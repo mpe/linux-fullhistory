@@ -189,7 +189,9 @@ ssize_t umsdos_emd_dir_read (struct file *filp, char *buf, size_t count)
 
 
 /*
- * Create the EMD dentry for a directory.
+ * Lookup the EMD dentry for a directory.
+ *
+ * Note: the caller must hold a lock on the parent directory.
  */
 struct dentry *umsdos_get_emd_dentry(struct dentry *parent)
 {
@@ -202,6 +204,8 @@ struct dentry *umsdos_get_emd_dentry(struct dentry *parent)
 
 /*
  * Check whether a directory has an EMD file.
+ *
+ * Note: the caller must hold a lock on the parent directory.
  */
 int umsdos_have_emd(struct dentry *dir)
 {
@@ -219,11 +223,12 @@ int umsdos_have_emd(struct dentry *dir)
 /*
  * Create the EMD file for a directory if it doesn't
  * already exist. Returns 0 or an error code.
+ *
+ * Note: the caller must hold a lock on the parent directory.
  */
 int umsdos_make_emd(struct dentry *parent)
 {
 	struct dentry *demd = umsdos_get_emd_dentry(parent);
-	struct inode *inode;
 	int err = PTR_ERR(demd);
 
 	if (IS_ERR(demd)) {
@@ -234,8 +239,7 @@ int umsdos_make_emd(struct dentry *parent)
 
 	/* already created? */
 	err = 0;
-	inode = demd->d_inode;
-	if (inode)
+	if (demd->d_inode)
 		goto out_set;
 
 Printk(("umsdos_make_emd: creating EMD %s/%s\n",
@@ -244,106 +248,17 @@ parent->d_name.name, demd->d_name.name));
 	err = msdos_create(parent->d_inode, demd, S_IFREG | 0777);
 	if (err) {
 		printk (KERN_WARNING
-			"UMSDOS: create %s/%s failed, err=%d\n",
+			"umsdos_make_emd: create %s/%s failed, err=%d\n",
 			parent->d_name.name, demd->d_name.name, err);
 		goto out_dput;
 	}
-	inode = demd->d_inode;
 out_set:
-	parent->d_inode->u.umsdos_i.i_emd_dir = inode->i_ino;
-	/* Disable UMSDOS_notify_change() for EMD file */
-	inode->u.umsdos_i.i_emd_owner = 0xffffffff;
+	parent->d_inode->u.umsdos_i.i_emd_dir = demd->d_inode->i_ino;
 
 out_dput:
 	dput(demd);
 out:
 	return err;
-}
-
-
-/*
- * Locate the EMD file in a directory.
- * 
- * Return NULL if error, dir->u.umsdos_i.emd_inode if OK. 
- * Caller must iput() returned inode when finished with it!
- * Note: deprecated; get rid of this soon!
- */
-
-struct inode *umsdos_emd_dir_lookup (struct inode *dir, int creat)
-{
-	struct inode *ret = NULL;
-	struct dentry *d_dir=NULL, *dlook=NULL;
-	int rv;
-
-	Printk ((KERN_DEBUG "Entering umsdos_emd_dir_lookup\n"));
-	if (!dir) {
-		printk (KERN_CRIT "umsdos_emd_dir_lookup: FATAL, dir=NULL!\n");
-		goto out;
-	}
-	check_inode (dir);
-	
-	if (dir->u.umsdos_i.i_emd_dir != 0) {
-		ret = iget (dir->i_sb, dir->u.umsdos_i.i_emd_dir);
-		Printk (("umsdos_emd_dir_lookup: deja trouve %ld %p\n",
-			dir->u.umsdos_i.i_emd_dir, ret));
-		goto out;
-	}
-
-	PRINTK ((KERN_DEBUG "umsdos /mn/: Looking for %.*s -",
-		UMSDOS_EMD_NAMELEN, UMSDOS_EMD_FILE));
-
-	d_dir = geti_dentry (dir);
-	if (!d_dir) {
-printk("UMSDOS: flaky i_dentry hack failed\n");
-		goto out;
-	}
-	dlook = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, NULL, d_dir);
-	if (!dlook)
-		goto out;
-	rv = msdos_lookup (dir, dlook);
-		
-	PRINTK ((KERN_DEBUG "-returned %d\n", rv));
-	Printk ((KERN_INFO "emd_dir_lookup "));
-		
-	ret = dlook->d_inode;
-	if (ret) {
-		Printk (("Found --linux "));
-		dir->u.umsdos_i.i_emd_dir = ret->i_ino;
-		ret->i_count++;	/* we'll need the inode */
-		check_inode (ret);
-	} else if (creat) {
-		int code;
-			
-		Printk ((" * ERROR * /mn/: creat not yet implemented? not fixed? "));
-		Printk (("avant create "));
-
-		check_inode (ret);
-		code = compat_msdos_create (dir, UMSDOS_EMD_FILE, 
-						UMSDOS_EMD_NAMELEN, 
-						S_IFREG | 0777, &ret);
-		check_inode (ret);
-		Printk (("Creat EMD code %d ret %p ", code, ret));
-		if (ret != NULL) {
-			Printk ((" ino=%lu", ret->i_ino));
-			dir->u.umsdos_i.i_emd_dir = ret->i_ino;
-		} else {
-			printk (KERN_WARNING "UMSDOS: Can't create EMD file\n");
-		}
-	}
-	dput(dlook);
-		
-	if (ret != NULL) {
-		/* Disable UMSDOS_notify_change() for EMD file */
-		ret->u.umsdos_i.i_emd_owner = 0xffffffff;
-	}
-
-out:
-#if UMS_DEBUG
-	Printk ((KERN_DEBUG "umsdos_emd_dir_lookup returning %p /mn/\n", ret));
-	if (ret != NULL)
-		Printk ((KERN_DEBUG " returning ino=%lu\n", ret->i_ino));
-#endif
-	return ret;
 }
 
 
@@ -387,6 +302,8 @@ Printk (("umsdos_emd_dir_readentry /mn/: returning len=%d,name=%.*s\n",
 /*
  * Write an entry in the EMD file.
  * Return 0 if OK, -EIO if some error.
+ *
+ * Note: the caller must hold a lock on the parent directory.
  */
 static int umsdos_writeentry (struct dentry *parent, struct umsdos_info *info,
 				int free_entry)
@@ -405,8 +322,9 @@ static int umsdos_writeentry (struct dentry *parent, struct umsdos_info *info,
 	/* make sure there's an EMD file */
 	ret = -EIO;
 	if (!emd_dentry->d_inode) {
-printk("umsdos_writeentry: no EMD file in %s/%s\n",
-parent->d_parent->d_name.name, parent->d_name.name);
+		printk(KERN_WARNING
+			"umsdos_writeentry: no EMD file in %s/%s\n",
+			parent->d_parent->d_name.name, parent->d_name.name);
 		goto out_dput;
 	}
 
@@ -468,6 +386,8 @@ struct find_buffer {
  * Unread bytes are simply moved to the beginning.
  * 
  * Return -ENOENT if EOF, 0 if OK, a negative error code if any problem.
+ *
+ * Note: the caller must hold a lock on the parent directory.
  */
 
 static int umsdos_fillbuf (struct find_buffer *buf)
@@ -518,6 +438,7 @@ static int umsdos_fillbuf (struct find_buffer *buf)
  * All this to say that umsdos_writeentry must be called after this
  * function since it relies on the f_pos field of info.
  *
+ * Note: the caller must hold a lock on the parent directory.
  */
 /* #Specification: EMD file structure
  * The EMD file uses a fairly simple layout.  It is made of records

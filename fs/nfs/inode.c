@@ -322,18 +322,20 @@ out_no_fh:
 	goto out_shutdown;
 
 out_no_iod:
-	printk("NFS: couldn't start rpciod!\n");
+	printk(KERN_WARNING "NFS: couldn't start rpciod!\n");
 out_shutdown:
 	rpc_shutdown_client(server->client);
-	goto out_unlock;
+	goto out_free_host;
 
 out_no_client:
-	printk("NFS: cannot create RPC client.\n");
+	printk(KERN_WARNING "NFS: cannot create RPC client.\n");
 	xprt_destroy(xprt);
-	goto out_unlock;
+	goto out_free_host;
 
 out_no_xprt:
-	printk("NFS: cannot create RPC transport.\n");
+	printk(KERN_WARNING "NFS: cannot create RPC transport.\n");
+
+out_free_host:
 	kfree(server->hostname);
 out_unlock:
 	unlock_super(sb);
@@ -393,9 +395,10 @@ restart:
 	tmp = head;
 	while ((tmp = tmp->next) != head) {
 		struct dentry *dentry = list_entry(tmp, struct dentry, d_alias);
+printk("nfs_free_dentries: found %s/%s, d_count=%d, hashed=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name,
+dentry->d_count, !list_empty(&dentry->d_hash));
 		if (!dentry->d_count) {
-printk("nfs_free_dentries: freeing %s/%s, i_count=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_count);
 			dget(dentry);
 			d_drop(dentry);
 			dput(dentry);

@@ -764,8 +764,8 @@ void cleanup_module(void)
 int ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 {
 	unsigned long overhead;
-	unsigned long overhead_per_group;
 	struct statfs tmp;
+	int	ngroups, i;
 
 	if (test_opt (sb, MINIX_DF))
 		overhead = 0;
@@ -773,13 +773,35 @@ int ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 		/*
 		 * Compute the overhead (FS structures)
 		 */
-		overhead_per_group = 1 /* super block */ +
-				     sb->u.ext2_sb.s_db_per_group /* descriptors */ +
-				     1 /* block bitmap */ +
-				     1 /* inode bitmap */ +
-				     sb->u.ext2_sb.s_itb_per_group /* inode table */;
-		overhead = le32_to_cpu(sb->u.ext2_sb.s_es->s_first_data_block) +
-			   sb->u.ext2_sb.s_groups_count * overhead_per_group;
+
+		/*
+		 * All of the blocks before first_data_block are
+		 * overhead
+		 */
+		overhead = le32_to_cpu(sb->u.ext2_sb.s_es->s_first_data_block);
+
+		/*
+		 * Add the overhead attributed to the superblock and
+		 * block group descriptors.  If this is sparse
+		 * superblocks is turned on, then not all groups have
+		 * this.
+		 */
+		if (le32_to_cpu(sb->u.ext2_sb.s_feature_ro_compat) &
+		    EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER) {
+			ngroups = 0;
+			for (i=0 ; i < sb->u.ext2_sb.s_groups_count; i++)
+				if (ext2_group_sparse(i))
+					ngroups++;
+		} else
+			ngroups = sb->u.ext2_sb.s_groups_count;
+		overhead += ngroups * (1 + sb->u.ext2_sb.s_db_per_group);
+
+		/*
+		 * Every block group has an inode bitmap, a block
+		 * bitmap, and an inode table.
+		 */
+		overhead += (sb->u.ext2_sb.s_groups_count *
+			     (2 + sb->u.ext2_sb.s_itb_per_group));
 	}
 
 	tmp.f_type = EXT2_SUPER_MAGIC;

@@ -215,7 +215,7 @@ int mem_mmap(struct file * file, struct vm_area_struct * vma)
 	pgd_t *src_dir, *dest_dir;
 	pmd_t *src_middle, *dest_middle;
 	pte_t *src_table, *dest_table;
-	unsigned long stmp, dtmp;
+	unsigned long stmp, dtmp, mapnr;
 	struct vm_area_struct *src_vma = NULL;
 	struct inode *inode = file->f_dentry->d_inode;
 	
@@ -296,7 +296,9 @@ int mem_mmap(struct file * file, struct vm_area_struct * vma)
 
 		set_pte(src_table, pte_mkdirty(*src_table));
 		set_pte(dest_table, *src_table);
-		atomic_inc(&mem_map[MAP_NR(pte_page(*src_table))].count);
+		mapnr = MAP_NR(pte_page(*src_table));
+		if (mapnr < max_mapnr)
+			atomic_inc(&mem_map[MAP_NR(pte_page(*src_table))].count);
 
 		stmp += PAGE_SIZE;
 		dtmp += PAGE_SIZE;

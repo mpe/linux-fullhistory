@@ -165,19 +165,23 @@ struct dqstats {
 #define DQ_FAKE       0x40	/* no limits only usage */
 
 struct dquot {
-	unsigned int dq_id;		/* ID this applies to (uid, gid) */
-	short dq_type;			/* Type of quota */
-	kdev_t dq_dev;			/* Device this applies to */
-	short dq_flags;			/* See DQ_* */
-	short dq_count;			/* Reference count */
-	unsigned long dq_referenced;	/* Number of times this dquot was referenced during its lifetime */
-	struct vfsmount *dq_mnt;	/* VFS_mount_point this applies to */
-	struct dqblk dq_dqb;		/* Diskquota usage */
-	struct wait_queue *dq_wait;	/* Pointer to waitqueue */
 	struct dquot *dq_next;		/* Pointer to next dquot */
+	struct dquot **dq_pprev;
+	struct list_head dq_free;	/* free list element */
 	struct dquot *dq_hash_next;	/* Pointer to next in dquot_hash */
 	struct dquot **dq_hash_pprev;	/* Pointer to previous in dquot_hash */
-	struct dquot **dq_pprev;
+	struct wait_queue *dq_wait;	/* Pointer to waitqueue */
+	int dq_count;			/* Reference count */
+
+	/* fields after this point are cleared when invalidating */
+	struct vfsmount *dq_mnt;	/* VFS_mount_point this applies to */
+	unsigned int dq_id;		/* ID this applies to (uid, gid) */
+	kdev_t dq_dev;			/* Device this applies to */
+	short dq_type;			/* Type of quota */
+	short dq_flags;			/* See DQ_* */
+	unsigned long dq_referenced;	/* Number of times this dquot was 
+					   referenced during its lifetime */
+	struct dqblk dq_dqb;		/* Diskquota usage */
 };
 
 #define NODQUOT (struct dquot *)NULL

@@ -71,7 +71,7 @@ enum {
 };
 
 #define TCP_STATE_MASK	0xF
-#define TCP_ACTION_FIN	1 << 7
+#define TCP_ACTION_FIN	(1 << 7)
 
 enum {
   TCPF_ESTABLISHED = (1 << 1),

@@ -102,7 +102,7 @@ static struct esp_pio_buffer *free_pio_buf;
 #define WAKEUP_CHARS 1024
 
 static char *serial_name = "ESP serial driver";
-static char *serial_version = "2.1";
+static char *serial_version = "2.2";
 
 static DECLARE_TASK_QUEUE(tq_esp);
 
@@ -2615,6 +2615,9 @@ __initfunc(int espserial_init(void))
 	}
 
 	memset((void *)info, 0, sizeof(struct esp_struct));
+	/* rx_trigger, tx_trigger are needed by autoconfig */
+	info->config.rx_trigger = rx_trigger;
+	info->config.tx_trigger = tx_trigger;
 
 	i = 0;
 	offset = 0;
@@ -2644,8 +2647,6 @@ __initfunc(int espserial_init(void))
 		info->callout_termios = esp_callout_driver.init_termios;
 		info->normal_termios = esp_driver.init_termios;
 		info->config.rx_timeout = rx_timeout;
-		info->config.rx_trigger = rx_trigger;
-		info->config.tx_trigger = tx_trigger;
 		info->config.flow_on = flow_on;
 		info->config.flow_off = flow_off;
 		info->config.pio_threshold = pio_threshold;
@@ -2681,6 +2682,9 @@ __initfunc(int espserial_init(void))
 		}
 
 		memset((void *)info, 0, sizeof(struct esp_struct));
+		/* rx_trigger, tx_trigger are needed by autoconfig */
+		info->config.rx_trigger = rx_trigger;
+		info->config.tx_trigger = tx_trigger;
 
 		if (offset == 56) {
 			i++;

@@ -371,9 +371,16 @@ static int __init MPBIOS_trigger(int idx)
 		{
 			switch (mp_bus_id_to_type[bus])
 			{
-				case MP_BUS_ISA: /* ISA pin, edge */
-				{
-					trigger = 0;
+				case MP_BUS_ISA: {
+					/* ISA pin, read the Edge/Level control register */
+					unsigned int irq = mp_irqs[idx].mpc_dstirq;
+					if (irq < 16) {
+						unsigned int port = 0x4d0 + (irq >> 3);
+						trigger = (inb(port) >> (irq & 7)) & 1;
+						break;
+					}
+					printk("Broken MPtable reports ISA irq %d\n", irq);
+					trigger = 1;
 					break;
 				}
 				case MP_BUS_PCI: /* PCI pin, level */
@@ -1009,8 +1016,10 @@ static void do_edge_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 	/*
 	 * If there is no IRQ handler or it was disabled, exit early.
 	 */
-	if (!action)
+	if (!action) {
+printk("Unhandled edge irq %d (%x %p)\n", irq, status, desc->action);
 		return;
+	}
 
 	/*
 	 * Edge triggered interrupts need to remember
@@ -1061,8 +1070,10 @@ static void do_level_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 	spin_unlock(&irq_controller_lock);
 
 	/* Exit early if we had no action or it was disabled */
-	if (!action)
+	if (!action) {
+printk("Unhandled level irq %d (%x)\n", irq, status);
 		return;
+	}
 
 	handle_IRQ_event(irq, regs, action);
 

@@ -426,8 +426,7 @@ check_table:
 				   && (q->sector & 63) == 1
 				   && (q->end_sector & 63) == 63) {
 					unsigned int heads = q->end_head + 1;
-					if (heads == 15 || heads == 16 ||
-					    heads == 32 || heads == 64 ||
+					if (heads == 32 || heads == 64 ||
 					    heads == 128 || heads == 240 ||
 					    heads == 255) {
 						(void) ide_xlate_1024(dev, heads, " [PTBL]");

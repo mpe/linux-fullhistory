@@ -28,6 +28,7 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/in.h>
+#include <linux/utsname.h>
 
 #include <linux/sunrpc/clnt.h>
 
@@ -101,6 +102,12 @@ rpc_create_client(struct rpc_xprt *xprt, char *servname,
 
 	if (!rpcauth_create(flavor, clnt))
 		goto out_no_auth;
+
+	/* save the nodename */
+	clnt->cl_nodelen = strlen(system_utsname.nodename);
+	if (clnt->cl_nodelen > UNX_MAXNODENAME)
+		clnt->cl_nodelen = UNX_MAXNODENAME;
+	memcpy(clnt->cl_nodename, system_utsname.nodename, clnt->cl_nodelen);
 out:
 	return clnt;
 

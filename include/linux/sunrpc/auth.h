@@ -14,6 +14,8 @@
 #include <linux/config.h>
 #include <linux/sunrpc/sched.h>
 
+/* size of the nodename buffer */
+#define UNX_MAXNODENAME	32
 
 /*
  * Client user credentials

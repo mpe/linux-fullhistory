@@ -2,31 +2,14 @@
 void check_page_tables (void);
 
 /* dir.c 22/06/95 00.22.12 */
-int compat_msdos_create(struct inode *dir,
-			const char *name,
-			int len,
-			int mode,
-			struct inode **inode);
 int  dummy_dir_read ( struct file *filp,
 	 char *buf,
 	 size_t size,
 	 loff_t *count);
 char * umsdos_d_path(struct dentry *, char *, int);
-void umsdos_lookup_patch_new(struct dentry *, struct umsdos_dirent *, off_t);
-void umsdos_lookup_patch (struct inode *dir,
-	 struct inode *inode,
-	 struct umsdos_dirent *entry,
-	 off_t emd_pos);
-int umsdos_dentry_to_entry (struct dentry *, struct umsdos_dirent *);
-int umsdos_inode2entry (struct inode *dir,
-	 struct inode *inode,
-	 struct umsdos_dirent *entry);
-int umsdos_locate_path (struct inode *inode, char *path);
+void umsdos_lookup_patch_new(struct dentry *, struct umsdos_info *);
 int umsdos_is_pseudodos (struct inode *dir, struct dentry *dentry);
-int umsdos_lookup_x (
-			    struct inode *dir,
-			    struct dentry *dentry,
-			    int nopseudo);
+int umsdos_lookup_x ( struct inode *dir, struct dentry *dentry, int nopseudo);
 int UMSDOS_lookup(struct inode *, struct dentry *);
 struct dentry *umsdos_lookup_dentry(struct dentry *, char *, int, int);
 
@@ -52,7 +35,6 @@ ssize_t umsdos_emd_dir_read (struct file *filp,
 struct dentry *umsdos_get_emd_dentry(struct dentry *);
 int umsdos_have_emd(struct dentry *);
 int umsdos_make_emd(struct dentry *);
-struct inode *umsdos_emd_dir_lookup (struct inode *dir, int creat);
 int umsdos_emd_dir_readentry (struct file *, struct umsdos_dirent *);
 int umsdos_newentry (struct dentry *, struct umsdos_info *);
 int umsdos_newhidden (struct dentry *, struct umsdos_info *);
@@ -63,32 +45,20 @@ int umsdos_isempty (struct dentry *);
 /* file.c 25/01/95 02.25.38 */
 
 /* inode.c 12/06/95 09.49.40 */
-inline struct dentry *geti_dentry (struct inode *inode);
-void checkd_inode (struct inode *inode);
-void check_inode (struct inode *inode);
-void check_dentry (struct dentry *dentry);
-void check_dentry_path (struct dentry *dentry, const char *desc);
 void fill_new_filp (struct file *filp, struct dentry *dentry);
-struct dentry *creat_dentry (const char *name,
-			     const int len,
-			     struct inode *inode,
-			     struct dentry *parent);
 void UMSDOS_read_inode (struct inode *);
 void UMSDOS_write_inode (struct inode *);
 int UMSDOS_notify_change (struct dentry *, struct iattr *attr);
+int umsdos_notify_change_locked(struct dentry *, struct iattr *attr);
 void UMSDOS_put_inode (struct inode *);
 int UMSDOS_statfs (struct super_block *, struct statfs *, int);
 struct super_block *UMSDOS_read_super (struct super_block *, void *, int);
 void UMSDOS_put_super (struct super_block *);
 
-int umsdos_real_lookup(struct inode *, struct dentry *);	 
 void umsdos_setup_dir(struct dentry *);
-void umsdos_setup_dir_inode (struct inode *inode);
 void umsdos_set_dirinfo_new(struct dentry *, off_t);
-void umsdos_set_dirinfo (struct inode *, struct inode *, off_t);
 int umsdos_isinit (struct inode *inode);
 void umsdos_patch_dentry_inode (struct dentry *, off_t);
-void umsdos_patch_inode (struct inode *, struct inode *, off_t);
 int umsdos_get_dirowner (struct inode *inode, struct inode **result);
 
 /* ioctl.c 22/06/95 00.22.08 */
@@ -96,6 +66,7 @@ int UMSDOS_ioctl_dir (struct inode *dir,
 	 struct file *filp,
 	 unsigned int cmd,
 	 unsigned long data);
+
 /* mangle.c 25/01/95 02.25.38 */
 void umsdos_manglename (struct umsdos_info *info);
 int umsdos_evalrecsize (int len);
@@ -135,9 +106,13 @@ int UMSDOS_rename (struct inode *old_dir,
 		   struct dentry *new_dentry);
 
 /* rdir.c 22/03/95 03.31.42 */
-int umsdos_rlookup_x (struct inode *dir,
-	 struct dentry *dentry,
-	 int nopseudo);
-int UMSDOS_rlookup (struct inode *dir,
-		    struct dentry *dentry);
+int umsdos_rlookup_x (struct inode *dir, struct dentry *dentry, int nopseudo);
+int UMSDOS_rlookup (struct inode *dir, struct dentry *dentry);
+
 /* symlink.c 23/01/95 03.38.30 */
+
+/* check.c */
+void checkd_inode (struct inode *inode);
+void check_inode (struct inode *inode);
+void check_dentry (struct dentry *dentry);
+void check_dentry_path (struct dentry *dentry, const char *desc);

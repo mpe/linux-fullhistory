@@ -686,6 +686,12 @@ static int test_root(int a, int b)
 	}
 }
 
+int ext2_group_sparse(int group)
+{
+	return (test_root(group, 3) || test_root(group, 5) ||
+		test_root(group, 7));
+}
+
 void ext2_check_blocks_bitmap (struct super_block * sb)
 {
 	struct buffer_head * bh;
@@ -716,7 +722,7 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 
 		if (!(le32_to_cpu(sb->u.ext2_sb.s_feature_ro_compat) &
 		     EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER) ||
-		    (test_root(i, 3) || test_root(i, 5) || test_root(i, 7))) {
+		    ext2_group_sparse(i)) {
 			if (!ext2_test_bit (0, bh->b_data))
 				ext2_error (sb, "ext2_check_blocks_bitmap",
 					    "Superblock in group %d "

@@ -262,7 +262,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, ret));
 		 * is in the dos_dirent.name field and the destination
 		 * is in umsdos_dirent.name field.
 		 * 
-		 * This ioctl allows umssync to rename a mangle file
+		 * This ioctl allows umssync to rename a mangled file
 		 * name before syncing it back in the EMD.
 		 */
 		old_dentry = umsdos_lookup_dentry (dentry, 
@@ -282,7 +282,6 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 			ret = msdos_rename (dir, old_dentry, dir, new_dentry);
 			dput(new_dentry);
 		}
-		d_drop(old_dentry);
 		dput(old_dentry);
 		goto out;
 	}
@@ -306,6 +305,11 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 				data.umsdos_dirent.name_len, &info);
 		ret = umsdos_delentry (dentry, &info,
 				S_ISDIR (data.umsdos_dirent.mode));
+		if (ret) {
+			printk(KERN_WARNING
+				"umsdos_ioctl: delentry %s/%s failed, ret=%d\n",
+				dentry->d_name.name, info.entry.name, ret);
+		}
 		goto out;
 	}
 	else if (cmd == UMSDOS_UNLINK_DOS) {
@@ -324,9 +328,11 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 		if (IS_ERR(temp))
 			goto out;
 		ret = -ENOENT;
-		if (temp->d_inode)
-			ret = msdos_unlink (dir, temp);
-		d_drop(temp);
+		if (temp->d_inode) {
+			ret = -EISDIR;
+			if (!S_ISDIR(temp->d_inode->i_mode))
+				ret = msdos_unlink (dir, temp);
+		}
 		dput (temp);
 		goto out;
 	}
@@ -346,9 +352,11 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 		if (IS_ERR(temp))
 			goto out;
 		ret = -ENOENT;
-		if (temp->d_inode)
-			ret = msdos_rmdir (dir, temp);
-		d_drop(temp);
+		if (temp->d_inode) {
+			ret = -ENOTDIR;
+			if (S_ISDIR(temp->d_inode->i_mode))
+				ret = msdos_rmdir (dir, temp);
+		}
 		dput (temp);
 		goto out;
 
@@ -385,7 +393,6 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 						sizeof (data.stat)))
 				ret = 0;
 		}
-		d_drop(dret);
 		dput(dret);
 		goto out;
 	}

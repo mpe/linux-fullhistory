@@ -281,15 +281,16 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 }
 
 /*
- * The bitmask for a follow event: normal
- * follow, and follow requires a directory
- * entry due to a slash ('/') after the
- * name, and whether to continue to parse
- * the name..
+ * The bitmask for a lookup event:
+ *  - follow links at the end
+ *  - require a directory
+ *  - ending slashes ok even for nonexistent files
+ *  - internal "there are more path compnents" flag
  */
-#define FOLLOW_LINK		(1)
-#define FOLLOW_DIRECTORY	(2)
-#define FOLLOW_CONTINUE		(4)
+#define LOOKUP_FOLLOW		(1)
+#define LOOKUP_DIRECTORY	(2)
+#define LOOKUP_SLASHOK		(4)
+#define LOOKUP_CONTINUE		(8)
 
 static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry, unsigned int follow)
 {
@@ -331,7 +332,7 @@ static inline struct dentry * follow_mount(struct dentry * dentry)
  * This is the basic name resolution function, turning a pathname
  * into the final dentry.
  */
-struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned int follow_link)
+struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned int lookup_flags)
 {
 	struct dentry * dentry;
 	struct inode *inode;
@@ -351,14 +352,14 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 		goto return_base;
 
 	inode = base->d_inode;
-	follow_link &= FOLLOW_LINK | FOLLOW_DIRECTORY;
+	lookup_flags &= LOOKUP_FOLLOW | LOOKUP_DIRECTORY | LOOKUP_SLASHOK;
 
 	/* At this point we know we have a real path component. */
 	for(;;) {
 		int err;
 		unsigned long hash;
 		struct qstr this;
-		unsigned int follow;
+		unsigned int flags;
 		unsigned int c;
 
 		err = permission(inode, MAY_EXEC);
@@ -379,16 +380,16 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 		this.hash = end_name_hash(hash);
 
 		/* remove trailing slashes? */
-		follow = follow_link;
+		flags = lookup_flags;
 		if (c) {
 			char tmp;
 
-			follow |= FOLLOW_DIRECTORY;
+			flags |= LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
 			do {
 				tmp = *++name;
 			} while (tmp == '/');
 			if (tmp)
-				follow |= FOLLOW_CONTINUE;
+				flags |= LOOKUP_CONTINUE;
 		}
 
 		/*
@@ -418,26 +419,47 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 		/* Check mountpoints.. */
 		dentry = follow_mount(dentry);
 
-		if (!follow)
+		if (!(flags & LOOKUP_FOLLOW))
 			break;
 
-		base = do_follow_link(base, dentry, follow);
+		base = do_follow_link(base, dentry, flags);
 		if (IS_ERR(base))
 			goto return_base;
 
-		dentry = ERR_PTR(-ENOENT);
 		inode = base->d_inode;
-		if (follow & FOLLOW_DIRECTORY) {
+		if (flags & LOOKUP_DIRECTORY) {
 			if (!inode)
-				break;
+				goto no_inode;
 			dentry = ERR_PTR(-ENOTDIR); 
 			if (!inode->i_op || !inode->i_op->lookup)
 				break;
-			if (follow & FOLLOW_CONTINUE)
+			if (flags & LOOKUP_CONTINUE)
 				continue;
 		}
 return_base:
 		return base;
+/*
+ * The case of a nonexisting file is special.
+ *
+ * In the middle of a pathname lookup (ie when
+ * LOOKUP_CONTINUE is set), it's an obvious
+ * error and returns ENOENT.
+ *
+ * At the end of a pathname lookup it's legal,
+ * and we return a negative dentry. However, we
+ * get here only if there were trailing slashes,
+ * which is legal only if we know it's supposed
+ * to be a directory (ie "mkdir"). Thus the
+ * LOOKUP_SLASHOK flag.
+ */
+no_inode:
+		dentry = ERR_PTR(-ENOENT);
+		if (flags & LOOKUP_CONTINUE)
+			break;
+		if (flags & LOOKUP_SLASHOK)
+			goto return_base;
+		dentry = ERR_PTR(-ENOTDIR);
+		break;
 	}
 	dput(base);
 	return dentry;
@@ -453,7 +475,7 @@ return_base:
  * namei exists in two versions: namei/lnamei. The only difference is
  * that namei follows links, while lnamei does not.
  */
-struct dentry * __namei(const char *pathname, unsigned int follow_link)
+struct dentry * __namei(const char *pathname, unsigned int lookup_flags)
 {
 	char *name;
 	struct dentry *dentry;
@@ -461,7 +483,7 @@ struct dentry * __namei(const char *pathname, unsigned int follow_link)
 	name = getname(pathname);
 	dentry = (struct dentry *) name;
 	if (!IS_ERR(name)) {
-		dentry = lookup_dentry(name, NULL, follow_link);
+		dentry = lookup_dentry(name, NULL, lookup_flags);
 		putname(name);
 		if (!IS_ERR(dentry)) {
 			if (!dentry->d_inode) {
@@ -659,7 +681,7 @@ struct dentry * do_mknod(const char * filename, int mode, dev_t dev)
 	struct dentry *dentry, *retval;
 
 	mode &= ~current->fs->umask;
-	dentry = lookup_dentry(filename, NULL, 1);
+	dentry = lookup_dentry(filename, NULL, LOOKUP_FOLLOW);
 	if (IS_ERR(dentry))
 		return dentry;
 
@@ -743,7 +765,7 @@ static inline int do_mkdir(const char * pathname, int mode)
 	struct dentry *dir;
 	struct dentry *dentry;
 
-	dentry = lookup_dentry(pathname, NULL, 0);
+	dentry = lookup_dentry(pathname, NULL, LOOKUP_SLASHOK);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto exit;
@@ -1150,7 +1172,16 @@ static inline int do_rename(const char * oldname, const char * newname)
 	if (IS_ERR(old_dentry))
 		goto exit;
 
-	new_dentry = lookup_dentry(newname, NULL, 0);
+	error = -ENOENT;
+	if (!old_dentry->d_inode)
+		goto exit;
+
+	{
+		unsigned int flags = 0;
+		if (S_ISDIR(old_dentry->d_inode->i_mode))
+			flags = LOOKUP_SLASHOK;
+		new_dentry = lookup_dentry(newname, NULL, flags);
+	}
 
 	error = PTR_ERR(new_dentry);
 	if (IS_ERR(new_dentry))
@@ -1160,10 +1191,6 @@ static inline int do_rename(const char * oldname, const char * newname)
 	old_dir = get_parent(old_dentry);
 
 	double_lock(new_dir, old_dir);
-
-	error = -ENOENT;
-	if (!old_dentry->d_inode)
-		goto exit_lock;
 
 	error = permission(old_dir->d_inode,MAY_WRITE | MAY_EXEC);
 	if (error)

@@ -598,9 +598,9 @@ unsigned int tcp_poll(struct file * file, struct socket *sock, poll_table *wait)
 		     sk->urginline || !tp->urg_data))
 			mask |= POLLIN | POLLRDNORM;
 
-		/* Always wake the user up when an error occurred */
-		if (sock_wspace(sk) >= tcp_min_write_space(sk, tp) || sk->err)
+		if (sock_wspace(sk) >= tcp_min_write_space(sk, tp))
 			mask |= POLLOUT | POLLWRNORM;
+
 		if (tp->urg_data & URG_VALID)
 			mask |= POLLPRI;
 	}
@@ -1458,7 +1458,8 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 	 *  reader process may not have drained the data yet!
 	 */
 	while((skb=__skb_dequeue(&sk->receive_queue))!=NULL) {
-		data_was_unread++;
+		u32 len = TCP_SKB_CB(skb)->end_seq - TCP_SKB_CB(skb)->seq - skb->h.th->fin;
+		data_was_unread += len;
 		kfree_skb(skb);
 	}
 

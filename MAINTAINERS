@@ -331,13 +331,7 @@ IP FIREWALL
 P:	Paul Russell
 M:	Paul.Russell@rustcorp.com.au
 W:	http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html
-S:	Maintained
-
-IP FIREWALL
-P:	Paul Russell
-M:	Paul.Russell@rustcorp.com.au
-W:	http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html
-S:	Maintained
+S:	Supported
 
 IPX/SPX NETWORK LAYER
 P:	Jay Schulist

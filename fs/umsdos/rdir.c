@@ -19,6 +19,7 @@
 #include <asm/uaccess.h>
 
 
+extern struct dentry *saved_root;
 extern struct inode *pseudo_root;
 extern struct dentry_operations umsdos_dentry_operations;
 
@@ -64,9 +65,7 @@ static int UMSDOS_rreaddir (struct file *filp, void *dirbuf, filldir_t filldir)
 
 	bufk.filldir = filldir;
 	bufk.dirbuf = dirbuf;
-	bufk.real_root = pseudo_root &&
-			 dir->i_ino == UMSDOS_ROOT_INO && 
-			 dir->i_sb == pseudo_root->i_sb;
+	bufk.real_root = pseudo_root && (dir == saved_root->d_inode);
 	return fat_readdir (filp, &bufk, rdir_filldir);
 }
 
@@ -82,30 +81,41 @@ static int UMSDOS_rreaddir (struct file *filp, void *dirbuf, filldir_t filldir)
  */
 int umsdos_rlookup_x ( struct inode *dir, struct dentry *dentry, int nopseudo)
 {
-	/* so locating "linux" will work */
-	const char *name = dentry->d_name.name;
-	int len = dentry->d_name.len;
-	struct inode *inode;
 	int ret;
 
+	/* N.B. this won't work ... lookups of `..' are done by VFS */
+#ifdef BROKEN_TO_BITS
 	if (pseudo_root && len == 2 && name[0] == '.' && name[1] == '.' &&
-	    dir->i_ino == UMSDOS_ROOT_INO && dir->i_sb == pseudo_root->i_sb) {
+	    dir == saved_root->d_inode) {
 printk (KERN_WARNING "umsdos_rlookup_x: we are at pseudo-root thingy?\n");
 		pseudo_root->i_count++;
 		d_add(dentry, pseudo_root);
 		ret = 0;
 		goto out;
 	}
+#endif
 
 	ret = msdos_lookup (dir, dentry);
 	if (ret) {
-		printk(KERN_WARNING "umsdos_rlookup_x: lookup failed, ret=%d\n",
-			ret);
+		printk(KERN_WARNING
+			"umsdos_rlookup_x: %s/%s failed, ret=%d\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name,ret);
 		goto out;
 	}
-	inode = dentry->d_inode;
-	if (inode) {
-		if (inode == pseudo_root && !nopseudo) {
+	if (dentry->d_inode) {
+		/* We must install the proper function table
+		 * depending on whether this is an MS-DOS or 
+		 * a UMSDOS directory
+		 */
+Printk ((KERN_DEBUG "umsdos_rlookup_x: setting up setup_dir_inode %lu...\n",
+inode->i_ino));
+		umsdos_patch_dentry_inode(dentry, 0);
+
+		/* N.B. Won't work -- /linux dentry will already have
+		 * an inode, so we'll never get called here.
+		 */
+#ifdef BROKEN_TO_BITS
+		if (dentry->d_inode == pseudo_root && !nopseudo) {
 			/* #Specification: pseudo root / DOS/linux
 			 * Even in the real root directory (c:\), the directory
 			 * /linux won't show
@@ -114,20 +124,11 @@ printk(KERN_WARNING "umsdos_rlookup_x: do the pseudo-thingy...\n");
 			/* make the dentry negative */
 			d_delete(dentry);
 		}
-		else if (S_ISDIR (inode->i_mode)) {
-			/* We must place the proper function table
-			 * depending on whether this is an MS-DOS or 
-			 * a UMSDOS directory
-			 */
-Printk ((KERN_DEBUG "umsdos_rlookup_x: setting up setup_dir_inode %lu...\n",
-inode->i_ino));
-			umsdos_setup_dir(dentry);
-		}
+#endif
 	}
 out:
 	/* always install our dentry ops ... */
 	dentry->d_op = &umsdos_dentry_operations;
-	PRINTK ((KERN_DEBUG "umsdos_rlookup_x: returning %d\n", ret));
 	return ret;
 }
 
@@ -168,18 +169,18 @@ static int UMSDOS_rrmdir ( struct inode *dir, struct dentry *dentry)
 	if (umsdos_is_pseudodos (dir, dentry))
 		goto out;
 
-	umsdos_lockcreate (dir);
 	ret = -EBUSY;
 	if (dentry->d_count > 1) {
 		shrink_dcache_parent(dentry);
 		if (dentry->d_count > 1)
-			goto out_unlock;
+			goto out;
 	}
 
 	ret = msdos_rmdir (dir, dentry);
 	if (ret != -ENOTEMPTY)
-		goto out_unlock;
+		goto out;
 
+	down(&dentry->d_inode->i_sem);
 	empty = umsdos_isempty (dentry);
 	if (empty == 1) {
 		struct dentry *demd;
@@ -192,14 +193,14 @@ static int UMSDOS_rrmdir ( struct inode *dir, struct dentry *dentry)
 				ret = msdos_unlink (dentry->d_inode, demd);
 			dput(demd);
 		}
-		if (ret)
-			goto out_unlock;
 	}
+	up(&dentry->d_inode->i_sem);
+	if (ret)
+		goto out;
+
 	/* now retry the original ... */
 	ret = msdos_rmdir (dir, dentry);
 
-out_unlock:
-	umsdos_unlockcreate (dir);
 out:
 	return ret;
 }

@@ -52,6 +52,9 @@ struct rpc_clnt {
 
 	struct rpc_portmap	cl_pmap;	/* port mapping */
 	struct rpc_wait_queue	cl_bindwait;	/* waiting on getport() */
+
+	int			cl_nodelen;	/* nodename length */
+	char 			cl_nodename[UNX_MAXNODENAME];
 };
 #define cl_timeout		cl_xprt->timeout
 #define cl_prog			cl_pmap.pm_prog

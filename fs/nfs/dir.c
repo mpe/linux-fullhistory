@@ -416,23 +416,16 @@ parent->d_name.name, dentry->d_name.name);
 	 */
 	error = nfs_proc_lookup(NFS_DSERVER(parent), NFS_FH(parent), 
 				dentry->d_name.name, &fhandle, &fattr);
-	if (error) {
-printk("nfs_lookup_revalidate: error=%d\n", error);
+	if (error)
 		goto out_bad;
-	}
 
 	/* Inode number matches? */
-	if (fattr.fileid != inode->i_ino) {
-printk("nfs_lookup_revalidate: %s/%s inode mismatch, old=%ld, new=%u\n",
-parent->d_name.name, dentry->d_name.name, inode->i_ino, fattr.fileid);
+	if (fattr.fileid != inode->i_ino)
 		goto out_bad;
-	}
+
 	/* Filehandle matches? */
-	if (memcmp(dentry->d_fsdata, &fhandle, sizeof(struct nfs_fh))) {
-printk("nfs_lookup_revalidate: %s/%s fh changed\n",
-parent->d_name.name, dentry->d_name.name);
+	if (memcmp(dentry->d_fsdata, &fhandle, sizeof(struct nfs_fh)))
 		goto out_bad;
-	}
 
 out_valid:
 	return 1;

@@ -1386,6 +1386,7 @@ ppp_ioctl(struct ppp *ppp, unsigned int param2, unsigned long param3)
 			break;
 		if (temp_i < PPP_MRU)
 			temp_i = PPP_MRU;
+		ppp->mru = temp_i;
 		if (ppp->flags & SC_DEBUG)
 			printk(KERN_INFO
 			       "ppp_ioctl: set mru to %x\n", temp_i);

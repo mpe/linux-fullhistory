@@ -62,12 +62,14 @@ struct umsdos_inode_info {
 		struct msdos_inode_info msdos_info;
 		struct pipe_inode_info pipe_info;
 		struct dir_locking_info dir_info;
-	} u;				/* Simply a filler, never referenced by fs/umsdos/... */
-	unsigned long i_dir_owner;	/* Inode of the dir which hold this entry */
-	unsigned long i_emd_owner;	/* Inode of the EMD file of i_dir_owner */
+	} u;
+	int i_patched;			/* Inode has been patched */
+	int i_is_hlink;			/* Resolved hardlink inode? */
+	unsigned long i_emd_owner;	/* Is this the EMD file inode? */
 	off_t pos;			/* Entry offset in the emd_owner file */
-	/* The rest is used only if this inode describe a directory */
-	unsigned long i_emd_dir;	/* Inode of the EMD file of this inode */
+	/* The rest is used only if this inode describes a directory */
+	struct dentry *i_emd_dentry;	/* EMD dentry for this directory */
+	unsigned long i_emd_dir;	/* Inode of the EMD file */
 };
 
 #endif

@@ -520,6 +520,7 @@ struct ext2_dir_entry_2 {
 extern int ext2_permission (struct inode *, int);
 
 /* balloc.c */
+extern int ext2_group_sparse(int group);
 extern int ext2_new_block (const struct inode *, unsigned long,
 			   __u32 *, __u32 *, int *);
 extern void ext2_free_blocks (const struct inode *, unsigned long,

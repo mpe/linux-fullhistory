@@ -65,8 +65,7 @@ static imm_struct imm_hosts[NO_HOSTS] =
 
 #define IMM_BASE(x)	imm_hosts[(x)].base
 
-int base[NO_HOSTS] =
-{0x03bc, 0x0378, 0x0278, 0x0000};
+int parbus_base[NO_HOSTS] = {0x03bc, 0x0378, 0x0278, 0x0000};
 
 void imm_wakeup(void *ref)
 {

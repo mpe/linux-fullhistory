@@ -1,7 +1,7 @@
 /*
  * bios32.c - Low-Level PCI Access
  *
- * $Id: bios32.c,v 1.45 1998/08/15 10:41:04 mj Exp $
+ * $Id: bios32.c,v 1.48 1998/09/26 08:06:55 mj Exp $
  *
  * Copyright 1993, 1994 Drew Eckhardt
  *      Visionary Computing
@@ -170,6 +170,7 @@ PCI_STUB(write, dword, u32)
 #define PCI_PROBE_CONF2 4
 #define PCI_NO_SORT 0x100
 #define PCI_BIOS_SORT 0x200
+#define PCI_NO_CHECKS 0x400
 
 static unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2;
 
@@ -343,14 +344,21 @@ static struct pci_access pci_direct_conf2 = {
  * whether bus 00 contains a host bridge (this is similar to checking
  * techniques used in XFree86, but ours should be more reliable since we
  * attempt to make use of direct access hints provided by the PCI BIOS).
+ *
+ * This should be close to trivial, but it isn't, because there are buggy
+ * chipsets (yes, you guessed it, by Intel) that have no class ID.
  */
 __initfunc(int pci_sanity_check(struct pci_access *a))
 {
-	u16 dfn, class;
+	u16 dfn, x;
 
+	if (pci_probe & PCI_NO_CHECKS)
+		return 1;
 	for(dfn=0; dfn < 0x100; dfn++)
-		if (!a->read_config_word(0, dfn, PCI_CLASS_DEVICE, &class) &&
-		    class == PCI_CLASS_BRIDGE_HOST)
+		if ((!a->read_config_word(0, dfn, PCI_CLASS_DEVICE, &x) &&
+		     x == PCI_CLASS_BRIDGE_HOST) ||
+		    (!a->read_config_word(0, dfn, PCI_VENDOR_ID, &x) &&
+		     x == PCI_VENDOR_ID_INTEL))
 			return 1;
 	DBG("PCI: Sanity check failed\n");
 	return 0;
@@ -945,7 +953,7 @@ __initfunc(void pcibios_fixup_ghosts(struct pci_bus *b))
 __initfunc(void pcibios_fixup_peer_bridges(void))
 {
 	struct pci_bus *b = &pci_root;
-	int i, cnt=-1;
+	int i, n, cnt=-1;
 	struct pci_dev *d;
 
 #ifdef CONFIG_PCI_DIRECT
@@ -960,8 +968,8 @@ __initfunc(void pcibios_fixup_peer_bridges(void))
 	for(d=b->devices; d; d=d->sibling)
 		if ((d->class >> 8) == PCI_CLASS_BRIDGE_HOST)
 			cnt++;
-	do {
-		int n = b->subordinate+1;
+	n = b->subordinate + 1;
+	while (n <= 0xff) {
 		int found = 0;
 		u16 l;
 		for(i=0; i<256; i += 8)
@@ -973,8 +981,9 @@ __initfunc(void pcibios_fixup_peer_bridges(void))
 				    l == PCI_CLASS_BRIDGE_HOST)
 					cnt++;
 			}
-		if (found && cnt > 0) {
-			cnt--;
+		if (cnt-- <= 0)
+			break;
+		if (found) {
 			printk("PCI: Discovered primary peer bus %02x\n", n);
 			b = kmalloc(sizeof(*b), GFP_KERNEL);
 			memset(b, 0, sizeof(*b));
@@ -983,9 +992,10 @@ __initfunc(void pcibios_fixup_peer_bridges(void))
 			b->number = b->secondary = n;
 			b->subordinate = 0xff;
 			b->subordinate = pci_scan_bus(b);
-			break;
+			n = b->subordinate;
 		}
-	} while (i < 256);
+		n++;
+	}
 }
 
 /*
@@ -1146,11 +1156,11 @@ __initfunc(char *pcibios_setup(char *str))
 #endif
 #ifdef CONFIG_PCI_DIRECT
 	else if (!strcmp(str, "conf1")) {
-		pci_probe = PCI_PROBE_CONF1;
+		pci_probe = PCI_PROBE_CONF1 | PCI_NO_CHECKS;
 		return NULL;
 	}
 	else if (!strcmp(str, "conf2")) {
-		pci_probe = PCI_PROBE_CONF2;
+		pci_probe = PCI_PROBE_CONF2 | PCI_NO_CHECKS;
 		return NULL;
 	}
 #endif

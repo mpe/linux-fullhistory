@@ -10,7 +10,6 @@
 #include <linux/malloc.h>
 #include <linux/socket.h>
 #include <linux/in.h>
-#include <linux/utsname.h>
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/auth.h>
 
@@ -28,13 +27,7 @@ struct unx_cred {
 
 #define UNX_CRED_EXPIRE		(60 * HZ)
 
-#ifndef DONT_FILLIN_HOSTNAME
-/* # define UNX_MAXNODENAME	(sizeof(system_utsname.nodename)-1) */
-# define UNX_MAXNODENAME	32
-# define UNX_WRITESLACK		(21 + (UNX_MAXNODENAME >> 2))
-#else
-# define UNX_WRITESLACK		20
-#endif
+#define UNX_WRITESLACK		(21 + (UNX_MAXNODENAME >> 2))
 
 #ifdef RPC_DEBUG
 # define RPCDBG_FACILITY	RPCDBG_AUTH
@@ -170,6 +163,7 @@ unx_match(struct rpc_task * task, struct rpc_cred *rcred)
 static u32 *
 unx_marshal(struct rpc_task *task, u32 *p, int ruid)
 {
+	struct rpc_clnt	*clnt = task->tk_client;
 	struct unx_cred	*cred = (struct unx_cred *) task->tk_cred;
 	u32		*base, *hold;
 	int		i, n;
@@ -177,20 +171,15 @@ unx_marshal(struct rpc_task *task, u32 *p, int ruid)
 	*p++ = htonl(RPC_AUTH_UNIX);
 	base = p++;
 	*p++ = htonl(jiffies/HZ);
-#ifndef DONT_FILLIN_HOSTNAME
+
 	/*
-	 *	Problem: The UTS name could change under us. We can't lock
-	 *	here to handle this. On the other hand we can't really
-	 *	go building a bad RPC!
+	 * Copy the UTS nodename captured when the client was created.
 	 */
-	if ((n = strlen((char *) system_utsname.nodename)) > UNX_MAXNODENAME)
-		n = UNX_MAXNODENAME;
+	n = clnt->cl_nodelen;
 	*p++ = htonl(n);
-	memcpy(p, system_utsname.nodename, n);
+	memcpy(p, clnt->cl_nodename, n);
 	p += (n + 3) >> 2;
-#else
-	*p++ = 0;
-#endif
+
 	if (ruid) {
 		*p++ = htonl((u32) cred->uc_uid);
 		*p++ = htonl((u32) cred->uc_gid);

@@ -868,17 +868,19 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 	struct vfsmount *vfsmnt;
 	int error;
 
-	down(&mount_sem);
 	error = -EACCES;
 	if (!(flags & MS_RDONLY) && dev && is_read_only(dev))
 		goto out;
-		/*flags |= MS_RDONLY;*/
 
+	/*
+	 * Do the lookup first to force automounting.
+	 */
 	dir_d = namei(dir_name);
 	error = PTR_ERR(dir_d);
 	if (IS_ERR(dir_d))
 		goto out;
 
+	down(&mount_sem);
 	error = -ENOTDIR;
 	if (!S_ISDIR(dir_d->d_inode->i_mode))
 		goto dput_and_out;
@@ -906,18 +908,16 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 
 	error = -ENOMEM;
 	vfsmnt = add_vfsmnt(sb, dev_name, dir_name);
-	if (!vfsmnt)
-		goto dput_and_out;
-	d_mount(dir_d, sb->s_root);
-	error = 0;	/* we don't dput(dir_d) - see umount */
-
-out:
-	up(&mount_sem);
-	return error;	
+	if (vfsmnt) {
+		d_mount(dget(dir_d), sb->s_root);
+		error = 0;
+	}
 
 dput_and_out:
 	dput(dir_d);
-	goto out;
+	up(&mount_sem);
+out:
+	return error;	
 }
 
 
