@@ -81,10 +81,6 @@
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
 
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-#endif
-
 #include "trident.h"
 #include "ac97_codec.h"
 

@@ -182,8 +182,6 @@ END OF TERMS AND CONDITIONS
     -   Initial Beta Release.  
 *****************************************************************************/
 
-
-#include <linux/config.h>        /* for CONFIG_PCI */
 #ifdef MODULE
 #include <linux/module.h>
 #endif

@@ -20,6 +20,7 @@
 #include <linux/utsname.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
+#include <linux/raid/md.h>
 #include <linux/smp_lock.h>
 #include <linux/blk.h>
 #include <linux/hdreg.h>
@@ -43,10 +44,6 @@
 
 #ifdef CONFIG_MTRR
 #  include <asm/mtrr.h>
-#endif
-
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
 #endif
 
 #ifdef CONFIG_MAC
@@ -685,6 +682,9 @@ static void __init do_basic_setup(void)
 			while (pid != wait(&i));
 		if (MAJOR(real_root_dev) != RAMDISK_MAJOR
 		     || MINOR(real_root_dev) != 0) {
+#ifdef CONFIG_BLK_DEV_MD
+			autodetect_raid();
+#endif
 			error = change_root(real_root_dev,"/initrd");
 			if (error)
 				printk(KERN_ERR "Change root to /initrd: "

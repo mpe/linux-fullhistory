@@ -9,6 +9,7 @@
  *
  * 01/07/99 S.Eranian modified to pass command line arguments to kernel
  */
+#include <linux/config.h>
 #include <linux/elf.h>
 #include <linux/init.h>
 #include <linux/kernel.h>

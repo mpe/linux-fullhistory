@@ -9,7 +9,6 @@
  * Copyright (C) 1999 Walt Drummond <drummond@valinux.com>
  */ 
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/smp.h>

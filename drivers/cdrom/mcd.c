@@ -1247,18 +1247,13 @@ int __init mcd_init(void)
 
         if (result[1] == 'D') 
 	{
-		sprintf(msg, " mcd: Mitsumi Double Speed CD-ROM at port=0x%x,"
-			     " irq=%d\n", mcd_port, mcd_irq);
 		MCMD_DATA_READ = MCMD_2X_READ;
-
-		mcd_info.speed = 2;
 		/* Added flag to drop to 1x speed if too many errors */
 		mcdDouble = 1;
-        } else {
-		sprintf(msg, " mcd: Mitsumi Single Speed CD-ROM at port=0x%x,"
-			     " irq=%d\n", mcd_port, mcd_irq);
-		mcd_info.speed = 2;
-	}
+        } else 
+		mcd_info.speed = 1;
+	sprintf(msg, " mcd: Mitsumi %s Speed CD-ROM at port=0x%x,"
+		     " irq=%d\n", mcd_info.speed == 1 ?  "Single" : "Double", mcd_port, mcd_irq);
 
 	request_region(mcd_port, 4, "mcd");
 

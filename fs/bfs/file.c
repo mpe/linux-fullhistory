@@ -46,8 +46,6 @@ static int bfs_move_block(unsigned long from, unsigned long to, kdev_t dev)
 	if (!bh)
 		return -EIO;
 	new = getblk(dev, to, BFS_BSIZE);
-	if (!buffer_uptodate(new))
-		wait_on_buffer(new);
 	memcpy(new->b_data, bh->b_data, bh->b_size);
 	mark_buffer_dirty(new, 1);
 	bforget(bh);
@@ -62,7 +60,7 @@ static int bfs_move_blocks(kdev_t dev, unsigned long start, unsigned long end,
 
 	dprintf("%08lx-%08lx->%08lx\n", start, end, where);
 	for (i = start; i <= end; i++)
-		if(i && bfs_move_block(i, where + i, dev)) {
+		if(bfs_move_block(i, where + i, dev)) {
 			dprintf("failed to move block %08lx -> %08lx\n", i, where + i);
 			return -EIO;
 		}
@@ -119,11 +117,14 @@ static int bfs_get_block(struct inode * inode, long block,
 
 	/* Ok, we have to move this entire file to the next free block */
 	next_free_block = s->su_lf_eblk + 1;
-	err = bfs_move_blocks(inode->i_dev, inode->iu_sblock, inode->iu_eblock, next_free_block);
-	if (err) {
-		dprintf("failed to move ino=%08lx -> possible fs corruption\n", inode->i_ino);
-		goto out;
-	}
+	if (inode->iu_sblock) { /* if data starts on block 0 then there is no data */
+		err = bfs_move_blocks(inode->i_dev, inode->iu_sblock, inode->iu_eblock, next_free_block);
+		if (err) {
+			dprintf("failed to move ino=%08lx -> possible fs corruption\n", inode->i_ino);
+			goto out;
+		}
+	} else
+		err = 0;
 
 	inode->iu_sblock = next_free_block;
 	s->su_lf_eblk = inode->iu_eblock = next_free_block + block;

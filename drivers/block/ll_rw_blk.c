@@ -23,6 +23,7 @@
 #include <asm/io.h>
 #include <linux/blk.h>
 #include <linux/highmem.h>
+#include <linux/raid/md.h>
 
 #include <linux/module.h>
 
@@ -65,7 +66,7 @@ spinlock_t io_request_lock = SPIN_LOCK_UNLOCKED;
  */
 DECLARE_WAIT_QUEUE_HEAD(wait_for_request);
 
-/* This specifies how many sectors to read ahead on the disk.  */
+/* This specifies how many sectors to read ahead on the disk. */
 
 int read_ahead[MAX_BLKDEV] = {0, };
 
@@ -126,18 +127,24 @@ static inline int get_max_sectors(kdev_t dev)
 }
 
 /*
- * Is called with the request spinlock aquired.
  * NOTE: the device-specific queue() functions
  * have to be atomic!
  */
-static inline request_queue_t *get_queue(kdev_t dev)
+request_queue_t * blk_get_queue (kdev_t dev)
 {
 	int major = MAJOR(dev);
 	struct blk_dev_struct *bdev = blk_dev + major;
+	unsigned long flags;
+	request_queue_t *ret;
 
+	spin_lock_irqsave(&io_request_lock,flags);
 	if (bdev->queue)
-		return bdev->queue(dev);
-	return &blk_dev[major].request_queue;
+		ret = bdev->queue(dev);
+	else
+		ret = &blk_dev[major].request_queue;
+	spin_unlock_irqrestore(&io_request_lock,flags);
+
+	return ret;
 }
 
 void blk_cleanup_queue(request_queue_t * q)
@@ -147,12 +154,17 @@ void blk_cleanup_queue(request_queue_t * q)
 
 void blk_queue_headactive(request_queue_t * q, int active)
 {
-	q->head_active     = active;
+	q->head_active = active;
 }
 
-void blk_queue_pluggable(request_queue_t * q, int use_plug)
+void blk_queue_pluggable (request_queue_t * q, plug_device_fn *plug)
 {
-	q->use_plug        = use_plug;
+	q->plug_device_fn = plug;
+}
+
+void blk_queue_make_request(request_queue_t * q, make_request_fn * mfn)
+{
+	q->make_request_fn = mfn;
 }
 
 static int ll_merge_fn(request_queue_t *q, struct request *req, 
@@ -185,42 +197,23 @@ static int ll_merge_requests_fn(request_queue_t *q, struct request *req,
 
 void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
 {
-	q->request_fn		= rfn;
+	q->request_fn     	= rfn;
 	q->current_request	= NULL;
-	q->merge_fn		= ll_merge_fn;
+	q->merge_fn       	= ll_merge_fn;
 	q->merge_requests_fn	= ll_merge_requests_fn;
-	q->plug_tq.sync		= 0;
-	q->plug_tq.routine	= unplug_device;
-	q->plug_tq.data		= q;
-	q->plugged		= 0;
+	q->make_request_fn	= NULL;
+	q->plug_tq.sync   	= 0;
+	q->plug_tq.routine	= &generic_unplug_device;
+	q->plug_tq.data   	= q;
+	q->plugged        	= 0;
 	/*
 	 * These booleans describe the queue properties.  We set the
 	 * default (and most common) values here.  Other drivers can
 	 * use the appropriate functions to alter the queue properties.
 	 * as appropriate.
 	 */
-	q->use_plug		= 1;
-	q->head_active		= 1;
-}
-
-/*
- * remove the plug and let it rip..
- */
-void unplug_device(void * data)
-{
-	request_queue_t * q = (request_queue_t *) data;
-	unsigned long flags;
-
-	spin_lock_irqsave(&io_request_lock,flags);
-	if( q->plugged )
-	{
-	        q->plugged = 0;
-		if( q->current_request != NULL )
-		{
-			(q->request_fn)(q);
-		}
-	}
-	spin_unlock_irqrestore(&io_request_lock,flags);
+	q->plug_device_fn 	= NULL;
+	q->head_active    	= 1;
 }
 
 /*
@@ -231,13 +224,34 @@ void unplug_device(void * data)
  * This is called with interrupts off and no requests on the queue.
  * (and with the request spinlock aquired)
  */
-static inline void plug_device(request_queue_t * q)
+inline void generic_plug_device (request_queue_t *q, kdev_t dev)
 {
+	if (MAJOR(dev) == MD_MAJOR) {
+		spin_unlock_irq(&io_request_lock);
+		BUG();
+	}
 	if (q->current_request)
 		return;
 
 	q->plugged = 1;
 	queue_task(&q->plug_tq, &tq_disk);
+}
+
+/*
+ * remove the plug and let it rip..
+ */
+void generic_unplug_device(void * data)
+{
+	request_queue_t * q = (request_queue_t *) data;
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock,flags);
+	if (q->plugged) {
+		q->plugged = 0;
+		if (q->current_request)
+			(q->request_fn)(q);
+	}
+	spin_unlock_irqrestore(&io_request_lock,flags);
 }
 
 /*
@@ -337,7 +351,7 @@ void set_device_ro(kdev_t dev,int flag)
 }
 
 static inline void drive_stat_acct(struct request *req,
-                                   unsigned long nr_sectors, int new_io)
+				unsigned long nr_sectors, int new_io)
 {
 	int major = MAJOR(req->rq_dev);
 	int minor = MINOR(req->rq_dev);
@@ -384,23 +398,17 @@ static inline void drive_stat_acct(struct request *req,
  * which is important for drive_stat_acct() above.
  */
 
-static void add_request(request_queue_t * q, struct request * req)
+static inline void __add_request(request_queue_t * q, struct request * req)
 {
 	int major = MAJOR(req->rq_dev);
 	struct request * tmp;
-	unsigned long flags;
 
 	drive_stat_acct(req, req->nr_sectors, 1);
 	req->next = NULL;
 
-	/*
-	 * We use the goto to reduce locking complexity
-	 */
-	spin_lock_irqsave(&io_request_lock,flags);
-
 	if (!(tmp = q->current_request)) {
 		q->current_request = req;
-		goto out;
+		return;
 	}
 	for ( ; tmp->next ; tmp = tmp->next) {
 		const int after_current = IN_ORDER(tmp,req);
@@ -420,7 +428,7 @@ static void add_request(request_queue_t * q, struct request * req)
 	/*
 	 * FIXME(eric) I don't understand why there is a need for this
 	 * special case code.  It clearly doesn't fit any more with
-	 * the new queueing architecture, and it got added in 2.3.10.  
+	 * the new queueing architecture, and it got added in 2.3.10.
 	 * I am leaving this in here until I hear back from the COMPAQ
 	 * people.
 	 */
@@ -433,16 +441,13 @@ static void add_request(request_queue_t * q, struct request * req)
 	{
 		(q->request_fn)(q);
 	}
-
-out:
-	spin_unlock_irqrestore(&io_request_lock,flags);
 }
 
 /*
  * Has to be called with the request spinlock aquired
  */
 static inline void attempt_merge (request_queue_t * q,
-				  struct request *req, 
+				  struct request *req,
 				  int max_sectors)
 {
 	struct request *next = req->next;
@@ -453,7 +458,6 @@ static inline void attempt_merge (request_queue_t * q,
 		return;
 	if (next->sem || req->cmd != next->cmd || req->rq_dev != next->rq_dev || req->nr_sectors + next->nr_sectors > max_sectors)
 		return;
-
 	/*
 	 * If we are not allowed to merge these requests, then
 	 * return.  If we are allowed to merge, then the count
@@ -471,11 +475,10 @@ static inline void attempt_merge (request_queue_t * q,
 	wake_up (&wait_for_request);
 }
 
-static void __make_request(request_queue_t * q,
-			   int major,
-			   int rw, 
+static inline void __make_request(request_queue_t * q, int rw,
 			   struct buffer_head * bh)
 {
+	int major = MAJOR(bh->b_rdev);
 	unsigned int sector, count;
 	struct request * req;
 	int rw_ahead, max_req, max_sectors;
@@ -488,24 +491,22 @@ static void __make_request(request_queue_t * q,
 	if (buffer_new(bh))
 		BUG();
 
-	/* Only one thread can actually submit the I/O. */
-	if (test_and_set_bit(BH_Lock, &bh->b_state))
-		return;
-
 	if (blk_size[major]) {
 		unsigned long maxsector = (blk_size[major][MINOR(bh->b_rdev)] << 1) + 1;
 
 		if (maxsector < count || maxsector - count < sector) {
 			bh->b_state &= (1 << BH_Lock) | (1 << BH_Mapped);
-                        /* This may well happen - the kernel calls bread()
-                           without checking the size of the device, e.g.,
-                           when mounting a device. */
+			if (!blk_size[major][MINOR(bh->b_rdev)])
+				goto end_io;
+			/* This may well happen - the kernel calls bread()
+			   without checking the size of the device, e.g.,
+			   when mounting a device. */
 			printk(KERN_INFO
-                               "attempt to access beyond end of device\n");
+				"attempt to access beyond end of device\n");
 			printk(KERN_INFO "%s: rw=%d, want=%d, limit=%d\n",
-                               kdevname(bh->b_rdev), rw,
-                               (sector + count)>>1,
-                               blk_size[major][MINOR(bh->b_rdev)]);
+				kdevname(bh->b_rdev), rw,
+					(sector + count)>>1,
+					blk_size[major][MINOR(bh->b_rdev)]);
 			goto end_io;
 		}
 	}
@@ -539,8 +540,7 @@ static void __make_request(request_queue_t * q,
 			max_req = (NR_REQUEST * 2) / 3;
 			break;
 		default:
-			printk(KERN_ERR "make_request: bad block dev cmd,"
-                               " must be R/W/RA/WA\n");
+			BUG();
 			goto end_io;
 	}
 
@@ -561,10 +561,12 @@ static void __make_request(request_queue_t * q,
 #endif
 
 /* look for a free request. */
-       /* Loop uses two requests, 1 for loop and 1 for the real device.
-        * Cut max_req in half to avoid running out and deadlocking. */
+	/*
+	 * Loop uses two requests, 1 for loop and 1 for the real device.
+	 * Cut max_req in half to avoid running out and deadlocking.
+	 */
 	 if ((major == LOOP_MAJOR) || (major == NBD_MAJOR))
-	     max_req >>= 1;
+		max_req >>= 1;
 
 	/*
 	 * Try to coalesce the new request with old requests
@@ -579,10 +581,10 @@ static void __make_request(request_queue_t * q,
 	req = q->current_request;
 	if (!req) {
 		/* MD and loop can't handle plugging without deadlocking */
-		if (major != MD_MAJOR && major != LOOP_MAJOR && 
-		    major != DDV_MAJOR && major != NBD_MAJOR
-		    && q->use_plug)
-			plug_device(q); /* is atomic */
+		if (q->plug_device_fn)
+			q->plug_device_fn(q, bh->b_rdev); /* is atomic */
+		else
+			generic_plug_device(q, bh->b_rdev); /* is atomic */
 		goto get_rq;
 	}
 
@@ -667,13 +669,34 @@ static void __make_request(request_queue_t * q,
 get_rq:
 	req = get_request(max_req, bh->b_rdev);
 
-	spin_unlock_irqrestore(&io_request_lock,flags);
-
-/* if no request available: if rw_ahead, forget it; otherwise try again blocking.. */
+	/*
+	 * if no request available: if rw_ahead, forget it,
+	 * otherwise try again blocking..
+	 */
 	if (!req) {
+		spin_unlock_irqrestore(&io_request_lock,flags);
 		if (rw_ahead)
 			goto end_io;
 		req = __get_request_wait(max_req, bh->b_rdev);
+		spin_lock_irqsave(&io_request_lock,flags);
+	}
+	/*
+	 * Dont start the IO if the buffer has been
+	 * invalidated meanwhile. (we have to do this
+	 * within the io request lock and atomically
+	 * before adding the request, see buffer.c's
+	 * insert_into_queues_exclusive() function.
+	 */
+	if (!test_bit(BH_Req, &bh->b_state)) {
+		req->rq_status = RQ_INACTIVE;
+		spin_unlock_irqrestore(&io_request_lock,flags);
+		/*
+		 * A fake 'everything went ok' completion event.
+		 * The bh doesnt matter anymore, but we should not
+		 * signal errors to RAID levels.
+	 	 */
+		bh->b_end_io(bh, 1);
+		return;
 	}
 
 /* fill up the request-info, and add it to the queue */
@@ -689,52 +712,51 @@ get_rq:
 	req->bh = bh;
 	req->bhtail = bh;
 	req->next = NULL;
-	add_request(q, req);
+	__add_request(q, req);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 	return;
 
 end_io:
 	bh->b_end_io(bh, test_bit(BH_Uptodate, &bh->b_state));
 }
 
-void make_request(int major,int rw,  struct buffer_head * bh)
+void generic_make_request(int rw, struct buffer_head * bh)
 {
 	request_queue_t * q;
 	unsigned long flags;
-	
-	q = get_queue(bh->b_dev);
 
-	__make_request(q, major, rw, bh);
+	q = blk_get_queue(bh->b_rdev);
+
+	__make_request(q, rw, bh);
 
 	spin_lock_irqsave(&io_request_lock,flags);
-	if( !q->plugged )
+	if (q && !q->plugged)
 		(q->request_fn)(q);
 	spin_unlock_irqrestore(&io_request_lock,flags);
 }
-
 
 
 /* This function can be used to request a number of buffers from a block
    device. Currently the only restriction is that all buffers must belong to
    the same device */
 
-void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
+static void __ll_rw_block(int rw, int nr, struct buffer_head * bh[],int haslock)
 {
 	unsigned int major;
 	int correct_size;
-	request_queue_t		* q;
-	unsigned long flags;
+	request_queue_t *q;
 	int i;
 
-
 	major = MAJOR(bh[0]->b_dev);
-	if (!(q = get_queue(bh[0]->b_dev))) {
+	q = blk_get_queue(bh[0]->b_dev);
+	if (!q) {
 		printk(KERN_ERR
 	"ll_rw_block: Trying to read nonexistent block-device %s (%ld)\n",
 		kdevname(bh[0]->b_dev), bh[0]->b_blocknr);
 		goto sorry;
 	}
 
-	/* Determine correct block size for this device.  */
+	/* Determine correct block size for this device. */
 	correct_size = BLOCK_SIZE;
 	if (blksize_size[major]) {
 		i = blksize_size[major][MINOR(bh[0]->b_dev)];
@@ -742,7 +764,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 			correct_size = i;
 	}
 
-	/* Verify requested block sizes.  */
+	/* Verify requested block sizes. */
 	for (i = 0; i < nr; i++) {
 		if (bh[i]->b_size != correct_size) {
 			printk(KERN_NOTICE "ll_rw_block: device %s: "
@@ -751,19 +773,6 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 			       correct_size, bh[i]->b_size);
 			goto sorry;
 		}
-
-		/* Md remaps blocks now */
-		bh[i]->b_rdev = bh[i]->b_dev;
-		bh[i]->b_rsector=bh[i]->b_blocknr*(bh[i]->b_size >> 9);
-#ifdef CONFIG_BLK_DEV_MD
-		if (major==MD_MAJOR &&
-		    md_map (MINOR(bh[i]->b_dev), &bh[i]->b_rdev,
-			    &bh[i]->b_rsector, bh[i]->b_size >> 9)) {
-		        printk (KERN_ERR
-				"Bad md_map in ll_rw_block\n");
-		        goto sorry;
-		}
-#endif
 	}
 
 	if ((rw & WRITE) && is_read_only(bh[0]->b_dev)) {
@@ -773,25 +782,29 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	}
 
 	for (i = 0; i < nr; i++) {
-		set_bit(BH_Req, &bh[i]->b_state);
-#ifdef CONFIG_BLK_DEV_MD
-		if (MAJOR(bh[i]->b_dev) == MD_MAJOR) {
-			md_make_request(MINOR (bh[i]->b_dev), rw, bh[i]);
-			continue;
+		/* Only one thread can actually submit the I/O. */
+		if (haslock) {
+			if (!buffer_locked(bh[i]))
+				BUG();
+		} else {
+			if (test_and_set_bit(BH_Lock, &bh[i]->b_state))
+				continue;
 		}
-#endif
-		__make_request(q, MAJOR(bh[i]->b_rdev), rw, bh[i]);
+		set_bit(BH_Req, &bh[i]->b_state);
+
+		if (q->make_request_fn)
+			q->make_request_fn(rw, bh[i]);
+		else {
+			bh[i]->b_rdev = bh[i]->b_dev;
+			bh[i]->b_rsector = bh[i]->b_blocknr*(bh[i]->b_size>>9);
+
+			generic_make_request(rw, bh[i]);
+		}
 	}
 
-	spin_lock_irqsave(&io_request_lock,flags);
-	if( !q->plugged )
-	{
-		(q->request_fn)(q);
-	}
-	spin_unlock_irqrestore(&io_request_lock,flags);
 	return;
 
-      sorry:
+sorry:
 	for (i = 0; i < nr; i++) {
 		mark_buffer_clean(bh[i]); /* remeber to refile it */
 		clear_bit(BH_Uptodate, &bh[i]->b_state);
@@ -800,8 +813,18 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	return;
 }
 
+void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
+{
+	__ll_rw_block(rw, nr, bh, 0);
+}
+
+void ll_rw_block_locked(int rw, int nr, struct buffer_head * bh[])
+{
+	__ll_rw_block(rw, nr, bh, 1);
+}
+
 #ifdef CONFIG_STRAM_SWAP
-extern int stram_device_init( void );
+extern int stram_device_init (void);
 #endif
 
 /*
@@ -811,8 +834,7 @@ extern int stram_device_init( void );
  * 1 means we are done
  */
 
-int 
-end_that_request_first( struct request *req, int uptodate, char *name ) 
+int end_that_request_first (struct request *req, int uptodate, char *name)
 {
 	struct buffer_head * bh;
 	int nsect;
@@ -847,8 +869,7 @@ end_that_request_first( struct request *req, int uptodate, char *name )
 	return 0;
 }
 
-void
-end_that_request_last( struct request *req ) 
+void end_that_request_last(struct request *req)
 {
 	if (req->sem != NULL)
 		up(req->sem);
@@ -862,7 +883,7 @@ int __init blk_dev_init(void)
 	struct blk_dev_struct *dev;
 
 	for (dev = blk_dev + MAX_BLKDEV; dev-- != blk_dev;) {
-		dev->queue           = NULL;
+		dev->queue = NULL;
 		blk_init_queue(&dev->request_queue, NULL);
 	}
 
@@ -943,7 +964,7 @@ int __init blk_dev_init(void)
 	sbpcd_init();
 #endif CONFIG_SBPCD
 #ifdef CONFIG_AZTCD
-        aztcd_init();
+	aztcd_init();
 #endif CONFIG_AZTCD
 #ifdef CONFIG_CDU535
 	sony535_init();

@@ -1,0 +1,166 @@
+               Linux Power Management Support
+
+This document briefly describes how to use power management with your
+Linux system and how to add power management support to Linux drivers.
+
+APM or ACPI?
+------------
+If you have a relatively recent x86 mobile, desktop, or server system,
+odds are it supports either Advanced Power Management (APM) or
+Advanced Configuration and Power Interface (ACPI).  ACPI is the newer
+of the two technologies and puts power management in the hands of the
+operating system, allowing for more intelligent power management than
+is possible with BIOS controlled APM.
+
+The best way to determine which, if either, your system supports is to
+build a kernel with both ACPI and APM enabled (as of 2.3.x ACPI is
+enabled by default).  If a working ACPI implementation is found, the
+ACPI driver will override and disable APM, otherwise the APM driver
+will be used.
+
+No sorry, you can not have both ACPI and APM enabled and running at
+once.  Some people with broken ACPI or broken APM implementations
+would like to use both to get a full set of working features, but you
+simply can not mix and match the two.  Only one power management
+interface can be in control of the machine at once.  Think about it..
+
+User-space Daemons
+------------------
+Both APM and ACPI rely on user-space daemons, apmd and acpid
+respectively, to be completely functional.  Obtain both of these
+daemons from your Linux distribution or from the Internet (see below)
+and be sure that they are started sometime in the system boot process.
+Go ahead and start both.  If ACPI or APM is not available on your
+system the associated daemon will exit gracefully.
+
+  apmd:   http://linuxcare.com.au/apm/
+  acpid:  http://phobos.fs.tum.de/acpi/
+
+Driver Interface
+----------------
+If you are writing a new driver or maintaining an old driver, it
+should include power management support.  Without power management
+support, a single driver may prevent a system with power management
+capabilities from ever being able to suspend (safely).
+
+Overview:
+1) Register each instance of a device with "pm_register"
+2) Call "pm_access" before accessing the hardware.
+   (this will ensure that the hardware is awake and ready)
+3) Your "pm_callback" is called before going into a
+   suspend state (ACPI D1-D3) or after resuming (ACPI D0)
+   from a suspend.
+4) Call "pm_dev_idle" when the device is not being used
+   (optional but will improve device idle detection)
+5) When unloaded, unregister the device with "pm_unregister"
+
+/*
+ * Description: Register a device with the power-management subsystem
+ *
+ * Parameters:
+ *   type - device type (PCI device, system device, ...)
+ *   id - instance number or unique identifier
+ *   cback - request handler callback (suspend, resume, ...)
+ *
+ * Returns: Registered PM device or NULL on error
+ *
+ * Examples:
+ *   dev = pm_register(PM_SYS_DEV, PM_SYS_VGA, vga_callback);
+ *
+ *   struct pci_dev *pci_dev = pci_find_dev(...);
+ *   dev = pm_register(PM_PCI_DEV, PM_PCI_ID(pci_dev), callback);
+ */
+struct pm_dev *pm_register(pm_dev_t type, unsigned long id, pm_callback cback);
+
+/*
+ * Description: Unregister a device with the power management subsystem
+ *
+ * Parameters:
+ *   dev - PM device previously returned from pm_register
+ */
+void pm_unregister(struct pm_dev *dev);
+
+/*
+ * Description: Unregister all devices with a matching callback function
+ *
+ * Parameters:
+ *   cback - previously registered request callback
+ *
+ * Notes: Provided for easier porting from old APM interface
+ */
+void pm_unregister_all(pm_callback cback);
+
+/*
+ * Device idle/use detection
+ *
+ * In general, drivers for all devices should call "pm_access"
+ * before accessing the hardware (ie. before reading or modifying
+ * a hardware register).  Request or packet-driven drivers should
+ * additionally call "pm_dev_idle" when a device is not being used.
+ *
+ * Examples:
+ * 1) A keyboard driver would call pm_access whenever a key is pressed
+ * 2) A network driver would call pm_access before submitting
+ *    a packet for transmit or receive and pm_dev_idle when its
+ *    transfer and receive queues are empty.
+ * 3) A VGA driver would call pm_access before it accesses any
+ *    of the video controller registers
+ *
+ * Ultimately, the PM policy manager uses the access and idle
+ * information to decide when to suspend individual devices
+ * or when to suspend the entire system
+ */
+
+/*
+ * Description: Update device access time and wake up device, if necessary
+ *
+ * Parameters:
+ *   dev - PM device previously returned from pm_register
+ *
+ * Details: If called from an interrupt handler pm_access updates
+ *          access time but should never need to wake up the device
+ *          (if device is generating interrupts, it should be awake
+ *          already)  This is important as we can not wake up
+ *          devices from an interrupt handler.
+ */
+void pm_access(struct pm_dev *dev);
+
+/*
+ * Description: Identify device as currently being idle
+ *
+ * Parameters:
+ *   dev - PM device previously returned from pm_register
+ *
+ * Details: A call to pm_dev_idle might signal to the policy manager
+ *          to put a device to sleep.  If a new device request arrives
+ *          between the call to pm_dev_idle and the pm_callback
+ *          callback, the driver should fail the pm_callback request.
+ */
+void pm_dev_idle(struct pm_dev *dev);
+
+/*
+ * Power management request callback
+ *
+ * Parameters:
+ *   dev - PM device previously returned from pm_register
+ *   rqst - request type
+ *   data - data, if any, associated with the request
+ *
+ * Returns: 0 if the request is successful
+ *          EINVAL if the request is not supported
+ *          EBUSY if the device is now busy and can not handle the request
+ *          ENOMEM if the device was unable to handle the request due to memory
+ *          
+ * Details: The device request callback will be called before the
+ *          device/system enters a suspend state (ACPI D1-D3) or
+ *          or after the device/system resumes from suspend (ACPI D0).
+ *          For PM_SUSPEND, the ACPI D-state being entered is passed
+ *          as the "data" argument to the callback.  The device
+ *          driver should save (PM_SUSPEND) or restore (PM_RESUME)
+ *          device context when the request callback is called.
+ *
+ *          Once a driver returns 0 (success) from a suspend
+ *          request, it should not process any further requests or
+ *          access the device hardware until a call to "pm_access" is made.
+ */
+typedef int (*pm_callback)(struct pm_dev *dev, pm_request_t rqst, void *data);

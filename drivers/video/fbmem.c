@@ -720,6 +720,8 @@ __setup("video=", video_setup);
 
 EXPORT_SYMBOL(register_framebuffer);
 EXPORT_SYMBOL(unregister_framebuffer);
+EXPORT_SYMBOL(registered_fb);
+EXPORT_SYMBOL(num_registered_fb);
 #if 1 /* to go away in 2.4.0 */
 EXPORT_SYMBOL(GET_FB_IDX);
 #endif

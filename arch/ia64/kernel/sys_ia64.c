@@ -5,6 +5,7 @@
  * Copyright (C) 1999 Hewlett-Packard Co
  * Copyright (C) 1999 David Mosberger-Tang <davidm@hpl.hp.com>
  */
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/mm.h>

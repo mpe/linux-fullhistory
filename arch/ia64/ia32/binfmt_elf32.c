@@ -3,6 +3,7 @@
  *
  * Copyright (C) 1999 Arun Sharma <arun.sharma@intel.com>
  */
+#include <linux/config.h>
 #include <linux/posix_types.h>
 
 #include <asm/signal.h>

@@ -23,6 +23,8 @@
 #include <linux/slab.h>
 #include <linux/pm.h>
 
+int pm_active = 0;
+
 static spinlock_t pm_devs_lock = SPIN_LOCK_UNLOCKED;
 static LIST_HEAD(pm_devs);
 
@@ -66,6 +68,51 @@ void pm_unregister(struct pm_dev *dev)
 }
 
 /*
+ * Unregister all devices with matching callback
+ */
+void pm_unregister_all(pm_callback callback)
+{
+	struct list_head *entry;
+
+	if (!callback)
+		return;
+
+	entry = pm_devs.next;
+	while (entry != &pm_devs) {
+		struct pm_dev *dev = list_entry(entry, struct pm_dev, entry);
+		entry = entry->next;
+		if (dev->callback == callback)
+			pm_unregister(dev);
+	}
+}
+
+/*
+ * Send request to an individual device
+ */
+static int pm_send(struct pm_dev *dev, pm_request_t rqst, void *data)
+{
+	int status = 0;
+	int next_state;
+	switch (rqst) {
+	case PM_SUSPEND:
+	case PM_RESUME:
+		next_state = (int) data;
+		if (dev->state != next_state) {
+			if (dev->callback)
+				status = (*dev->callback)(dev, rqst, data);
+			if (!status)
+				dev->state = next_state;
+		}
+		break;
+	default:
+		if (dev->callback)
+			status = (*dev->callback)(dev, rqst, data);
+		break;
+	}
+	return status;
+}
+
+/*
  * Send a request to all devices
  */
 int pm_send_request(pm_request_t rqst, void *data)
@@ -74,7 +121,7 @@ int pm_send_request(pm_request_t rqst, void *data)
 	while (entry != &pm_devs) {
 		struct pm_dev *dev = list_entry(entry, struct pm_dev, entry);
 		if (dev->callback) {
-			int status = (*dev->callback)(dev, rqst, data);
+			int status = pm_send(dev, rqst, data);
 			if (status)
 				return status;
 		}
@@ -100,5 +147,6 @@ struct pm_dev *pm_find(pm_dev_t type, struct pm_dev *from)
 
 EXPORT_SYMBOL(pm_register);
 EXPORT_SYMBOL(pm_unregister);
+EXPORT_SYMBOL(pm_unregister_all);
 EXPORT_SYMBOL(pm_send_request);
 EXPORT_SYMBOL(pm_find);

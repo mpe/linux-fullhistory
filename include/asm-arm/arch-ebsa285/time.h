@@ -17,7 +17,6 @@
 #define RTC_PORT(x)		(rtc_base+(x))
 #define RTC_ALWAYS_BCD		0
 
-#include <linux/config.h>
 #include <linux/mc146818rtc.h>
 
 #include <asm/dec21285.h>

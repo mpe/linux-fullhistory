@@ -888,6 +888,11 @@ M:	torvalds@transmeta.com
 L:	linux-smp@vger.rutgers.edu
 S:	Maintained
 
+SOFTWARE RAID (Multiple Disks) SUPPORT
+P:	Ingo Molnar
+M:	mingo@redhat.com
+S:	Maintained
+
 SONIC NETWORK DRIVER
 P:	Thomas Bogendoerfer
 M:	tsbogend@alpha.franken.de

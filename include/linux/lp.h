@@ -89,6 +89,7 @@
 #define LPGETSTATS  0x060d  /* get statistics (struct lp_stats) */
 #endif
 #define LPGETFLAGS  0x060e  /* get status flags */
+#define LPSETTIMEOUT 0x060f /* set parport timeout */
 
 /* timeout for printk'ing a timeout, in jiffies (100ths of a second).
    This is also used for re-checking error conditions if LP_ABORT is
@@ -145,6 +146,7 @@ struct lp_struct {
 	unsigned int last_error;
 	struct semaphore port_mutex;
 	wait_queue_head_t dataq;
+	long timeout;
 };
 
 /*

@@ -58,9 +58,7 @@
 #include <asm/dma.h>
 #include <asm/byteorder.h>
 
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-#endif
+#include <linux/pm.h>
 
 #include <net/irda/wrapper.h>
 #include <net/irda/irda.h>
@@ -144,9 +142,7 @@ static int  nsc_ircc_net_open(struct net_device *dev);
 static int  nsc_ircc_net_close(struct net_device *dev);
 static int  nsc_ircc_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 static struct net_device_stats *nsc_ircc_net_get_stats(struct net_device *dev);
-#ifdef CONFIG_APM
-static int nsc_ircc_apmproc(apm_event_t event);
-#endif /* CONFIG_APM */
+static int nsc_ircc_pmproc(struct pm_dev *dev, pm_request_t rqst, void *data);
 
 /*
  * Function nsc_ircc_init ()
@@ -216,11 +212,6 @@ int __init nsc_ircc_init(void)
 		} 
 		
 	}
-#ifdef CONFIG_APM
-	/* Make sure at least one chip was found before enabling APM */
-	if (ret == 0)
-		apm_register_callback(nsc_ircc_apmproc);
-#endif /* CONFIG_APM */
 
 	return ret;
 }
@@ -236,9 +227,7 @@ static void nsc_ircc_cleanup(void)
 {
 	int i;
 
-#ifdef CONFIG_APM
-	apm_unregister_callback(nsc_ircc_apmproc);
-#endif /* CONFIG_APM */
+	pm_unregister_all(nsc_ircc_pmproc);
 
 	for (i=0; i < 4; i++) {
 		if (dev_self[i])
@@ -257,6 +246,7 @@ static int nsc_ircc_open(int i, chipio_t *info)
 {
 	struct net_device *dev;
 	struct nsc_ircc_cb *self;
+        struct pm_dev *pmdev;
 	int ret;
 	int err;
 
@@ -379,6 +369,10 @@ static int nsc_ircc_open(int i, chipio_t *info)
 	
 	self->io.dongle_id = dongle_id;
 	nsc_ircc_init_dongle_interface(self->io.fir_base, dongle_id);
+
+        pmdev = pm_register(PM_SYS_DEV, PM_SYS_IRDA, nsc_ircc_pmproc);
+        if (pmdev)
+                pmdev->data = self;
 
 	return 0;
 }
@@ -1984,7 +1978,6 @@ static struct net_device_stats *nsc_ircc_net_get_stats(struct net_device *dev)
 	return &self->stats;
 }
 
-#ifdef CONFIG_APM
 static void nsc_ircc_suspend(struct nsc_ircc_cb *self)
 {
 	MESSAGE("%s, Suspending\n", driver_name);
@@ -2019,36 +2012,21 @@ static void nsc_ircc_wakeup(struct nsc_ircc_cb *self)
 	self->io.suspended = 0;
 }
 
-static int nsc_ircc_apmproc(apm_event_t event)
+static int nsc_ircc_pmproc(struct pm_dev *dev, pm_request_t rqst, void *data)
 {
-	static int down = 0; /* Filter out double events */
-	int i;
-
-	switch (event) {
-	case APM_SYS_SUSPEND:
-	case APM_USER_SUSPEND:
-		if (!down) {			
-			for (i=0; i<4; i++) {
-				if (dev_self[i])
-					nsc_ircc_suspend(dev_self[i]);
-			}
-		}
-		down = 1;
-		break;
-	case APM_NORMAL_RESUME:
-	case APM_CRITICAL_RESUME:
-		if (down) {
-			for (i=0; i<4; i++) {
-				if (dev_self[i])
-					nsc_ircc_wakeup(dev_self[i]);
-			}
-		}
-		down = 0;
-		break;
-	}
+        struct nsc_ircc_cb *self = (struct nsc_ircc_cb*) dev->data;
+        if (self) {
+                switch (rqst) {
+                case PM_SUSPEND:
+                        nsc_ircc_suspend(self);
+                        break;
+                case PM_RESUME:
+                        nsc_ircc_wakeup(self);
+                        break;
+                }
+        }
 	return 0;
 }
-#endif /* CONFIG_APM */
 
 #ifdef MODULE
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");

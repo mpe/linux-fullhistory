@@ -31,7 +31,6 @@
 	  nops while maximizing parallelism
 */
 
-#include <linux/config.h>
 #include <asm/break.h>
 
 	.text

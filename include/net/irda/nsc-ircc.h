@@ -31,6 +31,7 @@
 #include <linux/time.h>
 
 #include <linux/spinlock.h>
+#include <linux/pm.h>
 #include <asm/io.h>
 
 /* DMA modes needed */
@@ -253,6 +254,8 @@ struct nsc_ircc_cb {
 	__u32 flags;               /* Interface flags */
 	__u32 new_speed;
 	int index;                 /* Instance index */
+
+        struct pm_dev *dev;
 };
 
 static inline void switch_bank(int iobase, int bank)

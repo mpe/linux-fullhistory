@@ -7,6 +7,7 @@
  */
 
 #include <asm/io.h>		/* need byte IO */
+#include <linux/config.h>
 #include <linux/spinlock.h>	/* And spinlocks */
 #include <linux/delay.h>
 

@@ -6,6 +6,7 @@
  * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
+#include <linux/config.h>
 #include <linux/threads.h>
 
 extern unsigned int local_irq_count[NR_CPUS];

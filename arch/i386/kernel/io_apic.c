@@ -223,7 +223,7 @@ static int __init find_timer_pin(int type)
 static int __init pin_2_irq(int idx, int apic, int pin);
 int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pci_pin)
 {
-	int apic, i;
+	int apic, i, best_guess = -1;
 
 	for (i = 0; i < mp_irq_entries; i++) {
 		int lbus = mp_irqs[i].mpc_srcbus;
@@ -236,10 +236,18 @@ int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pci_pin)
 		    (mp_bus_id_to_type[lbus] == MP_BUS_PCI) &&
 		    !mp_irqs[i].mpc_irqtype &&
 		    (bus == mp_bus_id_to_pci_bus[mp_irqs[i].mpc_srcbus]) &&
-		    (slot == ((mp_irqs[i].mpc_srcbusirq >> 2) & 0x1f)) &&
-		    (pci_pin == (mp_irqs[i].mpc_srcbusirq & 3)))
+		    (slot == ((mp_irqs[i].mpc_srcbusirq >> 2) & 0x1f))) {
+			int irq = pin_2_irq(i,apic,mp_irqs[i].mpc_dstirq);
 
-			return pin_2_irq(i,apic,mp_irqs[i].mpc_dstirq);
+			if (pci_pin == (mp_irqs[i].mpc_srcbusirq & 3))
+				return irq;
+			/*
+			 * Use the first all-but-pin matching entry as a
+			 * best-guess fuzzy result for broken mptables.
+			 */
+			if (best_guess < 0)
+				best_guess = irq;
+		}
 	}
 	return -1;
 }

@@ -10,8 +10,6 @@
  * Copyright (C) 1999 Walt Drummond <drummond@valinux.com>
  */
 
-#include <linux/config.h>
-
 #include <linux/types.h>
 
 #define ACPI_RSDP_SIG "RSD PTR " /* Trailing space required */

@@ -84,7 +84,7 @@
 #include <linux/soundcard.h>
 #include <linux/pci.h>
 #include <linux/bitops.h>
-#include <linux/apm_bios.h>
+#include <linux/pm.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <linux/init.h>
@@ -2193,35 +2193,28 @@ static int setup_solo1(struct solo1_state *s)
 	return 0;
 }
 
-#ifdef CONFIG_APM
-
-static int solo1_apm_callback(apm_event_t event)
+static int solo1_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data)
 {
-	struct solo1_state *s;
-
-	switch(event) {
-	case APM_NORMAL_RESUME:
-	case APM_CRITICAL_RESUME:
-	case APM_STANDBY_RESUME:
-		for(s = devs ; s ; s = s->next)
+	struct solo1_state *s = (struct solo1_state*) dev->data;
+	if (s) {
+		switch(rqst) {
+		case PM_RESUME:
 			setup_solo1(s);
-		break;
+			break;
 
-		default: 
-			for(s = devs ; s ; s = s->next) {
-				outb(0, s->iobase+6);
-				/* DMA master clear */
-				outb(0, s->ddmabase+0xd); 
-				/* reset sequencer and FIFO */
-				outb(3, s->sbbase+6); 
-				/* turn off DDMA controller address space */
-				pci_write_config_word(s->dev, 0x60, 0); 
-			}
+		case PM_SUSPEND:
+			outb(0, s->iobase+6);
+			/* DMA master clear */
+			outb(0, s->ddmabase+0xd); 
+			/* reset sequencer and FIFO */
+			outb(3, s->sbbase+6); 
+			/* turn off DDMA controller address space */
+			pci_write_config_word(s->dev, 0x60, 0); 
+			break;
+		}
 	}
 	return 0;
 }
-
-#endif
 
 
 #define RSRCISIOREGION(dev,num) ((dev)->resource[(num)].start != 0 && \
@@ -2231,6 +2224,7 @@ static int solo1_apm_callback(apm_event_t event)
 static int solo1_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
 {
 	struct solo1_state *s;
+	struct pm_dev *pmdev;
 
 	if (!RSRCISIOREGION(pcidev, 0) ||
 	    !RSRCISIOREGION(pcidev, 1) ||
@@ -2299,6 +2293,11 @@ static int solo1_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid
 	pcidev->dma_mask = 0xffffff;  /* pessimistic; play can handle 32bit addrs */
 	/* put it into driver list */
 	list_add_tail(&s->devs, &devs);
+
+	pmdev = pm_register(PM_PCI_DEV, PM_PCI_ID(pcidev), solo1_pm_callback);
+	if (pmdev)
+		pmdev->data = s;
+
 	return 0;
 
  err:
@@ -2373,9 +2372,6 @@ static int __init init_solo1(void)
 	printk(KERN_INFO "solo1: version v0.13 time " __TIME__ " " __DATE__ "\n");
 	if (!pci_register_driver(&solo1_driver))
                 return -ENODEV;
-#ifdef CONFIG_APM
-	apm_register_callback(solo1_apm_callback);
-#endif
 	return 0;
 }
 
@@ -2388,9 +2384,7 @@ static void __exit cleanup_solo1(void)
 {
 	printk(KERN_INFO "solo1: unloading\n");
 	pci_unregister_driver(&solo1_driver);
-#ifdef CONFIG_APM
-	apm_unregister_callback(solo1_apm_callback);
-#endif
+	pm_unregister_all(solo1_pm_callback);
 }
 
 /* --------------------------------------------------------------------- */

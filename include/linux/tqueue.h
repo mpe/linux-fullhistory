@@ -116,7 +116,8 @@ extern __inline__ void run_task_queue(task_queue *list)
 			p      = p -> next;
 			mb();
 			save_p -> sync = 0;
-			(*f)(arg);
+			if (f)
+				(*f)(arg);
 		}
 	}
 }

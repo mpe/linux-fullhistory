@@ -150,13 +150,7 @@
 #include <asm/uaccess.h>
 #include <asm/desc.h>
 
-/*
- * Make APM look as much as just another ACPI module as possible..
- */
-#include <linux/acpi.h>
-
-EXPORT_SYMBOL(apm_register_callback);
-EXPORT_SYMBOL(apm_unregister_callback);
+#include <linux/pm.h>
 
 extern unsigned long get_cmos_time(void);
 extern void machine_real_restart(unsigned char *, int);
@@ -303,13 +297,6 @@ static char *	apm_event_name[] = {
 };
 #define NR_APM_EVENT_NAME	\
 		(sizeof(apm_event_name) / sizeof(apm_event_name[0]))
-
-typedef struct callback_list_t {
-	int (*				callback)(apm_event_t);
-	struct callback_list_t *	next;
-} callback_list_t;
-
-static callback_list_t *	callback_list = NULL;
 
 typedef struct lookup_t {
 	int	key;
@@ -687,32 +674,6 @@ static int apm_console_blank(int blank)
 }
 #endif
 
-int apm_register_callback(int (*callback)(apm_event_t))
-{
-	callback_list_t *	new;
-
-	new = kmalloc(sizeof(callback_list_t), GFP_KERNEL);
-	if (new == NULL)
-		return -ENOMEM;
-	new->callback = callback;
-	new->next = callback_list;
-	callback_list = new;
-	return 0;
-}
-
-void apm_unregister_callback(int (*callback)(apm_event_t))
-{
-	callback_list_t **	ptr;
-	callback_list_t *	old;
-
-	for (ptr = &callback_list; *ptr != NULL; ptr = &(*ptr)->next)
-		if ((*ptr)->callback == callback)
-			break;
-	old = *ptr;
-	*ptr = old->next;
-	kfree_s(old, sizeof(callback_list_t));
-}
-
 static int queue_empty(struct apm_bios_struct * as)
 {
 	return as->event_head == as->event_tail;
@@ -848,17 +809,26 @@ static apm_event_t get_event(void)
 static int send_event(apm_event_t event, apm_event_t undo,
 		       struct apm_bios_struct *sender)
 {
-	callback_list_t *	call;
-	callback_list_t *	fix;
-
-	for (call = callback_list; call != NULL; call = call->next) {
-		if (call->callback(event) && undo) {
-			for (fix = callback_list; fix != call; fix = fix->next)
-				fix->callback(undo);
+	switch (event) {
+	case APM_SYS_SUSPEND:
+	case APM_CRITICAL_SUSPEND:
+	case APM_USER_SUSPEND:
+		/* map all suspends to ACPI D3 */
+		if (pm_send_request(PM_SUSPEND, (void*) 3)) {
 			if (apm_bios_info.version > 0x100)
 				apm_set_power_state(APM_STATE_REJECT);
 			return 0;
 		}
+		break;
+	case APM_NORMAL_RESUME:
+	case APM_CRITICAL_RESUME:
+		/* map all resumes to ACPI D0 */
+		if (pm_send_request(PM_RESUME, 0)) {
+			if (apm_bios_info.version > 0x100)
+				apm_set_power_state(APM_STATE_REJECT);
+			return 0;
+		}
+		break;
 	}
 
 	queue_event(event, sender);
@@ -1373,13 +1343,15 @@ static int apm(void *unused)
 
 	/* Install our power off handler.. */
 	if (power_off_enabled)
-		acpi_power_off = apm_power_off;
+		pm_power_off = apm_power_off;
 #ifdef CONFIG_MAGIC_SYSRQ
 	sysrq_power_off = apm_power_off;
 #endif
 #if defined(CONFIG_APM_DISPLAY_BLANK) && defined(CONFIG_VT)
 	console_blank_hook = apm_console_blank;
 #endif
+
+	pm_active = 1;
 
 	apm_mainloop();
 	return 0;
@@ -1484,12 +1456,10 @@ static int __init apm_init(void)
 		APM_INIT_ERROR_RETURN;
 	}
 
-#ifdef CONFIG_ACPI
-	if (acpi_active) {
+	if (PM_IS_ACTIVE()) {
 		printk(KERN_NOTICE "apm: overridden by ACPI.\n");
 		APM_INIT_ERROR_RETURN;
 	}
-#endif
 
 	/*
 	 * Set up a segment that references the real mode segment 0x40
@@ -1551,4 +1521,4 @@ static int __init apm_init(void)
 	return 0;
 }
 
-module_init(apm_init)
+__initcall(apm_init);

@@ -1,6 +1,7 @@
 #ifndef __I386_MMU_CONTEXT_H
 #define __I386_MMU_CONTEXT_H
 
+#include <linux/config.h>
 #include <asm/desc.h>
 #include <asm/atomic.h>
 #include <asm/pgalloc.h>

@@ -217,16 +217,12 @@
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
 
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-static int maestro_apm_callback(apm_event_t ae);
+#include <linux/pm.h>
+static int maestro_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *d);
 static int in_suspend=0;
 wait_queue_head_t suspend_queue;
 static void check_suspend(void);
 #define CHECK_SUSPEND check_suspend();
-#else
-#define CHECK_SUSPEND
-#endif
 
 #include "maestro.h"
 
@@ -390,11 +386,9 @@ struct ess_card {
 	
 	struct ess_state channels[MAX_DSPS];
 	u16 maestro_map[NR_IDRS];	/* Register map */
-#ifdef CONFIG_APM
 	/* we have to store this junk so that we can come back from a
 		suspend */
 	u16 apu_map[NR_APUS][NR_APU_REGS];	/* contents of apu regs */
-#endif
 
 	/* this locks around the physical registers on the card */
 	spinlock_t lock;
@@ -1020,10 +1014,8 @@ static void apu_set_register(struct ess_state *s, u16 channel, u8 reg, u16 data)
 			printk("BAD CHANNEL %d.\n",channel);
 		else
 			channel = s->apu[channel];
-#ifdef	CONFIG_APM
 		/* store based on real hardware apu/reg */
 		s->card->apu_map[channel][reg]=data;
-#endif
 	}
 	reg|=(channel<<4);
 	
@@ -2171,9 +2163,7 @@ ess_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 				goto rec_return_free;
 			}
 			if (!interruptible_sleep_on_timeout(&s->dma_adc.wait, HZ)) {
-#ifdef CONFIG_APM
 				if(! in_suspend)
-#endif
 				printk(KERN_DEBUG "maestro: read: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
 				       s->dma_adc.dmasize, s->dma_adc.fragsize, s->dma_adc.count, 
 				       s->dma_adc.hwptr, s->dma_adc.swptr);
@@ -2273,9 +2263,7 @@ ess_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 				goto return_free;
 			}
 			if (!interruptible_sleep_on_timeout(&s->dma_dac.wait, HZ)) {
-#ifdef CONFIG_APM
 				if(! in_suspend)
-#endif
 				printk(KERN_DEBUG "maestro: write: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
 				       s->dma_dac.dmasize, s->dma_dac.fragsize, s->dma_dac.count, 
 				       s->dma_dac.hwptr, s->dma_dac.swptr);
@@ -3176,6 +3164,7 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 	int i;
 	struct ess_card *card;
 	struct ess_state *ess;
+        struct pm_dev *pmdev;
 	int num = 0;
 
 	/* don't pick up weird modem maestros */
@@ -3209,11 +3198,11 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 	memset(card, 0, sizeof(*card));
 	memcpy(&card->pcidev,pcidev,sizeof(card->pcidev));
 
-#ifdef CONFIG_APM
-	if (apm_register_callback(maestro_apm_callback)) {
-		printk(KERN_WARNING "maestro: apm suspend might not work.\n");
-	}
-#endif
+	pmdev = pm_register(PM_PCI_DEV,
+                            PM_PCI_ID(pcidev),
+                            maestro_pm_callback);
+        if (pmdev)
+                pmdev->data = card;
 
 	card->iobase = iobase;
 	card->card_type = card_type;
@@ -3331,9 +3320,7 @@ int SILLY_MAKE_INIT(init_maestro(void))
 		printk(KERN_WARNING "maestro: clipping dsps_order to %d\n",dsps_order);
 	}
 
-#ifdef CONFIG_APM
 	init_waitqueue_head(&suspend_queue);
-#endif
 
 	/*
 	 *	Find the ESS Maestro 2.
@@ -3382,9 +3369,8 @@ void cleanup_module(void)
 {
 	struct ess_card *s;
 
-#ifdef CONFIG_APM
-	apm_unregister_callback(maestro_apm_callback);
-#endif
+	pm_unregister_all(maestro_pm_callback);
+
 	while ((s = devs)) {
 		int i;
 		devs = devs->next;
@@ -3406,7 +3392,6 @@ void cleanup_module(void)
 }
 
 #endif /* MODULE */
-#ifdef CONFIG_APM
 
 void
 check_suspend(void)
@@ -3424,38 +3409,35 @@ check_suspend(void)
 }
 
 static int 
-maestro_suspend(void)
+maestro_suspend(struct ess_card *card)
 {
-	struct ess_card *card;
 	unsigned long flags;
+        int i,j;
 
 	save_flags(flags);
 	cli();
 
-	for (card = devs; card ; card = card->next) {
-		int i,j;
+        M_printk("maestro: pm in dev %p\n",card);
 
-		M_printk("maestro: apm in dev %p\n",card);
+        for(i=0;i<NR_DSPS;i++) {
+                struct ess_state *s = &card->channels[i];
 
-		for(i=0;i<NR_DSPS;i++) {
-			struct ess_state *s = &card->channels[i];
+                if(s->dev_audio == -1)
+                        continue;
+                
+                M_printk("maestro: stopping apus for device %d\n",i);
+                stop_dac(s);
+                stop_adc(s);
+                for(j=0;j<6;j++) 
+                        card->apu_map[s->apu[j]][5]=apu_get_register(s,j,5);
+                
+        }
 
-			if(s->dev_audio == -1)
-				continue;
+        /* get rid of interrupts? */
+        if( card->dsps_open > 0)
+                stop_bob(&card->channels[0]);
 
-			M_printk("maestro: stopping apus for device %d\n",i);
-			stop_dac(s);
-			stop_adc(s);
-			for(j=0;j<6;j++) 
-				card->apu_map[s->apu[j]][5]=apu_get_register(s,j,5);
-
-		}
-
-		/* get rid of interrupts? */
-		if( card->dsps_open > 0)
-			stop_bob(&card->channels[0]);
-	}
-	in_suspend=1;
+        in_suspend=1;
 
 	restore_flags(flags);
 
@@ -3464,10 +3446,10 @@ maestro_suspend(void)
 	return 0;
 }
 static int 
-maestro_resume(void)
+maestro_resume(struct ess_card *card)
 {
-	struct ess_card *card;
 	unsigned long flags;
+        int i;
 
 	save_flags(flags);
 	cli();
@@ -3475,52 +3457,45 @@ maestro_resume(void)
 	M_printk("maestro: resuming\n");
 
 	/* first lets just bring everything back. .*/
-	for (card = devs; card ; card = card->next) {
-		int i;
 
-		M_printk("maestro: apm in dev %p\n",card);
+        M_printk("maestro: pm in dev %p\n",card);
 
-		maestro_config(card);
-		/* need to restore the base pointers.. */ 
-		if(card->dmapages) 
-			set_base_registers(&card->channels[0],card->dmapages);
-
-		mixer_push_state(card);
-
-		for(i=0;i<NR_DSPS;i++) {
-			struct ess_state *s = &card->channels[i];
-			int chan,reg;
-
-			if(s->dev_audio == -1)
-				continue;
-
-			for(chan = 0 ; chan < 6 ; chan++) {
-				wave_set_register(s,s->apu[chan]<<3,s->apu_base[chan]);
-				for(reg = 1 ; reg < NR_APU_REGS ; reg++)  
-					apu_set_register(s,chan,reg,s->card->apu_map[s->apu[chan]][reg]);
-			}
-			for(chan = 0 ; chan < 6 ; chan++)  
-				apu_set_register(s,chan,0,s->card->apu_map[s->apu[chan]][0] & 0xFF0F);
-		}
-	}
+        maestro_config(card);
+        /* need to restore the base pointers.. */ 
+        if(card->dmapages) 
+                set_base_registers(&card->channels[0],card->dmapages);
+        
+        mixer_push_state(card);
+        
+        for(i=0;i<NR_DSPS;i++) {
+                struct ess_state *s = &card->channels[i];
+                int chan,reg;
+                
+                if(s->dev_audio == -1)
+                        continue;
+                
+                for(chan = 0 ; chan < 6 ; chan++) {
+                        wave_set_register(s,s->apu[chan]<<3,s->apu_base[chan]);
+                        for(reg = 1 ; reg < NR_APU_REGS ; reg++)  
+                                apu_set_register(s,chan,reg,s->card->apu_map[s->apu[chan]][reg]);
+                }
+                for(chan = 0 ; chan < 6 ; chan++)  
+                        apu_set_register(s,chan,0,s->card->apu_map[s->apu[chan]][0] & 0xFF0F);
+        }
 
 	/* now we flip on the music */
-	for (card = devs; card ; card = card->next) {
-		int i;
+        M_printk("maestro: pm in dev %p\n",card);
 
-		M_printk("maestro: apm in dev %p\n",card);
-
-		for(i=0;i<NR_DSPS;i++) {
-			struct ess_state *s = &card->channels[i];
-
-			/* these use the apu_mode, and can handle
-				spurious calls */
-			start_dac(s);	
-			start_adc(s);	
-		}
-		if( card->dsps_open > 0)
-			start_bob(&card->channels[0]);
-	}
+        for(i=0;i<NR_DSPS;i++) {
+                struct ess_state *s = &card->channels[i];
+                
+                /* these use the apu_mode, and can handle
+                   spurious calls */
+                start_dac(s);	
+                start_adc(s);	
+        }
+        if( card->dsps_open > 0)
+                start_bob(&card->channels[0]);
 
 	restore_flags(flags);
 
@@ -3530,22 +3505,20 @@ maestro_resume(void)
 }
 
 int 
-maestro_apm_callback(apm_event_t ae) {
+maestro_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data) {
+        struct ess_card *card = (struct ess_card*) dev->data;
+        if (card) {
+                M_printk("maestro: pm event received: 0x%x\n", rqst);
 
-	M_printk("maestro: apm event received: 0x%x\n",ae);
-
-	switch(ae) {
-	case APM_SYS_SUSPEND: 
-	case APM_CRITICAL_SUSPEND: 
-	case APM_USER_SUSPEND: 
-		maestro_suspend();break;
-	case APM_NORMAL_RESUME: 
-	case APM_CRITICAL_RESUME: 
-	case APM_STANDBY_RESUME: 
-		maestro_resume();break;
-	default: break;
-	}
+                switch (rqst) {
+                case PM_SUSPEND: 
+                        maestro_suspend(card);
+                        break;
+                case PM_RESUME: 
+                        maestro_resume(card);
+                        break;
+                }
+        }
 
 	return 0;
 }
-#endif

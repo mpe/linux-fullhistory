@@ -31,6 +31,7 @@
 #define SMC_IRCC_H
 
 #include <linux/spinlock.h>
+#include <linux/pm.h>
 
 #include <net/irda/irport.h>
 
@@ -181,6 +182,8 @@ struct ircc_cb {
 
 	int tx_buff_offsets[10];   /* Offsets between frames in tx_buff */
 	int tx_len;                /* Number of frames in tx_buff */
+
+	struct pm_dev *pmdev;
 };
 
 #endif /* SMC_IRCC_H */

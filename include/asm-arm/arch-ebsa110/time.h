@@ -12,7 +12,6 @@
  *  28-Dec-1998	APH	Made leds code optional
  */
 
-#include <linux/config.h>
 #include <asm/leds.h>
 
 #define MCLK_47_8

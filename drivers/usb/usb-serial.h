@@ -17,6 +17,8 @@
 #ifndef __LINUX_USB_SERIAL_H
 #define __LINUX_USB_SERIAL_H
 
+#include <linux/config.h>
+
 /* Module information */
 MODULE_AUTHOR("Greg Kroah-Hartman, greg@kroah.com, http://www.kroah.com/linux-usb/");
 MODULE_DESCRIPTION("USB Serial Driver");

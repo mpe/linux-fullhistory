@@ -46,10 +46,8 @@
 #include "uhci.h"
 #include "uhci-debug.h"
 
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-static int handle_apm_event(apm_event_t event);
-#endif
+#include <linux/pm.h>
+static int handle_pm_event(struct pm_dev *dev, pm_request_t rqst, void *data);
 
 static int debug = 1;
 MODULE_PARM(debug, "i");
@@ -1919,7 +1917,7 @@ int uhci_start_root_hub(struct uhci *uhci)
  * If we've successfully found a UHCI, now is the time to increment the
  * module usage count, and return success..
  */
-static int setup_uhci(int irq, unsigned int io_addr, unsigned int io_size)
+static int setup_uhci(struct pci_dev *dev, int irq, unsigned int io_addr, unsigned int io_size)
 {
 	int retval;
 	struct uhci *uhci;
@@ -1942,8 +1940,16 @@ static int setup_uhci(int irq, unsigned int io_addr, unsigned int io_size)
 	if (request_irq(irq, uhci_interrupt, SA_SHIRQ, "usb-uhci", uhci) == 0) {
 		uhci->irq = irq;
 
-		if (!uhci_start_root_hub(uhci))
+		if (!uhci_start_root_hub(uhci)) {
+                        struct pm_dev *pmdev;
+
+                        pmdev = pm_register(PM_PCI_DEV,
+                                            PM_PCI_ID(dev),
+                                            handle_pm_event);
+                        if (pmdev)
+                                pmdev->data = uhci;
 			return 0;
+                }
 	}
 
 	/* Couldn't allocate IRQ if we got here */
@@ -1985,38 +1991,22 @@ static int found_uhci(struct pci_dev *dev)
 			continue;
 		}
 
-		return setup_uhci(dev->irq, io_addr, io_size);
+		return setup_uhci(dev, dev->irq, io_addr, io_size);
 	}
 
 	return -1;
 }
 
-#ifdef CONFIG_APM
-static int handle_apm_event(apm_event_t event)
+static int handle_pm_event(struct pm_dev *dev, pm_request_t rqst, void *data)
 {
-	static int down = 0;
-
-	switch (event) {
-	case APM_SYS_SUSPEND:
-	case APM_USER_SUSPEND:
-		if (down) {
-			dbg("received extra suspend event");
-			break;
-		}
-		down = 1;
+	switch (rqst) {
+	case PM_SUSPEND:
 		break;
-	case APM_NORMAL_RESUME:
-	case APM_CRITICAL_RESUME:
-		if (!down) {
-			dbg("received bogus resume event");
-			break;
-		}
-		down = 0;
+	case PM_RESUME:
 		break;
 	}
 	return 0;
 }
-#endif
 
 int uhci_init(void)
 {
@@ -2063,10 +2053,6 @@ int uhci_init(void)
 	/*  and we didn't find a UHCI controller */
 	if (retval && uhci_list.next == &uhci_list)
 		goto init_failed;
-
-#ifdef CONFIG_APM
-	apm_register_callback(&handle_apm_event);
-#endif
 
 	return 0;
 
@@ -2129,9 +2115,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-#ifdef CONFIG_APM
-	apm_unregister_callback(&handle_apm_event);
-#endif
+	pm_unregister_all(handle_pm_event);
 	uhci_cleanup();
 }
 #endif //MODULE

@@ -29,12 +29,13 @@ extern pgd_t swapper_pg_dir[1024];
 
 #define __flush_tlb()							\
 	do {								\
-		__asm__ __volatile__					\
-			("movl %0, %%cr3;"				\
-				:					\
-				: "r" __pa(current->active_mm->pgd)	\
-				: "memory"				\
-		);							\
+		unsigned int tmpreg;					\
+									\
+		__asm__ __volatile__(					\
+			"movl %%cr3, %0;  # flush TLB \n"		\
+			"movl %0, %%cr3;              \n"		\
+			: "=r" (tmpreg)					\
+			:: "memory");					\
 	} while (0)
 
 /*
@@ -43,14 +44,16 @@ extern pgd_t swapper_pg_dir[1024];
  */
 #define __flush_tlb_global()						\
 	do {								\
+		unsigned int tmpreg;					\
+									\
 		__asm__ __volatile__(					\
-			"movl %0, %%cr4; # turn off PGE \n"		\
-			"mov %2, %%cr3;  # flush TLB \n"		\
-			"mov %1, %%cr4;  # turn PGE back on \n"		\
-			:						\
-			: "r" (mmu_cr4_features),			\
-			  "r" (mmu_cr4_features & ~X86_CR4_PGE),	\
-			  "r" (__pa(current->active_mm->pgd))		\
+			"movl %1, %%cr4;  # turn off PGE     \n"	\
+			"movl %%cr3, %0;  # flush TLB        \n"	\
+			"movl %0, %%cr3;                     \n"	\
+			"movl %2, %%cr4;  # turn PGE back on \n"	\
+			: "=r" (tmpreg)					\
+			: "r" (mmu_cr4_features & ~X86_CR4_PGE),	\
+			  "r" (mmu_cr4_features)			\
 			: "memory");					\
 	} while (0)
 

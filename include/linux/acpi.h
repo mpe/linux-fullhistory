@@ -56,15 +56,6 @@ enum
 
 typedef int acpi_dstate_t;
 
-#ifdef __KERNEL__
-
-extern int acpi_active;
-
-extern void (*acpi_idle)(void);
-extern void (*acpi_power_off)(void);
-
-#endif /* __KERNEL__ */
-
 /* RSDP location */
 #define ACPI_BIOS_ROM_BASE (0x0e0000)
 #define ACPI_BIOS_ROM_END  (0x100000)

@@ -185,15 +185,15 @@ static inline int __prepare_ICR (unsigned int shortcut, int vector)
 	return cfg;
 }
 
-static inline int __prepare_ICR2 (unsigned int dest)
+static inline int __prepare_ICR2 (unsigned int mask)
 {
 	unsigned int cfg;
 
 	cfg = __get_ICR2();
 #if LOGICAL_DELIVERY
-	cfg |= SET_APIC_DEST_FIELD((1<<dest));
+	cfg |= SET_APIC_DEST_FIELD(mask);
 #else
-	cfg |= SET_APIC_DEST_FIELD(dest);
+	cfg |= SET_APIC_DEST_FIELD(mask);
 #endif
 
 	return cfg;
@@ -249,7 +249,7 @@ void send_IPI_self(int vector)
 	__send_IPI_shortcut(APIC_DEST_SELF, vector);
 }
 
-static inline void send_IPI_single(int dest, int vector)
+static inline void send_IPI_mask(int mask, int vector)
 {
 	unsigned long cfg;
 #if FORCE_READ_AROUND_WRITE
@@ -263,7 +263,7 @@ static inline void send_IPI_single(int dest, int vector)
 	 * prepare target chip field
 	 */
 
-	cfg = __prepare_ICR2(dest);
+	cfg = __prepare_ICR2(mask);
 	apic_write(APIC_ICR2, cfg);
 
 	/*
@@ -289,19 +289,17 @@ static inline void send_IPI_single(int dest, int vector)
  *
  *	Optimizations Manfred Spraul <manfreds@colorfullife.com>
  */
-#define TLB_PARANOIA 1
 
 static volatile unsigned long flush_cpumask;
 static struct mm_struct * flush_mm;
 static unsigned long flush_va;
-#define FLUSH_ALL	0xFFFFffff
+static spinlock_t tlbstate_lock = SPIN_LOCK_UNLOCKED;
+#define FLUSH_ALL	0xffffffff
 
-static void inline leave_mm(unsigned long cpu)
+static void inline leave_mm (unsigned long cpu)
 {
-#ifdef TLB_PARANOIA
-	if(cpu_tlbstate[cpu].state == TLBSTATE_OK)
+	if (cpu_tlbstate[cpu].state == TLBSTATE_OK)
 		BUG();
-#endif
 	clear_bit(cpu, &cpu_tlbstate[cpu].active_mm->cpu_vm_mask);
 	cpu_tlbstate[cpu].state = TLBSTATE_OLD;
 }
@@ -335,109 +333,91 @@ static void inline leave_mm(unsigned long cpu)
  * instead update cpu_tlbstate.
  */
 
-asmlinkage void smp_invalidate_interrupt(void)
+asmlinkage void smp_invalidate_interrupt (void)
 {
 	unsigned long cpu = smp_processor_id();
 
 	if (flush_mm == cpu_tlbstate[cpu].active_mm) {
 		if (cpu_tlbstate[cpu].state == TLBSTATE_OK) {
-			if(flush_va == FLUSH_ALL)
+			if (flush_va == FLUSH_ALL)
 				local_flush_tlb();
-			 else
-			 	__flush_tlb_one(flush_va);
-		} else {
+			else
+				__flush_tlb_one(flush_va);
+		} else
 			leave_mm(cpu);
-		}
 	}
 	ack_APIC_irq();
 	clear_bit(cpu, &flush_cpumask);
 }
 
-static void flush_tlb_others(unsigned long cpumask, struct mm_struct *mm, unsigned long va)
+static void flush_tlb_others (unsigned long cpumask, struct mm_struct *mm,
+						unsigned long va)
 {
-#ifdef TLB_PARANOIA
-	if(in_interrupt()) {
-		printk(KERN_EMERG "tlb flush from interrupt: %d,%d",
-			local_bh_count[smp_processor_id()],
-			local_irq_count[smp_processor_id()]);
-	}
-	if(cpumask & (1<<smp_processor_id())) {
-		printk(KERN_EMERG "flush_tlb_others: bad cpumask!");
-		cpumask &= ~(1<<smp_processor_id());	
-		local_flush_tlb();
-	}
-	{
-		int flags;
-
-		save_flags(flags);
-		if(flags != 1) {
-static int limit=10;
-			if(limit > 0) {
-				limit--;
-				printk(KERN_EMERG "flush_tlb_others: possible lock-up, broken!(%d)",
-						flags);
-/*				show_stack(NULL);*/
-			}
-			sti();
-		}
-	}
-#endif
-	cpumask &= cpu_online_map;
+	/*
+	 * A couple of (to be removed) sanity checks:
+	 *
+	 * - we do not send IPIs to not-yet booted CPUs.
+	 * - current CPU must not be in mask
+	 * - mask must exist :)
+	 */
+	if (!cpumask)
+		BUG();
+	if ((cpumask & cpu_online_map) != cpumask)
+		BUG();
+	if (cpumask & (1 << smp_processor_id()))
+		BUG();
 
 	/*
-	 * it's important that we do not generate any APIC traffic
-	 * until the AP CPUs have booted up!
+	 * i'm not happy about this global shared spinlock in the
+	 * MM hot path, but we'll see how contended it is.
 	 */
-	if (cpumask) {
-static spinlock_t lock = SPIN_LOCK_UNLOCKED;
-		spin_lock(&lock);
-		
-		flush_mm = mm;
-		flush_va = va;
-		atomic_set_mask(cpumask, &flush_cpumask);
-		send_IPI_allbutself(INVALIDATE_TLB_VECTOR);
+	spin_lock(&tlbstate_lock);
+	
+	flush_mm = mm;
+	flush_va = va;
+	atomic_set_mask(cpumask, &flush_cpumask);
+	/*
+	 * We have to send the IPI only to
+	 * CPUs affected.
+	 */
+	send_IPI_mask(cpumask, INVALIDATE_TLB_VECTOR);
 
-		while (flush_cpumask) {
-			/* FIXME: lockup-detection, print backtrace on
-			 * lock-up
-			 */
-		}
-		flush_mm = NULL;
-		flush_va = 0;
-		spin_unlock(&lock);
-	}
+	while (flush_cpumask)
+		/* nothing. lockup detection does not belong here */;
+
+	flush_mm = NULL;
+	flush_va = 0;
+	spin_unlock(&tlbstate_lock);
 }
 	
 void flush_tlb_current_task(void)
 {
-	unsigned long vm_mask = 1 << smp_processor_id();
 	struct mm_struct *mm = current->mm;
-	unsigned long cpu_mask = mm->cpu_vm_mask & ~vm_mask;
+	unsigned long cpu_mask = mm->cpu_vm_mask & ~(1 << smp_processor_id());
 
 	local_flush_tlb();
-	flush_tlb_others(cpu_mask, mm, FLUSH_ALL);
+	if (cpu_mask)
+		flush_tlb_others(cpu_mask, mm, FLUSH_ALL);
 }
 
-void flush_tlb_mm(struct mm_struct * mm)
+void flush_tlb_mm (struct mm_struct * mm)
 {
-	unsigned long vm_mask = 1 << smp_processor_id();
-	unsigned long cpu_mask = mm->cpu_vm_mask & ~vm_mask;
+	unsigned long cpu_mask = mm->cpu_vm_mask & ~(1 << smp_processor_id());
 
 	if (current->active_mm == mm) {
-		if(current->mm)
+		if (current->mm)
 			local_flush_tlb();
-		 else
+		else
 			leave_mm(smp_processor_id());
 	}
-		
-	flush_tlb_others(cpu_mask, mm, FLUSH_ALL);
+	if (cpu_mask)
+		flush_tlb_others(cpu_mask, mm, FLUSH_ALL);
 }
 
 void flush_tlb_page(struct vm_area_struct * vma, unsigned long va)
 {
-	unsigned long vm_mask = 1 << smp_processor_id();
 	struct mm_struct *mm = vma->vm_mm;
-	unsigned long cpu_mask = mm->cpu_vm_mask & ~vm_mask;
+	unsigned long cpu_mask = mm->cpu_vm_mask & ~(1 << smp_processor_id());
 
 	if (current->active_mm == mm) {
 		if(current->mm)
@@ -446,12 +426,14 @@ void flush_tlb_page(struct vm_area_struct * vma, unsigned long va)
 		 	leave_mm(smp_processor_id());
 	}
 
-	flush_tlb_others(cpu_mask, mm, va);
+	if (cpu_mask)
+		flush_tlb_others(cpu_mask, mm, va);
 }
 
 static inline void do_flush_tlb_all_local(void)
 {
 	unsigned long cpu = smp_processor_id();
+
 	__flush_tlb_all();
 	if (cpu_tlbstate[cpu].state == TLBSTATE_LAZY)
 		leave_mm(cpu);
@@ -477,7 +459,7 @@ void flush_tlb_all(void)
 
 void smp_send_reschedule(int cpu)
 {
-	send_IPI_single(cpu, RESCHEDULE_VECTOR);
+	send_IPI_mask(1 << cpu, RESCHEDULE_VECTOR);
 }
 
 /*

@@ -61,12 +61,12 @@ void enable_hlt(void)
 /*
  * Powermanagement idle function, if any..
  */
-void (*acpi_idle)(void) = NULL;
+void (*pm_idle)(void) = NULL;
 
 /*
  * Power off function, if any
  */
-void (*acpi_power_off)(void) = NULL;
+void (*pm_power_off)(void) = NULL;
 
 /*
  * We use this if we don't have any better
@@ -92,7 +92,7 @@ void cpu_idle(void)
 	current->counter = -100;
 
 	while (1) {
-		void (*idle)(void) = acpi_idle;
+		void (*idle)(void) = pm_idle;
 		if (!idle)
 			idle = default_idle;
 		while (!current->need_resched)
@@ -328,8 +328,8 @@ void machine_halt(void)
 
 void machine_power_off(void)
 {
-	if (acpi_power_off)
-		acpi_power_off();
+	if (pm_power_off)
+		pm_power_off();
 }
 
 

@@ -49,14 +49,18 @@ endif
 endif
 
 ifeq ($(CONFIG_ACPI),y)
-  O_OBJS += acpi.o
+O_OBJS += acpi.o
+else
+  ifeq ($(CONFIG_ACPI),m)
+  M_OBJS += acpi.o
+  endif
 endif
 
 ifeq ($(CONFIG_APM),y)
-OX_OBJS += apm.o
+O_OBJS += apm.o
 else
   ifeq ($(CONFIG_APM),m)
-  MX_OBJS += apm.o
+  M_OBJS += apm.o
   endif
 endif
 

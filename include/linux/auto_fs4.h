@@ -16,10 +16,12 @@
 
 /* autofs v4 definitions */
 #undef AUTOFS_PROTO_VERSION
-#define AUTOFS_PROTO_VERSION 4
-
+#undef AUTOFS_MIN_PROTO_VERSION
 #undef AUTOFS_MAX_PROTO_VERSION
-#define AUTOFS_MAX_PROTO_VERSION	AUTOFS_PROTO_VERSION
+
+#define AUTOFS_PROTO_VERSION		4
+#define AUTOFS_MIN_PROTO_VERSION	3
+#define AUTOFS_MAX_PROTO_VERSION	4
 
 /* New message type */
 #define autofs_ptype_expire_multi	2	/* Expire entry (umount request) */

@@ -11,7 +11,6 @@
 #include <linux/config.h>
 
 #include <linux/init.h>
-#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/smp.h>
@@ -36,7 +35,7 @@ int __initdata acpi_cpus = 0;
 int __initdata acpi_apic_map[32];
 int __initdata cpu_cnt = 0;
 
-void (*acpi_idle) (void);
+void (*pm_idle) (void);
 
 /*
  * Identify usable CPU's and remember them for SMP bringup later.

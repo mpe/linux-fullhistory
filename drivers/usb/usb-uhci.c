@@ -54,10 +54,8 @@
 #undef dbg
 #define dbg(format, arg...) do {} while (0)
 
-#ifdef CONFIG_APM
-	#include <linux/apm_bios.h>
-	static int handle_apm_event (apm_event_t event);
-#endif
+#include <linux/pm.h>
+static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data);
 
 #ifdef DEBUG_SYMBOLS
 	#define _static
@@ -2184,10 +2182,11 @@ _static int __init uhci_start_usb (uhci_t *s)
 	return 0;
 }
 
-_static int __init alloc_uhci (int irq, unsigned int io_addr, unsigned int io_size)
+_static int __init alloc_uhci (struct pci_dev *dev, int irq, unsigned int io_addr, unsigned int io_size)
 {
 	uhci_t *s;
 	struct usb_bus *bus;
+	struct pm_dev *pmdev;
 
 	s = kmalloc (sizeof (uhci_t), GFP_KERNEL);
 	if (!s)
@@ -2270,6 +2269,11 @@ _static int __init alloc_uhci (int irq, unsigned int io_addr, unsigned int io_si
 
 	//chain new uhci device into global list
 	devs = s;
+
+	pmdev = pm_register(PM_PCI_DEV, PM_PCI_ID(dev), handle_pm_event);
+	if (pmdev)
+		pmdev->data = s;
+
 	return 0;
 }
 
@@ -2298,46 +2302,26 @@ _static int __init start_uhci (struct pci_dev *dev)
 			break;
 		/* disable legacy emulation */
 		pci_write_config_word (dev, USBLEGSUP, USBLEGSUP_DEFAULT);
-		return alloc_uhci(dev->irq, io_addr, io_size);
+		return alloc_uhci(dev, dev->irq, io_addr, io_size);
 	}
 	return -1;
 }
 
-#ifdef CONFIG_APM
-_static int handle_apm_event (apm_event_t event)
+_static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 {
-	static int down = 0;
-	uhci_t *s = devs;
-	dbg("handle_apm_event(%d)", event);
-	switch (event) {
-	case APM_SYS_SUSPEND:
-	case APM_USER_SUSPEND:
-		if (down) {
-			dbg("received extra suspend event");
-			break;
-		}
-		while (s) {
-			reset_hc (s);
-			s = s->next;
-		}
-		down = 1;
+	uhci_t *s = (uhci_t*) dev->data;
+	dbg("handle_apm_event(%d)", rqst);
+	if (s) {
+	switch (rqst) {
+	case PM_SUSPEND:
+		reset_hc (s);
 		break;
-	case APM_NORMAL_RESUME:
-	case APM_CRITICAL_RESUME:
-		if (!down) {
-			dbg("received bogus resume event");
-			break;
-		}
-		down = 0;
-		while (s) {
-			start_hc (s);
-			s = s->next;
-		}
+	case PM_RESUME:
+		start_hc (s);
 		break;
 	}
 	return 0;
 }
-#endif
 
 int __init uhci_init (void)
 {
@@ -2388,13 +2372,8 @@ int __init uhci_init (void)
 	
 		if (!retval)
 			i++;
-
 	}
 
-#ifdef CONFIG_APM
-	if(i)
-		apm_register_callback (&handle_apm_event);
-#endif
 	return retval;
 }
 
@@ -2424,9 +2403,7 @@ int init_module (void)
 
 void cleanup_module (void)
 {
-#ifdef CONFIG_APM
-	apm_unregister_callback (&handle_apm_event);
-#endif
+	pm_unregister_all (handle_pm_event);
 	uhci_cleanup ();
 }
 

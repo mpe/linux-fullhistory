@@ -7,7 +7,7 @@
 #define __KERNEL_SYSCALLS__	/* see <asm/unistd.h> */
 #include <linux/config.h>
 
-#include <linux/acpi.h>
+#include <linux/pm.h>
 #include <linux/elf.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -95,8 +95,8 @@ cpu_idle (void *unused)
 #endif
 		schedule();
 		check_pgt_cache();
-		if (acpi_idle)
-			(*acpi_idle)();
+		if (pm_idle)
+			(*pm_idle)();
 	}
 }
 

@@ -23,8 +23,6 @@ README.DAC960
 	- info on Mylex DAC960/DAC1100 PCI RAID Controller Driver for Linux
 VGA-softcursor.txt
 	- how to change your VGA cursor from a blinking underscore.
-acpi.txt
-	- info on ACPI Driver Interface
 arm/
 	- directory with info about Linux on the ARM architecture.
 atm.txt
@@ -125,6 +123,8 @@ pci.txt
 	- info on the PCI subsystem for device driver authors
 pcwd-watchdog.txt
 	- info and sample code for using with the PC Watchdog reset card.
+pm.txt
+	- info on Linux power management support
 powerpc/
 	- directory with info on using Linux with the PowerPC.
 proc_usb_info.txt

@@ -1,6 +1,8 @@
 #ifndef __ASM_IA64_IOSAPIC_H
 #define __ASM_IA64_IOSAPIC_H
 
+#include <linux/config.h>
+
 #define	IO_SAPIC_DEFAULT_ADDR	0xFEC00000
 
 #define	IO_SAPIC_REG_SELECT	0x0

@@ -11,6 +11,8 @@
 
 # ifdef __KERNEL__
 
+#include <linux/config.h>
+
 #define KEYBOARD_IRQ			1
 #define DISABLE_KBD_DURING_INTERRUPTS	0
 

@@ -105,7 +105,6 @@ static int acpi_p_lvl2_tested = 0;
 static int acpi_p_lvl3_tested = 0;
 
 static int acpi_disabled = 0;
-int acpi_active = 0;
 
 // bits 8-15 are SLP_TYPa, bits 0-7 are SLP_TYPb
 static unsigned long acpi_slp_typ[] = 
@@ -564,7 +563,7 @@ static int __init acpi_init_piix4(struct pci_dev *dev)
 /*
  * Init VIA ACPI device and create a fake FACP
  */
-static int __init acpi_init_via686a(struct pci_dev *dev)
+static int __init acpi_init_via(struct pci_dev *dev)
 {
 	u32 base;
 	u8 tmp, irq;
@@ -631,6 +630,7 @@ typedef enum
 {
 	CH_UNKNOWN = 0,
 	CH_INTEL_PIIX4,
+	CH_VIA_586,
 	CH_VIA_686A,
 } acpi_chip_t;
 
@@ -642,12 +642,13 @@ const static struct
 {
 	{NULL,},
 	{acpi_init_piix4},
-	{acpi_init_via686a},
+	{acpi_init_via},
 };
 	
 const static struct pci_device_id acpi_pci_tbl[] =
 {
 	{0x8086, 0x7113, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_INTEL_PIIX4},
+	{0x1106, 0x3040, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_VIA_586},
 	{0x1106, 0x3057, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_VIA_686A},
 	{0,}, /* terminate list */
 };
@@ -792,7 +793,7 @@ static void wake_on_busmaster(struct acpi_facp *facp)
 /*
  * Idle loop (uniprocessor only)
  */
-static void acpi_idle_handler(void)
+static void acpi_idle(void)
 {
 	static int sleep_level = 1;
 	struct acpi_facp *facp = acpi_facp;
@@ -1009,9 +1010,22 @@ static void acpi_enter_sx(acpi_sstate_t state)
 /*
  * Enter soft-off (S5)
  */
-static void acpi_power_off_handler(void)
+static void acpi_power_off(void)
 {
 	acpi_enter_sx(ACPI_S5);
+}
+
+/*
+ * Claim I/O port if available
+ */
+static int acpi_claim(unsigned long start, unsigned long size)
+{
+	if (start && size) {
+		if (check_region(start, size))
+			return -EBUSY;
+		request_region(start, size, "acpi");
+	}
+	return 0;
 }
 
 /*
@@ -1020,22 +1034,24 @@ static void acpi_power_off_handler(void)
 static int acpi_claim_ioports(struct acpi_facp *facp)
 {
 	// we don't get a guarantee of contiguity for any of the ACPI registers
-	if (facp->pm1a_evt)
-		request_region(facp->pm1a_evt, facp->pm1_evt_len, "acpi");
-	if (facp->pm1b_evt)
-		request_region(facp->pm1b_evt, facp->pm1_evt_len, "acpi");
-	if (facp->pm1a_cnt)
-		request_region(facp->pm1a_cnt, facp->pm1_cnt_len, "acpi");
-	if (facp->pm1b_cnt)
-		request_region(facp->pm1b_cnt, facp->pm1_cnt_len, "acpi");
-	if (facp->pm_tmr)
-		request_region(facp->pm_tmr, facp->pm_tm_len, "acpi");
-	if (facp->gpe0)
-		request_region(facp->gpe0, facp->gpe0_len, "acpi");
-	if (facp->gpe1)
-		request_region(facp->gpe1, facp->gpe1_len, "acpi");
-
+	if (acpi_claim(facp->pm1a_evt, facp->pm1_evt_len)
+	    || acpi_claim(facp->pm1b_evt, facp->pm1_evt_len)
+	    || acpi_claim(facp->pm1a_cnt, facp->pm1_cnt_len)
+	    || acpi_claim(facp->pm1b_cnt, facp->pm1_cnt_len)
+	    || acpi_claim(facp->pm_tmr, facp->pm_tm_len)
+	    || acpi_claim(facp->gpe0, facp->gpe0_len)
+	    || acpi_claim(facp->gpe1, facp->gpe1_len))
+		return -EBUSY;
 	return 0;
+}
+
+/*
+ * Release I/O port if claimed
+ */
+static void acpi_release(unsigned long start, unsigned long size)
+{
+	if (start && size)
+		release_region(start, size);
 }
 
 /*
@@ -1044,21 +1060,13 @@ static int acpi_claim_ioports(struct acpi_facp *facp)
 static int acpi_release_ioports(struct acpi_facp *facp)
 {
 	// we don't get a guarantee of contiguity for any of the ACPI registers
-	if (facp->pm1a_evt)
-		release_region(facp->pm1a_evt, facp->pm1_evt_len);
-	if (facp->pm1b_evt)
-		release_region(facp->pm1b_evt, facp->pm1_evt_len);
-	if (facp->pm1a_cnt)
-		release_region(facp->pm1a_cnt, facp->pm1_cnt_len);
-	if (facp->pm1b_cnt)
-		release_region(facp->pm1b_cnt, facp->pm1_cnt_len);
-	if (facp->pm_tmr)
-		release_region(facp->pm_tmr, facp->pm_tm_len);
-	if (facp->gpe0)
-		release_region(facp->gpe0, facp->gpe0_len);
-	if (facp->gpe1)
-		release_region(facp->gpe1, facp->gpe1_len);
-
+	acpi_release(facp->gpe1, facp->gpe1_len);
+	acpi_release(facp->gpe0, facp->gpe0_len);
+	acpi_release(facp->pm_tmr, facp->pm_tm_len);
+	acpi_release(facp->pm1b_cnt, facp->pm1_cnt_len);
+	acpi_release(facp->pm1a_cnt, facp->pm1_cnt_len);
+	acpi_release(facp->pm1b_evt, facp->pm1_evt_len);
+	acpi_release(facp->pm1a_evt, facp->pm1_evt_len);
 	return 0;
 }
 
@@ -1322,6 +1330,14 @@ static int __init acpi_init(void)
 			= ACPI_uS_TO_TMR_TICKS(acpi_facp->p_lvl3_lat * 5);
 	}
 
+	if (acpi_claim_ioports(acpi_facp)) {
+		printk(KERN_ERR "ACPI: I/O port allocation failed\n");
+		if (pci_driver_registered)
+			pci_unregister_driver(&acpi_driver);
+		acpi_destroy_tables();
+		return -ENODEV;
+	}
+
 	if (acpi_facp->sci_int
 	    && request_irq(acpi_facp->sci_int,
 			   acpi_irq,
@@ -1338,16 +1354,15 @@ static int __init acpi_init(void)
 		return -ENODEV;
 	}
 
-	acpi_claim_ioports(acpi_facp);
 	acpi_sysctl = register_sysctl_table(acpi_dir_table, 1);
 
 	pid = kernel_thread(acpi_control_thread,
 			    NULL,
 			    CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 
-	acpi_power_off = acpi_power_off_handler;
+	pm_power_off = acpi_power_off;
 
-	acpi_active = 1;
+	pm_active = 1;
 
 	/*
 	 * Set up the ACPI idle function. Note that we can't really
@@ -1360,7 +1375,7 @@ static int __init acpi_init(void)
 #endif
 
 	if (acpi_facp->pm_tmr)
-		acpi_idle = acpi_idle_handler;
+		pm_idle = acpi_idle;
 
 	return 0;
 }
@@ -1370,8 +1385,8 @@ static int __init acpi_init(void)
  */
 static void __exit acpi_exit(void)
 {
-	acpi_idle = NULL;
-	acpi_power_off = NULL;
+	pm_idle = NULL;
+	pm_power_off = NULL;
 
 	unregister_sysctl_table(acpi_sysctl);
 	acpi_disable(acpi_facp);

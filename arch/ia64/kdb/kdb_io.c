@@ -25,6 +25,7 @@
  *              Port to ia64
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/console.h>
 #include <linux/serial_reg.h>

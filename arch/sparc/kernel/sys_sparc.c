@@ -9,7 +9,6 @@
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/sched.h>
-#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/file.h>

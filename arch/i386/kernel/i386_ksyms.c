@@ -8,7 +8,7 @@
 #include <linux/in6.h>
 #include <linux/interrupt.h>
 #include <linux/smp_lock.h>
-#include <linux/acpi.h>
+#include <linux/pm.h>
 #include <linux/pci.h>
 
 #include <asm/semaphore.h>
@@ -51,8 +51,8 @@ EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(disable_irq_nosync);
 EXPORT_SYMBOL(probe_irq_mask);
 EXPORT_SYMBOL(kernel_thread);
-EXPORT_SYMBOL(acpi_idle);
-EXPORT_SYMBOL(acpi_power_off);
+EXPORT_SYMBOL(pm_idle);
+EXPORT_SYMBOL(pm_power_off);
 
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);

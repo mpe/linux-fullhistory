@@ -65,20 +65,6 @@ static struct gendisk *get_gendisk(kdev_t dev) {
 	return g;
 }
 
-/* moved here from md.c - will be discarded later */
-char *partition_name (kdev_t dev) {
-	static char name[40];		/* kdevname returns 32 bytes */
-					/* disk_name requires 32 bytes */
-	struct gendisk *hd = get_gendisk (dev);
-
-	if (!hd) {
-		sprintf (name, "[dev %s]", kdevname(dev));
-		return (name);
-	}
-
-	return disk_name (hd, MINOR(dev), name);  /* routine in genhd.c */
-}
-
 /*
  * Add a partition.
  *

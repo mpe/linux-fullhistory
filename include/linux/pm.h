@@ -21,6 +21,8 @@
 #ifndef _LINUX_PM_H
 #define _LINUX_PM_H
 
+#ifdef __KERNEL__
+
 #include <linux/config.h>
 #include <linux/list.h>
 
@@ -69,8 +71,10 @@ enum
 	PM_SYS_UNKNOWN = 0x00000000, /* generic */
 	PM_SYS_KBC =	 0x41d00303, /* keyboard controller */
 	PM_SYS_COM =	 0x41d00500, /* serial port */
+	PM_SYS_IRDA =	 0x41d00510, /* IRDA controller */
 	PM_SYS_FDC =	 0x41d00700, /* floppy controller */
 	PM_SYS_VGA =	 0x41d00900, /* VGA controller */
+	PM_SYS_PCMCIA =	 0x41d00e00, /* PCMCIA controller */
 };
 
 /*
@@ -96,12 +100,16 @@ struct pm_dev
 	void		*data;
 
 	unsigned long	 flags;
-	unsigned long	 status;
+	int		 state;
 
 	struct list_head entry;
 };
 
 #if defined(CONFIG_ACPI) || defined(CONFIG_APM)
+
+extern int pm_active;
+
+#define PM_IS_ACTIVE() (pm_active != 0)
 
 /*
  * Register a device with power management
@@ -114,6 +122,11 @@ struct pm_dev *pm_register(pm_dev_t type,
  * Unregister a device with power management
  */
 void pm_unregister(struct pm_dev *dev);
+
+/*
+ * Unregister all devices with matching callback
+ */
+void pm_unregister_all(pm_callback callback);
 
 /*
  * Send a request to all devices
@@ -130,6 +143,8 @@ extern inline void pm_dev_idle(struct pm_dev *dev) {}
 
 #else // CONFIG_ACPI || CONFIG_APM
 
+#define PM_IS_ACTIVE() 0
+
 extern inline struct pm_dev *pm_register(pm_dev_t type,
 					 unsigned long id,
 					 pm_callback callback)
@@ -138,6 +153,8 @@ extern inline struct pm_dev *pm_register(pm_dev_t type,
 }
 
 extern inline void pm_unregister(struct pm_dev *dev) {}
+
+extern inline void pm_unregister_all(pm_callback callback) {}
 
 extern inline int pm_send_request(pm_request_t rqst, void *data)
 {
@@ -153,5 +170,10 @@ extern inline void pm_access(struct pm_dev *dev) {}
 extern inline void pm_dev_idle(struct pm_dev *dev) {}
 
 #endif // CONFIG_ACPI || CONFIG_APM
+
+extern void (*pm_idle)(void);
+extern void (*pm_power_off)(void);
+
+#endif // __KERNEL__
 
 #endif /* _LINUX_PM_H */

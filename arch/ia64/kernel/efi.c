@@ -15,6 +15,7 @@
  *
  * Implemented EFI runtime services and virtual mode calls.  --davidm
  */
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/types.h>

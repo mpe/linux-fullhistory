@@ -77,9 +77,8 @@ static char *rcsid = "$Id: toshoboe.c,v 1.91 1999/06/29 14:21:06 root Exp $";
 #include <net/irda/irlap_frame.h>
 #include <net/irda/irda_device.h>
 
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-#endif
+#include <linux/pm.h>
+static int toshoboe_pmproc (struct pm_dev *dev, pm_request_t rqst, void *data);
 
 #include <net/irda/toshoboe.h>
 
@@ -690,6 +689,7 @@ toshoboe_open (struct pci_dev *pci_dev)
 {
   struct toshoboe_cb *self;
   struct net_device *dev;
+  struct pm_dev *pmdev;
   int i = 0;
   int ok = 0;
   int err;
@@ -858,6 +858,10 @@ toshoboe_open (struct pci_dev *pci_dev)
 	  return -1;
   }
 
+  pmdev = pm_register (PM_PCI_DEV, PM_PCI_ID(pci_dev), toshoboe_pmproc);
+  if (pmdev)
+	  pmdev->data = self;
+
   printk (KERN_WARNING "ToshOboe: Using ");
 #ifdef ONETASK
   printk ("single");
@@ -869,7 +873,6 @@ toshoboe_open (struct pci_dev *pci_dev)
   return (0);
 }
 
-#ifdef CONFIG_APM
 static void 
 toshoboe_gotosleep (struct toshoboe_cb *self)
 {
@@ -935,51 +938,22 @@ toshoboe_wakeup (struct toshoboe_cb *self)
 }
 
 static int 
-toshoboe_apmproc (apm_event_t event)
+toshoboe_pmproc (struct pm_dev *dev, pm_request_t rqst, void *data)
 {
-  static int down = 0;          /*Filter out double events */
-  int i;
-
-  switch (event)
-    {
-    case APM_SYS_SUSPEND:
-    case APM_USER_SUSPEND:
-      if (!down)
-        {
-
-          for (i = 0; i < 4; i++)
-            {
-              if (dev_self[i])
-                toshoboe_gotosleep (dev_self[i]);
-            }
-
-        }
-      down = 1;
-      break;
-    case APM_NORMAL_RESUME:
-    case APM_CRITICAL_RESUME:
-      if (down)
-        {
-
-
-
-          for (i = 0; i < 4; i++)
-            {
-              if (dev_self[i])
-                toshoboe_wakeup (dev_self[i]);
-            }
-
-
-
-        }
-      down = 0;
-      break;
-    }
+  struct toshoboe_cb *self = (struct toshoboe_cb *) dev->data;
+  if (self) {
+	  switch (rqst) {
+	  case PM_SUSPEND:
+		  toshoboe_gotosleep (self);
+		  break;
+	  case PM_RESUME:
+		  toshoboe_wakeup (self);
+		  break;
+	  }
+  }
   return 0;
 }
 
-
-#endif
 
 int __init toshoboe_init (void)
 {
@@ -997,7 +971,7 @@ int __init toshoboe_init (void)
                   pci_dev->irq);
 
           if (!toshoboe_open (pci_dev))
-            found++;
+	      found++;
         }
 
     }
@@ -1006,9 +980,6 @@ int __init toshoboe_init (void)
 
   if (found)
     {
-#ifdef CONFIG_APM
-      apm_register_callback (toshoboe_apmproc);
-#endif
       return 0;
     }
 
@@ -1030,10 +1001,7 @@ toshoboe_cleanup (void)
         toshoboe_close (dev_self[i]);
     }
 
-#ifdef CONFIG_APM
-  apm_unregister_callback (toshoboe_apmproc);
-#endif
-
+  pm_unregister_all (toshoboe_pmproc);
 }
 
 

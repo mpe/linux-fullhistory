@@ -263,8 +263,6 @@ EXPORT_SYMBOL(ioctl_by_bdev);
 EXPORT_SYMBOL(gendisk_head);
 EXPORT_SYMBOL(grok_partitions);
 EXPORT_SYMBOL(register_disk);
-EXPORT_SYMBOL(unplug_device);
-EXPORT_SYMBOL(make_request);
 EXPORT_SYMBOL(tq_disk);
 EXPORT_SYMBOL(init_buffer);
 EXPORT_SYMBOL(refile_buffer);
@@ -382,7 +380,6 @@ EXPORT_SYMBOL(vsprintf);
 EXPORT_SYMBOL(kdevname);
 EXPORT_SYMBOL(bdevname);
 EXPORT_SYMBOL(cdevname);
-EXPORT_SYMBOL(partition_name);		/* md.c only */
 EXPORT_SYMBOL(simple_strtoul);
 EXPORT_SYMBOL(system_utsname);	/* UTS data */
 EXPORT_SYMBOL(uts_sem);		/* UTS semaphore */

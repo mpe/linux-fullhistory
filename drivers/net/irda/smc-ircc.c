@@ -51,9 +51,7 @@
 #include <asm/dma.h>
 #include <asm/byteorder.h>
 
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-#endif
+#include <linux/pm.h>
 
 #include <net/irda/wrapper.h>
 #include <net/irda/irda.h>
@@ -91,9 +89,7 @@ static int  ircc_is_receiving(struct ircc_cb *self);
 
 static int  ircc_net_open(struct net_device *dev);
 static int  ircc_net_close(struct net_device *dev);
-#ifdef CONFIG_APM
-static int  ircc_apmproc(apm_event_t event);
-#endif /* CONFIG_APM */
+static int  ircc_pmproc(struct pm_dev *dev, pm_request_t rqst, void *data);
 
 /* These are the currently known SMC chipsets */
 static smc_chip_t chips[] =
@@ -290,6 +286,10 @@ static int ircc_open(int i, unsigned int fir_base, unsigned int sir_base)
 	self->netdev->stop   = &ircc_net_close;
 
 	irport_start(self->irport);
+
+        self->pmdev = pm_register(PM_SYS_DEV, PM_SYS_IRDA, ircc_pmproc);
+        if (self->pmdev)
+                self->pmdev->data = self;
 
 	return 0;
 }
@@ -999,7 +999,6 @@ static int ircc_net_close(struct net_device *dev)
 	return 0;
 }
 
-#ifdef CONFIG_APM
 static void ircc_suspend(struct ircc_cb *self)
 {
 	int i = 10;
@@ -1031,36 +1030,21 @@ static void ircc_wakeup(struct ircc_cb *self)
 	MESSAGE("%s, Waking up\n", driver_name);
 }
 
-static int ircc_apmproc(apm_event_t event)
+static int ircc_pmproc(struct pm_dev *dev, pm_request_t rqst, void *data)
 {
-	static int down = 0;          /* Filter out double events */
-	int i;
-
-	switch (event) {
-	case APM_SYS_SUSPEND:
-	case APM_USER_SUSPEND:
-		if (!down) {			
-			for (i=0; i<4; i++) {
-				if (dev_self[i])
-					ircc_suspend(dev_self[i]);
-			}
-		}
-		down = 1;
-		break;
-	case APM_NORMAL_RESUME:
-	case APM_CRITICAL_RESUME:
-		if (down) {
-			for (i=0; i<4; i++) {
-				if (dev_self[i])
-					ircc_wakeup(dev_self[i]);
-			}
-		}
-		down = 0;
-		break;
-	}
+        struct ircc_cb *self = (struct ircc_cb*) dev->data;
+        if (self) {
+                switch (rqst) {
+                case PM_SUSPEND:
+                        ircc_suspend(self);
+                        break;
+                case PM_RESUME:
+                        ircc_wakeup(self);
+                        break;
+                }
+        }
 	return 0;
 }
-#endif /* CONFIG_APM */
 
 #ifdef MODULE
 MODULE_AUTHOR("Thomas Davis <tadavis@jps.net>");

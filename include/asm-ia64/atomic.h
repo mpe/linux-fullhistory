@@ -12,7 +12,6 @@
  * Copyright (C) 1998, 1999 Hewlett-Packard Co
  * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
  */
-#include <linux/config.h>
 #include <linux/types.h>
 
 #include <asm/system.h>

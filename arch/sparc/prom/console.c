@@ -6,7 +6,6 @@
  * Copyright (C) 1998 Pete Zaitcev <zaitcev@metabyte.com>
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

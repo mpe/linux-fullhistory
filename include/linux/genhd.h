@@ -19,6 +19,7 @@
 #define WIN98_EXTENDED_PARTITION 0x0f
 
 #define LINUX_SWAP_PARTITION	0x82
+#define LINUX_RAID_PARTITION	0xfd	/* autodetect RAID partition */
 
 #ifdef CONFIG_SOLARIS_X86_PARTITION
 #define SOLARIS_X86_PARTITION	LINUX_SWAP_PARTITION
@@ -45,6 +46,7 @@ struct partition {
 struct hd_struct {
 	long start_sect;
 	long nr_sects;
+	int type;			/* currently RAID or normal */
 };
 
 struct gendisk {

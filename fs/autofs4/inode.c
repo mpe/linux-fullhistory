@@ -140,7 +140,8 @@ static int parse_options(char *options, int *pipefd, uid_t *uid, gid_t *gid,
 	*gid = current->gid;
 	*pgrp = current->pgrp;
 
-	*minproto = *maxproto = AUTOFS_MAX_PROTO_VERSION;
+	*minproto = AUTOFS_MIN_PROTO_VERSION;
+	*maxproto = AUTOFS_MAX_PROTO_VERSION;
 
 	*pipefd = -1;
 

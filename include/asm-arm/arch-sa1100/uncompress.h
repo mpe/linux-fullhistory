@@ -4,6 +4,7 @@
  * (C) 1999 Nicolas Pitre <nico@cam.org>
  */
 
+#include <linux/config.h>
 
 #if defined(CONFIG_SA1100_EMPEG) || \
     defined(CONFIG_SA1100_VICTOR) || \

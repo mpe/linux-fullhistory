@@ -354,10 +354,30 @@ else
 endif
 
 ifeq ($(CONFIG_MD_RAID5),y)
+LX_OBJS += xor.o
+CFLAGS_xor.o := $(PROFILING) -fomit-frame-pointer
 L_OBJS += raid5.o
 else
   ifeq ($(CONFIG_MD_RAID5),m)
+  LX_OBJS += xor.o
+  CFLAGS_xor.o := $(PROFILING) -fomit-frame-pointer
   M_OBJS += raid5.o
+  endif
+endif
+
+ifeq ($(CONFIG_MD_TRANSLUCENT),y)
+L_OBJS += translucent.o
+else
+  ifeq ($(CONFIG_MD_TRANSLUCENT),m)
+  M_OBJS += translucent.o
+  endif
+endif
+
+ifeq ($(CONFIG_MD_HSM),y)
+L_OBJS += hsm.o
+else
+  ifeq ($(CONFIG_MD_HSM),m)
+  M_OBJS += hsm.o
   endif
 endif
 

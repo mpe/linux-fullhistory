@@ -4,7 +4,6 @@
  * Copyright(C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
-#include <linux/config.h>
 #include <linux/string.h>
 #include <asm/oplib.h>
 #include <asm/sun4prom.h>

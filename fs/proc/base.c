@@ -15,7 +15,6 @@
 
 #include <asm/uaccess.h>
 
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/proc_fs.h>

@@ -37,14 +37,17 @@ struct request {
 };
 
 typedef struct request_queue request_queue_t;
-typedef int (merge_request_fn) (request_queue_t *, 
-				struct request  * req,
-				struct buffer_head *);
-typedef int (merge_requests_fn) (request_queue_t *, 
-				 struct request  * req,
-				 struct request  * req2);
-typedef void (request_fn_proc) (request_queue_t *);
+typedef int (merge_request_fn) (request_queue_t *q, 
+				struct request  *req,
+				struct buffer_head *bh);
+typedef int (merge_requests_fn) (request_queue_t *q, 
+				 struct request  *req,
+				 struct request  *req2);
+typedef void (request_fn_proc) (request_queue_t *q);
 typedef request_queue_t * (queue_proc) (kdev_t dev);
+typedef void (make_request_fn) (int rw, struct buffer_head *bh);
+typedef void (plug_device_fn) (request_queue_t *q, kdev_t device);
+typedef void (unplug_device_fn) (void *q);
 
 struct request_queue
 {
@@ -52,6 +55,8 @@ struct request_queue
 	request_fn_proc		* request_fn;
 	merge_request_fn	* merge_fn;
 	merge_requests_fn	* merge_requests_fn;
+	make_request_fn		* make_request_fn;
+	plug_device_fn		* plug_device_fn;
 	/*
 	 * The queue owner gets to use this for whatever they like.
 	 * ll_rw_blk doesn't touch it.
@@ -72,12 +77,6 @@ struct request_queue
 	 * not.
 	 */
 	char			  head_active;
-
-	/*
-	 * Boolean that indicates whether we should use plugging on
-	 * this queue or not.
-	 */
-	char			  use_plug; 
 };
 
 struct blk_dev_struct {
@@ -107,8 +106,10 @@ extern struct blk_dev_struct blk_dev[MAX_BLKDEV];
 extern wait_queue_head_t wait_for_request;
 extern void grok_partitions(struct gendisk *dev, int drive, unsigned minors, long size);
 extern void register_disk(struct gendisk *dev, kdev_t first, unsigned minors, struct block_device_operations *ops, long size);
-extern void unplug_device(void * data);
-extern void make_request(int major,int rw, struct buffer_head * bh);
+extern void generic_unplug_device(void * data);
+extern void generic_plug_device (request_queue_t *q, kdev_t dev);
+extern void generic_make_request(int rw, struct buffer_head * bh);
+extern request_queue_t * blk_get_queue(kdev_t dev);
 
 /*
  * Access functions for manipulating queue properties
@@ -116,12 +117,8 @@ extern void make_request(int major,int rw, struct buffer_head * bh);
 extern void blk_init_queue(request_queue_t *, request_fn_proc *);
 extern void blk_cleanup_queue(request_queue_t *);
 extern void blk_queue_headactive(request_queue_t *, int);
-extern void blk_queue_pluggable(request_queue_t *, int);
-
-/* md needs this function to remap requests */
-extern int md_map (int minor, kdev_t *rdev, unsigned long *rsector, unsigned long size);
-extern int md_make_request (int minor, int rw, struct buffer_head * bh);
-extern int md_error (kdev_t mddev, kdev_t rdev);
+extern void blk_queue_pluggable(request_queue_t *, plug_device_fn *);
+extern void blk_queue_make_request(request_queue_t *, make_request_fn *);
 
 extern int * blk_size[MAX_BLKDEV];
 

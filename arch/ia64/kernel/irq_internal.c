@@ -14,7 +14,6 @@
 #include <asm/irq.h>
 #include <asm/processor.h>
 #include <asm/ptrace.h>
-#include <asm/irq.h>
 
 /*
  * This is identical to IOSAPIC handle_irq.  It may go away . . .

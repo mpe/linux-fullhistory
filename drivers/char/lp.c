@@ -106,6 +106,8 @@
  * month ago...
  *
  *                                     14 Dec 1998, Andrea Arcangeli
+ *
+ * Copyright (C) 2000 by Tim Waugh (added LPSETTIMEOUT ioctl)
  */
 
 #include <linux/module.h>
@@ -132,6 +134,9 @@
 
 /* if you have more than 3 printers, remember to increase LP_NO */
 #define LP_NO 3
+
+/* ROUND_UP macro from fs/select.c */
+#define ROUND_UP(x,y) (((x)+(y)-1)/(y))
 
 struct lp_struct lp_table[LP_NO];
 
@@ -321,6 +326,7 @@ static ssize_t lp_write(struct file * file, const char * buf,
 	ssize_t retv = 0;
 	ssize_t written;
 	size_t copy_size = count;
+	long old_to;
 
 #ifdef LP_STATS
 	if (jiffies-lp_table[minor].lastcall > LP_TIME(minor))
@@ -345,6 +351,9 @@ static ssize_t lp_write(struct file * file, const char * buf,
 
 	/* Go to compatibility mode. */
 	parport_negotiate (port, IEEE1284_MODE_COMPAT);
+
+	old_to = parport_set_timeout (lp_table[minor].dev,
+				      lp_table[minor].timeout);
 
 	do {
 		/* Write the data. */
@@ -389,6 +398,9 @@ static ssize_t lp_write(struct file * file, const char * buf,
 			}
 		}	
 	} while (count > 0);
+
+	/* Not really necessary, but polite. */
+	parport_set_timeout (lp_table[minor].dev, old_to);
 
  	lp_parport_release (minor);
 
@@ -527,6 +539,9 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 	if ((LP_F(minor) & LP_EXIST) == 0)
 		return -ENODEV;
 	switch ( cmd ) {
+		struct timeval par_timeout;
+		long to_jiffies;
+
 		case LPTIME:
 			LP_TIME(minor) = arg * HZ/100;
 			break;
@@ -588,6 +603,26 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			if (copy_to_user((int *) arg, &status, sizeof(int)))
 				return -EFAULT;
 			break;
+
+		case LPSETTIMEOUT:
+			if (copy_from_user (&par_timeout,
+					    (struct timeval *) arg,
+					    sizeof (struct timeval))) {
+				return -EFAULT;
+			}
+			/* Convert to jiffies, place in lp_table */
+			if ((par_timeout.tv_sec < 0) ||
+			    (par_timeout.tv_usec < 0)) {
+				return -EINVAL;
+			}
+			to_jiffies = ROUND_UP(par_timeout.tv_usec, 1000000/HZ);
+			to_jiffies += par_timeout.tv_sec * (long) HZ;
+			if (to_jiffies <= 0) {
+				return -EINVAL;
+			}
+			lp_table[minor].timeout = to_jiffies;
+			break;
+
 		default:
 			retval = -EINVAL;
 	}
@@ -664,28 +699,33 @@ static void lp_console_write (struct console *co, const char *s,
 	do {
 		/* Write the data, converting LF->CRLF as we go. */
 		ssize_t canwrite = count;
-		char *line = strchr (s, '\n');
-		if (line)
-			canwrite = line - s;
+		char *lf = strchr (s, '\n');
+		if (lf)
+			canwrite = lf - s;
 
-		written = parport_write (port, s, canwrite);
-		if (written <= 0)
-			continue;
+		if (canwrite > 0) {
+			written = parport_write (port, s, canwrite);
 
-		s += written;
-		count -= written;
-		if (line) {
+			if (written <= 0)
+				continue;
+
+			s += written;
+			count -= written;
+			canwrite -= written;
+		}
+
+		if (lf && canwrite <= 0) {
 			const char *crlf = "\r\n";
 			int i = 2;
 
 			/* Dodge the original '\n', and put '\r\n' instead. */
 			s++;
 			count--;
-			while (i) {
+			do {
 				written = parport_write (port, crlf, i);
 				if (written > 0)
 					i -= written, crlf += written;
-			}
+			} while (i > 0 && (CONSOLE_LP_STRICT || written > 0));
 		}
 	} while (count > 0 && (CONSOLE_LP_STRICT || written > 0));
 
@@ -698,7 +738,7 @@ static kdev_t lp_console_device (struct console *c)
 }
 
 static struct console lpcons = {
-	"lp0",
+	"lp",
 	lp_console_write,
 	NULL,
 	lp_console_device,
@@ -706,7 +746,7 @@ static struct console lpcons = {
 	NULL,
 	NULL,
 	CON_PRINTBUFFER,
-	-1,
+	0,
 	0,
 	NULL
 };
@@ -778,6 +818,7 @@ static int lp_register(int nr, struct parport *port)
 #ifdef CONFIG_LP_CONSOLE
 	if (!nr) {
 		if (port->modes & PARPORT_MODE_SAFEININT) {
+			MOD_INC_USE_COUNT;
 			register_console (&lpcons);
 			printk (KERN_INFO "lp%d: console ready\n", CONSOLE_LP);
 		} else
@@ -854,6 +895,7 @@ int __init lp_init (void)
 		init_waitqueue_head (&lp_table[i].waitq);
 		init_waitqueue_head (&lp_table[i].dataq);
 		init_MUTEX (&lp_table[i].port_mutex);
+		lp_table[i].timeout = 10 * HZ;
 	}
 
 	if (register_chrdev (LP_MAJOR, "lp", &lp_fops)) {
