@@ -2076,6 +2076,7 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 			goto done;
 		inode = file->f_dentry->d_inode;
 		offset = (address & PAGE_MASK) - vma->vm_start;
+		spin_lock(&inode->i_shared_lock);
 		vmaring = inode->i_mmap; 
 		do {
 			/* Do not mistake ourselves as another mapping. */
@@ -2109,6 +2110,7 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 				}
 			}
 		} while ((vmaring = vmaring->vm_next_share) != NULL);
+		spin_unlock(&inode->i_shared_lock);
 
 		if(alias_found && ((pte_val(pte) & SRMMU_CACHE) != 0)) {
 			pgdp = srmmu_pgd_offset(vma->vm_mm, address);

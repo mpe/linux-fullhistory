@@ -63,11 +63,6 @@ CONFIG_KMOD=y
 # CONFIG_I2O_PROC is not set
 
 #
-# Plug and Play support
-#
-# CONFIG_PNP is not set
-
-#
 # Block devices
 #
 CONFIG_BLK_DEV_FD=m

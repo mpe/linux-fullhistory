@@ -18,7 +18,6 @@
 #include "hosts.h"
 #include "53c7xx.h"
 #include "mvme16x.h"
-#include "asm/mvme16xhw.h"
 
 #include<linux/stat.h>
 

@@ -2308,9 +2308,9 @@ static struct initvol {
 };
 
 #ifdef MODULE
-__initfunc(int init_module(void))
+int __init init_module(void)
 #else
-__initfunc(int init_es1370(void))
+int __init init_es1370(void)
 #endif
 {
 	struct es1370_state *s;

@@ -25,6 +25,8 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 				return -EBADF;
 		    	if (inode->i_op->get_block == NULL)
 				return -EINVAL;
+			if (!capable(CAP_SYS_RAWIO))
+				return -EPERM;
 			if ((error = get_user(block, (int *) arg)) != 0)
 				return error;
 

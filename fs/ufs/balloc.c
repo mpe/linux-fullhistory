@@ -360,14 +360,22 @@ unsigned ufs_new_fragments (struct inode * inode, u32 * p, unsigned fragment,
 	if (result) {
 		for (i = 0; i < oldcount; i++) {
 			bh = bread (sb->s_dev, tmp + i, sb->s_blocksize);
-			mark_buffer_clean (bh);
-			bh->b_blocknr = result + i;
-			mark_buffer_dirty (bh, 0);
-			if (IS_SYNC(inode)) {
-				ll_rw_block (WRITE, 1, &bh);
-				wait_on_buffer (bh);
+			if(bh)
+			{
+				mark_buffer_clean (bh);
+				bh->b_blocknr = result + i;
+				mark_buffer_dirty (bh, 0);
+				if (IS_SYNC(inode)) {
+					ll_rw_block (WRITE, 1, &bh);
+					wait_on_buffer (bh);
+				}
+				brelse (bh);
 			}
-			brelse (bh);
+			else
+			{
+				printk(KERN_ERR "ufs_new_fragments: bread fail\n");
+				return 0;
+			}
 		}
 		*p = SWAB32(result);
 		*err = 0;

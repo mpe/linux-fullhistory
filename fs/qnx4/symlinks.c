@@ -98,12 +98,12 @@ static int qnx4_readlink(struct dentry *dentry, char *buffer, int buflen)
 	}
 	bh = bread(inode->i_dev, qnx4_ino->i_first_xtnt.xtnt_blk,
 		   QNX4_BLOCK_SIZE);
-	QNX4DEBUG(("qnx4: qnx4_bread sym called -> [%s]\n",
-		   bh->b_data));
 	if (bh == NULL) {
 		QNX4DEBUG(("qnx4: NULL symlink bh\n"));
 		return 0;
 	}
+	QNX4DEBUG(("qnx4: qnx4_bread sym called -> [%s]\n",
+		   bh->b_data));
 	if (bh->b_data[0] != 0) {
 		i = 0;
 		while (i < buflen && (c = bh->b_data[i])) {

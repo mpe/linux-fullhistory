@@ -803,7 +803,7 @@ virtual_midi_disable (void)
 	return 0;
 }
 
-__initfunc (static int detect_wf_mpu (int irq, int io_base))
+static int __init detect_wf_mpu (int irq, int io_base)
 
 {
 	if (check_region (io_base, 2)) {
@@ -820,8 +820,7 @@ __initfunc (static int detect_wf_mpu (int irq, int io_base))
 	return 0;
 }
 
-__initfunc (int install_wf_mpu (void)) 
-
+int __init install_wf_mpu (void)
 {
 	if ((phys_dev->devno = sound_alloc_mididev()) < 0){
 

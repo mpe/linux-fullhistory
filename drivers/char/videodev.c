@@ -63,6 +63,9 @@ extern int aztech_init(struct video_init *);
 #ifdef CONFIG_RADIO_RTRACK
 extern int rtrack_init(struct video_init *);
 #endif
+#ifdef CONFIG_RADIO_RTRACK2
+extern int rtrack2_init(struct video_init *);
+#endif
 #ifdef CONFIG_RADIO_SF16FMI
 extern int fmi_init(struct video_init *);
 #endif
@@ -78,8 +81,14 @@ extern int typhoon_init(struct video_init *);
 #ifdef CONFIG_RADIO_CADET
 extern int cadet_init(struct video_init *);
 #endif
+#ifdef CONFIG_RADIO_TERRATEC
+extern int terratec_init(struct video_init *);
+#endif
 #ifdef CONFIG_VIDEO_PMS
 extern int init_pms_cards(struct video_init *);
+#endif
+#ifdef CONFIG_VIDEO_ZORAN
+extern int init_zoran_cards(struct video_init *);
 #endif
 
 static struct video_init video_init_list[]={
@@ -108,6 +117,9 @@ static struct video_init video_init_list[]={
 #ifdef CONFIG_RADIO_RTRACK
 	{"RTrack", rtrack_init}, 
 #endif 
+#ifdef CONFIG_RADIO_RTRACK2
+	{"RTrack2", rtrack2_init}, 
+#endif
 #ifdef CONFIG_RADIO_SF16FMI
 	{"SF16FMI", fmi_init}, 
 #endif	
@@ -123,6 +135,12 @@ static struct video_init video_init_list[]={
 #ifdef CONFIG_RADIO_TYPHOON
 	{"radio-typhoon", typhoon_init},
 #endif
+#ifdef CONFIG_RADIO_TERRATEC
+	{"radio-terratec", terratec_init},
+#endif
+#ifdef CONFIG_VIDEO_ZORAN
+	{"zoran", init_zoran_cards},
+#endif	
 	{"end", NULL}
 };
 

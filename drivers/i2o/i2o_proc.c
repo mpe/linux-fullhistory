@@ -17,9 +17,9 @@
  *   DISCLAIMER: This code is still under development/test and may cause
  *   your system to behave unpredictably.  Use at your own discretion.
  *
- *   LAN entries by Juha Sievänen(Juha.Sievanen@cs.Helsinki.FI),
+ *   LAN entries by Juha Sievänen (Juha.Sievanen@cs.Helsinki.FI),
+ *		    Auvo Häkkinen (Auvo.Hakkinen@cs.Helsinki.FI)
  *   University of Helsinki, Department of Computer Science
- *
  */
 
 /*
@@ -61,8 +61,8 @@
  */
 typedef struct _i2o_proc_entry_t
 {
-	char *name;						/* entry name */
-	mode_t mode;					/* mode */
+	char *name;			/* entry name */
+	mode_t mode;			/* mode */
 	read_proc_t *read_proc;		/* read func */
 	write_proc_t *write_proc;	/* write func */
 } i2o_proc_entry;
@@ -74,65 +74,65 @@ static int i2o_proc_read_lct(char *, char **, off_t, int, int *, void *);
 static int i2o_proc_read_hrt(char *, char **, off_t, int, int *, void *);
 static int i2o_proc_read_stat(char *, char **, off_t, int, int *, void *);
 static int i2o_proc_read_hw(char *, char **, off_t, int, int *, void *);
+static int i2o_proc_read_dst(char *, char **, off_t, int, int *, void *);
+static int i2o_proc_read_ddm_table(char *, char **, off_t, int, int *, void *);
+static int i2o_proc_read_ds(char *, char **, off_t, int, int *, void *);
+static int i2o_proc_read_groups(char *, char **, off_t, int, int *, void *);
+static int i2o_proc_read_priv_msgs(char *, char **, off_t, int, int *, void *);
 static int i2o_proc_read_dev(char *, char **, off_t, int, int *, void *);
 static int i2o_proc_read_dev_name(char *, char **, off_t, int, int *, void *);
 static int i2o_proc_read_ddm(char *, char **, off_t, int, int *, void *);
 static int i2o_proc_read_uinfo(char *, char **, off_t, int, int *, void *);
+static int i2o_proc_read_sgl_limits(char *, char **, off_t, int, int *, void *);
 static int print_serial_number(char *, int, u8 *, int);
 static int i2o_proc_create_entries(void *, 
-	i2o_proc_entry *p, struct proc_dir_entry *);
-static void i2o_proc_remove_entries(i2o_proc_entry *p, 
-	struct proc_dir_entry *);
+				   i2o_proc_entry *, struct proc_dir_entry *);
+static void i2o_proc_remove_entries(i2o_proc_entry *, struct proc_dir_entry *);
 static int i2o_proc_add_controller(struct i2o_controller *, 
-	struct proc_dir_entry * );
+				   struct proc_dir_entry * );
 static void i2o_proc_remove_controller(struct i2o_controller *, 
-	struct proc_dir_entry * );
+				       struct proc_dir_entry * );
 static int create_i2o_procfs(void);
 static int destroy_i2o_procfs(void);
 static void i2o_proc_reply(struct i2o_handler *, struct i2o_controller *,
-			struct i2o_message *);
+			   struct i2o_message *);
 
 static int i2o_proc_read_lan_dev_info(char *, char **, off_t, int, int *,
 				      void *);
 static int i2o_proc_read_lan_mac_addr(char *, char **, off_t, int, int *,
 				      void *);
-static int i2o_proc_read_lan_curr_addr(char *, char **, off_t, int, int *,
-				       void *);
-#if 0
 static int i2o_proc_read_lan_mcast_addr(char *, char **, off_t, int, int *,
 					void *);
-#endif
 static int i2o_proc_read_lan_batch_control(char *, char **, off_t, int, int *,
 					   void *);
 static int i2o_proc_read_lan_operation(char *, char **, off_t, int, int *,
 				       void *);
 static int i2o_proc_read_lan_media_operation(char *, char **, off_t, int,
 					     int *, void *);
-#if 0
 static int i2o_proc_read_lan_alt_addr(char *, char **, off_t, int, int *,
 				      void *);
-#endif
 static int i2o_proc_read_lan_tx_info(char *, char **, off_t, int, int *,
 				     void *);
 static int i2o_proc_read_lan_rx_info(char *, char **, off_t, int, int *,
 				     void *);
 static int i2o_proc_read_lan_hist_stats(char *, char **, off_t, int, int *,
 					void *);
+static int i2o_proc_read_lan_supp_opt_stats(char *, char **, off_t, int, int *,
+					    void *);
 static int i2o_proc_read_lan_opt_tx_hist_stats(char *, char **, off_t, int,
 					       int *, void *);
 static int i2o_proc_read_lan_opt_rx_hist_stats(char *, char **, off_t, int,
 					       int *, void *);
+static int i2o_proc_read_lan_eth_stats(char *, char **, off_t, int,
+				       int *, void *);
+static int i2o_proc_read_lan_supp_eth_stats(char *, char **, off_t, int, int *,
+					    void *);
+static int i2o_proc_read_lan_opt_eth_stats(char *, char **, off_t, int, int *,
+					   void *);
+static int i2o_proc_read_lan_tr_stats(char *, char **, off_t, int, int *,
+				      void *);
 static int i2o_proc_read_lan_fddi_stats(char *, char **, off_t, int, int *,
 					void *);
-
-#if 0
-/* Do we really need this??? */
-
-static loff_t i2o_proc_lseek(struct file *file, loff_t off, int whence)
-{
-	return 0;
-}
-#endif
 
 static struct proc_dir_entry *i2o_proc_dir_root;
 
@@ -156,6 +156,9 @@ static i2o_proc_entry generic_iop_entries[] =
 	{"lct", S_IFREG|S_IRUGO, i2o_proc_read_lct, NULL},
 	{"stat", S_IFREG|S_IRUGO, i2o_proc_read_stat, NULL},
 	{"hw", S_IFREG|S_IRUGO, i2o_proc_read_hw, NULL},
+	{"dst", S_IFREG|S_IRUGO, i2o_proc_read_dst, NULL},
+	{"ddm_table", S_IFREG|S_IRUGO, i2o_proc_read_ddm_table, NULL},
+	{"ds", S_IFREG|S_IRUGO, i2o_proc_read_ds, NULL},
 	{NULL, 0, NULL, NULL}
 };
 
@@ -164,8 +167,11 @@ static i2o_proc_entry generic_iop_entries[] =
  */
 static i2o_proc_entry generic_dev_entries[] = 
 {
+	{"groups", S_IFREG|S_IRUGO, i2o_proc_read_groups, NULL},
+	{"priv_msgs", S_IFREG|S_IRUGO, i2o_proc_read_priv_msgs, NULL},
 	{"dev_identity", S_IFREG|S_IRUGO, i2o_proc_read_dev, NULL},
 	{"ddm_identity", S_IFREG|S_IRUGO, i2o_proc_read_ddm, NULL},
+	{"sgl_limits", S_IFREG|S_IRUGO, i2o_proc_read_sgl_limits, NULL},
 	{"user_info", S_IFREG|S_IRUGO, i2o_proc_read_uinfo, NULL},
 	{NULL, 0, NULL, NULL}
 };
@@ -200,7 +206,7 @@ static i2o_proc_entry rbs_dev_entries[] =
 /* private */
 
 /*
- * LAN specific entries
+ * Generic LAN specific entries
  * 
  * Should groups with r/w entries have their own subdirectory?
  *
@@ -210,33 +216,78 @@ static i2o_proc_entry lan_entries[] =
 	/* LAN param groups 0000h-0008h */
 	{"lan_dev_info", S_IFREG|S_IRUGO, i2o_proc_read_lan_dev_info, NULL},
 	{"lan_mac_addr", S_IFREG|S_IRUGO, i2o_proc_read_lan_mac_addr, NULL},
-#if 0
 	{"lan_mcast_addr", S_IFREG|S_IRUGO|S_IWUSR,
 	 i2o_proc_read_lan_mcast_addr, NULL},
-#endif
 	{"lan_batch_ctrl", S_IFREG|S_IRUGO|S_IWUSR,
 	 i2o_proc_read_lan_batch_control, NULL},
 	{"lan_operation", S_IFREG|S_IRUGO, i2o_proc_read_lan_operation, NULL},
 	{"lan_media_operation", S_IFREG|S_IRUGO,
 	 i2o_proc_read_lan_media_operation, NULL},
-#if 0
 	{"lan_alt_addr", S_IFREG|S_IRUGO, i2o_proc_read_lan_alt_addr, NULL},
-#endif
 	{"lan_tx_info", S_IFREG|S_IRUGO, i2o_proc_read_lan_tx_info, NULL},
 	{"lan_rx_info", S_IFREG|S_IRUGO, i2o_proc_read_lan_rx_info, NULL},
+	/* LAN param groups 0100h, 0180h, 0182h, 0183h */
 	{"lan_stats", S_IFREG|S_IRUGO, i2o_proc_read_lan_hist_stats, NULL},
+	{"lan_supp_opt_stats", S_IFREG|S_IRUGO,
+	 i2o_proc_read_lan_supp_opt_stats, NULL},
 	{"lan_opt_tx_stats", S_IFREG|S_IRUGO,
 	 i2o_proc_read_lan_opt_tx_hist_stats, NULL},
 	{"lan_opt_rx_stats", S_IFREG|S_IRUGO,
 	 i2o_proc_read_lan_opt_rx_hist_stats, NULL},
-	{"lan_fddi_stats", S_IFREG|S_IRUGO, i2o_proc_read_lan_fddi_stats, NULL},
-	/* some useful r/w entries, no write yet */
-	{"lan_curr_addr", S_IFREG|S_IRUGO|S_IWUSR,
-	 i2o_proc_read_lan_curr_addr, NULL},
+	/* TODO: LAN param group 0184h */
 	{NULL, 0, NULL, NULL}
 };
 
+/*
+ * Ethernet specific LAN entries
+ * 
+ */
+static i2o_proc_entry lan_eth_entries[] = 
+{
+	/* LAN param groups 0200h, 0280h, 0281h */
+	{"lan_eth_stat", S_IFREG|S_IRUGO, i2o_proc_read_lan_eth_stats, NULL},
+        {"lan_supp_eth_stats", S_IFREG|S_IRUGO,
+	 i2o_proc_read_lan_supp_eth_stats, NULL},
+        {"lan_opt_eth_stats", S_IFREG|S_IRUGO,
+	 i2o_proc_read_lan_opt_eth_stats, NULL},
+	{NULL, 0, NULL, NULL}
+};
+
+/*
+ * Token Ring specific LAN entries
+ * 
+ */
+static i2o_proc_entry lan_tr_entries[] = 
+{
+	/* LAN param group 0300h */
+	{"lan_tr_stats", S_IFREG|S_IRUGO,
+	 i2o_proc_read_lan_tr_stats, NULL},
+	/* TODO: LAN param group 0380h, 0381h */
+	{NULL, 0, NULL, NULL}
+};
+
+/*
+ * FDDI specific LAN entries
+ * 
+ */
+static i2o_proc_entry lan_fddi_entries[] = 
+{
+	/* LAN param group 0400h */
+	{"lan_fddi_stats", S_IFREG|S_IRUGO,
+	 i2o_proc_read_lan_fddi_stats, NULL},
+	/* TODO: LAN param group 0480h, 0481h */
+	{NULL, 0, NULL, NULL}
+};
+
+
 static u32 i2o_proc_token = 0;
+
+static char *chtostr(u8 *chars, int n)
+{
+	char tmp[256];
+	tmp[0] = 0;
+        return strncat(tmp, (char *)chars, n);
+}
 
 static char* bus_strings[] = 
 { 
@@ -253,13 +304,13 @@ static char* bus_strings[] =
 static spinlock_t i2o_proc_lock = SPIN_LOCK_UNLOCKED;
 
 void i2o_proc_reply(struct i2o_handler *phdlr, struct i2o_controller *pctrl,
-	struct i2o_message *pmsg)
+		    struct i2o_message *pmsg)
 {
 	i2o_proc_token = I2O_POST_WAIT_OK;
 }
 
 int i2o_proc_read_hrt(char *buf, char **start, off_t offset, int len, 
-	int *eof, void *data)
+		      int *eof, void *data)
 {
 	struct i2o_controller *c = (struct i2o_controller *)data;
 	pi2o_hrt hrt;
@@ -303,8 +354,10 @@ int i2o_proc_read_hrt(char *buf, char **start, off_t offset, int len,
 
 	if(hrt->hrt_version)
 	{
+		kfree(workspace);
 		len += sprintf(buf+len, 
-					"HRT table for controller is too new a version.\n");
+			       "HRT table for controller is too new a version.\n");
+		spin_unlock(&i2o_proc_lock);
 		return len;
 	}
 
@@ -312,6 +365,7 @@ int i2o_proc_read_hrt(char *buf, char **start, off_t offset, int len,
 
 	if((count * hrt->entry_len + 8) > 2048) {
 		printk(KERN_WARNING "i2o_proc: HRT does not fit into buffer\n");
+		kfree(workspace);
 		len += sprintf(buf+len,
 			       "HRT table too big to fit in buffer.\n");
 		spin_unlock(&i2o_proc_lock);
@@ -490,7 +544,8 @@ int i2o_proc_read_lct(char *buf, char **start, off_t offset, int len,
 						break;
 
 					default:
-						len += sprintf(buf+len, ": Unknown");
+						len += sprintf(buf+len, ": Unknown (0x%02x)",
+							       lct->lct_entry[i].sub_class);
 						break;
 				}
 				break;
@@ -519,7 +574,8 @@ int i2o_proc_read_lct(char *buf, char **start, off_t offset, int len,
 						break;
 
 					default:
-						len += sprintf(buf+len, ": Unknown Sub-Class");
+						len += sprintf(buf+len, ": Unknown Sub-Class (0x%02x)",
+							       lct->lct_entry[i].sub_class & 0xFF);
 						break;
 				}
 				break;
@@ -642,6 +698,8 @@ int i2o_proc_read_stat(char *buf, char **start, off_t offset, int len,
 		len += sprintf(buf+len, "Lowest I2O version supported: ");
 		switch(workspace[2]) {
 		case 0x00:
+			len += sprintf(buf+len, "1.0\n");
+			break;
 		case 0x01:
 			len += sprintf(buf+len, "1.5\n");
 			break;
@@ -653,6 +711,8 @@ int i2o_proc_read_stat(char *buf, char **start, off_t offset, int len,
 		len += sprintf(buf+len, "Highest I2O version supported: ");
 		switch(workspace[3]) {
 		case 0x00:
+			len += sprintf(buf+len, "1.0\n");
+			break;
 		case 0x01:
 			len += sprintf(buf+len, "1.5\n");
 			break;
@@ -666,10 +726,12 @@ int i2o_proc_read_stat(char *buf, char **start, off_t offset, int len,
 	len += sprintf(buf+len, "Host Unit ID: %0#6x\n", work16[3]);
 	len += sprintf(buf+len, "Segment Number: %0#5x\n", work16[4]&0XFFF);
 
-	len += sprintf(buf+len, "I2O Version: ");
+	len += sprintf(buf+len, "I2O version: ");
 	switch(version)
 	{
 	case 0x00:
+		len += sprintf(buf+len, "1.0\n");
+		break;
 	case 0x01:
 		len += sprintf(buf+len, "1.5\n");
 		break;
@@ -722,7 +784,7 @@ int i2o_proc_read_stat(char *buf, char **start, off_t offset, int len,
 	switch (workspace[11])
 	{
 	case 0x00:
-		len += sprintf(buf+len, "Memory Mapped\n");
+		len += sprintf(buf+len, "Memory mapped\n");
 		break;
 	case 0x01:
 		len += sprintf(buf+len, "Memory mapped only\n");
@@ -749,26 +811,27 @@ int i2o_proc_read_stat(char *buf, char **start, off_t offset, int len,
 
 	len += sprintf(buf+len, "LCT Size: %d\n", work32[13]);
 
-	len += sprintf(buf+len, "Desired Private Memory Space: %d kB\n", 
+	len += sprintf(buf+len, "Desired private memory space: %d kB\n", 
 						work32[15]>>10);
-	len += sprintf(buf+len, "Allocated Private Memory Space: %d kB\n", 
+	len += sprintf(buf+len, "Allocated private memory space: %d kB\n", 
 						work32[16]>>10);
-	len += sprintf(buf+len, "Private Memory Base Address: %0#10x\n", 
+	len += sprintf(buf+len, "Private memory base address: %0#10x\n", 
 						work32[17]);
-	len += sprintf(buf+len, "Desired Private I/O Space: %d kB\n", 
+	len += sprintf(buf+len, "Desired private I/O space: %d kB\n", 
 						work32[18]>>10);
-	len += sprintf(buf+len, "Allocated Private I/O Space: %d kB\n", 
+	len += sprintf(buf+len, "Allocated private I/O space: %d kB\n", 
 						work32[19]>>10);
-	len += sprintf(buf+len, "Private I/O Base Address: %0#10x\n", 
+	len += sprintf(buf+len, "Private I/O base address: %0#10x\n", 
 						work32[20]);
 
+	kfree(workspace);
 	spin_unlock(&i2o_proc_lock);
 
 	return len;
 }
 
 int i2o_proc_read_hw(char *buf, char **start, off_t offset, int len, 
-	int *eof, void *data)
+		     int *eof, void *data)
 {
 	struct i2o_controller *c = (struct i2o_controller*)data;
 	static u32 work32[5];
@@ -779,14 +842,14 @@ int i2o_proc_read_hw(char *buf, char **start, off_t offset, int len,
 
 	static char *cpu_table[] =
 	{
-		"Intel 80960 Series",
-		"AMD2900 Series",
-		"Motorola 68000 Series",
-		"ARM Series",
-		"MIPS Series",
-		"Sparc Series",
-		"PowerPC Series",
-		"Intel x86 Series"
+		"Intel 80960 series",
+		"AMD2900 series",
+		"Motorola 68000 series",
+		"ARM series",
+		"MIPS series",
+		"Sparc series",
+		"PowerPC series",
+		"Intel x86 series"
 	};
 
 	spin_lock(&i2o_proc_lock);
@@ -807,15 +870,15 @@ int i2o_proc_read_hw(char *buf, char **start, off_t offset, int len,
 		return len;
 	}
 
-	len += sprintf(buf, "IOP Hardware Information Table\n");
+	len += sprintf(buf, "IOP Hardware Information Table (group = 0x0000)\n");
 
-	len += sprintf(buf+len, "I2O Vendor ID: %0#6x\n", work16[0]);
-	len += sprintf(buf+len, "Product ID: %0#6x\n", work16[1]);
-	len += sprintf(buf+len, "RAM: %dkB\n", work32[1]>>10);
-	len += sprintf(buf+len, "Non-Volatile Storage: %dkB\n", work32[2]>>10);
+	len += sprintf(buf+len, "I2O Vendor ID        : %0#6x\n", work16[0]);
+	len += sprintf(buf+len, "Product ID           : %0#6x\n", work16[1]);
+	len += sprintf(buf+len, "RAM                  : %dkB\n", work32[1]>>10);
+	len += sprintf(buf+len, "Non-Volatile Storage : %dkB\n", work32[2]>>10);
 
 	hwcap = work32[3];
-	len += sprintf(buf+len, "Capabilities:\n");
+	len += sprintf(buf+len, "Capabilities :\n");
 	if(hwcap&0x00000001)
 		len += sprintf(buf+len, "   Self-booting\n");
 	if(hwcap&0x00000002)
@@ -827,7 +890,7 @@ int i2o_proc_read_hw(char *buf, char **start, off_t offset, int len,
 	if(hwcap&0x00000010)
 		len += sprintf(buf+len, "   Battery-backed RAM\n");
 
-	len += sprintf(buf+len, "CPU: ");
+	len += sprintf(buf+len, "CPU                 : ");
 	if(work8[16] > 8)
 		len += sprintf(buf+len, "Unknown\n");
 	else
@@ -839,14 +902,407 @@ int i2o_proc_read_hw(char *buf, char **start, off_t offset, int len,
 	return len;
 }
 
+
+/* Executive group 0003h - Executing DDM List (table) */
+int i2o_proc_read_ddm_table(char *buf, char **start, off_t offset, int len, 
+			    int *eof, void *data)
+{
+	struct i2o_controller *c = (struct i2o_controller*)data;
+	int token;
+	int i;
+
+	typedef struct _i2o_exec_execute_ddm_table {
+		u16 ddm_tid;
+		u8  module_type;
+		u8  reserved;
+		u16 i2o_vendor_id;
+		u16 module_id;
+		u8  module_name[24];
+		u8  module_version[4];
+		u32 data_size;
+		u32 code_size;
+	} i2o_exec_execute_ddm_table, *pi2o_exec_execute_ddm_table;
+
+	struct
+	{
+		u16 result_count;
+		u16 pad;
+		u16 block_size;
+		u8  block_status;
+		u8  error_info_size;
+		u16 row_count;
+		u16 more_flag;
+		i2o_exec_execute_ddm_table ddm_table[MAX_I2O_MODULES];
+	} result;
+
+	i2o_exec_execute_ddm_table ddm_table;
+
+	spin_lock(&i2o_proc_lock);
+	len = 0;
+
+	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
+				c, ADAPTER_TID, proc_context,
+				0x0003, -1,
+				NULL, 0,
+				&result, sizeof(result), &i2o_proc_token);
+
+	if (token<0)
+		switch (token)
+		{
+		case -ETIMEDOUT:
+			len += sprintf(buf, "Timeout reading table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		case -ENOMEM:
+			len += sprintf(buf, "No free memory to read the table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		default:
+			len += sprintf(buf, "Error reading group. BlockStatus %d\n",
+				       token);
+			spin_unlock(&i2o_proc_lock);
+			return len;
+		}
+
+	len += sprintf(buf+len, "Tid   Type            Vendor Id     Name                     Vrs  Data_size Code_size\n");
+	ddm_table=result.ddm_table[0];
+
+	for(i=0; i < result.row_count; ddm_table=result.ddm_table[++i])
+	{
+		len += sprintf(buf+len, "0x%03x ", ddm_table.ddm_tid & 0xFFF);
+
+		switch(ddm_table.module_type)
+		{
+		case 0x01:
+			len += sprintf(buf+len, "Downloaded DDM  ");
+			break;			
+		case 0x22:
+			len += sprintf(buf+len, "Embedded DDM    ");
+			break;
+		default:
+			len += sprintf(buf+len, "                ");
+		}
+
+		len += sprintf(buf+len, "%-0#7x", ddm_table.i2o_vendor_id);
+		len += sprintf(buf+len, "%-0#7x", ddm_table.module_id);
+		len += sprintf(buf+len, "%-25s", chtostr(ddm_table.module_name, 24));
+		len += sprintf(buf+len, "%-6s", chtostr(ddm_table.module_version,4));
+		len += sprintf(buf+len, "%8d  ", ddm_table.data_size);
+		len += sprintf(buf+len, "%8d", ddm_table.code_size);
+
+		len += sprintf(buf+len, "\n");
+	}
+
+	spin_unlock(&i2o_proc_lock);
+
+	return len;
+}
+
+
+/* Executive group 0004h - Driver Store (scalar) */
+int i2o_proc_read_ds(char *buf, char **start, off_t offset, int len, 
+		     int *eof, void *data)
+{
+	struct i2o_controller *c = (struct i2o_controller*)data;
+	u32 work32[8];
+	int token;
+
+	spin_lock(&i2o_proc_lock);
+
+	len = 0;
+
+	token = i2o_query_scalar(c, ADAPTER_TID, proc_context, 0x0004, -1, 
+				 &work32, sizeof(work32), &i2o_proc_token);
+
+	if (token<0)
+	{
+		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
+		spin_unlock(&i2o_proc_lock);
+		return len;
+	}
+
+	len += sprintf(buf+len, "Module limit  : %d\n"
+				"Module count  : %d\n"
+				"Current space : %d kB\n"
+				"Free space    : %d kB\n", 
+			work32[0], work32[1], work32[2]>>10, work32[3]>>10);
+
+	spin_unlock(&i2o_proc_lock);
+
+	return len;
+}
+
+
+/* Executive group 0005h - Driver Store Table (table) */
+int i2o_proc_read_dst(char *buf, char **start, off_t offset, int len, 
+		      int *eof, void *data)
+{
+	typedef struct _i2o_driver_store {
+		u16 stored_ddm_index;
+		u8  module_type;
+		u8  reserved;
+		u16 i2o_vendor_id;
+		u16 module_id;
+		u8  module_name_version[28];
+		u8  date[8];
+		u32 module_size;
+		u32 mpb_size;
+		u32 module_flags;
+	} i2o_driver_store_table;
+
+	struct i2o_controller *c = (struct i2o_controller*)data;
+	int token;
+	int i;
+
+	struct
+	{
+		u16 result_count;
+		u16 pad;
+		u16 block_size;
+		u8  block_status;
+		u8  error_info_size;
+		u16 row_count;
+		u16 more_flag;
+		i2o_driver_store_table dst[MAX_I2O_MODULES];
+	} result;
+
+	i2o_driver_store_table dst;
+
+	spin_lock(&i2o_proc_lock);
+
+	len = 0;
+
+	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
+				c, ADAPTER_TID, proc_context,
+				0x0005, -1,
+				NULL, 0,
+				&result, sizeof(result), &i2o_proc_token);
+
+	if (token<0)
+		switch (token)
+		{
+		case -ETIMEDOUT:
+			len += sprintf(buf, "Timeout reading table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		case -ENOMEM:
+			len += sprintf(buf, "No free memory to read the table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		default:
+			len += sprintf(buf, "Error reading group. "
+					"BlockStatus %d\n",token);
+			spin_unlock(&i2o_proc_lock);
+			return len;
+		}
+
+	len += sprintf(buf+len, "#  Type            Vendor Id      Name                    Vrs  Date     Mod_size Par_size Flags\n");	
+
+	for(i=0, dst=result.dst[0]; i < result.row_count; dst=result.dst[++i])
+	{
+		len += sprintf(buf+len, "%-3d", dst.stored_ddm_index);
+		switch(dst.module_type)
+		{
+		case 0x01:
+			len += sprintf(buf+len, "Downloaded DDM  ");
+			break;			
+		case 0x22:
+			len += sprintf(buf+len, "Embedded DDM    ");
+			break;
+		default:
+			len += sprintf(buf+len, "                ");
+		}
+
+#if 0
+		if(c->i2oversion == 0x02)
+			len += sprintf(buf+len, "%-d", dst.module_state);
+#endif
+
+		len += sprintf(buf+len, "%-0#7x", dst.i2o_vendor_id);
+		len += sprintf(buf+len, "%-0#8x", dst.module_id);
+		len += sprintf(buf+len, "%-29s", chtostr(dst.module_name_version,28));
+		len += sprintf(buf+len, "%-9s", chtostr(dst.date,8));
+		len += sprintf(buf+len, "%8d ", dst.module_size);
+		len += sprintf(buf+len, "%8d ", dst.mpb_size);
+		len += sprintf(buf+len, "0x%04x", dst.module_flags);
+#if 0
+		if(c->i2oversion == 0x02)
+			len += sprintf(buf+len, "%d",
+				       dst.notification_level);
+#endif
+		len += sprintf(buf+len, "\n");
+	}
+
+	spin_unlock(&i2o_proc_lock);
+
+	return len;
+}
+
+
+/* Generic group F000h - Params Descriptor (table) */
+int i2o_proc_read_groups(char *buf, char **start, off_t offset, int len, 
+			 int *eof, void *data)
+{
+	struct i2o_controller *c = (struct i2o_controller*)data;
+	int token;
+	int i;
+	int rows;
+	u16 work16[2048];
+	u16 *group=work16;
+	int more;
+	
+	spin_lock(&i2o_proc_lock);
+
+	len = 0;
+
+	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
+				c, ADAPTER_TID, proc_context,
+				0xF000, -1,
+				NULL, 0,
+				&work16, sizeof(work16), &i2o_proc_token);
+
+	if (token<0)
+		switch (token)
+		{
+		case -ETIMEDOUT:
+			len += sprintf(buf, "Timeout reading table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		case -ENOMEM:
+			len += sprintf(buf, "No free memory to read the table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		default:
+			len += sprintf(buf, "Error reading table. BlockStatus %d\n",
+				       token);
+			spin_unlock(&i2o_proc_lock);
+			return len;
+		}
+
+	rows=work16[4];
+	more=work16[5];
+
+	len += sprintf(buf+len, "\nPARAMS DESCRIPTOR TABLE:\n\n");
+	len += sprintf(buf+len, "#  Group   FieldCount RowCount Type   Add Del Clear\n");
+
+	group+=64;
+
+	for(i=0; i < rows; i++,	group+=16)
+	{
+		len += sprintf(buf+len, "%-3d", i);
+
+		len += sprintf(buf+len, "%-0#6x ", group[0]);
+		len += sprintf(buf+len, "%10d ", group[1]);
+		len += sprintf(buf+len, "%8d ", group[2]);
+
+		if(group[3]&0x1)
+			len += sprintf(buf+len, "Table  ");
+		else
+			len += sprintf(buf+len, "Scalar ");
+		if(group[3]&0x2)
+			len += sprintf(buf+len, "x   ");
+		else
+			len += sprintf(buf+len, "    ");
+		if(group[3]&0x4)
+			len += sprintf(buf+len, "x   ");
+		else
+			len += sprintf(buf+len, "    ");
+		if(group[3]&0x8)
+			len += sprintf(buf+len, "x   ");
+		else
+			len += sprintf(buf+len, "    ");
+
+		len += sprintf(buf+len, "\n");
+	}
+
+	if(more)
+		len += sprintf(buf+len, "There is more...\n");
+
+	spin_unlock(&i2o_proc_lock);
+
+	return len;
+}
+
+
+/* Generic group F005h - Private message extensions (table) */
+int i2o_proc_read_priv_msgs(char *buf, char **start, off_t offset, int len, 
+			    int *eof, void *data)
+{
+	struct i2o_controller *c = (struct i2o_controller*)data;
+	int token;
+	int i;
+	int rows;
+	int more;
+	u16 work16[1024];
+	u16 *field=work16;
+
+	spin_lock(&i2o_proc_lock);
+
+	len = 0;
+
+	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
+				c, ADAPTER_TID, proc_context,
+				0xF000, -1,
+				NULL, 0,
+				&work16, sizeof(work16), &i2o_proc_token);
+
+	if (token<0)
+		switch (token)
+		{
+		case -ETIMEDOUT:
+			len += sprintf(buf, "Timeout reading table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		case -ENOMEM:
+			len += sprintf(buf, "No free memory to read the table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		default:
+			len += sprintf(buf, "Error reading field. BlockStatus %d\n",
+				       token);
+			spin_unlock(&i2o_proc_lock);
+			return len;
+		}
+
+	rows=work16[4];
+	more=work16[5];
+	
+	len += sprintf(buf+len, "Instance#  OrgId  FunctionCode\n");
+
+	field+=64;
+	for(i=0; i < rows; i++,	field+=16)
+	{
+		len += sprintf(buf+len, "%0#9x ", field[0]);
+		len += sprintf(buf+len, "%0#6x ", work16[1]);
+		len += sprintf(buf+len, "%0#6x", work16[2]);
+
+		len += sprintf(buf+len, "\n");
+	}
+
+	if(more)
+		len += sprintf(buf+len, "There is more...\n");
+
+	spin_unlock(&i2o_proc_lock);
+
+	return len;
+}
+
+
 int i2o_proc_read_dev(char *buf, char **start, off_t offset, int len, 
-	int *eof, void *data)
+		      int *eof, void *data)
 {
 	struct i2o_device *d = (struct i2o_device*)data;
 	static u32 work32[128];		// allow for "stuff" + up to 256 byte (max) serial number
 					// == (allow) 512d bytes (max)
 	static u16 *work16 = (u16*)work32;
-	char sz[17];
 	int token;
 
 	spin_lock(&i2o_proc_lock);
@@ -866,34 +1322,21 @@ int i2o_proc_read_dev(char *buf, char **start, off_t offset, int len,
 		spin_unlock(&i2o_proc_lock);
 		return len;
 	}
+	
+	len += sprintf(buf,     "Device Class  : %s\n", i2o_get_class_name(work16[0]));
+	len += sprintf(buf+len, "Owner TID     : %0#5x\n", work16[2]);
+	len += sprintf(buf+len, "Parent TID    : %0#5x\n", work16[3]);
+	len += sprintf(buf+len, "Vendor info   : %s\n", chtostr((u8 *)(work32+2), 16));
+	len += sprintf(buf+len, "Product info  : %s\n", chtostr((u8 *)(work32+6), 16));
+	len += sprintf(buf+len, "Description   : %s\n", chtostr((u8 *)(work32+10), 16));
+	len += sprintf(buf+len, "Product rev.  : %s\n", chtostr((u8 *)(work32+14), 8));
 
-	len += sprintf(buf, "Device Class: %s\n", i2o_get_class_name(work16[0]));
-
-	len += sprintf(buf+len, "Owner TID:    %0#5x\n", work16[2]);
-	len += sprintf(buf+len, "Parent TID:   %0#5x\n", work16[3]);
-
-	memcpy(sz, work32+2, 16);
-	sz[16] = '\0';
-	len += sprintf(buf+len, "Vendor Info:  %s\n", sz);
-
-	memcpy(sz, work32+6, 16);
-	sz[16] = '\0';
-	len += sprintf(buf+len, "Product Info: %s\n", sz);
-
-	memcpy(sz, work32+10, 16);
-	sz[16] = '\0';
-	len += sprintf(buf+len, "Description:  %s\n", sz);
-
-	memcpy(sz, work32+14, 8);
-	sz[8] = '\0';
-	len += sprintf(buf+len, "Product Revision: %s\n", sz);
-
-	len += sprintf(buf+len, "Serial Number: ");
+	len += sprintf(buf+len, "Serial number : ");
 	len = print_serial_number(buf, len,
 			(u8*)(work32+16),
-							/* allow for SNLen plus
-							 * possible trailing '\0'
-							 */
+						/* allow for SNLen plus
+						 * possible trailing '\0'
+						 */
 			sizeof(work32)-(16*sizeof(u32))-2
 				);
 	len +=  sprintf(buf+len, "\n");
@@ -920,13 +1363,12 @@ int i2o_proc_read_dev_name(char *buf, char **start, off_t offset, int len,
 
 
 int i2o_proc_read_ddm(char *buf, char **start, off_t offset, int len, 
-	int *eof, void *data)
+		      int *eof, void *data)
 {
 	struct i2o_device *d = (struct i2o_device*)data;
 	static u32 work32[128];
 	static u16 *work16 = (u16*)work32;
 	int token;
-	char mod[25];
 
 	spin_lock(&i2o_proc_lock);
 	
@@ -946,22 +1388,16 @@ int i2o_proc_read_ddm(char *buf, char **start, off_t offset, int len,
 		return len;
 	}
 
-	len += sprintf(buf, "Registering DDM TID: 0x%03x\n", work16[0]&0xFFF);
+	len += sprintf(buf,     "Registering DDM TID : 0x%03x\n", work16[0]&0xFFF);
+	len += sprintf(buf+len, "Module name         : %s\n", chtostr((u8 *)(work16+1), 24));
+	len += sprintf(buf+len, "Module revision     : %s\n", chtostr((u8 *)(work16+13), 8));
 
-	memcpy(mod, (char*)(work16+1), 24);
-	mod[24] = '\0';
-	len += sprintf(buf+len, "Module Name: %s\n", mod);
-
-	memcpy(mod, (char*)(work16+13), 8);
-	mod[8] = '\0';
-	len += sprintf(buf+len, "Module Rev: %s\n", mod);
-
-	len += sprintf(buf+len, "Serial Number: ");
+	len += sprintf(buf+len, "Serial number       : ");
 	len = print_serial_number(buf, len,
 			(u8*)(work16+17),
-							/* allow for SNLen plus
-							 * possible trailing '\0'
-							 */
+					/* allow for SNLen plus
+					 * possible trailing '\0'
+					 */
 			sizeof(work32)-(17*sizeof(u16))-2
 				);
 	len += sprintf(buf+len, "\n");
@@ -972,13 +1408,12 @@ int i2o_proc_read_ddm(char *buf, char **start, off_t offset, int len,
 }
 
 int i2o_proc_read_uinfo(char *buf, char **start, off_t offset, int len, 
-	int *eof, void *data)
+			int *eof, void *data)
 {
 	struct i2o_device *d = (struct i2o_device*)data;
-	static u32 work32[128];
+	static u32 work32[256];
 	int token;
-	char sz[65];
-
+ 
 	spin_lock(&i2o_proc_lock);
 	
 	len = 0;
@@ -997,26 +1432,72 @@ int i2o_proc_read_uinfo(char *buf, char **start, off_t offset, int len,
 		return len;
 	}
 
-	memcpy(sz, (char*)work32, 64);
-	sz[64] = '\0';
-	len += sprintf(buf, "Device Name: %s\n", sz);
+	len += sprintf(buf,     "Device name     : %s\n", chtostr((u8 *)work32, 64));
+	len += sprintf(buf+len, "Service name    : %s\n", chtostr((u8 *)(work32+16), 64));
+	len += sprintf(buf+len, "Physical name   : %s\n", chtostr((u8 *)(work32+32), 64));
+	len += sprintf(buf+len, "Instance number : %s\n", chtostr((u8 *)(work32+48), 4));
+        
+	spin_unlock(&i2o_proc_lock);
 
-	memcpy(sz, (char*)(work32+16), 64);
-	sz[64] = '\0';
-	len += sprintf(buf+len, "Service Name: %s\n", sz);
+	return len;
+}
 
-	memcpy(sz, (char*)(work32+32), 64);
-	sz[64] = '\0';
-	len += sprintf(buf+len, "Physical Name: %s\n", sz);
 
-	memcpy(sz, (char*)(work32+48), 4);
-	sz[4] = '\0';
-	len += sprintf(buf+len, "Instance Number: %s\n", sz);
+int i2o_proc_read_sgl_limits(char *buf, char **start, off_t offset, int len, 
+			     int *eof, void *data)
+{
+	struct i2o_device *d = (struct i2o_device*)data;
+	static u32 work32[12];
+	static u16 *work16 = (u16 *)work32;
+	static u8 *work8 = (u8 *)work32;
+	int token;
+
+	spin_lock(&i2o_proc_lock);
+	
+	len = 0;
+
+	token = i2o_query_scalar(d->controller, d->id, proc_context, 
+				 0xF103,	// ParamGroup F103h (SGL Operating Limits)
+				 -1,		// all fields
+				 &work32,
+				 sizeof(work32),
+				 &i2o_proc_token);
+
+	if(token < 0)
+	{
+		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
+		spin_unlock(&i2o_proc_lock);
+		return len;
+	}
+
+	len += sprintf(buf,     "SGL chain size        : %d\n", work32[0]);
+	len += sprintf(buf+len, "Max SGL chain size    : %d\n", work32[1]);
+	len += sprintf(buf+len, "SGL chain size target : %d\n", work32[2]);
+	len += sprintf(buf+len, "SGL frag count        : %d\n", work16[6]);
+	len += sprintf(buf+len, "Max SGL frag count    : %d\n", work16[7]);
+	len += sprintf(buf+len, "SGL frag count target : %d\n", work16[8]);
+
+	if (d->i2oversion == 0x02)
+	{
+		len += sprintf(buf+len, "SGL data alignment    : %d\n", work16[8]);
+		len += sprintf(buf+len, "SGL addr limit        : %d\n", work8[20]);
+		len += sprintf(buf+len, "SGL addr sizes supported : ");
+		if (work8[21] & 0x01)
+			len += sprintf(buf+len, "32 bit ");
+		if (work8[21] & 0x02)
+			len += sprintf(buf+len, "64 bit ");
+		if (work8[21] & 0x04)
+			len += sprintf(buf+len, "96 bit ");
+		if (work8[21] & 0x08)
+			len += sprintf(buf+len, "128 bit ");
+		len += sprintf(buf+len, "\n");
+	}
 
 	spin_unlock(&i2o_proc_lock);
 
 	return len;
 }
+
 
 static int print_serial_number(char *buff, int pos, u8 *serialno, int max_len)
 {
@@ -1068,22 +1549,22 @@ static int print_serial_number(char *buff, int pos, u8 *serialno, int max_len)
 
 		case I2O_SNFORMAT_LAN48_MAC:		/* LAN-48 MAC Address */
 			pos += sprintf(buff+pos, 
-						"LAN-48 MAC Address @ %02X:%02X:%02X:%02X:%02X:%02X",
+						"LAN-48 MAC address @ %02X:%02X:%02X:%02X:%02X:%02X",
 						serialno[2], serialno[3],
 						serialno[4], serialno[5],
 						serialno[6], serialno[7]);
+			break;
 
 		case I2O_SNFORMAT_WAN:			/* WAN MAC Address */
 			/* FIXME: Figure out what a WAN access address looks like?? */
 			pos += sprintf(buff+pos, "WAN Access Address");
 			break;
 
-
 /* plus new in v2.0 */
 		case I2O_SNFORMAT_LAN64_MAC:		/* LAN-64 MAC Address */
 			/* FIXME: Figure out what a LAN-64 address really looks like?? */
 			pos += sprintf(buff+pos, 
-						"LAN-64 MAC Address @ [?:%02X:%02X:?] %02X:%02X:%02X:%02X:%02X:%02X",
+						"LAN-64 MAC address @ [?:%02X:%02X:?] %02X:%02X:%02X:%02X:%02X:%02X",
 						serialno[8], serialno[9],
 						serialno[2], serialno[3],
 						serialno[4], serialno[5],
@@ -1114,12 +1595,221 @@ static int print_serial_number(char *buff, int pos, u8 *serialno, int max_len)
 		case I2O_SNFORMAT_UNKNOWN:		/* Unknown 0    */
 		case I2O_SNFORMAT_UNKNOWN2:		/* Unknown 0xff */
 		default:
-			pos += sprintf(buff+pos, "Unknown Data Format");
+			pos += sprintf(buff+pos, "Unknown data format (0x%02x)",
+				       serialno[0]);
 			break;
 	}
 
 	return pos;
 }
+
+const char * i2o_get_connector_type(int conn)
+{
+	int idx = 16;
+	static char *i2o_connector_type[] = {
+		"OTHER",
+		"UNKNOWN",
+		"AUI",
+		"UTP",
+		"BNC",
+		"RJ45",
+		"STP DB9",
+		"FIBER MIC",
+		"APPLE AUI",
+		"MII",
+		"DB9",
+		"HSSDC",
+		"DUPLEX SC FIBER",
+		"DUPLEX ST FIBER",
+		"TNC/BNC",
+		"HW DEFAULT"
+	};
+
+	switch(conn)
+	{
+	case 0x00000000:
+		idx = 0;
+		break;
+	case 0x00000001:
+		idx = 1;
+		break;
+	case 0x00000002:
+		idx = 2;
+		break;
+	case 0x00000003:
+		idx = 3;
+		break;
+	case 0x00000004:
+		idx = 4;
+		break;
+	case 0x00000005:
+		idx = 5;
+		break;
+	case 0x00000006:
+		idx = 6;
+		break;
+	case 0x00000007:
+		idx = 7;
+		break;
+	case 0x00000008:
+		idx = 8;
+		break;
+	case 0x00000009:
+		idx = 9;
+		break;
+	case 0x0000000A:
+		idx = 10;
+		break;
+	case 0x0000000B:
+		idx = 11;
+		break;
+	case 0x0000000C:
+		idx = 12;
+		break;
+	case 0x0000000D:
+		idx = 13;
+		break;
+	case 0x0000000E:
+		idx = 14;
+		break;
+	case 0xFFFFFFFF:
+		idx = 15;
+		break;
+	}
+
+	return i2o_connector_type[idx];
+}
+
+
+const char * i2o_get_connection_type(int conn)
+{
+	int idx = 0;
+	static char *i2o_connection_type[] = {
+		"Unknown",
+		"AUI",
+		"10BASE5",
+		"FIORL",
+		"10BASE2",
+		"10BROAD36",
+		"10BASE-T",
+		"10BASE-FP",
+		"10BASE-FB",
+		"10BASE-FL",
+		"100BASE-TX",
+		"100BASE-FX",
+		"100BASE-T4",
+		"1000BASE-SX",
+		"1000BASE-LX",
+		"1000BASE-CX",
+		"1000BASE-T",
+		"100VG-ETHERNET",
+		"100VG-TOKEN RING",
+		"4MBIT TOKEN RING",
+		"16 Mb Token Ring",
+		"125 MBAUD FDDI",
+		"Point-to-point",
+		"Arbitrated loop",
+		"Public loop",
+		"Fabric",
+		"Emulation",
+		"Other",
+		"HW default"
+	};
+
+	switch(conn)
+	{
+	case I2O_LAN_UNKNOWN:
+		idx = 0;
+		break;
+	case I2O_LAN_AUI:
+		idx = 1;
+		break;
+	case I2O_LAN_10BASE5:
+		idx = 2;
+		break;
+	case I2O_LAN_FIORL:
+		idx = 3;
+		break;
+	case I2O_LAN_10BASE2:
+		idx = 4;
+		break;
+	case I2O_LAN_10BROAD36:
+		idx = 5;
+		break;
+	case I2O_LAN_10BASE_T:
+		idx = 6;
+		break;
+	case I2O_LAN_10BASE_FP:
+		idx = 7;
+		break;
+	case I2O_LAN_10BASE_FB:
+		idx = 8;
+		break;
+	case I2O_LAN_10BASE_FL:
+		idx = 9;
+		break;
+	case I2O_LAN_100BASE_TX:
+		idx = 10;
+		break;
+	case I2O_LAN_100BASE_FX:
+		idx = 11;
+		break;
+	case I2O_LAN_100BASE_T4:
+		idx = 12;
+		break;
+	case I2O_LAN_1000BASE_SX:
+		idx = 13;
+		break;
+	case I2O_LAN_1000BASE_LX:
+		idx = 14;
+		break;
+	case I2O_LAN_1000BASE_CX:
+		idx = 15;
+		break;
+	case I2O_LAN_1000BASE_T:
+		idx = 16;
+		break;
+	case I2O_LAN_100VG_ETHERNET:
+		idx = 17;
+		break;
+	case I2O_LAN_100VG_TR:
+		idx = 18;
+		break;
+	case I2O_LAN_4MBIT:
+		idx = 19;
+		break;
+	case I2O_LAN_16MBIT:
+		idx = 20;
+		break;
+	case I2O_LAN_125MBAUD:
+		idx = 21;
+		break;
+	case I2O_LAN_POINT_POINT:
+		idx = 22;
+		break;
+	case I2O_LAN_ARB_LOOP:
+		idx = 23;
+		break;
+	case I2O_LAN_PUBLIC_LOOP:
+		idx = 24;
+		break;
+	case I2O_LAN_FABRIC:
+		idx = 25;
+		break;
+	case I2O_LAN_EMULATION:
+		idx = 26;
+		break;
+	case I2O_LAN_OTHER:
+		idx = 27;
+		break;
+	case I2O_LAN_DEFAULT:
+		idx = 28;
+		break;
+	}
+
+	return i2o_connection_type[idx];
+}
+
 
 /* LAN group 0000h - Device info (scalar) */
 int i2o_proc_read_lan_dev_info(char *buf, char **start, off_t offset, int len, 
@@ -1145,7 +1835,7 @@ int i2o_proc_read_lan_dev_info(char *buf, char **start, off_t offset, int len,
 		return len;
 	}
 
-	len += sprintf(buf, "LAN Type ........... ");
+	len += sprintf(buf, "LAN Type            : ");
 	switch (work16[0])
 	{
 	case 0x0030:
@@ -1164,7 +1854,7 @@ int i2o_proc_read_lan_dev_info(char *buf, char **start, off_t offset, int len,
 		len += sprintf(buf+len, "Fibre Channel, ");
 		break;
 	default:
-		len += sprintf(buf+len, "Unknown type, ");
+		len += sprintf(buf+len, "Unknown type (0x%04x), ", work16[0]);
 		break;
 	}
 
@@ -1178,7 +1868,7 @@ int i2o_proc_read_lan_dev_info(char *buf, char **start, off_t offset, int len,
 	else
 		len += sprintf(buf+len, "simplex\n");
 
-	len += sprintf(buf+len, "Address format:      ");
+	len += sprintf(buf+len, "Address format      : ");
 	switch(work8[4]) {
 	case 0x00:
 		len += sprintf(buf+len, "IEEE 48bit\n");
@@ -1187,11 +1877,11 @@ int i2o_proc_read_lan_dev_info(char *buf, char **start, off_t offset, int len,
 		len += sprintf(buf+len, "FC IEEE\n");
 		break;
 	default:
-		len += sprintf(buf+len, "Unknown\n");
+		len += sprintf(buf+len, "Unknown (0x%02x)\n", work8[4]);
 		break;
 	}
 
-	len += sprintf(buf+len, "State:               ");
+	len += sprintf(buf+len, "State               : ");
 	switch(work8[5])
 	{
 	case 0x00:
@@ -1210,7 +1900,14 @@ int i2o_proc_read_lan_dev_info(char *buf, char **start, off_t offset, int len,
 		len += sprintf(buf+len, "Resetting\n");
 		break;
 	case 0x05:
-		len += sprintf(buf+len, "Error\n");
+		len += sprintf(buf+len, "ERROR: ");
+		if(work16[3]&0x0001)
+			len += sprintf(buf+len, "TxCU inoperative ");
+		if(work16[3]&0x0002)
+			len += sprintf(buf+len, "RxCU inoperative ");
+		if(work16[3]&0x0004)
+			len += sprintf(buf+len, "Local mem alloc ");
+		len += sprintf(buf+len, "\n");
 		break;
 	case 0x06:
 		len += sprintf(buf+len, "Operational no Rx\n");
@@ -1223,27 +1920,18 @@ int i2o_proc_read_lan_dev_info(char *buf, char **start, off_t offset, int len,
 		break;
 	}
 
-	len += sprintf(buf+len, "Error status:      ");
-	if(work16[3]&0x0001)
-		len += sprintf(buf+len, "Transmit Control Unit Inoperative ");
-	if(work16[3]&0x0002)
-		len += sprintf(buf+len, "Receive Control Unit Inoperative\n");
-	if(work16[3]&0x0004)
-		len += sprintf(buf+len, "Local memory Allocation Error\n");
-	len += sprintf(buf+len, "\n");
-
-	len += sprintf(buf+len, "Min Packet size:     %d\n", work32[2]);
-	len += sprintf(buf+len, "Max Packet size:     %d\n", work32[3]);
-	len += sprintf(buf+len, "HW Address:          "
+	len += sprintf(buf+len, "Min packet size     : %d\n", work32[2]);
+	len += sprintf(buf+len, "Max packet size     : %d\n", work32[3]);
+	len += sprintf(buf+len, "HW address          : "
 		       "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n",
 		       work8[16],work8[17],work8[18],work8[19],
 		       work8[20],work8[21],work8[22],work8[23]);
 
-	len += sprintf(buf+len, "Max Tx Wire Speed:   " FMT_U64_HEX " bps\n", U64_VAL(&work64[3]));
-	len += sprintf(buf+len, "Max Rx Wire Speed:   " FMT_U64_HEX " bps\n", U64_VAL(&work64[4]));
+	len += sprintf(buf+len, "Max Tx wire speed   : %d bps\n", work64[3]);
+	len += sprintf(buf+len, "Max Rx wire speed   : %d bps\n", work64[4]);
 
-	len += sprintf(buf+len, "Min SDU packet size: 0x%08x\n", work32[10]);
-	len += sprintf(buf+len, "Max SDU packet size: 0x%08x\n", work32[11]);
+	len += sprintf(buf+len, "Min SDU packet size : 0x%08x\n", work32[10]);
+	len += sprintf(buf+len, "Max SDU packet size : 0x%08x\n", work32[11]);
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
@@ -1270,60 +1958,65 @@ int i2o_proc_read_lan_mac_addr(char *buf, char **start, off_t offset, int len,
 		return len;
 	}
 
-	len += sprintf(buf, "Active address: "
+	len += sprintf(buf,     "Active address          : "
 		       "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n",
 		       work8[0],work8[1],work8[2],work8[3],
 		       work8[4],work8[5],work8[6],work8[7]);
-	len += sprintf(buf+len, "Current address: "
+	len += sprintf(buf+len, "Current address         : "
 		       "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n",
 		       work8[8],work8[9],work8[10],work8[11],
 		       work8[12],work8[13],work8[14],work8[15]);
-	len += sprintf(buf+len, "Functional address mask: "
+	len += sprintf(buf+len, "Functional address mask : "
 		       "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n",
 		       work8[16],work8[17],work8[18],work8[19],
 		       work8[20],work8[21],work8[22],work8[23]);
 
-	len += sprintf(buf+len, "Filter mask: 0x%08x\n", work32[6]);
-	len += sprintf(buf+len, "HW/DDM capabilities: 0x%08x\n", work32[7]);
-	len += sprintf(buf+len, "    Unicast packets %ssupported (%sabled)\n",
-		       (work32[7]&0x00000001)?"":"not ",
-		       (work32[6]&0x00000001)?"en":"dis");
-	len += sprintf(buf+len, "    Promiscuous mode %ssupported (%sabled)\n",
-		       (work32[7]&0x00000002)?"":"not",
-		       (work32[6]&0x00000002)?"en":"dis");
-	len += sprintf(buf+len,
-		       "    Multicast promiscuous mode %ssupported (%sabled)\n",
-		       (work32[7]&0x00000004)?"":"not ",
-		       (work32[6]&0x00000004)?"en":"dis");
-	len += sprintf(buf+len,
-		       "    Broadcast Reception disabling %ssupported (%sabled)\n",
-		       (work32[7]&0x00000100)?"":"not ",
-		       (work32[6]&0x00000100)?"en":"dis");
-	len += sprintf(buf+len,
-		       "    Multicast Reception disabling %ssupported (%sabled)\n",
-		       (work32[7]&0x00000200)?"":"not ",
-		       (work32[6]&0x00000200)?"en":"dis");
-	len += sprintf(buf+len,
-		       "    Functional address disabling %ssupported (%sabled)\n",
-		       (work32[7]&0x00000400)?"":"not ",
-		       (work32[6]&0x00000400)?"en":"dis");
+	len += sprintf(buf+len, "HW/DDM capabilities : 0x%08x\n", work32[7]);
+	len += sprintf(buf+len, "    Unicast packets %ssupported\n",
+		       (work32[7]&0x00000001)?"":"not ");
+	len += sprintf(buf+len, "    Promiscuous mode %ssupported\n",
+		       (work32[7]&0x00000002)?"":"not");
+	len += sprintf(buf+len, "    Promiscuous multicast mode %ssupported\n",
+		       (work32[7]&0x00000004)?"":"not ");
+	len += sprintf(buf+len,"    Broadcast reception disabling %ssupported\n",
+		       (work32[7]&0x00000100)?"":"not ");
+	len += sprintf(buf+len,"    Multicast reception disabling %ssupported\n",
+		       (work32[7]&0x00000200)?"":"not ");
+	len += sprintf(buf+len,"    Functional address disabling %ssupported\n",
+		       (work32[7]&0x00000400)?"":"not ");
 	len += sprintf(buf+len, "    MAC reporting %ssupported\n",
-		       (work32[7]&0x00000800)?"":"not ");		       
+		       (work32[7]&0x00000800)?"":"not ");
 
-	len += sprintf(buf+len, "    MAC Reporting mode: ");
-	if (work32[6]&0x00000800)
-		len += sprintf(buf+len, "Pass only priority MAC packets\n");
-	else if (work32[6]&0x00001000)
-		len += sprintf(buf+len, "Pass all MAC packets\n");
-	else if (work32[6]&0x00001800)
-		len += sprintf(buf+len, "Pass all MAC packets (promiscuous)\n");
-	else
-		len += sprintf(buf+len, "Do not pass MAC packets\n");
-
-	len += sprintf(buf+len, "Number of multicast addesses: %d\n", work32[8]);
-	len += sprintf(buf+len, "Perfect filtering for max %d multicast addesses\n",
+	len += sprintf(buf+len, "Filter mask : 0x%08x\n", work32[6]);
+	len += sprintf(buf+len, "    Unicast packets %s\n",
+		(work32[6]&0x00000001)?"rejected":"enabled");
+	len += sprintf(buf+len, "    Promiscuous mode %s\n",
+		(work32[6]&0x00000002)?"enabled":"disabled");
+	len += sprintf(buf+len, "    Promiscuous multicast mode %s\n",
+		(work32[6]&0x00000004)?"enabled":"disabled");	
+	len += sprintf(buf+len, "    Broadcast packets %s\n",
+		(work32[6]&0x00000100)?"rejected":"enabled");
+	len += sprintf(buf+len, "    Multicast packets %s\n",
+		(work32[6]&0x00000200)?"rejected":"enabled");
+	len += sprintf(buf+len, "    Functional address %s\n",
+		       (work32[6]&0x00000400)?"ignored":"enabled");
+		       
+	if (work32[7]&0x00000800)
+	{		       
+		len += sprintf(buf+len, "    MAC reporting mode : ");
+		if (work32[6]&0x00000800)
+			len += sprintf(buf+len, "Pass only priority MAC packets to user\n");
+		else if (work32[6]&0x00001000)
+			len += sprintf(buf+len, "Pass all MAC packets to user\n");
+		else if (work32[6]&0x00001800)
+			len += sprintf(buf+len, "Pass all MAC packets (promiscuous) to user\n");
+		else
+			len += sprintf(buf+len, "Do not pass MAC packets to user\n");
+	}
+	len += sprintf(buf+len, "Number of multicast addresses : %d\n", work32[8]);
+	len += sprintf(buf+len, "Perfect filtering for max %d multicast addresses\n",
 		       work32[9]);
-	len += sprintf(buf+len, "Imperfect filtering for max %d multicast addesses\n",
+	len += sprintf(buf+len, "Imperfect filtering for max %d multicast addresses\n",
 		       work32[10]);
 
 	spin_unlock(&i2o_proc_lock);
@@ -1331,97 +2024,76 @@ int i2o_proc_read_lan_mac_addr(char *buf, char **start, off_t offset, int len,
 	return len;
 }
 
-/* LAN group 0001h, field 1 - Current MAC (scalar) */
-int i2o_proc_read_lan_curr_addr(char *buf, char **start, off_t offset, int len,
-				int *eof, void *data)
-{
-	struct i2o_device *d = (struct i2o_device*)data;
-	static u32 work32[2];
-	static u8 *work8 = (u8*)work32;
-	int token;
-
-	spin_lock(&i2o_proc_lock);	
-	len = 0;
-
-	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0001, 2, &work32, 8, &i2o_proc_token);
-	if(token < 0)
-	{
-		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
-		spin_unlock(&i2o_proc_lock);
-		return len;
-	}
-
-	len += sprintf(buf, "Current address: "
-		       "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n",
-		       work8[0],work8[1],work8[2],work8[3],
-		       work8[4],work8[5],work8[6],work8[7]);
-
-	spin_unlock(&i2o_proc_lock);
-	return len;
-}
-
-
-#if 0
 /* LAN group 0002h - Multicast MAC address table (table) */
-int i2o_proc_read_lan_mcast_addr(char *buf, char **start, off_t offset, int len, 
-				 int *eof, void *data)
+int i2o_proc_read_lan_mcast_addr(char *buf, char **start, off_t offset,
+				 int len, int *eof, void *data)
 {
 	struct i2o_device *d = (struct i2o_device*)data;
-	static u8 work8[32];
-	static u32 field32[8];
+	static u32 field32[64];
 	static u8 *field8 = (u8 *)field32;
+	static u16 *field16 = (u16 *)field32;
 	int token;
+	int i;
 
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_table_polled(d->controller, d->id, &work8, 32,
-				       0x0002, 0, field32, 8);
+	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
+			d->controller, d->id, proc_context, 0x0002, -1, 
+			NULL, 0, &field32, sizeof(field32),
+			&i2o_proc_token);
 
-	switch (token) {
-	case -ETIMEDOUT:
-		len += sprintf(buf, "Timeout reading table.\n");
-		spin_unlock(&i2o_proc_lock);
-		return len;
-		break;
-	case -ENOMEM:
-		len += sprintf(buf, "No free memory to read the table.\n");
-		spin_unlock(&i2o_proc_lock);
-		return len;
-		break;
-	case -EBADR:
-		len += sprintf(buf, "Error reading field.\n");
-		spin_unlock(&i2o_proc_lock);
-		return len;
-		break;
-	default:
-		break;
+	if (token<0)
+		switch (token) {
+		case -ETIMEDOUT:
+			len += sprintf(buf, "Timeout reading table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		case -ENOMEM:
+			len += sprintf(buf, "No free memory to read the table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		default:
+			len += sprintf(buf, "Error reading field. BlockStatus %d\n",
+				       token);
+			spin_unlock(&i2o_proc_lock);
+			return len;
+		}
+
+	len += sprintf(buf, "RowCount=%d, MoreFlag=%d\n", 
+		       field16[0], field16[1]);
+
+	field8=(u8 *)&field16[2];
+
+	for(i=0; i<field16[0]; i++, field8+=8)
+	{
+		len += sprintf(buf+len, "MC MAC address[%d]: "
+			       "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n",
+			       i,
+			       field8[0], field8[1], field8[2],
+			       field8[3], field8[4], field8[5],
+			       field8[6], field8[7]);
 	}
-
-	len += sprintf(buf, "Multicast MAC address: "
-		       "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n",
-		       field8[0],field8[1],field8[2],field8[3],
-		       field8[4],field8[5],field8[6],field8[7]);
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
 }
-#endif
 
 /* LAN group 0003h - Batch Control (scalar) */
 int i2o_proc_read_lan_batch_control(char *buf, char **start, off_t offset,
 				    int len, int *eof, void *data)
 {
 	struct i2o_device *d = (struct i2o_device*)data;
-	static u32 work32[18];
+	static u32 work32[9];
 	int token;
 
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
 	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0003, -1, &work32, 72, &i2o_proc_token);
+				 0x0003, -1, &work32, 9*4, &i2o_proc_token);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -1443,26 +2115,26 @@ int i2o_proc_read_lan_batch_control(char *buf, char **start, off_t offset,
 	len += sprintf(buf+len, "\n");
 
 	if(d->i2oversion == 0x00) { /* Reserved in 1.53 and 2.0 */
-		len += sprintf(buf+len, "Rising Load Delay: %d ms\n",
+		len += sprintf(buf+len, "Rising load delay      : %d ms\n",
 			       work32[1]/10);
-		len += sprintf(buf+len, "Rising Load Threshold: %d ms\n",
+		len += sprintf(buf+len, "Rising load threshold  : %d ms\n",
 			       work32[2]/10);
-		len += sprintf(buf+len, "Falling Load Delay: %d ms\n",
+		len += sprintf(buf+len, "Falling load delay     : %d ms\n",
 			       work32[3]/10);
-		len += sprintf(buf+len, "Falling Load Threshold: %d ms\n",
+		len += sprintf(buf+len, "Falling load threshold : %d ms\n",
 			       work32[4]/10);
 	}
 
-	len += sprintf(buf+len, "Max Rx Batch Count: %d\n", work32[5]);
-	len += sprintf(buf+len, "Max Rx Batch Delay: %d\n", work32[6]);
+	len += sprintf(buf+len, "Max Rx batch count : %d\n", work32[5]);
+	len += sprintf(buf+len, "Max Rx batch delay : %d\n", work32[6]);
 
 	if(d->i2oversion == 0x00) {
 		len += sprintf(buf+len,
-			       "Transmission Completion Reporting Delay: %d ms\n",
+			       "Transmission completion reporting delay : %d ms\n",
 			       work32[7]);
 	} else {
-		len += sprintf(buf+len, "Max Tx Batch Delay: %d\n", work32[7]);
-		len += sprintf(buf+len, "Max Tx Batch Count: %d\n", work32[8]);
+		len += sprintf(buf+len, "Max Tx batch delay : %d\n", work32[7]);
+		len += sprintf(buf+len, "Max Tx batch count : %d\n", work32[8]);
 	}
 
 	spin_unlock(&i2o_proc_lock);
@@ -1489,14 +2161,14 @@ int i2o_proc_read_lan_operation(char *buf, char **start, off_t offset, int len,
 		return len;
 	}
 
-	len += sprintf(buf, "Packet prepadding (32b words): %d\n", work32[0]);
-	len += sprintf(buf+len, "Transmission error reporting: %s\n",
+	len += sprintf(buf, "Packet prepadding (32b words) : %d\n", work32[0]);
+	len += sprintf(buf+len, "Transmission error reporting  : %s\n",
 		       (work32[1]&1)?"on":"off");
-	len += sprintf(buf+len, "Bad packet handling: %s\n",
+	len += sprintf(buf+len, "Bad packet handling           : %s\n",
 		       (work32[1]&0x2)?"by host":"by DDM");		      
-	len += sprintf(buf+len, "Packet orphan limit: %d\n", work32[2]);
+	len += sprintf(buf+len, "Packet orphan limit           : %d\n", work32[2]);
 
-	len += sprintf(buf+len, "Tx modes:\n");
+	len += sprintf(buf+len, "Tx modes :\n");
 	if (work32[3]&0x00000004)
 		len += sprintf(buf+len, "    HW CRC supressed\n");
 	else
@@ -1514,7 +2186,7 @@ int i2o_proc_read_lan_operation(char *buf, char **start, off_t offset, int len,
 	if (work32[3]&0x00002000)
 		len += sprintf(buf+len, "    Loopback packet not delivered\n");
 
-	len += sprintf(buf+len, "Rx modes:\n");
+	len += sprintf(buf+len, "Rx modes :\n");
 	if (work32[4]&0x00000004)
 		len += sprintf(buf+len, "    FCS in payload\n");
 	if (work32[4]&0x00000100)
@@ -1554,159 +2226,17 @@ int i2o_proc_read_lan_media_operation(char *buf, char **start, off_t offset,
 		return len;
 	}
 
-	len += sprintf(buf, "Connector type: ");
-	switch(work32[0])
-	{
-	case 0x00000000:
-		len += sprintf(buf+len, "OTHER\n");
-		break;
-	case 0x00000001:
-		len += sprintf(buf+len, "UNKNOWN\n");
-		break;
-	case 0x00000002:
-		len += sprintf(buf+len, "AUI\n");
-		break;
-	case 0x00000003:
-		len += sprintf(buf+len, "UTP\n");
-		break;
-	case 0x00000004:
-		len += sprintf(buf+len, "BNC\n");
-		break;
-	case 0x00000005:
-		len += sprintf(buf+len, "RJ45\n");
-		break;
-	case 0x00000006:
-		len += sprintf(buf+len, "STP DB9\n");
-		break;
-	case 0x00000007:
-		len += sprintf(buf+len, "FIBER MIC\n");
-		break;
-	case 0x00000008:
-		len += sprintf(buf+len, "APPLE AUI\n");
-		break;
-	case 0x00000009:
-		len += sprintf(buf+len, "MII\n");
-		break;
-	case 0x0000000A:
-		len += sprintf(buf+len, "DB9\n");
-		break;
-	case 0x0000000B:
-		len += sprintf(buf+len, "HSSDC\n");
-		break;
-	case 0x0000000C:
-		len += sprintf(buf+len, "DUPLEX SC FIBER\n");
-		break;
-	case 0x0000000D:
-		len += sprintf(buf+len, "DUPLEX ST FIBER\n");
-		break;
-	case 0x0000000E:
-		len += sprintf(buf+len, "TNC/BNC\n");
-		break;
-	case 0xFFFFFFFF:
-		len += sprintf(buf+len, "HW DEFAULT\n");
-		break;
-	}
+	len += sprintf(buf, "Connector type         : %s\n",
+		       i2o_get_connector_type(work32[0]));
+	len += sprintf(buf+len, "Connection type        : %s\n",
+		       i2o_get_connection_type(work32[1]));
 
-	len += sprintf(buf+len, "Connection type: ");
-	switch(work32[1])
-	{
-	case I2O_LAN_UNKNOWN:
-		len += sprintf(buf+len, "UNKNOWN\n");
-		break;
-	case I2O_LAN_AUI:
-		len += sprintf(buf+len, "AUI\n");
-		break;
-	case I2O_LAN_10BASE5:
-		len += sprintf(buf+len, "10BASE5\n");
-		break;
-	case I2O_LAN_FIORL:
-		len += sprintf(buf+len, "FIORL\n");
-		break;
-	case I2O_LAN_10BASE2:
-		len += sprintf(buf+len, "10BASE2\n");
-		break;
-	case I2O_LAN_10BROAD36:
-		len += sprintf(buf+len, "10BROAD36\n");
-		break;
-	case I2O_LAN_10BASE_T:
-		len += sprintf(buf+len, "10BASE-T\n");
-		break;
-	case I2O_LAN_10BASE_FP:
-		len += sprintf(buf+len, "10BASE-FP\n");
-		break;
-	case I2O_LAN_10BASE_FB:
-		len += sprintf(buf+len, "10BASE-FB\n");
-		break;
-	case I2O_LAN_10BASE_FL:
-		len += sprintf(buf+len, "10BASE-FL\n");
-		break;
-	case I2O_LAN_100BASE_TX:
-		len += sprintf(buf+len, "100BASE-TX\n");
-		break;
-	case I2O_LAN_100BASE_FX:
-		len += sprintf(buf+len, "100BASE-FX\n");
-		break;
-	case I2O_LAN_100BASE_T4:
-		len += sprintf(buf+len, "100BASE-T4\n");
-		break;
-	case I2O_LAN_1000BASE_SX:
-		len += sprintf(buf+len, "1000BASE-SX\n");
-		break;
-	case I2O_LAN_1000BASE_LX:
-		len += sprintf(buf+len, "1000BASE-LX\n");
-		break;
-	case I2O_LAN_1000BASE_CX:
-		len += sprintf(buf+len, "1000BASE-CX\n");
-		break;
-	case I2O_LAN_1000BASE_T:
-		len += sprintf(buf+len, "1000BASE-T\n");
-		break;
-	case I2O_LAN_100VG_ETHERNET:
-		len += sprintf(buf+len, "100VG-ETHERNET\n");
-		break;
-	case I2O_LAN_100VG_TR:
-		len += sprintf(buf+len, "100VG-TOKEN RING\n");
-		break;
-	case I2O_LAN_4MBIT:
-		len += sprintf(buf+len, "4MBIT TOKEN RING\n");
-		break;
-	case I2O_LAN_16MBIT:
-		len += sprintf(buf+len, "16 Mb Token Ring\n");
-		break;
-	case I2O_LAN_125MBAUD:
-		len += sprintf(buf+len, "125 MBAUD FDDI\n");
-		break;
-	case I2O_LAN_POINT_POINT:
-		len += sprintf(buf+len, "Point-to-point\n");
-		break;
-	case I2O_LAN_ARB_LOOP:
-		len += sprintf(buf+len, "Arbitrated loop\n");
-		break;
-	case I2O_LAN_PUBLIC_LOOP:
-		len += sprintf(buf+len, "Public loop\n");
-		break;
-	case I2O_LAN_FABRIC:
-		len += sprintf(buf+len, "Fabric\n");
-		break;
-	case I2O_LAN_EMULATION:
-		len += sprintf(buf+len, "Emulation\n");
-		break;
-	case I2O_LAN_OTHER:
-		len += sprintf(buf+len, "Other\n");
-		break;
-	case I2O_LAN_DEFAULT:
-		len += sprintf(buf+len, "HW default\n");
-		break;
-	}
+	len += sprintf(buf+len, "Current Tx wire speed  : %d bps\n", work64[1]);
+	len += sprintf(buf+len, "Current Rx wire speed  : %d bps\n", work64[2]);
 
-	len += sprintf(buf+len, "Current Tx Wire Speed: " FMT_U64_HEX " bps\n",
-		       U64_VAL(&work64[1]));
-	len += sprintf(buf+len, "Current Rx Wire Speed: " FMT_U64_HEX " bps\n",
-		       U64_VAL(&work64[2]));
-
-	len += sprintf(buf+len, "%s duplex\n", (work8[24]&1)?"Full":"Half");
-
-	len += sprintf(buf+len, "Link status: ");
+	len += sprintf(buf+len, "Duplex mode            : %s duplex\n", 
+			(work8[24]&1)?"Full":"Half");
+	len += sprintf(buf+len, "Link status            : ");
 	if(work8[25] == 0x00)
 		len += sprintf(buf+len, "Unknown\n");
 	else if(work8[25] == 0x01)
@@ -1719,237 +2249,104 @@ int i2o_proc_read_lan_media_operation(char *buf, char **start, off_t offset,
 		len += sprintf(buf+len, "Unspecified\n");
 
 	if (d->i2oversion == 0x00) { /* Reserved in 1.53 and 2.0 */
-		len += sprintf(buf+len, "Bad packets handled by: %s\n",
+		len += sprintf(buf+len, "Bad packets handled by : %s\n",
 			       (work8[26] == 0xFF)?"host":"DDM");
 	}
 	if (d->i2oversion != 0x00) {
-		len += sprintf(buf+len, "Duplex mode target: ");
+		len += sprintf(buf+len, "Duplex mode target     : ");
 		switch (work8[27]) {
 		case 0:
-			len += sprintf(buf+len, "Half Duplex\n");
+			len += sprintf(buf+len, "Half duplex\n");
 			break;
 		case 1:
-			len += sprintf(buf+len, "Full Duplex\n");
+			len += sprintf(buf+len, "Full duplex\n");
 			break;
 		default:
 			len += sprintf(buf+len, "\n");
 			break;
 		}
 
-		len += sprintf(buf+len, "Connector type target: ");
-		switch(work32[7])
-		{
-		case 0x00000000:
-			len += sprintf(buf+len, "OTHER\n");
-			break;
-		case 0x00000001:
-			len += sprintf(buf+len, "UNKNOWN\n");
-			break;
-		case 0x00000002:
-			len += sprintf(buf+len, "AUI\n");
-			break;
-		case 0x00000003:
-			len += sprintf(buf+len, "UTP\n");
-			break;
-		case 0x00000004:
-			len += sprintf(buf+len, "BNC\n");
-			break;
-		case 0x00000005:
-			len += sprintf(buf+len, "RJ45\n");
-			break;
-		case 0x00000006:
-			len += sprintf(buf+len, "STP DB9\n");
-			break;
-		case 0x00000007:
-			len += sprintf(buf+len, "FIBER MIC\n");
-			break;
-		case 0x00000008:
-			len += sprintf(buf+len, "APPLE AUI\n");
-			break;
-		case 0x00000009:
-			len += sprintf(buf+len, "MII\n");
-			break;
-		case 0x0000000A:
-			len += sprintf(buf+len, "DB9\n");
-			break;
-		case 0x0000000B:
-			len += sprintf(buf+len, "HSSDC\n");
-			break;
-		case 0x0000000C:
-			len += sprintf(buf+len, "DUPLEX SC FIBER\n");
-			break;
-		case 0x0000000D:
-			len += sprintf(buf+len, "DUPLEX ST FIBER\n");
-			break;
-		case 0x0000000E:
-			len += sprintf(buf+len, "TNC/BNC\n");
-			break;
-		case 0xFFFFFFFF:
-			len += sprintf(buf+len, "HW DEFAULT\n");
-			break;
-		default:
-			len += sprintf(buf+len, "\n");
-			break;
-		}
-
-		len += sprintf(buf+len, "Connection type target: ");
-		switch(work32[8])
-		{
-		case I2O_LAN_UNKNOWN:
-			len += sprintf(buf+len, "UNKNOWN\n");
-			break;
-		case I2O_LAN_AUI:
-			len += sprintf(buf+len, "AUI\n");
-			break;
-		case I2O_LAN_10BASE5:
-			len += sprintf(buf+len, "10BASE5\n");
-			break;
-		case I2O_LAN_FIORL:
-			len += sprintf(buf+len, "FIORL\n");
-			break;
-		case I2O_LAN_10BASE2:
-			len += sprintf(buf+len, "10BASE2\n");
-			break;
-		case I2O_LAN_10BROAD36:
-			len += sprintf(buf+len, "10BROAD36\n");
-			break;
-		case I2O_LAN_10BASE_T:
-			len += sprintf(buf+len, "10BASE-T\n");
-			break;
-		case I2O_LAN_10BASE_FP:
-			len += sprintf(buf+len, "10BASE-FP\n");
-			break;
-		case I2O_LAN_10BASE_FB:
-			len += sprintf(buf+len, "10BASE-FB\n");
-			break;
-		case I2O_LAN_10BASE_FL:
-			len += sprintf(buf+len, "10BASE-FL\n");
-			break;
-		case I2O_LAN_100BASE_TX:
-			len += sprintf(buf+len, "100BASE-TX\n");
-			break;
-		case I2O_LAN_100BASE_FX:
-			len += sprintf(buf+len, "100BASE-FX\n");
-			break;
-		case I2O_LAN_100BASE_T4:
-			len += sprintf(buf+len, "100BASE-T4\n");
-			break;
-		case I2O_LAN_1000BASE_SX:
-			len += sprintf(buf+len, "1000BASE-SX\n");
-			break;
-		case I2O_LAN_1000BASE_LX:
-			len += sprintf(buf+len, "1000BASE-LX\n");
-			break;
-		case I2O_LAN_1000BASE_CX:
-			len += sprintf(buf+len, "1000BASE-CX\n");
-			break;
-		case I2O_LAN_1000BASE_T:
-			len += sprintf(buf+len, "1000BASE-T\n");
-			break;
-		case I2O_LAN_100VG_ETHERNET:
-			len += sprintf(buf+len, "100VG-ETHERNET\n");
-			break;
-		case I2O_LAN_100VG_TR:
-			len += sprintf(buf+len, "100VG-TOKEN RING\n");
-			break;
-		case I2O_LAN_4MBIT:
-			len += sprintf(buf+len, "4MBIT TOKEN RING\n");
-			break;
-		case I2O_LAN_16MBIT:
-			len += sprintf(buf+len, "16 Mb Token Ring\n");
-			break;
-		case I2O_LAN_125MBAUD:
-			len += sprintf(buf+len, "125 MBAUD FDDI\n");
-			break;
-		case I2O_LAN_POINT_POINT:
-			len += sprintf(buf+len, "Point-to-point\n");
-			break;
-		case I2O_LAN_ARB_LOOP:
-			len += sprintf(buf+len, "Arbitrated loop\n");
-			break;
-		case I2O_LAN_PUBLIC_LOOP:
-			len += sprintf(buf+len, "Public loop\n");
-			break;
-		case I2O_LAN_FABRIC:
-			len += sprintf(buf+len, "Fabric\n");
-			break;
-		case I2O_LAN_EMULATION:
-			len += sprintf(buf+len, "Emulation\n");
-			break;
-		case I2O_LAN_OTHER:
-			len += sprintf(buf+len, "Other\n");
-			break;
-		case I2O_LAN_DEFAULT:
-			len += sprintf(buf+len, "HW default\n");
-			break;
-		default:
-			len += sprintf(buf+len, "\n");
-			break;
-		}
+		len += sprintf(buf+len, "Connector type target  : %s\n",
+			       i2o_get_connector_type(work32[7]));
+		len += sprintf(buf+len, "Connection type target : %s\n",
+			       i2o_get_connection_type(work32[8]));
 	}
+
 	spin_unlock(&i2o_proc_lock);
 	return len;
 }
 
-#if 0
 /* LAN group 0006h - Alternate address (table) */
 int i2o_proc_read_lan_alt_addr(char *buf, char **start, off_t offset, int len,
 			       int *eof, void *data)
 {
 	struct i2o_device *d = (struct i2o_device*)data;
-	static u8 work8[32];
-	static u32 field32[2];
+	static u32 field32[64];
 	static u8 *field8 = (u8 *)field32;
+	static u16 *field16 = (u16 *)field32;
 	int token;
+	int i;
 
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_table_polled(d->controller, d->id, &work8, 32,
-				       0x0006, 0, field32, 8);
-	switch (token) {
-	case -ETIMEDOUT:
-		len += sprintf(buf, "Timeout reading table.\n");
-		spin_unlock(&i2o_proc_lock);
-		return len;
-		break;
-	case -ENOMEM:
-		len += sprintf(buf, "No free memory to read the table.\n");
-		spin_unlock(&i2o_proc_lock);
-		return len;
-		break;
-	case -EBADR:
-		len += sprintf(buf, "Error reading field.\n");
-		spin_unlock(&i2o_proc_lock);
-		return len;
-		break;
-	default:
-		break;
-	}
+	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
+			d->controller, d->id, proc_context, 0x0006, -1, 
+			NULL, 0, &field32, sizeof(field32),
+			&i2o_proc_token);
 
-	len += sprintf(buf, "Alternate Address: "
-		       "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n",
-                       field8[0],field8[1],field8[2],field8[3],
-                       field8[4],field8[5],field8[6],field8[7]);
+	if (token<0)
+		switch (token) {
+		case -ETIMEDOUT:
+			len += sprintf(buf, "Timeout reading table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		case -ENOMEM:
+			len += sprintf(buf, "No free memory to read the table.\n");
+			spin_unlock(&i2o_proc_lock);
+			return len;
+			break;
+		default:
+			len += sprintf(buf, "Error reading field. BlockStatus %d\n",
+				       token);
+			spin_unlock(&i2o_proc_lock);
+			return len;
+		}
+
+	len += sprintf(buf,"RowCount=%d, MoreFlag=%d\n", field16[0],
+		       field16[1]);
+
+	field8=(u8 *)&field16[2];
+
+	for(i=0; i<field16[0]; i++, field8+=8)
+	{
+		len += sprintf(buf+len, "Alternate address[%d]: "
+			       "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n",
+			       i,
+			       field8[0], field8[1], field8[2],
+			       field8[3], field8[4], field8[5],
+			       field8[6], field8[7]);
+	}
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
 }
-#endif
+
 
 /* LAN group 0007h - Transmit info (scalar) */
 int i2o_proc_read_lan_tx_info(char *buf, char **start, off_t offset, int len, 
-				    int *eof, void *data)
+			      int *eof, void *data)
 {
 	struct i2o_device *d = (struct i2o_device*)data;
-	static u32 work32[10];
+	static u32 work32[8];
 	int token;
 
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
 	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0007, -1, &work32, 8, &i2o_proc_token);
+				 0x0007, -1, &work32, 8*4, &i2o_proc_token);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -1957,12 +2354,12 @@ int i2o_proc_read_lan_tx_info(char *buf, char **start, off_t offset, int len,
 		return len;
 	}
 
-	len += sprintf(buf, "Max SG Elements per packet: %d\n", work32[0]);
-	len += sprintf(buf+len, "Max SG Elements per chain: %d\n", work32[1]);
-	len += sprintf(buf+len, "Max outstanding packets: %d\n", work32[2]);
-	len += sprintf(buf+len, "Max packets per request: %d\n", work32[3]);
+	len += sprintf(buf,     "Max SG Elements per packet : %d\n", work32[0]);
+	len += sprintf(buf+len, "Max SG Elements per chain  : %d\n", work32[1]);
+	len += sprintf(buf+len, "Max outstanding packets    : %d\n", work32[2]);
+	len += sprintf(buf+len, "Max packets per request    : %d\n", work32[3]);
 
-	len += sprintf(buf+len, "Tx modes:\n");
+	len += sprintf(buf+len, "Tx modes :\n");
 	if(work32[4]&0x00000002)
 		len += sprintf(buf+len, "    No DA in SGL\n");
 	if(work32[4]&0x00000004)
@@ -1974,25 +2371,25 @@ int i2o_proc_read_lan_tx_info(char *buf, char **start, off_t offset, int len,
 	if(work32[4]&0x00000020)
 		len += sprintf(buf+len, "    RIF insertion\n");
 	if(work32[4]&0x00000100)
-		len += sprintf(buf+len, "    IPv4 Checksum\n");
+		len += sprintf(buf+len, "    IPv4 checksum\n");
 	if(work32[4]&0x00000200)
-		len += sprintf(buf+len, "    TCP Checksum\n");
+		len += sprintf(buf+len, "    TCP checksum\n");
 	if(work32[4]&0x00000400)
-		len += sprintf(buf+len, "    UDP Checksum\n");
+		len += sprintf(buf+len, "    UDP checksum\n");
 	if(work32[4]&0x00000800)
-		len += sprintf(buf+len, "    RSVP Checksum\n");
+		len += sprintf(buf+len, "    RSVP checksum\n");
 	if(work32[4]&0x00001000)
-		len += sprintf(buf+len, "    ICMP Checksum\n");
+		len += sprintf(buf+len, "    ICMP checksum\n");
 	if (d->i2oversion == 0x00) {
 		if(work32[4]&0x00008000)
-			len += sprintf(buf+len, "    Loopback Enabled\n");
+			len += sprintf(buf+len, "    Loopback enabled\n");
 		if(work32[4]&0x00010000)
-			len += sprintf(buf+len, "    Loopback Suppression Enabled\n");
+			len += sprintf(buf+len, "    Loopback suppression enabled\n");
 	} else {
 		if(work32[4]&0x00010000)
-			len += sprintf(buf+len, "    Loopback Enabled\n");
+			len += sprintf(buf+len, "    Loopback enabled\n");
 		if(work32[4]&0x00020000)
-			len += sprintf(buf+len, "    Loopback Suppression Enabled\n");
+			len += sprintf(buf+len, "    Loopback suppression enabled\n");
 	}
 
 	spin_unlock(&i2o_proc_lock);
@@ -2001,17 +2398,17 @@ int i2o_proc_read_lan_tx_info(char *buf, char **start, off_t offset, int len,
 
 /* LAN group 0008h - Receive info (scalar) */
 int i2o_proc_read_lan_rx_info(char *buf, char **start, off_t offset, int len, 
-				    int *eof, void *data)
+			      int *eof, void *data)
 {
 	struct i2o_device *d = (struct i2o_device*)data;
-	static u32 work32[10];
+	static u32 work32[8];
 	int token;
 
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
 	token = i2o_query_scalar(d->controller, d->id, proc_context, 
-				 0x0008, -1, &work32, 8, &i2o_proc_token);
+				 0x0008, -1, &work32, 8*4, &i2o_proc_token);
 	if(token < 0)
 	{
 		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
@@ -2019,14 +2416,14 @@ int i2o_proc_read_lan_rx_info(char *buf, char **start, off_t offset, int len,
 		return len;
 	}
 
-	len += sprintf(buf, "Max size of chain element: %d\n", work32[0]);
-	len += sprintf(buf+len, "Max number of buckets: %d\n", work32[1]);
+	len += sprintf(buf,"Max size of chain element : %d\n", work32[0]);
+	len += sprintf(buf+len, "Max number of buckets     : %d\n", work32[1]);
 
 	if (d->i2oversion > 0x00) { /* not in 1.5 */
-		len += sprintf(buf+len, "Rx modes: %d\n", work32[2]);
-		len += sprintf(buf+len, "RxMaxBucketsReply: %d\n", work32[3]);
-		len += sprintf(buf+len, "RxMaxPacketsPerBuckets: %d\n", work32[4]);
-		len += sprintf(buf+len, "RxMaxPostBuckets: %d\n", work32[5]);
+		len += sprintf(buf+len, "RxModes                   : %d\n", work32[2]);
+		len += sprintf(buf+len, "RxMaxBucketsReply         : %d\n", work32[3]);
+		len += sprintf(buf+len, "RxMaxPacketsPerBuckets    : %d\n", work32[4]);
+		len += sprintf(buf+len, "RxMaxPostBuckets          : %d\n", work32[5]);
 	}
 
 	spin_unlock(&i2o_proc_lock);
@@ -2054,15 +2451,63 @@ int i2o_proc_read_lan_hist_stats(char *buf, char **start, off_t offset, int len,
 		return len;
 	}
 
-	len += sprintf(buf, "Tx packets: " FMT_U64_HEX "\n", U64_VAL(&work64[0]));
-	len += sprintf(buf+len, "Tx bytes: " FMT_U64_HEX "\n", U64_VAL(&work64[1]));
-	len += sprintf(buf+len, "Rx packets: " FMT_U64_HEX "\n", U64_VAL(&work64[2]));
-	len += sprintf(buf+len, "Rx bytes: " FMT_U64_HEX "\n", U64_VAL(&work64[3]));
-	len += sprintf(buf+len, "Tx errors: " FMT_U64_HEX "\n", U64_VAL(&work64[4]));
-	len += sprintf(buf+len, "Rx errors: " FMT_U64_HEX "\n", U64_VAL(&work64[5]));
-	len += sprintf(buf+len, "Rx dropped: " FMT_U64_HEX "\n", U64_VAL(&work64[6]));
-	len += sprintf(buf+len, "Adapter resets: " FMT_U64_HEX "\n", U64_VAL(&work64[7]));
-	len += sprintf(buf+len, "Adapter suspends: " FMT_U64_HEX "\n", U64_VAL(&work64[8]));
+	len += sprintf(buf,     "Tx packets       : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[0]));
+	len += sprintf(buf+len, "Tx bytes         : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[1]));
+	len += sprintf(buf+len, "Rx packets       : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[2]));
+	len += sprintf(buf+len, "Rx bytes         : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[3]));
+	len += sprintf(buf+len, "Tx errors        : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[4]));
+	len += sprintf(buf+len, "Rx errors        : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[5]));
+	len += sprintf(buf+len, "Rx dropped       : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[6]));
+	len += sprintf(buf+len, "Adapter resets   : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[7]));
+	len += sprintf(buf+len, "Adapter suspends : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[8]));
+
+	spin_unlock(&i2o_proc_lock);
+	return len;
+}
+
+
+/* LAN group 0180h - Supported Optional Historical Statistics (scalar) */
+int i2o_proc_read_lan_supp_opt_stats(char *buf, char **start, off_t offset,
+				     int len, int *eof, void *data)
+{
+	struct i2o_device *d = (struct i2o_device*)data;
+	static u64 work64[4];
+	int token;
+
+	spin_lock(&i2o_proc_lock);	
+
+	len = 0;
+
+	token = i2o_query_scalar(d->controller, d->id, proc_context, 
+				 0x0180, -1, &work64, 4*8, &i2o_proc_token);
+	if(token < 0)
+	{
+		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
+		spin_unlock(&i2o_proc_lock);
+		return len;
+	}
+
+	if (d->i2oversion == 0x00)
+		len += sprintf(buf, "Supported stats : " FMT_U64_HEX " \n",
+			       U64_VAL(&work64[0]));
+	else
+	{
+		len += sprintf(buf, "Supported stats (0182h) : " FMT_U64_HEX " \n",
+			       U64_VAL(&work64[1]));
+		len += sprintf(buf, "Supported stats (0183h) : " FMT_U64_HEX " \n",
+			       U64_VAL(&work64[2]));
+		len += sprintf(buf, "Supported stats (0184h) : " FMT_U64_HEX " \n",
+			       U64_VAL(&work64[3]));
+	}
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
@@ -2091,15 +2536,24 @@ int i2o_proc_read_lan_opt_tx_hist_stats(char *buf, char **start, off_t offset,
 		return len;
 	}
 
-	len += sprintf(buf, "TxRetryCount: " FMT_U64_HEX "\n", U64_VAL(&work64[0]));
-	len += sprintf(buf+len, "DirectedBytesTx: " FMT_U64_HEX "\n", U64_VAL(&work64[1]));
-	len += sprintf(buf+len, "DirectedPacketsTx: " FMT_U64_HEX "\n", U64_VAL(&work64[2]));
-	len += sprintf(buf+len, "MulticastBytesTx: " FMT_U64_HEX "\n", U64_VAL(&work64[3]));
-	len += sprintf(buf+len, "MulticastPacketsTx: " FMT_U64_HEX "\n", U64_VAL(&work64[4]));
-	len += sprintf(buf+len, "BroadcastBytesTx: " FMT_U64_HEX "\n", U64_VAL(&work64[5]));
-	len += sprintf(buf+len, "BroadcastPacketsTx: " FMT_U64_HEX "\n", U64_VAL(&work64[6]));
-	len += sprintf(buf+len, "TotalGroupAddrTxCount: " FMT_U64_HEX "\n", U64_VAL(&work64[7]));
-	len += sprintf(buf+len, "TotalTxPacketsTooShort: " FMT_U64_HEX "\n", U64_VAL(&work64[8]));
+	len += sprintf(buf,     "TxRetryCount           : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[0]));
+	len += sprintf(buf+len, "DirectedBytesTx        : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[1]));
+	len += sprintf(buf+len, "DirectedPacketsTx      : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[2]));
+	len += sprintf(buf+len, "MulticastBytesTx       : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[3]));
+	len += sprintf(buf+len, "MulticastPacketsTx     : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[4]));
+	len += sprintf(buf+len, "BroadcastBytesTx       : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[5]));
+	len += sprintf(buf+len, "BroadcastPacketsTx     : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[6]));
+	len += sprintf(buf+len, "TotalGroupAddrTxCount  : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[7]));
+	len += sprintf(buf+len, "TotalTxPacketsTooShort : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[8]));
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
@@ -2127,22 +2581,206 @@ int i2o_proc_read_lan_opt_rx_hist_stats(char *buf, char **start, off_t offset,
 		return len;
 	}
 
-	len += sprintf(buf, "ReceiveCRCErrorCount: " FMT_U64_HEX "\n", U64_VAL(&work64[0]));
-	len += sprintf(buf+len, "DirectedBytesRx: " FMT_U64_HEX "\n", U64_VAL(&work64[1]));
-	len += sprintf(buf+len, "DirectedPacketsRx: " FMT_U64_HEX "\n", U64_VAL(&work64[2]));
-	len += sprintf(buf+len, "MulticastBytesRx: " FMT_U64_HEX "\n", U64_VAL(&work64[3]));
-	len += sprintf(buf+len, "MulticastPacketsRx: " FMT_U64_HEX "\n", U64_VAL(&work64[4]));
-	len += sprintf(buf+len, "BroadcastBytesRx: " FMT_U64_HEX "\n", U64_VAL(&work64[5]));
-	len += sprintf(buf+len, "BroadcastPacketsRx: " FMT_U64_HEX "\n", U64_VAL(&work64[6]));
-	len += sprintf(buf+len, "TotalGroupAddrRxCount: " FMT_U64_HEX "\n", U64_VAL(&work64[7]));
-	len += sprintf(buf+len, "TotalRxPacketsTooShort: " FMT_U64_HEX "\n", U64_VAL(&work64[8]));
-	len += sprintf(buf+len, "TotalRxPacketsTooLong: " FMT_U64_HEX "\n", U64_VAL(&work64[9]));
-	len += sprintf(buf+len, "TotalRuntPacketsReceived: " FMT_U64_HEX "\n", U64_VAL(&work64[10]));
+	len += sprintf(buf,     "ReceiveCRCErrorCount     : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[0]));
+	len += sprintf(buf+len, "DirectedBytesRx          : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[1]));
+	len += sprintf(buf+len, "DirectedPacketsRx        : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[2]));
+	len += sprintf(buf+len, "MulticastBytesRx         : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[3]));
+	len += sprintf(buf+len, "MulticastPacketsRx       : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[4]));
+	len += sprintf(buf+len, "BroadcastBytesRx         : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[5]));
+	len += sprintf(buf+len, "BroadcastPacketsRx       : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[6]));
+	len += sprintf(buf+len, "TotalGroupAddrRxCount    : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[7]));
+	len += sprintf(buf+len, "TotalRxPacketsTooShort   : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[8]));
+	len += sprintf(buf+len, "TotalRxPacketsTooLong    : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[9]));
+	len += sprintf(buf+len, "TotalRuntPacketsReceived : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[10]));
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
 }
 
+/* LAN group 0200h - Required Ethernet Statistics (scalar) */
+int i2o_proc_read_lan_eth_stats(char *buf, char **start, off_t offset,
+				int len, int *eof, void *data)
+{
+	struct i2o_device *d = (struct i2o_device*)data;
+	static u64 work64[8];
+	int token;
+
+
+	spin_lock(&i2o_proc_lock);
+	
+	len = 0;
+
+	token = i2o_query_scalar(d->controller, d->id, proc_context, 
+				 0x0200, -1, &work64, 8*8, &i2o_proc_token);
+	if(token < 0)
+	{
+		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
+		spin_unlock(&i2o_proc_lock);
+		return len;
+	}
+
+	len += sprintf(buf,     "Rx alignment errors    : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[0]));
+	len += sprintf(buf+len, "Tx one collisions      : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[1]));
+	len += sprintf(buf+len, "Tx multicollisions     : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[2]));
+	len += sprintf(buf+len, "Tx deferred            : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[3]));
+	len += sprintf(buf+len, "Tx late collisions     : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[4]));
+	len += sprintf(buf+len, "Tx max collisions      : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[5]));
+	len += sprintf(buf+len, "Tx carrier lost        : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[6]));
+	len += sprintf(buf+len, "Tx excessive deferrals : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[7]));
+
+	spin_unlock(&i2o_proc_lock);
+	return len;
+}
+
+/* LAN group 0280h - Supported Ethernet Historical Statistics (scalar) */
+int i2o_proc_read_lan_supp_eth_stats(char *buf, char **start, off_t offset,
+				     int len, int *eof, void *data)
+{
+	struct i2o_device *d = (struct i2o_device*)data;
+	static u64 work64[1];
+	int token;
+
+	spin_lock(&i2o_proc_lock);	
+
+	len = 0;
+
+	token = i2o_query_scalar(d->controller, d->id, proc_context, 
+				 0x0280, -1, &work64, 8, &i2o_proc_token);
+	if(token < 0)
+	{
+		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
+		spin_unlock(&i2o_proc_lock);
+		return len;
+	}
+
+	len += sprintf(buf, "Supported stats : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[0]));
+
+	spin_unlock(&i2o_proc_lock);
+	return len;
+}
+
+/* LAN group 0281h - Optional Ethernet Historical Statistics (scalar) */
+int i2o_proc_read_lan_opt_eth_stats(char *buf, char **start, off_t offset,
+				    int len, int *eof, void *data)
+{
+	struct i2o_device *d = (struct i2o_device*)data;
+	static u64 work64[3];
+	int token;
+
+	spin_lock(&i2o_proc_lock);	
+
+	len = 0;
+
+	token = i2o_query_scalar(d->controller, d->id, proc_context, 
+				 0x0281, -1, &work64, 3*8, &i2o_proc_token);
+	if(token < 0)
+	{
+		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
+		spin_unlock(&i2o_proc_lock);
+		return len;
+	}
+
+	len += sprintf(buf, "Rx overrun           : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[0]));
+	len += sprintf(buf, "Tx underrun          : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[1]));
+	len += sprintf(buf, "Tx heartbeat failure : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[2]));
+
+	spin_unlock(&i2o_proc_lock);
+	return len;
+}
+
+/* LAN group 0300h - Required Token Ring Statistics (scalar) */
+int i2o_proc_read_lan_tr_stats(char *buf, char **start, off_t offset,
+			       int len, int *eof, void *data)
+{
+	struct i2o_device *d = (struct i2o_device*)data;
+	static u64 work64[13];
+	int token;
+
+	static char *ring_status[] =
+	{
+		"",
+		"",
+		"",
+		"",
+		"",
+		"Ring Recovery",
+		"Single Station",
+		"Counter Overflow",
+		"Remove Received",
+		"",
+		"Auto-Removal Error 1",
+		"Lobe Wire Fault",
+		"Transmit Beacon",
+		"Soft Error",
+		"Hard Error",
+		"Signal Loss"
+	};
+
+	spin_lock(&i2o_proc_lock);
+	
+	len = 0;
+
+	token = i2o_query_scalar(d->controller, d->id, proc_context, 
+				 0x0300, -1, &work64, 13*8, &i2o_proc_token);
+	if(token < 0)
+	{
+		len += sprintf(buf, "Timeout waiting for reply from IOP\n");
+		spin_unlock(&i2o_proc_lock);
+		return len;
+	}
+
+	len += sprintf(buf,     "LineErrors          : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[0]));
+	len += sprintf(buf+len, "LostFrames          : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[1]));
+	len += sprintf(buf+len, "ACError             : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[2]));
+	len += sprintf(buf+len, "TxAbortDelimiter    : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[3]));
+	len += sprintf(buf+len, "BursErrors          : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[4]));
+	len += sprintf(buf+len, "FrameCopiedErrors   : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[5]));
+	len += sprintf(buf+len, "FrequencyErrors     : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[6]));
+	len += sprintf(buf+len, "InternalErrors      : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[7]));
+	len += sprintf(buf+len, "LastRingStatus      : %s\n", ring_status[work64[8]]);
+	len += sprintf(buf+len, "TokenError          : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[9]));
+	len += sprintf(buf+len, "UpstreamNodeAddress : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[10]));
+	len += sprintf(buf+len, "LastRingID          : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[11]));
+	len += sprintf(buf+len, "LastBeaconType      : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[12]));
+
+	spin_unlock(&i2o_proc_lock);
+	return len;
+}
 
 /* LAN group 0400h - Required FDDI Statistics (scalar) */
 int i2o_proc_read_lan_fddi_stats(char *buf, char **start, off_t offset,
@@ -2208,23 +2846,31 @@ int i2o_proc_read_lan_fddi_stats(char *buf, char **start, off_t offset,
 		return len;
 	}
 
-	len += sprintf(buf, "ConfigurationState: %s\n", conf_state[work64[0]]);
-	len += sprintf(buf+len, "UpstreamNode: " FMT_U64_HEX "\n", U64_VAL(&work64[1]));
-	len += sprintf(buf+len, "DownStreamNode: " FMT_U64_HEX "\n", U64_VAL(&work64[2]));
-	len += sprintf(buf+len, "FrameErrors: " FMT_U64_HEX "\n", U64_VAL(&work64[3]));
-	len += sprintf(buf+len, "FramesLost: " FMT_U64_HEX "\n", U64_VAL(&work64[4]));
-	len += sprintf(buf+len, "RingMgmtState: %s\n", ring_state[work64[5]]);
-	len += sprintf(buf+len, "LCTFailures: " FMT_U64_HEX "\n", U64_VAL(&work64[6]));
-	len += sprintf(buf+len, "LEMRejects: " FMT_U64_HEX "\n", U64_VAL(&work64[7]));
-	len += sprintf(buf+len, "LEMCount: " FMT_U64_HEX "\n", U64_VAL(&work64[8]));
-	len += sprintf(buf+len, "LConnectionState: %s\n", link_state[work64[9]]);
+	len += sprintf(buf,     "ConfigurationState : %s\n", conf_state[work64[0]]);
+	len += sprintf(buf+len, "UpstreamNode       : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[1]));
+	len += sprintf(buf+len, "DownStreamNode     : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[2]));
+	len += sprintf(buf+len, "FrameErrors        : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[3]));
+	len += sprintf(buf+len, "FramesLost         : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[4]));
+	len += sprintf(buf+len, "RingMgmtState      : %s\n", ring_state[work64[5]]);
+	len += sprintf(buf+len, "LCTFailures: " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[6]));
+	len += sprintf(buf+len, "LEMRejects         : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[7]));
+	len += sprintf(buf+len, "LEMCount           : " FMT_U64_HEX "\n",
+		       U64_VAL(&work64[8]));
+	len += sprintf(buf+len, "LConnectionState   : %s\n",
+		       link_state[work64[9]]);
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
 }
 
-static int i2o_proc_create_entries(void *data,
-	i2o_proc_entry *pentry, struct proc_dir_entry *parent)
+static int i2o_proc_create_entries(void *data, i2o_proc_entry *pentry,
+				   struct proc_dir_entry *parent)
 {
 	struct proc_dir_entry *ent;
 	
@@ -2245,7 +2891,7 @@ static int i2o_proc_create_entries(void *data,
 }
 
 static void i2o_proc_remove_entries(i2o_proc_entry *pentry, 
-	struct proc_dir_entry *parent)
+				    struct proc_dir_entry *parent)
 {
 	while(pentry->name != NULL)
 	{
@@ -2255,7 +2901,7 @@ static void i2o_proc_remove_entries(i2o_proc_entry *pentry,
 }
 
 static int i2o_proc_add_controller(struct i2o_controller *pctrl, 
-	struct proc_dir_entry *root )
+				   struct proc_dir_entry *root )
 {
 	struct proc_dir_entry *dir, *dir1;
 	struct i2o_device *dev;
@@ -2291,6 +2937,23 @@ static int i2o_proc_add_controller(struct i2o_controller *pctrl,
 			break;
 		case I2O_CLASS_LAN:
 			i2o_proc_create_entries(dev, lan_entries, dir1);
+			switch(dev->subclass)
+			{
+			case I2O_LAN_ETHERNET:
+				i2o_proc_create_entries(dev, lan_eth_entries,
+							dir1);
+				break;
+			case I2O_LAN_FDDI:
+				i2o_proc_create_entries(dev, lan_fddi_entries,
+							dir1);
+				break;
+			case I2O_LAN_TR:
+				i2o_proc_create_entries(dev, lan_tr_entries,
+							dir1);
+				break;
+			default:
+				break;
+			}
 			break;
 		default:
 			break;
@@ -2301,17 +2964,58 @@ static int i2o_proc_add_controller(struct i2o_controller *pctrl,
 }
 
 static void i2o_proc_remove_controller(struct i2o_controller *pctrl, 
-	struct proc_dir_entry *parent)
+				       struct proc_dir_entry *parent)
 {
 	char buff[10];
+	char dev_id[10];
+	struct proc_dir_entry *de;
+	struct i2o_device *dev;
 
-	sprintf(buff, "iop%d", pctrl->unit);
+	/* Remove unused device entries */
+	for(dev=pctrl->devices; dev; dev=dev->next)
+	{
+		de=dev->proc_entry;
+		sprintf(dev_id, "%0#5x", dev->id);
 
-	i2o_proc_remove_entries(generic_iop_entries, pctrl->proc_entry);
+		/* Would it be safe to remove _files_ even if they are in use? */
+		if((de) && (!de->count))
+		{
+			i2o_proc_remove_entries(generic_dev_entries, de);
 
-	remove_proc_entry(buff, parent);
+			switch(dev->class)
+			{
+			case I2O_CLASS_SCSI_PERIPHERAL:
+			case I2O_CLASS_RANDOM_BLOCK_STORAGE:
+				i2o_proc_remove_entries(rbs_dev_entries, de);
+				break;
+			case I2O_CLASS_LAN:
+				i2o_proc_remove_entries(lan_entries, de);
+				switch(dev->subclass)
+				{
+				case I2O_LAN_ETHERNET:
+					i2o_proc_remove_entries(lan_eth_entries, de);
+					break;
+				case I2O_LAN_FDDI:
+					i2o_proc_remove_entries(lan_fddi_entries, de);
+					break;
+				case I2O_LAN_TR:
+					i2o_proc_remove_entries(lan_tr_entries, de);
+					break;
+				}
+			}
+			remove_proc_entry(dev_id, parent);
+		}
+	}
 
-	pctrl->proc_entry = NULL;
+	if(!pctrl->proc_entry->count)
+	{
+		sprintf(buff, "iop%d", pctrl->unit);
+
+		i2o_proc_remove_entries(generic_iop_entries, pctrl->proc_entry);
+
+		remove_proc_entry(buff, parent);
+		pctrl->proc_entry = NULL;
+	}
 }
 
 static int create_i2o_procfs(void)
@@ -2327,7 +3031,10 @@ static int create_i2o_procfs(void)
 	{
 		pctrl = i2o_find_controller(i);
 		if(pctrl)
+		{
 			i2o_proc_add_controller(pctrl, i2o_proc_dir_root);
+			i2o_unlock_controller(pctrl);
+		}
 	};
 
 	return 0;
@@ -2345,19 +3052,25 @@ static int destroy_i2o_procfs(void)
 	{
 		pctrl = i2o_find_controller(i);
 		if(pctrl)
+		{
 			i2o_proc_remove_controller(pctrl, i2o_proc_dir_root);
+			i2o_unlock_controller(pctrl);
+		}
 	};
 
-	remove_proc_entry("i2o", 0);
+	if(!i2o_proc_dir_root->count)
+		remove_proc_entry("i2o", 0);
+	else
+		return -1;
+
 	return 0;
 }
 		
 #ifdef MODULE
+#define i2o_proc_init init_module
+#endif
 
-MODULE_AUTHOR("Intel Corporation");
-MODULE_DESCRIPTION("I2O procfs Handler");
-
-int init_module(void)
+__init int i2o_proc_init(void)
 {
 	if(create_i2o_procfs())
 		return -EBUSY;
@@ -2372,6 +3085,12 @@ int init_module(void)
 
 	return 0;
 }
+
+#ifdef MODULE
+
+
+MODULE_AUTHOR("Intel Corporation");
+MODULE_DESCRIPTION("I2O procfs Handler");
 
 void cleanup_module(void)
 {

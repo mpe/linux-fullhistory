@@ -265,6 +265,7 @@ typedef struct ide_drive_s {
 #if FAKE_FDISK_FOR_EZDRIVE
 	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */
 #endif /* FAKE_FDISK_FOR_EZDRIVE */
+	unsigned ata_flash	: 1;	/* 1=present, 0=default */
 	byte		media;		/* disk, cdrom, tape, floppy, ... */
 	select_t	select;		/* basic drive/head select reg value */
 	byte		ctl;		/* "normal" value for IDE_CONTROL_REG */
@@ -388,6 +389,7 @@ typedef struct hwif_s {
 	unsigned	sharing_irq: 1;	/* 1 = sharing irq with another hwif */
 	unsigned	reset      : 1;	/* reset after probe */
 	unsigned	autodma    : 1;	/* automatically try to enable DMA at boot */
+	unsigned	udma_four  : 1;	/* 1=ATA-66 capable, 0=default */
 	byte		channel;	/* for dual-port chips: 0=primary, 1=secondary */
 	struct pci_dev	*pci_dev;	/* for pci chipsets */
 	ide_pci_devid_t	pci_devid;	/* for pci chipsets: {VID,DID} */

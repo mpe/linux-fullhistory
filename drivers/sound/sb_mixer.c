@@ -13,6 +13,7 @@
  *
  * Thomas Sailer				: ioctl code reworked (vmalloc/vfree removed)
  * Rolf Fokkens (Dec 20 1998)	: Moved ESS stuff into sb_ess.[ch]
+ * Stanislav Voronyi <stas@esc.kharkov.com>	: Support for AWE 3DSE device (Jun 7 1999)
  */
 
 #include <linux/config.h>
@@ -550,14 +551,37 @@ static int sb_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	int val, ret;
 
 	/*
-	 * Use ioctl(fd, SOUND_MIXER_PRIVATE1, &mode) to turn AGC off (0) or on (1).
+	 * Use ioctl(fd, SOUND_MIXER_AGC, &mode) to turn AGC off (0) or on (1).
+	 * Use ioctl(fd, SOUND_MIXER_3DSE, &mode) to turn 3DSE off (0) or on (1)
+	 *					      or mode==2 put 3DSE state to mode.
 	 */
-	if (cmd == SOUND_MIXER_PRIVATE1 && devc->model == MDL_SB16) 
-	{
-		if (get_user(val, (int *)arg))
-			return -EFAULT;
-		sb_setmixer(devc, 0x43, (~val) & 0x01);
-		return 0;
+	if (devc->model == MDL_SB16) {
+		if (cmd == SOUND_MIXER_AGC) 
+		{
+			if (get_user(val, (int *)arg))
+				return -EFAULT;
+			sb_setmixer(devc, 0x43, (~val) & 0x01);
+			return 0;
+		}
+		if (cmd == SOUND_MIXER_3DSE) 
+		{
+			/* I put here 15, but I don't know the exact version.
+			   At least my 4.13 havn't 3DSE, 4.16 has it. */
+			if (devc->minor < 15)
+				return -EINVAL;
+			if (get_user(val, (int *)arg))
+				return -EFAULT;
+			if (val == 0 || val == 1)
+				sb_chgmixer(devc, AWE_3DSE, 0x01, val);
+			else if (val == 2)
+			{
+				ret = sb_getmixer(devc, AWE_3DSE)&0x01;
+				return put_user(ret, (int *)arg);
+			}
+			else
+				return -EINVAL;
+			return 0;
+		}
 	}
 	if (((cmd >> 8) & 0xff) == 'M') 
 	{

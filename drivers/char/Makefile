@@ -468,6 +468,14 @@ ifdef CONFIG_H8
 LX_OBJS += h8.o
 endif
 
+ifeq ($(CONFIG_PPDEV),y)
+L_OBJS += ppdev.o
+else
+  ifeq ($(CONFIG_PPDEV),m)
+  M_OBJS += ppdev.o
+  endif
+endif
+
 ifeq ($(L_I2C),y)
 LX_OBJS += i2c.o
 else

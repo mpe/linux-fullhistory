@@ -1,7 +1,7 @@
 /*
  *   	i2o_lan.h		LAN Class specific definitions
  *
- *      I2O LAN CLASS OSM       Prototyping, May 7th 1999
+ *      I2O LAN CLASS OSM       Prototyping, May 17th 1999
  *
  *      (C) Copyright 1999      University of Helsinki,
  *                              Department of Computer Science
@@ -9,16 +9,16 @@
  *      This code is still under development / test.
  *
  *      Author:         Auvo Häkkinen <Auvo.Hakkinen@cs.Helsinki.FI>
- *    
+ *			Juha Sievänen <Juha.Sievanen@cs.Helsinki.FI>    
  */
 
-#ifndef I2O_LAN_H
-#define I2O_LAN_H
+#ifndef _I2O_LAN_H
+#define _I2O_LAN_H
 
 /* Tunable parameters first */
 
-#define I2O_BUCKET_COUNT 	64
-#define I2O_BUCKET_THRESH	5
+#define I2O_BUCKET_COUNT 	16
+#define I2O_BUCKET_THRESH	0
 
 /* LAN types */
 #define I2O_LAN_ETHERNET	0x0030
@@ -75,7 +75,7 @@
 #define LAN_SDU_SEND		0x3D
 #define LAN_RECEIVE_POST	0x3E
 #define LAN_RESET		0x35
-#define LAN_SUSPEND	0x37
+#define LAN_SUSPEND		0x37
 
 /* LAN DetailedStatusCode defines */
 #define I2O_LAN_DSC_SUCCESS			0x00
@@ -109,4 +109,4 @@ struct i2o_bucket_descriptor {
 	struct i2o_packet_info packet_info[1];
 };
  
-#endif /* I2O_LAN_H */
+#endif /* _I2O_LAN_H */

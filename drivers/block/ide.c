@@ -297,7 +297,8 @@ int drive_is_flashcard (ide_drive_t *drive)
 		if (!strncmp(id->model, "KODAK ATA_FLASH", 15)	/* Kodak */
 		 || !strncmp(id->model, "Hitachi CV", 10)	/* Hitachi */
 		 || !strncmp(id->model, "SunDisk SDCFB", 13)	/* SunDisk */
-		 || !strncmp(id->model, "HAGIWARA HPC", 12))	/* Hagiwara */
+		 || !strncmp(id->model, "HAGIWARA HPC", 12)	/* Hagiwara */
+		 || !strncmp(id->model, "ATA_FLASH", 9))	/* Simple Tech */
 		{
 			return 1;	/* yes, it is a flash memory card */
 		}
@@ -1353,7 +1354,7 @@ void ide_timer_expiry (unsigned long data)
 			(void) hwgroup->hwif->dmaproc(ide_dma_end, drive);
 			printk("%s: timeout waiting for DMA\n", drive->name);
 	/*
-	 *  need something here for HX PIIX3 UDMA and HPT343.......AMH
+	 *  need something here for HPT34X.......AMH
 	 *  irq timeout: status=0x58 { DriveReady SeekComplete DataRequest }
 	 */
 		}
@@ -1898,6 +1899,7 @@ void ide_unregister (unsigned int index)
 	hwif->irq = old_hwif.irq;
 	hwif->major = old_hwif.major;
 	hwif->proc = old_hwif.proc;
+	hwif->udma_four = old_hwif.udma_four;
 	hwif->chipset = old_hwif.chipset;
 	hwif->pci_dev = old_hwif.pci_dev;
 	hwif->pci_devid = old_hwif.pci_devid;
@@ -2338,10 +2340,15 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			}
 			if ((((byte *)arg)[0] == WIN_SETFEATURES) &&
 			    (((byte *)arg)[1] > 66) &&
-			    (((byte *)arg)[2] == 3) &&
-			    ((drive->id->word93 & 0x2000) == 0)) {
-				printk("%s: Speed warnings UDMA 3/4 is not functional.\n", drive->name);
-				goto abort;
+			    (((byte *)arg)[2] == 3)) {
+				if (!HWIF(drive)->udma_four) {
+					printk("%s: Speed warnings UDMA 3/4 is not functional.\n", HWIF(drive)->name);
+					goto abort;
+				}
+				if ((drive->id->word93 & 0x2000) == 0) {
+					printk("%s: Speed warnings UDMA 3/4 is not functional.\n", drive->name);
+					goto abort;
+				}
 			}
 			err = ide_wait_cmd(drive, args[0], args[1], args[2], args[3], argbuf);
 			if (!err &&
@@ -2602,6 +2609,9 @@ __initfunc(static int match_parm (char *s, const char *keywords[], int vals[], i
  *
  * "hdx=swapdata"	: when the drive is a disk, byte swap all data
  * "hdx=bswap"		: same as above..........
+ * "hdx=flash"		: allows for more than one ata_flash disk to be
+ *				registered. In most cases, only one device
+ *				will be present.
  *
  * "idebus=xx"		: inform IDE driver of VESA/PCI bus speed in MHz,
  *				where "xx" is between 20 and 66 inclusive,
@@ -2688,7 +2698,7 @@ __initfunc(void ide_setup (char *s))
 	if (s[0] == 'h' && s[1] == 'd' && s[2] >= 'a' && s[2] <= max_drive) {
 		const char *hd_words[] = {"none", "noprobe", "nowerr", "cdrom",
 				"serialize", "autotune", "noautotune",
-				"slow", "swapdata", "bswap", NULL};
+				"slow", "swapdata", "bswap", "flash", NULL};
 		unit = s[2] - 'a';
 		hw   = unit / MAX_DRIVES;
 		unit = unit % MAX_DRIVES;
@@ -2728,6 +2738,9 @@ __initfunc(void ide_setup (char *s))
 			case -9: /* swapdata or bswap */
 			case -10:
 				drive->bswap = 1;
+				goto done;
+			case -11:
+				drive->ata_flash = 1;
 				goto done;
 			case 3: /* cyl,head,sect */
 				drive->media	= ide_disk;

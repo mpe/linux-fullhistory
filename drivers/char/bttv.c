@@ -43,7 +43,6 @@
 #include <linux/types.h>
 #include <linux/wrapper.h>
 #include <linux/interrupt.h>
-#include <linux/version.h>
 
 #if LINUX_VERSION_CODE >= 0x020100
 #include <asm/uaccess.h>
@@ -81,8 +80,8 @@ copy_from_user(void *to, const void *from, unsigned long n)
 #include "bttv.h"
 #include "tuner.h"
 
-#define DEBUG(x) 		/* Debug driver */	
-#define IDEBUG(x) 		/* Debug interrupt handler */
+#define DEBUG(x)		/* Debug driver */	
+#define IDEBUG(x)		/* Debug interrupt handler */
 
 #if LINUX_VERSION_CODE >= 0x020117
 MODULE_PARM(vidmem,"i");
@@ -110,7 +109,7 @@ static int triton1=0;
 #define CARD_DEFAULT 0
 #endif
 
-static unsigned int remap[BTTV_MAX];    /* remap Bt848 */
+static unsigned long remap[BTTV_MAX];    /* remap Bt848 */
 static unsigned int radio[BTTV_MAX];
 static unsigned int card[BTTV_MAX] = { CARD_DEFAULT, CARD_DEFAULT, 
                                        CARD_DEFAULT, CARD_DEFAULT };
@@ -129,51 +128,80 @@ static struct bttv bttvs[BTTV_MAX];
 #define EEPROM_WRITE_DELAY    20000
 #define BURSTOFFSET 76
 
-
-
 /*******************************/
 /* Memory management functions */
 /*******************************/
 
-/* convert virtual user memory address to physical address */
-/* (virt_to_phys only works for kmalloced kernel memory) */
+#define MDEBUG(x)	do { } while(0)		/* Debug memory management */
 
-static inline unsigned long uvirt_to_phys(unsigned long adr)
+/* [DaveM] I've recoded most of this so that:
+ * 1) It's easier to tell what is happening
+ * 2) It's more portable, especially for translating things
+ *    out of vmalloc mapped areas in the kernel.
+ * 3) Less unnecessary translations happen.
+ *
+ * The code used to assume that the kernel vmalloc mappings
+ * existed in the page tables of every process, this is simply
+ * not guarenteed.  We now use pgd_offset_k which is the
+ * defined way to get at the kernel page tables.
+ */
+
+/* Given PGD from the address space's page table, return the kernel
+ * virtual mapping of the physical memory mapped at ADR.
+ */
+static inline unsigned long uvirt_to_kva(pgd_t *pgd, unsigned long adr)
 {
-	pgd_t *pgd;
+        unsigned long ret = 0UL;
 	pmd_t *pmd;
 	pte_t *ptep, pte;
   
-	pgd = pgd_offset(current->mm, adr);
-	if (pgd_none(*pgd))
-		return 0;
-	pmd = pmd_offset(pgd, adr);
-	if (pmd_none(*pmd))
-		return 0;
-	ptep = pte_offset(pmd, adr/*&(~PGDIR_MASK)*/);
-	pte = *ptep;
-	if(pte_present(pte))
-		return 
-		  virt_to_phys((void *)(pte_page(pte)|(adr&(PAGE_SIZE-1))));
-	return 0;
+	if (!pgd_none(*pgd)) {
+                pmd = pmd_offset(pgd, adr);
+                if (!pmd_none(*pmd)) {
+                        ptep = pte_offset(pmd, adr);
+                        pte = *ptep;
+                        if(pte_present(pte))
+                                ret = (pte_page(pte)|(adr&(PAGE_SIZE-1)));
+                }
+        }
+        MDEBUG(printk("uv2kva(%lx-->%lx)", adr, ret));
+	return ret;
 }
 
 static inline unsigned long uvirt_to_bus(unsigned long adr) 
 {
-	return virt_to_bus(phys_to_virt(uvirt_to_phys(adr)));
-}
+        unsigned long kva, ret;
 
-/* convert virtual kernel memory address to physical address */
-/* (virt_to_phys only works for kmalloced kernel memory) */
-
-static inline unsigned long kvirt_to_phys(unsigned long adr) 
-{
-	return uvirt_to_phys(VMALLOC_VMADDR(adr));
+        kva = uvirt_to_kva(pgd_offset(current->mm, adr), adr);
+	ret = virt_to_bus((void *)kva);
+        MDEBUG(printk("uv2b(%lx-->%lx)", adr, ret));
+        return ret;
 }
 
 static inline unsigned long kvirt_to_bus(unsigned long adr) 
 {
-	return uvirt_to_bus(VMALLOC_VMADDR(adr));
+        unsigned long va, kva, ret;
+
+        va = VMALLOC_VMADDR(adr);
+        kva = uvirt_to_kva(pgd_offset_k(va), va);
+	ret = virt_to_bus((void *)kva);
+        MDEBUG(printk("kv2b(%lx-->%lx)", adr, ret));
+        return ret;
+}
+
+/* Here we want the physical address of the memory.
+ * This is used when initializing the contents of the
+ * area and marking the pages as reserved.
+ */
+static inline unsigned long kvirt_to_pa(unsigned long adr) 
+{
+        unsigned long va, kva, ret;
+
+        va = VMALLOC_VMADDR(adr);
+        kva = uvirt_to_kva(pgd_offset_k(va), va);
+	ret = __pa(kva);
+        MDEBUG(printk("kv2pa(%lx-->%lx)", adr, ret));
+        return ret;
 }
 
 static void * rvmalloc(unsigned long size)
@@ -188,8 +216,8 @@ static void * rvmalloc(unsigned long size)
 	        adr=(unsigned long) mem;
 		while (size > 0) 
                 {
-	                page = kvirt_to_phys(adr);
-			mem_map_reserve(MAP_NR(phys_to_virt(page)));
+	                page = kvirt_to_pa(adr);
+			mem_map_reserve(MAP_NR(__va(page)));
 			adr+=PAGE_SIZE;
 			size-=PAGE_SIZE;
 		}
@@ -206,8 +234,8 @@ static void rvfree(void * mem, unsigned long size)
 	        adr=(unsigned long) mem;
 		while (size > 0) 
                 {
-	                page = kvirt_to_phys(adr);
-			mem_map_unreserve(MAP_NR(phys_to_virt(page)));
+	                page = kvirt_to_pa(adr);
+			mem_map_unreserve(MAP_NR(__va(page)));
 			adr+=PAGE_SIZE;
 			size-=PAGE_SIZE;
 		}
@@ -541,13 +569,13 @@ static struct tvcard tvcards[] =
         /* Aimslab VHX */
         { 3, 1, 0, 2, 7, { 2, 3, 1, 1}, { 0, 1, 2, 3, 4}},
         /* Zoltrix TV-Max */
-        { 3, 1, 0, 2,15, { 2, 3, 1, 1}, { 0, 0, 0, 0, 0}},
+        { 3, 1, 0, 2, 0x00000f, { 2, 3, 1, 1}, { 0, 0, 0, 0, 0x8}},
         /* Pixelview PlayTV (bt878) */
         { 3, 4, 0, 2, 0x01e000, { 2, 0, 1, 1}, {0x01c000, 0, 0x018000, 0x014000, 0x002000, 0 }},
         /* "Leadtek WinView 601", */
         { 3, 1, 0, 2, 0x8300f8, { 2, 3, 1, 1,0}, {0x4fa007,0xcfa007,0xcfa007,0xcfa007,0xcfa007,0xcfa007}},
         /* AVEC Intercapture */
-        { 3, 1, 9, 2, 0, { 2, 3, 1, 1}, { 0, 0, 0, 0, 0}},
+        { 3, 2, 0, 2, 0, { 2, 3, 1, 1}, { 1, 0, 0, 0, 0}},
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(tvcard))
 
@@ -823,30 +851,30 @@ static void make_vbitab(struct bttv *btv)
 	unsigned int *po=(unsigned int *) btv->vbi_odd;
 	unsigned int *pe=(unsigned int *) btv->vbi_even;
   
-	DEBUG(printk(KERN_DEBUG "vbiodd: 0x%08x\n",(int)btv->vbi_odd));
-	DEBUG(printk(KERN_DEBUG "vbievn: 0x%08x\n",(int)btv->vbi_even));
-	DEBUG(printk(KERN_DEBUG "po: 0x%08x\n",(int)po));
-	DEBUG(printk(KERN_DEBUG "pe: 0x%08x\n",(int)pe));
+	DEBUG(printk(KERN_DEBUG "vbiodd: 0x%lx\n",(long)btv->vbi_odd));
+	DEBUG(printk(KERN_DEBUG "vbievn: 0x%lx\n",(long)btv->vbi_even));
+	DEBUG(printk(KERN_DEBUG "po: 0x%lx\n",(long)po));
+	DEBUG(printk(KERN_DEBUG "pe: 0x%lx\n",(long)pe));
         
-	*(po++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(po++)=0;
+	*(po++)=cpu_to_le32(BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1); *(po++)=0;
 	for (i=0; i<16; i++) 
 	{
-		*(po++)=VBI_RISC;
-		*(po++)=kvirt_to_bus((unsigned long)btv->vbibuf+i*2048);
+		*(po++)=cpu_to_le32(VBI_RISC);
+		*(po++)=cpu_to_le32(kvirt_to_bus((unsigned long)btv->vbibuf+i*2048));
 	}
-	*(po++)=BT848_RISC_JUMP;
-	*(po++)=virt_to_bus(btv->risc_jmp+4);
+	*(po++)=cpu_to_le32(BT848_RISC_JUMP);
+	*(po++)=cpu_to_le32(virt_to_bus(btv->risc_jmp+4));
 
-	*(pe++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(pe++)=0;
+	*(pe++)=cpu_to_le32(BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1); *(pe++)=0;
 	for (i=16; i<32; i++) 
 	{
-		*(pe++)=VBI_RISC;
-		*(pe++)=kvirt_to_bus((unsigned long)btv->vbibuf+i*2048);
+		*(pe++)=cpu_to_le32(VBI_RISC);
+		*(pe++)=cpu_to_le32(kvirt_to_bus((unsigned long)btv->vbibuf+i*2048));
 	}
-	*(pe++)=BT848_RISC_JUMP|BT848_RISC_IRQ|(0x01<<16);
-	*(pe++)=virt_to_bus(btv->risc_jmp+10);
-	DEBUG(printk(KERN_DEBUG "po: 0x%08x\n",(int)po));
-	DEBUG(printk(KERN_DEBUG "pe: 0x%08x\n",(int)pe));
+	*(pe++)=cpu_to_le32(BT848_RISC_JUMP|BT848_RISC_IRQ|(0x01<<16));
+	*(pe++)=cpu_to_le32(virt_to_bus(btv->risc_jmp+10));
+	DEBUG(printk(KERN_DEBUG "po: 0x%lx\n",(long)po));
+	DEBUG(printk(KERN_DEBUG "pe: 0x%lx\n",(long)pe));
 }
 
 int fmtbppx2[16] = {
@@ -881,8 +909,8 @@ static int make_rawrisctab(struct bttv *btv, unsigned int *ro,
 	unsigned long bpl=1024;		/* bytes per line */
 	unsigned long vadr=(unsigned long) vbuf;
 
-	*(ro++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(ro++)=0;
-	*(re++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(re++)=0;
+	*(ro++)=cpu_to_le32(BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1); *(ro++)=0;
+	*(re++)=cpu_to_le32(BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1); *(re++)=0;
   
         /* In PAL 650 blocks of 256 DWORDs are sampled, but only if VDELAY
            is 2 and without separate VBI grabbing.
@@ -890,17 +918,17 @@ static int make_rawrisctab(struct bttv *btv, unsigned int *ro,
 
 	for (line=0; line < 640; line++)
 	{
-                *(ro++)=BT848_RISC_WRITE|bpl|BT848_RISC_SOL|BT848_RISC_EOL;
-                *(ro++)=kvirt_to_bus(vadr);
-                *(re++)=BT848_RISC_WRITE|bpl|BT848_RISC_SOL|BT848_RISC_EOL;
-                *(re++)=kvirt_to_bus(vadr+BTTV_MAX_FBUF/2);
+                *(ro++)=cpu_to_le32(BT848_RISC_WRITE|bpl|BT848_RISC_SOL|BT848_RISC_EOL);
+                *(ro++)=cpu_to_le32(kvirt_to_bus(vadr));
+                *(re++)=cpu_to_le32(BT848_RISC_WRITE|bpl|BT848_RISC_SOL|BT848_RISC_EOL);
+                *(re++)=cpu_to_le32(kvirt_to_bus(vadr+BTTV_MAX_FBUF/2));
                 vadr+=bpl;
 	}
 	
-	*(ro++)=BT848_RISC_JUMP;
-	*(ro++)=btv->bus_vbi_even;
-	*(re++)=BT848_RISC_JUMP|BT848_RISC_IRQ|(2<<16);
-	*(re++)=btv->bus_vbi_odd;
+	*(ro++)=cpu_to_le32(BT848_RISC_JUMP);
+	*(ro++)=cpu_to_le32(btv->bus_vbi_even);
+	*(re++)=cpu_to_le32(BT848_RISC_JUMP|BT848_RISC_IRQ|(2<<16));
+	*(re++)=cpu_to_le32(btv->bus_vbi_odd);
 	
 	return 0;
 }
@@ -954,8 +982,8 @@ static int  make_prisctab(struct bttv *btv, unsigned int *ro,
 	cradr=cbadr+csize;
 	inter = (height>btv->win.cropheight/2) ? 1 : 0;
 	
-	*(ro++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM3; *(ro++)=0;
-	*(re++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM3; *(re++)=0;
+	*(ro++)=cpu_to_le32(BT848_RISC_SYNC|BT848_FIFO_STATUS_FM3); *(ro++)=0;
+	*(re++)=cpu_to_le32(BT848_RISC_SYNC|BT848_FIFO_STATUS_FM3); *(re++)=0;
   
 	for (line=0; line < (height<<(1^inter)); line++)
 	{
@@ -991,15 +1019,15 @@ static int  make_prisctab(struct bttv *btv, unsigned int *ro,
 		 todo-=bl;
 		 if(!todo) rcmd|=BT848_RISC_EOL; /* if this is the last EOL */
 		 
-		 *((*rp)++)=rcmd|bl;
-		 *((*rp)++)=blcb|(blcr<<16);
-		 *((*rp)++)=kvirt_to_bus(vadr);
+		 *((*rp)++)=cpu_to_le32(rcmd|bl);
+		 *((*rp)++)=cpu_to_le32(blcb|(blcr<<16));
+		 *((*rp)++)=cpu_to_le32(kvirt_to_bus(vadr));
 		 vadr+=bl;
 		 if((rcmd&(15<<28))==BT848_RISC_WRITE123)
 		 {
-		 	*((*rp)++)=kvirt_to_bus(cbadr);
+		 	*((*rp)++)=cpu_to_le32(kvirt_to_bus(cbadr));
 		 	cbadr+=blcb;
-		 	*((*rp)++)=kvirt_to_bus(cradr);
+		 	*((*rp)++)=cpu_to_le32(kvirt_to_bus(cradr));
 		 	cradr+=blcr;
 		 }
 		 
@@ -1007,10 +1035,10 @@ static int  make_prisctab(struct bttv *btv, unsigned int *ro,
 		}
 	}
 	
-	*(ro++)=BT848_RISC_JUMP;
-	*(ro++)=btv->bus_vbi_even;
-	*(re++)=BT848_RISC_JUMP|BT848_RISC_IRQ|(2<<16);
-	*(re++)=btv->bus_vbi_odd;
+	*(ro++)=cpu_to_le32(BT848_RISC_JUMP);
+	*(ro++)=cpu_to_le32(btv->bus_vbi_even);
+	*(re++)=cpu_to_le32(BT848_RISC_JUMP|BT848_RISC_IRQ|(2<<16));
+	*(re++)=cpu_to_le32(btv->bus_vbi_odd);
 	
 	return 0;
 }
@@ -1037,8 +1065,8 @@ static int  make_vrisctab(struct bttv *btv, unsigned int *ro,
 	inter = (height>btv->win.cropheight/2) ? 1 : 0;
 	bpl=width*fmtbppx2[palette2fmt[palette]&0xf]/2;
 	
-	*(ro++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(ro++)=0;
-	*(re++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(re++)=0;
+	*(ro++)=cpu_to_le32(BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1); *(ro++)=0;
+	*(re++)=cpu_to_le32(BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1); *(re++)=0;
   
 	for (line=0; line < (height<<(1^inter)); line++)
 	{
@@ -1050,35 +1078,35 @@ static int  make_vrisctab(struct bttv *btv, unsigned int *ro,
 		bl=PAGE_SIZE-((PAGE_SIZE-1)&vadr);
 		if (bpl<=bl)
                 {
-		        *((*rp)++)=BT848_RISC_WRITE|BT848_RISC_SOL|
-			        BT848_RISC_EOL|bpl; 
-			*((*rp)++)=kvirt_to_bus(vadr);
+		        *((*rp)++)=cpu_to_le32(BT848_RISC_WRITE|BT848_RISC_SOL|
+                                               BT848_RISC_EOL|bpl);
+			*((*rp)++)=cpu_to_le32(kvirt_to_bus(vadr));
 			vadr+=bpl;
 		}
 		else
 		{
 		        todo=bpl;
-		        *((*rp)++)=BT848_RISC_WRITE|BT848_RISC_SOL|bl;
-			*((*rp)++)=kvirt_to_bus(vadr);
+		        *((*rp)++)=cpu_to_le32(BT848_RISC_WRITE|BT848_RISC_SOL|bl);
+			*((*rp)++)=cpu_to_le32(kvirt_to_bus(vadr));
 			vadr+=bl;
 			todo-=bl;
 			while (todo>PAGE_SIZE)
 			{
-			        *((*rp)++)=BT848_RISC_WRITE|PAGE_SIZE;
-				*((*rp)++)=kvirt_to_bus(vadr);
+			        *((*rp)++)=cpu_to_le32(BT848_RISC_WRITE|PAGE_SIZE);
+				*((*rp)++)=cpu_to_le32(kvirt_to_bus(vadr));
 				vadr+=PAGE_SIZE;
 				todo-=PAGE_SIZE;
 			}
-			*((*rp)++)=BT848_RISC_WRITE|BT848_RISC_EOL|todo;
-			*((*rp)++)=kvirt_to_bus(vadr);
+			*((*rp)++)=cpu_to_le32(BT848_RISC_WRITE|BT848_RISC_EOL|todo);
+			*((*rp)++)=cpu_to_le32(kvirt_to_bus(vadr));
 			vadr+=todo;
 		}
 	}
 	
-	*(ro++)=BT848_RISC_JUMP;
-	*(ro++)=btv->bus_vbi_even;
-	*(re++)=BT848_RISC_JUMP|BT848_RISC_IRQ|(2<<16);
-	*(re++)=btv->bus_vbi_odd;
+	*(ro++)=cpu_to_le32(BT848_RISC_JUMP);
+	*(ro++)=cpu_to_le32(btv->bus_vbi_even);
+	*(re++)=cpu_to_le32(BT848_RISC_JUMP|BT848_RISC_IRQ|(2<<16));
+	*(re++)=cpu_to_le32(btv->bus_vbi_odd);
 	
 	return 0;
 }
@@ -1162,10 +1190,10 @@ static void make_clip_tab(struct bttv *btv, struct video_clip *cr, int ncr)
 	adr=btv->win.vidadr+btv->win.x*bpp+btv->win.y*bpl;
 	if ((clipmap=vmalloc(VIDEO_CLIPMAP_SIZE))==NULL) {
 		/* can't clip, don't generate any risc code */
-		*(ro++)=BT848_RISC_JUMP;
-		*(ro++)=btv->bus_vbi_even;
-		*(re++)=BT848_RISC_JUMP;
-		*(re++)=btv->bus_vbi_odd;
+		*(ro++)=cpu_to_le32(BT848_RISC_JUMP);
+		*(ro++)=cpu_to_le32(btv->bus_vbi_even);
+		*(re++)=cpu_to_le32(BT848_RISC_JUMP);
+		*(re++)=cpu_to_le32(btv->bus_vbi_odd);
 	}
 	if (ncr < 0) {	/* bitmap was pased */
 		memcpy(clipmap, (unsigned char *)cr, VIDEO_CLIPMAP_SIZE);
@@ -1187,8 +1215,8 @@ static void make_clip_tab(struct bttv *btv, struct video_clip *cr, int ncr)
 	if (btv->win.y<0)
 		clip_draw_rectangle(clipmap, 0, 0, 1024, -(btv->win.y));
 	
-	*(ro++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(ro++)=0;
-	*(re++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(re++)=0;
+	*(ro++)=cpu_to_le32(BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1); *(ro++)=0;
+	*(re++)=cpu_to_le32(BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1); *(re++)=0;
 	
 	/* translate bitmap to risc code */
         for (line=outofmem=0; line < (height<<inter) && !outofmem; line++)
@@ -1206,10 +1234,10 @@ static void make_clip_tab(struct bttv *btv, struct video_clip *cr, int ncr)
 				flags |= ((!sx) ? BT848_RISC_SOL : 0);
 				flags |= ((sx + dx == width) ? BT848_RISC_EOL : 0);
 				if (!lastbit) {
-					*((*rp)++)=BT848_RISC_WRITE|flags|len;
-					*((*rp)++)=adr + bpp * sx;
+					*((*rp)++)=cpu_to_le32(BT848_RISC_WRITE|flags|len);
+					*((*rp)++)=cpu_to_le32(adr + bpp * sx);
 				} else
-					*((*rp)++)=BT848_RISC_SKIP|flags|len;
+					*((*rp)++)=cpu_to_le32(BT848_RISC_SKIP|flags|len);
 				lastbit=cbit;
 				sx += dx;
 				dx = 1;
@@ -1224,10 +1252,10 @@ static void make_clip_tab(struct bttv *btv, struct video_clip *cr, int ncr)
 	}
 	vfree(clipmap);
 	/* outofmem flag relies on the following code to discard extra data */
-	*(ro++)=BT848_RISC_JUMP;
-	*(ro++)=btv->bus_vbi_even;
-	*(re++)=BT848_RISC_JUMP;
-	*(re++)=btv->bus_vbi_odd;
+	*(ro++)=cpu_to_le32(BT848_RISC_JUMP);
+	*(ro++)=cpu_to_le32(btv->bus_vbi_even);
+	*(re++)=cpu_to_le32(BT848_RISC_JUMP);
+	*(re++)=cpu_to_le32(btv->bus_vbi_odd);
 }
 
 /* set geometry for even/odd frames 
@@ -1297,6 +1325,23 @@ static void bt848_set_geo(struct bttv *btv, u16 width, u16 height, u16 fmt)
         set_pll(btv);
 
 	btwrite(fmt, BT848_COLOR_FMT);
+#ifdef __sparc__
+        if(fmt == BT848_COLOR_FMT_RGB32 ||
+           fmt == BT848_COLOR_FMT_RGB24) {
+                btwrite((BT848_COLOR_CTL_GAMMA		|
+                         BT848_COLOR_CTL_WSWAP_ODD	|
+                         BT848_COLOR_CTL_WSWAP_EVEN	|
+                         BT848_COLOR_CTL_BSWAP_ODD	|
+                         BT848_COLOR_CTL_BSWAP_EVEN),
+                        BT848_COLOR_CTL);
+        } else if(fmt == BT848_COLOR_FMT_RGB16 ||
+           fmt == BT848_COLOR_FMT_RGB15) {
+                btwrite((BT848_COLOR_CTL_GAMMA		|
+                         BT848_COLOR_CTL_BSWAP_ODD	|
+                         BT848_COLOR_CTL_BSWAP_EVEN),
+                        BT848_COLOR_CTL);
+        }
+#endif
 	hactive=width;
 
         vtc=0;
@@ -1474,7 +1519,7 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
 			btor(BT848_VSCALE_COMB, BT848_E_VSCALE_HI);
 			btor(BT848_VSCALE_COMB, BT848_O_VSCALE_HI);
 		}
-		btv->risc_jmp[12]=BT848_RISC_JUMP|(0x8<<16)|BT848_RISC_IRQ;
+		btv->risc_jmp[12]=cpu_to_le32(BT848_RISC_JUMP|(0x8<<16)|BT848_RISC_IRQ);
         }
 	btor(3, BT848_CAP_CTL);
 	btor(3, BT848_GPIO_DMA_CTL);
@@ -2268,7 +2313,7 @@ static int bttv_mmap(struct video_device *dev, const char *adr, unsigned long si
 	pos=(unsigned long) btv->fbuffer;
 	while (size > 0) 
 	{
-	        page = kvirt_to_phys(pos);
+	        page = kvirt_to_pa(pos);
 		if (remap_page_range(start, page, PAGE_SIZE, PAGE_SHARED))
 		        return -EAGAIN;
 		start+=PAGE_SIZE;
@@ -3110,44 +3155,44 @@ static void bt848_set_risc_jmps(struct bttv *btv)
 	int flags=btv->cap;
 
 	/* Sync to start of odd field */
-	btv->risc_jmp[0]=BT848_RISC_SYNC|BT848_RISC_RESYNC|BT848_FIFO_STATUS_VRE;
+	btv->risc_jmp[0]=cpu_to_le32(BT848_RISC_SYNC|BT848_RISC_RESYNC|BT848_FIFO_STATUS_VRE);
 	btv->risc_jmp[1]=0;
 
 	/* Jump to odd vbi sub */
-	btv->risc_jmp[2]=BT848_RISC_JUMP|(0x5<<20);
+	btv->risc_jmp[2]=cpu_to_le32(BT848_RISC_JUMP|(0x5<<20));
 	if (flags&8)
-		btv->risc_jmp[3]=virt_to_bus(btv->vbi_odd);
+		btv->risc_jmp[3]=cpu_to_le32(virt_to_bus(btv->vbi_odd));
 	else
-		btv->risc_jmp[3]=virt_to_bus(btv->risc_jmp+4);
+		btv->risc_jmp[3]=cpu_to_le32(virt_to_bus(btv->risc_jmp+4));
 
         /* Jump to odd sub */
-	btv->risc_jmp[4]=BT848_RISC_JUMP|(0x6<<20);
+	btv->risc_jmp[4]=cpu_to_le32(BT848_RISC_JUMP|(0x6<<20));
 	if (flags&2)
-		btv->risc_jmp[5]=virt_to_bus(btv->risc_odd);
+		btv->risc_jmp[5]=cpu_to_le32(virt_to_bus(btv->risc_odd));
 	else
-		btv->risc_jmp[5]=virt_to_bus(btv->risc_jmp+6);
+		btv->risc_jmp[5]=cpu_to_le32(virt_to_bus(btv->risc_jmp+6));
 
 
 	/* Sync to start of even field */
-	btv->risc_jmp[6]=BT848_RISC_SYNC|BT848_RISC_RESYNC|BT848_FIFO_STATUS_VRO;
+	btv->risc_jmp[6]=cpu_to_le32(BT848_RISC_SYNC|BT848_RISC_RESYNC|BT848_FIFO_STATUS_VRO);
 	btv->risc_jmp[7]=0;
 
 	/* Jump to even vbi sub */
-	btv->risc_jmp[8]=BT848_RISC_JUMP;
+	btv->risc_jmp[8]=cpu_to_le32(BT848_RISC_JUMP);
 	if (flags&4)
-		btv->risc_jmp[9]=virt_to_bus(btv->vbi_even);
+		btv->risc_jmp[9]=cpu_to_le32(virt_to_bus(btv->vbi_even));
 	else
-		btv->risc_jmp[9]=virt_to_bus(btv->risc_jmp+10);
+		btv->risc_jmp[9]=cpu_to_le32(virt_to_bus(btv->risc_jmp+10));
 
 	/* Jump to even sub */
-	btv->risc_jmp[10]=BT848_RISC_JUMP|(8<<20);
+	btv->risc_jmp[10]=cpu_to_le32(BT848_RISC_JUMP|(8<<20));
 	if (flags&1)
-		btv->risc_jmp[11]=virt_to_bus(btv->risc_even);
+		btv->risc_jmp[11]=cpu_to_le32(virt_to_bus(btv->risc_even));
 	else
-		btv->risc_jmp[11]=virt_to_bus(btv->risc_jmp+12);
+		btv->risc_jmp[11]=cpu_to_le32(virt_to_bus(btv->risc_jmp+12));
 
-	btv->risc_jmp[12]=BT848_RISC_JUMP;
-	btv->risc_jmp[13]=virt_to_bus(btv->risc_jmp);
+	btv->risc_jmp[12]=cpu_to_le32(BT848_RISC_JUMP);
+	btv->risc_jmp[13]=cpu_to_le32(virt_to_bus(btv->risc_jmp));
 
 	/* enable capturing */
 	btaor(flags, ~0x0f, BT848_CAP_CTL);
@@ -3165,7 +3210,7 @@ static int init_bt848(int i)
 
 	/* reset the bt848 */
 	btwrite(0, BT848_SRESET);
-	DEBUG(printk(KERN_DEBUG "bttv%d: bt848_mem: 0x%08x\n",i,(unsigned int) btv->bt848_mem));
+	DEBUG(printk(KERN_DEBUG "bttv%d: bt848_mem: 0x%lx\n",i,(unsigned long) btv->bt848_mem));
 
 	/* default setup for max. PAL size in a 1024xXXX hicolor framebuffer */
 	btv->win.norm=0; /* change this to 1 for NTSC, 2 for SECAM */
@@ -3330,8 +3375,7 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 		if (!astat)
 			return;
 		btwrite(astat,BT848_INT_STAT);
-		IDEBUG(printk ("bttv%d: astat %08x\n", btv->nr, astat));
-		IDEBUG(printk ("bttv%d:  stat %08x\n", btv->nr, stat));
+		IDEBUG(printk ("bttv%d: astat %08x stat %08x\n", btv->nr, astat, stat));
 
 		/* get device status bits */
 		dstat=btread(BT848_DSTATUS);
@@ -3387,8 +3431,8 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 					btv->gro = btv->gro_next;
 					btv->gre = btv->gre_next;
 					btv->grf = btv->grf_next;
-                                        btv->risc_jmp[5]=btv->gro;
-					btv->risc_jmp[11]=btv->gre;
+                                        btv->risc_jmp[5]=cpu_to_le32(btv->gro);
+					btv->risc_jmp[11]=cpu_to_le32(btv->gre);
 					bt848_set_geo(btv, btv->gwidth,
 						      btv->gheight,
 						      btv->gfmt);
@@ -3405,9 +3449,9 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 			}
 			if (stat&(8<<28)) 
 			{
-			        btv->risc_jmp[5]=btv->gro;
-				btv->risc_jmp[11]=btv->gre;
-				btv->risc_jmp[12]=BT848_RISC_JUMP;
+			        btv->risc_jmp[5]=cpu_to_le32(btv->gro);
+				btv->risc_jmp[11]=cpu_to_le32(btv->gre);
+				btv->risc_jmp[12]=cpu_to_le32(BT848_RISC_JUMP);
 				bt848_set_geo(btv, btv->gwidth, btv->gheight,
 					      btv->gfmt);
 			}
@@ -3502,14 +3546,16 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
 
         if (remap[bttv_num])
         {
+                unsigned int dw = btv->bt848_adr;
+
                 if (remap[bttv_num] < 0x1000)
                         remap[bttv_num]<<=20;
                 remap[bttv_num]&=PCI_BASE_ADDRESS_MEM_MASK;
-                printk(KERN_INFO "bttv%d: remapping to : 0x%08x.\n",
+                printk(KERN_INFO "bttv%d: remapping to : 0x%lx.\n",
                        bttv_num,remap[bttv_num]);
                 remap[bttv_num]|=btv->bt848_adr&(~PCI_BASE_ADDRESS_MEM_MASK);
                 pci_write_config_dword(dev, PCI_BASE_ADDRESS_0, remap[bttv_num]);
-                pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &btv->bt848_adr);
+                pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &dw);
                 btv->dev->base_address[0] = btv->bt848_adr;
         }					
         btv->bt848_adr&=PCI_BASE_ADDRESS_MEM_MASK;
@@ -3518,7 +3564,7 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
                bttv_num,btv->id, btv->revision);
         printk("bus: %d, devfn: %d, ",dev->bus->number, dev->devfn);
         printk("irq: %d, ",btv->irq);
-        printk("memory: 0x%08x.\n", btv->bt848_adr);
+        printk("memory: 0x%lx.\n", btv->bt848_adr);
 
         btv->pll.pll_crystal = 0;
         btv->pll.pll_ifreq   = 0;
@@ -3542,7 +3588,11 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
                 }
         }
         
+#ifdef __sparc__
+        btv->bt848_mem=(unsigned char *)btv->bt848_adr;
+#else
         btv->bt848_mem=ioremap(btv->bt848_adr, 0x1000);
+#endif
         
         /* clear interrupt mask */
 	btwrite(0, BT848_INT_MASK);
@@ -3817,17 +3867,17 @@ static void release_bttv(void)
 		if (btv->risc_even)
 			kfree((void *) btv->risc_even);
 
-		DEBUG(printk(KERN_DEBUG "free: risc_jmp: 0x%08x.\n", btv->risc_jmp));
+		DEBUG(printk(KERN_DEBUG "free: risc_jmp: 0x%p.\n", btv->risc_jmp));
 		if (btv->risc_jmp)
 			kfree((void *) btv->risc_jmp);
 
-		DEBUG(printk(KERN_DEBUG "bt848_vbibuf: 0x%08x.\n", btv->vbibuf));
+		DEBUG(printk(KERN_DEBUG "bt848_vbibuf: 0x%p.\n", btv->vbibuf));
 		if (btv->vbibuf)
 			vfree((void *) btv->vbibuf);
 
 
 		free_irq(btv->irq,btv);
-		DEBUG(printk(KERN_DEBUG "bt848_mem: 0x%08x.\n", btv->bt848_mem));
+		DEBUG(printk(KERN_DEBUG "bt848_mem: 0x%p.\n", btv->bt848_mem));
 		if (btv->bt848_mem)
 			iounmap(btv->bt848_mem);
 

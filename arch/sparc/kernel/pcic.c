@@ -20,7 +20,6 @@
 #include <asm/ebus.h>
 #include <asm/sbus.h> /* for sanity check... */
 #include <asm/swift.h> /* for cache flushing. */
-
 #include <asm/io.h>
 
 #undef PROM_DEBUG
@@ -39,7 +38,6 @@
 #include <linux/timex.h>
 #include <linux/interrupt.h>
 
-#include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/oplib.h>
 #include <asm/pcic.h>

@@ -327,6 +327,10 @@ enum status_bits {
 	TxFIFOUnderflow=0x20, TxJabber=0x08, TxNoBuf=0x04, TxDied=0x02, TxIntr=0x01,
 };
 
+enum desc_status_bits {
+	DescOwned=0x80000000, RxDescFatalErr=0x8000, RxWholePkt=0x0300,
+};
+        
 /* The Tulip Rx and Tx buffer descriptors. */
 struct tulip_rx_desc {
 	s32 status;
@@ -469,10 +473,12 @@ int tulip_probe(struct device *dev)
 			(PCI_CLASS_NETWORK_ETHERNET << 8,
 			 reverse_probe ? 0xfe - pci_index : pci_index,
 			 &pci_bus, &pci_device_fn) != PCIBIOS_SUCCESSFUL)
+		{
 			if (reverse_probe)
 				continue;
 			else
 				break;
+		}
 		pcibios_read_config_word(pci_bus, pci_device_fn,
 								 PCI_VENDOR_ID, &vendor);
 		pcibios_read_config_word(pci_bus, pci_device_fn,
@@ -1536,10 +1542,12 @@ static void select_media(struct device *dev, int startup)
 		outl(dev->if_port ? 0x0000000C : 0x00000004, ioaddr + CSR13);
 	} else {					/* Unknown chip type with no media table. */
 		if (tp->default_port == 0)
-			if (tp->mii_cnt) {
+		{
+			if (tp->mii_cnt)
 				dev->if_port = 11;
-			} else
+			else
 				dev->if_port = 3;
+		}
 		if (media_cap[dev->if_port] & MediaIsMII) {
 			new_csr6 = 0x020E0000;
 		} else if (media_cap[dev->if_port] & MediaIsFx) {
@@ -2698,8 +2706,8 @@ static void set_rx_mode(struct device *dev, int num_addrs, void *addrs)
 			/* Same setup recently queued, we need not add it. */
 		} else {
 			unsigned long flags;
-			unsigned int entry;
-			
+			unsigned int entry, dummy = 0;
+
 			save_flags(flags); cli();
 			entry = tp->cur_tx++ % TX_RING_SIZE;
 
@@ -2709,7 +2717,8 @@ static void set_rx_mode(struct device *dev, int num_addrs, void *addrs)
 				tp->tx_ring[entry].length =
 					(entry == TX_RING_SIZE-1) ? 0x02000000 : 0;
 				tp->tx_ring[entry].buffer1 = 0;
-				tp->tx_ring[entry].status = 0x80000000;
+				/* race with chip, set DescOwned later */
+				dummy = entry;
 				entry = tp->cur_tx++ % TX_RING_SIZE;
 			}
 
@@ -2724,6 +2733,8 @@ static void set_rx_mode(struct device *dev, int num_addrs, void *addrs)
 				dev->tbusy = 1;
 				tp->tx_full = 1;
 			}
+			if (dummy >= 0)
+				tp->tx_ring[dummy].status = DescOwned;
 			restore_flags(flags);
 			/* Trigger an immediate transmit demand. */
 			outl(0, ioaddr + CSR1);

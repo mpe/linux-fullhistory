@@ -641,6 +641,8 @@ static struct qcam_device *qcam_init(struct parport *port)
 	struct qcam_device *q;
 	
 	q = kmalloc(sizeof(struct qcam_device), GFP_KERNEL);
+	if(q==NULL)
+		return NULL;
 
 	q->pport = port;
 	q->pdev = parport_register_device(port, "c-qcam", NULL, NULL,
@@ -765,7 +767,7 @@ void cleanup_module(void)
 		close_cqcam(qcams[i]);
 }
 #else
-__initfunc(int init_colour_qcams(struct video_init *unused))
+int __init init_colour_qcams(struct video_init *unused)
 {
 	cqcam_init();
 	return 0;

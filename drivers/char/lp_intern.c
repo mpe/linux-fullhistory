@@ -28,7 +28,6 @@
 #endif
 #ifdef CONFIG_ATARI
 #include <linux/delay.h>
-#include <linux/sched.h>
 #include <asm/atarihw.h>
 #include <asm/atariints.h>
 #endif

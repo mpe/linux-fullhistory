@@ -46,6 +46,21 @@ possible for most people with PnP BIOS.  If it does not work for you,
 then email me if you are willing to experiment in an effort to make it
 work.
 
+************************************************************************
+* I have now had two such machines, and I have fixed this to work
+* properly when built into the kernel.  The Toshiba Libretto series, or
+* at least models 70CT and 110CT which I have owned, use a Yamaha
+* OPL3-SAx (OPL3-SA3 according to documentation) sound chip, IRQ 5,
+* IO addresses 220/530/388/330/370 and DMA 1,0 (_not_ 0,1).  All these
+* configuration settings can be gathered by booting another OS which
+* recognizes the card already.
+*
+* I have made things 'just work' for the non-modular case on such
+* machines when configured properly.
+*
+* David Luyer <luyer@ucs.uwa.edu.au>
+************************************************************************
+
 If you are using isapnp, follow the directions in its documentation to
 produce a configuration file.  Here is the relevant excerpt I use for
 my SAx card from my isapnp.conf:

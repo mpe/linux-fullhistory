@@ -3,6 +3,10 @@
  *  Low-level SCSI driver for sym53c416 chip.
  *  Copyright (C) 1998 Lieven Willems (lw_linux@hotmail.com)
  * 
+ *  Changes : 
+ * 
+ *  Marcelo Tosatti <marcelo@conectiva.com.br> : Added io_request_lock locking
+ * 
  *  LILO command line usage: sym53c416=<PORTBASE>[,<IRQ>]
  *
  *  This program is free software; you can redistribute it and/or modify it
@@ -25,11 +29,11 @@
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
-#include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <asm/dma.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/spinlock.h>
 #include <linux/blk.h>
 #include <linux/version.h>
 #include "scsi.h"
@@ -371,7 +375,9 @@ static void sym53c416_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
     printk("sym53c416: Warning: Reset received\n");
     current_command->SCp.phase = idle;
     current_command->result = DID_RESET << 16;
+    spin_lock_irqsave(&io_request_lock, flags);
     current_command->scsi_done(current_command);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     return;
     }
   if(int_reg & ILCMD)       /* Illegal Command */
@@ -379,7 +385,9 @@ static void sym53c416_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
     printk("sym53c416: Warning: Illegal Command: 0x%02x\n", inb(base + COMMAND_REG));
     current_command->SCp.phase = idle;
     current_command->result = DID_ERROR << 16;
+    spin_lock_irqsave(&io_request_lock, flags);
     current_command->scsi_done(current_command);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     return;
     }
   if(status_reg & GE)         /* Gross Error */
@@ -387,7 +395,9 @@ static void sym53c416_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
     printk("sym53c416: Warning: Gross Error\n");
     current_command->SCp.phase = idle;
     current_command->result = DID_ERROR << 16;
+    spin_lock_irqsave(&io_request_lock, flags);
     current_command->scsi_done(current_command);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     return;
     }
   if(status_reg & PE)         /* Parity Error */
@@ -395,7 +405,9 @@ static void sym53c416_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
     printk("sym53c416: Warning: Parity Error\n");
     current_command->SCp.phase = idle;
     current_command->result = DID_PARITY << 16;
+    spin_lock_irqsave(&io_request_lock, flags);
     current_command->scsi_done(current_command);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     return;
     }
   if(pio_int_reg & (CE | OUE))
@@ -403,7 +415,9 @@ static void sym53c416_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
     printk("sym53c416: Warning: PIO Interrupt Error\n");
     current_command->SCp.phase = idle;
     current_command->result = DID_ERROR << 16;
+    spin_lock_irqsave(&io_request_lock, flags);
     current_command->scsi_done(current_command);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     return;
     }
   if(int_reg & DIS)           /* Disconnect */
@@ -413,7 +427,10 @@ static void sym53c416_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
     else
       current_command->result = (current_command->SCp.Status & 0xFF) | ((current_command->SCp.Message & 0xFF) << 8) | (DID_OK << 16);
     current_command->SCp.phase = idle;
+
+    spin_lock_irqsave(&io_request_lock, flags);
     current_command->scsi_done(current_command);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     return;
     }
   /* Now we handle SCSI phases         */

@@ -333,7 +333,6 @@ __initfunc(int amiga_mouse_init(void))
 }
 
 #ifdef MODULE
-#include <asm/setup.h>
 
 int init_module(void)
 {

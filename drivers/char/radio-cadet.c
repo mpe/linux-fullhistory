@@ -1,7 +1,7 @@
-/* cadet.c - A video4linux driver for the ADS Cadet AM/FM Radio Card 
+/* radio-cadet.c - A video4linux driver for the ADS Cadet AM/FM Radio Card 
  *
  * by Fred Gleason <fredg@wava.com>
- * Version 0.3.2
+ * Version 0.3.3
  *
  * (Loosely) based on code for the Aztech radio card by
  *
@@ -346,17 +346,13 @@ void cadet_handler(unsigned long data)
 static long cadet_read(struct video_device *v,char *buf,unsigned long count,
 		       int nonblock)
 {
-        int i=0,c;
+        int i=0;
 	unsigned char readbuf[RDS_BUFFER];
 
         if(rdsstat==0) {
 	        cadet_lock++;
 	        rdsstat=1;
 		outb(0x80,io);        /* Select RDS fifo */
-		c=3*(inb(io)&0x03);
-		for(i=0;i<c;i++) {    /* Flush the fifo */
-		        inb(io+1);
-		}
 		cadet_lock--;
 		init_timer(&readtimer);
 		readtimer.function=cadet_handler;
@@ -546,7 +542,7 @@ static struct video_device cadet_radio=
 	NULL
 };
 
-__initfunc(int cadet_init(struct video_init *v))
+int __init cadet_init(struct video_init *v)
 {
 #ifndef MODULE        
         if(cadet_probe()<0) {

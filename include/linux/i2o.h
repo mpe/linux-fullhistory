@@ -24,9 +24,6 @@
  * message structures
  */
 
-#define    TID_SZ                                  12
-#define    FUNCTION_SZ                             8
-
 struct i2o_message
 {
 	u32	version_size;
@@ -34,6 +31,110 @@ struct i2o_message
 	u32	initiator_context;
 	/* List follows */
 };
+
+/**************************************************************************
+ * HRT related constants and structures
+ **************************************************************************/
+#define I2O_BUS_LOCAL	0
+#define I2O_BUS_ISA	1
+#define I2O_BUS_EISA	2
+#define I2O_BUS_MCA	3
+#define I2O_BUS_PCI	4
+#define I2O_BUS_PCMCIA	5
+#define I2O_BUS_NUBUS	6
+#define I2O_BUS_CARDBUS	7
+#define I2O_BUS_UNKNOWN	0x80
+
+typedef struct _i2o_pci_bus {
+	u8 PciFunctionNumber;
+	u8 PciDeviceNumber;
+	u8 PciBusNumber;
+	u8 reserved;
+	u16 PciVendorID;
+	u16 PciDeviceID;
+} i2o_pci_bus, *pi2o_pci_bus;
+
+typedef struct _i2o_local_bus {
+	u16 LbBaseIOPort;
+	u16 reserved;
+	u32 LbBaseMemoryAddress;
+} i2o_local_bus, *pi2o_local_bus;
+
+typedef struct _i2o_isa_bus {
+	u16 IsaBaseIOPort;
+	u8 CSN;
+	u8 reserved;
+	u32 IsaBaseMemoryAddress;
+} i2o_isa_bus, *pi2o_isa_bus;
+
+typedef struct _i2o_eisa_bus_info {
+	u16 EisaBaseIOPort;
+	u8 reserved;
+	u8 EisaSlotNumber;
+	u32 EisaBaseMemoryAddress;
+} i2o_eisa_bus, *pi2o_eisa_bus;
+
+typedef struct _i2o_mca_bus {
+	u16 McaBaseIOPort;
+	u8 reserved;
+	u8 McaSlotNumber;
+	u32 McaBaseMemoryAddress;
+} i2o_mca_bus, *pi2o_mca_bus;
+
+typedef struct _i2o_other_bus {
+	u16 BaseIOPort;
+	u16 reserved;
+	u32 BaseMemoryAddress;
+} i2o_other_bus, *pi2o_other_bus;
+
+
+typedef struct _i2o_hrt_entry {
+	u32 adapter_id;
+	u32 parent_tid:12;
+	u32 state:4;
+	u32 bus_num:8;
+	u32 bus_type:8;
+	union {
+		i2o_pci_bus pci_bus;
+		i2o_local_bus local_bus;
+		i2o_isa_bus isa_bus;
+		i2o_eisa_bus eisa_bus;
+		i2o_mca_bus mca_bus;
+		i2o_other_bus other_bus;
+	} bus;
+} i2o_hrt_entry, *pi2o_hrt_entry;
+
+typedef struct _i2o_hrt {
+	u16 num_entries;
+	u8 entry_len;
+	u8 hrt_version;
+	u32 change_ind;
+	i2o_hrt_entry hrt_entry[1];
+} i2o_hrt, *pi2o_hrt;
+
+typedef struct _i2o_lct_entry {
+	u32 entry_size:16;
+	u32 tid:12;
+	u32 reserved:4;
+	u32 change_ind;
+	u32 device_flags;
+	u32 class_id;
+	u32 sub_class;
+	u32 user_tid:12;
+	u32 parent_tid:12;
+	u32 bios_info:8;
+	u8 identity_tag[8];
+	u32 event_capabilities;
+} i2o_lct_entry, *pi2o_lct_entry;
+
+typedef struct _i2o_lct {
+	u32 table_size:16;
+	u32 boot_tid:12;
+	u32 lct_ver:4;
+	u32 iop_flags;
+	u32 current_change_ind;
+	i2o_lct_entry lct_entry[1];
+} i2o_lct, *pi2o_lct;
 
 
 /*
@@ -85,6 +186,8 @@ struct i2o_controller
 	volatile u32 *post_port;		/* Messaging ports */
 	volatile u32 *reply_port;
 	volatile u32 *irq_mask;			/* Interrupt port */
+	u32 *lct;
+	u32 *hrt;
 	u32 mem_offset;				/* MFA offset */
 	u32 mem_phys;				/* MFA physical */
 	u32 priv_mem;
@@ -185,18 +288,22 @@ extern int i2o_release_device(struct i2o_device *);
 extern int i2o_post_this(struct i2o_controller *, int, u32 *, int);
 extern int i2o_post_wait(struct i2o_controller *, int, u32 *, int, int *, int);
 extern int i2o_issue_claim(struct i2o_controller *, int, int, int, int *);
-extern int i2o_query_scalar(struct i2o_controller *, int, int, int, int, void *,
-			    int, int *);
-extern int i2o_params_set(struct i2o_controller *c, int, int, int, int, void *,
-			  int, int *);
+
+extern int i2o_query_scalar(struct i2o_controller *, int, int, int, int, 
+			void *, int, int *);
+extern int i2o_set_scalar(struct i2o_controller *, int, int, int, int, 
+			void *, int, int *);
+
+extern int i2o_query_table(int, struct i2o_controller *, int, int, int, int, 
+			void *, int, void *, int, int *);
+extern int i2o_clear_table(struct i2o_controller *, int, int, int, int *); 
+extern int i2o_row_add_table(struct i2o_controller *, int, int, int, int,
+			void *, int, int *);
+extern int i2o_row_delete_table(struct i2o_controller *, int, int, int, int,
+			void *, int, int *);
 
 extern void i2o_run_queue(struct i2o_controller *);
-
-extern void i2o_report_status(const char *, const char *, u8, u8, u16);
-extern void report_common_status(u8);
-extern void report_lan_dsc(u16);
-
-extern u32 i2o_wait_message(struct i2o_controller *, char *);
+extern void i2o_report_status(const char *, const char *, u32 *);
 
 extern const char *i2o_get_class_name(int);
 
@@ -278,27 +385,11 @@ extern const char *i2o_get_class_name(int);
 #define    I2O_SNFORMAT_IEEE_REG128                    9
 #define    I2O_SNFORMAT_UNKNOWN2                       0xff
 
-
-/*
- *	"Special" TID assignments
- */
-#define    I2O_IOP_TID                                 0
-#define    I2O_HOST_TID                                1
-
-
 /* Transaction Reply Lists (TRL) Control Word structure */
 
 #define TRL_SINGLE_FIXED_LENGTH		0x00
 #define TRL_SINGLE_VARIABLE_LENGTH	0x40
 #define TRL_MULTIPLE_FIXED_LENGTH	0x80
-
-/* LAN Class specific functions */
-
-#define    LAN_PACKET_SEND			0x3B
-#define    LAN_SDU_SEND				0x3D
-#define    LAN_RECEIVE_POST			0x3E
-#define    LAN_RESET				0x35
-#define    LAN_SUSPEND				0x37
 
 /*
  *	Messaging API values
@@ -468,7 +559,7 @@ extern const char *i2o_get_class_name(int);
 #define I2O_DSC_UNSUPPORTED_VERSION            0x001A
 #define I2O_DSC_DEVICE_BUSY                    0x001B
 #define I2O_DSC_DEVICE_NOT_AVAILABLE           0x001C
-
+ 
 /* Message header defines for VersionOffset */
 #define I2OVER15	0x0001
 #define I2OVER20	0x0002
@@ -478,7 +569,9 @@ extern const char *i2o_get_class_name(int);
 #define SGL_OFFSET_4    (0x0040 | I2OVERSION)
 #define SGL_OFFSET_5    (0x0050 | I2OVERSION)
 #define SGL_OFFSET_6    (0x0060 | I2OVERSION)
+#define SGL_OFFSET_7    (0x0070 | I2OVERSION)
 #define SGL_OFFSET_8    (0x0080 | I2OVERSION)
+#define SGL_OFFSET_9    (0x0090 | I2OVERSION)
 #define SGL_OFFSET_10   (0x00A0 | I2OVERSION)
 
 #define TRL_OFFSET_5    (0x0050 | I2OVERSION)
@@ -491,9 +584,6 @@ extern const char *i2o_get_class_name(int);
 #define MSG_FAIL	0x2000
 #define MSG_LAST	0x4000
 #define MSG_REPLY	0x8000
-
-  /* normal LAN request message MsgFlags and VersionOffset (0x1041) */
-#define LAN_MSG_REQST	(MSG_MULTI_TRANS | SGL_OFFSET_4)
 
  /* minimum size msg */
 #define THREE_WORD_MSG_SIZE	0x00030000
@@ -518,7 +608,7 @@ extern const char *i2o_get_class_name(int);
 #define MSG_POOL_SIZE		16384
 
 #define I2O_POST_WAIT_OK	1
-#define I2O_POST_WAIT_TIMEOUT	-1
+#define I2O_POST_WAIT_TIMEOUT	-ETIMEDOUT
 
 #endif /* __KERNEL__ */
 

@@ -23,7 +23,8 @@
  *	Z85230:
  *	Non DMA you want a 486DX50 or better to do 64Kbits. 9600 baud
  *	X.25 is not unrealistic on all machines. DMA mode can in theory
- *	handle T1/E1 quite nicely.
+ *	handle T1/E1 quite nicely. In practice the limit seems to be about
+ *	512Kbit->1Mbit depending on motherboard.
  *
  *	Z85C30:
  *	64K will take DMA, 9600 baud X.25 should be ok.
@@ -187,7 +188,6 @@ u8 z8530_hdlc_kilostream_85230[]=
 	1,	EXT_INT_ENAB|TxINT_ENAB|INT_ALL_Rx,
 	9,	NV|MIE|NORESET,
 	23,	3,		/* Extended mode AUTO TX and EOM*/
-	31,	3,		/* Extended mode AUTO TX and EOM*/
 	
 	255
 };
@@ -834,6 +834,8 @@ EXPORT_SYMBOL(z8530_sync_dma_close);
 
 int z8530_sync_txdma_open(struct device *dev, struct z8530_channel *c)
 {
+	unsigned long flags;
+
 	printk("Opening sync interface for TX-DMA\n");
 	c->sync = 1;
 	c->mtu = dev->mtu+64;
@@ -889,14 +891,21 @@ int z8530_sync_txdma_open(struct device *dev, struct z8530_channel *c)
 	c->regs[R14]|= DTRREQ;
 	write_zsreg(c, R14, c->regs[R14]);     
 	
+	c->regs[R1]&= ~TxINT_ENAB;
+	write_zsreg(c, R1, c->regs[R1]);
+	
 	/*
 	 *	Set up the DMA configuration
 	 */	
 	 
+	flags = claim_dma_lock();
+
 	disable_dma(c->txdma);
 	clear_dma_ff(c->txdma);
 	set_dma_mode(c->txdma, DMA_MODE_WRITE);
 	disable_dma(c->txdma);
+
+	release_dma_lock(flags);
 	
 	/*
 	 *	Select the DMA interrupt handlers
@@ -918,6 +927,7 @@ EXPORT_SYMBOL(z8530_sync_txdma_open);
 	
 int z8530_sync_txdma_close(struct device *dev, struct z8530_channel *c)
 {
+	unsigned long flags;
 	u8 chk;
 	c->irqs = &z8530_nop;
 	c->max = 0;
@@ -927,10 +937,14 @@ int z8530_sync_txdma_close(struct device *dev, struct z8530_channel *c)
 	 *	Disable the PC DMA channels
 	 */
 	 
+	flags = claim_dma_lock();
+
 	disable_dma(c->txdma);
 	clear_dma_ff(c->txdma);
 	c->txdma_on = 0;
 	c->tx_dma_used = 0;
+
+	release_dma_lock(flags);
 
 	/*
 	 *	Disable DMA control mode

@@ -13,10 +13,9 @@
  *	A lot of the I2O message side code from this is taken from the
  *	Red Creek RCPCI45 adapter driver by Red Creek Communications
  *
- *	Some fixes and cleanup by Philipp Rumpf
- *
- *	Additional fixes by Juha Sievänen <Juha.Sievanen@cs.Helsinki.FI>
- *	
+ *	Fixes by Philipp Rumpf
+ *		 Juha Sievänen <Juha.Sievanen@cs.Helsinki.FI>
+ *	         Auvo Häkkinen <Auvo.Hakkinen@cs.Helsinki.FI>
  */
  
 #include <linux/module.h>
@@ -32,26 +31,69 @@
 
 #include "i2o_lan.h"
 
+
 /*
  *	Size of the I2O module table
  */
  
-
 static struct i2o_handler *i2o_handlers[MAX_I2O_MODULES];
 static struct i2o_controller *i2o_controllers[MAX_I2O_CONTROLLERS];
 int i2o_num_controllers = 0;
-
+static int core_context = 0;
+static int reply_flag = 0;
 
 extern int i2o_online_controller(struct i2o_controller *c);
+static void i2o_core_reply(struct i2o_handler *, struct i2o_controller *,
+			   struct i2o_message *);
+
+/* Message handler */ 
+static struct i2o_handler i2o_core_handler =
+{
+	(void *)i2o_core_reply,
+	"I2O core layer",
+	0
+};
 
 /*
  *	I2O configuration spinlock. This isnt a big deal for contention
  *	so we have one only
  */
  
-#ifdef __SMP__
 static spinlock_t i2o_configuration_lock = SPIN_LOCK_UNLOCKED;
+
+void i2o_core_reply(struct i2o_handler *h, struct i2o_controller *c,
+		    struct i2o_message *m)
+{
+	u32 *msg=(u32 *)m;
+	u32 *flag = (u32 *)msg[3];
+
+#if 0
+	i2o_report_status(KERN_INFO, "i2o_core", msg);
 #endif
+	
+	if (msg[0] & (1<<13)) // Fail bit is set
+        {
+                printk(KERN_ERR "IOP failed to process the msg:\n");
+                printk(KERN_ERR "  Cmd = 0x%02X, InitiatorTid = %d, TargetTid =%d\n",
+		       (msg[1] >> 24) & 0xFF, (msg[1] >> 12) & 0xFFF, msg[1] &
+		       0xFFF);
+                printk(KERN_ERR "  FailureCode = 0x%02X\n  Severity = 0x%02X\n"
+		       "LowestVersion = 0x%02X\n  HighestVersion = 0x%02X\n",
+		       msg[4] >> 24, (msg[4] >> 16) & 0xFF,
+		       (msg[4] >> 8) & 0xFF, msg[4] & 0xFF);
+                printk(KERN_ERR "  FailingHostUnit = 0x%04X\n  FailingIOP = 0x%03X\n",
+		       msg[5] >> 16, msg[5] & 0xFFF);
+                return;
+        }
+
+	if (msg[4] >> 24)
+	{
+		i2o_report_status(KERN_WARNING, "i2o_core", msg);
+		*flag = -(msg[4] & 0xFFFF);
+	}
+	else
+		*flag = I2O_POST_WAIT_OK;
+}
 
 /*
  *	Install an I2O handler - these handle the asynchronous messaging
@@ -179,10 +221,11 @@ int i2o_install_controller(struct i2o_controller *c)
 int i2o_delete_controller(struct i2o_controller *c)
 {
 	struct i2o_controller **p;
-	
+
 	spin_lock(&i2o_configuration_lock);
 	if(atomic_read(&c->users))
 	{
+		printk("Someones using controller iop%d\n", c->unit);
 		spin_unlock(&i2o_configuration_lock);
 		return -EBUSY;
 	}
@@ -195,21 +238,41 @@ int i2o_delete_controller(struct i2o_controller *c)
 			return -EBUSY;
 		}
 	}
-	c->destructor(c);
-	
+//	c->destructor(c); /* We dont want to free the IRQ yet */
+
 	p=&i2o_controller_chain;
-	
+
+	/* Send first SysQuiesce to other IOPs */
+	while(*p)
+	{
+		if(*p!=c)
+			if(i2o_quiesce_controller(*p)<0)
+				printk(KERN_INFO "Unable to quiesce iop%d\n",
+				       (*p)->unit);
+		p=&((*p)->next);
+	}
+
+	p=&i2o_controller_chain;
+
 	while(*p)
 	{
 		if(*p==c)
 		{
-			/* Prepare for restart */
-//			i2o_clear_controller(c);
+			/* Ask the IOP to switch to HOLD state */
+			if (i2o_clear_controller(c) < 0)
+				printk("Unable to clear iop%d\n", c->unit);
+
+			/* Release IRQ */
+			c->destructor(c);
 
 			*p=c->next;
 			spin_unlock(&i2o_configuration_lock);
 			if(c->page_frame);
 				kfree(c->page_frame);
+			if(c->hrt)
+				kfree(c->hrt);
+			if(c->lct)
+				kfree(c->lct);
 			i2o_controllers[c->unit]=NULL;
 			kfree(c);
 			i2o_num_controllers--;
@@ -317,7 +380,7 @@ const char *i2o_get_class_name(int class)
 		"Device Driver Module",
 		"Block Device",
 		"Tape Device",
-		"LAN Inteface",
+		"LAN Interface",
 		"WAN Interface",
 		"Fibre Channel Port",
 		"Fibre Channel Device",
@@ -384,7 +447,7 @@ u32 i2o_wait_message(struct i2o_controller *c, char *why)
 	{
 		if((jiffies-time)>=5*HZ)
 		{
-			printk(KERN_ERR "%s: Timeout waiting for message to send %s.\n", 
+			printk(KERN_ERR "%s: Timeout waiting for message frame to send %s.\n", 
 				c->name, why);
 			return 0xFFFFFFFF;
 		}
@@ -396,7 +459,7 @@ u32 i2o_wait_message(struct i2o_controller *c, char *why)
 
 
 /*
- *	Wait up to 5 seconds for a reply to be available.
+ *	Wait up to timeout seconds for a reply to be available.
  */
  
 u32 i2o_wait_reply(struct i2o_controller *c, char *why, int timeout)
@@ -418,173 +481,6 @@ u32 i2o_wait_reply(struct i2o_controller *c, char *why, int timeout)
 }
 	
 
-
-/* Quiesce and clear IOP  */
-int i2o_quiesce_controller(struct i2o_controller *c)
-{
-	u32 m;
-	u32 *msg;
-
-	/* now we stop receiving messages to this IOP */
-	m=i2o_wait_message(c, "Quiesce IOP");
-	if(m==0xFFFFFFFF)
-		return -ETIMEDOUT;
-
-	msg=(u32 *)(c->mem_offset+m);
-
-	msg[0]=FOUR_WORD_MSG_SIZE|SGL_OFFSET_0;
-	msg[1]=I2O_CMD_SYS_QUIESCE<<24|HOST_TID<<12|ADAPTER_TID;
-	msg[2]=0;
-	msg[3]=0;
-
-	printk(KERN_DEBUG "Sending SysQuiesce to %s\n", c->name);
-	i2o_post_message(c,m);
-
-	m=i2o_wait_reply(c, "System Quiesce", 20);
-
-	if (m==0xFFFFFFFF)
-		return -ETIMEDOUT;
-	/* Someday we should check return status... */
-
-	return 0;
-}
-
-int i2o_clear_controller(struct i2o_controller *c)
-{
-	u32 m;
-	u32 *msg;
-
-	m=i2o_wait_message(c, "IOP Clear");
-	if (m==0xFFFFFFFF)
-		return -ETIMEDOUT;
-
-	msg=(u32 *)(c->mem_offset+m);
-
-	msg[0]=FOUR_WORD_MSG_SIZE|SGL_OFFSET_0;
-	msg[1]=I2O_CMD_ADAPTER_CLEAR<<24|HOST_TID<<12|ADAPTER_TID;
-	msg[2]=0;
-	msg[3]=0;
-
-	printk(KERN_DEBUG "Sending IOPClear to %s\n", c->name);
-	i2o_post_message(c, m);
-
-	m=i2o_wait_reply(c, "IOP Clear timeout", 5);
-
-	if(m==0xFFFFFFFF)
-		return -ETIMEDOUT;
-
-	return 0;
-}
-
-
-/*
- *	i2o table walking. We just provide a single element retrieve. You can
- *	all sorts of fancy lookups in I2O but we have no performance critical
- *	lookups so why write all the code for it.
- */
- 
-#if 0
-static int i2o_query_table_polled(struct i2o_controller *c, int tid, void *buf, int buflen, 
-	int group, int field, u32 *key, int keylen)
-{
-	u32 m;
-	u32 *msg;
-	u16 op[64];
-	u32 *p;
-	int i;
-	u32 *rbuf;
-
-	op[0]=1;			/* One Operation */
-	op[1]=0;			/* PAD */
-	op[2]=2;			/* LIST_GET */
-	op[3]=group;			/* group number */
-	op[4]=1;			/* 1 field */
-	op[5]=field;			/* Field number */
-	op[6]=1;			/* Key count */
-	memcpy(op+7, key, keylen);	/* Key */
-	
-	m=i2o_wait_message(c, "I2O query table.");
-	if(m==0xFFFFFFFF)
-	{	
-		return -ETIMEDOUT;
-	}
-	
-	msg=(u32 *)(c->mem_offset+m);
-	
-	rbuf=kmalloc(buflen+32, GFP_KERNEL);
-	if(rbuf==NULL)
-	{
-		printk(KERN_ERR "No free memory for table read.\n");
-		return -ENOMEM;
-	}
-	msg[0]=NINE_WORD_MSG_SIZE|SGL_OFFSET_5;
-	msg[1]=I2O_CMD_UTIL_PARAMS_GET<<24|HOST_TID<<12|tid;
-	msg[2]=0;			/* Context */
-	msg[3]=0;
-	msg[4]=0;
-	msg[5]=0x54000000|(14);
-	msg[6]=virt_to_bus(op);
-	msg[7]=0xD0000000|(32+buflen);
-	msg[8]=virt_to_bus(rbuf);
-
-	i2o_post_message(c,m);
-	barrier();
-	
-	/*
-	 *	Now wait for a reply
-	 */
-	 
-	
-	m=i2o_wait_reply(c, "Table read timeout", 5);
-	
-	if(m==0xFFFFFFFF)
-	{
-		kfree(rbuf);
-		return -ETIMEDOUT;
-	}
-	
-	msg = (u32 *)bus_to_virt(m);
-
-	if(msg[4]>>24)
-	{
-		i2o_report_status(KERN_WARNING, "i2o_core",
-				  (msg[1]>>24)&0xFF, (msg[4]>>24)&0xFF,
-				  msg[4]&0xFFFF);
-	}
-	
-	p=rbuf;
-
-	/* Ok 'p' is the reply block - lets see what happened */
-	/* p0->p2 are the header */
-	
-	/* FIXME: endians - turn p3 to little endian */
-	
-	i=(p[0]&0xFFFF)<<2;		/* Message size */
-	if(i<buflen)
-		buflen=i;
-	
-	/* Do we have an error block ? */
-	if(p[0]&0xFF000000)
-	{
-		printk(KERN_ERR "%s: error in field read.\n",
-			c->name);
-		kfree(rbuf);
-		return -EBADR;
-	}
-		
-	/* p[1] holds the more flag and row count - we dont care */
-	
-	/* Ok it worked p[2]-> hold the data */
-	memcpy(buf,  p+2, buflen);
-	
-	kfree(rbuf);
-	
-	/* Finally return the message */
-	I2O_REPLY_WRITE32(c,m);
-	return buflen;
-}
-#endif
-
 static int i2o_query_scalar_polled(struct i2o_controller *c, int tid, void *buf, int buflen, 
 	int group, int field)
 {
@@ -602,7 +498,7 @@ static int i2o_query_scalar_polled(struct i2o_controller *c, int tid, void *buf,
 	op[4]=1;			/* 1 field */
 	op[5]=field;			/* Field number */
 
-	m=i2o_wait_message(c, "I2O query scalar.");
+	m=i2o_wait_message(c, "ParamsGet");
 	if(m==0xFFFFFFFF)
 	{	
 		return -ETIMEDOUT;
@@ -634,8 +530,7 @@ static int i2o_query_scalar_polled(struct i2o_controller *c, int tid, void *buf,
 	 *	Now wait for a reply
 	 */
 	 
-	
-	m=i2o_wait_reply(c, "Scalar read timeout", 5);
+	m=i2o_wait_reply(c, "ParamsGet", 5);
 	
 	if(m==0xFFFFFFFF)
 	{
@@ -646,9 +541,7 @@ static int i2o_query_scalar_polled(struct i2o_controller *c, int tid, void *buf,
 	msg = (u32 *)bus_to_virt(m);
 	if(msg[4]>>24)
 	{
-		i2o_report_status(KERN_WARNING, "i2o_core",
-				  (msg[1]>>24)&0xFF, (msg[4]>>24)&0xFF,
-				  msg[4]&0xFFFF);
+		i2o_report_status(KERN_WARNING, "i2o_core", msg);
 	}
 	
 	p=rbuf;
@@ -729,9 +622,10 @@ void i2o_report_controller_unit(struct i2o_controller *c, int unit)
  *	This is full of endianisms!
  */
  
-static int i2o_parse_hrt(struct i2o_controller *c, u8 *p)
+static int i2o_parse_hrt(struct i2o_controller *c)
 {
-	u32 *rows=(u32 *)p;
+	u32 *rows=c->hrt;
+	u8 *p=(u8 *)c->hrt;
 	u8 *d;
 	int count;
 	int length;
@@ -818,7 +712,7 @@ static int i2o_parse_hrt(struct i2o_controller *c, u8 *p)
  *	on the board. Most of the stuff isn't interesting to us. 
  */
 
-static int i2o_parse_lct(struct i2o_controller *c, u32 *lct)
+static int i2o_parse_lct(struct i2o_controller *c)
 {
 	int i;
 	int max;
@@ -826,11 +720,18 @@ static int i2o_parse_lct(struct i2o_controller *c, u32 *lct)
 	u32 *p;
 	struct i2o_device *d;
 	char str[22];
+	u32 *lct=(u32 *)c->lct;
 
 	max=lct[0]&0xFFFF;
 	
 	max-=3;
 	max/=9;
+
+	if(max==0)
+	{
+		printk(KERN_ERR "LCT is empty????\n");
+		return -1;
+	}
 	
 	printk(KERN_INFO "LCT has %d entries.\n", max);
 	
@@ -891,37 +792,61 @@ static int i2o_parse_lct(struct i2o_controller *c, u32 *lct)
 	return 0;
 }
 
-#if 0
+/* Quiesce IOP */
+int i2o_quiesce_controller(struct i2o_controller *c)
+{
+	u32 msg[4];
+
+	msg[0]=FOUR_WORD_MSG_SIZE|SGL_OFFSET_0;
+	msg[1]=I2O_CMD_SYS_QUIESCE<<24|HOST_TID<<12|ADAPTER_TID;
+	msg[2]=core_context;
+	msg[3]=(u32)&reply_flag;
+
+	return i2o_post_wait(c, ADAPTER_TID, msg, sizeof(msg), &reply_flag, 10);
+}
+
+
+int i2o_clear_controller(struct i2o_controller *c)
+{
+	u32 msg[4];
+
+	/* First stop external operations for this IOP */
+	if(i2o_quiesce_controller(c)<0)
+		printk(KERN_INFO "Unable to quiesce iop%d\n", c->unit);
+	else
+		printk(KERN_INFO "Iop%d quiesced\n", c->unit);
+
+	/* Then clear the IOP */
+	msg[0]=FOUR_WORD_MSG_SIZE|SGL_OFFSET_0;
+	msg[1]=I2O_CMD_ADAPTER_CLEAR<<24|HOST_TID<<12|ADAPTER_TID;
+	msg[2]=core_context;
+	msg[3]=(u32)&reply_flag;
+
+	return i2o_post_wait(c, ADAPTER_TID, msg, sizeof(msg), &reply_flag, 10);
+}
+
+
 /* Reset the IOP to sane state */
-/* I think we need handler for core (or executive class in I2O terms) */
-static int i2o_reset_adapter(struct i2o_controller *c)
+static int i2o_reset_controller(struct i2o_controller *c)
 {
 	u32 m;
 	u8 *work8;
 	u32 *msg;
 	long time;
+	struct i2o_controller *iop;
 
-	/* First stop extral operations */
-	m=i2o_wait_message(c, "quiesce IOP");
-	if(m==0xFFFFFFFF)
-		return -ETIMEDOUT;
-	
-	msg=(u32 *)(c->mem_offset+m);
-				
-	msg[0]=FOUR_WORD_MSG_SIZE|SGL_OFFSET_0;
-	msg[1]=I2O_CMD_SYS_QUIESCE<<24|HOST_TID<<12|ADAPTER_TID;
-	msg[2]=0;
-	msg[3]=0;
-
-	i2o_post_message(c,m);
-
-	m=i2o_wait_reply(c, "System Quiesce timeout", 5);
-
-	if(m==0xFFFFFFFF)
-		return -ETIMEDOUT;
+	/* First stop external operations */
+	for(iop=i2o_controller_chain; iop != NULL; iop=iop->next)
+	{
+		if(i2o_quiesce_controller(iop)<0)
+			printk(KERN_INFO "Unable to quiesce iop%d\n",
+			       iop->unit);
+		else
+			printk(KERN_DEBUG "%s quiesced\n", iop->name);
+	}
 
 	/* Then reset the IOP */
-	m=i2o_wait_message(c, "reset IOP");
+	m=i2o_wait_message(c, "AdapterReset");
 	if(m==0xFFFFFFFF)
 		return -ETIMEDOUT;
 
@@ -937,8 +862,8 @@ static int i2o_reset_adapter(struct i2o_controller *c)
 	
 	msg[0]=EIGHT_WORD_MSG_SIZE|SGL_OFFSET_0;
 	msg[1]=I2O_CMD_ADAPTER_RESET<<24|HOST_TID<<12|ADAPTER_TID;
-	msg[2]=0;
-	msg[3]=0;
+	msg[2]=core_context;
+	msg[3]=(u32)&reply_flag;
 	msg[4]=0;
 	msg[5]=0;
 	msg[6]=virt_to_phys(work8);
@@ -949,8 +874,10 @@ static int i2o_reset_adapter(struct i2o_controller *c)
 	/* Wait for a reply */
 	time=jiffies;
 
-	while(work8[0]==0x01) {
-		if((jiffies-time)>=5*HZ) {
+	while(work8[0]==0x01)
+	{
+		if((jiffies-time)>=5*HZ)
+		{
 			printk(KERN_ERR "IOP reset timeout.\n");
 			kfree(work8);
 			return -ETIMEDOUT;
@@ -964,7 +891,108 @@ static int i2o_reset_adapter(struct i2o_controller *c)
 
 	return 0;
 }
-#endif
+
+
+int i2o_status_get(struct i2o_controller *c)
+{
+	long time;
+	u32 m;
+	u32 *msg;
+	u8 *status_block;
+
+	status_block=(void *)kmalloc(88, GFP_KERNEL);
+	if(status_block==NULL)
+	{
+		printk(KERN_ERR "StatusGet failed - no free memory.\n");
+		return -ENOMEM;
+	}
+
+	m=i2o_wait_message(c, "StatusGet");
+	if(m==0xFFFFFFFF)
+		return -ETIMEDOUT;
+
+	msg=(u32 *)(c->mem_offset+m);
+
+	msg[0]=NINE_WORD_MSG_SIZE|SGL_OFFSET_0;
+	msg[1]=I2O_CMD_STATUS_GET<<24|HOST_TID<<12|ADAPTER_TID;
+	msg[2]=core_context;
+	msg[3]=0;
+	msg[4]=0;
+	msg[5]=0;
+	msg[6]=virt_to_phys(status_block);
+	msg[7]=0;	/* 64bit host FIXME */
+	msg[8]=88;
+
+	i2o_post_message(c,m);
+
+	/* Wait for a reply */
+	time=jiffies;
+		 
+	while(status_block[87]!=0xFF)
+	{
+		if((jiffies-time)>=5*HZ)
+		{
+			printk(KERN_ERR "IOP get status timeout.\n");
+			return -ETIMEDOUT;
+		}
+		schedule();
+		barrier();
+	}
+	
+	/* Ok the reply has arrived. Fill in the important stuff */
+	c->status = status_block[10];
+	c->i2oversion = (status_block[9]>>4)&0xFF;
+	c->inbound_size = (status_block[12]|(status_block[13]<<8))*4;
+
+	return 0;
+}
+
+
+int i2o_hrt_get(struct i2o_controller *c)
+{
+	u32 m;
+	u32 *msg;
+
+	c->hrt=kmalloc(2048, GFP_KERNEL);
+	if(c->hrt==NULL)
+	{
+		printk(KERN_ERR "IOP init failed; no memory.\n");
+		return -ENOMEM;
+	}
+
+	m=i2o_wait_message(c, "HRTGet");
+	if(m==0xFFFFFFFF)
+		return -ETIMEDOUT;
+
+	msg=(u32 *)(c->mem_offset+m);
+
+	msg[0]= SIX_WORD_MSG_SIZE| SGL_OFFSET_4;
+	msg[1]= I2O_CMD_HRT_GET<<24 | HOST_TID<<12 | ADAPTER_TID;
+	msg[2]= core_context;
+	msg[3]= 0x0;				/* Transaction context */
+	msg[4]= (0xD0000000 | 2048);		/* Simple transaction , 2K */
+	msg[5]= virt_to_phys(c->hrt);		/* Dump it here */
+
+	i2o_post_message(c,m);
+
+	barrier();
+
+	/* Now wait for a reply */
+	m=i2o_wait_reply(c, "HRTGet", 5);
+
+	if(m==0xFFFFFFFF)
+		return -ETIMEDOUT;
+
+	msg=(u32 *)bus_to_virt(m);
+
+	if(msg[4]>>24)
+		i2o_report_status(KERN_WARNING, "i2o_core", msg);
+
+	I2O_REPLY_WRITE32(c,m);
+
+	return 0;
+}
+
 
 /*
  *	Bring an I2O controller into HOLD state. See the 1.5
@@ -991,86 +1019,58 @@ int i2o_activate_controller(struct i2o_controller *c)
 	u8 *workspace;
 	u32 *msg;
 	int i;
-	
-	printk(KERN_INFO "Configuring I2O controller at 0x%08X.\n", (u32)c->mem_phys);
+	int ret;
 
-	/* First reset the IOP to sane state */
-//	i2o_reset_adapter(c)
-	
-	m=i2o_wait_message(c, "initialise");
-	if(m==0xFFFFFFFF)
-		return -ETIMEDOUT;
+	printk(KERN_INFO "Configuring I2O controller at 0x%08X.\n",
+	       (u32)c->mem_phys);
 
-	msg=(u32 *)(c->mem_offset+m);
-	
+	if((ret=i2o_status_get(c)))
+		return ret;
+
+	if(c->status == ADAPTER_STATE_FAULTED) /* not likely to be seen */
+	{
+		printk(KERN_CRIT "i2o: iop%d has hardware fault\n",
+		       c->unit);
+		return -1;
+	}
+
+	/*
+	 *	If the board is running, reset it - we have no idea
+	 *	what kind of a mess the previous owner left it in.
+	 */
+	if(c->status == ADAPTER_STATE_HOLD ||
+	   c->status == ADAPTER_STATE_READY ||
+	   c->status == ADAPTER_STATE_OPERATIONAL ||
+	   c->status == ADAPTER_STATE_FAILED)
+	{
+		if((ret=i2o_reset_controller(c)))
+			return ret;
+
+		if((ret=i2o_status_get(c)))
+			return ret;
+	}
+
 	workspace = (void *)kmalloc(88, GFP_KERNEL);
 	if(workspace==NULL)
 	{
 		printk(KERN_ERR "IOP initialisation failed - no free memory.\n");
 		return -ENOMEM;
 	}
-	
+
 	memset(workspace, 0, 88);
-	
-	msg[0]=NINE_WORD_MSG_SIZE|SGL_OFFSET_0;
-	msg[1]=I2O_CMD_STATUS_GET<<24|HOST_TID<<12|ADAPTER_TID;
-	msg[2]=0;
-	msg[3]=0;
-	msg[4]=0;
-	msg[5]=0;
-	msg[6]=virt_to_phys(workspace);
-	msg[7]=0;	/* 64bit host FIXME */
-	msg[8]=88;
 
-	i2o_post_message(c,m);
-
-	/*
-	 *	Wait for a reply
-	 */
-
-	time=jiffies;
-		 
-	while(workspace[87]!=0xFF)
-	{
-		if((jiffies-time)>=5*HZ)
-		{
-			printk(KERN_ERR "IOP get status timeout.\n");
-			kfree(workspace);
-			return -ETIMEDOUT;
-		}
-		schedule();
-		barrier();
-	}
-	
-	/*
-	 *	Ok the reply has arrived. Fill in the important stuff
-	 */
-	 
-	c->status = workspace[10];
-	c->i2oversion = (workspace[9]>>4)&0xFF;
-	c->inbound_size = (workspace[12]|(workspace[13]<<8))*4; /* 32bit words */
-	
-	/*
-	 *	If the board is running, reset it - we have no idea
-	 *	what kind of a mess the previous owner left it in.
-	 */
-	 
-//	if(c->status == ADAPTER_STATE_OPERATIONAL)
-//		i2o_reset_device(c);
-
-	
-	m=i2o_wait_message(c, "initqueue");
+	m=i2o_wait_message(c, "OutboundInit");
 	if(m==0xFFFFFFFF)
 	{	
 		kfree(workspace);
 		return -ETIMEDOUT;
 	}
-	
+
 	msg=(u32 *)(c->mem_offset+m);
 
 	msg[0]= EIGHT_WORD_MSG_SIZE| TRL_OFFSET_6;
 	msg[1]= I2O_CMD_OUTBOUND_INIT<<24 | HOST_TID<<12 | ADAPTER_TID;
-	msg[2]= 0;
+	msg[2]= core_context;
 	msg[3]= 0x0106;			/* Transaction context */
 	msg[4]= 4096;			/* Host page frame size */
 	msg[5]= MSG_FRAME_SIZE<<16|0x80;	/* Outbound msg frame size and Initcode */
@@ -1099,8 +1099,10 @@ int i2o_activate_controller(struct i2o_controller *c)
 		schedule();
 		barrier();
 	}
-	
+
 	kfree(workspace);
+
+	/* TODO: v2.0: Set Executive class group 000Bh - OS Operating Info */
 
 	c->page_frame = kmalloc(MSG_POOL_SIZE, GFP_KERNEL);
 	if(c->page_frame==NULL)
@@ -1124,64 +1126,71 @@ int i2o_activate_controller(struct i2o_controller *c)
 	 *	Now we need the Hardware Resource Table. We must ask for
 	 *	this next we can't issue random messages yet.
 	 */
+	ret=i2o_hrt_get(c);
+	if(ret)
+		return ret;
+
+	ret=i2o_parse_hrt(c);
+	if(ret)
+		return ret;
+
+	return i2o_online_controller(c);
+//	i2o_report_controller_unit(c, ADAPTER_TID);
+}
 
 
-	workspace=kmalloc(2048, GFP_KERNEL);
-	if(workspace==NULL)
+int i2o_lct_get(struct i2o_controller *c)
+{
+	u32 m;
+	u32 *msg;
+
+	m=i2o_wait_message(c, "LCTNotify");
+
+	if(m==0xFFFFFFFF)
+		return -ETIMEDOUT;
+
+	msg=(u32 *)(c->mem_offset+m);
+
+	c->lct = kmalloc(8192, GFP_KERNEL);
+	if(c->lct==NULL)
 	{
-		printk(KERN_ERR "IOP init failed; no memory.\n");
+		msg[0]=FOUR_WORD_MSG_SIZE|SGL_OFFSET_0;
+		msg[1]= HOST_TID<<12|ADAPTER_TID;	/* NOP */
+		i2o_post_message(c,m);
+		printk(KERN_ERR "No free memory for i2o controller buffer.\n");
 		return -ENOMEM;
 	}
 	
-	m=i2o_wait_message(c, "I2O HRT timeout.");
-	if(m==0xFFFFFFFF)
-	{	
-		kfree(workspace);
-		return -ETIMEDOUT;
-	}
+	memset(c->lct, 0, 8192);
 	
-	msg=(u32 *)(c->mem_offset+m);
+	msg[0] = EIGHT_WORD_MSG_SIZE|SGL_OFFSET_6;
+	msg[1] = I2O_CMD_LCT_NOTIFY<<24 | HOST_TID<<12 | ADAPTER_TID;
+	msg[2] = 0;		/* Context not needed */
+	msg[3] = 0;
+	msg[4] = 0xFFFFFFFF;	/* All devices */
+	msg[5] = 0x00000000;	/* Report now */
+	msg[6] = 0xD0000000|8192;
+	msg[7] = virt_to_bus(c->lct);
 
-	msg[0]= SIX_WORD_MSG_SIZE| SGL_OFFSET_4;
-	msg[1]= I2O_CMD_HRT_GET<<24 | HOST_TID<<12 | ADAPTER_TID;
-	msg[2]= 0x0;
-	msg[3]= 0x0;				/* Transaction context */
-	msg[4]= (0xD0000000 | 2048);		/* Simple transaction , 2K */
-	msg[5]= virt_to_phys(workspace);	/* Dump it here */
-	*((u32 *)workspace)=0xFFFFFFFF;
-	
 	i2o_post_message(c,m);
-	
+
 	barrier();
-	
-	/*
-	 *	Now wait for a reply
-	 */
-	 
-	m=i2o_wait_reply(c, "HRT table", 5);
-	 
+
+	/* Now wait for a reply */
+	m=i2o_wait_reply(c, "LCTNotify", 5);
+
 	if(m==0xFFFFFFFF)
-	{
-		kfree(workspace);
 		return -ETIMEDOUT;
-	}
-	
+
 	msg=(u32 *)bus_to_virt(m);
-	
+
+	/* TODO: Check TableSize for big LCTs and send new ExecLctNotify 
+	 * with bigger workspace */
+
 	if(msg[4]>>24)
-	{
-		i2o_report_status(KERN_WARNING, "i2o_core",
-				  (msg[1]>>24)&0xFF, (msg[4]>>24)&0xFF,
-				  msg[4]&0xFFFF);
-	}
-	I2O_REPLY_WRITE32(c,m);
-	
-	i2o_parse_hrt(c, workspace);
-	
-	kfree(workspace);
-	
-	return i2o_online_controller(c);
-//	i2o_report_controller_unit(c, ADAPTER_TID);
+		i2o_report_status(KERN_ERR, "i2o_core", msg);
+
+	return 0;
 }
 
 
@@ -1196,7 +1205,7 @@ int i2o_online_controller(struct i2o_controller *c)
 	u32 systab[32];
 	u32 privmem[2];
 	u32 privio[2];
-	u32 *workspace;
+	int ret;
 	
 	systab[0]=1;
 	systab[1]=0;
@@ -1216,7 +1225,7 @@ int i2o_online_controller(struct i2o_controller *c)
 	privio[0]=c->priv_io;		/* Private I/O address */
 	privio[1]=c->priv_io_size;
 	
-	m=i2o_wait_message(c, "SetSysTab");
+	m=i2o_wait_message(c, "SysTabSet");
 	if(m==0xFFFFFFFF)
 		return -ETIMEDOUT;
 	
@@ -1249,7 +1258,7 @@ int i2o_online_controller(struct i2o_controller *c)
 	 */
 	 
 	 
-	m=i2o_wait_reply(c, "Systab read", 5);
+	m=i2o_wait_reply(c, "SysTabSet", 5);
 		
 	if(m==0xFFFFFFFF)
 		return -ETIMEDOUT;
@@ -1258,9 +1267,7 @@ int i2o_online_controller(struct i2o_controller *c)
 	
 	if(msg[4]>>24)
 	{
-		i2o_report_status(KERN_ERR, "i2o_core",
-				  (msg[1]>>24)&0xFF, (msg[4]>>24)&0xFF,
-				  msg[4]&0xFFFF);
+		i2o_report_status(KERN_ERR, "i2o_core", msg);
 	}
 	I2O_REPLY_WRITE32(c,m);
 	
@@ -1268,7 +1275,7 @@ int i2o_online_controller(struct i2o_controller *c)
 	 *	Finally we go online
 	 */
 	 
-	m=i2o_wait_message(c, "No message for SysEnable");
+	m=i2o_wait_message(c, "SysEnable");
 	
 	if(m==0xFFFFFFFF)
 		return -ETIMEDOUT;
@@ -1289,7 +1296,7 @@ int i2o_online_controller(struct i2o_controller *c)
 	 */
 	 
 	
-	m=i2o_wait_reply(c, "Enable", 240);
+	m=i2o_wait_reply(c, "SysEnable", 240);
 
 	if(m==0xFFFFFFFF)
 		return -ETIMEDOUT;
@@ -1298,73 +1305,25 @@ int i2o_online_controller(struct i2o_controller *c)
 	
 	if(msg[4]>>24)
 	{
-		i2o_report_status(KERN_ERR, "i2o_core",
-				  (msg[1]>>24)&0xFF, (msg[4]>>24)&0xFF,
-				  msg[4]&0xFFFF);
+		i2o_report_status(KERN_ERR, "i2o_core", msg);
 	}
 	I2O_REPLY_WRITE32(c,m);
 	
 	/*
 	 *	Grab the LCT, see what is attached
 	 */
-	 
-	m=i2o_wait_message(c, "No message for LCT");
-	
-	if(m==0xFFFFFFFF)
-		return -ETIMEDOUT;
-	
-	msg=(u32 *)(c->mem_offset+m);
-	
-	
-	workspace = kmalloc(8192, GFP_KERNEL);
-	if(workspace==NULL)
-	{
-		msg[0]=FOUR_WORD_MSG_SIZE|SGL_OFFSET_0;
-		msg[1]= HOST_TID<<12|ADAPTER_TID;	/* NOP */
-		i2o_post_message(c,m);
-		printk(KERN_ERR "No free memory for i2o controller buffer.\n");
-		return -ENOMEM;
-	}
-	
-	memset(workspace, 0, 8192);
-	
-	msg[0] = FOUR_WORD_MSG_SIZE|SGL_OFFSET_6;
-	msg[1] = I2O_CMD_LCT_NOTIFY<<24 | HOST_TID<<12 | ADAPTER_TID;
-	msg[2] = 0;		/* Context not needed */
-	msg[3] = 0;
-	msg[4] = 0xFFFFFFFF;	/* All devices */
-	msg[5] = 0x00000000;	/* Report now */
-	msg[6] = 0xD0000000|8192;
-	msg[7] = virt_to_bus(workspace);
-	
-	i2o_post_message(c,m);
-	
-	barrier();
 
-	/*
-	 *	Now wait for a reply
-	 */
-	 
-	m=i2o_wait_reply(c, "LCT", 5);
-	
-	if(m==0xFFFFFFFF)
+	ret=i2o_lct_get(c);
+	if(ret)
 	{
-		kfree(workspace);
-		return -ETIMEDOUT;
+		/* Maybe we should do also sthg else */
+		return ret;
 	}
-	
-	msg=(u32 *)bus_to_virt(m);
-	
-	if(msg[4]>>24)
-	{
-		i2o_report_status(KERN_ERR, "i2o_core",
-				  (msg[1]>>24)&0xFF, (msg[4]>>24)&0xFF,
-				  msg[4]&0xFFFF);
-	}
-	
-	i2o_parse_lct(c, workspace);
-	kfree(workspace);
-	
+
+	ret=i2o_parse_lct(c);
+	if(ret)
+		return ret;
+
 	I2O_REPLY_WRITE32(c,m);
 	
 	return 0;
@@ -1417,16 +1376,21 @@ int i2o_post_wait(struct i2o_controller *c, int tid, u32 *data, int len, int *fl
 	*flag = 0;
 		
 	if(i2o_post_this(c, tid, data, len))
-		return -1;
+		return I2O_POST_WAIT_TIMEOUT;
 		
 	while(!*flag && (jiffies-t)<timeout*HZ)
 	{
 		schedule();
 		mb();
 	}
-	if(*flag <= 0)
-		return -1;
-	return 0;
+
+	if (*flag < 0)
+		return *flag; /* DetailedStatus */
+
+	if (*flag == 0)
+		return I2O_POST_WAIT_TIMEOUT;
+	
+	return I2O_POST_WAIT_OK;
 }
 
 /*
@@ -1452,247 +1416,262 @@ int i2o_issue_claim(struct i2o_controller *c, int tid, int context, int onoff, i
 	return i2o_post_wait(c, tid, msg, 20, flag,2);
 }
 
-/*
- *	Query a scalar value
+/*	Issue UTIL_PARAMS_GET or UTIL_PARAMS_SET
+ *
+ *	This function can be used for all UtilParamsGet/Set operations.
+ *	The OperationBlock is given in opblk-buffer, 
+ *	and results are returned in resblk-buffer.
+ *	Note that the minimum sized resblk is 8 bytes and contains
+ *	ResultCount, ErrorInfoSize, BlockStatus and BlockSize.
  */
-
-int i2o_query_scalar(struct i2o_controller *c, int tid, int context,
-		     int group, int field, void *buf, int buflen, int *flag)
+int i2o_issue_params(int cmd, 
+                struct i2o_controller *iop, int tid, int context, 
+                void *opblk, int oplen, void *resblk, int reslen, 
+                int *flag)
 {
-	u16 *op;
-	u32 *bl;
-	u32 msg[9];
+        u32 msg[9]; 
+	u8 *res = (u8 *)resblk;
+	int res_count;
+	int blk_size;
+	int bytes;
+	int wait_status;
 
-	bl=kmalloc(buflen+64, GFP_KERNEL); /* Enough space for error replys */
-	if(bl==NULL)
+        msg[0] = NINE_WORD_MSG_SIZE | SGL_OFFSET_5;
+        msg[1] = cmd << 24 | HOST_TID << 12 | tid; 
+        msg[2] = context | 0x80000000;
+        msg[3] = (u32)flag;
+        msg[4] = 0;
+        msg[5] = 0x54000000 | oplen;	/* OperationBlock */
+        msg[6] = virt_to_bus(opblk);
+        msg[7] = 0xD0000000 | reslen;	/* ResultBlock */
+        msg[8] = virt_to_bus(resblk);
+
+        wait_status = i2o_post_wait(iop, tid, msg, sizeof(msg), flag, 10);
+	if (wait_status < 0)       
+                return wait_status; 	/* -DetailedStatus */
+
+        if (res[1]&0x00FF0000) 	/* BlockStatus != SUCCESS */
+        {
+                printk(KERN_WARNING "%s - Error:\n  ErrorInfoSize = 0x%02x, " 
+                	"BlockStatus = 0x%02x, BlockSize = 0x%04x\n",
+                        (cmd == I2O_CMD_UTIL_PARAMS_SET) ? "PARAMS_SET"
+                                                         : "PARAMS_GET",   
+                        res[1]>>24, (res[1]>>16)&0xFF, res[1]&0xFFFF);
+                return -((res[1] >> 16) & 0xFF); /* -BlockStatus */
+        }
+
+    	res_count = res[0] & 0xFFFF; /* # of resultblocks */
+    	bytes = 4; 
+    	res  += 4;
+    	while (res_count--)
+	{
+		blk_size = (res[0] & 0xFFFF) << 2;
+		bytes   += blk_size;
+		res     += blk_size;
+	}
+
+        return bytes; /* total sizeof Result List in bytes */
+}
+
+/*
+ *	 Query one scalar group value or a whole scalar group.
+ */                  	
+int i2o_query_scalar(struct i2o_controller *iop, int tid, int context, 
+                     int group, int field, void *buf, int buflen, int *flag)
+{
+	u16 opblk[] = { 1, 0, I2O_PARAMS_FIELD_GET, group, 1, field };
+	u8  resblk[8+buflen]; /* 8 bytes for header */
+	int size;
+
+	if (field == -1)  		/* whole group */
+       		opblk[4] = -1;
+              
+        size = i2o_issue_params(I2O_CMD_UTIL_PARAMS_GET, iop, tid, context, 
+			opblk, sizeof(opblk), resblk, sizeof(resblk), flag);
+			
+	if (size < 0)
+		return size;	
+
+	memcpy(buf, resblk+8, buflen);  /* cut off header */
+	return buflen;
+}
+
+/*
+ *	Set a scalar group value or a whole group.
+ */
+int i2o_set_scalar(struct i2o_controller *iop, int tid, int context, 
+		   int group, int field, void *buf, int buflen, int *flag)
+{
+	u16 *opblk;
+	u8  resblk[8+buflen]; /* 8 bytes for header */
+        int size;
+
+        opblk = kmalloc(buflen+64, GFP_KERNEL);
+        if (opblk == NULL)
+        {
+                printk(KERN_ERR "i2o: no memory for operation buffer.\n");
+                return -ENOMEM;
+        }
+
+        opblk[0] = 1;                        /* operation count */
+        opblk[1] = 0;                        /* pad */
+        opblk[2] = I2O_PARAMS_FIELD_SET;
+        opblk[3] = group;
+
+        if(field == -1) {               /* whole group */
+                opblk[4] = -1;
+                memcpy(opblk+5, buf, buflen);
+        }
+        else                            /* single field */
+        {
+                opblk[4] = 1;
+                opblk[5] = field;
+                memcpy(opblk+6, buf, buflen);
+        }   
+
+        size = i2o_issue_params(I2O_CMD_UTIL_PARAMS_SET, iop, tid, context, 
+			opblk, 12+buflen, resblk, sizeof(resblk), flag);
+
+	kfree(opblk);
+	return size;
+}
+
+/* 
+ * 	if oper == I2O_PARAMS_TABLE_GET: 
+ *		Get all table group fields from all rows or
+ *		get specific table group fields from all rows.
+ *
+ * 		if fieldcount == -1 we query all fields from all rows
+ *			ibuf is NULL and ibuflen is 0
+ * 		else we query specific fields from all rows
+ *  			ibuf contains fieldindexes
+ *
+ * 	if oper == I2O_PARAMS_LIST_GET:
+ *		Get all table group fields from specified rows or
+ *		get specific table group fields from specified rows.
+ *
+ * 		if fieldcount == -1 we query all fields from specified rows
+ *			ibuf contains rowcount, keyvalues
+ * 		else we query specific fields from specified rows
+ *  			ibuf contains fieldindexes, rowcount, keyvalues
+ *
+ *	You could also use directly function i2o_issue_params().
+ */
+int i2o_query_table(int oper,
+		struct i2o_controller *iop, int tid, int context, int group,
+		int fieldcount, void *ibuf, int ibuflen,
+		void *resblk, int reslen, int *flag) 
+{
+	u16 *opblk;
+	int size;
+
+	opblk = kmalloc(10 + ibuflen, GFP_KERNEL);
+	if (opblk == NULL)
 	{
 		printk(KERN_ERR "i2o: no memory for query buffer.\n");
 		return -ENOMEM;
 	}
 
-	op = (u16*)bl;
-	op[0]=1;			/* One Operation */
-	op[1]=0;			/* PAD */
-	op[2]=1;			/* FIELD_GET */
-	op[3]=group;			/* group number */
-	op[4]=1;			/* field count, default = 1 */
-	op[5]=field;			/* field index */
+	opblk[0] = 1;				/* operation count */
+	opblk[1] = 0;				/* pad */
+	opblk[2] = oper;
+	opblk[3] = group;		
+	opblk[4] = fieldcount;
+	memcpy(opblk+5, ibuf, ibuflen);		/* other params */
 
-	if(field == -1)
-	/* Single value or the whole group? */
-	{
-		op[4]=-1;
-		op[5]=0;
-	}
+        size = i2o_issue_params(I2O_CMD_UTIL_PARAMS_GET,iop, tid, context, 
+			opblk, 10+ibuflen, resblk, reslen, flag);
 
-	msg[0]=NINE_WORD_MSG_SIZE|SGL_OFFSET_5;
-	msg[1]=I2O_CMD_UTIL_PARAMS_GET<<24|HOST_TID<<12|tid;
-	msg[2]=context|0x80000000;	/* So we can pick it out */
-	msg[3]=(u32)flag;
-	msg[4]=0;
-	msg[5]=0x54000000|12;
-	msg[6]=virt_to_bus(bl);
-		/*
-		 *	There are 8 bytes of "overhead" required to pull in
-		 *	a Params ResultsList; 2 bytes for ResultCount
-		 *	(which should have value=1), plus 2 bytes for pad,
-		 *	plus 2 bytes for BlockSize, plus 1 byte BlockStatus,
-		 *	plus 1 byte ErrorInfoSize (8 bytes total overhead).
-		 *	This is followed finally by actual result value(s).
-		 *
-		 *	Tell the IOP to return 8 + buflen bytes.
-		 */
-	msg[7]=0xD0000000|(8+buflen);
-	msg[8]=virt_to_bus(bl+3);
-	
-	bl[3]=0xFCFCFCFC;		// Pad,ResultCount
-	bl[4]=0xFAFAFCFC;		// ErrorInfoSize,BlockStatus,BlockSize
-
-	/*
-	 *	Post the message and await a reply
-	 */
-
-	if (i2o_post_wait(c, tid, msg, sizeof(msg), flag,2) < 0)
-	{
-		kfree(bl);		
-		return -1;
-	}
-
-	if(bl[4]&0x00FF00000) /* BlockStatus != SUCCESS */
-	{
-		printk(KERN_WARNING "i2o_query_scalar - Error\n"
-			"ErrorInfoSize = 0x%02x, BlockStatus = 0x%02x, "
-			"BlockSize = 0x%04x\n", 
-			bl[4]>>24, (bl[4]>>16)&0xFF, bl[4]&0xFFFF);
-		kfree(bl);
-		return -1;
-	}
-	if((bl[3] & 0xFFFF) != 1)
-	{
-		printk(KERN_ERR "i2o: query ResultCount = 0x%04x\n", bl[3]&0xFFFF);
-	}
-	
-	memcpy(buf, bl+5, buflen);
-	kfree(bl);
-	return 0;
+	kfree(opblk);
+	return size;
 }
 
-
-#if 0
-/* 
- * Query a table field 
- * FIXME: NOT TESTED! 
+/*
+ * 	Clear table group, i.e. delete all rows.
  */
-int i2o_query_table(struct i2o_controller *c, int tid, int context,
-		    void *buf, int buflen,
-		    int table,
-		    int *field, int fieldlen,
-		    u32 *key, int keylen,
+
+int i2o_clear_table(struct i2o_controller *iop, int tid, int context,
+		    int group, int *flag)
+{
+	u16 opblk[] = { 1, 0, I2O_PARAMS_TABLE_CLEAR, group };
+	u8  resblk[32]; /* min 8 bytes for result header */
+
+        return i2o_issue_params(I2O_CMD_UTIL_PARAMS_SET, iop, tid, context, 
+			opblk, sizeof(opblk), resblk, sizeof(resblk), flag);
+}
+
+/*
+ * 	Add a new row into a table group.
+ *
+ * 	if fieldcount==-1 then we add whole rows
+ *		buf contains rowcount, keyvalues
+ * 	else just specific fields are given, rest use defaults
+ *  		buf contains fieldindexes, rowcount, keyvalues
+ */	
+
+int i2o_row_add_table(struct i2o_controller *iop, int tid, int context,
+		    int group, int fieldcount, void *buf, int buflen,
 		    int *flag)
 {
-	static u16 op[32];
-	u32 *bl;
-	u32 msg[9];
-	int i;
+	u16 *opblk;
+	u8  resblk[32]; /* min 8 bytes for header */
+	int size;
 
-	bl=kmalloc(buflen+64, GFP_KERNEL);
-	if(bl==NULL)
+	opblk = kmalloc(buflen+64, GFP_KERNEL);
+	if (opblk == NULL)
 	{
-		printk(KERN_ERR "i2o: no memory for query buffer.\n");
+		printk(KERN_ERR "i2o: no memory for operation buffer.\n");
 		return -ENOMEM;
 	}
 
-	op[0]=1;			/* Operation count */
-	op[1]=0;			/* Reserved */
-	op[2]=I2O_PARAMS_LIST_GET;	/* Operation */
-	op[3]=table;			/* Group */
-	/* Specific fields or the whole group? */
-	if(*field != -1)
-	{ /* FIXME: Fields can be variable size */
-		op[4]=fieldlen;
-		for (i=0; i < fieldlen; i++)
-			op[4+i]=field[i];
-	}
-	else
-	{
-		op[4]=-1;
-		op[5]=0;
-	}
+	opblk[0] = 1;			/* operation count */
+	opblk[1] = 0;			/* pad */
+	opblk[2] = I2O_PARAMS_ROW_ADD;
+	opblk[3] = group;	
+	opblk[4] = fieldcount;
+	memcpy(opblk+5, buf, buflen);
 
-	memcpy(bl, op, 12);
-	       	
-	msg[0]=NINE_WORD_MSG_SIZE|SGL_OFFSET_5;
-	msg[1]=I2O_CMD_UTIL_PARAMS_GET<<24|HOST_TID<<12|tid;
-	msg[2]=context|0x80000000;	/* So we can pick it out */
-	msg[3]=(u32)flag;
-	msg[4]=0;
-	msg[5]=0x54000000|12;
-	msg[6]=virt_to_bus(bl);
+        size = i2o_issue_params(I2O_CMD_UTIL_PARAMS_SET, iop, tid, context, 
+			opblk, 10+buflen, resblk, sizeof(resblk), flag);
 
-	msg[7]=0xD0000000|(buflen+48);
-	msg[8]=virt_to_bus(bl+4);
-
-	/*
-	 *	Post the message and await a reply
-	 */
-
-	if(i2o_post_wait(c, tid, msg, sizeof(msg), flag,2)<0)
-		return -1;
-	
-	if(bl[5]&0x00FF00000)	/* BlockStatus != SUCCESS */
-	{
-		printk(KERN_WARNING "i2o_query_table - Error\n"
-			"ErrorInfoSize = 0x%02x, BlockStatus = 0x%02x, "
-			"BlockSize = 0x%04x\n", 
-			bl[5]>>24, (bl[5]>>16)&0xFF, bl[5]&0xFFFF);
-		kfree(bl);
-		return -1;
-	}
-
-	if((bl[4]&0xFFFF)!=1)
-		printk(KERN_ERR "i2o: query ResultCount = %0#4x\n",
-		       bl[4]&0xFFFF);
-
-	memcpy(buf, bl+6, buflen);
-	kfree(bl);
-	return 0;
+	kfree(opblk);
+	return size;
 }
-#endif
 
 /*
- * Set (for now) scalar value
- *
- * TODO: Add support for table groups
- */
+ *	Delete rows from a table group.
+ */ 
 
-int i2o_params_set(struct i2o_controller *c, int tid, int context, int table,
-		   int field, void *buf, int buflen, int *flag)
+int i2o_row_delete_table(struct i2o_controller *iop, int tid, int context,
+		    int group, int keycount, void *keys, int keyslen,
+		    int *flag)
 {
-	static u16 opdata[]={1,0,6,0,1,4,0};
-	u32 *bl;
-	u32 msg[9];
+	u16 *opblk; 
+	u8  resblk[32]; /* min 8 bytes for header */
+	int size;
 
-	bl=kmalloc(buflen+64, GFP_KERNEL);
-	if(bl==NULL)
+	opblk = kmalloc(keyslen+64, GFP_KERNEL);
+	if (opblk == NULL)
 	{
-		printk(KERN_ERR "i2o: no memory for set buffer.\n");
+		printk(KERN_ERR "i2o: no memory for operation buffer.\n");
 		return -ENOMEM;
 	}
 
-	opdata[3]=table;
-	/* Single value or the whole group? */
-	if(field != -1) {
-		opdata[4]=1;	
-		opdata[5]=field;
-		opdata[6]=*(u16 *)buf;
-	}
-	else {
-		opdata[4]=-1;
-		opdata[5]=0;
-	}
+	opblk[0] = 1;			/* operation count */
+	opblk[1] = 0;			/* pad */
+	opblk[2] = I2O_PARAMS_ROW_DELETE;
+	opblk[3] = group;	
+	opblk[4] = keycount;
+	memcpy(opblk+5, keys, keyslen);
 
-	memcpy(bl, opdata, 14);
+        size = i2o_issue_params(I2O_CMD_UTIL_PARAMS_SET, iop, tid, context, 
+			opblk, 10+keyslen, resblk, sizeof(resblk), flag);
 
-	msg[0]=NINE_WORD_MSG_SIZE|SGL_OFFSET_5;
-	msg[1]=I2O_CMD_UTIL_PARAMS_SET<<24|HOST_TID<<12|tid;
-	msg[2]=context|0x80000000;	/* So we can pick it out */
-	msg[3]=(u32)flag;
-	msg[4]=0;
-	msg[5]=0x54000000|14;
-	msg[6]=virt_to_bus(bl);
-	msg[7]=0xD0000000|(buflen+48);
-	msg[8]=virt_to_bus(bl+4);
-	
-	/* Post the message and wait for a reply */
-	if(i2o_post_wait(c, tid, msg, 36, flag, 5)<0)
-	{
-		kfree(bl);
-		return -1;
-	}
-
-	/* Perhaps we should check errors, eh? */
-	if(bl[5]&0x00FF00000)	/* BlockStatus != SUCCESS */
-	{
-		printk(KERN_WARNING "i2o_params_set - Error\n"
-			"ErrorInfoSize = %0#2x, BlockStatus = %0#2x, "
-			"BlockSize = %0#4x\n", 
-			bl[5]>>24, (bl[5]>>16)&0xFF, bl[5]&0xFFFF);
-		kfree(bl);
-		return -1;
-	}
-
-	if((bl[4] & 0xFFFF) != 1)
-	{
-		printk(KERN_ERR "i2o: params set ResultCount = %0#4x\n",
-		       bl[4]&0xFFFF);
-	}
-
-	kfree(bl);
-	return 0;
+	kfree(opblk);
+	return size;
 }
 
-
-void report_common_status(u8 req_status)
+void i2o_report_common_status(u8 req_status)
 {
 	/* the following reply status strings are common to all classes */
 
@@ -1719,7 +1698,7 @@ void report_common_status(u8 req_status)
 	return;
 }
 
-static void report_common_dsc(u16 detailed_status)
+static void i2o_report_common_dsc(u16 detailed_status)
 {
 	/* The following detailed statuscodes are valid 
 	   - for executive class, utility class, DDM class and
@@ -1766,7 +1745,7 @@ static void report_common_dsc(u16 detailed_status)
 	return;
 }
 
-void report_lan_dsc(u16 detailed_status)
+static void i2o_report_lan_dsc(u16 detailed_status)
 {
 	static char *LAN_DSC[] = {	// Lan detailed status code strings
 		"SUCCESS",
@@ -1786,10 +1765,11 @@ void report_lan_dsc(u16 detailed_status)
 		"DEST_ADDRESS_DETECTED",
 		"DEST_ADDRESS_OMITTED",
 		"PARTIAL_PACKET_RETURNED",
-		"TEMP_SUSPENDED_STATE"
+		"TEMP_SUSPENDED_STATE",	// last Lan detailed status code
+		"INVALID_REQUEST"	// general detailed status code
 	};
 
-	if (detailed_status > I2O_LAN_DSC_TEMP_SUSPENDED_STATE)
+	if (detailed_status > I2O_DSC_INVALID_REQUEST)
 		printk("%0#4x.\n", detailed_status);
 	else
 		printk("%s.\n", LAN_DSC[detailed_status]);
@@ -1797,7 +1777,7 @@ void report_lan_dsc(u16 detailed_status)
 	return;	
 }
 
-static void report_util_cmd(u8 cmd)
+static void i2o_report_util_cmd(u8 cmd)
 {
 	switch (cmd) {
 	case I2O_CMD_UTIL_NOP:
@@ -1850,7 +1830,7 @@ static void report_util_cmd(u8 cmd)
 }
 
 
-static void report_exec_cmd(u8 cmd)
+static void i2o_report_exec_cmd(u8 cmd)
 {
 	switch (cmd) {
 	case I2O_CMD_ADAPTER_ASSIGN:
@@ -1959,7 +1939,7 @@ static void report_exec_cmd(u8 cmd)
 	return;	
 }
 
-static void report_lan_cmd(u8 cmd)
+static void i2o_report_lan_cmd(u8 cmd)
 {
 	switch (cmd) {
 	case LAN_PACKET_SEND:
@@ -1985,30 +1965,32 @@ static void report_lan_cmd(u8 cmd)
 }
 
 /* TODO: Add support for other classes */
-void i2o_report_status(const char *severity, const char *module, u8 cmd,
-		       u8 req_status, u16 detailed_status)
+void i2o_report_status(const char *severity, const char *module, u32 *msg)
 {
-	printk("%s", severity);
-	printk("%s: ", module);
+	u8 cmd = (msg[1]>>24)&0xFF;
+	u8 req_status = (msg[4]>>24)&0xFF;
+	u16 detailed_status = msg[4]&0xFFFF;
+
+	printk("%s%s: ", severity, module);
 
 	if (cmd < 0x1F) { 			// Utility Class
-		report_util_cmd(cmd);
-		report_common_status(req_status);
-		report_common_dsc(detailed_status);
+		i2o_report_util_cmd(cmd);
+		i2o_report_common_status(req_status);
+		i2o_report_common_dsc(detailed_status);
 		return;
 	}
 
 	if (cmd >= 0x30 && cmd <= 0x3F) {	// LAN class
-		report_lan_cmd(cmd);
-		report_common_status(req_status);		
-		report_lan_dsc(detailed_status);
+		i2o_report_lan_cmd(cmd);
+		i2o_report_common_status(req_status);		
+		i2o_report_lan_dsc(detailed_status);
 		return;
 	}
 	
 	if (cmd >= 0xA0 && cmd <= 0xEF) {	// Executive class
-		report_exec_cmd(cmd);
-		report_common_status(req_status);
-		report_common_dsc(detailed_status);
+		i2o_report_exec_cmd(cmd);
+		i2o_report_common_status(req_status);
+		i2o_report_common_dsc(detailed_status);
 		return;
 	}
 	
@@ -2016,6 +1998,8 @@ void i2o_report_status(const char *severity, const char *module, u8 cmd,
 	return;
 }
 
+
+#ifdef CONFIG_MODULE
 
 EXPORT_SYMBOL(i2o_install_handler);
 EXPORT_SYMBOL(i2o_remove_handler);
@@ -2037,16 +2021,75 @@ EXPORT_SYMBOL(i2o_online_controller);
 EXPORT_SYMBOL(i2o_get_class_name);
 
 EXPORT_SYMBOL(i2o_query_scalar);
-EXPORT_SYMBOL(i2o_params_set);
+EXPORT_SYMBOL(i2o_set_scalar);
+EXPORT_SYMBOL(i2o_query_table);
+EXPORT_SYMBOL(i2o_clear_table);
+EXPORT_SYMBOL(i2o_row_add_table);
+EXPORT_SYMBOL(i2o_row_delete_table);
+
 EXPORT_SYMBOL(i2o_post_this);
 EXPORT_SYMBOL(i2o_post_wait);
 EXPORT_SYMBOL(i2o_issue_claim);
 
 EXPORT_SYMBOL(i2o_report_status);
-EXPORT_SYMBOL(report_common_status);
-EXPORT_SYMBOL(report_lan_dsc);
-
-EXPORT_SYMBOL(i2o_wait_message);
 
 MODULE_AUTHOR("Red Hat Software");
 MODULE_DESCRIPTION("I2O Core");
+
+
+int init_module(void)
+{
+        if (i2o_install_handler(&i2o_core_handler) < 0)
+        {
+                printk(KERN_ERR "i2o_core: Unable to install core handler.\n");
+                return 0;
+        }
+
+        core_context = i2o_core_handler.context;
+
+        return 0;
+}
+
+void cleanup_module(void)
+{
+	i2o_remove_handler(&i2o_core_handler);
+}
+
+#else
+
+extern int i2o_block_init(void);
+extern int i2o_config_init(void);
+extern int i2o_lan_init(void);
+extern int i2o_pci_init(void);
+extern int i2o_proc_init(void);
+extern int i2o_scsi_init(void);
+
+__init int i2o_init(void)
+{
+        if (i2o_install_handler(&i2o_core_handler) < 0)
+        {
+                printk(KERN_ERR "i2o_core: Unable to install core handler.\n");
+                return 0;
+        }
+
+        core_context = i2o_core_handler.context;
+#ifdef CONFIG_I2O_PCI
+	i2o_pci_init();
+#endif
+	i2o_config_init();
+#ifdef CONFIG_I2O_BLOCK
+	i2o_block_init();
+#endif
+#ifdef CONFIG_I2O_SCSI
+	i2o_scsi_init();
+#endif
+#ifdef CONFIG_I2O_LAN
+	i2o_lan_init();
+#endif
+#ifdef CONFIG_I2O_PROC
+	i2o_proc_init();
+#endif
+	return 0;
+}
+
+#endif

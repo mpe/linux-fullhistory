@@ -29,7 +29,7 @@
 
 static kmem_cache_t *signal_queue_cachep;
 
-int nr_queued_signals;
+atomic_t nr_queued_signals;
 int max_queued_signals = 1024;
 
 void __init signals_init(void)
@@ -60,7 +60,7 @@ flush_signals(struct task_struct *t)
 	while (q) {
 		n = q->next;
 		kmem_cache_free(signal_queue_cachep, q);
-		nr_queued_signals--;
+		atomic_dec(&nr_queued_signals);
 		q = n;
 	}
 }
@@ -157,7 +157,7 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 					current->sigqueue_tail = pp;
 				*info = q->info;
 				kmem_cache_free(signal_queue_cachep,q);
-				nr_queued_signals--;
+				atomic_dec(&nr_queued_signals);
 				
 				/* then see if this signal is still pending. */
 				q = *pp;
@@ -323,13 +323,13 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 
 		struct signal_queue *q = 0;
 
-		if (nr_queued_signals < max_queued_signals) {
+		if (atomic_read(&nr_queued_signals) < max_queued_signals) {
 			q = (struct signal_queue *)
 			    kmem_cache_alloc(signal_queue_cachep, GFP_ATOMIC);
 		}
 		
 		if (q) {
-			nr_queued_signals++;
+			atomic_inc(&nr_queued_signals);
 			q->next = NULL;
 			*t->sigqueue_tail = q;
 			t->sigqueue_tail = &q->next;
@@ -872,7 +872,7 @@ do_sigaction(int sig, const struct k_sigaction *act, struct k_sigaction *oact)
 					else {
 						*pp = q->next;
 						kmem_cache_free(signal_queue_cachep, q);
-						nr_queued_signals--;
+						atomic_dec(&nr_queued_signals);
 					}
 					q = *pp;
 				}
@@ -1067,7 +1067,9 @@ sys_ssetmask(int newmask)
 
 	return old;
 }
+#endif /* !defined(__alpha__) */
 
+#if !defined(__alpha__) && !defined(__mips__)
 /*
  * For backwards compatibility.  Functionality superseded by sigaction.
  */
@@ -1084,4 +1086,4 @@ sys_signal(int sig, __sighandler_t handler)
 
 	return ret ? ret : (unsigned long)old_sa.sa.sa_handler;
 }
-#endif /* !alpha && !__ia64__ */
+#endif /* !alpha && !__ia64__ && !defined(__mips__) */

@@ -269,7 +269,6 @@
 #include <net/tcp.h>
 #include <net/udp.h>
 #include <net/raw.h>
-#include <net/snmp.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <linux/errno.h>

@@ -54,7 +54,6 @@
 #include <linux/malloc.h>
 #include <linux/vmalloc.h> 
 #include <linux/errno.h>
-#include <linux/sched.h>	/* to get the struct task_struct */
 #include <linux/string.h>	/* used in new tty drivers */
 #include <linux/signal.h>	/* used in new tty drivers */
 

@@ -16,6 +16,8 @@
  *            field from "current" - somewhere between 2.1.121 and 2.1.131
  */
 
+#define DEBUG_DZ 1
+
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
@@ -41,8 +43,10 @@
 /* for definition of struct console */
 #ifdef CONFIG_SERIAL_CONSOLE
 #define CONSOLE_LINE (3)
-#include <linux/console.h>
 #endif /* ifdef CONFIG_SERIAL_CONSOLE */
+#if defined(CONFIG_SERIAL_CONSOLE) || defined(DEBUG_DZ)
+#include <linux/console.h>
+#endif /* if defined(CONFIG_SERIAL_CONSOLE) || defined(DEBUG_DZ) */
 
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
@@ -54,13 +58,8 @@
 #include <asm/dec/kn01.h>
 #include <asm/dec/kn02.h>
 
-#define DEBUG_DZ 1
 #ifdef DEBUG_DZ
-#include <linux/tty.h>
-#include <linux/major.h>
 #include <linux/ptrace.h>
-#include <linux/init.h>
-#include <linux/console.h>
 #include <linux/fs.h>
 #include <asm/bootinfo.h>
 

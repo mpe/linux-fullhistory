@@ -39,8 +39,6 @@
 
 #include <net/rawv6.h>
 
-#include <asm/uaccess.h>
-
 struct sock *raw_v6_htable[RAWV6_HTABLE_SIZE];
 
 static void raw_v6_hash(struct sock *sk)

@@ -765,11 +765,11 @@ int Addinia100_into_Adapter_table(WORD wBIOS, WORD wBASE, BYTE bInterrupt,
 		if (inia100_adpt[i].ADPT_BIOS < wBIOS)
 			continue;
 		if (inia100_adpt[i].ADPT_BIOS == wBIOS) {
-			if (inia100_adpt[i].ADPT_BASE == wBASE)
+			if (inia100_adpt[i].ADPT_BASE == wBASE) {
 				if (inia100_adpt[i].ADPT_Bus != 0xFF)
 					return (FAILURE);
-				else if (inia100_adpt[i].ADPT_BASE < wBASE)
-					continue;
+			} else if (inia100_adpt[i].ADPT_BASE < wBASE)
+				continue;
 		}
 		for (j = MAX_SUPPORTED_ADAPTERS - 1; j > i; j--) {
 			inia100_adpt[j].ADPT_BASE = inia100_adpt[j - 1].ADPT_BASE;

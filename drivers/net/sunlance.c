@@ -108,7 +108,6 @@ static char *lancedma = "LANCE DMA";
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-#include <asm/idprom.h>
 #include <asm/machines.h>
 
 /* Define: 2^4 Tx buffers and 2^4 Rx buffers */

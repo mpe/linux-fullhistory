@@ -1339,7 +1339,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		break;
 	}
 
-	if(copied > 0 && msg->msg_name)
+	if (copied > 0 && msg->msg_name)
 		tp->af_specific->addr2sockaddr(sk, (struct sockaddr *)
 					       msg->msg_name);       
 

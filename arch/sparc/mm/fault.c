@@ -14,7 +14,6 @@
 #include <linux/mman.h>
 #include <linux/tasks.h>
 #include <linux/kernel.h>
-#include <linux/smp.h>
 #include <linux/signal.h>
 #include <linux/mm.h>
 #include <linux/smp.h>

@@ -242,8 +242,11 @@ __initfunc(static unsigned int ide_special_settings (struct pci_dev *dev, const 
 					dev->base_address[i] |= PCI_BASE_ADDRESS_SPACE_IO;
 
 				pci_read_config_word(dev, PCI_COMMAND, &pcicmd);
-				if (!(pcicmd & PCI_COMMAND_MEMORY))
+				if (!(pcicmd & PCI_COMMAND_MEMORY)) {
 					pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x20);
+				} else {
+					pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0xF0);
+				}
 			}
 		case PCI_DEVICE_ID_PROMISE_20246:
 		case PCI_DEVICE_ID_PROMISE_20262:
@@ -483,8 +486,11 @@ check_if_enabled:
 		}
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
-		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_SIS5513))
+		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_SIS5513) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT34X))
 			autodma = 0;
+		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20262))
+			hwif->udma_four = 1;
 		if (autodma)
 			hwif->autodma = 1;
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) ||

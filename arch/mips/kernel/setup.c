@@ -30,7 +30,6 @@
 #endif
 #include <linux/ide.h>
 #ifdef CONFIG_RTC
-#include <linux/ioport.h>
 #include <linux/timex.h>
 #endif
 

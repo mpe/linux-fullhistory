@@ -726,8 +726,9 @@ void vmtruncate(struct inode * inode, unsigned long offset)
 	struct vm_area_struct * mpnt;
 
 	truncate_inode_pages(inode, offset);
+	spin_lock(&inode->i_shared_lock);
 	if (!inode->i_mmap)
-		return;
+		goto out_unlock;
 	mpnt = inode->i_mmap;
 	do {
 		struct mm_struct *mm = mpnt->vm_mm;
@@ -758,6 +759,8 @@ void vmtruncate(struct inode * inode, unsigned long offset)
 		zap_page_range(mm, start, len);
 		flush_tlb_range(mm, start, end);
 	} while ((mpnt = mpnt->vm_next_share) != NULL);
+out_unlock:
+	spin_unlock(&inode->i_shared_lock);
 }
 
 

@@ -40,10 +40,10 @@
  *								recording problems for high samplerates. I
  *								fixed this by removing ess_calc_best_speed ()
  *								and just doing what the documentation says. 
- *Javier Achirica(May 15 1999): Major cleanup, MPU IRQ sharing, hardware
- *								volume support, PNP chip configuration,
- *								full duplex in most cards, sample rate fine
- *								tuning.
+ * Andy Sloane  (June 4 1999):  Stole some code from ALSA to fix the playback
+ * andy@guildsoftware.com		speed on ES1869, ES1879, ES1887, and ES1888.
+ * 								1879's were previously ignored by this driver;
+ * 								added (untested) support for those.
  *
  * This files contains ESS chip specifics. It's based on the existing ESS
  * handling as it resided in sb_common.c, sb_mixer.c and sb_audio.c. This
@@ -195,29 +195,22 @@
 #define ESSTYPE_LIKE20	-1		/* Mimic 2.0 behaviour					*/
 #define ESSTYPE_DETECT	0		/* Mimic 2.0 behaviour					*/
 
-int esstype = ESSTYPE_LIKE20; /* module parameter in sb_card.c */
+int esstype = ESSTYPE_DETECT; /* module parameter in sb_card.c */
 
-#define SUBMDL_ES688	0x00	/* Subtype ES688 for specific handling */
-#define SUBMDL_ES1688	0x08	/* Subtype ES1688 for specific handling */
 #define SUBMDL_ES1788	0x10	/* Subtype ES1788 for specific handling */
 #define SUBMDL_ES1868	0x11	/* Subtype ES1868 for specific handling */
 #define SUBMDL_ES1869	0x12	/* Subtype ES1869 for specific handling */
 #define SUBMDL_ES1878	0x13	/* Subtype ES1878 for specific handling */
-#define SUBMDL_ES1879	0x14	/* Subtype ES1879 for specific handling */
-#define SUBMDL_ES1887	0x15	/* Subtype ES1887 for specific handling */
-#define SUBMDL_ES1888	0x16	/* Subtype ES1888 for specific handling */
+#define SUBMDL_ES1879	0x16    /* ES1879 was initially forgotten */
+#define SUBMDL_ES1887	0x14	/* Subtype ES1887 for specific handling */
+#define SUBMDL_ES1888	0x15	/* Subtype ES1888 for specific handling */
 
-	/* Recording mixer, stereo full duplex */
-#define ESSCAP_NEW		0x00000100
-	/* ISA PnP configuration */
-#define ESSCAP_PNP		0x00000200
-	/* Full duplex, 6-bit volume, hardware volume controls */
-#define ESSCAP_ES18		0x00000400
-	/* New interrupt handling system (ESS 1887) */
-#define ESSCAP_IRQ		0x00000800
+#define SB_CAP_ES18XX_RATE 0x100
 
-#define ESSFMT_16		0x00000001
-#define ESSFMT_SIGNED	0x00000004
+#define ES1688_CLOCK1 795444 /* 128 - div */
+#define ES1688_CLOCK2 397722 /* 256 - div */
+#define ES18XX_CLOCK1 793800 /* 128 - div */
+#define ES18XX_CLOCK2 768000 /* 256 - div */
 
 #ifdef FKS_LOGGING
 static void ess_show_mixerregs (sb_devc *devc);
@@ -232,6 +225,52 @@ static void ess_chgmixer
  *									ESS audio								*
  *																			*
  ****************************************************************************/
+
+struct ess_command {short cmd; short data;};
+
+/*
+ * Commands for initializing Audio 1 for input (record)
+ */
+static struct ess_command ess_i08m[] =		/* input 8 bit mono */
+	{ {0xb7, 0x51}, {0xb7, 0xd0}, {-1, 0} };
+static struct ess_command ess_i16m[] =		/* input 16 bit mono */
+	{ {0xb7, 0x71}, {0xb7, 0xf4}, {-1, 0} };
+static struct ess_command ess_i08s[] =		/* input 8 bit stereo */
+	{ {0xb7, 0x51}, {0xb7, 0x98}, {-1, 0} };
+static struct ess_command ess_i16s[] =		/* input 16 bit stereo */
+	{ {0xb7, 0x71}, {0xb7, 0xbc}, {-1, 0} };
+
+static struct ess_command *ess_inp_cmds[] =
+	{ ess_i08m, ess_i16m, ess_i08s, ess_i16s };
+
+
+/*
+ * Commands for initializing Audio 1 for output (playback)
+ */
+static struct ess_command ess_o08m[] =		/* output 8 bit mono */
+	{ {0xb6, 0x80}, {0xb7, 0x51}, {0xb7, 0xd0}, {-1, 0} };
+static struct ess_command ess_o16m[] =		/* output 16 bit mono */
+	{ {0xb6, 0x00}, {0xb7, 0x71}, {0xb7, 0xf4}, {-1, 0} };
+static struct ess_command ess_o08s[] =		/* output 8 bit stereo */
+	{ {0xb6, 0x80}, {0xb7, 0x51}, {0xb7, 0x98}, {-1, 0} };
+static struct ess_command ess_o16s[] =		/* output 16 bit stereo */
+	{ {0xb6, 0x00}, {0xb7, 0x71}, {0xb7, 0xbc}, {-1, 0} };
+
+static struct ess_command *ess_out_cmds[] =
+	{ ess_o08m, ess_o16m, ess_o08s, ess_o16s };
+
+static void ess_exec_commands
+	(sb_devc *devc, struct ess_command *cmdtab[])
+{
+	struct ess_command *cmd;
+
+	cmd = cmdtab [ ((devc->channels != 1) << 1) + (devc->bits != AFMT_U8) ];
+
+	while (cmd->cmd != -1) {
+		ess_write (devc, cmd->cmd, cmd->data);
+		cmd++;
+	}
+}
 
 static void ess_change
 	(sb_devc *devc, unsigned int reg, unsigned int mask, unsigned int val)
@@ -272,21 +311,53 @@ static void ess_set_input_parms
 	devc->irq_mode = IMODE_INPUT;
 }
 
-static int ess_calc_div (int clock, int *speedp, int *diffp)
+static int ess_calc_div (int clock, int revert, int *speedp, int *diffp)
 {
 	int divider;
 	int speed, diff;
+	int retval;
 
 	speed   = *speedp;
 	divider = (clock + speed / 2) / speed;
-	if (divider > 127) {
-		divider = 127;
+	retval  = revert - divider;
+	if (retval > revert - 1) {
+		retval  = revert - 1;
+		divider = revert - retval;
 	}
+	/* This line is suggested. Must be wrong I think
+	*speedp = (clock + divider / 2) / divider;
+	So I chose the next one */
+
 	*speedp	= clock / divider;
 	diff	= speed - *speedp;
-	*diffp = diff < 0 ? -diff : diff;
+	if (diff < 0) diff =-diff;
+	*diffp  = diff;
 
-	return 128 - divider;
+	return retval;
+}
+
+static int ess_calc_best_speed
+	(int clock1, int rev1, int clock2, int rev2, int *divp, int *speedp)
+{
+	int speed1 = *speedp, speed2 = *speedp;
+	int div1, div2;
+	int diff1, diff2;
+	int retval;
+
+	div1 = ess_calc_div (clock1, rev1, &speed1, &diff1);
+	div2 = ess_calc_div (clock2, rev2, &speed2, &diff2);
+
+	if (diff1 < diff2) {
+		*divp   = div1;
+		*speedp = speed1;
+		retval  = 1;
+	} else {
+		*divp   = div2;
+		*speedp = speed2;
+		retval  = 2;
+	}
+
+	return retval;
 }
 
 /*
@@ -299,30 +370,24 @@ static int ess_calc_div (int clock, int *speedp, int *diffp)
  */
 static void ess_common_speed (sb_devc *devc, int *speedp, int *divp)
 {
-	int speed1 = *speedp, speed2 = *speedp;
-	int div1, div2;
-	int diff1, diff2;
+	int diff = 0, div;
 
-	if (devc->caps & ESSCAP_NEW) {
-		div1 = 0x000 | ess_calc_div (793800, &speed1, &diff1);
-		div2 = 0x080 | ess_calc_div (768000, &speed2, &diff2);
+	if (devc->duplex) {
+		/*
+		 * The 0x80 is important for the first audio channel
+		 */
+		div = 0x80 | ess_calc_div (795500, 128, speedp, &diff);
+	} else if(devc->caps & SB_CAP_ES18XX_RATE) {
+		ess_calc_best_speed(ES18XX_CLOCK1, 128, ES18XX_CLOCK2, 256, 
+						&div, speedp);
 	} else {
 		if (*speedp > 22000) {
-			div1 = 0x080 | ess_calc_div (795444, &speed1, &diff1);
-			div2 = 0x180 | ess_calc_div (793800, &speed2, &diff2);
+			div = 0x80 | ess_calc_div (ES1688_CLOCK1, 256, speedp, &diff);
 		} else {
-			div1 = 0x000 | ess_calc_div (397722, &speed1, &diff1);
-			div2 = 0x100 | ess_calc_div (396900, &speed2, &diff2);
+			div = 0x00 | ess_calc_div (ES1688_CLOCK2, 128, speedp, &diff);
 		}
 	}
-
-	if (diff1 < diff2) {
-		*divp   = div1;
-		*speedp = speed1;
-	} else {
-		*divp   = div2;
-		*speedp = speed2;
-	}
+	*divp = div;
 }
 
 static void ess_speed (sb_devc *devc, int audionum)
@@ -341,13 +406,21 @@ printk (KERN_INFO "FKS: ess_speed (%d) b speed = %d, div=%x\n", audionum, devc->
 
 	div2 = 256 - 7160000 / (speed * 82);
 
-	if ((devc->caps & ESSCAP_NEW) && audionum != 1) {
-		ess_setmixer (devc, 0x70, div);
-		ess_setmixer (devc, 0x72, div2);
-	} else {
-		ess_change (devc, 0xba, 0x40, (div & 0x100) ? 0x40 : 0x00);
-		ess_write (devc, 0xa1, div & 0xff);
+	if (!devc->duplex) audionum = 1;
+
+	if (audionum == 1) {
+		/* Change behaviour of register A1 *
+		sb_chg_mixer(devc, 0x71, 0x20, 0x20)
+		* For ES1869 only??? */
+		ess_write (devc, 0xa1, div);
 		ess_write (devc, 0xa2, div2);
+	} else {
+		ess_setmixer (devc, 0x70, div);
+		/*
+		 * FKS: fascinating: 0x72 doesn't seem to work.
+		 */
+		ess_write (devc, 0xa2, div2);
+		ess_setmixer (devc, 0x72, div2);
 	}
 }
 
@@ -355,14 +428,77 @@ static int ess_audio_prepare_for_input(int dev, int bsize, int bcount)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
-	ess_write (devc, 0xb8, 0x0e);	/* Auto init DMA mode */
-	ess_change (devc, 0xa8, 0x0b, 3 - devc->channels);	/* Mono/stereo */
-
 	ess_speed(devc, 1);
 
-    ess_write (devc, 0xb7, (devc->bits & ESSFMT_SIGNED) ? 0x71 : 0x51);
-    ess_write (devc, 0xb7, 0x90 | ((devc->bits & ESSFMT_SIGNED) ? 0x20 : 0) |
-		((devc->bits & ESSFMT_16) ? 4 : 0) | ((devc->channels > 1) ? 8 : 0x40));
+	sb_dsp_command(devc, DSP_CMD_SPKOFF);
+
+	ess_write (devc, 0xb8, 0x0e);	/* Auto init DMA mode */
+	ess_change (devc, 0xa8, 0x03, 3 - devc->channels);	/* Mono/stereo */
+	ess_write (devc, 0xb9, 2);	/* Demand mode (4 bytes/DMA request) */
+
+	ess_exec_commands (devc, ess_inp_cmds);
+
+	ess_change (devc, 0xb1, 0xf0, 0x50);
+	ess_change (devc, 0xb2, 0xf0, 0x50);
+
+	devc->trigger_bits = 0;
+	return 0;
+}
+
+static int ess_audio_prepare_for_output_audio1 (int dev, int bsize, int bcount)
+{
+	sb_devc *devc = audio_devs[dev]->devc;
+
+	sb_dsp_reset(devc);
+	ess_speed(devc, 1);
+	ess_write (devc, 0xb8, 4);	/* Auto init DMA mode */
+	ess_change (devc, 0xa8, 0x03, 3 - devc->channels);	/* Mono/stereo */
+	ess_write (devc, 0xb9, 2);	/* Demand mode (4 bytes/request) */
+
+	ess_exec_commands (devc, ess_out_cmds);
+
+	ess_change (devc, 0xb1, 0xf0, 0x50);	/* Enable DMA */
+	ess_change (devc, 0xb2, 0xf0, 0x50);	/* Enable IRQ */
+
+	sb_dsp_command(devc, DSP_CMD_SPKON);	/* There be sound! */
+
+	devc->trigger_bits = 0;
+	return 0;
+}
+
+static int ess_audio_prepare_for_output_audio2 (int dev, int bsize, int bcount)
+{
+	sb_devc *devc = audio_devs[dev]->devc;
+	unsigned char bits;
+
+/* FKS: qqq
+	sb_dsp_reset(devc);
+*/
+
+	/*
+	 * Auto-Initialize:
+	 * DMA mode + demand mode (8 bytes/request, yes I want it all!)
+	 * But leave 16-bit DMA bit untouched!
+	 */
+	ess_chgmixer (devc, 0x78, 0xd0, 0xd0);
+
+	ess_speed(devc, 2);
+
+	/* bits 4:3 on ES1887 represent recording source. Keep them! */
+	bits = ess_getmixer (devc, 0x7a) & 0x18;
+
+	/* Set stereo/mono */
+	if (devc->channels != 1) bits |= 0x02;
+
+	/* Init DACs; UNSIGNED mode for 8 bit; SIGNED mode for 16 bit */
+	if (devc->bits != AFMT_U8) bits |= 0x05;	/* 16 bit */
+
+	/* Enable DMA, IRQ will be shared (hopefully)*/
+	bits |= 0x60;
+
+	ess_setmixer (devc, 0x7a, bits);
+
+	ess_mixer_reload (devc, SOUND_MIXER_PCM);	/* There be sound! */
 
 	devc->trigger_bits = 0;
 	return 0;
@@ -378,79 +514,144 @@ printk(KERN_INFO "ess_audio_prepare_for_output: dma_out=%d,dma_in=%d\n"
 #endif
 
 	if (devc->duplex) {
-		ess_speed(devc, 2);
-
-	    ess_chgmixer (devc, 0x7a, 0x07, ((devc->bits & ESSFMT_SIGNED) ? 4 : 0) |
-			((devc->bits & ESSFMT_16) ? 1 : 0) | ((devc->channels > 1) ? 2 : 0));
-
-		if (devc->caps & ESSCAP_NEW)
-			ess_mixer_reload (devc, SOUND_MIXER_PCM);	/* There be sound! */
-		else
-			sb_dsp_command(devc, DSP_CMD_SPKON);	/* There be sound! */
+		return ess_audio_prepare_for_output_audio2 (dev, bsize, bcount);
 	} else {
-		ess_write (devc, 0xb8, 4);	/* Auto init DMA mode */
-		ess_change (devc, 0xa8, 0x03, 3 - devc->channels);	/* Mono/stereo */
-
-		ess_speed(devc, 1);
-
-	    ess_write (devc, 0xb6, (devc->bits & ESSFMT_SIGNED) ? 0 : 0x80);
-	    ess_write (devc, 0xb7, (devc->bits & ESSFMT_SIGNED) ? 0x71 : 0x51);
-	    ess_write (devc, 0xb7, 0x90 | ((devc->bits & ESSFMT_SIGNED) ? 0x20 : 0) |
-			((devc->bits & ESSFMT_16) ? 4 : 0) | ((devc->channels > 1) ? 8 : 0x40));
-
-		sb_dsp_command(devc, DSP_CMD_SPKON);	/* There be sound! */
+		return ess_audio_prepare_for_output_audio1 (dev, bsize, bcount);
 	}
-	devc->trigger_bits = 0;
-	return 0;
 }
 
 static void ess_audio_halt_xfer(int dev)
 {
+	unsigned long flags;
 	sb_devc *devc = audio_devs[dev]->devc;
 
-	sb_dsp_command (devc, DSP_CMD_SPKOFF);
+	save_flags(flags);
+	cli();
+	sb_dsp_reset(devc);
+	restore_flags(flags);
 
-	if (devc->caps & ESSCAP_NEW) {
-		ess_setmixer (devc, 0x7c, 0);
-	}
+	/*
+	 * Audio 2 may still be operational! Creates awful sounds!
+	 */
+	if (devc->duplex) ess_chgmixer(devc, 0x78, 0x03, 0x00);
+}
 
-	ess_change (devc, 0xb8, 0x0f, 0x00);	/* Stop */
+static void ess_audio_start_input
+	(int dev, unsigned long buf, int nr_bytes, int intrflag)
+{
+	int count = nr_bytes;
+	sb_devc *devc = audio_devs[dev]->devc;
+	short c = -nr_bytes;
 
-	if (devc->duplex) {			/* Audio 2 may still be operational! */
-		ess_chgmixer (devc, 0x78, 0x03, 0x00);
+	/*
+	 * Start a DMA input to the buffer pointed by dmaqtail
+	 */
+
+	if (audio_devs[dev]->dmap_in->dma > 3) count >>= 1;
+	count--;
+
+	devc->irq_mode = IMODE_INPUT;
+
+	ess_write (devc, 0xa4, (unsigned char) ((unsigned short) c & 0xff));
+	ess_write (devc, 0xa5, (unsigned char) (((unsigned short) c >> 8) & 0xff));
+
+	ess_change (devc, 0xb8, 0x0f, 0x0f);	/* Go */
+	devc->intr_active = 1;
+}
+
+static void ess_audio_output_block_audio1
+	(int dev, unsigned long buf, int nr_bytes, int intrflag)
+{
+	int count = nr_bytes;
+	sb_devc *devc = audio_devs[dev]->devc;
+	short c = -nr_bytes;
+
+	if (audio_devs[dev]->dmap_out->dma > 3)
+		count >>= 1;
+	count--;
+
+	devc->irq_mode = IMODE_OUTPUT;
+
+	ess_write (devc, 0xa4, (unsigned char) ((unsigned short) c & 0xff));
+	ess_write (devc, 0xa5, (unsigned char) (((unsigned short) c >> 8) & 0xff));
+
+	ess_change (devc, 0xb8, 0x05, 0x05);	/* Go */
+	devc->intr_active = 1;
+}
+
+static void ess_audio_output_block_audio2
+	(int dev, unsigned long buf, int nr_bytes, int intrflag)
+{
+	int count = nr_bytes;
+	sb_devc *devc = audio_devs[dev]->devc;
+	short c = -nr_bytes;
+
+	if (audio_devs[dev]->dmap_out->dma > 3) count >>= 1;
+	count--;
+
+	ess_setmixer (devc, 0x74, (unsigned char) ((unsigned short) c & 0xff));
+	ess_setmixer (devc, 0x76, (unsigned char) (((unsigned short) c >> 8) & 0xff));
+	ess_chgmixer (devc, 0x78, 0x03, 0x03);   /* Go */
+
+	devc->irq_mode_16 = IMODE_OUTPUT;
+		devc->intr_active_16 = 1;
+}
+
+static void ess_audio_output_block
+	(int dev, unsigned long buf, int nr_bytes, int intrflag)
+{
+	sb_devc *devc = audio_devs[dev]->devc;
+
+	if (devc->duplex) {
+		ess_audio_output_block_audio2 (dev, buf, nr_bytes, intrflag);
+	} else {
+		ess_audio_output_block_audio1 (dev, buf, nr_bytes, intrflag);
 	}
 }
 
+/*
+ * FKS: the if-statements for both bits and bits_16 are quite alike.
+ * Combine this...
+ */
 static void ess_audio_trigger(int dev, int bits)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
-	int bits_16 = bits & devc->irq_mode_16 & IMODE_OUTPUT;
+	int bits_16 = bits & devc->irq_mode_16;
 	bits &= devc->irq_mode;
 
 	if (!bits && !bits_16) {
-		sb_dsp_command (devc, 0xd0);			/* Halt DMA */
-		ess_chgmixer (devc, 0x78, 0x04, 0x00);	/* Halt DMA 2 */
+		/* FKS oh oh.... wrong?? for dma 16? */
+		sb_dsp_command(devc, 0xd0);	/* Halt DMA */
 	}
 
 	if (bits) {
-		short c = -devc->trg_bytes;
+		switch (devc->irq_mode)
+		{
+			case IMODE_INPUT:
+				ess_audio_start_input(dev, devc->trg_buf, devc->trg_bytes,
+					devc->trg_intrflag);
+				break;
 
-		ess_write (devc, 0xa4, (unsigned char)((unsigned short) c & 0xff));
-		ess_write (devc, 0xa5, (unsigned char)((unsigned short) c >> 8));
-		ess_change (devc, 0xb8, 0x0f, (devc->irq_mode==IMODE_INPUT)?0x0f:0x05);
-
-		devc->intr_active = 1;
+			case IMODE_OUTPUT:
+				ess_audio_output_block(dev, devc->trg_buf, devc->trg_bytes,
+					devc->trg_intrflag);
+				break;
+		}
 	}
 
 	if (bits_16) {
-		short c = -devc->trg_bytes_16;
+		switch (devc->irq_mode_16) {
+		case IMODE_INPUT:
+			ess_audio_start_input(dev, devc->trg_buf_16, devc->trg_bytes_16,
+					devc->trg_intrflag_16);
+			break;
 
-		ess_setmixer (devc, 0x74, (unsigned char)((unsigned short) c & 0xff));
-		ess_setmixer (devc, 0x76, (unsigned char)((unsigned short) c >> 8));
-		ess_chgmixer (devc, 0x78, 0x03, 0x03);   /* Go */
-
-		devc->intr_active_16 = 1;
+		case IMODE_OUTPUT:
+			ess_audio_output_block(dev, devc->trg_buf_16, devc->trg_bytes_16,
+					devc->trg_intrflag_16);
+			break;
+		}
 	}
 
 	devc->trigger_bits = bits | bits_16;
@@ -462,8 +663,8 @@ static int ess_audio_set_speed(int dev, int speed)
 	int minspeed, maxspeed, dummydiv;
 
 	if (speed > 0) {
-		minspeed = (devc->caps & ESSCAP_NEW) ? 6047  : 3125;
-		maxspeed = 48000;
+		minspeed = (devc->duplex ? 6215  : 5000 );
+		maxspeed = (devc->duplex ? 44100 : 48000);
 		if (speed < minspeed) speed = minspeed;
 		if (speed > maxspeed) speed = maxspeed;
 
@@ -474,46 +675,38 @@ static int ess_audio_set_speed(int dev, int speed)
 	return devc->speed;
 }
 
+/*
+ * FKS: This is a one-on-one copy of sb1_audio_set_bits
+ */
 static unsigned int ess_audio_set_bits(int dev, unsigned int bits)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
-	switch (bits) {
-		case 0:
-			break;
-		case AFMT_S16_LE:
-			devc->bits = ESSFMT_16 | ESSFMT_SIGNED;
-			break;
-		case AFMT_U16_LE:
-			devc->bits = ESSFMT_16;
-			break;
-		case AFMT_S8:
-			devc->bits = ESSFMT_SIGNED;
-			break;
-		default:
-			devc->bits = 0;
-			break;
+	if (bits != 0) {
+		if (bits == AFMT_U8 || bits == AFMT_S16_LE) {
+			devc->bits = bits;
+		} else {
+			devc->bits = AFMT_U8;
+		}
 	}
 
 	return devc->bits;
 }
 
+/*
+ * FKS: This is a one-on-one copy of sbpro_audio_set_channels
+ * (*) Modified it!!
+ */
 static short ess_audio_set_channels(int dev, short channels)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
-	if (devc->fullduplex && !(devc->caps & ESSCAP_NEW)) {
-		devc->channels = 1;
-	} else {
-		if (channels == 1 || channels == 2) {
-			devc->channels = channels;
-		}
-	}
+	if (channels == 1 || channels == 2) devc->channels = channels;
 
 	return devc->channels;
 }
 
-static struct audio_driver ess_audio_driver =   /* ESS ES688/1688/18xx */
+static struct audio_driver ess_audio_driver =   /* ESS ES688/1688 */
 {
 	sb_audio_open,
 	sb_audio_close,
@@ -540,7 +733,7 @@ struct audio_driver *ess_audio_init
 		(sb_devc *devc, int *audio_flags, int *format_mask)
 {
 	*audio_flags = DMA_AUTOMODE;
-	*format_mask |= AFMT_S16_LE | AFMT_U16_LE | AFMT_S8;
+	*format_mask |= AFMT_S16_LE;
 
 	if (devc->duplex) {
 		int tmp_dma;
@@ -563,8 +756,10 @@ struct audio_driver *ess_audio_init
  *								ESS common									*
  *																			*
  ****************************************************************************/
-static void ess_handle_channel (int dev, int irq_mode)
+static void ess_handle_channel
+	(char *channel, int dev, int intr_active, unsigned char flag, int irq_mode)
 {
+	if (!intr_active || !flag) return;
 #ifdef FKS_REG_LOGGING
 printk(KERN_INFO "FKS: ess_handle_channel %s irq_mode=%d\n", channel, irq_mode);
 #endif
@@ -586,77 +781,48 @@ printk(KERN_INFO "FKS: ess_handle_channel %s irq_mode=%d\n", channel, irq_mode);
 }
 
 /*
- * In the ESS 1888 model, how do we found out if the MPU interrupted ???
+ * FKS: TODO!!! Finish this!
+ *
+ * I think midi stuff uses uart401, without interrupts.
+ * So IMODE_MIDI isn't a value for devc->irq_mode.
  */
 void ess_intr (sb_devc *devc)
 {
 	int				status;
 	unsigned char	src;
 
-	if (devc->caps & ESSCAP_PNP) {
-		outb (devc->pcibase + 7, 0);		/* Mask IRQs */
-		src = inb (devc->pcibase + 6) & 0x0f;
-	} else if (devc->caps & ESSCAP_IRQ) {
+	if (devc->submodel == SUBMDL_ES1887) {
 		src = ess_getmixer (devc, 0x7f) >> 4;
 	} else {
-		src = inb (DSP_STATUS) & 0x01;
-		if (devc->duplex && (ess_getmixer (devc, 0x7a) & 0x80)) {
-			src |= 0x02;
-		}
-		if ((devc->caps & ESSCAP_ES18) && (ess_getmixer (devc, 0x64) & 0x10)) {
-			src |= 0x04;
-		}
-#if defined(CONFIG_MIDI) && defined(CONFIG_SOUND_MPU401)
-		/*
-		 * This should work if dev_conf wasn't local to mpu401.c
-		 */
-#if 0
-		if ((int)devc->midi_irq_cookie >= 0 &&
-			!(inb(dev_conf[(int)devc->midi_irq_cookie].base + 1) & 0x80)) {
-			src |= 0x08;
-		}
-#endif
-#endif
+		src = 0xff;
 	}
 
 #ifdef FKS_REG_LOGGING
 printk(KERN_INFO "FKS: sbintr src=%x\n",(int)src);
 #endif
+	ess_handle_channel
+		( "Audio 1"
+		, devc->dev, devc->intr_active   , src & 0x01, devc->irq_mode   );
+	ess_handle_channel
+		( "Audio 2"
+		, devc->dev, devc->intr_active_16, src & 0x02, devc->irq_mode_16);
+	/*
+	 * Acknowledge interrupts
+	 */
+	if (devc->submodel == SUBMDL_ES1887 && (src & 0x02)) {
+		ess_chgmixer (devc, 0x7a, 0x80, 0x00);
+	}
+
 	if (src & 0x01) {
-		status = inb(DSP_DATA_AVAIL);	/* Acknowledge interrupt */
-		if (devc->intr_active)
-			ess_handle_channel (devc->dev, devc->irq_mode   );
+		status = inb(DSP_DATA_AVAIL);
 	}
+}
 
-	if (src & 0x02) {
-		ess_chgmixer (devc, 0x7a, 0x80, 0x00);	/* Acknowledge interrupt */
-		if (devc->intr_active_16)
-			ess_handle_channel (devc->dev, devc->irq_mode_16);
-	}
+static void ess_extended (sb_devc * devc)
+{
+	/* Enable extended mode */
 
-	if (src & 0x04) {
-		int left, right;
-
-		ess_setmixer (devc, 0x66, 0x00);	/* Hardware volume IRQ ack */
-
-		left = ess_getmixer (devc, 0x60);
-		right = ess_getmixer (devc, 0x62);
-
-		left = (left & 0x40) ? 0 : ((left * 100 + 31)/ 63);	/* Mute or scale */
-		right = (right & 0x40) ? 0 : ((right * 100 + 31)/ 63);
-
-		devc->levels[SOUND_MIXER_VOLUME] = left | (right << 8);
-	}
-
-#if defined(CONFIG_MIDI) && defined(CONFIG_SOUND_MPU401)
-	if ((int)devc->midi_irq_cookie >= 0 && (src & 0x08)) {
-		mpuintr (devc->irq, devc->midi_irq_cookie, NULL);
-	}
-#endif
-
-	if (devc->caps & ESSCAP_PNP) {
-		outb (devc->pcibase + 7, 0xff);		/* Unmask IRQs */
-	}
+	sb_dsp_command(devc, 0xc6);
 }
 
 static int ess_write (sb_devc * devc, unsigned char reg, unsigned char data)
@@ -686,7 +852,7 @@ static int ess_read (sb_devc * devc, unsigned char reg)
 
 int ess_dsp_reset(sb_devc * devc)
 {
-	int loopc, val;
+	int loopc;
 
 #ifdef FKS_REG_LOGGING
 printk(KERN_INFO "FKS: ess_dsp_reset 1\n");
@@ -707,91 +873,7 @@ ess_show_mixerregs (devc);
 		DDB(printk("sb: No response to RESET\n"));
 		return 0;   /* Sorry */
 	}
-
-	sb_dsp_command(devc, 0xc6);			/* Enable extended mode */
-	if (!(devc->caps & ESSCAP_PNP)) {
-		ess_setmixer (devc, 0x40, 0x03);	/* Enable joystick and OPL3 */
-
-		switch (devc->irq) {
-			case 2:
-			case 9:
-				val = 1;
-				break;
-			case 5:
-				val = 2;
-				break;
-			case 7:
-				val = 3;
-				break;
-			case 10:
-				val = 4;
-				break;
-			case 11:
-				val = 5;
-				break;
-			default:
-				val = 0;
-		}						/* IRQ config */
-		ess_write (devc, 0xb1, 0xf0 | ((val && val != 5) ? val - 1 : 0));
-
-		if (devc->caps & ESSCAP_IRQ) {
-			ess_setmixer (devc, 0x7f, 0x01 | (val << 1)); /* IRQ config */
-		}
-
-		switch ((devc->duplex) ? devc->dma16 : devc->dma8) {
-			case 0:
-				val = 0x54;
-				break;
-			case 1:
-				val = 0x58;
-				break;
-			case 3:
-				val = 0x5c;
-				break;
-			default:
-				val = 0;
-		}
-		ess_write (devc, 0xb2, val); /* DMA1 config */
-
-		if (devc->duplex) {
-			switch (devc->dma8) {
-				case 0:
-					val = 0x04;
-					break;
-				case 1:
-					val = 0x05;
-					break;
-				case 3:
-					val = 0x06;
-					break;
-				case 5:
-					val = 0x07;
-					break;
-				default:
-					val = 0;
-			}
-			ess_write (devc, 0x7d, val); /* DMA2 config */
-		}
-	}
-	ess_change (devc, 0xb1, 0xf0, 0x50);	/* Enable IRQ 1 */
-	ess_change (devc, 0xb2, 0xf0, 0x50);	/* Enable DMA 1 */
-	ess_write (devc, 0xb9, 2);			/* Demand mode (4 bytes/DMA request) */
-	ess_setmixer (devc, 0x7a, 0x40);	/* Enable IRQ 2 */
-			/* Auto-Initialize DMA mode + demand mode (8 bytes/request) */
-	if (devc->caps & ESSCAP_PNP) {
-		ess_setmixer (devc, 0x78, 0xd0);
-		ess_setmixer (devc, 0x64, 0x82);		/* Enable HW volume interrupt */
-	} else {
-		ess_setmixer (devc, 0x78, (devc->dma8 > 4) ? 0xf0 : 0xd0);
-		ess_setmixer (devc, 0x64, 0x42);		/* Enable HW volume interrupt */
-	}
-
-    if (devc->caps & ESSCAP_NEW) {
-		ess_setmixer (devc, 0x71, 0x32); /* Change behaviour of register A1 */
-		ess_setmixer (devc, 0x1c, 0x05); /* Recording source is mixer */
-	} else {
-		ess_change (devc, 0xb7, 0x80, 0x80); /* Enable DMA FIFO */
-	}
+	ess_extended (devc);
 
 	DEB(printk("sb_dsp_reset() OK\n"));
 
@@ -801,6 +883,67 @@ ess_show_mixerregs (devc);
 #endif
 
 	return 1;
+}
+
+static int ess_irq_bits (int irq)
+{
+	switch (irq) {
+	case 2:
+	case 9:
+		return 0;
+
+	case 5:
+		return 1;
+
+	case 7:
+		return 2;
+
+	case 10:
+		return 3;
+
+	default:
+		printk(KERN_ERR "ESS1688: Invalid IRQ %d\n", irq);
+		return -1;
+	}
+}
+
+/*
+ *	Set IRQ configuration register for all ESS models
+ */
+static int ess_common_set_irq_hw (sb_devc * devc)
+{
+	int irq_bits;
+
+	if ((irq_bits = ess_irq_bits (devc->irq)) == -1) return 0;
+
+	if (!ess_write (devc, 0xb1, 0x50 | (irq_bits << 2))) {
+		printk(KERN_ERR "ES1688: Failed to write to IRQ config register\n");
+		return 0;
+	}
+	return 1;
+}
+
+/*
+ * I wanna use modern ES1887 mixer irq handling. Funny is the
+ * fact that my BIOS wants the same. But suppose someone's BIOS
+ * doesn't do this!
+ * This is independent of duplex. If there's a 1887 this will
+ * prevent it from going into 1888 mode.
+ */
+static void ess_es1887_set_irq_hw (sb_devc * devc)
+{
+	int irq_bits;
+
+	if ((irq_bits = ess_irq_bits (devc->irq)) == -1) return;
+
+	ess_chgmixer (devc, 0x7f, 0x0f, 0x01 | ((irq_bits + 1) << 1));
+}
+
+static int ess_set_irq_hw (sb_devc * devc)
+{
+	if (devc->submodel == SUBMDL_ES1887) ess_es1887_set_irq_hw (devc);
+
+	return ess_common_set_irq_hw (devc);
 }
 
 #ifdef FKS_TEST
@@ -826,7 +969,7 @@ printk (KERN_INFO "FKS: FKS_test %02x, %02x\n", (val1 & 0x0ff), (val2 & 0x0ff));
 };
 #endif
 
-static unsigned int ess_identify (sb_devc * devc, int *control)
+static unsigned int ess_identify (sb_devc * devc)
 {
 	unsigned int val;
 	unsigned long flags;
@@ -840,14 +983,7 @@ static unsigned int ess_identify (sb_devc * devc, int *control)
 	udelay(20);
 	val |= inb(MIXER_DATA);
 	udelay(20);
-	*control  = inb(MIXER_DATA) << 8;
-	udelay(20);
-	*control |= inb(MIXER_DATA);
-	udelay(20);
 	restore_flags(flags);
-
-	if (*control < 0 || *control > 0x3ff || check_region (*control, 8))
-		*control = 0;
 
 	return val;
 }
@@ -875,6 +1011,7 @@ static int ess_probe (sb_devc * devc, int reg, int xorval)
 
 int ess_init(sb_devc * devc, struct address_info *hw_config)
 {
+	unsigned char cfg;
 	int ess_major = 0, ess_minor = 0;
 	int i;
 	static char name[100], modelname[10];
@@ -882,7 +1019,6 @@ int ess_init(sb_devc * devc, struct address_info *hw_config)
 	/*
 	 * Try to detect ESS chips.
 	 */
-	devc->pcibase = 0;
 
 	sb_dsp_command(devc, 0xe7); /* Return identification */
 
@@ -934,10 +1070,10 @@ int ess_init(sb_devc * devc, struct address_info *hw_config)
 		case ESSTYPE_LIKE20:
 			break;
 		case 688:
-			submodel = SUBMDL_ES688;
+			submodel = 0x00;
 			break;
 		case 1688:
-			submodel = SUBMDL_ES1688;
+			submodel = 0x08;
 			break;
 		case 1868:
 			submodel = SUBMDL_ES1868;
@@ -986,7 +1122,7 @@ FKS_test (devc);
 		if (chip == NULL) {
 			int type;
 
-			type = ess_identify (devc, &devc->pcibase);
+			type = ess_identify (devc);
 
 			switch (type) {
 			case 0x1868:
@@ -1063,72 +1199,139 @@ FKS_test (devc);
 		strcpy(name, "Jazz16");
 	}
 
-	switch (devc->submodel) {
-	case SUBMDL_ES1869:
-	case SUBMDL_ES1879:
-		devc->caps |= ESSCAP_NEW;
-	case SUBMDL_ES1868:
-	case SUBMDL_ES1878:
-		devc->caps |= ESSCAP_PNP | ESSCAP_ES18;
-		break;
-	case SUBMDL_ES1887:
-		devc->caps |= ESSCAP_IRQ;
-	case SUBMDL_ES1888:
-		devc->caps |= ESSCAP_NEW | ESSCAP_ES18;
+	/* AAS: info stolen from ALSA: these boards have different clocks */
+	switch(devc->submodel) {
+		case SUBMDL_ES1869:
+		case SUBMDL_ES1887:
+		case SUBMDL_ES1888:
+			devc->caps |= SB_CAP_ES18XX_RATE;
+			break;
 	}
-    if (devc->caps & ESSCAP_PNP) {
-		if (!devc->pcibase) {
-			printk (KERN_ERR "ESS PnP chip without PnP registers. Ignored\n");
-			return 0;
-		}
-		request_region (devc->pcibase, 8, "ESS18xx ctrl");
-
-		outb (0x07, devc->pcibase);		/* Selects logical device #1 */
-		outb (0x01, devc->pcibase + 1);
-		outb (0x28, devc->pcibase);
-		i = inb (devc->pcibase + 1) & 0x0f;
-		outb (0x28, devc->pcibase);		/* Sets HW volume IRQ */
-		outb (devc->irq << 4 | i, devc->pcibase + 1);
-		outb (0x70, devc->pcibase);		/* Sets IRQ 1 */
-		outb (devc->irq, devc->pcibase + 1);
-		outb (0x72, devc->pcibase);		/* Sets IRQ 2 */
-		outb (devc->irq, devc->pcibase + 1);
-		outb (0x74, devc->pcibase);		/* Sets DMA 1 */
-		outb (hw_config->dma, devc->pcibase + 1);
-		outb (0x75, devc->pcibase);		/* Sets DMA 2 */
-		outb (hw_config->dma2 >= 0 ? hw_config->dma2 : 4, devc->pcibase + 1);
-	} else if (devc->pcibase) {
-		printk (KERN_INFO "Non-PnP ESS card with PnP registers at %04Xh, ignoring them.\n", devc->pcibase);
-		devc->pcibase = 0;
-	}
-
-	devc->caps |= SB_NO_MIDI;   /* ES1688 uses MPU401 MIDI mode */
 
 	hw_config->name = name;
-
+	/* FKS: sb_dsp_reset to enable extended mode???? */
 	sb_dsp_reset(devc); /* Turn on extended mode */
 
-	ess_setmixer (devc, 0x00, 0x00);	/* Reset mixer registers */
+	/*
+	 *  Enable joystick and OPL3
+	 */
+	cfg = ess_getmixer (devc, 0x40);
+	ess_setmixer (devc, 0x40, cfg | 0x03);
+	if (devc->submodel >= 8) {		/* ES1688 */
+		devc->caps |= SB_NO_MIDI;   /* ES1688 uses MPU401 MIDI mode */
+	}
+	sb_dsp_reset (devc);
 
+	/*
+	 * This is important! If it's not done, the IRQ probe in sb_dsp_init
+	 * may fail.
+	 */
+	return ess_set_irq_hw (devc);
+}
+
+static int ess_set_dma_hw(sb_devc * devc)
+{
+	unsigned char cfg, dma_bits = 0, dma16_bits;
+	int dma;
+
+#ifdef FKS_LOGGING
+printk(KERN_INFO "ess_set_dma_hw: dma8=%d,dma16=%d,dup=%d\n"
+, devc->dma8, devc->dma16, devc->duplex);
+#endif
+
+	/*
+	 * FKS: It seems as if this duplex flag isn't set yet. Check it.
+	 */
+	dma = devc->dma8;
+
+	if (dma > 3 || dma < 0 || dma == 2) {
+		dma_bits = 0;
+		printk(KERN_ERR "ESS1688: Invalid DMA8 %d\n", dma);
+		return 0;
+	} else {
+		/* Extended mode DMA enable */
+		cfg = 0x50;
+
+		if (dma == 3) {
+			dma_bits = 3;
+		} else {
+			dma_bits = dma + 1;
+		}
+	}
+
+	if (!ess_write (devc, 0xb2, cfg | (dma_bits << 2))) {
+		printk(KERN_ERR "ESS1688: Failed to write to DMA config register\n");
+		return 0;
+	}
+
+	if (devc->duplex) {
+		dma = devc->dma16;
+		dma16_bits = 0;
+
+		if (dma >= 0) {
+			switch (dma) {
+			case 0:
+				dma_bits = 0x04;
+				break;
+			case 1:
+				dma_bits = 0x05;
+				break;
+			case 3:
+				dma_bits = 0x06;
+				break;
+			case 5:
+				dma_bits   = 0x07;
+				dma16_bits = 0x20;
+				break;
+			default:
+				printk(KERN_ERR "ESS1887: Invalid DMA16 %d\n", dma);
+				return 0;
+			};
+			ess_chgmixer (devc, 0x78, 0x20, dma16_bits);
+			ess_chgmixer (devc, 0x7d, 0x07, dma_bits);
+		}
+	}
 	return 1;
 }
 
 /*
  * This one is called from sb_dsp_init.
+ *
+ * Return values:
+ *  0: Failed
+ *  1: Succeeded or doesn't apply (not SUBMDL_ES1887)
  */
 int ess_dsp_init (sb_devc *devc, struct address_info *hw_config)
 {
 	/*
+	 * This for ES1887 to run Full Duplex. Actually ES1888
+	 * is allowed to do so too. I have no idea yet if this
+	 * will work for ES1888 however.
+	 *
 	 * For SB16 having both dma8 and dma16 means enable
-	 * Full Duplex. Let's try this too
+	 * Full Duplex. Let's try this for ES1887 too
+	 *
 	 */
-	if ((devc->caps & ESSCAP_ES18) && hw_config->dma2 >= 0) {
-		devc->dma16 = hw_config->dma2;
-		if (devc->dma8 != devc->dma16) {
+	if (devc->submodel == SUBMDL_ES1887) {
+		if (hw_config->dma2 != -1) {
+			devc->dma16 = hw_config->dma2;
+		}
+		/*
+		 * devc->duplex initialization is put here, cause
+		 * ess_set_dma_hw needs it.
+		 */
+		if (devc->dma8 != devc->dma16 && devc->dma16 != -1) {
 			devc->duplex = 1;
 		}
+
+		if (!ess_set_dma_hw (devc)) {
+			free_irq(devc->irq, devc);
+			return 0;
+		}
+		return 1;
+	} else {
+		return -1;
 	}
-	return 1;
 }
 
 /****************************************************************************
@@ -1149,13 +1352,13 @@ int ess_dsp_init (sb_devc *devc, struct address_info *hw_config)
 #define ES1688_MIXER_DEVICES		\
 			( ES688_MIXER_DEVICES | SOUND_MASK_RECLEV	)
 
-#define ES_NEW_RECORDING_DEVICES	\
+#define ES1887_RECORDING_DEVICES	\
 			( ES1688_RECORDING_DEVICES | SOUND_MASK_LINE2 | SOUND_MASK_SYNTH)
-#define ES_NEW_MIXER_DEVICES		\
+#define ES1887_MIXER_DEVICES		\
 			( ES1688_MIXER_DEVICES											)
 
 /*
- * Mixer registers of ES18xx with new capabilities
+ * Mixer registers of ES1887
  *
  * These registers specifically take care of recording levels. To make the
  * mapping from playback devices to recording devices every recording
@@ -1285,11 +1488,11 @@ MIX_ENT(ES_REC_MIXER_RECLINE3,		0x00, 0, 0, 0x00, 0, 0)
 };
 
 /*
- * This one is for new ES's. It's little different from es_rec_mix: it
- * has 0x7c for PCM playback level. This is because uses
+ * This one is for ES1887. It's little different from es_rec_mix: it
+ * has 0x7c for PCM playback level. This is because ES1887 uses
  * Audio 2 for playback.
  */
-static mixer_tab es_new_mix = {
+static mixer_tab es1887_mix = {
 MIX_ENT(SOUND_MIXER_VOLUME,			0x60, 5, 6, 0x62, 5, 6),
 MIX_ENT(SOUND_MIXER_BASS,			0x00, 0, 0, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_TREBLE,			0x00, 0, 0, 0x00, 0, 0),
@@ -1323,6 +1526,16 @@ MIX_ENT(ES_REC_MIXER_RECLINE2,		0x6c, 7, 4, 0x6c, 3, 4),
 MIX_ENT(ES_REC_MIXER_RECLINE3,		0x00, 0, 0, 0x00, 0, 0)
 };
 
+static int ess_has_rec_mixer (int submodel)
+{
+	switch (submodel) {
+	case SUBMDL_ES1887:
+		return 1;
+	default:
+		return 0;
+	};
+};
+
 #ifdef FKS_LOGGING
 static int ess_mixer_mon_regs[]
 	= { 0x70, 0x71, 0x72, 0x74, 0x76, 0x78, 0x7a, 0x7c, 0x7d, 0x7f
@@ -1353,13 +1566,15 @@ printk(KERN_INFO "FKS: write mixer %x: %x\n", port, value);
 
 	save_flags(flags);
 	cli();
+	if (port >= 0xa0) {
+		ess_write (devc, port, value);
+	} else {
+		outb(((unsigned char) (port & 0xff)), MIXER_ADDR);
 
-	outb(((unsigned char) (port & 0xff)), MIXER_ADDR);
-
-	udelay(20);
-	outb(((unsigned char) (value & 0xff)), MIXER_DATA);
-	udelay(20);
-
+		udelay(20);
+		outb(((unsigned char) (value & 0xff)), MIXER_DATA);
+		udelay(20);
+	};
 	restore_flags(flags);
 }
 
@@ -1371,12 +1586,15 @@ unsigned int ess_getmixer (sb_devc * devc, unsigned int port)
 	save_flags(flags);
 	cli();
 
-	outb(((unsigned char) (port & 0xff)), MIXER_ADDR);
+	if (port >= 0xa0) {
+		val = ess_read (devc, port);
+	} else {
+		outb(((unsigned char) (port & 0xff)), MIXER_ADDR);
 
-	udelay(20);
-	val = inb(MIXER_DATA);
-	udelay(20);
-
+		udelay(20);
+		val = inb(MIXER_DATA);
+		udelay(20);
+	}
 	restore_flags(flags);
 
 	return val;
@@ -1400,21 +1618,23 @@ void ess_mixer_init (sb_devc * devc)
 	devc->mixer_caps = SOUND_CAP_EXCL_INPUT;
 
 	/*
-	* Take care of new ES's specifics...
+	* Take care of ES1887 specifics...
 	*/
-	if (devc->caps & ESSCAP_NEW) {
-		devc->supported_devices		= ES_NEW_MIXER_DEVICES;
-		devc->supported_rec_devices	= ES_NEW_RECORDING_DEVICES;
+	switch (devc->submodel) {
+	case SUBMDL_ES1887:
+		devc->supported_devices		= ES1887_MIXER_DEVICES;
+		devc->supported_rec_devices	= ES1887_RECORDING_DEVICES;
 #ifdef FKS_LOGGING
 printk (KERN_INFO "FKS: ess_mixer_init dup = %d\n", devc->duplex);
 #endif
 		if (devc->duplex) {
-			devc->iomap				= &es_new_mix;
+			devc->iomap				= &es1887_mix;
 		} else {
 			devc->iomap				= &es_rec_mix;
 		}
-	} else {
-		if (devc->submodel == SUBMDL_ES688) {
+		break;
+	default:
+		if (devc->submodel < 8) {
 			devc->supported_devices		= ES688_MIXER_DEVICES;
 			devc->supported_rec_devices	= ES688_RECORDING_DEVICES;
 			devc->iomap					= &es688_mix;
@@ -1425,10 +1645,10 @@ printk (KERN_INFO "FKS: ess_mixer_init dup = %d\n", devc->duplex);
 			 */
 			devc->supported_devices		= ES1688_MIXER_DEVICES;
 			devc->supported_rec_devices	= ES1688_RECORDING_DEVICES;
-			if (devc->caps & ESSCAP_ES18) {
-				devc->iomap				= &es1688later_mix;
-			} else {
+			if (devc->submodel < 0x10) {
 				devc->iomap				= &es1688_mix;
+			} else {
+				devc->iomap				= &es1688later_mix;
 			}
 		}
 	}
@@ -1440,14 +1660,8 @@ printk (KERN_INFO "FKS: ess_mixer_init dup = %d\n", devc->duplex);
  */
 int ess_mixer_set(sb_devc *devc, int dev, int left, int right)
 {
-	if ((devc->caps & ESSCAP_NEW) && (devc->recmask & (1 << dev))) {
+	if (ess_has_rec_mixer (devc->submodel) && (devc->recmask & (1 << dev))) {
 		sb_common_mixer_set (devc, dev + ES_REC_MIXER_RECDIFF, left, right);
-	}
-	/* Set & unmute master volume */
-	if ((devc->caps & ESSCAP_ES18) && (dev == SOUND_MIXER_VOLUME)) {
-		ess_chgmixer (devc, 0x60, 0x7f, 0x3f & ((left * 0x3f + 50) / 100));
-		ess_chgmixer (devc, 0x62, 0x7f, 0x3f & ((right * 0x3f + 50) / 100));
-		return left | (right << 8);
 	}
 	return sb_common_mixer_set (devc, dev, left, right);
 }
@@ -1494,6 +1708,7 @@ printk (KERN_INFO "FKS: es_rec_set_recmask mask = %x\n", mask);
 				right = (value & 0x0000ff00) >> 8;
 			} else {				/* Turn it off (3)  */
 				left  = 0;
+				left  = 0;
 				right = 0;
 			}
 			sb_common_mixer_set(devc, i + ES_REC_MIXER_RECDIFF, left, right);
@@ -1506,7 +1721,7 @@ int ess_set_recmask(sb_devc * devc, int *mask)
 {
 	/* This applies to ESS chips with record mixers only! */
 
-	if (devc->caps & ESSCAP_NEW) {
+	if (ess_has_rec_mixer (devc->submodel)) {
 		*mask	= es_rec_set_recmask (devc, *mask);
 		return 1;									/* Applied		*/
 	} else {
@@ -1522,7 +1737,18 @@ int ess_mixer_reset (sb_devc * devc)
 	/*
 	 * Separate actions for ESS chips with a record mixer:
 	 */
-	if (devc->caps & ESSCAP_NEW) {
+	if (ess_has_rec_mixer (devc->submodel)) {
+		switch (devc->submodel) {
+		case SUBMDL_ES1887:
+			/*
+			 * Separate actions for ES1887:
+			 * Change registers 7a and 1c to make the record mixer the
+			 * actual recording source.
+			 */
+			ess_chgmixer(devc, 0x7a, 0x18, 0x08);
+			ess_chgmixer(devc, 0x1c, 0x07, 0x07);
+			break;
+		};
 		/*
 		 * Call set_recmask for proper initialization
 		 */
@@ -1542,80 +1768,50 @@ int ess_mixer_reset (sb_devc * devc)
  *																			*
  ****************************************************************************/
 
+/*
+ * FKS: IRQ may be shared. Hm. And if so? Then What?
+ */
 int ess_midi_init(sb_devc * devc, struct address_info *hw_config)
 {
-	int val;
+	unsigned char   cfg, tmp;
 
-	if (devc->submodel == SUBMDL_ES688) {
-		return 0;				/* ES688 doesn't support MPU401 mode */
+	cfg = ess_getmixer (devc, 0x40) & 0x03;
+
+	if (devc->submodel < 8) {
+		ess_setmixer (devc, 0x40, cfg | 0x03);	/* Enable OPL3 & joystick */
+		return 0;  					 /* ES688 doesn't support MPU401 mode */
+	}
+	tmp = (hw_config->io_base & 0x0f0) >> 4;
+
+	if (tmp > 3) {
+		ess_setmixer (devc, 0x40, cfg);
+		return 0;
+	}
+	cfg |= tmp << 3;
+
+	tmp = 1;		/* MPU enabled without interrupts */
+
+	/* May be shared: if so the value is -ve */
+
+	switch (abs(hw_config->irq)) {
+		case 9:
+			tmp = 0x4;
+			break;
+		case 5:
+			tmp = 0x5;
+			break;
+		case 7:
+			tmp = 0x6;
+			break;
+		case 10:
+			tmp = 0x7;
+			break;
+		default:
+			return 0;
 	}
 
-	if (hw_config->irq < 2) {
-		hw_config->irq = devc->irq;
-	}
-
-	if (devc->caps & ESSCAP_PNP) {
-		outb (0x07, devc->pcibase);		/* Selects logical device #1 */
-		outb (0x01, devc->pcibase + 1);
-		outb (0x28, devc->pcibase);
-		val = inb (devc->pcibase + 1) & 0xf0;
-		outb (0x28, devc->pcibase);		/* Sets MPU IRQ */
-		outb (hw_config->irq | val, devc->pcibase + 1);
-		if (hw_config->io_base) {
-			outb (0x64, devc->pcibase);		/* Sets MPU I/O address */
-			outb ((hw_config->io_base & 0xf00) >> 8, devc->pcibase + 1);
-			outb (0x65, devc->pcibase);		/* Sets MPU I/O address */
-			outb (hw_config->io_base & 0xfc, devc->pcibase + 1);
-		} else {
-			outb (0x64, devc->pcibase);		/* Read MPU I/O address */
-			hw_config->io_base = (inb (devc->pcibase + 1) & 0x0f) << 8;
-			outb (0x65, devc->pcibase);		/* Read MPU I/O address */
-			hw_config->io_base |= inb (devc->pcibase + 1) & 0xfc;
-		}
-
-		ess_setmixer (devc, 0x64, 0xc2);	/* Enable MPU interrupt */
-	} else {
-		if (devc->irq == hw_config->irq && (devc->caps & ESSCAP_IRQ)) {
-			val = 0x43;
-		}
-		else switch (hw_config->irq) {
-			case 11:
-				if (!(devc->caps & ESSCAP_IRQ)) {
-					return 0;
-				}
-				val = 0x63;
-				break;
-			case 2:
-			case 9:
-				val = 0x83;
-				break;
-			case 5:
-				val = 0xa3;
-				break;
-			case 7:
-				val = 0xc3;
-				break;
-			case 10:
-				val = 0xe3;
-				break;
-			default:
-				return 0;
-		}
-		switch (hw_config->io_base) {
-			case 0x300:
-			case 0x310:
-			case 0x320:
-			case 0x330:
-				ess_setmixer (devc, 0x40, val
-								| ((hw_config->io_base & 0x0f0) >> 1));
-				break;
-			default:
-				return 0;
-		}
-	}
-
-	if (devc->irq == hw_config->irq)	/* Shared IRQ */
-		hw_config->irq = -devc->irq;
+	cfg |= tmp << 5;
+	ess_setmixer (devc, 0x40, cfg | 0x03);
 
 	return 1;
 }

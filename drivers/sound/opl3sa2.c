@@ -467,13 +467,13 @@ void unload_opl3sa2_mpu(struct address_info *hw_config)
 }
 
 
-static int probe_opl3sa2_mss(struct address_info *hw_config)
+int probe_opl3sa2_mss(struct address_info *hw_config)
 {
 	return probe_ms_sound(hw_config);
 }
 
 
-static void attach_opl3sa2_mss(struct address_info *hw_config)
+void attach_opl3sa2_mss(struct address_info *hw_config)
 {
 	char mixer_name[64];
 
@@ -516,7 +516,7 @@ static void attach_opl3sa2_mss(struct address_info *hw_config)
 }
 
 
-static void unload_opl3sa2_mss(struct address_info *hw_config)
+void unload_opl3sa2_mss(struct address_info *hw_config)
 {
 	unload_ms_sound(hw_config);
 }
@@ -592,6 +592,9 @@ int probe_opl3sa2(struct address_info *hw_config)
 	{
 		/* Generate a pretty name */
 		sprintf(chipset_name, "OPL3-SA%c", tag);
+#if defined(CONFIG_OPL3SA2_MPU_BASE) && !defined(MODULE)
+		sound_getconf(SNDCARD_OPL3SA2_MPU)->always_detect = 1;
+#endif
 		return 1;
 	}
 	return 0;

@@ -32,7 +32,6 @@ static char *version =
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/auxio.h>
-#include <asm/system.h>
 #include <asm/pgtable.h>
 
 #include <linux/netdevice.h>

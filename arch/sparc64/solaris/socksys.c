@@ -16,7 +16,6 @@
 #include <linux/file.h>
 #include <linux/init.h>
 #include <linux/poll.h>
-#include <linux/file.h>
 #include <linux/malloc.h>
 
 #include <asm/uaccess.h>

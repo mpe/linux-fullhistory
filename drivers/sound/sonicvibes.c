@@ -2312,9 +2312,9 @@ static struct initvol {
 };
 
 #ifdef MODULE
-__initfunc(int init_module(void))
+int __init init_module(void)
 #else
-__initfunc(int init_sonicvibes(void))
+int __init init_sonicvibes(void)
 #endif
 {
 	struct sv_state *s;

@@ -1,6 +1,6 @@
 /* via-rhine.c: A Linux Ethernet device driver for VIA Rhine family chips. */
 /*
-	Written 1998 by Donald Becker.
+	Written 1998-1999 by Donald Becker.
 
 	This software may be used and distributed according to the terms
 	of the GNU Public License (GPL), incorporated herein by reference.
@@ -20,7 +20,7 @@
 */
 
 static const char *versionA =
-"via-rhine.c:v1.00 9/5/98  Written by Donald Becker\n";
+"via-rhine.c:v1.01 2/27/99  Written by Donald Becker\n";
 static const char *versionB =
 "  http://cesdis.gsfc.nasa.gov/linux/drivers/via-rhine.html\n";
 
@@ -81,9 +81,11 @@ static const int multicast_filter_limit = 32;
 #include <asm/bitops.h>
 #include <asm/io.h>
 
-/* This driver was written to use PCI memory space, however some boards
-   only work with I/O space accesses. */
+/* This driver was written to use PCI memory space, however some x86
+   motherboards only configure I/O space accesses correctly. */
+#if defined(__i386__)  &&  !defined(VIA_USE_MEMORY)
 #define VIA_USE_IO
+#endif
 #ifdef VIA_USE_IO
 #undef readb
 #undef readw
@@ -105,6 +107,7 @@ static const int multicast_filter_limit = 32;
 #define RUN_AT(x) (jiffies + (x))
 
 #if (LINUX_VERSION_CODE >= 0x20100)
+char kernel_version[] = UTS_RELEASE;
 #else
 #ifndef __alpha__
 #define ioremap vremap
@@ -502,6 +505,7 @@ static int pci_etherdev_probe(struct device *dev, struct pci_id_info pci_tbl[])
 #ifndef MODULE
 int via_rhine_probe(struct device *dev)
 {
+	printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
 	return pci_etherdev_probe(dev, pci_tbl);
 }
 #endif
@@ -510,12 +514,8 @@ static struct device *via_probe1(int pci_bus, int pci_devfn,
 								 struct device *dev, long ioaddr, int irq,
 								 int chip_id, int card_idx)
 {
-	static int did_version = 0;		/* Already printed version info */
 	struct netdev_private *np;
 	int i, option = card_idx < MAX_UNITS ? options[card_idx] : 0;
-
-	if (debug > 0 && did_version++ == 0)
-		printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
 
 	dev = init_etherdev(dev, 0);
 
@@ -685,6 +685,8 @@ static int netdev_open(struct device *dev)
 		   ioaddr + IntrEnable);
 
 	np->chip_cmd = CmdStart|CmdTxOn|CmdRxOn|CmdNoTxPoll;
+	if (np->duplex_lock)
+		np->chip_cmd |= CmdFDuplex;
 	writew(np->chip_cmd, ioaddr + ChipCmd);
 
 	check_duplex(dev);
@@ -1053,7 +1055,6 @@ static int netdev_rx(struct device *dev)
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
 			dev->last_rx = jiffies;
-			np->stats.rx_bytes += pkt_len;
 			np->stats.rx_packets++;
 		}
 		entry = (++np->cur_rx) % RX_RING_SIZE;
@@ -1182,7 +1183,7 @@ static void set_rx_mode(struct device *dev)
 		}
 		writel(mc_filter[0], ioaddr + MulticastFilter0);
 		writel(mc_filter[1], ioaddr + MulticastFilter1);
-		rx_mode = 0x0C;
+		rx_mode = 0x08;
 	}
 	writeb(np->rx_thresh | rx_mode, ioaddr + RxConfig);
 }

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-probe.c	Version 1.04  March 10, 1999
+ *  linux/drivers/block/ide-probe.c	Version 1.05  July 3, 1999
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -18,8 +18,11 @@
  *			 by Andrea Arcangeli
  * Version 1.03		fix for (hwif->chipset == ide_4drives)
  * Version 1.04		fixed buggy treatments of known flash memory cards
- *			fix for (hwif->chipset == ide_pdc4030)
+ *
+ * Version 1.05		fix for (hwif->chipset == ide_pdc4030)
  *			added ide6/7
+ *			allowed for secondary flash card to be detectable
+ *			 with new flag : drive->ata_flash : 1;
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -141,8 +144,10 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	 */
 	if (drive_is_flashcard(drive)) {
 		ide_drive_t *mate = &HWIF(drive)->drives[1^drive->select.b.unit];
-		mate->present = 0;
-		mate->noprobe = 1;
+		if (!mate->ata_flash) {
+			mate->present = 0;
+			mate->noprobe = 1;
+		}
 	}
 	drive->media = ide_disk;
 	printk("ATA DISK drive\n");

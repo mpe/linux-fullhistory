@@ -1,4 +1,4 @@
-Documentation for /proc/sys/sunrpc/*	kernel version 2.2.5
+Documentation for /proc/sys/sunrpc/*	kernel version 2.2.10
 	(c) 1998, 1999,  Rik van Riel <riel@nl.linux.org>
 
 For general info and legal blurb, please look in README.

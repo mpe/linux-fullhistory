@@ -23,7 +23,6 @@
 #include <linux/proc_fs.h>
 #include <linux/netdevice.h>
 #include <linux/timer.h>
-#include <linux/rtnetlink.h>
 #include <asm/spinlock.h>
 #include <asm/atomic.h>
 #include <asm/uaccess.h>

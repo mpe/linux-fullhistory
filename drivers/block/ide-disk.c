@@ -776,8 +776,9 @@ static void idedisk_setup (ide_drive_t *drive)
 			drive->bios_cyl, drive->bios_head, drive->bios_sect);
 
 	if (drive->using_dma) {
-		if  ((id->field_valid & 4) && (id->word93 & 0x2000) &&
-		     (id->dma_ultra & (id->dma_ultra >> 11) & 3)) {
+		if ((id->field_valid & 4) && (id->word93 & 0x2000) &&
+		    (HWIF(drive)->udma_four) &&
+		    (id->dma_ultra & (id->dma_ultra >> 11) & 3)) {
 			printk(", UDMA(66)");	/* UDMA BIOS-enabled! */
 		} else if ((id->field_valid & 4) &&
 			   (id->dma_ultra & (id->dma_ultra >> 8) & 7)) {

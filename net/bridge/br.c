@@ -1831,12 +1831,8 @@ static int br_flood(struct sk_buff *skb, int port)
 			
 /*			printk("Flood to port %d\n",i);*/
 			nskb->nh.raw = nskb->data + ETH_HLEN;
-#if LINUX_VERSION_CODE >= 0x20100
 			nskb->priority = 1;
 			dev_queue_xmit(nskb);
-#else
-			dev_queue_xmit(nskb,nskb->dev,1);
-#endif
 		}
 	}
 	return(0);

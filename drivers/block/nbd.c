@@ -401,7 +401,7 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 		return 0;
 	case NBD_SET_SIZE_BLOCKS:
 		nbd_sizes[dev] = arg;
-		nbd_bytesizes[dev] = arg << nbd_blksize_bits[dev];
+		nbd_bytesizes[dev] = ((u64) arg) << nbd_blksize_bits[dev];
 		return 0;
 	case NBD_DO_IT:
 		if (!lo->file)

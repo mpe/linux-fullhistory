@@ -205,7 +205,7 @@ static struct video_device pcm20_radio=
 	NULL
 };
 
-__initfunc(int pcm20_init(struct video_init *v))
+int __init pcm20_init(struct video_init *v)
 {
 
 	pcm20_radio.priv=&pcm20_unit;

@@ -115,7 +115,8 @@ int access_process_vm(struct task_struct *tsk, unsigned long addr, void *buf, in
 int ptrace_readdata(struct task_struct *tsk, unsigned long src, char *dst, int len)
 {
 	int copied = 0;
-	while (len) {
+
+	while (len > 0) {
 		char buf[128];
 		int this_len, retval;
 
@@ -139,7 +140,8 @@ int ptrace_readdata(struct task_struct *tsk, unsigned long src, char *dst, int l
 int ptrace_writedata(struct task_struct *tsk, char * src, unsigned long dst, int len)
 {
 	int copied = 0;
-	while (len) {
+
+	while (len > 0) {
 		char buf[128];
 		int this_len, retval;
 

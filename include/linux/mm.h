@@ -317,6 +317,8 @@ extern void vmtruncate(struct inode * inode, unsigned long offset);
 extern int handle_mm_fault(struct task_struct *tsk,struct vm_area_struct *vma, unsigned long address, int write_access);
 extern int make_pages_present(unsigned long addr, unsigned long end);
 extern int access_process_vm(struct task_struct *tsk, unsigned long addr, void *buf, int len, int write);
+extern int ptrace_readdata(struct task_struct *tsk, unsigned long src, char *dst, int len);
+extern int ptrace_writedata(struct task_struct *tsk, char * src, unsigned long dst, int len);
 
 extern int pgt_cache_water[2];
 extern int check_pgt_cache(void);

@@ -18,7 +18,6 @@
 #include <linux/fcntl.h>
 #include <linux/net.h>
 #include <linux/in.h>
-#include <linux/version.h>
 #include <linux/unistd.h>
 #include <linux/malloc.h>
 #include <linux/proc_fs.h>

@@ -450,7 +450,7 @@ static char *cardname = "ICL EtherTeam 16i/32";
 
 #else  /* Not HAVE_DEVLIST */
 
-__initfunc(int eth16i_probe(struct device *dev))
+int __init eth16i_probe(struct device *dev)
 {
 	int i;
 	int ioaddr;
@@ -484,7 +484,7 @@ __initfunc(int eth16i_probe(struct device *dev))
 }
 #endif  /* Not HAVE_DEVLIST */
 
-__initfunc(static int eth16i_probe1(struct device *dev, int ioaddr))
+static int __init eth16i_probe1(struct device *dev, int ioaddr)
 {
 	static unsigned version_printed = 0;
 	boot = 1;  /* To inform initilization that we are in boot probe */
@@ -886,7 +886,7 @@ static int eth16i_check_signature(int ioaddr)
 	creg[0] &= 0x0F;      /* Mask collision cnr */
 	creg[2] &= 0x7F;      /* Mask DCLEN bit */
 
-#ifdef 0
+#if 0
 	/* 
 	   This was removed because the card was sometimes left to state
 	   from which it couldn't be find anymore. If there is need

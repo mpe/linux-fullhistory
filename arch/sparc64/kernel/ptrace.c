@@ -28,242 +28,6 @@
 
 #define MAGIC_CONSTANT 0x80000000
 
-/*
- * This routine gets a long from any process space by following the page
- * tables. NOTE! You should check that the long isn't on a page boundary,
- * and that it is in the task area before calling this: this routine does
- * no checking.
- */
-static pte_t *ptrace_get_page(struct task_struct * tsk,
-	struct vm_area_struct * vma, unsigned long addr, int write)
-{
-	pgd_t * pgdir;
-	pmd_t * pgmiddle;
-	pte_t * pgtable;
-
-repeat:
-	pgdir = pgd_offset(vma->vm_mm, addr);
-
-	/* Seems non-intuitive but the page copy/clear routines always
-	 * check current's value.
-	 */
-	current->mm->segments = (void *) (addr & PAGE_SIZE);
-
-	if (pgd_none(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, write);
-		goto repeat;
-	}
-	if (pgd_bad(*pgdir)) {
-		printk("ptrace: bad page directory %016lx\n", pgd_val(*pgdir));
-		pgd_clear(pgdir);
-		return 0;
-	}
-	pgmiddle = pmd_offset(pgdir, addr);
-	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, write);
-		goto repeat;
-	}
-	if (pmd_bad(*pgmiddle)) {
-		printk("ptrace: bad page middle %016lx\n", pmd_val(*pgmiddle));
-		pmd_clear(pgmiddle);
-		return 0;
-	}
-	pgtable = pte_offset(pgmiddle, addr);
-	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, write);
-		goto repeat;
-	}
-	if (write && !pte_write(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, write);
-		goto repeat;
-	}
-	return pgtable;
-}
-
-/* We must bypass the L1-cache to avoid alias issues.  -DaveM */
-static __inline__ unsigned long read_user_long(unsigned long kvaddr)
-{
-	unsigned long ret;
-
-	__asm__ __volatile__("ldxa [%1] %2, %0"
-			     : "=r" (ret)
-			     : "r" (__pa(kvaddr)), "i" (ASI_PHYS_USE_EC));
-	return ret;
-}
-
-static __inline__ unsigned int read_user_int(unsigned long kvaddr)
-{
-	unsigned int ret;
-
-	__asm__ __volatile__("lduwa [%1] %2, %0"
-			     : "=r" (ret)
-			     : "r" (__pa(kvaddr)), "i" (ASI_PHYS_USE_EC));
-	return ret;
-}
-
-static __inline__ void write_user_long(unsigned long kvaddr, unsigned long val)
-{
-	__asm__ __volatile__("stxa %0, [%1] %2"
-			     : /* no outputs */
-			     : "r" (val), "r" (__pa(kvaddr)), "i" (ASI_PHYS_USE_EC));
-}
-
-static __inline__ void write_user_int(unsigned long kvaddr, unsigned int val)
-{
-	__asm__ __volatile__("stwa %0, [%1] %2"
-			     : /* no outputs */
-			     : "r" (val), "r" (__pa(kvaddr)), "i" (ASI_PHYS_USE_EC));
-}
-
-static inline unsigned long get_long(struct task_struct * tsk,
-	struct vm_area_struct * vma, unsigned long addr)
-{
-	pte_t * pgtable;
-	unsigned long page, retval;
-	
-	if (!(pgtable = ptrace_get_page (tsk, vma, addr, 0))) return 0;
-	page = pte_page(*pgtable);
-/* this is a hack for non-kernel-mapped video buffers and similar */
-	if (MAP_NR(page) >= max_mapnr)
-		return 0;
-	page += addr & ~PAGE_MASK;
-	retval = read_user_long(page);
-	flush_page_to_ram(page);
-	return retval;
-}
-
-static inline void put_long(struct task_struct * tsk, struct vm_area_struct * vma,
-	unsigned long addr, unsigned long data)
-{
-	pte_t *pgtable;
-	unsigned long page;
-
-	if (!(pgtable = ptrace_get_page (tsk, vma, addr, 1))) return;
-	page = pte_page(*pgtable);
-/* this is a hack for non-kernel-mapped video buffers and similar */
-	flush_cache_page(vma, addr);
-	if (MAP_NR(page) < max_mapnr) {
-		unsigned long pgaddr;
-
-		pgaddr = page + (addr & ~PAGE_MASK);
-		write_user_long(pgaddr, data);
-
-		__asm__ __volatile__("
-		membar	#StoreStore
-		flush	%0
-"		: : "r" (pgaddr & ~7) : "memory");
-	}
-/* we're bypassing pagetables, so we have to set the dirty bit ourselves */
-/* this should also re-instate whatever read-only mode there was before */
-	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-	flush_tlb_page(vma, addr);
-}
-
-static inline unsigned int get_int(struct task_struct * tsk,
-	struct vm_area_struct * vma, unsigned long addr)
-{
-	pte_t * pgtable;
-	unsigned long page;
-	unsigned int retval;
-	
-	if (!(pgtable = ptrace_get_page (tsk, vma, addr, 0))) return 0;
-	page = pte_page(*pgtable);
-/* this is a hack for non-kernel-mapped video buffers and similar */
-	if (MAP_NR(page) >= max_mapnr)
-		return 0;
-	page += addr & ~PAGE_MASK;
-	retval = read_user_int(page);
-	flush_page_to_ram(page);
-	return retval;
-}
-
-static inline void put_int(struct task_struct * tsk, struct vm_area_struct * vma,
-	unsigned long addr, unsigned int data)
-{
-	pte_t *pgtable;
-	unsigned long page;
-
-	if (!(pgtable = ptrace_get_page (tsk, vma, addr, 1))) return;
-	page = pte_page(*pgtable);
-/* this is a hack for non-kernel-mapped video buffers and similar */
-	flush_cache_page(vma, addr);
-	if (MAP_NR(page) < max_mapnr) {
-		unsigned long pgaddr;
-
-		pgaddr = page + (addr & ~PAGE_MASK);
-		write_user_int(pgaddr, data);
-
-		__asm__ __volatile__("
-		membar	#StoreStore
-		flush	%0
-"		: : "r" (pgaddr & ~7) : "memory");
-	}
-/* we're bypassing pagetables, so we have to set the dirty bit ourselves */
-/* this should also re-instate whatever read-only mode there was before */
-	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-	flush_tlb_page(vma, addr);
-}
-
-/*
- * This routine checks the page boundaries, and that the offset is
- * within the task area. It then calls get_long() to read a long.
- */
-static int read_long(struct task_struct * tsk, unsigned long addr,
-		     unsigned long * result)
-{
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
-
-	if (!vma)
-		return -EIO;
-	*result = get_long(tsk, vma, addr);
-	return 0;
-}
-
-/*
- * This routine checks the page boundaries, and that the offset is
- * within the task area. It then calls get_int() to read a int.
- */
-static int read_int(struct task_struct * tsk, unsigned long addr,
-		     unsigned int * result)
-{
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
-
-	if (!vma)
-		return -EIO;
-	*result = get_int(tsk, vma, addr);
-	return 0;
-}
-
-/*
- * This routine checks the page boundaries, and that the offset is
- * within the task area. It then calls put_long() to write a long.
- */
-static int write_long(struct task_struct * tsk, unsigned long addr,
-		      unsigned long data)
-{
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
-
-	if (!vma)
-		return -EIO;
-	put_long(tsk, vma, addr, data);
-	return 0;
-}
-
-/*
- * This routine checks the page boundaries, and that the offset is
- * within the task area. It then calls put_int() to write a int.
- */
-static int write_int(struct task_struct * tsk, unsigned long addr,
-		     unsigned int data)
-{
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
-
-	if (!vma)
-		return -EIO;
-	put_int(tsk, vma, addr, data);
-	return 0;
-}
-
 /* Returning from ptrace is a bit tricky because the syscall return
  * low level code assumes any value returned which is negative and
  * is a valid errno will mean setting the condition codes to indicate
@@ -309,175 +73,6 @@ pt_os_succ_return (struct pt_regs *regs, unsigned long val, long *addr)
 	else
 		pt_succ_return_linux (regs, val, addr);
 }
-
-#if 0
-/* XXX: Implement this some day */
-/* Fuck me gently with a chainsaw... */
-static inline void read_sunos_user(struct pt_regs *regs, unsigned long offset,
-				   struct task_struct *tsk, long *addr)
-{
-	struct pt_regs *cregs = tsk->tss.kregs;
-	struct thread_struct *t = &tsk->tss;
-	int v;
-	
-	if(offset >= 1024)
-		offset -= 1024; /* whee... */
-	if(offset & ((sizeof(unsigned int) - 1))) {
-		pt_error_return(regs, EIO);
-		return;
-	}
-	if(offset >= 16 && offset < 784) {
-		offset -= 16; offset >>= 2;
-		if (t->w_saved)
-			pt_os_succ_return(regs, *(((unsigned long *)(&t->reg_window[0]))+offset), addr);
-		return;
-	}
-	if(offset >= 784 && offset < 832) {
-		offset -= 784; offset >>= 2;
-		if (t->w_saved)
-			pt_os_succ_return(regs, *(((unsigned long *)(&t->rwbuf_stkptrs[0]))+offset), addr);
-		return;
-	}
-	switch(offset) {
-	case 0:
-		v = t->ksp;
-		break;
-#if 0
-	case 4:
-		v = t->kpc;
-		break;
-#endif
-	case 8:
-		v = t->kpsr;
-		break;
-	case 12:
-		v = t->uwinmask;
-		break;
-	case 832:
-		v = t->w_saved;
-		break;
-	case 896:
-		v = cregs->u_regs[UREG_I0];
-		break;
-	case 900:
-		v = cregs->u_regs[UREG_I1];
-		break;
-	case 904:
-		v = cregs->u_regs[UREG_I2];
-		break;
-	case 908:
-		v = cregs->u_regs[UREG_I3];
-		break;
-	case 912:
-		v = cregs->u_regs[UREG_I4];
-		break;
-	case 916:
-		v = cregs->u_regs[UREG_I5];
-		break;
-	case 920:
-		v = cregs->u_regs[UREG_I6];
-		break;
-	case 924:
-		if(tsk->tss.flags & MAGIC_CONSTANT)
-			v = cregs->u_regs[UREG_G1];
-		else
-			v = 0;
-		break;
-	case 940:
-		v = cregs->u_regs[UREG_I0];
-		break;
-	case 944:
-		v = cregs->u_regs[UREG_I1];
-		break;
-
-	case 948:
-		/* Isn't binary compatibility _fun_??? */
-		if(cregs->psr & PSR_C)
-			v = cregs->u_regs[UREG_I0] << 24;
-		else
-			v = 0;
-		break;
-
-		/* Rest of them are completely unsupported. */
-	default:
-		printk("%s [%d]: Wants to read user offset %ld\n",
-		       current->comm, current->pid, offset);
-		pt_error_return(regs, EIO);
-		return;
-	}
-	pt_os_succ_return_linux (regs, v, addr);
-	return;
-}
-
-static inline void write_sunos_user(struct pt_regs *regs, unsigned long offset,
-				    struct task_struct *tsk)
-{
-	struct pt_regs *cregs = tsk->tss.kregs;
-	struct thread_struct *t = &tsk->tss;
-	unsigned int value = regs->u_regs[UREG_I3];
-
-	if(offset >= 1024)
-		offset -= 1024; /* whee... */
-	if(offset & ((sizeof(unsigned long) - 1)))
-		goto failure;
-	if(offset >= 16 && offset < 784) {
-		offset -= 16; offset >>= 2;
-		if (t->w_saved)
-			*(((unsigned long *)(&t->reg_window[0]))+offset) = value;
-		goto success;
-	}
-	if(offset >= 784 && offset < 832) {
-		offset -= 784; offset >>= 2;
-		if (t->w_saved)
-			*(((unsigned long *)(&t->rwbuf_stkptrs[0]))+offset) = value;
-		goto success;
-	}
-	switch(offset) {
-	case 896:
-		cregs->u_regs[UREG_I0] = value;
-		break;
-	case 900:
-		cregs->u_regs[UREG_I1] = value;
-		break;
-	case 904:
-		cregs->u_regs[UREG_I2] = value;
-		break;
-	case 908:
-		cregs->u_regs[UREG_I3] = value;
-		break;
-	case 912:
-		cregs->u_regs[UREG_I4] = value;
-		break;
-	case 916:
-		cregs->u_regs[UREG_I5] = value;
-		break;
-	case 920:
-		cregs->u_regs[UREG_I6] = value;
-		break;
-	case 924:
-		cregs->u_regs[UREG_I7] = value;
-		break;
-	case 940:
-		cregs->u_regs[UREG_I0] = value;
-		break;
-	case 944:
-		cregs->u_regs[UREG_I1] = value;
-		break;
-
-		/* Rest of them are completely unsupported or "no-touch". */
-	default:
-		printk("%s [%d]: Wants to write user offset %ld\n",
-		       current->comm, current->pid, offset);
-		goto failure;
-	}
-success:
-	pt_succ_return(regs, 0);
-	return;
-failure:
-	pt_error_return(regs, EIO);
-	return;
-}
-#endif
 
 /* #define ALLOW_INIT_TRACING */
 /* #define DEBUG_PTRACE */
@@ -642,76 +237,54 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 	switch(request) {
 	case PTRACE_PEEKTEXT: /* read word at location addr. */ 
 	case PTRACE_PEEKDATA: {
-		unsigned long tmp;
-		int res;
+		unsigned long tmp64;
+		unsigned int tmp32;
+		int res, copied;
 
-		/* Non-word alignment _not_ allowed on Sparc. */
+		res = -EIO;
 		if (current->tss.flags & SPARC_FLAG_32BIT) {
-			unsigned int x;
-			if(addr & (sizeof(unsigned int) - 1)) {
-				pt_error_return(regs, EINVAL);
-				goto out;
-			}
-			down(&child->mm->mmap_sem);
-			res = read_int(child, addr, &x);
-			up(&child->mm->mmap_sem);
-			tmp = x;
+			copied = access_process_vm(child, addr,
+						   &tmp32, sizeof(tmp32), 0);
+			tmp64 = (unsigned long) tmp32;
+			if (copied == sizeof(tmp32))
+				res = 0;
 		} else {
-			if(addr & (sizeof(unsigned long) - 1)) {
-				pt_error_return(regs, EINVAL);
-				goto out;
-			}
-			down(&child->mm->mmap_sem);
-			res = read_long(child, addr, &tmp);
-			up(&child->mm->mmap_sem);
+			copied = access_process_vm(child, addr,
+						   &tmp64, sizeof(tmp64), 0);
+			if (copied == sizeof(tmp64))
+				res = 0;
 		}
-		if (res < 0) {
+		if (res < 0)
 			pt_error_return(regs, -res);
-			goto out;
-		}
-		pt_os_succ_return(regs, tmp, (long *) data);
-		goto out;
+		else
+			pt_os_succ_return(regs, tmp64, (long *) data);
+		goto flush_and_out;
 	}
-
-	case PTRACE_PEEKUSR:
-#if 0	
-		read_sunos_user(regs, addr, child, (long *) data);
-#endif
-		goto out;
-
-	case PTRACE_POKEUSR:
-#if 0	
-		write_sunos_user(regs, addr, child);
-#endif		
-		goto out;
 
 	case PTRACE_POKETEXT: /* write the word at location addr. */
 	case PTRACE_POKEDATA: {
-		int res;
+		unsigned long tmp64;
+		unsigned int tmp32;
+		int copied, res = -EIO;
 
-		/* Non-word alignment _not_ allowed on Sparc. */
 		if (current->tss.flags & SPARC_FLAG_32BIT) {
-			if(addr & (sizeof(unsigned int) - 1)) {
-				pt_error_return(regs, EINVAL);
-				goto out;
-			}
-			down(&child->mm->mmap_sem);
-			res = write_int(child, addr, data);
-			up(&child->mm->mmap_sem);
+			tmp32 = data;
+			copied = access_process_vm(child, addr,
+						   &tmp32, sizeof(tmp32), 1);
+			if (copied == sizeof(tmp32))
+				res = 0;
 		} else {
-			if(addr & (sizeof(unsigned long) - 1)) {
-				pt_error_return(regs, EINVAL);
-				goto out;
-			}
-			down(&child->mm->mmap_sem);
-			res = write_long(child, addr, data);
-			up(&child->mm->mmap_sem);
+			tmp64 = data;
+			copied = access_process_vm(child, addr,
+						   &tmp64, sizeof(tmp64), 1);
+			if (copied == sizeof(tmp64))
+				res = 0;
 		}
 		if(res < 0)
 			pt_error_return(regs, -res);
 		else
 			pt_succ_return(regs, res);
-		goto out;
+		goto flush_and_out;
 	}
 
 	case PTRACE_GETREGS: {
@@ -926,98 +499,31 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 
 	case PTRACE_READTEXT:
 	case PTRACE_READDATA: {
-		unsigned char *dest = (unsigned char *) addr2;
-		unsigned long src = addr;
-		int len = data, curlen;
-		struct vm_area_struct *vma;
-		pte_t *pgtable;
-		unsigned long page;
-
-		while(len) {
-			down(&child->mm->mmap_sem);
-			vma = find_extend_vma(child, src);
-			if (!vma) {
-				up(&child->mm->mmap_sem);
-				pt_error_return(regs, EIO);
-				goto flush_and_out;
-			}
-			pgtable = ptrace_get_page (child, vma, src, 0);
-			up(&child->mm->mmap_sem);
-			if (src & ~PAGE_MASK) {
-				curlen = PAGE_SIZE - (src & ~PAGE_MASK);
-				if (curlen > len) curlen = len;
-			} else if (len > PAGE_SIZE)
-				curlen = PAGE_SIZE;
-			else
-				curlen = len;
-			if (pgtable && MAP_NR(page = pte_page(*pgtable)) < max_mapnr) {
-				if (copy_to_user (dest, ((char *)page) + (src & ~PAGE_MASK), curlen)) {
-					flush_page_to_ram(page);
-					pt_error_return(regs, EFAULT);
-					goto flush_and_out;
-				}
-				flush_page_to_ram(page);
-			} else {
-				if (clear_user (dest, curlen)) {
-					pt_error_return(regs, EFAULT);
-					goto flush_and_out;
-				}
-			}
-			src += curlen;
-			dest += curlen;
-			len -= curlen;
+		int res = ptrace_readdata(child, addr,
+					  (void *)addr2, data);
+		if (res == data) {
+			pt_succ_return(regs, 0);
+			goto flush_and_out;
 		}
-		pt_succ_return(regs, 0);
+		if (res >= 0)
+			res = -EIO;
+		pt_error_return(regs, -res);
 		goto flush_and_out;
 	}
 
 	case PTRACE_WRITETEXT:
 	case PTRACE_WRITEDATA: {
-		unsigned char *src = (unsigned char *) addr2;
-		unsigned long dest = addr;
-		int len = data, curlen;
-		struct vm_area_struct *vma;
-		pte_t *pgtable;
-		unsigned long page;
-
-		while(len) {
-			down(&child->mm->mmap_sem);
-			vma = find_extend_vma(child, dest);
-			if (!vma) {
-				up(&child->mm->mmap_sem);
-				pt_error_return(regs, EIO);
-				goto flush_and_out;
-			}
-			pgtable = ptrace_get_page (child, vma, dest, 1);
-			up(&child->mm->mmap_sem);
-			if (dest & ~PAGE_MASK) {
-				curlen = PAGE_SIZE - (dest & ~PAGE_MASK);
-				if (curlen > len) curlen = len;
-			} else if (len > PAGE_SIZE)
-				curlen = PAGE_SIZE;
-			else
-				curlen = len;
-			if (pgtable && MAP_NR(page = pte_page(*pgtable)) < max_mapnr) {
-				flush_cache_page(vma, dest);
-				if (copy_from_user (((char *)page) + (dest & ~PAGE_MASK), src, curlen)) {
-					flush_page_to_ram(page);
-					set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-					flush_tlb_page(vma, dest);
-					pt_error_return(regs, EFAULT);
-					goto flush_and_out;
-				}
-				flush_page_to_ram(page);
-				set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-				flush_tlb_page(vma, dest);
-			}
-			src += curlen;
-			dest += curlen;
-			len -= curlen;
+		int res = ptrace_writedata(child, (void *) addr2,
+					   addr, data);
+		if (res == data) {
+			pt_succ_return(regs, 0);
+			goto flush_and_out;
 		}
-		pt_succ_return(regs, 0);
+		if (res >= 0)
+			res = -EIO;
+		pt_error_return(regs, -res);
 		goto flush_and_out;
 	}
-
 	case PTRACE_SYSCALL: /* continue and stop at (return from) syscall */
 		addr = 1;
 
@@ -1105,6 +611,14 @@ flush_and_out:
 		unsigned long va;
 		for(va =  0; va < (PAGE_SIZE << 1); va += 32)
 			spitfire_put_dcache_tag(va, 0x0);
+		if (request == PTRACE_PEEKTEXT ||
+		    request == PTRACE_POKETEXT ||
+		    request == PTRACE_READTEXT ||
+		    request == PTRACE_WRITETEXT) {
+			for(va =  0; va < (PAGE_SIZE << 1); va += 32)
+				spitfire_put_icache_tag(va, 0x0);
+			__asm__ __volatile__("flush %g6");
+		}
 	}
 out:
 	unlock_kernel();

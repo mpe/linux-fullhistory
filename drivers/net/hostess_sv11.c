@@ -389,7 +389,8 @@ static void sv11_shutdown(struct sv11_device *dev)
 	free_irq(dev->sync.irq, dev);
 	if(dma)
 	{
-		free_dma(dev->sync.chanA.rxdma);
+		if(dma==1)
+			free_dma(dev->sync.chanA.rxdma);
 		free_dma(dev->sync.chanA.txdma);
 	}
 	release_region(dev->sync.chanA.ctrlio-1, 8);

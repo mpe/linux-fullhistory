@@ -130,6 +130,7 @@ static inline void init_once(struct inode * inode)
 	INIT_LIST_HEAD(&inode->i_hash);
 	INIT_LIST_HEAD(&inode->i_dentry);
 	sema_init(&inode->i_sem, 1);
+	spin_lock_init(&inode->i_shared_lock);
 }
 
 static inline void write_inode(struct inode *inode)
@@ -523,7 +524,7 @@ void clean_inode(struct inode *inode)
 	inode->i_sock = 0;
 	inode->i_op = NULL;
 	inode->i_nlink = 1;
-	inode->i_writecount = 0;
+	atomic_set(&inode->i_writecount, 0);
 	inode->i_size = 0;
 	inode->i_generation = 0;
 	memset(&inode->i_dquot, 0, sizeof(inode->i_dquot));

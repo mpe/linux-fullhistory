@@ -25,29 +25,17 @@
 #define SNDCARD_DESKPROXL		27	/* Compaq Deskpro XL */
 #define SNDCARD_VIDC			28	/* ARMs VIDC */
 #define SNDCARD_SBPNP			29
-#define SNDCARD_OPL3SA1			38
-#define SNDCARD_OPL3SA1_SB		39
-#define SNDCARD_OPL3SA1_MPU		40
 #define SNDCARD_SOFTOSS			36
 #define SNDCARD_VMIDI			37
+#define SNDCARD_OPL3SA1			38	/* Note: clash in msnd.h */
+#define SNDCARD_OPL3SA1_SB		39
+#define SNDCARD_OPL3SA1_MPU		40
 #define SNDCARD_WAVEFRONT               41
 #define SNDCARD_OPL3SA2                 42
 #define SNDCARD_OPL3SA2_MPU             43
 #define SNDCARD_WAVEARTIST		44
+#define SNDCARD_OPL3SA2_MSS             45	/* Originally missed */
 #define SNDCARD_AD1816                  88
-
-void attach_opl3sa_wss (struct address_info *hw_config);
-int probe_opl3sa_wss (struct address_info *hw_config);
-void attach_opl3sa_sb (struct address_info *hw_config);
-int probe_opl3sa_sb (struct address_info *hw_config);
-void attach_opl3sa_mpu (struct address_info *hw_config);
-int probe_opl3sa_mpu (struct address_info *hw_config);
-void unload_opl3sa_wss(struct address_info *hw_info);
-void unload_opl3sa_sb(struct address_info *hw_info);
-void unload_opl3sa_mpu(struct address_info *hw_info);
-void attach_softsyn_card (struct address_info *hw_config);
-int probe_softsyn (struct address_info *hw_config);
-void unload_softsyn (struct address_info *hw_config);
 
 /*
  *	NOTE! 	NOTE!	NOTE!	NOTE!
@@ -424,6 +412,7 @@ struct driver_info sound_drivers[] =
 
 #ifdef CONFIG_SOUND_OPL3SA2
 	{"OPL3SA2", 0, SNDCARD_OPL3SA2,	"OPL3SA2",		attach_opl3sa2, probe_opl3sa2, unload_opl3sa2},
+	{"OPL3SA2MSS", 1, SNDCARD_OPL3SA2_MSS,	"OPL3SA2 MSS",		attach_opl3sa2_mss, probe_opl3sa2_mss, unload_opl3sa2_mss},
 	{"OPL3SA2MPU", 0, SNDCARD_OPL3SA2_MPU,	"OPL3SA2 MIDI",		attach_opl3sa2_mpu, probe_opl3sa2_mpu, unload_opl3sa2_mpu},
 #endif
 
@@ -587,10 +576,11 @@ struct card_info snd_installed_cards[] =
 #ifndef CONFIG_OPL3SA2_DMA2
 #define CONFIG_OPL3SA2_DMA2 CONFIG_OPL3SA2_DMA
 #endif
+	{SNDCARD_OPL3SA2, {CONFIG_OPL3SA2_CTRL_BASE, CONFIG_OPL3SA2_IRQ, CONFIG_OPL3SA2_DMA, CONFIG_OPL3SA2_DMA2}, SND_DEFAULT_ENABLE},
+	{SNDCARD_OPL3SA2_MSS, {CONFIG_OPL3SA2_BASE, CONFIG_OPL3SA2_IRQ, CONFIG_OPL3SA2_DMA, CONFIG_OPL3SA2_DMA2}, SND_DEFAULT_ENABLE},
 #ifdef CONFIG_OPL3SA2_MPU_BASE
-	{SNDCARD_OPL3SA2_MPU, {CONFIG_OPL3SA2_MPU_BASE, CONFIG_OPL3SA2_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_OPL3SA2_MPU, {CONFIG_OPL3SA2_MPU_BASE, CONFIG_OPL3SA2_MPU_IRQ, CONFIG_OPL3SA2_DMA, -1}, SND_DEFAULT_ENABLE},
 #endif
-	{SNDCARD_OPL3SA2, {CONFIG_OPL3SA2_BASE, CONFIG_OPL3SA2_IRQ, CONFIG_OPL3SA2_DMA, CONFIG_OPL3SA2_DMA2}, SND_DEFAULT_ENABLE},
 #endif
 
 #ifdef CONFIG_SGALAXY

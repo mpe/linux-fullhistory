@@ -2474,8 +2474,7 @@ wavefront_hw_reset (void)
 	return (1);
 }
 
-__initfunc (static int detect_wavefront (int irq, int io_base))
-
+static int __init detect_wavefront (int irq, int io_base)
 {
 	unsigned char   rbuf[4], wbuf[4];
 
@@ -2653,8 +2652,7 @@ wavefront_download_firmware (char *path)
 	return 1;
 }
 
-__initfunc (static int wavefront_config_midi (void)) 
-
+static int __init wavefront_config_midi (void)
 {
 	unsigned char rbuf[4], wbuf[4];
     
@@ -2728,7 +2726,6 @@ __initfunc (static int wavefront_config_midi (void))
 
 static int
 wavefront_do_reset (int atboot)
-
 {
 	char voices[1];
 
@@ -2832,7 +2829,6 @@ wavefront_do_reset (int atboot)
 
 static int
 wavefront_init (int atboot)
-
 {
 	int samples_are_from_rom;
 
@@ -2861,7 +2857,7 @@ wavefront_init (int atboot)
 	return (0);
 }
 
-__initfunc (static int install_wavefront (void))
+static int __init install_wavefront (void)
 
 {
 	if ((dev.synth_dev = register_sound_synth (&wavefront_fops, -1)) < 0) {
@@ -2919,7 +2915,7 @@ uninstall_wavefront (void)
 #endif OSS_SUPPORT_SEQ
 	uninstall_wf_mpu ();
 }
-
+
 /***********************************************************************/
 /*   WaveFront FX control                                              */
 /***********************************************************************/
@@ -2955,8 +2951,7 @@ wffx_idle (void)
 	return (1);
 }
 
-__initfunc (static int detect_wffx (void))
-
+static int __init detect_wffx (void)
 {
 	/* This is a crude check, but its the best one I have for now.
 	   Certainly on the Maui and the Tropez, wffx_idle() will
@@ -2972,8 +2967,7 @@ __initfunc (static int detect_wffx (void))
 	return 0;
 }	
 
-__initfunc (static int attach_wffx (void))
-
+static int __init attach_wffx (void)
 {
 	if ((dev.fx_mididev = sound_alloc_mididev ()) < 0) {
 		printk (KERN_WARNING LOGNAME "cannot install FX Midi driver\n");

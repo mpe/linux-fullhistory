@@ -37,8 +37,6 @@ asmlinkage int sys_statfs(const char * path, struct statfs * buf)
 asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 {
 	struct file * file;
-	struct inode * inode;
-	struct dentry * dentry;
 	struct super_block * sb;
 	int error;
 

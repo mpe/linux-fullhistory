@@ -1,6 +1,9 @@
 <HTML><HEAD>
-<TITLE>Video4Linux Kernel API Reference v0.1:19980516</TITLE>
+<TITLE>Video4Linux Kernel API Reference v0.1:19990430</TITLE>
 </HEAD>
+<! Revision History: >
+<!   4/30/1999 - Fred Gleason (fredg@wava.com)>
+<! Documented extensions for the Radio Data System (RDS) extensions >
 <BODY bgcolor="#ffffff">
 <H3>Devices</H3>
 Video4Linux provides the following sets of device files. These live on the
@@ -117,7 +120,7 @@ fields available to the user.
 </TABLE>
 <P>
 Merely setting the window does not enable capturing. Overlay capturing
-is activatied by passing the <b>VIDIOCCAPTURE</b> ioctl a value of 1, and
+is activated by passing the <b>VIDIOCCAPTURE</b> ioctl a value of 1, and
 disabled by passing it a value of 0. 
 <P>
 Some capture devices can capture a subfield of the image they actually see.
@@ -150,7 +153,7 @@ the <b>struct video_channel</b> is filled in with information about the
 nature of the channel itself.
 <P>
 The <b>VIDIOCSCHAN</b> ioctl takes an integer argument and switches the
-capture to this input. It is not defined whether paramters such as colour
+capture to this input. It is not defined whether parameters such as colour
 settings or tuning are maintained across a channel switch. The caller should
 maintain settings as desired for each channel. (This is reasonable as 
 different video inputs may have different properties).
@@ -249,6 +252,8 @@ The following flags exist
 <TR><TD><b>VIDEO_TUNER_LOW</b><TD>Frequency is in a lower range</TD>
 <TR><TD><b>VIDEO_TUNER_NORM</b><TD>The norm for this tuner is settable</TD>
 <TR><TD><b>VIDEO_TUNER_STEREO_ON</b><TD>The tuner is seeing stereo audio</TD>
+<TR><TD><b>VIDEO_TUNER_RDS_ON</b><TD>The tuner is seeing a RDS datastream</TD>
+<TR><TD><b>VIDEO_TUNER_MBS_ON</b><TD>The tuner is seeing a MBS datastream</TD>
 </TABLE>
 <P>
 The following modes are defined
@@ -349,6 +354,21 @@ devices if any exist. The video_unit structure has the following fields.
 <TR><TD><b>teletext</b><TD>Teletext device</TD>
 </TABLE>
 <P>
-
+<H3>RDS Datastreams</H3>
+For radio devices that support it, it is possible to receive Radio Data
+System (RDS) data by means of a read() on the device.  The data is packed in
+groups of three, as follows:
+<TABLE>
+<TR><TD>First Octet</TD><TD>Least Siginificant Byte of RDS Block</TD></TR>
+<TR><TD>Second Octet</TD><TD>Most Siginificant Byte of RDS Block
+<TR><TD>Third Octet</TD><TD>Bit 7:</TD><TD>Error bit.  Indicates that
+an uncorrectable error occured during reception of this block.</TD></TR>
+<TR><TD>&nbsp;</TD><TD>Bit 6:</TD><TD>Corrected bit.  Indicates that  
+an error was corrected for this data block.</TD></TR>
+<TR><TD>&nbsp;</TD><TD>Bits 5-3:</TD><TD>Reeived Offset.  Indicates the  
+offset received by the sync system.</TD></TR>
+<TR><TD>&nbsp;</TD><TD>Bits 2-0:</TD><TD>Offset Name.  Indicates the  
+offset applied to this data.</TD></TR>
+</TABLE>
 </BODY>
 </HTML>

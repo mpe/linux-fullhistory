@@ -129,9 +129,7 @@ MODULE_DESCRIPTION ("AMI MegaRAID driver");
 #include <linux/tqueue.h>
 #include <linux/interrupt.h>
 
-#include <linux/sched.h>
 #include <linux/stat.h>
-#include <linux/malloc.h>	/* for kmalloc() */
 #if LINUX_VERSION_CODE < 0x20100
 #include <linux/bios32.h>
 #else

@@ -254,9 +254,9 @@
 #include <linux/time.h>
 #include <linux/blk.h>
 #include <asm/spinlock.h>
+#include <asm/pgtable.h>
 
 #ifdef CONFIG_AMIGA
-#include <asm/pgtable.h>
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
 #include <asm/irq.h>
@@ -266,7 +266,6 @@
 #endif
 
 #ifdef CONFIG_MVME16x
-#include <asm/pgtable.h>
 #include <asm/mvme16xhw.h>
 
 #define BIG_ENDIAN
@@ -275,7 +274,6 @@
 #endif
 
 #ifdef CONFIG_BVME6000
-#include <asm/pgtable.h>
 #include <asm/bvme6000hw.h>
 
 #define BIG_ENDIAN

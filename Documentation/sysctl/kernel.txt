@@ -1,4 +1,4 @@
-Documentation for /proc/sys/kernel/*	kernel version 2.2.5
+Documentation for /proc/sys/kernel/*	kernel version 2.2.10
 	(c) 1998, 1999,  Rik van Riel <riel@nl.linux.org>
 
 For general info and legal blurb, please look in README.
@@ -76,12 +76,21 @@ to decide what to do with it.
 
 domainname & hostname:
 
-These files can be controlled to set the domainname and
-hostname of your box. For the classic darkstar.frop.org
-a simple:
+These files can be used to set the NIS/YP domainname and the
+hostname of your box in exactly the same way as the commands
+domainname and hostname, i.e.:
 # echo "darkstar" > /proc/sys/kernel/hostname
-# echo "frop.org" > /proc/sys/kernel/domainname
-would suffice to set your hostname and domainname.
+# echo "mydomain" > /proc/sys/kernel/domainname
+has the same effect as
+# hostname "darkstar" > /proc/sys/kernel/hostname
+# domainname "mydomain" > /proc/sys/kernel/domainname
+
+Note, however, that the classic darkstar.frop.org has the
+hostname "darkstar" and DNS (Internet Domain Name Server)
+domainname "frop.org", not to be confused with the NIS (Network
+Information Service) or YP (Yellow Pages) domainname. These two
+domain names are in general different. For a detailed discussion
+see the hostname(1) man page.
 
 ==============================================================
 

@@ -256,21 +256,39 @@ void unload_trix_sb(struct address_info *hw_info);
 void unload_trix_mpu(struct address_info *hw_info);
 void unload_cs4232(struct address_info *hw_info);
 void unload_cs4232_mpu(struct address_info *hw_info);
+void unload_opl3sa_wss(struct address_info *hw_info);
+void unload_opl3sa_sb(struct address_info *hw_info);
+void unload_opl3sa_mpu(struct address_info *hw_info);
 void unload_opl3sa2(struct address_info *hw_info);
 void unload_opl3sa2_mpu(struct address_info *hw_info);
+void unload_opl3sa2_mss(struct address_info *hw_info);
+void unload_softsyn (struct address_info *hw_config);
 
-/* From cs4232.c */
-
+/*	From cs4232.c */
 int probe_cs4232 (struct address_info *hw_config);
 void attach_cs4232 (struct address_info *hw_config);
 int probe_cs4232_mpu (struct address_info *hw_config);
 void attach_cs4232_mpu (struct address_info *hw_config);
 
-/* From opl3sa2.c */
+/*	From opl3sa.c */
+void attach_opl3sa_wss (struct address_info *hw_config);
+int probe_opl3sa_wss (struct address_info *hw_config);
+void attach_opl3sa_sb (struct address_info *hw_config);
+int probe_opl3sa_sb (struct address_info *hw_config);
+void attach_opl3sa_mpu (struct address_info *hw_config);
+int probe_opl3sa_mpu (struct address_info *hw_config);
+
+/*	From opl3sa2.c */
 int probe_opl3sa2 (struct address_info *hw_config);
 void attach_opl3sa2 (struct address_info *hw_config);
 int probe_opl3sa2_mpu (struct address_info *hw_config);
 void attach_opl3sa2_mpu (struct address_info *hw_config);
+int probe_opl3sa2_mss (struct address_info *hw_config);
+void attach_opl3sa2_mss (struct address_info *hw_config);
+
+/*	From softoss.c */
+void attach_softsyn_card (struct address_info *hw_config);
+int probe_softsyn (struct address_info *hw_config);
 
 /*	From maui.c */
 void attach_maui(struct address_info * hw_config);
@@ -291,12 +309,12 @@ void attach_waveartist(struct address_info *hw_config);
 int probe_waveartist(struct address_info *hw_config);
 void unload_waveartist(struct address_info *hw_config);
 
-/*      From wavefront.c */
+/*	From wavefront.c */
 void attach_wavefront (struct address_info *hw_config);
 int probe_wavefront (struct address_info *hw_config);
 void unload_wavefront (struct address_info *hw_config);
 
-/*      From wf_midi.c */
+/*	From wf_midi.c */
 void attach_wf_mpu(struct address_info * hw_config);
 int probe_wf_mpu(struct address_info *hw_config);
 void unload_wf_mpu(struct address_info *hw_config);

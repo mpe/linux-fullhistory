@@ -33,8 +33,6 @@
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/malloc.h>
-#include <linux/delay.h>
-#include <linux/init.h>
 #include <linux/init.h>
 
 #include <asm/io.h>

@@ -369,24 +369,12 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 	case PTRACE_PEEKTEXT: /* read word at location addr. */ 
 	case PTRACE_PEEKDATA: {
 		unsigned long tmp;
-		int res;
 
-		/* XXX Find out what is really going on. */
-		flush_cache_all();
-
-		/* Non-word alignment _not_ allowed on Sparc. */
-		if(addr & (sizeof(unsigned long) - 1)) {
-			pt_error_return(regs, EINVAL);
-			goto out;
-		}
-		down(&child->mm->mmap_sem);
-		res = read_long(child, addr, &tmp);
-		up(&child->mm->mmap_sem);
-		if (res < 0) {
-			pt_error_return(regs, -res);
-			goto out;
-		}
-		pt_os_succ_return(regs, tmp, (long *) data);
+		if (access_process_vm(child, addr,
+				      &tmp, sizeof(tmp), 0) == sizeof(tmp))
+			pt_os_succ_return(regs, tmp, (long *)data);
+		else
+			pt_error_return(regs, EIO);
 		goto out;
 	}
 
@@ -400,22 +388,11 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 
 	case PTRACE_POKETEXT: /* write the word at location addr. */
 	case PTRACE_POKEDATA: {
-		struct vm_area_struct *vma;
-		int res;
-
-		/* Non-word alignment _not_ allowed on Sparc. */
-		if(addr & (sizeof(unsigned long) - 1)) {
-			pt_error_return(regs, EINVAL);
-			goto out;
-		}
-		down(&child->mm->mmap_sem);
-		vma = find_extend_vma(child, addr);
-		res = write_long(child, addr, data);
-		up(&child->mm->mmap_sem);
-		if(res < 0)
-			pt_error_return(regs, -res);
+		if (access_process_vm(child, addr,
+				      &data, sizeof(data), 1) == sizeof(data))
+			pt_succ_return(regs, 0);
 		else
-			pt_succ_return(regs, res);
+			pt_error_return(regs, EIO);
 		goto out;
 	}
 

@@ -32,14 +32,9 @@
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
 #include <linux/errno.h>
-
-#include <linux/sched.h>
 #include <linux/unistd.h>
-#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
-
-
 #include <asm/spinlock.h>
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -104,7 +99,7 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 		if (status) {
 			/* must reset the toggle on first error */
     			if (uhci_debug) {
-			    printk("Set toggle from %x rval %d\n", (unsigned int)tmp, rval ? *rval : 0);
+			    printk("Set toggle from %x rval %ld\n", (unsigned int)tmp, rval ? *rval : 0);
 			}
 			usb_settoggle(dev->usb, usb_pipeendpoint(tmp->info), usb_pipeout(tmp->info), (tmp->info >> 19) & 1);
 			break;

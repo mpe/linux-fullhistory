@@ -2311,9 +2311,7 @@ __initfunc(int init_cmpci(void))
 		index++;
 		continue;
 
-	err_dev4:
 		unregister_sound_midi(s->dev_midi);
-	err_dev3:
 		unregister_sound_mixer(s->dev_mixer);
 	err_dev2:
 		unregister_sound_dsp(s->dev_audio);
@@ -2328,7 +2326,6 @@ __initfunc(int init_cmpci(void))
 #ifdef CONFIG_SOUND_CMPCI_MIDI
 		release_region(s->iomidi, CM_EXTENT_MIDI);
 #endif
-	err_region4:
 		release_region(s->iobase, CM_EXTENT_CODEC);
 	err_region5:
 		kfree_s(s, sizeof(struct cm_state));

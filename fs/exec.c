@@ -563,7 +563,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 	if ((retval = permission(inode, MAY_EXEC)) != 0)
 		return retval;
 	/* better not execute files which are being written to */
-	if (inode->i_writecount > 0)
+	if (atomic_read(&inode->i_writecount) > 0)
 		return -ETXTBSY;
 
 	bprm->e_uid = current->euid;

@@ -276,7 +276,7 @@ static struct video_device fmi_radio=
 	NULL
 };
 
-__initfunc(int fmi_init(struct video_init *v))
+int __init fmi_init(struct video_init *v)
 {
 	if (check_region(io, 2)) 
 	{

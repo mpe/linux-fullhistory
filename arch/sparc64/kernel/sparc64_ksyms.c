@@ -45,7 +45,6 @@
 #include <asm/ebus.h>
 #endif
 #include <asm/a.out.h>
-#include <asm/svr4.h>
 
 struct poll {
 	int fd;

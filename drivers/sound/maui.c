@@ -15,9 +15,12 @@
  *					system
  *
  *	Status:
- *		Untested
+ *		Andrew J. Kroll		Tested 06/01/1999 with:
+ *					* OSWF.MOT File Version: 1.15
+ *					* OSWF.MOT File Dated: 09/12/94
+ *					* Older versions will cause problems.
  */
- 
+
 #include <linux/config.h>
 #include <linux/module.h>
 #include <asm/init.h>

@@ -201,9 +201,6 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 	return ((unsigned long*)t->reg29)[17];
 }
 
-struct pt_regs;
-extern int (*user_mode)(struct pt_regs *);
-
 /*
  * Do necessary setup to start up a newly executed thread.
  */

@@ -20,10 +20,10 @@
 #include <linux/ioport.h>
 #include <linux/major.h>
 
-#include  <asm/uaccess.h>
+#include <asm/uaccess.h>
+#include <asm/io.h>
 
 #if defined(__i386__)
-# include <asm/io.h>
 # include <asm/system.h>
 # include <asm/segment.h>
 #endif
@@ -34,7 +34,6 @@
 
 # include <asm/oplib.h>           /* OpenProm Library */
 # include <asm/sbus.h>            /* struct linux_sbus *SBus_chain */
-# include <asm/io.h>              /* sparc_alloc_io() */
 #endif
 
 #include <asm/bpp.h>

@@ -891,6 +891,12 @@ typedef unsigned char mixer_record[128];
 #define SOUND_MIXER_ACCESS		_SIOWR('M', 102, mixer_record)
 
 /*
+ * Two ioctls for special souncard function
+ */
+#define SOUND_MIXER_AGC  _SIOWR('M', 103, int)
+#define SOUND_MIXER_3DSE  _SIOWR('M', 104, int)
+
+/*
  * The SOUND_MIXER_PRIVATE# commands can be redefined by low level drivers.
  * These features can be used when accessing device specific features.
  */

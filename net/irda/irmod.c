@@ -218,6 +218,8 @@ __initfunc(int irda_init(void))
 	misc_register( &irda.dev);
 
 	irda.in_use = FALSE;
+	
+	init_waitqueue_head(&irda.wait_queue);
 
 	/* 
 	 * Initialize modules that got compiled into the kernel 

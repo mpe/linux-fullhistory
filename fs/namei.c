@@ -171,18 +171,22 @@ int permission(struct inode * inode,int mask)
  * 0: no writers, no VM_DENYWRITE mappings
  * < 0: (-i_writecount) vm_area_structs with VM_DENYWRITE set exist
  * > 0: (i_writecount) users are writing to the file.
+ *
+ * WARNING: as soon as we will move get_write_access(), do_mmap() or
+ * prepare_binfmt() out of the big lock we will need a spinlock protecting
+ * the checks in all 3. For the time being it is not needed.
  */
 int get_write_access(struct inode * inode)
 {
-	if (inode->i_writecount < 0)
+	if (atomic_read(&inode->i_writecount) < 0)
 		return -ETXTBSY;
-	inode->i_writecount++;
+	atomic_inc(&inode->i_writecount);
 	return 0;
 }
 
 void put_write_access(struct inode * inode)
 {
-	inode->i_writecount--;
+	atomic_dec(&inode->i_writecount);
 }
 
 /*

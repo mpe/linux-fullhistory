@@ -16,7 +16,6 @@
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
-#include <linux/signal.h>
 #include <linux/stddef.h>
 
 #include <asm/bitops.h>

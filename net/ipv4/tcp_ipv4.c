@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.181 1999/07/02 11:26:31 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.182 1999/07/05 01:34:07 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -167,7 +167,7 @@ static __inline__ int tcp_bucket_check(unsigned short snum)
 	tb = tcp_bhash[tcp_bhashfn(snum)];
 	for( ; (tb && (tb->port != snum)); tb = tb->next)
 		;
-	ret = 0
+	ret = 0;
 	if (tb == NULL) {
 		if ((tb = tcp_bucket_create(snum)) == NULL)
 			ret = 1;

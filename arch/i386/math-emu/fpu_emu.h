@@ -165,8 +165,6 @@ extern u_char const data_sizes_16[32];
 #define signpositive(a) ( (signbyte(a) & 0x80) == 0 )
 #define signnegative(a) (signbyte(a) & 0x80)
 
-#include "fpu_proto.h"
-
 static inline void reg_copy(FPU_REG const *x, FPU_REG *y)
 {
   *(short *)&(y->exp) = *(const short *)&(x->exp); 

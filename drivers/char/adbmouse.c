@@ -38,9 +38,7 @@
 #ifdef __powerpc__
 #include <asm/processor.h>
 #endif
-#ifdef __mc68000__
 #include <asm/setup.h>
-#endif
 
 static struct mouse_status mouse;
 static unsigned char adb_mouse_buttons[16];
@@ -282,7 +280,6 @@ __initfunc(void adb_mouse_setup(char *str, int *ints))
 }
 
 #ifdef MODULE
-#include <asm/setup.h>
 
 int init_module(void)
 {

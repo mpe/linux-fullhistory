@@ -776,8 +776,8 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	/*
 	 *	Check any passed addresses
 	 */
-  	if (addr_len) 
-  		*addr_len=sizeof(*sin);
+	if (addr_len)
+		*addr_len=sizeof(*sin);
 
 	if (flags & MSG_ERRQUEUE)
 		return ip_recv_error(sk, msg, len);

@@ -1386,13 +1386,14 @@ static void capidrv_signal(__u16 applid, __u32 dummy)
 			handle_data(&s_cmsg, skb);
 			continue;
 		}
-		kfree_skb(skb);
 		if ((s_cmsg.adr.adrController & 0xffffff00) == 0)
 			handle_controller(&s_cmsg);
 		else if ((s_cmsg.adr.adrPLCI & 0xffff0000) == 0)
 			handle_plci(&s_cmsg);
 		else
 			handle_ncci(&s_cmsg);
+
+		kfree_skb(skb);
 	}
 }
 

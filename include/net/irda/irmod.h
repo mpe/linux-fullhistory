@@ -90,7 +90,7 @@ struct irda_todo {
  */
 struct irda_cb {
 	struct miscdevice dev;	
-	wait_queue_head_t *wait_queue;
+	wait_queue_head_t wait_queue;
 
 	int in_use;
 

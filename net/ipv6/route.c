@@ -37,7 +37,6 @@
 #include <net/ndisc.h>
 #include <net/addrconf.h>
 #include <net/tcp.h>
-#include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 
 #include <asm/uaccess.h>

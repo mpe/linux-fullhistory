@@ -1165,7 +1165,7 @@ static int reset_dsp(void)
 	return -EIO;
 }
 
-__initfunc(static int probe_multisound(void))
+static int __init probe_multisound(void)
 {
 #ifndef MSND_CLASSIC
 	char *xv, *rev = NULL;
@@ -1305,7 +1305,7 @@ static int init_sma(void)
 	return 0;
 }
 
-__initfunc(static int calibrate_adc(WORD srate))
+static int __init calibrate_adc(WORD srate)
 {
 	writew(srate, dev.SMA + SMA_wCalFreqAtoD);
 	if (dev.calibrate_signal == 0)
@@ -1427,7 +1427,7 @@ static int dsp_full_reset(void)
 	return rv;
 }
 
-__initfunc(static int attach_multisound(void))
+static int __init attach_multisound(void)
 {
 	int err;
 
@@ -1491,7 +1491,7 @@ static void unload_multisound(void)
 
 /* Pinnacle/Fiji Logical Device Configuration */
 
-__initfunc(static int msnd_write_cfg(int cfg, int reg, int value))
+static int __init msnd_write_cfg(int cfg, int reg, int value)
 {
 	outb(reg, cfg);
 	outb(value, cfg + 1);
@@ -1502,7 +1502,7 @@ __initfunc(static int msnd_write_cfg(int cfg, int reg, int value))
 	return 0;
 }
 
-__initfunc(static int msnd_write_cfg_io0(int cfg, int num, WORD io))
+static int __init msnd_write_cfg_io0(int cfg, int num, WORD io)
 {
 	if (msnd_write_cfg(cfg, IREG_LOGDEVICE, num))
 		return -EIO;
@@ -1513,7 +1513,7 @@ __initfunc(static int msnd_write_cfg_io0(int cfg, int num, WORD io))
 	return 0;
 }
 
-__initfunc(static int msnd_write_cfg_io1(int cfg, int num, WORD io))
+static int __init msnd_write_cfg_io1(int cfg, int num, WORD io)
 {
 	if (msnd_write_cfg(cfg, IREG_LOGDEVICE, num))
 		return -EIO;
@@ -1524,7 +1524,7 @@ __initfunc(static int msnd_write_cfg_io1(int cfg, int num, WORD io))
 	return 0;
 }
 
-__initfunc(static int msnd_write_cfg_irq(int cfg, int num, WORD irq))
+static int __init msnd_write_cfg_irq(int cfg, int num, WORD irq)
 {
 	if (msnd_write_cfg(cfg, IREG_LOGDEVICE, num))
 		return -EIO;
@@ -1535,7 +1535,7 @@ __initfunc(static int msnd_write_cfg_irq(int cfg, int num, WORD irq))
 	return 0;
 }
 
-__initfunc(static int msnd_write_cfg_mem(int cfg, int num, int mem))
+static int __init msnd_write_cfg_mem(int cfg, int num, int mem)
 {
 	WORD wmem;
 
@@ -1553,7 +1553,7 @@ __initfunc(static int msnd_write_cfg_mem(int cfg, int num, int mem))
 	return 0;
 }
 
-__initfunc(static int msnd_activate_logical(int cfg, int num))
+static int __init msnd_activate_logical(int cfg, int num)
 {
 	if (msnd_write_cfg(cfg, IREG_LOGDEVICE, num))
 		return -EIO;
@@ -1562,7 +1562,7 @@ __initfunc(static int msnd_activate_logical(int cfg, int num))
 	return 0;
 }
 
-__initfunc(static int msnd_write_cfg_logical(int cfg, int num, WORD io0, WORD io1, WORD irq, int mem))
+static int __init msnd_write_cfg_logical(int cfg, int num, WORD io0, WORD io1, WORD irq, int mem)
 {
 	if (msnd_write_cfg(cfg, IREG_LOGDEVICE, num))
 		return -EIO;
@@ -1584,7 +1584,7 @@ typedef struct msnd_pinnacle_cfg_device {
 	int mem;
 } msnd_pinnacle_cfg_t[4];
 
-__initfunc(static int msnd_pinnacle_cfg_devices(int cfg, int reset, msnd_pinnacle_cfg_t device))
+static int __init msnd_pinnacle_cfg_devices(int cfg, int reset, msnd_pinnacle_cfg_t device)
 {
 	int i;
 
@@ -1767,9 +1767,9 @@ static int
 calibrate_signal __initdata =		CONFIG_MSND_CALSIGNAL;
 
 #ifdef MSND_CLASSIC
-__initfunc(int msnd_classic_init(void))
+int __init msnd_classic_init(void)
 #else
-__initfunc(int msnd_pinnacle_init(void))
+int __init msnd_pinnacle_init(void)
 #endif /* MSND_CLASSIC */
 
 #endif /* MODULE */

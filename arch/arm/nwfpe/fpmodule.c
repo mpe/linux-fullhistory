@@ -36,7 +36,6 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/sched.h>
 #include <linux/init.h>
 
 #include <asm/system.h>

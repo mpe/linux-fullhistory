@@ -324,7 +324,7 @@ static struct video_device rtrack_radio=
 	NULL
 };
 
-__initfunc(int rtrack_init(struct video_init *v))
+int __init rtrack_init(struct video_init *v)
 {
 	if (check_region(io, 2)) 
 	{

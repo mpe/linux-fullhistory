@@ -2682,8 +2682,10 @@ static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long addr
 		inode = dentry->d_inode;
 	if(inode) {
 		unsigned long offset = (address & PAGE_MASK) - vma->vm_start;
-		struct vm_area_struct *vmaring = inode->i_mmap; 
+		struct vm_area_struct *vmaring;
 		int alias_found = 0;
+		spin_lock(&inode->i_shared_lock);
+		vmaring = inode->i_mmap; 
 		do {
 			unsigned long vaddr = vmaring->vm_start + offset;
 			unsigned long start;
@@ -2712,6 +2714,7 @@ static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long addr
 				}
 			}
 		} while ((vmaring = vmaring->vm_next_share) != NULL);
+		spin_unlock(&inode->i_shared_lock);
 
 		if(alias_found && !(pte_val(pte) & _SUN4C_PAGE_NOCACHE)) {
 			pgdp = sun4c_pgd_offset(vma->vm_mm, address);

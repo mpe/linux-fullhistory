@@ -163,6 +163,7 @@ if [ "$CONFIG_ATARI" = "y" ]; then
     dep_tristate 'Atari SLM laser printer support' CONFIG_ATARI_SLM $CONFIG_ATARI_ACSI
   fi
 fi
+tristate 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA
 
 comment 'Additional Block Devices'
 

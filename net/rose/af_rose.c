@@ -54,7 +54,6 @@
 #include <linux/proc_fs.h>
 #include <net/ip.h>
 #include <net/arp.h>
-#include <linux/if_arp.h>
 #include <linux/init.h>
 
 int rose_ndevs = 10;
@@ -1509,6 +1508,11 @@ __initfunc(void rose_proto_init(struct net_proto *pro))
 
 	for (i = 0; i < rose_ndevs; i++) {
 		dev_rose[i].name = kmalloc(20, GFP_KERNEL);
+		if(dev_rose[i].name == NULL)
+		{
+			printk(KERN_ERR "Rose: unable to register ROSE devices.\n");
+			break;
+		}
 		sprintf(dev_rose[i].name, "rose%d", i);
 		dev_rose[i].init = rose_init;
 		register_netdev(&dev_rose[i]);

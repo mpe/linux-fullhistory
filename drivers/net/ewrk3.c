@@ -342,11 +342,8 @@ static int num_ewrk3s = 0, num_eth = 0;
     outb(EEPROM_INIT, EWRK3_IOPR);\
     mdelay(1);\
 }
-
 
-
-
-__initfunc(int ewrk3_probe(struct device *dev))
+int __init ewrk3_probe(struct device *dev)
 {
 	int tmp = num_ewrk3s, status = -ENODEV;
 	u_long iobase = dev->base_addr;
@@ -378,8 +375,8 @@ __initfunc(int ewrk3_probe(struct device *dev))
 	return status;
 }
 
-__initfunc(static int
-	   ewrk3_hw_init(struct device *dev, u_long iobase))
+static int __init 
+ewrk3_hw_init(struct device *dev, u_long iobase)
 {
 	struct ewrk3_private *lp;
 	int i, status = 0;
@@ -1285,7 +1282,7 @@ static void SetMulticastFilter(struct device *dev)
 /*
    ** ISA bus I/O device probe
  */
-__initfunc(static void isa_probe(struct device *dev, u_long ioaddr))
+static void __init isa_probe(struct device *dev, u_long ioaddr)
 {
 	int i = num_ewrk3s, maxSlots;
 	u_long iobase;
@@ -1325,7 +1322,7 @@ __initfunc(static void isa_probe(struct device *dev, u_long ioaddr))
    ** EISA bus I/O device probe. Probe from slot 1 since slot 0 is usually
    ** the motherboard.
  */
-__initfunc(static void eisa_probe(struct device *dev, u_long ioaddr))
+static void __init eisa_probe(struct device *dev, u_long ioaddr)
 {
 	int i, maxSlots;
 	u_long iobase;
@@ -1372,8 +1369,8 @@ __initfunc(static void eisa_probe(struct device *dev, u_long ioaddr))
    ** are not available then insert a new device structure at the end of
    ** the current list.
  */
-__initfunc(static struct device *
-	   alloc_device(struct device *dev, u_long iobase))
+static struct device * __init 
+alloc_device(struct device *dev, u_long iobase)
 {
 	struct device *adev = NULL;
 	int fixed = 0, new_dev = 0;
@@ -1417,8 +1414,8 @@ __initfunc(static struct device *
    ** If at end of eth device list and can't use current entry, malloc
    ** one up. If memory could not be allocated, print an error message.
  */
-__initfunc(static struct device *
-	   insert_device(struct device *dev, u_long iobase, int (*init) (struct device *)))
+static __init struct device *
+insert_device(struct device *dev, u_long iobase, int (*init) (struct device *))
 {
 	struct device *new;
 
@@ -1443,8 +1440,8 @@ __initfunc(static struct device *
 	return dev;
 }
 
-__initfunc(static int
-	   ewrk3_dev_index(char *s))
+static int __init 
+ewrk3_dev_index(char *s)
 {
 	int i = 0, j = 0;
 
@@ -1499,7 +1496,7 @@ static int Write_EEPROM(short data, u_long iobase, u_char eaddr)
 /*
    ** Look for a particular board name in the on-board EEPROM.
  */
-__initfunc(static void EthwrkSignature(char *name, char *eeprom_image))
+static void __init EthwrkSignature(char *name, char *eeprom_image)
 {
 	u_long i, j, k;
 	char *signatures[] = EWRK3_SIGNATURE;
@@ -1536,7 +1533,7 @@ __initfunc(static void EthwrkSignature(char *name, char *eeprom_image))
    ** ethernet address for later read out.
  */
 
-__initfunc(static int DevicePresent(u_long iobase))
+static int __init DevicePresent(u_long iobase)
 {
 	union {
 		struct {
@@ -1573,7 +1570,7 @@ __initfunc(static int DevicePresent(u_long iobase))
 	return status;
 }
 
-__initfunc(static u_char get_hw_addr(struct device *dev, u_char * eeprom_image, char chipType))
+static u_char __init get_hw_addr(struct device *dev, u_char * eeprom_image, char chipType)
 {
 	int i, j, k;
 	u_short chksum;
@@ -1624,7 +1621,7 @@ __initfunc(static u_char get_hw_addr(struct device *dev, u_char * eeprom_image, 
 /*
    ** Look for a particular board name in the EISA configuration space
  */
-__initfunc(static int EISA_signature(char *name, s32 eisa_id))
+static int __init EISA_signature(char *name, s32 eisa_id)
 {
 	u_long i;
 	char *signatures[] = EWRK3_SIGNATURE;
@@ -1679,18 +1676,20 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 			tmp.addr[i] = dev->dev_addr[i];
 		}
 		ioc->len = ETH_ALEN;
-		if (!(status = verify_area(VERIFY_WRITE, (void *) ioc->data, ioc->len))) {
-			copy_to_user(ioc->data, tmp.addr, ioc->len);
+		if (copy_to_user(ioc->data, tmp.addr, ioc->len)) {
+			status = -EFAULT;
+			break;
 		}
-		break;
 	case EWRK3_SET_HWADDR:	/* Set the hardware address */
 		if (capable(CAP_NET_ADMIN)) {
-			if (!(status = verify_area(VERIFY_READ, (void *) ioc->data, ETH_ALEN))) {
 				csr = inb(EWRK3_CSR);
 				csr |= (CSR_TXD | CSR_RXD);
 				outb(csr, EWRK3_CSR);	/* Disable the TX and RX */
 
-				copy_from_user(tmp.addr, ioc->data, ETH_ALEN);
+				if (copy_from_user(tmp.addr, ioc->data, ETH_ALEN)) {
+					status = -EFAULT;
+					break;
+				}
 				for (i = 0; i < ETH_ALEN; i++) {
 					dev->dev_addr[i] = tmp.addr[i];
 					outb(tmp.addr[i], EWRK3_PAR0 + i);
@@ -1698,7 +1697,6 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 				csr &= ~(CSR_TXD | CSR_RXD);	/* Enable the TX and RX */
 				outb(csr, EWRK3_CSR);
-			}
 		} else {
 			status = -EPERM;
 		}
@@ -1730,7 +1728,6 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case EWRK3_GET_MCA:	/* Get the multicast address table */
-		if (!(status = verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
 			while (test_and_set_bit(0, (void *) &lp->lock) != 0);	/* Wait for lock to free */
 			if (lp->shmem_length == IO_ONLY) {
 				outb(0, EWRK3_IOPR);
@@ -1743,17 +1740,21 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 				memcpy_fromio(tmp.addr, (char *) (lp->shmem_base + PAGE0_HTE), (HASH_TABLE_LEN >> 3));
 			}
 			ioc->len = (HASH_TABLE_LEN >> 3);
-			copy_to_user(ioc->data, tmp.addr, ioc->len);
-		}
+			if (copy_to_user(ioc->data, tmp.addr, ioc->len)) {
+				status = -EFAULT;
+				break;
+			}
+
 		lp->lock = 0;	/* Unlock the page register */
 
 		break;
 	case EWRK3_SET_MCA:	/* Set a multicast address */
 		if (capable(CAP_NET_ADMIN)) {
-			if (!(status = verify_area(VERIFY_READ, ioc->data, ETH_ALEN * ioc->len))) {
-				copy_from_user(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
-				set_multicast_list(dev);
+			if (copy_from_user(tmp.addr, ioc->data, ETH_ALEN * ioc->len)) {
+				status = -EFAULT;
+				break;
 			}
+			set_multicast_list(dev);
 		} else {
 			status = -EPERM;
 		}
@@ -1781,9 +1782,8 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	case EWRK3_GET_STATS:	/* Get the driver statistics */
 		cli();
 		ioc->len = sizeof(lp->pktStats);
-		if (!(status = verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-			copy_to_user(ioc->data, &lp->pktStats, ioc->len);
-		}
+		if (copy_to_user(ioc->data, &lp->pktStats, ioc->len))
+			status = -EFAULT;
 		sti();
 
 		break;
@@ -1800,16 +1800,16 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	case EWRK3_GET_CSR:	/* Get the CSR Register contents */
 		tmp.addr[0] = inb(EWRK3_CSR);
 		ioc->len = 1;
-		if (!(status = verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-			copy_to_user(ioc->data, tmp.addr, ioc->len);
-		}
+		if (copy_to_user(ioc->data, tmp.addr, ioc->len))
+			status = -EFAULT;
 		break;
 	case EWRK3_SET_CSR:	/* Set the CSR Register contents */
 		if (capable(CAP_NET_ADMIN)) {
-			if (!(status = verify_area(VERIFY_READ, ioc->data, 1))) {
-				copy_from_user(tmp.addr, ioc->data, 1);
-				outb(tmp.addr[0], EWRK3_CSR);
+			if (copy_from_user(tmp.addr, ioc->data, 1)) {
+				status = -EFAULT;
+				break;
 			}
+			outb(tmp.addr[0], EWRK3_CSR);
 		} else {
 			status = -EPERM;
 		}
@@ -1826,9 +1826,8 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 				tmp.addr[i++] = inb(EWRK3_PAR0 + j);
 			}
 			ioc->len = EEPROM_MAX + 1 + ETH_ALEN;
-			if (!(status = verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-				copy_to_user(ioc->data, tmp.addr, ioc->len);
-			}
+			if (copy_to_user(ioc->data, tmp.addr, ioc->len))
+				status = -EFAULT;
 		} else {
 			status = -EPERM;
 		}
@@ -1836,11 +1835,12 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 		break;
 	case EWRK3_SET_EEPROM:	/* Set the EEPROM contents */
 		if (capable(CAP_NET_ADMIN)) {
-			if (!(status = verify_area(VERIFY_READ, ioc->data, EEPROM_MAX))) {
-				copy_from_user(tmp.addr, ioc->data, EEPROM_MAX);
-				for (i = 0; i < (EEPROM_MAX >> 1); i++) {
-					Write_EEPROM(tmp.val[i], iobase, i);
-				}
+			if (copy_from_user(tmp.addr, ioc->data, EEPROM_MAX)) {
+				status = -EFAULT;
+				break;
+			}
+			for (i = 0; i < (EEPROM_MAX >> 1); i++) {
+				Write_EEPROM(tmp.val[i], iobase, i);
 			}
 		} else {
 			status = -EPERM;
@@ -1850,9 +1850,8 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	case EWRK3_GET_CMR:	/* Get the CMR Register contents */
 		tmp.addr[0] = inb(EWRK3_CMR);
 		ioc->len = 1;
-		if (!(status = verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-			copy_to_user(ioc->data, tmp.addr, ioc->len);
-		}
+		if (copy_to_user(ioc->data, tmp.addr, ioc->len))
+			status = -EFAULT;
 		break;
 	case EWRK3_SET_TX_CUT_THRU:	/* Set TX cut through mode */
 		if (suser()) {

@@ -46,7 +46,6 @@
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
 #include <linux/proc_fs.h>
-#include <linux/if_arp.h>
 #include <linux/init.h>
 #include <net/x25.h>
 

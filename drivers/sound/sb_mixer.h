@@ -78,6 +78,11 @@
 #define RIGHT_CHN	1
 
 /*
+ * 3DSE register of AWE32/64
+ */
+#define AWE_3DSE	0x90
+
+/*
  * Mixer registers of ALS007
  */
 #define ALS007_RECORD_SRC	0x6c

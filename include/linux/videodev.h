@@ -279,6 +279,7 @@ struct video_unit
 #define VID_HARDWARE_VINO	20	/* Reserved for SGI Indy Vino */
 #define VID_HARDWARE_CADET	21	/* Cadet radio */
 #define VID_HARDWARE_CPIA	22
+#define VID_HARDWARE_TERRATEC	23	/* TerraTec ActiveRadio */
 
 /*
  *	Initialiser list

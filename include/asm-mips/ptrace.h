@@ -59,7 +59,7 @@ struct pt_regs {
 /*
  * Does the process account for user or for system time?
  */
-#define user_mode(regs) ((regs)->cp0_status & 0x10)
+extern int (*user_mode)(struct pt_regs *);
 
 #define instruction_pointer(regs) ((regs)->cp0_epc)
 

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/hpt343.c		Version 0.23	May 12, 1999
+ * linux/drivers/block/hpt34x.c		Version 0.24	July 3, 1999
  *
  * Copyright (C) 1998-99	Andre Hedrick
  *					(hedrick@astro.dyer.vanderbilt.edu)
@@ -383,6 +383,7 @@ __initfunc(unsigned int pci_init_hpt34x (struct pci_dev *dev, const char *name))
 			pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->rom_address | PCI_ROM_ADDRESS_ENABLE);
 			printk(KERN_INFO "HPT345: ROM enabled at 0x%08lx\n", dev->rom_address);
 		}
+		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0xF0);
 	} else {
 		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x20);
 	}

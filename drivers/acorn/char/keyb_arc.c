@@ -22,7 +22,6 @@
 #include <linux/ctype.h>
 #include <linux/init.h>
 #include <linux/kbd_ll.h>
-#include <linux/tty.h>
 #include <linux/kbd_kern.h>
 #include <linux/delay.h>
 

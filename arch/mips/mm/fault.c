@@ -43,7 +43,7 @@ unsigned long asid_cache;
  * and the problem, and then passes it off to one of the appropriate
  * routines.
  */
-asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long writeaccess,
+asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long write,
 			      unsigned long address)
 {
 	struct vm_area_struct * vma;
@@ -59,7 +59,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long writeaccess,
 		goto no_context;
 #if 0
 	printk("[%s:%d:%08lx:%ld:%08lx]\n", current->comm, current->pid,
-	       address, writeaccess, regs->cp0_epc);
+	       address, write, regs->cp0_epc);
 #endif
 	down(&mm->mmap_sem);
 	vma = find_vma(mm, address);
@@ -76,14 +76,26 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long writeaccess,
  * we can handle it..
  */
 good_area:
-	if (writeaccess) {
+	if (write) {
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
 	} else {
 		if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	}
-	handle_mm_fault(tsk, vma, address, writeaccess);
+
+	/*
+	 * If for any reason at all we couldn't handle the fault,
+	 * make sure we exit gracefully rather than endlessly redo
+	 * the fault.
+	 */
+	{
+		int fault = handle_mm_fault(tsk, vma, address, write);
+		if (fault < 0)
+			goto out_of_memory;
+		if (!fault)
+			goto do_sigbus;
+	}
 	up(&mm->mmap_sem);
 	return;
 
@@ -96,12 +108,12 @@ bad_area:
 
 	if (user_mode(regs)) {
 		tsk->tss.cp0_badvaddr = address;
-		tsk->tss.error_code = writeaccess;
+		tsk->tss.error_code = write;
 #if 0
 		printk("do_page_fault() #2: sending SIGSEGV to %s for illegal %s\n"
 		       "%08lx (epc == %08lx, ra == %08lx)\n",
 		       tsk->comm,
-		       writeaccess ? "writeaccess to" : "readaccess from",
+		       write ? "write access to" : "read access from",
 		       address,
 		       (unsigned long) regs->cp0_epc,
 		       (unsigned long) regs->regs[31]);
@@ -132,6 +144,31 @@ no_context:
 	printk(KERN_ALERT "Unable to handle kernel paging request at virtual "
 	       "address %08lx, epc == %08lx, ra == %08lx\n",
 	       address, regs->cp0_epc, regs->regs[31]);
-	die("Oops", regs, writeaccess);
+	die("Oops", regs, write);
 	do_exit(SIGKILL);
+
+/*
+ * We ran out of memory, or some other thing happened to us that made
+ * us unable to handle the page fault gracefully.
+ */
+out_of_memory:
+	up(&mm->mmap_sem);
+	printk("VM: killing process %s\n", tsk->comm);
+	if (user_mode(regs))
+		do_exit(SIGKILL);
+	goto no_context;
+
+do_sigbus:
+	up(&mm->mmap_sem);
+
+	/*
+	 * Send a sigbus, regardless of whether we were in kernel
+	 * or user mode.
+	 * XXX Store details about fault for siginfo handling into tss.
+	 */
+	force_sig(SIGBUS, tsk);
+
+	/* Kernel mode? Handle exceptions or die */
+	if (!user_mode(regs))
+		goto no_context;
 }

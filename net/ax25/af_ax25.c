@@ -462,6 +462,9 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 	if ((ax25_dev = ax25_addr_ax25dev(&ax25_ctl.port_addr)) == NULL)
 		return -ENODEV;
 
+	if (ax25_ctl.digi_count > AX25_MAX_DIGIS)
+		return -EINVAL;
+
 	digi.ndigi = ax25_ctl.digi_count;
 	for (k = 0; k < digi.ndigi; k++)
 		digi.calls[k] = ax25_ctl.digi_addr[k];

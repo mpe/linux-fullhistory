@@ -880,13 +880,11 @@ S: Mergenthalerallee 45-47
 S: 65760 Eschborn
 S: Germany
 
-N: Kenji Tsutomu Hollis
-E: khollis@bitgate.com
-W: http://www.nurk.org/
+N: Kenji Hollis
+E: kenji@bitgate.com
+W: http://www.bitgate.com/
 D: Berkshire PC Watchdog Driver
-S: Post Office Box 15
-S: Grants Pass, Oregon 97526
-S: USA
+D: Small/Industrial Driver Project
 
 N: Nick Holloway
 E: Nick.Holloway@alfie.demon.co.uk
@@ -1671,6 +1669,15 @@ D: random Linux documentation, patches, and hacks
 S: 4390 Albany Drive #41A
 S: San Jose, California 95129
 S: USA
+
+N: Augusto Cesar Radtke
+E: bishop@sekure.org
+W: http://bishop.sekure.org
+D: {copy,get,put}_user calls updates
+D: Miscellaneous hacks
+S: R. Otto Marquardt, 226 - Garcia
+S: 89020-350 Blumenau - Santa Catarina
+S: Brazil
 
 N: Eric S. Raymond
 E: esr@thyrsus.com

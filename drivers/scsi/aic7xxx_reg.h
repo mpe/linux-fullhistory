@@ -459,11 +459,11 @@
 
 #define	CRCCONTROL1     		0x9d
 #define		CRCONSEEN       	0x80
-#define		TARGCRCCNTEN    	0x40
 #define		CRCVALCHKEN     	0x40
 #define		CRCENDCHKEN     	0x20
 #define		CRCREQCHKEN     	0x10
 #define		TARGCRCENDEN    	0x08
+#define		TARGCRCCNTEN    	0x04
 
 #define	SCSIPHASE       		0x9e
 #define		SP_STATUS       	0x20

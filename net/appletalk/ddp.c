@@ -894,7 +894,7 @@ int atif_ioctl(int cmd, void *arg)
 			else
 			{
 				limit = ntohs(nr->nr_lastnet);
-				if(limit - ntohs(nr->nr_firstnet) > 256)
+				if(limit - ntohs(nr->nr_firstnet) > 4096)
 				{
 					printk(KERN_WARNING "Too many routes/iface.\n");
 					return (-EINVAL);
@@ -938,6 +938,8 @@ int atif_ioctl(int cmd, void *arg)
                                 return (-EPERM);
                         if(sa->sat_family != AF_APPLETALK)
                                 return (-EINVAL);
+                        if (atif == NULL)
+                                return (-EADDRNOTAVAIL);
 
                         /*
                          * for now, we only support proxy AARP on ELAP;

@@ -107,7 +107,6 @@
 
 #include <asm/system.h>
 #include <asm/signal.h>
-#include <asm/system.h>
 #include <asm/kgdb.h>
 #include <asm/pgtable.h>
 #include <asm/ptrace.h>

@@ -109,19 +109,13 @@
 
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 #include <stdarg.h>
-#include <asm/io.h>
 #include <asm/irq.h>
-#include <linux/string.h>
 #include <linux/errno.h>
-#include <linux/kernel.h>
-#include <linux/ioport.h>
 #if LINUX_VERSION_CODE <= CVT_LINUX_VERSION(2,1,92)
 #include <linux/bios32.h>
 #endif
 #include <linux/delay.h>
-#include <linux/sched.h>
 #include <linux/pci.h>
-#include <linux/proc_fs.h>
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,23)
 #include <linux/init.h>
 #endif
@@ -129,39 +123,28 @@
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 #include <asm/spinlock.h>
 #endif
-#include "sd.h"
-#include "scsi.h"
-#include "hosts.h"
-#include "ini9100u.h"
 #include <linux/stat.h>
-#include <linux/malloc.h>
 #include <linux/config.h>
 
 #else
 
-#include <linux/kernel.h>
 #include <linux/head.h>
 #include <linux/types.h>
+#include <asm/system.h>
+#include "../block/blk.h"
+#endif
+
+#include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
-
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
-#include <asm/system.h>
 #include <asm/io.h>
-#include "../block/blk.h"
 #include "scsi.h"
 #include "sd.h"
 #include "hosts.h"
 #include <linux/malloc.h>
 #include "ini9100u.h"
-#endif
-
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,93)
-#ifdef CONFIG_PCI
-#include <linux/pci.h>
-#endif
-#endif
 
 #ifdef DEBUG_i91u
 unsigned int i91u_debug = DEBUG_DEFAULT;

@@ -3,6 +3,9 @@
  *	modulespace.
  *
  *      (C) Copyright 1997      Alan Cox, Licensed under the GNU GPL
+ *
+ *	Thu May 27 1999 Andrew J. Kroll <ag784@freenet..buffalo..edu>
+ *	left out exported symbol... fixed
  */
 
 #include <linux/module.h>
@@ -43,6 +46,7 @@ EXPORT_SYMBOL(sound_unload_synthdev);
 
 EXPORT_SYMBOL(load_mixer_volumes);
 
+EXPORT_SYMBOL(trace_init); /* oops! this is needed for maui.c -- AJK */
 
 EXPORT_SYMBOL(conf_printf);
 EXPORT_SYMBOL(conf_printf2);

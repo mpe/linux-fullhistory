@@ -5,8 +5,10 @@
  *	
  *	Written by Alan Cox, Building Number Three Ltd
  *
- *      Modified 04/20/199 by Deepak Saxena
+ *      Modified 04/20/1999 by Deepak Saxena
  *         - Added basic ioctl() support
+ *      Modified 06/07/1999 by Deepak Saxena
+ *         - Added software download ioctl (still testing)
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -22,7 +24,6 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/miscdevice.h>
-#include <linux/kernel.h>
 #include <linux/mm.h>
 
 #include <asm/uaccess.h>
@@ -210,7 +211,10 @@ int ioctl_gethrt(unsigned long arg)
 	workspace = kmalloc(8192, GFP_KERNEL);
 	hrt = (pi2o_hrt)workspace;
 	if(workspace==NULL)
+	{
+		i2o_unlock_controller(c);
 		return -ENOMEM;
+	}
 
 	memset(workspace, 0, 8192);
 
@@ -271,7 +275,10 @@ int ioctl_getlct(unsigned long arg)
 	workspace = kmalloc(8192, GFP_KERNEL);
 	lct = (pi2o_lct)workspace;
 	if(workspace==NULL)
+	{
+		i2o_unlock_controller(c);
 		return -ENOMEM;
+	}
 
 	memset(workspace, 0, 8192);
 
@@ -337,10 +344,14 @@ static int ioctl_parms(unsigned long arg, unsigned int type)
 
 	ops = (u8*)kmalloc(kcmd.oplen, GFP_KERNEL);
 	if(!ops)
+	{
+		i2o_unlock_controller(c);
 		return -ENOMEM;
+	}
 
 	if(copy_from_user(ops, kcmd.opbuf, kcmd.oplen))
 	{
+		i2o_unlock_controller(c);
 		kfree(ops);
 		return -EFAULT;
 	}
@@ -352,6 +363,7 @@ static int ioctl_parms(unsigned long arg, unsigned int type)
 	res = (u8*)kmalloc(65536, GFP_KERNEL);
 	if(!res)
 	{
+		i2o_unlock_controller(c);
 		kfree(ops);
 		return -ENOMEM;
 	}
@@ -374,11 +386,12 @@ static int ioctl_parms(unsigned long arg, unsigned int type)
 	token = i2o_post_wait(c, kcmd.tid, msg, 9*4, &i2o_cfg_token,10);
 	if(token == I2O_POST_WAIT_TIMEOUT)
 	{
+		i2o_unlock_controller(c);
 		kfree(ops);
 		kfree(res);
 		return -ETIMEDOUT;
 	}
-
+	i2o_unlock_controller(c);
 	kfree(ops);
 
 	/* 
@@ -448,9 +461,13 @@ int ioctl_html(unsigned long arg)
 	{
 		query = kmalloc(kcmd.qlen, GFP_KERNEL);
 		if(!query)
+		{
+			i2o_unlock_controller(c);
 			return -ENOMEM;
+		}
 		if(copy_from_user(query, kcmd.qbuf, kcmd.qlen))
 		{
+			i2o_unlock_controller(c);
 			printk(KERN_INFO "i2o_config: could not get query\n");
 			kfree(query);
 			return -EFAULT;
@@ -459,7 +476,10 @@ int ioctl_html(unsigned long arg)
 
 	res = kmalloc(4096, GFP_KERNEL);
 	if(!res)
+	{
+		i2o_unlock_controller(c);
 		return -ENOMEM;
+	}
 
 	msg[1] = (I2O_CMD_UTIL_CONFIG_DIALOG << 24)|HOST_TID<<12|kcmd.tid;
 	msg[2] = i2o_cfg_context;
@@ -480,11 +500,13 @@ int ioctl_html(unsigned long arg)
 	token = i2o_post_wait(c, cmd->tid, msg, 9*4, &i2o_cfg_token, 10);
 	if(token == I2O_POST_WAIT_TIMEOUT)
 	{
+		i2o_unlock_controller(c);
 		kfree(res);
 		if(kcmd.qlen) kfree(query);
 
 		return -ETIMEDOUT;
 	}
+	i2o_unlock_controller(c);
 
 	len = strnlen(res, 8192);
 	put_user(len, kcmd.reslen);
@@ -500,10 +522,123 @@ int ioctl_html(unsigned long arg)
 	return ret;
 }
 
-/* To be written */
 int ioctl_swdl(unsigned long arg)
 {
-	return -ENOSYS;
+	struct i2o_sw_xfer kxfer;
+	struct i2o_sw_xfer *pxfer = (struct i2o_sw_xfer *)arg;
+	unsigned char maxfrag = 0, curfrag = 0;
+	unsigned char buffer[8192];
+	u32 msg[MSG_FRAME_SIZE/4];
+	unsigned int token = 0, diff = 0, swlen = 0, swxfer = 0;
+	struct i2o_controller *c;
+	int foo = 0;
+
+	printk("*** foo%d ***\n", foo++);
+	if(copy_from_user(&kxfer, pxfer, sizeof(struct i2o_sw_xfer)))
+	{
+		printk( "i2o_config: can't copy i2o_sw cmd @ %p\n", pxfer);
+		return -EFAULT;
+	}
+	printk("*** foo%d ***\n", foo++);
+
+	printk("Attempting to copy swlen from %p\n", kxfer.swlen);
+	if(get_user(swlen, kxfer.swlen) < 0)
+	{
+		printk( "i2o_config: can't copy swlen\n");
+		return -EFAULT;
+	}
+	printk("*** foo%d ***\n", foo++);
+
+	maxfrag = swlen >> 13;	// Transfer in 8k fragments
+
+	printk("Attempting to write maxfrag @ %p\n", kxfer.maxfrag);
+	if(put_user(maxfrag, kxfer.maxfrag) < 0)
+	{
+		printk( "i2o_config: can't write maxfrag\n");
+		return -EFAULT;
+	}
+	printk("*** foo%d ***\n", foo++);
+
+	printk("Attempting to write curfrag @ %p\n", kxfer.curfrag);
+	if(put_user(curfrag, kxfer.curfrag) < 0)
+	{
+		printk( "i2o_config: can't write curfrag\n");
+		return -EFAULT;
+	}
+	printk("*** foo%d ***\n", foo++);
+
+	if(!kxfer.buf)
+	{
+		printk( "i2o_config: NULL software buffer\n");
+		return -EFAULT;
+	}
+	printk("*** foo%d ***\n", foo++);
+	
+	// access_ok doesn't check for NULL...
+	if(!access_ok(VERIFY_READ, kxfer.buf, swlen))
+	{
+                printk( "i2o_config: Cannot read sw buffer\n");
+                return -EFAULT;
+	}
+	printk("*** foo%d ***\n", foo++);
+
+	c = i2o_find_controller(kxfer.iop);
+	if(!c)
+		return -ENXIO;
+	printk("*** foo%d ***\n", foo++);
+
+	msg[0]= EIGHT_WORD_MSG_SIZE| SGL_OFFSET_7;
+	msg[1]= I2O_CMD_SW_DOWNLOAD<<24 | HOST_TID<<12 | ADAPTER_TID;
+	msg[2]= (u32)cfg_handler.context;
+	msg[3]= 0;
+	msg[4]= ((u32)kxfer.dl_flags)<<24|((u32)kxfer.sw_type)<<16|((u32)maxfrag)<<8|((u32)curfrag);
+	msg[5]= swlen;
+	msg[6]= kxfer.sw_id;
+	msg[7]= (0xD0000000 | 8192);
+	msg[8]= virt_to_phys(buffer);
+
+	printk("*** foo%d ***\n", foo++);
+
+	//
+	// Loop through all fragments but last and transfer them...
+	// We already checked memory, so from now we assume it's all good
+	//
+	for(curfrag = 0; curfrag < maxfrag-1; curfrag++)
+	{
+		printk("Transfering fragment %d\n", curfrag);
+
+		msg[4] |= (u32)curfrag;
+
+		__copy_from_user(buffer, kxfer.buf, 8192);
+		swxfer += 8129;
+
+		// Yes...that's one minute, but the spec states that
+		// transfers take a long time, and I've seen just how
+		// long they can take.
+		token = i2o_post_wait(c, ADAPTER_TID, msg, 6*4, &i2o_cfg_token,60);
+		if( token == I2O_POST_WAIT_TIMEOUT )	// Something very wrong
+		{
+			printk("Timeout downloading software");
+			return -ETIMEDOUT;
+		}
+
+		__put_user(curfrag, kxfer.curfrag);
+	}
+
+	// Last frag is special case since it's not exactly 8K
+	diff = swlen - swxfer;
+	msg[4] |= (u32)maxfrag;
+	msg[7] = (0xD0000000 | diff);
+	__copy_from_user(buffer, kxfer.buf, 8192);
+	token = i2o_post_wait(c, ADAPTER_TID, msg, 6*4, &i2o_cfg_token,60);
+	if( token == I2O_POST_WAIT_TIMEOUT )	// Something very wrong
+	{
+		printk("Timeout downloading software");
+		return -ETIMEDOUT;
+	}
+	__put_user(curfrag, kxfer.curfrag);
+
+	return 0;
 }
 
 /* To be written */
@@ -557,7 +692,7 @@ static struct miscdevice i2o_miscdev = {
 #ifdef MODULE
 int init_module(void)
 #else
-int i2o_config_init(void)
+__init int i2o_config_init(void)
 #endif
 {
 	printk(KERN_INFO "i2o configuration manager v 0.02\n");

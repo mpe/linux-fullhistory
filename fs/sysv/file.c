@@ -30,9 +30,6 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-#include <linux/fs.h>
-#include <linux/sysv_fs.h>
-
 /*
  * Write to a file (through the page cache).
  */

@@ -17,9 +17,9 @@
   If this 64MB area overlaps the IO memory of the Bt848 you also have to
   remap this. E.g.: insmod bttv vidmem=0xfb0 remap=0xfa0
 
-  If the videomemory is found at the right place and there are no address
-  conflicts but still no picture (or the computer even crashes.),
-  try disabling features of your PCI chipset in the BIOS Setup.
+  If the video memory is found at the right place and there are no address
+  conflicts but still no picture (or the computer even crashes),
+  try disabling features of your PCI chipset in the BIOS setup.
 
   Frank Kapahnke <frank@kapahnke.prima.ruhr.de> also reported that problems
   with his S3 868 went away when he upgraded to XFree 3.2.
@@ -50,13 +50,13 @@
   
   Disable backing store by starting X with the option "-bs"
 
-- When using 32bpp in XFree or 24+8bpp mode in AccelX 3.1 the system
+- When using 32 bpp in XFree or 24+8bpp mode in AccelX 3.1 the system
   can sometimes lock up if you use more than 1 bt848 card at the same time.
   You will always get pixel errors when e.g. using more than 1 card in full
   screen mode. Maybe we need something faster than the PCI bus ...
 
 
-- Some S3 cards and the Matrox Mystique will produce pixel erros with
-  full resolution in 32bit mode.
+- Some S3 cards and the Matrox Mystique will produce pixel errors with
+  full resolution in 32-bit mode.
 
 - Some video cards have problems with Accelerated X 4.1

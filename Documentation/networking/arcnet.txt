@@ -1,4 +1,3 @@
-
 ----------------------------------------------------------------------------
 NOTE:  See also arcnet-hardware.txt in this directory for jumper-setting
 and cabling information if you're like many of us and didn't happen to get a
@@ -92,10 +91,10 @@ ARCnet:
 	http://www.perftech.com/ or ftp to ftp.perftech.com.
 	
 Novell makes a networking stack for DOS which includes ARCnet drivers.  Try
-ftp'ing to ftp.novell.com.
+FTPing to ftp.novell.com.
 
 You can get the Crynwr packet driver collection (including arcether.com, the
-one you'll want to use with arcnet cards) from
+one you'll want to use with ARCnet cards) from
 oak.oakland.edu:/simtel/msdos/pktdrvr. It won't work perfectly on a 386+
 without patches, though, and also doesn't like several cards.  Fixed
 versions are available on my WWW page, or via e-mail if you don't have WWW
@@ -183,7 +182,7 @@ Loadable Module Support
 -----------------------
 
 Configure and rebuild Linux.  When asked, answer 'm' to "Generic ARCnet 
-support" and to support for your ARcnet chipset if you want to use the
+support" and to support for your ARCnet chipset if you want to use the
 loadable module. You can also say 'y' to "Generic ARCnet support" and 'm' 
 to the chipset support if you wish.
 
@@ -269,7 +268,7 @@ Windows:  See DOS :)  Trumpet Winsock works fine with either the Novell or
 	Arcether client, assuming you remember to load winpkt of course.
 
 LAN Manager and Windows for Workgroups: These programs use protocols that
-        are incompatible with the internet standard.  They try to pretend
+        are incompatible with the Internet standard.  They try to pretend
         the cards are Ethernet, and confuse everyone else on the network. 
         
         However, v2.00 and higher of the Linux ARCnet driver supports this
@@ -288,7 +287,7 @@ Windows 95: Tools are included with Win95 that let you use either the LANMAN
 	you're completely insane, and/or you need to build some kind of
 	hybrid network that uses both encapsulation types.
 
-OS2: I've been told it works under Warp Connect with an ARCnet driver from
+OS/2: I've been told it works under Warp Connect with an ARCnet driver from
 	SMC.  You need to use the 'arc0e' interface for this.  If you get
 	the SMC driver to work with the TCP/IP stuff included in the
 	"normal" Warp Bonus Pack, let me know.
@@ -309,7 +308,7 @@ Using Multiprotocol ARCnet
 The ARCnet driver v2.10 ALPHA supports three protocols, each on its own
 "virtual network device":
 
-	arc0  - RFC1201 protocol, the official internet standard which just
+	arc0  - RFC1201 protocol, the official Internet standard which just
 		happens to be 100% compatible with Novell's TRXNET driver. 
 		Version 1.00 of the ARCnet driver supported _only_ this
 		protocol.  arc0 is the fastest of the three protocols (for
@@ -331,13 +330,13 @@ The ARCnet driver v2.10 ALPHA supports three protocols, each on its own
 		reasons yet to be determined.  (Probably it's the smaller
 		MTU that does it.)
 		
-	arc0s - The "[s]imple" RFC1051 protocol is the "previous" internet
+	arc0s - The "[s]imple" RFC1051 protocol is the "previous" Internet
 		standard that is completely incompatible with the new
 		standard.  Some software today, however, continues to
 		support the old standard (and only the old standard)
 		including NetBSD and AmiTCP.  RFC1051 also does not support
 		RFC1201's packet splitting, and the MTU of 507 is still
-		smaller than the internet "requirement," so it's quite
+		smaller than the Internet "requirement," so it's quite
 		possible that you may run into problems.  It's also slower
 		than RFC1201 by about 25%, for the same reason as arc0e.
 		
@@ -388,16 +387,16 @@ can set up your network then:
    Linux but runs the free Microsoft LANMAN Client instead.
 
    Worse, one of the Linux computers (freedom) also has a modem and acts as
-   a router to my internet provider.  The other Linux box (insight) also has
+   a router to my Internet provider.  The other Linux box (insight) also has
    its own IP address and needs to use freedom as its default gateway.  The
-   XT (patience), however, does not have its own internet IP address and so
+   XT (patience), however, does not have its own Internet IP address and so
    I assigned it one on a "private subnet" (as defined by RFC1597).
 
    To start with, take a simple network with just insight and freedom. 
    Insight needs to:
    	- talk to freedom via RFC1201 (arc0) protocol, because I like it
 	  more and it's faster.
-	- use freedom as its internet gateway.
+	- use freedom as its Internet gateway.
 	
    That's pretty easy to do.  Set up insight like this:
    	ifconfig arc0 insight
@@ -417,20 +416,20 @@ can set up your network then:
    	/* and default gateway is configured by pppd */
    	
    Great, now insight talks to freedom directly on arc0, and sends packets
-   to the internet through freedom.  If you didn't know how to do the above,
+   to the Internet through freedom.  If you didn't know how to do the above,
    you should probably stop reading this section now because it only gets
    worse.
 
    Now, how do I add patience into the network?  It will be using LANMAN
    Client, which means I need the arc0e device.  It needs to be able to talk
    to both insight and freedom, and also use freedom as a gateway to the
-   internet.  (Recall that patience has a "private IP address" which won't
-   work on the internet; that's okay, I configured Linux IP masquerading on
+   Internet.  (Recall that patience has a "private IP address" which won't
+   work on the Internet; that's okay, I configured Linux IP masquerading on
    freedom for this subnet).
    
    So patience (necessarily; I don't have another IP number from my
    provider) has an IP address on a different subnet than freedom and
-   insight, but needs to use freedom as an internet gateway.  Worse, most
+   insight, but needs to use freedom as an Internet gateway.  Worse, most
    DOS networking programs, including LANMAN, have braindead networking
    schemes that rely completely on the netmask and a 'default gateway' to
    determine how to route packets.  This means that to get to freedom or
@@ -449,7 +448,7 @@ can set up your network then:
    
    This way, freedom will send all packets for patience through arc0e,
    giving its IP address as gatekeeper (on the private subnet).  When it
-   talks to insight or the internet, it will use its "freedom" internet IP
+   talks to insight or the Internet, it will use its "freedom" Internet IP
    address.
    
    You will notice that we haven't configured the arc0e device on insight. 
@@ -473,7 +472,7 @@ can set up your network then:
    
                                                     
           [RFC1201 NETWORK]                   [ETHER-ENCAP NETWORK]
-      (registered internet subnet)           (RFC1597 private subnet)
+      (registered Internet subnet)           (RFC1597 private subnet)
   
                              (IP Masquerade)
           /---------------\         *            /---------------\
@@ -523,7 +522,7 @@ found unless you turn on the D_INIT_REASONS debugging flag.
 Once the driver is running, you can run the arcdump shell script (available
 from me or in the full ARCnet package, if you have it) as root to list the
 contents of the arcnet buffers at any time.  To make any sense at all out of
-this, you should grab the pertinent RFC's. (some are listed near the top of
+this, you should grab the pertinent RFCs. (some are listed near the top of
 arcnet.c).  arcdump assumes your card is at 0xD0000.  If it isn't, edit the
 script.
 

@@ -27,7 +27,6 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
-#include <asm/segment.h>
 #include <asm/uaccess.h>
 
  #include <asm/ap1000/pgtapmmu.h>

@@ -63,7 +63,6 @@
 #include <linux/proc_fs.h>
 #include <net/ip.h>
 #include <net/arp.h>
-#include <linux/if_arp.h>
 #include <linux/init.h>
 
 int nr_ndevs = 4;
@@ -1311,6 +1310,11 @@ __initfunc(void nr_proto_init(struct net_proto *pro))
 
 	for (i = 0; i < nr_ndevs; i++) {
 		dev_nr[i].name = kmalloc(20, GFP_KERNEL);
+		if(dev_nr[i].name==NULL)
+		{
+			printk(KERN_ERR "Netrom: unable to register devices.\n");
+			break;
+		}
 		sprintf(dev_nr[i].name, "nr%d", i);
 		dev_nr[i].init = nr_init;
 		register_netdev(&dev_nr[i]);

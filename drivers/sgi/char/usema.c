@@ -53,7 +53,7 @@ sgi_usema_attach (usattach_t * attach, struct irix_usema *usema)
 	if (newfd < 0)
 		return newfd;
 	
-	get_file(usema);
+	get_file(usema->filp);
 	fd_install(newfd, usema->filp);
 	/* Is that it? */
 	printk("UIOCATTACHSEMA: new usema fd is %d", newfd);

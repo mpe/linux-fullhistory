@@ -13,7 +13,6 @@
 #include <linux/errno.h>
 #include <linux/fcntl.h>
 #include <linux/stat.h>
-#include <linux/msdos_fs.h>
 #include <linux/umsdos_fs.h>
 
 #include <asm/uaccess.h>

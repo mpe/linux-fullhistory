@@ -341,7 +341,11 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 		error = filp->f_op->lock(filp, F_GETLK, &file_lock);
 		if (error < 0)
 			goto out_putf;
-		fl = &file_lock;
+		else if (error == LOCK_USE_CLNT)
+		  /* Bypass for NFS with no locking - 2.0.36 compat */
+		  fl = posix_test_lock(filp, &file_lock);
+		else
+		  fl = (file_lock.fl_type == F_UNLCK ? NULL : &file_lock);
 	} else {
 		fl = posix_test_lock(filp, &file_lock);
 	}
@@ -402,14 +406,17 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	 * and shared.
 	 */
 	if (IS_MANDLOCK(inode) &&
-	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID &&
-	    inode->i_mmap) {
-		struct vm_area_struct *vma = inode->i_mmap;
-		error = -EAGAIN;
-		do {
-			if (vma->vm_flags & VM_MAYSHARE)
-				goto out_putf;
-		} while ((vma = vma->vm_next_share) != NULL);
+	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID) {
+		struct vm_area_struct *vma;
+		spin_lock(&inode->i_shared_lock);
+		for(vma = inode->i_mmap;vma;vma = vma->vm_next_share) {
+			if (!(vma->vm_flags & VM_MAYSHARE))
+				continue;
+			spin_unlock(&inode->i_shared_lock);
+			error = -EAGAIN;
+			goto out_putf;
+		}
+		spin_unlock(&inode->i_shared_lock);
 	}
 
 	error = -EINVAL;

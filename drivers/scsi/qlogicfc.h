@@ -61,8 +61,17 @@
  * requests are queued serially and the scatter/gather limit is
  * determined for each queue request anew.
  */
-#define QLOGICFC_REQ_QUEUE_LEN	63	/* must be power of two - 1 */
-#define QLOGICFC_MAX_SG(ql)	(2 + (((ql) > 0) ? 5*((ql) - 1) : 0))
+
+#if BITS_PER_LONG > 32
+#define DATASEGS_PER_COMMAND 2
+#define DATASEGS_PER_CONT 5
+#else
+#define DATASEGS_PER_COMMAND 3
+#define DATASEGS_PER_CONT 7
+#endif
+
+#define QLOGICFC_REQ_QUEUE_LEN	127	/* must be power of two - 1 */
+#define QLOGICFC_MAX_SG(ql)	(DATASEGS_PER_COMMAND + (((ql) > 0) ? DATASEGS_PER_CONT*((ql) - 1) : 0))
 #define QLOGICFC_CMD_PER_LUN    8
 
 int isp2100_detect(Scsi_Host_Template *);
@@ -84,16 +93,16 @@ extern struct proc_dir_entry proc_scsi_isp2100;
         release:                isp2100_release,                           \
         info:                   isp2100_info,                              \
         queuecommand:           isp2100_queuecommand,                      \
-        abort:                  isp2100_abort,                             \
+        eh_abort_handler:       isp2100_abort,                             \
         reset:                  isp2100_reset,                             \
         bios_param:             isp2100_biosparam,                         \
         can_queue:              QLOGICFC_REQ_QUEUE_LEN,                    \
         this_id:                -1,                                        \
         sg_tablesize:           QLOGICFC_MAX_SG(QLOGICFC_REQ_QUEUE_LEN),   \
-        cmd_per_lun:            QLOGICFC_CMD_PER_LUN,                      \
+	cmd_per_lun:		QLOGICFC_CMD_PER_LUN, 			   \
         present:                0,                                         \
         unchecked_isa_dma:      0,                                         \
-        use_clustering:         DISABLE_CLUSTERING                         \
+        use_clustering:         ENABLE_CLUSTERING 			   \
 }
 
 #endif /* _QLOGICFC_H */

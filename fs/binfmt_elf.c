@@ -443,6 +443,8 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 	retval = -ENOMEM;
 	size = elf_ex.e_phentsize * elf_ex.e_phnum;
+	if (size > 65536)
+		goto out;
 	elf_phdata = (struct elf_phdr *) kmalloc(size, GFP_KERNEL);
 	if (!elf_phdata)
 		goto out;

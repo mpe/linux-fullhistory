@@ -10,13 +10,17 @@
  * 	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	This is an initial test release. Most of the good code was taken
+ *	This is a beta test release. Most of the good code was taken
  *	from the nbd driver by Pavel Machek, who in turn took some of it
  *	from loop.c. Isn't free software great for reusability 8)
  *
  *	Fixes:
  *		Steve Ralston:	Multiple device handling error fixes,
  *				Added a queue depth.
+ *
+ *	Todo:
+ *		64bit cleanness.
+ *		Remove the queue walk. We can do that better.
  */
 
 #include <linux/major.h>
@@ -31,6 +35,7 @@
 #include <linux/ioctl.h>
 #include <linux/i2o.h>
 #include <linux/blkdev.h>
+#include <linux/blkpg.h>
 #include <linux/malloc.h>
 #include <linux/hdreg.h>
 
@@ -47,7 +52,7 @@
 
 #define MAX_I2OB	16
 
-#define MAX_I2OB_DEPTH	4
+#define MAX_I2OB_DEPTH	8
 
 /*
  *	Some of these can be made smaller later
@@ -61,9 +66,7 @@ static u32 i2ob_max_sectors[MAX_I2OB<<4];
 
 static int i2ob_context;
 
-#ifdef __SMP__
 static spinlock_t i2ob_lock = SPIN_LOCK_UNLOCKED;
-#endif
 
 struct i2ob_device
 {
@@ -175,15 +178,10 @@ static int i2ob_send(u32 m, struct i2ob_device *dev, struct request *req, u32 ba
 		msg[5] -= count;
 	}
 
-//	printk("Send for %p\n", req);
-
 	i2o_post_message(c,m);
 	atomic_inc(&queue_depth);
 	if(atomic_read(&queue_depth)>old_qd)
-	{
 		old_qd=atomic_read(&queue_depth);
-		printk("Depth now %d.\n", old_qd);
-	}
 	return 0;
 }
 
@@ -825,7 +823,7 @@ static void i2ob_probe(void)
                                  */
                                 if(i2ob_claim_device(dev, 1)==0)
                                 {
-                                        printk(KERN_INFO "Claimed Dev %x Tid %d Unit %d\n",dev,dev->tid,unit);
+                                        printk(KERN_INFO "Claimed Dev %p Tid %d Unit %d\n",dev,dev->tid,unit);
                                         i2ob_install_device(c,d,unit);
                                         unit+=16;
  
@@ -836,7 +834,7 @@ static void i2ob_probe(void)
                                          * the block or scsi driver.
                                          */
                                         if (i2ob_claim_device(dev, 0)<0)
-                                                printk(KERN_INFO "Could not unclaim Dev %x Tid %d\n",dev,dev->tid);
+                                                printk(KERN_INFO "Could not unclaim Dev %p Tid %d\n",dev,dev->tid);
  
                                 }
                                 else
@@ -966,14 +964,14 @@ static struct gendisk i2ob_gendisk =
  */
 
 #ifdef MODULE
-#define i2ob_init init_module
+#define i2o_block_init init_module
 #endif
 
-int i2ob_init(void)
+int i2o_block_init(void)
 {
 	int i;
 
-	printk("I2O block device OSM v0.06. (C) 1999 Red Hat Software.\n");
+	printk(KERN_INFO "I2O block device OSM v0.06. (C) 1999 Red Hat Software.\n");
 	
 	/*
 	 *	Register the block device interfaces

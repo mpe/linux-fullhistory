@@ -41,7 +41,7 @@ static int rx_copybreak = 200;
 static int max_interrupt_work = 200;
 
 /* Maximum number of multicast addresses to filter (vs. rx-all-multicast) */
-static int multicast_filter_limit = 64;
+static int multicast_filter_limit = 3;
 
 #include <linux/module.h>
 
@@ -343,7 +343,8 @@ struct speedo_private {
 	const char *product_name;
 	struct device *next_module;
 	spinlock_t lock;
-	struct TxFD	tx_ring[TX_RING_SIZE];	/* Commands (usually CmdTxPacket). */
+	struct TxFD	tx_ring[TX_RING_SIZE] 	/* Commands (usually CmdTxPacket). */
+				__attribute__ ((aligned (L1_CACHE_BYTES)));;
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
 	struct sk_buff* tx_skbuff[TX_RING_SIZE];
 	struct descriptor  *last_cmd;	/* Last command sent. */

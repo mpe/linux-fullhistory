@@ -5113,10 +5113,6 @@ z_streamp z;
 
 /* From: zutil.c,v 1.17 1996/07/24 13:41:12 me Exp $ */
 
-#ifdef DEBUG_ZLIB
-#include <stdio.h>
-#endif
-
 /* #include "zutil.h" */
 
 #ifndef NO_DUMMY_DECL

@@ -346,6 +346,7 @@ struct inode {
 	struct file_lock	*i_flock;
 	struct vm_area_struct	*i_mmap;
 	struct page		*i_pages;
+	spinlock_t		i_shared_lock;
 	struct dquot		*i_dquot[MAXQUOTAS];
 	struct pipe_inode_info	*i_pipe;
 
@@ -354,7 +355,7 @@ struct inode {
 	unsigned int		i_flags;
 	unsigned char		i_sock;
 
-	int			i_writecount;
+	atomic_t		i_writecount;
 	unsigned int		i_attr_flags;
 	__u32			i_generation;
 	union {
@@ -664,6 +665,10 @@ struct file_system_type {
 extern int register_filesystem(struct file_system_type *);
 extern int unregister_filesystem(struct file_system_type *);
 
+/* Return value for VFS lock functions - tells locks.c to lock conventionally
+ * REALLY kosha for root NFS and nfs_lock
+ */ 
+#define LOCK_USE_CLNT 1
 
 #define FLOCK_VERIFY_READ  1
 #define FLOCK_VERIFY_WRITE 2
@@ -921,10 +926,6 @@ extern int generic_buffer_fdatasync(struct inode *inode, unsigned long start, un
 
 extern int inode_change_ok(struct inode *, struct iattr *);
 extern void inode_setattr(struct inode *, struct iattr *);
-
-/* kludge to get SCSI modules working */
-#include <linux/minix_fs.h>
-#include <linux/minix_fs_sb.h>
 
 #endif /* __KERNEL__ */
 

@@ -13,7 +13,6 @@
 #include <asm/offset.h>
 #include <asm/bootinfo.h>
 #include <asm/cachectl.h>
-#include <asm/current.h>
 #include <asm/fpregdef.h>
 #include <asm/mipsconfig.h>
 #include <asm/mipsregs.h>

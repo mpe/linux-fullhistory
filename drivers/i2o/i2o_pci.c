@@ -10,6 +10,9 @@
  *	modify it under the terms of the GNU General Public License
  * 	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
+ *
+ *	TODO:
+ *		Support polled I2O PCI controllers. 
  */
  
 #include <linux/module.h>
@@ -187,9 +190,9 @@ static void i2o_pci_unload(void)
 		c=i2o_find_controller(i);
 		if(c==NULL)
 			continue;		
+		i2o_unlock_controller(c);
 		if(c->type == I2O_TYPE_PCI)
 			i2o_delete_controller(c);
-		i2o_unlock_controller(c);
 	}
 }
 
@@ -209,7 +212,6 @@ static void i2o_pci_activate(void)
 			{
 				printk("I2O: Failed to initialize iop%d\n", c->unit);
 				i2o_unlock_controller(c);
-				free_irq(c->bus.pci.irq, c);
 				i2o_delete_controller(c);
 				continue;
 			}
@@ -239,4 +241,13 @@ void cleanup_module(void)
 	i2o_pci_unload();
 }
 
+#else
+__init void i2o_pci_init(void)
+{
+	if(i2o_pci_scan()>=0)
+	{
+		printk(KERN_INFO "Linux I2O PCI support (c) 1999 Red Hat Software.\n");
+		i2o_pci_activate();
+	}
+}
 #endif

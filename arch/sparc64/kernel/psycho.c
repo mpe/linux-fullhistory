@@ -68,7 +68,6 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 #include <linux/smp_lock.h>
 #include <linux/pci.h>
 
-#include <asm/io.h>
 #include <asm/oplib.h>
 #include <asm/pbm.h>
 #include <asm/apb.h>

@@ -1065,8 +1065,10 @@ int isp1020_biosparam(Disk *disk, kdev_t n, int ip[])
 		ip[0] = 255;
 		ip[1] = 63;
 		ip[2] = size / (ip[0] * ip[1]);
+#if 0
 		if (ip[2] > 1023)
 			ip[2] = 1023;
+#endif			
 	}
 
 	LEAVE("isp1020_biosparam");

@@ -585,7 +585,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 		 * nice and simple solution (IMHO), and it seems to
 		 * work:-)
 		 */
-		if (EX_WGATHER(exp) && (inode->i_writecount > 1
+		if (EX_WGATHER(exp) && (atomic_read(&inode->i_writecount) > 1
 		 || (last_ino == inode->i_ino && last_dev == inode->i_dev))) {
 #if 0
 			interruptible_sleep_on_timeout(&inode->i_wait, 10 * HZ / 1000);

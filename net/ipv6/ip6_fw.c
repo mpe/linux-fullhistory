@@ -92,12 +92,11 @@ static __inline__ struct ip6_fw_rule * ip6_fwrule_alloc(void)
 	struct ip6_fw_rule *rl;
 
 	rl = kmalloc(sizeof(struct ip6_fw_rule), GFP_ATOMIC);
-
-	memset(rl, 0, sizeof(struct ip6_fw_rule));
-
 	if (rl)
+	{
+		memset(rl, 0, sizeof(struct ip6_fw_rule));
 		rl->flowr.ops = &ip6_fw_ops;
-
+	}
 	return rl;
 }
 

@@ -3,7 +3,9 @@
  *
  *  Copyright (C) 1997	Wu Ching Chen
  *  2.1.x update (C) 1998  Krzysztof G. Baranowski
- *
+ *   
+ * Marcelo Tosatti <marcelo@conectiva.com.br> : SMP fixes 
+ * 
  */
 
 #include <linux/module.h>
@@ -17,6 +19,7 @@
 #include <linux/proc_fs.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/spinlock.h>
 #include <linux/pci.h>
 #include <linux/blk.h>
 #include "scsi.h"
@@ -60,6 +63,7 @@ static struct Scsi_Host * atp_host[2]={NULL,NULL};
 
 static void atp870u_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
 {
+	 unsigned long flags;
     unsigned short int	tmpcip,id;
     unsigned char	i,j,h,tarid,lun;
     unsigned char  *prd;
@@ -364,7 +368,10 @@ get_sens:
 	     outb(0x80,tmport);
 	  }   */
 go_42:
+	  spin_lock_irqsave(&io_request_lock, flags);
 	  (*workrequ->scsi_done)(workrequ);
+	  spin_unlock_irqrestore(&io_request_lock, flags);
+
 	  curr_req[h][tarid]=0;
 	  workingu[h]--;
 	  if (wide_idu[h] != 0)

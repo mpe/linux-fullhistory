@@ -37,7 +37,7 @@ restrictions referred to are that the relevant option is valid if:
     SOUND	Appropriate sound system support is enabled.
     VGA 	The VGA console has been enabled.
     VT		Virtual terminal support is enabled.
-    XT		IBM PC/XT support is enabled.
+    XT		IBM PC/XT MFM hard disk support is enabled.
 
 In addition, the following text indicates that the option:
 

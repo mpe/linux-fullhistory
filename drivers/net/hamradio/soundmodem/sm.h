@@ -296,8 +296,6 @@ extern inline unsigned int lcm(unsigned int x, unsigned int y)
 
 #ifdef __i386__
 
-#include <asm/processor.h>
-
 #define HAS_RDTSC (current_cpu_data.x86_capability & X86_FEATURE_TSC)
 
 /*

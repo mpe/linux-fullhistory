@@ -37,7 +37,6 @@
 #include <asm/delay.h>
 #include <asm/processor.h>
 #include <asm/psr.h>
-#include <asm/system.h>
 #include <asm/elf.h>
 
 extern void fpsave(unsigned long *, unsigned long *, void *, unsigned long *);

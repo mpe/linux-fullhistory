@@ -332,6 +332,9 @@ extern void mdacon_setup(char *str, int *ints);
 #ifdef CONFIG_LTPC
 extern void ltpc_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_BLK_CPQ_DA
+extern void cpqarray_setup(char *str, int *ints);
+#endif
 
 #if defined(CONFIG_SYSVIPC)
 extern void ipc_init(void);
@@ -864,6 +867,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_LTPC
 	{ "ltpc=", ltpc_setup },
+#endif
+#ifdef CONFIG_BLK_CPQ_DA
+	{ "smart2=", cpqarray_setup },
 #endif
 	{ 0, 0 }
 };

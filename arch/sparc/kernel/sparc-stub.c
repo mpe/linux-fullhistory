@@ -105,7 +105,6 @@
 #include <asm/oplib.h>
 #include <asm/head.h>
 #include <asm/traps.h>
-#include <asm/system.h>
 #include <asm/vac-ops.h>
 #include <asm/kgdb.h>
 #include <asm/pgtable.h>

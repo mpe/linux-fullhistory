@@ -753,19 +753,29 @@ bootsect_panic_mess:
 ! This routine checks that the keyboard command queue is empty
 ! (after emptying the output buffers)
 !
-! No timeout is used - if this hangs there is something wrong with
-! the machine, and we probably couldn't proceed anyway.
+! Some machines have delusions that the keyboard buffer is always full
+! with no keyboard attached...
+
 empty_8042:
+       push    ecx
+       mov     ecx,#0xFFFFFF
+
+empty_8042_loop:
+       dec     ecx
+       jz      empty_8042_end_loop
+
 	call	delay
 	in	al,#0x64	! 8042 status port
 	test	al,#1		! output buffer?
 	jz	no_output
 	call	delay
 	in	al,#0x60	! read it
-	jmp	empty_8042
+	jmp	empty_8042_loop
 no_output:
 	test	al,#2		! is input buffer full?
-	jnz	empty_8042	! yes - loop
+	jnz	empty_8042_loop	! yes - loop
+empty_8042_end_loop:
+        pop     ecx
 	ret
 
 !

@@ -22,8 +22,15 @@ Deepak Saxena,	Intel Corp.
 Philip Rumpf
 	Fixed assorted dumb SMP locking bugs
 
-Juha Sievanen,  University Of Helsinki Finland
+Juha Sievanen,  University of Helsinki Finland
 	LAN OSM
+	/proc interface to LAN class
+	Bug fixes
+	Core code extensions
+
+Auvo Häkkinen,  University of Helsinki Finland
+	LAN OSM
+	/Proc interface to LAN class
 	Bug fixes
 	Core code extensions
 
@@ -41,13 +48,16 @@ Symbios Logic (Now LSI)
 BoxHill Corporation
 	Loan of initial FibreChannel disk array used for development work.
 
+European Comission
+	Funding the work done by the University of Helsinki
+
 STATUS:
 
 o	The core setup works within limits.
 o	The scsi layer seems to almost work. I'm still chasing down the hang
 	bug.
 o	The block OSM is fairly minimal but does seem to work.
-
+o	LAN OSM works with FDDI cards.
 
 TO DO:
 
@@ -69,10 +79,8 @@ o	Finish Media changers
 SCSI:
 o	Find the right way to associate drives/luns/busses
 
-Net:
-o	Port the existing RCPCI work to the frame work or write a new
-	driver. This one is with the Finns
+Lan:	Batch mode sends
+	Fix the "killing interrupt handler" in i2o_set_multicast_list
 
 Tape:
 o	Anyone seen anything implementing this ?
-

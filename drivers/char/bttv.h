@@ -102,9 +102,9 @@ struct bttv
 #else
 	struct pci_dev *dev;
 #endif
-	unsigned char irq;          /* IRQ used by Bt848 card */
+	unsigned int irq;           /* IRQ used by Bt848 card */
 	unsigned char revision;
-	unsigned int bt848_adr;      /* bus address of IO mem returned by PCI BIOS */
+	unsigned long bt848_adr;    /* bus address of IO mem returned by PCI BIOS */
 	unsigned char *bt848_mem;   /* pointer to mapped IO memory */
 	unsigned long busriscmem; 
 	u32 *riscmem;
@@ -274,7 +274,7 @@ struct bttv
 #define TEA6320_S          0x07  /* switch register */
                                  /* values for those registers: */
 #define TEA6320_S_SA       0x01  /* stereo A input */
-#define TEA6320_S_SB       0x02  /* stereo B */
+#define TEA6320_S_SB       0x07  /* stereo B -- databook wrong? this works */
 #define TEA6320_S_SC       0x04  /* stereo C */
 #define TEA6320_S_GMU      0x80  /* general mute */
 

@@ -22,10 +22,6 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
-
 #include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"

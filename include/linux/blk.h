@@ -359,6 +359,24 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device) 
 #define DEVICE_OFF(device)
 
+#elif (MAJOR_NR == I2O_MAJOR)
+
+#define DEVICE_NAME "I2O block"
+#define DEVICE_REQUEST do_i2ob_request
+#define DEVICE_NR(device) (MINOR(device)>>4)
+#define DEVICE_ON(device) 
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == COMPAQ_SMART2_MAJOR)
+
+#define DEVICE_NAME "ida"
+#define DEVICE_INTR do_ida
+#define TIMEOUT_VALUE (25*HZ)
+#define DEVICE_REQUEST do_ida_request0
+#define DEVICE_NR(device) (MINOR(device) >> 4)
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
 #endif /* MAJOR_NR == whatever */
 
 #if (MAJOR_NR != SCSI_TAPE_MAJOR)
@@ -435,7 +453,7 @@ void end_that_request_last(struct request *req);
 
 #ifndef LOCAL_END_REQUEST	/* If we have our own end_request, we do not want to include this mess */
 
-#if ! SCSI_BLK_MAJOR(MAJOR_NR)
+#if ! SCSI_BLK_MAJOR(MAJOR_NR) && (MAJOR_NR != COMPAQ_SMART2_MAJOR)
 
 static void end_request(int uptodate) {
 	struct request *req = CURRENT;

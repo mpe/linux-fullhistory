@@ -96,6 +96,7 @@ CONFIG_BLK_DEV_IDEPCI=y
 # CONFIG_BLK_DEV_HPT34X is not set
 CONFIG_BLK_DEV_PIIX=y
 # CONFIG_IDE_CHIPSETS is not set
+# CONFIG_BLK_CPQ_DA is not set
 
 #
 # Additional Block Devices

@@ -38,7 +38,6 @@
 #include <asm/uaccess.h>
 #include <asm/irq.h>
 #include <asm/system.h>
-#include <asm/irq.h>
 
 /* Some configuration switches are present in the include file... */
 

@@ -347,6 +347,9 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 /* for SCSI devices, call request_fn unconditionally */
 	if (scsi_blk_major(MAJOR(req->rq_dev)))
 		queue_new_request = 1;
+	if (MAJOR(req->rq_dev) >= COMPAQ_SMART2_MAJOR+0 &&
+	    MAJOR(req->rq_dev) <= COMPAQ_SMART2_MAJOR+7)
+		queue_new_request = 1;
 out:
 	if (queue_new_request)
 		(dev->request_fn)();
@@ -506,6 +509,14 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	     case SCSI_DISK7_MAJOR:
 	     case SCSI_CDROM_MAJOR:
 	     case I2O_MAJOR:
+	     case COMPAQ_SMART2_MAJOR+0:
+	     case COMPAQ_SMART2_MAJOR+1:
+	     case COMPAQ_SMART2_MAJOR+2:
+	     case COMPAQ_SMART2_MAJOR+3:
+	     case COMPAQ_SMART2_MAJOR+4:
+	     case COMPAQ_SMART2_MAJOR+5:
+	     case COMPAQ_SMART2_MAJOR+6:
+	     case COMPAQ_SMART2_MAJOR+7:
 
 		do {
 			if (req->sem)
@@ -717,7 +728,7 @@ end_that_request_last( struct request *req )
 	wake_up(&wait_for_request);
 }
 
-__initfunc(int blk_dev_init(void))
+int __init blk_dev_init(void)
 {
 	struct request * req;
 	struct blk_dev_struct *dev;

@@ -26,6 +26,9 @@
  *	Fixes:
  *		Steve Ralston	:	Scatter gather now works
  *
+ *	To Do
+ *		64bit cleanups
+ *		Fix the resource management problems.
  */
 
 #include <linux/module.h>
@@ -37,7 +40,6 @@
 #include <linux/interrupt.h>
 #include <linux/timer.h>
 #include <linux/delay.h>
-#include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <asm/dma.h>
 #include <asm/system.h>
@@ -83,6 +85,7 @@ static atomic_t queue_depth;
 /*
  *	SG Chain buffer support...
  */
+
 #define SG_MAX_FRAGS		64
 
 /*
@@ -204,9 +207,12 @@ static void i2o_scsi_reply(struct i2o_handler *h, struct i2o_controller *c, stru
 	}
 			
 	
-	/* Low byte is the adapter status, next is the device */
-	as=(u8)m[4]; 
-	ds=(u8)(m[4]>>8);
+	/*
+	 *	Low byte is device status, next is adapter status,
+	 *	(then one byte reserved), then request status.
+	 */
+	ds=(u8)m[4]; 
+	as=(u8)(m[4]>>8);
 	st=(u8)(m[4]>>24);
 	
 	dprintk(("i2o got a scsi reply %08X: ", m[0]));
@@ -264,10 +270,10 @@ static void i2o_scsi_reply(struct i2o_handler *h, struct i2o_controller *c, stru
 
 		dprintk((KERN_DEBUG "SCSI error %08X", m[4]));
 			
-		if (ds == 0x0E) 
+		if (as == 0x0E) 
 			/* SCSI Reset */
 			current_command->result = DID_RESET << 16;
-		else if (ds == 0x0F)
+		else if (as == 0x0F)
 			current_command->result = DID_PARITY << 16;
 		else
 			current_command->result = DID_ERROR << 16;
@@ -433,7 +439,6 @@ int i2o_scsi_detect(Scsi_Host_Template * tpnt)
 			  )
 				continue;
 		
-//			printk("Found a controller.\n");	
 			shpnt = scsi_register(tpnt, sizeof(struct i2o_scsi_host));
 			save_flags(flags);
 			cli();
@@ -443,7 +448,6 @@ int i2o_scsi_detect(Scsi_Host_Template * tpnt)
 			shpnt->irq = 0;
 			shpnt->this_id = /* Good question */15;
 			restore_flags(flags);
-//			printk("Scanning I2O port %d.\n", d->id);
 			i2o_scsi_init(c, d, shpnt);
 			count++;
 		}
@@ -534,23 +538,10 @@ int i2o_scsi_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 	int direction;
 	int scsidir;
 	u32 len;
+	u32 reqlen;
+	u32 tag;
 	
 	static int max_qd = 1;
-	
-	/*
-	 *	The scsi layer should be handling this stuff
-	 */
-
-	if(is_dir_out(SCpnt))
-	{
-		direction=0x04000000;
-		scsidir=0x80000000;
-	}
-	else
-	{
-		scsidir=0x40000000;
-		direction=0x00000000;
-	}
 	
 	/*
 	 *	Do the incoming paperwork
@@ -604,13 +595,45 @@ int i2o_scsi_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 	 *	Put together a scsi execscb message
 	 */
 	
+	len = SCpnt->request_bufflen;
+	direction = 0x00000000;			// SGL IN  (osm<--iop)
+	
+	/*
+	 *	The scsi layer should be handling this stuff
+	 */
+	
+	scsidir = 0x00000000;			// DATA NO XFER
+	if(len)
+	{
+		if(is_dir_out(SCpnt))
+		{
+			direction=0x04000000;	// SGL OUT  (osm-->iop)
+			scsidir  =0x80000000;	// DATA OUT (iop-->dev)
+		}
+		else
+		{
+			scsidir  =0x40000000;	// DATA IN  (iop<--dev)
+		}
+	}
+	
 	msg[1] = I2O_CMD_SCSI_EXEC<<24|HOST_TID<<12|tid;
 	msg[2] = scsi_context;		/* So the I2O layer passes to us */
 	/* Sorry 64bit folks. FIXME */
 	msg[3] = (u32)SCpnt;		/* We want the SCSI control block back */
-	/* Direction, disconnect ok, no tagging (yet) */
-	msg[4] = scsidir|(1<<29)|SCpnt->cmd_len;
 
+	/* LSI_920_PCI_QUIRK
+	 *
+	 *	Intermittant observations of msg frame word data corruption
+	 *	observed on msg[4] after:
+	 *	  WRITE, READ-MODIFY-WRITE
+	 *	operations.  19990606 -sralston
+	 *
+	 *	(Hence we build this word via tag. Its good practice anyway
+	 *	 we don't want fetches over PCI needlessly)
+	 */
+
+	tag=0;
+	
 	/*
 	 *	Attach tags to the devices
 	 */	
@@ -623,24 +646,23 @@ int i2o_scsi_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 		 */
 		if((jiffies - hostdata->tagclock[SCpnt->target][SCpnt->lun]) > (5*HZ))
 		{
-			msg[4]|=(1<<23)|(1<<24);
+			tag=0x01800000;		/* ORDERED! */
 			hostdata->tagclock[SCpnt->target][SCpnt->lun]=jiffies;
 		}
-		else switch(SCpnt->tag)
+		else
 		{
-			case SIMPLE_QUEUE_TAG:
-				msg[4]|=(1<<23);
-				break;
-			case HEAD_OF_QUEUE_TAG:
-				msg[4]|=(1<<24);
-				break;
-			case ORDERED_QUEUE_TAG:
-				msg[4]|=(1<<23)|(1<<24);
-				break;
-			default:
-				msg[4]|=(1<<23);
+			/* Hmmm...  I always see value of 0 here,
+			 *  of which {HEAD_OF, ORDERED, SIMPLE} are NOT!  -sralston
+			 */
+			if(SCpnt->tag == HEAD_OF_QUEUE_TAG)
+				tag=0x01000000;
+			else if(SCpnt->tag == ORDERED_QUEUE_TAG)
+				tag=0x01800000;
 		}
 	}
+
+	/* Direction, disconnect ok, tag, CDBLen */
+	msg[4] = scsidir|0x20000000|SCpnt->cmd_len|tag;
 
 	mptr=msg+5;
 
@@ -652,7 +674,7 @@ int i2o_scsi_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 	mptr+=4;
 	lenptr=mptr++;		/* Remember me - fill in when we know */
 	
-			
+	reqlen = 12;		// SINGLE SGE
 	/*
 	 *	Now fill in the SGList and command 
 	 *
@@ -664,21 +686,22 @@ int i2o_scsi_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 	if(SCpnt->use_sg)
 	{
 		struct scatterlist *sg = (struct scatterlist *)SCpnt->request_buffer;
+		int chain = 0;
 		
 		if((sg_max_frags > 11) && (SCpnt->use_sg > 11))
 		{
+			chain = 1;
 			/*
 			 *	Need to chain!
 			 */
-			SCpnt->host_scribble = (void*)(sg_chain_pool + sg_chain_tag);
 			*mptr++=direction|0xB0000000|(SCpnt->use_sg*2*4);
-			*mptr=virt_to_bus(SCpnt->host_scribble);
-			mptr = (u32*)SCpnt->host_scribble;
+			*mptr=virt_to_bus(sg_chain_pool + sg_chain_tag);
+			mptr = (u32*)(sg_chain_pool + sg_chain_tag);
 			if (SCpnt->use_sg > max_sg_len)
 			{
 				max_sg_len = SCpnt->use_sg;
 				printk("i2o_scsi: Chain SG! SCpnt=%p, SG_FragCnt=%d, SG_idx=%d\n",
-					SCpnt, SCpnt->use_sg, (chain_buf*)SCpnt->host_scribble-sg_chain_pool);
+					SCpnt, SCpnt->use_sg, sg_chain_tag);
 			}
 			if ( ++sg_chain_tag == SG_MAX_BUFS )
 				sg_chain_tag = 0;
@@ -693,7 +716,15 @@ int i2o_scsi_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 			*mptr++=virt_to_bus(sg->address);
 			sg++;
 		}
-		mptr[-2]|=0xC0000000;	/* End of List and block */
+
+		/* Make this an end of list. Again evade the 920 bug and
+		   unwanted PCI read traffic */
+		
+		mptr[-2]=direction|0xD0000000|(sg-1)->length;
+		
+		if(!chain)
+			reqlen = mptr - msg;
+		
 		*lenptr=len;
 		if(len != SCpnt->underflow)
 			printk("Cmd len %08X Cmd underflow %08X\n",
@@ -703,19 +734,23 @@ int i2o_scsi_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 	{
 		dprintk(("non sg for %p, %d\n", SCpnt->request_buffer,
 				SCpnt->request_bufflen));
-		*mptr++=0xD0000000|direction|SCpnt->request_bufflen;
-		*mptr++=virt_to_bus(SCpnt->request_buffer);
 		*lenptr = len = SCpnt->request_bufflen;
-		/* No transfer ? - fix up the request */
 		if(len == 0)
-			msg[4]&=~0xC0000000;
+		{
+			reqlen = 9;
+		}
+		else
+		{
+			*mptr++=0xD0000000|direction|SCpnt->request_bufflen;
+			*mptr++=virt_to_bus(SCpnt->request_buffer);
+		}
 	}
 	
 	/*
 	 *	Stick the headers on 
 	 */
 
-	msg[0] = (mptr-msg)<<16 | SGL_OFFSET_10;
+	msg[0] = reqlen<<16 | SGL_OFFSET_10;
 	
 	/* Queue the message */
 	i2o_post_message(c,m);
@@ -757,7 +792,7 @@ int i2o_scsi_abort(Scsi_Cmnd * SCpnt)
 	u32 m;
 	int tid;
 	
-	printk("i2o_scsi_abort\n");
+	printk("i2o_scsi: Aborting command block.\n");
 	
 	host = SCpnt->host;
 	hostdata = (struct i2o_scsi_host *)host->hostdata;
@@ -790,8 +825,6 @@ int i2o_scsi_abort(Scsi_Cmnd * SCpnt)
 	wmb();
 	i2o_post_message(c,m);
 	wmb();
-//	SCpnt->result = DID_RESET << 16;
-//	SCpnt->scsi_done(SCpnt);
 	return SCSI_ABORT_PENDING;
 }
 
@@ -804,12 +837,12 @@ int i2o_scsi_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	u32 m;
 	u32 *msg;
 
-	printk("i2o_scsi_reset\n");
-	
 	/*
 	 *	Find the TID for the bus
 	 */
 
+	printk("i2o_scsi: Attempting to reset the bus.\n");
+	
 	host = SCpnt->host;
 	hostdata = (struct i2o_scsi_host *)host->hostdata;
 	tid = hostdata->bus_task;

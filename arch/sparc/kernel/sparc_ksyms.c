@@ -40,7 +40,6 @@
 #include <asm/dma.h>
 #endif
 #include <asm/a.out.h>
-#include <asm/spinlock.h>
 #include <asm/io-unit.h>
 
 struct poll {

@@ -25,7 +25,6 @@
 #include <linux/signal.h>
 #include <linux/uio.h>
 #include <linux/utsname.h>
-#include <linux/fs.h>
 #include <linux/major.h>
 #include <linux/stat.h>
 #include <linux/malloc.h>
