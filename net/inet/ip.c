@@ -1041,7 +1041,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
  							len, len + hlen));
  
  		/* Allocate buffer. */
- 		if ((skb2 = alloc_skb(sizeof(struct sk_buff) + len + hlen,GFP_KERNEL)) == NULL) 
+ 		if ((skb2 = alloc_skb(sizeof(struct sk_buff) + len + hlen,GFP_ATOMIC)) == NULL) 
  		{
  			printk("IP: frag: no memory for new fragment!\n");
  			return;

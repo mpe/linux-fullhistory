@@ -3602,99 +3602,25 @@ tcp_write_wakeup(struct sock *sk)
   sk->prot->queue_xmit(sk, dev, buff, 1);
 }
 
-/*
- * This routine probes a zero window.  It makes a copy of the first
- * packet in the write queue, but with just one byte of data.
- */
 void
 tcp_send_probe0(struct sock *sk)
 {
-  unsigned char *raw;
-  struct iphdr *iph;
-  struct sk_buff *skb2, *skb;
-  int len, hlen, data;
-  struct tcphdr *t1;
-  struct device *dev;
+	if (sk->zapped)
+		return;		/* Afer a valid reset we can send no more */
 
-  if (sk->zapped)
-	return;	/* Afer a valid reset we can send no more */
+	tcp_write_wakeup(sk);
 
-  if (sk -> state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT &&
-      sk -> state != TCP_FIN_WAIT1 && sk->state != TCP_FIN_WAIT2)
-  	return;
-
-  skb = sk->wfront;
-  if (skb == NULL)
-        return;
-
-  dev = skb->dev;
-  /* I know this can't happen but as it does.. */
-  if(dev==NULL)
-    {
-      printk("tcp_send_probe0: NULL device bug!\n");
-      return;
-    }
-  IS_SKB(skb);
-
-  raw = skb->data;
-  iph = (struct iphdr *) (raw + dev->hard_header_len);
-
-  hlen = (iph->ihl * sizeof(unsigned long)) + dev->hard_header_len;
-  data = skb->len - hlen - sizeof(struct tcphdr);
-  len = hlen + sizeof(struct tcphdr) + (data ? 1 : 0);
- 	
-  /* Allocate buffer. */
-  if ((skb2 = alloc_skb(sizeof(struct sk_buff) + len, GFP_ATOMIC)) == NULL) {
-/*    printk("alloc failed raw %x th %x hlen %d data %d len %d\n",
-	   raw, skb->h.th, hlen, data, len); */
-    reset_timer (sk, TIME_PROBE0, 10);  /* try again real soon */
-    return;
-  }
-
-  skb2->arp = skb->arp;
-  skb2->len = len;
-  skb2->h.raw = (char *)(skb2->data);
- 
-  sk->wmem_alloc += skb2->mem_len;
- 
-  /* Copy the packet header into the new buffer. */
-  memcpy(skb2->h.raw, raw, len);
- 
-  skb2->h.raw += hlen;  /* it's now h.th -- pointer to the tcp header */
-  t1 = skb2->h.th;
- 
-/* source, dest, seq, from existing packet */
-  t1->ack_seq = ntohl(sk->acked_seq);
-  t1->res1 = 0;
-/* doff, fin, from existing packet.  Fin is safe because Linux always
- * sends fin in a separate packet
- * syn, rst, had better be zero in original */
-  t1->ack = 1;
-  t1->res2 = 0;
-  t1->window = ntohs(tcp_select_window(sk)/*sk->prot->rspace(sk)*/);
-  tcp_send_check(t1, sk->saddr, sk->daddr, len - hlen, sk);
-  /* Send it and free it.
-   * This will prevent the timer from automatically being restarted.
-   */
-  sk->prot->queue_xmit(sk, dev, skb2, 1);
-  sk->backoff++;
-  /*
-   * in the case of retransmissions, there's good reason to limit
-   * rto to 120 sec, as that's the maximum legal RTT on the Internet.
-   * For probes it could reasonably be longer.  However making it
-   * much longer could cause unacceptable delays in some situation,
-   * so we might as well use the same value
-   */
-  sk->rto = min(sk->rto << 1, 120*HZ);
-  reset_timer (sk, TIME_PROBE0, sk->rto);
-  sk->retransmits++;
-  sk->prot->retransmits ++;
+	sk->backoff++;
+	sk->rto = min(sk->rto << 1, 120*HZ);
+	reset_timer (sk, TIME_PROBE0, sk->rto);
+	sk->retransmits++;
+	sk->prot->retransmits ++;
 }
+
 
 /*
  *	Socket option code for TCP. 
- */
-  
+ */  
 int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen)
 {
 	int val,err;

@@ -106,7 +106,7 @@ bool 'System V and Coherent filesystem support' CONFIG_SYSV_FS n
 *
 #bool 'Keyboard meta-key sends ESC-prefix' CONFIG_KBD_META y
 #bool 'Keyboard Num Lock on by default' CONFIG_KBD_NUML y
-bool 'Parallel printer support' CONFIG_PRINTER y
+bool 'Parallel printer support' CONFIG_PRINTER n
 bool 'Logitech busmouse support' CONFIG_BUSMOUSE n
 bool 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE y
 if [ "$CONFIG_PSMOUSE" = "y" ]
@@ -114,7 +114,7 @@ bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE y
 fi
 bool 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
 bool 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
-bool 'Selection (cut and paste for virtual consoles)' CONFIG_SELECTION y
+bool 'Selection (cut and paste for virtual consoles)' CONFIG_SELECTION n
 bool 'QIC-02 tape support' CONFIG_TAPE_QIC02 n
 bool 'QIC-117 tape support' CONFIG_FTAPE n
 if [ "$CONFIG_FTAPE" = "y" ]

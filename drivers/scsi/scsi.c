@@ -127,10 +127,12 @@ static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};
 static struct blist blacklist[] = 
 {
    {"DENON","DRD-25X","V"},   /* A cdrom that locks up when probed at lun != 0 */
-   {"MAXTOR","XT-3280","PR02"},  /* Locks-up when LUN>0 polled. */
-   {"MAXTOR","XT-4380S","B3C"},  /* Locks-up when LUN>0 polled. */
+   {"IMS", "CDD521/10","2.06"},   /* Locks-up when LUN>0 polled. */
+   {"MAXTOR","XT-3280","PR02"},   /* Locks-up when LUN>0 polled. */
+   {"MAXTOR","XT-4380S","B3C"},   /* Locks-up when LUN>0 polled. */
    {"MAXTOR","MXT-1240S","I1.2"}, /* Locks up when LUN > 0 polled */
-   {"MAXTOR","XT-4170S","B5A"},  /* Locks-up sometimes when LUN>0 polled. */
+   {"MAXTOR","XT-4170S","B5A"},   /* Locks-up sometimes when LUN>0 polled. */
+   {"MAXTOR","XT-8760S","B7B"},   /* guess what? */
    {"NEC","CD-ROM DRIVE:841","1.0"},  /* Locks-up when LUN>0 polled. */
    {"RODIME","RO3000S","2.33"},  /* Locks up if polled for lun != 0 */
    {"SEAGATE", "ST157N", "\004|j"}, /* causes failed REQUEST SENSE on lun 1 for aha152x

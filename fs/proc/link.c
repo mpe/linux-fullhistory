@@ -111,6 +111,10 @@ static int proc_readlink(struct inode * inode, char * buffer, int buflen)
 	unsigned int dev,ino;
 	char buf[64];
 
+	if (!S_ISLNK(inode->i_mode)) {
+		iput(inode);
+		return -EINVAL;
+	}
 	i = proc_follow_link(NULL, inode, 0, 0, &inode);
 	if (i)
 		return i;

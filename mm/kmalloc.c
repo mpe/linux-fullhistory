@@ -151,8 +151,14 @@ void * kmalloc (size_t size, int priority)
 	int order,tries,i,sz;
 	struct block_header *p;
 	struct page_descriptor *page;
+	extern unsigned long intr_count;
 
 /* Sanity check... */
+	if (intr_count && priority != GFP_ATOMIC) {
+		printk("kmalloc called nonatomically from interrupt %08lx\n",
+			((unsigned long *)&size)[-1]);
+		priority = GFP_ATOMIC;
+	}
 if (size > MAX_KMALLOC_K * 1024) 
      {
      printk ("kmalloc: I refuse to allocate %d bytes (for now max = %d).\n",

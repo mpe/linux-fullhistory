@@ -982,9 +982,13 @@ inet_release(struct socket *sock, struct socket *peer)
 	while(sk->state != TCP_CLOSE && current->timeout>0) {
 		interruptible_sleep_on(sk->sleep);
 		if (current->signal & ~current->blocked) {
+			break;
+#if 0
+			/* not working now - closes can't be restarted */
 			sti();
 			current->timeout=0;
 			return(-ERESTARTSYS);
+#endif
 		}
 	}
 	current->timeout=0;
@@ -1855,7 +1859,7 @@ void inet_proto_init(struct ddi_proto *pro)
   struct inet_protocol *p;
   int i;
 
-  printk("Swansea University Computer Society Net2Debugged [1.27]\n");
+  printk("Swansea University Computer Society Net2Debugged [1.30]\n");
   /* Set up our UNIX VFS major device. */
   if (register_chrdev(AF_INET_MAJOR, "af_inet", &inet_fops) < 0) {
 	printk("%s: cannot register major device %d!\n",

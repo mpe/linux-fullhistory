@@ -13,7 +13,7 @@
 	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
 */
 
-static char *version = "3c509.c:pl15i 2/23/94 becker@super.org\n";
+static char *version = "3c509.c:pl15k 3/5/94 becker@super.org\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -190,7 +190,7 @@ int el3_probe(struct device *dev)
 
 	{
 		char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
-		printk("%s: 3c509 at %#3.3x	 tag %d, %s port, address ",
+		printk("%s: 3c509 at %#3.3x tag %d, %s port, address ",
 			   dev->name, dev->base_addr, current_tag, if_names[dev->if_port]);
 	}
 
@@ -477,10 +477,12 @@ el3_interrupt(int reg_ptr)
 		if (++i > 10) {
 			printk("%s: Infinite loop in interrupt, status %4.4x.\n",
 				   dev->name, status);
+			/* Clear all interrupts we have handled. */
+			outw(0x68FF, ioaddr + EL3_CMD);
 			break;
 		}
-		/* Clear the other interrupts we have handled. */
-		outw(0x6899, ioaddr + EL3_CMD); /* Ack IRQ */
+		/* Acknowledge the IRQ. */
+		outw(0x6891, ioaddr + EL3_CMD); /* Ack IRQ */
 	}
 
 	if (el3_debug > 4) {

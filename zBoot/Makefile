@@ -18,7 +18,7 @@ CFLAGS = -O2 -DSTDC_HEADERS $(TEST)
 all:	zSystem
 
 zSystem:	piggy.o $(zOBJECTS)
-		$(LD) $(LDFLAGS) -o zSystem -T 1000 $(zOBJECTS) piggy.o
+		$(LD) $(LDFLAGS) -o zSystem -Ttext 1000 $(zOBJECTS) piggy.o
 
 head.o:	head.s
 

@@ -585,6 +585,7 @@ last_free_pages[index = (index + 1) & (NR_LAST_FREE_PAGES - 1)] = result; \
  */
 unsigned long __get_free_page(int priority)
 {
+	extern unsigned long intr_count;
 	unsigned long result, flag;
 	static unsigned long index = 0;
 
@@ -593,6 +594,11 @@ unsigned long __get_free_page(int priority)
 	   sections of code have interrupts disabled. -RAB
 	   Is this code reentrant? */
 
+	if (intr_count && priority != GFP_ATOMIC) {
+		printk("gfp called nonatomically from interrupt %08lx\n",
+			((unsigned long *)&priority)[-1]);
+		priority = GFP_ATOMIC;
+	}
 	save_flags(flag);
 repeat:
 	REMOVE_FROM_MEM_QUEUE(free_page_list,nr_free_pages);

@@ -748,16 +748,14 @@ static unsigned long try_to_load_aligned(unsigned long address,
 	bh = create_buffers(address, size);
 	if (!bh)
 		return 0;
+	/* do any of the buffers already exist? punt if so.. */
 	p = b;
 	for (offset = 0 ; offset < PAGE_SIZE ; offset += size) {
 		block = *(p++);
 		if (!block)
 			goto not_aligned;
-		tmp = get_hash_table(dev, block, size);
-		if (tmp) {
-			brelse(tmp);
+		if (find_buffer(dev, block, size))
 			goto not_aligned;
-		}
 	}
 	tmp = bh;
 	p = b;

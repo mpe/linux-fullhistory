@@ -24,17 +24,17 @@ enum {
 
 extern inline void mark_bh(int nr)
 {
-	__asm__ __volatile__("btsl %1,%0":"=m" (bh_active):"ir" (nr));
+	__asm__ __volatile__("orl %1,%0":"=m" (bh_active):"ir" (1<<nr));
 }
 
 extern inline void disable_bh(int nr)
 {
-	__asm__ __volatile__("btcl %1,%0":"=m" (bh_mask):"ir" (nr));
+	__asm__ __volatile__("andl %1,%0":"=m" (bh_mask):"ir" (~(1<<nr)));
 }
 
 extern inline void enable_bh(int nr)
 {
-	__asm__ __volatile__("btsl %1,%0":"=m" (bh_mask):"ir" (nr));
+	__asm__ __volatile__("orl %1,%0":"=m" (bh_mask):"ir" (1<<nr));
 }
 
 #endif

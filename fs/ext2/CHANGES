@@ -1,3 +1,14 @@
+Changes from version 0.4b to version 0.5
+========================================
+	- New superblock fields: s_lastcheck and s_checkinterval added
+	  by Uwe Ohse <uwe@tirka.gun.de> to implement timedependent checks
+	  of the file system
+	- Real random numbers for secure rm added by Pierre del Perugia
+	  <delperug@gla.ecoledoc.ibp.fr>
+	- The mount warnings related to the state of a fs are not printed
+	  if the fs is mounted read-only, idea by Nick Holloway
+	  <alfie@dcs.warwick.ac.uk>
+
 Changes from version 0.4a to version 0.4b
 =========================================
 	- Copyrights changed to include the name of my laboratory.

@@ -101,12 +101,12 @@ asmlinkage void alignment_check(void);
 	printk("ds: %04x   es: %04x   fs: %04x   gs: %04x   ss: %04x\n",
 		regs->ds, regs->es, regs->fs, regs->gs, ss);
 	store_TR(i);
-	printk("Pid: %d, process nr: %d (%s)\nCode: ", current->pid, 0xffff & i, current->comm);
-	for(i=0;i<20;i++)
-		printk("%02x ",0xff & get_seg_byte(regs->cs,(i+(char *)regs->eip)));
-	printk("\nStack: ");
+	printk("Pid: %d, process nr: %d (%s)\nStack: ", current->pid, 0xffff & i, current->comm);
 	for(i=0;i<5;i++)
 		printk("%08lx ", get_seg_long(ss,(i+(unsigned long *)esp)));
+	printk("\nCode: ");
+	for(i=0;i<20;i++)
+		printk("%02x ",0xff & get_seg_byte(regs->cs,(i+(char *)regs->eip)));
 	printk("\n");
 	do_exit(SIGSEGV);
 }
