@@ -61,8 +61,7 @@ isa_delay(long t)
 {
         sti();
         current->state = TASK_INTERRUPTIBLE;
-        current->timeout = jiffies + t;
-        schedule();
+        schedule_timeout(t);
         sti();
 }
 

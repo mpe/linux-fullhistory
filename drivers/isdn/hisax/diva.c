@@ -241,13 +241,11 @@ reset_diva(struct IsdnCardState *cs)
 	cs->hw.diva.ctrl_reg = 0;        /* Reset On */
 	byteout(cs->hw.diva.ctrl, cs->hw.diva.ctrl_reg);
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + (10 * HZ) / 1000;	/* Timeout 10ms */
-	schedule();
+	schedule_timeout((10*HZ)/1000);	/* Timeout 10ms */
 	cs->hw.diva.ctrl_reg |= DIVA_RESET;  /* Reset Off */
 	byteout(cs->hw.diva.ctrl, cs->hw.diva.ctrl_reg);
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + (10 * HZ) / 1000;	/* Timeout 10ms */
-	schedule();
+	schedule_timeout((10*HZ)/1000);	/* Timeout 10ms */
 	if (cs->subtyp == DIVA_ISA)
 		cs->hw.diva.ctrl_reg |= DIVA_ISA_LED_A;
 	else

@@ -389,6 +389,7 @@ int fdc_interrupt_wait(unsigned int time)
 	sigset_t old_sigmask;	
 	static int resetting = 0;
 	TRACE_FUN(ft_t_fdc_dma);
+	long timeout;
 
 #if LINUX_VERSION_CODE >= KERNEL_VER(2,0,16)
  	if (waitqueue_active(&ftape_wait_intr)) {
@@ -400,8 +401,7 @@ int fdc_interrupt_wait(unsigned int time)
 	}
 #endif
 	/* timeout time will be up to USPT microseconds too long ! */
-	current->timeout = jiffies + (1000 * time + FT_USPT - 1) / FT_USPT;
-	current->state = TASK_INTERRUPTIBLE;
+	timeout = (1000 * time + FT_USPT - 1) / FT_USPT;
 
 	spin_lock_irq(&current->sigmask_lock);
 	old_sigmask = current->blocked;
@@ -409,9 +409,10 @@ int fdc_interrupt_wait(unsigned int time)
 	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 
+	current->state = TASK_INTERRUPTIBLE;
 	add_wait_queue(&ftape_wait_intr, &wait);
-	while (!ft_interrupt_seen && current->state != TASK_RUNNING) {
-		schedule();	/* sets TASK_RUNNING on timeout */
+	while (!ft_interrupt_seen && (current->state == TASK_INTERRUPTIBLE)) {
+		timeout = schedule_timeout(timeout);
         }
 
 	spin_lock_irq(&current->sigmask_lock);
@@ -433,7 +434,6 @@ int fdc_interrupt_wait(unsigned int time)
 	 */
 	current->state = TASK_RUNNING; 
 	if (ft_interrupt_seen) { /* woken up by interrupt */
-		current->timeout = 0;	  /* interrupt hasn't cleared this */
 		ft_interrupt_seen = 0;
 		TRACE_EXIT 0;
 	}

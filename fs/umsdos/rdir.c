@@ -107,8 +107,8 @@ printk (KERN_WARNING "umsdos_rlookup_x: we are at pseudo-root thingy?\n");
 		 * depending on whether this is an MS-DOS or 
 		 * a UMSDOS directory
 		 */
-Printk ((KERN_DEBUG "umsdos_rlookup_x: setting up setup_dir_inode %lu...\n",
-inode->i_ino));
+Printk ((KERN_DEBUG "umsdos_rlookup_x: patch_dentry_inode %s/%s\n",
+dentry->d_parent->d_name.name, dentry->d_name.name));
 		umsdos_patch_dentry_inode(dentry, 0);
 
 		/* N.B. Won't work -- /linux dentry will already have

@@ -201,12 +201,10 @@ reset_asuscom(struct IsdnCardState *cs)
 	save_flags(flags);
 	sti();
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + 1;
-	schedule();
+	schedule_timeout(1);
 	byteout(cs->hw.asus.adr, 0);	/* Reset Off */
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + 1;
-	schedule();
+	schedule_timeout(1);
 	restore_flags(flags);
 }
 

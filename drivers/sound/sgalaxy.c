@@ -29,9 +29,7 @@
 static void sleep( unsigned howlong )
 {
 	current->state   = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + howlong;
-	schedule();
-	current->timeout = 0;
+	schedule(howlong);
 }
 
 #define DPORT 0x80

@@ -1100,8 +1100,7 @@ static int mcd_open(struct cdrom_device_info * cdi, int purpose)
                         return -EIO;            /* drive doesn't respond */
                 if ((st & MST_READY) == 0) {    /* no disk? wait a sec... */
                         current->state = TASK_INTERRUPTIBLE;
-                        current->timeout = jiffies + HZ;
-                        schedule();
+                        schedule_timeout(HZ);
                 }
         } while (((st & MST_READY) == 0) && count++ < MCD_RETRY_ATTEMPTS);
 

@@ -650,9 +650,9 @@ kmem_slab_destroy(kmem_cache_t *cachep, kmem_slab_t *slabp)
 	}
 
 	slabp->s_magic = SLAB_MAGIC_DESTROYED;
-	kmem_freepages(cachep, slabp->s_mem-slabp->s_offset);
 	if (slabp->s_index)
 		kmem_cache_free(cachep->c_index_cachep, slabp->s_index);
+	kmem_freepages(cachep, slabp->s_mem-slabp->s_offset);
 	if (SLAB_OFF_SLAB(cachep->c_flags))
 		kmem_cache_free(cache_slabp, slabp);
 }

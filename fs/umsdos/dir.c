@@ -44,7 +44,7 @@ static void umsdos_dentry_dput(struct dentry *dentry)
 	}
 }
 
-static struct dentry_operations umsdos_dentry_operations =
+struct dentry_operations umsdos_dentry_operations =
 {
 	umsdos_dentry_validate,	/* d_validate(struct dentry *) */
 	NULL,			/* d_hash */
@@ -123,7 +123,6 @@ static int umsdos_readdir_x (struct inode *dir, struct file *filp,
 	if (filp->f_pos == UMSDOS_SPECIAL_DIRFPOS &&
 	    dir == pseudo_root && !internal_read) {
 
-Printk (("umsdos_readdir_x: what UMSDOS_SPECIAL_DIRFPOS /mn/?\n"));
 		/*
 		 * We don't need to simulate this pseudo directory
 		 * when umsdos_readdir_x is called for internal operation
@@ -134,6 +133,8 @@ Printk (("umsdos_readdir_x: what UMSDOS_SPECIAL_DIRFPOS /mn/?\n"));
 		 * linux root), it simulate a directory /DOS which points to
 		 * the real root of the file system.
 		 */
+
+		Printk ((KERN_WARNING "umsdos_readdir_x: pseudo_root thing UMSDOS_SPECIAL_DIRFPOS\n"));
 		if (filldir (dirbuf, "DOS", 3, 
 				UMSDOS_SPECIAL_DIRFPOS, UMSDOS_ROOT_INO) == 0) {
 			filp->f_pos++;
@@ -477,6 +478,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 		 * A lookup of DOS in the pseudo root will always succeed
 		 * and return the inode of the real root.
 		 */
+		Printk ((KERN_DEBUG "umsdos_lookup_x: following /DOS\n"));
 		inode = saved_root->d_inode;
 		goto out_add;
 	}
@@ -542,7 +544,7 @@ dret->d_parent->d_name.name, dret->d_name.name);
 		 * which are recorded independently of the pseudo-root
 		 * mode.
 		 */
-printk(KERN_WARNING "umsdos_lookup_x: untested, inode == Pseudo_root\n");
+printk("umsdos_lookup_x: skipping DOS/linux\n");
 		ret = -ENOENT;
 		goto out_dput;
 	}
@@ -557,7 +559,7 @@ out_add:
 	ret = 0;
 
 out_dput:
-	if (dret != dentry)
+	if (dret && dret != dentry)
 		d_drop(dret);
 	dput(dret);
 out:

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.127 1998/10/04 07:04:32 davem Exp $
+ * Version:	$Id: tcp.c,v 1.130 1998/11/07 14:36:10 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -860,8 +860,8 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			if(copy > seglen)
 				copy = seglen;
 
+			/* Determine how large of a buffer to allocate.  */
 			tmp = MAX_HEADER + sk->prot->max_header;
-			queue_it = 0;
 			if (copy < min(mss_now, tp->max_window >> 1) &&
 			    !(flags & MSG_OOB)) {
 				tmp += min(mss_now, tp->max_window);
@@ -876,6 +876,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 				queue_it = 1;
 			} else {
 				tmp += copy;
+				queue_it = 0;
 			}
 			skb = sock_wmalloc(sk, tmp, 0, GFP_KERNEL);
 
@@ -1617,6 +1618,8 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 	req->class->destructor(req);
 	tcp_openreq_free(req);
 	sk->ack_backlog--; 
+	if(sk->keepopen)
+		tcp_inc_slow_timer(TCP_SLT_KEEPALIVE);
 
 	/*
 	 * This does not pass any already set errors on the new socket
@@ -1655,48 +1658,86 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval,
 		return -EFAULT;
 
 	switch(optname) {
-		case TCP_MAXSEG:
-/* values greater than interface MTU won't take effect.  however at
- * the point when this call is done we typically don't yet know
- * which interface is going to be used
- */
-	  		if(val<1||val>MAX_WINDOW)
-				return -EINVAL;
-			tp->user_mss=val;
-			return 0;
-		case TCP_NODELAY:
-			sk->nonagle=(val==0)?0:1;
-			return 0;
-		default:
-			return(-ENOPROTOOPT);
+	case TCP_MAXSEG:
+		/* values greater than interface MTU won't take effect.  however at
+		 * the point when this call is done we typically don't yet know
+		 * which interface is going to be used
+		 */
+		if(val < 1 || val > MAX_WINDOW)
+			return -EINVAL;
+		tp->user_mss = val;
+		return 0;
+
+	case TCP_NODELAY:
+		/* You cannot try to use this and TCP_CORK in
+		 * tandem, so let the user know.
+		 */
+		if (sk->nonagle == 2)
+			return -EINVAL;
+		sk->nonagle = (val == 0) ? 0 : 1;
+		return 0;
+
+	case TCP_CORK:
+		/* When set indicates to always queue non-full frames.
+		 * Later the user clears this option and we transmit
+		 * any pending partial frames in the queue.  This is
+		 * meant to be used alongside sendfile() to get properly
+		 * filled frames when the user (for example) must write
+		 * out headers with a write() call first and then use
+		 * sendfile to send out the data parts.
+		 *
+		 * You cannot try to use TCP_NODELAY and this mechanism
+		 * at the same time, so let the user know.
+		 */
+		if (sk->nonagle == 1)
+			return -EINVAL;
+		if (val != 0) {
+			sk->nonagle = 2;
+		} else {
+			sk->nonagle = 0;
+
+			if (tp->send_head) {
+				lock_sock(sk);
+				if (tp->send_head &&
+				    tcp_snd_test (sk, tp->send_head))
+					tcp_write_xmit(sk);
+				release_sock(sk);
+			}
+		}
+		return 0;
+
+	default:
+		return -ENOPROTOOPT;
 	};
 }
 
-int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval, 
+int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval,
 		   int *optlen)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	int val;
-	int len;
+	int val, len;
 
 	if(level != SOL_TCP)
 		return tp->af_specific->getsockopt(sk, level, optname,
 						   optval, optlen);
-	
+
 	if(get_user(len,optlen))
 		return -EFAULT;
-		
-	len = min(len,sizeof(int));
+
+	len = min(len, sizeof(int));
 
 	switch(optname) {
-		case TCP_MAXSEG:
-			val=tp->user_mss;
-			break;
-		case TCP_NODELAY:
-			val=sk->nonagle;
-			break;
-		default:
-			return(-ENOPROTOOPT);
+	case TCP_MAXSEG:
+		val = tp->user_mss;
+		break;
+	case TCP_NODELAY:
+		val = (sk->nonagle == 1);
+		break;
+	case TCP_CORK:
+		val = (sk->nonagle == 2);
+		break;
+	default:
+		return -ENOPROTOOPT;
 	};
 
   	if(put_user(len, optlen))

@@ -403,8 +403,7 @@ reset_chip(struct device *dev))
 
 	/* wait 30 ms */
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + 3;
-	schedule();
+	schedule_timeout(30*HZ/1000);
 
 	if (lp->chip_type != CS8900) {
 		/* Hardware problem requires PNP registers to be reconfigured after a reset */

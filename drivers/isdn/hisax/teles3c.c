@@ -79,13 +79,11 @@ reset_t163c(struct IsdnCardState *cs)
 	save_flags(flags);
 	sti();
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + 3;
-	schedule();
+	schedule_timeout(3);
 	cs->hw.hfcD.cirm = HFCD_MEM8K;
 	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_CIRM, cs->hw.hfcD.cirm);	/* Reset Off */
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + 1;
-	schedule();
+	schedule_timeout(1);
 	cs->hw.hfcD.cirm |= HFCD_INTB;
 	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_CIRM, cs->hw.hfcD.cirm);	/* INT B */
 	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_CLKDEL, 0x0e);
@@ -136,8 +134,7 @@ t163c_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			save_flags(flags);
 			sti();
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + (80*HZ)/1000;
-			schedule();
+			schedule_timeout((80*HZ)/1000);
 			cs->hw.hfcD.ctmt |= HFCD_TIM800;
 			cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_CTMT, cs->hw.hfcD.ctmt); 
 			cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_MST_MODE, cs->hw.hfcD.mst_m);

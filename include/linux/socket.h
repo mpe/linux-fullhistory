@@ -250,6 +250,7 @@ struct ucred {
 /* TCP options - this way around because someone left a set in the c library includes */
 #define TCP_NODELAY	1
 #define TCP_MAXSEG	2
+#define TCP_CORK	3	/* Linux specific (for use with sendfile) */
 
 #ifdef __KERNEL__
 extern int memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len);

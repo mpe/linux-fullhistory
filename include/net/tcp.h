@@ -675,7 +675,7 @@ static __inline__ u32 tcp_receive_window(struct tcp_opt *tp)
  * scaling applied to the result.  The caller does these things
  * if necessary.  This is a "raw" window selection.
  */
-extern u32	__tcp_select_window(struct sock *sk, u32 cur_win);
+extern u32	__tcp_select_window(struct sock *sk);
 
 /* Chose a new window to advertise, update state in tcp_opt for the
  * socket, and return result with RFC1323 scaling applied.  The return
@@ -686,13 +686,20 @@ extern __inline__ u16 tcp_select_window(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	u32 cur_win = tcp_receive_window(tp);
-	u32 new_win = __tcp_select_window(sk, cur_win);
+	u32 new_win = __tcp_select_window(sk);
 
 	/* Never shrink the offered window */
-	if(new_win < cur_win)
+	if(new_win < cur_win) {
+		/* Danger Will Robinson!
+		 * Don't update rcv_wup/rcv_wnd here or else
+		 * we will not be able to advertise a zero
+		 * window in time.  --DaveM
+		 */
 		new_win = cur_win;
-	tp->rcv_wnd = new_win;
-	tp->rcv_wup = tp->rcv_nxt;
+	} else {
+		tp->rcv_wnd = new_win;
+		tp->rcv_wup = tp->rcv_nxt;
+	}
 
 	/* RFC1323 scaling applied */
 	return new_win >> tp->rcv_wscale;
@@ -706,7 +713,7 @@ extern __inline__ int tcp_raise_window(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	u32 cur_win = tcp_receive_window(tp);
-	u32 new_win = __tcp_select_window(sk, cur_win);
+	u32 new_win = __tcp_select_window(sk);
 
 	return (new_win && (new_win > (cur_win << 1)));
 }
@@ -790,8 +797,11 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 	 *
 	 * 	Don't use the nagle rule for urgent data.
 	 */
-	if (!sk->nonagle && skb->len < (tp->mss_cache >> 1) && tp->packets_out &&
-	    !(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_URG))
+	if ((sk->nonagle == 2 && (skb->len < tp->mss_cache)) ||
+	    (!sk->nonagle &&
+	     skb->len < (tp->mss_cache >> 1) &&
+	     tp->packets_out &&
+	     !(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_URG)))
 		nagle_check = 0;
 
 	return (nagle_check &&

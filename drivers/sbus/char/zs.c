@@ -1354,10 +1354,9 @@ static void send_break(	struct sun_serial * info, int duration)
 	if (!info->port)
 		return;
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + duration;
 	cli();
 	write_zsreg(info->zs_channel, 5, (info->curregs[5] | SND_BRK));
-	schedule();
+	schedule_timeout(duration);
 	write_zsreg(info->zs_channel, 5, info->curregs[5]);
 	sti();
 }
@@ -1543,8 +1542,7 @@ static void zs_close(struct tty_struct *tty, struct file * filp)
 	if (info->blocked_open) {
 		if (info->close_delay) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + info->close_delay;
-			schedule();
+			schedule_timeout(info->close_delay);
 		}
 		wake_up_interruptible(&info->open_wait);
 	}

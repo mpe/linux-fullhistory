@@ -1952,8 +1952,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
     if (info->blocked_open) {
 	if (info->close_delay) {
 	    current->state = TASK_INTERRUPTIBLE;
-	    current->timeout = jiffies + info->close_delay;
-	    schedule();
+	    schedule_timeout(info->close_delay);
 	}
 	wake_up_interruptible(&info->open_wait);
     }

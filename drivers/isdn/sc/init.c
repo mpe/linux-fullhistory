@@ -165,8 +165,7 @@ int init_sc(void)
 			pr_debug("Doing a SAFE probe reset\n");
 			outb(0xFF, io[b] + RESET_OFFSET);
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + milliseconds(10000);
-			schedule();
+			schedule_timeout(milliseconds(10000));
 		}
 		pr_debug("RAM Base for board %d is 0x%x, %s probe\n", b, ram[b],
 			ram[b] == 0 ? "will" : "won't");
@@ -514,8 +513,7 @@ int identify_board(unsigned long rambase, unsigned int iobase)
 	 */
 	outb(PRI_BASEPG_VAL, pgport);
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + HZ;
-	schedule();
+	schedule_timeout(HZ);
 	sig = readl(rambase + SIG_OFFSET);
 	pr_debug("Looking for a signature, got 0x%x\n", sig);
 #if 0
@@ -535,8 +533,7 @@ int identify_board(unsigned long rambase, unsigned int iobase)
 	 */
 	outb(BRI_BASEPG_VAL, pgport);
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + HZ;
-	schedule();
+	schedule_timeout(HZ);
 	sig = readl(rambase + SIG_OFFSET);
 	pr_debug("Looking for a signature, got 0x%x\n", sig);
 #if 0
@@ -571,8 +568,7 @@ int identify_board(unsigned long rambase, unsigned int iobase)
 	x = 0;
 	while((inb(iobase + FIFOSTAT_OFFSET) & RF_HAS_DATA) && x < 100) {
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + 1;
-		schedule();
+		schedule_timeout(1);
 		x++;
 	}
 	if(x == 100) {

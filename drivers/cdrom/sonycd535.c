@@ -62,26 +62,24 @@
  * This interface is (unfortunately) a polled interface.  This is
  * because most Sony interfaces are set up with DMA and interrupts
  * disables.  Some (like mine) do not even have the capability to
- * handle interrupts or DMA.  For this reason you will see a lot of
+ * handle interrupts or DMA.  For this reason you will see a bit of
  * the following:
  *
- *   retry_count = jiffies+ SONY_JIFFIES_TIMEOUT;
- *   while ((retry_count > jiffies) && (! <some condition to wait for))
+ *   snap = jiffies;
+ *   while (jiffies-snap < SONY_JIFFIES_TIMEOUT)
  *   {
- *      while (handle_sony_cd_attention())
- *         ;
- *
+ *		if (some_condition())
+ *         break;
  *      sony_sleep();
  *   }
- *   if (the condition not met)
+ *   if (some_condition not met)
  *   {
- *      return an error;
+ *      return an_error;
  *   }
  *
  * This ugly hack waits for something to happen, sleeping a little
- * between every try.  it also handles attentions, which are
- * asynchronous events from the drive informing the driver that a disk
- * has been inserted, removed, etc.
+ * between every try.  (The conditional is written so that jiffies
+ * wrap-around is handled properly.)
  *
  * One thing about these drives: They talk in MSF (Minute Second Frame) format.
  * There are 75 frames a second, 60 seconds a minute, and up to 75 minutes on a
@@ -327,17 +325,14 @@ cdu535_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 
 /*
- * Wait a little while (used for polling the drive).  If in initialization,
- * setting a timeout doesn't work, so just loop for a while.  (We trust
- * that the sony_sleep() call is protected by a test for proper jiffies count.)
+ * Wait a little while.
  */
 static inline void
 sony_sleep(void)
 {
 	if (sony535_irq_used <= 0) {	/* poll */
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies;
-		schedule();
+		schedule_timeout(0);
 	} else {	/* Interrupt driven */
 		cli();
 		enable_interrupts();
@@ -370,12 +365,13 @@ select_unit(int unit_no)
 static int
 read_result_reg(Byte *data_ptr)
 {
-	int retry_count;
+	unsigned long snap;
 	int read_status;
 
-	retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
-	while (jiffies < retry_count) {
-		if (((read_status = inb(read_status_reg)) & SONY535_RESULT_NOT_READY_BIT) == 0) {
+	snap = jiffies;
+	while (jiffies-snap < SONY_JIFFIES_TIMEOUT) {
+		read_status = inb(read_status_reg);
+		if ((read_status & SONY535_RESULT_NOT_READY_BIT) == 0) {
 #if DEBUG > 1
 			printk(CDU535_MESSAGE_NAME
 					": read_result_reg(): readStatReg = 0x%x\n", read_status);
@@ -599,7 +595,7 @@ seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 	Byte cmd_buff[7];
 	int  i;
 	int  read_status;
-	int  retry_count;
+	unsigned long snap;
 	Byte *data_buff;
 	int  sector_count = 0;
 
@@ -618,8 +614,9 @@ seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 	/* read back the data one block at a time */
 	while (0 < n_blocks--) {
 		/* wait for data to be ready */
-		retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
-		while (jiffies < retry_count) {
+		int data_valid = 0;
+		snap = jiffies;
+		while (jiffies-snap < SONY_JIFFIES_TIMEOUT) {
 			read_status = inb(read_status_reg);
 			if ((read_status & SONY535_RESULT_NOT_READY_BIT) == 0) {
 				read_exec_status(status);
@@ -630,11 +627,12 @@ seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 				data_buff = buff[sector_count++];
 				for (i = 0; i < block_size; i++)
 					*data_buff++ = inb(data_reg);	/* unrolling this loop does not seem to help */
+				data_valid = 1;
 				break;			/* exit the timeout loop */
 			}
 			sony_sleep();		/* data not ready, sleep a while */
 		}
-		if (retry_count <= jiffies)
+		if (!data_valid)
 			return TIME_OUT;	/* if we reach this stage */
 	}
 
@@ -893,8 +891,7 @@ do_cdu535_request(void)
 						if (readStatus == BAD_STATUS) {
 							/* Sleep for a while, then retry */
 							current->state = TASK_INTERRUPTIBLE;
-							current->timeout = jiffies + RETRY_FOR_BAD_STATUS;
-							schedule();
+							schedule_timeout(RETRY_FOR_BAD_STATUS*HZ/10);
 						}
 #if DEBUG > 0
 						printk(CDU535_MESSAGE_NAME
@@ -1493,7 +1490,8 @@ sony535_init(void))
 	Byte cmd_buff[3];
 	Byte ret_buff[2];
 	Byte status[2];
-	int  retry_count;
+	unsigned long snap;
+	int  got_result = 0;
 	int  tmp_irq;
 	int  i;
 
@@ -1525,21 +1523,22 @@ sony535_init(void))
 	}
 	/* look for the CD-ROM, follows the procedure in the DOS driver */
 	inb(select_unit_reg);
-	retry_count = jiffies + 2 * HZ;
-	while (jiffies < retry_count)
-		sony_sleep();			/* wait for 40 18 Hz ticks (from DOS driver) */
+	/* wait for 40 18 Hz ticks (reverse-engineered from DOS driver) */
+	schedule_timeout((HZ+17)*40/18);
 	inb(result_reg);
 
 	outb(0, read_status_reg);	/* does a reset? */
-	retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
-	while (jiffies < retry_count) {
+	snap = jiffies;
+	while (jiffies-snap < SONY_JIFFIES_TIMEOUT) {
 		select_unit(0);
-		if (inb(result_reg) != 0xff)
+		if (inb(result_reg) != 0xff) {
+			got_result = 1;
 			break;
+		}
 		sony_sleep();
 	}
 
-	if ((jiffies < retry_count) && (check_drive_status() != TIME_OUT)) {
+	if (got_result && (check_drive_status() != TIME_OUT)) {
 		/* CD-ROM drive responded --  get the drive configuration */
 		cmd_buff[0] = SONY535_INQUIRY;
 		if (do_sony_cmd(cmd_buff, 1, status,

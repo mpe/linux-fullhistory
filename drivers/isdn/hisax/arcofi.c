@@ -40,8 +40,7 @@ send_arcofi(struct IsdnCardState *cs, const u_char *msg) {
 	while (cnt && !test_bit(HW_MON1_TX_END, &cs->HW_Flags)) {
 		cnt--;
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + (10 * HZ) / 1000;	/* Timeout 10ms */
-		schedule();
+		schedule_timeout((10*HZ)/1000);	/* Timeout 10ms */
 	}
 	restore_flags(flags);
 	sprintf(tmp, "arcofi tout %d", cnt);

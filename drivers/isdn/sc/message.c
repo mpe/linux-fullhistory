@@ -267,8 +267,7 @@ int send_and_receive(int card,
 	/* wait for the response */
 	while (tries < timeout) {
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + 1; 
-		schedule();
+		schedule_timeout(1);
 		
 		pr_debug("SAR waiting..\n");
 

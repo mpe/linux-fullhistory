@@ -409,8 +409,7 @@ sony_sleep(void)
    if (cdu31a_irq <= 0)
    {
       current->state = TASK_INTERRUPTIBLE;
-      current->timeout = jiffies;
-      schedule();
+      schedule_timeout(0);
    }
    else /* Interrupt driven */
    {
@@ -753,8 +752,7 @@ restart_on_error(void)
    }
 
    current->state = TASK_INTERRUPTIBLE;
-   current->timeout = jiffies + 2*HZ;
-   schedule();
+   schedule_timeout(2*HZ);
 
    sony_get_toc();
 }
@@ -1012,8 +1010,7 @@ retry_cd_operation:
    {
       num_retries++;
       current->state = TASK_INTERRUPTIBLE;
-      current->timeout = jiffies + HZ/10; /* Wait .1 seconds on retries */
-      schedule();
+      schedule_timeout(HZ/10);  /* Wait .1 seconds on retries */
       goto retry_cd_operation;
    }
 

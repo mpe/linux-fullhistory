@@ -148,13 +148,13 @@ void umsdos_patch_dentry_inode(struct dentry *dentry, off_t f_pos)
 {
 	struct inode *inode = dentry->d_inode;
 
-Printk (("umsdos_patch_dentry_inode: inode=%lu\n", inode->i_ino));
+PRINTK (("umsdos_patch_dentry_inode: inode=%lu\n", inode->i_ino));
 
 	/*
 	 * Classify the inode based on EMD/non-EMD status.
 	 */
-Printk (("umsdos_patch_inode: call x_set_dirinfo(%p,%p,%lu)\n",
-inode, dir, f_pos));
+PRINTK (("umsdos_patch_inode: call umsdos_set_dirinfo_new(%p,%lu)\n",
+dentry, f_pos));
 	umsdos_set_dirinfo_new(dentry, f_pos);
 
 	inode->u.umsdos_i.i_emd_dir = 0;
@@ -275,8 +275,8 @@ dentry->d_parent->d_name.name, dentry->d_name.name, ret);
 
 	fill_new_filp (&filp, demd);
 	filp.f_pos = inode->u.umsdos_i.pos;
-Printk(("UMSDOS_notify_change: %s/%s reading at %u\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, filp.f_pos));
+Printk(("UMSDOS_notify_change: %s/%s reading at %d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, (int) filp.f_pos));
 
 	/* Read only the start of the entry since we don't touch the name */
 	ret = umsdos_emd_dir_read (&filp, (char *) &entry, UMSDOS_REC_SIZE);
@@ -398,11 +398,14 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 
 	/* Check whether to change to the /linux root */
 	new_root = check_pseudo_root(sb);
+
 	if (new_root) {
-		pseudo_root = new_root->d_inode;
 		/* sanity check */
 		if (new_root->d_op != &umsdos_dentry_operations)
 			printk("umsdos_read_super: pseudo-root wrong ops!\n");
+
+		pseudo_root = new_root->d_inode;
+
 		saved_root = sb->s_root;
 		sb->s_root = new_root;
 		printk(KERN_INFO "UMSDOS: changed to alternate root\n");
@@ -411,6 +414,9 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 	/* if d_count is not 1, mount will fail with -EBUSY! */
 	if (sb->s_root->d_count > 1) {
 		shrink_dcache_sb(sb);
+		if (sb->s_root->d_count > 1) {
+			printk(KERN_ERR "UMSDOS: root count %d > 1 !", sb->s_root->d_count);
+		}
 	}
 	return sb;
 

@@ -464,8 +464,7 @@ static int pt_atapi( int unit, char * cmd, int dlen, char * buf, char * fun )
 static void pt_sleep( int cs )
 
 {       current->state = TASK_INTERRUPTIBLE;
-        current->timeout = jiffies + cs;
-        schedule();
+        schedule_timeout(cs);
 }
 
 static int pt_poll_dsc( int unit, int pause, int tmo, char *msg )

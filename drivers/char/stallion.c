@@ -1072,8 +1072,7 @@ static void stl_delay(int len)
 #endif
 	if (len > 0) {
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + len;
-		schedule();
+		schedule_timeout(len);
 		current->state = TASK_RUNNING;
 	}
 }

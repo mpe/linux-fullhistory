@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.73 1998/10/21 05:36:02 davem Exp $
+ * Version:	$Id: arp.c,v 1.74 1998/11/01 22:15:06 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -431,7 +431,7 @@ void arp_send(int type, int ptype, u32 dest_ip,
 	 *	No arp on this interface.
 	 */
 	
-	if (dev->flags&(IFF_NOARP|IFF_NODYNARP))
+	if (dev->flags&IFF_NOARP)
 		return;
 
 	/*
@@ -547,7 +547,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  */  
 	if (in_dev == NULL ||
 	    arp->ar_hln != dev->addr_len    || 
-	    dev->flags & (IFF_NOARP|IFF_NODYNARP) ||
+	    dev->flags & IFF_NOARP ||
 	    skb->pkt_type == PACKET_OTHERHOST ||
 	    skb->pkt_type == PACKET_LOOPBACK ||
 	    arp->ar_pln != 4)

@@ -450,12 +450,10 @@ reset_elsa(struct IsdnCardState *cs)
 		sti();
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_POTA2, 0x20);
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + (10 * HZ) / 1000;	/* Timeout 10ms */
-		schedule();
+		schedule_timeout((10*HZ)/1000);	/* Timeout 10ms */
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_POTA2, 0x00);
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + (10 * HZ) / 1000;	/* Timeout 10ms */
-		schedule();
+		schedule_timeout((10*HZ)/1000);	/* Timeout 10ms */
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_MASK, 0xc0);
 		schedule();
 		restore_flags(flags);
@@ -658,8 +656,7 @@ Elsa_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			} else
 				return(0);
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + (110 * HZ) / 1000;		/* Timeout 110ms */
-			schedule();
+			schedule_timeout((110*HZ)/1000);		/* Timeout 110ms */
 			restore_flags(flags);
 			cs->hw.elsa.ctrl_reg &= ~ELSA_ENA_TIMER_INT;
 			byteout(cs->hw.elsa.ctrl, cs->hw.elsa.ctrl_reg);

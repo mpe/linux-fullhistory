@@ -82,8 +82,7 @@ static inline int fmi_setfreq(struct fmi_device *dev, unsigned long freq)
 	outbits(8, 0xC0, myport);
 	/* it is better than udelay(140000), isn't it? */
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + HZ/7;
-	schedule();
+	schedule_timeout(HZ/7);
 	/* ignore signals, we really should restore volume */
 	if (dev->curvol) fmi_unmute(myport);
 	return 0;
@@ -100,8 +99,7 @@ static inline int fmi_getsigstr(struct fmi_device *dev)
 	outb(val | 0x10, myport);
 	/* it is better than udelay(140000), isn't it? */
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + HZ/7;
-	schedule();
+	schedule_timeout(HZ/7);
 	/* do not do it..., 140ms is very looong time to get signal in real program 
 	if (signal_pending(current))
 	    return -EINTR;

@@ -242,12 +242,10 @@ reset_sedlbauer(struct IsdnCardState *cs)
 		save_flags(flags);
 		sti();
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + 1;
-		schedule();
+		schedule_timeout(1);
 		byteout(cs->hw.sedl.reset_off, 0);	/* Reset Off */
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + 1;
-		schedule();
+		schedule_timeout(1);
 		restore_flags(flags);
 	}
 }

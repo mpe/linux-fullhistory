@@ -750,7 +750,6 @@ static inline int __do_down(struct semaphore * sem, int task_state)
 		schedule();
 		tsk->state = task_state;
 	}
-
 	tsk->state = TASK_RUNNING;
 	remove_wait_queue(&sem->wait, &wait);
 	return ret;

@@ -4,7 +4,7 @@
  *
  * 	Copyright (c) 1994 Pauline Middelink
  *
- *	$Id: ip_masq.c,v 1.26 1998/09/24 03:38:58 davem Exp $
+ *	$Id: ip_masq.c,v 1.27 1998/11/07 14:59:24 davem Exp $
  *
  *
  *	See ip_fw.c for original log
@@ -1011,14 +1011,19 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 		switch (skb->ip_summed)
 		{
 			case CHECKSUM_NONE:
+			{
+				int datasz;
 				doff = proto_doff(iph->protocol, h.raw);
-				csum = csum_partial(h.raw + doff, size - doff, 0);
+				datasz = size - doff; 
+				if (datasz < 0) 
+					return -1; 
+				csum = csum_partial(h.raw + doff, datasz, 0);
 				IP_MASQ_DEBUG(3, "O-pkt: %s I-datacsum=%d\n",
 						masq_proto_name(iph->protocol),
 						csum);
 
 				skb->csum = csum_partial(h.raw , doff, csum);
-
+			}
 			case CHECKSUM_HW:
 				if (csum_tcpudp_magic(iph->saddr, iph->daddr, 
 						size, iph->protocol, skb->csum))

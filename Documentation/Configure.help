@@ -7246,10 +7246,10 @@ CONFIG_RISCOM8
 
 Specialix IO8+ card support
 CONFIG_SPECIALIX
-  This is a driver for the Specialix IO8+ multiport card which gives
-  you many serial ports. You would need something like this to 
-  connect more than two modems to your Linux box, for instance in
-  order to become a BBS. 
+  This is a driver for the Specialix IO8+ multiport card (both the
+  ISA and the PCI version) which gives you many serial ports. You 
+  would need something like this to connect more than two modems to 
+  your Linux box, for instance in order to become a BBS. 
 
   If you have a card like that, say Y here and read the file
   Documentation/specialix.txt. Also it's possible to say M here and

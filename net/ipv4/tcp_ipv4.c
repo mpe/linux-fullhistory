@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.161 1998/10/03 09:38:05 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.162 1998/11/07 11:50:26 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1633,6 +1633,9 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 	/* Count it even if it's bad */
 	tcp_statistics.TcpInSegs++;
 
+	if (len < sizeof(struct tcphdr))
+		goto bad_packet;
+
 	/* Try to use the device checksum if provided. */
 	switch (skb->ip_summed) {
 	case CHECKSUM_NONE:
@@ -1647,6 +1650,7 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 			       ntohs(th->dest),
 			       len, skb->len,
 			       ntohs(skb->nh.iph->tot_len));
+	bad_packet:		
 			tcp_statistics.TcpInErrs++;
 			goto discard_it;
 		}

@@ -1245,11 +1245,8 @@ static int drain_dac(struct sv_state *s, int nonblock)
                 }
 		tmo = (count * HZ) / s->ratedac;
 		tmo >>= sample_shift[(s->fmt >> SV_CFMT_ASHIFT) & SV_CFMT_MASK];
-		current->timeout = jiffies + (tmo ? tmo : 1);
-                schedule();
-		if (tmo && !current->timeout)
+		if (!schedule_timeout(tmo ? : 1) && tmo)
 			printk(KERN_DEBUG "sv: dma timed out??\n");
-		current->timeout = 0;
         }
         remove_wait_queue(&s->dma_dac.wait, &wait);
         current->state = TASK_RUNNING;
@@ -2025,11 +2022,8 @@ static int sv_midi_release(struct inode *inode, struct file *file)
 				return -EBUSY;
 			}
 			tmo = (count * HZ) / 3100;
-			current->timeout = tmo ? jiffies + tmo : 0;
-			schedule();
-			if (tmo && !current->timeout)
+			if (!schedule_timeout(tmo ? : 1) && tmo)
 				printk(KERN_DEBUG "sv: midi timed out??\n");
-			current->timeout = 0;
 		}
 		remove_wait_queue(&s->midi.owait, &wait);
 		current->state = TASK_RUNNING;

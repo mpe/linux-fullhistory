@@ -1526,12 +1526,11 @@ static void sktr_wait(unsigned long time)
 {
 	long tmp;
 
-	tmp = jiffies + time/(1000000/HZ);
+	tmp = time/(1000000/HZ);
 	do {
-		current->timeout	= tmp;
 		current->state 		= TASK_INTERRUPTIBLE;
-		schedule();
-	} while(tmp > jiffies);
+		tmp = schedule_timeout(tmp);
+	} while(tmp);
 
 	return;
 }

@@ -1181,8 +1181,7 @@ static void rp_close(struct tty_struct *tty, struct file * filp)
 	if (info->blocked_open) {
 		if (info->close_delay) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + info->close_delay;
-			schedule();
+			schedule_timeout(info->close_delay);
 		}
 		wake_up_interruptible(&info->open_wait);
 	} else {
@@ -1269,10 +1268,9 @@ static void rp_set_termios(struct tty_struct *tty, struct termios *old_termios)
 static void send_break(	struct r_port * info, int duration)
 {
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + duration;
 	cli();
 	sSendBreak(&info->channel);
-	schedule();
+	schedule_timeout(duration);
 	sClrBreak(&info->channel);
 	sti();
 }
@@ -1666,8 +1664,7 @@ static void rp_wait_until_sent(struct tty_struct *tty, int timeout)
 #endif
 		current->state = TASK_INTERRUPTIBLE;
 		current->counter = 0;	/* make us low-priority */
-		current->timeout = jiffies + check_time;
-		schedule();
+		schedule_timeout(check_time);
 		if (signal_pending(current))
 			break;
 	}

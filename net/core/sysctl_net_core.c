@@ -55,7 +55,7 @@ ctl_table core_table[] = {
 	{NET_CORE_OPTMEM_MAX, "optmem_max",
 	 &sysctl_optmem_max, sizeof(int), 0644, NULL,
 	 &proc_dointvec},
-#endif
+#endif /* CONFIG_NET */
 	{ 0 }
 };
 #endif

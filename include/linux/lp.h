@@ -25,7 +25,7 @@
 #define LP_NOPA  0x0010
 #define LP_ERR   0x0020
 #define LP_ABORT 0x0040
-#if 0
+#ifdef LP_NEED_CAREFUL
 #define LP_CAREFUL 0x0080
 #endif
 #define LP_ABORTOPEN 0x0100
@@ -41,10 +41,13 @@
 #define LP_INIT_CHAR 1000
 
 /* The parallel port specs apparently say that there needs to be
- * a .5usec wait before and after the strobe.
+ * a .5usec wait before and after the strobe.  Since there are wildly
+ * different computers running linux, I can't come up with a perfect
+ * value so if 20 is not good for you use `tunelp /dev/lp? -w ?`.
+ * You can also set it to 0 if your printer handle that.
  */
 
-#define LP_INIT_WAIT 1
+#define LP_INIT_WAIT 20
 
 /* This is the amount of time that the driver waits for the printer to
  * catch up when the printer's buffer appears to be filled.  If you
@@ -128,7 +131,6 @@ struct lp_struct {
 	unsigned int last_error;
 	volatile unsigned int irq_detected:1;
 	volatile unsigned int irq_missed:1;
-	unsigned int polled:1;
 };
 
 /*
@@ -174,7 +176,7 @@ struct lp_struct {
  */
 #define LP_DELAY 	50
 
-#define LP_POLLED(minor) (lp_table[(minor)].polled)
+#define LP_POLLED(minor) (lp_table[(minor)].dev->port->irq == PARPORT_IRQ_NONE)
 #define LP_PREEMPTED(minor) (lp_table[(minor)].dev->port->waithead != NULL)
 
 /*

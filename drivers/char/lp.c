@@ -16,14 +16,8 @@
  * Parport sharing hacking by Andrea Arcangeli
  * Fixed kernel_(to/from)_user memory copy to check for errors
  * 				by Riccardo Facchetti <fizban@tin.it>
- * Redesigned interrupt handling for handle printers with buggy handshake
- *				by Andrea Arcangeli, 11 May 1998
- * Full efficient handling of printer with buggy irq handshake (now I have
- * understood the meaning of the strange handshake). This is done sending new
- * characters if the interrupt is just happened, even if the printer say to
- * be still BUSY. This is needed at least with Epson Stylus Color.
- * I also fixed the irq on the rising edge of the strobe problem.
- *				Andrea Arcangeli, 15 Oct 1998
+ * Interrupt handling workaround for printers with buggy handshake
+ *				by Andrea Arcangeli, 11 May 98
  */
 
 /* This driver should, in theory, work with any parallel port that has an
@@ -84,14 +78,7 @@
  *
  *	ftp://e-mind.com/pub/linux/pscan/
  *
- * My printer scanner run on an Epson Stylus Color show that such printer
- * generates the irq on the _rising_ edge of the STROBE. Now lp handle
- * this case fine too.
- *
- * I also understood that on such printer we are just allowed to send
- * new characters after the interrupt even if the BUSY line is still active.
- *
- *					15 Oct 1998, Andrea Arcangeli
+ *					11 May 98, Andrea Arcangeli
  */
 
 #include <linux/module.h>
@@ -108,6 +95,7 @@
 
 #include <linux/parport.h>
 #undef LP_STATS
+#undef LP_NEED_CAREFUL
 #include <linux/lp.h>
 
 #include <asm/irq.h>
@@ -127,21 +115,16 @@ struct lp_struct lp_table[LP_NO] =
 			   NULL, 0, 0, 0}
 };
 
-/*
- * Test if printer is ready.
- */
-#define LP_READY(status) \
+/* Test if printer is ready (and optionally has no error conditions) */
+#ifdef LP_NEED_CAREFUL
+#define LP_READY(minor, status) \
+  ((LP_F(minor) & LP_CAREFUL) ? _LP_CAREFUL_READY(status) : ((status) & LP_PBUSY))
+#define _LP_CAREFUL_READY(status) \
    ((status) & (LP_PBUSY|LP_POUTPA|LP_PSELECD|LP_PERRORP)) == \
       (LP_PBUSY|LP_PSELECD|LP_PERRORP)
-
-/*
- * Test if the printer has error conditions.
- */
-#define LP_NO_ERROR(status) \
-   ((status) & (LP_POUTPA|LP_PSELECD|LP_PERRORP)) == \
-      (LP_PSELECD|LP_PERRORP)
-
-#define LP_NO_ACKING(status) ((status) & LP_PACK)
+#else
+#define LP_READY(minor, status) ((status) & LP_PBUSY)
+#endif
 
 #undef LP_DEBUG
 #undef LP_READ_DEBUG
@@ -189,7 +172,7 @@ static __inline__ void lp_schedule(int minor, long timeout)
 		schedule_timeout(timeout);
 		lp_parport_claim(minor);
 	} else
-		schedule();
+		schedule_timeout(timeout);
 }
 
 static int lp_reset(int minor)
@@ -204,81 +187,52 @@ static int lp_reset(int minor)
 	return retval;
 }
 
-static inline void lp_wait(int minor)
-{
-	udelay(LP_WAIT(minor));
-}
-
 static inline int lp_char(char lpchar, int minor)
 {
+	unsigned int wait = 0;
 	unsigned long count = 0;
 #ifdef LP_STATS
 	struct lp_stats *stats;
 #endif
 
-	if (signal_pending(current))
-		return 0;
-
 	for (;;)
 	{
-		unsigned char status;
 		lp_yield(minor);
-
-		status = r_str(minor);
-		/*
-		 * On Epson Stylus Color we must continue even if LP_READY()
-		 * is false to be efficient. This way is backwards
-		 * compatible with old not-buggy printers. -arca
-		 */
-		if (LP_NO_ERROR(status) &&
-		    ((lp_table[minor].irq_detected && LP_NO_ACKING(status)) ||
-		     LP_READY(status)))
+		if (LP_READY(minor, r_str(minor)))
 			break;
-		/*
-		 * To have a chance to sleep on the interrupt we should break
-		 * the polling loop ASAP. Unfortunately there seems to be
-		 * some hardware that underperform so we leave this
-		 * configurable at runtime. So when printing with irqs
-		 * `tunelp /dev/lp0 -c 1' is a must to take the full
-		 * advantage of the irq. -arca
-		 */
-		if (++count == LP_CHAR(minor))
-			return 0;
+ 		if (++count == LP_CHAR(minor) || signal_pending(current))
+ 			return 0;
 	}
 
 	w_dtr(minor, lpchar);
-
 #ifdef LP_STATS
 	stats = &LP_STAT(minor);
 	stats->chars++;
 #endif
-
-	/*
-	 * Epson Stylus Color generate the IRQ on the rising edge of
-	 * strobe so clean the irq's information before playing with
-	 * the strobe. -arca
-	 */
-	lp_table[minor].irq_detected = 0;
-	lp_table[minor].irq_missed = 0;
-	/*
-	 * Be sure that the CPU doesn' t reorder instruction. I am not sure
-	 * if it' s needed also before an outb(). If not tell me ;-). -arca
-	 */
-	mb();
-
 	/* must wait before taking strobe high, and after taking strobe
 	   low, according spec.  Some printers need it, others don't. */
-	lp_wait(minor);
-
+#ifndef __sparc__
+	while (wait != LP_WAIT(minor)) /* FIXME: should be a udelay() */
+		wait++;
+#else
+	udelay(1);
+#endif
 	/* control port takes strobe high */
+	w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PSTROBE);
+#ifndef __sparc__
+	while (wait)			/* FIXME: should be a udelay() */
+		wait--;
+#else
+	udelay(1);
+#endif
+	/* take strobe low */
 	if (LP_POLLED(minor))
-	{
-		w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PSTROBE);
-		lp_wait(minor);
+		/* take strobe low */
 		w_ctr(minor, LP_PSELECP | LP_PINITP);
-	} else {
-		w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PSTROBE | LP_PINTEN);
-		lp_wait(minor);
+	else
+	{
+		lp_table[minor].irq_detected = 0;
+		lp_table[minor].irq_missed = 0;
 		w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PINTEN);
 	}
 
@@ -286,8 +240,7 @@ static inline int lp_char(char lpchar, int minor)
 	/* update waittime statistics */
 	if (count > stats->maxwait) {
 #ifdef LP_DEBUG
-		printk(KERN_DEBUG "lp%d success after %d counts.\n",
-		       minor, count);
+		printk(KERN_DEBUG "lp%d success after %d counts.\n", minor, count);
 #endif
 		stats->maxwait = count;
 	}
@@ -371,12 +324,8 @@ static int lp_write_buf(unsigned int minor, const char *buf, int count)
 	lp_table[minor].last_error = 0;
 	lp_table[minor].irq_detected = 0;
 	lp_table[minor].irq_missed = 1;
-	LP_POLLED(minor) = lp_table[minor].dev->port->irq == PARPORT_IRQ_NONE;
 
-	if (LP_POLLED(minor))
-		w_ctr(minor, LP_PSELECP | LP_PINITP);
-	else
-		w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PINTEN);
+	w_ctr(minor, LP_PSELECP | LP_PINITP);
 
 	do {
 		bytes_written = 0;
@@ -431,7 +380,7 @@ static int lp_write_buf(unsigned int minor, const char *buf, int count)
 					printk(KERN_DEBUG "lp%d sleeping at %d characters for %d jiffies\n", minor, lp->runchars, LP_TIME(minor));
 #endif
 					current->state = TASK_INTERRUPTIBLE;
-					lp_schedule (minor, LP_TIME(minor));
+					lp_schedule(minor, LP_TIME(minor));
 				} else {
 					cli();
 					if (LP_PREEMPTED(minor))
@@ -447,7 +396,9 @@ static int lp_write_buf(unsigned int minor, const char *buf, int count)
 						goto lp_polling;
 					}
 					if (!lp_table[minor].irq_detected)
+					{
 						interruptible_sleep_on_timeout(&lp->wait_q, LP_TIMEOUT_INTERRUPT);
+					}
 					sti();
 				}
 			}
@@ -694,6 +645,14 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			else
 				LP_F(minor) &= ~LP_ABORTOPEN;
 			break;
+#ifdef LP_NEED_CAREFUL
+		case LPCAREFUL:
+			if (arg)
+				LP_F(minor) |= LP_CAREFUL;
+			else
+				LP_F(minor) &= ~LP_CAREFUL;
+			break;
+#endif
 		case LPWAIT:
 			LP_WAIT(minor) = arg;
 			break;

@@ -279,8 +279,7 @@ int atari_tt_hwclk( int op, struct hwclk_time *t )
 
     while( RTC_READ(RTC_FREQ_SELECT) & RTC_UIP ) {
         current->state = TASK_INTERRUPTIBLE;
-        current->timeout = jiffies + HWCLK_POLL_INTERVAL;
-        schedule();
+        schedule_timeout(HWCLK_POLL_INTERVAL);
     }
 
     save_flags(flags);

@@ -965,9 +965,8 @@ static int capi_manufacturer(unsigned int cmd, void *data)
 
 		while (card->cardstate != CARD_RUNNING) {
 
-			current->timeout = jiffies + HZ / 10;	/* 0.1 sec */
 			current->state = TASK_INTERRUPTIBLE;
-			schedule();
+			schedule_timeout(HZ/10);	/* 0.1 sec */
 
 			if (signal_pending(current))
 				return -EINTR;

@@ -1306,6 +1306,7 @@ asmlinkage int osf_usleep_thread(struct timeval32 *sleep, struct timeval32 *rema
 {
 	struct timeval tmp;
 	unsigned long ticks;
+	unsigned long tmp_timeout;
 
 	if (get_tv32(&tmp, sleep))
 		goto fault;
@@ -1313,18 +1314,11 @@ asmlinkage int osf_usleep_thread(struct timeval32 *sleep, struct timeval32 *rema
 	ticks = tmp.tv_usec;
 	ticks = (ticks + (1000000 / HZ) - 1) / (1000000 / HZ);
 	ticks += tmp.tv_sec * HZ;
-	current->timeout = ticks + jiffies;
-	current->state = TASK_INTERRUPTIBLE;
 
-	schedule();
+	current->state = TASK_INTERRUPTIBLE;
+	ticks = schedule_timeout(ticks);
 
 	if (remain) {
-		ticks = jiffies;
-		if (ticks < current->timeout)
-			ticks = current->timeout - ticks;
-		else
-			ticks = 0;
-		current->timeout = 0;
 		tmp.tv_sec = ticks / HZ;
 		tmp.tv_usec = ticks % HZ;
 		if (put_tv32(remain, &tmp))

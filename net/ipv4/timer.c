@@ -5,7 +5,7 @@
  *
  *		TIMER - implementation of software timers for IP.
  *
- * Version:	$Id: timer.c,v 1.12 1998/08/28 01:15:29 davem Exp $
+ * Version:	$Id: timer.c,v 1.14 1998/11/07 11:55:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -74,7 +74,8 @@ void net_timer (unsigned long data)
 
 	/* Only process if socket is not in use. */
 	if (atomic_read(&sk->sock_readers)) {
-		sk->timer.expires = jiffies+HZ;
+		/* Try again later. */ 
+		sk->timer.expires = jiffies+HZ/20;
 		add_timer(&sk->timer);
 		return;
 	}
@@ -111,11 +112,10 @@ void net_timer (unsigned long data)
 
 		case TIME_CLOSE:
 			/* We've waited long enough, close the socket. */
-			sk->state = TCP_CLOSE;
-			net_delete_timer (sk);
+			tcp_set_state(sk, TCP_CLOSE);
+			sk->shutdown = SHUTDOWN_MASK;
 			if (!sk->dead)
 				sk->state_change(sk);
-			sk->shutdown = SHUTDOWN_MASK;
 			net_reset_timer (sk, TIME_DONE, TCP_DONE_TIME);
 			break;
 

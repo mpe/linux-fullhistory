@@ -184,8 +184,7 @@ media_bay_task(void *x)
 
 		prev = media_bay_id;
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + 1;
-		schedule();
+		schedule_timeout(1);
 		if (signal_pending(current))
 			return 0;
 	}

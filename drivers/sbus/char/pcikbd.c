@@ -691,8 +691,7 @@ static int poll_aux_status(void)
 		    == AUX_STAT_OBF)
 			pcimouse_inb(pcimouse_iobase + KBD_DATA_REG);
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + (5*HZ + 99) / 100;
-		schedule();
+		schedule_timeout((5*HZ + 99)/100);
 		retries++;
 	}
 	return (retries < MAX_RETRIES);

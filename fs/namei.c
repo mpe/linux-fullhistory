@@ -1196,7 +1196,7 @@ static inline int do_rename(const char * oldname, const char * newname)
 
 	error = -ENOENT;
 	if (!old_dentry->d_inode)
-		goto exit;
+		goto exit_old;
 
 	{
 		unsigned int flags = 0;

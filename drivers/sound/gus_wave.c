@@ -1927,11 +1927,8 @@ static int guswave_load_patch(int dev, int format, const char *addr,
 			 */
 			active_device = GUS_DEV_WAVE;
 
-			current->timeout = jiffies + HZ;
-			interruptible_sleep_on(&dram_sleeper);
-			if (!current->timeout)
+			if (!interruptible_sleep_on_timeout(&dram_sleeper, HZ))
 				printk("GUS: DMA Transfer timed out\n");
-			current->timeout = 0;
 			restore_flags(flags);
 		}
 

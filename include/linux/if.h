@@ -43,7 +43,7 @@
 
 #define IFF_PORTSEL	0x2000          /* can set media type		*/
 #define IFF_AUTOMEDIA	0x4000		/* auto media select active	*/
-#define IFF_NODYNARP	0x8000		/* use static ARP only (HIPPI)	*/
+#define IFF_DYNAMIC	0x8000		/* dialup device with changing addresses*/
 
 #ifdef __KERNEL__
 /*

@@ -1,6 +1,6 @@
 Changes by Matija Nalis (mnalis@jagor.srce.hr) on umsdos dentry fixing
 (started by Peter T. Waltenberg <peterw@karaka.chch.cri.nz>)
-Final conversion to dentries Bill Hawes <whawes@star.net>
+(Final conversion to dentries Bill Hawes <whawes@star.net>)
 
 ---------- WARNING --------- WARNING --------- WARNING -----------
 There is no warning any more.
@@ -16,7 +16,7 @@ you are trying to use UMSDOS as root partition.
 Legend: those lines marked with '+' on the beggining of line indicates it
 passed all of my tests, and performed perfect in all of them.
 
-Current status (980915) - UMSDOS dentry-Beta 0.83:
+Current status (981018) - UMSDOS dentry-Beta 0.83:
 
 (1) pure MSDOS (no --linux-.--- EMD file):
 
@@ -47,18 +47,18 @@ READ:
 + read file			- works
 + switching MSDOS/UMSDOS	- works
 + switching UMSDOS/MSDOS	- works
-- pseudo root things		- DOES NOT WORK. COMMENTED OUT. See Notes below.
+- pseudo root things		- works mostly. See notes below.
 + resolve symlink		- works
 + dereference symlink		- works
 + dangling symlink		- works
-- hard links			- DOES NOT WORK CORRECTLY ALWAYS.
+- hard links			- seems to work mostly
 + special files (block/char devices, FIFOs, sockets...)	- works
 - various umsdos ioctls		- works
 
 
 WRITE:
-- create symlink		- sometimes works, but see WARNING below
-- create hardlink		- works
+- create symlink		- works mostly, but see WARNING below
+- create hardlink		- works, but see portability WARNING below
 + create file			- works
 + create special file		- works
 + write to file			- works
@@ -88,7 +88,8 @@ Some current notes:
 
 Note: creating and using pseudo-hardlinks is always non-perfect, especially
 in filesystems that might be externally modified like umsdos. There is
-example is specs file about it.
+example is specs file about it. Specifically, moving directory which
+contains hardlinks will break them.
 
 Warning: moving symlinks around may break them until umount/remount.
 
@@ -97,17 +98,22 @@ I rm -rf directory: it is manifested as symlink apperantly being regular
 file instead of symlink until next umount/mount pair. Tracking this one
 down...
 
-Wanted: I am currently looking for volunteers that already have UMSDOS
-filesystems in pseudo-root, or are able to get them, to test PSEUDO-ROOT
-stuff (and get new patches from me), which I currently can't do. Anyone know
-of URL of nice UMSDOS pseudo-root ready image ? As always, any patches or
-pointer to things done in wrong way (or ideas of better ways) are greatly
-appreciated !
+Note: (about pseudoroot) If you are currently trying to use UMSDOS as root
+partition (with linux installed in c:\linux) it will boot, but there are
+some problems. Volunteers ready to test pseudoroot are needed (preferably
+ones with working backups or unimportant data). There are problems with
+different interpretation of hard links in normal in pseudo-root modes,
+resulting is 'silent delete' of them sometimes. Also, '/DOS' pseudo
+directory is only partially re-implemented and buggy. It works most of the
+time, though.
 
-Note: If you are currently trying to use UMSDOS as root partition (with
-linux installed in c:\linux) it will not work. Pseudo-root is currently
-commented out. See 'wanted' above and contact me if you are interested in
-testing it.
+Warning: (about creating hardlinks in pseudoroot mode) - hardlinks created in
+pseudoroot mode are not compatibile with 'normal' hardlinks, and vice versa.
+That is because harlink which is /foo in pseudoroot mode, becomes
+/linux/foo in normal mode. I'm thinking about this one. However, since most
+people either always use pseudoroot, or always use normal umsdos filesystem,
+this is no showstopper.
+
 
 ------------------------------------------------------------------------------
 

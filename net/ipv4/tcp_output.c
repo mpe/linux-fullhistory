@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.95 1998/09/27 12:57:13 freitag Exp $
+ * Version:	$Id: tcp_output.c,v 1.96 1998/11/07 10:54:40 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -390,7 +390,7 @@ void tcp_write_xmit(struct sock *sk)
  *
  * Note, we don't "adjust" for TIMESTAMP or SACK option bytes.
  */
-u32 __tcp_select_window(struct sock *sk, u32 cur_win)
+u32 __tcp_select_window(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	unsigned int mss = tp->mss_cache;

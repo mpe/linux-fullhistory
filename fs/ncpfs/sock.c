@@ -94,7 +94,7 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 	poll_table wait_table;
 	struct poll_table_entry entry;
 	int init_timeout, max_timeout;
-	int timeout;
+	int timeout; long tmp_timeout;
 	int retrans;
 	int major_timeout_seen;
 	int acknowledge_seen;
@@ -173,6 +173,7 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 		wait_table.entry = &entry;
 		current->state = TASK_INTERRUPTIBLE;
 		if (!(file->f_op->poll(file, &wait_table) & POLLIN)) {
+			int timed_out;
 			if (timeout > max_timeout) {
 				/* JEJB/JSP 2/7/94
 				 * This is useful to see if the system is
@@ -182,17 +183,15 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 				}
 				timeout = max_timeout;
 			}
-			current->timeout = jiffies + timeout;
-			schedule();
+			timed_out = !schedule_timeout(timeout);
 			remove_wait_queue(entry.wait_address, &entry.wait);
 			fput(file);
 			current->state = TASK_RUNNING;
 			if (signal_pending(current)) {
-				current->timeout = 0;
 				result = -ERESTARTSYS;
 				break;
 			}
-			if (!current->timeout) {
+			if (timed_out) {
 				if (n < retrans)
 					continue;
 				if (server->m.flags & NCP_MOUNT_SOFT) {
@@ -208,8 +207,7 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 				}
 				major_timeout_seen = 1;
 				continue;
-			} else
-				current->timeout = 0;
+			}
 		} else if (wait_table.nr) {
 			remove_wait_queue(entry.wait_address, &entry.wait);
 			fput(file);

@@ -1740,12 +1740,14 @@ void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	if(do_print)
 		print_result("unexpected interrupt", inr);
 	if (inr == 0){
+		int max_sensei = 4;
 		do {
 			output_byte(FD_SENSEI);
 			inr = result();
 			if(do_print)
 				print_result("sensei", inr);
-		} while ((ST0 & 0x83) != UNIT(current_drive) && inr == 2);
+			max_sensei--;
+		} while ((ST0 & 0x83) != UNIT(current_drive) && inr == 2 && max_sensei);
 	}
 	if (handler) {
 		int cpu = smp_processor_id();

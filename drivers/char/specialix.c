@@ -1551,8 +1551,7 @@ static void sx_close(struct tty_struct * tty, struct file * filp)
 		timeout = jiffies+HZ;
 		while(port->IER & IER_TXEMPTY) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + port->timeout;
-			schedule();
+			schedule_timeout(port->timeout);
 			if (jiffies > timeout) {
 				printk (KERN_INFO "Timeout waiting for close\n");
 				break;
@@ -1571,8 +1570,7 @@ static void sx_close(struct tty_struct * tty, struct file * filp)
 	if (port->blocked_open) {
 		if (port->close_delay) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + port->close_delay;
-			schedule();
+			schedule_timeout(port->close_delay);
 		}
 		wake_up_interruptible(&port->open_wait);
 	}

@@ -555,8 +555,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 		if (EX_WGATHER(exp) && (inode->i_writecount > 1
 		 || (last_ino == inode->i_ino && last_dev == inode->i_dev))) {
 #if 0
-			current->timeout = jiffies + 10 * HZ / 1000;
-			interruptible_sleep_on(&inode->i_wait);
+			interruptible_sleep_on_timeout(&inode->i_wait, 10 * HZ / 1000);
 #else
 			dprintk("nfsd: write defer %d\n", current->pid);
 			schedule_timeout((HZ+99)/100);

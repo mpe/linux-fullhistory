@@ -816,8 +816,7 @@ static struct sound_queue sq;
 #define ONE_SECOND	HZ	/* in jiffies (100ths of a second) */
 #define NO_TIME_LIMIT	0xffffffff
 #define SLEEP(queue, time_limit) \
-	current->timeout = jiffies+(time_limit); \
-	interruptible_sleep_on(&queue);
+	interruptible_sleep_on(&queue, (time_limit));
 #define WAKE_UP(queue)	(wake_up_interruptible(&queue))
 
 /*

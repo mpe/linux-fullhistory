@@ -89,17 +89,18 @@ void ftape_sleep(unsigned int time)
 		/*  Time too small for scheduler, do a busy wait ! */
 		ftape_udelay(time);
 	} else {
+		long timeout;
 		unsigned long flags;
 		unsigned int ticks = (time + FT_USPT - 1) / FT_USPT;
 
 		TRACE(ft_t_any, "%d msec, %d ticks", time/1000, ticks);
-		current->timeout = jiffies + ticks;
+		timeout = ticks;
 		current->state = TASK_INTERRUPTIBLE;
 		save_flags(flags);
 		sti();
 		do {
 			while (current->state != TASK_RUNNING) {
-				schedule();
+				timeout = schedule_timeout(timeout);
 			}
 			/*  Mmm. Isn't current->blocked == 0xffffffff ?
 			 */
@@ -108,7 +109,7 @@ void ftape_sleep(unsigned int time)
 				      "awoken by non-blocked signal :-(");
 				break;	/* exit on signal */
 			}
-		} while (current->timeout > 0);
+		} while (timeout);
 		restore_flags(flags);
 	}
 	TRACE_EXIT;

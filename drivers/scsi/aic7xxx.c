@@ -349,7 +349,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.1.2"
+#define AIC7XXX_C_VERSION  "5.1.3"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -3429,10 +3429,7 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, int channel,
    * here so that we can delay all re-sent commands for this device for the
    * 4 seconds and then have our timer routine pick them back up.
    */
-        if( timer_pending(&p->dev_timer[i]) )
-        {
-          del_timer(&p->dev_timer[i]);
-        }
+        del_timer(&p->dev_timer[i]);
         p->dev_timer[i].expires = jiffies + (4 * HZ);
         add_timer(&p->dev_timer[i]);
       }
@@ -3481,8 +3478,7 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, int channel,
             "delayed_scbs queue!\n", p->host_no, channel, i, lun);
         scbq_init(&p->delayed_scbs[i]);
       }
-      if ( (p->delayed_scbs[i].head == NULL) &&
-           timer_pending(&p->dev_timer[i]) )
+      if ( p->delayed_scbs[i].head == NULL )
         del_timer(&p->dev_timer[i]);
     }
   }
@@ -4151,10 +4147,8 @@ aic7xxx_timer(struct aic7xxx_host *p)
 #endif
   for(i=0; i<MAX_TARGETS; i++)
   {
-    if ( timer_pending(&p->dev_timer[i]) && 
-         time_before_eq(p->dev_timer[i].expires, jiffies) )
+    if ( del_timer(&p->dev_timer[i]) )
     {
-      del_timer(&p->dev_timer[i]);
       p->dev_temp_queue_depth[i] =  p->dev_max_queue_depth[i];
       j = 0;
       while ( ((scb = scbq_remove_head(&p->delayed_scbs[i])) != NULL) &&
@@ -9175,6 +9169,27 @@ aic7xxx_detect(Scsi_Host_Template *template)
               aic_outb(temp_p, (aic_inb(temp_p, DSCOMMAND0) |
                                 CACHETHEN | MPARCKEN) & ~DPARCKEN,
                        DSCOMMAND0);
+              aic7xxx_load_seeprom(temp_p, &sxfrctl1);
+              break;
+            case AHC_AIC7880:
+              /*
+               * Only set the DSCOMMAND0 register if this is a Rev B.
+               * chipset.  For those, we also enable Ultra mode by
+               * force due to brain-damage on the part of some BIOSes
+               * We overload the devconfig variable here since we can.
+               */
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,92)
+              pci_read_config_dword(pdev, DEVCONFIG, &devconfig);
+#else
+              pcibios_read_config_dword(pci_bus, pci_devfn, DEVCONFIG,
+                                        &devconfig);
+#endif
+              if ((devconfig & 0xff) >= 1)
+              {
+                aic_outb(temp_p, (aic_inb(temp_p, DSCOMMAND0) |
+                                  CACHETHEN | MPARCKEN) & ~DPARCKEN,
+                         DSCOMMAND0);
+              }
               aic7xxx_load_seeprom(temp_p, &sxfrctl1);
               break;
           }

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.133 1998/10/21 05:38:53 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.136 1998/11/07 14:36:18 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -567,14 +567,6 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 
 /* This is Jacobson's slow start and congestion avoidance. 
  * SIGCOMM '88, p. 328.
- *
- * FIXME: What happens when the congestion window gets larger
- * than the maximum receiver window by some large factor
- * Suppose the pipeline never looses packets for a long
- * period of time, then traffic increases causing packet loss.
- * The congestion window should be reduced, but what it should
- * be reduced to is not clear, since 1/2 the old window may
- * still be larger than the maximum sending rate we ever achieved.
  */
 static void tcp_cong_avoid(struct tcp_opt *tp)
 {
@@ -1525,7 +1517,7 @@ static __inline__ void __tcp_ack_snd_check(struct sock *sk)
 	 *      - delay time <= 0.5 HZ
 	 *      - we don't have a window update to send
 	 *      - must send at least every 2 full sized packets
-	 *	- must send an ACK if we have any SACKs
+	 *	- must send an ACK if we have any out of order data
 	 *
 	 * With an extra heuristic to handle loss of packet
 	 * situations and also helping the sender leave slow
@@ -1538,8 +1530,8 @@ static __inline__ void __tcp_ack_snd_check(struct sock *sk)
 	    tcp_raise_window(sk) ||
 	    /* We entered "quick ACK" mode or... */
 	    tcp_in_quickack_mode(tp) ||
-	    /* We have pending SACKs */
-	    (tp->sack_ok && tp->num_sacks)) {
+	    /* We have out of order data */
+	    (skb_peek(&tp->out_of_order_queue) != NULL)) {
 		/* Then ack it now */
 		tcp_send_ack(sk);
 	} else {
@@ -1655,8 +1647,11 @@ static int prune_queue(struct sock *sk)
 			return 0;
 	}
 	
-	/* Now continue with the receive queue if it wasn't enough */
-	while ((skb = skb_peek_tail(&sk->receive_queue))) {
+	/* Now continue with the receive queue if it wasn't enough.
+	 * But only do this if we are really being abused.
+	 */
+	while ((atomic_read(&sk->rmem_alloc) >= (sk->rcvbuf * 2)) &&
+	       (skb = skb_peek_tail(&sk->receive_queue))) {
 		/* Never toss anything when we've seen the FIN.
 		 * It's just too complex to recover from it.
 		 */
@@ -1679,8 +1674,6 @@ static int prune_queue(struct sock *sk)
 			   TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq,
 			   tp->copied_seq); 
 		kfree_skb(skb);
-		if (atomic_read(&sk->rmem_alloc) <= sk->rcvbuf) 
-			break;
 	}
 	return 0;
 }
@@ -1771,7 +1764,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				goto discard;
 			}
 		} else if (TCP_SKB_CB(skb)->ack_seq == tp->snd_una &&
-			atomic_read(&sk->rmem_alloc) <= sk->rcvbuf) {
+			   atomic_read(&sk->rmem_alloc) <= sk->rcvbuf) {
 			/* Bulk data transfer: receiver */
 			__skb_pull(skb,th->doff*4);
 

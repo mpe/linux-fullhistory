@@ -16,8 +16,8 @@
  *                   12k or so
  * Thomas Sailer   : remove {in,out}_sleep_flag. It was used for the sleeper to
  *                   determine if it was woken up by the expiring timeout or by
- *                   an explicit wake_up. current->timeout can be used instead;
- *                   if 0, the wakeup was due to the timeout.
+ *                   an explicit wake_up. The return value from schedule_timeout
+ *		     can be used instead; if 0, the wakeup was due to the timeout.
  */
 #include <linux/config.h>
 

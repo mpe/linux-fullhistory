@@ -740,8 +740,7 @@ static int fd_eject(struct floppy_state *fs)
 			break;
 		}
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + 1;
-		schedule();
+		schedule_timeout(1);
 	}
 	fs->ejected = 1;
 	release_drive(fs);
@@ -807,8 +806,7 @@ static int floppy_open(struct inode *inode, struct file *filp)
 				break;
 			}
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + 1;
-			schedule();
+			schedule_timeout(1);
 		}
 		if (err == 0 && (swim3_readbit(fs, SEEK_COMPLETE) == 0
 				 || swim3_readbit(fs, DISK_IN) == 0))
@@ -911,8 +909,7 @@ static int floppy_revalidate(kdev_t dev)
 		if (signal_pending(current))
 			break;
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + 1;
-		schedule();
+		schedule_timeout(1);
 	}
 	ret = swim3_readbit(fs, SEEK_COMPLETE) == 0
 		|| swim3_readbit(fs, DISK_IN) == 0;

@@ -639,16 +639,12 @@ static void dsp_write_flush(void)
 	if (!(dev.mode & FMODE_WRITE) || !test_bit(F_WRITING, &dev.flags))
 		return;
 	set_bit(F_WRITEFLUSH, &dev.flags);
-	current->timeout = jiffies + get_play_delay_jiffies(dev.DAPF.len) + HZ / 8;
-	interruptible_sleep_on(&dev.writeflush);
+	interruptible_sleep_on_timeout(&dev.writeflush, get_play_delay_jiffies(dev.DAPF.len) + HZ / 8);
 	clear_bit(F_WRITEFLUSH, &dev.flags);
 	if (!signal_pending(current)) {
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + get_play_delay_jiffies(DAP_BUFF_SIZE);
-		schedule();
-		current->timeout = 0;
-	} else
-		current->timeout = 0;
+		schedule_timeout(get_play_delay_jiffies(DAP_BUFF_SIZE));
+	}
 	clear_bit(F_WRITING, &dev.flags);
 }
 
@@ -923,12 +919,8 @@ static int dsp_read(char *buf, size_t len)
 
 		if (count > 0) {
 			set_bit(F_READBLOCK, &dev.flags);
-			current->timeout = jiffies + get_rec_delay_jiffies(DAR_BUFF_SIZE);
-			interruptible_sleep_on(&dev.readblock);
-			if (current->timeout == 0)
+			if (!interruptible_sleep_on_timeout(&dev.readblock, get_rec_delay_jiffies(DAR_BUFF_SIZE)))
 				clear_bit(F_READING, &dev.flags);
-			else
-				current->timeout = 0;
 			clear_bit(F_READBLOCK, &dev.flags);
 			if (signal_pending(current))
 				return -EINTR;
@@ -968,9 +960,7 @@ static int dsp_write(const char *buf, size_t len)
 
 		if (count > 0) {
 			set_bit(F_WRITEBLOCK, &dev.flags);
-			current->timeout = jiffies + get_play_delay_jiffies(DAP_BUFF_SIZE);
-			interruptible_sleep_on(&dev.writeblock);
-			current->timeout = 0;
+			interruptible_sleep_on_timeout(&dev.writeblock, get_play_delay_jiffies(DAP_BUFF_SIZE));
 			clear_bit(F_WRITEBLOCK, &dev.flags);
 			if (signal_pending(current))
 				return -EINTR;
@@ -1300,9 +1290,7 @@ __initfunc(static int calibrate_adc(WORD srate))
 	if (msnd_send_word(&dev, 0, 0, HDEXAR_CAL_A_TO_D) == 0 &&
 	    chk_send_dsp_cmd(&dev, HDEX_AUX_REQ) == 0) {
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + HZ / 3;
-		schedule();
-		current->timeout = 0;
+		schedule_timeout(HZ / 3);
 		printk("successful\n");
 		return 0;
 	}

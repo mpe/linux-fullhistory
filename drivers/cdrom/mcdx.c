@@ -794,8 +794,7 @@ static void mcdx_delay(struct s_drive_stuff *stuff, long jifs)
 	 * allowed! */
     if (current->pid == 0) {
 		while (jiffies < tout) {
-            current->timeout = jiffies;
-            schedule();
+            schedule_timeout(0);
         }
     } else {
         current->timeout = tout;
@@ -1247,6 +1246,7 @@ static int mcdx_xfer(struct s_drive_stuff *stuffp,
 {
     int border;
     int done = 0;
+	long timeout;
 
 	if (stuffp->audio) {
 			xwarn("Attempt to read from audio CD.\n");
@@ -1281,13 +1281,12 @@ static int mcdx_xfer(struct s_drive_stuff *stuffp,
 
 	do {
 
-	    current->timeout = jiffies + 5 * HZ;
 	    while (stuffp->busy) {
 
-			interruptible_sleep_on(&stuffp->busyq);
+			timeout = interruptible_sleep_on_timeout(&stuffp->busyq, 5*HZ);
 
 			if (!stuffp->introk) { xtrace(XFER, "error via interrupt\n"); }
-			else if (current->timeout == 0) { xtrace(XFER, "timeout\n"); }
+			else if (!timeout) { xtrace(XFER, "timeout\n"); }
 			else if (signal_pending(current)) {
 				xtrace(XFER, "signal\n");
 			} else continue;

@@ -1308,8 +1308,8 @@ static void __init do_basic_setup(void)
 		*/
 		extern struct inode *pseudo_root;
 		if (pseudo_root != NULL){
-			current->fs->root = pseudo_root;
-			current->fs->pwd  = pseudo_root;
+			current->fs->root = pseudo_root->i_sb->s_root;
+			current->fs->pwd  = pseudo_root->i_sb->s_root;
 		}
 	}
 #endif

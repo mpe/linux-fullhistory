@@ -1017,11 +1017,8 @@ static int drain_dac1(struct es1370_state *s, int nonblock)
                 }
 		tmo = (count * HZ) / dac1_samplerate[(s->ctrl & CTRL_WTSRSEL) >> CTRL_SH_WTSRSEL];
 		tmo >>= sample_shift[(s->sctrl & SCTRL_P1FMT) >> SCTRL_SH_P1FMT];
-		current->timeout = jiffies + (tmo ? tmo : 1);
-                schedule();
-		if (tmo && !current->timeout)
+		if (!schedule_timeout(tmo ? : 1) && tmo)
 			printk(KERN_DEBUG "es1370: dma timed out??\n");
-		current->timeout = 0;
         }
         remove_wait_queue(&s->dma_dac1.wait, &wait);
         current->state = TASK_RUNNING;
@@ -1055,11 +1052,8 @@ static int drain_dac2(struct es1370_state *s, int nonblock)
                 }
 		tmo = (count * HZ) / DAC2_DIVTOSR((s->ctrl & CTRL_PCLKDIV) >> CTRL_SH_PCLKDIV);
 		tmo >>= sample_shift[(s->sctrl & SCTRL_P2FMT) >> SCTRL_SH_P2FMT];
-		current->timeout = jiffies + (tmo ? tmo : 1);
-                schedule();
-		if (tmo && !current->timeout)
+		if (!schedule_timeout(tmo ? : 1) && tmo)
 			printk(KERN_DEBUG "es1370: dma timed out??\n");
-		current->timeout = 0;
         }
         remove_wait_queue(&s->dma_dac2.wait, &wait);
         current->state = TASK_RUNNING;
@@ -2201,11 +2195,8 @@ static int es1370_midi_release(struct inode *inode, struct file *file)
 				return -EBUSY;
 			}
 			tmo = (count * HZ) / 3100;
-			current->timeout = tmo ? jiffies + tmo : 0;
-			schedule();
-			if (tmo && !current->timeout)
+			if (!schedule_timeout(tmo ? : 1) && tmo)
 				printk(KERN_DEBUG "es1370: midi timed out??\n");
-			current->timeout = 0;
 		}
 		remove_wait_queue(&s->midi.owait, &wait);
 		current->state = TASK_RUNNING;

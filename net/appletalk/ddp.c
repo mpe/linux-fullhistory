@@ -383,9 +383,8 @@ static int atif_probe_device(struct atalk_iface *atif)
 						/*
 						 * Defer 1/10th
 						 */
-						current->timeout = jiffies + (HZ/10);
 						current->state = TASK_INTERRUPTIBLE;
-						schedule();
+						schedule_timeout(HZ/10);
 						if(atif->status & ATIF_PROBE_FAIL)
 							break;
 					}

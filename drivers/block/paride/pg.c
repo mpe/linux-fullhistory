@@ -357,8 +357,7 @@ void    cleanup_module(void)
 static void pg_sleep( int cs )
 
 {       current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + cs;
-	schedule();
+	schedule_timeout(cs);
 }
 
 static int pg_wait( int unit, int go, int stop, int tmo, char * msg )

@@ -76,7 +76,7 @@ static long read_polled(struct parport *port, char *buf,
 			Byte |= (z<<4);
 			if (temp) 
 				*(temp++) = Byte; 
-			if (count++ == length)
+			if (++count == length)
 				temp = NULL;
 			/* Does the error line indicate end of data? */
 			if ((parport_read_status(port) & LP_PERRORP) == 
@@ -105,8 +105,8 @@ int parport_probe(struct parport *port, char *buffer, int len)
 	switch (parport_ieee1284_nibble_mode_ok(port, 4)) {
 	case 1:
 		current->state=TASK_INTERRUPTIBLE;
-		schedule_timeout(1);	/* HACK: wait 10ms because printer seems to
-					 * ack wrong */
+		/* HACK: wait 10ms because printer seems to ack wrong */
+		schedule_timeout((HZ+99)/100);	
 		result = read_polled(port, buffer, len);
 		break;
 	case 0:

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.93 1998/10/03 09:38:50 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.94 1998/11/07 11:50:33 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -1331,6 +1331,9 @@ int tcp_v6_rcv(struct sk_buff *skb, unsigned long len)
 
 	tcp_statistics.TcpInSegs++;
 
+	if (len < sizeof(struct tcphdr))
+		goto bad_packet;
+
 	/*
 	 *	Try to use the device checksum if provided.
 	 */
@@ -1341,6 +1344,7 @@ int tcp_v6_rcv(struct sk_buff *skb, unsigned long len)
 	case CHECKSUM_HW:
 		if (tcp_v6_check(th,len,saddr,daddr,skb->csum)) {
 			printk(KERN_DEBUG "tcp csum failed\n");
+	bad_packet:		
 			tcp_statistics.TcpInErrs++;
 			goto discard_it;
 		}

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.53 1998/09/15 02:11:39 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.55 1998/11/07 11:55:42 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -183,8 +183,8 @@ void tcp_probe_timer(unsigned long data)
 		return;
 	
 	if (atomic_read(&sk->sock_readers)) {
-		/* Try again in second. */
-		tcp_reset_xmit_timer(sk, TIME_PROBE0, HZ);
+		/* Try again later. */
+		tcp_reset_xmit_timer(sk, TIME_PROBE0, HZ/5);
 		return;
 	}
 
@@ -229,6 +229,9 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
 					sk->err = ETIMEDOUT;
 
 				tcp_set_state(sk, TCP_CLOSE);
+				sk->shutdown = SHUTDOWN_MASK;
+				if (!sk->dead)
+					sk->state_change(sk);
 			} else {
 				tp->probes_out++;
 				tp->pending = TIME_KEEPOPEN;
@@ -433,8 +436,8 @@ void tcp_retransmit_timer(unsigned long data)
 	}
 
 	if (atomic_read(&sk->sock_readers)) {
-		/* Try again in a second. */
-		tcp_reset_xmit_timer(sk, TIME_RETRANS, HZ);
+		/* Try again later */  
+		tcp_reset_xmit_timer(sk, TIME_RETRANS, HZ/20);
 		return;
 	}
 	lock_sock(sk);
@@ -463,10 +466,14 @@ void tcp_retransmit_timer(unsigned long data)
 	tp->fackets_out = 0;
 	tp->retrans_out = 0;
 	if (tp->retransmits == 0) {
-		/* remember window where we lost
+		/* Remember window where we lost:
 		 * "one half of the current window but at least 2 segments"
+		 *
+		 * Here "current window" means the effective one, which
+		 * means it must be an accurate representation of our current
+		 * sending rate _and_ the snd_wnd.
 		 */
-		tp->snd_ssthresh = max(tp->snd_cwnd >> 1, 2);
+		tp->snd_ssthresh = max(min(tp->snd_wnd, tp->snd_cwnd) >> 1, 2);
 		tp->snd_cwnd_cnt = 0;
 		tp->snd_cwnd = 1;
 	}

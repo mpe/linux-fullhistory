@@ -343,11 +343,8 @@ static int
 wavefront_sleep (wf_config *hw, int limit)
 
 {
-	current->timeout = jiffies + limit;
 	current->state = TASK_INTERRUPTIBLE;
-	schedule();
-	current->timeout = 0;
-
+	schedule_timeout(limit);
 	return signal_pending(current);
 }
     
@@ -2266,8 +2263,7 @@ wavefront_should_cause_interrupt (wf_config *hw, int val, int port, int timeout)
 	cli();
 	hw->irq_ok = 0;
 	outb (val,port);
-	current->timeout = jiffies + timeout;
-	interruptible_sleep_on (&hw->interrupt_sleeper);
+	interruptible_sleep_on_timeout(&hw->interrupt_sleeper, timeout);
 	restore_flags (flags);
 }
 

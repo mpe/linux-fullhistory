@@ -328,7 +328,6 @@ extern void put_cached_page(unsigned long);
  * Decide if we should try to do some swapout..
  */
 extern int free_memory_available(void);
-extern struct task_struct * kswapd_task;
 			
 /* vma is the first one with  address < vma->vm_end,
  * and even  address < vma->vm_start. Have to extend vma. */

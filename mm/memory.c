@@ -655,27 +655,28 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	 * Do we need to copy?
 	 */
 	if (is_page_shared(page_map)) {
-		if (new_page) {
-			if (PageReserved(mem_map + MAP_NR(old_page)))
-				++vma->vm_mm->rss;
-			copy_cow_page(old_page,new_page);
-			flush_page_to_ram(old_page);
-			flush_page_to_ram(new_page);
-			flush_cache_page(vma, address);
-			set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
-			free_page(old_page);
-			flush_tlb_page(vma, address);
-			return 1;
-		}
+		unlock_kernel();
+		if (!new_page)
+			return 0;
+
+		if (PageReserved(mem_map + MAP_NR(old_page)))
+			++vma->vm_mm->rss;
+		copy_cow_page(old_page,new_page);
+		flush_page_to_ram(old_page);
+		flush_page_to_ram(new_page);
 		flush_cache_page(vma, address);
-		set_pte(page_table, BAD_PAGE);
-		flush_tlb_page(vma, address);
+		set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
 		free_page(old_page);
-		oom(tsk);
-		return 0;
+		flush_tlb_page(vma, address);
+		return 1;
 	}
+
 	if (PageSwapCache(page_map))
 		delete_from_swap_cache(page_map);
+
+	/* We can release the kernel lock now.. */
+	unlock_kernel();
+
 	flush_cache_page(vma, address);
 	set_pte(page_table, pte_mkdirty(pte_mkwrite(pte)));
 	flush_tlb_page(vma, address);
@@ -778,11 +779,14 @@ void vmtruncate(struct inode * inode, unsigned long offset)
 }
 
 
+/*
+ * This is called with the kernel lock held, we need
+ * to return without it.
+ */
 static int do_swap_page(struct task_struct * tsk, 
 	struct vm_area_struct * vma, unsigned long address,
 	pte_t * page_table, pte_t entry, int write_access)
 {
-	lock_kernel();
 	if (!vma->vm_ops || !vma->vm_ops->swapin) {
 		swap_in(tsk, vma, page_table, pte_val(entry), write_access);
 		flush_page_to_ram(pte_page(*page_table));
@@ -833,8 +837,8 @@ static int do_anonymous_page(struct task_struct * tsk, struct vm_area_struct * v
  * As this is called only for pages that do not currently exist, we
  * do not need to flush old virtual caches or the TLB.
  *
- * This is called with the MM semaphore held, but without the kernel
- * lock.
+ * This is called with the MM semaphore and the kernel lock held.
+ * We need to release the kernel lock as soon as possible..
  */
 static int do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	unsigned long address, int write_access, pte_t *page_table)
@@ -842,19 +846,19 @@ static int do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	unsigned long page;
 	pte_t entry;
 
-	if (!vma->vm_ops || !vma->vm_ops->nopage)
+	if (!vma->vm_ops || !vma->vm_ops->nopage) {
+		unlock_kernel();
 		return do_anonymous_page(tsk, vma, page_table, write_access);
+	}
 
 	/*
 	 * The third argument is "no_share", which tells the low-level code
 	 * to copy, not share the page even if sharing is possible.  It's
 	 * essentially an early COW detection.
-	 *
-	 * We need to grab the kernel lock for this..
 	 */
-	lock_kernel();
 	page = vma->vm_ops->nopage(vma, address & PAGE_MASK,
 		(vma->vm_flags & VM_SHARED)?0:write_access);
+
 	unlock_kernel();
 	if (!page)
 		return 0;
@@ -896,7 +900,10 @@ static inline int handle_pte_fault(struct task_struct *tsk,
 	struct vm_area_struct * vma, unsigned long address,
 	int write_access, pte_t * pte)
 {
-	pte_t entry = *pte;
+	pte_t entry;
+
+	lock_kernel();
+	entry = *pte;
 
 	if (!pte_present(entry)) {
 		if (pte_none(entry))
@@ -907,16 +914,16 @@ static inline int handle_pte_fault(struct task_struct *tsk,
 	entry = pte_mkyoung(entry);
 	set_pte(pte, entry);
 	flush_tlb_page(vma, address);
-	if (!write_access)
-		return 1;
+	if (write_access) {
+		if (!pte_write(entry))
+			return do_wp_page(tsk, vma, address, pte);
 
-	if (pte_write(entry)) {
 		entry = pte_mkdirty(entry);
 		set_pte(pte, entry);
 		flush_tlb_page(vma, address);
-		return 1;
 	}
-	return do_wp_page(tsk, vma, address, pte);
+	unlock_kernel();
+	return 1;
 }
 
 /*

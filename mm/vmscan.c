@@ -29,15 +29,9 @@
 #include <asm/pgtable.h>
 
 /* 
- * How often do we do a pageout scan during normal conditions?
- * Default is four times a second.
- */
-int swapout_interval = HZ / 4;
-
-/* 
  * The wait queue for waking up the pageout daemon:
  */
-struct task_struct * kswapd_task = NULL;
+static struct task_struct * kswapd_task = NULL;
 
 static void init_swap_timer(void);
 
@@ -425,7 +419,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 		 * that we actually free'd up a page as a result.
 		 */
 		if (swap_out_process(pbest, gfp_mask) == 1)
-			return 1;
+				return 1;
 	}
 out:
 	return 0;

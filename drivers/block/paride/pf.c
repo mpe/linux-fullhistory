@@ -660,8 +660,7 @@ static void pf_eject( int unit )
 static void pf_sleep( int cs )
 
 {       current->state = TASK_INTERRUPTIBLE;
-        current->timeout = jiffies + cs;
-        schedule();
+        schedule_timeout(cs);
 }
 
 

@@ -1375,7 +1375,7 @@ int dev_change_flags(struct device *dev, unsigned flags)
 	 */
 
 	dev->flags = (flags & (IFF_DEBUG|IFF_NOTRAILERS|IFF_RUNNING|IFF_NOARP|
-			       IFF_NODYNARP|IFF_SLAVE|IFF_MASTER|
+			       IFF_SLAVE|IFF_MASTER|IFF_DYNAMIC|
 			       IFF_MULTICAST|IFF_PORTSEL|IFF_AUTOMEDIA)) |
 				       (dev->flags & (IFF_UP|IFF_VOLATILE|IFF_PROMISC|IFF_ALLMULTI));
 

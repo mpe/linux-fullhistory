@@ -843,8 +843,7 @@ static void sbp_sleep(u_int time)
 {
 	sti();
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + time;
-	schedule();
+	schedule_timeout(time);
 	sti();
 }
 /*==========================================================================*/

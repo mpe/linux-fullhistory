@@ -1081,13 +1081,8 @@ out:
 
 asmlinkage int irix_sginap(int ticks)
 {
-	lock_kernel();
-	if(ticks) {
-		current->timeout = ticks + jiffies;
-		current->state = TASK_INTERRUPTIBLE;
-	}
-	schedule();
-	unlock_kernel();
+	current->state = TASK_INTERRUPTIBLE;
+	schedule_timeout(ticks);
 	return 0;
 }
 

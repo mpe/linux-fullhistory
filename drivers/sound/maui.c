@@ -81,10 +81,8 @@ static int maui_wait(int mask)
 	{
 		if (inb(HOST_STAT_PORT) & mask)
 			return 1;
-		current->timeout = jiffies + HZ / 10;
 		current->state = TASK_INTERRUPTIBLE;
-		schedule();
-		current->timeout = 0;
+		schedule_timeout(HZ / 10);
 		if (signal_pending(current))
 			return 0;
 	}

@@ -96,9 +96,7 @@ static unsigned char crystal_key[] =	/* A 32 byte magic key sequence */
 static void sleep(unsigned howlong)
 {
 	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + howlong;
-	schedule();
-	current->timeout = 0;
+	schedule_timeout(howlong);
 }
 
 int probe_cs4232(struct address_info *hw_config)

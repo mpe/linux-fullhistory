@@ -1033,12 +1033,12 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	if (empty == 1) {
 		struct dentry *demd;
 
-Printk (("UMSDOS_rmdir: unlinking empty EMD err=%d", err));
 		demd = umsdos_get_emd_dentry(dentry);
 		if (!IS_ERR(demd)) {
 			err = -ENOENT;
 			if (demd->d_inode)
 				err = msdos_unlink (dentry->d_inode, demd);
+Printk (("UMSDOS_rmdir: unlinking empty EMD err=%d", err));
 #ifdef UMSDOS_PARANOIA
 if (err)
 printk("umsdos_rmdir: EMD %s/%s unlink failed, err=%d\n",

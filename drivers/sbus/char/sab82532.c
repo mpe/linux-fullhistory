@@ -1629,8 +1629,7 @@ static void sab82532_close(struct tty_struct *tty, struct file * filp)
 	if (info->blocked_open) {
 		if (info->close_delay) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + info->close_delay;
-			schedule();
+			schedule_timeout(info->close_delay);
 		}
 		wake_up_interruptible(&info->open_wait);
 	}
@@ -1674,8 +1673,7 @@ static void sab82532_wait_until_sent(struct tty_struct *tty, int timeout)
 	while (info->xmit_cnt || !info->all_sent) {
 		current->state = TASK_INTERRUPTIBLE;
 		current->counter = 0;
-		current->timeout = jiffies + char_time;
-		schedule();
+		schedule_timeout(char_time);
 		if (signal_pending(current))
 			break;
 		if (timeout && (orig_jiffies + timeout) < jiffies)
