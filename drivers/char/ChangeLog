@@ -1,14 +1,36 @@
+Tue May  2 00:53:25 1995    <tytso@rsx-11.mit.edu>
+
+	* tty_io.c (tty_set_ldisc): Wait until the output buffer is
+		drained before closing the old line discipline --- needed
+		in only one case: XON/XOFF processing.
+
+	* n_tty.c (n_tty_close): Don't bother waiting until the output
+		driver is closed; in general, the line discipline
+		shouldn't care if the hardware is finished
+		transmitting before the line discipline terminates.
+
+	* tty_io.c (release_dev): Shutdown the line discipline after
+		decrementing the tty count variable; but set the
+		TTY_CLOSING flag so that we know that this tty structure
+		isn't long for this world.
+
+	* tty_io.c (init_dev): Add sanity code to check to see if
+		TTY_CLOSING is set on a tty structure; if so, something
+		bad has happened (probably a line discipline close blocked
+		when it shouldn't have; so do a kernel printk and then
+		return an error).
+
 Wed Apr 26 10:23:44 1995  Theodore Y. Ts'o  <tytso@localhost>
 
-	* tty_io.c (release_dev): Try to shutdown the line discpline
+	* tty_io.c (release_dev): Try to shutdown the line discipline
 		*before* decrementing the tty count variable; this removes
 		a potential race condition which occurs when the line
-		discpline close blocks, and another process then tries
+		discipline close blocks, and another process then tries
 		open the same serial port.
 
 	* serial.c (rs_hangup): When hanging up, flush the output buffer
-		befure shutting down the UART.  Otherwise the line
-		discpline close blocks waiting for the characters to get
+		before shutting down the UART.  Otherwise the line
+		discipline close blocks waiting for the characters to get
 		flushed, which never happens until the serial port gets reused.
 
 Wed Apr 12 08:06:16 1995  Theodore Y. Ts'o  <tytso@localhost>

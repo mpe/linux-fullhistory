@@ -788,7 +788,7 @@ int buslogic_command(Scsi_Cmnd *scpnt)
 
     scpnt->SCp.Status = 0;
     while (!scpnt->SCp.Status)
-	continue;
+	barrier();
     return scpnt->result;
 }
 #endif

@@ -968,7 +968,7 @@ int aha152x_abort( Scsi_Cmnd *SCpnt)
   
         /* sleep until the abortion is complete */
         while(!abortion_complete)
-	  ;
+	  barrier();
         aborting=0;
         return abort_result;
       }

@@ -77,6 +77,8 @@ extern int nr_running, nr_tasks;
 
 #ifdef __KERNEL__
 
+#define barrier() __asm__("": : :"memory")
+
 extern void sched_init(void);
 extern void show_state(void);
 extern void trap_init(void);

@@ -636,7 +636,8 @@ static int NCR5380_probe_irq (struct Scsi_Host *instance, int possible) {
     NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE | ICR_ASSERT_DATA | 
 	ICR_ASSERT_SEL);
 
-    while (probe_irq == IRQ_NONE && jiffies < timeout);
+    while (probe_irq == IRQ_NONE && jiffies < timeout)
+    	barrier();
 
     NCR5380_write(SELECT_ENABLE_REG, 0);
     NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE);
@@ -2147,8 +2148,8 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		     */
 		    NCR5380_write(TARGET_COMMAND_REG, 0);
 		    
-		    while ((NCR5380_read(STATUS_REG) & SR_BSY) && 
-			!hostdata->connected);
+		    while ((NCR5380_read(STATUS_REG) & SR_BSY) && !hostdata->connected)
+			barrier();
 		    return;
 		case MESSAGE_REJECT:
 		    /* Accept message by clearing ACK */
@@ -2187,8 +2188,8 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		    /* Enable reselect interrupts */
 		    NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
 		    /* Wait for bus free to avoid nasty timeouts */
-		    while ((NCR5380_read(STATUS_REG) & SR_BSY) && 
-			!hostdata->connected);
+		    while ((NCR5380_read(STATUS_REG) & SR_BSY) && !hostdata->connected)
+		    	barrier();
 		    return;
 		/* 
 		 * The SCSI data pointer is *IMPLICITLY* saved on a disconnect

@@ -320,9 +320,9 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
 
 #if 0
     for (; i; --i) {
-	while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY);
+	while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY) barrier();
 #else
-    while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY);
+    while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY) barrier();
     for (; i; --i) {
 #endif
 	*d++ = *reg;
@@ -363,9 +363,9 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
 
 #if 0
     for (; i; --i) {
-	while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY);
+	while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY) barrier();
 #else
-    while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY);
+    while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY) barrier();
     for (; i; --i) {
 #endif
 	*reg = *s++;

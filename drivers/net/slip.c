@@ -1046,6 +1046,13 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 	}
 }
 
+static int sl_open_dev(struct device *dev)
+{
+	struct slip *sl = &sl_ctrl[dev->base_addr];
+	if(sl->tty==NULL)
+		return -ENODEV;
+	return 0;
+}
 
 /* Initialize the SLIP driver.  Called by DDI. */
 int
@@ -1103,7 +1110,7 @@ slip_init(struct device *dev)
 	/* Finish setting up the DEVICE info. */
 	dev->mtu		= SL_MTU;
 	dev->hard_start_xmit	= sl_xmit;
-	dev->open		= sl_open;
+	dev->open		= sl_open_dev;
 	dev->stop		= sl_close;
 	dev->hard_header	= sl_header;
 	dev->type_trans	        = sl_type_trans;

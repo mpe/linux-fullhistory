@@ -321,7 +321,6 @@ struct symbol_table symbol_table = {
 	X(n_tty_ioctl),
 	X(tty_register_ldisc),
 	X(kill_fasync),
-	X(tty_hung_up_p),
 #endif
 #ifdef CONFIG_SCSI
 	/* Supports loadable scsi drivers */

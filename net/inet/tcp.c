@@ -2854,7 +2854,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	buff = newsk->prot->wmalloc(newsk, MAX_SYN_SIZE, 1, GFP_ATOMIC);
 	if (buff == NULL) 
 	{
-		sk->err = -ENOMEM;
+		sk->err = ENOMEM;
 		newsk->dead = 1;
 		newsk->state = TCP_CLOSE;
 		/* And this will destroy it */

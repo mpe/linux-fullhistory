@@ -255,6 +255,7 @@ struct tty_struct {
 #define TTY_DEBUG 4
 #define TTY_DO_WRITE_WAKEUP 5
 #define TTY_PUSH 6
+#define TTY_CLOSING 7
 
 #define TTY_WRITE_FLUSH(tty) tty_write_flush((tty))
 

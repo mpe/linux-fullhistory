@@ -608,7 +608,7 @@ lance_open(struct device *dev)
 	outw(((int)&lp->init_block) >> 16, ioaddr+LANCE_DATA);
 
 	outw(0x0004, ioaddr+LANCE_ADDR);
-	outw(0x0d15, ioaddr+LANCE_DATA);
+	outw(0x0915, ioaddr+LANCE_DATA);
 
 	outw(0x0000, ioaddr+LANCE_ADDR);
 	outw(0x0001, ioaddr+LANCE_DATA);

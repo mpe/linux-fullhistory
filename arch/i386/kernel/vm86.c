@@ -358,6 +358,14 @@ void handle_vm86_fault(struct vm86_regs * regs, long error_code)
 			IP(regs) += 2;
 			set_vflags_long(popl(ssp, sp), regs);
 			return;
+
+		/* iretd */
+		case 0xcf:
+			SP(regs) += 12;
+			IP(regs) = (unsigned short)popl(ssp, sp);
+			regs->cs = (unsigned short)popl(ssp, sp);
+			set_vflags_long(popl(ssp, sp), regs);
+			return;
 		}
 
 	/* pushf */

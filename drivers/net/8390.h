@@ -60,7 +60,7 @@ struct ei_device {
   struct enet_statistics stat;
 };
 
-/* The maximum number of 8390 interrupt serivce routines called per IRQ. */
+/* The maximum number of 8390 interrupt service routines called per IRQ. */
 #define MAX_SERVICE 12
 
 /* The maximum number of jiffies waited before assuming a Tx failed. */

@@ -50,7 +50,7 @@ static char *version =
 /* Do we implement the read before write bugfix ? */
 /* #define CONFIG_NE_RW_BUGFIX */
 
-/* ---- No user-servicable parts below ---- */
+/* ---- No user-serviceable parts below ---- */
 
 extern struct device *init_etherdev(struct device *dev, int sizeof_private,
 				    unsigned long *mem_startp);
@@ -86,7 +86,7 @@ bad_clone_list[] = {
 #define NESM_START_PG	0x40	/* First page of TX buffer */
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
 
-#define NE_RDC_TIMEOUT	0x03	/* Max wait in jiffies for Tx RDC */
+#define NE_RDC_TIMEOUT	0x02	/* Max wait in jiffies for Tx RDC */
 
 int ne_probe(struct device *dev);
 static int ne_probe1(struct device *dev, int ioaddr);
@@ -462,7 +462,6 @@ ne_block_output(struct device *dev, int count,
     SLOW_DOWN_IO;
 #endif  /* rw_bugfix */
 
-    dma_start = jiffies;
     outb_p(ENISR_RDC, nic_base + EN0_ISR);
 
    /* Now the normal output. */
@@ -477,6 +476,8 @@ ne_block_output(struct device *dev, int count,
     } else {
 	outsb(NE_BASE + NE_DATAPORT, buf, count);
     }
+
+    dma_start = jiffies;
 
 #ifdef CONFIG_NE_SANITY
     /* This was for the ALPHA version only, but enough people have

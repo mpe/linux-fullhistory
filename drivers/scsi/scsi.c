@@ -369,7 +369,7 @@ void scan_scsis (struct Scsi_Host * shpnt)
 	     do it right and use a mutex */
 
 	  if (current == task[0])
-	      while (SCpnt->request.dev != 0xfffe);
+	      while (SCpnt->request.dev != 0xfffe) barrier();
 	  else if (SCpnt->request.dev != 0xfffe) {
 	      struct semaphore sem = MUTEX_LOCKED;
 
@@ -421,7 +421,7 @@ void scan_scsis (struct Scsi_Host * shpnt)
 		       256,  scan_scsis_done, SCSI_TIMEOUT, 3);
 
 	  if (current == task[0])
-	      while (SCpnt->request.dev != 0xfffe);
+	      while (SCpnt->request.dev != 0xfffe) barrier();
 	  else if (SCpnt->request.dev != 0xfffe) {
 	      struct semaphore sem = MUTEX_LOCKED;
 
@@ -584,7 +584,7 @@ void scan_scsis (struct Scsi_Host * shpnt)
 				 SCSI_TIMEOUT, 3);
 
 		    if (current == task[0])
-			while (SCpnt->request.dev != 0xfffe);
+			while (SCpnt->request.dev != 0xfffe) barrier();
 		    else if (SCpnt->request.dev != 0xfffe) {
 			struct semaphore sem = MUTEX_LOCKED;
 
@@ -1551,7 +1551,8 @@ int scsi_abort (Scsi_Cmnd * SCpnt, int why, int pid)
 		if (SCpnt->internal_timeout & IN_ABORT)
 			{
 			restore_flags(flags);
-			while (SCpnt->internal_timeout & IN_ABORT);
+			while (SCpnt->internal_timeout & IN_ABORT)
+				barrier();
 			}
 		else
 			{
@@ -1644,7 +1645,8 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
 		if (SCpnt->internal_timeout & IN_RESET)
 			{
 			restore_flags(flags);
-			while (SCpnt->internal_timeout & IN_RESET);
+			while (SCpnt->internal_timeout & IN_RESET)
+				barrier();
 			}
 		else
 			{

@@ -40,10 +40,27 @@
 #       EWRK3_DEBUG	Set the desired debug level
 #
 #  DE4x5		The DIGITAL series of PCI/EISA Ethernet Cards,
-#			DE425, DE434 and DE435
-#       DE4x5_DEBUG	Set the desired debug level
-#	IS_ZYNX         May allow driver to work with Zynx cards - 
+#			DE425, DE434, DE435, DE500
+#     DE4X5_DEBUG	Set the desired debug level
+#     IS_NOT_DEC        May allow driver to work with Zynx & SMC cards - 
 #			see linux/drivers/net/README.de4x5
+#     DE4X5_AUTOSENSE   (Default) auto media/mode selection
+#                       If you want at least one board to not autosense then
+#                       no board can autosense. For a board mix of several
+#	                types, OR the manual values [eg for a DE500 (100M) with
+#	                a DE450 (AUI) use '-DDE4X5_AUTOSENSE=(0x80|0x08)']
+#                       For full auto media/mode selection           = 0x4000
+#                       For manual TP media selection                = 0x01
+#                       For manual TP/Nway media selection (DC21041) = 0x02
+#                       For manual BNC media selection               = 0x04
+#                       For manual AUI media selection               = 0x08
+#                       For manual BNC/AUI media selection (DC21040) = 0x10
+#                       For manual 10Mb/s mode selection   (DC21140) = 0x40
+#                       For manual 100Mb/s mode selection  (DC21140) = 0x80
+#                       The DC21040 will default to TP if TP_NW is specified
+#                       The DC21041 will default to BNC if BNC_AUI is specified
+#                       The DC21140 needs it's speed to be manually set to
+#                       10Mb/s or 100Mb/s (AUTO defaults to 10Mb/s)
 #
 
 # The following options exist, but cannot be set in this file.
@@ -66,4 +83,4 @@ HP_OPTS		=
 PLIP_OPTS	=
 DEPCA_OPTS	= -DDEPCA_DEBUG=1
 EWRK3_OPTS	= -DEWRK3_DEBUG=1
-DE4x5_OPTS	= -DDE4x5_DEBUG=1
+DE4X5_OPTS	= -DDE4X5_DEBUG=1 -DDE4X5_AUTOSENSE=0x4000

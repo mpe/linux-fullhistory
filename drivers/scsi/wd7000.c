@@ -941,7 +941,7 @@ int wd7000_command(Scsi_Cmnd *SCpnt)
 {
     wd7000_queuecommand(SCpnt, wd7000_scsi_done);
 
-    while (SCpnt->SCp.phase > 0);  /* phase counts scbs down to 0 */
+    while (SCpnt->SCp.phase > 0) barrier();  /* phase counts scbs down to 0 */
 
     return SCpnt->result;
 }
@@ -964,7 +964,8 @@ int wd7000_diagnostics( Adapter *host, int code )
      */
     mail_out(host, (struct scb *) &icb);
     timeout = jiffies + WAITnexttimeout;  /* wait up to 2 seconds */
-    while (icb.phase && jiffies < timeout) /* wait for completion */;
+    while (icb.phase && jiffies < timeout)
+    	barrier(); /* wait for completion */
 
     if (icb.phase)  {
         printk("wd7000_diagnostics: timed out.\n");
@@ -1074,7 +1075,8 @@ void wd7000_revision(Adapter *host)
      * which in turn means that scatter/gather will be disabled.
      */
     mail_out(host, (struct scb *) &icb);
-    while (icb.phase) /* wait for completion */;
+    while (icb.phase)
+    	barrier(); /* wait for completion */
     host->rev1 = icb.primary;
     host->rev2 = icb.secondary;
 }

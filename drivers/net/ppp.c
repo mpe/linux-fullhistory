@@ -31,6 +31,7 @@
 /* #define NET02D				-* */
 #define NEW_TTY_DRIVERS				/* */
 #define OPTIMIZE_FLAG_TIME  ((HZ * 3)/2)	/* */
+#define CHECK_CHARACTERS
 
 #ifdef MODULE
 #include <linux/module.h>
@@ -469,8 +470,8 @@ ppp_release(struct ppp *ppp)
 #endif
 
   if (ppp->dev) {
-    ppp->dev->flags &= ~IFF_UP; /* down the device */
-    ppp->dev->flags |= IFF_POINTOPOINT;
+    dev_close (ppp->dev);
+    ppp->dev->flags = 0;
   }
 
   kfree (ppp->xbuff);
@@ -953,14 +954,14 @@ static void ppp_receive_buf(struct tty_struct *tty, unsigned char *cp,
 
 #ifdef CHECK_CHARACTERS
     if (c & 0x80)
-	sc->sc_flags |= SC_RCV_B7_1;
+	ppp->flags |= SC_RCV_B7_1;
     else
-	sc->sc_flags |= SC_RCV_B7_0;
+	ppp->flags |= SC_RCV_B7_0;
 
     if (paritytab[c >> 5] & (1 << (c & 0x1F)))
-	sc->sc_flags |= SC_RCV_ODDP;
+	ppp->flags |= SC_RCV_ODDP;
     else
-	sc->sc_flags |= SC_RCV_EVNP;
+	ppp->flags |= SC_RCV_EVNP;
 #endif
 
     switch (c) {
@@ -1005,6 +1006,7 @@ ppp_doframe(struct ppp *ppp)
   if (ppp->toss) {
     PRINTKN (1, (KERN_WARNING "ppp_toss: tossing frame, reason = %d\n",
 		 ppp->toss));
+    slhc_toss (ppp->slcomp);
     ppp->stats.rerrors++;
     return;
   }
@@ -1018,6 +1020,7 @@ ppp_doframe(struct ppp *ppp)
 
   if (count < 4) {
     PRINTKN (1,(KERN_WARNING "ppp: got runt ppp frame, %d chars\n", count));
+    slhc_toss (ppp->slcomp);
     ppp->stats.runts++;
     return;
   }
@@ -1025,6 +1028,7 @@ ppp_doframe(struct ppp *ppp)
   /* check PPP error detection field */
   if (!ppp_check_fcs(ppp)) {
     PRINTKN (1,(KERN_WARNING "ppp: frame with bad fcs\n"));
+    slhc_toss (ppp->slcomp);
     ppp->stats.rerrors++;
     return;
   }
@@ -1067,6 +1071,7 @@ ppp_doframe(struct ppp *ppp)
   /* couldn't cope. */
   PRINTKN (1,(KERN_WARNING
 	      "ppp: dropping packet on the floor: nobody could take it.\n"));
+  slhc_toss (ppp->slcomp);
   ppp->stats.tossed++;
 }
 
@@ -1109,6 +1114,7 @@ ppp_do_ip (struct ppp *ppp, unsigned short proto, unsigned char *c,
       PRINTKN (1,(KERN_NOTICE
 		  "ppp: no space to decompress VJ compressed TCP header.\n"));
       ppp->stats.roverrun++;
+      slhc_toss (ppp->slcomp);
       return 1;
     }
 
@@ -1116,6 +1122,7 @@ ppp_do_ip (struct ppp *ppp, unsigned short proto, unsigned char *c,
     if (count <= 0) {
       ppp->stats.rerrors++;
       PRINTKN (1,(KERN_NOTICE "ppp: error in VJ decompression\n"));
+      slhc_toss (ppp->slcomp);
       return 1;
     }
     ppp->stats.rcomp++;
@@ -1126,6 +1133,7 @@ ppp_do_ip (struct ppp *ppp, unsigned short proto, unsigned char *c,
     if (slhc_remember(ppp->slcomp, c, count) <= 0) {
       ppp->stats.rerrors++;
       PRINTKN (1,(KERN_NOTICE "ppp: error in VJ memorizing\n"));
+      slhc_toss (ppp->slcomp);
       return 1;
     }
     ppp->stats.runcomp++;
@@ -1709,7 +1717,12 @@ ppp_xmit(struct sk_buff *skb, struct device *dev)
   PRINTKN(4,(KERN_DEBUG "ppp_xmit [%s]: skb %lX busy %d\n", dev->name, 
 	     (unsigned long int) skb, ppp->sending));
 
-  CHECK_PPP(0);
+  /* avoid race conditions when the link fails */
+  if (!ppp->inuse) {
+    dev_kfree_skb(skb, FREE_WRITE);
+    dev_close (dev);
+    return 0;
+  }
 
   if (tty == NULL) {
     PRINTKN(1,(KERN_ERR "ppp_xmit: %s not connected to a TTY!\n", dev->name));
@@ -1726,7 +1739,7 @@ ppp_xmit(struct sk_buff *skb, struct device *dev)
   /* get length from IP header as per Alan Cox bugfix for slip.c */
   if (len < sizeof(struct iphdr)) {
     PRINTKN(0,(KERN_ERR "ppp_xmit: given runt packet, ignoring\n"));
-    return 1;
+    goto done;
   }
   len = ntohs( ((struct iphdr *)(skb->data)) -> tot_len );
 
@@ -1750,8 +1763,8 @@ ppp_xmit(struct sk_buff *skb, struct device *dev)
 
   /* try to compress, if VJ compression mode is on */
   if (ppp->flags & SC_COMP_TCP) {
-    /* NOTE: last 0 argument says never to compress connection ID */
-    len = slhc_compress(ppp->slcomp, p, len, ppp->cbuff, &p, 0);
+    len = slhc_compress(ppp->slcomp, p, len, ppp->cbuff, &p, 
+			!(ppp->flags & SC_NO_TCP_CCID));
     if (p[0] & SL_TYPE_COMPRESSED_TCP)
       proto = PROTO_VJCOMP;
     else {
@@ -2055,10 +2068,25 @@ static struct device dev_ppp[PPP_NRUNIT] = {
 		0, 0, 0, 0,	/* memory */
 		0, 0,		/* base, irq */
 		0, 0, 0, NULL, ppp_init,
-	},
-	{ "ppp1" , 0, 0, 0, 0,  1, 0, 0, 0, 0, NULL, ppp_init },
-	{ "ppp2" , 0, 0, 0, 0,  2, 0, 0, 0, 0, NULL, ppp_init },
-	{ "ppp3" , 0, 0, 0, 0,  3, 0, 0, 0, 0, NULL, ppp_init },
+	}
+	, { "ppp1" , 0, 0, 0, 0,  1, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp2" , 0, 0, 0, 0,  2, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp3" , 0, 0, 0, 0,  3, 0, 0, 0, 0, NULL, ppp_init }
+
+#ifdef PPP_PPP_LOTS
+	, { "ppp4" , 0, 0, 0, 0,  4, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp5" , 0, 0, 0, 0,  5, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp6" , 0, 0, 0, 0,  6, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp7" , 0, 0, 0, 0,  7, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp8" , 0, 0, 0, 0,  8, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp9" , 0, 0, 0, 0,  9, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp10" , 0, 0, 0, 0, 10, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp11" , 0, 0, 0, 0, 11, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp12" , 0, 0, 0, 0, 12, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp13" , 0, 0, 0, 0, 13, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp14" , 0, 0, 0, 0, 14, 0, 0, 0, 0, NULL, ppp_init }
+	, { "ppp15" , 0, 0, 0, 0, 15, 0, 0, 0, 0, NULL, ppp_init }
+#endif
 };
 
 int

@@ -18,7 +18,7 @@
    Reference Qlogic FAS408 Technical Manual, 53408-510-00A, May 10, 1994
    (you can reference it, but it is incomplete and inaccurate in places)
 
-   Version 0.41
+   Version 0.43 4/6/95 - kernel 1.2.0+, pcmcia 2.5.4+
 
    Functions as standalone, loadable, and PCMCIA driver, the latter from
    Dave Hind's PCMCIA package.
@@ -28,6 +28,11 @@
 */
 /*----------------------------------------------------------------*/
 /* Configuration */
+
+/* Set the following to 2 to use normal interrupt (active high/totempole-
+   tristate), otherwise use 0 (REQUIRED FOR PCMCIA) for active low, open
+   drain */
+#define QL_INT_ACTIVE_HIGH 2
 
 /* Set the following to 1 to enable the use of interrupts.  Note that 0 tends
    to be more stable, but slower (or ties up the system more) */
@@ -100,6 +105,8 @@
 
 /*----------------------------------------------------------------*/
 #ifdef PCMCIA
+#undef QL_INT_ACTIVE_HIGH
+#define QL_INT_ACTIVE_HIGH 0
 #define MODULE
 #endif 
 
@@ -143,7 +150,7 @@ static int	    qlcfgc = ( FASTCLK << 3 ) | ( FASTSCSI << 4 );
 /*----------------------------------------------------------------*/
 /* The qlogic card uses two register maps - These macros select which one */
 #define REG0 ( outb( inb( qbase + 0xd ) & 0x7f , qbase + 0xd ), outb( 4 , qbase + 0xd ))
-#define REG1 ( outb( inb( qbase + 0xd ) | 0x80 , qbase + 0xd ), outb( 0xb6 , qbase + 0xd ))
+#define REG1 ( outb( inb( qbase + 0xd ) | 0x80 , qbase + 0xd ), outb( 0xb4 | QL_INT_ACTIVE_HIGH , qbase + 0xd ))
 
 /* following is watchdog timeout in microseconds */
 #define WATCHDOG 5000000
@@ -262,8 +269,10 @@ rtrc(7)
 static int	ql_wai(void)
 {
 int	i,k;
+	k = 0;
 	i = jiffies + WATCHDOG;
-	while ( i > jiffies && !qabort && !((k = inb(qbase + 4)) & 0xe0));
+	while ( i > jiffies && !qabort && !((k = inb(qbase + 4)) & 0xe0))
+		barrier();
 	if (i <= jiffies)
 		return (DID_TIME_OUT);
 	if (qabort)
@@ -420,8 +429,10 @@ rtrc(1)
 		return (k << 16);
 /* should get bus service interrupt and disconnect interrupt */
 	i = inb(qbase + 5);	/* should be bus service */
-	while (!qabort && ((i & 0x20) != 0x20))
+	while (!qabort && ((i & 0x20) != 0x20)) {
+		barrier();
 		i |= inb(qbase + 5);
+	}
 rtrc(0)
 	if (qabort)
 		return ((qabort == 1 ? DID_ABORT : DID_RESET) << 16);
@@ -493,7 +504,8 @@ int	qlogic_queuecommand(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 
 	cmd->scsi_done = done;
 /* wait for the last command's interrupt to finish */
-	while (qlcmd != NULL);
+	while (qlcmd != NULL)
+		barrier();
 	ql_icmd(cmd);
 	return 0;
 }
@@ -556,7 +568,6 @@ unsigned long	flags;
 	outb(0x40 | qlcfg8 | qinitid, qbase + 8);	/* (ini) bus id, disable scsi rst */
 	outb(qlcfg5, qbase + 5);		/* select timer */
 	outb(qlcfg9, qbase + 9);			/* prescaler */
-	qlirq = -1;
 #if QL_RESET_AT_START
 	outb( 3 , qbase + 3 );
 	REG1;
@@ -565,6 +576,7 @@ unsigned long	flags;
 #endif
 #if QL_USE_IRQ
 /* IRQ probe - toggle pin and check request pending */
+
 	if( qlirq == -1 ) {
 		save_flags( flags );
 		cli();
@@ -575,21 +587,24 @@ unsigned long	flags;
 		outb(10, 0x20); /* access pending interrupt map */
 		outb(10, 0xa0);
 		while (j--) {
-			outb(0xb2 , qbase + 0xd);		/* int pin off */
+			outb(0xb0 | QL_INT_ACTIVE_HIGH , qbase + 0xd);	/* int pin off */
 			i &= ~(inb(0x20) | (inb(0xa0) << 8));	/* find IRQ off */
-			outb(0xb6 , qbase + 0xd);		/* int pin on */
+			outb(0xb4 | QL_INT_ACTIVE_HIGH , qbase + 0xd);	/* int pin on */
 			i &= inb(0x20) | (inb(0xa0) << 8);	/* find IRQ on */
 		}
 		REG0;
 		while (inb(qbase + 5)); 			/* purge int */
+		j = -1;
 		while (i)					/* find on bit */
-			i >>= 1, qlirq++;	/* should check for exactly 1 on */
-		if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, 0, "qlogic"))
-			host->can_queue = 1;
+			i >>= 1, j++;	/* should check for exactly 1 on */
+		qlirq = j;
 		restore_flags( flags );
 	}
 	else
-		printk( "Ql: Using preset IRQ of %d\n", qlirq );
+		printk( "Ql: Using preset IRQ %d\n", qlirq );
+
+	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, 0, "qlogic"))
+		host->can_queue = 1;
 #endif
 	request_region( qbase , 0x10 ,"qlogic");
 	hreg = scsi_register( host , 0 );	/* no host data */
@@ -599,7 +614,7 @@ unsigned long	flags;
 	if( qlirq != -1 )
 		hreg->irq = qlirq;
 
-	sprintf(qinfo, "Qlogic Driver version 0.41, chip %02X at %03X, IRQ %d, TPdma:%d",
+	sprintf(qinfo, "Qlogic Driver version 0.43, chip %02X at %03X, IRQ %d, TPdma:%d",
 	    qltyp, qbase, qlirq, QL_TURBO_PDMA );
 	host->name = qinfo;
 

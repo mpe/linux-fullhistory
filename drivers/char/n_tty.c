@@ -676,7 +676,6 @@ static void n_tty_set_termios(struct tty_struct *tty, struct termios * old)
 
 static void n_tty_close(struct tty_struct *tty)
 {
-	tty_wait_until_sent(tty, 0);
 	n_tty_flush_buffer(tty);
 	if (tty->read_buf) {
 		free_page((unsigned long) tty->read_buf);

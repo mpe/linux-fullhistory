@@ -89,7 +89,8 @@ static int sd_open(struct inode * inode, struct file * filp)
 /* Make sure that only one process can do a check_change_disk at one time.
  This is also used to lock out further access when the partition table is being re-read. */
 
-	while (rscsi_disks[target].device->busy);
+	while (rscsi_disks[target].device->busy)
+	  barrier();
 
 	if(rscsi_disks[target].device->removable) {
 	  check_disk_change(inode->i_rdev);
@@ -879,7 +880,7 @@ static int sd_init_onedisk(int i)
 		   512, sd_init_done,  SD_TIMEOUT,
 		   MAX_RETRIES);
       
-      while(SCpnt->request.dev != 0xfffe);
+      while(SCpnt->request.dev != 0xfffe) barrier();
       
       the_result = SCpnt->result;
       
@@ -905,7 +906,7 @@ static int sd_init_onedisk(int i)
 		       512, sd_init_done,  SD_TIMEOUT,
 		       MAX_RETRIES);
 	  
-	  while(SCpnt->request.dev != 0xfffe);
+	  while(SCpnt->request.dev != 0xfffe) barrier();
 
 	  spintime = jiffies;
 	};
@@ -941,7 +942,7 @@ static int sd_init_onedisk(int i)
 		 MAX_RETRIES);
     
     if (current == task[0])
-      while(SCpnt->request.dev != 0xfffe);
+      while(SCpnt->request.dev != 0xfffe) barrier();
     else
       if (SCpnt->request.dev != 0xfffe){
       	struct semaphore sem = MUTEX_LOCKED;

@@ -681,7 +681,8 @@ int aha1542_command(Scsi_Cmnd * SCpnt)
     aha1542_queuecommand(SCpnt, internal_done);
 
     SCpnt->SCp.Status = 0;
-    while (!SCpnt->SCp.Status);
+    while (!SCpnt->SCp.Status)
+    	barrier();
     return SCpnt->result;
 }
 

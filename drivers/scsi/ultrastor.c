@@ -733,13 +733,13 @@ int ultrastor_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
   retry:
     if (config.slot)
 	while (inb(config.ogm_address - 1) != 0 &&
-	       config.aborted[mscp_index] == 0xff);
+	       config.aborted[mscp_index] == 0xff) barrier();
 
     /* else??? */
 
     while ((inb(LCL_DOORBELL_INTR(config.doorbell_address)) & 
 	    (config.slot ? 2 : 1)) 
-	   && config.aborted[mscp_index] == 0xff);
+	   && config.aborted[mscp_index] == 0xff) barrier();
 
     /* To avoid race conditions, make the code to write to the adapter
        atomic.  This simplifies the abort code.  */

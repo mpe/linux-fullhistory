@@ -204,6 +204,8 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 		return 0;	/* We are already in the desired discipline */
 	o_ldisc = tty->ldisc;
 
+	tty_wait_until_sent(tty, 0);
+	
 	/* Shutdown the current discipline. */
 	if (tty->ldisc.close)
 		(tty->ldisc.close)(tty);
@@ -865,8 +867,15 @@ repeat:
 			}
 		}
 		tty = NULL;
-	} else
+	} else {
+		if ((*tty_loc)->flags & (1 << TTY_CLOSING)) {
+			printk("Attempt to open closing tty %s.\n",
+			       tty_name(*tty_loc));
+			printk("Ack!!!!  This should never happen!!\n");
+			return -EINVAL;
+		}
 		(*tty_loc)->count++;
+	}
 	if (driver->type == TTY_DRIVER_TYPE_PTY) {
 		if (!*o_tp_loc) {
 			*o_tp_loc = o_tp;
@@ -1006,22 +1015,6 @@ static void release_dev(struct file * filp)
 			tty->link->count = 0;
 		}
 	}
-	if (tty->count <= 1) {
-		/*
-		 * Shutdown the current line discipline, and reset it
-		 * to N_TTY.
-		 */
-		if (tty->ldisc.close)
-			(tty->ldisc.close)(tty);
-		tty->ldisc = ldiscs[N_TTY];
-		tty->termios->c_line = N_TTY;
-		if (o_tty && o_tty->count <= 0) {
-			if (o_tty->ldisc.close)
-				(o_tty->ldisc.close)(o_tty);
-			o_tty->ldisc = ldiscs[N_TTY];
-			o_tty->termios->c_line = N_TTY;
-		}
-	}
 	if (--tty->count < 0) {
 		printk("release_dev: bad tty->count (%d) for %s\n",
 		       tty->count, tty_name(tty));
@@ -1030,6 +1023,9 @@ static void release_dev(struct file * filp)
 	if (tty->count)
 		return;
 
+	/*
+	 * We're committed; at this point, we must not block!
+	 */
 	if (o_tty) {
 		if (o_tty->count)
 			return;
@@ -1041,6 +1037,7 @@ static void release_dev(struct file * filp)
 #ifdef TTY_DEBUG_HANGUP
 	printk("freeing tty structure...");
 #endif
+	tty->flags |= (1 << TTY_CLOSING);
 
 	/*
 	 * Make sure there aren't any processes that still think this
@@ -1055,6 +1052,20 @@ static void release_dev(struct file * filp)
 			(*p)->tty = NULL;
 	}
 
+	/*
+	 * Shutdown the current line discipline, and reset it to
+	 * N_TTY.
+	 */
+	if (tty->ldisc.close)
+		(tty->ldisc.close)(tty);
+	tty->ldisc = ldiscs[N_TTY];
+	tty->termios->c_line = N_TTY;
+	if (o_tty) {
+		if (o_tty->ldisc.close)
+			(o_tty->ldisc.close)(o_tty);
+		o_tty->ldisc = ldiscs[N_TTY];
+	}
+	
 	tty->driver.table[idx] = NULL;
 	if (tty->driver.flags & TTY_DRIVER_RESET_TERMIOS) {
 		tty->driver.termios[idx] = NULL;

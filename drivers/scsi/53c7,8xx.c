@@ -1242,7 +1242,8 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host) {
 	sti();
 
 	timeout = jiffies + 50;	/* arbitrary */
-	while ((hostdata->test_completed == -1) && jiffies < timeout);
+	while ((hostdata->test_completed == -1) && jiffies < timeout)
+		barrier();
 
 	failed = 1;
 	if (hostdata->test_completed == -1)
@@ -1330,7 +1331,8 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host) {
 	    sti();
 
 	    timeout = jiffies + 500;	/* arbitrary */
-	    while ((hostdata->test_completed == -1) && jiffies < timeout);
+	    while ((hostdata->test_completed == -1) && jiffies < timeout)
+	    	barrier();
 	    NCR53c7x0_write32 (DSA_REG, 0);
 
 	    if (hostdata->test_completed == 2) {

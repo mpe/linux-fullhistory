@@ -1,6 +1,6 @@
 /*  de4x5.c: A DIGITAL DE425/DE434/DE435 ethernet driver for linux.
 
-    Copyright 1994 Digital Equipment Corporation.
+    Copyright 1994, 1995 Digital Equipment Corporation.
 
     This software may be used and distributed according to the terms of
     the GNU Public License, incorporated herein by reference.
@@ -11,17 +11,22 @@
 	DE425 TP/COAX EISA
 	DE434 TP PCI
 	DE435 TP/COAX/AUI PCI
+	DE500 10/100 PCI Fasternet
 
-    The driver has been tested on a  relatively busy network using the DE425
-    and DE435 cards and benchmarked with 'ttcp': it  transferred 16M of data
-    at 1.08MB/s (8.6Mb/s) to a DECstation 5000/200.
+    The driver has been tested on a relatively busy network using the DE425,
+    DE434, DE435 and DE500 cards and benchmarked with 'ttcp': it transferred
+    16M of data to a DECstation 5000/200 as follows:
 
-    ************************************************************************
-    However there is still a known bug which causes ttcp to hang on transmit
-    (receive  is  OK), although  the  adapter/driver  continues to  function
-    normally for  other applications e.g.  nfs  mounting disks, pinging etc.
-    The cause is under investigation.
-    ************************************************************************
+                TCP           UDP
+             TX     RX     TX     RX
+    DE425   1030k  997k   1170k  1128k
+    DE434   1063k  995k   1170k  1125k
+    DE435   1063k  995k   1170k  1125k
+    DE500   1063k  998k   1170k  1125k  in 10Mb/s mode
+
+    All  values are typical (in   kBytes/sec) from a  sample  of 4 for  each
+    measurement. Their error is +/-20k on a quiet (private) network and also
+    depend on what load the CPU has.
 
     The author may    be  reached as davies@wanton.lkg.dec.com  or   Digital
     Equipment Corporation, 550 King Street, Littleton MA 01460.
@@ -98,9 +103,6 @@
 
     TO DO:
     ------
-    1. Add DC21041 Nway/Autosense support
-    2. Add DC21140 Autosense support
-    3. Add timer support
 
 
     Revision History
@@ -109,18 +111,26 @@
     Version   Date        Description
   
       0.1     17-Nov-94   Initial writing. ALPHA code release.
-      0.2     13-Jan-95   Added PCI support for DE435's
-      0.21    19-Jan-95   Added auto media detection
-      0.22    10-Feb-95   Fix interrupt handler call <chris@cosy.sbg.ac.at>
-                          Fix recognition bug reported by <bkm@star.rl.ac.uk>
-			  Add request/release_region code
-			  Add loadable modules support for PCI
-			  Clean up loadable modules support
+      0.2     13-Jan-95   Added PCI support for DE435's.
+      0.21    19-Jan-95   Added auto media detection.
+      0.22    10-Feb-95   Fix interrupt handler call <chris@cosy.sbg.ac.at>.
+                          Fix recognition bug reported by <bkm@star.rl.ac.uk>.
+			  Add request/release_region code.
+			  Add loadable modules support for PCI.
+			  Clean up loadable modules support.
+      0.23    28-Feb-95   Added DC21041 and DC21140 support. 
+                          Fix missed frame counter value and initialisation.
+			  Fixed EISA probe.
+      0.24    11-Apr-95   Change delay routine to use <linux/udelay>.
+                          Change TX_BUFFS_AVAIL macro.
+			  Change media autodetection to allow manual setting.
+			  Completed DE500 (DC21140) support.
+      0.241   18-Apr-95   Interim release without DE500 Autosense Algorithm.
 
     =========================================================================
 */
 
-static char *version = "de4x5.c:v0.22 2/10/95 davies@wanton.lkg.dec.com\n";
+static char *version = "de4x5.c:v0.241 4/18/95 davies@wanton.lkg.dec.com\n";
 
 #include <linux/config.h>
 #ifdef MODULE
@@ -140,6 +150,7 @@ static char *version = "de4x5.c:v0.22 2/10/95 davies@wanton.lkg.dec.com\n";
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/pci.h>
+#include <linux/delay.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -159,6 +170,12 @@ static char *version = "de4x5.c:v0.22 2/10/95 davies@wanton.lkg.dec.com\n";
 static int de4x5_debug = DE4X5_DEBUG;
 #else
 static int de4x5_debug = 1;
+#endif
+
+#ifdef DE4X5_AUTOSENSE              /* Should be done on a per adapter basis */
+static int de4x5_autosense = DE4X5_AUTOSENSE;
+#else
+static int de4x5_autosense = AUTO;      /* Do auto media/mode sensing */
 #endif
 
 /*
@@ -198,79 +215,102 @@ static int de4x5_debug = 1;
 #define DE4X5_PCI_TOTAL_SIZE 0x80        /* I/O address extent */
 
 /*
-** Timer defines
+** Memory Alignment. Each descriptor is 4 longwords long. To force a
+** particular alignment on the TX descriptor, adjust DESC_SKIP_LEN and
+** DESC_ALIGN. ALIGN aligns the start address of the private memory area
+** and hence the RX descriptor ring's first entry. 
 */
-#define TIMER_WIDTH   16
-#define TIMER_PORT    0x43
-#define TIMER_LATCH   0x06
-#define TIMER_READ    0x40
-#define TIMER_TICK    419  /*ns*/
-#define DELAY_QUANT   5    /*us*/
+#define ALIGN4      ((u_long)4 - 1)    /* 1 longword align */
+#define ALIGN8      ((u_long)8 - 1)    /* 2 longword align */
+#define ALIGN16     ((u_long)16 - 1)   /* 4 longword align */
+#define ALIGN32     ((u_long)32 - 1)   /* 8 longword align */
+#define ALIGN64     ((u_long)64 - 1)   /* 16 longword align */
+#define ALIGN128    ((u_long)128 - 1)  /* 32 longword align */
 
-#define LWPAD ((long)(sizeof(long) - 1)) /* for longword alignment */
+#define ALIGN         ALIGN32          /* Keep the DC21040 happy... */
+#define CACHE_ALIGN   CAL_16LONG
+#define DESC_SKIP_LEN DSL_0            /* Must agree with DESC_ALIGN */
+/*#define DESC_ALIGN    u_long dummy[4]; / * Must agree with DESC_SKIP_LEN */
+#define DESC_ALIGN
 
-#ifndef IS_ZYNX                          /* See README.de4x5 for using this */
-static int is_zynx = 0;
+#ifndef IS_NOT_DEC                     /* See README.de4x5 for using this */
+static int is_not_dec = 0;
 #else
-static int is_zynx = 1;
+static int is_not_dec = 1;
 #endif
 
 /*
 ** DE4X5 IRQ ENABLE/DISABLE
 */
-static u_long irq_mask = IMR_RIM | IMR_TIM | IMR_TUM ;
+static u_long irq_mask = IMR_SEM | IMR_RIM | IMR_RUM | IMR_TIM | IMR_TUM ;
 
 static u_long irq_en   = IMR_NIM | IMR_AIM;
 
-#define ENABLE_IRQs \
+#define ENABLE_IRQs { \
     imr |= irq_en;\
-    outl(imr, DE4X5_IMR)                    /* Enable the IRQs */
+    outl(imr, DE4X5_IMR);                   /* Enable the IRQs */\
+}
 
-#define DISABLE_IRQs \
+#define DISABLE_IRQs {\
     imr = inl(DE4X5_IMR);\
     imr &= ~irq_en;\
-    outl(imr, DE4X5_IMR)                    /* Disable the IRQs */
+    outl(imr, DE4X5_IMR);                   /* Disable the IRQs */\
+}
 
-#define UNMASK_IRQs \
+#define UNMASK_IRQs {\
     imr |= irq_mask;\
-    outl(imr, DE4X5_IMR)                    /* Unmask the IRQs */
+    outl(imr, DE4X5_IMR);                   /* Unmask the IRQs */\
+}
 
-#define MASK_IRQs \
+#define MASK_IRQs {\
     imr = inl(DE4X5_IMR);\
     imr &= ~irq_mask;\
-    outl(imr, DE4X5_IMR)                    /* Mask the IRQs */
+    outl(imr, DE4X5_IMR);                   /* Mask the IRQs */\
+}
 
 /*
 ** DE4X5 START/STOP
 */
-#define START_DE4X5 \
+#define START_DE4X5 {\
     omr = inl(DE4X5_OMR);\
     omr |= OMR_ST | OMR_SR;\
-    outl(omr, DE4X5_OMR)                    /* Enable the TX and/or RX */
+    outl(omr, DE4X5_OMR);                   /* Enable the TX and/or RX */\
+}
 
-#define STOP_DE4X5 \
+#define STOP_DE4X5 {\
     omr = inl(DE4X5_OMR);\
     omr &= ~(OMR_ST|OMR_SR);\
-    outl(omr, DE4X5_OMR)                    /* Disable the TX and/or RX */
+    outl(omr, DE4X5_OMR);                   /* Disable the TX and/or RX */ \
+}
 
 /*
 ** DE4X5 SIA RESET
 */
-#define RESET_SIA \
-    outl(SICR_RESET, DE4X5_SICR);           /* Reset SIA connectivity regs */ \
-    outl(STRR_RESET, DE4X5_STRR);           /* Write reset values */ \
-    outl(SIGR_RESET, DE4X5_SIGR)            /* Write reset values */
+#define RESET_SIA outl(0, DE4X5_SICR);      /* Reset SIA connectivity regs */
+
+/*
+** SROM Structure
+*/
+struct de4x5_srom {
+  char reserved[18];
+  char version;
+  char num_adapters;
+  char ieee_addr[6];
+  char info[100];
+  short chksum;
+};
 
 /*
 ** DE4X5 Descriptors. Make sure that all the RX buffers are contiguous
 ** and have sizes of both a power of 2 and a multiple of 4.
 ** A size of 256 bytes for each buffer was chosen because over 90% of
-** all packets in our network are <256 bytes long.
+** all packets in our network are <256 bytes long and 64 longword alignment
+** is possible.
 */
-#define NUM_RX_DESC 64                       /* Number of RX descriptors */
+#define NUM_RX_DESC 8                        /* Number of RX descriptors */
 #define NUM_TX_DESC 8                        /* Number of TX descriptors */
 #define BUFF_ALLOC_RETRIES 10                /* In case of memory shortage */
-#define RX_BUFF_SZ 256                       /* Power of 2 for kmalloc and */
+#define RX_BUFF_SZ 1536                      /* Power of 2 for kmalloc and */
                                              /* Multiple of 4 for DC21040 */
 
 struct de4x5_desc {
@@ -278,6 +318,7 @@ struct de4x5_desc {
     u_long des1;
     char *buf;
     char *next;
+    DESC_ALIGN
 };
 
 /*
@@ -308,48 +349,76 @@ struct de4x5_private {
     char rxRingSize;
     char txRingSize;
     char bus;                                /* EISA or PCI */
+    u_short chipset;                         /* DC21040, DC21041 or DC21140 */
+    long media;                              /* Media (eg TP), mode (eg 100B)*/
+    int  autosense;                          /* Allow/disallow autosensing */
+    int  tx_enable;                          /* Enable descriptor polling */
     char lostMedia;                          /* Possibly lost media */
+    int  setup_f;                            /* Setup frame filtering type */
 };
 
+
+/*
+** The transmit ring full condition is described by the tx_old and tx_new
+** pointers by:
+**    tx_old            = tx_new    Empty ring
+**    tx_old            = tx_new+1  Full ring
+**    tx_old+txRingSize = tx_new+1  Full ring  (wrapped condition)
+*/
 #define TX_BUFFS_AVAIL ((lp->tx_old<=lp->tx_new)?\
 			 lp->tx_old+lp->txRingSize-lp->tx_new-1:\
                          lp->tx_old               -lp->tx_new-1)
-#define TX_SUSPENDED   (((sts & STS_TS) ^ TS_SUSP)==0)
+/*#define TX_BUFFS_AVAIL ((lp->tx_ring[lp->tx_new].status)>=0 ? 1 : 0)*/
 
 /*
 ** Public Functions
 */
-static int  de4x5_open(struct device *dev);
-static int  de4x5_queue_pkt(struct sk_buff *skb, struct device *dev);
-static void de4x5_interrupt(int irq, struct pt_regs * regs);
-static int  de4x5_close(struct device *dev);
-static struct enet_statistics *de4x5_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
-static int  de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd);
+static int     de4x5_open(struct device *dev);
+static int     de4x5_queue_pkt(struct sk_buff *skb, struct device *dev);
+static void    de4x5_interrupt(int irq, struct pt_regs *regs);
+static int     de4x5_close(struct device *dev);
+static struct  enet_statistics *de4x5_get_stats(struct device *dev);
+static void    set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static int     de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd);
 
 /*
 ** Private functions
 */
-static int  de4x5_hw_init(struct device *dev, short iobase);
-static int  de4x5_init(struct device *dev);
-static int  de4x5_rx(struct device *dev);
-static int  de4x5_tx(struct device *dev);
+static int     de4x5_hw_init(struct device *dev, short iobase);
+static int     de4x5_init(struct device *dev);
+static int     de4x5_rx(struct device *dev);
+static int     de4x5_tx(struct device *dev);
 
-static int  autoconf_media(struct device *dev);
-static void create_packet(struct device *dev, char *frame, int len);
-static u_short dce_get_ticks(void);
-static void dce_us_delay(u_long usec);
-static void dce_ms_delay(u_long msec);
-static void load_packet(struct device *dev, char *buf, u_long flags, struct sk_buff *skb);
-static void EISA_signature(char * name, short iobase);
-static int  DevicePresent(short iobase);
-static void SetMulticastFilter(struct device *dev, int num_addrs, char *addrs, char *multicast_table);
+static int     autoconf_media(struct device *dev);
+static void    create_packet(struct device *dev, char *frame, int len);
+static void    dce_us_delay(u_long usec);
+static void    dce_ms_delay(u_long msec);
+static void    load_packet(struct device *dev, char *buf, u_long flags, struct sk_buff *skb);
+static void    dc21040_autoconf(struct device *dev);
+static void    dc21041_autoconf(struct device *dev);
+static void    dc21140_autoconf(struct device *dev);
+static long    test_media(struct device *dev, long irqs, long irq_mask, long csr13, long csr14, long csr15, long msec);
+static long    ping_media(struct device *dev);
+static void    reset_init_sia(struct device *dev, long sicr, long strr, long sigr);
+static int     test_ans(struct device *dev, long irqs, long irq_mask, long msec);
+static void    load_ms_timer(struct device *dev, u_long msec);
+static int     EISA_signature(char *name, long eisa_id);
+static int     DevicePresent(short iobase);
+static short   srom_rd(u_short address, u_char offset);
+static void    srom_latch(u_long command, u_short address);
+static void    srom_command(u_long command, u_short address);
+static void    srom_address(u_long command, u_short address, u_char offset);
+static short   srom_data(u_long command, u_short address);
+/*static void    srom_busy(u_long command, u_short address);*/
+static void    sendto_srom(u_long command, u_short addr);
+static long    getfrom_srom(u_short addr);
+static void    SetMulticastFilter(struct device *dev, int num_addrs, char *addrs);
+static int     aprom_crc (struct device *dev);
 
-static int aprom_crc (struct device *dev);
-
-static void eisa_probe(struct device *dev, short iobase);
-static void pci_probe(struct device *dev, short iobase);
-static struct device *alloc_device(struct device *dev, int iobase);
+static void    eisa_probe(struct device *dev, short iobase);
+static void    pci_probe(struct device *dev, short iobase);
+static struct  device *alloc_device(struct device *dev, int iobase);
+static char    *build_setup_frame(struct device *dev, int mode);
 
 #ifdef MODULE
 int  init_module(void);
@@ -371,6 +440,9 @@ static int num_de4x5s = 0, num_eth = 0;
 static struct bus_type {
     int bus;
     int device;
+    int chipset;
+    struct de4x5_srom srom;
+    int autosense;
 } bus;
 
 /*
@@ -382,8 +454,7 @@ static struct bus_type {
     outl(i | BMR_SWR, DE4X5_BMR);\
     outl(i, DE4X5_BMR);\
     for (i=0;i<5;i++) inl(DE4X5_BMR);\
-		   }
-
+}
 
 
 
@@ -409,7 +480,7 @@ int de4x5_probe(struct device *dev)
     ** Walk the device list to check that at least one device
     ** initialised OK
     */
-    for (; dev->priv == NULL && dev->next != NULL; dev = dev->next);
+    for (; (dev->priv == NULL) && (dev->next != NULL); dev = dev->next);
 
     if (dev->priv) status = 0;
     if (iobase == 0) autoprobed = 1;
@@ -422,9 +493,15 @@ static int
 de4x5_hw_init(struct device *dev, short iobase)
 {
   struct bus_type *lp = &bus;
-  int tmpbus, i, j, status=0;
+  int tmpbus, tmpchs, i, j, status=0;
   char *tmp;
   u_long nicsr;
+
+  /* Ensure we're not sleeping */
+  if (lp->chipset == DC21041) {
+    outl(0, PCI_CFDA);
+    dce_ms_delay(10);
+  }
 
   RESET_DE4X5;
 
@@ -433,10 +510,14 @@ de4x5_hw_init(struct device *dev, short iobase)
     ** Now find out what kind of DC21040/DC21041/DC21140 board we have.
     */
     if (lp->bus == PCI) {
-      if (!is_zynx) {
-	strcpy(name, "DE435");
+      if (!is_not_dec) {
+	if ((lp->chipset == DC21040) || (lp->chipset == DC21041)) {
+	  strcpy(name, "DE435");
+	} else if (lp->chipset == DC21140) {
+	  strcpy(name, "DE500");                /* Must read the SROM here! */
+	}
       } else {
-	strcpy(name, "ZYNX");
+	strcpy(name, "UNKNOWN");
       }
     } else {
       EISA_signature(name, EISA_ID0);
@@ -444,8 +525,6 @@ de4x5_hw_init(struct device *dev, short iobase)
 
     if (*name != '\0') {                         /* found a board signature */
       dev->base_addr = iobase;
-      request_region(iobase, (lp->bus == PCI ? DE4X5_PCI_TOTAL_SIZE :
-			                       DE4X5_EISA_TOTAL_SIZE), name);
       
       if (lp->bus == EISA) {
 	printk("%s: %s at %#3x (EISA slot %d)", 
@@ -462,6 +541,7 @@ de4x5_hw_init(struct device *dev, short iobase)
       printk("%2.2x,\n", dev->dev_addr[i]);
       
       tmpbus = lp->bus;
+      tmpchs = lp->chipset;
 
       if (status == 0) {
 	struct de4x5_private *lp;
@@ -470,26 +550,50 @@ de4x5_hw_init(struct device *dev, short iobase)
 	** Reserve a section of kernel memory for the adapter
 	** private area and the TX/RX descriptor rings.
 	*/
-	dev->priv = (void *) kmalloc(sizeof(struct de4x5_private) + LWPAD, 
+	dev->priv = (void *) kmalloc(sizeof(struct de4x5_private) + ALIGN, 
 				                                   GFP_KERNEL);
 	/*
 	** Align to a longword boundary
 	*/
-	dev->priv = (void *)(((u_long)dev->priv + LWPAD) & ~LWPAD);
+	dev->priv = (void *)(((u_long)dev->priv + ALIGN) & ~ALIGN);
 	lp = (struct de4x5_private *)dev->priv;
 	memset(dev->priv, 0, sizeof(struct de4x5_private));
 	lp->bus = tmpbus;
-	strcpy(lp->adapter_name, name);
+	lp->chipset = tmpchs;
+
+	/*
+	** Choose autosensing
+	*/
+	if (de4x5_autosense & AUTO) {
+	  lp->autosense = AUTO;
+	} else {
+	  if (lp->chipset != DC21140) {
+	    if ((lp->chipset == DC21040) && (de4x5_autosense & TP_NW)) {
+	      de4x5_autosense = TP;
+	    }
+	    if ((lp->chipset == DC21041) && (de4x5_autosense & BNC_AUI)) {
+	      de4x5_autosense = BNC;
+	    }
+	    lp->autosense = de4x5_autosense & 0x001f;
+	  } else {
+	    lp->autosense = de4x5_autosense & 0x00c0;
+	  }
+	}
+
+	sprintf(lp->adapter_name,"%s (%s)", name, dev->name);
+	request_region(iobase, (lp->bus == PCI ? DE4X5_PCI_TOTAL_SIZE :
+			                         DE4X5_EISA_TOTAL_SIZE), 
+		                                 lp->adapter_name);
 
 	/*
 	** Allocate contiguous receive buffers, long word aligned. 
 	** This could be a possible memory leak if the private area
 	** is ever hosed.
 	*/
-	for (tmp=NULL, j=0; j<BUFF_ALLOC_RETRIES && tmp==NULL; j++) {
-	  if ((tmp = (void *)kmalloc(RX_BUFF_SZ * NUM_RX_DESC + LWPAD, 
+	for (tmp=NULL, j=0; (j<BUFF_ALLOC_RETRIES) && (tmp==NULL); j++) {
+	  if ((tmp = (void *)kmalloc(RX_BUFF_SZ * NUM_RX_DESC + ALIGN, 
 	       	  		                        GFP_KERNEL)) != NULL) {
-	    tmp = (void *)(((u_long) tmp + LWPAD) & ~LWPAD);
+	    tmp = (char *)(((u_long) tmp + ALIGN) & ~ALIGN);
 	    for (i=0; i<NUM_RX_DESC; i++) {
 	      lp->rx_ring[i].status = 0;
 	      lp->rx_ring[i].des1 = RX_BUFF_SZ;
@@ -508,8 +612,10 @@ de4x5_hw_init(struct device *dev, short iobase)
 	  lp->tx_ring[lp->txRingSize - 1].des1 |= TD_TER;
 
 	  /* Tell the adapter where the TX/RX rings are located. */
-	  outl((u_long)lp->rx_ring, DE4X5_RRBA);
-	  outl((u_long)lp->tx_ring, DE4X5_TRBA);
+	  outl((long)lp->rx_ring, DE4X5_RRBA);
+	  outl((long)lp->tx_ring, DE4X5_TRBA);
+
+	  lp->tx_enable = TRUE;
 
 	  if (dev->irq < 2) {
 #ifndef MODULE
@@ -526,7 +632,7 @@ de4x5_hw_init(struct device *dev, short iobase)
 	      printk("      and failed to detect IRQ line.\n");
 	      status = -ENXIO;
 	    } else {
-	      for (dev->irq=0,i=0; i<sizeof(de4x5_irq) && !dev->irq; i++) {
+	      for (dev->irq=0,i=0; (i<sizeof(de4x5_irq)) && (!dev->irq); i++) {
 		if (irqnum == de4x5_irq[i]) {
 		  dev->irq = irqnum;
 		  printk("      and uses IRQ%d.\n", dev->irq);
@@ -550,13 +656,13 @@ de4x5_hw_init(struct device *dev, short iobase)
 		                                                    dev->name);
 	  status = -ENXIO;
 	}
+	if (status) release_region(iobase, (lp->bus == PCI ? 
+					             DE4X5_PCI_TOTAL_SIZE :
+			                             DE4X5_EISA_TOTAL_SIZE));
       } else {
 	printk("      which has an Ethernet PROM CRC error.\n");
 	status = -ENXIO;
       }
-      if (status) release_region(iobase, (lp->bus == PCI ? 
-					             DE4X5_PCI_TOTAL_SIZE :
-			                             DE4X5_EISA_TOTAL_SIZE));
     } else {
       status = -ENXIO;
     }
@@ -583,13 +689,19 @@ de4x5_hw_init(struct device *dev, short iobase)
     
     /* Fill in the generic field of the device structure. */
     ether_setup(dev);
+
+    /* Let the adapter sleep to save power */
+    if (lp->chipset == DC21041) {
+      outl(0, DE4X5_SICR);
+      outl(CFDA_PSM, PCI_CFDA);
+    }
   } else {                            /* Incorrectly initialised hardware */
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     if (lp) {
-      kfree_s(lp->rx_ring[0].buf, RX_BUFF_SZ * NUM_RX_DESC + LWPAD);
+      kfree_s(lp->rx_ring[0].buf, RX_BUFF_SZ * NUM_RX_DESC + ALIGN);
     }
     if (dev->priv) {
-      kfree_s(dev->priv, sizeof(struct de4x5_private) + LWPAD);
+      kfree_s(dev->priv, sizeof(struct de4x5_private) + ALIGN);
       dev->priv = NULL;
     }
   }
@@ -604,12 +716,15 @@ de4x5_open(struct device *dev)
   struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
   short iobase = dev->base_addr;
   int i, status = 0;
-  u_long imr, omr, sts;
+  long imr, omr, sts;
 
   /*
-  ** Stop the TX and RX...
+  ** Wake up the adapter
   */
-  STOP_DE4X5;
+  if (lp->chipset == DC21041) {
+    outl(0, PCI_CFDA);
+    dce_ms_delay(10);
+  }
 
   if (request_irq(dev->irq, (void *)de4x5_interrupt, 0, lp->adapter_name)) {
     printk("de4x5_open(): Requested IRQ%d is busy\n",dev->irq);
@@ -669,21 +784,19 @@ de4x5_open(struct device *dev)
       dev->tbusy = 0;                         
       dev->start = 1;
       dev->interrupt = UNMASK_INTERRUPTS;
-      
-      /*
-      ** Reset any pending interrupts
-      */
+      dev->trans_start = jiffies;
+
+      START_DE4X5;
+
+      /* Unmask and enable DE4X5 board interrupts */
+      imr = 0;
+      UNMASK_IRQs;
+
+      /* Reset any pending (stale) interrupts */
       sts = inl(DE4X5_STS);
       outl(sts, DE4X5_STS);
 
-      /*
-      ** Unmask and enable DE4X5 board interrupts
-      */
-      imr = 0;
-      UNMASK_IRQs;
       ENABLE_IRQs;
-
-      START_DE4X5;
     }
     if (de4x5_debug > 1) {
       printk("\tsts:  0x%08x\n", inl(DE4X5_STS));
@@ -703,70 +816,63 @@ de4x5_open(struct device *dev)
 }
 
 /*
-** Initialize the DE4X5 operating conditions
+** Initialize the DE4X5 operating conditions. NB: a chip problem with the
+** DC21140 requires using perfect filtering mode for that chip. Since I can't
+** see why I'd want > 14 multicast addresses, I may change all chips to use
+** the perfect filtering mode. Keep the DMA burst length at 8: there seems
+** to be data corruption problems if it is larger (UDP errors seen from a
+** ttcp source).
 */
 static int
 de4x5_init(struct device *dev)
 {  
   struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
   short iobase = dev->base_addr;
-  int offset, status = 0;
-  u_long i, j, bmr, omr;
-  char *pa;
-
-  /* Ensure a full reset */
-  RESET_DE4X5;
-
-  /* Set up automatic transmit polling every 1.6ms */
-  bmr = inl(DE4X5_BMR);
-  bmr |= TAP_1_6MS | CAL_16LONG;
-  outl(bmr, DE4X5_BMR);
-
-  /* Set up imperfect filtering mode as default, turn off promiscuous mode */
-  omr = OMR_HP;
-  offset = IMPERF_PA_OFFSET;
+  int status = 0;
+  long i, j, bmr, omr;
 
   /* Lock out other processes whilst setting up the hardware */
   set_bit(0, (void *)&dev->tbusy);
 
-  /* Rewrite the descriptor lists' start addresses */
-  outl((u_long)lp->rx_ring, DE4X5_RRBA);  /* Start of RX Descriptor List */
-  outl((u_long)lp->tx_ring, DE4X5_TRBA);  /* Start of TX Descriptor List */
+  RESET_DE4X5;
 
-  /* Reset the buffer pointers */
+  bmr = inl(DE4X5_BMR);
+  bmr |= PBL_8 | DESC_SKIP_LEN | CACHE_ALIGN;
+  outl(bmr, DE4X5_BMR);
+
+  if (lp->chipset != DC21140) {
+    omr = TR_96;
+    lp->setup_f = HASH_PERF;
+  } else {
+    omr = OMR_SDP | OMR_SF;
+    lp->setup_f = PERFECT;
+  }
+  outl((long)lp->rx_ring, DE4X5_RRBA);
+  outl((long)lp->tx_ring, DE4X5_TRBA);
+
   lp->rx_new = lp->rx_old = 0;
   lp->tx_new = lp->tx_old = 0;
 
-  /* Initialize each descriptor ownership in the RX ring */
   for (i = 0; i < lp->rxRingSize; i++) {
     lp->rx_ring[i].status = R_OWN;
   }
 
-  /* Initialize each descriptor ownership in the TX ring */
   for (i = 0; i < lp->txRingSize; i++) {
     lp->tx_ring[i].status = 0;
   }
 
-  /* Initialise the setup frame prior to starting the receive process */
-  memset(lp->setup_frame, 0, SETUP_FRAME_LEN);
+  /* Build the setup frame depending on filtering mode */
+  SetMulticastFilter(dev, 0, NULL);
 
-  /* Insert the physical address */
-  for (pa=lp->setup_frame+offset, j=0; j<ETH_ALEN; j++) {
-    *(pa + j) = dev->dev_addr[j];
-    if (j & 0x01) pa += 2;
+  if (lp->chipset != DC21140) {
+    load_packet(dev, lp->setup_frame, HASH_F|TD_SET|SETUP_FRAME_LEN, NULL);
+  } else {
+    load_packet(dev, lp->setup_frame, PERFECT_F|TD_SET|SETUP_FRAME_LEN, NULL);
   }
-
-  /* Clear the multicast list */
-  set_multicast_list(dev, 0, NULL);
-
-  /* Tell the hardware there's a new packet to be sent */
-  load_packet(dev, lp->setup_frame, HASH_F | TD_SET | SETUP_FRAME_LEN, NULL);
-
-  /* Start the TX process */
   outl(omr|OMR_ST, DE4X5_OMR);
 
   /* Poll for completion of setup frame (interrupts are disabled for now) */
-  for (j=0, i=0;i<100 && j==0;i++) {
+  for (j=0, i=0;(i<100) && (j==0);i++) {
     if (lp->tx_ring[lp->tx_new].status >= 0) j=1;
   }
   outl(omr, DE4X5_OMR);                        /* Stop everything! */
@@ -777,7 +883,6 @@ de4x5_init(struct device *dev)
     status = -EIO;
   }
 
-  /* Update pointers */
   lp->tx_new = (++lp->tx_new) % lp->txRingSize;
   lp->tx_old = lp->tx_new;
 
@@ -807,13 +912,9 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
   ** The 'lostMedia' threshold accounts for transient errors that
   ** were noticed when switching media.
   */
-  if (dev->tbusy || (lp->lostMedia > 3)) {
+  if (dev->tbusy || (lp->lostMedia > LOST_MEDIA_THRESHOLD)) {
     int tickssofar = jiffies - dev->trans_start;
-    if (tickssofar < 10 && !lp->lostMedia) {
-      /* Check if TX ring is full or not - 'tbusy' cleared if not full. */
-      if ((TX_BUFFS_AVAIL > 0) && dev->tbusy) {
-	dev->tbusy = 0;
-      }
+    if (tickssofar < 10 && (lp->lostMedia <= LOST_MEDIA_THRESHOLD)) {
       status = -1;
     } else {
       printk("%s: transmit timed out, status %08x, tbusy:%d, lostMedia:%d tickssofar:%d, resetting.\n",dev->name, inl(DE4X5_STS), dev->tbusy, lp->lostMedia, tickssofar);
@@ -825,21 +926,21 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
       /* Unmask DE4X5 board interrupts */
       if (!status) {
 	/* Start here to clean stale interrupts later */
+	dev->interrupt = UNMASK_INTERRUPTS;
+	dev->start = 1;
+	dev->tbusy = 0;                         
 	dev->trans_start = jiffies;
+      
 	START_DE4X5;
+
+	/* Unmask DE4X5 board interrupts */
+	imr = 0;
+	UNMASK_IRQs;
 
 	/* Clear any pending (stale) interrupts */
 	sts = inl(DE4X5_STS);
 	outl(sts, DE4X5_STS);
 
-	/* Unmask DE4X5 board interrupts */
-	imr = 0;
-	UNMASK_IRQs;
-	  
-	dev->interrupt = UNMASK_INTERRUPTS;
-	dev->start = 1;
-	dev->tbusy = 0;                         
-      
 	ENABLE_IRQs;
       } else {
 	printk("%s: hardware initialisation failure, status %08x.\n",
@@ -857,20 +958,18 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
     if (set_bit(0, (void*)&dev->tbusy) != 0)
       printk("%s: Transmitter access conflict.\n", dev->name);
 
-    if (TX_BUFFS_AVAIL > 0) {                   /* Fill in a Tx ring entry */
-      if (((u_long)skb->data & ~0x03) != (u_long)skb->data) {
-	printk("%s: TX skb buffer alignment prob..\n", dev->name);
-      }
-
+    if (TX_BUFFS_AVAIL) {                       /* Fill in a Tx ring entry */
       load_packet(dev, skb->data, TD_IC | TD_LS | TD_FS | skb->len, skb);
-      outl(POLL_DEMAND, DE4X5_TPD);             /* Start the TX */
+      if (lp->tx_enable) {
+	outl(POLL_DEMAND, DE4X5_TPD);           /* Start the TX */
+      }
 
       lp->tx_new = (++lp->tx_new) % lp->txRingSize; /* Ensure a wrap */
 	
       dev->trans_start = jiffies;
     }
 
-    if (TX_BUFFS_AVAIL > 0) {
+    if (TX_BUFFS_AVAIL) {
       dev->tbusy = 0;                           /* Another pkt may be queued */
     }
   }
@@ -882,12 +981,12 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
 ** The DE4X5 interrupt handler. 
 */
 static void
-de4x5_interrupt(int irq, struct pt_regs * regs)
+de4x5_interrupt(int irq, struct pt_regs *regs)
 {
     struct device *dev = (struct device *)(irq2dev_map[irq]);
     struct de4x5_private *lp;
     int iobase;
-    u_long imr, sts;
+    u_long imr, omr, sts;
 
     if (dev == NULL) {
 	printk ("de4x5_interrupt(): irq %d for unknown device.\n", irq);
@@ -909,19 +1008,22 @@ de4x5_interrupt(int irq, struct pt_regs * regs)
       sts = inl(DE4X5_STS);
       MASK_IRQs;
 
-      /* 
-      ** Acknowledge the DE4X5 board interrupts
-      */
-      outl(sts, DE4X5_STS);
+      outl(sts, DE4X5_STS);              /* Reset the board interrupts */
 
-      if (sts & STS_RI)	                 /* Rx interrupt (packet[s] arrived) */
+      if (sts & (STS_RI | STS_RU))	 /* Rx interrupt (packet[s] arrived) */
 	de4x5_rx(dev);
 
-      if (sts & STS_TI)                  /* Tx interrupt (packet sent) */
+      if (sts & (STS_TI | STS_TU))       /* Tx interrupt (packet sent) */
 	de4x5_tx(dev); 
 
-      if ((TX_BUFFS_AVAIL > 0) && dev->tbusy) { /* any resources available? */
-	dev->tbusy = 0;                  /* clear TX busy flag */
+      if (sts & STS_SE) {                /* Bus Error */
+	STOP_DE4X5;
+	printk("%s: Fatal bus error occurred, sts=0x%08lx, device stopped.\n", 
+	                                                       dev->name, sts);
+      }
+
+      if (TX_BUFFS_AVAIL && dev->tbusy) {/* Any resources available? */
+	dev->tbusy = 0;                  /* Clear TX busy flag */
 	mark_bh(NET_BH);
       }
 
@@ -941,7 +1043,6 @@ de4x5_rx(struct device *dev)
   volatile long status;
   char *buf;
 
-  /* Loop over any new packets for sending up the stack */
   for (entry = lp->rx_new; lp->rx_ring[entry].status >= 0;entry = lp->rx_new) {
     status = lp->rx_ring[entry].status;
 
@@ -957,7 +1058,7 @@ de4x5_rx(struct device *dev)
 	if (status & RD_OF)           lp->stats.rx_fifo_errors++;
       } else {                              /* A valid frame received */
 	struct sk_buff *skb;
-	short pkt_len = (short)(lp->rx_ring[entry].status >> 16);
+	short pkt_len = (short)(lp->rx_ring[entry].status >> 16) - 4;
 
 	if ((skb = alloc_skb(pkt_len, GFP_ATOMIC)) != NULL) {
 	  skb->len = pkt_len;
@@ -982,7 +1083,7 @@ de4x5_rx(struct device *dev)
 	  */
 	  lp->stats.rx_packets++;
 	  for (i=1; i<DE4X5_PKT_STAT_SZ-1; i++) {
-	    if (pkt_len < i*DE4X5_PKT_BIN_SZ) {
+	    if (pkt_len < (i*DE4X5_PKT_BIN_SZ)) {
 	      lp->pktStats.bins[i]++;
 	      i = DE4X5_PKT_STAT_SZ;
 	    }
@@ -1034,7 +1135,7 @@ de4x5_tx(struct device *dev)
 {
   struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
   int entry, iobase = dev->base_addr;
-  volatile long status;
+  long status;
 
   for (entry = lp->tx_old; entry != lp->tx_new; entry = lp->tx_old) {
     status = lp->tx_ring[entry].status;
@@ -1100,6 +1201,12 @@ de4x5_close(struct device *dev)
 
   MOD_DEC_USE_COUNT;
 
+  /* Put the adapter to sleep to save power */
+  if (lp->chipset == DC21041) {
+    outl(0, DE4X5_SICR);
+    outl(CFDA_PSM, PCI_CFDA);
+  }
+
   return 0;
 }
 
@@ -1109,7 +1216,7 @@ de4x5_get_stats(struct device *dev)
   struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
   int iobase = dev->base_addr;
 
-  lp->stats.rx_missed_errors = (int) inl(DE4X5_MFC);
+  lp->stats.rx_missed_errors = (int) (inl(DE4X5_MFC) & (MFC_OVFL | MFC_CNTR));
     
   return &lp->stats;
 }
@@ -1128,42 +1235,39 @@ static void load_packet(struct device *dev, char *buf, u_long flags, struct sk_b
 }
 /*
 ** Set or clear the multicast filter for this adaptor.
-** num_addrs == -1	Promiscuous mode, receive all packets
+** num_addrs == -1	Promiscuous mode, receive all packets - not supported.
+**                      Use the ioctls.
 ** num_addrs == 0	Normal mode, clear multicast list
 ** num_addrs > 0	Multicast mode, receive normal and MC packets, and do
 ** 			best-effort filtering.
 ** num_addrs == HASH_TABLE_LEN
-**	                Set all multicast bits
+**	                Set all multicast bits (pass all multicasts).
 */
 static void
 set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
   struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
   int iobase = dev->base_addr;
-  u_long omr;
 
   /* First, double check that the adapter is open */
   if (irq2dev_map[dev->irq] != NULL) {
-    omr = inl(DE4X5_OMR);
-
     if (num_addrs >= 0) {
-      SetMulticastFilter(dev, num_addrs, (char *)addrs, lp->setup_frame);
-
-      /* Tell the hardware that there's a new packet to be sent */
-      load_packet(dev, lp->setup_frame, TD_IC | HASH_F | TD_SET | 
+      SetMulticastFilter(dev, num_addrs, (char *)addrs);
+      if (lp->setup_f == HASH_PERF) {
+	load_packet(dev, lp->setup_frame, TD_IC | HASH_F | TD_SET | 
 		                                        SETUP_FRAME_LEN, NULL);
+      } else {
+	load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
+		                                        SETUP_FRAME_LEN, NULL);
+      }
+
       lp->tx_new = (++lp->tx_new) % lp->txRingSize;
       outl(POLL_DEMAND, DE4X5_TPD);                /* Start the TX */
-
-      omr &= ~OMR_PR;
-      omr |= OMR_PM;
-      outl(omr, DE4X5_OMR);
-    } else {                             /* set promiscuous mode */
-      omr |= OMR_PR;
-      omr &= ~OMR_PM;
-      outl(omr, DE4X5_OMR);
+      dev->trans_start = jiffies;
     }
   }
+
+  return;
 }
 
 /*
@@ -1171,49 +1275,58 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 ** from a list of ethernet multicast addresses.
 ** Little endian crc one liner from Matt Thomas, DEC.
 */
-static void SetMulticastFilter(struct device *dev, int num_addrs, char *addrs, char *multicast_table)
+static void SetMulticastFilter(struct device *dev, int num_addrs, char *addrs)
 {
-  char j, bit, byte;
-  long *p = (long *) multicast_table;
-  int i;
+  struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+  int i, j, bit, byte, iobase = dev->base_addr;
   u_short hashcode;
-  u_long crc, poly = CRC_POLYNOMIAL_LE;
+  u_long crc, omr, poly = CRC_POLYNOMIAL_LE;
+  char *pa;
 
-  if (num_addrs == HASH_TABLE_LEN) {
-    for (i=0; i<(HASH_TABLE_LEN >> 4); i++) {
-      *p++ = 0x0000ffff;
-    }
-  } else {
-    /* Clear the multicast table except for the broadcast bit */
-    memset(multicast_table, 0, (HASH_TABLE_LEN >> 2));
-    *(multicast_table + (HASH_TABLE_LEN >> 3) - 3) = 0x80;
+  omr = inl(DE4X5_OMR);
+  pa = build_setup_frame(dev, ALL);          /* Build the basic frame */
 
-    /* Now update the table */
-    for (i=0;i<num_addrs;i++) {              /* for each address in the list */
-      if ((*addrs & 0x01) == 1) {            /* multicast address? */ 
-	crc = 0xffffffff;                    /* init CRC for each address */
-	for (byte=0;byte<ETH_ALEN;byte++) {  /* for each address byte */
+  if (lp->setup_f == HASH_PERF) {
+    if (num_addrs == HASH_TABLE_LEN) {       /* Pass all multicasts */
+      omr |= OMR_PM;
+    } else {
+      omr &= ~OMR_PM;
+                                             /* Now update the MCA table */
+      for (i=0;i<num_addrs;i++) {            /* for each address in the list */
+	if ((*addrs & 0x01) == 1) {          /* multicast address? */ 
+	  crc = 0xffffffff;                  /* init CRC for each address */
+	  for (byte=0;byte<ETH_ALEN;byte++) {/* for each address byte */
 	                                     /* process each address bit */ 
-	  for (bit = *addrs++,j=0;j<8;j++, bit>>=1) {
-	    crc = (crc >> 1) ^ (((crc ^ bit) & 0x01) ? poly : 0);
+	    for (bit = *addrs++,j=0;j<8;j++, bit>>=1) {
+	      crc = (crc >> 1) ^ (((crc ^ bit) & 0x01) ? poly : 0);
+	    }
 	  }
+	  hashcode = crc & HASH_BITS;        /* hashcode is 9 LSb of CRC */
+
+	  byte = hashcode >> 3;              /* bit[3-8] -> byte in filter */
+	  bit = 1 << (hashcode & 0x07);      /* bit[0-2] -> bit in byte */
+
+	  byte <<= 1;                        /* calc offset into setup frame */
+	  if (byte & 0x02) {
+	    byte -= 1;
+	  }
+	  lp->setup_frame[byte] |= bit;
+	  
+	} else {                             /* skip this address */
+	  addrs += ETH_ALEN;
 	}
-	hashcode = crc & ((1 << 9) - 1);     /* hashcode is 9 LSb of CRC */
-
-	byte = hashcode >> 3;                /* bit[3-8] -> byte in filter */
-	bit = 1 << (hashcode & 0x07);        /* bit[0-2] -> bit in byte */
-
-	byte <<= 1;                          /* calc offset into setup frame */
-	if (byte & 0x02) {
-	  byte -= 1;
-	}
-	multicast_table[byte] |= bit;
-
-      } else {                               /* skip this address */
-	addrs += ETH_ALEN;
+      }
+    }
+  } else {                                   /* Perfect filtering */
+    omr &= ~OMR_PM;
+    for (j=0; j<num_addrs; j++) {
+      for (i=0; i<ETH_ALEN; i++) { 
+	*(pa + (i&1)) = *addrs++;
+	if (i & 0x01) pa += 4;
       }
     }
   }
+  outl(omr, DE4X5_OMR);
 
   return;
 }
@@ -1226,8 +1339,10 @@ static void eisa_probe(struct device *dev, short ioaddr)
 {
   int i, maxSlots;
   int status;
-  u_short iobase;
+  u_short vendor, device, iobase;
   struct bus_type *lp = &bus;
+  char name[DE4X5_STRLEN];
+  long cfid;
 
   if (!ioaddr && autoprobed) return ;            /* Been here before ! */
   if ((ioaddr < 0x1000) && (ioaddr > 0)) return; /* PCI MODULE special */
@@ -1244,17 +1359,30 @@ static void eisa_probe(struct device *dev, short ioaddr)
     maxSlots = i + 1;
   }
 
-  for (status = -ENODEV; i<maxSlots && dev!=NULL; i++, iobase+=EISA_SLOT_INC) {
-    if ((DevicePresent(EISA_APROM) == 0) || is_zynx) { 
-      if (check_region(iobase, DE4X5_EISA_TOTAL_SIZE) == 0) {
-	if ((dev = alloc_device(dev, iobase)) != NULL) {
-	  if ((status = de4x5_hw_init(dev, iobase)) == 0) {
-	    num_de4x5s++;
-	  }
+  for (status = -ENODEV; (i<maxSlots) && (dev!=NULL); i++, iobase+=EISA_SLOT_INC) {
+    if (EISA_signature(name, EISA_ID)) {
+      cfid = inl(PCI_CFID);
+      device = (u_short)(cfid >> 16);
+      vendor = (u_short) cfid;
+
+      lp->bus = EISA;
+      lp->chipset = device;
+      if (DevicePresent(EISA_APROM) == 0) { 
+	/* Write the PCI Configuration Registers */
+	outl(PCI_COMMAND_IO | PCI_COMMAND_MASTER, PCI_CFCS);
+	outl(0x00004000, PCI_CFLT);
+	outl((u_long)iobase, PCI_CBIO);
+
+	if (check_region(iobase, DE4X5_EISA_TOTAL_SIZE) == 0) {
+	  if ((dev = alloc_device(dev, iobase)) != NULL) {
+	    if ((status = de4x5_hw_init(dev, iobase)) == 0) {
+	      num_de4x5s++;
+	    }
 	  num_eth++;
+	  }
+	} else if (autoprobed) {
+	  printk("%s: region already allocated at 0x%04x.\n", dev->name, iobase);
 	}
-      } else if (autoprobed) {
-	printk("%s: region already allocated at 0x%04x.\n", dev->name, iobase);
       }
     }
   }
@@ -1295,14 +1423,17 @@ static void pci_probe(struct device *dev, short ioaddr)
       dev_last = PCI_LAST_DEV;
     }
 
-    for (; dev_num < dev_last && dev != NULL; dev_num++) {
+    for (; (dev_num < dev_last) && (dev != NULL); dev_num++) {
       pcibios_read_config_dword(pb, PCI_DEVICE, PCI_CLASS_REVISION, &class);
       if (class != 0xffffffff) {
 	pcibios_read_config_word(pb, PCI_DEVICE, PCI_VENDOR_ID, &vendor);
 	pcibios_read_config_word(pb, PCI_DEVICE, PCI_DEVICE_ID, &device);
-	if ((vendor == DC21040_VID) && (device == DC21040_DID)) {
+	if (is_DC21040 || is_DC21041 || is_DC21140) {
 	  /* Set the device number information */
 	  lp->device = dev_num;
+
+	  /* Set the chipset information */
+	  lp->chipset = device;
 
 	  /* Get the board I/O address */
 	  pcibios_read_config_dword(pb, PCI_DEVICE, PCI_BASE_ADDRESS_0, &iobase);
@@ -1317,7 +1448,7 @@ static void pci_probe(struct device *dev, short ioaddr)
 	  pcibios_write_config_word(pb, PCI_DEVICE, PCI_COMMAND, status);
 
 	  /* If there is a device and I/O region is open, initialise dev. */
-	  if ((DevicePresent(DE4X5_APROM) == 0) || is_zynx) {
+	  if ((DevicePresent(DE4X5_APROM) == 0) || is_not_dec) {
 	    if (check_region(iobase, DE4X5_PCI_TOTAL_SIZE) == 0) {
 	      if ((dev = alloc_device(dev, iobase)) != NULL) {
 		dev->irq = irq;
@@ -1457,120 +1588,322 @@ static struct device *alloc_device(struct device *dev, int iobase)
 static int autoconf_media(struct device *dev)
 {
   struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
-  int media, entry, iobase = dev->base_addr;
-  char frame[64];
-  u_long i, omr, sisr, linkBad;
-/*  u_long t_330ms = 920000;*/
-  u_long t_3s    = 8000000;
+  int iobase = dev->base_addr;
 
-  /* Set up for TP port, with LEDs */
-  media = TP;
-  RESET_SIA;
-  outl(SICR_OE57 | SICR_SEL | SICR_SRL, DE4X5_SICR);
-
-  /* Test the TP port */
-  for (linkBad=1,i=0;i<t_3s && linkBad;i++) {
-    if (((sisr = inl(DE4X5_SISR)) & SISR_LKF) == 0) linkBad = 0;
-    if (sisr & SISR_NCR) break;
-  }
-    
-  if (linkBad) {
-    /* Set up for BNC (Thinwire) port, with LEDs */
-    media = BNC;
-    RESET_SIA;
-    outl(SIGR_JCK | SIGR_HUJ, DE4X5_SIGR);
-    outl(STRR_CLD | STRR_CSQ | STRR_RSQ | STRR_DREN | STRR_ECEN, DE4X5_STRR);
-    outl(SICR_OE57| SICR_OE24 | SICR_OE13 | SICR_SEL |
- 	                                    SICR_AUI | SICR_SRL, DE4X5_SICR);
-
-    /* Wait 330ms */
-    dce_ms_delay(330);
-/*    for (i=0; i<t_330ms; i++) {
-      sisr = inl(DE4X5_SISR);
-    }
-*/
-    /* Make up a dummy packet with CRC error */
-    create_packet(dev, frame, sizeof(frame));
-
-    /* Setup the packet descriptor */
-    entry = lp->tx_new;                        /* Remember the ring position */
-    load_packet(dev, frame, TD_LS | TD_FS | TD_AC | sizeof(frame), NULL);
-
-    /* Start the TX process */
-    omr = inl(DE4X5_OMR);
-    outl(omr|OMR_ST, DE4X5_OMR);
-
-    /* Update pointers */
-    lp->tx_new = (++lp->tx_new) % lp->txRingSize;
-    lp->tx_old = lp->tx_new;
-
-    /* 
-    ** Poll for completion of frame (interrupts are disabled for now)...
-    ** Allow upto 3 seconds to complete.
-    */
-    for (linkBad=1,i=0;i<t_3s && linkBad;i++) {
-      if ((inl(DE4X5_SISR) & SISR_NCR) == 1) break;
-      if (lp->tx_ring[entry].status >= 0) linkBad=0;
-    }
-    
-    outl(omr, DE4X5_OMR);                        /* Stop everything! */
-
-    if (linkBad || (lp->tx_ring[entry].status & TD_ES)) {
-      /* Set up for AUI (Thickwire) port, with LEDs */
-      media = AUI;
-      RESET_SIA;
-      outl(SIGR_JCK | SIGR_HUJ, DE4X5_SIGR);
-      outl(STRR_CLD | STRR_CSQ | STRR_RSQ | STRR_DREN | STRR_ECEN, DE4X5_STRR);
-      outl(SICR_OE57| SICR_SEL | SICR_AUI | SICR_SRL, DE4X5_SICR);
-      
-      /* Wait 330ms */
-      dce_ms_delay(330);
-
-      /* Setup the packet descriptor */
-      entry = lp->tx_new;                      /* Remember the ring position */
-      load_packet(dev, frame, TD_LS | TD_FS | TD_AC | sizeof(frame), NULL);
-      
-      /* Start the TX process */
-      omr = inl(DE4X5_OMR);
-      outl(omr|OMR_ST, DE4X5_OMR);
-
-      /* Update pointers */
-      lp->tx_new = (++lp->tx_new) % lp->txRingSize;
-      lp->tx_old = lp->tx_new;
-
-      /* 
-      ** Poll for completion of frame (interrupts are disabled for now)...
-      ** Allow 3 seconds to complete.
-      */
-      for (linkBad=1,i=0;i<t_3s && linkBad;i++) {
-	if ((inl(DE4X5_SISR) & SISR_NCR) == 1) break;
-	if (lp->tx_ring[entry].status >= 0) linkBad=0;
-      }
-    
-      outl(omr, DE4X5_OMR);                        /* Stop everything! */
-
-      if (linkBad || (lp->tx_ring[entry].status & TD_ES)) {
-	/* Reset the SIA */
-	outl(SICR_RESET, DE4X5_SICR);        /* Reset SIA connectivity regs */
-	outl(STRR_RESET, DE4X5_STRR);        /* Write reset values */
-	outl(SIGR_RESET, DE4X5_SIGR);        /* Write reset values */
-
-	media = NC;
-      }
-    } 
+  if (lp->chipset == DC21040) {
+    lp->media = (lp->autosense == AUTO ? TP : lp->autosense);
+    dc21040_autoconf(dev);
+  } else if (lp->chipset == DC21041) {
+    lp->media = (lp->autosense == AUTO ? TP_NW : lp->autosense);
+    dc21041_autoconf(dev);
+  } else if (lp->chipset == DC21140) {
+    /* Force 10Mb/s (_100Mb for 100Mb/s) */
+    lp->media = (lp->autosense == AUTO ? _10Mb : lp->autosense);
+    dc21140_autoconf(dev);
   }
 
   if (de4x5_debug >= 1 ) {
-    printk("%s: Media is %s.\n",dev->name, 
-                                 (media == NC  ? "unconnected to this device" :
-                                 (media == TP  ? "TP" :
-                                 (media == BNC ? "BNC" : 
-                                                 "AUI"))));
+    if (lp->chipset != DC21140) {
+      printk("%s: Media is %s\n",dev->name,
+	                                (lp->media == NC  ? "unconnected!" :
+					(lp->media == TP  ? "TP." :
+					(lp->media == ANS ? "TP/Nway." :
+					(lp->media == BNC ? "BNC." : 
+					(lp->media == AUI ? "AUI." : 
+                                                            "BNC/AUI."
+					))))));
+    } else {
+      printk("%s: Mode is forced to %s\n",dev->name,
+	                                (lp->media == NC      ? "link down.":
+					(lp->media == _100Mb  ? "100Mb/s." :
+					(lp->media == _10Mb   ? "10Mb/s." :
+					                        "\?\?\?"
+					))));
+    }
   }
 
-  if (media) lp->lostMedia = 0;
+  if (lp->media) {
+    lp->lostMedia = 0;
+    inl(DE4X5_MFC);                         /* Zero the lost frames counter */
+  }
+  dce_ms_delay(10);
 
-  return media;
+  return (lp->media);
+}
+
+static void dc21040_autoconf(struct device *dev)
+{
+  struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+  int iobase = dev->base_addr;
+  u_long i, sisr = 0, linkBad;
+  u_long t_3s    = 3000;
+
+  switch (lp->media) {
+  case TP:
+    reset_init_sia(dev, 0x8f01, 0xffff, 0x0000);
+    for (linkBad=1,i=0;(i<t_3s) && linkBad && !(sisr & SISR_NCR);i++) {
+      if (((sisr = inl(DE4X5_SISR)) & SISR_LKF) == 0) linkBad = 0;
+      dce_ms_delay(1);
+    }
+    if (linkBad && (lp->autosense == AUTO)) {
+      lp->media = BNC_AUI;
+      dc21040_autoconf(dev);
+    }
+    break;
+
+  case BNC:
+  case AUI:
+  case BNC_AUI:
+    reset_init_sia(dev, 0x8f09, 0x0705, 0x0006);
+    dce_ms_delay(330);
+    linkBad = ping_media(dev);
+    if (linkBad && (lp->autosense == AUTO)) {
+      lp->media = NC;
+      dc21040_autoconf(dev);
+    }
+    break;
+
+  case NC:
+    reset_init_sia(dev, 0x8f01, 0xffff, 0x0000);
+    break;
+  }
+
+  return;
+}
+
+/*
+** Autoconfigure the media when using the DC21041. AUI needs to be tested
+** before BNC, because the BNC port will indicate activity if it's not
+** terminated correctly. The only way to test for that is to place a loopback
+** packet onto the network and watch for errors.
+*/
+static void dc21041_autoconf(struct device *dev)
+{
+  struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+  int iobase = dev->base_addr;
+  u_long sts, irqs, irq_mask, omr;
+
+  switch (lp->media) {
+  case TP_NW:
+    omr = inl(DE4X5_OMR);        /* Set up full duplex for the autonegotiate */
+    outl(omr | OMR_FD, DE4X5_OMR);
+    irqs = STS_LNF | STS_LNP;
+    irq_mask = IMR_LFM | IMR_LPM;
+    sts = test_media(dev, irqs, irq_mask, 0xef01, 0xffff, 0x0008, 2400);
+    if (sts & STS_LNP) {
+      lp->media = ANS;
+    } else {
+      lp->media = AUI;
+    }
+    dc21041_autoconf(dev);
+    break;
+
+  case ANS:
+    irqs = STS_LNP;
+    irq_mask = IMR_LPM;
+    sts = test_ans(dev, irqs, irq_mask, 3000);
+    if (!(sts & STS_LNP) && (lp->autosense == AUTO)) {
+      lp->media = TP;
+      dc21041_autoconf(dev);
+    }
+    break;
+
+  case TP:
+    omr = inl(DE4X5_OMR);                      /* Set up half duplex for TP */
+    outl(omr & ~OMR_FD, DE4X5_OMR);
+    irqs = STS_LNF | STS_LNP;
+    irq_mask = IMR_LFM | IMR_LPM;
+    sts = test_media(dev, irqs, irq_mask, 0xef01, 0xff3f, 0x0008, 2400);
+    if (!(sts & STS_LNP) && (lp->autosense == AUTO)) {
+      if (inl(DE4X5_SISR) & SISR_NRA) {    /* Non selected port activity */
+	lp->media = AUI;
+      } else {
+	lp->media = BNC;
+      }
+      dc21041_autoconf(dev);
+    }
+    break;
+
+  case AUI:
+    omr = inl(DE4X5_OMR);                      /* Set up half duplex for AUI */
+    outl(omr & ~OMR_FD, DE4X5_OMR);
+    irqs = 0;
+    irq_mask = 0;
+    sts = test_media(dev, irqs, irq_mask, 0xef09, 0xf7fd, 0x000e, 1000);
+    if (!(inl(DE4X5_SISR) & SISR_SRA) && (lp->autosense == AUTO)) {
+      lp->media = BNC;
+      dc21041_autoconf(dev);
+    }
+    break;
+
+  case BNC:
+    omr = inl(DE4X5_OMR);                      /* Set up half duplex for BNC */
+    outl(omr & ~OMR_FD, DE4X5_OMR);
+    irqs = 0;
+    irq_mask = 0;
+    sts = test_media(dev, irqs, irq_mask, 0xef09, 0xf7fd, 0x0006, 1000);
+    if (!(inl(DE4X5_SISR) & SISR_SRA) && (lp->autosense == AUTO)) {
+      lp->media = NC;
+    } else {                                   /* Ensure media connected */
+      if (ping_media(dev)) lp->media = NC;
+    }
+    break;
+
+  case NC:
+    omr = inl(DE4X5_OMR);        /* Set up full duplex for the autonegotiate */
+    outl(omr | OMR_FD, DE4X5_OMR);
+    reset_init_sia(dev, 0xef01, 0xffff, 0x0008);/* Initialise the SIA */
+    break;
+  }
+
+  return;
+}
+
+/*
+** Reduced feature version (temporary I hope)
+*/
+static void dc21140_autoconf(struct device *dev)
+{
+  struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+  int iobase = dev->base_addr;
+  u_long omr;
+
+  switch(lp->media) {
+  case _100Mb:      /* Set 100Mb/s, MII Port with PCS Function and Scrambler */
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR));
+    outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);
+    outl(GEP_FDXD | GEP_MODE, DE4X5_GEP);
+    break;
+
+  case _10Mb:       /* Set conventional 10Mb/s ENDEC interface */
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR));
+    outl(omr | OMR_TTM, DE4X5_OMR);
+    outl(GEP_FDXD, DE4X5_GEP);
+    break;
+  }
+
+  return;
+}
+
+static long test_media(struct device *dev, long irqs, long irq_mask, long csr13, long csr14, long csr15, long msec)
+{
+  struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+  int iobase = dev->base_addr;
+  long sts, time, csr12;
+
+  reset_init_sia(dev, csr13, csr14, csr15);
+
+  /* Set link_fail_inhibit_timer */
+  load_ms_timer(dev, msec);
+
+  /* clear all pending interrupts */
+  sts = inl(DE4X5_STS);
+  outl(sts, DE4X5_STS);
+
+  /* clear csr12 NRA and SRA bits */
+  csr12 = inl(DE4X5_SISR);
+  outl(csr12, DE4X5_SISR);
+
+  /* Poll for timeout - timer interrupt doesn't work correctly */
+  do {
+    time = inl(DE4X5_GPT) & GPT_VAL;
+    sts = inl(DE4X5_STS);
+  } while ((time != 0) && !(sts & irqs));
+
+  sts = inl(DE4X5_STS);
+
+  return sts;
+}
+
+/*
+** Send a packet onto the media and watch for send errors that indicate the
+** media is bad or unconnected.
+*/
+static long ping_media(struct device *dev)
+{
+  struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+  int entry, iobase = dev->base_addr;
+  char frame[64];
+  long i, linkBad, omr;
+  u_long t_3s    = 3000;
+
+  create_packet(dev, frame, sizeof(frame));
+
+  entry = lp->tx_new;                        /* Remember the ring position */
+  load_packet(dev, frame, TD_LS | TD_FS | sizeof(frame),NULL);
+
+  omr = inl(DE4X5_OMR);
+  outl(omr|OMR_ST, DE4X5_OMR);
+
+  lp->tx_new = (++lp->tx_new) % lp->txRingSize;
+  lp->tx_old = lp->tx_new;
+
+  /* Poll for completion of frame (interrupts are disabled for now)... */
+  for (linkBad=1,i=0;(i<t_3s) && linkBad;i++) {
+    if ((inl(DE4X5_SISR) & SISR_NCR) == 1) break;
+    if (lp->tx_ring[entry].status >= 0) linkBad=0;
+    dce_ms_delay(1);
+  }
+  outl(omr, DE4X5_OMR); 
+
+  return ((linkBad || (lp->tx_ring[entry].status & TD_ES)) ? 1 : 0);
+}
+
+/*
+** Check the Auto Negotiation State. Return OK when a link pass interrupt
+** is received and the auto-negotiation status is NWAY OK.
+*/
+static int test_ans(struct device *dev, long irqs, long irq_mask, long msec)
+{
+  struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+  int iobase = dev->base_addr;
+  long sts, ans;
+
+  outl(irq_mask, DE4X5_IMR);
+
+  /* Set timeout limit */
+  load_ms_timer(dev, msec);
+
+  /* clear all pending interrupts */
+  sts = inl(DE4X5_STS);
+  outl(sts, DE4X5_STS);
+
+  /* Poll for interrupts */
+  do {
+    ans = inl(DE4X5_SISR) & SISR_ANS;
+    sts = inl(DE4X5_STS);
+  } while (!(sts & irqs) && (ans ^ ANS_NWOK) != 0);
+
+  return ((sts & STS_LNP) && ((ans ^ ANS_NWOK) == 0) ? STS_LNP : 0);
+}
+
+/*
+**
+*/
+static void reset_init_sia(struct device *dev, long sicr, long strr, long sigr)
+{
+  struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+  int iobase = dev->base_addr;
+
+  RESET_SIA;
+  outl(sigr, DE4X5_SIGR);
+  outl(strr, DE4X5_STRR);
+  outl(sicr, DE4X5_SICR);
+
+  return;
+}
+
+/*
+** Load the timer on the DC21041 and 21140. Max time is 13.42 secs.
+*/
+static void load_ms_timer(struct device *dev, u_long msec)
+{
+  struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+  int iobase = dev->base_addr;
+
+  outl((long)(msec * 10000)/2048, DE4X5_GPT);
+
+  return;
 }
 
 /*
@@ -1578,7 +1911,7 @@ static int autoconf_media(struct device *dev)
 */
 static void create_packet(struct device *dev, char *frame, int len)
 {
-  int i, j;
+  int i;
   char *buf = frame;
 
   for (i=0; i<ETH_ALEN; i++) {             /* Use this source address */
@@ -1587,33 +1920,11 @@ static void create_packet(struct device *dev, char *frame, int len)
   for (i=0; i<ETH_ALEN; i++) {             /* Use this destination address */
     *buf++ = dev->dev_addr[i];
   }
-  for (j=1; j>=0; j--) {                   /* Packet length (2 bytes) */
-    *buf++ = (char) ((len >> 8*j) & 0xff);
-  }
-  *buf++ = 0;                              /* Data */
 
-  for (i=len-4; i<len; i++) {              /* CRC */
-    buf[i] = 0;
-  }
+  *buf++ = 0;                              /* Packet length (2 bytes) */
+  *buf++ = 1;
   
   return;
-}
-
-/*
-** Get the timer ticks from the PIT
-*/
-static u_short dce_get_ticks(void)
-{
-  u_short ticks = 0;
-  
-  /* Command 8254 to latch T0's count */
-  outb(TIMER_PORT, TIMER_LATCH);
-  
-  /* Read the counter */
-  ticks = inb(TIMER_READ);
-  ticks |= (inb(TIMER_READ) << 8);
-  
-  return ticks;
 }
 
 /*
@@ -1621,24 +1932,13 @@ static u_short dce_get_ticks(void)
 */
 static void dce_us_delay(u_long usec)
 {
-  u_long i, start, now, quant=(DELAY_QUANT*1000)/TIMER_TICK+1;
-  
-  for (i=0; i<usec/DELAY_QUANT; i++) {
-    start=dce_get_ticks();  
-    for (now=start; (start-now)<quant;) {
-      now=dce_get_ticks();
-      if (now > start) {         /* Wrapped counter counting down */
-	quant -= start;
-	start = (1 << TIMER_WIDTH);
-      }
-    }
-  }
+  udelay(usec);
 
   return;
 }
 
 /*
-** Known delay in milliseconds
+** Known delay in milliseconds, in millisecond steps.
 */
 static void dce_ms_delay(u_long msec)
 {
@@ -1655,18 +1955,19 @@ static void dce_ms_delay(u_long msec)
 /*
 ** Look for a particular board name in the EISA configuration space
 */
-static void EISA_signature(char *name, short iobase)
+int EISA_signature(char *name, long eisa_id)
 {
   unsigned long i;
   char *signatures[] = DE4X5_SIGNATURE;
-  char ManCode[8];
+  char ManCode[DE4X5_STRLEN];
   union {
-    u_long ID;
-    u_char Id[4];
+    long ID;
+    char Id[4];
   } Eisa;
+  int status = 0;
 
-  strcpy(name, "");
-  Eisa.ID = inl(iobase);
+  *name = '\0';
+  Eisa.ID = inl(eisa_id);
 
   ManCode[0]=(((Eisa.Id[0]>>2)&0x1f)+0x40);
   ManCode[1]=(((Eisa.Id[1]&0xe0)>>5)+((Eisa.Id[0]&0x03)<<3)+0x40);
@@ -1675,13 +1976,14 @@ static void EISA_signature(char *name, short iobase)
   ManCode[4]=(((Eisa.Id[3]>>4)&0x0f)+0x30);
   ManCode[5]='\0';
 
-  for (i=0;*signatures[i] != '\0' && *name == '\0';i++) {
+  for (i=0;(*signatures[i] != '\0') && (*name == '\0');i++) {
     if (strstr(ManCode, signatures[i]) != NULL) {
       strcpy(name,ManCode);
+      status = 1;
     }
   }
-  
-  return;                                   /* return the device name string */
+
+  return status;                           /* return the device name string */
 }
 
 /*
@@ -1715,26 +2017,34 @@ static int DevicePresent(short aprom_addr)
   dev.llsig.b = ETH_PROM_SIG;
   sigLength = sizeof(long) << 1;
 
-  for (i=0,j=0;j<sigLength && i<PROBE_LENGTH+sigLength-1;i++) {
-    if (lp->bus == PCI) {
-      while ((tmp = inl(aprom_addr)) < 0);
-      data = (char)tmp;
-    } else {
-      data = inb(aprom_addr);
-    }
-    if (dev.Sig[j] == data) {   /* track signature */
-      j++;
-    } else {                    /* lost signature; begin search again */
-      if (data == dev.Sig[0]) {
-	j=1;
+  if (lp->chipset == DC21040) {
+    for (i=0,j=0;(j<sigLength) && (i<PROBE_LENGTH+sigLength-1);i++) {
+      if (lp->bus == PCI) {
+	while ((tmp = inl(aprom_addr)) < 0);
+	data = (char)tmp;
       } else {
-	j=0;
+	data = inb(aprom_addr);
+      }
+      if (dev.Sig[j] == data) {   /* track signature */
+	j++;
+      } else {                    /* lost signature; begin search again */
+	if (data == dev.Sig[0]) {
+	  j=1;
+	} else {
+	  j=0;
+	}
       }
     }
-  }
 
-  if (j!=sigLength) {
-    status = -ENODEV;           /* search failed */
+    if (j!=sigLength) {
+      status = -ENODEV;           /* search failed */
+    }
+
+  } else {                        /* use new srom */
+    short *p = (short *)&lp->srom;
+    for (i=0; i<(sizeof(struct de4x5_srom)>>1); i++) {
+      *p++ = srom_rd(aprom_addr, i);
+    }
   }
 
   return status;
@@ -1753,12 +2063,17 @@ static int aprom_crc(struct device *dev)
     if (k > 0xffff) k-=0xffff;
 
     if (lp->bus == PCI) {
-      while ((tmp = inl(DE4X5_APROM)) < 0);
-      k += (u_char) tmp;
-      dev->dev_addr[i++] = (u_char) tmp;
-      while ((tmp = inl(DE4X5_APROM)) < 0);
-      k += (u_short) (tmp << 8);
-      dev->dev_addr[i++] = (u_char) tmp;
+      if (lp->chipset == DC21040) {
+	while ((tmp = inl(DE4X5_APROM)) < 0);
+	k += (u_char) tmp;
+	dev->dev_addr[i++] = (u_char) tmp;
+	while ((tmp = inl(DE4X5_APROM)) < 0);
+	k += (u_short) (tmp << 8);
+	dev->dev_addr[i++] = (u_char) tmp;
+      } else {
+	dev->dev_addr[i] = (u_char) lp->srom.ieee_addr[i]; i++;
+	dev->dev_addr[i] = (u_char) lp->srom.ieee_addr[i]; i++;
+      }
     } else {
       k += (u_char) (tmp = inb(EISA_APROM));
       dev->dev_addr[i++] = (u_char) tmp;
@@ -1771,18 +2086,155 @@ static int aprom_crc(struct device *dev)
   if (k == 0xffff) k=0;
 
   if (lp->bus == PCI) {
-    while ((tmp = inl(DE4X5_APROM)) < 0);
-    chksum = (u_char) tmp;
-    while ((tmp = inl(DE4X5_APROM)) < 0);
-    chksum |= (u_short) (tmp << 8);
+    if (lp->chipset == DC21040) {
+      while ((tmp = inl(DE4X5_APROM)) < 0);
+      chksum = (u_char) tmp;
+      while ((tmp = inl(DE4X5_APROM)) < 0);
+      chksum |= (u_short) (tmp << 8);
+      if (k != chksum) status = -1;
+    }
   } else {
     chksum = (u_char) inb(EISA_APROM);
     chksum |= (u_short) (inb(EISA_APROM) << 8);
+    if (k != chksum) status = -1;
   }
 
-  if (k != chksum) status = -1;
 
   return status;
+}
+
+/*
+** SROM Read
+*/
+static short srom_rd(u_short addr, u_char offset)
+{
+  sendto_srom(SROM_RD | SROM_SR, addr);
+
+  srom_latch(SROM_RD | SROM_SR | DT_CS, addr);
+  srom_command(SROM_RD | SROM_SR | DT_IN | DT_CS, addr);
+  srom_address(SROM_RD | SROM_SR | DT_CS, addr, offset);
+
+  return srom_data(SROM_RD | SROM_SR | DT_CS, addr);
+}
+
+static void srom_latch(u_long command, u_short addr)
+{
+  sendto_srom(command, addr);
+  sendto_srom(command | DT_CLK, addr);
+  sendto_srom(command, addr);
+
+  return;
+}
+
+static void srom_command(u_long command, u_short addr)
+{
+  srom_latch(command, addr);
+  srom_latch(command, addr);
+  srom_latch((command & 0x0000ff00) | DT_CS, addr);
+
+  return;
+}
+
+static void srom_address(u_long command, u_short addr, u_char offset)
+{
+  long i;
+  char a;
+
+  a = (char)(offset << 2);
+  for (i=0; i<6; i++, a <<= 1) {
+    srom_latch(command | ((a < 0) ? DT_IN : 0), addr);
+  }
+  dce_us_delay(1);
+
+  i = (getfrom_srom(addr) >> 3) & 0x01;
+  if (i != 0) {
+    printk("Bad SROM address phase.....\n");
+  }
+
+  return;
+}
+
+static short srom_data(u_long command, u_short addr)
+{
+  int i;
+  short word = 0;
+  long tmp;
+
+  for (i=0; i<16; i++) {
+    sendto_srom(command  | DT_CLK, addr);
+    tmp = getfrom_srom(addr);
+    sendto_srom(command, addr);
+
+    word = (word << 1) | ((tmp >> 3) & 0x01);
+  }
+
+  sendto_srom(command & 0x0000ff00, addr);
+
+  return word;
+}
+
+/*
+static void srom_busy(u_long command, u_short addr)
+{
+  sendto_srom((command & 0x0000ff00) | DT_CS, addr);
+
+  while (!((getfrom_srom(addr) >> 3) & 0x01)) {
+    dce_ms_delay(1);
+  }
+
+  sendto_srom(command & 0x0000ff00, addr);
+
+  return;
+}
+*/
+
+static void sendto_srom(u_long command, u_short addr)
+{
+  outl(command, addr);
+  dce_us_delay(1);
+
+  return;
+}
+
+static long getfrom_srom(u_short addr)
+{
+  long tmp;
+
+  tmp = inl(addr);
+  dce_us_delay(1);
+
+  return tmp;
+}
+
+static char *build_setup_frame(struct device *dev, int mode)
+{
+  struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+  int i;
+  char *pa = lp->setup_frame;
+
+  /* Initialise the setup frame */
+  if (mode == ALL) {
+    memset(lp->setup_frame, 0, SETUP_FRAME_LEN);
+  }
+
+  if (lp->setup_f == HASH_PERF) {
+    for (pa=lp->setup_frame+IMPERF_PA_OFFSET, i=0; i<ETH_ALEN; i++) {
+      *(pa + i) = dev->dev_addr[i];                 /* Host address */
+      if (i & 0x01) pa += 2;
+    }
+    *(lp->setup_frame + (HASH_TABLE_LEN >> 3) - 3) = 0x80; /* B'cast address */
+  } else {
+    for (i=0; i<ETH_ALEN; i++) { /* Host address */
+      *(pa + (i&1)) = dev->dev_addr[i];
+      if (i & 0x01) pa += 4;
+    }
+    for (i=0; i<ETH_ALEN; i++) { /* Broadcast address */
+      *(pa + (i&1)) = (char) 0xff;
+      if (i & 0x01) pa += 4;
+    }
+  }
+
+  return pa;                     /* Points to the next entry */
 }
 
 /*
@@ -1812,29 +2264,20 @@ static int de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     break;
   case DE4X5_SET_HWADDR:             /* Set the hardware address */
     if (suser()) {
-      int offset;
-      char *pa;
-      u_long omr;
-
       memcpy_fromfs(tmp.addr,ioc->data,ETH_ALEN);
       for (i=0; i<ETH_ALEN; i++) {
 	dev->dev_addr[i] = tmp.addr[i];
       }
-      omr = inl(DE4X5_OMR);
-      if (omr & OMR_HP) {
-	offset = IMPERF_PA_OFFSET;
-      } else {
-	offset = PERF_PA_OFFSET;
-      }
-      /* Insert the physical address */
-      for (pa=lp->setup_frame+offset, i=0; i<ETH_ALEN; i++) {
-	*(pa + i) = dev->dev_addr[i];
-	if (i & 0x01) pa += 2;
-      }
+      build_setup_frame(dev, PHYS_ADDR_ONLY);
       /* Set up the descriptor and give ownership to the card */
       while (set_bit(0, (void *)&dev->tbusy) != 0); /* Wait for lock to free */
-      load_packet(dev, lp->setup_frame, TD_IC | HASH_F | TD_SET | 
+      if (lp->setup_f == HASH_PERF) {
+	load_packet(dev, lp->setup_frame, TD_IC | HASH_F | TD_SET | 
 		                                        SETUP_FRAME_LEN, NULL);
+      } else {
+	load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
+		                                        SETUP_FRAME_LEN, NULL);
+      }
       lp->tx_new = (++lp->tx_new) % lp->txRingSize;
       outl(POLL_DEMAND, DE4X5_TPD);                /* Start the TX */
       dev->tbusy = 0;                              /* Unlock the TX ring */
@@ -1848,7 +2291,6 @@ static int de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     if (suser()) {
       omr = inl(DE4X5_OMR);
       omr |= OMR_PR;
-      omr &= ~OMR_PM;
       outl(omr, DE4X5_OMR);
     } else {
       status = -EPERM;
@@ -1893,11 +2335,10 @@ static int de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     }
 
     break;
-  case DE4X5_MCA_EN:                 /* Enable multicast addressing */
+  case DE4X5_MCA_EN:                 /* Enable pass all multicast addressing */
     if (suser()) {
       omr = inl(DE4X5_OMR);
       omr |= OMR_PM;
-      omr &= ~OMR_PR;
       outl(omr, DE4X5_OMR);
     } else {
       status = -EPERM;
@@ -2049,9 +2490,9 @@ cleanup_module(void)
 					             DE4X5_PCI_TOTAL_SIZE :
 			                             DE4X5_EISA_TOTAL_SIZE));
     if (lp) {
-      kfree_s(lp->rx_ring[0].buf, RX_BUFF_SZ * NUM_RX_DESC + LWPAD);
+      kfree_s(lp->rx_ring[0].buf, RX_BUFF_SZ * NUM_RX_DESC + ALIGN);
     }
-    kfree_s(thisDE4X5.priv, sizeof(struct de4x5_private) + LWPAD);
+    kfree_s(thisDE4X5.priv, sizeof(struct de4x5_private) + ALIGN);
     thisDE4X5.priv = NULL;
 
     unregister_netdev(&thisDE4X5);

@@ -926,7 +926,7 @@ static void get_sectorsize(int i){
 		 MAX_RETRIES);
     
     if (current == task[0])
-      while(SCpnt->request.dev != 0xfffe);
+      while(SCpnt->request.dev != 0xfffe) barrier();
     else
       if (SCpnt->request.dev != 0xfffe){
       	struct semaphore sem = MUTEX_LOCKED;

@@ -15,6 +15,7 @@
  *					AX.25 now works right, and SPX is feasible.
  *		Alan Cox	:	Fixed write select of non IP protocol crash.
  *		Florian  La Roche:	Changed for my new skbuff handling.
+ *		Darryl Miles	:	Fixed non-blocking SOCK_SEQPACKET.
  *
  *	Note:
  *		A lot of this will change when the protocol/socket separation
@@ -191,6 +192,11 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 			return(0);
 
 		case SEL_OUT:
+			if (sk->type==SOCK_SEQPACKET && sk->state==TCP_SYN_SENT)
+			{
+				/* Connection still in progress */
+				return(0);
+			}
 			if (sk->prot && sk->prot->wspace(sk) >= MIN_WRITE_SPACE)
 			{
 				return(1);
