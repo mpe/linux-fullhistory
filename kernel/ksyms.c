@@ -38,8 +38,10 @@
 #include <linux/net.h>
 #include <linux/netdevice.h>
 #include <linux/ip.h>
+#include <linux/tcp.h>
 #include "../net/inet/protocol.h"
 #include "../net/inet/arp.h"
+#include "../drivers/net/slhc.h"
 #endif
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
@@ -271,6 +273,11 @@ struct symbol_table symbol_table = {
 #ifdef CONFIG_INET	
 	X(inet_add_protocol),
 	X(inet_del_protocol),
+	X(slhc_init),
+	X(slhc_free),
+	X(slhc_remember),
+	X(slhc_compress),
+	X(slhc_uncompress),
 #endif
 	/* Device callback registration */
 	X(register_netdevice_notifier),

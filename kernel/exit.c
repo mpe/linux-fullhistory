@@ -91,6 +91,7 @@ void release(struct task_struct * p)
 	}
 	for (i=1 ; i<NR_TASKS ; i++)
 		if (task[i] == p) {
+			nr_tasks--;
 			task[i] = NULL;
 			REMOVE_LINKS(p);
 			if (STACK_MAGIC != *(unsigned long *)p->kernel_stack_page)

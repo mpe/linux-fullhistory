@@ -134,8 +134,9 @@ struct hpfs_spare_block
 
 
 /* The code page info pointed to by the spare block consists of an index
-   block and blocks containing character maps.  The following is pretty
-   sketchy, but Linux doesn't use code pages so it doesn't matter. */
+   block and blocks containing uppercasing tables.  I don't know what
+   these are for (CHKDSK, maybe?) -- OS/2 does not seem to use them
+   itself.  Linux doesn't use them either. */
 
 /* block pointed to by spareblock->code_page_dir */
 
@@ -174,7 +175,7 @@ struct code_page_data
     unsigned short ix;			/* index */
     unsigned short code_page_number;	/* code page number */
     unsigned short zero1;
-    unsigned char map[128];		/* map for chars 80..ff */
+    unsigned char map[128];		/* upcase table for chars 80..ff */
     unsigned short zero2;
   } code_page[3];
   unsigned char incognita[78];
@@ -256,7 +257,8 @@ struct hpfs_dirent {
   time_t creation_date;			/* ctime */
   unsigned ea_size;			/* total EA length, bytes */
   unsigned char zero1;
-  unsigned char locality;		/* 0=unk 1=seq 2=random 3=both */
+  unsigned char ix;			/* code page index (of filename), see
+					   struct code_page_data */
   unsigned char namelen, name[1];	/* file name */
   /* dnode_secno down;	  btree down pointer, if present,
      			  follows name on next word boundary, or maybe it

@@ -159,7 +159,7 @@ void clear_page_tables(struct task_struct * tsk)
 		panic("task[0] (swapper) doesn't support exec()\n");
 	page_dir = pgd_offset(tsk, 0);
 	if (!page_dir || page_dir == swapper_pg_dir) {
-		printk("Trying to clear kernel page-directory: not good\n");
+		printk("%s trying to clear kernel page-directory: not good\n", tsk->comm);
 		return;
 	}
 	if (pgd_inuse(page_dir)) {
@@ -197,7 +197,7 @@ void free_page_tables(struct task_struct * tsk)
 	}
 	page_dir = pgd_offset(tsk, 0);
 	if (!page_dir || page_dir == swapper_pg_dir) {
-		printk("Trying to free kernel page-directory: not good\n");
+		printk("%s trying to free kernel page-directory: not good\n", tsk->comm);
 		return;
 	}
 	SET_PAGE_DIR(tsk, swapper_pg_dir);

@@ -1,4 +1,3 @@
-#define rw_bugfix
 /* ne.c: A general non-shared-memory NS8390 ethernet driver for linux. */
 /*
     Written 1992-94 by Donald Becker.
@@ -348,6 +347,7 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
        encountering problems that it is still here.  If you see
        this message you either 1) have a slightly incompatible clone
        or 2) have noise/speed problems with your bus. */
+#ifdef CONFIG_NE_SANITY
     if (ei_debug > 1) {		/* DMA termination address check... */
 	int addr, tries = 20;
 	do {
@@ -364,6 +364,7 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
 		   "%#4.4x (expected) vs. %#4.4x (actual).\n",
 		   dev->name, ring_offset + xfer_count, addr);
     }
+#endif
     ei_status.dmaing &= ~0x01;
     return ring_offset + count;
 }
@@ -409,7 +410,14 @@ ne_block_output(struct device *dev, int count,
     SLOW_DOWN_IO;
 #endif  /* rw_bugfix */
 
-    /* Now the normal output. */
+   /*
+    	Now the normal output. I believe that if we don't lock this, a
+	race condition will munge the remote byte count values, and then
+	the ne2k will hang the machine by holding I/O CH RDY because it
+	expects more data. Hopefully fixes the lockups. -- Paul Gortmaker.
+    */
+
+    cli();
     outb_p(count & 0xff, nic_base + EN0_RCNTLO);
     outb_p(count >> 8,   nic_base + EN0_RCNTHI);
     outb_p(0x00, nic_base + EN0_RSARLO);
@@ -421,7 +429,9 @@ ne_block_output(struct device *dev, int count,
     } else {
 	outsb(NE_BASE + NE_DATAPORT, buf, count);
     }
+    sti();
 
+#ifdef CONFIG_NE_SANITY
     /* This was for the ALPHA version only, but enough people have
        encountering problems that it is still here. */
     if (ei_debug > 1) {		/* DMA termination address check... */
@@ -443,6 +453,7 @@ ne_block_output(struct device *dev, int count,
 		goto retry;
 	}
     }
+#endif
     ei_status.dmaing &= ~0x02;
     return;
 }

@@ -58,8 +58,8 @@ INSTALLING the kernel:
 		cd /usr/include
 		rm -rf linux
 		rm -rf asm
-		ln -s /usr/src/linux/include/linux .
-		ln -s /usr/src/linux/include/asm-i386 .
+		ln -s /usr/src/linux/include/linux linux
+		ln -s /usr/src/linux/include/asm-i386 asm
 
  - make sure you have no stale .o files and dependencies lying around:
 

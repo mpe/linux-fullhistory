@@ -27,8 +27,10 @@
    necessary case folding this is impossible.)
 
    There is a map from Latin-1 into code page 850 for every printing
-   character in Latin-1.  Most, maybe all, OS/2 installations have code
-   page 850 available, and surely all (on PC hardware) have 437 available.
+   character in Latin-1.  The NLS documentation of OS/2 shows that
+   everybody has 850 available unless they don't have Western latin
+   chars available at all (so fitting them to Linux without Unicode
+   is a doomed exercise).
 
    It is not clear exactly how HPFS.IFS handles the situation when
    multiple code pages are in use.  Experiments show that
@@ -45,8 +47,8 @@
    This means, I think, that HPFS.IFS operates in the current code
    page, without regard to the uppercasing information recorded in
    the tables on the disk.  It does record the uppercasing rules
-   it used, perhaps for alien operating systems such as us, but it
-   does not appear to use them itself.
+   it used, perhaps for CHKDSK, but it does not appear to use them
+   itself.
 
    So: Linux, a Latin-1 system, will operate in code page 850.  We
    recode between 850 and Latin-1 when dealing with the names actually
@@ -102,22 +104,29 @@ static const unsigned char tb_latin1_to_cp850[128] =
 };
 #endif
 
+#define A_GRAVE 0300
+#define THORN	0336   
+#define MULTIPLY 0327
+#define a_grave 0340
+#define thorn	0376
+#define divide	0367
+
 static inline unsigned latin1_upcase (unsigned c)
 {
-  if (c - (unsigned char) 'a' <= (unsigned char) 'z' - (unsigned char) 'a'
-      || (c - (unsigned char) '`' <= (unsigned char) '~' - (unsigned char) '`'
-	  && c != (unsigned char) 'w'))
-    return c - (unsigned char) 'a' + (unsigned char) 'A';
+  if (c - 'a' <= 'z' - 'a'
+      || (c - a_grave <= thorn - a_grave
+	  && c != divide))
+    return c - 'a' + 'A';
   else
     return c;
 }
 
 static inline unsigned latin1_downcase (unsigned c)
 {
-  if (c - (unsigned char) 'A' <= (unsigned char) 'Z' - (unsigned char) 'A'
-      || (c - (unsigned char) '@' <= (unsigned char) '^' - (unsigned char) '@'
-	  && c != (unsigned char) 'W'))
-    return c + (unsigned char) 'a' - (unsigned char) 'A';
+  if (c - 'A' <= 'Z' - 'A'
+      || (c - A_GRAVE <= THORN - A_GRAVE
+	  && c != MULTIPLY))
+    return c + 'a' - 'A';
   else
     return c;
 }

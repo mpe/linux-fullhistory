@@ -523,7 +523,7 @@ static int swap_out(unsigned int priority)
 	int loop, counter;
 	struct task_struct *p;
 
-	counter = 2*NR_TASKS >> priority;
+	counter = 2*nr_tasks >> priority;
 	for(; counter >= 0; counter--) {
 		/*
 		 * Check that swap_task is suitable for swapping.  If not, look for

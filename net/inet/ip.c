@@ -68,6 +68,7 @@
  *		Bjorn Ekwall	:	Removed ip_csum (from slhc.c too)
  *		Bjorn Ekwall	:	Moved ip_fast_csum to ip.h (inline!)
  *		Stefan Becker   :       Send out ICMP HOST REDIRECT
+ *		Alan Cox	:	Only send ICMP_REDIRECT if src/dest are the same net.
  *  
  *
  * To Fix:
@@ -1365,11 +1366,11 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	 *	arrived upon. We now generate an ICMP HOST REDIRECT giving the route
 	 *	we calculated.
 	 */
-#ifdef IP_NO_ICMP_REDIRECT
+#ifdef CONFIG_IP_NO_ICMP_REDIRECT
 	if (dev == dev2)
 		return;
 #else
-	if (dev == dev2)
+	if (dev == dev2 && (iph->saddr&dev->pa_mask) == (iph->daddr & dev->pa_mask))
 		icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, raddr, dev);
 #endif		
 

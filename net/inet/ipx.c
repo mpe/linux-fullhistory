@@ -431,6 +431,8 @@ ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
 
 	/* Hopefully, most cases */
 	if (in_offset == out_offset) {
+		skb->len += out_offset;
+		skb->arp = skb->free = 1;
 		return skb;
 	}
 
@@ -440,6 +442,7 @@ ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
 		skb->h.raw = &(skb->data[out_offset]);
 		memmove(skb->h.raw, oldraw, skb->len);
 		skb->len += out_offset;
+		skb->arp = skb->free = 1;
 		return skb;
 	}
 
@@ -569,6 +572,11 @@ ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 				ipx_frame_name(intrfc->if_dlink_type));
 		}
 	}
+
+	if (ipx->ipx_dest.net == 0L)
+		ipx->ipx_dest.net = intrfc->if_netnum;
+	if (ipx->ipx_source.net == 0L)
+		ipx->ipx_source.net = intrfc->if_netnum;
 
 	if (intrfc->if_netnum != ipx->ipx_dest.net) {
 		/* We only route point-to-point packets. */
@@ -1708,9 +1716,9 @@ static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 {
 	ipx_socket *sk=(ipx_socket *)sock->data;
 	struct sockaddr_ipx *sipx=(struct sockaddr_ipx *)sip;
-	struct ipx_packet	*ipx = NULL;
-	/* FILL ME IN */
+	struct ipx_packet *ipx = NULL;
 	int copied = 0;
+	int truesize;
 	struct sk_buff *skb;
 	int er;
 	
@@ -1732,7 +1740,8 @@ static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 		return er;
 
 	ipx = (ipx_packet *)(skb->h.raw);
-	copied=ntohs(ipx->ipx_pktsize) - sizeof(ipx_packet);
+	truesize=ntohs(ipx->ipx_pktsize) - sizeof(ipx_packet);
+	copied = (truesize > size) ? size : truesize;
 	skb_copy_datagram(skb,sizeof(struct ipx_packet),ubuf,copied);
 	
 	if(sipx)
@@ -1744,7 +1753,7 @@ static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 		sipx->sipx_type = ipx->ipx_type;
 	}
 	skb_free_datagram(skb);
-	return(copied);
+	return(truesize);
 }		
 
 static int ipx_write(struct socket *sock, char *ubuf, int size, int noblock)

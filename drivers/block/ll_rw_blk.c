@@ -100,6 +100,43 @@ int * blksize_size[MAX_BLKDEV] = { NULL, NULL, };
 int * hardsect_size[MAX_BLKDEV] = { NULL, NULL, };
 
 /*
+ * "plug" the device if there are no outstanding requests: this will
+ * force the transfer to start only after we have put all the requests
+ * on the list.
+ */
+static void plug_device(struct blk_dev_struct * dev, struct request * plug)
+{
+	unsigned long flags;
+
+	plug->dev = -1;
+	plug->cmd = -1;
+	plug->next = NULL;
+	save_flags(flags);
+	cli();
+	if (!dev->current_request)
+		dev->current_request = plug;
+	restore_flags(flags);
+}
+
+/*
+ * remove the plug and let it rip..
+ */
+static void unplug_device(struct blk_dev_struct * dev)
+{
+	struct request * req;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	req = dev->current_request;
+	if (req && req->dev == -1 && req->cmd == -1) {
+		dev->current_request = req->next;
+		(dev->request_fn)();
+	}
+	restore_flags(flags);
+}
+
+/*
  * look for a free request in the first N entries.
  * NOTE: interrupts must be disabled on the way in, and will still
  *       be disabled on the way out.
@@ -139,8 +176,10 @@ static inline struct request * get_request_wait(int n, int dev)
 {
 	register struct request *req;
 
-	while ((req = get_request(n, dev)) == NULL)
+	while ((req = get_request(n, dev)) == NULL) {
+		unplug_device(MAJOR(dev)+blk_dev);
 		sleep_on(&wait_for_request);
+	}
 	return req;
 }
 
@@ -332,6 +371,7 @@ repeat:
 			unlock_buffer(bh);
 			return;
 		}
+		unplug_device(major+blk_dev);
 		sleep_on(&wait_for_request);
 		sti();
 		goto repeat;
@@ -395,7 +435,6 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 {
 	unsigned int major;
 	struct request plug;
-	int plugged;
 	int correct_size;
 	struct blk_dev_struct * dev;
 	int i;
@@ -445,15 +484,8 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	   from starting until we have shoved all of the blocks into the
 	   queue, and then we let it rip.  */
 
-	plugged = 0;
-	cli();
-	if (!dev->current_request && nr > 1) {
-		dev->current_request = &plug;
-		plug.dev = -1;
-		plug.next = NULL;
-		plugged = 1;
-	}
-	sti();
+	if (nr > 1)
+		plug_device(dev, &plug);
 	for (i = 0; i < nr; i++) {
 		if (bh[i]) {
 			bh[i]->b_req = 1;
@@ -464,12 +496,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 				kstat.pgpgout++;
 		}
 	}
-	if (plugged) {
-		cli();
-		dev->current_request = plug.next;
-		(dev->request_fn)();
-		sti();
-	}
+	unplug_device(dev);
 	return;
 
       sorry:

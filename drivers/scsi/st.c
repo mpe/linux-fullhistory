@@ -572,7 +572,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     save_flags (processor_flags);
     cli();
     if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
-    restore_flags(flags);
+    restore_flags(processor_flags);
 
     if ((STp->buffer)->last_result_fatal != 0) {
 #ifdef DEBUG

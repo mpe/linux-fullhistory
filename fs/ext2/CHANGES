@@ -2,7 +2,7 @@ Changes from version 0.5 to version 0.5a
 ========================================
 	- Zero the partial block following the end of the file when a file
 	  is truncated.
-	- Dates updated in the copyrigth.
+	- Dates updated in the copyright.
 	- More checks when the filesystem is mounted: the count of blocks,
 	  fragments, and inodes per group is checked against the block size.
 	- The buffers used by the error routines are now static variables, to

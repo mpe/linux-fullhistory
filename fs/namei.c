@@ -483,7 +483,7 @@ asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
 	case 0:
 		mode |= S_IFREG;
 		break;
-	case S_IFREG: case S_IFCHR: case S_IFBLK: case S_IFIFO:
+	case S_IFREG: case S_IFCHR: case S_IFBLK: case S_IFIFO: case S_IFSOCK:
 		break;
 	default:
 		return -EINVAL;

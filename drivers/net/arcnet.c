@@ -291,7 +291,7 @@ struct ClientData
 				 *   but WE MUST GET RID OF IT BEFORE SENDING A
 				 *   PACKET!!
 				 */
-	u_char  saddr;		/* Source address - neccesary for IPX protocol */
+	u_char  saddr;		/* Source address - necessary for IPX protocol */
 	
 	/* data that IS part of real packet */
 	u_char	protocol_id,	/* ARC_P_IP, ARC_P_ARP, or ARC_P_RARP */

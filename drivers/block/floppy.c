@@ -844,6 +844,17 @@ static void floppy_enable_hlt(void)
 static void setup_DMA(void)
 {
 #ifdef CONFIG_FLOPPY_SANITY
+	if (raw_cmd.length == 0){
+		int i;
+
+		printk("zero dma transfer size:");
+		for(i=0; i< raw_cmd.cmd_count; i++)
+			printk("%x,", raw_cmd.cmd[i]);
+		printk("\n");
+		cont->done(0);
+		FDCS->reset = 1;
+		return;
+	}
 	if ((!CURRENT ||
 	     CURRENT->buffer != current_addr ||
 	     raw_cmd.length > 512 * CURRENT->nr_sectors) &&
@@ -2306,15 +2317,21 @@ static int make_raw_rw_request(void)
 		 * This means we should be able to read a sector even if there
 		 * are other bad sectors on this track.
 		 */
-		if ((indirect - sector_t) * 2 > (direct - sector_t) * 3 &&
-		    *errors < DP->max_errors.read_track &&
-		    /*!TESTF( FD_NEED_TWADDLE) &&*/
-		    ( ( !probing || (DP->read_track &
-			   (1 <<DRS->probed_format))))){
+		if (!direct ||
+		    (indirect * 2 > direct * 3 &&
+		     *errors < DP->max_errors.read_track &&
+		     /*!TESTF( FD_NEED_TWADDLE) &&*/
+		     ((!probing || (DP->read_track&(1<<DRS->probed_format)))))){
 			max_size = CURRENT->nr_sectors;
 		} else {
 			current_addr = CURRENT->buffer;
 			raw_cmd.length = current_count_sectors << 9;
+			if (raw_cmd.length == 0){
+				DPRINT("zero dma transfer attempted from make_raw_request\n");
+				DPRINT3("indirect=%d direct=%d sector_t=%d",
+					indirect, direct, sector_t);
+				return 0;
+			}
 			return 2;
 		}
 	}
@@ -2410,6 +2427,10 @@ static int make_raw_rw_request(void)
 		DPRINT("more sectors than bytes\n");
 		printk("bytes=%ld\n", raw_cmd.length >> 9 );
 		printk("sectors=%ld\n", current_count_sectors);
+	}
+	if (raw_cmd.length == 0){
+		DPRINT("zero dma transfer attempted from make_raw_request\n");
+		return 0;
 	}
 #endif
 	return 2;
@@ -2652,6 +2673,10 @@ static int raw_cmd_ioctl(void *param)
 	if (raw_cmd.flags & (FD_RAW_WRITE | FD_RAW_READ)){
 		if(count > max_buffer_sectors * 1024 )
 			return -ENOMEM;
+		if(count == 0){
+			printk("attempt to do a 0 byte dma transfer\n");
+			return -EINVAL;
+		}
 		buffer_track = -1;
 	}
 	if ( raw_cmd.flags & FD_RAW_WRITE ){

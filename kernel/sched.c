@@ -125,6 +125,7 @@ asmlinkage void schedule(void)
 	itimer_next = ~0;
 	sti();
 	need_resched = 0;
+	nr_running = 0;
 	p = &init_task;
 	for (;;) {
 		if ((p = p->next_task) == &init_task)
@@ -174,8 +175,11 @@ confuse_gcc1:
 	for (;;) {
 		if ((p = p->next_task) == &init_task)
 			goto confuse_gcc2;
-		if (p->state == TASK_RUNNING && p->counter > c)
-			c = p->counter, next = p;
+		if (p->state == TASK_RUNNING) {
+			nr_running++;
+			if (p->counter > c)
+				c = p->counter, next = p;
+		}
 	}
 confuse_gcc2:
 	if (!c) {

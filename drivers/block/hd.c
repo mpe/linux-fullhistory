@@ -893,6 +893,8 @@ static int hd_open(struct inode * inode, struct file * filp)
 	int target;
 	target =  DEVICE_NR(inode->i_rdev);
 
+	if (target >= NR_HD)
+		return -ENODEV;
 	while (busy[target])
 		sleep_on(&busy_wait);
 	access_count[target]++;

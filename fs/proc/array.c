@@ -177,10 +177,11 @@ static int get_loadavg(char * buffer)
 	a = avenrun[0] + (FIXED_1/200);
 	b = avenrun[1] + (FIXED_1/200);
 	c = avenrun[2] + (FIXED_1/200);
-	return sprintf(buffer,"%d.%02d %d.%02d %d.%02d\n",
+	return sprintf(buffer,"%d.%02d %d.%02d %d.%02d %d/%d\n",
 		LOAD_INT(a), LOAD_FRAC(a),
 		LOAD_INT(b), LOAD_FRAC(b),
-		LOAD_INT(c), LOAD_FRAC(c));
+		LOAD_INT(c), LOAD_FRAC(c),
+		nr_running, nr_tasks);
 }
 
 static int get_kstat(char * buffer)

@@ -351,7 +351,7 @@ void ext2_truncate (struct inode * inode)
 	/*
 	 * If the file is not being truncated to a block boundary, the
 	 * contents of the partial block following the end of the file must be
-	 * zero'ed in case it ever become accessible again because of
+	 * zeroed in case it ever becomes accessible again because of
 	 * subsequent file growth.
 	 */
 	offset = inode->i_size % inode->i_sb->s_blocksize;

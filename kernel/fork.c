@@ -24,6 +24,8 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
+int nr_tasks=1;
+int nr_running=1;
 long last_pid=0;
 
 static int find_empty_process(void)
@@ -203,6 +205,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->mm->swappable = 0;	/* don't try to swap it out before it's set up */
 	task[nr] = p;
 	SET_LINKS(p);
+	nr_tasks++;
 
 	/* copy all the process information */
 	copy_thread(nr, clone_flags, usp, p, regs);
@@ -221,6 +224,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 bad_fork_cleanup:
 	task[nr] = NULL;
 	REMOVE_LINKS(p);
+	nr_tasks--;
 bad_fork_free:
 	free_page(new_stack);
 	free_page((long) p);

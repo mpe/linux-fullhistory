@@ -9,11 +9,6 @@
  * NR_REQUEST is the number of entries in the request-queue.
  * NOTE that writes may use only the low 2/3 of these: reads
  * take precedence.
- *
- * 32 seems to be a reasonable number: enough to get some benefit
- * from the elevator-mechanism, but not so much as to lock a lot of
- * buffers when they are in the queue. 64 seems to be too many (easily
- * long pauses in reading when heavy writing/syncing is going on)
  */
 #define NR_REQUEST	64
 

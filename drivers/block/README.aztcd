@@ -129,7 +129,7 @@ during runtime via insmod and rmmod. To build aztcd as a loadable module you
 must *not* configure your kernel for AZTECH support. But you need to have
 the ISO9660-filesystem included! So rebuild your kernel, if necessary.
 
-Now edit the base adress of your AZTECH interface card in
+Now edit the base address of your AZTECH interface card in
 /usr/src/linux/include/linux/aztcd.h to the appropriate value. Then change
 to /usr/src/linux and do a 
                     make modules  
