@@ -181,7 +181,7 @@ static int ramfs_link(struct dentry *old_dentry, struct inode * dir, struct dent
 		return -EPERM;
 
 	inode->i_nlink++;
-	inode->i_count++;	/* New dentry reference */
+	atomic_inc(&inode->i_count);	/* New dentry reference */
 	dget(dentry);		/* Extra pinning count for the created dentry */
 	d_instantiate(dentry, inode);
 	return 0;

@@ -120,7 +120,7 @@ static int coda_pioctl(struct inode * inode, struct file * filp,
 
         CDEBUG(D_PIOCTL, "ioctl on inode %ld\n", target_inode->i_ino);
 	CDEBUG(D_DOWNCALL, "dput on ino: %ld, icount %d, dcount %d\n", target_inode->i_ino, 
-	       target_inode->i_count, nd.dentry->d_count);
+	       atomic_read(&target_inode->i_count), nd.dentry->d_count);
 	path_release(&nd);
         return error;
 }

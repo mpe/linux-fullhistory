@@ -376,7 +376,7 @@ struct inode {
 	struct list_head	i_dentry;
 
 	unsigned long		i_ino;
-	unsigned int		i_count;
+	atomic_t		i_count;
 	kdev_t			i_dev;
 	umode_t			i_mode;
 	nlink_t			i_nlink;
@@ -1071,6 +1071,7 @@ extern struct dentry * lookup_hash(struct qstr *, struct dentry *);
 #define user_path_walk_link(name,nd) __user_walk(name, LOOKUP_POSITIVE, nd)
 
 extern void iput(struct inode *);
+extern void force_delete(struct inode *);
 extern struct inode * igrab(struct inode *);
 extern ino_t iunique(struct super_block *, ino_t);
 

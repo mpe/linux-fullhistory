@@ -148,9 +148,9 @@ static void coda_put_inode(struct inode *inode)
 {
 	ENTRY;
 
-	CDEBUG(D_INODE,"ino: %ld, count %d\n", inode->i_ino, inode->i_count);
+	CDEBUG(D_INODE,"ino: %ld, count %d\n", inode->i_ino, atomic_read(&inode->i_count));
 		
-	if ( inode->i_count == 1 ) {
+	if ( atomic_read(&inode->i_count) == 1 ) {
                 write_inode_now(inode);
 		inode->i_nlink = 0;
         }
@@ -163,7 +163,7 @@ static void coda_delete_inode(struct inode *inode)
 
         ENTRY;
         CDEBUG(D_SUPER, " inode->ino: %ld, count: %d\n", 
-	       inode->i_ino, inode->i_count);        
+	       inode->i_ino, atomic_read(&inode->i_count));        
 
         cii = ITOC(inode);
 	if ( inode->i_ino == CTL_INO || cii->c_magic != CODA_CNODE_MAGIC ) {
@@ -179,7 +179,7 @@ static void coda_delete_inode(struct inode *inode)
         open_inode = cii->c_ovp;
         if ( open_inode ) {
                 CDEBUG(D_SUPER, "DELINO cached file: ino %ld count %d.\n",  
-		       open_inode->i_ino,  open_inode->i_count);
+		       open_inode->i_ino,  atomic_read(&open_inode->i_count));
                 cii->c_ovp = NULL;
 		inode->i_mapping = &inode->i_data;
                 iput(open_inode);

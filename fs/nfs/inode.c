@@ -44,7 +44,6 @@ void nfs_zap_caches(struct inode *);
 static void nfs_invalidate_inode(struct inode *);
 
 static void nfs_read_inode(struct inode *);
-static void nfs_put_inode(struct inode *);
 static void nfs_delete_inode(struct inode *);
 static void nfs_put_super(struct super_block *);
 static void nfs_umount_begin(struct super_block *);
@@ -52,7 +51,7 @@ static int  nfs_statfs(struct super_block *, struct statfs *);
 
 static struct super_operations nfs_sops = { 
 	read_inode:	nfs_read_inode,
-	put_inode:	nfs_put_inode,
+	put_inode:	force_delete,
 	delete_inode:	nfs_delete_inode,
 	put_super:	nfs_put_super,
 	statfs:		nfs_statfs,
@@ -112,17 +111,6 @@ nfs_read_inode(struct inode * inode)
 	NFS_CACHEINV(inode);
 	NFS_ATTRTIMEO(inode) = NFS_MINATTRTIMEO(inode);
 	NFS_ATTRTIMEO_UPDATE(inode) = jiffies;
-}
-
-static void
-nfs_put_inode(struct inode * inode)
-{
-	dprintk("NFS: put_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
-	/*
-	 * We want to get rid of unused inodes ...
-	 */
-	if (inode->i_count == 1)
-		inode->i_nlink = 0;
 }
 
 static void
@@ -690,7 +678,7 @@ nfs_inode_is_stale(struct inode *inode, struct nfs_fattr *fattr)
 	 *     don't invalidate their inodes even if all dentries are
 	 *     unhashed.
 	 */
-	if (unhashed && inode->i_count == unhashed + 1
+	if (unhashed && atomic_read(&inode->i_count) == unhashed + 1
 	    && !S_ISSOCK(inode->i_mode) && !S_ISFIFO(inode->i_mode))
 		is_stale = 1;
 
@@ -784,7 +772,7 @@ __nfs_fhget(struct super_block *sb, struct nfs_fattr *fattr)
 			break;
 
 		dprintk("__nfs_fhget: inode %ld still busy, i_count=%d\n",
-		       inode->i_ino, inode->i_count);
+		       inode->i_ino, atomic_read(&inode->i_count));
 		nfs_zap_caches(inode);
 		remove_inode_hash(inode);
 		iput(inode);
@@ -795,7 +783,7 @@ __nfs_fhget(struct super_block *sb, struct nfs_fattr *fattr)
 
 	nfs_fill_inode(inode, fattr);
 	dprintk("NFS: __nfs_fhget(%x/%ld ct=%d)\n",
-		inode->i_dev, inode->i_ino, inode->i_count);
+		inode->i_dev, inode->i_ino, atomic_read(&inode->i_count));
 
 out:
 	return inode;
@@ -870,7 +858,7 @@ nfs_wait_on_inode(struct inode *inode, int flag)
 	int error;
 	if (!(NFS_FLAGS(inode) & flag))
 		return 0;
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	error = nfs_wait_event(clnt, inode->i_wait, !(NFS_FLAGS(inode) & flag));
 	iput(inode);
 	return error;
@@ -1019,8 +1007,8 @@ nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 		goto out;
 
 	dfprintk(VFS, "NFS: refresh_inode(%x/%ld ct=%d info=0x%x)\n",
-			inode->i_dev, inode->i_ino, inode->i_count,
-			fattr->valid);
+			inode->i_dev, inode->i_ino,
+			atomic_read(&inode->i_count), fattr->valid);
 
 
 	if (NFS_FSID(inode) != fattr->fsid ||

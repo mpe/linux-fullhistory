@@ -80,7 +80,7 @@ void hfs_put_inode(struct inode * inode)
 	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 
 	hfs_cat_put(entry);
-	if (inode->i_count == 1) {
+	if (atomic_read(&inode->i_count) == 1) {
 	  struct hfs_hdr_layout *tmp = HFS_I(inode)->layout;
 
 	  if (tmp) {

@@ -139,7 +139,7 @@ int coda_cnode_make(struct inode **inode, ViceFid *fid, struct super_block *sb)
 	if  ( coda_fideq(fid, &cnp->c_fid) ) {
 		CDEBUG(D_DOWNCALL,
 		       "Done making inode: ino %ld, count %d with %s\n",
-		       (*inode)->i_ino, (*inode)->i_count, 
+		       (*inode)->i_ino, atomic_read(&(*inode)->i_count), 
 		       coda_f2s(&cnp->c_fid));
 		EXIT;
 		return 0;

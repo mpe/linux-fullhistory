@@ -142,7 +142,7 @@ static struct dentry *nfsd_iget(struct super_block *sb, unsigned long ino, __u32
 		/* we didn't find the right inode.. */
 		dprintk("fh_verify: Inode %lu, Bad count: %d %d or version  %u %u\n",
 			inode->i_ino,
-			inode->i_nlink, inode->i_count,
+			inode->i_nlink, atomic_read(&inode->i_count),
 			inode->i_generation,
 			generation);
 

@@ -38,27 +38,6 @@ void udf_free_inode(struct inode * inode)
 	int is_directory;
 	unsigned long ino;
 
-	if (!inode->i_dev)
-	{
-		udf_debug("inode has no device\n");
-		return;
-	}
-	if (inode->i_count > 1)
-	{
-		udf_debug("inode has count=%d\n", inode->i_count);
-		return;
-	}
-	if (inode->i_nlink)
-	{
-		udf_debug("inode has nlink=%d\n", inode->i_nlink);
-		return;
-	}
-	if (!sb)
-	{
-		udf_debug("inode on nonexistent device\n");
-		return;
-	}
-
 	ino = inode->i_ino;
 
 	/*

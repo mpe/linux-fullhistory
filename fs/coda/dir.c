@@ -117,7 +117,7 @@ static struct dentry *coda_lookup(struct inode *dir, struct dentry *entry)
 	        error = coda_cnode_makectl(&res_inode, dir->i_sb);
 		CDEBUG(D_SPECIAL, 
 		       "Lookup on CTL object; dir ino %ld, count %d\n", 
-		       dir->i_ino, dir->i_count);
+		       dir->i_ino, atomic_read(&dir->i_count));
                 goto exit;
         }
 
@@ -358,7 +358,7 @@ static int coda_link(struct dentry *source_de, struct inode *dir_inode,
 
 	if (  ! error ) { 
 		dir_cnp->c_flags |= C_VATTR;
-		++inode->i_count;
+		atomic_inc(&inode->i_count);
 		d_instantiate(de, inode);
 		inode->i_nlink++;
 	} else  {
@@ -597,9 +597,9 @@ int coda_open(struct inode *i, struct file *f)
         cnp->c_ocount++;
 
         CDEBUG(D_FILE, "result %d, coda i->i_count is %d for ino %ld\n", 
-	       error, i->i_count, i->i_ino);
+	       error, atomic_read(&i->i_count), i->i_ino);
         CDEBUG(D_FILE, "cache ino: %ld, count %d, ops %p\n", 
-	       cnp->c_ovp->i_ino, cnp->c_ovp->i_count,
+	       cnp->c_ovp->i_ino, atomic_read(&cnp->c_ovp->i_count),
 	       (cnp->c_ovp->i_op));
         EXIT;
         return 0;
@@ -622,8 +622,9 @@ int coda_release(struct inode *i, struct file *f)
         CHECK_CNODE(cnp);
         CDEBUG(D_FILE,  
 	       "RELEASE coda (ino %ld, ct %d) cache (ino %ld, ct %d)\n",
-               i->i_ino, i->i_count, (cnp->c_ovp ? cnp->c_ovp->i_ino : 0),
-               (cnp->c_ovp ? cnp->c_ovp->i_count : -99));
+               i->i_ino, atomic_read(&i->i_count),
+	       (cnp->c_ovp ? cnp->c_ovp->i_ino : 0),
+               (cnp->c_ovp ? atomic_read(&cnp->c_ovp->i_count) : -99));
 
 
         /* even when c_ocount=0 we cannot put c_ovp to

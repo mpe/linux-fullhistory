@@ -52,16 +52,6 @@ void de_put(struct proc_dir_entry *de)
 	}
 }
 
-static void proc_put_inode(struct inode *inode)
-{
-	/*
-	 * Kill off unused inodes ... VFS will unhash and
-	 * delete the inode if we set i_nlink to zero.
-	 */
-	if (inode->i_count == 1)
-		inode->i_nlink = 0;
-}
-
 /*
  * Decrement the use count of the proc_dir_entry.
  */
@@ -102,7 +92,7 @@ static int proc_statfs(struct super_block *sb, struct statfs *buf)
 
 static struct super_operations proc_sops = { 
 	read_inode:	proc_read_inode,
-	put_inode:	proc_put_inode,
+	put_inode:	force_delete,
 	delete_inode:	proc_delete_inode,
 	statfs:		proc_statfs,
 };

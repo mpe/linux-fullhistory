@@ -31,14 +31,13 @@
 
 #include "ncplib_kernel.h"
 
-static void ncp_put_inode(struct inode *);
 static void ncp_delete_inode(struct inode *);
 static void ncp_put_super(struct super_block *);
 static int  ncp_statfs(struct super_block *, struct statfs *);
 
 static struct super_operations ncp_sops =
 {
-	put_inode:	ncp_put_inode,
+	put_inode:	force_delete,
 	delete_inode:	ncp_delete_inode,
 	put_super:	ncp_put_super,
 	statfs:		ncp_statfs,
@@ -237,12 +236,6 @@ ncp_iget(struct super_block *sb, struct ncp_entry_info *info)
 	} else
 		printk(KERN_ERR "ncp_iget: iget failed!\n");
 	return inode;
-}
-
-static void ncp_put_inode(struct inode *inode)
-{
-	if (inode->i_count == 1)
-		inode->i_nlink = 0;
 }
 
 static void

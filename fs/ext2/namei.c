@@ -685,7 +685,7 @@ static int ext2_link (struct dentry * old_dentry,
 	inode->i_nlink++;
 	inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	d_instantiate(dentry, inode);
 	return 0;
 }

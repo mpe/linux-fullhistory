@@ -233,7 +233,7 @@ void hpfs_write_inode(struct inode *i)
 	struct inode *parent;
 	if (!i->i_nlink) return;
 	if (i->i_ino == i->i_sb->s_hpfs_root) return;
-	if (i->i_hpfs_rddir_off && !i->i_count) {
+	if (i->i_hpfs_rddir_off && !atomic_read(&i->i_count)) {
 		if (*i->i_hpfs_rddir_off) printk("HPFS: write_inode: some position still there\n");
 		kfree(i->i_hpfs_rddir_off);
 		i->i_hpfs_rddir_off = NULL;

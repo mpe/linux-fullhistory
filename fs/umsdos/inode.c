@@ -51,14 +51,14 @@ void UMSDOS_put_inode (struct inode *inode)
 		"put inode %p (%lu) pos %lu count=%d\n"
 		 ,inode, inode->i_ino
 		 ,inode->u.umsdos_i.pos
-		 ,inode->i_count));
+		 ,atomic_read(&inode->i_count)));
 
 	if (inode == pseudo_root) {
 		printk (KERN_ERR "Umsdos: Oops releasing pseudo_root."
 			" Notify jacques@solucorp.qc.ca\n");
 	}
 
-	if (inode->i_count == 1)
+	if (atomic_read(&inode->i_count) == 1)
 		inode->u.umsdos_i.i_patched = 0;
 }
 

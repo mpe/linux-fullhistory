@@ -153,25 +153,6 @@ static void qnx4_clear_inode(struct inode *inode)
 
 void qnx4_free_inode(struct inode *inode)
 {
-	if (!inode) {
-		return;
-	}
-	if (!inode->i_dev) {
-		printk("free_inode: inode has no device\n");
-		return;
-	}
-	if (inode->i_count > 1) {
-		printk("free_inode: inode has count=%d\n", inode->i_count);
-		return;
-	}
-	if (inode->i_nlink) {
-		printk("free_inode: inode has nlink=%d\n", inode->i_nlink);
-		return;
-	}
-	if (!inode->i_sb) {
-		printk("free_inode: inode on nonexistent device\n");
-		return;
-	}
 	if (inode->i_ino < 1) {
 		printk("free_inode: inode 0 or nonexistent inode\n");
 		return;

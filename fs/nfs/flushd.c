@@ -175,7 +175,7 @@ static void inode_append_flushd(struct inode *inode)
 	 *	 it from disappearing when on the flush list
 	 */
 	NFS_FLAGS(inode) |= NFS_INO_FLUSH;
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
  out:
 	spin_unlock(&nfs_flushd_lock);
 }

@@ -129,7 +129,7 @@ static struct dentry *devpts_root_lookup(struct inode * dir, struct dentry * den
 
 	dentry->d_inode = sbi->inodes[entry];
 	if ( dentry->d_inode )
-		dentry->d_inode->i_count++;
+		atomic_inc(&dentry->d_inode->i_count);
 	
 	d_add(dentry, dentry->d_inode);
 

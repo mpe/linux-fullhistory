@@ -270,7 +270,7 @@ affs_put_inode(struct inode *inode)
 		inode->i_ino,inode->i_nlink);
 
 	affs_free_prealloc(inode);
-	if (inode->i_count == 1) {
+	if (atomic_read(&inode->i_count) == 1) {
 		unsigned long cache_page = (unsigned long) inode->u.affs_i.i_ec;
 		if (cache_page) {
 			pr_debug("AFFS: freeing ext cache\n");

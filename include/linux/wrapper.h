@@ -19,9 +19,6 @@
 #define module_unregister_blkdev unregister_blkdev
 
 #define inode_get_rdev(i) i->i_rdev
-#define inode_get_count(i) i->i_count
-#define inode_inc_count(i) i->i_count++
-#define inode_dec_count(i) i->i_count--
 
 #define file_get_flags(f) f->f_flags
 

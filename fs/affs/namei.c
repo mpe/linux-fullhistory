@@ -512,7 +512,7 @@ affs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry)
 		dir->i_version = ++event;
 		mark_inode_dirty(dir);
 		mark_inode_dirty(oldinode);
-		oldinode->i_count++;
+		atomic_inc(&oldinode->i_count);
 		d_instantiate(dentry,oldinode);
 	}
 	mark_inode_dirty(inode);

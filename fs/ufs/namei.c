@@ -834,7 +834,7 @@ static int ufs_link (struct dentry * old_dentry, struct inode * dir,
 	inode->i_nlink++;
 	inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	d_instantiate(dentry, inode);
 	return 0;
 }

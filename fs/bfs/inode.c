@@ -139,8 +139,6 @@ static void bfs_delete_inode(struct inode * inode)
 
 	dprintf("ino=%08lx\n", inode->i_ino);
 
-	if (!inode || !inode->i_dev || inode->i_count > 1 || inode->i_nlink || !s)
-		return;
 	if (inode->i_ino < BFS_ROOT_INO || inode->i_ino > inode->i_sb->su_lasti) {
 		printf("invalid ino=%08lx\n", inode->i_ino);
 		return;

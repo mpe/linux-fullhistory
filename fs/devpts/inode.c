@@ -37,9 +37,9 @@ static void devpts_put_super(struct super_block *sb)
 
 	for ( i = 0 ; i < sbi->max_ptys ; i++ ) {
 		if ( (inode = sbi->inodes[i]) ) {
-			if ( inode->i_count != 1 )
+			if ( atomic_read(&inode->i_count) != 1 )
 				printk("devpts_put_super: badness: entry %d count %d\n",
-				       i, inode->i_count);
+				       i, atomic_read(&inode->i_count));
 			inode->i_nlink--;
 			iput(inode);
 		}

@@ -56,24 +56,7 @@ void sysv_free_inode(struct inode * inode)
 	struct buffer_head * bh;
 	struct sysv_inode * raw_inode;
 
-	if (!inode)
-		return;
-	if (!inode->i_dev) {
-		printk("sysv_free_inode: inode has no device\n");
-		return;
-	}
-	if (inode->i_count != 1) {
-		printk("sysv_free_inode: inode has count=%d\n", inode->i_count);
-		return;
-	}
-	if (inode->i_nlink) {
-		printk("sysv_free_inode: inode has nlink=%d\n", inode->i_nlink);
-		return;
-	}
-	if (!(sb = inode->i_sb)) {
-		printk("sysv_free_inode: inode on nonexistent device\n");
-		return;
-	}
+	sb = inode->i_sb;
 	ino = inode->i_ino;
 	if (ino <= SYSV_ROOT_INO || ino > sb->sv_ninodes) {
 		printk("sysv_free_inode: inode 0,1,2 or nonexistent inode\n");
@@ -112,7 +95,6 @@ struct inode * sysv_new_inode(const struct inode * dir)
 		return NULL;
 	sb = dir->i_sb;
 	inode->i_sb = sb;
-	inode->i_flags = 0;
 	lock_super(sb);		/* protect against task switches */
 	if ((*sb->sv_sb_fic_count == 0)
 	    || (*sv_sb_fic_inode(sb,(*sb->sv_sb_fic_count)-1) == 0) /* Applies only to SystemV2 FS */
@@ -149,8 +131,6 @@ struct inode * sysv_new_inode(const struct inode * dir)
 	mark_buffer_dirty(sb->sv_bh1, 1); /* super-block has been modified */
 	if (sb->sv_bh1 != sb->sv_bh2) mark_buffer_dirty(sb->sv_bh2, 1);
 	sb->s_dirt = 1; /* and needs time stamp */
-	inode->i_count = 1;
-	inode->i_nlink = 1;
 	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->fsuid;
 	inode->i_gid = (dir->i_mode & S_ISGID) ? dir->i_gid : current->fsgid;

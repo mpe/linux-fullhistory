@@ -507,7 +507,7 @@ static int sysv_link(struct dentry * old_dentry, struct inode * dir,
 	oldinode->i_nlink++;
 	oldinode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(oldinode);
-	oldinode->i_count++;
+	atomic_inc(&oldinode->i_count);
         d_instantiate(dentry, oldinode);
 	return 0;
 }

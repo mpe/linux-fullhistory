@@ -279,14 +279,14 @@ static int umsdos_create_any (struct inode *dir, struct dentry *dentry,
 		goto out_remove_dput;
 
 	inode = fake->d_inode;
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	d_instantiate (dentry, inode);
 	dput(fake);
-	if (inode->i_count > 1) {
+	if (atomic_read(&inode->i_count) > 1) {
 		printk(KERN_WARNING
 			"umsdos_create_any: %s/%s, ino=%ld, icount=%d??\n",
 			dentry->d_parent->d_name.name, dentry->d_name.name,
-			inode->i_ino, inode->i_count);
+			inode->i_ino, atomic_read(&inode->i_count));
 	}
 	umsdos_lookup_patch_new(dentry, &info);
 
@@ -809,7 +809,7 @@ dentry->d_parent->d_name.name, info.fake.fname);
 	inode = temp->d_inode;
 	down(&inode->i_sem);
 
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	d_instantiate(dentry, inode);
 
 	/* N.B. this should have an option to create the EMD ... */

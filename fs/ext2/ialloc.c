@@ -186,24 +186,6 @@ void ext2_free_inode (struct inode * inode)
 	struct ext2_group_desc * gdp;
 	struct ext2_super_block * es;
 
-	if (!inode->i_dev) {
-		printk ("ext2_free_inode: inode has no device\n");
-		return;
-	}
-	if (inode->i_count > 1) {
-		printk ("ext2_free_inode: inode has count=%d\n", inode->i_count);
-		return;
-	}
-	if (inode->i_nlink) {
-		printk ("ext2_free_inode: inode has nlink=%d\n",
-			inode->i_nlink);
-		return;
-	}
-	if (!sb) {
-		printk("ext2_free_inode: inode on nonexistent device\n");
-		return;
-	}
-
 	ino = inode->i_ino;
 	ext2_debug ("freeing inode %lu\n", ino);
 

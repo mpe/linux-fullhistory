@@ -218,7 +218,7 @@ static int ntfs_readdir(struct file* filp, void *dirent, filldir_t filldir)
 	       (unsigned)dir->i_ino,(unsigned int)dir->i_mode);
 
 	ntfs_debug(DEBUG_OTHER, "readdir: Looking for file %x dircount %d\n",
-	       (unsigned)filp->f_pos,dir->i_count);
+	       (unsigned)filp->f_pos,atomic_read(&dir->i_count));
 	cb.pl=filp->f_pos & 0xFFFF;
 	cb.ph=filp->f_pos >> 16;
 	/* end of directory */

@@ -170,15 +170,16 @@ static inline void write_inode(struct inode *inode)
 
 static inline void __iget(struct inode * inode)
 {
-	if (!inode->i_count++)
-	{
-		if (!(inode->i_state & I_DIRTY))
-		{
-			list_del(&inode->i_list);
-			list_add(&inode->i_list, &inode_in_use);
-		}
-		inodes_stat.nr_unused--;
+	if (atomic_read(&inode->i_count)) {
+		atomic_inc(&inode->i_count);
+		return;
 	}
+	atomic_inc(&inode->i_count);
+	if (!(inode->i_state & I_DIRTY)) {
+		list_del(&inode->i_list);
+		list_add(&inode->i_list, &inode_in_use);
+	}
+	inodes_stat.nr_unused--;
 }
 
 static inline void sync_one(struct inode *inode)
@@ -191,8 +192,9 @@ static inline void sync_one(struct inode *inode)
 		spin_lock(&inode_lock);
 	} else {
 		list_del(&inode->i_list);
-		list_add(&inode->i_list,
-			 inode->i_count ? &inode_in_use : &inode_unused);
+		list_add(&inode->i_list, atomic_read(&inode->i_count)
+							? &inode_in_use
+							: &inode_unused);
 		/* Set I_LOCK, reset I_DIRTY */
 		inode->i_state ^= I_DIRTY | I_LOCK;
 		spin_unlock(&inode_lock);
@@ -347,7 +349,7 @@ static int invalidate_list(struct list_head *head, struct super_block * sb, stru
 		inode = list_entry(tmp, struct inode, i_list);
 		if (inode->i_sb != sb)
 			continue;
-		if (!inode->i_count) {
+		if (!atomic_read(&inode->i_count)) {
 			list_del(&inode->i_hash);
 			INIT_LIST_HEAD(&inode->i_hash);
 			list_del(&inode->i_list);
@@ -433,7 +435,7 @@ void prune_icache(int goal)
 			BUG();
 		if (!CAN_UNUSE(inode))
 			continue;
-		if (inode->i_count)
+		if (atomic_read(&inode->i_count))
 			BUG();
 		list_del(tmp);
 		list_del(&inode->i_hash);
@@ -551,7 +553,7 @@ struct inode * get_empty_inode(void)
 		inode->i_dev = 0;
 		inode->i_ino = ++last_ino;
 		inode->i_flags = 0;
-		inode->i_count = 1;
+		atomic_set(&inode->i_count, 1);
 		inode->i_state = 0;
 		spin_unlock(&inode_lock);
 		clean_inode(inode);
@@ -583,7 +585,7 @@ static struct inode * get_new_inode(struct super_block *sb, unsigned long ino, s
 			inode->i_dev = sb->s_dev;
 			inode->i_ino = ino;
 			inode->i_flags = 0;
-			inode->i_count = 1;
+			atomic_set(&inode->i_count, 1);
 			inode->i_state = I_LOCK;
 			spin_unlock(&inode_lock);
 
@@ -758,7 +760,7 @@ void iput(struct inode *inode)
 			op->put_inode(inode);
 
 		spin_lock(&inode_lock);
-		if (!--inode->i_count) {
+		if (atomic_dec_and_test(&inode->i_count)) {
 			if (!inode->i_nlink) {
 				list_del(&inode->i_hash);
 				INIT_LIST_HEAD(&inode->i_hash);
@@ -807,15 +809,15 @@ kdevname(inode->i_dev), inode->i_ino);
 if (!list_empty(&inode->i_dentry))
 printk(KERN_ERR "iput: device %s inode %ld still has aliases!\n",
 kdevname(inode->i_dev), inode->i_ino);
-if (inode->i_count)
+if (atomic_read(&inode->i_count))
 printk(KERN_ERR "iput: device %s inode %ld count changed, count=%d\n",
-kdevname(inode->i_dev), inode->i_ino, inode->i_count);
+kdevname(inode->i_dev), inode->i_ino, atomic_read(&inode->i_count));
 if (atomic_read(&inode->i_sem.count) != 1)
 printk(KERN_ERR "iput: Aieee, semaphore in use inode %s/%ld, count=%d\n",
 kdevname(inode->i_dev), inode->i_ino, atomic_read(&inode->i_sem.count));
 #endif
 		}
-		if (inode->i_count > (1<<31)) {
+		if ((unsigned)atomic_read(&inode->i_count) > (1U<<31)) {
 			printk(KERN_ERR "iput: inode %s/%ld count wrapped\n",
 				kdevname(inode->i_dev), inode->i_ino);
 		}
@@ -823,6 +825,16 @@ kdevname(inode->i_dev), inode->i_ino, atomic_read(&inode->i_sem.count));
 		if (destroy)
 			destroy_inode(inode);
 	}
+}
+
+void force_delete(struct inode *inode)
+{
+	/*
+	 * Kill off unused inodes ... iput() will unhash and
+	 * delete the inode if we set i_nlink to zero.
+	 */
+	if (atomic_read(&inode->i_count) == 1)
+		inode->i_nlink = 0;
 }
 
 /**

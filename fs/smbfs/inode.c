@@ -29,7 +29,6 @@
 #define SMBFS_PARANOIA 1
 /* #define SMBFS_DEBUG_VERBOSE 1 */
 
-static void smb_put_inode(struct inode *);
 static void smb_delete_inode(struct inode *);
 static void smb_put_super(struct super_block *);
 static int  smb_statfs(struct super_block *, struct statfs *);
@@ -37,7 +36,7 @@ static void smb_set_inode_attr(struct inode *, struct smb_fattr *);
 
 static struct super_operations smb_sops =
 {
-	put_inode:	smb_put_inode,
+	put_inode:	force_delete,
 	delete_inode:	smb_delete_inode,
 	put_super:	smb_put_super,
 	statfs:		smb_statfs,
@@ -269,18 +268,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 	}
 out:
 	return error;
-}
-
-/*
- * This routine is called for every iput(). We clear i_nlink
- * on the last use to force a call to delete_inode.
- */
-static void
-smb_put_inode(struct inode *ino)
-{
-	pr_debug("smb_put_inode: count = %d\n", ino->i_count);
-	if (ino->i_count == 1)
-		ino->i_nlink = 0;
 }
 
 /*

@@ -136,6 +136,7 @@ EXPORT_SYMBOL(igrab);
 EXPORT_SYMBOL(iunique);
 EXPORT_SYMBOL(iget4);
 EXPORT_SYMBOL(iput);
+EXPORT_SYMBOL(force_delete);
 EXPORT_SYMBOL(follow_up);
 EXPORT_SYMBOL(follow_down);
 EXPORT_SYMBOL(path_init);

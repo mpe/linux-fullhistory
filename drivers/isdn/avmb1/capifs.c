@@ -209,7 +209,7 @@ static struct dentry *capifs_root_lookup(struct inode * dir, struct dentry * den
 
 	dentry->d_inode = np->inode;
 	if ( dentry->d_inode )
-		dentry->d_inode->i_count++;
+		atomic_inc(&dentry->d_inode->i_count);
 	
 	d_add(dentry, dentry->d_inode);
 
@@ -228,9 +228,9 @@ static void capifs_put_super(struct super_block *sb)
 
 	for ( i = 0 ; i < sbi->max_ncci ; i++ ) {
 		if ( (inode = sbi->nccis[i].inode) ) {
-			if ( inode->i_count != 1 )
+			if ( atomic_read(&inode->i_count) != 1 )
 				printk("capifs_put_super: badness: entry %d count %d\n",
-				       i, inode->i_count);
+				       i, atomic_read(&inode->i_count));
 			inode->i_nlink--;
 			iput(inode);
 		}

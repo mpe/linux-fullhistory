@@ -70,22 +70,11 @@ void ufs_free_inode (struct inode * inode)
 	
 	UFSD(("ENTER, ino %lu\n", inode->i_ino))
 
-	if (!inode)
-		return;
 	sb = inode->i_sb;
 	swab = sb->u.ufs_sb.s_swab;
 	uspi = sb->u.ufs_sb.s_uspi;
 	usb1 = ubh_get_usb_first(USPI_UBH);
 	
-	if (inode->i_count > 1) {
-		ufs_warning(sb, "ufs_free_inode", "inode has count=%d\n", inode->i_count);
-		return;
-	}
-	if (inode->i_nlink) {
-		ufs_warning(sb, "ufs_free_inode", "inode has nlink=%d\n", inode->i_nlink);
-		return;
-	}
-
 	ino = inode->i_ino;
 
 	lock_super (sb);

@@ -537,7 +537,7 @@ printk("umsdos_lookup_x: skipping DOS/linux\n");
 	 * We've found it OK.  Now hash the dentry with the inode.
 	 */
 out_add:
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	d_add (dentry, inode);
 	dentry->d_op = &umsdos_dentry_operations;
 	ret = 0;

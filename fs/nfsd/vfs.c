@@ -492,16 +492,10 @@ nfsd_close(struct file *filp)
 	struct dentry	*dentry = filp->f_dentry;
 	struct inode	*inode = dentry->d_inode;
 
-	if (!inode->i_count)
-		printk(KERN_WARNING "nfsd: inode count == 0!\n");
-	if (!dentry->d_count)
-		printk(KERN_WARNING "nfsd: wheee, %s/%s d_count == 0!\n",
-			dentry->d_parent->d_name.name, dentry->d_name.name);
 	if (filp->f_op && filp->f_op->release)
 		filp->f_op->release(inode, filp);
-	if (filp->f_mode & FMODE_WRITE) {
+	if (filp->f_mode & FMODE_WRITE)
 		put_write_access(inode);
-	}
 }
 
 /*

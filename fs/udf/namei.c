@@ -1108,7 +1108,7 @@ static int udf_link(struct dentry * old_dentry, struct inode * dir,
 	inode->i_ctime = CURRENT_TIME;
 	UDF_I_UCTIME(inode) = CURRENT_UTIME;
 	mark_inode_dirty(inode);
-	inode->i_count ++;
+	atomic_inc(&inode->i_count);
 	d_instantiate(dentry, inode);
 	return 0;
 }
