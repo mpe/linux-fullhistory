@@ -116,6 +116,15 @@ ifeq ($(CONFIG_USB_SCSI),y)
   endif
 endif
 
+ifeq ($(CONFIG_USB_EZUSB),y)
+  L_OBJS += ezusb.o
+endif
+
+ifeq ($(CONFIG_USB_EZUSB),m)
+  M_OBJS += ezusb.o
+  MIX_OBJS += ezusb.o
+endif
+
 include $(TOPDIR)/Rules.make
 
 keymap.o: keymap.c

@@ -32,7 +32,6 @@
 #endif
 #include <asm/bootx.h>
 #include <asm/machdep.h>
-#include <asm/ide.h>
 
 extern void pmac_init(unsigned long r3,
                       unsigned long r4,

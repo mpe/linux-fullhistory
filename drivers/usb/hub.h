@@ -68,6 +68,12 @@ struct usb_hub {
 	/* Device structure */
 	struct usb_device *dev;
 
+	/* Reference to the hub's polling IRQ */
+	void* irq_handle;
+
+	/* List of hubs */
+	struct list_head hub_list;
+
 	/* Temporary event list */
 	struct list_head event_list;
 

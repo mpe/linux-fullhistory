@@ -414,8 +414,6 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	unsigned int offset;
-
 	usb_deregister(&printer_driver);
 	unregister_chrdev(mymajor, "usblp");
 }

@@ -2124,20 +2124,23 @@ int ide_cdrom_dev_ioctl (struct cdrom_device_info *cdi,
 				 msf.cdmsf_frame0);
 
 		/* Make sure the TOC is up to date. */
-		stat = cdrom_read_toc (drive, NULL);
-		if (stat) return stat;
+		if (cmd != CDROMREADRAW) {
+			stat = cdrom_read_toc (drive, NULL);
+			if (stat) 
+				return stat;
 
-		toc = info->toc;
+			toc = info->toc;
 
-		if (lba < 0 || lba >= toc->capacity)
-			return -EINVAL;
+			if (lba < 0 || lba >= toc->capacity)
+				return -EINVAL;
+		}
 
 		buf = (char *) kmalloc (blocksize, GFP_KERNEL);
 		if (buf == NULL)
 			return -ENOMEM;
 
-		stat = cdrom_read_block (drive, format, lba, 1, buf, blocksize,
-					 NULL);
+		stat = cdrom_read_block (drive, format, lba, 1, buf,
+					 blocksize, NULL);
 
 		if (stat == 0) {
 			if (cmd == CDROMREADMODE2) {

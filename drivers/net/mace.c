@@ -682,8 +682,10 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		++mp->stats.tx_carrier_errors;
 	    if (fs & (UFLO|LCOL|RTRY))
 		++mp->stats.tx_aborted_errors;
-	} else
+	} else {
+	    mp->stats.tx_bytes += mp->tx_bufs[i]->len;
 	    ++mp->stats.tx_packets;
+	}
 	dev_kfree_skb(mp->tx_bufs[i]);
 	--mp->tx_active;
 	if (++i >= N_TX_RING)
@@ -848,6 +850,7 @@ static void mace_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs)
 		skb->protocol = eth_type_trans(skb, dev);
 		netif_rx(skb);
 		mp->rx_bufs[i] = 0;
+		mp->stats.rx_bytes += skb->len;
 		++mp->stats.rx_packets;
 	    }
 	} else {

@@ -314,8 +314,7 @@ void parport_pc_data_reverse (struct parport *p)
 
 void parport_pc_init_state(struct pardevice *dev, struct parport_state *s)
 {
-	struct parport_pc_private *priv = dev->port->physport->private_data;
-	priv->ctr = s->u.pc.ctr = 0xc | (dev->irq_func ? 0x10 : 0x0);
+	s->u.pc.ctr = 0xc | (dev->irq_func ? 0x10 : 0x0);
 	s->u.pc.ecr = 0x24;
 }
 
@@ -1377,7 +1376,8 @@ static int __init programmable_irq_support(struct parport *pb)
 
 static int __init irq_probe_ECP(struct parport *pb)
 {
-	int irqs, i;
+	int i;
+	unsigned long irqs;
 
 	sti();
 	irqs = probe_irq_on();

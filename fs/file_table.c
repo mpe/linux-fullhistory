@@ -116,16 +116,29 @@ int init_private_file(struct file *filp, struct dentry *dentry, int mode)
 		return 0;
 }
 
+/*
+ * Called when retiring the last use of a file pointer.
+ */
+static void __fput(struct file *filp)
+{
+	struct dentry * dentry = filp->f_dentry;
+	struct inode * inode = dentry->d_inode;
+
+	if (filp->f_op && filp->f_op->release)
+		filp->f_op->release(inode, filp);
+	filp->f_dentry = NULL;
+	if (filp->f_mode & FMODE_WRITE)
+		put_write_access(inode);
+	dput(dentry);
+}
+
 void _fput(struct file *file)
 {
-	atomic_inc(&file->f_count);
-
 	lock_kernel();
 	locks_remove_flock(file);	/* Still need the */
 	__fput(file);			/* big lock here. */
 	unlock_kernel();
 
-	atomic_set(&file->f_count, 0);
 	file_list_lock();
 	list_del(&file->f_list);
 	list_add(&file->f_list, &free_list);

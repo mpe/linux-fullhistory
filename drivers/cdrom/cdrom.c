@@ -1145,7 +1145,9 @@ int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
 		   ((cdi->ops->capability & ~cdi->mask & CDC_PLAY_AUDIO)!=0));
 
         strcpy(cdrom_drive_info+pos,"\n\n");
-	*lenp=pos+3;
+        pos += 3;
+        if (*lenp > pos)
+        	*lenp = pos;
 
         return proc_dostring(ctl, write, filp, buffer, lenp);
 }

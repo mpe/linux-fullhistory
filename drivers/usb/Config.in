@@ -34,6 +34,7 @@ if [ ! "$CONFIG_USB" = "n" ]; then
   if [ "$CONFIG_USB_SCSI" != "n" ]; then
 	  dep_tristate '  USB SCSI verbose debug' CONFIG_USB_SCSI_DEBUG $CONFIG_USB_SCSI
   fi
+  dep_tristate 'EZUSB Firmware downloader' CONFIG_USB_EZUSB $CONFIG_USB
 fi
 
 endmenu

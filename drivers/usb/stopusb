@@ -1,7 +1,11 @@
 #!/bin/sh
 
+killall khubd
+killall ohci-control
 killall uhci-control
 
 sleep 2
 
+rmmod hub
+rmmod usb-ohci
 rmmod usb-uhci

@@ -44,8 +44,10 @@ struct ohci_td {
 		/* bit3: this is NOT the last TD in a contiguious TD chain
 		 *       on the indicated ED.  (0 means it is the last) */
 
+	struct usb_device *usb_dev;	/* the owning device */
+
 	void *dev_id;	/* user defined pointer passed to irq handler */
-} __attribute((aligned(16)));
+} __attribute((aligned(32)));
 
 #define OHCI_TD_ROUND	(1 << 18)	/* buffer rounding bit */
 #define OHCI_TD_D	(3 << 19)	/* direction of xfer: */
@@ -210,7 +212,7 @@ struct ohci_device {
 	struct ohci_td		td[NUM_TDS];	/* Transfer Descriptors */
 
 	unsigned long		data[DATA_BUF_LEN];
-};
+} __attribute((aligned(32)));
 
 /* .... */
 

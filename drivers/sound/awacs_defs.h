@@ -70,8 +70,8 @@ struct awacs_regs {
 #define MASK_GAINMIC	(0x0 << 8)	/* Change Gain for Mic??? */
 
 #define MASK_MUX_CD	(0x1 << 9)	/* Select CD in MUX */
-#define MASK_MUX_MIC	(0x1 << 10)	/* Select Mic in MUX */
-#define MASK_MUX_AUDIN	(0x1 << 11)	/* Select Audio In in MUX */
+#define MASK_MUX_AUDIN	(0x1 << 10)	/* Select Audio In in MUX */
+#define MASK_MUX_MIC	(0x1 << 11)	/* Select Mic in MUX */
 #define MASK_MUX_LINE	MASK_MUX_AUDIN
 
 #define GAINRIGHT(x)	((x) & MASK_GAINRIGHT)

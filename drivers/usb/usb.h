@@ -169,7 +169,7 @@ struct usb_devmap {
 #define USB_MAXALTSETTING       5
 #define USB_MAXINTERFACES	32
 #define USB_MAXENDPOINTS	32
-#define USB_MAXSTRINGS		16
+#define USB_MAXSTRINGS		32
 
 struct usb_device_descriptor {
 	__u8  bLength;
@@ -276,6 +276,9 @@ struct usb_driver {
  *         of the buffer by this transfer.  (-1 = unknown/unsupported)
  *     void *dev_id - This is a user defined pointer set when the IRQ
  *         is requested that is passed back.
+ *
+ *   Special Cases:
+ *     if (status == USB_ST_REMOVED), don't trust buffer or len.
  */
 typedef int (*usb_device_irq)(int, void *, int, void *);
 
@@ -284,8 +287,8 @@ struct usb_operations {
 	int (*deallocate)(struct usb_device *);
 	int (*control_msg)(struct usb_device *, unsigned int, devrequest *, void *, int);
 	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int,unsigned long *);
-	int (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
-	int (*remove_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
+	void* (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
+	int (*release_irq)(void* handle);
 };
 
 /*
@@ -316,10 +319,9 @@ struct usb_device {
 	struct usb_device_descriptor descriptor;/* Descriptor */
 	struct usb_config_descriptor *config;	/* All of the configs */
 	struct usb_device *parent;
-	char *stringtable;		/* Strings (multiple, null term) */
-	char **stringindex;		/* pointers to strings */
-	int maxstring;			/* max valid index */
-
+	char *stringindex[USB_MAXSTRINGS];	/* pointers to strings */
+	int string_langid;		/* language ID for strings */
+  
 	/*
 	 * Child devices - these can be either new devices
 	 * (if this is a hub device), or different instances
@@ -341,7 +343,8 @@ extern void usb_deregister(struct usb_driver *);
 extern void usb_register_bus(struct usb_bus *);
 extern void usb_deregister_bus(struct usb_bus *);
 
-extern int usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *);
+extern void* usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *);
+extern int usb_release_irq(struct usb_device *dev, void *handle);
 
 extern void usb_init_root_hub(struct usb_device *dev);
 extern void usb_connect(struct usb_device *dev);
@@ -450,16 +453,11 @@ int usb_get_port_status(struct usb_device *dev, int port, void *data);
 int usb_get_protocol(struct usb_device *dev);
 int usb_set_protocol(struct usb_device *dev, int protocol);
 int usb_set_idle(struct usb_device *dev, int duration, int report_id);
+int usb_set_interface(struct usb_device *dev, int interface, int alternate);
 int usb_set_configuration(struct usb_device *dev, int configuration);
 int usb_get_report(struct usb_device *dev);
+char *usb_string(struct usb_device *dev, int index);
 int usb_clear_halt(struct usb_device *dev, int endp);
-static inline char * usb_string(struct usb_device* dev, int index)
-{
-	if (index <= dev->maxstring && dev->stringindex && dev->stringindex[index])
-		return dev->stringindex[index];
-	else
-		return NULL;
-}
 
 /*
  * Debugging helpers..

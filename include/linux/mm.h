@@ -328,6 +328,7 @@ extern void mem_init(unsigned long start_mem, unsigned long end_mem);
 extern void show_mem(void);
 extern void oom(struct task_struct * tsk);
 extern void si_meminfo(struct sysinfo * val);
+extern void swapin_readahead(unsigned long);
 
 /* mmap.c */
 extern void vma_init(void);

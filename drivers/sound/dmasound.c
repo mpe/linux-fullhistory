@@ -131,7 +131,7 @@ static int state_unit = -1;
 static int irq_installed = 0;
 #endif /* MODULE */
 static char **sound_buffers = NULL;
-
+static char **sound_read_buffers = NULL;
 
 #ifdef CONFIG_ATARI
 extern void atari_microwire_cmd(int cmd);
@@ -183,6 +183,9 @@ static int awacs_revision;
  */
 static void *awacs_tx_cmd_space;
 static volatile struct dbdma_cmd *awacs_tx_cmds;
+
+static void *awacs_rx_cmd_space;
+static volatile struct dbdma_cmd *awacs_rx_cmds;
 
 /*
  * Cached values of AWACS registers (we can't read them).
@@ -239,6 +242,7 @@ static short beep_wform[256] = {
 
 static int beep_volume = BEEP_VOLUME;
 static int beep_playing = 0;
+static int awacs_beep_state = 0;
 static short *beep_buf;
 static volatile struct dbdma_cmd *beep_dbdma_cmd;
 static void (*orig_mksound)(unsigned int, unsigned int);
@@ -276,10 +280,15 @@ struct notifier_block awacs_sleep_notifier = {
 #define MIN_BUFSIZE 		4
 #define MAX_BUFSIZE		128	/* Limit for Amiga */
 
-static int catchRadius = 0, numBufs = 4, bufSize = 32;
+static int catchRadius = 0;
+static int numBufs = 4, bufSize = 32;
+static int numReadBufs = 4, readbufSize = 32;
+
 MODULE_PARM(catchRadius, "i");
 MODULE_PARM(numBufs, "i");
 MODULE_PARM(bufSize, "i");
+MODULE_PARM(numreadBufs, "i");
+MODULE_PARM(readbufSize, "i");
 
 #define arraysize(x)	(sizeof(x)/sizeof(*(x)))
 #define min(x, y)	((x) < (y) ? (x) : (y))
@@ -630,6 +639,12 @@ static ssize_t pmac_ctx_s16(const u_char *userPtr, size_t userCount,
 static ssize_t pmac_ctx_u16(const u_char *userPtr, size_t userCount,
 			    u_char frame[], ssize_t *frameUsed,
 			    ssize_t frameLeft);
+static ssize_t pmac_ct_s16_read(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft);
+static ssize_t pmac_ct_u16_read(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft);
 #endif /* CONFIG_PPC */
 
 /*** Machine definitions *****************************************************/
@@ -681,6 +696,9 @@ struct sound_settings {
 	SETTINGS soft;		/* software settings */
 	SETTINGS dsp;		/* /dev/dsp default settings */
 	TRANS *trans;		/* supported translations */
+#if defined(CONFIG_PPC)
+	TRANS *read_trans;	/* supported translations */
+#endif
 	int volume_left;	/* volume (range is machine dependent) */
 	int volume_right;
 	int bass;		/* tone (range is machine dependent) */
@@ -746,9 +764,11 @@ static void PMacIrqCleanup(void);
 static void PMacSilence(void);
 static void PMacInit(void);
 static void PMacPlay(void);
+static void PMacRecord(void);
 static int PMacSetFormat(int format);
 static int PMacSetVolume(int volume);
 static void pmac_awacs_tx_intr(int irq, void *devid, struct pt_regs *regs);
+static void pmac_awacs_rx_intr(int irq, void *devid, struct pt_regs *regs);
 static void pmac_awacs_intr(int irq, void *devid, struct pt_regs *regs);
 static void awacs_write(int val);
 static int awacs_get_volume(int reg, int lshift);
@@ -773,6 +793,10 @@ static int sound_set_bass(int bass);
 static int sound_set_treble(int treble);
 #endif /* CONFIG_ATARI || CONFIG_AMIGA */
 static ssize_t sound_copy_translate(const u_char *userPtr,
+				    size_t userCount,
+				    u_char frame[], ssize_t *frameUsed,
+				    ssize_t frameLeft);
+static ssize_t sound_copy_translate_read(const u_char *userPtr,
 				    size_t userCount,
 				    u_char frame[], ssize_t *frameUsed,
 				    ssize_t frameLeft);
@@ -809,8 +833,8 @@ struct sound_queue {
 	 *	Amiga: Bit 0 is set: a frame is loaded
 	 *	       Bit 1 is set: a frame is playing
 	 */
-	int playing;
-	wait_queue_head_t write_queue, open_queue, sync_queue;
+	int active;
+	wait_queue_head_t action_queue, open_queue, sync_queue;
 	int open_mode;
 	int busy, syncing;
 #ifdef CONFIG_ATARI
@@ -822,6 +846,7 @@ struct sound_queue {
 };
 
 static struct sound_queue sq;
+static struct sound_queue read_sq;
 
 #define sq_block_address(i)	(sq.buffers[i])
 #define SIGNAL_RECEIVED	(signal_pending(current))
@@ -2172,6 +2197,135 @@ static ssize_t pmac_ctx_u16(const u_char *userPtr, size_t userCount,
 	return stereo? utotal * 4: utotal * 2;
 }
 
+static ssize_t pmac_ct_s8_read(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft)
+{
+	ssize_t count, used;
+	short *p = (short *) &frame[*frameUsed];
+	int val, stereo = sound.soft.stereo;
+
+	frameLeft >>= 2;
+	if (stereo)
+		userCount >>= 1;
+	used = count = min(userCount, frameLeft);
+	while (count > 0) {
+		u_char data;
+
+		val = *p++;
+		data = val >> 8;
+		if (put_user(data, (u_char *)userPtr++))
+			return -EFAULT;
+		if (stereo) {
+			val = *p;
+			data = val >> 8;
+			if (put_user(data, (u_char *)userPtr++))
+				return -EFAULT;
+		}
+		p++;
+		count--;
+	}
+	*frameUsed += used * 4;
+	return stereo? used * 2: used;
+}
+
+
+static ssize_t pmac_ct_u8_read(const u_char *userPtr, size_t userCount,
+			  u_char frame[], ssize_t *frameUsed,
+			  ssize_t frameLeft)
+{
+	ssize_t count, used;
+	short *p = (short *) &frame[*frameUsed];
+	int val, stereo = sound.soft.stereo;
+
+	frameLeft >>= 2;
+	if (stereo)
+		userCount >>= 1;
+	used = count = min(userCount, frameLeft);
+	while (count > 0) {
+		u_char data;
+
+		val = *p++;
+		data = (val >> 8) ^ 0x80;
+		if (put_user(data, (u_char *)userPtr++))
+			return -EFAULT;
+		if (stereo) {
+			val = *p;
+			data = (val >> 8) ^ 0x80;
+			if (put_user(data, (u_char *)userPtr++))
+				return -EFAULT;
+		}
+		p++;
+		count--;
+	}
+	*frameUsed += used * 4;
+	return stereo? used * 2: used;
+}
+
+
+static ssize_t pmac_ct_s16_read(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft)
+{
+	ssize_t count, used;
+	int stereo = sound.soft.stereo;
+	short *fp = (short *) &frame[*frameUsed];
+
+	frameLeft >>= 2;
+	userCount >>= (stereo? 2: 1);
+	used = count = min(userCount, frameLeft);
+	if (!stereo) {
+		short *up = (short *) userPtr;
+		while (count > 0) {
+			short data;
+			data = *fp;
+			if (put_user(data, up++))
+				return -EFAULT;
+			fp+=2;
+			count--;
+		}
+	} else {
+		if (copy_to_user((u_char *)userPtr, fp, count * 4))
+			return -EFAULT;
+	}
+	*frameUsed += used * 4;
+	return stereo? used * 4: used * 2;
+}
+
+static ssize_t pmac_ct_u16_read(const u_char *userPtr, size_t userCount,
+			   u_char frame[], ssize_t *frameUsed,
+			   ssize_t frameLeft)
+{
+	ssize_t count, used;
+	int mask = (sound.soft.format == AFMT_U16_LE? 0x0080: 0x8000);
+	int stereo = sound.soft.stereo;
+	short *fp = (short *) &frame[*frameUsed];
+	short *up = (short *) userPtr;
+
+	frameLeft >>= 2;
+	userCount >>= (stereo? 2: 1);
+	used = count = min(userCount, frameLeft);
+	while (count > 0) {
+		int data;
+
+		data = *fp++;
+		data ^= mask;
+		if (put_user(data, up++))
+			return -EFAULT;
+		if (stereo) {
+			data = *fp;
+			data ^= mask;
+			if (put_user(data, up++))
+				return -EFAULT;
+		}
+		fp++;
+		count--;
+	}
+	*frameUsed += used * 4;
+	return stereo? used * 4: used * 2;
+}
+
+
 #endif /* CONFIG_PPC */
 
 
@@ -2211,6 +2365,11 @@ static TRANS transAwacsNormal = {
 static TRANS transAwacsExpand = {
 	pmac_ctx_law, pmac_ctx_law, pmac_ctx_s8, pmac_ctx_u8,
 	pmac_ctx_s16, pmac_ctx_u16, pmac_ctx_s16, pmac_ctx_u16
+};
+
+static TRANS transAwacsNormalRead = {
+	NULL, NULL, pmac_ct_s8_read, pmac_ct_u8_read,
+	pmac_ct_s16_read, pmac_ct_u16_read, pmac_ct_s16_read, pmac_ct_u16_read
 };
 #endif /* CONFIG_PPC */
 
@@ -2574,18 +2733,18 @@ static void ata_sq_play_next_frame(int index)
 	/* Since only an even number of samples per frame can
 	   be played, we might lose one byte here. (TO DO) */
 	sq.front = (sq.front+1) % sq.max_count;
-	sq.playing++;
+	sq.active++;
 	tt_dmasnd.ctrl = DMASND_CTRL_ON | DMASND_CTRL_REPEAT;
 }
 
 
 static void AtaPlay(void)
 {
-	/* ++TeSche: Note that sq.playing is no longer just a flag but holds
+	/* ++TeSche: Note that sq.active is no longer just a flag but holds
 	 * the number of frames the DMA is currently programmed for instead,
 	 * may be 0, 1 (currently being played) or 2 (pre-programmed).
 	 *
-	 * Changes done to sq.count and sq.playing are a bit more subtle again
+	 * Changes done to sq.count and sq.active are a bit more subtle again
 	 * so now I must admit I also prefer disabling the irq here rather
 	 * than considering all possible situations. But the point is that
 	 * disabling the irq doesn't have any bad influence on this version of
@@ -2596,13 +2755,13 @@ static void AtaPlay(void)
 	 */
 	atari_disable_irq(IRQ_MFP_TIMA);
 
-	if (sq.playing == 2 ||	/* DMA is 'full' */
+	if (sq.active == 2 ||	/* DMA is 'full' */
 	    sq.count <= 0) {	/* nothing to do */
 		atari_enable_irq(IRQ_MFP_TIMA);
 		return;
 	}
 
-	if (sq.playing == 0) {
+	if (sq.active == 0) {
 		/* looks like there's nothing 'in' the DMA yet, so try
 		 * to put two frames into it (at least one is available).
 		 */
@@ -2650,7 +2809,7 @@ static void ata_sq_interrupt(int irq, void *dummy, struct pt_regs *fp)
 #if 0
 	/* ++TeSche: if you should want to test this... */
 	static int cnt = 0;
-	if (sq.playing == 2)
+	if (sq.active == 2)
 		if (++cnt == 10) {
 			/* simulate losing an interrupt */
 			cnt = 0;
@@ -2667,7 +2826,7 @@ static void ata_sq_interrupt(int irq, void *dummy, struct pt_regs *fp)
 		return;
 	}
 
-	if (!sq.playing) {
+	if (!sq.active) {
 		/* playing was interrupted and sq_reset() has already cleared
 		 * the sq variables, so better don't do anything here.
 		 */
@@ -2683,29 +2842,29 @@ static void ata_sq_interrupt(int irq, void *dummy, struct pt_regs *fp)
 	 * as soon as the irq gets through.
 	 */
 	sq.count--;
-	sq.playing--;
+	sq.active--;
 
-	if (!sq.playing) {
+	if (!sq.active) {
 		tt_dmasnd.ctrl = DMASND_CTRL_OFF;
 		sq.ignore_int = 1;
 	}
 
-	WAKE_UP(sq.write_queue);
+	WAKE_UP(sq.action_queue);
 	/* At least one block of the queue is free now
 	   so wake up a writing process blocked because
 	   of a full queue. */
 
-	if ((sq.playing != 1) || (sq.count != 1))
+	if ((sq.active != 1) || (sq.count != 1))
 		/* We must be a bit carefully here: sq.count indicates the
 		 * number of buffers used and not the number of frames to
-		 * be played. If sq.count==1 and sq.playing==1 that means
+		 * be played. If sq.count==1 and sq.active==1 that means
 		 * the only remaining frame was already programmed earlier
 		 * (and is currently running) so we mustn't call AtaPlay()
 		 * here, otherwise we'll play one frame too much.
 		 */
 		AtaPlay();
 
-	if (!sq.playing) WAKE_UP(sq.sync_queue);
+	if (!sq.active) WAKE_UP(sq.sync_queue);
 	/* We are not playing after AtaPlay(), so there
 	   is nothing to play any more. Wake up a process
 	   waiting for audio output to drain. */
@@ -2902,7 +3061,7 @@ static void ami_sq_play_next_frame(int index)
 			custom.dmacon = AMI_AUDIO_8;
 	}
 	sq.front = (sq.front+1) % sq.max_count;
-	sq.playing |= AMI_PLAY_LOADED;
+	sq.active |= AMI_PLAY_LOADED;
 }
 
 
@@ -2912,13 +3071,13 @@ static void AmiPlay(void)
 
 	custom.intena = IF_AUD0;
 
-	if (sq.playing & AMI_PLAY_LOADED) {
+	if (sq.active & AMI_PLAY_LOADED) {
 		/* There's already a frame loaded */
 		custom.intena = IF_SETCLR | IF_AUD0;
 		return;
 	}
 
-	if (sq.playing & AMI_PLAY_PLAYING)
+	if (sq.active & AMI_PLAY_PLAYING)
 		/* Increase threshold: frame 1 is already being played */
 		minframes = 2;
 
@@ -2946,7 +3105,7 @@ static void ami_sq_interrupt(int irq, void *dummy, struct pt_regs *fp)
 {
 	int minframes = 1;
 
-	if (!sq.playing) {
+	if (!sq.active) {
 		/* Playing was interrupted and sq_reset() has already cleared
 		 * the sq variables, so better don't do anything here.
 		 */
@@ -2954,20 +3113,20 @@ static void ami_sq_interrupt(int irq, void *dummy, struct pt_regs *fp)
 		return;
 	}
 
-	if (sq.playing & AMI_PLAY_PLAYING) {
+	if (sq.active & AMI_PLAY_PLAYING) {
 		/* We've just finished a frame */
 		sq.count--;
-		WAKE_UP(sq.write_queue);
+		WAKE_UP(sq.action_queue);
 	}
 
-	if (sq.playing & AMI_PLAY_LOADED)
+	if (sq.active & AMI_PLAY_LOADED)
 		/* Increase threshold: frame 1 is already being played */
 		minframes = 2;
 
 	/* Shift the flags */
-	sq.playing = (sq.playing<<1) & AMI_PLAY_MASK;
+	sq.active = (sq.active<<1) & AMI_PLAY_MASK;
 
-	if (!sq.playing)
+	if (!sq.active)
 		/* No frame is playing, disable audio DMA */
 		custom.dmacon = AMI_AUDIO_OFF;
 
@@ -2975,7 +3134,7 @@ static void ami_sq_interrupt(int irq, void *dummy, struct pt_regs *fp)
 		/* Try to play the next frame */
 		AmiPlay();
 
-	if (!sq.playing)
+	if (!sq.active)
 		/* Nothing to play anymore.
 		   Wake up a process waiting for audio output to drain. */
 		WAKE_UP(sq.sync_queue);
@@ -3001,7 +3160,8 @@ static void PMacFree(void *ptr, unsigned int size)
 static int __init PMacIrqInit(void)
 {
 	if (request_irq(awacs_irq, pmac_awacs_intr, 0, "AWACS", 0)
-	    || request_irq(awacs_tx_irq, pmac_awacs_tx_intr, 0, "AWACS out", 0))
+	    || request_irq(awacs_tx_irq, pmac_awacs_tx_intr, 0, "AWACS out", 0)
+	    || request_irq(awacs_rx_irq, pmac_awacs_rx_intr, 0, "AWACS in", 0))
 		return 0;
 	return 1;
 }
@@ -3015,7 +3175,10 @@ static void PMacIrqCleanup(void)
 	out_le32(&awacs->control, in_le32(&awacs->control) & 0xfff);
 	free_irq(awacs_irq, pmac_awacs_intr);
 	free_irq(awacs_tx_irq, pmac_awacs_tx_intr);
+	free_irq(awacs_rx_irq, pmac_awacs_rx_intr);
 	kfree(awacs_tx_cmd_space);
+	if (awacs_rx_cmd_space)
+		kfree(awacs_rx_cmd_space);
 	if (beep_buf)
 		kfree(beep_buf);
 	kd_mksound = orig_mksound;
@@ -3065,16 +3228,28 @@ static void PMacInit(void)
 		sound.trans = &transAwacsNormal;
 	else
 		sound.trans = &transAwacsExpand;
+	sound.read_trans = &transAwacsNormalRead;
 	sound.hard.speed = awacs_freqs[i];
 	awacs_rate_index = i;
 
-	PMacSilence();
 	/* XXX disable error interrupt on burgundy for now */
 	out_le32(&awacs->control, MASK_IEPC | (i << 8) | 0x11
 		 | (awacs_revision < AWACS_BURGUNDY? MASK_IEE: 0));
 	awacs_reg[1] = (awacs_reg[1] & ~MASK_SAMPLERATE) | (i << 3);
 	awacs_write(awacs_reg[1] | MASK_ADDR1);
 	out_le32(&awacs->byteswap, sound.hard.format != AFMT_S16_BE);
+
+	/* We really want to execute a DMA stop command, after the AWACS
+	 * is initialized.
+	 * For reasons I don't understand, it stops the hissing noise
+	 * common to many PowerBook G3 systems (like mine :-).  Maybe it
+	 * is just the AWACS control register change......
+	 */
+	out_le32(&awacs_txdma->control, (RUN|WAKE|FLUSH|PAUSE) << 16);
+	st_le16(&beep_dbdma_cmd->command, DBDMA_STOP);
+	out_le32(&awacs->control, (in_le32(&awacs->control) & ~0x1f00));
+	out_le32(&awacs_txdma->cmdptr, virt_to_bus(beep_dbdma_cmd));
+	out_le32(&awacs_txdma->control, RUN | (RUN << 16));
 
 	sound.bal = -sound.soft.speed;
 }
@@ -3163,20 +3338,23 @@ static void PMacPlay(void)
 	unsigned long flags;
 
 	save_flags(flags); cli();
-	if (beep_playing) {
+	if (awacs_beep_state) {
 		/* sound takes precedence over beeps */
 		out_le32(&awacs_txdma->control, (RUN|PAUSE|FLUSH|WAKE) << 16);
 		out_le32(&awacs->control,
 			 (in_le32(&awacs->control) & ~0x1f00)
-			 || (awacs_rate_index << 8));
+			 | (awacs_rate_index << 8));
 		out_le32(&awacs->byteswap, sound.hard.format != AFMT_S16_BE);
+		out_le32(&awacs_txdma->cmdptr, virt_to_bus(&(awacs_tx_cmds[(sq.front+sq.active) % sq.max_count])));
+
 		beep_playing = 0;
+		awacs_beep_state = 0;
 	}
-	i = sq.front + sq.playing;
+	i = sq.front + sq.active;
 	if (i >= sq.max_count)
 		i -= sq.max_count;
-	while (sq.playing < 2 && sq.playing < sq.count) {
-		count = (sq.count == sq.playing + 1)? sq.rear_size: sq.block_size;
+	while (sq.active < 2 && sq.active < sq.count) {
+		count = (sq.count == sq.active + 1)?sq.rear_size:sq.block_size;
 		if (count < sq.block_size && !sq.syncing)
 			/* last block not yet filled, and we're not syncing. */
 			break;
@@ -3187,13 +3365,32 @@ static void PMacPlay(void)
 			i = 0;
 		out_le16(&awacs_tx_cmds[i].command, DBDMA_STOP);
 		out_le16(&cp->command, OUTPUT_MORE + INTR_ALWAYS);
-		if (sq.playing == 0)
+		if (sq.active == 0)
 			out_le32(&awacs_txdma->cmdptr, virt_to_bus(cp));
 		out_le32(&awacs_txdma->control, ((RUN|WAKE) << 16) + (RUN|WAKE));
-		++sq.playing;
+		++sq.active;
 	}
 	restore_flags(flags);
 }
+
+
+static void PMacRecord(void)
+{
+	unsigned long flags;
+
+	if (read_sq.active)
+		return;
+
+	save_flags(flags); cli();
+
+	/* This is all we have to do......Just start it up.
+	*/
+	out_le32(&awacs_rxdma->control, ((RUN|WAKE) << 16) + (RUN|WAKE));
+	read_sq.active = 1;
+
+        restore_flags(flags);
+}
+
 
 static void
 pmac_awacs_tx_intr(int irq, void *devid, struct pt_regs *regs)
@@ -3202,25 +3399,77 @@ pmac_awacs_tx_intr(int irq, void *devid, struct pt_regs *regs)
 	int stat;
 	volatile struct dbdma_cmd *cp;
 
-	while (sq.playing > 0) {
+	while (sq.active > 0) {
 		cp = &awacs_tx_cmds[i];
 		stat = ld_le16(&cp->xfer_status);
 		if ((stat & ACTIVE) == 0)
 			break;	/* this frame is still going */
 		--sq.count;
-		--sq.playing;
+		--sq.active;
 		if (++i >= sq.max_count)
 			i = 0;
 	}
 	if (i != sq.front)
-		WAKE_UP(sq.write_queue);
+		WAKE_UP(sq.action_queue);
 	sq.front = i;
 
 	PMacPlay();
 
-	if (!sq.playing)
+	if (!sq.active)
 		WAKE_UP(sq.sync_queue);
 }
+
+
+static void
+pmac_awacs_rx_intr(int irq, void *devid, struct pt_regs *regs)
+{
+
+	/* For some reason on my PowerBook G3, I get one interrupt
+	 * when the interrupt vector is installed (like something is
+	 * pending).  This happens before the dbdma is initialize by
+	 * us, so I just check the command pointer and if it is zero,
+	 * just blow it off.
+	 */
+	if (in_le32(&awacs_rxdma->cmdptr) == 0)
+		return;
+	
+	/* We also want to blow 'em off when shutting down.
+	*/
+	if (read_sq.active == 0)
+		return;
+
+	/* Check multiple buffers in case we were held off from
+	 * interrupt processing for a long time.  Geeze, I really hope
+	 * this doesn't happen.
+	 */
+	while (awacs_rx_cmds[read_sq.rear].xfer_status) {
+
+		/* Clear status and move on to next buffer.
+		*/
+		awacs_rx_cmds[read_sq.rear].xfer_status = 0;
+		read_sq.rear++;
+
+		/* Wrap the buffer ring.
+		*/
+		if (read_sq.rear >= read_sq.max_active)
+			read_sq.rear = 0;
+
+		/* If we have caught up to the front buffer, bump it.
+		 * This will cause weird (but not fatal) results if the
+		 * read loop is currently using this buffer.  The user is
+		 * behind in this case anyway, so weird things are going
+		 * to happen.
+		 */
+		if (read_sq.rear == read_sq.front) {
+			read_sq.front++;
+			if (read_sq.front >= read_sq.max_active)
+				read_sq.front = 0;
+		}
+	}
+
+	WAKE_UP(read_sq.action_queue);
+}
+
 
 static void
 pmac_awacs_intr(int irq, void *devid, struct pt_regs *regs)
@@ -3294,7 +3543,7 @@ static void awacs_mksound(unsigned int hz, unsigned int ticks)
 		beep_timer.expires = jiffies + ticks;
 		add_timer(&beep_timer);
 	}
-	if (beep_playing || sq.playing || beep_buf == NULL) {
+	if (beep_playing || sq.active || beep_buf == NULL) {
 		restore_flags(flags);
 		return;		/* too hard, sorry :-( */
 	}
@@ -3324,6 +3573,7 @@ static void awacs_mksound(unsigned int hz, unsigned int ticks)
 	st_le16(&beep_dbdma_cmd->xfer_status, 0);
 	st_le32(&beep_dbdma_cmd->cmd_dep, virt_to_bus(beep_dbdma_cmd));
 	st_le32(&beep_dbdma_cmd->phy_addr, virt_to_bus(beep_buf));
+	awacs_beep_state = 1;
 
 	save_flags(flags); cli();
 	if (beep_playing) {	/* i.e. haven't been terminated already */
@@ -3781,6 +4031,45 @@ static ssize_t sound_copy_translate(const u_char *userPtr,
 		return 0;
 }
 
+static ssize_t sound_copy_translate_read(const u_char *userPtr,
+				    size_t userCount,
+				    u_char frame[], ssize_t *frameUsed,
+				    ssize_t frameLeft)
+{
+	ssize_t (*ct_func)(const u_char *, size_t, u_char *, ssize_t *, ssize_t) = NULL;
+
+	switch (sound.soft.format) {
+	case AFMT_MU_LAW:
+		ct_func = sound.read_trans->ct_ulaw;
+		break;
+	case AFMT_A_LAW:
+		ct_func = sound.read_trans->ct_alaw;
+		break;
+	case AFMT_S8:
+		ct_func = sound.read_trans->ct_s8;
+		break;
+	case AFMT_U8:
+		ct_func = sound.read_trans->ct_u8;
+		break;
+	case AFMT_S16_BE:
+		ct_func = sound.read_trans->ct_s16be;
+		break;
+	case AFMT_U16_BE:
+		ct_func = sound.read_trans->ct_u16be;
+		break;
+	case AFMT_S16_LE:
+		ct_func = sound.read_trans->ct_s16le;
+		break;
+	case AFMT_U16_LE:
+		ct_func = sound.read_trans->ct_u16le;
+		break;
+	}
+	if (ct_func)
+		return ct_func(userPtr, userCount, frame, frameUsed, frameLeft);
+	else
+		return 0;
+}
+
 
 /*
  * /dev/mixer abstraction
@@ -3999,7 +4288,8 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 				data = SOUND_MASK_VOLUME | SOUND_MASK_SPEAKER
 					| SOUND_MASK_LINE | SOUND_MASK_MIC
 					| SOUND_MASK_CD | SOUND_MASK_RECLEV
-					| SOUND_MASK_ALTPCM;
+					| SOUND_MASK_ALTPCM
+					| SOUND_MASK_MONITOR;
 				return IOCTL_OUT(arg, data);
 			case SOUND_MIXER_READ_RECMASK:
 				data = SOUND_MASK_LINE | SOUND_MASK_MIC
@@ -4013,20 +4303,27 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 					data |= SOUND_MASK_MIC;
 				if (awacs_reg[0] & MASK_MUX_CD)
 					data |= SOUND_MASK_CD;
+				if (awacs_reg[1] & MASK_LOOPTHRU)
+					data |= SOUND_MASK_MONITOR;
 				return IOCTL_OUT(arg, data);
 			case SOUND_MIXER_WRITE_RECSRC:
 				IOCTL_IN(arg, data);
 				data &= (SOUND_MASK_LINE
-					 | SOUND_MASK_MIC | SOUND_MASK_CD);
+					 | SOUND_MASK_MIC | SOUND_MASK_CD
+					 | SOUND_MASK_MONITOR);
 				awacs_reg[0] &= ~(MASK_MUX_CD | MASK_MUX_MIC
 						  | MASK_MUX_AUDIN);
+				awacs_reg[1] &= ~MASK_LOOPTHRU;
 				if (data & SOUND_MASK_LINE)
 					awacs_reg[0] |= MASK_MUX_AUDIN;
 				if (data & SOUND_MASK_MIC)
 					awacs_reg[0] |= MASK_MUX_MIC;
 				if (data & SOUND_MASK_CD)
 					awacs_reg[0] |= MASK_MUX_CD;
+				if (data & SOUND_MASK_MONITOR)
+					awacs_reg[1] |= MASK_LOOPTHRU;
 				awacs_write(awacs_reg[0] | MASK_ADDR0);
+				awacs_write(awacs_reg[1] | MASK_ADDR1);
 				return IOCTL_OUT(arg, data);
 			case SOUND_MIXER_READ_STEREODEVS:
 				data = SOUND_MASK_VOLUME | SOUND_MASK_SPEAKER
@@ -4347,7 +4644,61 @@ static void sq_release_buffers(void)
 }
 
 
-static void sq_setup(int numBufs, int bufSize, char **buffers)
+static int sq_allocate_read_buffers(void)
+{
+	int i;
+	int j;
+
+	if (sound_read_buffers)
+		return 0;
+	sound_read_buffers = kmalloc(numReadBufs * sizeof(char *), GFP_KERNEL);
+	if (!sound_read_buffers)
+		return -ENOMEM;
+	for (i = 0; i < numBufs; i++) {
+		sound_read_buffers[i] = sound.mach.dma_alloc (readbufSize<<10,
+							      GFP_KERNEL);
+		if (!sound_read_buffers[i]) {
+			while (i--)
+				sound.mach.dma_free (sound_read_buffers[i],
+						     readbufSize << 10);
+			kfree (sound_read_buffers);
+			sound_read_buffers = 0;
+			return -ENOMEM;
+		}
+		/* XXXX debugging code */
+		for (j=0; j<readbufSize; j++) {
+			sound_read_buffers[i][j] = 0xef;
+		}
+	}
+	return 0;
+}
+
+static void sq_release_read_buffers(void)
+{
+	int i;
+	volatile struct dbdma_cmd *cp;
+	
+
+	if (sound_read_buffers) {
+
+#if CONFIG_PPC
+		cp = awacs_rx_cmds;
+		for (i = 0; i < numReadBufs; i++,cp++) {
+			st_le16(&cp->command, DBDMA_STOP);
+		}
+		/* We should probably wait for the thing to stop before we
+		   release the memory */
+#endif
+		for (i = 0; i < numBufs; i++)
+			sound.mach.dma_free (sound_read_buffers[i],
+					     bufSize << 10);
+		kfree (sound_read_buffers);
+		sound_read_buffers = 0;
+	}
+}
+
+
+static void sq_setup(int numBufs, int bufSize, char **write_buffers)
 {
 #ifdef CONFIG_PPC
 	int i;
@@ -4357,12 +4708,12 @@ static void sq_setup(int numBufs, int bufSize, char **buffers)
 	sq.max_count = numBufs;
 	sq.max_active = numBufs;
 	sq.block_size = bufSize;
-	sq.buffers = buffers;
+	sq.buffers = write_buffers;
 
 	sq.front = sq.count = 0;
 	sq.rear = -1;
 	sq.syncing = 0;
-	sq.playing = 0;
+	sq.active = 0;
 
 #ifdef CONFIG_ATARI
 	sq.ignore_int = 0;
@@ -4375,7 +4726,7 @@ static void sq_setup(int numBufs, int bufSize, char **buffers)
 	cp = awacs_tx_cmds;
 	memset((void *) cp, 0, (numBufs + 1) * sizeof(struct dbdma_cmd));
 	for (i = 0; i < numBufs; ++i, ++cp) {
-		st_le32(&cp->phy_addr, virt_to_bus(buffers[i]));
+		st_le32(&cp->phy_addr, virt_to_bus(write_buffers[i]));
 	}
 	st_le16(&cp->command, DBDMA_NOP + BR_ALWAYS);
 	st_le32(&cp->cmd_dep, virt_to_bus(awacs_tx_cmds));
@@ -4383,6 +4734,59 @@ static void sq_setup(int numBufs, int bufSize, char **buffers)
 	out_le32(&awacs_txdma->cmdptr, virt_to_bus(awacs_tx_cmds));
 #endif /* CONFIG_PPC */
 }
+
+static void read_sq_setup(int numBufs, int bufSize, char **read_buffers)
+{
+#ifdef CONFIG_PPC
+	int i;
+	volatile struct dbdma_cmd *cp;
+#endif /* CONFIG_PPC */
+
+	read_sq.max_count = numBufs;
+	read_sq.max_active = numBufs;
+	read_sq.block_size = bufSize;
+	read_sq.buffers = read_buffers;
+
+	read_sq.front = read_sq.count = 0;
+	read_sq.rear = 0;
+	read_sq.rear_size = 0;
+	read_sq.syncing = 0;
+	read_sq.active = 0;
+
+#ifdef CONFIG_ATARI
+	read_sq.ignore_int = 0;
+#endif /* CONFIG_ATARI */
+#ifdef CONFIG_AMIGA
+	read_sq.block_size_half = read_sq.block_size>>1;
+	read_sq.block_size_quarter = read_sq.block_size_half>>1;
+#endif /* CONFIG_AMIGA */
+#ifdef CONFIG_PPC
+	cp = awacs_rx_cmds;
+	memset((void *) cp, 0, (numBufs + 1) * sizeof(struct dbdma_cmd));
+
+	/* Set dma buffers up in a loop */
+	for (i = 0; i < numBufs; i++,cp++) {
+		st_le32(&cp->phy_addr, virt_to_bus(read_buffers[i]));
+		st_le16(&cp->command, INPUT_MORE + INTR_ALWAYS);
+		st_le16(&cp->req_count, read_sq.block_size);
+		st_le16(&cp->xfer_status, 0);
+	}
+
+	/* The next two lines make the thing loop around.
+	*/
+	st_le16(&cp->command, DBDMA_NOP + BR_ALWAYS);
+	st_le32(&cp->cmd_dep, virt_to_bus(awacs_rx_cmds));
+
+	/* Don't start until the first read is done.
+	 * This will also abort any operations in progress if the DMA
+	 * happens to be running (and it shouldn't).
+	 */
+	out_le32(&awacs_rxdma->control, (RUN|PAUSE|FLUSH|WAKE) << 16);
+	out_le32(&awacs_rxdma->cmdptr, virt_to_bus(awacs_rx_cmds));
+
+#endif /* CONFIG_PPC */
+}
+
 
 static void sq_play(void)
 {
@@ -4428,7 +4832,7 @@ static ssize_t sq_write(struct file *file, const char *src, size_t uLeft,
 			sq_play();
 			if (NON_BLOCKING(sq.open_mode))
 				return uWritten > 0 ? uWritten : -EAGAIN;
-			SLEEP(sq.write_queue, ONE_SECOND);
+			SLEEP(sq.action_queue, ONE_SECOND);
 			if (SIGNAL_RECEIVED)
 				return uWritten > 0 ? uWritten : -EINTR;
 		}
@@ -4462,29 +4866,117 @@ static ssize_t sq_write(struct file *file, const char *src, size_t uLeft,
 }
 
 
+/***********/
+
+/* Here is how the values are used for reading.
+ * The value 'active' simply indicates the DMA is running.  This is
+ * done so the driver semantics are DMA starts when the first read is
+ * posted.  The value 'front' indicates the buffer we should next
+ * send to the user.  The value 'rear' indicates the buffer the DMA is
+ * currently filling.  When 'front' == 'rear' the buffer "ring" is
+ * empty (we always have an empty available).  The 'rear_size' is used
+ * to track partial offsets into the current buffer.  Right now, I just keep
+ * the DMA running.  If the reader can't keep up, the interrupt tosses
+ * the oldest buffer.  We could also shut down the DMA in this case.
+ */
+static ssize_t sq_read(struct file *file, char *dst, size_t uLeft,
+                       loff_t *ppos)
+{
+
+	ssize_t	uRead, bLeft, bUsed, uUsed;
+
+	if (uLeft == 0)
+		return 0;
+
+	if (!read_sq.active)
+		PMacRecord();	/* Kick off the record process. */
+
+	uRead = 0;
+
+	/* Move what the user requests, depending upon other options.
+	*/
+	while (uLeft > 0) {
+
+		/* When front == rear, the DMA is not done yet.
+		*/
+		while (read_sq.front == read_sq.rear) {
+			if (NON_BLOCKING(read_sq.open_mode)) {
+			       return uRead > 0 ? uRead : -EAGAIN;
+			}
+			SLEEP(read_sq.action_queue, ONE_SECOND);
+			if (SIGNAL_RECEIVED)
+				return uRead > 0 ? uRead : -EINTR;
+		}
+
+		/* The amount we move is either what is left in the
+		 * current buffer or what the user wants.
+		 */
+		bLeft = read_sq.block_size - read_sq.rear_size;
+		bUsed = read_sq.rear_size;
+		uUsed = sound_copy_translate_read(dst, uLeft,
+			read_sq.buffers[read_sq.front], &bUsed, bLeft);
+		if (uUsed <= 0)
+			return uUsed;
+		dst += uUsed;
+		uRead += uUsed;
+		uLeft -= uUsed;
+		read_sq.rear_size += bUsed;
+		if (read_sq.rear_size >= read_sq.block_size) {
+			read_sq.rear_size = 0;
+			read_sq.front++;
+			if (read_sq.front >= read_sq.max_active)
+				read_sq.front = 0;
+		}
+	}
+	return uRead;
+}
+
 static int sq_open(struct inode *inode, struct file *file)
 {
 	int rc = 0;
 
 	MOD_INC_USE_COUNT;
-	if (sq.busy) {
-		rc = -EBUSY;
-		if (NON_BLOCKING(file->f_flags))
-			goto err_out;
-		rc = -EINTR;
-		while (sq.busy) {
-			SLEEP(sq.open_queue, ONE_SECOND);
-			if (SIGNAL_RECEIVED)
+	if (file->f_mode & FMODE_WRITE) {
+		if (sq.busy) {
+			rc = -EBUSY;
+			if (NON_BLOCKING(file->f_flags))
 				goto err_out;
+			rc = -EINTR;
+			while (sq.busy) {
+				SLEEP(sq.open_queue, ONE_SECOND);
+				if (SIGNAL_RECEIVED)
+					goto err_out;
+			}
 		}
-		rc = 0;
+		sq.busy = 1; /* Let's play spot-the-race-condition */
+
+		if (sq_allocate_buffers()) goto err_out_nobusy;
+
+		sq_setup(numBufs, bufSize<<10,sound_buffers);
+		sq.open_mode = file->f_mode;
 	}
-	sq.busy = 1;
-	rc = sq_allocate_buffers();
-	if (rc)
-		goto err_out_nobusy;
-	sq_setup(numBufs, bufSize << 10, sound_buffers);
-	sq.open_mode = file->f_flags;
+
+
+	if (file->f_mode & FMODE_READ) {
+		if (read_sq.busy) {
+			rc = -EBUSY;
+			if (NON_BLOCKING(file->f_flags))
+				goto err_out;
+			rc = -EINTR;
+			while (read_sq.busy) {
+				SLEEP(read_sq.open_queue, ONE_SECOND);
+				if (SIGNAL_RECEIVED)
+					goto err_out;
+			}
+			rc = 0;
+		}
+		read_sq.busy = 1;
+		if (sq_allocate_read_buffers()) goto err_out_nobusy;
+
+		read_sq_setup(numReadBufs,readbufSize<<10, sound_read_buffers);
+		read_sq.open_mode = file->f_mode;
+	}                                                                      
+
 #ifdef CONFIG_ATARI
 	sq.ignore_int = 1;
 #endif /* CONFIG_ATARI */
@@ -4497,10 +4989,25 @@ static int sq_open(struct inode *inode, struct file *file)
 		sound_set_stereo(0);
 		sound_set_format(AFMT_MU_LAW);
 	}
+
+#if 0
+	if (file->f_mode == FMODE_READ) {
+		/* Start dma'ing straight away */
+		PMacRecord();
+	}
+#endif
+
 	return 0;
+
 err_out_nobusy:
-	sq.busy = 0;
-	WAKE_UP(sq.open_queue);
+	if (file->f_mode & FMODE_WRITE) {
+		sq.busy = 0;
+		WAKE_UP(sq.open_queue);
+	}
+	if (file->f_mode & FMODE_READ) {
+		read_sq.busy = 0;
+		WAKE_UP(read_sq.open_queue);
+	}
 err_out:
 	MOD_DEC_USE_COUNT;
 	return rc;
@@ -4510,7 +5017,7 @@ err_out:
 static void sq_reset(void)
 {
 	sound_silence();
-	sq.playing = 0;
+	sq.active = 0;
 	sq.count = 0;
 	sq.front = (sq.rear+1) % sq.max_count;
 }
@@ -4523,7 +5030,7 @@ static int sq_fsync(struct file *filp, struct dentry *dentry)
 	sq.syncing = 1;
 	sq_play();	/* there may be an incomplete frame waiting */
 
-	while (sq.playing) {
+	while (sq.active) {
 		SLEEP(sq.sync_queue, ONE_SECOND);
 		if (SIGNAL_RECEIVED) {
 			/* While waiting for audio output to drain, an
@@ -4548,11 +5055,23 @@ static int sq_release(struct inode *inode, struct file *file)
 	sound.soft = sound.dsp;
 	sound.hard = sound.dsp;
 	sound_silence();
+
+	sq_release_read_buffers();
 	sq_release_buffers();
 	MOD_DEC_USE_COUNT;
 
-	sq.busy = 0;
-	WAKE_UP(sq.open_queue);
+	/* There is probably a DOS atack here. They change the mode flag. */
+	/* XXX add check here */
+	if (file->f_mode & FMODE_READ) {
+		read_sq.busy = 0;
+		WAKE_UP(read_sq.open_queue);
+	}
+
+	if (file->f_mode & FMODE_WRITE) {
+		sq.busy = 0;
+		WAKE_UP(sq.open_queue);
+	}
+
 	/* Wake up a process waiting for the queue being released.
 	 * Note: There may be several processes waiting for a call
 	 * to open() returning. */
@@ -4624,7 +5143,7 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	case SNDCTL_DSP_SUBDIVIDE:
 		break;
 	case SNDCTL_DSP_SETFRAGMENT:
-		if (sq.count || sq.playing || sq.syncing)
+		if (sq.count || sq.active || sq.syncing)
 			return -EINVAL;
 		IOCTL_IN(arg, size);
 		nbufs = size >> 16;
@@ -4654,7 +5173,7 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 static struct file_operations sq_fops =
 {
 	sound_lseek,
-	NULL,			/* sq_read */
+	sq_read,			/* sq_read */
 	sq_write,
 	NULL,			/* sq_readdir */
 	NULL,			/* sq_poll */
@@ -4675,10 +5194,16 @@ static void __init sq_init(void)
 	if (sq_unit < 0)
 		return;
 
-	init_waitqueue_head(&sq.write_queue);
+	init_waitqueue_head(&sq.action_queue);
 	init_waitqueue_head(&sq.open_queue);
 	init_waitqueue_head(&sq.sync_queue);
+
+	init_waitqueue_head(&read_sq.action_queue);
+	init_waitqueue_head(&read_sq.open_queue);
+	init_waitqueue_head(&read_sq.sync_queue);
+
 	sq.busy = 0;
+	read_sq.busy = 0;
 
 	/* whatever you like as startup mode for /dev/dsp,
 	 * (/dev/audio hasn't got a startup mode). note that
@@ -4726,7 +5251,7 @@ static void __init sq_init(void)
 
 static int state_open(struct inode *inode, struct file *file)
 {
-	char *buffer = state.buf, *mach = "";
+	char *buffer = state.buf, *mach = "", awacs_buf[50];
 	int len = 0;
 
 	if (state.busy)
@@ -4750,7 +5275,8 @@ static int state_open(struct inode *inode, struct file *file)
 #endif /* CONFIG_AMIGA */
 #ifdef CONFIG_PPC
 	case DMASND_AWACS:
-		sprintf(mach, "PowerMac (AWACS rev %d) ", awacs_revision);
+		sprintf(awacs_buf, "PowerMac (AWACS rev %d) ", awacs_revision);
+		mach = awacs_buf;
 		break;
 #endif /* CONFIG_PPC */
 	}
@@ -4821,8 +5347,8 @@ static int state_open(struct inode *inode, struct file *file)
 		       sq.block_size, sq.max_count, sq.max_active);
 	len += sprintf(buffer+len, "\tsq.count = %d sq.rear_size = %d\n", sq.count,
 		       sq.rear_size);
-	len += sprintf(buffer+len, "\tsq.playing = %d sq.syncing = %d\n",
-		       sq.playing, sq.syncing);
+	len += sprintf(buffer+len, "\tsq.active = %d sq.syncing = %d\n",
+		       sq.active, sq.syncing);
 	state.len = len;
 	return 0;
 }
@@ -4951,15 +5477,18 @@ void __init dmasound_init(void)
 		int vol;
 		sound.mach = machPMac;
 		has_sound = 1;
+
 		awacs = (volatile struct awacs_regs *)
 			ioremap(np->addrs[0].address, 0x80);
 		awacs_txdma = (volatile struct dbdma_regs *)
 			ioremap(np->addrs[1].address, 0x100);
 		awacs_rxdma = (volatile struct dbdma_regs *)
 			ioremap(np->addrs[2].address, 0x100);
+
 		awacs_irq = np->intrs[0].line;
 		awacs_tx_irq = np->intrs[1].line;
 		awacs_rx_irq = np->intrs[2].line;
+
 		awacs_tx_cmd_space = kmalloc((numBufs + 4) * sizeof(struct dbdma_cmd),
 					     GFP_KERNEL);
 		if (awacs_tx_cmd_space == NULL) {
@@ -4968,6 +5497,18 @@ void __init dmasound_init(void)
 		}
 		awacs_tx_cmds = (volatile struct dbdma_cmd *)
 			DBDMA_ALIGN(awacs_tx_cmd_space);
+
+
+		awacs_rx_cmd_space = kmalloc((numReadBufs + 4) * sizeof(struct dbdma_cmd),
+					     GFP_KERNEL);
+		if (awacs_rx_cmd_space == NULL) {
+		  printk("DMA sound driver: No memory for input");
+		}
+		awacs_rx_cmds = (volatile struct dbdma_cmd *)
+		  DBDMA_ALIGN(awacs_rx_cmd_space);
+
+
+
 		awacs_reg[0] = MASK_MUX_CD;
 		awacs_reg[1] = MASK_LOOPTHRU | MASK_PAROUT;
 		/* get default volume from nvram */
@@ -5083,6 +5624,7 @@ void cleanup_module(void)
 		sound.mach.irqcleanup();
 	}
 
+	sq_release_read_buffers();
 	sq_release_buffers();
 
 	if (mixer_unit >= 0)

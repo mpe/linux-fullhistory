@@ -9,7 +9,6 @@
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/config.h>
-#include <linux/pci.h>
 #include <linux/openpic.h>
 
 #include <asm/processor.h>

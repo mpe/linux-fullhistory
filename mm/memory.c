@@ -781,7 +781,7 @@ out_unlock:
  * because it doesn't cost us any seek time.  We also make sure to queue
  * the 'original' request together with the readahead ones...  
  */
-static void swapin_readahead(unsigned long entry)
+void swapin_readahead(unsigned long entry)
 {
 	int i;
 	struct page *new_page;
@@ -898,6 +898,8 @@ static int do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	page = vma->vm_ops->nopage(vma, address & PAGE_MASK, (vma->vm_flags & VM_SHARED)?0:write_access);
 	if (!page)
 		return 0;	/* SIGBUS - but we _really_ should know whether it is OOM or SIGBUS */
+	if (page == -1)
+		return -1;	/* OOM */
 
 	++tsk->maj_flt;
 	++vma->vm_mm->rss;

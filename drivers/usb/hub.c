@@ -3,6 +3,7 @@
  *
  * (C) Copyright 1999 Linus Torvalds
  * (C) Copyright 1999 Johannes Erdfelt
+ * (C) Copyright 1999 Gregory P. Smith
  */
 
 #include <linux/kernel.h>
@@ -20,9 +21,15 @@
 /* Wakes up khubd */
 static DECLARE_WAIT_QUEUE_HEAD(usb_hub_wait);
 static spinlock_t hub_event_lock = SPIN_LOCK_UNLOCKED;
+static spinlock_t hub_list_lock = SPIN_LOCK_UNLOCKED;
 
 /* List of hubs needing servicing */
 static struct list_head hub_event_list;
+
+#ifdef MODULE
+/* List containing all of the hubs (for cleanup) */
+static struct list_head all_hubs_list;
+#endif
 
 /* PID of khubd */
 static int khubd_pid = 0;
@@ -149,6 +156,7 @@ static int hub_probe(struct usb_device *dev)
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_hub *hub;
+	unsigned long flags;
 
 	/* We don't handle multi-config hubs */
 	if (dev->descriptor.bNumConfigurations != 1)
@@ -196,9 +204,15 @@ static int hub_probe(struct usb_device *dev)
 	INIT_LIST_HEAD(&hub->event_list);
 	hub->dev = dev;
 
+	/* Record the new hub's existence */
+	spin_lock_irqsave(&hub_list_lock, flags);
+	INIT_LIST_HEAD(&hub->hub_list);
+	list_add(&hub->hub_list, &all_hubs_list);
+	spin_unlock_irqrestore(&hub_list_lock, flags);
+
 	usb_hub_configure(hub);
 
-	usb_request_irq(dev, usb_rcvctrlpipe(dev, endpoint->bEndpointAddress), hub_irq, endpoint->bInterval, hub);
+	hub->irq_handle = usb_request_irq(dev, usb_rcvctrlpipe(dev, endpoint->bEndpointAddress), hub_irq, endpoint->bInterval, hub);
 
 	/* Wake up khubd */
 	wake_up(&usb_hub_wait);
@@ -216,8 +230,13 @@ static void hub_disconnect(struct usb_device *dev)
 	/* Delete it and then reset it */
 	list_del(&hub->event_list);
 	INIT_LIST_HEAD(&hub->event_list);
+	list_del(&hub->hub_list);
+	INIT_LIST_HEAD(&hub->hub_list);
 
 	spin_unlock_irqrestore(&hub_event_lock, flags);
+
+	usb_release_irq(hub->dev, hub->irq_handle);
+	hub->irq_handle = NULL;
 
 	/* Free the memory */
 	kfree(hub);
@@ -353,13 +372,16 @@ static void usb_hub_events(void)
 
 static int usb_hub_thread(void *__hub)
 {
+	MOD_INC_USE_COUNT;
+	
+	printk(KERN_INFO "USB hub driver registered\n");
+
 	lock_kernel();
 
 	/*
 	 * This thread doesn't need any user-level access,
 	 * so get rid of all our resources
 	 */
-	printk("usb_hub_thread at %p\n", &usb_hub_thread);
 	exit_mm(current);
 	exit_files(current);
 	exit_fs(current);
@@ -372,6 +394,8 @@ static int usb_hub_thread(void *__hub)
 		interruptible_sleep_on(&usb_hub_wait);
 		usb_hub_events();
 	} while (!signal_pending(current));
+
+	MOD_DEC_USE_COUNT;
 
 	printk("usb_hub_thread exiting\n");
 
@@ -393,6 +417,7 @@ int usb_hub_init(void)
 	int pid;
 
 	INIT_LIST_HEAD(&hub_event_list);
+	INIT_LIST_HEAD(&all_hubs_list);
 
 	usb_register(&hub_driver);
 	pid = kernel_thread(usb_hub_thread, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
@@ -409,11 +434,39 @@ int usb_hub_init(void)
 
 void usb_hub_cleanup(void)
 {
-	if (khubd_pid >= 0)
-		kill_proc(khubd_pid, SIGINT, 1);
+	struct list_head *next, *tmp, *head = &all_hubs_list;
+	struct usb_hub *hub;
+	unsigned long flags, flags2;
+
+	/* Free the resources allocated by each hub */
+	spin_lock_irqsave(&hub_list_lock, flags);
+	spin_lock_irqsave(&hub_event_lock, flags2);
+
+	tmp = head->next;
+	while (tmp != head) {
+		hub = list_entry(tmp, struct usb_hub, hub_list);
+
+		next = tmp->next;
+
+		list_del(&hub->event_list);
+		INIT_LIST_HEAD(&hub->event_list);
+		list_del(tmp);         /* &hub->hub_list */
+		INIT_LIST_HEAD(tmp);   /* &hub->hub_list */
+
+		/* XXX we should disconnect each connected port here */
+
+		usb_release_irq(hub->dev, hub->irq_handle);
+		hub->irq_handle = NULL;
+		kfree(hub);
+
+		tmp = next;
+	}
 
 	usb_deregister(&hub_driver);
-}
+
+	spin_unlock_irqrestore(&hub_event_lock, flags2);
+	spin_unlock_irqrestore(&hub_list_lock, flags);
+} /* usb_hub_cleanup() */
 
 #ifdef MODULE
 int init_module(void){

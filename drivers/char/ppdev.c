@@ -53,11 +53,11 @@
 /* The device minor encodes the parport number and (arbitrary) 
  * pardevice number as (port << 4) | dev. */
 #define PP_PORT(minor) ((minor >> 4) & 0xf)
-#define PP_DEV(minor) ((minor) & 0xf)
 
 struct pp_struct {
 	struct pardevice * pdev;
 	wait_queue_head_t irq_wait;
+	int got_irq;
 	int mode;
 	unsigned int flags;
 };
@@ -71,7 +71,11 @@ struct pp_struct {
 #define PP_BUFFER_SIZE 256
 #define PARDEVICE_MAX 8
 
-static struct pp_struct pp_table[PARPORT_MAX][PARDEVICE_MAX];
+static inline void enable_irq (struct pp_struct *pp)
+{
+	struct parport *port = pp->pdev->port;
+	port->ops->enable_irq (port);
+}
 
 static loff_t pp_lseek (struct file * file, long long offset, int origin)
 {
@@ -165,17 +169,16 @@ static ssize_t pp_read (struct file * file, char * buf, size_t count,
 			loff_t * ppos)
 {
 	unsigned int minor = MINOR (file->f_dentry->d_inode->i_rdev);
-	unsigned int portnum = PP_PORT (minor);
-	unsigned int dev = PP_DEV (minor);
+	struct pp_struct *pp = file->private_data;
 	char * kbuffer;
 	ssize_t bytes_read = 0;
 	ssize_t got = 0;
 
-	if (!(pp_table[portnum][dev].flags & PP_CLAIMED)) {
+	if (!(pp->flags & PP_CLAIMED)) {
 		/* Don't have the port claimed */
 		printk (KERN_DEBUG CHRDEV "%02x: claim the port first\n",
 			minor);
-		return -EPERM;
+		return -EINVAL;
 	}
 
 	kbuffer = kmalloc (min (count, PP_BUFFER_SIZE), GFP_KERNEL);
@@ -185,16 +188,16 @@ static ssize_t pp_read (struct file * file, char * buf, size_t count,
 	while (bytes_read < count) {
 		ssize_t need = min(count - bytes_read, PP_BUFFER_SIZE);
 
-		got = do_read (&pp_table[portnum][dev], kbuffer, need);
+		got = do_read (pp, kbuffer, need);
 
-		if (got < 0) {
+		if (got <= 0) {
 			if (!bytes_read)
 				bytes_read = got;
 
 			break;
 		}
 
-		if (copy_to_user (kbuffer, buf + bytes_read, got)) {
+		if (copy_to_user (buf + bytes_read, kbuffer, got)) {
 			bytes_read = -EFAULT;
 			break;
 		}
@@ -212,6 +215,7 @@ static ssize_t pp_read (struct file * file, char * buf, size_t count,
 	}
 
 	kfree (kbuffer);
+	enable_irq (pp);
 	return bytes_read;
 }
 
@@ -219,17 +223,16 @@ static ssize_t pp_write (struct file * file, const char * buf, size_t count,
 			 loff_t * ppos)
 {
 	unsigned int minor = MINOR (file->f_dentry->d_inode->i_rdev);
-	unsigned int portnum = PP_PORT (minor);
-	unsigned int dev = PP_DEV (minor);
+	struct pp_struct *pp = file->private_data;
 	char * kbuffer;
 	ssize_t bytes_written = 0;
 	ssize_t wrote;
 
-	if (!(pp_table[portnum][dev].flags & PP_CLAIMED)) {
+	if (!(pp->flags & PP_CLAIMED)) {
 		/* Don't have the port claimed */
 		printk (KERN_DEBUG CHRDEV "%02x: claim the port first\n",
 			minor);
-		return -EPERM;
+		return -EINVAL;
 	}
 
 	kbuffer = kmalloc (min (count, PP_BUFFER_SIZE), GFP_KERNEL);
@@ -244,7 +247,7 @@ static ssize_t pp_write (struct file * file, const char * buf, size_t count,
 			break;
 		}
 
-		wrote = do_write (&pp_table[portnum][dev], kbuffer, n);
+		wrote = do_write (pp, kbuffer, n);
 
 		if (wrote < 0) {
 			if (!bytes_written)
@@ -265,19 +268,20 @@ static ssize_t pp_write (struct file * file, const char * buf, size_t count,
 	}
 
 	kfree (kbuffer);
+	enable_irq (pp);
 	return bytes_written;
 }
 
 static void pp_irq (int irq, void * private, struct pt_regs * unused)
 {
 	struct pp_struct * pp = (struct pp_struct *) private;
+	pp->got_irq = 1;
 	wake_up_interruptible (&pp->irq_wait);
 }
 
-static int register_device (int minor)
+static int register_device (int minor, struct pp_struct *pp)
 {
 	unsigned int portnum = PP_PORT (minor);
-	unsigned int dev = PP_DEV (minor);
 	struct parport * port;
 	struct pardevice * pdev = NULL;
 	char *name;
@@ -299,9 +303,9 @@ static int register_device (int minor)
 		return -ENXIO;
 	}
 
-	fl = (pp_table[portnum][dev].flags & PP_EXCL) ? PARPORT_FLAG_EXCL : 0;
+	fl = (pp->flags & PP_EXCL) ? PARPORT_FLAG_EXCL : 0;
 	pdev = parport_register_device (port, name, NULL, NULL, pp_irq, fl,
-					&pp_table[portnum][dev]);
+					pp);
 
 	if (!pdev) {
 		printk (KERN_WARNING "%s: failed to register device!\n", name);
@@ -309,7 +313,7 @@ static int register_device (int minor)
 		return -ENXIO;
 	}
 
-	pp_table[portnum][dev].pdev = pdev;
+	pp->pdev = pdev;
 	printk (KERN_DEBUG "%s: registered pardevice\n", name);
 	return 0;
 }
@@ -318,35 +322,38 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 		    unsigned int cmd, unsigned long arg)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
-	unsigned int portnum = PP_PORT (minor);
-	unsigned int dev = PP_DEV (minor);
+	struct pp_struct *pp = file->private_data;
 	struct parport * port;
 
 	/* First handle the cases that don't take arguments. */
 	if (cmd == PPCLAIM) {
-		if (pp_table[portnum][dev].flags & PP_CLAIMED) {
+		if (pp->flags & PP_CLAIMED) {
 			printk (KERN_DEBUG CHRDEV
 				"%02x: you've already got it!\n", minor);
 			return -EINVAL;
 		}
 
 		/* Deferred device registration. */
-		if (!pp_table[portnum][dev].pdev) {
-			int err = register_device (minor);
+		if (!pp->pdev) {
+			int err = register_device (minor, pp);
 			if (err)
 				return err;
 		}
 
-		parport_claim_or_block (pp_table[portnum][dev].pdev);
-		pp_table[portnum][dev].flags |= PP_CLAIMED;
+		parport_claim_or_block (pp->pdev);
+		pp->flags |= PP_CLAIMED;
+
+		/* For interrupt-reporting to work, we need to be
+		 * informed of each interrupt. */
+		enable_irq (pp);
 		return 0;
 	}
 
 	if (cmd == PPEXCL) {
-		if (pp_table[portnum][dev].pdev) {
+		if (pp->pdev) {
 			printk (KERN_DEBUG CHRDEV "%02x: too late for PPEXCL; "
 				"already registered\n", minor);
-			if (pp_table[portnum][dev].flags & PP_EXCL)
+			if (pp->flags & PP_EXCL)
 				/* But it's not really an error. */
 				return 0;
 			/* There's no chance of making the driver happy. */
@@ -355,23 +362,33 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 
 		/* Just remember to register the device exclusively
 		 * when we finally do the registration. */
-		pp_table[portnum][dev].flags |= PP_EXCL;
+		pp->flags |= PP_EXCL;
+		return 0;
+	}
+
+	if (cmd == PPSETMODE) {
+		int mode;
+		if (copy_from_user (&mode, (int *) arg, sizeof (mode)))
+			return -EFAULT;
+		/* FIXME: validate mode */
+		pp->mode = mode;
 		return 0;
 	}
 
 	/* Everything else requires the port to be claimed, so check
 	 * that now. */
-	if ((pp_table[portnum][dev].flags & PP_CLAIMED) == 0) {
+	if ((pp->flags & PP_CLAIMED) == 0) {
 		printk (KERN_DEBUG CHRDEV "%02x: claim the port first\n",
 			minor);
-		return -EPERM;
+		return -EINVAL;
 	}
 
-	port = pp_table[portnum][dev].pdev->port;
+	port = pp->pdev->port;
 	switch (cmd) {
 		unsigned char reg;
 		unsigned char mask;
 		int mode;
+		int ret;
 
 	case PPRSTATUS:
 		reg = parport_read_status (port);
@@ -389,19 +406,12 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 				     sizeof (reg));
 
 	case PPYIELD:
-		parport_yield_blocking (pp_table[portnum][dev].pdev);
+		parport_yield_blocking (pp->pdev);
 		return 0;
 
 	case PPRELEASE:
-		parport_release (pp_table[portnum][dev].pdev);
-		pp_table[portnum][dev].flags &= ~PP_CLAIMED;
-		return 0;
-
-	case PPSETMODE:
-		if (copy_from_user (&mode, (int *) arg, sizeof (mode)))
-			return -EFAULT;
-		/* FIXME: validate mode */
-		pp_table[portnum][dev].mode = mode;
+		parport_release (pp->pdev);
+		pp->flags &= ~PP_CLAIMED;
 		return 0;
 
 	case PPWCONTROL:
@@ -439,10 +449,12 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 		if (copy_from_user (&mode, (int *) arg, sizeof (mode)))
 			return -EFAULT;
 		/* FIXME: validate mode */
-		return parport_negotiate (port, mode);
+		ret = parport_negotiate (port, mode);
+		enable_irq (pp);
+		return ret;
 
 	default:
-		printk (KERN_DEBUG CHRDEV "%02x: What? (cmd=0x%x\n", minor,
+		printk (KERN_DEBUG CHRDEV "%02x: What? (cmd=0x%x)\n", minor,
 			cmd);
 		return -EINVAL;
 	}
@@ -455,23 +467,26 @@ static int pp_open (struct inode * inode, struct file * file)
 {
 	unsigned int minor = MINOR (inode->i_rdev);
 	unsigned int portnum = PP_PORT (minor);
-	unsigned int dev = PP_DEV (minor);
+	struct pp_struct *pp;
 
 	if (portnum >= PARPORT_MAX)
 		return -ENXIO;
 
-	if (pp_table[portnum][dev].pdev)
-		return -EBUSY;
+	pp = kmalloc (GFP_KERNEL, sizeof (struct pp_struct));
+	if (!pp)
+		return -ENOMEM;
 
-	pp_table[portnum][dev].mode = IEEE1284_MODE_COMPAT;
-	pp_table[portnum][dev].flags = 0;
-	init_waitqueue_head (&pp_table[portnum][dev].irq_wait);
+	pp->mode = IEEE1284_MODE_COMPAT;
+	pp->flags = 0;
+	pp->got_irq = 0;
+	init_waitqueue_head (&pp->irq_wait);
 
 	/* Defer the actual device registration until the first claim.
 	 * That way, we know whether or not the driver wants to have
 	 * exclusive access to the port (PPEXCL).
 	 */
-	pp_table[portnum][dev].pdev = NULL;
+	pp->pdev = NULL;
+	file->private_data = pp;
 
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -480,42 +495,46 @@ static int pp_open (struct inode * inode, struct file * file)
 static int pp_release (struct inode * inode, struct file * file)
 {
 	unsigned int minor = MINOR (inode->i_rdev);
-	unsigned int portnum = PP_PORT (minor);
-	unsigned int dev = PP_DEV (minor);
+	struct pp_struct *pp = file->private_data;
 
-	if (pp_table[portnum][dev].flags & PP_CLAIMED) {
-		parport_release (pp_table[portnum][dev].pdev);
+	if (pp->flags & PP_CLAIMED) {
+		parport_release (pp->pdev);
 		printk (KERN_DEBUG CHRDEV "%02x: released pardevice because "
 			"user-space forgot\n", minor);
 	}
 
-	if (pp_table[portnum][dev].pdev) {
-		kfree (pp_table[portnum][dev].pdev->name);
-		parport_unregister_device (pp_table[portnum][dev].pdev);
-		pp_table[portnum][dev].pdev = NULL;
+	if (pp->pdev) {
+		kfree (pp->pdev->name);
+		parport_unregister_device (pp->pdev);
+		pp->pdev = NULL;
 		printk (KERN_DEBUG CHRDEV "%02x: unregistered pardevice\n",
 			minor);
 	}
+
+	kfree (pp);
 
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
-#if 0
 static unsigned int pp_poll (struct file * file, poll_table * wait)
 {
-	unsigned int minor = MINOR (file->f_dentry->d_inode->i_rdev);
-	poll_wait (file, &pp_table[minor].irq_wait, wait);
-	return 0; /* FIXME! Return value is wrong here */
+	struct pp_struct *pp = file->private_data;
+	unsigned int mask = 0;
+	if (pp->got_irq) {
+		pp->got_irq = 0;
+		mask |= POLLIN | POLLRDNORM;
+	}
+	poll_wait (file, &pp->irq_wait, wait);
+	return mask;
 }
-#endif
 
 static struct file_operations pp_fops = {
 	pp_lseek,
 	pp_read,
 	pp_write,
 	NULL,	/* pp_readdir */
-	NULL,   /* pp_poll */
+	pp_poll,
 	pp_ioctl,
 	NULL,	/* pp_mmap */
 	pp_open,
@@ -535,7 +554,6 @@ int pp_init (void)
 		return -EIO;
 	}
 
-	memset (pp_table, 0, sizeof (pp_table));
 	printk (KERN_INFO PP_VERSION "\n");
 	return 0;
 }

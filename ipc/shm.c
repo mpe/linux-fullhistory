@@ -15,6 +15,7 @@
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/vmalloc.h>
+#include <linux/pagemap.h>
 #include <linux/proc_fs.h>
 
 #include <asm/uaccess.h>
@@ -626,6 +627,8 @@ static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 	pte_t pte;
 	struct shmid_kernel *shp;
 	unsigned int id, idx;
+	unsigned long page;
+	struct page * page_map;
 
 	id = SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK;
 	idx = (address - shmd->vm_start + shmd->vm_offset) >> PAGE_SHIFT;
@@ -649,26 +652,32 @@ static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 	}
 #endif
 
+	lock_kernel();
+ again:
 	pte = __pte(shp->shm_pages[idx]);
 	if (!pte_present(pte)) {
-		unsigned long page = get_free_page(GFP_USER);
-		if (!page) {
-			oom(current);
-			return 0;
-		}
-		pte = __pte(shp->shm_pages[idx]);
-		if (pte_present(pte)) {
-			free_page (page); /* doesn't sleep */
-			goto done;
-		}
-		if (!pte_none(pte)) {
-			rw_swap_page_nocache(READ, pte_val(pte), (char *)page);
-			pte = __pte(shp->shm_pages[idx]);
-			if (pte_present(pte))  {
-				free_page (page); /* doesn't sleep */
-				goto done;
+		if (pte_none(pte)) {
+			page = get_free_page(GFP_USER);
+			if (!page)
+				goto oom;
+			if (pte_val(pte) != shp->shm_pages[idx])
+				goto changed;
+		} else {
+			unsigned long entry = pte_val(pte);
+
+			page_map = lookup_swap_cache(entry);
+			if (!page_map) {
+				swapin_readahead(entry);
+				page_map = read_swap_cache(entry);
 			}
-			swap_free(pte_val(pte));
+			pte = __pte(shp->shm_pages[idx]);
+			page = page_address(page_map);
+			if (pte_present(pte))
+				goto present;
+			if (!page_map)
+				goto oom;
+			delete_from_swap_cache(page_map);
+			swap_free(entry);
 			shm_swp--;
 		}
 		shm_rss++;
@@ -678,9 +687,21 @@ static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 		--current->maj_flt;  /* was incremented in do_no_page */
 
 done:	/* pte_val(pte) == shp->shm_pages[idx] */
+	unlock_kernel();
 	current->min_flt++;
 	get_page(mem_map + MAP_NR(pte_page(pte)));
 	return pte_page(pte);
+
+changed:
+	free_page(page);
+	goto again;
+present:
+	if (page_map)
+		free_page_and_swap_cache(page);
+	goto done;
+oom:
+	unlock_kernel();
+	return -1;
 }
 
 /*
@@ -697,6 +718,7 @@ int shm_swap (int prio, int gfp_mask)
 	unsigned long id, idx;
 	int loop = 0;
 	int counter;
+	struct page * page_map;
 	
 	counter = shm_rss >> prio;
 	if (!counter || !(swap_nr = get_swap_page()))
@@ -725,7 +747,8 @@ int shm_swap (int prio, int gfp_mask)
 	page = __pte(shp->shm_pages[idx]);
 	if (!pte_present(page))
 		goto check_table;
-	if ((gfp_mask & __GFP_DMA) && !PageDMA(&mem_map[MAP_NR(pte_page(page))]))
+	page_map = &mem_map[MAP_NR(pte_page(page))];
+	if ((gfp_mask & __GFP_DMA) && !PageDMA(page_map))
 		goto check_table;
 	swap_attempts++;
 
@@ -737,8 +760,11 @@ int shm_swap (int prio, int gfp_mask)
 	if (page_count(mem_map + MAP_NR(pte_page(page))) != 1)
 		goto check_table;
 	shp->shm_pages[idx] = swap_nr;
-	rw_swap_page_nocache (WRITE, swap_nr, (char *) pte_page(page));
-	free_page(pte_page(page));
+	swap_duplicate(swap_nr);
+	add_to_swap_cache(page_map, swap_nr);
+	rw_swap_page(WRITE, page_map, 0);
+
+	__free_page(page_map);
 	swap_successes++;
 	shm_swp++;
 	shm_rss--;

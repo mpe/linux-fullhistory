@@ -133,6 +133,8 @@ void usb_show_hub_descriptor(struct usb_hub_descriptor * desc)
 
 void usb_show_string(struct usb_device* dev, char *id, int index)
 {
-	if (index <= dev->maxstring && dev->stringindex && dev->stringindex[index])
-		printk("%s: %s\n", id, dev->stringindex[index]);
+	char *p = usb_string(dev, index);
+
+	if (p != 0)
+		printk(KERN_INFO "%s: %s\n", id, p);
 }

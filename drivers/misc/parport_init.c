@@ -10,7 +10,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 
 #include <linux/parport.h>
 #include <linux/errno.h>

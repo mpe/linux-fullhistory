@@ -680,6 +680,7 @@ rtl8129_open(struct device *dev)
 	tp->tx_bufs = kmalloc(TX_BUF_SIZE * NUM_TX_DESC, GFP_KERNEL);
 	tp->rx_ring = kmalloc(RX_BUF_LEN + 16, GFP_KERNEL);
 	if (tp->tx_bufs == NULL ||  tp->rx_ring == NULL) {
+		free_irq(dev->irq, dev);
 		if (tp->tx_bufs)
 			kfree(tp->tx_bufs);
 		if (rtl8129_debug > 0)

@@ -11,7 +11,7 @@
  */
 
 #include <linux/config.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 #include <linux/parport.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>

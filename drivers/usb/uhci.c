@@ -346,8 +346,11 @@ static void uhci_remove_irq_list(struct uhci_td *td)
 
 /*
  * Request a interrupt handler..
+ *
+ * Returns: a "handle pointer" that release_irq can use to stop this
+ * interrupt.  (It's really a pointer to the TD).
  */
-static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
+static void* uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	struct uhci_device *root_hub=usb_to_uhci(dev->uhci->bus->root_hub);
@@ -388,13 +391,16 @@ static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_d
 
 	/* Add it into the skeleton */
 	uhci_insert_qh(interrupt_qh->skel, interrupt_qh);
-	return 0;
+
+	return (void*)td;
 }
 
 /*
  * Remove running irq td from queues
+ *
+ * This function is not used anymore.
  */
-
+#if 0
 static int uhci_remove_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
 {
     struct uhci_device *dev = usb_to_uhci(usb_dev);
@@ -435,6 +441,51 @@ static int uhci_remove_irq(struct usb_device *usb_dev, unsigned int pipe, usb_de
     spin_unlock_irqrestore(&irqlist_lock, flags);
     return USB_ST_INTERNALERROR;
 }
+#endif
+
+/*
+ * Release an interrupt handler previously allocated using
+ * uhci_request_irq.  This function does no validity checking, so make
+ * sure you're not releasing an already released handle as it may be
+ * in use by something else..
+ *
+ * This function can NOT be called from an interrupt.
+ */
+int uhci_release_irq(void* handle)
+{
+	struct uhci_td *td;
+	struct uhci_qh *interrupt_qh;
+	unsigned long flags;
+
+#ifdef UHCI_DEBUG
+	printk("usb-uhci: Releasing irq handle %p\n", handle);
+#endif
+
+	td = (struct uhci_td*)handle;
+	if (td == NULL)
+		return USB_ST_INTERNALERROR;
+
+	/* Remove it from the internal irq_list */
+	spin_lock_irqsave(&irqlist_lock, flags);
+	list_del(&td->irq_list);
+	spin_unlock_irqrestore(&irqlist_lock, flags);
+
+	/* Remove the interrupt TD and QH */
+	uhci_remove_td(td);
+	interrupt_qh = td->qh;
+	uhci_remove_qh(interrupt_qh->skel, interrupt_qh);
+
+	if (td->completed != NULL)
+		td->completed(USB_ST_REMOVED, NULL, 0, td->dev_id);
+
+	/* Free the TD and QH */
+	uhci_td_deallocate(td);
+	uhci_qh_deallocate(interrupt_qh);
+
+	return USB_ST_NOERROR;
+} /* uhci_release_irq() */
+
+
 /*
  * Isochronous thread operations
  */
@@ -1124,7 +1175,7 @@ struct usb_operations uhci_device_operations = {
 	uhci_control_msg,
 	uhci_bulk_msg,
 	uhci_request_irq,
-	uhci_remove_irq,
+	uhci_release_irq,
 };
 
 /*

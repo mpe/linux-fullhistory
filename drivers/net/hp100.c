@@ -121,8 +121,6 @@ typedef struct enet_statistics hp100_stats_t;
 
 #ifndef __initfunc
 #define __initfunc(__initarg) __initarg
-#else
-#include <linux/init.h>
 #endif
 
 #include "hp100.h"

@@ -12,6 +12,9 @@
 #
 # Copyright (C) 1994 by Linus Torvalds
 #
+# 19990713  Artur Skawina <skawina@geocities.com>
+#           Added '-march' and '-mpreferred-stack-boundary' support
+#
 
 LD=$(CROSS_COMPILE)ld -m elf_i386
 CPP=$(CC) -E
@@ -23,6 +26,9 @@ CFLAGS_PIPE := -pipe
 CFLAGS_NSR  := -fno-strength-reduce
 CFLAGS := $(CFLAGS) $(CFLAGS_PIPE) $(CFLAGS_NSR)
 
+# prevent gcc from keeping the stack 16 byte aligned
+CFLAGS += $(shell if $(CC) -mpreferred-stack-boundary=2 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-mpreferred-stack-boundary=2"; fi)
+
 ifdef CONFIG_M386
 CFLAGS := $(CFLAGS) -m386 -DCPU=386
 AFLAGS := $(AFLAGS) -DCPU=386
@@ -30,21 +36,25 @@ endif
 
 ifdef CONFIG_M486
 CFLAGS := $(CFLAGS) -m486 -DCPU=486
+CFLAGS += $(shell if $(CC) -march=i486 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i486"; fi)
 AFLAGS := $(AFLAGS) -DCPU=486
 endif
 
 ifdef CONFIG_M586
 CFLAGS := $(CFLAGS) -DCPU=586
+CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i586"; fi)
 AFLAGS := $(AFLAGS) -DCPU=586
 endif
 
 ifdef CONFIG_M586TSC
 CFLAGS := $(CFLAGS) -DCPU=586
+CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i586"; fi)
 AFLAGS := $(AFLAGS) -DCPU=586
 endif
 
 ifdef CONFIG_M686
 CFLAGS := $(CFLAGS) -DCPU=686
+CFLAGS += $(shell if $(CC) -march=i686 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i686"; fi)
 AFLAGS := $(AFLAGS) -DCPU=686
 endif
 

@@ -53,6 +53,12 @@ struct mouse_state {
 	struct fasync_struct *fasync;
 	/* later, add a list here to support multiple mice */
 	/* but we will also need a list of file pointers to identify it */
+
+	/* FIXME: move these to a per-mouse structure */
+	struct usb_device *dev;  /* host controller this mouse is on */
+	void* irq_handle;  /* host controller's IRQ transfer handle */
+	__u8 bEndpointAddress;  /* these are from the endpoint descriptor */
+	__u8 bInterval;		/* ...  used when calling usb_request_irq */
 };
 
 static struct mouse_state static_mouse_state;
@@ -103,8 +109,16 @@ static int release_mouse(struct inode * inode, struct file * file)
 	struct mouse_state *mouse = &static_mouse_state;
 
 	fasync_mouse(-1, file, 0);
-	if (--mouse->active)
-		return 0;
+
+	MOD_DEC_USE_COUNT;
+
+	if (--mouse->active == 0) {
+		/* stop polling the mouse while its not in use */
+	    	usb_release_irq(mouse->dev, mouse->irq_handle);
+		/* never keep a reference to a released IRQ! */
+		mouse->irq_handle = NULL;
+	}
+
 	return 0;
 }
 
@@ -118,6 +132,13 @@ static int open_mouse(struct inode * inode, struct file * file)
 		return 0;
 	/* flush state */
 	mouse->buttons = mouse->dx = mouse->dy = mouse->dz = 0;
+
+	/* prevent the driver from being unloaded while its in use */
+	MOD_INC_USE_COUNT;
+
+	/* start the usb controller's polling of the mouse */
+	mouse->irq_handle = usb_request_irq(mouse->dev, usb_rcvctrlpipe(mouse->dev, mouse->bEndpointAddress), mouse_irq, mouse->bInterval, NULL);
+
 	return 0;
 }
 
@@ -274,7 +295,10 @@ static int mouse_probe(struct usb_device *dev)
 
 	usb_set_configuration(dev, dev->config[0].bConfigurationValue);
 
-	usb_request_irq(dev, usb_rcvctrlpipe(dev, endpoint->bEndpointAddress), mouse_irq, endpoint->bInterval, NULL);
+	/* these are used to request the irq when the mouse is opened */
+	mouse->dev = dev;
+	mouse->bEndpointAddress = endpoint->bEndpointAddress;
+	mouse->bInterval = endpoint->bInterval;
 
 	mouse->present = 1;
 	return 0;
@@ -283,6 +307,15 @@ static int mouse_probe(struct usb_device *dev)
 static void mouse_disconnect(struct usb_device *dev)
 {
 	struct mouse_state *mouse = &static_mouse_state;
+
+	/* stop the usb interrupt transfer */
+	if (mouse->present) {
+	    	usb_release_irq(mouse->dev, mouse->irq_handle);
+		/* never keep a reference to a released IRQ! */
+		mouse->irq_handle = NULL;
+	}
+
+	mouse->irq_handle = NULL;
 
 	/* this might need work */
 	mouse->present = 0;
@@ -303,6 +336,7 @@ int usb_mouse_init(void)
 	misc_register(&usb_mouse);
 
 	mouse->present = mouse->active = 0;
+	mouse->irq_handle = NULL;
 	init_waitqueue_head(&mouse->wait);
 	mouse->fasync = NULL;
 
@@ -313,6 +347,15 @@ int usb_mouse_init(void)
 
 void usb_mouse_cleanup(void)
 {
+	struct mouse_state *mouse = &static_mouse_state;
+
+	/* stop the usb interrupt transfer */
+	if (mouse->present) {
+	    	usb_release_irq(mouse->dev, mouse->irq_handle);
+		/* never keep a reference to a released IRQ! */
+		mouse->irq_handle = NULL;
+	}
+
 	/* this, too, probably needs work */
 	usb_deregister(&mouse_driver);
 	misc_deregister(&usb_mouse);

@@ -437,6 +437,59 @@ inline void ohci_remove_bulk_ed(struct ohci *ohci, struct ohci_ed *ed)
 	ohci_remove_norm_ed_from_hw(ohci, ed, HCD_ED_BULK);
 }
 
+
+/*
+ *  Remove a periodic ED from the host controller
+ */
+void ohci_remove_periodic_ed(struct ohci *ohci, struct ohci_ed *ed)
+{
+	struct ohci_device *root_hub = usb_to_ohci(ohci->bus->root_hub);
+	struct ohci_ed *cur_ed = NULL, *prev_ed;
+	unsigned long flags;
+
+	/* FIXME: this will need to up fixed when add_periodic_ed()
+	 * is updated to spread similar polling rate EDs out over
+	 * multiple periodic queues.  Currently this assumes that the
+	 * 32ms (slowest) polling queue links to all others... */
+
+	/* search the periodic EDs, skipping the first one which is
+	 * only a placeholder. */
+	prev_ed = &root_hub->ed[ED_INT_32];
+	if (prev_ed->next_ed)
+		cur_ed = bus_to_virt(le32_to_cpup(&prev_ed->next_ed));
+
+	while (cur_ed) {
+		if (ed == cur_ed) {		/* remove the ED */
+			/* set its SKIP bit and be sure its not in use */
+			ohci_wait_for_ed_safe(ohci->regs, ed, HCD_ED_INT);
+
+			/* unlink it */
+			spin_lock_irqsave(&ohci_edtd_lock, flags);
+			prev_ed->next_ed = ed->next_ed;
+			spin_unlock_irqrestore(&ohci_edtd_lock, flags);
+			ed->next_ed = 0;
+
+			break;
+		}
+
+		spin_lock_irqsave(&ohci_edtd_lock, flags);
+		if (cur_ed->next_ed) {
+			prev_ed = cur_ed;
+			cur_ed = bus_to_virt(le32_to_cpup(&cur_ed->next_ed));
+			spin_unlock_irqrestore(&ohci_edtd_lock, flags);
+		} else {
+			spin_unlock_irqrestore(&ohci_edtd_lock, flags);
+
+			/* if multiple polling queues need to be checked,
+			 * here is where you'd advance to the next one */
+
+			printk("usb-ohci: ed %p not found on periodic queue\n", ed);
+			break;
+		}
+	}
+} /* ohci_remove_periodic_ed() */
+
+
 /*
  * Remove all the EDs which have a given device address from a list.
  * Used when the device is unplugged.
@@ -584,6 +637,8 @@ static struct ohci_td *ohci_get_free_td(struct ohci_device *dev)
 			new_td->info = cpu_to_le32(OHCI_TD_CC_NEW);
 			/* mark it as allocated */
 			allocate_td(new_td);
+			/* record the device that its on */
+			new_td->usb_dev = ohci_to_usb(dev);
 			return new_td;
 		}
 	}
@@ -879,8 +934,11 @@ static __u16 ohci_td_bytes_done(struct ohci_td *td)
  *
  * Period is desired polling interval in ms.  The closest, shorter
  * match will be used.  Powers of two from 1-32 are supported by OHCI.
+ *
+ * Returns: a "handle pointer" that release_irq can use to stop this
+ * interrupt.  (It's really a pointer to the TD).  NULL = error.
  */
-static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
+static void* ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	usb_device_irq handler, int period, void *dev_id)
 {
 	struct ohci_device *dev = usb_to_ohci(usb);
@@ -892,14 +950,14 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	interrupt_ed = ohci_get_free_ed(dev);
 	if (!interrupt_ed) {
 		printk(KERN_ERR "Out of EDs on device %p in ohci_request_irq\n", dev);
-		return -1;
+		return NULL;
 	}
 
 	td = ohci_get_free_td(dev);
 	if (!td) {
 		printk(KERN_ERR "Out of TDs in ohci_request_irq\n");
 		ohci_free_ed(interrupt_ed);
-		return -1;
+		return NULL;
 	}
 
 	/*
@@ -917,10 +975,6 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 			OHCI_TD_ROUND,
 			dev->data, maxps,
 			dev_id, handler);
-	/*
-	 * TODO: be aware of how the OHCI controller deals with DMA
-	 * spanning more than one page.
-	 */
 
 	/*
 	 *  Put the TD onto our ED and make sure its ready to run
@@ -936,17 +990,54 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	/* Assimilate the new ED into the collective */
 	ohci_add_periodic_ed(dev->ohci, interrupt_ed, period);
 
-	/* FIXME: return a request handle that can be used by the
-	 * caller to cancel this request.  Be sure its guaranteed not
-	 * to be re-used until the caller is guaranteed to know that
-	 * the transfer has ended or been cancelled */
-	return 0;
+	return (void*)td;
 } /* ohci_request_irq() */
 
-
 /*
- * Control thread operations:
+ * Release an interrupt handler previously allocated using
+ * ohci_request_irq.  This function does no validity checking, so make
+ * sure you're not releasing an already released handle as it may be
+ * in use by something else..
+ *
+ * This function can NOT be called from an interrupt.
  */
+int ohci_release_irq(void* handle)
+{
+	struct ohci_device *dev;
+	struct ohci_td *int_td;
+	struct ohci_ed *int_ed;
+
+#ifdef OHCI_DEBUG
+	if (handle)
+		printk("usb-ohci: Releasing irq handle %p\n", handle);
+#endif
+
+	int_td = (struct ohci_td*)handle;
+	if (int_td == NULL)
+		return USB_ST_INTERNALERROR;
+
+	dev = usb_to_ohci(int_td->usb_dev);
+	int_ed = int_td->ed;
+
+	ohci_remove_periodic_ed(dev->ohci, int_ed);
+
+	/* Tell the driver that the IRQ has been killed. */
+	/* Passing NULL in the "buffer" void* along with the
+	 * USB_ST_REMOVED status is the signal. */
+	if (int_td->completed != NULL)
+		int_td->completed(USB_ST_REMOVED, NULL, 0, int_td->dev_id);
+
+	/* Free the ED (& TD) */
+	ohci_free_ed(int_ed);
+
+	return USB_ST_NOERROR;
+} /* ohci_release_irq() */
+
+
+/************************************
+ * OHCI control transfer operations *
+ ************************************/
+
 static DECLARE_WAIT_QUEUE_HEAD(control_wakeup);
 
 /*
@@ -1134,7 +1225,7 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
 
 #ifdef OHCI_DEBUG
 	if (completion_status != 0) {
-		char *what = (completion_status < 0)? "timed out":
+		const char *what = (completion_status < 0)? "timed out":
 			cc_names[completion_status & 0xf];
 		printk(KERN_ERR "ohci_control_msg: %s on pipe %x cmd %x %x %x %x %x\n",
 		       what, pipe, cmd->requesttype, cmd->request,
@@ -1407,6 +1498,7 @@ static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 /* .......... */
 
 
+
 /*
  * Allocate a new USB device to be attached to an OHCI controller
  */
@@ -1488,6 +1580,7 @@ struct usb_operations ohci_device_operations = {
 	ohci_control_msg,
 	ohci_bulk_msg,
 	ohci_request_irq,
+	ohci_release_irq,
 };
 
 

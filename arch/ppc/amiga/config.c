@@ -30,7 +30,6 @@ void (*kbd_reset_setup) (char *, int) __initdata = 0;
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/console.h>
-#include <linux/init.h>
 
 #include <asm/bootinfo.h>
 #include <asm/setup.h>

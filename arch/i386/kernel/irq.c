@@ -930,17 +930,21 @@ void free_irq(unsigned int irq, void *dev_id)
 		if (action->dev_id != dev_id)
 			continue;
 
-		/* Found it - now free it */
+		/* Found it - now remove it from the list of entries */
 		*p = action->next;
-		kfree(action);
 		if (!irq_desc[irq].action) {
 			irq_desc[irq].status |= IRQ_DISABLED;
 			irq_desc[irq].handler->shutdown(irq);
 		}
-		goto out;
+		spin_unlock_irqrestore(&irq_controller_lock,flags);
+
+		/* Wait to make sure it's not being used on another CPU */
+		while (irq_desc[irq].status & IRQ_INPROGRESS)
+			barrier();
+		kfree(action);
+		return;
 	}
 	printk("Trying to free free IRQ%d\n",irq);
-out:
 	spin_unlock_irqrestore(&irq_controller_lock,flags);
 }
 

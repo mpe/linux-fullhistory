@@ -5,7 +5,6 @@
 #ifndef __LINUX_FILE_H
 #define __LINUX_FILE_H
 
-extern void __fput(struct file *);	/* goner? */
 extern void _fput(struct file *);
 
 /*

@@ -765,22 +765,6 @@ asmlinkage int sys_creat(const char * pathname, int mode)
 #endif
 
 /*
- * Called when retiring the last use of a file pointer.
- */
-void __fput(struct file *filp)
-{
-	struct dentry * dentry = filp->f_dentry;
-	struct inode * inode = dentry->d_inode;
-
-	if (filp->f_op && filp->f_op->release)
-		filp->f_op->release(inode, filp);
-	filp->f_dentry = NULL;
-	if (filp->f_mode & FMODE_WRITE)
-		put_write_access(inode);
-	dput(dentry);
-}
-
-/*
  * "id" is the POSIX thread ID. We use the
  * files pointer for this..
  */
