@@ -188,7 +188,7 @@ void send_IPI_mask_bitmask(cpumask_t cpumask, int vector)
 	local_irq_restore(flags);
 }
 
-inline void send_IPI_mask_sequence(cpumask_t mask, int vector)
+void send_IPI_mask_sequence(cpumask_t mask, int vector)
 {
 	unsigned long cfg, flags;
 	unsigned int query_cpu;
