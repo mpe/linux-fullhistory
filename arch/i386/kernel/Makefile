@@ -55,8 +55,12 @@ ifdef CONFIG_SMP
 O_OBJS += smp.o smpboot.o trampoline.o
 endif
 
+ifdef CONFIG_X86_LOCAL_APIC
+O_OBJS += apic.o
+endif
+
 ifdef CONFIG_X86_IO_APIC
-O_OBJS += io_apic.o
+O_OBJS += io_apic.o mpparse.o
 endif
 
 ifdef CONFIG_X86_VISWS_APIC

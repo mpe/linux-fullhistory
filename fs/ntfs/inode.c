@@ -612,7 +612,7 @@ int ntfs_vcn_to_lcn(ntfs_inode *ino,int vcn)
 		return 0;
 
 	for(rnum=0;rnum<data->d.r.len && 
-		    vcn>data->d.r.runlist[rnum].len;rnum++)
+		    vcn>=data->d.r.runlist[rnum].len;rnum++)
 		vcn-=data->d.r.runlist[rnum].len;
 	
 	return data->d.r.runlist[rnum].cluster+vcn;

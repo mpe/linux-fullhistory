@@ -34,6 +34,8 @@
  * 971222       Changed open/close for temperature handling
  *              Michael Meskes <meskes@debian.org>.
  * 980112       Used minor numbers from include/linux/miscdevice.h
+ * 990403       Clear reset status after reading control status register in 
+ *              pcwd_showprevstate(). [Marc Boucher <marc@mbsi.ca>]
  * 990605	Made changes to code to support Firmware 1.22a, added
  *		fairly useless proc entry.
  * 990610	removed said useless proc code for the merge <alan>
@@ -183,8 +185,10 @@ void pcwd_showprevstate(void)
 
 	if (revision == PCWD_REVISION_A)
 		initial_status = card_status = inb(current_readport);
-	else
+	else {
 		initial_status = card_status = inb(current_readport + 1);
+		outb_p(0x00, current_readport + 1); /* clear reset status */
+	}
 
 	if (revision == PCWD_REVISION_A) {
 		if (card_status & WD_WDRST)

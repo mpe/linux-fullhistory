@@ -95,6 +95,7 @@
  *	AX.25 037	Jonathan(G4KLX)		New timer architecture.
  *      AX.25 038       Matthias(DG2FEF)        Small fixes to the syscall interface to make kernel
  *                                              independent of AX25_MAX_DIGIS used by applications.
+ *                      Tomi(OH2BNS)            Fixed ax25_getname().
  */
 
 #include <linux/config.h>
@@ -1256,8 +1257,6 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 	newsk->sleep = &newsock->wait;
 
 	/* Now attach up the new socket */
-	skb->sk = NULL;
-	skb->destructor = NULL;
 	kfree_skb(skb);
 	sk->ack_backlog--;
 	newsock->sk    = newsk;
@@ -1269,37 +1268,34 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 static int ax25_getname(struct socket *sock, struct sockaddr *uaddr, int *uaddr_len, int peer)
 {
 	struct sock *sk = sock->sk;
+	struct full_sockaddr_ax25 *fsa = (struct full_sockaddr_ax25 *)uaddr;
 	unsigned char ndigi, i;
-	struct full_sockaddr_ax25 fsa;
 
 	if (peer != 0) {
 		if (sk->state != TCP_ESTABLISHED)
 			return -ENOTCONN;
 
-		fsa.fsa_ax25.sax25_family = AF_AX25;
-		fsa.fsa_ax25.sax25_call   = sk->protinfo.ax25->dest_addr;
-		fsa.fsa_ax25.sax25_ndigis = 0;
+		fsa->fsa_ax25.sax25_family = AF_AX25;
+		fsa->fsa_ax25.sax25_call   = sk->protinfo.ax25->dest_addr;
+		fsa->fsa_ax25.sax25_ndigis = 0;
 
 		if (sk->protinfo.ax25->digipeat != NULL) {
 			ndigi = sk->protinfo.ax25->digipeat->ndigi;
-			fsa.fsa_ax25.sax25_ndigis = ndigi;
+			fsa->fsa_ax25.sax25_ndigis = ndigi;
 			for (i = 0; i < ndigi; i++)
-				fsa.fsa_digipeater[i] = sk->protinfo.ax25->digipeat->calls[i];
+				fsa->fsa_digipeater[i] = sk->protinfo.ax25->digipeat->calls[i];
 		}
 	} else {
-		fsa.fsa_ax25.sax25_family = AF_AX25;
-		fsa.fsa_ax25.sax25_call   = sk->protinfo.ax25->source_addr;
-		fsa.fsa_ax25.sax25_ndigis = 1;
+		fsa->fsa_ax25.sax25_family = AF_AX25;
+		fsa->fsa_ax25.sax25_call   = sk->protinfo.ax25->source_addr;
+		fsa->fsa_ax25.sax25_ndigis = 1;
 		if (sk->protinfo.ax25->ax25_dev != NULL) {
-			memcpy(&fsa.fsa_digipeater[0], sk->protinfo.ax25->ax25_dev->dev->dev_addr, AX25_ADDR_LEN);
+			memcpy(&fsa->fsa_digipeater[0], sk->protinfo.ax25->ax25_dev->dev->dev_addr, AX25_ADDR_LEN);
 		} else {
-			fsa.fsa_digipeater[0] = null_ax25_address;
+			fsa->fsa_digipeater[0] = null_ax25_address;
 		}
 	}
-	if (*uaddr_len > sizeof (struct full_sockaddr_ax25))
-		*uaddr_len = sizeof (struct full_sockaddr_ax25);
-	memcpy(uaddr, &fsa, *uaddr_len);
-
+	*uaddr_len = sizeof (struct full_sockaddr_ax25);
 	return 0;
 }
 

@@ -1,7 +1,7 @@
 /*
  *	Intel IO-APIC support for multi-Pentium hosts.
  *
- *	Copyright (C) 1997, 1998, 1999 Ingo Molnar, Hajnalka Szabo
+ *	Copyright (C) 1997, 1998, 1999, 2000 Ingo Molnar, Hajnalka Szabo
  *
  *	Many thanks to Stig Venaas for trying out countless experimental
  *	patches and reporting/debugging problems patiently!
@@ -13,48 +13,17 @@
  *	and Ingo Molnar <mingo@redhat.com>
  */
 
-#include <linux/sched.h>
-#include <linux/smp_lock.h>
+#include <linux/mm.h>
+#include <linux/irq.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/sched.h>
+#include <linux/config.h>
+#include <linux/smp_lock.h>
+
 #include <asm/io.h>
+#include <asm/smp.h>
 #include <asm/desc.h>
-
-#include <linux/irq.h>
-
-#undef __init
-#define __init
-
-/*
- * volatile is justified in this case, IO-APIC register contents
- * might change spontaneously, GCC should not cache it
- */
-#define IO_APIC_BASE(idx) ((volatile int *)__fix_to_virt(FIX_IO_APIC_BASE_0 + idx))
-
-extern int nmi_watchdog;
-
-/*
- * The structure of the IO-APIC:
- */
-
-struct IO_APIC_reg_00 {
-	__u32	__reserved_2	: 24,
-		ID		:  4,
-		__reserved_1	:  4;
-} __attribute__ ((packed));
-
-struct IO_APIC_reg_01 {
-	__u32	version		:  8,
-		__reserved_2	:  8,
-		entries		:  8,
-		__reserved_1	:  8;
-} __attribute__ ((packed));
-
-struct IO_APIC_reg_02 {
-	__u32	__reserved_2	: 24,
-		arbitration	:  4,
-		__reserved_1	:  4;
-} __attribute__ ((packed));
 
 /*
  * # of IO-APICs and # of IRQ routing registers
@@ -62,93 +31,17 @@ struct IO_APIC_reg_02 {
 int nr_ioapics = 0;
 int nr_ioapic_registers[MAX_IO_APICS];
 
-enum ioapic_irq_destination_types {
-	dest_Fixed = 0,
-	dest_LowestPrio = 1,
-	dest_SMI = 2,
-	dest__reserved_1 = 3,
-	dest_NMI = 4,
-	dest_INIT = 5,
-	dest__reserved_2 = 6,
-	dest_ExtINT = 7
-};
+/* I/O APIC entries */
+struct mpc_config_ioapic mp_ioapics[MAX_IO_APICS];
 
-struct IO_APIC_route_entry {
-	__u32	vector		:  8,
-		delivery_mode	:  3,	/* 000: FIXED
-					 * 001: lowest prio
-					 * 111: ExtINT
-					 */
-		dest_mode	:  1,	/* 0: physical, 1: logical */
-		delivery_status	:  1,
-		polarity	:  1,
-		irr		:  1,
-		trigger		:  1,	/* 0: edge, 1: level */
-		mask		:  1,	/* 0: enabled, 1: disabled */
-		__reserved_2	: 15;
-
-	union {		struct { __u32
-					__reserved_1	: 24,
-					physical_dest	:  4,
-					__reserved_2	:  4;
-			} physical;
-
-			struct { __u32
-					__reserved_1	: 24,
-					logical_dest	:  8;
-			} logical;
-	} dest;
-
-} __attribute__ ((packed));
-
-/*
- * MP-BIOS irq configuration table structures:
- */
-
-struct mpc_config_ioapic mp_ioapics[MAX_IO_APICS];/* I/O APIC entries */
-int mp_irq_entries = 0;				/* # of MP IRQ source entries */
+/* # of MP IRQ source entries */
 struct mpc_config_intsrc mp_irqs[MAX_IRQ_SOURCES];
-						/* MP IRQ source entries */
-int mpc_default_type = 0;			/* non-0 if default (table-less)
-						   MP configuration */
 
+/* MP IRQ source entries */
+int mp_irq_entries = 0;
 
-/*
- * This is performance-critical, we want to do it O(1)
- *
- * the indexing order of this array favors 1:1 mappings
- * between pins and IRQs.
- */
-
-static inline unsigned int io_apic_read(unsigned int apic, unsigned int reg)
-{
-	*IO_APIC_BASE(apic) = reg;
-	return *(IO_APIC_BASE(apic)+4);
-}
-
-static inline void io_apic_write(unsigned int apic, unsigned int reg, unsigned int value)
-{
-	*IO_APIC_BASE(apic) = reg;
-	*(IO_APIC_BASE(apic)+4) = value;
-}
-
-/*
- * Re-write a value: to be used for read-modify-write
- * cycles where the read already set up the index register.
- */
-static inline void io_apic_modify(unsigned int apic, unsigned int value)
-{
-	*(IO_APIC_BASE(apic)+4) = value;
-}
-
-/*
- * Synchronize the IO-APIC and the CPU by doing
- * a dummy read from the IO-APIC
- */
-static inline void io_apic_sync(unsigned int apic)
-{
-	(void) *(IO_APIC_BASE(apic)+4);
-}
+/* non-0 if default (table-less) MP configuration */
+int mpc_default_type = 0;
 
 /*
  * Rough estimation of how many shared IRQs there are, can
@@ -156,6 +49,13 @@ static inline void io_apic_sync(unsigned int apic)
  */
 #define MAX_PLUS_SHARED_IRQS NR_IRQS
 #define PIN_MAP_SIZE (MAX_PLUS_SHARED_IRQS + NR_IRQS)
+
+/*
+ * This is performance-critical, we want to do it O(1)
+ *
+ * the indexing order of this array favors 1:1 mappings
+ * between pins and IRQs.
+ */
 
 static struct irq_pin_list {
 	int apic, pin, next;
@@ -239,6 +139,7 @@ static void clear_IO_APIC (void)
 #define MAX_PIRQS 8
 int pirq_entries [MAX_PIRQS];
 int pirqs_enabled;
+int skip_ioapic_setup = 0;
 
 static int __init ioapic_setup(char *str)
 {
@@ -1012,7 +913,7 @@ static void __init setup_ioapic_default_id(void)
 	 * system must have a unique ID or we get lots of nice
 	 * 'stuck on smp_invalidate_needed IPI wait' messages.
 	 */
-	if (cpu_present_map & (1<<0x2))
+	if (phys_cpu_present_map & (1<<0x2))
 		panic("APIC ID 2 already used");
 
 	/*
@@ -1448,8 +1349,8 @@ void __init setup_IO_APIC(void)
 {
 	enable_IO_APIC();
 
-	printk("ENABLING IO-APIC IRQs\n");
 	io_apic_irqs = ~PIC_IRQS;
+	printk("ENABLING IO-APIC IRQs\n");
 
 	/*
 	 * If there are no explicit MP IRQ entries, it's either one of the
@@ -1471,3 +1372,19 @@ void __init setup_IO_APIC(void)
 	check_timer();
 	print_IO_APIC();
 }
+
+#ifndef CONFIG_SMP
+/*
+ * This initializes the IO-APIC and APIC hardware if this is
+ * a UP kernel.
+ */
+void IO_APIC_init_uniprocessor (void)
+{
+	if (!smp_found_config)
+		return;
+	phys_cpu_present_map = 0xff;
+	setup_local_APIC();
+	setup_IO_APIC();
+	setup_APIC_clocks();
+}
+#endif

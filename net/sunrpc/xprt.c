@@ -1541,7 +1541,7 @@ xprt_create_socket(int proto, struct sockaddr_in *sap, struct rpc_timeout *to)
 	struct socket	*sock;
 	int		type, err;
 
-	dprintk("RPC:      xprt_create_socket(%08lx, %s %d)\n",
+	dprintk("RPC:      xprt_create_socket(%08x, %s %d)\n",
 			   sap? ntohl(sap->sin_addr.s_addr) : 0,
 			   (proto == IPPROTO_UDP)? "udp" : "tcp", proto);
 

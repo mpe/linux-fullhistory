@@ -23,7 +23,7 @@
  *  History:
  *   0.1  04.01.2000  Created
  *
- *  $Id: ezusb.c,v 1.22 1999/12/03 15:06:28 tom Exp $
+ *  $Id: usbdevice_fs.h,v 1.1 2000/01/06 18:40:41 tom Exp $
  */
 
 /*****************************************************************************/
@@ -111,6 +111,7 @@ struct usbdevfs_urb {
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
 #include <linux/list.h>
 #include <asm/semaphore.h>
 

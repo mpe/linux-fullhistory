@@ -24,7 +24,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  * 
- * $Id: msnd_classic.h,v 1.9 1998/09/10 04:11:18 andrewtv Exp $
+ * $Id: msnd_classic.h,v 1.10 1999/03/21 17:36:09 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_CLASSIC_H
@@ -108,13 +108,13 @@
 #define MIDQ_OFFSET				(SRAM_CNTL_START + 0x18)
 #define DSPQ_OFFSET				(SRAM_CNTL_START + 0x20)
 
-#define MOP_PROTEUS				0x10
+#define MOP_SYNTH				0x10
 #define MOP_EXTOUT				0x32
 #define MOP_EXTTHRU				0x02
 #define MOP_OUTMASK				0x01
 
 #define MIP_EXTIN				0x01
-#define MIP_PROTEUS				0x00
+#define MIP_SYNTH				0x00
 #define MIP_INMASK				0x32
 
 /* Classic SMA Common Data */

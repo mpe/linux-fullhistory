@@ -16,7 +16,7 @@
  */
 
 static const char *version =
-	"3c527.c:v0.05 1999/09/06 Alan Cox (alan@redhat.com)\n";
+	"3c527.c:v0.07 2000/01/18 Alan Cox (alan@redhat.com)\n";
 
 /*
  *	Things you need
@@ -447,9 +447,21 @@ static void mc32_ring_poll(struct net_device *dev)
 
 
 /*
- *	Send exec commands
+ *	Send exec commands. This requires a bit of explaining.
+ *
+ *	You feed the card a command, you wait, it interrupts you get a 
+ *	reply. All well and good. The complication arises because you use
+ *	commands for filter list changes which come in at bh level from things
+ *	like IPV6 group stuff.
+ *
+ *	We have a simple state machine
+ *
+ *	0	- nothing issued
+ *	1	- command issued, wait reply
+ *	2	- reply waiting - reader then goes to state 0
+ *	3	- command issued, trash reply. In which case the irq
+ *		  takes it back to state 0
  */
-
 
 /*
  *	Send command from interrupt state
@@ -463,7 +475,7 @@ static int mc32_command_nowait(struct net_device *dev, u16 cmd, void *data, int 
 	if(lp->exec_pending)
 		return -1;
 		
-	lp->exec_pending=1;
+	lp->exec_pending=3;
 	lp->exec_box->mbox=0;
 	lp->exec_box->mbox=cmd;
 	memcpy((void *)lp->exec_box->data, data, len);
@@ -492,6 +504,9 @@ static int mc32_command(struct net_device *dev, u16 cmd, void *data, int len)
 	 *	Wait for a command
 	 */
 	 
+	save_flags(flags);
+	cli();
+	 
 	while(lp->exec_pending)
 		sleep_on(&lp->event);
 		
@@ -500,6 +515,9 @@ static int mc32_command(struct net_device *dev, u16 cmd, void *data, int len)
 	 */
 
 	lp->exec_pending=1;
+	
+	restore_flags(flags);
+	
 	lp->exec_box->mbox=0;
 	lp->exec_box->mbox=cmd;
 	memcpy((void *)lp->exec_box->data, data, len);
@@ -826,6 +844,10 @@ static int mc32_send_packet(struct sk_buff *skb, struct net_device *dev)
 		wmb();
 		
 		np->length	= skb->len;
+		
+		if(np->length < 60)
+			np->length = 60;
+			
 		np->data	= virt_to_bus(skb->data);
 		np->status	= 0;
 		np->control	= (1<<7)|(1<<6);	/* EOP EOL */
@@ -1015,8 +1037,11 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		status>>=3;
 		if(status&1)
 		{
-			/* 0=no 1=yes 2=reply clearing */
-			lp->exec_pending=2;
+			/* 0=no 1=yes 2=replied, get cmd, 3 = wait reply & dump it */
+			if(lp->exec_pending!=3)
+				lp->exec_pending=2;
+			else
+				lp->exec_pending=0;
 			wake_up(&lp->event);
 		}
 		if(status&2)

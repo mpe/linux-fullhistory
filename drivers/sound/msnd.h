@@ -24,13 +24,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.h,v 1.33 1998/11/05 20:26:18 andrewtv Exp $
+ * $Id: msnd.h,v 1.36 1999/03/21 17:05:42 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_H
 #define __MSND_H
 
-#define VERSION			"0.8.2.2"
+#define VERSION			"0.8.3.1"
 
 #define DEFSAMPLERATE		DSP_DEFAULT_SPEED
 #define DEFSAMPLESIZE		AFMT_U8
@@ -202,6 +202,7 @@ typedef struct multisound_dev {
 	/* Linux device info */
 	char *name;
 	int dsp_minor, mixer_minor;
+	int ext_midi_dev, hdr_midi_dev;
 
 	/* Hardware resources */
 	int io, numio;
@@ -214,6 +215,7 @@ typedef struct multisound_dev {
 	unsigned long SMA;
 	unsigned long DAPQ, DARQ, MODQ, MIDQ, DSPQ;
 	unsigned long pwDSPQData, pwMIDQData, pwMODQData;
+	int dspq_data_buff, dspq_buff_size;
 
 	/* State variables */
 	enum { msndClassic, msndPinnacle } type;
@@ -229,7 +231,7 @@ typedef struct multisound_dev {
 #define F_READING			7
 #define F_READBLOCK			8
 #define F_EXT_MIDI_INUSE		9
-#define F_INT_MIDI_INUSE		10
+#define F_HDR_MIDI_INUSE		10
 #define F_DISABLE_WRITE_NDELAY		11
 	wait_queue_head_t writeblock;
 	wait_queue_head_t readblock;
@@ -268,6 +270,8 @@ int				msnd_register(multisound_dev_t *dev);
 void				msnd_unregister(multisound_dev_t *dev);
 int				msnd_get_num_devs(void);
 multisound_dev_t *		msnd_get_dev(int i);
+
+void				msnd_init_queue(unsigned long, int start, int size);
 
 void				msnd_fifo_init(msnd_fifo *f);
 void				msnd_fifo_free(msnd_fifo *f);

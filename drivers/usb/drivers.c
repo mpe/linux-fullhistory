@@ -4,6 +4,8 @@
  * (C) Copyright 1999, 2000 Thomas Sailer <sailer@ife.ee.ethz.ch>. (proc file per device)
  * (C) Copyright 1999 Deti Fliegl (new USB architecture)
  *
+ * $id$
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -29,7 +31,7 @@
  * 2000-01-04: Thomas Sailer <sailer@ife.ee.ethz.ch>
  *   Turned into its own filesystem
  *
- * $Id: proc_usb.c,v 1.16 1999/12/20 11:11:10 fliegl Exp $
+ * $Id: drivers.c,v 1.3 2000/01/11 13:58:24 tom Exp $
  */
 
 #include <linux/fs.h>

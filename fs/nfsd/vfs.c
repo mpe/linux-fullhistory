@@ -1590,7 +1590,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	*p++ = htonl(eof);		/* end of directory */
 	*countp = (caddr_t) p - (caddr_t) buffer;
 
-	dprintk("nfsd: readdir result %d bytes, eof %d offset %ld\n",
+	dprintk("nfsd: readdir result %d bytes, eof %d offset %d\n",
 				*countp, eof,
 				cd.offset? ntohl(*cd.offset) : -1);
 	err = 0;

@@ -27,25 +27,49 @@ extern pgd_t swapper_pg_dir[1024];
 #define flush_page_to_ram(page)			do { } while (0)
 #define flush_icache_range(start, end)		do { } while (0)
 
-#define __flush_tlb() \
-do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3":"=r" (tmpreg) : :"memory"); } while (0)
+#define __flush_tlb()							\
+	do {								\
+		__asm__ __volatile__					\
+			("movl %0, %%cr3;"				\
+				:					\
+				: "r" __pa(current->active_mm->pgd)	\
+				: "memory"				\
+		);							\
+	} while (0)
 
 /*
  * Global pages have to be flushed a bit differently. Not a real
  * performance problem because this does not happen often.
  */
 #define __flush_tlb_global()						\
-    do { __asm__ __volatile__( "					\
-	movl %%cr4,%%eax;						\
-	movl %%eax,%%ecx;						\
-	andl $0xffffff7f,%%eax; # turn off PGE (CR4[7]) in EAX \n	\
-	movl %%eax,%%cr4;						\
-	movl %%cr3,%%ebx;						\
-	movl %%ebx,%%cr3;						\
-	movl %%ecx,%%cr4;						\
-	" : : : "cc", "eax", "ebx", "ecx", "memory"			\
-    );									\
-} while (0)
+	do {								\
+		__asm__ __volatile__(					\
+			"movl %0, %%cr4; # turn off PGE \n"		\
+			"mov %2, %%cr3;  # flush TLB \n"		\
+			"mov %1, %%cr4;  # turn PGE back on \n"		\
+			:						\
+			: "r" (mmu_cr4_features),			\
+			  "r" (mmu_cr4_features & ~X86_CR4_PGE),	\
+			  "r" (__pa(current->active_mm->pgd))		\
+			: "memory");					\
+	} while (0)
+
+extern unsigned long pgkern_mask;
+
+/*
+ * Do not check the PGE bit unnecesserily if this is a PPro+ kernel.
+ */
+#ifdef CONFIG_X86_PGE
+# define __flush_tlb_all() __flush_tlb_global()
+#else
+# define __flush_tlb_all()						\
+	do {								\
+		if (cpu_has_pge)					\
+			__flush_tlb_global();				\
+		else							\
+			__flush_tlb();					\
+	} while (0)
+#endif
 
 #ifndef CONFIG_X86_INVLPG
 #define __flush_tlb_one(addr) __flush_tlb()
@@ -133,13 +157,37 @@ extern unsigned long empty_zero_page[1024];
 #define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_ACCESSED)
 #define PAGE_COPY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
 #define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
-#define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | _PAGE_ACCESSED)
-#define PAGE_KERNEL_NOCACHE	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | _PAGE_PCD | _PAGE_ACCESSED)
-#define PAGE_KERNEL_RO	__pgprot(_PAGE_PRESENT | _PAGE_DIRTY | _PAGE_ACCESSED)
+
+#define __PAGE_KERNEL \
+	(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | _PAGE_ACCESSED)
+#define __PAGE_KERNEL_NOCACHE \
+	(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | _PAGE_PCD | _PAGE_ACCESSED)
+#define __PAGE_KERNEL_RO \
+	(_PAGE_PRESENT | _PAGE_DIRTY | _PAGE_ACCESSED)
+
+#ifdef CONFIG_X86_PGE
+# define MAKE_GLOBAL(x) __pgprot((x) | _PAGE_GLOBAL)
+#else
+# define MAKE_GLOBAL(x)						\
+	({							\
+		pgprot_t __ret;					\
+								\
+		if (cpu_has_pge)				\
+			__ret = __pgprot((x) | _PAGE_GLOBAL);	\
+		else						\
+			__ret = __pgprot(x);			\
+		__ret;						\
+	})
+#endif
+
+#define PAGE_KERNEL MAKE_GLOBAL(__PAGE_KERNEL)
+#define PAGE_KERNEL_RO MAKE_GLOBAL(__PAGE_KERNEL_RO)
+#define PAGE_KERNEL_NOCACHE MAKE_GLOBAL(__PAGE_KERNEL_NOCACHE)
 
 /*
- * The i386 can't do page protection for execute, and considers that the same are read.
- * Also, write permissions imply read permissions. This is the closest we can get..
+ * The i386 can't do page protection for execute, and considers that
+ * the same are read. Also, write permissions imply read permissions.
+ * This is the closest we can get..
  */
 #define __P000	PAGE_NONE
 #define __P001	PAGE_READONLY

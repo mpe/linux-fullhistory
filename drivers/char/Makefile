@@ -95,6 +95,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MOXA_SMARTIO),y)
+L_OBJS += mxser.o
+else
+  ifeq ($(CONFIG_MOXA_SMARTIO),m)
+  M_OBJS += mxser.o
+  endif
+endif
+
+ifeq ($(CONFIG_MOXA_INTELLIO),y)
+L_OBJS += moxa.o
+else
+  ifeq ($(CONFIG_MOXA_INTELLIO),m)
+  M_OBJS += moxa.o
+  endif
+endif
+
 ifeq ($(CONFIG_DIGI),y)
 O_OBJS += pcxx.o
 else

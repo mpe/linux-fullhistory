@@ -20,7 +20,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.c,v 1.16 1998/09/08 04:05:56 andrewtv Exp $
+ * $Id: msnd.c,v 1.17 1999/03/21 16:50:09 andrewtv Exp $
  *
  ********************************************************************/
 
@@ -66,7 +66,7 @@ int msnd_register(multisound_dev_t *dev)
 
 	if (i == MSND_MAX_DEVS)
 		return -ENOMEM;
-	
+
 	devs[i] = dev;
 	++num_devs;
 
@@ -106,11 +106,19 @@ multisound_dev_t *msnd_get_dev(int j)
 	for (i = 0; i < MSND_MAX_DEVS && j; ++i)
 		if (devs[i] != NULL)
 			--j;
-	
+
 	if (i == MSND_MAX_DEVS || j != 0)
 		return NULL;
 
 	return devs[i];
+}
+
+void msnd_init_queue(unsigned long base, int start, int size)
+{
+	isa_writew(PCTODSP_BASED(start), base + JQS_wStart);
+	isa_writew(PCTODSP_OFFSET(size) - 1, base + JQS_wSize);
+	isa_writew(0, base + JQS_wHead);
+	isa_writew(0, base + JQS_wTail);
 }
 
 void msnd_fifo_init(msnd_fifo *f)
@@ -152,11 +160,11 @@ int msnd_fifo_write(msnd_fifo *f, const char *buf, size_t len, int user)
 
 	if (f->len == f->n)
 		return 0;
-	
+
 	while ((count < len) && (f->len != f->n)) {
-		
+
 		int nwritten;
-		
+
 		if (f->head <= f->tail) {
 			nwritten = len - count;
 			if (nwritten > f->n - f->tail)
@@ -180,7 +188,7 @@ int msnd_fifo_write(msnd_fifo *f, const char *buf, size_t len, int user)
 		f->tail += nwritten;
 		f->tail %= f->n;
 	}
-	
+
 	return count;
 }
 
@@ -190,11 +198,11 @@ int msnd_fifo_read(msnd_fifo *f, char *buf, size_t len, int user)
 
 	if (f->len == 0)
 		return f->len;
-	
+
 	while ((count < len) && (f->len > 0)) {
-		
+
 		int nread;
-		
+
 		if (f->tail <= f->head) {
 			nread = len - count;
 			if (nread > f->n - f->head)
@@ -205,20 +213,20 @@ int msnd_fifo_read(msnd_fifo *f, char *buf, size_t len, int user)
 			if (nread > len - count)
 				nread = len - count;
 		}
-		
+
 		if (user) {
 			if (copy_to_user(buf, f->data + f->head, nread))
 				return -EFAULT;
 		} else
 			memcpy(buf, f->data + f->head, nread);
-		
+
 		count += nread;
 		buf += nread;
 		f->len -= nread;
 		f->head += nread;
 		f->head %= f->n;
 	}
-	
+
 	return count;
 }
 
@@ -259,7 +267,7 @@ int msnd_send_dsp_cmd(multisound_dev_t *dev, BYTE cmd)
 	spin_unlock_irqrestore(&dev->lock, flags);
 
 	printk(KERN_DEBUG LOGNAME ": Send DSP command timeout\n");
-	
+
 	return -EIO;
 }
 
@@ -307,7 +315,7 @@ int msnd_enable_irq(multisound_dev_t *dev)
 		return 0;
 
 	printk(KERN_DEBUG LOGNAME ": Enabling IRQ\n");
-	
+
 	spin_lock_irqsave(&dev->lock, flags);
 	if (msnd_wait_TXDE(dev) == 0) {
 		outb(inb(dev->io + HP_ICR) | HPICR_TREQ, dev->io + HP_ICR);
@@ -316,6 +324,7 @@ int msnd_enable_irq(multisound_dev_t *dev)
 		outb(inb(dev->io + HP_ICR) & ~HPICR_TREQ, dev->io + HP_ICR);
 		outb(inb(dev->io + HP_ICR) | HPICR_RREQ, dev->io + HP_ICR);
 		enable_irq(dev->irq);
+		msnd_init_queue(dev->DSPQ, dev->dspq_data_buff, dev->dspq_buff_size);
 		spin_unlock_irqrestore(&dev->lock, flags);
 		return 0;
 	}
@@ -359,6 +368,8 @@ EXPORT_SYMBOL(msnd_register);
 EXPORT_SYMBOL(msnd_unregister);
 EXPORT_SYMBOL(msnd_get_num_devs);
 EXPORT_SYMBOL(msnd_get_dev);
+
+EXPORT_SYMBOL(msnd_init_queue);
 
 EXPORT_SYMBOL(msnd_fifo_init);
 EXPORT_SYMBOL(msnd_fifo_free);

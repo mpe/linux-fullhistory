@@ -29,7 +29,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd_pinnacle.c,v 1.73 1998/12/04 14:41:02 andrewtv Exp $
+ * $Id: msnd_pinnacle.c,v 1.75 1999/03/21 16:50:09 andrewtv Exp $
  *
  ********************************************************************/
 
@@ -254,7 +254,7 @@ static int dsp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case SNDCTL_DSP_SYNC:
 		dsp_write_flush();
 		return 0;
-		
+
 	case SNDCTL_DSP_GETBLKSIZE:
 		tmp = dsp_get_frag_size();
 		if (put_user(tmp, (int *)arg))
@@ -352,7 +352,7 @@ static int dsp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				break;
 			}
 		}
-									
+
 		for (i = 0; i < 3; ++i, lpDAQ += DAQDS__size, lpDARQ += DAQDS__size) {
 			if (file->f_mode & FMODE_WRITE)
 				isa_writew(data, lpDAQ + DAQDS_wChannels);
@@ -570,7 +570,7 @@ static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 		return 0;
 	} else if (((cmd >> 8) & 0xff) == 'M') {
 		int val = 0;
-		
+
 		if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
 			switch (cmd & 0xff) {
 			case SOUND_MIXER_RECSRC:
@@ -578,7 +578,7 @@ static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 					return -EFAULT;
 				val = set_recsrc(val);
 				break;
-				
+
 			default:
 				if (get_user(val, (int *)arg))
 					return -EFAULT;
@@ -592,7 +592,7 @@ static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 			case SOUND_MIXER_RECSRC:
 				val = dev.recsrc;
 				break;
-				
+
 			case SOUND_MIXER_DEVMASK:
 			case SOUND_MIXER_STEREODEVS:
 				val =   SOUND_MASK_PCM |
@@ -620,7 +620,7 @@ static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 			case SOUND_MIXER_CAPS:
 				val =   SOUND_CAP_EXCL_INPUT;
 				break;
-				
+
 			default:
 				if ((val = mixer_get(cmd & 0xff)) < 0)
 					return -EINVAL;
@@ -787,7 +787,7 @@ static int dev_open(struct inode *inode, struct file *file)
 		/* nothing */
 	} else
 		err = -EINVAL;
-	
+
 	if (err >= 0)
 		mod_inc_ref();
 
@@ -873,7 +873,7 @@ static __inline__ int pack_DAPF_to_DAPQ(register int start)
 		register int bank_num = DAPQ_tail / PCTODSP_OFFSET(DAQDS__size);
 		register int n;
 		unsigned long flags;
-		
+
 		/* Write the data to the new tail */
 		if (protect) {
 			/* Critical section: protect fifo in non-interrupt */
@@ -910,11 +910,9 @@ static __inline__ int pack_DAPF_to_DAPQ(register int start)
 		/* Then advance the tail */
 		DAPQ_tail = (++bank_num % 3) * PCTODSP_OFFSET(DAQDS__size);
 		isa_writew(DAPQ_tail, dev.DAPQ + JQS_wTail);
-		
 		/* Tell the DSP to play the bank */
 		msnd_send_dsp_cmd(&dev, HDEX_PLAY_START);
 	}
-	
 	return nbanks;
 }
 
@@ -999,7 +997,7 @@ static int dsp_write(const char *buf, size_t len)
 				return -EINTR;
 		}
 	}
-	
+
 	return len - count;
 }
 
@@ -1142,7 +1140,7 @@ static struct file_operations dev_fileops = {
 static int reset_dsp(void)
 {
 	int timeout = 100;
-		
+
 	outb(HPDSPRESET_ON, dev.io + HP_DSPR);
 	mdelay(1);
 #ifndef MSND_CLASSIC
@@ -1190,7 +1188,7 @@ static int __init probe_multisound(void)
 	case 0x3: xv = "1.4"; break;
 	default: xv = "unknown"; break;
 	}
-		
+
 	switch (dev.info & 0x7) {
 	case 0x0: rev = "I"; dev.name = pin; break;
 	case 0x1: rev = "F"; dev.name = pin; break;
@@ -1216,16 +1214,7 @@ static int __init probe_multisound(void)
 	       dev.base, dev.base + 0x7fff);
 
 	release_region(dev.io, dev.numio);
-	
 	return 0;
-}
-
-static void msnd_init_queue(unsigned long base, int start, int size)
-{
-	isa_writew(PCTODSP_BASED(start), base + JQS_wStart);
-	isa_writew(PCTODSP_OFFSET(size) - 1, base + JQS_wSize);
-	isa_writew(0, base + JQS_wHead);
-	isa_writew(0, base + JQS_wTail);
 }
 
 static int init_sma(void)
@@ -1383,7 +1372,7 @@ static int initialize(void)
 
 	if ((err = reset_dsp()) < 0)
 		return err;
-	
+
 	if ((err = upload_dsp_code()) < 0) {
 		printk(KERN_WARNING LOGNAME ": Cannot upload DSP code\n");
 		return err;
@@ -1462,12 +1451,14 @@ static int __init attach_multisound(void)
 		return dev.mixer_minor;
 	}
 
+	dev.ext_midi_dev = dev.hdr_midi_dev = -1;
+
 	disable_irq(dev.irq);
 	calibrate_adc(dev.play_sample_rate);
 #ifndef MSND_CLASSIC
 	force_recsrc(SOUND_MASK_IMIX);
 #endif
-	
+
 	return 0;
 }
 
@@ -1593,7 +1584,7 @@ static int __init msnd_pinnacle_cfg_devices(int cfg, int reset, msnd_pinnacle_cf
 
 	/* Configure specified devices */
 	for (i = 0; i < 4; ++i) {
-		
+
 		switch (i) {
 		case 0:		/* DSP */
 			if (!(device[i].io0 && device[i].irq && device[i].mem))
@@ -1776,7 +1767,7 @@ int __init msnd_pinnacle_init(void)
 
 	printk(KERN_INFO LOGNAME ": Turtle Beach " LONGNAME " Linux Driver Version "
 	       VERSION ", Copyright (C) 1998 Andrew Veliath\n");
-	
+
 	if (io == -1 || irq == -1 || mem == -1)
 		printk(KERN_WARNING LOGNAME ": io, irq and mem must be set\n");
 
@@ -1792,7 +1783,7 @@ int __init msnd_pinnacle_init(void)
 		printk(KERN_ERR LOGNAME ": \"io\" - DSP I/O base must be set to 0x210, 0x220, 0x230, 0x240, 0x250, 0x260, 0x290, or 0x3E0\n");
 		return -EINVAL;
 	}
-	
+
 	if (irq == -1 ||
 	    !(irq == 5 ||
 	      irq == 7 ||
@@ -1849,7 +1840,7 @@ int __init msnd_pinnacle_init(void)
 		pinnacle_devs[0].mem = mem;
 
 		/* The following are Pinnacle specific */
-		
+
 		/* MPU */
 		pinnacle_devs[1].io0 = mpu_io;
 		pinnacle_devs[1].irq = mpu_irq;
@@ -1896,6 +1887,8 @@ int __init msnd_pinnacle_init(void)
 	dev.fifosize = fifosize * 1024;
 	dev.calibrate_signal = calibrate_signal ? 1 : 0;
 	dev.recsrc = 0;
+	dev.dspq_data_buff = DSPQ_DATA_BUFF;
+	dev.dspq_buff_size = DSPQ_BUFF_SIZE;
 	dev.inc_ref = mod_inc_ref;
 	dev.dec_ref = mod_dec_ref;
 	if (write_ndelay == -1)
@@ -1934,7 +1927,7 @@ int __init msnd_pinnacle_init(void)
 		msnd_fifo_free(&dev.DARF);
 		return err;
 	}
-	
+
 	if ((err = attach_multisound()) < 0) {
 		printk(KERN_ERR LOGNAME ": Attach failed\n");
 		msnd_fifo_free(&dev.DAPF);

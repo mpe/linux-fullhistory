@@ -61,7 +61,9 @@
 #define KBD_DEFLOCK 0
 #endif
 
+void (*kbd_ledfunc)(unsigned int led) = NULL;
 EXPORT_SYMBOL(handle_scancode);
+EXPORT_SYMBOL(kbd_ledfunc);
 
 extern void ctrl_alt_del(void);
 
@@ -904,6 +906,7 @@ static void kbd_bh(void)
 	if (leds != ledstate) {
 		ledstate = leds;
 		kbd_leds(leds);
+		if (kbd_ledfunc) kbd_ledfunc(leds);
 	}
 }
 

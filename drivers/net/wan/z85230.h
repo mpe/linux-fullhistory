@@ -270,6 +270,7 @@ struct z8530_channel
 	struct sk_buff	*skb;		/* Buffer dptr points into */
 	struct sk_buff	*skb2;		/* Pending buffer */
 	u8		status;		/* Current DCD */
+	u8		dcdcheck;	/* which bit to check for line */
 	u8		sync;		/* Set if in sync mode */
 
 	u8		regs[32];	/* Register map for the chip */
@@ -413,7 +414,7 @@ extern void z8530_null_rx(struct z8530_channel *c, struct sk_buff *skb);
  *	Standard interrupt vector sets
  */
  
-struct z8530_irqhandler z8530_sync, z8530_async, z8530_nop;
+extern struct z8530_irqhandler z8530_sync, z8530_async, z8530_nop;
 
 /*
  *	Asynchronous Interfacing

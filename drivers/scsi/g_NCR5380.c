@@ -165,21 +165,25 @@ static void __init internal_setup(int board, char *str, int *ints){
 	    printk("generic_NCR5380_setup : usage ncr5380=" STRVAL(NCR5380_map_name) ",irq,dma\n");
 	    return;
 	}
+	break;
     case BOARD_NCR53C400:
 	if (ints[0] != 2) {
 	    printk("generic_NCR53C400_setup : usage ncr53c400=" STRVAL(NCR5380_map_name) ",irq\n");
 	    return;
 	}
+	break;
     case BOARD_NCR53C400A:
 	if (ints[0] != 2) {
 	    printk("generic_NCR53C400A_setup : usage ncr53c400a=" STRVAL(NCR5380_map_name) ",irq\n");
 	    return;
 	}
+	break;
     case BOARD_DTC3181E:
 	if (ints[0] != 2) {
 	    printk("generic_DTC3181E_setup : usage dtc3181e=" STRVAL(NCR5380_map_name) ",irq\n");
 	    return;
 	}
+	break;
     }
 
     if (commandline_current < NO_OVERRIDES) {

@@ -4,6 +4,8 @@
  * (C) Copyright 1999,2000 Thomas Sailer <sailer@ife.ee.ethz.ch>. (proc file per device)
  * (C) Copyright 1999 Deti Fliegl (new USB architecture)
  *
+ * $id$
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -44,7 +46,7 @@
  * 2000-01-04: Thomas Sailer <sailer@ife.ee.ethz.ch>
  *   Turned into its own filesystem
  *
- * $Id: proc_usb.c,v 1.16 1999/12/20 11:11:10 fliegl Exp $
+ * $Id: devices.c,v 1.5 2000/01/11 13:58:21 tom Exp $
  */
 
 #include <linux/fs.h>
@@ -67,16 +69,16 @@ static char *format_topo =
 
 static char *format_string_manufacturer =
 /* S:  Manufacturer=xxxx */
-  "S:  Manufacturer=%s\n";
+  "S:  Manufacturer=%.100s\n";
 
 static char *format_string_product =
 /* S:  Product=xxxx */
-  "S:  Product=%s\n";
+  "S:  Product=%.100s\n";
 
 #ifdef ALLOW_SERIAL_NUMBER
 static char *format_string_serialnumber =
 /* S:  SerialNumber=xxxx */
-  "S:  SerialNumber=%s\n";
+  "S:  SerialNumber=%.100s\n";
 #endif
 
 static char *format_bandwidth =
@@ -213,7 +215,7 @@ static char *usb_dump_interface(char *start, char *end, const struct usb_interfa
  * 2. add <halted> status to each endpoint line
  */
 
-static char *usb_dump_config_descriptor(char *start, char *end, const struct usb_config_descriptor *desc, const int active)
+static char *usb_dump_config_descriptor(char *start, char *end, const struct usb_config_descriptor *desc, int active)
 {
 	if (start > end)
 		return start;
@@ -226,7 +228,7 @@ static char *usb_dump_config_descriptor(char *start, char *end, const struct usb
 	return start;
 }
 
-static char *usb_dump_config(char *start, char *end, const struct usb_config_descriptor *config, const int active)
+static char *usb_dump_config(char *start, char *end, const struct usb_config_descriptor *config, int active)
 {
 	int i, j;
 	struct usb_interface *interface;
@@ -275,38 +277,34 @@ static char *usb_dump_device_descriptor(char *start, char *end, const struct usb
 /*
  * Dump the different strings that this device holds.
  */
-static char *usb_dump_device_strings (char *start, char *end, const struct usb_device *dev)
+static char *usb_dump_device_strings (char *start, char *end, struct usb_device *dev)
 {
 	char *buf;
 
 	if (start > end)
 		return start;
-	buf = kmalloc(256, GFP_KERNEL);
+	buf = kmalloc(128, GFP_KERNEL);
 	if (!buf)
 		return start;
-
 	if (dev->descriptor.iManufacturer) {
-		if (usb_string(dev, dev->descriptor.iManufacturer, buf, 256) > 0)
+		if (usb_string(dev, dev->descriptor.iManufacturer, buf, 128) > 0)
 			start += sprintf(start, format_string_manufacturer, buf);
 	}				
 	if (start > end)
 		goto out;
-
 	if (dev->descriptor.iProduct) {
-		if (usb_string(dev, dev->descriptor.iProduct, buf, 256) > 0)
+		if (usb_string(dev, dev->descriptor.iProduct, buf, 128) > 0)
 			start += sprintf(start, format_string_product, buf);
 	}
 	if (start > end)
 		goto out;
-
 #ifdef ALLOW_SERIAL_NUMBER
 	if (dev->descriptor.iSerialNumber) {
-		if (usb_string(dev, dev->descriptor.iSerialNumber, buf, 256) > 0)
+		if (usb_string(dev, dev->descriptor.iSerialNumber, buf, 128) > 0)
 			start += sprintf(start, format_string_serialnumber, buf);
 	}
 #endif
-
-out:
+ out:
 	kfree(buf);
 	return start;
 }
@@ -345,11 +343,11 @@ static char *usb_dump_hub_descriptor(char *start, char *end, const struct usb_hu
 	if (start > end)
 		return start;
 	start += sprintf(start, "Interface:");
-	while (leng) {
+	while (leng && start <= end) {
 		start += sprintf(start, " %02x", *ptr);
 		ptr++; leng--;
 	}
-	start += sprintf(start, "\n");
+	*start++ = '\n';
 	return start;
 }
 
@@ -359,7 +357,7 @@ static char *usb_dump_string(char *start, char *end, const struct usb_device *de
 		return start;
 	start += sprintf(start, "Interface:");
 	if (index <= dev->maxstring && dev->stringindex && dev->stringindex[index])
-		start += sprintf(start, "%s: %s ", id, dev->stringindex[index]);
+		start += sprintf(start, "%s: %.100s ", id, dev->stringindex[index]);
 	return start;
 }
 
@@ -419,7 +417,7 @@ static ssize_t usb_device_read(struct file *file, char *buf, size_t nbytes, loff
 		return 0;
 	if (!access_ok(VERIFY_WRITE, buf, nbytes))
 		return -EFAULT;
-        if (!(page = (char*) __get_free_page(GFP_KERNEL)))
+        if (!(page = (char*) __get_free_pages(GFP_KERNEL,1)))
                 return -ENOMEM;
 	pos = *ppos;
 	/* enumerate busses */
@@ -429,7 +427,7 @@ static ssize_t usb_device_read(struct file *file, char *buf, size_t nbytes, loff
 		len = sprintf(page, format_bandwidth, bus->bandwidth_allocated, FRAME_TIME_MAX_USECS_ALLOC,
 			      (100 * bus->bandwidth_allocated + FRAME_TIME_MAX_USECS_ALLOC / 2) / FRAME_TIME_MAX_USECS_ALLOC,
 			      bus->bandwidth_int_reqs, bus->bandwidth_isoc_reqs);
-		end = usb_device_dump(page + len, page + (PAGE_SIZE - 100), bus->root_hub, bus->busnum, 0, 0, 0);
+		end = usb_device_dump(page + len, page + (2*PAGE_SIZE - 256), bus->root_hub, bus->busnum, 0, 0, 0);
 		len = end - page;
 		if (len > pos) {
 			len -= pos;
@@ -448,7 +446,7 @@ static ssize_t usb_device_read(struct file *file, char *buf, size_t nbytes, loff
 		} else
 			pos -= len;
 	}
-	free_page((unsigned long)page);
+	free_pages((unsigned long)page, 1);
 	return ret;
 }
 

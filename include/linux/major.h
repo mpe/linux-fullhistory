@@ -108,7 +108,11 @@
 #define SPECIALIX_NORMAL_MAJOR 75
 #define SPECIALIX_CALLOUT_MAJOR 76
 
+#define DASD_MAJOR      94	/* Official assignations from Peter */
+
 #define LVM_CHAR_MAJOR	109	/* Logical Volume Manager */
+
+#define MDISK_MAJOR     95	/* Official assignations from Peter */
 
 #define I2O_MAJOR		80	/* 80->87 */
 

@@ -15,7 +15,7 @@
 
 #include <linux/config.h>
 #include <linux/kernel.h>
-#include <asm/apic.h>
+#include <asm/apicdef.h>
 #include <asm/page.h>
 #ifdef CONFIG_HIGHMEM
 #include <linux/threads.h>

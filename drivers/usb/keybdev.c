@@ -34,6 +34,7 @@
 #include <linux/malloc.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/kbd_kern.h>
 
 #ifdef CONFIG_X86
 
@@ -56,6 +57,21 @@ static unsigned char keybdev_mac_codes[256] =
 	  0,  0,  0,  0,127, 81,  0,113 };
 
 #endif
+
+struct input_handler keybdev_handler;
+
+void keybdev_ledfunc(unsigned int led)
+{
+	struct input_handle *handle;	
+
+	for (handle = keybdev_handler.handle; handle; handle = handle->hnext) {
+
+		input_event(handle->dev, EV_LED, LED_SCROLLL, !!(led & 0x01));
+		input_event(handle->dev, EV_LED, LED_NUML,    !!(led & 0x02));
+		input_event(handle->dev, EV_LED, LED_CAPSL,   !!(led & 0x04));
+
+	}
+}
 
 void keybdev_event(struct input_handle *handle, unsigned int type, unsigned int code, int down)
 {
@@ -96,6 +112,7 @@ void keybdev_event(struct input_handle *handle, unsigned int type, unsigned int 
 #error "Cannot generate rawmode keyboard for your architecture yet."
 #endif
 
+	mark_bh(KEYBOARD_BH);
 }
 
 static int keybdev_connect(struct input_handler *handler, struct input_dev *dev)
@@ -137,6 +154,7 @@ struct input_handler keybdev_handler = {
 #ifdef MODULE
 void cleanup_module(void)
 {
+	kbd_ledfunc = NULL;
 	input_unregister_handler(&keybdev_handler);
 }
 int init_module(void)
@@ -145,5 +163,6 @@ int __init keybdev_init(void)
 #endif
 {
 	input_register_handler(&keybdev_handler);
+	kbd_ledfunc = keybdev_ledfunc;
 	return 0;
 }

@@ -264,8 +264,6 @@ void usb_register_bus(struct usb_bus *bus)
 	} else
 		warn("too many buses");
 
-	proc_usb_add_bus(bus);
-
 	/* Add it to the list of buses */
 	list_add(&bus->bus_list, &usb_bus_list);
 
@@ -284,8 +282,6 @@ void usb_deregister_bus(struct usb_bus *bus)
 	 * itself up
 	 */
 	list_del(&bus->bus_list);
-
-	proc_usb_remove_bus(bus);
 
         usbdevfs_remove_bus(bus);
 
@@ -1230,7 +1226,6 @@ void usb_disconnect(struct usb_device **pdev)
 	}
 
 	/* remove /proc/bus/usb entry */
-	proc_usb_remove_device(dev);
         usbdevfs_remove_device(dev);
 
 	/* Free up the device itself, including its device number */
@@ -1694,7 +1689,6 @@ int usb_new_device(struct usb_device *dev)
 	usb_show_string(dev, "SerialNumber", dev->descriptor.iSerialNumber);
 
 	/* now that the basic setup is over, add a /proc/bus/usb entry */
-	proc_usb_add_device(dev);
         usbdevfs_add_device(dev);
 
 	/* find drivers willing to handle this device */

@@ -1269,7 +1269,7 @@ static int __init acpi_init(void)
 	 * do this with multiple CPU's, we'd need a per-CPU ACPI
 	 * device..
 	 */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	if (smp_num_cpus > 1)
 		return 0;
 #endif

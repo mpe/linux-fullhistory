@@ -61,6 +61,10 @@ extern void nubus_init(void);
 #include <net/irda/irda_device.h>
 #endif
 
+#ifdef CONFIG_X86_IO_APIC
+#include <asm/smp.h>
+#endif
+
 /*
  * Versions of gcc older than that listed below may actually compile
  * and link okay, but the end product can have subtle run time bugs.
@@ -426,7 +430,14 @@ extern void cpu_idle(void);
 
 #ifndef __SMP__
 
+#ifdef CONFIG_X86_IO_APIC
+static void __init smp_init(void)
+{
+	IO_APIC_init_uniprocessor();
+}
+#else
 #define smp_init()	do { } while (0)
+#endif
 
 #else
 

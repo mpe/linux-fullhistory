@@ -82,7 +82,7 @@ struct kernel_stat kstat = { 0 };
 
 #ifdef __SMP__
 
-#define idle_task(cpu) (init_tasks[cpu_number_map[(cpu)]])
+#define idle_task(cpu) (init_tasks[cpu_number_map(cpu)])
 #define can_schedule(p)	(!(p)->has_cpu)
 
 #else
@@ -1168,10 +1168,10 @@ void __init sched_init(void)
 	 * We have to do a little magic to get the first
 	 * process right in SMP mode.
 	 */
-	int cpu=hard_smp_processor_id();
+	int cpu = smp_processor_id();
 	int nr;
 
-	init_task.processor=cpu;
+	init_task.processor = cpu;
 
 	for(nr = 0; nr < PIDHASH_SZ; nr++)
 		pidhash[nr] = NULL;

@@ -40,12 +40,16 @@
     8/20/96 Fixed 7990 autoIRQ failure and reversed unneeded alignment -djb
     v1.12 10/27/97 Module support -djb
     v1.14  2/3/98 Module support modified, made PCI support optional -djb
+    v1.15 5/27/99 Fixed bug in the cleanup_module(). dev->priv was freed
+                  before unregister_netdev() which caused NULL pointer
+                  reference later in the chain (in rtnetlink_fill_ifinfo())
+                  -- Mika Kuoppala <miku@iki.fi>
     
     Forward ported v1.14 to 2.1.129, merged the PCI and misc changes from
     the 2.1 version of the old driver - Alan Cox
 */
 
-static const char *version = "lance.c:v1.14ac 1998/11/20 dplatt@3do.com, becker@cesdis.gsfc.nasa.gov\n";
+static const char *version = "lance.c:v1.15ac 1999/11/13 dplatt@3do.com, becker@cesdis.gsfc.nasa.gov\n";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -349,11 +353,11 @@ void cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_CARDS; this_dev++) {
 		struct net_device *dev = &dev_lance[this_dev];
 		if (dev->priv != NULL) {
-			kfree(dev->priv);
-			dev->priv = NULL;
+			unregister_netdev(dev);	
 			free_dma(dev->dma);
 			release_region(dev->base_addr, LANCE_TOTAL_SIZE);
-			unregister_netdev(dev);
+			kfree(dev->priv);
+			dev->priv = NULL;
 		}
 	}
 }

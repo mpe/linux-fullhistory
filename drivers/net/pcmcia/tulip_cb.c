@@ -2478,7 +2478,7 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	if (test_and_set_bit(0, (void*)&dev->interrupt)) {
 		printk(KERN_ERR "%s: Duplicate entry of the interrupt handler by "
 			   "processor %d.\n",
-			   dev->name, hard_smp_processor_id());
+			   dev->name, smp_processor_id());
 		dev->interrupt = 0;
 		return;
 	}
@@ -3088,7 +3088,7 @@ static void set_rx_mode(struct net_device *dev)
 	outl_CSR6(csr6 | 0x0000, ioaddr, tp->chip_id);
 }
 
-static struct pci_device_id tulip_pci_table[] = {
+static const struct pci_device_id tulip_pci_table[] __devinitdata = {
   { 0x1011, 0x0002, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21040 },
   { 0x1011, 0x0014, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21041 },
   { 0x1011, 0x0009, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21140 },
@@ -3107,7 +3107,7 @@ static struct pci_device_id tulip_pci_table[] = {
 
 MODULE_DEVICE_TABLE(pci, tulip_pci_table);
 
-static int __devinit tulip_pci_probe(struct pci_dev *pdev, struct pci_device_id *id)
+static int __devinit tulip_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct net_device *dev;
 	static int board_idx = 0;
@@ -3120,9 +3120,9 @@ static int __devinit tulip_pci_probe(struct pci_dev *pdev, struct pci_device_id 
 				       id->driver_data, board_idx++);
 	if (dev) {
 		pdev->driver_data = dev;
-		return 1;
+		return 0;
 	}
-	return 0;
+	return -ENODEV;
 }
 
 static void tulip_suspend(struct pci_dev *pdev)
@@ -3161,13 +3161,13 @@ static struct pci_driver tulip_ops = {
 	resume:		tulip_resume
 };
 
-static int tulip_init(void)
+static int __init tulip_init(void)
 {
 	pci_register_driver(&tulip_ops);
 	return 0;
 }
 
-static void tulip_exit(void)
+static __exit void tulip_exit(void)
 {
 	pci_unregister_driver(&tulip_ops);
 }

@@ -557,6 +557,13 @@ static int shaper_ioctl(struct net_device *dev,  struct ifreq *ifr, int cmd)
 {
 	struct shaperconf *ss= (struct shaperconf *)&ifr->ifr_data;
 	struct shaper *sh=dev->priv;
+	
+	if(ss->ss_cmd == SHAPER_SET_DEV || ss->ss_cmd == SHAPER_SET_SPEED)
+	{
+		if(!capable(CAP_NET_ADMIN))
+			return -EPERM;
+	}
+	
 	switch(ss->ss_cmd)
 	{
 		case SHAPER_SET_DEV:

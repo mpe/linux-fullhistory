@@ -279,7 +279,10 @@ struct hid_device {							/* device report descriptor */
 	int ifnum;							/* USB interface number */
 
 	char buffer[32];						/* Receive buffer */
+	char bufout[32];						/* Transmit buffer */
+	devrequest dr;							/* Startup packet */
 	struct urb urb;							/* USB URB structure */
+	struct urb urbout;						/* Output URB */
 	struct input_dev input;						/* input device structure */
 };
 

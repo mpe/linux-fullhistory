@@ -383,7 +383,7 @@ inline static void get_pcl(const struct ti_lynx *lynx, pcl_t pclid,
 
 inline static u32 pcl_bus(const struct ti_lynx *lynx, pcl_t pclid)
 {
-        return lynx->dev->base_address[1] + pclid * sizeof(struct ti_pcl);
+        return lynx->dev->resource[1].start + pclid * sizeof(struct ti_pcl);
 }
 
 #else /* CONFIG_IEEE1394_PCILYNX_LOCALRAM */

@@ -240,7 +240,8 @@ void ax25_return_dm(struct net_device *dev, ax25_address *src, ax25_address *des
 		return;	/* Next SABM will get DM'd */
 
 	skb_reserve(skb, AX25_BPQ_HEADER_LEN + ax25_addr_size(digi));
-
+	skb->nh.raw = skb->data;
+	
 	ax25_digi_invert(digi, &retdigi);
 
 	dptr = skb_put(skb, 1);

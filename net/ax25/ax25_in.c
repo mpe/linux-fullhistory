@@ -93,6 +93,7 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 
 					skbn->dev   = ax25->ax25_dev->dev;
 					skbn->h.raw = skbn->data;
+					skbn->nh.raw = skbn->data;
 
 					/* Copy data from the fragments */
 					while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL) {

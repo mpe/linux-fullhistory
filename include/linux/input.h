@@ -284,6 +284,13 @@ struct input_event {
 #define BTN_START		0x13b
 #define BTN_MODE		0x13c
 
+#define BTN_DIGI		0x140
+#define BTN_PEN			0x140
+#define BTN_RUBBER		0x141
+#define BTN_PEN_SIDE		0x142
+#define BTN_PEN_SIDE2		0x143
+#define BTN_NEAR		0x144
+
 #define KEY_MAX			0x1ff
 
 /*
@@ -319,16 +326,18 @@ struct input_event {
 #define ABS_HAT2Y		0x15
 #define ABS_HAT3X		0x16
 #define ABS_HAT3Y		0x17
-#define ABS_MISC		0x18
+#define ABS_PRESSURE		0x18
+#define ABS_DISTANCE		0x19
+#define ABS_MISC		0x1a
 #define ABS_MAX			0x1f
 
 /*
  * LEDs
  */
 
-#define LED_SCROLLL		0x00
-#define LED_NUML		0x01
-#define LED_CAPSL		0x02
+#define LED_NUML		0x00
+#define LED_CAPSL		0x01
+#define LED_SCROLLL		0x02
 #define LED_COMPOSE		0x03
 #define LED_KANA		0x04
 #define LED_MAX			0x0f

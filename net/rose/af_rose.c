@@ -20,6 +20,7 @@
  *	ROSE 003	Jonathan(G4KLX)	New timer architecture.
  *					Implemented idle timer.
  *					Added use count to neighbour.
+ *                      Tomi(OH2BNS)    Fixed rose_getname().
  */
 
 #include <linux/config.h>
@@ -893,7 +894,7 @@ static int rose_accept(struct socket *sock, struct socket *newsock, int flags)
 static int rose_getname(struct socket *sock, struct sockaddr *uaddr,
 	int *uaddr_len, int peer)
 {
-	struct sockaddr_rose *srose = (struct sockaddr_rose *)uaddr;
+	struct full_sockaddr_rose *srose = (struct full_sockaddr_rose *)uaddr;
 	struct sock *sk = sock->sk;
 	int n;
 
@@ -901,42 +902,21 @@ static int rose_getname(struct socket *sock, struct sockaddr *uaddr,
 		if (sk->state != TCP_ESTABLISHED)
 			return -ENOTCONN;
 		srose->srose_family = AF_ROSE;
-		srose->srose_ndigis = 0;
 		srose->srose_addr   = sk->protinfo.rose->dest_addr;
 		srose->srose_call   = sk->protinfo.rose->dest_call;
 		srose->srose_ndigis = sk->protinfo.rose->dest_ndigis;
-		if (*uaddr_len >= sizeof(struct full_sockaddr_rose)) {
-			struct full_sockaddr_rose *full_srose = (struct full_sockaddr_rose *)uaddr;
-			for (n = 0 ; n < sk->protinfo.rose->dest_ndigis ; n++)
-				full_srose->srose_digis[n] = sk->protinfo.rose->dest_digis[n];
-			*uaddr_len = sizeof(struct full_sockaddr_rose);
-		} else {
-			if (sk->protinfo.rose->dest_ndigis >= 1) {
-				srose->srose_ndigis = 1;
-				srose->srose_digi = sk->protinfo.rose->dest_digis[0];
-			}
-			*uaddr_len = sizeof(struct sockaddr_rose);
-		}
+		for (n = 0 ; n < sk->protinfo.rose->dest_ndigis ; n++)
+			srose->srose_digis[n] = sk->protinfo.rose->dest_digis[n];
 	} else {
 		srose->srose_family = AF_ROSE;
-		srose->srose_ndigis = 0;
 		srose->srose_addr   = sk->protinfo.rose->source_addr;
 		srose->srose_call   = sk->protinfo.rose->source_call;
 		srose->srose_ndigis = sk->protinfo.rose->source_ndigis;
-		if (*uaddr_len >= sizeof(struct full_sockaddr_rose)) {
-			struct full_sockaddr_rose *full_srose = (struct full_sockaddr_rose *)uaddr;
-			for (n = 0 ; n < sk->protinfo.rose->source_ndigis ; n++)
-				full_srose->srose_digis[n] = sk->protinfo.rose->source_digis[n];
-			*uaddr_len = sizeof(struct full_sockaddr_rose);
-		} else {
-			if (sk->protinfo.rose->source_ndigis >= 1) {
-				srose->srose_ndigis = 1;
-				srose->srose_digi = sk->protinfo.rose->source_digis[sk->protinfo.rose->source_ndigis-1];
-			}
-			*uaddr_len = sizeof(struct sockaddr_rose);
-		}
+		for (n = 0 ; n < sk->protinfo.rose->source_ndigis ; n++)
+			srose->srose_digis[n] = sk->protinfo.rose->source_digis[n];
 	}
 
+	*uaddr_len = sizeof(struct full_sockaddr_rose);
 	return 0;
 }
 

@@ -857,7 +857,8 @@ do_sigaction(int sig, const struct k_sigaction *act, struct k_sigaction *oact)
 					if (q->info.si_signo != sig)
 						pp = &q->next;
 					else {
-						*pp = q->next;
+						if ((*pp = q->next) == NULL)
+							current->sigqueue_tail = pp;
 						kmem_cache_free(signal_queue_cachep, q);
 						atomic_dec(&nr_queued_signals);
 					}

@@ -660,14 +660,14 @@ static void sppp_cisco_input (struct sppp *sp, struct sk_buff *skb)
 	h = (struct cisco_packet *)skb->data;
 	skb_pull(skb, sizeof(struct cisco_packet*));
 	if (sp->pp_flags & PP_DEBUG)
-		printk (KERN_WARNING "%s: cisco input: %d bytes <%lxh %xh %xh %xh %xh-%xh>\n",
+		printk (KERN_WARNING "%s: cisco input: %d bytes <%xh %xh %xh %xh %xh-%xh>\n",
 			dev->name,  skb->len,
 			ntohl (h->type), h->par1, h->par2, h->rel,
 			h->time0, h->time1);
 	switch (ntohl (h->type)) {
 	default:
 		if (sp->pp_flags & PP_DEBUG)
-			printk (KERN_WARNING "%s: unknown cisco packet type: 0x%lx\n",
+			printk (KERN_WARNING "%s: unknown cisco packet type: 0x%x\n",
 				dev->name,  ntohl (h->type));
 		break;
 	case CISCO_ADDR_REPLY:
@@ -814,7 +814,7 @@ static void sppp_cisco_send (struct sppp *sp, int type, long par1, long par2)
 	ch->time1 = htons ((u16) t);
 
 	if (sp->pp_flags & PP_DEBUG)
-		printk (KERN_WARNING "%s: cisco output: <%lxh %xh %xh %xh %xh-%xh>\n",
+		printk (KERN_WARNING "%s: cisco output: <%xh %xh %xh %xh %xh-%xh>\n",
 			dev->name,  ntohl (ch->type), ch->par1,
 			ch->par2, ch->rel, ch->time0, ch->time1);
 	sp->obytes += skb->len;

@@ -43,7 +43,7 @@ nlmsvc_retrieve_args(struct svc_rqst *rqstp, struct nlm_args *argp,
 	/* Obtain handle for client host */
 	if (rqstp->rq_client == NULL) {
 		printk(KERN_NOTICE
-			"lockd: unauthenticated request from (%08lx:%d)\n",
+			"lockd: unauthenticated request from (%08x:%d)\n",
 			ntohl(rqstp->rq_addr.sin_addr.s_addr),
 			ntohs(rqstp->rq_addr.sin_port));
 		return nlm_lck_denied_nolocks;
@@ -110,7 +110,7 @@ nlmsvc_proc_test(struct svc_rqst *rqstp, struct nlm_args *argp,
 	/* Now check for conflicting locks */
 	resp->status = nlmsvc_testlock(file, &argp->lock, &resp->lock);
 
-	dprintk("lockd: TEST          status %ld\n", ntohl(resp->status));
+	dprintk("lockd: TEST          status %d\n", ntohl(resp->status));
 	nlm_release_host(host);
 	nlm_release_file(file);
 	return rpc_success;
@@ -153,7 +153,7 @@ nlmsvc_proc_lock(struct svc_rqst *rqstp, struct nlm_args *argp,
 	resp->status = nlmsvc_lock(rqstp, file, &argp->lock,
 					argp->block, &argp->cookie);
 
-	dprintk("lockd: LOCK          status %ld\n", ntohl(resp->status));
+	dprintk("lockd: LOCK          status %d\n", ntohl(resp->status));
 	nlm_release_host(host);
 	nlm_release_file(file);
 	return rpc_success;
@@ -183,7 +183,7 @@ nlmsvc_proc_cancel(struct svc_rqst *rqstp, struct nlm_args *argp,
 	/* Try to cancel request. */
 	resp->status = nlmsvc_cancel_blocked(file, &argp->lock);
 
-	dprintk("lockd: CANCEL        status %ld\n", ntohl(resp->status));
+	dprintk("lockd: CANCEL        status %d\n", ntohl(resp->status));
 	nlm_release_host(host);
 	nlm_release_file(file);
 	return rpc_success;
@@ -216,7 +216,7 @@ nlmsvc_proc_unlock(struct svc_rqst *rqstp, struct nlm_args *argp,
 	/* Now try to remove the lock */
 	resp->status = nlmsvc_unlock(file, &argp->lock);
 
-	dprintk("lockd: UNLOCK        status %ld\n", ntohl(resp->status));
+	dprintk("lockd: UNLOCK        status %d\n", ntohl(resp->status));
 	nlm_release_host(host);
 	nlm_release_file(file);
 	return rpc_success;
@@ -234,7 +234,7 @@ nlmsvc_proc_granted(struct svc_rqst *rqstp, struct nlm_args *argp,
 
 	dprintk("lockd: GRANTED       called\n");
 	resp->status = nlmclnt_grant(&argp->lock);
-	dprintk("lockd: GRANTED       status %ld\n", ntohl(resp->status));
+	dprintk("lockd: GRANTED       status %d\n", ntohl(resp->status));
 	return rpc_success;
 }
 
@@ -340,7 +340,7 @@ nlmsvc_proc_share(struct svc_rqst *rqstp, struct nlm_args *argp,
 	/* Now try to create the share */
 	resp->status = nlmsvc_share_file(host, file, argp);
 
-	dprintk("lockd: SHARE         status %ld\n", ntohl(resp->status));
+	dprintk("lockd: SHARE         status %d\n", ntohl(resp->status));
 	nlm_release_host(host);
 	nlm_release_file(file);
 	return rpc_success;
@@ -373,7 +373,7 @@ nlmsvc_proc_unshare(struct svc_rqst *rqstp, struct nlm_args *argp,
 	/* Now try to lock the file */
 	resp->status = nlmsvc_unshare_file(host, file, argp);
 
-	dprintk("lockd: UNSHARE       status %ld\n", ntohl(resp->status));
+	dprintk("lockd: UNSHARE       status %d\n", ntohl(resp->status));
 	nlm_release_host(host);
 	nlm_release_file(file);
 	return rpc_success;
@@ -424,7 +424,7 @@ nlmsvc_proc_sm_notify(struct svc_rqst *rqstp, struct nlm_reboot *argp,
 	if (saddr.sin_addr.s_addr != htonl(INADDR_LOOPBACK)
 	 || ntohs(saddr.sin_port) >= 1024) {
 		printk(KERN_WARNING
-			"lockd: rejected NSM callback from %08lx:%d\n",
+			"lockd: rejected NSM callback from %08x:%d\n",
 			ntohl(rqstp->rq_addr.sin_addr.s_addr),
 			ntohs(rqstp->rq_addr.sin_port));
 		return rpc_system_err;

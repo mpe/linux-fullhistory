@@ -125,7 +125,7 @@ static void flush_all_zero_pkmaps(void)
 		page = pte_page(pte);
 		page->virtual = 0;
 	}
-	flush_tlb_all_kernel();
+	flush_tlb_all();
 }
 
 static inline unsigned long map_new_virtual(struct page *page)

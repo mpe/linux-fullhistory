@@ -22,33 +22,35 @@ if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
 fi
 bool 'Non-standard serial port support' CONFIG_SERIAL_NONSTANDARD
 if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
+   tristate '  Computone IntelliPort Plus serial support' CONFIG_COMPUTONE
    tristate '  Comtrol Rocketport support' CONFIG_ROCKETPORT
-   tristate '  Digiboard Intelligent Async Support' CONFIG_DIGIEPCA
-   if [ "$CONFIG_DIGIEPCA" = "n" ]; then
-      tristate '  Digiboard PC/Xx Support' CONFIG_DIGI
-   fi
    tristate '  Cyclades async mux support' CONFIG_CYCLADES
    if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_CYCLADES" != "n" ]; then
       bool '    Cyclades-Z interrupt mode operation (EXPERIMENTAL)' CONFIG_CYZ_INTR
    fi
-   bool '  Stallion multiport serial support' CONFIG_STALDRV
-   if [ "$CONFIG_STALDRV" = "y" ]; then
-     tristate '    Stallion EasyIO or EC8/32 support' CONFIG_STALLION
-     tristate '    Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
+   tristate '  Digiboard Intelligent Async Support' CONFIG_DIGIEPCA
+   if [ "$CONFIG_DIGIEPCA" = "n" ]; then
+      tristate '  Digiboard PC/Xx Support' CONFIG_DIGI
    fi
-   tristate '  SDL RISCom/8 card support' CONFIG_RISCOM8
-   tristate '  Computone IntelliPort Plus serial support' CONFIG_COMPUTONE
-   tristate '  Specialix IO8+ card support' CONFIG_SPECIALIX
-   if [ "$CONFIG_SPECIALIX" != "n" ]; then
-      bool '  Specialix DTR/RTS pin is RTS' CONFIG_SPECIALIX_RTSCTS
-   fi 
-   tristate '  Specialix SX (and SI) card support' CONFIG_SX
    tristate '  Hayes ESP serial port support' CONFIG_ESPSERIAL
+   tristate 'Moxa Intellio support' CONFIG_MOXA_INTELLIO
+   tristate 'Moxa SmartIO support' CONFIG_MOXA_SMARTIO
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       dep_tristate '  Multi-Tech multiport card support (EXPERIMENTAL)' CONFIG_ISI m
    fi
    dep_tristate '  Microgate SyncLink card support' CONFIG_SYNCLINK m
    dep_tristate '  HDLC line discipline support' CONFIG_N_HDLC m
+   tristate '  SDL RISCom/8 card support' CONFIG_RISCOM8
+   tristate '  Specialix IO8+ card support' CONFIG_SPECIALIX
+   if [ "$CONFIG_SPECIALIX" != "n" ]; then
+      bool '  Specialix DTR/RTS pin is RTS' CONFIG_SPECIALIX_RTSCTS
+   fi 
+   tristate '  Specialix SX (and SI) card support' CONFIG_SX
+   bool '  Stallion multiport serial support' CONFIG_STALDRV
+   if [ "$CONFIG_STALDRV" = "y" ]; then
+     tristate '    Stallion EasyIO or EC8/32 support' CONFIG_STALLION
+     tristate '    Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
+   fi
 fi
 bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then

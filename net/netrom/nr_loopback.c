@@ -11,6 +11,7 @@
  *
  *	History
  *	NET/ROM 007	Tomi(OH2BNS)	Created this file.
+ *                                      Small change in nr_loopback_queue().
  *
  */
 
@@ -44,17 +45,17 @@ int nr_loopback_queue(struct sk_buff *skb)
 {
 	struct sk_buff *skbn;
 
-	skbn = skb_clone(skb, GFP_ATOMIC);
+	if ((skbn = alloc_skb(skb->len, GFP_ATOMIC)) != NULL) {
+		memcpy(skb_put(skbn, skb->len), skb->data, skb->len);
+		skbn->h.raw = skbn->data;
 
-	kfree_skb(skb);
-
-	if (skbn != NULL) {
 		skb_queue_tail(&loopback_queue, skbn);
 
 		if (!nr_loopback_running())
 			nr_set_loopback_timer();
 	}
 
+	kfree_skb(skb);
 	return 1;
 }
 

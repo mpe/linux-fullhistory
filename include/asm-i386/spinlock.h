@@ -96,7 +96,7 @@ extern inline void spin_unlock(spinlock_t *lock)
 		:"=m" (__dummy_lock(lock)));
 }
 
-#define spin_trylock(lock) (!test_and_set_bit(0,(lock)))
+#define spin_trylock(lock) ({ !test_and_set_bit(0,(lock)); })
 
 /*
  * Read-write spinlocks, allowing multiple readers

@@ -1,5 +1,5 @@
 /*
- * printer.c  Version 0.1
+ * printer.c  Version 0.3
  *
  * Copyright (c) 1999 Michael Gee 	<michael@linuxspecific.com>
  * Copyright (c) 1999 Pavel Machek      <pavel@suse.cz>
@@ -12,6 +12,7 @@
  * ChangeLog:
  *	v0.1 - thorough cleaning, URBification, almost a rewrite
  *	v0.2 - some more cleanups
+ *	v0.3 - cleaner again, waitqueue fixes
  */
 
 /*
@@ -56,17 +57,17 @@
 #define USBLP_MINORS		16
 #define USBLP_MINOR_BASE	0
 
-#define USBLP_WRITE_TIMEOUT	(60*HZ)				/* 60 seconds */
+#define USBLP_WRITE_TIMEOUT	(60*HZ)			/* 60 seconds */
 
 struct usblp {
-	struct usb_device 	*dev;				/* USB device */
-	struct urb		readurb, writeurb;		/* The urbs */
-	wait_queue_head_t	readwait, writewait, pollwait;	/* Zzzzz ... */
-	int			readcount;			/* Counter for reads */
-	int			ifnum;				/* Interface number */
-	unsigned int		minor;				/* minor number of device */
-	unsigned char		used;				/* True if open */
-	unsigned char		bidir;				/* interface is bidirectional */
+	struct usb_device 	*dev;			/* USB device */
+	struct urb		readurb, writeurb;	/* The urbs */
+	wait_queue_head_t	wait;			/* Zzzzz ... */
+	int			readcount;		/* Counter for reads */
+	int			ifnum;			/* Interface number */
+	int			minor;			/* minor number of device */
+	unsigned char		used;			/* True if open */
+	unsigned char		bidir;			/* interface is bidirectional */
 };
 
 static struct usblp *usblp_table[USBLP_MINORS] = { NULL, /* ... */ };
@@ -105,13 +106,7 @@ static void usblp_bulk(struct urb *urb)
 	if (urb->status)
 		warn("nonzero read bulk status received: %d", urb->status);
 
-	if (urb == &usblp->writeurb)
-		wake_up_interruptible(&usblp->writewait);
-
-	if (urb == &usblp->readurb)
-		wake_up_interruptible(&usblp->readwait);
-
-	wake_up_interruptible(&usblp->pollwait);
+	wake_up_interruptible(&usblp->wait);
 }
 
 /*
@@ -130,15 +125,15 @@ static int usblp_check_status(struct usblp *usblp)
 	if (status & LP_PERRORP) {
 	
 		if (status & LP_POUTPA) {
-			info("usblp%d: out of paper", usblp->minor);
+			printk(KERN_INFO "usblp%d: out of paper", usblp->minor);
 			return -ENOSPC;
 		}
 		if (~status & LP_PSELECD) {
-			info("usblp%d: off-line", usblp->minor);
+			printk(KERN_INFO "usblp%d: off-line", usblp->minor);
 			return -EIO;
 		}
 		if (~status & LP_PERRORP) {
-			info("usblp%d: on fire", usblp->minor);
+			printk(KERN_INFO "usblp%d: on fire", usblp->minor);
 			return -EIO;
 		}
 	}
@@ -204,9 +199,7 @@ static int usblp_release(struct inode *inode, struct file *file)
 static unsigned int usblp_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct usblp *usblp = file->private_data;
-
-	poll_wait(file, &usblp->pollwait, wait);
-
+	poll_wait(file, &usblp->wait, wait);
 	return (usblp->readurb.status  == -EINPROGRESS ? 0 : POLLIN  | POLLRDNORM)
 	     | (usblp->writeurb.status == -EINPROGRESS ? 0 : POLLOUT | POLLWRNORM);
 }
@@ -230,13 +223,13 @@ static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, 
 				if (signal_pending(current))
 					return writecount ? writecount : -EINTR;
 
-				timeout = interruptible_sleep_on_timeout(&usblp->writewait, timeout);	
+				timeout = interruptible_sleep_on_timeout(&usblp->wait, timeout);	
 			}
 		}
 
 		if (usblp->writeurb.status == -EINPROGRESS) {
 			usb_unlink_urb(&usblp->writeurb);
-			err("usblp%d: timed out", usblp->minor);
+			printk(KERN_ERR "usblp%d: timed out\n", usblp->minor);
 			return -EIO;
 		}
 
@@ -247,7 +240,7 @@ static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, 
 			writecount += usblp->writeurb.transfer_buffer_length;
 		else {
 			if (!(retval = usblp_check_status(usblp))) {
-				err("usblp%d: error %d writing to printer",
+				printk(KERN_ERR "usblp%d: error %d writing to printer\n",
 					usblp->minor, usblp->writeurb.status);
 				return -EIO;
 			}
@@ -286,7 +279,7 @@ static ssize_t usblp_read(struct file *file, char *buffer, size_t count, loff_t 
 		while (usblp->readurb.status == -EINPROGRESS) {
 			if (signal_pending(current))
 				return -EINTR;
-			interruptible_sleep_on(&usblp->readwait);	
+			interruptible_sleep_on(&usblp->wait);	
 		}
 	}
 
@@ -294,7 +287,7 @@ static ssize_t usblp_read(struct file *file, char *buffer, size_t count, loff_t 
 		return -ENODEV;
 
 	if (usblp->readurb.status) {
-		err("usblp%d: error %d reading from printer",
+		printk(KERN_ERR "usblp%d: error %d reading from printer\n",
 			usblp->minor, usblp->readurb.status);
 		usb_submit_urb(&usblp->readurb);
 		return -EIO;
@@ -380,9 +373,7 @@ static void *usblp_probe(struct usb_device *dev, unsigned int ifnum)
 	usblp->minor = minor;
 	usblp->bidir = bidir;
 
-	init_waitqueue_head(&usblp->writewait);
-	init_waitqueue_head(&usblp->readwait);
-	init_waitqueue_head(&usblp->pollwait);
+	init_waitqueue_head(&usblp->wait);
 
 	if (!(buf = kmalloc(USBLP_BUF_SIZE * (bidir ? 2 : 1), GFP_KERNEL))) {
 		err("out of memory");

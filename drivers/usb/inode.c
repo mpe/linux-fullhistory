@@ -20,21 +20,21 @@
  *	along with this program; if not, write to the Free Software
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
+ *  $Id: inode.c,v 1.3 2000/01/11 13:58:25 tom Exp $
+ *
  *  History:
  *   0.1  04.01.2000  Created
- *
- *  $Id: ezusb.c,v 1.22 1999/12/03 15:06:28 tom Exp $
  */
 
 /*****************************************************************************/
 
 #define __NO_VERSION__
 #include <linux/module.h>
-#include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/smp_lock.h>
 #include <linux/locks.h>
 #include <linux/init.h>
+#include <linux/proc_fs.h>
 #include <asm/uaccess.h>
 
 #include "usb.h"
@@ -697,6 +697,8 @@ void usbdevfs_remove_device(struct usb_device *dev)
 
 /* --------------------------------------------------------------------- */
 
+static struct proc_dir_entry *usbdir = NULL;
+
 int __init usbdevfs_init(void)
 {
 	int ret;
@@ -708,6 +710,8 @@ int __init usbdevfs_init(void)
 		return ret;
 	if ((ret = register_filesystem(&usbdevice_fs_type)))
 		usb_deregister(&usbdevfs_driver);
+	/* create mount point for usbdevfs */
+	usbdir = proc_mkdir("usb", proc_bus);
 	return ret;
 }
 
@@ -715,6 +719,8 @@ void __exit usbdevfs_cleanup(void)
 {
 	usb_deregister(&usbdevfs_driver);
 	unregister_filesystem(&usbdevice_fs_type);
+        if (usbdir)
+                remove_proc_entry("usb", proc_bus);
 }
 
 #if 0

@@ -832,6 +832,13 @@ int ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 	new_dir->i_version = ++event;
 
 	/*
+	 * Like most other Unix systems, set the ctime for inodes on a
+	 * rename.
+	 */
+	old_inode->i_ctime = CURRENT_TIME;
+	mark_inode_dirty(old_inode);
+
+	/*
 	 * ok, that's it
 	 */
 	new_de->inode = le32_to_cpu(old_inode->i_ino);

@@ -53,7 +53,7 @@
 
 #define spin_lock_init(lock)	do { } while(0)
 #define spin_lock(lock)		(void)(lock) /* Not "unused variable". */
-#define spin_trylock(lock)	(1)
+#define spin_trylock(lock)	({1; })
 #define spin_unlock_wait(lock)	do { } while(0)
 #define spin_unlock(lock)	do { } while(0)
 

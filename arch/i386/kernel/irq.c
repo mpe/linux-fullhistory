@@ -1,8 +1,3 @@
-/* mostly architecture independent
-   some moved to i8259.c
-   the beautiful visws architecture code needs to be updated too.
-   and, finally, the BUILD_IRQ and SMP_BUILD macros in irq.h need fixed.
-   */
 /*
  *	linux/arch/i386/kernel/irq.c
  *
@@ -16,6 +11,8 @@
  */
 
 /*
+ * (mostly architecture independent, will move to kernel/irq.c in 2.5.)
+ *
  * IRQs are in fact implemented a bit like signal handlers for the kernel.
  * Naturally it's not a 1:1 relation, but there are similarities.
  */
@@ -33,15 +30,16 @@
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/kernel_stat.h>
+#include <linux/irq.h>
 
-#include <asm/system.h>
 #include <asm/io.h>
+#include <asm/smp.h>
+#include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/pgalloc.h>
 #include <asm/delay.h>
 #include <asm/desc.h>
 #include <asm/irq.h>
-#include <linux/irq.h>
 
 
 unsigned int local_bh_count[NR_CPUS];
@@ -99,7 +97,7 @@ static void ack_none(unsigned int irq)
  */
 #if CONFIG_X86
 	printk("unexpected IRQ trap at vector %02x\n", irq);
-#ifdef __SMP__
+#ifdef CONFIG_X86_LOCAL_APIC
 	/*
 	 * Currently unexpected vectors happen only on SMP and APIC.
 	 * We _must_ ack these because every local APIC has only N
@@ -149,7 +147,7 @@ int get_irq_list(char *buf)
 		if (!action) 
 			continue;
 		p += sprintf(p, "%3d: ",i);
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 		p += sprintf(p, "%10u ", kstat_irqs(i));
 #else
 		for (j = 0; j < smp_num_cpus; j++)
@@ -186,7 +184,7 @@ int get_irq_list(char *buf)
  */
 spinlock_t i386_bh_lock = SPIN_LOCK_UNLOCKED;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 unsigned char global_irq_holder = NO_PROC_ID;
 unsigned volatile int global_irq_lock;
 atomic_t global_irq_count;
@@ -707,7 +705,7 @@ void free_irq(unsigned int irq, void *dev_id)
 			}
 			spin_unlock_irqrestore(&irq_controller_lock,flags);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 			/* Wait to make sure it's not being used on another CPU */
 			while (irq_desc[irq].status & IRQ_INPROGRESS)
 				barrier();

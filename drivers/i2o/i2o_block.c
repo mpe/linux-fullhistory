@@ -738,7 +738,9 @@ static int i2ob_open(struct inode *inode, struct file *file)
 	if (minor >= MAX_I2OB<<4)
 		return -ENODEV;
 	dev=&i2ob_dev[(minor&0xF0)];
-
+	if(dev->i2odev == NULL)
+		return -ENODEV;
+		
 	if(dev->refcnt++==0)
 	{ 
 		u32 msg[6];

@@ -879,6 +879,8 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
    int              retcode;
    struct Scsi_Host *shpnt;
 #if DO_DETECT
+   int i = 0;
+   int j = 0;
    const int        buflen = 255;
    Scsi_Cmnd        SCinit;
    unsigned char    do_inquiry[] =       { INQUIRY, 0, 0, 0, buflen, 0 };

@@ -398,8 +398,16 @@ static void __init check_config(void)
  * If we configured ourselves for a TSC, we'd better have one!
  */
 #ifdef CONFIG_X86_TSC
-	if (!(boot_cpu_data.x86_capability & X86_FEATURE_TSC))
-		panic("Kernel compiled for Pentium+, requires TSC");
+	if (!cpu_has_tsc)
+		panic("Kernel compiled for Pentium+, requires TSC feature!");
+#endif
+
+/*
+ * If we configured ourselves for PGE, we'd better have it.
+ */
+#ifdef CONFIG_X86_PGE
+	if (!cpu_has_pge)
+		panic("Kernel compiled for PPro+, requires PGE feature!");
 #endif
 
 /*

@@ -947,23 +947,23 @@ void scsi_request_fn(request_queue_t * q)
 			 * get those allocated here.  
 			 */
 			if (!SDpnt->scsi_init_io_fn(SCpnt)) {
-				SHpnt->host_busy--;
-				SDpnt->device_busy--;
 				scsi_end_request(SCpnt, 0, 
 						 SCpnt->request.nr_sectors);
 				spin_lock_irq(&io_request_lock);
+				SHpnt->host_busy--;
+				SDpnt->device_busy--;
 				continue;
 			}
 			/*
 			 * Initialize the actual SCSI command for this request.
 			 */
 			if (!STpnt->init_command(SCpnt)) {
-				SHpnt->host_busy--;
-				SDpnt->device_busy--;
 				scsi_release_buffers(SCpnt);
 				scsi_end_request(SCpnt, 0, 
 						 SCpnt->request.nr_sectors);
 				spin_lock_irq(&io_request_lock);
+				SHpnt->host_busy--;
+				SDpnt->device_busy--;
 				continue;
 			}
 		}

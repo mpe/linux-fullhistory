@@ -62,7 +62,7 @@
  *    18.08.99   1.5   Only deallocate DMA buffer when unloading.
  *    02.09.99   1.6   Enable SPDIF LOOP
  *                     Change the mixer read back
- *    21.09.99   2.33  Use RCS version aas driver version.
+ *    21.09.99   2.33  Use RCS version as driver version.
  *                     Add support for modem, S/PDIF loop and 4 channels.
  *                     (8738 only)
  *                     Fix bug cause x11amp cannot play.

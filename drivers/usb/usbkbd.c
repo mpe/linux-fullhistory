@@ -99,19 +99,28 @@ int usb_kbd_event(struct input_dev *dev, unsigned int type, unsigned int code, i
 
 	if (type != EV_LED) return -1;
 
+	if (kbd->led.status == -EINPROGRESS) {
+		warn("had to kill led urb");
+		usb_unlink_urb(&kbd->led);
+	}
+
 	kbd->leds = (!!test_bit(LED_KANA,    dev->led) << 3) | (!!test_bit(LED_COMPOSE, dev->led) << 3) |
 		    (!!test_bit(LED_SCROLLL, dev->led) << 2) | (!!test_bit(LED_CAPSL,   dev->led) << 1) |
 		    (!!test_bit(LED_NUML,    dev->led));
-		
-	usb_submit_urb(&kbd->led);
 
-	return -1;
+
+	if (usb_submit_urb(&kbd->led)) {
+		err("usb_submit_urb(leds) failed");
+		return -1;
+	}
+
+	return 0;
 }
 
 static void usb_kbd_led(struct urb *urb)
 {
 	if (urb->status)
-		printk(KERN_DEBUG "nonzero control status received: %d\n", urb->status);
+		warn("led urb status %d received", urb->status);
 }
 
 static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum)
@@ -148,12 +157,6 @@ static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum)
 	kbd->dev.private = kbd;
 	kbd->dev.event = usb_kbd_event;
 
-	kbd->dr.requesttype = USB_TYPE_CLASS | USB_RECIP_INTERFACE;
-	kbd->dr.request = USB_REQ_SET_REPORT;
-	kbd->dr.value = 0x200;
-	kbd->dr.index = 1;
-	kbd->dr.length = 1;
-
 	{
 		int pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
 		int maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
@@ -162,7 +165,13 @@ static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum)
 			usb_kbd_irq, kbd, endpoint->bInterval);
 	}
 
-	FILL_CONTROL_URB(&kbd->led, dev, usb_sndctrlpipe(dev, endpoint->bEndpointAddress),
+	kbd->dr.requesttype = USB_TYPE_CLASS | USB_RECIP_INTERFACE;
+	kbd->dr.request = USB_REQ_SET_REPORT;
+	kbd->dr.value = 0x200;
+	kbd->dr.index = interface->bInterfaceNumber;
+	kbd->dr.length = 1;
+
+	FILL_CONTROL_URB(&kbd->led, dev, usb_sndctrlpipe(dev, 0),
 		(void*) &kbd->dr, &kbd->leds, 1, usb_kbd_led, kbd);
 			
 	if (usb_submit_urb(&kbd->irq)) {

@@ -899,28 +899,28 @@ int ext2_notify_change(struct dentry *dentry, struct iattr *iattr)
 	flags = iattr->ia_attr_flags;
 	if (flags & ATTR_FLAG_SYNCRONOUS) {
 		inode->i_flags |= MS_SYNCHRONOUS;
-		inode->u.ext2_i.i_flags = EXT2_SYNC_FL;
+		inode->u.ext2_i.i_flags |= EXT2_SYNC_FL;
 	} else {
 		inode->i_flags &= ~MS_SYNCHRONOUS;
 		inode->u.ext2_i.i_flags &= ~EXT2_SYNC_FL;
 	}
 	if (flags & ATTR_FLAG_NOATIME) {
 		inode->i_flags |= MS_NOATIME;
-		inode->u.ext2_i.i_flags = EXT2_NOATIME_FL;
+		inode->u.ext2_i.i_flags |= EXT2_NOATIME_FL;
 	} else {
 		inode->i_flags &= ~MS_NOATIME;
 		inode->u.ext2_i.i_flags &= ~EXT2_NOATIME_FL;
 	}
 	if (flags & ATTR_FLAG_APPEND) {
 		inode->i_flags |= S_APPEND;
-		inode->u.ext2_i.i_flags = EXT2_APPEND_FL;
+		inode->u.ext2_i.i_flags |= EXT2_APPEND_FL;
 	} else {
 		inode->i_flags &= ~S_APPEND;
 		inode->u.ext2_i.i_flags &= ~EXT2_APPEND_FL;
 	}
 	if (flags & ATTR_FLAG_IMMUTABLE) {
 		inode->i_flags |= S_IMMUTABLE;
-		inode->u.ext2_i.i_flags = EXT2_IMMUTABLE_FL;
+		inode->u.ext2_i.i_flags |= EXT2_IMMUTABLE_FL;
 	} else {
 		inode->i_flags &= ~S_IMMUTABLE;
 		inode->u.ext2_i.i_flags &= ~EXT2_IMMUTABLE_FL;

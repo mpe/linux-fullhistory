@@ -42,12 +42,14 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 
-#include <asm/processor.h>
-#include <asm/uaccess.h>
 #include <asm/io.h>
+#include <asm/smp.h>
 #include <asm/irq.h>
-#include <asm/delay.h>
 #include <asm/msr.h>
+#include <asm/delay.h>
+#include <asm/mpspec.h>
+#include <asm/uaccess.h>
+#include <asm/processor.h>
 
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
@@ -368,7 +370,7 @@ static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *reg
  * profiling, except when we simulate SMP mode on a uniprocessor
  * system, in that case we have to call the local interrupt handler.
  */
-#ifndef __SMP__
+#ifndef CONFIG_X86_LOCAL_APIC
 	if (!user_mode(regs))
 		x86_do_profile(regs->eip);
 #else

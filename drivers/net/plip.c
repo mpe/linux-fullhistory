@@ -318,7 +318,6 @@ plip_init_dev(struct net_device *dev, struct parport *pb)
 	dev->open		 = plip_open;
 	dev->stop		 = plip_close;
 	dev->get_stats 		 = plip_get_stats;
-	dev->set_config		 = plip_config;
 	dev->do_ioctl		 = plip_ioctl;
 	dev->header_cache_update = NULL;
 	dev->tx_queue_len 	 = 10;
@@ -1229,27 +1228,6 @@ plip_get_stats(struct net_device *dev)
 }
 
 static int
-plip_config(struct net_device *dev, struct ifmap *map)
-{
-	struct net_local *nl = (struct net_local *) dev->priv;
-	struct pardevice *pardev = nl->pardev;
-
-	if (dev->flags & IFF_UP)
-		return -EBUSY;
-
-	printk(KERN_WARNING "plip: Warning, changing irq with ifconfig will be obsoleted.\n");
-	printk(KERN_WARNING "plip: Next time, please set with /proc/parport/*/irq instead.\n");
-
-	if (map->irq != (unsigned char)-1) {
-		pardev->port->irq = dev->irq = map->irq;
-		/* Dummy request */
-		request_irq(dev->irq, plip_interrupt, SA_INTERRUPT,
-			    pardev->name, NULL);
-	}
-	return 0;
-}
-
-static int
 plip_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
 	struct net_local *nl = (struct net_local *) dev->priv;
@@ -1375,6 +1353,7 @@ plip_init(void)
 			if (!dev_plip[i]->name) {
 				printk(KERN_ERR "plip: memory squeeze.\n");
 				kfree(dev_plip[i]);
+				dev_plip[i] = NULL;
 				break;
 			}
 			sprintf(dev_plip[i]->name, "plip%d", i);
@@ -1382,6 +1361,7 @@ plip_init(void)
 			if (plip_init_dev(dev_plip[i],pb) || register_netdev(dev_plip[i])) {
 				kfree(dev_plip[i]->name);
 				kfree(dev_plip[i]);
+				dev_plip[i] = NULL;
 			} else {
 				i++;
 			}

@@ -515,19 +515,19 @@ struct pci_device_id {
 struct pci_driver {
 	struct list_head node;
 	char *name;
-	struct pci_device_id *id_table;		/* NULL if wants all devices */
-	int (*probe)(struct pci_dev *dev, struct pci_device_id *id);	/* New device inserted */
-	void (*remove)(struct pci_dev *dev);	/* Device removed */
+	const struct pci_device_id *id_table;	/* NULL if wants all devices */
+	int (*probe)(struct pci_dev *dev, const struct pci_device_id *id);	/* New device inserted */
+	void (*remove)(struct pci_dev *dev);	/* Device removed (NULL if not a hot-plug capable driver) */
 	void (*suspend)(struct pci_dev *dev);	/* Device suspended */
 	void (*resume)(struct pci_dev *dev);	/* Device woken up */
 };
 
-void pci_register_driver(struct pci_driver *);
+int pci_register_driver(struct pci_driver *);
 void pci_unregister_driver(struct pci_driver *);
 void pci_insert_device(struct pci_dev *, struct pci_bus *);
 void pci_remove_device(struct pci_dev *);
 struct pci_driver *pci_dev_driver(struct pci_dev *);
-struct pci_device_id *pci_match_device(struct pci_device_id *ids, struct pci_dev *dev);
+const struct pci_device_id *pci_match_device(const struct pci_device_id *ids, struct pci_dev *dev);
 
 /*
  *  If the system does not have PCI, clearly these return errors.  Define

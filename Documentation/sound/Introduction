@@ -25,7 +25,8 @@ History:
                    added info on multiple sound cards of similar types,]
                    added more diagnostics info, added info about esd.
                    added info on OSS and ALSA.
-
+1.1.1  19991031	   Added notes on sound-slot- and sound-service.
+			(Alan Cox)
 
 Modular Sound Drivers:
 ======================
@@ -321,6 +322,12 @@ in the Sound-HOWTO).
 
 7)  Turn on debug in drivers/sound/sound_config.h (DEB, DDB, MDB).
 
+8)  If the system reports insuffcient DMA memory then you may want to
+    load sound with the "dmabufs=1" option. Or in /etc/conf.modules add
+	
+	preinstall sound dmabufs=1
+
+    This makes the sound system allocate its buffers and hang onto them.
 
 Configuring Sound:
 ==================
@@ -335,7 +342,7 @@ There are several ways of configuring your sound:
 
 3)  In /etc/modules.conf when using modprobe.
 
-4)  Via Red Hat's /usr/sbin/sndconfig program (text based).
+4)  Via Red Hat's GPL'd /usr/sbin/sndconfig program (text based).
 
 5)  Via the OSS soundconf program (with the commercial version
     of the OSS driver.
@@ -343,6 +350,28 @@ There are several ways of configuring your sound:
 And I am sure, several other ways.  
 
 Anyone want to write a linuxconf module for configuring sound?
+
+Module Loading:
+===============
+
+When a sound card is first referenced and sound is modular the sound system
+will ask for the sound devices to be loaded. Initially it requests that
+the driver for the sound system is loaded. It then wwill ask for 
+sound-slot-0, where 0 is the first sound card. (sound-slot-1 the second and
+so on). Thus you can do
+
+alias sound-slot-0 sb
+
+To load a soundblaster at this point. If the slot loading does not provide
+the desired device - for example a soundblaster does not directly provide
+a midi synth in all cases then it will request "sound-service-0-n" where n
+is
+
+0	Mixer
+
+2  	MIDI
+
+3, 4	DSP audio
 
 
 For More Information (RTFM):
@@ -373,6 +402,3 @@ For More Information (RTFM):
 Contact Information:
 ====================
 Wade Hampton:  (whampton@staffnet.com)
-
-
-

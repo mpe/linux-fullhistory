@@ -118,6 +118,13 @@ CONFIG_SMP
   
   If you don't know what to do here, say N.
   
+APIC and IO-APIC Support on Uniprocessors
+CONFIG_X86_UP_IOAPIC
+  This option enables uniprocessor-kernels to switch into IO-APIC mode
+  if there is an IO-APIC in the system. Such a kernel will still boot
+  on IO-APIC-less systems with no slowdown at all. SMP kernels include
+  IO-APIC support unconditionally.
+
 Kernel math emulation
 CONFIG_MATH_EMULATION
   Linux can emulate a math coprocessor (used for floating point
@@ -7965,6 +7972,19 @@ CONFIG_USB_MOUSE
   USB mouse and prefer to use the mouse in its limited Boot Protocol
   mode. This driver is much smaller than the HID one.
 
+Wacom Graphire tablet support
+CONFIG_USB_GRAPHIRE
+  Say Y here if you want to use the USB version of the Wacom
+  Graphire tablet. Make sure you select Mouse and Event support,
+  don't select HID support, because this driver collides with it.
+  Use HIDBP support for keyboards and mice instead if you need it.
+
+Logitech WingMan Force joystick support
+CONFIG_USB_WMFORCE
+  Say Y here if you want to use the Logitech WingMan Force with Linux
+  on the USB port. No force-feedback support yet, but other than that,
+  it should work like a normal joystick.
+
 Keyboard support
 CONFIG_INPUT_KEYBDEV
   Say Y here if you want your USB HID keyboard to be able to serve as
@@ -8148,15 +8168,6 @@ CONFIG_USB_USS720
   The module will be called uss720.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
   
-/proc/bus/usb support
-CONFIG_USB_PROC
-  This reports USB drivers and devices in the /proc filesystem.
-  Entries are located in /proc/bus/usb. The entries are described in
-  the file Documentation/proc_usb_info.txt.
-
-  Note that you must say Y to global "/proc filesystem support" under
-  Filesystems for this to work.
-
 USB device filesystem
 CONFIG_USB_DEVICEFS
   This file system implements a "devices" file, that lists

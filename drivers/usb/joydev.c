@@ -424,9 +424,13 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev)
 	joydev->minor = ffz(joydev_minors);
 	set_bit(joydev->minor, &joydev_minors);
 	joydev_base[joydev->minor] = joydev;
-	
+
 	for (i = 0; i < joydev->nabs; i++) {
 		j = joydev->abspam[i];
+		if (dev->absmax[j] == dev->absmin[j]) {
+			joydev->corr[i].type = JS_CORR_NONE;
+			continue;
+		}
 		joydev->corr[i].type = JS_CORR_BROKEN;
 		joydev->corr[i].prec = dev->absfuzz[j];
 		joydev->corr[i].coef[0] = (dev->absmax[j] + dev->absmin[j]) / 2 - dev->absflat[j];

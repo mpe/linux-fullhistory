@@ -89,25 +89,7 @@ extern volatile unsigned long irq_err_count;
 
 extern char _stext, _etext;
 
-#define MAX_IRQ_SOURCES 128
-#define MAX_MP_BUSSES 32
-enum mp_bustype {
-	MP_BUS_ISA,
-	MP_BUS_EISA,
-	MP_BUS_PCI
-};
-extern int mp_bus_id_to_type [MAX_MP_BUSSES];
-extern int mp_bus_id_to_pci_bus [MAX_MP_BUSSES];
-
-
-#ifdef __SMP__
 #define IO_APIC_IRQ(x) (((x) >= 16) || ((1<<(x)) & io_apic_irqs))
-
-#else
-
-#define IO_APIC_IRQ(x)	(0)
-
-#endif
 
 #define __STR(x) #x
 #define STR(x) __STR(x)
@@ -133,8 +115,6 @@ extern int mp_bus_id_to_pci_bus [MAX_MP_BUSSES];
 #define GET_CURRENT \
 	"movl %esp, %ebx\n\t" \
 	"andl $-8192, %ebx\n\t"
-
-#ifdef __SMP__
 
 /*
  *	SMP has a few special interrupts for IPI messages
@@ -170,8 +150,6 @@ SYMBOL_NAME_STR(x) ":\n\t" \
 	"call "SYMBOL_NAME_STR(smp_##x)"\n\t" \
 	"addl $4,%esp\n\t" \
 	"jmp ret_from_intr\n");
-
-#endif /* __SMP__ */
 
 #define BUILD_COMMON_IRQ() \
 asmlinkage void call_do_IRQ(void); \

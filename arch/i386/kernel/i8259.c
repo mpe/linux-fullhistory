@@ -71,17 +71,16 @@ BUILD_16_IRQS(0xc) BUILD_16_IRQS(0xd)
 #undef BI
 
 
-#ifdef __SMP__
 /*
  * The following vectors are part of the Linux architecture, there
  * is no hardware IRQ pin equivalent for them, they are triggered
  * through the ICC by us (IPIs)
  */
+#ifdef CONFIG_SMP
 BUILD_SMP_INTERRUPT(reschedule_interrupt,RESCHEDULE_VECTOR)
 BUILD_SMP_INTERRUPT(invalidate_interrupt,INVALIDATE_TLB_VECTOR)
 BUILD_SMP_INTERRUPT(call_function_interrupt,CALL_FUNCTION_VECTOR)
-BUILD_SMP_INTERRUPT(spurious_interrupt,SPURIOUS_APIC_VECTOR)
-BUILD_SMP_INTERRUPT(error_interrupt,ERROR_APIC_VECTOR)
+#endif
 
 /*
  * every pentium local APIC has two 'local interrupts', with a
@@ -90,8 +89,10 @@ BUILD_SMP_INTERRUPT(error_interrupt,ERROR_APIC_VECTOR)
  * overflow. Linux uses the local APIC timer interrupt to get
  * a much simpler SMP time architecture:
  */
+#ifdef CONFIG_X86_LOCAL_APIC
 BUILD_SMP_TIMER_INTERRUPT(apic_timer_interrupt,LOCAL_TIMER_VECTOR)
-
+BUILD_SMP_INTERRUPT(error_interrupt,ERROR_APIC_VECTOR)
+BUILD_SMP_INTERRUPT(spurious_interrupt,SPURIOUS_APIC_VECTOR)
 #endif
 
 #define IRQ(x,y) \
@@ -428,8 +429,7 @@ void __init init_IRQ(void)
 			set_intr_gate(vector, interrupt[i]);
 	}
 
-#ifdef __SMP__	
-
+#ifdef CONFIG_SMP
 	/*
 	 * IRQ0 must be given a fixed assignment and initialized,
 	 * because it's used before the IO-APIC is set up.
@@ -445,16 +445,18 @@ void __init init_IRQ(void)
 	/* IPI for invalidation */
 	set_intr_gate(INVALIDATE_TLB_VECTOR, invalidate_interrupt);
 
-	/* self generated IPI for local APIC timer */
-	set_intr_gate(LOCAL_TIMER_VECTOR, apic_timer_interrupt);
-
 	/* IPI for generic function call */
 	set_intr_gate(CALL_FUNCTION_VECTOR, call_function_interrupt);
+#endif	
+
+#ifdef CONFIG_X86_LOCAL_APIC
+	/* self generated IPI for local APIC timer */
+	set_intr_gate(LOCAL_TIMER_VECTOR, apic_timer_interrupt);
 
 	/* IPI vectors for APIC spurious and error interrupts */
 	set_intr_gate(SPURIOUS_APIC_VECTOR, spurious_interrupt);
 	set_intr_gate(ERROR_APIC_VECTOR, error_interrupt);
-#endif	
+#endif
 
 	/*
 	 * Set the clock to HZ Hz, we already have a valid

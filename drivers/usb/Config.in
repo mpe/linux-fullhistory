@@ -12,9 +12,6 @@ comment 'USB Controllers'
    dep_tristate '  OHCI-HCD (Compaq, iMacs, OPTi, SiS, ALi, ...) support' CONFIG_USB_OHCI_HCD $CONFIG_USB
 
 comment 'Miscellaneous USB options'
-   if [ "$CONFIG_PROC_FS" != "n" ]; then
-      bool '  /proc/bus/usb support' CONFIG_USB_PROC
-   fi
    bool '  Preliminary USB device filesystem' CONFIG_USB_DEVICEFS
 
 comment 'USB Devices'
@@ -37,7 +34,6 @@ comment 'USB Devices'
    if [ "$CONFIG_USB_SCSI" != "n" ]; then
       bool '    USB SCSI verbose debug' CONFIG_USB_SCSI_DEBUG
    fi
-   dep_tristate '  EZUSB Firmware downloader' CONFIG_USB_EZUSB $CONFIG_USB
    dep_tristate '  USS720 parport driver' CONFIG_USB_USS720 $CONFIG_USB $CONFIG_PARPORT
    dep_tristate '  DABUSB driver' CONFIG_USB_DABUSB $CONFIG_USB 
 
@@ -47,6 +43,8 @@ comment 'USB HID'
       dep_tristate '  USB HIDBP Keyboard support' CONFIG_USB_KBD $CONFIG_USB
       dep_tristate '  USB HIDBP Mouse support' CONFIG_USB_MOUSE $CONFIG_USB
    fi
+   dep_tristate '  Wacom Graphire tablet support' CONFIG_USB_GRAPHIRE $CONFIG_USB
+   dep_tristate '  Logitech WingMan Force joystick support' CONFIG_USB_WMFORCE $CONFIG_USB
    dep_tristate '  Keyboard support' CONFIG_INPUT_KEYBDEV $CONFIG_USB
    dep_tristate '  Mouse support' CONFIG_INPUT_MOUSEDEV $CONFIG_USB
    if [ "$CONFIG_INPUT_MOUSEDEV" != "n" ]; then

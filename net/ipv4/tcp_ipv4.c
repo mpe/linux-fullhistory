@@ -1874,7 +1874,7 @@ do_rewrite:
 	/* Ouch!, this should not happen. */
 	if (!sk->saddr || !sk->rcv_saddr) {
 		printk(KERN_WARNING "tcp_v4_rebuild_header(): not valid sock addrs: "
-		       "saddr=%08lX rcv_saddr=%08lX\n",
+		       "saddr=%08X rcv_saddr=%08X\n",
 		       ntohl(sk->saddr), 
 		       ntohl(sk->rcv_saddr));
 		return 0;

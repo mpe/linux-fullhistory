@@ -24,7 +24,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd_pinnacle.h,v 1.10 1998/09/10 04:11:18 andrewtv Exp $
+ * $Id: msnd_pinnacle.h,v 1.11 1999/03/21 17:36:09 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_PINNACLE_H
@@ -141,18 +141,16 @@
 #define MIDQ_OFFSET				(SRAM_CNTL_START + 0x18)
 #define DSPQ_OFFSET				(SRAM_CNTL_START + 0x20)
 
-#define WAVEHDR_MOP				0
-#define EXTOUT_MOP				1
-#define HWINIT_MOP				0xFE
-#define NO_MOP					0xFF
+#define MOP_WAVEHDR				0
+#define MOP_EXTOUT				1
+#define MOP_HWINIT				0xfe
+#define MOP_NONE				0xff
+#define MOP_MAX					1
 
-#define MAX_MOP					1
-
-#define EXTIN_MIP				0
-#define WAVEHDR_MIP				1
-#define HWINIT_MIP				0xFE
-
-#define MAX_MIP					1
+#define MIP_EXTIN				0
+#define MIP_WAVEHDR				1
+#define MIP_HWINIT				0xfe
+#define MIP_MAX					1
 
 /* Pinnacle/Fiji SMA Common Data */
 #define SMA_wCurrPlayBytes			0x0000

@@ -358,7 +358,7 @@ err_bad_rpc:
 	goto sendit;
 
 err_bad_auth:
-	dprintk("svc: authentication failed (%ld)\n", ntohl(auth_stat));
+	dprintk("svc: authentication failed (%d)\n", ntohl(auth_stat));
 	serv->sv_stats->rpcbadauth++;
 	resp->buf[-1] = xdr_one;	/* REJECT */
 	svc_putlong(resp, xdr_one);	/* AUTH_ERROR */

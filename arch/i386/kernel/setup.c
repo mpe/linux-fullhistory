@@ -74,6 +74,7 @@
 #include <asm/desc.h>
 #include <asm/e820.h>
 #include <asm/dma.h>
+#include <asm/mpspec.h>
 
 /*
  * Machine setup..
@@ -82,7 +83,7 @@
 char ignore_irq13 = 0;		/* set if exception 16 works */
 struct cpuinfo_x86 boot_cpu_data = { 0, 0, 0, 0, -1, 1, 0, 0, -1 };
 
-unsigned long mmu_cr4_features __initdata = 0;
+unsigned long mmu_cr4_features = 0;
 
 /*
  * Bus types ..
@@ -696,7 +697,7 @@ void __init setup_arch(char **cmdline_p)
 	 */
 	reserve_bootmem(0, PAGE_SIZE);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/*
 	 * But first pinch a few for the stack/trampoline stuff
 	 * FIXME: Don't need the extra page at 4K, but need to fix
@@ -706,7 +707,7 @@ void __init setup_arch(char **cmdline_p)
 	smp_alloc_memory(); /* AP processor realmode stacks in low memory*/
 #endif
 
-#ifdef __SMP__
+#ifdef CONFIG_X86_IO_APIC
 	/*
 	 *	Save possible boot-time SMP configuration:
 	 */
@@ -1406,8 +1407,8 @@ int get_cpuinfo(char * buffer)
 	struct cpuinfo_x86 *c = cpu_data;
 	int i, n;
 
-	for(n=0; n<NR_CPUS; n++, c++) {
-#ifdef __SMP__
+	for (n = 0; n < NR_CPUS; n++, c++) {
+#ifdef CONFIG_SMP
 		if (!(cpu_online_map & (1<<n)))
 			continue;
 #endif
@@ -1519,14 +1520,14 @@ void cpu_init (void)
 	int nr = smp_processor_id();
 	struct tss_struct * t = &init_tss[nr];
 
-	if (test_and_set_bit(nr,&cpu_initialized)) {
+	if (test_and_set_bit(nr, &cpu_initialized)) {
 		printk("CPU#%d already initialized!\n", nr);
 		for (;;) __sti();
 	}
 	cpus_initialized++;
 	printk("Initializing CPU#%d\n", nr);
 
-	if (boot_cpu_data.x86_capability & X86_FEATURE_PSE)
+	if (cpu_has_pse)
 		clear_in_cr4(X86_CR4_VME|X86_CR4_PVI|X86_CR4_TSD|X86_CR4_DE);
 
 	__asm__ __volatile__("lgdt %0": "=m" (gdt_descr));

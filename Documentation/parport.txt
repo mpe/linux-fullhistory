@@ -28,8 +28,12 @@ architecture-dependent code with (for example):
 
 to tell the parport code that you want three PC-style ports, one at
 0x3bc with no IRQ, one at 0x378 using IRQ 7, and one at 0x278 with an
-auto-detected IRQ.  Currently, PC-style (parport_pc), Sun Ultra/AX
-(parport_ax), Amiga, Atari, and MFC3 hardware is supported.
+auto-detected IRQ.  Currently, PC-style (parport_pc), Sun `bpp',
+Amiga, Atari, and MFC3 hardware is supported.
+
+PCI parallel I/O card support comes from parport_pc.  Base I/O
+addresses should not be specified for supported PCI cards since they
+are automatically detected.
 
 
 KMod

@@ -100,7 +100,7 @@ extern void _outsw_ns(volatile unsigned short *port, const void *buf, int ns);
 extern void _insl_ns(volatile unsigned long *port, void *buf, int nl);
 extern void _outsl_ns(volatile unsigned long *port, const void *buf, int nl);
 
-#define IO_SPACE_LIMIT 0xffff
+#define IO_SPACE_LIMIT ~0
 
 #define memset_io(a,b,c)	memset((a),(b),(c))
 #define memcpy_fromio(a,b,c)	memcpy((a),(b),(c))

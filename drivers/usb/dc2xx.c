@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 1999 by David Brownell <david-b@pacbell.net>
+ * Copyright (C) 1999-2000 by David Brownell <david-b@pacbell.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -41,6 +41,7 @@
  * 12 Oct, 1999 -- handle DC-280 interface class (0xff not 0x0);
  *	added timeouts to bulk_msg calls.  Minor updates, docs.
  * 03 Nov, 1999 -- update for 2.3.25 kernel API changes.
+ * 08 Jan, 2000 .. multiple camera support
  *
  * Thanks to:  the folk who've provided USB product IDs, sent in
  * patches, and shared their sucesses!
@@ -61,10 +62,16 @@
 
 #include "usb.h"
 
-/* XXX need to get registered minor number, cdev 10/MINOR */
-/* XXX or: cdev USB_MAJOR(180)/USB_CAMERA_MINOR */
-#define	USB_CAMERA_MINOR	170
 
+
+/* current USB framework handles max of 16 USB devices per driver */
+#define	MAX_CAMERAS		8
+
+/* USB char devs use USB_MAJOR and from USB_CAMERA_MINOR_BASE up */
+#define	USB_CAMERA_MINOR_BASE	80
+
+
+// XXX remove packet size limit, now that bulk transfers seem fixed
 
 /* Application protocol limit is 0x8002; USB has disliked that limit! */
 #define	MAX_PACKET_SIZE		0x2000		/* e.g. image downloading */
@@ -80,39 +87,35 @@ static const struct camera {
 	short		idProduct;
 	/* plus hooks for camera-specific info if needed */
 } cameras [] = {
+	/* These have the same application level protocol */  
     { 0x040a, 0x0120 },		// Kodak DC-240
     { 0x040a, 0x0130 },		// Kodak DC-280
 
-	/* Kodak has several other USB-enabled devices, which (along with
-	 * models from other vendors) all use the Flashpoint "Digita
-	 * OS" and its wire protocol.  These use a different application
-	 * level protocol from the DC-240/280 models.  Note that Digita
-	 * isn't just for cameras -- Epson has a non-USB Digita printer.
-	 */
-//  { 0x040a, 0x0100 },		// Kodak DC-220
+	/* These have a different application level protocol which
+	 * is part of the Flashpoint "DigitaOS".  That supports some
+	 * non-camera devices, and some non-Kodak cameras.
+	 */  
+    { 0x040a, 0x0100 },		// Kodak DC-220
     { 0x040a, 0x0110 },		// Kodak DC-260
     { 0x040a, 0x0111 },		// Kodak DC-265
     { 0x040a, 0x0112 },		// Kodak DC-290
-
 //  { 0x03f0, 0xffff },		// HP PhotoSmart C500
 
-	/* Other USB cameras may well work here too, so long as they
-	 * just stick to half duplex packet exchanges and bulk messages.
-	 * Some non-camera devices have also been shown to work.
+	/* Other USB devices may well work here too, so long as they
+	 * just stick to half duplex bulk packet exchanges.
 	 */
 };
 
 
 struct camera_state {
-	/* these fields valid (dev != 0) iff camera connected */
 	struct usb_device	*dev;		/* USB device handle */
 	char			inEP;		/* read endpoint */
 	char			outEP;		/* write endpoint */
 	const struct camera	*info;		/* DC-240, etc */
-
-	/* valid iff isOpen */
-	int			isOpen;		/* device opened? */
+	int			subminor;	/* which minor dev #? */
 	int			isActive;	/* I/O taking place? */
+
+	/* this is non-null iff the device is open */
 	char			*buf;		/* buffer for I/O */
 
 	/* always valid */
@@ -120,11 +123,8 @@ struct camera_state {
 };
 
 
-/* For now, we only support one camera at a time: there's one
- * application-visible device (e.g. /dev/kodak) and the second
- * (to Nth) camera detected on the bus is ignored.
- */
-static struct camera_state static_camera_state;
+/* Support multiple cameras, possibly of different types.  */
+static struct camera_state *minor_data [MAX_CAMERAS];
 
 
 static ssize_t camera_read (struct file *file,
@@ -133,9 +133,12 @@ static ssize_t camera_read (struct file *file,
 	struct camera_state	*camera;
 	int			retries;
 
-	camera = (struct camera_state *) file->private_data;
 	if (len > MAX_PACKET_SIZE)
 		return -EINVAL;
+
+	camera = (struct camera_state *) file->private_data;
+	if (!camera->dev)
+		return -ENODEV;
 	if (camera->isActive++)
 		return -EBUSY;
 
@@ -161,7 +164,7 @@ static ssize_t camera_read (struct file *file,
 			  usb_rcvbulkpipe (camera->dev, camera->inEP),
 			  camera->buf, len, &count, HZ*10);
 
-		dbg("read (%d) - 0x%x %ld", len, result, count);
+		dbg ("read (%d) - 0x%x %ld", len, result, count);
 
 		if (!result) {
 			if (copy_to_user (buf, camera->buf, count))
@@ -173,7 +176,7 @@ static ssize_t camera_read (struct file *file,
 			break;
 		interruptible_sleep_on_timeout (&camera->wait, RETRY_TIMEOUT);
 
-		dbg("read (%d) - retry", len);
+		dbg ("read (%d) - retry", len);
 	}
 	camera->isActive = 0;
 	return -EIO;
@@ -185,9 +188,12 @@ static ssize_t camera_write (struct file *file,
 	struct camera_state	*camera;
 	ssize_t			bytes_written = 0;
 
-	camera = (struct camera_state *) file->private_data;
 	if (len > MAX_PACKET_SIZE)
 		return -EINVAL;
+
+	camera = (struct camera_state *) file->private_data;
+	if (!camera->dev)
+		return -ENODEV;
 	if (camera->isActive++)
 		return -EBUSY;
 	
@@ -228,7 +234,7 @@ static ssize_t camera_write (struct file *file,
 				 obuf, thistime, &count, HZ*10);
 
 			if (result)
-				dbg("write USB err - %x", result);
+				dbg ("write USB err - %x", result);
 
 			if (count) {
 				obuf += count;
@@ -258,26 +264,26 @@ static ssize_t camera_write (struct file *file,
 	}
 done:
 	camera->isActive = 0;
-
-	dbg("write %d", bytes_written); 
-
+	dbg ("wrote %d", bytes_written); 
 	return bytes_written;
 }
 
 static int camera_open (struct inode *inode, struct file *file)
 {
-	struct camera_state *camera = &static_camera_state;
+	struct camera_state	*camera;
+	int			subminor;
 
-	/* ignore camera->dev so it can be turned on "late" */
+	subminor = MINOR (inode->i_rdev) - USB_CAMERA_MINOR_BASE;
+	if (subminor < 0 || subminor >= MAX_CAMERAS
+			|| !(camera = minor_data [subminor])) {
+		return -ENODEV;
+	}
 
-	if (camera->isOpen++)
-		return -EBUSY;
 	if (!(camera->buf = (char *) kmalloc (MAX_PACKET_SIZE, GFP_KERNEL))) {
-		camera->isOpen = 0;
 		return -ENOMEM;
 	}
 
-	dbg("open"); 
+	dbg ("open"); 
 	
 	/* Keep driver from being unloaded while it's in use */
 	MOD_INC_USE_COUNT;
@@ -293,10 +299,16 @@ static int camera_release (struct inode *inode, struct file *file)
 
 	camera = (struct camera_state *) file->private_data;
 	kfree (camera->buf);
-	camera->isOpen = 0;
+
+	/* If camera was unplugged with open file ... */
+	if (!camera->dev) {
+		minor_data [camera->subminor] = NULL;
+		kfree (camera);
+	}
+
 	MOD_DEC_USE_COUNT;
 
-	dbg("close"); 
+	dbg ("close"); 
 
 	return 0;
 }
@@ -306,26 +318,11 @@ static int camera_release (struct inode *inode, struct file *file)
 	 * apps should be able to see the camera type.
 	 */
 static /* const */ struct file_operations usb_camera_fops = {
-	NULL,		/* llseek */
-	camera_read,
-	camera_write,
-	NULL, 		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	camera_open,
-	NULL,		/* flush */
-	camera_release,
-	NULL,		/* async */
-	NULL,		/* fasync */
-	NULL,		/* lock */
-};
-
-static struct miscdevice usb_camera = {
-	USB_CAMERA_MINOR,
-	"USB camera (Kodak DC-2xx)",
-	&usb_camera_fops
-	// next, prev
+	    /* Uses GCC initializer extension; simpler to maintain */
+	read:		camera_read,
+	write:		camera_write,
+	open:		camera_open,
+	release:	camera_release,
 };
 
 
@@ -337,8 +334,7 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 	struct usb_interface_descriptor	*interface;
 	struct usb_endpoint_descriptor	*endpoint;
 	int				direction, ep;
-
-	struct camera_state		*camera = &static_camera_state;
+	struct camera_state		*camera;
 
 	/* Is it a supported camera? */
 	for (i = 0; i < sizeof (cameras) / sizeof (struct camera); i++) {
@@ -355,7 +351,7 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 	/* these have one config, one interface */
 	if (dev->descriptor.bNumConfigurations != 1
 			|| dev->config[0].bNumInterfaces != 1) {
-		dbg("Bogus camera config info");
+		dbg ("Bogus camera config info");
 		return NULL;
 	}
 
@@ -367,18 +363,34 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 			|| interface->bInterfaceProtocol != 0
 			|| interface->bNumEndpoints != 2
 			) {
-		dbg("Bogus camera interface info");
+		dbg ("Bogus camera interface info");
 		return NULL;
 	}
 
-	/* can only show one camera at a time through /dev ... */
-	if (!camera->dev) {
-		camera->dev = dev;
-		info("USB Camera is connected");
-	} else {
-		info("Ignoring additional USB Camera");
+
+	/* select "subminor" number (part of a minor number) */
+	for (i = 0; i < MAX_CAMERAS; i++) {
+		if (!minor_data [i])
+			break;
+	}
+	if (i >= MAX_CAMERAS) {
+		info ("Ignoring additional USB Camera");
 		return NULL;
 	}
+
+	/* allocate & init camera state */
+	camera = minor_data [i] = kmalloc (sizeof *camera, GFP_KERNEL);
+	if (!camera) {
+		err ("no memory!");
+		return NULL;
+	}
+	camera->dev = dev;
+	camera->subminor = i;
+	camera->isActive = 0;
+	camera->buf = NULL;
+	init_waitqueue_head (&camera->wait);
+	info ("USB Camera #%d connected", camera->subminor);
+
 
 	/* get input and output endpoints (either order) */
 	endpoint = interface->endpoint;
@@ -402,14 +414,14 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 			|| endpoint [0].bmAttributes != USB_ENDPOINT_XFER_BULK
 			|| endpoint [1].bmAttributes != USB_ENDPOINT_XFER_BULK
 			) {
-		dbg("Bogus camera endpoints");
+		dbg ("Bogus endpoints");
 		camera->dev = NULL;
 		return NULL;
 	}
 
 
 	if (usb_set_configuration (dev, dev->config[0].bConfigurationValue)) {
-		err("Failed usb_set_configuration");
+		err ("Failed usb_set_configuration");
 		camera->dev = NULL;
 		return NULL;
 	}
@@ -421,21 +433,18 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 static void camera_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct camera_state	*camera = (struct camera_state *) ptr;
+	int			subminor = camera->subminor;
 
-	if (camera->dev != dev)
-		return;
-
-	/* Currently not reflecting this up to userland; at one point
-	 * it got called on bus reconfig, which we clearly don't want.
-	 * A good consequence is the ability to remove camera for
-	 * a while without apps needing to do much more than ignore
-	 * some particular error returns.  On the bad side, if one
-	 * camera is swapped for another one, we won't be telling.
+	/* If camera's not opened, we can clean up right away.
+	 * Else apps see a disconnect on next I/O; the release cleans.
 	 */
-	camera->info = NULL;
-	camera->dev = NULL;
+	if (!camera->buf) {
+		minor_data [subminor] = NULL;
+		kfree (camera);
+	} else
+		camera->dev = NULL;
 
-	info("USB Camera disconnected");
+	info ("USB Camera #%d disconnected", subminor);
 }
 
 static /* const */ struct usb_driver camera_driver = {
@@ -443,47 +452,26 @@ static /* const */ struct usb_driver camera_driver = {
 	camera_probe,
 	camera_disconnect,
 	{ NULL, NULL },
-
-	NULL,	/* &usb_camera_fops, */
-	0	/* USB_CAMERA_MINOR */
+	&usb_camera_fops,
+	USB_CAMERA_MINOR_BASE
 };
 
 
-#ifdef MODULE
-static __init
-#endif
-int usb_dc2xx_init(void)
+int __init usb_dc2xx_init(void)
 {
-	struct camera_state *camera = &static_camera_state;
-
-	camera->dev = NULL;
-	camera->isOpen = 0;
-	camera->isActive = 0;
-	init_waitqueue_head (&camera->wait);
-
-	if (usb_register (&camera_driver) < 0)
-		return -1;
-	misc_register (&usb_camera);
-
+ 	if (usb_register (&camera_driver) < 0)
+ 		return -1;
 	return 0;
 }
 
-#ifdef MODULE
-static __exit
-#endif
-void usb_dc2xx_cleanup(void)
+void __exit usb_dc2xx_cleanup(void)
 {
 	usb_deregister (&camera_driver);
-	misc_deregister (&usb_camera);
 }
 
-
-#ifdef MODULE
 
 MODULE_AUTHOR("David Brownell, david-b@pacbell.net");
 MODULE_DESCRIPTION("USB Camera Driver for Kodak DC-2xx series cameras");
 
 module_init (usb_dc2xx_init);
 module_exit (usb_dc2xx_cleanup);
-
-#endif	/* MODULE */

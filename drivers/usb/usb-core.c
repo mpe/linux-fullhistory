@@ -24,8 +24,6 @@ int usb_hub_init(void);
 void usb_hub_cleanup(void);
 int usb_major_init(void);
 void usb_major_cleanup(void);
-int proc_usb_init(void);
-void proc_usb_cleanup(void);
 
 /*
  * USB device drivers
@@ -45,6 +43,7 @@ int hid_init(void);
 int input_init(void);
 int usb_mouse_init(void);
 int usb_kbd_init(void);
+int graphire_init(void);
 
 /*
  * HCI drivers
@@ -62,9 +61,6 @@ int ohci_hcd_init(void);
 void cleanup_module(void)
 {
 	usb_major_cleanup();
-#ifdef CONFIG_USB_PROC
-	proc_usb_cleanup ();
-#endif
         usbdevfs_cleanup();
 	usb_hub_cleanup();
 
@@ -80,9 +76,6 @@ int usb_init(void)
 #endif
 {
 	usb_major_init();
-#ifdef CONFIG_USB_PROC
-	proc_usb_init();
-#endif
         usbdevfs_init();
 	usb_hub_init();
 
@@ -117,7 +110,7 @@ int usb_init(void)
 #ifdef CONFIG_USB_DABUSB
 	dabusb_init();
 #endif
-#if defined(CONFIG_USB_HID) || defined(CONFIG_USB_MOUSE) || defined(CONFIG_USB_KBD)
+#if defined(CONFIG_USB_HID) || defined(CONFIG_USB_MOUSE) || defined(CONFIG_USB_KBD) || defined(CONFIG_USB_GRAPHIRE)
 	input_init();
 #endif
 #ifdef CONFIG_USB_HID
@@ -128,6 +121,9 @@ int usb_init(void)
 #endif
 #ifdef CONFIG_USB_KBD
 	usb_kbd_init();
+#endif
+#ifdef CONFIG_USB_GRAPHIRE
+	graphire_init();
 #endif
 #ifdef CONFIG_USB_UHCI
 	uhci_init();

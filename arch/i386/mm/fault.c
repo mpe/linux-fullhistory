@@ -16,6 +16,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -76,7 +77,7 @@ bad_area:
 	return 0;
 }
 
-static inline void handle_wp_test (void)
+static void __init handle_wp_test (void)
 {
 	const unsigned long vaddr = PAGE_OFFSET;
 	pgd_t *pgd;
@@ -91,7 +92,7 @@ static inline void handle_wp_test (void)
 	pmd = pmd_offset(pgd, vaddr);
 	pte = pte_offset(pmd, vaddr);
 	*pte = mk_pte_phys(0, PAGE_KERNEL);
-	local_flush_tlb();
+	__flush_tlb_all();
 
 	boot_cpu_data.wp_works_ok = 1;
 	/*

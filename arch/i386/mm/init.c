@@ -34,6 +34,7 @@
 #include <asm/dma.h>
 #include <asm/fixmap.h>
 #include <asm/e820.h>
+#include <asm/apic.h>
 
 unsigned long highstart_pfn, highend_pfn;
 static unsigned long totalram_pages = 0;
@@ -194,8 +195,6 @@ void __init kmap_init(void)
 	kmap_pte = kmap_get_fixmap_pte(kmap_vstart);
 
 	kmap_prot = PAGE_KERNEL;
-	if (boot_cpu_data.x86_capability & X86_FEATURE_PGE)
-		pgprot_val(kmap_prot) |= _PAGE_GLOBAL;
 }
 #endif
 
@@ -250,13 +249,12 @@ static inline void set_pte_phys (unsigned long vaddr,
 	pgd = swapper_pg_dir + __pgd_offset(vaddr);
 	pmd = pmd_offset(pgd, vaddr);
 	pte = pte_offset(pmd, vaddr);
-	prot = flags;
-	if (boot_cpu_data.x86_capability & X86_FEATURE_PGE)
-		pgprot_val(prot) |= _PAGE_GLOBAL;
+	pgprot_val(prot) = pgprot_val(PAGE_KERNEL) | pgprot_val(flags);
 	set_pte(pte, mk_pte_phys(phys, prot));
 
 	/*
 	 * It's enough to flush this one mapping.
+	 * (PGE mappings get flushed as well)
 	 */
 	__flush_tlb_one(vaddr);
 }
@@ -415,7 +413,7 @@ void __init zap_low_mappings (void)
 #else
 		set_pgd(swapper_pg_dir+i, __pgd(0));
 #endif
-	flush_tlb_all_kernel();
+	flush_tlb_all();
 }
 
 /*
@@ -440,10 +438,10 @@ void __init paging_init(void)
 		set_in_cr4(X86_CR4_PAE);
 #endif
 
-	__flush_tlb();
+	__flush_tlb_all();
 
-#ifdef __SMP__
-	init_smp_mappings();
+#ifdef CONFIG_X86_LOCAL_APIC
+	init_apic_mappings();
 #endif
 
 #ifdef CONFIG_HIGHMEM

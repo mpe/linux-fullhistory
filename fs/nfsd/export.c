@@ -667,7 +667,7 @@ exp_procfs_exports(char *buffer, char **start, off_t offset,
 							if (first++) len += sprintf(buffer+len, "%s", " ");
 							if (tmp->h_client != clp)
 								len += sprintf(buffer+len, "(");
-							len += sprintf(buffer+len, "%ld.%ld.%ld.%ld",
+							len += sprintf(buffer+len, "%d.%d.%d.%d",
 									htonl(addr.s_addr) >> 24 & 0xff,
 									htonl(addr.s_addr) >> 16 & 0xff,
 									htonl(addr.s_addr) >>  8 & 0xff,

@@ -143,7 +143,7 @@ nfsd_proc_read(struct svc_rqst *rqstp, struct nfsd_readargs *argp,
 
 	if ((avail << 2) < argp->count) {
 		printk(KERN_NOTICE
-			"oversized read request from %08lx:%d (%d bytes)\n",
+			"oversized read request from %08x:%d (%d bytes)\n",
 				ntohl(rqstp->rq_addr.sin_addr.s_addr),
 				ntohs(rqstp->rq_addr.sin_port),
 				argp->count);

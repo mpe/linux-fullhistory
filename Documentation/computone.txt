@@ -7,7 +7,7 @@ These notes are for the drivers which have already been integrated into the
 kernel and have been tested on Linux kernels 2.0, 2.2, and 2.3.
 
 Version: 1.2.4
-Date: 08/04/99
+Date: 12/15/99
 Author: Andrew Manison <amanison@america.net>
 Testing: larryg@computone.com
 Support: support@computone.com
@@ -28,7 +28,7 @@ with the exception of the MicroChannel controllers.  It does not support
 products previous to the Intelliport II.
 
 This driver was developed on the v2.0.x Linux tree and has been tested up
-to v2.2.9; it will probably not work with earlier v1.X kernels,.
+to v2.2.13; it will probably not work with earlier v1.X kernels,.
 
 
 2. QUICK INSTALLATION
@@ -204,9 +204,94 @@ does not match the standard serial port's behaviour please let us know.
 
 7. ip2mkdev shell script
 
-===== Cut Here ===== 
-#!/bin/sh -
+Previously, this script was simply attached here.  It is now attached as a
+shar archive to make it easier to extract the script from the documentation.
+To create the ip2mkdev shell script change to a convenient directory (/tmp
+works just fine) and run the following command:
 
+	unshar /usr/src/linux/Documentation/computone.txt
+		(This file)
+
+You should now have a file ip2mkdev in your current working directory with
+permissions set to execute.  Running that script with then create the
+necessary devices for the Computone boards, interfaces, and ports which
+are present on you system at the time it is run.
+
+
+#!/bin/sh
+# This is a shell archive (produced by GNU sharutils 4.2).
+# To extract the files from this archive, save it to some FILE, remove
+# everything before the `!/bin/sh' line above, then type `sh FILE'.
+#
+# Made on 1999-12-17 16:06 EST by <root@alcove.wittsend.com>.
+# Source directory was `/mnt2/src/linux-2.3.33/Documentation'.
+#
+# Existing files will *not* be overwritten unless `-c' is specified.
+#
+# This shar contains:
+# length mode       name
+# ------ ---------- ------------------------------------------
+#   3300 -rwxr-xr-x ip2mkdev
+#
+save_IFS="${IFS}"
+IFS="${IFS}:"
+gettext_dir=FAILED
+locale_dir=FAILED
+first_param="$1"
+for dir in $PATH
+do
+  if test "$gettext_dir" = FAILED && test -f $dir/gettext \
+     && ($dir/gettext --version >/dev/null 2>&1)
+  then
+    set `$dir/gettext --version 2>&1`
+    if test "$3" = GNU
+    then
+      gettext_dir=$dir
+    fi
+  fi
+  if test "$locale_dir" = FAILED && test -f $dir/shar \
+     && ($dir/shar --print-text-domain-dir >/dev/null 2>&1)
+  then
+    locale_dir=`$dir/shar --print-text-domain-dir`
+  fi
+done
+IFS="$save_IFS"
+if test "$locale_dir" = FAILED || test "$gettext_dir" = FAILED
+then
+  echo=echo
+else
+  TEXTDOMAINDIR=$locale_dir
+  export TEXTDOMAINDIR
+  TEXTDOMAIN=sharutils
+  export TEXTDOMAIN
+  echo="$gettext_dir/gettext -s"
+fi
+touch -am 1231235999 $$.touch >/dev/null 2>&1
+if test ! -f 1231235999 && test -f $$.touch; then
+  shar_touch=touch
+else
+  shar_touch=:
+  echo
+  $echo 'WARNING: not restoring timestamps.  Consider getting and'
+  $echo "installing GNU \`touch', distributed in GNU File Utilities..."
+  echo
+fi
+rm -f 1231235999 $$.touch
+#
+if mkdir _sh06360; then
+  $echo 'x -' 'creating lock directory'
+else
+  $echo 'failed to create lock directory'
+  exit 1
+fi
+# ============= ip2mkdev ==============
+if test -f 'ip2mkdev' && test "$first_param" != -c; then
+  $echo 'x -' SKIPPING 'ip2mkdev' '(file already exists)'
+else
+  $echo 'x -' extracting 'ip2mkdev' '(text)'
+  sed 's/^X//' << 'SHAR_EOF' > 'ip2mkdev' &&
+#!/bin/sh -
+X
 #	ip2mkdev
 #
 #	Make or remove devices as needed for Computone Intelliport drivers
@@ -227,117 +312,134 @@ does not match the standard serial port's behaviour please let us know.
 #
 if test ! -f /proc/tty/drivers
 then
-	echo "\
+X	echo "\
 Unable to check driver status.
 Make sure proc file system is mounted."
-
-	exit 255
+X
+X	exit 255
 fi
-
+X
 if test ! -f /proc/tty/driver/ip2
 then
-	echo "\
+X	echo "\
 Unable to locate ip2 proc file.
 Attempting to load driver"
-
-	if insmod ip2
-	then
-		if test ! -f /proc/tty/driver/ip2
-		then
-			echo "\
+X
+X	if /sbin/insmod ip2
+X	then
+X		if test ! -f /proc/tty/driver/ip2
+X		then
+X			echo "\
 Unable to locate ip2 proc file after loading driver.
 Driver initialization failure or driver version error.
 "
-		exit 255
-		fi
-	else
-		echo "Unable to load ip2 driver."
-		exit 255
-	fi
+X		exit 255
+X		fi
+X	else
+X		echo "Unable to load ip2 driver."
+X		exit 255
+X	fi
 fi
-
+X
 # Ok...  So we got the driver loaded and we can locate the procfs files.
 # Next we need our major numbers.
-
+X
 TTYMAJOR=`sed -e '/^ip2/!d' -e '/\/dev\/tty/!d' -e 's/.*tty.[ 	]*\([0-9]*\)[ 	]*.*/\1/' < /proc/tty/drivers`
 CUAMAJOR=`sed -e '/^ip2/!d' -e '/\/dev\/cu/!d' -e 's/.*cu.[ 	]*\([0-9]*\)[ 	]*.*/\1/' < /proc/tty/drivers`
 BRDMAJOR=`sed -e '/^Driver: /!d' -e 's/.*IMajor=\([0-9]*\)[ 	]*.*/\1/' < /proc/tty/driver/ip2`
-
+X
 echo "\
 TTYMAJOR = $TTYMAJOR
 CUAMAJOR = $CUAMAJOR
 BRDMAJOR = $BRDMAJOR
 "
-
+X
 # Ok...  Now we should know our major numbers, if appropriate...
 # Now we need our boards and start the device loops.
-
+X
 grep '^Board [0-9]:' /proc/tty/driver/ip2 | while read token number type alltherest
 do
-	# The test for blank "type" will catch the stats lead-in lines
-	# if they exist in the file
-	if test "$type" = "vacant" -o "$type" = "Vacant" -o "$type" = ""
-	then
-		continue
-	fi
-
-	BOARDNO=`expr "$number" : '\([0-9]\):'`
-	PORTS=`expr "$alltherest" : '.*ports=\([0-9]*\)' | tr ',' ' '`
-	MINORS=`expr "$alltherest" : '.*minors=\([0-9,]*\)' | tr ',' ' '`
-
-	if test "$BOARDNO" = "" -o "$PORTS" = ""
-	then
+X	# The test for blank "type" will catch the stats lead-in lines
+X	# if they exist in the file
+X	if test "$type" = "vacant" -o "$type" = "Vacant" -o "$type" = ""
+X	then
+X		continue
+X	fi
+X
+X	BOARDNO=`expr "$number" : '\([0-9]\):'`
+X	PORTS=`expr "$alltherest" : '.*ports=\([0-9]*\)' | tr ',' ' '`
+X	MINORS=`expr "$alltherest" : '.*minors=\([0-9,]*\)' | tr ',' ' '`
+X
+X	if test "$BOARDNO" = "" -o "$PORTS" = ""
+X	then
 #	This may be a bug.  We should at least get this much information
-		echo "Unable to process board line"
-		continue
-	fi
-
-	if test "$MINORS" = ""
-	then
+X		echo "Unable to process board line"
+X		continue
+X	fi
+X
+X	if test "$MINORS" = ""
+X	then
 #	Silently skip this one.  This board seems to have no boxes
-		continue
-	fi
-
-	echo "board $BOARDNO: $type ports = $PORTS; port numbers = $MINORS"
-
-	if test "$BRDMAJOR" != ""
-	then
-		BRDMINOR=`expr $BOARDNO \* 4`
-		STSMINOR=`expr $BRDMINOR + 1`
-		if test ! -c /dev/ip2ipl$BOARDNO ; then
-			mknod /dev/ip2ipl$BOARDNO c $BRDMAJOR $BRDMINOR
-		fi
-		if test ! -c /dev/ip2stat$BOARDNO ; then
-			mknod /dev/ip2stat$BOARDNO c $BRDMAJOR $STSMINOR
-		fi
-	fi
-
-	if test "$TTYMAJOR" != ""
-	then
-		PORTNO=$BOARDBASE
-
-		for PORTNO in $MINORS
-		do
-			if test ! -c /dev/ttyF$PORTNO ; then
-				# We got the harware but no device - make it
-				mknod /dev/ttyF$PORTNO c $TTYMAJOR $PORTNO
-			fi	
-		done
-	fi
-
-	if test "$CUAMAJOR" != ""
-	then
-		PORTNO=$BOARDBASE
-
-		for PORTNO in $MINORS
-		do
-			if test ! -c /dev/cuf$PORTNO ; then
-				# We got the harware but no device - make it
-				mknod /dev/cuf$PORTNO c $CUAMAJOR $PORTNO
-			fi	
-		done
-	fi
+X		continue
+X	fi
+X
+X	echo "board $BOARDNO: $type ports = $PORTS; port numbers = $MINORS"
+X
+X	if test "$BRDMAJOR" != ""
+X	then
+X		BRDMINOR=`expr $BOARDNO \* 4`
+X		STSMINOR=`expr $BRDMINOR + 1`
+X		if test ! -c /dev/ip2ipl$BOARDNO ; then
+X			mknod /dev/ip2ipl$BOARDNO c $BRDMAJOR $BRDMINOR
+X		fi
+X		if test ! -c /dev/ip2stat$BOARDNO ; then
+X			mknod /dev/ip2stat$BOARDNO c $BRDMAJOR $STSMINOR
+X		fi
+X	fi
+X
+X	if test "$TTYMAJOR" != ""
+X	then
+X		PORTNO=$BOARDBASE
+X
+X		for PORTNO in $MINORS
+X		do
+X			if test ! -c /dev/ttyF$PORTNO ; then
+X				# We got the harware but no device - make it
+X				mknod /dev/ttyF$PORTNO c $TTYMAJOR $PORTNO
+X			fi	
+X		done
+X	fi
+X
+X	if test "$CUAMAJOR" != ""
+X	then
+X		PORTNO=$BOARDBASE
+X
+X		for PORTNO in $MINORS
+X		do
+X			if test ! -c /dev/cuf$PORTNO ; then
+X				# We got the harware but no device - make it
+X				mknod /dev/cuf$PORTNO c $CUAMAJOR $PORTNO
+X			fi	
+X		done
+X	fi
 done
-
+X
+Xexit 0
+SHAR_EOF
+  $shar_touch -am 1217160599 'ip2mkdev' &&
+  chmod 0755 'ip2mkdev' ||
+  $echo 'restore of' 'ip2mkdev' 'failed'
+  if ( md5sum --help 2>&1 | grep 'sage: md5sum \[' ) >/dev/null 2>&1 \
+  && ( md5sum --version 2>&1 | grep -v 'textutils 1.12' ) >/dev/null; then
+    md5sum -c << SHAR_EOF >/dev/null 2>&1 \
+    || $echo 'ip2mkdev:' 'MD5 check failed'
+eccd181f4a2005e47a969fc83885df61  ip2mkdev
+SHAR_EOF
+  else
+    shar_count="`LC_ALL= LC_CTYPE= LANG= wc -c < 'ip2mkdev'`"
+    test 3300 -eq "$shar_count" ||
+    $echo 'ip2mkdev:' 'original size' '3300,' 'current size' "$shar_count!"
+  fi
+fi
+rm -fr _sh06360
 exit 0
-===== Cut Here ===== 

@@ -1768,14 +1768,24 @@ void scsi_finish_command(Scsi_Cmnd * SCpnt)
 {
 	struct Scsi_Host *host;
 	Scsi_Device *device;
+	unsigned long flags;
 
 	ASSERT_LOCK(&io_request_lock, 0);
 
 	host = SCpnt->host;
 	device = SCpnt->device;
 
+        /*
+         * We need to protect the decrement, as otherwise a race condition
+         * would exist.  Fiddling with SCpnt isn't a problem as the
+         * design only allows a single SCpnt to be active in only
+         * one execution context, but the device and host structures are
+         * shared.
+         */
+	spin_lock_irqsave(&io_request_lock, flags);
 	host->host_busy--;	/* Indicate that we are free */
 	device->device_busy--;	/* Decrement device usage counter. */
+	spin_unlock_irqrestore(&io_request_lock, flags);
 
         /*
          * Clear the flags which say that the device/host is no longer

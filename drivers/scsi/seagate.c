@@ -244,6 +244,10 @@ static unsigned char controller_type = 0;       /* set to SEAGATE for ST0x
                                                    boards */
 static int irq = IRQ;
 
+MODULE_PARM(base_address, "i");
+MODULE_PARM(controller_type, "b");
+MODULE_PARM(irq, "i");
+
 #define retcode(result) (((result) << 16) | (message << 8) | status)
 #define STATUS ((u8) isa_readb(st0x_cr_sr))
 #define DATA ((u8) isa_readb(st0x_dr))

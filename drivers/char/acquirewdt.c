@@ -219,7 +219,7 @@ int __init acq_init(void)
 	misc_register(&acq_miscdev);
 	request_region(WDT_STOP, 1, "Acquire WDT");
 	request_region(WDT_START, 1, "Acquire WDT");
-	unregister_reboot_notifier(&acq_notifier);
+	register_reboot_notifier(&acq_notifier);
 	return 0;
 }
 

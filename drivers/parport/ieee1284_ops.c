@@ -56,6 +56,7 @@ size_t parport_ieee1284_write_compat (struct parport *port,
 	}
 
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_DATA;
+	parport_write_control (port, ctl);
 	while (count < len) {
 		long expire = jiffies + dev->timeout;
 		long wait = (HZ + 99) / 100;

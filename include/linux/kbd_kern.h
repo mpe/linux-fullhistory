@@ -69,6 +69,8 @@ extern void setledstate(struct kbd_struct *kbd, unsigned int led);
 
 extern int do_poke_blanked_console;
 
+extern void (*kbd_ledfunc)(unsigned int led);
+
 extern inline void show_console(void)
 {
 	do_poke_blanked_console = 1;

@@ -102,7 +102,6 @@ static int rx_copybreak = 100;
 #endif
 
 #if (LINUX_VERSION_CODE < 0x20123)
-#define hard_smp_processor_id() smp_processor_id()
 #define test_and_set_bit(val, addr) set_bit(val, addr)
 #endif
 
@@ -2164,7 +2163,7 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 #ifdef SMP_CHECK
 		printk(KERN_ERR "%s: Re-entering the interrupt handler with proc %d,"
 			   " proc %d already handling.\n", dev->name,
-			   tp->smp_proc_id, hard_smp_processor_id());
+			   tp->smp_proc_id, smp_processor_id());
 #else
 		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n", dev->name);
 #endif
@@ -2172,7 +2171,7 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 	}
 	dev->interrupt = 1;
 #ifdef SMP_CHECK
-	tp->smp_proc_id = hard_smp_processor_id();
+	tp->smp_proc_id = smp_processor_id();
 #endif
 
 	do {

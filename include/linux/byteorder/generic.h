@@ -129,7 +129,7 @@
  * also have a macro for them in case some strange program
  * wants to take the address of the thing or something..
  *
- * Note that these traditionally return a "long", even though
+ * Note that these used to return a "long" in libc5, even though
  * long is often 64-bit these days.. Thus the casts.
  *
  * They have to be macros in order to do the constant folding
@@ -146,9 +146,14 @@
  * Do the prototypes. Somebody might want to take the
  * address or some such sick thing..
  */
+#if defined(__KERNEL__) || (defined (__GLIBC__) && __GLIBC__ >= 2)
+extern __u32			ntohl(__u32);
+extern __u32			htonl(__u32);
+#else
 extern unsigned long int	ntohl(unsigned long int);
-extern unsigned short int	ntohs(unsigned short int);
 extern unsigned long int	htonl(unsigned long int);
+#endif
+extern unsigned short int	ntohs(unsigned short int);
 extern unsigned short int	htons(unsigned short int);
 
 
@@ -159,9 +164,14 @@ extern unsigned short int	htons(unsigned short int);
 #define ___ntohl(x) __be32_to_cpu(x)
 #define ___ntohs(x) __be16_to_cpu(x)
 
+#if defined(__KERNEL__) || (defined (__GLIBC__) && __GLIBC__ >= 2)
+#define htonl(x) ___htonl(x)
+#define ntohl(x) ___ntohl(x)
+#else
 #define htonl(x) ((unsigned long)___htonl(x))
-#define htons(x) ___htons(x)
 #define ntohl(x) ((unsigned long)___ntohl(x))
+#endif
+#define htons(x) ___htons(x)
 #define ntohs(x) ___ntohs(x)
 
 #endif /* OPTIMIZE */

@@ -337,7 +337,7 @@ static void unknown_nmi_error(unsigned char reason, struct pt_regs * regs)
 
 atomic_t nmi_counter[NR_CPUS];
 
-#if CONFIG_SMP
+#if CONFIG_X86_IO_APIC
 
 int nmi_watchdog = 1;
 
@@ -388,7 +388,12 @@ inline void nmi_watchdog_tick(struct pt_regs * regs)
 		alert_counter[cpu]++;
 		if (alert_counter[cpu] == 5*HZ) {
 			spin_lock(&nmi_print_lock);
-			console_lock.lock = 0;	// we are in trouble anyway
+			/*
+			 * We are in trouble anyway, lets at least try
+			 * to get a message out.
+			 */
+			spin_trylock(&console_lock);
+			spin_unlock(&console_lock);
 			printk("NMI Watchdog detected LOCKUP on CPU%d, registers:\n", cpu);
 			show_registers(regs);
 			printk("console shuts up ...\n");
@@ -409,7 +414,7 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 
 	atomic_inc(nmi_counter+smp_processor_id());
 	if (!(reason & 0xc0)) {
-#if CONFIG_SMP
+#if CONFIG_X86_IO_APIC
 		/*
 		 * Ok, so this is none of the documented NMI sources,
 		 * so it must be the NMI watchdog.
@@ -600,7 +605,10 @@ void __init trap_init_f00f_bug(void)
 	pte = pte_offset(pmd, page);
 	__free_page(pte_page(*pte));
 	*pte = mk_pte_phys(__pa(&idt_table), PAGE_KERNEL_RO);
-	local_flush_tlb();
+	/*
+	 * Not that any PGE-capable kernel should have the f00f bug ...
+	 */
+	__flush_tlb_all();
 
 	/*
 	 * "idt" is magic - it overlaps the idt_descr
@@ -806,13 +814,9 @@ void __init trap_init(void)
 	set_call_gate(&default_ldt[4],lcall27);
 
 	/*
-	 * on SMP we do not yet know which CPU is on which TSS,
-	 * so we delay this until smp_init(). (the CPU is already
-	 * in a reasonable state, otherwise we wouldnt have gotten so far :)
+	 * Should be a barrier for any external CPU state.
 	 */
-#ifndef __SMP__
 	cpu_init();
-#endif
 
 #ifdef CONFIG_X86_VISWS_APIC
 	superio_init();

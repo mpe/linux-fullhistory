@@ -23,7 +23,7 @@
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 extern void FASTCALL( __write_lock_failed(rwlock_t *rw));
 extern void FASTCALL( __read_lock_failed(rwlock_t *rw));
 #endif
@@ -92,13 +92,10 @@ EXPORT_SYMBOL(mmx_clear_page);
 EXPORT_SYMBOL(mmx_copy_page);
 #endif
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 EXPORT_SYMBOL(cpu_data);
 EXPORT_SYMBOL(kernel_flag);
-EXPORT_SYMBOL(cpu_number_map);
-EXPORT_SYMBOL(__cpu_logical_map);
 EXPORT_SYMBOL(smp_num_cpus);
-EXPORT_SYMBOL(cpu_present_map);
 EXPORT_SYMBOL(cpu_online_map);
 EXPORT_SYMBOL_NOVERS(__write_lock_failed);
 EXPORT_SYMBOL_NOVERS(__read_lock_failed);

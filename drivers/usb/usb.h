@@ -111,54 +111,6 @@
 #define USB_REQ_SET_IDLE		0x0A
 #define USB_REQ_SET_PROTOCOL		0x0B
 
-/*
- * /proc/bus/usb ioctl structs and codes
- */
-struct usb_proc_ctrltransfer {
-	__u8 requesttype;
-	__u8 request;
-	__u16 value;
-	__u16 index;
-	__u16 length;
-	__u32 timeout;  /* in milliseconds */
- 	void *data;
-};
-
-struct usb_proc_bulktransfer {
-	unsigned int ep;
-	unsigned int len;
-	unsigned int timeout; /* in milliseconds */
-	void *data;
-};
-
-struct usb_proc_old_ctrltransfer {
-	__u8 requesttype;
-	__u8 request;
-	__u16 value;
-	__u16 index;
-	__u16 length;
-	/* pointer to data */
-	void *data;
-};
-
-struct usb_proc_old_bulktransfer {
-	unsigned int ep;
-	unsigned int len;
-	void *data;
-};
-
-struct usb_proc_setinterface {
-	unsigned int interface;
-	unsigned int altsetting;
-};
-
-#define USB_PROC_CONTROL           _IOWR('U', 0, struct usb_proc_ctrltransfer)
-#define USB_PROC_BULK              _IOWR('U', 2, struct usb_proc_bulktransfer)
-#define USB_PROC_OLD_CONTROL       _IOWR('U', 0, struct usb_proc_old_ctrltransfer)
-#define USB_PROC_OLD_BULK          _IOWR('U', 2, struct usb_proc_old_bulktransfer)
-#define USB_PROC_RESETEP           _IOR('U', 3, unsigned int)
-#define USB_PROC_SETINTERFACE      _IOR('U', 4, struct usb_proc_setinterface)
-#define USB_PROC_SETCONFIGURATION  _IOR('U', 5, unsigned int)
 
 #ifdef __KERNEL__
 
@@ -525,9 +477,7 @@ struct usb_bus {
 	int bandwidth_int_reqs;		/* number of Interrupt requesters */
 	int bandwidth_isoc_reqs;	/* number of Isoc. requesters */
 
-	/* procfs entry */
-	struct proc_dir_entry *proc_entry;
-        /* usbdevfs inode list */
+	/* usbdevfs inode list */
         struct list_head inodes;
 };
 
@@ -557,8 +507,6 @@ struct usb_device {
   
 	void *hcpriv;			/* Host Controller private data */
 	
-	/* procfs entry */
-	struct proc_dir_entry *proc_entry;
         /* usbdevfs inode list */
         struct list_head inodes;
         struct list_head filelist;
@@ -779,22 +727,6 @@ void usb_show_string(struct usb_device *dev, char *id, int index);
 
 extern struct list_head usb_driver_list;
 extern struct list_head usb_bus_list;
-
-/*
- * procfs stuff
- */
-
-#ifdef CONFIG_USB_PROC
-void proc_usb_add_bus(struct usb_bus *bus);
-void proc_usb_remove_bus(struct usb_bus *bus);
-void proc_usb_add_device(struct usb_device *dev);
-void proc_usb_remove_device(struct usb_device *dev);
-#else
-extern inline void proc_usb_add_bus(struct usb_bus *bus) {}
-extern inline void proc_usb_remove_bus(struct usb_bus *bus) {}
-extern inline void proc_usb_add_device(struct usb_device *dev) {}
-extern inline void proc_usb_remove_device(struct usb_device *dev) {}
-#endif
 
 /*
  * USB device fs stuff

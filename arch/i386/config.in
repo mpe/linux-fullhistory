@@ -37,6 +37,7 @@ if [ "$CONFIG_M686" = "y" -o "$CONFIG_M586TSC" = "y" ]; then
 fi
 if [ "$CONFIG_M686" = "y" ]; then
    define_bool CONFIG_X86_GOOD_APIC y
+   define_bool CONFIG_X86_PGE y
 fi
 if [ "$CONFIG_MK7" = "y" ]; then
    define_bool CONFIG_X86_TSC y
@@ -59,6 +60,13 @@ fi
 bool 'Math emulation' CONFIG_MATH_EMULATION
 bool 'MTRR (Memory Type Range Register) support' CONFIG_MTRR
 bool 'Symmetric multi-processing support' CONFIG_SMP
+if [ "$CONFIG_SMP" != "y" ]; then
+    bool 'APIC and IO-APIC support on uniprocessors' CONFIG_X86_UP_IOAPIC
+    if [ "$CONFIG_X86_UP_IOAPIC" = "y" ]; then
+       define_bool CONFIG_X86_IO_APIC y
+       define_bool CONFIG_X86_LOCAL_APIC y
+    fi
+fi
 endmenu
 
 mainmenu_option next_comment

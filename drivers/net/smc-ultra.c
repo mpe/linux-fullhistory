@@ -480,14 +480,14 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++) {
 		struct net_device *dev = &dev_ultra[this_dev];
 		if (dev->priv != NULL) {
-			/* NB: ultra_close_card() does free_irq + irq2dev */
+			/* NB: ultra_close_card() does free_irq */
 			int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET;
-			kfree(dev->priv);
-			release_region(ioaddr, ULTRA_IO_EXTENT);
 			unregister_netdev(dev);
-			dev->priv = NULL;
+			release_region(ioaddr, ULTRA_IO_EXTENT);
+			kfree(dev->priv);
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */
 
