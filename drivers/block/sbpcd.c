@@ -5,7 +5,7 @@
  *            and for "no-sound" interfaces like Lasermate and the
  *            Panasonic CI-101P.
  *
- *  NOTE:     This is release 1.2.
+ *  NOTE:     This is release 1.3.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -13,8 +13,8 @@
  *
  *  VERSION HISTORY
  *
- *  0.1  initial release, April/May 93, after mcd.c
- *  
+ *  0.1  initial release, April/May 93, after mcd.c (Martin Harriss)
+ *
  *  0.2  the "repeat:"-loop in do_sbpcd_request did not check for
  *       end-of-request_queue (resulting in kernel panic).
  *       Flow control seems stable, but throughput is not better.  
@@ -60,7 +60,8 @@
  *  1.2  Found the "workman with double-speed drive" bug: use the driver's
  *       audio_state, not what the drive is reporting with ReadSubQ.
  *
- *
+ *  1.3  Minor cleanups.
+ *       Refinements regarding Workman.
  *
  *     special thanks to Kai Makisara (kai.makisara@vtt.fi) for his fine
  *     elaborated speed-up experiments (and the fabulous results!), for
@@ -92,16 +93,9 @@
  *   Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
-#ifndef PATCHLEVEL
-#define PATCHLEVEL 9
-#endif
 
 #include <linux/config.h>
 #include <linux/errno.h>
-
-#if SBPCD_USE_IRQ
-#include <linux/signal.h>
-#endif SBPCD_USE_IRQ
 
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -111,13 +105,12 @@
 #include <linux/ioport.h>
 #include <linux/sbpcd.h>
 
-#if PATCHLEVEL>13
+#if SBPCD_USE_IRQ
+#include <linux/signal.h>
+#endif SBPCD_USE_IRQ
+
 #include <linux/ddi.h>
 #include <linux/major.h> 
-#else
-#define DDIOCSDBG 0x9000
-#define MATSUSHITA_CDROM_MAJOR 25  
-#endif
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -127,13 +120,9 @@
 #define MAJOR_NR MATSUSHITA_CDROM_MAJOR
 #include "blk.h"
 
-#define VERSION "1.2"
+#define VERSION "1.3 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 #define SBPCD_DEBUG
-
-#ifndef CONFIG_SBPCD
-#error "SBPCD: \"make config\" again. Enable Matsushita/Panasonic CDROM support"
-#endif
 
 #ifndef CONFIG_ISO9660_FS
 #error "SBPCD: \"make config\" again. File system iso9660 is necessary."
@@ -145,7 +134,7 @@
 #define MANY_SESSION 0
 #define CDMKE
 #undef  FUTURE
-#define WORKMAN 0 /* some testing stuff to make it better */
+#define WORKMAN 1 /* some testing stuff to make it better */
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -154,17 +143,16 @@
  * inspired by Adam J. Richter from Yggdrasil
  *
  * still not good enough - can cause a hang.
- *   example: a NE 2000 ehernet card at 300 will cause a hang probing 310.
+ *   example: a NE 2000 ethernet card at 300 will cause a hang probing 310.
  * if that happens, reboot and use the LILO (kernel) command line.
- * the conflicting possible ethernet card addresses get probed last - to
- * minimize the hang possibilities. 
+ * The possibly conflicting ethernet card addresses get NOT probed 
+ * by default - to minimize the hang possibilities. 
  *
  * The SB Pro addresses get "mirrored" at 0x6xx - to avoid a type error,
  * the 0x2xx-addresses must get checked before 0x6xx.
  *
- * what are other cards' default and range ???
- * what about ESCOM PowerSound???
- * what about HighScreen???
+ * send mail to emoenke@gwdg.de if your interface card is not FULLY
+ * represented here.
  */
 static int autoprobe[] = 
 {
@@ -181,11 +169,14 @@ static int autoprobe[] =
   0x650, 0, /* "sound card #9" */
   0x670, 0, /* "sound card #9" */
   0x690, 0, /* "sound card #9" */
+#if 0
+/* some "hazardous" locations (ethernet cards) */
   0x330, 0, /* Lasermate, CI-101P */
   0x350, 0, /* Lasermate, CI-101P */
   0x370, 0, /* Lasermate, CI-101P */
   0x290, 1, /* Soundblaster 16 */
   0x310, 0, /* Lasermate, CI-101P */
+#endif
 };
 
 #define NUM_AUTOPROBE  (sizeof(autoprobe) / sizeof(int))
@@ -221,6 +212,8 @@ static int  sbp_data(void);
  * (1<<DBG_DID)  drive ID test
  * (1<<DBG_RES)  drive reset info
  * (1<<DBG_SPI)  SpinUp test info
+ * (1<<DBG_IOS)  ioctl trace: "subchannel"
+ * (1<<DBG_IO2)  ioctl trace: general
  * (1<<DBG_000)  unnecessary information
  */
 #if 1
@@ -228,6 +221,7 @@ static int sbpcd_debug =  (1<<DBG_INF) | (1<<DBG_WRN);
 #else
 static int sbpcd_debug =  (1<<DBG_INF) |
                           (1<<DBG_TOC) |
+                          (1<<DBG_IOC) |
                           (1<<DBG_IOX);
 #endif
 static int sbpcd_ioaddr = CDROM_PORT;	/* default I/O base address */
@@ -1992,9 +1986,17 @@ static int sbpcd_ioctl(struct inode *inode,struct file *file,
 {
   int i, st;
 
-  DPRINTF((DBG_IOC,"SBPCD: ioctl(%d, 0x%08lX, 0x%08lX)\n",
+  DPRINTF((DBG_IO2,"SBPCD: ioctl(%d, 0x%08lX, 0x%08lX)\n",
 				MINOR(inode->i_rdev), cmd, arg));
   if (!inode) return (-EINVAL);
+  i=MINOR(inode->i_rdev);
+  if ( (i<0) || (i>=NR_SBPCD) )
+    {
+      printk("SBPCD: ioctl: bad device: %d\n", i);
+      return (-ENODEV);             /* no such drive */
+    }
+  switch_drive(i);
+
   st=GetStatus();
   if (st<0) return (-EIO);
   
@@ -2004,16 +2006,7 @@ static int sbpcd_ioctl(struct inode *inode,struct file *file,
       if (i<0) return (-EIO);	/* error reading TOC */
     }
   
-  i=MINOR(inode->i_rdev);
-  if ( (i<0) || (i>=NR_SBPCD) )
-    {
-      DPRINTF((DBG_INF,"SBPCD: ioctl: bad device: %d\n", i));
-      return (-ENODEV);             /* no such drive */
-    }
-  switch_drive(i);
-
-
-  DPRINTF((DBG_IOC,"SBPCD: ioctl: device %d, request %04X\n",i,cmd));
+  DPRINTF((DBG_IO2,"SBPCD: ioctl: device %d, request %04X\n",i,cmd));
   switch (cmd) 		/* Sun-compatible */
     {
     case DDIOCSDBG:		/* DDI Debug */
@@ -2194,7 +2187,7 @@ static int sbpcd_ioctl(struct inode *inode,struct file *file,
       return (0);
 
     case CDROMSUBCHNL:   /* Get subchannel info */
-      DPRINTF((DBG_IOC,"SBPCD: ioctl: CDROMSUBCHNL entered.\n"));
+      DPRINTF((DBG_IOS,"SBPCD: ioctl: CDROMSUBCHNL entered.\n"));
       if ((st_spinning)||(!subq_valid)) { i=xx_ReadSubQ();
 					  if (i<0) return (-EIO);
 					}
@@ -2235,7 +2228,7 @@ static int sbpcd_ioctl(struct inode *inode,struct file *file,
 	  SC.cdsc_reladdr.msf.frame=DS[d].SubQ_run_trk&0x00FF;
 	}
       memcpy_tofs((void *) arg, &SC, sizeof(struct cdrom_subchnl));
-      DPRINTF((DBG_IOC,"SBPCD: CDROMSUBCHNL: %1X %02X %08X %08X %02X %02X %06X %06X\n",
+      DPRINTF((DBG_IOS,"SBPCD: CDROMSUBCHNL: %1X %02X %08X %08X %02X %02X %06X %06X\n",
 	       SC.cdsc_format,SC.cdsc_audiostatus,
 	       SC.cdsc_adr,SC.cdsc_ctrl,
 	       SC.cdsc_trk,SC.cdsc_ind,
@@ -2251,7 +2244,7 @@ static int sbpcd_ioctl(struct inode *inode,struct file *file,
       return (-EINVAL);
       
     default:
-      DPRINTF((DBG_IOX,"SBPCD: ioctl: unknown function request %04X\n", cmd));
+      DPRINTF((DBG_IOC,"SBPCD: ioctl: unknown function request %04X\n", cmd));
       return (-EINVAL);
     } /* end switch(cmd) */
 }
@@ -2353,7 +2346,7 @@ request_loop:
   dev = MINOR(CURRENT->dev);
   if ( (dev<0) || (dev>=NR_SBPCD) )
     {
-      DPRINTF((DBG_INF,"SBPCD: do_request: bad device: %d\n", dev));
+      printk("SBPCD: do_request: bad device: %d\n", dev);
       return;
     }
   switch_drive(dev);
@@ -2364,7 +2357,7 @@ request_loop:
 
   if (CURRENT->cmd != READ)
     {
-      DPRINTF((DBG_INF,"SBPCD: bad cmd %d\n", CURRENT->cmd));
+      printk("SBPCD: bad cmd %d\n", CURRENT->cmd);
       end_request(0);
       goto request_loop;
     }
@@ -2556,8 +2549,8 @@ static int sbp_data(void)
       if (j&s_not_data_ready)
 	{
 	  if ((DS[d].ored_ctl_adr&0x40)==0)
-	    DPRINTF((DBG_INF,"SBPCD: CD contains no data tracks.\n"));
-	  else DPRINTF((DBG_INF,"SBPCD: sbp_data: DATA_READY timeout.\n"));
+	    printk("SBPCD: CD contains no data tracks.\n");
+	  else printk("SBPCD: sbp_data: DATA_READY timeout.\n");
 	  error_flag++;
 	  break;
 	}
@@ -2665,7 +2658,7 @@ int sbpcd_open(struct inode *ip, struct file *fp)
   i = MINOR(ip->i_rdev);
   if ( (i<0) || (i>=NR_SBPCD) )
     {
-      DPRINTF((DBG_INF,"SBPCD: open: bad device: %d\n", i));
+      printk("SBPCD: open: bad device: %d\n", i);
       return (-ENODEV);             /* no such drive */
     }
   switch_drive(i);
@@ -2683,7 +2676,7 @@ int sbpcd_open(struct inode *ip, struct file *fp)
   DPRINTF((DBG_STA,"SBPCD: sbpcd_open: status %02X\n", DS[d].status_byte));
   if (!st_door_closed||!st_caddy_in)
     {
-      DPRINTF((DBG_INF,"SBPCD: sbpcd_open: no disk in drive\n"));
+      printk("SBPCD: sbpcd_open: no disk in drive\n");
       return (-EIO);
     }
 
@@ -2716,7 +2709,7 @@ static void sbpcd_release(struct inode * ip, struct file * file)
   i = MINOR(ip->i_rdev);
   if ( (i<0) || (i>=NR_SBPCD) ) 
     {
-      DPRINTF((DBG_INF,"SBPCD: release: bad device: %d\n", i));
+      printk("SBPCD: release: bad device: %d\n", i);
       return;
     }
   switch_drive(i);
@@ -2840,19 +2833,25 @@ u_long sbpcd_init(u_long mem_start, u_long mem_end)
       DPRINTF((DBG_INI,"SBPCD: check_drives done.\n"));
       sti(); /* to avoid possible "printk" bug */
       if (i>=0) break; /* drive found */
-      printk ("\n");
+      DPRINTF((DBG_INF,"\n"));
       sti(); /* to avoid possible "printk" bug */
     } /* end of cycling through the set of possible I/O port addresses */
 
   if (ndrives==0)
     {
-      DPRINTF((DBG_INF,"SBPCD: No drive found.\n"));
+      printk("SBPCD: No drive found.\n");
       sti();
       return (mem_start);
     }
 
-  DPRINTF((DBG_INF,"SBPCD: %d %s CD-ROM drive(s) at 0x%04X.\n",
-	   ndrives, type, CDo_command));
+  if (port_index>0)
+    {
+      printk("SBPCD: You should configure sbpcd.h for your hardware.\n");
+      sti();
+    }
+
+  printk("SBPCD: %d %s CD-ROM drive(s) at 0x%04X.\n",
+	   ndrives, type, CDo_command);
   sti(); /* to avoid possible "printk" bug */
   check_datarate();
   DPRINTF((DBG_INI,"SBPCD: check_datarate done.\n"));
@@ -2908,8 +2907,8 @@ u_long sbpcd_init(u_long mem_start, u_long mem_end)
   
   if (register_blkdev(MATSUSHITA_CDROM_MAJOR, "sbpcd", &sbpcd_fops) != 0)
     {
-      DPRINTF((DBG_INF,"SBPCD: Can't get MAJOR %d for Matsushita CDROM\n",
-	       MATSUSHITA_CDROM_MAJOR));
+      printk("SBPCD: Can't get MAJOR %d for Matsushita CDROM\n",
+	       MATSUSHITA_CDROM_MAJOR);
       sti(); /* to avoid possible "printk" bug */
       return (mem_start);
     }
@@ -2921,8 +2920,7 @@ u_long sbpcd_init(u_long mem_start, u_long mem_end)
 #if SBPCD_USE_IRQ
   if (irqaction(SBPCD_INTR_NR, &sbpcd_sigaction))
     {
-      DPRINTF((DBG_INF,"SBPCD: Can't get IRQ%d for sbpcd driver\n",
-	       SBPCD_INTR_NR));
+      printk("SBPCD: Can't get IRQ%d for sbpcd driver\n", SBPCD_INTR_NR);
       sti(); /* to avoid possible "printk" bug */
     }
 #endif SBPCD_USE_IRQ
@@ -2954,7 +2952,7 @@ int check_sbpcd_media_change(int full_dev, int unused_minor)
 
   if (MAJOR(full_dev) != MATSUSHITA_CDROM_MAJOR) 
     {
-      DPRINTF((DBG_INF,"SBPCD: media_check: invalid device.\n"));
+      printk("SBPCD: media_check: invalid device.\n");
       return (-1);
     }
   

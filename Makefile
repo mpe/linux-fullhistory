@@ -1,6 +1,6 @@
-VERSION = 0.99
-PATCHLEVEL = 15
-ALPHA = j
+VERSION = pre-1
+PATCHLEVEL = 0
+ALPHA =
 
 all:	Version zImage
 

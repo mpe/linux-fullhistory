@@ -52,7 +52,7 @@ struct msginfo {
 };
 
 #define MSGMNI   128   /* <= 1K */     /* max # of msg queue identifiers */
-#define MSGMAX  4080   /* <= 4080 */   /* max size of message (bytes) */
+#define MSGMAX  4056   /* <= 4056 */   /* max size of message (bytes) */
 #define MSGMNB 16384   /* ? */        /* default max size of a message queue */
 
 /* unused */

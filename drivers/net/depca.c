@@ -782,7 +782,7 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
     }
 
     /* Fill in the ethernet header. */
-    if (!skb->arp  &&  dev->rebuild_header(skb+1, dev)) {
+    if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
 	skb->dev = dev;
 	arp_queue (skb);
 	return 0;
@@ -814,7 +814,7 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
       int entry = lp->cur_tx++;
       int len;
       long skbL = skb->len;
-      char *p = (char *)(skb + 1);
+      char *p = (char *) skb->data;
 
       entry &= lp->rmask;  		    /* Ring around buffer number. */
       buf = (unsigned char *)(lp->tx_ring[entry].base & 0x00ffffff);
@@ -835,7 +835,7 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
       lp->tx_ring[entry].misc = 0x0000;
 
       /* copy the data from the socket buffer to the net memory */
-      memcpy((unsigned char *)(buf), (unsigned char *)(skb + 1), len);
+      memcpy((unsigned char *)(buf), skb->data, len);
 
       /* Hand over buffer ownership to the LANCE */
       if (skbL <= 0) lp->tx_ring[entry].base |= (T_ENP);
@@ -859,7 +859,7 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
 	dev->tbusy=0;
 
 	/* Copy ethernet header to the new buffer */
-	memcpy((unsigned char *)buf, (unsigned char *)(skb + 1), PKT_HDR_LEN);
+	memcpy((unsigned char *)buf, skb->data, PKT_HDR_LEN);
 
 	/* Determine length of data buffer */
 	len = ((skbL > DAT_SZ) ? DAT_SZ : skbL); /* skbL too long */
@@ -998,7 +998,7 @@ depca_rx(struct device *dev)
 	    skb->mem_addr = skb;
 	    skb->len = pkt_len;
 	    skb->dev = dev;
-	    memcpy((unsigned char *)(skb + 1),
+	    memcpy(skb->data,
 		   (unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff),
 		   pkt_len);
 	    /* 

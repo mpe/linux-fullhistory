@@ -20,6 +20,7 @@
  *		Alan Cox	:	KISS AX.25 and AXUI IP support
  *		Michael Riepe	:	Automatic CSLIP recognition added
  *		Charles Hedrick :	CSLIP header length problem fix.
+ *		Alan Cox	:	Corrected non-IP cases of the above.
  */
  
 #include <asm/segment.h>
@@ -552,36 +553,34 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
   /* We were not, so we are now... :-) */
   if (skb != NULL) {
 #ifdef CONFIG_AX25  
-  	if(sl->mode & SL_MODE_AX25)
-  	{
-  		if(!skb->arp && dev->rebuild_header(skb->data,dev))
-  		{
-  			skb->dev=dev;
-  			arp_queue(skb);
-  			return 0;
-  		}
-  		skb->arp=1;
-  	}
+	if(sl->mode & SL_MODE_AX25)
+	{
+		if(!skb->arp && dev->rebuild_header(skb->data,dev))
+		{
+			skb->dev=dev;
+			arp_queue(skb);
+			return 0;
+		}
+		skb->arp=1;
+	}
 #endif  	
 	sl_lock(sl);
-	
-	size=skb->len;
-	if(size<sizeof(struct iphdr))
-	{
-		printk("Runt IP frame fed to slip!\n");
+	size = skb->len;
+	if (!(sl->mode & SL_MODE_AX25)) {
+		if (size < sizeof(struct iphdr)) {
+			printk("Runt IP frame fed to slip!\n");
+		} else {
+			size = ((struct iphdr *)(skb->data))->tot_len;
+			size = ntohs(size);
+		}
 	}
-	else
-	{
-		size=((struct iphdr *)(skb->data))->tot_len;
-		size=ntohs(size);
 	/*	sl_hex_dump(skb->data,skb->len);*/
-		sl_encaps(sl, skb->data, size);
-	}
-	if (skb->free) kfree_skb(skb, FREE_WRITE);
+	sl_encaps(sl, skb->data, size);
+	if (skb->free)
+		kfree_skb(skb, FREE_WRITE);
   }
   return(0);
 }
-
 
 /* Return the frame type ID.  This is normally IP but maybe be AX.25. */
 static unsigned short

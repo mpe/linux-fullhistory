@@ -5,6 +5,10 @@
 #define KG_CTRL		2
 #define KG_ALT		3
 #define KG_ALTGR	1
+#define KG_SHIFTL       4
+#define KG_SHIFTR       5
+#define KG_CTRLL        6
+#define KG_CTRLR        7
 
 #define NR_KEYS 128
 #define NR_KEYMAPS 16
@@ -115,6 +119,10 @@ extern char *func_table[NR_FUNC];
 #define K_CTRL		K(KT_SHIFT,KG_CTRL)
 #define K_ALT		K(KT_SHIFT,KG_ALT)
 #define K_ALTGR		K(KT_SHIFT,KG_ALTGR)
+#define K_SHIFTL        K(KT_SHIFT,KG_SHIFTL)
+#define K_SHIFTR        K(KT_SHIFT,KG_SHIFTR)
+#define K_CTRLL         K(KT_SHIFT,KG_CTRLL)
+#define K_CTRLR         K(KT_SHIFT,KG_CTRLR)
 
 #define NR_SHIFT	4
 

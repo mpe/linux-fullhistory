@@ -394,7 +394,7 @@ int el16_probe1(struct device *dev, short ioaddr)
 	dev->if_port = (inb(ioaddr + ROM_CONFIG) & 0x80) ? 1 : 0;
 	dev->irq = inb(ioaddr + IRQ_CONFIG) & 0x0f;
 
-	printk(", IRQ %d, %sternal xcvr, memory %#x-%#x.\n", dev->irq,
+	printk(", IRQ %d, %sternal xcvr, memory %#lx-%#lx.\n", dev->irq,
 		   dev->if_port ? "ex" : "in", dev->mem_start, dev->mem_end-1);
 
 	if (net_debug)

@@ -15,6 +15,9 @@
  *		Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *
+ * Fixes:
+ *		Dmitry Gorodchanin	-	proc locking
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -27,6 +30,7 @@
 
 struct unix_proto_data {
 	int		refcnt;		/* cnt of reference 0=free	*/
+					/* -1=not initialised	-bgm	*/
 	struct socket	*socket;	/* socket we're bound to	*/
 	int		protocol;
 	struct sockaddr_un	sockaddr_un;

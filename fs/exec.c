@@ -692,6 +692,7 @@ restart_interp:
 		retval = fn(&bprm, regs);
 		if (retval == 0) {
 			iput(bprm.inode);
+			current->did_exec = 1;
 			return 0;
 		}
 		fmt++;

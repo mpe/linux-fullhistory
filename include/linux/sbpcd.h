@@ -35,12 +35,8 @@
  * LASERMATE (CI-101P) adresses typically are 0x0300, 0x0310, ...
  * there are some soundcards on the market with 0x0630, 0x0650, ...
  *
- * obey! changed against v0.4 !!!
- * for SBPRO cards, specify the CDROM address - no longer the audio address! 
  * example: if your SBPRO audio address is 0x220, specify 0x230.
  *
- * a fill-in is not always necessary - the driver does auto-probing now,
- * with the here specified address first...
  */
 #define CDROM_PORT 0x0230
 
@@ -73,7 +69,9 @@
 #define DBG_DID		16	/* drive ID test */
 #define DBG_RES		17	/* drive reset info */
 #define DBG_SPI		18	/* SpinUp test */
-#define DBG_000		19	/* unnecessary information */
+#define DBG_IOS		19	/* ioctl trace: "subchannel" */
+#define DBG_IO2		20	/* ioctl trace: general */
+#define DBG_000		21	/* unnecessary information */
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -420,12 +418,7 @@ Read XA Parameter:
 /*
  * use "REP INSB" for strobing the data in:
  */
-#if PATCHLEVEL<15
-#define READ_DATA(port, buf, nr) \
-__asm__("cld;rep;insb": :"d" (port),"D" (buf),"c" (nr):"cx","dx","di")
-#else
 #define READ_DATA(port, buf, nr) insb(port, buf, nr)
-#endif
 
 /*==========================================================================*/
 /*

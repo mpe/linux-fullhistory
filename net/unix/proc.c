@@ -16,6 +16,7 @@
  *		Fred Baumgarten, <dc6iq@insu1.etec.uni-kalrsruhe.de>
  *
  * Fixes:
+ *		Dmitry Gorodchanin	:	/proc locking fix
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -43,7 +44,7 @@ int unix_get_info(char *buffer)
   pos += sprintf(pos, "Num RefCount Protocol Flags    Type St Path\n");
 
   for(i = 0; i < NSOCKETS; i++) {
-	if (unix_datas[i].refcnt) {
+	if (unix_datas[i].refcnt>0) {
 		pos += sprintf(pos, "%2d: %08X %08X %08lX %04X %02X", i,
 			unix_datas[i].refcnt,
 			unix_datas[i].protocol,

@@ -278,7 +278,7 @@ static short init_words[] = {
 #endif
 
 	/* 0x0056: A continuous transmit command, only here for testing. */
-	0, CmdTx, DUMP_DATA, DUMP_DATA+8, 0x803ff, -1, DUMP_DATA, 0,
+	0, CmdTx, DUMP_DATA, DUMP_DATA+8, 0x83ff, -1, DUMP_DATA, 0,
 };
 
 /* Index to functions, as function prototypes. */
@@ -513,7 +513,7 @@ eexp_send_packet(struct sk_buff *skb, struct device *dev)
 
 	/* For ethernet, fill in the header.  This should really be done by a
 	   higher level, rather than duplicated for each ethernet adaptor. */
-	if (!skb->arp  &&  dev->rebuild_header(skb+1, dev)) {
+	if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
 		skb->dev = dev;
 		arp_queue (skb);
 		return 0;
@@ -525,7 +525,7 @@ eexp_send_packet(struct sk_buff *skb, struct device *dev)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned char *buf = (void *)(skb+1);
+		unsigned char *buf = skb->data;
 
 		/* Disable the 82586's input to the interrupt line. */
 		outb(irqrmap[dev->irq], ioaddr + SET_IRQ);
@@ -982,7 +982,7 @@ eexp_rx(struct device *dev)
 
 			outw(data_buffer_addr + 10, ioaddr + READ_PTR);
 
-			insw(ioaddr, (void *)(skb+1), (pkt_len + 1) >> 1);
+			insw(ioaddr, skb->data, (pkt_len + 1) >> 1);
 		
 #ifdef HAVE_NETIF_RX
 			netif_rx(skb);

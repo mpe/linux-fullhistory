@@ -13,7 +13,7 @@
 */
 
 static char *version =
-	"hp.c:v0.99.15c 2/11/94 Donald Becker (becker@super.org)\n";
+	"hp.c:v0.99.15k 3/3/94 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -177,31 +177,22 @@ hp_reset_8390(struct device *dev)
 {
 	int hp_base = dev->base_addr - NIC_OFFSET;
 	int saved_config = inb_p(hp_base + HP_CONFIGURE);
-	int reset_start_time = jiffies;
 
-	if (ei_debug > 1) printk("resetting the 8390 time=%d...", jiffies);
+	if (ei_debug > 1) printk("resetting the 8390 time=%ld...", jiffies);
 	outb_p(0x00, hp_base + HP_CONFIGURE);
 	ei_status.txing = 0;
-
-	sti();
-	/* We shouldn't use the boguscount for timing, but this hasn't been
-	   checked yet, and you could hang your machine if jiffies break... */
-	{
-		int boguscount = 150000;
-		while(jiffies - reset_start_time < 2)
-			if (boguscount-- < 0) {
-				printk("jiffy failure (t=%d)...", jiffies);
-				break;
-			}
-	}
+	/* Pause just a few cycles for the hardware reset to take place. */
+	SLOW_DOWN_IO;
+	SLOW_DOWN_IO;
 
 	outb_p(saved_config, hp_base + HP_CONFIGURE);
-	while ((inb_p(hp_base+NIC_OFFSET+EN0_ISR) & ENISR_RESET) == 0)
-		if (jiffies - reset_start_time > 2) {
-			printk("%s: hp_reset_8390() did not complete.\n", dev->name);
-			return;
-		}
-	if (ei_debug > 1) printk("8390 reset done (%d).", jiffies);
+	SLOW_DOWN_IO; SLOW_DOWN_IO;
+	
+	if ((inb_p(hp_base+NIC_OFFSET+EN0_ISR) & ENISR_RESET) == 0)
+		printk("%s: hp_reset_8390() did not complete.\n", dev->name);
+
+	if (ei_debug > 1) printk("8390 reset done (%ld).", jiffies);
+	return;
 }
 
 /* Block input and output, similar to the Crynwr packet driver.	 If you

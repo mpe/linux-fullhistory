@@ -16,7 +16,7 @@
 */
 
 static char *version =
-    "3c503.c:v0.99.13 8/30/93 Donald Becker (becker@super.org)\n";
+    "3c503.c:v0.99.15k 3/3/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -200,9 +200,6 @@ el2probe1(int ioaddr, struct device *dev)
 	dev->mem_end = dev->rmem_end = dev->mem_start + EL2_MEMSIZE;
 	dev->rmem_start = TX_PAGES*256 + dev->mem_start;
     }
-    if (ei_debug > 2)
-	printk("\n3c503: memory params start=%#5x rstart=%#5x end=%#5x rend=%#5x.\n",
-	       dev->mem_start, dev->rmem_start, dev->mem_end, dev->rmem_end);
 
     /* Finish setting the board's parameters. */
     ei_status.name = "3C503";
@@ -228,7 +225,7 @@ el2probe1(int ioaddr, struct device *dev)
     dev->stop = &el2_close;
 
     if (dev->mem_start)
-	printk("\n%s: %s with shared memory at %#6x-%#6x,\n",
+	printk("\n%s: %s with shared memory at %#6lx-%#6lx,\n",
 	       dev->name, ei_status.name, dev->mem_start, dev->mem_end-1);
     else
 	printk("\n%s: %s using programmed I/O (REJUMPER for SHARED MEMORY).\n",
@@ -352,9 +349,6 @@ el2_block_output(struct device *dev, int count,
 	if (ei_debug > 2  &&  memcmp(dest_addr, buf, count))
 	    printk("%s: 3c503 send_packet() bad memory copy @ %#5x.\n",
 		   dev->name, (int) dest_addr);
-	else if (ei_debug > 4)
-	    printk("%s: 3c503 send_packet() good memory copy @ %#5x.\n",
-		   dev->name, (int) dest_addr);
 	return;
     }
     /* No shared memory, put the packet out the slow way. */
@@ -395,19 +389,11 @@ el2_block_input(struct device *dev, int count, char *buf, int ring_offset)
 	if (dev->mem_start + ring_offset + count > end_of_ring) {
 	    /* We must wrap the input move. */
 	    int semi_count = end_of_ring - (dev->mem_start + ring_offset);
-	    if (ei_debug > 4)
-		printk("%s: 3c503 block_input() @ %#5x+%x=%5x.\n",
-		       dev->name, dev->mem_start, ring_offset,
-		       dev->mem_start + ring_offset);
 	    memcpy(buf, (char *)dev->mem_start + ring_offset, semi_count);
 	    count -= semi_count;
 	    memcpy(buf + semi_count, (char *)dev->rmem_start, count);
 	    return dev->rmem_start + count;
 	}
-	if (ei_debug > 4)
-	    printk("%s: 3c503 block_input() @ %#5x+%x=%5x.\n",
-		   dev->name, dev->mem_start, ring_offset,
-		   dev->mem_start + ring_offset);
 	memcpy(buf, (char *)dev->mem_start + ring_offset, count);
 	return ring_offset + count;
     }

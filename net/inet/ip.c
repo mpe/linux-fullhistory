@@ -36,7 +36,7 @@
  *		Alan Cox	:	Use ip_tos/ip_ttl settings
  *		Alan Cox	:	Fragmentation bogosity removed
  *					(Thanks to Mark.Bush@prg.ox.ac.uk)
- *		Dmitry Gordchanin :	Send of a raw packet crash fix.
+ *		Dmitry Gorodchanin :	Send of a raw packet crash fix.
  *		Alan Cox	:	Silly ip bug when an overlength
  *					fragment turns up. Now frees the
  *					queue.

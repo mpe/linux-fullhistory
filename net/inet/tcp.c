@@ -592,14 +592,15 @@ void tcp_send_check(struct tcphdr *th, unsigned long saddr,
 static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 {
 	int size;
+	struct tcphdr * th = skb->h.th;
 
 	/* length of packet (not counting length of pre-tcp headers) */
-	size = skb->len - ((unsigned char *) skb->h.th - skb->data);
+	size = skb->len - ((unsigned char *) th - skb->data);
 
 	/* sanity check it.. */
 	if (size < sizeof(struct tcphdr) || size > skb->len) {
 		printk("tcp_send_skb: bad skb (skb = %p, data = %p, th = %p, len = %lu)\n",
-			skb, skb->data, skb->h.th, skb->len);
+			skb, skb->data, th, skb->len);
 		kfree_skb(skb, FREE_WRITE);
 		return;
 	}
@@ -607,7 +608,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	/* If we have queued a header size packet.. */
 	if (size == sizeof(struct tcphdr)) {
 		/* If its got a syn or fin its notionally included in the size..*/
-		if(!skb->h.th->syn && !skb->h.th->fin) {
+		if(!th->syn && !th->fin) {
 			printk("tcp_send_skb: attempt to queue a bogon.\n");
 			kfree_skb(skb,FREE_WRITE);
 			return;
@@ -615,10 +616,10 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	}
   
 	/* We need to complete and send the packet. */
-	tcp_send_check(skb->h.th, sk->saddr, sk->daddr, size, sk);
+	tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
 
-	skb->h.seq = sk->write_seq;
-	if (after(sk->write_seq , sk->window_seq) ||
+	skb->h.seq = ntohl(th->seq) + size - 4*th->doff;
+	if (after(skb->h.seq, sk->window_seq) ||
 	    (sk->retransmits && sk->timeout == TIME_WRITE) ||
 	     sk->packets_out >= sk->cong_window) {
 		DPRINTF((DBG_TCP, "sk->cong_window = %d, sk->packets_out = %d\n",

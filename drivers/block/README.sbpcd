@@ -1,4 +1,4 @@
-This is release 1.2 of the SoundBlaster Pro (Matsushita, Kotobuki,
+This is release 1.3 of the SoundBlaster Pro (Matsushita, Kotobuki,
 Panasonic, CreativeLabs, Aztech) CD-ROM driver for Linux.
 
 The driver is able to drive the whole family of IDE-style
@@ -6,10 +6,10 @@ Matsushita/Kotobuki/Panasonic drives (the "double speed" versions
 like CR-562 and CR-563, too), and it will work with the soundcard
 interfaces (SB Pro, SB 16, Galaxy, SoundFX, ...) and/or with
 the "no-sound" cards (Panasonic CI-101P, LaserMate, Aztech, ...).
-The interface type has to get configured, because the behavior 
-is different.
+The interface type has to get configured in /usr/include/linux/sbpcd.h, 
+because the behavior is different.
 
-The driver respects different drive firmware releases - my drive
+The driver respects different drive firmware releases - my old drive
 is a 2.11, but it should work with "old" drives <2.01 ... >3.00
 and with "new" drives (which count the releases around 0.75 or
 1.00).
@@ -23,20 +23,14 @@ Each drive has to get a unique minor number (0...3), corresponding
 to it's drive ID. The drive IDs may be selected freely from 0 to 3 -
 they must not be in consecutive order.
 
-If this driver doesn't work with your equipment, mail me a
-description, please.
-
 The driver supports reading of data from the CD and playing of
 audio tracks. The audio part should run with WorkMan, xcdplayer,
 with the "non-X11" products CDplayer and WorkBone - tell me if
 it is not compatible with other software.
 
 MultiSession is supported, "ManySession" (see below) alternatively.
-Photo CDs should work, too. At ftp.gwdg.de:/pub/linux/hpcdtoppm
-is a package to convert photo CD image files.
-
-I did not have a chance to play with XA or mixed mode CDs yet.
-Send one over, if you would like sbpcd to support that.
+Photo CDs work, too. At ftp.gwdg.de:/pub/linux/hpcdtoppm/ is a package 
+to convert photo CD image files.
 
 The transfer rate will reach 150 kB/sec with standard drives and
 the full 300 kB/sec with double-speed drives.
@@ -127,7 +121,7 @@ If you would like the support of reading "in-between" sessions,
 drop me a mail and some food for the soul. :-)
 Those "many-session" CDs can get made by CDROM writers like
 Philips CDD 521.
-With this feature enabled, it is impossible to read true
+If you enable this feature, it is impossible to read true
 multisession CDs.
 
 
@@ -193,10 +187,6 @@ Known problems:
 
 Currently, the detection of disk change or removal does not
 work as good as it should.
-
-Further, I do not know if this driver can live together with a
-SCSI CD-ROM driver and/or device, but I hope so. 
-
 
 
 Bug reports, comments, wishes, donations (technical information

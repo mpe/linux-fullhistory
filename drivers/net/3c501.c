@@ -17,7 +17,7 @@
 */
 
 static char *version =
-    "3c501.c:v13.13 1993 Donald Becker (becker@super.org).\n";
+    "3c501.c: 3/3/94 Donald Becker (becker@super.org).\n";
 
 /*
   Braindamage remaining:
@@ -301,9 +301,6 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 
     if (skb->len <= 0)
 	return 0;
-
-    if (el_debug > 2)
-	printk("%s: el_start_xmit(%d)...", dev->name, skb->len);
 
     /* Avoid timer-based retransmission conflicts. */
     if (set_bit(0, (void*)&dev->tbusy) != 0)

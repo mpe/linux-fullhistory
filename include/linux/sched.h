@@ -183,6 +183,7 @@ struct task_struct {
 	int elf_executable:1;
 	int dumpable:1;
 	int swappable:1;
+	int did_exec:1;
 	unsigned long start_code,end_code,end_data,start_brk,brk,start_stack,start_mmap;
 	unsigned long arg_start, arg_end, env_start, env_end;
 	int pid,pgrp,session,leader;
@@ -263,7 +264,7 @@ struct task_struct {
 /* schedlink */	&init_task,&init_task, \
 /* signals */	{{ 0, },}, \
 /* stack */	0,(unsigned long) &init_kernel_stack, \
-/* ec,brk... */	0,0,0,0,0,0,0,0,0,0,0,0, \
+/* ec,brk... */	0,0,0,0,0,0,0,0,0,0,0,0,0, \
 /* argv.. */	0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \

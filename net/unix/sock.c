@@ -13,11 +13,12 @@
  * Fixes:
  *		Alan Cox	:	Verify Area
  *		NET2E Team	:	Page fault locks
+ *	Dmitry Gorodchanin	:	/proc locking
  *
  * To Do:
- *
- *	Change to the NET2E3 code for Unix domain sockets in general. The
- *	read/write logic is much better and cleaner.
+ *	Some nice person is looking into Unix sockets done properly. NET3
+ *	will replace all of this and include datagram sockets and socket
+ *	options - so please stop asking me for them 8-)
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -237,7 +238,7 @@ unix_data_lookup(struct sockaddr_un *sockun, int sockaddr_len,
   struct unix_proto_data *upd;
 
   for(upd = unix_datas; upd <= last_unix_data; ++upd) {
-	if (upd->refcnt && upd->socket &&
+	if (upd->refcnt > 0 && upd->socket &&
 	    upd->socket->state == SS_UNCONNECTED &&
 	    upd->sockaddr_un.sun_family == sockun->sun_family &&
 	    upd->inode == inode) return(upd);
@@ -254,7 +255,7 @@ unix_data_alloc(void)
   cli();
   for(upd = unix_datas; upd <= last_unix_data; ++upd) {
 	if (!upd->refcnt) {
-		upd->refcnt = 1;
+		upd->refcnt = -1;	/* unix domain socket not yet initialised - bgm */
 		sti();
 		upd->socket = NULL;
 		upd->sockaddr_len = 0;
@@ -328,6 +329,7 @@ unix_proto_create(struct socket *sock, int protocol)
   upd->protocol = protocol;
   upd->socket = sock;
   UN_DATA(sock) = upd;
+  upd->refcnt = 1;	/* Now its complete - bgm */
   dprintf(1, "UNIX: create: allocated data 0x%x\n", upd);
   return(0);
 }

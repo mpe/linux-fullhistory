@@ -461,32 +461,49 @@ asmlinkage int sys_brk(unsigned long brk)
  * OK, I think I have the protection semantics right.... this is really
  * only important on a multi-user system anyway, to make sure one user
  * can't send a signal to a process owned by another.  -TYT, 12/12/91
+ *
+ * Auch. Had to add the 'did_exec' flag to conform completely to POSIX.
+ * LBT 04.03.94
  */
 asmlinkage int sys_setpgid(pid_t pid, pid_t pgid)
 {
-	int i; 
+	struct task_struct * p;
 
 	if (!pid)
 		pid = current->pid;
 	if (!pgid)
-		pgid = current->pid;
+		pgid = pid;
 	if (pgid < 0)
 		return -EINVAL;
-	for (i=0 ; i<NR_TASKS ; i++)
-		if (task[i] && (task[i]->pid == pid) &&
-		    ((task[i]->p_pptr == current) || 
-		     (task[i]->p_opptr == current) || 
-		     (task[i] == current))) {
-			if (task[i]->leader)
-				return -EPERM;
-			if ((task[i]->session != current->session) ||
-			    ((pgid != pid) && 
-			     (session_of_pgrp(pgid) != current->session)))
-				return -EPERM;
-			task[i]->pgrp = pgid;
-			return 0;
-		}
+	for_each_task(p) {
+		if (p->pid == pid)
+			goto found_task;
+	}
 	return -ESRCH;
+
+found_task:
+	if (p->p_pptr == current || p->p_opptr == current) {
+		if (p->session != current->session)
+			return -EPERM;
+		if (p->did_exec)
+			return -EACCES;
+	} else if (p != current)
+		return -ESRCH;
+	if (p->leader)
+		return -EPERM;
+	if (pgid != pid) {
+		struct task_struct * tmp;
+		for_each_task (tmp) {
+			if (tmp->pgrp == pgid &&
+			 tmp->session == current->session)
+				goto ok_pgid;
+		}
+		return -EPERM;
+	}
+
+ok_pgid:
+	p->pgrp = pgid;
+	return 0;
 }
 
 asmlinkage int sys_getpgid(pid_t pid)

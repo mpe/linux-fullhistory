@@ -852,7 +852,10 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 			       mcd_port);
 			return mem_start;
 		}	
-					
+
+	if (result[0] == result[1] && result[1] == result[2])
+		return mem_start;
+
 	printk("mcd: Mitsumi version : %02X %c %x\n",
 	       result[0],result[1],result[2]);
 
