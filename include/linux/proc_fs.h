@@ -115,9 +115,6 @@ extern struct dentry *proc_lookup(struct inode *, struct dentry *);
 extern struct inode_operations proc_sys_inode_operations;
 extern struct inode_operations proc_kcore_inode_operations;
 extern struct inode_operations proc_kmsg_inode_operations;
-#if CONFIG_AP1000
-extern struct inode_operations proc_ringbuf_inode_operations;
-#endif
 extern struct inode_operations proc_omirr_inode_operations;
 extern struct inode_operations proc_ppc_htab_inode_operations;
 

@@ -1,8 +1,8 @@
-/* $Id: dtlb_base.S,v 1.4 1998/06/15 16:59:30 jj Exp $
+/* $Id: dtlb_base.S,v 1.5 2000/01/31 04:59:12 davem Exp $
  * dtlb_base.S:	Front end to DTLB miss replacement strategy.
  *              This is included directly into the trap table.
  *
- * Copyright (C) 1996,1998 David S. Miller (davem@dm.cobaltmicro.com)
+ * Copyright (C) 1996,1998 David S. Miller (davem@redhat.com)
  * Copyright (C) 1997,1998 Jakub Jelinek   (jj@ultra.linux.cz)
  */
 

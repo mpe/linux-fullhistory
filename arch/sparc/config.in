@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.81 2000/01/22 05:14:44 zaitcev Exp $
+# $Id: config.in,v 1.84 2000/01/31 21:10:04 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -19,43 +19,33 @@ define_bool CONFIG_VT_CONSOLE y
 
 bool 'Symmetric multi-processing support (does not work on sun4/sun4c)' CONFIG_SMP
 
-bool 'Support for AP1000 multicomputer' CONFIG_AP1000
-if [ "$CONFIG_AP1000" = "y" ]; then
-   define_bool CONFIG_NO_KEYBOARD y
-   define_bool CONFIG_FDDI y
-   define_bool CONFIG_APFDDI y
-   define_bool CONFIG_APBLOCK y
-   define_bool CONFIG_APBIF y
-   tristate '  OPIU DDV Driver' CONFIG_DDV
-else
-   bool 'Support for SUN4 machines (disables SUN4[CDM] support)' CONFIG_SUN4
-   if [ "$CONFIG_SUN4" != "y" ]; then
-      bool '  Support for PCI and PS/2 keyboard/mouse' CONFIG_PCI
-      source drivers/pci/Config.in
-   fi
+bool 'Support for SUN4 machines (disables SUN4[CDM] support)' CONFIG_SUN4
+if [ "$CONFIG_SUN4" != "y" ]; then
+   bool '  Support for PCI and PS/2 keyboard/mouse' CONFIG_PCI
+   source drivers/pci/Config.in
+fi
 
-   mainmenu_option next_comment
-   comment 'Console drivers'
-   bool 'PROM console' CONFIG_PROM_CONSOLE
-   source drivers/video/Config.in
-   endmenu
+mainmenu_option next_comment
+comment 'Console drivers'
+bool 'PROM console' CONFIG_PROM_CONSOLE
+source drivers/video/Config.in
+endmenu
 
-   # Global things across all Sun machines.
-   define_bool CONFIG_SBUS y
-   define_bool CONFIG_SBUSCHAR y
-   define_bool CONFIG_BUSMOUSE y
-   define_bool CONFIG_SUN_MOUSE y
-   define_bool CONFIG_SERIAL y
-   define_bool CONFIG_SUN_SERIAL y
-   define_bool CONFIG_SERIAL_CONSOLE y
-   define_bool CONFIG_SUN_KEYBOARD y
-   define_bool CONFIG_SUN_CONSOLE y
-   define_bool CONFIG_SUN_AUXIO y
-   define_bool CONFIG_SUN_IO y
-   if [ "$CONFIG_SUN4" != "y" ]; then
-      source drivers/sbus/char/Config.in
-      source drivers/sbus/audio/Config.in
-   fi
+# Global things across all Sun machines.
+define_bool CONFIG_SBUS y
+define_bool CONFIG_SBUSCHAR y
+define_bool CONFIG_BUSMOUSE y
+define_bool CONFIG_SUN_MOUSE y
+define_bool CONFIG_SERIAL y
+define_bool CONFIG_SUN_SERIAL y
+define_bool CONFIG_SERIAL_CONSOLE y
+define_bool CONFIG_SUN_KEYBOARD y
+define_bool CONFIG_SUN_CONSOLE y
+define_bool CONFIG_SUN_AUXIO y
+define_bool CONFIG_SUN_IO y
+if [ "$CONFIG_SUN4" != "y" ]; then
+   source drivers/sbus/char/Config.in
+   source drivers/sbus/audio/Config.in
 fi
 
 tristate 'Openprom tree appears in /proc/openprom' CONFIG_SUN_OPENPROMFS
@@ -161,7 +151,10 @@ if [ "$CONFIG_NET" = "y" ]; then
       tristate '  Dummy net driver support' CONFIG_DUMMY
       tristate '  PPP (point-to-point) support' CONFIG_PPP
       if [ ! "$CONFIG_PPP" = "n" ]; then
-	 comment 'CCP compressors for PPP are only built as modules.'
+        dep_tristate '  PPP support for async serial ports' CONFIG_PPP_ASYNC $CONFIG_PPP
+        dep_tristate '  PPP support for sync tty ports' CONFIG_PPP_SYNC_TTY $CONFIG_PPP
+        dep_tristate '  PPP Deflate compression' CONFIG_PPP_DEFLATE $CONFIG_PPP
+        dep_tristate '  PPP BSD-Compress compression' CONFIG_PPP_BSDCOMP m
       fi
       tristate '  SLIP (serial line) support' CONFIG_SLIP
       if [ "$CONFIG_SLIP" != "n" ]; then

@@ -5,7 +5,6 @@
 #include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
-#include <linux/config.h>
 #include <linux/interrupt.h>
 #include <asm/setup.h>
 #include <asm/segment.h>

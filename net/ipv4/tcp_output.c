@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.119 2000/01/19 04:06:15 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.120 2000/01/31 01:21:22 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1005,7 +1005,7 @@ int tcp_connect(struct sock *sk, struct sk_buff *buff)
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	/* Reserve space for headers. */
-	skb_reserve(buff, MAX_TCP_HEADER + 15);
+	skb_reserve(buff, MAX_TCP_HEADER);
 
 	/* We'll fix this up when we get a response from the other end.
 	 * See tcp_input.c:tcp_rcv_state_process case TCP_SYN_SENT.

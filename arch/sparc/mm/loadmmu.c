@@ -1,4 +1,4 @@
-/* $Id: loadmmu.c,v 1.53 2000/01/09 10:46:50 anton Exp $
+/* $Id: loadmmu.c,v 1.54 2000/01/29 01:09:07 anton Exp $
  * loadmmu.c:  This code loads up all the mm function pointers once the
  *             machine type has been determined.  It also sets the static
  *             mmu values such as PAGE_NONE, etc.
@@ -39,11 +39,6 @@ void __init load_mmu(void)
 	case sun4d:
 		ld_mmu_srmmu();
 		break;
-	case ap1000:
-#if CONFIG_AP1000
-		ld_mmu_apmmu();
-		break;
-#endif
 	default:
 		prom_printf("load_mmu: %d unsupported\n", (int)sparc_cpu_model);
 		prom_halt();

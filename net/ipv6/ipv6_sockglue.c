@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.31 2000/01/16 05:11:38 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.32 2000/01/31 01:21:25 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -183,6 +183,7 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 				local_bh_enable();
 				sk->prot = &udp_prot;
 				sk->socket->ops = &inet_dgram_ops;
+				sk->family = PF_INET;
 			}
 			opt = xchg(&np->opt, NULL);
 			if (opt)

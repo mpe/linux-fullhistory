@@ -1,8 +1,8 @@
-/* $Id: dtlb_backend.S,v 1.8 1999/12/05 10:41:35 davem Exp $
+/* $Id: dtlb_backend.S,v 1.9 2000/01/31 04:59:12 davem Exp $
  * dtlb_backend.S: Back end to DTLB miss replacement strategy.
  *                 This is included directly into the trap table.
  *
- * Copyright (C) 1996,1998 David S. Miller (davem@dm.cobaltmicro.com)
+ * Copyright (C) 1996,1998 David S. Miller (davem@redhat.com)
  * Copyright (C) 1997,1998 Jakub Jelinek   (jj@ultra.linux.cz)
  */
 

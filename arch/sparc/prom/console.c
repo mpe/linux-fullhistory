@@ -1,4 +1,4 @@
-/* $Id: console.c,v 1.20 1998/09/21 05:05:50 jj Exp $
+/* $Id: console.c,v 1.21 2000/01/29 01:09:12 anton Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
@@ -45,7 +45,6 @@ prom_nbgetchar(void)
 			i = -1;
 		}
 		break;
-	case PROM_AP1000:
 	default:
 		i = -1;
 		break;
@@ -78,15 +77,6 @@ prom_nbputchar(char c)
 			i = 0;
 		else
 			i = -1;
-		break;
-	case PROM_AP1000:
-#if CONFIG_AP1000
-		{
-		  extern void ap_putchar(char );
-		  ap_putchar(c);
-		  i = 0;
-		}
-#endif
 		break;
 	default:
 		i = -1;
@@ -160,8 +150,6 @@ prom_query_input_device()
 				return PROMDEV_ITTYB;
 		}
 		return PROMDEV_I_UNK;
-	case PROM_AP1000:
-		return PROMDEV_I_UNK;
 	}
 }
 
@@ -219,7 +207,6 @@ prom_query_output_device()
 			};
 		}
 		break;
-	case PROM_AP1000:
 	default:
 	}
 	return PROMDEV_O_UNK;

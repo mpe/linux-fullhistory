@@ -1676,7 +1676,7 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 		/* If we cannot rely on authentication in NLM requests,
 		 * just allow locks, others require read permission
 		 */
-		if (exp->ex_flags & NFSEXP_NONLMAUTH)
+		if (exp->ex_flags & NFSEXP_NOAUTHNLM)
 			return 0;
 		else
 			acc = MAY_READ;

@@ -23,7 +23,6 @@
  *	Jan 14 2000 Ollie Lho <ollie@sis.com.tw> 
  *	Isloated from trident.c to support multiple ac97 codec
  */
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/kernel.h>

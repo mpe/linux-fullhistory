@@ -498,9 +498,6 @@ enum pid_directory_inos {
 	PROC_PID_STAT,
 	PROC_PID_STATM,
 	PROC_PID_MAPS,
-#if CONFIG_AP1000
-	PROC_PID_RINGBUF,
-#endif
 	PROC_PID_CPU,
 	PROC_PID_FD_DIR = 0x8000,	/* 0x8000-0xffff */
 };
@@ -515,9 +512,6 @@ static struct pid_entry base_stuff[] = {
   E(PROC_PID_STATM,	"statm",	S_IFREG|S_IRUGO),
 #ifdef __SMP__
   E(PROC_PID_CPU,	"cpu",		S_IFREG|S_IRUGO),
-#endif
-#if CONFIG_AP1000
-  E(PROC_PID_RINGBUF,	"ringbuf",	S_IFREG|S_IRUGO|S_IWUSR),
 #endif
   E(PROC_PID_MAPS,	"maps",		S_IFREG|S_IRUGO),
   E(PROC_PID_MEM,	"mem",		S_IFREG|S_IRUSR|S_IWUSR),
@@ -869,11 +863,6 @@ static struct dentry *proc_base_lookup(struct inode *dir, struct dentry *dentry)
 		case PROC_PID_CPU:
 			inode->i_op = &proc_info_inode_operations;
 			inode->u.proc_i.op.proc_read = proc_pid_cpu;
-			break;
-#endif
-#if CONFIG_AP1000
-		case PROC_PID_RINGBUF:
-			inode->i_op = &proc_ringbuf_inode_operations;
 			break;
 #endif
 		case PROC_PID_MEM:

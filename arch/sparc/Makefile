@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.44 1999/08/19 06:22:20 jj Exp $
+# $Id: Makefile,v 1.45 2000/01/29 01:08:48 anton Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -43,14 +43,6 @@ CORE_FILES := arch/sparc/kernel/kernel.o arch/sparc/mm/mm.o $(CORE_FILES) \
 
 LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc/prom/promlib.a \
 	$(TOPDIR)/arch/sparc/lib/lib.a
-
-ifdef CONFIG_AP1000
-SUBDIRS := $(SUBDIRS) arch/sparc/ap1000 mpp
-CORE_FILES := $(TOPDIR)/arch/sparc/ap1000/ap1000lib.o \
-	      $(TOPDIR)/mpp/mpplib.o $(CORE_FILES) 
-DRIVERS := $(DRIVERS) drivers/ap1000/ap1000.a
-CFLAGS := $(CFLAGS) -D__MPP__=1
-endif
 
 # This one has to come last
 SUBDIRS += arch/sparc/boot

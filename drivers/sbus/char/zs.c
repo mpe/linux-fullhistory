@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.52 1999/12/15 14:29:20 davem Exp $
+/* $Id: zs.c,v 1.53 2000/01/29 01:29:38 anton Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1928,7 +1928,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.52 $";
+	char *revision = "$Revision: 1.53 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2075,11 +2075,6 @@ static struct sun_zslayout * __init get_zs(int chip)
 	int cpunode = 0, bbnode = 0;
 	static int irq = 0;
 	int chipid = chip;
-
-#if CONFIG_AP1000
-        printk("No zs chip\n");
-        return NULL;
-#endif
 
 	iospace = 0;
 	if(chip < 0 || chip >= NUM_SERIAL)
@@ -2406,11 +2401,6 @@ int __init zs_init(void)
 	unsigned long flags;
 	struct sun_serial *info;
 	char dummy;
-
-#if CONFIG_AP1000
-        printk("not doing zs_init()\n");
-        return 0;
-#endif
 
 	/* Setup base handler, and timer table. */
 	init_bh(SERIAL_BH, do_serial_bh);

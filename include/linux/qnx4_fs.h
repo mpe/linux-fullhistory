@@ -3,7 +3,7 @@
  *  Author                       : Richard Frowijn
  *  Function                     : qnx4 global filesystem definitions
  *  Version                      : 1.0.2
- *  Last modified                : 2000-01-06
+ *  Last modified                : 2000-01-31
  *
  *  History                      : 23-03-1998 created
  */
@@ -29,7 +29,9 @@
 #define QNX4_VALID_FS		0x0001	/* Clean fs. */
 #define QNX4_ERROR_FS		0x0002	/* fs has errors. */
 #define QNX4_BLOCK_SIZE         0x200	/* blocksize of 512 bytes */
-#define QNX4_DIR_ENTRY_SIZE     0x040	/* dir entry size */
+#define QNX4_BLOCK_SIZE_BITS    9	/* blocksize shift */
+#define QNX4_DIR_ENTRY_SIZE     0x040	/* dir entry size of 64 bytes */
+#define QNX4_DIR_ENTRY_SIZE_BITS 6	/* dir entry size shift */
 #define QNX4_XBLK_ENTRY_SIZE    0x200	/* xblk entry size */
 #define QNX4_INODES_PER_BLOCK   0x08	/* 512 / 64 */
 
@@ -96,7 +98,6 @@ struct qnx4_super_block {
 #endif
 
 extern struct dentry *qnx4_lookup(struct inode *dir, struct dentry *dentry);
-extern unsigned long qnx4_count_free_inodes(struct super_block *sb);
 extern unsigned long qnx4_count_free_blocks(struct super_block *sb);
 extern unsigned long qnx4_block_map(struct inode *inode, long iblock);
 

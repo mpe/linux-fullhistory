@@ -1830,16 +1830,15 @@ static struct uhci *alloc_uhci(unsigned int io_addr, unsigned int io_size)
 	uhci->irq = -1;
 	uhci->io_addr = io_addr;
 	uhci->io_size = io_size;
+
 	INIT_LIST_HEAD(&uhci->interrupt_list);
 	INIT_LIST_HEAD(&uhci->urb_list);
-
 	INIT_LIST_HEAD(&uhci->td_free_list);
 	INIT_LIST_HEAD(&uhci->qh_free_list);
 
 	spin_lock_init(&uhci->urblist_lock);
 	spin_lock_init(&uhci->framelist_lock);
 	spin_lock_init(&uhci->freelist_lock);
-
 	nested_init(&uhci->irqlist_lock);
 
 	/* We need exactly one page (per UHCI specs), how convenient */

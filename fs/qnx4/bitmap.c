@@ -76,14 +76,10 @@ unsigned long qnx4_count_free_blocks(struct super_block *sb)
 		count_bits(bh->b_data, size - total, &total_free);
 		brelse(bh);
 		total += QNX4_BLOCK_SIZE;
+		offset++;
 	}
 
 	return total_free;
-}
-
-unsigned long qnx4_count_free_inodes(struct super_block *sb)
-{
-	return qnx4_count_free_blocks(sb) * QNX4_INODES_PER_BLOCK;	/* FIXME */
 }
 
 #ifdef CONFIG_QNX4FS_RW

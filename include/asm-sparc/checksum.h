@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.30 2000/01/05 21:27:39 davem Exp $ */
+/* $Id: checksum.h,v 1.31 2000/01/31 01:26:52 davem Exp $ */
 #ifndef __SPARC_CHECKSUM_H
 #define __SPARC_CHECKSUM_H
 
@@ -210,7 +210,7 @@ static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
 
 static __inline__ unsigned short int csum_ipv6_magic(struct in6_addr *saddr,
 						     struct in6_addr *daddr,
-						     __u16 len,
+						     __u32 len,
 						     unsigned short proto,
 						     unsigned int sum) 
 {
@@ -237,7 +237,7 @@ static __inline__ unsigned short int csum_ipv6_magic(struct in6_addr *saddr,
 		"
 		: "=&r" (sum)
 		: "r" (saddr), "r" (daddr), 
-		  "r"(htonl((__u32) (len))), "r"(htonl(proto)), "r"(sum)
+		  "r"(htonl(len)), "r"(htonl(proto)), "r"(sum)
 		: "g2", "g3", "g4", "cc");
 
 	return csum_fold(sum);

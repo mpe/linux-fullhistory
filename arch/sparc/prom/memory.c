@@ -1,4 +1,4 @@
-/* $Id: memory.c,v 1.14 1999/08/31 06:54:46 davem Exp $
+/* $Id: memory.c,v 1.15 2000/01/29 01:09:12 anton Exp $
  * memory.c: Prom routine for acquiring various bits of information
  *           about RAM on the machine, both virtual and physical.
  *
@@ -194,19 +194,6 @@ void __init prom_meminit(void)
 #endif
 		break;
 
-        case PROM_AP1000:
-#if CONFIG_AP1000
-		/* really simple memory map */
-		prom_phys_total[0].start_adr = 0x00000000;
-		prom_phys_total[0].num_bytes = ap_memory_size();
-		prom_phys_total[0].theres_more = 0x0;
-		prom_prom_taken[0].start_adr = 0x00000000; 
-		prom_prom_taken[0].num_bytes = 0x00000000;
-		prom_prom_taken[0].theres_more = 0x0;
-		prom_phys_avail[0].start_adr = 0x00000000;
-		prom_phys_avail[0].num_bytes = prom_phys_total[0].num_bytes;
-		prom_phys_avail[0].theres_more = 0x0;
-#endif
 	default:
 		break;
 	};

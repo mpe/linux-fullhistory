@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.12 1999/12/20 14:08:25 jj Exp $
+/* $Id: sbus.h,v 1.13 2000/01/28 13:43:14 jj Exp $
  * sbus.h: Defines for the Sun SBus.
  *
  * Copyright (C) 1996, 1999 David S. Miller (davem@redhat.com)

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.197 2000/01/21 06:37:28 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.198 2000/01/31 01:21:20 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -598,6 +598,7 @@ unique:
 
 	*skp = sk;
 	sk->pprev = skp;
+	sk->hashent = hash;
 	sock_prot_inc_use(sk->prot);
 	write_unlock_bh(&head->lock);
 

@@ -13,7 +13,6 @@
 #ifndef _SCC_H
 #define _SCC_H
 
-#include <linux/config.h>
 #include <linux/delay.h>
 
 /* Special configuration ioctls for the Atari SCC5380 Serial

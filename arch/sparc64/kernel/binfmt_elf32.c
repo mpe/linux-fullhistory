@@ -1,7 +1,7 @@
 /*
  * binfmt_elf32.c: Support 32-bit Sparc ELF binaries on Ultra.
  *
- * Copyright (C) 1995, 1996, 1997, 1998 David S. Miller	(davem@dm.cobaltmicro.com)
+ * Copyright (C) 1995, 1996, 1997, 1998 David S. Miller	(davem@redhat.com)
  * Copyright (C) 1995, 1996, 1997, 1998 Jakub Jelinek	(jj@ultra.linux.cz)
  */
 

@@ -148,10 +148,10 @@ __csum_ipv6_magic(struct in6_addr *saddr, struct in6_addr *daddr, __u32 len,
 		__u32 proto, unsigned int sum);
 
 extern __inline__ unsigned short int
-csum_ipv6_magic(struct in6_addr *saddr, struct in6_addr *daddr, __u16 len,
+csum_ipv6_magic(struct in6_addr *saddr, struct in6_addr *daddr, __u32 len,
 		unsigned short proto, unsigned int sum)
 {
-	return csum_fold(__csum_ipv6_magic(saddr, daddr, htonl((__u32)len),
+	return csum_fold(__csum_ipv6_magic(saddr, daddr, htonl(len),
 					   htonl(proto), sum));
 }
 #endif

@@ -189,7 +189,7 @@ static __inline__ unsigned short ip_compute_csum(unsigned char * buff, int len)
 #define _HAVE_ARCH_IPV6_CSUM
 static __inline__ unsigned short int csum_ipv6_magic(struct in6_addr *saddr,
 						     struct in6_addr *daddr,
-						     __u16 len,
+						     __u32 len,
 						     unsigned short proto,
 						     unsigned int sum) 
 {
@@ -217,7 +217,7 @@ static __inline__ unsigned short int csum_ipv6_magic(struct in6_addr *saddr,
 		"add	%1,%0\n"
 		: "=r" (sum), "=&r" (__dummy)
 		: "r" (saddr), "r" (daddr), 
-		  "r" (htonl((__u32) (len))), "r" (htonl(proto)), "0" (sum));
+		  "r" (htonl(len)), "r" (htonl(proto)), "0" (sum));
 
 	return csum_fold(sum);
 }

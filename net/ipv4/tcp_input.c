@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.183 2000/01/24 18:40:33 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.186 2000/01/31 20:26:13 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1346,7 +1346,8 @@ tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 			goto kill_with_rst;
 
 		/* Dup ACK? */
-		if (!after(TCP_SKB_CB(skb)->end_seq, tw->rcv_nxt)) {
+		if (!after(TCP_SKB_CB(skb)->end_seq, tw->rcv_nxt) ||
+		    TCP_SKB_CB(skb)->end_seq == TCP_SKB_CB(skb)->seq) {
 			tcp_tw_put(tw);
 			return TCP_TW_SUCCESS;
 		}
@@ -1912,6 +1913,8 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 		    !tp->urg_data) {
 			int chunk = min(skb->len, tp->ucopy.len);
 
+			__set_current_state(TASK_RUNNING);
+
 			local_bh_enable();
 			if (memcpy_toiovec(tp->ucopy.iov, skb->data, chunk)) {
 				sk->err = EFAULT;
@@ -1948,10 +1951,9 @@ queue_and_out:
 		    !tp->urg_data)
 			tcp_fast_path_on(tp);
 
-		if (eaten)
+		if (eaten) {
 			kfree_skb(skb);
-
-		if (!sk->dead) {
+		} else if (!sk->dead) {
 			wake_up_interruptible(sk->sleep);
 			sock_wake_async(sk->socket,1, POLL_IN);
 		}
@@ -2296,29 +2298,7 @@ static int prune_queue(struct sock *sk)
 	 *	  fails?						-ANK
 	 */
 
-	/* F.e. one possible tactics is: */
-	do {
-		u32 new_clamp = (tp->rcv_nxt-tp->copied_seq) + pruned;
-
-		/* This guy is not a good guy. I bet, he martirized cats,
-		 * when was child and grew up to finished sadist. Clamp him!
-		 */
-		if (new_clamp > 3*tp->ack.rcv_mss)
-			new_clamp -= tp->ack.rcv_mss;
-		else
-			new_clamp = 2*tp->ack.rcv_mss;
-		tp->window_clamp = min(tp->window_clamp, new_clamp);
-	} while (0);
-	/* Though it should be made earlier, when we are still not
-	 * congested. This header prediction logic sucks
-	 * without true implementation of VJ algorithm.
-	 * I am really anxious. How was it possible to combine
-	 * header prediction and sending ACKs outside of recvmsg() context?
-	 * They _are_ incompatible. We should not advance window so
-	 * brainlessly and we should not advertise so huge window from the very
-	 * beginning. BTW window "prediction" does not speedup anything!
-	 * SIlly, silly, silly.
-	 */
+	tp->ack.quick = 0;
 
 	if(atomic_read(&sk->rmem_alloc) < (sk->rcvbuf << 1))
 		return 0;
@@ -2525,10 +2505,14 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 
 				NET_INC_STATS_BH(TCPHPHitsToUser);
 
+				__set_current_state(TASK_RUNNING);
+
 				if (tcp_copy_to_iovec(sk, skb, tcp_header_len))
 					goto csum_error;
 
 				__skb_pull(skb,tcp_header_len);
+
+				tp->rcv_nxt = TCP_SKB_CB(skb)->end_seq;
 			} else {
 				if (tcp_checksum_complete_user(sk, skb))
 					goto csum_error;
@@ -2548,15 +2532,15 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				 */
 				__skb_queue_tail(&sk->receive_queue, skb);
 				skb_set_owner_r(skb, sk);
+
+				tp->rcv_nxt = TCP_SKB_CB(skb)->end_seq;
+
+				/* FIN bit check is not done since if FIN is set in
+				 * this frame, the pred_flags won't match up. -DaveM
+				 */
+				wake_up_interruptible(sk->sleep);
+				sock_wake_async(sk->socket,1, POLL_IN);
 			}
-
-			tp->rcv_nxt = TCP_SKB_CB(skb)->end_seq;
-
-			/* FIN bit check is not done since if FIN is set in
-			 * this frame, the pred_flags won't match up. -DaveM
-			 */
-			wake_up_interruptible(sk->sleep);
-			sock_wake_async(sk->socket,1, POLL_IN);
 
 			tcp_event_data_recv(tp, skb);
 
@@ -3467,7 +3451,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 					int tmo;
 
 					if (tp->linger2 < 0 ||
-					    after(TCP_SKB_CB(skb)->end_seq - th->fin, tp->rcv_nxt)) {
+					    (TCP_SKB_CB(skb)->end_seq != TCP_SKB_CB(skb)->seq &&
+					     after(TCP_SKB_CB(skb)->end_seq - th->fin, tp->rcv_nxt))) {
 						tcp_done(sk);
 						return 1;
 					}
@@ -3526,7 +3511,8 @@ step6:
 		 * BSD 4.4 also does reset.
 		 */
 		if (sk->shutdown & RCV_SHUTDOWN) {
-			if (after(TCP_SKB_CB(skb)->end_seq - th->fin, tp->rcv_nxt)) {
+			if (TCP_SKB_CB(skb)->end_seq != TCP_SKB_CB(skb)->seq &&
+			    after(TCP_SKB_CB(skb)->end_seq - th->fin, tp->rcv_nxt)) {
 				tcp_reset(sk);
 				return 1;
 			}

@@ -1,4 +1,4 @@
-/* $Id: sunqe.c,v 1.40 1999/12/15 14:08:13 davem Exp $
+/* $Id: sunqe.c,v 1.41 2000/01/28 13:42:30 jj Exp $
  * sunqe.c: Sparc QuadEthernet 10baseT SBUS card driver.
  *          Once again I am out to prove that every ethernet
  *          controller out there can be most efficiently programmed

@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.78 2000/01/24 03:22:38 anton Exp $
+/*  $Id: init.c,v 1.79 2000/01/29 01:09:06 anton Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -238,15 +238,6 @@ void __init paging_init(void)
 		sparc_unmapped_base = 0x50000000;
 		BTFIXUPSET_SETHI(sparc_unmapped_base, 0x50000000);
 		break;
-
-	case ap1000:
-#if CONFIG_AP1000
-		apmmu_paging_init();
-		sparc_unmapped_base = 0x50000000;
-		BTFIXUPSET_SETHI(sparc_unmapped_base, 0x50000000);
-		break;
-#endif
-
 	default:
 		prom_printf("paging_init: Cannot init paging on this Sparc\n");
 		prom_printf("paging_init: sparc_cpu_model = %d\n", sparc_cpu_model);

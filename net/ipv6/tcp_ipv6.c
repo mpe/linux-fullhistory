@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.118 2000/01/18 08:24:22 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.119 2000/01/31 01:21:26 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -450,6 +450,7 @@ unique:
 
 	*skp = sk;
 	sk->pprev = skp;
+	sk->hashent = hash;
 	sock_prot_inc_use(sk->prot);
 	write_unlock_bh(&head->lock);
 

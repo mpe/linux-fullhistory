@@ -66,7 +66,7 @@ static int js_cr_read_packet(int io, unsigned int *data)
 	int r[2], t[2], p[2];
 	int i, j, ret;
 
-	for (i = 0; i < 2; i++); {
+	for (i = 0; i < 2; i++) {
 		r[i] = buf[i] = 0;
 		p[i] = t[i] = JS_CR_MAX_STROBE;
 		p[i] += JS_CR_MAX_STROBE;

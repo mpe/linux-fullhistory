@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.35 1999/10/09 05:32:01 zaitcev Exp $
+# $Id: Makefile,v 1.36 2000/01/29 01:09:05 anton Exp $
 # Makefile for the linux Sparc-specific parts of the memory manager.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -9,9 +9,6 @@
 
 O_TARGET := mm.o
 O_OBJS   := fault.o init.o loadmmu.o generic.o extable.o btfixup.o
-ifeq ($(CONFIG_AP1000),y)
-O_OBJS	 += asyncd.o
-endif
 ifeq ($(CONFIG_SUN4),y)
 O_OBJS	 += nosrmmu.o
 else

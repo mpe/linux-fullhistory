@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.144 2000/01/21 11:38:39 jj Exp $
+/*  $Id: process.c,v 1.145 2000/01/29 01:08:56 anton Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -266,9 +266,6 @@ void show_stackframe(struct sparc_stackf *sf)
 
 void show_regs(struct pt_regs * regs)
 {
-#if __MPP__
-	printk("CID: %d\n",mpp_cid());
-#endif
         printk("PSR: %08lx PC: %08lx NPC: %08lx Y: %08lx\n", regs->psr,
 	       regs->pc, regs->npc, regs->y);
 	printk("g0: %08lx g1: %08lx g2: %08lx g3: %08lx ",

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.160 2000/01/24 18:40:32 davem Exp $
+ * Version:	$Id: tcp.c,v 1.161 2000/01/31 01:21:16 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1119,7 +1119,7 @@ static void cleanup_rbuf(struct sock *sk, int copied)
 
 	/* Delayed ACKs frequently hit locked sockets during bulk receive. */
 	time_to_ack = tp->ack.blocked && tp->ack.pending;
-#if 1/*def CONFIG_TCP_MORE_COARSE_ACKS*/
+#ifdef CONFIG_TCP_MORE_COARSE_ACKS
 	if (tp->ack.pending &&
 	    (tp->rcv_nxt - tp->rcv_wup) > tp->ack.rcv_mss)
 		time_to_ack = 1;
@@ -1344,7 +1344,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 			tp->ucopy.len = len;
 
-			BUG_TRAP(tp->copied_seq == tp->rcv_nxt);
+			BUG_TRAP(tp->copied_seq == tp->rcv_nxt || (flags&MSG_PEEK));
 
 			/* Ugly... If prequeue is not empty, we have to
 			 * process it before releasing socket, otherwise
@@ -1408,7 +1408,7 @@ do_prequeue:
 					copied += chunk;
 				}
 			}
-#if 1/*def CONFIG_TCP_MORE_COARSE_ACKS*/
+#ifdef CONFIG_TCP_MORE_COARSE_ACKS
 			if (tp->ack.pending &&
 			    (tp->rcv_nxt - tp->rcv_wup) > tp->ack.rcv_mss)
 				tcp_send_ack(sk);

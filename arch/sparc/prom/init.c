@@ -1,4 +1,4 @@
-/* $Id: init.c,v 1.13 1999/08/31 06:54:45 davem Exp $
+/* $Id: init.c,v 1.14 2000/01/29 01:09:12 anton Exp $
  * init.c:  Initialize internal variables used by the PROM
  *          library functions.
  *
@@ -41,10 +41,6 @@ void __init prom_init(struct linux_romvec *rp)
 	extern struct linux_romvec *sun4_prom_init(void);
 	rp = sun4_prom_init();
 #endif
-#if CONFIG_AP1000
-	extern struct linux_romvec *ap_prom_init(void);
-	rp = ap_prom_init();
-#endif
 	romvec = rp;
 
 	switch(romvec->pv_romvers) {
@@ -60,10 +56,6 @@ void __init prom_init(struct linux_romvec *rp)
 	case 40:
 		prom_vers = PROM_SUN4;
 		break;
-	case 42: /* why not :-) */
-		prom_vers = PROM_AP1000;
-		break;
-
 	default:
 		prom_printf("PROMLIB: Bad PROM version %d\n",
 			    romvec->pv_romvers);

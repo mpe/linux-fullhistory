@@ -1,4 +1,4 @@
-/* $Id: dbri.c,v 1.17 2000/01/20 07:57:47 anton Exp $
+/* $Id: dbri.c,v 1.18 2000/01/28 13:42:50 jj Exp $
  * drivers/sbus/audio/dbri.c
  *
  * Copyright (C) 1997 Rudolf Koenig (rfkoenig@immd4.informatik.uni-erlangen.de)

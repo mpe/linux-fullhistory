@@ -1,8 +1,8 @@
-/* $Id: itlb_base.S,v 1.7 1999/03/02 15:42:12 jj Exp $
+/* $Id: itlb_base.S,v 1.8 2000/01/31 04:59:12 davem Exp $
  * itlb_base.S:	Front end to ITLB miss replacement strategy.
  *              This is included directly into the trap table.
  *
- * Copyright (C) 1996,1998 David S. Miller (davem@dm.cobaltmicro.com)
+ * Copyright (C) 1996,1998 David S. Miller (davem@redhat.com)
  * Copyright (C) 1997,1998 Jakub Jelinek   (jj@ultra.linux.cz)
  */
 

@@ -1,6 +1,6 @@
 /* net/sched/sch_dsmark.c - Differentiated Services field marker */
 
-/* Written 1998,1999 by Werner Almesberger, EPFL ICA */
+/* Written 1998-2000 by Werner Almesberger, EPFL ICA */
 
 
 #include <linux/config.h>
@@ -82,7 +82,7 @@ static struct Qdisc *dsmark_leaf(struct Qdisc *sch, unsigned long arg)
 
 static unsigned long dsmark_get(struct Qdisc *sch,u32 classid)
 {
-	struct dsmark_qdisc_data *p = PRIV(sch);
+	struct dsmark_qdisc_data *p __attribute__((unused)) = PRIV(sch);
 
 	DPRINTK("dsmark_get(sch %p,[qdisc %p],classid %x)\n",sch,p,classid);
 	return TC_H_MIN(classid)+1;

@@ -275,13 +275,13 @@ static int qnx4_statfs(struct super_block *sb,
 	struct statfs tmp;
 
 	memset(&tmp, 0, sizeof tmp);
-	tmp.f_type = sb->s_magic;
-	tmp.f_bsize = sb->s_blocksize;
-	tmp.f_blocks = le32_to_cpu(sb->u.qnx4_sb.BitMap->di_size) * 8;
-	tmp.f_bfree = qnx4_count_free_blocks(sb);
-	tmp.f_bavail = tmp.f_bfree;
-	tmp.f_files = 0x00;	/* change this !!! */
-	tmp.f_ffree = qnx4_count_free_inodes(sb);
+	tmp.f_type    = sb->s_magic;
+	tmp.f_bsize   = sb->s_blocksize;
+	tmp.f_blocks  = le32_to_cpu(sb->u.qnx4_sb.BitMap->di_size) * 8;
+	tmp.f_bfree   = qnx4_count_free_blocks(sb);
+	tmp.f_bavail  = tmp.f_bfree;
+	tmp.f_files   = -1;	/* we don't count files */
+	tmp.f_ffree   = -1;	/* inodes are allocated dynamically */
 	tmp.f_namelen = QNX4_NAME_MAX;
 
 	return copy_to_user(buf, &tmp, bufsize) ? -EFAULT : 0;

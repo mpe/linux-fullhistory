@@ -1,8 +1,8 @@
-/* $Id: memscan.S,v 1.2 1998/05/21 14:42:22 jj Exp $
+/* $Id: memscan.S,v 1.3 2000/01/31 04:59:10 davem Exp $
  * memscan.S: Optimized memscan for Sparc64.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@ultra.linux.cz)
- * Copyright (C) 1998 David S. Miller (davem@dm.cobaltmicro.com)
+ * Copyright (C) 1998 David S. Miller (davem@redhat.com)
  */
 
 #define HI_MAGIC	0x8080808080808080

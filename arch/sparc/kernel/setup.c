@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.113 1999/12/16 14:37:35 anton Exp $
+/*  $Id: setup.c,v 1.114 2000/01/29 01:08:57 anton Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -201,11 +201,6 @@ static void __init boot_flags_init(char *commands)
 				prom_printf("KGDB: Using serial line /dev/ttyb.\n");
 				break;
 #endif
-#ifdef CONFIG_AP1000
-			case 'c':
-				printk("KGDB: AP1000+ debugging\n");
-				break;
-#endif
 			default:
 				printk("KGDB: Unknown tty line.\n");
 				break;
@@ -326,10 +321,6 @@ void __init setup_arch(char **cmdline_p)
 		prom_halt();
 	}
 #endif
-#if CONFIG_AP1000
-	sparc_cpu_model=ap1000;
-	strcpy(&cputypval, "ap+");
-#endif
 	printk("ARCH: ");
 	switch(sparc_cpu_model) {
 	case sun4:
@@ -349,10 +340,6 @@ void __init setup_arch(char **cmdline_p)
 		break;
 	case sun4u:
 		printk("SUN4U\n");
-		break;
-	case ap1000:
-		register_console(&prom_console);
-		printk("AP1000\n");
 		break;
 	default:
 		printk("UNKNOWN!\n");

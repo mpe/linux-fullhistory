@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.74 2000/01/15 04:47:48 davem Exp $
+/* $Id: ioctl32.c,v 1.76 2000/01/31 21:10:15 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)

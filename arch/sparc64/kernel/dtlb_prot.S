@@ -1,8 +1,8 @@
-/* $Id: dtlb_prot.S,v 1.18 1999/03/02 15:42:14 jj Exp $
+/* $Id: dtlb_prot.S,v 1.19 2000/01/31 04:59:12 davem Exp $
  * dtlb_prot.S: DTLB protection trap strategy.
  *              This is included directly into the trap table.
  *
- * Copyright (C) 1996,1998 David S. Miller (davem@dm.cobaltmicro.com)
+ * Copyright (C) 1996,1998 David S. Miller (davem@redhat.com)
  * Copyright (C) 1997,1998 Jakub Jelinek   (jj@ultra.linux.cz)
  */
 

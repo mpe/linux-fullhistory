@@ -1,4 +1,4 @@
-/* $Id: bootstr.c,v 1.18 1999/08/31 06:54:45 davem Exp $
+/* $Id: bootstr.c,v 1.19 2000/01/29 01:09:11 anton Exp $
  * bootstr.c:  Boot string/argument acquisition from the PROM.
  *
  * Copyright(C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -55,11 +55,6 @@ prom_getbootargs(void)
 		 */
 		strncpy(barg_buf, *romvec->pv_v2bootargs.bootargs, BARG_LEN-1);
 		break;
-        case PROM_AP1000:
-#if CONFIG_AP1000
-                ap_getbootargs(barg_buf, BARG_LEN);
-                break;
-#endif
 	default:
 		break;
 	}

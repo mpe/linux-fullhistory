@@ -405,9 +405,6 @@ fake_volatile:
 	task_lock(tsk);
 	sem_exit();
 	__exit_mm(tsk);
-#if CONFIG_AP1000
-	exit_msc(tsk);
-#endif
 	__exit_files(tsk);
 	__exit_fs(tsk);
 	__exit_sighand(tsk);

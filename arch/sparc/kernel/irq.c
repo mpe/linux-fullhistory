@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.99 1999/12/27 06:08:29 anton Exp $
+/*  $Id: irq.c,v 1.100 2000/01/29 01:38:04 anton Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -738,12 +738,6 @@ void __init init_IRQ(void)
 	case sun4d:
 		sun4d_init_IRQ();
 		break;
-
-	case ap1000:
-#if CONFIG_AP1000
-		ap_init_IRQ();;
-		break;
-#endif
 
 	default:
 		prom_printf("Cannot initialize IRQ's on this Sun machine...");

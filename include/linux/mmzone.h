@@ -12,13 +12,7 @@
  * Free memory management - zoned buddy allocator.
  */
 
-#if CONFIG_AP1000
-/* the AP+ needs to allocate 8MB contiguous, aligned chunks of ram
-   for the ring buffers */
-#define MAX_ORDER 12
-#else
 #define MAX_ORDER 10
-#endif
 
 typedef struct free_area_struct {
 	struct list_head free_list;

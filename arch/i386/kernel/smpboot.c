@@ -710,7 +710,8 @@ extern unsigned long cpu_hz;
 
 static void smp_tune_scheduling (void)
 {
-	unsigned long cachesize;
+	unsigned long cachesize;       /* kB   */
+	unsigned long bandwidth = 350; /* MB/s */
 	/*
 	 * Rough estimation for SMP scheduling, this is the number of
 	 * cycles it takes for a fully memory-limited process to flush
@@ -731,10 +732,12 @@ static void smp_tune_scheduling (void)
 		return;
 	} else {
 		cachesize = boot_cpu_data.x86_cache_size;
-		if (cachesize == -1)
-			cachesize = 8; /* Pentiums */
+		if (cachesize == -1) {
+			cachesize = 16; /* Pentiums, 2x8kB cache */
+			bandwidth = 100;
+		}
 
-		cacheflush_time = cpu_hz/1024*cachesize/5000;
+		cacheflush_time = (cpu_hz>>20) * (cachesize<<10) / bandwidth;
 	}
 
 	printk("per-CPU timeslice cutoff: %ld.%02ld usecs.\n",

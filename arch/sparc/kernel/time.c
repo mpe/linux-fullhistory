@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.50 2000/01/21 04:35:53 anton Exp $
+/* $Id: time.c,v 1.51 2000/01/29 01:08:59 anton Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -353,12 +353,6 @@ void __init sbus_time_init(void)
 	BTFIXUPSET_CALL(bus_do_settimeofday, sbus_do_settimeofday, BTFIXUPCALL_NORM);
 	btfixup();
 
-#if CONFIG_AP1000
-	init_timers(timer_interrupt);
-	ap_init_time(&xtime);
-        return;
-#endif
-
 	if (ARCH_SUN4)
 		sun4_clock_probe();
 	else
@@ -451,14 +445,6 @@ extern __inline__ unsigned long do_gettimeoffset(void)
  */
 void do_gettimeofday(struct timeval *tv)
 {
-#if CONFIG_AP1000
-	unsigned long flags;
-
-	save_and_cli(flags);
-	ap_gettimeofday(&xtime);
-	*tv = xtime;
-	restore_flags(flags);
-#else /* !(CONFIG_AP1000) */
 	/* Load doubles must be used on xtime so that what we get
 	 * is guarenteed to be atomic, this is why we can run this
 	 * with interrupts on full blast.  Don't touch this... -DaveM
@@ -493,7 +479,6 @@ void do_gettimeofday(struct timeval *tv)
 	sub	%o5, %o2, %o5
 	st	%o4, [%o0 + 0x0]
 1:	st	%o5, [%o0 + 0x4]");
-#endif
 }
 
 void do_settimeofday(struct timeval *tv)
@@ -505,13 +490,11 @@ void do_settimeofday(struct timeval *tv)
 
 static void sbus_do_settimeofday(struct timeval *tv)
 {
-#if !CONFIG_AP1000
 	tv->tv_usec -= do_gettimeoffset();
 	if(tv->tv_usec < 0) {
 		tv->tv_usec += 1000000;
 		tv->tv_sec--;
 	}
-#endif
 	xtime = *tv;
 	time_adjust = 0;		/* stop active adjtime() */
 	time_status |= STA_UNSYNC;

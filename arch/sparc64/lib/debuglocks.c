@@ -1,7 +1,7 @@
-/* $Id: debuglocks.c,v 1.3 1999/09/10 10:40:50 davem Exp $
+/* $Id: debuglocks.c,v 1.4 2000/01/31 04:59:10 davem Exp $
  * debuglocks.c: Debugging versions of SMP locking primitives.
  *
- * Copyright (C) 1998 David S. Miller (davem@dm.cobaltmicro.com)
+ * Copyright (C) 1998 David S. Miller (davem@redhat.com)
  */
 
 #include <linux/kernel.h>

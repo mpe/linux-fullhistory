@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.66 2000/01/16 06:20:48 davem Exp $
+/* $Id: systbls.S,v 1.67 2000/01/29 16:41:21 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -48,7 +48,7 @@ sys_call_table32:
 /*130*/	.word sys_ftruncate, sys_flock, sys_lstat64, sys_nis_syscall, sys_nis_syscall
 	.word sys_nis_syscall, sys_mkdir, sys_rmdir, sys32_utimes, sys_stat64
 /*140*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getrlimit
-	.word sys32_setrlimit, sys_nis_syscall, sys32_prctl, sys32_pciconfig_read, sys32_pciconfig_write
+	.word sys32_setrlimit, sys_pivot_root, sys32_prctl, sys32_pciconfig_read, sys32_pciconfig_write
 /*150*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall
 	.word sys_nis_syscall, sys_nis_syscall, sys32_statfs, sys32_fstatfs, sys_oldumount
 /*160*/	.word sys_nis_syscall, sys_nis_syscall, sys_getdomainname, sys_setdomainname, sys_nis_syscall
@@ -107,7 +107,7 @@ sys_call_table:
 /*130*/	.word sys_ftruncate, sys_flock, sys_nis_syscall, sys_sendto, sys_shutdown
 	.word sys_socketpair, sys_mkdir, sys_rmdir, sys_utimes, sys_nis_syscall
 /*140*/	.word sys_nis_syscall, sys_getpeername, sys_nis_syscall, sys_nis_syscall, sys_getrlimit
-	.word sys_setrlimit, sys_nis_syscall, sys_prctl, sys_pciconfig_read, sys_pciconfig_write
+	.word sys_setrlimit, sys_pivot_root, sys_prctl, sys_pciconfig_read, sys_pciconfig_write
 /*150*/	.word sys_getsockname, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall
 	.word sys_nis_syscall, sys_nis_syscall, sys_statfs, sys_fstatfs, sys_oldumount
 /*160*/	.word sys_nis_syscall, sys_nis_syscall, sys_getdomainname, sys_setdomainname, sys_utrap_install

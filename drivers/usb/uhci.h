@@ -10,28 +10,28 @@
  */
 struct s_nested_lock {
 	spinlock_t lock;
-	volatile short int pid;
+	void *uniq;
 	short int count;
 };
 
 #define nested_init(snl) \
 	spin_lock_init(&(snl)->lock); \
-	(snl)->pid = 0; \
+	(snl)->uniq = NULL; \
 	(snl)->count = 0;
 
 #define nested_lock(snl, flags) \
-	if ((snl)->pid == current->pid) { \
+	if ((snl)->uniq == current) { \
 		(snl)->count++; \
-		flags = 0; \
+		flags = 0; /* No warnings */ \
 	} else { \
 		spin_lock_irqsave(&(snl)->lock, flags); \
 		(snl)->count++; \
-		(snl)->pid = current->pid; \
+		(snl)->uniq = current; \
 	}
 
 #define nested_unlock(snl, flags) \
 	if (!--(snl)->count) { \
-		(snl)->pid = 0; \
+		(snl)->uniq = NULL; \
 		spin_unlock_irqrestore(&(snl)->lock, flags); \
 	}
 

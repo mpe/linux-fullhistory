@@ -1,4 +1,4 @@
-/* $Id: siginfo.h,v 1.6 2000/01/21 11:39:17 jj Exp $
+/* $Id: siginfo.h,v 1.7 2000/01/29 07:41:51 davem Exp $
  * siginfo.c:
  */
 

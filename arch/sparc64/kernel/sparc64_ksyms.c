@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.70 2000/01/07 18:15:18 jj Exp $
+/* $Id: sparc64_ksyms.c,v 1.72 2000/01/28 13:41:59 jj Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -124,11 +124,6 @@ EXPORT_SYMBOL_PRIVATE(write_lock);
 EXPORT_SYMBOL_PRIVATE(write_unlock);
 #endif
 
-/* rw semaphores */
-EXPORT_SYMBOL_NOVERS(__down_read_failed);
-EXPORT_SYMBOL_NOVERS(__down_write_failed);
-EXPORT_SYMBOL_NOVERS(__rwsem_wake);
-
 /* Kernel wide locking */
 EXPORT_SYMBOL(kernel_flag);
 
@@ -168,6 +163,11 @@ EXPORT_SYMBOL(_do_write_unlock);
 EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(local_bh_count);
 #endif
+
+/* rw semaphores */
+EXPORT_SYMBOL_NOVERS(__down_read_failed);
+EXPORT_SYMBOL_NOVERS(__down_write_failed);
+EXPORT_SYMBOL_NOVERS(__rwsem_wake);
 
 /* Atomic counter implementation. */
 EXPORT_SYMBOL_PRIVATE(atomic_add);

@@ -1,4 +1,4 @@
-/* $Id: mp.c,v 1.10 1998/03/09 14:04:26 jj Exp $
+/* $Id: mp.c,v 1.11 2000/01/29 01:09:12 anton Exp $
  * mp.c:  OpenBoot Prom Multiprocessor support routines.  Don't call
  *        these on a UP or else you will halt and catch fire. ;)
  *
@@ -29,7 +29,6 @@ prom_startcpu(int cpunode, struct linux_prom_registers *ctable_reg, int ctx, cha
 	switch(prom_vers) {
 	case PROM_V0:
 	case PROM_V2:
-	case PROM_AP1000:
 	default:
 		ret = -1;
 		break;
@@ -56,7 +55,6 @@ prom_stopcpu(int cpunode)
 	switch(prom_vers) {
 	case PROM_V0:
 	case PROM_V2:
-	case PROM_AP1000:
 	default:
 		ret = -1;
 		break;
@@ -83,7 +81,6 @@ prom_idlecpu(int cpunode)
 	switch(prom_vers) {
 	case PROM_V0:
 	case PROM_V2:
-	case PROM_AP1000:
 	default:
 		ret = -1;
 		break;
@@ -110,7 +107,6 @@ prom_restartcpu(int cpunode)
 	switch(prom_vers) {
 	case PROM_V0:
 	case PROM_V2:
-	case PROM_AP1000:
 	default:
 		ret = -1;
 		break;

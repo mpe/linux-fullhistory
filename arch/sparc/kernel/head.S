@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.101 1999/12/02 08:34:56 jj Exp $
+/* $Id: head.S,v 1.102 2000/01/29 01:08:54 anton Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -483,10 +483,8 @@ current_pc:
 1:
 		mov	%o7, %g3
 
-#ifndef CONFIG_AP1000
 		tst	%o0
 		be	no_sun4u_here
-#endif
 		 mov	%g4, %o7		/* Previous %o7. */
 	
 		mov	%o0, %l0		! stash away romvec
@@ -762,11 +760,6 @@ go_to_highmem:
  * I figure out and store nwindows and nwindowsm1 later on.
  */
 execute_in_high_mem:
-#if CONFIG_AP1000
-                /* we don't have a prom :-( */
-                b sun4m_init
-                nop
-#endif
 		mov	%l0, %o0		! put back romvec
 		mov	%l1, %o1		! and debug_vec
 

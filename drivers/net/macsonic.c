@@ -53,7 +53,6 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-#include <linux/config.h>
 #include <linux/module.h>
 
 #define SREGS_PAD(n)    u16 n;

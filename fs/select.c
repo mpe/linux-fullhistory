@@ -414,6 +414,7 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 		wait = wait_table;
 	}
 
+	fds = NULL;
 	if (nfds != 0) {
 		fds = (struct pollfd **)kmalloc(
 			(1 + (nfds - 1) / POLLFD_PER_PAGE) * sizeof(struct pollfd *),

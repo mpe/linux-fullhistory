@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.57 2000/01/21 11:38:42 jj Exp $
+/* $Id: sys_sparc.c,v 1.59 2000/01/29 07:40:10 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -383,12 +383,3 @@ done:
 	up_read(&uts_sem);
 	return err;
 }
-
-
-#ifndef CONFIG_AP1000
-/* only AP+ systems have sys_aplib */
-asmlinkage int sys_aplib(void)
-{
-	return -ENOSYS;
-}
-#endif

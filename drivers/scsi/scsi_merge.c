@@ -87,7 +87,7 @@ static int dump_stats(struct request *req,
 	 * Dump the information that we have.  We know we have an
 	 * inconsistency.
 	 */
-	printk("nr_segments is %lx\n", req->nr_segments);
+	printk("nr_segments is %x\n", req->nr_segments);
 	printk("counted segments is %x\n", segments);
 	printk("Flags %d %d\n", use_clustering, dma_host);
 	for (bh = req->bh; bh->b_reqnext != NULL; bh = bh->b_reqnext) 

@@ -1,7 +1,7 @@
-/* $Id: starfire.c,v 1.4 1999/09/21 14:35:25 davem Exp $
+/* $Id: starfire.c,v 1.5 2000/01/31 04:59:12 davem Exp $
  * starfire.c: Starfire/E10000 support.
  *
- * Copyright (C) 1998 David S. Miller (davem@dm.cobaltmicro.com)
+ * Copyright (C) 1998 David S. Miller (davem@redhat.com)
  */
 
 #include <linux/kernel.h>
