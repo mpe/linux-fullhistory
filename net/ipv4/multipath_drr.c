@@ -56,11 +56,8 @@ struct multipath_device {
 #define MULTIPATH_MAX_DEVICECANDIDATES 10
 
 static struct multipath_device state[MULTIPATH_MAX_DEVICECANDIDATES];
-static spinlock_t state_lock = SPIN_LOCK_UNLOCKED;
-static int registered_dev_notifier = 0;
+static DEFINE_SPINLOCK(state_lock);
 static struct rtable *last_selection = NULL;
-
-#define RTprint(a...)	// printk(KERN_DEBUG a)
 
 static int inline __multipath_findslot(void)
 {
@@ -85,8 +82,8 @@ static int inline __multipath_finddev(int ifindex)
 	return -1;
 }
 
-static int multipath_dev_event(struct notifier_block *this,
-			       unsigned long event, void *ptr)
+static int drr_dev_event(struct notifier_block *this,
+			 unsigned long event, void *ptr)
 {
 	struct net_device *dev = ptr;
 	int devidx;
@@ -101,12 +98,6 @@ static int multipath_dev_event(struct notifier_block *this,
 			state[devidx].allocated = 0;
 			state[devidx].ifi = 0;
 			atomic_set(&state[devidx].usecount, 0);
-			RTprint(KERN_DEBUG"%s: successfully removed device " \
-				"with index %d\n",__FUNCTION__, devidx);
-		} else {
-			RTprint(KERN_DEBUG"%s: Device not relevant for " \
-				" multipath: %d\n",
-				__FUNCTION__, devidx);
 		}
 
 		spin_unlock_bh(&state_lock);
@@ -116,17 +107,17 @@ static int multipath_dev_event(struct notifier_block *this,
 	return NOTIFY_DONE;
 }
 
-struct notifier_block multipath_dev_notifier = {
-	.notifier_call	= multipath_dev_event,
+struct notifier_block drr_dev_notifier = {
+	.notifier_call	= drr_dev_event,
 };
 
-void __multipath_remove(struct rtable *rt)
+static void drr_remove(struct rtable *rt)
 {
 	if (last_selection == rt)
 		last_selection = NULL;
 }
 
-void __multipath_safe_inc(atomic_t *usecount)
+static void drr_safe_inc(atomic_t *usecount)
 {
 	int n;
 
@@ -135,9 +126,6 @@ void __multipath_safe_inc(atomic_t *usecount)
 	n = atomic_read(usecount);
 	if (n <= 0) {
 		int i;
-
-		RTprint("%s: detected overflow, now ill will reset all "\
-			"usecounts\n", __FUNCTION__);
 
 		spin_lock_bh(&state_lock);
 
@@ -148,7 +136,7 @@ void __multipath_safe_inc(atomic_t *usecount)
 	}
 }
 
-void __multipath_selectroute(const struct flowi *flp,
+static void drr_select_route(const struct flowi *flp,
 			     struct rtable *first, struct rtable **rp)
 {
 	struct rtable *nh, *result, *cur_min;
@@ -156,16 +144,9 @@ void __multipath_selectroute(const struct flowi *flp,
 	int devidx = -1;
 	int cur_min_devidx = -1;
 
-	/* register a notifier to stay informed about dying devices */
-	if (!registered_dev_notifier) {
-		registered_dev_notifier = 1;
-		register_netdevice_notifier(&multipath_dev_notifier);
-	}
-
        	/* if necessary and possible utilize the old alternative */
 	if ((flp->flags & FLOWI_FLAG_MULTIPATHOLDROUTE) != 0 &&
 	    last_selection != NULL) {
-		RTprint( KERN_CRIT"%s: holding route \n", __FUNCTION__ );
 		result = last_selection;
 		*rp = result;
 		return;
@@ -206,9 +187,6 @@ void __multipath_selectroute(const struct flowi *flp,
 					devidx = __multipath_findslot();
 					if (devidx == -1) {
 						/* unlikely but possible */
-						RTprint(KERN_DEBUG"%s: " \
-							"out of space\n",
-							__FUNCTION__);
 						continue;
 					}
 
@@ -216,13 +194,6 @@ void __multipath_selectroute(const struct flowi *flp,
 					state[devidx].ifi = nh_ifidx;
 					atomic_set(&state[devidx].usecount, 0);
 					min_usecount = 0;
-					RTprint(KERN_DEBUG"%s: created " \
-						" for " \
-						"device %d and " \
-						"min_usecount " \
-						" == -1\n",
-						__FUNCTION__,
-						nh_ifidx);
 				}
 
 				spin_unlock_bh(&state_lock);
@@ -232,11 +203,7 @@ void __multipath_selectroute(const struct flowi *flp,
 				/* if the device has not been used it is
 				 * the primary target
 				 */
-				RTprint(KERN_DEBUG"%s: now setting " \
-					"result to device %d\n",
-					__FUNCTION__, nh_ifidx );
-
-				__multipath_safe_inc(&state[devidx].usecount);
+				drr_safe_inc(&state[devidx].usecount);
 				result = nh;
 			} else {
 				int count =
@@ -247,13 +214,6 @@ void __multipath_selectroute(const struct flowi *flp,
 					cur_min = nh;
 					cur_min_devidx = devidx;
 					min_usecount = count;
-
-					RTprint(KERN_DEBUG"%s: found " \
-						"device " \
-						"%d with usecount == %d\n",
-						__FUNCTION__, 
-						nh_ifidx,
-						min_usecount);
 				}
 			}
 		}
@@ -261,24 +221,45 @@ void __multipath_selectroute(const struct flowi *flp,
 
 	if (!result) {
 		if (cur_min) {
-			RTprint( KERN_DEBUG"%s: index of device in state "\
-				 "array: %d\n",
-				 __FUNCTION__, cur_min_devidx );
-			__multipath_safe_inc(&state[cur_min_devidx].usecount);
+			drr_safe_inc(&state[cur_min_devidx].usecount);
 			result = cur_min;
 		} else {
-			RTprint( KERN_DEBUG"%s: utilized first\n",
-				 __FUNCTION__);
 			result = first;
 		}
-	} else {
-		RTprint(KERN_DEBUG"%s: utilize result: found device " \
-			"%d with usecount == %d\n",
-			__FUNCTION__, result->u.dst.dev->ifindex,
-			min_usecount);
-
 	}
 
 	*rp = result;
 	last_selection = result;
 }
+
+static struct ip_mp_alg_ops drr_ops = {
+	.mp_alg_select_route	=	drr_select_route,
+	.mp_alg_remove		=	drr_remove,
+};
+
+static int __init drr_init(void)
+{
+	int err = register_netdevice_notifier(&drr_dev_notifier);
+
+	if (err)
+		return err;
+
+	err = multipath_alg_register(&drr_ops, IP_MP_ALG_RR);
+	if (err)
+		goto fail;
+
+	return 0;
+
+fail:
+	unregister_netdevice_notifier(&drr_dev_notifier);
+	return err;
+}
+
+static void __exit drr_exit(void)
+{
+	unregister_netdevice_notifier(&drr_dev_notifier);
+	multipath_alg_unregister(&drr_ops, IP_MP_ALG_DRR);
+}
+
+module_init(drr_init);
+module_exit(drr_exit);

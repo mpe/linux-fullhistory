@@ -48,8 +48,6 @@
 #include <net/ip_fib.h>
 #include <net/ip_mp_alg.h>
 
-#define MPprint(a...)	// printk(KERN_DEBUG a)
-
 #define MULTIPATH_STATE_SIZE 15
 
 struct multipath_candidate {
@@ -85,13 +83,19 @@ struct multipath_route {
 };
 
 /* state: primarily weight per route information */
-static int multipath_state_initialized = 0;
-static spinlock_t state_big_lock = SPIN_LOCK_UNLOCKED;
 static struct multipath_bucket state[MULTIPATH_STATE_SIZE];
 
 /* interface to random number generation */
 static unsigned int RANDOM_SEED = 93186752;
-static __inline__ unsigned int random(unsigned int ubound);
+
+static inline unsigned int random(unsigned int ubound)
+{
+	static unsigned int a = 1588635695,
+		q = 2,
+		r = 1117695901;
+	RANDOM_SEED = a*(RANDOM_SEED % q) - r*(RANDOM_SEED / q);
+	return RANDOM_SEED % ubound;
+}
 
 static unsigned char __multipath_lookup_weight(const struct flowi *fl,
 					       const struct rtable *rt)
@@ -129,8 +133,6 @@ static unsigned char __multipath_lookup_weight(const struct flowi *fl,
 
 		if ((targetnetwork & d->netmask) == d->network) {
 			weight = d->nh_info->nh_weight;
-			MPprint("%s: found weight %d for gateway %u\n",
-				__FUNCTION__, weight, rt->rt_gateway);
 			goto out;
 		}
 	}
@@ -140,36 +142,19 @@ out:
 	return weight;
 }
 
-static void __multipath_init_state(void) 
+static void wrandom_init_state(void) 
 {
-	spin_lock(&state_big_lock);
+	int i;
 
-	/* check again due to SMP and to prevent contention */
-	if (!multipath_state_initialized) {
-		int i;
-
-		for (i = 0; i < MULTIPATH_STATE_SIZE; ++i) {
-			INIT_LIST_HEAD(&state[i].head);
-			state[i].lock = SPIN_LOCK_UNLOCKED;
-		}
+	for (i = 0; i < MULTIPATH_STATE_SIZE; ++i) {
+		INIT_LIST_HEAD(&state[i].head);
+		spin_lock_init(&state[i].lock);
 	}
-
-	/* now mark initialized */
-	multipath_state_initialized = 1;
-
-	spin_unlock(&state_big_lock);
 }
 
-static void inline __multipath_init(void)
-{
-	/* do not spinlock to reduce unnecessary contention */
-	if (!multipath_state_initialized)
-		__multipath_init_state();
-}
-
-void __multipath_selectroute(const struct flowi *flp,
-			     struct rtable *first,
-			     struct rtable **rp)
+static void wrandom_select_route(const struct flowi *flp,
+				 struct rtable *first,
+				 struct rtable **rp)
 {
 	struct rtable *rt;
 	struct rtable *decision;
@@ -180,9 +165,6 @@ void __multipath_selectroute(const struct flowi *flp,
 	int selector;
 	const size_t size_mpc = sizeof(struct multipath_candidate);
 
-	/* init state if necessary */
-	__multipath_init();
-
 	/* collect all candidates and identify their weights */
 	for (rt = rcu_dereference(first); rt;
 	     rt = rcu_dereference(rt->u.rt_next)) {
@@ -191,6 +173,9 @@ void __multipath_selectroute(const struct flowi *flp,
 			struct multipath_candidate* mpc =
 				(struct multipath_candidate*)
 				kmalloc(size_mpc, GFP_KERNEL);
+
+			if (!mpc)
+				return;
 
 			power += __multipath_lookup_weight(flp, rt) * 10000;
 
@@ -210,8 +195,6 @@ void __multipath_selectroute(const struct flowi *flp,
 	/* choose a weighted random candidate */
 	decision = first;
 	selector = random(power);
-	MPprint("%s: random number %d in range %d\n", __FUNCTION__, selector,
-		power);
 	last_power = 0;
 
 	/* select candidate, adjust GC data and cleanup local state */
@@ -219,13 +202,9 @@ void __multipath_selectroute(const struct flowi *flp,
 	last_mpc = NULL;
 	for (mpc = first_mpc; mpc; mpc = mpc->next) {
 		mpc->rt->u.dst.lastuse = jiffies;
-		MPprint("%s: last_power = %d, selector: %d, mpc->power: %d\n",
-			__FUNCTION__, last_power, selector, mpc->power);
-		if (last_power <= selector && selector < mpc->power) {
+		if (last_power <= selector && selector < mpc->power)
 			decision = mpc->rt;
-			MPprint("%s: selected %u\n", __FUNCTION__,
-				decision->rt_gateway);
-		}
+
 		last_power = mpc->power;
 		if (last_mpc)
 			kfree(last_mpc);
@@ -242,17 +221,14 @@ void __multipath_selectroute(const struct flowi *flp,
 	*rp = decision;
 }
 
-void __multipath_set_nhinfo(__u32 network,
-			    __u32 netmask,
-			    unsigned char prefixlen,
-			    const struct fib_nh* nh)
+static void wrandom_set_nhinfo(__u32 network,
+			       __u32 netmask,
+			       unsigned char prefixlen,
+			       const struct fib_nh *nh)
 {
 	const int state_idx = nh->nh_oif % MULTIPATH_STATE_SIZE;
 	struct multipath_route *r, *target_route = NULL;
 	struct multipath_dest *d, *target_dest = NULL;
-
-	/* init state if necessary */
-	__multipath_init();
 
 	/* store the weight information for a certain route */
 	spin_lock(&state[state_idx].lock);
@@ -321,20 +297,15 @@ static void __multipath_free_dst(struct rcu_head *head)
 	kfree(dst);
 }
 
-void __multipath_flush(void)
+static void wrandom_flush(void)
 {
 	int i;
-
-	MPprint("%s: called\n", __FUNCTION__);
-
-	/* init state if necessary */
-	__multipath_init();
 
 	/* defere delete to all entries */
 	for (i = 0; i < MULTIPATH_STATE_SIZE; ++i) {
 		struct multipath_route *r;
-		spin_lock(&state[i].lock);
 
+		spin_lock(&state[i].lock);
 		list_for_each_entry_rcu(r, &state[i].head, list) {
 			struct multipath_dest *d;
 			list_for_each_entry_rcu(d, &r->dests, list) {
@@ -349,15 +320,25 @@ void __multipath_flush(void)
 
 		spin_unlock(&state[i].lock);
 	}
-
-	MPprint("%s: finished\n", __FUNCTION__);
 }
 
-static __inline__ unsigned int random(unsigned int ubound)
+static struct ip_mp_alg_ops wrandom_ops = {
+	.mp_alg_select_route	=	wrandom_select_route,
+	.mp_alg_flush		=	wrandom_flush,
+	.mp_alg_set_nhinfo	=	wrandom_set_nhinfo,
+};
+
+static int __init wrandom_init(void)
 {
-	static unsigned int a = 1588635695,
-		q = 2,
-		r = 1117695901;
-	RANDOM_SEED = a*(RANDOM_SEED % q) - r*(RANDOM_SEED / q);
-	return RANDOM_SEED % ubound;
+	wrandom_init_state();
+
+	return multipath_alg_register(&wrandom_ops, IP_MP_ALG_WRANDOM);
 }
+
+static void __exit wrandom_exit(void)
+{
+	multipath_alg_unregister(&wrandom_ops, IP_MP_ALG_WRANDOM);
+}
+
+module_init(wrandom_init);
+module_exit(wrandom_exit);

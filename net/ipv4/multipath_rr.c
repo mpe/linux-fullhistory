@@ -47,29 +47,25 @@
 #include <net/checksum.h>
 #include <net/ip_mp_alg.h>
 
-#define RTprint(a...)	// printk(KERN_DEBUG a)
-
 #define MULTIPATH_MAX_CANDIDATES 40
 
 static struct rtable* last_used = NULL;
 
-void __multipath_remove(struct rtable *rt)
+static void rr_remove(struct rtable *rt)
 {
 	if (last_used == rt)
 		last_used = NULL;
 }
 
-void __multipath_selectroute(const struct flowi *flp,
-			     struct rtable *first, struct rtable **rp)
+static void rr_select_route(const struct flowi *flp,
+			    struct rtable *first, struct rtable **rp)
 {
 	struct rtable *nh, *result, *min_use_cand = NULL;
 	int min_use = -1;
 
 	/* if necessary and possible utilize the old alternative */
-	if ( ( flp->flags & FLOWI_FLAG_MULTIPATHOLDROUTE ) != 0 &&
-	     last_used != NULL ) {
-		RTprint( KERN_CRIT"%s: holding route \n",
-			 __FUNCTION__ );
+	if ((flp->flags & FLOWI_FLAG_MULTIPATHOLDROUTE) != 0 &&
+	    last_used != NULL) {
 		result = last_used;
 		goto out;
 	}
@@ -88,8 +84,6 @@ void __multipath_selectroute(const struct flowi *flp,
 				min_use = nh->u.dst.__use;
 				min_use_cand = nh;
 			}
-			RTprint( KERN_CRIT"%s: found balanced entry\n",
-				 __FUNCTION__ );
 		}
 	}
 	result = min_use_cand;
@@ -101,3 +95,21 @@ out:
 	result->u.dst.__use++;
 	*rp = result;
 }
+
+static struct ip_mp_alg_ops rr_ops = {
+	.mp_alg_select_route	=	rr_select_route,
+	.mp_alg_remove		=	rr_remove,
+};
+
+static int __init rr_init(void)
+{
+	return multipath_alg_register(&rr_ops, IP_MP_ALG_RR);
+}
+
+static void __exit rr_exit(void)
+{
+	multipath_alg_unregister(&rr_ops, IP_MP_ALG_RR);
+}
+
+module_init(rr_init);
+module_exit(rr_exit);
