@@ -153,12 +153,15 @@ flags_err:
 		}
 #endif
 	case EXT3_IOC_GETRSVSZ:
-		if (test_opt(inode->i_sb, RESERVATION) && S_ISREG(inode->i_mode)) {
-			rsv_window_size = atomic_read(&ei->i_rsv_window.rsv_goal_size);
+		if (test_opt(inode->i_sb, RESERVATION)
+			&& S_ISREG(inode->i_mode)
+			&& ei->i_rsv_window) {
+			rsv_window_size = atomic_read(&ei->i_rsv_window->rsv_goal_size);
 			return put_user(rsv_window_size, (int __user *)arg);
 		}
 		return -ENOTTY;
-	case EXT3_IOC_SETRSVSZ:
+	case EXT3_IOC_SETRSVSZ: {
+
 		if (!test_opt(inode->i_sb, RESERVATION) ||!S_ISREG(inode->i_mode))
 			return -ENOTTY;
 
@@ -173,8 +176,21 @@ flags_err:
 
 		if (rsv_window_size > EXT3_MAX_RESERVE_BLOCKS)
 			rsv_window_size = EXT3_MAX_RESERVE_BLOCKS;
-		atomic_set(&ei->i_rsv_window.rsv_goal_size, rsv_window_size);
+
+		/*
+		 * need to allocate reservation structure for this inode
+		 * before set the window size
+		 */
+		down(&ei->truncate_sem);
+		if (!ei->i_rsv_window)
+			ext3_alloc_init_reservation(inode);
+
+		if (ei->i_rsv_window)
+			atomic_set(&ei->i_rsv_window->rsv_goal_size,
+						rsv_window_size);
+		up(&ei->truncate_sem);
 		return 0;
+	}
 	case EXT3_IOC_GROUP_EXTEND: {
 		unsigned long n_blocks_count;
 		struct super_block *sb = inode->i_sb;

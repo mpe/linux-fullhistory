@@ -75,8 +75,8 @@ struct ext3_inode_info {
 	 * allocation when we detect linearly ascending requests.
 	 */
 	__u32	i_next_alloc_goal;
-	/* block reservation window */
-	struct ext3_reserve_window_node i_rsv_window;
+	/* block reservation info */
+	struct ext3_reserve_window_node *i_rsv_window;
 
 	__u32	i_dir_start_lookup;
 #ifdef CONFIG_EXT3_FS_XATTR

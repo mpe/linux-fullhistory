@@ -259,14 +259,29 @@ static inline int rsv_is_empty(struct ext3_reserve_window *rsv)
 	/* a valid reservation end block could not be 0 */
 	return (rsv->_rsv_end == EXT3_RESERVE_WINDOW_NOT_ALLOCATED);
 }
+void ext3_alloc_init_reservation(struct inode *inode)
+{
+	struct ext3_inode_info *ei = EXT3_I(inode);
+	struct ext3_reserve_window_node *rsv = ei->i_rsv_window;
+
+	rsv = kmalloc(sizeof(*rsv), GFP_NOFS);
+	if (rsv) {
+		rsv->rsv_start = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
+		rsv->rsv_end = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
+		atomic_set(&rsv->rsv_goal_size, EXT3_DEFAULT_RESERVE_BLOCKS);
+		atomic_set(&rsv->rsv_alloc_hit, 0);
+		seqlock_init(&rsv->rsv_seqlock);
+	}
+	ei->i_rsv_window = rsv;
+}
 
 void ext3_discard_reservation(struct inode *inode)
 {
 	struct ext3_inode_info *ei = EXT3_I(inode);
-	struct ext3_reserve_window_node *rsv = &ei->i_rsv_window;
+	struct ext3_reserve_window_node *rsv = ei->i_rsv_window;
 	spinlock_t *rsv_lock = &EXT3_SB(inode->i_sb)->s_rsv_window_lock;
 
-	if (!rsv_is_empty(&rsv->rsv_window)) {
+	if (rsv && !rsv_is_empty(&rsv->rsv_window)) {
 		spin_lock(rsv_lock);
 		if (!rsv_is_empty(&rsv->rsv_window))
 			rsv_window_remove(inode->i_sb, rsv);
@@ -1154,7 +1169,7 @@ int ext3_new_block(handle_t *handle, struct inode *inode,
 	struct ext3_super_block *es;
 	struct ext3_sb_info *sbi;
 	struct ext3_reserve_window_node *my_rsv = NULL;
-	struct ext3_reserve_window_node *rsv = &EXT3_I(inode)->i_rsv_window;
+	struct ext3_reserve_window_node *rsv = EXT3_I(inode)->i_rsv_window;
 	unsigned short windowsz = 0;
 #ifdef EXT3FS_DEBUG
 	static int goal_hits, goal_attempts;
@@ -1187,10 +1202,9 @@ int ext3_new_block(handle_t *handle, struct inode *inode,
 	 * command EXT3_IOC_SETRSVSZ to set the window size to 0 to turn off
 	 * reservation on that particular file)
 	 */
-	windowsz = atomic_read(&rsv->rsv_goal_size);
-	if (test_opt(sb, RESERVATION) &&
-		S_ISREG(inode->i_mode) && (windowsz > 0))
+	if (rsv && ((windowsz = atomic_read(&rsv->rsv_goal_size)) > 0))
 		my_rsv = rsv;
+
 	if (!ext3_has_free_blocks(sbi)) {
 		*errp = -ENOSPC;
 		goto out;
@@ -1211,6 +1225,14 @@ int ext3_new_block(handle_t *handle, struct inode *inode,
 	goal_group = group_no;
 retry:
 	free_blocks = le16_to_cpu(gdp->bg_free_blocks_count);
+	/*
+	 * if there is not enough free blocks to make a new resevation
+	 * turn off reservation for this allocation
+	 */
+	if (my_rsv && (free_blocks < windowsz)
+		&& (rsv_is_empty(&my_rsv->rsv_window)))
+		my_rsv = NULL;
+
 	if (free_blocks > 0) {
 		ret_block = ((goal - le32_to_cpu(es->s_first_data_block)) %
 				EXT3_BLOCKS_PER_GROUP(sb));
