@@ -115,7 +115,6 @@
  *     the SCC ourselves and only call the handler for the appopriate channel.
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

@@ -13,6 +13,8 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 1999/11/06	acme		cycx_down back to life (it needs to be
+*				called to iounmap the dpmbase)
 * 1999/08/09	acme		removed references to enable_tx_int
 *				use spinlocks instead of cli/sti in
 *				cyclomx_set_state
@@ -248,6 +250,7 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 	}
 
 	if (err) {
+		cycx_down(&card->hw);
 		free_irq(irq, card);
 		return err;
 	}
@@ -274,7 +277,8 @@ static int shutdown (wan_device_t *wandev)
 
 	card = wandev->private;
 	wandev->state = WAN_UNCONFIGURED;
-	printk(KERN_INFO "%s: irq %d being freed!\n", wandev->name,wandev->irq);
+	cycx_down(&card->hw);
+	printk(KERN_INFO "%s: irq %d being freed!\n", wandev->name, wandev->irq);
 	free_irq(wandev->irq, card);
 	return 0;
 }

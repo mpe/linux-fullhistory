@@ -682,7 +682,7 @@ struct dquot_operations {
 	int (*alloc_inode) (const struct inode *, unsigned long, uid_t);
 	void (*free_block) (const struct inode *, unsigned long);
 	void (*free_inode) (const struct inode *, unsigned long);
-	int (*transfer) (struct inode *, struct iattr *, char, uid_t);
+	int (*transfer) (struct dentry *, struct iattr *, uid_t);
 };
 
 struct file_system_type {

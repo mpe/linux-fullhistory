@@ -14,6 +14,7 @@
 #include <linux/locks.h>
 #include <linux/limits.h>
 #include <linux/config.h>
+#define __NO_VERSION__
 #include <linux/module.h>
 
 #include <asm/system.h>

@@ -60,6 +60,7 @@
 
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>

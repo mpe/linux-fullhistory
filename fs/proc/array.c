@@ -62,7 +62,6 @@
 #include <linux/mman.h>
 #include <linux/proc_fs.h>
 #include <linux/ioport.h>
-#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>

@@ -165,7 +165,7 @@ static ssize_t write_printer(struct file * file,
 	unsigned long partial;
 	int result = USB_ST_NOERROR;
 	int maxretry;
-	
+
 	do {
 		char *obuf = p->obuf;
 		unsigned long thistime;
@@ -180,7 +180,7 @@ static ssize_t write_printer(struct file * file,
 			if (signal_pending(current)) {
 				return bytes_written ? bytes_written : -EINTR;
 			}
-			result = p->pusb_dev->bus->op->bulk_msg(p->pusb_dev,
+			result = usb_bulk_msg(p->pusb_dev,
 					 usb_sndbulkpipe(p->pusb_dev, p->bulk_out_ep),
 					 obuf, thistime, &partial, HZ*20);
 			if (partial) {
@@ -233,7 +233,7 @@ static ssize_t read_printer(struct file * file,
 			return -ENODEV;
 		this_read = (count > sizeof(buf)) ? sizeof(buf) : count;
 
-		result = p->pusb_dev->bus->op->bulk_msg(p->pusb_dev,
+		result = usb_bulk_msg(p->pusb_dev,
 			  usb_rcvbulkpipe(p->pusb_dev, p->bulk_in_ep),
 			  buf, this_read, &partial, HZ*20);
 

@@ -8,7 +8,6 @@
  *  system memory and memory holes as well.
  */
 
-#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/kernel_stat.h>
 #include <linux/swap.h>

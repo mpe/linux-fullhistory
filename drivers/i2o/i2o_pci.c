@@ -16,6 +16,7 @@
  *		Support polled I2O PCI controllers. 
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>

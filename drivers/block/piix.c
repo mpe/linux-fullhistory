@@ -68,6 +68,42 @@
 
 #define PIIX_DEBUG_DRIVE_INFO		0
 
+#define DISPLAY_PIIX_TIMINGS
+
+#if defined(DISPLAY_PIIX_TIMINGS) && defined(CONFIG_PROC_FS)
+#include <linux/stat.h>
+#include <linux/proc_fs.h>
+
+static int piix_get_info(char *, char **, off_t, int, int);
+extern int (*piix_display_info)(char *, char **, off_t, int, int); /* ide-proc.c */
+extern char *ide_media_verbose(ide_drive_t *);
+static struct pci_dev *bmide_dev;
+
+static int piix_get_info (char *buffer, char **addr, off_t offset, int count, int dummy)
+{
+	/* int rc; */
+	int piix_who = (bmide_dev->device == PCI_DEVICE_ID_INTEL_82371AB) ? 4 : 3;
+	char *p = buffer;
+	p += sprintf(p, "\n                                Intel PIIX%d Chipset.\n", piix_who);
+	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n\n");
+	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
+	p += sprintf(p, "\n");
+	p += sprintf(p, "\n");
+
+/*
+ *	FIXME.... Add configuration junk data....blah blah......
+ */
+
+	return p-buffer;	 /* => must be less than 4k! */
+}
+#endif  /* defined(DISPLAY_PIIX_TIMINGS) && defined(CONFIG_PROC_FS) */
+
+/*
+ *  Used to set Fifo configuration via kernel command line:
+ */
+
+byte piix_proc = 0;
+
 extern char *ide_xfer_verbose (byte xfer_rate);
 
 #ifdef CONFIG_BLK_DEV_PIIX_TUNING
@@ -248,6 +284,18 @@ static int piix_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 }
 #endif /* CONFIG_BLK_DEV_PIIX_TUNING */
 
+unsigned int __init pci_init_piix (struct pci_dev *dev, const char *name)
+{
+#if defined(DISPLAY_PIIX_TIMINGS) && defined(CONFIG_PROC_FS)
+	if (!piix_proc) {
+		piix_proc = 1;
+		bmide_dev = dev;
+		piix_display_info = &piix_get_info;
+	}
+#endif /* DISPLAY_PIIX_TIMINGS && CONFIG_PROC_FS */
+	return 0;
+}
+
 void __init ide_init_piix (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &piix_tune_drive;
@@ -262,5 +310,4 @@ void __init ide_init_piix (ide_hwif_t *hwif)
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}
-
 }

@@ -4,8 +4,6 @@
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
-#include <linux/config.h>
-
 #include <asm/asi.h>
 #include <asm/pgtable.h>
 #include <asm/spitfire.h>

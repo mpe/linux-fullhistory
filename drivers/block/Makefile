@@ -243,11 +243,11 @@ endif
 ###Collect
 
 ifeq ($(CONFIG_BLK_DEV_IDE),y)
-  LX_OBJS += ide.o
+  LX_OBJS += ide.o ide-features.o
   L_OBJS += ide-probe.o $(IDE_OBJS)
 else
   ifeq ($(CONFIG_BLK_DEV_IDE),m)
-  MIX_OBJS += ide.o $(IDE_OBJS)
+  MIX_OBJS += ide.o ide-features.o $(IDE_OBJS)
   M_OBJS += ide-mod.o ide-probe-mod.o
   endif
 endif
@@ -374,8 +374,8 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-ide-mod.o: ide.o $(IDE_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ ide.o $(IDE_OBJS)
+ide-mod.o: ide.o ide-features.o $(IDE_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ ide.o ide-features.o $(IDE_OBJS)
 
 ide-probe-mod.o: ide-probe.o ide-geometry.o
 	$(LD) $(LD_RFLAG) -r -o $@ ide-probe.o ide-geometry.o

@@ -1,6 +1,8 @@
 #ifndef __M68K_MMU_CONTEXT_H
 #define __M68K_MMU_CONTEXT_H
 
+#include <linux/config.h>
+
 #ifndef CONFIG_SUN3
 
 #include <asm/setup.h>

@@ -34,7 +34,6 @@
 
 /*****************************************************************************/
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/socket.h>
 #include <linux/list.h>

@@ -48,6 +48,7 @@
 
 #include "udfdecl.h"    
 
+#include <linux/config.h>
 #include <linux/blkdev.h>
 #include <linux/malloc.h>
 #include <linux/kernel.h>

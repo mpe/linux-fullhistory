@@ -756,3 +756,51 @@ void update_atime (struct inode *inode)
     inode->i_atime = CURRENT_TIME;
     mark_inode_dirty (inode);
 }   /*  End Function update_atime  */
+
+
+/*
+ *	Quota functions that want to walk the inode lists..
+ */
+#ifdef CONFIG_QUOTA
+
+/* Functions back in dquot.c */
+void put_dquot_list(struct list_head *);
+int remove_inode_dquot_ref(struct inode *, short, struct list_head *);
+
+void remove_dquot_ref(kdev_t dev, short type)
+{
+	struct super_block *sb = get_super(dev);
+	struct inode *inode;
+	struct list_head *act_head;
+	LIST_HEAD(tofree_head);
+
+	if (!sb || !sb->dq_op)
+		return;	/* nothing to do */
+
+	/* We have to be protected against other CPUs */
+	spin_lock(&inode_lock);
+ 
+	for (act_head = inode_in_use.next; act_head != &inode_in_use; act_head = act_head->next) {
+		inode = list_entry(act_head, struct inode, i_list);
+		if (inode->i_sb != sb || !IS_QUOTAINIT(inode))
+			continue;
+		remove_inode_dquot_ref(inode, type, &tofree_head);
+	}
+	for (act_head = inode_unused.next; act_head != &inode_unused; act_head = act_head->next) {
+		inode = list_entry(act_head, struct inode, i_list);
+		if (inode->i_sb != sb || !IS_QUOTAINIT(inode))
+			continue;
+		remove_inode_dquot_ref(inode, type, &tofree_head);
+	}
+	for (act_head = sb->s_dirty.next; act_head != &sb->s_dirty; act_head = act_head->next) {
+		inode = list_entry(act_head, struct inode, i_list);
+		if (!IS_QUOTAINIT(inode))
+			continue;
+  		remove_inode_dquot_ref(inode, type, &tofree_head);
+	}
+	spin_unlock(&inode_lock);
+
+	put_dquot_list(&tofree_head);
+}
+
+#endif

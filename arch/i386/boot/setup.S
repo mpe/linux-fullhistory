@@ -783,7 +783,7 @@ bootsect_panic_mess:
 
 empty_8042:
 	pushl	%ecx
-	movl	$0xFFFFFF, %ecx
+	movl	$0x00FFFFFF, %ecx
 
 empty_8042_loop:
 	decl	%ecx

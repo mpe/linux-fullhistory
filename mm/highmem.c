@@ -16,6 +16,7 @@
  * Copyright (C) 1999 Ingo Molnar <mingo@redhat.com>
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/highmem.h>
@@ -269,9 +270,9 @@ static inline void copy_to_high_bh_irq (struct buffer_head *to,
 	unsigned long vto;
 
 	p_to = to->b_page;
-	vto = kmap_atomic(p_to, KM_BOUNCE_WRITE);
+	vto = kmap_atomic(p_to, KM_BOUNCE_READ);
 	memcpy((char *)vto + bh_offset(to), from->b_data, to->b_size);
-	kunmap_atomic(vto, KM_BOUNCE_WRITE);
+	kunmap_atomic(vto, KM_BOUNCE_READ);
 }
 
 static inline void bounce_end_io (struct buffer_head *bh, int uptodate)

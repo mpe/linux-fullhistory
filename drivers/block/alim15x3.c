@@ -693,6 +693,31 @@ unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
 		chip_is_1543c_e = ((tmpbyte & 0x1e) == 0x12) ? 1: 0;
 	}
 
+	if (m5229_revision == 0x20) {
+		/*
+		 * check M1533 revision (offset 0x08)
+		 */
+		pci_read_config_byte(isa_dev, 0x08, &tmpbyte);
+		if (tmpbyte == 0x0A) {
+			unsigned long flags;
+			pci_read_config_byte(dev, 0x4e, &tmpbyte);
+			save_flags(flags);
+			cli();
+			/*
+			 * set bit 6
+			 */
+			pci_write_config_byte(dev, 0x4e, tmpbyte | 0x40);
+			restore_flags(flags);
+
+			/*
+			 * this special version is similar to revision 0xC2
+			 * but does not support UDMA66
+			 * (cable_80_pin[0] = 0; cable_80_pin[1] = 0;)
+			 */
+			m5229_revision = 0xC2;
+		}
+	}
+
 	return 0;
 }
 
@@ -742,7 +767,7 @@ void __init ide_init_ali15x3 (ide_hwif_t *hwif)
 	}
 
 	hwif->tuneproc = &ali15x3_tune_drive;
-	if ((hwif->dma_base) && (m5229_revision >= 0xC1)) {
+	if ((hwif->dma_base) && (m5229_revision >= 0x20)) {
 		/*
 		 * M1543C or newer for DMAing
 		 */

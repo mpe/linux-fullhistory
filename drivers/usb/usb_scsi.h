@@ -1,13 +1,13 @@
-/* Driver for USB scsi - include file
- * 
+/* Driver for USB SCSI - include file
+ *
  * (C) Michael Gee (michael@linuxspecific.com) 1999
  *
- * This driver is scitzoid  - it make a USB scanner appear as both a SCSI device
+ * This driver is schizoid  - it makes a USB scanner appear as both a SCSI device
  * and a character device. The latter is only available if the device has an
  * interrupt endpoint, and is used specifically to receive interrupt events.
  *
- * In order to support various 'strange' scanners, this module supports plug in
- * device specific filter modules, which can do their own thing when required.
+ * In order to support various 'strange' scanners, this module supports plug-in
+ * device-specific filter modules, which can do their own thing when required.
  *
  */
 
@@ -58,7 +58,7 @@ struct bulk_cb_wrap {
     __u32	Signature;		/* contains 'USBC' */
     __u32	Tag;			/* unique per command id */
     __u32	DataTransferLength;	/* size of data */
-    __u8	Flags;	       		/* direction in bit 0 */
+    __u8	Flags;			/* direction in bit 0 */
     __u8	Lun;			/* LUN normally 0 */
     __u8	Length;			/* of of the CDB */
     __u8	CDB[16];		/* max command */
@@ -101,10 +101,10 @@ struct usb_scsi_filter {
 	struct usb_scsi_filter * next;	/* usb_scsi driver only */
 	char *name;			/* not really required */
 
-        unsigned int flags;                     			/* Filter flags */
-        void * (* probe) (struct usb_device *, char *, char *, char *);	/* probe device */
-	void (* release)(void *);					/* device gone */
-        int (* command)(void *, Scsi_Cmnd *);  /* all commands */
+	unsigned int flags;		/* Filter flags */
+	void * (* probe) (struct usb_device *, char *, char *, char *);	/* probe device */
+	void (* release)(void *);	/* device gone */
+	int (* command)(void *, Scsi_Cmnd *);  /* all commands */
 };
 
 #define GUID(x) __u32 x[3]

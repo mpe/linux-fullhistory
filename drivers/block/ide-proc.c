@@ -78,6 +78,11 @@ extern byte ali_proc;
 int (*ali_display_info)(char *, char **, off_t, int, int) = NULL;
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
 
+#ifdef CONFIG_BLK_DEV_PIIX
+extern byte piix_proc;
+int (*piix_display_info)(char *, char **, off_t, int, int) = NULL;
+#endif /* CONFIG_BLK_DEV_PIIX */
+
 #ifdef CONFIG_BLK_DEV_SIS5513
 extern byte sis_proc;
 int (*sis_display_info)(char *, char **, off_t, int, int) = NULL;
@@ -372,6 +377,8 @@ static int proc_ide_read_imodel
 		case ide_pdc4030:	name = "pdc4030";	break;
 		case ide_rz1000:	name = "rz1000";	break;
 		case ide_trm290:	name = "trm290";	break;
+		case ide_cmd646:	name = "cmd646";	break;
+		case ide_cy82c693:	name = "cy82c693";	break;
 		case ide_4drives:	name = "4drives";	break;
 		default:		name = "(unknown)";	break;
 	}
@@ -752,7 +759,6 @@ static void destroy_proc_ide_interfaces(void)
 	for (h = 0; h < MAX_HWIFS; h++) {
 		ide_hwif_t *hwif = &ide_hwifs[h];
 		int exist = (hwif->proc != NULL);
-
 #if 0
 		if (!hwif->present)
 			continue;
@@ -781,6 +787,10 @@ void proc_ide_create(void)
 	if ((ali_display_info) && (ali_proc))
 		create_proc_info_entry("ali", 0, proc_ide_root, ali_display_info);
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
+#ifdef CONFIG_BLK_DEV_PIIX
+	if ((piix_display_info) && (piix_proc))
+		create_proc_info_entry("piix", 0, proc_ide_root, piix_display_info);
+#endif /* CONFIG_BLK_DEV_PIIX */
 #ifdef CONFIG_BLK_DEV_SIS5513
 	if ((sis_display_info) && (sis_proc))
 		create_proc_info_entry("sis", 0, proc_ide_root, sis_display_info);
@@ -801,6 +811,10 @@ void proc_ide_destroy(void)
 	if ((ali_display_info) && (ali_proc))
 		remove_proc_entry("ide/ali",0);
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
+#ifdef CONFIG_BLK_DEV_PIIX
+	if ((piix_display_info) && (piix_proc))
+		remove_proc_entry("ide/piix",0);
+#endif /* CONFIG_BLK_DEV_PIIX */
 #ifdef CONFIG_BLK_DEV_SIS5513
 	if ((sis_display_info) && (sis_proc))
 		remove_proc_entry("ide/sis", 0);
@@ -809,6 +823,7 @@ void proc_ide_destroy(void)
 	if ((via_display_info) && (via_proc))
 		remove_proc_entry("ide/via",0);
 #endif /* CONFIG_BLK_DEV_VIA82CXXX */
+
 	remove_proc_entry("ide/drivers", 0);
 	destroy_proc_ide_interfaces();
 	remove_proc_entry("ide", 0);

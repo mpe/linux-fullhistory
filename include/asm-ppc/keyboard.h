@@ -15,7 +15,6 @@
 
 #ifdef __KERNEL__
 
-#include <linux/config.h>
 #include <linux/adb.h>
 #include <asm/machdep.h>
 

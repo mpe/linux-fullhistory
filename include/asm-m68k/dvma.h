@@ -9,6 +9,8 @@
 #ifndef __M68K_DVMA_H
 #define __M68K_DVMA_H
 
+#include <linux/config.h>
+
 #ifdef CONFIG_SUN3
 /* sun3 dvma page support */
 

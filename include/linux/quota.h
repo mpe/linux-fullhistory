@@ -202,7 +202,7 @@ struct dquot {
 # /* nodep */ include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int quotactl __P ((int, const char *, int, caddr_t));
+long quotactl __P ((int, const char *, int, caddr_t));
 __END_DECLS
 
 #endif /* __KERNEL__ */

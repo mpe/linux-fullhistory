@@ -20,7 +20,6 @@
  *	OPL3 devices.
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 

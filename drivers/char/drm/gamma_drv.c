@@ -30,6 +30,7 @@
  */
 
 #define EXPORT_SYMTAB
+#include <linux/config.h>
 #include "drmP.h"
 #include "gamma_drv.h"
 EXPORT_SYMBOL(gamma_init);

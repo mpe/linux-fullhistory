@@ -17,11 +17,12 @@
 struct quota_mount_options
 {
 	unsigned int flags;			/* Flags for diskquotas on this device */
-	struct semaphore semaphore;		/* lock device while I/O in progress */
+	struct semaphore dqio_sem;		/* lock device while I/O in progress */
+	struct semaphore dqoff_sem;		/* serialize quota_off() and quota_on() on device */
 	struct file *files[MAXQUOTAS];		/* fp's to quotafiles */
 	time_t inode_expire[MAXQUOTAS];		/* expiretime for inode-quota */
 	time_t block_expire[MAXQUOTAS];		/* expiretime for block-quota */
-	char rsquash[MAXQUOTAS];		/* for quotas treat root as any other user */
+	char rsquash[MAXQUOTAS];		/* for quotas threat root as any other user */
 };
 
 struct vfsmount

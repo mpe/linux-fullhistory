@@ -51,11 +51,11 @@ bootsect.o: bootsect.s
 bootsect.s: bootsect.S Makefile $(BOOT_INCL)
 	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
 
-bbootsect: bbootsect.o
-	$(LD) -Ttext 0x0 -s -oformat binary $< -o $@
+bbootsect: bbootsect.o bsetup.o
+	$(LD) -Ttext 0x0 -R bsetup.o -s -oformat binary $< -o $@
 
 bbootsect.o: bbootsect.s
-	$(AS) --defsym bootsect_kludge=0x220 -o $@ $<
+	$(AS) -o $@ $<
 
 bbootsect.s: bootsect.S Makefile $(BOOT_INCL)
 	$(CPP) -D__BIG_KERNEL__ -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@

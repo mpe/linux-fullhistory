@@ -102,7 +102,6 @@ static int csr0 = 0x00A00000 | 0x4800;
 #error You must compile this driver with "-O".
 #endif
 
-#include <linux/config.h>
 #include <linux/version.h>
 #ifdef MODULE
 #ifdef MODVERSIONS

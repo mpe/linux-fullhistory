@@ -402,7 +402,7 @@ static void probe_hwif (ide_hwif_t *hwif)
 	if (hwif->noprobe)
 		return;
 	if (hwif->io_ports[IDE_DATA_OFFSET] == HD_DATA) {
-		extern void probe_cmos_for_drives(ide_hwif_t *hwif);
+		extern void probe_cmos_for_drives(ide_hwif_t *);
 
 		probe_cmos_for_drives (hwif);
 	}
@@ -575,10 +575,6 @@ static int init_irq (ide_hwif_t *hwif)
 		hwgroup->handler  = NULL;
 		hwgroup->drive    = NULL;
 		hwgroup->busy     = 0;
-		hwgroup->spinlock = (spinlock_t)SPIN_LOCK_UNLOCKED;
-#if (DEBUG_SPINLOCK > 0)
-		printk("hwgroup(%s) spinlock is %p\n", hwif->name,  &hwgroup->spinlock);	/* FIXME */
-#endif
 		init_timer(&hwgroup->timer);
 		hwgroup->timer.function = &ide_timer_expiry;
 		hwgroup->timer.data = (unsigned long) hwgroup;

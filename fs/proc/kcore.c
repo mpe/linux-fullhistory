@@ -16,7 +16,6 @@
 #include <linux/elf.h>
 #include <linux/elfcore.h>
 #include <linux/vmalloc.h>
-#include <linux/proc_fs.h>
 #include <asm/uaccess.h>
 
 
@@ -189,7 +188,7 @@ static char *storenote(struct memelfnote *men, char *bufp)
  * store an ELF coredump header in the supplied buffer
  * num_vma is the number of elements in vmlist
  */
-static void elf_kcore_store_hdr(char *bufp, int num_vma, int elf_buflen)
+static void elf_kcore_store_hdr(char *bufp, int num_vma, int dataoff)
 {
 	struct elf_prstatus prstatus;	/* NT_PRSTATUS */
 	struct elf_prpsinfo prpsinfo;	/* NT_PRPSINFO */
@@ -235,18 +234,20 @@ static void elf_kcore_store_hdr(char *bufp, int num_vma, int elf_buflen)
 	nhdr->p_flags	= 0;
 	nhdr->p_align	= 0;
 
-	/* setup ELF PT_LOAD program header */
+	/* setup ELF PT_LOAD program header for the 
+	 * virtual range 0xc0000000 -> high_memory */
 	phdr = (struct elf_phdr *) bufp;
 	bufp += sizeof(struct elf_phdr);
 	offset += sizeof(struct elf_phdr);
 	phdr->p_type	= PT_LOAD;
 	phdr->p_flags	= PF_R|PF_W|PF_X;
-	phdr->p_offset	= elf_buflen;
+	phdr->p_offset	= dataoff;
 	phdr->p_vaddr	= PAGE_OFFSET;
 	phdr->p_paddr	= __pa(PAGE_OFFSET);
 	phdr->p_filesz	= phdr->p_memsz = ((unsigned long)high_memory - PAGE_OFFSET);
 	phdr->p_align	= PAGE_SIZE;
 
+	/* setup ELF PT_LOAD program headers, one for every kvma range */
 	for (m=vmlist; m; m=m->next) {
 		phdr = (struct elf_phdr *) bufp;
 		bufp += sizeof(struct elf_phdr);
@@ -254,9 +255,9 @@ static void elf_kcore_store_hdr(char *bufp, int num_vma, int elf_buflen)
 
 		phdr->p_type	= PT_LOAD;
 		phdr->p_flags	= PF_R|PF_W|PF_X;
-		phdr->p_offset	= (size_t)m->addr - PAGE_OFFSET + elf_buflen;
+		phdr->p_offset	= (size_t)m->addr - PAGE_OFFSET + dataoff;
 		phdr->p_vaddr	= (size_t)m->addr;
-		phdr->p_paddr	= __pa(m);
+		phdr->p_paddr	= __pa(m->addr);
 		phdr->p_filesz	= phdr->p_memsz	= m->size;
 		phdr->p_align	= PAGE_SIZE;
 	}
@@ -310,13 +311,16 @@ static void elf_kcore_store_hdr(char *bufp, int num_vma, int elf_buflen)
 /*
  * read from the ELF header and then kernel memory
  */
-static ssize_t read_kcore(struct file *file, char *buffer, size_t buflen,
-			      loff_t *fpos)
+static ssize_t read_kcore(struct file *file, char *buffer, size_t buflen, loff_t *fpos)
 {
 	ssize_t acc = 0;
 	size_t size, tsz;
 	char * elf_buffer;
-	int elf_buflen = 0, num_vma = 0;
+	size_t elf_buflen = 0;
+	int num_vma = 0;
+
+	if (verify_area(VERIFY_WRITE, buffer, buflen))
+		return -EFAULT;
 
 	/* XXX we need to somehow lock vmlist between here
 	 * and after elf_kcore_store_hdr() returns.
@@ -340,7 +344,7 @@ static ssize_t read_kcore(struct file *file, char *buffer, size_t buflen,
 			return -ENOMEM;
 		memset(elf_buffer, 0, elf_buflen);
 		elf_kcore_store_hdr(elf_buffer, num_vma, elf_buflen);
-		copy_to_user(buffer, elf_buffer, tsz);
+		copy_to_user(buffer, elf_buffer + *fpos, tsz);
 		kfree(elf_buffer);
 		buflen -= tsz;
 		*fpos += tsz;
@@ -349,7 +353,7 @@ static ssize_t read_kcore(struct file *file, char *buffer, size_t buflen,
 
 		/* leave now if filled buffer already */
 		if (buflen == 0)
-			return tsz;
+			return acc;
 	}
 
 	/* where page 0 not mapped, write zeros into buffer */
@@ -374,14 +378,10 @@ static ssize_t read_kcore(struct file *file, char *buffer, size_t buflen,
 #endif
 
 	/* fill the remainder of the buffer from kernel VM space */
-#if defined (__i386__) || defined (__mc68000__)
-	copy_to_user(buffer, __va(*fpos - PAGE_SIZE), buflen);
-#else
-	copy_to_user(buffer, __va(*fpos), buflen);
-#endif
+	copy_to_user(buffer, __va(*fpos - elf_buflen), buflen);
+
 	acc += buflen;
 	*fpos += buflen;
-
 	return acc;
 
 }

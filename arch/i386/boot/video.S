@@ -1008,7 +1008,7 @@ vesa_modes:
 vesa1:
 # gas version 2.9.1, using BFD version 2.9.1.0.23 buggers the next inst.
 # XXX:	lodsw	%gs:(%si), %ax			# Get next mode in the list
-	.byte 0x66, 0x65, 0xAD
+	.byte	0x65, 0xAD			# %gs seg prefix + lodsw
 	cmpw	$0xffff, %ax			# End of the table?
 	jz	vesar
 	

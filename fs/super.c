@@ -104,7 +104,8 @@ static struct vfsmount *add_vfsmnt(struct super_block *sb,
 	lptr->mnt_dev = sb->s_dev;
 	lptr->mnt_flags = sb->s_flags;
 
-	sema_init(&lptr->mnt_dquot.semaphore, 1);
+	sema_init(&lptr->mnt_dquot.dqio_sem, 1);
+	sema_init(&lptr->mnt_dquot.dqoff_sem, 1);
 	lptr->mnt_dquot.flags = 0;
 
 	/* N.B. Is it really OK to have a vfsmount without names? */

@@ -307,7 +307,7 @@ static inline unsigned long get_timeout(idescsi_pc_t *pc)
 /*
  *	Our interrupt handler.
  */
-static void idescsi_pc_intr (ide_drive_t *drive)
+static ide_startstop_t idescsi_pc_intr (ide_drive_t *drive)
 {
 	idescsi_scsi_t *scsi = drive->driver_data;
 	byte status, ireason;
@@ -337,15 +337,14 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 		if (status & ERR_STAT)
 			rq->errors++;
 		idescsi_end_request (1, HWGROUP(drive));
-		return;
+		return ide_stopped;
 	}
 	bcount = IN_BYTE (IDE_BCOUNTH_REG) << 8 | IN_BYTE (IDE_BCOUNTL_REG);
 	ireason = IN_BYTE (IDE_IREASON_REG);
 
 	if (ireason & IDESCSI_IREASON_COD) {
 		printk (KERN_ERR "ide-scsi: CoD != 0 in idescsi_pc_intr\n");
-		ide_do_reset (drive);
-		return;
+		return ide_do_reset (drive);
 	}
 	if (ireason & IDESCSI_IREASON_IO) {
 		temp = pc->actually_transferred + bcount;
@@ -365,7 +364,7 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 				pc->current_position += temp;
 				idescsi_discard_data (drive,bcount - temp);
 				ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc), NULL);
-				return;
+				return ide_started;
 			}
 #if IDESCSI_DEBUG_LOG
 			printk (KERN_NOTICE "ide-scsi: The scsi wants to send us more data than expected - allowing transfer\n");
@@ -389,32 +388,34 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 	pc->current_position+=bcount;
 
 	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc), NULL);	/* And set the interrupt handler again */
+	return ide_started;
 }
 
-static void idescsi_transfer_pc (ide_drive_t *drive)
+static ide_startstop_t idescsi_transfer_pc (ide_drive_t *drive)
 {
 	idescsi_scsi_t *scsi = drive->driver_data;
 	idescsi_pc_t *pc = scsi->pc;
 	byte ireason;
+	ide_startstop_t startstop;
 
-	if (ide_wait_stat (drive,DRQ_STAT,BUSY_STAT,WAIT_READY)) {
+	if (ide_wait_stat (&startstop,drive,DRQ_STAT,BUSY_STAT,WAIT_READY)) {
 		printk (KERN_ERR "ide-scsi: Strange, packet command initiated yet DRQ isn't asserted\n");
-		return;
+		return startstop;
 	}
 	ireason = IN_BYTE (IDE_IREASON_REG);
 	if ((ireason & (IDESCSI_IREASON_IO | IDESCSI_IREASON_COD)) != IDESCSI_IREASON_COD) {
 		printk (KERN_ERR "ide-scsi: (IO,CoD) != (0,1) while issuing a packet command\n");
-		ide_do_reset (drive);
-		return;
+		return ide_do_reset (drive);
 	}
 	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc), NULL);	/* Set the interrupt routine */
 	atapi_output_bytes (drive, scsi->pc->c, 12);			/* Send the actual packet */
+	return ide_started;
 }
 
 /*
  *	Issue a packet command
  */
-static void idescsi_issue_pc (ide_drive_t *drive, idescsi_pc_t *pc)
+static ide_startstop_t idescsi_issue_pc (ide_drive_t *drive, idescsi_pc_t *pc)
 {
 	idescsi_scsi_t *scsi = drive->driver_data;
 	int bcount;
@@ -443,16 +444,17 @@ static void idescsi_issue_pc (ide_drive_t *drive, idescsi_pc_t *pc)
 	if (test_bit (IDESCSI_DRQ_INTERRUPT, &scsi->flags)) {
 		ide_set_handler (drive, &idescsi_transfer_pc, get_timeout(pc), NULL);
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);		/* Issue the packet command */
+		return ide_started;
 	} else {
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);
-		idescsi_transfer_pc (drive);
+		return idescsi_transfer_pc (drive);
 	}
 }
 
 /*
  *	idescsi_do_request is our request handling function.
  */
-static void idescsi_do_request (ide_drive_t *drive, struct request *rq, unsigned long block)
+static ide_startstop_t idescsi_do_request (ide_drive_t *drive, struct request *rq, unsigned long block)
 {
 #if IDESCSI_DEBUG_LOG
 	printk (KERN_INFO "rq_status: %d, rq_dev: %u, cmd: %d, errors: %d\n",rq->rq_status,(unsigned int) rq->rq_dev,rq->cmd,rq->errors);
@@ -460,11 +462,11 @@ static void idescsi_do_request (ide_drive_t *drive, struct request *rq, unsigned
 #endif /* IDESCSI_DEBUG_LOG */
 
 	if (rq->cmd == IDESCSI_PC_RQ) {
-		idescsi_issue_pc (drive, (idescsi_pc_t *) rq->buffer);
-		return;
+		return idescsi_issue_pc (drive, (idescsi_pc_t *) rq->buffer);
 	}
 	printk (KERN_ERR "ide-scsi: %s: unsupported command in request queue (%x)\n", drive->name, rq->cmd);
 	idescsi_end_request (0,HWGROUP (drive));
+	return ide_stopped;
 }
 
 static int idescsi_open (struct inode *inode, struct file *filp, ide_drive_t *drive)

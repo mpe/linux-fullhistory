@@ -830,7 +830,7 @@ static void idefloppy_retry_pc (ide_drive_t *drive)
  *	idefloppy_pc_intr is the usual interrupt handler which will be called
  *	during a packet command.
  */
-static void idefloppy_pc_intr (ide_drive_t *drive)
+static ide_startstop_t idefloppy_pc_intr (ide_drive_t *drive)
 {
 	idefloppy_floppy_t *floppy = drive->driver_data;
 	idefloppy_status_reg_t status;
@@ -875,24 +875,22 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 			rq->errors++;
 			if (pc->c[0] == IDEFLOPPY_REQUEST_SENSE_CMD) {
 				printk (KERN_ERR "ide-floppy: I/O error in request sense command\n");
-				ide_do_reset (drive);
-				return;
+				return ide_do_reset (drive);
 			}
 			idefloppy_retry_pc (drive);				/* Retry operation */
-			return;
+			return ide_stopped; /* queued, but not started */
 		}
 		pc->error = 0;
 		if (floppy->failed_pc == pc)
 			floppy->failed_pc=NULL;
 		pc->callback(drive);			/* Command finished - Call the callback function */
-		return;
+		return ide_stopped;
 	}
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_and_clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		printk (KERN_ERR "ide-floppy: The floppy wants to issue more interrupts in DMA mode\n");
 		(void) HWIF(drive)->dmaproc(ide_dma_off, drive);
-		ide_do_reset (drive);
-		return;
+		return ide_do_reset (drive);
 	}
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 	bcount.b.high=IN_BYTE (IDE_BCOUNTH_REG);			/* Get the number of bytes to transfer */
@@ -901,14 +899,12 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 
 	if (ireason.b.cod) {
 		printk (KERN_ERR "ide-floppy: CoD != 0 in idefloppy_pc_intr\n");
-		ide_do_reset (drive);
-		return;
+		return ide_do_reset (drive);
 	}
 	if (ireason.b.io == test_bit (PC_WRITING, &pc->flags)) {	/* Hopefully, we will never get here */
 		printk (KERN_ERR "ide-floppy: We wanted to %s, ", ireason.b.io ? "Write":"Read");
 		printk (KERN_ERR "but the floppy wants us to %s !\n",ireason.b.io ? "Read":"Write");
-		ide_do_reset (drive);
-		return;
+		return ide_do_reset (drive);
 	}
 	if (!test_bit (PC_WRITING, &pc->flags)) {			/* Reading - Check that we have enough space */
 		temp = pc->actually_transferred + bcount.all;
@@ -917,7 +913,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 				printk (KERN_ERR "ide-floppy: The floppy wants to send us more data than expected - discarding data\n");
 				idefloppy_discard_data (drive,bcount.all);
 				ide_set_handler (drive,&idefloppy_pc_intr,IDEFLOPPY_WAIT_CMD, NULL);
-				return;
+				return ide_started;
 			}
 #if IDEFLOPPY_DEBUG_LOG
 			printk (KERN_NOTICE "ide-floppy: The floppy wants to send us more data than expected - allowing transfer\n");
@@ -939,31 +935,33 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 	pc->current_position+=bcount.all;
 
 	ide_set_handler (drive,&idefloppy_pc_intr,IDEFLOPPY_WAIT_CMD, NULL);		/* And set the interrupt handler again */
+	return ide_started;
 }
 
-static void idefloppy_transfer_pc (ide_drive_t *drive)
+static ide_startstop_t idefloppy_transfer_pc (ide_drive_t *drive)
 {
+	ide_startstop_t startstop;
 	idefloppy_floppy_t *floppy = drive->driver_data;
 	idefloppy_ireason_reg_t ireason;
 
-	if (ide_wait_stat (drive,DRQ_STAT,BUSY_STAT,WAIT_READY)) {
+	if (ide_wait_stat (&startstop,drive,DRQ_STAT,BUSY_STAT,WAIT_READY)) {
 		printk (KERN_ERR "ide-floppy: Strange, packet command initiated yet DRQ isn't asserted\n");
-		return;
+		return startstop;
 	}
 	ireason.all=IN_BYTE (IDE_IREASON_REG);
 	if (!ireason.b.cod || ireason.b.io) {
 		printk (KERN_ERR "ide-floppy: (IO,CoD) != (0,1) while issuing a packet command\n");
-		ide_do_reset (drive);
-		return;
+		return ide_do_reset (drive);
 	}
 	ide_set_handler (drive, &idefloppy_pc_intr, IDEFLOPPY_WAIT_CMD, NULL);	/* Set the interrupt routine */
 	atapi_output_bytes (drive, floppy->pc->c, 12);		/* Send the actual packet */
+	return ide_started;
 }
 
 /*
  *	Issue a packet command
  */
-static void idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
+static ide_startstop_t idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
 {
 	idefloppy_floppy_t *floppy = drive->driver_data;
 	idefloppy_bcount_reg_t bcount;
@@ -991,7 +989,7 @@ static void idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
 		}
 		floppy->failed_pc=NULL;
 		pc->callback(drive);
-		return;
+		return ide_stopped;
 	}
 #if IDEFLOPPY_DEBUG_LOG
 	printk (KERN_INFO "Retry number - %d\n",pc->retries);
@@ -1027,9 +1025,10 @@ static void idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
 	if (test_bit (IDEFLOPPY_DRQ_INTERRUPT, &floppy->flags)) {
 		ide_set_handler (drive, &idefloppy_transfer_pc, IDEFLOPPY_WAIT_CMD, NULL);
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);		/* Issue the packet command */
+		return ide_started;
 	} else {
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);
-		idefloppy_transfer_pc (drive);
+		return idefloppy_transfer_pc (drive);
 	}
 }
 
@@ -1135,7 +1134,7 @@ static void idefloppy_create_rw_cmd (idefloppy_floppy_t *floppy, idefloppy_pc_t 
 /*
  *	idefloppy_do_request is our request handling function.	
  */
-static void idefloppy_do_request (ide_drive_t *drive, struct request *rq, unsigned long block)
+static ide_startstop_t idefloppy_do_request (ide_drive_t *drive, struct request *rq, unsigned long block)
 {
 	idefloppy_floppy_t *floppy = drive->driver_data;
 	idefloppy_pc_t *pc;
@@ -1152,7 +1151,7 @@ static void idefloppy_do_request (ide_drive_t *drive, struct request *rq, unsign
 		else
 			printk (KERN_ERR "ide-floppy: %s: I/O error\n", drive->name);
 		idefloppy_end_request (0, HWGROUP(drive));
-		return;
+		return ide_stopped;
 	}
 	switch (rq->cmd) {
 		case READ:
@@ -1160,7 +1159,7 @@ static void idefloppy_do_request (ide_drive_t *drive, struct request *rq, unsign
 			if (rq->sector % floppy->bs_factor || rq->nr_sectors % floppy->bs_factor) {
 				printk ("%s: unsupported r/w request size\n", drive->name);
 				idefloppy_end_request (0, HWGROUP(drive));
-				return;
+				return ide_stopped;
 			}
 			pc = idefloppy_next_pc_storage (drive);
 			idefloppy_create_rw_cmd (floppy, pc, rq, block);
@@ -1171,10 +1170,10 @@ static void idefloppy_do_request (ide_drive_t *drive, struct request *rq, unsign
 		default:
 			printk (KERN_ERR "ide-floppy: unsupported command %x in request queue\n", rq->cmd);
 			idefloppy_end_request (0,HWGROUP (drive));
-			return;
+			return ide_stopped;
 	}
 	pc->rq = rq;
-	idefloppy_issue_pc (drive, pc);
+	return idefloppy_issue_pc (drive, pc);
 }
 
 /*

@@ -82,10 +82,7 @@ extern int i91u_command(Scsi_Cmnd *);
 extern int i91u_queue(Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
 extern int i91u_abort(Scsi_Cmnd *);
 extern int i91u_reset(Scsi_Cmnd *, unsigned int);
-
 extern int i91u_biosparam(Scsi_Disk *, kdev_t, int *);	/*for linux v2.0 */
-extern struct proc_dir_entry proc_scsi_ini9100u;
-#endif
 
 #define i91u_REVID "Initio INI-9X00U/UW SCSI device driver; Revision: 1.03g"
 

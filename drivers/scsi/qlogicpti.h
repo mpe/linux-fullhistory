@@ -163,8 +163,6 @@ int qlogicpti_queuecommand(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
 int qlogicpti_abort(Scsi_Cmnd *);
 int qlogicpti_reset(Scsi_Cmnd *, unsigned int);
 
-extern struct proc_dir_entry proc_scsi_qlogicpti;
-
 /* mailbox command complete status codes */
 #define MBOX_COMMAND_COMPLETE		0x4000
 #define INVALID_COMMAND			0x4001

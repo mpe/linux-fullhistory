@@ -133,7 +133,7 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 /*
  * read_intr() is the handler for disk read/multread interrupts
  */
-static void read_intr (ide_drive_t *drive)
+static ide_startstop_t read_intr (ide_drive_t *drive)
 {
 	byte stat;
 	int i;
@@ -141,8 +141,7 @@ static void read_intr (ide_drive_t *drive)
 	struct request *rq;
 
 	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
-		ide_error(drive, "read_intr", stat);
-		return;
+		return ide_error(drive, "read_intr", stat);
 	}
 	msect = drive->mult_count;
 	
@@ -154,12 +153,6 @@ read_next:
 		msect -= nsect;
 	} else
 		nsect = 1;
-	/*
-	 * PIO input can take longish times, so we drop the spinlock.
-	 * On SMP, bad things might happen if syscall level code adds
-	 * a new request while we do this PIO, so we just freeze all
-	 * request queue handling while doing the PIO. FIXME
-	 */
 	idedisk_input_data(drive, rq->buffer, nsect * SECTOR_WORDS);
 #ifdef DEBUG
 	printk("%s:  read: sectors(%ld-%ld), buffer=0x%08lx, remaining=%ld\n",
@@ -176,21 +169,24 @@ read_next:
 		if (msect)
 			goto read_next;
 		ide_set_handler (drive, &read_intr, WAIT_CMD, NULL);
+                return ide_started;
 	}
+        return ide_stopped;
 }
 
 /*
  * write_intr() is the handler for disk write interrupts
  */
-static void write_intr (ide_drive_t *drive)
+static ide_startstop_t write_intr (ide_drive_t *drive)
 {
 	byte stat;
 	int i;
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	struct request *rq = hwgroup->rq;
-	int error = 0;
 
-	if (OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
+	if (!OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
+		printk("%s: write_intr error1: nr_sectors=%ld, stat=0x%02x\n", drive->name, rq->nr_sectors, stat);
+        } else {
 #ifdef DEBUG
 		printk("%s: write: sector %ld, buffer=0x%08lx, remaining=%ld\n",
 			drive->name, rq->sector, (unsigned long) rq->buffer,
@@ -207,26 +203,30 @@ static void write_intr (ide_drive_t *drive)
 			if (i > 0) {
 				idedisk_output_data (drive, rq->buffer, SECTOR_WORDS);
 				ide_set_handler (drive, &write_intr, WAIT_CMD, NULL);
+                                return ide_started;
 			}
-			goto out;
+                        return ide_stopped;
 		}
-	} else
-		error = 1;
-out:
-	if (error)
-		ide_error(drive, "write_intr", stat);
+                printk("%s: write_intr error2: nr_sectors=%ld, stat=0x%02x\n", drive->name, rq->nr_sectors, stat);
+        }
+	return ide_error(drive, "write_intr", stat);
 }
 
 /*
  * ide_multwrite() transfers a block of up to mcount sectors of data
  * to a drive as part of a disk multiple-sector write operation.
+ *
+ * Returns 0 if successful;  returns 1 if request had to be aborted due to corrupted buffer list.
  */
-void ide_multwrite (ide_drive_t *drive, unsigned int mcount)
+int ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 {
-	struct request *rq = &HWGROUP(drive)->wrq;
+ 	ide_hwgroup_t	*hwgroup= HWGROUP(drive);
+ 	struct request	*rq = &hwgroup->wrq;
 
-	do {
-		unsigned int nsect = rq->current_nr_sectors;
+  	do {
+ 		unsigned long flags;
+  		unsigned int nsect = rq->current_nr_sectors;
+
 		if (nsect > mcount)
 			nsect = mcount;
 		mcount -= nsect;
@@ -237,6 +237,7 @@ void ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 			drive->name, rq->sector, (unsigned long) rq->buffer,
 			nsect, rq->nr_sectors - nsect);
 #endif
+		spin_lock_irqsave(&io_request_lock, flags);	/* Is this really necessary? */
 #ifdef CONFIG_BLK_DEV_PDC4030
 		rq->sector += nsect;
 #endif
@@ -247,32 +248,36 @@ void ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 				rq->current_nr_sectors = rq->bh->b_size>>9;
 				rq->buffer             = rq->bh->b_data;
 			} else {
-				panic("%s: buffer list corrupted\n", drive->name);
-				break;
+				spin_unlock_irqrestore(&io_request_lock, flags);
+				printk("%s: buffer list corrupted\n", drive->name);
+				ide_end_request(0, hwgroup);
+				return 1;
 			}
 		} else {
 			rq->buffer += nsect << 9;
 		}
+                spin_unlock_irqrestore(&io_request_lock, flags);
 	} while (mcount);
+        return 0;
 }
 
 /*
  * multwrite_intr() is the handler for disk multwrite interrupts
  */
-static void multwrite_intr (ide_drive_t *drive)
+static ide_startstop_t multwrite_intr (ide_drive_t *drive)
 {
 	byte stat;
 	int i;
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	struct request *rq = &hwgroup->wrq;
-	int error = 0;
 
 	if (OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
 		if (stat & DRQ_STAT) {
 			if (rq->nr_sectors) {
-				ide_multwrite(drive, drive->mult_count);
+				if (ide_multwrite(drive, drive->mult_count))
+					return ide_stopped;
 				ide_set_handler (drive, &multwrite_intr, WAIT_CMD, NULL);
-				goto out;
+				return ide_started;
 			}
 		} else {
 			if (!rq->nr_sectors) {	/* all done? */
@@ -281,20 +286,17 @@ static void multwrite_intr (ide_drive_t *drive)
 					i -= rq->current_nr_sectors;
 					ide_end_request(1, hwgroup);
 				}
-				goto out;
+				return ide_stopped;
 			}
 		}
-	} else
-		error = 1;
-out:
-	if (error)
-		ide_error(drive, "multwrite_intr", stat);
+	}
+	return ide_error(drive, "multwrite_intr", stat);
 }
 
 /*
  * set_multmode_intr() is invoked on completion of a WIN_SETMULT cmd.
  */
-static void set_multmode_intr (ide_drive_t *drive)
+static ide_startstop_t set_multmode_intr (ide_drive_t *drive)
 {
 	byte stat = GET_STAT();
 
@@ -309,28 +311,31 @@ static void set_multmode_intr (ide_drive_t *drive)
 		drive->special.b.recalibrate = 1;
 		(void) ide_dump_status(drive, "set_multmode", stat);
 	}
+	return ide_stopped;
 }
 
 /*
  * set_geometry_intr() is invoked on completion of a WIN_SPECIFY cmd.
  */
-static void set_geometry_intr (ide_drive_t *drive)
+static ide_startstop_t set_geometry_intr (ide_drive_t *drive)
 {
 	byte stat = GET_STAT();
 
 	if (!OK_STAT(stat,READY_STAT,BAD_STAT))
-		ide_error(drive, "set_geometry_intr", stat);
+		return ide_error(drive, "set_geometry_intr", stat);
+	return ide_stopped;
 }
 
 /*
  * recal_intr() is invoked on completion of a WIN_RESTORE (recalibrate) cmd.
  */
-static void recal_intr (ide_drive_t *drive)
+static ide_startstop_t recal_intr (ide_drive_t *drive)
 {
 	byte stat = GET_STAT();
 
 	if (!OK_STAT(stat,READY_STAT,BAD_STAT))
-		ide_error(drive, "recal_intr", stat);
+		return ide_error(drive, "recal_intr", stat);
+	return ide_stopped;
 }
 
 /*
@@ -338,7 +343,7 @@ static void recal_intr (ide_drive_t *drive)
  * using LBA if supported, or CHS otherwise, to address sectors.
  * It also takes care of issuing special DRIVE_CMDs.
  */
-static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long block)
+static ide_startstop_t do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long block)
 {
 	if (IDE_CONTROL_REG)
 		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
@@ -375,45 +380,61 @@ static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long bl
 	}
 #ifdef CONFIG_BLK_DEV_PDC4030
 	if (IS_PDC4030_DRIVE) {
-		extern void do_pdc4030_io(ide_drive_t *, struct request *);
-		do_pdc4030_io (drive, rq);
-		return;
+		extern ide_startstop_t do_pdc4030_io(ide_drive_t *, struct request *);
+		return do_pdc4030_io (drive, rq);
 	}
 #endif /* CONFIG_BLK_DEV_PDC4030 */
 	if (rq->cmd == READ) {
 #ifdef CONFIG_BLK_DEV_IDEDMA
 		if (drive->using_dma && !(HWIF(drive)->dmaproc(ide_dma_read, drive)))
-			return;
+			return ide_started;
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 		ide_set_handler(drive, &read_intr, WAIT_CMD, NULL);
 		OUT_BYTE(drive->mult_count ? WIN_MULTREAD : WIN_READ, IDE_COMMAND_REG);
-		return;
+		return ide_started;
 	}
 	if (rq->cmd == WRITE) {
+		ide_startstop_t startstop;
 #ifdef CONFIG_BLK_DEV_IDEDMA
 		if (drive->using_dma && !(HWIF(drive)->dmaproc(ide_dma_write, drive)))
-			return;
+			return ide_started;
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 		OUT_BYTE(drive->mult_count ? WIN_MULTWRITE : WIN_WRITE, IDE_COMMAND_REG);
-		if (ide_wait_stat(drive, DATA_READY, drive->bad_wstat, WAIT_DRQ)) {
+		if (ide_wait_stat(&startstop, drive, DATA_READY, drive->bad_wstat, WAIT_DRQ)) {
 			printk(KERN_ERR "%s: no DRQ after issuing %s\n", drive->name,
 				drive->mult_count ? "MULTWRITE" : "WRITE");
-			return;
+			return startstop;
 		}
 		if (!drive->unmask)
 			__cli();	/* local CPU only */
 		if (drive->mult_count) {
-			HWGROUP(drive)->wrq = *rq; /* scratchpad */
+			ide_hwgroup_t *hwgroup = HWGROUP(drive);
+			/*
+			 * Ugh.. this part looks ugly because we MUST set up
+			 * the interrupt handler before outputting the first block
+			 * of data to be written.  If we hit an error (corrupted buffer list)
+			 * in ide_multwrite(), then we need to remove the handler/timer
+			 * before returning.  Fortunately, this NEVER happens (right?).
+			 */
+			hwgroup->wrq = *rq; /* scratchpad */
 			ide_set_handler (drive, &multwrite_intr, WAIT_CMD, NULL);
-			ide_multwrite(drive, drive->mult_count);
+			if (ide_multwrite(drive, drive->mult_count)) {
+				unsigned long flags;
+				spin_lock_irqsave(&io_request_lock, flags);
+				hwgroup->handler = NULL;
+				del_timer(&hwgroup->timer);
+				spin_unlock_irqrestore(&io_request_lock, flags);
+				return ide_stopped;
+			}
 		} else {
 			ide_set_handler (drive, &write_intr, WAIT_CMD, NULL);
 			idedisk_output_data(drive, rq->buffer, SECTOR_WORDS);
 		}
-		return;
+		return ide_started;
 	}
 	printk(KERN_ERR "%s: bad command: %d\n", drive->name, rq->cmd);
 	ide_end_request(0, HWGROUP(drive));
+	return ide_stopped;
 }
 
 static int idedisk_open (struct inode *inode, struct file *filp, ide_drive_t *drive)
@@ -472,7 +493,7 @@ static unsigned long idedisk_capacity (ide_drive_t  *drive)
 	return (drive->capacity - drive->sect0);
 }
 
-static void idedisk_special (ide_drive_t *drive)
+static ide_startstop_t idedisk_special (ide_drive_t *drive)
 {
 	special_t *s = &drive->special;
 
@@ -498,7 +519,9 @@ static void idedisk_special (ide_drive_t *drive)
 		int special = s->all;
 		s->all = 0;
 		printk(KERN_ERR "%s: bad special flag: 0x%02x\n", drive->name, special);
+		return ide_stopped;
 	}
+	return IS_PDC4030_DRIVE ? ide_stopped : ide_started;
 }
 
 static void idedisk_pre_reset (ide_drive_t *drive)
@@ -620,7 +643,7 @@ static int set_nowerr(ide_drive_t *drive, int arg)
 		return -EBUSY;
 	drive->nowerr = arg;
 	drive->bad_wstat = arg ? BAD_R_STAT : BAD_W_STAT;
-	spin_unlock_irqrestore(&HWGROUP(drive)->spinlock, flags);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 	return 0;
 }
 

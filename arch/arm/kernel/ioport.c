@@ -4,6 +4,7 @@
  * IO permission support for ARM.
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>

@@ -15,6 +15,10 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 1999/11/11	acme		set_current_state(TASK_INTERRUPTIBLE), code cleanup
+* 1999/11/08	acme		init_cyc2x deleted, doing nothing
+* 1999/11/06	acme		back to read[bw], write[bw] and memcpy_to and
+*				fromio to use dpmbase ioremaped
 * 1999/10/26	acme		use isa_read[bw], isa_write[bw] and isa_memcpy_to
 *				and fromio
 * 1999/10/23	acme		cleanup to only supports cyclom2x: all the other
@@ -58,10 +62,10 @@
 #include <linux/cycx_drv.h>	/* API definitions */
 #include <linux/cycx_cfm.h>	/* CYCX firmware module definitions */
 #include <linux/delay.h>	/* udelay */
-#include <asm/io.h>		/* for inb(), outb(), etc. */
+#include <asm/io.h>		/* read[wl], write[wl], ioremap, iounmap */
 
 #define	MOD_VERSION	0
-#define	MOD_RELEASE	3
+#define	MOD_RELEASE	4
 
 #ifdef MODULE
 MODULE_AUTHOR("Arnaldo Carvalho de Melo");
@@ -70,30 +74,29 @@ MODULE_DESCRIPTION("Cyclom 2x Sync Card Driver");
 
 /* Function Prototypes */
 /* Module entry points. These are called by the OS and must be public. */
-int init_module (void);
-void cleanup_module (void);
+int init_module(void);
+void cleanup_module(void);
 
 /* Hardware-specific functions */
-static int load_cyc2x (cycxhw_t *hw, cfm_t *cfm, u32 len);
-static void cycx_bootcfg (cycxhw_t *hw);
+static int load_cyc2x(cycxhw_t *hw, cfm_t *cfm, u32 len);
+static void cycx_bootcfg(cycxhw_t *hw);
 
-static int init_cyc2x (cycxhw_t *hw);
-static int reset_cyc2x (u32 addr);
-static int detect_cyc2x (u32 addr);
+static int reset_cyc2x(u32 addr);
+static int detect_cyc2x(u32 addr);
 
 /* Miscellaneous functions */
-static void delay_cycx (int sec);
-static int get_option_index (u32 *optlist, u32 optval);
-static u16 checksum (u8 *buf, u32 len);
+static void delay_cycx(int sec);
+static int get_option_index(u32 *optlist, u32 optval);
+static u16 checksum(u8 *buf, u32 len);
 
 #define wait_cyc(addr) cycx_exec(addr + CMD_OFFSET)
 
-#define cyc2x_readb(b) isa_readb(b)
-#define cyc2x_readw(b) isa_readw(b)
-#define cyc2x_writeb(b, addr) isa_writeb(b, addr)
-#define cyc2x_writew(w, addr) isa_writew(w, addr)
-#define cyc2x_memcpy_toio(addr, buf, len) isa_memcpy_toio((addr), buf, len)
-#define cyc2x_memcpy_fromio(buf, addr, len) isa_memcpy_fromio(buf, (addr), len)
+#define cyc2x_readb(b) readb(b)
+#define cyc2x_readw(b) readw(b)
+#define cyc2x_writeb(b, addr) writeb(b, addr)
+#define cyc2x_writew(w, addr) writew(w, addr)
+#define cyc2x_memcpy_toio(addr, buf, len) memcpy_toio((addr), buf, len)
+#define cyc2x_memcpy_fromio(buf, addr, len) memcpy_fromio(buf, (addr), len)
 
 /* Global Data */
 
@@ -125,7 +128,7 @@ static u32 cycx_2x_irq_options[]  = { 7, 3, 5, 9, 10, 11, 12, 15 };
  *		< 0	error.
  * Context:	process */
 #ifdef MODULE
-int init_module (void)
+int init_module(void)
 {
 	printk(KERN_INFO "%s v%u.%u %s\n",
 		fullname, MOD_VERSION, MOD_RELEASE, copyright);
@@ -133,7 +136,7 @@ int init_module (void)
 }
 /* Module 'remove' entry point.
  * o release all remaining system resources */
-void cleanup_module (void)
+void cleanup_module(void)
 {
 }
 #endif
@@ -148,21 +151,14 @@ void cleanup_module (void)
  * Return:	0	ok.
  *		< 0	error */
 EXPORT_SYMBOL(cycx_setup);
-int cycx_setup (cycxhw_t *hw, void *cfm, u32 len)
+int cycx_setup(cycxhw_t *hw, void *cfm, u32 len)
 {
-	if (!detect_cyc2x(hw->dpmbase)) {
-		printk(KERN_ERR "%s: adapter Cyclom 2X not found at "
-				"address 0x%lX!\n",
-			modname, (unsigned long) hw->dpmbase);
-		return -EINVAL;
-	}
-
-	printk(KERN_INFO "%s: found Cyclom 2X card at address 0x%lx.\n",
-			 modname, (unsigned long) hw->dpmbase);
+	unsigned long dpmbase = hw->dpmbase;
+	int err;
 
 	/* Verify IRQ configuration options */
 	if (!get_option_index(cycx_2x_irq_options, hw->irq)) {
-		printk (KERN_ERR "%s: IRQ %d is illegal!\n", modname, hw->irq);
+		printk(KERN_ERR "%s: IRQ %d is illegal!\n", modname, hw->irq);
 		return -EINVAL;
 	} 
 
@@ -171,34 +167,50 @@ int cycx_setup (cycxhw_t *hw, void *cfm, u32 len)
 		printk(KERN_ERR "%s: you must specify the dpm address!\n",
 				modname);
  		return -EINVAL;
-	}
-	else if (!get_option_index(cyc2x_dpmbase_options, hw->dpmbase)) {
+	} else if (!get_option_index(cyc2x_dpmbase_options, hw->dpmbase)) {
 		printk(KERN_ERR "%s: memory address 0x%lX is illegal!\n",
-				modname, (unsigned long) hw->dpmbase);
+				modname, dpmbase);
 		return -EINVAL;
 	}
 
+	hw->dpmbase = (u32)ioremap(dpmbase, CYCX_WINDOWSIZE);
 	hw->dpmsize = CYCX_WINDOWSIZE;
 
-	init_cyc2x(hw);
+	if (!detect_cyc2x(hw->dpmbase)) {
+		printk(KERN_ERR "%s: adapter Cyclom 2X not found at "
+				"address 0x%lX!\n", modname, dpmbase);
+		return -EINVAL;
+	}
 
-	printk(KERN_INFO "%s: dual-port memory window is set at 0x%lX.\n",
-			 modname, (unsigned long) hw->dpmbase);
+	printk(KERN_INFO "%s: found Cyclom 2X card at address 0x%lX.\n",
+			 modname, dpmbase);
 
 	/* Load firmware. If loader fails then shut down adapter */
-	return load_cyc2x(hw, cfm, len);
+	err = load_cyc2x(hw, cfm, len);
+
+	if (err)
+		cycx_down(hw);         /* shutdown adapter */
+
+	return err;
 } 
+
+EXPORT_SYMBOL(cycx_down);
+int cycx_down(cycxhw_t *hw)
+{
+	iounmap((u32 *)hw->dpmbase);
+	return 0;
+}
 
 /* Enable interrupt generation.  */
 EXPORT_SYMBOL(cycx_inten);
-void cycx_inten (cycxhw_t *hw)
+void cycx_inten(cycxhw_t *hw)
 {
-	cyc2x_writeb (0, hw->dpmbase);
+	cyc2x_writeb(0, hw->dpmbase);
 }
 
 /* Generate an interrupt to adapter's CPU. */
 EXPORT_SYMBOL(cycx_intr);
-void cycx_intr (cycxhw_t *hw)
+void cycx_intr(cycxhw_t *hw)
 {
 	cyc2x_writew(0, hw->dpmbase + GEN_CYCX_INTR);
 }
@@ -207,7 +219,7 @@ void cycx_intr (cycxhw_t *hw)
  * o Set exec flag.
  * o Busy-wait until flag is reset. */
 EXPORT_SYMBOL(cycx_exec);
-int cycx_exec (u32 addr)
+int cycx_exec(u32 addr)
 {
 	u16 i = 0;
 	/* wait till addr content is zeroed */
@@ -223,10 +235,12 @@ int cycx_exec (u32 addr)
 /* Read absolute adapter memory.
  * Transfer data from adapter's memory to data buffer. */
 EXPORT_SYMBOL(cycx_peek);
-int cycx_peek (cycxhw_t *hw, u32 addr, void *buf, u32 len)
+int cycx_peek(cycxhw_t *hw, u32 addr, void *buf, u32 len)
 {
-	if (len == 1)	*(u8*)buf = cyc2x_readb (hw->dpmbase + addr);
-	else 		cyc2x_memcpy_fromio(buf, hw->dpmbase + addr, len);
+	if (len == 1)
+		*(u8*)buf = cyc2x_readb(hw->dpmbase + addr);
+	else
+		cyc2x_memcpy_fromio(buf, hw->dpmbase + addr, len);
 
 	return 0;
 }
@@ -234,10 +248,12 @@ int cycx_peek (cycxhw_t *hw, u32 addr, void *buf, u32 len)
 /* Write Absolute Adapter Memory.
  * Transfer data from data buffer to adapter's memory. */
 EXPORT_SYMBOL(cycx_poke);
-int cycx_poke (cycxhw_t *hw, u32 addr, void *buf, u32 len)
+int cycx_poke(cycxhw_t *hw, u32 addr, void *buf, u32 len)
 {
-	if (len == 1) cyc2x_writeb (*(u8*)buf, hw->dpmbase + addr);
-	else	      cyc2x_memcpy_toio(hw->dpmbase + addr, buf, len);
+	if (len == 1)
+		cyc2x_writeb(*(u8*)buf, hw->dpmbase + addr);
+	else
+		cyc2x_memcpy_toio(hw->dpmbase + addr, buf, len);
 
 	return 0;
 }
@@ -249,13 +265,13 @@ int cycx_poke (cycxhw_t *hw, u32 addr, void *buf, u32 len)
    return 1 if memory exists at addr and 0 if not. */
 static int memory_exists(u32 addr)
 {
-	int timeout = 0;
+	int tries = 0;
 
-	for (; timeout < 3 ; timeout++) {
-		cyc2x_writew (TEST_PATTERN, addr + 0x10);
+	for (; tries < 3 ; tries++) {
+		cyc2x_writew(TEST_PATTERN, addr + 0x10);
 
-		if (cyc2x_readw (addr + 0x10) == TEST_PATTERN)
-			if (cyc2x_readw (addr + 0x10) == TEST_PATTERN) return 1;
+		if (cyc2x_readw(addr + 0x10) == TEST_PATTERN)
+			if (cyc2x_readw(addr + 0x10) == TEST_PATTERN) return 1;
 
 		delay_cycx(1);
 	}
@@ -267,10 +283,10 @@ static int memory_exists(u32 addr)
 static void reset_load(u32 addr, u8 *buffer, u32 cnt)
 {
 	u32 pt_code = addr + RESET_OFFSET;
-	u16 i, j;
+	u16 i; /*, j; */
 
-	for ( i = 0 ; i < cnt ; i++) {
-		for (j = 0 ; j < 50 ; j++); /* Delay - FIXME busy waiting... */
+	for (i = 0 ; i < cnt ; i++) {
+/*		for (j = 0 ; j < 50 ; j++); Delay - FIXME busy waiting... */
 		cyc2x_writeb(*buffer++, pt_code++);
 	}
 }
@@ -286,7 +302,7 @@ static int buffer_load(u32 addr, u8 *buffer, u32 cnt)
 }
 
 /* Set up entry point and kick start Cyclom-X CPU. */
-static void cycx_start (u32 addr)
+static void cycx_start(u32 addr)
 {
 	/* put in 0x30 offset the jump instruction to the code entry point */
 	cyc2x_writeb(0xea, addr + 0x30);
@@ -326,19 +342,21 @@ static int cycx_data_boot(u32 addr, u8 *code, u32 len)
 	cyc2x_writew(CFM_LOAD_BUFSZ, pt_boot_cmd + sizeof(u16));
 	cyc2x_writew(GEN_DEFPAR, pt_boot_cmd);
 
-	if (wait_cyc(addr) < 0) return 2;
+	if (wait_cyc(addr) < 0)
+		return -1;
 
 	cyc2x_writew(0, pt_boot_cmd + sizeof(u16));
 	cyc2x_writew(0x4000, pt_boot_cmd + 2 * sizeof(u16));
 	cyc2x_writew(GEN_SET_SEG, pt_boot_cmd);
 
-	if (wait_cyc(addr) < 0) return 2;
+	if (wait_cyc(addr) < 0)
+		return -1;
 
 	for (i = 0 ; i < len ; i += CFM_LOAD_BUFSZ)
 		if (buffer_load(addr, code + i,
 				MIN(CFM_LOAD_BUFSZ, (len - i))) < 0) {
 			printk(KERN_ERR "%s: Error !!\n", modname);
-			return 4;
+			return -1;
 		}
 
 	return 0;
@@ -355,18 +373,20 @@ static int cycx_code_boot(u32 addr, u8 *code, u32 len)
 	cyc2x_writew(CFM_LOAD_BUFSZ, pt_boot_cmd + sizeof(u16));
 	cyc2x_writew(GEN_DEFPAR, pt_boot_cmd);
 
-	if (wait_cyc(addr) == -1) return 2;
+	if (wait_cyc(addr) < 0)
+		return -1;
 
 	cyc2x_writew(0x0000, pt_boot_cmd + sizeof(u16));
 	cyc2x_writew(0xc400, pt_boot_cmd + 2 * sizeof(u16));
 	cyc2x_writew(GEN_SET_SEG, pt_boot_cmd);
 
-	if (wait_cyc(addr) == -1) return 1;
+	if (wait_cyc(addr) < 0)
+		return -1;
 
 	for (i = 0 ; i < len ; i += CFM_LOAD_BUFSZ)
 		if (buffer_load(addr, code + i,MIN(CFM_LOAD_BUFSZ,(len - i)))) {
 			printk(KERN_ERR "%s: Error !!\n", modname);
-			return 4;
+			return -1;
 		}
 
 	return 0;
@@ -375,7 +395,7 @@ static int cycx_code_boot(u32 addr, u8 *code, u32 len)
 /* Load adapter from the memory image of the CYCX firmware module. 
  * o verify firmware integrity and compatibility
  * o start adapter up */
-static int load_cyc2x (cycxhw_t *hw, cfm_t *cfm, u32 len)
+static int load_cyc2x(cycxhw_t *hw, cfm_t *cfm, u32 len)
 {
 	int i, j;
 	cycx_header_t *img_hdr;
@@ -386,8 +406,8 @@ static int load_cyc2x (cycxhw_t *hw, cfm_t *cfm, u32 len)
 	u16 cksum;
 
 	/* Announce */
-	printk(KERN_INFO "%s: firmware signature=\"%s\"\n",
-			 modname, cfm->signature); 
+	printk(KERN_INFO "%s: firmware signature=\"%s\"\n", modname,
+							    cfm->signature);
 
 	/* Verify firmware signature */
 	if (strcmp(cfm->signature, CFM_SIGNATURE)) {
@@ -456,23 +476,24 @@ static int load_cyc2x (cycxhw_t *hw, cfm_t *cfm, u32 len)
 		delay_cycx(1);
 
 		for (j = 0 ; j < 3 ; j++)
-			if (!cyc2x_readw(pt_cycld)) goto reset_loaded;
-			else delay_cycx(1);
+			if (!cyc2x_readw(pt_cycld))
+				goto reset_loaded;
+			else
+				delay_cycx(1);
 	}
 
 	printk(KERN_ERR "%s: reset not started.\n", modname);
 	return -EINVAL;
+
 reset_loaded:
 	/* Load data.bin */
-	if(cycx_data_boot(hw->dpmbase, data_image, 
-				       img_hdr->data_size)) {
+	if (cycx_data_boot(hw->dpmbase, data_image, img_hdr->data_size)) {
 		printk(KERN_ERR "%s: cannot load data file.\n", modname);
 		return -EINVAL;
 	}
 
 	/* Load code.bin */
-	if(cycx_code_boot(hw->dpmbase, code_image, 
-				       img_hdr->code_size)) {
+	if (cycx_code_boot(hw->dpmbase, code_image, img_hdr->code_size)) {
 		printk(KERN_ERR "%s: cannot load code file.\n", modname);
 		return -EINVAL;
 	}
@@ -500,19 +521,10 @@ reset_loaded:
    - As of now, only static buffers are available to the user.
      So, the bit VD_RXDIRC must be set in 'valid'. That means that user
      wants to use the static transmission and reception buffers. */
-static void cycx_bootcfg (cycxhw_t *hw)
+static void cycx_bootcfg(cycxhw_t *hw)
 {
 	/* use fixed buffers */
 	cyc2x_writeb(FIXED_BUFFERS, hw->dpmbase + CONF_OFFSET); 
-}
-
-/* Initialize CYCX_2X adapter. */
-static int init_cyc2x (cycxhw_t *hw)
-{
-	if (!detect_cyc2x(hw->dpmbase))
-		return -ENODEV;
-
-	return 0;
 }
 
 /* Detect Cyclom 2x adapter.
@@ -521,11 +533,8 @@ static int init_cyc2x (cycxhw_t *hw)
  *	Return 1 if detected o.k. or 0 if failed.
  *	Note:	This test is destructive! Adapter will be left in shutdown
  *		state after the test. */
-static int detect_cyc2x (u32 addr)
+static int detect_cyc2x(u32 addr)
 {
-	printk(KERN_INFO "%s: looking for a cyclom 2x at 0x%lX...\n",
-			 modname, (unsigned long) addr);
-
 	reset_cyc2x(addr);
 	return memory_exists(addr);
 }
@@ -533,35 +542,36 @@ static int detect_cyc2x (u32 addr)
 /* Miscellaneous */
 /* Get option's index into the options list.
  *	Return option's index (1 .. N) or zero if option is invalid. */
-static int get_option_index (u32 *optlist, u32 optval)
+static int get_option_index(u32 *optlist, u32 optval)
 {
 	int i = 1;
-	for (; i <= optlist[0]; ++i) if (optlist[i] == optval) return i;
+
+	for (; i <= optlist[0]; ++i)
+		if (optlist[i] == optval)
+			return i;
+
 	return 0;
 }
 
 /* Reset adapter's CPU. */
-static int reset_cyc2x (u32 addr)
+static int reset_cyc2x(u32 addr)
 {
-	cyc2x_writeb (0, addr + RST_ENABLE);  delay_cycx (2);
-	cyc2x_writeb (0, addr + RST_DISABLE); delay_cycx (2);
+	cyc2x_writeb(0, addr + RST_ENABLE);
+	delay_cycx(2);
+	cyc2x_writeb(0, addr + RST_DISABLE);
+	delay_cycx(2);
 	return memory_exists(addr);
 }
 
 /* Delay */
-static void delay_cycx (int sec)
+static void delay_cycx(int sec)
 {
-/* acme
-   Thu dez 31 21:45:16 EDT 1998
-   FIXME I'll keep this comment here just in case, as of now I don't
-   know it all the contexts where this routine is used are interruptible... */
-
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout(sec*HZ);
 }
 
 /* Calculate 16-bit CRC using CCITT polynomial. */
-static u16 checksum (u8 *buf, u32 len)
+static u16 checksum(u8 *buf, u32 len)
 {
 	u16 crc = 0;
 	u16 mask, flag;
@@ -571,7 +581,9 @@ static u16 checksum (u8 *buf, u32 len)
 			flag = (crc & 0x8000);
 			crc <<= 1;
 			crc |= ((*buf & mask) ? 1 : 0);
-			if (flag) crc ^= 0x1021;
+
+			if (flag)
+				crc ^= 0x1021;
 		}
 
 	return crc;

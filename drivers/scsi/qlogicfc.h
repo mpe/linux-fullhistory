@@ -86,8 +86,6 @@ int isp2x00_biosparam(Disk *, kdev_t, int[]);
 #define NULL (0)
 #endif
 
-extern struct proc_dir_entry proc_scsi_isp2x00;
-
 #define QLOGICFC {							   \
         detect:                 isp2x00_detect,                            \
         release:                isp2x00_release,                           \

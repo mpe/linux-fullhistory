@@ -8,6 +8,7 @@
  * Tested and designed on the SiS620/5513 chipset.
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
@@ -27,13 +28,35 @@
 
 #include "ide_modes.h"
 
+#define DISPLAY_SIS_TIMINGS
 #define SIS5513_DEBUG_DRIVE_INFO	0
 
-#define DISPLAY_SIS_TIMINGS
+static struct pci_dev *host_dev = NULL;
 
-static struct pci_dev *host_dev;
+#define arraysize(x)			(sizeof(x)/sizeof(*(x)))
+
+#define SIS5513_FLAG_ATA_00		0x00000000
+#define SIS5513_FLAG_ATA_16		0x00000001
+#define SIS5513_FLAG_ATA_33		0x00000002
+#define SIS5513_FLAG_ATA_66		0x00000004
+#define SIS5513_FLAG_LATENCY		0x00000010
+
+static const struct {
+	const char *name;
+	unsigned short host_id;
+	unsigned int flags;
+} SiSHostChipInfo[] = {
+	{ "SiS530",	PCI_DEVICE_ID_SI_530,	SIS5513_FLAG_ATA_66, },
+	{ "SiS540",	PCI_DEVICE_ID_SI_540,	SIS5513_FLAG_ATA_66, },
+	{ "SiS620",	PCI_DEVICE_ID_SI_620,	SIS5513_FLAG_ATA_66|SIS5513_FLAG_LATENCY, },
+	{ "SiS630",	PCI_DEVICE_ID_SI_630,	SIS5513_FLAG_ATA_66|SIS5513_FLAG_LATENCY, },
+	{ "SiS5597",	PCI_DEVICE_ID_SI_5597,	SIS5513_FLAG_ATA_33, },
+	{ "SiS5600",	PCI_DEVICE_ID_SI_5600,	SIS5513_FLAG_ATA_33, },
+	{ "SiS5511",	PCI_DEVICE_ID_SI_5511,	SIS5513_FLAG_ATA_16, },
+};
 
 #if 0
+
 static struct _pio_mode_mapping {
 	byte data_active;
 	byte recovery;
@@ -122,9 +145,6 @@ static int sis_get_info (char *buffer, char **addr, off_t offset, int count, int
 	int rc;
 	char *p = buffer;
 	byte reg,reg1;
-#if 0
-	byte cyc, rec, act;
-#endif
 	u16 reg2, reg3;
 
 	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
@@ -213,16 +233,16 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	byte			drive_pci, test1, test2, mask;
 	int			err;
 
-	byte speed		= 0x00;
-	byte unmask		= 0xE0;
-	byte four_two		= 0x00;
+	byte speed		= 0x00, unmask = 0xE0, four_two = 0x00;
 	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 	byte udma_66		= ((id->word93 & 0x2000) && (hwif->udma_four)) ? 1 : 0;
 
 	if (host_dev) {
 		switch(host_dev->device) {
 			case PCI_DEVICE_ID_SI_530:
+			case PCI_DEVICE_ID_SI_540:
 			case PCI_DEVICE_ID_SI_620:
+			case PCI_DEVICE_ID_SI_630:
 				unmask   = 0xF0;
 				four_two = 0x01;
 			default:
@@ -246,13 +266,15 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 		pci_read_config_byte(dev, drive_pci|0x01, &test2);
 	}
 
-	if ((id->dma_ultra & 0x0010) && (ultra) && (udma_66) && (four_two)) {
+	if ((id->dma_ultra & 0x0010) && (ultra) &&
+	    (udma_66) && (four_two)) {
 		if (!(test2 & 0x90)) {
 			pci_write_config_byte(dev, drive_pci|0x01, test2 & ~unmask);
 			pci_write_config_byte(dev, drive_pci|0x01, test2|0x90);
 		}
 		speed = XFER_UDMA_4;
-	} else if ((id->dma_ultra & 0x0008) && (ultra) && (udma_66) && (four_two)) {
+	} else if ((id->dma_ultra & 0x0008) && (ultra) &&
+		   (udma_66) && (four_two)) {
 		if (!(test2 & 0xA0)) {
 			pci_write_config_byte(dev, drive_pci|0x01, test2 & ~unmask);
 			pci_write_config_byte(dev, drive_pci|0x01, test2|0xA0);
@@ -438,29 +460,23 @@ int sis5513_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 unsigned int __init pci_init_sis5513 (struct pci_dev *dev, const char *name)
 {
 	struct pci_dev *host;
+	int i = 0;
 	byte latency = 0;
 
 	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &latency);
 
-	for (host = pci_devices; host; host=host->next) {
-		if (host->vendor == PCI_VENDOR_ID_SI &&
-		    host->device == PCI_DEVICE_ID_SI_620) {
+	for (i = 0; i < arraysize (SiSHostChipInfo) && !host_dev; i++) {
+		host = pci_find_device (PCI_VENDOR_ID_SI,
+					SiSHostChipInfo[i].host_id,
+					NULL);
+		if (!host)
+			continue;
+
+		host_dev = host;
+		printk(SiSHostChipInfo[i].name);
+		if (SiSHostChipInfo[i].flags & SIS5513_FLAG_LATENCY) {
 			if (latency != 0x10)
 				pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x10);
-			host_dev = host;
-			break;
-		} else if (host->vendor == PCI_VENDOR_ID_SI &&
-			   host->device == PCI_DEVICE_ID_SI_530) {
-			host_dev = host;
-			break;
-		} else if (host->vendor == PCI_VENDOR_ID_SI &&
-			   host->device == PCI_DEVICE_ID_SI_5600) {
-			host_dev = host;
-			break;
-		} else if (host->vendor == PCI_VENDOR_ID_SI &&
-			   host->device == PCI_DEVICE_ID_SI_5597) {
-			host_dev = host;
-			break;
 		}
 	}
 
@@ -468,9 +484,10 @@ unsigned int __init pci_init_sis5513 (struct pci_dev *dev, const char *name)
 		byte reg52h = 0;
 
 		pci_read_config_byte(dev, 0x52, &reg52h);
-		if (!(reg52h & 0x04))
+		if (!(reg52h & 0x04)) {
 			/* set IDE controller to operate in Compabitility mode obly */
 			pci_write_config_byte(dev, 0x52, reg52h|0x04);
+		}
 #if defined(DISPLAY_SIS_TIMINGS) && defined(CONFIG_PROC_FS)
 		sis_proc = 1;
 		bmide_dev = dev;
@@ -489,7 +506,9 @@ unsigned int __init ata66_sis5513 (ide_hwif_t *hwif)
 	if (host_dev) {
 		switch(host_dev->device) {
 			case PCI_DEVICE_ID_SI_530:
+			case PCI_DEVICE_ID_SI_540:
 			case PCI_DEVICE_ID_SI_620:
+			case PCI_DEVICE_ID_SI_630:
 				ata66 = (reg48h & mask) ? 0 : 1;
 			default:
 				break;
@@ -509,7 +528,9 @@ void __init ide_init_sis5513 (ide_hwif_t *hwif)
 	if (host_dev) {
 		switch(host_dev->device) {
 			case PCI_DEVICE_ID_SI_530:
+			case PCI_DEVICE_ID_SI_540:
 			case PCI_DEVICE_ID_SI_620:
+			case PCI_DEVICE_ID_SI_630:
 			case PCI_DEVICE_ID_SI_5600:
 			case PCI_DEVICE_ID_SI_5597:
 				hwif->autodma = 1;

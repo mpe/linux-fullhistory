@@ -11,6 +11,7 @@
  *  16-Mar-1999	RMK	Added autodetect of ISA PICs
  */
 /* no need for config.h - arch/arm/kernel/irq.c does this for us */
+#include <linux/config.h>
 #include <asm/hardware.h>
 #include <asm/dec21285.h>
 #include <asm/irq.h>

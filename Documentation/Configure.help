@@ -685,17 +685,8 @@ CONFIG_BLK_DEV_HPT366
 
   Please read the comments at the top of drivers/block/hpt366.c
 
-HPT366 (EXPERIMENTAL)
-CONFIG_BLK_DEV_HPT366_SHARED
-  This requires CONFIG_BLK_DEV_HPT366.
-  It appears that there are different versions or releases of this hardware
-  by ABit.  Since some cases the second channel of the onboard chipset works
-  and others fail, it is default disabled.  This is required to be set if you
-  want to attempt the setup of the second channel.
-
-  JUMBO WARNING, do not boot a kernel with this enabled if it is your only
-  one.  You may not be able to get back into your machine without physically
-  detaching the attached devices.
+HPT366 Fast Interrupt support (EXPERIMENTAL)
+HPT366_FAST_IRQ_PREDICTION
 
   If unsure, say N.
 

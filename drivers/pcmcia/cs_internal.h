@@ -19,6 +19,8 @@
 #ifndef _LINUX_CS_INTERNAL_H
 #define _LINUX_CS_INTERNAL_H
 
+#include <linux/config.h>
+
 typedef struct erase_busy_t {
     eraseq_entry_t	*erase;
     client_handle_t	client;

@@ -48,6 +48,7 @@
 #define eicon_isa_h
 
 #ifdef __KERNEL__
+#include <linux/config.h>
 
 /* Factory defaults for ISA-Cards */
 #define EICON_ISA_MEMBASE 0xd0000

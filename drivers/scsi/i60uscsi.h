@@ -60,6 +60,8 @@
  *	12/19/98 bv, v1.02a Use spinlocks for 2.1.95 and up.
  **************************************************************************/
 
+#include <linux/config.h>
+
 #define ULONG   unsigned long
 #define PVOID   void *
 #define USHORT  unsigned short

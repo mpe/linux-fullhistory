@@ -579,6 +579,7 @@ extern int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 reque
 extern int usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *, void **);
 extern int usb_release_irq(struct usb_device *dev, void *handle, unsigned int pipe);
 
+extern int usb_bulk_msg(struct usb_device *, unsigned int, void *, int, unsigned long *, int);
 extern void *usb_request_bulk(struct usb_device *, unsigned int, usb_device_irq, void *, int, void *);
 extern int usb_terminate_bulk(struct usb_device *, void *);
 
@@ -694,6 +695,8 @@ static inline unsigned int __default_pipe(struct usb_device *dev)
 #define usb_rcvisocpipe(dev,endpoint)	((PIPE_ISOCHRONOUS << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
 #define usb_sndbulkpipe(dev,endpoint)	((PIPE_BULK << 30) | __create_pipe(dev,endpoint))
 #define usb_rcvbulkpipe(dev,endpoint)	((PIPE_BULK << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
+#define usb_sndintpipe(dev,endpoint)	((PIPE_INTERRUPT << 30) | __create_pipe(dev,endpoint))
+#define usb_rcvintpipe(dev,endpoint)	((PIPE_INTERRUPT << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
 #define usb_snddefctrl(dev)		((PIPE_CONTROL << 30) | __default_pipe(dev))
 #define usb_rcvdefctrl(dev)		((PIPE_CONTROL << 30) | __default_pipe(dev) | USB_DIR_IN)
 

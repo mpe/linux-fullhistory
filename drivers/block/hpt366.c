@@ -218,7 +218,8 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 {
 	struct hd_driveid *id	= drive->id;
 	byte speed		= 0x00;
-	unsigned int reg40 = 0;
+	byte reg51h		= 0;
+	unsigned int reg40	= 0;
 	int  rval;
 
 	if ((id->dma_ultra & 0x0010) &&
@@ -258,15 +259,22 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 		return ((int) ide_dma_off_quietly);
 	}
 
-	/* Disable the "fast interrupt" prediction.
+	pci_read_config_byte(HWIF(drive)->pci_dev, 0x51, &reg51h);
+
+#ifdef HPT366_FAST_IRQ_PREDICTION
+	/*
+	 * Some drives prefer/allow for the method of handling interrupts.
+	 */
+	if (!(reg51h & 0x80))
+		pci_write_config_byte(HWIF(drive)->pci_dev, 0x51, reg51h|0x80);
+#else /* ! HPT366_FAST_IRQ_PREDICTION */
+	/*
+	 * Disable the "fast interrupt" prediction.
 	 * Instead, always wait for the real interrupt from the drive!
 	 */
-	{
-		byte reg51h = 0;
-		pci_read_config_byte(HWIF(drive)->pci_dev, 0x51, &reg51h);
-		if (reg51h & 0x80)
-			pci_write_config_byte(HWIF(drive)->pci_dev, 0x51, reg51h & ~0x80);
-	}
+	if (reg51h & 0x80)
+		pci_write_config_byte(HWIF(drive)->pci_dev, 0x51, reg51h & ~0x80);
+#endif /* HPT366_FAST_IRQ_PREDICTION */
 
 	/*
 	 * Preserve existing PIO settings:

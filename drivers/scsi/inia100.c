@@ -80,7 +80,6 @@
 #include <linux/blk.h>
 #include <linux/spinlock.h>
 #include <linux/stat.h>
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/ioport.h>

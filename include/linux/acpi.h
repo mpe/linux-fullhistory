@@ -26,6 +26,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/wait.h>
 

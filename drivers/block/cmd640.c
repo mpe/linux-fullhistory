@@ -686,6 +686,7 @@ static void cmd640_tune_drive (ide_drive_t *drive, byte mode_wanted)
 		d.cycle_time,
 		d.overridden ? " (overriding vendor mode)" : "");
 	display_clocks(index);
+	return;
 }
 
 #endif /* CONFIG_BLK_DEV_CMD640_ENHANCED */

@@ -1304,6 +1304,11 @@ int usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq ha
 	return ret;
 }
 
+int usb_bulk_msg(struct usb_device *dev, unsigned int pipe, void *data, int len, unsigned long *rval, int timeout)
+{
+	return dev->bus->op->bulk_msg(dev, pipe, data, len, rval, timeout);
+}
+
 void *usb_request_bulk(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, void *data, int len, void *dev_id)
 {
 	return dev->bus->op->request_bulk(dev, pipe, handler, data, len, dev_id);
@@ -1517,7 +1522,7 @@ EXPORT_SYMBOL(usb_set_configuration);
 EXPORT_SYMBOL(usb_control_msg);
 EXPORT_SYMBOL(usb_request_irq);
 EXPORT_SYMBOL(usb_release_irq);
-/* EXPORT_SYMBOL(usb_bulk_msg); */
+EXPORT_SYMBOL(usb_bulk_msg);
 EXPORT_SYMBOL(usb_request_bulk);
 EXPORT_SYMBOL(usb_terminate_bulk);
 

@@ -158,6 +158,7 @@ int __init setup_pdc4030 (ide_hwif_t *hwif)
 	ide_hwif_t *hwif2;
 	struct dc_ident ident;
 	int i;
+	ide_startstop_t startstop;
 	
 	if (!hwif) return 0;
 
@@ -174,7 +175,7 @@ int __init setup_pdc4030 (ide_hwif_t *hwif)
 	if (pdc4030_cmd(drive,PROMISE_GET_CONFIG)) {
 		return 0;
 	}
-	if (ide_wait_stat(drive,DATA_READY,BAD_W_STAT,WAIT_DRQ)) {
+	if (ide_wait_stat(&startstop, drive,DATA_READY,BAD_W_STAT,WAIT_DRQ)) {
 		printk(KERN_INFO
 			"%s: Failed Promise read config!\n",hwif->name);
 		return 0;
@@ -301,7 +302,7 @@ void __init ide_probe_for_pdc4030(void)
 /*
  * promise_read_intr() is the handler for disk read/multread interrupts
  */
-static void promise_read_intr (ide_drive_t *drive)
+static ide_startstop_t promise_read_intr (ide_drive_t *drive)
 {
 	byte stat;
 	int total_remaining;
@@ -309,8 +310,7 @@ static void promise_read_intr (ide_drive_t *drive)
 	struct request *rq;
 
 	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
-		ide_error(drive, "promise_read_intr", stat);
-		return;
+		return ide_error(drive, "promise_read_intr", stat);
 	}
 
 read_again:
@@ -367,12 +367,13 @@ read_next:
 			printk(KERN_DEBUG "%s: promise_read: waiting for"
 			       "interrupt\n", drive->name);
 #endif 
-			return;
+			return ide_started;
 		}
 		printk(KERN_ERR "%s: Eeek! promise_read_intr: sectors left "
 		       "!DRQ !BUSY\n", drive->name);
-		ide_error(drive, "promise read intr", stat);
+		return ide_error(drive, "promise read intr", stat);
 	}
+	return ide_stopped;
 }
 
 /*
@@ -383,7 +384,7 @@ read_next:
  *
  * Once not busy, the end request is called.
  */
-static void promise_complete_pollfunc(ide_drive_t *drive)
+static ide_startstop_t promise_complete_pollfunc(ide_drive_t *drive)
 {
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	struct request *rq = hwgroup->rq;
@@ -392,13 +393,12 @@ static void promise_complete_pollfunc(ide_drive_t *drive)
 	if (GET_STAT() & BUSY_STAT) {
 		if (time_before(jiffies, hwgroup->poll_timeout)) {
 			ide_set_handler(drive, &promise_complete_pollfunc, HZ/100, NULL);
-			return; /* continue polling... */
+			return ide_started; /* continue polling... */
 		}
 		hwgroup->poll_timeout = 0;
 		printk(KERN_ERR "%s: completion timeout - still busy!\n",
 		       drive->name);
-		ide_error(drive, "busy timeout", GET_STAT());
-		return;
+		return ide_error(drive, "busy timeout", GET_STAT());
 	}
 
 	hwgroup->poll_timeout = 0;
@@ -409,24 +409,24 @@ static void promise_complete_pollfunc(ide_drive_t *drive)
 		i -= rq->current_nr_sectors;
 		ide_end_request(1, hwgroup);
 	}
+	return ide_stopped;
 }
 
 /*
  * promise_write_pollfunc() is the handler for disk write completion polling.
  */
-static void promise_write_pollfunc (ide_drive_t *drive)
+static ide_startstop_t promise_write_pollfunc (ide_drive_t *drive)
 {
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 
 	if (IN_BYTE(IDE_NSECTOR_REG) != 0) {
 		if (time_before(jiffies, hwgroup->poll_timeout)) {
 			ide_set_handler (drive, &promise_write_pollfunc, HZ/100, NULL);
-			return; /* continue polling... */
+			return ide_started; /* continue polling... */
 		}
 		hwgroup->poll_timeout = 0;
 		printk(KERN_ERR "%s: write timed-out!\n",drive->name);
-		ide_error (drive, "write timeout", GET_STAT());
-		return;
+		return ide_error (drive, "write timeout", GET_STAT());
 	}
 
 	/*
@@ -439,7 +439,7 @@ static void promise_write_pollfunc (ide_drive_t *drive)
 	printk(KERN_DEBUG "%s: Done last 4 sectors - status = %02x\n",
 		drive->name, GET_STAT());
 #endif
-	return;
+	return ide_started;
 }
 
 /*
@@ -449,7 +449,7 @@ static void promise_write_pollfunc (ide_drive_t *drive)
  * before the final 4 sectors are transfered. There is no interrupt generated
  * on writes (at least on the DC4030VL-2), we just have to poll for NOT BUSY.
  */
-static void promise_write (ide_drive_t *drive)
+static ide_startstop_t promise_write (ide_drive_t *drive)
 {
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	struct request *rq = &hwgroup->wrq;
@@ -465,21 +465,25 @@ static void promise_write (ide_drive_t *drive)
 	 * the polling strategy as defined above.
 	 */
 	if (rq->nr_sectors > 4) {
-		ide_multwrite(drive, rq->nr_sectors - 4);
+		if (ide_multwrite(drive, rq->nr_sectors - 4))
+			return ide_stopped;
 		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
 		ide_set_handler (drive, &promise_write_pollfunc, HZ/100, NULL);
+		return ide_started;
 	} else {
 	/*
 	 * There are 4 or fewer sectors to transfer, do them all in one go
 	 * and wait for NOT BUSY.
 	 */
-		ide_multwrite(drive, rq->nr_sectors);
+		if (ide_multwrite(drive, rq->nr_sectors))
+			return ide_stopped;
 		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
 		ide_set_handler(drive, &promise_complete_pollfunc, HZ/100, NULL);
 #ifdef DEBUG_WRITE
 		printk(KERN_DEBUG "%s: promise_write: <= 4 sectors, "
 			"status = %02x\n", drive->name, GET_STAT());
 #endif
+		return ide_started;
 	}
 }
 
@@ -488,7 +492,7 @@ static void promise_write (ide_drive_t *drive)
  * already set up. It issues a READ or WRITE command to the Promise
  * controller, assuming LBA has been used to set up the block number.
  */
-void do_pdc4030_io (ide_drive_t *drive, struct request *rq)
+ide_startstop_t do_pdc4030_io (ide_drive_t *drive, struct request *rq)
 {
 	unsigned long timeout;
 	byte stat;
@@ -510,8 +514,7 @@ void do_pdc4030_io (ide_drive_t *drive, struct request *rq)
 			stat=GET_STAT();
 			if (stat & DRQ_STAT) {
 				udelay(1);
-				promise_read_intr(drive);
-				return;
+				return promise_read_intr(drive);
 			}
 			if (IN_BYTE(IDE_SELECT_REG) & 0x01) {
 #ifdef DEBUG_READ
@@ -519,29 +522,31 @@ void do_pdc4030_io (ide_drive_t *drive, struct request *rq)
 				                  "interrupt\n", drive->name);
 #endif
 				ide_set_handler(drive, &promise_read_intr, WAIT_CMD, NULL);
-				return;
+				return ide_started;
 			}
 			udelay(1);
 		} while (time_before(jiffies, timeout));
 
 		printk(KERN_ERR "%s: reading: No DRQ and not waiting - Odd!\n",
 			drive->name);
-
+		return ide_stopped;
 	} else if (rq->cmd == WRITE) {
+		ide_startstop_t startstop;
 		OUT_BYTE(PROMISE_WRITE, IDE_COMMAND_REG);
-		if (ide_wait_stat(drive, DATA_READY, drive->bad_wstat, WAIT_DRQ)) {
+		if (ide_wait_stat(&startstop, drive, DATA_READY, drive->bad_wstat, WAIT_DRQ)) {
 			printk(KERN_ERR "%s: no DRQ after issuing "
 			       "PROMISE_WRITE\n", drive->name);
-			return;
+			return startstop;
 	    	}
 		if (!drive->unmask)
 			__cli();	/* local CPU only */
 		HWGROUP(drive)->wrq = *rq; /* scratchpad */
-		promise_write(drive);
+		return promise_write(drive);
 
 	} else {
 		printk("KERN_WARNING %s: bad command: %d\n",
 		       drive->name, rq->cmd);
 		ide_end_request(0, HWGROUP(drive));
+		return ide_stopped;
 	}
 }

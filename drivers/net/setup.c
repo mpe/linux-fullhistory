@@ -309,7 +309,7 @@ static void special_device_init(void)
 		static struct net_device dummy_dev = {
 			"dummy" __PAD5, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, dummy_init, 
 		};
-		register_netdev(&sb1000_dev);
+		register_netdev(&dummy_dev);
 	}
 #endif	
 #ifdef CONFIG_EQUALIZER
@@ -325,7 +325,7 @@ static void special_device_init(void)
 			NULL,				/* next device */
 			eql_init			/* set up the rest */
 		};
-		register_netdev(&sb1000_dev);
+		register_netdev(&eql_dev);
 	}
 #endif	
 #ifdef CONFIG_APBIF
@@ -335,7 +335,7 @@ static void special_device_init(void)
 		{
         		"bif" __PAD3, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, bif_init 
         	};
-		register_netdev(&sb1000_dev);
+		register_netdev(&bif_dev);
         }
 #endif
 #ifdef CONFIG_NET_SB1000

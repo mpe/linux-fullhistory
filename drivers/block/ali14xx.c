@@ -204,11 +204,11 @@ void init_ali14xx (void)
 {
 	/* auto-detect IDE controller port */
 	if (!findPort()) {
-		printk("ali14xx: not found\n");
+		printk("\nali14xx: not found");
 		return;
 	}
 
-	printk("ali14xx: base= 0x%03x, regOn = 0x%02x\n", basePort, regOn);
+	printk("\nali14xx: base= 0x%03x, regOn = 0x%02x", basePort, regOn);
 	ide_hwifs[0].chipset = ide_ali14xx;
 	ide_hwifs[1].chipset = ide_ali14xx;
 	ide_hwifs[0].tuneproc = &ali14xx_tune_drive;
@@ -219,7 +219,7 @@ void init_ali14xx (void)
 
 	/* initialize controller registers */
 	if (!initRegisters()) {
-		printk("ali14xx: Chip initialization failed\n");
+		printk("\nali14xx: Chip initialization failed");
 		return;
 	}
 }

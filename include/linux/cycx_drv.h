@@ -53,6 +53,7 @@ typedef struct cycxhw {
 
 /* Function Prototypes */
 extern int cycx_setup (cycxhw_t *hw, void *sfm, u32 len);
+extern int cycx_down (cycxhw_t *hw);
 extern int cycx_peek (cycxhw_t *hw, u32 addr, void *buf, u32 len);
 extern int cycx_poke (cycxhw_t *hw, u32 addr, void *buf, u32 len);
 extern int cycx_exec (u32 addr);

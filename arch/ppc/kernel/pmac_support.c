@@ -1,6 +1,7 @@
 /*
  * Miscellaneous procedures for dealing with the PowerMac hardware.
  */
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/stddef.h>
 #include <linux/reboot.h>

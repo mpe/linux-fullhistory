@@ -30,6 +30,8 @@
 #ifndef _LINUX_BUS_OPS_H
 #define _LINUX_BUS_OPS_H
 
+#include <linux/config.h>
+
 #ifdef CONFIG_VIRTUAL_BUS
 
 typedef struct bus_operations {

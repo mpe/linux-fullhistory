@@ -70,8 +70,6 @@ int isp1020_biosparam(Disk *, kdev_t, int[]);
 #define NULL (0)
 #endif
 
-extern struct proc_dir_entry proc_scsi_isp1020;
-
 #define QLOGICISP {							   \
 	detect:			isp1020_detect,				   \
 	release:		isp1020_release,			   \

@@ -6,8 +6,6 @@
 #ifndef _PPC_IRQ_CONTROL_H
 #define _PPC_IRQ_CONTROL_H
 
-#include <linux/config.h>
-
 #include <asm/irq.h>
 #include <asm/atomic.h>
 

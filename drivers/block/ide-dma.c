@@ -186,7 +186,7 @@ const char *bad_dma_drives[] = {"WDC AC11000H",
 /*
  * dma_intr() is the handler for disk read/write DMA interrupts
  */
-void ide_dma_intr (ide_drive_t *drive)
+ide_startstop_t ide_dma_intr (ide_drive_t *drive)
 {
 	int i;
 	byte stat, dma_stat;
@@ -201,12 +201,11 @@ void ide_dma_intr (ide_drive_t *drive)
 				i -= rq->current_nr_sectors;
 				ide_end_request(1, HWGROUP(drive));
 			}
-			return;
+			return ide_stopped;
 		}
 		printk("%s: dma_intr: bad DMA status\n", drive->name);
 	}
-	ide__sti();	/* local CPU only */
-	ide_error(drive, "dma_intr", stat);
+	return ide_error(drive, "dma_intr", stat);
 }
 
 /*

@@ -4,6 +4,7 @@
  * Copyright (C) 1996 Russell King
  * Copyright (C) 1998 Deborah Wallach (updates for SA1100/Brutus).
  */
+#include <linux/config.h>
 
 #ifdef CONFIG_SA1101
 #define NR_IRQS                 95

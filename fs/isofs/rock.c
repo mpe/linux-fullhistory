@@ -358,9 +358,10 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 #ifdef DEBUG
 	printk("RR CL (%x)\n",inode->i_ino);
 #endif
-	inode->u.isofs_i.i_first_extent = isonum_733(rr->u.CL.location) <<
-		inode -> i_sb -> u.isofs_sb.s_log_zone_size;
-	reloc = iget(inode->i_sb, inode->u.isofs_i.i_first_extent);
+	inode->u.isofs_i.i_first_extent = isonum_733(rr->u.CL.location);
+	reloc = iget(inode->i_sb,
+		     (inode->u.isofs_i.i_first_extent <<
+		      inode -> i_sb -> u.isofs_sb.s_log_zone_size));
 	if (!reloc)
 		goto out;
 	inode->i_mode = reloc->i_mode;

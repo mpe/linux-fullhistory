@@ -1046,6 +1046,17 @@ S: Tallak 95
 S: 8103 Rein
 S: Austria
 
+N: Jan Kara
+E: jack@atrey.karlin.mff.cuni.cz
+E: jack@suse.cz
+D: Quota fixes for 2.2 kernel
+D: Quota fixes for 2.3 kernel
+D: Few other fixes in filesystem area (buffer cache, isofs, loopback)
+W: http://atrey.karlin.mff.cuni.cz/~jack/
+S: Krosenska' 543
+S: 181 00 Praha 8
+S: Czech Republic
+
 N: Jan "Yenya" Kasprzak
 E: kas@fi.muni.cz
 D: Author of the COSA/SRP sync serial board driver.

@@ -31,8 +31,8 @@ extern int  dquot_alloc_inode(const struct inode *inode, unsigned long number,
 extern void dquot_free_block(const struct inode *inode, unsigned long number);
 extern void dquot_free_inode(const struct inode *inode, unsigned long number);
 
-extern int  dquot_transfer(struct inode *inode, struct iattr *iattr,
-                           char direction, uid_t initiator);
+extern int  dquot_transfer(struct dentry *dentry, struct iattr *iattr,
+                           uid_t initiator);
 
 /*
  * Operations supported for diskquotas.
@@ -99,17 +99,11 @@ extern __inline__ int DQUOT_TRANSFER(struct dentry *dentry, struct iattr *iattr)
 	int error = -EDQUOT;
 
 	if (dentry->d_inode->i_sb->dq_op) {
-		if (IS_QUOTAINIT(dentry->d_inode) == 0)
-			dentry->d_inode->i_sb->dq_op->initialize(dentry->d_inode, -1);
-		if (dentry->d_inode->i_sb->dq_op->transfer(dentry->d_inode, iattr, 0, current->fsuid))
-			goto out;
-		error = notify_change(dentry, iattr);
-		if (error)
-			dentry->d_inode->i_sb->dq_op->transfer(dentry->d_inode, iattr, 1, current->fsuid);
+		dentry->d_inode->i_sb->dq_op->initialize(dentry->d_inode, -1);
+		error = dentry->d_inode->i_sb->dq_op->transfer(dentry, iattr, current->fsuid);
 	} else {
 		error = notify_change(dentry, iattr);
 	}
-out:
 	return error;
 }
 

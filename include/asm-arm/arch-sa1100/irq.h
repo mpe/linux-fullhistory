@@ -12,6 +12,8 @@
  *   11-08-1999	PD	SA1101 support added
  *   25-09-1999	RMK	Merged into main ARM tree, cleaned up
  */
+#include <linux/config.h>
+
 static inline unsigned int fixup_irq(unsigned int irq)
 {
 #ifdef CONFIG_SA1101

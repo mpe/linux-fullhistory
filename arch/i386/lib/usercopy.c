@@ -5,6 +5,7 @@
  * Copyright 1997 Andi Kleen <ak@muc.de>
  * Copyright 1997 Linus Torvalds
  */
+#include <linux/config.h>
 #include <asm/uaccess.h>
 #include <asm/mmx.h>
 

@@ -25,6 +25,7 @@
 
 #include <linux/miscdevice.h>
 #include <linux/proc_fs.h>
+#define __NO_VERSION__
 #include <linux/module.h>
 
 #include <net/irda/irda.h>

@@ -20,6 +20,7 @@
 /* version number of this driver */
 #define RIVAFB_VERSION "0.6.5"
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>

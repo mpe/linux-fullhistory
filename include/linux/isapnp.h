@@ -23,6 +23,7 @@
 #define LINUX_ISAPNP_H
 
 #include <linux/config.h>
+#include <linux/errno.h>
 
 /*
  *  Configuration registers (TODO: change by specification)

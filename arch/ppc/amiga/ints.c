@@ -5,7 +5,6 @@
  *  Needed to drive the m68k emulating IRQ hardware on the PowerUp boards.
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/kernel_stat.h>

@@ -3,6 +3,8 @@
  *
  * Copyright (c) 1999 Nicolas Pitre <nico@visuaide.com>
  */
+#include <linux/config.h>
+
 #ifdef CONFIG_SA1100_VICTOR
 
 #define arch_reset( x ) {					\
