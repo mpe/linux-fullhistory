@@ -159,7 +159,7 @@ scsi_delete_timer(Scsi_Cmnd * SCset)
  *
  * Notes:
  */
-void scsi_times_out (Scsi_Cmnd * SCpnt)
+static void do_scsi_times_out (Scsi_Cmnd * SCpnt)
 {
 
     /* 
@@ -222,6 +222,15 @@ void scsi_times_out (Scsi_Cmnd * SCpnt)
     }
 }
 
+void scsi_times_out (Scsi_Cmnd * SCpnt)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	do_scsi_times_out(SCpnt);
+	spin_unlock_irqrestore(&io_request_lock, flags);
+}
+
 /*
  * Function     scsi_block_when_processing_errors
  *
@@ -264,6 +273,9 @@ scsi_block_when_processing_errors(Scsi_Device * SDpnt)
 STATIC
 void scsi_eh_times_out (Scsi_Cmnd * SCpnt)
 {
+  unsigned long flags;
+
+  spin_lock_irqsave(&io_request_lock, flags);
   SCpnt->request.rq_status = RQ_SCSI_DONE;
   SCpnt->owner = SCSI_OWNER_ERROR_HANDLER;
   SCpnt->eh_state = SCSI_STATE_TIMEOUT;
@@ -273,7 +285,8 @@ void scsi_eh_times_out (Scsi_Cmnd * SCpnt)
   if (SCpnt->host->eh_action != NULL)
     up(SCpnt->host->eh_action);
   else
-    panic("Missing scsi error handler thread");
+    printk("Missing scsi error handler thread\n");
+  spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 
@@ -446,6 +459,11 @@ scsi_test_unit_ready(Scsi_Cmnd * SCpnt)
   return SCpnt->eh_state;
 }
 
+/*
+ * This would normally need to get the IO request lock,
+ * but as it doesn't actually touch anything that needs
+ * to be locked we can avoid the lock here..
+ */
 STATIC
 void scsi_sleep_done (struct semaphore * sem)
 {

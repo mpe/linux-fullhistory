@@ -53,10 +53,6 @@
 #
 # 090398 Axel Boldt (boldt@math.ucsb.edu) - allow for empty lines in help
 # texts.
-#
-# 100498 Riley Williams (rhw@bigfoot.com) - added ability to display
-# blank lines in help texts: Any line consisting only of a single dot
-# will be displayed blank.
 
 #
 # Make sure we're really running bash.
@@ -107,7 +103,7 @@ ${var}:\\
      then
 	  echo; echo "  Sorry, no help available for this option yet.";echo
      else
-	  (echo; echo "$text") | sed 's/^\.$//' | ${PAGER:-more}
+	  (echo; echo "$text") | ${PAGER:-more}
      fi
   else
      echo;

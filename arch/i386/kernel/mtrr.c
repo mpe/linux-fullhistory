@@ -104,6 +104,12 @@
 	       Moved register-setting macros into this file.
 	       Moved setup code from init/main.c to i386-specific areas.
   v1.18
+    19980502   Richard Gooch <rgooch@atnf.csiro.au>
+	       Moved MTRR detection outside conditionals in <mtrr_init>.
+  v1.19
+    19980502   Richard Gooch <rgooch@atnf.csiro.au>
+	       Documentation improvement: mention Pentium II and AGP.
+  v1.20
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -137,7 +143,7 @@
 #include <asm/atomic.h>
 #include <linux/smp.h>
 
-#define MTRR_VERSION            "1.18 (19980429)"
+#define MTRR_VERSION            "1.20 (19980502)"
 
 #define TRUE  1
 #define FALSE 0
@@ -801,7 +807,7 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	if (ltype != type)
 	{
 	    spin_unlock (&main_lock);
-	    printk ( "mtrr: type missmatch for %lx,%lx old: %s new: %s\n",
+	    printk ( "mtrr: type mismatch for %lx,%lx old: %s new: %s\n",
 		     base, size, attrib_to_str (ltype), attrib_to_str (type) );
 	    return -EINVAL;
 	}
@@ -1193,8 +1199,8 @@ int init_module (void)
 __initfunc(int mtrr_init(void))
 #endif
 {
-#  if !defined(__SMP__) || defined(MODULE) 
     if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return 0;
+#  if !defined(__SMP__) || defined(MODULE) 
     printk("mtrr: v%s Richard Gooch (rgooch@atnf.csiro.au)\n", MTRR_VERSION);
 #endif
 

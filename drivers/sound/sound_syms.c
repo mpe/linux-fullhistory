@@ -26,6 +26,7 @@ EXPORT_SYMBOL(num_audiodevs);
 EXPORT_SYMBOL(note_to_freq);
 EXPORT_SYMBOL(compute_finetune);
 EXPORT_SYMBOL(seq_copy_to_input);
+EXPORT_SYMBOL(seq_input_event);
 EXPORT_SYMBOL(sequencer_init);
 EXPORT_SYMBOL(sequencer_timer);
 
@@ -61,6 +62,7 @@ EXPORT_SYMBOL(conf_printf2);
 EXPORT_SYMBOL(sound_timer_init);
 EXPORT_SYMBOL(sound_timer_interrupt);
 EXPORT_SYMBOL(sound_timer_syncinterval);
+EXPORT_SYMBOL(sound_timer_devs);
 
 /* Locking */
 EXPORT_SYMBOL(sound_locker);

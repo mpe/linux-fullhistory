@@ -125,7 +125,7 @@ int free_memory_available(int nr)
 	 * free unfragmented memory.
 	 * Added low/high water marks to avoid thrashing -- Rik.
 	 */
-	if (nr_free_pages > (num_physpages >> 5) + (nr ? 0 : num_physpages >> 6))
+	if (nr_free_pages > (nr ? freepages.low : freepages.high))
 		return nr+1;
 
 	list = free_area + NR_MEM_LISTS;
@@ -282,7 +282,6 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		spin_unlock_irqrestore(&page_alloc_lock, flags);
 		if (!(gfp_mask & __GFP_WAIT))
 			break;
-		shrink_dcache();
 		if (!try_to_free_pages(gfp_mask, SWAP_CLUSTER_MAX))
 			break;
 		gfp_mask &= ~__GFP_WAIT;	/* go through this only once */
@@ -335,15 +334,19 @@ __initfunc(unsigned long free_area_init(unsigned long start_mem, unsigned long e
 	int i;
 
 	/*
-	 * select nr of pages we try to keep free for important stuff
-	 * with a minimum of 48 pages. This is totally arbitrary
+	 * Select nr of pages we try to keep free for important stuff
+	 * with a minimum of 48 pages and a maximum of 256 pages, so
+	 * that we don't waste too much memory on large systems.
+	 * This is totally arbitrary.
 	 */
 	i = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT+7);
 	if (i < 48)
 		i = 48;
+	if (i > 256)
+		i = 256;
 	freepages.min = i;
-	freepages.low = i + (i>>1);
-	freepages.high = i + i;
+	freepages.low = i << 1;
+	freepages.high = freepages.low + i;
 	mem_map = (mem_map_t *) LONG_ALIGN(start_mem);
 	p = mem_map + MAP_NR(end_mem);
 	start_mem = LONG_ALIGN((unsigned long) p);

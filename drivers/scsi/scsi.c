@@ -1605,6 +1605,7 @@ void scsi_bottom_half_handler(void)
       if( SCpnt == NULL )
           return;
       
+      spin_lock_irqsave(&io_request_lock, flags);
       atomic_inc(&recursion_depth);
       
       SCnext = SCpnt->bh_next;
@@ -1696,6 +1697,7 @@ void scsi_bottom_half_handler(void)
       } /* for(; SCpnt...) */
 
       atomic_dec(&recursion_depth);
+      spin_unlock_irqrestore(&io_request_lock, flags);
 
   } /* while(1==1) */
 

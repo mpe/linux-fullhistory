@@ -37,8 +37,8 @@ static int irq_write_proc(struct file *file, const char *buffer,
 	int retval = -EINVAL;
 	int newirq = PARPORT_IRQ_NONE;
 	struct parport *pp = (struct parport *)data;
-	struct pardevice *cad = pp->cad;
 	int oldirq = pp->irq;
+	unsigned long flags;
 
 /*
  * We can have these valid cases:
@@ -70,35 +70,30 @@ static int irq_write_proc(struct file *file, const char *buffer,
 	if (oldirq == newirq)
 		goto out;
 
+	spin_lock_irqsave(&port->lock, flags);
 	if (pp->flags & PARPORT_FLAG_COMA)
 		goto out_ok;
 
+	retval = -EBUSY;
+	if (pp->cad)
+		goto out_unlock;
+
 	if (newirq != PARPORT_IRQ_NONE) { 
-		void (*handler)(int, void *, struct pt_regs *);
-
-		if (cad && cad->irq_func)
-			handler = cad->irq_func;
-		else
-			handler = parport_null_intr_func;
-
-		retval = request_irq(newirq, handler,
-				     SA_INTERRUPT,
-				     cad ? cad->name : pp->name,
-				     cad ? cad->private : NULL);
+		retval = request_irq(newirq, parport_null_intr_func,
+				     SA_INTERRUPT, pp->name, NULL);
 		if (retval)
-			goto out;
+			goto out_unlock;
 		else retval = count;
 	}
 
-	if (oldirq != PARPORT_IRQ_NONE) {
-		if (cad && cad->irq_func)
-			free_irq(oldirq, cad->private);
-		else
-			free_irq(oldirq, NULL);
-	}
+	if (oldirq != PARPORT_IRQ_NONE)
+		free_irq(oldirq, NULL);
 
 out_ok:
 	pp->irq = newirq;
+
+out_unlock:
+	spin_unlock_irqrestore (&pp->lock, flags);
 
 out:
 	return retval;

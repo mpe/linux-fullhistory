@@ -308,7 +308,9 @@ try_again:
 	}
 
 	/* Now we do the change of devices */
+	spin_lock_irqsave(&port->lock, flags);
 	port->cad = dev;
+	spin_unlock_irqrestore(&port->lock, flags);
 
 	/* Swap the IRQ handlers. */
 	if (port->irq != PARPORT_IRQ_NONE) {
@@ -346,9 +348,8 @@ blocked:
 			dev->waitprev = port->waittail;
 			if (port->waittail)
 				port->waittail->waitnext = dev;
-			else {
-				port->waithead = dev->port->waittail = dev;
-			}
+			else
+				port->waithead = port->waittail = dev;
 		}
 		spin_unlock_irqrestore (&port->lock, flags);
 	}

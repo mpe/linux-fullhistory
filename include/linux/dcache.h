@@ -131,7 +131,7 @@ extern int d_invalidate(struct dentry *);
 
 /* dcache memory management */
 extern int  select_dcache(int, int);
-extern void shrink_dcache_memory(void);
+extern void shrink_dcache_memory(int, unsigned int);
 extern void check_dcache_memory(void);
 extern void free_inode_memory(int);	/* defined in fs/inode.c */
 

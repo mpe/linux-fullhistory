@@ -1,7 +1,7 @@
 /*
  *	Intel IO-APIC support for multi-pentium hosts.
  *
- *	(c) 1997 Ingo Molnar, Hajnalka Szabo
+ *	Copyright (C) 1997, 1998 Ingo Molnar, Hajnalka Szabo
  *
  *	Many thanks to Stig Venaas for trying out countless experimental
  *	patches and reporting/debugging problems patiently!
@@ -34,6 +34,19 @@
  */
 #define IO_APIC_BASE ((volatile int *)0xfec00000)
 
+enum mp_irq_source_types {
+    mp_INT = 0,
+    mp_NMI = 1,
+    mp_SMI = 2,
+    mp_ExtINT = 3
+};
+
+enum ioapic_irq_destination_types {
+    dest_Fixed = 0,
+    dest_LowestPrio = 1,
+    dest_ExtINT = 7
+};
+
 /*
  * The structure of the IO-APIC:
  */
@@ -60,7 +73,7 @@ struct IO_APIC_route_entry {
 	__u32	vector		:  8,
 		delivery_mode	:  3,	/* 000: FIXED
 					 * 001: lowest prio
-					 * 111: ExtInt
+					 * 111: ExtINT
 					 */
 		dest_mode	:  1,	/* 0: physical, 1: logical */
 		delivery_status	:  1,
@@ -137,7 +150,7 @@ void disable_IO_APIC_irq (unsigned int irq)
 	io_apic_write(0x10+2*irq, *(((int *)&entry)+0));
 }
 
-void clear_IO_APIC_irq (unsigned int irq)
+void clear_IO_APIC_pin (unsigned int pin)
 {
 	struct IO_APIC_route_entry entry;
 
@@ -146,12 +159,12 @@ void clear_IO_APIC_irq (unsigned int irq)
 	 */
 	memset(&entry, 0, sizeof(entry));
 	entry.mask = 1;
-	io_apic_write(0x10+2*irq, *(((int *)&entry)+0));
-	io_apic_write(0x11+2*irq, *(((int *)&entry)+1));
+	io_apic_write(0x10+2*pin, *(((int *)&entry)+0));
+	io_apic_write(0x11+2*pin, *(((int *)&entry)+1));
 }
 
 /*
- * support for broken MP BIOSes, enables hand-redirection of PIRQ0-3 to
+ * support for broken MP BIOSes, enables hand-redirection of PIRQ0-7 to
  * specific CPU-side IRQs.
  */
 
@@ -159,7 +172,7 @@ void clear_IO_APIC_irq (unsigned int irq)
 int pirq_entries [MAX_PIRQS];
 int pirqs_enabled;
 
-void ioapic_pirq_setup(char *str, int *ints)
+__initfunc(void ioapic_pirq_setup(char *str, int *ints))
 {
 	int i, max;
 
@@ -187,12 +200,15 @@ void ioapic_pirq_setup(char *str, int *ints)
 	}
 }
 
-int find_irq_entry(int pin)
+/*
+ * Find the irq entry nr of a certain pin.
+ */
+__initfunc(static int find_irq_entry(int pin, int type))
 {
 	int i;
 
 	for (i=0; i<mp_irq_entries; i++)
-		if ( (mp_irqs[i].mpc_irqtype == 0x00) &&
+		if ( (mp_irqs[i].mpc_irqtype == type) &&
 			(mp_irqs[i].mpc_dstirq == pin))
 
 			return i;
@@ -200,7 +216,49 @@ int find_irq_entry(int pin)
 	return -1;
 }
 
-void setup_IO_APIC_irqs (void)
+/*
+ * Find the pin to which IRQ0 (ISA) is connected
+ */
+__initfunc(int find_timer_pin (int type))
+{
+	int i;
+
+	for (i=0; i<mp_irq_entries; i++) {
+		int lbus = mp_irqs[i].mpc_srcbus;
+
+		if ((mp_bus_id_to_type[lbus] == MP_BUS_ISA) &&
+		    (mp_irqs[i].mpc_irqtype == type) &&
+		    (mp_irqs[i].mpc_srcbusirq == 0x00))
+
+			return mp_irqs[i].mpc_dstirq;
+	}
+	return -1;
+}
+
+/*
+ * Find a specific PCI IRQ entry.
+ * Not an initfunc, possibly needed by modules
+ */
+int IO_APIC_get_PCI_irq_vector (int bus, int slot, int pci_pin)
+{
+	int i;
+
+	for (i=0; i<mp_irq_entries; i++) {
+		int lbus = mp_irqs[i].mpc_srcbus;
+
+		if (IO_APIC_IRQ(mp_irqs[i].mpc_dstirq) &&
+		    (mp_bus_id_to_type[lbus] == MP_BUS_PCI) &&
+		    !mp_irqs[i].mpc_irqtype &&
+		    (bus == mp_bus_id_to_pci_bus[mp_irqs[i].mpc_srcbus]) &&
+		    (slot == ((mp_irqs[i].mpc_srcbusirq >> 2) & 0x1f)) &&
+		    (pci_pin == (mp_irqs[i].mpc_srcbusirq & 3)))
+
+			return mp_irqs[i].mpc_dstirq;
+	}
+	return -1;
+}
+
+__initfunc(void setup_IO_APIC_irqs (void))
 {
 	struct IO_APIC_route_entry entry;
 	int i, idx, bus, irq, first_notcon=1;
@@ -214,12 +272,12 @@ void setup_IO_APIC_irqs (void)
 		 */
 		memset(&entry,0,sizeof(entry));
 
-		entry.delivery_mode = 1;		/* lowest prio */
+		entry.delivery_mode = dest_LowestPrio;
 		entry.dest_mode = 1;			/* logical delivery */
 		entry.mask = 0;				/* enable IRQ */
 		entry.dest.logical.logical_dest = 0xff;	/* all CPUs */
 
-		idx = find_irq_entry(i);
+		idx = find_irq_entry(i,mp_INT);
 		if (idx == -1) {
 			if (first_notcon) {
 				printk(" IO-APIC pin %d", i);
@@ -361,6 +419,21 @@ void setup_IO_APIC_irqs (void)
 			}
 		}
 
+	/*
+	 * There are broken mptables which register ISA+high-active+level IRQs,
+	 * these are illegal and are converted here to ISA+high-active+edge
+	 * IRQ sources. Careful, ISA+low-active+level is another broken entry
+	 * type, it represents PCI IRQs 'embedded into an ISA bus', they have
+	 * to be accepted. Yes, ugh.
+	 */
+		if ( (mp_bus_id_to_type[bus] == MP_BUS_ISA) &&
+			(entry.polarity == 0) /* active-high */ &&
+			(entry.trigger == 1) /* level */ )
+		{
+			printk("broken BIOS, changing pin %d to edge\n", i);
+			entry.trigger = 0;
+		}
+
 		io_apic_write(0x10+2*i, *(((int *)&entry)+0));
 		io_apic_write(0x11+2*i, *(((int *)&entry)+1));
 	}
@@ -369,7 +442,7 @@ void setup_IO_APIC_irqs (void)
 		printk(" not connected.\n");
 }
 
-void setup_IO_APIC_irq_ISA_default (unsigned int irq)
+__initfunc(void setup_IO_APIC_irq_ISA_default (unsigned int irq))
 {
 	struct IO_APIC_route_entry entry;
 
@@ -378,9 +451,9 @@ void setup_IO_APIC_irq_ISA_default (unsigned int irq)
 	 */
 	memset(&entry,0,sizeof(entry));
 
-	entry.delivery_mode = 1;			/* lowest prio */
+	entry.delivery_mode = dest_LowestPrio;		/* lowest prio */
 	entry.dest_mode = 1;				/* logical delivery */
-	entry.mask = 1;					/* unmask IRQ now */
+	entry.mask = 0;					/* unmask IRQ now */
 	entry.dest.logical.logical_dest = 0xff;		/* all CPUs */
 
 	entry.vector = IO_APIC_VECTOR(irq);
@@ -392,55 +465,41 @@ void setup_IO_APIC_irq_ISA_default (unsigned int irq)
 	io_apic_write(0x11+2*irq, *(((int *)&entry)+1));
 }
 
-int IO_APIC_get_PCI_irq_vector (int bus, int slot, int pci_pin)
-{
-	int i;
-
-	for (i=0; i<mp_irq_entries; i++) {
-		int lbus = mp_irqs[i].mpc_srcbus;
-
-		if (IO_APIC_IRQ(mp_irqs[i].mpc_dstirq) &&
-		    (mp_bus_id_to_type[lbus] == MP_BUS_PCI) &&
-		    !mp_irqs[i].mpc_irqtype &&
-		    (bus == mp_bus_id_to_pci_bus[mp_irqs[i].mpc_srcbus]) &&
-		    (slot == ((mp_irqs[i].mpc_srcbusirq >> 2) & 0x1f)) &&
-		    (pci_pin == (mp_irqs[i].mpc_srcbusirq & 3)))
-
-			return mp_irqs[i].mpc_dstirq;
-	}
-	return -1;
-}
-
 /*
- * There is a nasty bug in some older SMP boards, their mptable lies
- * about the timer IRQ. We do the following to work around the situation:
- *
- *	- timer IRQ defaults to IO-APIC IRQ
- *	- if this function detects that timer IRQs are defunct, then we fall
- *	  back to ISA timer IRQs
+ * Set up a certain pin as ExtINT delivered interrupt
  */
-static int timer_irq_works (void)
+__initfunc(void setup_ExtINT_pin (unsigned int pin))
 {
-	unsigned int t1=jiffies;
-	unsigned long flags;
+	struct IO_APIC_route_entry entry;
 
-	save_flags(flags);
-	sti();
+	/*
+	 * add it to the IO-APIC irq-routing table:
+	 */
+	memset(&entry,0,sizeof(entry));
 
-	udelay(100*1000);
+	entry.delivery_mode = dest_ExtINT;
+	entry.dest_mode = 1;				/* logical delivery */
+	entry.mask = 0;					/* unmask IRQ now */
+	entry.dest.logical.logical_dest = 0xff;		/* all CPUs */
 
-	if (jiffies-t1>1)
-		return 1;
+	entry.vector = IO_APIC_VECTOR(pin);		/* it's ignored */
 
-	return 0;
+	entry.polarity=0;
+	entry.trigger=0;
+
+	io_apic_write(0x10+2*pin, *(((int *)&entry)+0));
+	io_apic_write(0x11+2*pin, *(((int *)&entry)+1));
 }
 
-void print_IO_APIC (void)
+__initfunc(void print_IO_APIC (void))
 {
 	int i;
 	struct IO_APIC_reg_00 reg_00;
 	struct IO_APIC_reg_01 reg_01;
 	struct IO_APIC_reg_02 reg_02;
+
+ 	printk("nr of MP irq sources: %d.\n", mp_irq_entries);
+ 	printk("nr of IO-APIC registers: %d.\n", nr_ioapic_registers);
 
 	*(int *)&reg_00 = io_apic_read(0);
 	*(int *)&reg_01 = io_apic_read(1);
@@ -513,14 +572,41 @@ void print_IO_APIC (void)
 	return;
 }
 
-static void init_sym_mode (void)
+__initfunc(static void init_sym_mode (void))
 {
+	int i;
+
+	if (!pirqs_enabled)
+		for (i=0; i<MAX_PIRQS; i++)
+			pirq_entries[i]=-1;
+
 	printk("enabling Symmetric IO mode ... ");
-		outb_p (0x70, 0x22);
-		outb_p (0x01, 0x23);
+
+	outb(0x70, 0x22);
+	outb(0x01, 0x23);
+
 	printk("...done.\n");
+
+	/*
+	 * The number of IO-APIC irq-registers (== #pins):
+	 */
+	{
+		struct IO_APIC_reg_01 reg_01;
+
+		*(int *)&reg_01 = io_apic_read(1);
+		nr_ioapic_registers = reg_01.entries+1;
+	}
+
+	/*
+	 * Do not trust the IO-APIC being empty at bootup
+	 */
+	for (i=0; i<nr_ioapic_registers; i++)
+		clear_IO_APIC_pin (i);
 }
 
+/*
+ * Not an initfunc, needed by the reboot code
+ */
 void init_pic_mode (void)
 {
 	printk("disabling Symmetric IO mode ... ");
@@ -551,8 +637,7 @@ struct ioapic_list_entry ioapic_blacklist [] = {
 	{ 0		,	0		}
 };
 
-
-static int in_ioapic_list (struct ioapic_list_entry * table)
+__initfunc(static int in_ioapic_list (struct ioapic_list_entry * table))
 {
 	for (;table->oem_id; table++)
 		if ((!strcmp(table->oem_id,ioapic_OEM_ID)) &&
@@ -561,7 +646,7 @@ static int in_ioapic_list (struct ioapic_list_entry * table)
 	return 0;
 }
 
-static int ioapic_whitelisted (void)
+__initfunc(static int ioapic_whitelisted (void))
 {
 /*
  * Right now, whitelist everything to see whether the new parsing
@@ -574,12 +659,12 @@ static int ioapic_whitelisted (void)
 #endif
 }
 
-static int ioapic_blacklisted (void)
+__initfunc(static int ioapic_blacklisted (void))
 {
 	return in_ioapic_list(ioapic_blacklist);
 }
 
-static void setup_ioapic_id (void)
+__initfunc(static void setup_ioapic_id (void))
 {
 	struct IO_APIC_reg_00 reg_00;
 
@@ -598,7 +683,7 @@ static void setup_ioapic_id (void)
 		panic("APIC ID 2 already used");
 
 	/*
-	 * set the ID
+	 * Set the ID
 	 */
 	*(int *)&reg_00 = io_apic_read(0);
 	printk("... changing IO-APIC physical APIC ID to 2 ...\n");
@@ -613,7 +698,7 @@ static void setup_ioapic_id (void)
 		panic("could not set ID");
 }
 
-static void construct_default_ISA_mptable (void)
+__initfunc(static void construct_default_ISA_mptable (void))
 {
 	int i, pos=0;
 
@@ -650,31 +735,84 @@ static void construct_default_ISA_mptable (void)
 
 	setup_ioapic_id();
 }
-			
-void setup_IO_APIC (void)
+
+/*
+ * There is a nasty bug in some older SMP boards, their mptable lies
+ * about the timer IRQ. We do the following to work around the situation:
+ *
+ *	- timer IRQ defaults to IO-APIC IRQ
+ *	- if this function detects that timer IRQs are defunct, then we fall
+ *	  back to ISA timer IRQs
+ */
+__initfunc(static int timer_irq_works (void))
 {
-	int i;
+	unsigned int t1=jiffies;
+	unsigned long flags;
 
-	if (!pirqs_enabled)
-		for (i=0; i<MAX_PIRQS; i++)
-			pirq_entries[i]=-1;
+	save_flags(flags);
+	sti();
 
-	init_sym_mode();
-	{
-		struct IO_APIC_reg_01 reg_01;
+	udelay(10*10000);
 
-		*(int *)&reg_01 = io_apic_read(1);
-		nr_ioapic_registers = reg_01.entries+1;
+	if (jiffies-t1>1)
+		return 1;
+
+	return 0;
+}
+
+/*
+ * This code may look a bit paranoid, but it's supposed to cooperate with
+ * a wide range of boards and BIOS bugs ... fortunately only the timer IRQ
+ * is so screwy. Thanks to Brian Perkins for testing/hacking this beast
+ * fanatically on his truly bugged board.
+ */
+__initfunc(static void check_timer (void))
+{
+	int pin1, pin2;
+
+	pin1 = find_timer_pin (mp_INT);
+	pin2 = find_timer_pin (mp_ExtINT);
+
+	if (!timer_irq_works ()) {
+		if (pin1 != -1)
+			printk("..MP-BIOS bug: 8254 timer not connected to IO-APIC\n");
+		printk("..trying to set up timer as ExtINT ... ");
+
+		if (pin2 != -1) {
+			printk(".. (found pin %d) ...", pin2);
+			setup_ExtINT_pin (pin2);
+			make_8259A_irq(0);
+		}
+
+		if (!timer_irq_works ()) {
+			printk(" failed.\n");
+			printk("..trying to set up timer as BP irq ...");
+			/*
+			 * Just in case ...
+			 */
+			if (pin1 != -1)
+				clear_IO_APIC_pin (pin1);
+			if (pin2 != -1)
+				clear_IO_APIC_pin (pin2);
+
+			make_8259A_irq(0);
+
+			if (!timer_irq_works ()) {
+				printk(" failed.\n");
+				panic("IO-APIC + timer doesnt work!");
+			}
+		}
+		printk(" works.\n");
 	}
+}
+
+__initfunc(void setup_IO_APIC (void))
+{
+	init_sym_mode();
 
 	/*
-	 * do not trust the IO-APIC being empty at bootup
-	 */
-	for (i=0; i<nr_ioapic_registers; i++)
-		clear_IO_APIC_irq (i);
-
-	/*
-	 * the following IO-APIC's can be enabled:
+	 * Determine the range of IRQs handled by the IO-APIC. The
+	 * following boards can be fully enabled:
 	 *
 	 * - whitelisted ones
 	 * - those which have no PCI pins connected
@@ -699,7 +837,7 @@ void setup_IO_APIC (void)
 	/*
 	 * If there are no explicit mp irq entries: it's either one of the
 	 * default configuration types or we are broken. In both cases it's
-	 * fine to set up most of the low 16 IOAPIC pins to ISA defaults.
+	 * fine to set up most of the low 16 IO-APIC pins to ISA defaults.
 	 */
 	if (!mp_irq_entries) {
 		printk("no explicit IRQ entries, using default mptable\n");
@@ -708,18 +846,13 @@ void setup_IO_APIC (void)
 
 	init_IO_APIC_traps();
 
+	/*
+	 * Set up the IO-APIC irq routing table by parsing the MP-BIOS
+	 * mptable:
+	 */
 	setup_IO_APIC_irqs ();
-
-	if (!timer_irq_works ()) {
-		make_8259A_irq(0);
-		if (!timer_irq_works ())
-			panic("IO-APIC + timer doesnt work!");
-		printk("..MP-BIOS bug: i8254 timer not connected to IO-APIC\n");
-		printk("..falling back to 8259A-based timer interrupt\n");
-	}
+	check_timer();
  
- 	printk("nr of MP irq sources: %d.\n", mp_irq_entries);
- 	printk("nr of IOAPIC registers: %d.\n", nr_ioapic_registers);
 	print_IO_APIC();
 }
 

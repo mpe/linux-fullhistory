@@ -50,6 +50,15 @@ typedef struct freepages_v1
 typedef freepages_v1 freepages_t;
 extern freepages_t freepages;
 
+typedef struct pager_daemon_v1
+{
+	unsigned int	tries_base;
+	unsigned int	tries_min;
+	unsigned int	swap_cluster;
+} pager_daemon_v1;
+typedef pager_daemon_v1 pager_daemon_t;
+extern pager_daemon_t pager_daemon;
+
 #define SC_VERSION	1
 #define SC_MAX_VERSION	1
 

@@ -627,20 +627,29 @@ __initfunc(void smp_commence(void))
 	smp_commenced=1;
 }
 
+__initfunc(void enable_local_APIC(void))
+{
+	unsigned long value;
+
+ 	value = apic_read(APIC_SPIV);
+ 	value |= (1<<8);		/* Enable APIC (bit==1) */
+ 	value &= ~(1<<9);		/* Enable focus processor (bit==0) */
+ 	apic_write(APIC_SPIV,value);
+
+	udelay(100);			/* B safe */
+}
+
 __initfunc(void smp_callin(void))
 {
 	extern void calibrate_delay(void);
 	int cpuid=GET_APIC_ID(apic_read(APIC_ID));
-	unsigned long l;
 
 	/*
 	 *	Activate our APIC
 	 */
 	
 	SMP_PRINTK(("CALLIN %d %d\n",hard_smp_processor_id(), smp_processor_id()));
- 	l=apic_read(APIC_SPIV);
- 	l|=(1<<8);		/* Enable */
- 	apic_write(APIC_SPIV,l);
+	enable_local_APIC();
 
 	/*
 	 * Set up our APIC timer.
@@ -1004,15 +1013,7 @@ __initfunc(void smp_boot_cpus(void))
 	}
 #endif
 
-	/*
-	 *	Enable the local APIC
-	 */
-
-	cfg=apic_read(APIC_SPIV);
-	cfg|=(1<<8);		/* Enable APIC */
-	apic_write(APIC_SPIV,cfg);
-
-	udelay(10);
+	enable_local_APIC();
 
 	/*
 	 * Set up our local APIC timer:
@@ -1561,7 +1562,7 @@ __initfunc(static unsigned int get_8254_timer_count (void))
  * APIC double write bug.
  */
 
-#define APIC_DIVISOR 16
+#define APIC_DIVISOR 1
 
 void setup_APIC_timer (unsigned int clocks)
 {
@@ -1585,7 +1586,7 @@ void setup_APIC_timer (unsigned int clocks)
 	 */
 	tmp_value = apic_read(APIC_TDCR);
 	apic_write(APIC_TDCR , (tmp_value & ~APIC_TDR_DIV_1 )
-				 | APIC_TDR_DIV_16);
+				 | APIC_TDR_DIV_1);
 
 	tmp_value = apic_read(APIC_TMICT);
 	apic_write(APIC_TMICT, clocks/APIC_DIVISOR);

@@ -109,7 +109,11 @@ extern inline void get_mmu_context(struct task_struct *p)
 #endif
 }
 
-#define init_new_context(mm)	do { } while(0)
+extern inline void init_new_context(struct mm_struct *mm)
+{
+	mm->context = 0;
+}
+
 #define destroy_context(mm)	do { } while(0)
 
 #endif

@@ -1,15 +1,15 @@
 MTRR (Memory Type Range Register) control
-17 Dec 1997
+2 May 1998
 Richard Gooch
 <rgooch@atnf.csiro.au>
 
-  On Intel Pentium Pro systems the Memory Type Range Registers (MTRRs)
-  may be used to control processor access to memory ranges. This is
-  most useful when you have a video (VGA) card on the PCI
-  bus. Enabling write-combining allows PCI write transfers to be
-  combined into a larger transfer before bursting over the PCI
-  bus. This can increase performance of image write operations 2.5
-  times or more.
+  On Intel Pentium Pro/Pentium II systems the Memory Type Range
+  Registers (MTRRs) may be used to control processor access to memory
+  ranges. This is most useful when you have a video (VGA) card on a
+  PCI or AGP bus. Enabling write-combining allows bus write transfers
+  to be combined into a larger transfer before bursting over the
+  PCI/AGP bus. This can increase performance of image write operations
+  2.5 times or more.
 
   The CONFIG_MTRR option creates a /proc/mtrr file which may be used
   to manipulate your MTRRs. Typically the X server should use
@@ -30,13 +30,40 @@ Reading MTRRs from the shell:
 % cat /proc/mtrr
 reg00: base=0x00000000 (   0MB), size= 128MB: write-back, count=1
 reg01: base=0x08000000 ( 128MB), size=  64MB: write-back, count=1
-reg05: base=0x80000000 (2048MB), size=   4MB: write-combining, count=1
 ===============================================================================
 Creating MTRRs from the shell:
-% echo "base=0x80000000 size=0x400000 type=write-combining" >! /proc/mtrr
+# echo "base=0xf8000000 size=0x400000 type=write-combining" >! /proc/mtrr
+
+And the result thereof:
+% cat /proc/mtrr
+reg00: base=0x00000000 (   0MB), size= 128MB: write-back, count=1
+reg01: base=0x08000000 ( 128MB), size=  64MB: write-back, count=1
+reg02: base=0xf8000000 (3968MB), size=   4MB: write-combining, count=1
+
+This is for videoram at base address 0xf8000000 and size 4 MBytes. To
+find out your base address, you need to look at the output of your X
+server, which tells you where the linear framebuffer address is. A
+typical line that you may get is:
+
+(--) S3: PCI: 968 rev 0, Linear FB @ 0xf8000000
+
+Note that you should only use the value from the X server, as it may
+move the framebuffer base address, so the only value you can trust is
+that reported by the X server.
+
+To find out the size of your framebuffer (what, you don't actually
+know?), the following line will tell you:
+
+(--) S3: videoram:  4096k
+
+That's 4 MBytes, which is 0x400000 bytes (in hexadecimal).
+A patch is being written for XFree86 which will make this automatic:
+in other words the X server will manipulate /proc/mtrr using the
+ioctl() interface, so users won't have to do anything. If you use a
+commercial X server, lobby your vendor to add support for MTRRs.
 ===============================================================================
 Removing MTRRs from the shell:
-% echo "disable=5" >! /proc/mtrr
+% echo "disable=2" >! /proc/mtrr
 ===============================================================================
 Reading MTRRs from a C programme using ioctl()'s:
 
@@ -44,7 +71,7 @@ Reading MTRRs from a C programme using ioctl()'s:
 
     Source file for mtrr-show (example programme to show MTRRs using ioctl()'s)
 
-    Copyright (C) 1997  Richard Gooch
+    Copyright (C) 1997-1998  Richard Gooch
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -72,7 +99,7 @@ Reading MTRRs from a C programme using ioctl()'s:
 
     Written by      Richard Gooch   17-DEC-1997
 
-    Last updated by Richard Gooch   17-DEC-1997
+    Last updated by Richard Gooch   2-MAY-1998
 
 
 */
@@ -84,7 +111,7 @@ Reading MTRRs from a C programme using ioctl()'s:
 #include <sys/ioctl.h>
 #include <errno.h>
 #define MTRR_NEED_STRINGS
-#include <linux/mtrr.h>
+#include <asm/mtrr.h>
 
 #define TRUE 1
 #define FALSE 0
@@ -130,7 +157,7 @@ Creating MTRRs from a C programme using ioctl()'s:
 
     Source file for mtrr-add (example programme to add an MTRRs using ioctl())
 
-    Copyright (C) 1997  Richard Gooch
+    Copyright (C) 1997-1998  Richard Gooch
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -158,7 +185,7 @@ Creating MTRRs from a C programme using ioctl()'s:
 
     Written by      Richard Gooch   17-DEC-1997
 
-    Last updated by Richard Gooch   17-DEC-1997
+    Last updated by Richard Gooch   2-MAY-1998
 
 
 */
@@ -172,7 +199,7 @@ Creating MTRRs from a C programme using ioctl()'s:
 #include <sys/ioctl.h>
 #include <errno.h>
 #define MTRR_NEED_STRINGS
-#include <linux/mtrr.h>
+#include <asm/mtrr.h>
 
 #define TRUE 1
 #define FALSE 0

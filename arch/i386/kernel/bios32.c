@@ -1,7 +1,7 @@
 /*
  * bios32.c - Low-Level PCI Access
  *
- * $Id: bios32.c,v 1.29 1998/04/17 16:31:15 mj Exp $
+ * $Id: bios32.c,v 1.32 1998/05/02 12:03:05 davem Exp $
  *
  * Sponsored by
  *	iX Multiuser Multitasking Magazine
@@ -66,6 +66,8 @@
  *	and cleaned it up...     Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  *
  * Feb 6,  1998 : No longer using BIOS to find devices and device classes. [mj]
+ *
+ * May 1,  1998 : Support for peer host bridges. [mj]
  */
 
 #include <linux/config.h>
@@ -74,6 +76,7 @@
 #include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/ioport.h>
+#include <linux/malloc.h>
 
 #include <asm/page.h>
 #include <asm/segment.h>
@@ -832,7 +835,10 @@ __initfunc(static struct pci_access *pci_find_bios(void))
 }
 
 /*
- * Sort the device list according to PCI BIOS.
+ * Sort the device list according to PCI BIOS. Nasty hack, but since some
+ * fool forgot to define the `correct' device order in the PCI BIOS specs
+ * and we want to be (possibly bug-to-bug ;-]) compatible with older kernels
+ * which used BIOS ordering, we are bound to do this...
  */
 
 __initfunc(void pcibios_sort(void))
@@ -924,11 +930,41 @@ __initfunc(void pcibios_fixup_io_addr(struct pci_dev *dev, int idx))
 }
 
 /*
- * Arch-dependent fixups. We need to fix here base addresses, I/O
- * and memory enables and IRQ's as the PCI BIOS'es are buggy as hell.
+ * In case there are peer host bridges, scan bus behind each of them.
+ * Although several sources claim that the host bridges should have
+ * header type 1 and be assigned a bus number as for PCI2PCI bridges,
+ * the reality doesn't pass this test and the bus number is usually
+ * hard-wired to 1.
+ */
+__initfunc(void pcibios_fixup_peer_bridges(void))
+{
+	struct pci_dev *dev;
+	int cnt = 0;
+
+	for(dev=pci_root.devices; dev; dev=dev->sibling)
+		if ((dev->class >> 8) == PCI_CLASS_BRIDGE_HOST) {
+			DBG("PCI: Host bridge at %02x\n", dev->devfn);
+			if (cnt) {
+				struct pci_bus *b = kmalloc(sizeof(struct pci_bus), GFP_KERNEL);
+				memset(b, 0, sizeof(*b));
+				b->parent = &pci_root;
+				b->next = pci_root.next;
+				pci_root.next = b;
+				b->self = dev;
+				b->number = b->secondary = cnt;
+				b->subordinate = 0xff;
+				b->subordinate = pci_scan_bus(b);
+			}
+			cnt++;
+		}
+}
+
+/*
+ * Fix base addresses, I/O and memory enables and IRQ's (mostly work-arounds
+ * for buggy PCI BIOS'es :-[).
  */
 
-__initfunc(void pcibios_fixup(void))
+__initfunc(void pcibios_fixup_devices(void))
 {
 	struct pci_dev *dev;
 	int i, has_io, has_mem;
@@ -991,6 +1027,16 @@ __initfunc(void pcibios_fixup(void))
 		if (dev->irq >= NR_IRQS)
 			dev->irq = 0;
 	}
+}
+
+/*
+ * Arch-dependent fixups.
+ */
+
+__initfunc(void pcibios_fixup(void))
+{
+	pcibios_fixup_peer_bridges();
+	pcibios_fixup_devices();
 
 #ifdef CONFIG_PCI_BIOS
 	if ((pci_probe & PCI_BIOS_SORT) && !(pci_probe & PCI_NO_SORT))

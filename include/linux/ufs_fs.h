@@ -255,12 +255,12 @@ struct ufs_superblock {
 			__s32	fs_contigsumsize;/* size of cluster summary array */
 			__s32	fs_maxsymlinklen;/* max length of an internal symlink */
 			__s32	fs_inodefmt;	/* format of on-disk inodes */
-			__u64	fs_maxfilesize;	/* max representable file size */
+			__u32	fs_maxfilesize[2];/* max representable file size */
 			__u32	fs_qbmask[2];	/* ~usb_bmask */
 			__u32	fs_qfmask[2];	/* ~usb_fmask */
 			__s32	fs_state;	/* file system state time stamp */
 		} fs_44;
-	} fs_u  __attribute__ ((packed));
+	} fs_u;
 	__s32	fs_postblformat;	/* format of positional layout tables */
 	__s32	fs_nrpos;		/* number of rotational positions */
 	__s32	fs_postbloff;		/* (__s16) rotation block list head */

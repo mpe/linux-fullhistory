@@ -8,7 +8,7 @@
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
  *
- *  ==FILEVERSION 980319==
+ *  ==FILEVERSION 980501==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -107,8 +107,10 @@ typedef struct sk_buff	     sk_buff;
 #define PPP_LQR 0xc025	/* Link Quality Reporting Protocol */
 #endif
 
+#ifdef CONFIG_MODULES
 static int ppp_register_compressor (struct compressor *cp);
 static void ppp_unregister_compressor (struct compressor *cp);
+#endif
 
 /*
  * Local functions
@@ -3210,6 +3212,7 @@ static struct compressor *find_compressor (int type)
 	return (struct compressor *) 0;
 }
 
+#ifdef CONFIG_MODULES
 static int ppp_register_compressor (struct compressor *cp)
 {
 	struct compressor_link *new;
@@ -3261,6 +3264,7 @@ static void ppp_unregister_compressor (struct compressor *cp)
 	}
 	restore_flags(flags);
 }
+#endif
 
 /*************************************************************
  * Module support routines

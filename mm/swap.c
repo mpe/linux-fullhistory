@@ -44,8 +44,8 @@
  */
 freepages_t freepages = {
 	48,	/* freepages.min */
-	72,	/* freepages.low */
-	96	/* freepages.high */
+	96,	/* freepages.low */
+	144	/* freepages.high */
 };
 
 /* We track the number of pages currently being asynchronously swapped
@@ -76,4 +76,10 @@ buffer_mem_t page_cache = {
 	10,	/* minimum percent page cache */
 	30,	/* borrow percent page cache */
 	75	/* maximum */
+};
+
+pager_daemon_t pager_daemon = {
+	512,	/* base number for calculating the number of tries */
+	SWAP_CLUSTER_MAX,	/* minimum number of tries */
+	SWAP_CLUSTER_MAX,	/* do swap I/O in clusters of this size */
 };

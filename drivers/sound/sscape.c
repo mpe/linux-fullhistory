@@ -970,7 +970,7 @@ void cleanup_module(void)
 	if (mss)
 		unload_ss_ms_sound(&config);
 	SOUND_LOCK_END;
-	unload_sscape(&config);
+	unload_sscape(&mpu_config);
 }
 
 #endif

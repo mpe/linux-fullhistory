@@ -1,5 +1,5 @@
 /*
- *	$Id: pci.c,v 1.79 1998/04/17 16:25:24 mj Exp $
+ *	$Id: pci.c,v 1.84 1998/05/02 19:22:06 mj Exp $
  *
  *	PCI Bus Services
  *
@@ -68,11 +68,48 @@ pci_find_class(unsigned int class, struct pci_dev *from)
 }
 
 
+int
+pci_read_config_byte(struct pci_dev *dev, u8 where, u8 *val)
+{
+	return pcibios_read_config_byte(dev->bus->number, dev->devfn, where, val);
+}
+
+int
+pci_read_config_word(struct pci_dev *dev, u8 where, u16 *val)
+{
+	return pcibios_read_config_word(dev->bus->number, dev->devfn, where, val);
+}
+
+int
+pci_read_config_dword(struct pci_dev *dev, u8 where, u32 *val)
+{
+	return pcibios_read_config_dword(dev->bus->number, dev->devfn, where, val);
+}
+
+int
+pci_write_config_byte(struct pci_dev *dev, u8 where, u8 val)
+{
+	return pcibios_write_config_byte(dev->bus->number, dev->devfn, where, val);
+}
+
+int
+pci_write_config_word(struct pci_dev *dev, u8 where, u16 val)
+{
+	return pcibios_write_config_word(dev->bus->number, dev->devfn, where, val);
+}
+
+int
+pci_write_config_dword(struct pci_dev *dev, u8 where, u32 val)
+{
+	return pcibios_write_config_dword(dev->bus->number, dev->devfn, where, val);
+}
+
+
 void
 pci_set_master(struct pci_dev *dev)
 {
-	unsigned short cmd;
-	unsigned char lat;
+	u16 cmd;
+	u8 lat;
 
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 	if (! (cmd & PCI_COMMAND_MASTER)) {
@@ -89,16 +126,43 @@ pci_set_master(struct pci_dev *dev)
 	}
 }
 
+__initfunc(void pci_read_bases(struct pci_dev *dev, unsigned int howmany))
+{
+	unsigned int reg;
+	u32 l;
+
+	for(reg=0; reg<howmany; reg++) {
+		pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
+		if (l == 0xffffffff)
+			continue;
+		dev->base_address[reg] = l;
+		if ((l & PCI_MEMORY_RANGE_TYPE_MASK) == PCI_BASE_ADDRESS_MEM_TYPE_64) {
+			reg++;
+			pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
+			if (l) {
+#if BITS_PER_LONG == 64
+				dev->base_address[reg-1] |= ((unsigned long) l) << 32;
+#else
+				printk("PCI: Unable to handle 64-bit address for device %02x:%02x\n",
+					dev->bus->number, dev->devfn);
+				dev->base_address[reg-1] = 0;
+#endif
+			}
+		}
+	}
+}
+
 
 __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 {
 	unsigned int devfn, l, max, class;
 	unsigned char cmd, irq, tmp, hdr_type, is_multi = 0;
-	struct pci_dev *dev;
+	struct pci_dev *dev, **bus_last;
 	struct pci_bus *child;
 	int reg;
 
 	DBG("pci_scan_bus for bus %d\n", bus->number);
+	bus_last = &bus->devices;
 	max = bus->secondary;
 	for (devfn = 0; devfn < 0xff; ++devfn) {
 		if (PCI_FUNC(devfn) && !is_multi) {
@@ -111,8 +175,8 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 
 		pcibios_read_config_dword(bus->number, devfn, PCI_VENDOR_ID, &l);
 		/* some broken boards return 0 if a slot is empty: */
-		if (l == 0xffffffff || l == 0x00000000) {
-			hdr_type = 0;
+		if (l == 0xffffffff || l == 0x00000000 || l == 0x0000ffff || l == 0xffff0000) {
+			is_multi = 0;
 			continue;
 		}
 
@@ -133,11 +197,12 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 		pcibios_read_config_dword(bus->number, devfn, PCI_CLASS_REVISION, &class);
 		class >>= 8;				    /* upper 3 bytes */
 		dev->class = class;
+		class >>= 8;
 		dev->hdr_type = hdr_type;
 
 		switch (hdr_type & 0x7f) {		    /* header type */
 		case PCI_HEADER_TYPE_NORMAL:		    /* standard header */
-			if (class >> 8 == PCI_CLASS_BRIDGE_PCI)
+			if (class == PCI_CLASS_BRIDGE_PCI)
 				goto bad;
 			/*
 			 * If the card generates interrupts, read IRQ number
@@ -151,25 +216,19 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 			 * read base address registers, again pcibios_fixup() can
 			 * tweak these
 			 */
-			for (reg = 0; reg < 6; reg++) {
-				pcibios_read_config_dword(bus->number, devfn, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
-				dev->base_address[reg] = (l == 0xffffffff) ? 0 : l;
-			}
+			pci_read_bases(dev, 6);
 			pcibios_read_config_dword(bus->number, devfn, PCI_ROM_ADDRESS, &l);
 			dev->rom_address = (l == 0xffffffff) ? 0 : l;
 			break;
 		case PCI_HEADER_TYPE_BRIDGE:		    /* bridge header */
-			if (class >> 8 != PCI_CLASS_BRIDGE_PCI)
+			if (class != PCI_CLASS_BRIDGE_PCI)
 				goto bad;
-			for (reg = 0; reg < 2; reg++) {
-				pcibios_read_config_dword(bus->number, devfn, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
-				dev->base_address[reg] = (l == 0xffffffff) ? 0 : l;
-			}
+			pci_read_bases(dev, 2);
 			pcibios_read_config_dword(bus->number, devfn, PCI_ROM_ADDRESS1, &l);
 			dev->rom_address = (l == 0xffffffff) ? 0 : l;
 			break;
 		case PCI_HEADER_TYPE_CARDBUS:		    /* CardBus bridge header */
-			if (class >> 16 != PCI_BASE_CLASS_BRIDGE)
+			if (class != PCI_CLASS_BRIDGE_CARDBUS)
 				goto bad;
 			for (reg = 0; reg < 2; reg++) {
 				pcibios_read_config_dword(bus->number, devfn, PCI_CB_MEMORY_BASE_0 + (reg << 3), &l);
@@ -201,8 +260,8 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 		 * Now insert it into the list of devices held
 		 * by the parent bus.
 		 */
-		dev->sibling = bus->devices;
-		bus->devices = dev;
+		*bus_last = dev;
+		bus_last = &dev->sibling;
 
 #if 0
 		/*
@@ -217,7 +276,7 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 		/*
 		 * If it's a bridge, scan the bus behind it.
 		 */
-		if (class >> 8 == PCI_CLASS_BRIDGE_PCI) {
+		if (class == PCI_CLASS_BRIDGE_PCI) {
 			unsigned int buses;
 			unsigned short cr;
 

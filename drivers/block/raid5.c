@@ -1209,6 +1209,14 @@ repeat:
 	sh->pd_idx = pd_idx;
 	if (sh->phase != PHASE_COMPLETE && sh->phase != PHASE_BEGIN)
 		PRINTK(("stripe %lu catching the bus!\n", sh->sector));
+	if (sh->bh_new[dd_idx]) {
+		printk("raid5: bug: stripe->bh_new[%d], sector %lu exists\n", dd_idx, sh->sector);
+		printk("raid5: bh %p, bh_new %p\n", bh, sh->bh_new[dd_idx]);
+		lock_stripe(sh);
+		md_wakeup_thread(raid_conf->thread);
+		wait_on_stripe(sh);
+		goto repeat;
+	}
 	add_stripe_bh(sh, bh, dd_idx, rw);
 
 	md_wakeup_thread(raid_conf->thread);

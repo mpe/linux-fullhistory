@@ -735,7 +735,11 @@ static void do_8259A_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 static void enable_ioapic_irq(unsigned int irq)
 {
 	irq_desc_t *desc = irq_desc + irq;
+#if 0
+	enable_IO_APIC_irq(irq);
+#endif
 	if (desc->events && !desc->ipi) {
+		ack_APIC_irq();
 		desc->ipi = 1;
 		send_IPI(APIC_DEST_SELF, IO_APIC_VECTOR(irq));
 	}
@@ -746,6 +750,9 @@ static void enable_ioapic_irq(unsigned int irq)
  */
 static void disable_ioapic_irq(unsigned int irq)
 {
+#if 0
+	disable_IO_APIC_irq(irq);
+#endif
 }
 
 static void do_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
@@ -754,13 +761,15 @@ static void do_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 
 	spin_lock(&irq_controller_lock);
 
-	/* Ack the irq inside the lock! */
-	ack_APIC_irq();
 	desc->ipi = 0;
 
-	/* If the irq is disabled for whatever reason, just set a flag and return */
+	/*
+	 * If the irq is disabled for whatever reason, just
+	 * set a flag and return
+	 */
 	if (desc->status & (IRQ_DISABLED | IRQ_INPROGRESS)) {
 		desc->events = 1;
+		ack_APIC_irq();
 		spin_unlock(&irq_controller_lock);
 		return;
 	}
@@ -790,6 +799,7 @@ static void do_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	spin_unlock(&irq_controller_lock);
 
 no_handler:
+	ack_APIC_irq();
 	hardirq_exit(cpu);
 	release_irqlock(cpu);
 }

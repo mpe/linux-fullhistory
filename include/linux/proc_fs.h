@@ -51,6 +51,7 @@ enum root_directory_inos {
 	PROC_PPC_HTAB,
 	PROC_SOUND,
 	PROC_MTRR, /* whether enabled or not */
+	PROC_FS
 };
 
 enum pid_directory_inos {
@@ -203,6 +204,19 @@ enum bus_directory_inos {
 	PROC_BUS_PCI = PROC_MCA_LAST,
 	PROC_BUS_PCI_DEVICES,
 	PROC_BUS_LAST
+};
+
+enum fs_directory_inos {
+	PROC_FS_CODA = PROC_MCA_LAST,
+	PROC_FS_LAST
+};
+
+enum fs_coda_directory_inos {
+	PROC_VFS_STATS = PROC_MCA_LAST,
+	PROC_UPCALL_STATS,
+	PROC_PERMISSION_STATS,
+	PROC_CACHE_INV_STATS,
+	PROC_CODA_FS_LAST
 };
 
 /* Finally, the dynamically allocatable proc entries are reserved: */

@@ -1,5 +1,5 @@
 /*
- * $Id: quirks.c,v 1.3 1998/02/06 19:51:42 mj Exp $
+ * $Id: quirks.c,v 1.5 1998/05/02 19:24:14 mj Exp $
  *
  * PCI Chipset-Specific Quirks
  *
@@ -7,8 +7,7 @@
  *
  * This is the right place for all special fixups for on-board
  * devices not depending on system architecture -- for example
- * bus bridges. The only thing implemented in this release is
- * the bridge optimization, but others might appear later.
+ * bus bridges.
  */
 
 #include <linux/config.h>
@@ -88,21 +87,19 @@ __initfunc(static void quirk_bridge(struct pci_dev *dev, int pos))
 		printk("    %s: ", bridge_optimization[i].type);
 		bmap = &bridge_mapping[pos + i];
 		if (!bmap->addr) {
-			printk("Not supported.");
+			printk("Not supported.\n");
 		} else {
-			pcibios_read_config_byte(dev->bus->number, dev->devfn, bmap->addr, &val);
+			pci_read_config_byte(dev, bmap->addr, &val);
 			if ((val & bmap->mask) == bmap->value)
-				printk("%s.", bridge_optimization[i].on);
+				printk("%s.\n", bridge_optimization[i].on);
 			else {
-				printk("%s.", bridge_optimization[i].off);
-				pcibios_write_config_byte(dev->bus->number, dev->devfn,
-							  bmap->addr,
-							  (val & (0xff - bmap->mask))
-							  + bmap->value);
-				printk("Changed!  Now %s.", bridge_optimization[i].on);
+				printk("%s", bridge_optimization[i].off);
+				pci_write_config_byte(dev,
+						      bmap->addr,
+						      (val & (0xff - bmap->mask)) + bmap->value);
+				printk(" -> %s.\n", bridge_optimization[i].on);
 			}
 		}
-		printk("\n");
 	}
 }
 
@@ -113,27 +110,18 @@ __initfunc(static void quirk_bridge(struct pci_dev *dev, int pos))
    which can cause problems in combination with the 82441FX/PPro MTRRs */
 __initfunc(static void quirk_passive_release(struct pci_dev *dev, int arg))
 {
-	struct pci_dev *piix3;
+	struct pci_dev *d = NULL;
 	unsigned char dlc;
 
 	/* We have to make sure a particular bit is set in the PIIX3
 	   ISA bridge, so we have to go out and find it. */
-	for (piix3 = pci_devices; ; piix3 = piix3->next) {
-		if (!piix3)
-			return;
-
-		if (piix3->vendor == PCI_VENDOR_ID_INTEL
-		    && piix3->device == PCI_DEVICE_ID_INTEL_82371SB_0)
-			break;
-	}	
-
-	pcibios_read_config_byte(piix3->bus->number, piix3->devfn, 0x82, &dlc);
-
-	if (!(dlc & 1<<1)) {
-		printk("PIIX3: Enabling Passive Release\n");
-		dlc |= 1<<1;
-		pcibios_write_config_byte(piix3->bus->number, piix3->devfn, 
-					  0x82, dlc);
+	while ((d = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_0, d))) {
+		pci_read_config_byte(d, 0x82, &dlc);
+		if (!(dlc & 1<<1)) {
+			printk("PIIX3: Enabling Passive Release\n");
+			dlc |= 1<<1;
+			pci_write_config_byte(d, 0x82, dlc);
+		}
 	}
 }
 
@@ -141,7 +129,7 @@ __initfunc(static void quirk_passive_release(struct pci_dev *dev, int arg))
 typedef void (*quirk_handler)(struct pci_dev *, int);
 
 /*
- * Mpping from quirk handler functions to names.
+ * Mapping from quirk handler functions to names.
  */
 
 struct quirk_name {
@@ -185,6 +173,7 @@ static struct quirk_info quirk_list[] __initdata = {
 	{ PCI_VENDOR_ID_UMC,	PCI_DEVICE_ID_UMC_UM8891A,	quirk_bridge,	0x01 },
 	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82424,	quirk_bridge,	0x00 },
 	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82434,	quirk_bridge,	0x00 },
+	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82430,	quirk_bridge,	0x00 },
 #endif
 	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82441,	quirk_passive_release,	0x00 },
 };

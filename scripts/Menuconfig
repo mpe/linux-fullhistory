@@ -47,13 +47,6 @@
 #
 # 090398 Axel Boldt (boldt@math.ucsb.edu) - allow for empty lines in help
 # texts.
-#----------------------------------------------------------------------------
-#
-# 10 Apr 1998 - Added ability to display blank lines in help text: Any line
-#               which only contains a single dot will be displayed blank.
-#               Author: Riley Williams <rhw@bigfoot.com>
-#
-#----------------------------------------------------------------------------
 
 
 #
@@ -301,7 +294,7 @@ ${var}:\\
           echo "There is no help available for this kernel option."
 	  return 1
      else
-	  echo "$text" | sed 's/^\.$//'
+	  echo "$text"
      fi
   else
 	 echo "There is no help available for this kernel option."

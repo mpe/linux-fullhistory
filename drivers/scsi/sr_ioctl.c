@@ -106,8 +106,8 @@ retry:
 	    break;
 	case ILLEGAL_REQUEST:
             if (!quiet)
-                printk("sr%d: CDROM (ioctl) reports ILLEGAL REQUEST.\n",
-                       target);
+		printk(KERN_ERR "sr%d: CDROM (ioctl) reports ILLEGAL "
+		       "REQUEST.\n", target);
             if (SCpnt->sense_buffer[12] == 0x20 &&
                 SCpnt->sense_buffer[13] == 0x00) {
                 /* sense: Invalid command operation code */
@@ -121,7 +121,7 @@ retry:
 #endif
 	    break;
 	default:
-	    printk("sr%d: CDROM (ioctl) error, command: ", target);
+	    printk(KERN_ERR "sr%d: CDROM (ioctl) error, command: ", target);
 	    print_command(sr_cmd);
 	    print_sense("sr", SCpnt);
             err = -EIO;

@@ -84,7 +84,8 @@ enum
 	VM_BDFLUSH,		/* struct: Control buffer cache flushing */
 	VM_OVERCOMMIT_MEMORY,	/* Turn off the virtual memory safety limit */
 	VM_BUFFERMEM,		/* struct: Set buffer memory thresholds */
-	VM_PAGECACHE		/* struct: Set cache memory thresholds */
+	VM_PAGECACHE,		/* struct: Set cache memory thresholds */
+	VM_PAGERDAEMON		/* struct: Control kswapd behaviour */
 };
 
 

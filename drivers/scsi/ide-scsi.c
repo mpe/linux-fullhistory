@@ -260,7 +260,7 @@ static void idescsi_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 	struct request *rq = hwgroup->rq;
 	idescsi_pc_t *pc = (idescsi_pc_t *) rq->buffer;
 	int log = test_bit(IDESCSI_LOG_CMD, &scsi->log);
-	u8 *scsi_buf = pc->scsi_cmd->request_buffer;
+	u8 *scsi_buf;
 
 	if (rq->cmd != IDESCSI_PC_RQ) {
 		ide_end_request (uptodate, hwgroup);
@@ -282,6 +282,7 @@ static void idescsi_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 			printk ("ide-scsi: %s: suc %lu", drive->name, pc->scsi_cmd->serial_number);
 			if (!test_bit(PC_WRITING, &pc->flags) && pc->actually_transferred && pc->actually_transferred <= 1024 && pc->buffer) {
 				printk(", rst = ");
+				scsi_buf = pc->scsi_cmd->request_buffer;
 				hexdump(scsi_buf, IDE_MIN(16, pc->scsi_cmd->request_bufflen));
 			} else printk("\n");
 		}
@@ -345,7 +346,18 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 		if ( temp > pc->request_transfer) {
 			if (temp > pc->buffer_size) {
 				printk (KERN_ERR "ide-scsi: The scsi wants to send us more data than expected - discarding data\n");
-				idescsi_discard_data (drive,bcount);
+				temp = pc->buffer_size - pc->actually_transferred;
+				if (temp) {
+					clear_bit(PC_WRITING, &pc->flags);
+					if (pc->sg)
+						idescsi_input_buffers(drive, pc, temp);
+					else
+						atapi_input_bytes(drive, pc->current_position, temp);
+					printk(KERN_ERR "ide-scsi: transferred %d of %d bytes\n", temp, bcount);
+				}
+				pc->actually_transferred += temp;
+				pc->current_position += temp;
+				idescsi_discard_data (drive,bcount - temp);
 				ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc));
 				return;
 			}

@@ -297,9 +297,9 @@ void machine_restart(char * __unused)
 			int i;
 			for (i=0; i<100; i++) {
 				kb_wait();
-				udelay(10);
+				udelay(50);
 				outb(0xfe,0x64);         /* pulse reset low */
-				udelay(10);
+				udelay(50);
 			}
 			/* That didn't work - force a triple fault.. */
 			__asm__ __volatile__("lidt %0": :"m" (no_idt));
