@@ -39,6 +39,7 @@
 
 #include <sound/core.h>
 #include <sound/emu10k1.h>
+#include "p16v.h"
 
 #if 0
 MODULE_AUTHOR("Jaroslav Kysela <perex@suse.cz>, Creative Labs, Inc.");
@@ -178,14 +179,17 @@ static int __devinit snd_emu10k1_init(emu10k1_t * emu, int enable_ir)
 		tmp &= 0xfffff1ff;
 		tmp |= (0x2<<9);
 		snd_emu10k1_ptr_write(emu, A_SPDIF_SAMPLERATE, 0, tmp);
-
+		
 		/* Setup SRCSel (Enable Spdif,I2S SRCMulti) */
-		outl(0x600000, emu->port + 0x20);
-		outl(0x14, emu->port + 0x24);
-
+		snd_emu10k1_ptr20_write(emu, SRCSel, 0, 0x14);
 		/* Setup SRCMulti Input Audio Enable */
-		outl(0x6E0000, emu->port + 0x20);
-		outl(0xFF00FF00, emu->port + 0x24);
+		/* Use 0xFFFFFFFF to enable P16V sounds. */
+		snd_emu10k1_ptr20_write(emu, SRCMULTI_ENABLE, 0, 0xFFFFFFFF);
+
+		/* Enabled Phased (8-channel) P16V playback */
+		outl(0x0201, emu->port + HCFG2);
+		/* Set playback routing. */
+		snd_emu10k1_ptr_write(emu, CAPTURE_P16V_SOURCE, 0, 78e4);
 	}
 	if (emu->audigy && (emu->serial == 0x10011102) ) { /* audigy2 Value */
 		/* Hacks for Alice3 to work independent of haP16V driver */
@@ -596,6 +600,8 @@ static int snd_emu10k1_free(emu10k1_t *emu)
 	if (emu->port)
 		pci_release_regions(emu->pci);
 	pci_disable_device(emu->pci);
+	if (emu->audigy && emu->revision == 4) /* P16V */	
+		snd_p16v_free(emu);
 	kfree(emu);
 	return 0;
 }
@@ -605,6 +611,85 @@ static int snd_emu10k1_dev_free(snd_device_t *device)
 	emu10k1_t *emu = device->device_data;
 	return snd_emu10k1_free(emu);
 }
+
+/* vendor, device, subsystem, emu10k1_chip, emu10k2_chip, ca0102_chip, ca0108_chip, ca0151_chip, spk71, spdif_bug, ac97_chip, ecard, driver, name */
+
+static emu_chip_details_t emu_chip_details[] = {
+	/* Audigy 2 Value AC3 out does not work yet. Need to find out how to turn off interpolators.*/
+	{.vendor = 0x1102, .device = 0x0008, .subsystem = 0x10011102,
+	 .driver = "Audigy2", .name = "Audigy 2 Value [SB0400]", 
+	 .emu10k2_chip = 1,
+	 .ca0108_chip = 1,
+	 .spk71 = 1} ,
+	{.vendor = 0x1102, .device = 0x0008, 
+	 .driver = "Audigy2", .name = "Audigy 2 Value [Unknown]", 
+	 .emu10k2_chip = 1,
+	 .ca0108_chip = 1} ,
+	{.vendor = 0x1102, .device = 0x0004, .subsystem = 0x20071102,
+	 .driver = "Audigy2", .name = "Audigy 4 PRO [SB0380]", 
+	 .emu10k2_chip = 1,
+	 .ca0102_chip = 1,
+	 .ca0151_chip = 1,
+	 .spk71 = 1,
+	 .spdif_bug = 1,
+	 .ac97_chip = 1} ,
+	{.vendor = 0x1102, .device = 0x0004, .subsystem = 0x20021102,
+	 .driver = "Audigy2", .name = "Audigy 2 ZS [SB0350]", 
+	 .emu10k2_chip = 1,
+	 .ca0102_chip = 1,
+	 .ca0151_chip = 1,
+	 .spk71 = 1,
+	 .spdif_bug = 1,
+	 .ac97_chip = 1} ,
+	{.vendor = 0x1102, .device = 0x0004, .subsystem = 0x20011102,
+	 .driver = "Audigy2", .name = "Audigy 2 ZS [2001]", 
+	 .emu10k2_chip = 1,
+	 .ca0102_chip = 1,
+	 .ca0151_chip = 1,
+	 .spk71 = 1,
+	 .spdif_bug = 1,
+	 .ac97_chip = 1} ,
+	{.vendor = 0x1102, .device = 0x0004, .subsystem = 0x10071102,
+	 .driver = "Audigy2", .name = "Audigy 2 [SB0240]", 
+	 .emu10k2_chip = 1,
+	 .ca0102_chip = 1,
+	 .ca0151_chip = 1,
+	 .spk71 = 1,
+	 .spdif_bug = 1,
+	 .ac97_chip = 1} ,
+	{.vendor = 0x1102, .device = 0x0004, .subsystem = 0x10051102,
+	 .driver = "Audigy2", .name = "Audigy 2 EX [1005]", 
+	 .emu10k2_chip = 1,
+	 .ca0102_chip = 1,
+	 .ca0151_chip = 1,
+	 .spdif_bug = 1} ,
+	{.vendor = 0x1102, .device = 0x0004, .subsystem = 0x10021102,
+	 .driver = "Audigy2", .name = "Audigy 2 Platinum [SB0240P]", 
+	 .emu10k2_chip = 1,
+	 .ca0102_chip = 1,
+	 .ca0151_chip = 1,
+	 .spk71 = 1,
+	 .spdif_bug = 1,
+	 .ac97_chip = 1} ,
+	{.vendor = 0x1102, .device = 0x0004,
+	 .driver = "Audigy", .name = "Audigy 1 or 2 [Unknown]", 
+	 .emu10k2_chip = 1,
+	 .ca0102_chip = 1,
+	 .spdif_bug = 1} ,
+	{.vendor = 0x1102, .device = 0x0002, .subsystem = 0x40011102,
+	 .driver = "EMU10K1", .name = "E-mu APS [4001]", 
+	 .emu10k1_chip = 1,
+	 .ecard = 1} ,
+	{.vendor = 0x1102, .device = 0x0002, .subsystem = 0x80641102,
+	 .driver = "EMU10K1", .name = "SB Live 5.1", 
+	 .emu10k1_chip = 1,
+	 .ac97_chip = 1} ,
+	{.vendor = 0x1102, .device = 0x0002,
+	 .driver = "EMU10K1", .name = "SB Live [Unknown]", 
+	 .emu10k1_chip = 1,
+	 .ac97_chip = 1} ,
+	{ } /* terminator */
+};
 
 int __devinit snd_emu10k1_create(snd_card_t * card,
 		       struct pci_dev * pci,
@@ -617,14 +702,13 @@ int __devinit snd_emu10k1_create(snd_card_t * card,
 	emu10k1_t *emu;
 	int err;
 	int is_audigy;
+	unsigned char revision;
+	const emu_chip_details_t *c;
 	static snd_device_ops_t ops = {
 		.dev_free =	snd_emu10k1_dev_free,
 	};
 	
 	*remu = NULL;
-
-	// is_audigy = (int)pci->driver_data;
-	is_audigy = (pci->device == 0x0004) || ( (pci->device == 0x0008) );
 
 	/* enable PCI device */
 	if ((err = pci_enable_device(pci)) < 0)
@@ -634,15 +718,6 @@ int __devinit snd_emu10k1_create(snd_card_t * card,
 	if (emu == NULL) {
 		pci_disable_device(pci);
 		return -ENOMEM;
-	}
-	/* set the DMA transfer mask */
-	emu->dma_mask = is_audigy ? AUDIGY_DMA_MASK : EMU10K1_DMA_MASK;
-	if (pci_set_dma_mask(pci, emu->dma_mask) < 0 ||
-	    pci_set_consistent_dma_mask(pci, emu->dma_mask) < 0) {
-		snd_printk(KERN_ERR "architecture does not support PCI busmaster DMA with mask 0x%lx\n", emu->dma_mask);
-		kfree(emu);
-		pci_disable_device(pci);
-		return -ENXIO;
 	}
 	emu->card = card;
 	spin_lock_init(&emu->reg_lock);
@@ -658,8 +733,43 @@ int __devinit snd_emu10k1_create(snd_card_t * card,
 	emu->irq = -1;
 	emu->synth = NULL;
 	emu->get_synth_voice = NULL;
+	/* read revision & serial */
+	pci_read_config_byte(pci, PCI_REVISION_ID, &revision);
+	emu->revision = revision;
+	pci_read_config_dword(pci, PCI_SUBSYSTEM_VENDOR_ID, &emu->serial);
+	pci_read_config_word(pci, PCI_SUBSYSTEM_ID, &emu->model);
+	emu->card_type = EMU10K1_CARD_CREATIVE;
+	snd_printdd("vendor=0x%x, device=0x%x, subsystem_vendor_id=0x%x, subsystem_id=0x%x\n",pci->vendor, pci->device, emu->serial, emu->model);
 
-	emu->audigy = is_audigy;
+	for (c = emu_chip_details; c->vendor; c++) {
+		if (c->vendor == pci->vendor && c->device == pci->device) {
+			if (c->subsystem == emu->serial) break;
+			if (c->subsystem == 0) break;
+		}
+	}
+	if (c->vendor == 0) {
+		snd_printk(KERN_ERR "emu10k1: Card not recognised\n");
+		kfree(emu);
+		pci_disable_device(pci);
+		return -ENOENT;
+	}
+	emu->card_capabilities = c;
+	if (c->subsystem != 0)
+		snd_printdd("Sound card name=%s\n", c->name);
+	else
+		snd_printdd("Sound card name=%s, vendor=0x%x, device=0x%x, subsystem=0x%x\n", c->name, pci->vendor, pci->device, emu->serial);
+	
+	is_audigy = emu->audigy = c->emu10k2_chip;
+
+	/* set the DMA transfer mask */
+	emu->dma_mask = is_audigy ? AUDIGY_DMA_MASK : EMU10K1_DMA_MASK;
+	if (pci_set_dma_mask(pci, emu->dma_mask) < 0 ||
+	    pci_set_consistent_dma_mask(pci, emu->dma_mask) < 0) {
+		snd_printk(KERN_ERR "architecture does not support PCI busmaster DMA with mask 0x%lx\n", emu->dma_mask);
+		kfree(emu);
+		pci_disable_device(pci);
+		return -ENXIO;
+	}
 	if (is_audigy)
 		emu->gpr_base = A_FXGPREGBASE;
 	else
@@ -705,30 +815,15 @@ int __devinit snd_emu10k1_create(snd_card_t * card,
 	emu->memhdr->block_extra_size = sizeof(emu10k1_memblk_t) - sizeof(snd_util_memblk_t);
 
 	pci_set_master(pci);
-	/* read revision & serial */
-	pci_read_config_byte(pci, PCI_REVISION_ID, (char *)&emu->revision);
-	pci_read_config_dword(pci, PCI_SUBSYSTEM_VENDOR_ID, &emu->serial);
-	pci_read_config_word(pci, PCI_SUBSYSTEM_ID, &emu->model);
-	emu->card_type = EMU10K1_CARD_CREATIVE;
-	if (emu->serial == 0x40011102) {
+
+	if (c->ecard) {
 		emu->card_type = EMU10K1_CARD_EMUAPS;
 		emu->APS = 1;
-		emu->no_ac97 = 1; /* APS has no AC97 chip */
 	}
-	else if (emu->revision == 4 && emu->serial == 0x10051102) {
-		/* Audigy 2 EX has apparently no effective AC97 controls
-		 * (for both input and output), so we skip the AC97 detections
-		 */
-		snd_printdd(KERN_INFO "Audigy2 EX is detected. skipping ac97.\n");
-		emu->no_ac97 = 1;	
-	}
+	if (! c->ac97_chip)
+		emu->no_ac97 = 1;
 	
-	if (emu->revision == 4 && (emu->model == 0x2001 || emu->model == 0x2002)) {
-		/* Audigy 2 ZS */
-		snd_printdd(KERN_INFO "Audigy2 ZS is detected. setting 7.1 mode.\n");
-		emu->spk71 = 1;
-	}
-	
+	emu->spk71 = c->spk71;
 	
 	emu->fx8010.fxbus_mask = 0x303f;
 	if (extin_mask == 0)

@@ -187,9 +187,9 @@ static snd_pcm_hardware_t snd_ca0106_playback_hw = {
 	.rate_max =		192000,
 	.channels_min =		2,  //1,
 	.channels_max =		2,  //6,
-	.buffer_bytes_max =	(32*1024),
+	.buffer_bytes_max =	((65536 - 64) * 8),
 	.period_bytes_min =	64,
-	.period_bytes_max =	(16*1024),
+	.period_bytes_max =	(65536 - 64),
 	.periods_min =		2,
 	.periods_max =		8,
 	.fifo_size =		0,
@@ -206,9 +206,9 @@ static snd_pcm_hardware_t snd_ca0106_capture_hw = {
 	.rate_max =		48000,
 	.channels_min =		2,
 	.channels_max =		2,
-	.buffer_bytes_max =	(32*1024),
+	.buffer_bytes_max =	((65536 - 64) * 8),
 	.period_bytes_min =	64,
-	.period_bytes_max =	(16*1024),
+	.period_bytes_max =	(65536 - 64),
 	.periods_min =		2,
 	.periods_max =		2,
 	.fifo_size =		0,
@@ -513,6 +513,8 @@ static int snd_ca0106_pcm_prepare_playback(snd_pcm_substream_t *substream)
 	snd_ca0106_ptr_write(emu, PLAYBACK_LIST_PTR, channel, 0);
 	snd_ca0106_ptr_write(emu, PLAYBACK_DMA_ADDR, channel, runtime->dma_addr);
 	snd_ca0106_ptr_write(emu, PLAYBACK_PERIOD_SIZE, channel, frames_to_bytes(runtime, runtime->period_size)<<16); // buffer size in bytes
+	/* FIXME  test what 0 bytes does. */
+	snd_ca0106_ptr_write(emu, PLAYBACK_PERIOD_SIZE, channel, 0); // buffer size in bytes
 	snd_ca0106_ptr_write(emu, PLAYBACK_POINTER, channel, 0);
 	snd_ca0106_ptr_write(emu, 0x07, channel, 0x0);
 	snd_ca0106_ptr_write(emu, 0x08, channel, 0);

@@ -617,6 +617,7 @@ static int create_mixer(struct hda_codec *codec, struct hda_gnode *node,
 	char name[32];
 	int err;
 	int created = 0;
+	snd_kcontrol_new_t knew;
 
 	if (type)
 		sprintf(name, "%s %s Switch", type, dir_sfx);
@@ -624,16 +625,14 @@ static int create_mixer(struct hda_codec *codec, struct hda_gnode *node,
 		sprintf(name, "%s Switch", dir_sfx);
 	if ((node->wid_caps & AC_WCAP_IN_AMP) &&
 	    (node->amp_in_caps & AC_AMPCAP_MUTE)) {
-		snd_kcontrol_new_t knew =
-			HDA_CODEC_MUTE(name, node->nid, index, HDA_INPUT);
+		knew = (snd_kcontrol_new_t)HDA_CODEC_MUTE(name, node->nid, index, HDA_INPUT);
 		snd_printdd("[%s] NID=0x%x, DIR=IN, IDX=0x%x\n", name, node->nid, index);
 		if ((err = snd_ctl_add(codec->bus->card, snd_ctl_new1(&knew, codec))) < 0)
 			return err;
 		created = 1;
 	} else if ((node->wid_caps & AC_WCAP_OUT_AMP) &&
 		   (node->amp_out_caps & AC_AMPCAP_MUTE)) {
-		snd_kcontrol_new_t knew =
-			HDA_CODEC_MUTE(name, node->nid, 0, HDA_OUTPUT);
+		knew = (snd_kcontrol_new_t)HDA_CODEC_MUTE(name, node->nid, 0, HDA_OUTPUT);
 		snd_printdd("[%s] NID=0x%x, DIR=OUT\n", name, node->nid);
 		if ((err = snd_ctl_add(codec->bus->card, snd_ctl_new1(&knew, codec))) < 0)
 			return err;
@@ -646,16 +645,14 @@ static int create_mixer(struct hda_codec *codec, struct hda_gnode *node,
 		sprintf(name, "%s Volume", dir_sfx);
 	if ((node->wid_caps & AC_WCAP_IN_AMP) &&
 	    (node->amp_in_caps & AC_AMPCAP_NUM_STEPS)) {
-		snd_kcontrol_new_t knew =
-			HDA_CODEC_VOLUME(name, node->nid, index, HDA_INPUT);
+		knew = (snd_kcontrol_new_t)HDA_CODEC_VOLUME(name, node->nid, index, HDA_INPUT);
 		snd_printdd("[%s] NID=0x%x, DIR=IN, IDX=0x%x\n", name, node->nid, index);
 		if ((err = snd_ctl_add(codec->bus->card, snd_ctl_new1(&knew, codec))) < 0)
 			return err;
 		created = 1;
 	} else if ((node->wid_caps & AC_WCAP_OUT_AMP) &&
 		   (node->amp_out_caps & AC_AMPCAP_NUM_STEPS)) {
-		snd_kcontrol_new_t knew =
-			HDA_CODEC_VOLUME(name, node->nid, 0, HDA_OUTPUT);
+		knew = (snd_kcontrol_new_t)HDA_CODEC_VOLUME(name, node->nid, 0, HDA_OUTPUT);
 		snd_printdd("[%s] NID=0x%x, DIR=OUT\n", name, node->nid);
 		if ((err = snd_ctl_add(codec->bus->card, snd_ctl_new1(&knew, codec))) < 0)
 			return err;

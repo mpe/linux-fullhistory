@@ -184,7 +184,7 @@ static void snd_emu10k1_proc_read(snd_info_entry_t *entry,
 	snd_iprintf(buffer, "Card                  : %s\n",
 		    emu->audigy ? "Audigy" : (emu->APS ? "EMU APS" : "Creative"));
 	snd_iprintf(buffer, "Internal TRAM (words) : 0x%x\n", emu->fx8010.itram_size);
-	snd_iprintf(buffer, "External TRAM (words) : 0x%x\n", (int)emu->fx8010.etram_pages.bytes);
+	snd_iprintf(buffer, "External TRAM (words) : 0x%x\n", (int)emu->fx8010.etram_pages.bytes / 2);
 	snd_iprintf(buffer, "\n");
 	snd_iprintf(buffer, "Effect Send Routing   :\n");
 	for (idx = 0; idx < NUM_G; idx++) {
@@ -413,7 +413,7 @@ static void snd_ptr_write(emu10k1_t *emu,
 
 
 static void snd_emu_proc_ptr_reg_read(snd_info_entry_t *entry,
-				      snd_info_buffer_t * buffer, int iobase, int offset, int length)
+				      snd_info_buffer_t * buffer, int iobase, int offset, int length, int voices)
 {
 	emu10k1_t *emu = entry->private_data;
 	unsigned long value;
@@ -425,7 +425,7 @@ static void snd_emu_proc_ptr_reg_read(snd_info_entry_t *entry,
 	snd_iprintf(buffer, "Registers 0x%x\n", iobase);
 	for(i = offset; i < offset+length; i++) {
 		snd_iprintf(buffer, "%02X: ",i);
-		for (j = 0; j < 64; j++) {
+		for (j = 0; j < voices; j++) {
 			if(iobase == 0)
                 		value = snd_ptr_read(emu, 0, i, j);
 			else
@@ -466,25 +466,25 @@ static void snd_emu_proc_ptr_reg_write20(snd_info_entry_t *entry,
 static void snd_emu_proc_ptr_reg_read00a(snd_info_entry_t *entry,
 					 snd_info_buffer_t * buffer)
 {
-	snd_emu_proc_ptr_reg_read(entry, buffer, 0, 0, 0x40);
+	snd_emu_proc_ptr_reg_read(entry, buffer, 0, 0, 0x40, 64);
 }
 
 static void snd_emu_proc_ptr_reg_read00b(snd_info_entry_t *entry,
 					 snd_info_buffer_t * buffer)
 {
-	snd_emu_proc_ptr_reg_read(entry, buffer, 0, 0x40, 0x40);
+	snd_emu_proc_ptr_reg_read(entry, buffer, 0, 0x40, 0x40, 64);
 }
 
 static void snd_emu_proc_ptr_reg_read20a(snd_info_entry_t *entry,
 					 snd_info_buffer_t * buffer)
 {
-	snd_emu_proc_ptr_reg_read(entry, buffer, 0x20, 0, 0x40);
+	snd_emu_proc_ptr_reg_read(entry, buffer, 0x20, 0, 0x40, 4);
 }
 
 static void snd_emu_proc_ptr_reg_read20b(snd_info_entry_t *entry,
 					 snd_info_buffer_t * buffer)
 {
-	snd_emu_proc_ptr_reg_read(entry, buffer, 0x20, 0x40, 0x40);
+	snd_emu_proc_ptr_reg_read(entry, buffer, 0x20, 0x40, 0x40, 4);
 }
 #endif
 

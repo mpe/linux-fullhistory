@@ -2294,7 +2294,7 @@ static void snd_pcm_oss_proc_write(snd_info_entry_t *entry,
 				   snd_info_buffer_t * buffer)
 {
 	snd_pcm_str_t *pstr = (snd_pcm_str_t *)entry->private_data;
-	char line[256], str[32], task_name[32], *ptr;
+	char line[128], str[32], task_name[32], *ptr;
 	int idx1;
 	snd_pcm_oss_setup_t *setup, *setup1, template;
 

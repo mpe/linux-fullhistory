@@ -1606,62 +1606,65 @@ static int hw_rule_format(snd_pcm_hw_params_t *params,
 	return changed;
 }
 
+#define MAX_MASK	64
+
 /*
  * check whether the registered audio formats need special hw-constraints
  */
 static int check_hw_params_convention(snd_usb_substream_t *subs)
 {
 	int i;
-	u32 channels[64];
-	u32 rates[64];
+	u32 *channels;
+	u32 *rates;
 	u32 cmaster, rmaster;
 	u32 rate_min = 0, rate_max = 0;
 	struct list_head *p;
+	int err = 1;
 
-	memset(channels, 0, sizeof(channels));
-	memset(rates, 0, sizeof(rates));
+	channels = kcalloc(MAX_MASK, sizeof(u32), GFP_KERNEL);
+	rates = kcalloc(MAX_MASK, sizeof(u32), GFP_KERNEL);
 
 	list_for_each(p, &subs->fmt_list) {
 		struct audioformat *f;
 		f = list_entry(p, struct audioformat, list);
 		/* unconventional channels? */
 		if (f->channels > 32)
-			return 1;
+			goto __out;
 		/* continuous rate min/max matches? */
 		if (f->rates & SNDRV_PCM_RATE_CONTINUOUS) {
 			if (rate_min && f->rate_min != rate_min)
-				return 1;
+				goto __out;
 			if (rate_max && f->rate_max != rate_max)
-				return 1;
+				goto __out;
 			rate_min = f->rate_min;
 			rate_max = f->rate_max;
 		}
 		/* combination of continuous rates and fixed rates? */
 		if (rates[f->format] & SNDRV_PCM_RATE_CONTINUOUS) {
 			if (f->rates != rates[f->format])
-				return 1;
+				goto __out;
 		}
 		if (f->rates & SNDRV_PCM_RATE_CONTINUOUS) {
 			if (rates[f->format] && rates[f->format] != f->rates)
-				return 1;
+				goto __out;
 		}
 		channels[f->format] |= (1 << f->channels);
 		rates[f->format] |= f->rates;
 	}
 	/* check whether channels and rates match for all formats */
 	cmaster = rmaster = 0;
-	for (i = 0; i < 64; i++) {
+	for (i = 0; i < MAX_MASK; i++) {
 		if (cmaster != channels[i] && cmaster && channels[i])
-			return 1;
+			goto __out;
 		if (rmaster != rates[i] && rmaster && rates[i])
-			return 1;
+			goto __out;
 		if (channels[i])
 			cmaster = channels[i];
 		if (rates[i])
 			rmaster = rates[i];
 	}
 	/* check whether channels match for all distinct rates */
-	memset(channels, 0, sizeof(channels));
+	memset(channels, 0, MAX_MASK * sizeof(u32));
 	list_for_each(p, &subs->fmt_list) {
 		struct audioformat *f;
 		f = list_entry(p, struct audioformat, list);
@@ -1675,11 +1678,16 @@ static int check_hw_params_convention(snd_usb_substream_t *subs)
 	cmaster = 0;
 	for (i = 0; i < 32; i++) {
 		if (cmaster != channels[i] && cmaster && channels[i])
-			return 1;
+			goto __out;
 		if (channels[i])
 			cmaster = channels[i];
 	}
-	return 0;
+	err = 0;
+
+ __out:
+	kfree(channels);
+	kfree(rates);
+	return err;
 }
 
 

@@ -44,20 +44,20 @@
 
 static unsigned char vortex_game_read(struct gameport *gameport)
 {
-	vortex_t *vortex = gameport->port_data;
+	vortex_t *vortex = gameport_get_port_data(gameport);
 	return hwread(vortex->mmio, VORTEX_GAME_LEGACY);
 }
 
 static void vortex_game_trigger(struct gameport *gameport)
 {
-	vortex_t *vortex = gameport->port_data;
+	vortex_t *vortex = gameport_get_port_data(gameport);
 	hwwrite(vortex->mmio, VORTEX_GAME_LEGACY, 0xff);
 }
 
 static int
 vortex_game_cooked_read(struct gameport *gameport, int *axes, int *buttons)
 {
-	vortex_t *vortex = gameport->port_data;
+	vortex_t *vortex = gameport_get_port_data(gameport);
 	int i;
 
 	*buttons = (~hwread(vortex->mmio, VORTEX_GAME_LEGACY) >> 4) & 0xf;
@@ -73,7 +73,7 @@ vortex_game_cooked_read(struct gameport *gameport, int *axes, int *buttons)
 
 static int vortex_game_open(struct gameport *gameport, int mode)
 {
-	vortex_t *vortex = gameport->port_data;
+	vortex_t *vortex = gameport_get_port_data(gameport);
 
 	switch (mode) {
 	case GAMEPORT_MODE_COOKED:
@@ -106,14 +106,14 @@ static int __devinit vortex_gameport_register(vortex_t * vortex)
 
 	gameport_set_name(gp, "AU88x0 Gameport");
 	gameport_set_phys(gp, "pci%s/gameport0", pci_name(vortex->pci_dev));
-	gp->dev.parent = &vortex->pci_dev->dev;
+	gameport_set_dev_parent(gp, &vortex->pci_dev->dev);
 
 	gp->read = vortex_game_read;
 	gp->trigger = vortex_game_trigger;
 	gp->cooked_read = vortex_game_cooked_read;
 	gp->open = vortex_game_open;
 
-	gp->port_data = vortex;
+	gameport_set_port_data(gp, vortex);
 	gp->fuzz = 64;
 
 	gameport_register_port(gp);

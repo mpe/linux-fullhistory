@@ -2592,9 +2592,9 @@ static int __devinit snd_cmipci_create_gameport(cmipci_t *cm, int dev)
 	}
 	gameport_set_name(gp, "C-Media Gameport");
 	gameport_set_phys(gp, "pci%s/gameport0", pci_name(cm->pci));
-	gp->dev.parent = &cm->pci->dev;
+	gameport_set_dev_parent(gp, &cm->pci->dev);
 	gp->io = io_port;
-	gp->port_data = r;
+	gameport_set_port_data(gp, r);
 
 	snd_cmipci_set_bit(cm, CM_REG_FUNCTRL1, CM_JYSTK_EN);
 
@@ -2606,7 +2606,7 @@ static int __devinit snd_cmipci_create_gameport(cmipci_t *cm, int dev)
 static void snd_cmipci_free_gameport(cmipci_t *cm)
 {
 	if (cm->gameport) {
-		struct resource *r = cm->gameport->port_data;
+		struct resource *r = gameport_get_port_data(cm->gameport);
 
 		gameport_unregister_port(cm->gameport);
 		cm->gameport = NULL;

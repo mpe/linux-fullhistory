@@ -105,8 +105,8 @@ static const ac97_codec_id_t snd_ac97_codec_ids[] = {
 { 0x41445374, 0xffffffff, "AD1981B",		patch_ad1981b,	NULL },
 { 0x41445375, 0xffffffff, "AD1985",		patch_ad1985,	NULL },
 { 0x41445378, 0xffffffff, "AD1986",		patch_ad1985,	NULL },
-{ 0x414c4300, 0xffffff00, "ALC100/100P", 	NULL,		NULL },
-{ 0x414c4710, 0xfffffff0, "ALC200/200P",	NULL,		NULL },
+{ 0x414c4300, 0xffffff00, "ALC100,100P", 	NULL,		NULL },
+{ 0x414c4710, 0xfffffff0, "ALC200,200P",	NULL,		NULL },
 { 0x414c4721, 0xffffffff, "ALC650D",		NULL,	NULL }, /* already patched */
 { 0x414c4722, 0xffffffff, "ALC650E",		NULL,	NULL }, /* already patched */
 { 0x414c4723, 0xffffffff, "ALC650F",		NULL,	NULL }, /* already patched */
@@ -145,11 +145,11 @@ static const ac97_codec_id_t snd_ac97_codec_ids[] = {
 { 0x49434552, 0xffffffff, "VT1616i",		patch_vt1616,	NULL }, // VT1616 compatible (chipset integrated)
 { 0x49544520, 0xffffffff, "IT2226E",		NULL,		NULL },
 { 0x49544561, 0xffffffff, "IT2646E",		patch_it2646,	NULL },
-{ 0x4e534300, 0xffffffff, "LM4540/43/45/46/48",	NULL,		NULL }, // only guess --jk
+{ 0x4e534300, 0xffffffff, "LM4540,43,45,46,48",	NULL,		NULL }, // only guess --jk
 { 0x4e534331, 0xffffffff, "LM4549",		NULL,		NULL },
 { 0x4e534350, 0xffffffff, "LM4550",		NULL,		NULL },
 { 0x50534304, 0xffffffff, "UCB1400",		NULL,		NULL },
-{ 0x53494c20, 0xffffffe0, "Si3036/8",		NULL,		mpatch_si3036 },
+{ 0x53494c20, 0xffffffe0, "Si3036,8",		NULL,		mpatch_si3036 },
 { 0x54524102, 0xffffffff, "TR28022",		NULL,		NULL },
 { 0x54524106, 0xffffffff, "TR28026",		NULL,		NULL },
 { 0x54524108, 0xffffffff, "TR28028",		patch_tritech_tr28028,	NULL }, // added by xin jin [07/09/99]
@@ -158,26 +158,26 @@ static const ac97_codec_id_t snd_ac97_codec_ids[] = {
 { 0x56494161, 0xffffffff, "VIA1612A",		NULL,		NULL }, // modified ICE1232 with S/PDIF
 { 0x57454301, 0xffffffff, "W83971D",		NULL,		NULL },
 { 0x574d4c00, 0xffffffff, "WM9701A",		NULL,		NULL },
-{ 0x574d4C03, 0xffffffff, "WM9703/WM9707/WM9708/WM9717", patch_wolfson03, NULL},
-{ 0x574d4C04, 0xffffffff, "WM9704M/WM9704Q",	patch_wolfson04, NULL},
-{ 0x574d4C05, 0xffffffff, "WM9705/WM9710",	patch_wolfson05, NULL},
+{ 0x574d4C03, 0xffffffff, "WM9703,WM9707,WM9708,WM9717", patch_wolfson03, NULL},
+{ 0x574d4C04, 0xffffffff, "WM9704M,WM9704Q",	patch_wolfson04, NULL},
+{ 0x574d4C05, 0xffffffff, "WM9705,WM9710",	patch_wolfson05, NULL},
 { 0x574d4C09, 0xffffffff, "WM9709",		NULL,		NULL},
-{ 0x574d4C12, 0xffffffff, "WM9711/WM9712",	patch_wolfson11, NULL},
-{ 0x574d4c13, 0xffffffff, "WM9713/WM9714",	patch_wolfson13, NULL, AC97_DEFAULT_POWER_OFF},
+{ 0x574d4C12, 0xffffffff, "WM9711,WM9712",	patch_wolfson11, NULL},
+{ 0x574d4c13, 0xffffffff, "WM9713,WM9714",	patch_wolfson13, NULL, AC97_DEFAULT_POWER_OFF},
 { 0x594d4800, 0xffffffff, "YMF743",		NULL,		NULL },
 { 0x594d4802, 0xffffffff, "YMF752",		NULL,		NULL },
 { 0x594d4803, 0xffffffff, "YMF753",		patch_yamaha_ymf753,	NULL },
-{ 0x83847600, 0xffffffff, "STAC9700/83/84",	patch_sigmatel_stac9700,	NULL },
-{ 0x83847604, 0xffffffff, "STAC9701/3/4/5",	NULL,		NULL },
+{ 0x83847600, 0xffffffff, "STAC9700,83,84",	patch_sigmatel_stac9700,	NULL },
+{ 0x83847604, 0xffffffff, "STAC9701,3,4,5",	NULL,		NULL },
 { 0x83847605, 0xffffffff, "STAC9704",		NULL,		NULL },
-{ 0x83847608, 0xffffffff, "STAC9708/11",	patch_sigmatel_stac9708,	NULL },
-{ 0x83847609, 0xffffffff, "STAC9721/23",	patch_sigmatel_stac9721,	NULL },
+{ 0x83847608, 0xffffffff, "STAC9708,11",	patch_sigmatel_stac9708,	NULL },
+{ 0x83847609, 0xffffffff, "STAC9721,23",	patch_sigmatel_stac9721,	NULL },
 { 0x83847644, 0xffffffff, "STAC9744",		patch_sigmatel_stac9744,	NULL },
-{ 0x83847650, 0xffffffff, "STAC9750/51",	NULL,		NULL },	// patch?
-{ 0x83847652, 0xffffffff, "STAC9752/53",	NULL,		NULL }, // patch?
-{ 0x83847656, 0xffffffff, "STAC9756/57",	patch_sigmatel_stac9756,	NULL },
-{ 0x83847658, 0xffffffff, "STAC9758/59",	patch_sigmatel_stac9758,	NULL },
-{ 0x83847666, 0xffffffff, "STAC9766/67",	NULL,		NULL }, // patch?
+{ 0x83847650, 0xffffffff, "STAC9750,51",	NULL,		NULL },	// patch?
+{ 0x83847652, 0xffffffff, "STAC9752,53",	NULL,		NULL }, // patch?
+{ 0x83847656, 0xffffffff, "STAC9756,57",	patch_sigmatel_stac9756,	NULL },
+{ 0x83847658, 0xffffffff, "STAC9758,59",	patch_sigmatel_stac9758,	NULL },
+{ 0x83847666, 0xffffffff, "STAC9766,67",	NULL,		NULL }, // patch?
 { 0, 	      0,	  NULL,			NULL,		NULL }
 };
 
@@ -1486,7 +1486,7 @@ static int snd_ac97_mixer_build(ac97_t * ac97)
 	}
 
 	/* build S/PDIF controls */
-	if (ac97->ext_id & AC97_EI_SPDIF) {
+	if ((ac97->ext_id & AC97_EI_SPDIF) && !(ac97->scaps & AC97_SCAP_NO_SPDIF)) {
 		if (ac97->build_ops->build_spdif) {
 			if ((err = ac97->build_ops->build_spdif(ac97)) < 0)
 				return err;

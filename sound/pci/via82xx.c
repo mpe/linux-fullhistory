@@ -1660,9 +1660,9 @@ static int __devinit snd_via686_create_gameport(via82xx_t *chip, int dev, unsign
 
 	gameport_set_name(gp, "VIA686 Gameport");
 	gameport_set_phys(gp, "pci%s/gameport0", pci_name(chip->pci));
-	gp->dev.parent = &chip->pci->dev;
+	gameport_set_dev_parent(gp, &chip->pci->dev);
 	gp->io = JOYSTICK_ADDR;
-	gp->port_data = r;
+	gameport_set_port_data(gp, r);
 
 	/* Enable legacy joystick port */
 	*legacy |= VIA_FUNC_ENABLE_GAME;
@@ -1676,7 +1676,7 @@ static int __devinit snd_via686_create_gameport(via82xx_t *chip, int dev, unsign
 static void snd_via686_free_gameport(via82xx_t *chip)
 {
 	if (chip->gameport) {
-		struct resource *r = chip->gameport->port_data;
+		struct resource *r = gameport_get_port_data(chip->gameport);
 
 		gameport_unregister_port(chip->gameport);
 		chip->gameport = NULL;
@@ -1838,13 +1838,9 @@ static void __devinit snd_via82xx_proc_init(via82xx_t *chip)
 
 static int __devinit snd_via82xx_chip_init(via82xx_t *chip)
 {
-	ac97_t ac97;
 	unsigned int val;
 	int max_count;
 	unsigned char pval;
-
-	memset(&ac97, 0, sizeof(ac97));
-	ac97.private_data = chip;
 
 #if 0 /* broken on K7M? */
 	if (chip->chip_type == TYPE_VIA686)
@@ -1896,11 +1892,6 @@ static int __devinit snd_via82xx_chip_init(via82xx_t *chip)
 
 	if ((val = snd_via82xx_codec_xread(chip)) & VIA_REG_AC97_BUSY)
 		snd_printk("AC'97 codec is not ready [0x%x]\n", val);
-
-	/* and then reset codec.. */
-	snd_via82xx_codec_ready(chip, 0);
-	snd_via82xx_codec_write(&ac97, AC97_RESET, 0x0000);
-	snd_via82xx_codec_read(&ac97, 0);
 
 #if 0 /* FIXME: we don't support the second codec yet so skip the detection now.. */
 	snd_via82xx_codec_xwrite(chip, VIA_REG_AC97_READ |
@@ -2168,6 +2159,7 @@ static int __devinit check_dxs_list(struct pci_dev *pci)
 		{ .vendor = 0x1458, .device = 0xa002, .action = VIA_DXS_ENABLE }, /* Gigabyte GA-7VAXP */
 		{ .vendor = 0x1462, .device = 0x3800, .action = VIA_DXS_ENABLE }, /* MSI KT266 */
 		{ .vendor = 0x1462, .device = 0x5901, .action = VIA_DXS_NO_VRA }, /* MSI KT6 Delta-SR */
+		{ .vendor = 0x1462, .device = 0x7023, .action = VIA_DXS_NO_VRA }, /* MSI K8T Neo2-FI */
 		{ .vendor = 0x1462, .device = 0x7120, .action = VIA_DXS_ENABLE }, /* MSI KT4V */
 		{ .vendor = 0x147b, .device = 0x1401, .action = VIA_DXS_ENABLE }, /* ABIT KD7(-RAID) */
 		{ .vendor = 0x147b, .device = 0x1411, .action = VIA_DXS_ENABLE }, /* ABIT VA-20 */

@@ -1435,7 +1435,7 @@ static int __devinit snd_es1938_create_gameport(es1938_t *chip)
 
 	gameport_set_name(gp, "ES1938");
 	gameport_set_phys(gp, "pci%s/gameport0", pci_name(chip->pci));
-	gp->dev.parent = &chip->pci->dev;
+	gameport_set_dev_parent(gp, &chip->pci->dev);
 	gp->io = chip->game_port;
 
 	gameport_register_port(gp);

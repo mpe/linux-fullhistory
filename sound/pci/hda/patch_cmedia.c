@@ -112,9 +112,9 @@ static struct hda_verb cmi9880_ch2_init[] = {
 
 /* 3-stack / 6 channel */
 static struct hda_verb cmi9880_ch6_init[] = {
-	/* set line-in PIN for input */
+	/* set line-in PIN for output */
 	{ 0x0c, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x40 },
-	/* set mic PIN for input, also enable vref */
+	/* set mic PIN for output */
 	{ 0x0d, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x40 },
 	/* route front PCM (DAC1) to HP */
 	{ 0x0f, AC_VERB_SET_CONNECT_SEL, 0x00 },
@@ -123,9 +123,9 @@ static struct hda_verb cmi9880_ch6_init[] = {
 
 /* 3-stack+front / 8 channel */
 static struct hda_verb cmi9880_ch8_init[] = {
-	/* set line-in PIN for input */
+	/* set line-in PIN for output */
 	{ 0x0c, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x40 },
-	/* set mic PIN for input, also enable vref */
+	/* set mic PIN for output */
 	{ 0x0d, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x40 },
 	/* route rear-surround PCM (DAC4) to HP */
 	{ 0x0f, AC_VERB_SET_CONNECT_SEL, 0x03 },
@@ -565,7 +565,7 @@ static int patch_cmi9880(struct hda_codec *codec)
 	spec->board_config = snd_hda_check_board_config(codec, cmi9880_cfg_tbl);
 	if (spec->board_config < 0) {
 		snd_printd(KERN_INFO "hda_codec: Unknown model for CMI9880\n");
-		spec->board_config = CMI_MINIMAL;
+		spec->board_config = CMI_FULL_DIG; /* try everything */
 	}
 
 	switch (spec->board_config) {
@@ -615,6 +615,7 @@ static int patch_cmi9880(struct hda_codec *codec)
  * patch entries
  */
 struct hda_codec_preset snd_hda_preset_cmedia[] = {
+	{ .id = 0x13f69880, .name = "CMI9880", .patch = patch_cmi9880 },
  	{ .id = 0x434d4980, .name = "CMI9880", .patch = patch_cmi9880 },
 	{} /* terminator */
 };
