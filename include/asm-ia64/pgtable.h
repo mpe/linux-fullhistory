@@ -553,17 +553,27 @@ do {											\
 
 /*
  * Override for pgd_addr_end() to deal with the virtual address space holes
- * in each region.  Virtual address bits are used like this:
+ * in each region.  In regions 0..4 virtual address bits are used like this:
  *      +--------+------+--------+-----+-----+--------+
  *      | pgdhi3 | rsvd | pgdlow | pmd | pte | offset |
  *      +--------+------+--------+-----+-----+--------+
- *  The high bit of 'pgdlow' must be sign extended across the 'rsvd' bits.
+ *  'pgdlow' overflows to pgdhi3 (a.k.a. region bits) leaving rsvd==0
  */
-#define IA64_PGD_SIGNEXTEND (PGDIR_SIZE << (PAGE_SHIFT-7))
+#define IA64_PGD_OVERFLOW (PGDIR_SIZE << (PAGE_SHIFT-6))
+
 #define pgd_addr_end(addr, end)						\
 ({	unsigned long __boundary = ((addr) + PGDIR_SIZE) & PGDIR_MASK;	\
-	if (__boundary & IA64_PGD_SIGNEXTEND)				\
-		__boundary |= (RGN_SIZE - 1) & ~(IA64_PGD_SIGNEXTEND-1);\
+ 	if (REGION_NUMBER(__boundary) < 5 && 				\
+	    __boundary & IA64_PGD_OVERFLOW)				\
+		__boundary += (RGN_SIZE - 1) & ~(IA64_PGD_OVERFLOW - 1);\
+	(__boundary - 1 < (end) - 1)? __boundary: (end);		\
+})
+
+#define pmd_addr_end(addr, end)						\
+({	unsigned long __boundary = ((addr) + PMD_SIZE) & PMD_MASK;	\
+ 	if (REGION_NUMBER(__boundary) < 5 &&				\
+	    __boundary & IA64_PGD_OVERFLOW)				\
+		__boundary += (RGN_SIZE - 1) & ~(IA64_PGD_OVERFLOW - 1);\
 	(__boundary - 1 < (end) - 1)? __boundary: (end);		\
 })
 
