@@ -52,7 +52,7 @@
 /*
  * The second extended file system version
  */
-#define EXT2FS_DATE		"93/12/30"
+#define EXT2FS_DATE		"94/01/05"
 #define EXT2FS_VERSION		"0.4b"
 
 /*
@@ -289,7 +289,7 @@ struct ext2_super_block {
 	unsigned long  s_mtime;		/* Mount time */
 	unsigned long  s_wtime;		/* Write time */
 	unsigned short s_mnt_count;	/* Mount count */
-	unsigned short s_max_mnt_count;	/* Maximal mount count */
+	short          s_max_mnt_count;	/* Maximal mount count */
 	unsigned short s_magic;		/* Magic signature */
 	unsigned short s_state;		/* File system state */
 	unsigned short s_errors;	/* Behaviour when detecting errors */

@@ -299,7 +299,7 @@ repeat:
 			}
 		}
 		if (!goal)
-			goal = bh->b_blocknr + 1;
+			goal = bh->b_blocknr;
 	}
 	tmp = ext2_alloc_block (inode, goal);
 	if (!tmp) {

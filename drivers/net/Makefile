@@ -8,8 +8,8 @@
 include CONFIG
 
 NETDRV_OBJS := net.a(Space.o) net.a(auto_irq.o) net.a(net_init.o)
-CFLAGS := $(CFLAGS) -I../../net/inet
-CPP := $(CPP) -I../../net/inet
+CFLAGS := $(CFLAGS) -I../../net/inet -I../../net/socket -I../../net
+CPP := $(CPP) -I../../net/inet -I../../net/socket -I../../net
 
 # The point of the makefile...
 all: net.a

@@ -46,6 +46,8 @@ static int trunc_direct (struct inode * inode)
 	int i, tmp;
 	unsigned long * p;
 	struct buffer_head * bh;
+	unsigned long block_to_free = 0;
+	unsigned long free_count = 0;
 	int retry = 0;
 	int blocks = inode->i_sb->s_blocksize / 512;
 #define DIRECT_BLOCK ((inode->i_size + inode->i_sb->s_blocksize - 1) / \
@@ -82,8 +84,20 @@ repeat:
 			bh->b_dirt = 1;
 		}
 		brelse (bh);
-		ext2_free_blocks (inode->i_sb, tmp, 1);
+		if (free_count == 0) {
+			block_to_free = tmp;
+			free_count++;
+		} else if (free_count > 0 && block_to_free == tmp - free_count)
+			free_count++;
+		else {
+			ext2_free_blocks (inode->i_sb, block_to_free, free_count);
+			block_to_free = tmp;
+			free_count = 1;
+		}
+/*		ext2_free_blocks (inode->i_sb, tmp, 1); */
 	}
+	if (free_count > 0)
+		ext2_free_blocks (inode->i_sb, block_to_free, free_count);
 	return retry;
 }
 
@@ -93,6 +107,8 @@ static int trunc_indirect (struct inode * inode, int offset, unsigned long * p)
 	struct buffer_head * bh;
 	struct buffer_head * ind_bh;
 	unsigned long * ind;
+	unsigned long block_to_free = 0;
+	unsigned long free_count = 0;
 	int retry = 0;
 	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
 	int blocks = inode->i_sb->s_blocksize / 512;
@@ -144,10 +160,22 @@ repeat:
 			bh->b_dirt = 1;
 		}
 		brelse (bh);
-		ext2_free_blocks (inode->i_sb, tmp, 1);
+		if (free_count == 0) {
+			block_to_free = tmp;
+			free_count++;
+		} else if (free_count > 0 && block_to_free == tmp - free_count)
+			free_count++;
+		else {
+			ext2_free_blocks (inode->i_sb, block_to_free, free_count);
+			block_to_free = tmp;
+			free_count = 1;
+		}
+/*		ext2_free_blocks (inode->i_sb, tmp, 1); */
 		inode->i_blocks -= blocks;
 		inode->i_dirt = 1;
 	}
+	if (free_count > 0)
+		ext2_free_blocks (inode->i_sb, block_to_free, free_count);
 	ind = (unsigned long *) ind_bh->b_data;
 	for (i = 0; i < addr_per_block; i++)
 		if (*(ind++))

@@ -184,4 +184,14 @@ struct kbsentry {
 #define KDGKBSENT	0x4B48	/* gets one function key string entry */
 #define KDSKBSENT	0x4B49	/* sets one function key string entry */
 
+struct kbdiacr {
+        u_char diacr, base, result;
+};
+struct kbdiacrs {
+        unsigned int kb_cnt;    /* number of entries in following array */
+	struct kbdiacr kbdiacr[256];    /* MAX_DIACR from keyboard.h */
+};
+#define KDGKBDIACR      0x4B4A  /* read kernel accent table */
+#define KDSKBDIACR      0x4B4B  /* write kernel accent table */
+
 #endif /* _LINUX_KD_H */

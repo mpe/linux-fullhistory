@@ -303,6 +303,9 @@ struct sk_buff *skb_peek(struct sk_buff *volatile* list)
 	return *list;
 }
 
+
+#ifdef UNUSED_NOW
+
 /*
  *	Get a clone of an sk_buff. This is the safe way to peek at
  *	a socket queue without accidents. Its a bit long but most
@@ -368,6 +371,8 @@ struct sk_buff *skb_peek_copy(struct sk_buff *volatile* list)
 	restore_flags(flags);
 	return(newsk);
 }	
+
+#endif
 	
 /*
  *	Free an sk_buff. This still knows about things it should
@@ -376,40 +381,42 @@ struct sk_buff *skb_peek_copy(struct sk_buff *volatile* list)
 
 void kfree_skb(struct sk_buff *skb, int rw)
 {
-  if (skb == NULL) {
-	printk("kfree_skb: skb = NULL\n");
-	return;
-  }
-  IS_SKB(skb);
-  if(skb->free == 2)
-  	printk("Warning: kfree_skb passed an skb that nobody set the free flag on!\n");
-  if(skb->list)
-  	printk("Warning: kfree_skb passed an skb still on a list.\n");
-  skb->magic = 0;
-  if (skb->sk) 
-  {
-        if(skb->sk->prot!=NULL)
-        {
-		if (rw)
-	     		skb->sk->prot->rfree(skb->sk, skb->mem_addr, skb->mem_len);
-	     	else
-	     		skb->sk->prot->wfree(skb->sk, skb->mem_addr, skb->mem_len);
-
-	}
-	else
-	{
-		/* Non INET - default wmalloc/rmalloc handler */
-		if (rw)
-			skb->sk->rmem_alloc-=skb->mem_len;
+  	if (skb == NULL) {
+		printk("kfree_skb: skb = NULL\n");
+		return;
+  	}
+  	IS_SKB(skb);
+  	if(skb->free == 2)
+  		printk("Warning: kfree_skb passed an skb that nobody set the free flag on!\n");
+  	if(skb->list)
+  		printk("Warning: kfree_skb passed an skb still on a list.\n");
+  	skb->magic = 0;
+  	if (skb->sk) 
+  	{
+  	      if(skb->sk->prot!=NULL)
+  	      {
+			if (rw)
+		     		skb->sk->prot->rfree(skb->sk, skb->mem_addr, skb->mem_len);
+		     	else
+		     		skb->sk->prot->wfree(skb->sk, skb->mem_addr, skb->mem_len);
+	
+		}
 		else
-			skb->sk->wmem_alloc-=skb->mem_len;
-		if(!skb->sk->dead)
-			wake_up(skb->sk->sleep);
-		kfree_skbmem(skb->mem_addr,skb->mem_len);
+		{
+			/* Non INET - default wmalloc/rmalloc handler */
+				if (rw)
+					skb->sk->rmem_alloc-=skb->mem_len;
+				else
+					skb->sk->wmem_alloc-=skb->mem_len;
+				if(!skb->sk->dead)
+					skb->sk->write_space(skb->sk);
+				kfree_skbmem(skb->mem_addr,skb->mem_len);
+		}
+	} 
+	else 
+	{
+		kfree_skbmem(skb->mem_addr, skb->mem_len);
 	}
-  } 
-  else 
-	kfree_skbmem(skb->mem_addr, skb->mem_len);
 }
 
 /*

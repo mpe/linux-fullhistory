@@ -149,7 +149,9 @@ sys_get_kernel_syms(struct kernel_sym *table)
 	if (table != NULL) {
 		from = symbol_table;
 		to = table;
-		verify_area(VERIFY_WRITE, to, symbol_table_size * sizeof *table);
+		i = verify_area(VERIFY_WRITE, to, symbol_table_size * sizeof *table);
+		if (i)
+			return i;
 		for (i = symbol_table_size ; --i >= 0 ; ) {
 			sym.value = from->addr;
 			strncpy(sym.name, from->name, sizeof sym.name);

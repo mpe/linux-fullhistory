@@ -18,6 +18,7 @@
  *	Pauline Middelink	:	Slip driver fixes.
  *		Alan Cox	:	Honours the old SL_COMPRESSED flag
  *		Alan Cox	:	KISS AX.25 and AXUI IP support
+ *		Michael Riepe	:	Automatic CSLIP recognition added
  */
  
 #include <asm/segment.h>
@@ -39,9 +40,9 @@
 #include <linux/tty.h>
 #include <linux/in.h>
 #include "inet.h"
-#include "dev.h"
+#include "devinet.h"
 #ifdef CONFIG_AX25
-#include "ax25.h"
+#include "ax25/ax25.h"
 #endif
 #include "eth.h"
 #include "ip.h"
@@ -135,10 +136,14 @@ sl_initialize(struct slip *sl, struct device *dev)
   sl->sending		= 0;
   sl->escape		= 0;
   sl->flags		= 0;
+#ifdef SL_ADAPTIVE
+  sl->mode		= SL_MODE_ADAPTIVE;	/* automatic CSLIP recognition */
+#else
 #ifdef SL_COMPRESSED
-  sl->mode		= SL_MODE_CSLIP;	/* Default */
+  sl->mode		= SL_MODE_CSLIP | SL_MODE_ADAPTIVE;	/* Default */
 #else
   sl->mode		= SL_MODE_SLIP;		/* Default for non compressors */
+#endif
 #endif  
 
   sl->line		= dev->base_addr;
@@ -351,8 +356,15 @@ sl_bump(struct slip *sl)
   int count;
 
   count = sl->rcount;
-  if (sl->mode & SL_MODE_CSLIP) {
+  if (sl->mode & (SL_MODE_ADAPTIVE | SL_MODE_CSLIP)) {
     if ((c = sl->rbuff[0]) & SL_TYPE_COMPRESSED_TCP) {
+#if 1
+      /* ignore compressed packets when CSLIP is off */
+      if (!(sl->mode & SL_MODE_CSLIP)) {
+	printk("SLIP: compressed packet ignored\n");
+	return;
+      }
+#endif
       /* make sure we've reserved enough space for uncompress to use */
       save_flags(flags);
       cli();
@@ -374,6 +386,11 @@ sl_bump(struct slip *sl)
 	return;
       }
     } else if (c >= SL_TYPE_UNCOMPRESSED_TCP) {
+      if (!(sl->mode & SL_MODE_CSLIP)) {
+	/* turn on header compression */
+	sl->mode |= SL_MODE_CSLIP;
+	printk("SLIP: header compression turned on\n");
+      }
       sl->rbuff[0] &= 0x4f;
       if (slhc_remember(sl->slcomp, sl->rbuff, count) <= 0) {
 	sl->errors++;
@@ -485,6 +502,21 @@ sl_encaps(struct slip *sl, unsigned char *icp, int len)
   }
 }
 
+/*static void sl_hex_dump(unsigned char *x,int l)
+{
+	int n=0;
+	printk("sl_xmit: (%d bytes)\n",l);
+	while(l)
+	{
+		printk("%2X ",(int)*x++);
+		l--;
+		n++;
+		if(n%32==0)
+			printk("\n");
+	}
+	if(n%32)
+		printk("\n");
+}*/
 
 /* Encapsulate an IP datagram and kick it into a TTY queue. */
 static int
@@ -525,6 +557,7 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
   	}
 #endif  	
 	sl_lock(sl);
+/*	sl_hex_dump((unsigned char *)(skb+1),skb->len);*/
 	sl_encaps(sl, (unsigned char *) (skb + 1), skb->len);
 	if (skb->free) kfree_skb(skb, FREE_WRITE);
   }

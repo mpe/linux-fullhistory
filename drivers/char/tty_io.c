@@ -586,55 +586,39 @@ void copy_to_cooked(struct tty_struct * tty)
 		if (c == __DISABLED_CHAR)
 			tty->lnext = 1;
 		if (L_CANON(tty) && !tty->lnext) {
-			if (c == KILL_CHAR(tty) || c == WERASE_CHAR(tty)) {
+			if (c == ERASE_CHAR(tty) || c == KILL_CHAR(tty) || c == WERASE_CHAR(tty)) {
 				int seen_alnums =
 				  (c == WERASE_CHAR(tty)) ? 0 : -1;
+				int cc;
 
-				/* deal with killing the input line */
+				/* deal with killing in the input line */
 				while(!(EMPTY(&tty->secondary) ||
-					(c=LAST(&tty->secondary))==10 ||
+					(cc=LAST(&tty->secondary))==10 ||
 					((EOF_CHAR(tty) != __DISABLED_CHAR) &&
-					 (c==EOF_CHAR(tty))))) {
+					 (cc==EOF_CHAR(tty))))) {
 					/* if killing just a word, kill all
 					   non-alnum chars, then all alnum
 					   chars.  */
 					if (seen_alnums >= 0) {
-						if (isalnum(c))
+						if (isalnum(cc))
 							seen_alnums++;
 						else if (seen_alnums)
 							break;
 					}
 					if (L_ECHO(tty)) {
-						if (c<32) {
+					        int ct = 1;
+						if (cc < 32)
+						  ct = (L_ECHOCTL(tty) ? 2 : 0);
+						while(ct--) {
 							put_tty_queue('\b', &tty->write_q);
 							put_tty_queue(' ', &tty->write_q);
 							put_tty_queue('\b',&tty->write_q);
 						}
-						put_tty_queue('\b',&tty->write_q);
-						put_tty_queue(' ',&tty->write_q);
-						put_tty_queue('\b',&tty->write_q);
 					}
 					DEC(tty->secondary.head);
+					if(c == ERASE_CHAR(tty))
+					        break;
 				}
-				continue;
-			}
-			if (c == ERASE_CHAR(tty)) {
-				if (EMPTY(&tty->secondary) ||
-				   (c=LAST(&tty->secondary))==10 ||
-				   ((EOF_CHAR(tty) != __DISABLED_CHAR) &&
-				    (c==EOF_CHAR(tty))))
-					continue;
-				if (L_ECHO(tty)) {
-					if (c<32) {
-						put_tty_queue('\b',&tty->write_q);
-						put_tty_queue(' ',&tty->write_q);
-						put_tty_queue('\b',&tty->write_q);
-					}
-					put_tty_queue('\b',&tty->write_q);
-					put_tty_queue(' ',&tty->write_q);
-					put_tty_queue('\b',&tty->write_q);
-				}
-				DEC(tty->secondary.head);
 				continue;
 			}
 			if (c == LNEXT_CHAR(tty)) {

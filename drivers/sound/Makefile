@@ -25,7 +25,7 @@ all:	local.h sound.a
 
 /usr/include/sys/soundcard.h:
 	@echo "WARNING! Your /usr/include/sys/soundcard.h not found."
-	@echo "Please make a new /usr/include/sys/soundcard.h containing
+	@echo "Please make a new /usr/include/sys/soundcard.h containing"
 	@echo "just a line #include <linux/soundcard.h>"
 
 sound.a: $(OBJS) 

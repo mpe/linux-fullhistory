@@ -1,5 +1,5 @@
 #
-# Makefile for the Linix TCP/IP (INET) layer.
+# Makefile for the Linux socket support layer.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
@@ -7,8 +7,8 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-CFLAGS := $(CFLAGS) -I../socket -I..
-CPP := $(CPP) -I../socket -I..
+CFLAGS := $(CFLAGS) -I../inet -I..
+CPP := $(CPP) -I../inet -I..
 
 .c.o:
 	$(CC) $(CFLAGS) -c -o $*.o $<
@@ -18,20 +18,10 @@ CPP := $(CPP) -I../socket -I..
 	$(CC) $(CFLAGS) -S -o $*.s $<
 
 
-OBJS	= sockinet.o utils.o route.o proc.o timer.o protocol.o loopback.o \
-	  eth.o packet.o arp.o devinet.o ip.o raw.o icmp.o tcp.o udp.o
+OBJS	= datagram.o dev.o skbuff.o sock.o
 
-ifdef CONFIG_INET
-
-inet.o:		$(OBJS)
-		$(LD) -r -o inet.o $(OBJS)
-
-else
-
-inet.o:
-		echo | $(AS) -o inet.o
-
-endif
+socket.o:	$(OBJS)
+		$(LD) -r -o socket.o $(OBJS)
 
 dep:
 		$(CPP) -M *.c > .depend

@@ -66,8 +66,9 @@ struct slip {
 #define SL_MODE_SLIP	0
 #define SL_MODE_CSLIP	1
 #define SL_MODE_SLIP6	2		/* Matt Dillon's printable slip */
-#define SL_MODE_CSLIP6	(SL_MODE_SLIP|SL_MODE_CSLIP)
+#define SL_MODE_CSLIP6	(SL_MODE_SLIP6|SL_MODE_CSLIP)
 #define SL_MODE_AX25	4
+#define SL_MODE_ADAPTIVE 8
   int			xdata,xbits;	/* 6 bit slip controls 		*/
 };
 

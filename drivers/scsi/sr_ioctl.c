@@ -315,6 +315,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			  }
 
 			  /* Now mask and substitute our own volume and reuse the rest */
+			  buffer[0] = 0;  /* Clear reserved field */
 
 			  buffer[21] = volctrl.channel0 & mask[21];
 			  buffer[23] = volctrl.channel1 & mask[23];

@@ -682,7 +682,7 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
          sb_mixer_init(major);
 #endif
 
-#ifndef EXCLUDE_YM8312
+#ifndef EXCLUDE_YM3812
       if (major > 3 || (major == 3 && minor > 0))	/* SB Pro2 or later */
 	{
 	  enable_opl3_mode (OPL3_LEFT, OPL3_RIGHT, OPL3_BOTH);

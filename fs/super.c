@@ -486,6 +486,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 			return retval;
 		}
 	}
+	page = 0;
 	if ((new_flags & MS_MGC_MSK) == MS_MGC_VAL) {
 		flags = new_flags & ~MS_MGC_MSK;
 		retval = copy_mount_options(data, &page);

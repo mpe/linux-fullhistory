@@ -24,11 +24,11 @@
 #define IP_SET_DEV	0x2401
 
 struct ip_config {
-  char		name[MAX_IP_NAME];
-  unsigned long	paddr;
-  unsigned long	router;
-  unsigned long	net;
-  unsigned int	up:1,destroy:1;
+	char		name[MAX_IP_NAME];
+	unsigned long	paddr;
+	unsigned long	router;
+	unsigned long	net;
+	unsigned int	up:1,destroy:1;
 };
 #endif	/* FIXME: */
 

@@ -75,43 +75,46 @@
  * normal compare so long as neither of the numbers is within
  * 4K of wrapping.  Otherwise we must check for the wrap.
  */
-static inline int
-before (unsigned long seq1, unsigned long seq2)
+static inline int before (unsigned long seq1, unsigned long seq2)
 {
-  /* this inequality is strict. */
-  if (seq1 == seq2) return(0);
+  	/* this inequality is strict. */
+  	if (seq1 == seq2) 	
+  		return(0);
 
-  if (seq1 < seq2) {
-	if ((unsigned long)seq2-(unsigned long)seq1 < 65536UL) {
+  	if (seq1 < seq2) 
+  	{
+		if ((unsigned long)seq2-(unsigned long)seq1 < 65536UL) 
+		{
+			return(1);
+		} 
+		else 
+		{
+			return(0);
+		}
+  	}
+
+  	/*
+  	 * Now we know seq1 > seq2.  So all we need to do is check
+  	 * to see if seq1 has wrapped.
+  	 */
+  	if (seq2 < 8192UL && seq1 > (0xffffffffUL - 8192UL)) 
+  	{
 		return(1);
-	} else {
-		return(0);
-	}
-  }
-
-  /*
-   * Now we know seq1 > seq2.  So all we need to do is check
-   * to see if seq1 has wrapped.
-   */
-  if (seq2 < 8192UL && seq1 > (0xffffffffUL - 8192UL)) {
-	return(1);
-  }
-  return(0);
+  	}
+  	return(0);
 }
 
 
-static inline int
-after(unsigned long seq1, unsigned long seq2)
+static inline int after(unsigned long seq1, unsigned long seq2)
 {
-  return(before(seq2, seq1));
+  	return(before(seq2, seq1));
 }
 
 
 /* is s2<=s1<=s3 ? */
-static inline int
-between(unsigned long seq1, unsigned long seq2, unsigned long seq3)
+static inline int between(unsigned long seq1, unsigned long seq2, unsigned long seq3)
 {
-  return(after(seq1+1, seq2) && before(seq1, seq3+1));
+  	return(after(seq1+1, seq2) && before(seq1, seq3+1));
 }
 
 
@@ -121,12 +124,11 @@ between(unsigned long seq1, unsigned long seq2, unsigned long seq3)
  * convinced that this is the solution for the 'getpeername(2)'
  * problem. Thanks to Stephen A. Wood <saw@cebaf.gov>  -FvK
  */
-static inline const int
-tcp_connected(const int state)
+static inline const int tcp_connected(const int state)
 {
-  return(state == TCP_ESTABLISHED || state == TCP_CLOSE_WAIT ||
-	 state == TCP_FIN_WAIT1   || state == TCP_FIN_WAIT2 ||
-	 state == TCP_SYN_RECV);
+  	return(state == TCP_ESTABLISHED || state == TCP_CLOSE_WAIT ||
+		 state == TCP_FIN_WAIT1   || state == TCP_FIN_WAIT2 ||
+		 state == TCP_SYN_RECV);
 }
 
 

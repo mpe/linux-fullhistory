@@ -5,6 +5,7 @@ keycode   2 = one              exclam
 	alt     keycode   2 = Meta_one        
 keycode   3 = two              at               at              
 	control keycode   3 = nul             
+	shift control keycode 3 = nul
 	alt     keycode   3 = Meta_two        
 keycode   4 = three            numbersign      
 	control keycode   4 = Escape          
@@ -30,6 +31,7 @@ keycode  11 = zero             parenright       braceright
 	alt     keycode  11 = Meta_zero       
 keycode  12 = minus            underscore       backslash       
 	control keycode  12 = Control_underscore
+	shift control keycode 12 = Control_underscore
 	alt     keycode  12 = Meta_minus      
 keycode  13 = equal            plus            
 	alt     keycode  13 = Meta_equal      
@@ -54,7 +56,7 @@ keycode  27 = bracketright     braceright       asciitilde
 	control keycode  27 = Control_bracketright
 	alt     keycode  27 = Meta_bracketright
 keycode  28 = Return          
-	alt     keycode  28 = 0x080d          
+	alt     keycode  28 = Meta_Control_m  
 keycode  29 = Control         
 keycode  30 = a               
 keycode  31 = s               
@@ -87,6 +89,7 @@ keycode  50 = m
 keycode  51 = comma            less            
 	alt     keycode  51 = Meta_comma      
 keycode  52 = period           greater         
+	control keycode  52 = Compose
 	alt     keycode  52 = Meta_period     
 keycode  53 = slash            question        
 	control keycode  53 = Delete          
@@ -196,14 +199,14 @@ keycode 110 = Insert
 keycode 111 = Remove          
 	altgr   control keycode 111 = Boot            
 	control alt     keycode 111 = Boot            
-keycode 112 =
-keycode 113 =
-keycode 114 =
-keycode 115 =
-keycode 116 =
-keycode 117 =
-keycode 118 =
-keycode 119 =
+keycode 112 = Macro           
+keycode 113 = F13             
+keycode 114 = F14             
+keycode 115 = Help            
+keycode 116 = Do              
+keycode 117 = F17             
+keycode 118 = KP_MinPlus      
+keycode 119 = Pause
 keycode 120 =
 keycode 121 =
 keycode 122 =
@@ -238,9 +241,81 @@ string Remove = "\033[3~"
 string Select = "\033[4~"
 string Prior = "\033[5~"
 string Next = "\033[6~"
+string Help = ""
+string Do = ""
+string Macro = "\033[M"
+string Pause = "\033[P"
 string F21 = ""
 string F22 = ""
 string F23 = ""
 string F24 = ""
 string F25 = ""
 string F26 = ""
+compose '`' 'A' to 'À'
+compose '`' 'a' to 'à'
+compose '\'' 'A' to 'Á'
+compose '\'' 'a' to 'á'
+compose '^' 'A' to 'Â'
+compose '^' 'a' to 'â'
+compose '~' 'A' to 'Ã'
+compose '~' 'a' to 'ã'
+compose '"' 'A' to 'Ä'
+compose '"' 'a' to 'ä'
+compose 'O' 'A' to 'Å'
+compose 'o' 'a' to 'å'
+compose '0' 'A' to 'Å'
+compose '0' 'a' to 'å'
+compose 'A' 'A' to 'Å'
+compose 'a' 'a' to 'å'
+compose 'A' 'E' to 'Æ'
+compose 'a' 'e' to 'æ'
+compose ',' 'C' to 'Ç'
+compose ',' 'c' to 'ç'
+compose '`' 'E' to 'È'
+compose '`' 'e' to 'è'
+compose '\'' 'E' to 'É'
+compose '\'' 'e' to 'é'
+compose '^' 'E' to 'Ê'
+compose '^' 'e' to 'ê'
+compose '"' 'E' to 'Ë'
+compose '"' 'e' to 'ë'
+compose '`' 'I' to 'Ì'
+compose '`' 'i' to 'ì'
+compose '\'' 'I' to 'Í'
+compose '\'' 'i' to 'í'
+compose '^' 'I' to 'Î'
+compose '^' 'i' to 'î'
+compose '"' 'I' to 'Ï'
+compose '"' 'i' to 'ï'
+compose '-' 'D' to 'Ð'
+compose '-' 'd' to 'ð'
+compose '~' 'N' to 'Ñ'
+compose '~' 'n' to 'ñ'
+compose '`' 'O' to 'Ò'
+compose '`' 'o' to 'ò'
+compose '\'' 'O' to 'Ó'
+compose '\'' 'o' to 'ó'
+compose '^' 'O' to 'Ô'
+compose '^' 'o' to 'ô'
+compose '~' 'O' to 'Õ'
+compose '~' 'o' to 'õ'
+compose '"' 'O' to 'Ö'
+compose '"' 'o' to 'ö'
+compose '/' 'O' to 'Ø'
+compose '/' 'o' to 'ø'
+compose '`' 'U' to 'Ù'
+compose '`' 'u' to 'ù'
+compose '\'' 'U' to 'Ú'
+compose '\'' 'u' to 'ú'
+compose '^' 'U' to 'Û'
+compose '^' 'u' to 'û'
+compose '"' 'U' to 'Ü'
+compose '"' 'u' to 'ü'
+compose '\'' 'Y' to 'Ý'
+compose '\'' 'y' to 'ý'
+compose 'T' 'H' to 'Þ'
+compose 't' 'h' to 'þ'
+compose 's' 's' to 'ß'
+compose '"' 'y' to 'ÿ'
+compose 's' 'z' to 'ß'
+compose 'i' 'j' to 'ÿ'

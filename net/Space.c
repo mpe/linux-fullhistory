@@ -30,10 +30,10 @@
 #  include "inet/inet.h"
 #endif
 #ifdef CONFIG_IPX
-#include "inet/ipxcall.h"
+#include "ipx/ipxcall.h"
 #endif
 #ifdef CONFIG_AX25
-#include "inet/ax25call.h"
+#include "ax25/ax25call.h"
 #endif
 
 struct ddi_proto protocols[] = {
@@ -53,43 +53,3 @@ struct ddi_proto protocols[] = {
 };
 
 
-/*
- * Section B:	Device Driver Modules.
- *		This section defines which network device drivers
- *		get linked into the Linux kernel.  It is currently
- *		only used by the INET protocol.  Any takers for the
- *		other protocols like XNS or Novell?
- *
- * WARNING:	THIS SECTION IS NOT YET USED BY THE DRIVERS !!!!!
- */
-/*#include "drv/we8003/we8003.h"	Western Digital WD-80[01]3	*/
-/*#include "drv/dp8390/dp8390.h"	Donald Becker's DP8390 kit	*/
-/*#inclde "drv/slip/slip.h"		Laurence Culhane's SLIP kit	*/
-
-
-struct ddi_device devices[] = {
-#if CONF_WE8003
-  { "WD80x3[EBT]",
-	"",	0,	1,	we8003_init,	NULL,
-	19,	0,	DDI_FCHRDEV,
-    { 0x280,	0,	15,	0,	32768,	0xD0000		}	},
-#endif
-#if CONF_DP8390
-  { "DP8390/WD80x3",
-	"",	0,	1,	dpwd8003_init,	NULL,
-	20,	0,	DDI_FCHRDEV,
-    {	0,	0,	0,	0,	0,	0,		}	},
-  { "DP8390/NE-x000",
-	"",	0,	1,	dpne2000_init,	NULL,
-	20,	8,	DDI_FCHRDEV,
-    {	0,	0,	0,	0,	0,	0,		}	},
-  { "DP8390/3C50x",
-	"",	0,	1,	dpec503_init,	NULL,
-	20,	16,	DDI_FCHRDEV,
-    {	0,	0,	0,	0,	0,	0,		}	},
-#endif
-  { NULL,
-	"",	0,	0,	NULL,		NULL,
-	0,	0,	0,
-    {	0,	0,	0,	0,	0,	0		}	}
-};

@@ -47,18 +47,18 @@ static struct rtable *rt_base = NULL;
 static struct rtable *rt_loopback = NULL;
 
 /* Dump the contents of a routing table entry. */
-static void
-rt_print(struct rtable *rt)
+static void rt_print(struct rtable *rt)
 {
-  if (rt == NULL || inet_debug != DBG_RT) return;
+	if (rt == NULL || inet_debug != DBG_RT)
+		return;
 
-  printk("RT: %06lx NXT=%06lx FLAGS=0x%02x\n",
+	printk("RT: %06lx NXT=%06lx FLAGS=0x%02x\n",
 		(long) rt, (long) rt->rt_next, rt->rt_flags);
-  printk("    TARGET=%s ", in_ntoa(rt->rt_dst));
-  printk("GW=%s ", in_ntoa(rt->rt_gateway));
-  printk("    DEV=%s USE=%ld REF=%d\n",
-	(rt->rt_dev == NULL) ? "NONE" : rt->rt_dev->name,
-	rt->rt_use, rt->rt_refcnt);
+	printk("    TARGET=%s ", in_ntoa(rt->rt_dst));
+	printk("GW=%s ", in_ntoa(rt->rt_gateway));
+	printk("    DEV=%s USE=%ld REF=%d\n",
+		(rt->rt_dev == NULL) ? "NONE" : rt->rt_dev->name,
+		rt->rt_use, rt->rt_refcnt);
 }
 
 
@@ -162,8 +162,8 @@ static inline struct device * get_gw_dev(unsigned long gw)
 /*
  * rewrote rt_add(), as the old one was weird. Linus
  */
-void
-rt_add(short flags, unsigned long dst, unsigned long mask, unsigned long gw, struct device *dev)
+void rt_add(short flags, unsigned long dst, unsigned long mask,
+	unsigned long gw, struct device *dev)
 {
 	struct rtable *r, *rt;
 	struct rtable **rp;
@@ -280,38 +280,35 @@ static int rt_new(struct rtentry *r)
 }
 
 
-static int
-rt_kill(struct rtentry *r)
+static int rt_kill(struct rtentry *r)
 {
-  struct sockaddr_in *trg;
+	struct sockaddr_in *trg;
 
-  trg = (struct sockaddr_in *) &r->rt_dst;
-  rt_del(trg->sin_addr.s_addr);
-
-  return(0);
+	trg = (struct sockaddr_in *) &r->rt_dst;
+	rt_del(trg->sin_addr.s_addr);
+	return 0;
 }
 
 
 /* Called from the PROCfs module. */
-int
-rt_get_info(char *buffer)
+int rt_get_info(char *buffer)
 {
-  struct rtable *r;
-  char *pos;
+	struct rtable *r;
+	char *pos;
 
-  pos = buffer;
+	pos = buffer;
 
-  pos += sprintf(pos,
-		 "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\n");
+	pos += sprintf(pos,
+		"Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\n");
   
-  /* This isn't quite right -- r->rt_dst is a struct! */
-  for (r = rt_base; r != NULL; r = r->rt_next) {
-        pos += sprintf(pos, "%s\t%08lX\t%08lX\t%02X\t%d\t%lu\t%d\t%08lX\n",
-		r->rt_dev->name, r->rt_dst, r->rt_gateway,
-		r->rt_flags, r->rt_refcnt, r->rt_use, r->rt_metric,
-		r->rt_mask);
-  }
-  return(pos - buffer);
+	/* This isn't quite right -- r->rt_dst is a struct! */
+	for (r = rt_base; r != NULL; r = r->rt_next) {
+		pos += sprintf(pos, "%s\t%08lX\t%08lX\t%02X\t%d\t%lu\t%d\t%08lX\n",
+			r->rt_dev->name, r->rt_dst, r->rt_gateway,
+			r->rt_flags, r->rt_refcnt, r->rt_use, r->rt_metric,
+			r->rt_mask);
+	}
+	return pos - buffer;
 }
 
 /*
@@ -340,39 +337,41 @@ no_route:
 }
 
 
-int
-rt_ioctl(unsigned int cmd, void *arg)
+int rt_ioctl(unsigned int cmd, void *arg)
 {
-  struct device *dev;
-  struct rtentry rt;
-  char namebuf[32];
-  int ret;
-  int err;
+	struct device *dev;
+	struct rtentry rt;
+	char namebuf[32];
+	int ret;
+	int err;
 
-  switch(cmd) {
+	switch(cmd) {
 	case DDIOCSDBG:
 		ret = dbg_ioctl(arg, DBG_RT);
 		break;
+
 	case SIOCADDRT:
 	case SIOCDELRT:
-		if (!suser()) return(-EPERM);
-		err=verify_area(VERIFY_READ, arg, sizeof(struct rtentry));
+		if (!suser())
+			return -EPERM;
+		err = verify_area(VERIFY_READ, arg, sizeof(struct rtentry));
 		if(err)
 			return err;
 		memcpy_fromfs(&rt, arg, sizeof(struct rtentry));
 		if (rt.rt_dev) {
-		    err=verify_area(VERIFY_READ, rt.rt_dev, sizeof namebuf);
-		    if(err)
-		    	return err;
-		    memcpy_fromfs(&namebuf, rt.rt_dev, sizeof namebuf);
-		    dev = dev_get(namebuf);
-		    rt.rt_dev = dev;
+			err = verify_area(VERIFY_READ, rt.rt_dev, sizeof namebuf);
+			if(err)
+				return err;
+			memcpy_fromfs(&namebuf, rt.rt_dev, sizeof namebuf);
+			dev = dev_get(namebuf);
+			rt.rt_dev = dev;
 		}
 		ret = (cmd == SIOCDELRT) ? rt_kill(&rt) : rt_new(&rt);
 		break;
+
 	default:
 		ret = -EINVAL;
-  }
+	}
 
-  return(ret);
+	return ret;
 }

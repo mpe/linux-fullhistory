@@ -410,7 +410,7 @@ repeat:
 			/*
 			 * That failed: try linear search for a free inode
 			 */
-			i = dir->u.ext2_i.i_block_group + 2;
+			i = dir->u.ext2_i.i_block_group + 1;
 			for (j = 2; j < sb->u.ext2_sb.s_groups_count; j++) {
 				if (++i >= sb->u.ext2_sb.s_groups_count)
 					i = 0;
@@ -443,8 +443,17 @@ repeat:
 			ll_rw_block (WRITE, 1, &bh);
 			wait_on_buffer (bh);
 		}
-	} else
+	} else {
+		if (gdp->bg_free_inodes_count != 0) {
+			ext2_error (sb, "ext2_new_inode",
+				    "Free inodes count corrupted in group %d",
+				    i);
+			unlock_super (sb);
+			iput (inode);
+			return NULL;
+		}
 		goto repeat;
+	}
 	j += i * EXT2_INODES_PER_GROUP(sb) + 1;
 	if (j < EXT2_FIRST_INO || j > es->s_inodes_count) {
 		ext2_error (sb, "ext2_new_inode",
@@ -467,9 +476,13 @@ repeat:
 	inode->i_nlink = 1;
 	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->euid;
-	if ((dir->i_mode & S_ISGID) || test_opt (sb, GRPID))
+	if (test_opt (sb, GRPID))
 		inode->i_gid = dir->i_gid;
-	else
+	else if (dir->i_mode & S_ISGID) {
+		inode->i_gid = dir->i_gid;
+		if (S_ISDIR(mode))
+			mode |= S_ISGID;
+	} else
 		inode->i_gid = current->egid;
 	inode->i_dirt = 1;
 	inode->i_ino = j;

@@ -233,13 +233,15 @@ static int parse_options (char * options, unsigned long * sb_block,
 				return 0;
 			}
 		}
-		else if (!strcmp (this_char, "grpid"))
+		else if (!strcmp (this_char, "grpid") ||
+			 !strcmp (this_char, "bsdgroups"))
 			set_opt (*mount_options, GRPID);
 		else if (!strcmp (this_char, "nocheck")) {
 			clear_opt (*mount_options, CHECK_NORMAL);
 			clear_opt (*mount_options, CHECK_STRICT);
 		}
-		else if (!strcmp (this_char, "nogrpid"))
+		else if (!strcmp (this_char, "nogrpid") ||
+			 !strcmp (this_char, "sysvgroups"))
 			clear_opt (*mount_options, GRPID);
 		else if (!strcmp (this_char, "sb")) {
 			if (!value || !*value) {
@@ -271,7 +273,8 @@ static void ext2_setup_super (struct super_block * sb,
 	else if ((sb->u.ext2_sb.s_mount_state & EXT2_ERROR_FS))
 		printk ("EXT2-fs warning: mounting fs with errors, "
 			"running e2fsck is recommended\n");
-	else if (es->s_mnt_count >= es->s_max_mnt_count)
+	else if (es->s_max_mnt_count >= 0 &&
+	         es->s_mnt_count >= es->s_max_mnt_count)
 		printk ("EXT2-fs warning: maximal mount count reached, "
 			"running e2fsck is recommended\n");
 	if (!(sb->s_flags & MS_RDONLY)) {
@@ -390,8 +393,8 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		unlock_super (sb);
 		brelse (bh);
 		if (!silent)
-			printk ("VFS: Can't find an ext2 filesystem on dev 0x%04x.\n",
-				dev);
+			printk ("VFS: Can't find an ext2 filesystem on dev %d/%d.\n",
+				MAJOR(dev), MINOR(dev));
 		return NULL;
 	}
 	sb->s_blocksize = EXT2_MIN_BLOCK_SIZE << es->s_log_block_size;
@@ -477,8 +480,8 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		unlock_super (sb);
 		brelse (bh);
 		if (!silent)
-			printk ("VFS: Can't find an ext2 filesystem on dev 0x%04x.\n",
-				dev);
+			printk ("VFS: Can't find an ext2 filesystem on dev %d/%d.\n",
+				MAJOR(dev), MINOR(dev));
 		return NULL;
 	}
 	if (sb->s_blocksize != bh->b_size) {
@@ -522,7 +525,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 			sb->s_dev = 0;
 			unlock_super (sb);
 			for (j = 0; j < i; j++)
-				brelse (sb->u.ext2_sb.s_group_desc[i]);
+				brelse (sb->u.ext2_sb.s_group_desc[j]);
 			brelse (bh);
 			printk ("EXT2-fs: unable to read group descriptors\n");
 			return NULL;
@@ -532,7 +535,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		sb->s_dev = 0;
 		unlock_super (sb);
 		for (j = 0; j < i; j++)
-			brelse (sb->u.ext2_sb.s_group_desc[i]);
+			brelse (sb->u.ext2_sb.s_group_desc[j]);
 		brelse (bh);
 		printk ("EXT2-fs: group descriptors corrupted !\n");
 		return NULL;

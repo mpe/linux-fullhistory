@@ -462,7 +462,7 @@ repeat:
 					 EXT2_BLOCKS_PER_GROUP(sb));
 	if (j >= EXT2_BLOCKS_PER_GROUP(sb)) {
 		ext2_error (sb, "ext2_new_block",
-			    "Unable to locate free bit in block group %d", i);
+			    "Free blocks count corrupted for block group %d", i);
 		unlock_super (sb);
 		return 0;
 	}
@@ -486,8 +486,8 @@ got_block:
 	     tmp == gdp->bg_inode_bitmap ||
 	     in_range (tmp, gdp->bg_inode_table, sb->u.ext2_sb.s_itb_per_group)))
 		ext2_panic (sb, "ext2_new_block",
-			    "Allocating block in system zone\nblock = %u",
-			    tmp);
+			    "Allocating block in system zone\n"
+			    "block = %u", tmp);
 
 	if (set_bit (j, bh->b_data)) {
 		ext2_warning (sb, "ext2_new_block",

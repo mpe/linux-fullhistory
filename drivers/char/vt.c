@@ -2,6 +2,7 @@
  *  kernel/chr_drv/vt.c
  *
  *  Copyright (C) 1992 obz under the linux copyright
+ *  Dynamic diacritical handling - aeb@cwi.nl - Dec 1993
  */
 
 #include <linux/types.h>
@@ -19,6 +20,7 @@
 #include <asm/segment.h>
 
 #include "vt_kern.h"
+#include "diacr.h"
 
 /*
  * Console (vt and kd) routines, as defined by USL SVR4 manual, and by
@@ -37,6 +39,7 @@ struct vt_struct vt_cons[NR_CONSOLES];
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on);
 
+extern void compute_shiftstate(void);
 extern void change_console(unsigned int new_console);
 extern void complete_change_console(unsigned int new_console);
 extern int vt_waitactive(void);
@@ -212,6 +215,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		} else if (arg == K_XLATE) {
 			clr_vc_kbd_flag(kbd, VC_RAW);
 			clr_vc_kbd_flag(kbd, VC_MEDIUMRAW);
+			compute_shiftstate();
 		} else if (arg == K_MEDIUMRAW) {
 			clr_vc_kbd_flag(kbd, VC_RAW);
 			set_vc_kbd_flag(kbd, VC_MEDIUMRAW);
@@ -278,10 +282,17 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbsentry));
 		if (i)
 			return i;
-		if ((i = get_fs_byte(&a->kb_func)) >= NR_FUNC)
+		if ((i = get_fs_byte(&a->kb_func)) >= NR_FUNC || i < 0)
 			return -EINVAL;
 		q = a->kb_string;
-		for (p = func_table[i]; *p; p++)
+		p = func_table[i];
+		if(!p) {
+		    /* beware of tables generated for a smaller NR_FUNC */
+		    printk("KDGKBSENT error: func_table[%d] is nil.\n",
+			   i);
+		    return -EINVAL;
+		}
+		for ( ; *p; p++)
 			put_fs_byte(*p, q++);
 		put_fs_byte(0, q);
 		return 0;
@@ -301,7 +312,14 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return i;
 		if ((i = get_fs_byte(&a->kb_func)) >= NR_FUNC)
 			return -EINVAL;
-		delta = -strlen(func_table[i]);
+		q = func_table[i];
+		if (!q) {
+		    /* beware of tables generated for a smaller NR_FUNC */
+		    printk("KDSKBSENT error: func_table[%d] is nil.\n",
+			   i);
+		    return -EINVAL;
+		}
+		delta = -strlen(q);
 		for (p = a->kb_string; get_fs_byte(p); p++)
 			delta++;
 		first_free = func_table[NR_FUNC - 1] +
@@ -317,11 +335,41 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 				func_table[i + 1],
 				first_free - func_table[i + 1]);
 			for (k = i + 1; k < NR_FUNC; k++)
+			    if (func_table[k])  /* just to be sure */
 				func_table[k] += delta;
 		}
 		for (p = a->kb_string, q = func_table[i]; ; p++, q++)
 			if (!(*q = get_fs_byte(p)))
 				break;
+		return 0;
+	}
+
+	case KDGKBDIACR:
+	{
+	        struct kbdiacrs *a = (struct kbdiacrs *)arg;
+
+	        i = verify_area(VERIFY_WRITE, (void *) a, sizeof(struct kbdiacrs));
+		if (i)
+		        return i;
+		put_fs_long(accent_table_size, &a->kb_cnt);
+		memcpy_tofs(a->kbdiacr, accent_table,
+			    accent_table_size*sizeof(struct kbdiacr));
+		return 0;
+	}
+
+	case KDSKBDIACR:
+	{
+	        struct kbdiacrs *a = (struct kbdiacrs *)arg;
+		unsigned int ct;
+
+	        i = verify_area(VERIFY_READ, (void *) a, sizeof(struct kbdiacrs));
+		if (i)
+		        return i;
+		ct = get_fs_long(&a->kb_cnt);
+		if (ct >= MAX_DIACR)
+		        return -EINVAL;
+		accent_table_size = ct;
+		memcpy_fromfs(accent_table, a->kbdiacr, ct*sizeof(struct kbdiacr));
 		return 0;
 	}
 
