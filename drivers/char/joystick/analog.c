@@ -41,17 +41,18 @@
 #include <linux/gameport.h>
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
+MODULE_DESCRIPTION("Analog joystick and gamepad driver for Linux");
 
 /*
  * Option parsing.
  */
 
-MODULE_PARM(js,"1-16s");
-
 #define ANALOG_PORTS		16
 
 static char *js[ANALOG_PORTS];
 static int analog_options[ANALOG_PORTS];
+MODULE_PARM(js, "1-" __MODULE_STRING(ANALOG_PORTS) "s");
+MODULE_PARM_DESC(js, "Analog joystick options");
 
 /*
  * Times, feature definitions.

@@ -3,7 +3,6 @@
 	all the i2c code is here
 	also the gpio interface exported by bttv (used by lirc)
 
-
     bttv - Bt848 frame grabber driver
 
     Copyright (C) 1996,97,98 Ralph  Metzler (rjkm@thp.uni-koeln.de)
@@ -34,7 +33,7 @@
 
 #include <asm/io.h>
 
-#include "bttv.h"
+#include "bttvp.h"
 #include "tuner.h"
 
 
@@ -79,6 +78,8 @@ int bttv_gpio_enable(unsigned int card, unsigned long mask, unsigned long data)
 	
 	btv = &bttvs[card];
 	btaor(data, ~mask, BT848_GPIO_OUT_EN);
+	if (bttv_gpio)
+		bttv_gpio_tracking(btv,"extern enable");
 	return 0;
 }
 
@@ -115,6 +116,8 @@ int bttv_write_gpio(unsigned int card, unsigned long mask, unsigned long data)
 /* prior setting BT848_GPIO_REG_INP is (probably) not needed 
    because direct input is set on init */
 	btaor(data & mask, ~mask, BT848_GPIO_DATA);
+	if (bttv_gpio)
+		bttv_gpio_tracking(btv,"extern write");
 	return 0;
 }
 
@@ -195,8 +198,7 @@ static int attach_inform(struct i2c_client *client)
 	int i;
 
 	for (i = 0; i < I2C_CLIENTS_MAX; i++) {
-		if (btv->i2c_clients[i] == NULL ||
-		    btv->i2c_clients[i]->driver->id == client->driver->id) {
+		if (btv->i2c_clients[i] == NULL) {
 			btv->i2c_clients[i] = client;
 			break;
 		}
@@ -216,8 +218,7 @@ static int detach_inform(struct i2c_client *client)
         if (bttv_verbose)
 		printk("bttv%d: i2c detach [%s]\n",btv->nr,client->name);
 	for (i = 0; i < I2C_CLIENTS_MAX; i++) {
-		if (NULL != btv->i2c_clients[i] &&
-		    btv->i2c_clients[i]->driver->id == client->driver->id) {
+		if (btv->i2c_clients[i] == client) {
 			btv->i2c_clients[i] = NULL;
 			break;
 		}
@@ -240,33 +241,27 @@ void bttv_call_i2c_clients(struct bttv *btv, unsigned int cmd, void *arg)
 }
 
 struct i2c_algo_bit_data bttv_i2c_algo_template = {
-	NULL,
-	bttv_bit_setsda,
-	bttv_bit_setscl,
-	bttv_bit_getsda,
-	bttv_bit_getscl,
-	10, 10, 100,
+	setsda:  bttv_bit_setsda,
+	setscl:  bttv_bit_setscl,
+	getsda:  bttv_bit_getsda,
+	getscl:  bttv_bit_getscl,
+	udelay:  40,
+	mdelay:  10,
+	timeout: 200,
 };
 
 struct i2c_adapter bttv_i2c_adap_template = {
-	"bt848",
-	I2C_HW_B_BT848,
-	NULL,
-	NULL,
-	bttv_inc_use,
-	bttv_dec_use,
-	attach_inform,
-	detach_inform,
-	NULL,
+	name:              "bt848",
+	id:                I2C_HW_B_BT848,
+	inc_use:           bttv_inc_use,
+	dec_use:           bttv_dec_use,
+	client_register:   attach_inform,
+	client_unregister: detach_inform,
 };
 
 struct i2c_client bttv_i2c_client_template = {
-        "bttv internal",
-        -1,
-        0,
-        0,
-        NULL,
-        NULL
+        name: "bttv internal use only",
+        id:   -1,
 };
 
 
@@ -275,7 +270,7 @@ int bttv_I2CRead(struct bttv *btv, unsigned char addr, char *probe_for)
 {
         unsigned char buffer = 0;
 
-	if (0 != btv->i2c_ok)
+	if (0 != btv->i2c_rc)
 		return -1;
 	if (bttv_verbose && NULL != probe_for)
 		printk(KERN_INFO "bttv%d: i2c: checking for %s @ 0x%02x... ",
@@ -302,7 +297,7 @@ int bttv_I2CWrite(struct bttv *btv, unsigned char addr, unsigned char b1,
         unsigned char buffer[2];
         int bytes = both ? 2 : 1;
 
-	if (0 != btv->i2c_ok)
+	if (0 != btv->i2c_rc)
 		return -1;
         btv->i2c_client.addr = addr >> 1;
         buffer[0] = b1;

@@ -973,10 +973,8 @@ static int elp_open(struct net_device *dev)
 	 * device is now officially open!
 	 */
 
-	netif_wake_queue(dev);
-	MOD_INC_USE_COUNT;
-
-	return 0;		/* Always succeed */
+	netif_start_queue(dev);
+	return 0;
 }
 
 
@@ -1183,8 +1181,6 @@ static int elp_close(struct net_device *dev)
 
 	free_dma(dev->dma);
 	free_pages((unsigned long) adapter->dma_buffer, get_order(DMA_BUFFER_SIZE));
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }
@@ -1419,6 +1415,8 @@ int __init elplus_probe(struct net_device *dev)
 	elp_device *adapter;
 	int i, tries, tries1, timeout, okay;
 	unsigned long cookie = 0;
+
+	SET_MODULE_OWNER(dev);
 
 	/*
 	 *  setup adapter structure

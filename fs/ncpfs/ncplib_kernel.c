@@ -1005,6 +1005,8 @@ ncp__vol2io(struct ncp_server *server, unsigned char *iname, unsigned int *ilen,
 
 		/* this is wrong! */
 		vname_cc = kmalloc(vlen, GFP_KERNEL);
+		if (!vname_cc)
+			return -ENOMEM;
 		for (i = 0; i < vlen; i++)
 			vname_cc[i] = ncp_tolower(in, vname[i]);
 		vname = vname_cc;

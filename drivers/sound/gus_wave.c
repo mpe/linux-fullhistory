@@ -17,7 +17,7 @@
  * Bartlomiej Zolnierkiewicz : added some __init/__exit
  */
  
- 
+#include <linux/init.h> 
 #include <linux/config.h>
 
 #define GUSPNP_AUTODETECT

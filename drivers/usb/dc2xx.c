@@ -51,6 +51,7 @@
  * patches, and shared their sucesses!
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/signal.h>

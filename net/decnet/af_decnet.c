@@ -33,6 +33,8 @@
  *         David S. Miller: New socket locking
  *        Steve Whitehouse: Socket list hashing/locking
  *         Arnaldo C. Melo: use capable, not suser
+ *        Steve Whitehouse: Removed unused code. Fix to use sk->allocation
+ *                          when required.
  */
 
 
@@ -538,7 +540,7 @@ static void dn_destroy_sock(struct sock *sk)
 
 	switch(scp->state) {
 		case DN_DN:
-			dn_nsp_send_disc(sk, NSP_DISCCONF, NSP_REASON_DC, GFP_KERNEL);
+			dn_nsp_send_disc(sk, NSP_DISCCONF, NSP_REASON_DC, sk->allocation);
 			scp->persist_fxn = dn_destroy_timer;
 			scp->persist = dn_nsp_persist(sk);
 			break;
@@ -550,7 +552,7 @@ static void dn_destroy_sock(struct sock *sk)
 		case DN_DI:
 		case DN_DR:
 disc_reject:
-			dn_nsp_send_disc(sk, NSP_DISCINIT, 0, GFP_KERNEL);
+			dn_nsp_send_disc(sk, NSP_DISCINIT, 0, sk->allocation);
 		case DN_NC:
 		case DN_NR:
 		case DN_RJ:
@@ -967,7 +969,7 @@ static int dn_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	cb = (struct dn_skb_cb *)skb->cb;
 
-	if ((newsk = dn_alloc_sock(newsock, GFP_KERNEL)) == NULL) {
+	if ((newsk = dn_alloc_sock(newsock, sk->allocation)) == NULL) {
 		release_sock(sk);
 		kfree_skb(skb);
 		return -ENOBUFS;
@@ -1031,7 +1033,7 @@ static int dn_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	if (newsk->protinfo.dn.accept_mode == ACC_IMMED) {
 		newsk->protinfo.dn.state = DN_CC;
-        	dn_send_conn_conf(newsk, GFP_KERNEL);
+        	dn_send_conn_conf(newsk, newsk->allocation);
 		err = dn_wait_accept(newsock, flags);
 	}
 
@@ -1388,7 +1390,7 @@ static int __dn_setsockopt(struct socket *sock, int level,int optname, char *opt
 				return -EINVAL;
 
 			scp->state = DN_CC;
-			dn_send_conn_conf(sk, GFP_KERNEL);
+			dn_send_conn_conf(sk, sk->allocation);
 			err = dn_wait_accept(sock, sock->file->f_flags);
 			return err;
 
@@ -1399,7 +1401,7 @@ static int __dn_setsockopt(struct socket *sock, int level,int optname, char *opt
 
 			scp->state = DN_DR;
 			sk->shutdown = SHUTDOWN_MASK;
-			dn_nsp_send_disc(sk, 0x38, 0, GFP_KERNEL);
+			dn_nsp_send_disc(sk, 0x38, 0, sk->allocation);
 			break;
 
 		default:
@@ -1527,7 +1529,7 @@ static int dn_wait_run(struct sock *sk, int flags)
 
 		case DN_CR:
 			scp->state = DN_CC;
-			dn_send_conn_conf(sk, GFP_KERNEL);
+			dn_send_conn_conf(sk, sk->allocation);
 			return dn_wait_accept(sk->socket, (flags & MSG_DONTWAIT) ? O_NONBLOCK : 0);
 		case DN_CI:
 		case DN_CC:
@@ -2083,7 +2085,7 @@ static int __init decnet_init(void)
 	dn_dn2eth(decnet_ether_address, dn_ntohs(decnet_address));
 #endif
 
-        printk(KERN_INFO "NET4: DECnet for Linux: V.2.3.49s (C) 1995-2000 Linux DECnet Project Team\n");
+        printk(KERN_INFO "NET4: DECnet for Linux: V.2.4.0-test10s (C) 1995-2000 Linux DECnet Project Team\n");
 
 	sock_register(&dn_family_ops);
 	dev_add_pack(&dn_dix_packet_type);
@@ -2102,6 +2104,14 @@ static int __init decnet_init(void)
 #ifdef CONFIG_SYSCTL
 	dn_register_sysctl();
 #endif /* CONFIG_SYSCTL */
+
+	/*
+	 * Prevent DECnet module unloading until its fixed properly.
+	 * Requires an audit of the code to check for memory leaks and
+	 * initialisation problems etc.
+	 */
+	MOD_INC_USE_COUNT;
+
 	return 0;
 
 }
@@ -2111,7 +2121,6 @@ static int __init decnet_setup(char *str)
 {
 	unsigned short area = simple_strtoul(str, &str, 0);
 	unsigned short node = simple_strtoul(*str > 0 ? ++str : str, &str, 0);
-	/* unsigned short type = simple_strtoul(*str > 0 ? ++str : str, &str, 0); */
 
 	decnet_address = dn_htons(area << 10 | node);
 	dn_dn2eth(decnet_ether_address, dn_ntohs(decnet_address));

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/video/fbdev.c - nVidia RIVA 128/TNT/TNT2 fb driver
+ * linux/drivers/video/riva/fbdev.c - nVidia RIVA 128/TNT/TNT2 fb driver
  *
  * Maintained by Ani Joshi <ajoshi@shell.unixbox.com>
  *

@@ -15,7 +15,10 @@
  *	History
  *	X.25 001	Jonathan Naylor	Started coding.
  *	X.25 002	Jonathan Naylor	New timer architecture.
- *      2000-09-04	Henner Eisen    Prevented x25_output() skb leakage.
+ *	2000-09-04	Henner Eisen	Prevented x25_output() skb leakage.
+ *	2000-10-27	Henner Eisen	MSG_DONTWAIT for fragment allocation.
+ *	2000-11-10	Henner Eisen	x25_send_iframe(): re-queued frames
+ *					needed cleaned seq-number fields.
  */
 
 #include <linux/config.h>
@@ -55,13 +58,17 @@ static int x25_pacsize_to_bytes(unsigned int pacsize)
 }
 
 /*
- *	This is where all X.25 information frames pass;
+ *	This is where all X.25 information frames pass.
+ *
+ *      Returns the amount of user data bytes sent on success
+ *      or a negative error code on failure.
  */
 int x25_output(struct sock *sk, struct sk_buff *skb)
 {
 	struct sk_buff *skbn;
 	unsigned char header[X25_EXT_MIN_LEN];
 	int err, frontlen, len, header_len, max_len;
+	int sent=0, noblock = X25_SKB_CB(skb)->flags & MSG_DONTWAIT;
 
 	header_len = (sk->protinfo.x25->neighbour->extended) ? X25_EXT_MIN_LEN : X25_STD_MIN_LEN;
 	max_len    = x25_pacsize_to_bytes(sk->protinfo.x25->facilities.pacsize_out);
@@ -74,11 +81,14 @@ int x25_output(struct sock *sk, struct sk_buff *skb)
 		frontlen = skb_headroom(skb);
 
 		while (skb->len > 0) {
-			if ((skbn = sock_alloc_send_skb(sk, frontlen + max_len, 0, 0, &err)) == NULL){
-				int unsent = skb->len - header_len;
-				SOCK_DEBUG(sk, "x25_output: framgent allocation failed, err=%d, %d bytes unsent\n", err, unsent); 
-				return err;
+			if ((skbn = sock_alloc_send_skb(sk, frontlen + max_len, 0, noblock, &err)) == NULL){
+				if(err == -EWOULDBLOCK && noblock){
+					kfree_skb(skb);
+					return sent;
 				}
+				SOCK_DEBUG(sk, "x25_output: fragment allocation failed, err=%d, %d bytes sent\n", err, sent);
+				return err;
+			}
 				
 			skb_reserve(skbn, frontlen);
 
@@ -100,13 +110,15 @@ int x25_output(struct sock *sk, struct sk_buff *skb)
 			}
 
 			skb_queue_tail(&sk->write_queue, skbn);
+			sent += len;
 		}
 		
 		kfree_skb(skb);
 	} else {
 		skb_queue_tail(&sk->write_queue, skb);
+		sent = skb->len - header_len;
 	}
-	return 0;
+	return sent;
 }
 
 /* 
@@ -119,9 +131,11 @@ static void x25_send_iframe(struct sock *sk, struct sk_buff *skb)
 		return;
 
 	if (sk->protinfo.x25->neighbour->extended) {
-		skb->data[2] |= (sk->protinfo.x25->vs << 1) & 0xFE;
+		skb->data[2]  = (sk->protinfo.x25->vs << 1) & 0xFE;
+		skb->data[3] &= X25_EXT_M_BIT;
 		skb->data[3] |= (sk->protinfo.x25->vr << 1) & 0xFE;
 	} else {
+		skb->data[2] &= X25_STD_M_BIT;
 		skb->data[2] |= (sk->protinfo.x25->vs << 1) & 0x0E;
 		skb->data[2] |= (sk->protinfo.x25->vr << 5) & 0xE0;
 	}

@@ -16,8 +16,10 @@
  *	X.25 001	Jonathan Naylor	  Started coding.
  *	X.25 002	Jonathan Naylor	  Centralised disconnection code.
  *					  New timer architecture.
- *	mar/20/00	Daniela Squassoni Disabling/enabling of facilities 
+ *	2000-03-20	Daniela Squassoni Disabling/enabling of facilities 
  *					  negotiation.
+ *	2000-11-10	Henner Eisen	  Check and reset for out-of-sequence
+ *					  i-frames.
  */
 
 #include <linux/config.h>
@@ -216,7 +218,8 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 
 		case X25_DATA:	/* XXX */
 			sk->protinfo.x25->condition &= ~X25_COND_PEER_RX_BUSY;
-			if (!x25_validate_nr(sk, nr)) {
+			if ((ns!=sk->protinfo.x25->vr) || 
+			    !x25_validate_nr(sk, nr)) {
 				x25_clear_queues(sk);
 				x25_write_internal(sk, X25_RESET_REQUEST);
 				x25_start_t22timer(sk);

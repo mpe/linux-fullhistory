@@ -965,8 +965,7 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 	slot = lp->ppp_slot;
 	if (slot < 0 || slot > ISDN_MAX_CHANNELS) {
 		printk(KERN_ERR "isdn_ppp_push_higher: lp->ppp_slot %d\n", lp->ppp_slot);
-		kfree_skb(skb);
-		return;
+		goto drop_packet;
 	}
 	is = ippp_table[slot];
  	
@@ -974,14 +973,11 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
  		slot = ((isdn_net_local *) (lp->master->priv))->ppp_slot;
  		if (slot < 0 || slot > ISDN_MAX_CHANNELS) {
  			printk(KERN_ERR "isdn_ppp_push_higher: master->ppp_slot %d\n", lp->ppp_slot);
- 			kfree_skb(skb);
- 			return;
+			goto drop_packet;
  		}
  	}
  	mis = ippp_table[slot];
- 	if (mis != is) {
- 		printk(KERN_WARNING __FUNCTION__ ": BUG: is != mis %d %d %p %p\n", slot, lp->ppp_slot, mis, is);
- 	}
+
 	if (is->debug & 0x10) {
 		printk(KERN_DEBUG "push, skb %d %04x\n", (int) skb->len, proto);
 		isdn_ppp_frame_log("rpush", skb->data, skb->len, 32,is->unit,lp->ppp_slot);
@@ -995,15 +991,11 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 		case PPP_IPX:  /* untested */
 			if (is->debug & 0x20)
 				printk(KERN_DEBUG "isdn_ppp: IPX\n");
-			skb->dev = dev;
-			skb->mac.raw = skb->data;
 			skb->protocol = htons(ETH_P_IPX);
 			break;
 		case PPP_IP:
 			if (is->debug & 0x20)
 				printk(KERN_DEBUG "isdn_ppp: IP\n");
-			skb->dev = dev;
-			skb->mac.raw = skb->data;
 			skb->protocol = htons(ETH_P_IP);
 			break;
 #ifdef CONFIG_ISDN_PPP_VJ
@@ -1012,10 +1004,10 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 				printk(KERN_DEBUG "isdn_ppp: VJC_UNCOMP\n");
 			if (slhc_remember(ippp_table[net_dev->local->ppp_slot]->slcomp, skb->data, skb->len) <= 0) {
 				printk(KERN_WARNING "isdn_ppp: received illegal VJC_UNCOMP frame!\n");
-				net_dev->local->stats.rx_dropped++;
-				kfree_skb(skb);
-				return;
+				goto drop_packet;
 			}
+			skb->protocol = htons(ETH_P_IP);
+			break;
 		case PPP_VJC_COMP:
 			if (is->debug & 0x20)
 				printk(KERN_DEBUG "isdn_ppp: VJC_COMP\n");
@@ -1026,22 +1018,17 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 
 				if (!skb) {
 					printk(KERN_WARNING "%s: Memory squeeze, dropping packet.\n", dev->name);
-					net_dev->local->stats.rx_dropped++;
-					kfree_skb(skb_old);
-					return;
+					skb = skb_old;
+					goto drop_packet;
 				}
-				skb->dev = dev;
 				skb_put(skb, skb_old->len + 128);
 				memcpy(skb->data, skb_old->data, skb_old->len);
-				skb->mac.raw = skb->data;
 				pkt_len = slhc_uncompress(ippp_table[net_dev->local->ppp_slot]->slcomp,
 						skb->data, skb_old->len);
 				kfree_skb(skb_old);
-				if (pkt_len < 0) {
-					kfree_skb(skb);
-					lp->stats.rx_dropped++;
-					return;
-				}
+				if (pkt_len < 0)
+					goto drop_packet;
+
 				skb_trim(skb, pkt_len);
 				skb->protocol = htons(ETH_P_IP);
 			}
@@ -1058,16 +1045,22 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 			/* fall through */
 		default:
 			isdn_ppp_fill_rq(skb->data, skb->len, proto, lp->ppp_slot);	/* push data to pppd device */
-			dev_kfree_skb(skb);
+			kfree_skb(skb);
 			return;
 	}
 
  	/* Reset hangup-timer */
  	lp->huptimer = 0;
-	netif_rx(skb);
-	/* net_dev->local->stats.rx_packets++; *//* done in isdn_net.c */
 
+	skb->dev = dev;
+	skb->mac.raw = skb->data;
+	netif_rx(skb);
+	/* net_dev->local->stats.rx_packets++; done in isdn_net.c */
 	return;
+
+ drop_packet:
+	net_dev->local->stats.rx_dropped++;
+	kfree_skb(skb);
 }
 
 /*

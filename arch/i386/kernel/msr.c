@@ -231,7 +231,7 @@ static int msr_open(struct inode *inode, struct file *file)
   
   if ( !(cpu_online_map & (1UL << cpu)) )
     return -ENXIO;		/* No such CPU */
-  if ( !(c->x86_capability & X86_FEATURE_MSR) )
+  if ( !test_bit(X86_FEATURE_MSR, &c->x86_capability) )
     return -EIO;		/* MSR not supported */
   
   return 0;

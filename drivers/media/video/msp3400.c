@@ -88,8 +88,10 @@ struct msp3400c {
 	int norm;
 	int stereo;
 	int nicam_on;
+	int acb;
 	int main, second;	/* sound carrier */
 
+	int muted;
 	int left, right;	/* volume */
 	int bass, treble;
 
@@ -299,6 +301,43 @@ static struct CARRIER_DETECT carrier_detect_65[] = {
 
 #define CARRIER_COUNT(x) (sizeof(x)/sizeof(struct CARRIER_DETECT))
 
+/* ----------------------------------------------------------------------- */
+
+#define SCART_MASK    0
+#define SCART_IN1     1
+#define SCART_IN2     2
+#define SCART_IN1_DA  3
+#define SCART_IN2_DA  4
+#define SCART_IN3     5
+#define SCART_IN4     6
+#define SCART_MONO    7
+#define SCART_MUTE    8
+
+static int scarts[3][9] = {
+  /* MASK    IN1     IN2     IN1_DA  IN2_DA  IN3     IN4     MONO    MUTE   */
+  {  0x0320, 0x0000, 0x0200, -1,     -1,     0x0300, 0x0020, 0x0100, 0x0320 },
+  {  0x0c40, 0x0440, 0x0400, 0x0c00, 0x0040, 0x0000, 0x0840, 0x0800, 0x0c40 },
+  {  0x3080, 0x1000, 0x1080, 0x0000, 0x0080, 0x2080, 0x3080, 0x2000, 0x3000 },
+};
+
+static char *scart_names[] = {
+  "mask", "in1", "in2", "in1 da", "in2 da", "in3", "in4", "mono", "mute"
+};
+
+static void
+msp3400c_set_scart(struct i2c_client *client, int in, int out)
+{
+	struct msp3400c *msp = client->data;
+
+	if (-1 == scarts[out][in])
+		return;
+
+	dprintk("msp34xx: scart switch: %s => %d\n",scart_names[in],out);
+	msp->acb &= ~scarts[out][SCART_MASK];
+	msp->acb |=  scarts[out][in];
+	msp3400c_write(client,I2C_MSP3400C_DFP, 0x0013, msp->acb);
+}
+
 /* ------------------------------------------------------------------------ */
 
 static void msp3400c_setcarrier(struct i2c_client *client, int cdo1, int cdo2)
@@ -310,18 +349,21 @@ static void msp3400c_setcarrier(struct i2c_client *client, int cdo1, int cdo2)
 	msp3400c_write(client,I2C_MSP3400C_DEM, 0x0056, 0); /*LOAD_REG_1/2*/
 }
 
-static void msp3400c_setvolume(struct i2c_client *client, int left, int right)
+static void msp3400c_setvolume(struct i2c_client *client,
+			       int muted, int left, int right)
 {
-	int vol,val,balance;
+	int vol = 0,val = 0,balance = 0;
 
-	vol     = (left > right) ? left : right;
-	val     = (vol * 0x73 / 65535) << 8;
-	balance = 0;
-	if (vol > 0)
+	if (!muted) {
+		vol     = (left > right) ? left : right;
+		val     = (vol * 0x73 / 65535) << 8;
+	}
+	if (vol > 0) {
 		balance = ((right-left) * 127) / vol;
+	}
 
-	dprintk("msp34xx: setvolume: %d:%d 0x%02x 0x%02x\n",
-		left,right,val>>8,balance);
+	dprintk("msp34xx: setvolume: mute=%s %d:%d  v=0x%02x b=0x%02x\n",
+		muted ? "on" : "off", left, right, val>>8, balance);
 	msp3400c_write(client,I2C_MSP3400C_DFP, 0x0000, val); /* loudspeaker */
 	msp3400c_write(client,I2C_MSP3400C_DFP, 0x0006, val); /* headphones  */
 	/* scart - on/off only */
@@ -470,11 +512,8 @@ static void msp3400c_setstereo(struct i2c_client *client, int mode)
 		if (msp->mode == MSP_MODE_AM_NICAM) {
 			dprintk("msp3400: switching to AM mono\n");
 			/* AM mono decoding is handled by tuner, not MSP chip */
-			/* so let's redirect sound from tuner via SCART */
-			/* volume prescale for SCART */
-			msp3400c_write(client,I2C_MSP3400C_DFP, 0x000d, 0x1900);
-			/* SCART switching control register*/
-			msp3400c_write(client,I2C_MSP3400C_DFP, 0x0013, 0xe900);
+			/* SCART switching control register */
+			msp3400c_set_scart(client,SCART_MONO,0);
 			src = 0x0200;
 			break;
 		}
@@ -711,7 +750,7 @@ static int msp3400c_thread(void *data)
 		
 	restart:
 		msp->restart = 0;
-		msp3400c_setvolume(client, 0, 0);
+		msp3400c_setvolume(client, msp->muted, 0, 0);
 		msp3400c_setmode(client, MSP_MODE_AM_DETECT /* +1 */ );
 		val1 = val2 = 0;
 		max1 = max2 = -1;
@@ -829,6 +868,8 @@ static int msp3400c_thread(void *data)
 				msp->nicam_on = 0;
 				msp3400c_setstereo(client, VIDEO_SOUND_MONO);
 				msp3400c_setcarrier(client, msp->second, msp->main);
+				/* volume prescale for SCART (AM mono input) */
+				msp3400c_write(client,I2C_MSP3400C_DFP, 0x000d, 0x1900);
 				msp->watch_stereo = 1;
 			} else if (max2 == 0 && msp->nicam) {
 				/* D/K NICAM */
@@ -854,7 +895,7 @@ static int msp3400c_thread(void *data)
 		}
 
 		/* unmute */
-		msp3400c_setvolume(client, msp->left, msp->right);
+		msp3400c_setvolume(client, msp->muted, msp->left, msp->right);
 
 		if (msp->watch_stereo)
 			mod_timer(&msp->wake_stereo, jiffies+5*HZ);
@@ -941,9 +982,6 @@ static int msp3410d_thread(void *data)
 		if (msp->rmmod || signal_pending(current))
 			goto done;
 
-		if (VIDEO_MODE_RADIO == msp->norm)
-			continue;  /* nothing to do */
-	
 		msp->active = 1;
 
 		if (msp->watch_stereo) {
@@ -966,6 +1004,11 @@ static int msp3410d_thread(void *data)
 		/* put into sane state (and mute) */
 		msp3400c_reset(client);
 
+		/* set various prescales */
+		msp3400c_write(client, I2C_MSP3400C_DFP, 0x0d, 0x1900); /* scart */
+		msp3400c_write(client, I2C_MSP3400C_DFP, 0x0e, 0x2403); /* FM */
+		msp3400c_write(client, I2C_MSP3400C_DFP, 0x10, 0x5a00); /* nicam */
+
 		/* start autodetect */
 		switch (msp->norm) {
 		case VIDEO_MODE_PAL:
@@ -978,7 +1021,11 @@ static int msp3410d_thread(void *data)
 			break;
 		case VIDEO_MODE_SECAM: 
 			mode = 0x0003;
-			std = 1;
+			std  = 1;
+			break;
+		case VIDEO_MODE_RADIO: 
+			mode = 0x0003;
+			std  = 0x0040;
 			break;
 		default:
 			mode = 0x0003;
@@ -987,8 +1034,7 @@ static int msp3410d_thread(void *data)
 		}
 		msp3400c_write(client, I2C_MSP3400C_DEM, 0x30, mode);
 		msp3400c_write(client, I2C_MSP3400C_DEM, 0x20, std);
-		msp3400c_write(client, I2C_MSP3400C_DFP, 0x0e, 0x2403);
-		msp3400c_write(client, I2C_MSP3400C_DFP, 0x10, 0x5a00);
+
 		if (debug) {
 			int i;
 			for (i = 0; modelist[i].name != NULL; i++)
@@ -1019,7 +1065,7 @@ static int msp3410d_thread(void *data)
 			}
 		}
 		for (i = 0; modelist[i].name != NULL; i++)
-			 if (modelist[i].retval == val)
+			if (modelist[i].retval == val)
 				break;
 		dprintk("msp3410: current mode: %s (0x%04x)\n",
 			modelist[i].name ? modelist[i].name : "unknown",
@@ -1035,11 +1081,24 @@ static int msp3410d_thread(void *data)
 			msp3400c_write(client, I2C_MSP3400C_DEM, 0x20, val);
 		}
 
-		/* set prescale / stereo */
+		/* set stereo */
 		switch (val) {
+		case 0x0008: /* B/G NICAM */
+		case 0x000a: /* I NICAM */
+			if (val == 0x0008)
+				msp->mode = MSP_MODE_FM_NICAM1;
+			else
+				msp->mode = MSP_MODE_FM_NICAM2;
+			/* just turn on stereo */
+			msp->stereo = VIDEO_SOUND_STEREO;
+			msp->nicam_on = 1;
+			msp->watch_stereo = 1;
+			msp3400c_setstereo(client,VIDEO_SOUND_STEREO);
+			break;
 		case 0x0009:			
 			msp->mode = MSP_MODE_AM_NICAM;
 			msp->stereo = VIDEO_SOUND_MONO;
+			msp->nicam_on = 1;
 			msp3400c_setstereo(client,VIDEO_SOUND_MONO);
 			msp->watch_stereo = 1;
 			break;
@@ -1047,26 +1106,31 @@ static int msp3410d_thread(void *data)
 			/* just turn on stereo */
 			msp->mode   = MSP_MODE_BTSC;
 			msp->stereo = VIDEO_SOUND_STEREO;
+			msp->nicam_on = 0;
 			msp->watch_stereo = 1;
 			msp3400c_setstereo(client,VIDEO_SOUND_STEREO);
-			/* set prescale */
-			msp3400c_write(client, I2C_MSP3400C_DFP, 0x0e, 0x2403); /* FM */
+			break;
+		case 0x0040: /* FM radio */
+			msp->mode   = MSP_MODE_FM_RADIO;
+			msp->stereo = VIDEO_SOUND_STEREO;
+			msp->nicam_on = 0;
+			msp->watch_stereo = 0;
+			/* scart routing */
+			msp3400c_set_scart(client,SCART_IN2,0);
+			msp3400c_write(client,I2C_MSP3400C_DFP, 0x08, 0x0220);
 			break;
 		case 0x0003:
 			msp->mode   = MSP_MODE_FM_TERRA;
 			msp->stereo = VIDEO_SOUND_MONO;
+			msp->nicam_on = 0;
 			msp->watch_stereo = 1;
-			/* fall */
-		default:
-			msp3400c_write(client, I2C_MSP3400C_DFP, 0x0e, 0x2403); /* FM */
-			msp3400c_write(client, I2C_MSP3400C_DFP, 0x10, 0x5a00); /* NICAM */
 			break;
 		}
-
+		
 		/* unmute */
 		msp3400c_setbass(client, msp->bass);
 		msp3400c_settreble(client, msp->treble);
-		msp3400c_setvolume(client, msp->left, msp->right);
+		msp3400c_setvolume(client, msp->muted, msp->left, msp->right);
 
 		if (msp->watch_stereo)
 			mod_timer(&msp->wake_stereo, jiffies+HZ);
@@ -1093,22 +1157,18 @@ static int msp_probe(struct i2c_adapter *adap);
 static int msp_command(struct i2c_client *client, unsigned int cmd, void *arg);
 
 static struct i2c_driver driver = {
-        "i2c msp3400 driver",
-        I2C_DRIVERID_MSP3400,
-        I2C_DF_NOTIFY,
-        msp_probe,
-        msp_detach,
-        msp_command,
+        name:           "i2c msp3400 driver",
+        id:             I2C_DRIVERID_MSP3400,
+        flags:          I2C_DF_NOTIFY,
+        attach_adapter: msp_probe,
+        detach_client:  msp_detach,
+        command:        msp_command,
 };
 
 static struct i2c_client client_template = 
 {
-        "unset",
-        -1,
-        0,
-        0,
-        NULL,
-        &driver
+	name:   "(unset)",
+        driver: &driver,
 };
 
 static int msp_attach(struct i2c_adapter *adap, int addr,
@@ -1150,8 +1210,9 @@ static int msp_attach(struct i2c_adapter *adap, int addr,
 	}
     
 	rev1 = msp3400c_read(c, I2C_MSP3400C_DFP, 0x1e);
-	rev2 = msp3400c_read(c, I2C_MSP3400C_DFP, 0x1f);
-	if (0 == rev1 && 0 == rev2) {
+	if (-1 != rev1)
+		rev2 = msp3400c_read(c, I2C_MSP3400C_DFP, 0x1f);
+	if ((-1 == rev1) || (0 == rev1 && 0 == rev2)) {
 		kfree(msp);
 		printk("msp3400: error while reading chip version\n");
 		return -1;
@@ -1180,7 +1241,7 @@ static int msp_attach(struct i2c_adapter *adap, int addr,
 	msp->wake_stereo.data     = (unsigned long)msp;
 
 	/* hello world :-) */
-	printk(KERN_INFO "msp3400: init: chip=%s",c->name);
+	printk(KERN_INFO "msp34xx: init: chip=%s",c->name);
 	if (msp->nicam)
 		printk(", has NICAM support");
 	printk("\n");
@@ -1193,11 +1254,6 @@ static int msp_attach(struct i2c_adapter *adap, int addr,
 	down(&sem);
 	msp->notify = NULL;
 	wake_up_interruptible(&msp->wq);
-
-#ifdef REGISTER_MIXER
-	if ((msp->mixer_num = register_sound_mixer(&msp3400c_mixer_fops,mixer)) < 0)
-		printk(KERN_ERR "msp3400c: cannot allocate mixer device\n");
-#endif
 
 	/* update our own array */
 	for (i = 0; i < MSP3400_MAX; i++) {
@@ -1218,11 +1274,6 @@ static int msp_detach(struct i2c_client *client)
 	struct msp3400c *msp  = (struct msp3400c*)client->data;
 	int i;
 	
-#ifdef REGISTER_MIXER
-	if (msp->mixer_num >= 0)
-		unregister_sound_mixer(msp->mixer_num);
-#endif
-
 	/* shutdown control thread */
 	del_timer(&msp->wake_stereo);
 	if (msp->thread) 
@@ -1260,29 +1311,47 @@ static int msp_probe(struct i2c_adapter *adap)
 static int msp_command(struct i2c_client *client,unsigned int cmd, void *arg)
 {
 	struct msp3400c *msp  = (struct msp3400c*)client->data;
+        __u16           *sarg = arg;
 #if 0
 	int             *iarg = (int*)arg;
-        __u16           *sarg = arg;
 #endif
 
 	switch (cmd) {
+
+	case AUDC_SET_INPUT:
+#if 1
+		/* hauppauge 44xxx scart switching */
+		switch (*sarg) {
+		case AUDIO_RADIO:
+			msp3400c_set_scart(client,SCART_IN2,0);
+			break;
+		case AUDIO_EXTERN:
+			msp3400c_set_scart(client,SCART_IN1,0);
+			break;
+		default:
+			if (*sarg & AUDIO_MUTE)
+				msp3400c_set_scart(client,SCART_MUTE,0);
+			break;
+		}
+#endif
+		break;
 
 	case AUDC_SET_RADIO:
 		msp->norm = VIDEO_MODE_RADIO;
 		msp->watch_stereo=0;
 		del_timer(&msp->wake_stereo);
+		dprintk("msp34xx: switching to radio mode\n");
 		if (msp->simple) {
-			msp3400c_reset(client);
-			msp3400c_write(client, I2C_MSP3400C_DEM, 0x30, 0x0003); /* automatic   */
-			msp3400c_write(client, I2C_MSP3400C_DEM, 0x20, 0x0040); /* FM Radio    */
-			msp3400c_write(client, I2C_MSP3400C_DFP, 0x0e, 0x2403); /* FM prescale */
-			msp3400c_setbass(client, msp->bass);
-			msp3400c_settreble(client, msp->treble);
-			msp3400c_setvolume(client, msp->left, msp->right);
+			/* the thread will do for us */
+			msp3400c_setvolume(client,msp->muted,0,0);
+			if (msp->active)
+				msp->restart = 1;
+			wake_up_interruptible(&msp->wq);
 		} else {
+			/* set msp3400 to FM radio mode */
 			msp3400c_setmode(client,MSP_MODE_FM_RADIO);
 			msp3400c_setcarrier(client, MSP_CARRIER(10.7),MSP_CARRIER(10.7));
-			msp3400c_setvolume(client,msp->left, msp->right);			
+			msp3400c_setvolume(client,msp->muted,msp->left,msp->right);			
 		}
 		break;
 
@@ -1295,7 +1364,10 @@ static int msp_command(struct i2c_client *client,unsigned int cmd, void *arg)
 
 		va->flags |= VIDEO_AUDIO_VOLUME |
 			VIDEO_AUDIO_BASS |
-			VIDEO_AUDIO_TREBLE;
+			VIDEO_AUDIO_TREBLE |
+			VIDEO_AUDIO_MUTABLE;
+		if (msp->muted)
+			va->flags |= VIDEO_AUDIO_MUTE;
 		va->volume=MAX(msp->left,msp->right);
 		va->balance=(32768*MIN(msp->left,msp->right))/
 			(va->volume ? va->volume : 1);
@@ -1304,21 +1376,24 @@ static int msp_command(struct i2c_client *client,unsigned int cmd, void *arg)
 		va->bass = msp->bass;
 		va->treble = msp->treble;
 
-		autodetect_stereo(client);
-		va->mode = msp->stereo;
+		if (msp->norm != VIDEO_MODE_RADIO) {
+			autodetect_stereo(client);
+			va->mode = msp->stereo;
+		}
 		break;
 	}
 	case VIDIOCSAUDIO:
 	{
 		struct video_audio *va = arg;
 
+		msp->muted = (va->flags & VIDEO_AUDIO_MUTE);
 		msp->left = (MIN(65536 - va->balance,32768) *
 			     va->volume) / 32768;
 		msp->right = (MIN(va->balance,32768) *
 			      va->volume) / 32768;
 		msp->bass = va->bass;
 		msp->treble = va->treble;
-		msp3400c_setvolume(client,msp->left, msp->right);
+		msp3400c_setvolume(client,msp->muted,msp->left,msp->right);
 		msp3400c_setbass(client,msp->bass);
 		msp3400c_settreble(client,msp->treble);
 
@@ -1334,13 +1409,14 @@ static int msp_command(struct i2c_client *client,unsigned int cmd, void *arg)
 	{
 		struct video_channel *vc = arg;
 		
+		dprintk("msp34xx: switching to TV mode\n");
 		msp->norm = vc->norm;
 		break;
 	}
 	case VIDIOCSFREQ:
 	{
 		/* new channel -- kick audio carrier scan */
-		msp3400c_setvolume(client,0,0);
+		msp3400c_setvolume(client,msp->muted,0,0);
 		msp->watch_stereo=0;
 		del_timer(&msp->wake_stereo);
 		if (msp->active)

@@ -14,6 +14,7 @@
 
 /***************************** INCLUDES *****************************/
 
+#include <linux/config.h>
 #include "irnet.h"		/* Module global include */
 
 /************************ CONSTANTS & MACROS ************************/

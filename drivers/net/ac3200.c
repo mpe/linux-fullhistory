@@ -99,6 +99,8 @@ int __init ac3200_probe(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
+	SET_MODULE_OWNER(dev);
+
 	if (ioaddr > 0x1ff)		/* Check a single specified location. */
 		return ac_probe1(ioaddr, dev);
 	else if (ioaddr > 0)		/* Don't probe at all. */
@@ -262,9 +264,6 @@ static int ac_open(struct net_device *dev)
 #endif
 
 	ei_open(dev);
-
-	MOD_INC_USE_COUNT;
-
 	return 0;
 }
 
@@ -333,9 +332,6 @@ static int ac_close_card(struct net_device *dev)
 #endif
 
 	ei_close(dev);
-
-	MOD_DEC_USE_COUNT;
-
 	return 0;
 }
 

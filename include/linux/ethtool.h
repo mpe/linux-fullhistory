@@ -1,4 +1,4 @@
-/* $Id: ethtool.h,v 1.1 2000/11/10 05:44:33 davem Exp $
+/* $Id: ethtool.h,v 1.2 2000/11/12 10:05:57 davem Exp $
  * ethtool.h: Defines for Linux ethtool.
  *
  * Copyright (C) 1998 David S. Miller (davem@redhat.com)
@@ -79,6 +79,7 @@ struct ethtool_cmd {
 #define PORT_AUI		0x01
 #define PORT_MII		0x02
 #define PORT_FIBRE		0x03
+#define PORT_BNC		0x04
 
 /* Which tranceiver to use. */
 #define XCVR_INTERNAL		0x00

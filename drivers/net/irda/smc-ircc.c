@@ -7,7 +7,7 @@
  * Author:        Thomas Davis (tadavis@jps.net)
  * Created at:    
  * Modified at:   Tue Feb 22 10:05:06 2000
- * Modified by:   Dag Brattli <dagb@cs.uit.no>
+ * Modified by:   Dag Brattli <dag@brattli.net>
  * 
  *     Copyright (c) 1999-2000 Dag Brattli
  *     Copyright (c) 1998-1999 Thomas Davis, 
@@ -252,6 +252,7 @@ static int ircc_open(int i, unsigned int fir_base, unsigned int sir_base)
 		IR_115200|IR_576000|IR_1152000|(IR_4000000 << 8);
 
 	irport->qos.min_turn_time.bits = 0x07;
+	irport->qos.window_size.bits = 0x01;
 	irda_qos_bits_to_value(&irport->qos);
 
 	irport->flags = IFF_FIR|IFF_MIR|IFF_SIR|IFF_DMA|IFF_PIO;
@@ -508,6 +509,10 @@ static void ircc_change_speed(void *priv, __u32 speed)
 	outb(0x00, iobase+IRCC_MASTER);
 
 	switch (speed) {
+	default:
+		IRDA_DEBUG(0, __FUNCTION__ "(), unknown baud rate of %d\n", 
+			   speed);
+		/* FALLTHROUGH */
 	case 9600:
 	case 19200:
 	case 38400:
@@ -535,10 +540,6 @@ static void ircc_change_speed(void *priv, __u32 speed)
 		fast = IRCC_LCR_A_FAST;
 		IRDA_DEBUG(0, __FUNCTION__ "(), handling baud of 4000000\n");
 		break;
-	default:
-		IRDA_DEBUG(0, __FUNCTION__ "(), unknown baud rate of %d\n", 
-			   speed);
-		return;
 	}
 	
 	register_bank(iobase, 0);
@@ -620,7 +621,7 @@ static int ircc_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	if ((speed = irda_get_speed(skb)) != self->io.speed) {
 		/* Check for empty frame */
 		if (!skb->len) {
-			smc_ircc_change_speed(self, speed); 
+			ircc_change_speed(self, speed); 
 			return 0;
 		} else
 			self->new_speed = speed;
@@ -638,7 +639,7 @@ static int ircc_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 		int bofs;
 
 		/* 
-		 * Compute who many BOFS (STA or PA's) we need to waste the
+		 * Compute how many BOFs (STA or PA's) we need to waste the
 		 * min turn time given the speed of the link.
 		 */
 		bofs = mtt * (self->io.speed / 1000) / 8000;
@@ -650,7 +651,6 @@ static int ircc_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 		/* Transmit frame */
 		ircc_dma_xmit(self, iobase, 0);
 	}
-	
 	spin_unlock_irqrestore(&self->lock, flags);
 	dev_kfree_skb(skb);
 
@@ -767,6 +767,7 @@ static int ircc_dma_receive(struct ircc_cb *self, int iobase)
 
 	setup_dma(self->io.dma, self->rx_buff.data, self->rx_buff.truesize, 
 		  DMA_RX_MODE);
+
 	/* Set max Rx frame size */
 	register_bank(iobase, 4);
 	outb((2050 >> 8) & 0x0f, iobase+IRCC_RX_SIZE_HI);
@@ -795,7 +796,6 @@ static int ircc_dma_receive(struct ircc_cb *self, int iobase)
  *
  *    Finished with receiving frames
  *
- *    
  */
 static void ircc_dma_receive_complete(struct ircc_cb *self, int iobase)
 {

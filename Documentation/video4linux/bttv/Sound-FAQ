@@ -8,12 +8,12 @@ completely by the bt8xx chip, which is common on all boards.  But
 sound is handled in slightly different ways on each board.
 
 To handle the grabber boards correctly, there is a array tvcards[] in
-bttv.c, which holds the informations required for each board.  Sound
-will work only, if the correct entry is used (for video it often makes
-no difference).  The bttv driver prints a line to the kernel log,
-telling which card type is used.  Like this one:
+bttv-cards.c, which holds the informations required for each board.
+Sound will work only, if the correct entry is used (for video it often
+makes no difference).  The bttv driver prints a line to the kernel
+log, telling which card type is used.  Like this one:
 
-	bttv0: model: BT848(Hauppauge old)
+	bttv0: model: BT848(Hauppauge old) [autodetected]
 
 You should verify this is correct.  If it is'nt, you have to pass the
 correct board type as insmod argument, "insmod bttv card=2" for
@@ -32,7 +32,7 @@ you might want to check the video4linux mailing list archive first...
 
 Of course you need a correctly installed soundcard unless you have the
 speakers connected directly to the grabber board.  Hint: check the
-mixer settings too...
+mixer settings too.  ALSA for example has everything muted by default.
 
 
 How sound works in detail
@@ -48,42 +48,64 @@ bt848 chip.  Another one is the data register (BT848_GPIO_DATA), where
 you can get/set the status if these pins.  They can be used for input
 and output.
 
-All grabber board vendors use these pins to control an external chip
+Most grabber board vendors use these pins to control an external chip
 which does the sound routing.  But every board is a little different.
 These pins are also used by some companies to drive remote control
-receiver chips.
+receiver chips.  Some boards use the i2c bus instead of the gpio pins
+to connect the mux chip.
 
 As mentioned above, there is a array which holds the required
 informations for each known board.  You basically have to create a new
-line for your board.  What is in there:
+line for your board.  The important fields are these two:
 
 struct tvcard
 {
-        char *name;
-        int inputs;       /* number of video inputs */
-        int tuner;        /*   which of them is the tuner */
-        int svhs;         /*   which of them is the svhs input */
+	[ ... ]
         u32 gpiomask;
-        u32 muxsel[8];    /* video mux */
-        u32 audiomux[6];  /* audio mux: Tuner, Radio, external, internal, mute, stereo */
-        u32 gpiomask2;    /* GPIO MUX mask (this is video) */
+        u32 audiomux[5];  /* audio mux: tuner, radio, external, internal, mute */
 };
 
-gpiomask has all bits set which are used to control the audio mux.
-This value basically goes to the gpio output enable register.  It is
-also used to mask bits when switching the audio mux (which is done by
-read-modify-write on the gpio data register).
+gpiomask specifies which pins are used to control the audio mux chip.
+The corresponding bits in the output enable register
+(BT848_GPIO_OUT_EN) will be set as these pins must be driven by the
+bt848 chip.
+
+The audiomux[] array holds the data values for the different inputs
+(i.e. which pins must be high/low for tuner/mute/...).  This will be
+written to the data register (BT848_GPIO_DATA) to switch the audio
+mux.
+
 
 What you have to do is figure out the correct values for gpiomask and
 the audiomux array.  If you have Windows and the drivers four your
 card installed, you might to check out if you can read these registers
 values used by the windows driver.  A tool to do this is available
-from ftp://telepresence.dmem.strath.ac.uk/pub/bt848/winutil.  There is
-some #ifdef'ed code in bttv.c (search for "new card") which prints
-these values before board initialization, this might help too: boot
-win, start tv app, softboot (loadlin) into linux and load bttv with
-this enabled.  If you hav'nt Windows installed, this is a trial and
-error game...
+from ftp://telepresence.dmem.strath.ac.uk/pub/bt848/winutil (doesn't
+work with bt878 boards according to some reports I received).  You
+might also dig around in the *.ini files of the Windows applications.
+You can have a look at the board to see which of the gpio pins are
+connected at all and then start trial-and-error ...
+
+
+Starting with release 0.7.41 bttv has a number of insmod options to
+make the gpio debugging easier:
+
+bttv_gpio=0/1		enable/disable gpio debug messages
+gpiomask=n		set the gpiomask value
+audiomux=i,j,...	set the values of the audiomux array
+audioall=a		set the values of the audiomux array (one
+			value for all array elements, useful to check
+			out which effect the particular value has).
+
+The messages printed with bttv_gpio=1 look like this:
+
+	bttv0: gpio: en=00000027, out=00000024 in=00ffffd8 [audio: off]
+
+en  =	output _en_able register (BT848_GPIO_OUT_EN)
+out =	_out_put bits of the data register (BT848_GPIO_DATA),
+	i.e. BT848_GPIO_DATA & BT848_GPIO_OUT_EN
+in  = 	_in_put bits of the data register,
+	i.e. BT848_GPIO_DATA & ~BT848_GPIO_OUT_EN
 
 Good luck,
 

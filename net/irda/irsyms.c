@@ -182,7 +182,7 @@ EXPORT_SYMBOL(irtty_unregister_dongle);
 EXPORT_SYMBOL(irtty_set_packet_mode);
 #endif
 
-static int __init irda_init(void)
+int __init irda_init(void)
 {
 	IRDA_DEBUG(0, __FUNCTION__ "()\n");
 

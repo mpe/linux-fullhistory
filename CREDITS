@@ -2635,17 +2635,14 @@ S: Rockville, Maryland 20853
 S: USA
 
 N: Stephen Tweedie
-E: sct@dcs.ed.ac.uk
+E: sct@redhat.com
 P: 1024/E7A417AD E2 FE A4 20 34 EC ED FC 7D 7E 67 8D E0 31 D1 69
+P: 1024D/43BE7544 D2A4 8556 08E6 90E7 076C  BA3F 243F 20A4 43BE 7544
 D: Second extended file system developer
 D: General filesystem hacker
 D: kswap vm management code
-S: Dept. of Computer Science
-S: University of Edinburgh
-S: JCMB, The King's Buildings
-S: Mayfield Road
-S: Edinburgh 
-S: EH9 3JZ
+S: 44 Campbell Park Crescent
+S: Edinburgh EH13 0HT
 S: United Kingdom
 
 N: Thomas Uhl

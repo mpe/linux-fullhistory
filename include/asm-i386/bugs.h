@@ -147,200 +147,6 @@ static void __init check_popad(void)
 }
 
 /*
- *	B step AMD K6 before B 9730xxxx have hardware bugs that can cause
- *	misexecution of code under Linux. Owners of such processors should
- *	contact AMD for precise details and a CPU swap.
- *
- *	See	http://www.mygale.com/~poulot/k6bug.html
- *		http://www.amd.com/K6/k6docs/revgd.html
- *
- *	The following test is erm.. interesting. AMD neglected to up
- *	the chip setting when fixing the bug but they also tweaked some
- *	performance at the same time..
- */
- 
-extern void vide(void);
-__asm__(".align 4\nvide: ret");
-
-static void __init check_amd_k6(void)
-{
-	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
-	    boot_cpu_data.x86 == 5 &&
-	    boot_cpu_data.x86_model == 6 &&
-	    boot_cpu_data.x86_mask == 1)
-	{
-		int n;
-		void (*f_vide)(void);
-		unsigned long d, d2;
-
-		printk(KERN_INFO "AMD K6 stepping B detected - ");
-
-#define K6_BUG_LOOP 1000000
-
-		/*
-		 * It looks like AMD fixed the 2.6.2 bug and improved indirect 
-		 * calls at the same time.
-		 */
-
-		n = K6_BUG_LOOP;
-		f_vide = vide;
-		rdtscl(d);
-		while (n--) 
-			f_vide();
-		rdtscl(d2);
-		d = d2-d;
-
-		/* Knock these two lines out if it debugs out ok */
-		printk(KERN_INFO "K6 BUG %ld %d (Report these if test report is incorrect)\n", d, 20*K6_BUG_LOOP);
-		printk(KERN_INFO "AMD K6 stepping B detected - ");
-		/* -- cut here -- */
-		if (d > 20*K6_BUG_LOOP) 
-			printk("system stability may be impaired when more than 32 MB are used.\n");
-		else 
-			printk("probably OK (after B9730xxxx).\n");
-		printk(KERN_INFO "Please see http://www.mygale.com/~poulot/k6bug.html\n");
-	}
-}
-
-/*
- * All current models of Pentium and Pentium with MMX technology CPUs
- * have the F0 0F bug, which lets nonpriviledged users lock up the system:
- */
-
-#ifndef CONFIG_M686
-extern void trap_init_f00f_bug(void);
-
-static void __init check_pentium_f00f(void)
-{
-	/*
-	 * Pentium and Pentium MMX
-	 */
-	boot_cpu_data.f00f_bug = 0;
-	if (boot_cpu_data.x86 == 5 && boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) {
-		printk(KERN_INFO "Intel Pentium with F0 0F bug - workaround enabled.\n");
-		boot_cpu_data.f00f_bug = 1;
-		trap_init_f00f_bug();
-	}
-}
-#endif
-
-/*
- * Perform the Cyrix 5/2 test. A Cyrix won't change
- * the flags, while other 486 chips will.
- */
-
-static inline int test_cyrix_52div(void)
-{
-	unsigned int test;
-
-	__asm__ __volatile__(
-	     "sahf\n\t"		/* clear flags (%eax = 0x0005) */
-	     "div %b2\n\t"	/* divide 5 by 2 */
-	     "lahf"		/* store flags into %ah */
-	     : "=a" (test)
-	     : "0" (5), "q" (2)
-	     : "cc");
-
-	/* AH is 0x02 on Cyrix after the divide.. */
-	return (unsigned char) (test >> 8) == 0x02;
-}
-
-/*
- * Fix cpuid problems with Cyrix CPU's:
- *   -- on the Cx686(L) the cpuid is disabled on power up.
- *   -- braindamaged BIOS disable cpuid on the Cx686MX.
- */
-
-extern unsigned char Cx86_dir0_msb;  /* exported HACK from cyrix_model() */
-
-static void __init check_cx686_cpuid(void)
-{
-	if (boot_cpu_data.cpuid_level == -1 &&
-	    ((Cx86_dir0_msb == 5) || (Cx86_dir0_msb == 3))) {
-		int eax, dummy;
-		unsigned char ccr3, ccr4;
-		__u32 old_cap;
-
-		cli();
-		ccr3 = getCx86(CX86_CCR3);
-		setCx86(CX86_CCR3, (ccr3 & 0x0f) | 0x10); /* enable MAPEN  */
-		ccr4 = getCx86(CX86_CCR4);
-		setCx86(CX86_CCR4, ccr4 | 0x80);          /* enable cpuid  */
-		setCx86(CX86_CCR3, ccr3);                 /* disable MAPEN */
-		sti();
-
-		/* we have up to level 1 available on the Cx6x86(L|MX) */
-		boot_cpu_data.cpuid_level = 1;
-		/*  Need to preserve some externally computed capabilities  */
-		old_cap = boot_cpu_data.x86_capability & X86_FEATURE_MTRR;
-		cpuid(1, &eax, &dummy, &dummy,
-		      &boot_cpu_data.x86_capability);
-		boot_cpu_data.x86_capability |= old_cap;
-
-		boot_cpu_data.x86 = (eax >> 8) & 15;
-		/*
- 		 * we already have a cooked step/rev number from DIR1
-		 * so we don't use the cpuid-provided ones.
-		 */
-	}
-}
-
-/*
- * Reset the slow-loop (SLOP) bit on the 686(L) which is set by some old
- * BIOSes for compatability with DOS games.  This makes the udelay loop
- * work correctly, and improves performance.
- */
-
-extern void calibrate_delay(void) __init;
-
-static void __init check_cx686_slop(void)
-{
-	if (Cx86_dir0_msb == 3) {
-		unsigned char ccr3, ccr5;
-
-		cli();
-		ccr3 = getCx86(CX86_CCR3);
-		setCx86(CX86_CCR3, (ccr3 & 0x0f) | 0x10); /* enable MAPEN  */
-		ccr5 = getCx86(CX86_CCR5);
-		if (ccr5 & 2)
-			setCx86(CX86_CCR5, ccr5 & 0xfd);  /* reset SLOP */
-		setCx86(CX86_CCR3, ccr3);                 /* disable MAPEN */
-		sti();
-
-		if (ccr5 & 2) { /* possible wrong calibration done */
-			printk(KERN_INFO "Recalibrating delay loop with SLOP bit reset\n");
-			calibrate_delay();
-			boot_cpu_data.loops_per_sec = loops_per_sec;
-		}
-	}
-}
-
-/*
- * Cyrix CPUs without cpuid or with cpuid not yet enabled can be detected
- * by the fact that they preserve the flags across the division of 5/2.
- * PII and PPro exhibit this behavior too, but they have cpuid available.
- */
-
-static void __init check_cyrix_cpu(void)
-{
-	if ((boot_cpu_data.cpuid_level == -1) && (boot_cpu_data.x86 == 4)
-	    && test_cyrix_52div()) {
-
-		strcpy(boot_cpu_data.x86_vendor_id, "CyrixInstead");
-	}
-}
- 
-/*
- * In setup.c's cyrix_model() we have set the boot_cpu_data.coma_bug
- * on certain processors that we know contain this bug and now we
- * enable the workaround for it.
- */
-
-static void __init check_cyrix_coma(void)
-{
-}
- 
-/*
  * Check whether we are able to run this kernel safely on SMP.
  *
  * - In order to run on a i386, we need to be compiled for i386
@@ -391,7 +197,7 @@ static void __init check_config(void)
  */
 #if defined(CONFIG_X86_LOCAL_APIC) && defined(CONFIG_X86_GOOD_APIC)
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL
-	    && boot_cpu_data.x86_capability & X86_FEATURE_APIC
+	    && test_bit(X86_FEATURE_APIC, &boot_cpu_data.x86_capability)
 	    && boot_cpu_data.x86 == 5
 	    && boot_cpu_data.x86_model == 2
 	    && (boot_cpu_data.x86_mask < 6 || boot_cpu_data.x86_mask == 11))
@@ -409,10 +215,7 @@ static void __init check_config(void)
 
 static void __init check_bugs(void)
 {
-	check_cyrix_cpu();
 	identify_cpu(&boot_cpu_data);
-	check_cx686_cpuid();
-	check_cx686_slop();
 #ifndef CONFIG_SMP
 	printk("CPU: ");
 	print_cpu_info(&boot_cpu_data);
@@ -421,10 +224,5 @@ static void __init check_bugs(void)
 	check_fpu();
 	check_hlt();
 	check_popad();
-	check_amd_k6();
-#ifndef CONFIG_M686
-	check_pentium_f00f();
-#endif
-	check_cyrix_coma();
 	system_utsname.machine[1] = '0' + (boot_cpu_data.x86 > 6 ? 6 : boot_cpu_data.x86);
 }

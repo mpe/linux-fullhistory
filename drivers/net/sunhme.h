@@ -1,4 +1,4 @@
-/* $Id: sunhme.h,v 1.30 2000/02/18 13:49:26 davem Exp $
+/* $Id: sunhme.h,v 1.31 2000/11/12 10:23:30 davem Exp $
  * sunhme.h: Definitions for Sparc HME/BigMac 10/100baseT ethernet driver.
  *           Also known as the "Happy Meal".
  *
@@ -9,6 +9,7 @@
 #define _SUNHME_H
 
 #include <linux/config.h>
+#include <linux/pci.h>
 
 /* Happy Meal global registers. */
 #define GREG_SWRESET	0x000UL	/* Software Reset  */
@@ -589,7 +590,9 @@ struct quattro {
 	struct quattro		*next;
 
 	/* PROM ranges, if any. */
+#ifdef CONFIG_SBUS
 	struct linux_prom_ranges  ranges[8];
+#endif
 	int			  nranges;
 };
 

@@ -31,7 +31,7 @@
 /* 001 */
 extern __inline__ int md_cpu_has_mmx(void)
 {
-	return boot_cpu_data.x86_capability & X86_FEATURE_MMX;
+	return test_bit(X86_FEATURE_MMX,  &boot_cpu_data.x86_capability);
 }
 #endif
 
@@ -152,5 +152,5 @@ typedef wait_queue_head_t md_wait_queue_head_t;
 
 /* END */
 
-#endif _MD_COMPATIBLE_H
+#endif 
 

@@ -428,6 +428,8 @@ int tc515_probe(struct net_device *dev)
 {
 	int cards_found = 0;
 
+	SET_MODULE_OWNER(dev);
+
 	cards_found = corkscrew_scan(dev);
 
 	if (corkscrew_debug > 0 && cards_found)
@@ -561,6 +563,8 @@ static struct net_device *corkscrew_found_device(struct net_device *dev,
 	    sizeof(struct corkscrew_private) + 15;	/* Pad for alignment */
 
 	dev = (struct net_device *) kmalloc(dev_size, GFP_KERNEL);
+	if (!dev)
+		return NULL;
 	memset(dev, 0, dev_size);
 	/* Align the Rx and Tx ring entries.  */
 	dev->priv =
@@ -586,15 +590,16 @@ static struct net_device *corkscrew_found_device(struct net_device *dev,
 	ether_setup(dev);
 	vp->next_module = root_corkscrew_dev;
 	root_corkscrew_dev = dev;
-	if (register_netdev(dev) != 0)
-		return 0;
-#else				/* not a MODULE */
-	if (dev) {
-		/* Caution: quad-word alignment required for rings! */
-		dev->priv =
-		    kmalloc(sizeof(struct corkscrew_private), GFP_KERNEL);
-		memset(dev->priv, 0, sizeof(struct corkscrew_private));
+	if (register_netdev(dev) != 0) {
+		kfree(dev);
+		return NULL;
 	}
+	SET_MODULE_OWNER(dev);
+#else				/* not a MODULE */
+	/* Caution: quad-word alignment required for rings! */
+	dev->priv =
+	    kmalloc(sizeof(struct corkscrew_private), GFP_KERNEL);
+	memset(dev->priv, 0, sizeof(struct corkscrew_private));
 	dev = init_etherdev(dev, sizeof(struct corkscrew_private));
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
@@ -873,8 +878,6 @@ static int corkscrew_open(struct net_device *dev)
 	outw(SetIntrEnb | IntLatch | TxAvailable | RxComplete | StatsFull
 	     | (vp->bus_master ? DMADone : 0) | UpComplete | DownComplete,
 	     ioaddr + EL3_CMD);
-
-	MOD_INC_USE_COUNT;
 
 	return 0;
 }
@@ -1499,8 +1502,6 @@ static int corkscrew_close(struct net_device *dev)
 				vp->tx_skbuff[i] = 0;
 			}
 	}
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

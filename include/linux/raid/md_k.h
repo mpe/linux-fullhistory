@@ -365,5 +365,5 @@ do {									\
 	__wait_event_lock_irq(wq, condition, lock);			\
 } while (0)
 
-#endif _MD_K_H
+#endif 
 

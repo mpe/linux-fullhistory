@@ -87,5 +87,5 @@ extern void md_print_devices (void);
 
 #define MD_BUG(x...) { printk("md: bug in file %s, line %d\n", __FILE__, __LINE__); md_print_devices(); }
 
-#endif _MD_H
+#endif 
 

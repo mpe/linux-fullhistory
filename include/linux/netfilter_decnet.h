@@ -36,4 +36,24 @@
 #define NF_DN_ROUTE		6
 #define NF_DN_NUMHOOKS		7
 
+enum nf_dn_hook_priorities {
+	NF_DN_PRI_FIRST = INT_MIN,
+	NF_DN_PRI_CONNTRACK = -200,
+	NF_DN_PRI_MANGLE = -150,
+	NF_DN_PRI_NAT_DST = -100,
+	NF_DN_PRI_FILTER = 0,
+	NF_DN_PRI_NAT_SRC = 100,
+	NF_DN_PRI_DNRTMSG = 200,
+	NF_DN_PRI_LAST = INT_MAX,
+};
+
+struct nf_dn_rtmsg {
+	int nfdn_ifindex;
+};
+
+#define NFDN_RTMSG(r) ((unsigned char *)(r) + NLMSG_ALIGN(sizeof(struct nf_dn_rtmsg)))
+
+#define DNRMG_L1_GROUP 0x01
+#define DNRMG_L2_GROUP 0x02
+
 #endif /*__LINUX_DECNET_NETFILTER_H*/

@@ -26,8 +26,6 @@
 #define DOC_PASSIVE_PROBE
 */
 
-
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <asm/errno.h>

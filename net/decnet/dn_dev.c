@@ -19,6 +19,7 @@
  *          Steve Whitehouse : SIOCGIFCONF is now a compile time option
  *          Steve Whitehouse : /proc/sys/net/decnet/conf/<sys>/forwarding
  *          Steve Whitehouse : Removed timer1 - its a user space issue now
+ *         Patrick Caulfield : Fixed router hello message format
  */
 
 #include <linux/config.h>
@@ -795,13 +796,14 @@ static void dn_send_router_hello(struct net_device *dev)
 			DN_RT_INFO_L1RT : DN_RT_INFO_L2RT;
 	*((unsigned short *)ptr) = dn_htons(dn_db->parms.blksize);
 	ptr += 2;
-	*ptr++ = 0; /* Priority */
+	*ptr++ = dn_db->parms.priority; /* Priority */ 
 	*ptr++ = 0; /* Area: Reserved */
 	*((unsigned short *)ptr) = dn_htons((unsigned short)dn_db->parms.t3);
 	ptr += 2;
 	*ptr++ = 0; /* MPD: Reserved */
 	i1 = ptr++;
 	memset(ptr, 0, 7); /* Name: Reserved */
+	ptr += 7;
 	i2 = ptr++;
 
 	n = dn_neigh_elist(dev, ptr, n);
@@ -809,7 +811,7 @@ static void dn_send_router_hello(struct net_device *dev)
 	*i2 = 7 * n;
 	*i1 = 8 + *i2;
 
-	skb_trim(skb, (26 + *i2));
+	skb_trim(skb, (27 + *i2));
 
 	pktlen = (unsigned short *)skb_push(skb, 2);
 	*pktlen = dn_htons(skb->len - 2);

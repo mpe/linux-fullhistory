@@ -13,6 +13,7 @@
 #include <asm/page.h>
 #include <asm/types.h>
 #include <asm/sigcontext.h>
+#include <asm/cpufeature.h>
 #include <linux/config.h>
 #include <linux/threads.h>
 
@@ -37,8 +38,8 @@ struct cpuinfo_x86 {
 	char	hlt_works_ok;	/* Problems on some 486Dx4's and old 386's */
 	char	hard_math;
 	char	rfu;
-	int	cpuid_level;	/* Maximum supported CPUID level, -1=no CPUID */
-	__u32	x86_capability;
+       	int	cpuid_level;	/* Maximum supported CPUID level, -1=no CPUID */
+	__u32	x86_capability[NCAPINTS];
 	char	x86_vendor_id[16];
 	char	x86_model_id[64];
 	int 	x86_cache_size;  /* in KB - valid for CPUS which support this
@@ -67,39 +68,6 @@ struct cpuinfo_x86 {
  * capabilities of CPUs
  */
 
-#define X86_FEATURE_FPU		0x00000001	/* onboard FPU */
-#define X86_FEATURE_VME		0x00000002	/* Virtual Mode Extensions */
-#define X86_FEATURE_DE		0x00000004	/* Debugging Extensions */
-#define X86_FEATURE_PSE		0x00000008	/* Page Size Extensions */
-#define X86_FEATURE_TSC		0x00000010	/* Time Stamp Counter */
-#define X86_FEATURE_MSR		0x00000020	/* Model-Specific Registers, RDMSR, WRMSR */
-#define X86_FEATURE_PAE		0x00000040	/* Physical Address Extensions */
-#define X86_FEATURE_MCE		0x00000080	/* Machine Check Exceptions */
-#define X86_FEATURE_CX8		0x00000100	/* CMPXCHG8 instruction */
-#define X86_FEATURE_APIC	0x00000200	/* onboard APIC */
-#define X86_FEATURE_10		0x00000400
-#define X86_FEATURE_SEP		0x00000800	/* Fast System Call */ 
-#define X86_FEATURE_MTRR	0x00001000	/* Memory Type Range Registers */
-#define X86_FEATURE_PGE		0x00002000	/* Page Global Enable */
-#define X86_FEATURE_MCA		0x00004000	/* Machine Check Architecture */
-#define X86_FEATURE_CMOV	0x00008000	/* CMOV instruction (FCMOVCC and FCOMI too if FPU present) */
-#define X86_FEATURE_PAT		0x00010000	/* Page Attribute Table */
-#define X86_FEATURE_PSE36	0x00020000	/* 36-bit PSEs */
-#define X86_FEATURE_PN		0x00040000
-#define X86_FEATURE_19		0x00080000
-#define X86_FEATURE_20		0x00100000
-#define X86_FEATURE_21		0x00200000
-#define X86_FEATURE_22		0x00400000
-#define X86_FEATURE_MMX		0x00800000	/* Multimedia Extensions */
-#define X86_FEATURE_FXSR	0x01000000	/* FXSAVE and FXRSTOR instructions (fast save and restore of FPU context), and CR4.OSFXSR (OS uses these instructions) available */
-#define X86_FEATURE_XMM		0x02000000      /* Streaming SIMD Extensions */
-#define X86_FEATURE_26		0x04000000
-#define X86_FEATURE_27		0x08000000
-#define X86_FEATURE_28		0x10000000
-#define X86_FEATURE_29		0x20000000
-#define X86_FEATURE_30		0x40000000
-#define X86_FEATURE_AMD3D	0x80000000
-
 extern struct cpuinfo_x86 boot_cpu_data;
 extern struct tss_struct init_tss[NR_CPUS];
 
@@ -112,21 +80,21 @@ extern struct cpuinfo_x86 cpu_data[];
 #endif
 
 #define cpu_has_pge \
-		(boot_cpu_data.x86_capability & X86_FEATURE_PGE)
+		(test_bit(X86_FEATURE_PGE,  &boot_cpu_data.x86_capability))
 #define cpu_has_pse \
-		(boot_cpu_data.x86_capability & X86_FEATURE_PSE)
+		(test_bit(X86_FEATURE_PSE,  &boot_cpu_data.x86_capability))
 #define cpu_has_pae \
-		(boot_cpu_data.x86_capability & X86_FEATURE_PAE)
+		(test_bit(X86_FEATURE_PAE,  &boot_cpu_data.x86_capability))
 #define cpu_has_tsc \
-		(boot_cpu_data.x86_capability & X86_FEATURE_TSC)
+		(test_bit(X86_FEATURE_TSC,  &boot_cpu_data.x86_capability))
 #define cpu_has_de \
-		(boot_cpu_data.x86_capability & X86_FEATURE_DE)
+		(test_bit(X86_FEATURE_DE,   &boot_cpu_data.x86_capability))
 #define cpu_has_vme \
-		(boot_cpu_data.x86_capability & X86_FEATURE_VME)
+		(test_bit(X86_FEATURE_VME,  &boot_cpu_data.x86_capability))
 #define cpu_has_fxsr \
-		(boot_cpu_data.x86_capability & X86_FEATURE_FXSR)
+		(test_bit(X86_FEATURE_FXSR, &boot_cpu_data.x86_capability))
 #define cpu_has_xmm \
-		(boot_cpu_data.x86_capability & X86_FEATURE_XMM)
+		(test_bit(X86_FEATURE_XMM,  &boot_cpu_data.x86_capability))
 
 extern char ignore_irq13;
 
@@ -135,7 +103,28 @@ extern void print_cpu_info(struct cpuinfo_x86 *);
 extern void dodgy_tsc(void);
 
 /*
- *	Generic CPUID function
+ * EFLAGS bits
+ */
+#define X86_EFLAGS_CF	0x00000001 /* Carry Flag */
+#define X86_EFLAGS_PF	0x00000004 /* Parity Flag */
+#define X86_EFLAGS_AF	0x00000010 /* Auxillary carry Flag */
+#define X86_EFLAGS_ZF	0x00000040 /* Zero Flag */
+#define X86_EFLAGS_SF	0x00000080 /* Sign Flag */
+#define X86_EFLAGS_TF	0x00000100 /* Trap Flag */
+#define X86_EFLAGS_IF	0x00000200 /* Interrupt Flag */
+#define X86_EFLAGS_DF	0x00000400 /* Direction Flag */
+#define X86_EFLAGS_OF	0x00000800 /* Overflow Flag */
+#define X86_EFLAGS_IOPL	0x00003000 /* IOPL mask */
+#define X86_EFLAGS_NT	0x00004000 /* Nested Task */
+#define X86_EFLAGS_RF	0x00010000 /* Resume Flag */
+#define X86_EFLAGS_VM	0x00020000 /* Virtual Mode */
+#define X86_EFLAGS_AC	0x00040000 /* Alignment Check */
+#define X86_EFLAGS_VIF	0x00080000 /* Virtual Interrupt Flag */
+#define X86_EFLAGS_VIP	0x00100000 /* Virtual Interrupt Pending */
+#define X86_EFLAGS_ID	0x00200000 /* CPUID detection flag */
+
+/*
+ * Generic CPUID function
  */
 extern inline void cpuid(int op, int *eax, int *ebx, int *ecx, int *edx)
 {
@@ -147,6 +136,45 @@ extern inline void cpuid(int op, int *eax, int *ebx, int *ecx, int *edx)
 		: "a" (op));
 }
 
+/*
+ * CPUID functions returning a single datum
+ */
+extern inline unsigned int cpuid_eax(unsigned int op)
+{
+	unsigned int eax, ebx, ecx, edx;
+
+	__asm__("cpuid"
+		: "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
+		: "a" (op));
+	return eax;
+}
+extern inline unsigned int cpuid_ebx(unsigned int op)
+{
+	unsigned int eax, ebx, ecx, edx;
+
+	__asm__("cpuid"
+		: "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
+		: "a" (op));
+	return ebx;
+}
+extern inline unsigned int cpuid_ecx(unsigned int op)
+{
+	unsigned int eax, ebx, ecx, edx;
+
+	__asm__("cpuid"
+		: "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
+		: "a" (op));
+	return ecx;
+}
+extern inline unsigned int cpuid_edx(unsigned int op)
+{
+	unsigned int eax, ebx, ecx, edx;
+
+	__asm__("cpuid"
+		: "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
+		: "a" (op));
+	return edx;
+}
 
 /*
  * Intel CPU features in CR4

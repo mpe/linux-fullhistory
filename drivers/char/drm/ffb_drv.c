@@ -1,4 +1,4 @@
-/* $Id: ffb_drv.c,v 1.6 2000/08/10 05:26:23 davem Exp $
+/* $Id: ffb_drv.c,v 1.7 2000/11/12 10:01:41 davem Exp $
  * ffb_drv.c: Creator/Creator3D direct rendering driver.
  *
  * Copyright (C) 2000 David S. Miller (davem@redhat.com)

@@ -304,8 +304,10 @@ static void init_82586_mem(struct net_device *dev);
 
 int __init el16_probe(struct net_device *dev)
 {
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
 	int i;
+
+	SET_MODULE_OWNER(dev);
 
 	if (base_addr > 0x1ff)	/* Check a single specified location. */
 		return el16_probe1(dev, base_addr);
@@ -339,7 +341,7 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 		init_ID_done = 1;
 	}
 
-	if (!request_region(ioaddr, EL16_IO_EXTENT, "3c507"))
+	if (!request_region(ioaddr, EL16_IO_EXTENT, dev->name))
 		return -ENODEV;
 
 	if ((inb(ioaddr) != '*') || (inb(ioaddr + 1) != '3') || 
@@ -358,7 +360,7 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 
 	irq = inb(ioaddr + IRQ_CONFIG) & 0x0f;
 
-	irqval = request_irq(irq, &el16_interrupt, 0, "3c507", dev);
+	irqval = request_irq(irq, &el16_interrupt, 0, dev->name, dev);
 	if (irqval) {
 		printk ("unable to get IRQ %d (irqval=%d).\n", irq, irqval);
 		retval = -EAGAIN;
@@ -439,9 +441,6 @@ static int el16_open(struct net_device *dev)
 	init_82586_mem(dev);
 
 	netif_start_queue(dev);
-
-	MOD_INC_USE_COUNT;
-
 	return 0;
 }
 
@@ -623,8 +622,6 @@ static int el16_close(struct net_device *dev)
 	/* We always physically use the IRQ line, so we don't do free_irq(). */
 
 	/* Update the statistics here. */
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }
@@ -857,8 +854,7 @@ static void el16_rx(struct net_device *dev)
 	lp->rx_tail = rx_tail;
 }
 #ifdef MODULE
-static struct net_device dev_3c507 = { init: el16_probe };
-
+static struct net_device dev_3c507;
 static int io = 0x300;
 static int irq = 0;
 MODULE_PARM(io, "i");
@@ -870,6 +866,7 @@ int init_module(void)
 		printk("3c507: You should not use auto-probing with insmod!\n");
 	dev_3c507.base_addr = io;
 	dev_3c507.irq       = irq;
+	dev_3c507.init	    = el16_probe;
 	if (register_netdev(&dev_3c507) != 0) {
 		printk("3c507: register_netdev() returned non-zero.\n");
 		return -EIO;

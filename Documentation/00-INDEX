@@ -43,6 +43,8 @@ digiboard.txt
 	- info on the Digiboard PC/X{i,e,eve} multiport boards.
 digiepca.txt
 	- info on Digi Intl. {PC,PCI,EISA}Xx and Xem series cards.
+dnotify.txt
+	- info about directory notification in Linux.
 exception.txt
 	- how Linux v2.2 handles exceptions without verify_area etc.
 fb/

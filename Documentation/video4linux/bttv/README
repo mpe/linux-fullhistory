@@ -1,4 +1,8 @@
 
+IMPORTANT:  Don't send me mails with images attached unless I ask you
+to do so.  Mails with images attached will go to /dev/null unseen.
+
+
 Release notes for bttv-0.7.x
 ============================
 
@@ -17,7 +21,7 @@ CONFIG_I2C=m
 CONFIG_I2C_ALGOBIT=m
 
 The latest bttv version is available here:
-	http://me.in-berlin.de/~kraxel/bttv.html
+	http://www.strusel007.de/linux/bttv/
 
 You'll find Ralphs original (mostly outdated) documentation in the
 ralphs-doc subdirectory.
@@ -38,6 +42,8 @@ kernel at least once, you probably don't have do worry about this.  If
 not, go to /usr/src/linux and run at least "make config".  Even
 better, compile your own kernel, you'll never become a real hacker
 else ;-)
+Note that you have to turn on video4linux support (CONFIG_VIDEO_DEV)
+in the kernel to get the videodev.o module which is required by bttv.
 
 
 Make bttv work with your card
@@ -66,7 +72,8 @@ correct card type.  If you get video but no sound you've very likely
 specified the wrong (or no) card type.  A list of supported cards is
 in CARDLIST.
 
-If your card isn't listed in CARDLIST, you should read the Sound-FAQ.
+If your card isn't listed in CARDLIST or if you have trouble making
+audio work, you should read the Sound-FAQ.
 
 
 Still doesn't work?

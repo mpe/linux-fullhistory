@@ -1,3 +1,4 @@
+#include <linux/config.h>
 #include "initdef.h"
 
 USHORT SetFlag,RVBHCFACT,RVBHCMAX,VGAVT,VGAHT,VT,HT,VGAVDE,VGAHDE;

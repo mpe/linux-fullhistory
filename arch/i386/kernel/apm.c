@@ -1571,8 +1571,6 @@ static struct miscdevice apm_device = {
 	&apm_bios_fops
 };
 
-#define APM_INIT_ERROR_RETURN	return -1
-
 /*
  * Just start the APM thread. We do NOT want to do APM BIOS
  * calls from anything but the APM thread, if for no other reason
@@ -1587,7 +1585,7 @@ static int __init apm_init(void)
 {
 	if (apm_bios_info.version == 0) {
 		printk(KERN_INFO "apm: BIOS not found.\n");
-		APM_INIT_ERROR_RETURN;
+		return -ENODEV;
 	}
 	printk(KERN_INFO
 		"apm: BIOS version %d.%d Flags 0x%02x (Driver version %s)\n",
@@ -1597,7 +1595,7 @@ static int __init apm_init(void)
 		driver_version);
 	if ((apm_bios_info.flags & APM_32_BIT_SUPPORT) == 0) {
 		printk(KERN_INFO "apm: no 32 bit BIOS support\n");
-		APM_INIT_ERROR_RETURN;
+		return -ENODEV;
 	}
 
 	/*
@@ -1626,15 +1624,15 @@ static int __init apm_init(void)
 
 	if (apm_disabled) {
 		printk(KERN_NOTICE "apm: disabled on user request.\n");
-		APM_INIT_ERROR_RETURN;
+		return -ENODEV;
 	}
 	if ((smp_num_cpus > 1) && !power_off) {
 		printk(KERN_NOTICE "apm: disabled - APM is not SMP safe.\n");
-		APM_INIT_ERROR_RETURN;
+		return -ENODEV;
 	}
 	if (PM_IS_ACTIVE()) {
 		printk(KERN_NOTICE "apm: overridden by ACPI.\n");
-		APM_INIT_ERROR_RETURN;
+		return -ENODEV;
 	}
 	pm_active = 1;
 
@@ -1683,7 +1681,7 @@ static int __init apm_init(void)
 	if (smp_num_cpus > 1) {
 		printk(KERN_NOTICE
 		   "apm: disabled - APM is not SMP safe (power off active).\n");
-		APM_INIT_ERROR_RETURN;
+		return 0;
 	}
 
 	misc_register(&apm_device);

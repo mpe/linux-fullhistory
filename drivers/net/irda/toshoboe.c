@@ -275,7 +275,7 @@ toshoboe_hard_xmit (struct sk_buff *skb, struct net_device *dev)
   if ((speed = irda_get_speed(skb)) != self->io.speed) {
 	/* Check for empty frame */
 	if (!skb->len) {
-	    toshoboe_change_speed(self, speed); 
+	    toshoboe_setbaud(self, speed); 
 	    return 0;
 	} else
 	    self->new_speed = speed;

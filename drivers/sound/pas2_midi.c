@@ -13,6 +13,7 @@
  * Bartlomiej Zolnierkiewicz	: Added __init to pas_init_mixer()
  */
 
+#include <linux/init.h>
 #include "sound_config.h"
 
 #include "pas2.h"

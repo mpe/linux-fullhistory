@@ -114,7 +114,7 @@ void ax25_register_sysctl(void)
 	memset(ax25_table, 0x00, ax25_table_size);
 
 	for (n = 0, ax25_dev = ax25_dev_list; ax25_dev != NULL; ax25_dev = ax25_dev->next) {
-		ctl_table *child = kmalloc(sizeof(ax25_param_table, GFP_ATOMIC);
+		ctl_table *child = kmalloc(sizeof(ax25_param_table), GFP_ATOMIC);
 		if (!child) {
 			while (n--)
 				kfree(ax25_table[n].child);

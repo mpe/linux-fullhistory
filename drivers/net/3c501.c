@@ -234,7 +234,9 @@ struct net_local
 int __init el1_probe(struct net_device *dev)
 {
 	int i;
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
+
+	SET_MODULE_OWNER(dev);
 
 	if (base_addr > 0x1ff)	/* Check a single specified location. */
 		return el1_probe1(dev, base_addr);
@@ -403,15 +405,11 @@ static int el_open(struct net_device *dev)
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned long flags;
 
-	MOD_INC_USE_COUNT;
-
 	if (el_debug > 2)
 		printk("%s: Doing el_open()...", dev->name);
 
-	if ((retval = request_irq(dev->irq, &el_interrupt, 0, dev->name, dev))) {
-		MOD_DEC_USE_COUNT;
+	if ((retval = request_irq(dev->irq, &el_interrupt, 0, dev->name, dev)))
 		return retval;
-	}
 
 	spin_lock_irqsave(&lp->lock, flags);
 	el_reset(dev);
@@ -863,7 +861,6 @@ static int el1_close(struct net_device *dev)
 	free_irq(dev->irq, dev);
 	outb(AX_RESET, AX_CMD);		/* Reset the chip */
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -917,12 +914,10 @@ static void set_multicast_list(struct net_device *dev)
 
 #ifdef MODULE
 
-static struct net_device dev_3c501 =
-{
-	"", /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0x280, 5,
-	0, 0, 0, NULL, el1_probe
+static struct net_device dev_3c501 = {
+	init:		el1_probe,
+	base_addr:	0x280,
+	irq:		5,
 };
 
 static int io=0x280;

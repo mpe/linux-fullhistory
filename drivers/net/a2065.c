@@ -261,7 +261,7 @@ static int init_restart_lance (struct lance_private *lp)
 		barrier();
 	if ((i == 100) || (ll->rdp & LE_C0_ERR)) {
 		printk ("LANCE unopened after %d ticks, csr0=%4.4x.\n", i, ll->rdp);
-		return -1;
+		return -EIO;
 	}
 
 	/* Clear IDON by writing a "1", enable interrupts and start lance */
@@ -488,14 +488,19 @@ static int lance_open (struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	volatile struct lance_regs *ll = lp->ll;
-	int status = 0;
+	int ret;
+
+	MOD_INC_USE_COUNT;
 
 	last_dev = dev;
 
 	/* Install the Interrupt handler */
-	if (request_irq(IRQ_AMIGA_PORTS, lance_interrupt, SA_SHIRQ,
-			"a2065 Ethernet", dev))
-		return -EAGAIN;
+	ret = request_irq(IRQ_AMIGA_PORTS, lance_interrupt, SA_SHIRQ,
+			  dev->name, dev);
+	if (ret) {
+		MOD_DEC_USE_COUNT;
+		return ret;
+	}
 
 	/* Stop the Lance */
 	ll->rap = LE_CSR0;
@@ -506,11 +511,7 @@ static int lance_open (struct net_device *dev)
 
 	netif_start_queue(dev);
 
-	status = init_restart_lance (lp);
-
-	MOD_INC_USE_COUNT;
-
-	return status;
+	return init_restart_lance (lp);
 }
 
 static int lance_close (struct net_device *dev)
@@ -727,6 +728,7 @@ static int __init a2065_probe(void)
 
 	while ((z = zorro_find_device(ZORRO_WILDCARD, z))) {
 		unsigned long board, base_addr, mem_start;
+		struct resource *r1, *r2;
 		int is_cbm;
 
 		if (z->id == ZORRO_PROD_CBM_A2065_1 ||
@@ -741,25 +743,26 @@ static int __init a2065_probe(void)
 		base_addr = board+A2065_LANCE;
 		mem_start = board+A2065_RAM;
 
-		if (!request_mem_region(base_addr, sizeof(struct lance_regs),
-					"Am7990"))
-			continue;
-		if (!request_mem_region(mem_start, A2065_RAM_SIZE, "RAM")) {
-			release_mem_region(base_addr,
-					   sizeof(struct lance_regs));
+		r1 = request_mem_region(base_addr, sizeof(struct lance_regs),
+					"Am7990");
+		if (!r1) continue;
+		r2 = request_mem_region(mem_start, A2065_RAM_SIZE, "RAM");
+		if (!r2) {
+			release_resource(r1);
 			continue;
 		}
 
 		dev = init_etherdev(NULL, sizeof(struct lance_private));
 
 		if (dev == NULL) {
-			release_mem_region(base_addr,
-					   sizeof(struct lance_regs));
-			release_mem_region(mem_start, A2065_RAM_SIZE);
+			release_resource(r1);
+			release_resource(r2);
 			return -ENOMEM;
 		}
 		priv = (struct lance_private *)dev->priv;
-		memset(priv, 0, sizeof(struct lance_private));
+
+		r1->name = dev->name;
+		r2->name = dev->name;
 
 		priv->dev = dev;
 		dev->dev_addr[0] = 0x00;

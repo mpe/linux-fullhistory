@@ -1,4 +1,4 @@
-/* $Id: dtlb_base.S,v 1.7 2000/03/26 09:13:48 davem Exp $
+/* $Id: dtlb_base.S,v 1.8 2000/11/10 08:28:45 davem Exp $
  * dtlb_base.S:	Front end to DTLB miss replacement strategy.
  *              This is included directly into the trap table.
  *
@@ -57,7 +57,7 @@
 	 srax		%g4, VPTE_SHIFT, %g6		! Create VPTE offset
 	ldxa		[%g3 + %g6] ASI_S, %g5		! Load VPTE
 1:	brlz,pt		%g5, 9f				! Valid, load into TLB
-	 and		%g5, (_PAGE_PRESENT|_PAGE_READ), %g4	! Mask readable bits
+	 nop						! Delay-slot
 	ba,a,pt		%xcc, 4f			! Invalid, branch out
 
 /* DTLB ** ICACHE line 2: Quick kernel TLB misses	*/
@@ -68,27 +68,27 @@
 	 nop
 9:	stxa		%g5, [%g0] ASI_DTLB_DATA_IN	! Reload TLB
 	retry						! Trap return
-	nop
+4:	rdpr		%pstate, %g5			! Move into alternate globals
 
 /* DTLB ** ICACHE line 3: winfixups+real_faults		*/
-4:	cmp		%g4, (_PAGE_PRESENT|_PAGE_READ)	! Readable page?
-	be,pn		%xcc, 5f			! Yep, refbit update
-	 sllx		%g1, 60, %g4			! Get valid bit
-	rdpr		%pstate, %g5			! Move into alternate globals
 	wrpr		%g5, PSTATE_AG|PSTATE_MG, %pstate
 	rdpr		%tl, %g4			! See where we came from.
 	cmp		%g4, 1				! Is etrap/rtrap window fault?
 	mov		TLB_TAG_ACCESS, %g4		! Prepare for fault processing
-
-/* DTLB ** ICACHE line 4: padding		*/
 	ldxa		[%g4] ASI_DMMU, %g5		! Load faulting VA page
 	be,pt		%xcc, sparc64_realfault_common	! Jump to normal fault handling
 	 mov		FAULT_CODE_DTLB, %g4		! It was read from DTLB
 	ba,a,pt		%xcc, winfix_trampoline		! Call window fixup code
-5:	or		%g5, _PAGE_ACCESSED, %g5	! Indicate reference
-	or		%g5, %g4, %g5			! Set valid
-	stxa		%g5, [%g3 + %g6] ASI_S		! Update PTE table (cant trap)
-	ba,a,pt		%xcc, 9b			! Complete tlb miss
+
+/* DTLB ** ICACHE line 4: Unused...	*/
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
 
 #undef TAG_CONTEXT_BITS
 #undef VPTE_SHIFT

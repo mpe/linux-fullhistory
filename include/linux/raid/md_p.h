@@ -168,5 +168,5 @@ static inline __u64 md_event(mdp_super_t *sb) {
 	return (ev<<32)| sb->events_lo;
 }
 
-#endif _MD_P_H
+#endif 
 

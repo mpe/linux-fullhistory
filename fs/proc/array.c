@@ -372,7 +372,7 @@ int proc_pid_stat(struct task_struct *task, char * buffer)
 		task->start_time,
 		vsize,
 		mm ? mm->rss : 0, /* you might want to shift this left 3 */
-		task->rlim ? task->rlim[RLIMIT_RSS].rlim_cur : 0,
+		task->rlim[RLIMIT_RSS].rlim_cur,
 		mm ? mm->start_code : 0,
 		mm ? mm->end_code : 0,
 		mm ? mm->start_stack : 0,

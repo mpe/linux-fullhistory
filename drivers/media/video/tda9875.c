@@ -11,13 +11,9 @@
  * Based on tda9855.c by Steve VanDeBogart (vandebo@uclink.berkeley.edu)
  * Which was based on tda8425.c by Greg Alexander (c) 1998
  *
- * Contributors:
- * Arnaldo Carvalho de Melo <acme@conectiva.com.br> (0.2)
- *
  * OPTIONS:
  * debug   - set to 1 if you'd like to see debug messages
  * 
- *  Revision  0.2 - resource allocation fixes in tda9875_attach (08/14/2000)
  *  Revision: 0.1 - original version
  */
 
@@ -35,12 +31,7 @@
 
 #include "bttv.h"
 #include "audiochip.h"
-
-/* This driver ID is brand new, so define it if it's not in i2c-id.h yet */
-#ifndef I2C_DRIVERID_TDA9875
-  #define I2C_DRIVERID_TDA9875  28
-#endif
-
+#include "id.h"
 
 MODULE_PARM(debug,"i");
 
@@ -68,6 +59,7 @@ struct tda9875 {
 	int mode;
 	int rvol, lvol;
 	int bass, treble;
+	struct i2c_client c;
 };
 
 
@@ -228,19 +220,18 @@ static int tda9875_attach(struct i2c_adapter *adap, int addr,
 	struct tda9875 *t;
 	struct i2c_client *client;
 	dprintk("In tda9875_attach\n");
-	client = kmalloc(sizeof *client,GFP_KERNEL);
-	if (!client)
-		return -ENOMEM;		
+
+	t = kmalloc(sizeof *t,GFP_KERNEL);
+	if (!t)
+		return -ENOMEM;
+	memset(t,0,sizeof *t);
+
+	client = &t->c;
         memcpy(client,&client_template,sizeof(struct i2c_client));
         client->adapter = adap;
         client->addr = addr;
+	client->data = t;
 	
-	client->data = t = kmalloc(sizeof *t,GFP_KERNEL);
-	if (!t) {
-		kfree(client);
-		return -ENOMEM;
-	}
-	memset(t,0,sizeof *t);
 	do_tda9875_init(client);
 	MOD_INC_USE_COUNT;
 	strcpy(client->name,"TDA9875");
@@ -265,7 +256,6 @@ static int tda9875_detach(struct i2c_client *client)
 	i2c_detach_client(client);
 	
 	kfree(t);
-	kfree(client);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }

@@ -84,8 +84,6 @@ EXPORT_NO_SYMBOLS;
 
 #define CS4281_MAGIC  ((PCI_DEVICE_ID_CRYSTAL_CS4281<<16) | PCI_VENDOR_ID_CIRRUS)
 
-#include <linux/version.h>
-
 // Turn on/off debugging compilation by using 1/0 respectively for CSDEBUG
 //
 #define CSDEBUG_INTERFACE 1

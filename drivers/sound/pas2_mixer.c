@@ -16,6 +16,7 @@
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
  * Bartlomiej Zolnierkiewicz : added __init to pas_init_mixer()
  */
+#include <linux/init.h>
 #include "sound_config.h"
 
 #include "pas2.h"

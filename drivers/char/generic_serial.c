@@ -19,21 +19,21 @@
  *  best to be responsive.  -- REW
  * */
 
+#include <linux/module.h>
+#include <linux/kernel.h>
 #include <linux/tty.h>
 #include <linux/serial.h>
 #include <linux/mm.h>
+#include <linux/generic_serial.h>
 #include <asm/semaphore.h>
 #include <asm/uaccess.h>
-#include <linux/version.h>
-#include <linux/module.h>
-#include <linux/generic_serial.h>
 
 #define DEBUG 
 
 static char *                  tmp_buf; 
 static DECLARE_MUTEX(tmp_buf_sem);
 
-int gs_debug;
+static int gs_debug;
 
 
 #ifdef DEBUG
@@ -57,30 +57,7 @@ int gs_debug;
 
 #define RS_EVENT_WRITE_WAKEUP	1
 
-#ifdef MODULE
 MODULE_PARM(gs_debug, "i");
-#endif
-
-#ifdef DEBUG
-static void my_hd (unsigned char *addr, int len)
-{
-	int i, j, ch;
-
-	for (i=0;i<len;i+=16) {
-		printk ("%08x ", (int) addr+i);
-		for (j=0;j<16;j++) {
-			printk ("%02x %s", addr[j+i], (j==7)?" ":"");
-		}
-		for (j=0;j<16;j++) {
-			ch = addr[j+i];
-			printk ("%c", (ch < 0x20)?'.':((ch > 0x7f)?'.':ch));
-		}
-		printk ("\n");
-	}
-}
-#else
-#define my_hd(addr,len) 
-#endif
 
 
 void gs_put_char(struct tty_struct * tty, unsigned char ch)
@@ -1083,15 +1060,21 @@ void gs_getserial(struct gs_port *port, struct serial_struct *sp)
 	copy_to_user(sp, &sio, sizeof(struct serial_struct));
 }
 
+EXPORT_SYMBOL(gs_put_char);
+EXPORT_SYMBOL(gs_write);
+EXPORT_SYMBOL(gs_write_room);
+EXPORT_SYMBOL(gs_chars_in_buffer);
+EXPORT_SYMBOL(gs_flush_buffer);
+EXPORT_SYMBOL(gs_flush_chars);
+EXPORT_SYMBOL(gs_stop);
+EXPORT_SYMBOL(gs_start);
+EXPORT_SYMBOL(gs_hangup);
+EXPORT_SYMBOL(gs_do_softint);
+EXPORT_SYMBOL(block_til_ready);
+EXPORT_SYMBOL(gs_close);
+EXPORT_SYMBOL(gs_set_termios);
+EXPORT_SYMBOL(gs_init_port);
+EXPORT_SYMBOL(gs_setserial);
+EXPORT_SYMBOL(gs_getserial);
 
-#ifdef MODULE
-int init_module (void)
-{
-  return 0;
-}
-
-int cleanup_module (void)
-{
-  return 0;
-}
-#endif
+EXPORT_SYMBOL(gs_debug);

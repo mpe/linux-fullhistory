@@ -8,6 +8,8 @@
 #include <asm/ptrace.h>
 #include <asm/user.h>
 
+#include <linux/utsname.h>
+
 typedef unsigned long elf_greg_t;
 
 #define ELF_NGREG (sizeof (struct user_regs_struct) / sizeof(elf_greg_t))
@@ -84,7 +86,7 @@ typedef struct user_fxsr_struct elf_fpxregset_t;
    instruction set this CPU supports.  This could be done in user space,
    but it's not easy, and we've already done it here.  */
 
-#define ELF_HWCAP	(boot_cpu_data.x86_capability)
+#define ELF_HWCAP	(boot_cpu_data.x86_capability[0])
 
 /* This yields a string that ld.so will use to load implementation
    specific libraries for optimization.  This is more specific in
@@ -93,7 +95,7 @@ typedef struct user_fxsr_struct elf_fpxregset_t;
    For the moment, we have only optimizations for the Intel generations,
    but that could change... */
 
-#define ELF_PLATFORM  ("i386\0i486\0i586\0i686"+(((boot_cpu_data.x86>6?6:boot_cpu_data.x86)-3)*5))
+#define ELF_PLATFORM  (system_utsname.machine)
 
 #ifdef __KERNEL__
 #define SET_PERSONALITY(ex, ibcs2) set_personality((ibcs2)?PER_SVR4:PER_LINUX)

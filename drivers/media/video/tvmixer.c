@@ -16,6 +16,7 @@
 #include <asm/uaccess.h>
 
 #include "audiochip.h"
+#include "id.h"
 
 #define DEV_MAX  4
 
@@ -45,11 +46,11 @@ static loff_t tvmixer_llseek(struct file *file, loff_t offset, int origin);
 
 
 static struct i2c_driver driver = {
-	"tv card mixer driver",
-        42 /* I2C_DRIVERID_FIXME */,
-	I2C_DF_DUMMY,
-        tvmixer_adapters,
-        tvmixer_clients,
+	name:            "tv card mixer driver",
+        id:              I2C_DRIVERID_TVMIXER,
+	flags:           I2C_DF_DUMMY,
+        attach_adapter:  tvmixer_adapters,
+        detach_client:   tvmixer_clients,
 };
 
 static struct file_operations tvmixer_fops = {
@@ -241,6 +242,15 @@ static loff_t tvmixer_llseek(struct file *file, loff_t offset, int origin)
 
 static int tvmixer_adapters(struct i2c_adapter *adap)
 {
+	int i;
+
+	if (debug)
+		printk("tvmixer: adapter %s\n",adap->name);
+	for (i=0; i<I2C_CLIENT_MAX; i++) {
+		if (!adap->clients[i])
+			continue;
+		tvmixer_clients(adap->clients[i]);
+	}
 	return 0;
 }
 

@@ -1,4 +1,5 @@
 /* Recently Update by v1.09.50 */
+#include <linux/config.h>
 #include "sis_300.h"
 
 #if defined(ALLOC_PRAGMA)

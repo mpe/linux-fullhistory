@@ -87,6 +87,8 @@ el2_probe(struct net_device *dev)
     int *addr, addrs[] = { 0xddffe, 0xd9ffe, 0xcdffe, 0xc9ffe, 0};
     int base_addr = dev->base_addr;
 
+    SET_MODULE_OWNER(dev);
+
     if (base_addr > 0x1ff)	/* Check a single specified location. */
 	return el2_probe1(dev, base_addr);
     else if (base_addr != 0)		/* Don't probe at all. */
@@ -346,7 +348,6 @@ el2_open(struct net_device *dev)
 
     el2_init_card(dev);
     ei_open(dev);
-    MOD_INC_USE_COUNT;
     return 0;
 }
 
@@ -358,7 +359,6 @@ el2_close(struct net_device *dev)
     outb(EGACFR_IRQOFF, E33G_GACFR);	/* disable interrupts. */
 
     ei_close(dev);
-    MOD_DEC_USE_COUNT;
     return 0;
 }
 
@@ -604,18 +604,10 @@ el2_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring
 #ifdef MODULE
 #define MAX_EL2_CARDS	4	/* Max number of EL2 cards per module */
 
-static struct net_device dev_el2[MAX_EL2_CARDS] = {
-	{
-		"",
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
-static int io[MAX_EL2_CARDS] = { 0, };
-static int irq[MAX_EL2_CARDS]  = { 0, };
-static int xcvr[MAX_EL2_CARDS] = { 0, };	/* choose int. or ext. xcvr */
+static struct net_device dev_el2[MAX_EL2_CARDS];
+static int io[MAX_EL2_CARDS];
+static int irq[MAX_EL2_CARDS];
+static int xcvr[MAX_EL2_CARDS];	/* choose int. or ext. xcvr */
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_EL2_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_EL2_CARDS) "i");
 MODULE_PARM(xcvr, "1-" __MODULE_STRING(MAX_EL2_CARDS) "i");

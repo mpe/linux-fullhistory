@@ -179,8 +179,11 @@ static inline int noncached_address(unsigned long addr)
 	 * caching for the high addresses through the KEN pin, but
 	 * we maintain the tradition of paranoia in this code.
 	 */
- 	return !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR)
-		&& addr >= __pa(high_memory);
+ 	return !( test_bit(X86_FEATURE_MTRR, &boot_cpu_data.x86_capability) ||
+		  test_bit(X86_FEATURE_K6_MTRR, &boot_cpu_data.x86_capability) ||
+		  test_bit(X86_FEATURE_CYRIX_ARR, &boot_cpu_data.x86_capability) ||
+		  test_bit(X86_FEATURE_CENTAUR_MCR, &boot_cpu_data.x86_capability) )
+	  && addr >= __pa(high_memory);
 #else
 	return addr >= __pa(high_memory);
 #endif

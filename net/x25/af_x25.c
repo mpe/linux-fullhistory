@@ -16,13 +16,15 @@
  *	X.25 001	Jonathan Naylor	Started coding.
  *	X.25 002	Jonathan Naylor	Centralised disconnect handling.
  *					New timer architecture.
- *	2000-11-03	Henner Eisen	MSG_EOR handling more POSIX compliant.
- *	2000-22-03	Daniela Squassoni Allowed disabling/enabling of 
+ *	2000-03-11	Henner Eisen	MSG_EOR handling more POSIX compliant.
+ *	2000-03-22	Daniela Squassoni Allowed disabling/enabling of 
  *					  facilities negotiation and increased 
  *					  the throughput upper limit.
- *	2000-27-08	Arnaldo C. Melo s/suser/capable/ + micro cleanups
- *	2000-04-09	Henner Eisen	Set sock->state in x25_accept(). 
+ *	2000-08-27	Arnaldo C. Melo s/suser/capable/ + micro cleanups
+ *	2000-09-04	Henner Eisen	Set sock->state in x25_accept(). 
  *					Fixed x25_output() related skb leakage.
+ *	2000-10-02	Henner Eisen	Made x25_kick() single threaded per socket.
+ *	2000-10-27	Henner Eisen    MSG_DONTWAIT for fragment allocation.
  */
 
 #include <linux/config.h>
@@ -471,6 +473,7 @@ static int x25_create(struct socket *sock, int protocol)
 
 	sock->ops    = &x25_proto_ops;
 	sk->protocol = protocol;
+	sk->backlog_rcv = x25_process_rx_frame;
 
 	x25->t21   = sysctl_x25_call_request_timeout;
 	x25->t22   = sysctl_x25_reset_request_timeout;
@@ -905,6 +908,7 @@ static int x25_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct 
 
 	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags & MSG_DONTWAIT, &err)) == NULL)
 		return err;
+	X25_SKB_CB(skb)->flags = msg->msg_flags;
 
 	skb_reserve(skb, X25_MAX_L2_LEN + X25_EXT_MIN_LEN);
 
@@ -974,14 +978,31 @@ static int x25_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct 
 	if (msg->msg_flags & MSG_OOB) {
 		skb_queue_tail(&sk->protinfo.x25->interrupt_out_queue, skb);
 	} else {
-		err = x25_output(sk, skb);
-		if(err){
-			len = err;
+	        len = x25_output(sk, skb);
+		if(len<0){
 			kfree_skb(skb);
+		} else {
+			if(sk->protinfo.x25->qbitincl) len++;
 		}
 	}
 
+	/*
+	 * lock_sock() is currently only used to serialize this x25_kick()
+	 * against input-driven x25_kick() calls. It currently only blocks
+	 * incoming packets for this socket and does not protect against
+	 * any other socket state changes and is not called from anywhere
+	 * else. As x25_kick() cannot block and as long as all socket
+	 * operations are BKL-wrapped, we don't need take to care about
+	 * purging the backlog queue in x25_release().
+	 *
+	 * Using lock_sock() to protect all socket operations entirely
+	 * (and making the whole x25 stack SMP aware) unfortunately would
+	 * require major changes to {send,recv}msg and skb allocation methods.
+	 * -> 2.5 ;)
+	 */
+	lock_sock(sk);
 	x25_kick(sk);
+	release_sock(sk);
 
 	return len;
 }

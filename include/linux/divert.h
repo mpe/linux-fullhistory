@@ -112,6 +112,6 @@ void free_divert_blk(struct net_device *);
 int divert_ioctl(unsigned int cmd, struct divert_cf *arg);
 void divert_frame(struct sk_buff *skb);
 
-#endif __KERNEL__
+#endif 
 
 #endif	/* _LINUX_DIVERT_H */

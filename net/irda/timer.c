@@ -24,6 +24,7 @@
  ********************************************************************/
 
 #include <asm/system.h>
+#include <linux/config.h>
 #include <linux/delay.h>
 
 #include <net/irda/timer.h>

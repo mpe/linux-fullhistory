@@ -86,10 +86,8 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 
 	case NCP_IOC_CONN_LOGGED_IN:
 
-		if ((permission(inode, MAY_WRITE) != 0)
-		    && (current->uid != server->m.mounted_uid)) {
+		if (!capable(CAP_SYS_ADMIN))
 			return -EACCES;
-		}
 		if (!(server->m.int_flags & NCP_IMOUNT_LOGGEDIN_POSSIBLE))
 			return -EINVAL;
 		if (server->root_setuped)
@@ -207,8 +205,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			struct nw_info_struct i;
 			struct dentry* dentry;
 
-			if (   (permission(inode, MAY_WRITE) != 0)
-			    && (current->uid != server->m.mounted_uid))
+			if (!capable(CAP_SYS_ADMIN))
 			{
 				return -EACCES;
 			}
@@ -513,8 +510,7 @@ outrel:
  * Thanks Petr Vandrovec for idea and many hints.
  */
 	case NCP_IOC_SETCHARSETS:
-		if ((permission(inode, MAY_WRITE) != 0) &&
-				 (current->uid != server->m.mounted_uid))
+		if (!capable(CAP_SYS_ADMIN))
 			return -EACCES;
 		if (server->root_setuped)
 			return -EBUSY;

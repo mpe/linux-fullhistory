@@ -588,7 +588,7 @@ static int proc_bulk(struct dev_state *ps, void *arg)
 		return -EINVAL;
 	len1 = bulk.len;
 	if (len1 > PAGE_SIZE)
-		len1 = PAGE_SIZE;
+		return -EINVAL;
 	if (!(tbuf = (unsigned char *)__get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 	tmo = (bulk.timeout * HZ + 999) / 1000;

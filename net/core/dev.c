@@ -2192,6 +2192,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCSIFHWBROADCAST:
 		case SIOCSIFTXQLEN:
 		case SIOCSIFNAME:
+		case SIOCETHTOOL:
 			if (!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			dev_load(ifr.ifr_name);
@@ -2213,9 +2214,8 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		 */	
 		 
 		default:
-			if ((cmd >= SIOCDEVPRIVATE &&
-			    cmd <= SIOCDEVPRIVATE + 15) ||
-			    cmd == SIOCETHTOOL) {
+			if (cmd >= SIOCDEVPRIVATE &&
+			    cmd <= SIOCDEVPRIVATE + 15) {
 				dev_load(ifr.ifr_name);
 				rtnl_lock();
 				ret = dev_ifsioc(&ifr, cmd);

@@ -23,10 +23,18 @@ bttv.o
 				at the hardware).  default is 1.
 		bttv_debug=0/1	debug messages (for capture).
 				default is 0 (off).
+		irq_debug=0/1	irq handler debug messages.
+				default is 0 (off).
 		gbuffers=2-64	number of capture buffers for mmap'ed capture.
 				default is 2.
 		gbufsize=	size of capture buffers. default and
 				maximum value is 0x208000 (~2MB)
+
+		bttv_gpio=0/1
+		gpiomask=
+		audioall=
+		audiomux=
+				See Sound-FAQ for a detailed description.
 
 	remap, card, radio and pll accept up to four comma-separated arguments
 	(for multiple boards).
@@ -54,6 +62,19 @@ tvaudio.o
 	new, experimental module which is supported to provide a single
 	driver for all simple i2c audio control chips (tda/tea*).
 
+	insmod args:
+		tda8425  = 1	enable/disable the support for the
+		tda9840  = 1	various chips.
+		tda9850  = 1	The tea6300 can't be autodetected and is
+		tda9855  = 1	therefore off by default, if you have
+		tda9873  = 1	this one on your card (STB uses these)
+		tea6300  = 0	you have to enable it explicitly.
+		tea6420  = 1	The two tda985x chips use the same i2c
+		pic16c54 = 1	address and can't be disturgished from
+				each other, you might have to disable
+				the wrong one.
+		debug = 1	print debug messages
+
 msp3400.o
 	The driver for the msp34xx sound processor chips. If you have a
 	stereo card, you probably want to insmod this one.
@@ -72,7 +93,7 @@ msp3400.o
 				should improve things for french people, the
 				carrier autoscan seems to work with FM only...
 
-tea6300.o
+tea6300.o - OBSOLETE (use tvaudio instead)
 	The driver for the tea6300 fader chip.  If you have a stereo
 	card and the msp3400.o doesn't work, you might want to try this
 	one.  This chip is seen on most STB TV/FM cards (usually from
@@ -81,7 +102,7 @@ tea6300.o
 	insmod args:
 		debug=1		print some debug info to the syslog.
 
-tda8425.o
+tda8425.o - OBSOLETE (use tvaudio instead)
 	The driver for the tda8425 fader chip.  This driver used to be
 	part of bttv.c, so if your sound used to work but does not
 	anymore, try loading this module.
@@ -89,7 +110,7 @@ tda8425.o
 	insmod args:
 		debug=1		print some debug info to the syslog.
 
-tda985x.o
+tda985x.o - OBSOLETE (use tvaudio instead)
 	The driver for the tda9850/55 audio chips.
 
 	insmod args:

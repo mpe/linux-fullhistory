@@ -76,7 +76,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
          tristate '    3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
       fi
    fi
-   tristate '  AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE
+   dep_tristate '  AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE $CONFIG_ISA
    bool '  Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC
    if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
       tristate '    WD80*3 support' CONFIG_WD80x3
@@ -127,52 +127,45 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
    fi
    bool '  EISA, VLB, PCI and on board controllers' CONFIG_NET_PCI
    if [ "$CONFIG_NET_PCI" = "y" ]; then
-      tristate '    AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32
+      dep_tristate '    AMD PCnet32 PCI support' CONFIG_PCNET32 $CONFIG_PCI
       dep_tristate '    Adaptec Starfire support (EXPERIMENTAL)' CONFIG_ADAPTEC_STARFIRE $CONFIG_PCI $CONFIG_EXPERIMENTAL
-      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-	 tristate '    Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
+      if [ "$CONFIG_ISA" = "y" -o "$CONFIG_EISA" = "y" ]; then
+	 dep_tristate '    Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200 $CONFIG_EXPERIMENTAL
       fi
 
       tristate '    Apricot Xen-II on board Ethernet' CONFIG_APRICOT
-      tristate '    CS89x0 support' CONFIG_CS89x0
-      tristate '    Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
+      dep_tristate '    CS89x0 support' CONFIG_CS89x0 $CONFIG_ISA
       dep_tristate '    DECchip Tulip (dc21x4x) PCI support' CONFIG_TULIP $CONFIG_PCI
-      tristate '    Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
-      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-         tristate '    DM9102 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_DM9102
+      if [ "$CONFIG_PCI" = "y" -o "$CONFIG_EISA" = "y" ]; then
+         tristate '    Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
+         tristate '    Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
       fi
+      dep_tristate '    DM9102 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_DM9102 $CONFIG_PCI $CONFIG_EXPERIMENTAL
       dep_tristate '    EtherExpressPro/100 support' CONFIG_EEPRO100 $CONFIG_PCI
-      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-         if [ "$CONFIG_EEPRO100" = "y" -o "$CONFIG_EEPRO100" = "m" ]; then
-	    bool '      Enable Power Management (EXPERIMENTAL)' CONFIG_EEPRO100_PM
-	 fi
-	 tristate '    Mylex EISA LNE390A/B support (EXPERIMENTAL)' CONFIG_LNE390
-      fi
+      dep_mbool '      Enable Power Management (EXPERIMENTAL)' CONFIG_EEPRO100_PM $CONFIG_EEPRO100 $CONFIG_EXPERIMENTAL
+      dep_tristate '    Mylex EISA LNE390A/B support (EXPERIMENTAL)' CONFIG_LNE390 $CONFIG_EISA $CONFIG_EXPERIMENTAL
       dep_tristate '    National Semiconductor DP83810 series PCI Ethernet support' CONFIG_NATSEMI $CONFIG_PCI
       dep_tristate '    PCI NE2000 and clones support (see help)' CONFIG_NE2K_PCI $CONFIG_PCI
-      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-	 tristate '    Novell/Eagle/Microdyne NE3210 EISA support (EXPERIMENTAL)' CONFIG_NE3210
-      fi
-      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-	 tristate '    Racal-Interlan EISA ES3210 support (EXPERIMENTAL)' CONFIG_ES3210
-         dep_tristate '    RealTek 8129 (not 8019/8029/8139!) support (EXPERIMENTAL)' CONFIG_RTL8129 $CONFIG_PCI
-      fi
+      dep_tristate '    Novell/Eagle/Microdyne NE3210 EISA support (EXPERIMENTAL)' CONFIG_NE3210 $CONFIG_EISA $CONFIG_EXPERIMENTAL
+      dep_tristate '    Racal-Interlan EISA ES3210 support (EXPERIMENTAL)' CONFIG_ES3210 $CONFIG_EISA $CONFIG_EXPERIMENTAL
       dep_tristate '    RealTek RTL-8139 PCI Fast Ethernet Adapter support' CONFIG_8139TOO $CONFIG_PCI
+      dep_tristate '    RealTek 8129 (not 8019/8029/8139!) support (EXPERIMENTAL)' CONFIG_RTL8129 $CONFIG_PCI $CONFIG_EXPERIMENTAL
       dep_tristate '    SiS 900/7016 PCI Fast Ethernet Adapter support' CONFIG_SIS900 $CONFIG_PCI
       dep_tristate '    SMC EtherPower II' CONFIG_EPIC100 $CONFIG_PCI
       dep_tristate '    Sundance Alta support' CONFIG_SUNDANCE $CONFIG_PCI
-      tristate '    TI ThunderLAN support' CONFIG_TLAN
+      if [ "$CONFIG_PCI" = "y" -o "$CONFIG_EISA" = "y" ]; then
+         tristate '    TI ThunderLAN support' CONFIG_TLAN
+      fi
       dep_tristate '    VIA Rhine support' CONFIG_VIA_RHINE $CONFIG_PCI
       dep_tristate '    Winbond W89c840 Ethernet support' CONFIG_WINBOND_840 $CONFIG_PCI
+      dep_tristate '    Sun Happy Meal 10/100baseT PCI support' CONFIG_HAPPYMEAL $CONFIG_PCI
       if [ "$CONFIG_OBSOLETE" = "y" ]; then
 	 bool '    Zenith Z-Note support (EXPERIMENTAL)' CONFIG_ZNET
       fi
    fi
    bool '  Pocket and portable adapters' CONFIG_NET_POCKET
    if [ "$CONFIG_NET_POCKET" = "y" ]; then
-      if [ "$CONFIG_X86" = "y" ]; then
-         tristate '    AT-LAN-TEC/RealTek pocket adapter support' CONFIG_ATP
-      fi
+      dep_tristate '    AT-LAN-TEC/RealTek pocket adapter support' CONFIG_ATP $CONFIG_ISA
       tristate '    D-Link DE600 pocket adapter support' CONFIG_DE600
       tristate '    D-Link DE620 pocket adapter support' CONFIG_DE620
    fi

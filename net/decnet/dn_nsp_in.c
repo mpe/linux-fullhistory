@@ -1,4 +1,3 @@
-
 /*
  * DECnet       An implementation of the DECnet protocol suite for the LINUX
  *              operating system.  DECnet is implemented using the  BSD Socket
@@ -23,6 +22,9 @@
  *    Steve Whitehouse:  Fixed lockup when socket filtering was enabled.
  *         Paul Koning:  Fix to push CC sockets into RUN when acks are
  *                       received.
+ *    Steve Whitehouse:
+ *   Patrick Caulfield:  Checking conninits for correctness & sending of error
+ *                       responses.
  */
 
 /******************************************************************************
@@ -71,6 +73,16 @@
 #include <net/dn_dev.h>
 #include <net/dn_route.h>
 
+extern int decnet_log_martians;
+
+static void dn_log_martian(struct sk_buff *skb, const char *msg)
+{
+	if (decnet_log_martians && net_ratelimit()) {
+		char *devname = skb->rx_dev ? skb->rx_dev->name : "???";
+		struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
+		printk(KERN_INFO "DECnet: Martian packet (%s) rx_dev=%s src=0x%04hx dst=0x%04hx srcport=0x%04hx dstport=0x%04hx\n", msg, devname, cb->src, cb->dst, cb->src_port, cb->dst_port);
+	}
+}
 
 /*
  * For this function we've flipped the cross-subchannel bit
@@ -82,8 +94,6 @@ static void dn_ack(struct sock *sk, struct sk_buff *skb, unsigned short ack)
 	struct dn_scp *scp = &sk->protinfo.dn;
 	unsigned short type = ((ack >> 12) & 0x0003);
 	int wakeup = 0;
-
-	/* printk(KERN_DEBUG "dn_ack: %hd 0x%04hx\n", type, ack); */
 
 	switch(type) {
 		case 0: /* ACK - Data */
@@ -148,50 +158,172 @@ static int dn_process_ack(struct sock *sk, struct sk_buff *skb, int oth)
 }
 
 
+/**
+ * dn_check_idf - Check an image data field format is correct.
+ * @pptr: Pointer to pointer to image data
+ * @len: Pointer to length of image data
+ * @max: The maximum allowed length of the data in the image data field
+ * @follow_on: Check that this many bytes exist beyond the end of the image data
+ *
+ * Returns: 0 if ok, -1 on error
+ */
+static inline int dn_check_idf(unsigned char **pptr, int *len, unsigned char max, unsigned char follow_on)
+{
+	unsigned char *ptr = *pptr;
+	unsigned char flen = *ptr++;
+
+	(*len)--;
+	if (flen > max)
+		return -1;
+	if ((flen + follow_on) > *len)
+		return -1;
+
+	*len -= flen;
+	*pptr = ptr + flen;
+	return 0;
+}
+
+/*
+ * Table of reason codes to pass back to node which sent us a badly
+ * formed message, plus text messages for the log. A zero entry in
+ * the reason field means "don't reply" otherwise a disc init is sent with
+ * the specified reason code.
+ */
+static struct {
+	unsigned short reason;
+	const char *text;
+} ci_err_table[] = {
+ { 0,             "CI: Truncated message" },
+ { NSP_REASON_ID, "CI: Destination username error" },
+ { NSP_REASON_ID, "CI: Destination username type" },
+ { NSP_REASON_US, "CI: Source username error" },
+ { 0,             "CI: Truncated at menuver" },
+ { 0,             "CI: Truncated before access or user data" },
+ { NSP_REASON_IO, "CI: Access data format error" },
+ { NSP_REASON_IO, "CI: User data format error" }
+};
+
 /*
  * This function uses a slightly different lookup method
  * to find its sockets, since it searches on object name/number
- * rather than port numbers
+ * rather than port numbers. Various tests are done to ensure that
+ * the incoming data is in the correct format before it is queued to
+ * a socket.
  */
-static struct sock *dn_find_listener(struct sk_buff *skb)
+static struct sock *dn_find_listener(struct sk_buff *skb, unsigned short *reason)
 {
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 	struct nsp_conn_init_msg *msg = (struct nsp_conn_init_msg *)skb->data;
-	struct sockaddr_dn addr;
+	struct sockaddr_dn dstaddr;
+	struct sockaddr_dn srcaddr;
 	unsigned char type = 0;
+	int dstlen;
+	int srclen;
+	unsigned char *ptr;
+	int len;
+	int err = 0;
+	unsigned char menuver;
 
-	memset(&addr, 0, sizeof(struct sockaddr_dn));
+	memset(&dstaddr, 0, sizeof(struct sockaddr_dn));
+	memset(&srcaddr, 0, sizeof(struct sockaddr_dn));
 
+	/*
+	 * 1. Decode & remove message header
+	 */
 	cb->src_port = msg->srcaddr;
 	cb->dst_port = msg->dstaddr;
 	cb->services = msg->services;
 	cb->info     = msg->info;
 	cb->segsize  = dn_ntohs(msg->segsize);
 
-	skb_pull(skb, sizeof(*msg));
-
-	/* printk(KERN_DEBUG "username2sockaddr 1\n"); */
-	if (dn_username2sockaddr(skb->data, skb->len, &addr, &type) < 0)
+	if (skb->len < sizeof(*msg))
 		goto err_out;
 
+	skb_pull(skb, sizeof(*msg));
+
+	len = skb->len;
+	ptr = skb->data;
+
+	/*
+	 * 2. Check destination end username format
+	 */
+	dstlen = dn_username2sockaddr(ptr, len, &dstaddr, &type);
+	err++;
+	if (dstlen < 0)
+		goto err_out;
+
+	err++;
 	if (type > 1)
 		goto err_out;
 
-	/* printk(KERN_DEBUG "looking for listener...\n"); */
-	return dn_sklist_find_listener(&addr);
+	len -= dstlen;
+	ptr += dstlen;
+
+	/*
+	 * 3. Check source end username format
+	 */
+	srclen = dn_username2sockaddr(ptr, len, &srcaddr, &type);
+	err++;
+	if (srclen < 0)
+		goto err_out;
+
+	len -= srclen;
+	ptr += srclen;
+	err++;
+	if (len < 1)
+		goto err_out;
+
+	menuver = *ptr;
+	ptr++;
+	len--;
+
+	/*
+	 * 4. Check that optional data actually exists if menuver says it does
+	 */
+	err++;
+	if ((menuver & (DN_MENUVER_ACC | DN_MENUVER_USR)) && (len < 1))
+		goto err_out;
+
+	/*
+	 * 5. Check optional access data format
+	 */
+	err++;
+	if (menuver & DN_MENUVER_ACC) {
+		if (dn_check_idf(&ptr, &len, 39, 1))
+			goto err_out;
+		if (dn_check_idf(&ptr, &len, 39, 1))
+			goto err_out;
+		if (dn_check_idf(&ptr, &len, 39, (menuver & DN_MENUVER_USR) ? 1 : 0))
+			goto err_out;
+	}
+
+	/*
+	 * 6. Check optional user data format
+	 */
+	err++;
+	if (menuver & DN_MENUVER_USR) {
+		if (dn_check_idf(&ptr, &len, 16, 0))
+			goto err_out;
+	}
+
+	/*
+	 * 7. Look up socket based on destination end username
+	 */
+	return dn_sklist_find_listener(&dstaddr);
 err_out:
+	dn_log_martian(skb, ci_err_table[err].text);
+	*reason = ci_err_table[err].reason;
 	return NULL;
 }
 
+
 static void dn_nsp_conn_init(struct sock *sk, struct sk_buff *skb)
 {
-	/* printk(KERN_DEBUG "checking backlog...\n"); */
 	if (sk->ack_backlog >= sk->max_ack_backlog) {
 		kfree_skb(skb);
 		return;
 	}
 
-	/* printk(KERN_DEBUG "waking up socket...\n"); */
 	sk->ack_backlog++;
 	skb_queue_tail(&sk->receive_queue, skb);
 	sk->state_change(sk);
@@ -528,13 +660,20 @@ static void dn_returned_conn_init(struct sock *sk, struct sk_buff *skb)
 	kfree_skb(skb);
 }
 
-static void dn_nsp_no_socket(struct sk_buff *skb)
+static void dn_nsp_no_socket(struct sk_buff *skb, unsigned short reason)
 {
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 
-	switch(cb->nsp_flags) {
-		case 0x28: /* Connect Confirm */
-			dn_nsp_return_disc(skb, NSP_DISCCONF, NSP_REASON_NL);
+	if ((reason != NSP_REASON_OK) && ((cb->nsp_flags & 0x0c) == 0x08)) {
+		switch(cb->nsp_flags & 0x70) {
+			case 0x10:
+			case 0x60: /* (Retransmitted) Connect Init */
+				dn_nsp_return_disc(skb, NSP_DISCINIT, reason);
+				break;
+			case 0x20: /* Connect Confirm */
+				dn_nsp_return_disc(skb, NSP_DISCCONF, reason);
+				break;
+		}
 	}
 
 	kfree_skb(skb);
@@ -545,6 +684,7 @@ static int dn_nsp_rx_packet(struct sk_buff *skb)
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 	struct sock *sk = NULL;
 	unsigned char *ptr = (unsigned char *)skb->data;
+	unsigned short reason = NSP_REASON_NL;
 
 	skb->h.raw    = skb->data;
 	cb->nsp_flags = *ptr++;
@@ -584,7 +724,7 @@ static int dn_nsp_rx_packet(struct sk_buff *skb)
 				goto free_out;
 			case 0x10:
 			case 0x60:
-				sk = dn_find_listener(skb);
+				sk = dn_find_listener(skb, &reason);
 				goto got_it;
 		}
 	}
@@ -632,7 +772,7 @@ got_it:
 		return ret;
 	}
 
-	dn_nsp_no_socket(skb);
+	dn_nsp_no_socket(skb, reason);
 	return 1;
 
 free_out:
@@ -664,7 +804,6 @@ int dn_nsp_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 	 * Control packet.
 	 */
 	if ((cb->nsp_flags & 0x0c) == 0x08) {
-		/* printk(KERN_DEBUG "control type\n"); */
 		switch(cb->nsp_flags & 0x70) {
 			case 0x10:
 			case 0x60:

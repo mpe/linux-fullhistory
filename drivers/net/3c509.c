@@ -200,6 +200,8 @@ int el3_probe(struct net_device *dev)
 	static int pnp_cards = 0;
 #endif /* __ISAPNP__ */
 
+	if (dev) SET_MODULE_OWNER(dev);
+
 	/* First check all slots of the EISA bus.  The next slot address to
 	   probe is kept in 'eisa_addr' to support multiple probe() calls. */
 	if (EISA_bus) {
@@ -440,6 +442,7 @@ no_pnp:
 			release_region(ioaddr, EL3_IO_EXTENT);
 			return -ENOMEM;
 		}
+		SET_MODULE_OWNER(dev);
 	}
 	memcpy(dev->dev_addr, phys_addr, sizeof(phys_addr));
 	dev->base_addr = ioaddr;
@@ -530,9 +533,8 @@ el3_open(struct net_device *dev)
 	outw(RxReset, ioaddr + EL3_CMD);
 	outw(SetStatusEnb | 0x00, ioaddr + EL3_CMD);
 
-	if (request_irq(dev->irq, &el3_interrupt, 0, dev->name, dev)) {
-		return -EAGAIN;
-	}
+	i = request_irq(dev->irq, &el3_interrupt, 0, dev->name, dev);
+	if (i) return i;
 
 	EL3WINDOW(0);
 	if (el3_debug > 3)
@@ -591,8 +593,7 @@ el3_open(struct net_device *dev)
 		printk("%s: Opened 3c509  IRQ %d  status %4.4x.\n",
 			   dev->name, dev->irq, inw(ioaddr + EL3_STATUS));
 
-	MOD_INC_USE_COUNT;
-	return 0;					/* Always succeed */
+	return 0;
 }
 
 static void
@@ -969,7 +970,6 @@ el3_close(struct net_device *dev)
 	outw(0x0f00, ioaddr + WN0_IRQ);
 
 	update_stats(dev);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

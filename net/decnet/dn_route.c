@@ -812,8 +812,8 @@ non_local_input:
 	key.oif = 0;
 	key.scope = RT_SCOPE_UNIVERSE;
 
-#ifdef CONFIG_DECNET_ROUTE_FWMASK
-	key.fwmark = skb->fwmark;
+#ifdef CONFIG_DECNET_ROUTE_FWMARK
+	key.fwmark = skb->nfmark;
 #else
 	key.fwmark = 0;
 #endif
@@ -890,7 +890,7 @@ int dn_route_input(struct sk_buff *skb)
 		if ((rt->key.saddr == cb->src) &&
 				(rt->key.daddr == cb->dst) &&
 				(rt->key.oif == 0) &&
-#ifdef CONFIG_DECNET_ROUTE_FWMASK
+#ifdef CONFIG_DECNET_ROUTE_FWMARK
 				(rt->key.fwmark == skb->nfmark) &&
 #endif
 				(rt->key.iif == cb->iif)) {

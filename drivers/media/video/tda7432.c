@@ -25,10 +25,6 @@
  *                  Added I2C_DRIVERID_TDA7432
  *			added loudness insmod control
  *  Revision: 0.1 - initial version
- *
- *  Changes:
- *  Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/14/2000
- *  - resource allocation fixes in tda7432_attach
  */
 
 #include <linux/module.h>
@@ -45,12 +41,7 @@
 
 #include "bttv.h"
 #include "audiochip.h"
-
-/* This driver ID is brand new, so define it if it's not in i2c-id.h yet */
-#ifndef I2C_DRIVERID_TDA7432
-  #define I2C_DRIVERID_TDA7432	27
-#endif
-
+#include "id.h"
 
 MODULE_AUTHOR("Eric Sandeen <eric_sandeen@bigfoot.com>");
 MODULE_DESCRIPTION("bttv driver for the tda7432 audio processor chip");
@@ -87,6 +78,7 @@ struct tda7432 {
 	int tone;
 	int lf, lr, rf, rr;
 	int loud;
+	struct i2c_client c;
 };
 
 static struct i2c_driver driver;
@@ -316,19 +308,18 @@ static int tda7432_attach(struct i2c_adapter *adap, int addr,
 	struct tda7432 *t;
 	struct i2c_client *client;
 	d2printk("tda7432: In tda7432_attach\n");
-	client = kmalloc(sizeof *client,GFP_KERNEL);
-	if (!client)
-		return -ENOMEM;		
+
+	t = kmalloc(sizeof *t,GFP_KERNEL);
+	if (!t)
+		return -ENOMEM;
+	memset(t,0,sizeof *t);
+
+	client = &t->c;
         memcpy(client,&client_template,sizeof(struct i2c_client));
         client->adapter = adap;
         client->addr = addr;
+	client->data = t;
 	
-	client->data = t = kmalloc(sizeof *t,GFP_KERNEL);
-	if (!t) {
-		kfree(client);
-		return -ENOMEM;
-	}
-	memset(t,0,sizeof *t);
 	do_tda7432_init(client);
 	MOD_INC_USE_COUNT;
 	strcpy(client->name,"TDA7432");
@@ -353,7 +344,6 @@ static int tda7432_detach(struct i2c_client *client)
 	i2c_detach_client(client);
 	
 	kfree(t);
-	kfree(client);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }

@@ -220,5 +220,8 @@ extern unsigned long x25_display_timer(struct sock *);
 /* sysctl_net_x25.c */
 extern void x25_register_sysctl(void);
 extern void x25_unregister_sysctl(void);
-
+struct x25_skb_cb {
+	unsigned flags;
+};
+#define X25_SKB_CB(s) ((struct x25_skb_cb *) ((s)->cb))
 #endif

@@ -635,6 +635,9 @@ static int usb_find_interface_driver(struct usb_device *dev, unsigned ifnum)
 						break;
 				}
 			}
+			/* if driver not bound, leave defaults unchanged */
+			if (private == NULL)
+				interface->act_altsetting = 0;
 		}
 		else /* "old style" driver */
 			private = driver->probe(dev, ifnum, NULL);
@@ -650,58 +653,15 @@ static int usb_find_interface_driver(struct usb_device *dev, unsigned ifnum)
 }
 
 
-#if	defined(CONFIG_KMOD)
+#ifdef	CONFIG_HOTPLUG
 
 /*
  * USB hotplugging invokes what /proc/sys/kernel/hotplug says
  * (normally /sbin/hotplug) when USB devices get added or removed.
- */
-
-static int to_bcd (char *buf, __u16 *bcdValue)
-{
-	int	retval = 0;
-	char	*value = (char *) bcdValue;
-	int	temp;
-
-	/* digits are 0-9 then ":;<=>?" for devices using
-	 * non-bcd (non-standard!) values here ... */
-
-	/* No leading (or later, trailing) zeroes since scripts do
-	 * literal matches, and that's how they're doing them. */
-	if ((temp = value [1] & 0xf0) != 0) {
-		temp >>= 4;
-		temp += '0';
-		*buf++ = (char) temp;
-		retval++;
-	}
-
-	temp = value [1] & 0x0f;
-	temp += '0';
-	*buf++ = (char) temp;
-	retval++;
-
-	*buf++ = '.';
-	retval++;
-
-	temp = value [0] & 0xf0;
-	temp >>= 4;
-	temp += '0';
-	*buf++ = (char) temp;
-	retval++;
-
-	if ((temp = value [0] & 0x0f) != 0) {
-		temp += '0';
-		*buf++ = (char) temp;
-		retval++;
-	}
-	*buf++ = 0;
-
-	return retval;
-}
-
-/*
+ *
  * This invokes a user mode policy agent, typically helping to load driver
- * or other modules, configure the device, or both.
+ * or other modules, configure the device, and more.  Drivers can provide
+ * a MODULE_DEVICE_TABLE to help with module loading subtasks.
  *
  * Some synchronization is important: removes can't start processing
  * before the add-device processing completes, and vice versa.  That keeps
@@ -772,9 +732,7 @@ static void call_policy (char *verb, struct usb_device *dev)
 	 * all the device descriptors we don't tell them about.  Or
 	 * even act as usermode drivers.
 	 *
-	 * XXX how little intelligence can we hardwire?
-	 * (a) mount point: /devfs, /dev, /proc/bus/usb etc.
-	 * (b) naming convention: bus1/device3, 001/003 etc.
+	 * FIXME reduce hardwired intelligence here
 	 */
 	envp [i++] = "DEVFS=/proc/bus/usb";
 	envp [i++] = scratch;
@@ -782,14 +740,14 @@ static void call_policy (char *verb, struct usb_device *dev)
 		dev->bus->busnum, dev->devnum) + 1;
 #endif
 
-	/* per-device configuration hacks are often necessary */
+	/* per-device configuration hacks are common */
 	envp [i++] = scratch;
-	scratch += sprintf (scratch, "PRODUCT=%x/%x/",
+	scratch += sprintf (scratch, "PRODUCT=%x/%x/%x",
 		dev->descriptor.idVendor,
-		dev->descriptor.idProduct);
-	scratch += to_bcd (scratch, &dev->descriptor.bcdDevice) + 1;
+		dev->descriptor.idProduct,
+		dev->descriptor.bcdDevice) + 1;
 
-	/* otherwise, use a simple (so far) generic driver binding model */
+	/* class-based driver binding models */
 	envp [i++] = scratch;
 	scratch += sprintf (scratch, "TYPE=%d/%d/%d",
 			    dev->descriptor.bDeviceClass,
@@ -798,17 +756,18 @@ static void call_policy (char *verb, struct usb_device *dev)
 	if (dev->descriptor.bDeviceClass == 0) {
 		int alt = dev->actconfig->interface [0].act_altsetting;
 
-		/* simple/common case: one config, one interface, one driver
-		 * unsimple cases:  everything else
+		/* a simple/common case: one config, one interface, one driver
+		 * with current altsetting being a reasonable setting.
+		 * everything needs a smart agent and usbdevfs; or can rely on
+		 * device-specific binding policies.
 		 */
+		envp [i++] = scratch;
 		scratch += sprintf (scratch, "INTERFACE=%d/%d/%d",
 			dev->actconfig->interface [0].altsetting [alt].bInterfaceClass,
 			dev->actconfig->interface [0].altsetting [alt].bInterfaceSubClass,
 			dev->actconfig->interface [0].altsetting [alt].bInterfaceProtocol)
 			+ 1;
 		/* INTERFACE-0, INTERFACE-1, ... ? */
-	} else {
-		/* simple/common case: generic device, handled generically */
 	}
 	envp [i++] = 0;
 	/* assert: (scratch - buf) < sizeof buf */

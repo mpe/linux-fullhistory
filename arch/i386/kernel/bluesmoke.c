@@ -66,22 +66,19 @@ void do_machine_check(struct pt_regs * regs, long error_code)
  *	This has to be run for each processor
  */
  
-void mcheck_init(void)
+void mcheck_init(struct cpuinfo_x86 *c)
 {
 	u32 l, h;
 	int i;
-	struct cpuinfo_x86 *c;
 	static int done;
 
-	c=cpu_data+smp_processor_id();
-	
-	if(c->x86_vendor!=X86_VENDOR_INTEL)
+	if( c->x86_vendor != X86_VENDOR_INTEL )
 		return;
 	
-	if(!(c->x86_capability&X86_FEATURE_MCE))
+	if( !test_bit(X86_FEATURE_TSC, &c->x86_capability) )
 		return;
 		
-	if(!(c->x86_capability&X86_FEATURE_MCA))
+	if( !test_bit(X86_FEATURE_MCA, &c->x86_capability) )
 		return;
 		
 	/* Ok machine check is available */

@@ -149,7 +149,7 @@ struct sk_buff *dn_alloc_send_skb(struct sock *sk, int *size, int noblock, int *
 			continue;
 		}
 
-		if ((skb = dn_alloc_skb(sk, len, GFP_KERNEL)) == NULL)
+		if ((skb = dn_alloc_skb(sk, len, sk->allocation)) == NULL)
 			continue;
 
 		*size = len - 11;
@@ -444,7 +444,7 @@ void dn_send_conn_ack (struct sock *sk)
 	struct sk_buff *skb = NULL;
         struct nsp_conn_ack_msg *msg;
 
-	if ((skb = dn_alloc_skb(sk, 3, GFP_KERNEL)) == NULL)
+	if ((skb = dn_alloc_skb(sk, 3, sk->allocation)) == NULL)
 		return;
 
         msg = (struct nsp_conn_ack_msg *)skb_put(skb, 3);
@@ -626,7 +626,7 @@ void dn_nsp_send_conninit(struct sock *sk, unsigned char msgflg)
 	struct dn_skb_cb *cb;
 	unsigned char type = 1;
 
-	if ((skb = dn_alloc_skb(sk, 200, (msgflg == NSP_CI) ? GFP_KERNEL : GFP_ATOMIC)) == NULL)
+	if ((skb = dn_alloc_skb(sk, 200, (msgflg == NSP_CI) ? sk->allocation : GFP_ATOMIC)) == NULL)
 		return;
 
 	cb  = (struct dn_skb_cb *)skb->cb;

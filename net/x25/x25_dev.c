@@ -68,8 +68,17 @@ static int x25_receive_data(struct sk_buff *skb, struct x25_neigh *neigh)
 	 *	Find an existing socket.
 	 */
 	if ((sk = x25_find_socket(lci, neigh)) != NULL) {
+		int queued = 1;
+
 		skb->h.raw = skb->data;
-		return x25_process_rx_frame(sk, skb);
+		bh_lock_sock(sk);
+		if (!sk->lock.users) {
+			queued = x25_process_rx_frame(sk, skb);
+		} else {
+			sk_add_backlog(sk, skb);
+		}
+		bh_unlock_sock(sk);
+		return queued;
 	}
 
 	/*

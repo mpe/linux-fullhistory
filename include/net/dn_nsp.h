@@ -39,9 +39,27 @@ extern int dn_nsp_backlog_rcv(struct sock *sk, struct sk_buff *skb);
 extern struct sk_buff *dn_alloc_skb(struct sock *sk, int size, int pri);
 extern struct sk_buff *dn_alloc_send_skb(struct sock *sk, int *size, int noblock, int *err);
 
-#define NSP_REASON_NR 1
-#define NSP_REASON_DC 42
-#define NSP_REASON_NL 41
+#define NSP_REASON_OK 0		/* No error */
+#define NSP_REASON_NR 1		/* No resources */
+#define NSP_REASON_UN 2		/* Unrecognised node name */
+#define NSP_REASON_SD 3		/* Node shutting down */
+#define NSP_REASON_ID 4		/* Invalid destination end user */
+#define NSP_REASON_ER 5		/* End user lacks resources */
+#define NSP_REASON_OB 6		/* Object too busy */
+#define NSP_REASON_US 7		/* Unspecified error */
+#define NSP_REASON_TP 8		/* Third-Party abort */
+#define NSP_REASON_EA 9		/* End user has aborted the link */
+#define NSP_REASON_IF 10	/* Invalid node name format */
+#define NSP_REASON_LS 11	/* Local node shutdown */
+#define NSP_REASON_LL 32	/* Node lacks logical-link resources */
+#define NSP_REASON_LE 33	/* End user lacks logical-link resources */
+#define NSP_REASON_UR 34	/* Unacceptable RQSTRID or PASSWORD field */
+#define NSP_REASON_UA 36	/* Unacceptable ACCOUNT field */
+#define NSP_REASON_TM 38	/* End user timed out logical link */
+#define NSP_REASON_NU 39	/* Node unreachable */
+#define NSP_REASON_NL 41	/* No-link message */
+#define NSP_REASON_DC 42	/* Disconnect confirm */
+#define NSP_REASON_IO 43	/* Image data field overflow */
 
 #define NSP_DISCINIT 0x38
 #define NSP_DISCCONF 0x48

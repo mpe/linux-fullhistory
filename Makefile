@@ -180,6 +180,52 @@ DRIVERS-$(CONFIG_MD) += drivers/md/mddev.o
 
 DRIVERS += $(DRIVERS-y)
 
+
+# files removed with 'make clean'
+CLEAN_FILES = \
+	kernel/ksyms.lst include/linux/compile.h \
+	vmlinux System.map \
+	.tmp* \
+	drivers/char/consolemap_deftbl.c drivers/video/promcon_tbl.c \
+	drivers/char/conmakehash \
+	drivers/pci/devlist.h drivers/pci/classlist.h drivers/pci/gen-devlist \
+	drivers/zorro/devlist.h drivers/zorro/gen-devlist \
+	drivers/sound/bin2hex drivers/sound/hex2hex \
+	drivers/atm/fore200e_mkfirm drivers/atm/{pca,sba}*{.bin,.bin1,.bin2} \
+	net/khttpd/make_times_h \
+	net/khttpd/times.h \
+	submenu*
+# directories removed with 'make clean'
+CLEAN_DIRS = \
+	modules
+
+# files removed with 'make mrproper'
+MRPROPER_FILES = \
+	include/linux/autoconf.h include/linux/version.h \
+	drivers/net/hamradio/soundmodem/sm_tbl_{afsk1200,afsk2666,fsk9600}.h \
+	drivers/net/hamradio/soundmodem/sm_tbl_{hapn4800,psk4800}.h \
+	drivers/net/hamradio/soundmodem/sm_tbl_{afsk2400_7,afsk2400_8}.h \
+	drivers/net/hamradio/soundmodem/gentbl \
+	drivers/char/hfmodem/gentbl drivers/char/hfmodem/tables.h \
+	drivers/sound/*_boot.h drivers/sound/.*.boot \
+	drivers/sound/msndinit.c \
+	drivers/sound/msndperm.c \
+	drivers/sound/pndsperm.c \
+	drivers/sound/pndspini.c \
+	drivers/atm/fore200e_*_fw.c drivers/atm/.fore200e_*.fw \
+	.version .config* config.in config.old \
+	scripts/tkparse scripts/kconfig.tk scripts/kconfig.tmp \
+	scripts/lxdialog/*.o scripts/lxdialog/lxdialog \
+	.menuconfig.log \
+	include/asm \
+	.hdepend scripts/mkdep scripts/split-include scripts/docproc \
+	$(TOPDIR)/include/linux/modversions.h
+# directories removed with 'make mrproper'
+MRPROPER_DIRS = \
+	include/config \
+	$(TOPDIR)/include/linux/modules
+
+
 include arch/$(ARCH)/Makefile
 
 export	CPPFLAGS CFLAGS AFLAGS
@@ -355,47 +401,18 @@ modules modules_install: dummy
 endif
 
 clean:	archclean
-	rm -f kernel/ksyms.lst include/linux/compile.h
 	find . \( -name '*.[oas]' -o -name core -o -name '.*.flags' \) -type f -print \
 		| grep -v lxdialog/ | xargs rm -f
-	rm -f vmlinux System.map
-	rm -f .tmp*
-	rm -f drivers/char/consolemap_deftbl.c drivers/video/promcon_tbl.c
-	rm -f drivers/char/conmakehash
-	rm -f drivers/pci/devlist.h drivers/pci/classlist.h drivers/pci/gen-devlist
-	rm -f drivers/zorro/devlist.h drivers/zorro/gen-devlist
-	rm -f drivers/sound/bin2hex drivers/sound/hex2hex
-	rm -f drivers/atm/fore200e_mkfirm drivers/atm/{pca,sba}*{.bin,.bin1,.bin2}
-	rm -f net/khttpd/make_times_h
-	rm -f net/khttpd/times.h
-	rm -f submenu*
-	rm -rf modules
+	rm -f $(CLEAN_FILES)
+	rm -rf $(CLEAN_DIRS)
 	$(MAKE) -C Documentation/DocBook clean
 
 mrproper: clean archmrproper
-	rm -f include/linux/autoconf.h include/linux/version.h
-	rm -f drivers/net/hamradio/soundmodem/sm_tbl_{afsk1200,afsk2666,fsk9600}.h
-	rm -f drivers/net/hamradio/soundmodem/sm_tbl_{hapn4800,psk4800}.h
-	rm -f drivers/net/hamradio/soundmodem/sm_tbl_{afsk2400_7,afsk2400_8}.h
-	rm -f drivers/net/hamradio/soundmodem/gentbl
-	rm -f drivers/char/hfmodem/gentbl drivers/char/hfmodem/tables.h
-	rm -f drivers/sound/*_boot.h drivers/sound/.*.boot
-	rm -f drivers/sound/msndinit.c
-	rm -f drivers/sound/msndperm.c
-	rm -f drivers/sound/pndsperm.c
-	rm -f drivers/sound/pndspini.c
-	rm -f drivers/atm/fore200e_*_fw.c drivers/atm/.fore200e_*.fw
-	rm -f .version .config* config.in config.old
-	rm -f scripts/tkparse scripts/kconfig.tk scripts/kconfig.tmp
-	rm -f scripts/lxdialog/*.o scripts/lxdialog/lxdialog
-	rm -f .menuconfig.log
-	rm -f include/asm
-	rm -rf include/config
 	find . \( -size 0 -o -name .depend \) -type f -print | xargs rm -f
-	rm -f .hdepend scripts/mkdep scripts/split-include scripts/docproc
-	rm -f $(TOPDIR)/include/linux/modversions.h
-	rm -rf $(TOPDIR)/include/linux/modules
+	rm -f $(MRPROPER_FILES)
+	rm -rf $(MRPROPER_DIRS)
 	$(MAKE) -C Documentation/DocBook mrproper
+
 distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \
 		-o -name '*.bak' -o -name '#*#' -o -name '.*.orig' \

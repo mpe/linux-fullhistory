@@ -14,6 +14,7 @@
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
  * Bartlomiej Zolnierkiewicz : added __init to ics2101_mixer_init()
  */
+#include <linux/init.h>
 #include "sound_config.h"
 
 #include <linux/ultrasound.h>

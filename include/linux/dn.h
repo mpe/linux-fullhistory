@@ -139,23 +139,4 @@ struct dn_addr {
 #define OSIOCSNETADDR _IOW(DECNET_IOCTL_BASE, 0xe0, int)
 #define OSIOCGNETADDR _IOR(DECNET_IOCTL_BASE, 0xe1, int)
 
-/*
- * An unofficial structure used to set/get routes.
- * Be warned, this will probably change as the routing
- * evolves. Also this is only for use with the ioctl()
- * and the routing will use rtnetlink eventually.
- */
-struct dn_fib_rtinfo {
-	unsigned long flags; /* Flags */
-#define DN_FIB_RTINFO_F_REPLACE 0x0001  /* Replace any existing route */
-#define DN_FIB_RTINFO_F_DEVCOST 0x0002  /* Add cost of device         */
-	unsigned long timeout; /* Time in seconds route should last */
-	unsigned short src;  /* Source Address, 0 = any */
-	unsigned short dst;  /* Destination Address     */
-	unsigned short nhp;  /* Next Hop Address        */
-	unsigned short hops; /* Hops on path            */
-	unsigned short cost; /* Cost of path            */
-	char device[16];
-};
-
 #endif /* _LINUX_DN_H */

@@ -12,7 +12,7 @@
    Copyright 1992 - 2000 Kai Makisara
    email Kai.Makisara@metla.fi
 
-   Last modified: Tue Aug 15 16:56:35 2000 by makisara@kai.makisara.local
+   Last modified: Mon Nov 13 21:01:09 2000 by makisara@kai.makisara.local
    Some small formal changes - aeb, 950809
 
    Last modified: 18-JAN-1998 Richard Gooch <rgooch@atnf.csiro.au> Devfs support
@@ -976,7 +976,7 @@ static int st_flush(struct file *filp)
 		     ((SRpnt->sr_sense_buffer[0] & 0x80) != 0 &&
 		      (SRpnt->sr_sense_buffer[3] | SRpnt->sr_sense_buffer[4] |
 		       SRpnt->sr_sense_buffer[5] |
-		       SRpnt->sr_sense_buffer[6]) == 0))) {
+		       SRpnt->sr_sense_buffer[6]) != 0))) {
 			/* Filter out successful write at EOM */
 			scsi_release_request(SRpnt);
 			SRpnt = NULL;
@@ -2495,10 +2495,8 @@ static int st_int_ioctl(Scsi_Tape *STp, unsigned int cmd_in, unsigned long arg)
 			STps->drv_block = 0;
 			STps->eof = ST_NOEOF;
 		} else if ((cmd_in == MTBSF) || (cmd_in == MTBSFM)) {
-			if (fileno >= 0)
+			if (STps->drv_file >= 0)
 				STps->drv_file = fileno + undone;
-			else
-				STps->drv_file = fileno;
 			STps->drv_block = 0;
 			STps->eof = ST_NOEOF;
 		} else if (cmd_in == MTFSR) {
@@ -2519,10 +2517,8 @@ static int st_int_ioctl(Scsi_Tape *STp, unsigned int cmd_in, unsigned long arg)
 				STps->drv_file--;
 				STps->drv_block = (-1);
 			} else {
-				if (blkno >= 0)
+				if (STps->drv_block >= 0)
 					STps->drv_block = blkno + undone;
-				else
-					STps->drv_block = (-1);
 			}
 			STps->eof = ST_NOEOF;
 		} else if (cmd_in == MTEOM) {

@@ -1,5 +1,6 @@
 /* Recently Update by v1.09.50 */
 
+#include <linux/config.h>
 #include "sis_301.h"
 
 #ifndef CONFIG_FB_SIS_LINUXBIOS

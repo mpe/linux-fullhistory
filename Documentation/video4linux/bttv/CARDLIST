@@ -48,6 +48,11 @@ bttv.o
   card=46 - Zoltrix Genie TV
   card=47 - Terratec TV/Radio+
   card=48 - Dynalink Magic TView 
+  card=49 - GV-BCTV3
+  card=50 - Prolink PV-BT878P+4E (PixelView PlayTV PAK)
+  card=51 - Eagle Wireless Capricorn2 (bt878A)
+  card=52 - Pinnacle Studio PCTV Pro
+  card=53 - Typhoon TView RDS
 
 tuner.o
   type=0 - Temic PAL
@@ -65,3 +70,4 @@ tuner.o
   type=12 - Alps TSBE5
   type=13 - Alps TSBC5
   type=14 - Temic 4006FH5
+  type=15 - Alps TSCH6

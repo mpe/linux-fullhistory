@@ -5,21 +5,16 @@ Readme for Linux device driver for the OmniVision OV511 USB to camera bridge IC
 Author: Mark McClelland
 Homepage: http://alpha.dyndns.org/ov511
 
-NEW IN THIS VERSION:
- o Stability improvements
- o Support for hue control
- o 160x120 mostly working
- o OV6620 color problems fixed
- o More WebCam 3 detection improvements
-
 INTRODUCTION:
 
 This is a driver for the OV511, a USB-only chip used in many "webcam" devices.
 Any camera using the OV511/OV511+ and the OV7610/20/20AE CCD should work. It 
 supports streaming and capture of color or monochrome video via the Video4Linux
-API. Most V4L apps are compatible with it, but a few videoconferencing programs
+API. Most V4L apps are compatible with it, but a few video-conferencing programs
 do not work yet. The following resolutions are supported: 640x480, 448x336,
 384x288, 352x288, and 320x240.
+
+If you need more information, please visit the OV511 homepage at the above URL.
 
 WHAT YOU NEED:
 
@@ -81,29 +76,6 @@ Now you should be able to run xawtv. Right click for the options dialog. If
 you get a scrambled image it is likely that you made a mistake in Xawtv.ad.
 Try setting the size to 320x240 if all else fails.
 
-FAQ:
-Q: "Why does the picture have noise and look grainy"
-A: This is a problem at low light levels, and may be also due to subtle bugs in
-   the code. The cause is most likely the OV7610 settings we are currently
-   using. I am looking into this problem.
-
-Q: "The driver sometimes says `Failed to read OV7610 ID.' What is the deal?"
-A: The I2C code that allows the OV511 to communicate with the camera chip is a
-   bit flaky right now. This message means that the I2C bus never got
-   initialized properly, and the camera will most likely not work even if you
-   disable this warning. Try unloading/reloading the driver or unplugging/re-
-   plugging the camera if this happens. Also try increasing the i2c_detect_tries
-   parameter (see below).
-
-Q: "Why do you bother with this phony camera detection crap? It doesn't do
-    anything useful!"
-A: The main purpose of only supporting known camera models is to force people
-   with new camera models to tell me about them, so I can assemble the list
-   above, and so the code can know what CCD chip you have. Right now, nearly all
-   of the cameras use the OV7610 and consequently I have not put support for
-   other ones in, so the value of the detection code is questionable. Eventually
-   though, new CCDs might appear and we will be fortunate to have the detection.
-
 MODULE PARAMETERS:
 
   You can set these with:  insmod ov511 NAME=VALUE
@@ -136,7 +108,7 @@ MODULE PARAMETERS:
         or so lines higher than the red component. This is only apparent in 
         images with white objects on black backgrounds at 640x480. Setting this
         to 1 will realign the color planes correctly. NOTE: This is still
-        experimental and very buggy. You will likely need a fast (500 Mhz) CPU.
+        experimental and very buggy. You will likely need a fast (500 MHz) CPU.
 
   NAME: snapshot
   TYPE: integer (boolean)
@@ -203,15 +175,21 @@ MODULE PARAMETERS:
   DESC: Prevent apps from timing out if frame is not done in time. This is
         useful if you are having problems with Xawtv getting "stuck" on a frame
         when your system is under heavy load.
- 
+
+  NAME: sensor_gbr
+  TYPE: boolean
+  DEFAULT: 0
+  DESC: This makes the sensor output GBR422 instead of YUV420. This saves the
+        driver the trouble of converting YUV to RGB, but it currently does not
+        work very well (the colors are not quite right)
+
 WORKING FEATURES:
- o Color streaming/capture at 640x480, 448x336, 384x288, 352x288, 320x240, and
-   160x120
- o RGB24, YUV420, YUV422, YUYV, and YUV422P color
+ o Color streaming/capture at 640x480, 448x336, 384x288, 352x288, and 320x240
+ o RGB24, RGB565, YUV420, YUV422, YUYV, and YUV422P color
  o Monochrome
  o Setting/getting of saturation, contrast, brightness, and hue (only some of
    them work the OV7620 and OV7620AE)
- o proc status reporting
+ o /proc status reporting
 
 EXPERIMENTAL FEATURES:
  o fix_rgb_offset: Sometimes works, but other times causes errors with xawtv and
@@ -219,6 +197,7 @@ EXPERIMENTAL FEATURES:
  o Snapshot mode (only works with some read() based apps; see below for more)
  o OV6620 sensor support
  o GBR422 parsing
+ o 160x120
 
 TODO:
  o Fix the noise / grainy image problem.
@@ -227,18 +206,19 @@ TODO:
    so we can't really work on that yet. Please kindly inform OmniVision that you
    would like them to release their specifications to the Linux community.
  o YUV422
- o Get snapshot mode working with mmap().
  o Fix fixFrameRGBoffset(). It is not stable yet with streaming video.
- o Get autoadjust disable working
  o V4L2 support (Probably not until it goes into the kernel)
- o Creative WebCam III has problems initializing its sensor. This should be
-   fixed now, but if you still have problems let me know.
  o Get rid of the memory management functions (put them in videodev.c??)
  o Setting of contrast and brightness not working with 7620/7620AE
  o Driver/camera state save/restore for when USB supports suspend/resume
  o Unstable on SMP systems
  o OV7620/OV6620 experience frame corruption with moving objects
  o OV6620 is too dark
+ o 176x144 support
+ o Driver sometimes hangs upon close() with OHCI
+ o The image should always be written properly to the mmap'ed buffer as long as
+   the requested image size is at least the minimum size. This will likely
+   require a rewrite of all the parsing code.
 
 HOW TO CONTACT ME:
 

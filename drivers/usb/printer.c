@@ -498,7 +498,7 @@ static void *usblp_probe(struct usb_device *dev, unsigned int ifnum,
 	}
 
 #ifdef DEBUG
-	usblp_check_status(usblp);
+	usblp_check_status(usblp, 0);
 #endif
 
 	info("usblp%d: USB %sdirectional printer dev %d if %d alt %d",

@@ -21,18 +21,10 @@ Steve's quick list of things that need finishing off:
     send/recvmsg() calls should simply be a vector of set/getsockopt()
     calls]
 
- o check MSG_TRUNC, MSG_CTRUNC are set where they should be.
+ o check MSG_CTRUNC is set where it should be.
 
  o Start to hack together user level software and add more DECnet support
    in ifconfig for example. 
-
- o Fix conninit_rx to check out each CI before queuing it. Support code is
-   now in place, so this should be easy.
-
- o Work out which errors we can return from conninit_rx. Support code is
-   now in place, so this should be easy.
-
- o Check out receiving of errors in the light of what conninit_rx can return
 
  o Test adding/deleting of routes
 
@@ -55,7 +47,11 @@ Steve's quick list of things that need finishing off:
    allow DECnet support in netstat.
 
  o Make sure that returned connect messages are generated when they should
-   be, and that the correct error messages are sent too. Ensure that the
-   conninit receiving routine does not accept conninits with parameters
-   that we cannot handle.
+   be, and that the correct error messages are sent too. 
+
+ o Add the routing message grabbing netfilter module [written, tested,
+   awaiting merge]
+
+ o Add perfect socket hashing - an idea suggested by Paul Koning [part written,
+   awaiting debugging and merge]
 

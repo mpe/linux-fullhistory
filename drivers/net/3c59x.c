@@ -115,6 +115,9 @@
     - Added experimental support for the 3c556B Laptop Hurricane (Louis Gerbarg)
     - Add HAS_NWAY to "3c900 Cyclone 10Mbps TPO"
 
+   LK1.1.11 13 Nov 2000 andrewm
+    - Dump MOD_INC/DEC_USE_COUNT, use SET_MODULE_OWNER
+
     - See http://www.uow.edu.au/~andrewm/linux/#3c59x-2.3 for more details.
     - Also see Documentation/networking/vortex.txt
 */
@@ -200,7 +203,7 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 #include <linux/delay.h>
 
 static char version[] __devinitdata =
-"3c59x.c:LK1.1.10 17 Sep 2000  Donald Becker and others. http://www.scyld.com/network/vortex.html " "$Revision: 1.102.2.40 $\n";
+"3c59x.c:LK1.1.11 13 Nov 2000  Donald Becker and others. http://www.scyld.com/network/vortex.html " "$Revision: 1.102.2.46 $\n";
 
 MODULE_AUTHOR("Donald Becker <becker@scyld.com>");
 MODULE_DESCRIPTION("3Com 3c59x/3c90x/3c575 series Vortex/Boomerang/Cyclone driver");
@@ -878,7 +881,8 @@ static int __devinit vortex_probe1(struct pci_dev *pdev,
 		retval = -ENOMEM;
 		goto out;
 	}
-	
+	SET_MODULE_OWNER(dev);
+
 	printk(KERN_INFO "%s: 3Com %s %s at 0x%lx, ",
 	       dev->name,
 	       pdev ? "PCI" : "EISA",
@@ -1355,8 +1359,6 @@ vortex_open(struct net_device *dev)
 	int i;
 	int retval;
 
-	MOD_INC_USE_COUNT;
-
 	/* Use the now-standard shared IRQ implementation. */
 	if ((retval = request_irq(dev->irq, vp->full_bus_master_rx ?
 				&boomerang_interrupt : &vortex_interrupt, SA_SHIRQ, dev->name, dev))) {
@@ -1405,7 +1407,6 @@ out_free_irq:
 out:
 	if (vortex_debug > 1)
 		printk(KERN_ERR "%s: vortex_open() fails: returning %d\n", dev->name, retval);
-	MOD_DEC_USE_COUNT;
 	return retval;
 }
 
@@ -2282,7 +2283,6 @@ vortex_close(struct net_device *dev)
 			}
 	}
 
-	MOD_DEC_USE_COUNT;
 	vp->open = 0;
 	return 0;
 }
@@ -2567,7 +2567,6 @@ static void __devexit vortex_remove_one (struct pci_dev *pdev)
 
 	vp = (void *)(dev->priv);
 
-	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	/* AKPM: FIXME: we should have
 	 *	if (vp->cb_fn_base) iounmap(vp->cb_fn_base);
 	 * here

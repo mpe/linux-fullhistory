@@ -271,24 +271,8 @@ static struct atmdev_ops atm_ops =
    proc_read:	ns_proc_read
 };
 static struct timer_list ns_timer;
-static char *mac[NS_MAX_CARDS] = { NULL
-#if NS_MAX_CARDS > 1
-                                 , NULL
-#endif /* NS_MAX_CARDS > 1 */
-#if NS_MAX_CARDS > 2
-                                 , NULL
-#endif /* NS_MAX_CARDS > 2 */
-#if NS_MAX_CARDS > 3
-                                 , NULL
-#endif /* NS_MAX_CARDS > 3 */
-#if NS_MAX_CARDS > 4
-                                 , NULL
-#endif /* NS_MAX_CARDS > 4 */
-                                        };
-
-#ifdef MODULE
+static char *mac[NS_MAX_CARDS];
 MODULE_PARM(mac, "1-" __MODULE_STRING(NS_MAX_CARDS) "s");
-#endif /* MODULE */
 
 
 /* Functions*******************************************************************/

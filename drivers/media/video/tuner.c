@@ -113,6 +113,8 @@ static struct tunertype tuners[] = {
 	  16*133.25,16*351.25,0x01,0x02,0x08,0x8e,608},
 	{ "Temic 4006FH5", TEMIC, PAL_I,
 	  16*170.00,16*450.00,0xa0,0x90,0x30,0x8e,623}, 
+  	{ "Alps TSCH6",Alps,NTSC,
+  	  16*137.25,16*385.25,0x14,0x12,0x11,0x8e,732},
 };
 #define TUNERS (sizeof(tuners)/sizeof(struct tunertype))
 
@@ -131,6 +133,20 @@ static int tuner_getstatus(struct i2c_client *c)
 #define TUNER_FL        0x40
 #define TUNER_MODE      0x38
 #define TUNER_AFC       0x07
+
+#define TUNER_STEREO    0x10 /* radio mode */
+#define TUNER_SIGNAL    0x07 /* radio mode */
+
+static int tuner_signal(struct i2c_client *c)
+{
+	return (tuner_getstatus(c) & TUNER_SIGNAL)<<13;
+}
+
+static int tuner_stereo(struct i2c_client *c)
+{
+	return (tuner_getstatus (c) & TUNER_STEREO);
+}
+
 
 static int tuner_islocked (struct i2c_client *c)
 {
@@ -229,7 +245,7 @@ static void set_radio_freq(struct i2c_client *c, int freq)
 	}
 
 	tun=&tuners[t->type];
-	config = 0xa5;
+	config = 0xa4 /* 0xa5 */; /* bit 0 is AFC (set) vs. RF-Signal (clear) */
 	div=freq + (int)(16*10.7);
   	div&=0x7fff;
 
@@ -248,8 +264,12 @@ static void set_radio_freq(struct i2c_client *c, int freq)
 			printk ("tuner: PLL locked\n");
 		else
 			printk ("tuner: PLL not locked\n");
-		
-		printk ("tuner: AFC: %d\n", tuner_afcstatus (c));
+
+		if (config & 1) {
+			printk ("tuner: AFC: %d\n", tuner_afcstatus(c));
+		} else {
+			printk ("tuner: Signal: %d\n", tuner_signal(c));
+		}
 	}
 }
 /* ---------------------------------------------------------------------- */
@@ -370,6 +390,22 @@ tuner_command(struct i2c_client *client, unsigned int cmd, void *arg)
 		}
 		return 0;
 	}
+	case VIDIOCGTUNER:
+	{
+		struct video_tuner *vt = arg;
+
+		if (t->radio)
+			vt->signal = tuner_signal(client);
+		return 0;
+	}
+	case VIDIOCGAUDIO:
+	{
+		struct video_audio *va = arg;
+		if (t->radio)
+			va->mode = (tuner_stereo(client) ? VIDEO_SOUND_STEREO : VIDEO_SOUND_MONO);
+		return 0;
+	}
+	
 #if 0
 	/* --- old, obsolete interface --- */
 	case TUNER_SET_TVFREQ:

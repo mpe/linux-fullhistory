@@ -8,6 +8,7 @@
  * and exchange frames with IrTTP.
  */
 
+#include <linux/config.h>
 #include "irnet_irda.h"		/* Private header */
 
 /************************* CONTROL CHANNEL *************************/
