@@ -270,7 +270,8 @@ IF SOMETHING GOES WRONG:
    on making sense of the dump is in Documentation/oops-tracing.txt
 
  - You can use the "ksymoops" program to make sense of the dump.  This
-   utility can be downloaded from ftp://ftp.ocs.com.au/pub/ksymoops .
+   utility can be downloaded from
+   ftp://ftp.<country>.kernel.org/pub/linux/utils/kernel/ksymoops.
    Alternately you can do the dump lookup by hand:
 
  - In debugging dumps like the above, it helps enormously if you can

@@ -1,4 +1,4 @@
-/* $Id: piggyback.c,v 1.1 1997/07/11 11:05:26 jj Exp $
+/* $Id: piggyback.c,v 1.2 2000/09/19 14:34:39 anton Exp $
    Simple utility to make a single-image install kernel with initial ramdisk
    for Sparc64 tftpbooting without need to set up nfs.
    
@@ -50,9 +50,9 @@ int main(int argc,char **argv)
 	map = fopen (argv[2], "r");
 	if (!map) die(argv[2]);
 	while (fgets (buffer, 1024, map)) {
-		if (!strcmp (buffer + 19, "start\n"))
+		if (!strcmp (buffer + 19, "_start\n"))
 		start = strtoul (buffer + 8, NULL, 16);
-		else if (!strcmp (buffer + 19, "end\n"))
+		else if (!strcmp (buffer + 19, "_end\n"))
 		end = strtoul (buffer + 8, NULL, 16);
 	}
 	fclose (map);

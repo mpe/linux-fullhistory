@@ -9,6 +9,7 @@
 #include <linux/config.h>
 #include <linux/threads.h>
 #include <asm/asi.h>
+#include <asm/starfire.h>
 
 #ifndef __ASSEMBLY__
 /* PROM provided per-processor information we need
@@ -82,11 +83,7 @@ extern __inline__ int cpu_number_map(int cpu)
 
 extern __inline__ int hard_smp_processor_id(void)
 {
-	extern int this_is_starfire;
-
 	if(this_is_starfire != 0) {
-		extern int starfire_hard_smp_processor_id(void);
-
 		return starfire_hard_smp_processor_id();
 	} else {
 		unsigned long upaconfig;

@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.55 2000/07/24 14:13:13 anton Exp $
+/*  $Id: setup.c,v 1.56 2000/09/21 06:29:01 anton Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -37,6 +37,7 @@
 #include <asm/pgtable.h>
 #include <asm/idprom.h>
 #include <asm/head.h>
+#include <asm/starfire.h>
 
 #ifdef CONFIG_IP_PNP
 #include <net/ipconfig.h>
@@ -478,6 +479,9 @@ void __init setup_arch(char **cmdline_p)
 #elif defined(CONFIG_PROM_CONSOLE)
 	conswitchp = &prom_con;
 #endif
+
+	/* Work out if we are starfire early on */
+	check_if_starfire();
 
 	boot_flags_init(*cmdline_p);
 

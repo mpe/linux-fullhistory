@@ -1057,6 +1057,7 @@ _static int uhci_unlink_urb_sync (uhci_t *s, urb_t *urb)
 	uhci_desc_t *qh;
 	urb_priv_t *urb_priv;
 	unsigned long flags=0;
+	struct usb_device *usb_dev;
 
 	spin_lock_irqsave (&s->urb_list_lock, flags);
 
@@ -1103,11 +1104,13 @@ _static int uhci_unlink_urb_sync (uhci_t *s, urb_t *urb)
 #else
 		kfree (urb->hcpriv);
 #endif
+		usb_dev = urb->dev;
 		if (urb->complete) {
 			dbg("unlink_urb: calling completion");
+			urb->dev = NULL;
 			urb->complete ((struct urb *) urb);
 		}
-		usb_dec_dev_use (urb->dev);
+		usb_dec_dev_use (usb_dev);
 	}
 	else {
 		if (!in_interrupt())	
@@ -1171,6 +1174,7 @@ _static void uhci_cleanup_unlink(uhci_t *s, int force)
 
 			if (urb->complete) {
 				spin_unlock(&s->urb_list_lock);
+				urb->dev = NULL;
 				urb->complete ((struct urb *) urb);
 				spin_lock(&s->urb_list_lock);
 			}
@@ -2082,6 +2086,7 @@ _static int rh_submit_urb (urb_t *urb)
 
 	urb->actual_length = len;
 	urb->status = stat;
+	urb->dev=NULL;
 	if (urb->complete)
 		urb->complete (urb);
 	return 0;
@@ -2484,7 +2489,6 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 	int ret = 0;
 	urb_t *urb;
 
-
 	urb=list_entry (p, urb_t, urb_list);
 	//dbg("process_urb: found queued urb: %p", urb);
 
@@ -2508,6 +2512,9 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 
 	if (urb->status != -EINPROGRESS) {
 		int proceed = 0;
+		struct usb_device *usb_dev;
+		
+		usb_dev=urb->dev;
 
 		/* Release bandwidth for Interrupt or Iso transfers */
 		if (urb->bandwidth) {
@@ -2549,9 +2556,12 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 			// In case you need the current URB status for your completion handler (before resubmit)
 			if (urb->complete && (!proceed )) {
 				dbg("process_transfer: calling early completion");
+				urb->dev = NULL;
 				urb->complete ((struct urb *) urb);
-				if (!proceed && is_ring && (urb->status != -ENOENT))
+				if (!proceed && is_ring && (urb->status != -ENOENT)) {
+					urb->dev=usb_dev;
 					uhci_submit_urb (urb);
+				}
 			}
 
 			if (proceed && urb->next) {
@@ -2567,11 +2577,13 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 
 				if (urb->complete) {
 					dbg("process_transfer: calling completion");
+					urb->dev=NULL;
 					urb->complete ((struct urb *) urb);
 				}
 			}
-
-			usb_dec_dev_use (urb->dev);
+			
+			urb->dev=NULL; // Just in case no completion was called
+			usb_dec_dev_use (usb_dev);
 			spin_unlock(&urb->lock);		
 			spin_lock(&s->urb_list_lock);
 		}

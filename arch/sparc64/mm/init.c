@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.155 2000/09/09 00:02:19 davem Exp $
+/*  $Id: init.c,v 1.156 2000/09/21 06:34:48 anton Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -29,6 +29,7 @@
 #include <asm/mmu_context.h>
 #include <asm/vaddrs.h>
 #include <asm/dma.h>
+#include <asm/starfire.h>
 
 extern void device_scan(void);
 
@@ -200,7 +201,7 @@ static void inherit_prom_mappings(void)
 
 	for (i = 0; i < n; i++) {
 		unsigned long vaddr;
-		
+
 		if (trans[i].virt >= 0xf0000000 && trans[i].virt < 0x100000000) {
 			for (vaddr = trans[i].virt;
 			     vaddr < trans[i].virt + trans[i].size;
@@ -808,7 +809,6 @@ unsigned long __init bootmem_init(unsigned long *pages_avail)
 	unsigned long bootmap_pfn, bytes_avail, size;
 	int i;
 
-
 	bytes_avail = 0UL;
 	for (i = 0; sp_banks[i].num_bytes != 0; i++) {
 		end_of_phys_memory = sp_banks[i].base_addr +
@@ -999,12 +999,7 @@ void __init paging_init(void)
 	 */
 	{
 		extern void setup_tba(int);
-		int is_starfire = prom_finddevice("/ssp-serial");
-		if (is_starfire != 0 && is_starfire != -1)
-			is_starfire = 1;
-		else
-			is_starfire = 0;
-		setup_tba(is_starfire);
+		setup_tba(this_is_starfire);
 	}
 
 	inherit_locked_prom_mappings(1);

@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.93 2000/08/31 10:00:39 anton Exp $
+/* $Id: irq.c,v 1.94 2000/09/21 06:27:10 anton Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -31,6 +31,7 @@
 #include <asm/smp.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
+#include <asm/starfire.h>
 
 /* Internal flag, should not be visible elsewhere at all. */
 #define SA_IMAP_MASKED		0x100
@@ -123,7 +124,6 @@ int get_irq_list(char *buf)
 /* Now these are always passed a true fully specified sun4u INO. */
 void enable_irq(unsigned int irq)
 {
-	extern int this_is_starfire;
 	struct ino_bucket *bucket = __bucket(irq);
 	unsigned long imap;
 	unsigned long tid;
@@ -139,9 +139,6 @@ void enable_irq(unsigned int irq)
 				     : "i" (ASI_UPA_CONFIG));
 		tid = ((tid & UPA_CONFIG_MID) << 9);
 	} else {
-		extern unsigned int starfire_translate(unsigned long imap,
-						       unsigned int upaid);
-
 		tid = (starfire_translate(imap, current->processor) << 26);
 	}
 
@@ -715,7 +712,6 @@ void handler_irq(int irq, struct pt_regs *regs)
 	struct ino_bucket *bp, *nbp;
 	int cpu = smp_processor_id();
 #ifdef CONFIG_SMP
-	extern int this_is_starfire;
 	int should_forward = (this_is_starfire == 0	&&
 			      irq < 10			&&
 			      current->pid != 0);
@@ -1029,7 +1025,6 @@ void init_timers(void (*cfunc)(int, void *, struct pt_regs *),
 #ifdef CONFIG_SMP
 static int retarget_one_irq(struct irqaction *p, int goal_cpu)
 {
-	extern int this_is_starfire;
 	struct ino_bucket *bucket = __bucket(p->mask);
 	unsigned long imap = bucket->imap;
 	unsigned int tid;
@@ -1041,9 +1036,6 @@ static int retarget_one_irq(struct irqaction *p, int goal_cpu)
 	if(this_is_starfire == 0) {
 		tid = __cpu_logical_map[goal_cpu] << 26;
 	} else {
-		extern unsigned int starfire_translate(unsigned long imap,
-						       unsigned int upaid);
-
 		tid = (starfire_translate(imap, __cpu_logical_map[goal_cpu]) << 26);
 	}
 	upa_writel(IMAP_VALID | (tid & IMAP_TID), imap);

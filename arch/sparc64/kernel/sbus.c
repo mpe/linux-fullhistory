@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.11 2000/04/14 09:13:04 davem Exp $
+/* $Id: sbus.c,v 1.12 2000/09/21 06:25:14 anton Exp $
  * sbus.c: UltraSparc SBUS controller support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -18,6 +18,7 @@
 #include <asm/cache.h>
 #include <asm/dma.h>
 #include <asm/irq.h>
+#include <asm/starfire.h>
 
 #include "iommu_common.h"
 
@@ -1151,15 +1152,10 @@ void __init sbus_iommu_init(int prom_node, struct sbus_bus *sbus)
 	upa_writeq(control, iommu->sbus_control_reg);
 
 	/* Now some Xfire specific grot... */
-	{
-		extern void *starfire_hookup(int);
-		extern int this_is_starfire;
-
-		if (this_is_starfire)
-			sbus->starfire_cookie = starfire_hookup(sbus->portid);
-		else
-			sbus->starfire_cookie = NULL;
-	}
+	if (this_is_starfire)
+		sbus->starfire_cookie = starfire_hookup(sbus->portid);
+	else
+		sbus->starfire_cookie = NULL;
 
 	sysio_register_error_handlers(sbus);
 }

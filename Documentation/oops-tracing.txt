@@ -1,7 +1,8 @@
 Quick Summary
 -------------
 
-Install ksymoops from ftp://ftp.ocs.com.au/pub/ksymoops
+Install ksymoops from
+ftp://ftp.<country>.kernel.org/pub/linux/utils/kernel/ksymoops
 Read the ksymoops man page.
 ksymoops < the_oops.txt
 

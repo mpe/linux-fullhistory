@@ -8,19 +8,12 @@
 
 #include <linux/config.h>
 
-#ifdef CONFIG_SMP
-/* This is a temporary measure. -DaveM */
 typedef struct { volatile int counter; } atomic_t;
-#define ATOMIC_INIT(i)	{ (i << 8) }
-#else
-typedef struct { int counter; } atomic_t;
-#define ATOMIC_INIT(i)  { (i) }
-#endif
 
 #ifdef __KERNEL__
-
 #ifndef CONFIG_SMP
 
+#define ATOMIC_INIT(i)  { (i) }
 #define atomic_read(v)          ((v)->counter)
 #define atomic_set(v, i)        (((v)->counter) = i)
 
@@ -38,6 +31,8 @@ typedef struct { int counter; } atomic_t;
  *	----------------------------------------
  *	 31                          8 7      0
  */
+
+#define ATOMIC_INIT(i)	{ (i << 8) }
 
 static __inline__ int atomic_read(atomic_t *v)
 {

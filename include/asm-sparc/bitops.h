@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.60 2000/08/10 23:49:16 davem Exp $
+/* $Id: bitops.h,v 1.61 2000/09/23 02:11:22 davem Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -155,6 +155,9 @@ extern __inline__ void change_bit(unsigned long nr, volatile void *addr)
 }
 
 #endif /* __KERNEL__ */
+
+#define smp_mb__before_clear_bit()	do { } while(0)
+#define smp_mb__after_clear_bit()	do { } while(0)
 
 /* The following routine need not be atomic. */
 extern __inline__ int test_bit(int nr, __const__ void *addr)

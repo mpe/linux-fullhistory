@@ -1,7 +1,8 @@
-/* $Id: starfire.c,v 1.5 2000/01/31 04:59:12 davem Exp $
+/* $Id: starfire.c,v 1.7 2000/09/22 23:02:13 davem Exp $
  * starfire.c: Starfire/E10000 support.
  *
  * Copyright (C) 1998 David S. Miller (davem@redhat.com)
+ * Copyright (C) 2000 Anton Blanchard (anton@linuxcare.com)
  */
 
 #include <linux/kernel.h>
@@ -11,23 +12,31 @@
 #include <asm/oplib.h>
 #include <asm/smp.h>
 #include <asm/upa.h>
+#include <asm/starfire.h>
 
-/* A few places around the kernel check this to see if
+/*
+ * A few places around the kernel check this to see if
  * they need to call us to do things in a Starfire specific
  * way.
  */
 int this_is_starfire = 0;
 
-void starfire_check(void)
+void check_if_starfire(void)
 {
 	int ssnode = prom_finddevice("/ssp-serial");
+	if(ssnode != 0 && ssnode != -1)
+		this_is_starfire = 1;
+}
 
-	if(ssnode != 0 && ssnode != -1) {
+void starfire_cpu_setup(void)
+{
+	if (this_is_starfire) {
+/* We do this in starfire_translate - Anton */
+#if 0
 		int i;
 
-		this_is_starfire = 1;
-
-		/* Now must fixup cpu MIDs.  OBP gave us a logical
+		/*
+		 * Now must fixup cpu MIDs.  OBP gave us a logical
 		 * linear cpuid number, not the real upaid.
 		 */
 		for(i = 0; i < linux_num_cpus; i++) {
@@ -39,6 +48,7 @@ void starfire_check(void)
 
 			linux_cpus[i].mid = mid;
 		}
+#endif
 	}
 }
 
@@ -47,7 +57,8 @@ int starfire_hard_smp_processor_id(void)
 	return upa_readl(0x1fff40000d0UL);
 }
 
-/* Each Starfire board has 32 registers which perform translation
+/*
+ * Each Starfire board has 32 registers which perform translation
  * and delivery of traditional interrupt packets into the extended
  * Starfire hardware format.  Essentially UPAID's now have 2 more
  * bits than in all previous Sun5 systems.
@@ -82,6 +93,9 @@ void *starfire_hookup(int upaid)
 	for(i = 0; i < 32; i++) {
 		p->imap_slots[i] = 0UL;
 		p->tregs[i] = treg_base + (i * 0x10UL);
+		/* Lets play it safe and not overwrite existing mappings */
+		if (upa_readl(p->tregs[i]) != 0)
+			p->imap_slots[i] = 0xdeadbeaf;
 	}
 	p->upaid = upaid;
 	p->next = sflist;
@@ -116,6 +130,12 @@ unsigned int starfire_translate(unsigned long imap,
 		panic("Lucy in the sky....");
 	}
 	p->imap_slots[i] = imap;
+
+	/* map to real upaid */
+	upaid = (((upaid & 0x3c) << 1) |
+	       ((upaid & 0x40) >> 4) |
+	       (upaid & 0x3));
+
 	upa_writel(upaid, p->tregs[i]);
 
 	return i;

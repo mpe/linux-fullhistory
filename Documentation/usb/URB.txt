@@ -44,7 +44,7 @@ typedef struct urb
 
 // status after each completion
 	int status;                     // returned status
-	unsigned int transfer_flags;    // ASAP, SP_OK, EARLY_COMPLETE
+	unsigned int transfer_flags;    // ASAP, SP_OK, etc.
 
 // for data stage (CTRL), BULK, INT and ISO
 	void *transfer_buffer;          // associated data buffer
@@ -105,10 +105,9 @@ For ASAP set USB_ISO_ASAP in transfer_flags.
 If short packets should NOT be tolerated, set USB_DISABLE_SPD in 
 transfer_flags.
 
-Usually, (to reduce restart time) the completion handler is called
-AFTER the URB re-submission. You can get the other way by setting
-USB_URB_EARLY_COMPLETE in transfer_flags. This is implicit for
-INT transfers.
+Usually, to reduce restart time, the completion handler is called
+AFTER the URB re-submission.  However, it is called BEFORE URB
+re-submission for INT transfers that are being continued.
 
 
 1.5. How to submit an URB?
@@ -172,10 +171,12 @@ In the completion handler, you should have a look at urb->status to
 detect any USB errors. Since the context parameter is included in the URB,
 you can pass information to the completion handler. 
 
-Avoid using the urb->dev field in your completion handler; it's cleared
+NOTE:  ***** WARNING *****
+AVOID using the urb->dev field in your completion handler; it's cleared
 as part of URB unlinking.  Instead, use urb->context to hold all the
 data your driver needs.
 
+NOTE:  ***** WARNING *****
 Also, NEVER SLEEP IN A COMPLETION HANDLER.  These are normally called
 during hardware interrupt processing.  If you can, defer substantial
 work to a tasklet (bottom half) to keep system latencies low.  You'll

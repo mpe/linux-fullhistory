@@ -2,6 +2,7 @@
 #define _ALPHA_BITOPS_H
 
 #include <linux/config.h>
+#include <linux/kernel.h>
 
 /*
  * Copyright 1994, Linus Torvalds.

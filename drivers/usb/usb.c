@@ -35,6 +35,11 @@
 #endif
 #include <linux/usb.h>
 
+#define DEVNUM_ROUND_ROBIN	/***** OPTION *****/
+#ifdef DEVNUM_ROUND_ROBIN
+static int devnum_next = 1;
+#endif
+
 static const int usb_bandwidth_option =
 #ifdef CONFIG_USB_BANDWIDTH
 				1;
@@ -1470,7 +1475,19 @@ void usb_connect(struct usb_device *dev)
 	 * which hopefully doesn't run on multiple CPU's simultaneously 8-)
 	 */
 	dev->descriptor.bMaxPacketSize0 = 8;  /* Start off at 8 bytes  */
+#ifndef DEVNUM_ROUND_ROBIN
 	devnum = find_next_zero_bit(dev->bus->devmap.devicemap, 128, 1);
+#else	/* round_robin alloc of devnums */
+	/* Try to allocate the next devnum beginning at devnum_next. */
+	devnum = find_next_zero_bit(dev->bus->devmap.devicemap, 128, devnum_next);
+	if (devnum >= 128)
+		devnum = find_next_zero_bit(dev->bus->devmap.devicemap, 128, 1);
+
+	devnum_next = devnum + 1;
+	if (devnum_next >= 128)
+		devnum_next = 1;
+#endif	/* round_robin alloc of devnums */
+
 	if (devnum < 128) {
 		set_bit(devnum, dev->bus->devmap.devicemap);
 		dev->devnum = devnum;

@@ -23,7 +23,7 @@ typedef struct
 	wait_queue_head_t wait;
 	wait_queue_head_t remove_ok;
 	spinlock_t lock;
-	volatile atomic_t pending_io;
+	atomic_t pending_io;
 	driver_state_t state;
 	int remove_pending;
 	int got_mem;

@@ -107,24 +107,12 @@ typedef struct td {
   	__u32 hwBE;		/* Memory Buffer End Pointer */
   	__u16 hwPSW[MAXPSW];
 
-  	__u8 type;
+  	__u8 unused;
   	__u8 index;
   	struct ed * ed;
   	struct td * next_dl_td;
   	urb_t * urb;
 } td_t;
-
-
-/* TD types */
-#define BULK		0x03
-#define INT			0x01
-#define CTRL		0x02
-#define ISO			0x00
- 
-#define SEND            0x01
-#define ST_ADDR         0x02
-#define ADD_LEN         0x04
-#define DEL             0x08
 
 
 #define OHCI_ED_SKIP	(1 << 14)
@@ -347,7 +335,7 @@ typedef struct
 	__u16 length;	// number of tds associated with this request
 	__u16 td_cnt;	// number of tds already serviced
 	int   state;
-	void * wait;
+	wait_queue_head_t * wait;
 	td_t * td[0];	// list pointer to all corresponding TDs associated with this request
 
 } urb_priv_t;
@@ -398,7 +386,7 @@ typedef struct ohci {
 struct ohci_device {
 	ed_t 	ed[NUM_EDS];
 	int ed_cnt;
-	void  * wait;
+	wait_queue_head_t * wait;
 };
 
 // #define ohci_to_usb(ohci)	((ohci)->usb)

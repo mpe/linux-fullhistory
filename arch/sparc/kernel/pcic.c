@@ -1,4 +1,4 @@
-/* $Id: pcic.c,v 1.17 2000/09/05 06:49:44 anton Exp $
+/* $Id: pcic.c,v 1.18 2000/09/25 06:09:12 anton Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -34,11 +34,6 @@
 #include <asm/uaccess.h>
 
 #ifndef CONFIG_PCI
-
-int pcibios_present(void)
-{
-	return 0;
-}
 
 asmlinkage int sys_pciconfig_read(unsigned long bus,
 				  unsigned long dfn,
@@ -976,7 +971,6 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 	if(!suser())
 		return -EPERM;
 
-	lock_kernel();
 	switch(len) {
 	case 1:
 		err = get_user(ubyte, (unsigned char *)buf);
@@ -1004,7 +998,6 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 		break;
 
 	};
-	unlock_kernel();
 
 	return err;
 }			   

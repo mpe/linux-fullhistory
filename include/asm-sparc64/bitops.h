@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.30 2000/08/10 23:49:16 davem Exp $
+/* $Id: bitops.h,v 1.31 2000/09/23 02:09:21 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -19,6 +19,9 @@ extern long __test_and_change_bit(unsigned long nr, volatile void *addr);
 #define set_bit(nr,addr)		((void)__test_and_set_bit(nr,addr))
 #define clear_bit(nr,addr)		((void)__test_and_clear_bit(nr,addr))
 #define change_bit(nr,addr)		((void)__test_and_change_bit(nr,addr))
+
+#define smp_mb__before_clear_bit()	do { } while(0)
+#define smp_mb__after_clear_bit()	do { } while(0)
 
 extern __inline__ int test_bit(int nr, __const__ void *addr)
 {

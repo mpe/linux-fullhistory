@@ -1,4 +1,4 @@
-/* $Id: central.c,v 1.13 1999/12/01 10:44:43 davem Exp $
+/* $Id: central.c,v 1.14 2000/09/21 06:25:14 anton Exp $
  * central.c: Central FHC driver for Sunfire/Starfire/Wildfire.
  *
  * Copyright (C) 1997, 1999 David S. Miller (davem@redhat.com)
@@ -15,6 +15,7 @@
 
 #include <asm/page.h>
 #include <asm/fhc.h>
+#include <asm/starfire.h>
 
 struct linux_central *central_bus = NULL;
 struct linux_fhc *fhc_list = NULL;
@@ -254,9 +255,8 @@ void central_probe(void)
 
 	cnode = prom_finddevice("/central");
 	if(cnode == 0 || cnode == -1) {
-		extern void starfire_check(void);
-
-		starfire_check();
+		if (this_is_starfire)
+			starfire_cpu_setup();
 		return;
 	}
 

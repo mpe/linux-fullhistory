@@ -24,7 +24,6 @@ unsigned long pci_memspace_mask = 0xffffffffUL;
 
 #ifndef CONFIG_PCI
 /* A "nop" PCI implementation. */
-int pcibios_present(void) { return 0; }
 asmlinkage int sys_pciconfig_read(unsigned long bus, unsigned long dfn,
 				  unsigned long off, unsigned long len,
 				  unsigned char *buf)
@@ -316,7 +315,6 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 		goto out;
 	}
 
-	lock_kernel();
 	switch(len) {
 	case 1:
 		err = get_user(byte, (u8 *)buf);
@@ -344,7 +342,6 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 		break;
 
 	};
-	unlock_kernel();
 
 out:
 	return err;

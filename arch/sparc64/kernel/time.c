@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.29 2000/09/16 07:33:45 davem Exp $
+/* $Id: time.c,v 1.32 2000/09/22 23:02:13 davem Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -30,6 +30,7 @@
 #include <asm/fhc.h>
 #include <asm/pbm.h>
 #include <asm/ebus.h>
+#include <asm/starfire.h>
 
 extern rwlock_t xtime_lock;
 
@@ -305,6 +306,20 @@ void __init clock_probe(void)
 	struct linux_ebus *ebus = NULL;
 #endif
 
+
+	if (this_is_starfire) {
+		/* davem suggests we keep this within the 4M locked kernel image */
+		static char obp_gettod[256];
+		static u32 unix_tod;
+
+		sprintf(obp_gettod, "h# %08x unix-gettod",
+			(unsigned int) (long) &unix_tod);
+		prom_feval(obp_gettod);
+		xtime.tv_sec = unix_tod;
+		xtime.tv_usec = 0;
+		return;
+	}
+
 	__save_and_cli(flags);
 
 	if(central_bus != NULL) {
@@ -473,6 +488,9 @@ static __inline__ unsigned long do_gettimeoffset(void)
 
 void do_settimeofday(struct timeval *tv)
 {
+	if (this_is_starfire)
+		return;
+
 	write_lock_irq(&xtime_lock);
 
 	tv->tv_usec -= do_gettimeoffset();
@@ -496,7 +514,10 @@ static int set_rtc_mmss(unsigned long nowtime)
 	unsigned long regs = mstk48t02_regs;
 	u8 tmp;
 
-	/* Not having a register set can lead to trouble. */
+	/* 
+	 * Not having a register set can lead to trouble.
+	 * Also starfire doesnt have a tod clock.
+	 */
 	if (!regs) 
 		return -1;
 

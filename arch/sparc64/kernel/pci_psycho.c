@@ -1,4 +1,4 @@
-/* $Id: pci_psycho.c,v 1.16 2000/04/15 10:06:16 davem Exp $
+/* $Id: pci_psycho.c,v 1.17 2000/09/21 06:25:14 anton Exp $
  * pci_psycho.c: PSYCHO/U2P specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -15,6 +15,7 @@
 #include <asm/pbm.h>
 #include <asm/iommu.h>
 #include <asm/irq.h>
+#include <asm/starfire.h>
 
 #include "pci_impl.h"
 
@@ -1254,8 +1255,6 @@ static void __init psycho_scan_bus(struct pci_controller_info *p)
 
 static void __init psycho_iommu_init(struct pci_controller_info *p)
 {
-	extern int this_is_starfire;
-	extern void *starfire_hookup(int);
 	unsigned long tsbbase, i;
 	u64 control;
 

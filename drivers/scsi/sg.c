@@ -19,7 +19,7 @@
  */
 #include <linux/config.h>
 #ifdef CONFIG_PROC_FS
- static char * sg_version_str = "Version: 3.1.17 (20000921)";
+ static char * sg_version_str = "Version: 3.1.17 (20001002)";
 #endif
  static int sg_version_num = 30117; /* 2 digits for each component */
 /*
@@ -69,9 +69,7 @@
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
 static int sg_proc_init(void);
-#ifdef MODULE
 static void sg_proc_cleanup(void);
-#endif
 #endif
 
 #ifndef LINUX_VERSION_CODE
@@ -271,7 +269,8 @@ static int sg_open(struct inode * inode, struct file * filp)
      * else try and use this device.  Also, if error recovery fails, it
      * may try and take the device offline, in which case all further
      * access to the device is prohibited.  */
-    if(! scsi_block_when_processing_errors(sdp->device))
+    if (! ((flags & O_NONBLOCK) || 
+	   scsi_block_when_processing_errors(sdp->device)))
         return -ENXIO;
 
     SCSI_LOG_TIMEOUT(3, printk("sg_open: dev=%d, flags=0x%x\n", dev, flags));
@@ -279,7 +278,7 @@ static int sg_open(struct inode * inode, struct file * filp)
     if (flags & O_EXCL) {
         if (O_RDONLY == (flags & O_ACCMODE))
             return -EACCES;   /* Can't lock it with read only access */
-        if (sdp->headfp && (filp->f_flags & O_NONBLOCK))
+        if (sdp->headfp && (flags & O_NONBLOCK))
             return -EBUSY;
         res = 0;  /* following is a macro that beats race condition */
 	__wait_event_interruptible(sdp->o_excl_wait,
@@ -289,7 +288,7 @@ static int sg_open(struct inode * inode, struct file * filp)
             return res; /* -ERESTARTSYS because signal hit process */
     }
     else if (sdp->exclude) { /* some other fd has an exclusive lock on dev */
-        if (filp->f_flags & O_NONBLOCK)
+        if (flags & O_NONBLOCK)
             return -EBUSY;
         res = 0;  /* following is a macro that beats race condition */
         __wait_event_interruptible(sdp->o_excl_wait, (! sdp->exclude), res);
@@ -353,9 +352,6 @@ static ssize_t sg_read(struct file * filp, char * buf,
         return -ENXIO;
     SCSI_LOG_TIMEOUT(3, printk("sg_read: dev=%d, count=%d\n",
                                MINOR(sdp->i_rdev), (int)count));
-
-    if(! scsi_block_when_processing_errors(sdp->device))
-        return -ENXIO;
     if (ppos != &filp->f_pos)
         ; /* FIXME: Hmm.  Seek to the right place, or fail?  */
     if ((k = verify_area(VERIFY_WRITE, buf, count)))
@@ -451,15 +447,11 @@ static ssize_t sg_read(struct file * filp, char * buf,
 static ssize_t sg_new_read(Sg_fd * sfp, char * buf, size_t count,
 			   Sg_request * srp)
 {
-    Sg_device           * sdp = sfp->parentdp;
     sg_io_hdr_t         * hp = &srp->header;
     int                   k, len;
 
-    if(! scsi_block_when_processing_errors(sdp->device) )
-	return -ENXIO;
     if (count < size_sg_io_hdr)
 	return -EINVAL;
-
     hp->sb_len_wr = 0;
     if ((hp->mx_sb_len > 0) && hp->sbp) {
 	if ((CHECK_CONDITION & hp->masked_status) ||
@@ -503,7 +495,8 @@ static ssize_t sg_write(struct file * filp, const char * buf,
     SCSI_LOG_TIMEOUT(3, printk("sg_write: dev=%d, count=%d\n",
                                MINOR(sdp->i_rdev), (int)count));
 
-    if(! scsi_block_when_processing_errors(sdp->device) )
+    if (! ((filp->f_flags & O_NONBLOCK) ||
+           scsi_block_when_processing_errors(sdp->device)))
         return -ENXIO;
     if (ppos != &filp->f_pos)
         ; /* FIXME: Hmm.  Seek to the right place, or fail?  */
@@ -712,8 +705,6 @@ static int sg_ioctl(struct inode * inode, struct file * filp,
         return -ENXIO;
     SCSI_LOG_TIMEOUT(3, printk("sg_ioctl: dev=%d, cmd=0x%x\n",
                                MINOR(sdp->i_rdev), (int)cmd_in));
-    if(! scsi_block_when_processing_errors(sdp->device) )
-        return -ENXIO;
     read_only = (O_RDWR != (filp->f_flags & O_ACCMODE));
 
     switch(cmd_in)
@@ -885,7 +876,11 @@ static int sg_ioctl(struct inode * inode, struct file * filp,
     case SG_EMULATED_HOST:
         return put_user(sdp->device->host->hostt->emulated, (int *)arg);
     case SG_SCSI_RESET:
-        if (! scsi_block_when_processing_errors(sdp->device))
+        if (filp->f_flags & O_NONBLOCK) {
+	    if (sdp->device->host->in_recovery)
+		return -EBUSY;
+	}
+	else if (! scsi_block_when_processing_errors(sdp->device))
             return -EBUSY;
         result = get_user(val, (int *)arg);
         if (result) return result;
@@ -1301,16 +1296,14 @@ static void sg_detach(Scsi_Device * scsidp)
     return;
 }
 
-#ifdef MODULE
+MODULE_AUTHOR("Douglas Gilbert");
+MODULE_DESCRIPTION("SCSI generic (sg) driver");
 MODULE_PARM(def_reserved_size, "i");
 MODULE_PARM_DESC(def_reserved_size, "size of buffer reserved for each fd");
-#endif /* MODULE */
 
 static int __init init_sg(void) {
-#ifdef MODULE
     if (def_reserved_size >= 0)
 	sg_big_buff = def_reserved_size;
-#endif /* MODULE */
     sg_template.module = THIS_MODULE;
     return scsi_register_module(MODULE_SCSI_DEV, &sg_template);
 }
@@ -2551,7 +2544,6 @@ static int sg_proc_init()
     return 0;
 }
 
-#ifdef MODULE
 static void sg_proc_cleanup()
 {
     int k;
@@ -2563,7 +2555,6 @@ static void sg_proc_cleanup()
 	remove_proc_entry(sg_proc_leaf_names[k], sg_proc_sgp);
     remove_proc_entry(sg_proc_sg_dirname, proc_scsi);
 }
-#endif
 
 static int sg_proc_dressz_read(char * buffer, char ** start, off_t offset,
 			       int size, int * eof, void * data)

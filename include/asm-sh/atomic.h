@@ -7,8 +7,6 @@
  *
  */
 
-#include <linux/config.h>
-
 typedef struct { volatile int counter; } atomic_t;
 
 #define ATOMIC_INIT(i)	( (atomic_t) { (i) } )

@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.83 2000/08/04 05:35:55 davem Exp $ */
+/* $Id: system.h,v 1.84 2000/09/23 02:11:22 davem Exp $ */
 #include <linux/config.h>
 
 #ifndef __SPARC_SYSTEM_H
@@ -280,6 +280,9 @@ extern void __global_restore_flags(unsigned long flags);
 #define wmb()	mb()
 #define set_mb(__var, __value)  do { __var = __value; mb(); } while(0)
 #define set_wmb(__var, __value) set_mb(__var, __value)
+#define smp_mb()	__asm__ __volatile__("":::"memory");
+#define smp_rmb()	__asm__ __volatile__("":::"memory");
+#define smp_wmb()	__asm__ __volatile__("":::"memory");
 
 #define nop() __asm__ __volatile__ ("nop");
 
