@@ -225,28 +225,12 @@ source "arch/arm/mach-versatile/Kconfig"
 config ARCH_ACORN
 	bool
 
-config TIMER_ACORN
-	bool
-
-#####################################################################
-# SA1111 support
-config SA1111
-	bool
-	select DMABOUNCE
-
-config SHARP_LOCOMO
-	bool
-
-config SHARP_SCOOP
-	bool
+source "arch/arm/common/Kconfig"
 
 config FORCE_MAX_ZONEORDER
 	int
 	depends on SA1111
 	default "9"
-
-config DMABOUNCE
-	bool
 
 source arch/arm/mm/Kconfig
 
@@ -318,12 +302,6 @@ config PCI_HOST_VIA82C505
 	bool
 	depends on PCI && ARCH_SHARK
 	default y
-
-config ICST525
-	bool
-
-config ICST307
-	bool
 
 config ARM_AMBA
 	bool
