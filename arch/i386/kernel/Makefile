@@ -30,9 +30,10 @@ ifdef CONFIG_MCA
 O_OBJS += mca.o
 endif
 
+
 ifdef SMP
 
-O_OBJS += smp.o trampoline.o
+O_OBJS += io_apic.o smp.o trampoline.o
 
 head.o: head.S $(TOPDIR)/include/linux/tasks.h
 	$(CC) -D__ASSEMBLY__ -D__SMP__ -traditional -c $*.S -o $*.o

@@ -593,7 +593,7 @@ struct task_struct *apmmu_alloc_task_struct(void)
 
 static unsigned long apmmu_alloc_kernel_stack(struct task_struct *tsk)
 {
-	unsigned long kstk = __get_free_pages(GFP_KERNEL, 1, 0);
+	unsigned long kstk = __get_free_pages(GFP_KERNEL, 1);
 
 	if(!kstk)
 		kstk = (unsigned long) vmalloc(PAGE_SIZE << 1);

@@ -56,7 +56,7 @@ static char    *pas_model_names[] = {
 
 extern void     mix_write(unsigned char data, int ioaddr);
 
-unsigned charpas_read(int ioaddr)
+unsigned char pas_read(int ioaddr)
 {
 	return inb(ioaddr ^ translate_code);
 }

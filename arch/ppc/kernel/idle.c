@@ -236,7 +236,7 @@ int zero_paged(void *unused)
 		 * If we're interrupted we keep this page and our place in it
 		 * since we validly hold it and it's reserved for us.
 		 */
-		pageptr = __get_free_pages(GFP_ATOMIC, 0, 0 );
+		pageptr = __get_free_pages(GFP_ATOMIC, 0);
 		if ( !pageptr )
 			goto retry;
 		

@@ -1784,8 +1784,8 @@ int acsi_init( void )
 		return -EBUSY;
 	}
 
-	if (!(acsi_buffer = (char *)__get_free_pages(GFP_KERNEL,
-						     ACSI_BUFFER_ORDER, 1))) {
+	if (!(acsi_buffer = (char *)__get_free_pages(GFP_KERNEL | GFP_DMA,
+						     ACSI_BUFFER_ORDER))) {
 		printk( KERN_ERR "Unable to get ACSI ST-Ram buffer.\n" );
 		unregister_blkdev( MAJOR_NR, "ad" );
 		return -ENOMEM;

@@ -218,6 +218,7 @@ out:
 	return error;
 }
 
+spinlock_t console_lock;
 
 asmlinkage int printk(const char *fmt, ...)
 {
@@ -230,6 +231,7 @@ asmlinkage int printk(const char *fmt, ...)
 
 	__save_flags(flags);
 	__cli();
+	spin_lock(&console_lock);
 	va_start(args, fmt);
 	i = vsprintf(buf + 3, fmt, args); /* hopefully i < sizeof(buf)-4 */
 	buf_end = buf + 3 + i;
@@ -277,8 +279,9 @@ asmlinkage int printk(const char *fmt, ...)
 		if (line_feed)
 			msg_level = -1;
 	}
+	spin_unlock(&console_lock);
 	__restore_flags(flags);
-	wake_up_interruptible(&log_wait);
+/*	wake_up_interruptible(&log_wait);*/
 	return i;
 }
 
@@ -394,6 +397,26 @@ void register_console(struct console * console)
 	}
 }
 
+
+int unregister_console(struct console * console)
+{
+        struct console *a,*b;
+	
+	if (console_drivers == console) {
+		console_drivers=console->next;
+		return (0);
+	}
+	for (a=console_drivers->next, b=console_drivers ;
+	     a; b=a, a=b->next) {
+		if (a == console) {
+			b->next = a->next;
+			return 0;
+		}  
+	}
+	
+	return (1);
+}
+	
 /*
  * Write a message to a certain tty, not just the console. This is used for
  * messages that need to be redirected to a specific tty.

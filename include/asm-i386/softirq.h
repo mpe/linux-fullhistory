@@ -33,6 +33,7 @@ extern inline void disable_bh(int nr)
 {
 	bh_mask &= ~(1 << nr);
 	bh_mask_count[nr]++;
+	synchronize_irq();
 }
 
 extern inline void enable_bh(int nr)

@@ -116,7 +116,7 @@ typedef char floppy_drive_name[16];
  * Drive parameters (user modifiable)
  */
 struct floppy_drive_params {
-	char cmos;			/* cmos type */
+	signed char cmos;		/* cmos type */
 	
 	/* Spec2 is (HLD<<1 | ND), where HLD is head load time (1=2ms, 2=4 ms 
 	 * etc) and ND is set means no DMA. Hardcoded to 6 (HLD=6ms, use DMA).

@@ -49,7 +49,7 @@ void ap_ringbuf_init(void)
 
 	/* preallocate some ringbuffers */
 	for (i=0;i<RBUF_RESERVED;i++) {
-		if (!(rb_ptr = (char *)__get_free_pages(GFP_ATOMIC,RBUF_RESERVED_ORDER,0))) {
+		if (!(rb_ptr = (char *)__get_free_pages(GFP_ATOMIC,RBUF_RESERVED_ORDER))) {
 			printk("failed to preallocate ringbuf %d\n",i);
 			return;
 		}
@@ -160,7 +160,7 @@ static int cap_map(int rb_size)
 	}
 	  
 	if (!rb_ptr) {
-		rb_ptr = (char *)__get_free_pages(GFP_USER,order,0);
+		rb_ptr = (char *)__get_free_pages(GFP_USER,order);
 		if (!rb_ptr) return -ENOMEM;
 
 		for (i = MAP_NR(rb_ptr); i <= MAP_NR(rb_ptr+rb_size-1); i++) {

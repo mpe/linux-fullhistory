@@ -69,6 +69,9 @@ if [ "$CONFIG_UFS_FS" != "n" ]; then
   bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
   bool 'Solaris (x86) partition table support' CONFIG_SOLARIS_X86_PARTITION
 fi
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'ADFS filesystem support (read only) (EXPERIMENTAL)' CONFIG_ADFS_FS
+fi
 bool 'Macintosh partition map support' CONFIG_MAC_PARTITION
 endmenu
 

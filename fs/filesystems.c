@@ -131,6 +131,10 @@ __initfunc(static void do_sys_setup(void))
 	init_autofs_fs();
 #endif
 
+#ifdef CONFIG_ADFS_FS
+	init_adfs_fs();
+#endif
+
 #ifdef CONFIG_NLS
 	init_nls();
 #endif

@@ -36,9 +36,6 @@ enum root_directory_inos {
 	PROC_KSYMS,
 	PROC_DMA,	
 	PROC_IOPORTS,
-#ifdef __SMP_PROF__
-	PROC_SMP_PROF,
-#endif
 	PROC_PROFILE, /* whether enabled or not */
 	PROC_CMDLINE,
 	PROC_SYS,

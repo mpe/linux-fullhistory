@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.77 1997/12/13 21:53:00 kuznet Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.79 1998/01/15 22:40:47 freitag Exp $
  *
  *		IPv4 specific functions
  *
@@ -41,6 +41,7 @@
  *					Added new listen sematics (ifdefed by
  *					NEW_LISTEN for now)
  *	Juan Jose Ciarlante:		ip_dynaddr bits
+ *		Andi Kleen:		various fixes.
  */
 
 #include <linux/config.h>
@@ -809,8 +810,11 @@ static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip)
 			 * dropped. This is the new "fast" path mtu
 			 * discovery.
 			 */
-			if (!sk->sock_readers)
+			if (!sk->sock_readers) {
+				lock_sock(sk); 
 				tcp_simple_retransmit(sk);
+				release_sock(sk);
+			} /* else let the usual retransmit timer handle it */
 		}
 	}
 }
@@ -822,6 +826,12 @@ static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip)
  * it's just the icmp type << 8 | icmp code.  After adjustment
  * header points to the first 8 bytes of the tcp header.  We need
  * to find the appropriate port.
+ *
+ * The locking strategy used here is very "optimistic". When
+ * someone else accesses the socket the ICMP is just dropped
+ * and for some paths there is no check at all.
+ * A more general error queue to queue errors for later handling
+ * is probably better.
  */
 
 void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
@@ -865,13 +875,15 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 
 	switch (type) {
 	case ICMP_SOURCE_QUENCH:
+#ifndef OLD_SOURCE_QUENCH /* This is deprecated */
 		tp->snd_ssthresh = max(tp->snd_cwnd >> 1, 2);
 		tp->snd_cwnd = tp->snd_ssthresh;
 		tp->high_seq = tp->snd_nxt;
+#endif
 		return;
 	case ICMP_PARAMETERPROB:
 		sk->err=EPROTO;
-		sk->error_report(sk);
+		sk->error_report(sk); /* This isn't serialized on SMP! */
 		break; 
 	case ICMP_DEST_UNREACH:
 		if (code == ICMP_FRAG_NEEDED) { /* PMTU discovery (RFC1191) */
@@ -901,7 +913,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 			 */
 			return;
 		}
-		
+
 		if (!th->syn && !th->ack)
 			return;
 		req = tcp_v4_search_req(tp, iph, th, &prev); 
@@ -931,6 +943,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	}
 	
 	if(icmp_err_convert[code].fatal || opening) {
+		/* This code isn't serialized with the socket code */
 		sk->err = icmp_err_convert[code].errno;
 		if (opening) {
 			tcp_statistics.TcpAttemptFails++;
@@ -1111,8 +1124,7 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 static void tcp_v4_or_free(struct open_request *req)
 {
 	if(!req->sk && req->af.v4_req.opt)
-		kfree_s(req->af.v4_req.opt,
-			sizeof(struct ip_options) + req->af.v4_req.opt->optlen);
+		kfree_s(req->af.v4_req.opt, optlength(req->af.v4_req.opt));
 }
 
 static inline void syn_flood_warning(struct sk_buff *skb)
@@ -1125,6 +1137,28 @@ static inline void syn_flood_warning(struct sk_buff *skb)
 		       "possible SYN flooding on port %d. Sending cookies.\n",  
 		       ntohs(skb->h.th->dest));
 	}
+}
+
+/* 
+ * Save and compile IPv4 options into the open_request if needed. 
+ */
+static inline struct ip_options * 
+tcp_v4_save_options(struct sock *sk, struct sk_buff *skb, 
+		    struct ip_options *opt)
+{
+	struct ip_options *dopt = NULL; 
+
+	if (opt && opt->optlen) {
+		int opt_size = optlength(opt); 
+		dopt = kmalloc(opt_size, GFP_ATOMIC);
+		if (dopt) {
+			if (ip_options_echo(dopt, skb)) {
+				kfree_s(dopt, opt_size);
+				dopt = NULL;
+			}
+		}
+	}
+	return dopt;
 }
 
 int sysctl_max_syn_backlog = 1024; 
@@ -1147,7 +1181,6 @@ struct or_calltable or_ipv4 = {
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, 
 						__u32 isn)
 {
-	struct ip_options *opt = (struct ip_options *) ptr;
 	struct tcp_opt tp;
 	struct open_request *req;
 	struct tcphdr *th = skb->h.th;
@@ -1217,20 +1250,8 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 
 	req->snt_isn = isn;
 
-	/* IPv4 options */
-	req->af.v4_req.opt = NULL;
+	req->af.v4_req.opt = tcp_v4_save_options(sk, skb, ptr);
 
-	if (opt && opt->optlen) {
-		int opt_size = sizeof(struct ip_options) + opt->optlen;
-
-		req->af.v4_req.opt = kmalloc(opt_size, GFP_ATOMIC);
-		if (req->af.v4_req.opt) {
-			if (ip_options_echo(req->af.v4_req.opt, skb)) {
-				kfree_s(req->af.v4_req.opt, opt_size);
-				req->af.v4_req.opt = NULL;
-			}
-		}
-	}
 	req->class = &or_ipv4;
 	req->retrans = 0;
 	req->sk = NULL;
@@ -1238,26 +1259,27 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	tcp_v4_send_synack(sk, req);
 
 	if (want_cookie) {
-		if (req->af.v4_req.opt) 
-			kfree(req->af.v4_req.opt); 
+		if (req->af.v4_req.opt)
+			kfree(req->af.v4_req.opt);
+		tcp_v4_or_free(req); 
 	   	tcp_openreq_free(req); 
-	} else 	{
+	} else {
 		req->expires = jiffies + TCP_TIMEOUT_INIT;
 		tcp_inc_slow_timer(TCP_SLT_SYNACK);
 		tcp_synq_queue(&sk->tp_pinfo.af_tcp, req);
 	}
 
 	sk->data_ready(sk, 0);
-exit:
 	return 0;
 
 dead:
 	SOCK_DEBUG(sk, "Reset on %p: Connect on dead socket.\n",sk);
 	tcp_statistics.TcpAttemptFails++;
-	return -ENOTCONN;
+	return -ENOTCONN; /* send reset */
+
 error:
 	tcp_statistics.TcpAttemptFails++;
-	goto exit;
+	return 0;
 }
 
 struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
@@ -1283,7 +1305,7 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	/* Or else we die! -DaveM */
 	newsk->sklist_next = NULL;
 
-	newsk->opt = req->af.v4_req.opt;
+	newsk->opt = req->af.v4_req.opt; 
 
 	skb_queue_head_init(&newsk->write_queue);
 	skb_queue_head_init(&newsk->receive_queue);
@@ -1472,17 +1494,22 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	if (sk->filter)
 	{
 		if (sk_filter(skb, sk->filter_data, sk->filter))
-			return -EPERM;	/* Toss packet */
+			goto discard;
 	}
 #endif /* CONFIG_FILTER */
-
-	skb_set_owner_r(skb, sk);
 
 	/*
 	 *	socket locking is here for SMP purposes as backlog rcv
 	 *	is currently called with bh processing disabled.
 	 */
 	lock_sock(sk); 
+
+	/* 
+	 * This doesn't check if the socket has enough room for the packet.
+	 * Either process the packet _without_ queueing it and then free it,
+	 * or do the check later.
+	 */
+	skb_set_owner_r(skb, sk);
 
 	if (sk->state == TCP_ESTABLISHED) { /* Fast path */
 		if (tcp_rcv_established(sk, skb, skb->h.th, skb->len))
@@ -1503,8 +1530,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		sk = nsk;
 	}
 	
-	if (tcp_rcv_state_process(sk, skb, skb->h.th, 
-				  &(IPCB(skb)->opt), skb->len))
+	if (tcp_rcv_state_process(sk, skb, skb->h.th, &(IPCB(skb)->opt), skb->len))
 		goto reset;
 	release_sock(sk); 
 	return 0;

@@ -132,6 +132,7 @@ static __inline__ void tcp_sk_unbindify(struct sock *sk)
 #define BASE_ACK_SIZE	(NETHDR_SIZE + MAX_HEADER + 15)
 #define MAX_ACK_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + MAX_HEADER + 15)
 #define MAX_RESET_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + MAX_HEADER + 15)
+#define MAX_TCPHEADER_SIZE (NETHDR_SIZE + sizeof(struct tcphdr) + 20 + MAX_HEADER + 15)
 
 #define MAX_WINDOW	32767		/* Never offer a window over 32767 without using
 					   window scaling (not yet supported). Some poor
@@ -435,7 +436,6 @@ extern int			tcp_v4_connect(struct sock *sk,
 					       struct sockaddr *uaddr,
 					       int addr_len);
 
-
 /* From syncookies.c */
 extern struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb, 
 				    struct ip_options *opt);
@@ -455,7 +455,7 @@ extern void tcp_send_partial(struct sock *);
 extern void tcp_write_wakeup(struct sock *);
 extern void tcp_send_fin(struct sock *sk);
 extern int  tcp_send_synack(struct sock *);
-extern int  tcp_send_skb(struct sock *, struct sk_buff *);
+extern void tcp_send_skb(struct sock *, struct sk_buff *);
 extern void tcp_send_ack(struct sock *sk);
 extern void tcp_send_delayed_ack(struct sock *sk, int max_timeout);
 
@@ -585,6 +585,57 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 		if (state == TCP_TIME_WAIT || state == TCP_CLOSE)
 			sk->prot->rehash(sk);
 	}
+}
+
+static __inline__ void tcp_build_options(__u32 *ptr, struct tcp_opt *tp)
+{
+	/* FIXME: We will still need to do SACK here. */
+	if (tp->tstamp_ok) {
+		*ptr = ntohl((TCPOPT_NOP << 24)
+			| (TCPOPT_NOP << 16)
+                        | (TCPOPT_TIMESTAMP << 8)
+			| TCPOLEN_TIMESTAMP);
+		/* rest filled in by tcp_update_options */
+	}
+}
+
+static __inline__ void tcp_update_options(__u32 *ptr, struct tcp_opt *tp)
+{
+	/* FIXME: We will still need to do SACK here. */
+	if (tp->tstamp_ok) {
+		*++ptr = htonl(jiffies);
+		*++ptr = htonl(tp->ts_recent);
+	}
+}
+
+/* 
+ *	This routines builds a generic TCP header. 
+ *	They also build the RFC1323 Timestamp, but don't fill the
+ *	actual timestamp in (you need to call tcp_update_options for this).
+ *	It can't (unfortunately) do SACK as well.
+ *	XXX: pass tp instead of sk here.
+ */
+ 
+static inline void tcp_build_header_data(struct tcphdr *th, struct sock *sk, int push)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+
+	memcpy(th,(void *) &(sk->dummy_th), sizeof(*th));
+	th->seq = htonl(sk->write_seq);
+	if (!push)
+		th->psh = 1;
+	tcp_build_options((__u32*)(th+1), tp);
+}
+
+static inline void tcp_build_header(struct tcphdr *th, struct sock *sk)
+{
+     	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+
+	memcpy(th,(void *) &(sk->dummy_th), sizeof(*th));
+	th->seq = htonl(sk->write_seq);
+	th->ack_seq = htonl(tp->last_ack_sent = tp->rcv_nxt);
+	th->window = htons(tcp_select_window(sk));
+	tcp_build_options((__u32 *)(th+1), tp);
 }
 
 /*

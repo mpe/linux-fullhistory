@@ -53,7 +53,7 @@ BufPoolAdd(struct BufPool *bp, int priority)
 	printk(KERN_DEBUG "BufPoolAdd bp %x\n", bp);
 #endif
 
-	ptr = (struct Pages *) __get_free_pages(priority, bp->pageorder, 0);
+	ptr = (struct Pages *) __get_free_pages(priority, bp->pageorder);
 	if (!ptr) {
 		printk(KERN_WARNING "BufPoolAdd couldn't get pages!\n");
 		return (-1);

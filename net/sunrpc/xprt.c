@@ -397,14 +397,14 @@ xprt_reconnect(struct rpc_task *task)
 				task->tk_pid, status, xprt->connected);
 		task->tk_timeout = 60 * HZ;
 
-		disable_bh(NET_BH);
+		start_bh_atomic();
 		if (!xprt->connected) {
 			rpc_sleep_on(&xprt->reconn, task,
 				xprt_reconn_status, xprt_reconn_timeout);
-			enable_bh(NET_BH);
+			end_bh_atomic();
 			return;
 		}
-		enable_bh(NET_BH);
+		end_bh_atomic();
 	}
 
 	xprt->connecting = 0;
@@ -870,10 +870,10 @@ xprt_transmit(struct rpc_task *task)
 	/* For fast networks/servers we have to put the request on
 	 * the pending list now:
 	 */
-	disable_bh(NET_BH);
+	start_bh_atomic();
 	rpc_add_wait_queue(&xprt->pending, task);
 	task->tk_callback = NULL;
-	enable_bh(NET_BH);
+	end_bh_atomic();
 
 	/* Continue transmitting the packet/record. We must be careful
 	 * to cope with writespace callbacks arriving _after_ we have
@@ -891,16 +891,16 @@ xprt_transmit(struct rpc_task *task)
 				task->tk_pid, xprt->snd_buf.io_len,
 				req->rq_slen);
 		task->tk_status = 0;
-		disable_bh(NET_BH);
+		start_bh_atomic();
 		if (!xprt->write_space) {
 			/* Remove from pending */
 			rpc_remove_wait_queue(task);
 			rpc_sleep_on(&xprt->sending, task,
 					xprt_transmit_status, NULL);
-			enable_bh(NET_BH);
+			end_bh_atomic();
 			return;
 		}
-		enable_bh(NET_BH);
+		end_bh_atomic();
 	}
 }
 
@@ -943,12 +943,12 @@ xprt_receive(struct rpc_task *task)
 	 */
 	task->tk_timeout = req->rq_timeout.to_current;
 
-	disable_bh(NET_BH);
+	start_bh_atomic();
 	if (!req->rq_gotit) {
 		rpc_sleep_on(&xprt->pending, task,
 				xprt_receive_status, xprt_timer);
 	}
-	enable_bh(NET_BH);
+	end_bh_atomic();
 
 	dprintk("RPC: %4d xprt_receive returns %d\n",
 				task->tk_pid, task->tk_status);
@@ -1079,7 +1079,7 @@ xprt_release(struct rpc_task *task)
 	dprintk("RPC: %4d release request %p\n", task->tk_pid, req);
 
 	/* remove slot from queue of pending */
-	disable_bh(NET_BH);
+	start_bh_atomic();
 	if (task->tk_rpcwait) {
 		printk("RPC: task of released request still queued!\n");
 #ifdef RPC_DEBUG
@@ -1088,7 +1088,7 @@ xprt_release(struct rpc_task *task)
 		rpc_del_timer(task);
 		rpc_remove_wait_queue(task);
 	}
-	enable_bh(NET_BH);
+	end_bh_atomic();
 
 	/* Decrease congestion value. If congestion threshold is not yet
 	 * reached, pass on the request slot.

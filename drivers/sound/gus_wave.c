@@ -3260,7 +3260,7 @@ void gus_wave_unload(struct address_info *hw_config)
 	if (hw_config->slots[4] != -1)
 		sound_unload_audiodev(hw_config->slots[4]);
 	if (hw_config->slots[5] != -1)
-		sound_unload_mixerdev(hw_config->slots[4]);
+		sound_unload_mixerdev(hw_config->slots[5]);
 	
 	if(samples)
 		vfree(samples);

@@ -78,7 +78,12 @@ struct sk_buff
 	} mac;
 
 	struct  dst_entry *dst;
+
+#if (defined(__alpha__) || defined(__sparc64__)) && (defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE))
+	char		cb[48];	   /* sorry. 64bit pointers have a price */
+#else
 	char    	cb[32];
+#endif
 
 	__u32		seq;			/* TCP sequence number				*/
 	__u32		end_seq;		/* seq [+ fin] [+ syn] + datalen		*/
@@ -212,6 +217,14 @@ extern __inline__ struct sk_buff *skb_unshare(struct sk_buff *skb, int pri, int 
 extern __inline__ struct sk_buff *skb_peek(struct sk_buff_head *list_)
 {
 	struct sk_buff *list = ((struct sk_buff *)list_)->next;
+	if (list == (struct sk_buff *)list_)
+		list = NULL;
+	return list;
+}
+
+extern __inline__ struct sk_buff *skb_peek_tail(struct sk_buff_head *list_)
+{
+	struct sk_buff *list = ((struct sk_buff *)list_)->prev;
 	if (list == (struct sk_buff *)list_)
 		list = NULL;
 	return list;
@@ -406,6 +419,28 @@ extern __inline__ void skb_unlink(struct sk_buff *skb)
 		__skb_unlink(skb, skb->list);
 	restore_flags(flags);
 }
+
+/* XXX: more streamlined implementation */
+extern __inline__ struct sk_buff *__skb_dequeue_tail(struct sk_buff_head *list)
+{
+	struct sk_buff *skb = skb_peek_tail(list); 
+	if (skb)
+		__skb_unlink(skb, list);
+	return skb;
+}
+
+extern __inline__ struct sk_buff *skb_dequeue_tail(struct sk_buff_head *list)
+{
+	long flags;
+	struct sk_buff *result;
+
+	save_flags(flags);
+	cli();
+	result = __skb_dequeue_tail(list);
+	restore_flags(flags);
+	return result;
+}
+
 
 extern const char skb_put_errstr[];
 extern const char skb_push_errstr[];

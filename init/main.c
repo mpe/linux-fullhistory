@@ -76,6 +76,7 @@ extern void signals_init(void);
 extern void dquot_init(void);
 
 extern void smp_setup(char *str, int *ints);
+extern void ioapic_pirq_setup(char *str, int *ints);
 extern void no_scroll(char *str, int *ints);
 extern void swap_setup(char *str, int *ints);
 extern void buff_setup(char *str, int *ints);
@@ -459,6 +460,7 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef __SMP__
 	{ "nosmp", smp_setup },
 	{ "maxcpus=", smp_setup },
+	{ "pirq=", ioapic_pirq_setup },
 #endif
 #ifdef CONFIG_BLK_DEV_RAM
 	{ "ramdisk_start=", ramdisk_start_setup },
@@ -925,6 +927,8 @@ int cpu_idle(void *unused)
 
 #else
 
+extern void setup_IO_APIC(void);
+
 /*
  *	Multiprocessor idle thread is in arch/...
  */
@@ -979,6 +983,7 @@ __initfunc(asmlinkage void start_kernel(void))
 	memory_start = paging_init(memory_start,memory_end);
 	trap_init();
 	init_IRQ();
+	memory_start = console_init(memory_start,memory_end);
 	sched_init();
 	time_init();
 	parse_options(command_line);
@@ -1004,7 +1009,9 @@ __initfunc(asmlinkage void start_kernel(void))
 #if defined(CONFIG_PCI) && defined(CONFIG_PCI_CONSOLE)
 	memory_start = pci_init(memory_start,memory_end);
 #endif
+#if HACK
 	memory_start = console_init(memory_start,memory_end);
+#endif
 #if defined(CONFIG_PCI) && !defined(CONFIG_PCI_CONSOLE)
 	memory_start = pci_init(memory_start,memory_end);
 #endif
@@ -1044,6 +1051,7 @@ __initfunc(asmlinkage void start_kernel(void))
 	printk("POSIX conformance testing by UNIFIX\n");
 #ifdef __SMP__
 	smp_init();
+	setup_IO_APIC();
 #endif
 #ifdef CONFIG_SYSCTL
 	sysctl_init();

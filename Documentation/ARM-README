@@ -1,0 +1,169 @@
+			   ARM Linux 2.1.78
+			   ================
+
+ **  The ARM support contained within is NOT complete - it will not build.   **
+ **    If you want to build it, then please obtain a full copy of the ARM    **
+ ** patches from ftp://ftp.arm.uk.linux.org/pub/armlinux/kernel-sources/v2.1 **
+
+  Since this is a development kernel, it will not be as stable as the 2.0
+  series, and can cause very nasty problems (eg, trashing your hard disk).
+  When running one of these kernels, I advise you to back up the complete
+  contents of all your hard disks.
+
+Contributors
+------------
+
+  Here is a list of people actively working on the project (If you
+  wish to be added to the list, please email me):
+
+  Name: Russell King
+  Mail: linux@arm.uk.linux.org
+  Desc: Original developer of ARM Linux, project co-ordinator.
+
+  Name: Dave Gilbert
+  Mail: linux@treblig.org
+  Desc: A3/4/5xx floppy and hard disk code maintainer.
+
+  Name: Philip Blundell
+  Mail: Philip.Blundell@pobox.com
+  Desc: Architecture and processor selection during make config.
+
+Todo list
+---------
+
+  This is the list of changes to be done (roughly prioritorised):
+
+  * fully test new A5000 & older MEMC translation code
+  * fully test new AcornSCSI driver.
+  * reply to email ;)
+
+Bugs
+----
+
+  Fixed bugs in this version 2.1.76:
+
+  Modules believed to be buggy (please report your successes/failures):
+
+  * AcornSCSI believed to occasionally corrupt hard drives.
+  * All NCR5380-based SCSI devices [Cumana I, Oak, EcoSCSI] are slow,
+    and may not allow write access.
+  * A5000 and older machine kernel builds may not be as stable as they were.
+
+			     Notes
+			     =====
+
+Compilation of kernel
+---------------------
+
+  In order to compile ARM Linux, you will need a compiler capable of
+  generating ARM ELF code with GNU extensions.  GCC-2.7.2.2 is good.
+
+  To build ARM Linux natively, you shouldn't have to alter the ARCH = line in
+  the top level Makefile.  However, if you don't have the ARM Linux ELF tools
+  installed as default, then you should change the CROSS_COMPILE line as
+  detailed below.
+
+  If you wish to cross-compile, then alter the following lines in the top
+  level make file:
+
+    ARCH = <whatever>
+	with
+    ARCH = arm
+
+	and
+
+    CROSS_COMPILE=
+	to
+    CROSS_COMPILE=<your-path-to-your-compiler-without-gcc>
+	eg.
+    CROSS_COMPILE=/usr/src/bin/arm/arm-linuxelf-
+
+  Do a 'make config', followed by 'make dep', and finally 'make all' to
+  build the kernel (vmlinux).  A compressed image can be built by doing
+  a 'make zImage' instead of 'make all'.
+
+Bug reports etc
+---------------
+
+  Please send patches, bug reports and code for the ARM Linux project
+  to linux@arm.uk.linux.org.  Patches will not be included into future
+  kernels unless they come to me (or the relevant person concerned).
+
+  When sending bug reports, please ensure that they contain all relevent
+  information, eg. the kernel messages that were printed before/during
+  the problem, what you were doing, etc.
+
+  For patches, please include some explaination as to what the patch does
+  and why (if relevent).
+
+Modules
+-------
+
+  Although modularisation is supported (and required for the FP emulator),
+  each module on an arm2/arm250/arm3 machine when is loaded will take
+  memory up to the next 32k boundary due to the size of the pages.  Hence is
+  modularisation on these machines really worth it?
+
+  However, arm6 and up machines allow modules to take multiples of 4k, and
+  as such Acorn RiscPCs and other architectures using these processors can
+  make good use of modularisation.
+
+ADFS Image files
+----------------
+
+  You can access image files on your ADFS partitions by mounting the ADFS
+  partition, and then using the loopback device driver.  You must have
+  losetup installed.
+
+  Please note that the PCEmulator DOS partitions have a partition table at
+  the start, and as such, you will have to give '-o offset' to losetup.
+
+Kernel initialisation abort codes
+---------------------------------
+
+  When the kernel is unable to boot, it will if possible display a colour
+  at the top of the screen.  The colours have the following significance
+  when run in a 16 colour mode with the default palette:
+
+    Stripes of White,Red,Yellow,Green:
+       Kernel does not support the processor architecture detected.
+
+Request to developers
+---------------------
+
+  When writing device drivers which include a separate assember file, please
+  include it in with the C file, and not the arch/arm/lib directory.  This
+  allows the driver to be compiled as a loadable module without requiring
+  half the code to be needlessly compiled into the kernel image.
+
+  In general, try to avoid using assembler unless it is really necessary.  It
+  makes drivers far less easy to port to other hardware.
+
+ST506 hard drives
+-----------------
+
+  The ST506 hard drive controllers seem to be working fine (if a little
+  slowly).  At the moment they will only work off the controllers on an
+  A4x0's motherboard, but for it to work off a Podule just requires
+  someone with a podule to add the addresses for the IRQ mask and the
+  HDC base to the source.
+
+  As of 31/3/96 it works with two drives (you should get the ADFS
+  *configure harddrive set to 2). I've got an internal 20MB and a great
+  big external 5.25" FH 64MB drive (who could ever want more :-) ).
+
+  I've just got 240K/s off it (a dd with bs=128k); thats about half of what
+  RiscOS gets; but its a heck of a lot better than the 50K/s I was getting
+  last week :-)
+
+  Known bug: Drive data errors can cause a hang; including cases where
+  the controller has fixed the error using ECC. (Possibly ONLY
+  in that case...hmm).
+
+
+1772 Floppy
+-----------
+  This also seems to work OK, but hasn't been stressed much lately.  It
+  hasn't got any code for disc change detection in there at the moment which
+  could be a bit of a problem!  Suggestions on the correct way to do this
+  are welcome.

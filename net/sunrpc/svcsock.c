@@ -131,10 +131,10 @@ svc_sock_dequeue(struct svc_serv *serv)
 {
 	struct svc_sock	*svsk;
 
-	disable_bh(NET_BH);
+	start_bh_atomic();
 	if ((svsk = serv->sv_sockets) != NULL)
 		rpc_remove_list(&serv->sv_sockets, svsk);
-	enable_bh(NET_BH);
+	end_bh_atomic();
 
 	if (svsk) {
 		dprintk("svc: socket %p dequeued\n", svsk->sk_sk);
@@ -151,7 +151,7 @@ svc_sock_dequeue(struct svc_serv *serv)
 static inline void
 svc_sock_received(struct svc_sock *svsk, int count)
 {
-	disable_bh(NET_BH);
+	start_bh_atomic();
 	if ((svsk->sk_data -= count) < 0) {
 		printk(KERN_NOTICE "svc: sk_data negative!\n");
 		svsk->sk_data = 0;
@@ -163,7 +163,7 @@ svc_sock_received(struct svc_sock *svsk, int count)
 						svsk->sk_sk);
 		svc_sock_enqueue(svsk);
 	}
-	enable_bh(NET_BH);
+	end_bh_atomic();
 }
 
 /*
@@ -172,7 +172,7 @@ svc_sock_received(struct svc_sock *svsk, int count)
 static inline void
 svc_sock_accepted(struct svc_sock *svsk)
 {
-	disable_bh(NET_BH);
+	start_bh_atomic();
         svsk->sk_busy = 0;
         svsk->sk_conn--;
         if (svsk->sk_conn || svsk->sk_data || svsk->sk_close) {
@@ -180,7 +180,7 @@ svc_sock_accepted(struct svc_sock *svsk)
 						svsk->sk_sk);
                 svc_sock_enqueue(svsk);
         }
-	enable_bh(NET_BH);
+	end_bh_atomic();
 }
 
 /*
@@ -739,9 +739,9 @@ again:
 	if (signalled())
 		return -EINTR;
 
-	disable_bh(NET_BH);
+	start_bh_atomic();
 	if ((svsk = svc_sock_dequeue(serv)) != NULL) {
-		enable_bh(NET_BH);
+		end_bh_atomic();
 		rqstp->rq_sock = svsk;
 		svsk->sk_inuse++; /* N.B. where is this decremented? */
 	} else {
@@ -756,7 +756,7 @@ again:
 		 */
 		current->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(&rqstp->rq_wait, &wait);
-		enable_bh(NET_BH);
+		end_bh_atomic();
 		schedule();
 
 		if (!(svsk = rqstp->rq_sock)) {

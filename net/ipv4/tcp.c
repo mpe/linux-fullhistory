@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.76 1997/12/30 19:43:17 kuznet Exp $
+ * Version:	$Id: tcp.c,v 1.77 1998/01/15 22:40:18 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -491,9 +491,7 @@ void tcp_time_wait(struct sock *sk)
 
 
 /*
- *	Walk down the receive queue counting readable data until we hit the 
- *	end or we find a gap in the received data queue (ie a frame missing 
- *	that needs sending to us). 
+ *	Walk down the receive queue counting readable data.
  */
 
 static int tcp_readable(struct sock *sk)
@@ -520,7 +518,7 @@ static int tcp_readable(struct sock *sk)
 	/* Do until a push or until we are out of data. */
 	do {
 		/* Found a hole so stops here. */
-		if (before(counted, skb->seq))	 	
+		if (before(counted, skb->seq))	/* should not happen */
 			break;
 
 		/* Length - header but start from where we are up to
@@ -604,24 +602,30 @@ unsigned int tcp_poll(struct socket *sock, poll_table *wait)
 		mask = POLLERR;
 	/* Connected? */
 	if ((1 << sk->state) & ~(TCPF_SYN_SENT|TCPF_SYN_RECV)) {
+		int space;
+
 		if (sk->shutdown & RCV_SHUTDOWN)
 			mask |= POLLHUP;
-
+		
 		if ((tp->rcv_nxt != sk->copied_seq) &&
 		    (sk->urg_seq != sk->copied_seq ||
 		     tp->rcv_nxt != sk->copied_seq+1 ||
 		     sk->urginline || !sk->urg_data))
 			mask |= POLLIN | POLLRDNORM;
 
-		/* FIXME: this assumed sk->mtu is correctly maintained.
-		 * I see no evidence this is the case. -- erics
-		 */
-		if (!(sk->shutdown & SEND_SHUTDOWN) &&
-		     (sock_wspace(sk) >= sk->mtu+128+sk->prot->max_header))
+#if 1 /* This needs benchmarking and real world tests */
+		space = sk->dst_cache->pmtu + 128;
+		if (space < 2048) /* XXX */
+			space = 2048;
+#else /* 2.0 way */
+		/* More than half of the socket queue free? */
+		space = atomic_read(&sk->wmem_alloc) / 2;
+#endif
+		/* Always wake the user up when an error occured */
+		if (sock_wspace(sk) >= space)
 			mask |= POLLOUT | POLLWRNORM;
-
 		if (sk->urg_data)
-			mask |= POLLPRI;
+		    	mask |= POLLPRI;
 	}
 	return mask;
 }
@@ -659,40 +663,8 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			return put_user(amount, (int *)arg);
 		}
 		default:
-			return(-ENOIOCTLCMD);
+			return(-EINVAL);
 	};
-}
-
-
-/* 
- *	This routine builds a generic TCP header. 
- *	It also builds in the RFC1323 Timestamp.
- *	It can't (unfortunately) do SACK as well.
- */
- 
-extern __inline void tcp_build_header(struct tcphdr *th, struct sock *sk, int push)
-{
-	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-
-	memcpy(th,(void *) &(sk->dummy_th), sizeof(*th));
-	th->seq = htonl(sk->write_seq);
-	th->psh =(push == 0) ? 1 : 0;
-	th->ack_seq = htonl(tp->rcv_nxt);
-	th->window = htons(tcp_select_window(sk));
-
-	/* FIXME: could use the inline found in tcp_output.c as well.
-	 * Probably that means we should move these up to an include file. --erics
-	 */
-	if (tp->tstamp_ok) {
-		__u32 *ptr = (__u32 *)(th+1);
-		*ptr++ = ntohl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16)
-			| (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP);
-		/* FIXME: Not sure it's worth setting these here already, but I'm
-	 	 * also not sure we replace them on all paths later. --erics
-		 */
-		*ptr++ = jiffies;
-		*ptr++ = tp->ts_recent;
-	}
 }
 
 /*
@@ -942,7 +914,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			  skb_put(skb,tp->tcp_header_len);
 
 			seglen -= copy;
-			tcp_build_header(skb->h.th, sk, seglen || iovlen);
+			tcp_build_header_data(skb->h.th, sk, seglen || iovlen);
 			/* FIXME: still need to think about SACK options here. */
 
 			if (flags & MSG_OOB) {
@@ -1077,7 +1049,8 @@ static inline void tcp_eat_skb(struct sock *sk, struct sk_buff * skb)
 static void cleanup_rbuf(struct sock *sk)
 {
 	struct sk_buff *skb;
-
+	struct tcp_opt *tp;
+	
 	/* NOTE! The socket must be locked, so that we don't get
 	 * a messed-up receive queue.
 	 */
@@ -1089,11 +1062,12 @@ static void cleanup_rbuf(struct sock *sk)
 
 	SOCK_DEBUG(sk, "sk->rspace = %lu\n", sock_rspace(sk));
 
+	tp = &(sk->tp_pinfo.af_tcp);
+
   	/* We send a ACK if the sender is blocked
   	 * else let tcp_data deal with the acking policy.
   	 */
-	if (sk->tp_pinfo.af_tcp.delayed_acks) {
-		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	if (tp->delayed_acks) {
 		__u32 rcv_wnd;
 
 	 	/* FIXME: double check this rule, then check against
@@ -1536,43 +1510,45 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 	struct sock *newsk = NULL;
 	int error;
 
+	lock_sock(sk); 
+
 	/* We need to make sure that this socket is listening,
 	 * and that it has something pending.
 	 */
 	error = EINVAL;
 	if (sk->state != TCP_LISTEN)
-		goto no_listen;
+		goto out;
 
-	lock_sock(sk);
-
+	/* Find already established connection */
 	req = tcp_find_established(tp, &prev);
-	if (req) {
-got_new_connect:
-		tcp_synq_unlink(tp, req, prev);
-		newsk = req->sk;
-		tcp_openreq_free(req);
-		sk->ack_backlog--;
-		/* FIXME: need to check here if socket has already
-		 * an soft_err or err set.
-		 * We have two options here then: reply (this behaviour matches
-		 * Solaris) or return the error to the application (old Linux)
-		 */
-		error = 0;
-out:
-		release_sock(sk);
-no_listen:
-		sk->err = error;
-		return newsk;
+	if (!req) {
+	    /* If this is a non blocking socket don't sleep */
+	    error = EAGAIN;
+	    if (flags & O_NONBLOCK)
+		goto out;
+	    
+	    error = ERESTARTSYS;
+	    req = wait_for_connect(sk, &prev);
+	    if (!req) 
+		goto out;
+	    error = 0; 
 	}
 
-	error = EAGAIN;
-	if (flags & O_NONBLOCK)
-		goto out;
-	req = wait_for_connect(sk, &prev);
-	if (req)
-		goto got_new_connect;
-	error = ERESTARTSYS;
-	goto out;
+	tcp_synq_unlink(tp, req, prev);
+	newsk = req->sk;
+	tcp_openreq_free(req);
+	sk->ack_backlog--;  /* XXX */
+
+	/* FIXME: need to check here if newsk has already
+	 * an soft_err or err set.
+	 * We have two options here then: reply (this behaviour matches
+	 * Solaris) or return the error to the application (old Linux)
+	 */
+	error = 0;
+ out:
+	release_sock(sk);
+	sk->err = error;
+	return newsk;
 }
 
 /*

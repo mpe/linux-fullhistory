@@ -139,28 +139,17 @@ volatile unsigned long kernel_counter=0;		/* Number of times the processor holds
 volatile unsigned long syscall_count=0;			/* Number of times the processor holds the syscall lock	*/
 
 volatile unsigned long ipi_count;			/* Number of IPI's delivered				*/
-#ifdef __SMP_PROF__
-volatile unsigned long smp_spins[NR_CPUS]={0};          /* Count interrupt spins 				*/
-volatile unsigned long smp_spins_syscall[NR_CPUS]={0};  /* Count syscall spins                   		*/
-volatile unsigned long smp_spins_syscall_cur[NR_CPUS]={0};/* Count spins for the actual syscall                 */
-volatile unsigned long smp_spins_sys_idle[NR_CPUS]={0}; /* Count spins for sys_idle 				*/
-volatile unsigned long smp_idle_count[1+NR_CPUS]={0,};	/* Count idle ticks					*/
-
-/* Count local APIC timer ticks */
-volatile unsigned long smp_local_timer_ticks[1+NR_CPUS]={0,};
-
-#endif
-#if defined (__SMP_PROF__)
-volatile unsigned long smp_idle_map=0;			/* Map for idle processors 				*/
-#endif
 
 volatile unsigned long  smp_proc_in_lock[NR_CPUS] = {0,};/* for computing process time */
 volatile int smp_process_available=0;
 
 const char lk_lockmsg[] = "lock from interrupt context at %p\n"; 
 
+int mp_bus_id_to_type [MAX_MP_BUSSES] = { -1, };
+extern int mp_irq_entries;
+extern struct mpc_config_intsrc mp_irqs [MAX_IRQ_SOURCES];
 
-/*#define SMP_DEBUG*/
+/* #define SMP_DEBUG */
 
 #ifdef SMP_DEBUG
 #define SMP_PRINTK(x)	printk x
@@ -187,7 +176,7 @@ __initfunc(void smp_setup(char *str, int *ints))
 		max_cpus = 0;
 }
 
-static inline void ack_APIC_irq (void)
+void ack_APIC_irq (void)
 {
 	/* Clear the IPI */
 
@@ -338,6 +327,14 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 				SMP_PRINTK(("Bus #%d is %s\n",
 					m->mpc_busid,
 					str));
+				if ((strncmp(m->mpc_bustype,"ISA",3) == 0) ||
+					(strncmp(m->mpc_bustype,"EISA",4) == 0))
+					mp_bus_id_to_type[m->mpc_busid] =
+						MP_BUS_ISA;
+				else
+				if (strncmp(m->mpc_bustype,"PCI",3) == 0)
+					mp_bus_id_to_type[m->mpc_busid] =
+						MP_BUS_PCI;
 				mpt+=sizeof(*m);
 				count+=sizeof(*m);
 				break;
@@ -362,6 +359,21 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 			{
 				struct mpc_config_intsrc *m=
 					(struct mpc_config_intsrc *)mpt;
+
+				mp_irqs [mp_irq_entries] = *m;
+				if (++mp_irq_entries == MAX_IRQ_SOURCES) {
+					printk("Max irq sources exceeded!!\n");
+					printk("Skipping remaining sources.\n");
+					--mp_irq_entries;
+				}
+
+printk(" Itype:%d Iflag:%d srcbus:%d srcbusI:%d dstapic:%d dstI:%d.\n",
+		m->mpc_irqtype,
+		m->mpc_irqflag,
+		m->mpc_srcbus,
+		m->mpc_srcbusirq,
+		m->mpc_dstapic,
+		m->mpc_dstirq);
 
 				mpt+=sizeof(*m);
 				count+=sizeof(*m);
@@ -622,7 +634,7 @@ __initfunc(void smp_callin(void))
 	/*
 	 * Set up our APIC timer.
 	 */
-	setup_APIC_clock ();
+	setup_APIC_clock();
 
  	sti();
 	/*
@@ -1344,7 +1356,7 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 		else
 			system=1;
 
-		irq_enter(cpu, 0);
+ 		irq_enter(cpu, 0);
 		if (p->pid) {
 			update_one_process(p, 1, user, system, cpu);
 
@@ -1361,20 +1373,11 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 			kstat.cpu_system += system;
 			kstat.per_cpu_system[cpu] += system;
 
-		} else {
-#ifdef __SMP_PROF__
-			if (test_bit(cpu,&smp_idle_map))
-				smp_idle_count[cpu]++;
-#endif
 		}
 		prof_counter[cpu]=prof_multiplier[cpu];
-
 		irq_exit(cpu, 0);
 	}
 
-#ifdef __SMP_PROF__
-	smp_local_timer_ticks[cpu]++;
-#endif
 	/*
 	 * We take the 'long' return path, and there every subsystem
 	 * grabs the apropriate locks (kernel lock/ irq lock).
@@ -1420,6 +1423,7 @@ asmlinkage void smp_reschedule_interrupt(void)
 	 * This looks silly, but we actually do need to wait
 	 * for the global interrupt lock.
 	 */
+	printk("huh, this is used, where???\n");
 	irq_enter(cpu, 0);
 	need_resched = 1;
 	irq_exit(cpu, 0);

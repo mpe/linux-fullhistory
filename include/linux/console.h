@@ -99,6 +99,7 @@ struct console
 };
 
 extern void register_console(struct console *);
+extern int unregister_console(struct console *);
 extern struct console *console_drivers;
 
 #endif /* linux/console.h */

@@ -1,0 +1,16 @@
+#
+# linux/arch/arm/boot/compressed/Makefile
+#
+# create a compressed vmlinux image from the original vmlinux
+#
+
+COMPRESSED_EXTRA=../../lib/ll_char_wr.o
+OBJECTS=misc-debug.o $(COMPRESSED_EXTRA)
+
+CFLAGS=-D__KERNEL__ -O2 -DSTDC_HEADERS -DSTANDALONE_DEBUG -Wall -I../../../../include -c
+
+test-gzip: piggy.o $(OBJECTS)
+	$(CC) -o $@ $(OBJECTS) piggy.o
+
+misc-debug.o: misc.c
+	$(CC) $(CFLAGS) -o $@ misc.c

@@ -11,6 +11,11 @@
 # successful.  If it is, then all of the "*.orig" files are removed.
 #
 #       Nick Holloway <Nick.Holloway@alfie.demon.co.uk>, 2nd January 1995.
+#
+# Added support for handling multiple types of compression. What includes
+# gzip, bzip, bzip2, zip, compress, and plaintext. 
+#
+#       Adam Sulmicki <adam@cfar.umd.edu>, 1st January 1997.
 
 # Set directories from arguments, or use defaults.
 sourcedir=${1-/usr/src/linux}
@@ -29,16 +34,39 @@ echo "Current kernel version is $VERSION.$PATCHLEVEL.$SUBLEVEL"
 while :
 do
     SUBLEVEL=`expr $SUBLEVEL + 1`
-    patch=patch-$VERSION.$PATCHLEVEL.$SUBLEVEL.gz 
-    if [ ! -r $patchdir/$patch ]
-    then
-        break
+    patch=patch-$VERSION.$PATCHLEVEL.$SUBLEVEL 
+    if [ -r $patchdir/${patch}.gz ]; then
+        ext=".gz"
+        name="gzip"
+        uncomp="gunzip -dc"
+    elif [ -r $patchdir/${patch}.bz  ]; then
+        ext=".bz"
+	name="bzip"
+        uncomp="bunzip -dc"
+    elif [ -r $patchdir/${patch}.bz2 ]; then
+        ext=".bz2"
+        name="bzip2"
+        uncomp="bunzip2 -dc"
+    elif [ -r $patchdir/${patch}.zip ]; then
+        ext=".zip"
+        name="zip"
+        uncomp="unzip -d"
+    elif [ -r $patchdir/${patch}.Z ]; then
+        ext=".Z"
+        name="uncompress"
+        uncomp="uncompress -c"
+    elif [ -r $patchdir/${patch}     ]; then
+        ext=""
+        name="plaintext"
+        uncomp="cat"
+    else
+	break
     fi
 
-    echo -n "Applying $patch... "
-    if gunzip -dc $patchdir/$patch | patch -p1 -s -N -E -d $sourcedir
+    echo -n "Applying ${patch} (${name})... "
+    if $uncomp ${patchdir}/${patch}${ext} | patch -p1 -s -N -E -d $sourcedir
     then
-	echo "done."
+        echo "done."
     else
         echo "failed.  Clean up yourself."
         break

@@ -115,8 +115,10 @@ nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 	result = 0;
 
 io_error:
-	if (refresh)
+	/* Note: we don't refresh if the call returned error */
+	if (refresh && result >= 0)
 		nfs_refresh_inode(inode, &rqst.ra_fattr);
+	/* N.B. Use nfs_unlock_page here? */
 	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
 	return result;
@@ -131,17 +133,17 @@ nfs_readpage_result(struct rpc_task *task)
 {
 	struct nfs_rreq	*req = (struct nfs_rreq *) task->tk_calldata;
 	struct page	*page = req->ra_page;
+	unsigned long	address = page_address(page);
 	int		result = task->tk_status;
 	static int	succ = 0, fail = 0;
 
 	dprintk("NFS: %4d received callback for page %lx, result %d\n",
-			task->tk_pid, page_address(page), result);
+			task->tk_pid, address, result);
 
 	if (result >= 0) {
 		result = req->ra_res.count;
 		if (result < PAGE_SIZE) {
-			memset((char *) page_address(page) + result, 0,
-							PAGE_SIZE - result);
+			memset((char *) address + result, 0, PAGE_SIZE - result);
 		}
 		nfs_refresh_inode(req->ra_inode, &req->ra_fattr);
 		set_bit(PG_uptodate, &page->flags);
@@ -151,10 +153,11 @@ nfs_readpage_result(struct rpc_task *task)
 		fail++;
 		dprintk("NFS: %d successful reads, %d failures\n", succ, fail);
 	}
+	/* N.B. Use nfs_unlock_page here? */
 	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
 
-	free_page(page_address(page));
+	free_page(address);
 
 	rpc_release_task(task);
 	kfree(req);
@@ -164,38 +167,45 @@ static inline int
 nfs_readpage_async(struct dentry *dentry, struct inode *inode,
 			struct page *page)
 {
+	unsigned long address = page_address(page);
 	struct nfs_rreq	*req;
-	int		result, flags;
+	int		result = -1, flags;
 
 	dprintk("NFS: nfs_readpage_async(%p)\n", page);
-	flags = RPC_TASK_ASYNC | (IS_SWAPFILE(inode)? NFS_RPC_SWAPFLAGS : 0);
+	if (NFS_CONGESTED(inode))
+		goto out_defer;
 
-	if (NFS_CONGESTED(inode)
-	 || !(req = (struct nfs_rreq *) rpc_allocate(flags, sizeof(*req)))) {
-		dprintk("NFS: deferring async READ request.\n");
-		return -1;
-	}
+	/* N.B. Do we need to test? Never called for swapfile inode */
+	flags = RPC_TASK_ASYNC | (IS_SWAPFILE(inode)? NFS_RPC_SWAPFLAGS : 0);
+	req = (struct nfs_rreq *) rpc_allocate(flags, sizeof(*req));
+	if (!req)
+		goto out_defer;
 
 	/* Initialize request */
+	/* N.B. Will the dentry remain valid for life of request? */
 	nfs_readreq_setup(req, NFS_FH(dentry), page->offset,
-				(void *) page_address(page), PAGE_SIZE);
+				(void *) address, PAGE_SIZE);
 	req->ra_inode = inode;
-	req->ra_page = page;
+	req->ra_page = page; /* count has been incremented by caller */
 
 	/* Start the async call */
 	dprintk("NFS: executing async READ request.\n");
 	result = rpc_do_call(NFS_CLIENT(inode), NFSPROC_READ,
 				&req->ra_args, &req->ra_res, flags,
 				nfs_readpage_result, req);
+	if (result < 0)
+		goto out_free;
+	result = 0;
+out:
+	return result;
 
-	if (result >= 0) {
-		atomic_inc(&page->count);
-		return 0;
-	}
-
+out_defer:
+	dprintk("NFS: deferring async READ request.\n");
+	goto out;
+out_free:
 	dprintk("NFS: failed to enqueue async READ request.\n");
 	kfree(req);
-	return -1;
+	goto out;
 }
 
 /*
@@ -214,20 +224,20 @@ int
 nfs_readpage(struct dentry *dentry, struct page *page)
 {
 	struct inode *inode = dentry->d_inode;
-	unsigned long	address;
 	int		error = -1;
 
-	dprintk("NFS: nfs_readpage %08lx\n", page_address(page));
+	dprintk("NFS: nfs_readpage (%p %ld@%ld)\n",
+		page, PAGE_SIZE, page->offset);
 	set_bit(PG_locked, &page->flags);
-	address = page_address(page);
 	atomic_inc(&page->count);
 	if (!IS_SWAPFILE(inode) && !PageError(page) &&
 	    NFS_SERVER(inode)->rsize >= PAGE_SIZE)
 		error = nfs_readpage_async(dentry, inode, page);
-	if (error < 0)		/* couldn't enqueue */
+	if (error < 0) {	/* couldn't enqueue */
 		error = nfs_readpage_sync(dentry, inode, page);
-	if (error < 0 && IS_SWAPFILE(inode))
-		printk("Aiee.. nfs swap-in of page failed!\n");
-	free_page(address);
+		if (error < 0 && IS_SWAPFILE(inode))
+			printk("Aiee.. nfs swap-in of page failed!\n");
+		free_page(page_address(page));
+	}
 	return error;
 }

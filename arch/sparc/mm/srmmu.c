@@ -904,7 +904,7 @@ void srmmu_unmapioaddr(unsigned long virt_addr)
  */
 struct task_struct *srmmu_alloc_task_struct(void)
 {
-	return (struct task_struct *) __get_free_pages(GFP_KERNEL, 1, 0);
+	return (struct task_struct *) __get_free_pages(GFP_KERNEL, 1);
 }
 
 static void srmmu_free_task_struct(struct task_struct *tsk)

@@ -124,6 +124,10 @@ struct ip_options {
   unsigned char __data[0];
 };
 
+#ifdef __KERNEL__
+#define optlength(opt) (sizeof(struct ip_options) + opt->optlen)
+#endif
+
 struct iphdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u8	ihl:4,

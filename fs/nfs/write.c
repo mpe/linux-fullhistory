@@ -128,7 +128,7 @@ transfer_page_lock(struct nfs_wreq *req)
 	req->wb_flags |= NFS_WRITE_LOCKED;
 	rpc_wake_up_task(&req->wb_task);
 
-	dprintk("nfs:      wake up task %d (flags %x)\n",
+	dprintk("NFS:      wake up task %d (flags %x)\n",
 			req->wb_task.tk_pid, req->wb_flags);
 }
 
@@ -182,8 +182,8 @@ nfs_writepage_sync(struct dentry *dentry, struct inode *inode,
 	} while (count);
 
 io_error:
-	/* N.B. do we want to refresh if there was an error?? (fattr valid?) */
-	if (refresh) {
+	/* Note: we don't refresh if the call failed (fattr invalid) */
+	if (refresh && result >= 0) {
 		/* See comments in nfs_wback_result */
 		/* N.B. I don't think this is right -- sync writes in order */
 		if (fattr.size < inode->i_size)
@@ -509,25 +509,16 @@ int
 nfs_updatepage(struct dentry *dentry, struct page *page, const char *buffer,
 			unsigned long offset, unsigned int count, int sync)
 {
-	struct inode *inode = dentry->d_inode;
+	struct inode	*inode = dentry->d_inode;
+	u8		*page_addr = (u8 *) page_address(page);
 	struct nfs_wreq	*req;
 	int		status = 0, page_locked = 1;
-	u8		*page_addr;
 
 	dprintk("NFS:      nfs_updatepage(%s/%s %d@%ld, sync=%d)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		count, page->offset+offset, sync);
 
 	set_bit(PG_locked, &page->flags);
-	page_addr = (u8 *) page_address(page);
-
-	/* If wsize is smaller than page size, update and write
-	 * page synchronously.
-	 */
-	if (NFS_SERVER(inode)->wsize < PAGE_SIZE) {
-		copy_from_user(page_addr + offset, buffer, count);
-		return nfs_writepage_sync(dentry, inode, page, offset, count);
-	}
 
 	/*
 	 * Try to find a corresponding request on the writeback queue.
@@ -541,6 +532,7 @@ nfs_updatepage(struct dentry *dentry, struct page *page, const char *buffer,
 	 */
 	if ((req = find_write_request(inode, page)) != NULL) {
 		if (update_write_request(req, offset, count)) {
+			/* N.B. check for a fault here and cancel the req */
 			copy_from_user(page_addr + offset, buffer, count);
 			goto updated;
 		}
@@ -549,15 +541,22 @@ nfs_updatepage(struct dentry *dentry, struct page *page, const char *buffer,
 		return 0;
 	}
 
+	/* Copy data to page buffer. */
+	status = -EFAULT;
+	if (copy_from_user(page_addr + offset, buffer, count))
+		goto done;
+
+	/* If wsize is smaller than page size, update and write
+	 * page synchronously.
+	 */
+	if (NFS_SERVER(inode)->wsize < PAGE_SIZE)
+		return nfs_writepage_sync(dentry, inode, page, offset, count);
+
 	/* Create the write request. */
 	status = -ENOBUFS;
 	req = create_write_request(dentry, inode, page, offset, count);
 	if (!req)
 		goto done;
-
-	/* Copy data to page buffer. */
-	/* N.B. should check for fault here ... */
-	copy_from_user(page_addr + offset, buffer, count);
 
 	/* Schedule request */
 	page_locked = schedule_write_request(req, sync);
@@ -588,8 +587,14 @@ done:
 				if ((count = nfs_write_error(inode)) < 0)
 					status = count;
 			}
-		} else
+		} else {
+			if (status < 0) {
+printk("NFS: %s/%s write failed, clearing bit\n",
+dentry->d_parent->d_name.name, dentry->d_name.name);
+				clear_bit(PG_uptodate, &page->flags);
+			}
 			nfs_unlock_page(page);
+		}
 	}
 
 	dprintk("NFS:      nfs_updatepage returns %d (isize %ld)\n",
@@ -641,21 +646,19 @@ nfs_flush_pages(struct inode *inode, pid_t pid, off_t offset, off_t len,
 				req->wb_task.tk_pid,
 				req->wb_inode->i_dev, req->wb_inode->i_ino,
 				req->wb_page->offset, req->wb_flags);
-		if (!WB_INPROGRESS(req)) {
-			rqoffset = req->wb_page->offset + req->wb_offset;
-			rqend    = rqoffset + req->wb_bytes;
-
-			if (rqoffset < end && offset < rqend
+		rqoffset = req->wb_page->offset + req->wb_offset;
+		rqend    = rqoffset + req->wb_bytes;
+		
+		if (rqoffset < end && offset < rqend
 			 && (pid == 0 || req->wb_pid == pid)) {
-				if (!WB_HAVELOCK(req)) {
+			if (!WB_INPROGRESS(req) && !WB_HAVELOCK(req)) {
 #ifdef NFS_DEBUG_VERBOSE
 printk("nfs_flush: flushing inode=%ld, %d @ %lu\n",
 req->wb_inode->i_ino, req->wb_bytes, rqoffset);
 #endif
-					nfs_flush_request(req);
-				}
-				last = req;
+				nfs_flush_request(req);
 			}
+			last = req;
 		}
 		if (invalidate)
 			req->wb_flags |= NFS_WRITE_INVALIDATE;
@@ -815,32 +818,26 @@ nfs_wback_lock(struct rpc_task *task)
 	struct page	*page = req->wb_page;
 	struct dentry	*dentry = req->wb_dentry;
 
-	dprintk("NFS: %4d nfs_wback_lock (status %d flags %x)\n",
-			task->tk_pid, task->tk_status, req->wb_flags);
+	dprintk("NFS: %4d nfs_wback_lock (%s/%s, status=%d flags=%x)\n",
+		task->tk_pid, dentry->d_parent->d_name.name,
+		dentry->d_name.name, task->tk_status, req->wb_flags);
 
 	if (!WB_HAVELOCK(req))
 		req->wb_flags |= NFS_WRITE_WANTLOCK;
 
-	if (WB_WANTLOCK(req) && test_and_set_bit(PG_locked, &page->flags)) {
-		printk("NFS: page already locked in writeback_lock!\n");
-		task->tk_timeout = 2 * HZ;
-		rpc_sleep_on(&write_queue, task, NULL, NULL);
-		return;
-	}
-	task->tk_status = 0;
+	if (WB_WANTLOCK(req) && test_and_set_bit(PG_locked, &page->flags))
+		goto out_locked;
 	req->wb_flags &= ~NFS_WRITE_WANTLOCK;
 	req->wb_flags |=  NFS_WRITE_LOCKED;
+	task->tk_status = 0;
 
 	if (req->wb_args == 0) {
 		size_t	size = sizeof(struct nfs_writeargs)
 			     + sizeof(struct nfs_fattr);
 		void	*ptr;
 
-		if (!(ptr = kmalloc(size, GFP_KERNEL))) {
-			task->tk_timeout = HZ;
-			rpc_sleep_on(&write_queue, task, NULL, NULL);
-			return;
-		}
+		if (!(ptr = kmalloc(size, GFP_KERNEL)))
+			goto out_no_args;
 		req->wb_args = (struct nfs_writeargs *) ptr;
 		req->wb_fattr = (struct nfs_fattr *) (req->wb_args + 1);
 	}
@@ -854,6 +851,18 @@ nfs_wback_lock(struct rpc_task *task)
 	rpc_call_setup(task, NFSPROC_WRITE, req->wb_args, req->wb_fattr, 0);
 
 	req->wb_flags |= NFS_WRITE_INPROGRESS;
+	return;
+
+out_locked:
+	printk("NFS: page already locked in writeback_lock!\n");
+	task->tk_timeout = 2 * HZ;
+	rpc_sleep_on(&write_queue, task, NULL, NULL);
+	return;
+out_no_args:
+	printk("NFS: can't alloc args, sleeping\n");
+	task->tk_timeout = HZ;
+	rpc_sleep_on(&write_queue, task, NULL, NULL);
+	return;
 }
 
 /*
@@ -867,9 +876,12 @@ nfs_wback_result(struct rpc_task *task)
 	struct page	*page  = req->wb_page;
 	int		status = task->tk_status;
 
-	dprintk("NFS: %4d nfs_wback_result (status %d)\n",
-		task->tk_pid, status);
+	dprintk("NFS: %4d nfs_wback_result (%s/%s, status=%d, flags=%x)\n",
+		task->tk_pid, req->wb_dentry->d_parent->d_name.name,
+		req->wb_dentry->d_name.name, status, req->wb_flags);
 
+	/* Set the WRITE_COMPLETE flag, but leave INPROGRESS set */
+	req->wb_flags |= NFS_WRITE_COMPLETE;
 	if (status < 0) {
 		/*
 		 * An error occurred. Report the error back to the

@@ -2,8 +2,8 @@
  *	dev_table.h
  *
  *	Global definitions for device call tables
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
@@ -21,6 +21,7 @@
  * Sound card numbers 27 to 999. (1 to 26 are defined in soundcard.h)
  * Numbers 1000 to N are reserved for driver's internal use.
  */
+
 #define SNDCARD_DESKPROXL		27	/* Compaq Deskpro XL */
 #define SNDCARD_SBPNP			29
 #define SNDCARD_OPL3SA1			38
@@ -52,7 +53,8 @@ void unload_softsyn (struct address_info *hw_config);
 
 extern int sound_started;
 
-struct driver_info {
+struct driver_info 
+{
 	char *driver_id;
 	int card_subtype;	/* Driver specific. Usually 0 */
 	int card_type;		/*	From soundcard.h	*/
@@ -62,7 +64,8 @@ struct driver_info {
 	void (*unload) (struct address_info *hw_config);
 };
 
-struct card_info {
+struct card_info 
+{
 	int card_type;	/* Link (search key) to the driver list */
 	struct address_info config;
 	int enabled;
@@ -79,7 +82,8 @@ struct card_info {
 #define DMODE_OUTPUT		PCM_ENABLE_OUTPUT
 #define DMODE_INPUT		PCM_ENABLE_INPUT
 
-struct dma_buffparms {
+struct dma_buffparms 
+{
 	int      dma_mode;	/* DMODE_INPUT, DMODE_OUTPUT or DMODE_NONE */
 	int	 closing;
 
@@ -156,17 +160,19 @@ struct dma_buffparms {
  * Structure for use with various microcontrollers and DSP processors 
  * in the recent soundcards.
  */
-typedef struct coproc_operations {
-		char name[64];
-		int (*open) (void *devc, int sub_device);
-		void (*close) (void *devc, int sub_device);
-		int (*ioctl) (void *devc, unsigned int cmd, caddr_t arg, int local);
-		void (*reset) (void *devc);
+typedef struct coproc_operations 
+{
+	char name[64];
+	int (*open) (void *devc, int sub_device);
+	void (*close) (void *devc, int sub_device);
+	int (*ioctl) (void *devc, unsigned int cmd, caddr_t arg, int local);
+	void (*reset) (void *devc);
 
-		void *devc;		/* Driver specific info */
-	} coproc_operations;
+	void *devc;		/* Driver specific info */
+} coproc_operations;
 
-struct audio_driver {
+struct audio_driver 
+{
 	int (*open) (int dev, int mode);
 	void (*close) (int dev);
 	void (*output_block) (int dev, unsigned long buf, 
@@ -190,7 +196,8 @@ struct audio_driver {
 	void (*preprocess_read)(int dev); 	/* Device spesific preprocessing for read data */
 };
 
-struct audio_operations {
+struct audio_operations 
+{
         char name[128];
 	int flags;
 #define NOTHING_SPECIAL 	0x00
@@ -218,7 +225,8 @@ struct audio_operations {
 
 int *load_mixer_volumes(char *name, int *levels, int present);
 
-struct mixer_operations {
+struct mixer_operations 
+{
 	char id[16];
 	char name[64];
 	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg);
@@ -227,7 +235,8 @@ struct mixer_operations {
 	int modify_counter;
 };
 
-struct synth_operations {
+struct synth_operations 
+{
 	char *id;	/* Unique identifier (ASCII) max 29 char */
 	struct synth_info *info;
 	int midi_dev;
@@ -263,20 +272,23 @@ struct synth_operations {
 	int sysex_ptr;
 };
 
-struct midi_input_info { /* MIDI input scanner variables */
+struct midi_input_info 
+{
+	/* MIDI input scanner variables */
 #define MI_MAX	10
-    		int             m_busy;
-    		unsigned char   m_buf[MI_MAX];
-		unsigned char	m_prev_status;	/* For running status */
-    		int             m_ptr;
+	int             m_busy;
+    	unsigned char   m_buf[MI_MAX];
+	unsigned char	m_prev_status;	/* For running status */
+    	int             m_ptr;
 #define MST_INIT			0
 #define MST_DATA			1
 #define MST_SYSEX			2
-    		int             m_state;
-    		int             m_left;
-	};
+    	int             m_state;
+    	int             m_left;
+};
 
-struct midi_operations {
+struct midi_operations 
+{
 	struct midi_info info;
 	struct synth_operations *converter;
 	struct midi_input_info in_info;
@@ -297,15 +309,17 @@ struct midi_operations {
 	void *devc;
 };
 
-struct sound_lowlev_timer {
-		int dev;
-		int priority;
-		unsigned int (*tmr_start)(int dev, unsigned int usecs);
-		void (*tmr_disable)(int dev);
-		void (*tmr_restart)(int dev);
-	};
+struct sound_lowlev_timer 
+{
+	int dev;
+	int priority;
+	unsigned int (*tmr_start)(int dev, unsigned int usecs);
+	void (*tmr_disable)(int dev);
+	void (*tmr_restart)(int dev);
+};
 
-struct sound_timer_operations {
+struct sound_timer_operations 
+{
 	struct sound_timer_info info;
 	int priority;
 	int devlink;
@@ -319,91 +333,94 @@ struct sound_timer_operations {
 
 #ifdef _DEV_TABLE_C_   
 
-	struct audio_operations *audio_devs[MAX_AUDIO_DEV] = {NULL}; int num_audiodevs = 0;
-	struct mixer_operations *mixer_devs[MAX_MIXER_DEV] = {NULL}; int num_mixers = 0;
-	struct synth_operations *synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV] = {NULL}; int num_synths = 0;
-	struct midi_operations *midi_devs[MAX_MIDI_DEV] = {NULL}; int num_midis = 0;
+struct audio_operations *audio_devs[MAX_AUDIO_DEV] = {NULL}; int num_audiodevs = 0;
+struct mixer_operations *mixer_devs[MAX_MIXER_DEV] = {NULL}; int num_mixers = 0;
+struct synth_operations *synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV] = {NULL}; int num_synths = 0;
+struct midi_operations *midi_devs[MAX_MIDI_DEV] = {NULL}; int num_midis = 0;
 
 #if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS) && !defined(VMIDI)
-	extern struct sound_timer_operations default_sound_timer;
-	struct sound_timer_operations *sound_timer_devs[MAX_TIMER_DEV] = 
-		{&default_sound_timer, NULL}; 
-	int num_sound_timers = 1;
+extern struct sound_timer_operations default_sound_timer;
+struct sound_timer_operations *sound_timer_devs[MAX_TIMER_DEV] = {
+	&default_sound_timer, NULL
+}; 
+int num_sound_timers = 1;
 #else
-	struct sound_timer_operations *sound_timer_devs[MAX_TIMER_DEV] = 
-		{NULL}; 
-	int num_sound_timers = 0;
+struct sound_timer_operations *sound_timer_devs[MAX_TIMER_DEV] = {
+	NULL
+};
+int num_sound_timers = 0;
 #endif
 
 /*
  * List of low level drivers compiled into the kernel.
  */
 
-	struct driver_info sound_drivers[] = {
+struct driver_info sound_drivers[] = 
+{
 #if defined(CONFIG_PSS) && !defined(CONFIG_PSS_MODULE)
-	  {"PSS", 0, SNDCARD_PSS, "Echo Personal Sound System PSS (ESC614)", attach_pss, probe_pss, unload_pss},
-	  {"PSSMPU", 0, SNDCARD_PSS_MPU, "PSS-MPU", attach_pss_mpu, probe_pss_mpu, unload_pss_mpu},
-	  {"PSSMSS", 0, SNDCARD_PSS_MSS, "PSS-MSS", attach_pss_mss, probe_pss_mss, unload_pss_mss},
+	{"PSS", 0, SNDCARD_PSS, "Echo Personal Sound System PSS (ESC614)", attach_pss, probe_pss, unload_pss},
+	{"PSSMPU", 0, SNDCARD_PSS_MPU, "PSS-MPU", attach_pss_mpu, probe_pss_mpu, unload_pss_mpu},
+	{"PSSMSS", 0, SNDCARD_PSS_MSS, "PSS-MSS", attach_pss_mss, probe_pss_mss, unload_pss_mss},
 #endif
 
 #if defined(CONFIG_GUS) && !defined(CONFIG_GUS_MODULE)
 #ifdef CONFIG_GUS16
-		{"GUS16", 0, SNDCARD_GUS16,	"Ultrasound 16-bit opt.",	attach_gus_db16, probe_gus_db16, unload_gus_db16},
+	{"GUS16", 0, SNDCARD_GUS16,	"Ultrasound 16-bit opt.",	attach_gus_db16, probe_gus_db16, unload_gus_db16},
 #endif
 #ifdef CONFIG_GUSHW
-		{"GUS", 0, SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus, unload_gus},
-		{"GUSPNP", 1, SNDCARD_GUSPNP,	"GUS PnP",	attach_gus_card, probe_gus, unload_gus},
+	{"GUS", 0, SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus, unload_gus},
+	{"GUSPNP", 1, SNDCARD_GUSPNP,	"GUS PnP",	attach_gus_card, probe_gus, unload_gus},
 #endif
 #endif
 
 #if defined(CONFIG_MSS) && !defined(CONFIG_MSS_MODULE)
-		{"MSS", 0, SNDCARD_MSS,	"MS Sound System",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
+	{"MSS", 0, SNDCARD_MSS,	"MS Sound System",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
 	/* Compaq Deskpro XL */
-		{"DESKPROXL", 2, SNDCARD_DESKPROXL,	"Compaq Deskpro XL",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
+	{"DESKPROXL", 2, SNDCARD_DESKPROXL,	"Compaq Deskpro XL",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
 #endif
 #ifdef CONFIG_MAD16
-		{"MAD16", 0, SNDCARD_MAD16,	"MAD16/Mozart (MSS)",		attach_mad16, probe_mad16, unload_mad16},
-		{"MAD16MPU", 0, SNDCARD_MAD16_MPU,	"MAD16/Mozart (MPU)",		attach_mad16_mpu, probe_mad16_mpu, unload_mad16_mpu},
+	{"MAD16", 0, SNDCARD_MAD16,	"MAD16/Mozart (MSS)",		attach_mad16, probe_mad16, unload_mad16},
+	{"MAD16MPU", 0, SNDCARD_MAD16_MPU,	"MAD16/Mozart (MPU)",		attach_mad16_mpu, probe_mad16_mpu, unload_mad16_mpu},
 #endif
 #ifdef CONFIG_CS4232
-		{"CS4232", 0, SNDCARD_CS4232,	"CS4232",		attach_cs4232, probe_cs4232, unload_cs4232},
-		{"CS4232MPU", 0, SNDCARD_CS4232_MPU,	"CS4232 MIDI",		attach_cs4232_mpu, probe_cs4232_mpu, unload_cs4232_mpu},
+	{"CS4232", 0, SNDCARD_CS4232,	"CS4232",		attach_cs4232, probe_cs4232, unload_cs4232},
+	{"CS4232MPU", 0, SNDCARD_CS4232_MPU,	"CS4232 MIDI",		attach_cs4232_mpu, probe_cs4232_mpu, unload_cs4232_mpu},
 #endif
 #if defined(CONFIG_YM3812) && !defined(CONFIG_YM3812_MODULE)
-		{"OPL3", 0, SNDCARD_ADLIB,	"OPL-2/OPL-3 FM",		attach_adlib_card, probe_adlib, unload_adlib},
+	{"OPL3", 0, SNDCARD_ADLIB,	"OPL-2/OPL-3 FM",		attach_adlib_card, probe_adlib, unload_adlib},
 #endif
 #if defined(CONFIG_PAS) && !defined(CONFIG_PAS_MODULE)
-		{"PAS16", 0, SNDCARD_PAS,	"ProAudioSpectrum",	attach_pas_card, probe_pas, unload_pas},
+	{"PAS16", 0, SNDCARD_PAS,	"ProAudioSpectrum",	attach_pas_card, probe_pas, unload_pas},
 #endif
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI) && !defined(CONFIG_MPU401_MODULE)
-		{"MPU401", 0, SNDCARD_MPU401,"Roland MPU-401",	attach_mpu401, probe_mpu401, unload_mpu401},
+	{"MPU401", 0, SNDCARD_MPU401,"Roland MPU-401",	attach_mpu401, probe_mpu401, unload_mpu401},
 #endif
 #if defined(CONFIG_UART401) && defined(CONFIG_MIDI) && !defined(CONFIG_UART401_MODULE)
 	{"UART401", 0, SNDCARD_UART401,"MPU-401 (UART)", 
 		attach_uart401, probe_uart401, unload_uart401},
 #endif
 #if defined(CONFIG_MAUI) && !defined(CONFIG_MAUI_MODULE)
-		{"MAUI", 0, SNDCARD_MAUI,"TB Maui",	attach_maui, probe_maui, unload_maui},
+	{"MAUI", 0, SNDCARD_MAUI,"TB Maui",	attach_maui, probe_maui, unload_maui},
 #endif
 #if defined(CONFIG_UART6850) && defined(CONFIG_MIDI) && !defined(CONFIG_UART6850_MODULE)
-		{"MIDI6850", 0, SNDCARD_UART6850,"6860 UART Midi",	attach_uart6850, probe_uart6850, unload_uart6850},
+	{"MIDI6850", 0, SNDCARD_UART6850,"6860 UART Midi",	attach_uart6850, probe_uart6850, unload_uart6850},
 #endif
 
 
 
 
 #if defined(CONFIG_SBDSP) && !defined(CONFIG_SBDSP_MODULE)
-		{"SBLAST", 0, SNDCARD_SB,	"Sound Blaster",		attach_sb_card, probe_sb, unload_sb},
-		{"SBPNP", 6, SNDCARD_SBPNP,	"Sound Blaster PnP",		attach_sb_card, probe_sb, unload_sb},
+	{"SBLAST", 0, SNDCARD_SB,	"Sound Blaster",		attach_sb_card, probe_sb, unload_sb},
+	{"SBPNP", 6, SNDCARD_SBPNP,	"Sound Blaster PnP",		attach_sb_card, probe_sb, unload_sb},
 
-#	ifdef CONFIG_MIDI
-		{"SBMPU", 0, SNDCARD_SB16MIDI,"SB MPU-401",	attach_sbmpu, probe_sbmpu, unload_sbmpu},
-#	endif
+#ifdef CONFIG_MIDI
+	{"SBMPU", 0, SNDCARD_SB16MIDI,"SB MPU-401",	attach_sbmpu, probe_sbmpu, unload_sbmpu},
+#endif
 #endif
 
 #ifdef CONFIG_SSCAPEHW
-		{"SSCAPE", 0, SNDCARD_SSCAPE, "Ensoniq SoundScape",	attach_sscape, probe_sscape, unload_sscape},
-		{"SSCAPEMSS", 0, SNDCARD_SSCAPE_MSS,	"MS Sound System (SoundScape)",	attach_ss_ms_sound, probe_ss_ms_sound, unload_ss_ms_sound},
+	{"SSCAPE", 0, SNDCARD_SSCAPE, "Ensoniq SoundScape",	attach_sscape, probe_sscape, unload_sscape},
+	{"SSCAPEMSS", 0, SNDCARD_SSCAPE_MSS,	"MS Sound System (SoundScape)",	attach_ss_ms_sound, probe_ss_ms_sound, unload_ss_ms_sound},
 #endif
 
 #ifdef CONFIG_OPL3SA1
@@ -413,149 +430,146 @@ struct sound_timer_operations {
 #endif
 
 #if defined (CONFIG_TRIX) && !defined(CONFIG_TRIX_MODULE)
-		{"TRXPRO", 0, SNDCARD_TRXPRO, "MediaTrix AudioTrix Pro",	attach_trix_wss, probe_trix_wss, unload_trix_wss},
-		{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTrix (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
-		{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTrix MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
+	{"TRXPRO", 0, SNDCARD_TRXPRO, "MediaTrix AudioTrix Pro",	attach_trix_wss, probe_trix_wss, unload_trix_wss},
+	{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTrix (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
+	{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTrix MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
 #endif
 
 #if defined(CONFIG_SOFTOSS) && !defined(CONFIG_SOFTOSS_MODULE)
-		{"SOFTSYN", 0, SNDCARD_SOFTOSS,	"SoftOSS Virtual Wave Table", 
+	{"SOFTSYN", 0, SNDCARD_SOFTOSS,	"SoftOSS Virtual Wave Table", 
 		attach_softsyn_card, probe_softsyn, unload_softsyn},
 #endif
 
 #if defined(CONFIG_VMIDI) && defined(CONFIG_MIDI) && !defined(CONFIG_VMIDI_MODULE)
-		{"VMIDI", 0, SNDCARD_VMIDI,"Loopback MIDI Device",      attach_v_midi, probe_v_midi, unload_v_midi},
+	{"VMIDI", 0, SNDCARD_VMIDI,"Loopback MIDI Device",      attach_v_midi, probe_v_midi, unload_v_midi},
 #endif
+	{NULL, 0, 0,		"*?*",			NULL, NULL, NULL}
+};
 
-
-
-
-		{NULL, 0, 0,		"*?*",			NULL, NULL, NULL}
-	};
-
-	int num_sound_drivers =
-	    sizeof(sound_drivers) / sizeof (struct driver_info);
+int num_sound_drivers = sizeof(sound_drivers) / sizeof (struct driver_info);
 
 
 #ifndef FULL_SOUND
+
 /*
  *	List of devices actually configured in the system.
  *
  *	Note! The detection order is significant. Don't change it.
  */
 
-	struct card_info snd_installed_cards[] = {
+struct card_info snd_installed_cards[] = 
+{
 #ifdef CONFIG_PSS
-	     {SNDCARD_PSS, {PSS_BASE, 0, -1, -1}, SND_DEFAULT_ENABLE},
-#	ifdef PSS_MPU_BASE
-	     {SNDCARD_PSS_MPU, {PSS_MPU_BASE, PSS_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
-#	endif
-#	ifdef PSS_MSS_BASE
-	     {SNDCARD_PSS_MSS, {PSS_MSS_BASE, PSS_MSS_IRQ, PSS_MSS_DMA, -1}, SND_DEFAULT_ENABLE},
-#	endif
+	{SNDCARD_PSS, {PSS_BASE, 0, -1, -1}, SND_DEFAULT_ENABLE},
+#ifdef PSS_MPU_BASE
+	{SNDCARD_PSS_MPU, {PSS_MPU_BASE, PSS_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+#endif
+#ifdef PSS_MSS_BASE
+	{SNDCARD_PSS_MSS, {PSS_MSS_BASE, PSS_MSS_IRQ, PSS_MSS_DMA, -1}, SND_DEFAULT_ENABLE},
+#endif
 #endif
 #ifdef CONFIG_TRIX
 #ifndef TRIX_DMA2
 #define TRIX_DMA2 TRIX_DMA
 #endif
-	     {SNDCARD_TRXPRO, {TRIX_BASE, TRIX_IRQ, TRIX_DMA, TRIX_DMA2}, SND_DEFAULT_ENABLE},
-#	ifdef TRIX_SB_BASE
-	     {SNDCARD_TRXPRO_SB, {TRIX_SB_BASE, TRIX_SB_IRQ, TRIX_SB_DMA, -1}, SND_DEFAULT_ENABLE},
-#	endif
-#	ifdef TRIX_MPU_BASE
-	     {SNDCARD_TRXPRO_MPU, {TRIX_MPU_BASE, TRIX_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
-#	endif
+	{SNDCARD_TRXPRO, {TRIX_BASE, TRIX_IRQ, TRIX_DMA, TRIX_DMA2}, SND_DEFAULT_ENABLE},
+#ifdef TRIX_SB_BASE
+	{SNDCARD_TRXPRO_SB, {TRIX_SB_BASE, TRIX_SB_IRQ, TRIX_SB_DMA, -1}, SND_DEFAULT_ENABLE},
+#endif
+#ifdef TRIX_MPU_BASE
+	{SNDCARD_TRXPRO_MPU, {TRIX_MPU_BASE, TRIX_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+#endif
 #endif
 
 #ifdef CONFIG_OPL3SA1
-	     {SNDCARD_OPL3SA1, {OPL3SA1_BASE, OPL3SA1_IRQ, OPL3SA1_DMA, OPL3SA1_DMA2}, SND_DEFAULT_ENABLE},
-#	ifdef OPL3SA1_MPU_BASE
-	     {SNDCARD_OPL3SA1_MPU, {OPL3SA1_MPU_BASE, OPL3SA1_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
-#	endif
+	{SNDCARD_OPL3SA1, {OPL3SA1_BASE, OPL3SA1_IRQ, OPL3SA1_DMA, OPL3SA1_DMA2}, SND_DEFAULT_ENABLE},
+#ifdef OPL3SA1_MPU_BASE
+	{SNDCARD_OPL3SA1_MPU, {OPL3SA1_MPU_BASE, OPL3SA1_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+#endif
 #endif
 
 #ifdef CONFIG_SOFTOSS
-	     {SNDCARD_SOFTOSS, {0, 0, -1, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_SOFTOSS, {0, 0, -1, -1}, SND_DEFAULT_ENABLE},
 #endif
 
 #ifdef CONFIG_SSCAPE
-	     {SNDCARD_SSCAPE, {SSCAPE_BASE, SSCAPE_IRQ, SSCAPE_DMA, -1}, SND_DEFAULT_ENABLE},
-	     {SNDCARD_SSCAPE_MSS, {SSCAPE_MSS_BASE, SSCAPE_MSS_IRQ, SSCAPE_DMA, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_SSCAPE, {SSCAPE_BASE, SSCAPE_IRQ, SSCAPE_DMA, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_SSCAPE_MSS, {SSCAPE_MSS_BASE, SSCAPE_MSS_IRQ, SSCAPE_DMA, -1}, SND_DEFAULT_ENABLE},
 #endif
 #ifdef CONFIG_MAD16
 #ifndef MAD16_DMA2
 #define MAD16_DMA2 MAD16_DMA
 #endif
-	     {SNDCARD_MAD16, {MAD16_BASE, MAD16_IRQ, MAD16_DMA, MAD16_DMA2}, SND_DEFAULT_ENABLE},
-#	ifdef MAD16_MPU_BASE
-	     {SNDCARD_MAD16_MPU, {MAD16_MPU_BASE, MAD16_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
-#	endif
+	{SNDCARD_MAD16, {MAD16_BASE, MAD16_IRQ, MAD16_DMA, MAD16_DMA2}, SND_DEFAULT_ENABLE},
+#ifdef MAD16_MPU_BASE
+	{SNDCARD_MAD16_MPU, {MAD16_MPU_BASE, MAD16_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+#endif
 #endif
 
 #ifdef CONFIG_CS4232
 #ifndef CS4232_DMA2
 #define CS4232_DMA2 CS4232_DMA
 #endif
-#	ifdef CS4232_MPU_BASE
-	     {SNDCARD_CS4232_MPU, {CS4232_MPU_BASE, CS4232_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
-#	endif
-	     {SNDCARD_CS4232, {CS4232_BASE, CS4232_IRQ, CS4232_DMA, CS4232_DMA2}, SND_DEFAULT_ENABLE},
+#ifdef CS4232_MPU_BASE
+	{SNDCARD_CS4232_MPU, {CS4232_MPU_BASE, CS4232_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+#endif
+	{SNDCARD_CS4232, {CS4232_BASE, CS4232_IRQ, CS4232_DMA, CS4232_DMA2}, SND_DEFAULT_ENABLE},
 #endif
 
 
 #ifdef CONFIG_MSS
-#	ifndef MSS_DMA2
-#	define MSS_DMA2 -1
-#	endif
+#ifndef MSS_DMA2
+#define MSS_DMA2 -1
+#endif
 
-#	ifdef DESKPROXL
-		{SNDCARD_DESKPROXL, {MSS_BASE, MSS_IRQ, MSS_DMA, MSS_DMA2}, SND_DEFAULT_ENABLE},
-#	else
-		{SNDCARD_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA, MSS_DMA2}, SND_DEFAULT_ENABLE},
-#	endif
-#	ifdef MSS2_BASE
-		{SNDCARD_MSS, {MSS2_BASE, MSS2_IRQ, MSS2_DMA, MSS2_DMA2}, SND_DEFAULT_ENABLE},
-#	endif
+#ifdef DESKPROXL
+	{SNDCARD_DESKPROXL, {MSS_BASE, MSS_IRQ, MSS_DMA, MSS_DMA2}, SND_DEFAULT_ENABLE},
+#else
+	{SNDCARD_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA, MSS_DMA2}, SND_DEFAULT_ENABLE},
+#endif
+#ifdef MSS2_BASE
+	{SNDCARD_MSS, {MSS2_BASE, MSS2_IRQ, MSS2_DMA, MSS2_DMA2}, SND_DEFAULT_ENABLE},
+#endif
 #endif
 
 
 #ifdef CONFIG_PAS
-		{SNDCARD_PAS, {PAS_BASE, PAS_IRQ, PAS_DMA, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_PAS, {PAS_BASE, PAS_IRQ, PAS_DMA, -1}, SND_DEFAULT_ENABLE},
 #endif
 
 #ifdef CONFIG_SB
-#	ifndef SBC_DMA
-#		define SBC_DMA		1
-#	endif
-#	ifndef SB_DMA2
-#		define SB_DMA2		-1
-#	endif
-		{SNDCARD_SB, {SBC_BASE, SBC_IRQ, SBC_DMA, SB_DMA2}, SND_DEFAULT_ENABLE},
-# 	ifdef SB2_BASE
-		{SNDCARD_SB, {SB2_BASE, SB2_IRQ, SB2_DMA, SB2_DMA2}, SND_DEFAULT_ENABLE},
-#	endif
+#ifndef SBC_DMA
+#define SBC_DMA		1
+#endif
+#ifndef SB_DMA2
+#define SB_DMA2		-1
+#endif
+	{SNDCARD_SB, {SBC_BASE, SBC_IRQ, SBC_DMA, SB_DMA2}, SND_DEFAULT_ENABLE},
+#ifdef SB2_BASE
+	{SNDCARD_SB, {SB2_BASE, SB2_IRQ, SB2_DMA, SB2_DMA2}, SND_DEFAULT_ENABLE},
+#endif
 #endif
 #if defined(CONFIG_MAUI) 
-		{SNDCARD_MAUI, {MAUI_BASE, MAUI_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_MAUI, {MAUI_BASE, MAUI_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 
 #if defined(CONFIG_MPU401) && defined(CONFIG_MIDI)
-		{SNDCARD_MPU401, {MPU_BASE, MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_MPU401, {MPU_BASE, MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #ifdef MPU2_BASE
-		{SNDCARD_MPU401, {MPU2_BASE, MPU2_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_MPU401, {MPU2_BASE, MPU2_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 #ifdef MPU3_BASE
-		{SNDCARD_MPU401, {MPU3_BASE, MPU2_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_MPU401, {MPU3_BASE, MPU2_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 #endif
 
 #if defined(CONFIG_UART6850) && defined(CONFIG_MIDI)
-		{SNDCARD_UART6850, {U6850_BASE, U6850_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_UART6850, {U6850_BASE, U6850_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 
 #if defined(CONFIG_SB) 
 #if defined(CONFIG_MIDI) && defined(SB_MPU_BASE)
-		{SNDCARD_SB16MIDI,{SB_MPU_BASE, SB_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_SB16MIDI,{SB_MPU_BASE, SB_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 #endif
 
@@ -564,54 +578,51 @@ struct sound_timer_operations {
 #define GUS_DMA2 GUS_DMA
 #endif
 #ifdef CONFIG_GUS16
-		{SNDCARD_GUS16, {GUS16_BASE, GUS16_IRQ, GUS16_DMA, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_GUS16, {GUS16_BASE, GUS16_IRQ, GUS16_DMA, -1}, SND_DEFAULT_ENABLE},
 #endif
-		{SNDCARD_GUS, {GUS_BASE, GUS_IRQ, GUS_DMA, GUS_DMA2}, SND_DEFAULT_ENABLE},
+	{SNDCARD_GUS, {GUS_BASE, GUS_IRQ, GUS_DMA, GUS_DMA2}, SND_DEFAULT_ENABLE},
 #endif
 
 #if defined(CONFIG_YM3812) 
-		{SNDCARD_ADLIB, {FM_MONO, 0, 0, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_ADLIB, {FM_MONO, 0, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 
 #if defined(CONFIG_VMIDI) && defined(CONFIG_MIDI)
-		{SNDCARD_VMIDI, {0, 0, 0, -1}, SND_DEFAULT_ENABLE},
+	{SNDCARD_VMIDI, {0, 0, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 
-		{0, {0}, 0}
-	};
+	{0, {0}, 0}
+};
 
-	int num_sound_cards =
-	    sizeof(snd_installed_cards) / sizeof (struct card_info);
-	static int max_sound_cards =
-	    sizeof(snd_installed_cards) / sizeof (struct card_info);
+int num_sound_cards = sizeof(snd_installed_cards) / sizeof (struct card_info);
+static int max_sound_cards =  sizeof(snd_installed_cards) / sizeof (struct card_info);
 
 #else
-	int num_sound_cards = 0;
-	struct card_info snd_installed_cards[20] = {{0}};
-	static int max_sound_cards = 20;
+int num_sound_cards = 0;
+struct card_info snd_installed_cards[20] = {{0}};
+static int max_sound_cards = 20;
 #endif
 
 #if defined(MODULE) || (!defined(linux) && !defined(_AIX))
-	int trace_init = 0;
-#   else
-	int trace_init = 1;
-#   endif
+int trace_init = 0;
+#else
+int trace_init = 1;
+#endif
 
 #else
-	extern struct audio_operations * audio_devs[MAX_AUDIO_DEV]; extern int num_audiodevs;
-	extern struct mixer_operations * mixer_devs[MAX_MIXER_DEV]; extern int num_mixers;
-	extern struct synth_operations * synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV]; extern int num_synths;
-	extern struct midi_operations * midi_devs[MAX_MIDI_DEV]; extern int num_midis;
-	extern struct sound_timer_operations * sound_timer_devs[MAX_TIMER_DEV]; extern int num_sound_timers;
+extern struct audio_operations * audio_devs[MAX_AUDIO_DEV]; extern int num_audiodevs;
+extern struct mixer_operations * mixer_devs[MAX_MIXER_DEV]; extern int num_mixers;
+extern struct synth_operations * synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV]; extern int num_synths;
+extern struct midi_operations * midi_devs[MAX_MIDI_DEV]; extern int num_midis;
+extern struct sound_timer_operations * sound_timer_devs[MAX_TIMER_DEV]; extern int num_sound_timers;
 
-	extern struct driver_info sound_drivers[];
-	extern int num_sound_drivers;
-	extern struct card_info snd_installed_cards[];
-	extern int num_sound_cards;
+extern struct driver_info sound_drivers[];
+extern int num_sound_drivers;
+extern struct card_info snd_installed_cards[];
+extern int num_sound_cards;
 
-	extern int trace_init;
+extern int trace_init;
 #endif	/* _DEV_TABLE_C_ */
-
 void sndtable_init(void);
 int sndtable_get_cardcount (void);
 struct address_info *sound_getconf(int card_type);
@@ -629,27 +640,17 @@ int sndtable_probe (int unit, struct address_info *hw_config);
 int sndtable_init_card (int unit, struct address_info *hw_config);
 int sndtable_start_card (int unit, struct address_info *hw_config);
 void sound_timer_init (struct sound_lowlev_timer *t, char *name);
-int sound_start_dma (	int dev, struct dma_buffparms *dmap, int chan,
-			unsigned long physaddr,
-			int count, int dma_mode, int autoinit);
+int sound_start_dma(int dev, struct dma_buffparms *dmap, int chan,
+			unsigned long physaddr, int count, int dma_mode, int autoinit);
 void sound_dma_intr (int dev, struct dma_buffparms *dmap, int chan);
 
 #define AUDIO_DRIVER_VERSION	2
 #define MIXER_DRIVER_VERSION	2
-int sound_install_audiodrv(int vers,
-			   char *name,
-			   struct audio_driver *driver,
-			   int driver_size,
-			   int flags,
-      			   unsigned int format_mask,
-			   void *devc,
-			   int dma1, 
-			   int dma2);
-int sound_install_mixer(int vers, 
-			char *name,
-			struct mixer_operations *driver,
-			int driver_size,
-			void *devc);
+int sound_install_audiodrv(int vers, char *name, struct audio_driver *driver,
+			int driver_size, int flags, unsigned int format_mask,
+			void *devc, int dma1, int dma2);
+int sound_install_mixer(int vers, char *name, struct mixer_operations *driver,
+			int driver_size, void *devc);
 
 void sound_unload_audiodev(int dev);
 void sound_unload_mixerdev(int dev);

@@ -901,7 +901,7 @@ static int check_space (u16 n)
 	unsigned long pages;
 
 	if ((1 << alloced) * PAGE_SIZE < (n + 2) * sizeof(openpromfs_node)) {
-		pages = __get_free_pages (GFP_KERNEL, alloced + 1, 0);
+		pages = __get_free_pages (GFP_KERNEL, alloced + 1);
 		if (!pages)
 			return -1;
 
@@ -1048,7 +1048,7 @@ int init_module (void)
 	if (!romvec->pv_romvers)
 		return RET(ENODEV);
 #endif
-	nodes = (openpromfs_node *)__get_free_pages(GFP_KERNEL, 0, 0);
+	nodes = (openpromfs_node *)__get_free_pages(GFP_KERNEL, 0);
 	if (!nodes) {
 		printk (KERN_WARNING "/proc/openprom: can't get free page\n");
 		return RET(EIO);

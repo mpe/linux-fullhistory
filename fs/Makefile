@@ -218,6 +218,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ADFS_FS),y)
+SUB_DIRS += adfs
+else
+  ifeq ($(CONFIG_ADFS_FS),m)
+  MOD_SUB_DIRS += adfs
+  endif
+endif
+
 ifeq ($(CONFIG_BINFMT_ELF),y)
 BINFMTS += binfmt_elf.o
 else

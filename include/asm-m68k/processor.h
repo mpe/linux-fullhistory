@@ -94,7 +94,7 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 
 /* Allocation and freeing of basic task resources. */
 #define alloc_task_struct() \
-	((struct task_struct *) __get_free_pages(GFP_KERNEL,1,0))
+	((struct task_struct *) __get_free_pages(GFP_KERNEL,1))
 #define free_task_struct(p)	free_pages((unsigned long)(p),1)
 
 #define init_task	(init_task_union.task)

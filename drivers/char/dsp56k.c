@@ -425,7 +425,7 @@ static int dsp56k_ioctl(struct inode *inode, struct file *file,
  * but how do I then check device minor number?
  * Do I need this function at all???
  */
-#ifdef 0
+#if 0
 static int dsp56k_select(struct inode *inode, struct file *file, int sel_type,
 			 select_table *wait)
 {

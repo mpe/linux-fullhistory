@@ -46,6 +46,11 @@ static struct rpc_wait_queue	schedq = RPC_INIT_WAITQ("schedq");
 static struct rpc_wait_queue	childq = RPC_INIT_WAITQ("childq");
 
 /*
+ * RPC tasks sit here while waiting for conditions to improve.
+ */
+static struct rpc_wait_queue	delay_queue = RPC_INIT_WAITQ("delayq");
+
+/*
  * All RPC tasks are linked into this list
  */
 static struct rpc_task *	all_tasks = NULL;
@@ -318,8 +323,6 @@ static void	__rpc_atrun(struct rpc_task *);
 void
 rpc_delay(struct rpc_task *task, unsigned long delay)
 {
-	static struct rpc_wait_queue	delay_queue;
-
 	task->tk_timeout = delay;
 	rpc_sleep_on(&delay_queue, task, NULL, __rpc_atrun);
 }
@@ -440,10 +443,15 @@ rpc_execute(struct rpc_task *task)
 	static int	executing = 0;
 	int		incr = RPC_IS_ASYNC(task)? 1 : 0;
 
-	if (incr && (executing || rpc_inhibit)) {
-		printk("RPC: rpc_execute called recursively!\n");
-		return;
+	if (incr) {
+		if (rpc_inhibit) {
+			printk("RPC: execution inhibited!\n");
+			return;
+		}
+		if (executing)
+			printk("RPC: %d tasks executed\n", executing);
 	}
+	
 	executing += incr;
 	__rpc_execute(task);
 	executing -= incr;
@@ -712,6 +720,7 @@ rpc_run_child(struct rpc_task *task, struct rpc_task *child, rpc_action func)
 	save_flags(oldflags); cli();
 	rpc_make_runnable(child);
 	restore_flags(oldflags);
+	/* N.B. Is it possible for the child to have already finished? */
 	rpc_sleep_on(&childq, task, func, NULL);
 }
 
@@ -725,6 +734,7 @@ rpc_killall_tasks(struct rpc_clnt *clnt)
 	struct rpc_task	**q, *rovr;
 
 	dprintk("RPC:      killing all tasks for client %p\n", clnt);
+	/* N.B. Why bother to inhibit? Nothing blocks here ... */
 	rpc_inhibit++;
 	for (q = &all_tasks; (rovr = *q); q = &rovr->tk_next_task) {
 		if (!clnt || rovr->tk_client == clnt) {
@@ -917,14 +927,16 @@ void rpc_show_tasks(void)
 
 	if (!t)
 		return;
-	printk("-pid- proc flgs status -client- --rqstp- -timeout "
+	printk("-pid- proc flgs status -client- -prog- --rqstp- -timeout "
 		"-rpcwait -action- --exit--\n");
 	for (; t; t = next) {
 		next = t->tk_next_task;
-		printk("%05d %04d %04x %06d %8p %8p %08ld %8p %8p %8p\n",
+		printk("%05d %04d %04x %06d %8p %6d %8p %08ld %8s %8p %8p\n",
 			t->tk_pid, t->tk_proc, t->tk_flags, t->tk_status,
-			t->tk_client, t->tk_rqstp, t->tk_timeout,
-			t->tk_rpcwait, t->tk_action, t->tk_exit);
+			t->tk_client, t->tk_client->cl_prog,
+			t->tk_rqstp, t->tk_timeout,
+			t->tk_rpcwait ? rpc_qname(t->tk_rpcwait) : " <NULL> ",
+			t->tk_action, t->tk_exit);
 
 		if (!(t->tk_flags & RPC_TASK_NFSWRITE))
 			continue;

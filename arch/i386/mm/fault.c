@@ -20,6 +20,7 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
+#include <asm/hardirq.h>
 
 extern void die_if_kernel(const char *,struct pt_regs *,long);
 
@@ -99,6 +100,8 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
 
+	if (local_irq_count[smp_processor_id()])
+		die_if_kernel("page fault from irq handler",regs,error_code);
 	lock_kernel();
 	tsk = current;
 	mm = tsk->mm;

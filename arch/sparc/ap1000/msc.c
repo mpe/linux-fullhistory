@@ -237,7 +237,7 @@ void ap_msc_init(void)
 	MSC_OUT(MSC_SQRAM + i * 8, -1);
 
     if (!qof_base) {
-      qof_base = (struct qof_elt *) __get_free_pages(GFP_ATOMIC, QOF_ORDER, 0);
+      qof_base = (struct qof_elt *) __get_free_pages(GFP_ATOMIC, QOF_ORDER);
       for (i = MAP_NR(qof_base); i <= MAP_NR(((char*)qof_base)+QOF_SIZE-1);++i)
 	set_bit(PG_reserved, &mem_map[i].flags);
     }
@@ -285,7 +285,7 @@ void ap_msc_init(void)
 
     if (!system_ringbuf.ringbuf) {
       system_ringbuf.ringbuf = 
-	(void *)__get_free_pages(GFP_ATOMIC,SYSTEM_RINGBUF_ORDER,0);
+	(void *)__get_free_pages(GFP_ATOMIC,SYSTEM_RINGBUF_ORDER);
       for (i=MAP_NR(system_ringbuf.ringbuf);
 	   i<=MAP_NR(system_ringbuf.ringbuf+SYSTEM_RINGBUF_SIZE-1);i++)
 	set_bit(PG_reserved, &mem_map[i].flags);
@@ -294,7 +294,7 @@ void ap_msc_init(void)
 
     if (!dummy_ringbuf.ringbuf) {
       dummy_ringbuf.ringbuf = 
-	(void *)__get_free_pages(GFP_ATOMIC,DUMMY_RINGBUF_ORDER,0);
+	(void *)__get_free_pages(GFP_ATOMIC,DUMMY_RINGBUF_ORDER);
       for (i=MAP_NR(dummy_ringbuf.ringbuf);
 	   i<=MAP_NR(dummy_ringbuf.ringbuf+DUMMY_RINGBUF_SIZE-1);i++)
 	set_bit(PG_reserved, &mem_map[i].flags);

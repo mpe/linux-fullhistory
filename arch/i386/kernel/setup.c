@@ -436,8 +436,8 @@ int get_cpuinfo(char * buffer)
         static const char *x86_cap_flags[] = {
                 "fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
                 "cx8", "apic", "10", "sep", "mtrr", "pge", "mca", "cmov",
-                "16", "17", "18", "19", "20", "21", "22", "mmx",
-                "24", "25", "26", "27", "28", "29", "30", "31"
+                "fcmov", "17", "18", "19", "20", "21", "22", "mmx",
+                "cxmmx", "25", "26", "27", "28", "29", "30", "amd3d"
         };
 	struct cpuinfo_x86 *c = cpu_data;
 	int i, n;

@@ -221,14 +221,21 @@ static int get_loadavg(char * buffer)
 
 static int get_kstat(char * buffer)
 {
-	int i, len;
+	int i, j, len;
 	unsigned sum = 0;
 	extern unsigned long total_forks;
 	unsigned long ticks;
 
 	ticks = jiffies * smp_num_cpus;
+#ifndef __SMP__
 	for (i = 0 ; i < NR_IRQS ; i++)
-		sum += kstat.interrupts[i];
+		sum += kstat.interrupts[0][i];
+#else
+	for (j = 0 ; j < smp_num_cpus ; j++)
+		for (i = 0 ; i < NR_IRQS ; i++)
+			sum += kstat.interrupts[cpu_logical_map[j]][i];
+#endif
+
 #ifdef __SMP__
 	len = sprintf(buffer,
 		"cpu  %u %u %u %lu\n",
@@ -285,8 +292,17 @@ static int get_kstat(char * buffer)
 		kstat.pswpin,
 		kstat.pswpout,
 		sum);
-	for (i = 0 ; i < NR_IRQS ; i++)
-		len += sprintf(buffer + len, " %u", kstat.interrupts[i]);
+	for (i = 0 ; i < NR_IRQS ; i++) {
+#ifndef __SMP__
+		len += sprintf(buffer + len, " %u", kstat.interrupts[0][i]);
+#else
+		int sum=0;
+
+		for (j = 0 ; j < smp_num_cpus ; j++)
+			sum += kstat.interrupts[cpu_logical_map[j]][i];
+		len += sprintf(buffer + len, " %u", sum);
+#endif
+	}
 	len += sprintf(buffer + len,
 		"\nctxt %u\n"
 		"btime %lu\n"
@@ -1153,9 +1169,6 @@ extern int get_md_status (char *);
 extern int get_rtc_status (char *);
 extern int get_locks_status (char *, char **, off_t, int);
 extern int get_swaparea_info (char *);
-#ifdef __SMP_PROF__
-extern int get_smp_prof_list(char *);
-#endif
 #ifdef CONFIG_ZORRO
 extern int zorro_get_list(char *);
 #endif
@@ -1223,10 +1236,6 @@ static long get_root_array(char * page, int type, char **start,
 #ifdef CONFIG_BLK_DEV_MD
 	        case PROC_MD:
 			return get_md_status(page);
-#endif
-#ifdef __SMP_PROF__
-		case PROC_SMP_PROF:
-			return get_smp_prof_list(page);
 #endif
 		case PROC_CMDLINE:
 			return get_cmdline(page);

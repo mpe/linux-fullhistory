@@ -1185,7 +1185,7 @@ static struct task_struct *sun4c_alloc_task_struct(void)
 	unsigned long addr, pages;
 	int entry;
 
-	pages = __get_free_pages(GFP_KERNEL, 1, 0);
+	pages = __get_free_pages(GFP_KERNEL, 1);
 	if(!pages)
 		return (struct task_struct *) 0;
 

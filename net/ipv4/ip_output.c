@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.44 1997/12/27 20:41:14 kuznet Exp $
+ * Version:	$Id: ip_output.c,v 1.45 1998/01/15 22:06:35 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -332,12 +332,9 @@ void ip_send_check(struct iphdr *iph)
 
 
 /*
- * Queues a packet to be sent, and starts the transmitter
- * if necessary.  if free = 1 then we free the block after
- * transmit, otherwise we don't. If free==2 we not only
- * free the block but also don't assign a new ip seq number.
- * This routine also needs to put in the total length,
- * and compute the checksum
+ * Queues a packet to be sent, and starts the transmitter if necessary.  
+ * This routine also needs to put in the total length and compute the 
+ * checksum
  */
 
 void ip_queue_xmit(struct sk_buff *skb)
@@ -352,15 +349,23 @@ void ip_queue_xmit(struct sk_buff *skb)
 	iph->tot_len = htons(tot_len);
 	iph->id = htons(ip_id_count++);
 
-	if (rt->u.dst.obsolete)
-		goto check_route;
-after_check_route:
+	if (rt->u.dst.obsolete) {
+		/* Ugly... ugly... but what can I do?
+		   Essentially it is "ip_reroute_output" function. --ANK
+		*/
+		struct rtable *nrt;
+		if (ip_route_output(&nrt, rt->key.dst, rt->key.src, rt->key.tos, 
+				    sk?sk->bound_dev_if:0)) 
+			goto drop;
+		skb->dst = &nrt->u.dst;
+		ip_rt_put(rt);
+		rt = nrt;
+	}
+
 	dev = rt->u.dst.dev;
 
-	if (call_out_firewall(PF_INET, dev, iph, NULL,&skb) < FW_ACCEPT) {
-		kfree_skb(skb, FREE_WRITE);
-		return;
-	}
+	if (call_out_firewall(PF_INET, dev, iph, NULL,&skb) < FW_ACCEPT) 
+		goto drop;
 
 #ifdef CONFIG_NET_SECURITY	
 	/*
@@ -371,10 +376,7 @@ after_check_route:
 	ip_send_check(iph);
 
 	if (call_out_firewall(PF_SECURITY, NULL, NULL, (void *) 4, &skb)<FW_ACCEPT)
-	{
-		kfree_skb(skb, FREE_WRITE);
-		return;
-	}
+		goto drop;
 
 	iph = skb->nh.iph;
 	/* don't update tot_len, as the dev->mtu is already decreased */	
@@ -404,46 +406,33 @@ after_check_route:
 	if (tot_len > rt->u.dst.pmtu)
 		goto fragment;
 
+#ifndef CONFIG_NET_SECURITY
 	/*
 	 *	Add an IP checksum
 	 */
 
 	ip_send_check(iph);
+#endif
 
 	if (sk)
 		skb->priority = sk->priority;
 	skb->dst->output(skb);
 	return;
 
-check_route:
-	/* Ugly... ugly... but what can I do?
-
-	   Essentially it is "ip_reroute_output" function. --ANK
-	 */
-	{
-		struct rtable *nrt;
-		if (ip_route_output(&nrt, rt->key.dst, rt->key.src, rt->key.tos, sk?sk->bound_dev_if:0)) {
-			kfree_skb(skb, 0);
-			return;
-		}
-		skb->dst = &nrt->u.dst;
-		ip_rt_put(rt);
-		rt = nrt;
-	}
-	goto after_check_route;
-	
 fragment:
 	if ((iph->frag_off & htons(IP_DF)))
 	{
 		printk(KERN_DEBUG "sending pkt_too_big to self\n");
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
 			  htonl(rt->u.dst.pmtu));
-			  
-		kfree_skb(skb, FREE_WRITE);
-		return;
+		goto drop;
 	}
 	
 	ip_fragment(skb, skb->dst->output);
+	return;
+
+drop:
+	kfree_skb(skb, FREE_WRITE);
 }
 
 /*
@@ -612,11 +601,12 @@ int ip_build_xmit(struct sock *sk,
 	mf = 0;
 
 	/*
-	 *	Can't fragment raw packets 
+	 *	Don't fragment packets for path mtu discovery.
 	 */
 	 
-	if (offset > 0 && df)
+	if (offset > 0 && df) { 
  		return(-EMSGSIZE);
+	}
 
 	/*
 	 *	Lock the device lists.

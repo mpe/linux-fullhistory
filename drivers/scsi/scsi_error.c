@@ -1785,7 +1785,7 @@ scsi_error_handler(void * data)
          * This needs to be attached to task[0] instead.
          */
 
-	siginitsetinv(&current->blocked, SHUTDOWN_SIGS);
+	sigfillset(&current->blocked);
         current->fs->umask = 0;
 
 	/*

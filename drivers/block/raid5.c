@@ -1372,7 +1372,7 @@ static int raid5_run (int minor, struct md_dev *mddev)
 	memset (raid_conf, 0, sizeof (*raid_conf));
 	raid_conf->mddev = mddev;
 
-	if ((raid_conf->stripe_hashtbl = (struct stripe_head **) __get_free_pages(GFP_ATOMIC, HASH_PAGES_ORDER, 0)) == NULL)
+	if ((raid_conf->stripe_hashtbl = (struct stripe_head **) __get_free_pages(GFP_ATOMIC, HASH_PAGES_ORDER)) == NULL)
 		goto abort;
 	memset(raid_conf->stripe_hashtbl, 0, HASH_PAGES * PAGE_SIZE);
 

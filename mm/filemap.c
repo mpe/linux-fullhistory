@@ -1349,11 +1349,10 @@ generic_file_write(struct file *file, const char *buf,
 		if (!(page = __find_page(inode, pgpos, *hash))) {
 			if (!page_cache) {
 				page_cache = __get_free_page(GFP_KERNEL);
-				if (!page_cache) {
-					status = -ENOMEM;
-					break;
-				}
-				continue;
+				if (page_cache)
+					continue;
+				status = -ENOMEM;
+				break;
 			}
 			page = mem_map + MAP_NR(page_cache);
 			add_to_page_cache(page, inode, pgpos, hash);
@@ -1361,34 +1360,45 @@ generic_file_write(struct file *file, const char *buf,
 		}
 
 		/*
-		 * WSH 06/05/97: restructured slightly to make sure we release
-		 * the page on an error exit.  Removed explicit setting of
-		 * PG_locked, as that's handled below the i_op->xxx interface.
+		 * Note: setting of the PG_locked bit is handled
+		 * below the i_op->xxx interface.
 		 */
 		didread = 0;
 page_wait:
 		wait_on_page(page);
+		if (PageUptodate(page))
+			goto do_update_page;
 
 		/*
-		 * If the page is not uptodate, and we're writing less
+		 * The page is not up-to-date ... if we're writing less
 		 * than a full page of data, we may have to read it first.
-		 * However, don't bother with reading the page when it's
-		 * after the current end of file.
+		 * But if the page is past the current end of file, we must
+		 * clear it before updating.
 		 */
-		if (!PageUptodate(page)) {
-			if (bytes < PAGE_SIZE && pgpos < inode->i_size) {
-				status = -EIO; /* two tries ... error out */
-				if (didread < 2)
-					status = inode->i_op->readpage(dentry,
-									page);
+		if (bytes < PAGE_SIZE) {
+			if (pgpos < inode->i_size) {
+				status = -EIO;
+				if (didread >= 2)
+					goto done_with_page;
+				status = inode->i_op->readpage(dentry, page);
 				if (status < 0)
 					goto done_with_page;
 				didread++;
 				goto page_wait;
+			} else {
+				/* Must clear for partial writes */
+				memset((void *) page_address(page), 0,
+					 PAGE_SIZE);
 			}
-			set_bit(PG_uptodate, &page->flags);
 		}
+		/*
+		 * N.B. We should defer setting PG_uptodate at least until
+		 * the data is copied. A failure in i_op->updatepage() could
+		 * leave the page with garbage data.
+		 */
+		set_bit(PG_uptodate, &page->flags);
 
+do_update_page:
 		/* Alright, the page is there.  Now update it. */
 		status = inode->i_op->updatepage(dentry, page, buf,
 							offset, bytes, sync);
@@ -1408,9 +1418,7 @@ done_with_page:
 
 	if (page_cache)
 		free_page(page_cache);
-	if (written)
-		return written;
-	return status;
+	return written ? written : status;
 }
 
 /*
@@ -1429,7 +1437,7 @@ unsigned long get_cached_page(struct inode * inode, unsigned long offset,
 {
 	struct page * page;
 	struct page ** hash;
-	unsigned long page_cache;
+	unsigned long page_cache = 0;
 
 	hash = page_hash(inode, offset);
 	page = __find_page(inode, offset, *hash);
@@ -1443,14 +1451,15 @@ unsigned long get_cached_page(struct inode * inode, unsigned long offset,
 		add_to_page_cache(page, inode, offset, hash);
 	}
 	if (atomic_read(&page->count) != 2)
-		printk("get_cached_page: page count=%d\n",
+		printk(KERN_ERR "get_cached_page: page count=%d\n",
 			atomic_read(&page->count));
 	if (test_bit(PG_locked, &page->flags))
-		printk("get_cached_page: page already locked!\n");
+		printk(KERN_ERR "get_cached_page: page already locked!\n");
 	set_bit(PG_locked, &page->flags);
+	page_cache = page_address(page);
 
 out:
-	return page_address(page);
+	return page_cache;
 }
 
 /*

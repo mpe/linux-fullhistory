@@ -1335,11 +1335,12 @@ S: Malvern, Pennsylvania 19355
 S: USA
 
 N: Stefan Reinauer
-E: stepan@home.culture.mipt.ru
-W: http://home.culture.mipt.ru/~stepan
-D: Modularized affs and ufs. Minor fixes.
-S: Rebmannsweg 34h
-S: 79539 Loerrach
+E: stepan@linux.de
+W: http://www.freiburg.linux.de/~stepan/
+D: Modularization of some filesystems
+D: /proc/sound, minor fixes
+S: Schlossbergring 9
+S: 79098 Freiburg
 S: Germany
 
 N: Joerg Reuter

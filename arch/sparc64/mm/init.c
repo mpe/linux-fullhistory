@@ -265,7 +265,7 @@ void mmu_map_dma_area(unsigned long addr, int len, __u32 *dvma_addr,
 	   ((dvma_pages_current_offset + len) > (1 << 16))) {
 		struct linux_sbus *sbus;
 		unsigned long *iopte;
-		unsigned long newpages = __get_free_pages(GFP_KERNEL, 3, 0);
+		unsigned long newpages = __get_free_pages(GFP_KERNEL, 3);
 		int i;
 
 		if(!newpages)

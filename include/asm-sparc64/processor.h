@@ -204,7 +204,7 @@ do { \
 
 #ifdef __KERNEL__
 /* Allocation and freeing of task_struct and kernel stack. */
-#define alloc_task_struct()   ((struct task_struct *)__get_free_pages(GFP_KERNEL, 1, 0))
+#define alloc_task_struct()   ((struct task_struct *)__get_free_pages(GFP_KERNEL, 1))
 #define free_task_struct(tsk) free_pages((unsigned long)(tsk),1)
 
 #define init_task	(init_task_union.task)

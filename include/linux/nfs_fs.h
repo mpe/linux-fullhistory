@@ -118,7 +118,8 @@ struct nfs_wreq {
 #define NFS_WRITE_CANCELLED	0x0004	/* has been cancelled */
 #define NFS_WRITE_UNCOMMITTED	0x0008	/* written but uncommitted (NFSv3) */
 #define NFS_WRITE_INVALIDATE	0x0010	/* invalidate after write */
-#define NFS_WRITE_INPROGRESS	0x0020	/* RPC call in progress */
+#define NFS_WRITE_INPROGRESS	0x0100	/* RPC call in progress */
+#define NFS_WRITE_COMPLETE	0x0200	/* RPC call completed */
 
 #define WB_WANTLOCK(req)	((req)->wb_flags & NFS_WRITE_WANTLOCK)
 #define WB_HAVELOCK(req)	((req)->wb_flags & NFS_WRITE_LOCKED)
@@ -126,6 +127,7 @@ struct nfs_wreq {
 #define WB_UNCOMMITTED(req)	((req)->wb_flags & NFS_WRITE_UNCOMMITTED)
 #define WB_INVALIDATE(req)	((req)->wb_flags & NFS_WRITE_INVALIDATE)
 #define WB_INPROGRESS(req)	((req)->wb_flags & NFS_WRITE_INPROGRESS)
+#define WB_COMPLETE(req)	((req)->wb_flags & NFS_WRITE_COMPLETE)
 
 /*
  * linux/fs/nfs/proc.c

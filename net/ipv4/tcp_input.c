@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.65 1997/12/13 21:52:58 kuznet Exp $
+ * Version:	$Id: tcp_input.c,v 1.66 1998/01/15 22:40:29 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -41,6 +41,7 @@
  *					next packet on ack of previous packet.
  *		Andi Kleen	:	Moved open_request checking here
  *					and process RSTs for open_requests.
+ *		Andi Kleen	:	Better prune_queue, and other fixes.
  */
 
 #include <linux/config.h>
@@ -73,7 +74,6 @@ int sysctl_tcp_tsack;
 int sysctl_tcp_timestamps;
 int sysctl_tcp_window_scaling;
 int sysctl_tcp_syncookies = SYNC_INIT; 
-int sysctl_tcp_max_delay_acks = MAX_DELAY_ACK;
 int sysctl_tcp_stdurg;
 
 static tcp_sys_cong_ctl_t tcp_sys_cong_ctl_f = &tcp_cong_avoid_vanj;
@@ -379,6 +379,7 @@ void tcp_parse_options(struct tcphdr *th, struct tcp_opt *tp, int no_fancy)
  */
 static __inline__ int tcp_fast_parse_options(struct tcphdr *th, struct tcp_opt *tp)
 {
+	/* If we didn't send out any options ignore them all */
 	if (tp->tcp_header_len == sizeof(struct tcphdr))
 		return 0;
 	if (th->doff == sizeof(struct tcphdr)>>2) {
@@ -744,8 +745,10 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack, __u32 *seq,
 		if (after(skb->end_seq, ack))
 			break;
 
+#if 0
 		SOCK_DEBUG(sk, "removing seg %x-%x from retransmit queue\n",
 			   skb->seq, skb->end_seq);
+#endif
 
 		acked = FLAG_DATA_ACKED;
 		
@@ -1057,13 +1060,12 @@ static void tcp_ofo_queue(struct sock *sk)
 	struct sk_buff *skb;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
-	/* FIXME: out_of_order_queue is a strong tcp_opt candidate... -DaveM */
 	while ((skb = skb_peek(&sk->out_of_order_queue))) {
 		if (after(skb->seq, tp->rcv_nxt))
 			break;
 
 		if (!after(skb->end_seq, tp->rcv_nxt)) {
-			SOCK_DEBUG(sk, "ofo packet was allready received \n");
+			SOCK_DEBUG(sk, "ofo packet was already received \n");
 			skb_unlink(skb);
 			kfree_skb(skb, FREE_READ);
 			continue;
@@ -1088,7 +1090,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 	 */
 	if (skb->seq == tp->rcv_nxt) {
 		/* Ok. In sequence. */
-queue_and_out:
+	queue_and_out:
 		dst_confirm(sk->dst_cache);
 		skb_queue_tail(&sk->receive_queue, skb);
 		tp->rcv_nxt = skb->end_seq;
@@ -1098,12 +1100,12 @@ queue_and_out:
 		return;
 	}
 	
-	/* Not in sequence, either a retransmit or some packet got lost. */
+	/* An old packet, either a retransmit or some packet got lost. */
 	if (!after(skb->end_seq, tp->rcv_nxt)) {
 		/* A retransmit, 2nd most common case.  Force an imediate ack. */
 		SOCK_DEBUG(sk, "retransmit received: seq %X\n", skb->seq);
 
-		tp->delayed_acks = sysctl_tcp_max_delay_acks;
+		tp->delayed_acks = MAX_DELAY_ACK;
 		kfree_skb(skb, FREE_READ);
 		return;
 	}
@@ -1117,7 +1119,7 @@ queue_and_out:
 	}
 
 	/* Ok. This is an out_of_order segment, force an ack. */
-	tp->delayed_acks = sysctl_tcp_max_delay_acks;
+	tp->delayed_acks = MAX_DELAY_ACK;
 
 	/* Disable header predition. */
 	tp->pred_flags = 0;
@@ -1224,7 +1226,10 @@ static void tcp_data_snd_check(struct sock *sk)
 	}
 }
 
-static __inline__ void tcp_ack_snd_check(struct sock *sk)
+/*
+ * Check if sending an ack is needed.
+ */
+static __inline__ void __tcp_ack_snd_check(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
@@ -1236,16 +1241,23 @@ static __inline__ void tcp_ack_snd_check(struct sock *sk)
 	 *      - we don't have a window update to send
 	 *      - must send at least every 2 full sized packets
 	 */
-	if (tp->delayed_acks == 0) {
-		/* We sent a data segment already. */
-		return;
-	}
 
-	if (tp->delayed_acks >= sysctl_tcp_max_delay_acks || tcp_raise_window(sk))
+	if (tp->delayed_acks >= MAX_DELAY_ACK || tcp_raise_window(sk))
 		tcp_send_ack(sk);
 	else
 		tcp_send_delayed_ack(sk, HZ/2);
 }
+
+static __inline__ void tcp_ack_snd_check(struct sock *sk)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	if (tp->delayed_acks == 0) {
+		/* We sent a data segment already. */
+		return;
+	}
+	__tcp_ack_snd_check(sk);
+}
+
 
 /*
  *	This routine is only called when we have urgent data
@@ -1317,13 +1329,43 @@ static inline void tcp_urg(struct sock *sk, struct tcphdr *th, unsigned long len
 	}
 }
 
+/*
+ * Clean first the out_of_order queue, then the receive queue until
+ * the socket is in its memory limits again.
+ */
 static void prune_queue(struct sock *sk)
 {
+	struct tcp_opt *tp; 
 	struct sk_buff * skb;
 
-	/* Clean the out_of_order queue. */
-	while ((skb = skb_dequeue(&sk->out_of_order_queue))) 
+	SOCK_DEBUG(sk, "prune_queue: c=%x\n", sk->copied_seq);
+
+	/* First Clean the out_of_order queue. */
+	/* Start with the end because there are probably the least
+	 * useful packets (crossing fingers).
+	 */
+	while ((skb = skb_dequeue_tail(&sk->out_of_order_queue))) { 
 		kfree_skb(skb, FREE_READ);
+		if (atomic_read(&sk->rmem_alloc) <= sk->rcvbuf)
+			return;
+	}
+	
+	tp = &sk->tp_pinfo.af_tcp;
+
+	/* Now continue with the receive queue if it wasn't enough */
+	while ((skb = skb_peek_tail(&sk->receive_queue))) {
+		/* Never remove packets that have been already acked */
+		if (before(skb->end_seq, tp->last_ack_sent+1)) {
+			printk(KERN_DEBUG "prune_queue: hit acked data c=%x,%x,%x\n",
+				sk->copied_seq, skb->end_seq, tp->last_ack_sent);
+			break; 
+		}
+		skb_unlink(skb);
+		tp->rcv_nxt = skb->seq;
+		kfree_skb(skb, FREE_READ);
+		if (atomic_read(&sk->rmem_alloc) <= sk->rcvbuf) 
+			break;
+	}
 }
 
 int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
@@ -1356,8 +1398,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			if (tcp_paws_discard(tp)) {
 				if (!th->rst) {
 					tcp_send_ack(sk);
-					kfree_skb(skb, FREE_READ);
-					return 0;
+					goto discard;
 				}
 			}
 			tcp_replace_ts_recent(tp,skb->end_seq);
@@ -1378,18 +1419,22 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 		if (len <= th->doff*4) {
 			/* Bulk data transfer: sender */
 			if (len == th->doff*4) {
-				tcp_ack(sk, th, skb->seq, skb->ack_seq, len);
+				tcp_ack(sk, th, skb->seq, skb->ack_seq, len); 
+				kfree_skb(skb, FREE_READ); 
 				tcp_data_snd_check(sk);
+				return 0;
+			} else { /* Header too small */
+				tcp_statistics.TcpInErrs++;
+				goto discard;
 			}
-
-			tcp_statistics.TcpInErrs++;
-			kfree_skb(skb, FREE_READ);
-			return 0;
 		} else if (skb->ack_seq == tp->snd_una) {
 			/* Bulk data transfer: receiver */
 			
-			skb_pull(skb,th->doff*4);
+			if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf) 
+				goto discard;
 			
+			skb_pull(skb,th->doff*4);
+
 			/* DO NOT notify forward progress here.
 			 * It saves dozen of CPU instructions in fast path. --ANK
 			 */
@@ -1399,10 +1444,15 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			sk->data_ready(sk, 0);
 			tcp_delack_estimator(tp);
 
+#if 1			/* This checks for required window updates too. */
+			tp->delayed_acks++;
+			__tcp_ack_snd_check(sk);
+#else
 			if (tp->delayed_acks++ == 0)
 				tcp_send_delayed_ack(sk, HZ/2);
 			else
 				tcp_send_ack(sk);
+#endif
 			return 0;
 		}
 	}
@@ -1415,8 +1465,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 					   tp->rcv_wup, tp->rcv_wnd);
 			}
 			tcp_send_ack(sk);
-			kfree_skb(skb, FREE_READ);
-			return 0; 
+			goto discard;
 		}
 	}
 
@@ -1429,10 +1478,9 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	
 	if(th->rst) {
 		tcp_reset(sk,skb);
-		kfree_skb(skb, FREE_READ);
-		return 0; 
+		goto discard;
 	}
-	
+
 	if(th->ack)
 		tcp_ack(sk, th, skb->seq, skb->ack_seq, len);
 	
@@ -1447,16 +1495,17 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 		(void) tcp_fin(skb, sk, th);
 
 	tcp_data_snd_check(sk);
-	tcp_ack_snd_check(sk);
 
-	/* If our receive queue has grown past its limits,
-	 * try to prune away duplicates etc..
-	 */
+	/* If our receive queue has grown past its limits shrink it */
 	if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf)
 		prune_queue(sk);
 
-	if (!queued)
+	tcp_ack_snd_check(sk);
+
+	if (!queued) {
+	discard:
 		kfree_skb(skb, FREE_READ);
+	}
 
 	return 0;
 }
@@ -1860,8 +1909,12 @@ step6:
 			}
 		}
 		
-	case TCP_ESTABLISHED:
+	case TCP_ESTABLISHED: 
 		queued = tcp_data(skb, sk, len);
+
+		/* This can only happen when MTU+skbheader > rcvbuf */
+		if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf)
+			prune_queue(sk);
 		break;
 	}
 
@@ -1886,22 +1939,20 @@ int tcp_sysctl_congavoid(ctl_table *ctl, int write, struct file * filp,
 {
 	int val = sysctl_tcp_cong_avoidance;
 	int retv;
+	static tcp_sys_cong_ctl_t tab[] = { 
+		tcp_cong_avoid_vanj, 
+		tcp_cong_avoid_vegas
+	};
 
 	retv = proc_dointvec(ctl, write, filp, buffer, lenp);
 
 	if (write) {
-		switch (sysctl_tcp_cong_avoidance) {
-		case 0:
-			tcp_sys_cong_ctl_f = &tcp_cong_avoid_vanj;
-			break;
-		case 1:
-			tcp_sys_cong_ctl_f = &tcp_cong_avoid_vegas;
-			break;
-		default:
+		if ((unsigned)sysctl_tcp_cong_avoidance > 1) {
 			retv = -EINVAL;
 			sysctl_tcp_cong_avoidance = val;
-		};
+		} else {
+			tcp_sys_cong_ctl_f = tab[sysctl_tcp_cong_avoidance];
+		}
 	}
-
 	return retv;
 }

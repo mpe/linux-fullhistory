@@ -7,6 +7,34 @@
  * Interrupt entry/exit code at both C and assembly level
  */
 
+#define IO_APIC_GATE_OFFSET 0x51
+
+void mask_irq(unsigned int irq_nr);
+void unmask_irq(unsigned int irq_nr);
+void enable_IO_APIC_irq (int irq);
+void disable_IO_APIC_irq (int irq);
+void set_8259A_irq_mask(int irq_nr);
+void setup_IO_APIC_irq (int irq);
+void ack_APIC_irq (void);
+void setup_IO_APIC (void);
+void init_IO_APIC_traps(void);
+
+extern const unsigned int io_apic_irqs;
+#define IO_APIC_IRQ(x) ((1<<x) & io_apic_irqs)
+
+#define MAX_IRQ_SOURCES 128
+#define MAX_MP_BUSSES 32
+enum mp_bustype {
+	MP_BUS_ISA,
+	MP_BUS_PCI
+};
+extern int mp_bus_id_to_type [MAX_MP_BUSSES];
+
+extern spinlock_t irq_controller_lock; /*
+					* Protects both the 8259 and the
+					* IO-APIC
+					*/
+
 #ifdef __SMP__
 
 static inline void irq_enter(int cpu, int irq)
@@ -94,7 +122,7 @@ __asm__( \
 	"pushl $ret_from_intr\n\t" \
 	"jmp "SYMBOL_NAME_STR(do_IRQ));
 
-#define BUILD_IRQ(chip,nr,mask) \
+#define BUILD_IRQ(nr) \
 asmlinkage void IRQ_NAME(nr); \
 __asm__( \
 "\n"__ALIGN_STR"\n" \

@@ -12,7 +12,8 @@
  */
 /*
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
- *                   integrated sound_switch.c and made /proc/sound (equals to /dev/sndstat,
+ *                   integrated sound_switch.c
+ * Stefan Reinauer : integrated /proc/sound (equals to /dev/sndstat,
  *                   which should disappear in the near future)
  */
 #include <linux/config.h>
@@ -1100,7 +1101,8 @@ sound_alloc_dmap(int dev, struct dma_buffparms *dmap, int chan)
 
 		dmap->buffsize = PAGE_SIZE * (1 << sz);
 
-		if ((start_addr = (char *) __get_free_pages(GFP_ATOMIC, sz, MAX_DMA_ADDRESS)) == NULL)
+		start_addr = (char *) __get_free_pages(GFP_ATOMIC | GFP_DMA, sz);
+		if (start_addr == NULL)
 			dmap->buffsize /= 2;
 	}
 

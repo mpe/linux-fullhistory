@@ -289,16 +289,25 @@ EXPORT_SYMBOL(tcp_simple_retransmit);
 EXPORT_SYMBOL(xrlim_allow);
 #endif
 
+#ifdef CONFIG_RTNETLINK
+EXPORT_SYMBOL(rtnetlink_links);
+EXPORT_SYMBOL(__rta_fill);
+EXPORT_SYMBOL(rtnetlink_dump_ifinfo);
+EXPORT_SYMBOL(netlink_set_err);
+EXPORT_SYMBOL(netlink_broadcast);
+EXPORT_SYMBOL(rtnl_wlockct);
+EXPORT_SYMBOL(rtnl);
+EXPORT_SYMBOL(neigh_delete);
+EXPORT_SYMBOL(neigh_add);
+EXPORT_SYMBOL(neigh_dump_info);
+#endif
+
 #ifdef CONFIG_PACKET_MODULE
 EXPORT_SYMBOL(dev_set_allmulti);
 EXPORT_SYMBOL(dev_set_promiscuity);
 EXPORT_SYMBOL(sklist_remove_socket);
 EXPORT_SYMBOL(rtnl_wait);
 EXPORT_SYMBOL(rtnl_rlockct);
-#ifdef CONFIG_RTNETLINK
-EXPORT_SYMBOL(rtnl);
-EXPORT_SYMBOL(rtnl_wlockct);
-#endif
 #endif
 
 #if defined(CONFIG_IPV6_MODULE) || defined(CONFIG_PACKET_MODULE)

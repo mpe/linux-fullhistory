@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.23 1997/12/13 21:52:57 kuznet Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.25 1998/01/15 22:40:57 freitag Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -54,7 +54,6 @@ extern int sysctl_tcp_keepalive_probes;
 extern int sysctl_tcp_max_ka_probes;
 extern int sysctl_tcp_retries1;
 extern int sysctl_tcp_retries2;
-extern int sysctl_tcp_max_delay_acks;
 extern int sysctl_tcp_fin_timeout;
 extern int sysctl_tcp_syncookies;
 extern int sysctl_tcp_syn_retries;
@@ -199,8 +198,6 @@ ctl_table ipv4_table[] = {
 	 &sysctl_intvec, NULL, NULL, &tcp_retr1_max},
 	{NET_IPV4_TCP_RETRIES2, "tcp_retries2",
 	 &sysctl_tcp_retries2, sizeof(int), 0644, NULL, &proc_dointvec},
-	{NET_IPV4_TCP_MAX_DELAY_ACKS, "tcp_max_delay_acks",
-	 &sysctl_tcp_max_delay_acks, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_TCP_FIN_TIMEOUT, "tcp_fin_timeout",
 	 &sysctl_tcp_fin_timeout, sizeof(int), 0644, NULL, 
 	 &proc_dointvec_jiffies},

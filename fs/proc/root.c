@@ -574,13 +574,6 @@ static struct proc_dir_entry proc_root_interrupts = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
-#ifdef __SMP_PROF__
-static struct proc_dir_entry proc_root_smp = {
-	PROC_SMP_PROF, 3,"smp",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-#endif
 static struct proc_dir_entry proc_root_filesystems = {
 	PROC_FILESYSTEMS, 11,"filesystems",
 	S_IFREG | S_IRUGO, 1, 0, 0,
@@ -690,9 +683,6 @@ void proc_root_init(void)
 	proc_register(&proc_root, &proc_root_stat);
 	proc_register(&proc_root, &proc_root_devices);
 	proc_register(&proc_root, &proc_root_interrupts);
-#ifdef __SMP_PROF__
-	proc_register(&proc_root, &proc_root_smp);
-#endif 
 	proc_register(&proc_root, &proc_root_filesystems);
 	proc_register(&proc_root, &proc_root_dma);
 	proc_register(&proc_root, &proc_root_ioports);

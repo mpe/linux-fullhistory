@@ -2,6 +2,7 @@
 #define _LINUX_KERNEL_STAT_H
 
 #include <asm/irq.h>
+#include <linux/smp.h>
 #include <linux/tasks.h>
 
 /*
@@ -24,7 +25,7 @@ struct kernel_stat {
 	unsigned int dk_drive_wblk[DK_NDRIVE];
 	unsigned int pgpgin, pgpgout;
 	unsigned int pswpin, pswpout;
-	unsigned int interrupts[NR_IRQS];
+	unsigned int interrupts[NR_CPUS][NR_IRQS];
 	unsigned int ipackets, opackets;
 	unsigned int ierrors, oerrors;
 	unsigned int collisions;

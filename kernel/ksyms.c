@@ -50,6 +50,7 @@
 #include <linux/swap.h>
 #include <linux/ctype.h>
 #include <linux/file.h>
+#include <linux/console.h>
 
 extern unsigned char aux_device_present, kbd_read_mask;
 
@@ -407,3 +408,7 @@ EXPORT_SYMBOL(disk_name);	/* for md.c */
 /* binfmt_aout */
 EXPORT_SYMBOL(get_write_access);
 EXPORT_SYMBOL(put_write_access);
+
+/* dynamic registering of consoles */
+EXPORT_SYMBOL(register_console);
+EXPORT_SYMBOL(unregister_console);
