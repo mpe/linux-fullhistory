@@ -178,6 +178,8 @@ int dibusb_fe_init(struct usb_dibusb* dib)
 				break;
 			}
 		}
+		/* if a frontend was found */
+		if (dib->fe != NULL) {
 			if (dib->fe->ops->sleep != NULL)
 				dib->fe_sleep = dib->fe->ops->sleep;
 			dib->fe->ops->sleep = dibusb_hw_sleep;
@@ -192,6 +194,7 @@ int dibusb_fe_init(struct usb_dibusb* dib)
 			/* check which tuner is mounted on this device, in case this is unsure */
 			dibusb_tuner_quirk(dib);
 		}
+	}
 	if (dib->fe == NULL) {
 		err("A frontend driver was not found for device '%s'.",
 		       dib->dibdev->name);
@@ -205,6 +208,7 @@ int dibusb_fe_init(struct usb_dibusb* dib)
 			return -ENODEV;
 		}
 	}
+
 	return 0;
 }
 
