@@ -132,6 +132,42 @@ out:
 	return result;
 }
 
+/*
+ * This pretty-prints the pathname of a dentry,
+ * clarifying sockets etc.
+ */
+static int do_proc_readlink(struct dentry *dentry, char * buffer, int buflen)
+{
+	struct inode * inode;
+	char * tmp = (char*)__get_free_page(GFP_KERNEL), *path, *pattern;
+	int len;
+
+	/* Check for special dentries.. */
+	pattern = NULL;
+	inode = dentry->d_inode;
+	if (inode && dentry->d_parent == dentry) {
+		if (inode->i_sock)
+			pattern = "socket:[%lu]";
+		if (inode->i_pipe)
+			pattern = "pipe:[%lu]";
+	}
+	
+	if (pattern) {
+		len = sprintf(tmp, pattern, inode->i_ino);
+		path = tmp;
+	} else {
+		path = d_path(dentry, tmp, PAGE_SIZE);
+		len = tmp + PAGE_SIZE - path;
+	}
+
+	if (len < buflen)
+		buflen = len;
+	dput(dentry);
+	copy_to_user(buffer, path, buflen);
+	free_page((unsigned long)tmp);
+	return buflen;
+}
+
 static int proc_readlink(struct dentry * dentry, char * buffer, int buflen)
 {
 	int error;
@@ -141,18 +177,7 @@ static int proc_readlink(struct dentry * dentry, char * buffer, int buflen)
 	if (!IS_ERR(dentry)) {
 		error = -ENOENT;
 		if (dentry) {
-			char * tmp = (char*)__get_free_page(GFP_KERNEL), *path;
-			int len;
-
-			path = d_path(dentry, tmp, PAGE_SIZE);
-			len = tmp + PAGE_SIZE - path;
-
-			if (len < buflen)
-				buflen = len;
-			dput(dentry);
-			copy_to_user(buffer, path, buflen);
-			free_page((unsigned long)tmp);
-			error = buflen;
+			error = do_proc_readlink(dentry, buffer, buflen);
 		}
 	}
 	return error;

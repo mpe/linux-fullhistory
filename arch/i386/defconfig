@@ -237,6 +237,7 @@ CONFIG_LOCKD=y
 # CONFIG_NTFS_FS is not set
 # CONFIG_SYSV_FS is not set
 # CONFIG_AFFS_FS is not set
+# CONFIG_HFS_FS is not set
 # CONFIG_ROMFS_FS is not set
 CONFIG_AUTOFS_FS=y
 # CONFIG_UFS_FS is not set

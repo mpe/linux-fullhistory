@@ -13,8 +13,9 @@ MIX_OBJS :=
 MOD_LIST_NAME := SCSI_MODULES
 SCSI_SRCS = $(wildcard $(L_OBJS:%.o=%.c))
 
-AHA152X	= -DDEBUG_AHA152X -DAUTOCONF
-GDTH = #-DDEBUG_GDTH=2 -D__SERIAL__ -D__COM2__ -DGDTH_STATISTICS
+CFLAGS_aha152x.o =   -DDEBUG_AHA152X -DAUTOCONF
+CFLAGS_gdth.o    = # -DDEBUG_GDTH=2 -D__SERIAL__ -D__COM2__ -DGDTH_STATISTICS
+CFLAGS_seagate.o =   -DARBITRATE -DSLOW_HANDSHAKE -DFAST32 -DPARITY
 
 .SUFFIXES:
 .SUFFIXES: .c .o .h .a
@@ -455,23 +456,13 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-BusLogic.o: BusLogic.c FlashPoint.c
+# This gives correct output but uses old-style "excessive compilation".
+# This will be fixed soon (about December 1997 or January 1998).
+BusLogic.o: BusLogic.c FlashPoint.c ../../include/linux/autoconf.h
 	$(CC) $(CFLAGS) -c BusLogic.c -o BusLogic.O
 	$(CC) $(CFLAGS) -c FlashPoint.c -o FlashPoint.O
 	$(LD) -r -o BusLogic.o BusLogic.O FlashPoint.O
 	rm -f BusLogic.O FlashPoint.O
-
-aha152x.o: aha152x.c
-	$(CC) $(CFLAGS) $(AHA152X) -c aha152x.c 
-
-gdth.o: gdth.c gdth.h gdth_proc.c gdth_proc.h
-	$(CC) $(CFLAGS) $(GDTH) -c gdth.c 
-
-aic7xxx.o: aic7xxx.c aic7xxx_seq.h aic7xxx_reg.h
-	$(CC) $(CFLAGS) -c -o $@ aic7xxx.c
-
-seagate.o: seagate.c
-	$(CC) $(CFLAGS) -DARBITRATE -DSLOW_HANDSHAKE -DFAST32 -DPARITY -c seagate.c 
 
 53c8xx_d.h 53c8xx_u.h : 53c7,8xx.scr script_asm.pl
 	ln -sf 53c7,8xx.scr fake.c

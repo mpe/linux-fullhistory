@@ -208,35 +208,12 @@ struct hfs_cap_info {
 
 #ifdef __KERNEL__
 
-#include <linux/version.h>
+#if defined(CONFIG_HFS_FS) || defined(CONFIG_HFS_FS_MODULE)
 
-#if (LINUX_VERSION_CODE < 0x020001)
-#error "Linux kernel version 2.0.1 or newer is required."
-#endif
-
-#if (LINUX_VERSION_CODE < 0x020100) && !defined(__alpha__)
-typedef int hfs_rwret_t;
-typedef int hfs_rwarg_t;
-#else
 typedef ssize_t hfs_rwret_t;
 typedef size_t hfs_rwarg_t;
-#endif
 
-#if (LINUX_VERSION_CODE < 0x020104)
-#	define	copy_to_user	memcpy_tofs
-#	define	copy_from_user	memcpy_fromfs
-#endif
-
-#if (LINUX_VERSION_CODE < 0x020106)
-#	include <asm/segment.h>
-#else
-#	include <asm/uaccess.h>
-#endif
-
-#if (LINUX_VERSION_CODE < 0x020105)
-extern inline void clear_user(char *addr, off_t count)
-{ while (count--) { put_user(0, addr++); } }
-#endif
+#include <asm/uaccess.h>
 
 /* Some forward declarations */
 struct hfs_fork;
@@ -328,18 +305,8 @@ extern int hfs_mac2eight(char *, const struct hfs_name *);
 extern int hfs_mac2alpha(char *, const struct hfs_name *);
 extern int hfs_mac2triv(char *, const struct hfs_name *);
 
-#ifdef MODULE /* The kernel may or may not know about HFS */
-extern __inline__ struct hfs_inode_info *HFS_I(struct inode *inode) {
-	return (struct hfs_inode_info *)(&inode->u);
-}
-
-extern __inline__ struct hfs_sb_info *HFS_SB(struct super_block *super) {
-	return (struct hfs_sb_info *)(&super->u);
-}
-#else
-# define	HFS_I(X)	(&((X)->u.hfs_i))
-# define	HFS_SB(X)	(&((X)->u.hfs_sb))
-#endif
+#define	HFS_I(X)	(&((X)->u.hfs_i))
+#define	HFS_SB(X)	(&((X)->u.hfs_sb))
 
 extern __inline__ void hfs_nameout(struct inode *dir, struct hfs_name *out,
 				   const char *in, int len) {
@@ -388,6 +355,8 @@ static __inline__ void hfs_drop_special(const struct hfs_name *name,
     }
   }
 }
+
+#endif
 #endif /* __KERNEL__ */
 
 #endif

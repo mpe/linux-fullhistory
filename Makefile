@@ -209,19 +209,23 @@ symlinks:
 		mkdir include/linux/modules; \
 	fi
 
-oldconfig: symlinks
+oldconfig: symlinks scripts/split-include
 	$(CONFIG_SHELL) scripts/Configure -d arch/$(ARCH)/config.in
+	scripts/split-include include/linux/autoconf.h include/config
 
-xconfig: symlinks
+xconfig: symlinks scripts/split-include
 	$(MAKE) -C scripts kconfig.tk
 	wish -f scripts/kconfig.tk
+	scripts/split-include include/linux/autoconf.h include/config
 
-menuconfig: include/linux/version.h symlinks 
+menuconfig: include/linux/version.h symlinks scripts/split-include
 	$(MAKE) -C scripts/lxdialog all
 	$(CONFIG_SHELL) scripts/Menuconfig arch/$(ARCH)/config.in
+	scripts/split-include include/linux/autoconf.h include/config
 
-config: symlinks
+config: symlinks scripts/split-include
 	$(CONFIG_SHELL) scripts/Configure arch/$(ARCH)/config.in
+	scripts/split-include include/linux/autoconf.h include/config
 
 linuxsubdirs: dummy
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
@@ -339,8 +343,9 @@ endif
 
 clean:	archclean
 	rm -f kernel/ksyms.lst include/linux/compile.h
-	rm -f core `find . -name '*.[oas]' ! -regex '.*lxdialog/.*' -print`
-	rm -f core `find . -type f -name 'core' -print`
+	rm -f `find . -name '*.[oas]' ! -regex '.*lxdialog/.*' -print`
+	rm -f `find . -type f -name 'core' -print`
+	rm -f `find . -name '.*.flags' -print`
 	rm -f vmlinux System.map
 	rm -f .tmp*
 	rm -f drivers/char/consolemap_deftbl.c drivers/char/conmakehash
@@ -361,8 +366,9 @@ mrproper: clean
 	rm -f scripts/lxdialog/*.o scripts/lxdialog/lxdialog
 	rm -f .menuconfig.log
 	rm -f include/asm
+	rm -rf include/config
 	rm -f .depend `find . -name .depend -print`
-	rm -f .hdepend scripts/mkdep
+	rm -f .hdepend scripts/mkdep scripts/split-include
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -rf $(TOPDIR)/include/linux/modules
 	rm -rf modules
@@ -380,10 +386,9 @@ sums:
 	find . -type f -print | sort | xargs sum > .SUMS
 
 dep-files: scripts/mkdep archdep include/linux/version.h
-	scripts/mkdep init/*.c > .tmpdepend
+	scripts/mkdep init/*.c > .depend
 	scripts/mkdep `find $(FINDHPATH) -follow -name \*.h ! -name modversions.h -print` > .hdepend
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep; done
-	mv .tmpdepend .depend
 
 MODVERFILE :=
 
@@ -392,6 +397,9 @@ MODVERFILE := $(TOPDIR)/include/linux/modversions.h
 endif
 
 depend dep: dep-files $(MODVERFILE)
+
+checkconfig:
+	perl -w scripts/checkconfig.pl `find $(FINDHPATH) $(SUBDIRS) -name '*.[hcS]' -print | sort`
 
 ifdef CONFIGURATION
 ..$(CONFIGURATION):
@@ -421,3 +429,6 @@ include Rules.make
 
 scripts/mkdep: scripts/mkdep.c
 	$(HOSTCC) $(HOSTCFLAGS) -o scripts/mkdep scripts/mkdep.c
+
+scripts/split-include: scripts/split-include.c
+	$(HOSTCC) $(HOSTCFLAGS) -o scripts/split-include scripts/split-include.c

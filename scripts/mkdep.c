@@ -1,18 +1,31 @@
+/*
+ * Originally by Linus Torvalds.
+ * Smart CONFIG_* processing by Werner Almesberger, Michael Chastain.
+ *
+ * Usage: mkdep file ...
+ * 
+ * Read source files and output makefile dependency lines for them.
+ * I make simple dependency lines for #include <*.h> and #include "*.h".
+ * I also find instances of CONFIG_FOO and generate dependencies
+ *    like include/config/foo.h.
+ */
+
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include <errno.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <unistd.h>
+
 #include <sys/fcntl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
-char *filename, *command, __depname[256] = "\n\t@touch ";
-int needsconfig, hasconfig, hasmodules, hasdep;
 
+
+char __depname[512] = "\n\t@touch ";
 #define depname (__depname+9)
+int hasdep;
 
 struct path_struct {
 	int len;
@@ -22,22 +35,113 @@ struct path_struct {
 	{  0, "" }
 };
 
-static void handle_include(int type, char *name, int len)
+
+
+/*
+ * This records all the configuration options seen.
+ * In perl this would be a hash, but here it's a long string
+ * of values separated by newlines.  This is simple and
+ * extremely fast.
+ */
+char * str_config  = NULL;
+int    size_config = 0;
+int    len_config  = 0;
+
+
+
+/*
+ * Grow the configuration string to a desired length.
+ * Usually the first growth is plenty.
+ */
+void grow_config(int len)
 {
-	int plen;
+	if (str_config == NULL) {
+		len_config  = 0;
+		size_config = 4096;
+		str_config  = malloc(4096);
+		if (str_config == NULL)
+			{ perror("malloc"); exit(1); }
+	}
+
+	while (len_config + len > size_config) {
+		str_config = realloc(str_config, size_config *= 2);
+		if (str_config == NULL)
+			{ perror("malloc"); exit(1); }
+	}
+}
+
+
+
+/*
+ * Lookup a value in the configuration string.
+ */
+int is_defined_config(const char * name, int len)
+{
+	const char * pconfig;
+	const char * plast = str_config + len_config - len;
+	for ( pconfig = str_config + 1; pconfig < plast; pconfig++ ) {
+		if (pconfig[ -1] == '\n'
+		&&  pconfig[len] == '\n'
+		&&  !memcmp(pconfig, name, len))
+			return 1;
+	}
+	return 0;
+}
+
+
+
+/*
+ * Add a new value to the configuration string.
+ */
+void define_config(int convert, const char * name, int len)
+{
+	grow_config(len + 1);
+
+	memcpy(str_config+len_config, name, len);
+
+	if (convert) {
+		int i;
+		for (i = 0; i < len; i++) {
+			char c = str_config[len_config+i];
+			if (isupper(c)) c = tolower(c);
+			if (c == '_')   c = '/';
+			str_config[len_config+i] = c;
+		}
+	}
+
+	len_config += len;
+	str_config[len_config++] = '\n';
+}
+
+
+
+/*
+ * Clear the set of configuration strings.
+ */
+void clear_config( )
+{
+	len_config = 0;
+	define_config(0, "", 0);
+}
+
+
+
+/*
+ * Handle an #include line.
+ */
+void handle_include(int type, const char * name, int len)
+{
 	struct path_struct *path = path_array+type;
 
-	if (len == 14)
-		if (!memcmp(name, "linux/config.h", len))
-			hasconfig = 1;
-		else if (!memcmp(name, "linux/module.h", len))
-			hasmodules = 1;
+	if (len == 14 && !memcmp(name, "linux/config.h", len))
+		return;
 
-	plen = path->len;
-	memcpy(path->buffer+plen, name, len);
-	len += plen;
-	path->buffer[len] = '\0';
-	if (access(path->buffer, F_OK))
+	if (len >= 7 && !memcmp(name, "config/", 7))
+		define_config(0, name+7, len-7-2);
+
+	memcpy(path->buffer+path->len, name, len);
+	path->buffer[path->len+len] = '\0';
+	if (access(path->buffer, F_OK) != 0)
 		return;
 
 	if (!hasdep) {
@@ -47,14 +151,47 @@ static void handle_include(int type, char *name, int len)
 	printf(" \\\n   %s", path->buffer);
 }
 
-static void handle_config(void)
+
+
+/*
+ * Record the use of a CONFIG_* word.
+ */
+void use_config(const char * name, int len)
 {
-	needsconfig = 1;
-	if (!hasconfig)
-		fprintf(stderr,
-			"%s needs config but has not included config file\n",
-			filename);
+	char *pc;
+	int i;
+
+	pc = path_array[0].buffer + path_array[0].len;
+	memcpy(pc, "config/", 7);
+	pc += 7;
+
+	for (i = 0; i < len; i++) {
+	    char c = name[i];
+	    if (isupper(c)) c = tolower(c);
+	    if (c == '_')   c = '/';
+	    pc[i] = c;
+	}
+	pc[len] = '\0';
+
+	if (is_defined_config(pc, len))
+	    return;
+
+	define_config(0, pc, len);
+
+	if (!hasdep) {
+		hasdep = 1;
+		printf("%s: ", depname);
+	}
+	printf(" \\\n   $(wildcard %s.h)", path_array[0].buffer);
 }
+
+
+
+/*
+ * Macros for stunningly fast map-based character access.
+ * __buf is a register which holds the current word of the input.
+ * Thus, there is one memory access per sizeof(unsigned long) characters.
+ */
 
 #if defined(__alpha__) || defined(__i386__)
 #define LE_MACHINE
@@ -69,243 +206,283 @@ static void handle_config(void)
 #endif
 
 #define GETNEXT { \
-next_byte(__buf); \
-if (!__nrbuf) { \
-	__buf = *(unsigned long *) next; \
-	__nrbuf = sizeof(unsigned long); \
-	if (!__buf) \
-		break; \
-} next++; __nrbuf--; }
+	next_byte(__buf); \
+	if ((unsigned long) next % sizeof(unsigned long) == 0) { \
+		__buf = * (unsigned long *) next; \
+		if (!__buf) \
+			break; \
+	} \
+	next++; \
+}
+
+/*
+ * State machine macros.
+ */
 #define CASE(c,label) if (current == c) goto label
 #define NOTCASE(c,label) if (current != c) goto label
 
-static void state_machine(register char *next)
+/*
+ * Yet another state machine speedup.
+ */
+#define MAX2(a,b) ((a)>(b)?(a):(b))
+#define MIN2(a,b) ((a)<(b)?(a):(b))
+#define MAX5(a,b,c,d,e) (MAX2(a,MAX2(b,MAX2(c,MAX2(d,e)))))
+#define MIN5(a,b,c,d,e) (MIN2(a,MIN2(b,MIN2(c,MIN2(d,e)))))
+
+
+
+/*
+ * The state machine looks for (approximately) these Perl regular expressions:
+ *
+ *    m|\/\*.*?\*\/|
+ *    m|'.*?'|
+ *    m|".*?"|
+ *    m|#\s*include\s*"(.*?)"|
+ *    m|#\s*include\s*<(.*?>"|
+ *    m|#\s*(?define|undef)\s*CONFIG_(\w*)|
+ *    m|(?!\w)CONFIG_|
+ *
+ * About 98% of the CPU time is spent here, and most of that is in
+ * the 'start' paragraph.  Because the current characters are
+ * in a register, the start loop usually eats 4 or 8 characters
+ * per memory read.  The MAX5 and MIN5 tests dispose of most
+ * input characters with 1 or 2 comparisons.
+ */
+void state_machine(const char * map)
 {
-	for(;;) {
-	register unsigned long __buf = 0;
-	register unsigned long __nrbuf = 0;
+	const char * next = map;
+	const char * map_dot;
+	unsigned long __buf = 0;
 
-normal:
+	for (;;) {
+start:
 	GETNEXT
-__normal:
-	CASE('/',slash);
-	CASE('"',string);
-	CASE('\'',char_const);
-	CASE('#',preproc);
-	goto normal;
+__start:
+	if (current > MAX5('/','\'','"','#','C')) goto start;
+	if (current < MIN5('/','\'','"','#','C')) goto start;
+	CASE('/',  slash);
+	CASE('\'', squote);
+	CASE('"',  dquote);
+	CASE('#',  pound);
+	CASE('C',  cee);
+	goto start;
 
+/* / */
 slash:
 	GETNEXT
-	CASE('*',comment);
-	goto __normal;
+	NOTCASE('*', __start);
+slash_star_dot_star:
+	GETNEXT
+__slash_star_dot_star:
+	NOTCASE('*', slash_star_dot_star);
+	GETNEXT
+	NOTCASE('/', __slash_star_dot_star);
+	goto start;
 
-string:
+/* '.*?' */
+squote:
 	GETNEXT
-	CASE('"',normal);
-	NOTCASE('\\',string);
+	CASE('\'', start);
+	NOTCASE('\\', squote);
 	GETNEXT
-	goto string;
+	goto squote;
 
-char_const:
+/* ".*?" */
+dquote:
 	GETNEXT
-	CASE('\'',normal);
-	NOTCASE('\\',char_const);
+	CASE('"', start);
+	NOTCASE('\\', dquote);
 	GETNEXT
-	goto char_const;
+	goto dquote;
 
-comment:
+/* #\s* */
+pound:
 	GETNEXT
-__comment:
-	NOTCASE('*',comment);
-	GETNEXT
-	CASE('/',normal);
-	goto __comment;
+	CASE(' ',  pound);
+	CASE('\t', pound);
+	CASE('i',  pound_i);
+	CASE('d',  pound_d);
+	CASE('u',  pound_u);
+	goto __start;
 
-preproc:
-	GETNEXT
-	CASE('\n',normal);
-	CASE(' ',preproc);
-	CASE('\t',preproc);
-	CASE('i',i_preproc);
-	CASE('e',e_preproc);
-	GETNEXT
+/* #\s*i */
+pound_i:
+	GETNEXT NOTCASE('n', __start);
+	GETNEXT NOTCASE('c', __start);
+	GETNEXT NOTCASE('l', __start);
+	GETNEXT NOTCASE('u', __start);
+	GETNEXT NOTCASE('d', __start);
+	GETNEXT NOTCASE('e', __start);
+	goto pound_include;
 
-skippreproc:
-	CASE('\n',normal);
-	CASE('\\',skippreprocslash);
+/* #\s*include\s* */
+pound_include:
 	GETNEXT
-	goto skippreproc;
+	CASE(' ',  pound_include);
+	CASE('\t', pound_include);
+	map_dot = next;
+	CASE('"',  pound_include_dquote);
+	CASE('<',  pound_include_langle);
+	goto __start;
 
-skippreprocslash:
-	GETNEXT;
-	GETNEXT;
-	goto skippreproc;
+/* #\s*include\s*"(.*)" */
+pound_include_dquote:
+	GETNEXT
+	CASE('\n', start);
+	NOTCASE('"', pound_include_dquote);
+	handle_include(1, map_dot, next - map_dot - 1);
+	goto start;
 
-e_preproc:
+/* #\s*include\s*<(.*)> */
+pound_include_langle:
 	GETNEXT
-	NOTCASE('l',skippreproc);
-	GETNEXT
-	NOTCASE('i',skippreproc);
-	GETNEXT
-	CASE('f',if_line);
-	goto skippreproc;
+	CASE('\n', start);
+	NOTCASE('>', pound_include_langle);
+	handle_include(0, map_dot, next - map_dot - 1);
+	goto start;
 
-i_preproc:
-	GETNEXT
-	CASE('f',if_line);
-	NOTCASE('n',skippreproc);
-	GETNEXT
-	NOTCASE('c',skippreproc);
-	GETNEXT
-	NOTCASE('l',skippreproc);
-	GETNEXT
-	NOTCASE('u',skippreproc);
-	GETNEXT
-	NOTCASE('d',skippreproc);
-	GETNEXT
-	NOTCASE('e',skippreproc);
+/* #\s*d */
+pound_d:
+	GETNEXT NOTCASE('e', __start);
+	GETNEXT NOTCASE('f', __start);
+	GETNEXT NOTCASE('i', __start);
+	GETNEXT NOTCASE('n', __start);
+	GETNEXT NOTCASE('e', __start);
+	goto pound_define_undef;
 
-/* "# include" found */
-include_line:
-	GETNEXT
-	CASE('\n',normal);
-	CASE('<', std_include_file);
-	NOTCASE('"', include_line);
+/* #\s*u */
+pound_u:
+	GETNEXT NOTCASE('n', __start);
+	GETNEXT NOTCASE('d', __start);
+	GETNEXT NOTCASE('e', __start);
+	GETNEXT NOTCASE('f', __start);
+	goto pound_define_undef;
 
-/* "local" include file */
-{
-	char *incname = next;
-local_include_name:
+/* #\s*(define|undef)\s*CONFIG_(\w*) */
+pound_define_undef:
 	GETNEXT
-	CASE('\n',normal);
-	NOTCASE('"', local_include_name);
-	handle_include(1, incname, next-incname-1);
-	goto skippreproc;
+	CASE(' ',  pound_define_undef);
+	CASE('\t', pound_define_undef);
+
+	        NOTCASE('C', __start);
+	GETNEXT NOTCASE('O', __start);
+	GETNEXT NOTCASE('N', __start);
+	GETNEXT NOTCASE('F', __start);
+	GETNEXT NOTCASE('I', __start);
+	GETNEXT NOTCASE('G', __start);
+	GETNEXT NOTCASE('_', __start);
+
+	map_dot = next;
+pound_define_undef_CONFIG_word:
+	GETNEXT
+	if (isalnum(current) || current == '_')
+		goto pound_define_undef_CONFIG_word;
+	define_config(1, map_dot, next - map_dot - 1);
+	goto __start;
+
+/* \<CONFIG_(\w*) */
+cee:
+	if (next >= map+2 && (isalnum(next[-2]) || next[-2] == '_'))
+		goto start;
+	GETNEXT NOTCASE('O', __start);
+	GETNEXT NOTCASE('N', __start);
+	GETNEXT NOTCASE('F', __start);
+	GETNEXT NOTCASE('I', __start);
+	GETNEXT NOTCASE('G', __start);
+	GETNEXT NOTCASE('_', __start);
+
+	map_dot = next;
+cee_CONFIG_word:
+	GETNEXT
+	if (isalnum(current) || current == '_')
+		goto cee_CONFIG_word;
+	use_config(map_dot, next - map_dot - 1);
+	goto __start;
+    }
 }
 
-/* <std> include file */
-std_include_file:
+
+
+/*
+ * Generate dependencies for one file.
+ */
+void do_depend(const char * filename, const char * command)
 {
-	char *incname = next;
-std_include_name:
-	GETNEXT
-	CASE('\n',normal);
-	NOTCASE('>', std_include_name);
-	handle_include(0, incname, next-incname-1);
-	goto skippreproc;
-}
-
-if_line:
-	if (needsconfig)
-		goto skippreproc;
-if_start:
-	GETNEXT
-	CASE('C', config);
-	CASE('\n', normal);
-	CASE('_', if_middle);
-	if (current >= 'a' && current <= 'z')
-		goto if_middle;
-	if (current < 'A' || current > 'Z')
-		goto if_start;
-config:
-	GETNEXT
-	NOTCASE('O', __if_middle);
-	GETNEXT
-	NOTCASE('N', __if_middle);
-	GETNEXT
-	NOTCASE('F', __if_middle);
-	GETNEXT
-	NOTCASE('I', __if_middle);
-	GETNEXT
-	NOTCASE('G', __if_middle);
-	GETNEXT
-	NOTCASE('_', __if_middle);
-	handle_config();
-	goto skippreproc;
-
-if_middle:
-	GETNEXT
-__if_middle:
-	CASE('\n', normal);
-	CASE('_', if_middle);
-	if (current >= 'a' && current <= 'z')
-		goto if_middle;
-	if (current < 'A' || current > 'Z')
-		goto if_start;
-	goto if_middle;
-	}
-}
-
-static void do_depend(void)
-{
-	char *map;
 	int mapsize;
 	int pagesizem1 = getpagesize()-1;
-	int fd = open(filename, O_RDONLY);
+	int fd;
 	struct stat st;
+	char * map;
 
+	fd = open(filename, O_RDONLY);
 	if (fd < 0) {
-		if (errno != ENOENT)
-			perror(filename);
+		perror(filename);
 		return;
 	}
+
 	fstat(fd, &st);
 	if (st.st_size == 0) {
 		fprintf(stderr,"%s is empty\n",filename);
+		close(fd);
 		return;
 	}
+
 	mapsize = st.st_size + 2*sizeof(unsigned long);
 	mapsize = (mapsize+pagesizem1) & ~pagesizem1;
 	map = mmap(NULL, mapsize, PROT_READ, MAP_PRIVATE, fd, 0);
-	if (-1 == (long)map) {
+	if ((long) map == -1) {
 		perror("mkdep: mmap");
 		close(fd);
 		return;
 	}
-	close(fd);
+	if ((unsigned long) map % sizeof(unsigned long) != 0)
+	{
+		fprintf(stderr, "do_depend: map not aligned\n");
+		exit(1);
+	}
+
+	hasdep = 0;
+	clear_config();
 	state_machine(map);
-	munmap(map, mapsize);
 	if (hasdep)
 		puts(command);
+
+	munmap(map, mapsize);
+	close(fd);
 }
 
+
+
+/*
+ * Generate dependencies for all files.
+ */
 int main(int argc, char **argv)
 {
 	int len;
-	char * hpath;
+	char *hpath;
 
 	hpath = getenv("HPATH");
 	if (!hpath)
 		hpath = "/usr/src/linux/include";
 	len = strlen(hpath);
 	memcpy(path_array[0].buffer, hpath, len);
-	if (len && hpath[len-1] != '/') {
-		path_array[0].buffer[len] = '/';
-		len++;
-	}
+	if (len && hpath[len-1] != '/')
+		path_array[0].buffer[len++] = '/';
 	path_array[0].buffer[len] = '\0';
 	path_array[0].len = len;
 
 	while (--argc > 0) {
-		int len;
-		char *name = *++argv;
-
-		filename = name;
-		len = strlen(name);
-		memcpy(depname, name, len+1);
-		command = __depname;
-		if (len > 2 && name[len-2] == '.') {
-			switch (name[len-1]) {
-				case 'c':
-				case 'S':
-					depname[len-1] = 'o';
-					command = "";
+		const char * filename = *++argv;
+		const char * command  = __depname;
+		len = strlen(filename);
+		memcpy(depname, filename, len+1);
+		if (len > 2 && filename[len-2] == '.') {
+			if (filename[len-1] == 'c' || filename[len-1] == 'S') {
+			    depname[len-1] = 'o';
+			    command = "";
 			}
 		}
-		needsconfig = hasconfig = hasmodules = hasdep = 0;
-		do_depend();
-		if (hasconfig && !hasmodules && !needsconfig)
-			fprintf(stderr, "%s doesn't need config\n", filename);
+		do_depend(filename, command);
 	}
 	return 0;
 }

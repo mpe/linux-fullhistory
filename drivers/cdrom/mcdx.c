@@ -75,9 +75,6 @@ static const char *mcdx_c_version
 #define	mcdx_drive_map mcdx
 #include "mcdx.h"
 
-#define MCDX_QUIET 0
-
-
 #ifndef HZ
 #error HZ not defined
 #endif
@@ -288,7 +285,7 @@ static struct cdrom_device_ops mcdx_dops = {
   NULL,                       /* hard reset */
   mcdx_audio_ioctl,            /* audio ioctl */
   NULL,                  /* device-specific ioctl */
-  CDC_OPEN_TRAY | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO
+  CDC_OPEN_TRAY | CDC_LOCK | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO
   | CDC_DRIVE_STATUS, /* capability */
   0,                            /* number of minor devices */
 };

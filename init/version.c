@@ -6,14 +6,10 @@
  *  May be freely distributed as part of Linux.
  */
 
-#include <linux/config.h>
+#include <linux/uts.h>
 #include <linux/utsname.h>
 #include <linux/version.h>
 #include <linux/compile.h>
-
-/* make the "checkconfig" script happy: we really need to include config.h */
-#ifdef CONFIG_BOGUS
-#endif
 
 #define version(a) Version_ ## a
 #define version_string(a) version(a)

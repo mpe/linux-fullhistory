@@ -2834,115 +2834,128 @@ set_input_volumes(void)
 
 int gus_default_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
-	int vol, voice, val;
+	int vol, val;
 
-	if (((cmd >> 8) & 0xff) == 'M') {
-		if (_SIOC_DIR(cmd) & _SIOC_WRITE)
-			switch (cmd & 0xff) {
-			case SOUND_MIXER_RECSRC:
-				if (__get_user(gus_recmask, (int *)arg))
-					return -EFAULT;
-				gus_recmask &= MIX_DEVS;
-				if (!(gus_recmask & (SOUND_MASK_MIC | SOUND_MASK_LINE)))
-					gus_recmask = SOUND_MASK_MIC;
-				/* Note! Input volumes are updated during next open for recording */
-				return __put_user(gus_recmask, (int *)arg);
-
-			case SOUND_MIXER_MIC:
-				if (__get_user(vol, (int *)arg))
-					return -EFAULT;
-				vol &= 0xff;
-				if (vol < 0)
-					vol = 0;
-				if (vol > 100)
-					vol = 100;
-				gus_mic_vol = vol;
-				set_input_volumes();
-				vol |= (vol << 8);
-				return __put_user(vol, (int *)arg);
-				
-			case SOUND_MIXER_LINE:
-				if (__get_user(vol, (int *)arg))
-					return -EFAULT;
-				vol &= 0xff;
-				if (vol < 0)
-					vol = 0;
-				if (vol > 100)
-					vol = 100;
-				gus_line_vol = vol;
-				set_input_volumes();
-				vol |= (vol << 8);
-				return __put_user(vol, (int *)arg);
-
-			case SOUND_MIXER_PCM:
-				if (__get_user(gus_pcm_volume, (int *)arg))
-					return -EFAULT;
-				gus_pcm_volume &= 0xff;
-				if (gus_pcm_volume < 0)
-					gus_pcm_volume = 0;
-				if (gus_pcm_volume > 100)
-					gus_pcm_volume = 100;
-				gus_audio_update_volume();
-				gus_pcm_volume |= (gus_pcm_volume << 8);
-				return __put_user(gus_pcm_volume, (int *)arg);
-
-			case SOUND_MIXER_SYNTH:
-				if (__get_user(gus_wave_volume, (int *)arg))
-					return -EFAULT;
-				gus_wave_volume &= 0xff;
-				if (gus_wave_volume < 0)
-					gus_wave_volume = 0;
-				if (gus_wave_volume > 100)
-					gus_wave_volume = 100;
-				if (active_device == GUS_DEV_WAVE)
-					for (voice = 0; voice < nr_voices; voice++)
-						dynamic_volume_change(voice);	/* Apply the new vol */
-				gus_wave_volume |= (gus_wave_volume << 8);
-				return __put_user(gus_wave_volume, (int *)arg);
-
-			default:
-				return -EINVAL;
-			} else
-				switch (cmd & 0xff) {
-					/*
-					 * Return parameters
-					 */
-				case SOUND_MIXER_RECSRC:
-					return __put_user(gus_recmask, (int *)arg);
-					
-				case SOUND_MIXER_DEVMASK:
-					return __put_user(MIX_DEVS, (int *)arg);
-
-				case SOUND_MIXER_STEREODEVS:
-					return __put_user(0, (int *)arg);
-
-				case SOUND_MIXER_RECMASK:
-					val = SOUND_MASK_MIC | SOUND_MASK_LINE;
-					return __put_user(val, (int *)arg);
-
-				case SOUND_MIXER_CAPS:
-					return __put_user(0, (int *)arg);
-
-				case SOUND_MIXER_MIC:
-					val = gus_mic_vol | (gus_mic_vol << 8);
-					return __put_user(val, (int *)arg);
-
-				case SOUND_MIXER_LINE:
-					val = gus_line_vol | (gus_line_vol << 8);
-					return __put_user(val, (int *)arg);
-
-				case SOUND_MIXER_PCM:
-					val = gus_pcm_volume | (gus_pcm_volume << 8);
-					return __put_user(val, (int *)arg);
-
-				case SOUND_MIXER_SYNTH:
-					return __put_user(gus_wave_volume | (gus_wave_volume << 8), (int *)arg);
-
-				default:
-					return -EINVAL;
-				}
-	} else
+	if (((cmd >> 8) & 0xff) != 'M')
 		return -EINVAL;
+
+	if (!access_ok(VERIFY_WRITE, (int *)arg, sizeof(int)))
+		return -EFAULT;
+
+	if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
+		if (__get_user(val, (int *) arg))
+			return -EFAULT;
+
+		switch (cmd & 0xff) {
+		case SOUND_MIXER_RECSRC:
+			gus_recmask = val & MIX_DEVS;
+			if (!(gus_recmask & (SOUND_MASK_MIC | SOUND_MASK_LINE)))
+				gus_recmask = SOUND_MASK_MIC;
+			/* Note! Input volumes are updated during next open for recording */
+			val = gus_recmask;
+			break;
+
+		case SOUND_MIXER_MIC:
+			vol = val & 0xff;
+			if (vol < 0)
+				vol = 0;
+			if (vol > 100)
+				vol = 100;
+			gus_mic_vol = vol;
+			set_input_volumes();
+			vol |= (vol << 8);
+			val = vol;
+			break;
+				
+		case SOUND_MIXER_LINE:
+			vol = val & 0xff;
+			if (vol < 0)
+				vol = 0;
+			if (vol > 100)
+				vol = 100;
+			gus_line_vol = vol;
+			set_input_volumes();
+			vol |= (vol << 8);
+			val = vol;
+			break;
+
+		case SOUND_MIXER_PCM:
+			gus_pcm_volume = val & 0xff;
+			if (gus_pcm_volume < 0)
+				gus_pcm_volume = 0;
+			if (gus_pcm_volume > 100)
+				gus_pcm_volume = 100;
+			gus_audio_update_volume();
+			gus_pcm_volume |= (gus_pcm_volume << 8);
+			val = gus_pcm_volume;
+			break;
+
+		case SOUND_MIXER_SYNTH:
+			gus_wave_volume = val & 0xff;
+			if (gus_wave_volume < 0)
+				gus_wave_volume = 0;
+			if (gus_wave_volume > 100)
+				gus_wave_volume = 100;
+			if (active_device == GUS_DEV_WAVE) {
+				int voice;
+				for (voice = 0; voice < nr_voices; voice++)
+					dynamic_volume_change(voice);	/* Apply the new vol */
+			}
+			gus_wave_volume |= (gus_wave_volume << 8);
+			val = gus_wave_volume;
+			break;
+
+		default:
+			return -EINVAL;
+		}
+
+	} else {
+		switch (cmd & 0xff) {
+		/*
+		 * Return parameters
+		 */
+		case SOUND_MIXER_RECSRC:
+			val = gus_recmask;
+			break;
+					
+		case SOUND_MIXER_DEVMASK:
+			val = MIX_DEVS;
+			break;
+
+		case SOUND_MIXER_STEREODEVS:
+			val = 0;
+			break;
+
+		case SOUND_MIXER_RECMASK:
+			val = SOUND_MASK_MIC | SOUND_MASK_LINE;
+			break;
+
+		case SOUND_MIXER_CAPS:
+			val = 0;
+			break;
+
+		case SOUND_MIXER_MIC:
+			val = gus_mic_vol | (gus_mic_vol << 8);
+			break;
+
+		case SOUND_MIXER_LINE:
+			val = gus_line_vol | (gus_line_vol << 8);
+			break;
+
+		case SOUND_MIXER_PCM:
+			val = gus_pcm_volume | (gus_pcm_volume << 8);
+			break;
+
+		case SOUND_MIXER_SYNTH:
+			val = gus_wave_volume | (gus_wave_volume << 8);
+			break;
+
+		default:
+			return -EINVAL;
+		}
+	}
+
+	return __put_user(val, (int *)arg);
 }
 
 static struct mixer_operations gus_mixer_operations =

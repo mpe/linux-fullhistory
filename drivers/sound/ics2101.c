@@ -123,7 +123,7 @@ static int ics2101_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	if (((cmd >> 8) & 0xff) == 'M') {
 		if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
 			
-			if (__get_user(val, (int *)arg))
+			if (get_user(val, (int *)arg))
 				return -EFAULT;
 			switch (cmd & 0xff) {
 			case SOUND_MIXER_RECSRC:
@@ -152,7 +152,7 @@ static int ics2101_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 			default:
 				return -EINVAL;
 			}
-			return __put_user(val, (int *)arg);
+			return put_user(val, (int *)arg);
 		} else {
 			switch (cmd & 0xff) {
 				/*
@@ -200,7 +200,7 @@ static int ics2101_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 			default:
 				return -EINVAL;
 			}
-			return __put_user(val, (int *)arg);
+			return put_user(val, (int *)arg);
 		}
 	}
 	return -EINVAL;

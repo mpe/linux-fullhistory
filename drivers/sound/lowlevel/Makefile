@@ -27,9 +27,6 @@ ifndef TOPDIR
 TOPDIR=/usr/src/linux
 endif
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
 lowlevel.o:	$(OBJS)
 	$(LD) -r -o lowlevel.o $(OBJS)
 

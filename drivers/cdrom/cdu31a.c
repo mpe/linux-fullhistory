@@ -416,7 +416,8 @@ static int scd_drive_status(struct cdrom_device_info *cdi, int slot_nr)
      return -EINVAL;
   }
 
-  return sony_spun_up ? CDS_DISC_OK : CDS_DRIVE_NOT_READY;
+  /*return sony_spun_up ? CDS_DISC_OK : CDS_DRIVE_NOT_READY;*/
+  return sony_spun_up ? CDS_DISC_OK : CDS_TRAY_OPEN;
 }
 
 static inline void
@@ -1085,7 +1086,7 @@ handle_sony_cd_attention(void)
    volatile int val;
 
 
-#if DEBUG
+#if 0*DEBUG
    printk("Entering handle_sony_cd_attention\n");
 #endif
    if (is_attention())
@@ -1166,7 +1167,7 @@ handle_sony_cd_attention(void)
    }
 
    num_consecutive_attentions = 0;
-#if DEBUG
+#if 0*DEBUG
    printk("Leaving handle_sony_cd_attention at %d\n", __LINE__);
 #endif
    return(0);
@@ -2835,8 +2836,11 @@ static int scd_tray_move(struct cdrom_device_info *cdi, int position)
 
     sony_audio_status = CDROM_AUDIO_INVALID;
     return do_sony_cd_cmd_chk("EJECT",SONY_EJECT_CMD, NULL, 0, res_reg, &res_size);
-  } else
-  return 0;
+  } else {
+    if (0 == scd_spinup())
+      sony_spun_up = 1;
+    return 0;
+  }
 }
 
 /*
@@ -3230,7 +3234,6 @@ scd_open(struct cdrom_device_info *cdi, int openmode)
             printk("CDU31A: Unable to set XA params: 0x%2.2x\n", res_reg[1]);
          }
          sony_xa_mode = 1;
-printk("sony_xa_mode is set\n");
       }
       /* A non-XA disk.  Set the parms back if necessary. */
       else if (sony_xa_mode)
@@ -3247,7 +3250,6 @@ printk("sony_xa_mode is set\n");
             printk("CDU31A: Unable to reset XA params: 0x%2.2x\n", res_reg[1]);
          }
          sony_xa_mode = 0;
-printk("sony_xa_mode is reset\n");
       }
 
       sony_spun_up = 1;
@@ -3293,7 +3295,7 @@ static struct cdrom_device_ops scd_dops = {
   scd_reset,                  /* hard reset */
   scd_audio_ioctl,            /* audio ioctl */
   scd_dev_ioctl,              /* device-specific ioctl */
-  CDC_OPEN_TRAY | CDC_LOCK | CDC_SELECT_SPEED | CDC_MULTI_SESSION | 
+  CDC_OPEN_TRAY | CDC_CLOSE_TRAY | CDC_LOCK | CDC_SELECT_SPEED | CDC_MULTI_SESSION | 
   CDC_MULTI_SESSION | CDC_MCN | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO |
   CDC_RESET | CDC_IOCTLS | CDC_DRIVE_STATUS, /* capability */
   1,                            /* number of minor devices */
@@ -3571,6 +3573,7 @@ cdu31a_init(void))
       cdu31a_abort_timer.function = handle_abort_timeout;
 
       scd_info.mask = deficiency;
+      strncpy(scd_info.name, "cdu31a", sizeof(scd_info.name));
 
       if (register_cdrom(&scd_info))
       {

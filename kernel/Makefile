@@ -21,7 +21,6 @@ ifeq ($(CONFIG_MODULES),y)
 OX_OBJS  += ksyms.o
 endif
 
-include $(TOPDIR)/Rules.make
+CFLAGS_sched.o := $(PROFILING) -fno-omit-frame-pointer
 
-sched.o: sched.c
-	$(CC) $(CFLAGS) $(PROFILING) -fno-omit-frame-pointer -c $<
+include $(TOPDIR)/Rules.make

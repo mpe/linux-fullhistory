@@ -38,11 +38,6 @@ O_OBJS    = zftape-compress.o lzrw3.o
 
 M_OBJS    = $(O_TARGET)
 
+CFLAGS_lzrw3.o	:= -O6 -funroll-all-loops
+
 include $(TOPDIR)/Rules.make
-
-#
-# sorry, a special rule. 
-#
-lzrw3.o: lzrw3.c
-	$(CC) $(CFLAGS) -O6 -funroll-all-loops -c $<
-

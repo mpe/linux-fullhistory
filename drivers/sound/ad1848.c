@@ -532,7 +532,7 @@ static int ad1848_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	int val;
 
 	if (cmd == SOUND_MIXER_PRIVATE1) {
-		if (__get_user(val, (int *)arg))
+		if (get_user(val, (int *)arg))
 			return -EFAULT;
 
 		if (val != 0xffff) {
@@ -546,22 +546,22 @@ static int ad1848_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				ad_write(devc, 26, ad_read(devc, 26) | 0x40);		/* Mute mono out */
 		}
 		val = devc->mixer_output_port;
-		return __put_user(val, (int *)arg);
+		return put_user(val, (int *)arg);
 	}
 	if (((cmd >> 8) & 0xff) == 'M') {
 		if (_SIOC_DIR(cmd) & _SIOC_WRITE)
 			switch (cmd & 0xff) {
 			case SOUND_MIXER_RECSRC:
-				if (__get_user(val, (int *)arg))
+				if (get_user(val, (int *)arg))
 					return -EFAULT;
 				val = ad1848_set_recmask(devc, val);
-				return __put_user(val, (int *)arg);
+				return put_user(val, (int *)arg);
 				
 			    default:
-				if (__get_user(val, (int *)arg))
+				if (get_user(val, (int *)arg))
 					return -EFAULT;
 				val = ad1848_mixer_set(devc, cmd & 0xff, val);
-				return __put_user(val, (int *)arg);
+				return put_user(val, (int *)arg);
 			} 
 		else
 			switch (cmd & 0xff) {
@@ -571,28 +571,28 @@ static int ad1848_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 			    
 			case SOUND_MIXER_RECSRC:
 				val = devc->recmask;
-				return __put_user(val, (int *)arg);
+				return put_user(val, (int *)arg);
 				
 			case SOUND_MIXER_DEVMASK:
 				val = devc->supported_devices;
-				return __put_user(val, (int *)arg);
+				return put_user(val, (int *)arg);
 				
 			case SOUND_MIXER_STEREODEVS:
 				val = devc->supported_devices;
 				if (devc->model != MD_C930)
 					val &= ~(SOUND_MASK_SPEAKER | SOUND_MASK_IMIX);
-				return __put_user(val, (int *)arg);
+				return put_user(val, (int *)arg);
 				
 			case SOUND_MIXER_RECMASK:
 				val = devc->supported_rec_devices;
-				return __put_user(val, (int *)arg);
+				return put_user(val, (int *)arg);
 
 			case SOUND_MIXER_CAPS:
-				return __put_user(SOUND_CAP_EXCL_INPUT, (int *)arg);
+				return put_user(SOUND_CAP_EXCL_INPUT, (int *)arg);
 
 			default:
 				val = ad1848_mixer_get(devc, cmd & 0xff);
-				return __put_user(val, (int *)arg);
+				return put_user(val, (int *)arg);
 			}
 	} else
 		return -EINVAL;

@@ -293,14 +293,14 @@ static int sb_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	 * Use ioctl(fd, SOUND_MIXER_PRIVATE1, &mode) to turn AGC off (0) or on (1).
 	 */
 	if (cmd == SOUND_MIXER_PRIVATE1 && devc->model == MDL_SB16) {
-		if (__get_user(val, (int *)arg))
+		if (get_user(val, (int *)arg))
 			return -EFAULT;
 		sb_setmixer(devc, 0x43, (~val) & 0x01);
 		return 0;
 	}
 	if (((cmd >> 8) & 0xff) == 'M') {
 		if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
-			if (__get_user(val, (int *)arg))
+			if (get_user(val, (int *)arg))
 				return -EFAULT;
 			switch (cmd & 0xff) {
 			case SOUND_MIXER_RECSRC:
@@ -338,7 +338,7 @@ static int sb_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				  ret = sb_mixer_get(devc, cmd & 0xff);
 				  break;
 			  }
-		return __put_user(ret, (int *)arg); 
+		return put_user(ret, (int *)arg); 
 	} else
 		return -EINVAL;
 }

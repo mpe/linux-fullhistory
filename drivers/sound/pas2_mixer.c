@@ -220,7 +220,7 @@ static int pas_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 	DEB(printk("pas2_mixer.c: int pas_mixer_ioctl(unsigned int cmd = %X, unsigned int arg = %X)\n", cmd, arg));
 	if (cmd == SOUND_MIXER_PRIVATE1) { /* Set loudness bit */
-		if (__get_user(level, (int *)arg))
+		if (get_user(level, (int *)arg))
 			return -EFAULT;
 		if (level == -1)  /* Return current settings */
 			level = (mode_control & 0x04);
@@ -231,10 +231,10 @@ static int pas_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 			set_mode(mode_control);
 		}
 		level = !!level;
-		return __put_user(level, (int *)arg);
+		return put_user(level, (int *)arg);
 	}
 	if (cmd == SOUND_MIXER_PRIVATE2) { /* Set enhance bit */
-		if (__get_user(level, (int *)arg))
+		if (get_user(level, (int *)arg))
 			return -EFAULT;
 		if (level == -1) { /* Return current settings */
 			if (!(mode_control & 0x03))
@@ -254,10 +254,10 @@ static int pas_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				i = (i + 1) * 20;
 			level = i;
 		}
-		return __put_user(level, (int *)arg);
+		return put_user(level, (int *)arg);
 	}
 	if (cmd == SOUND_MIXER_PRIVATE3) { /* Set mute bit */
-		if (__get_user(level, (int *)arg))
+		if (get_user(level, (int *)arg))
 			return -EFAULT;
 		if (level == -1)	/* Return current settings */
 			level = !(pas_read(0x0B8A) & 0x20);
@@ -269,10 +269,10 @@ static int pas_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 			level = !(pas_read(0x0B8A) & 0x20);
 		}
-		return __put_user(level, (int *)arg);
+		return put_user(level, (int *)arg);
 	}
 	if (((cmd >> 8) & 0xff) == 'M') {
-		if (__get_user(v, (int *)arg))
+		if (get_user(v, (int *)arg))
 			return -EFAULT;
 		if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
 			v = pas_mixer_set(cmd & 0xff, v);
@@ -303,7 +303,7 @@ static int pas_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				break;
 			}
 		}
-		return __put_user(v, (int *)arg);
+		return put_user(v, (int *)arg);
 	}
 	return -EINVAL;
 }

@@ -1,6 +1,6 @@
 /* linux/drivers/cdrom/cdrom.c. 
    Copyright (c) 1996, 1997 David A. van Leeuwen.
-   Copyright (c) 1997 Erik Andersen (andersee@debian.org)
+   Copyright (c) 1997, 1998 Erik Andersen (andersee@debian.org)
 
    May be copied or modified under the terms of the GNU General Public
    License.  See linux/COPYING for more information.
@@ -68,13 +68,9 @@
 #include <asm/uaccess.h>
 
 
-#define VERSION "$Id: cdrom.c,v 2.1 1997/12/28 15:11:47 david Exp $"
-#define REVISION "$Revision: 2.1 $"
+#define VERSION "$Id: cdrom.c,v 2.11 1998/01/04 01:11:18 erik Exp $"
+#define REVISION "Revision: 2.11"
 #define FM_WRITE	0x2                 /* file mode write bit */
-
-/* When VERBOSE_STATUS_INFO is not defined, the debugging printks don't 
-   get compiled in */
-#define VERBOSE_STATUS_INFO
 
 /* I use an error-log mask to give fine grain control over the type of
    error messages dumped to the system logs.  The available masks include: */
@@ -83,9 +79,14 @@
 #define CD_DO_IOCTL	0x4
 #define CD_OPEN		0x8
 #define CD_CLOSE	0x10
+#define CD_COUNT_TRACKS 0x20
+
+/* When VERBOSE_STATUS_INFO is not defined, the debugging printks don't 
+   get compiled in at all */
+#define VERBOSE_STATUS_INFO
 
 #define ERRLOGMASK (CD_WARNING) 
-/* #define ERRLOGMASK (CD_WARNING|CD_OPEN|CD_CLOSE) */
+/* #define ERRLOGMASK (CD_WARNING|CD_OPEN|CD_COUNT_TRACKS|CD_CLOSE) */
 /* #define ERRLOGMASK (CD_WARNING|CD_REG_UNREG|CD_DO_IOCTL|CD_OPEN|CD_CLOSE) */
 
 #ifdef VERBOSE_STATUS_INFO
@@ -480,7 +481,7 @@ void cdrom_count_tracks(struct cdrom_device_info *cdi, tracktype* tracks)
 	tracks->cdi=0;
 	tracks->xa=0;
 	tracks->error=0;
-	cdinfo(CD_OPEN, "entering cdrom_count_tracks\n"); 
+	cdinfo(CD_COUNT_TRACKS, "entering cdrom_count_tracks\n"); 
         if (!(cdi->ops->capability & CDC_PLAY_AUDIO)) { 
                 tracks->error=CDS_NO_INFO;
                 return;
@@ -508,10 +509,10 @@ void cdrom_count_tracks(struct cdrom_device_info *cdi, tracktype* tracks)
 			tracks->data++;
 		} else
 		    tracks->audio++;
-		cdinfo(CD_OPEN, "track %d: format=%d, ctrl=%d\n",
+		cdinfo(CD_COUNT_TRACKS, "track %d: format=%d, ctrl=%d\n",
 		       i, entry.cdte_format, entry.cdte_ctrl);
 	}	
-	cdinfo(CD_OPEN, "disc has %d tracks: %d=audio %d=data %d=Cd-I %d=XA\n", 
+	cdinfo(CD_COUNT_TRACKS, "disc has %d tracks: %d=audio %d=data %d=Cd-I %d=XA\n", 
 		header.cdth_trk1, tracks->audio, tracks->data, 
 		tracks->cdi, tracks->xa);
 }	

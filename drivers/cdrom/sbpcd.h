@@ -119,14 +119,14 @@
 #define JUKEBOX 0
 #else
 #define JUKEBOX 1
-#endif DISTRIBUTION
+#endif /* DISTRIBUTION */
 
 /* tray control: eject tray after last use */
 #if DISTRIBUTION
 #define EJECT 0
 #else
 #define EJECT 1
-#endif DISTRIBUTION
+#endif /* DISTRIBUTION */
 
 /* max. number of audio frames to read with one     */
 /* request (allocates n* 2352 bytes kernel memory!) */
@@ -570,7 +570,7 @@ pause:   8d pr 00 00 00 00 00.  (0)  pause (pr=00)
                                      resume (pr=80) audio playing
 
 Mode Select:
-         84 00 nn-nn ??-?? 00   (0)  nn-nn: 2048 or 2340
+         84 00 nn-nn ??.?? 00   (0)  nn-nn: 2048 or 2340
                                      possibly defines transfer size
 
 set_vol: 84 83 00 00 sw le 00.  (0)  sw(itch): lrxxxxxx (off=1)
@@ -604,12 +604,12 @@ seek:    01 00 ll-bb-aa 00 00.  (0)
 seek:    01 02 mm-ss-ff 00 00.  (0)  
 
 Read Data:
-read:    02 xx-xx-xx nn-nn fl. (??)  read nn-nn blocks of 2048 bytes,
+read:    02 xx-xx-xx nn-nn fl.  (?)  read nn-nn blocks of 2048 bytes,
                                      starting at block xx-xx-xx  
                                      fl=0: "lba"-, =2:"msf-bcd"-coded xx-xx-xx
 
 Read XA-Data:
-read:    03 xx-xx-xx nn-nn fl. (??)  read nn-nn blocks of 2340 bytes, 
+read:    03 xx-xx-xx nn-nn fl.  (?)  read nn-nn blocks of 2340 bytes, 
                                      starting at block xx-xx-xx
                                      fl=0: "lba"-, =2:"msf-bcd"-coded xx-xx-xx
 
@@ -838,7 +838,7 @@ Read XA Parameter:
 
 /*==========================================================================*/
 /*==========================================================================*/
-#endif _LINUX_SBPCD_H
+#endif /* _LINUX_SBPCD_H */
 /*==========================================================================*/
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.

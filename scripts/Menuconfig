@@ -31,6 +31,11 @@
 # 081297 Pavel Machek (pavel@atrey.karlin.mff.cuni.cz) - better error 
 # handling
 #
+# 131197 Michael Chastain (mec@shout.net) - output all lines for a
+# choice list, not just the selected one.  This makes the output
+# the same as Configure output, which is important for smart config
+# dependencies.
+#
 # 101297 Michael Chastain (mec@shout.net) - remove sound driver cruft.
 #
 # 221297 Michael Chastain (mec@shout.net) - make define_bool actually
@@ -1051,11 +1056,19 @@ save_configuration () {
 		: ${current:=$default}
 
 		#
-		# Then extract the actual option from the list of choices.
+		# Output all choices (to be compatible with other configs).
 		#
-		current=${choices#*$current} ; set $current
-
-		define_bool "$1" "y"
+		set -- $choices
+		while [ -n "$2" ]
+		do
+			if eval [ "$1" = "$current" ]
+			then
+			    define_bool "$2" "y"
+			else
+			    define_bool "$2" "n"
+			fi
+			shift ; shift
+		done
 	}
 
 	function mainmenu_name () {

@@ -228,10 +228,10 @@ proc write_comment { file1 file2 text } {
 proc write_tristate { file1 file2 varname variable dep } {
 	if { $variable == 0 } \
 		then { puts $file1 "# $varname is not set"; \
-		       puts $file2 "#undef $varname"} \
+		       puts $file2 "#undef  $varname"} \
 	elseif { $variable == 2 || ($dep == 2 && $variable == 1) } \
 		then { puts $file1 "$varname=m"; \
-		       puts $file2 "#undef $varname"; \
+		       puts $file2 "#undef  $varname"; \
 		       puts $file2 "#define ${varname}_MODULE 1" } \
 	elseif { $variable == 1 && $dep != 2 } \
 		then { puts $file1 "$varname=y"; \
@@ -244,7 +244,7 @@ proc write_tristate { file1 file2 varname variable dep } {
 proc write_int { file1 file2 varname variable dep } {
 	if { $dep == 0 } \
 		then { puts $file1 "# $varname is not set"; \
-		       puts $file2 "#undef $varname"} \
+		       puts $file2 "#undef  $varname"} \
 	else {
 		puts $file1 "$varname=$variable"; \
 		puts $file2 "#define $varname $variable"; \
@@ -254,7 +254,7 @@ proc write_int { file1 file2 varname variable dep } {
 proc write_hex { file1 file2 varname variable dep } {
 	if { $dep == 0 } \
 		then { puts $file1 "# $varname is not set"; \
-		       puts $file2 "#undef $varname"} \
+		       puts $file2 "#undef  $varname"} \
 	else {
 		puts $file1 "$varname=$variable"; \
 		puts $file2 "#define $varname 0x$variable"; \
@@ -264,7 +264,7 @@ proc write_hex { file1 file2 varname variable dep } {
 proc write_string { file1 file2 varname variable dep } {
 	if { $dep == 0 } \
 		then { puts $file1 "# $varname is not set"; \
-		       puts $file2 "#undef $varname"} \
+		       puts $file2 "#undef  $varname"} \
 	else {
 		puts $file1 "$varname=\"$variable\""; \
 		puts $file2 "#define $varname \"$variable\""; \

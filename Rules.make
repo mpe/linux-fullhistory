@@ -45,13 +45,18 @@ first_rule: sub_dirs
 #
 
 %.s: %.c
-	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -S $< -o $@
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -S $< -o $@
 
 %.i: %.c
-	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -E $< > $@
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -E $< > $@
 
 %.o: %.c
-	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -c -o $@ $<
+	@ ( \
+	    echo 'ifeq ($(strip $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@)),$$(strip $$(CFLAGS) $$(EXTRA_CFLAGS) $$(CFLAGS_$@)))' ; \
+	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
+	    echo 'endif' \
+	) > .$@.flags
 
 %.o: %.s
 	$(AS) $(ASFLAGS) $(EXTRA_CFLAGS) -o $@ $<
@@ -66,29 +71,39 @@ all_targets: $(O_TARGET) $(L_TARGET)
 #
 ifdef O_TARGET
 ALL_O = $(OX_OBJS) $(O_OBJS)
-$(O_TARGET): $(ALL_O) $(TOPDIR)/include/linux/config.h
+$(O_TARGET): $(ALL_O)
 	rm -f $@
 ifneq "$(strip $(ALL_O))" ""
 	$(LD) $(EXTRA_LDFLAGS) -r -o $@ $(ALL_O)
 else
 	$(AR) rcs $@
 endif
+	@ ( \
+	    echo 'ifeq ($(strip $(EXTRA_LDFLAGS) $(ALL_O)),$$(strip $$(EXTRA_LDFLAGS) $$(ALL_O)))' ; \
+	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
+	    echo 'endif' \
+	) > .$@.flags
 endif # O_TARGET
 
 #
 # Rule to compile a set of .o files into one .a file
 #
 ifdef L_TARGET
-$(L_TARGET): $(LX_OBJS) $(L_OBJS) $(TOPDIR)/include/linux/config.h
+$(L_TARGET): $(LX_OBJS) $(L_OBJS)
 	rm -f $@
 	$(AR) $(EXTRA_ARFLAGS) rcs $@ $(LX_OBJS) $(L_OBJS)
+	@ ( \
+	    echo 'ifeq ($(strip $(EXTRA_ARFLAGS) $(LX_OBJS) $(L_OBJS)),$$(strip $$(EXTRA_ARFLAGS) $$(LX_OBJS) $$(L_OBJS)))' ; \
+	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
+	    echo 'endif' \
+	) > .$@.flags
 endif
 
 #
 # This make dependencies quickly
 #
 fastdep: dummy
-	$(TOPDIR)/scripts/mkdep *.[chS] > .depend
+	$(TOPDIR)/scripts/mkdep $(wildcard *.[chS] local.h.master) > .depend
 ifdef ALL_SUB_DIRS
 	set -e; for i in $(ALL_SUB_DIRS); do $(MAKE) -C $$i fastdep; done
 endif
@@ -131,7 +146,7 @@ endif
 ifneq "$(strip $(ALL_MOBJS))" ""
 	echo $(PDWN)
 	cd $$TOPDIR/modules; for i in $(ALL_MOBJS); do \
-	    ln -sf ../$(PDWN)/$$i .; done
+	    ln -sf ../$(PDWN)/$$i $$i; done
 endif
 
 #
@@ -198,19 +213,54 @@ endif # CONFIG_MODVERSIONS
 
 ifneq "$(strip $(SYMTAB_OBJS))" ""
 $(SYMTAB_OBJS): $(TOPDIR)/include/linux/modversions.h $(SYMTAB_OBJS:.o=.c)
-	$(CC) $(CFLAGS) -DEXPORT_SYMTAB -c $(@:.o=.c)
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -DEXPORT_SYMTAB -c $(@:.o=.c)
+	@ ( \
+	    echo 'ifeq ($(strip $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -DEXPORT_SYMTAB),$$(strip $$(CFLAGS) $$(EXTRA_CFLAGS) $$(CFLAGS_$@) -DEXPORT_SYMTAB))' ; \
+	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
+	    echo 'endif' \
+	) > .$@.flags
 endif
 
 endif # CONFIG_MODULES
 
 
 #
-# include dependency files they exist
+# include dependency files if they exist
 #
-ifeq (.depend,$(wildcard .depend))
+ifneq ($(wildcard .depend),)
 include .depend
 endif
 
-ifeq ($(TOPDIR)/.hdepend,$(wildcard $(TOPDIR)/.hdepend))
+ifneq ($(wildcard $(TOPDIR)/.hdepend),)
 include $(TOPDIR)/.hdepend
+endif
+
+#
+# Find files whose flags have changed and force recompilation.
+# For safety, this works in the converse direction:
+#   every file is forced, except those whose flags are positively up-to-date.
+#
+FILES_FLAGS_UP_TO_DATE :=
+
+FILES_FLAGS_EXIST := $(wildcard .*.flags)
+ifneq ($(FILES_FLAGS_EXIST),)
+include $(FILES_FLAGS_EXIST)
+endif
+
+FILES_FLAGS_CHANGED := $(strip \
+    $(filter-out $(FILES_FLAGS_UP_TO_DATE), \
+	$(O_TARGET) $(O_OBJS) $(OX_OBJS) \
+	$(L_TARGET) $(L_OBJS) $(LX_OBJS) \
+	$(M_OBJS) $(MX_OBJS) \
+	$(MI_OBJS) $(MIX_OBJS) \
+	))
+
+# A kludge: .S files don't get flag dependencies (yet),
+#   because that will involve changing a lot of Makefiles.
+FILES_FLAGS_CHANGED := $(strip \
+    $(filter-out $(patsubst %.S, %.o, $(wildcard *.S)), \
+    $(FILES_FLAGS_CHANGED)))
+
+ifneq ($(FILES_FLAGS_CHANGED),)
+$(FILES_FLAGS_CHANGED): dummy
 endif

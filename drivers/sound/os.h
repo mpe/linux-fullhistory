@@ -50,7 +50,7 @@ extern int sound_open_dma(int chn, char *deviceID);
 extern void sound_free_dma(int chn);
 extern void sound_close_dma(int chn);
 
-extern void reporgram_timer(void);
+extern void reprogram_timer(void);
 
 #define RUNTIME_DMA_ALLOC
 #define USE_AUTOINIT_DMA

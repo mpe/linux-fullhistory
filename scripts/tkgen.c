@@ -53,6 +53,14 @@
  * 1997 12 08
  * Michael Chastain - Remove sound driver special cases.
  *
+ * 1997 11 15
+ * Michael Chastain - For choice buttons, write values for all options,
+ *                    not just the single chosen one.  This is compatible
+ *                    with 'make config' and 'make oldconfig', and is
+ *                    needed so smart-config dependencies work if the
+ *                    user switches from one configuration method to
+ *                    another.
+ *
  * TO DO:
  *   - clean up - there are useless ifdef's everywhere.
  *   - better comments throughout - C code generating tcl is really cryptic.
@@ -1034,9 +1042,10 @@ void dump_tk_script(struct kconfig *scfg)
 		      cfg1 != NULL && cfg1->tok == tok_choice;
 		      cfg1 = cfg1->next)
 		    {
-		      printf("\tif { $%s == \"%s\" } then { write_tristate $cfg $autocfg %s 1 $notmod }\n",
+		      printf("\tif { $%s == \"%s\" } then { write_tristate $cfg $autocfg %s 1 $notmod } else { write_tristate $cfg $autocfg %s 0 $notmod }\n",
 			     cfg->optionname,
 			     cfg1->label,
+			     cfg1->optionname,
 			     cfg1->optionname);
 		    }
 		}

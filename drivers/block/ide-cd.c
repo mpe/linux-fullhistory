@@ -27,10 +27,8 @@
  *     unless you have a patch to fix it.  I am working on it...)
  * -Implement ide_cdrom_select_speed using the generic cdrom interface
  * -Fix ide_cdrom_reset so that it works (it does nothing right now)
- *
- * MOSTLY DONE LIST:
- *  Query the drive to find what features are available
- *   before trying to use them.
+ * -Query the drive to find what features are available before trying to
+ *   use them (like trying to close the tray in drives that can't).
  *
  *
  * ----------------------------------
@@ -182,10 +180,12 @@
  * 4.07  Dec 17, 1997  -- fallback to set pc->stat on "tray open"
  * 4.08  Dec 18, 1997  -- spew less noise when tray is empty
  *                     -- fix speed display for ACER 24X, 18X
+ * 4.09  Jan 04, 1998  -- fix handling of the last block so we return
+ *                         an end of file instead of an I/O error (Gadi)
  *
  *************************************************************************/
 
-#define IDECD_VERSION "4.07"
+#define IDECD_VERSION "4.09"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -1663,7 +1663,7 @@ cdrom_read_toc (ide_drive_t *drive,
 	if (stat) toc->capacity = 0x1fffff;
 
 	HWIF(drive)->gd->sizes[drive->select.b.unit << PARTN_BITS]
-		= toc->capacity * SECTORS_PER_FRAME;
+		= (toc->capacity * SECTORS_PER_FRAME) >> (BLOCK_SIZE_BITS - 9);
 	drive->part[0].nr_sects = toc->capacity * SECTORS_PER_FRAME;
 
 	/* Remember that we've read this stuff. */
