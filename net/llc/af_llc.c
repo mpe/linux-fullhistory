@@ -135,6 +135,12 @@ static void llc_ui_sk_init(struct socket *sock, struct sock *sk)
 	sock->ops	= &llc_ui_ops;
 }
 
+static struct proto llc_proto = {
+	.name	  = "DDP",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct llc_sock),
+};
+
 /**
  *	llc_ui_create - alloc and init a new llc_ui socket
  *	@sock: Socket to initialize and attach allocated sk to.
@@ -151,7 +157,7 @@ static int llc_ui_create(struct socket *sock, int protocol)
 
 	if (sock->type == SOCK_DGRAM || sock->type == SOCK_STREAM) {
 		rc = -ENOMEM;
-		sk = llc_sk_alloc(PF_LLC, GFP_KERNEL);
+		sk = llc_sk_alloc(PF_LLC, GFP_KERNEL, &llc_proto);
 		if (sk) {
 			rc = 0;
 			llc_ui_sk_init(sock, sk);
@@ -1033,18 +1039,25 @@ extern void llc_conn_handler(struct llc_sap *sap, struct sk_buff *skb);
 
 static int __init llc2_init(void)
 {
-	int rc;
+	int rc = proto_register(&llc_proto, 0);
+
+	if (rc != 0)
+		goto out;
 
 	llc_build_offset_table();
 	llc_station_init();
 	llc_ui_sap_last_autoport = LLC_SAP_DYN_START;
 	rc = llc_proc_init();
-	if (!rc) {
-		sock_register(&llc_ui_family_ops);
-		llc_add_pack(LLC_DEST_SAP, llc_sap_handler);
-		llc_add_pack(LLC_DEST_CONN, llc_conn_handler);
-	}
+	if (rc != 0)
+		goto out_unregister_llc_proto;
+	sock_register(&llc_ui_family_ops);
+	llc_add_pack(LLC_DEST_SAP, llc_sap_handler);
+	llc_add_pack(LLC_DEST_CONN, llc_conn_handler);
+out:
 	return rc;
+out_unregister_llc_proto:
+	proto_unregister(&llc_proto);
+	goto out;
 }
 
 static void __exit llc2_exit(void)
@@ -1054,6 +1067,7 @@ static void __exit llc2_exit(void)
 	llc_remove_pack(LLC_DEST_CONN);
 	sock_unregister(PF_LLC);
 	llc_proc_exit();
+	proto_unregister(&llc_proto);
 }
 
 module_init(llc2_init);

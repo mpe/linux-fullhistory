@@ -646,6 +646,15 @@ cpu_init (void)
 	ia64_set_kr(IA64_KR_FPU_OWNER, 0);
 
 	/*
+	 * Initialize the page-table base register to a global
+	 * directory with all zeroes.  This ensure that we can handle
+	 * TLB-misses to user address-space even before we created the
+	 * first user address-space.  This may happen, e.g., due to
+	 * aggressive use of lfetch.fault.
+	 */
+	ia64_set_kr(IA64_KR_PT_BASE, __pa(ia64_imva(empty_zero_page)));
+
+	/*
 	 * Initialize default control register to defer all speculative faults.  The
 	 * kernel MUST NOT depend on a particular setting of these bits (in other words,
 	 * the kernel must have recovery code for all speculative accesses).  Turn on

@@ -67,7 +67,7 @@ static void msi_set_mask_bit(unsigned int vector, int flag)
 		int		pos;
 		u32		mask_bits;
 
-		pos = (int)entry->mask_base;
+		pos = (long)entry->mask_base;
 		pci_read_config_dword(entry->dev, pos, &mask_bits);
 		mask_bits &= ~(1);
 		mask_bits |= flag;
@@ -555,7 +555,7 @@ static int msi_capability_init(struct pci_dev *dev)
 	dev->irq = vector;
 	entry->dev = dev;
 	if (is_mask_bit_support(control)) {
-		entry->mask_base = (void __iomem *)msi_mask_bits_reg(pos,
+		entry->mask_base = (void __iomem *)(long)msi_mask_bits_reg(pos,
 				is_64bit_address(control));
 	}
 	/* Replace with MSI handler */

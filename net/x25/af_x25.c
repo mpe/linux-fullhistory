@@ -442,17 +442,21 @@ static int x25_listen(struct socket *sock, int backlog)
 	return rc;
 }
 
+static struct proto x25_proto = {
+	.name	  = "X25",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct x25_sock),
+};
+
 static struct sock *x25_alloc_socket(void)
 {
 	struct x25_sock *x25;
-	struct sock *sk = sk_alloc(AF_X25, GFP_ATOMIC,
-				   sizeof(struct x25_sock), NULL);
+	struct sock *sk = sk_alloc(AF_X25, GFP_ATOMIC, &x25_proto, 1);
 
 	if (!sk)
 		goto out;
 
 	sock_init_data(NULL, sk);
-	sk_set_owner(sk, THIS_MODULE);
 
 	x25 = x25_sk(sk);
 	skb_queue_head_init(&x25->ack_queue);
@@ -481,7 +485,6 @@ static int x25_create(struct socket *sock, int protocol)
 	x25 = x25_sk(sk);
 
 	sock_init_data(sock, sk);
-	sk_set_owner(sk, THIS_MODULE);
 
 	x25_init_timers(sk);
 
@@ -1385,6 +1388,11 @@ void x25_kill_by_neigh(struct x25_neigh *nb)
 
 static int __init x25_init(void)
 {
+	int rc = proto_register(&x25_proto, 0);
+
+	if (rc != 0)
+		goto out;
+
 	sock_register(&x25_family_ops);
 
 	dev_add_pack(&x25_packet_type);
@@ -1397,7 +1405,8 @@ static int __init x25_init(void)
 	x25_register_sysctl();
 #endif
 	x25_proc_init();
-	return 0;
+out:
+	return rc;
 }
 module_init(x25_init);
 
@@ -1416,6 +1425,7 @@ static void __exit x25_exit(void)
 	dev_remove_pack(&x25_packet_type);
 
 	sock_unregister(AF_X25);
+	proto_unregister(&x25_proto);
 }
 module_exit(x25_exit);
 

@@ -627,7 +627,7 @@ int __set_page_dirty_nobuffers(struct page *page)
 			mapping2 = page_mapping(page);
 			if (mapping2) { /* Race with truncate? */
 				BUG_ON(mapping2 != mapping);
-				if (!mapping->backing_dev_info->memory_backed)
+				if (mapping_cap_account_dirty(mapping))
 					inc_page_state(nr_dirty);
 				radix_tree_tag_set(&mapping->page_tree,
 					page_index(page), PAGECACHE_TAG_DIRTY);
@@ -713,7 +713,7 @@ int test_clear_page_dirty(struct page *page)
 						page_index(page),
 						PAGECACHE_TAG_DIRTY);
 			write_unlock_irqrestore(&mapping->tree_lock, flags);
-			if (!mapping->backing_dev_info->memory_backed)
+			if (mapping_cap_account_dirty(mapping))
 				dec_page_state(nr_dirty);
 			return 1;
 		}
@@ -744,7 +744,7 @@ int clear_page_dirty_for_io(struct page *page)
 
 	if (mapping) {
 		if (TestClearPageDirty(page)) {
-			if (!mapping->backing_dev_info->memory_backed)
+			if (mapping_cap_account_dirty(mapping))
 				dec_page_state(nr_dirty);
 			return 1;
 		}

@@ -702,9 +702,7 @@ struct fb_tile_ops {
 
 #define FBINFO_MISC_USEREVENT          0x10000 /* event request
 						  from userspace */
-#define FBINFO_MISC_MODESWITCH         0x20000 /* mode switch */
-#define FBINFO_MISC_MODESWITCHLATE     0x40000 /* init hardware later */
-#define FBINFO_MISC_TILEBLITTING       0x80000 /* use tile blitting */
+#define FBINFO_MISC_TILEBLITTING       0x20000 /* use tile blitting */
 
 struct fb_info {
 	int node;

@@ -164,7 +164,7 @@ static inline void __inet_sk_copy_descendant(struct sock *sk_to,
 					     const int ancestor_size)
 {
 	memcpy(inet_sk(sk_to) + 1, inet_sk(sk_from) + 1,
-	       sk_from->sk_prot->slab_obj_size - ancestor_size);
+	       sk_from->sk_prot->obj_size - ancestor_size);
 }
 #if !(defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE))
 static inline void inet_sk_copy_descendant(struct sock *sk_to,

@@ -5640,7 +5640,7 @@ static void __devexit sisfb_remove(struct pci_dev *pdev)
 	/* Unmap */
 	iounmap(ivideo->video_vbase);
 	iounmap(ivideo->mmio_vbase);
-	if(ivideo->bios_abase) vfree(ivideo->bios_abase);
+	vfree(ivideo->bios_abase);
 
 	/* Release mem regions */
 	release_mem_region(ivideo->video_base, ivideo->video_size);
@@ -5695,7 +5695,7 @@ SISINITSTATIC int __init sisfb_init(void)
 	sisfb_setup(options);
 #endif
 #endif
-	return(pci_module_init(&sisfb_driver));
+	return(pci_register_driver(&sisfb_driver));
 }
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,8)

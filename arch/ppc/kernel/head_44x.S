@@ -728,78 +728,13 @@ _GLOBAL(empty_zero_page)
 _GLOBAL(swapper_pg_dir)
 	.space	8192
 
+/* Reserved 4k for the critical exception stack & 4k for the machine
+ * check stack per CPU for kernel mode exceptions */
 	.section .bss
-/* Stack for handling critical exceptions from kernel mode */
-critical_stack_bottom:
-	.space 4096
-critical_stack_top:
-	.previous
-
-/* Stack for handling machine check exceptions from kernel mode */
-mcheck_stack_bottom:
-	.space 4096
-mcheck_stack_top:
-	.previous
-
-/*
- * This area is used for temporarily saving registers during the
- * critical and machine check exception prologs. It must always
- * follow the page aligned allocations, so it starts on a page
- * boundary, ensuring that all crit_save areas are in a single
- * page.
- */
-
-/* crit_save */
-_GLOBAL(crit_save)
-	.space  4
-_GLOBAL(crit_r10)
-	.space	4
-_GLOBAL(crit_r11)
-	.space	4
-_GLOBAL(crit_sprg0)
-	.space	4
-_GLOBAL(crit_sprg1)
-	.space	4
-_GLOBAL(crit_sprg4)
-	.space	4
-_GLOBAL(crit_sprg5)
-	.space	4
-_GLOBAL(crit_sprg7)
-	.space	4
-_GLOBAL(crit_pid)
-	.space	4
-_GLOBAL(crit_srr0)
-	.space	4
-_GLOBAL(crit_srr1)
-	.space	4
-
-/* mcheck_save */
-_GLOBAL(mcheck_save)
-	.space  4
-_GLOBAL(mcheck_r10)
-	.space	4
-_GLOBAL(mcheck_r11)
-	.space	4
-_GLOBAL(mcheck_sprg0)
-	.space	4
-_GLOBAL(mcheck_sprg1)
-	.space	4
-_GLOBAL(mcheck_sprg4)
-	.space	4
-_GLOBAL(mcheck_sprg5)
-	.space	4
-_GLOBAL(mcheck_sprg7)
-	.space	4
-_GLOBAL(mcheck_pid)
-	.space	4
-_GLOBAL(mcheck_srr0)
-	.space	4
-_GLOBAL(mcheck_srr1)
-	.space	4
-_GLOBAL(mcheck_csrr0)
-	.space	4
-_GLOBAL(mcheck_csrr1)
-	.space	4
+        .align 12
+exception_stack_bottom:
+	.space	BOOKE_EXCEPTION_STACK_SIZE
+_GLOBAL(exception_stack_top)
 
 /*
  * This space gets a copy of optional info passed to us by the bootstrap

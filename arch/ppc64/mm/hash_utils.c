@@ -149,6 +149,8 @@ void __init htab_initialize(void)
 	unsigned long pteg_count;
 	unsigned long mode_rw;
 	int i, use_largepages = 0;
+	unsigned long base = 0, size = 0;
+	extern unsigned long tce_alloc_start, tce_alloc_end;
 
 	DBG(" -> htab_initialize()\n");
 
@@ -204,8 +206,6 @@ void __init htab_initialize(void)
 
 	/* create bolted the linear mapping in the hash table */
 	for (i=0; i < lmb.memory.cnt; i++) {
-		unsigned long base, size;
-
 		base = lmb.memory.region[i].physbase + KERNELBASE;
 		size = lmb.memory.region[i].size;
 
@@ -234,6 +234,25 @@ void __init htab_initialize(void)
 #endif /* CONFIG_U3_DART */
 		create_pte_mapping(base, base + size, mode_rw, use_largepages);
 	}
+
+	/*
+	 * If we have a memory_limit and we've allocated TCEs then we need to
+	 * explicitly map the TCE area at the top of RAM. We also cope with the
+	 * case that the TCEs start below memory_limit.
+	 * tce_alloc_start/end are 16MB aligned so the mapping should work
+	 * for either 4K or 16MB pages.
+	 */
+	if (tce_alloc_start) {
+		tce_alloc_start += KERNELBASE;
+		tce_alloc_end += KERNELBASE;
+
+		if (base + size >= tce_alloc_start)
+			tce_alloc_start = base + size + 1;
+
+		create_pte_mapping(tce_alloc_start, tce_alloc_end,
+			mode_rw, use_largepages);
+	}
+
 	DBG(" <- htab_initialize()\n");
 }
 #undef KB

@@ -802,7 +802,7 @@ static int __init kyrofb_init(void)
 		return -ENODEV;
 	kyrofb_setup(option);
 #endif
-	return pci_module_init(&kyrofb_pci_driver);
+	return pci_register_driver(&kyrofb_pci_driver);
 }
 
 static void __exit kyrofb_exit(void)

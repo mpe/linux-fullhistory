@@ -747,7 +747,7 @@ static int pm2fb_set_par(struct fb_info *info)
 	}
 	if ((info->var.vmode & FB_VMODE_MASK)==FB_VMODE_DOUBLE)
 		video |= PM2F_LINE_DOUBLE;
-	if (info->var.activate==FB_ACTIVATE_NOW)
+	if ((info->var.activate & FB_ACTIVATE_MASK)==FB_ACTIVATE_NOW)
 		video |= PM2F_VIDEO_ENABLE;
 	par->video = video;
 
@@ -1282,7 +1282,7 @@ static int __init pm2fb_init(void)
 	pm2fb_setup(option);
 #endif
 
-	return pci_module_init(&pm2fb_driver);
+	return pci_register_driver(&pm2fb_driver);
 }
 
 module_init(pm2fb_init);

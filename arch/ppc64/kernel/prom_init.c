@@ -177,6 +177,10 @@ static int __initdata of_platform;
 
 static char __initdata prom_cmd_line[COMMAND_LINE_SIZE];
 
+static unsigned long __initdata prom_memory_limit;
+static unsigned long __initdata prom_tce_alloc_start;
+static unsigned long __initdata prom_tce_alloc_end;
+
 static unsigned long __initdata alloc_top;
 static unsigned long __initdata alloc_top_high;
 static unsigned long __initdata alloc_bottom;
@@ -384,10 +388,70 @@ static int __init prom_setprop(phandle node, const char *pname,
 			 (u32)(unsigned long) value, (u32) valuelen);
 }
 
+/* We can't use the standard versions because of RELOC headaches. */
+#define isxdigit(c)	(('0' <= (c) && (c) <= '9') \
+			 || ('a' <= (c) && (c) <= 'f') \
+			 || ('A' <= (c) && (c) <= 'F'))
+
+#define isdigit(c)	('0' <= (c) && (c) <= '9')
+#define islower(c)	('a' <= (c) && (c) <= 'z')
+#define toupper(c)	(islower(c) ? ((c) - 'a' + 'A') : (c))
+
+unsigned long prom_strtoul(const char *cp, const char **endp)
+{
+	unsigned long result = 0, base = 10, value;
+
+	if (*cp == '0') {
+		base = 8;
+		cp++;
+		if (toupper(*cp) == 'X') {
+			cp++;
+			base = 16;
+		}
+	}
+
+	while (isxdigit(*cp) &&
+	       (value = isdigit(*cp) ? *cp - '0' : toupper(*cp) - 'A' + 10) < base) {
+		result = result * base + value;
+		cp++;
+	}
+
+	if (endp)
+		*endp = cp;
+
+	return result;
+}
+
+unsigned long prom_memparse(const char *ptr, const char **retptr)
+{
+	unsigned long ret = prom_strtoul(ptr, retptr);
+	int shift = 0;
+
+	/*
+	 * We can't use a switch here because GCC *may* generate a
+	 * jump table which won't work, because we're not running at
+	 * the address we're linked at.
+	 */
+	if ('G' == **retptr || 'g' == **retptr)
+		shift = 30;
+
+	if ('M' == **retptr || 'm' == **retptr)
+		shift = 20;
+
+	if ('K' == **retptr || 'k' == **retptr)
+		shift = 10;
+
+	if (shift) {
+		ret <<= shift;
+		(*retptr)++;
+	}
+
+	return ret;
+}
 
 /*
  * Early parsing of the command line passed to the kernel, used for
- * the options that affect the iommu
+ * "mem=x" and the options that affect the iommu
  */
 static void __init early_cmdline_parse(void)
 {
@@ -417,6 +481,14 @@ static void __init early_cmdline_parse(void)
 			RELOC(ppc64_iommu_off) = 1;
 		else if (!strncmp(opt, RELOC("force"), 5))
 			RELOC(iommu_force_on) = 1;
+	}
+
+	opt = strstr(RELOC(prom_cmd_line), RELOC("mem="));
+	if (opt) {
+		opt += 4;
+		RELOC(prom_memory_limit) = prom_memparse(opt, (const char **)&opt);
+		/* Align to 16 MB == size of large page */
+		RELOC(prom_memory_limit) = ALIGN(RELOC(prom_memory_limit), 0x1000000);
 	}
 }
 
@@ -664,15 +736,7 @@ static void __init prom_init_mem(void)
 		}
 	}
 
-	/* Setup our top/bottom alloc points, that is top of RMO or top of
-	 * segment 0 when running non-LPAR
-	 */
-	if ( RELOC(of_platform) == PLATFORM_PSERIES_LPAR )
-		RELOC(alloc_top) = RELOC(rmo_top);
-	else
-		RELOC(alloc_top) = RELOC(rmo_top) = min(0x40000000ul, RELOC(ram_top));
 	RELOC(alloc_bottom) = PAGE_ALIGN(RELOC(klimit) - offset + 0x4000);
-	RELOC(alloc_top_high) = RELOC(ram_top);
 
 	/* Check if we have an initrd after the kernel, if we do move our bottom
 	 * point to after it
@@ -682,7 +746,40 @@ static void __init prom_init_mem(void)
 			RELOC(alloc_bottom) = PAGE_ALIGN(RELOC(prom_initrd_end));
 	}
 
+	/*
+	 * If prom_memory_limit is set we reduce the upper limits *except* for
+	 * alloc_top_high. This must be the real top of RAM so we can put
+	 * TCE's up there.
+	 */
+
+	RELOC(alloc_top_high) = RELOC(ram_top);
+
+	if (RELOC(prom_memory_limit)) {
+		if (RELOC(prom_memory_limit) <= RELOC(alloc_bottom)) {
+			prom_printf("Ignoring mem=%x <= alloc_bottom.\n",
+				RELOC(prom_memory_limit));
+			RELOC(prom_memory_limit) = 0;
+		} else if (RELOC(prom_memory_limit) >= RELOC(ram_top)) {
+			prom_printf("Ignoring mem=%x >= ram_top.\n",
+				RELOC(prom_memory_limit));
+			RELOC(prom_memory_limit) = 0;
+		} else {
+			RELOC(ram_top) = RELOC(prom_memory_limit);
+			RELOC(rmo_top) = min(RELOC(rmo_top), RELOC(prom_memory_limit));
+		}
+	}
+
+	/*
+	 * Setup our top alloc point, that is top of RMO or top of
+	 * segment 0 when running non-LPAR.
+	 */
+	if ( RELOC(of_platform) == PLATFORM_PSERIES_LPAR )
+		RELOC(alloc_top) = RELOC(rmo_top);
+	else
+		RELOC(alloc_top) = RELOC(rmo_top) = min(0x40000000ul, RELOC(ram_top));
+
 	prom_printf("memory layout at init:\n");
+	prom_printf("  memory_limit : %x (16 MB aligned)\n", RELOC(prom_memory_limit));
 	prom_printf("  alloc_bottom : %x\n", RELOC(alloc_bottom));
 	prom_printf("  alloc_top    : %x\n", RELOC(alloc_top));
 	prom_printf("  alloc_top_hi : %x\n", RELOC(alloc_top_high));
@@ -870,6 +967,16 @@ static void __init prom_initialize_tce_table(void)
 	}
 
 	reserve_mem(local_alloc_bottom, local_alloc_top - local_alloc_bottom);
+
+	if (RELOC(prom_memory_limit)) {
+		/*
+		 * We align the start to a 16MB boundary so we can map the TCE area
+		 * using large pages if possible. The end should be the top of RAM
+		 * so no need to align it.
+		 */
+		RELOC(prom_tce_alloc_start) = _ALIGN_DOWN(local_alloc_bottom, 0x1000000);
+		RELOC(prom_tce_alloc_end) = local_alloc_top;
+	}
 
 	/* Flag the first invalid entry */
 	prom_debug("ending prom_initialize_tce_table\n");
@@ -1684,8 +1791,20 @@ unsigned long __init prom_init(unsigned long r3, unsigned long r4, unsigned long
 	 */
 	if (RELOC(ppc64_iommu_off))
 		prom_setprop(_prom->chosen, "linux,iommu-off", NULL, 0);
+
 	if (RELOC(iommu_force_on))
 		prom_setprop(_prom->chosen, "linux,iommu-force-on", NULL, 0);
+
+	if (RELOC(prom_memory_limit))
+		prom_setprop(_prom->chosen, "linux,memory-limit",
+			PTRRELOC(&prom_memory_limit), sizeof(RELOC(prom_memory_limit)));
+
+	if (RELOC(prom_tce_alloc_start)) {
+		prom_setprop(_prom->chosen, "linux,tce-alloc-start",
+			PTRRELOC(&prom_tce_alloc_start), sizeof(RELOC(prom_tce_alloc_start)));
+		prom_setprop(_prom->chosen, "linux,tce-alloc-end",
+			PTRRELOC(&prom_tce_alloc_end), sizeof(RELOC(prom_tce_alloc_end)));
+	}
 
 	/*
 	 * Now finally create the flattened device-tree

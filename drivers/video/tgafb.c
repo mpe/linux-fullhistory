@@ -1540,7 +1540,7 @@ tgafb_init(void)
 		return -ENODEV;
 	tgafb_setup(option);
 #endif
-	return pci_module_init(&tgafb_driver);
+	return pci_register_driver(&tgafb_driver);
 }
 
 /*

@@ -550,21 +550,17 @@ static int sctp_v4_is_ce(const struct sk_buff *skb)
 static struct sock *sctp_v4_create_accept_sk(struct sock *sk,
 					     struct sctp_association *asoc)
 {
-	struct sock *newsk;
 	struct inet_sock *inet = inet_sk(sk);
 	struct inet_sock *newinet;
+	struct sock *newsk = sk_alloc(PF_INET, GFP_KERNEL, sk->sk_prot, 1);
 
-	newsk = sk_alloc(PF_INET, GFP_KERNEL, sk->sk_prot->slab_obj_size,
-			 sk->sk_prot->slab);
 	if (!newsk)
 		goto out;
 
 	sock_init_data(NULL, newsk);
-	sk_set_owner(newsk, THIS_MODULE);
 
 	newsk->sk_type = SOCK_STREAM;
 
-	newsk->sk_prot = sk->sk_prot;
 	newsk->sk_no_check = sk->sk_no_check;
 	newsk->sk_reuse = sk->sk_reuse;
 	newsk->sk_shutdown = sk->sk_shutdown;
@@ -970,7 +966,7 @@ SCTP_STATIC __init int sctp_init(void)
 	if (!sctp_sanity_check())
 		goto out;
 
-	status = sk_alloc_slab(&sctp_prot, "sctp_sock");
+	status = proto_register(&sctp_prot, 1);
 	if (status)
 		goto out;
 
@@ -1164,7 +1160,7 @@ SCTP_STATIC __init int sctp_init(void)
 out:
 	return status;
 err_add_protocol:
-	sk_free_slab(&sctp_prot);
+	proto_unregister(&sctp_prot);
 err_ctl_sock_init:
 	sctp_v6_exit();
 err_v6_init:
@@ -1233,7 +1229,7 @@ SCTP_STATIC __exit void sctp_exit(void)
 	inet_del_protocol(&sctp_protocol, IPPROTO_SCTP);
 	inet_unregister_protosw(&sctp_seqpacket_protosw);
 	inet_unregister_protosw(&sctp_stream_protosw);
-	sk_free_slab(&sctp_prot);
+	proto_unregister(&sctp_prot);
 }
 
 module_init(sctp_init);

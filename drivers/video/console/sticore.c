@@ -798,11 +798,8 @@ sti_read_rom(int wordmode, struct sti_struct *sti, unsigned long address)
 	return 1;
 
 out_err:
-	if(raw)
-		kfree(raw);
-	if(cooked)
-		kfree(cooked);
-
+	kfree(raw);
+	kfree(cooked);
 	return 0;
 }
 
@@ -1058,7 +1055,7 @@ static void __init sti_init_roms(void)
 
 	/* Register drivers for native & PCI cards */
 	register_parisc_driver(&pa_sti_driver);
-	pci_module_init(&pci_sti_driver);
+	pci_register_driver(&pci_sti_driver);
 
 	/* if we didn't find the given default sti, take the first one */
 	if (!default_sti)

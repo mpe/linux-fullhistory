@@ -3150,7 +3150,7 @@ static int __init radeonfb_old_init (void)
 		return -ENODEV;
 	radeonfb_old_setup(option);
 #endif
-	return pci_module_init (&radeonfb_driver);
+	return pci_register_driver (&radeonfb_driver);
 }
 
 

@@ -183,7 +183,7 @@ mpc52xx_find_bridges(void)
 
 	pci_assign_all_busses = 1;
 
-	pci_regs = ioremap(MPC52xx_PCI, sizeof(struct mpc52xx_pci));
+	pci_regs = ioremap(MPC52xx_PA(MPC52xx_PCI_OFFSET), MPC52xx_PCI_SIZE);
 	if (!pci_regs)
 		return;
 

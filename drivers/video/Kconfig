@@ -74,6 +74,11 @@ config FB_SOFT_CURSOR
 	  This is used by drivers that don't provide their own (accelerated)
 	  version.
 
+config FB_MACMODES
+       tristate
+       depends on FB
+       default n
+
 config FB_MODE_HELPERS
         bool "Enable Video Mode Handling Helpers"
         depends on FB
@@ -323,6 +328,7 @@ config FB_OF
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	select FB_SOFT_CURSOR
+	select FB_MACMODES
 	help
 	  Say Y if you want support with Open Firmware for your graphics
 	  board.
@@ -334,6 +340,7 @@ config FB_CONTROL
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	select FB_SOFT_CURSOR
+	select FB_MACMODES
 	help
 	  This driver supports a frame buffer for the graphics adapter in the
 	  Power Macintosh 7300 and others.
@@ -345,6 +352,7 @@ config FB_PLATINUM
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	select FB_SOFT_CURSOR
+	select FB_MACMODES
 	help
 	  This driver supports a frame buffer for the "platinum" graphics
 	  adapter in some Power Macintoshes.
@@ -356,6 +364,7 @@ config FB_VALKYRIE
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	select FB_SOFT_CURSOR
+	select FB_MACMODES
 	help
 	  This driver supports a frame buffer for the "valkyrie" graphics
 	  adapter in some Power Macintoshes.
@@ -384,6 +393,7 @@ config FB_IMSTT
 	depends on (FB = y) && PCI
 	select FB_CFB_IMAGEBLIT
 	select FB_SOFT_CURSOR
+	select FB_MACMODES if PPC
 	help
 	  The IMS Twin Turbo is a PCI-based frame buffer card bundled with
 	  many Macintosh and compatible computers.
@@ -436,6 +446,7 @@ config FB_MAC
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	select FB_SOFT_CURSOR
+	select FB_MACMODES
 
 #      bool '  Apple DAFB display support' CONFIG_FB_DAFB
 config FB_HP300
@@ -619,12 +630,11 @@ config FB_NVIDIA
 	help
 	  This driver supports graphics boards with the nVidia chips, TNT
 	  and newer. For very old chipsets, such as the RIVA128, then use
-	  the the rivafb.
+	  the rivafb.
 	  Say Y if you have such a graphics board.
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called nvidiafb.
-          none yet
 
 config FB_NVIDIA_I2C
        bool "Enable DDC Support"
@@ -754,6 +764,7 @@ config FB_MATROX
 	select FB_CFB_IMAGEBLIT
 	select FB_SOFT_CURSOR
 	select FB_TILEBLITTING
+	select FB_MACMODES if PPC_PMAC
 	---help---
 	  Say Y here if you have a Matrox Millennium, Matrox Millennium II,
 	  Matrox Mystique, Matrox Mystique 220, Matrox Productiva G100, Matrox
@@ -893,6 +904,7 @@ config FB_RADEON_OLD
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	select FB_SOFT_CURSOR
+	select FB_MACMODES if PPC
 	help
 	  Choose this option if you want to use an ATI Radeon graphics card as
 	  a framebuffer device.  There are both PCI and AGP versions.  You
@@ -910,6 +922,7 @@ config FB_RADEON
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	select FB_SOFT_CURSOR
+	select FB_MACMODES if PPC_OF
 	help
 	  Choose this option if you want to use an ATI Radeon graphics card as
 	  a framebuffer device.  There are both PCI and AGP versions.  You
@@ -948,6 +961,7 @@ config FB_ATY128
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	select FB_SOFT_CURSOR
+	select FB_MACMODES if PPC_PMAC
 	help
 	  This driver supports graphics boards with the ATI Rage128 chips.
 	  Say Y if you have such a graphics board and read
@@ -963,6 +977,7 @@ config FB_ATY
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	select FB_SOFT_CURSOR
+	select FB_MACMODES if PPC
 	help
 	  This driver supports graphics boards with the ATI Mach64 chips.
 	  Say Y if you have such a graphics board.
@@ -1432,6 +1447,18 @@ config FB_PXA_PARAMETERS
 	  option disabled.
 
 	  <file:Documentation/fb/pxafb.txt> describes the available parameters.
+
+config FB_S1D13XXX
+	tristate "Epson S1D13XXX framebuffer support"
+	depends on FB
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	select FB_SOFT_CURSOR
+	help
+	  Support for S1D13XXX framebuffer device family (currently only
+	  working with S1D13806). Product specs at
+	  <http://www.erd.epson.com/vdc/html/legacy_13xxx.htm>
 
 config FB_VIRTUAL
 	tristate "Virtual Frame Buffer support (ONLY FOR TESTING!)"

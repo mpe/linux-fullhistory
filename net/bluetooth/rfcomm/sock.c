@@ -279,19 +279,23 @@ static void rfcomm_sock_init(struct sock *sk, struct sock *parent)
 	pi->dlc->link_mode = pi->link_mode;
 }
 
+static struct proto rfcomm_proto = {
+	.name		= "RFCOMM",
+	.owner		= THIS_MODULE,
+	.obj_size	= sizeof(struct rfcomm_pinfo)
+};
+
 static struct sock *rfcomm_sock_alloc(struct socket *sock, int proto, int prio)
 {
 	struct rfcomm_dlc *d;
 	struct sock *sk;
 
-	sk = sk_alloc(PF_BLUETOOTH, prio, sizeof(struct rfcomm_pinfo), NULL);
+	sk = sk_alloc(PF_BLUETOOTH, prio, &rfcomm_proto, 1);
 	if (!sk)
 		return NULL;
 
 	sock_init_data(sock, sk);
 	INIT_LIST_HEAD(&bt_sk(sk)->accept_q);
-
-	sk_set_owner(sk, THIS_MODULE);
 
 	d = rfcomm_dlc_alloc(prio);
 	if (!d) {
@@ -975,24 +979,32 @@ int  __init rfcomm_init_sockets(void)
 {
 	int err;
 
-	if ((err = bt_sock_register(BTPROTO_RFCOMM, &rfcomm_sock_family_ops))) {
-		BT_ERR("RFCOMM socket layer registration failed. %d", err);
+	err = proto_register(&rfcomm_proto, 0);
+	if (err < 0)
 		return err;
-	}
+
+	err = bt_sock_register(BTPROTO_RFCOMM, &rfcomm_sock_family_ops);
+	if (err < 0)
+		goto error;
 
 	rfcomm_sock_proc_init();
 
 	BT_INFO("RFCOMM socket layer initialized");
+
 	return 0;
+
+error:
+	BT_ERR("RFCOMM socket layer registration failed");
+	proto_unregister(&rfcomm_proto);
+	return err;
 }
 
 void __exit rfcomm_cleanup_sockets(void)
 {
-	int err;
-
 	rfcomm_sock_proc_cleanup();
 
-	/* Unregister socket, protocol and notifier */
-	if ((err = bt_sock_unregister(BTPROTO_RFCOMM)))
-		BT_ERR("RFCOMM socket layer unregistration failed. %d", err);
+	if (bt_sock_unregister(BTPROTO_RFCOMM) < 0)
+		BT_ERR("RFCOMM socket layer unregistration failed");
+
+	proto_unregister(&rfcomm_proto);
 }

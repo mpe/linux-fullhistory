@@ -201,7 +201,6 @@ static void __init
 gp3_init_IRQ(void)
 {
 	int i;
-	volatile cpm2_map_t *immap = cpm2_immr;
 	bd_t *binfo = (bd_t *) __res;
 
 	/*
@@ -227,24 +226,8 @@ gp3_init_IRQ(void)
 	 */
 	openpic_init(MPC85xx_OPENPIC_IRQ_OFFSET);
 
-	/*
-	 * Setup CPM2 PIC
-	 */
-
-	/* disable all CPM interupts */
-	immap->im_intctl.ic_simrh = 0x0;
-	immap->im_intctl.ic_simrl = 0x0;
-
-	for (i = CPM_IRQ_OFFSET; i < (NR_CPM_INTS + CPM_IRQ_OFFSET); i++)
-		irq_desc[i].handler = &cpm2_pic;
-
-	/*
-	 * Initialize the default interrupt mapping priorities,
-	 * in case the boot rom changed something on us.
-	 */
-	immap->im_intctl.ic_sicr = 0;
-	immap->im_intctl.ic_scprrh = 0x05309770;
-	immap->im_intctl.ic_scprrl = 0x05309770;
+	/* Setup CPM2 PIC */
+        cpm2_init_IRQ();
 
 	setup_irq(MPC85xx_IRQ_CPM, &cpm2_irqaction);
 

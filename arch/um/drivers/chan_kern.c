@@ -248,11 +248,8 @@ int write_chan(struct list_head *chans, const char *buf, int len,
 		n = chan->ops->write(chan->fd, buf, len, chan->data);
 		if (chan->primary) {
 			ret = n;
-			if ((ret == -EAGAIN) || ((ret >= 0) && (ret < len))){
+			if ((ret == -EAGAIN) || ((ret >= 0) && (ret < len)))
 				reactivate_fd(chan->fd, write_irq);
-				if (ret == -EAGAIN)
-					ret = 0;
-			}
 		}
 	}
 	return(ret);

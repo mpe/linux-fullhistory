@@ -126,11 +126,6 @@ int rosecmpm(rose_address *addr1, rose_address *addr2, unsigned short mask)
 	return 0;
 }
 
-static struct sock *rose_alloc_sock(void)
-{
-	return sk_alloc(PF_ROSE, GFP_ATOMIC, sizeof(struct rose_sock), NULL);
-}
-
 /*
  *	Socket removal during an interrupt is now safe.
  */
@@ -488,6 +483,12 @@ static int rose_listen(struct socket *sock, int backlog)
 	return -EOPNOTSUPP;
 }
 
+static struct proto rose_proto = {
+	.name	  = "ROSE",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct rose_sock),
+};
+
 static int rose_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -496,13 +497,12 @@ static int rose_create(struct socket *sock, int protocol)
 	if (sock->type != SOCK_SEQPACKET || protocol != 0)
 		return -ESOCKTNOSUPPORT;
 
-	if ((sk = rose_alloc_sock()) == NULL)
+	if ((sk = sk_alloc(PF_ROSE, GFP_ATOMIC, &rose_proto, 1)) == NULL)
 		return -ENOMEM;
 
 	rose = rose_sk(sk);
 
 	sock_init_data(sock, sk);
-	sk_set_owner(sk, THIS_MODULE);
 
 	skb_queue_head_init(&rose->ack_queue);
 #ifdef M_BIT
@@ -535,13 +535,12 @@ static struct sock *rose_make_new(struct sock *osk)
 	if (osk->sk_type != SOCK_SEQPACKET)
 		return NULL;
 
-	if ((sk = rose_alloc_sock()) == NULL)
+	if ((sk = sk_alloc(PF_ROSE, GFP_ATOMIC, &rose_proto, 1)) == NULL)
 		return NULL;
 
 	rose = rose_sk(sk);
 
 	sock_init_data(NULL, sk);
-	sk_set_owner(sk, THIS_MODULE);
 
 	skb_queue_head_init(&rose->ack_queue);
 #ifdef M_BIT
@@ -1472,6 +1471,10 @@ static const char banner[] = KERN_INFO "F6FBB/G4KLX ROSE for Linux. Version 0.62
 static int __init rose_proto_init(void)
 {
 	int i;
+	int rc = proto_register(&rose_proto, 0);
+
+	if (rc != 0)
+		goto out;
 
 	rose_callsign = null_ax25_address;
 
@@ -1524,14 +1527,15 @@ static int __init rose_proto_init(void)
 	proc_net_fops_create("rose_neigh", S_IRUGO, &rose_neigh_fops);
 	proc_net_fops_create("rose_nodes", S_IRUGO, &rose_nodes_fops);
 	proc_net_fops_create("rose_routes", S_IRUGO, &rose_routes_fops);
-
-	return 0;
+out:
+	return rc;
 fail:
 	while (--i >= 0) {
 		unregister_netdev(dev_rose[i]);
 		free_netdev(dev_rose[i]);
 	}
 	kfree(dev_rose);
+	proto_unregister(&rose_proto);
 	return -ENOMEM;
 }
 module_init(rose_proto_init);
@@ -1579,6 +1583,7 @@ static void __exit rose_exit(void)
 	}
 
 	kfree(dev_rose);
+	proto_unregister(&rose_proto);
 }
 
 module_exit(rose_exit);

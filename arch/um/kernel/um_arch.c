@@ -47,7 +47,7 @@ char command_line[COMMAND_LINE_SIZE] = { 0 };
 void add_arg(char *arg)
 {
 	if (strlen(command_line) + strlen(arg) + 1 > COMMAND_LINE_SIZE) {
-		printf("add_arg: Too much command line!\n");
+		printf("add_arg: Too many command line arguments!\n");
 		exit(1);
 	}
 	if(strlen(command_line) > 0)

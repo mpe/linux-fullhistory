@@ -385,6 +385,30 @@ static int cx24110_set_voltage (struct dvb_frontend* fe, fe_sec_voltage_t voltag
 	};
 }
 
+static int cx24110_diseqc_send_burst(struct dvb_frontend* fe,
+			fe_sec_mini_cmd_t burst)
+{
+	int rv, bit, i;
+	struct cx24110_state *state = fe->demodulator_priv;
+
+	if (burst == SEC_MINI_A)
+		bit = 0x00;
+	else if (burst == SEC_MINI_B)
+		bit = 0x08;
+	else
+		return -EINVAL;
+
+	rv = cx24110_readreg(state, 0x77);
+	cx24110_writereg(state, 0x77, rv|0x04);
+
+	rv = cx24110_readreg(state, 0x76);
+	cx24110_writereg(state, 0x76, ((rv & 0x90) | 0x40 | bit));
+	for (i = 500; i-- > 0 && !(cx24110_readreg(state,0x76)&0x40) ; )
+              ; /* wait for LNB ready */
+
+	return 0;
+}
+
 static int cx24110_send_diseqc_msg(struct dvb_frontend* fe,
 				   struct dvb_diseqc_master_cmd *cmd)
 {
@@ -393,6 +417,9 @@ static int cx24110_send_diseqc_msg(struct dvb_frontend* fe,
 
 	for (i = 0; i < cmd->msg_len; i++)
 		cx24110_writereg(state, 0x79 + i, cmd->msg[i]);
+
+	rv = cx24110_readreg(state, 0x77);
+	cx24110_writereg(state, 0x77, rv|0x04);
 
 	rv = cx24110_readreg(state, 0x76);
 
@@ -616,6 +643,7 @@ static struct dvb_frontend_ops cx24110_ops = {
 	.diseqc_send_master_cmd = cx24110_send_diseqc_msg,
 	.set_tone = cx24110_set_tone,
 	.set_voltage = cx24110_set_voltage,
+	.diseqc_send_burst = cx24110_diseqc_send_burst,
 };
 
 module_param(debug, int, 0644);

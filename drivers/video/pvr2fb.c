@@ -967,7 +967,7 @@ static struct pci_driver pvr2fb_pci_driver = {
 
 static int __init pvr2fb_pci_init(void)
 {
-	return pci_module_init(&pvr2fb_pci_driver);
+	return pci_register_driver(&pvr2fb_pci_driver);
 }
 
 static void pvr2fb_pci_exit(void)

@@ -193,7 +193,7 @@ static int cpuset_rmdir(struct inode *unused_dir, struct dentry *dentry);
 
 static struct backing_dev_info cpuset_backing_dev_info = {
 	.ra_pages = 0,		/* No readahead */
-	.memory_backed = 1,	/* Does not contribute to dirty memory */
+	.capabilities	= BDI_CAP_NO_ACCT_DIRTY | BDI_CAP_NO_WRITEBACK,
 };
 
 static struct inode *cpuset_new_inode(mode_t mode)
@@ -1456,7 +1456,7 @@ void cpuset_init_current_mems_allowed(void)
  * Do not call this routine if in_interrupt().
  */
 
-void cpuset_update_current_mems_allowed()
+void cpuset_update_current_mems_allowed(void)
 {
 	struct cpuset *cs = current->cpuset;
 

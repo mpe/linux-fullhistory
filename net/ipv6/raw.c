@@ -977,7 +977,7 @@ static int rawv6_init_sk(struct sock *sk)
 }
 
 struct proto rawv6_prot = {
-	.name =		"RAW",
+	.name =		"RAWv6",
 	.owner =	THIS_MODULE,
 	.close =	rawv6_close,
 	.connect =	ip6_datagram_connect,
@@ -993,7 +993,7 @@ struct proto rawv6_prot = {
 	.backlog_rcv =	rawv6_rcv_skb,
 	.hash =		raw_v6_hash,
 	.unhash =	raw_v6_unhash,
-	.slab_obj_size = sizeof(struct raw6_sock),
+	.obj_size =	sizeof(struct raw6_sock),
 };
 
 #ifdef CONFIG_PROC_FS

@@ -108,7 +108,8 @@ ifeq ($(CONFIG_83xx),y)
 obj-$(CONFIG_PCI)		+= indirect_pci.o pci_auto.o
 endif
 obj-$(CONFIG_MPC8555_CDS)	+= todc_time.o
-obj-$(CONFIG_PPC_MPC52xx)	+= mpc52xx_setup.o mpc52xx_pic.o
+obj-$(CONFIG_PPC_MPC52xx)	+= mpc52xx_setup.o mpc52xx_pic.o \
+					mpc52xx_sys.o mpc52xx_devices.o ppc_sys.o
 ifeq ($(CONFIG_PPC_MPC52xx),y)
 obj-$(CONFIG_PCI)		+= mpc52xx_pci.o
 endif

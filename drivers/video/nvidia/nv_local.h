@@ -37,6 +37,16 @@
 |*                                                                           *|
  \***************************************************************************/
 
+/*
+ * GPL Licensing Note - According to Mark Vojkovich, author of the Xorg/
+ * XFree86 'nv' driver, this source code is provided under MIT-style licensing
+ * where the source code is provided "as is" without warranty of any kind.
+ * The only usage restriction is for the copyright notices to be retained
+ * whenever code is used.
+ *
+ * Antonino Daplas <adaplas@pol.net> 2005-03-11
+ */
+
 #ifndef __NV_LOCAL_H__
 #define __NV_LOCAL_H__
 
@@ -77,9 +87,8 @@
 #endif
 
 #define WRITE_PUT(par, data) {                   \
-  volatile u8 scratch;                           \
   _NV_FENCE()                                    \
-  scratch = NV_RD08((par)->FbStart, 0);          \
+  NV_RD08((par)->FbStart, 0);                    \
   NV_WR32(&(par)->FIFO[0x0010], 0, (data) << 2); \
   mb();                                          \
 }

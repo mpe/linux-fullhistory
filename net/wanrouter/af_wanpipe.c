@@ -477,6 +477,17 @@ static struct sock *wanpipe_make_new(struct sock *osk)
 	return sk;
 }
 
+/* 
+ * FIXME: wanpipe_opt has to include a sock in its definition and stop using
+ * sk_protinfo, but this code is not even compilable now, so lets leave it for
+ * later.
+ */
+static struct proto wanpipe_proto = {
+	.name	  = "WANPIPE",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct sock),
+};
+
 /*============================================================
  * wanpipe_make_new
  *
@@ -495,7 +506,7 @@ static struct sock *wanpipe_alloc_socket(void)
 	struct sock *sk;
 	struct wanpipe_opt *wan_opt;
 
-	if ((sk = sk_alloc(PF_WANPIPE, GFP_ATOMIC, 1, NULL)) == NULL)
+	if ((sk = sk_alloc(PF_WANPIPE, GFP_ATOMIC, &wanpipe_proto, 1)) == NULL)
 		return NULL;
 
 	if ((wan_opt = kmalloc(sizeof(struct wanpipe_opt), GFP_ATOMIC)) == NULL) {
@@ -2577,17 +2588,23 @@ void cleanup_module(void)
 	printk(KERN_INFO "wansock: Cleaning up \n");
 	unregister_netdevice_notifier(&wanpipe_netdev_notifier);
 	sock_unregister(PF_WANPIPE);
-	return;
+	proto_unregister(&wanpipe_proto);
 }
-
 
 int init_module(void)
 {
+	int rc;
 
 	printk(KERN_INFO "wansock: Registering Socket \n");
+
+	rc = proto_register(&wanpipe_proto, 0);
+	if (rc != 0)
+		goto out;
+
 	sock_register(&wanpipe_family_ops);
 	register_netdevice_notifier(&wanpipe_netdev_notifier);
-	return 0;
+out:
+	return rc;
 }
 #endif
 MODULE_LICENSE("GPL");

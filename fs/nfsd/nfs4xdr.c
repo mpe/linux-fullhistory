@@ -1331,7 +1331,10 @@ nfsd4_encode_fattr(struct svc_fh *fhp, struct svc_export *exp,
 		if (bmval0 & FATTR4_WORD0_ACL) {
 			if (status == -EOPNOTSUPP)
 				bmval0 &= ~FATTR4_WORD0_ACL;
-			else if (status != 0)
+			else if (status == -EINVAL) {
+				status = nfserr_attrnotsupp;
+				goto out;
+			} else if (status != 0)
 				goto out_nfserr;
 		}
 	}

@@ -455,8 +455,6 @@ struct acpi_prt_list {
 	struct list_head	entries;
 };
 
-extern struct acpi_prt_list	acpi_prt;
-
 struct pci_dev;
 
 int acpi_pci_irq_enable (struct pci_dev *dev);

@@ -95,24 +95,6 @@ _GLOBAL(crit_r10)
 	.space	4
 _GLOBAL(crit_r11)
 	.space	4
-_GLOBAL(crit_sprg0)
-	.space	4
-_GLOBAL(crit_sprg1)
-	.space	4
-_GLOBAL(crit_sprg4)
-	.space	4
-_GLOBAL(crit_sprg5)
-	.space	4
-_GLOBAL(crit_sprg6)
-	.space	4
-_GLOBAL(crit_sprg7)
-	.space	4
-_GLOBAL(crit_pid)
-	.space	4
-_GLOBAL(crit_srr0)
-	.space	4
-_GLOBAL(crit_srr1)
-	.space	4
 
 /*
  * Exception vector entry code. This code runs with address translation
@@ -165,24 +147,6 @@ _GLOBAL(crit_srr1)
 #define CRITICAL_EXCEPTION_PROLOG					     \
 	stw	r10,crit_r10@l(0);	/* save two registers to work with */\
 	stw	r11,crit_r11@l(0);					     \
-	mfspr	r10,SPRN_SPRG0;						     \
-	stw	r10,crit_sprg0@l(0);					     \
-	mfspr	r10,SPRN_SPRG1;						     \
-	stw	r10,crit_sprg1@l(0);					     \
-	mfspr	r10,SPRN_SPRG4;						     \
-	stw	r10,crit_sprg4@l(0);					     \
-	mfspr	r10,SPRN_SPRG5;						     \
-	stw	r10,crit_sprg5@l(0);					     \
-	mfspr	r10,SPRN_SPRG6;						     \
-	stw	r10,crit_sprg6@l(0);					     \
-	mfspr	r10,SPRN_SPRG7;						     \
-	stw	r10,crit_sprg7@l(0);					     \
-	mfspr	r10,SPRN_PID;						     \
-	stw	r10,crit_pid@l(0);					     \
-	mfspr	r10,SPRN_SRR0;						     \
-	stw	r10,crit_srr0@l(0);					     \
-	mfspr	r10,SPRN_SRR1;						     \
-	stw	r10,crit_srr1@l(0);					     \
 	mfcr	r10;			/* save CR in r10 for now	   */\
 	mfspr	r11,SPRN_SRR3;		/* check whether user or kernel    */\
 	andi.	r11,r11,MSR_PR;						     \
@@ -221,9 +185,6 @@ _GLOBAL(crit_srr1)
 	 * r11 saved in crit_r11 and in stack frame,
 	 *	now phys stack/exception frame pointer
 	 * r12 saved in stack frame, now saved SRR2
-	 * SPRG0,1,4,5,6,7 saved in crit_sprg0,1,4,5,6,7
-	 * PID saved in crit_pid
-	 * SRR0,1 saved in crit_srr0,1
 	 * CR saved in stack frame, CR0.EQ = !SRR3.PR
 	 * LR, DEAR, ESR in stack frame
 	 * r1 saved in stack frame, now virt stack/excframe pointer
@@ -1030,10 +991,11 @@ _GLOBAL(swapper_pg_dir)
 
 /* Stack for handling critical exceptions from kernel mode */
 	.section .bss
-critical_stack_bottom:
+        .align 12
+exception_stack_bottom:
 	.space	4096
 critical_stack_top:
-	.previous
+_GLOBAL(exception_stack_top)
 
 /* This space gets a copy of optional info passed to us by the bootstrap
  * which is used to pass parameters into the kernel like root=/dev/sda1, etc.

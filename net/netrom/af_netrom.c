@@ -64,11 +64,6 @@ static DEFINE_SPINLOCK(nr_list_lock);
 
 static struct proto_ops nr_proto_ops;
 
-static struct sock *nr_alloc_sock(void)
-{
-	return  sk_alloc(PF_NETROM, GFP_ATOMIC, sizeof(struct nr_sock), NULL);
-}
-
 /*
  *	Socket removal during an interrupt is now safe.
  */
@@ -398,6 +393,12 @@ static int nr_listen(struct socket *sock, int backlog)
 	return -EOPNOTSUPP;
 }
 
+static struct proto nr_proto = {
+	.name	  = "NETROM",
+	.owner	  = THIS_MODULE,
+	.obj_size = sizeof(struct nr_sock),
+};
+
 static int nr_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -406,13 +407,12 @@ static int nr_create(struct socket *sock, int protocol)
 	if (sock->type != SOCK_SEQPACKET || protocol != 0)
 		return -ESOCKTNOSUPPORT;
 
-	if ((sk = nr_alloc_sock()) == NULL)
+	if ((sk = sk_alloc(PF_NETROM, GFP_ATOMIC, &nr_proto, 1)) == NULL)
 		return -ENOMEM;
 
 	nr = nr_sk(sk);
 
 	sock_init_data(sock, sk);
-	sk_set_owner(sk, THIS_MODULE);
 
 	sock->ops    = &nr_proto_ops;
 	sk->sk_protocol = protocol;
@@ -444,13 +444,12 @@ static struct sock *nr_make_new(struct sock *osk)
 	if (osk->sk_type != SOCK_SEQPACKET)
 		return NULL;
 
-	if ((sk = nr_alloc_sock()) == NULL)
+	if ((sk = sk_alloc(PF_NETROM, GFP_ATOMIC, osk->sk_prot, 1)) == NULL)
 		return NULL;
 
 	nr = nr_sk(sk);
 
 	sock_init_data(NULL, sk);
-	sk_set_owner(sk, THIS_MODULE);
 
 	sk->sk_type     = osk->sk_type;
 	sk->sk_socket   = osk->sk_socket;
@@ -1368,6 +1367,10 @@ static char banner[] __initdata = KERN_INFO "G4KLX NET/ROM for Linux. Version 0.
 static int __init nr_proto_init(void)
 {
 	int i;
+	int rc = proto_register(&nr_proto, 0);
+
+	if (rc != 0)
+		goto out;
 
 	if (nr_ndevs > 0x7fffffff/sizeof(struct net_device *)) {
 		printk(KERN_ERR "NET/ROM: nr_proto_init - nr_ndevs parameter to large\n");
@@ -1423,15 +1426,17 @@ static int __init nr_proto_init(void)
 	proc_net_fops_create("nr", S_IRUGO, &nr_info_fops);
 	proc_net_fops_create("nr_neigh", S_IRUGO, &nr_neigh_fops);
 	proc_net_fops_create("nr_nodes", S_IRUGO, &nr_nodes_fops);
-	return 0;
-
- fail:
+out:
+	return rc;
+fail:
 	while (--i >= 0) {
 		unregister_netdev(dev_nr[i]);
 		free_netdev(dev_nr[i]);
 	}
 	kfree(dev_nr);
-	return -1;
+	proto_unregister(&nr_proto);
+	rc = -1;
+	goto out;
 }
 
 module_init(nr_proto_init);
@@ -1475,5 +1480,6 @@ static void __exit nr_exit(void)
 	}
 
 	kfree(dev_nr);
+	proto_unregister(&nr_proto);
 }
 module_exit(nr_exit);

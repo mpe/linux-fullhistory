@@ -197,30 +197,40 @@ nfsd4_open(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nfsd4_open 
 	}
 	if (status)
 		goto out;
-	if (open->op_claim_type == NFS4_OPEN_CLAIM_NULL) {
-	/*
-	 * This block of code will (1) set CURRENT_FH to the file being opened,
-	 * creating it if necessary, (2) set open->op_cinfo, 
-	 * (3) set open->op_truncate if the file is to be truncated 
-	 * after opening, (4) do permission checking.
-	 */
-		status = do_open_lookup(rqstp, current_fh, open);
-		if (status)
+	switch (open->op_claim_type) {
+		case NFS4_OPEN_CLAIM_NULL:
+			/*
+			 * (1) set CURRENT_FH to the file being opened,
+			 * creating it if necessary, (2) set open->op_cinfo,
+			 * (3) set open->op_truncate if the file is to be
+			 * truncated after opening, (4) do permission checking.
+			 */
+			status = do_open_lookup(rqstp, current_fh, open);
+			if (status)
+				goto out;
+			break;
+		case NFS4_OPEN_CLAIM_PREVIOUS:
+			/*
+			 * The CURRENT_FH is already set to the file being
+			 * opened.  (1) set open->op_cinfo, (2) set
+			 * open->op_truncate if the file is to be truncated
+			 * after opening, (3) do permission checking.
+			*/
+			status = do_open_fhandle(rqstp, current_fh, open);
+			if (status)
+				goto out;
+			break;
+		case NFS4_OPEN_CLAIM_DELEGATE_CUR:
+             	case NFS4_OPEN_CLAIM_DELEGATE_PREV:
+			printk("NFSD: unsupported OPEN claim type %d\n",
+				open->op_claim_type);
+			status = nfserr_notsupp;
 			goto out;
-	} else if (open->op_claim_type == NFS4_OPEN_CLAIM_PREVIOUS) {
-	/*
-	* The CURRENT_FH is already set to the file being opened. This
-	* block of code will (1) set open->op_cinfo, (2) set
-	* open->op_truncate if the file is to be truncated after opening,
-	* (3) do permission checking.
-	*/
-		status = do_open_fhandle(rqstp, current_fh, open);
-		if (status)
+		default:
+			printk("NFSD: Invalid OPEN claim type %d\n",
+				open->op_claim_type);
+			status = nfserr_inval;
 			goto out;
-	} else {
-		printk("NFSD: unsupported OPEN claim type\n");
-		status = nfserr_inval;
-		goto out;
 	}
 	/*
 	 * nfsd4_process_open2() does the actual opening of the file.  If
@@ -573,8 +583,8 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nfsd4_se
 	status = nfs_ok;
 	if (setattr->sa_iattr.ia_valid & ATTR_SIZE) {
 		nfs4_lock_state();
-		if ((status = nfs4_preprocess_stateid_op(current_fh, 
-						&setattr->sa_stateid, 
+		if ((status = nfs4_preprocess_stateid_op(current_fh,
+						&setattr->sa_stateid,
 						CHECK_FH | WR_STATE, NULL))) {
 			dprintk("NFSD: nfsd4_setattr: couldn't process stateid!\n");
 			goto out_unlock;
@@ -609,7 +619,7 @@ nfsd4_write(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nfsd4_writ
 		return nfserr_inval;
 
 	nfs4_lock_state();
-	if ((status = nfs4_preprocess_stateid_op(current_fh, stateid, 
+	if ((status = nfs4_preprocess_stateid_op(current_fh, stateid,
 					CHECK_FH | WR_STATE, &filp))) {
 		dprintk("NFSD: nfsd4_write: couldn't process stateid!\n");
 		goto out;

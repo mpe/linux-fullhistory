@@ -128,7 +128,7 @@ int line_write(struct tty_struct *tty, const unsigned char *buf, int len)
 		ret = buffer_data(line, buf, len);
 		err = flush_buffer(line);
 		local_irq_restore(flags);
-		if(err <= 0)
+		if(err <= 0 && (err != -EAGAIN || !ret))
 			ret = err;
 	}
 	else {

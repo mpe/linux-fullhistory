@@ -42,8 +42,6 @@
 /* FIXME: this is just for IP_NF_ASSERRT */
 #include <linux/netfilter_ipv4/ip_conntrack.h>
 
-#define MS2JIFFIES(x) ((x*HZ)/1000)
-
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Harald Welte <laforge@netfilter.org>");
 MODULE_DESCRIPTION("iptables match for limiting per hash-bucket");
@@ -117,18 +115,18 @@ hash_dst(const struct ipt_hashlimit_htable *ht, const struct dsthash_dst *dst)
 static inline struct dsthash_ent *
 __dsthash_find(const struct ipt_hashlimit_htable *ht, struct dsthash_dst *dst)
 {
-	struct dsthash_ent *ent = NULL;
+	struct dsthash_ent *ent;
 	struct hlist_node *pos;
 	u_int32_t hash = hash_dst(ht, dst);
 
 	if (!hlist_empty(&ht->hash[hash]))
 		hlist_for_each_entry(ent, pos, &ht->hash[hash], node) {
 			if (dst_cmp(ent, dst)) {
-				break;
+				return ent;
 			}
 		}
 	
-	return ent;
+	return NULL;
 }
 
 /* allocate dsthash_ent, initialize dst, put in htable and lock it */
@@ -230,7 +228,7 @@ static int htable_create(struct ipt_hashlimit_info *minfo)
 	hinfo->pde->data = hinfo;
 
 	init_timer(&hinfo->timer);
-	hinfo->timer.expires = jiffies + MS2JIFFIES(hinfo->cfg.gc_interval);
+	hinfo->timer.expires = jiffies + msecs_to_jiffies(hinfo->cfg.gc_interval);
 	hinfo->timer.data = (unsigned long )hinfo;
 	hinfo->timer.function = htable_gc;
 	add_timer(&hinfo->timer);
@@ -281,7 +279,7 @@ static void htable_gc(unsigned long htlong)
 	htable_selective_cleanup(ht, select_gc);
 
 	/* re-add the timer accordingly */
-	ht->timer.expires = jiffies + MS2JIFFIES(ht->cfg.gc_interval);
+	ht->timer.expires = jiffies + msecs_to_jiffies(ht->cfg.gc_interval);
 	add_timer(&ht->timer);
 }
 
@@ -475,7 +473,7 @@ hashlimit_match(const struct sk_buff *skb,
 			return 0;
 		}
 
-		dh->expires = jiffies + MS2JIFFIES(hinfo->cfg.expire);
+		dh->expires = jiffies + msecs_to_jiffies(hinfo->cfg.expire);
 
 		dh->rateinfo.prev = jiffies;
 		dh->rateinfo.credit = user2credits(hinfo->cfg.avg * 
@@ -489,7 +487,7 @@ hashlimit_match(const struct sk_buff *skb,
 	}
 
 	/* update expiration timeout */
-	dh->expires = now + MS2JIFFIES(hinfo->cfg.expire);
+	dh->expires = now + msecs_to_jiffies(hinfo->cfg.expire);
 
 	rateinfo_recalc(dh, now);
 	if (dh->rateinfo.credit >= dh->rateinfo.cost) {
