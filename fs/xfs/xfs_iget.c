@@ -490,6 +490,11 @@ inode_allocate:
 				goto retry;
 			}
 
+			if (is_bad_inode(inode)) {
+				iput(inode);
+				return EIO;
+			}
+
 			bdp = vn_bhv_lookup(VN_BHV_HEAD(vp), &xfs_vnodeops);
 			if (bdp == NULL) {
 				XFS_STATS_INC(xs_ig_dup);
