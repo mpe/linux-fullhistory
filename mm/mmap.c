@@ -8,6 +8,7 @@
 #include <linux/mman.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>
+#include <linux/swapctl.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/file.h>
@@ -49,6 +50,12 @@ int vm_enough_memory(long pages)
 	 * simple, it hopefully works in most obvious cases.. Easy to
 	 * fool it, but this should catch most mistakes.
 	 */
+	/* 23/11/98 NJC: Somewhat less stupid version of algorithm,
+	 * which tries to do "TheRightThing".  Instead of using half of
+	 * (buffers+cache), use the minimum values.  Allow an extra 2%
+	 * of num_physpages for safety margin.
+	 */
+
 	long free;
 	
         /* Sometimes we want to use more memory than we have. */
@@ -57,10 +64,9 @@ int vm_enough_memory(long pages)
 
 	free = buffermem >> PAGE_SHIFT;
 	free += page_cache_size;
-	free >>= 1;
 	free += nr_free_pages;
 	free += nr_swap_pages;
-	free -= num_physpages >> 4;
+	free -= (page_cache.min_percent + buffer_mem.min_percent + 2)*num_physpages/100; 
 	return free > pages;
 }
 

@@ -306,8 +306,6 @@ static inline pid_t wait(int * wait_stat)
 	return waitpid(-1,wait_stat,0);
 }
 
-extern pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
-
 #endif
 
 #endif /* _ASM_I386_UNISTD_H_ */

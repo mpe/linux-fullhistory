@@ -371,6 +371,15 @@ nfs_free_dircache(void)
 	nfs_invalidate_dircache_sb(NULL);
 }
 
+/*
+ * Whenever an NFS operation succeeds, we know that the dentry
+ * is valid, so we update the revalidation timestamp.
+ */
+static inline void nfs_renew_times(struct dentry * dentry)
+{
+	dentry->d_time = jiffies;
+}
+
 #define NFS_REVALIDATE_INTERVAL (5*HZ)
 /*
  * This is called every time the dcache has a lookup hit,
@@ -426,6 +435,9 @@ parent->d_name.name, dentry->d_name.name);
 	/* Filehandle matches? */
 	if (memcmp(dentry->d_fsdata, &fhandle, sizeof(struct nfs_fh)))
 		goto out_bad;
+
+	/* Ok, remeber that we successfully checked it.. */
+	nfs_renew_times(dentry);
 
 out_valid:
 	return 1;
@@ -513,15 +525,6 @@ static void show_dentry(struct list_head * dlist)
 	}
 }
 #endif
-
-/*
- * Whenever an NFS operation succeeds, we know that the dentry
- * is valid, so we update the revalidation timestamp.
- */
-static inline void nfs_renew_times(struct dentry * dentry)
-{
-	dentry->d_time = jiffies;
-}
 
 static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 {

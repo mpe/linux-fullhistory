@@ -4,6 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/smp_lock.h>
@@ -350,7 +351,9 @@ NORET_TYPE void do_exit(long code)
 	if (!tsk->pid)
 		panic("Attempted to kill the idle task!");
 	tsk->flags |= PF_EXITING;
+	start_bh_atomic();
 	del_timer(&tsk->real_timer);
+	end_bh_atomic();
 
 	lock_kernel();
 fake_volatile:

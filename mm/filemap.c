@@ -174,6 +174,9 @@ static inline int shrink_one_page(struct page *page, int gfp_mask)
 		if (test_and_clear_bit(PG_referenced, &page->flags))
 			break;
 
+		if (buffer_under_min())
+			break;
+
 		/* is it a buffer cache page? */
 		if (bh && try_to_free_buffer(bh, &bh, 6))
 			return 1;

@@ -507,7 +507,7 @@ void release_segments(struct mm_struct *mm)
 /*
  * Create a kernel thread
  */
-pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
+int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {
 	long retval;
 

@@ -100,6 +100,7 @@
  * is less than 512 (PAGE_SIZE<<3), but greater than 256.
  */
 
+#include	<linux/config.h>
 #include	<linux/slab.h>
 #include	<linux/interrupt.h>
 #include	<linux/init.h>

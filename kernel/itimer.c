@@ -47,15 +47,15 @@ int do_getitimer(int which, struct itimerval *value)
 	case ITIMER_REAL:
 		interval = current->it_real_incr;
 		val = 0;
-		if (del_timer(&current->real_timer)) {
-			unsigned long now = jiffies;
-			val = current->real_timer.expires;
-			add_timer(&current->real_timer);
+		start_bh_atomic();
+		if (timer_pending(&current->real_timer)) {
+			val = current->real_timer.expires - jiffies;
+
 			/* look out for negative/zero itimer.. */
-			if (val <= now)
-				val = now+1;
-			val -= now;
+			if ((long) val <= 0)
+				val = 1;
 		}
+		end_bh_atomic();
 		break;
 	case ITIMER_VIRTUAL:
 		val = current->it_virt_value;
@@ -114,7 +114,9 @@ int do_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 		return k;
 	switch (which) {
 		case ITIMER_REAL:
+			start_bh_atomic();
 			del_timer(&current->real_timer);
+			end_bh_atomic();
 			current->it_real_value = j;
 			current->it_real_incr = i;
 			if (!j)

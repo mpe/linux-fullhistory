@@ -25,6 +25,7 @@
 #include <asm/byteorder.h>
 #include <asm/unaligned.h>
 
+extern struct timezone sys_tz;
 
 #undef offsetof
 #define offsetof(TYPE, MEMB) ((size_t) &((TYPE *)0)->MEMB)
@@ -68,8 +69,24 @@ extern inline void hfs_free(void *ptr, unsigned int size) {
 }
 
 
+/* handle conversion between times. 
+ *
+ * NOTE: hfs+ doesn't need this. also, we don't use tz_dsttime as that's
+ *       not a good thing to do. instead, we depend upon tz_minuteswest
+ *       having the correct daylight savings correction. 
+ */
+extern inline hfs_u32 hfs_from_utc(hfs_s32 time)
+{
+	return time - sys_tz.tz_minuteswest*60; 
+}
+
+extern inline hfs_s32 hfs_to_utc(hfs_u32 time)
+{
+	return time + sys_tz.tz_minuteswest*60;
+}
+
 extern inline hfs_u32 hfs_time(void) {
-	return htonl(CURRENT_TIME+2082844800U);
+	return htonl(hfs_from_utc(CURRENT_TIME)+2082844800U);
 }
 
 

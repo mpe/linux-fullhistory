@@ -1,3 +1,11 @@
+1998-11-21  a sun  <asun@hecate.darksunrising.blah>
+
+	* hfs_sysdep.h, hfs_fs.h: added hfs_from_utc/to_utc to deal with
+	date differences on hfs formatted media. 
+
+	NOTE: hfs extended keeps everything in utc, so we'll need to deal
+	with that when appropriate.
+
 1998-11-12  a sun  <asun@hecate.darksunrising.blah>
 
 	* extent.c (shrink_fork): added some lock_bitmap/unlock_bitmap's

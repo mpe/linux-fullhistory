@@ -9,6 +9,7 @@
  *   by Bjorn Ekwall <bj0rn@blox.se>
  */
 
+#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/module.h>
 #include <linux/blkdev.h>
@@ -356,6 +357,7 @@ EXPORT_SYMBOL(make_bad_inode);
 EXPORT_SYMBOL(is_bad_inode);
 EXPORT_SYMBOL(event);
 EXPORT_SYMBOL(__down);
+EXPORT_SYMBOL(__down_interruptible);
 EXPORT_SYMBOL(__up);
 
 /* all busmice */

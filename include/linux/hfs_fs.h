@@ -104,10 +104,10 @@
  */
 #define hfs_h_to_mtime(ARG)	htonl((hfs_s32)ntohl(ARG)+3029529600U)
 #define hfs_m_to_htime(ARG)	((hfs_s32)htonl(ntohl(ARG)-3029529600U))
-#define hfs_h_to_utime(ARG)	((hfs_s32)ntohl(ARG)+946684800U)
-#define hfs_u_to_htime(ARG)	((hfs_s32)htonl((ARG)-946684800U))
-#define hfs_u_to_mtime(ARG)	htonl((ARG)+2082844800U)
-#define hfs_m_to_utime(ARG)	(ntohl(ARG)-2082844800U)
+#define hfs_h_to_utime(ARG)	((hfs_s32)hfs_to_utc(ntohl(ARG)+946684800U))
+#define hfs_u_to_htime(ARG)	((hfs_s32)htonl(hfs_from_utc(ARG)-946684800U))
+#define hfs_u_to_mtime(ARG)	htonl(hfs_from_utc(ARG)+2082844800U)
+#define hfs_m_to_utime(ARG)	(hfs_to_utc(ntohl(ARG)-2082844800U))
 
 /*======== Data structures kept in memory ========*/
 

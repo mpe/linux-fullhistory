@@ -17,6 +17,20 @@
 
 /*================ File-local functions ================*/
 
+/* btree locking functions */
+static inline void hfs_btree_lock(struct hfs_btree *tree)
+{
+  while (tree->lock) 
+    hfs_sleep_on(&tree->wait);
+  tree->lock = 1;
+}
+
+static inline void hfs_btree_unlock(struct hfs_btree *tree)
+{
+  tree->lock = 0;
+  hfs_wake_up(&tree->wait);
+}
+
 /*
  * binsert_nonfull()
  *
@@ -512,15 +526,11 @@ restart:
 		/* make certain we have enough nodes to proceed */
 		if ((tree->bthFree - tree->reserved) < reserve) {
 			hfs_brec_relse(&brec, NULL);
-			while (tree->lock) {
-				hfs_sleep_on(&tree->wait);
-			}
-			tree->lock = 1;
+			hfs_btree_lock(tree);
 			if ((tree->bthFree - tree->reserved) < reserve) {
 				hfs_btree_extend(tree);
 			}
-			tree->lock = 0;
-			hfs_wake_up(&tree->wait);
+			hfs_btree_unlock(tree);
 			if ((tree->bthFree - tree->reserved) < reserve) {
 				return -ENOSPC;
 			} else {

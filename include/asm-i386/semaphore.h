@@ -37,6 +37,7 @@ asmlinkage int  __down_failed_interruptible(void  /* params in registers */);
 asmlinkage void __up_wakeup(void /* special register calling convention */);
 
 extern void __down(struct semaphore * sem);
+extern int  __down_interruptible(struct semaphore * sem);
 extern void __up(struct semaphore * sem);
 
 extern spinlock_t semaphore_wake_lock;

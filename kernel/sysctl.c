@@ -11,6 +11,7 @@
  * Made sysctl support optional via CONFIG_SYSCTL, 1/10/97, Chris Horn.
  */
 
+#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/sysctl.h>
 #include <linux/swapctl.h>
