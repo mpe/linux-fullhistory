@@ -256,7 +256,7 @@ int pcibios_read_config_byte(unsigned char bus,
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
-		: "=cb" (*value),
+		: "=c" (*value),
 		  "=a" (ret)
 		: "1" (PCIBIOS_READ_CONFIG_BYTE),
 		  "b" (bx),
@@ -278,7 +278,7 @@ int pcibios_read_config_word (unsigned char bus,
 		: "=c" (*value),
 		  "=a" (ret)
 		: "1" (PCIBIOS_READ_CONFIG_WORD),
-		  "bx" (bx),
+		  "b" (bx),
 		  "D" ((long) where),
 		  "S" (&pci_indirect));
 	return (int) (ret & 0xff00) >> 8;
@@ -294,10 +294,10 @@ int pcibios_read_config_dword (unsigned char bus,
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
-		: "=ecx" (*value),
-		  "=ax" (ret)
+		: "=c" (*value),
+		  "=a" (ret)
 		: "1" (PCIBIOS_READ_CONFIG_DWORD),
-		  "bx" (bx),
+		  "b" (bx),
 		  "D" ((long) where),
 		  "S" (&pci_indirect));
 	return (int) (ret & 0xff00) >> 8;
@@ -313,7 +313,7 @@ int pcibios_write_config_byte (unsigned char bus,
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
-		: "=ax" (ret)
+		: "=a" (ret)
 		: "0" (PCIBIOS_WRITE_CONFIG_BYTE),
 		  "c" (value),
 		  "b" (bx),
@@ -332,10 +332,10 @@ int pcibios_write_config_word (unsigned char bus,
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
-		: "=ax" (ret)
+		: "=a" (ret)
 		: "0" (PCIBIOS_WRITE_CONFIG_WORD),
-		  "cx" (value),
-		  "bx" (bx),
+		  "c" (value),
+		  "b" (bx),
 		  "D" ((long) where),
 		  "S" (&pci_indirect));
 	return (int) (ret & 0xff00) >> 8;
@@ -351,7 +351,7 @@ int pcibios_write_config_dword (unsigned char bus,
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
-		: "=ax" (ret)
+		: "=a" (ret)
 		: "0" (PCIBIOS_WRITE_CONFIG_DWORD),
 		  "c" (value),
 		  "b" (bx),

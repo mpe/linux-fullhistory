@@ -1,6 +1,8 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 44
+SUBLEVEL = 45
+
+ARCH = i386
 
 all:	Version zImage
 
@@ -24,10 +26,6 @@ CONFIGURATION = depend
 endif
 else
 CONFIGURATION = config
-endif
-
-ifdef CONFIGURATION
-CONFIGURE = dummy
 endif
 
 #
@@ -63,12 +61,6 @@ ifdef CONFIG_CPP
 CFLAGS := $(CFLAGS) -x c++
 endif
 
-ifdef CONFIG_M486
-CFLAGS := $(CFLAGS) -m486
-else
-CFLAGS := $(CFLAGS) -m386
-endif
-
 #
 # if you want the ram-disk device, define this to be the
 # size in blocks.
@@ -76,30 +68,10 @@ endif
 
 #RAMDISK = -DRAMDISK=512
 
-AS86	=as86 -0 -a
-LD86	=ld86 -0
+# Include the make variables (CC, etc...)
+#
 
-# 
-# Set these to indicate how to link it..
-#
-# -zmagic:
-#
-#LOWLDFLAGS	= -Ttext 0x1000
-#HIGHLDFLAGS	= -Ttext 0x100000
-#
-# -qmagic (we need to remove the 32 byte header for bootup purposes)
-#
-LOWLDFLAGS	=-qmagic -Ttext 0xfe0
-HIGHLDFLAGS	=-qmagic -Ttext 0xfffe0
-
-AS	=as
-LD	=ld
-HOSTCC	=gcc
-CC	=gcc -D__KERNEL__ -I$(TOPDIR)/include
-MAKE	=make
-CPP	=$(CC) -E
-AR	=ar
-STRIP	=strip
+include arch/$(ARCH)/Makefile
 
 ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o ipc/ipc.o
 FILESYSTEMS	=fs/filesystems.a
@@ -109,8 +81,6 @@ DRIVERS		=drivers/block/block.a \
 		 ibcs/ibcs.o
 LIBS		=lib/lib.a
 SUBDIRS		=kernel drivers mm fs net ipc ibcs lib
-
-KERNELHDRS	=/usr/src/linux/include
 
 ifdef CONFIG_SCSI
 DRIVERS := $(DRIVERS) drivers/scsi/scsi.a
@@ -134,10 +104,21 @@ endif
 Version: dummy
 	rm -f tools/version.h
 
-oldconfig:
+boot:
+	ln -sf arch/$(ARCH)/boot boot
+
+include/asm:
+	( cd include ; ln -sf asm-$(ARCH) asm)
+
+symlinks: boot include/asm
+
+config.in: arch/$(ARCH)/config.in
+	cp $< $@
+
+oldconfig: symlinks config.in
 	$(CONFIG_SHELL) Configure -d $(OPTS)
 
-config:
+config: symlinks config.in
 	$(CONFIG_SHELL) Configure $(OPTS)
 
 linuxsubdirs: dummy
@@ -168,61 +149,6 @@ tools/version.o: tools/version.c tools/version.h
 init/main.o: $(CONFIGURE) init/main.c
 	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
 
-tools/system:	boot/head.o init/main.o tools/version.o linuxsubdirs
-	$(LD) $(LOWLDFLAGS) boot/head.o init/main.o tools/version.o \
-		$(ARCHIVES) \
-		$(FILESYSTEMS) \
-		$(DRIVERS) \
-		$(LIBS) \
-		-o tools/system
-	nm tools/zSystem | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)' | \
-		sort > System.map
-
-boot/setup: boot/setup.o
-	$(LD86) -s -o $@ $<
-
-boot/setup.o: boot/setup.s
-	$(AS86) -o $@ $<
-
-boot/setup.s: boot/setup.S $(CONFIGURE) include/linux/config.h Makefile
-	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
-
-boot/bootsect: boot/bootsect.o
-	$(LD86) -s -o $@ $<
-
-boot/bootsect.o: boot/bootsect.s
-	$(AS86) -o $@ $<
-
-boot/bootsect.s: boot/bootsect.S $(CONFIGURE) include/linux/config.h Makefile
-	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
-
-zBoot/zSystem: zBoot/*.c zBoot/*.S tools/zSystem
-	$(MAKE) -C zBoot
-
-zImage: $(CONFIGURE) boot/bootsect boot/setup zBoot/zSystem tools/build
-	tools/build boot/bootsect boot/setup zBoot/zSystem $(ROOT_DEV) > zImage
-	sync
-
-zdisk: zImage
-	dd bs=8192 if=zImage of=/dev/fd0
-
-zlilo: $(CONFIGURE) zImage
-	if [ -f $(INSTALL_PATH)/vmlinuz ]; then mv $(INSTALL_PATH)/vmlinuz $(INSTALL_PATH)/vmlinuz.old; fi
-	if [ -f $(INSTALL_PATH)/zSystem.map ]; then mv $(INSTALL_PATH)/zSystem.map $(INSTALL_PATH)/zSystem.old; fi
-	cat zImage > $(INSTALL_PATH)/vmlinuz
-	cp zSystem.map $(INSTALL_PATH)/
-	if [ -x /sbin/lilo ]; then /sbin/lilo; else /etc/lilo/install; fi
-
-tools/zSystem:	boot/head.o init/main.o tools/version.o linuxsubdirs
-	$(LD) $(HIGHLDFLAGS) boot/head.o init/main.o tools/version.o \
-		$(ARCHIVES) \
-		$(FILESYSTEMS) \
-		$(DRIVERS) \
-		$(LIBS) \
-		-o tools/zSystem
-	nm tools/zSystem | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)' | \
-		sort > zSystem.map
-
 fs: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=fs
 
@@ -244,20 +170,20 @@ drivers: dummy
 net: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=net
 
-clean:
+clean:	archclean
 	rm -f kernel/ksyms.lst
 	rm -f core `find . -name '*.[oas]' -print`
 	rm -f core `find . -name 'core' -print`
 	rm -f zImage zSystem.map tools/zSystem tools/system
-	rm -f Image System.map boot/bootsect boot/setup
+	rm -f Image System.map tools/build
 	rm -f zBoot/zSystem zBoot/xtract zBoot/piggyback
 	rm -f .tmp* drivers/sound/configure
-	rm -f init/*.o tools/build boot/*.o tools/*.o
 
 mrproper: clean
 	rm -f include/linux/autoconf.h tools/version.h
 	rm -f drivers/sound/local.h
-	rm -f .version .config* config.old
+	rm -f .version .config* config.in config.old
+	rm -f boot include/asm
 	rm -f .depend `find . -name .depend -print`
 
 distclean: mrproper
@@ -296,13 +222,6 @@ endif
 #
 # Leave these dummy entries for now to tell people that they are going away..
 #
-lilo:
-	@echo
-	@echo Uncompressed kernel images no longer supported. Use
-	@echo \"make zlilo\" instead.
-	@echo
-	@exit 1
-
 Image:
 	@echo
 	@echo Uncompressed kernel images no longer supported. Use

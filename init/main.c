@@ -486,11 +486,6 @@ asmlinkage void start_kernel(void)
 			printk("Ok, fpu using %s error reporting.\n",
 				ignore_irq13?"exception 16":"irq13");
 	}
-	if (hlt_works_ok) {
-		printk("Checking 'hlt' instruction... ");
-		__asm__ __volatile__("hlt ; hlt ; hlt ; hlt");
-		printk(" Ok.\n");
-	}
 #ifndef CONFIG_MATH_EMULATION
 	else {
 		printk("No coprocessor found and no math emulation present.\n");
@@ -498,6 +493,11 @@ asmlinkage void start_kernel(void)
 		for (;;) ;
 	}
 #endif
+	if (hlt_works_ok) {
+		printk("Checking 'hlt' instruction... ");
+		__asm__ __volatile__("hlt ; hlt ; hlt ; hlt");
+		printk(" Ok.\n");
+	}
 
 	system_utsname.machine[1] = '0' + x86;
 	printk(linux_banner);

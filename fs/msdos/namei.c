@@ -177,6 +177,7 @@ static int msdos_create_entry(struct inode *dir,char *name,int is_dir,
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_dirt = 1;
 	memcpy(de->name,name,MSDOS_NAME);
+	memset(de->unused, 0, sizeof(de->unused));
 	de->attr = is_dir ? ATTR_DIR : ATTR_ARCH;
 	de->start = 0;
 	date_unix2dos(dir->i_mtime,&de->time,&de->date);

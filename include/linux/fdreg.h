@@ -7,18 +7,21 @@
  */
 
 #ifdef FDPATCHES
+
+#define FD_IOPORT fdc_state[fdc].address
+
 /* Fd controller regs. S&C, about page 340 */
-#define FD_STATUS	(4 + fdc_state[fdc].address )
-#define FD_DATA		(5 + fdc_state[fdc].address )
+#define FD_STATUS	(4 + FD_IOPORT )
+#define FD_DATA		(5 + FD_IOPORT )
 
 /* Digital Output Register */
-#define FD_DOR		(2 + fdc_state[fdc].address )
+#define FD_DOR		(2 + FD_IOPORT )
 
 /* Digital Input Register (read) */
-#define FD_DIR		(7 + fdc_state[fdc].address )
+#define FD_DIR		(7 + FD_IOPORT )
 
 /* Diskette Control Register (write)*/
-#define FD_DCR		(7 + fdc_state[fdc].address )
+#define FD_DCR		(7 + FD_IOPORT )
 
 #else
 

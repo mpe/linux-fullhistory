@@ -1018,7 +1018,7 @@ static void shutdown(struct async_struct * info)
 			  !IRQ_ports[info->irq]->next_port)) {
 		if (IRQ_ports[info->irq]) {
 			free_irq(info->irq);
-			retval = request_irq(info->irq, rs_interrupt_single, 0, "serial");
+			retval = request_irq(info->irq, rs_interrupt_single, SA_INTERRUPT, "serial");
 			
 			if (retval)
 				printk("serial shutdown: request_irq: error %d"
