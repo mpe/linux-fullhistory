@@ -509,7 +509,8 @@ int fs_may_mount(kdev_t dev)
 
 int fs_may_umount(kdev_t dev, struct dentry * root)
 {
-	return 0;
+	shrink_dcache();
+	return root->d_count == 1;
 }
 
 int fs_may_remount_ro(kdev_t dev)

@@ -488,7 +488,7 @@ static long sg_write(struct inode *inode,struct file *filp,const char *buf,unsig
 
 static unsigned int sg_poll(struct file *file, poll_table * wait)
 {
-        int dev = MINOR(file->f_inode->i_rdev);
+        int dev = MINOR(file->f_dentry->d_inode->i_rdev);
         struct scsi_generic *device = &scsi_generics[dev];
         unsigned int mask = 0;
 

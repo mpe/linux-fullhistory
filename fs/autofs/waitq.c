@@ -37,7 +37,7 @@ void autofs_catatonic_mode(struct autofs_sb_info *sbi)
 		wake_up(&wq->queue);
 		wq = nwq;
 	}
-	fput(sbi->pipe, sbi->pipe->f_inode);	/* Close the pipe */
+	fput(sbi->pipe);	/* Close the pipe */
 }
 
 static int autofs_write(struct file *file, const void *addr, int bytes)
@@ -55,7 +55,7 @@ static int autofs_write(struct file *file, const void *addr, int bytes)
 
 	old_signal = current->signal;
 
-	while ( bytes && (written = file->f_op->write(file->f_inode,file,data,bytes)) > 0 ) {
+	while ( bytes && (written = file->f_op->write(file->f_dentry->d_inode,file,data,bytes)) > 0 ) {
 		data += written;
 		bytes -= written;
 	}

@@ -194,7 +194,7 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 	sbi->pipe = fget(pipefd);
 	if ( !sbi->pipe || !sbi->pipe->f_op || !sbi->pipe->f_op->write ) {
 		if ( sbi->pipe ) {
-			fput(sbi->pipe, sbi->pipe->f_inode);
+			fput(sbi->pipe);
 			printk("autofs: pipe file descriptor does not contain proper ops\n");
 		} else {
 			printk("autofs: could not open pipe file descriptor\n");

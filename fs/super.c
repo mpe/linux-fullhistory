@@ -455,26 +455,6 @@ struct super_block * get_super(kdev_t dev)
 	return NULL;
 }
 
-void put_super(kdev_t dev)
-{
-	struct super_block * sb;
-
-	if (dev == ROOT_DEV) {
-		printk("VFS: Root device %s: prepare for armageddon\n",
-		       kdevname(dev));
-		return;
-	}
-	if (!(sb = get_super(dev)))
-		return;
-	if (sb->s_root != sb->s_root->d_mounts) {
-		printk("VFS: Mounted device %s - tssk, tssk\n",
-		       kdevname(dev));
-		return;
-	}
-	if (sb->s_op && sb->s_op->put_super)
-		sb->s_op->put_super(sb);
-}
-
 asmlinkage int sys_ustat(dev_t dev, struct ustat * ubuf)
 {
         struct super_block *s;
@@ -574,14 +554,12 @@ static void d_umount(struct dentry *dentry)
 {
 	struct dentry * covers = dentry->d_covers;
 
-	if (covers == dentry) {
-		printk("VFS: unmount - covers == dentry?\n");
-		return;
+	if (covers != dentry) {
+		covers->d_mounts = covers;
+		dentry->d_covers = dentry;
+		dput(covers);
+		dput(dentry);
 	}
-	covers->d_mounts = covers;
-	dentry->d_covers = dentry;
-	dput(covers);
-	dput(dentry);
 }
 
 static void d_mount(struct dentry *covers, struct dentry *dentry)
@@ -590,8 +568,8 @@ static void d_mount(struct dentry *covers, struct dentry *dentry)
 		printk("VFS: mount - already mounted\n");
 		return;
 	}
-	covers->d_mounts = dget(dentry);
-	dentry->d_covers = dget(covers);
+	covers->d_mounts = dentry;
+	dentry->d_covers = covers;
 }
 
 static int do_umount(kdev_t dev,int unmount_root)
@@ -599,13 +577,18 @@ static int do_umount(kdev_t dev,int unmount_root)
 	struct super_block * sb;
 	int retval;
 	
+	sb = get_super(dev);
+	if (!sb)
+		return -ENOENT;
+
+	if (!sb->s_root)
+		return -ENOENT;
+
 	if (dev==ROOT_DEV && !unmount_root) {
 		/*
 		 * Special case for "unmounting" root. We just try to remount
 		 * it readonly, and sync() the device.
 		 */
-		if (!(sb=get_super(dev)))
-			return -ENOENT;
 		if (!(sb->s_flags & MS_RDONLY)) {
 			/*
 			 * Make sure all quotas are turned off on this device we need to mount
@@ -621,9 +604,6 @@ static int do_umount(kdev_t dev,int unmount_root)
 		}
 		return 0;
 	}
-	sb=get_super(dev);
-	if (!sb)
-		return -ENOENT;
 
 	/*
 	 * Before checking if the filesystem is still busy make sure the kernel
@@ -634,18 +614,39 @@ static int do_umount(kdev_t dev,int unmount_root)
 	if (!fs_may_umount(dev, sb->s_root))
 		return -EBUSY;
 
-	/* Clear up the dcache tree. This should be cleaner.. */
-	if (sb->s_root) {
-		d_umount(sb->s_root);
-		d_delete(sb->s_root);
-	}
-
+	/* clean up dcache .. */
+	d_umount(sb->s_root);
 	sb->s_root = NULL;
-	if (sb->s_op && sb->s_op->write_super && sb->s_dirt)
-		sb->s_op->write_super(sb);
-	put_super(dev);
+
+	if (sb->s_op) {
+		if (sb->s_op->write_super && sb->s_dirt)
+			sb->s_op->write_super(sb);
+		if (sb->s_op->put_super)
+			sb->s_op->put_super(sb);
+	}
 	remove_vfsmnt(dev);
 	return 0;
+}
+
+static int umount_dev(kdev_t dev)
+{
+	int retval;
+	struct inode * inode = get_empty_inode();
+
+	inode->i_rdev = dev;
+	if (MAJOR(dev) >= MAX_BLKDEV)
+		return -ENXIO;
+
+	retval = do_umount(dev,0);
+	if (!retval) {
+		fsync_dev(dev);
+		if (dev != ROOT_DEV) {
+			blkdev_release(inode);
+			put_unnamed_dev(dev);
+		}
+	}
+	iput(inode);
+	return retval;
 }
 
 /*
@@ -662,9 +663,6 @@ static int do_umount(kdev_t dev,int unmount_root)
 asmlinkage int sys_umount(char * name)
 {
 	struct dentry * dentry;
-	struct inode * inode;
-	kdev_t dev;
-	struct inode * dummy_inode = NULL;
 	int retval;
 
 	if (!suser())
@@ -673,45 +671,27 @@ asmlinkage int sys_umount(char * name)
 	lock_kernel();
 	dentry = namei(name);
 	retval = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
-		goto out;
+	if (!IS_ERR(dentry)) {
+		struct inode * inode = dentry->d_inode;
+		kdev_t dev = inode->i_rdev;
 
-	inode = dentry->d_inode;
-	if (S_ISBLK(inode->i_mode)) {
-		dev = inode->i_rdev;
-		retval = -EACCES;
-		if (IS_NODEV(inode)) {
-			dput(dentry);
-			goto out;
+		retval = 0;		
+		if (S_ISBLK(inode->i_mode)) {
+			if (IS_NODEV(inode))
+				retval = -EACCES;
+		} else {
+			struct super_block *sb = inode->i_sb;
+			retval = -EINVAL;
+			if (sb && inode == sb->s_root->d_inode) {
+				dev = sb->s_dev;
+				retval = 0;
+			}
 		}
-	} else {
-		retval = -EINVAL;
-		if (!inode->i_sb || inode != inode->i_sb->s_root->d_inode) {
-			dput(dentry);
-			goto out;
-		}
-		dev = inode->i_sb->s_dev;
 		dput(dentry);
-		inode = dummy_inode = get_empty_inode();
-		inode->i_rdev = dev;
+
+		if (!retval)
+			retval = umount_dev(dev);
 	}
-	retval = -ENXIO;
-	if (MAJOR(dev) >= MAX_BLKDEV) {
-		dput(dentry);
-		goto out;
-	}
-	retval = do_umount(dev,0);
-	if (!retval) {
-		fsync_dev(dev);
-		if (dev != ROOT_DEV) {
-			blkdev_release (inode);
-			put_unnamed_dev(dev);
-		}
-	}
-	dput(dentry);
-	if (!retval)
-		fsync_dev(dev);
-out:
 	unlock_kernel();
 	return retval;
 }
@@ -1101,8 +1081,7 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 {
 	kdev_t old_root_dev;
 	struct vfsmount *vfsmnt;
-	struct inode *old_root,*old_pwd,*inode;
-	unsigned long old_fs;
+	struct dentry *old_root,*old_pwd,*dir_d = NULL;
 	int error;
 
 	old_root = current->fs->root;
@@ -1114,24 +1093,29 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 	}
 	ROOT_DEV = new_root_dev;
 	do_mount_root();
-	old_fs = get_fs();
-	set_fs(get_ds());
-        error = namei(put_old, &inode);
-	if (error) inode = NULL;
-	set_fs(old_fs);
-	if (!error && (atomic_read(&inode->i_count) != 1 || inode->i_mount))
+	dir_d = lookup_dentry(put_old, NULL, 1);
+	if (IS_ERR(dir_d)) {
+		error = PTR_ERR(dir_d);
+	} else if (!dir_d->d_inode) {
+		dput(dir_d);
+		error = -ENOENT;
+	} else {
+		error = 0;
+	}
+	if (!error && dir_d->d_covers != dir_d) {
+		dput(dir_d);
 		error = -EBUSY;
-	if (!error && !S_ISDIR(inode->i_mode))
+	}
+	if (!error && !S_ISDIR(dir_d->d_inode->i_mode)) {
+		dput(dir_d);
 		error = -ENOTDIR;
-	iput(old_root); /* current->fs->root */
-	iput(old_pwd); /* current->fs->pwd */
+	}
+	dput(old_root);
+	dput(old_pwd);
 	if (error) {
 		int umount_error;
 
-		if (inode) iput(inode);
 		printk(KERN_NOTICE "Trying to unmount old root ... ");
-		old_root->i_mount = old_root;
-			/* does this belong into do_mount_root ? */
 		umount_error = do_umount(old_root_dev,1);
 		if (umount_error) printk(KERN_ERR "error %d\n",umount_error);
 		else {
@@ -1140,16 +1124,16 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 		}
 		return umount_error ? error : 0;
 	}
-	iput(old_root); /* sb->s_covered */
 	remove_vfsmnt(old_root_dev);
 	vfsmnt = add_vfsmnt(old_root_dev,"/dev/root.old",put_old);
 	if (!vfsmnt) printk(KERN_CRIT "Trouble: add_vfsmnt failed\n");
 	else {
-		vfsmnt->mnt_sb = old_root->i_sb;
-		vfsmnt->mnt_sb->s_covered = inode;
+		vfsmnt->mnt_sb = old_root->d_inode->i_sb;
+		d_mount(dir_d,vfsmnt->mnt_sb->s_root);
 		vfsmnt->mnt_flags = vfsmnt->mnt_sb->s_flags;
 	}
-	inode->i_mount = old_root;
+	d_umount(old_root);
+	d_mount(dir_d,old_root);
 	return 0;
 }
 

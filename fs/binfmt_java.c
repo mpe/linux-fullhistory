@@ -28,7 +28,9 @@ static int do_load_java(struct linux_binprm *bprm,struct pt_regs *regs)
 	char *i_name;
 	int len;
 	int retval;
+	struct dentry * dentry;
 	unsigned char *ucp = (unsigned char *) bprm->buf;
+
 	if ((ucp[0] != 0xca) || (ucp[1] != 0xfe) || (ucp[2] != 0xba) || (ucp[3] != 0xbe)) 
 		return -ENOEXEC;
 
@@ -42,8 +44,8 @@ static int do_load_java(struct linux_binprm *bprm,struct pt_regs *regs)
 
 	bprm->java = 1;
 
-	iput(bprm->inode);
-	bprm->dont_iput=1;
+	dput(bprm->dentry);
+	bprm->dentry = NULL;
 
 	/*
 	 * Set args: [0] the name of the java interpreter
@@ -75,15 +77,17 @@ static int do_load_java(struct linux_binprm *bprm,struct pt_regs *regs)
 	if (!bprm->p) 
 		return -E2BIG;
 	/*
-	 * OK, now restart the process with the interpreter's inode.
+	 * OK, now restart the process with the interpreter's dentry.
 	 */
 	bprm->filename = binfmt_java_interpreter;
-	retval = open_namei(binfmt_java_interpreter, 0, 0, &bprm->inode);
-	if (retval)
+	dentry = open_namei(binfmt_java_interpreter, 0, 0);
+	retval = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		return retval;
-	bprm->dont_iput=0;
-	retval=prepare_binprm(bprm);
-	if(retval<0)
+
+	bprm->dentry = dentry;
+	retval = prepare_binprm(bprm);
+	if (retval < 0)
 		return retval;
 
 	return search_binary_handler(bprm,regs);
@@ -92,12 +96,14 @@ static int do_load_java(struct linux_binprm *bprm,struct pt_regs *regs)
 static int do_load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 {
 	char *i_name;
+	struct dentry * dentry;
 	int retval;
+
 	if (strncmp (bprm->buf, "<!--applet", 10))
 		return -ENOEXEC;
 
-	iput(bprm->inode);
-	bprm->dont_iput=1;
+	dput(bprm->dentry);
+	bprm->dentry = NULL;
 
 	/*
 	 * Set args: [0] the name of the appletviewer
@@ -118,15 +124,17 @@ static int do_load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 	if (!bprm->p) 
 		return -E2BIG;
 	/*
-	 * OK, now restart the process with the interpreter's inode.
+	 * OK, now restart the process with the interpreter's dentry.
 	 */
 	bprm->filename = binfmt_java_appletviewer;
-	retval = open_namei(binfmt_java_appletviewer, 0, 0, &bprm->inode);
-	if (retval)
+	dentry = open_namei(binfmt_java_appletviewer, 0, 0);
+	retval = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		return retval;
-	bprm->dont_iput=0;
-	retval=prepare_binprm(bprm);
-	if(retval<0)
+
+	bprm->dentry = dentry;
+	retval = prepare_binprm(bprm);
+	if (retval < 0)
 		return retval;
 
 	return search_binary_handler(bprm,regs);

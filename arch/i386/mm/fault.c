@@ -173,7 +173,7 @@ bad_area:
 	/* Are we prepared to handle this kernel fault?  */
 	if ((fixup = search_exception_table(regs->eip)) != 0) {
 		printk(KERN_DEBUG "%s: Exception at [<%lx>] (%lx)\n",
-			current->comm,
+			tsk->comm,
 			regs->eip,
 			fixup);
 		regs->eip = fixup;

@@ -157,6 +157,7 @@ static struct binfmt_entry *check_file(struct linux_binprm *bprm)
 static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 {
 	struct binfmt_entry *fmt;
+	struct dentry * dentry;
 	char iname[128];
 	char *iname_addr = iname, *p;
 	int retval, fmt_flags = 0;
@@ -179,8 +180,8 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 		goto _ret;
 	}
 
-	iput(bprm->inode);
-	bprm->dont_iput = 1;
+	dput(bprm->dentry);
+	bprm->dentry = NULL;
 
 	/* Build args for interpreter */
 	if ((fmt_flags & ENTRY_STRIP_EXT) &&
@@ -197,11 +198,14 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	}
 	bprm->filename = iname;	/* for binfmt_script */
 
-	if ((retval = open_namei(iname, 0, 0, &bprm->inode)))
+	dentry = open_namei(iname, 0, 0);
+	retval = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		goto _ret;
-	bprm->dont_iput = 0;
+	bprm->dentry = dentry;
 
-	if ((retval = prepare_binprm(bprm)) >= 0)
+	retval = prepare_binprm(bprm);
+	if (retval >= 0)
 		retval = search_binary_handler(bprm, regs);
 _ret:
 	return retval;

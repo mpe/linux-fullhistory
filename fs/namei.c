@@ -275,7 +275,7 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 }
 
 /* Internal lookup() using the new generic dcache. */
-static inline struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
+static struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
 {
 	struct dentry * dentry = d_lookup(parent, name);
 
@@ -318,31 +318,14 @@ static struct dentry * reserved_lookup(struct dentry * parent, struct qstr * nam
 			if (name->name[1] != '.')
 				break;
 
-			if (parent != current->fs->root) {
+			if (parent != current->fs->root)
 				parent = parent->d_covers->d_parent;
-			}
 			/* fallthrough */
 		case 1:
-			result = dget(parent);
-			break;
+			result = parent;
 		}
 	}
 	return result;
-}
-
-static inline int is_reserved(struct dentry *dentry)
-{
-	if (dentry->d_name.name[0] == '.') {
-		switch (dentry->d_name.len) {
-		case 2:
-			if (dentry->d_name.name[1] != '.')
-				break;
-			/* fallthrough */
-		case 1:
-			return 1;
-		}
-	}
-	return 0;
 }
 
 /* In difference to the former version, lookup() no longer eats the dir. */
@@ -355,23 +338,23 @@ static struct dentry * lookup(struct dentry * dir, struct qstr * name)
 	err = permission(dir->d_inode, MAY_EXEC);
 	result = ERR_PTR(err);
  	if (err)
-		goto done;
+		goto done_error;
 
 	result = reserved_lookup(dir, name);
 	if (result)
-		goto done;
+		goto done_noerror;
 
 	result = cached_lookup(dir, name);
 	if (result)
-		goto done;
+		goto done_noerror;
 
 	result = real_lookup(dir, name);
-	if (!result)
-		result = ERR_PTR(-ENOTDIR);
-done:
-	if (!IS_ERR(result))
-		result = dget(result->d_mounts);
 
+	if (!IS_ERR(result)) {
+done_noerror:
+		result = dget(result->d_mounts);
+	}
+done_error:
 	return result;
 }
 
@@ -382,7 +365,7 @@ static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry
 {
 	struct inode * inode = dentry->d_inode;
 
-	if (inode->i_op && inode->i_op->follow_link) {
+	if (inode && inode->i_op && inode->i_op->follow_link) {
 		struct dentry *result;
 
 		/* This eats the base */
@@ -415,7 +398,7 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 		base = dget(current->fs->pwd);
 	}
 
-	if (*name == '\0')
+	if (!*name)
 		return base;
 
 	/* At this point we know we have a real path component. */
@@ -423,37 +406,45 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 		int len;
 		unsigned long hash;
 		struct qstr this;
-		char c, trailing;
+		char c, follow;
 
+		dentry = ERR_PTR(-ENOENT);
+		if (!base->d_inode)
+			break;
 		this.name = name;
 		hash = init_name_hash();
-		for (len = 0; (c = *name++) && (c != '/') ; len++)
+		len = 0;
+		c = *name;
+		do {
+			len++; name++;
 			hash = partial_name_hash(c, hash);
+			c = *name;
+		} while (c && (c != '/'));
 
 		this.len = len;
 		this.hash = end_name_hash(hash);
 
 		/* remove trailing slashes? */
-		trailing = c;
+		follow = follow_link;
 		if (c) {
-			while ((c = *name) == '/')
-				name++;
+			follow |= c;
+			do {
+				c = *++name;
+			} while (c == '/');
 		}
 
 		dentry = lookup(base, &this);
 		if (IS_ERR(dentry))
 			break;
-		if (!dentry->d_inode)
+
+		if (!follow)
 			break;
 
-		/* Last component? */
-		if (!c) {
-			if (!trailing && !follow_link)
-				break;
-			return do_follow_link(base, dentry);
-		}
-
 		base = do_follow_link(base, dentry);
+		if (c)
+			continue;
+
+		return base;
 	}
 	dput(base);
 	return dentry;
@@ -491,17 +482,13 @@ struct dentry * __namei(const char *pathname, int follow_link)
 
 static inline struct inode *get_parent(struct dentry *dentry)
 {
-	struct inode *dir = dentry->d_parent->d_inode;
-
-	atomic_inc(&dir->i_count);
-	return dir;
+	return dentry->d_parent->d_inode;
 }
 
 static inline struct inode *lock_parent(struct dentry *dentry)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
 
-	atomic_inc(&dir->i_count);
 	down(&dir->i_sem);
 	return dir;
 }
@@ -557,7 +544,6 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 			acc_mode = 0;
 		}
 		up(&dir->i_sem);
-		iput(dir);
 		if (error)
 			goto exit;
 	}
@@ -669,7 +655,6 @@ struct dentry * do_mknod(const char * filename, int mode, dev_t dev)
 
 exit_lock:
 	up(&dir->i_sem);
-	iput(dir);
 	dput(dentry);
 	return retval;
 }
@@ -749,7 +734,6 @@ static inline int do_mkdir(const char * pathname, int mode)
 
 exit_lock:
 	up(&dir->i_sem);
-	iput(dir);
 	dput(dentry);
 exit:
 	return error;
@@ -818,7 +802,6 @@ static inline int do_rmdir(const char * name)
 
 exit_lock:
         up(&dir->i_sem);
-        iput(dir);
 	dput(dentry);
 exit:
 	return error;
@@ -879,7 +862,6 @@ static inline int do_unlink(const char * name)
 
 exit_lock:
         up(&dir->i_sem);
-        iput(dir);
 	dput(dentry);
 exit:
 	return error;
@@ -937,7 +919,6 @@ static inline int do_symlink(const char * oldname, const char * newname)
 
 exit_lock:
 	up(&dir->i_sem);
-	iput(dir);
 	dput(dentry);
 exit:
 	return error;
@@ -1021,7 +1002,6 @@ static inline int do_link(const char * oldname, const char * newname)
 
 exit_lock:
 	up(&dir->i_sem);
-	iput(dir);
 	dput(new_dentry);
 exit_old:
 	dput(old_dentry);
@@ -1067,6 +1047,21 @@ static inline void double_down(struct semaphore *s1, struct semaphore *s2)
 		down(s2);
 		down(s1);
 	}
+}
+
+static inline int is_reserved(struct dentry *dentry)
+{
+	if (dentry->d_name.name[0] == '.') {
+		switch (dentry->d_name.len) {
+		case 2:
+			if (dentry->d_name.name[1] != '.')
+				break;
+			/* fallthrough */
+		case 1:
+			return 1;
+		}
+	}
+	return 0;
 }
 
 static inline int do_rename(const char * oldname, const char * newname)
@@ -1138,8 +1133,6 @@ static inline int do_rename(const char * oldname, const char * newname)
 exit_lock:
 	up(&new_dir->i_sem);
 	up(&old_dir->i_sem);
-	iput(old_dir);
-	iput(new_dir);
 	dput(new_dentry);
 exit_old:
 	dput(old_dentry);

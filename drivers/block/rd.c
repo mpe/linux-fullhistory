@@ -444,8 +444,9 @@ done:
  */
 __initfunc(static void rd_load_image(kdev_t device,int offset))
 {
-	struct inode inode, out_inode;
+ 	struct inode inode, out_inode;
 	struct file infile, outfile;
+	struct dentry in_dentry, out_dentry;
 	unsigned short fs;
 	kdev_t ram_device;
 	int nblocks, i;
@@ -457,15 +458,19 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
 
 	memset(&infile, 0, sizeof(infile));
 	memset(&inode, 0, sizeof(inode));
+	memset(&in_dentry, 0, sizeof(in_dentry));
 	inode.i_rdev = device;
 	infile.f_mode = 1; /* read only */
-	infile.f_inode = &inode;
+	infile.f_dentry = &in_dentry;
+	in_dentry.d_inode = &inode;
 
 	memset(&outfile, 0, sizeof(outfile));
 	memset(&out_inode, 0, sizeof(out_inode));
+	memset(&out_dentry, 0, sizeof(out_dentry));
 	out_inode.i_rdev = ram_device;
 	outfile.f_mode = 3; /* read/write */
-	outfile.f_inode = &out_inode;
+	outfile.f_dentry = &out_dentry;
+	out_dentry.d_inode = &out_inode;
 
 	if (blkdev_open(&inode, &infile) != 0) return;
 	if (blkdev_open(&out_inode, &outfile) != 0) return;
@@ -506,9 +511,9 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
 
 	printk(KERN_NOTICE "RAMDISK: Loading %d blocks into ram disk... ", nblocks);
 	for (i=0; i < nblocks; i++) {
-		infile.f_op->read(infile.f_inode, &infile, buf,
+		infile.f_op->read(infile.f_dentry->d_inode, &infile, buf,
 				  BLOCK_SIZE);
-		outfile.f_op->write(outfile.f_inode, &outfile, buf,
+		outfile.f_op->write(outfile.f_dentry->d_inode, &outfile, buf,
 				    BLOCK_SIZE);
 		if (!(i % 16)) {
 			printk("%c\b", rotator[rotate & 0x3]);
@@ -637,7 +642,7 @@ __initfunc(static int fill_inbuf(void))
 {
 	if (exit_code) return -1;
 	
-	insize = crd_infp->f_op->read(crd_infp->f_inode, crd_infp,
+	insize = crd_infp->f_op->read(crd_infp->f_dentry->d_inode, crd_infp,
 				      inbuf, INBUFSIZ);
 	if (insize == 0) return -1;
 
@@ -656,7 +661,7 @@ __initfunc(static void flush_window(void))
     unsigned n;
     uch *in, ch;
     
-    crd_outfp->f_op->write(crd_outfp->f_inode, crd_outfp, window,
+    crd_outfp->f_op->write(crd_outfp->f_dentry->d_inode, crd_outfp, window,
 			   outcnt);
     in = window;
     for (n = 0; n < outcnt; n++) {

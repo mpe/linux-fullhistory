@@ -246,7 +246,7 @@ sound_poll (struct file *file, poll_table * wait)
   struct inode   *inode;
   int             ret = 0;
 
-  inode = file->f_inode;
+  inode = file->f_dentry->d_inode;
 
   if (sound_select (inode, file, SEL_IN, wait))
     ret |= POLLIN;
@@ -326,8 +326,7 @@ sound_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma)
 			vma->vm_page_prot))
     return -EAGAIN;
 
-  vma->vm_inode = inode;
-  atomic_inc(&inode->i_count);
+  vma->vm_dentry = dget(file->f_dentry);
 
   dmap->mapping_flags |= DMA_MAP_MAPPED;
 

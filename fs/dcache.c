@@ -186,7 +186,7 @@ struct dentry * d_alloc_root(struct inode * root_inode, struct dentry *old_root)
 	if (root_inode) {
 		res = d_alloc(NULL, &(const struct qstr) { "/", 1, 0 });
 		res->d_parent = res;
-		res->d_count = 2;
+		res->d_count = 1;
 		d_instantiate(res, root_inode);
 	}
 	return res;

@@ -419,7 +419,7 @@ int do_pipe(int *fd)
 		goto close_f12_inode_i;
 	j = error;
 
-	f1->f_dentry = f2->f_dentry = d_alloc_root(inode, NULL);
+	f1->f_dentry = f2->f_dentry = dget(d_alloc_root(inode, NULL));
 
 	/* read file */
 	f1->f_pos = f2->f_pos = 0;

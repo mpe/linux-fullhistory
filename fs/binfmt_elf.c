@@ -678,8 +678,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		__MOD_INC_USE_COUNT(current->binfmt->module);
 
 #ifndef VM_STACK_FLAGS
-	current->executable = bprm->dentry;
-	atomic_inc(&bprm->dentry->i_count);
+	current->executable = dget(bprm->dentry);
 #endif
 #ifdef LOW_ELF_STACK
 	current->start_stack = bprm->p = elf_stack - 4;

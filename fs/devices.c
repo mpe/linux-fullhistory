@@ -209,9 +209,7 @@ int check_disk_change(kdev_t dev)
 
 	printk(KERN_DEBUG "VFS: Disk change detected on device %s\n",
 		kdevname(dev));
-	for (i=0 ; i<NR_SUPER ; i++)
-		if (super_blocks[i].s_dev == dev)
-			put_super(super_blocks[i].s_dev);
+
 	invalidate_inodes(dev);
 	invalidate_buffers(dev);
 
