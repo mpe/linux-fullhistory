@@ -1478,6 +1478,7 @@ static ssize_t trident_write(struct file *file, const char *buffer, size_t count
 	return ret;
 }
 
+/* No kernel lock - we have our own spinlock */
 static unsigned int trident_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct trident_state *state = (struct trident_state *)file->private_data;

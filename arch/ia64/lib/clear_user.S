@@ -210,6 +210,7 @@ long_do_clear:
 	// 	if p7 -> coming from st4 or st1 : len3 contains what's left
 	// We must restore lc/pr even though might not have been used.
 .Lexit2:
+	.pred.rel "mutex", p6, p7
 (p6)	mov len=len2
 (p7)	mov len=len3
 	;;

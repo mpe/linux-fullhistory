@@ -14,6 +14,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (04/19/2000) gkh
+ *	Added driver for ZyXEL omni.net lcd plus modem.
+ *	Made startup info message specify which drivers were compiled in.
+ *
  * (04/03/2000) gkh
  *	Changed the probe process to remove the module unload races.
  *	Changed where the tty layer gets initialized to have devfs work nicer.
@@ -211,6 +215,7 @@ MODULE_DESCRIPTION("USB Serial Driver");
 
 #include "usb-serial.h"
 
+#define MAX(a,b)	(((a)>(b))?(a):(b))
 
 /* function prototypes for a "generic" type serial converter (no flow control, not all endpoints needed) */
 /* need to always compile these in, as some of the other devices use these functions as their own. */
@@ -269,6 +274,9 @@ static struct usb_serial_device_type *usb_serial_devices[] = {
 #ifdef CONFIG_USB_SERIAL_KEYSPAN_PDA
 	&keyspan_pda_fake_device,
 	&keyspan_pda_device,
+#endif
+#ifdef CONFIG_USB_SERIAL_OMNINET
+	&zyxel_omninet_device,
 #endif
 	NULL
 };
@@ -424,14 +432,9 @@ static int serial_open (struct tty_struct *tty, struct file * filp)
 		return -ENODEV;
 	}
 
-	/* set up our port structure */
+	/* set up our port structure making the tty driver remember our port object, and us it */
 	portNumber = MINOR(tty->device) - serial->minor;
 	port = &serial->port[portNumber];
-	port->number = portNumber;
-	port->serial = serial;
-	port->magic = USB_SERIAL_PORT_MAGIC;
-	
-	/* make the tty driver remember our port object, and us it */
 	tty->driver_data = port;
 	port->tty = tty;
 	 
@@ -996,6 +999,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	int num_bulk_in = 0;
 	int num_bulk_out = 0;
 	int num_ports;
+	int max_endpoints;
 	
 	/* loop through our list of known serial converters, and see if this
            device matches. */
@@ -1177,7 +1181,17 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 			     endpoint->bInterval);
 	}
 
-
+	/* initialize some parts of the port structures */
+	/* we don't use num_ports here cauz some devices have more endpoint pairs than ports */
+	max_endpoints = MAX(num_bulk_in, num_bulk_out);
+	max_endpoints = MAX(max_endpoints, num_interrupt_in);
+	for (i = 0; i < max_endpoints; ++i) {
+		port = &serial->port[i];
+		port->number = i;
+		port->serial = serial;
+		port->magic = USB_SERIAL_PORT_MAGIC;
+	}
+	
 	for (i = 0; i < serial->num_ports; ++i) {
 		info("%s converter now attached to ttyUSB%d", 
 		     type->name, serial->minor + i);
@@ -1294,6 +1308,7 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 int usb_serial_init(void)
 {
 	int i;
+	int something;
 
 	/* Initalize our global data */
 	for (i = 0; i < SERIAL_TTY_MINORS; ++i) {
@@ -1305,7 +1320,16 @@ int usb_serial_init(void)
 		return -1;
 	}
 
-	info("support registered");
+	something = 0;
+	for (i = 0; usb_serial_devices[i]; ++i) {
+		if (!strstr (usb_serial_devices[i]->name, "prerenumeration")) {
+			info ("USB Serial support registered for %s", usb_serial_devices[i]->name);
+			something = 1;
+		}
+	}
+	if (!something)
+		info ("USB Serial driver is not configured for any devices!");
+
 	return 0;
 }
 

@@ -7,7 +7,8 @@
 
 #include <linux/config.h>
 
-#define USB_STORAGE "usb-storage: "
+#define USB_STORAGE "usb-storage.c: "
+#define USB_STOR_STRING_LEN 32
 
 #ifdef CONFIG_USB_STORAGE_DEBUG
 void us_show_command(Scsi_Cmnd *srb);
@@ -128,9 +129,27 @@ static inline void make_guid( __u32 *pg, __u16 vendor, __u16 product, char *seri
 	}
 }
 
+/*
+ * Unusual device list definitions 
+ */
+
+struct us_unusual_dev {
+	/* we search the list based on these parameters */
+	__u16 idVendor;
+	__u16 idProduct;
+	__u16 bcdDevice;
+
+	/* the list specifies these parameters */
+	const char* name;
+	__u8  useProtocol;
+	__u8  useTransport;
+	unsigned int flags;
+};
+
 /* Flag definitions */
-#define US_FL_IP_STATUS	      0x00000001 /* status uses interrupt           */
-#define US_FL_FIXED_COMMAND   0x00000002 /* expand commands to fixed size   */
-#define US_FL_MODE_XLATE      0x00000004 /* translate _6 to _10 comands for
+#define US_FL_SINGLE_LUN      0x00000001 /* allow access to only LUN 0 */
+#define US_FL_MODE_XLATE      0x00000002 /* translate _6 to _10 comands for
 					            Win/MacOS compatibility */
-#define US_FL_CBI_AS_CB       0x00000008 /* treat a CBI dev as a CB dev     */
+#define US_FL_START_STOP      0x00000004 /* ignore START_STOP commands */
+#define US_FL_ALT_LENGTH      0x00000008 /* use the alternate algorithm for
+                                                    us_transfer_length() */

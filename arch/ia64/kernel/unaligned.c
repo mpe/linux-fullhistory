@@ -305,7 +305,7 @@ set_rse_reg(struct pt_regs *regs, unsigned long r1, unsigned long val, int nat)
 	DPRINT(("rnat @%p = 0x%lx nat=%d rnatval=%lx\n",
 		addr, rnats, nat, rnats &ia64_rse_slot_num(slot)));
 	
-	if ( nat ) {
+	if (nat) {
 		rnats |= __IA64_UL(1) << ia64_rse_slot_num(slot);
 	} else {
 		rnats &= ~(__IA64_UL(1) << ia64_rse_slot_num(slot));
@@ -385,7 +385,8 @@ get_rse_reg(struct pt_regs *regs, unsigned long r1, unsigned long *val, int *nat
 	ia64_peek(regs, current, (unsigned long)addr, &rnats);
 	DPRINT(("rnat @%p = 0x%lx\n", addr, rnats));
 	
-	if ( nat ) *nat = rnats >> ia64_rse_slot_num(slot) & 0x1;
+	if (nat)
+		*nat = rnats >> ia64_rse_slot_num(slot) & 0x1;
 }
 
 
@@ -401,7 +402,7 @@ setreg(unsigned long regnum, unsigned long val, int nat, struct pt_regs *regs)
 	/*
 	 * First takes care of stacked registers
 	 */
- 	if ( regnum >= IA64_FIRST_STACKED_GR ) {
+ 	if (regnum >= IA64_FIRST_STACKED_GR) {
 		set_rse_reg(regs, regnum, val, nat);
 		return;
 	}
@@ -414,7 +415,7 @@ setreg(unsigned long regnum, unsigned long val, int nat, struct pt_regs *regs)
 	/*
 	 * Now look at registers in [0-31] range and init correct UNAT
 	 */
-	if ( GR_IN_SW(regnum) ) {
+	if (GR_IN_SW(regnum)) {
 		addr = (unsigned long)sw;
 		unat = &sw->ar_unat;
 	} else {
@@ -437,7 +438,7 @@ setreg(unsigned long regnum, unsigned long val, int nat, struct pt_regs *regs)
 	 */
 	bitmask   = __IA64_UL(1) << (addr >> 3 & 0x3f);
 	DPRINT(("*0x%lx=0x%lx NaT=%d prev_unat @%p=%lx\n", addr, val, nat, unat, *unat));
-	if ( nat ) {
+	if (nat) {
 		*unat |= bitmask;
 	} else {
 		*unat &= ~bitmask;
@@ -465,7 +466,7 @@ setfpreg(unsigned long regnum, struct ia64_fpreg *fpval, struct pt_regs *regs)
 	 * fly to store to the right register.
 	 * For now, we are using the (slow) save/restore way.
 	 */
- 	if ( regnum >= IA64_FIRST_ROTATING_FR ) {
+ 	if (regnum >= IA64_FIRST_ROTATING_FR) {
 		/*
 		 * force a save of [32-127] to tss
 		 * we use the __() form to avoid fiddling with the dfh bit
@@ -489,7 +490,7 @@ setfpreg(unsigned long regnum, struct ia64_fpreg *fpval, struct pt_regs *regs)
 		/*
 		 * pt_regs or switch_stack ?
 		 */
-		if ( FR_IN_SW(regnum) ) {
+		if (FR_IN_SW(regnum)) {
 			addr = (unsigned long)sw;
 		} else {
 			addr = (unsigned long)regs;
@@ -542,7 +543,7 @@ getfpreg(unsigned long regnum, struct ia64_fpreg *fpval, struct pt_regs *regs)
 	 * we need to force a save to the tss to get access to it.
 	 * See discussion in setfpreg() for reasons and other ways of doing this.
 	 */
- 	if ( regnum >= IA64_FIRST_ROTATING_FR ) {
+ 	if (regnum >= IA64_FIRST_ROTATING_FR) {
 	
 		/*
 		 * force a save of [32-127] to tss
@@ -587,7 +588,7 @@ getreg(unsigned long regnum, unsigned long *val, int *nat, struct pt_regs *regs)
 	struct switch_stack *sw = (struct switch_stack *)regs -1;
 	unsigned long addr, *unat;
 
- 	if ( regnum >= IA64_FIRST_STACKED_GR ) {
+ 	if (regnum >= IA64_FIRST_STACKED_GR) {
 		get_rse_reg(regs, regnum, val, nat);
 		return;
 	}
@@ -595,7 +596,7 @@ getreg(unsigned long regnum, unsigned long *val, int *nat, struct pt_regs *regs)
 	/*
 	 * take care of r0 (read-only always evaluate to 0)
 	 */
-	if ( regnum == 0 ) {
+	if (regnum == 0) {
 		*val = 0;
 		*nat = 0;
 		return;
@@ -604,7 +605,7 @@ getreg(unsigned long regnum, unsigned long *val, int *nat, struct pt_regs *regs)
 	/*
 	 * Now look at registers in [0-31] range and init correct UNAT
 	 */
-	if ( GR_IN_SW(regnum) ) {
+	if (GR_IN_SW(regnum)) {
 		addr = (unsigned long)sw;
 		unat = &sw->ar_unat;
 	} else {
@@ -621,7 +622,8 @@ getreg(unsigned long regnum, unsigned long *val, int *nat, struct pt_regs *regs)
 	/*
 	 * do it only when requested
 	 */
-	if ( nat ) *nat  = (*unat >> (addr >> 3 & 0x3f)) & 0x1UL;
+	if (nat)
+		*nat  = (*unat >> (addr >> 3 & 0x3f)) & 0x1UL;
 }
 
 static void
@@ -633,7 +635,7 @@ emulate_load_updates(update_t type, load_store_t *ld, struct pt_regs *regs, unsi
 	 * not get to this point in the code but we keep this sanity check,
 	 * just in case.
 	 */
-	if ( ld->x6_op == 1 || ld->x6_op == 3 ) {
+	if (ld->x6_op == 1 || ld->x6_op == 3) {
 		printk(KERN_ERR __FUNCTION__": register update on speculative load, error\n");	
 		die_if_kernel("unaligned reference on specualtive load with register update\n",
 			      regs, 30);
@@ -644,7 +646,7 @@ emulate_load_updates(update_t type, load_store_t *ld, struct pt_regs *regs, unsi
 	 * at this point, we know that the base register to update is valid i.e.,
 	 * it's not r0
 	 */
-	if ( type == UPD_IMMEDIATE ) {
+	if (type == UPD_IMMEDIATE) {
 		unsigned long imm;
 
 		/* 
@@ -670,7 +672,7 @@ emulate_load_updates(update_t type, load_store_t *ld, struct pt_regs *regs, unsi
 
 		DPRINT(("ld.x=%d ld.m=%d imm=%ld r3=0x%lx\n", ld->x, ld->m, imm, ifa));
 
-	} else if ( ld->m ) {
+	} else if (ld->m) {
 		unsigned long r2;
 		int nat_r2;
 
@@ -719,7 +721,7 @@ emulate_load_int(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 	 *
 	 * Note: the first argument is ignored 
 	 */
-	if ( access_ok(VERIFY_READ, (void *)ifa, len) < 0 ) {
+	if (access_ok(VERIFY_READ, (void *)ifa, len) < 0) {
 		DPRINT(("verify area failed on %lx\n", ifa));
 		return -1;
 	}
@@ -737,7 +739,7 @@ emulate_load_int(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 	 * invalidate the ALAT entry.
 	 * See comment below for explanation on how we handle ldX.a
 	 */
-	if ( ld->x6_op != 0x2 ) {
+	if (ld->x6_op != 0x2) {
 		/*
 		 * we rely on the macros in unaligned.h for now i.e.,
 		 * we let the compiler figure out how to read memory gracefully.
@@ -767,9 +769,8 @@ emulate_load_int(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 	/*
 	 * check for updates on any kind of loads
 	 */
-	if ( ld->op == 0x5 || ld->m )
-		emulate_load_updates(ld->op == 0x5 ? UPD_IMMEDIATE: UPD_REG, 
-				ld, regs, ifa);
+	if (ld->op == 0x5 || ld->m)
+		emulate_load_updates(ld->op == 0x5 ? UPD_IMMEDIATE: UPD_REG, ld, regs, ifa);
 
 	/*
 	 * handling of various loads (based on EAS2.4):
@@ -882,7 +883,7 @@ emulate_store_int(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 	 *
 	 * Note: the first argument is ignored 
 	 */
-	if ( access_ok(VERIFY_WRITE, (void *)ifa, len) < 0 ) {
+	if (access_ok(VERIFY_WRITE, (void *)ifa, len) < 0) {
 		DPRINT(("verify area failed on %lx\n",ifa));
 		return -1;
 	}
@@ -926,7 +927,7 @@ emulate_store_int(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 	 * ld->r3 can never be r0, because r0 would not generate an 
 	 * unaligned access.
 	 */
-	if ( ld->op == 0x5 ) {
+	if (ld->op == 0x5) {
 		unsigned long imm;
 
 		/*
@@ -936,7 +937,7 @@ emulate_store_int(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 		/*
 		 * sign extend (8bits) if m set
 		 */
-		if ( ld->m ) imm |= SIGN_EXT9; 
+		if (ld->m) imm |= SIGN_EXT9; 
 		/*
 		 * ifa == r3 (NaT is necessarily cleared)
 		 */
@@ -955,7 +956,8 @@ emulate_store_int(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 	/*
 	 * stX.rel: use fence instead of release
 	 */
-	if ( ld->x6_op == 0xd ) mb();
+	if (ld->x6_op == 0xd)
+		mb();
 
 	return 0;
 }
@@ -1033,7 +1035,7 @@ emulate_load_floatpair(unsigned long ifa, load_store_t *ld, struct pt_regs *regs
 	struct ia64_fpreg fpr_final[2];
 	unsigned long len = float_fsz[ld->x6_sz];
 
-	if ( access_ok(VERIFY_READ, (void *)ifa, len<<1) < 0 ) {
+	if (access_ok(VERIFY_READ, (void *)ifa, len<<1) < 0) {
 		DPRINT(("verify area failed on %lx\n", ifa));
 		return -1;
 	}
@@ -1055,7 +1057,7 @@ emulate_load_floatpair(unsigned long ifa, load_store_t *ld, struct pt_regs *regs
 	 * ldfpX.a: we don't try to emulate anything but we must
 	 * invalidate the ALAT entry and execute updates, if any.
 	 */
-	if ( ld->x6_op != 0x2 ) {
+	if (ld->x6_op != 0x2) {
 		/*
 		 * does the unaligned access
 		 */
@@ -1118,7 +1120,7 @@ emulate_load_floatpair(unsigned long ifa, load_store_t *ld, struct pt_regs *regs
 	 * Check for updates: only immediate updates are available for this
 	 * instruction.
 	 */
-	if ( ld->m ) {
+	if (ld->m) {
 
 		/*
 		 * the immediate is implicit given the ldsz of the operation:
@@ -1132,8 +1134,9 @@ emulate_load_floatpair(unsigned long ifa, load_store_t *ld, struct pt_regs *regs
 		 * as long as we don't come here with a ldfpX.s.
 		 * For this reason we keep this sanity check
 		 */
-		if ( ld->x6_op == 1 || ld->x6_op == 3 ) {
-			printk(KERN_ERR "%s: register update on speculative load pair, error\n", __FUNCTION__);	
+		if (ld->x6_op == 1 || ld->x6_op == 3) {
+			printk(KERN_ERR "%s: register update on speculative load pair, error\n",
+			       __FUNCTION__);	
 		}
 
 
@@ -1143,7 +1146,7 @@ emulate_load_floatpair(unsigned long ifa, load_store_t *ld, struct pt_regs *regs
 	/*
 	 * Invalidate ALAT entries, if any, for both registers.
 	 */
-	if ( ld->x6_op == 0x2 ) {
+	if (ld->x6_op == 0x2) {
 		invala_fr(ld->r1);
 		invala_fr(ld->imm);
 	}
@@ -1160,10 +1163,10 @@ emulate_load_float(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 
 	/*
 	 * check for load pair because our masking scheme is not fine grain enough
-	if ( ld->x == 1 ) return emulate_load_floatpair(ifa,ld,regs);
+	if (ld->x == 1) return emulate_load_floatpair(ifa,ld,regs);
 	 */
 
-	if ( access_ok(VERIFY_READ, (void *)ifa, len) < 0 ) {
+	if (access_ok(VERIFY_READ, (void *)ifa, len) < 0) {
 		DPRINT(("verify area failed on %lx\n", ifa));
 		return -1;
 	}
@@ -1187,7 +1190,7 @@ emulate_load_float(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 	 * invalidate the ALAT entry.
 	 * See comments in ldX for descriptions on how the various loads are handled.
 	 */
-	if ( ld->x6_op != 0x2 ) {
+	if (ld->x6_op != 0x2) {
 
 		/*
 		 * does the unaligned access
@@ -1243,7 +1246,7 @@ emulate_load_float(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 	/*
 	 * check for updates on any loads
 	 */
-	if ( ld->op == 0x7 || ld->m )
+	if (ld->op == 0x7 || ld->m)
 		emulate_load_updates(ld->op == 0x7 ? UPD_IMMEDIATE: UPD_REG, 
 				ld, regs, ifa);
 
@@ -1274,7 +1277,7 @@ emulate_store_float(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 	 *
 	 * Note: the first argument is ignored 
 	 */
-	if ( access_ok(VERIFY_WRITE, (void *)ifa, len) < 0 ) {
+	if (access_ok(VERIFY_WRITE, (void *)ifa, len) < 0) {
 		DPRINT(("verify area failed on %lx\n",ifa));
 		return -1;
 	}
@@ -1342,7 +1345,7 @@ emulate_store_float(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 	 * ld->r3 can never be r0, because r0 would not generate an 
 	 * unaligned access.
 	 */
-	if ( ld->op == 0x7 ) {
+	if (ld->op == 0x7) {
 		unsigned long imm;
 
 		/*
@@ -1352,7 +1355,8 @@ emulate_store_float(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 		/*
 		 * sign extend (8bits) if m set
 		 */
-		if ( ld->m ) imm |= SIGN_EXT9; 
+		if (ld->m)
+			imm |= SIGN_EXT9; 
 		/*
 		 * ifa == r3 (NaT is necessarily cleared)
 		 */
@@ -1384,6 +1388,28 @@ ia64_handle_unaligned(unsigned long ifa, struct pt_regs *regs)
 	load_store_t *insn;
 	int ret = -1;
 
+	/*
+	 * Unaligned references in the kernel could come from unaligned
+	 *   arguments to system calls.  We fault the user process in
+	 *   these cases and panic the kernel otherwise (the kernel should
+	 *   be fixed to not make unaligned accesses).
+	 */
+	if (!user_mode(regs)) {
+		const struct exception_table_entry *fix;
+
+		fix = search_exception_table(regs->cr_iip);
+		if (fix) {
+			regs->r8 = -EFAULT;
+			if (fix->skip & 1) {
+				regs->r9 = 0;
+			}
+			regs->cr_iip += ((long) fix->skip) & ~15;
+			regs->cr_ipsr &= ~IA64_PSR_RI;	/* clear exception slot number */
+			return;
+		}
+		die_if_kernel("Unaligned reference while in kernel\n", regs, 30);
+		/* NOT_REACHED */
+	}
 	if (current->thread.flags & IA64_THREAD_UAC_SIGBUS) {
 		struct siginfo si;
 
@@ -1539,7 +1565,7 @@ ia64_handle_unaligned(unsigned long ifa, struct pt_regs *regs)
 	}
 
 	DPRINT(("ret=%d\n", ret));
-	if ( ret ) {
+	if (ret) {
 		lock_kernel();
 	        force_sig(SIGSEGV, current);
 	        unlock_kernel();
@@ -1549,7 +1575,8 @@ ia64_handle_unaligned(unsigned long ifa, struct pt_regs *regs)
 	 	 * because a memory access instruction (M) can never be in the 
 	 	 * last slot of a bundle. But let's keep it for  now.
 	 	 */
-		if ( ipsr->ri == 2 ) regs->cr_iip += 16;
+		if (ipsr->ri == 2)
+			regs->cr_iip += 16;
 		ipsr->ri = ++ipsr->ri & 3;
 	}
 

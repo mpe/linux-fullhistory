@@ -8,7 +8,7 @@ OUTPUT_ARCH(ia64)
 ENTRY(_start)
 SECTIONS
 {
-  v = PAGE_OFFSET;	/* this symbol is here to make debugging with kdb easier... */
+  v = PAGE_OFFSET;	/* this symbol is here to make debugging easier... */
 
   . = KERNEL_START;
 
@@ -38,21 +38,6 @@ SECTIONS
   __ex_table : AT(ADDR(__ex_table) - PAGE_OFFSET)
 	{ *(__ex_table) }
   __stop___ex_table = .;
-
-#if defined(CONFIG_KDB)
-  /* Kernel symbols and strings for kdb */
-# define KDB_MEAN_SYMBOL_SIZE	48
-# define KDB_SPACE		(CONFIG_KDB_STBSIZE * KDB_MEAN_SYMBOL_SIZE)
-  . = ALIGN(8);
-  _skdb = .;
-  .kdb : AT(ADDR(.kdb) - PAGE_OFFSET)
-    {
-	*(kdbsymtab)
-	*(kdbstrings)
-    }
-  _ekdb = .;
-  . = _skdb + KDB_SPACE;
-#endif
 
   /* Kernel symbol names for modules: */
   .kstrtab : AT(ADDR(.kstrtab) - PAGE_OFFSET)

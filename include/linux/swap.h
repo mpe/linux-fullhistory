@@ -51,6 +51,7 @@ struct swap_info_struct {
 	kdev_t swap_device;
 	spinlock_t sdev_lock;
 	struct dentry * swap_file;
+	struct vfsmount *swap_vfsmnt;
 	unsigned short * swap_map;
 	unsigned int lowest_bit;
 	unsigned int highest_bit;

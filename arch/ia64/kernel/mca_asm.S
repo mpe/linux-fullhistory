@@ -1,7 +1,31 @@
+// 
+// assembly portion of the IA64 MCA handling
+//
+// Mods by cfleck to integrate into kernel build
+// 00/03/15 davidm Added various stop bits to get a clean compile
+// 00/03/29 cfleck Added code to save INIT handoff state in pt_regs format, switch to temp kstack,
+//		   switch modes, jump to C INIT handler
+//
+#include <asm/offsets.h>
+#include <asm/pgtable.h>
 #include <asm/processor.h>
-#include <asm/mcaasm.h>
-#include <asm/page.h>
+#include <asm/mca_asm.h>
 #include <asm/mca.h>
+
+/*
+ * When we get an machine check, the kernel stack pointer is no longer
+ * valid, so we need to set a new stack pointer.
+ */
+#define MINSTATE_START_SAVE_MIN							\
+(pKern) movl sp=ia64_init_stack+IA64_STK_OFFSET-IA64_PT_REGS_SIZE;		\
+	;;
+
+#define MINSTATE_END_SAVE_MIN							\
+	or r12=r12,r14;		/* make sp a kernel virtual address */		\
+	or r13=r13,r14;		/* make `current' a kernel virtual address */	\
+	;;
+
+#include "minstate.h"
 	
 	.psr abi64
 	.psr lsb
@@ -54,7 +78,9 @@
 100:	(p)	mov		temp=ip;		\
 		;;					\
 	(p)	adds		temp=to_label-100b,temp;\
+		;;					\
 	(p)	adds		temp=adjust,temp;	\
+		;;					\
 	(p)	mov		b1=temp	;		\
 	(p)	br		b1	
 
@@ -68,6 +94,7 @@
 	.global	ia64_mca_stack
 	.global	ia64_mca_stackframe
 	.global	ia64_mca_bspstore
+	.global ia64_init_stack	
 			
 	.text
 	.align 16
@@ -341,6 +368,7 @@ cSaveARs:
         mov		r3=ar16                     // ar.rsc
 	mov		ar16=r0			    // put RSE in enforced lazy mode
         mov		r5=ar17                     // ar.bsp
+	;;
         mov		r7=ar18;;                   // ar.bspstore
         st8		[r2]=r3,3*8
         st8		[r4]=r5,3*8
@@ -575,6 +603,7 @@ restore_ARs:
 //      mov		ar16=r3                     // ar.rsc
 //      mov		ar17=r5                     // ar.bsp is read only
 	mov		ar16=r0			    // make sure that RSE is in enforced lazy mode
+	;;
         mov		ar18=r7;;                   // ar.bspstore
 
         ld8		r9=[r2],8*13;;
@@ -619,3 +648,146 @@ end_os_mca_restore:
 	BRANCH(ia64_os_mca_done_restore, r2, p0, -0x20)
 	;; 
 //EndStub//////////////////////////////////////////////////////////////////////
+
+// ok, the issue here is that we need to save state information so
+// it can be useable by the kernel debugger and show regs routines.
+// In order to do this, our best bet is save the current state (plus
+// the state information obtain from the MIN_STATE_AREA) into a pt_regs
+// format.  This way we can pass it on in a useable format.
+//				
+
+//
+// SAL to OS entry point for INIT on the monarch processor
+// This has been defined for registration purposes with SAL 
+// as a part of ia64_mca_init.
+//
+// When we get here, the follow registers have been
+// set by the SAL for our use
+//		
+//		1. GR1 = OS INIT GP
+//		2. GR8 = PAL_PROC physical address
+//		3. GR9 = SAL_PROC physical address
+//		4. GR10 = SAL GP (physical)
+//		5. GR11 = Init Reason
+//			0 = Received INIT for event other than crash dump switch
+//			1 = Received wakeup at the end of an OS_MCA corrected machine check
+//			2 = Received INIT dude to CrashDump switch assertion
+//	
+//		6. GR12 = Return address to location within SAL_INIT procedure
+
+				
+	.text
+	.align 16
+.global ia64_monarch_init_handler       
+.proc ia64_monarch_init_handler       
+ia64_monarch_init_handler:
+
+#if defined(SAL_MPINIT_WORKAROUND)
+	//
+	// work around SAL bug that sends all processors to monarch entry
+	//
+	.global bootstrap_processor
+
+	movl	r21=24
+	movl	r20=16
+	mov	r17=cr.lid
+	movl	r18=bootstrap_processor
+	;;
+	dep	r18=0,r18,61,3		// convert bsp to physical address
+	;;
+	shr	r19=r17,r20
+	shr	r22=r17,r21
+	ld4	r18=[r18]		// get the BSP ID
+	;;
+	and	r19=0xf, r19
+	and	r22=0xf, r22
+	;;
+	shl	r19=r19,8		// get them in the right order
+	;;
+	or	r22=r22,r19		// combine EID and LID
+	;;
+	cmp.eq	p6,p7=r22,r18		// Am I the BSP ?
+(p7)	br.cond.spnt slave_init_spin_me
+	;;
+#endif
+
+	
+//
+// ok, the first thing we do is stash the information
+// the SAL passed to os
+//
+_tmp = r2
+	movl	_tmp=ia64_sal_to_os_handoff_state
+	;;
+	dep	_tmp=0,_tmp, 61, 3	// get physical address
+	;;
+	st8	[_tmp]=r1,0x08;;
+	st8	[_tmp]=r8,0x08;;
+	st8	[_tmp]=r9,0x08;;			
+	st8	[_tmp]=r10,0x08;;			
+	st8	[_tmp]=r11,0x08;;
+	st8	[_tmp]=r12,0x08;;
+
+// now we want to save information so we can dump registers
+	SAVE_MIN_WITH_COVER
+	;;
+	mov r8=cr.ifa
+	mov r9=cr.isr
+	adds r3=8,r2				// set up second base pointer
+	;;
+	SAVE_REST
+	
+// ok, enough should be saved at this point to be dangerous, and  supply
+// information for a dump
+// We need to switch to Virtual mode before hitting the C functions.
+//
+// 
+//
+	movl	r2=IA64_PSR_IT|IA64_PSR_IC|IA64_PSR_DT|IA64_PSR_RT|IA64_PSR_DFH|IA64_PSR_BN
+	mov	r3=psr	// get the current psr, minimum enabled at this point
+	;;
+	or	r2=r2,r3
+	;;
+	movl	r3=IVirtual_Switch
+	;;
+	mov	cr.iip=r3		// short return to set the appropriate bits
+	mov	cr.ipsr=r2		// need to do an rfi to set appropriate bits
+	;;
+	rfi
+	;;
+IVirtual_Switch:
+	//	
+	// We should now be running virtual
+	//
+	// Lets call the C handler to get the rest of the state info
+	//
+	alloc r14=ar.pfs,0,0,1,0		// now it's safe (must be first in insn group!)
+	;;					//
+	adds out0=16,sp				// out0 = pointer to pt_regs
+	;;
+
+	br.call.sptk.few rp=ia64_init_handler
+	;;
+
+return_from_init:
+	br.sptk return_from_init
+
+	.endp
+
+//
+// SAL to OS entry point for INIT on the slave processor
+// This has been defined for registration purposes with SAL 
+// as a part of ia64_mca_init.
+//
+
+	.text
+	.align 16
+.global ia64_slave_init_handler
+.proc ia64_slave_init_handler
+ia64_slave_init_handler:		
+
+
+slave_init_spin_me:	
+	br.sptk slave_init_spin_me
+	;;
+	.endp

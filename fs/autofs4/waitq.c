@@ -1,4 +1,4 @@
-/* -*- linux-c -*- --------------------------------------------------------- *
+/* -*- c -*- --------------------------------------------------------------- *
  *
  * linux/fs/autofs/waitq.c
  *
@@ -45,7 +45,6 @@ void autofs4_catatonic_mode(struct autofs_sb_info *sbi)
 		sbi->pipe = NULL;
 	}
 
-	autofs4_ihash_nuke(&sbi->ihash);
 	shrink_dcache_sb(sbi->sb);
 }
 

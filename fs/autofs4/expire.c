@@ -1,4 +1,4 @@
-/* -*- linux-c -*- --------------------------------------------------------- *
+/* -*- c -*- --------------------------------------------------------------- *
  *
  * linux/fs/autofs/expire.c
  *
@@ -46,8 +46,9 @@ static int is_tree_busy(struct dentry *root)
 		count--;
 	}
 
-	/* Mountpoints don't count */
-	if (d_mountpoint(root)) {
+	/* Mountpoints don't count (either mountee or mounter) */
+	if (d_mountpoint(root) ||
+	    root != root->d_covers) {
 		DPRINTK(("is_tree_busy: mountpoint\n"));
 		count--;
 	}
@@ -75,9 +76,11 @@ resume:
 		/* Decrement count for unused children */
 		count += (dentry->d_count - 1);
 
-		/* Mountpoints don't count */
-		if (d_mountpoint(dentry)) {
-			DPRINTK(("is_tree_busy: mountpoint\n"));
+		/* Mountpoints don't count (either mountee or mounter) */
+		if (d_mountpoint(dentry) ||
+		    dentry != dentry->d_covers) {
+			DPRINTK(("is_tree_busy: mountpoint dentry=%p covers=%p mounts=%p\n",
+				 dentry, dentry->d_covers, dentry->d_mounts));
 			adj++;
 		}
 

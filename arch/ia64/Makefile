@@ -9,6 +9,7 @@
 #
 
 NM := $(CROSS_COMPILE)nm -B
+AWK := awk
 
 LINKFLAGS = -static -T arch/$(ARCH)/vmlinux.lds
 # next line is for HP compiler backend:
@@ -16,10 +17,10 @@ LINKFLAGS = -static -T arch/$(ARCH)/vmlinux.lds
 # The next line is needed when compiling with the July snapshot of the Cygnus compiler:
 #EXTRA	= -D__GCC_DOESNT_KNOW_IN_REGS__
 # next two lines are for the September snapshot of the Cygnus compiler:
-AFLAGS += -D__GCC_MULTIREG_RETVALS__
+AFLAGS += -D__GCC_MULTIREG_RETVALS__ -Wa,-x
 EXTRA	= -D__GCC_MULTIREG_RETVALS__
 
-CFLAGS := $(CFLAGS) -pipe $(EXTRA) -ffixed-r13 -mfixed-range=f10-f15,f32-f127
+CFLAGS := $(CFLAGS) -pipe $(EXTRA) -Wa,-x -ffixed-r13 -mfixed-range=f10-f15,f32-f127
 
 ifdef CONFIG_IA64_GENERIC
 	CORE_FILES      :=      arch/$(ARCH)/hp/hp.a	\
@@ -34,14 +35,14 @@ ifdef CONFIG_IA64_GENERIC
 
 else # !GENERIC
 
-ifeq ($(CONFIG_IA64_HP_SIM),y)
+ifdef CONFIG_IA64_HP_SIM
         SUBDIRS         :=      arch/$(ARCH)/hp		\
                                 $(SUBDIRS)
         CORE_FILES      :=      arch/$(ARCH)/hp/hp.a	\
                                 $(CORE_FILES)
 endif
 
-ifeq ($(CONFIG_IA64_SGI_SN1_SIM),y)
+ifdef CONFIG_IA64_SGI_SN1_SIM
         SUBDIRS         :=      arch/$(ARCH)/sn/sn1	\
 				arch/$(ARCH)/sn		\
 				$(SUBDIRS)
@@ -49,14 +50,14 @@ ifeq ($(CONFIG_IA64_SGI_SN1_SIM),y)
 				$(CORE_FILES)
 endif
 
-ifeq ($(CONFIG_IA64_SOFTSDV),y)
+ifdef CONFIG_IA64_SOFTSDV
         SUBDIRS         :=      arch/$(ARCH)/dig	\
 				$(SUBDIRS)
         CORE_FILES      :=      arch/$(ARCH)/dig/dig.a	\
 				$(CORE_FILES)
 endif
 
-ifeq ($(CONFIG_IA64_DIG),y)
+ifdef CONFIG_IA64_DIG
         SUBDIRS         :=      arch/$(ARCH)/dig	\
 				$(SUBDIRS)
         CORE_FILES      :=      arch/$(ARCH)/dig/dig.a	\
@@ -65,14 +66,9 @@ endif
 
 endif # !GENERIC
 
-ifeq ($(CONFIG_IA32_SUPPORT),y)
+ifdef CONFIG_IA32_SUPPORT
 	SUBDIRS		:=	arch/$(ARCH)/ia32 $(SUBDIRS)
 	CORE_FILES	:=	arch/$(ARCH)/ia32/ia32.o $(CORE_FILES)
-endif
-
-ifdef CONFIG_KDB
-	LIBS := $(LIBS) $(TOPDIR)/arch/$(ARCH)/kdb/kdb.a
-	SUBDIRS := $(SUBDIRS) arch/$(ARCH)/kdb
 endif
 
 HEAD := arch/$(ARCH)/kernel/head.o arch/ia64/kernel/init_task.o

@@ -1,17 +1,19 @@
 /*
- * gcc currently does not conform to the ia-64 calling convention as far
- * as returning function values are concerned.  Instead of returning
- * values up to 32 bytes in size in r8-r11, gcc returns any value
- * bigger than a doubleword via a structure that's allocated by the
- * caller and whose address is passed into the function.  Since
- * SAL_PROC returns values according to the calling convention, this
- * stub takes care of copying r8-r11 to the place where gcc expects
- * them.
- *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 #ifndef __GCC_MULTIREG_RETVALS__
+	/*
+	 * gcc currently does not conform to the ia-64 calling
+	 * convention as far as returning function values are
+	 * concerned.  Instead of returning values up to 32 bytes in
+	 * size in r8-r11, gcc returns any value bigger than a
+	 * doubleword via a structure that's allocated by the caller
+	 * and whose address is passed into the function.  Since
+	 * SAL_PROC returns values according to the calling
+	 * convention, this stub takes care of copying r8-r11 to the
+	 * place where gcc expects them.
+	 */
 	.text
 	.psr abi64
 	.psr lsb

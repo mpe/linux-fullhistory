@@ -108,9 +108,20 @@ void __set_personality(unsigned long personality)
 
 	it = lookup_exec_domain(personality);
 	if (it) {
-		put_exec_domain(current->exec_domain);
+		if (atomic_read(&current->fs->count) != 1) {
+			struct fs_struct *new = copy_fs_struct(current->fs);
+			if (!new)
+				return;
+			put_fs_struct(xchg(&current->fs,new));
+		}
+		/*
+		 * At that point we are guaranteed to be the sole owner of
+		 * current->fs.
+		 */
 		current->personality = personality;
 		current->exec_domain = it;
+		set_fs_altroot();
+		put_exec_domain(current->exec_domain);
 	}
 }
 

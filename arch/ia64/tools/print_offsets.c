@@ -12,6 +12,8 @@
  * file, be sure to verify that the awk procedure still works (see
  * prin_offsets.awk).
  */
+#include <linux/config.h>
+
 #include <linux/sched.h>
 
 #include <asm-ia64/processor.h>
@@ -50,6 +52,9 @@ tab[] =
     { "IA64_TASK_PROCESSOR_OFFSET",	offsetof (struct task_struct, processor) },
     { "IA64_TASK_THREAD_OFFSET",	offsetof (struct task_struct, thread) },
     { "IA64_TASK_THREAD_KSP_OFFSET",	offsetof (struct task_struct, thread.ksp) },
+#ifdef CONFIG_IA32_SUPPORT
+    { "IA64_TASK_THREAD_SIGMASK_OFFSET",offsetof (struct task_struct, thread.un.sigmask) },
+#endif
     { "IA64_TASK_PID_OFFSET",		offsetof (struct task_struct, pid) },
     { "IA64_TASK_MM_OFFSET",		offsetof (struct task_struct, mm) },
     { "IA64_PT_REGS_CR_IPSR_OFFSET",	offsetof (struct pt_regs, cr_ipsr) },
@@ -63,6 +68,8 @@ tab[] =
     { "IA64_SIGCONTEXT_FLAGS_OFFSET",	offsetof (struct sigcontext, sc_flags) },
     { "IA64_SIGCONTEXT_CFM_OFFSET",	offsetof (struct sigcontext, sc_cfm) },
     { "IA64_SIGCONTEXT_FR6_OFFSET",	offsetof (struct sigcontext, sc_fr[6]) },
+    { "IA64_CLONE_VFORK",		CLONE_VFORK },
+    { "IA64_CLONE_VM",			CLONE_VM },
 };
 
 static const char *tabs = "\t\t\t\t\t\t\t\t\t\t";

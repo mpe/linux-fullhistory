@@ -122,6 +122,7 @@ extern struct usb_serial_device_type whiteheat_device;
 extern struct usb_serial_device_type ftdi_sio_device;
 extern struct usb_serial_device_type keyspan_pda_fake_device;
 extern struct usb_serial_device_type keyspan_pda_device;
+extern struct usb_serial_device_type zyxel_omninet_device;
 
 
 /* determine if we should include the EzUSB loader functions */

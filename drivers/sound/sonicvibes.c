@@ -1475,6 +1475,7 @@ static ssize_t sv_write(struct file *file, const char *buffer, size_t count, lof
 	return ret;
 }
 
+/* No kernel lock - we have our own spinlock */
 static unsigned int sv_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct sv_state *s = (struct sv_state *)file->private_data;
@@ -2069,6 +2070,7 @@ static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count
 	return ret;
 }
 
+/* No kernel lock - we have our own spinlock */
 static unsigned int sv_midi_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct sv_state *s = (struct sv_state *)file->private_data;

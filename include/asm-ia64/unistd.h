@@ -197,6 +197,8 @@
 #define __NR_sendmsg			1205
 #define __NR_recvmsg			1206
 #define __NR_sys_pivot_root		1207
+#define __NR_mincore			1208
+#define __NR_madvise			1209
 
 #if !defined(__ASSEMBLY__) && !defined(ASSEMBLER)
 

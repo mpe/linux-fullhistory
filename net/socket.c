@@ -561,21 +561,16 @@ int sock_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 }
 
 
+/* No kernel lock held - perfect */
 static unsigned int sock_poll(struct file *file, poll_table * wait)
 {
 	struct socket *sock;
-	int err;
-
-	unlock_kernel();
-	sock = socki_lookup(file->f_dentry->d_inode);
 
 	/*
 	 *	We can't return errors to poll, so it's either yes or no. 
 	 */
-
-	err = sock->ops->poll(file, sock, wait);
-	lock_kernel();
-	return err;
+	sock = socki_lookup(file->f_dentry->d_inode);
+	return sock->ops->poll(file, sock, wait);
 }
 
 static int sock_mmap(struct file * file, struct vm_area_struct * vma)

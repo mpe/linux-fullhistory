@@ -25,6 +25,7 @@
 
 #include <linux/config.h>
 
+#include <asm/cache.h>
 #include <asm/errno.h>
 #include <asm/offsets.h>
 #include <asm/processor.h>
@@ -228,11 +229,11 @@ save_switch_stack:
 	stf.spill [r2]=f30,32
 	stf.spill [r3]=f31,24
 	;;
-	st8.spill [r2]=r4,16
-	st8.spill [r3]=r5,16
+.mem.offset 0,0;	st8.spill [r2]=r4,16
+.mem.offset 8,0;	st8.spill [r3]=r5,16
 	;;
-	st8.spill [r2]=r6,16
-	st8.spill [r3]=r7,16
+.mem.offset 0,0;	st8.spill [r2]=r6,16
+.mem.offset 8,0;	st8.spill [r3]=r7,16
 	;;
 	st8 [r2]=r21,16		// save b0
 	st8 [r3]=r22,16		// save b1
@@ -437,8 +438,8 @@ strace_check_retval:
 (p6)	br.cond.sptk.few strace_error		// syscall failed ->
 	;;					// avoid RAW on r10
 strace_save_retval:
-	st8.spill [r2]=r8			// store return value in slot for r8
-	st8.spill [r3]=r10			// clear error indication in slot for r10
+.mem.offset 0,0;	st8.spill [r2]=r8	// store return value in slot for r8
+.mem.offset 8,0;	st8.spill [r3]=r10	// clear error indication in slot for r10
 ia64_strace_leave_kernel:
 	br.call.sptk.few rp=invoke_syscall_trace // give parent a chance to catch return value
 .ret6:	br.cond.sptk.many ia64_leave_kernel
@@ -491,7 +492,9 @@ ia64_ret_from_syscall:
 	adds r2=IA64_PT_REGS_R8_OFFSET+16,sp	// r2 = &pt_regs.r8
 	adds r3=IA64_PT_REGS_R8_OFFSET+32,sp	// r3 = &pt_regs.r10
 	;;
+	.mem.offset 0,0
 (p6)	st8.spill [r2]=r8	// store return value in slot for r8 and set unat bit
+	.mem.offset 8,0
 (p6)	st8.spill [r3]=r0	// clear error indication in slot for r10 and set unat bit
 (p7)	br.cond.spnt.few handle_syscall_error	// handle potential syscall failure
 
@@ -504,7 +507,9 @@ ia64_leave_kernel:
 	;;
 	ld4	r2=[r2]
 	;;
-	shladd	r3=r2,3,r3
+	shl	r2=r2,SMP_LOG_CACHE_BYTES	// can't use shladd here...
+	;;
+	add	r3=r2,r3
 #else
 	movl r3=softirq_state
 #endif
@@ -550,6 +555,16 @@ back_from_resched:
 2:
 	// check & deliver pending signals:
 (p2)	br.call.spnt.few rp=handle_signal_delivery
+#if defined(CONFIG_SMP) || defined(CONFIG_IA64_SOFTSDV_HACKS)
+	// Check for lost ticks
+	mov r2 = ar.itc
+	mov r3 = cr.itm
+	;;
+	sub r2 = r2, r3
+	;;
+	cmp.ge p6,p7 = r2, r0
+(p6)	br.call.spnt.few rp=invoke_ia64_reset_itm
+#endif 
 restore_all:
 
 	// start restoring the state saved on the kernel stack (struct pt_regs):
@@ -735,8 +750,8 @@ handle_syscall_error:
 (p6)	mov r9=r8
 (p6)	mov r10=0
 	;;
-	st8.spill [r2]=r9	// store errno in pt_regs.r8 and set unat bit
-	st8.spill [r3]=r10	// store error indication in pt_regs.r10 and set unat bit
+.mem.offset 0,0; st8.spill [r2]=r9	// store errno in pt_regs.r8 and set unat bit
+.mem.offset 8,0; st8.spill [r3]=r10	// store error indication in pt_regs.r10 and set unat bit
 	br.cond.sptk.many ia64_leave_kernel
 	.endp handle_syscall_error
 
@@ -757,6 +772,19 @@ invoke_schedule_tail:
 	mov rp=loc1
 	br.ret.sptk.many rp
 	.endp invoke_schedule_tail
+
+	.proc invoke_ia64_reset_itm
+invoke_ia64_reset_itm:
+	alloc loc0=ar.pfs,8,2,0,0
+	mov loc1=rp
+	;;
+	br.call.sptk.many rp=ia64_reset_itm
+	;;
+	mov ar.pfs=loc0
+	mov rp=loc1
+	br.ret.sptk.many rp
+	.endp invoke_ia64_reset_itm
+
 #endif /* CONFIG_SMP */
 
 	/*
@@ -855,26 +883,22 @@ setup_switch_stack:
 	.global sys_rt_sigsuspend
 sys_rt_sigsuspend:
 	alloc loc0=ar.pfs,2,2,3,0
-	mov r9=ar.unat
 
 	// If the process is being ptraced, the signal may not actually be delivered to
 	// the process.  Instead, SIGCHLD will be sent to the parent.  We need to
 	// setup a switch_stack so ptrace can inspect the processes state if necessary.
-	adds r2=IA64_TASK_FLAGS_OFFSET,r13
-	;;
-	ld8 r2=[r2]
+	// Also, the process might not ptraced until stopped in sigsuspend, so this
+	// isn't something that we can do conditionally based upon the value of
+	// PF_PTRACED_BIT.
 	mov out0=in0				// mask
 	mov out1=in1				// sigsetsize
 	;;
 	adds out2=16,sp				// out1=&pt_regs
-	tbit.nz p16,p17=r2,PF_PTRACED_BIT
-(p16)	br.cond.spnt.many sigsuspend_setup_switch_stack
+	movl r28=back_from_sigsuspend_setup_switch_stack
+	mov r16=loc0
+	br.cond.sptk.many save_switch_stack
 	;;
 back_from_sigsuspend_setup_switch_stack:
-	adds r3=-IA64_SWITCH_STACK_SIZE+IA64_SWITCH_STACK_CALLER_UNAT_OFFSET+16,sp
-(p17)	adds sp=-IA64_SWITCH_STACK_SIZE,sp	// make space for (dummy) switch_stack
-	;;
-(p17)	st8 [r3]=r9				// save ar.unat in sw->caller_unat
 	mov loc1=rp				// save return address
 	br.call.sptk.many rp=ia64_rt_sigsuspend
 .ret12:
@@ -883,32 +907,22 @@ back_from_sigsuspend_setup_switch_stack:
 	ld8 r9=[r3]				// load new unat from sw->caller_unat
 	mov rp=loc1
 	;;
-(p17)	adds sp=IA64_SWITCH_STACK_SIZE,sp	// drop (dummy) switch_stack
-(p17)	mov ar.unat=r9
-(p17)	mov ar.pfs=loc0
-(p17)	br.ret.sptk.many rp
 
 	// restore the switch stack (ptrace may have modified it):
 	movl r28=1f
 	br.cond.sptk.many load_switch_stack
 1:	br.ret.sptk.many rp
 	// NOT REACHED
-
-sigsuspend_setup_switch_stack:
-	movl r28=back_from_sigsuspend_setup_switch_stack
-	mov r16=loc0
-	br.cond.sptk.many save_switch_stack
-	// NOT REACHED
-
 	.endp sys_rt_sigsuspend
 
 	.align 16
 	.proc sys_rt_sigreturn
 sys_rt_sigreturn:
-	alloc loc0=ar.pfs,8,1,1,0 // preserve all eight input regs in case of syscall restart!
+	.regstk 0,0,3,0	// inherited from gate.s:invoke_sighandler()
 	adds out0=16,sp				// out0 = &pt_regs
-	;;
 	adds sp=-IA64_SWITCH_STACK_SIZE,sp	// make space for unat and padding
+	;;
+	cmp.eq pNonSys,p0=r0,r0			// sigreturn isn't a normal syscall...
 	br.call.sptk.few rp=ia64_rt_sigreturn
 .ret13:
 	adds r3=IA64_SWITCH_STACK_CALLER_UNAT_OFFSET+16,sp
@@ -918,8 +932,7 @@ sys_rt_sigreturn:
 	;;
 	adds sp=IA64_SWITCH_STACK_SIZE,sp	// drop (dummy) switch-stack frame
 	mov ar.unat=r9
-	mov ar.pfs=loc0
-	br.ret.sptk.many rp
+	br rp
 	.endp sys_rt_sigreturn
 
 	.align 16
@@ -939,76 +952,6 @@ ia64_prepare_handle_unaligned:
 	br.cond.sptk.many load_switch_stack
 2:	br.cond.sptk.many rp			  // goes to ia64_leave_kernel
 	.endp ia64_prepare_handle_unaligned
-
-#ifdef CONFIG_KDB
-	//
-	// This gets called from ivt.S with:
-	//	SAVE MIN with cover done
-	//	SAVE REST done
-	//	no parameters
-	//	r15 has return value = ia64_leave_kernel
-	//
-	.align 16
-	.global ia64_invoke_kdb
-	.proc ia64_invoke_kdb
-ia64_invoke_kdb:
-	alloc r16=ar.pfs,0,0,4,0
-	movl r28=1f				// save_switch_stack protocol
-	;;			// avoid WAW on CFM
-	br.cond.sptk.many save_switch_stack	// to flushrs
-1:	mov out0=4				// kdb entry reason
-	mov out1=0				// err number
-	adds out2=IA64_SWITCH_STACK_SIZE+16,sp	// pt_regs
-	add out3=16,sp				// switch_stack
-	br.call.sptk.few rp=kdb
-.ret15:
-	movl r28=1f				// load_switch_stack proto
-	br.cond.sptk.many load_switch_stack
-1:	br.ret.sptk.many rp
-	.endp ia64_invoke_kdb
-
-	//
-	// When KDB is compiled in, we intercept each fault and give
-	// kdb a chance to run before calling the normal fault handler.
-	//
-        .align 16
-        .global ia64_invoke_kdb_fault_handler
-        .proc ia64_invoke_kdb_fault_handler
-ia64_invoke_kdb_fault_handler:
-        alloc r16=ar.pfs,5,1,5,0
-        movl r28=1f
-	mov loc0=rp			// save this
-	br.cond.sptk.many save_switch_stack // to flushrs
-	;;			// avoid WAW on CFM
-1:	mov out0=in0			// vector number
-	mov out1=in1			// cr.isr
-	mov out2=in2			// cr.ifa
-	mov out3=in3			// cr.iim
-	mov out4=in4			// cr.itir
-	br.call.sptk.few rp=ia64_kdb_fault_handler
-.ret16:
-
-	movl r28=1f
-	br.cond.sptk.many load_switch_stack
-1:	cmp.ne p6,p0=r8,r0		// did ia64_kdb_fault_handler return 0?
-	mov rp=loc0
-(p6)	br.ret.spnt.many rp		// no, we're done
-	;;		// avoid WAW on rp
-	mov out0=in0			// vector number
-	mov out1=in1			// cr.isr
-	mov out2=in2			// cr.ifa
-	mov out3=in3			// cr.iim
-	mov out4=in4			// cr.itir
-	mov in0=ar.pfs			// preserve ar.pfs returned by load_switch_stack
-	br.call.sptk.few rp=ia64_fault	// yup -> we need to invoke normal fault handler now
-.ret17:
-	mov ar.pfs=in0
-	mov rp=loc0
-	br.ret.sptk.many rp
-
-	.endp ia64_invoke_kdb_fault_handler
-
-#endif /* CONFIG_KDB */
 
 	.rodata
 	.align 8
@@ -1198,8 +1141,8 @@ sys_call_table:
 	data8 sys_sendmsg			// 1205
 	data8 sys_recvmsg
 	data8 sys_pivot_root
-	data8 ia64_ni_syscall
-	data8 ia64_ni_syscall
+	data8 sys_mincore
+	data8 sys_madvise
 	data8 ia64_ni_syscall			// 1210
 	data8 ia64_ni_syscall
 	data8 ia64_ni_syscall

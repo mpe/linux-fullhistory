@@ -186,6 +186,7 @@ recover:
 	;;
 	cmp.eq p6,p0=8,val1	// val1==8 ?
 (p6)	br.wtop.dptk.few 2b	// loop until p6 == 0
+	;;			// (avoid WAW on p63)
 	sub ret0=base,orig	// distance from base
 	sub tmp=8,val1
 	mov pr=saved_pr,0xffffffffffff0000

@@ -274,6 +274,7 @@ pipe_ioctl(struct inode *pino, struct file *filp,
 	}
 }
 
+/* No kernel lock held - fine */
 static unsigned int
 pipe_poll(struct file *filp, poll_table *wait)
 {

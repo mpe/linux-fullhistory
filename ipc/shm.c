@@ -1202,7 +1202,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	sprintf (name, SHM_FMT, shmid);
 
 	lock_kernel();
-	dentry = lookup_one(name, dget(lock_parent(shm_sb->s_root)));
+	dentry = lookup_one(name, lock_parent(shm_sb->s_root));
 	unlock_dir(shm_sb->s_root);
 	err = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
@@ -1256,7 +1256,7 @@ static int shm_remove_name(int id)
 	sprintf (name, SHM_FMT, id);
 	lock_kernel();
 	dir = lock_parent(shm_sb->s_root);
-	dentry = lookup_one(name, dget(dir));
+	dentry = lookup_one(name, dir);
 	error = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
 		/*

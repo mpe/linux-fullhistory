@@ -2375,6 +2375,7 @@ return_free:
 	return ret;
 }
 
+/* No kernel lock - we have our own spinlock */
 static unsigned int ess_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct ess_state *s = (struct ess_state *)file->private_data;

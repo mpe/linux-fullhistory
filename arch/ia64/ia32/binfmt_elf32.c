@@ -134,6 +134,19 @@ void ia64_elf32_init(struct pt_regs *regs)
 	regs->cr_ipsr &= ~IA64_PSR_AC;
 
 	regs->loadrs = 0;
+	/*
+	 *  According to the ABI %edx points to an `atexit' handler.
+	 *  Since we don't have one we'll set it to 0 and initialize
+	 *  all the other registers just to make things more deterministic,
+	 *  ala the i386 implementation.
+	 */
+	regs->r8 = 0;	/* %eax */
+	regs->r11 = 0;	/* %ebx */
+	regs->r9 = 0;	/* %ecx */
+	regs->r10 = 0;	/* %edx */
+	regs->r13 = 0;	/* %ebp */
+	regs->r14 = 0;	/* %esi */
+	regs->r15 = 0;	/* %edi */
 }
 
 #undef STACK_TOP

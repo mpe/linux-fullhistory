@@ -1402,6 +1402,7 @@ static ssize_t es1371_write(struct file *file, const char *buffer, size_t count,
 	return ret;
 }
 
+/* No kernel lock - we have our own spinlock */
 static unsigned int es1371_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct es1371_state *s = (struct es1371_state *)file->private_data;
@@ -1951,6 +1952,7 @@ static ssize_t es1371_write_dac(struct file *file, const char *buffer, size_t co
 	return ret;
 }
 
+/* No kernel lock - we have our own spinlock */
 static unsigned int es1371_poll_dac(struct file *file, struct poll_table_struct *wait)
 {
 	struct es1371_state *s = (struct es1371_state *)file->private_data;
@@ -2397,6 +2399,7 @@ static ssize_t es1371_midi_write(struct file *file, const char *buffer, size_t c
 	return ret;
 }
 
+/* No kernel lock - we have our own spinlock */
 static unsigned int es1371_midi_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct es1371_state *s = (struct es1371_state *)file->private_data;

@@ -71,10 +71,6 @@ verify_area (int type, const void *addr, unsigned long size)
  * These are the main single-value transfer routines.  They automatically
  * use the right size if we just have the right pointer type.
  *
- * As the alpha uses the same address space for kernel and user
- * data, we can just do these as direct assignments.  (Of course, the
- * exception handling means that it's no longer "just"...)
- *
  * Careful to not
  * (a) re-use the arguments for side effects (sizeof/typeof is ok)
  * (b) require any knowledge of processes at this stage

@@ -326,6 +326,7 @@ repeat:
 	return count;
 }
 
+/* No kernel lock held - fine */
 static unsigned int busmouse_poll(struct file *file, poll_table *wait)
 {
 	struct busmouse_data *mse = (struct busmouse_data *)file->private_data;

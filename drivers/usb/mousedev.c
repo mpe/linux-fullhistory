@@ -365,6 +365,7 @@ static ssize_t mousedev_read(struct file * file, char * buffer, size_t count, lo
 	return count;	
 }
 
+/* No kernel lock - fine */
 static unsigned int mousedev_poll(struct file *file, poll_table *wait)
 {
 	struct mousedev_list *list = file->private_data;

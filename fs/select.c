@@ -194,7 +194,6 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 	retval = 0;
 	for (;;) {
 		set_current_state(TASK_INTERRUPTIBLE);
-		lock_kernel();
 		for (i = 0 ; i < n; i++) {
 			unsigned long bit = BIT(i);
 			unsigned long mask;
@@ -227,7 +226,6 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 				wait = NULL;
 			}
 		}
-		unlock_kernel();
 		wait = NULL;
 		if (retval || !__timeout || signal_pending(current))
 			break;
@@ -462,9 +460,7 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 			goto out_fds1;
 	}
 
-	lock_kernel();
 	fdcount = do_poll(nfds, nchunks, nleft, fds, wait, timeout);
-	unlock_kernel();
 
 	/* OK, now copy the revents fields back to user space. */
 	for(i=0; i < nchunks; i++)

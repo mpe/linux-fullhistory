@@ -54,8 +54,8 @@ extern irq_cpustat_t irq_stat[NR_CPUS];
 #include <asm/atomic.h>
 #include <asm/smp.h>
 
-extern unsigned char global_irq_holder;
-extern unsigned volatile int global_irq_lock;
+extern unsigned int global_irq_holder;
+extern volatile unsigned int global_irq_lock;
 
 static inline int irqs_running (void)
 {

@@ -679,7 +679,9 @@ static unsigned int devfs_debug_init __initdata = DEBUG_NONE;
 static unsigned int devfs_debug = DEBUG_NONE;
 #  endif
 #endif
-static unsigned int boot_options = OPTION_NONE;
+
+/* by default, we do not mount devfs on bootup */
+static unsigned int boot_options = OPTION_NOMOUNT;
 
 /*  Forward function declarations  */
 static struct devfs_entry *search_for_entry (struct devfs_entry *dir,
@@ -1915,6 +1917,11 @@ SETUP_STATIC int __init devfs_setup (char *str)
 	{
 	    boot_options |= OPTION_ONLY;
 	    str += 4;
+	}
+	else if (strncmp (str, "mount", 5) == 0)
+	{
+	    boot_options &= ~OPTION_NOMOUNT;
+	    str += 5;
 	}
 	else if (strncmp (str, "nomount", 7) == 0)
 	{

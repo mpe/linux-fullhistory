@@ -725,6 +725,7 @@ static struct CARD {
 	{ 0x3002144f, BTTV_MAGICTVIEW061, "Askey Magic TView" },
 	{ 0x300214ff, BTTV_PHOEBE_TVMAS,  "Phoebe TV Master" },
 	{ 0x6606217d, BTTV_WINFAST2000,   "Leadtek WinFast TV 2000" },
+	{ 0x1200bd11, BTTV_PINNACLERAVE,  "Pinnacle PCTV Rave" },
 	{ 0, -1, NULL }
 };
 
@@ -887,6 +888,10 @@ static struct tvcard tvcards[] =
 	{ "TView99 CPH063",
 	  3, 1, 0, 2, 0x551e00, { 2, 0, 1, 1},
 	  { 0x551400, 0x551200, 0, 0, 0x551200 }, 0,1,1,1,1,0 },
+	{ "Pinnacle PCTV Rave",
+	  3, 1, 0, 2, 0x03000F, { 2, 3, 1, 1}, { 2, 0, 0, 0, 1},0,
+	  1,1,1,1,0 },
+	
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(struct tvcard))
 

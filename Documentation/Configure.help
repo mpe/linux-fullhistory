@@ -18,7 +18,7 @@
 #   - Polish, by Cezar Cichocki (cezar@cs.net.pl), at
 #     http://www.cs.net.pl/~cezar/Kernel
 #   - German, by SuSE, at http://www.suse.de/~ke/kernel . This patch
-#     includes infrastructure to support different languages as well.
+#     also includes infrastructure to support different languages.
 #
 # To access a document on the WWW, you need to have a direct Internet
 # connection and a browser program such as netscape or lynx. If you
@@ -187,48 +187,44 @@ CONFIG_MATHEMU
 
 High Memory support
 CONFIG_NOHIGHMEM
-  If you are compiling a kernel which will never run on a machine
-  with more than 1 Gigabyte total physical RAM, answer "off"
-  here (default choice).  This will result in the old "3GB/1GB"
-  virtual/physical memory split. 3GB are mapped so as each processus
-  sees a 3GB virtual memory space.
-  The remaining part of the 4GB virtual memory space is used by the
-  kernel to 'permanently map' as much physical memory as possible.
-  Certain types of applications perform better if there is more
-  'permanently mapped' kernel memory.
-  Certain types of applications (eg. database servers) perform
-  better if they have as much virtual memory per process as possible.
-
   Linux can use up to 64 Gigabytes of physical memory on x86 systems.
-  However 32-bit x86 processors have only 4 Gigabytes of virtual memory
-  space. 
+  However, the address space of 32-bit x86 processors is only 4
+  Gigabytes large. That means that, if you have a large amount of
+  physical memory, not all of it can be "permanently mapped" by the
+  kernel. The physical memory that's not permanently mapped is called
+  "high memory".
 
-  Any potentially remaining part of physical memory is called
-  'high memory' that is all the physical RAM that could not be directly
-  mapped by the kernel - ie. 3GB if there is 4GB RAM in the system,
-  7GB if there is 8GB RAM in the system.
+  If you are compiling a kernel which will never run on a machine with
+  more than 1 Gigabyte total physical RAM, answer "off" here (default
+  choice and suitable for most users). This will result in a "3GB/1GB"
+  split: 3GB are mapped so that each process sees a 3GB virtual memory
+  space and the remaining part of the 4GB virtual memory space is used
+  by the kernel to permanently map as much physical memory as
+  possible.
 
-  If 4 Gigabytes physical RAM or less is used then answer "4GB" here.
+  If the machine has between 1 and 4 Gigabytes physical RAM, then
+  answer "4GB" here.
 
   If more than 4 Gigabytes is used then answer "64GB" here. This
   selection turns Intel PAE (Physical Address Extension) mode on.
   PAE implements 3-level paging on IA32 processors. PAE is fully
   supported by Linux, PAE mode is implemented on all recent Intel
-  processors (PPro and better). NOTE: The "64GB" kernel will not
-  boot CPUs that not support PAE!
+  processors (Pentium Pro and better). NOTE: If you say "64GB" here,
+  then the kernel will not boot on CPUs that don't support PAE!
 
   The actual amount of total physical memory will either be
-  autodetected or can be forced by using a kernel command line option
+  auto detected or can be forced by using a kernel command line option
   such as "mem=256M". (Try "man bootparam" or see the documentation of
   your boot loader (lilo or loadlin) about how to pass options to the
-  kernel at boot time. The lilo procedure is also explained in the
-  SCSI-HOWTO, available from http://www.linuxdoc.org/docs.html#howto .)
+  kernel at boot time.) 
+
+  If unsure, say "off".
 
 Normal PC floppy disk support
 CONFIG_BLK_DEV_FD
   If you want to use the floppy disk drive(s) of your PC under Linux,
   say Y. Information about this driver, especially important for IBM
-  Thinkpad users, is contained in drivers/block/README.fd. This file
+  Thinkpad users, is contained in Documentation/floppy.txt. That file
   also contains the location of the Floppy driver FAQ as well as
   location of the fdutils package used to configure additional
   parameters of the driver at run time.
@@ -276,7 +272,9 @@ CONFIG_BLK_DEV_LOOP
   Saying Y here will allow you to use a regular file as a block
   device; you can then create a file system on that block device and
   mount it just as you would mount other block devices such as hard
-  drive partitions, CDROM drives or floppy drives.
+  drive partitions, CDROM drives or floppy drives. The loop devices
+  are block special device files with major number 7 and typically
+  called /dev/loop0, /dev/loop1 etc.
 
   This is useful if you want to check an ISO 9660 file system before
   burning the CD, or if you want to use floppy images without first
@@ -291,17 +289,18 @@ CONFIG_BLK_DEV_LOOP
   bits of, say, a sound file). This is also safe if the file resides
   on a remote file server. If you want to do this, you will first have
   to acquire and install a kernel patch from
-  ftp://ftp.replay.com/pub/crypto/linux/all or
-  ftp://verden.pvv.org/pub/linux/kerneli/v2.1/ , and then you need to
+  ftp://ftp.kerneli.org/pub/kerneli/ , and then you need to
   say Y to this option.
 
   Note that alternative ways to use encrypted file systems are
   provided by the cfs package, which can be gotten from
-  ftp://ftp.replay.com/pub/crypto/disk/ , and the newer tcfs package,
-  available at http://tcfs.dia.unisa.it/ . You do not need to say Y
-  here if you want to use one of these. However, using cfs requires
-  saying Y to "NFS file system support" below while using tcfs
-  requires applying a kernel patch.
+  ftp://ftp.kerneli.org/pub/kerneli/net-source/ , and the newer tcfs
+  package, available at http://tcfs.dia.unisa.it/ . You do not need to
+  say Y here if you want to use one of these. However, using cfs
+  requires saying Y to "NFS file system support" below while using
+  tcfs requires applying a kernel patch. An alternative steganography
+  solution is provided by StegFS, also available from
+  ftp://ftp.kerneli.org/pub/kerneli/net-source/ .
 
   To use the loop device, you need the losetup utility and a recent
   version of the mount program, both contained in the util-linux
@@ -1430,7 +1429,7 @@ CONFIG_BLK_DEV_LVM
   devices named /dev/VolumeGroupName/LogicalVolumeName.
 
   For details see Documentation/LVM-HOWTO. You will need supporting
-  user space software from http://linux.msede.com/lvm .
+  user space software; location is in Documentation/Changes.
 
   If you want to compile this support as a module ( = code which can
   be inserted in and removed from the running kernel whenever you
@@ -1450,12 +1449,12 @@ Multiple devices driver support
 CONFIG_BLK_DEV_MD
   This driver lets you combine several hard disk partitions into one
   logical block device. This can be used to simply append one
-  partition to another one or to combine several redundant
-  hard disks to a RAID1/4/5 device so as to provide protection against
-  hard disk failures. This is called "Software RAID" since the
-  combining of the partitions is done by the kernel. "Hardware RAID"
-  means that the combining is done by a dedicated controller; if you
-  have such a controller, you do not need to say Y here.
+  partition to another one or to combine several redundant hard disks
+  into a RAID1/4/5 device so as to provide protection against hard
+  disk failures. This is called "Software RAID" since the combining of
+  the partitions is done by the kernel. "Hardware RAID" means that the
+  combining is done by a dedicated controller; if you have such a
+  controller, you do not need to say Y here.
 
   More information about Software RAID on Linux is contained in the
   Software-RAID mini-HOWTO, available from
@@ -1523,7 +1522,7 @@ CONFIG_MD_MIRRORING
 RAID-4/RAID-5 mode
 CONFIG_MD_RAID5
   A RAID-5 set of N drives with a capacity of C MB per drive provides
-  the capacity of C * (N - 1) drives, and protects against a failure
+  the capacity of C * (N - 1) MB, and protects against a failure
   of a single drive. For a given sector (row) number, (N - 1) drives
   contain data sectors, and one drive contains the parity protection.
   For a RAID-4 set, the parity blocks are present on a single drive,
@@ -1632,6 +1631,56 @@ CONFIG_JAZZ_ESP
   4000, Acer PICA, Olivetti M700-10 and a few other identical OEM
   systems.
 
+PCMCIA SCSI adapter support
+CONFIG_SCSI_PCMCIA
+  Say Y here if you intend to attach a PCMCIA or CardBus card to your
+  computer which acts as a SCSI host adapter. These are credit card
+  size devices often used with laptops.
+
+  Note that the answer to this question won't directly affect the
+  kernel: saying N will just cause this configure script to skip all
+  the questions PCMCIA SCSI host adapters.
+
+Adaptec AHA152X PCMCIA support
+CONFIG_PCMCIA_AHA152X
+  Say Y here if you intend to attach this type of PCMCIA SCSI host
+  adapter to your computer.
+
+  This driver is also available as a module called aha152x_cs.o ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
+Qlogic PCMCIA support
+CONFIG_PCMCIA_QLOGIC
+  Say Y here if you intend to attach this type of PCMCIA SCSI host
+  adapter to your computer.
+
+  This driver is also available as a module called qlogic_cs.o ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
+Future Domain PCMCIA support
+CONFIG_PCMCIA_FDOMAIN
+  Say Y here if you intend to attach this type of PCMCIA SCSI host
+  adapter to your computer.
+
+  This driver is also available as a module called fdomain_cs.o ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
+Adaptec APA1480 CardBus support
+CONFIG_PCMCIA_APA1480
+  Say Y here if you intend to attach this type of CardBus SCSI host
+  adapter to your computer.
+
+  This driver is also available as a module called apa1480_cb.o ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
 CPU type
 CONFIG_CPU_R3000
   Please make sure to pick the right CPU type. Linux/MIPS is not
@@ -1722,8 +1771,8 @@ CONFIG_NETFILTER
 
   Various modules exist for netfilter which replace the previous
   masquerading (ipmasqadm), packet filtering (ipchains), transparent
-  proxying, and portforwarding mechanisms. More information is
-  available from http://netfilter.kernelnotes.org .
+  proxying, and portforwarding mechanisms. Please see
+  Documentation/Changes for the location of these packages.
  
   Make sure to say N to "Fast switching" below if you intend to say Y
   here, as Fast switching currently bypasses netfilter.
@@ -1759,10 +1808,10 @@ CONFIG_IP_NF_FTP
   If you want to compile it as a module, say M here and read
   Documentation/modules.txt.  If unsure, say `Y'.
 
-IP: userspace queueing via NETLINK (EXPERIMENTAL)
+IP: user space queueing via NETLINK (EXPERIMENTAL)
 CONFIG_IP_NF_QUEUE
-  Netfilter has the ability to queue packets to userspace: the netlink
-  device can be used to access them using this driver.
+  Netfilter has the ability to queue packets to user space: the
+  netlink device can be used to access them using this driver.
 
   If you want to compile it as a module, say M here and read
   Documentation/modules.txt.  If unsure, say `N'.
@@ -3821,12 +3870,17 @@ CONFIG_IPV6_NETLINK
   
 Kernel httpd acceleration (EXPERIMENTAL)
 CONFIG_KHTTPD
-  The kernel httpd acceleration daemon (kHTTPd) is a (limited) 
-  web server built into the kernel. It is limited since it can only
-  serve files from the file system. Saying "M" here builds the
-  kHTTPd module; this is NOT enough to have a working kHTTPd. 
-  For safety reasons, the module has to be activated by doing a
-  "echo 1 > /proc/sys/net/khttpd/start" after inserting the module.
+  The kernel httpd acceleration daemon (kHTTPd) is a (limited) web
+  server built into the kernel. It is limited since it can only serve
+  files from the file system and cannot deal with executable content
+  such as CGI scripts. Serving files is sped up if you use kHTTPd.
+  If kHTTPd is not able to fulfill a request, it can transparently
+  pass it through to a user space web server such as apache.
+
+  Saying "M" here builds the kHTTPd module; this is NOT enough to have
+  a working kHTTPd. For safety reasons, the module has to be activated
+  by doing a "echo 1 > /proc/sys/net/khttpd/start" after inserting the
+  module.
 
   Before using this, read the README in net/khttpd !
 
@@ -5043,15 +5097,17 @@ CONFIG_CHR_DEV_SG
   about anything having "SCSI" in its name other than hard disks,
   CDROMs or tapes, say Y here. These won't be supported by the kernel
   directly, so you need some additional software which knows how to
-  talk to these devices using the SCSI protocol. For scanners, look at
-  SANE (www.mostang.com/sane). For CD writer software look at cdrecord
-  (www.fokus.gmd.de/research/cc/glone/employees/joerg.schilling/private
-  /cdrecord.html) and for burning a "disk at once": cdrdao
-  (www.ping.de/sites/daneb/cdrdao.html). Cdparanoia is a high quality
-  digital reader of audio CDs (www.xiph.org/paranoia).
-  For other devices, it's possible that you'll have to write the driver
-  software yourself. Please read the file Documentation/scsi-generic.txt
-  for more information.
+  talk to these devices using the SCSI protocol:
+
+  For scanners, look at SANE (http://www.mostang.com/sane). For CD
+  writer software look at cdrecord
+  (http://www.fokus.gmd.de/research/cc/glone/employees/joerg.schilling/private/cdrecord.html)
+  and for burning a "disk at once": cdrdao
+  (http://www.ping.de/sites/daneb/cdrdao.html). Cdparanoia is a high
+  quality digital reader of audio CDs (http://www.xiph.org/paranoia).
+  For other devices, it's possible that you'll have to write the
+  driver software yourself. Please read the file
+  Documentation/scsi-generic.txt for more information.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -5875,6 +5931,15 @@ CONFIG_SCSI_QLOGIC_FC
   The module will be called qlogicfc.o. If you want to compile it as
   a module, say M here and read Documentation/modules.txt.
 
+Qlogic QLA 1280 SCSI support
+CONFIG_SCSI_QLOGIC_1280
+  Say Y if you have a QLogic ISP1x80/1x160 SCSI host adapter.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called qla1280.o. If you want to compile it as
+  a module, say M here and read Documentation/modules.txt.
+
 Seagate ST-02 and Future Domain TMC-8xx SCSI support
 CONFIG_SCSI_SEAGATE
   These are 8-bit SCSI controllers; the ST-01 is also supported by
@@ -6558,6 +6623,17 @@ CONFIG_PPP
   Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
+PPP multilink support (EXPERIMENTAL)
+CONFIG_PPP_MULTILINK
+  PPP multilink is a protocol (defined in RFC 1990) which allows you
+  to combine several (logical or physical) lines into one logical PPP
+  connection, so that you can utilize your full bandwidth.
+
+  This has to be supported at the other end as well and you need a
+  version of the pppd daemon which understands the multilink protocol.
+
+  If unsure, say N.
+
 PPP support for async serial ports
 CONFIG_PPP_ASYNC
   Say Y (or M) here if you want to be able to use PPP over standard
@@ -6568,6 +6644,8 @@ CONFIG_PPP_ASYNC
   This code is also available as a module (code which can be inserted
   into and removed from the running kernel).  If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
+
+  If unsure, say Y.
 
 PPP support for sync tty ports
 CONFIG_PPP_SYNC_TTY
@@ -6918,6 +6996,17 @@ CONFIG_ARCNET_COM20020_CS
   The module will be called com20020_cs.o. If you want to compile it
   as a module, say M here and read Documentation/modules.txt. If
   unsure, say N.
+
+IBM PCMCIA Token Ring adapter support
+CONFIG_PCMCIA_IBMTR
+  Say Y here if you intend to attach this type of Token Ring PCMCIA
+  card to your computer. You then also need to say Y to "Token Ring
+  driver support". 
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called ibmtr_cs.o. If you want to compile it
+  as a module, say M here and read Documentation/modules.txt.
 
 3Com 3c575 CardBus support
 CONFIG_PCMCIA_3C575
@@ -9374,11 +9463,13 @@ CONFIG_USB
   modems, and printers support the USB protocol and can be connected
   to the PC via those ports.
 
-  Say Y here if your computer has a USB port and you want to
-  use USB devices. You then need to say Y to at least one
-  of "UHCI support" or "OHCI support" below (the type of interface
-  that the USB hardware in your computer provides) and then choose
-  from among the drivers for USB peripherals.
+  Say Y here if your computer has a USB port and you want to use USB
+  devices. You then need to say Y to at least one of "UHCI support" or
+  "OHCI support" below (the type of interface that the USB hardware in
+  your computer provides to the operating system) and then choose from
+  among the drivers for USB peripherals. You may want to check out the
+  information provided in Documentation/usb/ and especially the links
+  given in Documentation/usb/usb-help.txt.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -9396,56 +9487,54 @@ CONFIG_USB_UHCI
   The Universal Host Controller Interface is a standard by Intel for
   accessing the USB hardware in the PC (which is also called the USB
   host controller). If your USB host controller conforms to this
-  standard, say Y. All recent boards with Intel PCI chipsets (like
-  intel 430TX, 440FX, 440LX, 440BX, i810, i820) conform to this standard.
-  Also all VIA PCI chipsets (like VIA VP2, VP3, MVP3, Apollo Pro, Apollo
-  Pro II or Apollo Pro 133).
-  If unsure, say Y.
+  standard, you may want to say Y, but see below. All recent boards
+  with Intel PCI chipsets (like intel 430TX, 440FX, 440LX, 440BX,
+  i810, i820) conform to this standard. Also all VIA PCI chipsets
+  (like VIA VP2, VP3, MVP3, Apollo Pro, Apollo Pro II or Apollo Pro
+  133).
+
+  Currently there exist two drivers for UHCI host controllers: this
+  one and the so-called JE driver, which you can get from 
+  "UHCI alternate (JE) support", below. You need only one.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called usb-uhci.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
-  
-USB-UHCI High Bandwidth support
-CONFIG_USB_UHCI_HIGH_BANDWIDTH
-  This option enables the so-called reclamation loop in usb-uhci, thus
-  allowing much higher transfer bandwidth for USB-bulk and control
-  messages; isochronous transfers (audio, video etc.) are not affected.
-  Due to a very simple design of the UHCI controller, this may cause
-  a significant PCI congestion under certain conditions. If you are
-  experiencing a system slowdown, disable this option.
-  
-  If unsure, say N.
-  
+
 UHCI (intel PIIX4, VIA, ...) alternate (JE) support?
 CONFIG_USB_UHCI_ALT
-  This is an alternate driver for UHCI support. It has been commonly
-  been referred to as the "JE driver".
-
   The Universal Host Controller Interface is a standard by Intel for
   accessing the USB hardware in the PC (which is also called the USB
   host controller). If your USB host controller conforms to this
-  standard, say Y. All recent boards with Intel PCI chipsets (like
-  intel 430TX, 440FX, 440LX, 440BX, i810, i820) conform to this standard.
-  Also all VIA PCI chipsets (like VIA VP2, VP3, MVP3, Apollo Pro, Apollo
-  Pro II or Apollo Pro 133).
-  If unsure, say Y.
+  standard, you may want to say Y, but see below. All recent boards
+  with Intel PCI chipsets (like intel 430TX, 440FX, 440LX, 440BX,
+  i810, i820) conform to this standard. Also all VIA PCI chipsets
+  (like VIA VP2, VP3, MVP3, Apollo Pro, Apollo Pro II or Apollo Pro
+  133). If unsure, say Y.
+
+  Currently there exist two drivers for UHCI host controllers: this
+  so-called JE driver, and the one you get from "UHCI support", above.
+  You need only one.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called uhci.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
-  
-OHCI (Compaq, iMacs, OPTi, SiS, ALi, ...) support?
+
+UHCI unlink optimizations (EXPERIMENTAL)
+CONFIG_USB_UHCI_ALT_UNLINK_OPTIMIZE
+  This option currently does nothing. You may say Y or N.
+
+OHCI (Compaq, iMacs, OPTi, SiS, ALi, ...) support
 CONFIG_USB_OHCI
   The Open Host Controller Interface is a standard by
   Compaq/Microsoft/National for accessing the USB PC hardware (also
-  called USB host controller). If your USB host controller conforms
-  to this standard, say Y. The USB host controllers on most
-  non-Intel architectures and on several x86 compatibles with non-Intel
-  chipsets - like SiS (actual 610, 610 and so on) or ALi (ALi IV, ALi V,
-  Aladdin Pro..) - conform to this standard.
+  called USB host controller). If your USB host controller conforms to
+  this standard, say Y. The USB host controllers on most non-Intel
+  architectures and on several x86 compatibles with non-Intel chipsets
+  -- like SiS (aktual 610, 610 and so on) or ALi (ALi IV, ALi V,
+  Aladdin Pro..) -- conform to this standard.
 
   You may want to read the file Documentation/usb/ohci.txt.
 
@@ -9456,9 +9545,17 @@ CONFIG_USB_OHCI
 
 USB Human Interface Device (HID) support
 CONFIG_USB_HID
-  Say Y here if you want to connect a keyboard, mouse, joystick,
-  graphic tablet, UPS or any other HID based devices to your computer
-  via USB.
+  Say Y here if you want to connect keyboards, mice, joysticks,
+  graphic tablets, UPS's or any other HID based devices to your
+  computer via USB. More information is available:
+  Documentation/usb/input.txt.
+
+  If unsure, say Y.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called hid.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
 
 USB HIDBP Keyboard support
 CONFIG_USB_KBD
@@ -9532,17 +9629,6 @@ CONFIG_INPUT_MOUSEDEV
   The module will be called mousedev.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-Mix all mice into one device
-CONFIG_INPUT_MOUSEDEV_MIX
-  Say Y here if you want input from all your USB HID mice to be mixed
-  into one misc device. If you say N, you'll have a separate
-  device for each USB mouse.
-
-Support for digitizers
-CONFIG_INPUT_MOUSEDEV_DIGITIZER
-  Say Y here if you have a digitizer that doesn't emulate a mouse
-  itself, and want to use it as a mouse.
-
 Horizontal screen resolution
 CONFIG_INPUT_MOUSEDEV_SCREEN_X
   For the mouse emulation to be correct, the mousedev driver needs to
@@ -9595,6 +9681,7 @@ USB Modem (CDC ACM) support
 CONFIG_USB_ACM
   This driver supports USB modems and ISDN adapters which support the
   Communication Device Class Abstract Control Model interface.
+  Please read Documentation/usb/acm.txt for details.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -9640,25 +9727,30 @@ CONFIG_USB_SERIAL_VISOR
 USB FTDI Single Port Serial Driver
 CONFIG_USB_SERIAL_FTDI_SIO
   Say Y here if you want to use a FTDI SIO single port USB to serial
-  converter device. The implementation I have is called the USC-1000
+  converter device. The implementation I have is called the USC-1000.
 
-  See http://reality.sgi.com/bryder_wellington/ftdi_sio for more information 
-   on this driver and the device
+  See http://reality.sgi.com/bryder_wellington/ftdi_sio for more
+  information on this driver and the device.
 
-USB FTDI Single Port Serial Driver
+USB Keyspan PDA Single Port Serial Driver
 CONFIG_USB_SERIAL_KEYSPAN_PDA
-  Say Y here if you want to use a Keyspan PDA single port USB to serial
-  converter device.
+  Say Y here if you want to use a Keyspan PDA single port USB to
+  serial converter device.
 
 USB Printer support
 CONFIG_USB_PRINTER
-  Say Y here if you want to connect a USB printer to your computer's USB
-  port.
+  Say Y here if you want to connect a USB printer to your computer's
+  USB port.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called printer.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
+
+USB Serial Converter verbose debug
+CONFIG_USB_SERIAL_DEBUG
+  Say Y here if you want verbose debug messages from the USB Serial
+  Converter. 
 
 USB IBM (Xirlink) C-It Camera support
 CONFIG_USB_IBMCAM
@@ -9727,13 +9819,12 @@ CONFIG_USB_DC2XX
   The module will be called dc2xx.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-
 USB Mustek MDC800 Digital Camera Support
 CONFIG_USB_MDC800
   Say Y here if you want to connect this type of still camera to
   your computer's USB port. This driver can be used with gphoto 0.4.3
-  and higher (look at www.gphoto.org).
-  To use it create a devicenode with mknod /dev/mustek c 180 32 and
+  and higher (look at http://www.gphoto.org ).
+  To use it create a device node with "mknod /dev/mustek c 10 171" and
   configure it in your software.
 
   This code is also available as a module ( = code which can be
@@ -9788,13 +9879,13 @@ USB device file system
 CONFIG_USB_DEVICEFS
   If you say Y here (and to "/proc file system support" below), you
   will get a file /proc/usb/devices which lists the devices currently
-  connected to your USB busses, a file /proc/usb/drivers file which
-  lists the USB kernel client drivers currently loaded, and for every
+  connected to your USB busses, a file /proc/usb/drivers which lists
+  the USB kernel client drivers currently loaded, and for every
   connected device a file named "/proc/usb/xxx/yyy", where xxx is the
   bus number and yyy the device number; the latter files can be used
-  by userspace drivers to talk to the device. These files are
-  "virtual", meaning they are generated on the fly and not stored on
-  the hard drive.
+  by user space programs to talk directly to the device. These files
+  are "virtual", meaning they are generated on the fly and not stored
+  on the hard drive.
   
   For the format of the /proc/usb/ files, please read
   Documentation/usb/proc_usb_info.txt. 
@@ -9956,8 +10047,33 @@ CONFIG_CRAMFS
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. The module will be
-  called cramfs.o.
+  called cramfs.o. Note that the root file system (the one containing
+  the directory /) cannot be compiled as a module.
+
+  If unsure, say N.
    
+Simple RAM-based file system support
+CONFIG_RAMFS
+  Ramfs is a file system which keeps all files in RAM. It allows
+  read and write access.
+
+  In contrast to RAM disks, which get allocated a fixed amount of RAM,
+  ramfs grows and shrinks to accommodate the files it contains.
+
+  Before you can use this RAM-based file system, it has to be mounted,
+  meaning it has to be given a location in the directory hierarchy. If
+  you want to use the location /ramfiles for example, you would have
+  to create that directory first and then mount the file system by
+  saying "mount -t ramfs ramfs /ramfiles" or the equivalent line in
+  /etc/fstab. Everything is "virtual" in the sense that no files will
+  be created on your hard drive; if you reboot, everything in
+  /ramfiles will be lost.
+  
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called ramfs.o.
+
 ISO 9660 CDROM file system support
 CONFIG_ISO9660_FS
   This is the standard file system used on CDROMs. It was previously
@@ -10141,12 +10257,17 @@ CONFIG_PROC_FS
   (there is a small number of Interrupt ReQuest lines in your computer
   that are used by the attached devices to gain the CPU's attention --
   often a source of trouble if two devices are mistakenly configured
-  to use the same IRQ). 
+  to use the same IRQ). The program procinfo to display some
+  information about your system gathered from the /proc file system.
+
+  Before you can use the /proc file system, it has to be mounted,
+  meaning it has to be given a location in the directory hierarchy.
+  That location should be /proc. A command such as "mount -t proc proc
+  /proc" or the equivalent line in /etc/fstab does the job.
 
   The /proc file system is explained in the file
   Documentation/filesystems/proc.txt and on the proc(5) manpage ("man
-  5 proc"). You can also use the program procinfo to display some
-  information about your system gathered from the /proc file system.
+  5 proc").
 
   This option will enlarge your kernel by about 67 KB. Several
   programs depend on this, so everyone should say Y here.
@@ -10159,9 +10280,9 @@ CONFIG_DEVFS_FS
   allocations. Device drivers register entries in /dev which then
   appear automatically, which means that the system administrator does
   not have to create character and block special device files in the
-  /dev directory using the mknod command anymore.
+  /dev directory using the mknod command (or MAKEDEV script) anymore.
 
-  This is work in progress. If you want to use this you *must* read
+  This is work in progress. If you want to use this, you *must* read
   the material in Documentation/filesystems/devfs/, especially the
   file README there.
 
@@ -10210,6 +10331,13 @@ CONFIG_NFS_FS
 
   If you don't know what all this is about, say N.
 
+Provide NFSv3 client support (EXPERIMENTAL)
+CONFIG_NFS_V3
+  Say Y here if you want your NFS client to be able to speak the newer
+  version 3 of the NFS protocol. 
+ 
+  If unsure, say N.
+
 Root file system on NFS
 CONFIG_ROOT_NFS
   If you want your Linux box to mount its whole root file system (the
@@ -10235,6 +10363,10 @@ CONFIG_NFSD
   In either case, you will need support software; the respective
   locations are given in the file Documentation/Changes in the NFS
   section.
+
+  If you say Y here, you will get support for version 2 of the NFS
+  protocol (NFSv2). If you also want NFSv3, say Y to the next question
+  as well.
 
   Please read the NFS-HOWTO, available from
   http://www.linuxdoc.org/docs.html#howto .
@@ -10282,7 +10414,7 @@ CONFIG_NTFS_RW
   If you say Y here, you will (maybe) be able to write to NTFS file
   systems as well as read from them. The read-write support in
   NTFS is far from being complete and is not well tested. If you
-  enable this, back up your NTFS volume first since it may get
+  say Y here, back up your NTFS volume first since it may get
   damaged. Also, make sure to run chkdsk from within Microsoft
   Windows NT after having performed any writes to a NTFS partition
   from Linux to detect any problems as early as possible.
@@ -10378,7 +10510,8 @@ CONFIG_ROMFS_FS
   which can be inserted in and removed from the running kernel
   whenever you want). The module is called romfs.o. If you want to
   compile it as a module, say M here and read
-  Documentation/modules.txt.
+  Documentation/modules.txt. Note that the file system of your root
+  partition (the one containing the directory /) cannot be a module.
 
   If you don't know whether you need it, then you don't need it:
   answer N.
@@ -10410,9 +10543,9 @@ CONFIG_AUTOFS_FS
   overhead in the already-mounted case; this is unlike the BSD
   automounter (amd), which is a pure user space daemon.
 
-  To use the automounter you need the user-space tools from
-  ftp://ftp.kernel.org/pub/linux/daemons/autofs ; you also want to
-  answer Y to "NFS file system support", below.
+  To use the automounter you need the user-space tools from the autofs
+  package; you can find the location in Documentation/Changes. You
+  also want to answer Y to "NFS file system support", below.
 
   If you want to use the newer version of the automounter with more
   features, say N here and say Y to "Kernel automounter v4 support",
@@ -10602,7 +10735,8 @@ CONFIG_DEVPTS_FS
 
   The GNU C library glibc 2.1 contains the requisite support for this
   mode of operation; you also need client programs that use the Unix98
-  API.
+  API. Please read Documentation/Changes for more information about
+  the Unix98 pty devices.
 
   Note that the experimental "/dev file system support"
   (CONFIG_DEVFS_FS)  is a more general facility.
@@ -12353,13 +12487,29 @@ WDT Watchdog timer
 CONFIG_WDT
   If you have a WDT500P or WDT501P watchdog board, say Y here,
   otherwise N. It is not possible to probe for this board, which means
-  that you have to set the IO port and IRQ it uses in the kernel
-  source at the top of drivers/char/wdt.c. 
+  that you have to inform the kernel about the IO port and IRQ using
+  the "wdt=" kernel option (try "man bootparam" or see the
+  documentation of your boot loader (lilo or loadlin) about how to
+  pass options to the kernel at boot time).
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. The module will be
   called wdt.o.
+
+WDT PCI Watchdog timer
+CONFIG_WDTPCI
+  If you have a PCI WDT500/501 watchdog board, say Y here,
+  otherwise N. It is not possible to probe for this board, which means
+  that you have to inform the kernel about the IO port and IRQ using
+  the "wdt=" kernel option (try "man bootparam" or see the
+  documentation of your boot loader (lilo or loadlin) about how to
+  pass options to the kernel at boot time).
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called wdt_pci.o.
 
 WDT501 features
 CONFIG_WDT_501
@@ -12853,9 +13003,9 @@ CONFIG_SOUND_OPL3SA1
 ProAudioSpectrum 16 support
 CONFIG_SOUND_PAS
   Answer Y only if you have a Pro Audio Spectrum 16, ProAudio Studio
-  16 or Logitech SoundMan 16 sound card. Don't answer Y if you have
-  some other card made by Media Vision or Logitech since they are not
-  PAS16 compatible.
+  16 or Logitech SoundMan 16 sound card. Answer N if you have some
+  other card made by Media Vision or Logitech since those are not
+  PAS16 compatible. Please read Documentation/sound/PAS16.
 
   If you compile the driver into the kernel, you have to add
   "pas2=<io>,<irq>,<dma>,<dma2>,<sbio>,<sbirq>,<sbdma>,<sbdma2>
@@ -14948,6 +15098,35 @@ CONFIG_VIDEO_CQCAM
   as a module (c-qcam.o). Read Documentation/video4linux/CQcam.txt for
   more information.
 
+CPiA Video For Linux
+CONFIG_VIDEO_CPIA
+  This is the video4linux driver for cameras based on Vision's CPiA
+  (Colour Processor Interface ASIC), such as the Creative Labs Video
+  Blaster Webcam II. If you have one of these cameras, say Y here
+  and select parallel port and/or USB lowlevel support below,
+  otherwise say N. This will not work with the Creative Webcam III.
+  
+  Please read Documentation/video4linux/README.cpia for more
+  information.
+  
+  This driver is also available as a module (cpia.o).
+
+CPiA Parallel Port Lowlevel Support
+CONFIG_VIDEO_CPIA_PP
+  This is the lowlevel parallel port support for cameras based on
+  Vision's CPiA (Colour Processor Interface ASIC), such as the
+  Creative Webcam II. If you have the parallel port version of one
+  of these cameras, say Y here, otherwise say N. It is also available
+  as a module (cpia_pp.o).
+
+CPiA USB Lowlevel Support
+CONFIG_VIDEO_CPIA_USB
+  This is the lowlevel USB support for cameras based on Vision's CPiA
+  (Colour Processor Interface ASIC), such as the Creative Webcam II.
+  If you have the USB version of one of these cameras, say Y here,
+  otherwise say N. This will not work with the Creative Webcam III.
+  It is also available as a module (cpia_usb.o).
+
 Mediavision Pro Movie Studio Video For Linux
 CONFIG_VIDEO_PMS
   Say Y if you have such a thing. This driver is also available as a
@@ -15426,121 +15605,16 @@ CONFIG_BVME6000_SCC
   boards from BVM Ltd.  Everyone using one of these boards should say
   Y here.
 
-Support for user-space parallel port device drivers
-CONFIG_PPDEV
-  Saying Y to this adds support for /dev/parport device nodes.  This
-  is needed for programs that want portable access to the parallel
-  port, for instance deviceid (which displays Plug-and-Play device
-  IDs).
-
-  This is the parallel port equivalent of SCSI generic support (sg).
-  It is safe to say N to this -- it is not needed for normal printing
-  or parallel port CD-ROM/disk support.
-
-  This support is also available as a module. If you want to compile
-  it as a module, say M here and read Documentation/modules.txt. The
-  module will be called ppdev.o.
-
-  If unsure, say N.
-
-Kernel httpd acceleration (EXPERIMENTAL)
-CONFIG_KHTTPD
-  The kernel httpd acceleration daemon (kHTTPd) is a (limited) 
-  web server build into the kernel. It is limited since it can only
-  serve files from the file system. Saying "M" here builds the
-  kHTTPd module; this is NOT enough to have a working kHTTPd. 
-  For safety reasons, the module has to be activated by doing a
-  "echo 1 > /proc/sys/net/khttpd/start" after inserting the module.
-
-  Before using this, read the README in /usr/src/linux/net/khttpd !
-
-  The kHTTPd is experimental. Be careful when using it on a production
-  machine. Also note that kHTTPd doesn't support virtual servers yet.
-
-I2C support
-CONFIG_I2C
-  I2C (pronounce: I-square-C) is a slow bus protocol developed by
-  Philips. SMBus, or System Management Bus is a sub-protocol of I2C.
-
-  Both I2C and SMBus are supported here. You will need this for 
-  hardware sensors support, and in the future for Video for Linux
-  support.
-
-  Beside this option, you will also need to select specific drivers 
-  for your bus adapter(s). 
-
-I2C bit-banging interfaces
-CONFIG_I2C_ALGOBIT
-  This allows you to use a range of I2C adapters called bit-banging
-  adapters. Why they are called so is rather technical and uninteresting;
-  but you need to select this if you own one of the adapters listed
-  under it.
-
-Philips style parallel port adapter
-CONFIG_I2C_PHILIPSPAR
-  This supports parallel-port I2C adapters made by Philips. Unless you
-  own such an adapter, you do not need to select this.
-
-ELV adapter
-CONFIG_I2C_ELV
-  This supports parallel-port I2C adapters called ELV. Unless you 
-  own such an adapter, you do not need to select this.
-
-Velleman K9000 adapter
-CONFIG_I2C_VELLEMAN
-  This supports the Velleman K9000 parallel-port I2C adapter. Unless
-  you own such an adapter, you do not need to select this.
-
-I2C PCF 8584 interfaces
-CONFIG_I2C_ALGOPCF
-  This allows you to use a range of I2C adapters called PCF
-  adapters. Why they are called so is rather technical and uninteresting;
-  but you need to select this if you own one of the adapters listed
-  under it.
-
-Elektor ISA card
-CONFIG_I2C_ELEKTOR
-  This supports the PCF8584 ISA bus I2C adapter. Unless you own such
-  an adapter, you do not need to select this.
-
-I2C device interface
-CONFIG_I2C_CHARDEV
-  Here you find the drivers which allow you to use the i2c-* device 
-  files, usually found in the /dev directory on your system. They
-  make it possible to have user-space programs use the I2C bus.
-
-CPiA Video For Linux
-CONFIG_VIDEO_CPIA
-  This is the video4linux driver for cameras based on Vision's CPiA
-  (Colour Processor Interface ASIC), such as the Creative Labs Video
-  Blaster Webcam II. If you have one of these cameras, say Y here
-  and select parallel port and/or USB lowlevel support below,
-  otherwise say N. This will not work with the Creative Webcam III.
-  It is also available as a module (cpia.o).
-
-CPiA Parallel Port Lowlevel Support
-CONFIG_VIDEO_CPIA_PP
-  This is the lowlevel parallel port support for cameras based on
-  Vision's CPiA (Colour Processor Interface ASIC), such as the
-  Creative Webcam II. If you have the parallel port version of one
-  of these cameras, say Y here, otherwise say N. It is also available
-  as a module (cpia_pp.o).
-
-CPiA USB Lowlevel Support
-CONFIG_VIDEO_CPIA_USB
-  This is the lowlevel USB support for cameras based on Vision's CPiA
-  (Colour Processor Interface ASIC), such as the Creative Webcam II.
-  If you have the USB version of one of these cameras, say Y here,
-  otherwise say N. This will not work with the Creative Webcam III.
-  It is also available as a module (cpia_usb.o).
 
 #
 # A couple of things I keep forgetting:
 #   capitalize: AppleTalk, Ethernet, DOS, DMA, FAT, FTP, Internet, 
-#               Intel, IRQ, Linux, MSDOS, NetWare, NetWinder, NFS, 
-#               PCI, SCSI, SPARC
-#   two words:  hard drive, hard disk, sound card, home page
-#   other:      it's safe to save; daemon; use --, not - or ---
+#               Intel, IRQ, ISDN, Linux, MSDOS, NetWare, NetWinder, 
+#               NFS, PCI, SCSI, SPARC
+#   two words:  file system, hard drive, hard disk, home page, 
+#               user space, web site
+#   other:      it's safe to save; daemon; use --, not - or ---;
+#               use KB for 1024 bytes, not kB or K.
 #
 #
 # This is used by Emacs' spell checker ispell.el:
@@ -15671,7 +15745,7 @@ ICN EDSS Cisco
 # LocalWords:  caldera Preload Preloading slowdowns schoebel uni NBD nbd prog
 # LocalWords:  stuttgart rdist TRANS hostnames mango jukeboxes ESS userland PD
 # LocalWords:  hardlinked NAMETRANS env mtab fstab umount nologin runlevel gid
-# LocalWords:  filespace adm Nodename hostname uname Kernelname bootp nmi DI OV
+# LocalWords:  adm Nodename hostname uname Kernelname bootp nmi DI OV StegFS
 # LocalWords:  KERNNAME kname ktype kernelname Kerneltype KERNTYPE Alt RX mdafb
 # LocalWords:  dataless kerneltype SYSNAME Comtrol Rocketport palmtop fbset EGS
 # LocalWords:  nvram SYSRQ SysRq PrintScreen sysrq NVRAMs NvRAM Shortwave RTTY
@@ -15819,7 +15893,7 @@ ICN EDSS Cisco
 # LocalWords:  Diffserv DSMARK Ingress Qdisc TCINDEX TMSPCI tmspci Ringode JE
 # LocalWords:  MADGEMC madgemc TokenRing SMCTR TokenCard smctr Wacom Graphire
 # LocalWords:  WMFORCE mousedev ConnectTech HandSpring Xirlink IBMCAM ibmcam SN
-# LocalWords:  DEVICEFS yyy userspace Cymraeg Dwave SIMM JSFLASH JavaStation's
+# LocalWords:  DEVICEFS yyy Cymraeg Dwave SIMM JSFLASH JavaStation's multilink
 # LocalWords:  nsc ircc DDB Vrc CMN TB PROMs Vino rivafb DDC Matroxes MGA TVO
 # LocalWords:  MAVEN fbdev crtc maven matroxset NTSC PCA SBA AAL SKFP DAS SAS
 # LocalWords:  skfp Intuos ADMtek's pegasus PLUSB plusb pointopoint mp rio Xeon
@@ -15844,4 +15918,7 @@ ICN EDSS Cisco
 # LocalWords:  UltraDMA WDC CRC CONNTRACK IPTABLES iptables nfmark interface's
 # LocalWords:  tdfxfb TNTx HGA hgafb VERBOSEDEBUG SunTrunking SunSoft XIRTULIP
 # LocalWords:  ethercards PNIC Macronix MXIC ASIX xircom Mustek MDC gphoto mdc
-# LocalWords:  CramFs Cramfs uid cramfs AVM's kernelcapi PCIV
+# LocalWords:  CramFs Cramfs uid cramfs AVM's kernelcapi PCIV cdrdao Cdparanoia
+# LocalWords:  DMX Domex dmx wellington ftdi sio Accton Billington Corega FEter
+# LocalWords:  MELCO LUA PNA Linksys SNC chkdsk AWACS Webcam RAMFS Ramfs ramfs
+# LocalWords:  ramfiles MAKEDEV pty WDTPCI APA apa

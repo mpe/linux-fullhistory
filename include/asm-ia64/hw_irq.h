@@ -11,8 +11,7 @@
 #include <linux/types.h>
 
 #include <asm/ptrace.h>
-
-#define NR_ISA_IRQS	 16
+#include <asm/smp.h>
 
 /*
  * 0 special
@@ -42,6 +41,8 @@
 
 /* IA64 inter-cpu interrupt related definitions */
 
+#define IPI_DEFAULT_BASE_ADDR	0xfee00000
+
 /* Delivery modes for inter-cpu interrupts */
 enum {
         IA64_IPI_DM_INT =       0x0,    /* pend an external interrupt */
@@ -57,20 +58,26 @@ enum {
 extern __u8 isa_irq_to_vector_map[16];
 #define isa_irq_to_vector(x)	isa_irq_to_vector_map[(x)]
 
-extern struct hw_interrupt_type irq_type_ia64_internal;	/* CPU-internal interrupt controller */
+extern unsigned long ipi_base_addr;
 
-extern void ipi_send (int cpu, int vector, int delivery_mode);
+extern struct hw_interrupt_type irq_type_ia64_sapic;	/* CPU-internal interrupt controller */
 
-#ifdef CONFIG_SMP
-extern void handle_IPI(int irq, void *dev_id, struct pt_regs *regs);
+extern void ipi_send (int cpu, int vector, int delivery_mode, int redirect);
 
 static inline void
-hw_resend_irq (struct hw_interrupt_type *h, unsigned int i)
+hw_resend_irq (struct hw_interrupt_type *h, unsigned int vector)
 {
-	send_IPI_self(i);
-}
+	int my_cpu_id;
+
+#ifdef CONFIG_SMP
+	my_cpu_id = smp_processor_id();
 #else
-# define hw_resend_irq(h,i)
+	__u64 lid;
+
+	__asm__ ("mov %0=cr.lid" : "=r"(lid));
+	my_cpu_id = (lid >> 24) & 0xff;		/* extract id (ignore eid) */
 #endif
+	ipi_send(my_cpu_id, vector, IA64_IPI_DM_INT, 0);
+}
 
 #endif /* _ASM_IA64_HW_IRQ_H */

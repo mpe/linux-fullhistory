@@ -130,7 +130,7 @@ static struct file_lock *locks_init_lock(struct file_lock *,
 					 struct file_lock *);
 static void locks_insert_lock(struct file_lock **pos, struct file_lock *fl);
 static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait);
-static char *lock_get_status(struct file_lock *fl, int id, char *pfx);
+static void lock_get_status(char* out, struct file_lock *fl, int id, char *pfx);
 
 static void locks_insert_block(struct file_lock *blocker, struct file_lock *waiter);
 static void locks_delete_block(struct file_lock *blocker, struct file_lock *waiter);
@@ -1179,90 +1179,85 @@ static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait)
 	return;
 }
 
-
-static char *lock_get_status(struct file_lock *fl, int id, char *pfx)
+static void lock_get_status(char* out, struct file_lock *fl, int id, char *pfx)
 {
-	static char temp[155];
-	char *p = temp;
 	struct inode *inode;
 
 	inode = fl->fl_file->f_dentry->d_inode;
 
-	p += sprintf(p, "%d:%s ", id, pfx);
+	out += sprintf(out, "%d:%s ", id, pfx);
 	if (fl->fl_flags & FL_POSIX) {
-		p += sprintf(p, "%6s %s ",
+		out += sprintf(out, "%6s %s ",
 			     (fl->fl_flags & FL_ACCESS) ? "ACCESS" : "POSIX ",
 			     (IS_MANDLOCK(inode) &&
 			      (inode->i_mode & (S_IXGRP | S_ISGID)) == S_ISGID) ?
 			     "MANDATORY" : "ADVISORY ");
 	}
 	else {
-		p += sprintf(p, "FLOCK  ADVISORY  ");
+		out += sprintf(out, "FLOCK  ADVISORY  ");
 	}
-	p += sprintf(p, "%s ", (fl->fl_type == F_RDLCK) ? "READ " : "WRITE");
-	p += sprintf(p, "%d %s:%ld %Ld %Ld ",
+	out += sprintf(out, "%s ", (fl->fl_type == F_RDLCK) ? "READ " : "WRITE");
+	out += sprintf(out, "%d %s:%ld %Ld %Ld ",
 		     fl->fl_pid,
 		     kdevname(inode->i_dev), inode->i_ino,
 		     (long long)fl->fl_start, (long long)fl->fl_end);
-	sprintf(p, "%08lx %08lx %08lx %08lx %08lx\n",
+	sprintf(out, "%08lx %08lx %08lx %08lx %08lx\n",
 		(long)fl, (long)fl->fl_prevlink, (long)fl->fl_nextlink,
 		(long)fl->fl_next, (long)fl->fl_nextblock);
-	return (temp);
 }
 
-static inline int copy_lock_status(char *p, char **q, off_t pos, int len,
-				   off_t offset, int length)
+static void move_lock_status(char **p, off_t* pos, off_t offset)
 {
-	off_t i;
-
-	i = pos - offset;
-	if (i > 0) {
-		if (i >= length) {
-			i = len + length - i;
-			memcpy(*q, p, i);
-			*q += i;
-			return (0);
-		}
-		if (i < len) {
-			p += len - i;
-		}
-		else
-			i = len;
-		memcpy(*q, p, i);
-		*q += i;
+	int len;
+	len = strlen(*p);
+	if(*pos >= offset) {
+		/* the complete line is valid */
+		*p += len;
+		*pos += len;
+		return;
 	}
-	
-	return (1);
+	if(*pos+len > offset) {
+		/* use the second part of the line */
+		int i = offset-*pos;
+		memmove(*p,*p+i,len-i);
+		*p += len-i;
+		*pos += len;
+		return;
+	}
+	/* discard the complete line */
+	*pos += len;
 }
 
 int get_locks_status(char *buffer, char **start, off_t offset, int length)
 {
 	struct file_lock *fl;
 	struct file_lock *bfl;
-	char *p;
 	char *q = buffer;
-	off_t i, len, pos = 0;
+	off_t pos = 0;
+	int i;
 
 	for (fl = file_lock_table, i = 1; fl != NULL; fl = fl->fl_nextlink, i++) {
-		p = lock_get_status(fl, i, "");
-		len = strlen(p);
-		pos += len;
-		if (!copy_lock_status(p, &q, pos, len, offset, length))
+		lock_get_status(q, fl, i, "");
+		move_lock_status(&q, &pos, offset);
+
+		if(pos >= offset+length)
 			goto done;
+
 		if ((bfl = fl->fl_nextblock) == NULL)
 			continue;
 		do {
-			p = lock_get_status(bfl, i, " ->");
-			len = strlen(p);
-			pos += len;
-			if (!copy_lock_status(p, &q, pos, len, offset, length))
+			lock_get_status(q, bfl, i, " ->");
+			move_lock_status(&q, &pos, offset);
+
+			if(pos >= offset+length)
 				goto done;
 		} while ((bfl = bfl->fl_nextblock) != fl);
 	}
 done:
-	if (q != buffer)
-		*start = buffer;
-	return (q - buffer);
+	*start = buffer;
+	if(q-buffer < length)
+		return (q-buffer);
+	return length;
 }
 
 

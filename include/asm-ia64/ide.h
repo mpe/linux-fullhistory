@@ -15,6 +15,8 @@
 
 #include <linux/config.h>
 
+#include <linux/irq.h>
+
 #ifndef MAX_HWIFS
 # ifdef CONFIG_BLK_DEV_IDEPCI
 #define MAX_HWIFS	10
@@ -29,12 +31,12 @@ static __inline__ int
 ide_default_irq (ide_ioreg_t base)
 {
 	switch (base) {
-		case 0x1f0: return 14;
-		case 0x170: return 15;
-		case 0x1e8: return 11;
-		case 0x168: return 10;
-		case 0x1e0: return 8;
-		case 0x160: return 12;
+		case 0x1f0: return isa_irq_to_vector(14);
+		case 0x170: return isa_irq_to_vector(15);
+		case 0x1e8: return isa_irq_to_vector(11);
+		case 0x168: return isa_irq_to_vector(10);
+		case 0x1e0: return isa_irq_to_vector(8);
+		case 0x160: return isa_irq_to_vector(12);
 		default:
 			return 0;
 	}

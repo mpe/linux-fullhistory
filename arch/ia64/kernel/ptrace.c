@@ -23,6 +23,16 @@
 #include <asm/uaccess.h>
 
 /*
+ * Bits in the PSR that we allow ptrace() to change:
+ *	be, up, ac, mfl, mfh (the user mask; five bits total)
+ *	db (debug breakpoint fault; one bit)
+ *	id (instruction debug fault disable; one bit)
+ *	dd (data debug fault disable; one bit)
+ *	ri (restart instruction; two bits)
+ */
+#define CR_IPSR_CHANGE_MASK 0x06a00100003eUL
+
+/*
  * Collect the NaT bits for r1-r31 from sw->caller_unat and
  * sw->ar_unat and return a NaT bitset where bit i is set iff the NaT
  * bit of register i is set.
@@ -352,6 +362,94 @@ ia64_poke (struct pt_regs *regs, struct task_struct *child, unsigned long addr, 
 }
 
 /*
+ * Synchronize (i.e, write) the RSE backing store living in kernel
+ * space to the VM of the indicated child process.
+ *
+ * If new_bsp is non-zero, the bsp will (effectively) be updated to
+ * the new value upon resumption of the child process.  This is
+ * accomplished by setting the loadrs value to zero and the bspstore
+ * value to the new bsp value.
+ *
+ * When new_bsp and force_loadrs_to_zero are both 0, the register
+ * backing store in kernel space is written to user space and the
+ * loadrs and bspstore values are left alone.
+ *
+ * When new_bsp is zero and force_loadrs_to_zero is 1 (non-zero),
+ * loadrs is set to 0, and the bspstore value is set to the old bsp
+ * value.  This will cause the stacked registers (r32 and up) to be
+ * obtained entirely from the the child's memory space rather than
+ * from the kernel.  (This makes it easier to write code for
+ * modifying the stacked registers in multi-threaded programs.)
+ *
+ * Note:  I had originally written this function without the
+ * force_loadrs_to_zero parameter; it was written so that loadrs would
+ * always be set to zero.  But I had problems with certain system
+ * calls apparently causing a portion of the RBS to be zeroed.  (I
+ * still don't understand why this was happening.) Anyway, it'd
+ * definitely less intrusive to leave loadrs and bspstore alone if
+ * possible.
+ */
+static long
+sync_kernel_register_backing_store (struct task_struct *child,
+                                    long new_bsp,
+                                    int force_loadrs_to_zero)
+{
+	unsigned long *krbs, bspstore, bsp, krbs_num_regs, rbs_end, addr, val;
+	long ndirty, ret;
+	struct pt_regs *child_regs;
+	struct switch_stack *child_stack;
+
+	ret = 0;
+	child_regs = ia64_task_regs(child);
+	child_stack = (struct switch_stack *) child_regs - 1;
+
+	krbs = (unsigned long *) child + IA64_RBS_OFFSET/8;
+	ndirty = ia64_rse_num_regs(krbs, krbs + (child_regs->loadrs >> 19));
+	bspstore = child_regs->ar_bspstore;
+	bsp = (long) ia64_rse_skip_regs((long *)bspstore, ndirty);
+	krbs_num_regs = ia64_rse_num_regs(krbs, (unsigned long *) child_stack->ar_bspstore);
+	rbs_end = (long) ia64_rse_skip_regs((long *)bspstore, krbs_num_regs);
+
+	/* Return early if nothing to do */
+	if (bsp == new_bsp)
+		return 0;
+
+	/* Write portion of backing store living on kernel stack to the child's VM. */
+	for (addr = bspstore; addr < rbs_end; addr += 8) {
+		ret = ia64_peek(child_regs, child, addr, &val);
+		if (ret != 0)
+			return ret;
+		if (access_process_vm(child, addr, &val, sizeof(val), 1) != sizeof(val))
+			return -EIO;
+	}
+
+	if (new_bsp != 0) {
+		force_loadrs_to_zero = 1;
+		bsp = new_bsp;
+	}
+
+	if (force_loadrs_to_zero) {
+		child_regs->loadrs = 0;
+		child_regs->ar_bspstore = bsp;
+	}
+
+	return ret;
+}
+
+static void
+sync_thread_rbs (struct task_struct *child, int make_writable)
+{
+	struct task_struct *p;
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if (p->mm == child->mm && p->state != TASK_RUNNING)
+			sync_kernel_register_backing_store(p, 0, make_writable);
+	}
+	read_unlock(&tasklist_lock);
+	child->thread.flags |= IA64_THREAD_KRBS_SYNCED;
+}
+
+/*
  * Ensure the state in child->thread.fph is up-to-date.
  */
 static void
@@ -375,8 +473,8 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 	struct switch_stack *child_stack;
 	struct pt_regs *child_regs;
 	struct task_struct *child;
-	unsigned long flags, *base;
-	long ret, regnum;
+	unsigned long flags, regnum, *base;
+	long ret;
 
 	lock_kernel();
 	ret = -EPERM;
@@ -441,6 +539,9 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 	switch (request) {
 	      case PTRACE_PEEKTEXT:
 	      case PTRACE_PEEKDATA:		/* read word at location addr */
+	        if (!(child->thread.flags & IA64_THREAD_KRBS_SYNCED)
+		    && atomic_read(&child->mm->mm_users) > 1)
+			sync_thread_rbs(child, 0);
 		ret = ia64_peek(regs, child, addr, &data);
 		if (ret == 0) {
 			ret = data;
@@ -450,6 +551,9 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 
 	      case PTRACE_POKETEXT:
 	      case PTRACE_POKEDATA:		/* write the word at location addr */
+	        if (!(child->thread.flags & IA64_THREAD_KRBS_SYNCED)
+		    && atomic_read(&child->mm->mm_users) > 1)
+			sync_thread_rbs(child, 1);
 		ret = ia64_poke(regs, child, addr, data);
 		goto out;
 
@@ -477,8 +581,35 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 				bspstore = (unsigned long *) child_regs->ar_bspstore;
 				ndirty = ia64_rse_num_regs(rbs, rbs + (ret >> 19));
 				ret = (unsigned long) ia64_rse_skip_regs(bspstore, ndirty);
+
+				/*
+				 * If we're in a system call, no ``cover'' was done.  So
+				 * to make things uniform, we'll add the appropriate
+				 * displacement onto bsp if we're in a system call.
+				 *
+				 * Note: It may be better to leave the system call case
+				 * alone and subtract the amount of the cover for the
+				 * non-syscall case.  That way the reported bsp value
+				 * would actually be the correct bsp for the child
+				 * process.
+				 */
+				if (!(child_regs->cr_ifs & (1UL << 63))) {
+					ret = (unsigned long)
+						ia64_rse_skip_regs((unsigned long *) ret,
+						                   child_stack->ar_pfs & 0x7f);
+				}
+			} else if (addr == PT_CFM) {
+				/* ret currently contains pt_regs.cr_ifs */
+				if ((ret & (1UL << 63)) == 0)
+					ret = child_stack->ar_pfs;
+				ret &= 0x3fffffffffUL;		/* return only the CFM */
 			}
 		} else {
+			if (!(child->thread.flags & IA64_THREAD_DBG_VALID)) {
+				child->thread.flags |= IA64_THREAD_DBG_VALID;
+				memset(child->thread.dbr, 0, sizeof child->thread.dbr);
+				memset(child->thread.ibr, 0, sizeof child->thread.ibr);
+			}
 			if (addr >= PT_IBR) {
 				regnum = (addr - PT_IBR) >> 3;
 				base = &child->thread.ibr[0];
@@ -488,7 +619,7 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 			}
 			if (regnum >= 8)
 				goto out;
-			data = base[regnum];
+			ret = base[regnum];
 		}
 		regs->r8 = 0;	/* ensure "ret" is not mistaken as an error code */
 		goto out;
@@ -503,29 +634,47 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 			sync_fph(child);
 			addr += (unsigned long) &child->thread.fph;
 			*(unsigned long *) addr = data;
-			if (ret < 0)
-				goto out;
+		} else if (addr == PT_AR_BSPSTORE || addr == PT_CALLER_UNAT 
+			|| addr == PT_KERNEL_FPSR || addr == PT_K_B0 || addr == PT_K_AR_PFS 
+			|| (PT_K_AR_UNAT <= addr && addr <= PT_K_PR)) {
+			/*
+			 * Don't permit changes to certain registers.
+			 * 
+			 * We don't allow bspstore to be modified because doing
+			 * so would mess up any modifications to bsp.  (See
+			 * sync_kernel_register_backing_store for the details.)
+			 */
+			goto out;
+		} else if (addr == PT_AR_BSP) {
+			/* FIXME? Account for lack of ``cover'' in the syscall case */
+			ret = sync_kernel_register_backing_store(child, data, 1);
+			goto out;
+		} else if (addr == PT_CFM) {
+			child_regs = ia64_task_regs(child);
+			child_stack = (struct switch_stack *) child_regs - 1;
+
+			if (child_regs->cr_ifs & (1UL << 63)) {
+				child_regs->cr_ifs = (child_regs->cr_ifs & ~0x3fffffffffUL)
+				                   | (data & 0x3fffffffffUL);
+			} else {
+				child_stack->ar_pfs = (child_stack->ar_pfs & ~0x3fffffffffUL)
+				                    | (data & 0x3fffffffffUL);
+			}
 		} else if (addr < PT_F9+16) {
 			/* accessing switch_stack or pt_regs */
 			child_regs = ia64_task_regs(child);
 			child_stack = (struct switch_stack *) child_regs - 1;
 
-			if (addr == PT_AR_BSP) {
-				/* compute the loadrs value based on bsp and bspstore: */
-				unsigned long *rbs, *bspstore, ndirty, *kbsp;
-
-				bspstore = (unsigned long *) child_regs->ar_bspstore;
-				ndirty = ia64_rse_num_regs(bspstore, (unsigned long *) data);
-				rbs = (unsigned long *) child + IA64_RBS_OFFSET/8;
-				kbsp = ia64_rse_skip_regs(rbs, ndirty);
-				data = (kbsp - rbs) << 19;
-			}
+			if (addr == PT_CR_IPSR)
+				data = (data & CR_IPSR_CHANGE_MASK)
+				     | (child_regs->cr_ipsr & ~CR_IPSR_CHANGE_MASK);
+			
 			*(unsigned long *) ((long) child_stack + addr - PT_CALLER_UNAT) = data;
 		} else {
 			if (!(child->thread.flags & IA64_THREAD_DBG_VALID)) {
 				child->thread.flags |= IA64_THREAD_DBG_VALID;
-				memset(current->thread.dbr, 0, sizeof current->thread.dbr);
-				memset(current->thread.ibr, 0, sizeof current->thread.ibr);
+				memset(child->thread.dbr, 0, sizeof child->thread.dbr);
+				memset(child->thread.ibr, 0, sizeof child->thread.ibr);
 			}
 
 			if (addr >= PT_IBR) {
@@ -538,7 +687,7 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 			if (regnum >= 8)
 				goto out;
 			if (regnum & 1) {
-				/* force breakpoint to be effective a most for user-level: */
+				/* force breakpoint to be effective only for user-level: */
 				data &= ~(0x7UL << 56);
 			}
 			base[regnum] = data;
@@ -546,6 +695,23 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 		ret = 0;
 		goto out;
 
+	      case PTRACE_GETSIGINFO:
+		ret = -EIO;
+		if (!access_ok(VERIFY_WRITE, data, sizeof (siginfo_t))
+		    || child->thread.siginfo == 0)
+			goto out;
+		copy_to_user((siginfo_t *) data, child->thread.siginfo, sizeof (siginfo_t));
+		ret = 0;
+		goto out;
+		break;
+	      case PTRACE_SETSIGINFO:
+		ret = -EIO;
+		if (!access_ok(VERIFY_READ, data, sizeof (siginfo_t))
+		    || child->thread.siginfo == 0)
+			goto out;
+		copy_from_user(child->thread.siginfo, (siginfo_t *) data, sizeof (siginfo_t));
+		ret = 0;
+		goto out;
 	      case PTRACE_SYSCALL:	/* continue and stop at next (return from) syscall */
 	      case PTRACE_CONT:		/* restart after signal. */
 		ret = -EIO;
@@ -560,6 +726,9 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 		/* make sure the single step/take-branch tra bits are not set: */
 		ia64_psr(ia64_task_regs(child))->ss = 0;
 		ia64_psr(ia64_task_regs(child))->tb = 0;
+
+		/* Turn off flag indicating that the KRBS is sync'd with child's VM: */
+		child->thread.flags &= ~IA64_THREAD_KRBS_SYNCED;
 
 		wake_up_process(child);
 		ret = 0;
@@ -579,6 +748,9 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 		ia64_psr(ia64_task_regs(child))->ss = 0;
 		ia64_psr(ia64_task_regs(child))->tb = 0;
 
+		/* Turn off flag indicating that the KRBS is sync'd with child's VM: */
+		child->thread.flags &= ~IA64_THREAD_KRBS_SYNCED;
+
 		wake_up_process(child);
 		ret = 0;
 		goto out;
@@ -596,6 +768,9 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 			ia64_psr(ia64_task_regs(child))->tb = 1;
 		}
 		child->exit_code = data;
+
+		/* Turn off flag indicating that the KRBS is sync'd with child's VM: */
+		child->thread.flags &= ~IA64_THREAD_KRBS_SYNCED;
 
 		/* give it a chance to run. */
 		wake_up_process(child);
@@ -618,6 +793,9 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 		/* make sure the single step/take-branch tra bits are not set: */
 		ia64_psr(ia64_task_regs(child))->ss = 0;
 		ia64_psr(ia64_task_regs(child))->tb = 0;
+
+		/* Turn off flag indicating that the KRBS is sync'd with child's VM: */
+		child->thread.flags &= ~IA64_THREAD_KRBS_SYNCED;
 
 		wake_up_process(child);
 		ret = 0;

@@ -1,4 +1,4 @@
-/* -*- linux-c -*- ------------------------------------------------------- *
+/* -*- c -*- ------------------------------------------------------------- *
  *   
  * linux/fs/autofs/autofs_i.h
  *
@@ -57,10 +57,8 @@ struct autofs_info {
 	int		flags;
 
 	struct autofs_sb_info *sbi;
-	struct list_head ino_hash;
 	unsigned long last_used;
 
-	ino_t	ino;
 	mode_t	mode;
 	size_t	size;
 
@@ -71,10 +69,6 @@ struct autofs_info {
 };
 
 #define AUTOFS_INF_EXPIRING	(1<<0) /* dentry is in the process of expiring */
-
-struct autofs_inohash {
-	struct list_head head;
-};
 
 struct autofs_wait_queue {
 	wait_queue_head_t queue;
@@ -89,9 +83,6 @@ struct autofs_wait_queue {
 	int wait_ctr;
 };
 
-#define AUTOFS_ROOT_INO		1
-#define AUTOFS_FIRST_INO	2
-
 #define AUTOFS_SBI_MAGIC 0x6d4a556d
 
 struct autofs_sb_info {
@@ -101,10 +92,8 @@ struct autofs_sb_info {
 	int catatonic;
 	int version;
 	unsigned long exp_timeout;
-	ino_t next_ino;
 	struct super_block *sb;
 	struct autofs_wait_queue *queues; /* Wait queue pointer */
-	struct autofs_inohash ihash;
 };
 
 static inline struct autofs_sb_info *autofs4_sbi(struct super_block *sb)
@@ -134,13 +123,7 @@ static inline int autofs4_ispending(struct dentry *dentry)
 		(inf != NULL && inf->flags & AUTOFS_INF_EXPIRING);
 }
 
-/* Inode hash operations */
-void autofs4_init_ihash(struct autofs_inohash *);
-void autofs4_ihash_insert(struct autofs_inohash *ih, struct autofs_info *ino);
-void autofs4_ihash_delete(struct autofs_info *ino);
-void autofs4_ihash_nuke(struct autofs_inohash *ih);
-struct autofs_info *autofs4_ihash_find(struct autofs_inohash *ih, ino_t ino);
-
+struct inode *autofs4_get_inode(struct super_block *, struct autofs_info *);
 struct autofs_info *autofs4_init_inf(struct autofs_sb_info *, mode_t mode);
 void autofs4_free_ino(struct autofs_info *);
 

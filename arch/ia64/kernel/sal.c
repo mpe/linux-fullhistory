@@ -139,7 +139,7 @@ ia64_sal_init (struct ia64_sal_systab *systab)
 				    case IA64_SAL_AP_EXTERNAL_INT:
 				      ap_wakeup_vector = ap->vector;
 # ifdef SAL_DEBUG
-				      printk("SAL: AP wakeup using external interrupt; "
+				      printk("SAL: AP wakeup using external interrupt "
 					     "vector 0x%lx\n", ap_wakeup_vector);
 # endif
 				      break;
@@ -151,6 +151,36 @@ ia64_sal_init (struct ia64_sal_systab *systab)
 			      break;
 		      }
 #endif
+		      case SAL_DESC_PLATFORM_FEATURE:
+		      {
+			      struct ia64_sal_desc_platform_feature *pf = (void *) p;
+			      printk("SAL: Platform features ");
+
+			      if (pf->feature_mask & (1 << 0))
+				      printk("BusLock ");
+
+			      if (pf->feature_mask & (1 << 1)) {
+				      printk("IRQ_Redirection ");
+#ifdef CONFIG_SMP
+				      if (no_int_routing) 
+					      smp_int_redirect &= ~SMP_IRQ_REDIRECTION;
+				      else
+					      smp_int_redirect |= SMP_IRQ_REDIRECTION;
+#endif
+			      }
+			      if (pf->feature_mask & (1 << 2)) {
+				      printk("IPI_Redirection ");
+#ifdef CONFIG_SMP
+				      if (no_int_routing) 
+					      smp_int_redirect &= ~SMP_IPI_REDIRECTION;
+				      else
+					      smp_int_redirect |= SMP_IPI_REDIRECTION;
+#endif
+			      }
+			      printk("\n");
+			      break;
+ 		      }
+
 		}
 		p += SAL_DESC_SIZE(*p);
 	}

@@ -102,7 +102,7 @@ static unsigned char mac_keycodes[128] =
 	 76,125, 75,105,124,  0,115, 62,116, 59, 60,119, 61,121,114,117,
 	  0,  0,  0,  0,127, 81,  0,113,  0,  0,  0,  0,  0, 55, 55 };
 
-static int emulate_raw(unsigned int code, unsigned char upflag)
+static int emulate_raw(unsigned int keycode, int down)
 {
 	if (keycode > 127 || !mac_keycodes[keycode])
 		return -1;

@@ -52,17 +52,18 @@ use_init_fs_context(void)
 	lock_kernel();
 
 	our_fs = current->fs;
-	dput(our_fs->root);
-	dput(our_fs->pwd);
-	mntput(our_fs->rootmnt);
-	mntput(our_fs->pwdmnt);
-
 	init_fs = init_task.fs;
 	our_fs->umask = init_fs->umask;
-	our_fs->root = dget(init_fs->root);
-	our_fs->pwd = dget(init_fs->pwd);
-	our_fs->rootmnt = mntget(init_fs->rootmnt);
-	our_fs->pwdmnt = mntget(init_fs->pwdmnt);
+	set_fs_root(our_fs, init_fs->rootmnt, init_fs->root);
+	set_fs_pwd(our_fs, init_fs->pwdmnt, init_fs->pwd);
+	if (our_fs->altroot) {
+		struct vfsmount *mnt = our_fs->altrootmnt;
+		struct dentry *dentry = our_fs->altroot;
+		our_fs->altrootmnt = NULL;
+		our_fs->altroot = NULL;
+		dput(dentry);
+		mntput(mnt);
+	}
 
 	unlock_kernel();
 }

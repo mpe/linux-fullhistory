@@ -10,7 +10,7 @@
 
 #define PF_PTRACED_BIT			4
 
-#define IA64_TASK_SIZE			2800	/* 0xaf0 */
+#define IA64_TASK_SIZE			2816	/* 0xb00 */
 #define IA64_PT_REGS_SIZE		400	/* 0x190 */
 #define IA64_SWITCH_STACK_SIZE		560	/* 0x230 */
 #define IA64_SIGINFO_SIZE		136	/* 0x88 */
@@ -21,6 +21,7 @@
 #define IA64_TASK_PROCESSOR_OFFSET	108	/* 0x6c */
 #define IA64_TASK_THREAD_OFFSET		928	/* 0x3a0 */
 #define IA64_TASK_THREAD_KSP_OFFSET	928	/* 0x3a0 */
+#define IA64_TASK_THREAD_SIGMASK_OFFSET	2656	/* 0xa60 */
 #define IA64_TASK_PID_OFFSET		188	/* 0xbc */
 #define IA64_TASK_MM_OFFSET		88	/* 0x58 */
 #define IA64_PT_REGS_CR_IPSR_OFFSET	0	/* 0x0 */
@@ -34,5 +35,7 @@
 #define IA64_SIGCONTEXT_FLAGS_OFFSET	0	/* 0x0 */
 #define IA64_SIGCONTEXT_CFM_OFFSET	48	/* 0x30 */
 #define IA64_SIGCONTEXT_FR6_OFFSET	560	/* 0x230 */
+#define IA64_CLONE_VFORK			16384	/* 0x4000 */
+#define IA64_CLONE_VM			256	/* 0x100 */
 
 #endif /* _ASM_IA64_OFFSETS_H */

@@ -731,7 +731,7 @@ encode_entry(struct readdir_cd *cd, const char *name,
 				dchild = dchild->d_parent;
 			dchild = dget(dchild);
 		} else
-			dchild = lookup_one(name, dget(dparent));
+			dchild = lookup_one(name, dparent);
 		if (IS_ERR(dchild))
 			goto noexec;
 		if (fh_compose(&fh, exp, dchild) != 0 || !dchild->d_inode)

@@ -2108,6 +2108,7 @@ static ssize_t usb_audio_write(struct file *file, const char *buffer, size_t cou
 	return ret;
 }
 
+/* Called without the kernel lock - fine */
 static unsigned int usb_audio_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct usb_audiodev *as = (struct usb_audiodev *)file->private_data;

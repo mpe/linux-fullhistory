@@ -192,6 +192,7 @@ static ssize_t evdev_read(struct file * file, char * buffer, size_t count, loff_
 	return retval;	
 }
 
+/* No kernel lock - fine */
 static unsigned int evdev_poll(struct file *file, poll_table *wait)
 {
 	struct evdev_list *list = file->private_data;

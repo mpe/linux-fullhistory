@@ -315,30 +315,30 @@ int setup_arg_pages(struct linux_binprm *bprm)
 	return 0;
 }
 
-/* MOUNT_REWRITE: &mnt should be passed to lookup_dentry */
 struct file *open_exec(const char *name)
 {
-	struct dentry *dentry;
-	struct vfsmount *mnt = NULL;
+	struct nameidata nd;
 	struct file *file;
+	int err = 0;
 
 	lock_kernel();
-	dentry = lookup_dentry(name, LOOKUP_FOLLOW|LOOKUP_POSITIVE);
-	file = (struct file*) dentry;
-	if (!IS_ERR(dentry)) {
+	if (walk_init(name, LOOKUP_FOLLOW|LOOKUP_POSITIVE, &nd))
+		err = walk_name(name, &nd);
+	file = ERR_PTR(err);
+	if (!err) {
 		file = ERR_PTR(-EACCES);
-		if (S_ISREG(dentry->d_inode->i_mode)) {
-			int err = permission(dentry->d_inode, MAY_EXEC);
+		if (S_ISREG(nd.dentry->d_inode->i_mode)) {
+			int err = permission(nd.dentry->d_inode, MAY_EXEC);
 			file = ERR_PTR(err);
 			if (!err) {
-				file = dentry_open(dentry, mnt, O_RDONLY);
+				file = dentry_open(nd.dentry, nd.mnt, O_RDONLY);
 out:
 				unlock_kernel();
 				return file;
 			}
 		}
-		dput(dentry);
-		mntput(mnt);
+		dput(nd.dentry);
+		mntput(nd.mnt);
 	}
 	goto out;
 }

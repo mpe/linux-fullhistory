@@ -13,9 +13,9 @@
  *		struct ia64_fpreg fph[96];		// f32-f127
  *		struct switch_stack sw;
  *		struct pt_regs pt;
- *		unsigned long rsvd1[358];
+ *		unsigned long rsvd1[712];
  *		unsigned long dbr[8];
- *		unsigned long rsvd2[252];
+ *		unsigned long rsvd2[504];
  *		unsigned long ibr[8];
  *	}
  */
@@ -165,7 +165,8 @@
 /* pt_regs */
 #define PT_CR_IPSR		0x0830
 #define PT_CR_IIP		0x0838
-#define PT_CR_IFS		0x0840
+#define PT_CFM			0x0840
+#define PT_CR_IFS		PT_CFM		/* Use of PT_CR_IFS is deprecated */
 #define PT_AR_UNAT		0x0848
 #define PT_AR_PFS		0x0850
 #define PT_AR_RSC		0x0858

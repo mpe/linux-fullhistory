@@ -367,6 +367,7 @@ static ssize_t hung_up_tty_write(struct file * file, const char * buf,
 	return -EIO;
 }
 
+/* No kernel lock held - none needed ;) */
 static unsigned int hung_up_tty_poll(struct file * filp, poll_table * wait)
 {
 	return POLLIN | POLLOUT | POLLERR | POLLHUP | POLLRDNORM | POLLWRNORM;
@@ -1410,6 +1411,7 @@ static int tty_release(struct inode * inode, struct file * filp)
 	return 0;
 }
 
+/* No kernel lock held - fine */
 static unsigned int tty_poll(struct file * filp, poll_table * wait)
 {
 	struct tty_struct * tty;

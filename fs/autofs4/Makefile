@@ -5,7 +5,7 @@
 #
 
 O_TARGET := autofs4.o
-O_OBJS   := inohash.o init.o inode.o root.o symlink.o waitq.o expire.o
+O_OBJS   := init.o inode.o root.o symlink.o waitq.o expire.o
 
 M_OBJS   := $(O_TARGET)
 

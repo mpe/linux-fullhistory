@@ -440,6 +440,7 @@ static ssize_t ppp_file_write(struct ppp_file *pf, const char *buf,
 	return ret;
 }
 
+/* No kernel lock - fine */
 static unsigned int ppp_poll(struct file *file, poll_table *wait)
 {
 	struct ppp_file *pf = (struct ppp_file *) file->private_data;
@@ -1828,6 +1829,7 @@ ppp_channel_write(struct ppp_channel *chan, const char *buf, size_t count)
 	return ppp_file_write(&pch->file, buf, count);
 }
 
+/* No kernel lock - fine */
 unsigned int
 ppp_channel_poll(struct ppp_channel *chan, struct file *file, poll_table *wait)
 {

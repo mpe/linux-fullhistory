@@ -66,7 +66,7 @@ irq_cpustat_t irq_stat [NR_CPUS];
  * Controller mappings for all interrupt sources:
  */
 irq_desc_t irq_desc[NR_IRQS] __cacheline_aligned =
-	{ [0 ... NR_IRQS-1] = { 0, &no_irq_type, NULL, 0, SPIN_LOCK_UNLOCKED}};
+	{ [0 ... NR_IRQS-1] = { IRQ_DISABLED, &no_irq_type, NULL, 0, SPIN_LOCK_UNLOCKED}};
 
 static void register_irq_proc (unsigned int irq);
 
@@ -164,7 +164,7 @@ int get_irq_list(char *buf)
 		p += sprintf(p, "%10u ",
 			atomic_read(&nmi_counter(cpu_logical_map(j))));
 	p += sprintf(p, "\n");
-#if CONFIG_SMP
+#if defined(CONFIG_SMP) && defined(__i386__)
 	p += sprintf(p, "LOC: ");
 	for (j = 0; j < smp_num_cpus; j++)
 		p += sprintf(p, "%10u ",
@@ -182,8 +182,8 @@ int get_irq_list(char *buf)
  */
 
 #ifdef CONFIG_SMP
-unsigned char global_irq_holder = NO_PROC_ID;
-unsigned volatile int global_irq_lock;
+unsigned int global_irq_holder = NO_PROC_ID;
+volatile unsigned int global_irq_lock;
 
 extern void show_stack(unsigned long* esp);
 
@@ -201,6 +201,10 @@ static void show(char * str)
 		printk(" %d",local_bh_count(i));
 
 	printk(" ]\nStack dumps:");
+#ifdef __ia64__
+	printk(" ]\nStack dumps: <unimplemented on IA-64---please fix me>");
+	/* for now we don't have stack dumping support... */
+#elif __i386__
 	for(i=0;i< smp_num_cpus;i++) {
 		unsigned long esp;
 		if(i==cpu)
@@ -219,8 +223,13 @@ static void show(char * str)
 		esp += sizeof(struct task_struct);
 		show_stack((void*)esp);
  	}
+#else
+	You lose...
+#endif
 	printk("\nCPU %d:",cpu);
+#ifdef __i386__
 	show_stack(NULL);
+#endif
 	printk("\n");
 }
 	
@@ -250,7 +259,11 @@ static void show(char * str)
 /*
  * We have to allow irqs to arrive between __sti and __cli
  */
-# define SYNC_OTHER_CORES(x) __asm__ __volatile__ ("nop")
+# ifdef __ia64__
+#  define SYNC_OTHER_CORES(x) __asm__ __volatile__ ("nop 0")
+# else
+#  define SYNC_OTHER_CORES(x) __asm__ __volatile__ ("nop")
+# endif
 #endif
 
 static inline void wait_on_irq(int cpu)
@@ -311,7 +324,7 @@ static inline void get_irqlock(int cpu)
 {
 	if (test_and_set_bit(0,&global_irq_lock)) {
 		/* do we already hold the lock? */
-		if ((unsigned char) cpu == global_irq_holder)
+		if (cpu == global_irq_holder)
 			return;
 		/* Uhhuh.. Somebody else got it. Wait.. */
 		do {
@@ -349,6 +362,15 @@ void __global_cli(void)
 {
 	unsigned int flags;
 
+#ifdef __ia64__
+	__save_flags(flags);
+	if (flags & IA64_PSR_I) {
+		int cpu = smp_processor_id();
+		__cli();
+		if (!local_irq_count(cpu))
+			get_irqlock(cpu);
+	}
+#else
 	__save_flags(flags);
 	if (flags & (1 << EFLAGS_IF_SHIFT)) {
 		int cpu = smp_processor_id();
@@ -356,6 +378,7 @@ void __global_cli(void)
 		if (!local_irq_count(cpu))
 			get_irqlock(cpu);
 	}
+#endif
 }
 
 void __global_sti(void)
@@ -382,7 +405,11 @@ unsigned long __global_save_flags(void)
 	int cpu = smp_processor_id();
 
 	__save_flags(flags);
+#ifdef __ia64__
+	local_enabled = (flags & IA64_PSR_I) != 0;
+#else
 	local_enabled = (flags >> EFLAGS_IF_SHIFT) & 1;
+#endif
 	/* default to local */
 	retval = 2 + local_enabled;
 
@@ -479,11 +506,13 @@ void disable_irq(unsigned int irq)
 {
 	disable_irq_nosync(irq);
 
+#ifdef CONFIG_SMP
 	if (!local_irq_count(smp_processor_id())) {
 		do {
 			barrier();
 		} while (irq_desc[irq].status & IRQ_INPROGRESS);
 	}
+#endif
 }
 
 void enable_irq(unsigned int irq)
@@ -559,15 +588,12 @@ unsigned int do_IRQ(unsigned long irq, struct pt_regs *regs)
 
 	/*
 	 * If there is no IRQ handler or it was disabled, exit early.
-	   Since we set PENDING, if another processor is handling
-	   a different instance of this same irq, the other processor
-	   will take care of it.
+	 * Since we set PENDING, if another processor is handling
+	 * a different instance of this same irq, the other processor
+	 * will take care of it.
 	 */
 	if (!action)
-{
-	desc->status = status & ~IRQ_INPROGRESS;
 		goto out;
-}
 
 	/*
 	 * Edge triggered interrupts need to remember
@@ -597,15 +623,6 @@ out:
 	desc->handler->end(irq);
 	spin_unlock(&desc->lock);
 
-#if 0
-	/*
-	 * let kernel exit path take care of this; we want to do the
-	 * CPU EOI before doing softirq() so a new interrupt can come
-	 * through
-	 */
-	if (softirq_state[cpu].active & softirq_state[cpu].mask)
-		do_softirq();
-#endif
 	return 1;
 }
 

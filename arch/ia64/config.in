@@ -4,6 +4,8 @@ mainmenu_option next_comment
 comment 'General setup'
 
 define_bool CONFIG_IA64 y
+define_bool CONFIG_ITANIUM y	# easy choice for now... ;-)
+
 define_bool CONFIG_ISA n
 define_bool CONFIG_SBUS n
 
@@ -25,7 +27,7 @@ if [ "$CONFIG_IA64_DIG" = "y" ]; then
 	bool '  Enable BigSur hacks' CONFIG_IA64_BIGSUR_HACKS
 	bool '  Enable Lion hacks' CONFIG_IA64_LION_HACKS
 	bool '  Emulate PAL/SAL/EFI firmware' CONFIG_IA64_FW_EMU
-	bool '  Get PCI IRQ routing from firmware/ACPI'	CONFIG_IA64_IRQ_ACPI
+	bool '  Enable IA64 Machine Check Abort' CONFIG_IA64_MCA
 fi
 
 if [ "$CONFIG_IA64_GENERIC" = "y" ]; then
@@ -185,10 +187,5 @@ bool 'Early printk support (requires VGA!)' CONFIG_IA64_EARLY_PRINTK
 bool 'Turn on compare-and-exchange bug checking (slow!)' CONFIG_IA64_DEBUG_CMPXCHG
 bool 'Turn on irq debug checks (slow!)' CONFIG_IA64_DEBUG_IRQ
 bool 'Print possible IA64 hazards to console' CONFIG_IA64_PRINT_HAZARDS
-bool 'Built-in Kernel Debugger support' CONFIG_KDB
-if [ "$CONFIG_KDB" = "y" ]; then
-  bool 'Compile the kernel with frame pointers' CONFIG_KDB_FRAMEPTR
-  int  'KDB Kernel Symbol Table size?' CONFIG_KDB_STBSIZE 10000
-fi
 
 endmenu

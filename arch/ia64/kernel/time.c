@@ -9,11 +9,12 @@
  * Copyright (C) 1999-2000 Walt Drummond <drummond@valinux.com>
  */
 #include <linux/config.h>
+
 #include <linux/init.h>
-#include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/time.h>
+#include <linux/interrupt.h>
 
 #include <asm/delay.h>
 #include <asm/efi.h>
@@ -136,6 +137,7 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	static unsigned long last_time;
 	static unsigned char count;
 	int cpu = smp_processor_id();
+	int printed = 0;
 
 	/*
 	 * Here we are in the timer irq handler. We have irqs locally
@@ -145,9 +147,14 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 */
 	write_lock(&xtime_lock);
 	while (1) {
-		/* do kernel PC profiling here.  */
+		/*
+		 * Do kernel PC profiling here.  We multiply the
+		 * instruction number by four so that we can use a
+		 * prof_shift of 2 to get instruction-level instead of
+		 * just bundle-level accuracy.
+		 */
 		if (!user_mode(regs)) 
-			do_profile(regs->cr_iip);
+			do_profile(regs->cr_iip + 4*ia64_psr(regs)->ri);
 
 #ifdef CONFIG_SMP
 		smp_do_timer(regs);
@@ -172,15 +179,18 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 #if !(defined(CONFIG_IA64_SOFTSDV_HACKS) && defined(CONFIG_SMP))
 		/*
-		 * SoftSDV in SMP mode is _slow_, so we do "loose" ticks, 
+		 * SoftSDV in SMP mode is _slow_, so we do "lose" ticks, 
 		 * but it's really OK...
 		 */
 		if (count > 0 && jiffies - last_time > 5*HZ)
 			count = 0;
 		if (count++ == 0) {
 			last_time = jiffies;
-			printk("Lost clock tick on CPU %d (now=%lx, next=%lx)!!\n",
-			       cpu, ia64_get_itc(), itm.next[cpu]);
+			if (!printed) {
+				printk("Lost clock tick on CPU %d (now=%lx, next=%lx)!!\n",
+				       cpu, ia64_get_itc(), itm.next[cpu]);
+				printed = 1;
+			}
 # ifdef CONFIG_IA64_DEBUG_IRQ
 			printk("last_cli_ip=%lx\n", last_cli_ip);
 # endif
@@ -303,8 +313,6 @@ void __init
 time_init (void)
 {
 	/* we can't do request_irq() here because the kmalloc() would fail... */
-	irq_desc[TIMER_IRQ].status = IRQ_DISABLED;
-	irq_desc[TIMER_IRQ].handler = &irq_type_ia64_internal;
 	setup_irq(TIMER_IRQ, &timer_irqaction);
 
 	efi_gettimeofday(&xtime);

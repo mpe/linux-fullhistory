@@ -25,10 +25,6 @@
 #include <linux/smp_lock.h>
 #include <linux/threads.h>
 
-#ifdef CONFIG_KDB
-# include <linux/kdb.h>
-#endif
-
 #include <asm/bitops.h>
 #include <asm/delay.h>
 #include <asm/io.h>
@@ -41,13 +37,15 @@
 spinlock_t ivr_read_lock;
 #endif
 
+unsigned long ipi_base_addr = IPI_DEFAULT_BASE_ADDR;	/* default base addr of IPI table */
+
 /*
  * Legacy IRQ to IA-64 vector translation table.  Any vector not in
  * this table maps to itself (ie: irq 0x30 => IA64 vector 0x30)
  */
-__u8 isa_irq_to_vector_map[IA64_MIN_VECTORED_IRQ] = {
+__u8 isa_irq_to_vector_map[16] = {
 	/* 8259 IRQ translation, first 16 entries */
-	0x60, 0x50, 0x0f, 0x51, 0x52, 0x53, 0x43, 0x54,
+	0x60, 0x50, 0x10, 0x51, 0x52, 0x53, 0x43, 0x54,
 	0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x40, 0x41
 };
 
@@ -80,8 +78,8 @@ ia64_handle_irq (unsigned long vector, struct pt_regs *regs)
 #ifdef CONFIG_ITANIUM_ASTEP_SPECIFIC
 # ifndef CONFIG_SMP
 	static unsigned int max_prio = 0;
-# endif
 	unsigned int prev_prio;
+# endif
 	unsigned long eoi_ptr;
  
 # ifdef CONFIG_USB
@@ -95,21 +93,25 @@ ia64_handle_irq (unsigned long vector, struct pt_regs *regs)
 	 * Stop IPIs by getting the ivr_read_lock
 	 */
 	spin_lock(&ivr_read_lock);
+	{
+		unsigned int tmp;
 
-	/*
-	 * Disable PCI writes
-	 */
-	outl(0x80ff81c0, 0xcf8);
-	outl(0x73002188, 0xcfc);
-	eoi_ptr = inl(0xcfc);
+		/*
+		 * Disable PCI writes
+		 */
+		outl(0x80ff81c0, 0xcf8);
+		tmp = inl(0xcfc);
+		outl(tmp | 0x400, 0xcfc);
 
-	vector = ia64_get_ivr();
+		eoi_ptr = inl(0xcfc);
 
-	/*
-	 * Enable PCI writes
-	 */
-	outl(0x73182188, 0xcfc);
+		vector = ia64_get_ivr();
 
+		/*
+		 * Enable PCI writes
+		 */
+		outl(tmp, 0xcfc);
+	}
 	spin_unlock(&ivr_read_lock);
 
 # ifdef CONFIG_USB
@@ -152,9 +154,6 @@ ia64_handle_irq (unsigned long vector, struct pt_regs *regs)
 			printk("ia64_handle_irq: DANGER: less than 1KB of free stack space!!\n"
 			       "(bsp=0x%lx, sp=%lx)\n", bsp, sp);
 		}
-#ifdef CONFIG_KDB
-		kdb(KDB_REASON_PANIC, 0, regs);
-#endif		
 	}
 
 	/*
@@ -175,9 +174,6 @@ ia64_handle_irq (unsigned long vector, struct pt_regs *regs)
 		if (!pEOI) {
 			printk("Yikes: ia64_handle_irq() without pEOI!!\n");
 			asm volatile ("cmp.eq p1,p0=r0,r0" : "=r"(pEOI));
-# ifdef CONFIG_KDB
-			kdb(KDB_REASON_PANIC, 0, regs);
-# endif
 		}
 	}
 
@@ -195,13 +191,13 @@ ia64_handle_irq (unsigned long vector, struct pt_regs *regs)
 
 #ifdef CONFIG_SMP
 
-void __init
-init_IRQ_SMP (void)
-{
-	if (request_irq(IPI_IRQ, handle_IPI, 0, "IPI", NULL))
-		panic("Could not allocate IPI Interrupt Handler!");
-}
+extern void handle_IPI (int irq, void *dev_id, struct pt_regs *regs);
 
+static struct irqaction ipi_irqaction = {
+	handler:	handle_IPI,
+	flags:		SA_INTERRUPT,
+	name:		"IPI"
+};
 #endif
 
 void __init
@@ -214,13 +210,14 @@ init_IRQ (void)
 	ia64_set_lrr0(0, 1);	
 	ia64_set_lrr1(0, 1);	
 
-	irq_desc[TIMER_IRQ].handler = &irq_type_ia64_internal;
+	irq_desc[TIMER_IRQ].handler	    = &irq_type_ia64_sapic;
+	irq_desc[IA64_SPURIOUS_INT].handler = &irq_type_ia64_sapic;
 #ifdef CONFIG_SMP
 	/* 
 	 * Configure the IPI vector and handler
 	 */
-	irq_desc[IPI_IRQ].handler = &irq_type_ia64_internal;
-	init_IRQ_SMP();
+	irq_desc[IPI_IRQ].handler = &irq_type_ia64_sapic;
+	setup_irq(IPI_IRQ, &ipi_irqaction);
 #endif
 
 	ia64_set_pmv(1 << 16);
@@ -232,16 +229,26 @@ init_IRQ (void)
 	ia64_set_tpr(0);
 }
 
-/* TBD:
- * 	Certain IA64 platforms can have inter-processor interrupt support.
- * 	This interface is supposed to default to the IA64 IPI block-based
- * 	mechanism if the platform doesn't provide a separate mechanism
- *	for IPIs.
- *	Choices : (1) Extend hw_interrupt_type interfaces 
- *		  (2) Use machine vector mechanism
- *	For now defining the following interface as a place holder.
- */
 void
-ipi_send (int cpu, int vector, int delivery_mode)
+ipi_send (int cpu, int vector, int delivery_mode, int redirect)
 {
+	unsigned long ipi_addr;
+	unsigned long ipi_data;
+#ifdef	CONFIG_ITANIUM_ASTEP_SPECIFIC
+	unsigned long flags;
+#endif
+#	define EID	0
+
+	ipi_data = (delivery_mode << 8) | (vector & 0xff);
+	ipi_addr = ipi_base_addr | ((cpu << 8 | EID) << 4) | ((redirect & 1)  << 3);
+
+#ifdef	CONFIG_ITANIUM_ASTEP_SPECIFIC
+	spin_lock_irqsave(&ivr_read_lock, flags);
+#endif	/* CONFIG_ITANIUM_ASTEP_SPECIFIC */
+
+	writeq(ipi_data, ipi_addr);
+
+#ifdef	CONFIG_ITANIUM_ASTEP_SPECIFIC
+	spin_unlock_irqrestore(&ivr_read_lock, flags);
+#endif
 }

@@ -1364,6 +1364,7 @@ static ssize_t cm_write(struct file *file, const char *buffer, size_t count, lof
 	return ret;
 }
 
+/* No kernel lock - fine (we have our own spinlock) */
 static unsigned int cm_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct cm_state *s = (struct cm_state *)file->private_data;

@@ -13,10 +13,10 @@
  */
 
 #ifdef __ASSEMBLY__
-# define __IA64_UL(x)		x
+# define __IA64_UL(x)		(x)
 # define __IA64_UL_CONST(x)	x
 #else
-# define __IA64_UL(x)		((unsigned long)x)
+# define __IA64_UL(x)		((unsigned long)(x))
 # define __IA64_UL_CONST(x)	x##UL
 #endif
 

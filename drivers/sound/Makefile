@@ -139,8 +139,7 @@ obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
 # Translate to Rules.make lists.
 
 O_TARGET	:= sounddrivers.o
-# This is a nice idea but needs depmod altering
-#MOD_LIST_NAME	:= SOUND_MODULES
+MOD_LIST_NAME	:= SOUND_MODULES
 
 O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
 OX_OBJS		:= $(filter     $(export-objs), $(obj-y))

@@ -323,7 +323,7 @@ extern long __cmpxchg_called_with_bad_pointer(void);
 struct __xchg_dummy { unsigned long a[100]; };
 #define __xg(x) (*(struct __xchg_dummy *)(x))
 
-#define ia64_cmpxchg(ptr,old,new,size)					\
+#define ia64_cmpxchg(sem,ptr,old,new,size)				\
 ({									\
 	__typeof__(ptr) _p_ = (ptr);					\
 	__typeof__(new) _n_ = (new);					\
@@ -336,28 +336,28 @@ struct __xchg_dummy { unsigned long a[100]; };
 	      case 8: _o_ = (__u64) (old); break;			\
 	      default:							\
 	}								\
-	 __asm__ __volatile__ ("mov ar.ccv=%0;;" :: "r"(_o_));		\
+	 __asm__ __volatile__ ("mov ar.ccv=%0;;" :: "rO"(_o_));		\
 	switch (size) {							\
 	      case 1:							\
-		__asm__ __volatile__ ("cmpxchg1.rel %0=%2,%3,ar.ccv"	\
+		__asm__ __volatile__ ("cmpxchg1."sem" %0=%2,%3,ar.ccv"	\
 				      : "=r"(_r_), "=m"(__xg(_p_))	\
 				      : "m"(__xg(_p_)), "r"(_n_));	\
 		break;							\
 									\
 	      case 2:							\
-		__asm__ __volatile__ ("cmpxchg2.rel %0=%2,%3,ar.ccv"	\
+		__asm__ __volatile__ ("cmpxchg2."sem" %0=%2,%3,ar.ccv"	\
 				      : "=r"(_r_), "=m"(__xg(_p_))	\
 				      : "m"(__xg(_p_)), "r"(_n_));	\
 		break;							\
 									\
 	      case 4:							\
-		__asm__ __volatile__ ("cmpxchg4.rel %0=%2,%3,ar.ccv"	\
+		__asm__ __volatile__ ("cmpxchg4."sem" %0=%2,%3,ar.ccv"	\
 				      : "=r"(_r_), "=m"(__xg(_p_))	\
 				      : "m"(__xg(_p_)), "r"(_n_));	\
 		break;							\
 									\
 	      case 8:							\
-		__asm__ __volatile__ ("cmpxchg8.rel %0=%2,%3,ar.ccv"	\
+		__asm__ __volatile__ ("cmpxchg8."sem" %0=%2,%3,ar.ccv"	\
 				      : "=r"(_r_), "=m"(__xg(_p_))	\
 				      : "m"(__xg(_p_)), "r"(_n_));	\
 		break;							\
@@ -369,7 +369,11 @@ struct __xchg_dummy { unsigned long a[100]; };
 	(__typeof__(old)) _r_;						\
 })
 
-#define cmpxchg(ptr,o,n)     ia64_cmpxchg((ptr), (o), (n), sizeof(*(ptr)))
+#define cmpxchg_acq(ptr,o,n)	ia64_cmpxchg("acq", (ptr), (o), (n), sizeof(*(ptr)))
+#define cmpxchg_rel(ptr,o,n)	ia64_cmpxchg("rel", (ptr), (o), (n), sizeof(*(ptr)))
+
+/* for compatibility with other platforms: */
+#define cmpxchg(ptr,o,n)	cmpxchg_acq(ptr,o,n)
 
 #ifdef CONFIG_IA64_DEBUG_CMPXCHG
 # define CMPXCHG_BUGCHECK_DECL	int _cmpxchg_bugcheck_count = 128;
@@ -396,24 +400,24 @@ extern void ia64_load_debug_regs (unsigned long *save_area);
 #define prepare_to_switch()    do { } while(0)
 
 #ifdef CONFIG_IA32_SUPPORT
-# define TASK_TO_PTREGS(t)									\
-	((struct pt_regs *)(((unsigned long)(t) + IA64_STK_OFFSET - IA64_PT_REGS_SIZE)))
 # define IS_IA32_PROCESS(regs)	(ia64_psr(regs)->is != 0)
-# define IA32_FP_STATE(prev,next)						\
-	if (IS_IA32_PROCESS(TASK_TO_PTREGS(prev))) {				\
+# define IA32_STATE(prev,next)							\
+	if (IS_IA32_PROCESS(ia64_task_regs(prev))) {				\
+	    __asm__ __volatile__("mov %0=ar.eflag":"=r"((prev)->thread.eflag));	\
 	    __asm__ __volatile__("mov %0=ar.fsr":"=r"((prev)->thread.fsr));	\
 	    __asm__ __volatile__("mov %0=ar.fcr":"=r"((prev)->thread.fcr));	\
 	    __asm__ __volatile__("mov %0=ar.fir":"=r"((prev)->thread.fir));	\
 	    __asm__ __volatile__("mov %0=ar.fdr":"=r"((prev)->thread.fdr));	\
 	}									\
-	if (IS_IA32_PROCESS(TASK_TO_PTREGS(next))) {				\
+	if (IS_IA32_PROCESS(ia64_task_regs(next))) {				\
+	    __asm__ __volatile__("mov ar.eflag=%0"::"r"((next)->thread.eflag));	\
 	    __asm__ __volatile__("mov ar.fsr=%0"::"r"((next)->thread.fsr));	\
 	    __asm__ __volatile__("mov ar.fcr=%0"::"r"((next)->thread.fcr));	\
 	    __asm__ __volatile__("mov ar.fir=%0"::"r"((next)->thread.fir));	\
 	    __asm__ __volatile__("mov ar.fdr=%0"::"r"((next)->thread.fdr));	\
 	}
 #else /* !CONFIG_IA32_SUPPORT */
-# define IA32_FP_STATE(prev,next)
+# define IA32_STATE(prev,next)
 # define IS_IA32_PROCESS(regs)		0
 #endif /* CONFIG_IA32_SUPPORT */
 
@@ -436,7 +440,7 @@ extern struct task_struct *ia64_switch_to (void *next_task);
 	if ((next)->thread.flags & IA64_THREAD_DBG_VALID) {			\
 		ia64_load_debug_regs(&(next)->thread.dbr[0]);			\
 	}									\
-	IA32_FP_STATE(prev,next);						\
+	IA32_STATE(prev,next);							\
 	(last) = ia64_switch_to((next));					\
 } while (0)
 

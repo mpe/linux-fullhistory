@@ -310,7 +310,7 @@ __down_write_failed (struct rw_semaphore *sem, long count)
 		do {
 			old_count = sem->count;
 			count = old_count - RW_LOCK_BIAS;
-		} while (cmpxchg(&sem->count, old_count, count) != old_count);
+		} while (cmpxchg_acq(&sem->count, old_count, count) != old_count);
 
 		if (count == 0)
 			return;

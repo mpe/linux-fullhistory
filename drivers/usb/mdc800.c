@@ -30,6 +30,12 @@
  *
  * The driver supports only one camera.
  *
+ * version 0.7.3
+ * bugfix : The mdc800->state field gets set to READY after the
+ * the diconnect function sets it to NOT_CONNECTED. This makes the
+ * driver running like the camera is connected and causes some
+ * hang ups.
+ *
  * version 0.7.1
  * MOD_INC and MOD_DEC are changed in usb_probe to prevent load/unload
  * problems when compiled as Module.
@@ -73,8 +79,8 @@
 
 #include <linux/usb.h>
 
-#define VERSION 		"0.7.1"
-#define RELEASE_DATE "(26/03/2000)"
+#define VERSION 		"0.7.3"
+#define RELEASE_DATE "(15/04/2000)"
 
 /* Vendor and Product Information */
 #define MDC800_VENDOR_ID 	0x055f
@@ -82,9 +88,9 @@
 
 /* Timeouts (msec) */
 #define TO_READ_FROM_IRQ 		4000
-#define TO_GET_READY				2000
-#define TO_DOWNLOAD_GET_READY	1500
-#define TO_DOWNLOAD_GET_BUSY	1500
+#define TO_GET_READY			2000
+#define TO_DOWNLOAD_GET_READY		1500
+#define TO_DOWNLOAD_GET_BUSY		1500
 #define TO_WRITE_GET_READY		3000
 #define TO_DEFAULT_COMMAND		5000
 
@@ -114,7 +120,7 @@ struct mdc800_data
 	wait_queue_head_t	irq_wait;
 	char*			irq_urb_buffer;
 
-	int			camera_busy;		 // is camera busy ?
+	int			camera_busy;          // is camera busy ?
 	int 			camera_request_ready; // Status to synchronize with irq
 	char 			camera_response [8];	 // last Bytes send after busy
 
@@ -130,9 +136,9 @@ struct mdc800_data
 
 
 	/* Device Data */
-	char			out [64];		// Answer Buffer
+	char			out [64];	// Answer Buffer
 	int 			out_ptr;		// Index to the first not readen byte
-	int			out_count;		// Bytes in the buffer
+	int			out_count;	// Bytes in the buffer
 
 	int			open;			// Camera device open ?
 	int			rw_lock;		// Block read <-> write
@@ -284,9 +290,17 @@ static int mdc800_usb_waitForIRQ (int mode, int msec)
 	{
 		mdc800->camera_request_ready=0;
 		err ("timeout waiting for camera.");
-		return 0;
+		return -1;
 	}
-	return 1;
+	
+	if (mdc800->state == NOT_CONNECTED)
+	{
+		warn ("Camera gets disconnected during waiting for irq.");
+		mdc800->camera_request_ready=0;
+		return -2;
+	}
+	
+	return 0;
 }
 
 
@@ -301,7 +315,10 @@ static void mdc800_usb_write_notify (struct urb *urb)
 	{
 		err ("writing command fails (status=%i)", urb->status);
 	}
-	mdc800->state=READY;
+	else
+	{	
+		mdc800->state=READY;
+	}
 	wake_up_interruptible (&mdc800->write_wait);
 }
 
@@ -328,7 +345,6 @@ static void mdc800_usb_download_notify (struct urb *urb)
 	else
 	{
 		err ("request bytes fails (status:%i)", urb->status);
-		mdc800->state=READY;
 	}
 	wake_up_interruptible (&mdc800->download_wait);
 }
@@ -416,6 +432,8 @@ static void* mdc800_usb_probe (struct usb_device *dev ,unsigned int ifnum )
 
 	mdc800->dev=dev;
 	mdc800->state=READY;
+	mdc800->open=0;
+	mdc800->rw_lock=0;
 
 	/* Setup URB Structs */
 	FILL_INT_URB (
@@ -464,10 +482,8 @@ static void mdc800_usb_disconnect (struct usb_device *dev,void* ptr)
 
 	if (mdc800->state == NOT_CONNECTED)
 		return;
-
+	
 	mdc800->state=NOT_CONNECTED;
-	mdc800->open=0;
-	mdc800->rw_lock=0;
 
 	usb_unlink_urb (mdc800->irq_urb);
 	usb_unlink_urb (mdc800->write_urb);
@@ -599,6 +615,12 @@ static ssize_t mdc800_device_read (struct file *file, char *buf, size_t len, lof
 	if (mdc800->state == NOT_CONNECTED)
 		return -EBUSY;
 
+	if (mdc800->state == WORKING)
+	{
+		warn ("Illegal State \"working\" reached during read ?!");
+		return -EBUSY;
+	}
+
 	if (!mdc800->open || mdc800->rw_lock)
 		return -EBUSY;
 	mdc800->rw_lock=1;
@@ -624,15 +646,13 @@ static ssize_t mdc800_device_read (struct file *file, char *buf, size_t len, lof
 				if (usb_submit_urb (mdc800->download_urb))
 				{
 					err ("Can't submit download urb (status=%i)",mdc800->download_urb->status);
-					mdc800->state=READY;
 					mdc800->rw_lock=0;
 					return len-left;
 				}
 				interruptible_sleep_on_timeout (&mdc800->download_wait, TO_DOWNLOAD_GET_READY*HZ/1000);
 				if (mdc800->download_urb->status != 0)
 				{
-					err ("requesting bytes fails (status=%i)",mdc800->download_urb->status);
-					mdc800->state=READY;
+					err ("request download-bytes fails (status=%i)",mdc800->download_urb->status);
 					mdc800->rw_lock=0;
 					return len-left;
 				}
@@ -710,7 +730,12 @@ static ssize_t mdc800_device_write (struct file *file, const char *buf, size_t l
 		{
 			int answersize;
 
-			mdc800_usb_waitForIRQ (0,TO_GET_READY);
+			if (mdc800_usb_waitForIRQ (0,TO_GET_READY))
+			{
+				err ("Camera didn't get ready.\n");
+				mdc800->rw_lock=0;
+				return -EIO;
+			}
 
 			answersize=mdc800_getAnswerSize (mdc800->in[1]);
 
@@ -720,14 +745,12 @@ static ssize_t mdc800_device_write (struct file *file, const char *buf, size_t l
 			{
 				err ("submitting write urb fails (status=%i)", mdc800->write_urb->status);
 				mdc800->rw_lock=0;
-				mdc800->state=READY;
 				return -EIO;
 			}
 			interruptible_sleep_on_timeout (&mdc800->write_wait, TO_DEFAULT_COMMAND*HZ/1000);
 			if (mdc800->state == WORKING)
 			{
 				usb_unlink_urb (mdc800->write_urb);
-				mdc800->state=READY;
 				mdc800->rw_lock=0;
 				return -EIO;
 			}
@@ -756,10 +779,9 @@ static ssize_t mdc800_device_write (struct file *file, const char *buf, size_t l
 					if (answersize)
 					{
 
-						if (!mdc800_usb_waitForIRQ (1,TO_READ_FROM_IRQ))
+						if (mdc800_usb_waitForIRQ (1,TO_READ_FROM_IRQ))
 						{
 							err ("requesting answer from irq fails");
-							mdc800->state=READY;
 							mdc800->rw_lock=0;
 							return -EIO;
 						}
@@ -785,11 +807,10 @@ static ssize_t mdc800_device_write (struct file *file, const char *buf, size_t l
 					}
 					else
 					{
-						if (!mdc800_usb_waitForIRQ (0,TO_DEFAULT_COMMAND))
+						if (mdc800_usb_waitForIRQ (0,TO_DEFAULT_COMMAND))
 						{
 							err ("Command Timeout.");
 							mdc800->rw_lock=0;
-							mdc800->state=READY;
 							return -EIO;
 						}
 					}
@@ -811,21 +832,10 @@ static ssize_t mdc800_device_write (struct file *file, const char *buf, size_t l
 /* File Operations of this drivers */
 static struct file_operations mdc800_device_ops =
 {
-	0,					/* llseek */
-	mdc800_device_read,
-	mdc800_device_write,
-	0,					/* readdir */
-	0,					/* poll */
-	0,					/* ioctl, this can be used to detect USB ! */
-	0,					/* mmap */
-	mdc800_device_open,
-	0,					/* flush */
-	mdc800_device_release,
-	0,					/* async */
-	0,					/* fasync */
-	0,					/* check_media_change */
-//	0,					/* revalidate */
-//	0					/* lock */
+	read:		mdc800_device_read,
+	write:		mdc800_device_write,
+	open:		mdc800_device_open,
+	release:	mdc800_device_release,
 };
 
 

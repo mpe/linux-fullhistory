@@ -232,9 +232,11 @@ struct switch_stack {
 #endif /* !__ASSEMBLY__ */
 
 /*
- * The number chosen here is somewhat arbitrary but absolutely MUST
+ * The numbers chosen here are somewhat arbitrary but absolutely MUST
  * not overlap with any of the number assigned in <linux/ptrace.h>.
  */
 #define PTRACE_SINGLEBLOCK	12	/* resume execution until next branch */
+#define PTRACE_GETSIGINFO	13	/* get child's siginfo structure */
+#define PTRACE_SETSIGINFO	14	/* set child's siginfo structure */
 
 #endif /* _ASM_IA64_PTRACE_H */

@@ -2409,6 +2409,7 @@ static ssize_t vwsnd_audio_write(struct file *file,
 	return ret;
 }
 
+/* No kernel lock - fine */
 static unsigned int vwsnd_audio_poll(struct file *file,
 				     struct poll_table_struct *wait)
 {

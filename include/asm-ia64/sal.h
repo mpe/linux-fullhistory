@@ -12,6 +12,8 @@
  * Copyright (C) 1999 Srinivasa Prasad Thirumalachar <sprasad@sprasad.engr.sgi.com>
  *
  * 99/09/29 davidm	Updated for SAL 2.6.
+ * 00/03/29 cfleck      Updated SAL Error Logging info for processor (SAL 2.6) 
+ *                      (plus examples of platform error info structures from smariset @ Intel)
  */
 
 #include <linux/config.h>
@@ -274,14 +276,93 @@ typedef struct sal_log_processor_info_s {
 	} slpi_bus_check_info[MAX_BUS_ERRORS];
 
 	pal_min_state_area_t		slpi_min_state_area;
-	u64				slpi_bank1_gr[16];
-	u64				slpi_bank1_nat_bits;
 	u64				slpi_br[8];
 	u64				slpi_cr[128];
 	u64				slpi_ar[128];
 	u64				slpi_rr[8];
 	u64				slpi_fr[128];
 } sal_log_processor_info_t;
+
+/* platform error log structures */
+typedef struct platerr_logheader {
+	u64	nextlog;	/* next log offset if present */
+	u64	loglength;	/* log length */
+	u64	logsubtype;	/* log subtype memory/bus/component */
+	u64	eseverity;	/* error severity */
+} ehdr_t;
+
+typedef struct sysmem_errlog {
+	ehdr_t	lhdr;		/* header */
+	u64	vflag;		/* valid bits for each field in the log */
+	u64	addr;		/* memory address */
+	u64	data;		/* memory data */
+	u64	cmd;		/* command bus value if any */
+	u64	ctrl;		/* control bus value if any */
+	u64	addrsyndrome;	/* memory address ecc/parity syndrome bits */
+	u64	datasyndrome;	/* data ecc/parity syndrome */
+	u64	cacheinfo;	/* platform cache info as defined in pal spec. table 7-34 */
+} merrlog_t;
+
+typedef struct sysbus_errlog {
+	ehdr_t	lhdr;		/* linkded list header */
+	u64	vflag;		/* valid bits for each field in the log */
+	u64	busnum;		/* bus number in error */
+	u64	reqaddr;	/* requestor address */
+	u64	resaddr;	/* responder address */
+	u64	taraddr;	/* target address */
+	u64	data;		/* requester r/w data */
+	u64	cmd;		/* bus commands */
+	u64	ctrl;		/* bus controls (be# &-0) */
+	u64	addrsyndrome;	/* addr bus ecc/parity bits */
+	u64	datasyndrome;	/* data bus ecc/parity bits */
+	u64	cmdsyndrome;	/* command bus ecc/parity bits */
+	u64	ctrlsyndrome;	/* control bus ecc/parity bits */
+} berrlog_t;
+
+/* platform error log structures */
+typedef struct syserr_chdr {	/* one header per component */
+	u64	busnum;		/* bus number on which the component resides */
+	u64	devnum;		/* same as device select */
+	u64	funcid;		/* function id of the device */
+	u64	devid;		/* pci device id */
+	u64	classcode;	/* pci class code for the device */
+	u64	cmdreg;		/* pci command reg value */
+	u64	statreg;	/* pci status reg value */
+} chdr_t;
+
+typedef struct cfginfo {
+	u64	cfgaddr;
+	u64	cfgval;
+} cfginfo_t;
+
+typedef struct sys_comperr {	/* per component */
+	ehdr_t	lhdr;		/* linked list header */
+	u64	vflag;		/* valid bits for each field in the log */
+	chdr_t	scomphdr;	
+	u64	numregpair;	/* number of reg addr/value pairs */
+	cfginfo_t cfginfo;
+} cerrlog_t;
+
+typedef struct sel_records {
+	ehdr_t	lhdr;
+	u64	seldata;
+} isel_t;
+
+typedef struct plat_errlog {
+	u64	      mbcsvalid;	/* valid bits for each type of log */
+	merrlog_t     smemerrlog;	/* platform memory error logs */
+	berrlog_t     sbuserrlog;	/* platform bus error logs */
+	cerrlog_t     scomperrlog;	/* platform chipset error logs */
+	isel_t	      selrecord;	/* ipmi sel record */
+} platforminfo_t;
+
+/* over all log structure (processor+platform) */
+
+typedef union udev_specific_log {
+	sal_log_processor_info_t  proclog;
+	platforminfo_t		  platlog;
+} devicelog_t;
+
 
 #define sal_log_processor_info_psi_valid		slpi_valid.spli_psi
 #define sal_log_processor_info_cache_check_valid	slpi_valid.spli_cache_check
@@ -303,15 +384,14 @@ typedef struct sal_log_header_s {
 	ushort			slh_log_type;		/* Type of log (0 - cpu ,1 - platform) */
 	ushort			slh_log_sub_type;	/* SGI specific sub type */
 	sal_log_timestamp_t	slh_log_timestamp;	/* Timestamp */
-	u64			slh_log_dev_spec_info;	/* For processor log this field will
-							 * contain an area architected for all
-							 * IA-64 processors. For platform log
-							 * this field will contain information
-							 * specific to the hardware 
-							 * implementation.
-							 */
 } sal_log_header_t;
 
+/* SAL PSI log structure */
+typedef struct psilog
+{
+	sal_log_header_t   sal_elog_header;
+	devicelog_t        devlog;
+} ia64_psilog_t;
 
 /*
  * Now define a couple of inline functions for improved type checking

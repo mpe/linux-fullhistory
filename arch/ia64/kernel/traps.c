@@ -32,10 +32,7 @@ register double f30 asm ("f30"); register double f31 asm ("f31");
 #include <linux/init.h>
 #include <linux/sched.h>
 
-#ifdef CONFIG_KDB
-# include <linux/kdb.h>
-#endif
-
+#include <asm/ia32.h>
 #include <asm/processor.h>
 #include <asm/uaccess.h>
 
@@ -87,13 +84,6 @@ die_if_kernel (char *str, struct pt_regs *regs, long err)
 	}
 
 	printk("%s[%d]: %s %ld\n", current->comm, current->pid, str, err);
-
-#ifdef CONFIG_KDB
-	while (1) {
-                kdb(KDB_REASON_PANIC, 0, regs);
-                printk("Cant go anywhere from Panic!\n");
-	}
-#endif
 
 	show_regs(regs);
 
@@ -440,7 +430,18 @@ ia64_fault (unsigned long vector, unsigned long isr, unsigned long ifa,
 	      case 35: /* Taken Branch Trap */
 	      case 36: /* Single Step Trap */
 		switch (vector) {
-		      case 29: siginfo.si_code = TRAP_BRKPT; break;
+		      case 29: 
+			siginfo.si_code = TRAP_HWBKPT;
+#ifdef CONFIG_ITANIUM
+			/*
+			 * Erratum 10 (IFA may contain incorrect address) now has
+			 * "NoFix" status.  There are no plans for fixing this.
+			 */
+			if (ia64_psr(regs)->is == 0)
+			  ifa = regs->cr_iip;
+#endif
+			siginfo.si_addr = (void *) ifa;
+		        break;
 		      case 35: siginfo.si_code = TRAP_BRANCH; break;
 		      case 36: siginfo.si_code = TRAP_TRACE; break;
 		}
@@ -479,12 +480,18 @@ ia64_fault (unsigned long vector, unsigned long isr, unsigned long ifa,
 		break;
 
 	      case 45:
-		printk("Unexpected IA-32 exception\n");
+#ifdef CONFIG_IA32_SUPPORT
+		if (ia32_exception(regs, isr) == 0)
+			return;
+#endif
+		printk("Unexpected IA-32 exception (Trap 45)\n");
+		printk("  iip - 0x%lx, ifa - 0x%lx, isr - 0x%lx\n", regs->cr_iip, ifa, isr);
 		force_sig(SIGSEGV, current);
-		return;
+		break;
 
 	      case 46:
-		printk("Unexpected IA-32 intercept trap\n");
+		printk("Unexpected IA-32 intercept trap (Trap 46)\n");
+		printk("  iip - 0x%lx, ifa - 0x%lx, isr - 0x%lx\n", regs->cr_iip, ifa, isr);
 		force_sig(SIGSEGV, current);
 		return;
 

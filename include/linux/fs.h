@@ -551,6 +551,7 @@ struct nameidata {
 	struct dentry *dentry;
 	struct vfsmount *mnt;
 	struct qstr last;
+	unsigned int flags;
 };
 
 #define FASYNC_MAGIC 0x4601
@@ -689,6 +690,12 @@ struct block_device_operations {
 	int (*revalidate) (kdev_t);
 };
 
+/*
+ * NOTE:
+ * read, write, poll, fsync, readv, writev can be called
+ *   without the big kernel lock held in all filesystems.
+ * fasync can be called at interrupt time.
+ */
 struct file_operations {
 	loff_t (*llseek) (struct file *, loff_t, int);
 	ssize_t (*read) (struct file *, char *, size_t, loff_t *);
@@ -996,6 +1003,7 @@ extern ino_t find_inode_number(struct dentry *, struct qstr *);
 #define LOOKUP_CONTINUE		(8)
 #define LOOKUP_POSITIVE		(16)
 #define LOOKUP_PARENT		(32)
+#define LOOKUP_NOALT		(64)
 
 /*
  * "descriptor" for what we're up to with a read for sendfile().
@@ -1020,7 +1028,7 @@ extern loff_t default_llseek(struct file *file, loff_t offset, int origin);
 
 extern struct dentry * lookup_dentry(const char *, unsigned int);
 extern int walk_init(const char *, unsigned, struct nameidata *);
-extern int walk_name(const char *, unsigned, struct nameidata *);
+extern int walk_name(const char *, struct nameidata *);
 extern struct dentry * lookup_one(const char *, struct dentry *);
 extern struct dentry * __namei(const char *, unsigned int);
 

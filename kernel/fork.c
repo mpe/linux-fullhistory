@@ -421,21 +421,41 @@ fail_nomem:
 	return retval;
 }
 
+static inline struct fs_struct *__copy_fs_struct(struct fs_struct *old)
+{
+	struct fs_struct *fs = kmalloc(sizeof(*old), GFP_KERNEL);
+	if (fs) {
+		atomic_set(&fs->count, 1);
+		fs->umask = old->umask;
+		fs->rootmnt = mntget(old->rootmnt);
+		fs->root = dget(old->root);
+		fs->pwdmnt = mntget(old->pwdmnt);
+		fs->pwd = dget(old->pwd);
+		if (old->altroot) {
+			fs->altrootmnt = mntget(old->altrootmnt);
+			fs->altroot = dget(old->altroot);
+		} else {
+			fs->altrootmnt = NULL;
+			fs->altroot = NULL;
+		}	
+	}
+	return fs;
+}
+
+struct fs_struct *copy_fs_struct(struct fs_struct *old)
+{
+	return __copy_fs_struct(old);
+}
+
 static inline int copy_fs(unsigned long clone_flags, struct task_struct * tsk)
 {
 	if (clone_flags & CLONE_FS) {
 		atomic_inc(&current->fs->count);
 		return 0;
 	}
-	tsk->fs = kmalloc(sizeof(*tsk->fs), GFP_KERNEL);
+	tsk->fs = __copy_fs_struct(current->fs);
 	if (!tsk->fs)
 		return -1;
-	atomic_set(&tsk->fs->count, 1);
-	tsk->fs->umask = current->fs->umask;
-	tsk->fs->root = dget(current->fs->root);
-	tsk->fs->pwd = dget(current->fs->pwd);
-	tsk->fs->rootmnt = mntget(current->fs->rootmnt);
-	tsk->fs->pwdmnt = mntget(current->fs->pwdmnt);
 	return 0;
 }
 

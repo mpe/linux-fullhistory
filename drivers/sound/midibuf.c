@@ -394,6 +394,7 @@ int MIDIbuf_ioctl(int dev, struct file *file,
 	}
 }
 
+/* No kernel lock - fine */
 unsigned int MIDIbuf_poll(int dev, struct file *file, poll_table * wait)
 {
 	unsigned int mask = 0;

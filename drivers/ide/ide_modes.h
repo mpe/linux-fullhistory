@@ -124,8 +124,11 @@ static struct ide_pio_info {
 	{ "QUANTUM LPS540A", 3 },
 	{ "QUANTUM LIGHTNING 540A", 3 },
 	{ "QUANTUM LIGHTNING 730A", 3 },
-	{ "QUANTUM FIREBALL", 3 }, /* For models 540/640/1080/1280 */
-				   /* 1080A works fine in mode4 with triton */
+
+        { "QUANTUM FIREBALL_540", 3 }, /* Older Quantum Fireballs don't work */
+        { "QUANTUM FIREBALL_640", 3 }, 
+        { "QUANTUM FIREBALL_1080", 3 },
+        { "QUANTUM FIREBALL_1280", 3 },
 	{ NULL,	0 }
 };
 

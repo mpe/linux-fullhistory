@@ -978,6 +978,8 @@ static int n_hdlc_tty_select (struct tty_struct *tty, struct inode *inode,
  * Return Value:
  * 
  * 	bit mask containing info on which ops will not block
+ *
+ * Note: Called without the kernel lock held. Which is fine.
  */
 static unsigned int n_hdlc_tty_poll (struct tty_struct *tty,
 	 struct file *filp, poll_table * wait)

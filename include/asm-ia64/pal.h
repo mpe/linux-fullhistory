@@ -15,6 +15,7 @@
  *
  * 99/10/01	davidm	Make sure we pass zero for reserved parameters.
  * 00/03/07	davidm	Updated pal_cache_flush() to be in sync with PAL v2.6.
+ * 00/03/23     cfleck  Modified processor min-state save area to match updated PAL & SAL info
  */
 
 /*
@@ -595,18 +596,27 @@ typedef union pal_mc_error_info_u {
 #define pmci_bus_external_error			pme_bus.eb
 #define pmci_bus_mc				pme_bus.mc
 
+/* 
+ * NOTE: this min_state_save area struct only includes the 1KB 
+ * architectural state save area.  The other 3 KB is scratch space
+ * for PAL.
+ */
 
 typedef struct pal_min_state_area_s {
-	u64	pmsa_reserved[26];
-	u64	pmsa_xfs;
-	u64	pmsa_xpsr;
-	u64	pmsa_xip;
-	u64	pmsa_rsc;
-	u64	pmsa_br0;
-	u64	pmsa_pr;
-	u64	pmsa_bank0_gr[16];
-	u64	pmsa_gr[16];
-	u64	pmsa_nat_bits;
+	u64	pmsa_nat_bits;		/* nat bits for saved GRs  */
+	u64	pmsa_gr[15];		/* GR1	- GR15		   */
+	u64	pmsa_bank0_gr[16];	/* GR16 - GR31		   */
+	u64	pmsa_bank1_gr[16];	/* GR16 - GR31		   */
+	u64	pmsa_pr;		/* predicate registers	   */
+	u64	pmsa_br0;		/* branch register 0	   */
+	u64	pmsa_rsc;		/* ar.rsc		   */
+	u64	pmsa_iip;		/* cr.iip		   */
+	u64	pmsa_ipsr;		/* cr.ipsr		   */
+	u64	pmsa_ifs;		/* cr.ifs		   */
+	u64	pmsa_xip;		/* previous iip		   */
+	u64	pmsa_xpsr;		/* previous psr		   */
+	u64	pmsa_xfs;		/* previous ifs		   */
+	u64	pmsa_reserved[71];	/* pal_min_state_area should total to 1KB */
 } pal_min_state_area_t;
 
 

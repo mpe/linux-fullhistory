@@ -590,7 +590,7 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 	if (end < MAX_DMA_ADDRESS) {
 		/* If it would cross a 64k boundary, cap it at the end. */
 		if ((start ^ end) & ~0xffffUL)
-			maxlen = (0x10000 - start) & 0xffff;
+			maxlen = 0x10000 - (start & 0xffff);
 
 		dma_addr = dma_handle = pci_map_single(priv->dev, (void *)buf, length,
 						       PCI_DMA_TODEVICE);

@@ -138,7 +138,7 @@ flush_tlb_range (struct mm_struct *mm, unsigned long start, unsigned long end)
 			 */
 			++nbits;
 		if (((1UL << nbits) & SUPPORTED_PGBITS) == 0)
-		  panic("flush_tlb_range: BUG: nbits=%lu\n", nbits);
+			panic("flush_tlb_range: BUG: nbits=%lu\n", nbits);
 	}
 	start &= ~((1UL << nbits) - 1);
 

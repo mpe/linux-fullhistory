@@ -550,6 +550,7 @@ static int rtc_release(struct inode *inode, struct file *file)
 }
 
 #ifndef __alpha__
+/* Called without the kernel lock - fine */
 static unsigned int rtc_poll(struct file *file, poll_table *wait)
 {
 	unsigned long l, flags;

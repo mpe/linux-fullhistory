@@ -2100,7 +2100,7 @@ int sab82532_read_proc(char *page, char **start, off_t off, int count,
 done:
 	if (off >= len+begin)
 		return 0;
-	*start = page + (begin-off);
+	*start = page + (off-begin);
 	return ((count < begin+len-off) ? count : begin+len-off);
 }
 

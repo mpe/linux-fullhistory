@@ -989,6 +989,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 	return ret;
 }
 
+/* No kernel lock - fine */
 static unsigned int usbdev_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct dev_state *ps = (struct dev_state *)file->private_data;

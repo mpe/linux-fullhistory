@@ -184,6 +184,7 @@ EXPORT_SYMBOL(get_hardblocksize);
 EXPORT_SYMBOL(set_blocksize);
 EXPORT_SYMBOL(getblk);
 EXPORT_SYMBOL(bdget);
+EXPORT_SYMBOL(bdput);
 EXPORT_SYMBOL(bread);
 EXPORT_SYMBOL(breada);
 EXPORT_SYMBOL(__brelse);

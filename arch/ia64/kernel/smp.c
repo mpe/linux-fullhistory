@@ -6,6 +6,8 @@
  * 
  * Lots of stuff stolen from arch/alpha/kernel/smp.c
  *
+ *  00/03/31 Rohit Seth <rohit.seth@intel.com>	Fixes for Bootstrap Processor & cpu_online_map
+ *			now gets done here (instead of setup.c)
  *  99/10/05 davidm	Update to bring it in sync with new command-line processing scheme.
  */
 #define __KERNEL_SYSCALLS__
@@ -24,15 +26,6 @@
 #include <asm/bitops.h>
 #include <asm/current.h>
 #include <asm/delay.h>
-
-#ifdef CONFIG_KDB
-#include <linux/kdb.h>
-void smp_kdb_interrupt (struct pt_regs* regs);
-void kdb_global(int cpuid);
-extern unsigned long smp_kdb_wait;
-extern int kdb_new_cpu;
-#endif
-
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/page.h>
@@ -47,25 +40,24 @@ extern int kdb_new_cpu;
 extern int cpu_idle(void * unused);
 extern void _start(void);
 
-extern int cpu_now_booting;                          /* Used by head.S to find idle task */
-extern unsigned long cpu_initialized;                /* Bitmap of available cpu's */
-extern struct cpuinfo_ia64 cpu_data[NR_CPUS];        /* Duh... */
+extern int cpu_now_booting;			     /* Used by head.S to find idle task */
+extern volatile unsigned long cpu_online_map;	     /* Bitmap of available cpu's */
+extern struct cpuinfo_ia64 cpu_data[NR_CPUS];	     /* Duh... */
 
 spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
-#ifdef CONFIG_KDB
-unsigned long cpu_online_map = 1;
-#endif
+struct smp_boot_data __initdata smp;
+char __initdata no_int_routing = 0;
 
+unsigned char smp_int_redirect;			/* are INT and IPI redirectable by the chipset? */
 volatile int __cpu_number_map[NR_CPUS] = { -1, };    /* SAPIC ID -> Logical ID */
 volatile int __cpu_logical_map[NR_CPUS] = { -1, };   /* logical ID -> SAPIC ID */
 int smp_num_cpus = 1;		
-int bootstrap_processor = -1;                        /* SAPIC ID of BSP */
-int smp_threads_ready = 0;	                     /* Set when the idlers are all forked */
-unsigned long ipi_base_addr = IPI_DEFAULT_BASE_ADDR; /* Base addr of IPI table */
+int bootstrap_processor = -1;			     /* SAPIC ID of BSP */
+int smp_threads_ready = 0;			     /* Set when the idlers are all forked */
 cycles_t cacheflush_time = 0;
-unsigned long ap_wakeup_vector = -1;                 /* External Int to use to wakeup AP's */
-static int max_cpus = -1;	                     /* Command line */
+unsigned long ap_wakeup_vector = -1;		     /* External Int to use to wakeup AP's */
+static int max_cpus = -1;			     /* Command line */
 static unsigned long ipi_op[NR_CPUS];
 struct smp_call_struct {
 	void (*func) (void *info);
@@ -76,20 +68,13 @@ struct smp_call_struct {
 };
 static struct smp_call_struct *smp_call_function_data;
 
-#ifdef CONFIG_KDB
-unsigned long smp_kdb_wait = 0;                         /* Bitmask of waiters */
-#endif
-
 #ifdef	CONFIG_ITANIUM_ASTEP_SPECIFIC
 extern spinlock_t ivr_read_lock;
 #endif
 
-int use_xtp = 0;		/* XXX */
-
 #define IPI_RESCHEDULE	        0
 #define IPI_CALL_FUNC	        1
 #define IPI_CPU_STOP	        2
-#define IPI_KDB_INTERRUPT	4
 
 /*
  *	Setup routine for controlling SMP activation
@@ -118,13 +103,22 @@ static int __init maxcpus(char *str)
 
 __setup("maxcpus=", maxcpus);
 
+static int __init
+nointroute(char *str)
+{
+	no_int_routing = 1;
+	return 1;
+}
+
+__setup("nointroute", nointroute);
+
 /*
  * Yoink this CPU from the runnable list... 
  */
 void
 halt_processor(void) 
 {
-        clear_bit(smp_processor_id(), &cpu_initialized);
+        clear_bit(smp_processor_id(), &cpu_online_map);
 	max_xtp();
 	__cli();
         for (;;)
@@ -188,12 +182,6 @@ handle_IPI(int irq, void *dev_id, struct pt_regs *regs)
 			halt_processor();
 			break;
 
-#ifdef CONFIG_KDB
-		case IPI_KDB_INTERRUPT:
-			smp_kdb_interrupt(regs);
-			break;
-#endif
-
 		default:
 			printk(KERN_CRIT "Unknown IPI on CPU %d: %lu\n", this_cpu, which);
 			break;
@@ -205,32 +193,6 @@ handle_IPI(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static inline void
-send_IPI(int dest_cpu, unsigned char vector)
-{
-	unsigned long ipi_addr;
-	unsigned long ipi_data;
-#ifdef	CONFIG_ITANIUM_ASTEP_SPECIFIC
-	unsigned long flags;
-#endif
-
-	ipi_data = vector;
-	ipi_addr = ipi_base_addr | ((dest_cpu << 8) << 4); /* 16-bit SAPIC ID's; assume CPU bus 0 */
-	mb();
-
-#ifdef	CONFIG_ITANIUM_ASTEP_SPECIFIC
-	/*
-	 * Disable IVR reads
-	 */
-	spin_lock_irqsave(&ivr_read_lock, flags);
-	writeq(ipi_data, ipi_addr);
-	spin_unlock_irqrestore(&ivr_read_lock, flags);
-#else
- 	writeq(ipi_data, ipi_addr);
-#endif	/* CONFIG_ITANIUM_ASTEP_SPECIFIC */
-
-}
-
-static inline void
 send_IPI_single(int dest_cpu, int op) 
 {
 	
@@ -238,7 +200,7 @@ send_IPI_single(int dest_cpu, int op)
                 return;
         
         ipi_op[dest_cpu] |= (1 << op);
-	send_IPI(dest_cpu, IPI_IRQ);
+	ipi_send(dest_cpu, IPI_IRQ, IA64_IPI_DM_INT, 0);
 }
 
 static inline void
@@ -452,9 +414,11 @@ start_ap(void)
 	ia64_clear_ic(flags);
 	ia64_set_rr(          0, (0x1000 << 8) | (_PAGE_SIZE_1M << 2));
 	ia64_set_rr(PAGE_OFFSET, (ia64_rid(0, PAGE_OFFSET) << 8) | (_PAGE_SIZE_256M << 2));
+	ia64_srlz_d();
 	ia64_itr(0x3, 1, PAGE_OFFSET,
 		 pte_val(mk_pte_phys(0, __pgprot(__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RWX))),
 		 _PAGE_SIZE_256M);
+	ia64_srlz_i();
 
 	flags = (IA64_PSR_IT | IA64_PSR_IC | IA64_PSR_DT | IA64_PSR_RT | IA64_PSR_DFH | 
 		 IA64_PSR_BN);
@@ -492,6 +456,10 @@ smp_callin(void)
 	smp_store_cpu_info(smp_processor_id());
 	smp_setup_percpu_timer(smp_processor_id());
 
+	if (test_and_set_bit(smp_processor_id(), &cpu_online_map)) {
+		printk("CPU#%d already initialized!\n", smp_processor_id());
+		machine_halt();
+	}  
 	while (!smp_threads_ready) 
 		mb();
 
@@ -505,6 +473,9 @@ smp_callin(void)
 	ia64_set_lrr1(0, 1);	
 
 	__sti();		/* Interrupts have been off till now. */
+
+	printk("SMP: CPU %d starting idle loop\n", smp_processor_id());
+
 	cpu_idle(NULL);
 }
 
@@ -565,7 +536,7 @@ smp_boot_one_cpu(int cpuid, int cpunum)
 	cpu_now_booting = cpunum;
 	
 	/* Kick the AP in the butt */
-	send_IPI(cpuid, ap_wakeup_vector);
+	ipi_send(cpuid, ap_wakeup_vector, IA64_IPI_DM_INT, 0);
 	ia64_srlz_i();
 	mb();
 
@@ -575,24 +546,20 @@ smp_boot_one_cpu(int cpuid, int cpunum)
 	 * is waiting for smp_threads_ready to be 1 and we can move on.
 	 */
 	for (timeout = 0; timeout < 100000; timeout++) {
-		if (test_bit(cpuid, &cpu_initialized))
+		if (test_bit(cpuid, &cpu_online_map))
 			goto alive;
-		udelay(10);
+		udelay(100);
 		barrier();
 	}
 
 	printk(KERN_ERR "SMP: Processor %d is stuck.\n", cpuid);
-	return -1;
+	return 0;
 
 alive:
 	/* Remember the AP data */
 	__cpu_number_map[cpuid] = cpunum;
-#ifdef CONFIG_KDB
-        cpu_online_map |= (1<<cpunum);
-        printk ("DEBUGGER: cpu_online_map = 0x%08x\n", cpu_online_map);
-#endif
 	__cpu_logical_map[cpunum] = cpuid;
-	return 0;
+	return 1;
 }
 
 
@@ -607,9 +574,6 @@ smp_boot_cpus(void)
 {
 	int i, cpu_count = 1;
 	unsigned long bogosum;
-	int sapic_id;
-	extern int acpi_cpus;
-	extern int acpi_apic_map[32];
 
 	/* Take care of some initial bookkeeping.  */
 	memset(&__cpu_number_map, -1, sizeof(__cpu_number_map));
@@ -634,6 +598,10 @@ smp_boot_cpus(void)
 #endif
  	smp_setup_percpu_timer(bootstrap_processor);
 
+	if (test_and_set_bit(bootstrap_processor, &cpu_online_map)) {
+		printk("CPU#%d already initialized!\n", smp_processor_id());
+		machine_halt();
+	}  
 	init_idle();
 
 	/* Nothing to do when told not to.  */
@@ -642,33 +610,36 @@ smp_boot_cpus(void)
 		return;
 	}
 
-	if (acpi_cpus > 1) {
+	if (max_cpus != -1) 
+		printk("Limiting CPUs to %d\n", max_cpus);
+
+	if (smp.cpu_count > 1) {
 		printk(KERN_INFO "SMP: starting up secondaries.\n");
 
 		for (i = 0; i < NR_CPUS; i++) {
-			if (acpi_apic_map[i] == -1 || 
-			    acpi_apic_map[i] == bootstrap_processor << 8) /* XXX Fix me Walt */
+			if (smp.cpu_map[i] == -1 || 
+			    smp.cpu_map[i] == bootstrap_processor)
 				continue;
 
-			/*
-			 * IA64 SAPIC ID's are 16-bits.  See asm/smp.h for more info 
-			 */
-			sapic_id = acpi_apic_map[i] >> 8;
-			if (smp_boot_one_cpu(sapic_id, cpu_count))
+			if (smp_boot_one_cpu(smp.cpu_map[i], cpu_count) == 0)
 				continue;
 
 			cpu_count++; /* Count good CPUs only... */
+			/* 
+			 * Bail if we've started as many CPUS as we've been told to.
+			 */
+			if (cpu_count == max_cpus)
+				break;
 		}
 	}
 
 	if (cpu_count == 1) {
 		printk(KERN_ERR "SMP: Bootstrap processor only.\n");
-		return;
 	}
 
 	bogosum = 0;
         for (i = 0; i < NR_CPUS; i++) {
-		if (cpu_initialized & (1L << i))
+		if (cpu_online_map & (1L << i))
 			bogosum += cpu_data[i].loops_per_sec;
         }
 
@@ -733,45 +704,8 @@ init_smp_config(void)
 	if (sal_ret < 0) {
 		printk("SMP: Can't set SAL AP Boot Rendezvous: %s\n", ia64_sal_strerror(sal_ret));
 		printk("     Forcing UP mode\n");
+		max_cpus = 0;
 		smp_num_cpus = 1; 
 	}
 
 }
-
-#ifdef CONFIG_KDB
-void smp_kdb_stop (int all, struct pt_regs* regs)
-{
-        if (all)
-      {
-              printk ("Sending IPI to all on CPU %i\n", smp_processor_id ());
-                smp_kdb_wait = 0xffffffff;
-                clear_bit (smp_processor_id(), &smp_kdb_wait);
-                send_IPI_allbutself (IPI_KDB_INTERRUPT);
-        }
-      else
-      {
-              printk ("Sending IPI to self on CPU %i\n",
-                      smp_processor_id ());
-                set_bit (smp_processor_id(), &smp_kdb_wait);
-              clear_bit (__cpu_logical_map[kdb_new_cpu], &smp_kdb_wait);
-                smp_kdb_interrupt (regs);
-        }
-}
-
-void smp_kdb_interrupt (struct pt_regs* regs)
-{
-        printk ("kdb: IPI on CPU %i with mask 0x%08x\n",
-              smp_processor_id (), smp_kdb_wait);
-
-      /* All CPUs spin here forever */
-        while (test_bit (smp_processor_id(), &smp_kdb_wait));
-
-      /* Enter KDB on CPU selected by KDB on the last CPU */
-        if (__cpu_logical_map[kdb_new_cpu] == smp_processor_id ())
-      {
-                kdb (KDB_REASON_SWITCH, 0, regs);
-        }
-}
-
-#endif
-

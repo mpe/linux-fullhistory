@@ -152,7 +152,8 @@ typedef struct siginfo {
 #define TRAP_BRKPT	1	/* process breakpoint */
 #define TRAP_TRACE	2	/* process trace trap */
 #define TRAP_BRANCH	3	/* process taken branch trap */
-#define NSIGTRAP	3
+#define TRAP_HWBKPT	4	/* hardware breakpoint or watchpoint */
+#define NSIGTRAP	4
 
 /*
  * SIGCHLD si_codes

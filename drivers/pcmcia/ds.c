@@ -669,6 +669,7 @@ static ssize_t ds_write(struct file *file, const char *buf,
 
 /*====================================================================*/
 
+/* No kernel lock - fine */
 static u_int ds_poll(struct file *file, poll_table *wait)
 {
     socket_t i = MINOR(file->f_dentry->d_inode->i_rdev);

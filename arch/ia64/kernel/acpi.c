@@ -11,12 +11,12 @@
 #include <linux/config.h>
 
 #include <linux/init.h>
-#include <linux/irq.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/irq.h>
 
 #include <asm/acpi-ext.h>
 #include <asm/page.h>
@@ -27,13 +27,12 @@
 #undef ACPI_DEBUG		/* Guess what this does? */
 
 #ifdef CONFIG_SMP
-extern unsigned long ipi_base_addr;
+extern struct smp_boot_data smp;
 #endif
 
 /* These are ugly but will be reclaimed by the kernel */
-int __initdata acpi_cpus = 0;	
-int __initdata acpi_apic_map[32];
-int __initdata cpu_cnt = 0;
+int __initdata available_cpus = 0;	
+int __initdata total_cpus = 0;
 
 void (*pm_idle) (void);
 
@@ -50,7 +49,7 @@ acpi_lsapic(char *p)
 	if ((lsapic->flags & LSAPIC_PRESENT) == 0) 
 		return;
 
-	printk("      CPU %d (%.04x:%.04x): ", cpu_cnt, lsapic->eid, lsapic->id);
+	printk("      CPU %d (%.04x:%.04x): ", total_cpus, lsapic->eid, lsapic->id);
 
 	if ((lsapic->flags & LSAPIC_ENABLED) == 0) {
 		printk("Disabled.\n");
@@ -62,11 +61,17 @@ acpi_lsapic(char *p)
 	
 	if (add) {
 		printk("Available.\n");
-		acpi_cpus++;
-		acpi_apic_map[cpu_cnt] = (lsapic->id << 8) | lsapic->eid;
+		available_cpus++;
+#ifdef CONFIG_SMP
+# if LARGE_CPU_ID_OK
+		smp.cpu_map[total_cpus] = (lsapic->id << 8) | lsapic->eid;
+# else
+		smp.cpu_map[total_cpus] = lsapic->id;
+# endif
+#endif
 	}
 	
-	cpu_cnt++;
+	total_cpus++;
 }
 
 /*
@@ -174,7 +179,7 @@ acpi_legacy_irq(char *p)
 		break;
 	}
 
-#ifdef ACPI_DEBUG
+#if 1/*def ACPI_DEBUG*/
 	printk("Legacy ISA IRQ %x -> IA64 Vector %x IOSAPIC Pin %x Active %s %s Trigger\n", 
 	       legacy->isa_irq, vector, iosapic_pin(vector), 
 	       ((iosapic_polarity(vector) == IO_SAPIC_POL_LOW) ? "Low" : "High"),
@@ -204,11 +209,11 @@ acpi_parse_msapic(acpi_sapic_t *msapic)
 {
 	char *p, *end;
 
-	memset(&acpi_apic_map, -1, sizeof(acpi_apic_map));
+	/* Base address of IPI Message Block */
+	ipi_base_addr = (unsigned long) ioremap(msapic->interrupt_block, 0);
 
 #ifdef CONFIG_SMP
-	/* Base address of IPI Message Block */
-	ipi_base_addr = ioremap(msapic->interrupt_block, 0);
+	memset(&smp, -1, sizeof(smp));
 #endif
 	
 	p = (char *) (msapic + 1);
@@ -238,11 +243,22 @@ acpi_parse_msapic(acpi_sapic_t *msapic)
 		}
 
 		/* Move to next table entry. */
-		p += *(p + 1);
+#define BAD_ACPI_TABLE
+#ifdef BAD_ACPI_TABLE
+		/*
+		 * Some prototype Lion's have a bad ACPI table
+		 * requiring this fix.  Without this fix, those
+		 * machines crash during bootup.
+		 */
+		if (p[1] == 0)
+			p = end;
+		else
+#endif
+			p += p[1];
 	}
 
 	/* Make bootup pretty */
-	printk("      %d CPUs available, %d CPUs total\n", acpi_cpus, cpu_cnt);
+	printk("      %d CPUs available, %d CPUs total\n", available_cpus, total_cpus);
 }
 
 int __init 
@@ -281,12 +297,15 @@ acpi_parse(acpi_rsdp_t *rsdp)
 			continue;
 
 		acpi_parse_msapic((acpi_sapic_t *) hdrp);
-	} /* while() */
-
-	if (acpi_cpus == 0) {
-		printk("ACPI: Found 0 CPUS; assuming 1\n");
-		acpi_cpus = 1; /* We've got at least one of these, no? */
 	}
+
+#ifdef CONFIG_SMP
+	if (available_cpus == 0) {
+		printk("ACPI: Found 0 CPUS; assuming 1\n");
+		available_cpus = 1; /* We've got at least one of these, no? */
+	}
+	smp.cpu_count = available_cpus;
+#endif
 	return 1;
 }
 

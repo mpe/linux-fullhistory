@@ -569,6 +569,7 @@ static int pp_release (struct inode * inode, struct file * file)
 	return 0;
 }
 
+/* No kernel lock held - fine */
 static unsigned int pp_poll (struct file * file, poll_table * wait)
 {
 	struct pp_struct *pp = file->private_data;

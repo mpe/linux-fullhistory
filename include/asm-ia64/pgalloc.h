@@ -139,6 +139,9 @@ free_pte_fast (pte_t *pte)
 #define pmd_free(pmd)		free_pmd_fast(pmd)
 #define pgd_free(pgd)		free_pgd_fast(pgd)
 
+extern void __handle_bad_pgd (pgd_t *pgd);
+extern void __handle_bad_pmd (pmd_t *pmd);
+
 extern __inline__ pte_t*
 pte_alloc (pmd_t *pmd, unsigned long vmaddr)
 {
@@ -242,11 +245,6 @@ extern void flush_tlb_range (struct mm_struct *mm, unsigned long start, unsigned
 
 /*
  * Page-granular tlb flush.
- *
- * do a tbisd (type = 2) normally, and a tbis (type = 3)
- * if it is an executable mapping.  We want to avoid the
- * itlb flush, because that potentially also does a
- * icache flush.
  */
 static __inline__ void
 flush_tlb_page (struct vm_area_struct *vma, unsigned long addr)

@@ -290,6 +290,7 @@ ppp_asynctty_ioctl(struct tty_struct *tty, struct file *file,
 	return err;
 }
 
+/* No kernel lock - fine */
 static unsigned int
 ppp_asynctty_poll(struct tty_struct *tty, struct file *file, poll_table *wait)
 {

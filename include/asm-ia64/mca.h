@@ -6,9 +6,14 @@
  * Copyright (C) Vijay Chander (vijay@engr.sgi.com)
  * Copyright (C) Srinivasa Thirumalachar (sprasad@engr.sgi.com)
  */
+
+/* XXX use this temporary define for MP systems trying to INIT */
+#define SAL_MPINIT_WORKAROUND
+
 #ifndef _ASM_IA64_MCA_H
 #define _ASM_IA64_MCA_H
 
+#if !defined(__ASSEMBLY__)
 #include <linux/types.h>
 #include <asm/param.h>
 #include <asm/sal.h>
@@ -119,7 +124,7 @@ typedef struct ia64_mca_os_to_sal_state_s {
 
 typedef int (*prfunc_t)(const char * fmt, ...);
 
-extern void mca_init(void);
+extern void ia64_mca_init(void);
 extern void ia64_os_mca_dispatch(void);
 extern void ia64_os_mca_dispatch_end(void);
 extern void ia64_mca_ucmc_handler(void);
@@ -134,10 +139,12 @@ extern void ia64_log_print(int,int,prfunc_t);
 
 #undef 	MCA_TEST
 
-#if defined(MCA_TEST)
-# define MCA_DEBUG	printk
-#else
-# define MCA_DEBUG
-#endif
+#define IA64_MCA_DEBUG_INFO 1
 
+#if defined(IA64_MCA_DEBUG_INFO)
+# define IA64_MCA_DEBUG	printk
+#else
+# define IA64_MCA_DEBUG
+#endif
+#endif /* !__ASSEMBLY__ */
 #endif /* _ASM_IA64_MCA_H */

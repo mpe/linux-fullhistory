@@ -479,10 +479,22 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 #ifdef __sparc__
 			if (ibcs2_interpreter) {
 				unsigned long old_pers = current->personality;
-					
-				current->personality = PER_SVR4;
+				struct exec_domain *old_domain = current->exec_domain;
+				struct exec_domain *new_domain;
+				struct fs_struct *old_fs = current->fs, *new_fs;
+				get_exec_domain(old_domain);
+				atomic_inc(&old_fs->count);
+
+				set_personality(PER_SVR4);
 				interpreter = open_exec(elf_interpreter);
+
+				new_domain = current->exec_domain;
+				new_fs = current->fs;
 				current->personality = old_pers;
+				current->exec_domain = old_domain;
+				current->fs = old_fs;
+				put_exec_domain(new_domain);
+				put_fs_struct(new_fs);
 			} else
 #endif
 			{

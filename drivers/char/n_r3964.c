@@ -1429,6 +1429,7 @@ static void r3964_set_termios(struct tty_struct *tty, struct termios * old)
    TRACE_L("set_termios");
 }
 
+/* Called without the kernel lock held - fine */
 static unsigned int r3964_poll(struct tty_struct * tty, struct file * file,
 		      struct poll_table_struct *wait)
 {

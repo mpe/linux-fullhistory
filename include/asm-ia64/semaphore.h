@@ -230,7 +230,7 @@ down_write (struct rw_semaphore *sem)
 	do {
 		old_count = sem->count;
 		new_count = old_count - RW_LOCK_BIAS;
-	} while (cmpxchg(&sem->count, old_count, new_count) != old_count);
+	} while (cmpxchg_acq(&sem->count, old_count, new_count) != old_count);
 
 	if (new_count != 0)
 		__down_write_failed(sem, new_count);
@@ -279,7 +279,7 @@ __up_write (struct rw_semaphore *sem)
 	do {
 		old_count = sem->count;
 		new_count = old_count + RW_LOCK_BIAS;
-	} while (cmpxchg(&sem->count, old_count, new_count) != old_count);
+	} while (cmpxchg_rel(&sem->count, old_count, new_count) != old_count);
 
 	/*
 	 * Note: new_count <u RW_LOCK_BIAS <=> old_count < 0 && new_count >= 0.

@@ -271,6 +271,7 @@ extern __inline__ void io_st_le32(volatile unsigned *addr, unsigned val)
 #define BTTV_TYPHOON_TVIEW 0x24
 #define BTTV_PXELVWPLTVPRO 0x25
 #define BTTV_MAGICTVIEW063 0x26
+#define BTTV_PINNACLERAVE  0x27
 
 
 #define AUDIO_TUNER        0x00

@@ -327,12 +327,10 @@ asmlinkage long sys_access(const char * filename, int mode)
 	return res;
 }
 
-/* MOUNT_REWRITE: pass &mnt to lookup_dentry */
 asmlinkage long sys_chdir(const char * filename)
 {
 	int error;
-	struct dentry *dentry, *tmp;
-	struct vfsmount *mnt = NULL, *tmp_mnt;
+	struct nameidata nd;
 	char *name;
 
 	lock_kernel();
@@ -342,27 +340,22 @@ asmlinkage long sys_chdir(const char * filename)
 	if (IS_ERR(name))
 		goto out;
 
-	dentry = lookup_dentry(name, LOOKUP_POSITIVE | LOOKUP_FOLLOW | LOOKUP_DIRECTORY);
+	error = 0;
+	if (walk_init(name,LOOKUP_POSITIVE|LOOKUP_FOLLOW|LOOKUP_DIRECTORY,&nd))
+		error = walk_name(name, &nd);
 	putname(name);
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	if (error)
 		goto out;
 
-	error = permission(dentry->d_inode,MAY_EXEC);
+	error = permission(nd.dentry->d_inode,MAY_EXEC);
 	if (error)
 		goto dput_and_out;
 
-	/* exchange dentries */
-	tmp = current->fs->pwd;
-	tmp_mnt = current->fs->pwdmnt;
-	current->fs->pwd = dentry;
-	current->fs->pwdmnt = mnt;
-	dentry = tmp;
-	mnt = tmp_mnt;
+	set_fs_pwd(current->fs, nd.mnt, nd.dentry);
 
 dput_and_out:
-	mntput(mnt);
-	dput(dentry);
+	dput(nd.dentry);
+	mntput(nd.mnt);
 out:
 	unlock_kernel();
 	return error;
@@ -391,14 +384,8 @@ asmlinkage long sys_fchdir(unsigned int fd)
 
 	lock_kernel();
 	error = permission(inode, MAY_EXEC);
-	if (!error) {
-		struct dentry *tmp = current->fs->pwd;
-		struct vfsmount *tmp_mnt = current->fs->pwdmnt;
-		current->fs->pwd = dget(dentry);
-		current->fs->pwdmnt = mntget(mnt);
-		mntput(tmp_mnt);
-		dput(tmp);
-	}
+	if (!error)
+		set_fs_pwd(current->fs, mnt, dentry);
 	unlock_kernel();
 out_putf:
 	fput(file);
@@ -406,12 +393,10 @@ out:
 	return error;
 }
 
-/* MOUNT_REWRITE: pass &mnt to lookup_dentry */
 asmlinkage long sys_chroot(const char * filename)
 {
 	int error;
-	struct dentry *dentry, *tmp;
-	struct vfsmount *mnt = NULL, *tmp_mnt;
+	struct nameidata nd;
 	char *name;
 
 	lock_kernel();
@@ -421,13 +406,14 @@ asmlinkage long sys_chroot(const char * filename)
 	if (IS_ERR(name))
 		goto out;
 
-	dentry = lookup_dentry(name, LOOKUP_POSITIVE | LOOKUP_FOLLOW | LOOKUP_DIRECTORY);
+	walk_init(name, LOOKUP_POSITIVE | LOOKUP_FOLLOW |
+		      LOOKUP_DIRECTORY | LOOKUP_NOALT, &nd);
+	error = walk_name(name, &nd);	
 	putname(name);
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	if (error)
 		goto out;
 
-	error = permission(dentry->d_inode,MAY_EXEC);
+	error = permission(nd.dentry->d_inode,MAY_EXEC);
 	if (error)
 		goto dput_and_out;
 
@@ -435,18 +421,12 @@ asmlinkage long sys_chroot(const char * filename)
 	if (!capable(CAP_SYS_CHROOT))
 		goto dput_and_out;
 
-	/* exchange dentries */
-	tmp = current->fs->root;
-	tmp_mnt = current->fs->rootmnt;
-	current->fs->root = dentry;
-	current->fs->rootmnt = mnt;
-	dentry = tmp;
-	mnt = tmp_mnt;
+	set_fs_root(current->fs, nd.mnt, nd.dentry);
+	set_fs_altroot();
 	error = 0;
-
 dput_and_out:
-	mntput(mnt);
-	dput(dentry);
+	dput(nd.dentry);
+	mntput(nd.mnt);
 out:
 	unlock_kernel();
 	return error;

@@ -15,7 +15,7 @@ all: dig.a
 O_TARGET        = dig.a
 O_OBJS          = iosapic.o setup.o
 
-ifeq ($(CONFIG_IA64_GENERIC),y)
+ifdef CONFIG_IA64_GENERIC
 O_OBJS		+= machvec.o
 endif
 

@@ -13,8 +13,8 @@
  * over and over again with slight variations and possibly making a
  * mistake somewhere.
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  * Copyright (C) 1999 Asit Mallick <asit.k.mallick@intel.com>
  * Copyright (C) 1999 Don Dugger <don.dugger@intel.com>
  */
@@ -253,66 +253,66 @@ __outsl (unsigned long port, void *src, unsigned long count)
 /*
  * The address passed to these functions are ioremap()ped already.
  */
-extern inline unsigned long
-__readb (unsigned long addr)
+extern inline unsigned char
+__readb (void *addr)
 {
 	return *(volatile unsigned char *)addr;
 }
 
-extern inline unsigned long
-__readw (unsigned long addr)
+extern inline unsigned short
+__readw (void *addr)
 {
 	return *(volatile unsigned short *)addr;
 }
 
-extern inline unsigned long
-__readl (unsigned long addr)
+extern inline unsigned int
+__readl (void *addr)
 {
 	return *(volatile unsigned int *) addr;
 }
 
 extern inline unsigned long
-__readq (unsigned long addr)
+__readq (void *addr)
 {
 	return *(volatile unsigned long *) addr;
 }
 
 extern inline void
-__writeb (unsigned char val, unsigned long addr)
+__writeb (unsigned char val, void *addr)
 {
 	*(volatile unsigned char *) addr = val;
 }
 
 extern inline void
-__writew (unsigned short val, unsigned long addr)
+__writew (unsigned short val, void *addr)
 {
 	*(volatile unsigned short *) addr = val;
 }
 
 extern inline void
-__writel (unsigned int val, unsigned long addr)
+__writel (unsigned int val, void *addr)
 {
 	*(volatile unsigned int *) addr = val;
 }
 
 extern inline void
-__writeq (unsigned long val, unsigned long addr)
+__writeq (unsigned long val, void *addr)
 {
 	*(volatile unsigned long *) addr = val;
 }
 
-#define readb		__readb
-#define readw		__readw
-#define readl		__readl
-#define readq		__readqq
+#define readb(a)	__readb((void *)(a))
+#define readw(a)	__readw((void *)(a))
+#define readl(a)	__readl((void *)(a))
+#define readq(a)	__readqq((void *)(a))
 #define __raw_readb	readb
 #define __raw_readw	readw
 #define __raw_readl	readl
 #define __raw_readq	readq
-#define writeb		__writeb
-#define writew		__writew
-#define writel		__writel
-#define writeq		__writeq
+#define writeb(v,a)	__writeb((v), (void *) (a))
+#define writew(v,a)	__writew((v), (void *) (a))
+#define writel(v,a)	__writel((v), (void *) (a))
+#define writeq(v,a)	__writeq((v), (void *) (a))
 #define __raw_writeb	writeb
 #define __raw_writew	writew
 #define __raw_writeq	writeq

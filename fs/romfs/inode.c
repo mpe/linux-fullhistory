@@ -506,7 +506,8 @@ romfs_read_inode(struct inode *i)
 			break;
 		case 3:
 			i->i_op = &page_symlink_inode_operations;
-			i->i_mode = S_IRWXUGO;
+			i->i_data.a_ops = &romfs_aops;
+			i->i_mode = ino | S_IRWXUGO;
 			break;
 		default:
 			/* depending on MBZ for sock/fifos */

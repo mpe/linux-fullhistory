@@ -58,32 +58,6 @@
 #define A(__x) ((unsigned long)(__x))
 #define AA(__x) ((unsigned long)(__x))
 
-/*
- * This is trivial, and on the face of it looks like it
- * could equally well be done in user mode.
- *
- * Not so, for quite unobvious reasons - register pressure.
- * In user mode vfork() cannot have a stack frame, and if
- * done by calling the "clone()" system call directly, you
- * do not have enough call-clobbered registers to hold all
- * the information you need.
- */
-asmlinkage int sys32_vfork(
-int dummy0,
-int dummy1,
-int dummy2,
-int dummy3,
-int dummy4,
-int dummy5,
-int dummy6,
-int dummy7,
-int stack)
-{
-	struct pt_regs *regs = (struct pt_regs *)&stack;
-
-	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs->r12, regs);
-}
-
 static int
 nargs(unsigned int arg, char **ap)
 {
@@ -842,82 +816,6 @@ asmlinkage int old_select(struct sel_arg_struct *arg)
 	return sys32_select(a.n, a.inp, a.outp, a.exp, a.tvp);
 }
 
-struct rusage32 {
-        struct timeval32 ru_utime;
-        struct timeval32 ru_stime;
-        int    ru_maxrss;
-        int    ru_ixrss;
-        int    ru_idrss;
-        int    ru_isrss;
-        int    ru_minflt;
-        int    ru_majflt;
-        int    ru_nswap;
-        int    ru_inblock;
-        int    ru_oublock;
-        int    ru_msgsnd; 
-        int    ru_msgrcv; 
-        int    ru_nsignals;
-        int    ru_nvcsw;
-        int    ru_nivcsw;
-};
-
-static int
-put_rusage (struct rusage32 *ru, struct rusage *r)
-{
-	int err;
-	
-	err = put_user (r->ru_utime.tv_sec, &ru->ru_utime.tv_sec);
-	err |= __put_user (r->ru_utime.tv_usec, &ru->ru_utime.tv_usec);
-	err |= __put_user (r->ru_stime.tv_sec, &ru->ru_stime.tv_sec);
-	err |= __put_user (r->ru_stime.tv_usec, &ru->ru_stime.tv_usec);
-	err |= __put_user (r->ru_maxrss, &ru->ru_maxrss);
-	err |= __put_user (r->ru_ixrss, &ru->ru_ixrss);
-	err |= __put_user (r->ru_idrss, &ru->ru_idrss);
-	err |= __put_user (r->ru_isrss, &ru->ru_isrss);
-	err |= __put_user (r->ru_minflt, &ru->ru_minflt);
-	err |= __put_user (r->ru_majflt, &ru->ru_majflt);
-	err |= __put_user (r->ru_nswap, &ru->ru_nswap);
-	err |= __put_user (r->ru_inblock, &ru->ru_inblock);
-	err |= __put_user (r->ru_oublock, &ru->ru_oublock);
-	err |= __put_user (r->ru_msgsnd, &ru->ru_msgsnd);
-	err |= __put_user (r->ru_msgrcv, &ru->ru_msgrcv);
-	err |= __put_user (r->ru_nsignals, &ru->ru_nsignals);
-	err |= __put_user (r->ru_nvcsw, &ru->ru_nvcsw);
-	err |= __put_user (r->ru_nivcsw, &ru->ru_nivcsw);
-	return err;
-}
-
-extern asmlinkage int sys_wait4(pid_t pid,unsigned int * stat_addr,
-				int options, struct rusage * ru);
-
-asmlinkage int
-sys32_wait4(__kernel_pid_t32 pid, unsigned int *stat_addr, int options,
-	    struct rusage32 *ru)
-{
-	if (!ru)
-		return sys_wait4(pid, stat_addr, options, NULL);
-	else {
-		struct rusage r;
-		int ret;
-		unsigned int status;
-		mm_segment_t old_fs = get_fs();
-		
-		set_fs (KERNEL_DS);
-		ret = sys_wait4(pid, stat_addr ? &status : NULL, options, &r);
-		set_fs (old_fs);
-		if (put_rusage (ru, &r)) return -EFAULT;
-		if (stat_addr && put_user (status, stat_addr))
-			return -EFAULT;
-		return ret;
-	}
-}
-
-asmlinkage int
-sys32_waitpid(__kernel_pid_t32 pid, unsigned int *stat_addr, int options)
-{
-	return sys32_wait4(pid, stat_addr, options, NULL);
-}
-
 struct timespec32 {
 	int 	tv_sec;
 	int	tv_nsec;
@@ -1586,65 +1484,63 @@ do_sys32_semctl(int first, int second, int third, void *uptr)
 {
 	union semun fourth;
 	u32 pad;
-	int err = -EINVAL;
+	int err, err2;
+	struct semid64_ds s;
+	struct semid_ds32 *usp;
+	mm_segment_t old_fs;
 
 	if (!uptr)
-		goto out;
+		return -EINVAL;
 	err = -EFAULT;
 	if (get_user (pad, (u32 *)uptr))
-		goto out;
+		return err;
 	if(third == SETVAL)
 		fourth.val = (int)pad;
 	else
 		fourth.__pad = (void *)A(pad);
-	if (IPCOP_MASK (third) &
-	    (IPCOP_MASK (IPC_INFO) | IPCOP_MASK (SEM_INFO) |
-	     IPCOP_MASK (GETVAL) | IPCOP_MASK (GETPID) |
-	     IPCOP_MASK (GETNCNT) | IPCOP_MASK (GETZCNT) |
-	     IPCOP_MASK (GETALL) | IPCOP_MASK (SETALL) |
-	     IPCOP_MASK (IPC_RMID))) {
-		err = sys_semctl (first, second, third, fourth);
-	} else {
-		struct semid_ds s;
-		struct semid_ds32 *usp = (struct semid_ds32 *)A(pad);
-		mm_segment_t old_fs;
-		int need_back_translation;
+	switch (third) {
 
-		if (third == IPC_SET) {
-			err = get_user (s.sem_perm.uid, &usp->sem_perm.uid);
-			err |= __get_user(s.sem_perm.gid, &usp->sem_perm.gid);
-			err |= __get_user(s.sem_perm.mode, &usp->sem_perm.mode);
-			if (err)
-				goto out;
-			fourth.__pad = &s;
-		}
-		need_back_translation =
-			(IPCOP_MASK (third) &
-			 (IPCOP_MASK (SEM_STAT) | IPCOP_MASK (IPC_STAT))) != 0;
-		if (need_back_translation)
-			fourth.__pad = &s;
+	case IPC_INFO:
+	case IPC_RMID:
+	case IPC_SET:
+	case SEM_INFO:
+	case GETVAL:
+	case GETPID:
+	case GETNCNT:
+	case GETZCNT:
+	case GETALL:
+	case SETVAL:
+	case SETALL:
+		err = sys_semctl (first, second, third, fourth);
+		break;
+
+	case IPC_STAT:
+	case SEM_STAT:
+		usp = (struct semid_ds32 *)A(pad);
+		fourth.__pad = &s;
 		old_fs = get_fs ();
 		set_fs (KERNEL_DS);
 		err = sys_semctl (first, second, third, fourth);
 		set_fs (old_fs);
-		if (need_back_translation) {
-			int err2 = put_user(s.sem_perm.key, &usp->sem_perm.key);
-			err2 |= __put_user(s.sem_perm.uid, &usp->sem_perm.uid);
-			err2 |= __put_user(s.sem_perm.gid, &usp->sem_perm.gid);
-			err2 |= __put_user(s.sem_perm.cuid,
-					   &usp->sem_perm.cuid);
-			err2 |= __put_user (s.sem_perm.cgid,
-					    &usp->sem_perm.cgid);
-			err2 |= __put_user (s.sem_perm.mode,
-					    &usp->sem_perm.mode);
-			err2 |= __put_user (s.sem_perm.seq, &usp->sem_perm.seq);
-			err2 |= __put_user (s.sem_otime, &usp->sem_otime);
-			err2 |= __put_user (s.sem_ctime, &usp->sem_ctime);
-			err2 |= __put_user (s.sem_nsems, &usp->sem_nsems);
-			if (err2) err = -EFAULT;
-		}
+		err2 = put_user(s.sem_perm.key, &usp->sem_perm.key);
+		err2 |= __put_user(s.sem_perm.uid, &usp->sem_perm.uid);
+		err2 |= __put_user(s.sem_perm.gid, &usp->sem_perm.gid);
+		err2 |= __put_user(s.sem_perm.cuid,
+				   &usp->sem_perm.cuid);
+		err2 |= __put_user (s.sem_perm.cgid,
+				    &usp->sem_perm.cgid);
+		err2 |= __put_user (s.sem_perm.mode,
+				    &usp->sem_perm.mode);
+		err2 |= __put_user (s.sem_perm.seq, &usp->sem_perm.seq);
+		err2 |= __put_user (s.sem_otime, &usp->sem_otime);
+		err2 |= __put_user (s.sem_ctime, &usp->sem_ctime);
+		err2 |= __put_user (s.sem_nsems, &usp->sem_nsems);
+		if (err2)
+			err = -EFAULT;
+		break;
+
 	}
-out:
+
 	return err;
 }
 
@@ -1717,52 +1613,60 @@ out:
 static int
 do_sys32_msgctl (int first, int second, void *uptr)
 {
-	int err;
+	int err, err2;
+	struct msqid_ds m;
+	struct msqid64_ds m64;
+	struct msqid_ds32 *up = (struct msqid_ds32 *)uptr;
+	mm_segment_t old_fs;
 
-	if (IPCOP_MASK (second) &
-	    (IPCOP_MASK (IPC_INFO) | IPCOP_MASK (MSG_INFO) |
-	     IPCOP_MASK (IPC_RMID))) {
+	switch (second) {
+
+	case IPC_INFO:
+	case IPC_RMID:
+	case MSG_INFO:
 		err = sys_msgctl (first, second, (struct msqid_ds *)uptr);
-	} else {
-		struct msqid_ds m;
-		struct msqid_ds32 *up = (struct msqid_ds32 *)uptr;
-		mm_segment_t old_fs;
+		break;
 
-		if (second == IPC_SET) {
-			err = get_user (m.msg_perm.uid, &up->msg_perm.uid);
-			err |= __get_user (m.msg_perm.gid, &up->msg_perm.gid);
-			err |= __get_user (m.msg_perm.mode, &up->msg_perm.mode);
-			err |= __get_user (m.msg_qbytes, &up->msg_qbytes);
-			if (err)
-				goto out;
-		}
+	case IPC_SET:
+		err = get_user (m.msg_perm.uid, &up->msg_perm.uid);
+		err |= __get_user (m.msg_perm.gid, &up->msg_perm.gid);
+		err |= __get_user (m.msg_perm.mode, &up->msg_perm.mode);
+		err |= __get_user (m.msg_qbytes, &up->msg_qbytes);
+		if (err)
+			break;
 		old_fs = get_fs ();
 		set_fs (KERNEL_DS);
 		err = sys_msgctl (first, second, &m);
 		set_fs (old_fs);
-		if (IPCOP_MASK (second) &
-		    (IPCOP_MASK (MSG_STAT) | IPCOP_MASK (IPC_STAT))) {
-			int err2 = put_user (m.msg_perm.key, &up->msg_perm.key);
-			err2 |= __put_user(m.msg_perm.uid, &up->msg_perm.uid);
-			err2 |= __put_user(m.msg_perm.gid, &up->msg_perm.gid);
-			err2 |= __put_user(m.msg_perm.cuid, &up->msg_perm.cuid);
-			err2 |= __put_user(m.msg_perm.cgid, &up->msg_perm.cgid);
-			err2 |= __put_user(m.msg_perm.mode, &up->msg_perm.mode);
-			err2 |= __put_user(m.msg_perm.seq, &up->msg_perm.seq);
-			err2 |= __put_user(m.msg_stime, &up->msg_stime);
-			err2 |= __put_user(m.msg_rtime, &up->msg_rtime);
-			err2 |= __put_user(m.msg_ctime, &up->msg_ctime);
-			err2 |= __put_user(m.msg_cbytes, &up->msg_cbytes);
-			err2 |= __put_user(m.msg_qnum, &up->msg_qnum);
-			err2 |= __put_user(m.msg_qbytes, &up->msg_qbytes);
-			err2 |= __put_user(m.msg_lspid, &up->msg_lspid);
-			err2 |= __put_user(m.msg_lrpid, &up->msg_lrpid);
-			if (err2)
-				err = -EFAULT;
-		}
+		break;
+
+	case IPC_STAT:
+	case MSG_STAT:
+		old_fs = get_fs ();
+		set_fs (KERNEL_DS);
+		err = sys_msgctl (first, second, &m64);
+		set_fs (old_fs);
+		err2 = put_user (m64.msg_perm.key, &up->msg_perm.key);
+		err2 |= __put_user(m64.msg_perm.uid, &up->msg_perm.uid);
+		err2 |= __put_user(m64.msg_perm.gid, &up->msg_perm.gid);
+		err2 |= __put_user(m64.msg_perm.cuid, &up->msg_perm.cuid);
+		err2 |= __put_user(m64.msg_perm.cgid, &up->msg_perm.cgid);
+		err2 |= __put_user(m64.msg_perm.mode, &up->msg_perm.mode);
+		err2 |= __put_user(m64.msg_perm.seq, &up->msg_perm.seq);
+		err2 |= __put_user(m64.msg_stime, &up->msg_stime);
+		err2 |= __put_user(m64.msg_rtime, &up->msg_rtime);
+		err2 |= __put_user(m64.msg_ctime, &up->msg_ctime);
+		err2 |= __put_user(m64.msg_cbytes, &up->msg_cbytes);
+		err2 |= __put_user(m64.msg_qnum, &up->msg_qnum);
+		err2 |= __put_user(m64.msg_qbytes, &up->msg_qbytes);
+		err2 |= __put_user(m64.msg_lspid, &up->msg_lspid);
+		err2 |= __put_user(m64.msg_lrpid, &up->msg_lrpid);
+		if (err2)
+			err = -EFAULT;
+		break;
+
 	}
 
-out:
 	return err;
 }
 
@@ -1774,85 +1678,98 @@ do_sys32_shmat (int first, int second, int third, int version, void *uptr)
 	int err = -EINVAL;
 
 	if (version == 1)
-		goto out;
+		return err;
 	err = sys_shmat (first, uptr, second, &raddr);
 	if (err)
-		goto out;
+		return err;
 	err = put_user (raddr, uaddr);
-out:
 	return err;
 }
 
 static int
 do_sys32_shmctl (int first, int second, void *uptr)
 {
-	int err;
+	int err = -EFAULT, err2;
+	struct shmid_ds s;
+	struct shmid64_ds s64;
+	struct shmid_ds32 *up = (struct shmid_ds32 *)uptr;
+	mm_segment_t old_fs;
+	struct shm_info32 {
+		int used_ids;
+		u32 shm_tot, shm_rss, shm_swp;
+		u32 swap_attempts, swap_successes;
+	} *uip = (struct shm_info32 *)uptr;
+	struct shm_info si;
 
-	if (IPCOP_MASK (second) &
-	    (IPCOP_MASK (IPC_INFO) | IPCOP_MASK (SHM_LOCK)
-	     | IPCOP_MASK (SHM_UNLOCK) | IPCOP_MASK (IPC_RMID))) {
+	switch (second) {
+
+	case IPC_INFO:
+	case IPC_RMID:
+	case SHM_LOCK:
+	case SHM_UNLOCK:
 		err = sys_shmctl (first, second, (struct shmid_ds *)uptr);
-	} else {
-		struct shmid_ds s;
-		struct shmid_ds32 *up = (struct shmid_ds32 *)uptr;
-		mm_segment_t old_fs;
-
-		if (second == IPC_SET) {
-			err = get_user (s.shm_perm.uid, &up->shm_perm.uid);
-			err |= __get_user (s.shm_perm.gid, &up->shm_perm.gid);
-			err |= __get_user (s.shm_perm.mode, &up->shm_perm.mode);
-			if (err)
-				goto out;
-		}
+		break;
+	case IPC_SET:
+		err = get_user (s.shm_perm.uid, &up->shm_perm.uid);
+		err |= __get_user (s.shm_perm.gid, &up->shm_perm.gid);
+		err |= __get_user (s.shm_perm.mode, &up->shm_perm.mode);
+		if (err)
+			break;
 		old_fs = get_fs ();
 		set_fs (KERNEL_DS);
 		err = sys_shmctl (first, second, &s);
 		set_fs (old_fs);
-		if (err < 0)
-			goto out;
+		break;
 
-		/* Mask it even in this case so it becomes a CSE. */
-		if (second == SHM_INFO) {
-			struct shm_info32 {
-				int used_ids;
-				u32 shm_tot, shm_rss, shm_swp;
-				u32 swap_attempts, swap_successes;
-			} *uip = (struct shm_info32 *)uptr;
-			struct shm_info *kp = (struct shm_info *)&s;
-			int err2 = put_user (kp->used_ids, &uip->used_ids);
-			err2 |= __put_user (kp->shm_tot, &uip->shm_tot);
-			err2 |= __put_user (kp->shm_rss, &uip->shm_rss);
-			err2 |= __put_user (kp->shm_swp, &uip->shm_swp);
-			err2 |= __put_user (kp->swap_attempts,
-					    &uip->swap_attempts);
-			err2 |= __put_user (kp->swap_successes,
-					    &uip->swap_successes);
-			if (err2)
-				err = -EFAULT;
-		} else if (IPCOP_MASK (second) &
-			   (IPCOP_MASK (SHM_STAT) | IPCOP_MASK (IPC_STAT))) {
-			int err2 = put_user (s.shm_perm.key, &up->shm_perm.key);
-			err2 |= __put_user (s.shm_perm.uid, &up->shm_perm.uid);
-			err2 |= __put_user (s.shm_perm.gid, &up->shm_perm.gid);
-			err2 |= __put_user (s.shm_perm.cuid,
-					    &up->shm_perm.cuid);
-			err2 |= __put_user (s.shm_perm.cgid,
-					    &up->shm_perm.cgid);
-			err2 |= __put_user (s.shm_perm.mode,
-					    &up->shm_perm.mode);
-			err2 |= __put_user (s.shm_perm.seq, &up->shm_perm.seq);
-			err2 |= __put_user (s.shm_atime, &up->shm_atime);
-			err2 |= __put_user (s.shm_dtime, &up->shm_dtime);
-			err2 |= __put_user (s.shm_ctime, &up->shm_ctime);
-			err2 |= __put_user (s.shm_segsz, &up->shm_segsz);
-			err2 |= __put_user (s.shm_nattch, &up->shm_nattch);
-			err2 |= __put_user (s.shm_cpid, &up->shm_cpid);
-			err2 |= __put_user (s.shm_lpid, &up->shm_lpid);
-			if (err2)
-				err = -EFAULT;
-		}
+	case IPC_STAT:
+	case SHM_STAT:
+		old_fs = get_fs ();
+		set_fs (KERNEL_DS);
+		err = sys_shmctl (first, second, &s64);
+		set_fs (old_fs);
+		if (err < 0)
+			break;
+		err2 = put_user (s64.shm_perm.key, &up->shm_perm.key);
+		err2 |= __put_user (s64.shm_perm.uid, &up->shm_perm.uid);
+		err2 |= __put_user (s64.shm_perm.gid, &up->shm_perm.gid);
+		err2 |= __put_user (s64.shm_perm.cuid,
+				    &up->shm_perm.cuid);
+		err2 |= __put_user (s64.shm_perm.cgid,
+				    &up->shm_perm.cgid);
+		err2 |= __put_user (s64.shm_perm.mode,
+				    &up->shm_perm.mode);
+		err2 |= __put_user (s64.shm_perm.seq, &up->shm_perm.seq);
+		err2 |= __put_user (s64.shm_atime, &up->shm_atime);
+		err2 |= __put_user (s64.shm_dtime, &up->shm_dtime);
+		err2 |= __put_user (s64.shm_ctime, &up->shm_ctime);
+		err2 |= __put_user (s64.shm_segsz, &up->shm_segsz);
+		err2 |= __put_user (s64.shm_nattch, &up->shm_nattch);
+		err2 |= __put_user (s64.shm_cpid, &up->shm_cpid);
+		err2 |= __put_user (s64.shm_lpid, &up->shm_lpid);
+		if (err2)
+			err = -EFAULT;
+		break;
+
+	case SHM_INFO:
+		old_fs = get_fs ();
+		set_fs (KERNEL_DS);
+		err = sys_shmctl (first, second, &si);
+		set_fs (old_fs);
+		if (err < 0)
+			break;
+		err2 = put_user (si.used_ids, &uip->used_ids);
+		err2 |= __put_user (si.shm_tot, &uip->shm_tot);
+		err2 |= __put_user (si.shm_rss, &uip->shm_rss);
+		err2 |= __put_user (si.shm_swp, &uip->shm_swp);
+		err2 |= __put_user (si.swap_attempts,
+				    &uip->swap_attempts);
+		err2 |= __put_user (si.swap_successes,
+				    &uip->swap_successes);
+		if (err2)
+			err = -EFAULT;
+		break;
+
 	}
-out:
 	return err;
 }
 
@@ -1865,67 +1782,54 @@ sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u32 fifth)
 	version = call >> 16; /* hack for backward compatibility */
 	call &= 0xffff;
 
-	if (call <= SEMCTL)
-		switch (call) {
-		case SEMOP:
-			/* struct sembuf is the same on 32 and 64bit :)) */
-			err = sys_semop (first, (struct sembuf *)AA(ptr),
-					 second);
-			goto out;
-		case SEMGET:
-			err = sys_semget (first, second, third);
-			goto out;
-		case SEMCTL:
-			err = do_sys32_semctl (first, second, third,
-					       (void *)AA(ptr));
-			goto out;
-		default:
-			err = -EINVAL;
-			goto out;
-		};
-	if (call <= MSGCTL) 
-		switch (call) {
-		case MSGSND:
-			err = do_sys32_msgsnd (first, second, third,
-					       (void *)AA(ptr));
-			goto out;
-		case MSGRCV:
-			err = do_sys32_msgrcv (first, second, fifth, third,
-					       version, (void *)AA(ptr));
-			goto out;
-		case MSGGET:
-			err = sys_msgget ((key_t) first, second);
-			goto out;
-		case MSGCTL:
-			err = do_sys32_msgctl (first, second, (void *)AA(ptr));
-			goto out;
-		default:
-			err = -EINVAL;
-			goto out;
-		}
-	if (call <= SHMCTL) 
-		switch (call) {
-		case SHMAT:
-			err = do_sys32_shmat (first, second, third,
-					      version, (void *)AA(ptr));
-			goto out;
-		case SHMDT: 
-			err = sys_shmdt ((char *)AA(ptr));
-			goto out;
-		case SHMGET:
-			err = sys_shmget (first, second, third);
-			goto out;
-		case SHMCTL:
-			err = do_sys32_shmctl (first, second, (void *)AA(ptr));
-			goto out;
-		default:
-			err = -EINVAL;
-			goto out;
-		}
+	switch (call) {
 
-	err = -EINVAL;
+	case SEMOP:
+		/* struct sembuf is the same on 32 and 64bit :)) */
+		err = sys_semop (first, (struct sembuf *)AA(ptr),
+				 second);
+		break;
+	case SEMGET:
+		err = sys_semget (first, second, third);
+		break;
+	case SEMCTL:
+		err = do_sys32_semctl (first, second, third,
+				       (void *)AA(ptr));
+		break;
 
-out:
+	case MSGSND:
+		err = do_sys32_msgsnd (first, second, third,
+				       (void *)AA(ptr));
+		break;
+	case MSGRCV:
+		err = do_sys32_msgrcv (first, second, fifth, third,
+				       version, (void *)AA(ptr));
+		break;
+	case MSGGET:
+		err = sys_msgget ((key_t) first, second);
+		break;
+	case MSGCTL:
+		err = do_sys32_msgctl (first, second, (void *)AA(ptr));
+		break;
+
+	case SHMAT:
+		err = do_sys32_shmat (first, second, third,
+				      version, (void *)AA(ptr));
+		break;
+	case SHMDT: 
+		err = sys_shmdt ((char *)AA(ptr));
+		break;
+	case SHMGET:
+		err = sys_shmget (first, second, third);
+		break;
+	case SHMCTL:
+		err = do_sys32_shmctl (first, second, (void *)AA(ptr));
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	}
+
 	unlock_kernel();
 	return err;
 }
@@ -1947,6 +1851,537 @@ asmlinkage long sys32_time(int * tloc)
 			i = -EFAULT;
 	}
 	return i;
+}
+
+struct rusage32 {
+        struct timeval32 ru_utime;
+        struct timeval32 ru_stime;
+        int    ru_maxrss;
+        int    ru_ixrss;
+        int    ru_idrss;
+        int    ru_isrss;
+        int    ru_minflt;
+        int    ru_majflt;
+        int    ru_nswap;
+        int    ru_inblock;
+        int    ru_oublock;
+        int    ru_msgsnd; 
+        int    ru_msgrcv; 
+        int    ru_nsignals;
+        int    ru_nvcsw;
+        int    ru_nivcsw;
+};
+
+static int
+put_rusage (struct rusage32 *ru, struct rusage *r)
+{
+	int err;
+	
+	err = put_user (r->ru_utime.tv_sec, &ru->ru_utime.tv_sec);
+	err |= __put_user (r->ru_utime.tv_usec, &ru->ru_utime.tv_usec);
+	err |= __put_user (r->ru_stime.tv_sec, &ru->ru_stime.tv_sec);
+	err |= __put_user (r->ru_stime.tv_usec, &ru->ru_stime.tv_usec);
+	err |= __put_user (r->ru_maxrss, &ru->ru_maxrss);
+	err |= __put_user (r->ru_ixrss, &ru->ru_ixrss);
+	err |= __put_user (r->ru_idrss, &ru->ru_idrss);
+	err |= __put_user (r->ru_isrss, &ru->ru_isrss);
+	err |= __put_user (r->ru_minflt, &ru->ru_minflt);
+	err |= __put_user (r->ru_majflt, &ru->ru_majflt);
+	err |= __put_user (r->ru_nswap, &ru->ru_nswap);
+	err |= __put_user (r->ru_inblock, &ru->ru_inblock);
+	err |= __put_user (r->ru_oublock, &ru->ru_oublock);
+	err |= __put_user (r->ru_msgsnd, &ru->ru_msgsnd);
+	err |= __put_user (r->ru_msgrcv, &ru->ru_msgrcv);
+	err |= __put_user (r->ru_nsignals, &ru->ru_nsignals);
+	err |= __put_user (r->ru_nvcsw, &ru->ru_nvcsw);
+	err |= __put_user (r->ru_nivcsw, &ru->ru_nivcsw);
+	return err;
+}
+
+extern asmlinkage int sys_wait4(pid_t pid,unsigned int * stat_addr,
+				int options, struct rusage * ru);
+
+asmlinkage int
+sys32_wait4(__kernel_pid_t32 pid, unsigned int *stat_addr, int options,
+	    struct rusage32 *ru)
+{
+	if (!ru)
+		return sys_wait4(pid, stat_addr, options, NULL);
+	else {
+		struct rusage r;
+		int ret;
+		unsigned int status;
+		mm_segment_t old_fs = get_fs();
+		
+		set_fs (KERNEL_DS);
+		ret = sys_wait4(pid, stat_addr ? &status : NULL, options, &r);
+		set_fs (old_fs);
+		if (put_rusage (ru, &r)) return -EFAULT;
+		if (stat_addr && put_user (status, stat_addr))
+			return -EFAULT;
+		return ret;
+	}
+}
+
+asmlinkage int
+sys32_waitpid(__kernel_pid_t32 pid, unsigned int *stat_addr, int options)
+{
+	return sys32_wait4(pid, stat_addr, options, NULL);
+}
+
+
+extern asmlinkage int
+sys_getrusage(int who, struct rusage *ru);
+
+asmlinkage int
+sys32_getrusage(int who, struct rusage32 *ru)
+{
+	struct rusage r;
+	int ret;
+	mm_segment_t old_fs = get_fs();
+		
+	set_fs (KERNEL_DS);
+	ret = sys_getrusage(who, &r);
+	set_fs (old_fs);
+	if (put_rusage (ru, &r)) return -EFAULT;
+	return ret;
+}
+
+struct tms32 {
+	__kernel_clock_t32 tms_utime;
+	__kernel_clock_t32 tms_stime;
+	__kernel_clock_t32 tms_cutime;
+	__kernel_clock_t32 tms_cstime;
+};
+                                
+extern asmlinkage long sys_times(struct tms * tbuf);
+
+asmlinkage long
+sys32_times(struct tms32 *tbuf)
+{
+	struct tms t;
+	long ret;
+	mm_segment_t old_fs = get_fs ();
+	int err;
+	
+	set_fs (KERNEL_DS);
+	ret = sys_times(tbuf ? &t : NULL);
+	set_fs (old_fs);
+	if (tbuf) {
+		err = put_user (t.tms_utime, &tbuf->tms_utime);
+		err |= __put_user (t.tms_stime, &tbuf->tms_stime);
+		err |= __put_user (t.tms_cutime, &tbuf->tms_cutime);
+		err |= __put_user (t.tms_cstime, &tbuf->tms_cstime);
+		if (err)
+			ret = -EFAULT;
+	}
+	return ret;
+}
+
+unsigned int
+ia32_peek (struct pt_regs *regs, struct task_struct *child, unsigned long addr, unsigned int *val)
+{
+	size_t copied;
+	unsigned int ret;
+
+	copied = access_process_vm(child, addr, val, sizeof(*val), 0);
+	return(copied != sizeof(ret) ? -EIO : 0);
+}
+
+unsigned int
+ia32_poke (struct pt_regs *regs, struct task_struct *child, unsigned long addr, unsigned int val)
+{
+
+	if (access_process_vm(child, addr, &val, sizeof(val), 1) != sizeof(val))
+		return -EIO;
+	return 0;
+}
+
+/*
+ *  The order in which registers are stored in the ptrace regs structure
+ */
+#define PT_EBX	0
+#define PT_ECX	1
+#define PT_EDX	2
+#define PT_ESI	3
+#define PT_EDI	4
+#define PT_EBP	5
+#define PT_EAX	6
+#define PT_DS	7
+#define PT_ES	8
+#define PT_FS	9
+#define PT_GS	10
+#define PT_ORIG_EAX 11
+#define PT_EIP	12
+#define PT_CS 	13
+#define PT_EFL	14
+#define PT_UESP	15
+#define PT_SS	16
+
+unsigned int
+getreg(struct task_struct *child, int regno)
+{
+	struct pt_regs *child_regs;
+
+	child_regs = ia64_task_regs(child);
+	switch (regno / sizeof(int)) {
+
+	case PT_EBX:
+		return(child_regs->r11);
+	case PT_ECX:
+		return(child_regs->r9);
+	case PT_EDX:
+		return(child_regs->r10);
+	case PT_ESI:
+		return(child_regs->r14);
+	case PT_EDI:
+		return(child_regs->r15);
+	case PT_EBP:
+		return(child_regs->r13);
+	case PT_EAX:
+	case PT_ORIG_EAX:
+		return(child_regs->r8);
+	case PT_EIP:
+		return(child_regs->cr_iip);
+	case PT_UESP:
+		return(child_regs->r12);
+	case PT_EFL:
+		return(child->thread.eflag);
+	case PT_DS:
+	case PT_ES:
+	case PT_FS:
+	case PT_GS:
+	case PT_SS:
+		return((unsigned int)__USER_DS);
+	case PT_CS:
+		return((unsigned int)__USER_CS);
+	default:
+		printk("getregs:unknown register %d\n", regno);
+		break;
+
+	}
+	return(0);
+}
+
+void
+putreg(struct task_struct *child, int regno, unsigned int value)
+{
+	struct pt_regs *child_regs;
+
+	child_regs = ia64_task_regs(child);
+	switch (regno / sizeof(int)) {
+
+	case PT_EBX:
+		child_regs->r11 = value;
+		break;
+	case PT_ECX:
+		child_regs->r9 = value;
+		break;
+	case PT_EDX:
+		child_regs->r10 = value;
+		break;
+	case PT_ESI:
+		child_regs->r14 = value;
+		break;
+	case PT_EDI:
+		child_regs->r15 = value;
+		break;
+	case PT_EBP:
+		child_regs->r13 = value;
+		break;
+	case PT_EAX:
+	case PT_ORIG_EAX:
+		child_regs->r8 = value;
+		break;
+	case PT_EIP:
+		child_regs->cr_iip = value;
+		break;
+	case PT_UESP:
+		child_regs->r12 = value;
+		break;
+	case PT_EFL:
+		child->thread.eflag = value;
+		break;
+	case PT_DS:
+	case PT_ES:
+	case PT_FS:
+	case PT_GS:
+	case PT_SS:
+		if (value != __USER_DS)
+			printk("setregs:try to set invalid segment register %d = %x\n", regno, value);
+		break;
+	case PT_CS:
+		if (value != __USER_CS)
+			printk("setregs:try to set invalid segment register %d = %x\n", regno, value);
+		break;
+	default:
+		printk("getregs:unknown register %d\n", regno);
+		break;
+
+	}
+}
+
+static inline void
+ia32f2ia64f(void *dst, void *src)
+{
+
+	__asm__ ("ldfe f6=[%1] ;;\n\t"
+		 "stf.spill [%0]=f6"
+		:
+		: "r"(dst), "r"(src));
+	return;
+}
+
+static inline void
+ia64f2ia32f(void *dst, void *src)
+{
+
+	__asm__ ("ldf.fill f6=[%1] ;;\n\t"
+		 "stfe [%0]=f6"
+		:
+		: "r"(dst),  "r"(src));
+	return;
+}
+
+void
+put_fpreg(int regno, struct _fpreg_ia32 *reg, struct pt_regs *ptp, struct switch_stack *swp, int tos)
+{
+	struct _fpreg_ia32 *f;
+	char buf[32];
+
+	f = (struct _fpreg_ia32 *)(((unsigned long)buf + 15) & ~15);
+	if ((regno += tos) >= 8)
+		regno -= 8;
+	switch (regno) {
+
+	case 0:
+		ia64f2ia32f(f, &ptp->f8);
+		break;
+	case 1:
+		ia64f2ia32f(f, &ptp->f9);
+		break;
+	case 2:
+	case 3:
+	case 4:
+	case 5:
+	case 6:
+	case 7:
+		ia64f2ia32f(f, &swp->f10 + (regno - 2));
+		break;
+
+	}
+	__copy_to_user(reg, f, sizeof(*reg));
+	return;
+}
+
+void
+get_fpreg(int regno, struct _fpreg_ia32 *reg, struct pt_regs *ptp, struct switch_stack *swp, int tos)
+{
+
+	if ((regno += tos) >= 8)
+		regno -= 8;
+	switch (regno) {
+
+	case 0:
+		__copy_from_user(&ptp->f8, reg, sizeof(*reg));
+		break;
+	case 1:
+		__copy_from_user(&ptp->f9, reg, sizeof(*reg));
+		break;
+	case 2:
+	case 3:
+	case 4:
+	case 5:
+	case 6:
+	case 7:
+		__copy_from_user(&swp->f10 + (regno - 2), reg, sizeof(*reg));
+		break;
+
+	}
+	return;
+}
+
+int
+save_ia32_fpstate(struct task_struct *tsk, struct _fpstate_ia32 *save)
+{
+	struct switch_stack *swp;
+	struct pt_regs *ptp;
+	int i, tos;
+
+	if (!access_ok(VERIFY_WRITE, save, sizeof(*save)))
+		return(-EIO);
+	__put_user(tsk->thread.fcr, &save->cw);
+	__put_user(tsk->thread.fsr, &save->sw);
+	__put_user(tsk->thread.fsr >> 32, &save->tag);
+	__put_user(tsk->thread.fir, &save->ipoff);
+	__put_user(__USER_CS, &save->cssel);
+	__put_user(tsk->thread.fdr, &save->dataoff);
+	__put_user(__USER_DS, &save->datasel);
+	/*
+	 *  Stack frames start with 16-bytes of temp space
+	 */
+	swp = (struct switch_stack *)(tsk->thread.ksp + 16);
+	ptp = ia64_task_regs(tsk);
+	tos = (tsk->thread.fsr >> 11) & 3;
+	for (i = 0; i < 8; i++)
+		put_fpreg(i, &save->_st[i], ptp, swp, tos);
+	return(0);
+}
+
+int
+restore_ia32_fpstate(struct task_struct *tsk, struct _fpstate_ia32 *save)
+{
+	struct switch_stack *swp;
+	struct pt_regs *ptp;
+	int i, tos;
+	int fsrlo, fsrhi;
+
+	if (!access_ok(VERIFY_READ, save, sizeof(*save)))
+		return(-EIO);
+	__get_user(tsk->thread.fcr, (unsigned int *)&save->cw);
+	__get_user(fsrlo, (unsigned int *)&save->sw);
+	__get_user(fsrhi, (unsigned int *)&save->tag);
+	tsk->thread.fsr = ((long)fsrhi << 32) | (long)fsrlo;
+	__get_user(tsk->thread.fir, (unsigned int *)&save->ipoff);
+	__get_user(tsk->thread.fdr, (unsigned int *)&save->dataoff);
+	/*
+	 *  Stack frames start with 16-bytes of temp space
+	 */
+	swp = (struct switch_stack *)(tsk->thread.ksp + 16);
+	ptp = ia64_task_regs(tsk);
+	tos = (tsk->thread.fsr >> 11) & 3;
+	for (i = 0; i < 8; i++)
+		get_fpreg(i, &save->_st[i], ptp, swp, tos);
+	return(0);
+}
+
+asmlinkage long sys_ptrace(long, pid_t, unsigned long, unsigned long, long, long, long, long, long);
+
+/*
+ *  Note that the IA32 version of `ptrace' calls the IA64 routine for
+ *    many of the requests.  This will only work for requests that do
+ *    not need access to the calling processes `pt_regs' which is located
+ *    at the address of `stack'.  Once we call the IA64 `sys_ptrace' then
+ *    the address of `stack' will not be the address of the `pt_regs'.
+ */
+asmlinkage long
+sys32_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
+	    long arg4, long arg5, long arg6, long arg7, long stack)
+{
+	struct pt_regs *regs = (struct pt_regs *) &stack;
+	struct task_struct *child;
+	long i, ret;
+	unsigned int value;
+
+	lock_kernel();
+	if (request == PTRACE_TRACEME) {
+		ret = sys_ptrace(request, pid, addr, data,
+				arg4, arg5, arg6, arg7, stack);
+		goto out;
+	}
+
+	ret = -ESRCH;
+	read_lock(&tasklist_lock);
+	child = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);
+	if (!child)
+		goto out;
+	ret = -EPERM;
+	if (pid == 1)		/* no messing around with init! */
+		goto out;
+
+	if (request == PTRACE_ATTACH) {
+		ret = sys_ptrace(request, pid, addr, data,
+				arg4, arg5, arg6, arg7, stack);
+		goto out;
+	}
+	ret = -ESRCH;
+	if (!(child->flags & PF_PTRACED))
+		goto out;
+	if (child->state != TASK_STOPPED) {
+		if (request != PTRACE_KILL)
+			goto out;
+	}
+	if (child->p_pptr != current)
+		goto out;
+
+	switch (request) {
+	      case PTRACE_PEEKTEXT:
+	      case PTRACE_PEEKDATA:	/* read word at location addr */
+		ret = ia32_peek(regs, child, addr, &value);
+		if (ret == 0)
+			ret = put_user(value, (unsigned int *)data);
+		else
+			ret = -EIO;
+		goto out;
+
+	      case PTRACE_POKETEXT:
+	      case PTRACE_POKEDATA:	/* write the word at location addr */
+		ret = ia32_poke(regs, child, addr, (unsigned int)data);
+		goto out;
+
+	      case PTRACE_PEEKUSR:	/* read word at addr in USER area */
+		ret = 0;
+		break;
+
+	      case PTRACE_POKEUSR:	/* write word at addr in USER area */
+		ret = 0;
+		break;
+
+	      case IA32_PTRACE_GETREGS:
+	  	if (!access_ok(VERIFY_WRITE, (int *)data, 17*sizeof(int))) {
+			ret = -EIO;
+			break;
+		}
+		for ( i = 0; i < 17*sizeof(int); i += sizeof(int) ) {
+			__put_user(getreg(child, i),(unsigned int *) data);
+			data += sizeof(int);
+		}
+		ret = 0;
+		break;
+
+	      case IA32_PTRACE_SETREGS:
+	      {
+		unsigned int tmp;
+	  	if (!access_ok(VERIFY_READ, (int *)data, 17*sizeof(int))) {
+			ret = -EIO;
+			break;
+		}
+		for ( i = 0; i < 17*sizeof(int); i += sizeof(int) ) {
+			__get_user(tmp, (unsigned int *) data);
+			putreg(child, i, tmp);
+			data += sizeof(int);
+		}
+		ret = 0;
+		break;
+	      }
+
+	      case IA32_PTRACE_GETFPREGS:
+		ret = save_ia32_fpstate(child, (struct _fpstate_ia32 *)data);
+		break;
+
+	      case IA32_PTRACE_SETFPREGS:
+		ret = restore_ia32_fpstate(child, (struct _fpstate_ia32 *)data);
+		break;
+
+	      case PTRACE_SYSCALL:	/* continue, stop after next syscall */
+	      case PTRACE_CONT:		/* restart after signal. */
+	      case PTRACE_KILL:
+	      case PTRACE_SINGLESTEP:	/* execute chile for one instruction */
+	      case PTRACE_DETACH:	/* detach a process */
+		unlock_kernel();
+		ret = sys_ptrace(request, pid, addr, data,
+				arg4, arg5, arg6, arg7, stack);
+		return(ret);
+
+	      default:
+		ret = -EIO;
+		break;
+
+	}
+  out:
+	unlock_kernel();
+	return ret;
 }
 
 #ifdef	NOTYET  /* UNTESTED FOR IA64 FROM HERE DOWN */
@@ -2719,37 +3154,6 @@ sys32_getresgid(__kernel_gid_t32 *rgid, __kernel_gid_t32 *egid,
 	return ret;
 }
 
-struct tms32 {
-	__kernel_clock_t32 tms_utime;
-	__kernel_clock_t32 tms_stime;
-	__kernel_clock_t32 tms_cutime;
-	__kernel_clock_t32 tms_cstime;
-};
-                                
-extern asmlinkage long sys_times(struct tms * tbuf);
-
-asmlinkage long
-sys32_times(struct tms32 *tbuf)
-{
-	struct tms t;
-	long ret;
-	mm_segment_t old_fs = get_fs ();
-	int err;
-	
-	set_fs (KERNEL_DS);
-	ret = sys_times(tbuf ? &t : NULL);
-	set_fs (old_fs);
-	if (tbuf) {
-		err = put_user (t.tms_utime, &tbuf->tms_utime);
-		err |= __put_user (t.tms_stime, &tbuf->tms_stime);
-		err |= __put_user (t.tms_cutime, &tbuf->tms_cutime);
-		err |= __put_user (t.tms_cstime, &tbuf->tms_cstime);
-		if (err)
-			ret = -EFAULT;
-	}
-	return ret;
-}
-
 extern asmlinkage int sys_getgroups(int gidsetsize, gid_t *grouplist);
 
 asmlinkage int
@@ -2786,23 +3190,6 @@ sys32_setgroups(int gidsetsize, __kernel_gid_t32 *grouplist)
         set_fs (KERNEL_DS);
 	ret = sys_setgroups(gidsetsize, gl);
 	set_fs (old_fs);
-	return ret;
-}
-
-extern asmlinkage int
-sys_getrusage(int who, struct rusage *ru);
-
-asmlinkage int
-sys32_getrusage(int who, struct rusage32 *ru)
-{
-	struct rusage r;
-	int ret;
-	mm_segment_t old_fs = get_fs();
-		
-	set_fs (KERNEL_DS);
-	ret = sys_getrusage(who, &r);
-	set_fs (old_fs);
-	if (put_rusage (ru, &r)) return -EFAULT;
 	return ret;
 }
 
@@ -4355,4 +4742,3 @@ sys32_adjtimex(struct timex32 *utp)
 	return ret;
 }
 #endif	// NOTYET
-

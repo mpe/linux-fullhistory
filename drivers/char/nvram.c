@@ -372,7 +372,7 @@ static int nvram_read_proc( char *buffer, char **start, off_t offset,
 
     if (offset >= begin + len)
 		return( 0 );
-    *start = buffer + (begin - offset);
+    *start = buffer + (offset - begin);
     return( size < begin + len - offset ? size : begin + len - offset );
 	
 }

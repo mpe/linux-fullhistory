@@ -3,7 +3,9 @@
  *
  * Copyright (C) 1999 Silicon Graphics, Inc.
  * Copyright (C) Vijay Chander (vijay@engr.sgi.com)
- * Copyright (C) Srinivasa Thirumalachar (sprasad@engr.sgi.com)
+ * Copyright (C) Srinivasa Thirumalachar <sprasad@engr.sgi.com>
+ * Copyright (C) 2000 Hewlett-Packard Co.
+ * Copyright (C) 2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 #ifndef _ASM_IA64_MCA_ASM_H
 #define _ASM_IA64_MCA_ASM_H
@@ -70,25 +72,26 @@
 	;;										\
 	dep	old_psr = 0, old_psr, 32, 32;						\
 	                                                                                \
-	mov	ar##.##rsc = r0 ;							\
+	mov	ar.rsc = r0 ;								\
 	;;										\
-	mov	temp2 = ar##.##bspstore;						\
+	mov	temp2 = ar.bspstore;							\
 	;;										\
 	DATA_VA_TO_PA(temp2);								\
 	;;										\
-	mov	temp1 = ar##.##rnat;							\
+	mov	temp1 = ar.rnat;							\
 	;;										\
-	mov	ar##.##bspstore = temp2;						\
+	mov	ar.bspstore = temp2;							\
 	;;										\
-	mov	ar##.##rnat = temp1;							\
+	mov	ar.rnat = temp1;							\
 	mov	temp1 = psr;								\
 	mov	temp2 = psr;								\
 	;;										\
 	                                                                                \
 	dep	temp2 = 0, temp2, PSR_IC, 2;						\
 	;;										\
-	mov	psr##.##l = temp2;							\
-	                                                                                \
+	mov	psr.l = temp2;								\
+	;;										\
+	srlz.d;										\
 	dep	temp1 = 0, temp1, 32, 32;						\
 	;;										\
  	dep	temp1 = 0, temp1, PSR_IT, 1;						\
@@ -100,15 +103,16 @@
 	dep	temp1 = 0, temp1, PSR_I, 1;						\
 	;;										\
 	movl	temp2 = start_addr;							\
-	mov	cr##.##ipsr = temp1;							\
+	mov	cr.ipsr = temp1;							\
 	;;										\
 	INST_VA_TO_PA(temp2);								\
-	mov	cr##.##iip = temp2;							\
-	mov	cr##.##ifs = r0;							\
+	;;										\
+	mov	cr.iip = temp2;								\
+	mov	cr.ifs = r0;								\
 	DATA_VA_TO_PA(sp)								\
 	DATA_VA_TO_PA(gp)								\
 	;;										\
-	srlz##.##i;									\
+	srlz.i;										\
 	;;										\
 	nop	1;									\
 	nop	2;									\
@@ -143,18 +147,19 @@
 	;;										\
 	dep	temp2 = 0, temp2, PSR_IC, 2;						\
 	;;										\
-	mov	psr##.##l = temp2;							\
-	mov	ar##.##rsc = r0 ;							\
+	mov	psr.l = temp2;								\
+	mov	ar.rsc = r0;								\
 	;;										\
-	mov	temp2 = ar##.##bspstore;						\
+	srlz.d;										\
+	mov	temp2 = ar.bspstore;							\
 	;;										\
 	DATA_PA_TO_VA(temp2,temp1);							\
 	;;										\
-	mov	temp1 = ar##.##rnat;							\
+	mov	temp1 = ar.rnat;							\
 	;;										\
-	mov	ar##.##bspstore = temp2;						\
+	mov	ar.bspstore = temp2;							\
 	;;										\
-	mov	ar##.##rnat = temp1;							\
+	mov	ar.rnat = temp1;							\
 	;;										\
 	mov	temp1 = old_psr;							\
 	;;										\
@@ -172,12 +177,12 @@
 	dep	temp1 = temp2, temp1, PSR_BN, 1;					\
 	;;										\
 	                                                                                \
-	mov     cr##.##ipsr = temp1;							\
+	mov     cr.ipsr = temp1;							\
 	movl	temp2 = start_addr;							\
 	;;										\
-	mov	cr##.##iip = temp2;							\
+	mov	cr.iip = temp2;								\
 	DATA_PA_TO_VA(sp, temp1);							\
-	DATA_PA_TO_VA(gp, temp1);							\
+	DATA_PA_TO_VA(gp, temp2);							\
 	;;										\
 	nop	1;									\
 	nop	2;									\
@@ -226,19 +231,19 @@
  */
 #define rse_switch_context(temp,p_stackframe,p_bspstore) 			\
         ;; 									\
-        mov     temp=ar##.##rsc;; 						\
+        mov     temp=ar.rsc;; 							\
         st8     [p_stackframe]=temp,8;; 					\
-        mov     temp=ar##.##pfs;; 						\
+        mov     temp=ar.pfs;; 							\
         st8     [p_stackframe]=temp,8; 						\
         cover ;;								\
-        mov     temp=cr##.##ifs;; 						\
+        mov     temp=cr.ifs;; 							\
         st8     [p_stackframe]=temp,8;;	 					\
-        mov     temp=ar##.##bspstore;; 						\
+        mov     temp=ar.bspstore;; 						\
         st8     [p_stackframe]=temp,8;; 					\
-        mov     temp=ar##.##rnat;; 						\
+        mov     temp=ar.rnat;; 							\
         st8     [p_stackframe]=temp,8; 						\
-        mov     ar##.##bspstore=p_bspstore;; 					\
-        mov     temp=ar##.##bsp;; 						\
+        mov     ar.bspstore=p_bspstore;; 					\
+        mov     temp=ar.bsp;; 							\
         sub     temp=temp,p_bspstore;;						\
         st8     [p_stackframe]=temp,8
 
@@ -262,23 +267,23 @@
         add     p_stackframe=rse_ndirty_offset,p_stackframe;;			\
         ld8     temp=[p_stackframe];; 						\
         shl     temp=temp,16;;							\
-        mov     ar##.##rsc=temp;; 						\
+        mov     ar.rsc=temp;; 							\
         loadrs;;								\
         add     p_stackframe=-rse_ndirty_offset+rse_bspstore_offset,p_stackframe;;\
         ld8     temp=[p_stackframe];; 						\
-        mov     ar##.##bspstore=temp;; 						\
+        mov     ar.bspstore=temp;; 						\
         add     p_stackframe=-rse_bspstore_offset+rse_rnat_offset,p_stackframe;;\
         ld8     temp=[p_stackframe];; 						\
-        mov     ar##.##rnat=temp;;						\
+        mov     ar.rnat=temp;;							\
         add     p_stackframe=-rse_rnat_offset+rse_pfs_offset,p_stackframe;;	\
         ld8     temp=[p_stackframe];; 						\
-        mov     ar##.##pfs=temp;						\
+        mov     ar.pfs=temp;							\
         add     p_stackframe=-rse_pfs_offset+rse_ifs_offset,p_stackframe;;	\
         ld8     temp=[p_stackframe];; 						\
-        mov     cr##.##ifs=temp;						\
+        mov     cr.ifs=temp;							\
         add     p_stackframe=-rse_ifs_offset+rse_rsc_offset,p_stackframe;;	\
         ld8     temp=[p_stackframe];; 						\
-        mov     ar##.##rsc=temp ;						\
+        mov     ar.rsc=temp ;							\
         add     p_stackframe=-rse_rsc_offset,p_stackframe;			\
         mov     temp=cr.ipsr;;							\
         st8     [p_stackframe]=temp,8;						\

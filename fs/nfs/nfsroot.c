@@ -450,32 +450,16 @@ static int __init root_nfs_get_handle(void)
 	return status;
 }
 
-
 /*
- *  Now actually mount the given directory.
+ *  Get the NFS port numbers and file handle, and return the prepared 'data'
+ *  argument for ->read_super() if everything went OK. Return NULL otherwise.
  */
-static int __init root_nfs_do_mount(struct super_block *sb)
-{
-	/* Pass the server address to NFS */
-	set_sockaddr((struct sockaddr_in *) &nfs_data.addr, servaddr, nfs_port);
-
-	/* Now (finally ;-)) read the super block for mounting */
-	if (nfs_read_super(sb, &nfs_data, 1) == NULL)
-		return -1;
-	return 0;
-}
-
-
-/*
- *  Get the NFS port numbers and file handle, and then read the super-
- *  block for mounting.
- */
-int __init nfs_root_mount(struct super_block *sb)
+void * __init nfs_root_data(void)
 {
 	if (root_nfs_init() < 0
 	 || root_nfs_ports() < 0
-	 || root_nfs_get_handle() < 0
-	 || root_nfs_do_mount(sb) < 0)
-		return -1;
-	return 0;
+	 || root_nfs_get_handle() < 0)
+		return NULL;
+	set_sockaddr((struct sockaddr_in *) &nfs_data.addr, servaddr, nfs_port);
+	return (void*)&nfs_data;
 }

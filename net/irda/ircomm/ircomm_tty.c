@@ -1346,7 +1346,7 @@ static int ircomm_tty_read_proc(char *buf, char **start, off_t offset, int len,
 done:
         if (offset >= count+begin)
                 return 0;
-        *start = buf + (begin-offset);
+        *start = buf + (offset-begin);
         return ((len < begin+count-offset) ? len : begin+count-offset);
 }
 

@@ -974,6 +974,7 @@ static ssize_t write_aux(struct file * file, const char * buffer,
 	return retval;
 }
 
+/* No kernel lock held - fine */
 static unsigned int aux_poll(struct file *file, poll_table * wait)
 {
 	poll_wait(file, &queue->proc_list, wait);

@@ -207,6 +207,25 @@ void exit_files(struct task_struct *tsk)
 {
 	__exit_files(tsk);
 }
+static inline void __put_fs_struct(struct fs_struct *fs)
+{
+	if (atomic_dec_and_test(&fs->count)) {
+		dput(fs->root);
+		mntput(fs->rootmnt);
+		dput(fs->pwd);
+		mntput(fs->pwdmnt);
+		if (fs->altroot) {
+			dput(fs->altroot);
+			mntput(fs->altrootmnt);
+		}
+		kfree(fs);
+	}
+}
+
+void put_fs_struct(struct fs_struct *fs)
+{
+	__put_fs_struct(fs);
+}
 
 static inline void __exit_fs(struct task_struct *tsk)
 {
@@ -214,13 +233,7 @@ static inline void __exit_fs(struct task_struct *tsk)
 
 	if (fs) {
 		tsk->fs = NULL;
-		if (atomic_dec_and_test(&fs->count)) {
-			dput(fs->root);
-			mntput(fs->rootmnt);
-			dput(fs->pwd);
-			mntput(fs->pwdmnt);
-			kfree(fs);
-		}
+		__put_fs_struct(fs);
 	}
 }
 

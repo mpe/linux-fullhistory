@@ -62,6 +62,8 @@
 #define IA64_PSR_TB_BIT		26
 #define IA64_PSR_RT_BIT		27
 /* The following are not affected by save_flags()/restore_flags(): */
+#define IA64_PSR_CPL0_BIT	32
+#define IA64_PSR_CPL1_BIT	33
 #define IA64_PSR_IS_BIT		34
 #define IA64_PSR_MC_BIT		35
 #define IA64_PSR_IT_BIT		36
@@ -151,6 +153,7 @@
 #define IA64_THREAD_DBG_VALID	(__IA64_UL(1) << 1)	/* debug registers valid? */
 #define IA64_THREAD_UAC_NOPRINT	(__IA64_UL(1) << 2)	/* don't log unaligned accesses */
 #define IA64_THREAD_UAC_SIGBUS	(__IA64_UL(1) << 3)	/* generate SIGBUS on unaligned acc. */
+#define IA64_THREAD_KRBS_SYNCED	(__IA64_UL(1) << 4)	/* krbs synced with process vm? */
 #define IA64_KERNEL_DEATH	(__IA64_UL(1) << 63)	/* see die_if_kernel()... */
 
 #define IA64_THREAD_UAC_SHIFT	2	
@@ -270,6 +273,8 @@ typedef struct {
 		 (int *) (addr));								\
 })
 
+struct siginfo;
+
 struct thread_struct {
 	__u64 ksp;			/* kernel stack pointer */
 	unsigned long flags;		/* various flags */
@@ -278,14 +283,19 @@ struct thread_struct {
 	__u64 ibr[IA64_NUM_DBG_REGS];
 	__u64 map_base;			/* base address for mmap() */
 #ifdef CONFIG_IA32_SUPPORT
+	__u64 eflag;			/* IA32 EFLAGS reg */
 	__u64 fsr;			/* IA32 floating pt status reg */
 	__u64 fcr;			/* IA32 floating pt control reg */
 	__u64 fir;			/* IA32 fp except. instr. reg */
 	__u64 fdr;			/* IA32 fp except. data reg */
-# define INIT_THREAD_IA32	, 0, 0, 0, 0
+	union {
+		__u64 sigmask;		/* aligned mask for sigsuspend scall */
+	} un;
+# define INIT_THREAD_IA32	, 0, 0, 0, 0, 0, {0}
 #else
 # define INIT_THREAD_IA32
 #endif /* CONFIG_IA32_SUPPORT */
+	struct siginfo *siginfo;	/* current siginfo struct for ptrace() */
 };
 
 #define INIT_MMAP {								\
@@ -300,7 +310,8 @@ struct thread_struct {
 	{0, },				/* dbr */	\
 	{0, },				/* ibr */	\
 	0x2000000000000000		/* map_base */	\
-	INIT_THREAD_IA32				\
+	INIT_THREAD_IA32,				\
+	0				/* siginfo */	\
 }
 
 #define start_thread(regs,new_ip,new_sp) do {					\

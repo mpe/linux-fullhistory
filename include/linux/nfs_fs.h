@@ -275,7 +275,7 @@ nfs_time_to_secs(__u64 time)
 
 /* NFS root */
 
-extern int nfs_root_mount(struct super_block *sb);
+extern void * nfs_root_data(void);
 
 #define nfs_wait_event(clnt, wq, condition)				\
 ({									\

@@ -8,10 +8,12 @@
  * Copyright (C) 1999 VA Linux Systems
  * Copyright (C) 1999 Walt Drummond <drummond@valinux.com>
  *
- * 02/04/00 D.Mosberger some more get_cpuinfo fixes...
- * 02/01/00 R.Seth fixed get_cpuinfo for SMP
- * 01/07/99 S.Eranian added the support for command line argument
- * 06/24/99 W.Drummond added boot_cpu_data.
+ * 04/04/00 D.Mosberger renamed cpu_initialized to cpu_online_map
+ * 03/31/00 R.Seth	cpu_initialized and current->processor fixes
+ * 02/04/00 D.Mosberger	some more get_cpuinfo fixes...
+ * 02/01/00 R.Seth	fixed get_cpuinfo for SMP
+ * 01/07/99 S.Eranian	added the support for command line argument
+ * 06/24/99 W.Drummond	added boot_cpu_data.
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -32,6 +34,7 @@
 #include <asm/sal.h>
 #include <asm/system.h>
 #include <asm/efi.h>
+#include <asm/mca.h>
 
 extern char _end;
 
@@ -41,9 +44,12 @@ struct cpuinfo_ia64 cpu_data[NR_CPUS];
 unsigned long ia64_cycles_per_usec;
 struct ia64_boot_param ia64_boot_param;
 struct screen_info screen_info;
-unsigned long cpu_initialized = 0;
 /* This tells _start which CPU is booting.  */
 int cpu_now_booting = 0;
+
+#ifdef CONFIG_SMP
+volatile unsigned long cpu_online_map;
+#endif
 
 #define COMMAND_LINE_SIZE	512
 
@@ -101,7 +107,6 @@ void __init
 setup_arch (char **cmdline_p)
 {
 	unsigned long max_pfn, bootmap_start, bootmap_size;
-	u64 progress;
 
 	/*
 	 * The secondary bootstrap loader passes us the boot
@@ -147,7 +152,10 @@ setup_arch (char **cmdline_p)
 
 	printk("args to kernel: %s\n", *cmdline_p);
 
-#ifndef CONFIG_SMP
+#ifdef CONFIG_SMP
+	bootstrap_processor = hard_smp_processor_id();
+	current->processor = bootstrap_processor;
+#else
 	cpu_init();
 	identify_cpu(&cpu_data[0]);
 #endif
@@ -168,6 +176,11 @@ setup_arch (char **cmdline_p)
 	conswitchp = &dummy_con;
 # endif
 #endif
+
+#ifdef CONFIG_IA64_MCA
+	/* enable IA-64 Machine Check Abort Handling */
+	ia64_mca_init();
+#endif
 	paging_init();
 	platform_setup(cmdline_p);
 }
@@ -183,8 +196,10 @@ get_cpuinfo (char *buffer)
 	unsigned long mask;
 
 	for (c = cpu_data; c < cpu_data + NR_CPUS; ++c) {
-		if (!(cpu_initialized & (1UL << (c - cpu_data))))
+#ifdef CONFIG_SMP
+		if (!(cpu_online_map & (1UL << (c - cpu_data))))
 			continue;
+#endif
 
 		mask = c->features;
 
@@ -209,7 +224,7 @@ get_cpuinfo (char *buffer)
 		if (mask)
 			sprintf(cp, " 0x%lx", mask);
 
-		p += sprintf(buffer,
+		p += sprintf(p,
 			     "CPU# %lu\n"
 			     "\tvendor     : %s\n"
 			     "\tfamily     : %s\n"
@@ -303,8 +318,6 @@ identify_cpu (struct cpuinfo_ia64 *c)
 void
 cpu_init (void)
 {
-	int nr = smp_processor_id();
-
 	/* Clear the stack memory reserved for pt_regs: */
 	memset(ia64_task_regs(current), 0, sizeof(struct pt_regs));
 
@@ -318,11 +331,6 @@ cpu_init (void)
 	 */
 	ia64_set_dcr(IA64_DCR_DR | IA64_DCR_DK | IA64_DCR_DX | IA64_DCR_PP);
 	ia64_set_fpu_owner(0);		/* initialize ar.k5 */
-
-	if (test_and_set_bit(nr, &cpu_initialized)) {
-		printk("CPU#%d already initialized!\n", nr);
-		machine_halt();
-	}
 	atomic_inc(&init_mm.mm_count);
 	current->active_mm = &init_mm;
 }

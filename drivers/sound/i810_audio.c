@@ -1069,6 +1069,7 @@ static ssize_t i810_write(struct file *file, const char *buffer, size_t count, l
 	return ret;
 }
 
+/* No kernel lock - we have our own spinlock */
 static unsigned int i810_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct i810_state *state = (struct i810_state *)file->private_data;

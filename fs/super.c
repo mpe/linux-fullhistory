@@ -1242,39 +1242,38 @@ void __init mount_root(void)
 	int path_start = -1;
 
 #ifdef CONFIG_ROOT_NFS
-	if (MAJOR(ROOT_DEV) == UNNAMED_MAJOR) {
-		ROOT_DEV = 0;
-		if ((fs_type = get_fs_type("nfs"))) {
-			sb = get_empty_super(); /* "can't fail" */
-			sb->s_dev = get_unnamed_dev();
-			sb->s_bdev = NULL;
-			sb->s_flags = root_mountflags;
-			sema_init(&sb->s_vfs_rename_sem,1);
-			sema_init(&sb->s_nfsd_free_path_sem,1);
-			vfsmnt = add_vfsmnt(sb, "/dev/root", "/");
-			if (vfsmnt) {
-				if (nfs_root_mount(sb) >= 0) {
-					sb->s_dirt = 0;
-					sb->s_type = fs_type;
-					current->fs->root = dget(sb->s_root);
-					current->fs->rootmnt = mntget(vfsmnt);
-					current->fs->pwd = dget(sb->s_root);
-					current->fs->pwdmnt = mntget(vfsmnt);
-					ROOT_DEV = sb->s_dev;
-			                printk (KERN_NOTICE "VFS: Mounted root (NFS filesystem)%s.\n", (sb->s_flags & MS_RDONLY) ? " readonly" : "");
-					return;
-				}
-				remove_vfsmnt(sb->s_dev);
-			}
-			put_unnamed_dev(sb->s_dev);
-			sb->s_dev = 0;
-			put_filesystem(fs_type);
-		}
-		if (!ROOT_DEV) {
-			printk(KERN_ERR "VFS: Unable to mount root fs via NFS, trying floppy.\n");
-			ROOT_DEV = MKDEV(FLOPPY_MAJOR, 0);
-		}
-	}
+	void *data;
+	if (MAJOR(ROOT_DEV) != UNNAMED_MAJOR)
+		goto skip_nfs;
+	fs_type = get_fs_type("nfs");
+	if (!fs_type)
+		goto no_nfs;
+	ROOT_DEV = get_unnamed_dev();
+	if (!ROOT_DEV)
+		/*
+		 * Your /linuxrc sucks worse than MSExchange - that's the
+		 * only way you could run out of anon devices at that point.
+		 */
+		goto no_anon;
+	data = nfs_root_data();
+	if (!data)
+		goto no_server;
+	sb = read_super(ROOT_DEV, NULL, fs_type, root_mountflags, data, 1);
+	if (sb)
+		/*
+		 * We _can_ fail there, but if that will happen we have no
+		 * chance anyway (no memory for vfsmnt and we _will_ need it,
+		 * no matter which fs we try to mount).
+		 */
+		goto mount_it;
+no_server:
+	put_unnamed_dev(ROOT_DEV);
+no_anon:
+	put_filesystem(fs_type);
+no_nfs:
+	printk(KERN_ERR "VFS: Unable to mount root fs via NFS, trying floppy.\n");
+	ROOT_DEV = MKDEV(FLOPPY_MAJOR, 0);
+skip_nfs:
 #endif
 
 #ifdef CONFIG_BLK_DEV_FD
@@ -1369,11 +1368,8 @@ void __init mount_root(void)
 		kdevname(ROOT_DEV));
 
 mount_it:
-	sb->s_flags = root_mountflags;
-	current->fs->root = dget(sb->s_root);
-	current->fs->rootmnt = mntget(vfsmnt);
-	current->fs->pwd = dget(sb->s_root);
-	current->fs->pwdmnt = mntget(vfsmnt);
+	set_fs_root(current->fs, vfsmnt, sb->s_root);
+	set_fs_pwd(current->fs, vfsmnt, sb->s_root);
 	printk ("VFS: Mounted root (%s filesystem)%s.\n",
 		fs_type->name,
 		(sb->s_flags & MS_RDONLY) ? " readonly" : "");
@@ -1388,7 +1384,8 @@ mount_it:
 	}
 	else vfsmnt = add_vfsmnt (sb, "/dev/root", "/");
 	if (vfsmnt) {
-		bdput(bdev); /* sb holds a reference */
+		if (bdev)
+			bdput(bdev); /* sb holds a reference */
 		return;
 	}
 	panic("VFS: add_vfsmnt failed for root fs");
@@ -1402,27 +1399,22 @@ static void chroot_fs_refs(struct dentry *old_root,
 {
 	struct task_struct *p;
 
+	/* We can't afford dput() blocking under the tasklist_lock */
+	mntget(old_rootmnt);
+	dget(old_root);
+
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
 		if (!p->fs) continue;
-		if (p->fs->root == old_root && p->fs->rootmnt == old_rootmnt) {
-			p->fs->root = dget(new_root);
-			p->fs->rootmnt = mntget(new_rootmnt);
-			mntput(old_rootmnt);
-			dput(old_root);
-			printk(KERN_DEBUG "chroot_fs_refs: changed root of "
-			    "process %d\n",p->pid);
-		}
-		if (p->fs->pwd == old_root && p->fs->pwdmnt == old_rootmnt) {
-			p->fs->pwd = dget(new_root);
-			p->fs->pwdmnt = mntget(new_rootmnt);
-			mntput(old_rootmnt);
-			dput(old_root);
-			printk(KERN_DEBUG "chroot_fs_refs: changed cwd of "
-			    "process %d\n",p->pid);
-		}
+		if (p->fs->root == old_root && p->fs->rootmnt == old_rootmnt)
+			set_fs_root(p->fs, new_rootmnt, new_root);
+		if (p->fs->pwd == old_root && p->fs->pwdmnt == old_rootmnt)
+			set_fs_pwd(p->fs, new_rootmnt, new_root);
 	}
 	read_unlock(&tasklist_lock);
+
+	dput(old_root);
+	mntput(old_rootmnt);
 }
 
 /*

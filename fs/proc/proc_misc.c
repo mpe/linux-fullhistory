@@ -30,6 +30,7 @@
 #include <linux/signal.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -469,7 +470,10 @@ static int ds1286_read_proc(char *page, char **start, off_t off,
 static int locks_read_proc(char *page, char **start, off_t off,
 				 int count, int *eof, void *data)
 {
-	int len = get_locks_status(page, start, off, count);
+	int len;
+	lock_kernel();
+	len = get_locks_status(page, start, off, count);
+	unlock_kernel();
 	if (len < count) *eof = 1;
 	return len;
 }

@@ -405,18 +405,11 @@ static void disconnect_rio(struct usb_device *dev, void *ptr)
 
 static struct
 file_operations usb_rio_fops = {
-	NULL,			/* seek */
-	read_rio,
-	write_rio,
-	NULL,			/* readdir */
-	NULL,			/* poll */
-	ioctl_rio,		/* ioctl */
-	NULL,			/* mmap */
-	open_rio,
-	NULL,			/* flush */
-	close_rio,
-	NULL,
-	NULL,			/* fasync */
+	read:		read_rio,
+	write:		write_rio,
+	ioctl:		ioctl_rio,
+	open:		open_rio,
+	release:	close_rio,
 };
 
 static struct

@@ -29,7 +29,7 @@ static struct irq_routing_table *pirq_table;
  * Avoid using: 13, 14 and 15 (FP error and IDE).
  * Penalize: 3, 4, 7, 12 (known ISA uses: serial, parallel and mouse)
  */
-unsigned int pcibios_irq_mask = ~0;
+unsigned int pcibios_irq_mask = 0xfff8;
 
 static unsigned pirq_penalty[16] = {
 	10000, 10000, 10000, 100, 100, 0, 0, 100,
@@ -305,10 +305,7 @@ int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 		return 0;
 	}
 	DBG(" -> PIRQ %02x, mask %04x, excl %04x", pirq, mask, pirq_table->exclusive_irqs);
-	if (pcibios_irq_mask != ~0)
-		mask &= pcibios_irq_mask;
-	else
-		mask &= pirq_table->exclusive_irqs;
+	mask &= pcibios_irq_mask;
 
 	/* Find the best IRQ to assign */
 	newirq = 0;

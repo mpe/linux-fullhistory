@@ -23,6 +23,7 @@ extern unsigned long event;
 #include <linux/sem.h>
 #include <linux/signal.h>
 #include <linux/securebits.h>
+#include <linux/fs_struct.h>
 
 /*
  * cloning flags:
@@ -179,19 +180,6 @@ struct files_struct {
 	{ { 0, } }, \
 	{ { 0, } }, \
 	{ NULL, } \
-}
-
-struct fs_struct {
-	atomic_t count;
-	int umask;
-	struct dentry * root, * pwd;
-	struct vfsmount * rootmnt, * pwdmnt;
-};
-
-#define INIT_FS { \
-	ATOMIC_INIT(1), \
-	0022, \
-	NULL, NULL, NULL, NULL \
 }
 
 /* Maximum number of active map areas.. This is a random (large) number */
@@ -709,7 +697,6 @@ extern void flush_thread(void);
 extern void exit_thread(void);
 
 extern void exit_mm(struct task_struct *);
-extern void exit_fs(struct task_struct *);
 extern void exit_files(struct task_struct *);
 extern void exit_sighand(struct task_struct *);
 

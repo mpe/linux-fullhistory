@@ -90,7 +90,7 @@ struct sigcontext_ia32 {
        unsigned int eflags;
        unsigned int esp_at_signal;
        unsigned short ss, __ssh;
-       struct _fpstate_ia32 * fpstate;
+       unsigned int fpstate;		/* really (struct _fpstate_ia32 *) */
        unsigned int oldmask;
        unsigned int cr2;
 };
@@ -287,8 +287,13 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
  *  IA32 floating point control registers starting values
  */
 
-#define IA32_FSR_DEFAULT	0x555500000	/* set all tag bits */
+#define IA32_FSR_DEFAULT	0x55550000	/* set all tag bits */
 #define IA32_FCR_DEFAULT	0x33f		/* single precision, all masks */
+
+#define IA32_PTRACE_GETREGS	12
+#define IA32_PTRACE_SETREGS	13
+#define IA32_PTRACE_GETFPREGS	14
+#define IA32_PTRACE_SETFPREGS	15
 
 #define ia32_start_thread(regs,new_ip,new_sp) do {				\
 	set_fs(USER_DS);							\
@@ -302,10 +307,11 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 } while (0)
 
 extern void ia32_gdt_init (void);
-extern long ia32_setup_frame1 (int sig, struct k_sigaction *ka, siginfo_t *info,
+extern int ia32_setup_frame1 (int sig, struct k_sigaction *ka, siginfo_t *info,
 			       sigset_t *set, struct pt_regs *regs);
 extern void ia32_init_addr_space (struct pt_regs *regs);
 extern int ia32_setup_arg_pages (struct linux_binprm *bprm);
+extern int ia32_exception (struct pt_regs *regs, unsigned long isr);
 
 #endif /* !CONFIG_IA32_SUPPORT */
  

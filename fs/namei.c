@@ -286,11 +286,12 @@ static inline int follow_down(struct dentry ** dentry, struct vfsmount **mnt)
  *
  * We expect 'base' to be positive and a directory.
  */
-int walk_name(const char * name, unsigned lookup_flags, struct nameidata *nd)
+int walk_name(const char * name, struct nameidata *nd)
 {
 	struct dentry *dentry;
 	struct inode *inode;
 	int err;
+	unsigned int lookup_flags = nd->flags;
 
 	while (*name=='/')
 		name++;
@@ -300,9 +301,6 @@ int walk_name(const char * name, unsigned lookup_flags, struct nameidata *nd)
 	inode = nd->dentry->d_inode;
 	if (current->link_count)
 		lookup_flags = LOOKUP_FOLLOW;
-
-	lookup_flags &= LOOKUP_FOLLOW | LOOKUP_DIRECTORY |
-			LOOKUP_SLASHOK | LOOKUP_POSITIVE | LOOKUP_PARENT;
 
 	/* At this point we know we have a real path component. */
 	for(;;) {
@@ -379,10 +377,10 @@ int walk_name(const char * name, unsigned lookup_flags, struct nameidata *nd)
 		err = -ENOENT;
 		inode = dentry->d_inode;
 		if (!inode)
-			break;
+			goto out_dput;
 		err = -ENOTDIR; 
 		if (!inode->i_op)
-			break;
+			goto out_dput;
 
 		if (inode->i_op->follow_link) {
 			err = do_follow_link(dentry, nd);
@@ -474,6 +472,9 @@ lookup_parent:
 		nd->last = this;
 return_base:
 		return 0;
+out_dput:
+		dput(dentry);
+		break;
 	}
 	dput(nd->dentry);
 	mntput(nd->mnt);
@@ -482,27 +483,20 @@ return_err:
 }
 
 /* returns 1 if everything is done */
-static int __emul_lookup_dentry(const char *name, int lookup_flags,
-		struct nameidata *nd)
+static int __emul_lookup_dentry(const char *name, struct nameidata *nd)
 {
-	char *emul = __emul_prefix();
-
-	if (!emul)
-		return 0;
-
-	nd->mnt = mntget(current->fs->rootmnt);
-	nd->dentry = dget(current->fs->root);
-	if (walk_name(emul,LOOKUP_FOLLOW|LOOKUP_DIRECTORY|LOOKUP_POSITIVE,nd))
-		return 0;
-	if (walk_name(name, lookup_flags, nd))
+	nd->mnt = mntget(current->fs->altrootmnt);
+	nd->dentry = dget(current->fs->altroot);
+	if (walk_name(name, nd))
 		return 0;
 
 	if (!nd->dentry->d_inode) {
 		struct nameidata nd_root;
 		nd_root.last.len = 0;
+		nd_root.flags = nd->flags;
 		nd_root.mnt = mntget(current->fs->rootmnt);
 		nd_root.dentry = dget(current->fs->root);
-		if (walk_name(name, lookup_flags, &nd_root))
+		if (walk_name(name, &nd_root))
 			return 1;
 		if (nd_root.dentry->d_inode) {
 			dput(nd->dentry);
@@ -518,11 +512,36 @@ static int __emul_lookup_dentry(const char *name, int lookup_flags,
 	return 1;
 }
 
-static inline int
-walk_init_root(const char *name, unsigned flags, struct nameidata *nd)
+void set_fs_altroot(void)
 {
-	if (current->personality != PER_LINUX)
-		if (__emul_lookup_dentry(name,flags,nd))
+	char *emul = __emul_prefix();
+	struct nameidata nd;
+	struct vfsmount *mnt = NULL, *oldmnt;
+	struct dentry *dentry = NULL, *olddentry;
+	if (emul) {
+		nd.mnt = mntget(current->fs->rootmnt);
+		nd.dentry = dget(current->fs->root);
+		nd.flags = LOOKUP_FOLLOW|LOOKUP_DIRECTORY|LOOKUP_POSITIVE;
+		if (walk_name(emul,&nd) == 0) {
+			mnt = nd.mnt;
+			dentry = nd.dentry;
+		}
+	}
+	oldmnt = current->fs->altrootmnt;
+	olddentry = current->fs->altroot;
+	current->fs->altrootmnt = mnt;
+	current->fs->altroot = dentry;
+	if (olddentry) {
+		dput(olddentry);
+		mntput(oldmnt);
+	}
+}
+
+static inline int
+walk_init_root(const char *name, struct nameidata *nd)
+{
+	if (current->fs->altroot && !(nd->flags & LOOKUP_NOALT))
+		if (__emul_lookup_dentry(name,nd))
 			return 0;
 	nd->mnt = mntget(current->fs->rootmnt);
 	nd->dentry = dget(current->fs->root);
@@ -532,8 +551,9 @@ walk_init_root(const char *name, unsigned flags, struct nameidata *nd)
 int walk_init(const char *name,unsigned int flags,struct nameidata *nd)
 {
 	nd->last.len = 0;
+	nd->flags = flags;
 	if (*name=='/')
-		return walk_init_root(name,flags,nd);
+		return walk_init_root(name,nd);
 	nd->mnt = mntget(current->fs->pwdmnt);
 	nd->dentry = dget(current->fs->pwd);
 	return 1;
@@ -545,7 +565,7 @@ struct dentry * lookup_dentry(const char * name, unsigned int lookup_flags)
 	int err = 0;
 
 	if (walk_init(name, lookup_flags, &nd))
-		err = walk_name(name, lookup_flags, &nd);
+		err = walk_name(name, &nd);
 	if (!err) {
 		mntput(nd.mnt);
 		return nd.dentry;
@@ -589,15 +609,10 @@ static inline struct dentry * lookup_hash(struct qstr *name, struct dentry * bas
 		dentry = inode->i_op->lookup(inode, new);
 		if (!dentry)
 			dentry = new;
-		else {
+		else
 			dput(new);
-			if (IS_ERR(dentry))
-				goto out;
-		}
 	}
-
 out:
-	dput(base);
 	return dentry;
 }
 
@@ -790,7 +805,7 @@ int open_namei(const char * pathname, int flag, int mode, struct nameidata *nd)
 	acc_mode = ACC_MODE(flag);
 	if (!(flag & O_CREAT)) {
 		if (walk_init(pathname, lookup_flags(flag), nd))
-			error = walk_name(pathname, lookup_flags(flag), nd);
+			error = walk_name(pathname, nd);
 		if (error)
 			return error;
 
@@ -799,7 +814,7 @@ int open_namei(const char * pathname, int flag, int mode, struct nameidata *nd)
 		struct dentry *dir;
 
 		if (walk_init(pathname, LOOKUP_PARENT, nd))
-			error = walk_name(pathname, LOOKUP_PARENT, nd);
+			error = walk_name(pathname, nd);
 		if (error)
 			return error;
 		/*
@@ -821,7 +836,7 @@ int open_namei(const char * pathname, int flag, int mode, struct nameidata *nd)
 		dir = dget(nd->dentry);
 		down(&dir->d_inode->i_sem);
 
-		dentry = lookup_hash(&nd->last, dget(nd->dentry));
+		dentry = lookup_hash(&nd->last, nd->dentry);
 		error = PTR_ERR(dentry);
 		if (IS_ERR(dentry)) {
 			up(&dir->d_inode->i_sem);
@@ -834,7 +849,7 @@ int open_namei(const char * pathname, int flag, int mode, struct nameidata *nd)
 			dput(dir);
 			error = -EEXIST;
 			if (flag & O_EXCL)
-				goto exit;
+				goto exit_dput;
 			if (dentry->d_inode->i_op &&
 			    dentry->d_inode->i_op->follow_link) {
 				/*
@@ -936,6 +951,8 @@ int open_namei(const char * pathname, int flag, int mode, struct nameidata *nd)
 
 	return 0;
 
+exit_dput:
+	dput(dentry);
 exit:
 	dput(nd->dentry);
 	mntput(nd->mnt);
@@ -948,7 +965,7 @@ static struct dentry *lookup_create(const char *name, int is_dir)
 	struct dentry *dentry;
 	int err = 0;
 	if (walk_init(name, LOOKUP_PARENT, &nd))
-		err = walk_name(name, LOOKUP_PARENT, &nd);
+		err = walk_name(name, &nd);
 	dentry = ERR_PTR(err);
 	if (err)
 		goto out;
@@ -957,7 +974,7 @@ static struct dentry *lookup_create(const char *name, int is_dir)
 	if (!nd.last.len || (nd.last.name[0] == '.' &&
 	      (nd.last.len == 1 || (nd.last.name[1] == '.' && nd.last.len == 2))))
 		goto fail;
-	dentry = lookup_hash(&nd.last, dget(nd.dentry));
+	dentry = lookup_hash(&nd.last, nd.dentry);
 	if (IS_ERR(dentry))
 		goto fail;
 	if (!is_dir && nd.last.name[nd.last.len] && !dentry->d_inode)
@@ -1620,11 +1637,11 @@ __vfs_follow_link(struct nameidata *nd, const char *link)
 	if (*link == '/') {
 		dput(nd->dentry);
 		mntput(nd->mnt);
-		if (!walk_init_root(link, LOOKUP_FOLLOW, nd))
+		if (!walk_init_root(link, nd))
 			/* weird __emul_prefix() stuff did it */
 			return 0;
 	}
-	return walk_name(link, LOOKUP_FOLLOW, nd);
+	return walk_name(link, nd);
 
 fail:
 	dput(nd->dentry);

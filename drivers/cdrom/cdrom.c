@@ -962,7 +962,7 @@ static void setup_report_key(struct cdrom_generic_command *cgc, unsigned agid, u
 		}
 	}
 	cgc->cmd[9] = cgc->buflen;
-	cgc->data_direction = CGC_DATA_WRITE;
+	cgc->data_direction = CGC_DATA_READ;
 }
 
 static void setup_send_key(struct cdrom_generic_command *cgc, unsigned agid, unsigned type)
@@ -984,7 +984,7 @@ static void setup_send_key(struct cdrom_generic_command *cgc, unsigned agid, uns
 		}
 	}
 	cgc->cmd[9] = cgc->buflen;
-	cgc->data_direction = CGC_DATA_READ;
+	cgc->data_direction = CGC_DATA_WRITE;
 }
 
 static int dvd_do_auth(struct cdrom_device_info *cdi, dvd_authinfo *ai)
@@ -2535,7 +2535,7 @@ static void cdrom_sysctl_unregister(void)
 
 #endif /* CONFIG_SYSCTL */
 
-static int cdrom_init(void)
+static int __init cdrom_init(void)
 {
 #ifdef CONFIG_SYSCTL
 	cdrom_sysctl_register();
@@ -2544,7 +2544,7 @@ static int cdrom_init(void)
 	return 0;
 }
 
-static void cdrom_exit(void)
+static void __exit cdrom_exit(void)
 {
 	printk(KERN_INFO "Uniform CD-ROM driver unloaded\n");
 #ifdef CONFIG_SYSCTL

@@ -1,14 +1,55 @@
 #include <asm/offsets.h>
 #include <asm/signal.h>
 
+	//
+	// Get possibly unaligned sigmask argument into an aligned
+	//   kernel buffer
+	.text
+	.proc ia32_rt_sigsuspend
+	.global ia32_rt_sigsuspend
+ia32_rt_sigsuspend:
+
+	// We'll cheat and not do an alloc here since we are ultimately
+	// going to do a simple branch to the IA64 sys_rt_sigsuspend.
+	// r32 is still the first argument which is the signal mask.
+	// We copy this 4-byte aligned value to an 8-byte aligned buffer
+	// in the task structure and then jump to the IA64 code.
+
+	mov r8=r0		// no memory access errors yet
+	add r10=4,r32
+	;;
+1:
+	ld4 r2=[r32]		// get first half of sigmask
+	ld4 r3=[r10]		// get second half of sigmask
+2:
+	cmp.lt p6,p0=r8,r0	// check memory access
+	;;
+(p6)	br.ret.sptk.many rp	//   it failed
+
+	adds r32=IA64_TASK_THREAD_SIGMASK_OFFSET,r13
+	adds r10=IA64_TASK_THREAD_SIGMASK_OFFSET+4,r13
+	;;
+	st4 [r32]=r2
+	st4 [r10]=r3
+	br.cond.sptk.many sys_rt_sigsuspend
+
+	.section __ex_table,"a"
+	data4 @gprel(1b)
+	data4 (2b-1b)|1
+	.previous
+
+
+	.endp ia32_rt_sigsuspend
+
 	.global ia32_ret_from_syscall
-	.proc ia64_ret_from_syscall
+	.proc ia32_ret_from_syscall
 ia32_ret_from_syscall:
 	cmp.ge p6,p7=r8,r0                      // syscall executed successfully?
 	adds r2=IA64_PT_REGS_R8_OFFSET+16,sp    // r2 = &pt_regs.r8
 	;; 
 	st8 [r2]=r8                             // store return value in slot for r8
 	br.cond.sptk.few ia64_leave_kernel
+	.endp ia32_ret_from_syscall
 
 	//
 	// Invoke a system call, but do some tracing before and after the call.
@@ -35,10 +76,21 @@ ia32_trace_syscall:
 	.endp ia32_trace_syscall
 
 	.align 16
+	.global sys32_vfork
+	.proc sys32_vfork
+sys32_vfork:
+	alloc r16=ar.pfs,2,2,3,0;;
+	mov out0=IA64_CLONE_VFORK|IA64_CLONE_VM|SIGCHLD	// out0 = clone_flags
+	br.cond.sptk.few .fork1			// do the work
+	.endp sys32_vfork
+
+	.align 16
 	.global sys32_fork
 	.proc sys32_fork
 sys32_fork:
 	alloc r16=ar.pfs,2,2,3,0;;
+	mov out0=SIGCHLD			// out0 = clone_flags
+.fork1:
 	movl r28=1f
 	mov loc1=rp
 	br.cond.sptk.many save_switch_stack
@@ -46,7 +98,6 @@ sys32_fork:
 	mov loc0=r16				// save ar.pfs across do_fork
 	adds out2=IA64_SWITCH_STACK_SIZE+16,sp
 	adds r2=IA64_SWITCH_STACK_SIZE+IA64_PT_REGS_R12_OFFSET+16,sp
-	mov out0=SIGCHLD			// out0 = clone_flags
 	;;
 	ld8 out1=[r2]				// fetch usp from pt_regs.r12
 	br.call.sptk.few rp=do_fork
@@ -88,7 +139,7 @@ ia32_syscall_table:
 	data8 sys_setuid
 	data8 sys_getuid
 	data8 sys_ni_syscall /* sys_stime is not supported on IA64 */  /* 25 */
-	data8 sys_ptrace
+	data8 sys32_ptrace
 	data8 sys32_alarm
 	data8 sys_ni_syscall
 	data8 sys_ni_syscall
@@ -105,7 +156,7 @@ ia32_syscall_table:
 	data8 sys_rmdir		  /* 40 */
 	data8 sys_dup
 	data8 sys32_pipe
-	data8 sys_times
+	data8 sys32_times
 	data8 sys_ni_syscall	  /* old prof syscall holder */
 	data8 sys_brk		  /* 45 */
 	data8 sys_setgid
@@ -139,7 +190,7 @@ ia32_syscall_table:
 	data8 sys_sethostname
 	data8 sys32_setrlimit	  /* 75 */
 	data8 sys32_getrlimit
-	data8 sys_getrusage
+	data8 sys32_getrusage
 	data8 sys32_gettimeofday
 	data8 sys32_settimeofday
 	data8 sys_getgroups	  /* 80 */
@@ -241,7 +292,7 @@ ia32_syscall_table:
 	data8 sys_rt_sigpending
 	data8 sys_rt_sigtimedwait
 	data8 sys_rt_sigqueueinfo
-	data8 sys_rt_sigsuspend
+	data8 ia32_rt_sigsuspend
 	data8 sys_pread		  /* 180 */
 	data8 sys_pwrite
 	data8 sys_chown

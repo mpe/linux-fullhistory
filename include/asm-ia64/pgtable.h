@@ -8,16 +8,22 @@
  * This hopefully works with any (fixed) ia-64 page-size, as defined
  * in <asm/page.h> (currently 8192).
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
 #include <asm/mman.h>
 #include <asm/page.h>
 #include <asm/types.h>
 
-/* Size of physical address space: */
-#define IA64_PHYS_BITS		50		/* EAS2.5 defines 50 bits of ppn */
+/* Size of virtuaql and physical address spaces: */
+#ifdef CONFIG_ITANIUM
+# define IA64_IMPL_VA_MSB	50
+# define IA64_PHYS_BITS		44		/* Itanium PRM defines 44 bits of ppn */
+#else
+# define IA64_IMPL_VA_MSB	60		/* maximum value (bits 61-63 are region bits) */
+# define IA64_PHYS_BITS		50		/* EAS2.6 allows up to 50 bits of ppn */
+#endif
 #define IA64_PHYS_SIZE		(__IA64_UL(1) << IA64_PHYS_BITS)
 
 /* Is ADDR a valid kernel address? */
@@ -336,10 +342,6 @@ pgd_offset (struct mm_struct *mm, unsigned long address)
 /* Find an entry in the third-level page table.. */
 #define pte_offset(dir,addr) \
 	((pte_t *) pmd_page(*(dir)) + (((addr) >> PAGE_SHIFT) & (PTRS_PER_PTE - 1)))
-
-
-extern void __handle_bad_pgd (pgd_t *pgd);
-extern void __handle_bad_pmd (pmd_t *pmd);
 
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];

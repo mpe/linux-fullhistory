@@ -724,7 +724,7 @@ static int udf_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	cfi.fileCharacteristics = FILE_DIRECTORY | FILE_PARENT;
 	udf_write_fi(&cfi, fi, &fibh, NULL, NULL);
 	udf_release_data(fibh.sbh);
-	inode->i_mode = S_IFDIR | (mode & (S_IRWXUGO|S_ISVTX) & ~current->fs->umask);
+	inode->i_mode = S_IFDIR | mode;
 	if (dir->i_mode & S_ISGID)
 		inode->i_mode |= S_ISGID;
 	mark_inode_dirty(inode);

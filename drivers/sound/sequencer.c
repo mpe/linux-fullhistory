@@ -1561,6 +1561,7 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 	return put_user(val, (int *)arg);
 }
 
+/* No kernel lock - we're using the global irq lock here */
 unsigned int sequencer_poll(int dev, struct file *file, poll_table * wait)
 {
 	unsigned long flags;

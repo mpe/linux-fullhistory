@@ -47,17 +47,11 @@ dig_setup (char **cmdline_p)
 	unsigned int orig_x, orig_y, num_cols, num_rows, font_height;
 
 	/*
-	 * This assumes that the EFI partition is physical disk 1
-	 * partition 1 and the Linux root disk is physical disk 1
-	 * partition 2.
+	 * Default to /dev/sda2.  This assumes that the EFI partition
+	 * is physical disk 1 partition 1 and the Linux root disk is
+	 * physical disk 1 partition 2.
 	 */
-#ifdef CONFIG_IA64_LION_HACKS
-	/* default to /dev/sda2 on Lion... */
 	ROOT_DEV = to_kdev_t(0x0802);		/* default to second partition on first drive */
-#else
-	/* default to /dev/dha2 on BigSur... */
-	ROOT_DEV = to_kdev_t(0x0302);		/* default to second partition on first drive */
-#endif
 
 #ifdef CONFIG_SMP
 	init_smp_config();

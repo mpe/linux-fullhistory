@@ -24,7 +24,7 @@
 #include <asm/io.h>
 #include <asm/processor.h>
 
-#define EFI_DEBUG
+#define EFI_DEBUG	0
 
 extern efi_status_t efi_call_phys (void *, ...);
 
@@ -210,9 +210,8 @@ efi_memmap_walk (efi_freemem_callback_t callback, void *arg)
 void __init 
 efi_init (void)
 {
-	void *efi_map_start, *efi_map_end, *p;
+	void *efi_map_start, *efi_map_end;
 	efi_config_table_t *config_tables;
-	efi_memory_desc_t *md;
 	efi_char16_t *c16;
 	u64 efi_desc_size;
 	char vendor[100] = "unknown";
@@ -278,13 +277,18 @@ efi_init (void)
 	efi_map_end   = efi_map_start + ia64_boot_param.efi_memmap_size;
 	efi_desc_size = ia64_boot_param.efi_memdesc_size;
 
-#ifdef EFI_DEBUG
+#if EFI_DEBUG
 	/* print EFI memory map: */
-	for (i = 0, p = efi_map_start; p < efi_map_end; ++i, p += efi_desc_size) {
-		md = p;
-		printk("mem%02u: type=%u, attr=0x%lx, range=[0x%016lx-0x%016lx) (%luMB)\n",
-		       i, md->type, md->attribute,
-		       md->phys_addr, md->phys_addr + (md->num_pages<<12) - 1, md->num_pages >> 8);
+	{
+		efi_memory_desc_t *md = p;
+		void *p;
+
+		for (i = 0, p = efi_map_start; p < efi_map_end; ++i, p += efi_desc_size) {
+			md = p;
+			printk("mem%02u: type=%u, attr=0x%lx, range=[0x%016lx-0x%016lx) (%luMB)\n",
+			       i, md->type, md->attribute, md->phys_addr,
+			       md->phys_addr + (md->num_pages<<12) - 1, md->num_pages >> 8);
+		}
 	}
 #endif
 }

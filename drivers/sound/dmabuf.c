@@ -1218,6 +1218,7 @@ void DMAbuf_init(int dev, int dma1, int dma2)
 	}
 }
 
+/* No kernel lock - DMAbuf_activate_recording protected by global cli/sti */
 static unsigned int poll_input(struct file * file, int dev, poll_table *wait)
 {
 	struct audio_operations *adev = audio_devs[dev];

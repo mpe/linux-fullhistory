@@ -10,7 +10,7 @@ all: hp.a
 O_TARGET	= hp.a
 O_OBJS		= hpsim_console.o hpsim_irq.o hpsim_setup.o
 
-ifeq ($(CONFIG_IA64_GENERIC),y)
+ifdef CONFIG_IA64_GENERIC
 O_OBJS		+= hpsim_machvec.o
 endif
 

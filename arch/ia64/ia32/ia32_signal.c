@@ -94,7 +94,9 @@ setup_sigcontext_ia32(struct sigcontext_ia32 *sc, struct _fpstate_ia32 *fpstate,
          err |= __put_user(tmp ? fpstate : NULL, &sc->fpstate);
 
        /* non-iBCS2 extensions.. */
+#endif
        err |= __put_user(mask, &sc->oldmask);
+#if 0
        err |= __put_user(current->tss.cr2, &sc->cr2);
 #endif
        
@@ -196,7 +198,7 @@ get_sigframe(struct k_sigaction *ka, struct pt_regs * regs, size_t frame_size)
        return (void *)((esp - frame_size) & -8ul);
 }
 
-static void
+static int
 setup_frame_ia32(int sig, struct k_sigaction *ka, sigset_t *set,
            struct pt_regs * regs) 
 {      
@@ -247,20 +249,21 @@ setup_frame_ia32(int sig, struct k_sigaction *ka, sigset_t *set,
        regs->eflags &= ~TF_MASK;
 #endif
 
-#if 1
-       printk("SIG deliver (%s:%d): sp=%p pc=%lx ra=%x\n",
-               current->comm, current->pid, frame, regs->cr_iip, frame->pretcode);
+#if 0
+       printk("SIG deliver (%s:%d): sig=%d sp=%p pc=%lx ra=%x\n",
+               current->comm, current->pid, sig, frame, regs->cr_iip, frame->pretcode);
 #endif
 
-       return;
+       return 1;
 
 give_sigsegv:
        if (sig == SIGSEGV)
                ka->sa.sa_handler = SIG_DFL;
        force_sig(SIGSEGV, current);
+       return 0;
 }
 
-static void
+static int
 setup_rt_frame_ia32(int sig, struct k_sigaction *ka, siginfo_t *info,
               sigset_t *set, struct pt_regs * regs)
 {
@@ -316,29 +319,29 @@ setup_rt_frame_ia32(int sig, struct k_sigaction *ka, siginfo_t *info,
        regs->eflags &= ~TF_MASK;
 #endif
 
-#if 1
+#if 0
        printk("SIG deliver (%s:%d): sp=%p pc=%lx ra=%x\n",
                current->comm, current->pid, frame, regs->cr_iip, frame->pretcode);
 #endif
 
-       return;
+       return 1;
 
 give_sigsegv:
        if (sig == SIGSEGV)
                ka->sa.sa_handler = SIG_DFL;
        force_sig(SIGSEGV, current);
+       return 0;
 }
 
-long
+int
 ia32_setup_frame1 (int sig, struct k_sigaction *ka, siginfo_t *info,
 		   sigset_t *set, struct pt_regs *regs)
 {
        /* Set up the stack frame */
        if (ka->sa.sa_flags & SA_SIGINFO)
-               setup_rt_frame_ia32(sig, ka, info, set, regs);
+               return(setup_rt_frame_ia32(sig, ka, info, set, regs));
        else
-               setup_frame_ia32(sig, ka, set, regs);
-
+               return(setup_frame_ia32(sig, ka, set, regs));
 }
 
 asmlinkage int

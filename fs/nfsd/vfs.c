@@ -139,7 +139,8 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	} else {
 		nd.mnt = NULL;
 		nd.dentry = dget(dparent);
-		err = walk_name(name, 0, &nd);
+		nd.flags = 0;
+		err = walk_name(name, &nd);
 		if (err)
 			goto out_nfserr;
 		/*
@@ -838,7 +839,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (!resfhp->fh_dverified) {
 		/* called from nfsd_proc_mkdir, or possibly nfsd3_proc_create */
 		fh_lock(fhp);
-		dchild = lookup_one(fname, dget(dentry));
+		dchild = lookup_one(fname, dentry);
 		err = PTR_ERR(dchild);
 		if (IS_ERR(dchild))
 			goto out_nfserr;
@@ -961,7 +962,7 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	/*
 	 * Compose the response file handle.
 	 */
-	dchild = lookup_one(fname, dget(dentry));
+	dchild = lookup_one(fname, dentry);
 	err = PTR_ERR(dchild);
 	if(IS_ERR(dchild))
 		goto out_nfserr;
@@ -1108,7 +1109,7 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		goto out;
 	fh_lock(fhp);
 	dentry = fhp->fh_dentry;
-	dnew = lookup_one(fname, dget(dentry));
+	dnew = lookup_one(fname, dentry);
 	err = PTR_ERR(dnew);
 	if (IS_ERR(dnew))
 		goto out_nfserr;
@@ -1173,7 +1174,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	ddir = ffhp->fh_dentry;
 	dirp = ddir->d_inode;
 
-	dnew = lookup_one(fname, dget(ddir));
+	dnew = lookup_one(fname, ddir);
 	err = PTR_ERR(dnew);
 	if (IS_ERR(dnew))
 		goto out_nfserr;
@@ -1238,7 +1239,7 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 		goto out;
 
 	double_down(&tdir->i_sem, &fdir->i_sem);
-	odentry = lookup_one(fname, dget(fdentry));
+	odentry = lookup_one(fname, fdentry);
 	err = PTR_ERR(odentry);
 	if (IS_ERR(odentry))
 		goto out_nfserr;
@@ -1247,7 +1248,7 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	if (!odentry->d_inode)
 		goto out_dput_old;
 
-	ndentry = lookup_one(tname, dget(tdentry));
+	ndentry = lookup_one(tname, tdentry);
 	err = PTR_ERR(ndentry);
 	if (IS_ERR(ndentry))
 		goto out_dput_old;
@@ -1310,7 +1311,7 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	dentry = fhp->fh_dentry;
 	dirp = dentry->d_inode;
 
-	rdentry = lookup_one(fname, dget(dentry));
+	rdentry = lookup_one(fname, dentry);
 	err = PTR_ERR(rdentry);
 	if (IS_ERR(rdentry))
 		goto out_nfserr;

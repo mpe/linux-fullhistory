@@ -56,6 +56,8 @@ extern int register_exec_domain(struct exec_domain *it);
 extern int unregister_exec_domain(struct exec_domain *it);
 #define put_exec_domain(it) \
 	if (it && it->module) __MOD_DEC_USE_COUNT(it->module);
+#define get_exec_domain(it) \
+	if (it && it->module) __MOD_INC_USE_COUNT(it->module);
 extern void __set_personality(unsigned long personality);
 #define set_personality(pers) do {	\
 	if (current->personality != pers) \

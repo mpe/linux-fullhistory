@@ -33,7 +33,7 @@ set_bit (int nr, volatile void *addr)
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
 		new = old | bit;
-	} while (cmpxchg(m, old, new) != old);
+	} while (cmpxchg_acq(m, old, new) != old);
 }
 
 extern __inline__ void
@@ -49,7 +49,7 @@ clear_bit (int nr, volatile void *addr)
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
 		new = old & mask;
-	} while (cmpxchg(m, old, new) != old);
+	} while (cmpxchg_acq(m, old, new) != old);
 }
 
 extern __inline__ void
@@ -65,7 +65,7 @@ change_bit (int nr, volatile void *addr)
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
 		new = old ^ bit;
-	} while (cmpxchg(m, old, new) != old);
+	} while (cmpxchg_acq(m, old, new) != old);
 }
 
 extern __inline__ int
@@ -81,7 +81,7 @@ test_and_set_bit (int nr, volatile void *addr)
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
 		new = old | bit;
-	} while (cmpxchg(m, old, new) != old);
+	} while (cmpxchg_acq(m, old, new) != old);
 	return (old & bit) != 0;
 }
 
@@ -98,7 +98,7 @@ test_and_clear_bit (int nr, volatile void *addr)
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
 		new = old & mask;
-	} while (cmpxchg(m, old, new) != old);
+	} while (cmpxchg_acq(m, old, new) != old);
 	return (old & ~mask) != 0;
 }
 
@@ -115,7 +115,7 @@ test_and_change_bit (int nr, volatile void *addr)
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
 		new = old ^ bit;
-	} while (cmpxchg(m, old, new) != old);
+	} while (cmpxchg_acq(m, old, new) != old);
 	return (old & bit) != 0;
 }
 
