@@ -46,6 +46,7 @@
 
 #define RT_CONN_FLAGS(sk)   (RT_TOS(inet_sk(sk)->tos) | sock_flag(sk, SOCK_LOCALROUTE))
 
+struct fib_nh;
 struct inet_peer;
 struct rtable
 {
@@ -58,7 +59,8 @@ struct rtable
 	struct in_device	*idev;
 	
 	unsigned		rt_flags;
-	unsigned		rt_type;
+	__u16			rt_type;
+	__u16			rt_multipath_alg;
 
 	__u32			rt_dst;	/* Path destination	*/
 	__u32			rt_src;	/* Path source		*/
@@ -179,6 +181,9 @@ static inline int ip_route_newports(struct rtable **rp, u16 sport, u16 dport,
 		memcpy(&fl, &(*rp)->fl, sizeof(fl));
 		fl.fl_ip_sport = sport;
 		fl.fl_ip_dport = dport;
+#if defined(CONFIG_IP_ROUTE_MULTIPATH_CACHED)
+		fl.flags |= FLOWI_FLAG_MULTIPATHOLDROUTE;
+#endif
 		ip_rt_put(*rp);
 		*rp = NULL;
 		return ip_route_output_flow(rp, &fl, sk, 0);
@@ -196,5 +201,78 @@ static inline struct inet_peer *rt_get_peer(struct rtable *rt)
 	rt_bind_peer(rt, 0);
 	return rt->peer;
 }
+
+#ifdef CONFIG_IP_ROUTE_MULTIPATH_WRANDOM
+extern void __multipath_flush(void);
+static inline void multipath_flush(void)
+{
+	__multipath_flush();
+}
+#else /* CONFIG_IP_ROUTE_MULTIPATH_WRANDOM */
+static inline void multipath_flush(void)
+{
+}
+#endif /* CONFIG_IP_ROUTE_MULTIPATH_WRANDOM */
+
+#ifdef CONFIG_IP_ROUTE_MULTIPATH_WRANDOM
+extern void __multipath_set_nhinfo(__u32 network,
+				   __u32 netmask,
+				   unsigned char prefixlen,
+				   const struct fib_nh* nh);
+static inline void multipath_set_nhinfo(__u32 network,
+					__u32 netmask,
+					unsigned char prefixlen,
+					const struct fib_nh* nh)
+{
+	__multipath_set_nhinfo(network, netmask, prefixlen, nh);
+}
+#else
+static inline void multipath_set_nhinfo(__u32 network,
+					__u32 netmask,
+					unsigned char prefixlen,
+					const struct fib_nh* nh)
+{
+}
+#endif
+
+
+
+#if defined(CONFIG_IP_ROUTE_MULTIPATH_RR) || defined(CONFIG_IP_ROUTE_MULTIPATH_DRR)
+extern void __multipath_remove(struct rtable *rt);
+static inline void multipath_remove(struct rtable *rt)
+{
+	if ( rt->u.dst.flags & DST_BALANCED )
+		__multipath_remove(rt);
+}
+#else /* CONFIG_IP_ROUTE_MULTIPATH_RR || CONFIG_IP_ROUTE_MULTIPATH_DRR */
+static inline void multipath_remove(struct rtable *rt)
+{
+}
+#endif /* CONFIG_IP_ROUTE_MULTIPATH_RR || CONFIG_IP_ROUTE_MULTIPATH_DRR */
+
+
+#ifdef CONFIG_IP_ROUTE_MULTIPATH_CACHED
+extern void __multipath_selectroute(const struct flowi *flp,
+				    struct rtable *rth,
+				    struct rtable **rp);
+static inline int multipath_selectroute(const struct flowi *flp,
+					struct rtable *rth,
+					struct rtable **rp)
+{
+	if (rth->u.dst.flags & DST_BALANCED) {
+		__multipath_selectroute(flp, rth, rp);
+		return 1;
+	} else {
+		return 0;
+	}
+}
+#else /* CONFIG_IP_ROUTE_MULTIPATH_CACHED */
+static inline int multipath_selectroute(const struct flowi *flp,
+					struct rtable *rth,
+					struct rtable **rp)
+{
+	return 0;
+}
+#endif /* CONFIG_IP_ROUTE_MULTIPATH_CACHED */
 
 #endif	/* _ROUTE_H */

@@ -95,6 +95,10 @@ struct fib_result {
 	unsigned char	nh_sel;
 	unsigned char	type;
 	unsigned char	scope;
+#ifdef CONFIG_IP_ROUTE_MULTIPATH_WRANDOM
+	__u32           network;
+	__u32           netmask;
+#endif
 	struct fib_info *fi;
 #ifdef CONFIG_IP_MULTIPLE_TABLES
 	struct fib_rule	*r;
@@ -118,6 +122,14 @@ struct fib_result {
 #define FIB_RES_GW(res)			(FIB_RES_NH(res).nh_gw)
 #define FIB_RES_DEV(res)		(FIB_RES_NH(res).nh_dev)
 #define FIB_RES_OIF(res)		(FIB_RES_NH(res).nh_oif)
+
+#ifdef CONFIG_IP_ROUTE_MULTIPATH_WRANDOM
+#define FIB_RES_NETWORK(res)		((res).network)
+#define FIB_RES_NETMASK(res)	        ((res).netmask)
+#else /* CONFIG_IP_ROUTE_MULTIPATH_WRANDOM */
+#define FIB_RES_NETWORK(res)		(0)
+#define FIB_RES_NETMASK(res)	        (0)
+#endif /* CONFIG_IP_ROUTE_MULTIPATH_WRANDOM */
 
 struct fib_table {
 	unsigned char	tb_id;

@@ -831,7 +831,8 @@ failure:
 }
 
 int fib_semantic_match(struct list_head *head, const struct flowi *flp,
-		       struct fib_result *res, int prefixlen)
+		       struct fib_result *res, __u32 zone, __u32 mask, 
+			int prefixlen)
 {
 	struct fib_alias *fa;
 	int nh_sel = 0;
@@ -895,6 +896,11 @@ out_fill_res:
 	res->type = fa->fa_type;
 	res->scope = fa->fa_scope;
 	res->fi = fa->fa_info;
+#ifdef CONFIG_IP_ROUTE_MULTIPATH_WRANDOM
+	res->netmask = mask;
+	res->network = zone &
+		(0xFFFFFFFF >> (32 - prefixlen));
+#endif
 	atomic_inc(&res->fi->fib_clntref);
 	return 0;
 }
