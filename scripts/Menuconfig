@@ -78,16 +78,13 @@ function bool () {
 	eval $2=\${$2:-'n'}  x=\$$2
 
 	case $x in
-	y|m) yes='ON' no='OFF' flag="*"
-	   ;;
-	n) yes='OFF' no='ON' flag=" "
-	   ;;
+	y|m)	flag="*" ;;
+	n)	flag=" " ;;
 	esac
 
 	echo -ne "'$2' '($flag) $1' " >>MCmenu
 
-	echo -e "function $2 () { l_bool '$1' '$yes' '$no' '$2' }\n" \
-		>>MCradiolists
+	echo -e "function $2 () { l_bool '$2' \"\$1\" }\n" >>MCradiolists
 }
 
 #
@@ -104,20 +101,15 @@ function tristate () {
 		eval $2=\${$2:-'n'}  x=\$$2
 	
 		case $x in
-		y) yes='ON'  no='OFF' module='OFF' flag="*"
-   		;;
-		m) yes='OFF' no='OFF' module='ON' flag="M"
-   		;;
-		*) yes='OFF' no='ON'  module='OFF' flag=" "
-   		;;
+		y) flag="*" ;;
+		m) flag="M" ;;
+		*) flag=" " ;;
 		esac
 	
 		echo -ne "'$2' '<$flag> $1' " >>MCmenu
 	
 		echo -e "
-		function $2 () { \
-			l_tristate '$1' '$yes' '$no' '$module' '$2'
-		}"  >>MCradiolists
+		function $2 () { l_tristate '$2' \"\$1\" }" >>MCradiolists
 	fi
 }
 
@@ -155,7 +147,7 @@ function int () {
 
 	echo -ne "'$2' '($x) $1' " >>MCmenu
 
-	echo -e "function $2 () { l_int '$1' '$2' '$3' '$x' }\n" >>MCradiolists
+	echo -e "function $2 () { l_int '$1' '$2' '$3' '$x' }" >>MCradiolists
 }
 
 #
@@ -166,7 +158,7 @@ function hex () {
 
 	echo -ne "'$2' '($x) $1' " >>MCmenu
 
-	echo -e "function $2 () { l_hex '$1' '$2' '$3' '$x' }\n" >>MCradiolists
+	echo -e "function $2 () { l_hex '$1' '$2' '$3' '$x' }" >>MCradiolists
 }
 
 #
@@ -203,9 +195,8 @@ function choice () {
 	echo -ne "'$firstchoice' '($current) $title' " >>MCmenu
 
 	echo -e "
-	function $firstchoice () {
-		l_choice '$title' \"$choices\" $current
-	}\n" >>MCradiolists
+	function $firstchoice () \
+		{ l_choice '$title' \"$choices\" $current }" >>MCradiolists
 }
 
 } # END load_functions()
@@ -236,12 +227,14 @@ function extract_help () {
 
      if [ -z "$text" ]
      then
-	  echo "There is no help available for this kernel option."
+          echo "There is no help available for this kernel option."
+	  return 1
      else
 	  echo "$text"
      fi
   else
 	 echo "There is no help available for this kernel option."
+         return 1
   fi
 }
 
@@ -263,7 +256,7 @@ function help () {
 #
 # Show the README file.
 #
-function show_readme() {
+function show_readme () {
 	$DIALOG --backtitle "$backtitle" \
 		--textbox scripts/README.Menuconfig $LINES $COLS
 }
@@ -309,22 +302,15 @@ function l_soundcfg () {
 # Handle a boolean (Yes/No) option.
 #
 function l_bool () {
-	while true
-	do
-		$DIALOG --title "$1" \
-			--backtitle "$backtitle" \
-			--radiolist "$radiolist_instructions" 12 70 2 \
-			'y' 'Yes' $2 'n' 'No' $3 2>MCdialog.out
-
-		case "$?" in
-		0) eval $4=`cat MCdialog.out`
-		   break ;;
-
-		1) help "$4" "$1" ;;
-
-		*) break ;;
+	if [ -n "$2" ]
+	then
+		case "$2" in
+		y|m)	eval $1=y ;;
+		*)	eval $1=n ;;
 		esac
-	done
+	else
+		echo -ne "\007"
+	fi
 }
 
 #
@@ -334,62 +320,44 @@ function mod_bool () {
 	eval $2=\${$2:-'n'}  x=\$$2
 
 	case $x in
-	m) module='ON'  no='OFF' flag='M'
-	   ;;
-	*) module='OFF' no='ON'  flag=' '
-	   ;;
+	y|m) flag='M' ;;
+	*)   flag=' ' ;;
 	esac
 
 	echo -ne "'$2' '<$flag> $1' " >>MCmenu
 
-	echo -e "function $2 () { l_mod_bool '$1' '$module' '$no' '$2' }\n" \
-		>>MCradiolists
+	echo -e "function $2 () { l_mod_bool '$2' \"\$1\" }" >>MCradiolists
 }
 
 #
 # Same as l_bool() except options are (Module/No)
 #
 function l_mod_bool() {
-	while true
-	do
-		$DIALOG --title "$1" \
-			--backtitle "$backtitle" \
-			--radiolist "$radiolist_instructions" 12 70 2 \
-			'm' 'Module' $2 'n' 'No' $3 2>MCdialog.out
-
-		case "$?" in
-		0) eval $4=`cat MCdialog.out`
-		   break ;;
-
-		1) help "$4" "$1" ;;
-
-		*) break ;;
+	if [ -n "$2" ]
+	then
+		case "$2" in
+		y|m)	eval $1=m ;;
+		*)	eval $1=n ;;
 		esac
-			
-	done
+	else
+		echo -ne "\007"
+	fi
 }
 
 #
 # Handle a tristate (Yes/No/Module) option.
 #
 function l_tristate () {
-	while true
-	do
-		$DIALOG --title "$1" \
-			--backtitle "$backtitle" \
-			--radiolist "$radiolist_instructions" 13 70 3 \
-			'y' 'Yes' $2 'n' 'No' $3 'm' 'Module' $4 \
-			2>MCdialog.out
-
-		case "$?" in
-		0) eval $5=`cat MCdialog.out`
-		   break ;;
-
-		1) help "$5" "$1" ;;
-
-		*) break ;;
+	if [ -n "$2" ]
+	then
+		case "$2" in
+		y) eval $1=y ;;
+		m) eval $1=m ;;
+		*) eval $1=n ;;
 		esac
-	done
+	else
+		echo -ne "\007"
+	fi
 }
 
 #
@@ -401,7 +369,7 @@ function l_int () {
 		if $DIALOG --title "$1" \
 			--backtitle "$backtitle" \
 			--inputbox "$inputbox_instructions_int" \
-			15 55 "$4" 2>MCdialog.out
+			10 75 "$4" 2>MCdialog.out
 		then
 			answer="`cat MCdialog.out`"
 			answer="${answer:-$3}"
@@ -433,7 +401,7 @@ function l_hex () {
 		if $DIALOG --title "$1" \
 			--backtitle "$backtitle" \
 			--inputbox "$inputbox_instructions_hex" \
-			15 55 "$4" 2>MCdialog.out
+			10 75 "$4" 2>MCdialog.out
 		then
 			answer="`cat MCdialog.out`"
 			answer="${answer:-$3}"
@@ -489,7 +457,7 @@ function l_choice () {
 		if $DIALOG --title "$title" \
 			--backtitle "$backtitle" \
 			--radiolist "$radiolist_instructions" \
-			22 70 11 $list 2>MCdialog.out
+			15 70 6 $list 2>MCdialog.out
 		then
 			choice=`cat MCdialog.out`
 			break
@@ -647,30 +615,37 @@ function parse_config_files () {
 # dialog commands or recursively call other menus.
 #
 function activate_menu () {
-
 	while true
 	do
-		comment_ctr=0
-		$1 "$default"		#Create the radiolists and dialog cmd
-		. MCradiolists		#Read in the dialog functions.
+		comment_ctr=0		#So comment lines get unique tags
 
-		. MCmenu 2>MCdialog.out	#Activate this menu
+		$1 "$default"		#Create the lxdialog menu & functions
+		. MCradiolists		#Source the menu's functions
 
-		case "$?" in
-		0)
-			defaults="`cat MCdialog.out`$defaults"  #psuedo stack
-			. MCdialog.out
+		. MCmenu 2>MCdialog.out	#Activate the lxdialog menu
+		ret=$?
+
+		read selection <MCdialog.out
+
+		case "$ret" in
+		0|3|4|5)
+			defaults="$selection$defaults"  #psuedo stack
+			case "$ret" in
+			0) eval $selection   ;;
+			3) eval $selection y ;;
+			4) eval $selection n ;;
+			5) eval $selection m ;;
+			esac
 			default="${defaults%%*}" defaults="${defaults#*}"
 			;;
 		2)	
-			echo >>MCdialog.out
-			read selection <MCdialog.out
 			default="${selection%% *}"
 
 			case "$selection" in
-			*"-->"*|\
-			*"alt_config"*) show_readme ;;
-			*)	 eval help $selection ;;
+			*"-->"*|*"alt_config"*)
+				show_readme ;;
+			*)
+				eval help $selection ;;
 			esac
 			;;
 		255|1)
@@ -876,8 +851,9 @@ save_configuration () {
          	m)
 			if [ "$CONFIG_MODULES" = "y" ]
 			then
-                		echo "$1=m"		>>$CONFIG
-                		echo "#undef  $1"	>>$CONFIG_H
+                		echo "$1=m"		   >>$CONFIG
+                		echo "#undef  $1"	   >>$CONFIG_H
+                		echo "#define $1_MODULE 1" >>$CONFIG_H
 			else
                 		echo "$1=y" 		>>$CONFIG
                 		echo "#define $1 1"	>>$CONFIG_H
@@ -1026,17 +1002,24 @@ case $x in
 	COLS=75
 	;;
 esac
-	
+
+if [ $LINES -lt 15 -o $COLS -lt 75 ]
+then
+	echo -e "\n\007Your display is too small to run Menuconfig!\n"
+	echo "It is currently set to $LINES lines by $COLS columns."
+	echo "It must be at least 15 lines by 75 columns."
+	exit 0
+fi
+
 
 menu_instructions="\
-The Arrow keys navigate the menu.  \
+Arrow keys navigate the menu.  \
 Highlighted letters are hotkeys.  \
-Press the <Space Bar> to select an item.  \
-Press <Esc><Esc> to exit.  \
-Press <?> for Help.  \
-(*) options will be compiled into the kernel.  \
-(M) options will be modules.  \
-< > marks module capable options."
+Pressing <Y> includes a feature, <N> excludes it, <M> makes it modular.  \
+Press <Esc><Esc> to exit or <?> for Help.  \
+(*) shows built in features.  \
+(M) shows modules.  \
+< > features are module capable."
 
 radiolist_instructions="\
 Use the arrow keys to navigate this window or \
@@ -1047,11 +1030,11 @@ Press <?> for additional information about this option."
 inputbox_instructions_int="\
 Please enter a decimal value between 1 and 9999. \
 Fractions will not be accepted.  \
-Use the <TAB> key to move from the input field to buttons below it."
+Use the <TAB> key to move from the input field to the buttons below it."
 
 inputbox_instructions_hex="\
 Please enter a hexidecimal value. \
-Use the <TAB> key to move from the input field to buttons below it."
+Use the <TAB> key to move from the input field to the buttons below it."
 
 backtitle="Linux Kernel Configuration"
 

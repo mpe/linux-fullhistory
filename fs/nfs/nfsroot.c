@@ -65,8 +65,8 @@
 #include <linux/if.h>
 #include <linux/inet.h>
 #include <linux/net.h>
-#include <linux/if_arp.h>
 #include <linux/netdevice.h>
+#include <linux/if_arp.h>
 #ifdef CONFIG_AX25
 #include <net/ax25.h>	/* For AX25_P_IP */
 #endif

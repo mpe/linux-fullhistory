@@ -7,21 +7,25 @@
  * assume GCC is being used.
  */
 
-typedef unsigned short	__dev_t;
-typedef unsigned long	__ino_t;
-typedef unsigned short	__mode_t;
-typedef unsigned short	__nlink_t;
-typedef long		__off_t;
-typedef int		__pid_t;
-typedef unsigned short	__uid_t;
-typedef unsigned short	__gid_t;
-typedef unsigned int	__size_t;
-typedef int		__ssize_t;
-typedef int		__ptrdiff_t;
-typedef long		__time_t;
-typedef long		__clock_t;
-typedef int		__daddr_t;
-typedef char *		__caddr_t;
+typedef unsigned short	__kernel_dev_t;
+typedef unsigned long	__kernel_ino_t;
+typedef unsigned short	__kernel_mode_t;
+typedef unsigned short	__kernel_nlink_t;
+typedef long		__kernel_off_t;
+typedef int		__kernel_pid_t;
+typedef unsigned short	__kernel_uid_t;
+typedef unsigned short	__kernel_gid_t;
+typedef unsigned int	__kernel_size_t;
+typedef int		__kernel_ssize_t;
+typedef int		__kernel_ptrdiff_t;
+typedef long		__kernel_time_t;
+typedef long		__kernel_clock_t;
+typedef int		__kernel_daddr_t;
+typedef char *		__kernel_caddr_t;
+
+#ifdef __GNUC__
+typedef long long	__kernel_loff_t;
+#endif
 
 #undef	__FD_SET
 #define __FD_SET(fd,fdsetp) \

@@ -346,11 +346,6 @@ struct symbol_table symbol_table = {
 	X(aux_device_present),
 	X(kbd_read_mask),
 
-#ifdef CONFIG_TR
-	X(tr_setup),
-	X(tr_type_trans),
-#endif
-
 #ifdef CONFIG_BLK_DEV_IDE_PCMCIA
 	X(ide_register),
 	X(ide_unregister),

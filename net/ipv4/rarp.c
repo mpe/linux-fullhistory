@@ -41,6 +41,7 @@
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/errno.h>
+#include <linux/netdevice.h>
 #include <linux/if_arp.h>
 #include <linux/in.h>
 #include <linux/config.h>
@@ -49,7 +50,6 @@
 #include <asm/segment.h>
 #include <stdarg.h>
 #include <linux/inet.h>
-#include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <net/ip.h>
 #include <net/route.h>

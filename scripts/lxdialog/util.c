@@ -342,13 +342,16 @@ draw_shadow (WINDOW * win, int y, int x, int height, int width)
 int
 first_alpha(const char *string)
 {
-	int i, in_paren=0;
+	int i, in_paren=0, c;
 
 	for (i = 0; i < strlen(string); i++) {
-		if (string[i] == '(') ++in_paren;
-		if (string[i] == ')') --in_paren;
+		c = tolower(string[i]);
 
-		if ((! in_paren) && isalpha(string[i]))
+		if (c == '(') ++in_paren;
+		if (c == ')') --in_paren;
+
+		if ((! in_paren) && isalpha(c) && 
+		     strchr("nNyYmM", c) == 0)
 			return i;
 	}
 

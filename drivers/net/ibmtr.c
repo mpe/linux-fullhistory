@@ -153,7 +153,7 @@ static short TokBaseAddrs[] = { MMIOStartLocP, MMIOStartLocA };
 int tok_probe(struct device *dev);
 unsigned char get_sram_size(struct tok_info *adapt_info);
 
-static int  tok_init_card(struct device *dev);
+static void tok_init_card(unsigned long dev_addr);
 int trdev_init(struct device *dev);
 void tok_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 

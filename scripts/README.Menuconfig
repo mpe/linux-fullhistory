@@ -3,25 +3,46 @@ lift.  Featuring text based color menus and dialogs, it does not
 require X Windows.  With this utility you can easily select a kernel
 option to modify without sifting through 100 other options.
 
-Some Menuconfig keyboard hints:
+Overview
+--------
+Some kernel features may be built directly into the kernel.
+Some may be made into loadable runtime modules.  Some features
+may be completely removed altogether.  There are also certain
+kernel parameters which are not really features, but must be 
+entered in as decimal or hexidecimal numbers or possibly text.
+
+Menu items beginning with (*), (M) or ( ) represent features 
+configured to be built in, modularized or removed respectively.
+Pointed brackets <> represent module capable features.
+                                                             more...
+
+To change any of these features, highlight it with the cursor 
+keys and press <Y> to build it in, <M> to make it a module or
+<N> to removed it.  (See keyboard hints below)
+
+Items beginning with numbers or other text within parenthesis can 
+be changed by highlighting the item and pressing <Enter>.  Then
+enter the new parameter into the dialog box that pops up.
+
+
+Some keyboard hints:
 
 Menus
 ----------
 o  Use the Up/Down arrow keys (cursor keys) to highlight the item 
-   or submenu you wish to select.  
+   you wish to change or submenu wish to select.  Submenus are
+   designated by "--->".
+
    Shortcut: Press the option's highlighted letter (hotkey).
              Pressing a hotkey more than once will sequence
-             through all items which use that hotkey.
+             through all visible items which use that hotkey.
 
    You may also use the <PAGE UP> and <PAGE DOWN> keys to scroll
    unseen options into view.
 
-o  Use the cursor keys to highlight <Select> and press <ENTER>.  
-   Shortcut: Press the <SPACE BAR> or <S> if there is no item using
-             <S> as it's hotkey.
-
 o  To exit a menu use the cursor keys to highlight the <Exit> button
    and press <ENTER>.  
+
    Shortcut: Press <ESC><ESC> or <E> or <X> if there is no hotkey
              using those letters.  You may press a single <ESC>, but
              there is a delayed response which you may find annoying.
@@ -31,18 +52,21 @@ o  To exit a menu use the cursor keys to highlight the <Exit> button
 
 o  To get help with an item, use the cursor keys to highlight <Help>
    and Press <ENTER>.
+
    Shortcut: Press <H> or <?>.
 
 
-Radiolists  (Yes/No/Module)
+Radiolists  (Choice lists)
 -----------
 o  Use the cursor keys to select the option you wish to set and press
    <S> or the <SPACE BAR>.
+
    Shortcut: Press the first letter of the option you wish to set then
              press <S> or <SPACE BAR>.
 
 o  To see available help for the item, use the cursor keys to highlight
    <Help> and Press <ENTER>.
+
    Shortcut: Press <H> or <?>.
 
    Also, the <TAB> and cursor keys will cycle between <Select> and

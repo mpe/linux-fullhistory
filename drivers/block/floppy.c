@@ -2597,7 +2597,7 @@ static void redo_fd_request(void)
 	}
 
 	while(1){
-		if (!CURRENT || CURRENT_PLUGGED) {
+		if (!CURRENT) {
 			CLEAR_INTR;
 			unlock_fdc();
 			return;

@@ -145,7 +145,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stl_drvname = "Stallion Multiport Serial Driver";
-static char	*stl_drvversion = "1.0.6";
+static char	*stl_drvversion = "1.0.8";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 

@@ -225,6 +225,16 @@ static const char * i586model(unsigned int nr)
 	return NULL;
 }
 
+static const char * i686model(unsigned int nr)
+{
+	static const char *model[] = {
+		"PPro A-step", "Pentium Pro"
+	};
+	if (nr < sizeof(model)/sizeof(char *))
+		return model[nr];
+	return NULL;
+}
+
 static const char * getmodel(int x86, int model)
 {
         const char *p = NULL;
@@ -235,6 +245,9 @@ static const char * getmodel(int x86, int model)
 			break;
 		case 5:
 			p = i586model(model);
+			break;
+		case 6:
+			p = i686model(model);
 			break;
 	}
         if (p)
@@ -294,12 +307,15 @@ int get_cpuinfo(char * buffer)
                                        "fdiv_bug\t: %s\n"
                                        "hlt_bug\t\t: %s\n"
                                        "fpu\t\t: %s\n"
+                                       "fpu_exception\t: %s\n"
                                        "cpuid\t\t: %s\n"
                                        "wp\t\t: %s\n"
                                        "flags\t\t:",
                                        CD(fdiv_bug) ? "yes" : "no",
                                        CD(hlt_works_ok) ? "no" : "yes",
                                        CD(hard_math) ? "yes" : "no",
+                                       (CD(hard_math) && ignore_irq13)
+                                         ? "yes" : "no",
                                        CD(have_cpuid) ? "yes" : "no",
                                        CD(wp_works_ok) ? "yes" : "no");
         

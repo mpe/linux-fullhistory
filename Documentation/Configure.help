@@ -30,8 +30,6 @@
 # thanks to all the contributors.  Feel free to use these help texts
 # in your own kernel configuration tools. The texts are copyrighted
 # (c) 1995,1996 by Axel Boldt and governed by the GNU Public License.
-#
-# Send comments to Axel Boldt <boldt@math.ucsb.edu>.
 
 Kernel math emulation
 CONFIG_MATH_EMULATION
@@ -168,7 +166,7 @@ CONFIG_BLK_DEV_IDETAPE
   or something similar.  Be sure to consult the drivers/block/ide-tape.c
   and README.ide files for usage information.
 
-Support removeable IDE interfaces (PCMCIA)
+Support removable IDE interfaces (PCMCIA)
 CONFIG_BLK_DEV_IDE_PCMCIA
   This option adds code to the IDE driver to handle hot insertion
   and removal of IDE interfaces and drives, under direction of an
@@ -593,7 +591,8 @@ CONFIG_M386
   it can make sense to specify "Pentium" even if running a 486: the
   kernel will be smaller but slower. On the other hand, if you use a
   compiler before gcc 2.7 (say "gcc -v" to find out), then you have to
-  say "486" here even if running on a Pentium machine.
+  say "386" or "486" here even if running on a Pentium or PPro
+  machine. If you don't know what to do, say "386".
 
 Compile the kernel into the ELF object format 
 CONFIG_ELF_KERNEL
@@ -857,18 +856,17 @@ CONFIG_INET_PCTCP
 
 Reverse ARP
 CONFIG_INET_RARP
-  Since you asked: if there are diskless machines on your local network 
-  that know their hardware ethernet address but don't know their IP
-  addresses upon startup, they send out a Reverse
-  Address Resolution Protocol request to find out their own IP
-  addresses. If you want your Linux box to be able to *answer* such
-  requests, say Y here; you'd use the program rarp ("man rarp"). 
-  Superior solutions to the same problem are given by the 
-  protocols BOOTP and DHCP. If you want to compile RARP support 
-  as a module ( = code which can be inserted
-  in and removed from the running kernel whenever you want), say M
-  here and read Documentation/modules.txt.  If you don't understand a
-  word, say N and rest in peace.
+  Since you asked: if there's a diskless machine on your local network
+  that know its hardware ethernet address but doesn't know its IP
+  address upon startup, it can send out a Reverse Address Resolution
+  Protocol request to find out its own IP address. If you want your
+  Linux box to be able to *answer* such requests, say Y here; you'd
+  have to run the program rarp ("man rarp") on your box.  Superior
+  solutions to the same problem are given by the protocols BOOTP and
+  DHCP. If you want to compile RARP support as a module ( = code which
+  can be inserted in and removed from the running kernel whenever you
+  want), say M here and read Documentation/modules.txt.  If you don't
+  understand a word, say N and rest in peace.
 
 Assume subnets are local
 CONFIG_INET_SNARL
@@ -938,8 +936,11 @@ CONFIG_IPX
   sunsite.unc.edu:/pub/Linux/system/Network/daemons/ or mars_nwe from
   linux01.gwdg.de:/pub/ncpfs. For more information, read the IPX-HOWTO
   in sunsite.unc.edu:/pub/Linux/docs/howto. The IPX driver would
-  enlarge your kernel by about 5 kB. Unless you want to integrate your
-  Linux box with a local Novell network, say N.
+  enlarge your kernel by about 5 kB. This driver is also available as
+  a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. Unless you
+  want to integrate your Linux box with a local Novell network, say N.
 
 Full internal IPX network
 CONFIG_IPX_INTERN
@@ -968,8 +969,11 @@ CONFIG_ATALK
   http://www.cs.dartmouth.edu/~flowerpt/projects/linux-netatalk/ on
   the WWW for details (to browse the WWW, you need to have access to a
   machine on the Internet that has one of the programs lynx, netscape
-  or Mosaic). I hear that the GNU boycott of Apple is over, so even
-  politically correct people are allowed to say Y here.
+  or Mosaic). This driver is also available as a module ( = code which
+  can be inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt. I hear that the GNU boycott of Apple is
+  over, so even politically correct people are allowed to say Y here.
 
 Amateur Radio AX.25 Level 2
 CONFIG_AX25
@@ -1044,20 +1048,23 @@ CONFIG_RTNETLINK
 
 SCSI support?
 CONFIG_SCSI
-  If you want to use an SCSI harddisk, SCSI tapedrive, SCSI CDROM or
+  If you want to use a SCSI harddisk, SCSI tapedrive, SCSI CDROM or
   any other SCSI device under Linux, say Y and make sure that you know
   the name of your SCSI host adaptor (the card inside your computer
   that "speaks" the SCSI protocol), because you will be asked for
-  it. And read the SCSI-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want). If you want to compile it as a
-  module, say M here and read Documentation/modules.txt and
-  Documentation/scsi.txt. 
+  it. You also need to say Y here if you want support for the parallel
+  port version of the 100MB IOMEGA ZIP drive. Please read the
+  SCSI-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt and
+  Documentation/scsi.txt.
 
 SCSI disk support
 CONFIG_BLK_DEV_SD
-  If you want to use an SCSI harddisk under Linux, say Y and read the
+  If you want to use a SCSI harddisk or the SCSI or parallel port
+  version of the IOMEGA ZIP drive under Linux, say Y and read the
   SCSI-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. This is NOT for SCSI
   CDROMs. This driver is also available as a module ( = code which can
@@ -1067,7 +1074,7 @@ CONFIG_BLK_DEV_SD
   
 SCSI tape support
 CONFIG_CHR_DEV_ST
-  If you want to use an SCSI tapedrive under Linux, say Y and read the
+  If you want to use a SCSI tapedrive under Linux, say Y and read the
   SCSI-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO and drivers/scsi/README.st in
   the kernel source. This is NOT for SCSI CDROMs. This driver is also
@@ -1078,7 +1085,7 @@ CONFIG_CHR_DEV_ST
 
 SCSI CDROM support
 CONFIG_BLK_DEV_SR
-  If you want to use an SCSI CDROM under Linux, say Y and read the
+  If you want to use a SCSI CDROM under Linux, say Y and read the
   SCSI-HOWTO and the CDROM-HOWTO from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also make sure to enable the
   ISO9660 filesystem later. This driver is also available as a module
@@ -1103,7 +1110,7 @@ CONFIG_CHR_DEV_SG
 
 Probe all LUNs on each SCSI device
 CONFIG_SCSI_MULTI_LUN
-  If you have an SCSI device that supports more than one LUN (Logical
+  If you have a SCSI device that supports more than one LUN (Logical
   Unit Number), e.g. a CD jukebox, you should say Y here so that all
   will be found by the SCSI driver. An SCSI device with multiple LUNs
   acts logically like multiple SCSI devices. The vast majority of SCSI
@@ -1133,7 +1140,7 @@ CONFIG_SCSI_ADVANSYS
 
 Adaptec AHA152X support
 CONFIG_SCSI_AHA152X
-  This is support for an SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adaptor. It is explained in section
   3.3 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
   box, you may have to change some settings in drivers/scsi/aha152x.h.
@@ -1144,7 +1151,7 @@ CONFIG_SCSI_AHA152X
 
 Adaptec AHA1542 support
 CONFIG_SCSI_AHA1542
-  This is support for an SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adaptor. It is explained in section
   3.4 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  Note that Trantor was
   recently purchased by Adaptec, and some former Trantor products are
@@ -1156,7 +1163,7 @@ CONFIG_SCSI_AHA1542
  
 Adaptec AHA1740 support
 CONFIG_SCSI_AHA1740
-  This is support for an SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adaptor. It is explained in section
   3.5 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
   the box, you may have to change some settings in
@@ -1188,7 +1195,7 @@ CONFIG_SCSI_BUSLOGIC
  
 EATA-DMA (DPT,NEC&ATT for ISA,EISA,PCI) support
 CONFIG_SCSI_EATA_DMA
-  This is support for an SCSI host adaptor. Please read the
+  This is support for a SCSI host adaptor. Please read the
   SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
   box, you may have to change some settings in
@@ -1278,7 +1285,7 @@ CONFIG_SCSI_NCR53C7xx
  
 Always IN2000 SCSI support (test release)
 CONFIG_SCSI_IN2000
-  Believe it or not, there is an SCSI host adaptor of that name. It is
+  Believe it or not, there is a SCSI host adaptor of that name. It is
   explained in section 3.6 of the SCSI-HOWTO, available via ftp (user:
   anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't
   work out of the box, you may have to change some settings in
@@ -1288,7 +1295,7 @@ CONFIG_SCSI_IN2000
 
 PAS16 SCSI support
 CONFIG_SCSI_PAS16
-  This is support for an SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adaptor. It is explained in section
   3.10 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
   box, you may have to change some settings in drivers/scsi/pas16.h.
@@ -1317,7 +1324,7 @@ CONFIG_SCSI_SEAGATE
 
 Trantor T128/T128F/T228 SCSI support
 CONFIG_SCSI_T128
-  This is support for an SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adaptor. It is explained in section
   3.11 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
   the box, you may have to change some settings in
@@ -1380,14 +1387,17 @@ CONFIG_SCSI_AM53C974
 IOMEGA Parallel Port ZIP drive SCSI support
 CONFIG_SCSI_PPA
   This driver supports the parallel port version of IOMEGA's ZIP
-  drive (a 100Mb removable media device).  For more infomation 
+  drive (a 100Mb removable media device).  For more information 
   about this driver and how to use it you should read the file
   drivers/scsi/README.ppa.  You should also read the SCSI-HOWTO,
   which is available via anonymous ftp from sunsite.unc.edu in
   the directory /pub/Linux/docs/HOWTO.  This driver is also available
   as a module which can be inserted in and removed from the
   running kernel whenever you want. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
+  module, say M here and read Documentation/modules.txt. Note that 
+  you can say N here if you have the SCSI version of the ZIP drive: 
+  it will be supported automatically if you enabled the generic
+  "SCSI disk support", above.
 
 Network device support?
 CONFIG_NETDEVICES
@@ -1559,6 +1569,47 @@ CONFIG_EQUALIZER
   has to be supported at the other end as well, either with a similar
   EQL Linux driver or with a Livingston Portmaster 2e. Say Y if you
   want this and read drivers/net/README.eql. This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+
+FRAD (Frame Relay Access Device) support
+CONFIG_FRAD
+  This is support for the frame relay protocol; frame relay is a fast
+  low-cost way to connect to a remote internet access provider or to
+  form a private wide area network. The one physical line to your
+  local entry point or "switch" carries several logical
+  point-to-point connections to other sites connected to the frame
+  relay network. For a general explanation of the protocol, check out
+  http://frame-relay.indiana.edu/4000/4000index.html on the WWW. (To
+  browse the WWW, you need to have access to a machine on the Internet
+  that has one of the programs lynx, netscape or Mosaic.) To use frame
+  relay, you need supporting hardware (FRAD) and certain programs from
+  the net-tools package as explained in
+  Documentation/framerelay.txt. This driver is also available as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
+Max open DLCI
+CONFIG_DLCI_COUNT 
+  This is the maximal number of logical point-to-point frame relay
+  connections (the identifiers of which are called DCLIs) that
+  the driver can handle. The default is probably fine.
+
+Max DLCI per device
+CONFIG_DLCI_MAX
+  You can specify here how many logical point-to-point frame relay
+  connections (the identifiers of which are called DCLIs) should be
+  handled by each of your hardware frame relay access devices. Go with
+  the default.
+
+Sangoma S502A FRAD support
+CONFIG_SDLA
+  Say Y here if you need a driver for the Sangoma S502A, S502E and
+  S508 Frame Relay Access Devices. These are multi-protocol
+  cards, but only frame relay is supported by the driver at this
+  time. Please read Documentation/framerelay.txt. This driver is also
   available as a module ( = code which can be inserted in and removed
   from the running kernel whenever you want). If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
@@ -1867,6 +1918,19 @@ CONFIG_AT1700
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
+FMV-181/182 support
+CONFIG_FMV18X
+  If you have a Fujitsu FMV-181/182 network (ethernet) card, say Y and
+  read the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
 EtherExpressPro support
 CONFIG_EEXPRESS_PRO
   If you have a network (ethernet) card of this type, say Y and read
@@ -1885,14 +1949,11 @@ CONFIG_EEXPRESS
   If you have a network (ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the Intel
-  EtherExpress16 card is generally regarded to be a very poor choice
-  and the driver is not very reliable. (Roger Wolff
-  (R.E.Wolff@et.tudelft.nl) is attempting to do something about
-  this. At the moment he could use 1) one or more etherexpress16 cards
-  to test locally 2) Alpha testers: people to try new versions of the
-  driver to see if things improve...)  If you want to compile this
-  driver as a module ( = code which can be inserted in and removed
-  from the running kernel whenever you want), say M here and read
+  EtherExpress16 card used to be regarded as a very poor choice
+  because the driver was very unreliable. We now have a new driver
+  that should do better. If you want to compile this driver as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
   Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. If you plan to use more
   than one network card under linux, read the
@@ -2573,16 +2634,17 @@ CONFIG_SYSV_FS
   and is often needed to run commercial software, most prominently
   WordPerfect. It's in tsx-11.mit.edu:/pub/linux/BETA). If you only
   intend to mount files from some other Unix over the network using
-  NFS, you don't need this (but you need nfs filesystem support
-  obviously). Note that this option is generally not needed for
-  floppies, since a good portable way to transport files between
-  unixes (and even to other operating systems) is given by the tar
-  program ("man tar").  Note also that this option has nothing to do
-  whatsoever with the option "System V IPC". Read about the System V
-  filesystem in Documentation/filesystems/sysv-fs.txt. This option
-  will enlarge your kernel by about 34 kB. If you want to compile this
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
+  NFS, you don't need the System V filesystem support (but you need
+  nfs filesystem support obviously). Note that this option is
+  generally not needed for floppies, since a good portable way to
+  transport files and directories between unixes (and even other
+  operating systems) is given by the tar program ("man tar").  Note
+  also that this option has nothing whatsoever to do with the option
+  "System V IPC". Read about the System V filesystem in
+  Documentation/filesystems/sysv-fs.txt. This option will enlarge your
+  kernel by about 34 kB. If you want to compile this as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read
   Documentation/modules.txt. If you haven't heard about all of this
   before, it's safe to say N.
 
@@ -2601,18 +2663,18 @@ CONFIG_SMB_FS
   information about how to connect Linux, Windows machines and Macs is
   on the WWW at http://eats.com/linux_mac_win.html (to browse the WWW,
   you need to have access to a machine on the Internet that has one of
-  the programs lynx, netscape or Mosaic).  If you want to compile this
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
-  Documentation/modules.txt. Most people say N, however.
+  the programs lynx, netscape or Mosaic).  If you want to compile the
+  SMB support as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt. Most people say N, however.
 
 NCP filesystem support (to mount NetWare volumes)
 CONFIG_NCP_FS
   NCP (NetWare Core Protocol) is a protocol that runs over IPX and is
-  used by NetWare clients to talk to file servers. It is to IPX what
-  nfs is to tcp/ip, if that helps. Enabling this option allows you to
-  mount NetWare file server volumes and to access them just like any
-  other Unix directory. For details, please read the file
+  used by Novel NetWare clients to talk to file servers. It is to IPX
+  what nfs is to tcp/ip, if that helps. Enabling this option allows
+  you to mount NetWare file server volumes and to access them just
+  like any other Unix directory. For details, please read the file
   Documentation/filesystems/ncpfs.txt in the kernel source and the
   IPX-HOWTO on sunsite.unc.edu:/pub/Linux/docs/howto.  If you want to
   compile this as a module ( = code which can be inserted in and
@@ -2633,13 +2695,13 @@ CONFIG_SERIAL
 
 Cyclades async mux support
 CONFIG_CYCLADES
-  This is a card which gives you many serial ports. You would need
-  something like this to connect more than two modems to your linux
-  box, for instance in order to become a BBS. If you want to compile
-  this as a module ( = code which can be inserted in and removed from
-  the running kernel whenever you want), say M here and read
-  Documentation/modules.txt. If you haven't heard about it, it's safe
-  to say N.
+  This is a driver for a card that gives you many serial ports. You
+  would need something like this to connect more than two modems to
+  your linux box, for instance in order to become a BBS. If you want
+  to compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt. If you haven't heard about it, it's
+  safe to say N.
 
 Stallion multiport serial support 
 CONFIG_STALDRV
@@ -3038,4 +3100,5 @@ CONFIG_ISDN_DRV_TELES
 # LocalWords:  ipppd syncppp RFC MPP VJ downloaded icn NICCY Creatix shmem ufr
 # LocalWords:  ibp md ARCnet ether encap NDIS arcether ODI Amigas AmiTCP NetBSD
 # LocalWords:  initrd tue util DES funet des OnNet BIOSP smc Travan Iomega CMS
-# LocalWords:  FC
+# LocalWords:  FC DC dc PPA IOMEGA's ppa RNFS FMV Fujitsu ARPD arpd loran layes
+# LocalWords:  FRAD indiana framerelay DLCI DCLIs Sangoma SDLA

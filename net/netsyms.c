@@ -113,6 +113,11 @@ static struct symbol_table net_syms = {
 	X(NS8390_init),
 #endif
 
+#ifdef CONFIG_TR
+        X(tr_setup),
+        X(tr_type_trans),
+#endif
+                          
 #ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
 #endif

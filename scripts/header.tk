@@ -204,7 +204,8 @@ proc write_tristate { file1 file2 varname variable dep } {
 		       puts $file2 "#undef $varname"} \
 	elseif { $variable == 2 || ($dep == 2 && $variable == 1) } \
 		then { puts $file1 "$varname=m"; \
-		       puts $file2 "#undef $varname"  } \
+		       puts $file2 "#undef $varname"; \
+		       puts $file2 "#define $varname_MODULE 1" } \
 	elseif { $variable == 1 && $dep != 2 } \
 		then { puts $file1 "$varname=y"; \
 		       puts $file2 "#define $varname 1" } \

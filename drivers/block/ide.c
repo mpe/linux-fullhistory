@@ -1469,8 +1469,6 @@ void ide_do_request (ide_hwgroup_t *hwgroup)
 			 */
 			hwif = hwgroup->next_hwif;
 			do {
-				if (IS_PLUGGED(blk_dev + hwif->major))
-					continue;
 				rq = blk_dev[hwif->major].current_request;
 				if (rq != NULL && rq->rq_status != RQ_INACTIVE)
 					goto got_rq;

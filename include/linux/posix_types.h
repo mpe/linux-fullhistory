@@ -1,8 +1,6 @@
 #ifndef _LINUX_POSIX_TYPES_H
 #define _LINUX_POSIX_TYPES_H
 
-#define _GNU_TYPES_H
-
 /*
  * This file is generally used by user-level software, so you need to
  * be a little careful about namespace pollution etc.  Also, we cannot
@@ -45,15 +43,8 @@
 
 typedef struct fd_set {
 	unsigned int fds_bits [__FDSET_INTS];
-} __fd_set;
+} __kernel_fd_set;
 
 #include <asm/posix_types.h>
-
-/* bsd */
-
-typedef unsigned char	__u_char;
-typedef unsigned short	__u_short;
-typedef unsigned int	__u_int;
-typedef unsigned long	__u_long;
 
 #endif /* _LINUX_POSIX_TYPES_H */

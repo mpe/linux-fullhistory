@@ -514,7 +514,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
  * turned off 
  */
 #define INIT_SCSI_REQUEST       \
-    if (!CURRENT || CURRENT_PLUGGED) {     \
+    if (!CURRENT) {             \
 	CLEAR_INTR;             \
 	restore_flags(flags);	\
 	return;                 \

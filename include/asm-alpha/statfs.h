@@ -5,7 +5,7 @@
 
 #include <linux/posix_types.h>
 
-typedef __fsid_t	fsid_t;
+typedef __kernel_fsid_t	fsid_t;
 
 #endif
 
@@ -23,7 +23,7 @@ struct statfs {
 	int	f_bavail;
 	int	f_files;
 	int	f_ffree;
-	__fsid_t f_fsid;
+	__kernel_fsid_t f_fsid;
 	/* linux-specific entries start here.. */
 	int	f_namelen;
 };

@@ -1654,7 +1654,7 @@ sonycd535_setup(char *strings, int *ints)
 	 * then call with io base of 0
 	 */
 	if (ints[0] > 0)
-		if (ints[0] != 0)
+		if (ints[1] != 0)
 			sony535_cd_base_io = ints[1];
 	if (ints[0] > 1)
 		sony535_irq_used = ints[2];

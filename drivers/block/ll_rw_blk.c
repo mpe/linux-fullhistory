@@ -85,8 +85,9 @@ static void unplug_device(void * data)
 
 	save_flags(flags);
 	cli();
-	if (dev->current_request)
-		(dev->request_fn)();
+	dev->current_request = dev->plug.next;
+	dev->plug.next = NULL;
+	(dev->request_fn)();
 	restore_flags(flags);
 }
 
@@ -94,11 +95,20 @@ static void unplug_device(void * data)
  * "plug" the device if there are no outstanding requests: this will
  * force the transfer to start only after we have put all the requests
  * on the list.
+ *
+ * Note! We can do the check without interrupts off, because interrupts
+ * will never add a new request to the queue, only take requests off.. 
  */
 static inline void plug_device(struct blk_dev_struct * dev)
 {
-	if (!dev->current_request && !IS_PLUGGED(dev)) {
+	if (!dev->current_request) {
+		unsigned long flags;
+
+		save_flags(flags);
+		cli();
+		dev->current_request = &dev->plug;
 		queue_task_irq_off(&dev->plug_tq, &tq_scheduler);
+		restore_flags(flags);
 	}
 }
 
@@ -250,8 +260,7 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	if (!(tmp = dev->current_request)) {
 		dev->current_request = req;
 		up (&request_lock);
-		if (!IS_PLUGGED(dev))
-			(dev->request_fn)();
+		(dev->request_fn)();
 		sti();
 		return;
 	}
@@ -266,7 +275,7 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 
 	up (&request_lock);
 /* for SCSI devices, call request_fn unconditionally */
-	if (!IS_PLUGGED(dev) && scsi_major(MAJOR(req->rq_dev)) && MAJOR(req->rq_dev)!=MD_MAJOR)
+	if (scsi_major(MAJOR(req->rq_dev)) && MAJOR(req->rq_dev)!=MD_MAJOR)
 		(dev->request_fn)();
 
 	sti();
@@ -609,6 +618,9 @@ int blk_dev_init(void)
 	for (dev = blk_dev + MAX_BLKDEV; dev-- != blk_dev;) {
 		dev->request_fn      = NULL;
 		dev->current_request = NULL;
+		dev->plug.rq_status  = RQ_INACTIVE;
+		dev->plug.cmd        = -1;
+		dev->plug.next       = NULL;
 		dev->plug_tq.routine = &unplug_device;
 		dev->plug_tq.data    = dev;
 	}

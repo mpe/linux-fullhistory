@@ -2,8 +2,8 @@
 Stallion Multiport Serial Drivers
 ---------------------------------
 
-Version: 1.0.6
-Date:    11MAR96
+Version: 1.0.8
+Date:    25MAR96
 Author:  Greg Ungerer (gerg@stallion.oz.au)
 
 
@@ -12,31 +12,31 @@ Author:  Greg Ungerer (gerg@stallion.oz.au)
 There are two drivers that work with the different families of Stallion
 multiport serial boards. One is for the Stallion smart boards - that is
 EasyIO and EasyConnection 8/32, the other for the true Stallion intelligent
-multiport boards - Stallion, Brumby, ONboard and EasyConnection 8/64.
+multiport boards - EasyConnection 8/64, ONboard, Brumby and Stallion.
 
 If you are using any of the Stallion intelligent multiport boards (Brumby,
 ONboard, Stallion, EasyConnection 8/64) with Linux you will need to get the
 driver utility package. This package is available at most of the Linux
 archive sites (and on CD's that contain these archives). The file will be
 called stallion-X.X.X.tar.gz where X.X.X will be the version number. In
-particular this package contains the board embeded executable images that
+particular this package contains the board embedded executable images that
 are required for these boards. It also contains the downloader program.
 These boards cannot be used without this.
 
-The following ftp sites (and their mirrors) definately have the stallion
+The following ftp sites (and their mirrors) definitely have the stallion
 driver utility package: ftp.stallion.com, tsx-11.mit.edu, sunsite.unc.edu.
 
-ftp.stallion.com:/drivers/ata5/Linux/stallion-1.0.1.tar.gz
-tsx-11.mit.edu:/pub/linux/BETA/serial/stallion/stallion-1.0.1.tar.gz
-sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-1.0.1.tar.gz
+ftp.stallion.com:/drivers/ata5/Linux/stallion-1.0.7.tar.gz
+tsx-11.mit.edu:/pub/linux/BETA/serial/stallion/stallion-1.0.7.tar.gz
+sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-1.0.7.tar.gz
 
 If you are using the EasyIO or EasyConnection 8/32 boards then you don't
 need this package. Although it does have a handy script to create the
-/dev device nodes for these boards.
+/dev device nodes for these boards, and a serial stats display program.
 
 If you require DIP switch settings, EISA/MCA configuration files, or any
-other information related to Stallion boards then have a look at
-http://www.stallion.com.
+other information related to Stallion boards then have a look at Stallion's
+web pages at http://www.stallion.com.
 
 
 
@@ -265,13 +265,15 @@ by Greg Hankins. It will explain everything you need to know!
 
 You can use both drivers at once if you have a mix of board types installed
 in a system. However to do this you will need to change the major numbers
-used by one of the drivers. Currently both drivers use major numbers 24 and
-25 for their port devices. Change one driver to use some other major numbers,
+used by one of the drivers. Currently both drivers use major numbers 24, 25
+and 28 for their devices. Change one driver to use some other major numbers,
 and then modify the mkdevnods script to make device nodes based on those new
-major numbers. For example, you could change the stallion.c driver to use
-major numbers 30 and 31 (don't use 28, it's used by istallion.c driver for its
-sio memory device!). You will also need to create device nodes with different
-names for the ports...
+major numbers. For example, you could change the istallion.c driver to use
+major numbers 60, 61 and 62. You will also need to create device nodes with
+different names for the ports, for example ttyF# and cuf#.
+
+The original Stallion board is no longer supported by Stallion Technologies.
+Although it is known to work with the istallion driver.
 
 Finding a free physical memory address range can be a problem. The older
 boards like the Stallion and ONboard need large areas (64K or even 128K), so
@@ -301,32 +303,14 @@ them can be used then the high memory support to use the really high address
 ranges is the best option. Typically the 2Gb range is convenient for them,
 and gets them well out of the way.
 
-There is a new utility program in the stallion utility package called
-"stlstty". Most people will not need to use this. If you have an ONboard/16
-which has partial signals on the upper 12 ports then this program can be used
-to set the upper ports to have modem control instead of hardware flow control.
-Use the "mapcts maprts" flag options to this utility on the port(s) that you
-wish to do this mapping on, eg
-    ./stlstty maprts mapcts < /dev/cue0
-This enables RTS to act like DTR and CTS to act like DCD on the specified
-port.
-
 The ports of the EasyIO-8M board do not have DCD or DTR signals. So these
 ports cannot be used as real modem devices. Generally when using these
 ports you should only use the cueX devices.
 
-There is another new utility in this package that reports statistics on
-the serial ports. You will need to have the curses libray installed on
-your system to build it.
-
-To build the statistics display program type:
-    make stlstats
-Once compiled simply run it (you will need to be root) and it will display
-a port summary for the first board and panel installed. Use the digits to
-select different board numbers, or 'n' to cycle through the panels on a
-board. To look at detailed port information then hit 'p', that will display
-detailed port 0 information. Use the digits and letteres 'a' through 'f' to
-select the different ports (on this board and panel).
+The driver utility package contains a couple of very useful programs. One 
+is a serial port statistics collection and display program - very handy
+for solving serial port problems. The other is an extended option setting
+program that works with the intelligent boards.
 
 
 

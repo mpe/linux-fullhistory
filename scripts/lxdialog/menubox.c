@@ -197,19 +197,25 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
     print_buttons (dialog, height, width, 0);
 
     while (key != ESC) {
-	key = wgetch (dialog);
+	key = wgetch(dialog);
 
+	if (isalpha(key)) key = tolower(key);
+
+	if (strchr("ynm", key))
+		i = max_choice;
+	else {
         for (i = choice+1; i < max_choice; i++) {
 		j = first_alpha(items[(scroll+i)*2+1]);
-		if (toupper(key) == toupper(items[(scroll+i)*2+1][j]))
+		if (key == tolower(items[(scroll+i)*2+1][j]))
                 	break;
 	}
 	if (i == max_choice)
        		for (i = 0; i < max_choice; i++) {
 			j = first_alpha(items[(scroll+i)*2+1]);
-			if (toupper(key) == toupper(items[(scroll+i)*2+1][j]))
+			if (key == tolower(items[(scroll+i)*2+1][j]))
                 		break;
 		}
+	}
 
 	if (i < max_choice || 
             key == KEY_UP || key == KEY_DOWN ||
@@ -302,30 +308,31 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 	    print_buttons(dialog, height, width, button);
 	    wrefresh (dialog);
 	    break;
-	case ' ':
-	case 'S':
 	case 's':
+	case 'y':
+	case 'n':
+	case 'm':
 	    delwin (dialog);
-            fprintf(stderr, items[(scroll + choice) * 2]);
+            fprintf(stderr, "%s\n", items[(scroll + choice) * 2]);
+            if (key == 'y') return 3;
+            if (key == 'n') return 4;
+            if (key == 'm') return 5;
 	    return 0;
-	case 'H':
 	case 'h':
 	case '?':
 	    button = 2;
 	case '\n':
 	    delwin (dialog);
 	    if (button == 2) 
-            	fprintf(stderr, "%s \"%s\"", 
+            	fprintf(stderr, "%s \"%s\"\n", 
 			items[(scroll + choice) * 2],
 			items[(scroll + choice) * 2 + 1] +
 			first_alpha(items[(scroll + choice) * 2 + 1]));
 	    else
-            	fprintf(stderr, items[(scroll + choice) * 2]);
+            	fprintf(stderr, "%s\n", items[(scroll + choice) * 2]);
 
 	    return button;
-	case 'E':
 	case 'e':
-	case 'X':
 	case 'x':
 	    key = ESC;
 	case ESC:

@@ -1,5 +1,5 @@
 !
-!	Display adapter & video mode setup, version 2.5 (19-Mar-96)
+!	Display adapter & video mode setup, version 2.6 (25-Mar-96)
 !
 !	Copyright (C) 1995, 1996 Martin Mares <mj@k332.feld.cvut.cz>
 !	Based on the original setup.S code (C) Linus Torvalds
@@ -779,7 +779,7 @@ vesa2:	push	cx
 	add	bh,#VIDEO_FIRST_VESA>>8
 	pop	cx
 	cmp	ax,#0x004f
-	jnz	vesae
+	jnz	vesan		! Don't report errors (buggy BIOSES :-[ )
 	mov	al,(di)		! Check capabilities. We require
 	and	al,#0x19	! a color text mode.
 	cmp	al,#0x09

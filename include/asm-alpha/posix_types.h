@@ -7,25 +7,29 @@
  * assume GCC is being used.
  */
 
-typedef unsigned int	__dev_t;
-typedef unsigned int	__ino_t;
-typedef unsigned int	__mode_t;
-typedef unsigned short	__nlink_t;
-typedef long		__off_t;
-typedef int		__pid_t;
-typedef unsigned int	__uid_t;
-typedef unsigned int	__gid_t;
-typedef unsigned long	__size_t;
-typedef long		__ssize_t;
-typedef long		__ptrdiff_t;
-typedef long		__time_t;
-typedef long		__clock_t;
-typedef int		__daddr_t;
-typedef char *		__caddr_t;
+typedef unsigned int	__kernel_dev_t;
+typedef unsigned int	__kernel_ino_t;
+typedef unsigned int	__kernel_mode_t;
+typedef unsigned short	__kernel_nlink_t;
+typedef long		__kernel_off_t;
+typedef int		__kernel_pid_t;
+typedef unsigned int	__kernel_uid_t;
+typedef unsigned int	__kernel_gid_t;
+typedef unsigned long	__kernel_size_t;
+typedef long		__kernel_ssize_t;
+typedef long		__kernel_ptrdiff_t;
+typedef long		__kernel_time_t;
+typedef long		__kernel_clock_t;
+typedef int		__kernel_daddr_t;
+typedef char *		__kernel_caddr_t;
+
+#ifdef __GNUC__
+typedef long long	__kernel_loff_t;
+#endif
 
 typedef struct {
 	int	val[2];
-} __fsid_t;
+} __kernel_fsid_t;
 
 #ifndef __GNUC__
 
@@ -33,14 +37,14 @@ typedef struct {
 #define	__FD_CLR(d, set)	((set)->fds_bits[__FDELT(d)] &= ~__FDMASK(d))
 #define	__FD_ISSET(d, set)	((set)->fds_bits[__FDELT(d)] & __FDMASK(d))
 #define	__FD_ZERO(set)	\
-  ((void) memset ((__ptr_t) (set), 0, sizeof (__fd_set)))
+  ((void) memset ((__ptr_t) (set), 0, sizeof (__kernel_fd_set)))
 
 #else /* __GNUC__ */
 
 /* With GNU C, use inline functions instead so args are evaluated only once: */
 
 #undef __FD_SET
-static __inline__ void __FD_SET(unsigned long fd, __fd_set *fdsetp)
+static __inline__ void __FD_SET(unsigned long fd, __kernel_fd_set *fdsetp)
 {
 	unsigned long _tmp = fd / __NFDBITS;
 	unsigned long _rem = fd % __NFDBITS;
@@ -48,7 +52,7 @@ static __inline__ void __FD_SET(unsigned long fd, __fd_set *fdsetp)
 }
 
 #undef __FD_CLR
-static __inline__ void __FD_CLR(unsigned long fd, __fd_set *fdsetp)
+static __inline__ void __FD_CLR(unsigned long fd, __kernel_fd_set *fdsetp)
 {
 	unsigned long _tmp = fd / __NFDBITS;
 	unsigned long _rem = fd % __NFDBITS;
@@ -56,7 +60,7 @@ static __inline__ void __FD_CLR(unsigned long fd, __fd_set *fdsetp)
 }
 
 #undef __FD_ISSET
-static __inline__ int __FD_ISSET(unsigned long fd, __fd_set *p)
+static __inline__ int __FD_ISSET(unsigned long fd, __kernel_fd_set *p)
 { 
 	unsigned long _tmp = fd / __NFDBITS;
 	unsigned long _rem = fd % __NFDBITS;
@@ -68,7 +72,7 @@ static __inline__ int __FD_ISSET(unsigned long fd, __fd_set *p)
  * for a 256-bit fd_set)
  */
 #undef __FD_ZERO
-static __inline__ void __FD_ZERO(__fd_set *p)
+static __inline__ void __FD_ZERO(__kernel_fd_set *p)
 {
 	unsigned int *tmp = p->fds_bits;
 	int i;

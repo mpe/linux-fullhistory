@@ -393,7 +393,7 @@ ncp_read_volume_list(struct ncp_server *server, int fpos, int cache_size)
 
 		if (ncp_get_volume_info_with_number(server, i, &info) != 0)
 		{
-			return total_count;
+			return (total_count - fpos);
 		}
 
 		if (strlen(info.volume_name) > 0)

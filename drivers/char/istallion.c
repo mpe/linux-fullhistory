@@ -180,7 +180,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stli_drvname = "Stallion Intelligent Multiport Serial Driver";
-static char	*stli_drvversion = "1.0.6";
+static char	*stli_drvversion = "1.0.8";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -279,7 +279,6 @@ typedef struct {
 	struct termios		normaltermios;
 	struct termios		callouttermios;
 	asysigs_t		asig;
-	comstats_t		stats;
 	unsigned long		addr;
 	unsigned long		rxoffset;
 	unsigned long		txoffset;
@@ -4351,48 +4350,48 @@ static int stli_getportstats(stliport_t *portp, comstats_t *cp)
 	if (brdp == (stlibrd_t *) NULL)
 		return(-ENODEV);
 
-	portp->stats.state = portp->state;
-	portp->stats.flags = portp->flags;
-	if (portp->tty != (struct tty_struct *) NULL) {
-		portp->stats.ttystate = portp->tty->flags;
-		portp->stats.cflags = portp->tty->termios->c_cflag;
-		portp->stats.iflags = portp->tty->termios->c_iflag;
-		portp->stats.oflags = portp->tty->termios->c_oflag;
-		portp->stats.lflags = portp->tty->termios->c_lflag;
-		portp->stats.rxbuffered = portp->tty->flip.count;
-	} else {
-		portp->stats.ttystate = 0;
-		portp->stats.cflags = 0;
-		portp->stats.iflags = 0;
-		portp->stats.oflags = 0;
-		portp->stats.lflags = 0;
-		portp->stats.rxbuffered = 0;
-	}
-
 	if ((rc = stli_cmdwait(brdp, portp, A_GETSTATS, &stli_cdkstats, sizeof(asystats_t), 1)) < 0)
 		return(rc);
 
-	portp->stats.txtotal = stli_cdkstats.txchars;
-	portp->stats.rxtotal = stli_cdkstats.rxchars + stli_cdkstats.ringover;
-	portp->stats.txbuffered = stli_cdkstats.txringq;
-	portp->stats.rxbuffered += stli_cdkstats.rxringq;
-	portp->stats.rxoverrun = stli_cdkstats.overruns;
-	portp->stats.rxparity = stli_cdkstats.parity;
-	portp->stats.rxframing = stli_cdkstats.framing;
-	portp->stats.rxlost = stli_cdkstats.ringover;
-	portp->stats.rxbreaks = stli_cdkstats.rxbreaks;
-	portp->stats.txbreaks = stli_cdkstats.txbreaks;
-	portp->stats.txxon = stli_cdkstats.txstart;
-	portp->stats.txxoff = stli_cdkstats.txstop;
-	portp->stats.rxxon = stli_cdkstats.rxstart;
-	portp->stats.rxxoff = stli_cdkstats.rxstop;
-	portp->stats.rxrtsoff = stli_cdkstats.rtscnt / 2;
-	portp->stats.rxrtson = stli_cdkstats.rtscnt - portp->stats.rxrtsoff;
-	portp->stats.modem = stli_cdkstats.dcdcnt;
-	portp->stats.hwid = stli_cdkstats.hwid;
-	portp->stats.signals = stli_mktiocm(stli_cdkstats.signals);
+	stli_comstats.state = portp->state;
+	stli_comstats.flags = portp->flags;
+	if (portp->tty != (struct tty_struct *) NULL) {
+		stli_comstats.ttystate = portp->tty->flags;
+		stli_comstats.cflags = portp->tty->termios->c_cflag;
+		stli_comstats.iflags = portp->tty->termios->c_iflag;
+		stli_comstats.oflags = portp->tty->termios->c_oflag;
+		stli_comstats.lflags = portp->tty->termios->c_lflag;
+		stli_comstats.rxbuffered = portp->tty->flip.count;
+	} else {
+		stli_comstats.ttystate = 0;
+		stli_comstats.cflags = 0;
+		stli_comstats.iflags = 0;
+		stli_comstats.oflags = 0;
+		stli_comstats.lflags = 0;
+		stli_comstats.rxbuffered = 0;
+	}
 
-	memcpy_tofs(cp, &portp->stats, sizeof(comstats_t));
+	stli_comstats.txtotal = stli_cdkstats.txchars;
+	stli_comstats.rxtotal = stli_cdkstats.rxchars + stli_cdkstats.ringover;
+	stli_comstats.txbuffered = stli_cdkstats.txringq;
+	stli_comstats.rxbuffered += stli_cdkstats.rxringq;
+	stli_comstats.rxoverrun = stli_cdkstats.overruns;
+	stli_comstats.rxparity = stli_cdkstats.parity;
+	stli_comstats.rxframing = stli_cdkstats.framing;
+	stli_comstats.rxlost = stli_cdkstats.ringover;
+	stli_comstats.rxbreaks = stli_cdkstats.rxbreaks;
+	stli_comstats.txbreaks = stli_cdkstats.txbreaks;
+	stli_comstats.txxon = stli_cdkstats.txstart;
+	stli_comstats.txxoff = stli_cdkstats.txstop;
+	stli_comstats.rxxon = stli_cdkstats.rxstart;
+	stli_comstats.rxxoff = stli_cdkstats.rxstop;
+	stli_comstats.rxrtsoff = stli_cdkstats.rtscnt / 2;
+	stli_comstats.rxrtson = stli_cdkstats.rtscnt - stli_comstats.rxrtsoff;
+	stli_comstats.modem = stli_cdkstats.dcdcnt;
+	stli_comstats.hwid = stli_cdkstats.hwid;
+	stli_comstats.signals = stli_mktiocm(stli_cdkstats.signals);
+
+	memcpy_tofs(cp, &stli_comstats, sizeof(comstats_t));
 	return(0);
 }
 
@@ -4418,15 +4417,15 @@ static int stli_clrportstats(stliport_t *portp, comstats_t *cp)
 	if (brdp == (stlibrd_t *) NULL)
 		return(-ENODEV);
 
-	memset(&portp->stats, 0, sizeof(comstats_t));
-	portp->stats.brd = portp->brdnr;
-	portp->stats.panel = portp->panelnr;
-	portp->stats.port = portp->portnr;
-
 	if ((rc = stli_cmdwait(brdp, portp, A_CLEARSTATS, 0, 0, 0)) < 0)
 		return(rc);
 
-	memcpy_tofs(cp, &portp->stats, sizeof(comstats_t));
+	memset(&stli_comstats, 0, sizeof(comstats_t));
+	stli_comstats.brd = portp->brdnr;
+	stli_comstats.panel = portp->panelnr;
+	stli_comstats.port = portp->portnr;
+
+	memcpy_tofs(cp, &stli_comstats, sizeof(comstats_t));
 	return(0);
 }
 

@@ -103,7 +103,7 @@ union bdflush_param{
 				   trim back the buffers */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{25, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
+} bdf_prm = {{60, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
 
 /* The lav constant is set for 1 minute, as long as the update process runs
    every 5 seconds.  If you change the frequency of update, the time
