@@ -174,6 +174,7 @@ struct tcp_tw_bucket {
 	struct tcp_func		*af_specific;
 	struct tcp_bind_bucket	*tb;
 	struct tcp_tw_bucket	*next_death;
+	struct tcp_tw_bucket	**pprev_death;
 	int			death_slot;
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 	struct in6_addr		v6_daddr;
@@ -714,6 +715,22 @@ extern __inline__ int tcp_raise_window(struct sock *sk)
 	u32 new_win = __tcp_select_window(sk);
 
 	return (new_win && (new_win > (cur_win << 1)));
+}
+
+/* Recalculate snd_ssthresh, we want to set it to:
+ *
+ * 	one half the current congestion window, but no
+ *	less than two segments
+ *
+ * We must take into account the current send window
+ * as well, however we keep track of that using different
+ * units so a conversion is necessary.  -DaveM
+ */
+extern __inline__ __u32 tcp_recalc_ssthresh(struct tcp_opt *tp)
+{
+	__u32 snd_wnd_packets = tp->snd_wnd / tp->mss_cache;
+
+	return max(min(snd_wnd_packets, tp->snd_cwnd) >> 1, 2);
 }
 
 /* TCP timestamps are only 32-bits, this causes a slight

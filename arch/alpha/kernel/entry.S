@@ -6,8 +6,6 @@
 
 #include <asm/system.h>
 
-#define halt	.long PAL_halt
-#define rti	.long PAL_rti
 #define SIGCHLD 20
 
 #define NR_SYSCALLS 371
@@ -98,7 +96,7 @@
 	call_pal PAL_swpipl;		\
 	stq	$21,HAE_CACHE($19);	\
 	stq	$21,0($20);		\
-	bis	$0,$0,$16;		\
+	mov	$0,$16;			\
 	call_pal PAL_swpipl;		\
 	ldq	$0,0($30);		\
 	ldq	$1,8($30);		\
@@ -127,8 +125,8 @@
 entInt:
 	SAVE_ALL
 	lda	$8,0x3fff
-	bic	$30,$8,$8
 	lda	$26,ret_from_sys_call
+	bic	$30,$8,$8
 	jsr	$31,do_entInt
 .end entInt
 
@@ -170,8 +168,8 @@ entMM:
 entArith:
 	SAVE_ALL
 	lda	$8,0x3fff
-	bic	$30,$8,$8
 	lda	$26,ret_from_sys_call
+	bic	$30,$8,$8
 	jsr	$31,do_entArith
 .end entArith
 
@@ -181,8 +179,8 @@ entArith:
 entIF:
 	SAVE_ALL
 	lda	$8,0x3fff
-	bic	$30,$8,$8
 	lda	$26,ret_from_sys_call
+	bic	$30,$8,$8
 	jsr	$31,do_entIF
 .end entIF
 
@@ -192,8 +190,8 @@ entIF:
 entDbg:
 	SAVE_ALL
 	lda	$8,0x3fff
-	bic	$30,$8,$8
 	lda	$26,ret_from_sys_call
+	bic	$30,$8,$8
 	jsr	$31,do_entDbg
 .end entDbg
 
@@ -212,18 +210,18 @@ entDbg:
 kernel_clone:
 	.frame $30, 0, $26
 	.prologue 0
-	subq $30,6*8,$30
-	stq $31,0($30)
-	stq $26,8($30)
-	stq $29,16($30)
-	stq $16,24($30)
-	stq $17,32($30)
-	stq $18,40($30)
-	bis $31,2,$0	/* Register v0: syscall nr for fork() */
+	subq	$30,6*8,$30
+	stq	$31,0($30)
+	stq	$26,8($30)
+	stq	$29,16($30)
+	stq	$16,24($30)
+	stq	$17,32($30)
+	stq	$18,40($30)
+	bis	$31,2,$0	/* Register v0: syscall nr for fork() */
 	SAVE_ALL
-	bsr $26,sys_clone
-	stq $0,0($30)
-	br $31,ret_from_sys_call
+	bsr	$26,sys_clone
+	stq	$0,0($30)
+	br	ret_from_sys_call
 .end	kernel_clone
 
 /*
@@ -233,32 +231,32 @@ kernel_clone:
 .globl	__kernel_thread
 .ent	__kernel_thread
 __kernel_thread:
-	ldgp $29,0($27)		/* we can be called from a module */
+	ldgp	$29,0($27)	/* we can be called from a module */
 	.frame $30, 4*8, $26
-	subq $30,4*8,$30
-	stq $10,16($30)
-	stq $9,8($30)
-	stq $26,0($30)
+	subq	$30,4*8,$30
+	stq	$10,16($30)
+	stq	$9,8($30)
+	stq	$26,0($30)
 	.prologue 1
-	bis $17,$17,$9		/* save fn */
-	bis $18,$18,$10		/* save arg */
-	bsr $26,kernel_clone
-	bne $20,1f		/* $20 is non-zero in child */
-	ldq $26,0($30)
-	ldq $9,8($30)
-	ldq $10,16($30)
-	addq $30,4*8,$30
-	ret $31,($26),1
+	mov	$17,$9		/* save fn */		
+	mov	$18,$10		/* save arg */
+	bsr	$26,kernel_clone
+	bne	$20,1f		/* $20 is non-zero in child */
+	ldq	$26,0($30)
+	ldq	$9,8($30)
+	ldq	$10,16($30)
+	addq	$30,4*8,$30
+	ret	$31,($26),1
 /* this is in child: look out as we don't have any stack here.. */
-1:	bis $9,$9,$27		/* get fn */
-	lda $8,0x3fff
-	bis $10,$10,$16		/* get arg */
-	bic $30,$8,$8		/* get current */
-	jsr $26,($27)
+1:	mov	$9,$27		/* get fn */
+	lda	$8,0x3fff
+	mov	$10,$16		/* get arg */
+	bic	$30,$8,$8	/* get current */
+	jsr	$26,($27)
 	ldgp	$29,0($26)
-	bis $0,$0,$16
-	jsr $26,sys_exit
-	call_pal PAL_halt
+	mov	$0,$16
+	mov	$31,$26
+	jsr	$31,sys_exit
 .end	__kernel_thread
 
 /*
@@ -286,202 +284,199 @@ __kernel_execve:
 .align 3
 .ent	do_switch_stack
 do_switch_stack:
-	lda $30,-SWITCH_STACK_SIZE($30)
-	stq  $9,0($30)
-	stq $10,8($30)
-	stq $11,16($30)
-	stq $12,24($30)
-	stq $13,32($30)
-	stq $14,40($30)
-	stq $15,48($30)
-	stq $26,56($30)
-	stt $f0,64($30)
-	stt $f1,72($30)
-	stt $f2,80($30)
-	stt $f3,88($30)
-	stt $f4,96($30)
-	stt $f5,104($30)
-	stt $f6,112($30)
-	stt $f7,120($30)
-	stt $f8,128($30)
-	stt $f9,136($30)
-	stt $f10,144($30)
-	stt $f11,152($30)
-	stt $f12,160($30)
-	stt $f13,168($30)
-	stt $f14,176($30)
-	stt $f15,184($30)
-	stt $f16,192($30)
-	stt $f17,200($30)
-	stt $f18,208($30)
-	stt $f19,216($30)
-	stt $f20,224($30)
-	stt $f21,232($30)
-	stt $f22,240($30)
-	stt $f23,248($30)
-	stt $f24,256($30)
-	stt $f25,264($30)
-	stt $f26,272($30)
-	stt $f27,280($30)
-	mf_fpcr $f0		# get fpcr
-	stt $f28,288($30)
-	stt $f29,296($30)
-	stt $f30,304($30)
-	stt $f0,312($30)	# save fpcr in slot of $f31
-	ldt $f0,64($30)		# dont let "do_switch_stack" change fp state.
-	ret $31,($1),1
+	lda	$30,-SWITCH_STACK_SIZE($30)
+	stq	$9,0($30)
+	stq	$10,8($30)
+	stq	$11,16($30)
+	stq	$12,24($30)
+	stq	$13,32($30)
+	stq	$14,40($30)
+	stq	$15,48($30)
+	stq	$26,56($30)
+	stt	$f0,64($30)
+	stt	$f1,72($30)
+	stt	$f2,80($30)
+	stt	$f3,88($30)
+	stt	$f4,96($30)
+	stt	$f5,104($30)
+	stt	$f6,112($30)
+	stt	$f7,120($30)
+	stt	$f8,128($30)
+	stt	$f9,136($30)
+	stt	$f10,144($30)
+	stt	$f11,152($30)
+	stt	$f12,160($30)
+	stt	$f13,168($30)
+	stt	$f14,176($30)
+	stt	$f15,184($30)
+	stt	$f16,192($30)
+	stt	$f17,200($30)
+	stt	$f18,208($30)
+	stt	$f19,216($30)
+	stt	$f20,224($30)
+	stt	$f21,232($30)
+	stt	$f22,240($30)
+	stt	$f23,248($30)
+	stt	$f24,256($30)
+	stt	$f25,264($30)
+	stt	$f26,272($30)
+	stt	$f27,280($30)
+	mf_fpcr	$f0		# get fpcr
+	stt	$f28,288($30)
+	stt	$f29,296($30)
+	stt	$f30,304($30)
+	stt	$f0,312($30)	# save fpcr in slot of $f31
+	ldt	$f0,64($30)	# dont let "do_switch_stack" change fp state.
+	ret	$31,($1),1
 .end do_switch_stack
 
 .align 3
 .ent	undo_switch_stack
 undo_switch_stack:
-	ldq  $9,0($30)
-	ldq $10,8($30)
-	ldq $11,16($30)
-	ldq $12,24($30)
-	ldq $13,32($30)
-	ldq $14,40($30)
-	ldq $15,48($30)
-	ldq $26,56($30)
-	ldt $f30,312($30)	# get saved fpcr
-	ldt $f0,64($30)
-	ldt $f1,72($30)
-	ldt $f2,80($30)
-	ldt $f3,88($30)
-	mt_fpcr $f30		# install saved fpcr
-	ldt $f4,96($30)
-	ldt $f5,104($30)
-	ldt $f6,112($30)
-	ldt $f7,120($30)
-	ldt $f8,128($30)
-	ldt $f9,136($30)
-	ldt $f10,144($30)
-	ldt $f11,152($30)
-	ldt $f12,160($30)
-	ldt $f13,168($30)
-	ldt $f14,176($30)
-	ldt $f15,184($30)
-	ldt $f16,192($30)
-	ldt $f17,200($30)
-	ldt $f18,208($30)
-	ldt $f19,216($30)
-	ldt $f20,224($30)
-	ldt $f21,232($30)
-	ldt $f22,240($30)
-	ldt $f23,248($30)
-	ldt $f24,256($30)
-	ldt $f25,264($30)
-	ldt $f26,272($30)
-	ldt $f27,280($30)
-	ldt $f28,288($30)
-	ldt $f29,296($30)
-	ldt $f30,304($30)
-	lda $30,SWITCH_STACK_SIZE($30)
-	ret $31,($1),1
+	ldq	$9,0($30)
+	ldq	$10,8($30)
+	ldq	$11,16($30)
+	ldq	$12,24($30)
+	ldq	$13,32($30)
+	ldq	$14,40($30)
+	ldq	$15,48($30)
+	ldq	$26,56($30)
+	ldt	$f30,312($30)	# get saved fpcr
+	ldt	$f0,64($30)
+	ldt	$f1,72($30)
+	ldt	$f2,80($30)
+	ldt	$f3,88($30)
+	mt_fpcr	$f30		# install saved fpcr
+	ldt	$f4,96($30)
+	ldt	$f5,104($30)
+	ldt	$f6,112($30)
+	ldt	$f7,120($30)
+	ldt	$f8,128($30)
+	ldt	$f9,136($30)
+	ldt	$f10,144($30)
+	ldt	$f11,152($30)
+	ldt	$f12,160($30)
+	ldt	$f13,168($30)
+	ldt	$f14,176($30)
+	ldt	$f15,184($30)
+	ldt	$f16,192($30)
+	ldt	$f17,200($30)
+	ldt	$f18,208($30)
+	ldt	$f19,216($30)
+	ldt	$f20,224($30)
+	ldt	$f21,232($30)
+	ldt	$f22,240($30)
+	ldt	$f23,248($30)
+	ldt	$f24,256($30)
+	ldt	$f25,264($30)
+	ldt	$f26,272($30)
+	ldt	$f27,280($30)
+	ldt	$f28,288($30)
+	ldt	$f29,296($30)
+	ldt	$f30,304($30)
+	lda	$30,SWITCH_STACK_SIZE($30)
+	ret	$31,($1),1
 .end undo_switch_stack
 
 .align 3
 .globl	entUna
 .ent	entUna
 entUna:
-	lda $30,-256($30)
-	stq $0,0($30)
-	ldq $0,256($30)		/* get PS */
-	stq $1,8($30)
-	stq $2,16($30)
-	stq $3,24($30)
-	and $0,8,$0		/* user mode? */
-	stq $4,32($30)
-	bne $0,entUnaUser	/* yup -> do user-level unaligned fault */
-	stq $5,40($30)
-	stq $6,48($30)
-	stq $7,56($30)
-	stq $8,64($30)
-	stq $9,72($30)
-	stq $10,80($30)
-	stq $11,88($30)
-	stq $12,96($30)
-	stq $13,104($30)
-	stq $14,112($30)
-	stq $15,120($30)
+	lda	$30,-256($30)
+	stq	$0,0($30)
+	ldq	$0,256($30)	/* get PS */
+	stq	$1,8($30)
+	stq	$2,16($30)
+	stq	$3,24($30)
+	and	$0,8,$0		/* user mode? */
+	stq	$4,32($30)
+	bne	$0,entUnaUser	/* yup -> do user-level unaligned fault */
+	stq	$5,40($30)
+	stq	$6,48($30)
+	stq	$7,56($30)
+	stq	$8,64($30)
+	stq	$9,72($30)
+	stq	$10,80($30)
+	stq	$11,88($30)
+	stq	$12,96($30)
+	stq	$13,104($30)
+	stq	$14,112($30)
+	stq	$15,120($30)
 	/* 16-18 PAL-saved */
-	stq $19,152($30)
-	stq $20,160($30)
-	stq $21,168($30)
-	stq $22,176($30)
-	stq $23,184($30)
-	stq $24,192($30)
-	stq $25,200($30)
-	stq $26,208($30)
-	stq $27,216($30)
-	stq $28,224($30)
-	stq $29,232($30)
-	stq $30,240($30)
-	stq $31,248($30)
-	lda $8,0x3fff
-	bic $30,$8,$8
-	jsr $26,do_entUna
-	ldq $0,0($30)
-	ldq $1,8($30)
-	ldq $2,16($30)
-	ldq $3,24($30)
-	ldq $4,32($30)
-	ldq $5,40($30)
-	ldq $6,48($30)
-	ldq $7,56($30)
-	ldq $8,64($30)
-	ldq $9,72($30)
-	ldq $10,80($30)
-	ldq $11,88($30)
-	ldq $12,96($30)
-	ldq $13,104($30)
-	ldq $14,112($30)
-	ldq $15,120($30)
+	stq	$19,152($30)
+	stq	$20,160($30)
+	stq	$21,168($30)
+	stq	$22,176($30)
+	stq	$23,184($30)
+	stq	$24,192($30)
+	stq	$25,200($30)
+	stq	$26,208($30)
+	stq	$27,216($30)
+	stq	$28,224($30)
+	stq	$29,232($30)
+	lda	$8,0x3fff
+	stq	$31,248($30)
+	bic	$30,$8,$8
+	jsr	$26,do_entUna
+	ldq	$0,0($30)
+	ldq	$1,8($30)
+	ldq	$2,16($30)
+	ldq	$3,24($30)
+	ldq	$4,32($30)
+	ldq	$5,40($30)
+	ldq	$6,48($30)
+	ldq	$7,56($30)
+	ldq	$8,64($30)
+	ldq	$9,72($30)
+	ldq	$10,80($30)
+	ldq	$11,88($30)
+	ldq	$12,96($30)
+	ldq	$13,104($30)
+	ldq	$14,112($30)
+	ldq	$15,120($30)
 	/* 16-18 PAL-saved */
-	ldq $19,152($30)
-	ldq $20,160($30)
-	ldq $21,168($30)
-	ldq $22,176($30)
-	ldq $23,184($30)
-	ldq $24,192($30)
-	ldq $25,200($30)
-	ldq $26,208($30)
-	ldq $27,216($30)
-	ldq $28,224($30)
-	ldq $29,232($30)
-	ldq $30,240($30)
-	lda $30,256($30)
-	rti
+	ldq	$19,152($30)
+	ldq	$20,160($30)
+	ldq	$21,168($30)
+	ldq	$22,176($30)
+	ldq	$23,184($30)
+	ldq	$24,192($30)
+	ldq	$25,200($30)
+	ldq	$26,208($30)
+	ldq	$27,216($30)
+	ldq	$28,224($30)
+	ldq	$29,232($30)
+	lda	$30,256($30)
+	call_pal PAL_rti
 .end entUna
 
 .align 3
 .ent	entUnaUser
 entUnaUser:
-	ldq $0,0($30)			/* restore original $0 */
-	lda $30,256($30)		/* pop entUna's stack frame */
-	SAVE_ALL			/* setup normal kernel stack */
-	lda $30,-56($30)
-	stq $9,0($30)
-	stq $10,8($30)
-	stq $11,16($30)
-	stq $12,24($30)
-	stq $13,32($30)
-	stq $14,40($30)
-	stq $15,48($30)
-	lda $8,0x3fff
-	addq $30,56,$19
-	bic $30,$8,$8
-	jsr $26,do_entUnaUser
-	ldq $9,0($30)
-	ldq $10,8($30)
-	ldq $11,16($30)
-	ldq $12,24($30)
-	ldq $13,32($30)
-	ldq $14,40($30)
-	ldq $15,48($30)
-	lda $30,56($30)
-	br $31,ret_from_sys_call
-
+	ldq	$0,0($30)	/* restore original $0 */
+	lda	$30,256($30)	/* pop entUna's stack frame */
+	SAVE_ALL		/* setup normal kernel stack */
+	lda	$30,-56($30)
+	stq	$9,0($30)
+	stq	$10,8($30)
+	stq	$11,16($30)
+	stq	$12,24($30)
+	stq	$13,32($30)
+	stq	$14,40($30)
+	stq	$15,48($30)
+	lda	$8,0x3fff
+	addq	$30,56,$19
+	bic	$30,$8,$8
+	jsr	$26,do_entUnaUser
+	ldq	$9,0($30)
+	ldq	$10,8($30)
+	ldq	$11,16($30)
+	ldq	$12,24($30)
+	ldq	$13,32($30)
+	ldq	$14,40($30)
+	ldq	$15,48($30)
+	lda	$30,56($30)
+	br	ret_from_sys_call
 .end	entUnaUser
 
 /*
@@ -491,36 +486,36 @@ entUnaUser:
 .globl	sys_fork
 .ent	sys_fork
 sys_fork:
-	bsr $1,do_switch_stack
-	bis $31,SIGCHLD,$16
-	bis $31,$31,$17
-	bis $30,$30,$18
-	jsr $26,alpha_clone
-	bsr $1,undo_switch_stack
-	ret $31,($26),1
+	bsr	$1,do_switch_stack
+	bis	$31,SIGCHLD,$16
+	mov	$31,$17
+	mov	$30,$18
+	jsr	$26,alpha_clone
+	bsr	$1,undo_switch_stack
+	ret	$31,($26),1
 .end	sys_fork
 
 .align 3
 .globl	sys_clone
 .ent	sys_clone
 sys_clone:
-	bsr $1,do_switch_stack
+	bsr	$1,do_switch_stack
 	/* arg1 and arg2 come from the user */
-	bis $30,$30,$18
-	jsr $26,alpha_clone
-	bsr $1,undo_switch_stack
-	ret $31,($26),1
+	mov	$30,$18
+	jsr	$26,alpha_clone
+	bsr	$1,undo_switch_stack
+	ret	$31,($26),1
 .end	sys_clone
 
 .align 3
 .globl	sys_vfork
 .ent	sys_vfork
 sys_vfork:
-	bsr $1,do_switch_stack
-	bis $30,$30,$16
-	jsr $26,alpha_vfork
-	bsr $1,undo_switch_stack
-	ret $31,($26),1
+	bsr	$1,do_switch_stack
+	mov	$30,$16
+	jsr	$26,alpha_vfork
+	bsr	$1,undo_switch_stack
+	ret	$31,($26),1
 .end	sys_vfork
 
 .align 3
@@ -528,12 +523,12 @@ sys_vfork:
 .ent    alpha_switch_to
 alpha_switch_to:
 	.prologue 0
-	bsr $1,do_switch_stack
+	bsr	$1,do_switch_stack
 	call_pal PAL_swpctx
-	lda $16,-2($31)
-	call_pal PAL_tbi
-	bsr $1,undo_switch_stack
-	ret $31,($26),1
+	unop
+	bsr	$1,undo_switch_stack
+	mov	$17,$0
+	ret	$31,($26),1
 .end alpha_switch_to
 
 /*
@@ -592,7 +587,7 @@ ret_from_reschedule:
 	bne	$5,signal_return
 restore_all:
 	RESTORE_ALL
-	rti
+	call_pal PAL_rti
 
 
 /* PTRACE syscall handler */
@@ -620,7 +615,7 @@ strace:
 	s8addq	$0,$2,$2
 	beq	$1,1f
 	ldq	$27,0($2)
-1:	jsr	$26,($27),alpha_ni_syscall
+1:	jsr	$26,($27),sys_gettimeofday
 	ldgp	$29,0($26)
 
 	/* check return.. */
@@ -646,15 +641,15 @@ strace_error:
 	stq	$1,72($30)	/* a3 for return */
 
 	bsr	$1,do_switch_stack
-	bis	$19,$19,$9	/* save old syscall number */
-	bis	$20,$20,$10	/* save old a3 */
+	mov	$19,$9		/* save old syscall number */
+	mov	$20,$10		/* save old a3 */
 	jsr     $26,syscall_trace
-	bis	$9,$9,$19
-	bis	$10,$10,$20
+	mov	$9,$19
+	mov	$10,$20
 	bsr	$1,undo_switch_stack
 
-	bis	$31,$31,$26	/* tell "ret_from_sys_call" that we can restart */
-	br	$31,ret_from_sys_call
+	mov	$31,$26		/* tell "ret_from_sys_call" we can restart */
+	br	ret_from_sys_call
 
 	.align 3
 handle_bottom_half:
@@ -665,7 +660,7 @@ handle_bottom_half:
 	ldq	$19,0($30)
 	ldq	$20,8($30)
 	addq	$30,16,$30
-	br	$31,ret_from_handle_bh
+	br	ret_from_handle_bh
 
 	.align 3
 syscall_error:
@@ -683,38 +678,35 @@ syscall_error:
 	subq	$31,$0,$0	/* with error in v0 */
 	addq	$31,1,$1	/* set a3 for errno return */
 	stq	$0,0($30)
-	bis	$31,$31,$26	/* tell "ret_from_sys_call" we can restart */
+	mov	$31,$26		/* tell "ret_from_sys_call" we can restart */
 	stq	$1,72($30)	/* a3 for return */
-	br	$31,ret_from_sys_call
+	br	ret_from_sys_call
 
 ret_success:
 	stq	$0,0($30)
 	stq	$31,72($30)	/* a3=0 => no error */
-	br	$31,ret_from_sys_call
+	br	ret_from_sys_call
 
 .align 3
 signal_return:
-	bis	$30,$30,$17
+	mov	$30,$17
 	br	$1,do_switch_stack
-	bis	$30,$30,$18
-	bis	$31,$31,$16
+	mov	$30,$18
+	mov	$31,$16
 	jsr	$26,do_signal
 	bsr	$1,undo_switch_stack
-	br	$31,restore_all
+	br	restore_all
 .end entSys
 
 #ifdef __SMP__
-        .globl  ret_from_smpfork
+        .globl  ret_from_smp_fork
 .align 3
-.ent ret_from_smpfork
-ret_from_smpfork:
-	.set at
-	mb	/* Make the changed data visible before the freed lock. */
-	stq	$31,scheduler_lock	
+.ent ret_from_smp_fork
+ret_from_smp_fork:
 	lda	$26,ret_from_sys_call
+	mov	$17,$16
 	jsr	$31,schedule_tail
-	.set noat
-.end ret_from_smpfork
+.end ret_from_smp_fork
 #endif /* __SMP__ */
 
 .align 3
@@ -727,51 +719,51 @@ reschedule:
 	ldq	$19,0($30)
 	ldq	$20,8($30)
 	addq	$30,16,$30
-	br	$31,ret_from_reschedule
+	br	ret_from_reschedule
 .end reschedule
 
 .align 3
 .ent sys_sigreturn
 sys_sigreturn:
-	bis	$30,$30,$17
+	mov	$30,$17
+	lda	$18,-SWITCH_STACK_SIZE($30)
 	lda	$30,-SWITCH_STACK_SIZE($30)
-	bis	$30,$30,$18
 	jsr	$26,do_sigreturn
 	br	$1,undo_switch_stack
-	br	$31,ret_from_sys_call
+	br	ret_from_sys_call
 .end sys_sigreturn
 
 .align 3
 .ent sys_rt_sigreturn
 sys_rt_sigreturn:
-	bis	$30,$30,$17
+	mov	$30,$17
+	lda	$18,-SWITCH_STACK_SIZE($30)
 	lda	$30,-SWITCH_STACK_SIZE($30)
-	bis	$30,$30,$18
 	jsr	$26,do_rt_sigreturn
 	br	$1,undo_switch_stack
-	br	$31,ret_from_sys_call
+	br	ret_from_sys_call
 .end sys_rt_sigreturn
 
 .align 3
 .ent sys_sigsuspend
 sys_sigsuspend:
-	bis	$30,$30,$17
+	mov	$30,$17
 	br	$1,do_switch_stack
-	bis	$30,$30,$18
+	mov	$30,$18
 	jsr	$26,do_sigsuspend
 	lda	$30,SWITCH_STACK_SIZE($30)
-	br	$31,ret_from_sys_call
+	br	ret_from_sys_call
 .end sys_sigsuspend
 
 .align 3
 .ent sys_rt_sigsuspend
 sys_rt_sigsuspend:
-	bis	$30,$30,$18
+	mov	$30,$18
 	br	$1,do_switch_stack
-	bis	$30,$30,$19
+	mov	$30,$19
 	jsr	$26,do_rt_sigsuspend
 	lda	$30,SWITCH_STACK_SIZE($30)
-	br	$31,ret_from_sys_call
+	br	ret_from_sys_call
 .end sys_rt_sigsuspend
 
 	.data

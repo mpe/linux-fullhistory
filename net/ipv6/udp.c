@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.39 1999/04/22 10:07:47 davem Exp $
+ *	$Id: udp.c,v 1.40 1999/05/08 20:00:32 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -381,7 +381,7 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 			/* Error for blocking case is chosen to masquerade
 			   as some normal condition.
 			 */
-			err = (msg->msg_flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;
+			err = (flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;
 			udp_stats_in6.UdpInErrors++;
 			goto out_free;
 		}
@@ -398,7 +398,7 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 			/* Error for blocking case is chosen to masquerade
 			   as some normal condition.
 			 */
-			err = (msg->msg_flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;
+			err = (flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;
 			udp_stats_in6.UdpInErrors++;
 			goto out_free;
 		}

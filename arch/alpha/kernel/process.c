@@ -237,10 +237,13 @@ void exit_thread(void)
 
 void flush_thread(void)
 {
-	/* Arrange for each exec'ed process to start off with a 
-	   clean slate with respect to the FPU.  */
+	/* Arrange for each exec'ed process to start off with a clean slate
+	   with respect to the FPU.  This is all exceptions disabled.  Note
+           that EV6 defines UNFD valid only with UNDZ, which we don't want
+	   for IEEE conformance -- so that disabled bit remains in software.  */
+
 	current->tss.flags &= ~IEEE_SW_MASK;
-	wrfpcr(FPCR_DYN_NORMAL);
+	wrfpcr(FPCR_DYN_NORMAL | FPCR_INVD | FPCR_DZED | FPCR_OVFD | FPCR_INED);
 }
 
 void release_thread(struct task_struct *dead_task)
@@ -270,8 +273,6 @@ int alpha_vfork(struct switch_stack * swstack)
 			(struct pt_regs *) (swstack+1));
 }
 
-extern void ret_from_sys_call(void);
-extern void ret_from_smpfork(void);
 /*
  * Copy an alpha thread..
  *
@@ -282,9 +283,13 @@ extern void ret_from_smpfork(void);
  * Use the passed "regs" pointer to determine how much space we need
  * for a kernel fork().
  */
+
 int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	struct task_struct * p, struct pt_regs * regs)
 {
+	extern void ret_from_sys_call(void);
+	extern void ret_from_smp_fork(void);
+
 	struct pt_regs * childregs;
 	struct switch_stack * childstack, *stack;
 	unsigned long stack_offset;
@@ -292,18 +297,18 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	stack_offset = PAGE_SIZE - sizeof(struct pt_regs);
 	if (!(regs->ps & 8))
 		stack_offset = (PAGE_SIZE-1) & (unsigned long) regs;
-	childregs = (struct pt_regs *) (stack_offset + PAGE_SIZE + (unsigned long)p);
+	childregs = (struct pt_regs *) (stack_offset + PAGE_SIZE + (long)p);
 		
 	*childregs = *regs;
 	childregs->r0 = 0;
 	childregs->r19 = 0;
-	childregs->r20 = 1;	/* OSF/1 has some strange fork() semantics.. */
+	childregs->r20 = 1;	/* OSF/1 has some strange fork() semantics.  */
 	regs->r20 = 0;
 	stack = ((struct switch_stack *) regs) - 1;
 	childstack = ((struct switch_stack *) childregs) - 1;
 	*childstack = *stack;
 #ifdef __SMP__
-	childstack->r26 = (unsigned long) ret_from_smpfork;
+	childstack->r26 = (unsigned long) ret_from_smp_fork;
 #else
 	childstack->r26 = (unsigned long) ret_from_sys_call;
 #endif
@@ -328,10 +333,12 @@ void dump_thread(struct pt_regs * pt, struct user * dump)
 	dump->start_code  = current->mm->start_code;
 	dump->start_data  = current->mm->start_data;
 	dump->start_stack = rdusp() & ~(PAGE_SIZE - 1);
-	dump->u_tsize = (current->mm->end_code - dump->start_code) >> PAGE_SHIFT;
-	dump->u_dsize = (current->mm->brk + (PAGE_SIZE - 1) - dump->start_data) >> PAGE_SHIFT;
-	dump->u_ssize =
-	  (current->mm->start_stack - dump->start_stack + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	dump->u_tsize = ((current->mm->end_code - dump->start_code)
+			 >> PAGE_SHIFT);
+	dump->u_dsize = ((current->mm->brk + PAGE_SIZE-1 - dump->start_data)
+			 >> PAGE_SHIFT);
+	dump->u_ssize = (current->mm->start_stack - dump->start_stack
+			 + PAGE_SIZE-1) >> PAGE_SHIFT;
 
 	/*
 	 * We store the registers in an order/format that is

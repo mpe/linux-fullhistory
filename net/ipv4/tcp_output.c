@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.107 1999/04/28 16:08:12 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.108 1999/05/08 21:48:59 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -521,24 +521,39 @@ static void tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb, int m
 void tcp_simple_retransmit(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	struct sk_buff *skb; 
-	unsigned int mss = tcp_current_mss(sk); 
+	struct sk_buff *skb, *old_next_skb;
+	unsigned int mss = tcp_current_mss(sk);
 
  	/* Don't muck with the congestion window here. */
  	tp->dup_acks = 0;
  	tp->high_seq = tp->snd_nxt;
- 	tp->retrans_head = NULL; 
+ 	tp->retrans_head = NULL;
 
  	/* Input control flow will see that this was retransmitted
 	 * and not use it for RTT calculation in the absence of
 	 * the timestamp option.
 	 */
-	for (skb = skb_peek(&sk->write_queue);
+	for (old_next_skb = skb = skb_peek(&sk->write_queue);
 	     ((skb != tp->send_head) &&
 	      (skb != (struct sk_buff *)&sk->write_queue));
-	     skb = skb->next) 
-		if (skb->len > mss)
-			tcp_retransmit_skb(sk, skb); 
+	     skb = skb->next) {
+		int resend_skb = 0;
+
+		/* Our goal is to push out the packets which we
+		 * sent already, but are being chopped up now to
+		 * account for the PMTU information we have.
+		 *
+		 * As we resend the queue, packets are fragmented
+		 * into two pieces, and when we try to send the
+		 * second piece it may be collapsed together with
+		 * a subsequent packet, and so on.  -DaveM
+		 */
+		if (old_next_skb != skb || skb->len > mss)
+			resend_skb = 1;
+		old_next_skb = skb->next;
+		if (resend_skb != 0)
+			tcp_retransmit_skb(sk, skb);
+	}
 }
 
 static __inline__ void update_retrans_head(struct sock *sk)

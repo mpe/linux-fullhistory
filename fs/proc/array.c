@@ -896,7 +896,7 @@ static int get_stat(int pid, char * buffer)
 
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
 %lu %lu %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu \
-%lu %lu %lu %lu %lu %lu %lu %lu %d\n",
+%lu %lu %lu %lu %lu %lu %lu %lu %d %d\n",
 		pid,
 		tsk->comm,
 		state,
@@ -938,7 +938,8 @@ static int get_stat(int pid, char * buffer)
 		wchan,
 		tsk->nswap,
 		tsk->cnswap,
-		tsk->exit_signal);
+		tsk->exit_signal,
+		tsk->processor);
 }
 		
 static inline void statm_pte_range(pmd_t * pmd, unsigned long address, unsigned long size,

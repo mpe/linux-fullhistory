@@ -1,6 +1,6 @@
 /*  Generic MTRR (Memory Type Range Register) ioctls.
 
-    Copyright (C) 1997-1998  Richard Gooch
+    Copyright (C) 1997-1999  Richard Gooch
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Library General Public
@@ -44,10 +44,11 @@ struct mtrr_gentry
 };
 
 /*  These are the various ioctls  */
-#define MTRRIOC_ADD_ENTRY        _IOW(MTRR_IOCTL_BASE, 0, struct mtrr_sentry)
-#define MTRRIOC_SET_ENTRY        _IOW(MTRR_IOCTL_BASE, 1, struct mtrr_sentry)
-#define MTRRIOC_DEL_ENTRY        _IOW(MTRR_IOCTL_BASE, 2, struct mtrr_sentry)
+#define MTRRIOC_ADD_ENTRY        _IOW(MTRR_IOCTL_BASE,  0, struct mtrr_sentry)
+#define MTRRIOC_SET_ENTRY        _IOW(MTRR_IOCTL_BASE,  1, struct mtrr_sentry)
+#define MTRRIOC_DEL_ENTRY        _IOW(MTRR_IOCTL_BASE,  2, struct mtrr_sentry)
 #define MTRRIOC_GET_ENTRY        _IOWR(MTRR_IOCTL_BASE, 3, struct mtrr_gentry)
+#define MTRRIOC_KILL_ENTRY       _IOW(MTRR_IOCTL_BASE,  4, struct mtrr_sentry)
 
 /*  These are the region types  */
 #define MTRR_TYPE_UNCACHABLE 0
@@ -75,7 +76,7 @@ static char *mtrr_strings[MTRR_NUM_TYPES] =
 #ifdef __KERNEL__
 
 /*  The following functions are for use by other drivers  */
-# if defined(CONFIG_MTRR) || defined(CONFIG_MTRR_MODULE)
+# ifdef CONFIG_MTRR
 extern int mtrr_add (unsigned long base, unsigned long size,
 		     unsigned int type, char increment);
 extern int mtrr_del (int reg, unsigned long base, unsigned long size);

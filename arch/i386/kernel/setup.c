@@ -5,6 +5,10 @@
  *
  *  Enhanced CPU type detection by Mike Jagdis, Patrick St. Jean
  *  and Martin Mares, November 1997.
+ *
+ *  Force Cyrix 6x86(MX) and M II processors to report MTRR capability
+ *  and fix against Cyrix "coma bug" by
+ *      Zoltan Boszormenyi <zboszor@mol.hu> February 1999.
  */
 
 /*
@@ -395,6 +399,14 @@ __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 	cpuid(0x80000003, &v[4], &v[5], &v[6], &v[7]);
 	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
 	c->x86_model_id[48] = 0;
+	/*  Set MTRR capability flag if appropriate  */
+	if(boot_cpu_data.x86 !=5)
+		return 1;
+	if((boot_cpu_data.x86_model == 9) ||
+	   ((boot_cpu_data.x86_model == 8) && 
+	    (boot_cpu_data.x86_mask >= 8)))
+		c->x86_capability |= X86_FEATURE_MTRR;
+
 	return 1;
 }
 
@@ -574,6 +586,10 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
 			(c->x86_model)++;
 		} else             /* 686 */
 			p = Cx86_cb+1;
+		/* Emulate MTRRs using Cyrix's ARRs. */
+		c->x86_capability |= X86_FEATURE_MTRR;
+		/* 6x86's contain this bug */
+		c->coma_bug = 1;
 		break;
 
 	case 4: /* MediaGX/GXm */
@@ -598,11 +614,14 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
 
         case 5: /* 6x86MX/M II */
 		if (dir1 > 7) dir0_msn++;  /* M II */
+		else c->coma_bug = 1;      /* 6x86MX, it has the bug. */
 		tmp = (!(dir0_lsn & 7) || dir0_lsn & 1) ? 2 : 0;
 		Cx86_cb[tmp] = cyrix_model_mult2[dir0_lsn & 7];
 		p = Cx86_cb+tmp;
         	if (((dir1 & 0x0f) > 4) || ((dir1 & 0xf0) == 0x20))
 			(c->x86_model)++;
+		/* Emulate MTRRs using Cyrix's ARRs. */
+		c->x86_capability |= X86_FEATURE_MTRR;
 		break;
 
 	case 0xf:  /* Cyrix 486 without DEVID registers */
@@ -856,7 +875,7 @@ int get_cpuinfo(char * buffer)
 	int sep_bug;
 	static char *x86_cap_flags[] = {
 	        "fpu", "vme", "de", "pse", "tsc", "msr", "6", "mce",
-	        "cx8", "9", "10", "sep", "12", "pge", "14", "cmov",
+	        "cx8", "9", "10", "sep", "mtrr", "pge", "14", "cmov",
 	        "16", "17", "psn", "19", "20", "21", "22", "mmx",
 	        "24", "kni", "26", "27", "28", "29", "30", "31"
 	};
@@ -904,7 +923,6 @@ int get_cpuinfo(char * buffer)
 		} else if (c->x86_vendor == X86_VENDOR_INTEL) {
 			x86_cap_flags[6] = "pae";
 			x86_cap_flags[9] = "apic";
-			x86_cap_flags[12] = "mtrr";
 			x86_cap_flags[14] = "mca";
 			x86_cap_flags[16] = "pat";
 			x86_cap_flags[17] = "pse36";
@@ -923,6 +941,7 @@ int get_cpuinfo(char * buffer)
 			        "hlt_bug\t\t: %s\n"
 			        "sep_bug\t\t: %s\n"
 			        "f00f_bug\t: %s\n"
+			        "coma_bug\t: %s\n"
 			        "fpu\t\t: %s\n"
 			        "fpu_exception\t: %s\n"
 			        "cpuid level\t: %d\n"
@@ -932,6 +951,7 @@ int get_cpuinfo(char * buffer)
 			     c->hlt_works_ok ? "no" : "yes",
 			     sep_bug ? "yes" : "no",
 			     c->f00f_bug ? "yes" : "no",
+			     c->coma_bug ? "yes" : "no",
 			     c->hard_math ? "yes" : "no",
 			     (c->hard_math && ignore_irq13) ? "yes" : "no",
 			     c->cpuid_level,

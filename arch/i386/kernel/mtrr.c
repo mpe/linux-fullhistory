@@ -132,11 +132,70 @@
 	       Fixed harmless compiler warning in include/asm-i386/mtrr.h
 	       Fixed version numbering and history for v1.23 -> v1.24.
   v1.26
-  
-  v1.26ac	Alan Cox <alan@redhat.com>
-  		Added some K6-II/III support. This needs back merging with
-  		Richard's current code before it goes to Linus really.
-  		
+    19990118   Richard Gooch <rgooch@atnf.csiro.au>
+	       PLACEHOLDER.
+  v1.27
+    19990123   Richard Gooch <rgooch@atnf.csiro.au>
+	       Changed locking to spin with reschedule.
+	       Made use of new <smp_call_function>.
+  v1.28
+    19990201   Zoltan Boszormenyi <zboszor@mol.hu>
+	       Extended the driver to be able to use Cyrix style ARRs.
+    19990204   Richard Gooch <rgooch@atnf.csiro.au>
+	       Restructured Cyrix support.
+  v1.29
+    19990204   Zoltan Boszormenyi <zboszor@mol.hu>
+	       Refined ARR support: enable MAPEN in set_mtrr_prepare()
+	       and disable MAPEN in set_mtrr_done().
+    19990205   Richard Gooch <rgooch@atnf.csiro.au>
+	       Minor cleanups.
+  v1.30
+    19990208   Zoltan Boszormenyi <zboszor@mol.hu>
+               Protect plain 6x86s (and other processors without the
+               Page Global Enable feature) against accessing CR4 in
+               set_mtrr_prepare() and set_mtrr_done().
+    19990210   Richard Gooch <rgooch@atnf.csiro.au>
+	       Turned <set_mtrr_up> and <get_mtrr> into function pointers.
+  v1.31
+    19990212   Zoltan Boszormenyi <zboszor@mol.hu>
+               Major rewrite of cyrix_arr_init(): do not touch ARRs,
+               leave them as the BIOS have set them up.
+               Enable usage of all 8 ARRs.
+               Avoid multiplications by 3 everywhere and other
+               code clean ups/speed ups.
+    19990213   Zoltan Boszormenyi <zboszor@mol.hu>
+               Set up other Cyrix processors identical to the boot cpu.
+               Since Cyrix don't support Intel APIC, this is l'art pour l'art.
+               Weigh ARRs by size:
+               If size <= 32M is given, set up ARR# we were given.
+               If size >  32M is given, set up ARR7 only if it is free,
+               fail otherwise.
+    19990214   Zoltan Boszormenyi <zboszor@mol.hu>
+               Also check for size >= 256K if we are to set up ARR7,
+               mtrr_add() returns the value it gets from set_mtrr()
+    19990218   Zoltan Boszormenyi <zboszor@mol.hu>
+               Remove Cyrix "coma bug" workaround from here.
+               Moved to linux/arch/i386/kernel/setup.c and
+               linux/include/asm-i386/bugs.h
+    19990228   Richard Gooch <rgooch@atnf.csiro.au>
+	       Added #ifdef CONFIG_DEVFS_FS
+	       Added MTRRIOC_KILL_ENTRY ioctl(2)
+	       Trap for counter underflow in <mtrr_file_del>.
+	       Trap for 4 MiB aligned regions for PPro, stepping <= 7.
+    19990301   Richard Gooch <rgooch@atnf.csiro.au>
+	       Created <get_free_region> hook.
+    19990305   Richard Gooch <rgooch@atnf.csiro.au>
+	       Temporarily disable AMD support now MTRR capability flag is set.
+  v1.32
+    19990308   Zoltan Boszormenyi <zboszor@mol.hu>
+	       Adjust my changes (19990212-19990218) to Richard Gooch's
+	       latest changes. (19990228-19990305)
+  v1.33
+    19990309   Richard Gooch <rgooch@atnf.csiro.au>
+	       Fixed typo in <printk> message.
+    19990310   Richard Gooch <rgooch@atnf.csiro.au>
+	       Support K6-II/III based on Alan Cox's <alan@redhat.com> patches.
+  v1.34
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -173,7 +232,7 @@
 #include <asm/hardirq.h>
 #include "irq.h"
 
-#define MTRR_VERSION            "1.26 (19981001)"
+#define MTRR_VERSION            "1.34 (19990310)"
 
 #define TRUE  1
 #define FALSE 0
@@ -203,7 +262,7 @@
 #  define MTRR_CHANGE_MASK_DEFTYPE   0x04
 #endif
 
-/* In the intel processor's MTRR interface, the MTRR type is always held in
+/* In the Intel processor's MTRR interface, the MTRR type is always held in
    an 8 bit field: */
 typedef u8 mtrr_type;
 
@@ -213,8 +272,11 @@ typedef u8 mtrr_type;
 #ifdef __SMP__
 #  define set_mtrr(reg,base,size,type) set_mtrr_smp (reg, base, size, type)
 #else
-#  define set_mtrr(reg,base,size,type) set_mtrr_up (reg, base, size, type,TRUE)
+#  define set_mtrr(reg,base,size,type) (*set_mtrr_up) (reg, base, size, type, \
+						       TRUE)
 #endif
+
+#define spin_lock_reschedule(lock) while (!spin_trylock(lock)) schedule ();
 
 #ifndef CONFIG_PROC_FS
 #  define compute_ascii() while (0)
@@ -231,7 +293,6 @@ static spinlock_t main_lock = SPIN_LOCK_UNLOCKED;
 #ifdef CONFIG_PROC_FS
 static void compute_ascii (void);
 #endif
-static int k6_has_ranges(void);
 
 
 struct set_mtrr_context
@@ -240,36 +301,30 @@ struct set_mtrr_context
     unsigned long deftype_lo;
     unsigned long deftype_hi;
     unsigned long cr4val;
+    unsigned long ccr3;
 };
 
-/*
- *	No point continually digging through complex CPU conditionals..
- */
- 
-static int mtrr_flags;
 
-#define MTRR_PRESENT		1
-#define MTRR_WRCOMB		2
-
-/* Put the processor into a state where MTRRs can be safely set. */
-static void set_mtrr_prepare(struct set_mtrr_context *ctxt)
+/*  Put the processor into a state where MTRRs can be safely set  */
+static void set_mtrr_prepare (struct set_mtrr_context *ctxt)
 {
     unsigned long tmp;
 
-    /* disable interrupts locally */
+    /*  Disable interrupts locally  */
     __save_flags (ctxt->flags); __cli ();
 
-    if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
-    	return;
+    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) return;
 
-    /* save value of CR4 and clear Page Global Enable (bit 7) */
-    asm volatile ("movl  %%cr4, %0\n\t"
-		  "movl  %0, %1\n\t"
-		  "andb  $0x7f, %b1\n\t"
-		  "movl  %1, %%cr4\n\t"
-                  : "=r" (ctxt->cr4val), "=q" (tmp) : : "memory");
-    /* disable and flush caches. Note that wbinvd flushes the TLBs as
-       a side-effect. */
+    /*  Save value of CR4 and clear Page Global Enable (bit 7)  */
+    if (boot_cpu_data.x86_capability & X86_FEATURE_PGE)
+	asm volatile ("movl  %%cr4, %0\n\t"
+		      "movl  %0, %1\n\t"
+		      "andb  $0x7f, %b1\n\t"
+		      "movl  %1, %%cr4\n\t"
+		      : "=r" (ctxt->cr4val), "=q" (tmp) : : "memory");
+
+    /*  Disable and flush caches. Note that wbinvd flushes the TLBs as
+	a side-effect  */
     asm volatile ("movl  %%cr0, %0\n\t"
 		  "orl   $0x40000000, %0\n\t"
 		  "wbinvd\n\t"
@@ -277,110 +332,108 @@ static void set_mtrr_prepare(struct set_mtrr_context *ctxt)
 		  "wbinvd\n\t"
 		  : "=r" (tmp) : : "memory");
 
-    /* disable MTRRs, and set the default type to uncached. */
-    rdmsr(MTRRdefType_MSR, ctxt->deftype_lo, ctxt->deftype_hi);
-    wrmsr(MTRRdefType_MSR, ctxt->deftype_lo & 0xf300UL, ctxt->deftype_hi);
+    switch (boot_cpu_data.x86_vendor)
+    {
+      case X86_VENDOR_INTEL:
+	/*  Disable MTRRs, and set the default type to uncached  */
+	rdmsr (MTRRdefType_MSR, ctxt->deftype_lo, ctxt->deftype_hi);
+	wrmsr (MTRRdefType_MSR, ctxt->deftype_lo & 0xf300UL, ctxt->deftype_hi);
+	break;
+      case X86_VENDOR_CYRIX:
+	tmp = getCx86 (CX86_CCR3);
+	setCx86 (CX86_CCR3, (tmp & 0x0f) | 0x10);
+	ctxt->ccr3 = tmp;
+	break;
+    }
 }   /*  End Function set_mtrr_prepare  */
 
-
-/* Restore the processor after a set_mtrr_prepare */
-static void set_mtrr_done(struct set_mtrr_context *ctxt)
+/*  Restore the processor after a set_mtrr_prepare  */
+static void set_mtrr_done (struct set_mtrr_context *ctxt)
 {
     unsigned long tmp;
 
-    if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
-    	return;
-    	
-    /* flush caches and TLBs */
+    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+    {
+	__restore_flags (ctxt->flags);
+	return;
+    }
+
+    /*  Flush caches and TLBs  */
     asm volatile ("wbinvd" : : : "memory" );
 
-    /* restore MTRRdefType */
-    wrmsr(MTRRdefType_MSR, ctxt->deftype_lo, ctxt->deftype_hi);
+    /*  Restore MTRRdefType  */
+    switch (boot_cpu_data.x86_vendor)
+    {
+      case X86_VENDOR_INTEL:
+	wrmsr (MTRRdefType_MSR, ctxt->deftype_lo, ctxt->deftype_hi);
+	break;
+      case X86_VENDOR_CYRIX:
+	setCx86 (CX86_CCR3, ctxt->ccr3);
+	break;
+    }
 
-    /* enable caches */
+    /*  Enable caches  */
     asm volatile ("movl  %%cr0, %0\n\t"
 		  "andl  $0xbfffffff, %0\n\t"
 		  "movl  %0, %%cr0\n\t"
 		  : "=r" (tmp) : : "memory");
 
-    /* restore value of CR4 */
-    asm volatile ("movl  %0, %%cr4"
-                  : : "r" (ctxt->cr4val) : "memory");
+    /*  Restore value of CR4  */
+    if (boot_cpu_data.x86_capability & X86_FEATURE_PGE)
+	asm volatile ("movl  %0, %%cr4"
+		      : : "r" (ctxt->cr4val) : "memory");
 
-    /* re-enable interrupts locally (if enabled previously) */
+    /*  Re-enable interrupts locally (if enabled previously)  */
     __restore_flags (ctxt->flags);
 }   /*  End Function set_mtrr_done  */
 
-
-/* this function returns the number of variable MTRRs */
+/*  This function returns the number of variable MTRRs  */
 static unsigned int get_num_var_ranges (void)
 {
     unsigned long config, dummy;
-    
-    if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
-    	return 2;
 
-    rdmsr(MTRRcap_MSR, config, dummy);
-    return (config & 0xff);
+    switch (boot_cpu_data.x86_vendor)
+    {
+      case X86_VENDOR_INTEL:
+	rdmsr (MTRRcap_MSR, config, dummy);
+	return (config & 0xff);
+	/*break;*/
+      case X86_VENDOR_CYRIX:
+	/*  Cyrix have 8 ARRs */
+	return 8;
+	/*break;*/
+      case X86_VENDOR_AMD:
+	return 2;
+	/*break;*/
+    }
+    return 0;
 }   /*  End Function get_num_var_ranges  */
 
-
-/* non-zero if we have the write-combining memory type. */
+/*  Returns non-zero if we have the write-combining memory type  */
 static int have_wrcomb (void)
 {
     unsigned long config, dummy;
 
-    rdmsr(MTRRcap_MSR, config, dummy);
-    return (config & (1<<10));
-}
+    switch (boot_cpu_data.x86_vendor)
+    {
+      case X86_VENDOR_INTEL:
+	rdmsr (MTRRcap_MSR, config, dummy);
+	return (config & (1<<10));
+	/*break;*/
+      case X86_VENDOR_CYRIX:
+      case X86_VENDOR_AMD:
+	return 1;
+	/*break;*/
+    }
+    return 0;
+}   /*  End Function have_wrcomb  */
 
-
-static void get_mtrr (unsigned int reg, unsigned long *base,
-		      unsigned long *size, mtrr_type *type)
+static void intel_get_mtrr (unsigned int reg, unsigned long *base,
+			    unsigned long *size, mtrr_type *type)
 {
     unsigned long dummy, mask_lo, base_lo;
 
-    if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
-    {
-        unsigned long low, high;
-    	rdmsr(0xC0000085,  low, high);
-    	/* Upper dword is region 1, lower is region 0 */
-    	if(reg==1)
-    		low=high;
-    	/* The base masks off on the right alignment */
-    	*base=low&0xFFFE0000;
-    	*type=0;
-    	if(low&1)
-    		*type=MTRR_TYPE_UNCACHABLE;
-    	if(low&2)
-    		*type=MTRR_TYPE_WRCOMB;
-    	if(!(low&3))
-    	{
-    		*size=0;
-    		return;
-    	}
-    	
-	/*
-	 *	This needs a little explaining. The size is stored as an
-	 *	inverted mask of bits of 128K granularity 15 bits long offset
-	 *	2 bits
-	 *
-	 *	So to get a size we do invert the mask and add 1 to the lowest
-	 *	mask bit (4 as its 2 bits in). This gives us a size we then shift
-	 *	to turn into 128K blocks
-	 *
-	 *	eg		111 1111 1111 1100      is 512K
-	 *
-	 *	invert		000 0000 0000 0011
-	 *	+1		000 0000 0000 0100
-	 *	*128K	...
-	 */
-
-    	low=(~low)&0x1FFFC;
-	*size = (low+4)<<15;
-	return;	
-    }
-    rdmsr(MTRRphysMask_MSR(reg), mask_lo, dummy);
+    rdmsr (MTRRphysMask_MSR(reg), mask_lo, dummy);
     if ((mask_lo & 0x800) == 0) {
 	/* Invalid (i.e. free) range. */
 	*base = 0;
@@ -404,11 +457,104 @@ static void get_mtrr (unsigned int reg, unsigned long *base,
 
     *base = (base_lo & 0xfffff000UL);
     *type = (base_lo & 0xff);
-}   /*  End Function get_mtrr  */
+}   /*  End Function intel_get_mtrr  */
 
+static void cyrix_get_arr (unsigned int reg, unsigned long *base,
+			   unsigned long *size, mtrr_type *type)
+{
+    unsigned long flags;
+    unsigned char arr, ccr3, rcr, shift;
 
-static void set_mtrr_up (unsigned int reg, unsigned long base,
-			 unsigned long size, mtrr_type type, int do_safe)
+    arr = CX86_ARR_BASE + (reg << 1) + reg; /* avoid multiplication by 3 */
+
+    /* Save flags and disable interrupts */
+    __save_flags (flags); __cli ();
+
+    ccr3 = getCx86 (CX86_CCR3);
+    setCx86 (CX86_CCR3, (ccr3 & 0x0f) | 0x10);		/* enable MAPEN */
+    ((unsigned char *) base)[3]  = getCx86 (arr);
+    ((unsigned char *) base)[2]  = getCx86 (arr+1);
+    ((unsigned char *) base)[1]  = getCx86 (arr+2);
+    rcr = getCx86(CX86_RCR_BASE + reg);
+    setCx86 (CX86_CCR3, ccr3);				/* disable MAPEN */
+
+    /* Enable interrupts if it was enabled previously */
+    __restore_flags (flags);
+    
+    shift = ((unsigned char *) base)[1] & 0x0f;
+    *base &= 0xfffff000UL;
+
+    /* Power of two, at least 4K on ARR0-ARR6, 256K on ARR7
+     * Note: shift==0xf means 4G, this is unsupported.
+     */
+    if (shift)
+      *size = (reg < 7 ? 0x800UL : 0x20000UL) << shift;
+    else
+      *size = 0;
+
+    /* Bit 0 is Cache Enable on ARR7, Cache Disable on ARR0-ARR6 */
+    if (reg < 7) {
+      switch (rcr) {
+	case  1: *type = MTRR_TYPE_UNCACHABLE; break;
+	case  8: *type = MTRR_TYPE_WRBACK;     break;
+	case  9: *type = MTRR_TYPE_WRCOMB;     break;
+	case 24:
+	default: *type = MTRR_TYPE_WRTHROUGH;  break;
+      }
+    } else {
+      switch (rcr) {
+	case  0: *type = MTRR_TYPE_UNCACHABLE; break;
+	case  8: *type = MTRR_TYPE_WRCOMB;     break;
+	case  9: *type = MTRR_TYPE_WRBACK;     break;
+	case 25:
+	default: *type = MTRR_TYPE_WRTHROUGH;  break;
+      }
+    }
+}   /*  End Function cyrix_get_arr  */
+
+static void amd_get_mtrr (unsigned int reg, unsigned long *base,
+			  unsigned long *size, mtrr_type *type)
+{
+    unsigned long low, high;
+
+    rdmsr (0xC0000085, low, high);
+    /*  Upper dword is region 1, lower is region 0  */
+    if (reg == 1) low = high;
+    /*  The base masks off on the right alignment  */
+    *base = low & 0xFFFE0000;
+    *type = 0;
+    if (low & 1) *type = MTRR_TYPE_UNCACHABLE;
+    if (low & 2) *type = MTRR_TYPE_WRCOMB;
+    if ( !(low & 3) )
+    {
+	*size = 0;
+	return;
+    }
+    /*
+     *	This needs a little explaining. The size is stored as an
+     *	inverted mask of bits of 128K granularity 15 bits long offset
+     *	2 bits
+     *
+     *	So to get a size we do invert the mask and add 1 to the lowest
+     *	mask bit (4 as its 2 bits in). This gives us a size we then shift
+     *	to turn into 128K blocks
+     *
+     *	eg		111 1111 1111 1100      is 512K
+     *
+     *	invert		000 0000 0000 0011
+     *	+1		000 0000 0000 0100
+     *	*128K	...
+     */
+    low = (~low) & 0x1FFFC;
+    *size = (low + 4) << 15;
+    return;
+}   /*  End Function amd_get_mtrr  */
+
+static void (*get_mtrr) (unsigned int reg, unsigned long *base,
+			 unsigned long *size, mtrr_type *type) = NULL;
+
+static void intel_set_mtrr_up (unsigned int reg, unsigned long base,
+			       unsigned long size, mtrr_type type, int do_safe)
 /*  [SUMMARY] Set variable MTRR register on the local CPU.
     <reg> The register to set.
     <base> The base address of the region.
@@ -416,65 +562,110 @@ static void set_mtrr_up (unsigned int reg, unsigned long base,
     <type> The type of the region.
     <do_safe> If TRUE, do the change safely. If FALSE, safety measures should
     be done externally.
+    [RETURNS] Nothing.
 */
 {
     struct set_mtrr_context ctxt;
 
     if (do_safe) set_mtrr_prepare (&ctxt);
-    
-    if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL)
+    if (size == 0)
     {
-	    if (size == 0)
-	    {
-		/* The invalid bit is kept in the mask, so we simply clear the
-		   relevant mask register to disable a range. */
-		wrmsr (MTRRphysMask_MSR (reg), 0, 0);
-	    }
-	    else
-	    {
-		wrmsr (MTRRphysBase_MSR (reg), base | type, 0);
-		wrmsr (MTRRphysMask_MSR (reg), ~(size - 1) | 0x800, 0);
-	    }
+	/* The invalid bit is kept in the mask, so we simply clear the
+	   relevant mask register to disable a range. */
+	wrmsr (MTRRphysMask_MSR (reg), 0, 0);
     }
-    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+    else
     {
-        u32 low, high;
-        unsigned long flags;
-        /*
-         *	Low is MTRR0 , High MTRR 1
-         */
-        rdmsr(0xC0000085, low, high);
-        /*
-         *	Blank to disable
-         */
-        if(size==0)
-        	*(reg?&high:&low)=0;
-        else
-        	/* Set the register to the base (already shifted for us), the
-        	   type (off by one) and an inverted bitmask of the size
-        	   
-        	   The size is the only odd bit. We are fed say 512K
-        	   We invert this and we get 111 1111 1111 1011 but
-        	   if you subtract one and invert you get the desired
-        	   111 1111 1111 1100 mask 
-        	*/
-        	
-		*(reg?&high:&low)=(((~(size-1))>>15)&0x0001FFFC)|base|(type+1);
-	
-	/*
-	 *	The writeback rule is quite specific. See the manual. Its
-	 *	disable local interrupts, write back the cache, set the mtrr
-	 */
-	 
-	save_flags(flags);
-	__cli();
-	__asm__ __volatile__("wbinvd" : : : "memory");
-	wrmsr(0xC0000085, low, high);
-	restore_flags(flags);
+	wrmsr (MTRRphysBase_MSR (reg), base | type, 0);
+	wrmsr (MTRRphysMask_MSR (reg), ~(size - 1) | 0x800, 0);
     }
     if (do_safe) set_mtrr_done (&ctxt);
-}   /*  End Function set_mtrr_up  */
+}   /*  End Function intel_set_mtrr_up  */
 
+static void cyrix_set_arr_up (unsigned int reg, unsigned long base,
+			      unsigned long size, mtrr_type type, int do_safe)
+{
+    struct set_mtrr_context ctxt;
+    unsigned char arr, arr_type, arr_size;
+
+    arr = CX86_ARR_BASE + (reg << 1) + reg; /* avoid multiplication by 3 */
+
+    /* count down from 32M (ARR0-ARR6) or from 2G (ARR7) */
+    size >>= (reg < 7 ? 12 : 18);
+    size &= 0x7fff; /* make sure arr_size <= 14 */
+    for(arr_size = 0; size; arr_size++, size >>= 1);
+
+    if (reg<7) {
+      switch (type) {
+	case MTRR_TYPE_UNCACHABLE:	arr_type =  1; break;
+	case MTRR_TYPE_WRCOMB:		arr_type =  9; break;
+	case MTRR_TYPE_WRTHROUGH:	arr_type = 24; break;
+	default:			arr_type =  8; break;
+      }
+    } else {
+      switch (type) {
+	case MTRR_TYPE_UNCACHABLE:	arr_type =  0; break;
+	case MTRR_TYPE_WRCOMB:		arr_type =  8; break;
+	case MTRR_TYPE_WRTHROUGH:	arr_type = 25; break;
+	default:			arr_type =  9; break;
+      }
+    }
+
+    if (do_safe) set_mtrr_prepare (&ctxt);
+    setCx86(arr,    ((unsigned char *) &base)[3]);
+    setCx86(arr+1,  ((unsigned char *) &base)[2]);
+    setCx86(arr+2, (((unsigned char *) &base)[1]) | arr_size);
+    setCx86(CX86_RCR_BASE + reg, arr_type);
+    if (do_safe) set_mtrr_done (&ctxt);
+}   /*  End Function cyrix_set_arr_up  */
+
+static void amd_set_mtrr_up (unsigned int reg, unsigned long base,
+			     unsigned long size, mtrr_type type, int do_safe)
+/*  [SUMMARY] Set variable MTRR register on the local CPU.
+    <reg> The register to set.
+    <base> The base address of the region.
+    <size> The size of the region. If this is 0 the region is disabled.
+    <type> The type of the region.
+    <do_safe> If TRUE, do the change safely. If FALSE, safety measures should
+    be done externally.
+    [RETURNS] Nothing.
+*/
+{
+    u32 low, high;
+    struct set_mtrr_context ctxt;
+
+    if (do_safe) set_mtrr_prepare (&ctxt);
+    /*
+     *	Low is MTRR0 , High MTRR 1
+     */
+    rdmsr (0xC0000085, low, high);
+    /*
+     *	Blank to disable
+     */
+    if (size == 0)
+	*(reg ? &high : &low) = 0;
+    else
+	/* Set the register to the base (already shifted for us), the
+	   type (off by one) and an inverted bitmask of the size
+        	   
+	   The size is the only odd bit. We are fed say 512K
+	   We invert this and we get 111 1111 1111 1011 but
+	   if you subtract one and invert you get the desired
+	   111 1111 1111 1100 mask 
+	   */
+	*(reg ? &high : &low)=(((~(size-1))>>15)&0x0001FFFC)|base|(type+1);
+    /*
+     *	The writeback rule is quite specific. See the manual. Its
+     *	disable local interrupts, write back the cache, set the mtrr
+     */
+    __asm__ __volatile__ ("wbinvd" : : : "memory");
+    wrmsr (0xC0000085, low, high);
+    if (do_safe) set_mtrr_done (&ctxt);
+}   /*  End Function amd_set_mtrr_up  */
+
+static void (*set_mtrr_up) (unsigned int reg, unsigned long base,
+			    unsigned long size, mtrr_type type,
+			    int do_safe) = NULL;
      
 #ifdef __SMP__
 
@@ -487,7 +678,7 @@ struct mtrr_var_range
 };
 
 
-/* Get the MSR pair relating to a var range. */
+/*  Get the MSR pair relating to a var range  */
 __initfunc(static void get_mtrr_var_range (unsigned int index,
 					   struct mtrr_var_range *vr))
 {
@@ -496,8 +687,8 @@ __initfunc(static void get_mtrr_var_range (unsigned int index,
 }   /*  End Function get_mtrr_var_range  */
 
 
-/* Set the MSR pair relating to a var range. Returns TRUE if
-   changes are made. */
+/*  Set the MSR pair relating to a var range. Returns TRUE if
+    changes are made  */
 __initfunc(static int set_mtrr_var_range_testing (unsigned int index,
 						  struct mtrr_var_range *vr))
 {
@@ -521,8 +712,7 @@ __initfunc(static int set_mtrr_var_range_testing (unsigned int index,
     }
     
     return changed;
-}
-
+}   /*  End Function set_mtrr_var_range_testing  */
 
 __initfunc(static void get_fixed_ranges(mtrr_type *frs))
 {
@@ -536,8 +726,7 @@ __initfunc(static void get_fixed_ranges(mtrr_type *frs))
  
     for (i = 0; i < 8; i++)
 	rdmsr(MTRRfix4K_C0000_MSR + i, p[6 + i*2], p[7 + i*2]);
-}
-
+}   /*  End Function get_fixed_ranges  */
 
 __initfunc(static int set_fixed_ranges_testing(mtrr_type *frs))
 {
@@ -567,10 +756,8 @@ __initfunc(static int set_fixed_ranges_testing(mtrr_type *frs))
 	    changed = TRUE;
 	}
     }
-
     return changed;
-}
-
+}   /*  End Function set_fixed_ranges_testing  */
 
 struct mtrr_state
 {
@@ -582,7 +769,7 @@ struct mtrr_state
 };
 
 
-/* Grab all of the MTRR state for this CPU into *state. */
+/*  Grab all of the MTRR state for this CPU into *state  */
 __initfunc(static void get_mtrr_state(struct mtrr_state *state))
 {
     unsigned int nvrs, i;
@@ -591,28 +778,22 @@ __initfunc(static void get_mtrr_state(struct mtrr_state *state))
 
     nvrs = state->num_var_ranges = get_num_var_ranges();
     vrs = state->var_ranges 
-              = kmalloc(nvrs * sizeof(struct mtrr_var_range), GFP_KERNEL);
+              = kmalloc (nvrs * sizeof (struct mtrr_var_range), GFP_KERNEL);
     if (vrs == NULL)
 	nvrs = state->num_var_ranges = 0;
 
     for (i = 0; i < nvrs; i++)
-	get_mtrr_var_range(i, &vrs[i]);
+	get_mtrr_var_range (i, &vrs[i]);
     
-    if(boot_cpu_data.x86_vendor == X86_VENDOR_INTEL)
-    {
-	    get_fixed_ranges(state->fixed_ranges);
+    get_fixed_ranges (state->fixed_ranges);
 
-	    rdmsr(MTRRdefType_MSR, lo, dummy);
-	    state->def_type = (lo & 0xff);
-	    state->enabled = (lo & 0xc00) >> 10;
-	    return;
-    }
-    state->def_type = 0;
-    state->enabled = 1;
+    rdmsr (MTRRdefType_MSR, lo, dummy);
+    state->def_type = (lo & 0xff);
+    state->enabled = (lo & 0xc00) >> 10;
 }   /*  End Function get_mtrr_state  */
 
 
-/* Free resources associated with a struct mtrr_state */
+/*  Free resources associated with a struct mtrr_state  */
 __initfunc(static void finalize_mtrr_state(struct mtrr_state *state))
 {
     if (state->var_ranges) kfree (state->var_ranges);
@@ -631,18 +812,15 @@ __initfunc(static unsigned long set_mtrr_state (struct mtrr_state *state,
     unsigned int i;
     unsigned long change_mask = 0;
 
-    if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
-    	return 0UL;
-    	
     for (i = 0; i < state->num_var_ranges; i++)
-	if (set_mtrr_var_range_testing(i, &state->var_ranges[i]))
+	if ( set_mtrr_var_range_testing (i, &state->var_ranges[i]) )
 	    change_mask |= MTRR_CHANGE_MASK_VARIABLE;
 
-    if (set_fixed_ranges_testing(state->fixed_ranges))
+    if ( set_fixed_ranges_testing(state->fixed_ranges) )
 	change_mask |= MTRR_CHANGE_MASK_FIXED;
     
-    /* set_mtrr_restore restores the old value of MTRRdefType,
-       so to set it we fiddle with the saved value. */
+    /*  Set_mtrr_restore restores the old value of MTRRdefType,
+	so to set it we fiddle with the saved value  */
     if ((ctxt->deftype_lo & 0xff) != state->def_type
 	|| ((ctxt->deftype_lo & 0xc00) >> 10) != state->enabled)
     {
@@ -655,87 +833,8 @@ __initfunc(static unsigned long set_mtrr_state (struct mtrr_state *state,
 
  
 static atomic_t undone_count;
-static void (*handler_func) (struct set_mtrr_context *ctxt, void *info);
-static void *handler_info;
 static volatile int wait_barrier_execute = FALSE;
 static volatile int wait_barrier_cache_enable = FALSE;
-
-static void sync_handler (void)
-/*  [SUMMARY] Synchronisation handler. Executed by "other" CPUs.
-    [RETURNS] Nothing.
-*/
-{
-    struct set_mtrr_context ctxt;
-
-    set_mtrr_prepare (&ctxt);
-    /*  Notify master CPU that I'm at the barrier and then wait  */
-    atomic_dec (&undone_count);
-    while (wait_barrier_execute) barrier ();
-    /*  The master has cleared me to execute  */
-    (*handler_func) (&ctxt, handler_info);
-    /*  Notify master CPU that I've executed the function  */
-    atomic_dec (&undone_count);
-    /*  Wait for master to clear me to enable cache and return  */
-    while (wait_barrier_cache_enable) barrier ();
-    set_mtrr_done (&ctxt);
-}   /*  End Function sync_handler  */
-
-static void do_all_cpus (void (*handler) (struct set_mtrr_context *ctxt,
-					  void *info),
-			 void *info, int local)
-/*  [SUMMARY] Execute a function on all CPUs, with caches flushed and disabled.
-    [PURPOSE] This function will synchronise all CPUs, flush and disable caches
-    on all CPUs, then call a specified function. When the specified function
-    finishes on all CPUs, caches are enabled on all CPUs.
-    <handler> The function to execute.
-    <info> An arbitrary information pointer which is passed to <<handler>>.
-    <local> If TRUE <<handler>> is executed locally.
-    [RETURNS] Nothing.
-*/
-{
-    unsigned long timeout;
-    struct set_mtrr_context ctxt;
-
-    mtrr_hook = sync_handler;
-    handler_func = handler;
-    handler_info = info;
-    wait_barrier_execute = TRUE;
-    wait_barrier_cache_enable = TRUE;
-    /*  Send a message to all other CPUs and wait for them to enter the
-	barrier  */
-    atomic_set (&undone_count, smp_num_cpus - 1);
-    smp_send_mtrr();
-    /*  Wait for it to be done  */
-    timeout = jiffies + JIFFIE_TIMEOUT;
-    while ( (atomic_read (&undone_count) > 0) &&
-	    time_before(jiffies, timeout) )
-	barrier ();
-    if (atomic_read (&undone_count) > 0)
-    {
-	panic ("mtrr: timed out waiting for other CPUs\n");
-    }
-    mtrr_hook = NULL;
-    /*  All other CPUs should be waiting for the barrier, with their caches
-	already flushed and disabled. Prepare for function completion
-	notification  */
-    atomic_set (&undone_count, smp_num_cpus - 1);
-    /*  Flush and disable the local CPU's cache	and release the barier, which
-	should cause the other CPUs to execute the function. Also execute it
-	locally if required  */
-    set_mtrr_prepare (&ctxt);
-    wait_barrier_execute = FALSE;
-    if (local) (*handler) (&ctxt, info);
-    /*  Now wait for other CPUs to complete the function  */
-    while (atomic_read (&undone_count) > 0) barrier ();
-    /*  Now all CPUs should have finished the function. Release the barrier to
-	allow them to re-enable their caches and return from their interrupt,
-	then enable the local cache and return  */
-    wait_barrier_cache_enable = FALSE;
-    set_mtrr_done (&ctxt);
-    handler_func = NULL;
-    handler_info = NULL;
-}   /*  End Function do_all_cpus  */
-
 
 struct set_mtrr_data
 {
@@ -745,28 +844,63 @@ struct set_mtrr_data
     mtrr_type smp_type;
 };
 
-static void set_mtrr_handler (struct set_mtrr_context *ctxt, void *info)
+static void ipi_handler (void *info)
+/*  [SUMMARY] Synchronisation handler. Executed by "other" CPUs.
+    [RETURNS] Nothing.
+*/
 {
     struct set_mtrr_data *data = info;
+    struct set_mtrr_context ctxt;
 
-    set_mtrr_up (data->smp_reg, data->smp_base, data->smp_size, data->smp_type,
-		 FALSE);
-}   /*  End Function set_mtrr_handler  */
+    set_mtrr_prepare (&ctxt);
+    /*  Notify master that I've flushed and disabled my cache  */
+    atomic_dec (&undone_count);
+    while (wait_barrier_execute) barrier ();
+    /*  The master has cleared me to execute  */
+    (*set_mtrr_up) (data->smp_reg, data->smp_base, data->smp_size,
+		    data->smp_type, FALSE);
+    /*  Notify master CPU that I've executed the function  */
+    atomic_dec (&undone_count);
+    /*  Wait for master to clear me to enable cache and return  */
+    while (wait_barrier_cache_enable) barrier ();
+    set_mtrr_done (&ctxt);
+}   /*  End Function ipi_handler  */
 
 static void set_mtrr_smp (unsigned int reg, unsigned long base,
 			  unsigned long size, mtrr_type type)
 {
     struct set_mtrr_data data;
+    struct set_mtrr_context ctxt;
 
     data.smp_reg = reg;
     data.smp_base = base;
     data.smp_size = size;
     data.smp_type = type;
-    do_all_cpus (set_mtrr_handler, &data, TRUE);
+    wait_barrier_execute = TRUE;
+    wait_barrier_cache_enable = TRUE;
+    atomic_set (&undone_count, smp_num_cpus - 1);
+    /*  Flush and disable the local CPU's cache	and start the ball rolling on
+	other CPUs  */
+    set_mtrr_prepare (&ctxt);
+    if (smp_call_function (ipi_handler, &data, 1, 0) != 0)
+	panic ("mtrr: timed out waiting for other CPUs\n");
+    /*  Wait for all other CPUs to flush and disable their caches  */
+    while (atomic_read (&undone_count) > 0) barrier ();
+    /* Set up for completion wait and then release other CPUs to change MTRRs*/
+    atomic_set (&undone_count, smp_num_cpus - 1);
+    wait_barrier_execute = FALSE;
+    (*set_mtrr_up) (reg, base, size, type, FALSE);
+    /*  Now wait for other CPUs to complete the function  */
+    while (atomic_read (&undone_count) > 0) barrier ();
+    /*  Now all CPUs should have finished the function. Release the barrier to
+	allow them to re-enable their caches and return from their interrupt,
+	then enable the local cache and return  */
+    wait_barrier_cache_enable = FALSE;
+    set_mtrr_done (&ctxt);
 }   /*  End Function set_mtrr_smp  */
 
 
-/* Some BIOS's are fucked and don't set all MTRRs the same! */
+/*  Some BIOS's are fucked and don't set all MTRRs the same!  */
 __initfunc(static void mtrr_state_warn (unsigned long mask))
 {
     if (!mask) return;
@@ -809,6 +943,58 @@ static void init_table (void)
 #endif
 }   /*  End Function init_table  */
 
+static int generic_get_free_region (unsigned long base, unsigned long size)
+/*  [SUMMARY] Get a free MTRR.
+    <base> The starting (base) address of the region.
+    <size> The size (in bytes) of the region.
+    [RETURNS] The index of the region on success, else -1 on error.
+*/
+{
+    int i, max;
+    mtrr_type ltype;
+    unsigned long lbase, lsize;
+
+    max = get_num_var_ranges ();
+    for (i = 0; i < max; ++i)
+    {
+	(*get_mtrr) (i, &lbase, &lsize, &ltype);
+	if (lsize < 1) return i;
+    }
+    return -ENOSPC;
+}   /*  End Function generic_get_free_region  */
+
+static int cyrix_get_free_region (unsigned long base, unsigned long size)
+/*  [SUMMARY] Get a free ARR.
+    <base> The starting (base) address of the region.
+    <size> The size (in bytes) of the region.
+    [RETURNS] The index of the region on success, else -1 on error.
+*/
+{
+    int i;
+    mtrr_type ltype;
+    unsigned long lbase, lsize;
+
+    /* If we are to set up a region >32M then look at ARR7 immediately */
+    if (size > 0x2000000UL) {
+	cyrix_get_arr (7, &lbase, &lsize, &ltype);
+	if (lsize < 1) return 7;
+    /* else try ARR0-ARR6 first */
+    } else {
+	for (i = 0; i < 7; i++)
+	{
+	    cyrix_get_arr (i, &lbase, &lsize, &ltype);
+	    if (lsize < 1) return i;
+	}
+	/* ARR0-ARR6 isn't free, try ARR7 but its size must be at least 256K */
+	cyrix_get_arr (i, &lbase, &lsize, &ltype);
+	if ((lsize < 1) && (size >= 0x40000)) return i;
+    }
+    return -ENOSPC;
+}   /*  End Function cyrix_get_free_region  */
+
+static int (*get_free_region) (unsigned long base,
+			       unsigned long size) = generic_get_free_region;
+
 int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	      char increment)
 /*  [SUMMARY] Add an MTRR entry.
@@ -826,11 +1012,44 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
     mtrr_type ltype;
     unsigned long lbase, lsize, last;
 
-    if (!(mtrr_flags&MTRR_PRESENT))
-    	return -ENODEV;
-    	
-    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return -ENODEV;
+    switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_INTEL:
+	/*  For Intel PPro stepping <= 7, must be 4 MiB aligned  */
+	if ( (boot_cpu_data.x86 == 6) && (boot_cpu_data.x86_model == 1) &&
+	     (boot_cpu_data.x86_mask <= 7) && ( base & ( (1 << 22) - 1 ) ) )
+	{
+	    printk ("mtrr: base(0x%lx) is not 4 MiB aligned\n", base);
+	    return -EINVAL;
+	}
+	/*  Fall through  */
+      case X86_VENDOR_CYRIX:
+	if ( (base & 0xfff) || (size & 0xfff) )
+	{
+	    printk ("mtrr: size and base must be multiples of 4 kiB\n");
+	    printk ("mtrr: size: %lx  base: %lx\n", size, base);
+	    return -EINVAL;
+	}
+	if (base + size < 0x100000)
+	{
+	    printk ("mtrr: cannot set region below 1 MiB (0x%lx,0x%lx)\n",
+		    base, size);
+	    return -EINVAL;
+	}
+	/*  Check upper bits of base and last are equal and lower bits are 0
+	    for base and 1 for last  */
+	last = base + size - 1;
+	for (lbase = base; !(lbase & 1) && (last & 1);
+	     lbase = lbase >> 1, last = last >> 1);
+	if (lbase != last)
+	{
+	    printk ("mtrr: base(0x%lx) is not aligned on a size(0x%lx) boundary\n",
+		    base, size);
+	    return -EINVAL;
+	}
+	break;
+      case X86_VENDOR_AMD:
     	/* Apply the K6 block alignment and size rules 
     	   In order
     	      o Uncached or gathering only
@@ -838,54 +1057,32 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
     	      o Power of 2 block
     	      o base suitably aligned to the power
     	  */
-    	if(type > 1 || size < (1<<17) || (size & ~(size-1))-size || (base&(size-1)))
-    		return -EINVAL;
+    	if (type > MTRR_TYPE_WRCOMB || size < (1 << 17) ||
+	    (size & ~(size-1))-size || (base & (size-1)))
+	    return -EINVAL;
+	break;
+      default:
+	return -EINVAL;
+	/*break;*/
     }
-    	
-    if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL)
+    if (type >= MTRR_NUM_TYPES)
     {
-	    if ( (base & 0xfff) || (size & 0xfff) )
-	    {
-		printk ("mtrr: size and base must be multiples of 4kB\n");
-		printk ("mtrr: size: %lx  base: %lx\n", size, base);
-		return -EINVAL;
-	    }
-	    if (base + size < 0x100000)
-	    {
-		printk ("mtrr: cannot set region below 1 MByte (0x%lx,0x%lx)\n",
-			base, size);
-		return -EINVAL;
-	    }
-	    /*  Check upper bits of base and last are equal and lower bits are 0 for
-		base and 1 for last  */
-	    last = base + size - 1;
-	    for (lbase = base; !(lbase & 1) && (last & 1);
-		 lbase = lbase >> 1, last = last >> 1);
-	    if (lbase != last)
-	    {
-		printk ("mtrr: base(0x%lx) is not aligned on a size(0x%lx) boundary\n",
-			base, size);
-		return -EINVAL;
-	    }
-	    if (type >= MTRR_NUM_TYPES)
-	    {
-		printk ("mtrr: type: %u illegal\n", type);
-		return -EINVAL;
-	    }
-	    /*  If the type is WC, check that this processor supports it  */
-	    if ( (type == MTRR_TYPE_WRCOMB) && !have_wrcomb () )
-	    {
-	        printk ("mtrr: your processor doesn't support write-combining\n");
-	        return -EINVAL;
-	    }
+	printk ("mtrr: type: %u illegal\n", type);
+	return -EINVAL;
+    }
+    /*  If the type is WC, check that this processor supports it  */
+    if ( (type == MTRR_TYPE_WRCOMB) && !have_wrcomb () )
+    {
+        printk ("mtrr: your processor doesn't support write-combining\n");
+        return -ENOSYS;
     }
     increment = increment ? 1 : 0;
     max = get_num_var_ranges ();
     /*  Search for existing MTRR  */
-    spin_lock (&main_lock);
+    spin_lock_reschedule (&main_lock);
     for (i = 0; i < max; ++i)
     {
-	get_mtrr (i, &lbase, &lsize, &ltype);
+	(*get_mtrr) (i, &lbase, &lsize, &ltype);
 	if (base >= lbase + lsize) continue;
 	if ( (base < lbase) && (base + size <= lbase) ) continue;
 	/*  At this point we know there is some kind of overlap/enclosure  */
@@ -911,19 +1108,18 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	return i;
     }
     /*  Search for an empty MTRR  */
-    for (i = 0; i < max; ++i)
+    i = (*get_free_region) (base, size);
+    if (i < 0)
     {
-	get_mtrr (i, &lbase, &lsize, &ltype);
-	if (lsize > 0) continue;
-	set_mtrr (i, base, size, type);
-	usage_table[i] = 1;
-	compute_ascii ();
 	spin_unlock (&main_lock);
+	printk ("mtrr: no more MTRRs available\n");
 	return i;
     }
+    set_mtrr (i, base, size, type);
+    usage_table[i] = 1;
+    compute_ascii ();
     spin_unlock (&main_lock);
-    printk ("mtrr: no more MTRRs available\n");
-    return -ENOSPC;
+    return i;
 }   /*  End Function mtrr_add  */
 
 int mtrr_del (int reg, unsigned long base, unsigned long size)
@@ -941,15 +1137,15 @@ int mtrr_del (int reg, unsigned long base, unsigned long size)
     mtrr_type ltype;
     unsigned long lbase, lsize;
 
-    if ( !(mtrr_flags&MTRR_PRESENT) ) return -ENODEV;
+    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return -ENODEV;
     max = get_num_var_ranges ();
-    spin_lock (&main_lock);
+    spin_lock_reschedule (&main_lock);
     if (reg < 0)
     {
 	/*  Search for existing MTRR  */
 	for (i = 0; i < max; ++i)
 	{
-	    get_mtrr (i, &lbase, &lsize, &ltype);
+	    (*get_mtrr) (i, &lbase, &lsize, &ltype);
 	    if ( (lbase == base) && (lsize == size) )
 	    {
 		reg = i;
@@ -969,7 +1165,7 @@ int mtrr_del (int reg, unsigned long base, unsigned long size)
 	printk ("mtrr: register: %d too big\n", reg);
 	return -EINVAL;
     }
-    get_mtrr (reg, &lbase, &lsize, &ltype);
+    (*get_mtrr) (reg, &lbase, &lsize, &ltype);
     if (lsize < 1)
     {
 	spin_unlock (&main_lock);
@@ -1020,7 +1216,9 @@ static int mtrr_file_del (unsigned long base, unsigned long size,
 
     reg = mtrr_del (-1, base, size);
     if (reg < 0) return reg;
-    if (fcount != NULL) --fcount[reg];
+    if (fcount == NULL) return reg;
+    if (fcount[reg] < 1) return -EINVAL;
+    --fcount[reg];
     return reg;
 }   /*  End Function mtrr_file_del  */
 
@@ -1126,11 +1324,18 @@ static int mtrr_ioctl (struct inode *inode, struct file *file,
 	err = mtrr_file_del (sentry.base, sentry.size, file);
 	if (err < 0) return err;
 	break;
+      case MTRRIOC_KILL_ENTRY:
+	if ( !suser () ) return -EPERM;
+	if ( copy_from_user (&sentry, (void *) arg, sizeof sentry) )
+	    return -EFAULT;
+	err = mtrr_del (-1, sentry.base, sentry.size);
+	if (err < 0) return err;
+	break;
       case MTRRIOC_GET_ENTRY:
 	if ( copy_from_user (&gentry, (void *) arg, sizeof gentry) )
 	    return -EFAULT;
 	if ( gentry.regnum >= get_num_var_ranges () ) return -EINVAL;
-	get_mtrr (gentry.regnum, &gentry.base, &gentry.size, &type);
+	(*get_mtrr) (gentry.regnum, &gentry.base, &gentry.size, &type);
 	gentry.type = type;
 	if ( copy_to_user ( (void *) arg, &gentry, sizeof gentry) )
 	     return -EFAULT;
@@ -1222,7 +1427,7 @@ static void compute_ascii (void)
     max = get_num_var_ranges ();
     for (i = 0; i < max; i++)
     {
-	get_mtrr (i, &base, &size, &type);
+	(*get_mtrr) (i, &base, &size, &type);
 	if (size < 1) usage_table[i] = 0;
 	else
 	{
@@ -1255,28 +1460,165 @@ EXPORT_SYMBOL(mtrr_del);
 
 #ifdef __SMP__
 
+typedef struct {
+  unsigned long base;
+  unsigned long size;
+  mtrr_type type;
+} arr_state_t;
+
+arr_state_t arr_state[8] __initdata = {
+  {0UL,0UL,0UL}, {0UL,0UL,0UL}, {0UL,0UL,0UL}, {0UL,0UL,0UL},
+  {0UL,0UL,0UL}, {0UL,0UL,0UL}, {0UL,0UL,0UL}, {0UL,0UL,0UL}
+};
+
+unsigned char ccr_state[7] __initdata = { 0, 0, 0, 0, 0, 0, 0 };
+
+__initfunc(static void cyrix_arr_init_secondary(void))
+{
+    struct set_mtrr_context ctxt;
+    int i;
+
+    set_mtrr_prepare (&ctxt); /* flush cache and enable MAPEN */
+
+     /* the CCRs are not contiguous */
+    for(i=0; i<4; i++) setCx86(CX86_CCR0 + i, ccr_state[i]);
+    for(   ; i<7; i++) setCx86(CX86_CCR4 + i, ccr_state[i]);
+    for(i=0; i<8; i++)
+      cyrix_set_arr_up(i,
+        arr_state[i].base, arr_state[i].size, arr_state[i].type, FALSE);
+
+    set_mtrr_done (&ctxt); /* flush cache and disable MAPEN */
+}   /*  End Function cyrix_arr_init_secondary  */
+
+#endif
+
+/*
+ * On Cyrix 6x86(MX) and M II the ARR3 is special: it has connection
+ * with the SMM (System Management Mode) mode. So we need the following:
+ * Check whether SMI_LOCK (CCR3 bit 0) is set
+ *   if it is set, write a warning message: ARR3 cannot be changed!
+ *     (it cannot be changed until the next processor reset)
+ *   if it is reset, then we can change it, set all the needed bits:
+ *   - disable access to SMM memory through ARR3 range (CCR1 bit 7 reset)
+ *   - disable access to SMM memory (CCR1 bit 2 reset)
+ *   - disable SMM mode (CCR1 bit 1 reset)
+ *   - disable write protection of ARR3 (CCR6 bit 1 reset)
+ *   - (maybe) disable ARR3
+ * Just to be sure, we enable ARR usage by the processor (CCR5 bit 5 set)
+ */
+__initfunc(static void cyrix_arr_init(void))
+{
+    struct set_mtrr_context ctxt;
+    unsigned char ccr[7];
+    int ccrc[7] = { 0, 0, 0, 0, 0, 0, 0 };
+#ifdef __SMP__
+    int i;
+#endif
+
+    set_mtrr_prepare (&ctxt); /* flush cache and enable MAPEN */
+
+    /* Save all CCRs locally */
+    ccr[0] = getCx86 (CX86_CCR0);
+    ccr[1] = getCx86 (CX86_CCR1);
+    ccr[2] = getCx86 (CX86_CCR2);
+    ccr[3] = ctxt.ccr3;
+    ccr[4] = getCx86 (CX86_CCR4);
+    ccr[5] = getCx86 (CX86_CCR5);
+    ccr[6] = getCx86 (CX86_CCR6);
+
+    if (ccr[3] & 1)
+      ccrc[3] = 1;
+    else {
+      /* Disable SMM mode (bit 1), access to SMM memory (bit 2) and
+       * access to SMM memory through ARR3 (bit 7).
+       */
+/*
+      if (ccr[1] & 0x80) { ccr[1] &= 0x7f; ccrc[1] |= 0x80; }
+      if (ccr[1] & 0x04) { ccr[1] &= 0xfb; ccrc[1] |= 0x04; }
+      if (ccr[1] & 0x02) { ccr[1] &= 0xfd; ccrc[1] |= 0x02; }
+*/
+      if (ccr[6] & 0x02) {
+        ccr[6] &= 0xfd; ccrc[6] = 1; /* Disable write protection of ARR3. */
+        setCx86 (CX86_CCR6, ccr[6]);
+      }
+      /* Disable ARR3. */
+      /* cyrix_set_arr_up (3, 0, 0, 0, FALSE); */
+    }
+    /* If we changed CCR1 in memory, change it in the processor, too. */
+    if (ccrc[1]) setCx86 (CX86_CCR1, ccr[1]);
+
+    /* Enable ARR usage by the processor */
+    if (!(ccr[5] & 0x20)) {
+      ccr[5] |= 0x20; ccrc[5] = 1;
+      setCx86 (CX86_CCR5, ccr[5]);
+    }
+
+#ifdef __SMP__
+    for(i=0; i<7; i++) ccr_state[i] = ccr[i];
+    for(i=0; i<8; i++)
+      cyrix_get_arr(i,
+        &arr_state[i].base, &arr_state[i].size, &arr_state[i].type);
+#endif
+
+    set_mtrr_done (&ctxt); /* flush cache and disable MAPEN */
+
+    if ( ccrc[5] ) printk ("mtrr: ARR usage was not enabled, enabled manually\n");
+    if ( ccrc[3] ) printk ("mtrr: ARR3 cannot be changed\n");
+/*
+    if ( ccrc[1] & 0x80) printk ("mtrr: SMM memory access through ARR3 disabled\n");
+    if ( ccrc[1] & 0x04) printk ("mtrr: SMM memory access disabled\n");
+    if ( ccrc[1] & 0x02) printk ("mtrr: SMM mode disabled\n");
+*/
+    if ( ccrc[6] ) printk ("mtrr: ARR3 was write protected, unprotected\n");
+}   /*  End Function cyrix_arr_init  */
+
+__initfunc(static void mtrr_setup (void))
+{
+    printk ("mtrr: v%s Richard Gooch (rgooch@atnf.csiro.au)\n", MTRR_VERSION);
+    switch (boot_cpu_data.x86_vendor)
+    {
+      case X86_VENDOR_INTEL:
+	get_mtrr = intel_get_mtrr;
+	set_mtrr_up = intel_set_mtrr_up;
+	break;
+      case X86_VENDOR_CYRIX:
+	printk ("mtrr: Using Cyrix style ARRs\n");
+	get_mtrr = cyrix_get_arr;
+	set_mtrr_up = cyrix_set_arr_up;
+	get_free_region = cyrix_get_free_region;
+	break;
+      case X86_VENDOR_AMD:
+	get_mtrr = amd_get_mtrr;
+	set_mtrr_up = amd_set_mtrr_up;
+	break;
+    }
+}   /*  End Function mtrr_setup  */
+
+#ifdef __SMP__
+
 static volatile unsigned long smp_changes_mask __initdata = 0;
 static struct mtrr_state smp_mtrr_state __initdata = {0, 0};
 
 __initfunc(void mtrr_init_boot_cpu (void))
 {
-    printk("mtrr: v%s Richard Gooch (rgooch@atnf.csiro.au)\n", MTRR_VERSION);
-    if (boot_cpu_data.x86_capability & X86_FEATURE_MTRR)
+    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return;
+    mtrr_setup ();
+    switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_INTEL:
 	get_mtrr_state (&smp_mtrr_state);
-    }
-    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD && k6_has_ranges())
-    {
-	get_mtrr_state (&smp_mtrr_state);
+	break;
+      case X86_VENDOR_CYRIX:
+	cyrix_arr_init ();
+	break;
     }
 }   /*  End Function mtrr_init_boot_cpu  */
 
-__initfunc(void mtrr_init_secondary_cpu (void))
+__initfunc(static void intel_mtrr_init_secondary_cpu (void))
 {
     unsigned long mask, count;
     struct set_mtrr_context ctxt;
 
-    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return;
     /*  Note that this is not ideal, since the cache is only flushed/disabled
 	for this CPU while the MTRRs are changed, but changing this requires
 	more invasive changes to the way the kernel boots  */
@@ -1289,53 +1631,57 @@ __initfunc(void mtrr_init_secondary_cpu (void))
 	if (mask & 0x01) set_bit (count, &smp_changes_mask);
 	mask >>= 1;
     }
-}   /*  End Function mtrr_init_secondary_cpu  */
+}   /*  End Function intel_mtrr_init_secondary_cpu  */
 
-#endif  /*  __SMP__  */
-
-/*
- *	The extended memory handling is available on the K6-III and the
- *	K6-II stepping 8 and higher only.
- */
- 
-static int k6_has_ranges(void)
+__initfunc(void mtrr_init_secondary_cpu (void))
 {
-	if(boot_cpu_data.x86 !=5)
-		return 0;
-	if(boot_cpu_data.x86_model == 9 ||
-		(boot_cpu_data.x86_model == 8 && 
-		 boot_cpu_data.x86_mask >= 8))
-		 return 1;
-	return 0;
-}
+    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return;
+    switch (boot_cpu_data.x86_vendor)
+    {
+      case X86_VENDOR_INTEL:
+	intel_mtrr_init_secondary_cpu ();
+	break;
+      case X86_VENDOR_CYRIX:
+	/* This is _completely theoretical_!
+	 * I assume here that one day Cyrix will support Intel APIC.
+	 * In reality on non-Intel CPUs we won't even get to this routine.
+	 * Hopefully no one will plug two Cyrix processors in a dual P5 board.
+	 *  :-)
+	 */
+	cyrix_arr_init_secondary ();
+	break;
+      default:
+	printk ("mtrr: SMP support incomplete for this vendor\n");
+	break;
+    }
+}   /*  End Function mtrr_init_secondary_cpu  */
+#endif  /*  __SMP__  */
 
 __initfunc(int mtrr_init(void))
 {
-    if ( boot_cpu_data.x86_vendor == X86_VENDOR_AMD  && k6_has_ranges())
-    {
-#  ifdef CONFIG_PROC_FS
-	proc_register (&proc_root, &proc_root_mtrr);
-#  endif
-    	mtrr_flags|=MTRR_PRESENT|MTRR_WRCOMB;
-    	init_table();
-    	return 0;
-    }
-    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) )
-    	return 0;
-#  ifndef __SMP__
-    printk("mtrr: v%s Richard Gooch (rgooch@atnf.csiro.au)\n", MTRR_VERSION);
-#  endif
-
+    if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return 0;
 #  ifdef __SMP__
-    finalize_mtrr_state (&smp_mtrr_state);
-    mtrr_state_warn (smp_changes_mask);
-#  endif /* __SMP__ */
+    switch (boot_cpu_data.x86_vendor)
+    {
+      case X86_VENDOR_INTEL:
+	finalize_mtrr_state (&smp_mtrr_state);
+	mtrr_state_warn (smp_changes_mask);
+	break;
+    }
+#  else /* __SMP__ */
+    mtrr_setup ();
+    switch (boot_cpu_data.x86_vendor)
+    {
+      case X86_VENDOR_CYRIX:
+	cyrix_arr_init ();
+	break;
+    }
+#  endif  /*  !__SMP__  */
 
 #  ifdef CONFIG_PROC_FS
     proc_register (&proc_root, &proc_root_mtrr);
 #  endif
 
-    mtrr_flags|=MTRR_PRESENT;
     init_table ();
     return 0;
 }   /*  End Function mtrr_init  */

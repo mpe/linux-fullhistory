@@ -371,10 +371,19 @@ static inline int nfs_dentry_force_reval(struct dentry *dentry, int flags)
 
 	/*
 	 * If it's the last lookup in a series, we use a stricter
-	 * cache consistency check!
+	 * cache consistency check by looking at the parent mtime.
+	 *
+	 * If it's been modified in the last hour, be really strict.
+	 * (This still means that we can avoid doing unnecessary
+	 * work on directories like /usr/share/bin etc which basically
+	 * never change).
 	 */
-	if (!(flags & LOOKUP_CONTINUE))
-		timeout = 0;
+	if (!(flags & LOOKUP_CONTINUE)) {
+		long diff = CURRENT_TIME - dentry->d_parent->d_inode->i_mtime;
+
+		if (diff < 15*60)
+			timeout = 0;
+	}
 	
 	return time_after(jiffies,dentry->d_time + timeout);
 }
@@ -389,14 +398,10 @@ static inline int nfs_dentry_force_reval(struct dentry *dentry, int flags)
 static inline int nfs_neg_need_reval(struct dentry *dentry)
 {
 	unsigned long timeout = 30 * HZ;
-	struct inode *dir = dentry->d_parent->d_inode;
+	long diff = CURRENT_TIME - dentry->d_parent->d_inode->i_mtime;
 
-	if (dir) {
-		/* Modified in the last two minutes? */
-		long diff = CURRENT_TIME - dir->i_mtime;
-		if (diff < 2*60)
-			timeout = 1 * HZ;
-	}
+	if (diff < 5*60)
+		timeout = 1 * HZ;
 
 	return time_after(jiffies, dentry->d_time + timeout);
 }

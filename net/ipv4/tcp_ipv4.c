@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.174 1999/04/28 16:08:19 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.175 1999/05/08 21:09:54 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -819,7 +819,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	switch (type) {
 	case ICMP_SOURCE_QUENCH:
 #ifndef OLD_SOURCE_QUENCH /* This is deprecated */
-		tp->snd_ssthresh = max(tp->snd_cwnd >> 1, 2);
+		tp->snd_ssthresh = tcp_recalc_ssthresh(tp);
 		tp->snd_cwnd = tp->snd_ssthresh;
 		tp->snd_cwnd_cnt = 0;
 		tp->high_seq = tp->snd_nxt;

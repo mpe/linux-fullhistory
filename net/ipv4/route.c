@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.66 1999/04/22 10:07:35 davem Exp $
+ * Version:	$Id: route.c,v 1.67 1999/05/08 20:00:20 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1492,13 +1492,16 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 			return -ENODEV;	/* Wrong error code */
 
 		if (LOCAL_MCAST(daddr) || daddr == 0xFFFFFFFF) {
-			key.src = inet_select_addr(dev_out, 0, RT_SCOPE_LINK);
+			if (!key.src)
+				key.src = inet_select_addr(dev_out, 0, RT_SCOPE_LINK);
 			goto make_route;
 		}
-		if (MULTICAST(daddr))
-			key.src = inet_select_addr(dev_out, 0, key.scope);
-		else if (!daddr)
-			key.src = inet_select_addr(dev_out, 0, RT_SCOPE_HOST);
+		if (!key.src) {
+			if (MULTICAST(daddr))
+				key.src = inet_select_addr(dev_out, 0, key.scope);
+			else if (!daddr)
+				key.src = inet_select_addr(dev_out, 0, RT_SCOPE_HOST);
+		}
 	}
 
 	if (!key.dst) {

@@ -54,12 +54,10 @@ unset CONFIG_PCI CONFIG_ALPHA_EISA
 unset CONFIG_ALPHA_LCA CONFIG_ALPHA_APECS CONFIG_ALPHA_CIA
 unset CONFIG_ALPHA_T2 CONFIG_ALPHA_PYXIS CONFIG_ALPHA_POLARIS
 unset CONFIG_ALPHA_TSUNAMI CONFIG_ALPHA_MCPCIA
-unset CONFIG_ALPHA_NEED_ROUNDING_EMULATION
 
 if [ "$CONFIG_ALPHA_GENERIC" = "y" ]
 then
 	define_bool CONFIG_PCI y
-	define_bool CONFIG_ALPHA_NEED_ROUNDING_EMULATION y
 fi
 if [ "$CONFIG_ALPHA_BOOK1" = "y" ]
 then
@@ -108,7 +106,7 @@ then
 	then
 		define_bool CONFIG_ALPHA_EV5 y
 	else
-	define_bool CONFIG_ALPHA_EV4 y
+		define_bool CONFIG_ALPHA_EV4 y
 	fi
 	define_bool CONFIG_ALPHA_T2 y
 fi
@@ -140,11 +138,6 @@ fi
 if [ "$CONFIG_ALPHA_JENSEN" = "y" ]
 then
 	define_bool CONFIG_ALPHA_EV4 y
-fi
-if [ "$CONFIG_ALPHA_EV4" = "y" ]
-then
-	# EV45 and older do not support all rounding modes in hw:
-	define_bool CONFIG_ALPHA_NEED_ROUNDING_EMULATION y
 fi
 
 if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \

@@ -59,7 +59,17 @@ ifeq ($(CONFIG_USB_OHCI),y)
   endif
 endif
 
-
+ifeq ($(CONFIG_USB_OHCI_HCD),y)
+  ifeq ($(CONFIG_USB), y)
+    L_OBJS += ohci-hcd.o ohci-root-hub.o
+  else
+    ifeq ($(CONFIG_USB),m)
+      USBO_OBJS += ohci-hcd.o ohci-root-hub.o
+      M_OBJS += usb-ohci-hcd.o
+      MIX_OBJS += $(USBX_OBJS)
+    endif
+  endif
+endif
 include $(TOPDIR)/Rules.make
 
 keymap.o: keymap.c
@@ -73,3 +83,6 @@ usb-uhci.o: uhci.o uhci-debug.o $(USBX_OBJS)
 usb-ohci.o: ohci.o ohci-debug.o $(USBX_OBJS)
 	$(LD) $(LD_RFLAG) -r -o $@ ohci.o ohci-debug.o $(USBX_OBJS)
 
+usb-ohci-hcd.o: ohci-hcd.o ohci-root-hub.o $(USBX_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ ohci-hcd.o ohci-root-hub.o $(USBX_OBJS)
+       

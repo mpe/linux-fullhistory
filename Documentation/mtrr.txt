@@ -62,6 +62,23 @@ in other words the X server will manipulate /proc/mtrr using the
 ioctl() interface, so users won't have to do anything. If you use a
 commercial X server, lobby your vendor to add support for MTRRs.
 ===============================================================================
+Creating overlapping MTRRs:
+
+%echo "base=0xfb000000 size=0x1000000 type=write-combining" >/proc/mtrr
+%echo "base=0xfb000000 size=0x1000 type=uncachable" >/proc/mtrr
+
+And the results: cat /proc/mtrr
+reg00: base=0x00000000 (   0MB), size=  64MB: write-back, count=1
+reg01: base=0xfb000000 (4016MB), size=  16MB: write-combining, count=1
+reg02: base=0xfb000000 (4016MB), size=   4kB: uncachable, count=1
+
+Some cards (especially Voodoo Graphics boards) need this 4 kB area 
+excluded from the beginning of the region because it is used for
+registers.
+
+NOTE: You can only create type=uncachable region, if the first
+region that you created is type=write-combining.
+===============================================================================
 Removing MTRRs from the shell:
 % echo "disable=2" >! /proc/mtrr
 ===============================================================================

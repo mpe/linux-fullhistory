@@ -125,13 +125,16 @@ do_entArith(unsigned long summary, unsigned long write_mask,
 	    unsigned long a2, unsigned long a3, unsigned long a4,
 	    unsigned long a5, struct pt_regs regs)
 {
-	if ((summary & 1)) {
-		/*
-		 * Software-completion summary bit is set, so try to
-		 * emulate the instruction.
-		 */
-		if (alpha_fp_emul_imprecise(&regs, write_mask)) {
-			return;		/* emulation was successful */
+	if (summary & 1) {
+		/* Software-completion summary bit is set, so try to
+		   emulate the instruction.  */
+		if (implver() == IMPLVER_EV6) {
+			/* Whee!  EV6 has precice exceptions.  */
+			if (alpha_fp_emul(regs.pc - 4))
+				return;
+		} else {
+			if (alpha_fp_emul_imprecise(&regs, write_mask))
+				return;
 		}
 	}
 
@@ -141,7 +144,7 @@ do_entArith(unsigned long summary, unsigned long write_mask,
 		current->comm, regs.pc, summary, write_mask);
 #endif
 	die_if_kernel("Arithmetic fault", &regs, 0, 0);
-	force_sig(SIGFPE, current);
+	send_sig(SIGFPE, current, 1);
 	unlock_kernel();
 }
 
@@ -150,14 +153,17 @@ do_entIF(unsigned long type, unsigned long a1,
 	 unsigned long a2, unsigned long a3, unsigned long a4,
 	 unsigned long a5, struct pt_regs regs)
 {
-	lock_kernel();
 	die_if_kernel("Instruction fault", &regs, type, 0);
 	switch (type) {
 	      case 0: /* breakpoint */
 		if (ptrace_cancel_bpt(current)) {
 			regs.pc -= 4;	/* make pc point to former bpt */
 		}
-		force_sig(SIGTRAP, current);
+		send_sig(SIGTRAP, current, 1);
+		break;
+
+	      case 1: /* bugcheck */
+		send_sig(SIGTRAP, current, 1);
 		break;
 
 	      case 2: /* gentrap */
@@ -171,14 +177,13 @@ do_entIF(unsigned long type, unsigned long a1,
 		switch ((long) regs.r16) {
 		      case GEN_INTOVF: case GEN_INTDIV: case GEN_FLTOVF:
 		      case GEN_FLTDIV: case GEN_FLTUND: case GEN_FLTINV:
-		      case GEN_FLTINE:
-			force_sig(SIGFPE, current);
+		      case GEN_FLTINE: case GEN_ROPRAND:
+			send_sig(SIGFPE, current, 1);
 			break;
 
 		      case GEN_DECOVF:
 		      case GEN_DECDIV:
 		      case GEN_DECINV:
-		      case GEN_ROPRAND:
 		      case GEN_ASSERTERR:
 		      case GEN_NULPTRERR:
 		      case GEN_STKOVF:
@@ -193,42 +198,29 @@ do_entIF(unsigned long type, unsigned long a1,
 		      case GEN_SUBRNG5:
 		      case GEN_SUBRNG6:
 		      case GEN_SUBRNG7:
-			force_sig(SIGILL, current);
+			send_sig(SIGTRAP, current, 1);
 			break;
 		}
 		break;
 
-	      case 1: /* bugcheck */
 	      case 3: /* FEN fault */
-		force_sig(SIGILL, current);
+		send_sig(SIGILL, current, 1);
 		break;
 
 	      case 4: /* opDEC */
-#ifdef CONFIG_ALPHA_NEED_ROUNDING_EMULATION
-		{
-			unsigned int opcode;
-
-			/* get opcode of faulting instruction: */
-			get_user(opcode, (__u32*)(regs.pc - 4));
-			opcode >>= 26;
-			if (opcode == 0x16) {
-				/*
-				 * It's a FLTI instruction, emulate it
-				 * (we don't do no stinkin' VAX fp...)
-				 */
-				if (!alpha_fp_emul(regs.pc - 4))
-					force_sig(SIGFPE, current);
-				break;
-			}
+		if (implver() == IMPLVER_EV4) {
+			/* EV4 does not implement anything except normal
+			   rounding.  Everything else will come here as
+			   an illegal instruction.  Emulate them.  */
+			if (alpha_fp_emul(regs.pc - 4))
+				return;
 		}
-#endif
-		force_sig(SIGILL, current);
+		send_sig(SIGILL, current, 1);
 		break;
 
 	      default:
 		panic("do_entIF: unexpected instruction-fault type");
 	}
-	unlock_kernel();
 }
 
 /* There is an ifdef in the PALcode in MILO that enables a 
@@ -877,14 +869,14 @@ do_entUnaUser(void * va, unsigned long opcode,
 give_sigsegv:
 	regs->pc -= 4;  /* make pc point to faulting insn */
 	lock_kernel();
-	force_sig(SIGSEGV, current);
+	send_sig(SIGSEGV, current, 1);
 	unlock_kernel();
 	return;
 
 give_sigbus:
 	regs->pc -= 4;
 	lock_kernel();
-	force_sig(SIGBUS, current);
+	send_sig(SIGBUS, current, 1);
 	unlock_kernel();
 	return;
 }

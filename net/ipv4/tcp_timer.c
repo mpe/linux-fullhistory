@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.60 1999/04/28 16:08:21 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.62 1999/05/08 21:09:55 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -317,48 +317,47 @@ static void tcp_twkill(unsigned long data)
 void tcp_tw_schedule(struct tcp_tw_bucket *tw)
 {
 	int slot = (tcp_tw_death_row_slot - 1) & (TCP_TWKILL_SLOTS - 1);
+	struct tcp_tw_bucket **tpp = &tcp_tw_death_row[slot];
+
+	if((tw->next_death = *tpp) != NULL)
+		(*tpp)->pprev_death = &tw->next_death;
+	*tpp = tw;
+	tw->pprev_death = tpp;
 
 	tw->death_slot = slot;
-	tw->next_death = tcp_tw_death_row[slot];
-	tcp_tw_death_row[slot] = tw;
+
 	tcp_inc_slow_timer(TCP_SLT_TWKILL);
 }
 
 /* Happens rarely if at all, no care about scalability here. */
 void tcp_tw_reschedule(struct tcp_tw_bucket *tw)
 {
-	struct tcp_tw_bucket *walk;
-	int slot = tw->death_slot;
+	struct tcp_tw_bucket **tpp;
+	int slot;
 
-	walk = tcp_tw_death_row[slot];
-	if(walk == tw) {
-		tcp_tw_death_row[slot] = tw->next_death;
-	} else {
-		while(walk->next_death != tw)
-			walk = walk->next_death;
-		walk->next_death = tw->next_death;
-	}
+	if(tw->next_death)
+		tw->next_death->pprev_death = tw->pprev_death;
+	*tw->pprev_death = tw->next_death;
+	tw->pprev_death = NULL;
+
 	slot = (tcp_tw_death_row_slot - 1) & (TCP_TWKILL_SLOTS - 1);
+	tpp = &tcp_tw_death_row[slot];
+	if((tw->next_death = *tpp) != NULL)
+		(*tpp)->pprev_death = &tw->next_death;
+	*tpp = tw;
+	tw->pprev_death = tpp;
+
 	tw->death_slot = slot;
-	tw->next_death = tcp_tw_death_row[slot];
-	tcp_tw_death_row[slot] = tw;
 	/* Timer was incremented when we first entered the table. */
 }
 
 /* This is for handling early-kills of TIME_WAIT sockets. */
 void tcp_tw_deschedule(struct tcp_tw_bucket *tw)
 {
-	struct tcp_tw_bucket *walk;
-	int slot = tw->death_slot;
-
-	walk = tcp_tw_death_row[slot];
-	if(walk == tw) {
-		tcp_tw_death_row[slot] = tw->next_death;
-	} else {
-		while(walk->next_death != tw)
-			walk = walk->next_death;
-		walk->next_death = tw->next_death;
-	}
+	if(tw->next_death)
+		tw->next_death->pprev_death = tw->pprev_death;
+	*tw->pprev_death = tw->next_death;
+	tw->pprev_death = NULL;
 	tcp_dec_slow_timer(TCP_SLT_TWKILL);
 }
 
@@ -478,7 +477,7 @@ void tcp_retransmit_timer(unsigned long data)
 		 * means it must be an accurate representation of our current
 		 * sending rate _and_ the snd_wnd.
 		 */
-		tp->snd_ssthresh = max(min(tp->snd_wnd, tp->snd_cwnd) >> 1, 2);
+		tp->snd_ssthresh = tcp_recalc_ssthresh(tp);
 		tp->snd_cwnd_cnt = 0;
 		tp->snd_cwnd = 1;
 	}

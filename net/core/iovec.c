@@ -59,8 +59,15 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 		goto out;
 	m->msg_iov=iov;
 
-	for (err = 0, ct = 0; ct < m->msg_iovlen; ct++)
+	for (err = 0, ct = 0; ct < m->msg_iovlen; ct++) {
 		err += iov[ct].iov_len;
+		/* Goal is not to verify user data, but to prevent returning
+		   negative value, which is interpreted as errno.
+		   Overflow is still possible, but it is harmless.
+		 */
+		if (err < 0)
+			return -EMSGSIZE;
+	}
 out:
 	return err;
 }

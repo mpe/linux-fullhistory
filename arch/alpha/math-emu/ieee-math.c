@@ -22,6 +22,7 @@
  * functions are used on exceptional numbers only (well, assuming you
  * don't turn on the "trap on inexact"...).
  */
+#include <linux/sched.h>
 #include "ieee-math.h"
 
 #define STICKY_S	0x20000000	/* both in longword 0 of fraction */
@@ -1339,4 +1340,42 @@ ieee_DIVT (int f, unsigned long a, unsigned long b, unsigned long *c)
 	normalize(&op_c);
 	op_c.e -= 9;		/* remove excess exp from original shift */
 	return round_t_ieee(f, &op_c, c);
+}
+
+/*
+ * Sqrt a = b, where a and b are ieee s-floating numbers.  "f"
+ * contains the rounding mode etc.
+ */
+unsigned long
+ieee_SQRTS (int f, unsigned long a, unsigned long *b)
+{
+	fpclass_t a_type;
+	EXTENDED op_a, op_b;
+
+	*b = IEEE_QNaN;
+	a_type = extend_ieee(a, &op_a, SINGLE);
+	if (op_a.s == 0) {
+		/* FIXME -- handle positive denormals.  */
+		send_sig(SIGFPE, current, 1);
+	}
+	return FPCR_INV;
+}
+
+/*
+ * Sqrt a = b, where a and b are ieee t-floating numbers.  "f"
+ * contains the rounding mode etc.
+ */
+unsigned long
+ieee_SQRTT (int f, unsigned long a, unsigned long *b)
+{
+	fpclass_t a_type;
+	EXTENDED op_a, op_b;
+
+	*b = IEEE_QNaN;
+	a_type = extend_ieee(a, &op_a, DOUBLE);
+	if (op_a.s == 0) {
+		/* FIXME -- handle positive denormals.  */
+		send_sig(SIGFPE, current, 1);
+	}
+	return FPCR_INV;
 }

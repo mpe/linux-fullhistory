@@ -9,7 +9,7 @@
 static __inline__ void wait_ms(unsigned int ms)
 {
         current->state = TASK_UNINTERRUPTIBLE;
-        schedule_timeout(1 + ms / 10);
+        schedule_timeout(1 + ms * HZ / 1000);
 }
 
 

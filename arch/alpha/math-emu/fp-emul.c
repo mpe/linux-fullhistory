@@ -13,6 +13,7 @@
 #define OPC_INTL	0x11
 #define OPC_INTS	0x12
 #define OPC_INTM	0x13
+#define OPC_FLTC	0x14
 #define OPC_FLTV	0x15
 #define OPC_FLTI	0x16
 #define OPC_FLTL	0x17
@@ -21,33 +22,37 @@
 
 #define	OPC_JSR		0x1a
 
-/*
- * "Base" function codes for the FLTI-class instructions.  These
- * instructions all have opcode 0x16.  Note that in most cases these
- * actually correspond to the "chopped" form of the instruction.  Not
- * to worry---we extract the qualifier bits separately and deal with
- * them separately.  Notice that base function code 0x2c is used for
- * both CVTTS and CVTST.  The other bits in the function code are used
- * to distinguish the two.
- */
-#define FLTI_FUNC_ADDS			0x000
-#define FLTI_FUNC_ADDT			0x020
-#define FLTI_FUNC_CMPTEQ		0x025
-#define FLTI_FUNC_CMPTLT		0x026
-#define FLTI_FUNC_CMPTLE		0x027
-#define FLTI_FUNC_CMPTUN		0x024
-#define FLTI_FUNC_CVTTS_or_CVTST	0x02c
-#define FLTI_FUNC_CVTTQ			0x02f
-#define FLTI_FUNC_CVTQS			0x03c
-#define FLTI_FUNC_CVTQT			0x03e
-#define FLTI_FUNC_DIVS			0x003
-#define FLTI_FUNC_DIVT			0x023
-#define FLTI_FUNC_MULS			0x002
-#define FLTI_FUNC_MULT			0x022
-#define FLTI_FUNC_SUBS			0x001
-#define FLTI_FUNC_SUBT			0x021
+#define OP_FUN(OP,FUN)	((OP << 26) | (FUN << 5))
 
-#define FLTI_FUNC_CVTQL			0x030	/* opcode 0x17 */
+/*
+ * "Base" function codes for the FLTI-class instructions.
+ * Note that in most cases these actually correspond to the "chopped"
+ * form of the instruction.  Not to worry---we extract the qualifier
+ * bits separately and deal with them separately.  Notice that base
+ * function code 0x2c is used for both CVTTS and CVTST.  The other bits
+ * in the function code are used to distinguish the two.
+ */
+#define FLTI_FUNC_ADDS			OP_FUN(OPC_FLTI, 0x000)
+#define FLTI_FUNC_ADDT			OP_FUN(OPC_FLTI, 0x020)
+#define FLTI_FUNC_CMPTEQ		OP_FUN(OPC_FLTI, 0x025)
+#define FLTI_FUNC_CMPTLT		OP_FUN(OPC_FLTI, 0x026)
+#define FLTI_FUNC_CMPTLE		OP_FUN(OPC_FLTI, 0x027)
+#define FLTI_FUNC_CMPTUN		OP_FUN(OPC_FLTI, 0x024)
+#define FLTI_FUNC_CVTTS_or_CVTST	OP_FUN(OPC_FLTI, 0x02c)
+#define FLTI_FUNC_CVTTQ			OP_FUN(OPC_FLTI, 0x02f)
+#define FLTI_FUNC_CVTQS			OP_FUN(OPC_FLTI, 0x03c)
+#define FLTI_FUNC_CVTQT			OP_FUN(OPC_FLTI, 0x03e)
+#define FLTI_FUNC_DIVS			OP_FUN(OPC_FLTI, 0x003)
+#define FLTI_FUNC_DIVT			OP_FUN(OPC_FLTI, 0x023)
+#define FLTI_FUNC_MULS			OP_FUN(OPC_FLTI, 0x002)
+#define FLTI_FUNC_MULT			OP_FUN(OPC_FLTI, 0x022)
+#define FLTI_FUNC_SUBS			OP_FUN(OPC_FLTI, 0x001)
+#define FLTI_FUNC_SUBT			OP_FUN(OPC_FLTI, 0x021)
+
+#define FLTC_FUNC_SQRTS			OP_FUN(OPC_FLTC, 0x00B)
+#define FLTC_FUNC_SQRTT			OP_FUN(OPC_FLTC, 0x02B)
+
+#define FLTL_FUNC_CVTQL			OP_FUN(OPC_FLTL, 0x030)
 
 #define MISC_TRAPB	0x0000
 #define MISC_EXCB	0x0400
@@ -101,7 +106,7 @@ void cleanup_module(void)
 long
 alpha_fp_emul (unsigned long pc)
 {
-	unsigned long opcode, fa, fb, fc, func, mode;
+	unsigned long op_fun, fa, fb, fc, func, mode;
 	unsigned long fpcw = current->tss.flags;
 	unsigned long va, vb, vc, res, fpcr;
 	__u32 insn;
@@ -110,10 +115,11 @@ alpha_fp_emul (unsigned long pc)
 
 	get_user(insn, (__u32*)pc);
 	fc     = (insn >>  0) &  0x1f;	/* destination register */
-	func   = (insn >>  5) & 0x7ff;
 	fb     = (insn >> 16) &  0x1f;
 	fa     = (insn >> 21) &  0x1f;
-	opcode = insn >> 26;
+	func   = (insn >>  5) & 0x7ff;
+	mode   = (insn >>  5) & 0xc0;
+	op_fun = insn & OP_FUN(0x3f, 0x3f);
 	
 	va = alpha_read_fp_reg(fa);
 	vb = alpha_read_fp_reg(fb);
@@ -123,7 +129,6 @@ alpha_fp_emul (unsigned long pc)
 	 * Try the operation in software.  First, obtain the rounding
 	 * mode...
 	 */
-	mode = func & 0xc0;
 	if (mode == 0xc0) {
 	    /* dynamic---get rounding mode from fpcr: */
 	    mode = ((fpcr & FPCR_DYN_MASK) >> FPCR_DYN_SHIFT) << ROUND_SHIFT;
@@ -135,8 +140,7 @@ alpha_fp_emul (unsigned long pc)
 		something_is_wrong();
 	}
 
-	/* least 6 bits contain operation code: */
-	switch (func & 0x3f) {
+	switch (op_fun) {
 	      case FLTI_FUNC_CMPTEQ:
 		res = ieee_CMPTEQ(va, vb, &vc);
 		break;
@@ -153,7 +157,7 @@ alpha_fp_emul (unsigned long pc)
 		res = ieee_CMPTUN(va, vb, &vc);
 		break;
 
-	      case FLTI_FUNC_CVTQL:
+	      case FLTL_FUNC_CVTQL:
 		/*
 		 * Notice: We can get here only due to an integer
 		 * overflow.  Such overflows are reported as invalid
@@ -222,6 +226,14 @@ alpha_fp_emul (unsigned long pc)
 		res = ieee_CVTTQ(mode, vb, &vc);
 		break;
 
+	      case FLTC_FUNC_SQRTS:
+		res = ieee_SQRTS(mode, vb, &vc);
+		break;
+
+	      case FLTC_FUNC_SQRTT:
+		res = ieee_SQRTT(mode, vb, &vc);
+		break;
+
 	      default:
 		printk("alpha_fp_emul: unexpected function code %#lx at %#lx\n",
 		       func & 0x3f, pc);
@@ -247,7 +259,7 @@ alpha_fp_emul (unsigned long pc)
 
 		/* Update hardware control register */
 		fpcr &= (~FPCR_MASK | FPCR_DYN_MASK);
-		fpcr |= ieee_swcr_to_fpcr(fpcw | (~fpcw&IEEE_STATUS_MASK)>>16);
+		fpcr |= ieee_swcr_to_fpcr(fpcw);
 		wrfpcr(fpcr);
 
 		/* Do we generate a signal?  */
@@ -319,6 +331,7 @@ alpha_fp_emul_imprecise (struct pt_regs *regs, unsigned long write_mask)
 			write_mask &= ~(1UL << rc);
 			break;
 
+		      case OPC_FLTC:
 		      case OPC_FLTV:
 		      case OPC_FLTI:
 		      case OPC_FLTL:
@@ -326,13 +339,11 @@ alpha_fp_emul_imprecise (struct pt_regs *regs, unsigned long write_mask)
 			break;
 		}
 		if (!write_mask) {
-			if ((opcode == OPC_FLTI || opcode == OPC_FLTL)
-			    && alpha_fp_emul(trigger_pc))
-			{
-			    /* re-execute insns in trap-shadow: */
-			    regs->pc = trigger_pc + 4;
-			    MOD_DEC_USE_COUNT;
-			    return 1;
+			if (alpha_fp_emul(trigger_pc)) {
+				/* re-execute insns in trap-shadow: */
+				regs->pc = trigger_pc + 4;
+				MOD_DEC_USE_COUNT;
+				return 1;
 			}
 			break;
 		}

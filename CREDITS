@@ -256,6 +256,10 @@ W: http://math-www.uni-paderborn.de/~axel/
 D: Configuration help text support
 D: Linux CD and Support Giveaway List
 
+N: Zoltan Boszormenyi
+E: zboszor@mol.hu
+D: MTRR emulation with Cyrix style ARR registers
+
 N: John Boyd
 E: boyd@cis.ohio-state.edu
 D: Co-author of wd7000 SCSI driver

@@ -97,12 +97,15 @@ extern void wripir(unsigned long);
 
 extern void halt(void) __attribute__((noreturn));
 
-#define switch_to(prev,next) do {					\
-	current = next;							\
-	alpha_switch_to((unsigned long) &current->tss - IDENT_ADDR);	\
+#define switch_to(prev,next,last)			\
+do {							\
+	unsigned long pcbb;				\
+	current = (next);				\
+	pcbb = virt_to_phys(&current->tss);		\
+	(last) = alpha_switch_to(pcbb, (prev));		\
 } while (0)
 
-extern void alpha_switch_to(unsigned long pctxp);
+extern struct task_struct* alpha_switch_to(unsigned long, struct task_struct*);
 
 #define mb() \
 __asm__ __volatile__("mb": : :"memory")
@@ -119,6 +122,34 @@ __asm__ __volatile__ ("call_pal %0 #imb" : : "i" (PAL_imb) : "memory")
 #define draina() \
 __asm__ __volatile__ ("call_pal %0 #draina" : : "i" (PAL_draina) : "memory")
 
+enum implver_enum {
+	IMPLVER_EV4,
+	IMPLVER_EV5,
+	IMPLVER_EV6
+};
+
+#ifdef CONFIG_ALPHA_GENERIC
+#define implver()				\
+({ unsigned long __implver;			\
+   __asm__ ("implver %0" : "=r"(__implver));	\
+   (enum implver_enum) __implver; })
+#else
+/* Try to eliminate some dead code.  */
+#ifdef CONFIG_ALPHA_EV4
+#define implver() IMPLVER_EV4
+#endif
+#ifdef CONFIG_ALPHA_EV5
+#define implver() IMPLVER_EV5
+#endif
+#ifdef CONFIG_ALPHA_EV6
+#define implver() IMPLVER_EV6
+#endif
+#endif
+
+#define amask(mask)						\
+({ unsigned long __amask, __input = (mask);			\
+   __asm__ ("amask %1,%0" : "=r"(__amask) : "rI"(__input));	\
+   __amask; })
 
 static inline unsigned long 
 wrperfmon(unsigned long perf_fun, unsigned long arg)

@@ -14,8 +14,15 @@
 #define STATUS   0x1
 #define DATA     0
 
+/* Private data for PC low-level driver. */
+struct parport_pc_private {
+	/* Contents of CTR. */
+	unsigned char ctr;
+};
+
 extern int parport_pc_epp_clear_timeout(struct parport *pb);
 
+extern volatile unsigned char parport_pc_ctr;
 
 extern __inline__ void parport_pc_write_epp(struct parport *p, unsigned char d)
 {
@@ -62,19 +69,24 @@ extern __inline__ unsigned char parport_pc_read_data(struct parport *p)
 
 extern __inline__ void parport_pc_write_control(struct parport *p, unsigned char d)
 {
+	struct parport_pc_private *priv = p->private_data;
+	priv->ctr = d;/* update soft copy */
 	outb(d, p->base+CONTROL);
 }
 
 extern __inline__ unsigned char parport_pc_read_control(struct parport *p)
 {
-	return inb(p->base+CONTROL);
+	struct parport_pc_private *priv = p->private_data;
+	return priv->ctr;
 }
 
 extern __inline__ unsigned char parport_pc_frob_control(struct parport *p, unsigned char mask,  unsigned char val)
 {
-	unsigned char old = inb(p->base+CONTROL);
-	outb(((old & ~mask) ^ val), p->base+CONTROL);
-	return old;
+	struct parport_pc_private *priv = p->private_data;
+	unsigned char ctr = priv->ctr;
+	ctr = (ctr & ~mask) ^ val;
+	outb (ctr, p->base+CONTROL);
+	return priv->ctr = ctr; /* update soft copy */
 }
 
 extern __inline__ void parport_pc_write_status(struct parport *p, unsigned char d)

@@ -57,7 +57,10 @@ int uhci_init(void);
 #ifdef CONFIG_USB_OHCI
 int ohci_init(void);
 #endif
-
+#ifdef CONFIG_USB_OHCI_HCD
+int ohci_hcd_init(void);
+#endif
+     
 static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,
 			    const char * buf, size_t count, loff_t *ppos)
 {
@@ -611,6 +614,9 @@ __initfunc(int chr_dev_init(void))
 #endif
 #ifdef CONFIG_USB_OHCI
 	ohci_init();
+#endif
+#ifdef CONFIG_USB_OHCI_HCD
+        ohci_hcd_init(); 
 #endif
 #endif
 #if defined (CONFIG_FB)

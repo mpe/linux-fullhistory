@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.75 1999/03/22 05:02:45 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.76 1999/05/08 05:54:55 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -322,7 +322,7 @@ static int unix_release_sock (unix_socket *sk)
 	{
 		if (sk->type==SOCK_STREAM && unix_our_peer(sk, skpair))
 		{
-			skpair->state_change(skpair);
+			skpair->data_ready(skpair,0);
 			skpair->shutdown=SHUTDOWN_MASK;	/* No more writes*/
 		}
 		unix_unlock(skpair); /* It may now die */
@@ -1409,7 +1409,10 @@ static int unix_shutdown(struct socket *sock, int mode)
 			if (mode&SEND_SHUTDOWN)
 				peer_mode |= RCV_SHUTDOWN;
 			other->shutdown |= peer_mode;
-			other->state_change(other);
+			if (peer_mode&RCV_SHUTDOWN)
+				other->data_ready(other,0);
+			else
+				other->state_change(other);
 		}
 	}
 	return 0;

@@ -92,7 +92,7 @@ EXPORT_SYMBOL(__global_cli);
 EXPORT_SYMBOL(__global_sti);
 EXPORT_SYMBOL(__global_save_flags);
 EXPORT_SYMBOL(__global_restore_flags);
-EXPORT_SYMBOL(mtrr_hook);
+EXPORT_SYMBOL(smp_call_function);
 #endif
 
 #ifdef CONFIG_MCA

@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.65 1999/03/21 05:22:49 davem Exp $
+ * Version:	$Id: udp.c,v 1.66 1999/05/08 20:00:25 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -955,7 +955,7 @@ csum_copy_err:
 	 * Error for blocking case is chosen to masquerade
    	 * as some normal condition.
 	 */
-	return (msg->msg_flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;	
+	return (flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;	
 #endif
 }
 

@@ -48,5 +48,7 @@ extern unsigned long ieee_DIVS (int rm, unsigned long a, unsigned long b,
 				unsigned long *c);
 extern unsigned long ieee_DIVT (int rm, unsigned long a, unsigned long b,
 				unsigned long *c);
+extern unsigned long ieee_SQRTS (int rm, unsigned long a, unsigned long *b);
+extern unsigned long ieee_SQRTT (int rm, unsigned long a, unsigned long *b);
 
 #endif /* __ieee_math_h__ */

@@ -672,6 +672,7 @@ void schedule_tail (struct task_struct *prev)
 {
 	__schedule_tail(prev);
 }
+
 /*
  *  'schedule()' is the scheduler function. It's a very simple and nice
  * scheduler: it's not perfect, but certainly works for most things.
@@ -820,7 +821,7 @@ still_running_back:
 	kstat.context_swtch++;
 	get_mmu_context(next);
 	switch_to(prev, next, prev);
-	schedule_tail(prev);
+	__schedule_tail(prev);
 
 same_process:
   

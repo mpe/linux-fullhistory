@@ -277,6 +277,7 @@ __initfunc(static void check_cx686_cpuid(void))
 	    ((Cx86_dir0_msb == 5) || (Cx86_dir0_msb == 3))) {
 		int eax, dummy;
 		unsigned char ccr3, ccr4;
+		__u32 old_cap;
 
 		cli();
 		ccr3 = getCx86(CX86_CCR3);
@@ -288,8 +289,11 @@ __initfunc(static void check_cx686_cpuid(void))
 
 		/* we have up to level 1 available on the Cx6x86(L|MX) */
 		boot_cpu_data.cpuid_level = 1;
+		/*  Need to preserve some externally computed capabilities  */
+		old_cap = boot_cpu_data.x86_capability & X86_FEATURE_MTRR;
 		cpuid(1, &eax, &dummy, &dummy,
 		      &boot_cpu_data.x86_capability);
+		boot_cpu_data.x86_capability |= old_cap;
 
 		boot_cpu_data.x86 = (eax >> 8) & 15;
 		/*
@@ -341,6 +345,24 @@ __initfunc(static void check_cyrix_cpu(void))
 	    && test_cyrix_52div()) {
 
 		strcpy(boot_cpu_data.x86_vendor_id, "CyrixInstead");
+	}
+}
+ 
+/*
+ * In setup.c's cyrix_model() we have set the boot_cpu_data.coma_bug
+ * on certain processors that we know contain this bug and now we
+ * enable the workaround for it.
+ */
+
+__initfunc(static void check_cyrix_coma(void))
+{
+	if (boot_cpu_data.coma_bug) {
+		unsigned char ccr1;
+		cli();
+		ccr1 = getCx86 (CX86_CCR1);
+		setCx86 (CX86_CCR1, ccr1 | 0x10);
+		sti();
+		printk("Cyrix processor with \"coma bug\" found, workaround enabled\n");
 	}
 }
  
@@ -402,5 +424,6 @@ __initfunc(static void check_bugs(void))
 	check_popad();
 	check_amd_k6();
 	check_pentium_f00f();
+	check_cyrix_coma();
 	system_utsname.machine[1] = '0' + boot_cpu_data.x86;
 }

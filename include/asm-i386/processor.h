@@ -35,6 +35,7 @@ struct cpuinfo_x86 {
 				    call  */
 	int	fdiv_bug;
 	int	f00f_bug;
+	int	coma_bug;
 	unsigned long loops_per_sec;
 	unsigned long *pgd_quick;
 	unsigned long *pte_quick;
@@ -119,12 +120,17 @@ extern inline void cpuid(int op, int *eax, int *ebx, int *ecx, int *edx)
 /*
  *      Cyrix CPU configuration register indexes
  */
+#define CX86_CCR0 0xc0
+#define CX86_CCR1 0xc1
 #define CX86_CCR2 0xc2
 #define CX86_CCR3 0xc3
 #define CX86_CCR4 0xe8
 #define CX86_CCR5 0xe9
+#define CX86_CCR6 0xea
 #define CX86_DIR0 0xfe
 #define CX86_DIR1 0xff
+#define CX86_ARR_BASE 0xc4
+#define CX86_RCR_BASE 0xdc
 
 /*
  *      Cyrix CPU indexed register access macros

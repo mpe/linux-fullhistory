@@ -1131,6 +1131,7 @@ void __init mount_root(void)
 			sb = get_empty_super(); /* "can't fail" */
 			sb->s_dev = get_unnamed_dev();
 			sb->s_flags = root_mountflags;
+			sema_init(&sb->s_vfs_rename_sem,1);
 			vfsmnt = add_vfsmnt(sb, "/dev/root", "/");
 			if (vfsmnt) {
 				if (nfs_root_mount(sb) >= 0) {

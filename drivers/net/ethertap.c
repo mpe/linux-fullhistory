@@ -98,6 +98,7 @@ __initfunc(int ethertap_probe(struct device *dev))
 
 	ether_setup(dev);
 
+	dev->hard_header_len = 16;
 	dev->tx_queue_len = 0;
 	dev->flags|=IFF_NOARP;
 	tap_map[dev->base_addr]=dev;

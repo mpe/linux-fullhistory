@@ -48,25 +48,22 @@ int parport_wait_peripheral(struct parport *port, unsigned char mask,
 int parport_ieee1284_nibble_mode_ok(struct parport *port, unsigned char mode) 
 {
 	/* make sure it's a valid state, set nStrobe & nAutoFeed high */
-	parport_write_control(port, (parport_read_control(port) \
-		& ~1 ) & ~2);
+	parport_frob_control (port, (1|2), 0);
 	udelay(1);
 	parport_write_data(port, mode);
 	udelay(400);
 	/* nSelectIn high, nAutoFd low */
-	parport_write_control(port, (parport_read_control(port) & ~8) | 2);
+	parport_frob_control(port, (2|8), 2);
 	if (parport_wait_peripheral(port, 0x78, 0x38)) {
-		parport_write_control(port, 
-				      (parport_read_control(port) & ~2) | 8);
+		parport_frob_control(port, (2|8), 8);
 		return 0; 
 	}
 	/* nStrobe low */
-	parport_write_control(port, parport_read_control(port) | 1);
+	parport_frob_control (port, 1, 1);
 	udelay(1);				     /* Strobe wait */
 	/* nStrobe high, nAutoFeed low, last step before transferring 
 	 *  reverse data */
-	parport_write_control(port, (parport_read_control(port) \
-		& ~1) & ~2);
+	parport_frob_control (port, (1|2), 0);
 	udelay(1);
 	/* Data available? */
 	parport_wait_peripheral (port, PARPORT_STATUS_ACK, PARPORT_STATUS_ACK);

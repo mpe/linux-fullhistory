@@ -16,6 +16,10 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   if [ ! "$CONFIG_USB" = "n" ]; then
     bool 'UHCI (intel PIIX4 and others) support?' CONFIG_USB_UHCI
     bool 'OHCI (compaq and some others) support?' CONFIG_USB_OHCI
+    bool 'OHCI-HCD (other OHCI opt. Virt. Root Hub) support?' CONFIG_USB_OHCI_HCD
+    if [ "$CONFIG_USB_OHCI_HCD" = "y" ]; then
+       bool 'OHCI-HCD Virtual Root Hub' CONFIG_USB_OHCI_VROOTHUB
+    fi
 
     bool 'USB mouse support' CONFIG_USB_MOUSE
     bool 'USB keyboard support' CONFIG_USB_KBD

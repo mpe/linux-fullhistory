@@ -167,19 +167,6 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 
 #else /* __SMP__ */
 
-/* ipi_msg_flush_tb is owned by the holder of the global kernel lock. */
-struct ipi_msg_flush_tb_struct {
-	volatile unsigned int flush_tb_mask;
-	union {
-		struct mm_struct *	flush_mm;
-		struct vm_area_struct *	flush_vma;
-	} p;
-	unsigned long flush_addr;
-	unsigned long flush_end;
-};
-
-extern struct ipi_msg_flush_tb_struct ipi_msg_flush_tb;
-
 extern void flush_tlb_all(void);
 extern void flush_tlb_mm(struct mm_struct *);
 extern void flush_tlb_page(struct vm_area_struct *, unsigned long);

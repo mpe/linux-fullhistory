@@ -322,7 +322,7 @@ BUILD_16_IRQS(0xc) BUILD_16_IRQS(0xd)
 BUILD_SMP_INTERRUPT(reschedule_interrupt)
 BUILD_SMP_INTERRUPT(invalidate_interrupt)
 BUILD_SMP_INTERRUPT(stop_cpu_interrupt)
-BUILD_SMP_INTERRUPT(mtrr_interrupt)
+BUILD_SMP_INTERRUPT(call_function_interrupt)
 BUILD_SMP_INTERRUPT(spurious_interrupt)
 
 /*
@@ -1094,8 +1094,8 @@ __initfunc(void init_IRQ(void))
 	/* self generated IPI for local APIC timer */
 	set_intr_gate(LOCAL_TIMER_VECTOR, apic_timer_interrupt);
 
-	/* IPI for MTRR control */
-	set_intr_gate(MTRR_CHANGE_VECTOR, mtrr_interrupt);
+	/* IPI for generic function call */
+	set_intr_gate(CALL_FUNCTION_VECTOR, call_function_interrupt);
 
 	/* IPI vector for APIC spurious interrupts */
 	set_intr_gate(SPURIOUS_APIC_VECTOR, spurious_interrupt);

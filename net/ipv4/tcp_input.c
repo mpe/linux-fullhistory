@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.163 1999/04/28 16:08:05 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.164 1999/05/08 21:09:52 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -497,8 +497,7 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 		if (tp->high_seq == 0 || after(ack, tp->high_seq)) {
 			tp->dup_acks++;
 			if ((tp->fackets_out > 3) || (tp->dup_acks == 3)) {
-                                tp->snd_ssthresh =
-					max(min(tp->snd_wnd, tp->snd_cwnd) >> 1, 2);
+                                tp->snd_ssthresh = tcp_recalc_ssthresh(tp);
                                 tp->snd_cwnd = (tp->snd_ssthresh + 3);
 				tp->high_seq = tp->snd_nxt;
 				if(!tp->fackets_out)

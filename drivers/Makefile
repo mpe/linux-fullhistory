@@ -47,7 +47,11 @@ endif
 ifeq ($(CONFIG_USB),y)
 SUB_DIRS += usb
 MOD_SUB_DIRS += usb
-endif
+else
+  ifeq ($(CONFIG_USB),m)
+  MOD_SUB_DIRS += usb
+  endif
+endif 
 
 # If CONFIG_SCSI is set, the core of SCSI support will be added to the kernel,
 # but some of the low-level things may also be modules.

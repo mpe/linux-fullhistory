@@ -81,6 +81,18 @@ ieee_swcr_to_fpcr(unsigned long sw)
 	return fp;
 }
 
+static inline unsigned long
+ieee_fpcr_to_swcr(unsigned long fp)
+{
+	unsigned long sw;
+	sw = (fp >> 35) & IEEE_STATUS_MASK;
+	sw |= (~fp >> 48) & (IEEE_TRAP_ENABLE_INV
+			     | IEEE_TRAP_ENABLE_DZE
+			     | IEEE_TRAP_ENABLE_OVF);
+	sw |= (~fp >> 57) & (IEEE_TRAP_ENABLE_UNF | IEEE_TRAP_ENABLE_INE);
+	return sw;
+}
+
 #ifdef __KERNEL__
 
 /* The following two functions don't need trapb/excb instructions

@@ -44,6 +44,8 @@
 
 #include "irq.h"
 
+#define JIFFIE_TIMEOUT 100
+
 extern void update_one_process( struct task_struct *p,
 				unsigned long ticks, unsigned long user,
 				unsigned long system, int cpu);
@@ -1651,15 +1653,84 @@ void smp_send_stop(void)
 	send_IPI_allbutself(STOP_CPU_VECTOR);
 }
 
+/* Structure and data for smp_call_function(). This is designed to minimise
+ * static memory requirements. It also looks cleaner.
+ */
+struct smp_call_function_struct {
+	void (*func) (void *info);
+	void *info;
+	atomic_t unstarted_count;
+	atomic_t unfinished_count;
+	int wait;
+};
+static volatile struct smp_call_function_struct *smp_call_function_data = NULL;
+
 /*
- * this function sends an 'reload MTRR state' IPI to all other CPUs
- * in the system. it goes straight through, completion processing
- * is done on the mttr.c level.
+ * this function sends a 'generic call function' IPI to all other CPUs
+ * in the system.
  */
 
-void smp_send_mtrr(void)
+int smp_call_function (void (*func) (void *info), void *info, int retry,
+		       int wait)
+/*  [SUMMARY] Run a function on all other CPUs.
+    <func> The function to run. This must be fast and non-blocking.
+    <info> An arbitrary pointer to pass to the function.
+    <retry> If true, keep retrying until ready.
+    <wait> If true, wait until function has completed on other CPUs.
+    [RETURNS] 0 on success, else a negative status code. Does not return until
+    remote CPUs are nearly ready to execute <<func>> or are or have executed.
+*/
 {
-	send_IPI_allbutself(MTRR_CHANGE_VECTOR);
+	unsigned long timeout;
+	struct smp_call_function_struct data;
+	static spinlock_t lock = SPIN_LOCK_UNLOCKED;
+
+	if (retry) {
+		while (1) {
+			if (smp_call_function_data) {
+				schedule ();  /*  Give a mate a go  */
+				continue;
+			}
+			spin_lock (&lock);
+			if (smp_call_function_data) {
+				spin_unlock (&lock);  /*  Bad luck  */
+				continue;
+			}
+			/*  Mine, all mine!  */
+			break;
+		}
+	}
+	else {
+		if (smp_call_function_data) return -EBUSY;
+		spin_lock (&lock);
+		if (smp_call_function_data) {
+			spin_unlock (&lock);
+			return -EBUSY;
+		}
+	}
+	smp_call_function_data = &data;
+	spin_unlock (&lock);
+	data.func = func;
+	data.info = info;
+	atomic_set (&data.unstarted_count, smp_num_cpus - 1);
+	data.wait = wait;
+	if (wait) atomic_set (&data.unfinished_count, smp_num_cpus - 1);
+	/*  Send a message to all other CPUs and wait for them to respond  */
+	send_IPI_allbutself (CALL_FUNCTION_VECTOR);
+	/*  Wait for response  */
+	timeout = jiffies + JIFFIE_TIMEOUT;
+	while ( (atomic_read (&data.unstarted_count) > 0) &&
+		time_before (jiffies, timeout) )
+		barrier ();
+	if (atomic_read (&data.unstarted_count) > 0) {
+		smp_call_function_data = NULL;
+		return -ETIMEDOUT;
+	}
+	if (wait)
+		while (atomic_read (&data.unfinished_count) > 0)
+			barrier ();
+	smp_call_function_data = NULL;
+	return 0;
 }
 
 /*
@@ -1798,12 +1869,19 @@ asmlinkage void smp_stop_cpu_interrupt(void)
 	stop_this_cpu();
 }
 
-void (*mtrr_hook) (void) = NULL;
-
-asmlinkage void smp_mtrr_interrupt(void)
+asmlinkage void smp_call_function_interrupt(void)
 {
-	ack_APIC_irq();
-	if (mtrr_hook) (*mtrr_hook)();
+	void (*func) (void *info) = smp_call_function_data->func;
+	void *info = smp_call_function_data->info;
+	int wait = smp_call_function_data->wait;
+
+	ack_APIC_irq ();
+	/*  Notify initiating CPU that I've grabbed the data and am about to
+	    execute the function  */
+	atomic_dec (&smp_call_function_data->unstarted_count);
+	/*  At this point the structure may be out of scope unless wait==1  */
+	(*func) (info);
+	if (wait) atomic_dec (&smp_call_function_data->unfinished_count);
 }
 
 /*

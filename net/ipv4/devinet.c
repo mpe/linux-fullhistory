@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.27 1999/03/25 10:04:06 davem Exp $
+ *	Version: $Id: devinet.c,v 1.28 1999/05/08 20:00:16 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -712,6 +712,7 @@ static int inetdev_event(struct notifier_block *this, unsigned long event, void 
 				ifa->ifa_mask = inet_make_mask(8);
 				ifa->ifa_dev = in_dev;
 				ifa->ifa_scope = RT_SCOPE_HOST;
+				memcpy(ifa->ifa_label, dev->name, IFNAMSIZ);
 				inet_insert_ifa(in_dev, ifa);
 			}
 		}
