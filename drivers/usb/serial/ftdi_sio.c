@@ -1287,10 +1287,14 @@ static void create_sysfs_attrs(struct usb_serial *serial)
 	priv = usb_get_serial_port_data(serial->port[0]);
 	udev = serial->dev;
 	
-	if (priv->chip_type == FT232BM) {
-		dbg("sysfs attributes for FT232BM");
+	/* XXX I've no idea if the original SIO supports the event_char
+	 * sysfs parameter, so I'm playing it safe.  */
+	if (priv->chip_type != SIO) {
+		dbg("sysfs attributes for %s", ftdi_chip_name[priv->chip_type]);
 		device_create_file(&udev->dev, &dev_attr_event_char);
-		device_create_file(&udev->dev, &dev_attr_latency_timer);
+		if (priv->chip_type == FT232BM || priv->chip_type == FT2232C) {
+			device_create_file(&udev->dev, &dev_attr_latency_timer);
+		}
 	}
 }
 
@@ -1304,9 +1308,12 @@ static void remove_sysfs_attrs(struct usb_serial *serial)
 	priv = usb_get_serial_port_data(serial->port[0]);
 	udev = serial->dev;
 	
-	if (priv->chip_type == FT232BM) {
+	/* XXX see create_sysfs_attrs */
+	if (priv->chip_type != SIO) {
 		device_remove_file(&udev->dev, &dev_attr_event_char);
-		device_remove_file(&udev->dev, &dev_attr_latency_timer);
+		if (priv->chip_type == FT232BM || priv->chip_type == FT2232C) {
+			device_remove_file(&udev->dev, &dev_attr_latency_timer);
+		}
 	}
 	
 }
@@ -1408,6 +1415,8 @@ static int ftdi_8U232AM_startup (struct usb_serial *serial)
 	priv->chip_type = FT8U232AM;
 	priv->baud_base = 48000000 / 2; /* Would be / 16, but FTDI supports 0.125, 0.25 and 0.5 divisor fractions! */
 	
+	create_sysfs_attrs(serial);
+	
 	return (0);
 } /* ftdi_8U232AM_startup */
 
@@ -1459,6 +1468,8 @@ static int ftdi_FT2232C_startup (struct usb_serial *serial)
 	}
 	priv->baud_base = 48000000 / 2; /* Would be / 16, but FT2232C supports multiple of 0.125 divisor fractions! */
 	
+	create_sysfs_attrs(serial);
+
 	return (0);
 } /* ftdi_FT2232C_startup */
 
