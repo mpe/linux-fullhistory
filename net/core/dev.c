@@ -1327,7 +1327,7 @@ static int sprintf_wireless_stats(char *buffer, struct net_device *dev)
 			       stats->qual.level,
 			       stats->qual.updated & 2 ? '.' : ' ',
 			       stats->qual.noise,
-			       stats->qual.updated & 3 ? '.' : ' ',
+			       stats->qual.updated & 4 ? '.' : ' ',
 			       stats->discard.nwid,
 			       stats->discard.code,
 			       stats->discard.misc);

@@ -2319,8 +2319,8 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 #ifdef COMPAT_HAS_NEW_WAITQ
 	d->snd_waitq = d->rcv_waitq + m;
 	for (j = 0; j < m; j++) {
-		init_waitqueue_head(&d->rcv_waitq[m]);
-		init_waitqueue_head(&d->snd_waitq[m]);
+		init_waitqueue_head(&d->rcv_waitq[j]);
+		init_waitqueue_head(&d->snd_waitq[j]);
 	}
 #else
 	memset((char *) d->rcv_waitq, 0, sizeof(struct wait_queue *) * m);

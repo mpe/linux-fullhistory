@@ -941,7 +941,7 @@ static __u16 ohci_td_bytes_done(struct ohci_td *td)
  * interrupt.  (It's really a pointer to the TD).
  */
 static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
-	usb_device_irq handler, int period, void *dev_id, void **handle)
+	usb_device_irq handler, int period, void *dev_id, void **handle, long bustime)
 {
 	struct ohci_device *dev = usb_to_ohci(usb);
 	struct ohci_td *td;

@@ -39,11 +39,11 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_SKTR),y)
-  L_OBJS += sktr.o
+ifeq ($(CONFIG_TMS380TR),y)
+  L_OBJS += tms380tr.o
 else
-  ifeq ($(CONFIG_SKTR),m)
-    M_OBJS += sktr.o
+  ifeq ($(CONFIG_TMS380TR),m)
+    M_OBJS += tms380tr.o
   endif
 endif
 

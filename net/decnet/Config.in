@@ -1,6 +1,8 @@
 #
 # DECnet configuration
 #
-bool 'DECnet: SIOCGIFCONF support' CONFIG_DECNET_SIOCGIFCONF 
-bool 'DECnet: router support (VERY VERY EXPERIMENTAL)' CONFIG_DECNET_ROUTER
-bool 'DECnet: raw socket support' CONFIG_DECNET_RAW
+bool '  DECnet: SIOCGIFCONF support' CONFIG_DECNET_SIOCGIFCONF 
+if [ "$CONFIG_EXPERIMENTAL" ]; then
+   bool '  DECnet: router support (EXPERIMENTAL)' CONFIG_DECNET_ROUTER
+fi
+bool '  DECnet: raw socket support' CONFIG_DECNET_RAW

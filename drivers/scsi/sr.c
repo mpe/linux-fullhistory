@@ -861,7 +861,6 @@ void get_sectorsize(int i)
 	unsigned char *buffer;
 	int the_result, retries;
 	Scsi_Cmnd *SCpnt;
-	unsigned long flags;
 
 	buffer = (unsigned char *) scsi_malloc(512);
 	SCpnt = scsi_allocate_device(NULL, scsi_CDs[i].device, 1);
@@ -1031,7 +1030,6 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 {
 	Scsi_Cmnd *SCpnt;
 	Scsi_Device *device = scsi_CDs[MINOR(cdi->dev)].device;
-	unsigned long flags;
 	int stat;
 
 	/* get the device */

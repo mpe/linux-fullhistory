@@ -222,7 +222,7 @@ int
 nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 {
 	struct inode * inode = filp->f_dentry->d_inode;
-	int	status;
+	int	status = 0;
 
 	dprintk("NFS: nfs_lock(f=%4x/%ld, t=%x, fl=%x, r=%ld:%ld)\n",
 			inode->i_dev, inode->i_ino,
@@ -237,8 +237,11 @@ nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 		return -ENOLCK;
 
 	/* Fake OK code if mounted without NLM support */
-	if (NFS_SERVER(inode)->flags & NFS_MOUNT_NONLM)
-		return 0;
+	if (NFS_SERVER(inode)->flags & NFS_MOUNT_NONLM) {
+		if (cmd == F_GETLK)
+			status = LOCK_USE_CLNT;
+		goto out_ok;
+	}
 
 	/*
 	 * No BSD flocks over NFS allowed.
@@ -260,11 +263,14 @@ nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 
 	if ((status = nlmclnt_proc(inode, cmd, fl)) < 0)
 		return status;
+	else
+		status = 0;
 
 	/*
 	 * Make sure we re-validate anything we've got cached.
 	 * This makes locking act as a cache coherency point.
 	 */
+ out_ok:
 	NFS_CACHEINV(inode);
-	return 0;
+	return status;
 }

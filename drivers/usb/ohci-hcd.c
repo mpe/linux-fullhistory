@@ -179,7 +179,7 @@ static int sohci_iso_handler(void * ohci_in, struct usb_ohci_ed *ed, void * data
 	return 0;
 }
                                                      
-static int sohci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle)
+static int sohci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle, long bustime)
 {
 	struct ohci * ohci = usb_dev->bus->hcpriv;
 	struct ohci_device * dev = usb_to_ohci(usb_dev);

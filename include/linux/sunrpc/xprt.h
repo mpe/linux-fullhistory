@@ -17,7 +17,7 @@
 /*
  * Maximum number of iov's we use.
  */
-#define MAX_IOVEC	8
+#define MAX_IOVEC	10
 
 /*
  * The transport code maintains an estimate on the maximum number of out-
@@ -44,7 +44,7 @@
 #define RPC_MAXCWND		(RPC_MAXCONG * RPC_CWNDSCALE)
 #define RPC_INITCWND		RPC_CWNDSCALE
 #define RPCXPRT_CONGESTED(xprt) \
-	((xprt)->cong >= ((xprt)->nocong? RPC_MAXCWND : (xprt)->cwnd))
+	((xprt)->cong >= (xprt)->cwnd)
 
 /* Default timeout values */
 #define RPC_MAX_UDP_TIMEOUT	(6*HZ)
@@ -124,10 +124,8 @@ struct rpc_rqst {
 struct rpc_xprt {
 	struct rpc_xprt *	link;		/* list of all clients */
 	struct rpc_xprt *	rx_pending;	/* receive pending list */
-	struct rpc_xprt *	tx_pending;	/* transmit pending list */
 	
 	int 			rx_pending_flag;/* are we on the rcv pending list ? */
-	int 			tx_pending_flag;/* are we on the xmit pending list ? */
 
 	struct file *		file;		/* VFS layer */
 	struct socket *		sock;		/* BSD socket layer */
@@ -170,16 +168,16 @@ struct rpc_xprt {
 	u32			tcp_copied;	/* copied to request */
 
 	/*
-	 * TCP send stuff
+	 * Send stuff
 	 */
-	struct rpc_iov		snd_buf;	/* send buffer */
 	struct rpc_task *	snd_task;	/* Task blocked in send */
-	u32			snd_sent;	/* Bytes we have sent */
 
 
 	void			(*old_data_ready)(struct sock *, int);
 	void			(*old_state_change)(struct sock *);
 	void			(*old_write_space)(struct sock *);
+
+	wait_queue_head_t	cong_wait;
 };
 #define tcp_reclen		tcp_recm.header[0]
 #define tcp_xid			tcp_recm.header[1]
@@ -202,6 +200,9 @@ void			xprt_receive(struct rpc_task *);
 int			xprt_adjust_timeout(struct rpc_timeout *);
 void			xprt_release(struct rpc_task *);
 void			xprt_reconnect(struct rpc_task *);
+int			xprt_clear_backlog(struct rpc_xprt *);
+
+int			xprt_tcp_pending(void);
 
 #endif /* __KERNEL__*/
 

@@ -19,21 +19,27 @@ choice 'Processor family' \
 	 486/Cx486		CONFIG_M486	\
 	 586/K5/5x86/6x86	CONFIG_M586	\
 	 Pentium/K6/TSC		CONFIG_M586TSC	\
-	 PPro/6x86MX		CONFIG_M686" PPro
+	 PPro/6x86MX		CONFIG_M686 \
+	 Athlon                 CONFIG_MK7" PPro
 #
 # Define implied options from the CPU selection here
 #
 if [ "$CONFIG_M386" != "y" ]; then
-  define_bool CONFIG_X86_WP_WORKS_OK y
-  define_bool CONFIG_X86_INVLPG y
-  define_bool CONFIG_X86_BSWAP y
-  define_bool CONFIG_X86_POPAD_OK y
+   define_bool CONFIG_X86_WP_WORKS_OK y
+   define_bool CONFIG_X86_INVLPG y
+   define_bool CONFIG_X86_BSWAP y
+   define_bool CONFIG_X86_POPAD_OK y
 fi
 if [ "$CONFIG_M686" = "y" -o "$CONFIG_M586TSC" = "y" ]; then
-  define_bool CONFIG_X86_TSC y
+   define_bool CONFIG_X86_TSC y
 fi
 if [ "$CONFIG_M686" = "y" ]; then
-  define_bool CONFIG_X86_GOOD_APIC y
+   define_bool CONFIG_X86_GOOD_APIC y
+fi
+if [ "$CONFIG_MK7" = "y" ]; then
+   define_bool CONFIG_X86_TSC y
+   define_bool CONFIG_X86_GOOD_APIC y
+   define_bool CONFIG_X86_USE_3DNOW y
 fi
 
 choice 'Maximum Physical Memory' \
@@ -49,8 +55,8 @@ mainmenu_option next_comment
 comment 'Loadable module support'
 bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
-  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
-  bool 'Kernel module loader' CONFIG_KMOD
+   bool '  Set version information on all module symbols' CONFIG_MODVERSIONS
+   bool '  Kernel module loader' CONFIG_KMOD
 fi
 endmenu
 
@@ -61,28 +67,29 @@ bool 'BIGMEM support' CONFIG_BIGMEM
 bool 'Networking support' CONFIG_NET
 bool 'SGI Visual Workstation support' CONFIG_VISWS
 if [ "$CONFIG_VISWS" = "y" ]; then
-  define_bool CONFIG_X86_VISWS_APIC y
-  define_bool CONFIG_X86_LOCAL_APIC y
-  define_bool CONFIG_PCI y
+   define_bool CONFIG_X86_VISWS_APIC y
+   define_bool CONFIG_X86_LOCAL_APIC y
+   define_bool CONFIG_PCI y
 else
-  if [ "$CONFIG_SMP" = "y" ]; then
-    define_bool CONFIG_X86_IO_APIC y
-    define_bool CONFIG_X86_LOCAL_APIC y
-  fi
-  bool 'PCI support' CONFIG_PCI
-  if [ "$CONFIG_PCI" = "y" ]; then
-    choice 'PCI access mode' \
+   if [ "$CONFIG_SMP" = "y" ]; then
+      define_bool CONFIG_X86_IO_APIC y
+      define_bool CONFIG_X86_LOCAL_APIC y
+   fi
+   bool 'PCI support' CONFIG_PCI
+   if [ "$CONFIG_PCI" = "y" ]; then
+      choice '  PCI access mode' \
 	"BIOS		CONFIG_PCI_GOBIOS	\
 	 Direct		CONFIG_PCI_GODIRECT	\
 	 Any		CONFIG_PCI_GOANY"	Any
-    if [ "$CONFIG_PCI_GOBIOS" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
-      define_bool CONFIG_PCI_BIOS y
-    fi
-    if [ "$CONFIG_PCI_GODIRECT" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
-      define_bool CONFIG_PCI_DIRECT y
-    fi
-  fi
-  bool 'MCA support' CONFIG_MCA
+      if [ "$CONFIG_PCI_GOBIOS" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
+         define_bool CONFIG_PCI_BIOS y
+      fi
+      if [ "$CONFIG_PCI_GODIRECT" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
+         define_bool CONFIG_PCI_DIRECT y
+      fi
+   fi
+   bool 'MCA support' CONFIG_MCA
+
 fi
 
 source drivers/pcmcia/Config.in
@@ -96,17 +103,17 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
 source drivers/parport/Config.in
 
-tristate 'Advanced Power Management BIOS support' CONFIG_APM
+bool 'Advanced Power Management BIOS support' CONFIG_APM
 if [ "$CONFIG_APM" != "n" ]; then
-  bool '   Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND
-  bool '   Enable PM at boot time' CONFIG_APM_DO_ENABLE
-  bool '   Make CPU Idle calls when idle' CONFIG_APM_CPU_IDLE
-  bool '   Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
-  bool '   Power off on shutdown' CONFIG_APM_POWER_OFF
-  bool '   Ignore multiple suspend' CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
-  bool '   Ignore multiple suspend/resume cycles' CONFIG_APM_IGNORE_SUSPEND_BOUNCE
-  bool '   RTC stores time in GMT' CONFIG_APM_RTC_IS_GMT
-  bool '   Allow interrupts during APM BIOS calls' CONFIG_APM_ALLOW_INTS
+   bool '  Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND
+   bool '  Enable PM at boot time' CONFIG_APM_DO_ENABLE
+   bool '  Make CPU Idle calls when idle' CONFIG_APM_CPU_IDLE
+   bool '  Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
+   bool '  Power off on shutdown' CONFIG_APM_POWER_OFF
+   bool '  Ignore multiple suspend' CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
+   bool '  Ignore multiple suspend/resume cycles' CONFIG_APM_IGNORE_SUSPEND_BOUNCE
+   bool '  RTC stores time in GMT' CONFIG_APM_RTC_IS_GMT
+   bool '  Allow interrupts during APM BIOS calls' CONFIG_APM_ALLOW_INTS
 fi
 
 endmenu
@@ -118,7 +125,7 @@ source drivers/pnp/Config.in
 source drivers/block/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
-  source net/Config.in
+   source net/Config.in
 fi
 
 mainmenu_option next_comment
@@ -127,22 +134,22 @@ comment 'SCSI support'
 tristate 'SCSI support' CONFIG_SCSI
 
 if [ "$CONFIG_SCSI" != "n" ]; then
-  source drivers/scsi/Config.in
+   source drivers/scsi/Config.in
 fi
 endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
-  mainmenu_option next_comment
-  comment 'Network device support'
+   mainmenu_option next_comment
+   comment 'Network device support'
 
-  bool 'Network device support' CONFIG_NETDEVICES
-  if [ "$CONFIG_NETDEVICES" = "y" ]; then
-    source drivers/net/Config.in
-    if [ "$CONFIG_ATM" = "y" ]; then
-      source drivers/atm/Config.in
-    fi
-  fi
-  endmenu
+   bool 'Network device support' CONFIG_NETDEVICES
+   if [ "$CONFIG_NETDEVICES" = "y" ]; then
+      source drivers/net/Config.in
+      if [ "$CONFIG_ATM" = "y" ]; then
+         source drivers/atm/Config.in
+      fi
+   fi
+   endmenu
 fi
 
 source net/ax25/Config.in
@@ -152,10 +159,10 @@ source net/irda/Config.in
 mainmenu_option next_comment
 comment 'ISDN subsystem'
 if [ "$CONFIG_NET" != "n" ]; then
-  tristate 'ISDN support' CONFIG_ISDN
-  if [ "$CONFIG_ISDN" != "n" ]; then
-    source drivers/isdn/Config.in
-  fi
+   tristate 'ISDN support' CONFIG_ISDN
+   if [ "$CONFIG_ISDN" != "n" ]; then
+      source drivers/isdn/Config.in
+   fi
 fi
 endmenu
 
@@ -164,7 +171,7 @@ comment 'Old CD-ROM drivers (not SCSI, not IDE)'
 
 bool 'Support non-SCSI/IDE/ATAPI CDROM drives' CONFIG_CD_NO_IDESCSI
 if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
-  source drivers/cdrom/Config.in
+   source drivers/cdrom/Config.in
 fi
 endmenu
 
@@ -177,15 +184,15 @@ source drivers/misc/Config.in
 source fs/Config.in
 
 if [ "$CONFIG_VT" = "y" ]; then
-  mainmenu_option next_comment
-  comment 'Console drivers'
-  bool 'VGA text console' CONFIG_VGA_CONSOLE
-  bool 'Video mode selection support' CONFIG_VIDEO_SELECT
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    tristate 'MDA text console (dual-headed) (EXPERIMENTAL)' CONFIG_MDA_CONSOLE
-    source drivers/video/Config.in
-  fi
-  endmenu
+   mainmenu_option next_comment
+   comment 'Console drivers'
+   bool 'VGA text console' CONFIG_VGA_CONSOLE
+   bool 'Video mode selection support' CONFIG_VIDEO_SELECT
+   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'MDA text console (dual-headed) (EXPERIMENTAL)' CONFIG_MDA_CONSOLE
+      source drivers/video/Config.in
+   fi
+   endmenu
 fi
 
 mainmenu_option next_comment
@@ -193,7 +200,7 @@ comment 'Sound'
 
 tristate 'Sound card support' CONFIG_SOUND
 if [ "$CONFIG_SOUND" != "n" ]; then
-  source drivers/sound/Config.in
+   source drivers/sound/Config.in
 fi
 endmenu
 
@@ -203,4 +210,3 @@ comment 'Kernel hacking'
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 endmenu
-

@@ -43,3 +43,5 @@ EXPORT_SYMBOL(pcibios_find_device);
 /* Quirk info */
 
 EXPORT_SYMBOL(isa_dma_bridge_buggy);
+EXPORT_SYMBOL(pci_pci_problems);
+

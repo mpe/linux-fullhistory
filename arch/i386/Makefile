@@ -57,6 +57,12 @@ CFLAGS += $(shell if $(CC) -march=i686 -S -o /dev/null -xc /dev/null >/dev/null 
 AFLAGS := $(AFLAGS) -DCPU=686
 endif
 
+ifdef CONFIG_MK7
+CFLAGS := $(CFLAGS) -DCPU=686 -march=pentiumpro -mpentiumpro -malign-functions=4 -fschedule-insns2 -mwide-multiply -fexpensive-optimizations
+CFLAGS += $(shell if $(CC) -march=i686 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i686"; fi)
+AFLAGS := $(AFLAGS) -DCPU=686
+endif
+
 HEAD := arch/i386/kernel/head.o arch/i386/kernel/init_task.o
 
 SUBDIRS := $(SUBDIRS) arch/i386/kernel arch/i386/mm arch/i386/lib
@@ -83,7 +89,7 @@ arch/i386/vmlinux.lds: arch/i386/vmlinux.lds.S FORCE
 
 FORCE: ;
 
-.PHONY: zImage bzImge compressed zlilo bzlilo zdisk bzdisk install \
+.PHONY: zImage bzImage compressed zlilo bzlilo zdisk bzdisk install \
 		clean archclean archmrproper archdep
 
 zImage: vmlinux

@@ -803,6 +803,13 @@ rpc_killall_tasks(struct rpc_clnt *clnt)
 
 static DECLARE_MUTEX_LOCKED(rpciod_running);
 
+static inline int
+rpciod_task_pending(void)
+{
+	return schedq.task != NULL || xprt_tcp_pending();
+}
+
+
 /*
  * This is the rpciod kernel thread
  */
@@ -849,11 +856,10 @@ rpciod(void *ptr)
 		dprintk("RPC: rpciod running checking dispatch\n");
 		rpciod_tcp_dispatcher();
 
-		if (!schedq.task) {
+		if (!rpciod_task_pending()) {
 			dprintk("RPC: rpciod back to sleep\n");
-			interruptible_sleep_on(&rpciod_idle);
+			wait_event_interruptible(rpciod_idle, rpciod_task_pending());
 			dprintk("RPC: switch to rpciod\n");
-			rpciod_tcp_dispatcher();
 			rounds = 0;
 		}
 		restore_flags(oldflags);

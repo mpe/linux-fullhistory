@@ -101,3 +101,14 @@ ADS Channel Surfer
 Maxi TV Video PCI 2 card
 ------------------------
 ...
+
+
+Image World ConferenceTV
+------------------------
+Doesn't work:
+	- autodetect. Use card=3D20
+	- sound mute. Use the line-in volume of your soundcard
+	- radio tuner.  Since the card doesn't have an antenna, it is quite
+          understandable ;)  However, you can hear some stations if you
+	  ``ln -s /dev/bttv0 /dev/radio''
+	 =20

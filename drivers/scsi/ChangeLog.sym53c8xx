@@ -1,3 +1,14 @@
+Sun Oct  3  19:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.5f
+	- Change the way the driver checks the PCI clock frequency, so 
+	  that overclocked PCI BUS up to 48 MHz will not be refused.
+	  The more the BUS is overclocked, the less the driver will 
+	  guarantee that its measure of the SCSI clock is correct.
+	- Backport some minor improvements of SCRIPTS from the sym_hipd 
+	  driver.
+	- Backport the code rewrite of the START QUEUE dequeuing (on 
+	  bad scsi status received) from the sym_hipd driver.
+
 Sat Sep 11  11:00 1999 Gerard Roudier (groudier@club-internet.fr)
 	* version sym53c8xx-1.5e
 	- New linux-2.3.13 __setup scheme support added.

@@ -166,6 +166,9 @@ struct uhci_td {
 	struct uhci_qh *qh;		/* QH this TD is a part of (ignored for Isochronous) */
 	int flags;			/* Remove, etc */
 	int isoc_td_number;		/* 0-relative number within a usb_isoc_desc. */
+	int pipetype;			/* Control, Bulk, Interrupt, or Isoc */
+	int bandwidth_alloc;		/* in microsecs; used only for Interrupt
+					 * transfers, to return its bandwidth */
 } __attribute__((aligned(16)));
 
 

@@ -15,6 +15,11 @@
  *				made static the ipx ops. Removed the hack
  *				ipx methods interface. Dropped AF_SPX - its
  *				the wrong abstraction.
+ *	Eduardo Trapani	:	Added a check for the return value of
+ *				ipx_if_offset that crashed sock_alloc_send_skb.
+ *				Added spx_datagram_poll() so that select()
+ *				works now on SPX sockets.  Added updating
+ *				of the alloc count to follow rmt_seq.
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -36,6 +41,7 @@
 #include <asm/uaccess.h>
 #include <linux/uio.h>
 #include <linux/unistd.h>
+#include <linux/poll.h>
 
 static struct proto_ops *ipx_operations;
 static struct proto_ops spx_ops;
@@ -48,6 +54,45 @@ static void spx_watchdog(unsigned long data);
 void spx_rcv(struct sock *sk, int bytes);
 
 extern void ipx_remove_socket(struct sock *sk);
+
+/* Datagram poll:	the same code as datagram_poll() in net/core
+			but the right spx buffers are looked at and
+			there is no question on the type of the socket
+			*/
+static unsigned int spx_datagram_poll(struct file * file, struct socket *sock, poll_table *wait)
+{
+	struct sock *sk = sock->sk;
+	struct spx_opt *pdata = &sk->tp_pinfo.af_spx;
+	unsigned int mask;
+
+	poll_wait(file, sk->sleep, wait);
+	mask = 0;
+
+	/* exceptional events? */
+	if (sk->err || !skb_queue_empty(&sk->error_queue))
+		mask |= POLLERR;
+	if (sk->shutdown & RCV_SHUTDOWN)
+		mask |= POLLHUP;
+
+	/* readable? */
+	if (!skb_queue_empty(&pdata->rcv_queue))
+		mask |= POLLIN | POLLRDNORM;
+
+	/* Need to check for termination and startup */
+	if (sk->state==TCP_CLOSE)
+		mask |= POLLHUP;
+	/* connection hasn't started yet? */
+	if (sk->state == TCP_SYN_SENT)
+		return mask;
+
+	/* writable? */
+	if (sock_writeable(sk))
+		mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
+	else
+		sk->socket->flags |= SO_NOSPACE;
+
+	return mask;
+}
 
 /* Create the SPX specific data */
 static int spx_sock_init(struct sock *sk)
@@ -390,6 +435,9 @@ static int spx_transmit(struct sock *sk, struct sk_buff *skb, int type, int len)
 		int offset  = ipx_if_offset(pdata->dest_addr.net);
         	int size    = offset + sizeof(struct ipxspxhdr);
 
+        	if (offset < 0) /* ENETUNREACH */
+        		return(-ENETUNREACH);
+
 		save_flags(flags);
 		cli();
         	skb = sock_alloc_send_skb(sk, size, 1, 0, &err);
@@ -649,6 +697,7 @@ void spx_rcv(struct sock *sk, int bytes)
 			{
 				pdata->rmt_seq = ntohs(ipxh->spx.sequence);
 				pdata->rmt_ack = ntohs(ipxh->spx.ackseq);
+				pdata->alloc   = pdata->rmt_seq + 3;
 				if(pdata->rmt_ack > 0 || pdata->rmt_ack == 0)
 					spx_retransmit_chk(pdata,pdata->rmt_ack, ACK);
 
@@ -842,7 +891,7 @@ static struct proto_ops SOCKOPS_WRAPPED(spx_ops) = {
         sock_no_socketpair,
         spx_accept,
 	spx_getname,
-        datagram_poll,  /* this does seqpacket too */
+        spx_datagram_poll,
 	spx_ioctl,
         spx_listen,
         sock_no_shutdown,

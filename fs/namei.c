@@ -857,7 +857,7 @@ asmlinkage long sys_mknod(const char * filename, int mode, dev_t dev)
 
 	lock_kernel();
 	error = -EPERM;
-	if (S_ISDIR(mode) || (!S_ISFIFO(mode) && !capable(CAP_SYS_ADMIN)))
+	if (S_ISDIR(mode) || (!S_ISFIFO(mode) && !capable(CAP_MKNOD)))
 		goto out;
 	tmp = getname(filename);
 	error = PTR_ERR(tmp);

@@ -9,7 +9,7 @@ bool 'Token Ring driver support' CONFIG_TR
 if [ "$CONFIG_TR" = "y" ]; then
    tristate '  IBM Tropic chipset based adapter support' CONFIG_IBMTR
    tristate '  IBM Olympic chipset PCI adapter support' CONFIG_IBMOL
-   tristate '  SysKonnect adapter support' CONFIG_SKTR
+   tristate '  Generic TMS380 Token Ring ISA/PCI adapter support' CONFIG_TMS380TR
 fi
 
 endmenu

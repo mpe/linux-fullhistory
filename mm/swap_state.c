@@ -13,6 +13,7 @@
 #include <linux/swapctl.h>
 #include <linux/init.h>
 #include <linux/pagemap.h>
+#include <linux/smp_lock.h>
 
 #include <asm/pgtable.h>
 
@@ -234,7 +235,9 @@ void __delete_from_swap_cache(struct page *page)
 		   page_address(page), page_count(page), entry);
 #endif
 	remove_from_swap_cache (page);
+	lock_kernel();
 	swap_free (entry);
+	unlock_kernel();
 }
 
 static void delete_from_swap_cache_nolock(struct page *page)

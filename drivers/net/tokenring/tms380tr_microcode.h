@@ -8,20 +8,26 @@
  * waranty expressed or implied about its fitness for any purpose.
  */
 
-/* sktr_firmware.h: SysKonnect TokenRing driver firmware dump for Linux.
+/* tms380tr_microcode.h: TI TMS380 Token Ring driver COMMprocessor microcode
  *
  * Notes:
- *  - Loaded from sktr_reset_adapter upon adapter reset.
+ *  - Loaded from tms380tr_reset_adapter upon adapter reset.
  *
- * Authors:
- * - Christoph Goos <cgoos@syskonnect.de>
+ * This microcode is loaded into the TMS380 COMMprocessor during adapter
+ * initialization.  It is copyright Texas Instruments and contains
+ * intellectual property of both TI and their contractors.  
+ *
+ * TMS380 COMMprocessor Microcode Version 3.11 for Token Ring.
+ *
+ * Available from TI in COFF format (EAGLECAF.OUT).
+ *
  */
 
 #include <linux/config.h>
 
-#if defined(CONFIG_SKTR) || defined(CONFIG_SKTR_MODULE)
+#if defined(CONFIG_TMS380TR) || defined(CONFIG_TMS380TR_MODULE)
 
-unsigned char sktr_code[] = {
+unsigned char tms380tr_code[] = {
 	0x00, 0x00, 0x00, 0xA0, 0x00, 0x20, 0x68, 0x54,
 	0x73, 0x69, 0x63, 0x20, 0x64, 0x6F, 0x20, 0x65,
 	0x73, 0x69, 0x72, 0x20, 0x6C, 0x65, 0x61, 0x65,
@@ -3613,4 +3619,4 @@ unsigned char sktr_code[] = {
 	0x00, 0x00, 0xFC, 0xFF, 0x02, 0x00, 0x80, 0x00, 
 	0x3E, 0xA0, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00  
 };
-#endif /* CONFIG_SKTR */
+#endif /* CONFIG_TMS380TR */

@@ -1,4 +1,4 @@
-/* $Id: cosa.c,v 1.26 1999/07/09 15:02:37 kas Exp $ */
+/* $Id: cosa.c,v 1.28 1999/10/11 21:06:58 kas Exp $ */
 
 /*
  *  Copyright (C) 1995-1997  Jan "Yenya" Kasprzak <kas@fi.muni.cz>
@@ -137,8 +137,7 @@ struct channel_data {
 	struct semaphore rsem, wsem;
 	char *rxdata;
 	int rxsize;
-	wait_queue_head_t txwaitq; 
-	wait_queue_head_t rxwaitq;
+	wait_queue_head_t txwaitq, rxwaitq;
 	int tx_status, rx_status;
 
 	/* SPPP/HDLC device parts */
@@ -146,6 +145,11 @@ struct channel_data {
 	struct sk_buff *rx_skb, *tx_skb;
 	struct net_device_stats stats;
 };
+
+/* cosa->firmware_status bits */
+#define COSA_FW_RESET		(1<<0)	/* Is the ROM monitor active? */
+#define COSA_FW_DOWNLOAD	(1<<1)	/* Is the microcode downloaded? */
+#define COSA_FW_START		(1<<2)	/* Is the microcode running? */
 
 struct cosa_data {
 	int num;			/* Card number */
@@ -606,6 +610,11 @@ static int cosa_sppp_open(struct net_device *d)
 	struct channel_data *chan = d->priv;
 	int err, flags;
 
+	if (!(chan->cosa->firmware_status & COSA_FW_START)) {
+		printk(KERN_NOTICE "%s: start the firmware first (status %d)\n",
+			chan->cosa->name, chan->cosa->firmware_status);
+		return -EPERM;
+	}
 	spin_lock_irqsave(&chan->cosa->lock, flags);
 	if (chan->usage != 0) {
 		printk(KERN_WARNING "%s: sppp_open called with usage count %d\n",
@@ -781,6 +790,11 @@ static ssize_t cosa_read(struct file *file,
 	struct cosa_data *cosa = chan->cosa;
 	char *kbuf;
 
+	if (!(cosa->firmware_status & COSA_FW_START)) {
+		printk(KERN_NOTICE "%s: start the firmware first (status %d)\n",
+			cosa->name, cosa->firmware_status);
+		return -EPERM;
+	}
 	if (down_interruptible(&chan->rsem))
 		return -ERESTARTSYS;
 	
@@ -845,12 +859,17 @@ static int chrdev_rx_done(struct channel_data *chan)
 static ssize_t cosa_write(struct file *file,
 	const char *buf, size_t count, loff_t *ppos)
 {
-	struct channel_data *chan = (struct channel_data *)file->private_data;
 	DECLARE_WAITQUEUE(wait, current);
+	struct channel_data *chan = (struct channel_data *)file->private_data;
 	struct cosa_data *cosa = chan->cosa;
 	unsigned int flags;
 	char *kbuf;
 
+	if (!(cosa->firmware_status & COSA_FW_START)) {
+		printk(KERN_NOTICE "%s: start the firmware first (status %d)\n",
+			cosa->name, cosa->firmware_status);
+		return -EPERM;
+	}
 	if (down_interruptible(&chan->wsem))
 		return -ERESTARTSYS;
 
@@ -992,12 +1011,14 @@ static inline int cosa_reset(struct cosa_data *cosa)
 	if (cosa->usage > 1)
 		printk(KERN_INFO "cosa%d: WARNING: reset requested with cosa->usage > 1 (%d). Odd things may happen.\n",
 			cosa->num, cosa->usage);
+	cosa->firmware_status &= ~(COSA_FW_RESET|COSA_FW_START);
 	if (cosa_reset_and_read_id(cosa, idstring) < 0) {
 		printk(KERN_NOTICE "cosa%d: reset failed\n", cosa->num);
 		return -EIO;
 	}
 	printk(KERN_INFO "cosa%d: resetting device: %s\n", cosa->num,
 		idstring);
+	cosa->firmware_status |= COSA_FW_RESET;
 	return 0;
 }
 
@@ -1009,15 +1030,14 @@ static inline int cosa_download(struct cosa_data *cosa, struct cosa_download *d)
 	char *code;
 
 	if (cosa->usage > 1)
-		printk(KERN_INFO "cosa%d: WARNING: download of microcode requested with cosa->usage > 1 (%d). Odd things may happen.\n",
-			cosa->num, cosa->usage);
-#if 0
-	if (cosa->status != CARD_STATUS_RESETED && cosa->status != CARD_STATUS_DOWNLOADED) {
-		printk(KERN_NOTICE "cosa%d: reset the card first (status %d).\n",
-			cosa->num, cosa->status);
+		printk(KERN_INFO "%s: WARNING: download of microcode requested with cosa->usage > 1 (%d). Odd things may happen.\n",
+			cosa->name, cosa->usage);
+	if (!(cosa->firmware_status & COSA_FW_RESET)) {
+		printk(KERN_NOTICE "%s: reset the card first (status %d).\n",
+			cosa->name, cosa->firmware_status);
 		return -EPERM;
 	}
-#endif
+
 	get_user_ret(addr, &(d->addr), -EFAULT);
 	get_user_ret(len, &(d->len), -EFAULT);
 	get_user_ret(code, &(d->code), -EFAULT);
@@ -1027,6 +1047,9 @@ static inline int cosa_download(struct cosa_data *cosa, struct cosa_download *d)
 	if (d->len < 0 || d->len > COSA_MAX_FIRMWARE_SIZE)
 		return -EINVAL;
 
+	/* If something fails, force the user to reset the card */
+	cosa->firmware_status &= ~(COSA_FW_RESET|COSA_FW_DOWNLOAD);
+
 	if ((i=download(cosa, d->code, len, addr)) < 0) {
 		printk(KERN_NOTICE "cosa%d: microcode download failed: %d\n",
 			cosa->num, i);
@@ -1034,6 +1057,7 @@ static inline int cosa_download(struct cosa_data *cosa, struct cosa_download *d)
 	}
 	printk(KERN_INFO "cosa%d: downloading microcode - 0x%04x bytes at 0x%04x\n",
 		cosa->num, len, addr);
+	cosa->firmware_status |= COSA_FW_RESET|COSA_FW_DOWNLOAD;
 	return 0;
 }
 
@@ -1048,17 +1072,18 @@ static inline int cosa_readmem(struct cosa_data *cosa, struct cosa_download *d)
 		printk(KERN_INFO "cosa%d: WARNING: readmem requested with "
 			"cosa->usage > 1 (%d). Odd things may happen.\n",
 			cosa->num, cosa->usage);
-#if 0
-	if (cosa->status != CARD_STATUS_RESETED &&
-		cosa->status != CARD_STATUS_DOWNLOADED) {
-		printk(KERN_NOTICE "cosa%d: reset the card first (status %d).\n",
-			cosa->num, cosa->status);
+	if (!(cosa->firmware_status & COSA_FW_RESET)) {
+		printk(KERN_NOTICE "%s: reset the card first (status %d).\n",
+			cosa->name, cosa->firmware_status);
 		return -EPERM;
 	}
-#endif
+
 	get_user_ret(addr, &(d->addr), -EFAULT);
 	get_user_ret(len, &(d->len), -EFAULT);
 	get_user_ret(code, &(d->code), -EFAULT);
+
+	/* If something fails, force the user to reset the card */
+	cosa->firmware_status &= ~COSA_FW_RESET;
 
 	if ((i=readmem(cosa, d->code, len, addr)) < 0) {
 		printk(KERN_NOTICE "cosa%d: reading memory failed: %d\n",
@@ -1067,6 +1092,7 @@ static inline int cosa_readmem(struct cosa_data *cosa, struct cosa_download *d)
 	}
 	printk(KERN_INFO "cosa%d: reading card memory - 0x%04x bytes at 0x%04x\n",
 		cosa->num, len, addr);
+	cosa->firmware_status |= COSA_FW_RESET;
 	return 0;
 }
 
@@ -1078,13 +1104,14 @@ static inline int cosa_start(struct cosa_data *cosa, int address)
 	if (cosa->usage > 1)
 		printk(KERN_INFO "cosa%d: WARNING: start microcode requested with cosa->usage > 1 (%d). Odd things may happen.\n",
 			cosa->num, cosa->usage);
-#if 0
-	if (cosa->status != CARD_STATUS_DOWNLOADED) {
-		printk(KERN_NOTICE "cosa%d: download the microcode first (status %d).\n",
-			cosa->num, cosa->status);
+
+	if ((cosa->firmware_status & (COSA_FW_RESET|COSA_FW_DOWNLOAD))
+		!= (COSA_FW_RESET|COSA_FW_DOWNLOAD)) {
+		printk(KERN_NOTICE "%s: download the microcode and/or reset the card first (status %d).\n",
+			cosa->name, cosa->firmware_status);
 		return -EPERM;
 	}
-#endif
+	cosa->firmware_status &= ~COSA_FW_RESET;
 	if ((i=startmicrocode(cosa, address)) < 0) {
 		printk(KERN_NOTICE "cosa%d: start microcode at 0x%04x failed: %d\n",
 			cosa->num, address, i);
@@ -1093,6 +1120,7 @@ static inline int cosa_start(struct cosa_data *cosa, int address)
 	printk(KERN_INFO "cosa%d: starting microcode at 0x%04x\n",
 		cosa->num, address);
 	cosa->startaddr = address;
+	cosa->firmware_status |= COSA_FW_START;
 	return 0;
 }
 		
@@ -1689,9 +1717,11 @@ static inline void tx_interrupt(struct cosa_data *cosa, int status)
 			/* in second pass, accept first ready-to-TX channel */
 			if (i > cosa->nchannels) {
 				/* Can be safely ignored */
+#ifdef DEBUG_IRQS
 				printk(KERN_DEBUG "%s: Forcing TX "
 					"to not-ready channel %d\n",
 					cosa->name, cosa->txchan);
+#endif
 				break;
 			}
 		}

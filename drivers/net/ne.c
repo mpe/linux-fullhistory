@@ -28,7 +28,8 @@
     rjohnson@analogic.com : Changed init order so an interrupt will only
     occur after memory is allocated for dev->priv. Deallocated memory
     last in cleanup_modue()
-
+    Richard Guenther    : Added support for ISAPnP cards
+    
 */
 
 /* Routines for the NatSemi-based designs (NE[12]000). */
@@ -43,6 +44,7 @@ static const char *version =
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/pci.h>
+#include <linux/isapnp.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <asm/system.h>
@@ -90,6 +92,13 @@ pci_clone_list[] __initdata = {
 static int probe_pci = 1;
 #endif
 
+static struct { unsigned short vendor, function; char *name; }
+isapnp_clone_list[] __initdata = {
+	{ISAPNP_VENDOR('E','D','I'), ISAPNP_FUNCTION(0x0216),		"NN NE2000" },
+	{ISAPNP_VENDOR('P','N','P'), ISAPNP_FUNCTION(0x80d6),		"Generic PNP" },
+	{0,}
+};
+
 #ifdef SUPPORT_NE_BAD_CLONES
 /* A list of bad clones that we none-the-less recognize. */
 static struct { const char *name8, *name16; unsigned char SAprefix[4];}
@@ -128,6 +137,7 @@ static unsigned int pci_irq_line = 0;
 
 int ne_probe(struct net_device *dev);
 static int ne_probe1(struct net_device *dev, int ioaddr);
+static int ne_probe_isapnp(struct net_device *dev);
 #ifdef CONFIG_PCI
 static int ne_probe_pci(struct net_device *dev);
 #endif
@@ -193,6 +203,10 @@ int __init ne_probe(struct net_device *dev)
 		return 0;
 #endif
 
+	/* Then look for any installed ISAPnP clones */
+	if (isapnp_present() && (ne_probe_isapnp(dev) == 0))
+		return 0;
+
 #ifndef MODULE
 	/* Last resort. The semi-risky ISA auto-probe. */
 	for (base_addr = 0; netcard_portlist[base_addr] != 0; base_addr++) {
@@ -242,6 +256,46 @@ static int __init ne_probe_pci(struct net_device *dev)
 	return -ENODEV;
 }
 #endif  /* CONFIG_PCI */
+
+static int __init ne_probe_isapnp(struct net_device *dev)
+{
+	int i;
+	
+	for (i = 0; isapnp_clone_list[i].vendor != 0; i++) {
+		struct pci_dev *idev = NULL;
+
+		while ((idev = isapnp_find_dev(NULL,
+					       isapnp_clone_list[i].vendor,
+					       isapnp_clone_list[i].function,
+					       idev))) {
+			/* Avoid already found cards from previous calls */
+			if (idev->prepare(idev))
+				continue;
+			if (idev->activate(idev))
+				continue;
+			pci_irq_line = idev->irq_resource[0].start;
+			/* if no irq, search for next */
+			if (!pci_irq_line)
+				continue;
+			/* found it */
+			if (ne_probe1(dev, idev->resource[0].start) != 0) {	/* Shouldn't happen. */
+				printk(KERN_ERR "ne.c: Probe of ISAPnP card at %#lx failed.\n",
+				       idev->resource[0].start);
+				return -ENXIO;
+			}
+			ei_status.priv = (unsigned long)idev;
+			break;
+		}
+		if (!idev)
+			continue;
+		printk(KERN_INFO "ne.c: ISAPnP reports %s at i/o %#lx, irq %d.\n",
+				isapnp_clone_list[i].name,
+				dev->base_addr, dev->irq);
+		return 0;
+	}
+
+	return -ENODEV;
+}
 
 static int __init ne_probe1(struct net_device *dev, int ioaddr)
 {
@@ -491,6 +545,7 @@ static int __init ne_probe1(struct net_device *dev, int ioaddr)
 	ei_status.block_input = &ne_block_input;
 	ei_status.block_output = &ne_block_output;
 	ei_status.get_8390_hdr = &ne_get_8390_hdr;
+	ei_status.priv = 0;
 	dev->open = &ne_open;
 	dev->stop = &ne_close;
 	NS8390_init(dev, 0);
@@ -819,6 +874,9 @@ void cleanup_module(void)
 		struct net_device *dev = &dev_ne[this_dev];
 		if (dev->priv != NULL) {
 			void *priv = dev->priv;
+			struct pci_dev *idev = (struct pci_dev *)ei_status.priv;
+			if (idev)
+				idev->deactivate(idev);
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, NE_IO_EXTENT);
 			unregister_netdev(dev);

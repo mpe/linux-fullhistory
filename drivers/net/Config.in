@@ -130,9 +130,9 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
    bool '  EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA
    if [ "$CONFIG_NET_EISA" = "y" ]; then
       tristate '    AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32
-#     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-#	 tristate '    Adaptec Starfire support (EXPERIMENTAL)' CONFIG_ADAPTEC_STARFIRE
-#     fi
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	 tristate '    Adaptec Starfire support (EXPERIMENTAL)' CONFIG_ADAPTEC_STARFIRE
+      fi
       tristate '    Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support' CONFIG_ACENIC
       if [ "$CONFIG_ACENIC" != "n" ]; then
 	 bool '      Omit support for old Tigon I based AceNICs' CONFIG_ACENIC_OMIT_TIGON_I

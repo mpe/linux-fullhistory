@@ -193,7 +193,6 @@ typedef __u32 kernel_cap_t;
 
 /* Allow configuration of the secure attention key */
 /* Allow administration of the random device */
-/* Allow device administration (mknod)*/
 /* Allow examination and configuration of disk quotas */
 /* Allow configuring the kernel's syslog (printk behaviour) */
 /* Allow setting the domainname */
@@ -265,6 +264,10 @@ typedef __u32 kernel_cap_t;
 /* Allow vhangup() of tty */
 
 #define CAP_SYS_TTY_CONFIG   26
+
+/* Allow the privileged aspects of mknod() */
+
+#define CAP_MKNOD            27
 
 #ifdef __KERNEL__
 /* 

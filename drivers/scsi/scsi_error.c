@@ -1762,33 +1762,21 @@ void scsi_error_handler(void *data)
 	int rtn;
 	DECLARE_MUTEX_LOCKED(sem);
 	unsigned long flags;
-	struct fs_struct *fs;
+
+	siginitsetinv(&current->blocked, SHUTDOWN_SIGS);
 
 	lock_kernel();
 
 	/*
-	 * If we were started as result of loading a module, close all of the
-	 * user space pages.  We don't need them, and if we didn't close them
-	 * they would be locked into memory.
+	 *	Flush resources
 	 */
-	exit_mm(current);
-
-	current->session = 1;
-	current->pgrp = 1;
-
-	/* Become as one with the init task */
-
-	exit_fs(current);	/* current->fs->count--; */
-	fs = init_task.fs;
-	current->fs = fs;
-	atomic_inc(&fs->count);
-
-	siginitsetinv(&current->blocked, SHUTDOWN_SIGS);
-
-
+	 
+	daemonize();
+	
 	/*
 	 * Set the name of this process.
 	 */
+
 	sprintf(current->comm, "scsi_eh_%d", host->host_no);
 
 	host->eh_wait = &sem;

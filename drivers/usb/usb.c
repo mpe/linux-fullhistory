@@ -1160,7 +1160,7 @@ int usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq ha
 	if (check_bandwidth_alloc (dev->bus->bandwidth_allocated, bustime))
 		return (USB_ST_BANDWIDTH_ERROR);
 
-	ret = dev->bus->op->request_irq(dev, pipe, handler, period, dev_id, handle);
+	ret = dev->bus->op->request_irq(dev, pipe, handler, period, dev_id, handle, bustime);
 
 	/* Claim the USB bandwidth if no error. */
 	if (!ret) {
@@ -1185,6 +1185,21 @@ int usb_terminate_bulk(struct usb_device *dev, void *first)
 	return dev->bus->op->terminate_bulk(dev, first);
 }
 
+/*
+ * usb_release_bandwidth():
+ *
+ * called to release an interrupt pipe's bandwidth (in microseconds)
+ */
+void usb_release_bandwidth(struct usb_device *dev, int bw_alloc)
+{
+	dev->bus->bandwidth_allocated -= bw_alloc;
+	dev->bus->bandwidth_int_reqs--;
+	PRINTD ("bw_alloc reduced to %d for %d requesters",
+		dev->bus->bandwidth_allocated,
+		dev->bus->bandwidth_int_reqs +
+		dev->bus->bandwidth_isoc_reqs);
+}
+
 int usb_release_irq(struct usb_device *dev, void *handle, unsigned int pipe)
 {
 	long    bustime;
@@ -1196,13 +1211,8 @@ int usb_release_irq(struct usb_device *dev, void *handle, unsigned int pipe)
 	if (!err) {
 		bustime = calc_bus_time (usb_pipeslow(pipe), usb_pipein(pipe), 0,
 				usb_maxpacket(dev, pipe, usb_pipeout(pipe)));
-		bustime = NS_TO_US(bustime);
-		dev->bus->bandwidth_allocated -= bustime;
-		dev->bus->bandwidth_int_reqs--;
-		PRINTD ("bw_alloc reduced to %d for %d requesters",
-			dev->bus->bandwidth_allocated,
-			dev->bus->bandwidth_int_reqs +
-			dev->bus->bandwidth_isoc_reqs);
+		bustime = NS_TO_US(bustime);	/* work in microseconds */
+		usb_release_bandwidth(dev, bustime);
 	}
 
 	return err;
@@ -1351,6 +1361,7 @@ EXPORT_SYMBOL(usb_init_root_hub);
 EXPORT_SYMBOL(usb_new_device);
 EXPORT_SYMBOL(usb_connect);
 EXPORT_SYMBOL(usb_disconnect);
+EXPORT_SYMBOL(usb_release_bandwidth);
 
 EXPORT_SYMBOL(usb_set_address);
 EXPORT_SYMBOL(usb_get_descriptor);

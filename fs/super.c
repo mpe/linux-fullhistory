@@ -1186,6 +1186,8 @@ void __init mount_root(void)
 
 	memset(&filp, 0, sizeof(filp));
 	d_inode = get_empty_inode();
+	if (!d_inode)
+		panic(__FUNCTION__ ": unable to allocate root inode");
 	d_inode->i_rdev = ROOT_DEV;
 	filp.f_dentry = NULL;
 	if ( root_mountflags & MS_RDONLY)

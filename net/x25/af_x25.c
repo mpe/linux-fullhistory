@@ -848,7 +848,11 @@ static int x25_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct 
 	unsigned char *asmptr;
 	int size, qbit = 0;
 
-	if (msg->msg_flags & ~(MSG_DONTWAIT | MSG_OOB))
+	if (msg->msg_flags & ~(MSG_DONTWAIT | MSG_OOB | MSG_EOR))
+		return -EINVAL;
+
+	/* we currently don't support segments at the user interface */ 
+	if (!(msg->msg_flags & MSG_EOR))
 		return -EINVAL;
 
 	if (sk->zapped)

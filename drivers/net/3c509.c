@@ -902,6 +902,7 @@ static int xcvr[] = {-1, -1, -1, -1, -1, -1, -1, -1};
 MODULE_PARM(debug,"i");
 MODULE_PARM(irq,"1-8i");
 MODULE_PARM(xcvr,"1-8i");
+MODULE_PARM(max_interrupt_work, "i");
 
 int
 init_module(void)

@@ -55,7 +55,7 @@
 */
 
 /*
-**	Sep 10 1999, sym53c8xx 1.5e
+**	October 3 1999, sym53c8xx 1.5f
 **
 **	Supported SCSI features:
 **	    Synchronous data transfers
@@ -83,7 +83,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5e"
+#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5f"
 
 /* #define DEBUG_896R1 */
 #define SCSI_NCR_OPTIMIZE_896
@@ -1847,6 +1847,16 @@ struct ncb {
 	u_long		clock_khz;	/* SCSI clock frequency in KHz	*/
 
 	/*----------------------------------------------------------------
+	**	Range for the PCI clock frequency measurement result
+	**	that ensures the algorithm used by the driver can be 
+	**	trusted for the SCSI clock frequency measurement.
+	**	(Assuming a PCI clock frequency of 33 MHz).
+	**----------------------------------------------------------------
+	*/
+	u_int		pciclock_min;
+	u_int		pciclock_max;
+
+	/*----------------------------------------------------------------
 	**	Start queue management.
 	**	It is filled up by the host processor and accessed by the 
 	**	SCRIPTS processor in order to start SCSI commands.
@@ -1993,7 +2003,7 @@ struct ncb {
 **	of 825A, 875, 876, 895, 895A and 896 chips.
 */
 struct script {
-	ncrcmd	start		[ 18];
+	ncrcmd	start		[ 14];
 	ncrcmd	getjob_begin	[  4];
 	ncrcmd	getjob_end	[  4];
 	ncrcmd	select		[  8];
@@ -2114,7 +2124,7 @@ struct scripth {
 	ncrcmd	bad_identify	[ 12];
 	ncrcmd	bad_i_t_l	[  4];
 	ncrcmd	bad_i_t_l_q	[  4];
-	ncrcmd	bad_status	[ 10];
+	ncrcmd	bad_status	[  6];
 	ncrcmd	tweak_pmj	[ 12];
 	ncrcmd	pm_handle	[ 20];
 	ncrcmd	pm_handle1	[  4];
@@ -2319,15 +2329,14 @@ static	struct script script0 __initdata = {
 	*/
 	SCR_FROM_REG (istat),
 		0,
-	SCR_JUMPR ^ IFFALSE (MASK (SEM, SEM)),
-		16,
 	/*
 	**	Report to the C code the next position in 
 	**	the start queue the SCRIPTS will schedule.
+	**	The C code must not change SCRATCHA.
 	*/
 	SCR_LOAD_ABS (scratcha, 4),
 		PADDRH (startpos),
-	SCR_INT,
+	SCR_INT ^ IFTRUE (MASK (SEM, SEM)),
 		SIR_SCRIPT_STOPPED,
 
 	/*
@@ -2344,8 +2353,6 @@ static	struct script script0 __initdata = {
 	**	may happen that the job address is not yet in the DSA 
 	**	and the the next queue position points to the next JOB.
 	*/
-	SCR_LOAD_ABS (scratcha, 4),
-		PADDRH (startpos),
 	SCR_LOAD_ABS (dsa, 4),
 		PADDRH (startpos),
 	SCR_LOAD_REL (temp, 4),
@@ -3755,17 +3762,14 @@ static	struct scripth scripth0 __initdata = {
 		PADDRH (abort_resel),
 }/*-------------------------< BAD_STATUS >-----------------*/,{
 	/*
-	**	If command resulted in either QUEUE FULL,
-	**	CHECK CONDITION or COMMAND TERMINATED,
-	**	call the C code.
+	**	Anything different from INTERMEDIATE 
+	**	CONDITION MET should be a bad SCSI status, 
+	**	given that GOOD status has already been tested.
+	**	Call the C code.
 	*/
 	SCR_LOAD_ABS (scratcha, 4),
 		PADDRH (startpos),
-	SCR_INT ^ IFTRUE (DATA (S_QUEUE_FULL)),
-		SIR_BAD_STATUS,
-	SCR_INT ^ IFTRUE (DATA (S_CHECK_COND)),
-		SIR_BAD_STATUS,
-	SCR_INT ^ IFTRUE (DATA (S_TERMINATED)),
+	SCR_INT ^ IFFALSE (DATA (S_COND_MET)),
 		SIR_BAD_STATUS,
 	SCR_RETURN,
 		0,
@@ -5181,15 +5185,48 @@ printk(KERN_INFO NAME53C "%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n
 	(void) ncr_prepare_setting(np, nvram);
 
 	/*
-	**	Check the PCI clock frequency.
-	**	Must be done after prepare_setting since it 
-	**	destroys STEST1 that is used to probe for 
-	**	the clock doubler.
+	**	Check the PCI clock frequency if needed.
+	**	
+	**	Must be done after ncr_prepare_setting since it destroys 
+	**	STEST1 that is used to probe for the clock multiplier.
+	**
+	**	The range is currently [22688 - 45375 Khz], given 
+	**	the values used by ncr_getclock().
+	**	This calibration of the frequecy measurement 
+	**	algorithm against the PCI clock frequency is only 
+	**	performed if the driver has had to measure the SCSI 
+	**	clock due to other heuristics not having been enough 
+	**	to deduce the SCSI clock frequency.
+	**
+	**	When the chip has been initialized correctly by the 
+	**	SCSI BIOS, the driver deduces the presence of the 
+	**	clock multiplier and the value of the SCSI clock from 
+	**	initial values of IO registers, and therefore no 
+	**	clock measurement is performed.
+	**	Normally the driver should never have to measure any 
+	**	clock, unless the controller may use a 80 MHz clock 
+	**	or has a clock multiplier and any of the following 
+	**	condition is met:
+	**
+	**	- No SCSI BIOS is present.
+	**	- SCSI BIOS did'nt enable the multiplier for some reason.
+	**	- User has disabled the controller from the SCSI BIOS.
+	**	- User booted the O/S from another O/S that did'nt enable 
+	**	  the multiplier for some reason.
+	**
+	**	As a result, the driver may only have to measure some 
+	**	frequency in very unusual situations.
+	**
+	**	For this reality test against the PCI clock to really 
+	**	protect against flaws in the udelay() calibration or 
+	**	driver problem that affect the clock measurement 
+	**	algorithm, the actual PCI clock frequency must be 33 MHz.
 	*/
-	i = (int) ncr_getpciclock(np);
-	if (i > 37000) {
-		printk(KERN_ERR "%s: PCI clock seems too high (%u KHz).\n",
-		       ncr_name(np), i);
+	i = np->pciclock_max ? ncr_getpciclock(np) : 0;
+	if (i && (i < np->pciclock_min  || i > np->pciclock_max)) {
+		printk(KERN_ERR "%s: PCI clock (%u KHz) is out of range "
+			"[%u KHz - %u KHz].\n",
+		       ncr_name(np), i, np->pciclock_min, np->pciclock_max);
 		goto attach_error;
 	}
 
@@ -8509,81 +8546,63 @@ static void ncr_sir_to_redo(ncb_p np, int num, ccb_p cp)
 	u_int32		startp;
 	u_char		s_status = INB (SS_PRT);
 	int		msglen;
+	int		i, j;
 
+
+	/*
+	**	If the LCB is not yet available, then only 
+	**	1 IO is accepted, so we should have it.
+	*/
+	if (!lp)
+		goto next;	
 	/*
 	**	Remove all CCBs queued to the chip for that LUN and put 
 	**	them back in the LUN CCB wait queue.
 	*/
-	if (lp) {
-		int i = np->squeueput;
-		int j = (INL (nc_scratcha) - vtobus(np->squeue)) / 4;
-		int k = np->squeueput;
-
-		busyccbs = lp->queuedccbs;
-		while (1) {
-			if (i == j)
-				break;
-			if (i == 0)
-				i = MAX_START*2;
-			i = i - 2;
-			cp2 = ncr_ccb_from_dsa(np, scr_to_cpu(np->squeue[i]));
-			if (!cp2)
-				continue;
-			if (cp2->target != cp->target || cp2->lun != cp->lun)
-				continue;
+	busyccbs = lp->queuedccbs;
+	i = (INL (nc_scratcha) - vtobus(np->squeue)) / 4;
+	j = i;
+	while (i != np->squeueput) {
+		cp2 = ncr_ccb_from_dsa(np, scr_to_cpu(np->squeue[i]));
+		assert(cp2);
 #ifdef SCSI_NCR_IARB_SUPPORT
-			cp2->host_flags &= ~HF_HINT_IARB;
-			if (cp2 == np->last_cp)
-				np->last_cp = 0;
+		/* IARB hints may not be relevant any more. Forget them. */
+		cp2->host_flags &= ~HF_HINT_IARB;
 #endif
+		if (cp2 && cp2->target == cp->target && cp2->lun == cp->lun) {
 			xpt_remque(&cp2->link_ccbq);
 			xpt_insque_head(&cp2->link_ccbq, &lp->wait_ccbq);
 			--lp->queuedccbs;
 			cp2->queued = 0;
-			np->squeue[i] = DSA_INVALID;
-			k = i;
 		}
-
-		/*
-		**	Requeue the interrupted CCB in front of 
-		**	the LUN CCB wait queue.
-		*/
-#ifdef SCSI_NCR_IARB_SUPPORT
-		cp->host_flags &= ~HF_HINT_IARB;
-		if (cp == np->last_cp)
-			np->last_cp = 0;
-#endif
-		xpt_remque(&cp->link_ccbq);
-		xpt_insque_head(&cp->link_ccbq, &lp->wait_ccbq);
-		--lp->queuedccbs;
-		cp->queued = 0;
-
-#ifdef SCSI_NCR_IARB_SUPPORT
-		if (np->last_cp)
-			np->last_cp->host_flags &= ~HF_HINT_IARB;
-#endif
-
-		/*
-		**	Repair the startqueue if necessary.
-		*/
-		if (k != np->squeueput) {
-			j = k;
-			while (1) {
-				j += 2;
-				if (j >= MAX_START*2)
-					j = 0;
-				if (np->squeue[j] == DSA_INVALID)
-					continue;
-				np->squeue[k] = np->squeue[j];
-				if (j == np->squeueput)
-					break;
-				k += 2;
-				if (k >= MAX_START*2)
-					k = 0;
-			}
-			np->squeueput = k;
+		else {
+			if (i != j)
+				np->squeue[j] = np->squeue[i];
+			if ((j += 2) >= MAX_START*2) j = 0;
 		}
+		if ((i += 2) >= MAX_START*2) i = 0;
 	}
+	if (i != j)		/* Copy back the idle task if needed */
+		np->squeue[j] = np->squeue[i];
+	np->squeueput = j;	/* Update our current start queue pointer */
+
+	/*
+	**	Requeue the interrupted CCB in front of the 
+	**	LUN CCB wait queue to preserve ordering.
+	*/
+	xpt_remque(&cp->link_ccbq);
+	xpt_insque_head(&cp->link_ccbq, &lp->wait_ccbq);
+	--lp->queuedccbs;
+	cp->queued = 0;
+
+next:
+
+#ifdef SCSI_NCR_IARB_SUPPORT
+	/* IARB hint may not be relevant any more. Forget it. */
+	cp->host_flags &= ~HF_HINT_IARB;
+	if (np->last_cp)
+		np->last_cp = 0;
+#endif
 
 	/*
 	**	Now we can restart the SCRIPTS processor safely.
@@ -8592,7 +8611,10 @@ static void ncr_sir_to_redo(ncb_p np, int num, ccb_p cp)
 	OUTL (nc_dsp, NCB_SCRIPT_PHYS (np, start));
 
 	switch(s_status) {
-	default:	/* Just for safety, should never happen */
+	default:
+	case S_BUSY:
+		ncr_complete(np, cp);
+		break;
 	case S_QUEUE_FULL:
 		if (!lp || !lp->queuedccbs) {
 			ncr_complete(np, cp);
@@ -8951,6 +8973,7 @@ static void ncr_sir_task_recovery(ncb_p np, int num)
 			assert(k != -1);
 			if (k != 1) {
 				np->squeue[k] = np->squeue[i]; /* Idle task */
+				np->squeueput = k; /* Start queue pointer */
 				cp->host_status = HS_ABORTED;
 				cp->scsi_status = S_ILLEGAL;
 				ncr_complete(np, cp);
@@ -10944,11 +10967,18 @@ static void __init ncr_getclock (ncb_p np, int mult)
 		if (bootverbose)
 			printk ("%s: NCR clock is %uKHz\n", ncr_name(np), f1);
 
-		if	(f1 <	45000)		f1 =  40000;
-		else if (f1 <	55000)		f1 =  50000;
+		if	(f1 < 55000)		f1 =  40000;
 		else				f1 =  80000;
 
-		if (f1 < 80000 && mult > 1) {
+		/*
+		**	Suggest to also check the PCI clock frequency 
+		**	to make sure our frequency calculation algorithm 
+		**	is not too biased.
+		*/
+		np->pciclock_min = (33000*55+80-1)/80;
+		np->pciclock_max = (33000*55)/40;
+
+		if (f1 == 40000 && mult > 1) {
 			if (bootverbose >= 2)
 				printk ("%s: clock multiplier assumed\n", ncr_name(np));
 			np->multiplier	= mult;
@@ -10973,13 +11003,12 @@ static void __init ncr_getclock (ncb_p np, int mult)
  */
 static u_int __init ncr_getpciclock (ncb_p np)
 {
-	static u_int f = 0;
+	static u_int f;
 
-	if (!f) {
-		OUTB (nc_stest1, SCLK);	/* Use the PCI clock as SCSI clock */
-		f = ncr_getfreq (np);
-		OUTB (nc_stest1, 0);
-	}
+	OUTB (nc_stest1, SCLK);	/* Use the PCI clock as SCSI clock */
+	f = ncr_getfreq (np);
+	OUTB (nc_stest1, 0);
+
 	return f;
 }
 

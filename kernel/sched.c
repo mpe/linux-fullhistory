@@ -510,6 +510,7 @@ signed long schedule_timeout(signed long timeout)
 			printk(KERN_ERR "schedule_timeout: wrong timeout "
 			       "value %lx from %p\n", timeout,
 			       __builtin_return_address(0));
+			current->state = TASK_RUNNING;
 			goto out;
 		}
 	}

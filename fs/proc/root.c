@@ -898,6 +898,8 @@ static struct dentry *proc_root_lookup(struct inode * dir, struct dentry * dentr
 		}
 		pid *= 10;
 		pid += c;
+		if (!pid)
+			break;
 		if (pid & 0xffff0000) {
 			pid = 0;
 			break;

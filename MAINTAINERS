@@ -852,7 +852,14 @@ TOKEN-RING NETWORK DRIVER
 P:	Paul Norton
 M:	pnorton@ieee.org
 L:	linux-net@vger.rutgers.edu
-L:	linux-tr@emissary.aus-etc.com
+L:	linux-tr@linuxtr.net
+S:	Maintained
+
+TMS380 TOKEN-RING NETWORK DRIVER
+P:	Adam Fritzler
+M:	mid@auk.cx
+L:	linux-tr@linuxtr.net
+W:	http://www.auk.cx/tms380tr/
 S:	Maintained
 
 U14-34F SCSI DRIVER

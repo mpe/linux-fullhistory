@@ -553,6 +553,8 @@ static int do_md_add (int minor, kdev_t dev)
 	   a better idea, please help ! */
   
 	realdev->inode=get_empty_inode ();
+	if (!realdev->inode)
+		return -ENOMEM;
 	realdev->inode->i_dev=dev; 	/* don't care about other fields */
 	insert_inode_hash (realdev->inode);
   

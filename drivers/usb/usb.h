@@ -458,7 +458,7 @@ struct usb_operations {
 	int (*deallocate)(struct usb_device *);
 	int (*control_msg)(struct usb_device *, unsigned int, devrequest *, void *, int, int);
 	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int, unsigned long *, int);
-	int (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *, void **);
+	int (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *, void **, long);
 	int (*release_irq)(struct usb_device *, void *);
 	void *(*request_bulk)(struct usb_device *, unsigned int, usb_device_irq,
  void *, int, void *);
@@ -551,6 +551,7 @@ extern struct usb_device *usb_alloc_dev(struct usb_device *parent, struct usb_bu
 extern void usb_free_dev(struct usb_device *);
 extern void usb_inc_dev_use(struct usb_device *);
 #define usb_dec_dev_use usb_free_dev
+extern void usb_release_bandwidth(struct usb_device *, int);
 
 extern int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size, int timeout);
 
@@ -614,6 +615,11 @@ int usb_kill_isoc (struct usb_isoc_desc *isocdesc);
  * appropriately.
  */
 
+#define PIPE_ISOCHRONOUS		0
+#define PIPE_INTERRUPT			1
+#define PIPE_CONTROL			2
+#define PIPE_BULK			3
+
 #define usb_maxpacket(dev, pipe, out)	(out \
 				? (dev)->epmaxpacketout[usb_pipeendpoint(pipe)] \
 				: (dev)->epmaxpacketin [usb_pipeendpoint(pipe)] )
@@ -627,10 +633,10 @@ int usb_kill_isoc (struct usb_isoc_desc *isocdesc);
 #define usb_pipedata(pipe)	(((pipe) >> 19) & 1)
 #define usb_pipeslow(pipe)	(((pipe) >> 26) & 1)
 #define usb_pipetype(pipe)	(((pipe) >> 30) & 3)
-#define usb_pipeisoc(pipe)	(usb_pipetype((pipe)) == 0)
-#define usb_pipeint(pipe)	(usb_pipetype((pipe)) == 1)
-#define usb_pipecontrol(pipe)	(usb_pipetype((pipe)) == 2)
-#define usb_pipebulk(pipe)	(usb_pipetype((pipe)) == 3)
+#define usb_pipeisoc(pipe)	(usb_pipetype((pipe)) == PIPE_ISOCHRONOUS)
+#define usb_pipeint(pipe)	(usb_pipetype((pipe)) == PIPE_INTERRUPT)
+#define usb_pipecontrol(pipe)	(usb_pipetype((pipe)) == PIPE_CONTROL)
+#define usb_pipebulk(pipe)	(usb_pipetype((pipe)) == PIPE_BULK)
 
 #define PIPE_DEVEP_MASK		0x0007ff00
 
@@ -656,14 +662,14 @@ static inline unsigned int __default_pipe(struct usb_device *dev)
 }
 
 /* Create various pipes... */
-#define usb_sndctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint))
-#define usb_rcvctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
-#define usb_sndisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint))
-#define usb_rcvisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
-#define usb_sndbulkpipe(dev,endpoint)	((3 << 30) | __create_pipe(dev,endpoint))
-#define usb_rcvbulkpipe(dev,endpoint)	((3 << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
-#define usb_snddefctrl(dev)		((2 << 30) | __default_pipe(dev))
-#define usb_rcvdefctrl(dev)		((2 << 30) | __default_pipe(dev) | USB_DIR_IN)
+#define usb_sndctrlpipe(dev,endpoint)	((PIPE_CONTROL << 30) | __create_pipe(dev,endpoint))
+#define usb_rcvctrlpipe(dev,endpoint)	((PIPE_CONTROL << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
+#define usb_sndisocpipe(dev,endpoint)	((PIPE_ISOCHRONOUS << 30) | __create_pipe(dev,endpoint))
+#define usb_rcvisocpipe(dev,endpoint)	((PIPE_ISOCHRONOUS << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
+#define usb_sndbulkpipe(dev,endpoint)	((PIPE_BULK << 30) | __create_pipe(dev,endpoint))
+#define usb_rcvbulkpipe(dev,endpoint)	((PIPE_BULK << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
+#define usb_snddefctrl(dev)		((PIPE_CONTROL << 30) | __default_pipe(dev))
+#define usb_rcvdefctrl(dev)		((PIPE_CONTROL << 30) | __default_pipe(dev) | USB_DIR_IN)
 
 /*
  * Send and receive control messages..
@@ -742,4 +748,3 @@ extern inline void proc_usb_remove_device(struct usb_device *dev) {}
 #endif  /* __KERNEL__ */
 
 #endif
-

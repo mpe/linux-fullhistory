@@ -1035,6 +1035,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ADAPTEC_STARFIRE),y)
+L_OBJS += starfire.o
+else
+  ifeq ($(CONFIG_ADAPTEC_STARFIRE),m)
+  M_OBJS += starfire.o
+  endif
+endif
+
 #
 # HIPPI adapters
 #

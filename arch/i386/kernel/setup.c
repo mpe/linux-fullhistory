@@ -25,6 +25,10 @@
  *
  *  Memory region support
  *	David Parsons <orc@pell.chi.il.us>, July-August 1999
+ *
+ *  Cleaned up cache-detection code
+ *	Dave Jones <dave@powertweak.com>, October 1999
+ *
  */
 
 /*
@@ -462,7 +466,7 @@ void __init setup_memory_region(void)
 
 void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
-	unsigned long memory_start, memory_end;
+	unsigned long high_pfn, max_pfn;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
 	int i;
@@ -493,7 +497,6 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 
 	if (!MOUNT_ROOT_RDONLY)
 		root_mountflags &= ~MS_RDONLY;
-	memory_start = (unsigned long) &_end;
 	init_mm.start_code = (unsigned long) &_text;
 	init_mm.end_code = (unsigned long) &_etext;
 	init_mm.end_data = (unsigned long) &_edata;
@@ -557,51 +560,53 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 	*to = '\0';
 	*cmdline_p = command_line;
 
-#define VMALLOC_RESERVE	(128 << 20)	/* 128MB for vmalloc and initrd */
-#define MAXMEM	((unsigned long)(-PAGE_OFFSET-VMALLOC_RESERVE))
-
-	memory_end = 0;
+	/* Find the highest page frame number we have available */
+	max_pfn = 0;
 	for (i=0; i < e820.nr_map; i++) {
 		/* RAM? */
 		if (e820.map[i].type == E820_RAM) {
-			unsigned long end = e820.map[i].addr + e820.map[i].size;
+			unsigned long end_pfn = (e820.map[i].addr + e820.map[i].size) >> PAGE_SHIFT;
 
-			if (end > memory_end)
-				memory_end = end;
+			if (end_pfn > max_pfn)
+				max_pfn = end_pfn;
 		}
 	}
-	memory_end &= PAGE_MASK;
-	ram_resources[1].end = memory_end-1;
 
+/*
+ * We can only allocate a limited amount of direct-mapped memory
+ */
+#define VMALLOC_RESERVE	(128 << 20)	/* 128MB for vmalloc and initrd */
+#define MAXMEM		((unsigned long)(-PAGE_OFFSET-VMALLOC_RESERVE))
+#define MAXMEM_PFN	(MAXMEM >> PAGE_SHIFT)
+
+	high_pfn = MAXMEM_PFN;
+	if (max_pfn < high_pfn)
+		high_pfn = max_pfn;
+
+/*
+ * But the bigmem stuff may be able to use more of it
+ * (but currently only up to about 4GB)
+ */
 #ifdef CONFIG_BIGMEM
-	bigmem_start = bigmem_end = memory_end;
-#endif
-	if (memory_end > MAXMEM)
-	{
-#ifdef CONFIG_BIGMEM
-#define MAXBIGMEM ((unsigned long)(~(VMALLOC_RESERVE-1)))
-		bigmem_start = MAXMEM;
-		bigmem_end = (memory_end < MAXBIGMEM) ? memory_end : MAXBIGMEM;
-#endif
-		memory_end = MAXMEM;
-#ifdef CONFIG_BIGMEM
-		printk(KERN_NOTICE "%ldMB BIGMEM available.\n",
-			(bigmem_end-bigmem_start)>>20);
-#else
-		printk(KERN_WARNING "Warning only %ldMB will be used.\n",
-			MAXMEM>>20);
-#endif
-	}
-#if defined(CONFIG_BIGMEM) && defined(BIGMEM_DEBUG)
-	else {
-		memory_end -= memory_end/4;
-		bigmem_start = memory_end;
-	}
+	#define MAXBIGMEM	((unsigned long)(~(VMALLOC_RESERVE-1)))
+	#define MAXBIGMEM_PFN	(MAXBIGMEM >> PAGE_SHIFT)
+	if (max_pfn > MAX_PFN)
+		max_pfn = MAX_PFN;
+
+/* When debugging, make half of "normal" memory be BIGMEM memory instead */
+#ifdef BIGMEM_DEBUG
+	high_pfn >>= 1;
 #endif
 
-	memory_end += PAGE_OFFSET;
-	*memory_start_p = memory_start;
-	*memory_end_p = memory_end;
+	bigmem_start = high_pfn << PAGE_SHIFT;
+	bigmem_end = max_pfn << PAGE_SHIFT;
+	printk(KERN_NOTICE "%ldMB BIGMEM available.\n", (bigmem_end-bigmem_start) >> 20);
+#endif
+
+	ram_resources[1].end = (high_pfn << PAGE_SHIFT)-1;
+
+	*memory_start_p = (unsigned long) &_end;
+	*memory_end_p = PAGE_OFFSET + (high_pfn << PAGE_SHIFT);
 
 #ifdef __SMP__
 	/*
@@ -1129,49 +1134,47 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 		}
 	}
 
-	for (i = 0; i < sizeof(cpu_models)/sizeof(struct cpu_model_info); i++) {
-		if (c->cpuid_level > 1) {
-			/* supports eax=2  call */
-			int edx, cache_size, dummy;
-			
-			cpuid(2, &dummy, &dummy, &dummy, &edx);
+	if (c->cpuid_level > 1) {
+		/* supports eax=2  call */
+		int edx, dummy;
 
-			/* We need only the LSB */
-			edx &= 0xff;
+		cpuid(2, &dummy, &dummy, &dummy, &edx);
 
-			switch (edx) {
-				case 0x40:
-					cache_size = 0;
-					break;
+		/* We need only the LSB */
+		edx &= 0xff;
 
-				case 0x41:
-					cache_size = 128;
-					break;
+		switch (edx) {
+			case 0x40:
+				c->x86_cache_size = 0;
+				break;
 
-				case 0x42:
-					cache_size = 256;
-					break;
+			case 0x41:
+				c->x86_cache_size = 128;
+				break;
 
-				case 0x43:
-					cache_size = 512;
-					break;
+			case 0x42:
+				c->x86_cache_size = 256;
+				break;
 
-				case 0x44:
-					cache_size = 1024;
-					break;
+			case 0x43:
+				c->x86_cache_size = 512;
+				break;
 
-				case 0x45:
-					cache_size = 2048;
-					break;
+			case 0x44:
+				c->x86_cache_size = 1024;
+				break;
 
-				default:
-					cache_size = 0;
-					break;
-			}
+			case 0x45:
+				c->x86_cache_size = 2048;
+				break;
 
-			c->x86_cache_size = cache_size; 
+			default:
+				c->x86_cache_size = 0;
+				break;
 		}
+	}
 
+	for (i = 0; i < sizeof(cpu_models)/sizeof(struct cpu_model_info); i++) {
 		if (cpu_models[i].vendor == c->x86_vendor &&
 		    cpu_models[i].x86 == c->x86) {
 			if (c->x86_model <= 16)

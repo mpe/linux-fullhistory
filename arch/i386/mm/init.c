@@ -367,6 +367,22 @@ void __init test_wp_bit(void)
 		printk(".\n");
 }
 
+static void __init mem_init_region(unsigned long pfn, unsigned long count, unsigned long start_mem_pfn)
+{
+	printk("memory region: %luk @ %08lx000\n", count << 2, pfn);
+
+	do {
+		if (pfn >= max_mapnr)
+			break;
+
+		/* Avoid the kernel mapping between HIGH_MEMORY and "start_mem".. */
+		if (pfn < (HIGH_MEMORY >> PAGE_SHIFT) || pfn >= start_mem_pfn)
+			clear_bit(PG_reserved, &mem_map[pfn].flags);
+
+		pfn++;
+	} while (--count > 0);
+}
+
 void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 {
 	unsigned long start_low_mem = PAGE_SIZE;
@@ -412,45 +428,22 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 	/* walk the whitelist, unreserving good memory
 	 */
 	for (avail = i = 0; i < e820.nr_map; i++) {
-		unsigned long addr, end, size;
+		unsigned long start_pfn, end_pfn;
 
 		if (e820.map[i].type != E820_RAM)	/* not usable memory */
 			continue;
-		addr = e820.map[i].addr;
-		size = e820.map[i].size;
 
-		/* Silently ignore memory regions starting above 4gb */
-		if (addr != e820.map[i].addr)
+		start_pfn = (e820.map[i].addr + PAGE_SIZE - 1) >> PAGE_SHIFT;
+		end_pfn = (e820.map[i].addr + e820.map[i].size) >> PAGE_SHIFT;
+
+		/* We have a certain amount of low memory reserved */
+		if (start_pfn < MAP_NR(start_low_mem))
+			start_pfn = MAP_NR(start_low_mem);
+
+		if (end_pfn <= start_pfn)
 			continue;
 
-		printk("memory region: %luk @ %08lx\n", size >> 10, addr );
-
-		/* Make sure we don't get fractional pages */
-		end = PAGE_OFFSET + ((addr + size) & PAGE_MASK);
-		addr= PAGE_OFFSET + PAGE_ALIGN(addr);
-
-		for ( ; addr < end; addr += PAGE_SIZE) {
-
-			/* this little bit of grossness is for dealing
-			 * with memory borrowing for system bookkeeping
-			 * (smp stacks, zero page, kernel code, etc)
-			 * without having to go back and edit the e820
-			 * map to compensate.
-			 *
-			 * if we're in low memory (<1024k), we need to
-			 * avoid the smp stack and zero page.
-			 * if we're in high memory, we need to avoid
-			 * the kernel code.
-			 * in any case, we don't want to hack mem_map
-			 * entries above end_mem.
-			 */
-			if ( (addr < start_low_mem)
-			  || (addr >= (HIGH_MEMORY + PAGE_OFFSET)&& addr <= start_mem)
-			  || (addr > end_mem) )
-				continue;
-
-			clear_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
-		}
+		mem_init_region(start_pfn, end_pfn - start_pfn, MAP_NR(start_mem));
 	}
 
 	for (tmp = PAGE_OFFSET ; tmp < end_mem ; tmp += PAGE_SIZE) {

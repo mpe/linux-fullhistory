@@ -120,7 +120,7 @@ static struct pci_ops pci_direct_conf1 = {
 
 #define IOADDR(devfn, where)	((0xC000 | ((devfn & 0x78) << 5)) + where)
 #define FUNC(devfn)		(((devfn & 7) << 1) | 0xf0)
-#define SET(dev)		if (dev->devfn) return PCIBIOS_DEVICE_NOT_FOUND;		\
+#define SET(dev)		if (dev->devfn & 0x80) return PCIBIOS_DEVICE_NOT_FOUND;		\
 				outb(FUNC(dev->devfn), 0xCF8);					\
 				outb(dev->bus->number, 0xCFA);
 

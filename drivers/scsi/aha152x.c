@@ -344,6 +344,8 @@
 #include <linux/ioport.h>
 #include <linux/proc_fs.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
+#include <linux/kernel.h>
 
 #include "aha152x.h"
 #include <linux/stat.h>
@@ -714,6 +716,7 @@ static int getphase(struct Scsi_Host *shpnt)
 	}
 }
 
+#if 0
 /* called from init/main.c */
 void aha152x_setup(char *str, int *ints)
 {
@@ -742,6 +745,29 @@ void aha152x_setup(char *str, int *ints)
 	} else
 		setup_count++;
 }
+#endif
+
+static int __init do_aha152x_setup (char * str)
+{
+	if (setup_count > 2) {
+		printk(KERN_ERR"aha152x: you can only configure up to two
+controllers\n");
+	return 0;
+	}
+
+	setup[setup_count].conf = str;
+	get_option(&str,&setup[setup_count].io_port);
+	get_option(&str,&setup[setup_count].irq);
+	get_option(&str,&setup[setup_count].scsiid);
+	get_option(&str,&setup[setup_count].reconnect);
+	
+	setup_count++;
+	return 1;
+}
+
+#ifndef MODULE
+__setup("aha152x=",do_aha152x_setup);
+#endif
 
 /*
  * Test, if port_base is valid.

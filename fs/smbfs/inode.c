@@ -75,6 +75,8 @@ smb_iget(struct super_block *sb, struct smb_fattr *fattr)
 	pr_debug("smb_iget: %p\n", fattr);
 
 	result = get_empty_inode();
+	if (!result)
+		return result;
 	result->i_sb = sb;
 	result->i_dev = sb->s_dev;
 	result->i_ino = fattr->f_ino;

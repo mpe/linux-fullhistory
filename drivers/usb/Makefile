@@ -98,12 +98,12 @@ ifeq ($(CONFIG_USB_PRINTER),m)
 endif
 
 ifeq ($(CONFIG_USB_SERIAL),y)
-  L_OBJS += serial.o
+  L_OBJS += usb-serial.o
 endif
 
 ifeq ($(CONFIG_USB_SERIAL),m)
-  M_OBJS += serial.o
-  MIX_OBJS += serial.o  
+  M_OBJS += usb-serial.o
+  MIX_OBJS += usb-serial.o  
 endif
 
 ifneq ($(CONFIG_ADB_KEYBOARD),y)

@@ -213,6 +213,10 @@ struct bttv
 #define BTTV_PIXVIEWPLAYTV 0x10
 #define BTTV_WINVIEW_601   0x11
 #define BTTV_AVEC_INTERCAP 0x12
+#define BTTV_LIFE_FLYKIT   0x13
+#define BTTV_CEI_RAFFLES   0x14
+#define BTTV_CONFERENCETV  0x15
+#define BTTV_PHOEBE_TVMAS  0x16
 
 #define AUDIO_TUNER        0x00
 #define AUDIO_RADIO        0x01
@@ -237,6 +241,7 @@ struct bttv
 #define I2C_STBEE          0xae
 #define I2C_VHX 	   0xc0
 #define I2C_TEA6300        0x80 /* same as TEA6320 */
+#define I2C_TEA6320        0x80
 
 #define TDA9840_SW	   0x00
 #define TDA9840_LVADJ	   0x02

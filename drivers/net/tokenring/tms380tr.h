@@ -1,23 +1,20 @@
-/* sktr.h: SysKonnect TokenRing driver for Linux
+/* tms380tr.h: TI TMS380 Token Ring driver for Linux
  *
  * Authors:
  * - Christoph Goos <cgoos@syskonnect.de>
  */
 
-#ifndef __LINUX_SKTR_H
-#define __LINUX_SKTR_H
+#ifndef __LINUX_TMS380TR_H
+#define __LINUX_TMS380TR_H
 
 #ifdef __KERNEL__
 
-#define SKTR_MAX_ADAPTERS 7
+#define TMS380TR_MAX_ADAPTERS 7
 
 #define SEND_TIMEOUT 10*HZ
 
 #define TR_RCF_LONGEST_FRAME_MASK 0x0070
 #define TR_RCF_FRAME4K 0x0030
-
-#define SK_ISA 0
-#define SK_PCI 1
 
 /*------------------------------------------------------------------*/
 /*  Bit order for adapter communication with DMA		    */
@@ -645,7 +642,7 @@ typedef struct {
  * but possibly multiple TPLs for one frame) the length of the TPLs has to be
  * initialized in the OPL. (OPEN parameter list)
  */
-#define TPL_NUM		9	/* Number of Transmit Parameter Lists.
+#define TPL_NUM		3	/* Number of Transmit Parameter Lists.
 				 * !! MUST BE >= 3 !!
 				 */
 
@@ -1034,6 +1031,15 @@ struct s_RPL {	/* Receive Parameter List */
 	int RPLIndex;
 };
 
+#define TMS_ISA 1
+#define TMS_PCI 2
+struct cardinfo_table {
+	int type; /* 1 = ISA, 2 = PCI */
+	int vendor_id;
+	int device_id;
+	char *name;
+};
+
 /* Information that need to be kept for each board. */
 typedef struct net_local {
 #pragma pack(1)
@@ -1066,8 +1072,6 @@ typedef struct net_local {
 	unsigned char ScbInUse;
 	unsigned short CMDqueue;
 
-	unsigned int DeviceType;
-
 	unsigned long AdapterOpenFlag:1;
 	unsigned long AdapterVirtOpenFlag:1;
 	unsigned long OpenCommandIssued:1;
@@ -1090,6 +1094,8 @@ typedef struct net_local {
 
 	struct tr_statistics MacStat;	/* MAC statistics structure */
 
+	struct cardinfo_table *CardType;
+
 	struct timer_list timer;
 
 	wait_queue_head_t  wait_for_tok_int;
@@ -1100,4 +1106,4 @@ typedef struct net_local {
 } NET_LOCAL;
 
 #endif	/* __KERNEL__ */
-#endif	/* __LINUX_SKTR_H */
+#endif	/* __LINUX_TMS380TR_H */
