@@ -2118,6 +2118,16 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 	                return 0;
 		}
 #endif
+		case IP_MULTICAST_LOOP: 
+		{
+			unsigned char ucval;
+
+			ucval=get_fs_byte((unsigned char *)optval);
+			if(ucval!=0 && ucval!=1)
+				 return -EINVAL;
+			sk->ip_mc_loop=(int)ucval;
+			return 0;
+		}
 		case IP_MULTICAST_IF: 
 		{
 			/* Not fully tested */
@@ -2356,6 +2366,9 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 #ifdef CONFIG_IP_MULTICAST			
 		case IP_MULTICAST_TTL:
 			val=sk->ip_mc_ttl;
+			break;
+		case IP_MULTICAST_LOOP:
+			val=sk->ip_mc_loop;
 			break;
 		case IP_MULTICAST_IF:
 			err=verify_area(VERIFY_WRITE, optlen, sizeof(int));

@@ -1,10 +1,8 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 74
+SUBLEVEL = 75
 
 ARCH = i386
-
-all:	Version zImage
 
 .EXPORT_ALL_VARIABLES:
 
@@ -12,6 +10,8 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 TOPDIR	:= $(shell if [ "$$PWD" != "" ]; then echo $$PWD; else pwd; fi)
+
+all:	do-it-all
 
 #
 # Make "config" the default target if there is no configuration file or
@@ -21,11 +21,14 @@ ifeq (.config,$(wildcard .config))
 include .config
 ifeq (.depend,$(wildcard .depend))
 include .depend
+do-it-all:	Version arch-all
 else
 CONFIGURATION = depend
+do-it-all:	depend
 endif
 else
 CONFIGURATION = config
+do-it-all:	config
 endif
 
 #
@@ -55,7 +58,7 @@ SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
 # standard CFLAGS
 #
 
-CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe
+CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
 
 ifdef CONFIG_CPP
 CFLAGS := $(CFLAGS) -x c++
@@ -156,6 +159,7 @@ boot/head.s: boot/head.S $(CONFIGURE) include/linux/tasks.h
 	$(CPP) -traditional $< -o $@
 
 tools/version.o: tools/version.c include/linux/version.h
+	$(CC) $(CFLAGS) -DUTS_MACHINE='"$(ARCH)"' -c -o tools/version.o tools/version.c
 
 init/main.o: $(CONFIGURE) init/main.c
 	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<

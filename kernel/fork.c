@@ -240,7 +240,7 @@ asmlinkage int sys_fork(struct pt_regs regs)
 		if (p->ldt != NULL)
 			memcpy(p->ldt, current->ldt, LDT_ENTRIES*LDT_ENTRY_SIZE);
 	}
-	p->tss.bitmap = offsetof(struct tss_struct,io_bitmap);
+	p->tss.bitmap = offsetof(struct thread_struct,io_bitmap);
 	for (i = 0; i < IO_BITMAP_SIZE+1 ; i++) /* IO bitmap is actually SIZE+1 */
 		p->tss.io_bitmap[i] = ~0;
 	if (last_task_used_math == current)

@@ -143,9 +143,7 @@ _INLINE_ void run_task_queue(task_queue *list)
 	void (*f) (void *);
 
 	while(1) {
-		p = &tq_last;
-		__asm__ __volatile__("xchgl %0,%2" : "=r" (p) :
-				     "0" (p), "m" (*list) : "memory");
+		p = xchg_ptr(list,&tq_last);
 		if(p == &tq_last)
 			break;
 

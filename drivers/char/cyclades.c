@@ -16,7 +16,7 @@ static char rcsid[] =
  *
  * $Log: cyclades.c,v $
  * Revision 1.35  1994/12/16  13:54:18  steffen
- * addditional patch by Marcio Saito for board detection
+ * additional patch by Marcio Saito for board detection
  * Accidently left out in 1.34
  *
  * Revision 1.34  1994/12/10  12:37:12  steffen
@@ -304,7 +304,7 @@ static unsigned char *tmp_buf = 0;
 static struct semaphore tmp_buf_sem = MUTEX;
 
 /*
- * This is used to look up the divsor speeds and the timeouts
+ * This is used to look up the divisor speeds and the timeouts
  * We're normally limited to 15 distinct baud rates.  The extra
  * are accessed via settings in info->flags.
  *         0,     1,     2,     3,     4,     5,     6,     7,     8,     9,
@@ -326,7 +326,7 @@ static char baud_bpr[] = {  /* 25 MHz baud rate period table */
         0x00,  0xf5,  0xa3,  0x6f,  0x5c,  0x51,  0xf5,  0xa3,  0x51,  0xa3,
         0x6d,  0x51,  0xa3,  0x51,  0xa3,  0x51,  0x36,  0x29,  0x1b,  0x15};
 
-static char baud_cor3[] = {  /* receive threashold */
+static char baud_cor3[] = {  /* receive threshold */
         0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,
         0x0a,  0x0a,  0x0a,  0x08,  0x04,  0x02,  0x01,  0x01,  0x01,  0x01};
 
@@ -1925,7 +1925,7 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
         case TIOCMSET:
             ret_val = set_modem_info(info, cmd, (unsigned int *) arg);
 
-/* The following commands are imcompletely implemented!!! */
+/* The following commands are incompletely implemented!!! */
         case TIOCGSOFTCAR:
             error = verify_area(VERIFY_WRITE, (void *) arg
                                 ,sizeof(unsigned int *));
@@ -2038,7 +2038,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
 	info->count = 1;
     }
 #ifdef SERIAL_DEBUG_COUNT
-    printk("cyc: %d: decrmenting count to %d\n", __LINE__, info->count - 1);
+    printk("cyc: %d: decrementing count to %d\n", __LINE__, info->count - 1);
 #endif
     if (--info->count < 0) {
 	printk("cy_close: bad serial port count for ttys%d: %d\n",
@@ -2204,7 +2204,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 #endif
     info->count--;
 #ifdef SERIAL_DEBUG_COUNT
-    printk("cyc: %d: decrmenting count to %d\n", __LINE__, info->count);
+    printk("cyc: %d: decrementing count to %d\n", __LINE__, info->count);
 #endif
     info->blocked_open++;
 
@@ -2263,7 +2263,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
     if (!tty_hung_up_p(filp)){
 	info->count++;
 #ifdef SERIAL_DEBUG_COUNT
-    printk("cyc: %d: incrmenting count to %d\n", __LINE__, info->count);
+    printk("cyc: %d: incrementing count to %d\n", __LINE__, info->count);
 #endif
     }
     info->blocked_open--;
@@ -2279,7 +2279,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 
 /*
  * This routine is called whenever a serial port is opened.  It
- * performs the serial-specific initalization for the tty structure.
+ * performs the serial-specific initialization for the tty structure.
  */
 int
 cy_open(struct tty_struct *tty, struct file * filp)
@@ -2304,7 +2304,7 @@ cy_open(struct tty_struct *tty, struct file * filp)
 #endif
     info->count++;
 #ifdef SERIAL_DEBUG_COUNT
-    printk("cyc: %d: incrmenting count to %d\n", __LINE__, info->count);
+    printk("cyc: %d: incrementing count to %d\n", __LINE__, info->count);
 #endif
     tty->driver_data = info;
     info->tty = tty;

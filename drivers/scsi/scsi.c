@@ -165,6 +165,8 @@ static struct blist blacklist[] =
    {"MEDIAVIS","CDR-H93MV","1.31"},  /* Locks up if polled for lun != 0 */
    {"SANKYO", "CP525","6.64"},  /* causes failed REQ SENSE, extra reset */
    {"HP", "C1750A", "3226"},    /* scanjet iic */
+   {"HP", "C1790A", ""},	/* scanjet iip */
+   {"HP", "C2500A", ""},	/* scanjet iicx */
    {NULL, NULL, NULL}};	
 
 static int blacklisted(unsigned char * response_data){
@@ -2188,7 +2190,7 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 }
 
 /*
- * Similarily, this entry point should be called by a loadable module if it
+ * Similarly, this entry point should be called by a loadable module if it
  * is trying to remove a low level scsi driver from the system.
  */
 static void scsi_unregister_host(Scsi_Host_Template * tpnt)

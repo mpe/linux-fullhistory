@@ -110,12 +110,6 @@ struct fat_cache {
 
 #ifdef __KERNEL__
 
-static inline struct buffer_head *msdos_sread(int dev,int sector)
-{
-	return bread(dev,sector,SECTOR_SIZE);
-}
-
-
 /* misc.c */
 
 extern void fs_panic(struct super_block *s,char *msg);
@@ -180,6 +174,7 @@ extern int msdos_readdir (struct inode *inode, struct file *filp,
 /* file.c */
 
 extern struct inode_operations msdos_file_inode_operations;
+extern struct inode_operations msdos_file_inode_operations_1024;
 extern int msdos_file_read(struct inode *, struct file *, char *, int);
 extern int msdos_file_write(struct inode *, struct file *, char *, int);
 extern struct inode_operations msdos_file_inode_operations_no_bmap;

@@ -18,6 +18,8 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 
+#include "msbuffer.h"
+
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
@@ -55,6 +57,52 @@ struct inode_operations msdos_file_inode_operations = {
 	NULL,			/* permission */
 	NULL			/* smap */
 };
+/* #Specification: msdos / special devices / mmap	
+	Mmapping does work because a special mmap is provide in that case.
+	Note that it is much less efficient than the generic_mmap normally
+	used since it allocate extra buffer. generic_mmap is used for
+	normal device (512 bytes hardware sectors).
+*/
+static struct file_operations msdos_file_operations_1024 = {
+	NULL,			/* lseek - default */
+	msdos_file_read,	/* read */
+	msdos_file_write,	/* write */
+	NULL,			/* readdir - bad */
+	NULL,			/* select - default */
+	NULL,			/* ioctl - default */
+	msdos_mmap,		/* mmap */
+	NULL,			/* no special open is needed */
+	NULL,			/* release */
+	file_fsync		/* fsync */
+};
+
+/* #Specification: msdos / special devices / swap file
+	Swap file can't work on special devices with a large sector
+	size (1024 bytes hard sector). Those devices have a weird
+	MsDOS filesystem layout. Generally a single hardware sector
+	may contain 2 unrelated logical sector. This mean that there is
+	no easy way to do a mapping between disk sector of a file and virtual
+	memory. So swap file is difficult (not available right now)
+	on those devices. Off course, Ext2 does not have this problem.
+*/
+struct inode_operations msdos_file_inode_operations_1024 = {
+	&msdos_file_operations_1024,	/* default file operations */
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	NULL,			/* bmap */
+	msdos_truncate,		/* truncate */
+	NULL,			/* permission */
+	NULL			/* smap */
+};
 
 #define MSDOS_PREFETCH	32
 struct msdos_pre {
@@ -72,6 +120,7 @@ static void msdos_prefetch (
 	struct msdos_pre *pre,
 	int nb)		/* How many must be prefetch at once */
 {
+	struct super_block *sb = inode->i_sb;
 	struct buffer_head *bhreq[MSDOS_PREFETCH];	/* Buffers not */
 												/* already read */
 	int nbreq=0;			/* Number of buffers in bhreq */
@@ -85,12 +134,12 @@ static void msdos_prefetch (
 			bh = getblk(inode->i_dev,sector,SECTOR_SIZE);
 			if (bh == NULL)	break;
 			pre->bhlist[pre->nblist++] = bh;
-			if (!bh->b_uptodate) bhreq[nbreq++] = bh;
+			if (!msdos_is_uptodate(sb,bh)) bhreq[nbreq++] = bh;
 		}else{
 			break;
 		}
 	}
-	if (nbreq > 0) ll_rw_block (READ,nbreq,bhreq);
+	if (nbreq > 0) msdos_ll_rw_block (sb,READ,nbreq,bhreq);
 	for (i=pre->nblist; i<MSDOS_PREFETCH; i++) pre->bhlist[i] = NULL;
 }
 
@@ -103,6 +152,7 @@ int msdos_file_read(
 	char *buf,
 	int count)
 {
+	struct super_block *sb = inode->i_sb;
 	char *start = buf;
 	char *end   = buf + count;
 	int i;
@@ -172,7 +222,7 @@ int msdos_file_read(
 		}
 		PRINTK (("file_read pos %ld nblist %d %d %d\n",filp->f_pos,pre.nblist,pre.fetched,count));
 		wait_on_buffer(bh);
-		if (!bh->b_uptodate){
+		if (!msdos_is_uptodate(sb,bh)){
 			/* read error  ? */
 			brelse (bh);
 			break;
@@ -216,6 +266,7 @@ int msdos_file_write(
 	char *buf,
 	int count)
 {
+	struct super_block *sb = inode->i_sb;
 	int sector,offset,size,left,written;
 	int error,carry;
 	char *start,*to,ch;
@@ -258,7 +309,7 @@ int msdos_file_write(
 				error = -EIO;
 				break;
 			}
-		}else if (!(bh = msdos_sread(inode->i_dev,sector))) {
+		}else if (!(bh = bread(inode->i_dev,sector,SECTOR_SIZE))) {
 			error = -EIO;
 			break;
 		}
@@ -292,7 +343,7 @@ int msdos_file_write(
 			inode->i_size = filp->f_pos;
 			inode->i_dirt = 1;
 		}
-		bh->b_uptodate = 1;
+		msdos_set_uptodate(sb,bh,1);
 		mark_buffer_dirty(bh, 0);
 		brelse(bh);
 	}

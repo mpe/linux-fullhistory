@@ -72,6 +72,20 @@ int * blk_size[MAX_BLKDEV] = { NULL, NULL, };
 int * blksize_size[MAX_BLKDEV] = { NULL, NULL, };
 
 /*
+ * hardsect_size contains the size of the hardware sector of a device.
+ *
+ * hardsect_size[MAJOR][MINOR]
+ *
+ * if (!hardsect_size[MAJOR])
+ *		then 512 bytes is assumed.
+ * else
+ *		sector_size is hardsect_size[MAJOR][MINOR]
+ * This is currently set by some scsi device and read by the msdos fs driver
+ * This might be a some uses later.
+ */
+int * hardsect_size[MAX_BLKDEV] = { NULL, NULL, };
+
+/*
  * look for a free request in the first N entries.
  * NOTE: interrupts must be disabled on the way in, and will still
  *       be disabled on the way out.

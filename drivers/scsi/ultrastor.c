@@ -290,11 +290,14 @@ static inline void build_sg_list(struct mscp *, Scsi_Cmnd *SCpnt);
 static inline int find_and_clear_bit_16(unsigned short *field)
 {
   int rv;
+  unsigned long flags;
+
+  save_flags(flags);
   cli();
   if (*field == 0) panic("No free mscp");
   asm("xorl %0,%0\n0:\tbsfw %1,%w0\n\tbtr %0,%1\n\tjnc 0b"
       : "=&r" (rv), "=m" (*field) : "1" (*field));
-  sti();
+  restore_flags(flags);
   return rv;
 }
 

@@ -152,7 +152,7 @@
  *  2.9  Fulfilled the Longshine LCS-7260 support; with great help and
  *       experiments by Serge Robyns.
  *       First attempts to support the TEAC CD-55A drives; but still not
- *       useable yet.
+ *       usable yet.
  *       Implemented the CDROMMULTISESSION and CDROMMULTISESSION_SYS ioctls;
  *       this is an attempt to handle multi session CDs more "transparent"
  *       (redirection handling has to be done within the isofs routines, and
@@ -243,7 +243,7 @@
                                   * linux/fs/isofs/inode.c
                                   * if set to 0 here
                                   */
-#define TEAC 0 /* if 1: enable TEAC CD-55A support (not useable yet) */
+#define TEAC 0 /* if 1: enable TEAC CD-55A support (not usable yet) */
 #define JUKEBOX 1 /* tray control: eject tray if no disk is in */
 #define EJECT 1 /* tray control: eject tray after last use */
 #define LONG_TIMING 0 /* test against timeouts with "gold" CDs on CR-521 */
@@ -625,7 +625,7 @@ static void sbpcd_dprintf(int level, char *fmt, ...)
 }
 
 /*
- * DDI interface: runtime trace bit pattern maintainance
+ * DDI interface: runtime trace bit pattern maintenance
  */
 static int sbpcd_dbg_ioctl(unsigned long arg, int level)
 {

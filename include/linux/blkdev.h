@@ -44,4 +44,6 @@ extern int * blk_size[MAX_BLKDEV];
 
 extern int * blksize_size[MAX_BLKDEV];
 
+extern int * hardsect_size[MAX_BLKDEV];
+
 #endif

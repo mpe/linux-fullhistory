@@ -6,6 +6,7 @@
 
 #include <asm/system.h>
 
+#undef halt
 #define halt .long PAL_halt
 
 /*

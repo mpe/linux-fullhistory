@@ -57,8 +57,8 @@ struct	rusage {
 #define RLIM_INFINITY	((long)(~0UL>>1))
 
 struct rlimit {
-	int	rlim_cur;
-	int	rlim_max;
+	long	rlim_cur;
+	long	rlim_max;
 };
 
 #define	PRIO_MIN	(-99)

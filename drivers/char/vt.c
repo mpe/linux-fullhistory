@@ -129,7 +129,7 @@ kd_mksound(unsigned int count, unsigned int ticks)
 int vt_ioctl(struct tty_struct *tty, struct file * file,
 	     unsigned int cmd, unsigned long arg)
 {
-	int i;
+	int i, perm;
 	unsigned int console;
 	unsigned char ucval;
 	struct kbd_struct * kbd;
@@ -140,13 +140,25 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	if (!vc_cons_allocated(console)) 	/* impossible? */
 		return -ENOIOCTLCMD;
 
+	/*
+	 * To have permissions to do most of the vt ioctls, we either have
+	 * to be the owner of the tty, or super-user.
+	 */
+	perm = 0;
+	if (current->tty == tty || suser())
+		perm = 1;
+
 	kbd = kbd_table + console;
 	switch (cmd) {
 	case KIOCSOUND:
+		if (!perm)
+			return -EPERM;
 		kd_mksound((unsigned int)arg, 0);
 		return 0;
 
 	case KDMKTONE:
+		if (!perm)
+			return -EPERM;
 	{
 		unsigned int ticks = HZ * ((arg >> 16) & 0xffff) / 1000;
 
@@ -190,7 +202,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		 * doesn't do a whole lot. i'm not sure if it should do any
 		 * restoration of modes or what...
 		 */
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		switch (arg) {
 		case KD_GRAPHICS:
@@ -232,7 +244,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return -EINVAL;
 
 	case KDSKBMODE:
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		switch(arg) {
 		  case K_RAW:
@@ -313,7 +325,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		struct kbkeycode * const a = (struct kbkeycode *)arg;
 		unsigned int sc, kc;
 
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbkeycode));
 		if (i)
@@ -354,7 +366,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		u_char s;
 		u_short v;
 
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbentry));
 		if (i)
@@ -445,7 +457,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		u_char *p;
 		char *q;
 
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbsentry));
 		if (i)
@@ -530,7 +542,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		struct kbdiacrs *a = (struct kbdiacrs *)arg;
 		unsigned int ct;
 
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		i = verify_area(VERIFY_READ, (void *) a, sizeof(struct kbdiacrs));
 		if (i)
@@ -554,7 +566,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return 0;
 
 	case KDSKBLED:
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		if (arg & ~0x77)
 			return -EINVAL;
@@ -582,7 +594,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		struct vt_mode *vtmode = (struct vt_mode *)arg;
 		char mode;
 
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		i = verify_area(VERIFY_WRITE, (void *)vtmode, sizeof(struct vt_mode));
 		if (i)
@@ -659,7 +671,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	 * to preserve sanity).
 	 */
 	case VT_ACTIVATE:
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		if (arg == 0 || arg > MAX_NR_CONSOLES)
 			return -ENXIO;
@@ -674,7 +686,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	 * wait until the specified VT has been activated
 	 */
 	case VT_WAITACTIVE:
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		if (arg == 0 || arg > MAX_NR_CONSOLES)
 			return -ENXIO;
@@ -697,7 +709,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	 *	2:	completed switch-to OK
 	 */
 	case VT_RELDISP:
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		if (vt_cons[console]->vt_mode.mode != VT_PROCESS)
 			return -EINVAL;
@@ -747,7 +759,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	  * Disallocate memory associated to VT (but leave VT1)
 	  */
 	 case VT_DISALLOCATE:
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		if (arg > MAX_NR_CONSOLES)
 			return -ENXIO;
@@ -776,7 +788,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	{
 		struct vt_sizes *vtsizes = (struct vt_sizes *) arg;
 		ushort ll,cc;
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		i = verify_area(VERIFY_READ, (void *)vtsizes, sizeof(struct vt_sizes));
 		if (i)
@@ -787,7 +799,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	}
 
 	case PIO_FONT:
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		return con_set_font((char *)arg);
 		/* con_set_font() defined in console.c */
@@ -797,7 +809,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		/* con_get_font() defined in console.c */
 
 	case PIO_SCRNMAP:
-		if (!suser())
+		if (!perm)
 			return -EPERM;
 		return con_set_trans((char *)arg);
 		/* con_set_trans() defined in console.c */

@@ -18,7 +18,7 @@ endif
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS=	namei.o inode.o file.o dir.o misc.o fat.o
+OBJS=	buffer.o namei.o inode.o file.o dir.o misc.o fat.o mmap.o
 
 msdos.o: $(OBJS)
 	$(LD) -r -o msdos.o $(OBJS)

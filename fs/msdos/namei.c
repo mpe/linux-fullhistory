@@ -13,6 +13,8 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 
+#include "msbuffer.h"
+
 #define PRINTK(x)
 
 /* MS-DOS "device special files" */
@@ -107,6 +109,7 @@ static int msdos_find(struct inode *dir,const char *name,int len,
 int msdos_lookup(struct inode *dir,const char *name,int len,
     struct inode **result)
 {
+	struct super_block *sb = dir->i_sb;
 	int ino,res;
 	struct msdos_dir_entry *de;
 	struct buffer_head *bh;
@@ -173,6 +176,7 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 static int msdos_create_entry(struct inode *dir,char *name,int is_dir,
     struct inode **result)
 {
+	struct super_block *sb = dir->i_sb;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 	int res,ino;
@@ -209,6 +213,7 @@ static int msdos_create_entry(struct inode *dir,char *name,int is_dir,
 int msdos_create(struct inode *dir,const char *name,int len,int mode,
 	struct inode **result)
 {
+	struct super_block *sb = dir->i_sb;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 	char msdos_name[MSDOS_NAME];
@@ -256,6 +261,7 @@ static void dump_fat(struct super_block *sb,int start)
 
 int msdos_mkdir(struct inode *dir,const char *name,int len,int mode)
 {
+	struct super_block *sb = dir->i_sb;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 	struct inode *inode,*dot;
@@ -313,6 +319,7 @@ mkdir_error:
 
 static int msdos_empty(struct inode *dir)
 {
+	struct super_block *sb = dir->i_sb;
 	loff_t pos;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
@@ -338,6 +345,7 @@ static int msdos_empty(struct inode *dir)
 
 int msdos_rmdir(struct inode *dir,const char *name,int len)
 {
+	struct super_block *sb = dir->i_sb;
 	int res,ino;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
@@ -379,6 +387,7 @@ static int msdos_unlinkx(
 	int len,
 	int nospc)	/* Flag special file ? */
 {
+	struct super_block *sb = dir->i_sb;
 	int res,ino;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
@@ -425,6 +434,7 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,
     struct inode *new_dir,char *new_name,struct buffer_head *old_bh,
     struct msdos_dir_entry *old_de,int old_ino)
 {
+	struct super_block *sb = old_dir->i_sb;
 	struct buffer_head *new_bh;
 	struct msdos_dir_entry *new_de;
 	struct inode *new_inode,*old_inode;
@@ -476,6 +486,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
     struct inode *new_dir,char *new_name,struct buffer_head *old_bh,
     struct msdos_dir_entry *old_de,int old_ino)
 {
+	struct super_block *sb = old_dir->i_sb;
 	struct buffer_head *new_bh,*free_bh,*dotdot_bh;
 	struct msdos_dir_entry *new_de,*free_de,*dotdot_de;
 	struct inode *old_inode,*new_inode,*free_inode,*dotdot_inode,*walk;
@@ -594,6 +605,7 @@ rename_done:
 int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
 	struct inode *new_dir,const char *new_name,int new_len)
 {
+	struct super_block *sb = old_dir->i_sb;
 	char old_msdos_name[MSDOS_NAME],new_msdos_name[MSDOS_NAME];
 	struct buffer_head *old_bh;
 	struct msdos_dir_entry *old_de;

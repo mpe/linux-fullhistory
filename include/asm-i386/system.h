@@ -18,6 +18,125 @@ __asm__ __volatile__ ("movl %%esp,%%eax\n\t" \
 	"mov %%ax,%%gs" \
 	: /* no outputs */ :"i" (USER_DS), "i" (USER_CS):"ax")
 
+/*
+ * Entry into gdt where to find first TSS. GDT layout:
+ *   0 - nul
+ *   1 - kernel code segment
+ *   2 - kernel data segment
+ *   3 - user code segment
+ *   4 - user data segment
+ * ...
+ *   8 - TSS #0
+ *   9 - LDT #0
+ *  10 - TSS #1
+ *  11 - LDT #1
+ */
+#define FIRST_TSS_ENTRY 8
+#define FIRST_LDT_ENTRY (FIRST_TSS_ENTRY+1)
+#define _TSS(n) ((((unsigned long) n)<<4)+(FIRST_TSS_ENTRY<<3))
+#define _LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))
+#define load_TR(n) __asm__("ltr %%ax": /* no output */ :"a" (_TSS(n)))
+#define load_ldt(n) __asm__("lldt %%ax": /* no output */ :"a" (_LDT(n)))
+#define store_TR(n) \
+__asm__("str %%ax\n\t" \
+	"subl %2,%%eax\n\t" \
+	"shrl $4,%%eax" \
+	:"=a" (n) \
+	:"0" (0),"i" (FIRST_TSS_ENTRY<<3))
+
+/* This special macro can be used to load a debugging register */
+
+#define loaddebug(register) \
+		__asm__("movl %0,%%edx\n\t" \
+			"movl %%edx,%%db" #register "\n\t" \
+			: /* no output */ \
+			:"m" (current->debugreg[register]) \
+			:"dx");
+
+
+/*
+ *	switch_to(n) should switch tasks to task nr n, first
+ * checking that n isn't the current task, in which case it does nothing.
+ * This also clears the TS-flag if the task we switched to has used
+ * the math co-processor latest.
+ *
+ * It also reloads the debug regs if necessary..
+ */
+#define switch_to(tsk) do { \
+__asm__("cli\n\t" \
+	"xchgl %%ecx,_current\n\t" \
+	"ljmp %0\n\t" \
+	"sti\n\t" \
+	"cmpl %%ecx,_last_task_used_math\n\t" \
+	"jne 1f\n\t" \
+	"clts\n" \
+	"1:" \
+	: /* no output */ \
+	:"m" (*(((char *)&tsk->tss.tr)-4)), \
+	 "c" (tsk) \
+	:"cx"); \
+	/* Now maybe reload the debug registers */ \
+	if(current->debugreg[7]){ \
+		loaddebug(0); \
+		loaddebug(1); \
+		loaddebug(2); \
+		loaddebug(3); \
+		loaddebug(6); \
+	} \
+} while (0)
+
+#define _set_base(addr,base) \
+__asm__("movw %%dx,%0\n\t" \
+	"rorl $16,%%edx\n\t" \
+	"movb %%dl,%1\n\t" \
+	"movb %%dh,%2" \
+	: /* no output */ \
+	:"m" (*((addr)+2)), \
+	 "m" (*((addr)+4)), \
+	 "m" (*((addr)+7)), \
+	 "d" (base) \
+	:"dx")
+
+#define _set_limit(addr,limit) \
+__asm__("movw %%dx,%0\n\t" \
+	"rorl $16,%%edx\n\t" \
+	"movb %1,%%dh\n\t" \
+	"andb $0xf0,%%dh\n\t" \
+	"orb %%dh,%%dl\n\t" \
+	"movb %%dl,%1" \
+	: /* no output */ \
+	:"m" (*(addr)), \
+	 "m" (*((addr)+6)), \
+	 "d" (limit) \
+	:"dx")
+
+#define set_base(ldt,base) _set_base( ((char *)&(ldt)) , base )
+#define set_limit(ldt,limit) _set_limit( ((char *)&(ldt)) , (limit-1)>>12 )
+
+static inline unsigned long _get_base(char * addr)
+{
+	unsigned long __base;
+	__asm__("movb %3,%%dh\n\t"
+		"movb %2,%%dl\n\t"
+		"shll $16,%%edx\n\t"
+		"movw %1,%%dx"
+		:"=&d" (__base)
+		:"m" (*((addr)+2)),
+		 "m" (*((addr)+4)),
+		 "m" (*((addr)+7)));
+	return __base;
+}
+
+#define get_base(ldt) _get_base( ((char *)&(ldt)) )
+
+static inline unsigned long get_limit(unsigned long segment)
+{
+	unsigned long __limit;
+	__asm__("lsll %1,%0"
+		:"=r" (__limit):"r" (segment));
+	return __limit+1;
+}
+
 #define nop() __asm__ __volatile__ ("nop")
 
 /*
@@ -34,12 +153,32 @@ __asm__ __volatile__ ( \
 	:"ax")
 
 
+extern inline unsigned long xchg_u8(char * m, unsigned long val)
+{
+	__asm__("xchgb %b0,%1":"=q" (val),"=m" (*m):"0" (val):"memory");
+	return val;
+}
+
+extern inline unsigned long xchg_u16(short * m, unsigned long val)
+{
+	__asm__("xchgw %w0,%1":"=r" (val),"=m" (*m):"0" (val):"memory");
+	return val;
+}
+
+extern inline unsigned long xchg_u32(long * m, unsigned long val)
+{
+	__asm__("xchgl %0,%1":"=r" (val),"=m" (*m):"0" (val):"memory");
+	return val;
+}
+
 extern inline int tas(char * m)
 {
-	char res;
+	return xchg_u8(m,1);
+}
 
-	__asm__("xchgb %0,%1":"=q" (res),"=m" (*m):"0" (0x1));
-	return res;
+extern inline void * xchg_ptr(void * m, void * val)
+{
+	return (void *) xchg_u32(m, (unsigned long) val);
 }
 
 #define sti() __asm__ __volatile__ ("sti": : :"memory")
@@ -104,5 +243,10 @@ __asm__ __volatile__ ("movw $" #limit ",%1\n\t" \
 #define set_ldt_desc(n,addr,size) \
 	_set_tssldt_desc(((char *) (n)),((int)(addr)),((size << 3) - 1),"0x82")
 
+/*
+ * This is the ldt that every process will get unless we need
+ * something other than this.
+ */
+extern struct desc_struct default_ldt;
 
 #endif

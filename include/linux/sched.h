@@ -11,51 +11,13 @@
 
 #define HZ 100
 
-/*
- * System setup and hardware bug flags..
- */
-extern char hard_math;
-extern char x86;		/* lower 4 bits */
-extern char x86_vendor_id[13];
-extern char x86_model;		/* lower 4 bits */
-extern char x86_mask;		/* lower 4 bits */
-extern int  x86_capability;	/* field of flags */
-extern int  fdiv_bug;		
-extern char ignore_irq13;
-extern char wp_works_ok;		/* doesn't work on a 386 */
-extern char hlt_works_ok;	/* problems on some 486Dx4's and old 386's */
-
 extern unsigned long intr_count;
 extern unsigned long event;
-
-#define start_bh_atomic() \
-__asm__ __volatile__("incl _intr_count")
-
-#define end_bh_atomic() \
-__asm__ __volatile__("decl _intr_count")
-
-/*
- * Bus types (default is ISA, but people can check others with these..)
- * MCA_bus hardcoded to 0 for now.
- */
-extern int EISA_bus;
-#define MCA_bus 0
 
 #include <linux/binfmts.h>
 #include <linux/personality.h>
 #include <linux/tasks.h>
 #include <asm/system.h>
-
-/*
- * User space process size: 3GB. This is hardcoded into a few places,
- * so don't change it unless you know what you are doing.
- */
-#define TASK_SIZE	0xc0000000
-
-/*
- * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.
- */
-#define IO_BITMAP_SIZE	32
 
 /*
  * These are the constant used to fake the fixed-point load-average
@@ -98,6 +60,8 @@ extern unsigned long avenrun[];		/* Load averages */
 #include <linux/math_emu.h>
 #include <linux/ptrace.h>
 
+#include <asm/processor.h>
+
 #define TASK_RUNNING		0
 #define TASK_INTERRUPTIBLE	1
 #define TASK_UNINTERRUPTIBLE	2
@@ -118,82 +82,6 @@ extern void trap_init(void);
 asmlinkage void schedule(void);
 
 #endif /* __KERNEL__ */
-
-struct i387_hard_struct {
-	long	cwd;
-	long	swd;
-	long	twd;
-	long	fip;
-	long	fcs;
-	long	foo;
-	long	fos;
-	long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
-};
-
-struct i387_soft_struct {
-	long	cwd;
-	long	swd;
-	long	twd;
-	long	fip;
-	long	fcs;
-	long	foo;
-	long	fos;
-	long    top;
-	struct fpu_reg	regs[8];	/* 8*16 bytes for each FP-reg = 128 bytes */
-	unsigned char	lookahead;
-	struct info	*info;
-	unsigned long	entry_eip;
-};
-
-union i387_union {
-	struct i387_hard_struct hard;
-	struct i387_soft_struct soft;
-};
-
-struct tss_struct {
-	unsigned short	back_link,__blh;
-	unsigned long	esp0;
-	unsigned short	ss0,__ss0h;
-	unsigned long	esp1;
-	unsigned short	ss1,__ss1h;
-	unsigned long	esp2;
-	unsigned short	ss2,__ss2h;
-	unsigned long	cr3;
-	unsigned long	eip;
-	unsigned long	eflags;
-	unsigned long	eax,ecx,edx,ebx;
-	unsigned long	esp;
-	unsigned long	ebp;
-	unsigned long	esi;
-	unsigned long	edi;
-	unsigned short	es, __esh;
-	unsigned short	cs, __csh;
-	unsigned short	ss, __ssh;
-	unsigned short	ds, __dsh;
-	unsigned short	fs, __fsh;
-	unsigned short	gs, __gsh;
-	unsigned short	ldt, __ldth;
-	unsigned short	trace, bitmap;
-	unsigned long	io_bitmap[IO_BITMAP_SIZE+1];
-	unsigned long	tr;
-	unsigned long	cr2, trap_no, error_code;
-	union i387_union i387;
-};
-
-#define INIT_TSS  { \
-	0,0, \
-	sizeof(init_kernel_stack) + (long) &init_kernel_stack, \
-	KERNEL_DS, 0, \
-	0,0,0,0,0,0, \
-	(long) &swapper_pg_dir, \
-	0,0,0,0,0,0,0,0,0,0, \
-	USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0, \
-	_LDT(0),0, \
-	0, 0x8000, \
-	{~0, }, /* ioperm */ \
-	_TSS(0), 0, 0,0, \
-	{ { 0, }, }  /* 387 state */ \
-}
 
 struct files_struct {
 	int count;
@@ -286,10 +174,6 @@ struct task_struct {
 	struct rlimit rlim[RLIM_NLIMITS]; 
 	unsigned short used_math;
 	char comm[16];
-/* virtual 86 mode stuff */
-	struct vm86_struct * vm86_info;
-	unsigned long screen_bitmap;
-	unsigned long v86flags, v86mask, v86mode;
 /* file system info */
 	int link_count;
 	struct tty_struct *tty; /* NULL if no tty */
@@ -298,7 +182,7 @@ struct task_struct {
 /* ldt for this task - used by Wine.  If NULL, default_ldt is used */
 	struct desc_struct *ldt;
 /* tss for this task */
-	struct tss_struct tss;
+	struct thread_struct tss;
 /* filesystem information */
 	struct fs_struct fs[1];
 /* open file information */
@@ -345,7 +229,6 @@ struct task_struct {
 		  {       0, LONG_MAX}, {LONG_MAX, LONG_MAX}}, \
 /* math */	0, \
 /* comm */	"swapper", \
-/* vm86_info */	NULL, 0, 0, 0, 0, \
 /* fs info */	0,NULL, \
 /* ipc */	NULL, \
 /* ldt */	NULL, \
@@ -380,79 +263,6 @@ extern int in_group_p(gid_t grp);
 
 extern int request_irq(unsigned int irq,void (*handler)(int), unsigned long flags, const char *device);
 extern void free_irq(unsigned int irq);
-
-/*
- * Entry into gdt where to find first TSS. GDT layout:
- *   0 - nul
- *   1 - kernel code segment
- *   2 - kernel data segment
- *   3 - user code segment
- *   4 - user data segment
- * ...
- *   8 - TSS #0
- *   9 - LDT #0
- *  10 - TSS #1
- *  11 - LDT #1
- */
-#define FIRST_TSS_ENTRY 8
-#define FIRST_LDT_ENTRY (FIRST_TSS_ENTRY+1)
-#define _TSS(n) ((((unsigned long) n)<<4)+(FIRST_TSS_ENTRY<<3))
-#define _LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))
-#define load_TR(n) __asm__("ltr %%ax": /* no output */ :"a" (_TSS(n)))
-#define load_ldt(n) __asm__("lldt %%ax": /* no output */ :"a" (_LDT(n)))
-#define store_TR(n) \
-__asm__("str %%ax\n\t" \
-	"subl %2,%%eax\n\t" \
-	"shrl $4,%%eax" \
-	:"=a" (n) \
-	:"0" (0),"i" (FIRST_TSS_ENTRY<<3))
-/*
- *	switch_to(n) should switch tasks to task nr n, first
- * checking that n isn't the current task, in which case it does nothing.
- * This also clears the TS-flag if the task we switched to has used
- * tha math co-processor latest.
- */
-#define switch_to(tsk) \
-__asm__("cli\n\t" \
-	"xchgl %%ecx,_current\n\t" \
-	"ljmp %0\n\t" \
-	"sti\n\t" \
-	"cmpl %%ecx,_last_task_used_math\n\t" \
-	"jne 1f\n\t" \
-	"clts\n" \
-	"1:" \
-	: /* no output */ \
-	:"m" (*(((char *)&tsk->tss.tr)-4)), \
-	 "c" (tsk) \
-	:"cx")
-
-#define _set_base(addr,base) \
-__asm__("movw %%dx,%0\n\t" \
-	"rorl $16,%%edx\n\t" \
-	"movb %%dl,%1\n\t" \
-	"movb %%dh,%2" \
-	: /* no output */ \
-	:"m" (*((addr)+2)), \
-	 "m" (*((addr)+4)), \
-	 "m" (*((addr)+7)), \
-	 "d" (base) \
-	:"dx")
-
-#define _set_limit(addr,limit) \
-__asm__("movw %%dx,%0\n\t" \
-	"rorl $16,%%edx\n\t" \
-	"movb %1,%%dh\n\t" \
-	"andb $0xf0,%%dh\n\t" \
-	"orb %%dh,%%dl\n\t" \
-	"movb %%dl,%1" \
-	: /* no output */ \
-	:"m" (*(addr)), \
-	 "m" (*((addr)+6)), \
-	 "d" (limit) \
-	:"dx")
-
-#define set_base(ldt,base) _set_base( ((char *)&(ldt)) , base )
-#define set_limit(ldt,limit) _set_limit( ((char *)&(ldt)) , (limit-1)>>12 )
 
 /*
  * The wait-queues are circular lists, and you have to be *very* sure
@@ -556,30 +366,6 @@ extern inline void up(struct semaphore * sem)
 	wake_up(&sem->wait);
 }	
 
-static inline unsigned long _get_base(char * addr)
-{
-	unsigned long __base;
-	__asm__("movb %3,%%dh\n\t"
-		"movb %2,%%dl\n\t"
-		"shll $16,%%edx\n\t"
-		"movw %1,%%dx"
-		:"=&d" (__base)
-		:"m" (*((addr)+2)),
-		 "m" (*((addr)+4)),
-		 "m" (*((addr)+7)));
-	return __base;
-}
-
-#define get_base(ldt) _get_base( ((char *)&(ldt)) )
-
-static inline unsigned long get_limit(unsigned long segment)
-{
-	unsigned long __limit;
-	__asm__("lsll %1,%0"
-		:"=r" (__limit):"r" (segment));
-	return __limit+1;
-}
-
 #define REMOVE_LINKS(p) do { unsigned long flags; \
 	save_flags(flags) ; cli(); \
 	(p)->next_task->prev_task = (p)->prev_task; \
@@ -608,21 +394,6 @@ static inline unsigned long get_limit(unsigned long segment)
 
 #define for_each_task(p) \
 	for (p = &init_task ; (p = p->next_task) != &init_task ; )
-
-/*
- * This is the ldt that every process will get unless we need
- * something other than this.
- */
-extern struct desc_struct default_ldt;
-
-/* This special macro can be used to load a debugging register */
-
-#define loaddebug(register) \
-		__asm__("movl %0,%%edx\n\t" \
-			"movl %%edx,%%db" #register "\n\t" \
-			: /* no output */ \
-			:"m" (current->debugreg[register]) \
-			:"dx");
 
 #endif /* __KERNEL__ */
 

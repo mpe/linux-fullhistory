@@ -95,9 +95,9 @@ unsigned long prof_len = 0;
 extern void mem_use(void);
 
 extern int timer_interrupt(void);
-asmlinkage int system_call(void);
-
+ 
 static unsigned long init_kernel_stack[1024] = { STACK_MAGIC, };
+unsigned long init_user_stack[1024] = { STACK_MAGIC, };
 static struct vm_area_struct init_mmap = INIT_MMAP;
 struct task_struct init_task = INIT_TASK;
 
@@ -108,54 +108,7 @@ struct task_struct *last_task_used_math = NULL;
 
 struct task_struct * task[NR_TASKS] = {&init_task, };
 
-long user_stack [ PAGE_SIZE>>2 ] = { STACK_MAGIC, };
-
-struct {
-	long * a;
-	short b;
-	} stack_start = { & user_stack [PAGE_SIZE>>2] , KERNEL_DS };
-
 struct kernel_stat kstat = { 0 };
-
-/*
- *  'math_state_restore()' saves the current math information in the
- * old math state array, and gets the new ones from the current task
- *
- * Careful.. There are problems with IBM-designed IRQ13 behaviour.
- * Don't touch unless you *really* know how it works.
- */
-asmlinkage void math_state_restore(void)
-{
-	__asm__ __volatile__("clts");
-	if (last_task_used_math == current)
-		return;
-	timer_table[COPRO_TIMER].expires = jiffies+50;
-	timer_active |= 1<<COPRO_TIMER;	
-	if (last_task_used_math)
-		__asm__("fnsave %0":"=m" (last_task_used_math->tss.i387));
-	else
-		__asm__("fnclex");
-	last_task_used_math = current;
-	if (current->used_math) {
-		__asm__("frstor %0": :"m" (current->tss.i387));
-	} else {
-		__asm__("fninit");
-		current->used_math=1;
-	}
-	timer_active &= ~(1<<COPRO_TIMER);
-}
-
-#ifndef CONFIG_MATH_EMULATION
-
-asmlinkage void math_emulate(long arg)
-{
-  printk("math-emulation not enabled and no coprocessor found.\n");
-  printk("killing %s.\n",current->comm);
-  send_sig(SIGFPE,current,1);
-  schedule();
-}
-
-#endif /* CONFIG_MATH_EMULATION */
 
 unsigned long itimer_ticks = 0;
 unsigned long itimer_next = ~0;
@@ -252,14 +205,6 @@ confuse_gcc2:
 		return;
 	kstat.context_swtch++;
 	switch_to(next);
-	/* Now maybe reload the debug registers */
-	if(current->debugreg[7]){
-		loaddebug(0);
-		loaddebug(1);
-		loaddebug(2);
-		loaddebug(3);
-		loaddebug(6);
-	};
 }
 
 asmlinkage int sys_pause(void)
@@ -801,10 +746,12 @@ static void show_task(int nr,struct task_struct * p)
 		printk(stat_nam[p->state]);
 	else
 		printk(" ");
+#ifdef __i386__
 	if (p == current)
 		printk(" current  ");
 	else
 		printk(" %08lX ", ((unsigned long *)p->tss.esp)[3]);
+#endif
 	for (free = 1; free < 1024 ; free++) {
 		if (((unsigned long *)p->kernel_stack_page)[free])
 			break;
@@ -837,29 +784,11 @@ void show_state(void)
 
 void sched_init(void)
 {
-	int i;
-	struct desc_struct * p;
-
 	bh_base[TIMER_BH].routine = timer_bh;
 	bh_base[TQUEUE_BH].routine = tqueue_bh;
 	bh_base[IMMEDIATE_BH].routine = immediate_bh;
 	if (sizeof(struct sigaction) != 16)
 		panic("Struct sigaction MUST be 16 bytes");
-	set_tss_desc(gdt+FIRST_TSS_ENTRY,&init_task.tss);
-	set_ldt_desc(gdt+FIRST_LDT_ENTRY,&default_ldt,1);
-	set_system_gate(0x80,&system_call);
-	p = gdt+2+FIRST_TSS_ENTRY;
-	for(i=1 ; i<NR_TASKS ; i++) {
-		task[i] = NULL;
-		p->a=p->b=0;
-		p++;
-		p->a=p->b=0;
-		p++;
-	}
-/* Clear NT, so that we won't have troubles with that later on */
-	__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
-	load_TR(0);
-	load_ldt(0);
 	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */

@@ -14,6 +14,8 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 
+#include "msbuffer.h"
+
 #define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
 #define ROUND_UP(x) (((x)+3) & ~3)
 
@@ -62,6 +64,7 @@ int msdos_readdir(
 	struct dirent *dirent,	/* dirent in user space */
 	int count)
 {
+	struct super_block *sb = inode->i_sb;
 	int ino,i,i2,last;
 	char c,*walk;
 	struct buffer_head *bh;

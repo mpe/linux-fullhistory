@@ -9,12 +9,13 @@
 #ifndef UTS_SYSNAME
 #define UTS_SYSNAME "Linux"
 #endif
-#ifndef UTS_NODENAME
-#define UTS_NODENAME "(none)"	/* set by sethostname() */
-#endif
 
 #ifndef UTS_MACHINE
-#define UTS_MACHINE "i386"	/* hardware type */
+#define UTS_MACHINE "unknown"
+#endif
+
+#ifndef UTS_NODENAME
+#define UTS_NODENAME "(none)"	/* set by sethostname() */
 #endif
 
 #ifndef UTS_DOMAINNAME

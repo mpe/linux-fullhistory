@@ -243,17 +243,16 @@ static int get_version(char * buffer)
 
 static int get_cpuinfo(char * buffer)
 {
-	/* to conserve memory, we define the strins yes and no in
-	   advance */
-	char *yes="yes";
-	char *no="no";
 	char *model[2][9]={{"DX","SX","DX/2","4","SX/2","6",
 				"7","DX/4"},
 			{"Pentium 60/66","Pentium 90/100","3",
 				"4","5","6","7","8"}};
+	char mask[2];
+	mask[0] = x86_mask+'@';
+	mask[1] = '\0';
 	return sprintf(buffer,"cpu\t\t: %c86\n"
 			      "model\t\t: %s\n"
-			      "mask\t\t: %c\n"
+			      "mask\t\t: %s\n"
 			      "vid\t\t: %s\n"
 			      "fdiv_bug\t: %s\n"
 			      "math\t\t: %s\n"
@@ -269,20 +268,20 @@ static int get_cpuinfo(char * buffer)
 			      "CMPXCHGB8B\t: %s\n",
 			      x86+'0', 
 			      x86_model ? model[x86-4][x86_model-1] : "Unknown",
-			      x86_mask+'@',
+			      x86_mask ? mask : "Unknown",
 			      x86_vendor_id,
-			      fdiv_bug ? yes : no,
-			      hard_math ? yes : no,
-			      hlt_works_ok ? yes : no,
-			      wp_works_ok ? yes : no,
-			      x86_capability & 1 ? yes : no,
-			      x86_capability & 2 ? yes : no,
-			      x86_capability & 4 ? yes : no,
-			      x86_capability & 8 ? yes : no,
-			      x86_capability & 16 ? yes : no,
-			      x86_capability & 32 ? yes : no,
-			      x86_capability & 128 ? yes : no,
-			      x86_capability & 256 ? yes : no
+			      fdiv_bug ? "yes" : "no",
+			      hard_math ? "yes" : "no",
+			      hlt_works_ok ? "yes" : "no",
+			      wp_works_ok ? "yes" : "no",
+			      x86_capability & 1 ? "yes" : "no",
+			      x86_capability & 2 ? "yes" : "no",
+			      x86_capability & 4 ? "yes" : "no",
+			      x86_capability & 8 ? "yes" : "no",
+			      x86_capability & 16 ? "yes" : "no",
+			      x86_capability & 32 ? "yes" : "no",
+			      x86_capability & 128 ? "yes" : "no",
+			      x86_capability & 256 ? "yes" : "no"
 			      );
 }
 
@@ -431,7 +430,7 @@ static int get_stat(int pid, char * buffer)
 	else
 		tty_pgrp = -1;
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
-%lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %u %lu %lu %lu %lu %lu %lu \
+%lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu %lu %lu %lu %lu \
 %lu %lu %lu %lu\n",
 		pid,
 		(*p)->comm,

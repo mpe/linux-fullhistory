@@ -19,6 +19,8 @@ CPP     =$(CC) -E
 AR      =ar
 STRIP   =strip
 
+CFLAGS := $(CFLAGS) -pipe
+
 ifdef CONFIG_M486
 CFLAGS := $(CFLAGS) -m486
 else
@@ -28,6 +30,8 @@ else
 CFLAGS := $(CFLAGS) -m386
 endif
 endif
+
+arch-all: zImage
 
 zBoot/zSystem: zBoot/*.c zBoot/*.S tools/zSystem
 	$(MAKE) -C zBoot

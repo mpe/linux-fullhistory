@@ -1,3 +1,6 @@
+#ifndef _SPARC_OPENPROM_H
+#define _SPARC_OPENPROM_H
+
 /* openprom.h:  Prom structures and defines for access to the OPENBOOT
                 prom routines and data areas.
 
@@ -16,7 +19,7 @@
 #define	LINUX_OPPROM_MAGIC      0x10010407
 
 /* The device functions structure for the v0 prom. Nice and neat, open,
-   close, read & write divied up between net + block + char devices. We
+   close, read & write divvied up between net + block + char devices. We
    also have a seek routine only usable for block devices. The divide
    and conquer strategy of this struct becomes unnecessary for v2.
 
@@ -51,7 +54,7 @@ struct linux_dev_v0_funcs {
    the time can be a pain in the rear after a while. Why v2 has memory
    allocations in here are beyond me. Perhaps they figure that if you
    are going to use only the prom's device drivers then your memory
-   management is either non-existant or pretty sad. :-)
+   management is either non-existent or pretty sad. :-)
 */
 
 struct linux_dev_v2_funcs {
@@ -64,7 +67,7 @@ struct linux_dev_v2_funcs {
 	caddr_t	(*v2_dumb_mem_alloc)(caddr_t va, unsigned sz);
 	void	(*v2_dumb_mem_free)(caddr_t va, unsigned sz);
 
-	/* "dumb" mmap() munmap(), copy on write? whats that? */
+	/* "dumb" mmap() munmap(), copy on write? what's that? */
 	caddr_t	(*v2_dumb_mmap)(caddr_t virta, int asi, unsigned prot, unsigned sz);
 	void	(*v2_dumb_munmap)(caddr_t virta, unsigned size);
 
@@ -103,7 +106,7 @@ struct linux_mem_v0 {
 	struct  linux_mlist_v0 **v0_available;	/* what phys. is left over */
 };
 
-/* Arguements sent to the kernel from the boot prompt. */
+/* Arguments sent to the kernel from the boot prompt. */
 
 struct linux_arguments_v0 {
 	char	*argv[8];		/* argv format for boot string */
@@ -260,3 +263,5 @@ struct nodeops {
 	int	(*no_setprop)(int node, caddr_t name, caddr_t val, int len);
 	caddr_t	(*no_nextprop)(int node, caddr_t name);
 };
+
+#endif /* !(_SPARC_OPENPROM_H) */

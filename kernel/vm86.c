@@ -39,8 +39,8 @@
 /*
  * virtual flags (16 and 32-bit versions)
  */
-#define VFLAGS	(*(unsigned short *)&(current->v86flags))
-#define VEFLAGS	(current->v86flags)
+#define VFLAGS	(*(unsigned short *)&(current->tss.v86flags))
+#define VEFLAGS	(current->tss.v86flags)
 
 #define set_flags(X,new,mask) \
 ((X) = ((X) & ~(mask)) | ((new) & (mask)))
@@ -52,13 +52,13 @@ asmlinkage struct pt_regs * save_v86_state(struct vm86_regs * regs)
 {
 	unsigned long tmp;
 
-	if (!current->vm86_info) {
+	if (!current->tss.vm86_info) {
 		printk("no vm86_info: BAD\n");
 		do_exit(SIGSEGV);
 	}
-	set_flags(regs->eflags, VEFLAGS, VIF_MASK | current->v86mask);
-	memcpy_tofs(&current->vm86_info->regs,regs,sizeof(*regs));
-	put_fs_long(current->screen_bitmap,&current->vm86_info->screen_bitmap);
+	set_flags(regs->eflags, VEFLAGS, VIF_MASK | current->tss.v86mask);
+	memcpy_tofs(&current->tss.vm86_info->regs,regs,sizeof(*regs));
+	put_fs_long(current->tss.screen_bitmap,&current->tss.vm86_info->screen_bitmap);
 	tmp = current->tss.esp0;
 	current->tss.esp0 = current->saved_kernel_stack;
 	current->saved_kernel_stack = 0;
@@ -117,16 +117,16 @@ asmlinkage int sys_vm86(struct vm86_struct * v86)
 
 	switch (info.cpu_type) {
 		case CPU_286:
-			current->v86mask = 0;
+			current->tss.v86mask = 0;
 			break;
 		case CPU_386:
-			current->v86mask = NT_MASK | IOPL_MASK;
+			current->tss.v86mask = NT_MASK | IOPL_MASK;
 			break;
 		case CPU_486:
-			current->v86mask = AC_MASK | NT_MASK | IOPL_MASK;
+			current->tss.v86mask = AC_MASK | NT_MASK | IOPL_MASK;
 			break;
 		default:
-			current->v86mask = ID_MASK | AC_MASK | NT_MASK | IOPL_MASK;
+			current->tss.v86mask = ID_MASK | AC_MASK | NT_MASK | IOPL_MASK;
 			break;
 	}
 
@@ -136,9 +136,9 @@ asmlinkage int sys_vm86(struct vm86_struct * v86)
 	pt_regs->eax = 0;
 	current->saved_kernel_stack = current->tss.esp0;
 	current->tss.esp0 = (unsigned long) pt_regs;
-	current->vm86_info = v86;
+	current->tss.vm86_info = v86;
 
-	current->screen_bitmap = info.screen_bitmap;
+	current->tss.screen_bitmap = info.screen_bitmap;
 	if (info.flags & VM86_SCREEN_BITMAP)
 		mark_screen_rdonly(current);
 	__asm__ __volatile__("movl %0,%%esp\n\t"
@@ -178,7 +178,7 @@ static inline void clear_TF(struct vm86_regs * regs)
 
 static inline void set_vflags_long(unsigned long eflags, struct vm86_regs * regs)
 {
-	set_flags(VEFLAGS, eflags, current->v86mask);
+	set_flags(VEFLAGS, eflags, current->tss.v86mask);
 	set_flags(regs->eflags, eflags, SAFE_MASK);
 	if (eflags & IF_MASK)
 		set_IF(regs);
@@ -186,7 +186,7 @@ static inline void set_vflags_long(unsigned long eflags, struct vm86_regs * regs
 
 static inline void set_vflags_short(unsigned short flags, struct vm86_regs * regs)
 {
-	set_flags(VFLAGS, flags, current->v86mask);
+	set_flags(VFLAGS, flags, current->tss.v86mask);
 	set_flags(regs->eflags, flags, SAFE_MASK);
 	if (flags & IF_MASK)
 		set_IF(regs);
@@ -198,7 +198,7 @@ static inline unsigned long get_vflags(struct vm86_regs * regs)
 
 	if (VEFLAGS & VIF_MASK)
 		flags |= IF_MASK;
-	return flags | (VEFLAGS & current->v86mask);
+	return flags | (VEFLAGS & current->tss.v86mask);
 }
 
 static inline int is_revectored(int nr, struct revectored_struct * bitmap)
@@ -287,9 +287,9 @@ static void do_int(struct vm86_regs *regs, int i, unsigned char * ssp, unsigned 
 	unsigned short seg = get_fs_word((void *) ((i<<2)+2));
 
 	if (seg == BIOSSEG || regs->cs == BIOSSEG ||
-	    is_revectored(i, &current->vm86_info->int_revectored))
+	    is_revectored(i, &current->tss.vm86_info->int_revectored))
 		return_to_32bit(regs, VM86_INTx + (i << 8));
-	if (i==0x21 && is_revectored(AH(regs),&current->vm86_info->int21_revectored))
+	if (i==0x21 && is_revectored(AH(regs),&current->tss.vm86_info->int21_revectored))
 		return_to_32bit(regs, VM86_INTx + (i << 8));
 	pushw(ssp, sp, get_vflags(regs));
 	pushw(ssp, sp, regs->cs);

@@ -49,6 +49,7 @@ struct hd_struct * sd;
 Scsi_Disk * rscsi_disks;
 static int * sd_sizes;
 static int * sd_blocksizes;
+static int * sd_hardsizes;		/* Hardware sector size */
 
 extern int sd_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
@@ -994,6 +995,21 @@ static int sd_init_onedisk(int i)
 	    return i;
 	  };
 	}
+    {
+       /*
+          The msdos fs need to know the hardware sector size
+          So I have created this table. See ll_rw_blk.c
+          Jacques Gelinas (Jacques@solucorp.qc.ca)
+       */
+       int m;
+       int hard_sector = rscsi_disks[i].sector_size;
+       /* There is 16 minor allocated for each devices */
+       for (m=i<<4; m<((i+1)<<4); m++){
+         sd_hardsizes[m] = hard_sector;
+       }
+       printk ("SCSI Hardware sector size is %d bytes on device sd%c\n"
+         ,hard_sector,i+'a');
+    }
       if(rscsi_disks[i].sector_size == 1024)
 	rscsi_disks[i].capacity <<= 1;  /* Change this into 512 byte sectors */
       if(rscsi_disks[i].sector_size == 256)
@@ -1042,9 +1058,14 @@ static void sd_init()
 
 	sd_blocksizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) * 
 						 sizeof(int));
-	for(i=0;i<(sd_template.dev_max << 4);i++) sd_blocksizes[i] = 1024;
+	sd_hardsizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) * 
+						 sizeof(int));
+	for(i=0;i<(sd_template.dev_max << 4);i++){
+		sd_blocksizes[i] = 1024;
+		sd_hardsizes[i] = 512;
+	}
 	blksize_size[MAJOR_NR] = sd_blocksizes;
-
+	hardsect_size[MAJOR_NR] = sd_hardsizes;
 	sd = (struct hd_struct *) scsi_init_malloc((sd_template.dev_max << 4) *
 						   sizeof(struct hd_struct));
 

@@ -37,7 +37,7 @@ startup_32:
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
-	lss _stack_start,%esp
+	lss stack_start,%esp
 /*
  * Clear BSS first so that there are no surprises...
  */
@@ -164,7 +164,7 @@ is386:	pushl %ecx		# restore original EFLAGS
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
-	lss _stack_start,%esp
+	lss stack_start,%esp
 	xorl %eax,%eax
 	lldt %ax
 	pushl %eax		# These are the parameters to main :-)
@@ -294,6 +294,10 @@ _empty_zero_page:
  */
 _floppy_track_buffer:
 	.fill 512*2*MAX_BUFFER_SECTORS,1,0
+	
+stack_start:
+	.long _init_user_stack+4096
+	.long KERNEL_DS
 
 /* This is the default interrupt "handler" :-) */
 int_msg:

@@ -2,6 +2,8 @@
 #ifndef _LINUX_INTERRUPT_H
 #define _LINUX_INTERRUPT_H
 
+#include <asm/bitops.h>
+
 struct bh_struct {
 	void (*routine)(void *);
 	void *data;
@@ -27,17 +29,17 @@ enum {
 
 extern inline void mark_bh(int nr)
 {
-	__asm__ __volatile__("orl %1,%0":"=m" (bh_active):"ir" (1<<nr));
+	set_bit(nr, &bh_active);
 }
 
 extern inline void disable_bh(int nr)
 {
-	__asm__ __volatile__("andl %1,%0":"=m" (bh_mask):"ir" (~(1<<nr)));
+	clear_bit(nr, &bh_mask);
 }
 
 extern inline void enable_bh(int nr)
 {
-	__asm__ __volatile__("orl %1,%0":"=m" (bh_mask):"ir" (1<<nr));
+	set_bit(nr, &bh_mask);
 }
 
 #endif

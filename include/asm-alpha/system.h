@@ -62,6 +62,10 @@
 #define PAL_rtsys	61
 #define PAL_rti		63
 
+#define halt() __asm__ __volatile__(".long 0");
+#define move_to_user_mode() halt()
+#define switch_to(x) halt()
+
 #ifndef mb
 #define mb() __asm__ __volatile__("mb": : :"memory")
 #endif
@@ -76,5 +80,45 @@ __asm__ __volatile__( \
 	: "r" (__new_ipl) \
 	: "$0", "$1", "$16", "$22", "$23", "$24", "$25"); \
 __old_ipl; })
+
+#define cli()			swpipl(7)
+#define sti()			swpipl(0)
+#define save_flags(flags)	do { flags = swpipl(7); } while (0)
+#define restore_flags(flags)	swpipl(flags)
+
+extern inline unsigned long xchg_u32(int * m, unsigned long val)
+{
+	unsigned long dummy, dummy2;
+
+	__asm__ __volatile__(
+		"\n1:\t"
+		"ldl_l %0,%1\n\t"
+		"bis %2,%2,%3\n\t"
+		"stl_c %3,%1\n\t"
+		"beq %3,1b\n"
+		: "=r" (val), "=m" (*m), "=r" (dummy), "=r" (dummy2)
+		: "1" (*m), "2" (val));
+	return val;
+}
+
+extern inline unsigned long xchg_u64(long * m, unsigned long val)
+{
+	unsigned long dummy, dummy2;
+
+	__asm__ __volatile__(
+		"\n1:\t"
+		"ldq_l %0,%1\n\t"
+		"bis %2,%2,%3\n\t"
+		"stq_c %3,%1\n\t"
+		"beq %3,1b\n"
+		: "=r" (val), "=m" (*m), "=r" (dummy), "=r" (dummy2)
+		: "1" (*m), "2" (val));
+	return val;
+}
+
+extern inline void * xchg_ptr(void *m, void *val)
+{
+	return (void *) xchg_u64((long *) m, (unsigned long) val);
+}
 
 #endif

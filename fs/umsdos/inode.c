@@ -45,6 +45,9 @@ void UMSDOS_put_inode(struct inode *inode)
 	PRINTK (("put inode %x owner %x pos %d dir %x\n",inode
 		,inode->u.umsdos_i.i_emd_owner,inode->u.umsdos_i.pos
 		,inode->u.umsdos_i.i_emd_dir));
+	if (inode != NULL && inode == pseudo_root){
+		printk ("Umsdos: Oops releasing pseudo_root. Notify jacques@solucorp.qc.ca\n");
+	}
 	msdos_put_inode(inode);
 }
 
@@ -152,18 +155,11 @@ void umsdos_patch_inode (
 	if (!umsdos_isinit(inode)){
 		inode->u.umsdos_i.i_emd_dir = 0;
 		if (S_ISREG(inode->i_mode)){
-			static char is_init = 0;
-			if (!is_init){
-				/*
-					I don't want to change the msdos file system code
-					so I get the address of some subroutine dynamically
-					once.
-				*/
-				umsdos_file_inode_operations.bmap = inode->i_op->bmap;
+			if (inode->i_op->bmap != NULL){
 				inode->i_op = &umsdos_file_inode_operations;
-				is_init = 1;
+			}else{
+				inode->i_op = &umsdos_file_inode_operations_no_bmap;
 			}
-			inode->i_op = &umsdos_file_inode_operations;
 		}else if (S_ISDIR(inode->i_mode)){
 			if (dir != NULL){
 				umsdos_setup_dir_inode(inode);
@@ -409,7 +405,7 @@ struct super_block *UMSDOS_read_super(
 		msdos directory, with all limitation of msdos.
 	*/
 	struct super_block *sb = msdos_read_super(s,data,silent);
-	printk ("UMSDOS Alpha 0.5a (compatibility level %d.%d, fast msdos)\n"
+	printk ("UMSDOS Beta 0.6 (compatibility level %d.%d, fast msdos)\n"
 		,UMSDOS_VERSION,UMSDOS_RELEASE);
 	if (sb != NULL){
 		sb->s_op = &umsdos_sops;

@@ -144,6 +144,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(block_fsync),
 	X(wait_for_request),
 	X(blksize_size),
+	X(hardsect_size),
 	X(blk_size),
 	X(blk_dev),
 	X(is_read_only),

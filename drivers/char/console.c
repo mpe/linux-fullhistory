@@ -2337,15 +2337,16 @@ int do_screendump(int arg, int mode)
 #endif
 	switch(mode) {
 	    case 0:
-	sptr = (char *) origin;
+			sptr = (char *) origin;
 			for (l=chcount; l>0 ; l--, sptr++)
-		put_fs_byte(*sptr++,buf++);	
+				put_fs_byte(*sptr++,buf++);	
 			break;
 	    case 1:
 			put_fs_byte((char)x,buf++); put_fs_byte((char)y,buf++); 
 			memcpy_tofs(buf,(char *)origin,2*chcount);
 			break;
 	    case 2:
+			gotoxy(currcons, get_fs_byte(buf+2), get_fs_byte(buf+3));
 			buf+=4; /* ioctl#, console#, x,y */
 			memcpy_fromfs((char *)origin,buf,2*chcount);
 			break;
@@ -2445,9 +2446,12 @@ static inline int atedge(const int p)
 }
 
 /* constrain v such that v <= u */
-static inline short limit(const unsigned short v, const unsigned short u)
+static inline unsigned short limit(const unsigned short v, const unsigned short u)
 {
-	return ((v > u) ? u : v);
+/* gcc miscompiles the ?: operator, so don't use it.. */
+	if (v > u)
+		return u;
+	return v;
 }
 
 /* invoked via ioctl(TIOCLINUX) */

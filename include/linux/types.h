@@ -28,7 +28,7 @@ typedef unsigned short nlink_t;
 typedef int daddr_t;
 typedef long off_t;
 
-#ifndef __STRICT_ANSI__
+#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
 #define _LOFF_T
 typedef long long loff_t;
 #endif

@@ -29,7 +29,7 @@
  * to be short.
  */
 #define DCACHE_NAME_LEN	15
-#define DCACHE_SIZE 64
+#define DCACHE_SIZE 128
 
 struct hash_list {
 	struct dir_cache_entry * next;

@@ -144,7 +144,7 @@
    with a MIDI card, which frequently also uses 0x330.
 
    This can also be overridden on the command line to the kernel, via LILO or
-   LODLIN. */
+   LOADLIN. */
 static unsigned short bases[7] = {
 #ifdef BUSLOGIC_PORT_OVERRIDE
     BUSLOGIC_PORT_OVERRIDE,

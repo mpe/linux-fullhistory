@@ -27,7 +27,7 @@
  *	Dmitry Gorodchanin	:	SLIP memory leaks
  *      Dmitry Gorodchanin      :       Code cleanup. Reduce tty driver
  *                                      buffering from 4096 to 256 bytes.
- *                                      Improving SLIP responce time.
+ *                                      Improving SLIP response time.
  *                                      CONFIG_SLIP_MODE_SLIP6.
  *                                      ifconfig sl? up & down now works correctly.
  *					Modularization.

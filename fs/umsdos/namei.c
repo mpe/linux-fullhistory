@@ -483,6 +483,7 @@ int UMSDOS_link (
 		
 		Given a file /foo/file
 
+		#
 			ln /foo/file /tmp/file2
 
 			become internally
@@ -490,6 +491,7 @@ int UMSDOS_link (
 			mv /foo/file /foo/-LINK1
 			ln -s /foo/-LINK1 /foo/file
 			ln -s /foo/-LINK1 /tmp/file2
+		#
 
 		Using this strategy, we can operate on /foo/file or /foo/file2.
 		We can remove one and keep the other, like a normal Unix hard link.
@@ -502,6 +504,7 @@ int UMSDOS_link (
 		The strategy for hard link introduces a side effect that
 		may or may not be acceptable. Here is the sequence
 
+		#
 		mkdir subdir1
 		touch subdir1/file
 		mkdir subdir2
@@ -509,6 +512,7 @@ int UMSDOS_link (
 		rm    subdir1/file
 		rmdir subdir1
 		rmdir: subdir1: Directory not empty
+		#
 
 		This happen because there is an invisible file (--link) in
 		subdir1 which is referenced by subdir2/file.
@@ -519,12 +523,14 @@ int UMSDOS_link (
 		Another weakness of hard link come from the fact that
 		it is based on hidden symbolic links. Here is an example.
 
+		#
 		mkdir /subdir1
 		touch /subdir1/file
 		mkdir /subdir2
 		ln    /subdir1/file subdir2/file
 		mv    /subdir1 subdir3
 		ls -l /subdir2/file
+		#
 
 		Since /subdir2/file is a hidden symbolic link
 		to /subdir1/..hlinkNNN, accessing it will fail since
@@ -765,6 +771,7 @@ int UMSDOS_rmdir(
 		but you rapidly get iput() all around. Here is an exemple
 		of what I am trying to avoid.
 
+		#
 		if (a){
 			...
 			if(b){
@@ -783,10 +790,12 @@ int UMSDOS_rmdir(
 		}
 		// Was iput finally done ?
 		return status;
+		#
 
 		Here is the style I am using. Still sometime I do the
 		first when things are very simple (or very complicated :-( )
 
+		#
 		if (a){
 			if (b){
 				...
@@ -797,6 +806,7 @@ int UMSDOS_rmdir(
 			...
 		}
 		return status;
+		#
 
 		Again, while this help clarifying the code, I often get a lot
 		of iput(), unlike the first style, where I can place few 
@@ -812,6 +822,7 @@ int UMSDOS_rmdir(
 		where an iput() is done, the inode is simply nulled, disabling
 		the last one.
 
+		#
 		if (a){
 			if (b){
 				...
@@ -824,6 +835,7 @@ int UMSDOS_rmdir(
 		}
 		iput (dir);
 		return status;
+		#
 
 		Note that the umsdos_lockcreate() and umsdos_unlockcreate() function
 		pair goes against this practice of "forgetting" the inode as soon

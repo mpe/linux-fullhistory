@@ -24,12 +24,12 @@
 #include <linux/utsname.h>
 #include <linux/ioport.h>
 
+#include <asm/bugs.h>
+
 extern unsigned long * prof_buffer;
 extern unsigned long prof_len;
 extern char etext, end;
 extern char *linux_banner;
-asmlinkage void lcall7(void);
-struct desc_struct default_ldt;
 
 /*
  * we need this inline - forking from kernel space will result
@@ -159,8 +159,6 @@ unsigned char aux_device_present;
 int ramdisk_size;
 int root_mountflags = 0;
 
-static char fpu_error = 0;
-
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
 
 char *get_options(char *str, int *ints)
@@ -183,6 +181,10 @@ struct {
 } bootsetups[] = {
 	{ "reserve=", reserve_setup },
 	{ "ramdisk=", ramdisk_setup },
+#ifdef CONFIG_BUGi386
+	{ "no-hlt", no_halt },
+	{ "no387", no_387 },
+#endif
 #ifdef CONFIG_INET
 	{ "ether=", eth_setup },
 #endif
@@ -352,17 +354,6 @@ static void parse_options(char *line)
 			console_loglevel = 10;
 			continue;
 		}
-		if (!strcmp(line,"no-hlt")) {
-			hlt_works_ok = 0;
-			continue;
-		}
-		if (!strcmp(line,"no387")) {
-			hard_math = 0;
-			__asm__("movl %%cr0,%%eax\n\t"
-				"orl $0xE,%%eax\n\t"
-				"movl %%eax,%%cr0\n\t" : : : "ax");
-			continue;
-		}
 		if (checksetup(line))
 			continue;
 		/*
@@ -409,91 +400,7 @@ static void copy_options(char * to, char * from)
 	*to = '\0';
 }
 
-static void copro_timeout(void)
-{
-	fpu_error = 1;
-	timer_table[COPRO_TIMER].expires = jiffies+100;
-	timer_active |= 1<<COPRO_TIMER;
-	printk("387 failed: trying to reset\n");
-	send_sig(SIGFPE, last_task_used_math, 1);
-	outb_p(0,0xf1);
-	outb_p(0,0xf0);
-}
-
-static void check_fpu(void)
-{
-	static double x = 4195835.0;
-	static double y = 3145727.0;
-	unsigned short control_word;
-
-	if (!hard_math) {
-#ifndef CONFIG_MATH_EMULATION
-		printk("No coprocessor found and no math emulation present.\n");
-		printk("Giving up.\n");
-		for (;;) ;
-#endif
-		return;
-	}
-	/*
-	 * check if exception 16 works correctly.. This is truly evil
-	 * code: it disables the high 8 interrupts to make sure that
-	 * the irq13 doesn't happen. But as this will lead to a lockup
-	 * if no exception16 arrives, it depends on the fact that the
-	 * high 8 interrupts will be re-enabled by the next timer tick.
-	 * So the irq13 will happen eventually, but the exception 16
-	 * should get there first..
-	 */
-	printk("Checking 386/387 coupling... ");
-	timer_table[COPRO_TIMER].expires = jiffies+50;
-	timer_table[COPRO_TIMER].fn = copro_timeout;
-	timer_active |= 1<<COPRO_TIMER;
-	__asm__("clts ; fninit ; fnstcw %0 ; fwait":"=m" (*&control_word));
-	control_word &= 0xffc0;
-	__asm__("fldcw %0 ; fwait": :"m" (*&control_word));
-	outb_p(inb_p(0x21) | (1 << 2), 0x21);
-	__asm__("fldz ; fld1 ; fdiv %st,%st(1) ; fwait");
-	timer_active &= ~(1<<COPRO_TIMER);
-	if (fpu_error)
-		return;
-	if (!ignore_irq13) {
-		printk("Ok, fpu using old IRQ13 error reporting\n");
-		return;
-	}
-	__asm__("fninit\n\t"
-		"fldl %1\n\t"
-		"fdivl %2\n\t"
-		"fmull %2\n\t"
-		"fldl %1\n\t"
-		"fsubp %%st,%%st(1)\n\t"
-		"fistpl %0\n\t"
-		"fwait\n\t"
-		"fninit"
-		: "=m" (*&fdiv_bug)
-		: "m" (*&x), "m" (*&y));
-	if (!fdiv_bug) {
-		printk("Ok, fpu using exception 16 error reporting.\n");
-		return;
-
-	}
-	printk("Ok, FDIV bug i%c86 system\n", '0'+x86);
-}
-
-static void check_hlt(void)
-{
-	printk("Checking 'hlt' instruction... ");
-	if (!hlt_works_ok) {
-		printk("disabled\n");
-		return;
-	}
-	__asm__ __volatile__("hlt ; hlt ; hlt ; hlt");
-	printk("Ok.\n");
-}
-
-static void check_bugs(void)
-{
-	check_fpu();
-	check_hlt();
-}
+extern void check_bugs(void);
 
 asmlinkage void start_kernel(void)
 {
@@ -501,7 +408,6 @@ asmlinkage void start_kernel(void)
  * Interrupts are still disabled. Do necessary setups, then
  * enable them
  */
-	set_call_gate(&default_ldt,lcall7);
  	ROOT_DEV = ORIG_ROOT_DEV;
  	drive_info = DRIVE_INFO;
  	screen_info = SCREEN_INFO;
@@ -567,7 +473,6 @@ asmlinkage void start_kernel(void)
 	sti();
 	check_bugs();
 
-	system_utsname.machine[1] = '0' + x86;
 	printk(linux_banner);
 
 	move_to_user_mode();

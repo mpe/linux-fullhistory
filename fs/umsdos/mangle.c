@@ -222,13 +222,15 @@ int umsdos_parse (
 								with a special character as the first character
 								of the extension will be mangled. This solve the
 								following problem:
-				
+
+								#
 								touch FILE
 								# FILE is invalid for DOS, so mangling is applied
 								# file.{_1 is created in the DOS directory
 								touch file.{_1
 								# To UMSDOS file point to a single DOS entry.
 								# So file.{_1 has to be mangled.
+								#
 							*/	
 							static char special[]={
 								SPECIAL_MANGLING,'\0'
@@ -270,7 +272,9 @@ int umsdos_parse (
 				Control character are converted to #.
 				Space are converted to #.
 				The following character are also converted to #.
+				#
 					" * + , / : ; < = > ? [ \ ] | ~
+				#
 
 				Sometime, the problem is not in MsDOS itself but in
 				command.com.
@@ -316,10 +320,12 @@ int umsdos_parse (
 
 				Here is the list of DOS pseudo devices:
 
+				#
 					"prn","con","aux","nul",
 					"lpt1","lpt2","lpt3","lpt4",
 					"com1","com2","com3","com4",
 					"clock$"
+				#
 
 				and some standard ones for common DOS programs
 

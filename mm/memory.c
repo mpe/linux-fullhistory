@@ -1001,7 +1001,7 @@ good_area:
 	if (regs->eflags & VM_MASK) {
 		unsigned long bit = (address - 0xA0000) >> PAGE_SHIFT;
 		if (bit < 32)
-			current->screen_bitmap |= 1 << bit;
+			current->tss.screen_bitmap |= 1 << bit;
 	}
 	if (!(vma->vm_page_prot & PAGE_USER))
 		goto bad_area;
