@@ -729,8 +729,11 @@ unsigned long ide_find_free_region (unsigned short size) __init;
 void ide_scan_pcibus (void) __init;
 #endif
 #ifdef CONFIG_BLK_DEV_IDEDMA
+#define BAD_DMA_DRIVE		0
+#define GOOD_DMA_DRIVE		1
 int ide_build_dmatable (ide_drive_t *drive);
 void ide_dma_intr  (ide_drive_t *drive);
+int check_drive_lists (ide_drive_t *drive, int good_bad);
 int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive);
 void ide_setup_dma (ide_hwif_t *hwif, unsigned long dmabase, unsigned int num_ports) __init;
 unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) __init;

@@ -411,6 +411,7 @@ int umsdos_parse (
 		/* Why not use info->fake.len everywhere? Is it longer?
                  */
 		memcpy (info->entry.name, fname, len);
+		info->entry.name[len] = '\0';	/* for printk */
 		info->entry.name_len = len;
 		ret = 0;
 	}

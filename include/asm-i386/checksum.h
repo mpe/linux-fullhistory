@@ -27,22 +27,25 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
 unsigned int csum_partial_copy_generic( const char *src, char *dst, int len, int sum,
 					int *src_err_ptr, int *dst_err_ptr);
 
+/*
+ *	Note: when you get a NULL pointer exception here this means someone
+ *	passed in an incorrect kernel address to one of these functions. 
+ *	
+ *	If you use these functions directly please don't forget the 
+ *	verify_area().
+ */
 extern __inline__
 unsigned int csum_partial_copy_nocheck ( const char *src, char *dst,
 					int len, int sum)
 {
-	int *src_err_ptr=NULL, *dst_err_ptr=NULL;
-
-	return csum_partial_copy_generic ( src, dst, len, sum, src_err_ptr, dst_err_ptr);
+	return csum_partial_copy_generic ( src, dst, len, sum, NULL, NULL);
 }
 
 extern __inline__
 unsigned int csum_partial_copy_from_user ( const char *src, char *dst,
 						int len, int sum, int *err_ptr)
 {
-	int *dst_err_ptr=NULL;
-
-	return csum_partial_copy_generic ( src, dst, len, sum, err_ptr, dst_err_ptr);
+	return csum_partial_copy_generic ( src, dst, len, sum, err_ptr, NULL);
 }
 
 #if 0
@@ -59,9 +62,7 @@ extern __inline__
 unsigned int csum_partial_copy_to_user ( const char *src, char *dst,
 					int len, int sum, int *err_ptr)
 {
-	int *src_err_ptr=NULL;
-
-	return csum_partial_copy_generic ( src, dst, len, sum, src_err_ptr, err_ptr);
+	return csum_partial_copy_generic ( src, dst, len, sum, NULL, err_ptr);
 }
 #endif
 
@@ -202,15 +203,13 @@ static __inline__ unsigned short int csum_ipv6_magic(struct in6_addr *saddr,
 static __inline__ unsigned int csum_and_copy_to_user (const char *src, char *dst,
 				    int len, int sum, int *err_ptr)
 {
-	int *src_err_ptr=NULL;
-
-	if (verify_area(VERIFY_WRITE, dst, len) == 0)
-		return csum_partial_copy_generic(src, dst, len, sum, src_err_ptr, err_ptr);
+	if (access_ok(VERIFY_WRITE, dst, len))
+		return csum_partial_copy_generic(src, dst, len, sum, NULL, err_ptr);
 
 	if (len)
 		*err_ptr = -EFAULT;
 
-	return sum;
+	return -1; /* invalid checksum */
 }
 
 #endif

@@ -78,6 +78,9 @@ int UMSDOS_ioctl_dir(struct inode *dir, struct file *filp, unsigned int cmd,
 	struct file new_filp;
 	struct umsdos_ioctl data;
 
+Printk(("UMSDOS_ioctl_dir: %s/%s, cmd=%d, data=%08lx\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, cmd, data_ptr));
+
 	/* forward non-umsdos ioctls - this hopefully doesn't cause conflicts */
 	if (cmd != UMSDOS_GETVERSION
 	    && cmd != UMSDOS_READDIR_DOS
@@ -164,20 +167,19 @@ int UMSDOS_ioctl_dir(struct inode *dir, struct file *filp, unsigned int cmd,
 		ret = PTR_ERR(demd);
 		if (IS_ERR(demd))
 			goto out;
+		ret = 0;
+		if (!demd->d_inode)
+			goto read_dput;
+
 		fill_new_filp(&new_filp, demd);
 		new_filp.f_pos = filp->f_pos;
-
-		while (1) {
+		while (new_filp.f_pos < demd->d_inode->i_size) {
 			off_t f_pos = new_filp.f_pos;
 			struct umsdos_dirent entry;
 			struct umsdos_info info;
 
-			ret = 0;
-			if (new_filp.f_pos >= demd->d_inode->i_size)
-				break;
-
 			ret = umsdos_emd_dir_readentry (&new_filp, &entry);
-			if (ret < 0)
+			if (ret)
 				break;
 			if (entry.name_len <= 0)
 				continue;
@@ -198,6 +200,7 @@ int UMSDOS_ioctl_dir(struct inode *dir, struct file *filp, unsigned int cmd,
 		}
 		/* update the original f_pos */
 		filp->f_pos = new_filp.f_pos;
+	read_dput:
 		d_drop(demd);
 		dput(demd);
 		goto out;
@@ -217,6 +220,8 @@ int UMSDOS_ioctl_dir(struct inode *dir, struct file *filp, unsigned int cmd,
 		extern struct inode_operations umsdos_rdir_inode_operations;
 
 		ret = umsdos_make_emd(dentry);
+Printk(("UMSDOS_ioctl_dir: INIT_EMD %s/%s, ret=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, ret));
 		dir->i_op = (ret == 0)
 		    ? &umsdos_dir_inode_operations
 		    : &umsdos_rdir_inode_operations;

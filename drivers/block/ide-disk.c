@@ -19,6 +19,7 @@
  * Version 1.05		add capacity support for ATA3 >= 8GB
  * Version 1.06		get boot-up messages to show full cyl count
  * Version 1.07		disable door-locking if it fails
+ * Version 1.07a	fixed mult_count enables
  */
 
 #define IDEDISK_VERSION	"1.07"
@@ -724,20 +725,24 @@ static void idedisk_setup (ide_drive_t *drive)
 	 drive->name, id->model, idedisk_capacity(drive)/2048L, id->buf_size/2,
 	 drive->bios_cyl, drive->bios_head, drive->bios_sect);
 	if (drive->using_dma) {
-		if ((id->field_valid & 4) && (id->dma_ultra & (id->dma_ultra >> 8) & 7))
-			printk(", UDMA");
-		else
+		if ((id->field_valid & 4) &&
+		    (id->dma_ultra & (id->dma_ultra >> 8) & 7)) {
+			printk(", UDMA");	/* UDMA BIOS-enabled! */
+		} else if (id->field_valid & 4) {
+			printk(", (U)DMA");	/* Can be BIOS-enabled! */
+		} else {
 			printk(", DMA");
+		}
 	}
 	printk("\n");
 	drive->mult_count = 0;
 	if (id->max_multsect) {
-		drive->mult_req = INITIAL_MULT_COUNT;
-		if (drive->mult_req > id->max_multsect)
-			drive->mult_req = id->max_multsect;
-		if (drive->mult_req || ((id->multsect_valid & 1) && id->multsect))
-			drive->special.b.set_multmode = 1;
+		id->multsect = ((id->max_multsect/2) > 1) ? id->max_multsect : 0;
+		id->multsect_valid = id->multsect ? 1 : 0;
+		drive->mult_req = id->multsect_valid ? id->max_multsect : INITIAL_MULT_COUNT;
+		drive->special.b.set_multmode = drive->mult_req ? 1 : 0;
 	}
+	drive->no_io_32bit = id->dword_io ? 1 : 0;
 }
 
 int idedisk_init (void)

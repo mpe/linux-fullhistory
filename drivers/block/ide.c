@@ -1104,6 +1104,10 @@ static void ide_do_request (ide_hwgroup_t *hwgroup, unsigned long *hwgroup_flags
 			if (sleep) {
 				if (0 < (signed long)(jiffies + WAIT_MIN_SLEEP - sleep)) 
 					sleep = jiffies + WAIT_MIN_SLEEP;
+#if 1
+				if (hwgroup->timer.next || hwgroup->timer.prev)
+					printk("ide_set_handler: timer already active\n");
+#endif
 				mod_timer(&hwgroup->timer, sleep);
 			} else {
 				/* Ugly, but how can we sleep for the lock otherwise? perhaps from tq_scheduler? */
@@ -1253,7 +1257,7 @@ void ide_timer_expiry (unsigned long data)
 	}
 	hwgroup->busy = 1;	/* should already be "1" */
 	hwgroup->handler = NULL;
-	del_timer(&hwgroup->timer);
+	del_timer(&hwgroup->timer);	/* Is this needed?? */
 	if (hwgroup->poll_timeout != 0) {	/* polling in progress? */
 		spin_unlock_irqrestore(&hwgroup->spinlock, flags);
 		handler(drive);
@@ -1265,6 +1269,10 @@ void ide_timer_expiry (unsigned long data)
 		if (drive->waiting_for_dma) {
 			(void) hwgroup->hwif->dmaproc(ide_dma_end, drive);
 			printk("%s: timeout waiting for DMA\n", drive->name);
+	/*
+	 *  need something here for HX PIIX3 UDMA and HPT343.......AMH
+	 *  irq timeout: status=0x58 { DriveReady SeekComplete DataRequest }
+	 */
 		}
 		spin_unlock_irqrestore(&hwgroup->spinlock, flags);
 		ide_error(drive, "irq timeout", GET_STAT());

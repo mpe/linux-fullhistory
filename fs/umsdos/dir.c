@@ -230,6 +230,11 @@ Printk (("f_pos %Ld i_size %ld\n", new_filp.f_pos, demd->d_inode->i_size));
 			break;
 		if (entry.name_len == 0)
 			continue;
+#ifdef UMSDOS_DEBUG_VERBOSE
+if (entry.flags & UMSDOS_HLINK)
+printk("umsdos_readdir_x: %s/%s is hardlink\n",
+filp->f_dentry->d_name.name, entry.name);
+#endif
 
 		umsdos_parse (entry.name, entry.name_len, &info);
 		info.f_pos = cur_f_pos;
@@ -245,33 +250,33 @@ Printk (("f_pos %Ld i_size %ld\n", new_filp.f_pos, demd->d_inode->i_size));
 		/*
 		 * If the file wasn't found, remove it from the EMD.
 		 */
-		if (!dret->d_inode)
+		inode = dret->d_inode;
+		if (!inode)
 			goto remove_name;
+#ifdef UMSDOS_DEBUG_VERBOSE
+if (inode->u.umsdos_i.i_is_hlink)
+printk("umsdos_readdir_x: %s/%s already resolved, ino=%ld\n",
+dret->d_parent->d_name.name, dret->d_name.name, inode->i_ino);
+#endif
 
 Printk (("Found %s/%s, ino=%ld, flags=%x\n",
 dret->d_parent->d_name.name, info.fake.fname, dret->d_inode->i_ino,
 entry.flags));
 		/* check whether to resolve a hard-link */
-		if ((entry.flags & UMSDOS_HLINK) && follow_hlink) {
+		if ((entry.flags & UMSDOS_HLINK) && follow_hlink &&
+		    !inode->u.umsdos_i.i_is_hlink) {
 			dret = umsdos_solve_hlink (dret);
 			ret = PTR_ERR(dret);
 			if (IS_ERR(dret))
 				break;
-#ifdef UMSDOS_DEBUG_VERBOSE
-printk("umsdos_readdir_x: link is %s/%s, ino=%ld\n",
-dret->d_parent->d_name.name, dret->d_name.name,
-(dret->d_inode ? dret->d_inode->i_ino : 0));
-#endif
-		}
-
-		/* save the inode ptr and number, then free the dentry */
-		inode = dret->d_inode;
-		if (!inode) {
+			inode = dret->d_inode;
+			if (!inode) {
 printk("umsdos_readdir_x: %s/%s negative after link\n",
 dret->d_parent->d_name.name, dret->d_name.name);
-			goto clean_up;
+				goto clean_up;
+			}
 		}
-					
+
 		/* #Specification:  pseudo root / reading real root
 		 * The pseudo root (/linux) is logically
 		 * erased from the real root.  This means that
@@ -304,7 +309,7 @@ dret->d_parent->d_name.name, dret->d_name.name, inode->i_ino));
 		 * removed from the EMD file silently.
 		 */
 #ifdef UMSDOS_PARANOIA
-printk("umsdos_readdir_x: %s/%s out of sync, erased\n",
+printk("umsdos_readdir_x: %s/%s out of sync, erasing\n",
 filp->f_dentry->d_name.name, info.entry.name);
 #endif
 		ret = umsdos_delentry(filp->f_dentry, &info, 
@@ -551,7 +556,6 @@ int umsdos_dentry_to_entry(struct dentry *dentry, struct umsdos_dirent *entry)
 		fat_readdir (&filp, &bufsrch, umsdos_dir_search);
 		if (bufsrch.found) {
 			ret = 0;
-			inode->u.umsdos_i.i_dir_owner = parent->d_inode->i_ino;
 			inode->u.umsdos_i.i_emd_owner = 0;
 if (!S_ISDIR(inode->i_mode))
 printk("UMSDOS: %s/%s not a directory!\n",
@@ -681,9 +685,13 @@ info.fake.len, info.fake.fname, info.f_pos, ret, info.fake.len));
 	dret = umsdos_lookup_dentry(dentry->d_parent, info.fake.fname,
 					info.fake.len, 1);
 	ret = PTR_ERR(dret);
-	if (IS_ERR(dret))
+	if (IS_ERR(dret)) {
+printk("umsdos_lookup_x: %s/%s real lookup failed, ret=%d\n", 
+dentry->d_parent->d_name.name, dentry->d_name.name, ret);
 		goto out;
-	if (!dret->d_inode)
+	}
+	inode = dret->d_inode;
+	if (!inode)
 		goto out_remove;
 	umsdos_lookup_patch_new(dret, &info.entry, info.f_pos);
 #ifdef UMSDOS_DEBUG_VERBOSE
@@ -692,19 +700,19 @@ dret->d_parent->d_name.name, dret->d_name.name, dret->d_inode->i_ino);
 #endif
 
 	/* Check for a hard link */
-	if (info.entry.flags & UMSDOS_HLINK) {
+	if ((info.entry.flags & UMSDOS_HLINK) &&
+	    !inode->u.umsdos_i.i_is_hlink) {
 		dret = umsdos_solve_hlink (dret);
 		ret = PTR_ERR(dret);
 		if (IS_ERR(dret))
 			goto out;
-	}
-
-	ret = -ENOENT;
-	inode = dret->d_inode;
-	if (!inode) {
+		ret = -ENOENT;
+		inode = dret->d_inode;
+		if (!inode) {
 printk("umsdos_lookup_x: %s/%s negative after link\n", 
 dret->d_parent->d_name.name, dret->d_name.name);
-		goto out_dput;
+			goto out_dput;
+		}
 	}
 
 	if (inode == pseudo_root && !nopseudo) {
@@ -751,9 +759,7 @@ out_remove:
  * Check whether a file exists in the current directory.
  * Return 0 if OK, negative error code if not (ex: -ENOENT).
  * 
- * called by VFS. should fill dentry->d_inode (via d_add), and 
- * set (increment) dentry->d_inode->i_count.
- *
+ * Called by VFS; should fill dentry->d_inode via d_add.
  */
 
 int UMSDOS_lookup (struct inode *dir, struct dentry *dentry)
@@ -829,13 +835,13 @@ char * umsdos_d_path(struct dentry *dentry, char * buffer, int len)
 	
 
 /*
- * gets dentry which points to pseudo-hardlink
+ * Return the dentry which points to a pseudo-hardlink.
  *
  * it should try to find file it points to
- * if file is found, it should dput() original dentry and return new one
- * (with d_count = i_count = 1)
- * Otherwise, it should return with error, with dput()ed original dentry.
+ * if file is found, return new dentry/inode
+ * The resolved inode will have i_is_hlink set.
  *
+ * Note: the original dentry is always dput(), even if an error occurs.
  */
 
 struct dentry *umsdos_solve_hlink (struct dentry *hlink)
@@ -913,18 +919,23 @@ dir->d_inode->u.umsdos_i.i_emd_dir, real);
 			break;
 	} /* end while */
 
-	if (IS_ERR(dentry_dst))
-		printk ("umsdos_solve_hlink: err=%ld\n", PTR_ERR(dentry_dst));
+	if (!IS_ERR(dentry_dst)) {
+		struct inode *inode = dentry_dst->d_inode;
+		if (inode) {
+			inode->u.umsdos_i.i_is_hlink = 1;
 #ifdef UMSDOS_DEBUG_VERBOSE
-	else if (!dentry_dst->d_inode)
-		printk ("umsdos_solve_hlink: resolved link %s/%s negative!\n",
-			dentry_dst->d_parent->d_name.name,
-			dentry_dst->d_name.name);
-	else
-		printk ("umsdos_solve_hlink: resolved link %s/%s, ino=%ld\n",
-			dentry_dst->d_parent->d_name.name,
-			dentry_dst->d_name.name, dentry_dst->d_inode->i_ino);
+printk ("umsdos_solve_hlink: resolved link %s/%s, ino=%ld\n",
+dentry_dst->d_parent->d_name.name, dentry_dst->d_name.name, inode->i_ino);
 #endif
+		} else {
+#ifdef UMSDOS_DEBUG_VERBOSE
+printk ("umsdos_solve_hlink: resolved link %s/%s negative!\n",
+dentry_dst->d_parent->d_name.name, dentry_dst->d_name.name);
+#endif
+		}
+	} else
+		printk(KERN_WARNING
+			"umsdos_solve_hlink: err=%ld\n", PTR_ERR(dentry_dst));
 
 out_free:
 	kfree (path);

@@ -6,6 +6,8 @@
  *  Copyright (C) 1996  Erik Andersen
  */
 
+#include <asm/byteorder.h>
+
 /* Turn this on to have the driver print out the meanings of the
    ATAPI error codes.  This will use up additional kernel-space
    memory, though. */
@@ -148,13 +150,29 @@ struct ide_cd_state_flags {
 
 
 struct atapi_request_sense {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned char valid      : 1;
+	unsigned char error_code : 7;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned char error_code : 7;
 	unsigned char valid      : 1;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 	byte reserved1;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned char reserved3  : 2;
+	unsigned char ili        : 1;
+	unsigned char reserved2  : 1;
+	unsigned char sense_key  : 4;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned char sense_key  : 4;
 	unsigned char reserved2  : 1;
 	unsigned char ili        : 1;
 	unsigned char reserved3  : 2;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 	byte info[4];
 	byte sense_len;
 	byte command_info[4];
@@ -190,8 +208,15 @@ struct atapi_toc_header {
 
 struct atapi_toc_entry {
 	byte reserved1;
-	unsigned control : 4;
-	unsigned adr     : 4;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 adr     : 4;
+	__u8 control : 4;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 control : 4;
+	__u8 adr     : 4;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 	byte track;
 	byte reserved2;
 	union {
@@ -218,8 +243,15 @@ struct atapi_cdrom_subchnl {
  	u_short acdsc_length;
 	u_char  acdsc_format;
 
+#if defined(__BIG_ENDIAN_BITFIELD)
+	u_char  acdsc_ctrl:     4;
+	u_char  acdsc_adr:      4;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	u_char  acdsc_adr:	4;
 	u_char  acdsc_ctrl:	4;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 	u_char  acdsc_trk;
 	u_char  acdsc_ind;
 	union {
@@ -243,79 +275,182 @@ typedef enum {
 
 
 struct atapi_capabilities_page {
-	unsigned page_code           : 6;
-	unsigned reserved1           : 1;
-	unsigned parameters_saveable : 1;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 parameters_saveable : 1;
+	__u8 reserved1           : 1;
+	__u8 page_code           : 6;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 page_code           : 6;
+	__u8 reserved1           : 1;
+	__u8 parameters_saveable : 1;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 
 	byte     page_length;
 
-	/* Drive supports read from CD-R discs (orange book, part II) */
-        unsigned cd_r_read           : 1; /* reserved in 1.2 */
-	/* Drive supports read from CD-R/W (CD-E) discs (orange book, part III) */
-        unsigned cd_rw_read           : 1; /* reserved in 1.2 */
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved2           : 5;
 	/* Drive supports reading CD-R discs with addressing method 2 */
-	unsigned method2             : 1; /* reserved in 1.2 */
-	unsigned reserved2           : 5;
+	__u8 method2             : 1; /* reserved in 1.2 */
+	/* Drive can read from CD-R/W (CD-E) discs (orange book, part III) */
+	__u8 cd_rw_read           : 1; /* reserved in 1.2 */
+	/* Drive supports read from CD-R discs (orange book, part II) */
+	__u8 cd_r_read           : 1; /* reserved in 1.2 */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	/* Drive supports read from CD-R discs (orange book, part II) */
+        __u8 cd_r_read           : 1; /* reserved in 1.2 */
+	/* Drive can read from CD-R/W (CD-E) discs (orange book, part III) */
+        __u8 cd_rw_read          : 1; /* reserved in 1.2 */
+	/* Drive supports reading CD-R discs with addressing method 2 */
+	__u8 method2             : 1; /* reserved in 1.2 */
+	__u8 reserved2           : 5;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved3           : 6;
+	/* Drive can write to CD-R/W (CD-E) discs (orange book, part III) */
+	__u8 cd_rw_write          : 1; /* reserved in 1.2 */
 	/* Drive supports write to CD-R discs (orange book, part II) */
-        unsigned cd_r_write          : 1; /* reserved in 1.2 */
-	/* Drive supports write to CD-R/W (CD-E) discs (orange book, part III) */
-        unsigned cd_rw_write          : 1; /* reserved in 1.2 */
-	unsigned reserved3           : 6;
+	__u8 cd_r_write          : 1; /* reserved in 1.2 */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 
-	/* Drive supports audio play operations. */
-	unsigned audio_play          : 1;
-	/* Drive can deliver a composite audio/video data stream. */
-	unsigned composite           : 1;
-	/* Drive supports digital output on port 1. */
-	unsigned digport1            : 1;
-	/* Drive supports digital output on port 2. */
-	unsigned digport2            : 1;
-	/* Drive can read mode 2, form 1 (XA) data. */
-	unsigned mode2_form1         : 1;
-	/* Drive can read mode 2, form 2 data. */
-	unsigned mode2_form2         : 1;
+	/* Drive can write to CD-R discs (orange book, part II) */
+        __u8 cd_r_write          : 1; /* reserved in 1.2 */
+	/* Drive can write to CD-R/W (CD-E) discs (orange book, part III) */
+        __u8 cd_rw_write          : 1; /* reserved in 1.2 */
+	__u8 reserved3           : 6;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
+
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved4           : 1;
 	/* Drive can read multisession discs. */
-	unsigned multisession        : 1;
-	unsigned reserved4           : 1;
+	__u8 multisession        : 1;
+	/* Drive can read mode 2, form 2 data. */
+	__u8 mode2_form2         : 1;
+	/* Drive can read mode 2, form 1 (XA) data. */
+	__u8 mode2_form1         : 1;
+	/* Drive supports digital output on port 2. */
+	__u8 digport2            : 1;
+	/* Drive supports digital output on port 1. */
+	__u8 digport1            : 1;
+	/* Drive can deliver a composite audio/video data stream. */
+	__u8 composite           : 1;
+	/* Drive supports audio play operations. */
+	__u8 audio_play          : 1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	/* Drive supports audio play operations. */
+	__u8 audio_play          : 1;
+	/* Drive can deliver a composite audio/video data stream. */
+	__u8 composite           : 1;
+	/* Drive supports digital output on port 1. */
+	__u8 digport1            : 1;
+	/* Drive supports digital output on port 2. */
+	__u8 digport2            : 1;
+	/* Drive can read mode 2, form 1 (XA) data. */
+	__u8 mode2_form1         : 1;
+	/* Drive can read mode 2, form 2 data. */
+	__u8 mode2_form2         : 1;
+	/* Drive can read multisession discs. */
+	__u8 multisession        : 1;
+	__u8 reserved4           : 1;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 
-	/* Drive can read Red Book audio data. */
-	unsigned cdda                : 1;
-	/* Drive can continue a read cdda operation from a loss of streaming.*/
-	unsigned cdda_accurate       : 1;
-	/* Subchannel reads can return combined R-W information. */
-	unsigned rw_supported        : 1;
-	/* R-W data will be returned deinterleaved and error corrected. */
-	unsigned rw_corr             : 1;
-	/* Drive supports C2 error pointers. */
-	unsigned c2_pointers         : 1;
-	/* Drive can return International Standard Recording Code info. */
-	unsigned isrc                : 1;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved5           : 1;
 	/* Drive can return Media Catalog Number (UPC) info. */
-	unsigned upc                 : 1;
-	unsigned reserved5           : 1;
+	__u8 upc                 : 1;
+	/* Drive can return International Standard Recording Code info. */
+	__u8 isrc                : 1;
+	/* Drive supports C2 error pointers. */
+	__u8 c2_pointers         : 1;
+	/* R-W data will be returned deinterleaved and error corrected. */
+	__u8 rw_corr             : 1;
+	/* Subchannel reads can return combined R-W information. */
+	__u8 rw_supported        : 1;
+	/* Drive can continue a read cdda operation from a loss of streaming.*/
+	__u8 cdda_accurate       : 1;
+	/* Drive can read Red Book audio data. */
+	__u8 cdda                : 1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	/* Drive can read Red Book audio data. */
+	__u8 cdda                : 1;
+	/* Drive can continue a read cdda operation from a loss of streaming.*/
+	__u8 cdda_accurate       : 1;
+	/* Subchannel reads can return combined R-W information. */
+	__u8 rw_supported        : 1;
+	/* R-W data will be returned deinterleaved and error corrected. */
+	__u8 rw_corr             : 1;
+	/* Drive supports C2 error pointers. */
+	__u8 c2_pointers         : 1;
+	/* Drive can return International Standard Recording Code info. */
+	__u8 isrc                : 1;
+	/* Drive can return Media Catalog Number (UPC) info. */
+	__u8 upc                 : 1;
+	__u8 reserved5           : 1;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 
-	/* Drive can lock the door. */
-	unsigned lock                : 1;
-	/* Present state of door lock. */
-	unsigned lock_state          : 1;
-	/* State of prevent/allow jumper. */
-	unsigned prevent_jumper      : 1;
-	/* Drive can eject a disc or changer cartridge. */
-	unsigned eject               : 1;
-	unsigned reserved6           : 1;
+#if defined(__BIG_ENDIAN_BITFIELD)
 	/* Drive mechanism types. */
 	mechtype_t mechtype          : 3;
+	__u8 reserved6           : 1;
+	/* Drive can eject a disc or changer cartridge. */
+	__u8 eject               : 1;
+	/* State of prevent/allow jumper. */
+	__u8 prevent_jumper      : 1;
+	/* Present state of door lock. */
+	__u8 lock_state          : 1;
+	/* Drive can lock the door. */
+	__u8 lock                : 1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+
+	/* Drive can lock the door. */
+	__u8 lock                : 1;
+	/* Present state of door lock. */
+	__u8 lock_state          : 1;
+	/* State of prevent/allow jumper. */
+	__u8 prevent_jumper      : 1;
+	/* Drive can eject a disc or changer cartridge. */
+	__u8 eject               : 1;
+	__u8 reserved6           : 1;
+	/* Drive mechanism types. */
+	mechtype_t mechtype          : 3;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
+
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved7           : 4;
+	/* Drive supports software slot selection. */
+	__u8 sss                 : 1;  /* reserved in 1.2 */
+	/* Changer can report exact contents of slots. */
+	__u8 disc_present        : 1;  /* reserved in 1.2 */
+	/* Audio for each channel can be muted independently. */
+	__u8 separate_mute       : 1;
+	/* Audio level for each channel can be controlled independently. */
+	__u8 separate_volume     : 1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 
 	/* Audio level for each channel can be controlled independently. */
-	unsigned separate_volume     : 1;
+	__u8 separate_volume     : 1;
 	/* Audio for each channel can be muted independently. */
-	unsigned separate_mute       : 1;
+	__u8 separate_mute       : 1;
 	/* Changer can report exact contents of slots. */
-	unsigned disc_present        : 1;  /* reserved in 1.2 */
+	__u8 disc_present        : 1;  /* reserved in 1.2 */
 	/* Drive supports software slot selection. */
-	unsigned sss                 : 1;  /* reserved in 1.2 */
-	unsigned reserved7           : 4;
+	__u8 sss                 : 1;  /* reserved in 1.2 */
+	__u8 reserved7           : 4;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 
 	/* Note: the following four fields are returned in big-endian form. */
 	/* Maximum speed (in kB/s). */
@@ -333,23 +468,46 @@ struct atapi_capabilities_page {
 
 
 struct atapi_mechstat_header {
-	unsigned curslot       : 5;
-	unsigned changer_state : 2;
-	unsigned fault         : 1;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 fault         : 1;
+	__u8 changer_state : 2;
+	__u8 curslot       : 5;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 curslot       : 5;
+	__u8 changer_state : 2;
+	__u8 fault         : 1;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 
-	unsigned reserved1     : 5;
-	unsigned mech_state    : 3;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 mech_state    : 3;
+	__u8 reserved1     : 5;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 reserved1     : 5;
+	__u8 mech_state    : 3;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 
 	byte     curlba[3];
 	byte     nslots;
-	unsigned short slot_tablelen;
+	__u8 short slot_tablelen;
 };
 
 
 struct atapi_slot {
-	unsigned change       : 1;
-	unsigned reserved1    : 6;
-	unsigned disc_present : 1;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 disc_present : 1;
+	__u8 reserved1    : 6;
+	__u8 change       : 1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 change       : 1;
+	__u8 reserved1    : 6;
+	__u8 disc_present : 1;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 
 	byte reserved2[3];
 };

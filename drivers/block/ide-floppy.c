@@ -121,10 +121,19 @@ typedef struct idefloppy_packet_command_s {
  *	Removable Block Access Capabilities Page
  */
 typedef struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	page_code	:6;	/* Page code - Should be 0x1b */
 	unsigned	reserved1_6	:1;	/* Reserved */
 	unsigned	ps		:1;	/* Should be 0 */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	ps		:1;	/* Should be 0 */
+	unsigned	reserved1_6	:1;	/* Reserved */
+	unsigned	page_code	:6;	/* Page code - Should be 0x1b */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	u8		page_length;		/* Page Length - Should be 0xa */
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	reserved2	:6;
 	unsigned	srfp		:1;	/* Supports reporting progress of format */
 	unsigned	sflp		:1;	/* System floppy type device */
@@ -132,6 +141,17 @@ typedef struct {
 	unsigned	reserved3	:3;
 	unsigned	sml		:1;	/* Single / Multiple lun supported */
 	unsigned	ncd		:1;	/* Non cd optical device */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	sflp		:1;	/* System floppy type device */
+	unsigned	srfp		:1;	/* Supports reporting progress of format */
+	unsigned	reserved2	:6;
+	unsigned	ncd		:1;	/* Non cd optical device */
+	unsigned	sml		:1;	/* Single / Multiple lun supported */
+	unsigned	reserved3	:3;
+	unsigned	tlun		:3;	/* Total logical units supported by the device */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	u8		reserved[8];
 } idefloppy_capabilities_page_t;
 
@@ -139,9 +159,17 @@ typedef struct {
  *	Flexible disk page.
  */
 typedef struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	page_code	:6;	/* Page code - Should be 0x5 */
 	unsigned	reserved1_6	:1;	/* Reserved */
 	unsigned	ps		:1;	/* The device is capable of saving the page */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	ps		:1;	/* The device is capable of saving the page */
+	unsigned	reserved1_6	:1;	/* Reserved */
+	unsigned	page_code	:6;	/* Page code - Should be 0x5 */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	u8		page_length;		/* Page Length - Should be 0x1e */
 	u16		transfer_rate;		/* In kilobits per second */
 	u8		heads, sectors;		/* Number of heads, Number of sectors per track */
@@ -164,8 +192,15 @@ typedef struct {
 
 typedef struct {
 	u32		blocks;			/* Number of blocks */
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	dc		:2;	/* Descriptor Code */
 	unsigned	reserved	:6;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	reserved	:6;
+	unsigned	dc		:2;	/* Descriptor Code */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	u8		length_msb;		/* Block Length (MSB)*/
 	u16		length;			/* Block Length */
 } idefloppy_capacity_descriptor_t;
@@ -271,6 +306,7 @@ typedef struct {
 typedef union {
 	unsigned all			:8;
 	struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned check		:1;	/* Error occurred */
 		unsigned idx		:1;	/* Reserved */
 		unsigned corr		:1;	/* Correctable error occurred */
@@ -279,6 +315,18 @@ typedef union {
 		unsigned reserved5	:1;	/* Reserved */
 		unsigned drdy		:1;	/* Ignored for ATAPI commands (ready to accept ATA command) */
 		unsigned bsy		:1;	/* The device has access to the command block */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+		unsigned bsy		:1;	/* The device has access to the command block */
+		unsigned drdy		:1;	/* Ignored for ATAPI commands (ready to accept ATA command) */
+		unsigned reserved5	:1;	/* Reserved */
+		unsigned dsc		:1;	/* Media access command finished */
+		unsigned drq		:1;	/* Data is request by the device */
+		unsigned corr		:1;	/* Correctable error occurred */
+		unsigned idx		:1;	/* Reserved */
+		unsigned check		:1;	/* Error occurred */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	} b;
 } idefloppy_status_reg_t;
 
@@ -288,11 +336,21 @@ typedef union {
 typedef union {
 	unsigned all			:8;
 	struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned ili		:1;	/* Illegal Length Indication */
 		unsigned eom		:1;	/* End Of Media Detected */
 		unsigned abrt		:1;	/* Aborted command - As defined by ATA */
 		unsigned mcr		:1;	/* Media Change Requested - As defined by ATA */
 		unsigned sense_key	:4;	/* Sense key of the last failed packet command */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+		unsigned sense_key	:4;	/* Sense key of the last failed packet command */
+		unsigned mcr		:1;	/* Media Change Requested - As defined by ATA */
+		unsigned abrt		:1;	/* Aborted command - As defined by ATA */
+		unsigned eom		:1;	/* End Of Media Detected */
+		unsigned ili		:1;	/* Illegal Length Indication */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	} b;
 } idefloppy_error_reg_t;
 
@@ -302,10 +360,19 @@ typedef union {
 typedef union {
 	unsigned all			:8;
 	struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned dma		:1;	/* Using DMA or PIO */
 		unsigned reserved321	:3;	/* Reserved */
 		unsigned reserved654	:3;	/* Reserved (Tag Type) */
 		unsigned reserved7	:1;	/* Reserved */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+		unsigned reserved7	:1;	/* Reserved */
+		unsigned reserved654	:3;	/* Reserved (Tag Type) */
+		unsigned reserved321	:3;	/* Reserved */
+		unsigned dma		:1;	/* Using DMA or PIO */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	} b;
 } idefloppy_feature_reg_t;
 
@@ -315,8 +382,15 @@ typedef union {
 typedef union {
 	unsigned all			:16;
 	struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned low		:8;	/* LSB */
 		unsigned high		:8;	/* MSB */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+		unsigned high		:8;	/* MSB */
+		unsigned low		:8;	/* LSB */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	} b;
 } idefloppy_bcount_reg_t;
 
@@ -326,9 +400,17 @@ typedef union {
 typedef union {
 	unsigned all			:8;
 	struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned cod		:1;	/* Information transferred is command (1) or data (0) */
 		unsigned io		:1;	/* The device requests us to read (1) or write (0) */
 		unsigned reserved	:6;	/* Reserved */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+		unsigned reserved	:6;	/* Reserved */
+		unsigned io		:1;	/* The device requests us to read (1) or write (0) */
+		unsigned cod		:1;	/* Information transferred is command (1) or data (0) */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	} b;
 } idefloppy_ireason_reg_t;
 
@@ -338,12 +420,23 @@ typedef union {
 typedef union {	
 	unsigned all			:8;
 	struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned sam_lun	:3;	/* Logical unit number */
 		unsigned reserved3	:1;	/* Reserved */
 		unsigned drv		:1;	/* The responding drive will be drive 0 (0) or drive 1 (1) */
 		unsigned one5		:1;	/* Should be set to 1 */
 		unsigned reserved6	:1;	/* Reserved */
 		unsigned one7		:1;	/* Should be set to 1 */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+		unsigned one7		:1;	/* Should be set to 1 */
+		unsigned reserved6	:1;	/* Reserved */
+		unsigned one5		:1;	/* Should be set to 1 */
+		unsigned drv		:1;	/* The responding drive will be drive 0 (0) or drive 1 (1) */
+		unsigned reserved3	:1;	/* Reserved */
+		unsigned sam_lun	:3;	/* Logical unit number */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	} b;
 } idefloppy_drivesel_reg_t;
 
@@ -353,11 +446,21 @@ typedef union {
 typedef union {			
 	unsigned all			:8;
 	struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned zero0		:1;	/* Should be set to zero */
 		unsigned nien		:1;	/* Device interrupt is disabled (1) or enabled (0) */
 		unsigned srst		:1;	/* ATA software reset. ATAPI devices should use the new ATAPI srst. */
 		unsigned one3		:1;	/* Should be set to 1 */
 		unsigned reserved4567	:4;	/* Reserved */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+		unsigned reserved4567	:4;	/* Reserved */
+		unsigned one3		:1;	/* Should be set to 1 */
+		unsigned srst		:1;	/* ATA software reset. ATAPI devices should use the new ATAPI srst. */
+		unsigned nien		:1;	/* Device interrupt is disabled (1) or enabled (0) */
+		unsigned zero0		:1;	/* Should be set to zero */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	} b;
 } idefloppy_control_reg_t;
 
@@ -366,6 +469,7 @@ typedef union {
  *	the ATAPI IDENTIFY DEVICE command.
  */
 struct idefloppy_id_gcw {	
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned packet_size		:2;	/* Packet Size */
 	unsigned reserved234		:3;	/* Reserved */
 	unsigned drq_type		:2;	/* Command packet DRQ type */
@@ -373,12 +477,24 @@ struct idefloppy_id_gcw {
 	unsigned device_type		:5;	/* Device type */
 	unsigned reserved13		:1;	/* Reserved */
 	unsigned protocol		:2;	/* Protocol type */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	unsigned protocol		:2;	/* Protocol type */
+	unsigned reserved13		:1;	/* Reserved */
+	unsigned device_type		:5;	/* Device type */
+	unsigned removable		:1;	/* Removable media */
+	unsigned drq_type		:2;	/* Command packet DRQ type */
+	unsigned reserved234		:3;	/* Reserved */
+	unsigned packet_size		:2;	/* Packet Size */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 };
 
 /*
  *	INQUIRY packet command - Data Format
  */
 typedef struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	device_type	:5;	/* Peripheral Device Type */
 	unsigned	reserved0_765	:3;	/* Peripheral Qualifier - Reserved */
 	unsigned	reserved1_6t0	:7;	/* Reserved */
@@ -390,6 +506,21 @@ typedef struct {
 	unsigned	reserved3_45	:2;	/* Reserved */
 	unsigned	reserved3_6	:1;	/* TrmIOP - Reserved */
 	unsigned	reserved3_7	:1;	/* AENC - Reserved */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	reserved0_765	:3;	/* Peripheral Qualifier - Reserved */
+	unsigned	device_type	:5;	/* Peripheral Device Type */
+	unsigned	rmb		:1;	/* Removable Medium Bit */
+	unsigned	reserved1_6t0	:7;	/* Reserved */
+	unsigned	iso_version	:2;	/* ISO Version */
+	unsigned	ecma_version	:3;	/* ECMA Version */
+	unsigned	ansi_version	:3;	/* ANSI Version */
+	unsigned	reserved3_7	:1;	/* AENC - Reserved */
+	unsigned	reserved3_6	:1;	/* TrmIOP - Reserved */
+	unsigned	reserved3_45	:2;	/* Reserved */
+	unsigned	response_format :4;	/* Response Data Format */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	u8		additional_length;	/* Additional Length (total_length-4) */
 	u8		rsv5, rsv6, rsv7;	/* Reserved */
 	u8		vendor_id[8];		/* Vendor Identification */
@@ -404,6 +535,7 @@ typedef struct {
  *	REQUEST SENSE packet command result - Data Format.
  */
 typedef struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	error_code	:7;	/* Current error (0x70) */
 	unsigned	valid		:1;	/* The information field conforms to SFF-8070i */
 	u8		reserved1	:8;	/* Reserved */
@@ -411,6 +543,17 @@ typedef struct {
 	unsigned	reserved2_4	:1;	/* Reserved */
 	unsigned	ili		:1;	/* Incorrect Length Indicator */
 	unsigned	reserved2_67	:2;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	valid		:1;	/* The information field conforms to SFF-8070i */
+	unsigned	error_code	:7;	/* Current error (0x70) */
+	u8		reserved1	:8;	/* Reserved */
+	unsigned	reserved2_67	:2;
+	unsigned	ili		:1;	/* Incorrect Length Indicator */
+	unsigned	reserved2_4	:1;	/* Reserved */
+	unsigned	sense_key	:4;	/* Sense Key */
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	u32		information __attribute__ ((packed));
 	u8		asl;			/* Additional sense length (n-7) */
 	u32		command_specific;	/* Additional command specific information */
@@ -433,8 +576,15 @@ typedef struct {
 typedef struct {
 	u16		mode_data_length;	/* Length of the following data transfer */
 	u8		medium_type;		/* Medium Type */
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	reserved3	:7;
 	unsigned	wp		:1;	/* Write protect */
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	wp		:1;	/* Write protect */
+	unsigned	reserved3	:7;
+#else
+#error "Bitfield endianness not defined! Check your byteorder.h"
+#endif
 	u8		reserved[4];
 } idefloppy_mode_parameter_header_t;
 
@@ -1371,7 +1521,8 @@ static void idefloppy_setup (ide_drive_t *drive, idefloppy_floppy_t *floppy)
 	if (gcw.drq_type == 1)
 		set_bit (IDEFLOPPY_DRQ_INTERRUPT, &floppy->flags);
 	if (strcmp(drive->id->model, "IOMEGA ZIP 100 ATAPI") == 0 &&
-	    strcmp(drive->id->fw_rev, "21.D") == 0) {
+	    ((strcmp(drive->id->fw_rev, "21.D") == 0) ||
+	     (strcmp(drive->id->fw_rev, "23.D") == 0))) {
 		for (i = 0; i < 1 << PARTN_BITS; i++)
 			max_sectors[major][minor + i] = 64;
 	}

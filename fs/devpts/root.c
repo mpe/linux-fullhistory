@@ -134,7 +134,8 @@ static int devpts_revalidate(struct dentry * dentry)
 static int devpts_root_lookup(struct inode * dir, struct dentry * dentry)
 {
 	struct devpts_sb_info *sbi = SBI(dir->i_sb);
-	int entry, i;
+	unsigned int entry;
+	int i;
 	const char *p;
 
 	if (!S_ISDIR(dir->i_mode))
@@ -161,13 +162,13 @@ static int devpts_root_lookup(struct inode * dir, struct dentry * dentry)
 		}
 	}
 
-	if (entry > sbi->max_ptys)
-		return -ENOENT;
-	
+	if ( entry >= sbi->max_ptys )
+		return 0;
+
 	dentry->d_inode = sbi->inodes[entry];
 	if ( dentry->d_inode )
 		dentry->d_inode->i_count++;
-
+	
 	d_add(dentry, dentry->d_inode);
 
 	return 0;

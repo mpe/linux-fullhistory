@@ -511,6 +511,27 @@ CONFIG_BLK_DEV_NS87415
 
   Please read the comments at the top of drivers/block/ns87415.c.
 
+VIA82C586 chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_VIA82C586
+  This adds initial timing settings for VIA (U)DMA onboard ide
+  controllers that are ATA3 compliant.  May work with ATA4 systems,
+  but not tested to date.
+
+  This requires CONFIG_IDEDMA_AUTO to be enabled.
+  Please read the comments at the top of drivers/block/via82C586.c
+
+  If unsure, say N.
+
+HPT343 chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_HPT343
+  This driver adds up to 4 more eide devices sharing a single interrupt.
+  The HPT343 chipset in it's current form is a non-bootable PCI
+  UDMA controller.  This driver requires dynamic tuning of the
+  chipset during the ide-probe at boot.  It is reported to support
+  DVD II drives, by the manufacturer.
+
+  Please read the comments at the top of drivers/block/hpt343.c
+
 QDI QD6580 support
 CONFIG_BLK_DEV_QD6580
   This driver is enabled at runtime using the "ide0=qd6580" kernel
@@ -531,16 +552,6 @@ CONFIG_BLK_DEV_ALI14XX
   of the ALI M1439/1443/1445/1487/1489 chipsets, and permits faster
   I/O speeds to be set as well. See the files Documentation/ide.txt
   and ali14xx.c for more info.
-
-Apple Macintosh builtin IDE interface support (EXPERIMENTAL)
-CONFIG_BLK_DEV_MAC_IDE
-  This is the IDE driver for the builtin IDE interface on some Apple
-  Macintosh models.  It supports both the Quadra/Performa/LC 630 and
-  the PowerBook 190 IDE interface.
-
-  Say Y if you have such a Macintosh model and want to use IDE devices
-  (hard disks, CD-ROM drives, etc.) that are connected to the builtin
-  IDE interface.
 
 XT hard disk support
 CONFIG_BLK_DEV_XD

@@ -388,6 +388,10 @@ static struct dev_name_struct {
 	{ "hdf",     0x2140 },
 	{ "hdg",     0x2200 },
 	{ "hdh",     0x2240 },
+	{ "hdi",     0x3800 },
+	{ "hdj",     0x3840 },
+	{ "hdk",     0x3900 },
+	{ "hdl",     0x3940 },
 #endif
 #ifdef CONFIG_BLK_DEV_SD
 	{ "sda",     0x0800 },

@@ -62,6 +62,7 @@
         ( (unsigned)( & (((struct kernel_vm86_regs *)0)->VM86_REGS_PART2) ) )
 #define VM86_REGS_SIZE2 (sizeof(struct kernel_vm86_regs) - VM86_REGS_SIZE1)
 
+asmlinkage struct pt_regs * FASTCALL(save_v86_state(struct kernel_vm86_regs * regs));
 asmlinkage struct pt_regs * save_v86_state(struct kernel_vm86_regs * regs)
 {
 	struct pt_regs *ret;

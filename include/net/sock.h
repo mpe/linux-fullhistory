@@ -238,6 +238,7 @@ struct tcp_opt {
  *	Slow start and congestion control (see also Nagle, and Karn & Partridge)
  */
  	__u32	snd_ssthresh;	/* Slow start size threshold		*/
+ 	__u16	snd_cwnd_cnt;	/* Linear increase counter		*/
 	__u8	dup_acks;	/* Consequetive duplicate acks seen from other end */
 	__u8	delayed_acks;
 	__u16	user_mss;  	/* mss requested by user in ioctl */

@@ -192,7 +192,7 @@ extern kmem_cache_t *tcp_timewait_cachep;
 	(((__u32)(__dport)<<16) | (__u32)(__sport))
 #endif
 
-#if defined(__alpha__) || defined(__sparc_v9__)
+#if (BITS_PER_LONG == 64)
 #ifdef __BIG_ENDIAN
 #define TCP_V4_ADDR_COOKIE(__name, __saddr, __daddr) \
 	__u64 __name = (((__u64)(__saddr))<<32)|((__u64)(__daddr));
@@ -750,12 +750,6 @@ struct tcp_skb_cb {
 
 #define TCP_SKB_CB(__skb)	((struct tcp_skb_cb *)&((__skb)->cb[0]))
 
-/* We store the congestion window as a packet count, shifted by
- * a factor so that implementing the 1/2 MSS ssthresh rules
- * is easy.
- */
-#define TCP_CWND_SHIFT	1
-
 /* This determines how many packets are "in the network" to the best
  * of our knowledge.  In many cases it is conservative, but where
  * detailed information is available from the receiver (via SACK
@@ -801,7 +795,7 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 		nagle_check = 0;
 
 	return (nagle_check &&
-		(tcp_packets_in_flight(tp) < (tp->snd_cwnd>>TCP_CWND_SHIFT)) &&
+		(tcp_packets_in_flight(tp) < tp->snd_cwnd) &&
 		!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una + tp->snd_wnd) &&
 		tp->retransmits == 0);
 }

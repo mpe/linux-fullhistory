@@ -42,8 +42,10 @@
 #define DEVID_NS87410	((ide_pci_devid_t){PCI_VENDOR_ID_NS,      PCI_DEVICE_ID_NS_87410})
 #define DEVID_NS87415	((ide_pci_devid_t){PCI_VENDOR_ID_NS,      PCI_DEVICE_ID_NS_87415})
 #define DEVID_HT6565	((ide_pci_devid_t){PCI_VENDOR_ID_HOLTEK,  PCI_DEVICE_ID_HOLTEK_6565})
-#define DEVID_AEC6210	((ide_pci_devid_t){0x1191,                0x0005})
+#define DEVID_AEC6210	((ide_pci_devid_t){PCI_VENDOR_ID_ARTOP,   PCI_DEVICE_ID_ARTOP_ATP850UF})
 #define DEVID_W82C105	((ide_pci_devid_t){PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105})
+#define DEVID_UM8886BF	((ide_pci_devid_t){PCI_VENDOR_ID_UMC,     PCI_DEVICE_ID_UMC_UM8886BF})
+#define DEVID_HPT343	((ide_pci_devid_t){PCI_VENDOR_ID_TTI,     PCI_DEVICE_ID_TTI_HPT343})
 
 #define IDE_IGNORE	((void *)-1)
 
@@ -93,6 +95,13 @@ extern void ide_init_rz1000(ide_hwif_t *);
 #define INIT_RZ1000	IDE_IGNORE
 #endif
 
+#ifdef CONFIG_BLK_DEV_VIA82C586
+extern void ide_init_via82c586(ide_hwif_t *);
+#define	INIT_VIA82C586	&ide_init_via82c586
+#else
+#define	INIT_VIA82C586	NULL
+#endif
+
 typedef struct ide_pci_enablebit_s {
 	byte	reg;	/* byte pci reg holding the enable-bit */
 	byte	mask;	/* mask to isolate the enable-bit */
@@ -104,35 +113,80 @@ typedef struct ide_pci_device_s {
 	const char		*name;
 	void 			(*init_hwif)(ide_hwif_t *hwif);
 	ide_pci_enablebit_t	enablebits[2];
+	byte			bootable;
+	unsigned int		extra;
 } ide_pci_device_t;
 
 static ide_pci_device_t ide_pci_chipsets[] __initdata = {
-	{DEVID_PIIXa,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
-	{DEVID_PIIXb,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
-	{DEVID_PIIX3,	"PIIX3",	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
-	{DEVID_PIIX4,	"PIIX4",	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
-	{DEVID_VP_IDE,	"VP_IDE",	NULL,		{{0x40,0x02,0x02}, {0x40,0x01,0x01}} },
-	{DEVID_PDC20246,"PDC20246",	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}} },
-	{DEVID_RZ1000,	"RZ1000",	INIT_RZ1000,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{DEVID_RZ1001,	"RZ1001",	INIT_RZ1000,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{DEVID_CMD640,	"CMD640",	IDE_IGNORE,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{DEVID_NS87410,	"NS87410",	NULL,		{{0x43,0x08,0x08}, {0x47,0x08,0x08}} },
-	{DEVID_SIS5513,	"SIS5513",	NULL,		{{0x4a,0x02,0x02}, {0x4a,0x04,0x04}} },
-	{DEVID_CMD646,	"CMD646",	INIT_CMD646,	{{0x00,0x00,0x00}, {0x51,0x80,0x80}} },
-	{DEVID_HT6565,	"HT6565",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{DEVID_OPTI621,	"OPTI621",	INIT_OPTI621,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}} },
-	{DEVID_OPTI621X,"OPTI621X",	INIT_OPTI621,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}} },
-	{DEVID_TRM290,	"TRM290",	INIT_TRM290,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{DEVID_NS87415,	"NS87415",	INIT_NS87415,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{DEVID_AEC6210,	"AEC6210",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{DEVID_W82C105,	"W82C105",	INIT_W82C105,	{{0x40,0x01,0x01}, {0x40,0x10,0x10}} },
-	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} }};
+	{DEVID_PIIXa,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	0x01,	0 },
+	{DEVID_PIIXb,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	0x01,	0 },
+	{DEVID_PIIX3,	"PIIX3",	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	0x01,	0 },
+	{DEVID_PIIX4,	"PIIX4",	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	0x01,	0 },
+	{DEVID_VP_IDE,	"VP_IDE",	INIT_VIA82C586,	{{0x40,0x02,0x02}, {0x40,0x01,0x01}}, 	0x01,	0 },
+	{DEVID_PDC20246,"PDC20246",	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}}, 	0x01,	16 },
+	{DEVID_RZ1000,	"RZ1000",	INIT_RZ1000,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	0x01,	0 },
+	{DEVID_RZ1001,	"RZ1001",	INIT_RZ1000,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	0x01,	0 },
+	{DEVID_CMD640,	"CMD640",	IDE_IGNORE,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	0x01,	0 },
+	{DEVID_NS87410,	"NS87410",	NULL,		{{0x43,0x08,0x08}, {0x47,0x08,0x08}}, 	0x01,	0 },
+	{DEVID_SIS5513,	"SIS5513",	NULL,		{{0x4a,0x02,0x02}, {0x4a,0x04,0x04}}, 	0x01,	0 },
+	{DEVID_CMD646,	"CMD646",	INIT_CMD646,	{{0x00,0x00,0x00}, {0x51,0x80,0x80}}, 	0x01,	0 },
+	{DEVID_HT6565,	"HT6565",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	0x01,	0 },
+	{DEVID_OPTI621,	"OPTI621",	INIT_OPTI621,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	0x01,	0 },
+	{DEVID_OPTI621X,"OPTI621X",	INIT_OPTI621,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	0x01,	0 },
+	{DEVID_TRM290,	"TRM290",	INIT_TRM290,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	0x01,	0 },
+	{DEVID_NS87415,	"NS87415",	INIT_NS87415,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	0x01,	0 },
+	{DEVID_AEC6210,	"AEC6210",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	0x01,	0 },
+	{DEVID_W82C105,	"W82C105",	INIT_W82C105,	{{0x40,0x01,0x01}, {0x40,0x10,0x10}}, 	0x01,	0 },
+	{DEVID_UM8886BF,"UM8886BF",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	0x01,	0 },
+	{DEVID_HPT343,	"HPT343",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	0x00,	16 },
+	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	0x01,	0 }};
+
+/*
+ * This allows offboard ide-pci cards the enable a BIOS, verify interrupt
+ * settings of split-mirror pci-config space, place chipset into init-mode,
+ * and/or preserve an interrupt if the card is not native ide support.
+ */
+__initfunc(static unsigned int ide_special_settings (struct pci_dev *dev, const char *name))
+{
+	unsigned int addressbios = 0;
+
+	pci_read_config_dword(dev, PCI_ROM_ADDRESS, &addressbios);
+
+	switch(dev->device) {
+		case PCI_DEVICE_ID_ARTOP_ATP850UF:
+		case PCI_DEVICE_ID_PROMISE_20246:
+			pci_write_config_byte(dev, PCI_ROM_ADDRESS, PCI_ROM_ADDRESS_ENABLE);
+			printk("%s: ROM enabled ", name);
+
+			if (!addressbios) {
+				printk("but no address\n");
+			} else {
+				printk("at 0x%08x\n", addressbios);
+			}
+
+			if ((dev->class >> 8) == PCI_CLASS_STORAGE_RAID) {
+				unsigned char irq1 = 0, irq2 = 0;
+
+				pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &irq1);
+				pci_read_config_byte(dev, (PCI_INTERRUPT_LINE)|0x80, &irq2);	/* 0xbc */
+				if (irq1 != irq2) {
+					printk("%s: IRQ1 %d IRQ2 %d\n",
+						name, irq1, irq2);
+					pci_write_config_byte(dev, (PCI_INTERRUPT_LINE)|0x80, irq1);	/* 0xbc */
+				}
+			}
+			return dev->irq;
+		default:
+			break;
+	}
+	return 0;
+}
 
 /*
  * Match a PCI IDE port against an entry in ide_hwifs[],
  * based on io_base port if possible.
  */
-__initfunc(static ide_hwif_t *ide_match_hwif (unsigned long io_base, const char *name))
+__initfunc(static ide_hwif_t *ide_match_hwif (unsigned long io_base, byte bootable, const char *name))
 {
 	int h;
 	ide_hwif_t *hwif;
@@ -168,11 +222,22 @@ __initfunc(static ide_hwif_t *ide_match_hwif (unsigned long io_base, const char 
 	 * Give preference to claiming other slots before claiming ide0/ide1,
 	 * just in case there's another interface yet-to-be-scanned
 	 * which uses ports 1f0/170 (the ide0/ide1 defaults).
+	 *
+	 * Unless there is a bootable card that does not use the standard
+	 * ports 1f0/170 (the ide0/ide1 defaults). The (bootable) flag.
 	 */
-	for (h = 2; h < MAX_HWIFS; ++h) {
-		hwif = ide_hwifs + h;
-		if (hwif->chipset == ide_unknown)
-			return hwif;	/* pick an unused entry */
+	if (bootable) {
+		for (h = 0; h < MAX_HWIFS; ++h) {
+			hwif = &ide_hwifs[h];
+			if (hwif->chipset == ide_unknown)
+				return hwif;	/* pick an unused entry */
+		}
+	} else {
+		for (h = 2; h < MAX_HWIFS; ++h) {
+			hwif = ide_hwifs + h;
+			if (hwif->chipset == ide_unknown)
+				return hwif;	/* pick an unused entry */
+		}
 	}
 	for (h = 0; h < 2; ++h) {
 		hwif = ide_hwifs + h;
@@ -263,7 +328,7 @@ check_if_enabled:
 	pciirq = dev->irq;
 	if ((dev->class & ~(0xfa)) != ((PCI_CLASS_STORAGE_IDE << 8) | 5)) {
 		printk("%s: not 100%% native mode: will probe irqs later\n", d->name);
-		pciirq = 0;
+		pciirq = ide_special_settings(dev, d->name);
 	} else if (tried_config) {
 		printk("%s: will probe irqs later\n", d->name);
 		pciirq = 0;
@@ -298,7 +363,7 @@ check_if_enabled:
 			ctl = port ? 0x374 : 0x3f4;	/* use default value */
 		if (!base)
 			base = port ? 0x170 : 0x1f0;	/* use default value */
-		if ((hwif = ide_match_hwif(base, d->name)) == NULL)
+		if ((hwif = ide_match_hwif(base, d->bootable, d->name)) == NULL)
 			continue;	/* no room in ide_hwifs[] */
 		if (hwif->io_ports[IDE_DATA_OFFSET] != base) {
 			ide_init_hwif_ports(hwif->io_ports, base, NULL);
@@ -314,6 +379,10 @@ check_if_enabled:
 		if (mate) {
 			hwif->mate = mate;
 			mate->mate = hwif;
+			if (IDE_PCI_DEVID_EQ(d->devid, DEVID_AEC6210)) {
+				hwif->serialized = 1;
+				mate->serialized = 1;
+			}
 		}
 #ifdef CONFIG_BLK_DEV_IDEDMA
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_SIS5513))
@@ -321,9 +390,10 @@ check_if_enabled:
 		if (autodma)
 			hwif->autodma = 1;
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_AEC6210) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT343) ||
 		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
-			unsigned int extra = (!mate && IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246)) ? 16 : 0;
-			unsigned long dma_base = ide_get_or_set_dma_base(hwif, extra, d->name);
+			unsigned long dma_base = ide_get_or_set_dma_base(hwif, (!mate && d->extra) ? d->extra : 0, d->name);
 			if (dma_base && !(pcicmd & PCI_COMMAND_MASTER)) {
 				/*
  	 			 * Set up BM-DMA capability (PnP BIOS should have done this)

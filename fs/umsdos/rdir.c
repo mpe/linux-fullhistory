@@ -98,8 +98,13 @@ printk (KERN_WARNING "umsdos_rlookup_x: we are at pseudo-root thingy?\n");
 	}
 
 	ret = msdos_lookup (dir, dentry);
+	if (ret) {
+		printk(KERN_WARNING "umsdos_rlookup_x: lookup failed, ret=%d\n",
+			ret);
+		goto out;
+	}
 	inode = dentry->d_inode;
-	if ((ret == 0) && inode) {
+	if (inode) {
 		if (inode == pseudo_root && !nopseudo) {
 			/* #Specification: pseudo root / DOS/linux
 			 * Even in the real root directory (c:\), the directory

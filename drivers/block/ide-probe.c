@@ -273,6 +273,18 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 	{
 		if ((rc = try_to_identify(drive,cmd)))   /* send cmd and wait */
 			rc = try_to_identify(drive,cmd); /* failed: try again */
+		if (rc == 1 && cmd == WIN_PIDENTIFY && drive->autotune != 2) {
+			unsigned long timeout;
+			printk("%s: no response (status = 0x%02x), resetting drive\n", drive->name, GET_STAT());
+			delay_50ms();
+			OUT_BYTE (drive->select.all, IDE_SELECT_REG);
+			delay_50ms();
+			OUT_BYTE(WIN_SRST, IDE_COMMAND_REG);
+			timeout = jiffies;
+			while ((GET_STAT() & BUSY_STAT) && jiffies < timeout + WAIT_WORSTCASE)
+				delay_50ms();
+			rc = try_to_identify(drive, cmd);
+		}
 		if (rc == 1)
 			printk("%s: no response (status = 0x%02x)\n", drive->name, GET_STAT());
 		(void) GET_STAT();		/* ensure drive irq is clear */

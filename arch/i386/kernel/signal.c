@@ -28,7 +28,7 @@
 
 asmlinkage int sys_wait4(pid_t pid, unsigned long *stat_addr,
 			 int options, unsigned long *ru);
-asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs);
+asmlinkage int FASTCALL(do_signal(struct pt_regs *regs, sigset_t *oldset));
 
 /*
  * Atomically swap in the new signal mask, and wait for a signal.
@@ -50,7 +50,7 @@ sys_sigsuspend(int history0, int history1, old_sigset_t mask)
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
-		if (do_signal(&saveset, regs))
+		if (do_signal(regs, &saveset))
 			return -EINTR;
 	}
 }
@@ -79,7 +79,7 @@ sys_rt_sigsuspend(sigset_t *unewset, size_t sigsetsize)
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
-		if (do_signal(&saveset, regs))
+		if (do_signal(regs, &saveset))
 			return -EINTR;
 	}
 }
@@ -597,7 +597,7 @@ handle_signal(unsigned long sig, struct k_sigaction *ka,
  * the kernel can handle, and then we build all the user-level signal handling
  * stack-frames in one go after that.
  */
-asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
+asmlinkage int do_signal(struct pt_regs *regs, sigset_t *oldset)
 {
 	siginfo_t info;
 	struct k_sigaction *ka;

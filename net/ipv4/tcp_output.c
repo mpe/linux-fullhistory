@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.93 1998/08/26 12:04:32 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.94 1998/09/15 02:11:36 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -616,7 +616,7 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 			/* Stop retransmitting if we've hit the congestion
 			 * window limit.
 			 */
-			if (tp->retrans_out >= (tp->snd_cwnd >> TCP_CWND_SHIFT))
+			if (tp->retrans_out >= tp->snd_cwnd)
 				break;
 		} else {
 			update_retrans_head(sk);
@@ -646,7 +646,7 @@ void tcp_fack_retransmit(struct sock *sk)
 		if(tcp_retransmit_skb(sk, skb))
 			break;
 
-		if(tcp_packets_in_flight(tp) >= (tp->snd_cwnd >> TCP_CWND_SHIFT))
+		if(tcp_packets_in_flight(tp) >= tp->snd_cwnd)
 			break;
 next_packet:
 		packet_cnt++;

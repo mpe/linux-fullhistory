@@ -905,7 +905,7 @@ static int __init timer_irq_works(void)
 	unsigned int t1 = jiffies;
 
 	sti();
-	udelay(10*10000);
+	mdelay(100);
 
 	if (jiffies-t1>1)
 		return 1;
@@ -947,17 +947,36 @@ static void disable_edge_ioapic_irq(unsigned int irq)
 }
 
 /*
- * Level triggered interrupts can just be masked.
+ * Starting up a edge-triggered IO-APIC interrupt is
+ * nasty - we need to make sure that we get the edge.
+ * If it is already asserted for some reason, we need
+ * to fake an edge by marking it IRQ_PENDING..
+ *
+ * This is not complete - we should be able to fake
+ * an edge even if it isn't on the 8259A...
  */
-static void enable_level_ioapic_irq(unsigned int irq)
+
+static void startup_edge_ioapic_irq(unsigned int irq)
 {
-	unmask_IO_APIC_irq(irq);
+	if (irq < 16) {
+		disable_8259A_irq(irq);
+		if (i8259A_irq_pending(irq))
+			irq_desc[irq].status |= IRQ_PENDING;
+	}
+	enable_edge_ioapic_irq(irq);
 }
 
-static void disable_level_ioapic_irq(unsigned int irq)
-{
-	mask_IO_APIC_irq(irq);
-}
+#define shutdown_edge_ioapic_irq	disable_edge_ioapic_irq
+
+/*
+ * Level triggered interrupts can just be masked,
+ * and shutting down and starting up the interrupt
+ * is the same as enabling and disabling them.
+ */
+#define startup_level_ioapic_irq	unmask_IO_APIC_irq
+#define shutdown_level_ioapic_irq	mask_IO_APIC_irq
+#define enable_level_ioapic_irq		unmask_IO_APIC_irq
+#define disable_level_ioapic_irq	mask_IO_APIC_irq
 
 static void do_edge_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 {
@@ -1065,6 +1084,8 @@ static void do_level_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 
 static struct hw_interrupt_type ioapic_edge_irq_type = {
 	"IO-APIC-edge",
+	startup_edge_ioapic_irq,
+	shutdown_edge_ioapic_irq,
 	do_edge_ioapic_IRQ,
 	enable_edge_ioapic_irq,
 	disable_edge_ioapic_irq
@@ -1072,6 +1093,8 @@ static struct hw_interrupt_type ioapic_edge_irq_type = {
 
 static struct hw_interrupt_type ioapic_level_irq_type = {
 	"IO-APIC-level",
+	startup_level_ioapic_irq,
+	shutdown_level_ioapic_irq,
 	do_level_ioapic_IRQ,
 	enable_level_ioapic_irq,
 	disable_level_ioapic_irq
@@ -1162,20 +1185,11 @@ static inline void check_timer(void)
  *   directly from the FPU to the old PIC. Linux doesn't
  *   really care, because Linux doesn't want to use IRQ13
  *   anyway (exception 16 is the proper FPU error signal)
- * - IRQ9 is broken on PIIX4 motherboards:
  *
- *		"IRQ9 cannot be re-assigned"
- *
- *		IRQ9 is not available to assign to
- *		ISA add-in cards because it is
- *		dedicated to the power
- *		management function of the PIIX4
- *		controller on the motherboard.
- *		This is true for other motherboards
- *		which use the 82371AB PIIX4
- *		component.
+ * Additionally, something is definitely wrong with irq9
+ * on PIIX4 boards.
  */
-#define PIC_IRQS	((1<<2)|(1<<9)|(1<<13))
+#define PIC_IRQS	((1<<2)|(1<<13))
 
 void __init setup_IO_APIC(void)
 {
@@ -1224,27 +1238,6 @@ void __init setup_IO_APIC(void)
 	setup_IO_APIC_irqs();
 	init_IRQ_SMP();
 	check_timer();
-
-	/*
-	 * Get rid of any pending interrupt sources by just blindly
-	 * ACK'ing the IO-APIC. There is apparently no other way to
-	 * remove stale bits in the ISR.
-	 *
-	 * I'd love to be proven wrong, please tell me how to clear
-	 * the ISR bit for specific interrupts..
-	 *
-	 * Oh, how do we clear the IRR bit? I'd like to be able to
-	 * make sure that we get one interrupt for something that 
-	 * is pending when we enable it, even if it is edge-triggered.
-	 * How to fool the IO-APIC to think it got an edge when
-	 * enabled?
-	 */
-	{
-		int i = 10;
-		do {
-			ack_APIC_irq();
-		} while (--i);
-	}
 
 	print_IO_APIC();
 }

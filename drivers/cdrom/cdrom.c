@@ -67,7 +67,7 @@
 
 2.12  Jan  24, 1998 -- Erik Andersen <andersee@debian.org>
   -- Fixed a bug in the IOCTL_IN and IOCTL_OUT macros.  It turns out that
-  copy_*_user does not return EFAULT on error, but instead return the number 
+  copy_*_user does not return EFAULT on error, but instead returns the number 
   of bytes not copied.  I was returning whatever non-zero stuff came back from 
   the copy_*_user functions directly, which would result in strange errors.
 
@@ -80,10 +80,16 @@
   -- Fixed it so that the /proc entry now also shows up when cdrom is
   compiled into the kernel.  Before it only worked when loaded as a module.
 
+  2.14 August 17, 1998 -- Erik Andersen <andersee@debian.org>
+  -- Fixed a bug in cdrom_media_changed and handling of reporting that
+  the media had changed for devices that _don't_ implement media_changed.  
+  Thanks to Grant R. Guenther <grant@torque.net> for spotting this bug.
+  -- Made a few things more pedanticly correct.
+
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 2.13"
-#define VERSION "Id: cdrom.c 2.13 1998/07/17 erik"
+#define REVISION "Revision: 2.14"
+#define VERSION "Id: cdrom.c 2.14 1998/08/17 erik"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -163,15 +169,6 @@ static int check_for_audio_disc(struct cdrom_device_info * cdi,
 static void sanitize_format(union cdrom_addr *addr, 
 		u_char * curr, u_char requested);
 static void cdrom_sysctl_register(void);
-typedef struct {
-	int data;
-	int audio;
-	int cdi;
-	int xa;
-	long error;
-} tracktype;
-
-static void cdrom_count_tracks(struct cdrom_device_info *cdi,tracktype* tracks);
 static struct cdrom_device_info *topCdromPtr = NULL;
 
 struct file_operations cdrom_fops =
@@ -312,6 +309,9 @@ int cdrom_open(struct inode *ip, struct file *fp)
 		ret = open_for_data(cdi);
 	if (!ret) cdi->use_count++;
 	cdinfo(CD_OPEN, "Use count for \"/dev/%s\" now %d\n", cdi->name, cdi->use_count);
+	/* Do this on open.  Don't wait for mount, because they might
+	    not be mounting, but opening with O_NONBLOCK */
+	check_disk_change(dev);
 	return ret;
 }
 
@@ -497,7 +497,10 @@ int cdrom_release(struct inode *ip, struct file *fp)
 		!(fp && fp->f_flags & O_NONBLOCK);
 	cdo->release(cdi);
 	if (cdi->use_count == 0) {      /* last process that closes dev*/
+		struct super_block *sb;
 		sync_dev(dev);
+		sb = get_super(dev);
+		if (sb) invalidate_inodes(sb);
 		invalidate_buffers(dev);
 		if (opened_for_data &&
 		    cdi->options & CDO_AUTO_EJECT &&
@@ -519,6 +522,8 @@ int media_changed(struct cdrom_device_info *cdi, int queue)
 	unsigned int mask = (1 << (queue & 1));
 	int ret = !!(cdi->mc_flags & mask);
 
+	if (!(cdi->ops->capability & ~cdi->mask & CDC_MEDIA_CHANGED))
+	    return ret;
 	/* changed since last call? */
 	if (cdi->ops->media_changed(cdi, CDSL_CURRENT)) {
 		cdi->mc_flags = 0x3;    /* set bit on both queues */
@@ -532,14 +537,18 @@ static
 int cdrom_media_changed(kdev_t dev)
 {
 	struct cdrom_device_info *cdi = cdrom_find_device (dev);
+	/* This talks to the VFS, which doesn't like errors - just 1 or 0.  
+	 * Returning "0" is always safe (media hasn't been changed). Do that 
+	 * if the low-level cdrom driver dosn't support media changed. */ 
 	if (cdi == NULL)
-		return -ENODEV;
+		return 0;
 	if (cdi->ops->media_changed == NULL)
-		return -ENOSYS;
-	return media_changed(cdi, 0);
+		return 0;
+	if (!(cdi->ops->capability & ~cdi->mask & CDC_MEDIA_CHANGED))
+	    return 0;
+	return (media_changed(cdi, 0));
 }
 
-static
 void cdrom_count_tracks(struct cdrom_device_info *cdi, tracktype* tracks)
 {
 	struct cdrom_tochdr header;
@@ -950,6 +959,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		return cdo->dev_ioctl(cdi, cmd, arg);
 }
 
+EXPORT_SYMBOL(cdrom_count_tracks);
 EXPORT_SYMBOL(register_cdrom);
 EXPORT_SYMBOL(unregister_cdrom);
 EXPORT_SYMBOL(cdrom_fops);

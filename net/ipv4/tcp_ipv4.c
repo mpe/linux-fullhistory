@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.157 1998/08/28 00:27:47 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.160 1998/09/15 02:11:27 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -817,8 +817,9 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	switch (type) {
 	case ICMP_SOURCE_QUENCH:
 #ifndef OLD_SOURCE_QUENCH /* This is deprecated */
-		tp->snd_ssthresh = max(tp->snd_cwnd >> (1 + TCP_CWND_SHIFT), 2);
-		tp->snd_cwnd = (tp->snd_ssthresh << TCP_CWND_SHIFT);
+		tp->snd_ssthresh = max(tp->snd_cwnd >> 1, 2);
+		tp->snd_cwnd = tp->snd_ssthresh;
+		tp->snd_cwnd_cnt = 0;
 		tp->high_seq = tp->snd_nxt;
 #endif
 		return;
@@ -1285,13 +1286,14 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newtp->last_ack_sent = req->rcv_isn + 1;
 		newtp->backoff = 0;
 		newtp->mdev = TCP_TIMEOUT_INIT;
-		newtp->snd_cwnd = (1 << TCP_CWND_SHIFT);
+		newtp->snd_cwnd = 1;
 		newtp->rto = TCP_TIMEOUT_INIT;
 		newtp->packets_out = 0;
 		newtp->fackets_out = 0;
 		newtp->retrans_out = 0;
 		newtp->high_seq = 0;
 		newtp->snd_ssthresh = 0x7fffffff;
+		newtp->snd_cwnd_cnt = 0;
 		newtp->dup_acks = 0;
 		newtp->delayed_acks = 0;
 		init_timer(&newtp->retransmit_timer);
@@ -1760,7 +1762,8 @@ static int tcp_v4_init_sock(struct sock *sk)
 	/* See draft-stevens-tcpca-spec-01 for discussion of the
 	 * initialization of these values.
 	 */
-	tp->snd_cwnd = (1 << TCP_CWND_SHIFT);
+	tp->snd_cwnd = 1;
+	tp->snd_cwnd_cnt = 0;
 	tp->snd_ssthresh = 0x7fffffff;	/* Infinity */
 
 	sk->state = TCP_CLOSE;

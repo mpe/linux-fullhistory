@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.51 1998/05/02 15:19:26 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.53 1998/09/15 02:11:39 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -466,8 +466,9 @@ void tcp_retransmit_timer(unsigned long data)
 		/* remember window where we lost
 		 * "one half of the current window but at least 2 segments"
 		 */
-		tp->snd_ssthresh = max(tp->snd_cwnd >> (1 + TCP_CWND_SHIFT), 2);
-		tp->snd_cwnd = (1 << TCP_CWND_SHIFT);
+		tp->snd_ssthresh = max(tp->snd_cwnd >> 1, 2);
+		tp->snd_cwnd_cnt = 0;
+		tp->snd_cwnd = 1;
 	}
 
 	tp->retransmits++;

@@ -16,6 +16,12 @@
  *
  * Changes:     Ingo Molnar, converted csum_partial_copy() to 2.1 exception
  *			     handling.
+ *		Andi Kleen,  add zeroing on error, fix constraints.
+ *
+ * To fix:
+ *		Convert to pure asm, because this file is too hard
+ *		for gcc's register allocator and it is not clear if the
+ *	 	contraints are correct.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -98,7 +104,7 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
 7:	    "
 	: "=a"(sum)
 	: "0"(sum), "c"(len), "S"(buff)
-	: "bx", "cx", "dx", "si");
+	: "bx", "dx", "si", "cx", "memory");
 	return(sum);
 }
 
@@ -191,7 +197,7 @@ unsigned int csum_partial(const unsigned char * buf, int len, unsigned int sum) 
 80:          "
         : "=a"(sum)
         : "0"(sum), "c"(len), "S"(buf)
-        : "bx", "cx", "dx", "si");
+        : "bx", "dx", "cx", "si", "memory");
         return(sum);
 }
 
@@ -228,6 +234,7 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
     __u32 tmp_var;
 
     __asm__ __volatile__ ( "
+		movl  %6,%%edi
 		testl $2, %%edi		# Check alignment. 
 		jz 2f			# Jump if alignment is ok.
 		subl $2, %%ecx		# Alignment uses up two bytes.
@@ -318,7 +325,12 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
 						#
 	movl	%7, (%%ebx)			#
 						#
-# FIXME: do zeroing of rest of the buffer here. #
+# zero the complete destination - computing the rest
+# is too much work 
+	movl	%6, %%edi
+	movl	%9, %%ecx
+	xorl	%%eax,%%eax
+	rep ; stosb
 						#
 	jmp	5000b				#
 						#
@@ -337,9 +349,10 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
 "
 	: "=a" (sum)
 	: "m" (src_err_ptr), "m" (dst_err_ptr),
-	  "0" (sum), "c" (len), "S" (src), "D" (dst),
-		"i" (-EFAULT), "m"(tmp_var)
-	: "bx", "cx", "dx", "si", "di" );
+	  "0" (sum), "c" (len), "S" (src), "m" (dst),
+		"i" (-EFAULT), "m"(tmp_var),
+		"m" (len)
+	: "bx", "dx", "si", "di", "cx", "memory" );
 
     return(sum);
 }
@@ -360,6 +373,7 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
 				  int len, int sum, int *src_err_ptr, int *dst_err_ptr)
 {
 	__asm__ __volatile__ ("
+	movl %4,%%ecx
         movl %%ecx, %%edx  
         movl %%ecx, %%ebx  
         shrl $6, %%ecx     
@@ -396,7 +410,11 @@ ROUND (-16) ROUND(-12) ROUND(-8)  ROUND(-4)
 7:
 .section .fixup, \"ax\"
 6000:	movl	%7, (%%ebx)
-# FIXME: do zeroing of rest of the buffer here.
+# zero the complete destination (computing the rest is too much work)
+	movl	%8,%%edi
+	movl	%4,%%ecx
+	xorl	%%eax,%%eax
+	rep ; stosb
 	jmp	7b
 6001:	movl    %1, %%ebx	
 	jmp	6000b	
@@ -404,10 +422,12 @@ ROUND (-16) ROUND(-12) ROUND(-8)  ROUND(-4)
 	jmp	6000b
 .previous
         "
-	: "=a"(sum), "=m"(src_err_ptr), "=m"(dst_err_ptr)
-        : "0"(sum), "c"(len), "S"(src), "D" (dst),
-		"i" (-EFAULT)
-        : "bx", "cx", "dx", "si", "di" );
+	: "=a"(sum)
+        : "m"(src_err_ptr), "m"(dst_err_ptr), 
+	  "0"(sum), "m"(len), "S"(src), "D" (dst),
+	  "i" (-EFAULT),
+	  "m" (dst)
+        : "bx", "cx", "si", "di", "dx", "memory" );
 	return(sum);
 }
 

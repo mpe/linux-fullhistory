@@ -62,6 +62,13 @@
  * for supplying a Promise UDMA board & WD UDMA drive for this work!
  *
  * And, yes, Intel Zappa boards really *do* use both PIIX IDE ports.
+ *
+ * ACARD ATP850UF Chipset "Modified SCSI Class" with other names
+ *       AEC6210 U/UF
+ *       SIIG's UltraIDE Pro CN-2449
+ * TTI   HPT343 Chipset "Modified SCSI Class" but reports as an
+ *       unknown storage device.
+ * NEW	check_drive_lists(ide_drive_t *drive, int good_bad)
  */
 #include <linux/config.h>
 #include <linux/types.h>
@@ -85,7 +92,17 @@
 const char *good_dma_drives[] = {"Micropolis 2112A",
 				 "CONNER CTMA 4000",
 				 "ST34342A",	/* for Sun Ultra */
+				 "WDC AC2340F",	/* DMA mode1 */
+				 "WDC AC2340H",	/* DMA mode1 */
 				 NULL};
+
+/*
+ * bad_dma_drives() lists the model names (from "hdparm -i")
+ * of drives which supposedly support (U)DMA but which are
+ * known to corrupt data with this interface under Linux.
+ */
+const char *bad_dma_drives[] = {"WDC AC22100H",
+ 				NULL};
 
 /*
  * Our Physical Region Descriptor (PRD) table should be large enough
@@ -204,27 +221,57 @@ int ide_build_dmatable (ide_drive_t *drive)
 	return count;
 }
 
-static int config_drive_for_dma (ide_drive_t *drive)
+/*
+ *  For both Blacklisted and Whitelisted drives.
+ *  This is setup to be called as an extern for future support
+ *  to other special driver code.
+ */
+int check_drive_lists (ide_drive_t *drive, int good_bad)
 {
 	const char **list;
+	struct hd_driveid *id = drive->id;
+
+	if (good_bad) {
+		/* Consult the list of known "good" drives */
+		list = good_dma_drives;
+		while (*list) {
+			if (!strcmp(*list++,id->model))
+				return 1;
+		}
+	} else {
+		/* Consult the list of known "bad" drives */
+		list = bad_dma_drives;
+		while (*list) {
+			if (!strcmp(*list++,id->model)) {
+				printk("%s: (U)DMA capability is broken for %s\n",
+					drive->name, id->model);
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+static int config_drive_for_dma (ide_drive_t *drive)
+{
 	struct hd_driveid *id = drive->id;
 	ide_hwif_t *hwif = HWIF(drive);
 
 	if (id && (id->capability & 1) && hwif->autodma) {
+		/* Consult the list of known "bad" drives */
+		if (check_drive_lists(drive, BAD_DMA_DRIVE))
+			return hwif->dmaproc(ide_dma_off, drive);
 		/* Enable DMA on any drive that has UltraDMA (mode 0/1/2) enabled */
 		if (id->field_valid & 4)	/* UltraDMA */
 			if  ((id->dma_ultra & (id->dma_ultra >> 8) & 7))
 				return hwif->dmaproc(ide_dma_on, drive);
 		/* Enable DMA on any drive that has mode2 DMA (multi or single) enabled */
 		if (id->field_valid & 2)	/* regular DMA */
-			if  ((id->dma_mword & 0x404) == 0x404 || (id->dma_1word & 0x404) == 0x404)
+			if ((id->dma_mword & 0x404) == 0x404 || (id->dma_1word & 0x404) == 0x404)
 				return hwif->dmaproc(ide_dma_on, drive);
 		/* Consult the list of known "good" drives */
-		list = good_dma_drives;
-		while (*list) {
-			if (!strcmp(*list++,id->model))
-				return hwif->dmaproc(ide_dma_on, drive);
-		}
+		if (check_drive_lists(drive, GOOD_DMA_DRIVE))
+			return hwif->dmaproc(ide_dma_on, drive);
 	}
 	return hwif->dmaproc(ide_dma_off_quietly, drive);
 }
@@ -354,7 +401,7 @@ __initfunc(unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, c
 		}
 	}
 	if (dma_base) {
-		if (extra) /* PDC20246 */
+		if (extra) /* PDC20246 & HPT343 */
 			request_region(dma_base+16, extra, name);
 		dma_base += hwif->channel ? 8 : 0;
 		if (inb(dma_base+2) & 0x80) {

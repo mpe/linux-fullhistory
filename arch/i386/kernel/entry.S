@@ -112,7 +112,11 @@ ENOSYS = 38
 	jmp 1b;		\
 5:	movl $0,(%esp);	\
 	jmp 2b;		\
-6:	pushl $11;	\
+6:	pushl %ss;	\
+	popl %ds;	\
+	pushl %ss;	\
+	popl %es;	\
+	pushl $11;	\
 	call do_exit;	\
 .previous;		\
 .section __ex_table,"a";\
@@ -184,25 +188,26 @@ ret_with_reschedule:
 	jne reschedule
 	cmpl $0,sigpending(%ebx)
 	jne signal_return
+restore_all:
 	RESTORE_ALL
+
 	ALIGN
 signal_return:
 	testl $(VM_MASK),EFLAGS(%esp)
-	pushl %esp
+	movl %esp,%eax
 	jne v86_signal_return
-	pushl $0
+	xorl %edx,%edx
 	call SYMBOL_NAME(do_signal)
-	addl $8,%esp
-	RESTORE_ALL
+	jmp restore_all
+
 	ALIGN
 v86_signal_return:
 	call SYMBOL_NAME(save_v86_state)
 	movl %eax,%esp
-	pushl %eax
-	pushl $0
+	xorl %edx,%edx
 	call SYMBOL_NAME(do_signal)
-	addl $8,%esp
-	RESTORE_ALL
+	jmp restore_all
+
 	ALIGN
 tracesys:
 	movl $-ENOSYS,EAX(%esp)
@@ -228,7 +233,7 @@ ret_from_intr:
 	movb CS(%esp),%al
 	testl $(VM_MASK | 3),%eax	# return to VM86 mode or non-supervisor?
 	jne ret_with_reschedule
-	RESTORE_ALL
+	jmp restore_all
 
 	ALIGN
 handle_bottom_half:

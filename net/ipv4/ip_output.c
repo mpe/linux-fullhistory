@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.61 1998/08/26 12:03:54 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.62 1998/09/14 01:22:58 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -544,7 +544,7 @@ int ip_build_xmit_slow(struct sock *sk,
 		 *	Account for the fragment.
 		 */
 
-		if(!err && offset == 0 && 
+		if(!err &&
 		   call_out_firewall(PF_INET, rt->u.dst.dev, skb->nh.iph, NULL, &skb) < FW_ACCEPT)
 			err = -EPERM;
 

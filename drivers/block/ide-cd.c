@@ -1,4 +1,4 @@
-#define VERBOSE_IDE_CD_ERRORS 1
+#define VERBOSE_IDE_CD_ERRORS	1
 /*
  * linux/drivers/block/ide-cd.c
  * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
@@ -218,9 +218,12 @@
  *                         since the .pdf version doesn't seem to work...
  *                     -- Updated the TODO list to something more current.
  *
+ * 4.15  Aug 25, 1998  -- Updated ide-cd.h to respect mechine endianess, 
+ *                         patch thanks to "Eddie C. Dost" <ecd@skynet.be>
+ *
  *************************************************************************/
 
-#define IDECD_VERSION "4.14"
+#define IDECD_VERSION "4.15"
 
 #include <linux/module.h>
 #include <linux/types.h>

@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.33 1998/08/27 16:55:20 davem Exp $
+ *	$Id: udp.c,v 1.35 1998/09/07 00:13:57 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -317,41 +317,8 @@ static void udpv6_close(struct sock *sk, unsigned long timeout)
 	destroy_sock(sk);
 }
 
-#ifdef CONFIG_FILTER
+#if defined(CONFIG_FILTER) || !defined(HAVE_CSUM_COPY_USER)
 #undef CONFIG_UDP_DELAY_CSUM
-#endif
-
-#ifdef CONFIG_UDP_DELAY_CSUM
-
-/* Please, read comments in net/checksum.h, asm/checksum.h
-
-   I commented out csum_partial_copy_to_user there because it did not
-   verify_area. Now I am even wondered, how clever was I that time 8)8)
-   If I did not it, I would step into this hole again.   --ANK
- */
-
-#ifndef _HAVE_ARCH_COPY_AND_CSUM_TO_USER
-#if defined(__i386__)
-static __inline__
-unsigned int csum_and_copy_to_user (const char *src, char *dst,
-				    int len, int sum, int *err_ptr)
-{
-	int *src_err_ptr=NULL;
-
-	if (verify_area(VERIFY_WRITE, dst, len) == 0)
-		return csum_partial_copy_generic(src, dst, len, sum, src_err_ptr, err_ptr);
-
-	if (len)
-		*err_ptr = -EFAULT;
-
-	return sum;
-}
-#elif defined(__sparc__)
-#define csum_and_copy_to_user csum_partial_copy_to_user
-#else
-#undef CONFIG_UDP_DELAY_CSUM
-#endif
-#endif
 #endif
 
 /*
@@ -905,7 +872,7 @@ struct proto udpv6_prot = {
 	0				/* highestinuse */
 };
 
-__initfunc(void udpv6_init(void))
+void __init udpv6_init(void)
 {
 	inet6_add_protocol(&udpv6_protocol);
 }

@@ -217,10 +217,8 @@ void umsdos_setup_dir_inode (struct inode *inode)
 void umsdos_set_dirinfo_new (struct dentry *dentry, off_t f_pos)
 {
 	struct inode *inode = dentry->d_inode;
-	struct inode *dir = dentry->d_parent->d_inode;
 	struct dentry *demd;
 
-	inode->u.umsdos_i.i_dir_owner = dir->i_ino;
 	inode->u.umsdos_i.i_emd_owner = 0;
 	inode->u.umsdos_i.pos = f_pos;
 
@@ -250,7 +248,6 @@ void umsdos_set_dirinfo (struct inode *inode, struct inode *dir, off_t f_pos)
 		goto out;
 	Printk (("umsdos_set_dirinfo: emd_owner is %lu for dir %lu\n", 
 		emd_owner->i_ino, dir->i_ino));
-	inode->u.umsdos_i.i_dir_owner = dir->i_ino;
 	inode->u.umsdos_i.i_emd_owner = emd_owner->i_ino;
 	inode->u.umsdos_i.pos = f_pos;
 	iput (emd_owner);
@@ -420,23 +417,25 @@ void UMSDOS_read_inode (struct inode *inode)
 int UMSDOS_notify_change (struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
-	unsigned long i_emd_owner = inode->u.umsdos_i.i_emd_owner;
 	struct dentry *demd;
 	int ret;
 	struct file filp;
 	struct umsdos_dirent entry;
 
-	Printk ((KERN_DEBUG "UMSDOS_notify_change: entering\n"));
+Printk(("UMSDOS_notify_change: entering for %s/%s\n",
+dentry->d_parent->d_name.name, dentry->d_name.name));
 
-	if ((ret = inode_change_ok (inode, attr)) != 0)
+	ret = inode_change_ok (inode, attr);
+	if (ret) {
+printk("UMSDOS_notify_change: %s/%s change not OK, ret=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, ret);
 		goto out;
+	}
 
 	if (inode->i_nlink == 0)
 		goto out_nolink;
 
 	if (inode->i_ino == UMSDOS_ROOT_INO)
-		goto out_nolink;
-	if (i_emd_owner != 0)
 		goto out_nolink;
 
 	/* get the EMD file dentry */
@@ -445,50 +444,69 @@ int UMSDOS_notify_change (struct dentry *dentry, struct iattr *attr)
 	if (IS_ERR(demd))
 		goto out_nolink;
 	ret = -EPERM;
-	if (!demd->d_inode)
+	if (!demd->d_inode) {
+		printk(KERN_WARNING
+			"UMSDOS_notify_change: no EMD file %s/%s\n",
+			demd->d_parent->d_name.name, demd->d_name.name);
 		goto out_dput;
+	}
 
 	ret = 0;
+	/* don't do anything if this is the EMD itself */
 	if (inode == demd->d_inode)
 		goto out_dput;
+
 	/* This inode is not a EMD file nor an inode used internally
 	 * by MSDOS, so we can update its status.
 	 * See emd.c
 	 */
 
-	Printk (("notify change %p ", inode));
 	fill_new_filp (&filp, demd);
 	filp.f_pos = inode->u.umsdos_i.pos;
+Printk(("UMSDOS_notify_change: %s/%s reading at %u\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, filp.f_pos));
 
-	Printk (("pos = %Lu ", filp.f_pos));
 	/* Read only the start of the entry since we don't touch the name */
 	ret = umsdos_emd_dir_read (&filp, (char *) &entry, UMSDOS_REC_SIZE);
-	if (!ret) {
-		if (attr->ia_valid & ATTR_UID)
-			entry.uid = attr->ia_uid;
-		if (attr->ia_valid & ATTR_GID)
-			entry.gid = attr->ia_gid;
-		if (attr->ia_valid & ATTR_MODE)
-			entry.mode = attr->ia_mode;
-		if (attr->ia_valid & ATTR_ATIME)
-			entry.atime = attr->ia_atime;
-		if (attr->ia_valid & ATTR_MTIME)
-			entry.mtime = attr->ia_mtime;
-		if (attr->ia_valid & ATTR_CTIME)
-			entry.ctime = attr->ia_ctime;
-
-		entry.nlink = inode->i_nlink;
-		filp.f_pos = inode->u.umsdos_i.pos;
-		ret = umsdos_emd_dir_write (&filp, (char *) &entry,
-						 UMSDOS_REC_SIZE);
-
-		Printk (("notify pos %lu ret %d nlink %d ",
-			inode->u.umsdos_i.pos, ret, entry.nlink));
-		/* #Specification: notify_change / msdos fs
-		 * notify_change operation are done only on the
-		 * EMD file. The msdos fs is not even called.
-		 */
+	if (ret) {
+		printk(KERN_WARNING
+			"umsdos_notify_change: %s/%s EMD read error, ret=%d\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name,ret);
+		goto out_dput;
 	}
+	if (attr->ia_valid & ATTR_UID)
+		entry.uid = attr->ia_uid;
+	if (attr->ia_valid & ATTR_GID)
+		entry.gid = attr->ia_gid;
+	if (attr->ia_valid & ATTR_MODE)
+		entry.mode = attr->ia_mode;
+	if (attr->ia_valid & ATTR_ATIME)
+		entry.atime = attr->ia_atime;
+	if (attr->ia_valid & ATTR_MTIME)
+		entry.mtime = attr->ia_mtime;
+	if (attr->ia_valid & ATTR_CTIME)
+		entry.ctime = attr->ia_ctime;
+
+	entry.nlink = inode->i_nlink;
+	filp.f_pos = inode->u.umsdos_i.pos;
+	ret = umsdos_emd_dir_write (&filp, (char *) &entry, UMSDOS_REC_SIZE);
+	if (ret)
+		printk(KERN_WARNING
+			"umsdos_notify_change: %s/%s EMD write error, ret=%d\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name,ret);
+
+	Printk (("notify pos %lu ret %d nlink %d ",
+		inode->u.umsdos_i.pos, ret, entry.nlink));
+	/* #Specification: notify_change / msdos fs
+	 * notify_change operation are done only on the
+	 * EMD file. The msdos fs is not even called.
+	 */
+#ifdef UMSDOS_DEBUG_VERBOSE
+if (entry.flags & UMSDOS_HIDDEN)
+printk("umsdos_notify_change: %s/%s hidden, nlink=%d, ret=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, entry.nlink, ret);
+#endif
+
 out_dput:
 	dput(demd);
 out_nolink:
@@ -556,7 +574,7 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 	if (!res)
 		goto out_fail;
 
-	printk (KERN_INFO "UMSDOS dentry-WIP-Beta 0.82-7 "
+	printk (KERN_INFO "UMSDOS dentry-Beta 0.83 "
 		"(compatibility level %d.%d, fast msdos)\n", 
 		UMSDOS_VERSION, UMSDOS_RELEASE);
 

@@ -255,6 +255,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( WINBOND,	WINBOND_82C105,	"SL82C105"),
 	DEVICE( WINBOND,	WINBOND_83C553,	"W83C553"),
 	DEVICE( DATABOOK,      	DATABOOK_87144,	"DB87144"),
+	DEVICE(	PLX,		PLX_9050,	"PCI9050 I2O"),
 	DEVICE( PLX,		PLX_9080,	"PCI9080 I2O"),
 	DEVICE( MADGE,		MADGE_MK2,	"Smart 16/4 BM Mk2 Ringnode"),
 	DEVICE( MADGE,		MADGE_C155S,	"Collage 155 Server"),
@@ -314,6 +315,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( TRUEVISION,	TRUEVISION_T1000,"TARGA 1000"),
 	DEVICE( INIT,		INIT_320P,	"320 P"),
 	DEVICE( INIT,		INIT_360P,	"360 P"),
+	DEVICE(	TTI,		TTI_HPT343,	"HPT343"),
 	DEVICE( VIA,		VIA_82C505,	"VT 82C505"),
 	DEVICE( VIA,		VIA_82C561,	"VT 82C561"),
 	DEVICE( VIA,		VIA_82C586_1,	"VT 82C586 Apollo IDE"),
@@ -389,6 +391,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( TOSHIBA,	TOSHIBA_TOPIC95,"ToPIC95"),
 	DEVICE( TOSHIBA,	TOSHIBA_TOPIC97,"ToPIC97"),
 	DEVICE( RICOH,		RICOH_RL5C466,	"RL5C466"),
+	DEVICE(	ARTOP,		ARTOP_ATP8400,	"ATP8400"),
 	DEVICE( ARTOP,		ARTOP_ATP850UF,	"ATP850UF"),
 	DEVICE( ZEITNET,	ZEITNET_1221,	"1221"),
 	DEVICE( ZEITNET,	ZEITNET_1225,	"1225"),
@@ -722,6 +725,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_REALTEK:	return "Realtek";
 	      case PCI_VENDOR_ID_TRUEVISION:	return "Truevision";
 	      case PCI_VENDOR_ID_INIT:		return "Initio Corp";
+	      case PCI_VENDOR_ID_TTI:		return "Triones Technologies, Inc.";
 	      case PCI_VENDOR_ID_VIA:		return "VIA Technologies";
 	      case PCI_VENDOR_ID_VORTEX:	return "VORTEX";
 	      case PCI_VENDOR_ID_EF:		return "Efficient Networks";

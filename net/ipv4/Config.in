@@ -74,3 +74,7 @@ tristate 'IP: Reverse ARP' CONFIG_INET_RARP
 #bool 'IP: Disable NAGLE algorithm (normally enabled)' CONFIG_TCP_NAGLE_OFF
 bool 'IP: Drop source routed frames' CONFIG_IP_NOSR
 bool 'IP: Allow large windows (not recommended if <16Mb of memory)' CONFIG_SKB_LARGE
+#if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then 
+#bool 'IP: support experimental checksum copy to user for UDP'  CONFIG_UDP_DELAY_CSUM
+#fi
+

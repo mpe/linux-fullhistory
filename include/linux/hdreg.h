@@ -42,6 +42,7 @@
 #define WIN_RESTORE		0x10
 #define WIN_READ		0x20
 #define WIN_WRITE		0x30
+#define WIN_WRITE_VERIFY	0x3C
 #define WIN_VERIFY		0x40
 #define WIN_FORMAT		0x50
 #define WIN_INIT		0x60
@@ -61,6 +62,9 @@
 #define WIN_SETFEATURES		0xEF	/* set special drive features */
 #define WIN_READDMA		0xc8	/* read sectors using DMA transfers */
 #define WIN_WRITEDMA		0xca	/* write sectors using DMA transfers */
+
+#define WIN_READ_BUFFER		0xE4	/* force read only 1 sector */
+#define WIN_WRITE_BUFFER	0xE8	/* force write only 1 sector */
 
 #define WIN_SMART		0xb0	/* self-monitoring and reporting */
 
@@ -85,6 +89,7 @@
 #define MARK_ERR	0x01	/* Bad address mark */
 #define TRK0_ERR	0x02	/* couldn't find track 0 */
 #define ABRT_ERR	0x04	/* Command aborted */
+#define MCR_ERR		0x08	/* media change request */
 #define ID_ERR		0x10	/* ID field not found */
 #define ECC_ERR		0x40	/* Uncorrectable ECC error */
 #define	BBD_ERR		0x80	/* pre-EIDE meaning:  block marked bad */

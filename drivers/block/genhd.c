@@ -16,6 +16,8 @@
  *  More flexible handling of extended partitions - aeb, 950831
  *
  *  Check partition table on IDE disks for common CHS translations
+ *
+ *  Added needed MAJORS for new pairs, {hdi,hdj}, {hdk,hdl}
  */
 
 #include <linux/config.h>
@@ -77,6 +79,10 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 	 * This requires special handling here.
 	 */
 	switch (hd->major) {
+		case IDE5_MAJOR:
+			unit += 2;
+		case IDE4_MAJOR:
+			unit += 2;
 		case IDE3_MAJOR:
 			unit += 2;
 		case IDE2_MAJOR:
@@ -420,9 +426,10 @@ check_table:
 				   && (q->sector & 63) == 1
 				   && (q->end_sector & 63) == 63) {
 					unsigned int heads = q->end_head + 1;
-					if (heads == 32 || heads == 64 ||
-					    heads == 128 || heads == 255 ||
-					    heads == 240) {
+					if (heads == 15 || heads == 16 ||
+					    heads == 32 || heads == 64 ||
+					    heads == 128 || heads == 240 ||
+					    heads == 255) {
 						(void) ide_xlate_1024(dev, heads, " [PTBL]");
 						break;
 					}

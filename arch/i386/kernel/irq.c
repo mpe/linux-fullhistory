@@ -84,6 +84,10 @@ static void do_8259A_IRQ(unsigned int irq, struct pt_regs * regs);
 static void enable_8259A_irq(unsigned int irq);
 void disable_8259A_irq(unsigned int irq);
 
+/* startup is the same as "enable", shutdown is same as "disable" */
+#define startup_8259A_irq	enable_8259A_irq
+#define shutdown_8259A_irq	disable_8259A_irq
+
 /*
  * Dummy controller type for unused interrupts
  */
@@ -91,8 +95,14 @@ static void do_none(unsigned int irq, struct pt_regs * regs) { }
 static void enable_none(unsigned int irq) { }
 static void disable_none(unsigned int irq) { }
 
+/* startup is the same as "enable", shutdown is same as "disable" */
+#define startup_none	enable_none
+#define shutdown_none	disable_none
+
 static struct hw_interrupt_type no_irq_type = {
 	"none",
+	startup_none,
+	shutdown_none,
 	do_none,
 	enable_none,
 	disable_none
@@ -100,6 +110,8 @@ static struct hw_interrupt_type no_irq_type = {
 
 static struct hw_interrupt_type i8259A_irq_type = {
 	"XT-PIC",
+	startup_8259A_irq,
+	shutdown_8259A_irq,
 	do_8259A_IRQ,
 	enable_8259A_irq,
 	disable_8259A_irq
@@ -786,22 +798,8 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 	*p = new;
 
 	if (!shared) {
-#ifdef __SMP__
-		if (IO_APIC_IRQ(irq)) {
-			/*
-			 * If it was on a 8259, disable it there
-			 * and move the "pendingness" onto the
-			 * new irq descriptor.
-			 */
-			if (irq < 16) {
-				disable_8259A_irq(irq);
-				if (i8259A_irq_pending(irq))
-					irq_desc[irq].status |= IRQ_PENDING;
-			}
-		}
-#endif
 		irq_desc[irq].status &= ~(IRQ_DISABLED | IRQ_INPROGRESS);
-		irq_desc[irq].handler->enable(irq);
+		irq_desc[irq].handler->startup(irq);
 	}
 	spin_unlock_irqrestore(&irq_controller_lock,flags);
 	return 0;
@@ -858,7 +856,7 @@ void free_irq(unsigned int irq, void *dev_id)
 		kfree(action);
 		if (!irq_desc[irq].action) {
 			irq_desc[irq].status |= IRQ_DISABLED;
-			irq_desc[irq].handler->disable(irq);
+			irq_desc[irq].handler->shutdown(irq);
 		}
 		goto out;
 	}
@@ -888,7 +886,7 @@ unsigned long probe_irq_on(void)
 		if (!irq_desc[i].action) {
 			unsigned int status = irq_desc[i].status | IRQ_AUTODETECT;
 			irq_desc[i].status = status & ~IRQ_INPROGRESS;
-			irq_desc[i].handler->enable(i);
+			irq_desc[i].handler->startup(i);
 		}
 	}
 	spin_unlock_irq(&irq_controller_lock);
@@ -912,7 +910,7 @@ unsigned long probe_irq_on(void)
 		/* It triggered already - consider it spurious. */
 		if (status & IRQ_INPROGRESS) {
 			irq_desc[i].status = status & ~IRQ_AUTODETECT;
-			irq_desc[i].handler->disable(i);
+			irq_desc[i].handler->shutdown(i);
 		}
 	}
 	spin_unlock_irq(&irq_controller_lock);
@@ -942,7 +940,7 @@ int probe_irq_off(unsigned long unused)
 			nr_irqs++;
 		}
 		irq_desc[i].status = status & ~IRQ_AUTODETECT;
-		irq_desc[i].handler->disable(i);
+		irq_desc[i].handler->shutdown(i);
 	}
 	spin_unlock_irq(&irq_controller_lock);
 

@@ -9,6 +9,8 @@
  */
 struct hw_interrupt_type {
 	const char * typename;
+	void (*startup)(unsigned int irq);
+	void (*shutdown)(unsigned int irq);
 	void (*handle)(unsigned int irq, struct pt_regs * regs);
 	void (*enable)(unsigned int irq);
 	void (*disable)(unsigned int irq);

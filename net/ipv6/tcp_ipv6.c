@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.89 1998/08/28 00:27:54 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.92 1998/09/15 02:11:42 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -1518,7 +1518,8 @@ static int tcp_v6_init_sock(struct sock *sk)
 	/* See draft-stevens-tcpca-spec-01 for discussion of the
 	 * initialization of these values.
 	 */
-	tp->snd_cwnd = (1 << TCP_CWND_SHIFT);
+	tp->snd_cwnd = 1;
+	tp->snd_cwnd_cnt = 0;
 	tp->snd_ssthresh = 0x7fffffff;
 
 	sk->state = TCP_CLOSE;

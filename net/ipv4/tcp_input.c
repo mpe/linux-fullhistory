@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.127 1998/08/26 12:04:20 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.128 1998/09/15 02:11:18 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -166,7 +166,7 @@ static __inline__ void tcp_rtt_estimator(struct tcp_opt *tp, __u32 mrtt)
 static __inline__ void tcp_set_rto(struct tcp_opt *tp)
 {
 	tp->rto = (tp->srtt >> 3) + tp->mdev;
-	tp->rto += (tp->rto >> 2) + (tp->rto >> ((tp->snd_cwnd>>TCP_CWND_SHIFT)-1));
+	tp->rto += (tp->rto >> 2) + (tp->rto >> (tp->snd_cwnd-1));
 }
  
 
@@ -231,16 +231,13 @@ static int __tcp_sequence(struct tcp_opt *tp, u32 seq, u32 end_seq)
 {
 	u32 end_window = tp->rcv_wup + tp->rcv_wnd;
 
-	if (tp->rcv_wnd) {
-		if (!before(seq, tp->rcv_nxt) && before(seq, end_window))
-			return 1;
-
-		if ((end_seq - seq) && after(end_seq, tp->rcv_nxt) &&
-		    !after(end_seq, end_window))
-			return 1;
-	}
-
-	return 0;
+	if (tp->rcv_wnd &&
+	    after(end_seq, tp->rcv_nxt) &&
+	    before(seq, end_window))
+		return 1;
+	if (seq != end_window)
+		return 0;
+	return (seq == end_seq);
 }
 
 /* This functions checks to see if the tcp header is actually acceptable. */
@@ -442,7 +439,7 @@ static __inline__ int tcp_fast_parse_options(struct sock *sk, struct tcphdr *th,
 static __inline__ void clear_fast_retransmit(struct tcp_opt *tp)
 {
 	if (tp->dup_acks > 3)
-		tp->snd_cwnd = (tp->snd_ssthresh << TCP_CWND_SHIFT);
+		tp->snd_cwnd = (tp->snd_ssthresh);
 
 	tp->dup_acks = 0;
 }
@@ -474,8 +471,8 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 		if (tp->high_seq == 0 || after(ack, tp->high_seq)) {
 			tp->dup_acks++;
 			if ((tp->fackets_out > 3) || (tp->dup_acks == 3)) {
-                                tp->snd_ssthresh = max(tp->snd_cwnd >> (TCP_CWND_SHIFT + 1), 2);
-                                tp->snd_cwnd = (tp->snd_ssthresh + 3) << TCP_CWND_SHIFT;
+                                tp->snd_ssthresh = max(tp->snd_cwnd >> 1, 2);
+                                tp->snd_cwnd = (tp->snd_ssthresh + 3);
 				tp->high_seq = tp->snd_nxt;
 				if(!tp->fackets_out)
 					tcp_retransmit_skb(sk, skb_peek(&sk->write_queue));
@@ -495,7 +492,7 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
                  */
                 if (tp->dup_acks > 3) {
 			if(!tp->fackets_out) {
-				tp->snd_cwnd += (1 << TCP_CWND_SHIFT);
+				tp->snd_cwnd++;
 			} else {
 				/* Fill any further holes which may have appeared.
 				 * We may want to change this to run every further
@@ -567,14 +564,20 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
  * be reduced to is not clear, since 1/2 the old window may
  * still be larger than the maximum sending rate we ever achieved.
  */
-static void tcp_cong_avoid(struct tcp_opt *tp, u32 seq, u32 ack, u32 seq_rtt)
+static void tcp_cong_avoid(struct tcp_opt *tp)
 {
-        if ((tp->snd_cwnd>>TCP_CWND_SHIFT) <= tp->snd_ssthresh) {
+        if (tp->snd_cwnd <= tp->snd_ssthresh) {
                 /* In "safe" area, increase. */
-                tp->snd_cwnd += (1 << TCP_CWND_SHIFT);
+                tp->snd_cwnd++;
 	} else {
-                /* In dangerous area, increase slowly. */
-		tp->snd_cwnd += 1;
+                /* In dangerous area, increase slowly.
+		 * In theory this is tp->snd_cwnd += 1 / tp->snd_cwnd
+		 */
+		if (tp->snd_cwnd_cnt >= tp->snd_cwnd) {
+			tp->snd_cwnd++;
+			tp->snd_cwnd_cnt=0;
+		} else
+			tp->snd_cwnd_cnt++;
         }       
 }
 
@@ -684,7 +687,7 @@ static void tcp_ack_saw_tstamp(struct sock *sk, struct tcp_opt *tp,
 		}
 	} else {
 		tcp_set_rto(tp);
-		tcp_cong_avoid(tp, seq, ack, seq_rtt);
+		tcp_cong_avoid(tp);
 	}
 	/* NOTE: safe here so long as cong_ctl doesn't use rto */
 	tcp_bound_rto(tp);
@@ -803,7 +806,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 					tcp_set_rto(tp);
 					tcp_bound_rto(tp);
 				}
-				tcp_cong_avoid(tp, seq, ack, seq_rtt);
+				tcp_cong_avoid(tp);
 			}
 		}
 	}
@@ -1457,7 +1460,7 @@ static void tcp_data_snd_check(struct sock *sk)
 
 	if ((skb = tp->send_head)) {
 		if (!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una + tp->snd_wnd) &&
-		    tcp_packets_in_flight(tp) < (tp->snd_cwnd >> TCP_CWND_SHIFT)) {
+		    tcp_packets_in_flight(tp) < tp->snd_cwnd) {
 			/* Put more data onto the wire. */
 			tcp_write_xmit(sk);
 		} else if (tp->packets_out == 0 && !tp->pending) {
@@ -1724,14 +1727,16 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				goto discard;
 			}
 		} else if (TCP_SKB_CB(skb)->ack_seq == tp->snd_una) {
-			/* Bulk data transfer: receiver */
-			if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf) {
-				/* We must send an ACK for zero window probes. */
-				if (!before(TCP_SKB_CB(skb)->seq,
-						tp->rcv_wup + tp->rcv_wnd))
-					tcp_send_ack(sk);
+			/* Bulk data transfer: receiver
+			 *
+			 * Check if the segment is out-of-window.
+			 * It may be a zero window probe.
+			 */
+			if (!before(TCP_SKB_CB(skb)->seq,
+					tp->rcv_wup + tp->rcv_wnd))
+				goto unacceptable_packet;
+			if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf)
 				goto discard;
-			}
 			
 			__skb_pull(skb,th->doff*4);
 
@@ -1773,6 +1778,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				   TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq,
 				   tp->rcv_wup, tp->rcv_wnd);
 		}
+unacceptable_packet:
 		tcp_send_ack(sk);
 		goto discard;
 	}

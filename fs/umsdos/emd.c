@@ -51,10 +51,8 @@ ssize_t umsdos_file_write_kmem_real (struct file * filp,
 				     const char *buf,
 				     size_t count)
 {
-	ssize_t ret;
 	mm_segment_t old_fs = get_fs ();
-
-	set_fs (KERNEL_DS);
+	ssize_t ret;
 
 	/* note: i_binary=2 is for CVF-FAT. We put it here, instead of
 	 * umsdos_file_write_kmem, since it is also wise not to compress
@@ -65,14 +63,18 @@ ssize_t umsdos_file_write_kmem_real (struct file * filp,
 
 	MSDOS_I (filp->f_dentry->d_inode)->i_binary = 2;
 
+	set_fs (KERNEL_DS);
 	ret = fat_file_write (filp, buf, count, &filp->f_pos);
-#ifdef UMSDOS_PARANOIA
-	if (ret != count) {
-		printk(KERN_WARNING "umsdos_file_write: count=%u, ret=%u\n",
-			count, ret);
-	}
-#endif
 	set_fs (old_fs);
+	if (ret < 0) {
+		printk(KERN_WARNING "umsdos_file_write: ret=%d\n", ret);
+		goto out;
+	}
+#ifdef UMSDOS_PARANOIA
+if (ret != count)
+printk(KERN_WARNING "umsdos_file_write: count=%u, ret=%u\n", count, ret);
+#endif
+out:
 	return ret;
 }
 
@@ -224,8 +226,11 @@ int umsdos_make_emd(struct dentry *parent)
 	struct inode *inode;
 	int err = PTR_ERR(demd);
 
-	if (IS_ERR(demd))
+	if (IS_ERR(demd)) {
+		printk("umsdos_make_emd: can't get dentry in %s, err=%d\n",
+			parent->d_name.name, err);
 		goto out;
+	}
 
 	/* already created? */
 	err = 0;
@@ -233,14 +238,14 @@ int umsdos_make_emd(struct dentry *parent)
 	if (inode)
 		goto out_set;
 
-Printk(("umsdos_make_emd: creating %s/%s\n",
+Printk(("umsdos_make_emd: creating EMD %s/%s\n",
 parent->d_name.name, demd->d_name.name));
 
 	err = msdos_create(parent->d_inode, demd, S_IFREG | 0777);
 	if (err) {
 		printk (KERN_WARNING
-			"UMSDOS: Can't create EMD file %s/%s\n",
-			parent->d_name.name, demd->d_name.name);
+			"UMSDOS: create %s/%s failed, err=%d\n",
+			parent->d_name.name, demd->d_name.name, err);
 		goto out_dput;
 	}
 	inode = demd->d_inode;
@@ -754,8 +759,8 @@ int umsdos_isempty (struct dentry *dentry)
 out_dput:
 	dput(demd);
 out:
-printk("umsdos_isempty: checked %s/%s, empty=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, ret);
+Printk(("umsdos_isempty: checked %s/%s, empty=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, ret));
 
 	return ret;
 }
@@ -764,11 +769,11 @@ dentry->d_parent->d_name.name, dentry->d_name.name, ret);
  * Locate an entry in a EMD directory.
  * Return 0 if OK, error code if not, generally -ENOENT.
  *
- * does not change i_count
+ * expect argument:
+ * 	0: anything
+ * 	1: file
+ * 	2: directory
  */
-/* 0: anything */
-/* 1: file */
-/* 2: directory */
 
 int umsdos_findentry (struct dentry *parent, struct umsdos_info *info,
 			int expect)
@@ -779,14 +784,16 @@ int umsdos_findentry (struct dentry *parent, struct umsdos_info *info,
 	if (ret)
 		goto out;
 
-	if (expect != 0) {
-		if (S_ISDIR (info->entry.mode)) {
-			if (expect != 2)
-				ret = -EISDIR;
-		} else if (expect == 2) {
+	switch (expect) {
+	case 1:
+		if (S_ISDIR (info->entry.mode))
+			ret = -EISDIR;
+		break;
+	case 2:
+		if (!S_ISDIR (info->entry.mode))
 			ret = -ENOTDIR;
-		}
 	}
+
 out:
 	Printk (("umsdos_findentry: returning %d\n", ret));
 	return ret;
