@@ -104,6 +104,8 @@ static const char *version =
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
+#define BLOCKOUT_2
+
 /* A zero-terminated list of I/O addresses to be probed.
    The 3c501 can be at many locations, but here are the popular ones. */
 static unsigned int netcard_portlist[] =
@@ -128,7 +130,7 @@ static void set_multicast_list(struct device *dev);
 #define EL1_IO_EXTENT	16
 
 #ifndef EL_DEBUG
-#define EL_DEBUG  2	/* use 0 for production, 1 for devel., >2 for debug */
+#define EL_DEBUG  0	/* use 0 for production, 1 for devel., >2 for debug */
 #endif			/* Anything above 5 is wordy death! */
 static int el_debug = EL_DEBUG;
  
@@ -377,6 +379,9 @@ static int el_start_xmit(struct sk_buff *skb, struct device *dev)
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 	unsigned long flags;
+	
+	if(dev->interrupt)		/* May be unloading, don't stamp on */
+		return 1;		/* the packet buffer this time      */
 
 	if (dev->tbusy) 
 	{
@@ -436,10 +441,13 @@ load_it_again_sam:
 		 *	Command mode with status cleared should [in theory]
 		 *	mean no more interrupts can be pending on the card.
 		 */
-	
-		outb(AX_SYS, AX_CMD);
-		inb(RX_STATUS);
-		inb(TX_STATUS);
+		 
+#ifdef BLOCKOUT_1
+		disable_irq(dev->irq);		 
+#endif	
+		outb_p(AX_SYS, AX_CMD);
+		inb_p(RX_STATUS);
+		inb_p(TX_STATUS);
 	
 		lp->loading=1;
 	
@@ -453,13 +461,19 @@ load_it_again_sam:
 		outw(gp_start, GP_LOW);		/* aim - packet will be loaded into buffer start */
 		outsb(DATAPORT,buf,skb->len);	/* load buffer (usual thing each byte increments the pointer) */
 		outw(gp_start, GP_LOW);		/* the board reuses the same register */
+#ifndef BLOCKOUT_1		
 		if(lp->loading==2)		/* A receive upset our load, despite our best efforts */
 		{
 			if(el_debug>2)
 				printk("%s: burped during tx load.\n", dev->name);
 			goto load_it_again_sam;	/* Sigh... */
 		}
+#endif
 		outb(AX_XMIT, AX_CMD);		/* fire ... Trigger xmit.  */
+		lp->loading=0;
+#ifdef BLOCKOUT_1		
+		enable_irq(dev->irq);
+#endif		
 		dev->trans_start = jiffies;
 	}
 
@@ -506,18 +520,37 @@ static void el_interrupt(int irq, struct pt_regs *regs)
 	if (dev->interrupt)
 		printk("%s: Reentering the interrupt driver!\n", dev->name);
 	dev->interrupt = 1;
-    
+#ifndef BLOCKOUT_1    
+        if(lp->loading==1 && !dev->tbusy)
+        	printk("%s: Inconsistent state loading while not in tx\n",
+        		dev->name);
+#endif        		
+#ifdef BLOCKOUT_3
 	lp->loading=2;		/* So we can spot loading interruptions */
+#endif
 
 	if (dev->tbusy) 
 	{
     
     		/*
-    		 *	Board in transmit mode.
+    		 *	Board in transmit mode. May be loading. If we are
+    		 *	loading we shouldn't have got this.
     		 */
     	 
 		int txsr = inb(TX_STATUS);
-
+#ifdef BLOCKOUT_2		
+		if(lp->loading==1)
+		{
+			if(el_debug > 2)
+			{
+				printk("%s: Interrupt while loading [", dev->name);
+				printk(" txsr=%02x gp=%04x rp=%04x]\n", txsr, inw(GP_LOW),inw(RX_LOW));
+			}
+			lp->loading=2;		/* Force a reload */
+			dev->interrupt = 0;
+			return;
+		}
+#endif
 		if (el_debug > 6)
 			printk(" txsr=%02x gp=%04x rp=%04x", txsr, inw(GP_LOW),inw(RX_LOW));
 
@@ -593,7 +626,7 @@ static void el_interrupt(int irq, struct pt_regs *regs)
 		 */
 		if (rxsr & RX_MISSED)
 			lp->stats.rx_missed_errors++;
-		if (rxsr & RX_RUNT) 
+		else if (rxsr & RX_RUNT) 
 		{	/* Handled to avoid board lock-up. */
 			lp->stats.rx_length_errors++;
 			if (el_debug > 5) 

@@ -1,7 +1,8 @@
 /*
- *		NET_ALIAS device aliasing module.
+ *		NET_ALIAS network device aliasing module.
  *
- * Version:	@(#)net_alias.c	0.42   12/11/95
+ *
+ * Version:	@(#)net_alias.c	0.43   12/20/95
  *
  * Authors:	Juan Jose Ciarlante, <jjciarla@raiz.uncu.edu.ar>
  *		Marcelo Fabian Roccasalva, <mfroccas@raiz.uncu.edu.ar>
@@ -13,15 +14,13 @@
  *	-	fast hashed alias address lookup
  *	-	net_alias_type objs registration/unreg., module-ables.
  *	-	/proc/net/aliases & /proc/net/alias_types entries
+ * Fixes:
+ *	JJC	:	several net_alias_type func. renamed.
+ *	JJC	:	net_alias_type object methods now pass *this.
+ *	JJC	:	xxx_rcv device selection based on <src,dst> addrs
  *
  * FIXME:
  *	- User calls sleep/wake_up locking.
- *	- Define a way to select the "best" alias device for an incoming
- *	  packet to allow xxx_rcv() device switching based ALSO on pkt's
- *	  src address (this would require a routing query).
- *	  Related stuff:
- *		IP: Test routing between aliases (possible ICMP redirects).
- *		IP: ARP proxy entries attached to aliases are not visible.
  *
  *
  *	This program is free software; you can redistribute it and/or
@@ -37,6 +36,7 @@
 #include <linux/notifier.h>
 #include <linux/if.h>
 #include <linux/inet.h>
+#include <linux/in.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 
@@ -68,7 +68,7 @@ static struct device *net_alias_dev_delete(struct device *main_dev, int slot, in
 static void net_alias_free(struct device *dev);
 					   
 /*
- * net_alias_type base array, will hold net_alias_type objects.
+ * net_alias_type base array, will hold net_alias_type obj hashed list heads.
  */
 
 struct net_alias_type *nat_base[16];
@@ -99,7 +99,7 @@ static __inline__ __u32
 nat_addr32(struct net_alias_type *nat, struct sockaddr *sa)
 {
   if (nat->get_addr32)
-    return nat->get_addr32(sa);
+    return nat->get_addr32(nat, sa);
   else
     return (*(struct sockaddr_in *)sa).sin_addr.s_addr;
 }
@@ -122,7 +122,7 @@ HASH(__u32 addr, int af)
 /*
  * get hash key for supplied net alias type and address
  * nat must be !NULL
- * the purpose here is to map an net_alias_type and a generic
+ * the purpose here is to map a net_alias_type and a generic
  * address to a hash code.
  */
 
@@ -166,33 +166,33 @@ nat_attach_chg(struct net_alias_type *nat, int delta)
 static __inline__ int
 nat_bind(struct net_alias_type *nat,struct net_alias *alias, struct sockaddr *sa)
 {
-  if (nat->alias_init_1) nat->alias_init_1(alias, sa);
+  if (nat->alias_init_1) nat->alias_init_1(nat, alias, sa);
   return nat_attach_chg(nat, +1);
 }
 
 
 /*
- * unbind alias from type object and call 'done' hook
+ * unbind alias from type object and call alias destructor
  */
 
 static __inline__ int
 nat_unbind(struct net_alias_type *nat, struct net_alias *alias)
 {
-  if (nat->alias_done_1) nat->alias_done_1(alias);
+  if (nat->alias_done_1) nat->alias_done_1(nat, alias);
   return nat_attach_chg(nat, -1);
 }
 
 
 /*
- * compare device address with given. if NULL nat->addr_chk,
+ * compare device address with given. if NULL nat->dev_addr_chk,
  * compare dev->pa_addr with (sockaddr_in) 32 bits address (IP-ish)
  */
 
-static __inline__ int nat_addr_chk(struct net_alias_type *nat,
+static __inline__ int nat_dev_addr_chk_1(struct net_alias_type *nat,
 				   struct device *dev, struct sockaddr *sa)
 {
-  if (nat->addr_chk)
-    return nat->addr_chk(dev, sa);
+  if (nat->dev_addr_chk)
+    return nat->dev_addr_chk(nat, dev, sa);
   else
     return (dev->pa_addr == (*(struct sockaddr_in *)sa).sin_addr.s_addr);
 }
@@ -573,213 +573,6 @@ net_alias_dev_delete(struct device *main_dev, int slot, int *err)
   return NULL;
 }
 
-
-/*
- * dev_get() with added alias naming magic.
- */
-
-struct device *
-net_alias_dev_get(char *dev_name, int aliasing_ok, int *err,
-		  struct sockaddr *sa, void *data)
-{
-  struct device *dev;
-  char *sptr,*eptr;
-  int slot = 0;
-  int delete = 0;
-  
-  *err = -ENODEV;
-  if ((dev=dev_get(dev_name)))
-    return dev;
-
-  /*
-   * want alias naming magic?
-   */
-  
-  if (!aliasing_ok) return NULL;
-
-  if (!dev_name || !*dev_name)
-    return NULL;
-  
-  /*
-   * find the first ':' , must be followed by, at least, 1 char
-   */
-  
-  for (sptr=dev_name ; *sptr ; sptr++) if(*sptr==':') break;
-  if (!*sptr || !*(sptr+1))
-    return NULL;
-  
-  /*
-   * seems to be an alias name, fetch main device
-   */
-  
-  *sptr='\0';
-  if (!(dev=dev_get(dev_name)))
-    return NULL;
-  *sptr++=':';
-  
-  /*
-   * fetch slot number
-   */
-  
-  slot = simple_strtoul(sptr,&eptr,10);
-  if (slot >= NET_ALIAS_MAX_SLOT)
-    return NULL;
-
-  /*
-   * if last char is '-', it is a deletion request
-   */
-  
-  if (eptr[0] == '-' && !eptr[1] ) delete++;
-  else if (eptr[0])
-    return NULL;
-  
-  /*
-   * well... let's work.
-   */
-  
-  if (delete)
-    return net_alias_dev_delete(dev, slot, err);
-  else
-    return net_alias_dev_create(dev, slot, err, sa, data);
-}
-
-
-/*
- * rehash alias with address supplied. 
- */
-
-int
-net_alias_rehash(struct net_alias *alias, struct sockaddr *sa)
-{
-  struct net_alias_info *alias_info;
-  struct net_alias **aliasp;
-  struct device *dev;
-  unsigned long flags;
-  struct net_alias_type *o_nat, *n_nat;
-  unsigned n_hash;
-  
-  /*
-   * defensive ...
-   */
-  
-  if (!sa)
-  {
-    printk("ERROR: net_alias_rehash(): NULL sockaddr passed\n");
-    return -1;
-  }
-
-  /*
-   * defensive. should not happen.
-   */
-  
-  if (!(dev = alias->main_dev))
-  {
-    printk("ERROR: net_alias_rehash for %s: NULL maindev\n", alias->name);
-    return -1;
-  }
-
-  /*
-   * defensive. should not happen.
-   */
-
-  if (!(alias_info=dev->alias_info))
-  {
-    printk("ERROR: net_alias_rehash for %s: NULL alias_info\n", alias->name);
-    return -1;
-  }
-  
-  /*
-   * will the request also change device family?
-   */
-  
-  o_nat = alias->nat;
-  if (!o_nat)
-  {
-    printk("ERROR: net_alias_rehash(%s): unbound alias.\n", alias->name);
-    return -1;
-  }
-
-  /*
-   * point to new alias_type obj.
-   */
-  
-  if (o_nat->type == sa->sa_family)
-    n_nat = o_nat;
-  else
-  {
-    n_nat = nat_getbytype(sa->sa_family);
-    if (!n_nat)
-    {
-      printk("ERROR: net_alias_rehash(%s): unreg family==%d.\n", alias->name, sa->sa_family);
-      return -1;
-    }
-  }
-  
-  /*
-   * new hash key. if same as old AND same type (family) return;
-   */
-  
-  n_hash = nat_hash_key(n_nat, sa);
-  if (n_hash == alias->hash && o_nat == n_nat )
-    return 0;
-
-  /*
-   * find alias in hashed list
-   */
-  
-  for (aliasp = &alias_info->hash_tab[alias->hash]; *aliasp; aliasp = &(*aliasp)->next)
-    if (*aliasp == alias) break;
-  
-  /*
-   * not found (???). try a full search
-   */
-  
-  if(!*aliasp)
-    if ((aliasp = net_alias_slow_findp(alias_info, alias)))
-      printk("net_alias_rehash(%s): bad hashing recovered\n", alias->name);
-    else
-    {
-      printk("ERROR: net_alias_rehash(%s): unhashed alias!\n", alias->name);
-      return -1;
-    }
-  
-  save_flags(flags);
-  cli();
-  
-  /*
-   * if type (family) changed unlink from old type object (o_nat)
-   * will call o_nat->alias_done_1()
-   */
-  
-  if (o_nat != n_nat)
-    nat_unbind(o_nat, alias);
-
-  /*
-   * if diff hash key, change alias position in hashed list
-   */
-  
-  if (n_hash != alias->hash)
-  {
-    *aliasp = (*aliasp)->next;
-    alias->hash = n_hash;
-    aliasp = &alias_info->hash_tab[n_hash];
-    alias->next = *aliasp;
-    *aliasp = alias;
-  }
-  
-  /*
-   * if type (family) changed link to new type object (n_nat)
-   * will call n_nat->alias_init_1()
-   */
-  
-  if (o_nat != n_nat)
-    nat_bind(n_nat, alias, sa);
-  
-  restore_flags(flags);
-  return 0;
-}
-
-
 /*
  * free all main device aliasing stuff
  * will be called on dev_close(main_dev)
@@ -856,6 +649,216 @@ net_alias_free(struct device *main_dev)
   return;
 }
 
+/*
+ * dev_get() with added alias naming magic.
+ */
+
+struct device *
+net_alias_dev_get(char *dev_name, int aliasing_ok, int *err,
+		  struct sockaddr *sa, void *data)
+{
+  struct device *dev;
+  char *sptr,*eptr;
+  int slot = 0;
+  int delete = 0;
+  
+  *err = -ENODEV;
+  if ((dev=dev_get(dev_name)))
+    return dev;
+
+  /*
+   * want alias naming magic?
+   */
+  
+  if (!aliasing_ok) return NULL;
+
+  if (!dev_name || !*dev_name)
+    return NULL;
+  
+  /*
+   * find the first ':' , must be followed by, at least, 1 char
+   */
+  
+  for (sptr=dev_name ; *sptr ; sptr++) if(*sptr==':') break;
+  if (!*sptr || !*(sptr+1))
+    return NULL;
+  
+  /*
+   * seems to be an alias name, fetch main device
+   */
+  
+  *sptr='\0';
+  if (!(dev=dev_get(dev_name)))
+    return NULL;
+  *sptr++=':';
+  
+  /*
+   * fetch slot number
+   */
+  
+  slot = simple_strtoul(sptr,&eptr,10);
+  if (slot >= NET_ALIAS_MAX_SLOT)
+    return NULL;
+
+  /*
+   * if last char is '-', it is a deletion request
+   */
+  
+  if (eptr[0] == '-' && !eptr[1] ) delete++;
+  else if (eptr[0])
+    return NULL;
+  
+  /*
+   * well... let's work.
+   */
+  
+  if (delete)
+    return net_alias_dev_delete(dev, slot, err);
+  else
+    return net_alias_dev_create(dev, slot, err, sa, data);
+}
+
+
+/*
+ * rehash alias device with address supplied. 
+ */
+
+int
+net_alias_dev_rehash(struct device *dev, struct sockaddr *sa)
+{
+  struct net_alias_info *alias_info;
+  struct net_alias *alias, **aliasp;
+  struct device *main_dev;
+  unsigned long flags;
+  struct net_alias_type *o_nat, *n_nat;
+  unsigned n_hash;
+
+  /*
+   * defensive ...
+   */
+  
+  if (dev == NULL) return -1;
+  if ( (alias = dev->my_alias) == NULL ) return -1;
+  
+  if (!sa)
+  {
+    printk("ERROR: net_alias_rehash(): NULL sockaddr passed\n");
+    return -1;
+  }
+
+  /*
+   * defensive. should not happen.
+   */
+
+  if ( (main_dev = alias->main_dev) == NULL )
+  {
+    printk("ERROR: net_alias_rehash for %s: NULL maindev\n", alias->name);
+    return -1;
+  }
+
+  /*
+   * defensive. should not happen.
+   */
+
+  if (!(alias_info=main_dev->alias_info))
+  {
+    printk("ERROR: net_alias_rehash for %s: NULL alias_info\n", alias->name);
+    return -1;
+  }
+  
+  /*
+   * will the request also change device family?
+   */
+  
+  o_nat = alias->nat;
+  if (!o_nat)
+  {
+    printk("ERROR: net_alias_rehash(%s): unbound alias.\n", alias->name);
+    return -1;
+  }
+
+  /*
+   * point to new alias_type obj.
+   */
+  
+  if (o_nat->type == sa->sa_family)
+    n_nat = o_nat;
+  else
+  {
+    n_nat = nat_getbytype(sa->sa_family);
+    if (!n_nat)
+    {
+      printk("ERROR: net_alias_rehash(%s): unreg family==%d.\n", alias->name, sa->sa_family);
+      return -1;
+    }
+  }
+  
+  /*
+   * new hash key. if same as old AND same type (family) return;
+   */
+  
+  n_hash = nat_hash_key(n_nat, sa);
+  if (n_hash == alias->hash && o_nat == n_nat )
+    return 0;
+
+  /*
+   * find alias in hashed list
+   */
+  
+  for (aliasp = &alias_info->hash_tab[alias->hash]; *aliasp; aliasp = &(*aliasp)->next)
+    if (*aliasp == alias) break;
+  
+  /*
+   * not found (???). try a full search
+   */
+  
+  if(!*aliasp)
+    if ((aliasp = net_alias_slow_findp(alias_info, alias)))
+      printk("net_alias_rehash(%s): bad hashing recovered\n", alias->name);
+    else
+    {
+      printk("ERROR: net_alias_rehash(%s): unhashed alias!\n", alias->name);
+      return -1;
+    }
+  
+  save_flags(flags);
+  cli();
+  
+  /*
+   * if type (family) changed, unlink from old type object (o_nat)
+   * will call o_nat->alias_done_1()
+   */
+  
+  if (o_nat != n_nat)
+    nat_unbind(o_nat, alias);
+
+  /*
+   * if diff hash key, change alias position in hashed list
+   */
+  
+  if (n_hash != alias->hash)
+  {
+    *aliasp = (*aliasp)->next;
+    alias->hash = n_hash;
+    aliasp = &alias_info->hash_tab[n_hash];
+    alias->next = *aliasp;
+    *aliasp = alias;
+  }
+  
+  /*
+   * if type (family) changed link to new type object (n_nat)
+   * will call n_nat->alias_init_1()
+   */
+  
+  if (o_nat != n_nat)
+    nat_bind(n_nat, alias, sa);
+  
+  restore_flags(flags);
+  return 0;
+}
+
+
+
 
 /*
  *  implements /proc/net/alias_types entry
@@ -898,7 +901,7 @@ int net_alias_types_getinfo(char *buffer, char **start, off_t offset, int length
  *
  */
 
-#define NAT_REC_SIZE 64
+#define NET_ALIASES_RECSIZ 64
 int net_alias_getinfo(char *buffer, char **start, off_t offset, int length, int dummy)
 {
   off_t pos=0, begin=0;
@@ -908,7 +911,7 @@ int net_alias_getinfo(char *buffer, char **start, off_t offset, int length, int 
   struct net_alias *alias;
   struct device *dev;
 
-  len=sprintf(buffer,"%-*s\n",NAT_REC_SIZE-1,"device           family address");
+  len=sprintf(buffer,"%-*s\n",NET_ALIASES_RECSIZ-1,"device           family address");
   for (dev = dev_base; dev ; dev = dev->next)
     if (net_alias_is(dev))
     {
@@ -921,7 +924,7 @@ int net_alias_getinfo(char *buffer, char **start, off_t offset, int length, int 
        */
       
       if (nat->alias_print_1)
-	dlen += nat->alias_print_1(buffer+len+dlen, NAT_REC_SIZE - dlen, alias);
+	dlen += nat->alias_print_1(nat, alias, buffer+len+dlen, NET_ALIASES_RECSIZ - dlen);
       else
 	dlen += sprintf(buffer+len+dlen, "-");
 
@@ -929,12 +932,12 @@ int net_alias_getinfo(char *buffer, char **start, off_t offset, int length, int 
        * fill with spaces if needed 
        */
       
-      if (dlen < NAT_REC_SIZE) memset(buffer+len+dlen, ' ', NAT_REC_SIZE - dlen);
+      if (dlen < NET_ALIASES_RECSIZ) memset(buffer+len+dlen, ' ', NET_ALIASES_RECSIZ - dlen);
       /*
-       * truncate to NAT_REC_SIZE
+       * truncate to NET_ALIASES_RECSIZ
        */
       
-      len += NAT_REC_SIZE;
+      len += NET_ALIASES_RECSIZ;
       buffer[len-1] = '\n';
       
       pos=begin+len;
@@ -984,58 +987,39 @@ int net_alias_device_event(struct notifier_block *this, unsigned long event, voi
 
 
 /*
- * returns alias device with specified address AND flags_1 on AND flags_0 off.
- *   intended for main devices.
- *   typically called on xxx_rcv() to check if packet's dest address is one
- *   of main_dev's alias address.
+ * device aliases address comparison workhorse
+ * no checks for nat and alias_info, must be !NULL
  */
 
-struct device *
-net_alias_chk(struct device *dev, struct sockaddr *sa,int flags_1, int flags_0)
+static __inline__ struct device *
+nat_addr_chk(struct net_alias_type *nat, struct net_alias_info *alias_info, struct sockaddr *sa, int flags_on, int flags_off)
 {
-  struct net_alias_info *alias_info = dev->alias_info;
-  struct net_alias_type *nat;
   struct net_alias *alias;
-  
-  if (!alias_info) return NULL;	/* has aliases? */
-  
-  /*
-   * get alias_type object for sa->sa_family.
-   */
-  
-  nat = nat_getbytype(sa->sa_family);
-  if (!nat)
-    return 0;
-  
   for(alias = alias_info->hash_tab[nat_hash_key(nat,sa)];
       alias; alias = alias->next)
   {
     if (alias->dev.family != sa->sa_family) continue;
 
     /*
-     * nat_addr_chk will call type specific address cmp function.
+     * nat_dev_addr_chk_1 will call type specific address cmp function.
      */
     
-    if (alias->dev.flags & flags_1 && !(alias->dev.flags & flags_0) &&
-	nat_addr_chk(nat,&alias->dev,sa))
+    if (alias->dev.flags & flags_on && !(alias->dev.flags & flags_off) &&
+	nat_dev_addr_chk_1(nat,&alias->dev,sa))
       return &alias->dev;
   }
   return NULL;
 }
 
 /*
- * addr_chk enough for protocols whose addr is (fully) stored at pa_addr.
+ * nat_addr_chk enough for protocols whose addr is (fully) stored at pa_addr.
+ * note that nat pointer is ignored because of static comparison.
  */
 
-struct device *
-net_alias_chk32(struct device *dev, int family, __u32 addr32,
-		int flags_1, int flags_0)
+static __inline__ struct device *
+nat_addr_chk32(struct net_alias_type *nat, struct net_alias_info *alias_info, int family, __u32 addr32, int flags_on, int flags_off)
 {
-  struct net_alias_info *alias_info = dev->alias_info;
   struct net_alias *alias;
-  
-  if (!alias_info) return NULL;	/* has aliases? */
-  
   for (alias=alias_info->hash_tab[HASH(addr32,family)];
        alias; alias=alias->next)
   {
@@ -1045,11 +1029,210 @@ net_alias_chk32(struct device *dev, int family, __u32 addr32,
      * "hard" (static) comparison between addr32 and pa_addr.
      */
     
-    if (alias->dev.flags & flags_1 && !(alias->dev.flags & flags_0) &&
+    if (alias->dev.flags & flags_on && !(alias->dev.flags & flags_off) &&
 	addr32 == alias->dev.pa_addr)
       return &alias->dev;
   }
   return NULL;
+}
+
+/*
+ * returns alias device with specified address AND flags_on AND flags_off,
+ * else NULL.
+ * intended for main devices.
+ */
+
+struct device *
+net_alias_dev_chk(struct device *main_dev, struct sockaddr *sa,int flags_on, int flags_off)
+{
+  struct net_alias_info *alias_info = main_dev->alias_info;
+  struct net_alias_type *nat;
+  
+  /*
+   * only if main_dev has aliases
+   */
+
+  if (!alias_info) return NULL;
+  
+  /*
+   * get alias_type object for sa->sa_family.
+   */
+  
+  nat = nat_getbytype(sa->sa_family);
+  if (!nat)
+    return NULL;
+
+  return nat_addr_chk(nat, alias_info, sa, flags_on, flags_off);
+}
+
+/*
+ * net_alias_dev_chk enough for protocols whose addr is (fully) stored
+ * at pa_addr.
+ */
+
+struct device *
+net_alias_dev_chk32(struct device *main_dev, int family, __u32 addr32,
+		int flags_on, int flags_off)
+{
+  struct net_alias_info *alias_info = main_dev->alias_info;
+  
+  /*
+   * only if main_dev has aliases
+   */
+
+  if (!alias_info) return NULL;
+  
+  return nat_addr_chk32(NULL, alias_info, family, addr32, flags_on, flags_off);
+}
+
+
+/*
+ * select closest (main or alias) device to <src,dst> addresses given. if no
+ * further info is available, return main_dev (for easier calling arrangment).
+ *
+ * Should be called early at xxx_rcv() time for device selection
+ */
+
+struct device *
+net_alias_dev_rcv_sel(struct device *main_dev, struct sockaddr *sa_src, struct sockaddr *sa_dst)
+{
+  int family;
+  struct net_alias_type *nat;
+  struct net_alias_info *alias_info;
+  struct device *dev;
+  
+  if (main_dev == NULL) return NULL;
+
+  /*
+   * if not aliased, dont bother any more
+   */
+
+  if ((alias_info = main_dev->alias_info) == NULL)
+    return main_dev;
+
+  /*
+   * find out family
+   */
+
+  family = (sa_src)? sa_src->sa_family : ((sa_dst)? sa_dst->sa_family : AF_UNSPEC);
+  if (family == AF_UNSPEC) return main_dev;
+
+  /*
+   * get net_alias_type object for this family
+   */
+
+  if ( (nat = nat_getbytype(family)) == NULL ) return main_dev;
+  
+  /*
+   * first step: find out if dst addr is main_dev's or one of its aliases'
+   */
+
+  if (sa_dst)
+  {
+    if (nat_dev_addr_chk_1(nat, main_dev,sa_dst))
+      return main_dev;
+
+    dev = nat_addr_chk(nat, alias_info, sa_dst, IFF_UP, 0);
+
+    if (dev != NULL) return dev;
+  }
+
+  /*
+   * second step: find the rcv addr 'closest' alias through nat method call
+   */
+
+  if ( sa_src == NULL || nat->dev_select == NULL) return main_dev;
+  dev = nat->dev_select(nat, main_dev, sa_src);
+
+  if (dev == NULL || dev->family != family) return main_dev;
+  
+  /*
+   * dev ok only if it is alias of main_dev
+   */
+  
+  dev = net_alias_is(dev)?
+    ( (dev->my_alias->main_dev == main_dev)? dev : NULL) : NULL;
+
+  /*
+   * do not return NULL.
+   */
+  
+  return (dev)? dev : main_dev;
+
+}
+
+/*
+ * dev_rcv_sel32: dev_rcv_sel for 'pa_addr' protocols.
+ */
+
+struct device *
+net_alias_dev_rcv_sel32(struct device *main_dev, int family, __u32 src, __u32 dst)
+{
+  struct net_alias_type *nat;
+  struct net_alias_info *alias_info;
+  struct sockaddr_in sin_src;
+  struct device *dev;
+  
+  if (main_dev == NULL) return NULL;
+
+  /*
+   * if not aliased, dont bother any more
+   */
+
+  if ((alias_info = main_dev->alias_info) == NULL)
+    return main_dev;
+
+  /*
+   * early return if dst is main_dev's address
+   */
+  
+  if (dst == main_dev->pa_addr)
+    return main_dev;
+  
+  if (family == AF_UNSPEC) return main_dev;
+
+  /*
+   * get net_alias_type object for this family
+   */
+
+  if ( (nat = nat_getbytype(family)) == NULL ) return main_dev;
+  
+  /*
+   * first step: find out if dst address one of main_dev aliases'
+   */
+  
+  if (dst)
+  {
+    dev = nat_addr_chk32(nat, alias_info, family, dst, IFF_UP, 0);
+    if (dev) return dev;
+  }
+  
+  /*
+   * second step: find the rcv addr 'closest' alias through nat method call
+   */
+
+  if ( src == 0 || nat->dev_select == NULL) return main_dev;
+
+  sin_src.sin_family = family;
+  sin_src.sin_addr.s_addr = src;
+    
+  dev = nat->dev_select(nat, main_dev, (struct sockaddr *)&sin_src);
+
+  if (dev == NULL) return main_dev;
+  
+  /*
+   * dev ok only if it is alias of main_dev
+   */
+  
+  dev = net_alias_is(dev)?
+    ( (dev->my_alias->main_dev == main_dev)? dev : NULL) : NULL;
+
+  /*
+   * do not return NULL.
+   */
+  
+  return (dev)? dev : main_dev;
+  
 }
 
 
@@ -1162,3 +1345,4 @@ int unregister_net_alias_type(struct net_alias_type *nat)
   printk("unregister_net_alias_type(type=%d): not found!\n", nat->type);
   return -EINVAL;
 }
+

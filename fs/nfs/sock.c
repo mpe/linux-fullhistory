@@ -92,7 +92,7 @@ nfs_rpc_call(struct nfs_server *server, int *start, int *end, int size)
 			}
 			if ((timeout.init_timeout <<= 1) >= maxtimeo)
 				timeout.init_timeout = maxtimeo;
-		} else if (result < 0) {
+		} else if (result < 0 && result != ERESTARTSYS) {
 			printk("NFS: notice message: result = %d.\n", result);
 		}
 	} while (result == -ETIMEDOUT && !(server->flags & NFS_MOUNT_SOFT));

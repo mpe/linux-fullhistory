@@ -960,7 +960,7 @@ static void set_multicast_list(struct device *dev)
 	struct i596_cmd *cmd;
 
 	if (i596_debug > 1)
-		printk ("%s: set multicast list %d\n", dev->name, num_addrs);
+		printk ("%s: set multicast list %d\n", dev->name, dev->mc_count);
 
 	if (dev->mc_count > 0) 
 	{
@@ -974,10 +974,10 @@ static void set_multicast_list(struct device *dev)
 		}
 		cmd->command = CmdMulticastList;
 		*((unsigned short *) (cmd + 1)) = dev->mc_count * 6;
-		cp=((char *)(cmd + 1))+2
+		cp=((char *)(cmd + 1))+2;
 		for(dmi=dev->mc_list;dmi!=NULL;dmi=dmi->next)
 		{
-			memcpy(cp, addr,6);
+			memcpy(cp, dmi,6);
 			cp+=6;
 		}
 		print_eth (((char *)(cmd + 1)) + 2);

@@ -29,6 +29,7 @@
 #include <linux/smp.h>
 #include <asm/pgtable.h>
 #include <asm/bitops.h>
+#include <asm/pgtable.h>
 #include <asm/smp.h>
 
 extern void *vremap(unsigned long offset, unsigned long size);	/* Linus hasnt put this in the headers yet */
@@ -611,7 +612,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 *	During boot up send no messages
 	 */
 	 
-	if(!smp_activated)
+	if(!smp_activated || !smp_commenced)
 		return;
 		
 	

@@ -385,7 +385,7 @@ int chr_dev_init(void)
 #endif
 #if defined (CONFIG_BUSMOUSE) || defined (CONFIG_82C710_MOUSE) || \
     defined (CONFIG_PSMOUSE) || defined (CONFIG_MS_BUSMOUSE) || \
-    defined (CONFIG_ATIXL_BUSMOUSE)
+    defined (CONFIG_ATIXL_BUSMOUSE) || defined(CONFIG_SOFT_WATCHDOG)
 	mouse_init();
 #endif
 #ifdef CONFIG_SOUND

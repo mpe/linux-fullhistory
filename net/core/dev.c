@@ -1121,7 +1121,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 
 #ifdef CONFIG_NET_ALIAS
 			  	if (net_alias_is(dev))
-			    	net_alias_rehash(dev->my_alias,&ifr.ifr_addr);
+			    	net_alias_dev_rehash(dev ,&ifr.ifr_addr);
 #endif
 				dev->pa_addr = (*(struct sockaddr_in *)
 					 &ifr.ifr_addr).sin_addr.s_addr;
@@ -1387,6 +1387,9 @@ int net_dev_init(void)
 #if defined(CONFIG_PI)
 	pi_init();
 #endif	
+#if defined(CONFIG_PT)
+	pt_init();
+#endif
 #if defined(CONFIG_DEC_ELCP)
 	dec21040_init();
 #endif	

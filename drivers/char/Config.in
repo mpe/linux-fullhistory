@@ -36,3 +36,12 @@ if [ "$CONFIG_APM" = "y" ]; then
   bool '   Make CPU Idle calls when idle' CONFIG_APM_CPU_IDLE
   bool '   Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
 fi
+bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
+if [ "$CONFIG_WATCHDOG" = "y" ]; then
+#  bool '   WDT501P Watchdog timer' CONFIG_WDT_501P
+#  if [ "$CONFIG_WDT_501P" = "y" ]; then
+#    bool '       Fan Tachomeeter' CONFIG_WDT_501P_TACHO
+#  fi
+#  bool '   WDT500P Watchdog timer' CONFIG_WDT_500P
+  bool '   Software Watchdog' CONFIG_SOFT_WATCHDOG
+fi

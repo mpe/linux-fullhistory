@@ -488,9 +488,29 @@ static void parse_options(char *line)
 	envp_init[envs+1] = NULL;
 }
 
+
 extern void setup_arch(char **, unsigned long *, unsigned long *);
 
-#ifdef __SMP__
+#ifndef __SMP__
+
+/*
+ *	Uniprocessor idle thread
+ */
+ 
+int cpu_idle(void *unused)
+{
+	for(;;)
+		idle();
+}
+
+#else
+
+/*
+ *	Multiprocessor idle thread is in arch/...
+ */
+ 
+extern int cpu_idle(void * unused);
+
 /*
  *	Activate a secondary processor.
  */
@@ -500,15 +520,10 @@ asmlinkage void start_secondary(void)
 	trap_init();
 	init_IRQ();
 	smp_callin();
-	for(;;)
-		idle();
+	cpu_idle(NULL);
 }
 
-int smp_idle(void * unused)
-{
-	for (;;)
-		idle();
-}
+
 
 /*
  *	Called by CPU#0 to activate the rest.
@@ -525,7 +540,7 @@ static void smp_init(void)
 
 	for(i=1;i<smp_num_cpus;i++)
 	{
-		kernel_thread(smp_idle, NULL, CLONE_PID);
+		kernel_thread(cpu_idle, NULL, CLONE_PID);
 		/*
 		 *	Assume linear processor numbering
 		 */
@@ -633,8 +648,7 @@ asmlinkage void start_kernel(void)
  *
  * Right now task[0] just does a infinite idle loop.
  */
-	for(;;)
-		idle();
+ 	cpu_idle(NULL);
 }
 
 static int printf(const char *fmt, ...)

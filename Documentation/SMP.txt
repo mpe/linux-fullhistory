@@ -1,20 +1,18 @@
-
-SMP support for Linux with up to 32 processors using the Intel MP
+SMP support for Linux with up to 16 processors using the Intel MP
 specification. 
 
 WARNING:
-	This is experimental. Back up your disks first.
+	This is experimental. Back up your disks first. Experience is that
+it is basically stable in its current (inefficient form).
 
 To fix:
 
 o	Fix sys_idle to exit/enter kernel state and do hlt's.
 o	Fix scheduler decisions to reschedule. Per cpu reschedule ?
-o	Scheduler ignores stick to CPU advantage. Critical for P6! [Done - FK]
 o	Clean up message pass.
 o	Test for B stepping processors.
 o	Clean up processor specific/independant split.
 o	Document it all.	[PARTLY DONE]
-o	Find the exception/crash bug.
 o	Halt other CPU's on reset/panic doesn't always work.
 o	Dont waste page at 4K - dont need it now.(watch the GDT code).
 o	Dump bootup pages once booted somehow.
@@ -25,4 +23,3 @@ o	Distribute irq's (locking present just needs the 82489 to be asked
 	nicely).
 o	486 startup code.
 o	How to handle mixed FPU/non FPU processors.
-o	Support 4Mb page mode again	[TESTING]

@@ -574,7 +574,7 @@ extern inline void bforget(struct buffer_head *buf)
 }
 extern void set_blocksize(kdev_t dev, int size);
 extern struct buffer_head * bread(kdev_t dev, int block, int size);
-extern void bread_page(unsigned long addr,kdev_t dev,int b[],int size);
+extern int bread_page(unsigned long addr,kdev_t dev,int b[],int size);
 extern void bwrite_page(unsigned long addr,kdev_t dev,int b[],int size);
 extern struct buffer_head * breada(kdev_t dev,int block, int size, 
 				   unsigned int pos, unsigned int filesize);

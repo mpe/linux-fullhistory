@@ -27,11 +27,15 @@ extern __inline__ unsigned short int	__constant_ntohs(unsigned short int);
 extern __inline__ unsigned long int
 __ntohl(unsigned long int x)
 {
+#if defined(CONFIG_M486) && defined(__KERNEL__)
+	__asm__("bswap %0" : "=r" (x) : "0" (x));
+#else
 	__asm__("xchgb %b0,%h0\n\t"	/* swap lower bytes	*/
 		"rorl $16,%0\n\t"	/* swap words		*/
 		"xchgb %b0,%h0"		/* swap higher bytes	*/
 		:"=q" (x)
 		: "0" (x));
+#endif	
 	return x;
 }
 

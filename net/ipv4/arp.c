@@ -895,15 +895,22 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  */
 
 /*
- *	try to switch to alias device whose address is tip, if any
+ *	try to switch to alias device whose addr is tip or closest to sip.
  */
 
 #ifdef CONFIG_NET_ALIAS
-	if (net_alias_has(dev))
+	if (tip != dev->pa_addr && net_alias_has(skb->dev)) 
 	{
-		struct device *adev;
-		adev = net_alias_chk32(dev,AF_INET,tip,IFF_UP,IFF_NOARP);
-		if (adev != NULL) dev = adev;
+		/*
+		 *	net_alias_dev_rcv_sel32 returns main dev if it fails to found other.
+		 */
+		dev = net_alias_dev_rcv_sel32(dev, AF_INET, sip, tip);
+
+		if (dev->type != ntohs(arp->ar_hrd) || dev->flags & IFF_NOARP)
+		{
+			kfree_skb(skb, FREE_READ);
+			return 0;
+		}
 	}
 #endif
 

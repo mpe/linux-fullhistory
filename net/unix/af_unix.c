@@ -799,8 +799,9 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 }
 
 /*
- * Sleep until data has arrive. But check for races..
+ *	Sleep until data has arrive. But check for races..
  */
+ 
 static void unix_data_wait(unix_socket * sk)
 {
 	cli();
@@ -1035,7 +1036,7 @@ static struct proto_ops unix_proto_ops = {
 
 void unix_proto_init(struct net_proto *pro)
 {
-	printk("NET3: Unix domain sockets 0.10 BETA for Linux NET3.031.\n");
+	printk("NET3: Unix domain sockets 0.10 BETA for Linux NET3.033.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_UNIX,  4, "unix",

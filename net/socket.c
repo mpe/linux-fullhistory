@@ -1341,7 +1341,7 @@ void sock_init(void)
 {
 	int i;
 
-	printk("Swansea University Computer Society NET3.033 for Linux 1.3.38\n");
+	printk("Swansea University Computer Society NET3.033 for Linux 1.3.50\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 

@@ -51,6 +51,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
   tristate 'NE2000/NE1000 support' CONFIG_NE2000
   if [ "$CONFIG_AX25" = "y" ]; then
     bool 'Ottawa PI and PI/2 support' CONFIG_PI
+    bool 'Gracilis PackeTwin support' CONFIG_PT
   fi
   bool 'SK_G16 support' CONFIG_SK_G16
 fi

@@ -245,8 +245,6 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 		eip = (unsigned long) sa->sa_handler;
 		if (sa->sa_flags & SA_ONESHOT)
 			sa->sa_handler = NULL;
-/* force a supervisor-mode page-in of the signal handler to reduce races */
-		__asm__("testb $0,%%fs:%0": :"m" (*(char *) eip));
 		regs->cs = USER_CS; regs->ss = USER_DS;
 		regs->ds = USER_DS; regs->es = USER_DS;
 		regs->gs = USER_DS; regs->fs = USER_DS;

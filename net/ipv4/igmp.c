@@ -2,9 +2,11 @@
  *	Linux NET3:	Internet Gateway Management Protocol  [IGMP]
  *
  *	This code implements the IGMP protocol as defined in RFC1122. There has
- *	been a further revision of this protocol since, but since it is not
- *	cleanly specified in any IETF standards we implement the old one properly
- *	rather than play a game of guess the BSD unofficial extensions.
+ *	been a further revision of this protocol since which is now supported.
+ *
+ *	If you have trouble with this module be careful what gcc you have used,
+ *	the older version didnt come out right using gcc 2.5.8, the newer one
+ *	seems to fall out with gcc 2.6.2.
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -42,6 +44,8 @@
  *					and do what the IGMP version 2 specified.
  *		Chih-Jen Chang	:	Added a timer to revert to IGMP V2 router
  *		Tsu-Sheng Tsao		if the specified time expired.
+ *		Alan Cox	:	Stop IGMP from 0.0.0.0 being accepted.
+ *		Alan Cox	:	Use GFP_ATOMIC in the right places.
  */
 
 
@@ -107,7 +111,10 @@ static	struct	ip_router_info	*igmp_get_mrouter_info(struct device *dev)
 	/*
 	 *  Not found. Create a new entry. The default is IGMP V2 router
 	 */
-	i=(struct ip_router_info *)kmalloc(sizeof(*i), GFP_KERNEL);
+	 
+	i=(struct ip_router_info *)kmalloc(sizeof(*i), GFP_ATOMIC);
+	if(i==NULL)
+		return NULL;
 	i->dev = dev;
 	i->type = IGMP_NEW_ROUTER;
 	i->time = IGMP_AGE_THRESHOLD;
@@ -153,7 +160,9 @@ static	struct	ip_router_info	*igmp_set_mrouter_info(struct device *dev,int type,
 	/*
 	 *  Not found. Create a new entry.
 	 */
-	i=(struct ip_router_info *)kmalloc(sizeof(*i), GFP_KERNEL);
+	i=(struct ip_router_info *)kmalloc(sizeof(*i), GFP_ATOMIC);
+	if(i==NULL)
+		return NULL;
 	i->dev = dev;
 	i->type = type;
 	i->time = time;
@@ -242,6 +251,8 @@ static void igmp_timer_expire(unsigned long data)
 	struct ip_router_info *r;
 	igmp_stop_timer(im);
 	r=igmp_get_mrouter_info(im->interface);
+	if(r==NULL)
+		return;
 	if(r->type==IGMP_NEW_ROUTER)
 		igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_NEW_MEMBERSHIP_REPORT);
 	else
@@ -277,7 +288,8 @@ static void igmp_heard_query(struct device *dev,unsigned char max_resp_time)
 	{
 		mrouter_type=IGMP_NEW_ROUTER;
 
-		igmp_set_mrouter_info(dev,mrouter_type,0);
+		if(igmp_set_mrouter_info(dev,mrouter_type,0)==NULL)
+			return;
 		/*
 		 * - Start the timers in all of our membership records
 		 *   that the query applies to for the interface on
@@ -310,7 +322,8 @@ static void igmp_heard_query(struct device *dev,unsigned char max_resp_time)
 		mrouter_type=IGMP_OLD_ROUTER;
 		max_resp_time=IGMP_MAX_HOST_REPORT_DELAY*IGMP_TIMER_SCALE;
 
-		igmp_set_mrouter_info(dev,mrouter_type,IGMP_AGE_THRESHOLD);
+		if(igmp_set_mrouter_info(dev,mrouter_type,IGMP_AGE_THRESHOLD)==NULL)
+			return;
 
 		/*
 		 * Start the timers in all of our membership records for
@@ -383,6 +396,8 @@ extern __inline__ void igmp_group_added(struct ip_mc_list *im)
 	igmp_init_timer(im);
 	ip_mc_filter_add(im->interface, im->multiaddr);
 	r=igmp_get_mrouter_info(im->interface);
+	if(r==NULL)
+		return;
 	if(r->type==IGMP_NEW_ROUTER)
 		igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_NEW_MEMBERSHIP_REPORT);
 	else
@@ -412,6 +427,18 @@ int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 	if(skb->len <sizeof(struct igmphdr) || skb->ip_hdr->ttl>1 || ip_compute_csum((void *)skb->h.raw,sizeof(struct igmphdr)))
 	{
+		kfree_skb(skb, FREE_READ);
+		return 0;
+	}
+	
+	/*
+	 *	I have a report that someone does this!
+	 */
+	 
+	if(saddr==0)
+	{
+		printk("Broken multicast host using 0.0.0.0 heard on %s\n",
+			dev->name);
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}

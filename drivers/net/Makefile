@@ -345,6 +345,9 @@ L_OBJS += pi2.o
 CONFIG_PI = CONFIG_PI
 endif
 
+ifeq ($(CONFIG_PT),y)
+L_OBJS += pt.o
+endif
 
 # If anything built-in uses slhc, then build it into the kernel also.
 # If not, but a module uses it, build as a module.

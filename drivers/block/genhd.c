@@ -573,7 +573,6 @@ void device_setup(void)
 		setup_dev(p);
 		nr += p->nr_real;
 	}
-
 #ifdef CONFIG_BLK_DEV_RAM
 	rd_load();
 #endif

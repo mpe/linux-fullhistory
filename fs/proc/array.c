@@ -469,7 +469,7 @@ static int get_stat(int pid, char * buffer)
 	else
 		state = "RSDZTW"[tsk->state];
 	vsize = eip = esp = 0;
-	if (tsk->mm) {
+	if (tsk->mm && tsk->mm != &init_mm) {
 		struct vm_area_struct *vma = tsk->mm->mmap;
 		while (vma) {
 			vsize += vma->vm_end - vma->vm_start;
@@ -628,7 +628,7 @@ static int get_statm(int pid, char * buffer)
 
 	if (!p || (tsk = *p) == NULL)
 		return 0;
-	if (tsk->mm) {
+	if (tsk->mm && tsk->mm != &init_mm) {
 		struct vm_area_struct * vma = tsk->mm->mmap;
 
 		while (vma) {
@@ -692,7 +692,7 @@ static int read_maps (int pid, struct file * file, char * buf, int count)
 	if (!p || !*p)
 		return -EINVAL;
 
-	if (!(*p)->mm || count == 0)
+	if (!(*p)->mm || (*p)->mm == &init_mm || count == 0)
 		return 0;
 
 	/* decode f_pos */

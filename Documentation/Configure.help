@@ -439,7 +439,8 @@ CONFIG_NET_IPIP
   encapsulating protocol. This particular tunneling driver implements
   encapsulation of IP within IP, which sounds kind of pointless, but
   can be useful if you want to make your (or some other) machine
-  appear on a different network than it physically is. Enabling this
+  appear on a different network than it physically is, or to use the 
+  mobile IP facilities (which effectively are doing that). Enabling this
   option will produce two modules ( = code which can be inserted in
   and removed from the running kernel whenever you want), one
   encapsulator and one decapsulator.  This is still alpha code, which
@@ -488,7 +489,8 @@ PC/TCP compatibility mode
 CONFIG_INET_PCTCP
   If you have been having difficulties telneting to your Linux machine
   from a DOS system that uses (broken) PC/TCP networking software, try
-  enabling this option.  Everyone else says N.
+  enabling this option.  Everyone else says N. As of later 1.3.x kernels
+  nobody should need this option. Please report if it solves problems.
 
 Reverse ARP
 CONFIG_INET_RARP
@@ -509,7 +511,7 @@ CONFIG_INET_SNARL
   by Ethernet segments only, as this option optimizes network access
   for this special case. If there are other connections, e.g. SLIP
   links, between machines of your IP network, say N.  If in doubt, say
-  Y.
+  N. The PATH mtu discovery facility will cover most cases anyway.
 
 Disable Path MTU Discovery (normally enabled)
 CONFIG_NO_PATH_MTU_DISCOVERY
@@ -523,10 +525,10 @@ Disable NAGLE algorithm (normally enabled)
 CONFIG_TCP_NAGLE_OFF
   The NAGLE algorithm works by requiring an acknowledgment before
   sending small IP frames (= packets).  This keeps tiny telnet and
-  rlogin packets from congesting Wide Area Networks.  You may wish to
-  disable it if you run your X-server from across the network, or if
-  multiple byte key sequences are delayed. Most people strongly
-  recommend to say N here, though, thereby leaving NAGLE enabled.
+  rlogin packets from congesting Wide Area Networks.  Most people strongly
+  recommend to say N here, though, thereby leaving NAGLE enabled. Those
+  programs that benefit by disabling the facility should do it on a per
+  connection basis themselves anyway.
 
 IP: Drop source routed frames
 CONFIG_IP_NOSR
@@ -571,15 +573,15 @@ CONFIG_IPX
   the programs lynx, netscape or Mosaic). This driver would enlarge
   your kernel by about 5 kB. Unless you have Novell computers on your
   local network, say N.
+  BTW: Although it still doesn't work with this release of the kernel you 
+  can also find ncpfs (a free Novell client) on linux01.gwdg.de.
 
 Appletalk DDP
 CONFIG_ATALK
   Appletalk is the way Apple computers speak to each other on an
   Ethernet (Apple calls it EtherTalk) network. If your linux box is
   connected to such a network and you want to join the conversation,
-  say Y. You would have to give "appletalk" as the address family
-  argument to ifconfig ("man ifconfig") in order to do this. You will
-  also probably want to use the netatalk package so that your Linux
+  say Y. You will need to use the netatalk package so that your Linux
   box can act as a print and file server for macs as well as access
   appletalk printers. Check out
   http://www.cs.dartmouth.edu/~flowerpt/projects/linux-netatalk/ on
@@ -638,7 +640,7 @@ CONFIG_NETLINK
   This driver allows for two-way communication between certain parts
   of the kernel or modules and user processes; the user processes are
   able to read from and write to character special files in the /dev
-  directory having major mode 18. So far, the kernel uses it to
+  directory having major mode 36. So far, the kernel uses it to
   publish some network related information if you enable "Routing
   messages", below. Say Y if you want to experiment with it; this is
   ALPHA code, which means that it need not be completely stable; it
@@ -647,10 +649,9 @@ CONFIG_NETLINK
 Routing messages
 CONFIG_RTNETLINK
   If you enable this and create a character special file /dev/route
-  with major number 18 and minor number 0 using mknod ("man mknod"),
+  with major number 36 and minor number 0 using mknod ("man mknod"),
   you can read some network related routing information from that
-  file. Everything you write to that file will be discarded. Say Y,
-  because otherwise the network link driver is pointless.
+  file. Everything you write to that file will be discarded.
 
 SCSI support?
 CONFIG_SCSI
@@ -1091,15 +1092,13 @@ CONFIG_EQUALIZER
 
 Sun LANCE Ethernet support
 CONFIG_SUN_LANCE
-  This is support for a certain type of Ethernet cards on Sun
-  workstations. The driver does not yet exist, so you might as well
-  say N.
+  This is support for lance ethernet cards on Sun workstations such as
+  the Sparcstation IPC (any Sparc with an 'le0' under SunOS basically).
 
 Sun Intel Ethernet support
 CONFIG_SUN_INTEL
-  This is support for a certain type of Ethernet cards on Sun
-  workstations. The driver does not yet exist, so you might as well
-  say N.
+  This is support for the intel ethernet cards on some Sun workstations
+  (all those with an ie0 interface under SunOS).
 
 Do you want to be offered ALPHA test drivers
 CONFIG_NET_ALPHA
@@ -1242,7 +1241,9 @@ CONFIG_EL3
   Documentation/networking/net-modules.txt. If you plan to use more
   than one network card under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If your card is not working
+  you may need to use the DOS setup disk to disable Plug & Play mode, and
+  to select the default media type.
 
 Other ISA cards
 CONFIG_NET_ISA
@@ -1398,6 +1399,16 @@ CONFIG_PI
   (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also,
   you should have said Y to "AX.25 support" above, because AX.25 is
   the protocol used for digital traffic over radio links.
+
+Gracilis PackeTwin support
+CONFIG_PT
+  This card is similar to the PI card (mentioned above).  It is used mainly
+  by amateur radio operators for packet radio.  You should of already said Y
+  to "AX.25 support" as this card uses that protocol. 
+  Other than the code and the PT user documentation, there is no other
+  information on this card.
+  NOTE: The card is capable of DMA and full duplex but neither of these have
+  been coded in the driver as yet.
 
 WaveLAN support
 CONFIG_WAVELAN
@@ -1793,7 +1804,7 @@ CONFIG_MINIX_FS
   still used for root/boot and other floppies or ram disks since it is
   leaner. You don't want to use it on your harddisk because of certain
   built-in restrictions. This option will enlarge your kernel by about
-  25 kB. Everyone should say Y so that they are able to read this
+  25 kB. Everyone should say Y or M so that they are able to read this
   common floppy format.  If you want to compile this as a module
   however ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
@@ -2049,7 +2060,7 @@ CONFIG_PRINTER
   connecting the parallel ports of two local machines) or a ethernet
   network pocket adaptor attaching to the parallel port and a parallel
   printer as well, you should compile both drivers as modules because
-  the drivers don't like each other.
+  the drivers both want the same resources.
 
 Logitech busmouse support
 CONFIG_BUSMOUSE
@@ -2103,7 +2114,9 @@ CONFIG_MS_BUSMOUSE
   and read Documentation/modules.txt. If you are unsure, say N and
   read the HOWTO nevertheless: it will tell you what you have. Chances
   are that you have a regular serial MouseSystem or Microsoft mouse
-  plugging in a COM port which is supported automatically.
+  plugging in a COM port which is supported automatically. Also be aware
+  several vendors talk about 'Microsoft busmouse' and actually mean PS/2
+  busmouse - so count the pins on the connector.
 
 ATIXL busmouse support
 CONFIG_ATIXL_BUSMOUSE

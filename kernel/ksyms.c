@@ -38,6 +38,8 @@
 #include <linux/ext2_fs.h>
 #include <linux/random.h>
 
+extern unsigned char aux_device_present, kbd_read_mask;
+
 #ifdef __alpha__
 # include <asm/io.h>
 # include <asm/hwrpb.h>
@@ -62,6 +64,9 @@ extern void __remqu (void);
 #include <linux/net.h>
 #include <linux/netdevice.h>
 #include <linux/firewall.h>
+
+#include <linux/trdevice.h>
+
 #ifdef CONFIG_AX25
 #include <net/ax25.h>
 #endif
@@ -132,6 +137,11 @@ extern void free_dma(unsigned int dmanr);
 extern int (*rarp_ioctl_hook)(int,void*);
 
 extern void (* iABI_hook)(struct pt_regs * regs);
+
+#ifdef CONFIG_BINFMT_ELF
+#include <linux/elfcore.h>
+extern int dump_fpu(elf_fpregset_t *);
+#endif
 
 struct symbol_table symbol_table = {
 #include <linux/symtab_begin.h>
@@ -558,6 +568,22 @@ struct symbol_table symbol_table = {
 	X(proc_net_inode_operations),
 	X(proc_net),
 #endif
+/* all busmice */
+	X(add_mouse_randomness),
+	X(fasync_helper),
+/* psaux mouse */
+	X(aux_device_present),
+	X(kbd_read_mask),
+
+#ifdef CONFIG_TR
+	X(tr_setup),
+	X(tr_type_trans),
+#endif
+
+#ifdef CONFIG_BINFMT_ELF
+	X(dump_fpu),
+#endif
+
 	/********************************************************
 	 * Do not add anything below this line,
 	 * as the stacked modules depend on this!

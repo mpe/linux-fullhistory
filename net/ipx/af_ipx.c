@@ -404,18 +404,7 @@ static int ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int c
 	 * that skb1 and skb2 point to it (them) so that it (they) can be 
 	 * demuxed to sock1 and/or sock2.  If we are unable to make enough
 	 * copies, we do as much as is possible.
-	 *
-	 * Firstly stop charging the sender for the space. We will
-	 * charge the recipient or discard. If we are called from ipx_rcv
-	 * this is ok as no socket owns an input buffer.
 	 */
-	 
-	if(skb->sk && !copy)
-	{
-		skb->sk->wmem_alloc -= skb->truesize;	/* Adjust */
-		skb->sk=NULL;				/* Disown */
-	}
-
 	 
 	if (copy) 
 	{
@@ -499,7 +488,7 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 	 */
 	 
 	if ((dl == NULL) || (dev == NULL) || (dev->flags & IFF_LOOPBACK)) 
-		send_to_wire = 0;
+		send_to_wire = 0;	/* No non looped */
 
 	/*
 	 *	See if this should be demuxed to sockets on this interface 
@@ -514,12 +503,24 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 		 *	To our own node, loop and free the original.
 		 */
 		if (memcmp(intrfc->if_node, node, IPX_NODE_LEN) == 0) 
+		{
+			/*
+			 *	Don't charge sender
+			 */
+			if(skb->sk)
+				skb->sk->wmem_alloc-=skb->truesize;
+			/*
+			 *	Will charge receiver
+			 */
 			return ipxitf_demux_socket(intrfc, skb, 0);
+		}
 		/*
 		 *	Broadcast, loop and possibly keep to send on.
 		 */
 		if (memcmp(ipx_broadcast_node, node, IPX_NODE_LEN) == 0) 
 		{
+			if (!send_to_wire && skb->sk)
+				skb->sk->wmem_alloc-=skb->truesize;
 			ipxitf_demux_socket(intrfc, skb, send_to_wire);
 			if (!send_to_wire) 
 				return 0;
@@ -527,7 +528,9 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 	}
 
 	/*
-	 *	if the originating net is not equal to our net; this is routed 
+	 *	If the originating net is not equal to our net; this is routed 
+	 *	We are still charging the sender. Which is right - the driver
+	 *	free will handle this fairly.
 	 */
 	 
 	if (ipx->ipx_source.net != intrfc->if_netnum) 

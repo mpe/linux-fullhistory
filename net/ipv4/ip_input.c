@@ -273,6 +273,17 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 	
 	/*
+	 *	Try to select closest <src,dst> alias device, if any.
+	 *	net_alias_dev_rcv_sel32 returns main device if it 
+	 *	fails to found other.
+	 */
+
+#ifdef CONFIG_NET_ALIAS
+	if (iph->daddr != skb->dev->pa_addr && net_alias_has(skb->dev)) 
+		skb->dev = dev = net_alias_dev_rcv_sel32(skb->dev, AF_INET, iph->saddr, iph->daddr);
+#endif
+
+	/*
 	 *	See if the firewall wants to dispose of the packet. 
 	 */
 
@@ -316,18 +327,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	function entry.
 	 */
 
-	/*
-	 *	also check device aliases address : will avoid
-	 *	a full lookup over device chain
-	 */
-
-#ifdef CONFIG_NET_ALIAS
-	if ( iph->daddr == skb->dev->pa_addr ||
-	    ( net_alias_has(skb->dev) && net_alias_addr_chk32(skb->dev,AF_INET, iph->daddr )) ||
-	    (brd = ip_chk_addr(iph->daddr)) != 0)
-#else
 	if ( iph->daddr == skb->dev->pa_addr || (brd = ip_chk_addr(iph->daddr)) != 0)
-#endif
 	{
 	        if (opt && opt->srr) 
 	        {

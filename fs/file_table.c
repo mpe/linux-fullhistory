@@ -4,6 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/string.h>
 #include <linux/mm.h>
@@ -120,6 +121,8 @@ struct file * get_empty_filp(void)
 	return NULL;
 }
 
+#ifdef CONFIG_QUOTA
+
 void add_dquot_ref(dev_t dev, short type)
 {
 	struct file *filp;
@@ -149,3 +152,5 @@ void reset_dquot_ptrs(dev_t dev, short type)
 		}
 	}
 }
+
+#endif

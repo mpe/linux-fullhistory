@@ -46,7 +46,7 @@ swap_control_t swap_control = {
 	20, 3, 1, 3,		/* Page aging */
 	10, 2, 2, 0,		/* Buffer aging */
 	32, 4,			/* Aging cluster */
-	8192, 4096,		/* Pageout and bufferout weights */
+	8192, 8192,		/* Pageout and bufferout weights */
 	-200,			/* Buffer grace */
 	1, 1,			/* Buffs/pages to free */
 	RCL_ROUND_ROBIN		/* Balancing policy */

@@ -92,6 +92,11 @@ else
   endif
 endif
 
+ifdef CONFIG_SOFT_WATCHDOG
+L_OBJS += softdog.o
+M = y
+endif
+
 ifdef CONFIG_QIC02_TAPE
 L_OBJS += tpqic02.o 
 endif

@@ -37,7 +37,12 @@
 			  current->state = TASK_INTERRUPTIBLE; \
 			  schedule(); \
 			}
-#define dprintk		if (0) printk
+			
+#ifdef DEBUG_NFS			
+#define dprintk(x)		printk(x)
+#else
+#define	dprintk(x)
+#endif
 
 static inline void
 rpc_insque(struct rpc_sock *rsock, struct rpc_wait *slot)
@@ -52,9 +57,9 @@ rpc_insque(struct rpc_sock *rsock, struct rpc_wait *slot)
 	rsock->tail = slot;
 	slot->prev = tmp;
 	slot->next = NULL;
-	dprintk("RPC: inserted %08lx into queue.\n", (long)slot);
-	dprintk("RPC: head = %08lx, tail = %08lx.\n",
-			(long) rsock->head, (long) rsock->tail);
+	dprintk(("RPC: inserted %08lx into queue.\n", (long)slot));
+	dprintk(("RPC: head = %08lx, tail = %08lx.\n",
+			(long) rsock->head, (long) rsock->tail));
 }
 
 static inline void
@@ -71,9 +76,9 @@ rpc_remque(struct rpc_sock *rsock, struct rpc_wait *slot)
 		next->prev = prev;
 	else
 		rsock->tail = prev;
-	dprintk("RPC: removed %08lx from queue.\n", (long)slot);
-	dprintk("RPC: head = %08lx, tail = %08lx.\n",
-			(long) rsock->head, (long) rsock->tail);
+	dprintk(("RPC: removed %08lx from queue.\n", (long)slot));
+	dprintk(("RPC: head = %08lx, tail = %08lx.\n",
+			(long) rsock->head, (long) rsock->tail));
 }
 
 static inline int
@@ -83,12 +88,12 @@ rpc_sendmsg(struct rpc_sock *rsock, struct msghdr *msg, int len)
 	unsigned long	oldfs;
 	int		result;
 
-	dprintk("RPC: sending %d bytes (buf %p)\n", len, msg->msg_iov[0].iov_base);
+	dprintk(("RPC: sending %d bytes (buf %p)\n", len, msg->msg_iov[0].iov_base));
 	oldfs = get_fs();
 	set_fs(get_ds());
 	result = sock->ops->sendmsg(sock, msg, len, 0, 0);
 	set_fs(oldfs);
-	dprintk("RPC: result = %d\n", result);
+	dprintk(("RPC: result = %d\n", result));
 
 	return result;
 }
@@ -104,7 +109,7 @@ rpc_select(struct rpc_sock *rsock)
 	struct file	*file = rsock->file;
 	select_table	wait_table;
 
-	dprintk("RPC: selecting on socket...\n");
+	dprintk(("RPC: selecting on socket...\n"));
 	wait_table.nr = 0;
 	wait_table.entry = &entry;
 	current->state = TASK_INTERRUPTIBLE;
@@ -120,7 +125,7 @@ rpc_select(struct rpc_sock *rsock)
 	} else if (wait_table.nr)
 		remove_wait_queue(entry.wait_address, &entry.wait);
 	current->state = TASK_RUNNING;
-	dprintk("RPC: ...Okay, there appears to be some data.\n");
+	dprintk(("RPC: ...Okay, there appears to be some data.\n"));
 	return 0;
 }
 
@@ -133,16 +138,16 @@ rpc_recvmsg(struct rpc_sock *rsock, struct msghdr *msg, int len,int flags)
 	unsigned long	oldfs;
 	int		result;
 
-	dprintk("RPC: receiving %d bytes max (buf %p)\n", len, msg->msg_iov[0].iov_base);
+	dprintk(("RPC: receiving %d bytes max (buf %p)\n", len, msg->msg_iov[0].iov_base));
 	oldfs = get_fs();
 	set_fs(get_ds());
 	result = sock->ops->recvmsg(sock, msg, len, 1, flags, &alen);
 	set_fs(oldfs);
-	dprintk("RPC: result = %d\n", result);
+	dprintk(("RPC: result = %d\n", result));
 
 #if 0
 	if (alen != salen || memcmp(&sa, sap, alen)) {
-		dprintk("RPC: reply address mismatch... rejected.\n");
+		dprintk(("RPC: reply address mismatch... rejected.\n"));
 		result = -EAGAIN;
 	}
 #endif
@@ -173,11 +178,11 @@ rpc_call_one(struct rpc_sock *rsock, struct rpc_wait *slot,
 	iov.iov_base	=	(void *)sndbuf;
 	iov.iov_len	=	slen;
 
-	dprintk("RPC: placing one call, rsock = %08lx, slot = %08lx, "
+	dprintk(("RPC: placing one call, rsock = %08lx, slot = %08lx, "
 		"sap = %08lx, salen = %d, "
 		"sndbuf = %08lx, slen = %d, rcvbuf = %08lx, rlen = %d\n",
 		(long) rsock, (long) slot, (long) sap, 
-		salen, (long) sndbuf, slen, (long) rcvbuf, rlen);
+		salen, (long) sndbuf, slen, (long) rcvbuf, rlen));
 
 	result = rpc_sendmsg(rsock, &msg, slen);
 	if (result < 0)
@@ -201,7 +206,7 @@ rpc_call_one(struct rpc_sock *rsock, struct rpc_wait *slot,
 		/* wait for data to arrive */
 		result = rpc_select(rsock);
 		if (result < 0) {
-			dprintk("RPC: select error = %d\n", result);
+			dprintk(("RPC: select error = %d\n", result));
 			break;
 		}
 
@@ -214,7 +219,7 @@ rpc_call_one(struct rpc_sock *rsock, struct rpc_wait *slot,
 			case EAGAIN: case ECONNREFUSED:
 				continue;
 			default:
-				dprintk("rpc_call: recv error = %d\n", result);
+				dprintk(("rpc_call: recv error = %d\n", result));
 			case ERESTARTSYS:
 				return result;
 			}
@@ -234,7 +239,7 @@ rpc_call_one(struct rpc_sock *rsock, struct rpc_wait *slot,
 
 		if (!rovr || rovr->gotit) {
 			/* bad XID or duplicate reply, discard dgram */
-			dprintk("RPC: bad XID or duplicate reply.\n");
+			dprintk(("RPC: bad XID or duplicate reply.\n"));
 			iov.iov_base=(void *)&xid;
 			iov.iov_len=sizeof(xid);
 			rpc_recvmsg(rsock, &msg, sizeof(xid),0);
@@ -282,7 +287,7 @@ rpc_call(struct rpc_sock *rsock, struct sockaddr *sap, int addrlen,
 	slot = NULL;
 
 	do {
-		dprintk("RPC call TP1\n");
+		dprintk(("RPC call TP1\n"));
 		current->timeout = jiffies + timeout;
 		if (slot == NULL) {
 			while ((slot = rsock->free) == NULL) {
@@ -296,12 +301,12 @@ rpc_call(struct rpc_sock *rsock, struct sockaddr *sap, int addrlen,
 					goto timedout;
 				}
 				if (rsock->shutdown) {
-					printk("RPC: aborting call due to shutdown.\n");
+					dprintk(("RPC: aborting call due to shutdown.\n"));
 					current->timeout = 0;
 					return -EIO;
 				}
 			}
-			dprintk("RPC call TP2\n");
+			dprintk(("RPC call TP2\n"));
 			slot->gotit = 0;
 			slot->xid = *(u32 *)sndbuf;
 			slot->buf = rcvbuf;
@@ -310,15 +315,15 @@ rpc_call(struct rpc_sock *rsock, struct sockaddr *sap, int addrlen,
 			rpc_insque(rsock, slot);
 		}
 
-		dprintk("RPC call TP3\n");
+		dprintk(("RPC call TP3\n"));
 		result = rpc_call_one(rsock, slot, sap, addrlen,
 					sndbuf, slen, rcvbuf, rlen);
 		if (result != -ETIMEDOUT)
 			break;
 
 timedout:
-		dprintk("RPC call TP4\n");
-		dprintk("RPC: rpc_call_one returned timeout.\n");
+		dprintk(("RPC call TP4\n"));
+		dprintk(("RPC: rpc_call_one returned timeout.\n"));
 		if (strategy->exponential)
 			timeout <<= 1;
 		else
@@ -329,10 +334,10 @@ timedout:
 			break;
 	} while (1);
 
-	dprintk("RPC call TP5\n");
+	dprintk(("RPC call TP5\n"));
 	current->timeout = 0;
 	if (slot != NULL) {
-		dprintk("RPC call TP6\n");
+		dprintk(("RPC call TP6\n"));
 		rpc_remque(rsock, slot);
 		slot->next = rsock->free;
 		rsock->free = slot;
@@ -356,7 +361,7 @@ rpc_makesock(struct file *file)
 	struct rpc_wait	*slot;
 	int		i;
 
-	dprintk("RPC: make RPC socket...\n");
+	dprintk(("RPC: make RPC socket...\n"));
 	if ((rsock = kmalloc(sizeof(struct rpc_sock), GFP_KERNEL)) == NULL)
 		return NULL;
 	memset(rsock, 0, sizeof(*rsock)); /* Nnnngh! */
@@ -377,7 +382,7 @@ rpc_makesock(struct file *file)
 	rsock->shutdown = 0;
 	 */
 
-	dprintk("RPC: made socket %08lx", (long) rsock);
+	dprintk(("RPC: made socket %08lx", (long) rsock));
 	return rsock;
 }
 

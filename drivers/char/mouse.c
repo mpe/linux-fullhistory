@@ -119,6 +119,9 @@ int mouse_init(void)
 #ifdef CONFIG_ATIXL_BUSMOUSE
  	atixl_busmouse_init();
 #endif
+#ifdef CONFIG_SOFT_WATCHDOG
+	watchdog_init();
+#endif	
 #endif /* !MODULE */
 	if (register_chrdev(MOUSE_MAJOR,"mouse",&mouse_fops)) {
 	  printk("unable to get major %d for mouse devices\n",

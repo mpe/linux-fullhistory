@@ -893,6 +893,15 @@ S: 24 Avon Place
 S: Arlington, Massachusetts 02174
 S: USA
 
+N: Craig Small
+E: csmall@triode.apana.org.au
+E: vk2xlz@gonzo.vk2xlz.ampr.org (packet radio)
+S: 10 Stockalls Place
+S: Minto, NSW, 2566
+S: Australia
+D: Gracilis PackeTwin device driver
+D: RSPF daemon 
+
 N: Chris Smith
 E: csmith@convex.com
 D: HPFS filesystem

@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1995 by Ralf Baechle
  *
- * Some usefull macros for MIPS assembler code
+ * Some useful macros for MIPS assembler code
  *
  * Some of the routines below contain useless nops that will be optimized
  * away by gas in -O mode. These nops are however required to fill delay

@@ -4,6 +4,7 @@
 mainmenu_option next_comment
 comment 'Filesystems'
 
+bool	 'Quota support' CONFIG_QUOTA
 tristate 'Standard (minix) fs support' CONFIG_MINIX_FS
 tristate 'Extended fs support' CONFIG_EXT_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
@@ -22,4 +23,6 @@ fi
 tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
-tristate 'SMB filesystem (to mount WfW shares etc..) support' CONFIG_SMB_FS
+if [ "$CONFIG_INET" = "y" ]; then
+  tristate 'SMB filesystem (to mount WfW shares etc..) support' CONFIG_SMB_FS
+fi

@@ -156,7 +156,7 @@ o	Minor bug fixes					[TESTED]
 
 o	Missing patches for device change in TCP	[TESTED]
 o	Device locking					[TESTED]
-o	Infinite slip devices				[IN - BUG]
+o	Infinite slip devices				[TESTED]
 o	New AF_UNIX sockets				[TESTED]
 o	Sendmsg/recvmsg (for some stuff only)		[TESTED]
 o	Device unload loopholes fixed			[TESTED]
@@ -209,7 +209,7 @@ o	Rewrote ICMP completely				[TESTED]
 o	Moved most IP addresses to __u32		[TESTED]
 o	Cleaned up ICMP reporting			[TESTED]
 o	Tidied remove_sock				[TESTED]
-o	Added memory allocation type to ip_build_xmit	[IN]
+o	Added memory allocation type to ip_build_xmit	[TESTED]
 o	Cleaned up af_inet to use inet_error		[TESTED]
 o	Named firewall returns				[TESTED]
 o	Added firewall output checks to ip_build_xmit	[TESTED]
@@ -218,7 +218,7 @@ o	Multicast router downs VIF's when their
 o	Reformatted ipv4/protocol.c, dropped frag field	[TESTED]
 o	Fixed MSS for TCP				[TESTED]
 o	Dropped sock_awaitconn				[TESTED]
-o	Added ip_forward to ksyms for IPIP etc		[IN]
+o	Added ip_forward to ksyms for IPIP etc		[TESTED]
 o	Appletalk TIOCINQ/TIOCOUTQ bug fix		[TESTED]
 o	Rewrote the IFF_UP/IFF_DOWN handling code	[TESTED]
 
@@ -239,7 +239,7 @@ o	Kernel/user communication module (not used yet) [TESTED]
 -------->>>>> 1.3.31 <<<<<<-------
 
 o	IFF_ALLMULTI support for 3c501,3c509,8390 and
-	tulip(SMC etherpower) boards			[IN]
+	tulip(SMC etherpower) boards			[TESTED]
 
 -------->>>>> 1.3.33 <<<<<<--------
 
@@ -268,37 +268,51 @@ o	ip udp/raw nonblock bug fixed			[TESTED]
 o	ICMP lockup fix					[TESTED]
 o	Fundamental operations now only sendmsg/recvmsg	[TESTED]
 o	bind() for SOCK_PACKET				[IN]
-o	set_mac_addr fixed up				[IN]
-o	BSD SIOCSIFADDR, AF_UNSPEC behaviour		[IN]
+o	set_mac_addr fixed up				[TESTED]
+o	BSD SIOCSIFADDR, AF_UNSPEC behaviour		[TESTED]
 o	Updated this list				[OK]
 o	Massive ARP/cache/routing rewrite [ANK]		[IN]
-o	AX.25 connect return fixed in using sock_error	[IN]
+o	AX.25 connect return fixed in using sock_error	[TESTED]
 o	Proper netlink device major(36)			[TESTED]
 o	First parts of the SKIP support			[IN, not useful]
-o	TCP ICMP (SOSS should work again)		[IN]
+o	TCP ICMP (SOSS should work again)		[TESTED]
 o	IPFW support for TOS changing (Al Longyear)	[IN]
 o	DECNET PPP test code [Steve]			[IN]
-o	NFS root	[Miguel/Gero]			[IN]
-o	Path MTU discovery [ANK]			[IN]
+o	NFS root	[Miguel/Gero]			[TESTED]
+o	Path MTU discovery [ANK]			[TESTED]
 
 -------->>>>> 1.3.44 <<<<<<--------
 
-o	NFS root/ FPU clash fixed			[IN]
-o	ARP lock bug fixed				[IN]
-o	SO_BSDCOMPAT option(libbsd/ibcs2 ought to set)	[IN]
-o	Changed to new set_multicast_list()		[IN]
-o	ARP ioctl() call fixes	[Bernd]			[IN]
+o	NFS root/ FPU clash fixed			[TESTED]
+o	ARP lock bug fixed				[TESTED]
+o	SO_BSDCOMPAT option(libbsd/ibcs2 ought to set)	[SEMIDONE]
+o	Changed to new set_multicast_list()		[TESTED]
+o	ARP ioctl() call fixes	[Bernd]			[TESTED]
 o	Fixes to the name set functions (maybe fixes
-	netrom)		[Steve]				[IN]
-o	Packet protocol labelling (not IPX yet)		[IN]
-o	Faster buffer copy/clone [Linus]		[IN]
+	netrom)		[Steve]				[TESTED]
+o	Packet protocol labelling (not IPX yet)		[TESTED]
+o	Faster buffer copy/clone [Linus]		[TESTED]
 
 -------->>>>> 1.3.46 <<<<<<--------
 
-o	AX.25/NetROM fixes/changes [John Naylor]	[IN]
+o	AX.25/NetROM fixes/changes [John Naylor]	[TESTED]
 o	Further attempts to fix the IPX memory bug	[IN]
 o	ARP fixes (Assorted)				[IN]
 o	Driver fixes for multicast lists		[IN]
+
+-------->>>>> 1.3.48 <<<<<<--------
+
+o	IPalias						[TESTED]
+
+-------->>>>> 1.3.50 <<<<<<--------
+
+o	TCP soft error support				[IN]
+o	Further 3c501 tweaking				[TESTED]
+o	Still trying to make IPX work right		[IN]
+o	Trap faulty boxes sending IGMP using 0.0.0.0	[IN]
+o	Only allow SMBFS selection with IP configured	[IN]
+o	Packetwin driver [Craig]			[IN]
+o	Net alias changes [Juan]			[IN]
 
 ---------- Things I thought Linus had for a while and not merged ----------------
 
@@ -310,7 +324,6 @@ o	Decnet pre pre pre pre pre Alpha 0.0.
 o	Chase Donald for new drivers, get people to sort out what net
 	drivers should cease to be 'Alpha'.
 o	IPX PPP support
-o	IPalias
 
 ---------- Things pending for me to merge --------------
 
@@ -323,7 +336,7 @@ o	SPARC patches [Dave] [partly in]
 
 o	Forwarding queue control (+ fairness algorithms ??)
 o	IP forward flow control.
-o	IPX memory leak ?????
+o	IPX memory leak ?????				[Done with luck]
 o	Clean up RAW AX.25 sockets.
 o	Finish IPIP bug fixes				[Done hopefully]
 o	Multicast routing				[STARTED BITS]
@@ -332,8 +345,22 @@ o	IPX for Lwared
 o	SKIP						[Available in user mode]
 o	AX.25/NetROM locking changes
 o	insw_and_csum
-o	IPAlias
 o	AF_UNIX fd passing
+
+-------------------------- Bugs to fix ------------------------------
+
+o	signal interrupting a unix domain connect can occasionally hang the 
+	machine ??
+o	IPX has a memory accounting bug.		[HOPE DONE]
+o	TCP socket cache gets things wrong very very occasionally under high 
+	load.						[TRYING THINGS]
+o	AX.25/NetROM needs more locking.
+o	IP mroute code Oopses still.			[WAITING DIFF]
+o	Lance driver in a few rare systems is causing crashes in copy/checksum.
+o	NFS logs an error (-512) when interrupted.
+o	NFS flow control is needed with the new multirequest NFS support.
+o	Need to be able to turn off the intelligent arp refreshing as its not so
+	hot over AX.25 and upsets some people with very dumb ISDN bridges.
 
 0.2
 ---

@@ -78,7 +78,7 @@ int shrink_mmap(int priority, unsigned long limit)
 	limit = MAP_NR(limit);
 	if (clock >= limit)
 		clock = 0;
-	priority = limit >> (2*priority);
+	priority = limit >> priority;
 	page = mem_map + clock;
 	while (priority-- > 0) {
 		if (page->inode && page->count == 1) {

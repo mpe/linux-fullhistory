@@ -174,7 +174,10 @@ struct sock
  */
  
 	volatile unsigned short	backoff;
-	volatile int		err;
+	volatile int		err, err_soft;	/* Soft holds errors that don't
+						   cause failure but are the cause
+						   of a persistent failure not just
+						   'timed out' */
 	unsigned char		protocol;
 	volatile unsigned char	state;
 	volatile unsigned char	ack_backlog;
@@ -409,7 +412,7 @@ extern __inline__ int sock_error(struct sock *sk)
 	int err=xchg(&sk->err,0);
 	return -err;
 }
- 
+
 /* 
  *	Declarations from timer.c 
  */

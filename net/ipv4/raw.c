@@ -220,11 +220,11 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
 		if (sk->state != TCP_ESTABLISHED) 
 			return(-EINVAL);
 		sin.sin_family = AF_INET;
-		sin.sin_port = sk->protocol;
+		sin.sin_port = sk->num;
 		sin.sin_addr.s_addr = sk->daddr;
 	}
 	if (sin.sin_port == 0) 
-		sin.sin_port = sk->protocol;
+		sin.sin_port = sk->num;
   
 	if (sin.sin_addr.s_addr == INADDR_ANY)
 		sin.sin_addr.s_addr = ip_my_addr();

@@ -430,28 +430,38 @@ repeat:
 	return;
 }
 
+static inline unsigned long value(struct inode * inode)
+{
+	if (inode->i_lock)  
+		return 1000;
+	if (inode->i_dirt)
+		return 1000;
+	return inode->i_nrpages;
+}
+
 struct inode * get_empty_inode(void)
 {
 	static int ino = 0;
 	struct inode * inode, * best;
+	unsigned long badness = ~0UL;
 	int i;
 
-	if (nr_inodes < NR_INODE && nr_free_inodes < (nr_inodes >> 2))
+	if (nr_inodes < NR_INODE && nr_free_inodes < (nr_inodes >> 1))
 		grow_inodes();
 repeat:
 	inode = first_inode;
 	best = NULL;
 	for (i = 0; i<nr_inodes; inode = inode->i_next, i++) {
 		if (!inode->i_count) {
-			if (!best)
+			unsigned long i = value(inode);
+			if (i < badness) {
 				best = inode;
-			if (!inode->i_dirt && !inode->i_lock) {
-				best = inode;
-				break;
+				if ((badness = i) == 0)
+					break;
 			}
 		}
 	}
-	if (!best || best->i_dirt || best->i_lock)
+	if (badness > 20)
 		if (nr_inodes < NR_INODE) {
 			grow_inodes();
 			goto repeat;

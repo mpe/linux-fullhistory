@@ -950,7 +950,7 @@ static void get_more_buffer_heads(void)
 	if (unused_list)
 		return;
 
-	if (!(bh = (struct buffer_head*) get_free_page(GFP_BUFFER)))
+	if (!(bh = (struct buffer_head*) get_free_page(GFP_KERNEL)))
 		return;
 
 	for (nr_buffer_heads+=i=PAGE_SIZE/sizeof*bh ; i>0; i--) {
@@ -1014,138 +1014,58 @@ no_grow:
 
 static void read_buffers(struct buffer_head * bh[], int nrbuf)
 {
-	int i;
-	int bhnum = 0;
-	struct buffer_head * bhr[MAX_BUF_PER_PAGE];
-
-	for (i = 0 ; i < nrbuf ; i++) {
-		if (bh[i] && !buffer_uptodate(bh[i]))
-			bhr[bhnum++] = bh[i];
-	}
-	if (bhnum)
-		ll_rw_block(READ, bhnum, bhr);
-	for (i = nrbuf ; --i >= 0 ; ) {
-		if (bh[i]) {
-			wait_on_buffer(bh[i]);
-		}
-	}
+	ll_rw_block(READ, nrbuf, bh);
+	bh += nrbuf;
+	do {
+		nrbuf--;
+		bh--;
+		wait_on_buffer(*bh);
+	} while (nrbuf > 0);
 }
 
-static int try_to_load_aligned(unsigned long address,
-	kdev_t dev, int b[], int size)
+int bread_page(unsigned long address, kdev_t dev, int b[], int size)
 {
-	struct buffer_head * bh, * tmp, * arr[MAX_BUF_PER_PAGE];
-	unsigned long offset;
-        int isize = BUFSIZE_INDEX(size);
-	int * p;
-	int block;
+	struct buffer_head *bh, *next, *arr[MAX_BUF_PER_PAGE];
+	int block, nr;
 
 	bh = create_buffers(address, size);
 	if (!bh)
-		return 0;
-	/* do any of the buffers already exist? punt if so.. */
-	p = b;
-	for (offset = 0 ; offset < PAGE_SIZE ; offset += size) {
-		block = *(p++);
-		if (!block)
-			goto not_aligned;
-		if (find_buffer(dev, block, size))
-			goto not_aligned;
-	}
-	tmp = bh;
-	p = b;
-	block = 0;
-	while (1) {
-		arr[block++] = bh;
-		bh->b_count = 1;
-		bh->b_flushtime = 0;
-		clear_bit(BH_Dirty, &bh->b_state);
-		clear_bit(BH_Uptodate, &bh->b_state);
-		clear_bit(BH_Req, &bh->b_state);
-		bh->b_dev = dev;
-		bh->b_blocknr = *(p++);
-		bh->b_list = BUF_CLEAN;
-		nr_buffers++;
-		nr_buffers_size[isize]++;
-		insert_into_queues(bh);
-		if (bh->b_this_page)
-			bh = bh->b_this_page;
-		else
-			break;
-	}
-	buffermem += PAGE_SIZE;
-	bh->b_this_page = tmp;
-	mem_map[MAP_NR(address)].count++;
-	buffer_pages[MAP_NR(address)] = bh;
-	read_buffers(arr,block);
-	while (block-- > 0)
-		brelse(arr[block]);
+		return -ENOMEM;
+	nr = 0;
+	next = bh;
+	do {
+		struct buffer_head * tmp;
+		block = *(b++);
+		if (!block) {
+			memset(next->b_data, 0, size);
+			continue;
+		}
+		tmp = get_hash_table(dev, block, size);
+		if (tmp) {
+			memcpy(next->b_data, tmp->b_data, size);
+			brelse(tmp);
+			continue;
+		}
+		arr[nr++] = next;
+		next->b_dev = dev;
+		next->b_blocknr = block;
+		next->b_count = 1;
+		next->b_flushtime = 0;
+		clear_bit(BH_Dirty, &next->b_state);
+		clear_bit(BH_Uptodate, &next->b_state);
+		clear_bit(BH_Req, &next->b_state);
+		next->b_list = BUF_CLEAN;
+	} while ((next = next->b_this_page) != NULL);
+
+	if (nr)
+		read_buffers(arr,nr);
 	++current->maj_flt;
-	return 1;
-not_aligned:
-	while ((tmp = bh) != NULL) {
+
+	while ((next = bh) != NULL) {
 		bh = bh->b_this_page;
-		put_unused_buffer_head(tmp);
+		put_unused_buffer_head(next);
 	}
 	return 0;
-}
-
-/*
- * Try-to-share-buffers tries to minimize memory use by trying to keep
- * both code pages and the buffer area in the same page. This is done by
- * trying to load them into memory the way we want them.
- *
- * This doesn't guarantee that the memory is shared, but should under most
- * circumstances work very well indeed (ie >90% sharing of code pages on
- * demand-loadable executables).
- */
-static inline int try_to_share_buffers(unsigned long address,
-	kdev_t dev, int *b, int size)
-{
-	struct buffer_head * bh;
-	int block;
-
-	block = b[0];
-	if (!block)
-		return 0;
-	bh = get_hash_table(dev, block, size);
-	if (!bh)
-		return try_to_load_aligned(address, dev, b, size);
-	brelse(bh);
-	return 0;
-}
-
-/*
- * bread_page reads four buffers into memory at the desired address. It's
- * a function of its own, as there is some speed to be got by reading them
- * all at the same time, not waiting for one to be read, and then another
- * etc. This also allows us to optimize memory usage by sharing code pages
- * and filesystem buffers..
- */
-void bread_page(unsigned long address, kdev_t dev, int b[], int size)
-{
-	struct buffer_head * bh[MAX_BUF_PER_PAGE];
-	unsigned long where;
-	int i, j;
-
-	if (try_to_share_buffers(address, dev, b, size))
-		return;
-	++current->maj_flt;
- 	for (i=0, j=0; j<PAGE_SIZE ; i++, j+= size) {
-		bh[i] = NULL;
-		if (b[i])
-			bh[i] = getblk(dev, b[i], size);
-	}
-	read_buffers(bh,i);
-	where = address;
- 	for (i=0, j=0; j<PAGE_SIZE ; i++, j += size, where += size) {
-		if (bh[i]) {
-			if (buffer_uptodate(bh[i]))
-				memcpy((void *) where, bh[i]->b_data, size);
-			brelse(bh[i]);
-		} else
-			memset((void *) where, 0, size);
-	}
 }
 
 #if 0
@@ -1869,7 +1789,7 @@ int bdflush(void * unused) {
 	in a few more things so "top" and /proc/2/{exe,root,cwd}
 	display semi-sane things. Not real crucial though...  */
 
-	sprintf(current->comm, "bdflush - kernel");
+	sprintf(current->comm, "kernel bdflush");
 
 	for (;;) {
 #ifdef DEBUG

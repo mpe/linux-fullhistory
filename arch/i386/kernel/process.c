@@ -8,6 +8,9 @@
  * This file handles the architecture-dependent parts of process handling..
  */
 
+#define __KERNEL_SYSCALLS__
+#include <stdarg.h>
+
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -21,6 +24,7 @@
 #include <linux/a.out.h>
 #include <linux/interrupt.h>
 #include <linux/config.h>
+#include <linux/unistd.h>
 
 #include <asm/segment.h>
 #include <asm/pgtable.h>
@@ -50,6 +54,8 @@ void enable_hlt(void)
 	hlt_counter--;
 }
 
+#ifndef __SMP__
+
 static void hard_idle(void)
 {
 	while (!need_resched) {
@@ -68,7 +74,8 @@ static void hard_idle(void)
 			__asm__("hlt");
 #endif
 	        }
- 		if (need_resched) break;
+ 		if (need_resched) 
+ 			break;
 		schedule();
 	}
 #ifdef CONFIG_APM
@@ -77,60 +84,72 @@ static void hard_idle(void)
 }
 
 /*
- * The idle loop on a i386..
+ * The idle loop on a uniprocessor i386..
  */
+ 
 asmlinkage int sys_idle(void)
 {
-#ifndef __SMP__
         unsigned long start_idle = 0;
-#endif
-		
+
 	if (current->pid != 0)
-	{
-	/*	printk("Wrong process idled\n");	SMP bug check */
 		return -EPERM;
-	}
-#ifdef __SMP__
-	/*
-	 *	SMP locking sanity checker
-	 */
-	if(smp_processor_id()!=active_kernel_processor)
-		panic("CPU is %d, kernel CPU is %d in sys_idle!\n",
-			smp_processor_id(), active_kernel_processor);
-	if(syscall_count!=1)
-		printk("sys_idle: syscall count is not 1 (%ld)\n", syscall_count);
-	if(kernel_counter!=1)
-	{
-		printk("CPU %d, sys_idle, kernel_counter is %ld\n", smp_processor_id(), kernel_counter);
-		if(!kernel_counter)
-			panic("kernel locking botch");
-	}
-	/*
-	 *	Until we have C unlocking done
-	 */
-	current->counter = -100;
-	schedule();
-	return 0;
-#endif	
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
-	for (;;) {
-#ifdef __SMP__
-		if (cpu_data[smp_processor_id()].hlt_works_ok && !hlt_counter && !need_resched)
-			__asm__("hlt");
-#else	
-		if (!start_idle) start_idle = jiffies;
-		if (jiffies - start_idle > HARD_IDLE_TIMEOUT) {
+	for (;;) 
+	{
+		/*
+		 *	We are locked at this point. So we can safely call
+		 *	the APM bios knowing only one CPU at a time will do
+		 *	so.
+		 */
+		if (!start_idle) 
+			start_idle = jiffies;
+		if (jiffies - start_idle > HARD_IDLE_TIMEOUT) 
+		{
 			hard_idle();
-		} else {
+		} 
+		else 
+		{
 			if (hlt_works_ok && !hlt_counter && !need_resched)
 		        	__asm__("hlt");
 		}
-		if (need_resched) start_idle = 0;
-#endif
+		if (need_resched) 
+			start_idle = 0;
 		schedule();
 	}
 }
+
+#else
+
+/*
+ *	In the SMP world we hlt outside of kernel syscall rather than within
+ *	so as to get the right locking semantics.
+ */
+ 
+asmlinkage int sys_idle(void)
+{
+	if(current->pid != 0)
+		return -EPERM;
+	current->counter= -100;
+	schedule();
+	return 0;
+}
+
+/*
+ *	This is being executed in task 0 'user space'.
+ */
+
+int cpu_idle(void *unused)
+{
+	while(1)
+	{
+		if(cpu_data[smp_processor_id()].hlt_works_ok && !hlt_counter && !need_resched)
+			__asm("hlt");
+		idle();
+	}
+}
+
+#endif
 
 /*
  * This routine reboots the machine by asking the keyboard
@@ -186,6 +205,7 @@ void show_regs(struct pt_regs * regs)
 /*
  * Free current thread data structures etc..
  */
+
 void exit_thread(void)
 {
 	/* forget lazy i387 state */

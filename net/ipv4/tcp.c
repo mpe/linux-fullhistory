@@ -179,6 +179,7 @@
  *		Alan Cox	:	Block double connect().
  *		Alan Cox	:	Small hooks for enSKIP.
  *		Alexey Kuznetsov:	Path MTU discovery.
+ *		Alan Cox	:	Support soft errors.
  *
  *
  * To Fix:
@@ -192,7 +193,6 @@
  *		RFC1323 - PAWS and window scaling. PAWS is required for IPv6 so we
  *		could do with it working on IPv4
  *		User settable/learned rtt/max window/mtu
- *		Cope with MTU/device switches when retransmitting in tcp.
  *		Fix the window handling to use PR's new code.
  *
  *		Change the fundamental structure to a single send queue maintained
@@ -349,12 +349,12 @@
  *   MUST implement receiver-side SWS. (does)
  *   
  * When to Send Data (4.2.3.4)
- *   MUST implement sender-side SWS. (does - imperfectly)
+ *   MUST implement sender-side SWS. (does)
  *   SHOULD implement Nagle algorithm. (does)
  * 
  * TCP Connection Failures (4.2.3.5)
  *  MUST handle excessive retransmissions "properly" (see the RFC). (does)
- *   SHOULD inform application layer of soft errors. (doesn't)
+ *   SHOULD inform application layer of soft errors. (does)
  *   
  * TCP Keep-Alives (4.2.3.6)
  *   MAY provide keep-alives. (does)
@@ -372,13 +372,11 @@
  *   MUST use same local address for all segments of a connection. (does)
  * 
  * IP Options (4.2.3.8)
- *   (I don't think the IP layer sees the IP options, yet.)
- *   MUST ignore unsupported IP options. (does, I guess 8*b)
- *   MAY support Time Stamp and Record Route. (doesn't)
- * **MUST allow application to specify a source route. (doesn't?)
- * **MUST allow receieved Source Route option to set route for all future
- *     segments on this connection. (doesn't, not that I think it's a
- *     huge problem)
+ *   MUST ignore unsupported IP options. (does)
+ *   MAY support Time Stamp and Record Route. (does)
+ *   MUST allow application to specify a source route. (does)
+ *   MUST allow receieved Source Route option to set route for all future
+ *     segments on this connection. (does not (security issues))
  * 
  * ICMP messages (4.2.3.9)
  *   MUST act on ICMP errors. (does)
@@ -387,7 +385,7 @@
  *     Unreachables (0, 1, 5), Time Exceededs and Parameter
  *     Problems. (doesn't)
  *   SHOULD report soft Destination Unreachables etc. to the
- *     application. (doesn't)
+ *     application. (does)
  *   SHOULD abort connection upon receipt of hard Destination Unreachable
  *     messages (2, 3, 4). (does)
  * 
@@ -696,7 +694,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		{
 			if(skb->sk)
 			{
-				skb->sk->err=ENETUNREACH;
+				skb->sk->err_soft=ENETUNREACH;
 				skb->sk->error_report(skb->sk);
 			}
 		}
@@ -893,7 +891,10 @@ static int tcp_write_timeout(struct sock *sk)
 	 
 	if(sk->retransmits > TCP_SYN_RETRIES && sk->state==TCP_SYN_SENT)
 	{
-		sk->err=ETIMEDOUT;
+		if(sk->err_soft)
+			sk->err=sk->err_soft;
+		else
+			sk->err=ETIMEDOUT;
 		sk->error_report(sk);
 		del_timer(&sk->retransmit_timer);
 		tcp_statistics.TcpAttemptFails++;	/* Is this right ??? - FIXME - */
@@ -907,7 +908,10 @@ static int tcp_write_timeout(struct sock *sk)
 	 */
 	if (sk->retransmits > TCP_RETR2) 
 	{
-		sk->err = ETIMEDOUT;
+		if(sk->err_soft)
+			sk->err = sk->err_soft;
+		else
+			sk->err = ETIMEDOUT;
 		sk->error_report(sk);
 		del_timer(&sk->retransmit_timer);
 		/*
@@ -1113,17 +1117,21 @@ void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 	 * until we time out, or the user gives up.
 	 */
 
-	if (code < 13 && (icmp_err_convert[code].fatal || sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV))
-	{
-		sk->err = icmp_err_convert[code].errno;
-		if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) 
+	if (code < 13)
+	{	
+		if(icmp_err_convert[code].fatal || sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV)
 		{
-			tcp_statistics.TcpAttemptFails++;
-			tcp_set_state(sk,TCP_CLOSE);
-			sk->error_report(sk);		/* Wake people up to see the error (see connect in sock.c) */
+			sk->err = icmp_err_convert[code].errno;
+			if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) 
+			{
+				tcp_statistics.TcpAttemptFails++;
+				tcp_set_state(sk,TCP_CLOSE);
+				sk->error_report(sk);		/* Wake people up to see the error (see connect in sock.c) */
+			}
 		}
+		else	/* Only an error on timeout */
+			sk->err_soft = icmp_err_convert[code].errno;
 	}
-	return;
 }
 
 
@@ -3590,6 +3598,13 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 	 */
 	 
 	sk->rcv_ack_seq = ack;
+	
+	/*
+	 *	We passed data and got it acked, remove any soft error
+	 *	log. Something worked...
+	 */
+	 
+	sk->err_soft = 0;
 
 	/*
 	 *	If this ack opens up a zero window, clear backoff.  It was
@@ -4809,7 +4824,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Find the socket, using the last hit cache if applicable.
 	 */
 
-	if(saddr==th_cache_saddr && daddr==th_cache_daddr && th->dest==th_cache_dport && th->source==th_cache_sport)
+	if(!redo && saddr==th_cache_saddr && daddr==th_cache_daddr && th->dest==th_cache_dport && th->source==th_cache_sport)
 	{
 		sk=(struct sock *)th_cache_sk;
 		/*
@@ -5319,12 +5334,13 @@ static void tcp_write_wakeup(struct sock *sk)
 		 *	Find the first data byte.
 		 */
 		 
-		tcp_data_start = skb->data + skb->dev->hard_header_len + 
-				(iph->ihl << 2) + th->doff * 4;
+		tcp_data_start = skb->ip_hdr + 
+				((iph->ihl + th->doff) << 2);
 
 		/*
 		 *	Add it to our new buffer
 		 */
+		 
 		memcpy(skb_put(buff,win_size), tcp_data_start, win_size);
 		
 		/*
@@ -5333,38 +5349,8 @@ static void tcp_write_wakeup(struct sock *sk)
 		 
 	    	buff->end_seq = sk->sent_seq + win_size;
 	    	sk->sent_seq = buff->end_seq;		/* Hack */
-#if 0
-
-	    	/*
-	    	 *	now: shrink the queue head segment 
-	    	 */
-	    	 
-		th->check = 0;
-	    	ow_size = skb->len - win_size - 
-	    		((unsigned long) (tcp_data_start - (void *) skb->data));
-
-		memmove(tcp_data_start, tcp_data_start + win_size, ow_size);
-	    	skb_trim(skb,skb->len-win_size);
-	    	sk->sent_seq += win_size;
-	    	th->seq = htonl(sk->sent_seq);
-	    	if (th->urg)
-	    	{
-			unsigned short urg_ptr;
-	
-			urg_ptr = ntohs(th->urg_ptr);
-			if (urg_ptr <= win_size)
-				th->urg = 0;
-			else
-			{
-				urg_ptr -= win_size;
-		    		th->urg_ptr = htons(urg_ptr);
-		    		nth->urg_ptr = htons(win_size);
-		  	}
-	      	}
-#else
 		if(th->urg && ntohs(th->urg_ptr) < win_size)
 			nth->urg = 0;
-#endif	      	
 
 		/*
 		 *	Checksum the split buffer

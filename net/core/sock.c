@@ -66,6 +66,7 @@
  *					(compatibility fix)
  *		Alan Cox	:	Added optimistic memory grabbing for AF_UNIX throughput.
  *		Alan Cox	:	Allocator for a socket is settable.
+ *		Alan Cox	:	SO_ERROR includes soft errors.
  *
  * To Fix:
  *
@@ -259,8 +260,9 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 			break;
 
 		case SO_ERROR:
-			val = sk->err;
-			sk->err = 0;
+			val = sock_error(sk);
+			if(val==0)
+				val=xchg(&sk->err_soft,0);
 			break;
 
 		case SO_OOBINLINE:
