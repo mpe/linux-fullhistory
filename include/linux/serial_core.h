@@ -113,6 +113,9 @@
 /* Samsung S3C2400 SoC */
 #define PORT_S3C2400	67
 
+/* M32R SIO */
+#define PORT_M32R_SIO	68
+
 #ifdef __KERNEL__
 
 #include <linux/config.h>
