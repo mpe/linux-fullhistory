@@ -55,6 +55,9 @@
 #define NFS4_ANYONE_MODE (NFS4_ACE_READ_ATTRIBUTES | NFS4_ACE_READ_ACL | NFS4_ACE_SYNCHRONIZE)
 #define NFS4_OWNER_MODE (NFS4_ACE_WRITE_ATTRIBUTES | NFS4_ACE_WRITE_ACL)
 
+/* We don't support these bits; insist they be neither allowed nor denied */
+#define NFS4_MASK_UNSUPP (NFS4_ACE_DELETE | NFS4_ACE_WRITE_OWNER)
+
 /* flags used to simulate posix default ACLs */
 #define NFS4_INHERITANCE_FLAGS (NFS4_ACE_FILE_INHERIT_ACE \
 		| NFS4_ACE_DIRECTORY_INHERIT_ACE | NFS4_ACE_INHERIT_ONLY_ACE)
@@ -83,7 +86,7 @@ mask_from_posix(unsigned short perm, unsigned int flags)
 static u32
 deny_mask(u32 allow_mask, unsigned int flags)
 {
-	u32 ret = ~allow_mask & ~NFS4_ACE_DELETE;
+	u32 ret = ~allow_mask & ~NFS4_MASK_UNSUPP;
 	if (!(flags & NFS4_ACL_DIR))
 		ret &= ~NFS4_ACE_DELETE_CHILD;
 	return ret;
