@@ -19,9 +19,9 @@ struct inet_peer
 {
 	struct inet_peer	*avl_left, *avl_right;
 	struct inet_peer	*unused_next, **unused_prevp;
-	atomic_t		refcnt;
 	unsigned long		dtime;		/* the time of last use of not
 						 * referenced entries */
+	atomic_t		refcnt;
 	__u32			v4daddr;	/* peer's address */
 	__u16			avl_height;
 	__u16			ip_id_count;	/* IP ID for the next packet */
