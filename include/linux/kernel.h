@@ -8,6 +8,7 @@
 void verify_area(void * addr,int count);
 volatile void panic(const char * str);
 volatile void do_exit(long error_code);
+unsigned long simple_strtoul(const char *,char **,unsigned int);
 int printk(const char * fmt, ...);
 void * malloc(unsigned int size);
 void free_s(void * obj, int size);

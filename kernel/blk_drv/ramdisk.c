@@ -14,7 +14,6 @@
 #include <linux/string.h>
 #include <asm/system.h>
 #include <asm/segment.h>
-#include <asm/memory.h>
 
 #define MAJOR_NR 1
 #include "blk.h"

@@ -208,11 +208,14 @@ L_round:
 L_round_up:
 	addl	$1,%ebx
 	adcl	$0,%eax
+	jnc	L_store
 
-#ifdef PARANOID
-	/* We can show that an overflow here is not possible */
-	jc	L_bugged_4
-#endif PARANOID
+	/* We just rounded up to (1) 00 00 */
+	/* This *is* possible, if the subtraction is of the
+	   form (1. + x) - (x + y) where x is small and y is
+	   very small. */
+	incl	EXP(%edi)
+	movl	$0x80000000,%eax
 
 L_store:
 /*------------------------------+

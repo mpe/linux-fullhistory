@@ -24,9 +24,11 @@ void do_st_request(void)
 	panic("There is no st driver.\n\r");
 }
 
-void st_init(void)
+unsigned long st_init(unsigned long memory_start, unsigned long memory_end)
 {
 	blk_dev[MAJOR_NR].request_fn = do_st_request;
 	blk_size[MAJOR_NR] = st_sizes;
+	return memory_start;
 }
 #endif	
+

@@ -40,6 +40,6 @@ int  fdomain_16x0_queue( unsigned char target, const void *cmnd,
 			 NULL,                             \
 		         fdomain_16x0_abort,               \
 			 fdomain_16x0_reset,               \
-			 0, 6, 0 }
+			 0, 6, 0 ,0}
 #endif
 #endif

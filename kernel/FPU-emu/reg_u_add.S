@@ -133,20 +133,21 @@ L_round_the_result:
 	cmpl	$0x80000000,%edx
 	jc	L_no_round_up
 
-/* Check the rounding algorithm *********/
 	jne	L_do_round_up
 
+	/* Now test for round-to-even */
 	testb	$1,%ebx
 	jz	L_no_round_up
 
 L_do_round_up:
 	addl	$1,%ebx
 	adcl	$0,%eax
-	jnc	L_no_round_up
+	jnc	L_no_round_up		/* Rounding done, no overflow */
 
 	/* Overflow, adjust the result */
 	rcrl	$1,%eax
 	rcrl	$1,%ebx
+	incl	EXP(%edi)
 
 L_no_round_up:
 	/* store the result */

@@ -267,27 +267,6 @@ void exception(int n)
 }
 
 
-/********
-int EmptyError(void)
-{
-  EXCEPTION(EX_StackUnder);
-  return 0;
-}
- **********/
-
-
-/****
-int FullError(void)
-{
-  EXCEPTION(EX_StackOver);
-  reg_move(&CONST_QNaN, st0_ptr);
-  return 0;
-}
- ****/
-
-
-
-
 /* Real operation attempted on two operands, one a NaN */
 void real_2op_NaN(REG *a, REG *b, REG *dest)
 {

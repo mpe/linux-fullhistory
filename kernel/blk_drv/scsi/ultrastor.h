@@ -43,7 +43,7 @@ int ultrastor_14f_reset(void);
 #define ULTRASTOR_14F \
     { "UltraStor 14F", ultrastor_14f_detect, ultrastor_14f_info, \
       ultrastor_14f_command, 0, ultrastor_14f_abort, ultrastor_14f_reset, \
-      0, 0, 0 }
+      0, 0, 0, 1 }
 #endif
 
 #define UD_ABORT 0x0001

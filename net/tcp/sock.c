@@ -26,8 +26,8 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
+#include <linux/string.h>
 #include <linux/sock_ioctl.h>
-#include <asm/memory.h>
 #include "../kern_sock.h"
 #include "timer.h"
 #include "ip.h"
@@ -124,6 +124,10 @@ struct proto_ops inet_proto_ops =
 void
 print_sk (volatile struct sock *sk)
 {
+  if (!sk) {
+    PRINTK ("  print_sk(NULL)\n");
+    return;
+  }
   PRINTK ("  wmem_alloc = %d\n", sk->wmem_alloc);
   PRINTK ("  rmem_alloc = %d\n", sk->rmem_alloc);
   PRINTK ("  send_head = %X\n", sk->send_head);
@@ -149,6 +153,10 @@ print_sk (volatile struct sock *sk)
 void
 print_skb(struct sk_buff *skb)
 {
+  if (!skb) {
+    PRINTK ("  print_skb(NULL)\n");
+    return;
+  }
   PRINTK ("  prev = %X, next = %X\n", skb->prev, skb->next);
   PRINTK ("  sk = %X link3 = %X\n", skb->sk, skb->link3);
   PRINTK ("  mem_addr = %X, mem_len = %d\n", skb->mem_addr, skb->mem_len);
@@ -332,27 +340,41 @@ remove_sock(volatile struct sock *sk1)
   volatile struct sock *sk2;
   PRINTK ("remove_sock(sk1=%X)\n",sk1);
 
+  if (!sk1)
+    {
+      printk ("sock.c: remove_sock: sk1 == NULL\n");
+      return;
+    }
+
+  if (!sk1->prot)
+    {
+      printk ("sock.c: remove_sock: sk1->prot == NULL\n");
+      return;
+    }
+
   /* we can't have this changing out from under us. */
   cli();
-  sk2=sk1->prot->sock_array[sk1->num & (SOCK_ARRAY_SIZE -1)];
+  sk2 = sk1->prot->sock_array[sk1->num & (SOCK_ARRAY_SIZE -1)];
   if (sk2 == sk1)
     {
        sk1->prot->sock_array[sk1->num & (SOCK_ARRAY_SIZE -1)] = sk1->next;
        sti();
        return;
     }
-  while (sk2->next != sk1)
+
+  while (sk2 && sk2->next != sk1)
+    sk2 = sk2->next;
+
+  if (sk2)
     {
-      if (sk2 == NULL)
-	{
-	  sti();
-	  PRINTK ("remove_sock: sock  not found.\n");
-	  return;
-	}
-      sk2=sk2->next;
+      sk2->next = sk1->next;
+      sti();
+      return;
     }
-  sk2->next = sk1->next;
   sti();
+
+  if (sk1->num != 0)
+    PRINTK ("remove_sock: sock  not found.\n");
 }
 
 void
@@ -1718,6 +1740,18 @@ volatile struct sock *get_sock (struct proto *prot, unsigned short num,
 
 void release_sock (volatile struct sock *sk)
 {
+  if (!sk)
+    {
+      printk ("sock.c: release_sock sk == NULL\n");
+      return;
+    }
+
+  if (!sk->prot)
+    {
+      printk ("sock.c: release_sock sk->prot == NULL\n");
+      return;
+    }
+
   if (sk->blog) return;
   /* see if we have any packets built up. */
 

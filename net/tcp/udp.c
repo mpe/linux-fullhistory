@@ -567,13 +567,15 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	sk = get_sock (prot, net16(uh->dest), saddr, uh->source, daddr);
 
 	/* if we don't know about the socket, forget about it. */
-	if (sk == NULL &&
-	    (daddr & 0xff000000 != 0) && (daddr & 0xff000000 != 0xff000000))
+	if (sk == NULL)
 	  {
-	     icmp_reply (skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, dev);
-	     skb->sk = NULL;
-	     free_skb (skb, 0);
-	     return (0);
+	    if ((daddr & 0xff000000 != 0) && (daddr & 0xff000000 != 0xff000000))
+	      {
+		icmp_reply (skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, dev);
+	      }
+	    skb->sk = NULL;
+	    free_skb (skb, 0);
+	    return (0);
 	  }
 
 

@@ -22,5 +22,5 @@ typedef struct
 
 extern int NR_ST;
 extern Scsi_Tape scsi_tapes[MAX_ST];
-void st_init(void);
+unsigned long st_init(unsigned long, unsigned long);
 #endif

@@ -198,20 +198,19 @@ void wake_one_task(struct task_struct * p)
 /*
  * wake_up doesn't wake up stopped processes - they have to be awakened
  * with signals or similar.
+ *
+ * Note that this doesn't need cli-sti pairs: interrupts may not change
+ * the wait-queue structures directly, but only call wake_up() to wake
+ * a process. The process itself must remove the queue once it has woken.
  */
 void wake_up(struct wait_queue **q)
 {
-	struct wait_queue *tmp, *next;
+	struct wait_queue *tmp;
 	struct task_struct * p;
-	unsigned long flags;
 
-	if (!q || !(next = *q))
+	if (!q || !(tmp = *q))
 		return;
-	save_flags(flags);
-	cli();
 	do {
-		tmp = next;
-		next = tmp->next;
 		if (p = tmp->task) {
 			if (p->state == TASK_ZOMBIE)
 				printk("wake_up: TASK_ZOMBIE\n");
@@ -221,9 +220,17 @@ void wake_up(struct wait_queue **q)
 					need_resched = 1;
 			}
 		}
-		tmp->next = NULL;
-	} while (next && next != *q);
-	restore_flags(flags);
+#ifdef DEBUG
+		if (!tmp->next) {
+			printk("wait_queue is bad\n");
+			printk("        q = %08x\n",q);
+			printk("       *q = %08x\n",*q);
+			printk("      tmp = %08x\n",tmp);
+			break;
+		}
+#endif
+		tmp = tmp->next;
+	} while (tmp != *q);
 }
 
 static inline void __sleep_on(struct wait_queue **p, int state)
@@ -234,12 +241,9 @@ static inline void __sleep_on(struct wait_queue **p, int state)
 		return;
 	if (current == task[0])
 		panic("task[0] trying to sleep");
-	if (current->wait.next)
-		printk("__sleep_on: wait->next exists\n");
-	save_flags(flags);
-	cli();
 	current->state = state;
 	add_wait_queue(p,&current->wait);
+	save_flags(flags);
 	sti();
 	schedule();
 	remove_wait_queue(p,&current->wait);

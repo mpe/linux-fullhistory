@@ -23,7 +23,7 @@
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
-#include <asm/memory.h>
+#include <linux/string.h>
 #include <linux/socket.h>
 #include <netinet/in.h>
 #include <linux/fcntl.h>
@@ -2101,7 +2101,31 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   struct tcp_header *th;
   volatile struct sock *sk;
 
+  if (!skb)
+    {
+      printk ("tcp.c: tcp_rcv skb = NULL\n");
+      return (0);
+    }
+#if 0 /* it's ok for protocol to be NULL */
+  if (!protocol)
+    {
+      printk ("tcp.c: tcp_rcv protocol = NULL\n");
+      return (0);
+    }
+
+  if (!opt) /* it's ok for opt to be NULL */
+    {
+      printk ("tcp.c: tcp_rcv opt = NULL\n");
+    }
+#endif
+  if (!dev)
+    {
+      printk ("tcp.c: tcp_rcv dev = NULL\n");
+      return (0);
+    }
+
   th = skb->h.th;
+
   /* find the socket. */
   sk=get_sock(&tcp_prot, net16(th->dest), saddr, th->source, daddr);
   PRINTK("<<\n");
@@ -2168,6 +2192,20 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 }
        sk->inuse = 1;
        sti();
+     }
+  else
+    {
+      if (!sk)
+	{
+	  printk ("tcp.c: tcp_rcv bug sk=NULL redo = 1\n");
+	  return (0);
+	}
+    }
+
+  if (!sk->prot)
+    {
+      printk ("tcp.c: tcp_rcv sk->prot = NULL \n");
+      return (0);
     }
 
   /* charge the memory to the socket. */
@@ -2214,6 +2252,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	   release_sock(sk);
 	   return (0);
 	}
+
       if (th->rst)
 	{
 	  sk->err = ECONNRESET;
@@ -2226,8 +2265,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	  release_sock(sk);
 	  return (0);
 	}
-
-      if (opt->security != 0 || opt->compartment != 0 || th->syn)
+      if (opt && (opt->security != 0 || opt->compartment != 0 || th->syn))
 	{
 	   sk->err = ECONNRESET;
 	   sk->state = TCP_CLOSE;

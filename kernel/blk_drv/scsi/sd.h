@@ -42,7 +42,7 @@ typedef struct {
 	
 extern Scsi_Disk rscsi_disks[MAX_SD];
 
-void sd_init(void);
+unsigned long sd_init(unsigned long, unsigned long);
 
 #define HOST (rscsi_disks[DEVICE_NR(CURRENT->dev)].device->host_no)
 #define ID (rscsi_disks[DEVICE_NR(CURRENT->dev)].device->id)

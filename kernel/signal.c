@@ -66,26 +66,6 @@ int sys_sigsuspend(int restart, unsigned long old_mask, unsigned long set)
     return -ERESTARTNOINTR;		/* handle the signal, and come back */
 }
 
-static inline void save_old(char * from,char * to)
-{
-	int i;
-
-	verify_area(to, sizeof(struct sigaction));
-	for (i=0 ; i< sizeof(struct sigaction) ; i++) {
-		put_fs_byte(*from,to);
-		from++;
-		to++;
-	}
-}
-
-static inline void get_new(char * from,char * to)
-{
-	int i;
-
-	for (i=0 ; i< sizeof(struct sigaction) ; i++)
-		*(to++) = get_fs_byte(from++);
-}
-
 int sys_signal(int signum, long handler, long restorer)
 {
 	struct sigaction tmp;
@@ -104,19 +84,24 @@ int sys_signal(int signum, long handler, long restorer)
 int sys_sigaction(int signum, const struct sigaction * action,
 	struct sigaction * oldaction)
 {
-	struct sigaction tmp;
+	struct sigaction new, *p;
 
 	if (signum<1 || signum>32 || signum==SIGKILL || signum==SIGSTOP)
 		return -EINVAL;
-	tmp = current->sigaction[signum-1];
-	get_new((char *) action,
-		(char *) (signum-1+current->sigaction));
-	if (oldaction)
-		save_old((char *) &tmp,(char *) oldaction);
-	if (current->sigaction[signum-1].sa_flags & SA_NOMASK)
-		current->sigaction[signum-1].sa_mask = 0;
-	else
-		current->sigaction[signum-1].sa_mask |= (1<<(signum-1));
+	p = signum - 1 + current->sigaction;
+	if (action) {
+		memcpy_fromfs(&new, action, sizeof(struct sigaction));
+		if (new.sa_flags & SA_NOMASK)
+			new.sa_mask = 0;
+		else
+			new.sa_mask |= (1<<(signum-1));
+	}
+	if (oldaction) {
+		verify_area(oldaction, sizeof(struct sigaction));
+		memcpy_tofs(oldaction, p, sizeof(struct sigaction));
+	}
+	if (action)
+		*p = new;
 	return 0;
 }
 

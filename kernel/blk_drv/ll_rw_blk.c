@@ -12,6 +12,7 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/config.h>
+#include <linux/locks.h>
 
 #include <asm/system.h>
 
@@ -55,23 +56,6 @@ struct blk_dev_struct blk_dev[NR_BLK_DEV] = {
  * if (!blk_size[MAJOR]) then no minor size checking is done.
  */
 int * blk_size[NR_BLK_DEV] = { NULL, NULL, };
-
-static inline void lock_buffer(struct buffer_head * bh)
-{
-	cli();
-	while (bh->b_lock)
-		sleep_on(&bh->b_wait);
-	bh->b_lock=1;
-	sti();
-}
-
-static inline void unlock_buffer(struct buffer_head * bh)
-{
-	if (!bh->b_lock)
-		printk("ll_rw_block.c: buffer not locked\n\r");
-	bh->b_lock = 0;
-	wake_up(&bh->b_wait);
-}
 
 /* RO fail safe mechanism */
 
@@ -251,7 +235,7 @@ repeat:
 	req->nr_sectors = 8;
 	req->current_nr_sectors = 8;
 	req->buffer = buffer;
-	req->waiting = &current->wait;
+	req->waiting = current;
 	req->bh = NULL;
 	req->next = NULL;
 	current->state = TASK_UNINTERRUPTIBLE;
@@ -282,24 +266,6 @@ void ll_rw_block(int rw, struct buffer_head * bh)
 		return;
 	}
 	make_request(major,rw,bh);
-}
-
-long blk_dev_init(long mem_start, long mem_end)
-{
-	int i;
-
-	for (i=0 ; i<NR_REQUEST ; i++) {
-		request[i].dev = -1;
-		request[i].next = NULL;
-	}
-	memset(ro_bits,0,sizeof(ro_bits));
-#ifdef CONFIG_BLK_DEV_HD
-	mem_start = hd_init(mem_start,mem_end);
-#endif
-#ifdef RAMDISK
-	mem_start += rd_init(mem_start, RAMDISK*1024);
-#endif
-	return mem_start;
 }
 
 void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
@@ -341,11 +307,29 @@ repeat:
 		req->nr_sectors = 2;
 		req->current_nr_sectors = 2;
 		req->buffer = buf;
-		req->waiting = &current->wait;
+		req->waiting = current;
 		req->bh = NULL;
 		req->next = NULL;
 		current->state = TASK_UNINTERRUPTIBLE;
 		add_request(major+blk_dev,req);
 		schedule();
 	}
+}
+
+long blk_dev_init(long mem_start, long mem_end)
+{
+	int i;
+
+	for (i=0 ; i<NR_REQUEST ; i++) {
+		request[i].dev = -1;
+		request[i].next = NULL;
+	}
+	memset(ro_bits,0,sizeof(ro_bits));
+#ifdef CONFIG_BLK_DEV_HD
+	mem_start = hd_init(mem_start,mem_end);
+#endif
+#ifdef RAMDISK
+	mem_start += rd_init(mem_start, RAMDISK*1024);
+#endif
+	return mem_start;
 }

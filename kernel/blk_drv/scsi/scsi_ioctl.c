@@ -70,15 +70,16 @@ static void scsi_ioctl_done (int host, int result)
 	the_result[host] = result;	
 }	
 
+/* This function will operate certain scsi functions which require no
+   data transfer */
 static int ioctl_internal_command(Scsi_Device *dev, char ** command)
 {
-	char * buf;
 	char * cmd;
 	int temp, host;
+	char sense_buffer[256];
 
 	host = dev->host_no;
 	cmd = command[0];
-	buf = command[1];
 
 	do {
 		cli();
@@ -93,16 +94,16 @@ static int ioctl_internal_command(Scsi_Device *dev, char ** command)
 		}
 	} while (1);
 
-	scsi_do_cmd(host,  dev->id,  cmd,  buf,  255,
+	scsi_do_cmd(host,  dev->id,  cmd,  NULL,  0,
 			scsi_ioctl_done,  MAX_TIMEOUT,
-			buf,  MAX_RETRIES);
+			sense_buffer,  MAX_RETRIES);
 
 	while (the_result[host] == -1)
 		/* nothing */;
 	temp = the_result[host];
 
 	if(driver_byte(the_result[host]) != 0)
-	  switch(buf[2] & 0xf) {
+	  switch(sense_buffer[2] & 0xf) {
 	  case ILLEGAL_REQUEST:
 	    printk("SCSI device (ioctl) reports ILLEGAL REQUEST.\n");
 	    break;
@@ -125,9 +126,9 @@ static int ioctl_internal_command(Scsi_Device *dev, char ** command)
 		   dev->lun,
 		   the_result);
 	    printk("\tSense class %x, sense error %x, extended sense %x\n",
-		   sense_class(buf[0]),
-		   sense_error(buf[0]),
-		   buf[2] & 0xf);
+		   sense_class(sense_buffer[0]),
+		   sense_error(sense_buffer[0]),
+		   sense_buffer[2] & 0xf);
 
 	  };
 
@@ -226,7 +227,6 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 			scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
 			scsi_cmd[4] = SCSI_REMOVAL_PREVENT;
 			command[0] = scsi_cmd;
-			command[1] = (char *) arg;
 			return ioctl_internal_command((Scsi_Device *) dev, command);
 			break;
 		case SCSI_IOCTL_DOORUNLOCK:
@@ -236,7 +236,6 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 			scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
 			scsi_cmd[4] = SCSI_REMOVAL_ALLOW;
 			command[0] = scsi_cmd;
-			command[1] = (char *) arg;
 			return ioctl_internal_command((Scsi_Device *) dev, command);
 		case SCSI_IOCTL_TEST_UNIT_READY:
 		        scsi_cmd[0] = TEST_UNIT_READY;
@@ -244,7 +243,6 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 			scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
 			scsi_cmd[4] = 0;
 			command[0] = scsi_cmd;
-			command[1] = (char *) arg;
 			return ioctl_internal_command((Scsi_Device *) dev, command);
 			break;
 		default :			

@@ -135,5 +135,5 @@ int aha1542_reset(void);
 		aha1542_queuecommand,			\
 		aha1542_abort,				\
 		aha1542_reset,				\
-		1, 7, 0}
+		1, 7, 0, 1}
 #endif

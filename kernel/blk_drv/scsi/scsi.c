@@ -1105,7 +1105,7 @@ static void update_timeout(void)
 */
 
 static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};		
-void scsi_dev_init (void)
+unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end)
 	{
 	int i;
 #ifdef FOO_ON_YOU
@@ -1129,16 +1129,17 @@ void scsi_dev_init (void)
         scan_scsis();           /* scan for scsi devices */
 
 #ifdef CONFIG_BLK_DEV_SD
-	sd_init();              /* init scsi disks */
+	memory_start = sd_init(memory_start, memory_end);              /* init scsi disks */
 #endif
 
 #ifdef CONFIG_BLK_DEV_ST
-        st_init();              /* init scsi tapes */
+        memory_start = st_init(memory_start, memory_end);              /* init scsi tapes */
 #endif
 
 #ifdef CONFIG_BLK_DEV_SR
-	sr_init();
+	memory_start = sr_init(memory_start, memory_end);
 #endif
+	return memory_start;
 	}
 #endif
 

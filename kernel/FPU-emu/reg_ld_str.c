@@ -372,7 +372,7 @@ int reg_store_extended(void)
 	      REG tmp;
 	      EXCEPTION(EX_Denormal);  /* De-normal */
 	      reg_move(st0_ptr, &tmp);
-	      tmp.exp += EXTENDED_Emin + 64;  /* largest exp to be 62 */
+	      tmp.exp += -EXTENDED_Emin + 64;  /* largest exp to be 63 */
 	      round_to_int(&tmp);
 	      e = 0;
 	      put_fs_long(tmp.sigl, (unsigned long *) d);
@@ -516,7 +516,7 @@ int reg_store_double(void)
 	      REG tmp;
 	      EXCEPTION(EX_Denormal);
 	      reg_move(st0_ptr, &tmp);
-	      tmp.exp += DOUBLE_Emin + 52;  /* largest exp to be 51 */
+	      tmp.exp += -DOUBLE_Emin + 52;  /* largest exp to be 51 */
 	      round_to_int(&tmp);
 	      l[0] = tmp.sigl;
 	      l[1] = tmp.sigh;
@@ -645,7 +645,7 @@ int reg_store_single(void)
 	      REG tmp;
 	      EXCEPTION(EX_Denormal);
 	      reg_move(st0_ptr, &tmp);
-	      tmp.exp += SINGLE_Emin + 53;  /* largest exp to be 52 */
+	      tmp.exp += -SINGLE_Emin + 23;  /* largest exp to be 22 */
 	      round_to_int(&tmp);
 	      templ = tmp.sigl;
 	    }
@@ -1142,7 +1142,7 @@ void fsave(void)
 		{
 		  /* Make a de-normal */
 		  reg_move(rp, &tmp);
-		  tmp.exp += EXTENDED_Emin + 64;  /* largest exp to be 62 */
+		  tmp.exp += -EXTENDED_Emin + 64;  /* largest exp to be 63 */
 		  round_to_int(&tmp);
 		  e = 0;
 		  put_fs_long(tmp.sigl, (unsigned long *) (d+i*10+2));

@@ -29,7 +29,6 @@
 #include <linux/mm.h>
 #include <linux/socket.h>
 #include <netinet/in.h>
-#include <asm/memory.h>
 #include "dev.h"
 #include "eth.h"
 #include "timer.h"

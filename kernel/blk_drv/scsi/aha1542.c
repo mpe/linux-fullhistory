@@ -433,11 +433,6 @@ int aha1542_detect(int hostnum)
 	return 0;
     }
  
-#ifndef MAX_16M
-  printk("Adaptec 1542 disabled for kernels without memory limiting to 16MB.\n");
-  return 0;
-#endif
-
     /* Set the Bus on/off-times as not to ruin floppy performens */
     {
 	static unchar oncmd[] = {CMD_BUSON_TIME, 5};

@@ -253,7 +253,7 @@ extern int scsi_abort (int host, int code);
 	Initializes all SCSI devices.  This scans all scsi busses.
 */
 
-extern void scsi_dev_init (void);
+extern unsigned long scsi_dev_init (unsigned long, unsigned long);
 
 /*
 	You guesed it.  This sends a command to the selected SCSI host 

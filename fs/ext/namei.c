@@ -169,7 +169,7 @@ int ext_lookup(struct inode * dir,const char * name, int len,
 	}
 	ino = de->inode;
 	brelse(bh);
-	if (!(*result = iget(dir->i_dev,ino))) {
+	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
 		return -EACCES;
 	}
@@ -307,7 +307,7 @@ int ext_create(struct inode * dir,const char * name, int len, int mode,
 	*result = NULL;
 	if (!dir)
 		return -ENOENT;
-	inode = ext_new_inode(dir->i_dev);
+	inode = ext_new_inode(dir->i_sb);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -345,7 +345,7 @@ int ext_mknod(struct inode * dir, const char * name, int len, int mode, int rdev
 		iput(dir);
 		return -EEXIST;
 	}
-	inode = ext_new_inode(dir->i_dev);
+	inode = ext_new_inode(dir->i_sb);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -403,7 +403,7 @@ int ext_mkdir(struct inode * dir, const char * name, int len, int mode)
 		iput(dir);
 		return -EEXIST;
 	}
-	inode = ext_new_inode(dir->i_dev);
+	inode = ext_new_inode(dir->i_sb);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -509,9 +509,9 @@ static int empty_dir(struct inode * inode)
 static inline void ext_merge_entries (struct ext_dir_entry * de,
 	struct ext_dir_entry * pde, struct ext_dir_entry * nde)
 {
-	if (! nde->inode)
+	if (nde && !nde->inode)
 		de->rec_len += nde->rec_len;
-	if (! pde->inode)
+	if (pde && !pde->inode)
 		pde->rec_len += de->rec_len;
 }
 
@@ -528,7 +528,7 @@ int ext_rmdir(struct inode * dir, const char * name, int len)
 	if (!bh)
 		goto end_rmdir;
 	retval = -EPERM;
-	if (!(inode = iget(dir->i_dev, de->inode)))
+	if (!(inode = iget(dir->i_sb, de->inode)))
 		goto end_rmdir;
 	if ((dir->i_mode & S_ISVTX) && current->euid &&
 	   inode->i_uid != current->euid)
@@ -580,7 +580,7 @@ int ext_unlink(struct inode * dir, const char * name, int len)
 	bh = ext_find_entry(dir,name,len,&de,&pde,&nde);
 	if (!bh)
 		goto end_unlink;
-	if (!(inode = iget(dir->i_dev, de->inode)))
+	if (!(inode = iget(dir->i_sb, de->inode)))
 		goto end_unlink;
 	retval = -EPERM;
 	if ((dir->i_mode & S_ISVTX) && !suser() &&
@@ -617,7 +617,7 @@ int ext_symlink(struct inode * dir, const char * name, int len, const char * sym
 	int i;
 	char c;
 
-	if (!(inode = ext_new_inode(dir->i_dev))) {
+	if (!(inode = ext_new_inode(dir->i_sb))) {
 		iput(dir);
 		return -ENOSPC;
 	}
@@ -673,6 +673,11 @@ int ext_link(struct inode * oldinode, struct inode * dir, const char * name, int
 		iput(oldinode);
 		iput(dir);
 		return -EPERM;
+	}
+	if (oldinode->i_nlink > 32000) {
+		iput(oldinode);
+		iput(dir);
+		return -EMLINK;
 	}
 	bh = ext_find_entry(dir,name,len,&de,NULL,NULL);
 	if (bh) {
@@ -768,7 +773,7 @@ start_up:
 	retval = -ENOENT;
 	if (!old_bh)
 		goto end_rename;
-	old_inode = iget(old_dir->i_dev, old_de->inode);
+	old_inode = iget(old_dir->i_sb, old_de->inode);
 	if (!old_inode)
 		goto end_rename;
 	retval = -EPERM;
@@ -778,7 +783,7 @@ start_up:
 		goto end_rename;
 	new_bh = ext_find_entry(new_dir,new_name,new_len,&new_de,NULL,NULL);
 	if (new_bh) {
-		new_inode = iget(new_dir->i_dev, new_de->inode);
+		new_inode = iget(new_dir->i_sb, new_de->inode);
 		if (!new_inode) {
 			brelse(new_bh);
 			new_bh = NULL;

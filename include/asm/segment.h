@@ -37,7 +37,7 @@ extern inline void put_fs_long(unsigned long val,unsigned long * addr)
 __asm__ ("movl %0,%%fs:%1"::"r" (val),"m" (*addr));
 }
 
-extern inline void memcpy_tofs(void * to, void * from, unsigned long n)
+extern inline void memcpy_tofs(void * to, const void * from, unsigned long n)
 {
 __asm__("cld\n\t"
 	"push %%es\n\t"
@@ -56,7 +56,7 @@ __asm__("cld\n\t"
 	:"cx","di","si");
 }
 
-extern inline void memcpy_fromfs(void * to, void * from, unsigned long n)
+extern inline void memcpy_fromfs(void * to, const void * from, unsigned long n)
 {
 __asm__("cld\n\t"
 	"testb $1,%%cl\n\t"

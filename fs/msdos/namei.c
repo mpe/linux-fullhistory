@@ -131,7 +131,7 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 		ino = msdos_parent_ino(dir,0);
 		iput(dir);
 		if (ino < 0) return ino;
-		if (!(*result = iget(dir->i_dev,ino))) return -EACCES;
+		if (!(*result = iget(dir->i_sb,ino))) return -EACCES;
 		return 0;
 	}
 	if ((res = msdos_find(dir,name,len,&bh,&de,&ino)) < 0) {
@@ -140,7 +140,7 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 	}
 	if (bh) brelse(bh);
 /* printk("lookup: ino=%d\r\n",ino); */
-	if (!(*result = iget(dir->i_dev,ino))) {
+	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
 		return -EACCES;
 	}
@@ -152,7 +152,7 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 	while (MSDOS_I(*result)->i_old) {
 		next = MSDOS_I(*result)->i_old;
 		iput(*result);
-		if (!(*result = iget(next->i_dev,next->i_ino)))
+		if (!(*result = iget(next->i_sb,next->i_ino)))
 			panic("msdos_lookup: Can't happen");
 	}
 	iput(dir);
@@ -180,7 +180,7 @@ static int msdos_create_entry(struct inode *dir,char *name,int is_dir,
 	date_unix2dos(CURRENT_TIME,&de->time,&de->date);
 	de->size = 0;
 	bh->b_dirt = 1;
-	if (*result = iget(dir->i_dev,ino)) msdos_read_inode(*result);
+	if (*result = iget(dir->i_sb,ino)) msdos_read_inode(*result);
 	brelse(bh);
 	if (!*result) return -EIO;
 	(*result)->i_mtime = (*result)->i_atime = (*result)->i_ctime =
@@ -308,7 +308,7 @@ int msdos_rmdir(struct inode *dir,const char *name,int len)
 	    get_fs_byte(name+1) == '.'))) goto rmdir_done;
 	if ((res = msdos_find(dir,name,len,&bh,&de,&ino)) < 0) goto rmdir_done;
 	res = -ENOENT;
-	if (!(inode = iget(dir->i_dev,ino))) goto rmdir_done;
+	if (!(inode = iget(dir->i_sb,ino))) goto rmdir_done;
 	res = -ENOTDIR;
 	if (!S_ISDIR(inode->i_mode)) goto rmdir_done;
 	res = -EBUSY;
@@ -351,7 +351,7 @@ int msdos_unlink(struct inode *dir,const char *name,int len)
 	inode = NULL;
 	if ((res = msdos_find(dir,name,len,&bh,&de,&ino)) < 0)
 		goto unlink_done;
-	if (!(inode = iget(dir->i_dev,ino))) {
+	if (!(inode = iget(dir->i_sb,ino))) {
 		res = -ENOENT;
 		goto unlink_done;
 	}
@@ -389,7 +389,7 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,
 		return -ENOENT;
 	}
 	if (exists) {
-		if (!(new_inode = iget(new_dir->i_dev,new_ino))) {
+		if (!(new_inode = iget(new_dir->i_sb,new_ino))) {
 			brelse(new_bh);
 			return -EIO;
 		}
@@ -409,7 +409,7 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,
 	memcpy(old_de->name,new_name,MSDOS_NAME);
 	old_bh->b_dirt = 1;
 	if (MSDOS_SB(old_dir->i_sb)->conversion == 'a') /* update binary info */
-		if (old_inode = iget(old_dir->i_dev,old_ino)) {
+		if (old_inode = iget(old_dir->i_sb,old_ino)) {
 			msdos_read_inode(old_inode);
 			iput(old_inode);
 		}
@@ -429,20 +429,20 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 
 	if (old_dir->i_dev != new_dir->i_dev) return -EINVAL;
 	if (old_ino == new_dir->i_ino) return -EINVAL;
-	if (!(walk = iget(new_dir->i_dev,new_dir->i_ino))) return -EIO;
+	if (!(walk = iget(new_dir->i_sb,new_dir->i_ino))) return -EIO;
 	while (walk->i_ino != MSDOS_ROOT_INO) {
 		ino = msdos_parent_ino(walk,1);
 		iput(walk);
 		if (ino < 0) return ino;
 		if (ino == old_ino) return -EINVAL;
-		if (!(walk = iget(new_dir->i_dev,ino))) return -EIO;
+		if (!(walk = iget(new_dir->i_sb,ino))) return -EIO;
 	}
 	iput(walk);
 	if ((error = msdos_scan(new_dir,NULL,&free_bh,&free_de,&free_ino)) < 0)
 	    return error;
 	exists = msdos_scan(new_dir,new_name,&new_bh,&new_de,&new_ino)
 	    >= 0;
-	if (!(old_inode = iget(old_dir->i_dev,old_ino))) {
+	if (!(old_inode = iget(old_dir->i_sb,old_ino))) {
 		brelse(free_bh);
 		if (exists) brelse(new_bh);
 		return -EIO;
@@ -455,7 +455,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 	}
 	new_inode = NULL; /* to make GCC happy */
 	if (exists) {
-		if (!(new_inode = iget(new_dir->i_dev,new_ino))) {
+		if (!(new_inode = iget(new_dir->i_sb,new_ino))) {
 			iput(old_inode);
 			brelse(new_bh);
 			return -EIO;
@@ -474,7 +474,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 	}
 	memcpy(free_de,old_de,sizeof(struct msdos_dir_entry));
 	memcpy(free_de->name,new_name,MSDOS_NAME);
-	if (!(free_inode = iget(new_dir->i_dev,free_ino))) {
+	if (!(free_inode = iget(new_dir->i_sb,free_ino))) {
 		free_de->name[0] = DELETED_FLAG;
 /*  Don't mark free_bh as dirty. Both states are supposed to be equivalent. */
 		brelse(free_bh);
@@ -502,7 +502,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 	if (S_ISDIR(old_inode->i_mode)) {
 		if ((error = msdos_scan(old_inode,MSDOS_DOTDOT,&dotdot_bh,
 		    &dotdot_de,&dotdot_ino)) < 0) goto rename_done;
-		if (!(dotdot_inode = iget(old_inode->i_dev,dotdot_ino))) {
+		if (!(dotdot_inode = iget(old_inode->i_sb,dotdot_ino))) {
 			brelse(dotdot_bh);
 			error = -EIO;
 			goto rename_done;

@@ -45,7 +45,7 @@ KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
 # KEYBOARD = -DKBD_SG_LATIN1 -DKBDFLAGS=0x9F
 # KEYBOARD = -DKBD_SF -DKBDFLAGS=0
 # KEYBOARD = -DKBD_SF_LATIN1 -DKBDFLAGS=0x9F
-# KEYBOARD = -DKDB_NO
+# KEYBOARD = -DKBD_NO -DKBDFLAGS=0
 
 #
 # comment this line if you don't want the emulation-code
@@ -127,7 +127,7 @@ linuxsubdirs: dummy
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.98.pl2-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.98.pl3-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
@@ -170,10 +170,10 @@ boot/setup: boot/setup.s
 	$(AS86) -o boot/setup.o boot/setup.s
 	$(LD86) -s -o boot/setup boot/setup.o
 
-boot/setup.s:	boot/setup.S include/linux/config.h
+boot/setup.s:	boot/setup.S include/linux/config.h Makefile
 	$(CPP) -traditional $(SVGA_MODE) boot/setup.S -o boot/setup.s
 
-boot/bootsect.s:	boot/bootsect.S include/linux/config.h
+boot/bootsect.s: boot/bootsect.S include/linux/config.h
 	$(CPP) -traditional boot/bootsect.S -o boot/bootsect.s
 
 boot/bootsect:	boot/bootsect.s

@@ -24,6 +24,11 @@
 #define DEF_SETUPSEG	0x9020
 #define DEF_SYSSIZE	0x7000
 
+/* internal svga startup constants */
+#define NORMAL_VGA	0xffff		/* 80x25 mode */
+#define EXTENDED_VGA	0xfffe		/* 80x50 mode */
+#define ASK_VGA		0xfffd		/* ask for it at bootup */
+
 /*
  * The root-device is no longer hard-coded. You can change the default
  * root-device by changing the line ROOT_DEV = XXX in boot/bootsect.s

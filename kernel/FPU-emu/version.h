@@ -8,5 +8,5 @@
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
-#define FPU_VERSION "wm-FPU-emu version ALPHA 0.5"
+#define FPU_VERSION "wm-FPU-emu version ALPHA 0.61"
 

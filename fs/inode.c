@@ -12,28 +12,74 @@
 
 #include <asm/system.h>
 
-struct inode inode_table[NR_INODE]={{0,},};
+static struct inode inode_table[NR_INODE];
+
+void inode_init(void)
+{
+	memset(inode_table,0,sizeof(inode_table));	
+}
+
+int fs_may_mount(dev_t dev)
+{
+	struct inode * inode;
+
+	for (inode = inode_table+0 ; inode < inode_table+NR_INODE ; inode++) {
+		if (inode->i_dev != dev)
+			continue;
+		if (inode->i_count || inode->i_dirt || inode->i_lock)
+			return 0;
+		inode->i_dev = 0;
+	}
+	return 1;
+}
+
+int fs_may_umount(dev_t dev, struct inode * mount_root)
+{
+	struct inode * inode;
+
+	for (inode = inode_table+0 ; inode < inode_table+NR_INODE ; inode++)
+		if (inode->i_dev==dev && inode->i_count)
+			if (inode == mount_root && inode->i_count == 1)
+				continue;
+			else
+				return 0;
+	return 1;
+}
+
+/*
+ * The "new" scheduling primitives (new as of 0.97 or so) allow this to
+ * be done without disabling interrupts (other than in the actual queue
+ * updating things: only a couple of 386 instructions). This should be
+ * much better for interrupt latency.
+ */
+static void __wait_on_inode(struct inode * inode)
+{
+	add_wait_queue(&inode->i_wait,&current->wait);
+repeat:
+	current->state = TASK_UNINTERRUPTIBLE;
+	if (inode->i_lock) {
+		schedule();
+		goto repeat;
+	}
+	remove_wait_queue(&inode->i_wait,&current->wait);
+	current->state = TASK_RUNNING;
+}
 
 static inline void wait_on_inode(struct inode * inode)
 {
-	cli();
-	while (inode->i_lock)
-		sleep_on(&inode->i_wait);
-	sti();
+	if (inode->i_lock)
+		__wait_on_inode(inode);
 }
 
 static inline void lock_inode(struct inode * inode)
 {
-	cli();
-	while (inode->i_lock)
-		sleep_on(&inode->i_wait);
-	inode->i_lock=1;
-	sti();
+	wait_on_inode(inode);
+	inode->i_lock = 1;
 }
 
 static inline void unlock_inode(struct inode * inode)
 {
-	inode->i_lock=0;
+	inode->i_lock = 0;
 	wake_up(&inode->i_wait);
 }
 
@@ -41,8 +87,8 @@ static void write_inode(struct inode * inode)
 {
 	if (!inode->i_dirt)
 		return;
-	inode->i_dirt = 0;
 	lock_inode(inode);
+	inode->i_dirt = 0;
 	if (inode->i_dev && inode->i_sb &&
 	    inode->i_sb->s_op && inode->i_sb->s_op->write_inode)
 		inode->i_sb->s_op->write_inode(inode);
@@ -74,7 +120,7 @@ int bmap(struct inode * inode, int block)
 	return 0;
 }
 
-void invalidate_inodes(int dev)
+void invalidate_inodes(dev_t dev)
 {
 	int i;
 	struct inode * inode;
@@ -92,7 +138,7 @@ void invalidate_inodes(int dev)
 	}
 }
 
-void sync_inodes(void)
+void sync_inodes(dev_t dev)
 {
 	int i;
 	struct inode * inode;
@@ -134,11 +180,10 @@ repeat:
 		inode->i_count--;
 		return;
 	}
-	if (!inode->i_nlink) {
-		if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->put_inode) {
-			inode->i_sb->s_op->put_inode(inode);
+	if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->put_inode) {
+		inode->i_sb->s_op->put_inode(inode);
+		if (!inode->i_nlink)
 			return;
-		}
 	}
 	if (inode->i_dirt) {
 		write_inode(inode);	/* we can sleep - so do again */
@@ -201,21 +246,21 @@ struct inode * get_pipe_inode(void)
 	return inode;
 }
 
-struct inode * iget(int dev,int nr)
+struct inode * iget(struct super_block * sb,int nr)
 {
 	struct inode * inode, * empty;
 
-	if (!dev)
-		panic("iget with dev==0");
+	if (!sb)
+		panic("iget with sb==NULL");
 	empty = get_empty_inode();
 	inode = inode_table;
 	while (inode < NR_INODE+inode_table) {
-		if (inode->i_dev != dev || inode->i_ino != nr) {
+		if (inode->i_sb != sb || inode->i_ino != nr) {
 			inode++;
 			continue;
 		}
 		wait_on_inode(inode);
-		if (inode->i_dev != dev || inode->i_ino != nr) {
+		if (inode->i_sb != sb || inode->i_ino != nr) {
 			inode = inode_table;
 			continue;
 		}
@@ -247,14 +292,10 @@ struct inode * iget(int dev,int nr)
 	if (!empty)
 		return (NULL);
 	inode = empty;
-	if (!(inode->i_sb = get_super(dev))) {
-		printk("iget: gouldn't get super-block\n\t");
-		iput(inode);
-		return NULL;
-	}
-	inode->i_dev = dev;
+	inode->i_sb = sb;
+	inode->i_dev = sb->s_dev;
 	inode->i_ino = nr;
-	inode->i_flags = inode->i_sb->s_flags;
+	inode->i_flags = sb->s_flags;
 	read_inode(inode);
 	return inode;
 }

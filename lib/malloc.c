@@ -55,6 +55,8 @@
 
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/string.h>
+
 #include <asm/system.h>
 
 struct bucket_desc {	/* 16 bytes */
@@ -142,6 +144,7 @@ void *malloc(unsigned int len)
 		printk("malloc called with impossibly large argument (%d)\n", len);
 		return NULL;
 	}
+	len = bdir->size;
 	/*
 	 * Now we search for a bucket descriptor which has free space
 	 */
@@ -165,7 +168,7 @@ void *malloc(unsigned int len)
 		bdesc = free_bucket_desc;
 		free_bucket_desc = bdesc->next;
 		bdesc->refcnt = 0;
-		bdesc->bucket_size = bdir->size;
+		bdesc->bucket_size = len;
 		bdesc->page = bdesc->freeptr =
 		  (void *) cp = get_free_page(GFP_ATOMIC);
 		if (!cp) {
@@ -173,9 +176,9 @@ void *malloc(unsigned int len)
 			return NULL;
 		}
 		/* Set up the chain of free objects */
-		for (i=PAGE_SIZE/bdir->size; i > 1; i--) {
-			*((char **) cp) = cp + bdir->size;
-			cp += bdir->size;
+		for (i=PAGE_SIZE/len; i > 1; i--) {
+			*((char **) cp) = cp + len;
+			cp += len;
 		}
 		*((char **) cp) = 0;
 		bdesc->next = bdir->chain; /* OK, link it in! */
@@ -185,6 +188,7 @@ void *malloc(unsigned int len)
 	bdesc->freeptr = *((void **) retval);
 	bdesc->refcnt++;
 	sti();	/* OK, we're safe again */
+	memset(retval, 0, len);
 	return retval;
 }
 

@@ -282,7 +282,7 @@ int msdos_scan(struct inode *dir,char *name,struct buffer_head **res_bh,
 		}
 		else if (!de->name[0] || ((unsigned char *) (de->name))[0] ==
 			    DELETED_FLAG) {
-				if (!(inode = iget(dir->i_dev,*ino))) break;
+				if (!(inode = iget(dir->i_sb,*ino))) break;
 				if (!MSDOS_I(inode)->i_busy) {
 					iput(inode);
 					break;

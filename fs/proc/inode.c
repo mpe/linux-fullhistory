@@ -10,12 +10,15 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/stat.h>
+#include <linux/locks.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
 
 void proc_put_inode(struct inode *inode)
 {
+	if (inode->i_nlink)
+		return;
 	inode->i_size = 0;
 }
 
@@ -23,7 +26,7 @@ void proc_put_super(struct super_block *sb)
 {
 	lock_super(sb);
 	sb->s_dev = 0;
-	free_super(sb);
+	unlock_super(sb);
 }
 
 static struct super_operations proc_sops = { 
@@ -37,16 +40,13 @@ static struct super_operations proc_sops = {
 
 struct super_block *proc_read_super(struct super_block *s,void *data)
 {
-	int dev=s->s_dev;
-
 	lock_super(s);
 	s->s_blocksize = 1024;
 	s->s_magic = PROC_SUPER_MAGIC;
-	s->s_dev = dev;
 	s->s_op = &proc_sops;
-	free_super(s);
-	if (!(s->s_mounted = iget(dev,PROC_ROOT_INO))) {
-		s->s_dev=0;
+	unlock_super(s);
+	if (!(s->s_mounted = iget(s,PROC_ROOT_INO))) {
+		s->s_dev = 0;
 		printk("get root inode failed\n");
 		return NULL;
 	}

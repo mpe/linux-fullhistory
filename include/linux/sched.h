@@ -336,18 +336,31 @@ __asm__("movw %%dx,%0\n\t" \
 #define set_base(ldt,base) _set_base( ((char *)&(ldt)) , base )
 #define set_limit(ldt,limit) _set_limit( ((char *)&(ldt)) , (limit-1)>>12 )
 
+/*
+ * The wait-queues are circular lists, and you have to be *very* sure
+ * to keep them correct. Use only these two functions to add/remove
+ * entries in the queues.
+ */
 extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
 {
 	unsigned long flags;
-	struct wait_queue * tmp;
 
+#ifdef DEBUG
+	if (wait->next) {
+		unsigned long pc;
+		__asm__ __volatile__("call 1f\n"
+			"1:\tpopl %0":"=r" (pc));
+		printk("add_wait_queue (%08x): wait->next = %08x\n",pc,wait->next);
+	}
+#endif
 	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
-	wait->next = *p;
-	tmp = wait;
-	while (tmp->next)
-		if ((tmp = tmp->next)->next == *p)
-			break;
-	*p = tmp->next = wait;
+	if (!*p) {
+		wait->next = wait;
+		*p = wait;
+	} else {
+		wait->next = (*p)->next;
+		(*p)->next = wait;
+	}
 	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
 }
 
@@ -357,14 +370,14 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 	struct wait_queue * tmp;
 
 	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
-	if (*p == wait)
-		if ((*p = wait->next) == wait)
-			*p = NULL;
-	tmp = wait;
-	while (tmp && tmp->next != wait)
-		tmp = tmp->next;
-	if (tmp)
+	if ((*p == wait) && ((*p = wait->next) == wait)) {
+		*p = NULL;
+	} else {
+		tmp = wait;
+		while (tmp->next != wait)
+			tmp = tmp->next;
 		tmp->next = wait->next;
+	}
 	wait->next = NULL;
 	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
 }
@@ -377,6 +390,7 @@ extern inline void select_wait(struct wait_queue ** wait_address, select_table *
 		return;
 	entry->wait_address = wait_address;
 	entry->wait.task = current;
+	entry->wait.next = NULL;
 	add_wait_queue(wait_address,&entry->wait);
 	p->nr++;
 }

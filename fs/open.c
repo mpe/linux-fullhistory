@@ -419,6 +419,28 @@ int sys_close(unsigned int fd)
 }
 
 /*
+ * This routine is used by vhangup.  It send's sigkill to everything
+ * waiting on a particular wait_queue.  It assumes root privledges.
+ * We don't want to destroy the wait queue here, because the caller
+ * should call wake_up immediately after calling kill_wait.
+ */
+static void kill_wait(struct wait_queue **q, int sig)
+{
+	struct wait_queue *next;
+	struct wait_queue *tmp;
+	struct task_struct *p;
+
+	if (!q || !(next = *q))
+		return;
+	do { 
+		tmp = next;
+		next = tmp->next;
+		if (p = tmp->task)
+			send_sig (sig, p , 1);
+	} while (next && next != *q);
+}
+
+/*
  * This routine looks through all the process's and closes any
  * references to the current processes tty.  To avoid problems with
  * process sleeping on an inode which has already been iput, anyprocess
@@ -430,10 +452,11 @@ int sys_close(unsigned int fd)
  */
 int sys_vhangup(void)
 {
-	int i,j;
+	int j;
+	struct task_struct ** process;
 	struct file *filep;
+	struct inode *inode;
 	struct tty_struct *tty;
-	extern void kill_wait (struct wait_queue **q, int signal);
 	extern int kill_pg (int pgrp, int sig, int priv);
 
 	if (!suser())
@@ -444,33 +467,34 @@ int sys_vhangup(void)
 	if (current->tty < 0)
 		return 0;
 
-	for (i = 0; i < NR_TASKS; i++) {
-		if (task[i] == NULL)
-			continue;
+	for (process = task + 0; process < task + NR_TASKS; process++) {
 		for (j = 0; j < NR_OPEN; j++) {
-			filep = task[i]->filp[j];
-			if (!filep)
+			if (!*process)
+				break;
+			if (!(filep = (*process)->filp[j]))
 				continue;
-	 		if (!S_ISCHR(filep->f_inode->i_mode))
+			if (!(inode = filep->f_inode))
 				continue;
-			if ((MAJOR(filep->f_inode->i_rdev) == 5 ||
-			     MAJOR(filep->f_inode->i_rdev) == 4 ) &&
+	 		if (!S_ISCHR(inode->i_mode))
+				continue;
+			if ((MAJOR(inode->i_rdev) == 5 ||
+			     MAJOR(inode->i_rdev) == 4 ) &&
 			    (MAJOR(filep->f_rdev) == 4 &&
 			     MINOR(filep->f_rdev) == MINOR (current->tty))) {
 		  /* so now we have found something to close.  We
 		     need to kill every process waiting on the
 		     inode. */
-				task[i]->filp[j] = NULL;
-				kill_wait (&filep->f_inode->i_wait, SIGKILL);
+				(*process)->filp[j] = NULL;
+				kill_wait (&inode->i_wait, SIGKILL);
 
 		  /* now make sure they are awake before we close the
 		     file. */
 
-				wake_up (&filep->f_inode->i_wait);
+				wake_up (&inode->i_wait);
 
 		  /* finally close the file. */
 
-				current->close_on_exec &= ~(1<<j);
+				(*process)->close_on_exec &= ~(1<<j);
 				close_fp (filep);
 			}
 		}
@@ -478,15 +502,17 @@ int sys_vhangup(void)
 	   But we can't touch current->tty until after the
 	   loop is complete. */
 
-		if (task[i]->tty == current->tty && task[i] != current) {
-			task[i]->tty = -1;
+		if (*process && (*process)->tty == current->tty && *process != current) {
+			(*process)->tty = -1;
 		}
 	}
    /* need to do tty->session = 0 */
 	tty = TTY_TABLE(MINOR(current->tty));
-	tty->session = 0;
-	tty->pgrp = -1;
-	current->tty = -1;
+	if (tty) {
+		tty->session = 0;
+		tty->pgrp = -1;
+		current->tty = -1;
+	}
 	return 0;
 }
 

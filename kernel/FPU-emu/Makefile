@@ -46,30 +46,6 @@ dep:
 proto:
 	cproto -e -DMAKING_PROTO *.c >fpu_proto.h
 
-tar:
-	echo "List of source files for wm-FPU-emu" > MANIFEST
-	echo "---- -- ------ ----- --- ----------" >> MANIFEST
-	ls -l Makefile *.c *.S *.h >> MANIFEST
-	( cd ../../..; \
-	pwd; \
-	tar cvf wm-FPU-emu.t \
-		linux/kernel/wm-FPU-emu/*.c \
-		linux/kernel/wm-FPU-emu/*.S \
-		linux/kernel/wm-FPU-emu/*.h \
-		linux/kernel/wm-FPU-emu/Makefile \
-		linux/kernel/wm-FPU-emu/MANIFEST \
-		linux/kernel/wm-FPU-emu/README \
-		linux/kernel/wm-FPU-emu/Checklist \
-		linux/kernel/wm-FPU-emu/Limitations \
-		linux/kernel/wm-FPU-emu/Internals \
-		linux/kernel/wm-FPU-emu/Performance \
-		linux/kernel/wm-FPU-emu/COPYING \
-		linux/include/linux/sched.h \
-		linux/include/linux/user.h \
-		; \
-	compress wm-FPU-emu.t \
-	)
-
 dummy:
 
 ### Dependencies:

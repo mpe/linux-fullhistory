@@ -133,5 +133,5 @@ int wd7000fasst_reset(void);
 		wd7000fasst_queuecommand,		\
 		wd7000fasst_abort,				\
 		wd7000fasst_reset,				\
-		1, 7, 0}
+		1, 7, 0, 1}
 #endif

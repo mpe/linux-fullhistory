@@ -39,6 +39,7 @@
 #define WRITEA 3	/* "write-ahead" - silly, but somewhat useful */
 
 extern void buffer_init(void);
+extern void inode_init(void);
 
 #define MAJOR(a) (((unsigned)(a))>>8)
 #define MINOR(a) ((a)&0xff)
@@ -90,7 +91,7 @@ struct buffer_head {
 	char * b_data;			/* pointer to data block (1024 bytes) */
 	unsigned long b_size;		/* block size */
 	unsigned long b_blocknr;	/* block number */
-	unsigned short b_dev;		/* device (0 = free) */
+	dev_t b_dev;			/* device (0 = free) */
 	unsigned short b_count;		/* users using this block */
 	unsigned char b_uptodate;
 	unsigned char b_dirt;		/* 0-clean,1-dirty */
@@ -145,14 +146,14 @@ struct inode {
 };
 
 struct file {
-	unsigned short f_mode;
+	mode_t f_mode;
+	dev_t f_rdev;			/* needed for /dev/tty */
+	off_t f_pos;
 	unsigned short f_flags;
 	unsigned short f_count;
 	unsigned short f_reada;
-	unsigned short f_rdev;		/* needed for /dev/tty */
 	struct inode * f_inode;
 	struct file_operations * f_op;
-	off_t f_pos;
 };
 
 struct file_lock {
@@ -170,7 +171,7 @@ struct file_lock {
 #include <linux/msdos_fs_sb.h>
 
 struct super_block {
-	unsigned short s_dev;
+	dev_t s_dev;
 	unsigned long s_blocksize;
 	unsigned char s_lock;
 	unsigned char s_rd_only;
@@ -237,7 +238,9 @@ extern struct file_operations * blkdev_fops[MAX_BLKDEV];
 
 extern struct file_system_type *get_fs_type(char *name);
 
-extern struct inode inode_table[NR_INODE];
+extern int fs_may_mount(dev_t dev);
+extern int fs_may_umount(dev_t dev, struct inode * mount_root);
+
 extern struct file file_table[NR_FILE];
 extern struct super_block super_block[NR_SUPER];
 
@@ -247,44 +250,41 @@ extern int shrink_buffers(unsigned int priority);
 extern int nr_buffers;
 extern int nr_buffer_heads;
 
-extern void check_disk_change(int dev);
-extern void invalidate_inodes(int dev);
-extern void invalidate_buffers(int dev);
+extern void check_disk_change(dev_t dev);
+extern void invalidate_inodes(dev_t dev);
+extern void invalidate_buffers(dev_t dev);
 extern int floppy_change(struct buffer_head * first_block);
 extern int ticks_to_floppy_on(unsigned int dev);
 extern void floppy_on(unsigned int dev);
 extern void floppy_off(unsigned int dev);
-extern void sync_inodes(void);
-extern void wait_on(struct inode * inode);
+extern void sync_inodes(dev_t dev);
+extern void sync_dev(dev_t dev);
+extern void sync_supers(dev_t dev);
 extern int bmap(struct inode * inode,int block);
 extern int namei(const char * pathname, struct inode ** res_inode);
 extern int lnamei(const char * pathname, struct inode ** res_inode);
 extern int permission(struct inode * inode,int mask);
 extern int open_namei(const char * pathname, int flag, int mode,
 	struct inode ** res_inode, struct inode * base);
-extern int do_mknod(const char * filename, int mode, int dev);
+extern int do_mknod(const char * filename, int mode, dev_t dev);
 extern void iput(struct inode * inode);
-extern struct inode * iget(int dev,int nr);
+extern struct inode * iget(struct super_block * sb,int nr);
 extern struct inode * get_empty_inode(void);
 extern struct inode * get_pipe_inode(void);
 extern struct file * get_empty_filp(void);
-extern struct buffer_head * get_hash_table(int dev, int block, int size);
-extern struct buffer_head * getblk(int dev, int block, int size);
+extern struct buffer_head * get_hash_table(dev_t dev, int block, int size);
+extern struct buffer_head * getblk(dev_t dev, int block, int size);
 extern void ll_rw_block(int rw, struct buffer_head * bh);
 extern void ll_rw_page(int rw, int dev, int nr, char * buffer);
 extern void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buffer);
 extern void brelse(struct buffer_head * buf);
-extern struct buffer_head * bread(int dev, int block, int size);
-extern void bread_page(unsigned long addr,int dev,int b[4]);
-extern struct buffer_head * breada(int dev,int block,...);
-extern int sync_dev(int dev);
-extern struct super_block * get_super(int dev);
-extern void put_super(int dev);
-extern int ROOT_DEV;
+extern struct buffer_head * bread(dev_t dev, int block, int size);
+extern void bread_page(unsigned long addr,dev_t dev,int b[4]);
+extern struct buffer_head * breada(dev_t dev,int block,...);
+extern void put_super(dev_t dev);
+extern dev_t ROOT_DEV;
 
 extern void mount_root(void);
-extern void lock_super(struct super_block * sb);
-extern void free_super(struct super_block * sb);
 
 extern int char_read(struct inode *, struct file *, char *, int);
 extern int block_read(struct inode *, struct file *, char *, int);

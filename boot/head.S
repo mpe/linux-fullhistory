@@ -12,9 +12,11 @@
  * the page directory.
  */
 .text
-.globl _idt,_gdt,_swapper_pg_dir,_tmp_floppy_area,_floppy_track_buffer
+.globl _idt,_gdt,
+.globl _swapper_pg_dir,_pg0
 .globl _empty_bad_page
 .globl _empty_bad_page_table
+.globl _tmp_floppy_area,_floppy_track_buffer
 
 /*
  * swapper_pg_dir is the main page directory, address 0x00001000
@@ -125,7 +127,7 @@ _swapper_pg_dir:
  * tables are set up later depending on memory size.
  */
 .org 0x2000
-pg0:
+_pg0:
 
 .org 0x3000
 _empty_bad_page:
@@ -232,10 +234,10 @@ setup_paging:
 	movl $_swapper_pg_dir,%edi	/* swapper_pg_dir is at 0x1000 */
 	cld;rep;stosl
 /* Identity-map the kernel in low 4MB memory for ease of transition */
-	movl $pg0+7,_swapper_pg_dir		/* set present bit/user r/w */
+	movl $_pg0+7,_swapper_pg_dir		/* set present bit/user r/w */
 /* But the real place is at 0xC0000000 */
-	movl $pg0+7,_swapper_pg_dir+3072	/* set present bit/user r/w */
-	movl $pg0+4092,%edi
+	movl $_pg0+7,_swapper_pg_dir+3072	/* set present bit/user r/w */
+	movl $_pg0+4092,%edi
 	movl $0x03ff007,%eax		/*  4Mb - 4096 + 7 (r/w user,p) */
 	std
 1:	stosl			/* fill the page backwards - more efficient :-) */

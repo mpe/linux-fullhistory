@@ -27,12 +27,11 @@ void reg_mul(REG *a, REG *b, REG *dest)
       reg_u_mul(a, b, dest);
       dest->exp += - EXP_BIAS + 1;
       dest->sign = (a->sign ^ b->sign);
+      dest->tag = TW_Valid;
       if ( dest->exp <= EXP_UNDER )
 	{ arith_underflow(st0_ptr); }
       else if ( dest->exp >= EXP_OVER )
 	{ arith_overflow(st0_ptr); }
-      else
-	dest->tag = TW_Valid;
       return;
     }
   else if ((a->tag <= TW_Zero) && (b->tag <= TW_Zero))

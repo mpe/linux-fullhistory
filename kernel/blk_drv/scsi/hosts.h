@@ -143,6 +143,11 @@ typedef struct
 	*/
 
 	unsigned present:1;	
+	/*
+	  true if this host adapter uses unchecked DMA onto an ISA bus.
+	*/
+	unsigned unchecked_isa_dma:1;
+
 	} Scsi_Host;
 
 /*

@@ -16,11 +16,11 @@
 #include <linux/kernel.h>
 #include <linux/stat.h>
 #include <linux/errno.h>
+#include <linux/locks.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
 
-int sync_dev(int dev);
 void wait_for_keypress(void);
 void fcntl_init_locks(void);
 
@@ -32,7 +32,7 @@ __res; })
 
 struct super_block super_block[NR_SUPER];
 /* this is initialized in init/main.c */
-int ROOT_DEV = 0;
+dev_t ROOT_DEV = 0;
 
 /* Move into include file later */
 
@@ -56,30 +56,37 @@ struct file_system_type *get_fs_type(char *name)
 	return(NULL);
 }
 
-void lock_super(struct super_block * sb)
+void __wait_on_super(struct super_block * sb)
 {
-	cli();
-	while (sb->s_lock)
-		sleep_on(&(sb->s_wait));
-	sb->s_lock = 1;
-	sti();
+	add_wait_queue(&sb->s_wait,&current->wait);
+repeat:
+	current->state = TASK_UNINTERRUPTIBLE;
+	if (sb->s_lock) {
+		schedule();
+		goto repeat;
+	}
+	remove_wait_queue(&sb->s_wait,&current->wait);
+	current->state = TASK_RUNNING;
 }
 
-void free_super(struct super_block * sb)
+void sync_supers(dev_t dev)
 {
-	sb->s_lock = 0;
-	wake_up(&(sb->s_wait));
+	struct super_block * sb;
+
+	for (sb = super_block + 0 ; sb < super_block + NR_SUPER ; sb++) {
+		if (!sb->s_dev)
+			continue;
+		wait_on_super(sb);
+		if (!sb->s_dev || !sb->s_dirt)
+			continue;
+		if (dev && (dev != sb->s_dev))
+			continue;
+		if (sb->s_op && sb->s_op->write_super)
+			sb->s_op->write_super(sb);
+	}
 }
 
-void wait_on_super(struct super_block * sb)
-{
-	cli();
-	while (sb->s_lock)
-		sleep_on(&(sb->s_wait));
-	sti();
-}
-
-struct super_block * get_super(int dev)
+static struct super_block * get_super(dev_t dev)
 {
 	struct super_block * s;
 
@@ -97,7 +104,7 @@ struct super_block * get_super(int dev)
 	return NULL;
 }
 
-void put_super(int dev)
+void put_super(dev_t dev)
 {
 	struct super_block * sb;
 
@@ -115,7 +122,7 @@ void put_super(int dev)
 		sb->s_op->put_super(sb);
 }
 
-static struct super_block * read_super(int dev,char *name,int flags,void *data)
+static struct super_block * read_super(dev_t dev,char *name,int flags,void *data)
 {
 	struct super_block * s;
 	struct file_system_type *type;
@@ -148,10 +155,9 @@ static struct super_block * read_super(int dev,char *name,int flags,void *data)
 	return s;
 }
 
-static int do_umount(int dev)
+static int do_umount(dev_t dev)
 {
 	struct super_block * sb;
-	struct inode * inode;
 
 	if (dev==ROOT_DEV)
 		return -EBUSY;
@@ -159,12 +165,8 @@ static int do_umount(int dev)
 		return -ENOENT;
 	if (!sb->s_covered->i_mount)
 		printk("Mounted inode has i_mount=0\n");
-	for (inode = inode_table+0 ; inode < inode_table+NR_INODE ; inode++)
-		if (inode->i_dev==dev && inode->i_count)
-			if (inode == sb->s_mounted && inode->i_count == 1)
-				continue;
-			else
-				return -EBUSY;
+	if (!fs_may_umount(dev, sb->s_mounted))
+		return -EBUSY;
 	sb->s_covered->i_mount=0;
 	iput(sb->s_covered);
 	sb->s_covered = NULL;
@@ -172,7 +174,7 @@ static int do_umount(int dev)
 	sb->s_mounted = NULL;
 	if (sb->s_op && sb->s_op->write_super && sb->s_dirt)
 		sb->s_op->write_super (sb);
-        put_super(dev);
+	put_super(dev);
 	return 0;
 }
 
@@ -191,13 +193,21 @@ int sys_umount(char * dev_name)
 		iput(inode);
 		return -ENOTBLK;
 	}
+	if (IS_NODEV(inode)) {
+		iput(inode);
+		return -EACCES;
+	}
+	if (MAJOR(dev) >= MAX_BLKDEV) {
+		iput(inode);
+		return -ENODEV;
+	}
 	retval = do_umount(dev);
-	if (!retval && MAJOR(dev) < MAX_BLKDEV &&
-	    blkdev_fops[MAJOR(dev)]->release)
+	if (!retval && blkdev_fops[MAJOR(dev)] && blkdev_fops[MAJOR(dev)]->release)
 		blkdev_fops[MAJOR(dev)]->release(inode,NULL);
 	iput(inode);
-	if (retval) return retval;
-        sync_dev(dev);
+	if (retval)
+		return retval;
+	sync_dev(dev);
 	return 0;
 }
 
@@ -210,9 +220,9 @@ int sys_umount(char * dev_name)
  * We also have to flush all inode-data for this device, as the new mount
  * might need new info.
  */
-static int do_mount(int dev, const char * dir, char * type, int flags, void * data)
+static int do_mount(dev_t dev, const char * dir, char * type, int flags, void * data)
 {
-	struct inode * inode, * dir_i;
+	struct inode * dir_i;
 	struct super_block * sb;
 	int error;
 
@@ -227,14 +237,9 @@ static int do_mount(int dev, const char * dir, char * type, int flags, void * da
 		iput(dir_i);
 		return -EPERM;
 	}
-	for (inode = inode_table+0 ; inode < inode_table+NR_INODE ; inode++) {
-		if (inode->i_dev != dev)
-			continue;
-		if (inode->i_count || inode->i_dirt || inode->i_lock) {
-			iput(dir_i);
-			return -EBUSY;
-		}
-		inode->i_dev = 0;
+	if (!fs_may_mount(dev)) {
+		iput(dir_i);
+		return -EBUSY;
 	}
 	sb = read_super(dev,type,flags,data);
 	if (!sb || sb->s_covered) {
@@ -263,6 +268,7 @@ int sys_mount(char * dev_name, char * dir_name, char * type,
 	unsigned long new_flags, void *data)
 {
 	struct inode * inode;
+	struct file_operations * fops;
 	int dev;
 	int retval;
 	char tmp[100],*t;
@@ -272,19 +278,27 @@ int sys_mount(char * dev_name, char * dir_name, char * type,
 
 	if (!suser())
 		return -EPERM;
-	retval = namei(dev_name,&inode);
-	if (retval)
+	if (retval = namei(dev_name,&inode))
 		return retval;
 	dev = inode->i_rdev;
-	if (!S_ISBLK(inode->i_mode))
-		retval = -EPERM;
-	else if (IS_NODEV(inode))
-		retval = -EACCES;
-	if (!retval && blkdev_fops[MAJOR(dev)]->open)
-		retval = blkdev_fops[MAJOR(dev)]->open(inode,NULL);
-	if (retval) {
+	if (!S_ISBLK(inode->i_mode)) {
 		iput(inode);
-		return retval;
+		return -ENOTBLK;
+	}
+	if (IS_NODEV(inode)) {
+		iput(inode);
+		return -EACCES;
+	}
+	if (MAJOR(dev) >= MAX_BLKDEV) {
+		iput(inode);
+		return -ENODEV;
+	}
+	fops = blkdev_fops[MAJOR(dev)];
+	if (fops && fops->open) {
+		if (retval = fops->open(inode,NULL)) {
+			iput(inode);
+			return retval;
+		}
 	}
 	if ((new_flags & 0xffff0000) == 0xC0ED0000) {
 		flags = new_flags & 0xffff;
@@ -306,8 +320,8 @@ int sys_mount(char * dev_name, char * dir_name, char * type,
 		t = "minix";
 	retval = do_mount(dev,dir_name,t,flags,(void *) page);
 	free_page(page);
-	if (retval && blkdev_fops[MAJOR(dev)]->release)
-		blkdev_fops[MAJOR(dev)]->release(inode,NULL);
+	if (retval && fops && fops->release)
+		fops->release(inode,NULL);
 	iput(inode);
 	return retval;
 }

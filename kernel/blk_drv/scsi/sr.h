@@ -32,7 +32,7 @@ typedef struct
 	
 extern Scsi_CD scsi_CDs[MAX_SR];
 
-void sr_init(void);
+unsigned long sr_init(unsigned long, unsigned long);
 
 #define SR_HOST (scsi_CDs[DEVICE_NR(CURRENT->dev)].device->host_no)
 #define SR_ID (scsi_CDs[DEVICE_NR(CURRENT->dev)].device->id)

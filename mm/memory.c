@@ -739,6 +739,10 @@ void do_no_page(unsigned long error_code, unsigned long address,
 			nr[i] = bmap(inode,block);
 		bread_page(page,inode->i_dev,nr);
 	}
+	if (share_page(tsk,inode,address)) {
+		free_page(page);
+		return;
+	}
 	i = address + PAGE_SIZE - tsk->end_data;
 	if (i > PAGE_SIZE-1)
 		i = 0;

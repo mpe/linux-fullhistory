@@ -17,6 +17,7 @@
 #include <linux/tty.h>
 #include <linux/head.h>
 #include <linux/unistd.h>
+#include <linux/string.h>
 
 extern unsigned long * prof_buffer;
 extern unsigned long prof_len;
@@ -64,21 +65,12 @@ extern void floppy_init(void);
 extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
 extern long kernel_mktime(struct mktime * time);
+extern unsigned long simple_strtoul(const char *cp,char **endp,unsigned int
+    base);
 
 #ifdef CONFIG_SCSI
-extern void scsi_dev_init(void);
+extern unsigned long scsi_dev_init(unsigned long, unsigned long);
 #endif
-
-static int sprintf(char * str, const char *fmt, ...)
-{
-	va_list args;
-	int i;
-
-	va_start(args, fmt);
-	i = vsprintf(str, fmt, args);
-	va_end(args);
-	return i;
-}
 
 /*
  * This is set up by the setup-routine at boot-time
@@ -88,6 +80,16 @@ static int sprintf(char * str, const char *fmt, ...)
 #define SCREEN_INFO (*(struct screen_info *)0x90000)
 #define ORIG_ROOT_DEV (*(unsigned short *)0x901FC)
 #define AUX_DEVICE_INFO (*(unsigned char *)0x901FF)
+
+/*
+ * Boot command-line arguments
+ */
+#define MAX_INIT_ARGS 8
+#define MAX_INIT_ENVS 8
+#define CL_MAGIC_ADDR (*(unsigned short *) 0x90020)
+#define CL_MAGIC 0xa33f
+#define CL_BASE_ADDR ((char *) 0x90000)
+#define CL_OFFSET (*(unsigned short *) 0x90022)
 
 /*
  * Yeah, yeah, it's ugly, but I cannot find how to do this correctly
@@ -130,21 +132,70 @@ static unsigned long memory_start = 0; /* After mem_init, stores the */
 static unsigned long memory_end = 0;
 static unsigned long low_memory_start = 0;
 
-static char term[32];
-
-static char * argv_init[] = { "/bin/init", NULL };
-static char * envp_init[] = { "HOME=/", NULL, NULL };
+static char * argv_init[MAX_INIT_ARGS+2] = { "/bin/init", NULL, };
+static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=console", NULL, };
 
 static char * argv_rc[] = { "/bin/sh", NULL };
-static char * envp_rc[] = { "HOME=/", NULL ,NULL };
+static char * envp_rc[] = { "HOME=/", "TERM=console", NULL };
 
 static char * argv[] = { "-/bin/sh",NULL };
-static char * envp[] = { "HOME=/usr/root", NULL, NULL };
+static char * envp[] = { "HOME=/usr/root", "TERM=console", NULL };
 
 struct drive_info { char dummy[32]; } drive_info;
 struct screen_info screen_info;
 
 unsigned char aux_device_present;
+
+static char command_line[80] = { 0, };
+
+/*
+ * This is a simple kernel command line parsing function: it parses
+ * the command line, and fills in the arguments/environment to init
+ * as appropriate. Any cmd-line option is taken to be an environment
+ * variable if it contains the character '='.
+ *
+ *
+ * This routine also checks for options meant for the kernel - currently
+ * only the "root=XXXX" option is recognized. These options are not given
+ * to init - they are for internal kernel use only.
+ */
+static void parse_options(char *line)
+{
+	char *next;
+	int args, envs;
+
+	if (!*line)
+		return;
+	args = 0;
+	envs = 1;	/* TERM is set to 'console' by default */
+	next = line;
+	while (line = next) {
+		if (next = strchr(line,' '))
+			*next++ = 0;
+		/*
+		 * check for kernel options first..
+		 */
+		if (!strncmp(line,"root=",5)) {
+			ROOT_DEV = simple_strtoul(line+5,NULL,16);
+			continue;
+		}
+		/*
+		 * Then check if it's an environment variable or
+		 * an option.
+		 */	
+		if (strchr(line,'=')) {
+			if (envs >= MAX_INIT_ENVS)
+				break;
+			envp_init[++envs] = line;
+		} else {
+			if (args >= MAX_INIT_ARGS)
+				break;
+			argv_init[++args] = line;
+		}
+	}
+	argv_init[args+1] = NULL;
+	envp_init[envs+1] = NULL;
+}
 
 void start_kernel(void)
 {
@@ -156,10 +207,6 @@ void start_kernel(void)
  	drive_info = DRIVE_INFO;
  	screen_info = SCREEN_INFO;
 	aux_device_present = AUX_DEVICE_INFO;
-	sprintf(term, "TERM=con%dx%d", ORIG_VIDEO_COLS, ORIG_VIDEO_LINES);
-	envp[1] = term;	
-	envp_rc[1] = term;
-	envp_init[1] = term;
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 	memory_end &= 0xfffff000;
 #ifdef MAX_16M
@@ -171,9 +218,12 @@ void start_kernel(void)
 	low_memory_start += 0xfff;
 	low_memory_start &= 0xfffff000;
 	memory_start = paging_init(memory_start,memory_end);
+	if (CL_MAGIC_ADDR == CL_MAGIC)
+		strcpy(command_line,CL_BASE_ADDR+CL_OFFSET);
 	trap_init();
 	init_IRQ();
 	sched_init();
+	parse_options(command_line);
 #ifdef PROFILE_SHIFT
 	prof_buffer = (unsigned long *) memory_start;
 	prof_len = (unsigned long) &end;
@@ -182,15 +232,15 @@ void start_kernel(void)
 #endif
 	memory_start = chr_dev_init(memory_start,memory_end);
 	memory_start = blk_dev_init(memory_start,memory_end);
+#ifdef CONFIG_SCSI
+	memory_start = scsi_dev_init(memory_start,memory_end);
+#endif
 	mem_init(low_memory_start,memory_start,memory_end);
 	buffer_init();
+	inode_init();
 	time_init();
 	floppy_init();
 	sock_init();
-	sti();
-#ifdef CONFIG_SCSI
-	scsi_dev_init();
-#endif
 	sti();
 	move_to_user_mode();
 	if (!fork())		/* we count on this going ok */

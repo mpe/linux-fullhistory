@@ -50,7 +50,7 @@ repeat:
 		*p = 0;
 		inode->i_dirt = 1;
 		brelse(bh);
-		minix_free_block(inode->i_dev,tmp);
+		minix_free_block(inode->i_sb,tmp);
 	}
 	return retry;
 }
@@ -99,7 +99,7 @@ repeat:
 		*ind = 0;
 		ind_bh->b_dirt = 1;
 		brelse(bh);
-		minix_free_block(inode->i_dev,tmp);
+		minix_free_block(inode->i_sb,tmp);
 	}
 	ind = (unsigned short *) ind_bh->b_data;
 	for (i = 0; i < 512; i++)
@@ -111,7 +111,7 @@ repeat:
 		else {
 			tmp = *p;
 			*p = 0;
-			minix_free_block(inode->i_dev,tmp);
+			minix_free_block(inode->i_sb,tmp);
 		}
 	brelse(ind_bh);
 	return retry;
@@ -158,7 +158,7 @@ repeat:
 			tmp = *p;
 			*p = 0;
 			inode->i_dirt = 1;
-			minix_free_block(inode->i_dev,tmp);
+			minix_free_block(inode->i_sb,tmp);
 		}
 	brelse(dind_bh);
 	return retry;

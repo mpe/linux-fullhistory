@@ -10,22 +10,15 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/stat.h>
+#include <linux/locks.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
 
-int sync_dev(int dev);
-
-static inline void wait_on_buffer(struct buffer_head * bh)
-{
-	cli();
-	while (bh->b_lock)
-		sleep_on(&bh->b_wait);
-	sti();
-}
-
 void minix_put_inode(struct inode *inode)
 {
+	if (inode->i_nlink)
+		return;
 	inode->i_size = 0;
 	minix_truncate(inode);
 	minix_free_inode(inode);
@@ -41,7 +34,7 @@ void minix_put_super(struct super_block *sb)
 		brelse(sb->u.minix_sb.s_imap[i]);
 	for(i = 0 ; i < MINIX_Z_MAP_SLOTS ; i++)
 		brelse(sb->u.minix_sb.s_zmap[i]);
-	free_super(sb);
+	unlock_super(sb);
 	return;
 }
 
@@ -63,7 +56,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data)
 	lock_super(s);
 	if (!(bh = bread(dev,1,BLOCK_SIZE))) {
 		s->s_dev=0;
-		free_super(s);
+		unlock_super(s);
 		printk("bread failed\n");
 		return NULL;
 	}
@@ -80,7 +73,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data)
 	brelse(bh);
 	if (s->s_magic != MINIX_SUPER_MAGIC) {
 		s->s_dev = 0;
-		free_super(s);
+		unlock_super(s);
 		printk("magic match failed\n");
 		return NULL;
 	}
@@ -105,25 +98,26 @@ struct super_block *minix_read_super(struct super_block *s,void *data)
 		for(i=0;i<MINIX_Z_MAP_SLOTS;i++)
 			brelse(s->u.minix_sb.s_zmap[i]);
 		s->s_dev=0;
-		free_super(s);
+		unlock_super(s);
 		printk("block failed\n");
 		return NULL;
 	}
 	s->u.minix_sb.s_imap[0]->b_data[0] |= 1;
 	s->u.minix_sb.s_zmap[0]->b_data[0] |= 1;
-	free_super(s);
 	/* set up enough so that it can read an inode */
 	s->s_dev = dev;
 	s->s_op = &minix_sops;
-	if (!(s->s_mounted = iget(dev,MINIX_ROOT_INO))) {
-		s->s_dev=0;
+	s->s_mounted = iget(s,MINIX_ROOT_INO);
+	unlock_super(s);
+	if (!s->s_mounted) {
+		s->s_dev = 0;
 		printk("get root inode failed\n");
 		return NULL;
 	}
 	return s;
 }
 
-void minix_statfs (struct super_block *sb, struct statfs *buf)
+void minix_statfs(struct super_block *sb, struct statfs *buf)
 {
 	long tmp;
 
@@ -200,12 +194,12 @@ repeat:
 	}
 	if (!create)
 		return NULL;
-	tmp = minix_new_block(inode->i_dev);
+	tmp = minix_new_block(inode->i_sb);
 	if (!tmp)
 		return NULL;
 	result = getblk(inode->i_dev, tmp, BLOCK_SIZE);
 	if (*p) {
-		minix_free_block(inode->i_dev,tmp);
+		minix_free_block(inode->i_sb,tmp);
 		brelse(result);
 		goto repeat;
 	}
@@ -215,7 +209,8 @@ repeat:
 	return result;
 }
 
-static struct buffer_head * block_getblk(struct buffer_head * bh, int nr, int create)
+static struct buffer_head * block_getblk(struct inode * inode, 
+	struct buffer_head * bh, int nr, int create)
 {
 	int tmp;
 	unsigned short *p;
@@ -247,14 +242,14 @@ repeat:
 		brelse(bh);
 		return NULL;
 	}
-	tmp = minix_new_block(bh->b_dev);
+	tmp = minix_new_block(inode->i_sb);
 	if (!tmp) {
 		brelse(bh);
 		return NULL;
 	}
 	result = getblk(bh->b_dev, tmp, BLOCK_SIZE);
 	if (*p) {
-		minix_free_block(bh->b_dev,tmp);
+		minix_free_block(inode->i_sb,tmp);
 		brelse(result);
 		goto repeat;
 	}
@@ -281,12 +276,12 @@ struct buffer_head * minix_getblk(struct inode * inode, int block, int create)
 	block -= 7;
 	if (block < 512) {
 		bh = inode_getblk(inode,7,create);
-		return block_getblk(bh,block,create);
+		return block_getblk(inode, bh, block, create);
 	}
 	block -= 512;
 	bh = inode_getblk(inode,8,create);
-	bh = block_getblk(bh,block>>9,create);
-	return block_getblk(bh,block & 511,create);
+	bh = block_getblk(inode, bh, block>>9, create);
+	return block_getblk(inode, bh, block & 511, create);
 }
 
 struct buffer_head * minix_bread(struct inode * inode, int block, int create)

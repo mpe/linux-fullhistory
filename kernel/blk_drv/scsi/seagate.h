@@ -29,7 +29,7 @@ int seagate_st0x_reset(void);
 #define SEAGATE_ST0X  {"Seagate ST-01/ST-02", seagate_st0x_detect, 	\
 			 seagate_st0x_info, seagate_st0x_command,  	\
 			 seagate_st0x_queue_command, seagate_st0x_abort, \
-			 seagate_st0x_reset, 1, 7, 0}
+			 seagate_st0x_reset, 1, 7, 0, 0}
 #endif
 
 

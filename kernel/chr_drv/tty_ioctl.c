@@ -392,6 +392,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 				redirect = tty;
 			return 0;
 		case FIONBIO:
+			arg = get_fs_long((unsigned long *) arg);
 			if (arg)
 				file->f_flags |= O_NONBLOCK;
 			else

@@ -7,9 +7,7 @@
 /*
  *  'buffer.c' implements the buffer-cache functions. Race-conditions have
  * been avoided by NEVER letting a interrupt change a buffer (except for the
- * data, of course), but instead letting the caller do it. NOTE! As interrupts
- * can wake up a caller, some cli-sti sequences are needed to check for
- * sleep-on-calls. These should be extremely quick, though (I hope).
+ * data, of course), but instead letting the caller do it.
  */
 
 /*
@@ -24,6 +22,7 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/locks.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -46,15 +45,29 @@ static struct wait_queue * buffer_wait = NULL;
 int nr_buffers = 0;
 int nr_buffer_heads = 0;
 
-static inline void wait_on_buffer(struct buffer_head * bh)
+/*
+ * Rewrote the wait-routines to use the "new" wait-queue functionality,
+ * and getting rid of the cli-sti pairs. The wait-queue routines still
+ * need cli-sti, but now it's just a couple of 386 instructions or so.
+ *
+ * Note that the real wait_on_buffer() is an inline function that checks
+ * if 'b_wait' is set before calling this, so that the queues aren't set
+ * up unnecessarily.
+ */
+void __wait_on_buffer(struct buffer_head * bh)
 {
-	cli();
-	while (bh->b_lock)
-		sleep_on(&bh->b_wait);
-	sti();
+	add_wait_queue(&bh->b_wait,&current->wait);
+repeat:
+	current->state = TASK_UNINTERRUPTIBLE;
+	if (bh->b_lock) {
+		schedule();
+		goto repeat;
+	}
+	remove_wait_queue(&bh->b_wait,&current->wait);
+	current->state = TASK_RUNNING;
 }
 
-static void sync_buffers(int dev)
+static void sync_buffers(dev_t dev)
 {
 	int i;
 	struct buffer_head * bh;
@@ -69,35 +82,21 @@ static void sync_buffers(int dev)
 	}
 }
 
+void sync_dev(dev_t dev)
+{
+	sync_buffers(dev);
+	sync_supers(dev);
+	sync_inodes(dev);
+	sync_buffers(dev);
+}
+
 int sys_sync(void)
 {
-	int i;
-
-	for (i=0 ; i<NR_SUPER ; i++)
-		if (super_block[i].s_dev
-		    && super_block[i].s_op 
-		    && super_block[i].s_op->write_super 
-		    && super_block[i].s_dirt)
-			super_block[i].s_op->write_super(&super_block[i]);
-	sync_inodes();		/* write out inodes into buffers */
-	sync_buffers(0);
+	sync_dev(0);
 	return 0;
 }
 
-int sync_dev(int dev)
-{
-	struct super_block * sb;
-
-	if (sb = get_super (dev))
-		if (sb->s_op && sb->s_op->write_super && sb->s_dirt)
-			sb->s_op->write_super (sb);
-	sync_buffers(dev);
-	sync_inodes();
-	sync_buffers(dev);
-	return 0;
-}
-
-void invalidate_buffers(int dev)
+void invalidate_buffers(dev_t dev)
 {
 	int i;
 	struct buffer_head * bh;
@@ -126,7 +125,7 @@ void invalidate_buffers(int dev)
  * and that mount/open needn't know that floppies/whatever are
  * special.
  */
-void check_disk_change(int dev)
+void check_disk_change(dev_t dev)
 {
 	int i;
 	struct buffer_head * bh;
@@ -251,7 +250,7 @@ static inline void insert_into_queues(struct buffer_head * bh)
 		bh->b_next->b_prev = bh;
 }
 
-static struct buffer_head * find_buffer(int dev, int block, int size)
+static struct buffer_head * find_buffer(dev_t dev, int block, int size)
 {		
 	struct buffer_head * tmp;
 
@@ -273,7 +272,7 @@ static struct buffer_head * find_buffer(int dev, int block, int size)
  * will force it bad). This shouldn't really happen currently, but
  * the code is ready.
  */
-struct buffer_head * get_hash_table(int dev, int block, int size)
+struct buffer_head * get_hash_table(dev_t dev, int block, int size)
 {
 	struct buffer_head * bh;
 
@@ -301,7 +300,7 @@ struct buffer_head * get_hash_table(int dev, int block, int size)
  * when the filesystem starts to get full of dirty blocks (I hope).
  */
 #define BADNESS(bh) (((bh)->b_dirt<<1)+(bh)->b_lock)
-struct buffer_head * getblk(int dev, int block, int size)
+struct buffer_head * getblk(dev_t dev, int block, int size)
 {
 	struct buffer_head * bh, * tmp;
 	int buffers;
@@ -377,7 +376,7 @@ void brelse(struct buffer_head * buf)
  * bread() reads a specified block and returns the buffer that contains
  * it. It returns NULL if the block was unreadable.
  */
-struct buffer_head * bread(int dev, int block, int size)
+struct buffer_head * bread(dev_t dev, int block, int size)
 {
 	struct buffer_head * bh;
 
@@ -408,7 +407,7 @@ __asm__("cld\n\t" \
  * all at the same time, not waiting for one to be read, and then another
  * etc.
  */
-void bread_page(unsigned long address,int dev,int b[4])
+void bread_page(unsigned long address, dev_t dev, int b[4])
 {
 	struct buffer_head * bh[4];
 	int i;
@@ -434,7 +433,7 @@ void bread_page(unsigned long address,int dev,int b[4])
  * blocks for reading as well. End the argument list with a negative
  * number.
  */
-struct buffer_head * breada(int dev,int first, ...)
+struct buffer_head * breada(dev_t dev,int first, ...)
 {
 	va_list args;
 	struct buffer_head * bh, *tmp;

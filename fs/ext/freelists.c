@@ -34,6 +34,7 @@
 #include <linux/ext_fs.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/locks.h>
 
 #define clear_block(addr) \
 __asm__("cld\n\t" \
@@ -41,13 +42,12 @@ __asm__("cld\n\t" \
         "stosl" \
         ::"a" (0),"c" (BLOCK_SIZE/4),"D" ((long) (addr)):"cx","di")
 
-void ext_free_block(int dev, int block)
+void ext_free_block(struct super_block * sb, int block)
 {
-	struct super_block * sb;
 	struct buffer_head * bh;
 	struct ext_free_block * efb;
 
-	if (!(sb = get_super(dev)))
+	if (!sb)
 		panic("trying to free block on nonexistent device");
 	lock_super (sb);
 	if (block < sb->u.ext_sb.s_firstdatazone ||
@@ -55,7 +55,7 @@ void ext_free_block(int dev, int block)
 		printk("trying to free block not in datazone\n");
 		return;
 	}
-	bh = get_hash_table(dev, block, sb->s_blocksize);
+	bh = get_hash_table(sb->s_dev, block, sb->s_blocksize);
 	if (bh)
 		bh->b_dirt=0;
 	brelse(bh);
@@ -67,7 +67,7 @@ printk("ext_free_block: block full, skipping to %d\n", block);
 #endif
 		if (sb->u.ext_sb.s_firstfreeblock)
 			brelse (sb->u.ext_sb.s_firstfreeblock);
-		if (!(sb->u.ext_sb.s_firstfreeblock = bread (dev,
+		if (!(sb->u.ext_sb.s_firstfreeblock = bread (sb->s_dev,
 			block, sb->s_blocksize)))
 			panic ("ext_free_block: unable to read block to free\n");
 		efb = (struct ext_free_block *) sb->u.ext_sb.s_firstfreeblock->b_data;
@@ -80,18 +80,17 @@ printk("ext_free_block: block full, skipping to %d\n", block);
 	sb->u.ext_sb.s_freeblockscount ++;
 	sb->s_dirt = 1;
 	sb->u.ext_sb.s_firstfreeblock->b_dirt = 1;
-	free_super (sb);
+	unlock_super (sb);
 	return;
 }
 
-int ext_new_block(int dev)
+int ext_new_block(struct super_block * sb)
 {
 	struct buffer_head * bh;
-	struct super_block * sb;
 	struct ext_free_block * efb;
 	int j;
 
-	if (!(sb = get_super(dev)))
+	if (!sb)
 		panic("trying to get new block from nonexistant device");
 	if (!sb->u.ext_sb.s_firstfreeblock)
 		return 0;
@@ -110,7 +109,7 @@ printk("ext_new_block: block empty, skipping to %d\n", efb->next);
 		if (!sb->u.ext_sb.s_firstfreeblocknumber) {
 			sb->u.ext_sb.s_firstfreeblock = NULL;
 		} else {
-			if (!(sb->u.ext_sb.s_firstfreeblock = bread (dev,
+			if (!(sb->u.ext_sb.s_firstfreeblock = bread (sb->s_dev,
 				sb->u.ext_sb.s_firstfreeblocknumber,
 				sb->s_blocksize)))
 				panic ("ext_new_block: unable to read next free block\n");
@@ -123,7 +122,7 @@ printk("ext_new_block: block empty, skipping to %d\n", efb->next);
 	sb->u.ext_sb.s_freeblockscount --;
 	sb->s_dirt = 1;
 
-	if (!(bh=getblk(dev, j, sb->s_blocksize)))
+	if (!(bh=getblk(sb->s_dev, j, sb->s_blocksize)))
 		panic("new_block: cannot get block");
 	if (bh->b_count != 1)
 		panic("new block: count is != 1");
@@ -134,7 +133,7 @@ printk("ext_new_block: block empty, skipping to %d\n", efb->next);
 #ifdef EXTFS_DEBUG
 printk("ext_new_block: allocating block %d\n", j);
 #endif
-	free_super (sb);
+	unlock_super (sb);
 	return j;
 }
 
@@ -166,7 +165,7 @@ unsigned long ext_count_free_blocks(struct super_block *sb)
 	}
 printk("ext_count_free_blocks: stored = %d, computed = %d\n",
 	sb->u.ext_sb.s_freeblockscount, count);
-	free_super (sb);
+	unlock_super (sb);
 	return count;
 #else
 	return sb->u.ext_sb.s_freeblockscount;
@@ -200,7 +199,7 @@ void ext_free_inode(struct inode * inode)
 	lock_super (inode->i_sb);
 	if (inode->i_ino < 1 || inode->i_ino > inode->i_sb->u.ext_sb.s_ninodes) {
 		printk("free_inode: inode 0 or nonexistent inode\n");
-		free_super (inode->i_sb);
+		unlock_super (inode->i_sb);
 		return;
 	}
 	if (inode->i_sb->u.ext_sb.s_firstfreeinodeblock)
@@ -227,57 +226,54 @@ printk("ext_free_inode: inode full, skipping to %d\n", inode->i_ino);
 	inode->i_sb->u.ext_sb.s_freeinodescount ++;
 	inode->i_sb->s_dirt = 1;
 	inode->i_sb->u.ext_sb.s_firstfreeinodeblock->b_dirt = 1;
-	free_super (inode->i_sb);
+	unlock_super (inode->i_sb);
 	memset(inode,0,sizeof(*inode));
 }
 
-struct inode * ext_new_inode(int dev)
+struct inode * ext_new_inode(struct super_block * sb)
 {
 	struct inode * inode;
 	struct ext_free_inode * efi;
 	unsigned long block;
 	int j;
 
-	if (!(inode=get_empty_inode()))
+	if (!sb || !(inode=get_empty_inode()))
 		return NULL;
-	if (!(inode->i_sb = get_super(dev))) {
-		printk("new_inode: unknown device\n");
-		iput(inode);
-		return NULL;
-	}
-	inode->i_flags = inode->i_sb->s_flags;
-	if (!inode->i_sb->u.ext_sb.s_firstfreeinodeblock)
+	inode->i_sb = sb;
+	inode->i_flags = sb->s_flags;
+	if (!sb->u.ext_sb.s_firstfreeinodeblock)
 		return 0;
-	lock_super (inode->i_sb);
-	efi = ((struct ext_free_inode *) inode->i_sb->u.ext_sb.s_firstfreeinodeblock->b_data) +
-		(inode->i_sb->u.ext_sb.s_firstfreeinodenumber-1)%EXT_INODES_PER_BLOCK;
+	lock_super (sb);
+	efi = ((struct ext_free_inode *) sb->u.ext_sb.s_firstfreeinodeblock->b_data) +
+		(sb->u.ext_sb.s_firstfreeinodenumber-1)%EXT_INODES_PER_BLOCK;
 	if (efi->count) {
 		j = efi->free[--efi->count];
-		inode->i_sb->u.ext_sb.s_firstfreeinodeblock->b_dirt = 1;
+		sb->u.ext_sb.s_firstfreeinodeblock->b_dirt = 1;
 	} else {
 #ifdef EXTFS_DEBUG
 printk("ext_free_inode: inode empty, skipping to %d\n", efi->next);
 #endif
-		j = inode->i_sb->u.ext_sb.s_firstfreeinodenumber;
-		if (efi->next > inode->i_sb->u.ext_sb.s_ninodes) {
+		j = sb->u.ext_sb.s_firstfreeinodenumber;
+		if (efi->next > sb->u.ext_sb.s_ninodes) {
 			printk ("efi->next = %d\n", efi->next);
 			panic ("ext_new_inode: bad inode number in free list\n");
 		}
-		inode->i_sb->u.ext_sb.s_firstfreeinodenumber = efi->next;
+		sb->u.ext_sb.s_firstfreeinodenumber = efi->next;
 		block = 2 + (((unsigned long) efi->next) - 1) / EXT_INODES_PER_BLOCK;
-		brelse (inode->i_sb->u.ext_sb.s_firstfreeinodeblock);
-		if (!inode->i_sb->u.ext_sb.s_firstfreeinodenumber) {
-			inode->i_sb->u.ext_sb.s_firstfreeinodeblock = NULL;
+		brelse (sb->u.ext_sb.s_firstfreeinodeblock);
+		if (!sb->u.ext_sb.s_firstfreeinodenumber) {
+			sb->u.ext_sb.s_firstfreeinodeblock = NULL;
 		} else {
-			if (!(inode->i_sb->u.ext_sb.s_firstfreeinodeblock = bread (dev, block, inode->i_sb->s_blocksize)))
+			if (!(sb->u.ext_sb.s_firstfreeinodeblock =
+			    bread(sb->s_dev, block, sb->s_blocksize)))
 				panic ("ext_new_inode: unable to read next free inode block\n");
 		}
 	}
-	inode->i_sb->u.ext_sb.s_freeinodescount --;
-	inode->i_sb->s_dirt = 1;
+	sb->u.ext_sb.s_freeinodescount --;
+	sb->s_dirt = 1;
 	inode->i_count = 1;
 	inode->i_nlink = 1;
-	inode->i_dev = dev;
+	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->euid;
 	inode->i_gid = current->egid;
 	inode->i_dirt = 1;
@@ -288,7 +284,7 @@ printk("ext_free_inode: inode empty, skipping to %d\n", efi->next);
 #ifdef EXTFS_DEBUG
 printk("ext_new_inode : allocating inode %d\n", inode->i_ino);
 #endif
-	free_super (inode->i_sb);
+	unlock_super (sb);
 	return inode;
 }
 
@@ -328,7 +324,7 @@ unsigned long ext_count_free_inodes(struct super_block *sb)
 	}
 printk("ext_count_free_inodes: stored = %d, computed = %d\n",
 	sb->u.ext_sb.s_freeinodescount, count);
-	free_super (sb);
+	unlock_super (sb);
 	return count;
 #else
 	return sb->u.ext_sb.s_freeinodescount;

@@ -11,6 +11,10 @@
 #include <linux/tty.h>
 #include <linux/mouse.h>
 
+#include <linux/user.h>
+#include <linux/a.out.h>
+#include <linux/string.h>
+
 #include <asm/segment.h>
 #include <asm/io.h>
 
@@ -22,6 +26,51 @@ static int read_ram(struct inode * inode, struct file * file,char * buf, int cou
 static int write_ram(struct inode * inode, struct file * file,char * buf, int count)
 {
 	return -EIO;
+}
+
+static int read_core(struct inode * inode, struct file * file,char * buf, int count)
+{
+	unsigned long p = file->f_pos;
+	int read;
+	int count1;
+	char * pnt;
+	struct user dump;
+
+	memset(&dump, 0, sizeof(struct user));
+	dump.magic = CMAGIC;
+	dump.u_dsize = high_memory >> 12;
+
+	if (count < 0)
+		return -EINVAL;
+	if (p >= high_memory)
+		return 0;
+	if (count > high_memory - p)
+		count = high_memory - p;
+	read = 0;
+
+	if (p < sizeof(struct user) && count > 0) {
+		count1 = count;
+		if (p + count1 > sizeof(struct user))
+			count1 = sizeof(struct user)-p;
+		pnt = (char *) &dump + p;
+		memcpy_tofs(buf,(void *) pnt, count1);
+		buf += count1;
+		p += count1;
+		count -= count1;
+		read += count1;
+	}
+
+	while (p < (4096 + 4096) && count > 0) {
+		put_fs_byte(0,buf);
+		buf++;
+		p++;
+		count--;
+		read++;
+	}
+	memcpy_tofs(buf,(void *) (p - 4096),count);
+	read += count;
+	file->f_pos += read;
+	return read;
 }
 
 static int read_mem(struct inode * inode, struct file * file,char * buf, int count)
@@ -228,6 +277,18 @@ static struct file_operations zero_fops = {
 	NULL		/* no special release code */
 };
 
+static struct file_operations core_fops = {
+	memory_lseek,
+	read_core,
+	NULL,
+	NULL,		/* zero_readdir */
+	NULL,		/* zero_select */
+	NULL,		/* zero_ioctl */
+	NULL,		/* zero_mmap */
+	NULL,		/* no special open code */
+	NULL		/* no special release code */
+};
+
 static int memory_open(struct inode * inode, struct file * filp)
 {
 	switch (MINOR(inode->i_rdev)) {
@@ -248,6 +309,9 @@ static int memory_open(struct inode * inode, struct file * filp)
 			break;
 		case 5:
 			filp->f_op = &zero_fops;
+			break;
+		case 6:
+			filp->f_op = &core_fops;
 			break;
 		default:
 			return -ENODEV;

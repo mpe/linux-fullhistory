@@ -286,10 +286,10 @@ create_arp (unsigned long paddr, unsigned char *addr, int hlen)
   apt->hlen =hlen;
   memcpy (apt->hard, addr, hlen);
   apt->last_used=timer_seq;
-  sti();
-  apt->next = arp_table[hash];
-  arp_table[hash]=apt;
   cli();
+  apt->next = arp_table[hash];
+  arp_table[hash] = apt;
+  sti();
   return (apt);
 }
 
@@ -439,7 +439,6 @@ arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
   return (1);
 }
 
-
 void
 arp_add (unsigned long addr, unsigned char *haddr, struct device *dev)
 {
@@ -461,7 +460,6 @@ arp_add_broad (unsigned long addr, struct device *dev)
   arp_add (addr,  dev->broadcast , dev);
 }
 
-
 void
 arp_queue(struct sk_buff *skb)
 {
@@ -473,13 +471,11 @@ arp_queue(struct sk_buff *skb)
 	skb->prev = skb;
      }
    else
-    {
-      skb->next = arp_q;
-      skb->prev = arp_q->prev;
-      skb->next->prev = skb;
-      skb->prev->next = skb;
-    }
-  sti();
-
+     {
+	skb->next = arp_q;
+	skb->prev = arp_q->prev;
+	skb->next->prev = skb;
+	skb->prev->next = skb;
+     }
+   sti();
 }
-

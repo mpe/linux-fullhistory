@@ -123,15 +123,17 @@ void keyboard_interrupt(int int_pt_regs)
 			rep = scancode;
 			repke0 = ke0;
 		}
-	} else if (ke0 == repke0 && (scancode & 0x7f) == rep)
+	} else if (ke0 == repke0 && (scancode & 0x7f) == rep) {
 		if (scancode & 0x80)
 			rep = 0xff;
-		else if (!(krepeat && tty && (L_ECHO(tty) ||
-					      (EMPTY(&tty->secondary) &&
-					       EMPTY(&tty->read_q))))) {
+		else if (!(krepeat && tty &&
+			   (L_ECHO(tty) ||
+			    (EMPTY(&tty->secondary) &&
+			     EMPTY(&tty->read_q))))) {
 			ke0 = 0;
 			return;
 		}
+	}
 	key_table[scancode](scancode);
 	do_keyboard_interrupt();
 	ke0 = 0;
@@ -1351,12 +1353,11 @@ long no_idt[2] = {0, 0};
 void hard_reset_now(void)
 {
 	int i;
-	unsigned long * pg_dir;
+	extern unsigned long pg0[1024];
 
 	sti();
 /* rebooting needs to touch the page at absolute addr 0 */
-	pg_dir = (unsigned long *) current->tss.cr3;
-	pg_dir[768] = 7;			/* 0xC0000000 */
+	pg0[0] = 7;
 	for (;;) {
 		for (i=0; i<100; i++) {
 			kb_wait();

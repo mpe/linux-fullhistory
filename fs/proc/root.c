@@ -89,7 +89,7 @@ static int proc_lookuproot(struct inode * dir,const char * name, int len,
 		return -ENOENT;
 	}
 	ino = (pid << 16) + 2;
-	if (!(*result = iget(dir->i_dev,ino))) {
+	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
 		return -ENOENT;
 	}

@@ -53,7 +53,8 @@ static int proc_lookupfd(struct inode * dir,const char * name, int len,
 {
 	unsigned int ino, pid, fd, c;
 	struct task_struct * p;
-	int i, dev;
+	struct super_block * sb;
+	int i;
 
 	*result = NULL;
 	ino = dir->i_ino;
@@ -62,6 +63,7 @@ static int proc_lookupfd(struct inode * dir,const char * name, int len,
 	ino -= 7;
 	if (!dir)
 		return -ENOENT;
+	sb = dir->i_sb;
 	if (!pid || ino > 1 || !S_ISDIR(dir->i_mode)) {
 		iput(dir);
 		return -ENOENT;
@@ -72,14 +74,13 @@ static int proc_lookupfd(struct inode * dir,const char * name, int len,
 			*result = dir;
 			return 0;
 		}
-		if (!(*result = iget(dir->i_dev,(pid << 16)+2))) {
+		if (!(*result = iget(sb,(pid << 16)+2))) {
 			iput(dir);
 			return -ENOENT;
 		}
 		iput(dir);
 		return 0;
 	}
-	dev = dir->i_dev;
 	iput(dir);
 	fd = 0;
 	while (len-- > 0) {
@@ -110,7 +111,7 @@ static int proc_lookupfd(struct inode * dir,const char * name, int len,
 			return -ENOENT;
 		ino = (pid << 16) + 0x200 + fd;
 	}
-	if (!(*result = iget(dev,ino)))
+	if (!(*result = iget(sb,ino)))
 		return -ENOENT;
 	return 0;
 }

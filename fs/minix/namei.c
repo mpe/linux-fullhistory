@@ -119,7 +119,7 @@ int minix_lookup(struct inode * dir,const char * name, int len,
 	}
 	ino = de->inode;
 	brelse(bh);
-	if (!(*result = iget(dir->i_dev,ino))) {
+	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
 		return -EACCES;
 	}
@@ -200,7 +200,7 @@ int minix_create(struct inode * dir,const char * name, int len, int mode,
 	*result = NULL;
 	if (!dir)
 		return -ENOENT;
-	inode = minix_new_inode(dir->i_dev);
+	inode = minix_new_inode(dir->i_sb);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -238,7 +238,7 @@ int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rd
 		iput(dir);
 		return -EEXIST;
 	}
-	inode = minix_new_inode(dir->i_dev);
+	inode = minix_new_inode(dir->i_sb);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -296,7 +296,7 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 		iput(dir);
 		return -EEXIST;
 	}
-	inode = minix_new_inode(dir->i_dev);
+	inode = minix_new_inode(dir->i_sb);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -396,7 +396,7 @@ int minix_rmdir(struct inode * dir, const char * name, int len)
 	if (!bh)
 		goto end_rmdir;
 	retval = -EPERM;
-	if (!(inode = iget(dir->i_dev, de->inode)))
+	if (!(inode = iget(dir->i_sb, de->inode)))
 		goto end_rmdir;
 	if ((dir->i_mode & S_ISVTX) && current->euid &&
 	   inode->i_uid != current->euid)
@@ -446,7 +446,7 @@ int minix_unlink(struct inode * dir, const char * name, int len)
 	bh = minix_find_entry(dir,name,len,&de);
 	if (!bh)
 		goto end_unlink;
-	if (!(inode = iget(dir->i_dev, de->inode)))
+	if (!(inode = iget(dir->i_sb, de->inode)))
 		goto end_unlink;
 	retval = -EPERM;
 	if ((dir->i_mode & S_ISVTX) && !suser() &&
@@ -481,7 +481,7 @@ int minix_symlink(struct inode * dir, const char * name, int len, const char * s
 	int i;
 	char c;
 
-	if (!(inode = minix_new_inode(dir->i_dev))) {
+	if (!(inode = minix_new_inode(dir->i_sb))) {
 		iput(dir);
 		return -ENOSPC;
 	}
@@ -537,6 +537,11 @@ int minix_link(struct inode * oldinode, struct inode * dir, const char * name, i
 		iput(oldinode);
 		iput(dir);
 		return -EPERM;
+	}
+	if (oldinode->i_nlink > 126) {
+		iput(oldinode);
+		iput(dir);
+		return -EMLINK;
 	}
 	bh = minix_find_entry(dir,name,len,&de);
 	if (bh) {
@@ -630,7 +635,7 @@ start_up:
 	retval = -ENOENT;
 	if (!old_bh)
 		goto end_rename;
-	old_inode = iget(old_dir->i_dev, old_de->inode);
+	old_inode = iget(old_dir->i_sb, old_de->inode);
 	if (!old_inode)
 		goto end_rename;
 	retval = -EPERM;
@@ -640,7 +645,7 @@ start_up:
 		goto end_rename;
 	new_bh = minix_find_entry(new_dir,new_name,new_len,&new_de);
 	if (new_bh) {
-		new_inode = iget(new_dir->i_dev, new_de->inode);
+		new_inode = iget(new_dir->i_sb, new_de->inode);
 		if (!new_inode) {
 			brelse(new_bh);
 			new_bh = NULL;

@@ -564,7 +564,7 @@ int sys_sethostname(char *name, int len)
 	return 0;
 }
 
-int sys_getrlimit(int resource, struct rlimit *rlim)
+int sys_getrlimit(unsigned int resource, struct rlimit *rlim)
 {
 	if (resource >= RLIM_NLIMITS)
 		return -EINVAL;
@@ -576,7 +576,7 @@ int sys_getrlimit(int resource, struct rlimit *rlim)
 	return 0;	
 }
 
-int sys_setrlimit(int resource, struct rlimit *rlim)
+int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
 {
 	struct rlimit new, *old;
 

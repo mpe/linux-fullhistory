@@ -235,7 +235,11 @@ static void UART_ISR_proc(async_ISR ISR, int line)
 			info->timer = jiffies + info->timeout;
 			if (info->timer < timer_table[RS_TIMER].expires)
 				timer_table[RS_TIMER].expires = info->timer;
+#ifdef i386
 			rs_write_active |= 1 << line;
+#else
+			set_bit(line, &rs_write_active);
+#endif
 			timer_active |= 1 << RS_TIMER;
 		}
 	no_xmit:
@@ -328,6 +332,11 @@ static void rs_timer(void)
 		if ((mask > rs_event) &&
 		    (mask > rs_write_active))
 			break;
+		if (!info->tty) {	/* check that we haven't closed it.. */
+			rs_event &= ~mask;
+			rs_write_active &= ~mask;
+			continue;
+		}
 		if (mask & rs_event) {
 			if (!clear_bit(RS_EVENT_READ_PROCESS, &info->event)) {
 				TTY_READ_FLUSH(info->tty);
@@ -357,7 +366,11 @@ static void rs_timer(void)
 		}
 		if (mask & rs_write_active) {
 			if (info->timer <= jiffies) {
+#ifdef i386
 				rs_write_active &= ~mask;
+#else
+				clear_bit(info->line, &rs_write_active);
+#endif
 				rs_write(info->tty);
 			}
 			if ((mask & rs_write_active) &&
@@ -405,8 +418,10 @@ static void rs_throttle(struct tty_struct * tty, int status)
 	struct async_struct *info;
 	unsigned char mcr;
 
+#ifdef notdef
 	printk("throttle tty%d: %d (%d, %d)....\n", DEV_TO_SL(tty->line),
 	       status, LEFT(&tty->read_q), LEFT(&tty->secondary));
+#endif
 	switch (status) {
 	case TTY_THROTTLE_RQ_FULL:
 		info = rs_table + DEV_TO_SL(tty->line);
@@ -460,6 +475,14 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	if (!info->port)
 		return;
 	shutdown(info);
+#ifdef i386
+	rs_write_active &= ~(1 << line);
+	rs_event &= ~(1 << line);
+#else
+	clear_bit(line, &rs_write_active);
+	clear_bit(line, &rs_event);
+#endif
+	info->event = 0;
 	info->tty = 0;
 	ISR = info->ISR;
 	irq = ISR->irq;
@@ -556,7 +579,7 @@ void change_speed(unsigned int line)
 	struct async_struct * info;
 	unsigned short port;
 	int	quot = 0;
-	unsigned cflag,cval;
+	unsigned cflag,cval,mcr;
 	int	i;
 
 	if (line >= NR_PORTS)
@@ -589,8 +612,11 @@ void change_speed(unsigned int line)
 		quot = 0;
 		info->timeout = 0;
 	}
-	if (!quot) {
-		shutdown(info);
+	mcr = inb(UART_MCR + port);
+	if (quot) 
+		outb(mcr | UART_MCR_DTR, UART_MCR + port);
+	else {
+		outb(mcr & ~UART_MCR_DTR, UART_MCR + port);
 		return;
 	}
 	/* byte size and parity */
@@ -844,6 +870,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 		IRQ_ISR[irq] = ISR;
 	}
 	startup(info);
+	change_speed(info->line);
 	return 0;
 }
 
@@ -950,8 +977,6 @@ static void init(struct async_struct * info)
 		}
 	} else
 		info->type = PORT_8250;
-	startup(info);
-	change_speed(info->line);
 	shutdown(info);
 }
 

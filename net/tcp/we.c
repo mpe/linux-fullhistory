@@ -51,10 +51,10 @@
 #include <linux/tty.h>
 #include <linux/types.h>
 #include <linux/ptrace.h>
+#include <linux/string.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/io.h>
-#include <asm/memory.h>
 #include <errno.h>
 #include <linux/fcntl.h>
 #include <netinet/in.h>

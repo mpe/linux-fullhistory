@@ -120,7 +120,7 @@ static int proc_lookupbase(struct inode * dir,const char * name, int len,
 		iput(dir);
 		return -ENOENT;
 	}
-	if (!(*result = iget(dir->i_dev,ino))) {
+	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
 		return -ENOENT;
 	}

@@ -17,6 +17,7 @@
 #include <asm/system.h>
 
 #include "scsi.h"
+#include "hosts.h"
 #include "sd.h"
 #include "scsi_ioctl.h"
 
@@ -37,7 +38,18 @@ static const char RCSid[] = "$Header:";
 
 #define SD_TIMEOUT 200
 
+#define ISA_DMA_THRESHOLD (0x00ffffff)
 struct hd_struct sd[MAX_SD << 4];
+
+/* For a > 16 Mb system, we may need an intermediate buffer for data */
+
+struct block_buffer
+	{
+	unsigned long int use;
+	unsigned char	buffer[4096];
+	};
+
+static struct block_buffer * bb = NULL;
 
 int NR_SD=0;
 Scsi_Disk rscsi_disks[MAX_SD];
@@ -61,14 +73,16 @@ static int sd_open(struct inode * inode, struct file * filp)
         int target;
 	target =  DEVICE_NR(MINOR(inode->i_rdev));
 
+	if(target >= NR_SD || !rscsi_disks[target].device)
+	  return -EACCES;   /* No such device */
+
 /* Make sure that only one process can do a check_change_disk at one time.
  This is also used to lock out further access when the partition table is being re-read. */
 
 	while (rscsi_disks[target].device->busy);
 
 	if(rscsi_disks[target].device->removable) {
-	  if (filp->f_mode)
-	    check_disk_change(inode->i_rdev);
+	  check_disk_change(inode->i_rdev);
 
 	  if(!rscsi_disks[target].device->access_count)
 	    sd_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
@@ -150,6 +164,17 @@ static void rw_intr (int host, int result)
 */
 
 	if (!result) {
+	  if (bb && bb[DEVICE_NR(CURRENT->dev)].use && CURRENT->cmd == READ)
+	    {
+	      memcpy((char *)CURRENT->buffer, 
+		     bb[DEVICE_NR(CURRENT->dev)].buffer,
+		     this_count << 9);
+#ifdef DEBUG
+	      printk("R");
+#endif
+	    };
+	  if(bb) bb[DEVICE_NR(CURRENT->dev)].use = 0;
+
 		CURRENT->nr_sectors -= this_count;
 		if (slow_scsi_io == host) {
 		  total_count -= this_count;
@@ -199,7 +224,7 @@ static void rw_intr (int host, int result)
 		else
 			end_request(1);
 		do_sd_request();
-		}
+	}
 
 /*
  *	Of course, the error handling code is a little Fubar down in scsi.c.
@@ -214,12 +239,25 @@ static void rw_intr (int host, int result)
 */
 
 	else if (driver_byte(result) & DRIVER_SENSE) {
+	  if (bb) bb[DEVICE_NR(CURRENT->dev)].use = 0;
 		if (sugestion(result) == SUGGEST_REMAP) {
 #ifdef REMAP
 /*
 	Not yet implemented.  A read will fail after being remapped,
 	a write will call the strategy routine again.
 */
+			if rscsi_disks[DEVICE_NR(CURRENT->dev)].remap
+				{
+				result = 0;
+				}
+			else
+
+#endif
+		}
+
+/* A unit attention comes up if there is a media change on a removable
+   disk drive */
+
 		else if ((sense_buffer[0] & 0x7f) == 0x70) {
 			if ((sense_buffer[2] & 0xf) == UNIT_ATTENTION) {
 				/* detected disc change.  set a bit and quietly refuse	*/
@@ -230,16 +268,8 @@ static void rw_intr (int host, int result)
 				do_sd_request();
 				return;
 			}
-		}
+		      }
 
-			if rscsi_disks[DEVICE_NR(CURRENT->dev)].remap
-				{
-				result = 0;
-				}
-			else
-
-#endif
-		}
 /*
 	If we had an ILLEGAL REQUEST returned, then we may have performed
 	an unsupported command.  The only thing this should be would be a  ten
@@ -247,7 +277,6 @@ static void rw_intr (int host, int result)
 	system where READ CAPACITY failed, we mave have read past the end of the
 	disk.
 */
-
 		else if (sense_buffer[7] == ILLEGAL_REQUEST) {
 			if (rscsi_disks[DEVICE_NR(CURRENT->dev)].ten) {
 				rscsi_disks[DEVICE_NR(CURRENT->dev)].ten = 0;
@@ -258,6 +287,7 @@ static void rw_intr (int host, int result)
 		}
 	}
 	if (result) {
+	        if (bb) bb[DEVICE_NR(CURRENT->dev)].use = 0;
 		printk("SCSI disk error : host %d id %d lun %d return code = %x\n",
 		       rscsi_disks[DEVICE_NR(CURRENT->dev)].device->host_no,
 		       rscsi_disks[DEVICE_NR(CURRENT->dev)].device->id,
@@ -284,6 +314,7 @@ static void do_sd_request (void)
 {
 	int dev, block;
 	unsigned char cmd[10];
+	char * buff;
 
 repeat:
 	INIT_REQUEST;
@@ -357,6 +388,24 @@ repeat:
 
 	cmd[1] = (LUN << 5) & 0xe0;
 
+	buff = CURRENT->buffer;
+
+/* Curses, curses. If this is a DMA transfer, we could be screwed. */
+	if (((int) buff) + (this_count << 9) > ISA_DMA_THRESHOLD && 
+	    (scsi_hosts[HOST].unchecked_isa_dma)) {
+	  if (bb[DEVICE_NR(CURRENT->dev)].use) panic ("block buffer already in use");
+	  bb[DEVICE_NR(CURRENT->dev)].use = 1;
+	  if(this_count > 8) this_count = 8;
+	  if (CURRENT->cmd == WRITE) {
+	    memcpy(bb[DEVICE_NR(CURRENT->dev)].buffer,
+		   (char *)CURRENT->buffer, this_count << 9);
+#ifdef DEBUG
+	    printk("W");
+#endif
+	  };
+	  buff = bb[DEVICE_NR(CURRENT->dev)].buffer;
+	};
+
 	if (((this_count > 0xff) ||  (block > 0x1fffff)) && rscsi_disks[dev].ten)
 		{
 		if (this_count > 0xffff)
@@ -383,7 +432,7 @@ repeat:
 		cmd[5] = 0;
 		}
 
-	scsi_do_cmd (HOST, ID, (void *) cmd, CURRENT->buffer, this_count << 9,
+	scsi_do_cmd (HOST, ID, (void *) cmd, buff, this_count << 9,
 		     rw_intr, SD_TIMEOUT, sense_buffer, MAX_RETRIES);
 }
 
@@ -527,7 +576,7 @@ static int sd_init_onedisk(int i)
 	their size, and reads partition	table entries for them.
 */
 
-void sd_init(void)
+unsigned long sd_init(unsigned long memory_start, unsigned long memory_end)
 {
 	int i;
 
@@ -539,6 +588,13 @@ void sd_init(void)
 	sd_gendisk.next = gendisk_head;
 	gendisk_head = &sd_gendisk;
 	boot_init_done++;
+/* Allocate DMA block buffer */
+	if(memory_end > ISA_DMA_THRESHOLD) {
+	  bb = (struct block_buffer *) memory_start;
+	  memory_start += NR_SD * sizeof(struct block_buffer);
+	  for (i=0; i < NR_SD; ++i) bb[i].use = 0;
+	};
+	return memory_start;
 }
 
 #define DEVICE_BUSY rscsi_disks[target].device->busy
@@ -567,6 +623,7 @@ int revalidate_scsidisk(int dev, int maxusage){
 	  sti();
 	  if (DEVICE_BUSY || USAGE > maxusage) {
 	    cli();
+	    printk("Device busy for revalidation (usage=%d)\n", USAGE);
 	    return -EBUSY;
 	  };
 	  DEVICE_BUSY = 1;

@@ -15,6 +15,7 @@
 #include <linux/errno.h>
 #include <linux/fcntl.h>
 #include <linux/stat.h>
+#include <linux/locks.h>
 
 #define	NBUF	16
 
@@ -23,14 +24,6 @@
 
 #include <linux/fs.h>
 #include <linux/minix_fs.h>
-
-static inline void wait_on_buffer(struct buffer_head * bh)
-{
-	cli();
-	while (bh->b_lock)
-		sleep_on(&bh->b_wait);
-	sti();
-}
 
 static int minix_file_read(struct inode *, struct file *, char *, int);
 static int minix_file_write(struct inode *, struct file *, char *, int);

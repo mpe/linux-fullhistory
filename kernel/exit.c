@@ -205,30 +205,6 @@ int kill_pg(int pgrp, int sig, int priv)
 	return(found ? 0 : retval);
 }
 
-/* This routine is used by vhangup.  It send's sigkill to everything
-   waiting on a particular wait_queue.  It assumes root privledges.
-   We don't want to destroy the wait queue here, because the caller
-   should call wake_up immediately after calling kill_wait. */
-
-void
-kill_wait (struct wait_queue **q, int sig)
-{
-   struct wait_queue *next;
-   struct wait_queue *tmp;
-   struct task_struct *p;
-   
-   if (!q || !(next = *q))
-     return;
-   do { 
-      tmp = next;
-      next = tmp->next;
-      if (p = tmp->task)
-	{
-	   send_sig (sig, p , 1);
-	}
-   } while (next && next != *q);
-}
-
 int kill_proc(int pid, int sig, int priv)
 {
  	struct task_struct **p;

@@ -16,22 +16,15 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/stat.h>
+#include <linux/locks.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
 
-int sync_dev(int dev);
-
-static inline void wait_on_buffer(struct buffer_head * bh)
-{
-	cli();
-	while (bh->b_lock)
-		sleep_on(&bh->b_wait);
-	sti();
-}
-
 void ext_put_inode(struct inode *inode)
 {
+	if (inode->i_nlink)
+		return;
 	inode->i_size = 0;
 	ext_truncate(inode);
 	ext_free_inode(inode);
@@ -46,7 +39,7 @@ void ext_put_super(struct super_block *sb)
 		brelse (sb->u.ext_sb.s_firstfreeinodeblock);
 	if (sb->u.ext_sb.s_firstfreeblock)
 		brelse (sb->u.ext_sb.s_firstfreeblock);
-	free_super(sb);
+	unlock_super(sb);
 	return;
 }
 
@@ -68,7 +61,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 	lock_super(s);
 	if (!(bh = bread(dev, 1, BLOCK_SIZE))) {
 		s->s_dev=0;
-		free_super(s);
+		unlock_super(s);
 		printk("bread failed\n");
 		return NULL;
 	}
@@ -87,7 +80,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 	brelse(bh);
 	if (s->s_magic != EXT_SUPER_MAGIC) {
 		s->s_dev = 0;
-		free_super(s);
+		unlock_super(s);
 		printk("magic match failed\n");
 		return NULL;
 	}
@@ -98,7 +91,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 			s->u.ext_sb.s_firstfreeblocknumber, BLOCK_SIZE))) {
 			printk ("ext_read_super: unable to read first free block\n");
 			s->s_dev = 0;
-			free_super(s);
+			unlock_super(s);
 			return NULL;
 		}
 	if (!s->u.ext_sb.s_firstfreeinodenumber)
@@ -109,15 +102,15 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 			printk ("ext_read_super: unable to read first free inode block\n");
 			brelse(s->u.ext_sb.s_firstfreeblock);
 			s->s_dev = 0;
-			free_super (s);
+			unlock_super (s);
 			return NULL;
 		}
 	}
-	free_super(s);
+	unlock_super(s);
 	/* set up enough so that it can read an inode */
 	s->s_dev = dev;
 	s->s_op = &ext_sops;
-	if (!(s->s_mounted = iget(dev,EXT_ROOT_INO))) {
+	if (!(s->s_mounted = iget(s,EXT_ROOT_INO))) {
 		s->s_dev=0;
 		printk("get root inode failed\n");
 		return NULL;
@@ -235,12 +228,12 @@ repeat:
 	}
 	if (!create)
 		return NULL;
-	tmp = ext_new_block(inode->i_dev);
+	tmp = ext_new_block(inode->i_sb);
 	if (!tmp)
 		return NULL;
 	result = getblk(inode->i_dev, tmp, BLOCK_SIZE);
 	if (*p) {
-		ext_free_block(inode->i_dev,tmp);
+		ext_free_block(inode->i_sb,tmp);
 		brelse(result);
 		goto repeat;
 	}
@@ -250,7 +243,8 @@ repeat:
 	return result;
 }
 
-static struct buffer_head * block_getblk(struct buffer_head * bh, int nr, int create)
+static struct buffer_head * block_getblk(struct inode * inode,
+	struct buffer_head * bh, int nr, int create)
 {
 	int tmp;
 	unsigned long * p;
@@ -282,14 +276,14 @@ repeat:
 		brelse(bh);
 		return NULL;
 	}
-	tmp = ext_new_block(bh->b_dev);
+	tmp = ext_new_block(inode->i_sb);
 	if (!tmp) {
 		brelse(bh);
 		return NULL;
 	}
 	result = getblk(bh->b_dev, tmp, BLOCK_SIZE);
 	if (*p) {
-		ext_free_block(bh->b_dev,tmp);
+		ext_free_block(inode->i_sb,tmp);
 		brelse(result);
 		goto repeat;
 	}
@@ -316,19 +310,19 @@ struct buffer_head * ext_getblk(struct inode * inode, int block, int create)
 	block -= 9;
 	if (block<256) {
 		bh = inode_getblk(inode,9,create);
-		return block_getblk(bh,block,create);
+		return block_getblk(inode,bh,block,create);
 	}
 	block -= 256;
 	if (block<256*256) {
 		bh = inode_getblk(inode,10,create);
-		bh = block_getblk(bh,block>>8,create);
-		return block_getblk(bh,block & 255,create);
+		bh = block_getblk(inode,bh,block>>8,create);
+		return block_getblk(inode,bh,block & 255,create);
 	}
 	block -= 256*256;
 	bh = inode_getblk(inode,11,create);
-	bh = block_getblk(bh,block>>16,create);
-	bh = block_getblk(bh,(block>>8) & 255,create);
-	return block_getblk(bh,block & 255,create);
+	bh = block_getblk(inode,bh,block>>16,create);
+	bh = block_getblk(inode,bh,(block>>8) & 255,create);
+	return block_getblk(inode,bh,block & 255,create);
 }
 
 struct buffer_head * ext_bread(struct inode * inode, int block, int create)

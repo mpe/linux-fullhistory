@@ -28,7 +28,7 @@ struct request {
 	unsigned long nr_sectors;
 	unsigned long current_nr_sectors;
 	char * buffer;
-	struct wait_queue * waiting;
+	struct task_struct * waiting;
 	struct buffer_head * bh;
 	struct buffer_head * bhtail;
 	struct request * next;
@@ -191,6 +191,7 @@ static void end_request(int uptodate)
 {
 	struct request * req;
 	struct buffer_head * bh;
+	struct task_struct * p;
 
 	req = CURRENT;
 	req->errors = 0;
@@ -220,7 +221,12 @@ static void end_request(int uptodate)
 	}
 	DEVICE_OFF(req->dev);
 	CURRENT = req->next;
-	wake_up(&req->waiting);
+	if (p = req->waiting) {
+		req->waiting = NULL;
+		p->state = TASK_RUNNING;
+		if (p->counter > current->counter)
+			need_resched = 1;
+	}
 	req->dev = -1;
 	wake_up(&wait_for_request);
 }

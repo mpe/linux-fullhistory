@@ -11,6 +11,7 @@
 #include <linux/string.h>
 #include <linux/ctype.h>
 #include <linux/stat.h>
+#include <linux/locks.h>
 
 #include <asm/segment.h>
 
@@ -18,6 +19,8 @@ void msdos_put_inode(struct inode *inode)
 {
 	struct inode *depend;
 
+	if (inode->i_nlink)
+		return;
 	inode->i_size = 0;
 	msdos_truncate(inode);
 	depend = MSDOS_I(inode)->i_depend;
@@ -40,7 +43,7 @@ void msdos_put_super(struct super_block *sb)
 	cache_inval_dev(sb->s_dev);
 	lock_super(sb);
 	sb->s_dev = 0;
-	free_super(sb);
+	unlock_super(sb);
 	return;
 }
 
@@ -53,32 +56,6 @@ static struct super_operations msdos_sops = {
 	NULL, /* added in 0.96c */
 	msdos_statfs
 };
-
-
-static unsigned long simple_strtoul(const char *cp,char **endp,unsigned int base)
-{
-	unsigned long result = 0,value;
-
-	if (!base) {
-		base = 10;
-		if (*cp == '0') {
-			base = 8;
-			cp++;
-			if ((*cp == 'x') && isxdigit(cp[1])) {
-				cp++;
-				base = 16;
-			}
-		}
-	}
-	while (isxdigit(*cp) && (value = isdigit(*cp) ? *cp-'0' : (islower(*cp)
-	    ? toupper(*cp) : *cp)-'A'+10) < base) {
-		result = result*base + value;
-		cp++;
-	}
-	if (endp)
-		*endp = (char *)cp;
-	return result;
-}
 
 
 static int parse_options(char *options,char *check,char *conversion,uid_t *uid, gid_t *gid, int *umask)
@@ -155,7 +132,7 @@ struct super_block *msdos_read_super(struct super_block *s,void *data)
 	cache_init();
 	lock_super(s);
 	bh = bread(s->s_dev, 0, BLOCK_SIZE);
-	free_super(s);
+	unlock_super(s);
 	if (bh == NULL) {
 		s->s_dev = 0;
 		printk("MSDOS bread failed\n");
@@ -202,7 +179,7 @@ printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,se=%d,ts=%d]\n",
 	MSDOS_SB(s)->free_clusters = -1; /* don't know yet */
 	MSDOS_SB(s)->fat_wait = NULL;
 	MSDOS_SB(s)->fat_lock = 0;
-	if (!(s->s_mounted = iget(s->s_dev,MSDOS_ROOT_INO))) {
+	if (!(s->s_mounted = iget(s,MSDOS_ROOT_INO))) {
 		s->s_dev = 0;
 		printk("get root inode failed\n");
 		return NULL;

@@ -50,7 +50,7 @@ struct termios *tty_termios[256]; /* We need to keep the termios state */
  */
 int fg_console = 0;
 struct tty_struct * redirect = NULL;
-struct wait_queue * keypress_wait;
+struct wait_queue * keypress_wait = NULL;
 
 int initialize_tty_struct(struct tty_struct *tty, int line);
 
@@ -545,41 +545,54 @@ static int tty_open(struct inode * inode, struct file * filp)
 	if (dev < 0)
 		return -ENODEV;
 	filp->f_rdev = 0x0400 | dev;
-	tty = TTY_TABLE(dev);
-	if (!tty) {
-		tty = TTY_TABLE(dev) = (struct tty_struct *)
-			get_free_page(GFP_KERNEL);
-		if (!tty)
-			return -ENOMEM;
-		retval = initialize_tty_struct(tty, TTY_TABLE_IDX(dev));
-		if (retval) {
-			free_page((unsigned long)tty);
-			return retval;
-		}
-		if (IS_A_PTY(dev) && !tty_table[PTY_OTHER(dev)]) {
-			o_tty = (struct tty_struct *) get_free_page(GFP_USER);
-			/*
-			 * Check for race condition, since get_free_page may sleep.
-			 */
-			if (tty_table[PTY_OTHER(dev)]) {
-				free_page((unsigned long) o_tty);
-				goto other_done;
-			}
-			tty_table[PTY_OTHER(dev)] = o_tty;
-			if (!o_tty) {
-				free_page((unsigned long)tty);
-				return -ENOMEM;
-			}
-			retval = initialize_tty_struct(o_tty, PTY_OTHER(dev));
+/*
+ * There be race-conditions here... Lots of them. Careful now.
+ */
+	tty = o_tty = NULL;
+	if (!TTY_TABLE(dev)) {
+		tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
+		if (tty) {
+			retval = initialize_tty_struct(tty, TTY_TABLE_IDX(dev));
 			if (retval) {
-				free_page((unsigned long) tty);
-				free_page((unsigned long) o_tty);
+				free_page((unsigned long)tty);
 				return retval;
 			}
-			tty->link = o_tty;
-			o_tty->link = tty;
 		}
-	other_done:
+	}
+	if (IS_A_PTY(dev)) {
+		if (!tty_table[PTY_OTHER(dev)]) {
+			o_tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
+			if (o_tty) {
+				retval = initialize_tty_struct(o_tty, PTY_OTHER(dev));
+				if (retval) {
+					free_page((unsigned long) tty);
+					free_page((unsigned long) o_tty);
+					return retval;
+				}
+			}
+		}
+		if (!o_tty && !tty_table[PTY_OTHER(dev)]) {
+			free_page((unsigned long) tty);
+			return -ENOMEM;
+		}
+	}
+	if (TTY_TABLE(dev)) {
+		free_page((unsigned long) tty);
+		tty = TTY_TABLE(dev);
+	} else if (tty)
+		TTY_TABLE(dev) = tty;
+	else {
+		free_page((unsigned long) o_tty);
+		return -ENOMEM;
+	}
+	if (IS_A_PTY(dev)) {
+		if (tty_table[PTY_OTHER(dev)]) {
+			free_page((unsigned long) o_tty);
+			o_tty = tty_table[PTY_OTHER(dev)];
+		} else
+			tty_table[PTY_OTHER(dev)] = o_tty;
+		tty->link = o_tty;
+		o_tty->link = tty;
 	}
 	if (IS_A_PTY_MASTER(dev)) {
 		if (tty->count)
@@ -791,11 +804,11 @@ int initialize_tty_struct(struct tty_struct *tty, int line)
 			tp->c_oflag = OPOST | ONLCR;
 			tp->c_cflag = B38400 | CS8 | CREAD;
 			tp->c_lflag = ISIG | ICANON | ECHO | ECHOCTL | ECHOKE;
-		} else if IS_A_SERIAL(line) {
+		} else if (IS_A_SERIAL(line)) {
 			tp->c_cflag = B2400 | CS8 | CREAD | HUPCL;
-		} else if IS_A_PTY_MASTER(line)	{
+		} else if (IS_A_PTY_MASTER(line)) {
 			tp->c_cflag = B9600 | CS8 | CREAD;
-		} else if IS_A_PTY_SLAVE(line) {
+		} else if (IS_A_PTY_SLAVE(line)) {
 			tp->c_cflag = B9600 | CS8 | CREAD;
 			tp->c_lflag = ISIG | ICANON;
 		}
@@ -820,7 +833,6 @@ long tty_init(long kmem_start)
 
 	chrdev_fops[4] = &tty_fops;
 	chrdev_fops[5] = &tty_fops;
-	keypress_wait = 0;
 	for (i=0 ; i<256 ; i++) {
 		tty_table[i] =  0;
 		tty_termios[i] = 0;

@@ -17,6 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
+#include <linux/errno.h>
 
 #include "scsi.h"
 #include "sr.h"
@@ -42,7 +43,7 @@ struct block_buffer
 	unsigned char	buffer[2048];
 	};
 
-static struct block_buffer bb[MAX_SR];
+static struct block_buffer * bb;
 
 static int sr_open(struct inode *, struct file *);
 
@@ -220,8 +221,10 @@ static void rw_intr (int host, int result)
 
 static int sr_open(struct inode * inode, struct file * filp)
 {
-	if (filp->f_mode)
-		check_disk_change(inode->i_rdev);
+	if(MINOR(inode->i_rdev) >= NR_SR ||
+	   !scsi_CDs[MINOR(inode->i_rdev)].device) return -EACCES;   /* No such device */
+
+        check_disk_change(inode->i_rdev);
 
 	if(!scsi_CDs[MINOR(inode->i_rdev)].device->access_count++)
 	  sr_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
@@ -370,9 +373,12 @@ void do_sr_request (void)
 		     rw_intr, SR_TIMEOUT, sense_buffer, MAX_RETRIES);
 }
 
-void sr_init(void)
+unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 {
 	int i;
+
+	bb = (struct block_buffer *) memory_start;
+	memory_start += NR_SR * sizeof(struct block_buffer);
 
 	for (i = 0; i < NR_SR; ++i)
 		{
@@ -389,6 +395,7 @@ void sr_init(void)
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	blk_size[MAJOR_NR] = sr_sizes;	
 	blkdev_fops[MAJOR_NR] = &sr_fops; 
+	return memory_start;
 }	
 #endif
 
