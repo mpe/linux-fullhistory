@@ -181,7 +181,7 @@ static int msdos_create_entry(struct inode *dir,char *name,int is_dir,
 	de->start = 0;
 	date_unix2dos(dir->i_mtime,&de->time,&de->date);
 	de->size = 0;
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	if ((*result = iget(dir->i_sb,ino)) != NULL)
 		msdos_read_inode(*result);
 	brelse(bh);
@@ -350,7 +350,7 @@ int msdos_rmdir(struct inode *dir,const char *name,int len)
 	dir->i_nlink--;
 	inode->i_dirt = dir->i_dirt = 1;
 	de->name[0] = DELETED_FLAG;
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	res = 0;
 rmdir_done:
 	brelse(bh);
@@ -384,7 +384,7 @@ int msdos_unlink(struct inode *dir,const char *name,int len)
 	MSDOS_I(inode)->i_busy = 1;
 	inode->i_dirt = dir->i_dirt = 1;
 	de->name[0] = DELETED_FLAG;
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 unlink_done:
 	brelse(bh);
 	iput(inode);
@@ -429,12 +429,12 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,
 		MSDOS_I(new_inode)->i_busy = 1;
 		new_inode->i_dirt = 1;
 		new_de->name[0] = DELETED_FLAG;
-		dirtify_buffer(new_bh, 1);
+		mark_buffer_dirty(new_bh, 1);
 		iput(new_inode);
 		brelse(new_bh);
 	}
 	memcpy(old_de->name,new_name,MSDOS_NAME);
-	dirtify_buffer(old_bh, 1);
+	mark_buffer_dirty(old_bh, 1);
 	if (MSDOS_SB(old_dir->i_sb)->conversion == 'a') /* update binary info */
 		if ((old_inode = iget(old_dir->i_sb,old_ino)) != NULL) {
 			msdos_read_inode(old_inode);
@@ -503,7 +503,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 		MSDOS_I(new_inode)->i_busy = 1;
 		new_inode->i_dirt = 1;
 		new_de->name[0] = DELETED_FLAG;
-		dirtify_buffer(new_bh, 1);
+		mark_buffer_dirty(new_bh, 1);
 	}
 	memcpy(free_de,old_de,sizeof(struct msdos_dir_entry));
 	memcpy(free_de->name,new_name,MSDOS_NAME);
@@ -526,8 +526,8 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 	cache_inval_inode(old_inode);
 	old_inode->i_dirt = 1;
 	old_de->name[0] = DELETED_FLAG;
-	dirtify_buffer(old_bh, 1);
-	dirtify_buffer(free_bh, 1);
+	mark_buffer_dirty(old_bh, 1);
+	mark_buffer_dirty(free_bh, 1);
 	if (!exists) iput(free_inode);
 	else {
 		MSDOS_I(new_inode)->i_depend = free_inode;
@@ -547,7 +547,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 		dotdot_de->start = MSDOS_I(dotdot_inode)->i_start =
 		    MSDOS_I(new_dir)->i_start;
 		dotdot_inode->i_dirt = 1;
-		dirtify_buffer(dotdot_bh, 1);
+		mark_buffer_dirty(dotdot_bh, 1);
 		old_dir->i_nlink--;
 		new_dir->i_nlink++;
 		/* no need to mark them dirty */

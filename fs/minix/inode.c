@@ -28,7 +28,7 @@ void minix_put_inode(struct inode *inode)
 static void minix_commit_super (struct super_block * sb,
 			       struct minix_super_block * ms)
 {
-	dirtify_buffer(sb->u.minix_sb.s_sbh, 1);
+	mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
 	sb->s_dirt = 0;
 }
 
@@ -54,7 +54,7 @@ void minix_put_super(struct super_block *sb)
 	lock_super(sb);
 	if (!(sb->s_flags & MS_RDONLY)) {
 		sb->u.minix_sb.s_ms->s_state = sb->u.minix_sb.s_mount_state;
-		dirtify_buffer(sb->u.minix_sb.s_sbh, 1);
+		mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
 	}
 	sb->s_dev = 0;
 	for(i = 0 ; i < MINIX_I_MAP_SLOTS ; i++)
@@ -90,7 +90,7 @@ int minix_remount (struct super_block * sb, int * flags, char * data)
 			return 0;
 		/* Mounting a rw partition read-only. */
 		ms->s_state = sb->u.minix_sb.s_mount_state;
-		dirtify_buffer(sb->u.minix_sb.s_sbh, 1);
+		mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
 		sb->s_dirt = 1;
 		minix_commit_super (sb, ms);
 	}
@@ -98,7 +98,7 @@ int minix_remount (struct super_block * sb, int * flags, char * data)
 	  	/* Mount a partition which is read-only, read-write. */
 		sb->u.minix_sb.s_mount_state = ms->s_state;
 		ms->s_state &= ~MINIX_VALID_FS;
-		dirtify_buffer(sb->u.minix_sb.s_sbh, 1);
+		mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
 		sb->s_dirt = 1;
 
 		if (!(sb->u.minix_sb.s_mount_state & MINIX_VALID_FS))
@@ -197,7 +197,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	}
 	if (!(s->s_flags & MS_RDONLY)) {
 		ms->s_state &= ~MINIX_VALID_FS;
-		dirtify_buffer(bh, 1);
+		mark_buffer_dirty(bh, 1);
 		s->s_dirt = 1;
 	}
 	if (!(s->u.minix_sb.s_mount_state & MINIX_VALID_FS))
@@ -349,7 +349,7 @@ repeat:
 		goto repeat;
 	}
 	*p = tmp;
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	brelse(bh);
 	return result;
 }
@@ -477,7 +477,7 @@ static struct buffer_head * minix_update_inode(struct inode * inode)
 	else for (block = 0; block < 9; block++)
 		raw_inode->i_zone[block] = inode->u.minix_i.i_data[block];
 	inode->i_dirt=0;
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	return bh;
 }
 

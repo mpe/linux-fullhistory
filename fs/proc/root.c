@@ -67,6 +67,7 @@ static struct proc_dir_entry root_dir[] = {
 	{14,5,"kcore" },
    	{16,7,"modules" },
    	{17,4,"stat" },
+   	{18,7,"devices" },
 };
 
 #define NR_ROOT_DIRENTRY ((sizeof (root_dir))/(sizeof (root_dir[0])))

@@ -390,6 +390,7 @@ extern int ext2_bmap (struct inode *, int);
 extern struct buffer_head * ext2_getblk (struct inode *, long, int, int *);
 extern struct buffer_head * ext2_bread (struct inode *, int, int, int *);
 
+extern int ext2_getcluster (struct inode * inode, long block);
 extern void ext2_read_inode (struct inode *);
 extern void ext2_write_inode (struct inode *);
 extern void ext2_put_inode (struct inode *);

@@ -200,7 +200,7 @@ static int msdos_file_write(struct inode *inode,struct file *filp,char *buf,
 			inode->i_size = filp->f_pos;
 			inode->i_dirt = 1;
 		}
-		dirtify_buffer(bh, 0);
+		mark_buffer_dirty(bh, 0);
 		brelse(bh);
 	}
 	if (start == buf)

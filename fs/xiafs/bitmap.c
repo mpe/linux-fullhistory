@@ -65,7 +65,7 @@ zone_found:
         start_bit=j + (i << 5) + 1;
 	goto repeat;
     }
-    dirtify_buffer(bh, 1);
+    mark_buffer_dirty(bh, 1);
     return j + (i << 5);
 }
 
@@ -245,7 +245,7 @@ void xiafs_free_zone(struct super_block * sb, int d_addr)
         printk("XIA-FS: dev %04x"
 	       " block bit %u (0x%x) already cleared (%s %d)\n",
 	       sb->s_dev, bit, bit, WHERE_ERR);
-    dirtify_buffer(bh, 1);
+    mark_buffer_dirty(bh, 1);
     xiafs_unlock_super(sb, sb->u.xiafs_sb.s_zmap_cached);
 }
 
@@ -277,7 +277,7 @@ int xiafs_new_zone(struct super_block * sb, u_long prev_addr)
     }
     clear_buf(bh);
     bh->b_uptodate = 1;
-    dirtify_buffer(bh, 1);
+    mark_buffer_dirty(bh, 1);
     brelse(bh);
     return tmp;
 }
@@ -305,7 +305,7 @@ void xiafs_free_inode(struct inode * inode)
         printk("XIA-FS: dev %04x"
 	       "inode bit %ld (0x%lx) already cleared (%s %d)\n",
 	       inode->i_dev, ino, ino, WHERE_ERR);
-    dirtify_buffer(bh, 1);
+    mark_buffer_dirty(bh, 1);
     xiafs_unlock_super(sb, sb->u.xiafs_sb.s_imap_cached);
 }
 

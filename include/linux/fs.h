@@ -28,7 +28,6 @@
 #define NR_INODE 2048	/* this should be bigger than NR_FILE */
 #define NR_FILE 1024	/* this can well be larger on a larger system */
 #define NR_SUPER 32
-#define NR_HASH 997
 #define NR_IHASH 131
 #define NR_FILE_LOCKS 64
 #define BLOCK_SIZE 1024
@@ -138,6 +137,11 @@ struct buffer_head {
 	unsigned char b_dirt;		/* 0-clean,1-dirty */
 	unsigned char b_lock;		/* 0 - ok, 1 -locked */
 	unsigned char b_req;		/* 0 if the buffer has been invalidated */
+	unsigned char b_list;		/* List that this buffer appears */
+	unsigned char b_retain;         /* Expected number of times this will
+					   be used.  Put on freelist when 0 */
+	unsigned long b_flushtime;      /* Time when this (dirty) buffer should be written */
+	unsigned long b_lru_time;       /* Time when this buffer was last used. */
 	struct wait_queue * b_wait;
 	struct buffer_head * b_prev;		/* doubly linked list of hash-queue */
 	struct buffer_head * b_next;
@@ -356,15 +360,40 @@ extern struct super_block super_blocks[NR_SUPER];
 
 extern int shrink_buffers(unsigned int priority);
 
+extern void refile_buffer(struct buffer_head * buf);
+void set_writetime(struct buffer_head * buf, int flag);
+
+struct buffer_head ** buffer_pages;
+
 extern int nr_buffers;
 extern int buffermem;
 extern int nr_buffer_heads;
 
-/* Once the full cluster diffs are in place, this will be filled out a bit. */
-extern inline void dirtify_buffer(struct buffer_head * bh, int flag)
+#define BUF_CLEAN 0
+#define BUF_UNSHARED 1 /* Buffers that were shared but are not any more */
+#define BUF_LOCKED 2   /* Buffers scheduled for write */
+#define BUF_LOCKED1 3  /* Supers, inodes */
+#define BUF_DIRTY 4    /* Dirty buffers, not yet scheduled for write */
+#define BUF_SHARED 5   /* Buffers shared */
+#define NR_LIST 6
+
+extern inline void mark_buffer_clean(struct buffer_head * bh)
 {
-  bh->b_dirt = 1;
+  if(bh->b_dirt) {
+    bh->b_dirt = 0;
+    if(bh->b_list == BUF_DIRTY) refile_buffer(bh);
+  }
 }
+
+extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
+{
+  if(!bh->b_dirt) {
+    bh->b_dirt = 1;
+    set_writetime(bh, flag);
+    if(bh->b_list != BUF_DIRTY) refile_buffer(bh);
+  }
+}
+
 
 extern void check_disk_change(dev_t dev);
 extern void invalidate_inodes(dev_t dev);
@@ -402,6 +431,7 @@ extern unsigned long bread_page(unsigned long addr,dev_t dev,int b[],int size,in
 extern struct buffer_head * breada(dev_t dev,int block, int size, 
 				   unsigned int pos, unsigned int filesize);
 extern void put_super(dev_t dev);
+unsigned long generate_cluster(dev_t dev, int b[], int size);
 extern dev_t ROOT_DEV;
 
 extern void show_buffers(void);

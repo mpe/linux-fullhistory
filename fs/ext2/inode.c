@@ -109,7 +109,7 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal)
 		}
 		clear_block (bh->b_data, inode->i_sb->s_blocksize);
 		bh->b_uptodate = 1;
-		dirtify_buffer(bh, 1);
+		mark_buffer_dirty(bh, 1);
 		brelse (bh);
 	} else {
 		ext2_discard_prealloc (inode);
@@ -314,7 +314,7 @@ repeat:
 		goto repeat;
 	}
 	*p = tmp;
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(inode)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -325,6 +325,41 @@ repeat:
 	inode->u.ext2_i.i_next_alloc_block = new_block;
 	inode->u.ext2_i.i_next_alloc_goal = tmp;
 	brelse (bh);
+	return result;
+}
+
+static int block_getcluster (struct inode * inode, struct buffer_head * bh,
+					  int nr,
+					  int blocksize)
+{
+	unsigned long * p;
+	int firstblock = 0;
+	int result = 0;
+	int i;
+
+	/* Check to see if clustering possible here. */
+
+	if(!bh) return 0;
+
+	if(nr % (PAGE_SIZE / inode->i_sb->s_blocksize) != 0) goto out;
+	if(nr + 3 > EXT2_ADDR_PER_BLOCK(inode->i_sb)) goto out;
+
+	for(i=0; i< (PAGE_SIZE / inode->i_sb->s_blocksize); i++) {
+	  p = (unsigned long *) bh->b_data + nr + i;
+	  
+	  /* All blocks in cluster must already be allocated */
+	  if(*p == 0) goto out;
+	  
+	  /* See if aligned correctly */
+	  if(i==0) firstblock = *p;
+	  else if(*p != firstblock + i) goto out;
+	};
+	
+	p = (unsigned long *) bh->b_data + nr;
+	result = generate_cluster(bh->b_dev, (int *) p, blocksize);
+
+      out:
+	brelse(bh);
 	return result;
 }
 
@@ -387,6 +422,55 @@ struct buffer_head * ext2_getblk (struct inode * inode, long block,
 			   create, inode->i_sb->s_blocksize, b, err);
 	return block_getblk (inode, bh, block & (addr_per_block - 1), create,
 			     inode->i_sb->s_blocksize, b, err);
+}
+
+int ext2_getcluster (struct inode * inode, long block)
+{
+	struct buffer_head * bh;
+	int err, create;
+	unsigned long b;
+	unsigned long addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+
+	create = 0;
+	err = -EIO;
+	if (block < 0) {
+		ext2_warning (inode->i_sb, "ext2_getblk", "block < 0");
+		return 0;
+	}
+	if (block > EXT2_NDIR_BLOCKS + addr_per_block  +
+		    addr_per_block * addr_per_block +
+		    addr_per_block * addr_per_block * addr_per_block) {
+		ext2_warning (inode->i_sb, "ext2_getblk", "block > big");
+		return 0;
+	}
+
+	err = -ENOSPC;
+	b = block;
+	if (block < EXT2_NDIR_BLOCKS) return 0;
+
+	block -= EXT2_NDIR_BLOCKS;
+
+	if (block < addr_per_block) {
+		bh = inode_getblk (inode, EXT2_IND_BLOCK, create, b, &err);
+		return block_getcluster (inode, bh, block, 
+					 inode->i_sb->s_blocksize);
+	}
+	block -= addr_per_block;
+	if (block < addr_per_block * addr_per_block) {
+		bh = inode_getblk (inode, EXT2_DIND_BLOCK, create, b, &err);
+		bh = block_getblk (inode, bh, block / addr_per_block, create,
+				   inode->i_sb->s_blocksize, b, &err);
+		return block_getcluster (inode, bh, block & (addr_per_block - 1),
+				     inode->i_sb->s_blocksize);
+	}
+	block -= addr_per_block * addr_per_block;
+	bh = inode_getblk (inode, EXT2_TIND_BLOCK, create, b, &err);
+	bh = block_getblk (inode, bh, block/(addr_per_block * addr_per_block),
+			   create, inode->i_sb->s_blocksize, b, &err);
+	bh = block_getblk (inode, bh, (block/addr_per_block) & (addr_per_block - 1),
+			   create, inode->i_sb->s_blocksize, b, &err);
+	return block_getcluster (inode, bh, block & (addr_per_block - 1),
+				 inode->i_sb->s_blocksize);
 }
 
 struct buffer_head * ext2_bread (struct inode * inode, int block, 
@@ -549,7 +633,7 @@ static struct buffer_head * ext2_update_inode (struct inode * inode)
 		raw_inode->i_block[0] = inode->i_rdev;
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)
 		raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	inode->i_dirt = 0;
 	return bh;
 }

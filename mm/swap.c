@@ -470,12 +470,12 @@ check_table:
 
 #endif
 
-static int try_to_free_page(void)
+static int try_to_free_page(int priority)
 {
 	int i=6;
 
 	while (i--) {
-		if (shrink_buffers(i))
+	        if (priority != GFP_NOBUFFER && shrink_buffers(i))
 			return 1;
 		if (shm_swap(i))
 			return 1;
@@ -545,6 +545,17 @@ void free_pages(unsigned long addr, unsigned long order)
 				if (!--*map)
 					free_pages_ok(addr, order);
 				restore_flags(flag);
+				if(*map == 1) {
+				  int j;
+				  struct buffer_head * bh, *tmp;
+
+				  bh = buffer_pages[MAP_NR(addr)];
+				  if(bh)
+				    for(j = 0, tmp = bh; tmp && (!j || tmp != bh); 
+					tmp = tmp->b_this_page, j++)
+				      if(tmp->b_list == BUF_SHARED && tmp->b_dev != 0xffff)
+					refile_buffer(tmp);
+				}
 			}
 			return;
 		}
@@ -610,7 +621,7 @@ repeat:
 		return 0;
 	}
 	restore_flags(flags);
-        if (priority != GFP_BUFFER && try_to_free_page())
+        if (priority != GFP_BUFFER && try_to_free_page(priority))
 		goto repeat;
 	return 0;
 }

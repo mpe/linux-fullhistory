@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 2
+SUBLEVEL = 3
 
 all:	Version zImage
 
@@ -116,12 +116,11 @@ endif
 Version: dummy
 	rm -f tools/version.h
 
+oldconfig:
+	$(CONFIG_SHELL) Configure -d $(OPTS)
+
 config:
-	$(CONFIG_SHELL) Configure $(OPTS) < config.in
-	@if grep -s '^CONFIG_SOUND' .tmpconfig ; then \
-		$(MAKE) -C drivers/sound config; \
-		else : ; fi
-	mv .tmpconfig .config
+	$(CONFIG_SHELL) Configure $(OPTS)
 
 linuxsubdirs: dummy
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done

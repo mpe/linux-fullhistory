@@ -221,7 +221,7 @@ static struct buffer_head * xiafs_add_entry(struct inode * dir,
 		memcpy(de->d_name, name, namelen);
 		de->d_name[namelen]=0;
 		de->d_name_len=namelen;
-		dirtify_buffer(bh, 1);
+		mark_buffer_dirty(bh, 1);
 		*res_dir = de;
 		if (res_pre)
 		    *res_pre = de_pre;
@@ -268,7 +268,7 @@ int xiafs_create(struct inode * dir, const char * name, int len, int mode,
 	return -ENOSPC;
     }
     de->d_ino = inode->i_ino;
-    dirtify_buffer(bh, 1);
+    mark_buffer_dirty(bh, 1);
     brelse(bh);
     iput(dir);
     *result = inode;
@@ -325,7 +325,7 @@ int xiafs_mknod(struct inode *dir, const char *name, int len, int mode, int rdev
 	return -ENOSPC;
     }
     de->d_ino = inode->i_ino;
-    dirtify_buffer(bh, 1);
+    mark_buffer_dirty(bh, 1);
     brelse(bh);
     iput(dir);
     iput(inode);
@@ -375,7 +375,7 @@ int xiafs_mkdir(struct inode * dir, const char * name, int len, int mode)
     de->d_name_len=2;
     de->d_rec_len=XIAFS_ZSIZE(dir->i_sb)-12;
     inode->i_nlink = 2;
-    dirtify_buffer(dir_block, 1);
+    mark_buffer_dirty(dir_block, 1);
     brelse(dir_block);
     inode->i_mode = S_IFDIR | (mode & S_IRWXUGO & ~current->umask);
     if (dir->i_mode & S_ISGID)
@@ -389,7 +389,7 @@ int xiafs_mkdir(struct inode * dir, const char * name, int len, int mode)
 	return -ENOSPC;
     }
     de->d_ino = inode->i_ino;
-    dirtify_buffer(bh, 1);
+    mark_buffer_dirty(bh, 1);
     dir->i_nlink++;
     dir->i_dirt = 1;
     iput(dir);
@@ -518,7 +518,7 @@ int xiafs_rmdir(struct inode * dir, const char * name, int len)
     if (inode->i_nlink != 2)
         printk("XIA-FS: empty directory has nlink!=2 (%s %d)\n", WHERE_ERR);
     xiafs_rm_entry(de, de_pre);
-    dirtify_buffer(bh, 1);
+    mark_buffer_dirty(bh, 1);
     inode->i_nlink=0;
     inode->i_dirt=1;
     dir->i_nlink--;
@@ -566,7 +566,7 @@ repeat:
 	inode->i_nlink=1;
     }
     xiafs_rm_entry(de, de_pre);
-    dirtify_buffer(bh, 1);
+    mark_buffer_dirty(bh, 1);
     inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
     dir->i_dirt = 1;
     inode->i_nlink--;
@@ -611,7 +611,7 @@ int xiafs_symlink(struct inode * dir, const char * name,
     for (i = 0; i < BLOCK_SIZE-1 && (c=*symname++); i++)
         name_block->b_data[i] = c;
     name_block->b_data[i] = 0;
-    dirtify_buffer(name_block, 1);
+    mark_buffer_dirty(name_block, 1);
     brelse(name_block);
     inode->i_size = i;
     inode->i_dirt = 1;
@@ -624,7 +624,7 @@ int xiafs_symlink(struct inode * dir, const char * name,
 	return -ENOSPC;
     }
     de->d_ino = inode->i_ino;
-    dirtify_buffer(bh, 1);
+    mark_buffer_dirty(bh, 1);
     brelse(bh);
     iput(dir);
     iput(inode);
@@ -661,7 +661,7 @@ int xiafs_link(struct inode * oldinode, struct inode * dir,
 	return -ENOSPC;
     }
     de->d_ino = oldinode->i_ino;
-    dirtify_buffer(bh, 1);
+    mark_buffer_dirty(bh, 1);
     brelse(bh);
     iput(dir);
     oldinode->i_nlink++;
@@ -798,11 +798,11 @@ try_again:
         new_inode->i_nlink--;
 	new_inode->i_dirt = 1;
     }
-    dirtify_buffer(old_bh, 1);
-    dirtify_buffer(new_bh, 1);
+    mark_buffer_dirty(old_bh, 1);
+    mark_buffer_dirty(new_bh, 1);
     if (dir_bh) {
         PARENT_INO(dir_bh->b_data) = new_dir->i_ino;
-	dirtify_buffer(dir_bh, 1);
+	mark_buffer_dirty(dir_bh, 1);
 	old_dir->i_nlink--;
 	new_dir->i_nlink++;
 	old_dir->i_dirt = 1;

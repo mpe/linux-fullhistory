@@ -301,7 +301,7 @@ static int sysv_file_write(struct inode * inode, struct file * filp, char * buf,
 		memcpy_fromfs(p,buf,c);
 		buf += c;
 		bh->b_uptodate = 1;
-		dirtify_buffer(bh, 0);
+		mark_buffer_dirty(bh, 0);
 		brelse(bh);
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;

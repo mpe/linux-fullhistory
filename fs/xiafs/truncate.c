@@ -104,7 +104,7 @@ repeat:
 	    retry = 1;
 	else {
 	    *indp = 0;
-	    dirtify_buffer(ind_bh, 1);
+	    mark_buffer_dirty(ind_bh, 1);
 	    inode->i_blocks-= 2 << XIAFS_ZSHIFT(inode->i_sb);
 	    xiafs_free_zone(inode->i_sb, tmp);
 	}
@@ -157,7 +157,7 @@ repeat:
 	retry |= trunc_indirect(inode, 
 				8+((1+i)<<XIAFS_ADDRS_PER_Z_BITS(inode->i_sb)), 
 				dindp);
-	dirtify_buffer(dind_bh, 1);
+	mark_buffer_dirty(dind_bh, 1);
     }
     dindp = (u_long *) dind_bh->b_data;
     for (i = 0; i < XIAFS_ADDRS_PER_Z(inode->i_sb) && !(*dindp++); i++);

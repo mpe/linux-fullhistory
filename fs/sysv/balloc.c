@@ -96,7 +96,7 @@ void sysv_free_block(struct super_block * sb, unsigned int block)
 		}
 		*flc_count = *sb->sv_sb_flc_count; /* = sb->sv_flc_size */
 		memcpy(flc_blocks, sb->sv_sb_flc_blocks, *flc_count * sizeof(sysv_zone_t));
-		dirtify_buffer(bh, 1);
+		mark_buffer_dirty(bh, 1);
 		bh->b_uptodate = 1;
 		brelse(bh);
 		*sb->sv_sb_flc_count = 0;
@@ -117,7 +117,7 @@ void sysv_free_block(struct super_block * sb, unsigned int block)
 		bh_data = bh->b_data + ((block & sb->sv_block_size_ratio_1) << sb->sv_block_size_bits);
 		memzero(bh_data, sb->sv_block_size);
 		/* this implies ((struct ..._freelist_chunk *) bh_data)->flc_count = 0; */
-		dirtify_buffer(bh, 1);
+		mark_buffer_dirty(bh, 1);
 		bh->b_uptodate = 1;
 		brelse(bh);
 		/* still *sb->sv_sb_flc_count = 0 */
@@ -138,7 +138,7 @@ void sysv_free_block(struct super_block * sb, unsigned int block)
 		  to_coh_ulong(from_coh_ulong(*sb->sv_sb_total_free_blocks) + 1);
 	else
 		*sb->sv_sb_total_free_blocks = *sb->sv_sb_total_free_blocks + 1;
-	dirtify_buffer(sb->sv_bh, 1); /* super-block has been modified */
+	mark_buffer_dirty(sb->sv_bh, 1); /* super-block has been modified */
 	sb->s_dirt = 1; /* and needs time stamp */
 	unlock_super(sb);
 }
@@ -229,7 +229,7 @@ int sysv_new_block(struct super_block * sb)
 			return 0;
 		}
 	memzero(bh_data,sb->sv_block_size);
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	bh->b_uptodate = 1;
 	brelse(bh);
 	if (sb->sv_convert)
@@ -237,7 +237,7 @@ int sysv_new_block(struct super_block * sb)
 		  to_coh_ulong(from_coh_ulong(*sb->sv_sb_total_free_blocks) - 1);
 	else
 		*sb->sv_sb_total_free_blocks = *sb->sv_sb_total_free_blocks - 1;
-	dirtify_buffer(sb->sv_bh, 1); /* super-block has been modified */
+	mark_buffer_dirty(sb->sv_bh, 1); /* super-block has been modified */
 	sb->s_dirt = 1; /* and needs time stamp */
 	unlock_super(sb);
 	return block;
@@ -331,7 +331,7 @@ unsigned long sysv_count_free_blocks(struct super_block * sb)
 		printk("sysv_count_free_blocks: free block count was %d, correcting to %d\n",old_count,count);
 		if (!(sb->s_flags & MS_RDONLY)) {
 			*sb->sv_sb_total_free_blocks = (sb->sv_convert ? to_coh_ulong(count) : count);
-			dirtify_buffer(sb->sv_bh, 1); /* super-block has been modified */
+			mark_buffer_dirty(sb->sv_bh, 1); /* super-block has been modified */
 			sb->s_dirt = 1; /* and needs time stamp */
 		}
 	}

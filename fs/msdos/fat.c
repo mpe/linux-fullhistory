@@ -72,15 +72,15 @@ int fat_access(struct super_block *sb,int nr,int new_value)
 				*p_first = new_value & 0xff;
 				*p_last = (*p_last & 0xf0) | (new_value >> 8);
 			}
-			dirtify_buffer(bh2, 1);
+			mark_buffer_dirty(bh2, 1);
 		}
-		dirtify_buffer(bh, 1);
+		mark_buffer_dirty(bh, 1);
 		for (copy = 1; copy < MSDOS_SB(sb)->fats; copy++) {
 			if (!(c_bh = msdos_sread(sb->s_dev,MSDOS_SB(sb)->
 			    fat_start+(first >> SECTOR_BITS)+MSDOS_SB(sb)->
 			    fat_length*copy,&c_data))) break;
 			memcpy(c_data,data,SECTOR_SIZE);
-			dirtify_buffer(c_bh, 1);
+			mark_buffer_dirty(c_bh, 1);
 			if (data != data2 || bh != bh2) {
 				if (!(c_bh2 = msdos_sread(sb->s_dev,
 				    MSDOS_SB(sb)->fat_start+(first >>

@@ -156,7 +156,7 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 	req->next = NULL;
 	cli();
 	if (req->bh)
-		req->bh->b_dirt = 0;
+		mark_buffer_clean(req->bh);
 	if (!(tmp = dev->current_request)) {
 		dev->current_request = req;
 		(dev->request_fn)();
@@ -240,12 +240,12 @@ repeat:
 			    !req->waiting &&
 			    req->cmd == rw &&
 			    req->sector + req->nr_sectors == sector &&
-			    req->nr_sectors < 254)
+			    req->nr_sectors < 244)
 			{
 				req->bhtail->b_reqnext = bh;
 				req->bhtail = bh;
 				req->nr_sectors += count;
-				bh->b_dirt = 0;
+				mark_buffer_clean(bh);
 				sti();
 				return;
 			}
@@ -254,14 +254,14 @@ repeat:
 			    !req->waiting &&
 			    req->cmd == rw &&
 			    req->sector - count == sector &&
-			    req->nr_sectors < 254)
+			    req->nr_sectors < 244)
 			{
 			    	req->nr_sectors += count;
 			    	bh->b_reqnext = req->bh;
 			    	req->buffer = bh->b_data;
 			    	req->current_nr_sectors = count;
 			    	req->sector = sector;
-			    	bh->b_dirt = 0;
+				mark_buffer_clean(bh);
 			    	req->bh = bh;
 			    	sti();
 			    	return;

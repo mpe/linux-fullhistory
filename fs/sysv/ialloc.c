@@ -74,10 +74,10 @@ void sysv_free_inode(struct inode * inode)
 	if (*sb->sv_sb_fic_count < sb->sv_fic_size)
 		sb->sv_sb_fic_inodes[(*sb->sv_sb_fic_count)++] = ino;
 	(*sb->sv_sb_total_free_inodes)++;
-	dirtify_buffer(sb->sv_bh, 1); /* super-block has been modified */
+	mark_buffer_dirty(sb->sv_bh, 1); /* super-block has been modified */
 	sb->s_dirt = 1; /* and needs time stamp */
 	memset(raw_inode, 0, sizeof(struct sysv_inode));
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	unlock_super(sb);
 	brelse(bh);
 	clear_inode(inode);
@@ -130,7 +130,7 @@ struct inode * sysv_new_inode(const struct inode * dir)
 	}
 	/* Now *sb->sv_sb_fic_count > 0. */
 	ino = sb->sv_sb_fic_inodes[--(*sb->sv_sb_fic_count)];
-	dirtify_buffer(sb->sv_bh, 1); /* super-block has been modified */
+	mark_buffer_dirty(sb->sv_bh, 1); /* super-block has been modified */
 	sb->s_dirt = 1; /* and needs time stamp */
 	inode->i_count = 1;
 	inode->i_nlink = 1;
@@ -152,7 +152,7 @@ struct inode * sysv_new_inode(const struct inode * dir)
 	inode->i_dirt = 1;		/* cleared by sysv_write_inode() */
 	/* That's it. */
 	(*sb->sv_sb_total_free_inodes)--;
-	dirtify_buffer(sb->sv_bh, 1); /* super-block has been modified again */
+	mark_buffer_dirty(sb->sv_bh, 1); /* super-block has been modified again */
 	sb->s_dirt = 1; /* and needs time stamp again */
 	unlock_super(sb);
 	return inode;
@@ -191,7 +191,7 @@ unsigned long sysv_count_free_inodes(struct super_block * sb)
 		printk("sysv_count_free_inodes: free inode count was %d, correcting to %d\n",(short)(*sb->sv_sb_total_free_inodes),count);
 		if (!(sb->s_flags & MS_RDONLY)) {
 			*sb->sv_sb_total_free_inodes = count;
-			dirtify_buffer(sb->sv_bh, 1); /* super-block has been modified */
+			mark_buffer_dirty(sb->sv_bh, 1); /* super-block has been modified */
 			sb->s_dirt = 1; /* and needs time stamp */
 		}
 	}

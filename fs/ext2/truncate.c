@@ -90,7 +90,7 @@ repeat:
 		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL) {
 			clear_block (bh->b_data, inode->i_sb->s_blocksize,
 				     RANDOM_INT);
-			dirtify_buffer(bh, 1);
+			mark_buffer_dirty(bh, 1);
 		}
 		brelse (bh);
 		if (free_count == 0) {
@@ -162,11 +162,11 @@ repeat:
 			continue;
 		}
 		*ind = 0;
-		dirtify_buffer(ind_bh, 1);
+		mark_buffer_dirty(ind_bh, 1);
 		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL) {
 			clear_block (bh->b_data, inode->i_sb->s_blocksize,
 				     RANDOM_INT);
-			dirtify_buffer(bh, 1);
+			mark_buffer_dirty(bh, 1);
 		}
 		brelse (bh);
 		if (free_count == 0) {
@@ -243,7 +243,7 @@ repeat:
 			continue;
 		retry |= trunc_indirect (inode, offset + (i * addr_per_block),
 					  dind);
-		dirtify_buffer(dind_bh, 1);
+		mark_buffer_dirty(dind_bh, 1);
 	}
 	dind = (unsigned long *) dind_bh->b_data;
 	for (i = 0; i < addr_per_block; i++)
@@ -302,7 +302,7 @@ repeat:
 		retry |= trunc_dindirect(inode, EXT2_NDIR_BLOCKS +
 			addr_per_block + (i + 1) * addr_per_block * addr_per_block,
 			tind);
-		dirtify_buffer(tind_bh, 1);
+		mark_buffer_dirty(tind_bh, 1);
 	}
 	tind = (unsigned long *) tind_bh->b_data;
 	for (i = 0; i < addr_per_block; i++)

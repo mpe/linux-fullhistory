@@ -78,6 +78,7 @@ static int ext2_file_read (struct inode * inode, struct file * filp,
 	int read, left, chars;
 	int block, blocks, offset;
 	int bhrequest, uptodate;
+	int clusterblocks;
 	struct buffer_head ** bhb, ** bhe;
 	struct buffer_head * bhreq[NBUF];
 	struct buffer_head * buflist[NBUF];
@@ -130,11 +131,18 @@ static int ext2_file_read (struct inode * inode, struct file * filp,
 	 * buffers and caches.
 	 */
 
+	clusterblocks = 0;
+
 	do {
 		bhrequest = 0;
 		uptodate = 1;
 		while (blocks) {
 			--blocks;
+#if 1
+			if(!clusterblocks) clusterblocks = ext2_getcluster(inode, block);
+			if(clusterblocks) clusterblocks--;
+#endif
+
 			*bhb = ext2_getblk (inode, block++, 0, &err);
 			if (*bhb && !(*bhb)->b_uptodate) {
 				uptodate = 0;
@@ -277,7 +285,7 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		memcpy_fromfs (p, buf, c);
 		buf += c;
 		bh->b_uptodate = 1;
-		dirtify_buffer(bh, 0);
+		mark_buffer_dirty(bh, 0);
 		brelse (bh);
 	}
 	up(&inode->i_sem);

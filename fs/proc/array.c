@@ -465,6 +465,7 @@ static int get_maps(int pid, char *buf)
 }
 
 extern int get_module_list(char *);
+extern int get_device_list(char *);
 
 static int array_read(struct inode * inode, struct file * file,char * buf, int count)
 {
@@ -521,6 +522,9 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 			break;
 		case 17:
 			length = get_kstat(page);
+			break;
+		case 18:
+			length = get_device_list(page);
 			break;
 		default:
 			free_page((unsigned long) page);

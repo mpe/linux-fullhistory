@@ -320,7 +320,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 			 */
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
 			dir->i_dirt = 1;
-			dirtify_buffer(bh, 1);
+			mark_buffer_dirty(bh, 1);
 			*res_dir = de;
 			*err = 0;
 			return bh;
@@ -394,7 +394,7 @@ int ext2_create (struct inode * dir,const char * name, int len, int mode,
 	ext2_dcache_add (dir->i_dev, dir->i_ino, de->name, de->name_len,
 			 de->inode);
 #endif
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -460,7 +460,7 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 	ext2_dcache_add (dir->i_dev, dir->i_ino, de->name, de->name_len,
 			 de->inode);
 #endif
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -517,7 +517,7 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 	de->name_len = 2;
 	strcpy (de->name, "..");
 	inode->i_nlink = 2;
-	dirtify_buffer(dir_block, 1);
+	mark_buffer_dirty(dir_block, 1);
 	brelse (dir_block);
 	inode->i_mode = S_IFDIR | (mode & S_IRWXUGO & ~current->umask);
 	if (dir->i_mode & S_ISGID)
@@ -536,7 +536,7 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 	ext2_dcache_add (dir->i_dev, dir->i_ino, de->name, de->name_len,
 			 de->inode);
 #endif
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -660,7 +660,7 @@ repeat:
 	up(&inode->i_sem);
 	if (retval)
 		goto end_rmdir;
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -728,7 +728,7 @@ repeat:
 	retval = ext2_delete_entry (de, bh);
 	if (retval)
 		goto end_unlink;
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -793,7 +793,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 		link[i++] = c;
 	link[i] = 0;
 	if (name_block) {
-		dirtify_buffer(name_block, 1);
+		mark_buffer_dirty(name_block, 1);
 		brelse (name_block);
 	}
 	inode->i_size = i;
@@ -820,7 +820,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 	ext2_dcache_add (dir->i_dev, dir->i_ino, de->name, de->name_len,
 			 de->inode);
 #endif
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -866,7 +866,7 @@ int ext2_link (struct inode * oldinode, struct inode * dir,
 	ext2_dcache_add (dir->i_dev, dir->i_ino, de->name, de->name_len,
 			 de->inode);
 #endif
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -1042,19 +1042,19 @@ start_up:
 	}
 	old_dir->i_ctime = old_dir->i_mtime = CURRENT_TIME;
 	old_dir->i_dirt = 1;
-	dirtify_buffer(old_bh,  1);
+	mark_buffer_dirty(old_bh,  1);
 	if (IS_SYNC(old_dir)) {
 		ll_rw_block (WRITE, 1, &old_bh);
 		wait_on_buffer (old_bh);
 	}
-	dirtify_buffer(new_bh, 1);
+	mark_buffer_dirty(new_bh, 1);
 	if (IS_SYNC(new_dir)) {
 		ll_rw_block (WRITE, 1, &new_bh);
 		wait_on_buffer (new_bh);
 	}
 	if (dir_bh) {
 		PARENT_INO(dir_bh->b_data) = new_dir->i_ino;
-		dirtify_buffer(dir_bh, 1);
+		mark_buffer_dirty(dir_bh, 1);
 		old_dir->i_nlink--;
 		old_dir->i_dirt = 1;
 		if (new_inode) {

@@ -83,7 +83,7 @@ printk("ext_free_block: block full, skipping to %d\n", block);
 	}
 	sb->u.ext_sb.s_freeblockscount ++;
 	sb->s_dirt = 1;
-	dirtify_buffer(sb->u.ext_sb.s_firstfreeblock, 1);
+	mark_buffer_dirty(sb->u.ext_sb.s_firstfreeblock, 1);
 	unlock_super (sb);
 	return;
 }
@@ -104,7 +104,7 @@ int ext_new_block(struct super_block * sb)
 	efb = (struct ext_free_block *) sb->u.ext_sb.s_firstfreeblock->b_data;
 	if (efb->count) {
 		j = efb->free[--efb->count];
-		dirtify_buffer(sb->u.ext_sb.s_firstfreeblock, 1);
+		mark_buffer_dirty(sb->u.ext_sb.s_firstfreeblock, 1);
 	} else {
 #ifdef EXTFS_DEBUG
 printk("ext_new_block: block empty, skipping to %d\n", efb->next);
@@ -135,7 +135,7 @@ printk("ext_new_block: block empty, skipping to %d\n", efb->next);
 	}
 	clear_block(bh->b_data);
 	bh->b_uptodate = 1;
-	dirtify_buffer(bh, 1);
+	mark_buffer_dirty(bh, 1);
 	brelse(bh);
 #ifdef EXTFS_DEBUG
 printk("ext_new_block: allocating block %d\n", j);
@@ -239,7 +239,7 @@ printk("ext_free_inode: inode full, skipping to %d\n", ino);
 	}
 	sb->u.ext_sb.s_freeinodescount ++;
 	sb->s_dirt = 1;
-	dirtify_buffer(sb->u.ext_sb.s_firstfreeinodeblock, 1);
+	mark_buffer_dirty(sb->u.ext_sb.s_firstfreeinodeblock, 1);
 	unlock_super (sb);
 }
 
@@ -263,7 +263,7 @@ struct inode * ext_new_inode(const struct inode * dir)
 		(sb->u.ext_sb.s_firstfreeinodenumber-1)%EXT_INODES_PER_BLOCK;
 	if (efi->count) {
 		j = efi->free[--efi->count];
-		dirtify_buffer(sb->u.ext_sb.s_firstfreeinodeblock, 1);
+		mark_buffer_dirty(sb->u.ext_sb.s_firstfreeinodeblock, 1);
 	} else {
 #ifdef EXTFS_DEBUG
 printk("ext_free_inode: inode empty, skipping to %d\n", efi->next);

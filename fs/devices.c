@@ -28,6 +28,26 @@ static struct device_struct blkdevs[MAX_BLKDEV] = {
 	{ NULL, NULL },
 };
 
+int get_device_list(char * page)
+{
+	int i;
+	int len;
+
+	len = sprintf(page, "Character devices:\n");
+	for (i = 0; i < MAX_CHRDEV ; i++) {
+		if (chrdevs[i].fops) {
+			len += sprintf(page+len, "%2d %s\n", i, chrdevs[i].name);
+		}
+	}
+	len += sprintf(page+len, "\nBlock devices:\n");
+	for (i = 0; i < MAX_BLKDEV ; i++) {
+		if (blkdevs[i].fops) {
+			len += sprintf(page+len, "%2d %s\n", i, blkdevs[i].name);
+		}
+	}
+	return len;
+}
+
 struct file_operations * get_blkfops(unsigned int major)
 {
 	if (major >= MAX_BLKDEV)
