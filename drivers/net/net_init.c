@@ -165,6 +165,9 @@ static int fddi_change_mtu(struct device *dev, int new_mtu)
 #endif
 
 #ifdef CONFIG_HIPPI
+#define MAX_HIP_CARDS	4
+static struct device *hipdev_index[MAX_HIP_CARDS];
+
 static int hippi_change_mtu(struct device *dev, int new_mtu)
 {
 	/*
@@ -193,32 +196,60 @@ static int hippi_mac_addr(struct device *dev, void *p)
 
 struct device *init_hippi_dev(struct device *dev, int sizeof_priv)
 {
-	struct device *tmp_dev;		/* pointer to a device structure */
+	int new_device = 0;
+	int i;
 
-	/* Find next free HIPPI entry */
+	/* Use an existing correctly named device in Space.c:dev_base. */
+	if (dev == NULL) {
+		int alloc_size = sizeof(struct device) + sizeof("hip%d  ")
+			+ sizeof_priv + 3;
+		struct device *cur_dev;
+		char pname[8];
 
-	for (tmp_dev = dev; tmp_dev != NULL; tmp_dev = tmp_dev->next)
-		if ((strncmp(tmp_dev->name, "hip", 3) == 0) &&
-		    (tmp_dev->base_addr == 0))
-			break;
+		for (i = 0; i < MAX_HIP_CARDS; ++i)
+			if (hipdev_index[i] == NULL) {
+				sprintf(pname, "hip%d", i);
+				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next)
+					if (strcmp(pname, cur_dev->name) == 0) {
+						dev = cur_dev;
+						dev->init = NULL;
+						sizeof_priv = (sizeof_priv + 3) & ~3;
+						dev->priv = sizeof_priv
+							  ? kmalloc(sizeof_priv, GFP_KERNEL)
+							  :	NULL;
+						if (dev->priv) memset(dev->priv, 0, sizeof_priv);
+						goto hipfound;
+					}
+			}
 
-	if (tmp_dev == NULL)
-	{
-		printk("Could not find free HIPPI device structure.\n");
-		return NULL;
+		alloc_size &= ~3;		/* Round to dword boundary. */
+
+		dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
+		memset(dev, 0, alloc_size);
+		if (sizeof_priv)
+			dev->priv = (void *) (dev + 1);
+		dev->name = sizeof_priv + (char *)(dev + 1);
+		new_device = 1;
 	}
-		
-	tmp_dev->init = NULL;
-	sizeof_priv = (sizeof_priv + 3) & ~3;
-	tmp_dev->priv = sizeof_priv ?								kmalloc(sizeof_priv, GFP_KERNEL) : NULL;
 
-	if (tmp_dev->priv)
-		memset(dev->priv, 0, sizeof_priv);
+hipfound:				/* From the double loop above. */
 
-	/* Initialize remaining device structure information */
+	if (dev->name &&
+		((dev->name[0] == '\0') || (dev->name[0] == ' '))) {
+		for (i = 0; i < MAX_HIP_CARDS; ++i)
+			if (hipdev_index[i] == NULL) {
+				sprintf(dev->name, "hip%d", i);
+				hipdev_index[i] = dev;
+				break;
+			}
+	}
 
-	hippi_setup(tmp_dev);
-	return tmp_dev;
+	hippi_setup(dev);
+	
+	if (new_device)
+		register_netdevice(dev);
+
+	return dev;
 }
 
 static int hippi_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
@@ -312,6 +343,19 @@ void fddi_setup(struct device *dev)
 #ifdef CONFIG_HIPPI
 void hippi_setup(struct device *dev)
 {
+	int i;
+
+	if (dev->name && (strncmp(dev->name, "hip", 3) == 0)) {
+		i = simple_strtoul(dev->name + 3, NULL, 0);
+		if (hipdev_index[i] == NULL) {
+			hipdev_index[i] = dev;
+		}
+		else if (dev != hipdev_index[i]) {
+			printk("hippi_setup: Ouch! Someone else took %s\n",
+				dev->name);
+		}
+	}
+
 	dev->set_multicast_list	= NULL;
 	dev->change_mtu			= hippi_change_mtu;
 	dev->hard_header		= hippi_header;

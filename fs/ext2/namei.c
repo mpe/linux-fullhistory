@@ -430,19 +430,6 @@ int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
 					      EXT2_FEATURE_INCOMPAT_FILETYPE))
 			de->file_type = EXT2_FT_REG_FILE;
-	} else if (S_ISDIR(inode->i_mode)) {
-		inode->i_op = &ext2_dir_inode_operations;
-		if (dir->i_mode & S_ISGID)
-			inode->i_mode |= S_ISGID;
-		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
-					      EXT2_FEATURE_INCOMPAT_FILETYPE))
-			de->file_type = EXT2_FT_DIR;
-	}
-	else if (S_ISLNK(inode->i_mode)) {
-		inode->i_op = &ext2_symlink_inode_operations;
-		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
-					      EXT2_FEATURE_INCOMPAT_FILETYPE))
-			de->file_type = EXT2_FT_SYMLINK;
 	} else if (S_ISCHR(inode->i_mode)) {
 		inode->i_op = &chrdev_inode_operations;
 		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
@@ -701,14 +688,6 @@ int ext2_unlink(struct inode * dir, struct dentry *dentry)
 	inode = dentry->d_inode;
 	DQUOT_INIT(inode);
 
-	retval = -EPERM;
-	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
-		goto end_unlink;
-	if ((dir->i_mode & S_ISVTX) &&
-	    current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
-		goto end_unlink;
-
 	retval = -EIO;
 	if (le32_to_cpu(de->inode) != inode->i_ino)
 		goto end_unlink;
@@ -896,17 +875,15 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 		goto end_rename;
 
 	old_bh = ext2_find_entry (old_dir, old_dentry->d_name.name, old_dentry->d_name.len, &old_de);
-	retval = -ENOENT;
-	if (!old_bh)
-		goto end_rename;
+	/*
+	 *  Check for inode number is _not_ due to possible IO errors.
+	 *  We might rmdir the source, keep it as pwd of some process
+	 *  and merrily kill the link to whatever was created under the
+	 *  same name. Goodbye sticky bit ;-<
+	 */
 	old_inode = old_dentry->d_inode;
-
-	retval = -EPERM;
-	if ((old_dir->i_mode & S_ISVTX) && 
-	    current->fsuid != old_inode->i_uid &&
-	    current->fsuid != old_dir->i_uid && !capable(CAP_FOWNER))
-		goto end_rename;
-	if (IS_APPEND(old_inode) || IS_IMMUTABLE(old_inode))
+	retval = -ENOENT;
+	if (!old_bh || le32_to_cpu(old_de->inode) != old_inode->i_ino)
 		goto end_rename;
 
 	new_inode = new_dentry->d_inode;
@@ -923,39 +900,21 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 	retval = 0;
 	if (new_inode == old_inode)
 		goto end_rename;
-	if (new_inode && S_ISDIR(new_inode->i_mode)) {
-		retval = -EISDIR;
-		if (!S_ISDIR(old_inode->i_mode))
-			goto end_rename;
-		retval = -EINVAL;
-		if (is_subdir(new_dentry, old_dentry))
-			goto end_rename;
-		/* Prune any children before testing for busy */
-		if (new_dentry->d_count > 1)
-			shrink_dcache_parent(new_dentry);
-		retval = -ENOTEMPTY;
-		if (!empty_dir (new_inode))
-			goto end_rename;
-		retval = -EBUSY;
-		if (new_dentry->d_count > 1)
-			goto end_rename;
-	}
-	retval = -EPERM;
-	if (new_inode) {
-		if ((new_dir->i_mode & S_ISVTX) &&
-		    current->fsuid != new_inode->i_uid &&
-		    current->fsuid != new_dir->i_uid && !capable(CAP_FOWNER))
-			goto end_rename;
-		if (IS_APPEND(new_inode) || IS_IMMUTABLE(new_inode))
-			goto end_rename;
-	}
 	if (S_ISDIR(old_inode->i_mode)) {
-		retval = -ENOTDIR;
-		if (new_inode && !S_ISDIR(new_inode->i_mode))
-			goto end_rename;
 		retval = -EINVAL;
 		if (is_subdir(new_dentry, old_dentry))
 			goto end_rename;
+		if (new_inode) {
+			/* Prune any children before testing for busy */
+			if (new_dentry->d_count > 1)
+				shrink_dcache_parent(new_dentry);
+			retval = -EBUSY;
+			if (new_dentry->d_count > 1)
+				goto end_rename;
+			retval = -ENOTEMPTY;
+			if (!empty_dir (new_inode))
+				goto end_rename;
+		}
 		dir_bh = ext2_bread (old_inode, 0, 0, &retval);
 		if (!dir_bh)
 			goto end_rename;

@@ -1488,7 +1488,7 @@ __initfunc(int sjcd_init( void )){
     /*
      * Wait 10ms approx.
      */
-    for( timer = jiffies; jiffies <= timer; );
+    for( timer = jiffies; time_before_eq(jiffies, timer); );
     if ( (i % 100) == 0 ) printk( "." );
     ( void )sjcd_check_status();
   }
@@ -1509,7 +1509,7 @@ __initfunc(int sjcd_init( void )){
     /*
      * Wait 10ms approx.
      */
-    for( timer = jiffies; jiffies <= timer; );
+    for( timer = jiffies; time_before_eq(jiffies, timer); );
     if ( (i % 100) == 0 ) printk( "." );
     ( void )sjcd_check_status();
   }
@@ -1540,7 +1540,7 @@ __initfunc(int sjcd_init( void )){
       /*
        * Wait 10ms approx.
        */
-      for( timer = jiffies; jiffies <= timer; );
+      for( timer = jiffies; time_before_eq(jiffies, timer); );
       if ( (i % 100) == 0 ) printk( "." );
       ( void )sjcd_check_status();
     }

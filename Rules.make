@@ -197,7 +197,7 @@ MODINCL = $(TOPDIR)/include/linux/modules
 # and SMP Intel boxes - AC - from bits by Michael Chastain
 #
 
-ifdef SMP
+ifdef CONFIG_SMP
 	genksyms_smp_prefix := -p smp_
 else
 	genksyms_smp_prefix := 

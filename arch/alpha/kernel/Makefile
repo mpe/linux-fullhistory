@@ -111,7 +111,7 @@ endif
 
 endif # GENERIC
 
-ifdef SMP
+ifdef CONFIG_SMP
 O_OBJS   += smp.o
 endif
 

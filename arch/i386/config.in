@@ -20,6 +20,7 @@ bool 'Math emulation' CONFIG_MATH_EMULATION
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'MTRR (Memory Type Range Register) support' CONFIG_MTRR
 fi
+bool 'Symmetric multi-processing support' CONFIG_SMP
 endmenu
 
 mainmenu_option next_comment

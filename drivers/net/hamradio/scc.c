@@ -1,4 +1,4 @@
-#define RCS_ID "$Id: scc.c,v 1.73 1998/01/29 17:38:51 jreuter Exp jreuter $"
+#define RCS_ID "$Id: scc.c,v 1.75 1998/11/04 15:15:01 jreuter Exp jreuter $"
 
 #define VERSION "3.0"
 #define BANNER  "Z8530 SCC driver version "VERSION".dl1bke (experimental) by DL1BKE\n"
@@ -60,22 +60,22 @@
    Incomplete history of z8530drv:
    -------------------------------
 
-   940913	- started to write the driver, rescued most of my own
-		  code (and Hans Alblas' memory buffer pool concept) from 
-		  an earlier project "sccdrv" which was initiated by 
-		  Guido ten Dolle. Not much of the old driver survived, 
-		  though. The first version I put my hands on was sccdrv1.3
-		  from August 1993. The memory buffer pool concept
-		  appeared in an unauthorized sccdrv version (1.5) from
-		  August 1994.
+   1994-09-13	started to write the driver, rescued most of my own
+		code (and Hans Alblas' memory buffer pool concept) from 
+		an earlier project "sccdrv" which was initiated by 
+		Guido ten Dolle. Not much of the old driver survived, 
+		though. The first version I put my hands on was sccdrv1.3
+		from August 1993. The memory buffer pool concept
+		appeared in an unauthorized sccdrv version (1.5) from
+		August 1994.
 
-   950131	- changed copyright notice to GPL without limitations.
+   1995-01-31	changed copyright notice to GPL without limitations.
    
      .
      .	<SNIP>
      .
    		  
-   961005	- New semester, new driver... 
+   1996-10-05	New semester, new driver... 
 
    		  * KISS TNC emulator removed (TTY driver)
    		  * Source moved to drivers/net/
@@ -88,12 +88,22 @@
    		  The move to version number 3.0 reflects theses changes.
    		  You can use 'kissbridge' if you need a KISS TNC emulator.
 
-   961213	- Fixed for Linux networking changes. (G4KLX)
-   970108	- Fixed the remaining problems.
-   970402	- Hopefully fixed the problems with the new *_timer()
-   		  routines, added calibration code.
-   971012	- Made SCC_DELAY a CONFIG option, added CONFIG_SCC_TRXECHO
-   980129	- Small fix to avoid lock-up on initialization
+   1996-12-13	Fixed for Linux networking changes. (G4KLX)
+   1997-01-08	Fixed the remaining problems.
+   1997-04-02	Hopefully fixed the problems with the new *_timer()
+   		routines, added calibration code.
+   1997-10-12	Made SCC_DELAY a CONFIG option, added CONFIG_SCC_TRXECHO
+   1998-01-29	Small fix to avoid lock-up on initialization
+   1998-09-29	Fixed the "grouping" bugs, tx_inhibit works again,
+   		using dev->tx_queue_len now instead of MAXQUEUE now.
+   1998-10-21	Postponed the spinlock changes, would need a lot of
+   		testing I currently don't have the time to. Softdcd doesn't
+   		work.
+   1998-11-04	Softdcd does not work correctly in DPLL mode, in fact it 
+   		never did. The DPLL locks on noise, the SYNC unit sees
+   		flags that aren't... Restarting the DPLL does not help
+   		either, it resynchronizes too slow and the first received
+   		frame gets lost.
 
    Thanks to all who contributed to this driver with ideas and bug
    reports!
@@ -119,22 +129,22 @@
    Joerg Reuter	ampr-net: dl1bke@db0pra.ampr.org
 		AX-25   : DL1BKE @ DB0ACH.#NRW.DEU.EU
 		Internet: jreuter@poboxes.com
-		www     : http://www.rat.de/jr
+		www     : http://poboxes.com/jreuter/
 */
 
 /* ----------------------------------------------------------------------- */
 
 #undef  SCC_LDELAY	1	/* slow it even a bit more down */
-#undef  DONT_CHECK		/* don't look if the SCCs you specified are available */
+#undef  SCC_DONT_CHECK		/* don't look if the SCCs you specified are available */
 
-#define MAXSCC          4       /* number of max. supported chips */
-#define BUFSIZE         384     /* must not exceed 4096 */
-#define MAXQUEUE	8	/* number of buffers we queue ourself */
-#undef  DISABLE_ALL_INTS	/* use cli()/sti() in ISR instead of */
+#define SCC_MAXCHIPS	4       /* number of max. supported chips */
+#define SCC_BUFSIZE	384     /* must not exceed 4096 */
+#undef  SCC_DISABLE_ALL_INTS	/* use cli()/sti() in ISR instead of */
 				/* enable_irq()/disable_irq()        */
 #undef	SCC_DEBUG
 
-#define DEFAULT_CLOCK	4915200 /* default pclock if nothing is specified */
+#define SCC_DEFAULT_CLOCK	4915200 
+				/* default pclock if nothing is specified */
 
 /* ----------------------------------------------------------------------- */
 
@@ -214,13 +224,13 @@ static unsigned char *SCC_DriverName = "scc";
 
 static struct irqflags { unsigned char used : 1; } Ivec[16];
 	
-static struct scc_channel SCC_Info[2 * MAXSCC];	/* information per channel */
+static struct scc_channel SCC_Info[2 * SCC_MAXCHIPS];	/* information per channel */
 
 static struct scc_ctrl {
 	io_port chan_A;
 	io_port chan_B;
 	int irq;
-} SCC_ctrl[MAXSCC+1];
+} SCC_ctrl[SCC_MAXCHIPS+1];
 
 static unsigned char Driver_Initialized = 0;
 static int Nchips = 0;
@@ -236,7 +246,7 @@ MODULE_SUPPORTED_DEVICE("scc");
 
 /* These provide interrupt save 2-step access to the Z8530 registers */
 
-extern __inline__ unsigned char InReg(io_port port, unsigned char reg)
+static inline unsigned char InReg(io_port port, unsigned char reg)
 {
 	unsigned long flags;
 	unsigned char r;
@@ -256,7 +266,7 @@ extern __inline__ unsigned char InReg(io_port port, unsigned char reg)
 	return r;
 }
 
-extern __inline__ void OutReg(io_port port, unsigned char reg, unsigned char val)
+static inline void OutReg(io_port port, unsigned char reg, unsigned char val)
 {
 	unsigned long flags;
 	
@@ -272,31 +282,31 @@ extern __inline__ void OutReg(io_port port, unsigned char reg, unsigned char val
 	restore_flags(flags);
 }
 
-extern __inline__ void wr(struct scc_channel *scc, unsigned char reg,
+static inline void wr(struct scc_channel *scc, unsigned char reg,
 	unsigned char val)
 {
 	OutReg(scc->ctrl, reg, (scc->wreg[reg] = val));
 }
 
-extern __inline__ void or(struct scc_channel *scc, unsigned char reg, unsigned char val)
+static inline void or(struct scc_channel *scc, unsigned char reg, unsigned char val)
 {
 	OutReg(scc->ctrl, reg, (scc->wreg[reg] |= val));
 }
 
-extern __inline__ void cl(struct scc_channel *scc, unsigned char reg, unsigned char val)
+static inline void cl(struct scc_channel *scc, unsigned char reg, unsigned char val)
 {
 	OutReg(scc->ctrl, reg, (scc->wreg[reg] &= ~val));
 }
 
-#ifdef DISABLE_ALL_INTS
-extern __inline__ void scc_cli(int irq)
+#ifdef SCC_DISABLE_ALL_INTS
+static inline void scc_cli(int irq)
 { cli(); }
-extern __inline__ void scc_sti(int irq)
+static inline void scc_sti(int irq)
 { sti(); }
 #else
-static __inline__ void scc_cli(int irq)
+static inline void scc_cli(int irq)
 { disable_irq(irq); }
-static __inline__ void scc_sti(int irq)
+static inline void scc_sti(int irq)
 { enable_irq(irq); }
 #endif
 
@@ -305,17 +315,17 @@ static __inline__ void scc_sti(int irq)
 /* ******************************************************************** */
 
 
-extern __inline__ void scc_lock_dev(struct scc_channel *scc)
+static inline void scc_lock_dev(struct scc_channel *scc)
 {
 	scc->dev->tbusy = 1;
 }
 
-extern __inline__ void scc_unlock_dev(struct scc_channel *scc)
+static inline void scc_unlock_dev(struct scc_channel *scc)
 {
 	scc->dev->tbusy = 0;
 }
 
-extern __inline__ void scc_discard_buffers(struct scc_channel *scc)
+static inline void scc_discard_buffers(struct scc_channel *scc)
 {
 	unsigned long flags;
 	
@@ -343,7 +353,7 @@ extern __inline__ void scc_discard_buffers(struct scc_channel *scc)
 
 /* ----> subroutines for the interrupt handlers <---- */
 
-extern __inline__ void scc_notify(struct scc_channel *scc, int event)
+static inline void scc_notify(struct scc_channel *scc, int event)
 {
 	struct sk_buff *skb;
 	char *bp;
@@ -362,7 +372,7 @@ extern __inline__ void scc_notify(struct scc_channel *scc, int event)
 		scc->stat.nospace++;
 }
 
-extern __inline__ void flush_rx_FIFO(struct scc_channel *scc)
+static inline void flush_rx_FIFO(struct scc_channel *scc)
 {
 	int k;
 	
@@ -377,12 +387,18 @@ extern __inline__ void flush_rx_FIFO(struct scc_channel *scc)
 	}
 }
 
+static void start_hunt(struct scc_channel *scc)
+{
+	if ((scc->modem.clocksrc != CLK_EXTERNAL))
+		OutReg(scc->ctrl,R14,SEARCH|scc->wreg[R14]); /* DPLL: enter search mode */
+	or(scc,R3,ENT_HM|RxENABLE);  /* enable the receiver, hunt mode */
+}
 
 /* ----> four different interrupt handlers for Tx, Rx, changing of	*/
 /*       DCD/CTS and Rx/Tx errors					*/
 
 /* Transmitter interrupt handler */
-extern __inline__ void scc_txint(struct scc_channel *scc)
+static inline void scc_txint(struct scc_channel *scc)
 {
 	struct sk_buff *skb;
 
@@ -446,7 +462,7 @@ extern __inline__ void scc_txint(struct scc_channel *scc)
 
 
 /* External/Status interrupt handler */
-extern __inline__ void scc_exint(struct scc_channel *scc)
+static inline void scc_exint(struct scc_channel *scc)
 {
 	unsigned char status,changes,chg_and_stat;
 
@@ -461,35 +477,39 @@ extern __inline__ void scc_exint(struct scc_channel *scc)
 	if (chg_and_stat & BRK_ABRT)		/* Received an ABORT */
 		flush_rx_FIFO(scc);
 
+	/* HUNT: software DCD; on = waiting for SYNC, off = receiving frame */
+
+	if ((changes & SYNC_HUNT) && scc->kiss.softdcd)
+	{
+		if (status & SYNC_HUNT)
+		{
+			scc->dcd = 0;
+			flush_rx_FIFO(scc);
+			if ((scc->modem.clocksrc != CLK_EXTERNAL))
+				OutReg(scc->ctrl,R14,SEARCH|scc->wreg[R14]); /* DPLL: enter search mode */
+		} else {
+			scc->dcd = 1;
+		}
+
+		scc_notify(scc, scc->dcd? HWEV_DCD_OFF:HWEV_DCD_ON);
+	}
 
 	/* DCD: on = start to receive packet, off = ABORT condition */
 	/* (a successfully received packet generates a special condition int) */
 	
-	if(changes & DCD)                       /* DCD input changed state */
+	if((changes & DCD) && !scc->kiss.softdcd) /* DCD input changed state */
 	{
 		if(status & DCD)                /* DCD is now ON */
 		{
-			if (scc->modem.clocksrc != CLK_EXTERNAL)
-				OutReg(scc->ctrl,R14,SEARCH|scc->wreg[R14]); /* DPLL: enter search mode */
-				
-			or(scc,R3,ENT_HM|RxENABLE); /* enable the receiver, hunt mode */
+			start_hunt(scc);
+			scc->dcd = 1;
 		} else {                        /* DCD is now OFF */
 			cl(scc,R3,ENT_HM|RxENABLE); /* disable the receiver */
 			flush_rx_FIFO(scc);
+			scc->dcd = 0;
 		}
 		
-		if (!scc->kiss.softdcd)
-			scc_notify(scc, (status & DCD)? HWEV_DCD_ON:HWEV_DCD_OFF);
-	}
-	
-	/* HUNT: software DCD; on = waiting for SYNC, off = receiving frame */
-	
-	if (changes & SYNC_HUNT)
-	{
-		if (scc->kiss.softdcd)
-			scc_notify(scc, (status & SYNC_HUNT)? HWEV_DCD_OFF:HWEV_DCD_ON);
-		else
-			cl(scc,R15,SYNCIE);	/* oops, we were too lazy to disable this? */
+		scc_notify(scc, scc->dcd? HWEV_DCD_ON:HWEV_DCD_OFF);
 	}
 
 #ifdef notdef
@@ -527,7 +547,7 @@ extern __inline__ void scc_exint(struct scc_channel *scc)
 
 
 /* Receiver interrupt handler */
-extern __inline__ void scc_rxint(struct scc_channel *scc)
+static inline void scc_rxint(struct scc_channel *scc)
 {
 	struct sk_buff *skb;
 
@@ -575,7 +595,7 @@ extern __inline__ void scc_rxint(struct scc_channel *scc)
 
 
 /* Receive Special Condition interrupt handler */
-extern __inline__ void scc_spint(struct scc_channel *scc)
+static inline void scc_spint(struct scc_channel *scc)
 {
 	unsigned char status;
 	struct sk_buff *skb;
@@ -646,8 +666,6 @@ static void scc_isr(int irq, void *dev_id, struct pt_regs *regs)
 	struct scc_ctrl *ctrl;
 	int k;
 	
-	scc_cli(irq);
-
 	if (Vector_Latch)
 	{
 	    	for(k=0; k < SCC_IRQTIMEOUT; k++)
@@ -665,7 +683,6 @@ static void scc_isr(int irq, void *dev_id, struct pt_regs *regs)
 
 			OutReg(scc->ctrl,R0,RES_H_IUS);              /* Reset Highest IUS */
 		}  
-		scc_sti(irq);
 
 		if (k == SCC_IRQTIMEOUT)
 			printk(KERN_WARNING "z8530drv: endless loop in scc_isr()?\n");
@@ -718,8 +735,6 @@ static void scc_isr(int irq, void *dev_id, struct pt_regs *regs)
 		} else
 			ctrl++;
 	}
-	
-	scc_sti(irq);
 }
 
 
@@ -731,7 +746,7 @@ static void scc_isr(int irq, void *dev_id, struct pt_regs *regs)
 
 /* ----> set SCC channel speed <---- */
 
-extern __inline__ void set_brg(struct scc_channel *scc, unsigned int tc)
+static inline void set_brg(struct scc_channel *scc, unsigned int tc)
 {
 	cl(scc,R14,BRENABL);		/* disable baudrate generator */
 	wr(scc,R12,tc & 255);		/* brg rate LOW */
@@ -739,7 +754,7 @@ extern __inline__ void set_brg(struct scc_channel *scc, unsigned int tc)
 	or(scc,R14,BRENABL);		/* enable baudrate generator */
 }
 
-extern __inline__ void set_speed(struct scc_channel *scc)
+static inline void set_speed(struct scc_channel *scc)
 {
 	disable_irq(scc->irq);
 
@@ -752,7 +767,7 @@ extern __inline__ void set_speed(struct scc_channel *scc)
 
 /* ----> initialize a SCC channel <---- */
 
-extern __inline__ void init_brg(struct scc_channel *scc)
+static inline void init_brg(struct scc_channel *scc)
 {
 	wr(scc, R14, BRSRC);				/* BRG source = PCLK */
 	OutReg(scc->ctrl, R14, SSBR|scc->wreg[R14]);	/* DPLL source = BRG */
@@ -875,19 +890,15 @@ static void init_channel(struct scc_channel *scc)
 		wr(scc,R7,AUTOEOM);
 	}
 
-	if((InReg(scc->ctrl,R0)) & DCD)		/* DCD is now ON */
+	if(scc->kiss.softdcd || (InReg(scc->ctrl,R0) & DCD))
+						/* DCD is now ON */
 	{
-		if (scc->modem.clocksrc != CLK_EXTERNAL)
-			or(scc,R14, SEARCH);
-			
-		or(scc,R3,ENT_HM|RxENABLE);	/* enable the receiver, hunt mode */
+		start_hunt(scc);
 	}
 	
 	/* enable ABORT, DCD & SYNC/HUNT interrupts */
 
-	wr(scc,R15, BRKIE|TxUIE|DCDIE);
-	if (scc->kiss.softdcd)
-		or(scc,R15, SYNCIE);
+	wr(scc,R15, BRKIE|TxUIE|(scc->kiss.softdcd? SYNCIE:DCDIE));
 
 	Outb(scc->ctrl,RES_EXT_INT);	/* reset ext/status interrupts */
 	Outb(scc->ctrl,RES_EXT_INT);	/* must be done twice */
@@ -940,14 +951,21 @@ static void scc_key_trx(struct scc_channel *scc, char tx)
 		{
 #ifdef CONFIG_SCC_TRXECHO
 			cl(scc, R3, RxENABLE|ENT_HM);	/* switch off receiver */
-			cl(scc, R15, DCDIE);		/* No DCD changes, please */
+			cl(scc, R15, DCDIE|SYNCIE);	/* No DCD changes, please */
 #endif
 			set_brg(scc, time_const);	/* reprogram baudrate generator */
 
 			/* DPLL -> Rx clk, BRG -> Tx CLK, TRxC mode output, TRxC = BRG */
 			wr(scc, R11, RCDPLL|TCBR|TRxCOI|TRxCBR);
 			
-			or(scc,R5,RTS|TxENAB);		/* set the RTS line and enable TX */
+			/* By popular demand: tx_inhibit */
+			if (scc->kiss.tx_inhibit)
+			{
+				or(scc,R5, TxENAB);
+				scc->wreg[R5] |= RTS;
+			} else {
+				or(scc,R5,RTS|TxENAB);	/* set the RTS line and enable TX */
+			}
 		} else {
 			cl(scc,R5,RTS|TxENAB);
 			
@@ -955,10 +973,14 @@ static void scc_key_trx(struct scc_channel *scc, char tx)
 			
 			/* DPLL -> Rx clk, DPLL -> Tx CLK, TRxC mode output, TRxC = DPLL */
 			wr(scc, R11, RCDPLL|TCDPLL|TRxCOI|TRxCDP);
-#ifdef CONFIG_SCC_TRXECHO
-			or(scc,R3,RxENABLE|ENT_HM);
-			or(scc,R15, DCDIE);
+
+#ifndef CONFIG_SCC_TRXECHO
+			if (scc->kiss.softdcd)
 #endif
+			{
+				or(scc,R15, scc->kiss.softdcd? SYNCIE:DCDIE);
+				start_hunt(scc);
+			}
 		}
 	} else {
 		if (tx)
@@ -967,22 +989,30 @@ static void scc_key_trx(struct scc_channel *scc, char tx)
 			if (scc->kiss.fulldup == KISS_DUPLEX_HALF)
 			{
 				cl(scc, R3, RxENABLE);
-				cl(scc, R15, DCDIE);
+				cl(scc, R15, DCDIE|SYNCIE);
 			}
 #endif
 				
-				
-			or(scc,R5,RTS|TxENAB);		/* enable tx */
+			if (scc->kiss.tx_inhibit)
+			{
+				or(scc,R5, TxENAB);
+				scc->wreg[R5] |= RTS;
+			} else {	
+				or(scc,R5,RTS|TxENAB);	/* enable tx */
+			}
 		} else {
 			cl(scc,R5,RTS|TxENAB);		/* disable tx */
 
-#ifdef CONFIG_SCC_TRXECHO
-			if (scc->kiss.fulldup == KISS_DUPLEX_HALF)
-			{
-				or(scc, R3, RxENABLE|ENT_HM);
-				or(scc, R15, DCDIE);
-			}
+			if ((scc->kiss.fulldup == KISS_DUPLEX_HALF) &&
+#ifndef CONFIG_SCC_TRXECHO
+			    scc->kiss.softdcd)
+#else
+			    1)
 #endif
+			{
+				or(scc, R15, scc->kiss.softdcd? SYNCIE:DCDIE);
+				start_hunt(scc);
+			}
 		}
 	}
 
@@ -1088,7 +1118,7 @@ static void scc_tx_done(struct scc_channel *scc)
 
 static unsigned char Rand = 17;
 
-extern __inline__ int is_grouped(struct scc_channel *scc)
+static inline int is_grouped(struct scc_channel *scc)
 {
 	int k;
 	struct scc_channel *scc2;
@@ -1109,7 +1139,7 @@ extern __inline__ int is_grouped(struct scc_channel *scc)
 			if ( (grp1 & TXGROUP) && (scc2->wreg[R5] & RTS) )
 				return 1;
 			
-			if ( (grp1 & RXGROUP) && (scc2->status & DCD) )
+			if ( (grp1 & RXGROUP) && scc2->dcd )
 				return 1;
 		}
 	}
@@ -1144,7 +1174,7 @@ static void t_dwait(unsigned long channel)
 	{
 		Rand = Rand * 17 + 31;
 		
-		if ( (scc->kiss.softdcd? !(scc->status & SYNC_HUNT):(scc->status & DCD))  || (scc->kiss.persist) < Rand || (scc->kiss.group && is_grouped(scc)) )
+		if (scc->dcd || (scc->kiss.persist) < Rand || (scc->kiss.group && is_grouped(scc)) )
 		{
 			scc_start_defer(scc);
 			scc_start_tx_timer(scc, t_dwait, scc->kiss.slottime);
@@ -1317,8 +1347,6 @@ static void scc_init_timer(struct scc_channel *scc)
 
 static unsigned int scc_set_param(struct scc_channel *scc, unsigned int cmd, unsigned int arg)
 {
-	int dcd;
-
 	switch (cmd)
 	{
 		case PARAM_TXDELAY:	scc->kiss.txdelay=arg;		break;
@@ -1338,9 +1366,14 @@ static unsigned int scc_set_param(struct scc_channel *scc, unsigned int cmd, uns
 		case PARAM_SOFTDCD:	
 			scc->kiss.softdcd=arg;
 			if (arg)
+			{
 				or(scc, R15, SYNCIE);
-			else
+				cl(scc, R15, DCDIE);
+				start_hunt(scc);
+			} else {
+				or(scc, R15, DCDIE);
 				cl(scc, R15, SYNCIE);
+			}
 			break;
 				
 		case PARAM_SPEED:
@@ -1369,8 +1402,7 @@ static unsigned int scc_set_param(struct scc_channel *scc, unsigned int cmd, uns
 			break;
 			
 		case PARAM_HWEVENT:
-			dcd = (scc->kiss.softdcd? !(scc->status & SYNC_HUNT):(scc->status & DCD));
-			scc_notify(scc, dcd? HWEV_DCD_ON:HWEV_DCD_OFF);
+			scc_notify(scc, scc->dcd? HWEV_DCD_ON:HWEV_DCD_OFF);
 			break;
 
 		default:		return -EINVAL;
@@ -1449,9 +1481,10 @@ scc_start_calibrate(struct scc_channel *scc, int duration, unsigned char pattern
 
 	scc->tx_wdog.data = (unsigned long) scc;
 	scc->tx_wdog.function = scc_stop_calibrate;
-	scc->tx_wdog.expires = jiffies + HZ*scc->kiss.maxkeyup;
+	scc->tx_wdog.expires = jiffies + HZ*duration;
 	add_timer(&scc->tx_wdog);
-	
+
+	/* This doesn't seem to work. Why not? */	
 	wr(scc, R6, 0);
 	wr(scc, R7, pattern);
 
@@ -1680,6 +1713,7 @@ static void scc_net_rx(struct scc_channel *scc, struct sk_buff *skb)
 	skb->dev      = scc->dev;
 	skb->protocol = htons(ETH_P_AX25);
 	skb->mac.raw  = skb->data;
+	skb->pkt_type = PACKET_HOST;
 	
 	netif_rx(skb);
 	return;
@@ -1722,7 +1756,7 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
 	save_flags(flags);
 	cli();
 	
-	if (skb_queue_len(&scc->tx_queue) >= MAXQUEUE-1)
+	if (skb_queue_len(&scc->tx_queue) > scc->dev->tx_queue_len)
 	{
 		struct sk_buff *skb_del;
 		skb_del = __skb_dequeue(&scc->tx_queue);
@@ -1791,7 +1825,7 @@ static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 			if (!suser()) return -EPERM;
 			if (!arg) return -EFAULT;
 
-			if (Nchips >= MAXSCC) 
+			if (Nchips >= SCC_MAXCHIPS) 
 				return -EINVAL;
 
 			if (copy_from_user(&hwcfg, arg, sizeof(hwcfg)))
@@ -1811,14 +1845,15 @@ static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 				Vector_Latch = hwcfg.vector_latch;
 
 			if (hwcfg.clock == 0)
-				hwcfg.clock = DEFAULT_CLOCK;
+				hwcfg.clock = SCC_DEFAULT_CLOCK;
 
-#ifndef DONT_CHECK
+#ifndef SCC_DONT_CHECK
 			disable_irq(hwcfg.irq);
 
 			check_region(scc->ctrl, 1);
 			Outb(hwcfg.ctrl_a, 0);
-			udelay(5);
+			OutReg(hwcfg.ctrl_a, R9, FHWRES);
+			udelay(100);
 			OutReg(hwcfg.ctrl_a,R13,0x55);		/* is this chip really there? */
 			udelay(5);
 
@@ -1853,7 +1888,7 @@ static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 				SCC_Info[2*Nchips+chan].option = hwcfg.option;
 				SCC_Info[2*Nchips+chan].enhanced = hwcfg.escc;
 
-#ifdef DONT_CHECK
+#ifdef SCC_DONT_CHECK
 				printk(KERN_INFO "%s: data port = 0x%3.3x  control port = 0x%3.3x\n",
 					device_name, 
 					SCC_Info[2*Nchips+chan].data, 
@@ -1903,7 +1938,7 @@ static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 			if (!suser()) return -EPERM;
 			if (!arg) return -EINVAL;
 			
-			scc->stat.bufsize   = BUFSIZE;
+			scc->stat.bufsize   = SCC_BUFSIZE;
 
 			if (copy_from_user(&scc->modem, arg, sizeof(struct scc_modem)))
 				return -EINVAL;
@@ -1980,7 +2015,7 @@ static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		
 		case SIOCSCCCAL:
 			if (!suser()) return -EPERM;
-			if (!arg || copy_from_user(&cal, arg, sizeof(cal)))
+			if (!arg || copy_from_user(&cal, arg, sizeof(cal)) || cal.time == 0)
 				return -EINVAL;
 
 			scc_start_calibrate(scc, cal.time, cal.pattern);
@@ -2169,7 +2204,7 @@ __initfunc(int scc_init (void))
 	
 	/* pre-init channel information */
 	
-	for (chip = 0; chip < MAXSCC; chip++)
+	for (chip = 0; chip < SCC_MAXCHIPS; chip++)
 	{
 		memset((char *) &SCC_Info[2*chip  ], 0, sizeof(struct scc_channel));
 		memset((char *) &SCC_Info[2*chip+1], 0, sizeof(struct scc_channel));

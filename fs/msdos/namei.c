@@ -440,12 +440,9 @@ int msdos_rmdir(struct inode *dir, struct dentry *dentry)
 	if (res < 0)
 		goto rmdir_done;
 	/*
-	 * Check whether the directory is empty, then prune
-	 * any child dentries and make sure it's not in use.
+	 * Check whether the directory is not in use, then check
+	 * whether it is empty.
 	 */
-	res = msdos_empty(inode);
-	if (res)
-		goto rmdir_done;
 	res = -EBUSY;
 	if (!list_empty(&dentry->d_hash)) {
 #ifdef MSDOS_DEBUG
@@ -454,6 +451,9 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 #endif
 		goto rmdir_done;
 	}
+	res = msdos_empty(inode);
+	if (res)
+		goto rmdir_done;
 
 	inode->i_nlink = 0;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
@@ -502,11 +502,14 @@ int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode)
 
 	dir->i_nlink++;
 	inode->i_nlink = 2; /* no need to mark them dirty */
-	MSDOS_I(inode)->i_busy = 1; /* prevent lookups */
+
+#ifdef whatfor
 	/*
-	 * Instantiate the dentry now, in case we need to cleanup.
+	 * He's dead, Jim. We don't d_instantiate anymore. Should do it
+	 * from the very beginning, actually.
 	 */
-	d_instantiate(dentry, inode);
+	MSDOS_I(inode)->i_busy = 1; /* prevent lookups */
+#endif
 
 	if ((res = fat_add_cluster(inode)) < 0)
 		goto mkdir_error;
@@ -526,8 +529,11 @@ int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode)
 	MSDOS_I(dot)->i_logstart = MSDOS_I(dir)->i_logstart;
 	dot->i_nlink = dir->i_nlink;
 	mark_inode_dirty(dot);
+#ifdef whatfor
 	MSDOS_I(inode)->i_busy = 0;
+#endif
 	iput(dot);
+	d_instantiate(dentry, inode);
 	res = 0;
 
 out_unlock:
@@ -536,8 +542,17 @@ out_unlock:
 
 mkdir_error:
 	printk("msdos_mkdir: error=%d, attempting cleanup\n", res);
-	if (msdos_rmdir(dir,dentry) < 0)
-		fat_fs_panic(dir->i_sb,"rmdir in mkdir failed");
+	bh = NULL;
+	fat_scan(dir,msdos_name,&bh,&de,&ino,SCAN_ANY);
+	inode->i_nlink = 0;
+	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	dir->i_nlink--;
+	mark_inode_dirty(inode);
+	mark_inode_dirty(dir);
+	iput(inode);
+	de->name[0] = DELETED_FLAG;
+	fat_mark_buffer_dirty(sb, bh, 1);
+	fat_brelse(sb, bh);
 	goto out_unlock;
 
 out_exist:
@@ -562,8 +577,6 @@ static int msdos_unlinkx( struct inode *dir, struct dentry *dentry, int nospc)
 		goto unlink_done;
 	res = -EPERM;
 	if (!S_ISREG(inode->i_mode) && nospc)
-		goto unlink_done;
-	if (IS_IMMUTABLE(inode))
 		goto unlink_done;
 	/* N.B. check for busy files? */
 

@@ -51,7 +51,7 @@ endif
 # Uncomment this to get spinlock/rwlock debugging on SMP.
 # DEBUG_SPINLOCK = 1
 
-ifdef SMP
+ifdef CONFIG_SMP
   ifdef DEBUG_SPINLOCK
     CFLAGS += -DSPIN_LOCK_DEBUG
     AFLAGS += -DSPIN_LOCK_DEBUG

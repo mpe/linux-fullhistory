@@ -29,23 +29,17 @@
  */
 
 #include <linux/config.h>
-#include <linux/kernel.h>
-#include <linux/string.h>
-#include <linux/timer.h>
-#include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
 #include <linux/mc146818rtc.h>
 #include <asm/i82489.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>
 #include <asm/pgtable.h>
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
-#include <asm/smp.h>
 #include <asm/io.h>
 
 #ifdef CONFIG_MTRR
@@ -159,6 +153,7 @@ extern int mpc_default_type;
 int mp_bus_id_to_pci_bus [MAX_MP_BUSSES] = { -1, };
 int mp_current_pci_id = 0;
 unsigned long mp_lapic_addr = 0;
+int skip_ioapic_setup = 0;				/* 1 if "noapic" boot option passed */
 
 /* #define SMP_DEBUG */
 
@@ -405,7 +400,11 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
 		}
 	}
 	if (ioapics > 1)
+	{
 		printk("Warning: Multiple IO-APICs not yet supported.\n");
+		printk("Warning: switching to non APIC mode.\n");
+		skip_ioapic_setup=1;
+	}
 	return num_processors;
 }
 
@@ -1170,7 +1169,8 @@ void __init smp_boot_cpus(void)
 	 * Here we can be sure that there is an IO-APIC in the system. Let's
 	 * go and set it up:
 	 */
-	setup_IO_APIC();
+	if (!skip_ioapic_setup) 
+		setup_IO_APIC();
 
 smp_done:
 }

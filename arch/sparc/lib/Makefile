@@ -7,7 +7,7 @@ OBJS  = mul.o rem.o sdiv.o udiv.o umul.o urem.o ashrdi3.o memcpy.o memset.o \
 	strncpy_from_user.o divdi3.o udivdi3.o strlen_user.o \
 	copy_user.o locks.o atomic.o bitops.o debuglocks.o
 
-ifdef SMP
+ifdef CONFIG_SMP
 OBJS += irqlock.o
 endif
 
@@ -54,7 +54,7 @@ atomic.o: atomic.S
 bitops.o: bitops.S
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o bitops.o bitops.S
 
-ifdef SMP
+ifdef CONFIG_SMP
 irqlock.o: irqlock.S
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o irqlock.o irqlock.S
 endif

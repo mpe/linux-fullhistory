@@ -41,7 +41,7 @@ OX_OBJS += chrp_setup.o prep_setup.o
 endif
 endif
 
-ifdef SMP
+ifdef CONFIG_SMP
 O_OBJS += smp.o
 endif
 

@@ -286,6 +286,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_NLS_ISO8859_15),y)
+NLS += nls_iso8859-15.o
+else
+  ifeq ($(CONFIG_NLS_ISO8859_15),m)
+  M_OBJS += nls_iso8859-15.o
+  endif
+endif
+
 ifeq ($(CONFIG_NLS_KOI8_R),y)
 NLS += nls_koi8-r.o
 else

@@ -19,6 +19,7 @@
  *	AX.25 036	Jonathan(G4KLX)	Cloned from ax25_in.c
  *			Joerg(DL1BKE)	Fixed it.
  *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
+ *			Joerg(DL1BKE)	ax25->n2count never got reset
  */
 
 #include <linux/config.h>
@@ -47,7 +48,7 @@
 
 /*
  *	State machine for state 1, Awaiting Connection State.
- *	The handling of the timer(s) is in file ax25_timer.c.
+ *	The handling of the timer(s) is in file ax25_ds_timer.c.
  *	Handling of state 0 and connection release is in ax25.c.
  */
 static int ax25_ds_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype, int pf, int type)
@@ -56,6 +57,12 @@ static int ax25_ds_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 		case AX25_SABM:
 			ax25->modulus = AX25_MODULUS;
 			ax25->window  = ax25->ax25_dev->values[AX25_VALUES_WINDOW];
+			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
+			break;
+			
+		case AX25_SABME:
+			ax25->modulus = AX25_EMODULUS;
+			ax25->window  =  ax25->ax25_dev->values[AX25_VALUES_EWINDOW];
 			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
 			break;
 
@@ -83,7 +90,7 @@ static int ax25_ds_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 
 			/* according to DK4EG´s spec we are required to
 			 * send a RR RESPONSE FINAL NR=0. Please mail
-			 * <jr@lykos.oche.de> if this causes problems
+			 * <jreuter@poboxes.com> if this causes problems
 			 * with the TheNetNode DAMA Master implementation.
 			 */ 
 
@@ -104,13 +111,14 @@ static int ax25_ds_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 
 /*
  *	State machine for state 2, Awaiting Release State.
- *	The handling of the timer(s) is in file ax25_timer.c
+ *	The handling of the timer(s) is in file ax25_ds_timer.c
  *	Handling of state 0 and connection release is in ax25.c.
  */
 static int ax25_ds_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype, int pf, int type)
 {
 	switch (frametype) {
 		case AX25_SABM:
+		case AX25_SABME:
 			ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
 			ax25_dama_off(ax25);
 			break;
@@ -157,8 +165,14 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 
 	switch (frametype) {
 		case AX25_SABM:
-			ax25->modulus   = AX25_MODULUS;
-			ax25->window    = ax25->ax25_dev->values[AX25_VALUES_WINDOW];
+		case AX25_SABME:
+			if (frametype == AX25_SABM) {
+				ax25->modulus   = AX25_MODULUS;
+				ax25->window    = ax25->ax25_dev->values[AX25_VALUES_WINDOW];
+			} else {
+				ax25->modulus   = AX25_EMODULUS;
+				ax25->window    = ax25->ax25_dev->values[AX25_VALUES_EWINDOW];
+			}
 			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
 			ax25_stop_t1timer(ax25);
 			ax25_start_t3timer(ax25);
@@ -188,8 +202,10 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 				ax25->condition &= ~AX25_COND_PEER_RX_BUSY;
 			else
 				ax25->condition |= AX25_COND_PEER_RX_BUSY;
+
 			if (ax25_validate_nr(ax25, nr)) {
-				ax25_check_iframes_acked(ax25, nr);
+				if (ax25_check_iframes_acked(ax25, nr))
+					ax25->n2count=0;
 				if (type == AX25_COMMAND && pf)
 					ax25_ds_enquiry_response(ax25);
 			} else {
@@ -200,13 +216,17 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 
 		case AX25_REJ:
 			ax25->condition &= ~AX25_COND_PEER_RX_BUSY;
+
 			if (ax25_validate_nr(ax25, nr)) {
+				if (ax25->va != nr)
+					ax25->n2count=0;
+
 				ax25_frames_acked(ax25, nr);
 				ax25_calculate_rtt(ax25);
 				ax25_stop_t1timer(ax25);
 				ax25_start_t3timer(ax25);
-				ax25->n2count = 0;
 				ax25_requeue_frames(ax25);
+
 				if (type == AX25_COMMAND && pf)
 					ax25_ds_enquiry_response(ax25);
 			} else {
@@ -225,14 +245,15 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 				ax25_frames_acked(ax25, nr);
 				ax25->n2count = 0;
 			} else {
-				ax25_check_iframes_acked(ax25, nr);
+				if (ax25_check_iframes_acked(ax25, nr))
+					ax25->n2count = 0;
 			}
 			if (ax25->condition & AX25_COND_OWN_RX_BUSY) {
 				if (pf) ax25_ds_enquiry_response(ax25);
 				break;
 			}
 			if (ns == ax25->vr) {
-				ax25->vr = (ax25->vr + 1) % AX25_MODULUS;
+				ax25->vr = (ax25->vr + 1) % ax25->modulus;
 				queued = ax25_rx_iframe(ax25, skb);
 				if (ax25->condition & AX25_COND_OWN_RX_BUSY)
 					ax25->vr = ns;	/* ax25->vr - 1 */

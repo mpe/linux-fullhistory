@@ -1919,7 +1919,7 @@ part2:
 		spin_lock_irq(&io_request_lock);
 		
 		if (time_after_eq(jiffies, timeout)) {
-			printk("scsi%d: timeout at NCR5380.c:%d\n", __LINE__);
+			printk("scsi%d: timeout at NCR5380.c:%d\n", instance->host_no, __LINE__);
 			NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
 			return -1;
 		}

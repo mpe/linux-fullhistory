@@ -475,13 +475,6 @@ int ufs_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode))
 		inode->i_op = &ufs_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode)) {
-		inode->i_op = &ufs_dir_inode_operations;
-		if (dir->i_mode & S_ISGID)
-			inode->i_mode |= S_ISGID;
-	}
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &ufs_symlink_inode_operations;
 	else if (S_ISCHR(inode->i_mode))
 		inode->i_op = &chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
@@ -751,14 +744,6 @@ int ufs_unlink(struct inode * dir, struct dentry *dentry)
 	if (inode->i_sb->dq_op)
 		inode->i_sb->dq_op->initialize (inode, -1);
 
-	retval = -EPERM;
-	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
-		goto end_unlink;
-	if ((dir->i_mode & S_ISVTX) &&
-	    current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !fsuser())
-		goto end_unlink;
-
 	retval = -EIO;
 	if (SWAB32(de->d_ino) != inode->i_ino)
 		goto end_unlink;
@@ -958,19 +943,12 @@ static int do_ufs_rename (struct inode * old_dir, struct dentry * old_dentry,
 	old_bh = ufs_find_entry (old_dir, old_dentry->d_name.name, old_dentry->d_name.len, &old_de);
 	UFSD(("ino %u, reclen %u, namlen %u, name %s\n", SWAB32(old_de->d_ino),
 		SWAB16(old_de->d_reclen), ufs_get_de_namlen(old_de), old_de->d_name))
-	    
+
+	/* Arrrgh. See comments in ext2 */
 	retval = -ENOENT;
-	if (!old_bh)
+	if (!old_bh || SWAB32(old_de->d_ino) != old_inode->i_ino)
 		goto end_rename;
 	old_inode = old_dentry->d_inode;
-
-	retval = -EPERM;
-	if ((old_dir->i_mode & S_ISVTX) && 
-	    current->fsuid != old_inode->i_uid &&
-	    current->fsuid != old_dir->i_uid && !fsuser())
-		goto end_rename;
-	if (IS_APPEND(old_inode) || IS_IMMUTABLE(old_inode))
-		goto end_rename;
 
 	new_inode = new_dentry->d_inode;
 	UFSD(("name %s, len %u\n", new_dentry->d_name.name, new_dentry->d_name.len)) 
@@ -987,36 +965,21 @@ static int do_ufs_rename (struct inode * old_dir, struct dentry * old_dentry,
 	retval = 0;
 	if (new_inode == old_inode)
 		goto end_rename;
-	if (new_inode && S_ISDIR(new_inode->i_mode)) {
-		retval = -EISDIR;
-		if (!S_ISDIR(old_inode->i_mode))
-			goto end_rename;
-		retval = -EINVAL;
-		if (is_subdir(new_dentry, old_dentry))
-			goto end_rename;
-		retval = -ENOTEMPTY;
-		if (!ufs_empty_dir (new_inode))
-			goto end_rename;
-		retval = -EBUSY;
-		if (new_dentry->d_count > 1)
-			goto end_rename;
-	}
-	retval = -EPERM;
-	if (new_inode) {
-		if ((new_dir->i_mode & S_ISVTX) &&
-		    current->fsuid != new_inode->i_uid &&
-		    current->fsuid != new_dir->i_uid && !fsuser())
-			goto end_rename;
-		if (IS_APPEND(new_inode) || IS_IMMUTABLE(new_inode))
-			goto end_rename;
-	}
 	if (S_ISDIR(old_inode->i_mode)) {
-		retval = -ENOTDIR;
-		if (new_inode && !S_ISDIR(new_inode->i_mode))
-			goto end_rename;
 		retval = -EINVAL;
 		if (is_subdir(new_dentry, old_dentry))
 			goto end_rename;
+		if (new_inode) {
+			if (new_dentry->d_count > 1)
+				shrink_dcache_parent(new_dentry);
+			retval = -EBUSY;
+			if (new_dentry->d_count > 1)
+				goto end_rename;
+			retval = -ENOTEMPTY;
+			if (!ufs_empty_dir (new_inode))
+				goto end_rename;
+		}
+
 		dir_bh = ufs_bread (old_inode, 0, 0, &retval);
 		if (!dir_bh)
 			goto end_rename;

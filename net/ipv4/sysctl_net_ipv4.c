@@ -31,6 +31,7 @@ static int boolean_max = 1;
 /* From icmp.c */
 extern int sysctl_icmp_echo_ignore_all;
 extern int sysctl_icmp_echo_ignore_broadcasts;
+extern int sysctl_icmp_ignore_bogus_error_responses;
 
 /* From ip_fragment.c */
 extern int sysctl_ipfrag_low_thresh;
@@ -163,6 +164,9 @@ ctl_table ipv4_table[] = {
 	 &proc_dointvec},
 	{NET_IPV4_ICMP_ECHO_IGNORE_BROADCASTS, "icmp_echo_ignore_broadcasts",
 	 &sysctl_icmp_echo_ignore_broadcasts, sizeof(int), 0644, NULL,
+	 &proc_dointvec},
+	{NET_IPV4_ICMP_IGNORE_BOGUS_ERROR_RESPONSES, "icmp_ignore_bogus_error_responses",
+	 &sysctl_icmp_ignore_bogus_error_responses, sizeof(int), 0644, NULL,
 	 &proc_dointvec},
 	{NET_IPV4_ICMP_DESTUNREACH_RATE, "icmp_destunreach_rate",
 	 &sysctl_icmp_destunreach_time, sizeof(int), 0644, NULL, &proc_dointvec},

@@ -267,13 +267,6 @@ int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev)
 	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode))
 		inode->i_op = &minix_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode)) {
-		inode->i_op = &minix_dir_inode_operations;
-		if (dir->i_mode & S_ISGID)
-			inode->i_mode |= S_ISGID;
-	}
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &minix_symlink_inode_operations;
 	else if (S_ISCHR(inode->i_mode))
 		inode->i_op = &chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
@@ -483,10 +476,6 @@ repeat:
 		schedule();
 		goto repeat;
 	}
-	if ((dir->i_mode & S_ISVTX) &&
-	    current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
-		goto end_unlink;
 	if (de->inode != inode->i_ino) {
 		retval = -ENOENT;
 		goto end_unlink;
@@ -642,10 +631,6 @@ start_up:
 		goto end_rename;
 	old_inode = old_dentry->d_inode;
 	retval = -EPERM;
-	if ((old_dir->i_mode & S_ISVTX) && 
-	    current->fsuid != old_inode->i_uid &&
-	    current->fsuid != old_dir->i_uid && !capable(CAP_FOWNER))
-		goto end_rename;
 	new_inode = new_dentry->d_inode;
 	new_bh = minix_find_entry(new_dir, new_dentry->d_name.name,
 				  new_dentry->d_name.len, &new_de);
@@ -659,32 +644,21 @@ start_up:
 		retval = 0;
 		goto end_rename;
 	}
-	if (new_inode && S_ISDIR(new_inode->i_mode)) {
-		retval = -EISDIR;
-		if (!S_ISDIR(old_inode->i_mode))
-			goto end_rename;
-		retval = -EINVAL;
-		if (is_subdir(new_dentry, old_dentry))
-			goto end_rename;
-		retval = -ENOTEMPTY;
-		if (!empty_dir(new_inode))
-			goto end_rename;
-		retval = -EBUSY;
-		if (new_inode->i_count > 1)
-			goto end_rename;
-	}
-	retval = -EPERM;
-	if (new_inode && (new_dir->i_mode & S_ISVTX) && 
-	    current->fsuid != new_inode->i_uid &&
-	    current->fsuid != new_dir->i_uid && !capable(CAP_FOWNER))
-		goto end_rename;
 	if (S_ISDIR(old_inode->i_mode)) {
-		retval = -ENOTDIR;
-		if (new_inode && !S_ISDIR(new_inode->i_mode))
-			goto end_rename;
 		retval = -EINVAL;
 		if (is_subdir(new_dentry, old_dentry))
 			goto end_rename;
+		if (new_inode) {
+			/* Prune any children before testing for busy */
+			if (new_dentry->d_count > 1)
+				shrink_dcache_parent(new_dentry);
+			retval = -EBUSY;
+			if (new_dentry->d_count > 1)
+			retval = -ENOTEMPTY;
+			if (!empty_dir(new_inode))
+				goto end_rename;
+			retval = -EBUSY;
+		}
 		retval = -EIO;
 		dir_bh = minix_bread(old_inode,0,0);
 		if (!dir_bh)

@@ -195,6 +195,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_MCA_53C9X),y)
+L_OBJS += NCR53C9x.o mca_53c9x.o
+else
+  ifeq ($(CONFIG_SCSI_MCA_53C9X),m)
+  M_OBJS += NCR53C9x.o mca_53c9x.o
+  endif
+endif
+
 ifeq ($(CONFIG_CYBERSTORM_SCSI),y)
 L_OBJS += NCR53C9x.o cyberstorm.o
 else
@@ -276,6 +284,29 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_ACARD),y)
+L_OBJS += atp870u.o
+else
+  ifeq ($(CONFIG_SCSI_ACARD),m)
+  M_OBJS += atp870u.o
+  endif
+endif
+
+ifeq ($(CONFIG_SCSI_INITIO),y)
+L_OBJS += initio.o
+else
+  ifeq ($(CONFIG_SCSI_INITIO),m)
+  M_OBJS += initio.o
+  endif
+endif
+
+ifeq ($(CONFIG_SCSI_QLOGIC_FC),y)
+L_OBJS += qlogicfc.o 
+else
+  ifeq ($(CONFIG_SCSI_QLOGIC_FC),m)   
+  M_OBJS += qlogicfc.o 
+  endif
+endif
 
 ifeq ($(CONFIG_SCSI_AHA152X),y)
 L_OBJS += aha152x.o
@@ -539,6 +570,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_MEGARAID),y)
+L_OBJS += megaraid.o
+else
+  ifeq ($(CONFIG_SCSI_MEGARAID),m)
+  M_OBJS += megaraid.o
+  endif
+endif
+
 ifeq ($(CONFIG_BLK_DEV_IDESCSI),y)
 L_OBJS += ide-scsi.o
 else
@@ -573,6 +612,15 @@ include $(TOPDIR)/Rules.make
 
 53c7xx.o : 53c7xx_d.h 53c7xx.c
 	$(CC) $(CFLAGS) -c 53c7xx.c
+
+initio.o: ini9100u.c i91uscsi.c
+	$(CC) $(CFLAGS) -c ini9100u.c -o ini9100u.o
+	$(CC) $(CFLAGS) -c i91uscsi.c -o i91uscsi.o
+	$(LD) -r -o initio.o ini9100u.o i91uscsi.o
+	rm -f ini9100u.o i91uscsi.o
+
+megaraid.o: megaraid.c
+	$(CC) $(CFLAGS) -c megaraid.c
 
 scsi_mod.o: $(MIX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
 		scsicam.o scsi_proc.o scsi_error.o scsi_obsolete.o scsi_queue.o

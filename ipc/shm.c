@@ -126,6 +126,8 @@ found:
 	return (unsigned int) shp->u.shm_perm.seq * SHMMNI + id;
 }
 
+int shmmax = SHMMAX;
+
 asmlinkage int sys_shmget (key_t key, int size, int shmflg)
 {
 	struct shmid_kernel *shp;
@@ -133,7 +135,7 @@ asmlinkage int sys_shmget (key_t key, int size, int shmflg)
 
 	down(&current->mm->mmap_sem);
 	lock_kernel();
-	if (size < 0 || size > SHMMAX) {
+	if (size < 0 || size > shmmax) {
 		err = -EINVAL;
 	} else if (key == IPC_PRIVATE) {
 		err = newseg(key, shmflg, size);
@@ -228,7 +230,7 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		if (!buf)
 			goto out;
 		shminfo.shmmni = SHMMNI;
-		shminfo.shmmax = SHMMAX;
+		shminfo.shmmax = shmmax;
 		shminfo.shmmin = SHMMIN;
 		shminfo.shmall = SHMALL;
 		shminfo.shmseg = SHMSEG;

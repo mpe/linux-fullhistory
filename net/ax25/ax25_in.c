@@ -389,10 +389,9 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		}
 
 		ax25 = make->protinfo.ax25;
-
+		skb_set_owner_r(skb, make);
 		skb_queue_head(&sk->receive_queue, skb);
 
-		skb->sk     = make;
 		make->state = TCP_ESTABLISHED;
 		make->pair  = sk;
 
@@ -473,6 +472,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 int ax25_kiss_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 {
 	skb->sk = NULL;		/* Initially we don't know who it's for */
+	skb->destructor = NULL;	/* Who initializes this, dammit?! */
 
 	if ((*skb->data & 0x0F) != 0) {
 		kfree_skb(skb);	/* Not a KISS data frame */

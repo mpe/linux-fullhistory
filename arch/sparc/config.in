@@ -25,6 +25,7 @@ define_bool CONFIG_VT y
 define_bool CONFIG_VT_CONSOLE y
 
 bool 'Support for AP1000 multicomputer' CONFIG_AP1000
+bool 'Symmetric multi-processing support' CONFIG_SMP
 
 if [ "$CONFIG_AP1000" = "y" ]; then
 	define_bool CONFIG_NO_KEYBOARD y

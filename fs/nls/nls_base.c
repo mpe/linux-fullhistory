@@ -429,6 +429,9 @@ int init_nls(void)
 #ifdef CONFIG_NLS_ISO8859_9
 	init_nls_iso8859_9();
 #endif
+#ifdef CONFIG_NLS_ISO8859_15
+	init_nls_iso8859_15();
+#endif
 #ifdef CONFIG_NLS_CODEPAGE_437
 	init_nls_cp437();
 #endif

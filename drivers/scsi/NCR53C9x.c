@@ -6,6 +6,9 @@
  *
  * Most DMA dependencies put in driver specific files by 
  * Jesper Skov (jskov@cygnus.co.uk)
+ *
+ * Set up to use GETREG/SETREG (preprocessor macros in NCR53c9x.h) by
+ * Tymm Twillman (tymm@coe.missouri.edu)
  */
 
 /* TODO:
@@ -27,6 +30,7 @@
 #include <linux/blk.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+
 #include <linux/init.h>
 
 #include "scsi.h"
@@ -297,7 +301,7 @@ extern inline void esp_cmd(struct NCR_ESP *esp, struct ESP_regs *eregs,
 	esp->espcmdlog[esp->espcmdent] = cmd;
 	esp->espcmdent = (esp->espcmdent + 1) & 31;
 #endif
-	eregs->esp_cmd = cmd;
+	SETREG(eregs->esp_cmnd, cmd);
 }
 
 /* How we use the various Linux SCSI data structures for operation.
@@ -400,7 +404,7 @@ static inline void esp_reset_esp(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	 */
 	esp->max_period = ((35 * esp->ccycle) / 1000);
 	if(esp->erev == fast) {
-		version = eregs->esp_uid;
+		version = GETREG(eregs->esp_uid);
 		family_code = (version & 0xf8) >> 3;
 #ifdef SYMBIOS_HACK
 		if (version == 0 && family_code == 0)
@@ -432,25 +436,25 @@ static inline void esp_reset_esp(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	}
 
 	/* Reload the configuration registers */
-	eregs->esp_cfact = esp->cfact;
-	eregs->esp_stp   = 0;
-	eregs->esp_soff  = 0;
-	eregs->esp_timeo = esp->neg_defp;
+	SETREG(eregs->esp_cfact, esp->cfact);
+	SETREG(eregs->esp_stp, 0);
+	SETREG(eregs->esp_soff, 0);
+	SETREG(eregs->esp_timeo, esp->neg_defp);
 	esp->max_period = (esp->max_period + 3)>>2;
 	esp->min_period = (esp->min_period + 3)>>2;
 
-	eregs->esp_cfg1  = esp->config1;
+	SETREG(eregs->esp_cfg1, esp->config1);
 	switch(esp->erev) {
 	case esp100:
 		/* nothing to do */
 		break;
 	case esp100a:
-		eregs->esp_cfg2 = esp->config2;
+		SETREG(eregs->esp_cfg2, esp->config2);
 		break;
 	case esp236:
 		/* Slow 236 */
-		eregs->esp_cfg2 = esp->config2;
-		eregs->esp_cfg3 = esp->config3[0];
+		SETREG(eregs->esp_cfg2, esp->config2);
+		SETREG(eregs->esp_cfg3, esp->config3[0]);
 		break;
 	case fashme:
 		esp->config2 |= (ESP_CONFIG2_HME32 | ESP_CONFIG2_HMEFENAB);
@@ -458,7 +462,7 @@ static inline void esp_reset_esp(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	case fas216:	    
 	case fas236:
 		/* Fast 236 or HME */
-		eregs->esp_cfg2 = esp->config2;
+		SETREG(eregs->esp_cfg2, esp->config2);
 		for(i=0; i<8; i++) {
 			if(esp->erev == fashme)
 				esp->config3[i] |=
@@ -466,7 +470,7 @@ static inline void esp_reset_esp(struct NCR_ESP *esp, struct ESP_regs *eregs)
 			else
 				esp->config3[i] |= ESP_CONFIG3_FCLK;
 		}
-		eregs->esp_cfg3 = esp->config3[0];
+		SETREG(eregs->esp_cfg3, esp->config3[0]);
 		if(esp->erev == fashme) {
 			esp->radelay = 80;
 		} else {
@@ -478,10 +482,10 @@ static inline void esp_reset_esp(struct NCR_ESP *esp, struct ESP_regs *eregs)
 		break;
 	case fas100a:
 		/* Fast 100a */
-		eregs->esp_cfg2 = esp->config2;
+		SETREG(eregs->esp_cfg2, esp->config2);
 		for(i=0; i<8; i++)
 			esp->config3[i] |= ESP_CONFIG3_FCLOCK;
-		eregs->esp_cfg3 = esp->config3[0];
+		SETREG(eregs->esp_cfg3, esp->config3[0]);
 		esp->radelay = 32;
 		break;
 	default:
@@ -490,7 +494,7 @@ static inline void esp_reset_esp(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	};
 
 	/* Eat any bitrot in the chip */
-	trash = eregs->esp_intrpt;
+	trash = GETREG(eregs->esp_intrpt);
 	udelay(100);
 }
 
@@ -507,13 +511,13 @@ inline void esp_bootup_reset(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	esp_reset_esp(esp, eregs);
 
 	/* Reset the SCSI bus, but tell ESP not to generate an irq */
-	eregs->esp_cfg1 |= ESP_CONFIG1_SRRDISAB;
+	SETREG(eregs->esp_cfg1, GETREG(eregs->esp_cfg1) | ESP_CONFIG1_SRRDISAB);
 	esp_cmd(esp, eregs, ESP_CMD_RS);
 	udelay(400);
-	eregs->esp_cfg1 = esp->config1;
+	SETREG(eregs->esp_cfg1, esp->config1);
 
 	/* Eat any bitrot in the chip and we are done... */
-	trash = eregs->esp_intrpt;
+	trash = GETREG(eregs->esp_intrpt);
 }
 
 /* Allocate structure and insert basic data such as SCSI chip frequency
@@ -650,19 +654,21 @@ void esp_initialize(struct NCR_ESP *esp)
 	/* Probe the revision of this esp */
 	esp->config1 = (ESP_CONFIG1_PENABLE | (esp->scsi_id & 7));
 	esp->config2 = (ESP_CONFIG2_SCSI2ENAB | ESP_CONFIG2_REGPARITY);
-	eregs->esp_cfg2 = esp->config2;
+	SETREG(eregs->esp_cfg2, esp->config2);
 #ifndef SYMBIOS_HACK
-	if((eregs->esp_cfg2 & ~(ESP_CONFIG2_MAGIC)) !=
+	if((GETREG(eregs->esp_cfg2) & ~(ESP_CONFIG2_MAGIC)) !=
 	   (ESP_CONFIG2_SCSI2ENAB | ESP_CONFIG2_REGPARITY)) {
 		printk("NCR53C90(esp100) detected\n");
 		esp->erev = esp100;
 	} else {
 #endif
-		eregs->esp_cfg2 = esp->config2 = 0;
-		eregs->esp_cfg3 = 0;
-		eregs->esp_cfg3 = esp->config3[0] = 5;
+		esp->config2 = 0;
+		SETREG(eregs->esp_cfg2, esp->config2);
+		SETREG(eregs->esp_cfg3, 0);
+		esp->config3[0] = 5;
+		SETREG(eregs->esp_cfg3, esp->config3[0]);
 #ifndef SYMBIOS_HACK
-		if(eregs->esp_cfg3 != 5) {
+		if(GETREG(eregs->esp_cfg3) != 5) {
 			printk("NCR53C90A(esp100a) detected\n");
 			esp->erev = esp100a;
 		} else {
@@ -673,19 +679,21 @@ void esp_initialize(struct NCR_ESP *esp)
 			
 			for(target=0; target<8; target++)
 				esp->config3[target] = 0;
-			eregs->esp_cfg3 = 0;
+			SETREG(eregs->esp_cfg3, 0);
 #ifndef SYMBIOS_HACK
 			if(ccf > ESP_CCF_F5) {
 #endif
 				printk("NCR53C9XF(espfast) detected\n");
 				esp->erev = fast;
-				eregs->esp_cfg2 = esp->config2 = 0;
+				esp->config2 = 0;
+				SETREG(eregs->esp_cfg2, esp->config2);
 				esp->sync_defp = SYNC_DEFP_FAST;
 #ifndef SYMBIOS_HACK
 			} else {
 				printk("NCR53C9x(esp236) detected\n");
 				esp->erev = esp236;
-				eregs->esp_cfg2 = esp->config2 = 0;
+				esp->config2 = 0;
+				SETREG(eregs->esp_cfg2, esp->config2);
 			}
 		}
 #endif
@@ -1193,14 +1201,14 @@ after_nego_msg_built:
 
 	/* HME sucks... */
 	if(esp->erev == fashme)
-		eregs->esp_busid = (target & 0xf) |
-			(ESP_BUSID_RESELID | ESP_BUSID_CTR32BIT);
+		SETREG(eregs->esp_busid, (target & 0xf) |
+			(ESP_BUSID_RESELID | ESP_BUSID_CTR32BIT));
 	else
-		eregs->esp_busid = (target & 7);
-	eregs->esp_soff = SDptr->sync_max_offset;
-	eregs->esp_stp  = SDptr->sync_min_period;
+		SETREG(eregs->esp_busid, (target & 7));
+	SETREG(eregs->esp_soff, SDptr->sync_max_offset);
+	SETREG(eregs->esp_stp, SDptr->sync_min_period);
 	if(esp->erev > esp100a)
-		eregs->esp_cfg3 = esp->config3[target];
+		SETREG(eregs->esp_cfg3, esp->config3[target]);
 
 	i = (cmdp - esp->esp_command);
 
@@ -1209,7 +1217,7 @@ after_nego_msg_built:
 		int j = 0;
 
 		for(;j<i;j++)
-			eregs->esp_fdata = esp->esp_command[j];
+			SETREG(eregs->esp_fdata, esp->esp_command[j]);
 		the_esp_command &= ~ESP_CMD_DMA;
 
 		/* Tell ESP to "go". */
@@ -1219,16 +1227,16 @@ after_nego_msg_built:
 			esp_cmd(esp, eregs, ESP_CMD_FLUSH); /* Grrr! */
 
 			/* Set up the HME counters */
-			eregs->esp_tclow = i;
-			eregs->esp_tcmed = 0;
-			eregs->fas_rlo = 0;
-			eregs->fas_rhi = 0;
+			SETREG(eregs->esp_tclow, i);
+			SETREG(eregs->esp_tcmed, 0);
+			SETREG(eregs->fas_rlo, 0);
+			SETREG(eregs->fas_rhi, 0);
 			esp_cmd(esp, eregs, the_esp_command);
 			esp->dma_init_write(esp, esp->esp_command_dvma, 16);
 		} else {
 			/* Set up the ESP counters */
-			eregs->esp_tclow = i;
-			eregs->esp_tcmed = 0;
+			SETREG(eregs->esp_tclow, i);
+			SETREG(eregs->esp_tcmed, 0);
 			esp->dma_init_write(esp, esp->esp_command_dvma, i);
 
 			/* Tell ESP to "go". */
@@ -1341,7 +1349,8 @@ static inline void esp_dump_state(struct NCR_ESP *esp,
 	ESPLOG(("esp%d: SW [sreg<%02x> sstep<%02x> ireg<%02x>]\n",
 		esp->esp_id, esp->sreg, esp->seqreg, esp->ireg));
 	ESPLOG(("esp%d: HW reread [sreg<%02x> sstep<%02x> ireg<%02x>]\n",
-		esp->esp_id, eregs->esp_status, eregs->esp_sstep, eregs->esp_intrpt));
+		esp->esp_id, GETREG(eregs->esp_status), 
+		GETREG(eregs->esp_sstep), GETREG(eregs->esp_intrpt)));
 #ifdef DEBUG_ESP_CMDS
 	printk("esp%d: last ESP cmds [", esp->esp_id);
 	i = (esp->espcmdent - 1) & 31;
@@ -1549,20 +1558,23 @@ static inline void hme_fifo_hwbug_workaround(struct NCR_ESP *esp,
 		return;
 	} else {
 		unsigned long count = 0;
-		unsigned long fcnt = eregs->esp_fflags & ESP_FF_FBYTES;
+		unsigned long fcnt = GETREG(eregs->esp_fflags) & ESP_FF_FBYTES;
 
 		/* The HME stores bytes in multiples of 2 in the fifo. */
 		ESPHME(("hme_fifo[fcnt=%d", (int)fcnt));
 		while(fcnt) {
-			esp->hme_fifo_workaround_buffer[count++] = eregs->esp_fdata;
-			esp->hme_fifo_workaround_buffer[count++] = eregs->esp_fdata;
+			esp->hme_fifo_workaround_buffer[count++] = 
+			 GETREG(eregs->esp_fdata);
+			esp->hme_fifo_workaround_buffer[count++] = 
+			 GETREG(eregs->esp_fdata);
 			ESPHME(("<%02x,%02x>", esp->hme_fifo_workaround_buffer[count-2], esp->hme_fifo_workaround_buffer[count-1]));
 			fcnt--;
 		}
-		if(eregs->esp_status2 & ESP_STAT2_F1BYTE) {
+		if(GETREG(eregs->esp_status2) & ESP_STAT2_F1BYTE) {
 			ESPHME(("<poke_byte>"));
-			eregs->esp_fdata = 0;
-			esp->hme_fifo_workaround_buffer[count++] = eregs->esp_fdata;
+			SETREG(eregs->esp_fdata, 0);
+			esp->hme_fifo_workaround_buffer[count++] = 
+			 GETREG(eregs->esp_fdata);
 			ESPHME(("<%02x,0x00>", esp->hme_fifo_workaround_buffer[count-1]));
 			ESPHME(("CMD_FLUSH"));
 			esp_cmd(esp, eregs, ESP_CMD_FLUSH);
@@ -1579,8 +1591,8 @@ static inline void hme_fifo_push(struct NCR_ESP *esp, struct ESP_regs *eregs,
 {
 	esp_cmd(esp, eregs, ESP_CMD_FLUSH);
 	while(count) {
-		eregs->esp_fdata = *bytes++;
-		eregs->esp_fdata = 0;
+		SETREG(eregs->esp_fdata, *bytes++);
+		SETREG(eregs->esp_fdata, 0);
 		count--;
 	}
 }
@@ -1596,7 +1608,7 @@ static inline int skipahead1(struct NCR_ESP *esp, struct ESP_regs *eregs,
 
 	if(esp->dma_irq_p(esp)) {
 		/* Yes, we are able to save an interrupt. */
-		esp->sreg = eregs->esp_status;
+		esp->sreg = GETREG(eregs->esp_status);
 		if(esp->erev == fashme) {
 			/* This chip is really losing. */
 			ESPHME(("HME["));
@@ -1608,7 +1620,7 @@ static inline int skipahead1(struct NCR_ESP *esp, struct ESP_regs *eregs,
 			ESPHME(("fifo_workaround]"));
 			hme_fifo_hwbug_workaround(esp, eregs);
 		}
-		esp->ireg = eregs->esp_intrpt;
+		esp->ireg = GETREG(eregs->esp_intrpt);
 		esp->sreg &= ~(ESP_STAT_INTR);
 		if(!(esp->ireg & ESP_INTR_SR))
 			return 0;
@@ -1630,7 +1642,7 @@ static inline int skipahead2(struct NCR_ESP *esp,
 		return 0;
 	if(esp->dma_irq_p(esp)) {
 		/* Yes, we are able to save an interrupt. */
-		esp->sreg = eregs->esp_status;
+		esp->sreg = GETREG(eregs->esp_status);
 		if(esp->erev == fashme) {
 			/* This chip is really losing. */
 			ESPHME(("HME["));
@@ -1643,7 +1655,7 @@ static inline int skipahead2(struct NCR_ESP *esp,
 			ESPHME(("fifo_workaround]"));
 			hme_fifo_hwbug_workaround(esp, eregs);
 		}
-		esp->ireg = eregs->esp_intrpt;
+		esp->ireg = GETREG(eregs->esp_intrpt);
 		esp->sreg &= ~(ESP_STAT_INTR);
 		if(!(esp->ireg & ESP_INTR_SR))
 			return 0;
@@ -1658,18 +1670,18 @@ static inline int skipahead2(struct NCR_ESP *esp,
 /* Misc. esp helper routines. */
 static inline void esp_setcount(struct ESP_regs *eregs, int cnt, int hme)
 {
-	eregs->esp_tclow = (cnt & 0xff);
-	eregs->esp_tcmed = ((cnt >> 8) & 0xff);
+	SETREG(eregs->esp_tclow, (cnt & 0xff));
+	SETREG(eregs->esp_tcmed, ((cnt >> 8) & 0xff));
 	if(hme) {
-		eregs->fas_rlo = 0;
-		eregs->fas_rhi = 0;
+		SETREG(eregs->fas_rlo, 0);
+		SETREG(eregs->fas_rhi, 0);
 	}
 }
 
 static inline int esp_getcount(struct ESP_regs *eregs)
 {
-	return (((eregs->esp_tclow)&0xff) |
-		(((eregs->esp_tcmed)&0xff) << 8));
+	return (((GETREG(eregs->esp_tclow))&0xff) |
+		(((GETREG(eregs->esp_tcmed))&0xff) << 8));
 }
 
 static inline int fcount(struct NCR_ESP *esp, struct ESP_regs *eregs)
@@ -1677,7 +1689,7 @@ static inline int fcount(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	if(esp->erev == fashme)
 		return esp->hme_fifo_workaround_count;
 	else
-		return eregs->esp_fflags & ESP_FF_FBYTES;
+		return GETREG(eregs->esp_fflags) & ESP_FF_FBYTES;
 }
 
 static inline int fnzero(struct NCR_ESP *esp, struct ESP_regs *eregs)
@@ -1685,7 +1697,7 @@ static inline int fnzero(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	if(esp->erev == fashme)
 		return 0;
 	else
-		return eregs->esp_fflags & ESP_FF_ONOTZERO;
+		return GETREG(eregs->esp_fflags) & ESP_FF_ONOTZERO;
 }
 
 /* XXX speculative nops unnecessary when continuing amidst a data phase
@@ -1719,8 +1731,8 @@ static inline int esp100_sync_hwbug(struct NCR_ESP *esp, struct ESP_regs *eregs,
 {
 	/* Do not touch this piece of code. */
 	if((!(esp->erev == esp100)) ||
-	   (!(sreg_datainp((esp->sreg = eregs->esp_status)) && !fifocnt) &&
-	    !(sreg_dataoutp(esp->sreg) && !fnzero(esp, eregs)))) {
+	   (!(sreg_datainp((esp->sreg = GETREG(eregs->esp_status))) && !fifocnt)
+	    && !(sreg_dataoutp(esp->sreg) && !fnzero(esp, eregs)))) {
 		if(sp->SCp.phase == in_dataout)
 			esp_cmd(esp, eregs, ESP_CMD_FLUSH);
 		return 0;
@@ -1747,7 +1759,7 @@ static inline int esp100_reconnect_hwbug(struct NCR_ESP *esp,
 
 	if(esp->erev != esp100)
 		return 0;
-	junk = eregs->esp_intrpt;
+	junk = GETREG(eregs->esp_intrpt);
 
 	if(junk & ESP_INTR_SR)
 		return 1;
@@ -1772,7 +1784,7 @@ static inline int reconnect_target(struct NCR_ESP *esp, struct ESP_regs *eregs)
 		 */
 		targ = esp->hme_fifo_workaround_buffer[0];
 	} else {
-		it = eregs->esp_fdata;
+		it = GETREG(eregs->esp_fdata);
 		if(!(it & me))
 			return -1;
 		it &= ~me;
@@ -1796,7 +1808,7 @@ static inline int reconnect_lun(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	if(esp->erev == fashme)
 		lun = esp->hme_fifo_workaround_buffer[1];
 	else
-		lun = eregs->esp_fdata;
+		lun = GETREG(eregs->esp_fdata);
 	if(esp->sreg & ESP_STAT_PERR)
 		return 0;
 	if((lun & 0x40) || !(lun & 0x80))
@@ -1811,13 +1823,13 @@ static inline void esp_connect(struct NCR_ESP *esp, struct ESP_regs *eregs,
 			       Scsi_Cmnd *sp)
 {
 	Scsi_Device *dp = sp->device;
-	eregs->esp_soff = dp->sync_max_offset;
-	eregs->esp_stp  = dp->sync_min_period;
+	SETREG(eregs->esp_soff, dp->sync_max_offset);
+	SETREG(eregs->esp_stp, dp->sync_min_period);
 	if(esp->erev > esp100a)
-		eregs->esp_cfg3 = esp->config3[sp->target];
+		SETREG(eregs->esp_cfg3, esp->config3[sp->target]);
 	if(esp->erev == fashme)
-		eregs->esp_busid = (sp->target & 0xf) |
-			(ESP_BUSID_RESELID | ESP_BUSID_CTR32BIT);
+		SETREG(eregs->esp_busid, (sp->target & 0xf) |
+			(ESP_BUSID_RESELID | ESP_BUSID_CTR32BIT));
 	esp->current_SC = sp;
 }
 
@@ -1839,7 +1851,8 @@ static inline void esp_reconnect(struct NCR_ESP *esp, Scsi_Cmnd *sp)
 static inline int esp_do_msgin(struct NCR_ESP *esp, struct ESP_regs *eregs)
 {
 	/* Must be very careful with the fifo on the HME */
-	if((esp->erev != fashme) || !(eregs->esp_status2 & ESP_STAT2_FEMPTY))
+	if((esp->erev != fashme) || !(GETREG(eregs->esp_status2) & 
+	 ESP_STAT2_FEMPTY))
 		esp_cmd(esp, eregs, ESP_CMD_FLUSH);
 	esp_maybe_nop(esp, eregs);
 	esp_cmd(esp, eregs, ESP_CMD_TI);
@@ -1961,7 +1974,7 @@ static inline int esp_do_data_finale(struct NCR_ESP *esp,
 	 * will move and count 16-bit quantities during wide data.
 	 * SMCC _and_ Qlogic can both bite me.
 	 */
-	fifocnt = eregs->esp_fflags & ESP_FF_FBYTES;
+	fifocnt = GETREG(eregs->esp_fflags) & ESP_FF_FBYTES;
 	if(esp->erev != fashme)
 		ecount = esp_getcount(eregs);
 	bytes_sent = esp->current_transfer_size;
@@ -2360,16 +2373,18 @@ static int esp_do_phase_determine(struct NCR_ESP *esp,
 			if(esp->do_pio_cmds){
 				esp_advance_phase(SCptr, in_status);
 				esp_cmd(esp, eregs, ESP_CMD_ICCSEQ);
-				while(!(esp->eregs->esp_status & ESP_STAT_INTR));
-				esp->esp_command[0] = eregs->esp_fdata;
-				while(!(esp->eregs->esp_status & ESP_STAT_INTR));
-				esp->esp_command[1] = eregs->esp_fdata;
+				while(!(GETREG(esp->eregs->esp_status)
+				 & ESP_STAT_INTR));
+				esp->esp_command[0] = GETREG(eregs->esp_fdata);
+				while(!(GETREG(esp->eregs->esp_status)
+				 & ESP_STAT_INTR));
+				esp->esp_command[1] = GETREG(eregs->esp_fdata);
 			} else {				
 				if(esp->erev != fashme) {
 					esp->esp_command[0] = 0xff;
 					esp->esp_command[1] = 0xff;
-					eregs->esp_tclow = 2;
-					eregs->esp_tcmed = 0;
+					SETREG(eregs->esp_tclow, 2);
+					SETREG(eregs->esp_tcmed, 0);
 					esp->dma_init_read(esp, esp->esp_command_dvma, 2);
 					esp_cmd(esp, eregs, ESP_CMD_DMA | ESP_CMD_ICCSEQ);
 				} else {
@@ -2456,11 +2471,11 @@ static int esp_select_complete(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	int cmd_bytes_sent, fcnt;
 
 	if(esp->erev != fashme)
-		esp->seqreg = (eregs->esp_sstep & ESP_STEP_VBITS);
+		esp->seqreg = (GETREG(eregs->esp_sstep) & ESP_STEP_VBITS);
 	if(esp->erev == fashme)
 		fcnt = esp->hme_fifo_workaround_count;
 	else
-		fcnt = (eregs->esp_fflags & ESP_FF_FBYTES);
+		fcnt = (GETREG(eregs->esp_fflags) & ESP_FF_FBYTES);
 	cmd_bytes_sent = esp->dma_bytes_sent(esp, fcnt);
 	if(esp->dma_invalidate)
 		esp->dma_invalidate(esp);
@@ -2695,9 +2710,9 @@ static int esp_select_complete(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	esp_print_seqreg(esp->seqreg);
 	printk("\n");
 	printk("esp%d: New -- ", esp->esp_id);
-	esp->sreg = eregs->esp_status;
-	esp->seqreg = eregs->esp_sstep;
-	esp->ireg = eregs->esp_intrpt;
+	esp->sreg = GETREG(eregs->esp_status);
+	esp->seqreg = GETREG(eregs->esp_sstep);
+	esp->ireg = GETREG(eregs->esp_intrpt);
 	esp_print_ireg(esp->ireg);
 	printk(" ");
 	esp_print_statreg(esp->sreg);
@@ -2931,10 +2946,11 @@ static inline int check_multibyte_msg(struct NCR_ESP *esp,
 					esp->config3[SCptr->target] |= bit;
 				else
 					esp->config3[SCptr->target] &= ~bit;
-				eregs->esp_cfg3 = esp->config3[SCptr->target];
+				SETREG(eregs->esp_cfg3,
+				 esp->config3[SCptr->target]);
 			}
-			eregs->esp_soff = SDptr->sync_min_period;
-			eregs->esp_stp  = SDptr->sync_max_offset;
+			SETREG(eregs->esp_soff, SDptr->sync_min_period);
+			SETREG(eregs->esp_stp, SDptr->sync_max_offset);
 
 			ESPSDTR(("soff=%2x stp=%2x cfg3=%2x\n",
 				SDptr->sync_max_offset,
@@ -2949,15 +2965,16 @@ static inline int check_multibyte_msg(struct NCR_ESP *esp,
 			ESPSDTR(("unaccaptable sync nego, forcing async\n"));
 			SDptr->sync_max_offset = 0;
 			SDptr->sync_min_period = 0;
-			eregs->esp_soff = 0;
-			eregs->esp_stp = 0;
+			SETREG(eregs->esp_soff, 0);
+			SETREG(eregs->esp_stp, 0);
 			if((esp->erev == fas100a || esp->erev == fas216 || esp->erev == fas236 || esp->erev == fashme)) {
 				if((esp->erev == fas100a) || (esp->erev == fashme))
 					bit = ESP_CONFIG3_FAST;
 				else
 					bit = ESP_CONFIG3_FSCSI;
 				esp->config3[SCptr->target] &= ~bit;
-				eregs->esp_cfg3 = esp->config3[SCptr->target];
+				SETREG(eregs->esp_cfg3,
+				 esp->config3[SCptr->target]);
 			}
 		}
 
@@ -3007,7 +3024,7 @@ static inline int check_multibyte_msg(struct NCR_ESP *esp,
 				/* Pure paranoia. */
 				esp->config3[SCptr->target] &= ~(ESP_CONFIG3_EWIDE);
 			}
-			eregs->esp_cfg3 = esp->config3[SCptr->target];
+			SETREG(eregs->esp_cfg3, esp->config3[SCptr->target]);
 
 			/* Regardless, next try for sync transfers. */
 			build_sync_nego_msg(esp, esp->sync_defp, 15);
@@ -3038,7 +3055,8 @@ static int esp_do_msgindone(struct NCR_ESP *esp, struct ESP_regs *eregs)
 				message_out = MSG_PARITY_ERROR;
 				esp_cmd(esp, eregs, ESP_CMD_FLUSH);
 			} else if(esp->erev != fashme &&
-				  (it = (eregs->esp_fflags & ESP_FF_FBYTES))!=1) {
+				  (it = (GETREG(eregs->esp_fflags)
+				  & ESP_FF_FBYTES))!=1) {
 				/* We certainly dropped the ball somewhere. */
 				message_out = INITIATOR_ERROR;
 				esp_cmd(esp, eregs, ESP_CMD_FLUSH);
@@ -3046,7 +3064,7 @@ static int esp_do_msgindone(struct NCR_ESP *esp, struct ESP_regs *eregs)
 				if(esp->erev == fashme)
 					it = esp->hme_fifo_workaround_buffer[0];
 				else
-					it = eregs->esp_fdata;
+					it = GETREG(eregs->esp_fdata);
 				esp_advance_phase(SCptr, in_msgincont);
 			} else {
 				/* it is ok and we want it */
@@ -3055,7 +3073,7 @@ static int esp_do_msgindone(struct NCR_ESP *esp, struct ESP_regs *eregs)
 						esp->hme_fifo_workaround_buffer[0];
 				else
 					it = esp->cur_msgin[esp->msgin_ctr] =
-						eregs->esp_fdata;
+						GETREG(eregs->esp_fdata);
 				esp->msgin_ctr++;
 			}
 		} else {
@@ -3096,7 +3114,7 @@ static int esp_do_msgindone(struct NCR_ESP *esp, struct ESP_regs *eregs)
 		esp_advance_phase(SCptr, in_the_dark);
 		esp->msgin_len = 0;
 	}
-	esp->sreg = eregs->esp_status;
+	esp->sreg = GETREG(eregs->esp_status);
 	esp->sreg &= ~(ESP_STAT_INTR);
 	if((esp->sreg & (ESP_STAT_PMSG|ESP_STAT_PCD)) == (ESP_STAT_PMSG|ESP_STAT_PCD))
 		esp_cmd(esp, eregs, ESP_CMD_MOK);
@@ -3123,7 +3141,7 @@ static int esp_do_cmdbegin(struct NCR_ESP *esp, struct ESP_regs *eregs)
 		esp->dma_init_write(esp, esp->esp_command_dvma, i);
 	} else {
 		esp_cmd(esp, eregs, ESP_CMD_FLUSH);
-		eregs->esp_fdata = *esp->esp_scmdp++;
+		SETREG(eregs->esp_fdata, *esp->esp_scmdp++);
 		esp->esp_scmdleft--;
 		esp_cmd(esp, eregs, ESP_CMD_TI);
 	}
@@ -3154,14 +3172,14 @@ static int esp_do_msgout(struct NCR_ESP *esp, struct ESP_regs *eregs)
 		if(esp->erev == fashme)
 			hme_fifo_push(esp, eregs, &esp->cur_msgout[0], 1);
 		else
-			eregs->esp_fdata = esp->cur_msgout[0];
+			SETREG(eregs->esp_fdata, esp->cur_msgout[0]);
 		esp_cmd(esp, eregs, ESP_CMD_TI);
 		break;
 
 	case 2:
 		if(esp->do_pio_cmds){
-			eregs->esp_fdata = esp->cur_msgout[0];
-			eregs->esp_fdata = esp->cur_msgout[1];
+			SETREG(eregs->esp_fdata, esp->cur_msgout[0]);
+			SETREG(eregs->esp_fdata, esp->cur_msgout[1]);
 			esp_cmd(esp, eregs, ESP_CMD_TI);
 		} else {
 			esp->esp_command[0] = esp->cur_msgout[0];
@@ -3180,10 +3198,10 @@ static int esp_do_msgout(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	case 4:
 		esp->snip = 1;
 		if(esp->do_pio_cmds){
-			eregs->esp_fdata = esp->cur_msgout[0];
-			eregs->esp_fdata = esp->cur_msgout[1];
-			eregs->esp_fdata = esp->cur_msgout[2];
-			eregs->esp_fdata = esp->cur_msgout[3];
+			SETREG(eregs->esp_fdata, esp->cur_msgout[0]);
+			SETREG(eregs->esp_fdata, esp->cur_msgout[1]);
+			SETREG(eregs->esp_fdata, esp->cur_msgout[2]);
+			SETREG(eregs->esp_fdata, esp->cur_msgout[3]);
 			esp_cmd(esp, eregs, ESP_CMD_TI);
 		} else {
 			esp->esp_command[0] = esp->cur_msgout[0];
@@ -3204,18 +3222,18 @@ static int esp_do_msgout(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	case 5:
 		esp->snip = 1;
 		if(esp->do_pio_cmds){
-			eregs->esp_fdata = esp->cur_msgout[0];
-			eregs->esp_fdata = esp->cur_msgout[1];
-			eregs->esp_fdata = esp->cur_msgout[2];
-			eregs->esp_fdata = esp->cur_msgout[3];
-			eregs->esp_fdata = esp->cur_msgout[4];
+			SETREG(eregs->esp_fdata, esp->cur_msgout[0]);
+			SETREG(eregs->esp_fdata, esp->cur_msgout[1]);
+			SETREG(eregs->esp_fdata, esp->cur_msgout[2]);
+			SETREG(eregs->esp_fdata, esp->cur_msgout[3]);
+			SETREG(eregs->esp_fdata, esp->cur_msgout[4]);
 			esp_cmd(esp, eregs, ESP_CMD_TI);
 		} else {
-			esp->esp_command[0] = esp->cur_msgout[0];
-			esp->esp_command[1] = esp->cur_msgout[1];
-			esp->esp_command[2] = esp->cur_msgout[2];
-			esp->esp_command[3] = esp->cur_msgout[3];
-			esp->esp_command[4] = esp->cur_msgout[4];
+			SETREG(esp->esp_command[0], esp->cur_msgout[0]);
+			SETREG(esp->esp_command[1], esp->cur_msgout[1]);
+			SETREG(esp->esp_command[2], esp->cur_msgout[2]);
+			SETREG(esp->esp_command[3], esp->cur_msgout[3]);
+			SETREG(esp->esp_command[4], esp->cur_msgout[4]);
 			if(esp->erev == fashme) {
 				hme_fifo_push(esp, eregs, &esp->cur_msgout[0], 5);
 				esp_cmd(esp, eregs, ESP_CMD_TI);
@@ -3234,7 +3252,7 @@ static int esp_do_msgout(struct NCR_ESP *esp, struct ESP_regs *eregs)
 		if(esp->erev == fashme) {
 			hme_fifo_push(esp, eregs, &esp->cur_msgout[0], 1);
 		} else {
-			eregs->esp_fdata = esp->cur_msgout[0];
+			SETREG(eregs->esp_fdata, esp->cur_msgout[0]);
 		}
 		esp->msgout_len = 1;
 		esp_cmd(esp, eregs, ESP_CMD_TI);
@@ -3383,11 +3401,11 @@ inline void esp_handle(struct NCR_ESP *esp)
 		esp->dma_irq_entry(esp);
 
 	/* Check for errors. */
-	esp->sreg = eregs->esp_status;
+	esp->sreg = GETREG(eregs->esp_status);
 	esp->sreg &= (~ESP_STAT_INTR);
 	if(esp->erev == fashme) {
-		esp->sreg2 = eregs->esp_status2;
-		esp->seqreg = (eregs->esp_sstep & ESP_STEP_VBITS);
+		esp->sreg2 = GETREG(eregs->esp_status2);
+		esp->seqreg = (GETREG(eregs->esp_sstep) & ESP_STEP_VBITS);
 	}
 	if(esp->sreg & (ESP_STAT_SPAM)) {
 		/* Gross error, could be due to one of:
@@ -3461,7 +3479,7 @@ inline void esp_handle(struct NCR_ESP *esp)
 		}
 	}
 
-	esp->ireg = eregs->esp_intrpt;   /* Unlatch intr and stat regs */
+	esp->ireg = GETREG(eregs->esp_intrpt);   /* Unlatch intr and stat regs */
 
 	/* This cannot be done until this very moment. -DaveM */
 	synchronize_irq();
@@ -3674,7 +3692,7 @@ repeat:
 }
 #else
 /* For SMP we only service one ESP on the list list at our IRQ level! */
-static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
+void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 {
 	struct NCR_ESP *esp;
 

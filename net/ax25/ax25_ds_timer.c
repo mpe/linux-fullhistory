@@ -119,8 +119,10 @@ void ax25_ds_heartbeat_expiry(ax25_cb *ax25)
 			 * Check the state of the receive buffer.
 			 */
 			if (ax25->sk != NULL) {
-				if (atomic_read(&ax25->sk->rmem_alloc) < (ax25->sk->rcvbuf / 2) && (ax25->condition & AX25_COND_OWN_RX_BUSY)) {
+				if (atomic_read(&ax25->sk->rmem_alloc) < (ax25->sk->rcvbuf / 2) && 
+				    (ax25->condition & AX25_COND_OWN_RX_BUSY)) {
 					ax25->condition &= ~AX25_COND_OWN_RX_BUSY;
+					ax25->condition &= ~AX25_COND_ACK_PENDING;
 					break;
 				}
 			}
@@ -150,17 +152,11 @@ void ax25_ds_idletimer_expiry(ax25_cb *ax25)
 	ax25_clear_queues(ax25);
 
 	ax25->n2count = 0;
-
-	/* state 1 or 2 should not happen, but... */
-
-	if (ax25->state == AX25_STATE_1 || ax25->state == AX25_STATE_2)
-		ax25->state = AX25_STATE_0;
-	else
-		ax25->state = AX25_STATE_2;
+	ax25->state = AX25_STATE_2;
 
 	ax25_calculate_t1(ax25);
 	ax25_start_t1timer(ax25);
-	ax25_start_t3timer(ax25);
+	ax25_stop_t3timer(ax25);
 
 	if (ax25->sk != NULL) {
 		ax25->sk->state     = TCP_CLOSE;

@@ -123,6 +123,12 @@ icmp_echoreply_rate - INTEGER (not enabled per default)
 	0 to disable any limiting, otherwise the maximal rate in jiffies(1)
 	See the source for more information.
 
+icmp_ignore_bogus_error_responses - BOOLEAN
+	Some routers violate RFC 1122 by sending bogus responses to broadcast
+	frames.  Such violations are normally logged via a kernel warning.
+	If this is set to TRUE, the kernel will not give such warnings, which
+	will avoid log file clutter.
+	Default: FALSE
 
 (1) Jiffie: internal timeunit for the kernel. On the i386 1/100s, on the
 Alpha 1/1024s. See the HZ define in /usr/include/asm/param.h for the exact

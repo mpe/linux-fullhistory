@@ -258,7 +258,7 @@ void free_page_and_swap_cache(unsigned long addr)
  * incremented.
  */
 
-static struct page * lookup_swap_cache(unsigned long entry)
+struct page * lookup_swap_cache(unsigned long entry)
 {
 	struct page *found;
 	
@@ -305,7 +305,7 @@ struct page * read_swap_cache_async(unsigned long entry, int wait)
 	if (found_page)
 		goto out;
 
-	new_page_addr = __get_free_page(GFP_KERNEL);
+	new_page_addr = __get_free_page(GFP_USER);
 	if (!new_page_addr)
 		goto out;	/* Out of memory */
 	new_page = mem_map + MAP_NR(new_page_addr);

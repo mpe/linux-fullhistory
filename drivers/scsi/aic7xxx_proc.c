@@ -132,7 +132,7 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
   {
     for (lun = 0; lun < MAX_LUNS; lun++)
     {
-      if (p->stats[target][lun].xfers != 0)
+      if (p->stats[target][lun].r_total != 0)
 #ifdef AIC7XXX_PROC_STATS
         size += 512;
 #else
@@ -278,7 +278,7 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
     for (lun = 0; lun < MAX_LUNS; lun++)
     {
       sp = &p->stats[target][lun];
-      if (sp->xfers == 0)
+      if (sp->r_total == 0)
       {
         continue;
       }
@@ -331,11 +331,11 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
                       p->transinfo[target].cur_period,
                       p->transinfo[target].cur_offset,
                       p->transinfo[target].cur_width);
+#ifdef AIC7XXX_PROC_STATS
       size += sprintf(BLS, "    Total transfers %ld (%ld read;%ld written)\n",
           sp->xfers, sp->r_total, sp->w_total);
       size += sprintf(BLS, "      blks(512) rd=%ld; blks(512) wr=%ld\n",
           sp->r_total512, sp->w_total512);
-#ifdef AIC7XXX_PROC_STATS
       size += sprintf(BLS, "%s\n", HDRB);
       size += sprintf(BLS, " Reads:");
       for (i = 0; i < NUMBER(sp->r_bins); i++)
@@ -348,6 +348,9 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
       {
         size += sprintf(BLS, "%6ld ", sp->w_bins[i]);
       }
+#else
+      size += sprintf(BLS, "    Total transfers: %ld/%ld read/written)\n",
+          sp->r_total, sp->w_total);
 #endif /* AIC7XXX_PROC_STATS */
       size += sprintf(BLS, "\n\n");
     }

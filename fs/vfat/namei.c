@@ -1808,6 +1808,10 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 
 	if (res == 0) {
 		drop_replace_inodes(old_dentry, new_inode);
+		list_del(&old_dentry->d_alias);
+		iput(old_dentry->d_inode);
+		d_instantiate(old_dentry, new_inode);
+
 		d_move(old_dentry, new_dentry);
 		put_new_inode = 0;
 	}

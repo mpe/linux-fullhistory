@@ -63,17 +63,7 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 /* Time in jiffies before concluding the transmitter is hung. */
 #define TX_TIMEOUT  ((2000*HZ)/1000)
 
-#ifdef MODULE
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -93,13 +83,10 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 #include <linux/skbuff.h>
 
 /* Kernel compatibility defines, most common to the PCCard package. */
-#include <linux/version.h>		/* Evil, but neccessary */
+#include <linux/version.h>		/* Evil and unneccessary */
 
 #define RUN_AT(x) (jiffies + (x))
 
-#if (LINUX_VERSION_CODE >= 0x20100)
-char kernel_version[] = UTS_RELEASE;
-#endif
 #if (LINUX_VERSION_CODE < 0x20123)
 #define test_and_set_bit(val, addr) set_bit(val, addr)
 #endif
@@ -214,7 +201,7 @@ See Packet Engines confidential appendix (prototype chips only).
 static void yellowfin_timer(unsigned long data);
 
 enum capability_flags {HasMII=1, FullTxStatus=2};
-struct chip_info {
+static struct chip_info {
 	u16	vendor_id, device_id, device_id_mask, pci_flags;
 	const char *name;
 	void (*media_timer)(unsigned long data);

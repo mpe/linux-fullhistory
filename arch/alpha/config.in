@@ -167,6 +167,8 @@ then
 	define_bool CONFIG_ALPHA_AVANTI y
 fi
 
+bool 'Symmetric multi-processing support' CONFIG_SMP
+
 if [ "$CONFIG_PCI" = "y" ]; then
   bool 'PCI quirks' CONFIG_PCI_QUIRKS
   if [ "$CONFIG_PCI_QUIRKS" = "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then

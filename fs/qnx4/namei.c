@@ -219,17 +219,12 @@ int qnx4_unlink(struct inode *dir, struct dentry *dentry)
 	if (bh == NULL) {
 		return -ENOENT;
 	}
-	if ((inode = iget(dir->i_sb, ino)) == NULL) {
-		QNX4DEBUG(("qnx4: lookup->iget -> NULL\n"));
-		retval = -EACCES;
+	inode = dentry->d_inode;
+	if (inode->i_ino != ino) {
+		retval = -EIO;
 		goto end_unlink;
 	}
 	retval = -EPERM;
-	if ((dir->i_mode & S_ISVTX) &&
-	    current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER)) {
-		goto end_unlink;
-	}
 	if (!inode->i_nlink) {
 		QNX4DEBUG(("Deleting nonexistent file (%s:%lu), %d\n",
 			   kdevname(inode->i_dev),

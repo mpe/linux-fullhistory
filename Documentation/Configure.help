@@ -7418,6 +7418,21 @@ CONFIG_NLS_ISO8859_10
   letters that were missing in Latin 4 to cover the entire Nordic
   area.
 
+nls iso8859-15
+CONFIG_NLS_ISO8859_15
+  If you want to display filenames with native language characters
+  from the Microsoft fat filesystem family or from JOLIET CDROMs
+  correctly on the screen, you need to include the appropriate
+  input/output character sets. Say Y here for the Latin 9 character
+  set, which covers most West European languages such as Albanian,
+  Catalan, Danish, Dutch, English, Estonian, Faeroese, Finnish,
+  French, German, Galician, Irish, Icelandic, Italian, Norwegian,
+  Portuguese, Spanish, Swedish, and Valencian. Latin 9 is an update to
+  Latin 1 (ISO 8859-1) that removes a handful of rarely used
+  characters and instead adds support for Estonian, corrects the
+  support for French and Finnish, and adds the new Euro character.  If
+  unsure, say Y.
+
 nls koi8-r
 CONFIG_NLS_KOI8_R
   If you want to display filenames with native language characters

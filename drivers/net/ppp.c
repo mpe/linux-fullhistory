@@ -2041,7 +2041,7 @@ rcv_proto_vjc_comp(struct ppp *ppp, struct sk_buff *skb)
 		return 0;
 	new_count = slhc_uncompress(ppp->slcomp, skb->data + PPP_HDRLEN,
 				    skb->len - PPP_HDRLEN);
-	if (new_count < 0) {
+	if (new_count<=0) {
 		if (ppp->flags & SC_DEBUG)
 			printk(KERN_NOTICE
 			       "ppp: error in VJ decompression\n");

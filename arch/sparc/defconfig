@@ -20,6 +20,7 @@ CONFIG_KMOD=y
 CONFIG_VT=y
 CONFIG_VT_CONSOLE=y
 # CONFIG_AP1000 is not set
+# CONFIG_SMP is not set
 # CONFIG_SUN4 is not set
 # CONFIG_PCI is not set
 

@@ -418,31 +418,6 @@ out:
 }
 
 /*
- * We are much more aggressive about trying to swap out than we used
- * to be.  This works out OK, because we now do proper aging on page
- * contents. 
- */
-static int do_try_to_free_page(int gfp_mask)
-{
-	int i=6;
-
-	/* Always trim SLAB caches when memory gets low. */
-	kmem_cache_reap(gfp_mask);
-
-	do {
-		if (shrink_mmap(i, gfp_mask))
-			return 1;
-		if (shm_swap(i, gfp_mask))
-			return 1;
-		if (swap_out(i, gfp_mask))
-			return 1;
-		shrink_dcache_memory(i, gfp_mask);
-		i--;
-	} while (i >= 0);
-	return 0;
-}
-
-/*
  * Before we start the kernel thread, print out the 
  * kswapd initialization message (otherwise the init message 
  * may be printed in the middle of another driver's init 
@@ -453,12 +428,52 @@ void __init kswapd_setup(void)
        int i;
        char *revision="$Revision: 1.5 $", *s, *e;
 
+       swap_setup();
+       
        if ((s = strchr(revision, ':')) &&
            (e = strchr(s, '$')))
                s++, i = e - s;
        else
                s = revision, i = -1;
        printk ("Starting kswapd v%.*s\n", i, s);
+}
+
+#define free_memory(fn) \
+	count++; do { if (!--count) goto done; } while (fn)
+
+static int kswapd_free_pages(int kswapd_state)
+{
+	unsigned long end_time;
+
+	/* Always trim SLAB caches when memory gets low. */
+	kmem_cache_reap(0);
+
+	/* max one hundreth of a second */
+	end_time = jiffies + (HZ-1)/100;
+	do {
+		int priority = 7;
+		int count = pager_daemon.swap_cluster;
+
+		switch (kswapd_state) {
+			do {
+			default:
+				free_memory(shrink_mmap(priority, 0));
+				kswapd_state++;
+			case 1:
+				free_memory(shm_swap(priority, 0));
+				kswapd_state++;
+			case 2:
+				free_memory(swap_out(priority, 0));
+				shrink_dcache_memory(priority, 0);
+				kswapd_state = 0;
+			} while (--priority >= 0);
+			return kswapd_state;
+		}
+done:
+		if (nr_free_pages > freepages.high + pager_daemon.swap_cluster)
+			break;
+	} while (time_before_eq(jiffies,end_time));
+	return kswapd_state;
 }
 
 /*
@@ -503,22 +518,14 @@ int kswapd(void *unused)
 	init_swap_timer();
 	kswapd_task = current;
 	while (1) {
-		unsigned long end_time;
+		int state = 0;
 
 		current->state = TASK_INTERRUPTIBLE;
 		flush_signals(current);
 		run_task_queue(&tq_disk);
 		schedule();
 		swapstats.wakeups++;
-
-		/* max one hundreth of a second */
-		end_time = jiffies + (HZ-1)/100;
-		do {
-			if (!do_try_to_free_page(0))
-				break;
-			if (nr_free_pages > freepages.high + SWAP_CLUSTER_MAX)
-				break;
-		} while (time_before_eq(jiffies,end_time));
+		state = kswapd_free_pages(state);
 	}
 	/* As if we could ever get here - maybe we want to make this killable */
 	kswapd_task = NULL;
@@ -535,23 +542,39 @@ int kswapd(void *unused)
  * if we need more memory as part of a swap-out effort we
  * will just silently return "success" to tell the page
  * allocator to accept the allocation.
+ *
+ * We want to try to free "count" pages, and we need to 
+ * cluster them so that we get good swap-out behaviour. See
+ * the "free_memory()" macro for details.
  */
 int try_to_free_pages(unsigned int gfp_mask, int count)
 {
-	int retval = 1;
+	int retval;
 
 	lock_kernel();
+
+	/* Always trim SLAB caches when memory gets low. */
+	kmem_cache_reap(gfp_mask);
+
+	retval = 1;
 	if (!(current->flags & PF_MEMALLOC)) {
+		int priority;
+
 		current->flags |= PF_MEMALLOC;
+	
+		priority = 8;
 		do {
-			retval = do_try_to_free_page(gfp_mask);
-			if (!retval)
-				break;
-			count--;
-		} while (count > 0);
+			free_memory(shrink_mmap(priority, gfp_mask));
+			free_memory(shm_swap(priority, gfp_mask));
+			free_memory(swap_out(priority, gfp_mask));
+			shrink_dcache_memory(priority, gfp_mask);
+		} while (--priority >= 0);
+		retval = 0;
+done:
 		current->flags &= ~PF_MEMALLOC;
 	}
 	unlock_kernel();
+
 	return retval;
 }
 

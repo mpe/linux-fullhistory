@@ -52,7 +52,8 @@ enum root_directory_inos {
 	PROC_STRAM,
 	PROC_SOUND,
 	PROC_MTRR, /* whether enabled or not */
-	PROC_FS
+	PROC_FS,
+	PROC_SWAPSTATS
 };
 
 enum pid_directory_inos {
@@ -170,6 +171,7 @@ enum scsi_directory_inos {
 	PROC_SCSI_PAS16,
 	PROC_SCSI_QLOGICFAS,
 	PROC_SCSI_QLOGICISP,
+	PROC_SCSI_QLOGICFC,
 	PROC_SCSI_SEAGATE,
 	PROC_SCSI_T128,
 	PROC_SCSI_NCR53C7xx,
@@ -183,7 +185,9 @@ enum scsi_directory_inos {
 	PROC_SCSI_AM53C974,
 	PROC_SCSI_SSC,
 	PROC_SCSI_NCR53C406A,
+	PROC_SCSI_MEGARAID,
 	PROC_SCSI_PPA,
+	PROC_SCSI_ATP870U,
 	PROC_SCSI_ESP,
 	PROC_SCSI_QLOGICPTI,
 	PROC_SCSI_AMIGA7XX,
@@ -198,6 +202,7 @@ enum scsi_directory_inos {
 	PROC_SCSI_MESH,
 	PROC_SCSI_53C94,
 	PROC_SCSI_PLUTO,
+	PROC_SCSI_INI9100U,
 	PROC_SCSI_SCSI_DEBUG,	
 	PROC_SCSI_NOT_PRESENT,
 	PROC_SCSI_FILE,                        /* I'm assuming here that we */

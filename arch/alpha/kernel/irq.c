@@ -84,6 +84,15 @@ generic_ack_irq(unsigned long irq)
 	}
 }
 
+
+
+static void dummy_perf(unsigned long vector, struct pt_regs *regs)
+{
+        printk(KERN_CRIT "Performance counter interrupt!\n");
+}
+
+void (*perf_irq)(unsigned long, struct pt_regs *) = dummy_perf;
+
 /*
  * Dispatch device interrupts.
  */
@@ -879,8 +888,8 @@ do_entInt(unsigned long type, unsigned long vector, unsigned long la_ptr,
 		__restore_flags(flags);
 		return;
 	case 4:
-		printk("Performance counter interrupt\n");
-		break;
+		perf_irq(vector, &regs);
+		return;
 	default:
 		printk("Hardware intr %ld %lx? Huh?\n", type, vector);
 	}

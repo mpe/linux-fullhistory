@@ -38,7 +38,7 @@ ifdef CONFIG_APM
 OX_OBJS += apm.o
 endif
 
-ifdef SMP
+ifdef CONFIG_SMP
 O_OBJS += io_apic.o smp.o trampoline.o
 endif
 

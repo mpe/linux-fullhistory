@@ -1242,21 +1242,17 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 		return -EINVAL;
 
 	/*
-	 *	The write queue this time is holding sockets ready to use
+	 *	The read queue this time is holding sockets ready to use
 	 *	hooked into the SABM we saved
 	 */
 	do {
-		cli();
 		if ((skb = skb_dequeue(&sk->receive_queue)) == NULL) {
-			if (flags & O_NONBLOCK) {
-				sti();
+			if (flags & O_NONBLOCK)
 				return -EWOULDBLOCK;
-			}
+
 			interruptible_sleep_on(sk->sleep);
-			if (signal_pending(current)) {
-				sti();
+			if (signal_pending(current)) 
 				return -ERESTARTSYS;
-			}
 		}
 	} while (skb == NULL);
 
@@ -1264,10 +1260,10 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 	newsk->pair = NULL;
 	newsk->socket = newsock;
 	newsk->sleep = &newsock->wait;
-	sti();
 
 	/* Now attach up the new socket */
 	skb->sk = NULL;
+	skb->destructor = NULL;
 	kfree_skb(skb);
 	sk->ack_backlog--;
 	newsock->sk    = newsk;

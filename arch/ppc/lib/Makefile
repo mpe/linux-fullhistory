@@ -8,7 +8,7 @@
 O_TARGET = lib.o
 O_OBJS  = checksum.o string.o strcase.o
 
-ifdef SMP
+ifdef CONFIG_SMP
 O_OBJS += locks.o
 endif
 

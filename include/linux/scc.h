@@ -82,8 +82,8 @@ enum HWEVENT_opts {
 
 /* channel grouping */
 
-#define RXGROUP		0x100	/* if set, only tx when all channels clear */
-#define TXGROUP		0x200	/* if set, don't transmit simultaneously */
+#define RXGROUP		0100	/* if set, only tx when all channels clear */
+#define TXGROUP		0200	/* if set, don't transmit simultaneously */
 
 /* Tx/Rx clock sources */
 
@@ -237,6 +237,7 @@ struct scc_channel {
 
 	unsigned char wreg[16]; 	/* Copy of last written value in WRx */
 	unsigned char status;		/* Copy of R0 at last external interrupt */
+	unsigned char dcd;		/* DCD status */
 
         struct scc_kiss kiss;		/* control structure for KISS params */
         struct scc_stat stat;		/* statistical information */

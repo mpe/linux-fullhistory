@@ -27,7 +27,7 @@ ifdef CONFIG_PCI
   O_OBJS += ebus.o
 endif
 
-ifdef SMP
+ifdef CONFIG_SMP
 O_OBJS += smp.o trampoline.o
 endif
 
@@ -63,11 +63,17 @@ check_asm: dummy
 	@echo "#ifndef __ASM_OFFSETS_H__" >> asm_offsets.h
 	@echo "#define __ASM_OFFSETS_H__" >> asm_offsets.h
 	@echo "" >> asm_offsets.h
-	@echo "#ifndef __SMP__" >> asm_offsets.h
+	@echo "#include <linux/config.h>" >> asm_offsets.h
 	@echo "" >> asm_offsets.h
-	@echo "#include <linux/sched.h>" > tmp.c
+	@echo "#ifndef CONFIG_SMP" >> asm_offsets.h
+	@echo "" >> asm_offsets.h
+	@echo "#include <linux/config.h>" > tmp.c
+	@echo "#undef CONFIG_SMP" >> tmp.c
+	@echo "#include <linux/sched.h>" >> tmp.c
 	$(CC) -E tmp.c -o tmp.i
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
+	@echo "#include <linux/config.h>" >> check_asm.c
+	@echo "#undef CONFIG_SMP" >> check_asm.c
 	@echo "#include <linux/sched.h>" >> check_asm.c
 	@echo 'struct task_struct _task;' >> check_asm.c
 	@echo 'struct mm_struct _mm;' >> check_asm.c
@@ -87,13 +93,19 @@ check_asm: dummy
 	./check_asm >> asm_offsets.h
 	@rm -f check_asm check_asm.c
 	@echo "" >> asm_offsets.h
-	@echo "#else /* __SMP__ */" >> asm_offsets.h
+	@echo "#else /* CONFIG_SMP */" >> asm_offsets.h
 	@echo "" >> asm_offsets.h
 	@echo "#ifndef SPIN_LOCK_DEBUG" >>asm_offsets.h
 	@echo "" >> asm_offsets.h
-	@echo "#include <linux/sched.h>" > tmp.c
+	@echo "#include <linux/config.h>" > tmp.c
+	@echo "#undef CONFIG_SMP" >> tmp.c
+	@echo "#define CONFIG_SMP 1" >> tmp.c
+	@echo "#include <linux/sched.h>" >> tmp.c
 	$(CC) -D__SMP__ -E tmp.c -o tmp.i
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
+	@echo "#include <linux/config.h>" >> check_asm.c
+	@echo "#undef CONFIG_SMP" >> check_asm.c
+	@echo "#define CONFIG_SMP 1" >> check_asm.c
 	@echo "#include <linux/sched.h>" >> check_asm.c
 	@echo 'struct task_struct _task;' >> check_asm.c
 	@echo 'struct mm_struct _mm;' >> check_asm.c
@@ -118,6 +130,9 @@ check_asm: dummy
 	@echo "#include <linux/sched.h>" > tmp.c
 	$(CC) -D__SMP__ -DSPIN_LOCK_DEBUG -E tmp.c -o tmp.i
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
+	@echo "#include <linux/config.h>" >> check_asm.c
+	@echo "#undef CONFIG_SMP" >> check_asm.c
+	@echo "#define CONFIG_SMP 1" >> check_asm.c
 	@echo "#include <linux/sched.h>" >> check_asm.c
 	@echo 'struct task_struct _task;' >> check_asm.c
 	@echo 'struct mm_struct _mm;' >> check_asm.c
@@ -138,7 +153,7 @@ check_asm: dummy
 	@rm -f check_asm check_asm.c
 	@echo "#endif /* SPIN_LOCK_DEBUG */" >> asm_offsets.h
 	@echo "" >> asm_offsets.h
-	@echo "#endif /* __SMP__ */" >> asm_offsets.h
+	@echo "#endif /* CONFIG_SMP */" >> asm_offsets.h
 	@echo "" >> asm_offsets.h
 	@echo "#endif /* __ASM_OFFSETS_H__ */" >> asm_offsets.h
 	@if test -r $(HPATH)/asm/asm_offsets.h; then \

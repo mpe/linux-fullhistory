@@ -61,6 +61,15 @@ extern struct inode swapper_inode;
 extern unsigned long page_cache_size;
 extern int buffermem;
 
+struct swap_stats 
+{
+	long	proc_freepage_attempts;
+	long	proc_freepage_successes;
+	long	kswap_freepage_attempts;
+	long	kswap_freepage_successes;
+};
+extern struct swap_stats swap_stats;
+
 /* Incomplete types for prototype declarations: */
 struct task_struct;
 struct vm_area_struct;
@@ -68,6 +77,9 @@ struct sysinfo;
 
 /* linux/ipc/shm.c */
 extern int shm_swap (int, int);
+
+/* linux/mm/swap.c */
+extern void swap_setup (void);
 
 /* linux/mm/vmscan.c */
 extern int try_to_free_pages(unsigned int gfp_mask, int count);
@@ -87,6 +99,7 @@ extern void show_swap_cache_info(void);
 extern int add_to_swap_cache(struct page *, unsigned long);
 extern int swap_duplicate(unsigned long);
 extern int swap_check_entry(unsigned long);
+struct page * lookup_swap_cache(unsigned long);
 extern struct page * read_swap_cache_async(unsigned long, int);
 #define read_swap_cache(entry) read_swap_cache_async(entry, 1);
 extern int FASTCALL(swap_count(unsigned long));

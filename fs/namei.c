@@ -490,6 +490,77 @@ struct dentry * __namei(const char *pathname, unsigned int lookup_flags)
 	return dentry;
 }
 
+/*
+ * It's inline, so penalty for filesystems that don't use sticky bit is
+ * minimal.
+ */
+static inline int check_sticky(struct inode *dir, struct inode *inode)
+{
+	if (!(dir->i_mode & S_ISVTX))
+		return 0;
+	if (inode->i_uid == current->fsuid)
+		return 0;
+	if (dir->i_uid == current->fsuid)
+		return 0;
+	return !capable(CAP_FOWNER);
+}
+
+/*
+ *	Check whether we can remove a link victim from directory dir, check
+ *  whether the type of victim is right.
+ *  1. We can't do it if dir is read-only (done in permission())
+ *  2. We should have write and exec permissions on dir
+ *  3. We can't remove anything from append-only dir
+ *  4. We can't do anything with immutable dir (done in permission())
+ *  5. If the sticky bit on dir is set we should either
+ *	a. be owner of dir, or
+ *	b. be owner of victim, or
+ *	c. have CAP_FOWNER capability
+ *  6. If the victim is append-only or immutable we can't do antyhing with
+ *     links pointing to it.
+ *  7. If we were asked to remove a directory and victim isn't one - ENOTDIR.
+ *  8. If we were asked to remove a non-directory and victim isn't one - EISDIR.
+ *  9. We can't remove a root or mountpoint.
+ */
+static inline int may_delete(struct inode *dir,struct dentry *victim, int isdir)
+{
+	int error;
+	if (!victim->d_inode || victim->d_parent->d_inode != dir)
+		return -ENOENT;
+	error = permission(dir,MAY_WRITE | MAY_EXEC);
+	if (error)
+		return error;
+	if (IS_APPEND(dir))
+		return -EPERM;
+	if (check_sticky(dir, victim->d_inode)||IS_APPEND(victim->d_inode)||
+	    IS_IMMUTABLE(victim->d_inode))
+		return -EPERM;
+	if (isdir) {
+		if (!S_ISDIR(victim->d_inode->i_mode))
+			return -ENOTDIR;
+		if (IS_ROOT(victim))
+			return -EBUSY;
+		if (victim->d_mounts != victim->d_covers)
+			return -EBUSY;
+	} else if (S_ISDIR(victim->d_inode->i_mode))
+		return -EISDIR;
+	return 0;
+}
+
+/*	Check whether we can create an object with dentry child in directory
+ *  dir.
+ *  1. We can't do it if child already exists (open has special treatment for
+ *     this case, but since we are inlined it's OK)
+ *  2. We can't do it if dir is read-only (done in permission())
+ *  3. We should have write and exec permissions on dir
+ *  4. We can't do it if dir is immutable (done in permission())
+ */
+static inline int may_create(struct inode *dir, struct dentry *child) {
+	if (child->d_inode)
+		return -EEXIST;
+	return permission(dir,MAY_WRITE | MAY_EXEC);
+}
+
 static inline struct dentry *get_parent(struct dentry *dentry)
 {
 	return dget(dentry->d_parent);
@@ -599,16 +670,16 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 			error = 0;
 			if (flag & O_EXCL)
 				error = -EEXIST;
-		} else if (IS_RDONLY(dir->d_inode))
-			error = -EROFS;
-		else if (!dir->d_inode->i_op || !dir->d_inode->i_op->create)
-			error = -EACCES;
-		else if ((error = permission(dir->d_inode,MAY_WRITE | MAY_EXEC)) == 0) {
-			DQUOT_INIT(dir->d_inode);
-			error = dir->d_inode->i_op->create(dir->d_inode, dentry, mode);
-			/* Don't check for write permission, don't truncate */
-			acc_mode = 0;
-			flag &= ~O_TRUNC;
+		} else if ((error = may_create(dir->d_inode, dentry)) == 0) {
+			if (!dir->d_inode->i_op || !dir->d_inode->i_op->create)
+				error = -EACCES;
+			else {
+				DQUOT_INIT(dir->d_inode);
+				error = dir->d_inode->i_op->create(dir->d_inode, dentry, mode);
+				/* Don't check for write permission, don't truncate */
+				acc_mode = 0;
+				flag &= ~O_TRUNC;
+			}
 		}
 		unlock_dir(dir);
 		if (error)
@@ -705,30 +776,20 @@ struct dentry * do_mknod(const char * filename, int mode, dev_t dev)
 	if (IS_ERR(dir))
 		goto exit;
 
-	retval = ERR_PTR(-EEXIST);
-	if (dentry->d_inode)
-		goto exit_lock;
-
-	retval = ERR_PTR(-EROFS);
-	if (IS_RDONLY(dir->d_inode))
-		goto exit_lock;
-
-	error = permission(dir->d_inode,MAY_WRITE | MAY_EXEC);
-	retval = ERR_PTR(error);
+	error = may_create(dir->d_inode, dentry);
 	if (error)
 		goto exit_lock;
 
-	retval = ERR_PTR(-EPERM);
+	error = -EPERM;
 	if (!dir->d_inode->i_op || !dir->d_inode->i_op->mknod)
 		goto exit_lock;
 
 	DQUOT_INIT(dir->d_inode);
 	error = dir->d_inode->i_op->mknod(dir->d_inode, dentry, mode, dev);
+exit_lock:
 	retval = ERR_PTR(error);
 	if (!error)
 		retval = dget(dentry);
-
-exit_lock:
 	unlock_dir(dir);
 exit:
 	dput(dentry);
@@ -790,15 +851,7 @@ static inline int do_mkdir(const char * pathname, int mode)
 	if (IS_ERR(dir))
 		goto exit_dput;
 
-	error = -EEXIST;
-	if (dentry->d_inode)
-		goto exit_lock;
-
-	error = -EROFS;
-	if (IS_RDONLY(dir->d_inode))
-		goto exit_lock;
-
-	error = permission(dir->d_inode,MAY_WRITE | MAY_EXEC);
+	error = may_create(dir->d_inode, dentry);
 	if (error)
 		goto exit_lock;
 
@@ -865,66 +918,19 @@ static inline void double_unlock(struct dentry *d1, struct dentry *d2)
 	dput(d2);
 }
 
-/*
- * It's inline, so penalty for filesystems that don't use sticky bit is
- * minimal.
- */
 
-static inline int check_sticky(struct inode *dir, struct inode *inode)
-{
-	if (!(dir->i_mode & S_ISVTX))
-		return 0;
-	if (inode->i_uid == current->fsuid)
-		return 0;
-	if (dir->i_uid == current->fsuid)
-		return 0;
-	return !capable(CAP_FOWNER);
-}
 
-int VFS_rmdir(struct inode *dir, struct dentry *dentry)
+int vfs_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	int error;
 
-	if (IS_RDONLY(dir))
-		return -EROFS;
-
-	error = permission(dir,MAY_WRITE | MAY_EXEC);
+	error = may_delete(dir, dentry, 1);
 	if (error)
 		return error;
 
-	/*
-	 * A subdirectory cannot be removed from an append-only directory.
-	 */
-	if (IS_APPEND(dir))
-		return -EPERM;
-	/*
-	 * Check the sticky bit.
-	 */
-	if (check_sticky(dir, dentry->d_inode))
-		return -EPERM;
-
-	/* Disallow removals of mountpoints. */
-	if (dentry->d_mounts != dentry->d_covers)
-		return -EBUSY;
-
 	if (!dir->i_op || !dir->i_op->rmdir)
 		return -EPERM;
-	/*
-	 * I suspect that these two checks are atavisms copied from minixfs
-	 * and it looks like they can be dropped. Anyway, it will be simpler
-	 * to drop them from here and even if those checks are needed they
-	 * belong to VFS.
-	 */
-	if (dir == dentry->d_inode)
-		return -EPERM;
-	if (dir->i_dev != dentry->d_inode->i_dev)
-		return -EPERM;
-	/*
-	 * Non-directories can't be rmdir'd. It may confuse the heck of
-	 * NFS and CODA. Testing it in VFS is the Right Thing (tm), anyway.
-	 */
-	if (!S_ISDIR(dentry->d_inode->i_mode))
-		return -ENOTDIR;
+
 	DQUOT_INIT(dir);
 
 	/*
@@ -970,6 +976,9 @@ static inline int do_rmdir(const char * name)
 	error = -ENOENT;
 	if (!dentry->d_inode)
 		goto exit_dput;
+
+	dir = dget(dentry->d_parent);
+
 	/*
 	 * The dentry->d_count stuff confuses d_delete() enough to
 	 * not kill the inode from under us while it is locked. This
@@ -977,14 +986,9 @@ static inline int do_rmdir(const char * name)
 	 * in the inode, not in the dentry..
 	 */
 	dentry->d_count++;
-	dir = dget(dentry->d_parent);
 	double_lock(dir, dentry);
 
-	/*
-	 * Check that dentry still sits where it did and do the real stuff.
-	 */
-	if (dentry->d_parent == dir)
-		error = VFS_rmdir(dir->d_inode, dentry);
+	error = vfs_rmdir(dir->d_inode, dentry);
 
 	double_unlock(dentry, dir);
 exit_dput:
@@ -1009,6 +1013,25 @@ asmlinkage int sys_rmdir(const char * pathname)
 	return error;
 }
 
+int vfs_unlink(struct inode *dir, struct dentry *dentry)
+{
+	int error;
+
+	error = may_delete(dir, dentry, 0);
+	if (error)
+		goto exit_lock;
+
+	if (!dir->i_op || !dir->i_op->unlink)
+		goto exit_lock;
+
+	DQUOT_INIT(dir);
+
+	error = dir->i_op->unlink(dir, dentry);
+
+exit_lock:
+	return error;
+}
+
 static inline int do_unlink(const char * name)
 {
 	int error;
@@ -1025,42 +1048,8 @@ static inline int do_unlink(const char * name)
 	if (IS_ERR(dir))
 		goto exit_dput;
 
-	error = -ENOENT;
-	if (!dentry->d_inode)
-		goto exit_lock;
+	error = vfs_unlink(dir->d_inode, dentry);
 
-	/* Mount point? */
-	error = -EBUSY;
-	if (dentry == dir)
-		goto exit_lock;
-
-	error = -EROFS;
-	if (IS_RDONLY(dir->d_inode))
-		goto exit_lock;
-
-	error = permission(dir->d_inode,MAY_WRITE | MAY_EXEC);
-	if (error)
-		goto exit_lock;
-
-	/*
-	 * A directory can't be unlink'ed.
-	 * A file cannot be removed from an append-only directory.
-	 */
-	error = -EPERM;
-	if (S_ISDIR(dentry->d_inode->i_mode))
-		goto exit_lock;
-
-	if (IS_APPEND(dir->d_inode))
-		goto exit_lock;
-
-	if (!dir->d_inode->i_op || !dir->d_inode->i_op->unlink)
-		goto exit_lock;
-
-	DQUOT_INIT(dir->d_inode);
-
-	error = dir->d_inode->i_op->unlink(dir->d_inode, dentry);
-
-exit_lock:
         unlock_dir(dir);
 exit_dput:
 	dput(dentry);
@@ -1101,15 +1090,7 @@ static inline int do_symlink(const char * oldname, const char * newname)
 	if (IS_ERR(dir))
 		goto exit_dput;
 
-	error = -EEXIST;
-	if (dentry->d_inode)
-		goto exit_lock;
-
-	error = -EROFS;
-	if (IS_RDONLY(dir->d_inode))
-		goto exit_lock;
-
-	error = permission(dir->d_inode,MAY_WRITE | MAY_EXEC);
+	error = may_create(dir->d_inode, dentry);
 	if (error)
 		goto exit_lock;
 
@@ -1185,20 +1166,12 @@ static inline int do_link(const char * oldname, const char * newname)
 	if (!inode)
 		goto exit_lock;
 
-	error = -EEXIST;
-	if (new_dentry->d_inode)
-		goto exit_lock;
-
-	error = -EROFS;
-	if (IS_RDONLY(dir->d_inode))
+	error = may_create(dir->d_inode, new_dentry);
+	if (error)
 		goto exit_lock;
 
 	error = -EXDEV;
 	if (dir->d_inode->i_dev != inode->i_dev)
-		goto exit_lock;
-
-	error = permission(dir->d_inode, MAY_WRITE | MAY_EXEC);
-	if (error)
 		goto exit_lock;
 
 	/*
@@ -1247,6 +1220,38 @@ asmlinkage int sys_link(const char * oldname, const char * newname)
 	return error;
 }
 
+int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
+	       struct inode *new_dir, struct dentry *new_dentry)
+{
+	int error;
+	int isdir;
+
+	isdir = S_ISDIR(old_dentry->d_inode->i_mode);
+
+	error = may_delete(old_dir, old_dentry, isdir); /* XXX */
+	if (error)
+		return error;
+
+	if (new_dir->i_dev != old_dir->i_dev)
+		return -EXDEV;
+
+	if (!new_dentry->d_inode)
+		error = may_create(new_dir, new_dentry);
+	else
+		error = may_delete(new_dir, new_dentry, isdir);
+	if (error)
+		return error;
+
+	if (!old_dir->i_op || !old_dir->i_op->rename)
+		return -EPERM;
+
+	DQUOT_INIT(old_dir);
+	DQUOT_INIT(new_dir);
+	error = old_dir->i_op->rename(old_dir, old_dentry, new_dir, new_dentry);
+
+	return error;
+}
+
 static inline int do_rename(const char * oldname, const char * newname)
 {
 	int error;
@@ -1279,43 +1284,9 @@ static inline int do_rename(const char * oldname, const char * newname)
 
 	double_lock(new_dir, old_dir);
 
-	error = permission(old_dir->d_inode,MAY_WRITE | MAY_EXEC);
-	if (error)
-		goto exit_lock;
-	error = permission(new_dir->d_inode,MAY_WRITE | MAY_EXEC);
-	if (error)
-		goto exit_lock;
+	error = vfs_rename(old_dir->d_inode, old_dentry,
+			   new_dir->d_inode, new_dentry);
 
-	/* Disallow moves of mountpoints. */
-	error = -EBUSY;
-	if (old_dir == old_dentry || new_dir == new_dentry)
-		goto exit_lock;
-
-	error = -EXDEV;
-	if (new_dir->d_inode->i_dev != old_dir->d_inode->i_dev)
-		goto exit_lock;
-
-	error = -EROFS;
-	if (IS_RDONLY(new_dir->d_inode) || IS_RDONLY(old_dir->d_inode))
-		goto exit_lock;
-
-	/*
-	 * A file cannot be removed from an append-only directory.
-	 */
-	error = -EPERM;
-	if (IS_APPEND(old_dir->d_inode))
-		goto exit_lock;
-
-	error = -EPERM;
-	if (!old_dir->d_inode->i_op || !old_dir->d_inode->i_op->rename)
-		goto exit_lock;
-
-	DQUOT_INIT(old_dir->d_inode);
-	DQUOT_INIT(new_dir->d_inode);
-	error = old_dir->d_inode->i_op->rename(old_dir->d_inode, old_dentry,
-					       new_dir->d_inode, new_dentry);
-
-exit_lock:
 	double_unlock(new_dir, old_dir);
 	dput(new_dentry);
 exit_old:

@@ -962,7 +962,7 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 	struct file * file = area->vm_file;
 	struct dentry * dentry = file->f_dentry;
 	struct inode * inode = dentry->d_inode;
-	unsigned long offset;
+	unsigned long offset, reada, i;
 	struct page * page, **hash;
 	unsigned long old_page, new_page;
 
@@ -1023,7 +1023,18 @@ success:
 	return new_page;
 
 no_cached_page:
-	new_page = __get_free_page(GFP_USER);
+	/*
+	 * Try to read in an entire cluster at once.
+	 */
+	reada   = offset;
+	reada >>= PAGE_SHIFT + page_cluster;
+	reada <<= PAGE_SHIFT + page_cluster;
+
+	for (i = 1 << page_cluster; i > 0; --i, reada += PAGE_SIZE)
+		new_page = try_to_read_ahead(file, reada, new_page);
+
+	if (!new_page)
+		new_page = __get_free_page(GFP_USER);
 	if (!new_page)
 		goto no_page;
 
@@ -1047,11 +1058,6 @@ no_cached_page:
 	if (inode->i_op->readpage(file, page) != 0)
 		goto failure;
 
-	/*
-	 * Do a very limited read-ahead if appropriate
-	 */
-	if (PageLocked(page))
-		new_page = try_to_read_ahead(file, offset + PAGE_SIZE, 0);
 	goto found_page;
 
 page_locked_wait:
@@ -1625,7 +1631,7 @@ unsigned long get_cached_page(struct inode * inode, unsigned long offset,
 	if (!page) {
 		if (!new)
 			goto out;
-		page_cache = get_free_page(GFP_KERNEL);
+		page_cache = get_free_page(GFP_USER);
 		if (!page_cache)
 			goto out;
 		page = mem_map + MAP_NR(page_cache);

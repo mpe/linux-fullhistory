@@ -265,6 +265,14 @@ S: 403 Gilmore Avenue
 S: Trafford, Pennsylvania 15085
 S: USA
 
+N: Dag Brattli
+E: dagb@cs.uit.no
+W: http://www.cs.uit.no/~dagb
+D: IrDA Subsystem
+S: 19. Wellington Road
+S: Lancaster, LA1 4DN
+S: UK, England
+
 N: Andries Brouwer
 E: aeb@cwi.nl
 D: random Linux hacker
@@ -338,10 +346,12 @@ S: Stanford, California 94305
 S: USA
 
 N: Juan Jose Ciarlante
+W: http://juanjox.linuxhq.com/
 E: jjciarla@raiz.uncu.edu.ar
-E: juanjo@irriga.uncu.edu.ar
+E: jjo@mendoza.gov.ar
 D: Network driver alias support
 D: IP masq hashing and app modules
+D: IP masq 2.1 features and bugs
 S: Las Cuevas 2385 - Bo Guemes
 S: Las Heras, Mendoza CP 5539
 S: Argentina
@@ -434,6 +444,15 @@ S: Computer Science Department
 S: New Mexico Tech
 S: Socorro, New Mexico 87801
 S: USA
+
+N: Oleg Drokin
+E: green@ccssu.crimea.ua
+W: http://www.ccssu.crimea.ua/~green
+D: Cleaning up sound drivers.
+S: Skvoznoy per., 14a
+S: Evpatoria
+S: Crimea
+S: UKRAINE, 334320
 
 N: Thomas Dunbar
 E: tdunbar@vtaix.cc.vt.edu
@@ -641,6 +660,17 @@ D: kernel hacker
 S: 8124 Constitution Apt. 7
 S: Sterling Heights, Michigan 48313
 S: USA
+
+N: Tristan Greaves
+E: Tristan.Greaves@icl.com
+E: tmg296@ecs.soton.ac.uk
+W: http://www.ecs.soton.ac.uk/~tmg296
+D: Miscellaneous ipv4 sysctl patches
+S: 15 Little Mead
+S: Denmead
+S: Hampshire
+S: PO7 6HS
+S: United Kingdom
 
 N: Michael A. Griffith
 E: grif@cs.ucr.edu
@@ -863,6 +893,14 @@ S: Na Orechovce 7
 S: 160 00 Praha 6
 S: Czech Republic
 
+N: Niels Kristian Bech Jensen
+E: nkbj@image.dk
+W: http://www.image.dk/~nkbj
+D: 4.4BSD and NeXTstep support in read-only ufs
+S: Dr. Holsts Vej 34, lejl. 164
+S: DK-8230 Åbyhøj
+S: Denmark
+
 N: Michael K. Johnson
 E: johnsonm@redhat.com
 W: http://www.redhat.com/~johnsonm
@@ -886,6 +924,17 @@ D: digiboard driver update(modularisation work and 2.1.x upd)
 S: Tallak 95
 S: 8103 Rein
 S: Austria
+
+N: Jan "Yenya" Kasprzak
+E: kas@fi.muni.cz
+D: Author of the COSA/SRP sync serial board driver.
+D: Port of the syncppp.c from the 2.0 to the 2.1 kernel.
+P: 1024/D3498839 0D 99 A7 FB 20 66 05 D7  8B 35 FC DE 05 B1 8A 5E
+W: http://www.fi.muni.cz/~kas/
+S: c/o Faculty of Informatics, Masaryk University
+S: Botanicka' 68a
+S: 602 00 Brno
+S: Czech Republic
 
 N: Fred N. van Kempen
 E: waltje@uwalt.nl.mugnet.org
@@ -932,6 +981,17 @@ D: Slackware and Debian, vote-taker for 2nd comp.os.linux reorganization
 S: Post Office Box 611311
 S: San Jose, California 95161-1311
 S: USA
+
+N: Thorsten Knabe
+E: Thorsten Knabe <tek@rbg.informatik.tu-darmstadt.de>
+E: Thorsten Knabe <tek01@hrzpub.tu-darmstadt.de>
+W: http://www.student.informatik.tu-darmstadt.de/~tek
+W: http://www.tu-darmstadt.de/~tek01
+P: 1024/3BC8D885 8C 29 C5 0A C0 D1 D6 F4  20 D4 2D AB 29 F6 D0 60
+D: AD1816 sound driver
+S: Am Bergfried 10
+S: 63225 Langen
+S: Germany
 
 N: Alain L. Knaff
 E: Alain.Knaff@poboxes.com
@@ -1026,11 +1086,11 @@ S: 3817 KS Amersfoort
 S: The Netherlands
 
 N: Volker Lendecke
-E: lendecke@namu01.Num.Math.Uni-Goettingen.de
+E: vl@kki.org
 D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
 D: NCP filesystem support (to mount NetWare volumes)
-S: Innersteweg 11
-S: 37081 Goettingen
+S: Von Ossietzky Str. 12
+S: 37085 Goettingen
 S: Germany
 
 N: Kevin Lentin
@@ -1551,7 +1611,7 @@ D: the gpm mouse server and kernel support for it
 
 N: Paul Russell
 E: Paul.Russell@rustcorp.com.au
-W: http://www.adelaide.net.au/~rustcorp
+W: http://www.rustcorp.com
 D: Ruggedly handsome.
 D: Developed Generic IP Firewalling Chains with Michael Neuling.
 
@@ -1590,6 +1650,11 @@ D: Mitsumi CD-ROM driver patches March version
 S: Molenbaan 29
 S: B2240 Zandhoven
 S: Belgium
+
+N: Henning P. Schmiedehausen
+E: hps@tanstaafl.de
+D: added PCI support to the serial driver
+S: Buckenhof, Germany
 
 N: Martin Schulze
 E: joey@linux.de
@@ -1950,7 +2015,8 @@ S: USA
 
 N: Steven Whitehouse
 E: SteveW@ACM.org
-D: Linux DECnet project: http://eeshack3.swan.ac.uk/~gw7rrm/DECnet/index.html
+W: http://www-sigproc.eng.cam.ac.uk/~sjw44/
+D: Linux DECnet project: http://www.sucs.swan.ac.uk/~rohan/DECnet/index.html
 D: Minor debugging of other networking protocols.
 
 N: Hans-Joachim Widmaier

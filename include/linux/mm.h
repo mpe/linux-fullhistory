@@ -11,6 +11,7 @@
 extern unsigned long max_mapnr;
 extern unsigned long num_physpages;
 extern void * high_memory;
+extern int page_cluster;
 
 #include <asm/page.h>
 #include <asm/atomic.h>

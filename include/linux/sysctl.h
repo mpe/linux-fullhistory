@@ -56,7 +56,7 @@ enum
 	CTL_PROC=4,		/* Process info */
 	CTL_FS=5,		/* Filesystems */
 	CTL_DEBUG=6,		/* Debugging */
-	CTL_DEV=7,		/* Devices */
+	CTL_DEV=7		/* Devices */
 };
 
 
@@ -89,6 +89,14 @@ enum
 	KERN_SG_BIG_BUFF=29,
 	KERN_ACCT=30,		/* BSD process accounting parameters */
 	KERN_PPC_L2CR=31,	/* l2cr register on PPC */
+
+	KERN_RTSIGNR=32,	/* Number of rt sigs queued */
+	KERN_RTSIGMAX=33,	/* Max queuable */
+	
+	KERN_SHMMAX=34,         /* int: Maximum shared memory segment */
+	KERN_MSGMAX=35,         /* int: Maximum size of a messege */
+	KERN_MSGMNB=36,         /* int: Maximum message queue size */
+	KERN_MSGPOOL=37         /* int: Maximum system message pool size */
 };
 
 
@@ -103,7 +111,8 @@ enum
 	VM_BUFFERMEM=6,		/* struct: Set buffer memory thresholds */
 	VM_PAGECACHE=7,		/* struct: Set cache memory thresholds */
 	VM_PAGERDAEMON=8,	/* struct: Control kswapd behaviour */
-	VM_PGT_CACHE=9		/* struct: Set page table cache parameters */
+	VM_PGT_CACHE=9,		/* struct: Set page table cache parameters */
+	VM_PAGE_CLUSTER=10	/* int: set log2 number of pages to swap together */
 };
 
 
@@ -140,7 +149,7 @@ enum
 	NET_CORE_FASTROUTE=7,
 	NET_CORE_MSG_COST=8,
 	NET_CORE_MSG_BURST=9,
-	NET_CORE_OPTMEM_MAX=10,
+	NET_CORE_OPTMEM_MAX=10
 };
 
 /* /proc/sys/net/ethernet */
@@ -152,7 +161,7 @@ enum
 enum
 {
 	NET_UNIX_DESTROY_DELAY=1,
-	NET_UNIX_DELETE_DELAY=2,
+	NET_UNIX_DELETE_DELAY=2
 };
 
 /* /proc/sys/net/ipv4 */
@@ -198,6 +207,7 @@ enum
 	NET_IPV4_ICMP_TIMEEXCEED_RATE=61,
 	NET_IPV4_ICMP_PARAMPROB_RATE=62,
 	NET_IPV4_ICMP_ECHOREPLY_RATE=63,
+	NET_IPV4_ICMP_IGNORE_BOGUS_ERROR_RESPONSES=64
 };
 
 enum {
@@ -214,13 +224,13 @@ enum {
 	NET_IPV4_ROUTE_REDIRECT_SILENCE=11,
 	NET_IPV4_ROUTE_ERROR_COST=12,
 	NET_IPV4_ROUTE_ERROR_BURST=13,
-	NET_IPV4_ROUTE_GC_ELASTICITY=14,
+	NET_IPV4_ROUTE_GC_ELASTICITY=14
 };
 
 enum
 {
 	NET_PROTO_CONF_ALL=-2,
-	NET_PROTO_CONF_DEFAULT=-3,
+	NET_PROTO_CONF_DEFAULT=-3
 
 	/* And device ifindices ... */
 };
@@ -237,14 +247,14 @@ enum
 	NET_IPV4_CONF_RP_FILTER=8,
 	NET_IPV4_CONF_ACCEPT_SOURCE_ROUTE=9,
 	NET_IPV4_CONF_BOOTP_RELAY=10,
-	NET_IPV4_CONF_LOG_MARTIANS=11,
+	NET_IPV4_CONF_LOG_MARTIANS=11
 };
 
 /* /proc/sys/net/ipv6 */
 enum {
 	NET_IPV6_CONF=16,
 	NET_IPV6_NEIGH=17,
-	NET_IPV6_ROUTE=18,
+	NET_IPV6_ROUTE=18
 };
 
 enum {
@@ -254,7 +264,7 @@ enum {
 	NET_IPV6_ROUTE_GC_MIN_INTERVAL=4,
 	NET_IPV6_ROUTE_GC_TIMEOUT=5,
 	NET_IPV6_ROUTE_GC_INTERVAL=6,
-	NET_IPV6_ROUTE_GC_ELASTICITY=7,
+	NET_IPV6_ROUTE_GC_ELASTICITY=7
 };
 
 enum {
@@ -267,7 +277,7 @@ enum {
 	NET_IPV6_DAD_TRANSMITS=7,
 	NET_IPV6_RTR_SOLICITS=8,
 	NET_IPV6_RTR_SOLICIT_INTERVAL=9,
-	NET_IPV6_RTR_SOLICIT_DELAY=10,
+	NET_IPV6_RTR_SOLICIT_DELAY=10
 };
 
 /* /proc/sys/net/<protocol>/neigh/<dev> */
@@ -298,7 +308,7 @@ enum {
 	NET_ATALK_AARP_EXPIRY_TIME=1,
 	NET_ATALK_AARP_TICK_TIME=2,
 	NET_ATALK_AARP_RETRANSMIT_LIMIT=3,
-	NET_ATALK_AARP_RESOLVE_TIME=4,
+	NET_ATALK_AARP_RESOLVE_TIME=4
 };
 
 
@@ -346,7 +356,7 @@ enum {
 	NET_ROSE_LINK_FAIL_TIMEOUT=7,
 	NET_ROSE_MAX_VCS=8,
 	NET_ROSE_WINDOW_SIZE=9,
-	NET_ROSE_NO_ACTIVITY_TIMEOUT=10,
+	NET_ROSE_NO_ACTIVITY_TIMEOUT=10
 };
 
 /* /proc/sys/net/x25 */
@@ -366,12 +376,11 @@ enum
 
 /* /proc/sys/net/decnet */
 enum {
-	NET_DECNET_DEF_T3_BROADCAST=1,
-	NET_DECNET_DEF_T3_POINTTOPOINT=2,
-	NET_DECNET_DEF_T1=3,
-	NET_DECNET_DEF_BCT1=4,
-	NET_DECNET_CACHETIMEOUT=5,
-	NET_DECNET_DEBUG_LEVEL=6
+	NET_DECNET_NODE_TYPE=1,
+	NET_DECNET_NODE_ADDRESS=2,
+	NET_DECNET_NODE_NAME=3,
+	NET_DECNET_DEFAULT_DEVICE=4,
+	NET_DECNET_DEBUG_LEVEL=255
 };
 
 /* CTL_PROC names: */
@@ -388,7 +397,7 @@ enum
 	FS_MAXFILE=7,	/* int:maximum number of filedescriptors that can be allocated */
 	FS_DENTRY=8,
 	FS_NRSUPER=9,	/* int:current number of allocated super_blocks */
-	FS_MAXSUPER=10,	/* int:maximum number of super_blocks that can be allocated */
+	FS_MAXSUPER=10	/* int:maximum number of super_blocks that can be allocated */
 };
 
 /* CTL_DEBUG names: */
@@ -396,12 +405,12 @@ enum
 /* CTL_DEV names: */
 enum {
 	DEV_CDROM=1,
-	DEV_HWMON=2,
+	DEV_HWMON=2
 };
 
 /* /proc/sys/dev/cdrom */
 enum {
-	DEV_CDROM_INFO=1,
+	DEV_CDROM_INFO=1
 };
 
 #ifdef __KERNEL__

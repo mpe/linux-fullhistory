@@ -18,3 +18,23 @@ Tue Jan 27 1998   Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
 Wed Feb  4 1998   Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
 	*    namei.c: removed static subdir(); is_subdir() from dcache.c
 		      is used instead. Cosmetic changes.
+
+Thu Dec  3 1998   Al Viro (viro@math.psu.edu)
+	*    namei.c (sysv_rmdir):
+		      Bugectomy: old check for victim being busy
+		      (inode->i_count) wasn't replaced (with checking
+		      dentry->d_count) and escaped Linus in the last round
+		      of changes. Shot and buried.
+
+Wed Dec  9 1998   AV
+	*    namei.c (do_sysv_rename):
+		       Fixed incorrect check for other owners + race.
+		       Removed checks that went to VFS.
+	*    namei.c (sysv_unlink):
+		       Removed checks that went to VFS.
+
+Thu Dec 10 1998   AV
+	*    namei.c (do_mknod):
+			Removed dead code - mknod is never asked to
+			create a symlink or directory. Incidentially,
+			it wouldn't do it right if it would be called.

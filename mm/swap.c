@@ -39,6 +39,9 @@ freepages_t freepages = {
 	144	/* freepages.high */
 };
 
+/* How many pages do we try to swap or page in/out together? */
+int page_cluster = 4; /* Default value modified in swap_setup() */
+
 /* We track the number of pages currently being asynchronously swapped
    out, so that we don't try to swap TOO many pages out at once */
 atomic_t nr_async_pages = ATOMIC_INIT(0);
@@ -77,3 +80,19 @@ pager_daemon_t pager_daemon = {
 	SWAP_CLUSTER_MAX,	/* minimum number of tries */
 	SWAP_CLUSTER_MAX,	/* do swap I/O in clusters of this size */
 };
+
+
+/*
+ * Perform any setup for the swap system
+ */
+
+void __init swap_setup(void)
+{
+	/* Use a smaller cluster for memory <16MB or <32MB */
+	if (num_physpages < ((16 * 1024 * 1024) >> PAGE_SHIFT))
+		page_cluster = 2;
+	else if (num_physpages < ((32 * 1024 * 1024) >> PAGE_SHIFT))
+		page_cluster = 3;
+	else
+		page_cluster = 4;
+}

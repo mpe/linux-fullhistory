@@ -108,7 +108,7 @@ void check_inode (struct inode *inode)
 		} else if (inode->i_op == &umsdos_symlink_inode_operations) {
 			printk (" (i_op is umsdos_symlink_inode_operations)\n");
 		} else {
-			printk ((" (i_op is UNKNOWN: %p)\n", inode->i_op));
+			printk (" (i_op is UNKNOWN: %p)\n", inode->i_op);
 		}
 	} else {
 		printk (KERN_DEBUG "*   inode is NULL\n");

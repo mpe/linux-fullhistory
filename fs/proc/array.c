@@ -60,6 +60,7 @@
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>
+#include <linux/swapctl.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/signal.h>
@@ -369,6 +370,28 @@ static int get_meminfo(char * buffer)
 		page_cache_size << (PAGE_SHIFT - 10),
 		i.totalswap >> 10,
 		i.freeswap >> 10);
+}
+
+static int get_swapstats(char * buffer)
+{
+	unsigned long *w = swapstats.kswap_wakeups;
+	
+	return sprintf(buffer,
+		       "ProcFreeTry:    %8lu\n"
+		       "ProcFreeSucc:   %8lu\n"
+		       "ProcShrinkTry:  %8lu\n"
+		       "ProcShrinkSucc: %8lu\n"
+		       "KswapFreeTry:   %8lu\n"
+		       "KswapFreeSucc:  %8lu\n"
+		       "KswapWakeups:	%8lu %lu %lu %lu\n",
+		       swapstats.gfp_freepage_attempts,
+		       swapstats.gfp_freepage_successes,
+		       swapstats.gfp_shrink_attempts,
+		       swapstats.gfp_shrink_successes,
+		       swapstats.kswap_freepage_attempts,
+		       swapstats.kswap_freepage_successes,
+		       w[0], w[1], w[2], w[3]
+		       );
 }
 
 static int get_version(char * buffer)
@@ -1257,6 +1280,9 @@ static long get_root_array(char * page, int type, char **start,
 		case PROC_MEMINFO:
 			return get_meminfo(page);
 
+		case PROC_SWAPSTATS:
+			return get_swapstats(page);
+
 #ifdef CONFIG_PCI_OLD_PROC
   	        case PROC_PCI:
 			return get_pci_list(page);
@@ -1342,7 +1368,7 @@ static long get_root_array(char * page, int type, char **start,
 static int process_unauthorized(int type, int pid)
 {
 	struct task_struct *p;
-	uid_t euid;	/* Save the euid keep the lock short */
+	uid_t euid=0;	/* Save the euid keep the lock short */
 		
 	read_lock(&tasklist_lock);
 	

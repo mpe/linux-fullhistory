@@ -1897,9 +1897,6 @@ __initfunc(int net_dev_init(void))
 	 * Some devices want to be initialized early..
 	 */
 
-#if defined(CONFIG_LANCE)
-	lance_init();
-#endif
 #if defined(CONFIG_SCC)
 	scc_init();
 #endif
@@ -1937,11 +1934,14 @@ __initfunc(int net_dev_init(void))
 	 *	SLHC if present needs attaching so other people see it
 	 *	even if not opened.
 	 */
+	 
+#ifdef CONFIG_INET	 
 #if (defined(CONFIG_SLIP) && defined(CONFIG_SLIP_COMPRESSED)) \
 	 || defined(CONFIG_PPP) \
     || (defined(CONFIG_ISDN) && defined(CONFIG_ISDN_PPP))
 	slhc_install();
 #endif	
+#endif
 
 #ifdef CONFIG_NET_PROFILE
 	net_profile_init();

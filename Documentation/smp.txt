@@ -1,7 +1,6 @@
 To set up SMP
 
-Edit linux/Makefile and uncomment SMP=1, then compile and install
-as usual.
+Configure the kernel and answer Y to CONFIG_SMP.
 
 If you are using LILO, it is handy to have both SMP and non-SMP
 kernel images on hand. Edit /etc/lilo.conf to create an entry

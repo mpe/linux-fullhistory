@@ -30,6 +30,8 @@
  *			Joerg(DL1BKE)	Fixed DAMA Slave mode: will work
  *					on non-DAMA interfaces like AX25L2V2
  *					again (this behaviour is _required_).
+ *			Joerg(DL1BKE)	ax25_check_iframes_acked() returns a 
+ *					value now (for DAMA n2count handling)
  */
 
 #include <linux/config.h>
@@ -391,20 +393,23 @@ void ax25_queue_xmit(struct sk_buff *skb)
 	dev_queue_xmit(skb);
 }
 
-void ax25_check_iframes_acked(ax25_cb *ax25, unsigned short nr)
+int ax25_check_iframes_acked(ax25_cb *ax25, unsigned short nr)
 {
 	if (ax25->vs == nr) {
 		ax25_frames_acked(ax25, nr);
 		ax25_calculate_rtt(ax25);
 		ax25_stop_t1timer(ax25);
 		ax25_start_t3timer(ax25);
+		return 1;
 	} else {
 		if (ax25->va != nr) {
 			ax25_frames_acked(ax25, nr);
 			ax25_calculate_t1(ax25);
 			ax25_start_t1timer(ax25);
+			return 1;
 		}
 	}
+	return 0;
 }
 
 #endif

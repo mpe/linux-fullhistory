@@ -54,8 +54,10 @@ static long read_polled(struct parport *port, char *buf,
 	unsigned int count = 0;
 	unsigned char z=0;
 	unsigned char Byte=0;
+	unsigned long igiveupat=jiffies+5*HZ;
 
-	for (i=0; ; i++) {
+	for (i=0; time_before(jiffies, igiveupat); i++) {
+	       /* if(current->need_resched) schedule(); */
 		parport_write_control(port, parport_read_control(port) | 2); /* AutoFeed high */
 		if (parport_wait_peripheral(port, 0x40, 0)) {
 #ifdef DEBUG_PROBE

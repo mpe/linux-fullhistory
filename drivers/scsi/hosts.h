@@ -382,7 +382,14 @@ struct Scsi_Host
      * Host has rejected a command because it was busy.
      */
     unsigned host_blocked:1;
+    
+    /*
+     * Host uses correct SCSI ordering not PC ordering. The bit is
+     * set for the minority of drivers whose authors actually read the spec ;)
+     */
 
+    unsigned reverse_ordering:1;
+    
     void (*select_queue_depths)(struct Scsi_Host *, Scsi_Device *);
 
     /*

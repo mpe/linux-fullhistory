@@ -384,6 +384,10 @@ endif
 
 ifeq ($(CONFIG_LANCE),y)
 L_OBJS += lance.o
+else
+  ifeq ($(CONFIG_LANCE),m)
+  M_OBJS += lance.o
+  endif
 endif
 
 ifeq ($(CONFIG_PCNET32),y)
@@ -975,6 +979,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_RCPCI),y)
+L_OBJS += rcpci.o
+else
+  ifeq ($(CONFIG_RCPCI),m)
+  M_OBJS += rcpci.o
+  endif
+endif
+
 ifeq ($(CONFIG_MACE),y)
 L_OBJS += mace.o
 endif
@@ -1054,3 +1066,6 @@ clean:
 
 wanpipe.o: $(WANPIPE_OBJS)
 	ld -r -o $@ $(WANPIPE_OBJS)
+
+rcpci.o: rcpci45.o rcmtl.o
+	$(LD) -r -o rcpci.o rcpci45.o rcmtl.o

@@ -359,6 +359,38 @@ unsigned long __init free_area_init(unsigned long start_mem, unsigned long end_m
 	return start_mem;
 }
 
+/* 
+ * Primitive swap readahead code. We simply read an aligned block of
+ * (1 << page_cluster) entries in the swap area. This method is chosen
+ * because it doesn't cost us any seek time.  We also make sure to queue
+ * the 'original' request together with the readahead ones...  
+ */
+void swapin_readahead(unsigned long entry)
+{
+	int i;
+	struct page *new_page;
+	unsigned long offset = SWP_OFFSET(entry);
+	struct swap_info_struct *swapdev = SWP_TYPE(entry) + swap_info;
+	
+	offset = (offset >> page_cluster) << page_cluster;
+	
+	for (i = 1 << page_cluster; i > 0; i--) {
+	      if (offset >= swapdev->max
+			      || nr_free_pages - atomic_read(&nr_async_pages) <
+			      (freepages.high + freepages.low)/2)
+		      return;
+	      if (!swapdev->swap_map[offset] ||
+		  swapdev->swap_map[offset] == SWAP_MAP_BAD ||
+		  test_bit(offset, swapdev->swap_lockmap))
+		      continue;
+	      new_page = read_swap_cache_async(SWP_ENTRY(SWP_TYPE(entry), offset), 0);
+	      if (new_page != NULL)
+		      __free_page(new_page);
+	      offset++;
+	}
+	return;
+}
+
 /*
  * The tests may look silly, but it essentially makes sure that
  * no other process did a swap-in on us just as we were waiting.
@@ -370,10 +402,12 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 	pte_t * page_table, unsigned long entry, int write_access)
 {
 	unsigned long page;
-	struct page *page_map;
-	
-	page_map = read_swap_cache(entry);
+	struct page *page_map = lookup_swap_cache(entry);
 
+	if (!page_map) {
+		swapin_readahead(entry);
+		page_map = read_swap_cache(entry);
+	}
 	if (pte_val(*page_table) != entry) {
 		if (page_map)
 			free_page_and_swap_cache(page_address(page_map));

@@ -132,7 +132,7 @@ static int rx_coal_tick[8] = {0, };
 static int max_tx_desc[8] = {0, };
 static int max_rx_desc[8] = {0, };
 
-static const char *version = "acenic.c: v0.18 12/16/98  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
+static const char *version = "acenic.c: v0.19 12/17/98  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
 
 static struct device *root_dev = NULL;
 
@@ -418,7 +418,7 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 
 	{
 		long myjif = jiffies + HZ;
-		while (myjif > jiffies);
+		while (time_before(jiffies, myjif));
 	}
 #endif
 
@@ -754,7 +754,7 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 	 * Wait for the firmware to spin up - max 3 seconds.
 	 */
 	myjif = jiffies + 3 * HZ;
-	while ((myjif > jiffies) && !ap->fw_running);
+	while (time_before(jiffies, myjif) && !ap->fw_running);
 	if (!ap->fw_running){
 		printk(KERN_ERR "%s: firmware NOT running!\n", dev->name);
 		ace_dump_trace(ap);
@@ -1228,10 +1228,15 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 			ap->tx_full = 0;
 			dev->tbusy = 0;
 			mark_bh(NET_BH);
+
+			/*
+			 * TX ring is no longer full, aka the
+			 * transmitter is working fine - kill timer.
+			 */
+			del_timer(&ap->timer);
 		}
 
 		ap->tx_ret_csm = txcsm;
-		mod_timer(&ap->timer, jiffies + (5/2*HZ));
 	}
 
 	rxretprd = ap->rx_ret_prd;
@@ -1290,7 +1295,7 @@ static int ace_open(struct device *dev)
 
 #if 0
 	{ long myjif = jiffies + HZ;
-	while (jiffies < myjif);
+	while (time_before(jiffies, myjif));
 	}
 
 	cmd.evt = C_LNK_NEGOTIATION;
@@ -1309,10 +1314,8 @@ static int ace_open(struct device *dev)
 	 * Setup the timer
 	 */
 	init_timer(&ap->timer);
-	ap->timer.expires = jiffies + (5/2 * HZ);
 	ap->timer.data = (unsigned long)dev;
 	ap->timer.function = ace_timer;
-	add_timer(&ap->timer);
 	return 0;
 }
 
@@ -1389,6 +1392,12 @@ static int ace_start_xmit(struct sk_buff *skb, struct device *dev)
 	if ((idx + 1) % TX_RING_ENTRIES == ap->tx_ret_csm){
 		ap->tx_full = 1;
 		set_bit(0, (void*)&dev->tbusy);
+		/*
+		 * Queue is full, add timer to detect whether the
+		 * transmitter is stuck.
+		 */
+		ap->timer.expires = jiffies + (3 * HZ);
+		add_timer(&ap->timer);
 	}
 
 	spin_unlock_irqrestore(&ap->lock, flags);

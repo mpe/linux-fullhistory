@@ -111,6 +111,8 @@ extern int rtl8139_probe(struct device *dev);
 extern int hplance_probe(struct device *dev);
 extern int via_rhine_probe(struct device *dev);
 extern int tc515_probe(struct device *dev);
+extern int lance_probe(struct device *dev);
+extern int rcpci_probe(struct device *);
 
 /* Gigabit Ethernet adapters */
 extern int yellowfin_probe(struct device *dev);
@@ -168,6 +170,9 @@ __initfunc(static int probe_list(struct device *dev, struct devprobe *plist))
 struct devprobe pci_probes[] __initdata = {
 #ifdef CONFIG_DGRS
 	{dgrs_probe, 0},
+#endif
+#ifdef CONFIG_RCPCI
+	{rcpci_probe, 0},
 #endif
 #ifdef CONFIG_VORTEX
 	{tc59x_probe, 0},
@@ -296,6 +301,9 @@ struct devprobe isa_probes[] __initdata = {
 #endif
 #ifdef CONFIG_NE2000		/* ISA (use ne2k-pci for PCI cards) */
 	{ne_probe, 0},
+#endif
+#ifdef CONFIG_LANCE		/* ISA/VLB (use pcnet32 for PCI cards) */
+	{lance_probe, 0},
 #endif
 #ifdef CONFIG_SMC9194
 	{smc_init, 0},
@@ -709,6 +717,9 @@ trif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_SKTR
 	&& sktr_probe(dev)
+#endif
+#ifdef CONFIG_SMCTR
+	&& smctr_probe(dev)
 #endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */

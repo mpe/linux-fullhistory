@@ -51,14 +51,16 @@
  */
 
 #include <linux/config.h>
+#include <linux/module.h>
+#include <linux/types.h>
+#include <linux/string.h>
+#include <linux/errno.h>
+#include <linux/kernel.h>
+
 #ifdef CONFIG_INET
 /* Entire module is for IP only */
-#include <linux/module.h>
-
-#include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/string.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/termios.h>
@@ -72,7 +74,6 @@
 #include <net/tcp.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
-#include <linux/errno.h>
 #include <linux/timer.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -758,4 +759,52 @@ __initfunc(void slhc_install(void))
 }
 
 #endif /* MODULE */
+#else /* CONFIG_INET */
+EXPORT_SYMBOL(slhc_init);
+EXPORT_SYMBOL(slhc_free);
+EXPORT_SYMBOL(slhc_remember);
+EXPORT_SYMBOL(slhc_compress);
+EXPORT_SYMBOL(slhc_uncompress);
+EXPORT_SYMBOL(slhc_toss);
+
+int
+slhc_toss(struct slcompress *comp)
+{
+  printk(KERN_DEBUG "Called IP function on non IP-system: slhc_toss");
+  return -EINVAL;
+}
+int
+slhc_uncompress(struct slcompress *comp, unsigned char *icp, int isize)
+{
+  printk(KERN_DEBUG "Called IP function on non IP-system: slhc_uncompress");
+  return -EINVAL;
+}
+int
+slhc_compress(struct slcompress *comp, unsigned char *icp, int isize,
+	unsigned char *ocp, unsigned char **cpp, int compress_cid)
+{
+  printk(KERN_DEBUG "Called IP function on non IP-system: slhc_compress");
+  return -EINVAL;
+}
+
+int
+slhc_remember(struct slcompress *comp, unsigned char *icp, int isize)
+{
+  printk(KERN_DEBUG "Called IP function on non IP-system: slhc_remember");
+  return -EINVAL;
+}
+
+void
+slhc_free(struct slcompress *comp)
+{
+  printk(KERN_DEBUG "Called IP function on non IP-system: slhc_free");
+  return;
+}
+struct slcompress *
+slhc_init(int rslots, int tslots)
+{
+  printk(KERN_DEBUG "Called IP function on non IP-system: slhc_init");
+  return NULL;
+}
+
 #endif /* CONFIG_INET */

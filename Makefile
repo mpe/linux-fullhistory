@@ -4,15 +4,6 @@ SUBLEVEL = 132
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
-#
-# For SMP kernels, set this. We don't want to have this in the config file
-# because it makes re-config very ugly and too many fundamental files depend
-# on "CONFIG_SMP"
-#
-# For UP operations COMMENT THIS OUT, simply setting SMP = 0 won't work
-#
-SMP = 1
-
 .EXPORT_ALL_VARIABLES:
 
 CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
@@ -94,7 +85,7 @@ SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
 
 CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
 
-ifdef SMP
+ifdef CONFIG_SMP
 CFLAGS += -D__SMP__
 AFLAGS += -D__SMP__
 endif
@@ -270,7 +261,7 @@ newversion:
 
 include/linux/compile.h: $(CONFIGURATION) include/linux/version.h newversion
 	@echo -n \#define UTS_VERSION \"\#`cat .version` > .ver
-	@if [ -n "$(SMP)" ] ; then echo -n " SMP" >> .ver; fi
+	@if [ -n "$(CONFIG_SMP)" ] ; then echo -n " SMP" >> .ver; fi
 	@if [ -f .name ]; then  echo -n \-`cat .name` >> .ver; fi
 	@echo ' '`date`'"' >> .ver
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> .ver
@@ -420,6 +411,9 @@ depend dep: dep-files $(MODVERFILE)
 
 checkconfig:
 	perl -w scripts/checkconfig.pl `find * -name '*.[hcS]' -print | sort`
+
+checkhelp:
+	perl -w scripts/checkhelp.pl `find * -name [cC]onfig.in -print`
 
 ifdef CONFIGURATION
 ..$(CONFIGURATION):

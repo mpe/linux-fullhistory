@@ -241,10 +241,6 @@ affs_unlink(struct inode *dir, struct dentry *dentry)
 		goto unlink_done;
 
 	inode  = dentry->d_inode;
-	retval = -EPERM;
-	if (current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid && !capable(CAP_FOWNER))
-		goto unlink_done;
 
 	if ((retval = affs_remove_header(bh,inode)) < 0)
 		goto unlink_done;
@@ -563,29 +559,21 @@ affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		retval = 0;
 		goto end_rename;
 	}
-	if (new_inode && S_ISDIR(new_inode->i_mode)) {
-		retval = -EISDIR;
-		if (!S_ISDIR(old_inode->i_mode))
-			goto end_rename;
-		retval = -EINVAL;
-		if (is_subdir(new_dentry, old_dentry))
-			goto end_rename;
-		if (new_dentry->d_count > 1)
-			shrink_dcache_parent(new_dentry);
-		retval = -ENOTEMPTY;
-		if (!empty_dir(new_bh,AFFS_I2HSIZE(new_inode)))
-			goto end_rename;
-		retval = -EBUSY;
-		if (new_dentry->d_count > 1)
-			goto end_rename;
-	}
 	if (S_ISDIR(old_inode->i_mode)) {
-		retval = -ENOTDIR;
-		if (new_inode && !S_ISDIR(new_inode->i_mode))
-			goto end_rename;
 		retval = -EINVAL;
 		if (is_subdir(new_dentry, old_dentry))
 			goto end_rename;
+		if (new_inode) {
+			if (new_dentry->d_count > 1)
+				shrink_dcache_parent(new_dentry);
+			retval = -EBUSY;
+			if (new_dentry->d_count > 1)
+				goto end_rename;
+			retval = -ENOTEMPTY;
+			if (!empty_dir(new_bh,AFFS_I2HSIZE(new_inode)))
+				goto end_rename;
+		}
+
 		if (affs_parent_ino(old_inode) != old_dir->i_ino)
 			goto end_rename;
 	}

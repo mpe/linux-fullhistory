@@ -1,4 +1,4 @@
-/* NCR53C9x.c:  Defines and structures for the NCR53C9x generic driver.
+/* NCR53C9x.h:  Defines and structures for the NCR53C9x generic driver.
  *
  * Originaly esp.h:  Defines and structures for the Sparc ESP 
  *                   (Enhanced SCSI Processor) driver under Linux.
@@ -6,6 +6,8 @@
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *
  * Generalization by Jesper Skov (jskov@cygnus.co.uk)
+ *
+ * More generalization (for i386 stuff) by Tymm Twillman (tymm@computer.org)
  */
 
 #ifndef NCR53C9X_H
@@ -131,6 +133,15 @@
 /* All the ESP registers are one byte each and are accessed longwords
  * apart with a big-endian ordering to the bytes.
  */
+ 
+/*
+ * On intel, we must use inb() and outb() for register access, and the registers
+ *  are consecutive; no padding.
+ */ 
+
+#ifndef __i386__
+#define SETREG(reg, val) (reg = val)
+#define GETREG(reg)      (reg)
 
 struct ESP_regs {
                                 /* Access    Description              Offset */
@@ -140,7 +151,7 @@ struct ESP_regs {
                                 EREGS_PAD(fdpad);
     volatile unchar esp_fdata;  /* rw  FIFO data bits                 0x08   */
                                 EREGS_PAD(cbpad);
-    volatile unchar esp_cmd;    /* rw  SCSI command bits              0x0c   */
+    volatile unchar esp_cmnd;    /* rw  SCSI command bits              0x0c   */
                                 EREGS_PAD(stpad);
     volatile unchar esp_status; /* ro  ESP status register            0x10   */
 #define esp_busid   esp_status  /* wo  Bus ID for select/reselect     0x10   */
@@ -178,6 +189,52 @@ struct ESP_regs {
 #define fas_rhi     esp_fgrnd   /* rw  HME extended counter           0x3c  */
 };
 
+#else
+#define SETREG(reg, val) outb(val, reg)
+#define GETREG(reg)      inb(reg)
+
+struct ESP_regs {
+#ifdef CONFIG_MCA
+    unsigned int slot;
+#endif
+    unsigned int io_addr;
+                                  /* Access    Description              Offset */
+#define esp_tclow   io_addr      /* rw  Low bits of the transfer count 0x00   */
+#define esp_tcmed   io_addr + 1  /* rw  Mid bits of the transfer count 0x04   */
+#define esp_fdata   io_addr + 2  /* rw  FIFO data bits                 0x08   */
+#define esp_cmnd     io_addr + 3  /* rw  SCSI command bits              0x0c   */
+#define esp_status  io_addr + 4  /* ro  ESP status register            0x10   */
+#define esp_busid    esp_status   /* wo  Bus ID for select/reselect     0x10   */
+#define esp_intrpt  io_addr + 5  /* ro  Kind of interrupt              0x14   */
+#define esp_timeo    esp_intrpt   /* wo  Timeout value for select/resel 0x14   */
+#define esp_sstep   io_addr + 6  /* ro  Sequence step register         0x18   */
+#define esp_stp      esp_sstep    /* wo  Transfer period per sync       0x18   */
+#define esp_fflags  io_addr + 7  /* ro  Bits of current FIFO info      0x1c   */
+#define esp_soff     esp_fflags   /* wo  Sync offset                    0x1c   */
+#define esp_cfg1    io_addr + 8  /* rw  First configuration register   0x20   */
+#define esp_cfact   io_addr + 9  /* wo  Clock conversion factor        0x24   */
+#define esp_status2  esp_cfact    /* ro  HME status2 register           0x24   */
+#define esp_ctest   io_addr + 10 /* wo  Chip test register             0x28   */
+#define esp_cfg2    io_addr + 11 /* rw  Second configuration register  0x2c   */
+
+    /* The following is only found on the 53C9X series SCSI chips */
+#define esp_cfg3    io_addr + 12 /* rw  Third configuration register   0x30  */
+#define esp_hole    io_addr + 13 /* hole in register map               0x34  */
+
+    /* The following is found on all chips except the NCR53C90 (ESP100) */
+#define esp_tchi    io_addr + 14 /* rw  High bits of transfer count    0x38  */
+#define esp_uid      esp_tchi     /* ro  Unique ID code                 0x38  */
+#define fas_rlo      esp_tchi     /* rw  HME extended counter           0x38  */
+#define esp_fgrnd   io_addr + 15 /* rw  Data base for fifo             0x3c  */
+#define fas_rhi      esp_fgrnd    /* rw  HME extended counter           0x3c  */
+};
+
+#ifndef save_and_cli
+#define save_and_cli(flags)  save_flags(flags); cli();
+#endif
+
+#endif
+
 /* Various revisions of the ESP board. */
 enum esp_rev {
   esp100     = 0x00,  /* NCR53C90 - very broken */
@@ -195,7 +252,11 @@ enum esp_rev {
 struct NCR_ESP {
   struct NCR_ESP *next;                   /* Next ESP on probed or NULL */
   struct ESP_regs *eregs;	          /* All esp registers */
+#ifndef __i386__
   struct Linux_DMA *dma;                  /* Who I do transfers with. */
+#else
+  int dma;
+#endif
   void *dregs;		  		  /* And his registers. */
   struct Scsi_Host *ehost;                /* Backpointer to SCSI Host */
 
@@ -272,6 +333,10 @@ struct NCR_ESP {
   int scsi_id_mask;                       /* Bitmask of 'me'. */
   int diff;                               /* Differential SCSI bus? */
   int bursts;                             /* Burst sizes our DVMA supports */
+
+#ifdef CONFIG_MCA
+  int slot;				  /* MCA slot the adapter occupies */
+#endif
 
   /* Our command queues, only one cmd lives in the current_SC queue. */
   Scsi_Cmnd *issue_SC;           /* Commands to be issued */

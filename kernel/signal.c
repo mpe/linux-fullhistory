@@ -28,8 +28,8 @@
 
 static kmem_cache_t *signal_queue_cachep;
 
-static int nr_queued_signals;
-static int max_queued_signals = 1024;
+int nr_queued_signals;
+int max_queued_signals = 1024;
 
 void __init signals_init(void)
 {

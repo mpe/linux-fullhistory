@@ -1230,7 +1230,7 @@ static int tok_init_card(struct device *dev)
 {
 	struct tok_info *ti;
 	short PIOaddr;
-	int i;
+	unsigned long i;
 	PIOaddr = dev->base_addr;
 	ti=(struct tok_info *) dev->priv;
 
@@ -1252,7 +1252,7 @@ static int tok_init_card(struct device *dev)
 #endif
 
 	outb(0, PIOaddr+ADAPTRESET);
-	for (i=jiffies+TR_RESET_INTERVAL; jiffies<=i;); /* wait 50ms */
+	for (i=jiffies+TR_RESET_INTERVAL; time_before_eq(jiffies, i);); /* wait 50ms */
 	outb(0,PIOaddr+ADAPTRESETREL);
 
 #if !TR_NEWFORMAT

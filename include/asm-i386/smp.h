@@ -237,7 +237,7 @@ extern __inline int hard_smp_processor_id(void)
  *	processes are run.
  */
  
-#define PROC_CHANGE_PENALTY	15		/* Schedule penalty */
+#define PROC_CHANGE_PENALTY	10		/* Schedule penalty */
 
 #define SMP_FROM_INT		1
 #define SMP_FROM_SYSCALL	2

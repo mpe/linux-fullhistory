@@ -172,7 +172,9 @@ EXPORT_SYMBOL(shrink_dcache_parent);
 EXPORT_SYMBOL(find_inode_number);
 EXPORT_SYMBOL(is_subdir);
 EXPORT_SYMBOL(get_unused_fd);
-EXPORT_SYMBOL(VFS_rmdir);
+EXPORT_SYMBOL(vfs_rmdir);
+EXPORT_SYMBOL(vfs_unlink);
+EXPORT_SYMBOL(vfs_rename);
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);

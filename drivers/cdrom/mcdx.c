@@ -1778,7 +1778,7 @@ mcdx_getval(struct s_drive_stuff *stuffp, int to, int delay, char* buf)
     if (!buf) buf = &c;
 
     while (inb((unsigned int) stuffp->rreg_status) & MCDX_RBIT_STEN) {
-        if (jiffies > timeout) return -1;
+        if (time_after(jiffies, timeout)) return -1;
         mcdx_delay(stuffp, delay);
     }
 

@@ -232,7 +232,7 @@ noname_pci_fixup(void)
 	 * selected... :-(
 	 */
 	layout_all_busses(DEFAULT_IO_BASE, APECS_AND_LCA_DEFAULT_MEM_BASE);
-	sio_pci_fixup(noname_map_irq, 0x0b0a0f09);
+	sio_pci_fixup(noname_map_irq, 0x0b0a0f0e);
 	sio_fixup_irq_levels(sio_collect_irq_levels());
         enable_ide(0x26e);
 }

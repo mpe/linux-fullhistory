@@ -23,8 +23,6 @@
  *     
  ********************************************************************/
 
-#include <linux/config.h>
-
 #include <net/irda/irda.h>
 #include <net/irda/irqueue.h>
 #include <net/irda/irlap.h>

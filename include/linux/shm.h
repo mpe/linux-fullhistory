@@ -14,6 +14,9 @@ struct shmid_ds {
 	__kernel_ipc_pid_t	shm_cpid;	/* pid of creator */
 	__kernel_ipc_pid_t	shm_lpid;	/* pid of last operator */
 	unsigned short		shm_nattch;	/* no. of current attaches */
+	unsigned short 		shm_unused;	/* compatibility */
+	void 			*shm_unused2;	/* ditto - used by DIPC */
+	void			*shm_unused3;	/* unused */
 };
 
 struct shmid_kernel

@@ -198,18 +198,6 @@ static SERIALSWITCH SCC_switch = {
 };
 
 /*
- * tmp_buf is used as a temporary buffer by serial_write.  We need to
- * lock it in case the memcpy_fromfs blocks while swapping in a page,
- * and some other program tries to do a serial write at the same time.
- * Since the lock will only come under contention when the system is
- * swapping and available memory is low, it makes sense to share one
- * buffer across all the serial ports, since it significantly saves
- * memory if large numbers of serial ports are open.
- */
-static unsigned char tmp_buf[4096]; /* This is cheating */
-static struct semaphore tmp_buf_sem = MUTEX;
-
-/*
  * This is used to figure out the divisor speeds and the timeouts
  */
 static int baud_table[] = {
@@ -771,7 +759,7 @@ static void SCC_init_port( struct m68k_async_struct *info, int type, int channel
 
 	/* If console serial line, then enable interrupts. */
 	if (info->private->is_cons) {
-		printk("mac_SCC: console line %lx; enabling interrupt!\n", info);
+		printk("mac_SCC: console line %d; enabling interrupt!\n", info->line);
 		write_zsreg(info->private->zs_channel, R1,
 			    (EXT_INT_ENAB | INT_ALL_Rx | TxINT_ENAB));
 		write_zsreg(info->private->zs_channel, R9, (NV | MIE));
@@ -784,7 +772,7 @@ static void SCC_init_port( struct m68k_async_struct *info, int type, int channel
 	 * client attached to us asynchronously.
 	 */
 	if (info->private->kgdb_channel) {
-		printk("mac_SCC: kgdb line %lx; enabling interrupt!\n", info);
+		printk("mac_SCC: kgdb line %d; enabling interrupt!\n", info->line);
 		kgdb_chaninit(info, 1, info->private->zs_baud);
 	}
 	/* Report settings (in m68kserial.c) */
@@ -1141,8 +1129,6 @@ static void SCC_throttle(struct m68k_async_struct *info, int status)
 static void SCC_get_serial_info(struct m68k_async_struct * info,
 			   struct serial_struct * retinfo)
 {
-	struct serial_struct tmp;
-  
 	retinfo->baud_base = info->baud_base;
 	retinfo->custom_divisor = info->custom_divisor;
 }
@@ -1190,8 +1176,7 @@ static unsigned int SCC_get_modem_info(struct m68k_async_struct *info)
 static int SCC_set_modem_info(struct m68k_async_struct *info, 
 			      int new_dtr, int new_rts)
 {
-	int error;
-	unsigned int arg, bits;
+	unsigned int bits;
 
 	bits = (new_rts ? RTS: 0) + (new_dtr ? DTR: 0);
 	info->private->curregs[5] = (info->private->curregs[5] & ~(DTR | RTS)) | bits;
@@ -1231,7 +1216,6 @@ static int SCC_ioctl(struct tty_struct *tty, struct file * file,
 	            unsigned long arg)
 {
 	int error;
-	int retval;
 
 	switch (cmd) {
 		case TIOCSERGETLSR: /* Get line status register */
@@ -1315,9 +1299,9 @@ static void probe_sccs(void)
 				ZS_CONTROL+ZS_MOVE*n;
 		zs_channels[n].data = (volatile unsigned char *)ZS_DATA+ZS_MOVE*n;
 #else
-		zs_channels[n].control = (volatile unsigned char *)
+		zs_channels[n].control = (volatile unsigned char *) /* 2, 0 */
 			(mac_bi_data.sccbase+ZS_CH_A_FIRST)+ZS_MOVE*n;
-		zs_channels[n].data = (volatile unsigned char *)
+		zs_channels[n].data = (volatile unsigned char *) /* 6, 4 */
 			(mac_bi_data.sccbase+ZS_CH_A_FIRST+ZS_DATA_MOVE)+ZS_MOVE*n;
 #endif
 		zs_soft[n].private = &zs_soft_private[n];
@@ -1405,8 +1389,8 @@ static inline void
 rs_cons_check(struct m68k_async_struct *ss, int channel)
 {
 	int i, o, io;
-	static consout_registered = 0;
-	static msg_printed = 0;
+	static int consout_registered = 0;
+	static int msg_printed = 0;
 
 	i = o = io = 0;
 
@@ -1458,10 +1442,9 @@ volatile int test_done;
 /* rs_init inits the driver */
 int mac_SCC_init(void)
 {
-	int channel, line, nr = 0, i;
+	int channel, line, nr = 0;
 	unsigned long flags;
 	struct serial_struct req;
-	struct m68k_async_struct *info;
 
 	printk("Mac68K Z8530 serial driver version 1.01\n");
 
@@ -1486,7 +1469,7 @@ int mac_SCC_init(void)
 	for (channel = 0; channel < zs_channels_found; ++channel) {
 		req.line = channel;
 		req.type = SER_SCC_MAC;
-		req.port = zs_soft[channel].private->zs_channel->control;
+		req.port = (int) zs_soft[channel].private->zs_channel->control;
 
 		if ((line = register_serial( &req )) >= 0) {
 			SCC_init_port( &rs_table[line], req.type, line );

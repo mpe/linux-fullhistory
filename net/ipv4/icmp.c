@@ -50,6 +50,8 @@
  *		Yu Tianli	:	Fixed two ugly bugs in icmp_send
  *					- IP option length was accounted wrongly
  *					- ICMP header length was not accounted at all.
+ *              Tristan Greaves :       Added sysctl option to ignore bogus broadcast
+ *                                      responses from broken routers.
  *
  * To Fix:
  *
@@ -310,6 +312,9 @@ struct icmp_err icmp_err_convert[] = {
 /* Control parameters for ECHO relies. */
 int sysctl_icmp_echo_ignore_all = 0;
 int sysctl_icmp_echo_ignore_broadcasts = 0;
+
+/* Control parameter - ignore bogus broadcast responses? */
+int sysctl_icmp_ignore_bogus_error_responses =0;
 
 /*
  *	ICMP control array. This specifies what to do with each ICMP.
@@ -701,15 +706,18 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	 *	first check your netmask matches at both ends, if it does then
 	 *	get the other vendor to fix their kit.
 	 */
-	 
-	if (inet_addr_type(iph->daddr) == RTN_BROADCAST)
-	{
-		if (net_ratelimit())
-			printk(KERN_WARNING "%s sent an invalid ICMP error to a broadcast.\n",
-			       in_ntoa(skb->nh.iph->saddr));
-		return; 
-	}
 
+	if (!sysctl_icmp_ignore_bogus_error_responses)
+	{
+	
+		if (inet_addr_type(iph->daddr) == RTN_BROADCAST)
+		{
+			if (net_ratelimit())
+				printk(KERN_WARNING "%s sent an invalid ICMP error to a broadcast.\n",
+			       	in_ntoa(skb->nh.iph->saddr));
+			return; 
+		}
+	}
 
 	/*
 	 *	Deliver ICMP message to raw sockets. Pretty useless feature?
@@ -886,8 +894,10 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, int len)
 
 static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, int len)
 {
+#if 0
 	if (net_ratelimit())
 		printk(KERN_DEBUG "a guy asks for address mask. Who is it?\n");
+#endif		
 }
 
 /*

@@ -472,11 +472,9 @@ int fd_mcs_detect( Scsi_Host_Template *tpnt )
 	/* *************************************************** */	    
 #endif
 
-#if 0
 	/* IBM/ANSI scsi scan ordering */
 	/* Stick this back in when the scsi.c changes are there */
-	shpnt->reverse_scan = 1;
-#endif
+	shpnt->reverse_ordering = 1;
 	
 
 	/* saving info */

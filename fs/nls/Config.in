@@ -29,15 +29,16 @@ if [ "$CONFIG_NLS" = "y" ]; then
   tristate 'Codepage 866 (Cyrillic/Russian)'       CONFIG_NLS_CODEPAGE_866
   tristate 'Codepage 869 (Greek)'                  CONFIG_NLS_CODEPAGE_869
   tristate 'Codepage 874 (Thai)'                   CONFIG_NLS_CODEPAGE_874
-  tristate 'NLS ISO 8859-1 (Latin 1; Western European Languages)' CONFIG_NLS_ISO8859_1
-  tristate 'NLS ISO 8859-2 (Latin 2; Slavic/Central European)' CONFIG_NLS_ISO8859_2
-  tristate 'NLS ISO 8859-3 (Latin 3; Esperanto, Galician, Maltese, Turkish)' CONFIG_NLS_ISO8859_3
-  tristate 'NLS ISO 8859-4 (Latin 4; Estonian, Latvian, Lithuanian)' CONFIG_NLS_ISO8859_4
-  tristate 'NLS ISO 8859-5 (Cyrillic)'             CONFIG_NLS_ISO8859_5
-  tristate 'NLS ISO 8859-6 (Arabic)'               CONFIG_NLS_ISO8859_6
-  tristate 'NLS ISO 8859-7 (Modern Greek)'         CONFIG_NLS_ISO8859_7
-  tristate 'NLS ISO 8859-8 (Hebrew)'               CONFIG_NLS_ISO8859_8
-  tristate 'NLS ISO 8859-9 (Latin 5; Turkey)'      CONFIG_NLS_ISO8859_9
-  tristate 'NLS KOI8-R (Russian)'                  CONFIG_NLS_KOI8_R
+  tristate 'NLS ISO 8859-1  (Latin 1; Western European Languages)' CONFIG_NLS_ISO8859_1
+  tristate 'NLS ISO 8859-2  (Latin 2; Slavic/Central European)' CONFIG_NLS_ISO8859_2
+  tristate 'NLS ISO 8859-3  (Latin 3; Esperanto, Galician, Maltese, Turkish)' CONFIG_NLS_ISO8859_3
+  tristate 'NLS ISO 8859-4  (Latin 4; Estonian, Latvian, Lithuanian)' CONFIG_NLS_ISO8859_4
+  tristate 'NLS ISO 8859-5  (Cyrillic)'             CONFIG_NLS_ISO8859_5
+  tristate 'NLS ISO 8859-6  (Arabic)'               CONFIG_NLS_ISO8859_6
+  tristate 'NLS ISO 8859-7  (Modern Greek)'         CONFIG_NLS_ISO8859_7
+  tristate 'NLS ISO 8859-8  (Hebrew)'               CONFIG_NLS_ISO8859_8
+  tristate 'NLS ISO 8859-9  (Latin 5; Turkey)'      CONFIG_NLS_ISO8859_9
+  tristate 'NLS ISO 8859-15 (Latin 9; Western European with Euro)' CONFIG_NLS_ISO8859_15
+  tristate 'NLS KOI8-R (Russian)'                   CONFIG_NLS_KOI8_R
   endmenu
 fi

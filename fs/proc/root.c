@@ -493,6 +493,11 @@ static struct proc_dir_entry proc_root_meminfo = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
+static struct proc_dir_entry proc_root_swapstats = {
+	PROC_SWAPSTATS, 9, "swapstats",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
+};
 static struct proc_dir_entry proc_root_kmsg = {
 	PROC_KMSG, 4, "kmsg",
 	S_IFREG | S_IRUSR, 1, 0, 0,
@@ -648,6 +653,7 @@ __initfunc(void proc_root_init(void))
 	proc_register(&proc_root, &proc_root_loadavg);
 	proc_register(&proc_root, &proc_root_uptime);
 	proc_register(&proc_root, &proc_root_meminfo);
+	proc_register(&proc_root, &proc_root_swapstats);
 	proc_register(&proc_root, &proc_root_kmsg);
 	proc_register(&proc_root, &proc_root_version);
 	proc_register(&proc_root, &proc_root_cpuinfo);

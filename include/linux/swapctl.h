@@ -22,11 +22,19 @@ extern swap_control_t swap_control;
 
 typedef struct swapstat_v1
 {
-	unsigned int	wakeups;
-	unsigned int	pages_reclaimed;
-	unsigned int	pages_shm;
-	unsigned int	pages_mmap;
-	unsigned int	pages_swap;
+	unsigned long	wakeups;
+	unsigned long	pages_reclaimed;
+	unsigned long	pages_shm;
+	unsigned long	pages_mmap;
+	unsigned long	pages_swap;
+
+	unsigned long	gfp_freepage_attempts;
+	unsigned long	gfp_freepage_successes;
+	unsigned long	gfp_shrink_attempts;
+	unsigned long	gfp_shrink_successes;
+	unsigned long	kswap_freepage_attempts;
+	unsigned long	kswap_freepage_successes;
+	unsigned long	kswap_wakeups[4];
 } swapstat_v1;
 typedef swapstat_v1 swapstat_t;
 extern swapstat_t swapstats;

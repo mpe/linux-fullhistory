@@ -27,7 +27,6 @@
 #include <linux/delay.h>
 #include <linux/tty.h>
 #include <linux/sched.h>
-#include <linux/config.h>
 #include <linux/init.h>
 
 #include <asm/ioctls.h>

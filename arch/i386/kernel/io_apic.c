@@ -225,6 +225,13 @@ static void __init clear_IO_APIC_pin(unsigned int pin)
 int pirq_entries [MAX_PIRQS];
 int pirqs_enabled;
 
+void __init ioapic_setup(char *str, int *ints)
+{
+	extern int skip_ioapic_setup;	/* defined in arch/i386/kernel/smp.c */
+
+	skip_ioapic_setup = 1;
+}
+
 void __init ioapic_pirq_setup(char *str, int *ints)
 {
 	int i, max;

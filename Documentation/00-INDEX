@@ -111,10 +111,10 @@ serial-console.txt
 	- how to set up linux with a serial line console as the default.
 smart-config.txt
 	- description of the Smart Config makefile feature.
-smp
-	- how to setup the kernel for SMP
 smp.tex
 	- TeX document describing implementation of Multiprocessor Linux
+smp.txt
+	- a few more notes on symmetric multi-processing
 sound/
 	- directory with info on sound card support
 specialix.txt

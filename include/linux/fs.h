@@ -560,6 +560,13 @@ struct super_block {
 };
 
 /*
+ * VFS helper functions..
+ */
+extern int vfs_rmdir(struct inode *, struct dentry *);
+extern int vfs_unlink(struct inode *, struct dentry *);
+extern int vfs_rename(struct inode *, struct dentry *, struct inode *, struct dentry *);
+
+/*
  * This is the "filldir" function type, used by readdir() to let
  * the kernel specify what kind of dirent layout it wants to have.
  * This allows the kernel to read directories into kernel space or
@@ -776,7 +783,6 @@ extern int get_write_access(struct inode *inode);
 extern void put_write_access(struct inode *inode);
 extern struct dentry * open_namei(const char * pathname, int flag, int mode);
 extern struct dentry * do_mknod(const char * filename, int mode, dev_t dev);
-extern int VFS_rmdir(struct inode *dir, struct dentry *dentry);
 extern int do_pipe(int *);
 
 /* fs/dcache.c -- generic fs support functions */

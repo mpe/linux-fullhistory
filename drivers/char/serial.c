@@ -1673,7 +1673,7 @@ static int set_serial_info(struct async_struct * info,
 		state->flags = ((state->flags & ~ASYNC_USR_MASK) |
 			       (new_serial.flags & ASYNC_USR_MASK));
 		info->flags = ((info->flags & ~ASYNC_USR_MASK) |
-			       (info->flags & ASYNC_USR_MASK));
+			       (new_serial.flags & ASYNC_USR_MASK));
 		state->custom_divisor = new_serial.custom_divisor;
 		goto check_and_exit;
 	}

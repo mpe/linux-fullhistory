@@ -32,7 +32,7 @@
  * the following:
  *
  *   retry_count = jiffies+ SONY_JIFFIES_TIMEOUT;
- *   while ((retry_count > jiffies) && (! <some condition to wait for))
+ *   while (time_before(jiffies, retry_count) && (! <some condition to wait for))
  *   {
  *      while (handle_sony_cd_attention())
  *         ;
@@ -488,7 +488,7 @@ static int scd_reset(struct cdrom_device_info * cdi)
   reset_drive();
 
   retry_count = jiffies + SONY_RESET_TIMEOUT;
-  while ((retry_count > jiffies) && (!is_attention()))
+  while (time_before(jiffies, retry_count) && (!is_attention()))
   {
      sony_sleep();
   }
@@ -740,7 +740,7 @@ restart_on_error(void)
    printk("cdu31a: Resetting drive on error\n");
    reset_drive();
    retry_count = jiffies + SONY_RESET_TIMEOUT;
-   while ((retry_count > jiffies) && (!is_attention()))
+   while (time_before(jiffies, retry_count) && (!is_attention()))
    {
       sony_sleep();
    }
@@ -808,7 +808,7 @@ get_result(unsigned char *result_buffer,
       ;
    /* Wait for the result data to be ready */
    retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
-   while ((retry_count > jiffies) && (is_busy() || (!(is_result_ready()))))
+   while (time_before(jiffies, retry_count) && (is_busy() || (!(is_result_ready()))))
    {
       sony_sleep();
 
@@ -978,7 +978,7 @@ retry_cd_operation:
    sti();
    
    retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
-   while ((retry_count > jiffies) && (is_busy()))
+   while (time_before(jiffies, retry_count) && (is_busy()))
    {
       sony_sleep();
       
@@ -1246,7 +1246,7 @@ start_request(unsigned int sector,
       ;
 
    retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
-   while ((retry_count > jiffies) && (is_busy()))
+   while (time_before(jiffies, retry_count) && (is_busy()))
    {
       sony_sleep();
       
@@ -1514,7 +1514,7 @@ read_data_block(char          *buffer,
 
    /* Wait for the drive to tell us we have something */
    retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
-   while ((retry_count > jiffies) && !(is_data_ready()))
+   while (time_before(jiffies, retry_count) && !(is_data_ready()))
    {
       while (handle_sony_cd_attention())
          ;
@@ -1553,7 +1553,7 @@ read_data_block(char          *buffer,
 
       /* Wait for the status from the drive. */
       retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
-      while ((retry_count > jiffies) && !(is_result_ready()))
+      while (time_before(jiffies, retry_count) && !(is_result_ready()))
       {
          while (handle_sony_cd_attention())
             ;
@@ -2432,8 +2432,7 @@ read_audio_data(char          *buffer,
    /* Wait for the drive to tell us we have something */
    retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
 continue_read_audio_wait:
-   while (   (retry_count > jiffies)
-          && !(is_data_ready())
+   while (time_before(jiffies, retry_count) && !(is_data_ready())
           && !(is_result_ready() || result_read))
    {
       while (handle_sony_cd_attention())
@@ -2495,7 +2494,7 @@ continue_read_audio_wait:
       {
          /* Wait for the drive to tell us we have something */
          retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
-         while ((retry_count > jiffies) && !(is_result_ready()))
+         while (time_before(jiffies, retry_count) && !(is_result_ready()))
          {
             while (handle_sony_cd_attention())
                ;
@@ -3286,7 +3285,7 @@ get_drive_configuration(unsigned short base_io,
        */
       reset_drive();
       retry_count = jiffies + SONY_RESET_TIMEOUT;
-      while ((retry_count > jiffies) && (!is_attention()))
+      while (time_before(jiffies, retry_count) && (!is_attention()))
       {
          sony_sleep();
       }

@@ -44,8 +44,8 @@ char * coda_f2s(ViceFid *f)
 /* recognize special .CONTROL name */
 int coda_iscontrol(const char *name, size_t length)
 {
-	if ((CFS_CONTROLLEN == length) && 
-	    (strncmp(name, CFS_CONTROL, CFS_CONTROLLEN) == 0))
+	if ((CODA_CONTROLLEN == length) && 
+	    (strncmp(name, CODA_CONTROL, CODA_CONTROLLEN) == 0))
 		return 1;
 	return 0;
 }
@@ -104,7 +104,7 @@ void coda_load_creds(struct coda_cred *cred)
         cred->cr_suid = (vuid_t) current->suid;
         cred->cr_fsuid = (vuid_t) current->fsuid;
 
-        cred->cr_gid = (vgid_t) current->gid;
+        cred->cr_groupid = (vgid_t) current->gid;
         cred->cr_egid = (vgid_t) current->egid;
         cred->cr_sgid = (vgid_t) current->sgid;
         cred->cr_fsgid = (vgid_t) current->fsgid;
@@ -142,6 +142,11 @@ unsigned short coda_flags_to_cflags(unsigned short flags)
 	if ( flags & O_TRUNC )  { 
 		CDEBUG(D_FILE, "--> C_O_TRUNC added\n");
 		coda_flags |= C_O_TRUNC;
+	}
+
+	if ( flags & O_CREAT )  { 
+		CDEBUG(D_FILE, "--> C_O_CREAT added\n");
+		coda_flags |= C_O_CREAT;
 	}
 
 	if ( flags & O_EXCL ) {

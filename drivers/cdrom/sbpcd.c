@@ -1014,20 +1014,20 @@ static int CDi_stat_loop_T(void)
               {
               case 4:
                 sbp_sleep(HZ);
-                if (jiffies > timeout_4) gear++;
+                if (time_after(jiffies, timeout_4)) gear++;
                 msg(DBG_TEA, "CDi_stat_loop_T: long sleep active.\n");
                 break;
               case 3:
                 sbp_sleep(HZ/10);
-                if (jiffies > timeout_3) gear++;
+                if (time_after(jiffies, timeout_3)) gear++;
                 break;
               case 2:
                 sbp_sleep(HZ/100);
-                if (jiffies > timeout_2) gear++;
+                if (time_after(jiffies, timeout_2)) gear++;
                 break;
               case 1:
                 sbp_sleep(0);
-                if (jiffies > timeout_1) gear++;
+                if (time_after(jiffies, timeout_1)) gear++;
               }
           } while (gear < 5);
 	return -1;
@@ -1037,7 +1037,7 @@ static int CDi_stat_loop(void)
 {
 	int i,j;
 	
-	for(timeout = jiffies + 10*HZ, i=maxtim_data; timeout > jiffies; )
+	for(timeout = jiffies + 10*HZ, i=maxtim_data; time_before(jiffies, timeout); )
 	{
 		for ( ;i!=0;i--)
 		{
@@ -1098,11 +1098,11 @@ static int ResponseInfo(void)
 				st=inb(CDi_status);
 				if (!(st&s_not_result_ready)) break;
 			}
-			if ((j!=0)||(timeout<=jiffies)) break;
+			if ((j!=0)||time_after_eq(jiffies, timeout)) break;
 			sbp_sleep(1);
 			j = 1;
 		}
-		if (timeout<=jiffies) break;
+		if (time_after_eq(jiffies, timeout)) break;
 		infobuf[i]=inb(CDi_info);
 	}
 #if 000
@@ -1238,7 +1238,7 @@ static int ResponseStatus(void)
 			i=inb(CDi_status);
 			if (!(i&s_not_result_ready)) break;
 		}
-		if ((j!=0)||(timeout<jiffies)) break;
+		if ((j!=0)||time_after(jiffies, timeout)) break;
 		sbp_sleep(1);
 		j = 1;
 	}
@@ -4355,7 +4355,7 @@ static int sbpcd_dev_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 						if (!(j&s_not_result_ready)) break;
 						if (fam0L_drive) if (j&s_attention) break;
 					}
-					if (try != 0 || timeout <= jiffies) break;
+					if (try != 0 || time_after_eq(jiffies, timeout)) break;
 					if (data_retrying == 0) data_waits++;
 					data_retrying = 1;
 					sbp_sleep(1);
@@ -4419,7 +4419,7 @@ static int sbpcd_dev_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 			if (fam0L_drive)
 			{
 				i=maxtim_data;
-				for (timeout=jiffies+9*HZ; timeout > jiffies; timeout--)
+				for (timeout=jiffies+9*HZ; time_before(jiffies, timeout); timeout--)
 				{
 					for ( ;i!=0;i--)
 					{
@@ -4428,7 +4428,7 @@ static int sbpcd_dev_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 						if (!(j&s_not_result_ready)) break;
 						if (j&s_attention) break;
 					}
-					if (i != 0 || timeout <= jiffies) break;
+					if (i != 0 || time_after_eq(jiffies, timeout)) break;
 					sbp_sleep(0);
 					i = 1;
 				}
@@ -5250,7 +5250,7 @@ static int sbp_data(struct request *req)
 	{
 		SBPCD_CLI;
 		i=maxtim_data;
-		for (timeout=jiffies+HZ; timeout > jiffies; timeout--)
+		for (timeout=jiffies+HZ; time_before(jiffies, timeout); timeout--)
 		{
 			for ( ;i!=0;i--)
 			{
@@ -5259,7 +5259,7 @@ static int sbp_data(struct request *req)
 				if (!(j&s_not_result_ready)) break;
 				if (j&s_attention) break;
 			}
-			if (i != 0 || timeout <= jiffies) break;
+			if (i != 0 || time_after_eq(jiffies, timeout)) break;
 			sbp_sleep(0);
 			i = 1;
 		}
@@ -5701,7 +5701,7 @@ __initfunc(int SBPCD_INIT(void))
 				if (i<0) break;
 				if (!st_caddy_in) break;
 				}
-			while ((!st_diskok)||(timeout<jiffies));
+			while ((!st_diskok)||time_after(jiffies, timeout));
 		}
 		i=SetSpeed();
 		if (i>=0) D_S[j].CD_changed=1;

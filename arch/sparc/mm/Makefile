@@ -14,7 +14,7 @@ O_OBJS	 += nosrmmu.o
 else
 O_OBJS	 += srmmu.o iommu.o io-unit.o hypersparc.o viking.o tsunami.o
 endif
-ifdef SMP
+ifdef CONFIG_SMP
 O_OBJS   += nosun4c.o
 else
 O_OBJS   += sun4c.o

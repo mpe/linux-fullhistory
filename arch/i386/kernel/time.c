@@ -20,6 +20,10 @@
  *	(C. Scott Ananian <cananian@alumni.princeton.edu>, Andrew D.
  *	Balsa <andrebalsa@altern.org>, Philip Gladstone <philip@raptor.com>;
  *	ported from 2.0.35 Jumbo-9 by Michael Krause <m.krause@tu-harburg.de>).
+ * 1998-12-16    Andrea Arcangeli
+ *	Fixed Jumbo-9 code in 2.1.131: do_gettimeofday was missing 1 jiffy
+ *	because was not accounting lost_ticks. I also removed some ugly
+ *	not needed global cli() and where needed I used a disable_irq(0).
  */
 
 /* What about the "updated NTP code" stuff in 2.0 time.c? It's not in
@@ -92,9 +96,9 @@ static unsigned long do_fast_gettimeoffset(void)
 	eax -= last_tsc_low;	/* tsc_low delta */
 
 	/*
-         * Time offset = (tsc_low delta) * fast_gettimeoffset_quotient.
-         *             = (tsc_low delta) / (clocks_per_usec)
-         *             = (tsc_low delta) / (clocks_per_jiffy / usecs_per_jiffy)
+         * Time offset = (tsc_low delta) * fast_gettimeoffset_quotient
+         *             = (tsc_low delta) * (usecs_per_clock)
+         *             = (tsc_low delta) * (usecs_per_jiffy / clocks_per_jiffy)
 	 *
 	 * Using a mull instead of a divl saves up to 31 clock cycles
 	 * in the critical path.
@@ -230,17 +234,19 @@ static unsigned long (*do_gettimeoffset)(void) = do_slow_gettimeoffset;
  */
 void do_gettimeofday(struct timeval *tv)
 {
+	extern volatile unsigned long lost_ticks;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 	*tv = xtime;
 	tv->tv_usec += do_gettimeoffset();
-	if (tv->tv_usec >= 1000000) {
+	if (lost_ticks)
+		tv->tv_usec += lost_ticks * (1000000/HZ);
+	restore_flags(flags);
+	while (tv->tv_usec >= 1000000) {
 		tv->tv_usec -= 1000000;
 		tv->tv_sec++;
 	}
-	restore_flags(flags);
 }
 
 void do_settimeofday(struct timeval *tv)
@@ -254,7 +260,7 @@ void do_settimeofday(struct timeval *tv)
 	 */
 	tv->tv_usec -= do_gettimeoffset();
 
-	if (tv->tv_usec < 0) {
+	while (tv->tv_usec < 0) {
 		tv->tv_usec += 1000000;
 		tv->tv_sec--;
 	}
@@ -399,18 +405,20 @@ static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  */
 static void pentium_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	int count, flags;
+	int count;
 
 	/* It is important that these two operations happen almost at the
 	 * same time. We do the RDTSC stuff first, since it's faster. To
-         * avoid any inconsistencies, we disable interrupts locally.
+         * avoid any inconsistencies, we need interrupts disabled locally.
          */
+
+	/*
+	 * Interrupts are just disabled locally since the timer irq has the
+	 * SA_INTERRUPT flag set. -arca
+	 */
 	
-	__save_flags(flags);
-	__cli(); 
 	/* read Pentium cycle counter */
-	__asm__("rdtsc"
-		:"=a" (last_tsc_low):: "eax", "edx");
+	__asm__("rdtsc" : "=a" (last_tsc_low) : : "edx");
 
 	outb_p(0x00, 0x43);     /* latch the count ASAP */
 
@@ -419,8 +427,7 @@ static void pentium_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	count = ((LATCH-1) - count) * TICK_SIZE;
 	delay_at_last_interrupt = (count + LATCH/2) / LATCH;
-	__restore_flags(flags);
-       
+ 
 	timer_interrupt(irq, NULL, regs);
 }
 

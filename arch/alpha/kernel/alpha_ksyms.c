@@ -52,6 +52,7 @@ EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(screen_info);
+EXPORT_SYMBOL(perf_irq);
 
 /* platform dependent support */
 EXPORT_SYMBOL(_inb);
