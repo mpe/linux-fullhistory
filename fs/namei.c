@@ -201,7 +201,7 @@ int open_namei(const char * pathname, int flag, int mode,
 
 	if ((flag & O_TRUNC) && !(flag & O_ACCMODE))
 		flag |= O_WRONLY;
-	mode &= 0777 & ~current->umask;
+	mode &= 07777 & ~current->umask;
 	mode |= I_REGULAR;
 	if (!(dir = dir_namei(pathname,&namelen,&basename,NULL)))
 		return -ENOENT;

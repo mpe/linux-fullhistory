@@ -24,6 +24,8 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/hdreg.h>
+
+#define REALLY_SLOW_IO
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -423,17 +425,8 @@ static void bad_rw_intr(void)
 	if (!CURRENT)
 		return;
 	if (++CURRENT->errors >= MAX_ERRORS)
-		if (CURRENT->bh && CURRENT->nr_sectors > 2) {
-			CURRENT->nr_sectors--;
-			CURRENT->sector++;
-			if (CURRENT->nr_sectors & 1) {
-				CURRENT->nr_sectors--;
-				CURRENT->sector++;
-			}
-			next_buffer(0);
-		} else
-			end_request(0);
-	if (CURRENT->errors > MAX_ERRORS/2)
+		end_request(0);
+	else if (CURRENT->errors > MAX_ERRORS/2)
 		reset = 1;
 	else
 		recalibrate = 1;
@@ -457,16 +450,15 @@ static void read_intr(void)
 		if ((i & STAT_MASK) != STAT_OK)
 			goto bad_read;
 	CURRENT->errors = 0;
-	if (CURRENT->bh && (CURRENT->nr_sectors&1) && CURRENT->nr_sectors > 2)
-		next_buffer(1);
-	else
-		CURRENT->buffer += 512;
+	CURRENT->buffer += 512;
 	CURRENT->sector++;
-	if (--CURRENT->nr_sectors) {
+	i = --CURRENT->nr_sectors;
+	if (!i || (CURRENT->bh && !(i&1)))
+		end_request(1);
+	if (i > 0) {
 		SET_INTR(&read_intr);
 		return;
 	}
-	end_request(1);
 #if (HD_DELAY > 0)
 	last_req = read_timer();
 #endif
@@ -487,24 +479,22 @@ static void write_intr(void)
 	i = (unsigned) inb_p(HD_STATUS);
 	if ((i & STAT_MASK) != STAT_OK)
 		goto bad_write;
-	if (CURRENT->nr_sectors < 2) {
+	if (CURRENT->nr_sectors > 1 && !(i & DRQ_STAT))
+		goto bad_write;
+	CURRENT->sector++;
+	i = --CURRENT->nr_sectors;
+	CURRENT->buffer += 512;
+	if (!i || (CURRENT->bh && !(i & 1)))
 		end_request(1);
+	if (i > 0) {
+		SET_INTR(&write_intr);
+		port_write(HD_DATA,CURRENT->buffer,256);
+	} else {
 #if (HD_DELAY > 0)
 		last_req = read_timer();
 #endif
 		do_hd_request();
-		return;
 	}
-	if (!(i & DRQ_STAT))
-		goto bad_write;
-	CURRENT->sector++;
-	CURRENT->nr_sectors--;
-	if (CURRENT->bh && !(CURRENT->nr_sectors & 1))
-		next_buffer(1);
-	else
-		CURRENT->buffer += 512;
-	SET_INTR(&write_intr);
-	port_write(HD_DATA,CURRENT->buffer,256);
 	return;
 bad_write:
 	if (i & ERR_STAT)
@@ -534,16 +524,7 @@ static void hd_times_out(void)
 	printk("HD timeout\n\r");
 	cli();
 	if (++CURRENT->errors >= MAX_ERRORS)
-		if (CURRENT->bh && CURRENT->nr_sectors > 2) {
-			CURRENT->nr_sectors--;
-			CURRENT->sector++;
-			if (CURRENT->nr_sectors & 1) {
-				CURRENT->nr_sectors--;
-				CURRENT->sector++;
-			}
-			next_buffer(0);
-		} else
-			end_request(0);
+		end_request(0);
 	do_hd_request();
 }
 
@@ -558,7 +539,7 @@ static void do_hd_request(void)
 	dev = MINOR(CURRENT->dev);
 	block = CURRENT->sector;
 	nsect = CURRENT->nr_sectors;
-	if (dev >= (NR_HD<<6) || block+nsect > hd[dev].nr_sects) {
+	if (dev >= (NR_HD<<6) || block >= hd[dev].nr_sects) {
 		end_request(0);
 		goto repeat;
 	}

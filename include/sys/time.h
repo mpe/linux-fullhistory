@@ -54,6 +54,9 @@ struct	itimerval {
 	struct	timeval it_value;	/* current value */
 };
 
+int getitimer(int which, struct itimerval *value);
+int setitimer(int which, struct itimerval *value, struct itimerval *ovalue);
+
 #include <time.h>
 #include <sys/types.h>
 

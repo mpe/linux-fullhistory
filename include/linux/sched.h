@@ -119,6 +119,7 @@ struct task_struct {
 	long blocked;	/* bitmap of masked signals */
 /* various fields */
 	int exit_code;
+	int dumpable;
 	unsigned long start_code,end_code,end_data,brk,start_stack;
 	long pid,pgrp,session,leader;
 	int	groups[NGROUPS];
@@ -134,7 +135,9 @@ struct task_struct {
 	struct task_struct *next_wait;
 	unsigned short uid,euid,suid;
 	unsigned short gid,egid,sgid;
-	unsigned long timeout,alarm;
+	unsigned long timeout;
+	unsigned long it_real_value, it_prof_value, it_virt_value;
+	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
 	long utime,stime,cutime,cstime,start_time;
 	unsigned long min_flt, maj_flt;
 	unsigned long cmin_flt, cmaj_flt;
@@ -181,12 +184,12 @@ struct task_struct {
 #define INIT_TASK \
 /* state etc */	{ 0,15,15, \
 /* signals */	0,{{},},0, \
-/* ec,brk... */	0,0,0,0,0,0, \
+/* ec,brk... */	0,0,0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
 /* proc links*/ &init_task.task,NULL,NULL,NULL,NULL, \
 /* uid etc */	0,0,0,0,0,0, \
-/* timeout */	0,0,0,0,0,0,0, \
+/* timeout */	0,0,0,0,0,0,0,0,0,0,0,0, \
 /* min_flt */	0,0,0,0, \
 /* rlimits */   { {0x7fffffff, 0x7fffffff}, {0x7fffffff, 0x7fffffff},  \
 		  {0x7fffffff, 0x7fffffff}, {0x7fffffff, 0x7fffffff}, \

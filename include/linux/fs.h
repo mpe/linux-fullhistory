@@ -8,6 +8,7 @@
 
 #include <sys/types.h>
 #include <sys/dirent.h>
+#include <sys/vfs.h>
 
 /* devices are as follows: (same as minix, so we can use the minix
  * file system. These are major numbers.)
@@ -135,12 +136,12 @@ typedef struct select_table_struct {
 } select_table;
 
 struct super_block {
-	unsigned short s_ninodes;
-	unsigned short s_nzones;
-	unsigned short s_imap_blocks;
-	unsigned short s_zmap_blocks;
-	unsigned short s_firstdatazone;
-	unsigned short s_log_zone_size;
+	unsigned long s_ninodes;
+	unsigned long s_nzones;
+	unsigned long s_imap_blocks;
+	unsigned long s_zmap_blocks;
+	unsigned long s_firstdatazone;
+	unsigned long s_log_zone_size;
 	unsigned long s_max_size;
 	unsigned short s_magic;
 /* These are only in memory */
@@ -191,6 +192,7 @@ struct super_operations {
 	void (*write_inode) (struct inode *inode);
 	void (*put_inode) (struct inode *inode);
 	void (*put_super)(struct super_block *sb);
+	void (*statfs) (struct super_block *sb, struct statfs *buf);
 };
 
 struct file_system_type {

@@ -180,14 +180,14 @@ void ctrl_alt_del(void)
  */
 int sys_setregid(int rgid, int egid)
 {
-	if (rgid>0) {
+	if (rgid >= 0) {
 		if ((current->gid == rgid) || 
 		    suser())
 			current->gid = rgid;
 		else
 			return(-EPERM);
 	}
-	if (egid>0) {
+	if (egid >= 0) {
 		if ((current->gid == egid) ||
 		    (current->egid == egid) ||
 		    suser()) {
@@ -267,17 +267,17 @@ int sys_setreuid(int ruid, int euid)
 {
 	int old_ruid = current->uid;
 	
-	if (ruid>0) {
+	if (ruid >= 0) {
 		if ((current->euid==ruid) ||
-                    (old_ruid == ruid) ||
+		    (old_ruid == ruid) ||
 		    suser())
 			current->uid = ruid;
 		else
 			return(-EPERM);
 	}
-	if (euid>0) {
+	if (euid >= 0) {
 		if ((old_ruid == euid) ||
-                    (current->euid == euid) ||
+		    (current->euid == euid) ||
 		    suser()) {
 			current->euid = euid;
 			current->suid = euid;

@@ -1,5 +1,5 @@
 /*
- *  linux/fs/chrdev.c
+ *  linux/fs/minix/chrdev.c
  *
  *  (C) 1991  Linus Torvalds
  */

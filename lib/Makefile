@@ -23,7 +23,7 @@ CPP	=gcc -E -nostdinc -I../include
 	-c -o $*.o $<
 
 OBJS  = ctype.o _exit.o open.o close.o errno.o write.o dup.o setsid.o \
-	execve.o wait.o string.o malloc.o
+	execve.o wait.o string.o malloc.o itimer.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)

@@ -28,7 +28,7 @@ CPP	=cpp -nostdinc -I../include
 
 OBJS  = sched.o sys_call.o traps.o asm.o fork.o \
 	panic.o printk.o vsprintf.o sys.o exit.o \
-	signal.o mktime.o ptrace.o ioport.o
+	signal.o mktime.o ptrace.o ioport.o itimer.o
 
 kernel.o: $(OBJS)
 	$(LD) -r -o kernel.o $(OBJS)

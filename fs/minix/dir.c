@@ -1,7 +1,9 @@
 /*
- * linux/fs/minix/dir.c
+ *  linux/fs/minix/dir.c
  *
- * minix directory hadnling functions
+ *  (C) 1991 Linus Torvalds
+ *
+ *  minix directory handling functions
  */
 
 #include <errno.h>

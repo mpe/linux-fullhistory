@@ -60,8 +60,10 @@ extern int minix_rename(struct inode * old_dir, const char * old_name, int old_l
 	struct inode * new_dir, const char * new_name, int new_len);
 extern struct inode * minix_new_inode(int dev);
 extern void minix_free_inode(struct inode * inode);
+extern unsigned long minix_count_free_inodes(struct super_block *sb);
 extern int minix_new_block(int dev);
 extern int minix_free_block(int dev, int block);
+extern unsigned long minix_count_free_blocks(struct super_block *sb);
 
 extern int minix_create_block(struct inode *, int);
 extern int minix_bmap(struct inode *,int);
@@ -72,6 +74,7 @@ extern struct super_block *minix_read_super(struct super_block *,void *);
 extern void minix_read_inode(struct inode *);
 extern void minix_write_inode(struct inode *);
 extern void minix_put_inode(struct inode *);
+extern void minix_statfs(struct super_block *, struct statfs *);
 
 extern int minix_lseek(struct inode *, struct file *, off_t, int);
 extern int minix_read(struct inode *, struct file *, char *, int);

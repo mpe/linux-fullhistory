@@ -187,10 +187,13 @@ ret_from_sys_call:
 	je 2f
 	btrl %ecx,%ebx
 	movl %ebx,signal(%eax)
+	movl %esp,%ebx
+	pushl %ebx
 	incl %ecx
 	pushl %ecx
 	call _do_signal
 	popl %ecx
+	popl %ebx
 	testl %eax, %eax
 	jne 1b			# see if we need to switch tasks, or do more signals
 2:	popl %ebx

@@ -125,6 +125,11 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 		printk("Bad block dev command, must be R/W/RA/WA\n");
 		return;
 	}
+	if (blk_size[major])
+		if (blk_size[major][MINOR(bh->b_dev)] <= bh->b_blocknr) {
+			bh->b_dirt = bh->b_uptodate = 0;
+			return;
+		}
 	lock_buffer(bh);
 	if ((rw == WRITE && !bh->b_dirt) || (rw == READ && bh->b_uptodate)) {
 		unlock_buffer(bh);

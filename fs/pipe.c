@@ -174,6 +174,7 @@ int sys_pipe(unsigned long * fildes)
 	}
 	f[0]->f_inode = f[1]->f_inode = inode;
 	f[0]->f_pos = f[1]->f_pos = 0;
+	f[0]->f_flags = f[1]->f_flags = 0;
 	f[0]->f_op = &read_pipe_fops;
 	f[0]->f_mode = 1;		/* read */
 	f[1]->f_op = &write_pipe_fops;

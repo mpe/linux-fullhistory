@@ -1,16 +1,39 @@
 /*
  *	ultrastor.c	(C) 1991 David B. Gentzel
- *	Low-level scsi driver for UltraStor 14F
+ *	Low-level SCSI driver for UltraStor 14F
  *	by David B. Gentzel, Whitfield Software Services, Carnegie, PA
  *	    (gentzel@nova.enet.dec.com)
  *	Thanks to UltraStor for providing the necessary documentation
  */
 
-/* ??? Caveats:
-   This driver is VERY stupid.  It takes no advantage of much of the power of
-   the UltraStor controller.  We just sit-and-spin while waiting for commands
-   to complete.  I hope to go back and beat it into shape, but PLEASE, anyone
-   else who would like to, please make improvements! */
+/*
+ * NOTES:
+ *    The UltraStor 14F is an intelligent, high performance ISA SCSI-2 host
+ *    adapter.  It is essentially an ISA version of the UltraStor 24F EISA
+ *    adapter.  It supports first-party DMA, command queueing, and
+ *    scatter/gather I/O.  It can also emulate the standard AT MFM/RLL/IDE
+ *    interface for use with OS's which don't support SCSI.
+ *
+ *    This driver may also work (with some small changes) with the UltraStor
+ *    24F.  I have no way of confirming this...
+ *
+ *    Places flagged with a triple question-mark are things which are either
+ *    unfinished, questionable, or wrong.
+ */
+
+/*
+ * CAVEATS: ???
+ *    This driver is VERY stupid.  It takes no advantage of much of the power
+ *    of the UltraStor controller.  We just sit-and-spin while waiting for
+ *    commands to complete.  I hope to go back and beat it into shape, but
+ *    PLEASE, anyone else who would like to, please make improvements!
+ *
+ *    By defining USE_QUEUECOMMAND as TRUE in ultrastor.h, you enable the
+ *    queueing feature of the mid-level SCSI driver.  This should improve
+ *    performance somewhat.  However, it does not seem to work.  I believe
+ *    this is due to a bug in the mid-level driver, but I haven't looked
+ *    too closely.
+ */
 
 #include <linux/config.h>
 
@@ -19,22 +42,20 @@
 #include <stddef.h>
 
 #include <linux/string.h>
-#include <linux/config.h>
 #include <linux/sched.h>
-#include <linux/fs.h>
 #include <linux/kernel.h>
-#include <linux/hdreg.h>
-#include <asm/system.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/system.h>
 
+#define ULTRASTOR_PRIVATE	/* Get the private stuff from ultrastor.h */
 #include "ultrastor.h"
 #include "scsi.h"
 #include "hosts.h"
 
-#define VERSION "1.0 alpha"
+#define VERSION "1.0 beta"
 
 #define ARRAY_SIZE(arr) (sizeof (arr) / sizeof (arr)[0])
+#define BIT(n) (1ul << (n))
 #define BYTE(num, n) ((unsigned char)((unsigned int)(num) >> ((n) * 8)))
 
 /* Simply using "unsigned long" in these structures won't work as it causes
@@ -44,21 +65,32 @@ typedef struct {
     unsigned char bytes[4];
 } Longword;
 
+/* Used to fetch the configuration info from the config i/o registers.  We
+   then store (in a friendlier format) in config. */
+struct config_1 {
+    unsigned char bios_segment: 3;
+    unsigned char reserved: 1;
+    unsigned char interrupt: 2;
+    unsigned char dma_channel: 2;
+};
+struct config_2 {
+    unsigned char ha_scsi_id: 3;
+    unsigned char mapping_mode: 2;
+    unsigned char bios_drive_number: 1;
+    unsigned char tfr_port: 2;
+};
+
 /* Used to store configuration info read from config i/o registers.  Most of
    this is not used yet, but might as well save it. */
 struct config {
-    struct {
-	unsigned char bios_segment: 3;
-	unsigned char reserved: 1;
-	unsigned char interrupt: 2;
-	unsigned char dma_channel: 2;
-    } config_1;
-    struct {
-	unsigned char ha_scsi_id: 3;
-	unsigned char mapping_mode: 2;
-	unsigned char bios_drive_number: 1;
-	unsigned char tfr_port: 2;
-    } config_2;
+    unsigned short port_address;
+    const void *bios_segment;
+    unsigned char interrupt: 4;
+    unsigned char dma_channel: 3;
+    unsigned char ha_scsi_id: 3;
+    unsigned char heads: 6;
+    unsigned char sectors: 6;
+    unsigned char bios_drive_number: 1;
 };
 
 /* MailBox SCSI Command Packet.  Basic command structure for communicating
@@ -97,12 +129,11 @@ static const unsigned char interrupt_table[4] = { 15, 14, 11, 10 };
 /* Allowed DMA channels for 14f (0 indicates reserved) */
 static const unsigned char dma_channel_table[4] = { 5, 6, 7, 0 };
 
-#if 0	/* Not currently used, head/sector mappings allowed by 14f */
+/* Head/sector mappings allowed by 14f */
 static const struct {
     unsigned char heads;
     unsigned char sectors;
 } mapping_table[4] = { { 16, 63 }, { 64, 32 }, { 64, 63 }, { 0, 0 } };
-#endif
 
 /* Config info */
 static struct config config;
@@ -114,8 +145,7 @@ static int host_number;
 #ifdef PORT_OVERRIDE
 # define PORT_ADDRESS PORT_OVERRIDE
 #else
-static unsigned short port_address = 0;
-# define PORT_ADDRESS port_address
+# define PORT_ADDRESS (config.port_address)
 #endif
 
 static volatile int aborted = 0;
@@ -125,6 +155,10 @@ static const unsigned short ultrastor_ports[] = {
     0x330, 0x340, 0x310, 0x230, 0x240, 0x210, 0x130, 0x140,
 };
 #endif
+
+void ultrastor_interrupt(void);
+
+static void (*ultrastor_done)(int, int) = 0;
 
 static const struct {
     const char *signature;
@@ -138,75 +172,105 @@ int ultrastor_14f_detect(int hostnum)
 {
     size_t i;
     unsigned char in_byte;
-    const void *base_address;
+    struct config_1 config_1;
+    struct config_2 config_2;
 
-#ifdef DEBUG
-    printk("ultrastor_14f_detect: called\n");
+#if (ULTRASTOR_DEBUG & UD_DETECT)
+    printk("US14F: detect: called\n");
 #endif
 
 #ifndef PORT_OVERRIDE
-/* ??? This is easy to implement, but I'm not sure how "friendly" it is to
-   go off and read random i/o ports. */
-# error Not implemented!
+    PORT_ADDRESS = 0;
+    for (i = 0; i < ARRAY_SIZE(ultrastor_ports); i++) {
+	PORT_ADDRESS = ultrastor_ports[i];
 #endif
 
-    if (!PORT_ADDRESS) {
-#ifdef DEBUG
-	printk("ultrastor_14f_detect: no port address found!\n");
-#endif
-	return FALSE;
-    }
-
-#ifdef DEBUG
-    printk("ultrastor_14f_detect: port address = %X\n", PORT_ADDRESS);
+#if (ULTRASTOR_DEBUG & UD_DETECT)
+	printk("US14F: detect: testing port address %03X\n", PORT_ADDRESS);
 #endif
 
-    in_byte = inb(PRODUCT_ID(PORT_ADDRESS + 0));
-    if (in_byte != US14F_PRODUCT_ID_0) {
-#ifdef DEBUG
-	printk("ultrastor_14f_detect: unknown product ID 0 - %02X\n", in_byte);
+	in_byte = inb(PRODUCT_ID(PORT_ADDRESS + 0));
+	if (in_byte != US14F_PRODUCT_ID_0) {
+#if (ULTRASTOR_DEBUG & UD_DETECT)
+# ifdef PORT_OVERRIDE
+	    printk("US14F: detect: wrong product ID 0 - %02X\n", in_byte);
+# else
+	    printk("US14F: detect: no adapter at port %03X", PORT_ADDRESS);
+# endif
 #endif
+#ifdef PORT_OVERRIDE
+	    return FALSE;
+#else
+	    continue;
+#endif
+	}
+	in_byte = inb(PRODUCT_ID(PORT_ADDRESS + 1));
+	/* Only upper nibble is defined for Product ID 1 */
+	if ((in_byte & 0xF0) != US14F_PRODUCT_ID_1) {
+#if (ULTRASTOR_DEBUG & UD_DETECT)
+# ifdef PORT_OVERRIDE
+	    printk("US14F: detect: wrong product ID 1 - %02X\n", in_byte);
+# else
+	    printk("US14F: detect: no adapter at port %03X", PORT_ADDRESS);
+# endif
+#endif
+#ifdef PORT_OVERRIDE
+	    return FALSE;
+#else
+	    continue;
+#endif
+	}
+#ifndef PORT_OVERRIDE
+	break;
+    }
+    if (i == ARRAY_SIZE(ultrastor_ports)) {
+# if (ULTRASTOR_DEBUG & UD_DETECT)
+	printk("US14F: detect: no port address found!\n");
+# endif
 	return FALSE;
     }
-    in_byte = inb(PRODUCT_ID(PORT_ADDRESS + 1));
-    /* Only upper nibble is defined for Product ID 1 */
-    if ((in_byte & 0xF0) != US14F_PRODUCT_ID_1) {
-#ifdef DEBUG
-	printk("ultrastor_14f_detect: unknown product ID 1 - %02X\n", in_byte);
 #endif
-	return FALSE;
-    }
+
+#if (ULTRASTOR_DEBUG & UD_DETECT)
+    printk("US14F: detect: adapter found at port address %03X\n",
+	   PORT_ADDRESS);
+#endif
 
     /* All above tests passed, must be the right thing.  Get some useful
        info. */
-    *(char *)&config.config_1 = inb(CONFIG(PORT_ADDRESS + 0));
-    *(char *)&config.config_2 = inb(CONFIG(PORT_ADDRESS + 1));
+    *(char *)&config_1 = inb(CONFIG(PORT_ADDRESS + 0));
+    *(char *)&config_2 = inb(CONFIG(PORT_ADDRESS + 1));
+    config.bios_segment = bios_segment_table[config_1.bios_segment];
+    config.interrupt = interrupt_table[config_1.interrupt];
+    config.dma_channel = dma_channel_table[config_1.dma_channel];
+    config.ha_scsi_id = config_2.ha_scsi_id;
+    config.heads = mapping_table[config_2.mapping_mode].heads;
+    config.sectors = mapping_table[config_2.mapping_mode].sectors;
+    config.bios_drive_number = config_2.bios_drive_number;
 
     /* To verify this card, we simply look for the UltraStor SCSI from the
        BIOS version notice. */
-    base_address = bios_segment_table[config.config_1.bios_segment];
-    if (base_address != NULL) {
+    if (config.bios_segment != NULL) {
 	int found = 0;
 
 	for (i = 0; !found && i < ARRAY_SIZE(signatures); i++)
-	    if (memcmp((char *)base_address + signatures[i].offset,
+	    if (memcmp((char *)config.bios_segment + signatures[i].offset,
 		       signatures[i].signature, signatures[i].length))
 		found = 1;
 	if (!found)
-	    base_address = NULL;
+	    config.bios_segment = NULL;
     }
-    if (!base_address) {
-#ifdef DEBUG
-	printk("ultrastor_14f_detect: not detected.\n");
+    if (!config.bios_segment) {
+#if (ULTRASTOR_DEBUG & UD_DETECT)
+	printk("US14F: detect: not detected.\n");
 #endif
 	return FALSE;
     }
 
     /* Final consistancy check, verify previous info. */
-    if (!dma_channel_table[config.config_1.dma_channel]
-	|| !(config.config_2.tfr_port & 0x2)) {
-#ifdef DEBUG
-	printk("ultrastor_14f_detect: consistancy check failed\n");
+    if (!config.dma_channel || !(config_2.tfr_port & 0x2)) {
+#if (ULTRASTOR_DEBUG & UD_DETECT)
+	printk("US14F: detect: consistancy check failed\n");
 #endif
 	return FALSE;
     }
@@ -216,18 +280,25 @@ int ultrastor_14f_detect(int hostnum)
        exhausted! */
 
     /* Finally!  Now I'm satisfied... */
-#ifdef DEBUG
-    printk("ultrastor_14f_detect: detect succeeded\n"
+#if (ULTRASTOR_DEBUG & UD_DETECT)
+    printk("US14F: detect: detect succeeded\n"
+	   "  Port address: %03X\n"
 	   "  BIOS segment: %05X\n"
-	   "  Interrupt: %d\n"
-	   "  DMA channel: %d\n"
-	   "  H/A SCSI ID: %d\n",
-	   base_address, interrupt_table[config.config_1.interrupt],
-	   dma_channel_table[config.config_1.dma_channel],
-	   config.config_2.ha_scsi_id);
+	   "  Interrupt: %u\n"
+	   "  DMA channel: %u\n"
+	   "  H/A SCSI ID: %u\n",
+	   PORT_ADDRESS, config.bios_segment, config.interrupt,
+	   config.dma_channel, config.ha_scsi_id);
 #endif
     host_number = hostnum;
-    scsi_hosts[hostnum].this_id = config.config_2.ha_scsi_id;
+    scsi_hosts[hostnum].this_id = config.ha_scsi_id;
+#if USE_QUEUECOMMAND
+    set_intr_gate(0x20 + config.interrupt, ultrastor_interrupt);
+    /* gate to PIC 2 */
+    outb_p(inb_p(0x21) & ~BIT(2), 0x21);
+    /* enable the interrupt */
+    outb(inb_p(0xA1) & ~BIT(config.interrupt - 8), 0xA1);
+#endif
     return TRUE;
 }
 
@@ -238,64 +309,86 @@ const char *ultrastor_14f_info(void)
 	   " by David B. Gentzel\n";
 }
 
-#if 0
+static struct mscp mscp = {
+    OP_SCSI, DTD_SCSI, FALSE, TRUE, FALSE	/* This stuff doesn't change */
+};
+
 int ultrastor_14f_queuecommand(unsigned char target, const void *cmnd,
 			       void *buff, int bufflen, void (*done)(int, int))
-#else
-int ultrastor_14f_command(unsigned char target, const void *cmnd,
-			  void *buff, int bufflen)
-#endif
 {
-    struct mscp mscp = {
-	OP_SCSI, DTD_SCSI, FALSE, TRUE, FALSE,
-	target, 0, 0 /* LUN??? */,
-	*(Longword *)&buff,
-	*(Longword *)&bufflen,
-	{ 0, 0, 0, 0 },
-	0,
-	0,
-	0,
-	((*(char *)cmnd <= 0x1F) ? 6 : 10),
-	{ 0 },	/* Filled in via memcpy below */
-	0,
-	0,
-	{ 0, 0, 0, 0 }
-    };
     unsigned char in_byte;
 
+#if (ULTRASTOR_DEBUG & UD_COMMAND)
+    printk("US14F: queuecommand: called\n");
+#endif
+
+    /* Skip first (constant) byte */
+    memset((char *)&mscp + 1, 0, sizeof (struct mscp) - 1);
+    mscp.target_id = target;
+    /* mscp.lun = ???; */
+    mscp.transfer_data = *(Longword *)&buff;
+    mscp.transfer_data_length = *(Longword *)&bufflen,
+    mscp.length_of_scsi_cdbs = ((*(unsigned char *)cmnd <= 0x1F) ? 6 : 10);
     memcpy(mscp.scsi_cdbs, cmnd, mscp.length_of_scsi_cdbs);
 
     /* Find free OGM slot (OGMINT bit is 0) */
     do
-	in_byte = inb(LCL_DOORBELL_INTR(PORT_ADDRESS));
+	in_byte = inb_p(LCL_DOORBELL_INTR(PORT_ADDRESS));
     while (!aborted && (in_byte & 1));
     if (aborted)
 	/* ??? is this right? */
 	return (aborted << 16);
 
     /* Store pointer in OGM address bytes */
-    outb(BYTE(&mscp, 0), OGM_DATA_PTR(PORT_ADDRESS + 0));
-    outb(BYTE(&mscp, 1), OGM_DATA_PTR(PORT_ADDRESS + 1));
-    outb(BYTE(&mscp, 2), OGM_DATA_PTR(PORT_ADDRESS + 2));
-    outb(BYTE(&mscp, 3), OGM_DATA_PTR(PORT_ADDRESS + 3));
+    outb_p(BYTE(&mscp, 0), OGM_DATA_PTR(PORT_ADDRESS + 0));
+    outb_p(BYTE(&mscp, 1), OGM_DATA_PTR(PORT_ADDRESS + 1));
+    outb_p(BYTE(&mscp, 2), OGM_DATA_PTR(PORT_ADDRESS + 2));
+    outb_p(BYTE(&mscp, 3), OGM_DATA_PTR(PORT_ADDRESS + 3));
 
     /* Issue OGM interrupt */
-    outb(0x1, LCL_DOORBELL_INTR(PORT_ADDRESS));
+    outb_p(0x1, LCL_DOORBELL_INTR(PORT_ADDRESS));
+
+    ultrastor_done = done;
+
+#if (ULTRASTOR_DEBUG & UD_COMMAND)
+    printk("US14F: queuecommand: returning\n");
+#endif
+
+    return 0;
+}
+
+#if !USE_QUEUECOMMAND
+int ultrastor_14f_command(unsigned char target, const void *cmnd,
+			  void *buff, int bufflen)
+{
+    unsigned char in_byte;
+
+#if (ULTRASTOR_DEBUG & UD_COMMAND)
+    printk("US14F: command: called\n");
+#endif
+
+    (void)ultrastor_14f_queuecommand(target, cmnd, buff, bufflen, 0);
 
     /* Wait for ICM interrupt */
     do
-	in_byte = inb(SYS_DOORBELL_INTR(PORT_ADDRESS));
+	in_byte = inb_p(SYS_DOORBELL_INTR(PORT_ADDRESS));
     while (!aborted && !(in_byte & 1));
     if (aborted)
 	/* ??? is this right? */
 	return (aborted << 16);
 
     /* Clean ICM slot (set ICMINT bit to 0) */
-    outb(0x1, SYS_DOORBELL_INTR(PORT_ADDRESS));
+    outb_p(0x1, SYS_DOORBELL_INTR(PORT_ADDRESS));
+
+#if (ULTRASTOR_DEBUG & UD_COMMAND)
+    printk("US14F: command: returning %08X\n",
+	   (mscp.adapter_status << 16) | mscp.target_status);
+#endif
 
     /* ??? not right, but okay for now? */
     return (mscp.adapter_status << 16) | mscp.target_status;
 }
+#endif
 
 int ultrastor_14f_abort(int code)
 {
@@ -307,23 +400,71 @@ int ultrastor_14f_reset(void)
 {
     unsigned char in_byte;
 
-#ifdef DEBUG
-    printk("ultrastor_14f_reset: called\n");
+#if (ULTRASTOR_DEBUG & UD_RESET)
+    printk("US14F: reset: called\n");
 #endif
 
     /* Issue SCSI BUS reset */
-    outb(0x20, LCL_DOORBELL_INTR(PORT_ADDRESS));
+    outb_p(0x20, LCL_DOORBELL_INTR(PORT_ADDRESS));
+
     /* Wait for completion... */
     do
-	in_byte = inb(LCL_DOORBELL_INTR(PORT_ADDRESS));
+	in_byte = inb_p(LCL_DOORBELL_INTR(PORT_ADDRESS));
     while (in_byte & 0x20);
 
     aborted = DID_RESET;
 
-#ifdef DEBUG
-    printk("ultrastor_14f_reset: returning\n");
+#if (ULTRASTOR_DEBUG & UD_RESET)
+    printk("US14F: reset: returning\n");
 #endif
     return 0;
 }
+
+#if USE_QUEUECOMMAND
+void ultrastor_interrupt_service(void)
+{
+    if (ultrastor_done == 0) {
+	printk("US14F: unexpected ultrastor interrupt\n\r");
+	/* ??? Anything else we should do here?  Reset? */
+	return;
+    }
+    printk("US14F: got an ultrastor interrupt: %u\n\r",
+	   (mscp.adapter_status << 16) | mscp.target_status);
+    ultrastor_done(host_number,
+		   (mscp.adapter_status << 16) | mscp.target_status);
+    ultrastor_done = 0;
+}
+
+__asm__("
+_ultrastor_interrupt:
+	cld
+	pushl %eax
+	pushl %ecx
+	pushl %edx
+	push %ds
+	push %es
+	push %fs
+	movl $0x10,%eax
+	mov %ax,%ds
+	mov %ax,%es
+	movl $0x17,%eax
+	mov %ax,%fs
+	movb $0x20,%al
+	outb %al,$0xA0		# EOI to interrupt controller #1
+	outb %al,$0x80		# give port chance to breathe
+	outb %al,$0x80
+	outb %al,$0x80
+	outb %al,$0x80
+	outb %al,$0x20
+	call _ultrastor_interrupt_service
+	pop %fs
+	pop %es
+	pop %ds
+	popl %edx
+	popl %ecx
+	popl %eax
+	iret
+");
+#endif
 
 #endif

@@ -1,7 +1,9 @@
 /*
- * linux/fs/minix/symlink.c
+ *  linux/fs/minix/symlink.c
  *
- * minix symlink handling code
+ *  (C) 1991 Linus Torvalds
+ *
+ *  minix symlink handling code
  */
 
 #include <errno.h>

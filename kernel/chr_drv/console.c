@@ -883,6 +883,8 @@ void con_init(void)
 	char *display_ptr;
 	int currcons = 0;
 	long base;
+	int orig_x = ORIG_X;
+	int orig_y = ORIG_Y;
 
 	video_num_columns = ORIG_VIDEO_COLS;
 	video_size_row = video_num_columns * 2;
@@ -975,7 +977,7 @@ void con_init(void)
 	vt_cons[0].vt_mode = KD_TEXT;
         vc_cons[0].vc_bold_attr = -1;
 
-	gotoxy(currcons,ORIG_X,ORIG_Y);
+	gotoxy(currcons,orig_x,orig_y);
   	for (currcons = 1; currcons<NR_CONSOLES; currcons++) {
 		vc_cons[currcons] = vc_cons[0];
 		vt_cons[currcons] = vt_cons[0];

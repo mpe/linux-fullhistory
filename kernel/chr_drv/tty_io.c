@@ -25,6 +25,9 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
+#include <sys/kd.h>
+#include "vt_kern.h"
+
 #ifndef MIN
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
@@ -65,6 +68,8 @@ struct tty_queue * table_list[]={
 
 void change_console(unsigned int new_console)
 {
+	if (vt_cons[fg_console].vt_mode == KD_GRAPHICS)
+		return;
 	if (new_console == fg_console || new_console >= NR_CONSOLES)
 		return;
 	table_list[0] = con_queues + 0 + new_console*3;
@@ -124,9 +129,14 @@ void copy_to_cooked(struct tty_struct * tty)
 					((EOF_CHAR(tty) != _POSIX_VDISABLE) &&
 					 (c==EOF_CHAR(tty))))) {
 					if (L_ECHO(tty)) {
-						if (c<32)
-							PUTCH(127,tty->write_q);
-						PUTCH(127,tty->write_q);
+						if (c<32) {
+							PUTCH(8,tty->write_q);
+							PUTCH(' ',tty->write_q);
+							PUTCH(8,tty->write_q);
+						}
+						PUTCH(8,tty->write_q);
+						PUTCH(' ',tty->write_q);
+						PUTCH(8,tty->write_q);
 						TTY_WRITE_FLUSH(tty);
 					}
 					DEC(tty->secondary->head);
@@ -141,9 +151,14 @@ void copy_to_cooked(struct tty_struct * tty)
 				    (c==EOF_CHAR(tty))))
 					continue;
 				if (L_ECHO(tty)) {
-					if (c<32)
-						PUTCH(127,tty->write_q);
-					PUTCH(127,tty->write_q);
+					if (c<32) {
+						PUTCH(8,tty->write_q);
+						PUTCH(' ',tty->write_q);
+						PUTCH(8,tty->write_q);
+					}
+					PUTCH(8,tty->write_q);
+					PUTCH(32,tty->write_q);
+					PUTCH(8,tty->write_q);
 					TTY_WRITE_FLUSH(tty);
 				}
 				DEC(tty->secondary->head);

@@ -117,6 +117,9 @@
 
 extern int errno;
 
+#define __NR_setitimer		104
+#define __NR_getitimer		105
+
 /* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
 #define _syscall0(type,name) \
 type name(void) \

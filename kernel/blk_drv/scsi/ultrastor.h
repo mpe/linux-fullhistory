@@ -9,10 +9,6 @@
 #ifndef _ULTRASTOR_H
 #define _ULTRASTOR_H
 
-/* ??? Some of the stuff in this file is really private to ultrastor.c and
-   should be moved elsewhere (as this file is included by higher-level driver
-   files). */
-
 /* ??? These don't really belong here */
 #ifndef TRUE
 # define TRUE 1
@@ -21,32 +17,40 @@
 # define FALSE 0
 #endif
 
+/* ??? This should go eventually, once the queueing bug is fixed */
+#define USE_QUEUECOMMAND FALSE
+
 int ultrastor_14f_detect(int);
 const char *ultrastor_14f_info(void);
-#if 0	/* ??? Future direction... */
 int ultrastor_14f_queuecommand(unsigned char target, const void *cmnd,
 			       void *buff, int bufflen,
 			       void (*done)(int, int));
-#else
+#if !USE_QUEUECOMMAND
 int ultrastor_14f_command(unsigned char target, const void *cmnd,
 			  void *buff, int bufflen);
 #endif
 int ultrastor_14f_abort(int);
 int ultrastor_14f_reset(void);
 
-#if 0	/* ??? Future direction... */
-# define ULTRASTOR_14F \
-    { "UltraStor 14F", ultrastor_14f_detect, ultrastor_14f_info, 0, \
-      ultrastor_14f_queuecommand, ultrastor_14f_abort, ultrastor_14f_reset, \
-      TRUE, 0, 0 }
-#else
-# define ULTRASTOR_14F \
+#if !USE_QUEUECOMMAND
+#define ULTRASTOR_14F \
     { "UltraStor 14F", ultrastor_14f_detect, ultrastor_14f_info, \
       ultrastor_14f_command, 0, ultrastor_14f_abort, ultrastor_14f_reset, \
       FALSE, 0, 0 }
+#else
+#define ULTRASTOR_14F \
+    { "UltraStor 14F", ultrastor_14f_detect, ultrastor_14f_info, 0, \
+      ultrastor_14f_queuecommand, ultrastor_14f_abort, ultrastor_14f_reset, \
+      TRUE, 0, 0 }
 #endif
 
-#define PORT_OVERRIDE 0x330
+#define UD_DETECT 0x1
+#define UD_COMMAND 0x2
+#define UD_RESET 0x4
+
+#ifdef ULTRASTOR_PRIVATE
+
+/* #define PORT_OVERRIDE 0x330 */
 
 /* Port addresses (relative to the base address) */
 #define LCL_DOORBELL_MASK(port) ((port) + 0x0)
@@ -80,5 +84,7 @@ int ultrastor_14f_reset(void);
 #define HA_CMD_SELF_DIAG 0x2
 #define HA_CMD_READ_BUFF 0x3
 #define HA_CMD_WRITE_BUFF 0x4
+
+#endif
 
 #endif

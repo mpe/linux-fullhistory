@@ -43,9 +43,10 @@ typedef unsigned int sigset_t;		/* 32 bits */
 #define SIGPOLL		SIGIO
 #define SIGXCPU		24
 #define SIGXFSZ		25
+*/
+
 #define SIGVTALRM	26
 #define SIGPROF		27
-*/
 
 #define SIGWINCH	28
 

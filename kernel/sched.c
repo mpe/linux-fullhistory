@@ -18,6 +18,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
+#include <sys/time.h>
 
 #include <signal.h>
 #include <errno.h>
@@ -68,7 +69,7 @@ union task_union {
 	char stack[PAGE_SIZE];
 };
 
-static union task_union init_task = {INIT_TASK,};
+static union task_union init_task = {INIT_TASK, };
 
 unsigned long volatile jiffies=0;
 unsigned long startup_time=0;
@@ -134,10 +135,6 @@ void schedule(void)
 					(*p)->timeout = 0;
 					(*p)->state = TASK_RUNNING;
 				}
-			if ((*p)->alarm && (*p)->alarm < jiffies) {
-				(*p)->signal |= (1<<(SIGALRM-1));
-				(*p)->alarm = 0;
-			}
 			if (((*p)->signal & ~(*p)->blocked) &&
 			(*p)->state==TASK_INTERRUPTIBLE)
 				(*p)->state=TASK_RUNNING;
@@ -352,7 +349,7 @@ static unsigned long cexp[3] = {
 	2014,	/* 0.9834714538216174 * FSCALE,	 exp(-1/60) */
 	2037,	/* 0.9944598480048967 * FSCALE,	 exp(-1/180) */
 };
-unsigned long averunnable[3];	/* fixed point numbers */
+unsigned long averunnable[3] = { 0, };	/* fixed point numbers */
 
 void update_avg(void)
 {
@@ -376,7 +373,8 @@ void do_timer(long cpl)
 {
 	unsigned long mask;
 	struct timer_struct *tp = timer_table+0;
-	static int avg_cnt;
+	struct task_struct ** task_p;
+	static int avg_cnt = 0;
 
 	for (mask = 1 ; mask ; tp++,mask += mask) {
 		if (mask > timer_active)
@@ -388,6 +386,25 @@ void do_timer(long cpl)
 		timer_active &= ~mask;
 		tp->fn();
 		sti();
+	}
+
+	/* Update ITIMER_REAL for every task */
+	for (task_p = &LAST_TASK; task_p >= &FIRST_TASK; task_p--)
+		if (*task_p && (*task_p)->it_real_value
+			&& !(--(*task_p)->it_real_value)) {
+			(*task_p)->signal |= (1<<(SIGALRM-1));
+			(*task_p)->it_real_value = (*task_p)->it_real_incr;
+			need_resched = 1;
+		}
+	/* Update ITIMER_PROF for the current task */
+	if (current->it_prof_value && !(--current->it_prof_value)) {
+		current->it_prof_value = current->it_prof_incr;
+		current->signal |= (1<<(SIGPROF-1));
+	}
+	/* Update ITIMER_VIRT for current task if not in a system call */
+	if (cpl && current->it_virt_value && !(--current->it_virt_value)) {
+		current->it_virt_value = current->it_virt_incr;
+		current->signal |= (1<<(SIGVTALRM-1));
 	}
 
 	if (cpl)
@@ -420,12 +437,14 @@ void do_timer(long cpl)
 
 int sys_alarm(long seconds)
 {
-	int old = current->alarm;
+	extern int _setitimer(int, struct itimerval *, struct itimerval *);
+	struct itimerval new, old;
 
-	if (old)
-		old = (old - jiffies) / HZ;
-	current->alarm = (seconds>0)?(jiffies+HZ*seconds):0;
-	return (old);
+	new.it_interval.tv_sec = new.it_interval.tv_usec = 0;
+	new.it_value.tv_sec = seconds;
+	new.it_value.tv_usec = 0;
+	_setitimer(ITIMER_REAL, &new, &old);
+	return(old.it_value.tv_sec + (old.it_value.tv_usec / 1000000));
 }
 
 int sys_getpid(void)

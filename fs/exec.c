@@ -21,7 +21,9 @@
 #include <errno.h>
 #include <linux/string.h>
 #include <sys/stat.h>
+#include <sys/ptrace.h>
 #include <a.out.h>
+#include <fcntl.h>
 
 #include <linux/fs.h>
 #include <linux/sched.h>
@@ -38,6 +40,86 @@ extern int sys_close(int fd);
  * a maximum env+arg of 128kB !
  */
 #define MAX_ARG_PAGES 32
+
+/*
+ * These are the only things you should do on a core-file: use only these
+ * macros to write out all the necessary info.
+ */
+#define DUMP_WRITE(addr,nr) \
+while (file.f_op->write(inode,&file,(char *)(addr),(nr)) != (nr)) goto close_coredump
+
+#define DUMP_SEEK(offset) \
+if (file.f_op->lseek) { \
+	if (file.f_op->lseek(inode,&file,(offset),0) != (offset)) \
+ 		goto close_coredump; \
+} else file.f_pos = (offset)		
+
+/*
+ * Routine writes a core dump image in the current directory.
+ * Currently only a stub-function.
+ *
+ * Note that setuid/setgid files won't make a core-dump if the uid/gid
+ * changed due to the set[u|g]id. It's enforced by the "current->dumpable"
+ * field, which also makes sure the core-dumps won't be recursive if the
+ * dumping of the process results in another error..
+ */
+int core_dump(long signr, struct pt_regs * regs)
+{
+	struct inode * inode = NULL;
+	struct file file;
+	unsigned short fs;
+	int has_dumped = 0;
+
+	if (!current->dumpable)
+		return 0;
+	current->dumpable = 0;
+	__asm__("mov %%fs,%0":"=r" (fs));
+	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
+	if (open_namei("core",O_CREAT | O_WRONLY | O_TRUNC,0600,&inode))
+		goto end_coredump;
+	if (!S_ISREG(inode->i_mode))
+		goto end_coredump;
+	if (!inode->i_op || !inode->i_op->default_file_ops)
+		goto end_coredump;
+	file.f_mode = 3;
+	file.f_flags = 0;
+	file.f_count = 1;
+	file.f_inode = inode;
+	file.f_pos = 0;
+	file.f_reada = 0;
+	file.f_op = inode->i_op->default_file_ops;
+	if (file.f_op->open)
+		if (file.f_op->open(inode,&file))
+			goto end_coredump;
+	if (!file.f_op->write)
+		goto close_coredump;
+	has_dumped = 1;
+/* write and seek example: from kernel space */
+	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
+	DUMP_WRITE("core-dump, regs=\n",17);
+	DUMP_SEEK(64);
+	DUMP_WRITE(regs,sizeof(*regs));
+	if (current->used_math) {
+		if (last_task_used_math == current)
+			__asm__("clts ; fnsave %0"::"m" (current->tss.i387));
+		DUMP_SEEK(1024);
+		DUMP_WRITE("floating-point regs=\n",21);
+		DUMP_SEEK(1088);
+		DUMP_WRITE(&current->tss.i387,sizeof(current->tss.i387));
+	}
+/* now we start writing out the user space info */
+	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x17));
+/* the dummy dump-file contains the first block of user space... */
+	DUMP_SEEK(2048);
+	DUMP_WRITE(0,1024);
+close_coredump:
+	if (file.f_op->release)
+		file.f_op->release(inode,&file);
+end_coredump:
+	__asm__("mov %0,%%fs"::"r" (fs));
+	iput(inode);
+	return has_dumped;
+}
 
 /*
  * Note that a shared library must be both readable and executable due to
@@ -406,6 +488,7 @@ restart_interp:
 		}
 	}
 /* OK, This is the point of no return */
+	current->dumpable = 1;
 	for (i=0; (ch = get_fs_byte(filename++)) != '\0';)
 		if (ch == '/')
 			i = 0;
@@ -421,6 +504,9 @@ restart_interp:
 		iput(current->libraries[i].library);
 		current->libraries[i].library = NULL;
 	}
+	if (e_uid != current->euid || e_gid != current->egid ||
+	    !permission(inode,MAY_READ))
+		current->dumpable = 0;
 	current->numlibraries = 0;
 	current->executable = inode;
 	current->signal = 0;
@@ -454,7 +540,7 @@ restart_interp:
 	eip[0] = ex.a_entry;		/* eip, magic happens :-) */
 	eip[3] = p;			/* stack pointer */
 	if (current->flags & PF_PTRACED)
-	  send_sig(SIGTRAP, current, 0);
+		send_sig(SIGTRAP, current, 0);
 	return 0;
 exec_error2:
 	iput(inode);

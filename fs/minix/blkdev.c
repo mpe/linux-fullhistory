@@ -1,5 +1,5 @@
 /*
- *  linux/fs/chrdev.c
+ *  linux/fs/minix/blkdev.c
  *
  *  (C) 1991  Linus Torvalds
  */
@@ -19,7 +19,6 @@ static int blkdev_open(struct inode * inode, struct file * filp)
 {
 	int i;
 
-	check_disk_change(inode->i_rdev);
 	i = MAJOR(inode->i_rdev);
 	if (i < MAX_BLKDEV) {
 		filp->f_op = blkdev_fops[i];

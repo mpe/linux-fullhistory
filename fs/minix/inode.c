@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <asm/system.h>
+#include <asm/segment.h>
 
 int sync_dev(int dev);
 
@@ -40,12 +41,14 @@ static struct super_operations minix_sops = {
 	minix_read_inode,
 	minix_write_inode,
 	minix_put_inode,
-	minix_put_super
+	minix_put_super,
+	minix_statfs
 };
 
 struct super_block *minix_read_super(struct super_block *s,void *data)
 {
 	struct buffer_head *bh;
+	struct minix_super_block *ms;
 	int i,dev=s->s_dev,block;
 
 	lock_super(s);
@@ -55,8 +58,17 @@ struct super_block *minix_read_super(struct super_block *s,void *data)
 		printk("bread failed\n");
 		return NULL;
 	}
-	*((struct minix_super_block *) s) =
-		*((struct minix_super_block *) bh->b_data);
+/*	*((struct minix_super_block *) s) =
+		*((struct minix_super_block *) bh->b_data); */
+	ms = (struct minix_super_block *) bh->b_data;
+	s->s_ninodes = ms->s_ninodes;
+	s->s_nzones = ms->s_nzones;
+	s->s_imap_blocks = ms->s_imap_blocks;
+	s->s_zmap_blocks = ms->s_zmap_blocks;
+	s->s_firstdatazone = ms->s_firstdatazone;
+	s->s_log_zone_size = ms->s_log_zone_size;
+	s->s_max_size = ms->s_max_size;
+	s->s_magic = ms->s_magic;
 	brelse(bh);
 	if (s->s_magic != MINIX_SUPER_MAGIC) {
 		s->s_dev = 0;
@@ -101,6 +113,21 @@ struct super_block *minix_read_super(struct super_block *s,void *data)
 		return NULL;
 	}
 	return s;
+}
+
+void minix_statfs (struct super_block *sb, struct statfs *buf)
+{
+	long tmp;
+
+	put_fs_long(MINIX_SUPER_MAGIC, &buf->f_type);
+	put_fs_long(1024, &buf->f_bsize);
+	put_fs_long(sb->s_nzones << sb->s_log_zone_size, &buf->f_blocks);
+	tmp = minix_count_free_blocks(sb);
+	put_fs_long(tmp, &buf->f_bfree);
+	put_fs_long(tmp, &buf->f_bavail);
+	put_fs_long(sb->s_ninodes, &buf->f_files);
+	put_fs_long(minix_count_free_inodes(sb), &buf->f_ffree);
+	/* Don't know what value to put in buf->f_fsid */
 }
 
 static int _minix_bmap(struct inode * inode,int block,int create)

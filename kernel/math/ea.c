@@ -58,7 +58,7 @@ static char * sib(struct info * info, int mod)
 char * ea(struct info * info, unsigned short code)
 {
 	unsigned char mod,rm;
-	long * tmp = &EAX;
+	long * tmp;
 	int offset = 0;
 
 	mod = (code >> 6) & 3;

@@ -1012,7 +1012,7 @@ void kb_ack(void)
 	int i;
 
 	for(i=0; i<0x10000; i++)
-		if (inb(0x64) == 0xfa)
+		if (inb(0x60) == 0xfa)
 			break;
 }
 

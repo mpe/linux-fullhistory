@@ -35,7 +35,7 @@
 /*
  * Automatic floppy-detection and formatting written by Werner Almesberger
  * (almesber@nessie.cs.id.ethz.ch), who also corrected some problems with
- * the floppy-change signa| detection.
+ * the floppy-change signal detection.
  */
 
 #include <linux/sched.h>
@@ -942,7 +942,8 @@ static void config_types(void)
 {
 	printk("Floppy drive(s): ");
 	base_type[0] = find_base(0,(CMOS_READ(0x10) >> 4) & 15);
-	if (((CMOS_READ(0x14) >> 6) & 1) == 0) base_type[0] = NULL;
+	if (((CMOS_READ(0x14) >> 6) & 1) == 0)
+		base_type[1] = NULL;
 	else {
 		printk(", ");
 		base_type[1] = find_base(1,CMOS_READ(0x10) & 15);
