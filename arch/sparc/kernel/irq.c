@@ -195,15 +195,8 @@ void free_irq(unsigned int irq, void *dev_id)
         restore_flags(flags);
 }
 
-#ifndef CONFIG_SMP
-unsigned int __local_bh_count;
-unsigned int __local_irq_count;
-
-#else
+#ifdef CONFIG_SMP
 /* SMP interrupt locking on Sparc. */
-
-unsigned int __local_bh_count[NR_CPUS];
-unsigned int __local_irq_count[NR_CPUS];
 
 /* Who has global_irq_lock. */
 unsigned char global_irq_holder = NO_PROC_ID;
@@ -229,14 +222,14 @@ static void show(char * str)
 	printk("irq:  %d [ ", atomic_read(&global_irq_count));
 
 	for (i = 0; i < NR_CPUS; i++) {
-		printk("%d ", __local_irq_count[i]);
+		printk("%d ", local_irq_count(i));
 	}
 	printk("]\n");
 
 	printk("bh:   %d [ ", (spin_is_locked(&global_bh_lock) ? 1 : 0));
 
 	for (i = 0; i < NR_CPUS; i++) {
-		printk("%d ", __local_bh_count[cpu]);
+		printk("%d ", local_bh_count(cpu));
 	}
 	printk("]\n");
 
@@ -263,7 +256,7 @@ static inline void wait_on_irq(int cpu)
 		 * already executing in one..
 		 */
 		if (!atomic_read(&global_irq_count)) {
-			if (__local_bh_count[cpu] || !spin_is_locked(&global_bh_lock))
+			if (local_bh_count(cpu) || !spin_is_locked(&global_bh_lock))
 				break;
 		}
 
@@ -282,7 +275,7 @@ static inline void wait_on_irq(int cpu)
 				continue;
 			if (spin_is_locked (&global_irq_lock))
 				continue;
-			if (!__local_bh_count[cpu] && spin_is_locked(&global_bh_lock))
+			if (!local_bh_count(cpu) && spin_is_locked(&global_bh_lock))
 				continue;
 			if (spin_trylock(&global_irq_lock))
 				break;
@@ -358,7 +351,7 @@ void __global_cli(void)
 	if ((flags & PSR_PIL) != PSR_PIL) {
 		int cpu = smp_processor_id();
 		__cli();
-		if (!__local_irq_count[cpu])
+		if (!local_irq_count(cpu))
 			get_irqlock(cpu);
 	}
 }
@@ -367,7 +360,7 @@ void __global_sti(void)
 {
 	int cpu = smp_processor_id();
 
-	if (!__local_irq_count[cpu])
+	if (!local_irq_count(cpu))
 		release_irqlock(cpu);
 	__sti();
 }
@@ -394,7 +387,7 @@ unsigned long __global_save_flags(void)
 	retval = 2 + local_enabled;
 
 	/* check for global flags if we're not in an interrupt */
-	if (!__local_irq_count[smp_processor_id()]) {
+	if (!local_irq_count(smp_processor_id())) {
 		if (local_enabled)
 			retval = 1;
 		if (global_irq_holder == (unsigned char) smp_processor_id())

@@ -353,6 +353,9 @@ EXPORT_SYMBOL(add_timer);
 EXPORT_SYMBOL(del_timer);
 EXPORT_SYMBOL(request_irq);
 EXPORT_SYMBOL(free_irq);
+#if !defined(CONFIG_ARCH_S390)
+EXPORT_SYMBOL(irq_stat);	/* No separate irq_stat for s390, it is part of PSA */
+#endif
 
 /* waitqueue handling */
 EXPORT_SYMBOL(add_wait_queue);

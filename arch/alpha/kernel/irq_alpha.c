@@ -14,11 +14,7 @@
 #include "proto.h"
 #include "irq_impl.h"
 
-/* Only uniprocessor needs this IRQ/BH locking depth, on SMP it lives
-   in the per-cpu structure for cache reasons.  */
 #ifndef CONFIG_SMP
-int __local_irq_count;
-int __local_bh_count;
 unsigned long __irq_attempt[NR_IRQS];
 #endif
 

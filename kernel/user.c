@@ -8,6 +8,7 @@
  * able to have per-user limits for system resources. 
  */
 
+#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/slab.h>

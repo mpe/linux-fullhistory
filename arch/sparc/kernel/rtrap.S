@@ -50,10 +50,10 @@ rtrap_7win_patch5:	and	%g1, 0x7f, %g1
 ret_trap_entry:
 	ld	[%curptr + AOFF_task_processor], %l3
 	sll	%l3, 5, %l3
-	sethi	%hi(C_LABEL(softirq_state)), %l4
+	sethi	%hi(C_LABEL(irq_stat)), %l4		! &softirq_active
 	add	%l4, %l3, %l4
-	ld	[%l4 + %lo(C_LABEL(softirq_state))], %g5
-	ld	[%l4 + %lo(C_LABEL(softirq_state) + 4)], %g4
+	ld	[%l4 + %lo(C_LABEL(irq_stat))], %g5	! softirq_active
+	ld	[%l4 + %lo(C_LABEL(irq_stat) + 4)], %g4	! softirq_mask
 	andcc	%g4, %g5, %g0
 	be	C_LABEL(ret_trap_lockless_ipi)
 	 nop

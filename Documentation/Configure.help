@@ -16445,6 +16445,19 @@ CONFIG_BVME6000_SCC
   boards from BVM Ltd.  Everyone using one of these boards should say
   Y here.
 
+7-Segment Display support
+CONFIG_DISPLAY7SEG
+  This is the driver for the 7-segment display and LED present on
+  Sun Microsystems CompactPCI models CP1400 and CP1500.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called display7seg.o. If you want to compile it
+  as a module, say M here and read Documentation/modules.txt.
+
+  If you do not have a CompactPCI model CP1400 or CP1500, or
+  another UltraSPARC-IIi-cEngine boardset with a 7-segment display,
+  you should say N to this option. 
 
 #
 # A couple of things I keep forgetting:

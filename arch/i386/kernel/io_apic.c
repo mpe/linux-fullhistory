@@ -1070,7 +1070,7 @@ static int __init nmi_irq_works(void)
 
 	for (j = 0; j < smp_num_cpus; j++) {
 		cpu = cpu_logical_map(j);
-		if (nmi_counter(cpu) - tmp[cpu].__nmi_counter <= 3) {
+		if (nmi_count(cpu) - tmp[cpu].__nmi_count <= 3) {
 			printk(KERN_WARNING "CPU#%d NMI appears to be stuck.\n", cpu);
 			return 0;
 		}

@@ -47,7 +47,6 @@
 #ifndef _IPS_H_
    #define _IPS_H_
 
-   #include <linux/config.h>
    #include <asm/uaccess.h>
    #include <asm/io.h>
 
@@ -67,209 +66,276 @@
     * Some handy macros
     */
    #ifndef LinuxVersionCode
-      #define LinuxVersionCode(x,y,z)   (((x)<<16)+((y)<<8)+(z))
+      #define LinuxVersionCode(x,y,z)  (((x)<<16)+((y)<<8)+(z))
    #endif
 
-   #define HA(x)                       ((ips_ha_t *) x->hostdata)
+   #define IPS_HA(x)                   ((ips_ha_t *) x->hostdata)
    #define IPS_COMMAND_ID(ha, scb)     (int) (scb - ha->scbs)
-   #define VIRT_TO_BUS(x)              (unsigned int)virt_to_bus((void *) x)
+   
+   #ifndef VIRT_TO_BUS
+      #define VIRT_TO_BUS(x)           (unsigned int)virt_to_bus((void *) x)
+   #endif
 
-   #define UDELAY udelay
-   #define MDELAY mdelay
+   #ifndef UDELAY
+      #define UDELAY udelay
+   #endif
+   
+   #ifndef MDELAY
+      #define MDELAY mdelay
+   #endif
 
-   #define verify_area_20(t,a,sz)       (0) /* success */
-   #define PUT_USER                     put_user
-   #define __PUT_USER                   __put_user
-   #define PUT_USER_RET                 put_user_ret
-   #define GET_USER                     get_user
-   #define __GET_USER                   __get_user
-   #define GET_USER_RET                 get_user_ret
+   #ifndef verify_area_20
+      #define verify_area_20(t,a,sz)   (0) /* success */
+   #endif
+   
+   #ifndef PUT_USER
+      #define PUT_USER                 put_user
+   #endif
+   
+   #ifndef __PUT_USER
+      #define __PUT_USER               __put_user
+   #endif
+   
+   #ifndef PUT_USER_RET
+      #define PUT_USER_RET             put_user_ret
+   #endif
+   
+   #ifndef GET_USER
+      #define GET_USER                 get_user
+   #endif
+   
+   #ifndef __GET_USER
+      #define __GET_USER               __get_user
+   #endif
+   
+   #ifndef GET_USER_RET
+      #define GET_USER_RET             get_user_ret
+   #endif
 
-/*
- * Adapter address map equates
- */
-   #define HISR                         0x08    /* Host Interrupt Status Reg   */
-   #define CCSAR                        0x10    /* Cmd Channel System Addr Reg */
-   #define CCCR                         0x14    /* Cmd Channel Control Reg     */
-   #define SQHR                         0x20    /* Status Q Head Reg           */
-   #define SQTR                         0x24    /* Status Q Tail Reg           */
-   #define SQER                         0x28    /* Status Q End Reg            */
-   #define SQSR                         0x2C    /* Status Q Start Reg          */
-   #define SCPR                         0x05    /* Subsystem control port reg  */
-   #define ISPR                         0x06    /* interrupt status port reg   */
-   #define CBSP                         0x07    /* CBSP register               */
+   /*
+    * Lock macros
+    */
+   #define IPS_SCB_LOCK(cpu_flags)      spin_lock_irqsave(&ha->scb_lock, cpu_flags)
+   #define IPS_SCB_UNLOCK(cpu_flags)    spin_unlock_irqrestore(&ha->scb_lock, cpu_flags)
+   #define IPS_QUEUE_LOCK(queue)        spin_lock_irqsave(&(queue)->lock, (queue)->cpu_flags)
+   #define IPS_QUEUE_UNLOCK(queue)      spin_unlock_irqrestore(&(queue)->lock, (queue)->cpu_flags)
+   #define IPS_HA_LOCK(cpu_flags)       spin_lock_irqsave(&ha->ips_lock, cpu_flags)
+   #define IPS_HA_UNLOCK(cpu_flags)     spin_unlock_irqrestore(&ha->ips_lock, cpu_flags)
 
-/*
- * Adapter register bit equates
- */
-   #define GHI                          0x04    /* HISR General Host Interrupt */
-   #define SQO                          0x02    /* HISR Status Q Overflow      */
-   #define SCE                          0x01    /* HISR Status Channel Enqueue */
-   #define SEMAPHORE                    0x08    /* CCCR Semaphore Bit          */
-   #define ILE                          0x10    /* CCCR ILE Bit                */
-   #define START_COMMAND                0x101A  /* CCCR Start Command Channel  */
-   #define START_STOP_BIT               0x0002  /* CCCR Start/Stop Bit         */
-   #define RST                          0x80    /* SCPR Reset Bit              */
-   #define EBM                          0x02    /* SCPR Enable Bus Master      */
-   #define EI                           0x80    /* HISR Enable Interrupts      */
-   #define OP                           0x01    /* OP bit in CBSP              */
+   /*
+    * Adapter address map equates
+    */
+   #define IPS_REG_HISR                 0x08    /* Host Interrupt Status Reg   */
+   #define IPS_REG_CCSAR                0x10    /* Cmd Channel System Addr Reg */
+   #define IPS_REG_CCCR                 0x14    /* Cmd Channel Control Reg     */
+   #define IPS_REG_SQHR                 0x20    /* Status Q Head Reg           */
+   #define IPS_REG_SQTR                 0x24    /* Status Q Tail Reg           */
+   #define IPS_REG_SQER                 0x28    /* Status Q End Reg            */
+   #define IPS_REG_SQSR                 0x2C    /* Status Q Start Reg          */
+   #define IPS_REG_SCPR                 0x05    /* Subsystem control port reg  */
+   #define IPS_REG_ISPR                 0x06    /* interrupt status port reg   */
+   #define IPS_REG_CBSP                 0x07    /* CBSP register               */
+   #define IPS_REG_FLAP                 0x18    /* Flash address port          */
+   #define IPS_REG_FLDP                 0x1C    /* Flash data port             */
 
-/*
- * Adapter Command ID Equates
- */
-   #define GET_LOGICAL_DRIVE_INFO       0x19
-   #define GET_SUBSYS_PARAM             0x40
-   #define READ_NVRAM_CONFIGURATION     0x38
-   #define RW_NVRAM_PAGE                0xBC
-   #define IPS_READ                     0x02
-   #define IPS_WRITE                    0x03
-   #define ENQUIRY                      0x05
-   #define FLUSH_CACHE                  0x0A
-   #define NORM_STATE                   0x00
-   #define READ_SCATTER_GATHER          0x82
-   #define WRITE_SCATTER_GATHER         0x83
-   #define DIRECT_CDB                   0x04
-   #define DIRECT_CDB_SCATTER_GATHER    0x84
-   #define CONFIG_SYNC                  0x58
-   #define POCL                         0x30
-   #define GET_ERASE_ERROR_TABLE        0x17
-   #define RESET_CHANNEL                0x1A
-   #define CSL                          0xFF
-   #define ADAPT_RESET                  0xFF
+   /*
+    * Adapter register bit equates
+    */
+   #define IPS_BIT_GHI                  0x04    /* HISR General Host Interrupt */
+   #define IPS_BIT_SQO                  0x02    /* HISR Status Q Overflow      */
+   #define IPS_BIT_SCE                  0x01    /* HISR Status Channel Enqueue */
+   #define IPS_BIT_SEM                  0x08    /* CCCR Semaphore Bit          */
+   #define IPS_BIT_ILE                  0x10    /* CCCR ILE Bit                */
+   #define IPS_BIT_START_CMD            0x101A  /* CCCR Start Command Channel  */
+   #define IPS_BIT_START_STOP           0x0002  /* CCCR Start/Stop Bit         */
+   #define IPS_BIT_RST                  0x80    /* SCPR Reset Bit              */
+   #define IPS_BIT_EBM                  0x02    /* SCPR Enable Bus Master      */
+   #define IPS_BIT_EI                   0x80    /* HISR Enable Interrupts      */
+   #define IPS_BIT_OP                   0x01    /* OP bit in CBSP              */
 
-/*
- * Adapter Equates
- */
+   /*
+    * Adapter Command ID Equates
+    */
+   #define IPS_CMD_GET_LD_INFO          0x19
+   #define IPS_CMD_GET_SUBSYS           0x40
+   #define IPS_CMD_READ_CONF            0x38
+   #define IPS_CMD_RW_NVRAM_PAGE        0xBC
+   #define IPS_CMD_READ                 0x02
+   #define IPS_CMD_WRITE                0x03
+   #define IPS_CMD_FFDC                 0xD7
+   #define IPS_CMD_ENQUIRY              0x05
+   #define IPS_CMD_FLUSH                0x0A
+   #define IPS_CMD_READ_SG              0x82
+   #define IPS_CMD_WRITE_SG             0x83
+   #define IPS_CMD_DCDB                 0x04
+   #define IPS_CMD_DCDB_SG              0x84
+   #define IPS_CMD_CONFIG_SYNC          0x58
+   #define IPS_CMD_ERROR_TABLE          0x17
+
+   /*
+    * Adapter Equates
+    */
+   #define IPS_CSL                      0xFF
+   #define IPS_POCL                     0x30
+   #define IPS_NORM_STATE               0x00
    #define IPS_MAX_ADAPTERS             16
    #define IPS_MAX_IOCTL                1
    #define IPS_MAX_IOCTL_QUEUE          8
    #define IPS_MAX_QUEUE                128
    #define IPS_BLKSIZE                  512
-   #define MAX_SG_ELEMENTS              17
-   #define MAX_LOGICAL_DRIVES           8
-   #define MAX_CHANNELS                 3
-   #define MAX_TARGETS                  15
-   #define MAX_CHUNKS                   16
-   #define MAX_CMDS                     128
+   #define IPS_MAX_SG                   17
+   #define IPS_MAX_LD                   8
+   #define IPS_MAX_CHANNELS             4
+   #define IPS_MAX_TARGETS              15
+   #define IPS_MAX_CHUNKS               16
+   #define IPS_MAX_CMDS                 128
    #define IPS_MAX_XFER                 0x10000
-   #define COMP_MODE_HEADS              128
-   #define COMP_MODE_SECTORS            32
-   #define NORM_MODE_HEADS              254
-   #define NORM_MODE_SECTORS            63
-   #define NVRAM_PAGE5_SIGNATURE        0xFFDDBB99
-   #define MAX_POST_BYTES               0x02
-   #define MAX_CONFIG_BYTES             0x02
-   #define GOOD_POST_BASIC_STATUS       0x80
-   #define SEMAPHORE_TIMEOUT            2000
-   #define IPS_INTR_OFF                 0
-   #define IPS_INTR_ON                  1
+   #define IPS_NVRAM_P5_SIG             0xFFDDBB99
+   #define IPS_MAX_POST_BYTES           0x02
+   #define IPS_MAX_CONFIG_BYTES         0x02
+   #define IPS_GOOD_POST_STATUS         0x80
+   #define IPS_SEM_TIMEOUT              2000
+   #define IPS_IOCTL_COMMAND            0x0D
+   #define IPS_IOCTL_NEW_COMMAND        0x81
+   #define IPS_INTR_ON                  0
+   #define IPS_INTR_IORL                1
+   #define IPS_INTR_HAL                 2
    #define IPS_ADAPTER_ID               0xF
    #define IPS_VENDORID                 0x1014
    #define IPS_DEVICEID                 0x002E
-   #define TIMEOUT_10                   0x10
-   #define TIMEOUT_60                   0x20
-   #define TIMEOUT_20M                  0x30
-   #define STATUS_SIZE                  4
-   #define STATUS_Q_SIZE                (MAX_CMDS+1) * STATUS_SIZE
-   #define ONE_MSEC                     1
-   #define ONE_SEC                      1000
+   #define IPS_IOCTL_SIZE               8192
+   #define IPS_STATUS_SIZE              4
+   #define IPS_STATUS_Q_SIZE            (IPS_MAX_CMDS+1) * IPS_STATUS_SIZE
+   #define IPS_ONE_MSEC                 1
+   #define IPS_ONE_SEC                  1000
+   
+   /*
+    * Geometry Settings
+    */
+   #define IPS_COMP_HEADS               128
+   #define IPS_COMP_SECTORS             32
+   #define IPS_NORM_HEADS               254
+   #define IPS_NORM_SECTORS             63
 
-/*
- * Adapter Basic Status Codes
- */
-   #define BASIC_STATUS_MASK            0xFF
-   #define GSC_STATUS_MASK              0x0F
-   #define SSUCCESS                     0x00
-   #define RECOVERED_ERROR              0x01
-   #define IPS_CHECK_CONDITION          0x02
-   #define INVAL_OPCO                   0x03
-   #define INVAL_CMD_BLK                0x04
-   #define INVAL_PARM_BLK               0x05
+   /*
+    * Adapter Basic Status Codes
+    */
+   #define IPS_BASIC_STATUS_MASK        0xFF
+   #define IPS_GSC_STATUS_MASK          0x0F
+   #define IPS_CMD_SUCCESS              0x00
+   #define IPS_CMD_RECOVERED_ERROR      0x01
+   #define IPS_INVAL_OPCO               0x03
+   #define IPS_INVAL_CMD_BLK            0x04
+   #define IPS_INVAL_PARM_BLK           0x05
    #define IPS_BUSY                     0x08
-   #define ADAPT_HARDWARE_ERROR         0x09
-   #define ADAPT_FIRMWARE_ERROR         0x0A
-   #define CMD_CMPLT_WERROR             0x0C
-   #define LOG_DRV_ERROR                0x0D
-   #define CMD_TIMEOUT                  0x0E
-   #define PHYS_DRV_ERROR               0x0F
+   #define IPS_CMD_CMPLT_WERROR         0x0C
+   #define IPS_LD_ERROR                 0x0D
+   #define IPS_CMD_TIMEOUT              0x0E
+   #define IPS_PHYS_DRV_ERROR           0x0F
 
-/*
- * Adapter Extended Status Equates
- */
-   #define SELECTION_TIMEOUT            0xF0
-   #define DATA_OVER_UNDER_RUN          0xF2
-   #define EXT_HOST_RESET               0xF7
-   #define EXT_DEVICE_RESET             0xF8
-   #define EXT_RECOVERY                 0xFC
-   #define EXT_CHECK_CONDITION          0xFF
+   /*
+    * Adapter Extended Status Equates
+    */
+   #define IPS_ERR_SEL_TO               0xF0
+   #define IPS_ERR_OU_RUN               0xF2
+   #define IPS_ERR_HOST_RESET           0xF7
+   #define IPS_ERR_DEV_RESET            0xF8
+   #define IPS_ERR_RECOVERY             0xFC
+   #define IPS_ERR_CKCOND               0xFF
 
-/*
- * Operating System Defines
- */
-   #define OS_WINDOWS_NT                0x01
-   #define OS_NETWARE                   0x02
-   #define OS_OPENSERVER                0x03
-   #define OS_UNIXWARE                  0x04
-   #define OS_SOLARIS                   0x05
-   #define OS_OS2                       0x06
-   #define OS_LINUX                     0x07
-   #define OS_FREEBSD                   0x08
+   /*
+    * Operating System Defines
+    */
+   #define IPS_OS_WINDOWS_NT            0x01
+   #define IPS_OS_NETWARE               0x02
+   #define IPS_OS_OPENSERVER            0x03
+   #define IPS_OS_UNIXWARE              0x04
+   #define IPS_OS_SOLARIS               0x05
+   #define IPS_OS_OS2                   0x06
+   #define IPS_OS_LINUX                 0x07
+   #define IPS_OS_FREEBSD               0x08
 
-/*
- * Adapter Command/Status Packet Definitions
- */
+   /*
+    * Adapter Revision ID's
+    */
+   #define IPS_REVID_SERVERAID          0x02
+   #define IPS_REVID_NAVAJO             0x03
+   #define IPS_REVID_SERVERAID2         0x04
+   #define IPS_REVID_CLARINETP1         0x05
+   #define IPS_REVID_CLARINETP2         0x07
+   #define IPS_REVID_CLARINETP3         0x0D
+   #define IPS_REVID_TROMBONE32         0x0F
+   #define IPS_REVID_TROMBONE64         0x10
+
+   /*
+    * Adapter Command/Status Packet Definitions
+    */
    #define IPS_SUCCESS                  0x01 /* Successfully completed       */
    #define IPS_SUCCESS_IMM              0x02 /* Success - Immediately        */
    #define IPS_FAILURE                  0x04 /* Completed with Error         */
 
-/*
- * Logical Drive Equates
- */
-   #define OFF_LINE                     0x02
-   #define OKAY                         0x03
-   #define FREE                         0x00
-   #define SYS                          0x06
-   #define CRS                          0x24
+   /*
+    * Logical Drive Equates
+    */
+   #define IPS_LD_OFFLINE               0x02
+   #define IPS_LD_OKAY                  0x03
+   #define IPS_LD_FREE                  0x00
+   #define IPS_LD_SYS                   0x06
+   #define IPS_LD_CRS                   0x24
 
-/*
- * DCDB Table Equates
- */
-   #define NO_DISCONNECT                0x00
-   #define DISCONNECT_ALLOWED           0x80
-   #define NO_AUTO_REQUEST_SENSE        0x40
-   #define IPS_DATA_NONE		0x00
-   #define IPS_DATA_UNK			0x00
+   /*
+    * DCDB Table Equates
+    */
+   #define IPS_NO_DISCONNECT            0x00
+   #define IPS_DISCONNECT_ALLOWED       0x80
+   #define IPS_NO_AUTO_REQSEN           0x40
+   #define IPS_DATA_NONE                0x00
+   #define IPS_DATA_UNK                 0x00
    #define IPS_DATA_IN                  0x01
    #define IPS_DATA_OUT                 0x02
-   #define TRANSFER_64K                 0x08
-   #define NOTIMEOUT                    0x00
-   #define TIMEOUT10                    0x10
-   #define TIMEOUT60                    0x20
-   #define TIMEOUT20M                   0x30
+   #define IPS_TRANSFER64K              0x08
+   #define IPS_NOTIMEOUT                0x00
+   #define IPS_TIMEOUT10                0x10
+   #define IPS_TIMEOUT60                0x20
+   #define IPS_TIMEOUT20M               0x30
 
-/*
- * Host adapter Flags (bit numbers)
- */
+   /*
+    * Host adapter Flags (bit numbers)
+    */
    #define IPS_IN_INTR                  0
    #define IPS_IN_ABORT                 1
    #define IPS_IN_RESET                 2
 
-/*
- * SCB Flags
- */
-   #define SCB_ACTIVE                   0x00001
-   #define SCB_WAITING                  0x00002
+   /*
+    * SCB Flags
+    */
+   #define IPS_SCB_ACTIVE               0x00001
+   #define IPS_SCB_WAITING              0x00002
 
-/*
- * Passthru stuff
- */
-   #define COPPUSRCMD                  (('C'<<8) | 65)
+   /*
+    * Passthru stuff
+    */
+   #define IPS_COPPUSRCMD              (('C'<<8) | 65)
+   #define IPS_COPPIOCCMD              (('C'<<8) | 66)
    #define IPS_NUMCTRLS                (('C'<<8) | 68)
    #define IPS_CTRLINFO                (('C'<<8) | 69)
+   #define IPS_FLASHBIOS               (('C'<<8) | 70)
 
-/*
- * Scsi_Host Template
- */
+   /* time oriented stuff */
+   #define IPS_IS_LEAP_YEAR(y)           (((y % 4 == 0) && ((y % 100 != 0) || (y % 400 == 0))) ? 1 : 0)
+   #define IPS_NUM_LEAP_YEARS_THROUGH(y) ((y) / 4 - (y) / 100 + (y) / 400)
+
+   #define IPS_SECS_MIN                 60
+   #define IPS_SECS_HOUR                3600
+   #define IPS_SECS_8HOURS              28800
+   #define IPS_SECS_DAY                 86400
+   #define IPS_DAYS_NORMAL_YEAR         365
+   #define IPS_DAYS_LEAP_YEAR           366
+   #define IPS_EPOCH_YEAR               1970
+
+   /*
+    * Scsi_Host Template
+    */
  #define IPS {                            \
     next : NULL,                          \
     module : NULL,                        \
@@ -291,7 +357,7 @@
     bios_param : ips_biosparam,           \
     can_queue : 0,                        \
     this_id: -1,                          \
-    sg_tablesize : MAX_SG_ELEMENTS,       \
+    sg_tablesize : IPS_MAX_SG,            \
     cmd_per_lun: 16,                      \
     present : 0,                          \
     unchecked_isa_dma : 0,                \
@@ -313,7 +379,7 @@ typedef struct {
    u16       reserved;
    u32       ccsar;
    u32       cccr;
-} BASIC_IO_CMD, *PBASIC_IO_CMD;
+} IPS_IO_CMD, *PIPS_IO_CMD;
 
 typedef struct {
    u8        op_code;
@@ -324,7 +390,7 @@ typedef struct {
    u32       reserved3;
    u32       ccsar;
    u32       cccr;
-} LOGICAL_INFO, *PLOGICAL_INFO;
+} IPS_LD_CMD, *PIPS_LD_CMD;
 
 typedef struct {
    u8        op_code;
@@ -334,7 +400,7 @@ typedef struct {
    u32       reserved3;
    u32       buffer_addr;
    u32       reserved4;
-} IOCTL_INFO, *PIOCTL_INFO;
+} IPS_IOCTL_CMD, *PIPS_IOCTL_CMD;
 
 typedef struct {
    u8        op_code;
@@ -345,7 +411,7 @@ typedef struct {
    u32       reserved3;
    u32       ccsar;
    u32       cccr;
-} DCDB_CMD, *PDCDB_CMD;
+} IPS_DCDB_CMD, *PIPS_DCDB_CMD;
 
 typedef struct {
    u8        op_code;
@@ -357,7 +423,7 @@ typedef struct {
    u32       reserved3;
    u32       ccsar;
    u32       cccr;
-} CONFIG_SYNC_CMD, *PCONFIG_SYNC_CMD;
+} IPS_CS_CMD, *PIPS_CS_CMD;
 
 typedef struct {
    u8        op_code;
@@ -369,7 +435,7 @@ typedef struct {
    u32       reserved3;
    u32       ccsar;
    u32       cccr;
-} UNLOCK_STRIPE_CMD, *PUNLOCK_STRIPE_CMD;
+} IPS_US_CMD, *PIPS_US_CMD;
 
 typedef struct {
    u8        op_code;
@@ -381,7 +447,7 @@ typedef struct {
    u32       reserved4;
    u32       ccsar;
    u32       cccr;
-} FLUSH_CACHE_CMD, *PFLUSH_CACHE_CMD;
+} IPS_FC_CMD, *PIPS_FC_CMD;
 
 typedef struct {
    u8        op_code;
@@ -393,7 +459,7 @@ typedef struct {
    u32       reserved3;
    u32       ccsar;
    u32       cccr;
-} STATUS_CMD, *PSTATUS_CMD;
+} IPS_STATUS_CMD, *PIPS_STATUS_CMD;
 
 typedef struct {
    u8        op_code;
@@ -405,19 +471,36 @@ typedef struct {
    u32       reserved2;
    u32       ccsar;
    u32       cccr;
-} NVRAM_CMD, *PNVRAM_CMD;
+} IPS_NVRAM_CMD, *PIPS_NVRAM_CMD;
+
+typedef struct {
+   u8     op_code;
+   u8     command_id;
+   u8     reset_count;
+   u8     reset_type;
+   u8     second;
+   u8     minute;
+   u8     hour;
+   u8     day;
+   u8     reserved1[4];
+   u8     month;
+   u8     yearH;
+   u8     yearL;
+   u8     reserved2;
+} IPS_FFDC_CMD, *PIPS_FFDC_CMD;
 
 typedef union {
-   BASIC_IO_CMD      basic_io;
-   LOGICAL_INFO      logical_info;
-   IOCTL_INFO        ioctl_info;
-   DCDB_CMD          dcdb;
-   CONFIG_SYNC_CMD   config_sync;
-   UNLOCK_STRIPE_CMD unlock_stripe;
-   FLUSH_CACHE_CMD   flush_cache;
-   STATUS_CMD        status;
-   NVRAM_CMD         nvram;
-} HOST_COMMAND, *PHOST_COMMAND;
+   IPS_IO_CMD        basic_io;
+   IPS_LD_CMD        logical_info;
+   IPS_IOCTL_CMD     ioctl_info;
+   IPS_DCDB_CMD      dcdb;
+   IPS_CS_CMD        config_sync;
+   IPS_US_CMD        unlock_stripe;
+   IPS_FC_CMD        flush_cache;
+   IPS_STATUS_CMD    status;
+   IPS_NVRAM_CMD     nvram;
+   IPS_FFDC_CMD      ffdc;
+} IPS_HOST_COMMAND, *PIPS_HOST_COMMAND;
 
 typedef struct {
    u8         logical_id;
@@ -425,25 +508,13 @@ typedef struct {
    u8         raid_level;
    u8         state;
    u32        sector_count;
-} DRIVE_INFO, *PDRIVE_INFO;
+} IPS_DRIVE_INFO, *PIPS_DRIVE_INFO;
 
 typedef struct {
-   u8         no_of_log_drive;
-   u8         reserved[3];
-   DRIVE_INFO drive_info[MAX_LOGICAL_DRIVES];
-} LOGICAL_DRIVE_INFO, *PLOGICAL_DRIVE_INFO;
-
-typedef struct {
-   u8        ha_num;
-   u8        bus_num;
-   u8        id;
-   u8        device_type;
-   u32       data_len;
-   u32       data_ptr;
-   u8        scsi_cdb[12];
-   u32       data_counter;
-   u32       block_size;
-} NON_DISK_DEVICE_INFO, *PNON_DISK_DEVICE_INFO;
+   u8             no_of_log_drive;
+   u8             reserved[3];
+   IPS_DRIVE_INFO drive_info[IPS_MAX_LD];
+} IPS_LD_INFO, *PIPS_LD_INFO;
 
 typedef struct {
    u8         device_address;
@@ -458,24 +529,24 @@ typedef struct {
    u8         sense_info[64];
    u8         scsi_status;
    u8         reserved2[3];
-} DCDB_TABLE, *PDCDB_TABLE;
+} IPS_DCDB_TABLE, *PIPS_DCDB_TABLE;
 
 typedef struct {
    volatile u8      reserved;
    volatile u8      command_id;
    volatile u8      basic_status;
    volatile u8      extended_status;
-} STATUS, *PSTATUS;
+} IPS_STATUS, *PIPS_STATUS;
 
 typedef struct {
-   STATUS               status[MAX_CMDS + 1];
-   volatile PSTATUS     p_status_start;
-   volatile PSTATUS     p_status_end;
-   volatile PSTATUS     p_status_tail;
+   IPS_STATUS           status[IPS_MAX_CMDS + 1];
+   volatile PIPS_STATUS p_status_start;
+   volatile PIPS_STATUS p_status_end;
+   volatile PIPS_STATUS p_status_tail;
    volatile u32         hw_status_start;
    volatile u32         hw_status_tail;
-   LOGICAL_DRIVE_INFO   logical_drive_info;
-} ADAPTER_AREA, *PADAPTER_AREA;
+   IPS_LD_INFO          logical_drive_info;
+} IPS_ADAPTER, *PIPS_ADAPTER;
 
 typedef struct {
    u8        ucLogDriveCount;
@@ -488,7 +559,7 @@ typedef struct {
    u8        ucNVramDevChgCnt;
    u8        CodeBlkVersion[8];
    u8        BootBlkVersion[8];
-   u32       ulDriveSize[MAX_LOGICAL_DRIVES];
+   u32       ulDriveSize[IPS_MAX_LD];
    u8        ucConcurrentCmdCount;
    u8        ucMaxPhysicalDevices;
    u16       usFlashRepgmCount;
@@ -499,8 +570,8 @@ typedef struct {
    u16       usConfigUpdateCount;
    u8        ucBlkFlag;
    u8        reserved;
-   u16       usAddrDeadDisk[MAX_CHANNELS * MAX_TARGETS];
-} ENQCMD, *PENQCMD;
+   u16       usAddrDeadDisk[IPS_MAX_CHANNELS * IPS_MAX_TARGETS];
+} IPS_ENQ, *PIPS_ENQ;
 
 typedef struct {
    u8        ucInitiator;
@@ -509,7 +580,7 @@ typedef struct {
    u8        ucState;
    u32       ulBlockCount;
    u8        ucDeviceId[28];
-} DEVSTATE, *PDEVSTATE;
+} IPS_DEVSTATE, *PIPS_DEVSTATE;
 
 typedef struct {
    u8        ucChn;
@@ -517,7 +588,7 @@ typedef struct {
    u16       ucReserved;
    u32       ulStartSect;
    u32       ulNoOfSects;
-} CHUNK, *PCHUNK;
+} IPS_CHUNK, *PIPS_CHUNK;
 
 typedef struct {
    u16       ucUserField;
@@ -528,8 +599,8 @@ typedef struct {
    u8        ucParams;
    u8        ucReserved;
    u32       ulLogDrvSize;
-   CHUNK     chunk[MAX_CHUNKS];
-} LOGICAL_DRIVE, *PLOGICAL_DRIVE;
+   IPS_CHUNK chunk[IPS_MAX_CHUNKS];
+} IPS_LD, *PIPS_LD;
 
 typedef struct {
    u8        board_disc[8];
@@ -539,7 +610,7 @@ typedef struct {
    u8        ucCompression;
    u8        ucNvramType;
    u32       ulNvramSize;
-} HARDWARE_DISC, *PHARDWARE_DISC;
+} IPS_HARDWARE, *PIPS_HARDWARE;  
 
 typedef struct {
    u8             ucLogDriveCount;
@@ -563,12 +634,12 @@ typedef struct {
    u16            user_field;
    u8             ucRebuildRate;
    u8             ucReserve;
-   HARDWARE_DISC  hardware_disc;
-   LOGICAL_DRIVE  logical_drive[MAX_LOGICAL_DRIVES];
-   DEVSTATE       dev[MAX_CHANNELS][MAX_TARGETS+1];
+   IPS_HARDWARE   hardware_disc;
+   IPS_LD         logical_drive[IPS_MAX_LD];
+   IPS_DEVSTATE   dev[IPS_MAX_CHANNELS][IPS_MAX_TARGETS+1];
    u8             reserved[512];
 
-} CONFCMD, *PCONFCMD;
+} IPS_CONF, *PIPS_CONF;
 
 typedef struct {
    u32        signature;
@@ -583,11 +654,11 @@ typedef struct {
    u8         driver_high[4];
    u8         driver_low[4];
    u8         reserved4[100];
-} NVRAM_PAGE5, *PNVRAM_PAGE5;
+} IPS_NVRAM_P5, *PIPS_NVRAM_P5;
 
-typedef struct _SUBSYS_PARAM {
+typedef struct _IPS_SUBSYS {
    u32        param[128];
-} SUBSYS_PARAM, *PSUBSYS_PARAM;
+} IPS_SUBSYS, *PIPS_SUBSYS;
 
 /*
  * Inquiry Data Format
@@ -614,7 +685,7 @@ typedef struct {
    u8        ProductRevisionLevel[4];
    u8        VendorSpecific[20];
    u8        Reserved3[40];
-} IPS_INQUIRYDATA, *IPS_PINQUIRYDATA;
+} IPS_INQ_DATA, *PIPS_INQ_DATA;
 
 /*
  * Read Capacity Data Format
@@ -622,7 +693,7 @@ typedef struct {
 typedef struct {
    u32       lba;
    u32       len;
-} CAPACITY_T;
+} IPS_CAPACITY;
 
 /*
  * Sense Data Format
@@ -646,7 +717,7 @@ typedef struct {
    u32       pg_rmb:1;      /* Removeable                   */
    u32       pg_hsec:1;     /* Hard sector formatting       */
    u32       pg_ssec:1;     /* Soft sector formatting       */
-} DADF_T;
+} IPS_DADF;
 
 typedef struct {
    u8        pg_pc:6;        /* Page Code                     */
@@ -662,9 +733,9 @@ typedef struct {
    u32       pg_landu:16;    /* Landing zone cylinder (upper) */
    u32       pg_landl:8;     /* Landing zone cylinder (lower) */
    u32       pg_res2:24;     /* Reserved                      */
-} RDDG_T;
+} IPS_RDDG;
 
-struct blk_desc {
+struct ips_blk_desc {
    u8       bd_dencode;
    u8       bd_nblks1;
    u8       bd_nblks2;
@@ -681,15 +752,15 @@ typedef struct {
    u8       plh_res:7; /* Reserved                */
    u8       plh_wp:1;  /* Write protect           */
    u8       plh_bdl;   /* Block descriptor length */
-} SENSE_PLH_T;
+} ips_sense_plh_t;
 
 typedef struct {
-   SENSE_PLH_T     plh;
-   struct blk_desc blk_desc;
+   ips_sense_plh_t     plh;
+   struct ips_blk_desc blk_desc;
 
    union {
-      DADF_T        pg3;
-      RDDG_T        pg4;
+      IPS_DADF      pg3;
+      IPS_RDDG      pg4;
    } pdata;
 } ips_mdata_t;
 
@@ -699,14 +770,14 @@ typedef struct {
 typedef struct ips_sglist {
    u32       address;
    u32       length;
-} SG_LIST, *PSG_LIST;
+} IPS_SG_LIST, *PIPS_SG_LIST;
 
-typedef struct _INFOSTR {
+typedef struct _IPS_INFOSTR {
    char *buffer;
    int   length;
    int   offset;
    int   pos;
-} INFOSTR;
+} IPS_INFOSTR;
 
 /*
  * Status Info
@@ -722,7 +793,9 @@ typedef struct ips_stat {
 typedef struct ips_scb_queue {
    struct ips_scb *head;
    struct ips_scb *tail;
-   unsigned int    count;
+   u32             count;
+   u32             cpu_flags;
+   spinlock_t      lock;
 } ips_scb_queue_t;
 
 /*
@@ -731,12 +804,28 @@ typedef struct ips_scb_queue {
 typedef struct ips_wait_queue {
    Scsi_Cmnd      *head;
    Scsi_Cmnd      *tail;
-   unsigned int    count;
+   u32             count;
+   u32             cpu_flags;
+   spinlock_t      lock;
 } ips_wait_queue_t;
 
+typedef struct ips_copp_wait_item {
+   Scsi_Cmnd                 *scsi_cmd;
+   struct semaphore          *sem;
+   struct ips_copp_wait_item *next;
+} ips_copp_wait_item_t;
+
+typedef struct ips_copp_queue {
+   struct ips_copp_wait_item *head;
+   struct ips_copp_wait_item *tail;
+   u32                        count;
+   u32                        cpu_flags;
+   spinlock_t                 lock;
+} ips_copp_queue_t;
+
 typedef struct ips_ha {
-   u8                 ha_id[MAX_CHANNELS+1];
-   u32                dcdb_active[MAX_CHANNELS];
+   u8                 ha_id[IPS_MAX_CHANNELS+1];
+   u32                dcdb_active[IPS_MAX_CHANNELS];
    u32                io_addr;            /* Base I/O address           */
    u8                 irq;                /* IRQ for adapter            */
    u8                 ntargets;           /* Number of targets          */
@@ -751,35 +840,39 @@ typedef struct ips_ha {
    struct ips_scb    *scbs;               /* Array of all CCBS          */
    struct ips_scb    *scb_freelist;       /* SCB free list              */
    ips_wait_queue_t   scb_waitlist;       /* Pending SCB list           */
-   ips_wait_queue_t   copp_waitlist;      /* Pending PT list            */
+   ips_copp_queue_t   copp_waitlist;      /* Pending PT list            */
    ips_scb_queue_t    scb_activelist;     /* Active SCB list            */
-   BASIC_IO_CMD      *dummy;              /* dummy command              */
-   ADAPTER_AREA      *adapt;              /* Adapter status area        */
-   ENQCMD            *enq;                /* Adapter Enquiry data       */
-   CONFCMD           *conf;               /* Adapter config data        */
-   NVRAM_PAGE5       *nvram;              /* NVRAM page 5 data          */
-   SUBSYS_PARAM      *subsys;             /* Subsystem parameters       */
+   IPS_IO_CMD        *dummy;              /* dummy command              */
+   IPS_ADAPTER       *adapt;              /* Adapter status area        */
+   IPS_ENQ           *enq;                /* Adapter Enquiry data       */
+   IPS_CONF          *conf;               /* Adapter config data        */
+   IPS_NVRAM_P5      *nvram;              /* NVRAM page 5 data          */
+   IPS_SUBSYS        *subsys;             /* Subsystem parameters       */
+   char              *ioctl_data;         /* IOCTL data area            */
+   u32                ioctl_datasize;     /* IOCTL data size            */
    u32                cmd_in_progress;    /* Current command in progress*/
    u32                flags;              /* HA flags                   */
    u8                 waitflag;           /* are we waiting for cmd     */
    u8                 active;
-   u32                reserved:16;        /* reserved space             */
-   wait_queue_head_t  copp_queue;         /* passthru sync queue        */
+   u16                reset_count;        /* number of resets           */
+   u32                last_ffdc;          /* last time we sent ffdc info*/
+   u8                 revision_id;        /* Revision level             */
 
    #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,0)
    spinlock_t         scb_lock;
    spinlock_t         copp_lock;
+   spinlock_t         ips_lock;
    #endif
 } ips_ha_t;
 
-typedef void (*scb_callback) (ips_ha_t *, struct ips_scb *);
+typedef void (*ips_scb_callback) (ips_ha_t *, struct ips_scb *);
 
 /*
  * SCB Format
  */
 typedef struct ips_scb {
-   HOST_COMMAND      cmd;
-   DCDB_TABLE        dcdb;
+   IPS_HOST_COMMAND  cmd;
+   IPS_DCDB_TABLE    dcdb;
    u8                target_id;
    u8                bus;
    u8                lun;
@@ -794,31 +887,53 @@ typedef struct ips_scb {
    u32               sg_len;
    u32               flags;
    u32               op_code;
-   SG_LIST          *sg_list;
+   IPS_SG_LIST      *sg_list;
    Scsi_Cmnd        *scsi_cmd;
    struct ips_scb   *q_next;
-   scb_callback      callback;
+   ips_scb_callback  callback;
+   struct semaphore *sem;
 } ips_scb_t;
+
+typedef struct ips_scb_pt {
+   IPS_HOST_COMMAND  cmd;
+   IPS_DCDB_TABLE    dcdb;
+   u8                target_id;
+   u8                bus;
+   u8                lun;
+   u8                cdb[12];
+   u32               scb_busaddr;
+   u32               data_busaddr;
+   u32               timeout;
+   u8                basic_status;
+   u8                extended_status;
+   u16               breakup;
+   u32               data_len;
+   u32               sg_len;
+   u32               flags;
+   u32               op_code;
+   IPS_SG_LIST      *sg_list;
+   Scsi_Cmnd        *scsi_cmd;
+   struct ips_scb   *q_next;
+   ips_scb_callback  callback;
+} ips_scb_pt_t;
 
 /*
  * Passthru Command Format
  */
 typedef struct {
-   u8         CoppID[4];
-   u32        CoppCmd;
-   u32        PtBuffer;
-   u8        *CmdBuffer;
-   u32        CmdBSize;
-   ips_scb_t  CoppCP;
-   u32        TimeOut;
-   u8         BasicStatus;
-   u8         ExtendedStatus;
-   u16        reserved;
+   u8            CoppID[4];
+   u32           CoppCmd;
+   u32           PtBuffer;
+   u8           *CmdBuffer;
+   u32           CmdBSize;
+   ips_scb_pt_t  CoppCP;
+   u32           TimeOut;
+   u8            BasicStatus;
+   u8            ExtendedStatus;
+   u16           reserved;
 } ips_passthru_t;
 
 #endif
-
-
 
 /*
  * Overrides for Emacs so that we almost follow Linus's tabbing style.

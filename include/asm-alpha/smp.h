@@ -33,7 +33,6 @@ struct cpuinfo_alpha {
 	unsigned long irq_attempt[NR_IRQS];
 	unsigned long prof_multiplier;
 	unsigned long prof_counter;
-	int irq_count, bh_count;
 	unsigned char mcheck_expected;
 	unsigned char mcheck_taken;
 	unsigned char mcheck_extra;

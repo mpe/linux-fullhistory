@@ -29,7 +29,6 @@
 
 #include <asm/baget/baget.h>
 
-irq_cpustat_t irq_stat [NR_CPUS];
 unsigned long spurious_count = 0;
 
 /*

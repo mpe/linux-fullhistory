@@ -141,6 +141,4 @@ EXPORT_SYMBOL(screen_info);
 
 EXPORT_SYMBOL(get_wchan);
 
-EXPORT_SYMBOL(irq_stat);
-
 EXPORT_SYMBOL(rtc_lock);

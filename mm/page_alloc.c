@@ -29,7 +29,7 @@ int nr_lru_pages;
 pg_data_t *pgdat_list;
 
 static char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
-static int zone_balance_ratio[MAX_NR_ZONES] = { 128, 128, 128, };
+static int zone_balance_ratio[MAX_NR_ZONES] = { 32, 128, 128, };
 static int zone_balance_min[MAX_NR_ZONES] = { 10 , 10, 10, };
 static int zone_balance_max[MAX_NR_ZONES] = { 255 , 255, 255, };
 
@@ -430,7 +430,16 @@ void show_free_areas_core(int nid)
 		zone_t *zone = NODE_DATA(nid)->node_zones + type;
  		unsigned long nr, total, flags;
 
-		printk("  %s: ", zone->name);
+		printk("  %c%d%d %s: ",
+		       (zone->free_pages > zone->pages_low
+			? (zone->free_pages > zone->pages_high
+			   ? ' '
+			   : 'H')
+			: (zone->free_pages > zone->pages_min
+			   ? 'M'
+			   : 'L')),
+		       zone->zone_wake_kswapd, zone->low_on_memory,
+		       zone->name);
 
 		total = 0;
 		if (zone->size) {

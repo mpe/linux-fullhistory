@@ -47,8 +47,6 @@
  * interrupt controllers, without having to do assembly magic.
  */
 
-irq_cpustat_t irq_stat [NR_CPUS];
-
 /*
  * This contains the irq mask for both 8259A irq controllers, it's an
  * int so we can deal with the third PIC in some systems like the RM300.
@@ -63,8 +61,6 @@ static unsigned int cached_irq_mask = 0xffff;
 #define cached_21       (__byte(0,cached_irq_mask))
 #define cached_A1       (__byte(1,cached_irq_mask))
 
-unsigned int local_bh_count[NR_CPUS];
-unsigned int local_irq_count[NR_CPUS];
 unsigned long spurious_count = 0;
 
 /*
@@ -228,7 +224,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	}
 	irq_exit(cpu);
 
-	if (softirq_state[cpu].active&softirq_state[cpu].mask)
+	if (softirq_active(cpu)&softirq_mask(cpu))
 		do_softirq();
 
 	/* unmasking and bottom half handling is done magically for us. */

@@ -1,4 +1,4 @@
-/* $Id: ioctl.c,v 1.14 1999/09/22 09:28:50 davem Exp $
+/* $Id: ioctl.c,v 1.15 2000/07/28 12:15:02 davem Exp $
  * ioctl.c: Solaris ioctl emulation.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -30,9 +30,6 @@
 
 #include "conv.h"
 #include "socksys.h"
-
-extern char *getname32(u32 filename);
-#define putname32 putname
 
 extern asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, 
 	unsigned long arg);
@@ -486,7 +483,7 @@ static inline int solaris_S(struct file *filp, unsigned int fd, unsigned int cmd
 		return -ENOSYS;
 	case 2: /* I_PUSH */
         {
-		p = getname32 (arg);
+		p = getname ((char *)A(arg));
 		if (IS_ERR (p))
 			return PTR_ERR(p);
                 ret = -EINVAL;
@@ -503,7 +500,7 @@ static inline int solaris_S(struct file *filp, unsigned int fd, unsigned int cmd
                                 break;
                         }
                 }
-		putname32 (p);
+		putname (p);
 		return ret;
         }
 	case 3: /* I_POP */
@@ -546,7 +543,7 @@ static inline int solaris_S(struct file *filp, unsigned int fd, unsigned int cmd
 	case 11: /* I_FIND */
         {
                 int i;
-		p = getname32 (arg);
+		p = getname ((char *)A(arg));
 		if (IS_ERR (p))
 			return PTR_ERR(p);
                 ret = 0;
@@ -557,7 +554,7 @@ static inline int solaris_S(struct file *filp, unsigned int fd, unsigned int cmd
                                 break;
                         } 
                 }
-		putname32 (p);
+		putname (p);
 		return ret;
         }
 	case 19: /* I_SWROPT */

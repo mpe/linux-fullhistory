@@ -46,8 +46,6 @@
  */
 #define MAX_IRQ_CNT	100000
 
-unsigned int local_bh_count[NR_CPUS];
-unsigned int local_irq_count[NR_CPUS];
 spinlock_t irq_controller_lock;
 
 int setup_arm_irq(int, struct irqaction *);
@@ -236,7 +234,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 
 	irq_exit(cpu, irq);
 
-	if (softirq_state[cpu].active & softirq_state[cpu].mask)
+	if (softirq_active(cpu) & softirq_mask(cpu))
 		do_softirq();
 	return;
 

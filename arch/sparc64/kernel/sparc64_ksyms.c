@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.86 2000/06/30 10:18:38 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.89 2000/07/28 12:15:02 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -65,7 +65,6 @@ extern int __strncmp(const char *, const char *, __kernel_size_t);
 extern __kernel_size_t __strlen(const char *);
 extern __kernel_size_t strlen(const char *);
 extern char saved_command_line[];
-extern char *getname32(u32 name);
 extern void linux_sparc_syscall(void);
 extern void rtrap(void);
 extern void show_regs(struct pt_regs *);
@@ -84,6 +83,7 @@ extern long sparc32_open(const char * filename, int flags, int mode);
 extern int register_ioctl32_conversion(unsigned int cmd, int (*handler)(unsigned int, unsigned int, unsigned long, struct file *));
 extern int unregister_ioctl32_conversion(unsigned int cmd);
 extern int io_remap_page_range(unsigned long from, unsigned long offset, unsigned long size, pgprot_t prot, int space);
+extern void flush_dcache_page(void *addr);
                 
 extern int __ashrdi3(int, int);
 
@@ -156,9 +156,6 @@ EXPORT_SYMBOL(_do_write_lock);
 EXPORT_SYMBOL(_do_write_unlock);
 #endif
 
-#else
-EXPORT_SYMBOL(__local_bh_count);
-EXPORT_SYMBOL(__local_irq_count);
 #endif
 
 /* rw semaphores */
@@ -182,6 +179,8 @@ EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 
 EXPORT_SYMBOL_PRIVATE(flushw_user);
+
+EXPORT_SYMBOL(flush_dcache_page);
 
 EXPORT_SYMBOL(mstk48t02_regs);
 EXPORT_SYMBOL(request_fast_irq);
@@ -279,7 +278,6 @@ EXPORT_SYMBOL(strtok);
 EXPORT_SYMBOL(strstr);
 
 #ifdef CONFIG_SOLARIS_EMUL_MODULE
-EXPORT_SYMBOL(getname32);
 EXPORT_SYMBOL(linux_sparc_syscall);
 EXPORT_SYMBOL(rtrap);
 EXPORT_SYMBOL(show_regs);

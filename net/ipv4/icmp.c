@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.70 2000/06/21 17:16:21 davem Exp $
+ *	Version: $Id: icmp.c,v 1.71 2000/08/02 06:01:48 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -669,7 +669,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	room -= sizeof(struct iphdr) + icmp_param.replyopts.optlen;
 	room -= sizeof(struct icmphdr);
 
-	icmp_param.data_len=(iph->ihl<<2)+(skb_in->tail-(u8*)iph);
+	icmp_param.data_len=(skb_in->tail-(u8*)iph);
 	if (icmp_param.data_len > room)
 		icmp_param.data_len = room;
 	

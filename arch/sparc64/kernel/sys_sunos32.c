@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.52 2000/07/10 20:57:35 davem Exp $
+/* $Id: sys_sunos32.c,v 1.53 2000/07/30 23:12:24 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -179,21 +179,18 @@ asmlinkage u32 sunos_sbrk(int increment)
 	int error, oldbrk;
 
 	/* This should do it hopefully... */
-	lock_kernel();
 	oldbrk = (int)current->mm->brk;
 	error = sunos_brk(((int) current->mm->brk) + increment);
 	if(!error)
 		error = oldbrk;
-	unlock_kernel();
 	return error;
 }
 
 asmlinkage u32 sunos_sstk(int increment)
 {
-	lock_kernel();
 	printk("%s: Call to sunos_sstk(increment<%d>) is unsupported\n",
 	       current->comm, increment);
-	unlock_kernel();
+
 	return (u32)-1;
 }
 
@@ -213,12 +210,13 @@ static char *vstrings[] = {
 
 asmlinkage void sunos_vadvise(u32 strategy)
 {
+	static int count = 0;
+
 	/* I wanna see who uses this... */
-	lock_kernel();
-	printk("%s: Advises us to use %s paging strategy\n",
-	       current->comm,
-	       strategy <= 3 ? vstrings[strategy] : "BOGUS");
-	unlock_kernel();
+	if (count++ < 5)
+		printk("%s: Advises us to use %s paging strategy\n",
+		       current->comm,
+		       strategy <= 3 ? vstrings[strategy] : "BOGUS");
 }
 
 /* This just wants the soft limit (ie. rlim_cur element) of the RLIMIT_NOFILE
@@ -457,7 +455,6 @@ asmlinkage int sunos_nosys(void)
 	siginfo_t info;
 	static int cnt;
 
-	lock_kernel();
 	regs = current->thread.kregs;
 	info.si_signo = SIGSYS;
 	info.si_errno = 0;
@@ -470,7 +467,6 @@ asmlinkage int sunos_nosys(void)
 		       (int) regs->u_regs[UREG_G1]);
 		show_regs(regs);
 	}
-	unlock_kernel();
 	return -ENOSYS;
 }
 
@@ -726,7 +722,7 @@ sunos_mount(char *type, char *dir, int flags, void *data)
 
 	if (!capable (CAP_SYS_ADMIN))
 		return -EPERM;
-	lock_kernel();
+
 	/* We don't handle the integer fs type */
 	if ((flags & SMNT_NEWTYPE) == 0)
 		goto out;
@@ -772,7 +768,9 @@ sunos_mount(char *type, char *dir, int flags, void *data)
 	ret = PTR_ERR(dev_fname);
 	if (IS_ERR(dev_fname))
 		goto out2;
+	lock_kernel();
 	ret = do_mount(dev_fname, dir_page, type_page, linux_flags, NULL);
+	unlock_kernel();
 	if (dev_fname)
 		putname(dev_fname);
 out2:
@@ -780,7 +778,6 @@ out2:
 out1:
 	putname(dir_page);
 out:
-	unlock_kernel();
 	return ret;
 }
 
@@ -818,12 +815,7 @@ asmlinkage int sunos_wait4(__kernel_pid_t32 pid, u32 stat_addr, int options, u32
 extern int kill_pg(int, int, int);
 asmlinkage int sunos_killpg(int pgrp, int sig)
 {
-	int ret;
-
-	lock_kernel();
-	ret = kill_pg(pgrp, sig, 0);
-	unlock_kernel();
-	return ret;
+	return kill_pg(pgrp, sig, 0);
 }
 
 asmlinkage int sunos_audit(void)
@@ -836,9 +828,8 @@ extern asmlinkage u32 sunos_gethostid(void)
 {
 	u32 ret;
 
-	lock_kernel();
 	ret = (((u32)idprom->id_machtype << 24) | ((u32)idprom->id_sernum));
-	unlock_kernel();
+
 	return ret;
 }
 

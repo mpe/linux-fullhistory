@@ -1,10 +1,13 @@
 /*
  * valkyriefb.h: Constants of all sorts for valkyriefb
  *
- * Created 8 August 1998 by Martin Costabel and Kevin Schoedel
+ *  Created 8 August 1998 by 
+ *  Martin Costabel <costabel@wanadoo.fr> and Kevin Schoedel
  *
  * Vmode-switching changes and vmode 15/17 modifications created 29 August
  * 1998 by Barry K. Nathan <barryn@pobox.com>.
+ * 
+ * vmode 10 changed by Steven Borley <sjb@salix.demon.co.uk>, 14 mai 2000
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -141,7 +144,8 @@ static struct valkyrie_regvals valkyrie_reg_init_11 = {
 /* Register values for 800x600, 60Hz mode (10) */
 static struct valkyrie_regvals valkyrie_reg_init_10 = {
     12,
-    { 20, 53, 2 },  /* pixel clock = 41.41MHz for V=59.78Hz */
+    { 25, 32, 3 },  /* pixel clock = 40.0015MHz,
+                     used to be 20,53,2, pixel clock 41.41MHz for V=59.78Hz */
     { 800, 1600 },
 	800, 600
 };

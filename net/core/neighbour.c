@@ -407,7 +407,7 @@ static int pneigh_ifdown(struct neigh_table *tbl, struct net_device *dev)
 
 	for (h=0; h<=PNEIGH_HASHMASK; h++) {
 		np = &tbl->phash_buckets[h]; 
-		for (np = &tbl->phash_buckets[h]; (n=*np) != NULL; np = &n->next) {
+		while ((n=*np) != NULL) {
 			if (n->dev == dev || dev == NULL) {
 				*np = n->next;
 				if (tbl->pdestructor)

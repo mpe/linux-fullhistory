@@ -577,10 +577,10 @@ entSys:
 ret_from_sys_call:
 	cmovne	$26,0,$19		/* $19 = 0 => non-restartable */
 	ldl	$3,TASK_PROCESSOR($8)
-	lda	$4,softirq_state
+	lda	$4,irq_stat		/* softirq_active */
 	sll	$3,L1_CACHE_SHIFT,$3
 	addq	$3,$4,$4
-	ldq	$4,0($4)
+	ldq	$4,0($4)		/* softirq_active[32] + softirq_mask[32] */
 	sll	$4,32,$3
 	and	$4,$3,$4
 	bne	$4,handle_softirq

@@ -319,16 +319,16 @@ lost_irq_ret:
 	addi	r3,r1,STACK_FRAME_OVERHEAD
 	bl	do_IRQ
 	b	3b
-1:	lis	r4,softirq_state@ha
-	addi	r4,r4,softirq_state@l
+1:	lis	r4,irq_stat@ha		/* &softirq_active for cpu 0 */
+	addi	r4,r4,irq_stat@l
 #ifdef CONFIG_SMP
 	/* get processor # */
 	lwz	r3,PROCESSOR(r2)
 	slwi	r3,r3,5
 	add	r4,r4,r3
 #endif /* CONFIG_SMP */
-	lwz	r5,0(r4)
-	lwz	r4,4(r4)
+	lwz	r5,0(r4)		/* softirq_active */
+	lwz	r4,4(r4)		/* softirq_mask */
 	and.	r5,r5,r4
 	beq+	2f
 	bl	do_softirq

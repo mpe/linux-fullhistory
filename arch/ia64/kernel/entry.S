@@ -506,7 +506,7 @@ GLOBAL_ENTRY(ia64_leave_kernel)
 	PT_REGS_UNWIND_INFO(0)
 #ifdef CONFIG_SMP
 	adds r2=IA64_TASK_PROCESSOR_OFFSET,r13
-	movl r3=softirq_state
+	movl r3=irq_stat		// softirq_active
 	;;
 	ld4 r2=[r2]
 	;;
@@ -514,10 +514,10 @@ GLOBAL_ENTRY(ia64_leave_kernel)
 	;;
 	add r3=r2,r3
 #else
-	movl r3=softirq_state
+	movl r3=irq_stat		// softirq_active
 #endif
 	;;
-	ld8 r2=[r3]		// r3 is guaranteed to be 8-byte aligned!
+	ld8 r2=[r3]		// r3 (softirq_active+softirq_mask) is guaranteed to be 8-byte aligned!
 	;;
 	shr r3=r2,32
 	;;

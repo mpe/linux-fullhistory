@@ -56,9 +56,6 @@
 #ifdef CONFIG_AMIGA
 #include <asm/amigahw.h>
 #endif
-#ifdef CONFIG_FB_OF
-#include <asm/prom.h>
-#endif
 
 #include <video/fbcon.h>
 #include <video/fbcon-mfb.h>
@@ -472,9 +469,6 @@ int clgenfb_setup (char *options);
 
 static int clgenfb_open (struct fb_info *info, int user);
 static int clgenfb_release (struct fb_info *info, int user);
-#if defined(CONFIG_FB_OF)
-int clgen_of_init (struct device_node *dp);
-#endif
 
 /* function table of the above functions */
 static struct fb_ops clgenfb_ops = {
@@ -2400,34 +2394,6 @@ static void __init get_prep_addrs (unsigned long *display, unsigned long *regist
 
 
 
-#ifdef CONFIG_FB_OF
-static void __init get_of_addrs (const struct device_node *dp,
-			  unsigned long *display, unsigned long *registers)
-{
-	int i;
-
-	DPRINTK ("ENTER\n");
-
-	/* Map in frame buffer and registers */
-	for (i = 0; i < dp->n_addrs; ++i) {
-		unsigned long addr = dp->addrs[i].address;
-		unsigned long size = dp->addrs[i].size;
-		printk ("dp->addrs[%d].address = %lx, dp->addrs[%d].size = %lx\n",
-			i, addr, i, size);
-		if (size >= 0x800000) {
-			*display = addr;
-		} else {
-			*registers = addr;
-		}
-	}
-
-	DPRINTK ("EXIT\n");
-}
-#endif				/* CONFIG_FB_OF */
-
-
-
-
 #ifdef CONFIG_PCI
 /* Pulled the logic from XFree86 Cirrus driver to get the memory size,
  * based on the DRAM bandwidth bit and DRAM bank switching bit.  This
@@ -2529,9 +2495,6 @@ static void __exit clgen_pci_unmap (struct clgenfb_info *info)
 static int __init clgen_pci_setup (struct clgenfb_info *info,
 				   clgen_board_t *btype)
 {
-#ifdef CONFIG_FB_OF
-	struct device_node *dp;
-#endif				/* CONFIG_FB_OF */
 	struct pci_dev *pdev;
 	unsigned long board_addr, board_size;
 
@@ -2554,29 +2517,12 @@ static int __init clgen_pci_setup (struct clgenfb_info *info,
 	pcibios_write_config_dword (0, pdev->devfn, PCI_BASE_ADDRESS_0, 0x00000000);
 #endif
 
-#ifdef CONFIG_FB_OF
-	/* Ok, so its an ugly hack, since we could have passed it down from
-	 * clgen_of_init() if we'd done it right. */
-	DPRINTK ("Attempt to get OF info for MacPicasso\n");
-	dp = find_devices ("MacPicasso");
-	if (dp != 0) {
-		if (dp->n_addrs != 2) {
-			printk (KERN_ERR "expecting 2 address for clgen (got %d)\n", dp->n_addrs);
-			DPRINTK ("EXIT, returning 1\n");
-			return 1;
-		}
-		get_of_addrs (dp, &board_addr, &info->fbregs_phys);
-	} else
-#endif
-	{
-
 #ifdef CONFIG_PREP
-		get_prep_addrs (&board_addr, &info->fbregs_phys);
+	get_prep_addrs (&board_addr, &info->fbregs_phys);
 #else				/* CONFIG_PREP */
-		DPRINTK ("Attempt to get PCI info for Cirrus Graphics Card\n");
-		get_pci_addrs (pdev, &board_addr, &info->fbregs_phys);
+	DPRINTK ("Attempt to get PCI info for Cirrus Graphics Card\n");
+	get_pci_addrs (pdev, &board_addr, &info->fbregs_phys);
 #endif				/* CONFIG_PREP */
-	}
 
 	DPRINTK ("Board address: 0x%lx, register address: 0x%lx\n", board_addr, info->fbregs_phys);
 
@@ -2836,14 +2782,6 @@ int __init clgenfb_init(void)
 	return 0;
 }
 
-
-
-#if defined(CONFIG_FB_OF)
-int __init clgen_of_init (struct device_node *dp)
-{
-	return clgenfb_init ();
-}
-#endif				/* CONFIG_FB_OF */
 
 
     /*

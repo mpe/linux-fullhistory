@@ -62,6 +62,8 @@
    1.02.00.001 - Added support for full command packet posts through ioctls
                  for 3DM.
                  Bug fix so hot spare drives don't show up.
+   1.02.00.002 - Fix bug with tw_setfeature() call that caused oops on some
+                 systems.
 */
 
 #include <linux/module.h>
@@ -107,7 +109,7 @@ static struct notifier_block tw_notifier = {
 };
 
 /* Globals */
-char *tw_driver_version="1.02.00.001";
+char *tw_driver_version="1.02.00.002";
 TW_Device_Extension *tw_device_extension_list[TW_MAX_SLOT];
 int tw_device_extension_count = 0;
 
@@ -747,7 +749,7 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 			kfree(tw_dev);
 
 		/* Tell the firmware we support shutdown notification*/
-		tw_setfeature(tw_dev, 2, 1, &c);
+		tw_setfeature(tw_dev2, 2, 1, &c);
 	}
 
 	if (numcards == 0) 

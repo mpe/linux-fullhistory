@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.41 2000/07/07 23:47:45 davem Exp $
+ *	$Id: sit.c,v 1.42 2000/08/02 06:03:59 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -440,7 +440,6 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	int    mtu;
 	struct in6_addr *addr6;	
 	int addr_type;
-	int err;
 
 	if (tunnel->recursion++) {
 		tunnel->stat.collisions++;
@@ -565,27 +564,12 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	if ((iph->ttl = tiph->ttl) == 0)
 		iph->ttl	=	iph6->hop_limit;
 
-	iph->tot_len		=	htons(skb->len);
-	ip_select_ident(iph, &rt->u.dst);
-	ip_send_check(iph);
-
 #ifdef CONFIG_NETFILTER
 	nf_conntrack_put(skb->nfct);
 	skb->nfct = NULL;
 #endif
 
-	err = NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev, 
-		do_ip_send);
-	if(err < 0) {
-		if(net_ratelimit())
-			printk(KERN_ERR "ipip6_tunnel_xmit: ip_send() failed, err=%d\n", -err);
-		skb = NULL;
-		goto tx_error;
-	}
-
-	stats->tx_bytes += skb->len;
-	stats->tx_packets++;
-
+	IPTUNNEL_XMIT();
 	tunnel->recursion--;
 	return 0;
 
@@ -593,8 +577,7 @@ tx_error_icmp:
 	dst_link_failure(skb);
 tx_error:
 	stats->tx_errors++;
-	if(skb)
-		dev_kfree_skb(skb);
+	dev_kfree_skb(skb);
 	tunnel->recursion--;
 	return 0;
 }

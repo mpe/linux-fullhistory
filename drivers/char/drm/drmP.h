@@ -578,7 +578,9 @@ extern void	     drm_vm_close(struct vm_area_struct *vma);
 extern int	     drm_mmap_dma(struct file *filp,
 				  struct vm_area_struct *vma);
 extern int	     drm_mmap(struct file *filp, struct vm_area_struct *vma);
-
+extern struct vm_operations_struct drm_vm_ops;
+extern struct vm_operations_struct drm_vm_shm_ops;
+extern struct vm_operations_struct drm_vm_dma_ops;
 
 				/* Proc support (proc.c) */
 extern int	     drm_proc_init(drm_device_t *dev);

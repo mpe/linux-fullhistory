@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl32.c,v 1.10 1998/08/15 20:42:46 davem Exp $
+/* $Id: sunos_ioctl32.c,v 1.11 2000/07/30 23:12:24 davem Exp $
  * sunos_ioctl32.c: SunOS ioctl compatability on sparc64.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -98,7 +98,6 @@ asmlinkage int sunos_ioctl (int fd, u32 cmd, u32 arg)
 {
 	int ret = -EBADF;
 
-	lock_kernel();
 	if(fd >= SUNOS_NR_OPEN)
 		goto out;
 	if(!fcheck(fd))
@@ -281,6 +280,5 @@ asmlinkage int sunos_ioctl (int fd, u32 cmd, u32 arg)
 	/* so stupid... */
 	ret = (ret == -EINVAL ? -EOPNOTSUPP : ret);
 out:
-	unlock_kernel();
 	return ret;
 }

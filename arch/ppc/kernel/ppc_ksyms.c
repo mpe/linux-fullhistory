@@ -78,7 +78,6 @@ EXPORT_SYMBOL(do_lost_interrupts);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(disable_irq_nosync);
-EXPORT_SYMBOL(irq_stat);
 #ifdef CONFIG_SMP
 EXPORT_SYMBOL(kernel_flag);
 #endif /* CONFIG_SMP */

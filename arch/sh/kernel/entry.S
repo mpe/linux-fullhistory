@@ -462,9 +462,9 @@ syscall_ret:
 	/* fall through */
 
 ENTRY(ret_from_syscall)
-	mov.l	__softirq_state, $r0
+	mov.l	__irq_stat, $r0	! softirq_active
 	mov.l	@$r0, $r1
-	mov.l	@(4,$r0), $r2
+	mov.l	@(4,$r0), $r2	! softirq_mask
 	tst	$r2, $r1
 	bt	ret_with_reschedule
 handle_softirq:
@@ -489,8 +489,8 @@ signal_return:
 	.align	2
 __do_signal:
 	.long	SYMBOL_NAME(do_signal)
-__softirq_state:
-	.long	SYMBOL_NAME(softirq_state)
+__irq_stat:
+	.long	SYMBOL_NAME(irq_stat)
 __do_softirq:
 	.long	SYMBOL_NAME(do_softirq)
 

@@ -87,7 +87,6 @@ void __init smp_store_cpu_info(int id)
 {
 	int i;
 
-	cpu_data[id].bh_count			= 0;
 	/* multiplier and counter set by
 	   smp_setup_percpu_timer()  */
 	cpu_data[id].udelay_val			= loops_per_sec;

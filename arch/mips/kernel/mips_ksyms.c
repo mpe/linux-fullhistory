@@ -140,4 +140,3 @@ EXPORT_SYMBOL(ide_ops);
 #endif
 
 EXPORT_SYMBOL(get_wchan);
-EXPORT_SYMBOL(irq_stat);

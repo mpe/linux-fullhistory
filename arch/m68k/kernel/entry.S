@@ -171,7 +171,7 @@ do_delayed_trace:
 #if 0
 #if CONFIG_AMIGA
 SYMBOL_NAME_LABEL(ami_inthandler)
-	addql	#1,SYMBOL_NAME(local_irq_count)
+	addql	#1,SYMBOL_NAME(irq_stat)+8	| local_irq_count
 	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 
@@ -203,7 +203,7 @@ ENTRY(nmi_handler)
 SYMBOL_NAME_LABEL(inthandler)
 	SAVE_ALL_INT
 	GET_CURRENT(%d0)
-	addql	#1,SYMBOL_NAME(local_irq_count)
+	addql	#1,SYMBOL_NAME(irq_stat)+8	| local_irq_count
 					|  put exception # in d0
 	bfextu %sp@(PT_VECTOR){#4,#10},%d0
 
@@ -222,7 +222,7 @@ SYMBOL_NAME_LABEL(inthandler)
 3:     	addql	#8,%sp			|  pop parameters off stack
 
 SYMBOL_NAME_LABEL(ret_from_interrupt)
-	subql	#1,SYMBOL_NAME(local_irq_count)
+	subql	#1,SYMBOL_NAME(irq_stat)+8	| local_irq_count
 	jeq	1f
 2:
 	RESTORE_ALL
@@ -236,8 +236,8 @@ SYMBOL_NAME_LABEL(ret_from_interrupt)
 #endif
 	/* check if we need to do software interrupts */
 
-	movel	SYMBOL_NAME(softirq_state),%d0
-	andl	SYMBOL_NAME(softirq_state)+4,%d0
+	movel	SYMBOL_NAME(irq_stat),%d0	| softirq_active
+	andl	SYMBOL_NAME(irq_stat)+4,%d0	| softirq_mask
 	jeq	SYMBOL_NAME(ret_from_exception)
 
 	pea	SYMBOL_NAME(ret_from_exception)

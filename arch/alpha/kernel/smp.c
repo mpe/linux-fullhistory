@@ -108,8 +108,8 @@ smp_store_cpu_info(int cpuid)
 	cpu_data[cpuid].loops_per_sec = loops_per_sec;
 	cpu_data[cpuid].last_asn
 	  = (cpuid << WIDTH_HARDWARE_ASN) + ASN_FIRST_VERSION;
-	cpu_data[cpuid].irq_count = 0;
-	cpu_data[cpuid].bh_count = 0;
+	local_irq_count(cpuid) = 0;
+	local_bh_count(cpuid) = 0;
 }
 
 /*

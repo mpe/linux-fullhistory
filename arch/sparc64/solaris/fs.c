@@ -1,4 +1,4 @@
-/* $Id: fs.c,v 1.21 2000/07/10 20:57:35 davem Exp $
+/* $Id: fs.c,v 1.22 2000/07/28 12:15:02 davem Exp $
  * fs.c: fs related syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -25,8 +25,6 @@
 
 #include "conv.h"
 
-extern char * getname32(u32 filename);
- 
 #define R4_DEV(DEV) ((DEV & 0xff) | ((DEV & 0xff00) << 10))
 #define R4_MAJOR(DEV) (((DEV) >> 18) & 0x3fff)
 #define R4_MINOR(DEV) ((DEV) & 0x3ffff)
@@ -136,7 +134,7 @@ asmlinkage int solaris_stat(u32 filename, u32 statbuf)
 	int (*sys_newstat)(char *,struct stat *) = 
 		(int (*)(char *,struct stat *))SYS(stat);
 	
-	filenam = getname32 (filename);
+	filenam = getname ((char *)A(filename));
 	ret = PTR_ERR(filenam);
 	if (!IS_ERR(filenam)) {
 		set_fs (KERNEL_DS);
@@ -164,7 +162,7 @@ asmlinkage int solaris_stat64(u32 filename, u32 statbuf)
 	int (*sys_newstat)(char *,struct stat *) = 
 		(int (*)(char *,struct stat *))SYS(stat);
 	
-	filenam = getname32 (filename);
+	filenam = getname ((char *)A(filename));
 	ret = PTR_ERR(filenam);
 	if (!IS_ERR(filenam)) {
 		set_fs (KERNEL_DS);
@@ -186,7 +184,7 @@ asmlinkage int solaris_lstat(u32 filename, u32 statbuf)
 	int (*sys_newlstat)(char *,struct stat *) = 
 		(int (*)(char *,struct stat *))SYS(lstat);
 	
-	filenam = getname32 (filename);
+	filenam = getname ((char *)A(filename));
 	ret = PTR_ERR(filenam);
 	if (!IS_ERR(filenam)) {
 		set_fs (KERNEL_DS);
@@ -213,7 +211,7 @@ asmlinkage int solaris_lstat64(u32 filename, u32 statbuf)
 	int (*sys_newlstat)(char *,struct stat *) = 
 		(int (*)(char *,struct stat *))SYS(lstat);
 	
-	filenam = getname32 (filename);
+	filenam = getname ((char *)A(filename));
 	ret = PTR_ERR(filenam);
 	if (!IS_ERR(filenam)) {
 		set_fs (KERNEL_DS);

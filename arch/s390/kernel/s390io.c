@@ -621,8 +621,11 @@ void s390_init_IRQ( void )
 
 	// Hopefully bh_count's will get set when we copy the prefix lowcore
 	// structure to other CPI's ( DJB )
-	atomic_set(&S390_lowcore.local_bh_count,0);
-	atomic_set(&S390_lowcore.local_irq_count,0);
+	softirq_active(smp_processor_id()) = 0;
+	softirq_mask(smp_processor_id()) = 0;
+	local_bh_count(smp_processor_id()) = 0;
+	local_irq_count(smp_processor_id()) = 0;
+	syscall_count(smp_processor_id()) = 0;
 
 	asm volatile ("STCK %0" : "=m" (irq_IPL_TOD));
 

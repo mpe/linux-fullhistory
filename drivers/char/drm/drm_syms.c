@@ -31,6 +31,9 @@ EXPORT_SYMBOL(drm_vm_open);
 EXPORT_SYMBOL(drm_vm_close);
 EXPORT_SYMBOL(drm_mmap_dma);
 EXPORT_SYMBOL(drm_mmap);
+EXPORT_SYMBOL(drm_vm_ops);
+EXPORT_SYMBOL(drm_vm_shm_ops);
+EXPORT_SYMBOL(drm_vm_dma_ops);
 
 /* Proc support (proc.c) */
 EXPORT_SYMBOL(drm_proc_init);

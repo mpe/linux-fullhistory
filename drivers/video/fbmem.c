@@ -67,7 +67,6 @@ extern int hitfb_setup(char*);
 extern int vfb_init(void);
 extern int vfb_setup(char*);
 extern int offb_init(void);
-extern int offb_setup(char*);
 extern int atyfb_init(void);
 extern int atyfb_setup(char*);
 extern int aty128fb_init(void);
@@ -83,7 +82,6 @@ extern int virgefb_init(void);
 extern int virgefb_setup(char*);
 extern int resolver_video_setup(char*);
 extern int s3triofb_init(void);
-extern int s3triofb_setup(char*);
 extern int vesafb_init(void);
 extern int vesafb_setup(char*);
 extern int vga16fb_init(void);
@@ -96,10 +94,13 @@ extern int hpfb_init(void);
 extern int hpfb_setup(char*);
 extern int sbusfb_init(void);
 extern int sbusfb_setup(char*);
-extern int valkyriefb_init(void);
-extern int valkyriefb_setup(char*);
 extern int control_init(void);
 extern int control_setup(char*);
+extern int platinum_init(void);
+extern int platinum_setup(char*);
+extern int valkyriefb_init(void);
+extern int valkyriefb_setup(char*);
+extern int chips_init(void);
 extern int g364fb_init(void);
 extern int sa1100fb_init(void);
 extern int sa1100fb_setup(char*);
@@ -122,6 +123,7 @@ static struct {
 	int (*init)(void);
 	int (*setup)(char*);
 } fb_drivers[] __initdata = {
+
 #ifdef CONFIG_FB_SBUS
 	/*
 	 * Sbusfb must be initialized _before_ other frame buffer devices that
@@ -129,26 +131,16 @@ static struct {
 	 */
 	{ "sbus", sbusfb_init, sbusfb_setup },
 #endif
-#ifdef CONFIG_FB_3DFX
-	{ "tdfx", tdfxfb_init, tdfxfb_setup },
-#endif
-#ifdef CONFIG_FB_SGIVW
-	{ "sgivw", sgivwfb_init, sgivwfb_setup },
-#endif
+
+	/*
+	 * Chipset specific drivers that use resource management
+	 */
+
 #ifdef CONFIG_FB_RETINAZ3
 	{ "retz3", retz3fb_init, retz3fb_setup },
 #endif
-#ifdef CONFIG_FB_ACORN
-	{ "acorn", acornfb_init, acornfb_setup },
-#endif
 #ifdef CONFIG_FB_AMIGA
 	{ "amifb", amifb_init, amifb_setup },
-#endif
-#ifdef CONFIG_FB_ATARI
-	{ "atafb", atafb_init, atafb_setup },
-#endif
-#ifdef CONFIG_FB_MAC
-	{ "macfb", macfb_init, macfb_setup },
 #endif
 #ifdef CONFIG_FB_CYBER
 	{ "cyber", cyberfb_init, cyberfb_setup },
@@ -171,18 +163,76 @@ static struct {
 #ifdef CONFIG_FB_ATY128
 	{ "aty128fb", aty128fb_init, aty128fb_setup },
 #endif
-#ifdef CONFIG_FB_OF
-	/*
-	 * Offb must be initialized _after_ all other frame buffer devices
-	 * that use PCI probing and PCI resources! [ Geert ]
-	 */
-	{ "offb", offb_init, offb_setup },
+#ifdef CONFIG_FB_VIRGE
+	{ "virge", virgefb_init, virgefb_setup },
 #endif
-#ifdef CONFIG_FB_IGA
-        { "igafb", igafb_init, igafb_setup },
+#ifdef CONFIG_FB_RIVA
+	{ "riva", rivafb_init, rivafb_setup },
+#endif
+#ifdef CONFIG_FB_CONTROL
+	{ "controlfb", control_init, control_setup },
+#endif
+#ifdef CONFIG_FB_PLATINUM
+	{ "platinumfb", platinum_init, platinum_setup },
+#endif
+#ifdef CONFIG_FB_VALKYRIE
+	{ "valkyriefb", valkyriefb_init, valkyriefb_setup },
+#endif
+#ifdef CONFIG_FB_CT65550
+	{ "chipsfb", chips_init, NULL },
 #endif
 #ifdef CONFIG_FB_IMSTT
 	{ "imsttfb", imsttfb_init, imsttfb_setup },
+#endif
+#ifdef CONFIG_FB_S3TRIO
+	{ "s3trio", s3triofb_init, NULL },
+#endif 
+#ifdef CONFIG_FB_FM2
+	{ "fm2fb", fm2fb_init, fm2fb_setup },
+#endif 
+#ifdef CONFIG_FB_SIS
+	{ "sisfb", sisfb_init, sisfb_setup },
+#endif
+
+	/*
+	 * Generic drivers that are used as fallbacks
+	 * 
+	 * These depend on resource management and must be initialized
+	 * _after_ all other frame buffer devices that use resource
+	 * management!
+	 */
+
+#ifdef CONFIG_FB_OF
+	{ "offb", offb_init, NULL },
+#endif
+#ifdef CONFIG_FB_VESA
+	{ "vesa", vesafb_init, vesafb_setup },
+#endif 
+
+	/*
+	 * Chipset specific drivers that don't use resource management (yet)
+	 */
+
+#ifdef CONFIG_FB_3DFX
+	{ "tdfx", tdfxfb_init, tdfxfb_setup },
+#endif
+#ifdef CONFIG_FB_SGIVW
+	{ "sgivw", sgivwfb_init, sgivwfb_setup },
+#endif
+#ifdef CONFIG_FB_ACORN
+	{ "acorn", acornfb_init, acornfb_setup },
+#endif
+#ifdef CONFIG_FB_ATARI
+	{ "atafb", atafb_init, atafb_setup },
+#endif
+#ifdef CONFIG_FB_MAC
+	{ "macfb", macfb_init, macfb_setup },
+#endif
+#ifdef CONFIG_FB_HGA
+	{ "hga", hgafb_init, hgafb_setup },
+#endif 
+#ifdef CONFIG_FB_IGA
+        { "igafb", igafb_init, igafb_setup },
 #endif
 #ifdef CONFIG_APOLLO
 	{ "apollo", dnfb_init, NULL },
@@ -190,60 +240,43 @@ static struct {
 #ifdef CONFIG_FB_Q40
 	{ "q40fb", q40fb_init, NULL },
 #endif
-#ifdef CONFIG_FB_S3TRIO
-	{ "s3trio", s3triofb_init, s3triofb_setup },
-#endif 
 #ifdef CONFIG_FB_TGA
 	{ "tga", tgafb_init, tgafb_setup },
 #endif
-#ifdef CONFIG_FB_VIRGE
-	{ "virge", virgefb_init, virgefb_setup },
-#endif
-#ifdef CONFIG_FB_RIVA
-	{ "riva", rivafb_init, rivafb_setup },
-#endif
-#ifdef CONFIG_FB_VESA
-	{ "vesa", vesafb_init, vesafb_setup },
-#endif 
-#ifdef CONFIG_FB_VGA16
-	{ "vga16", vga16fb_init, vga16fb_setup },
-#endif 
-#ifdef CONFIG_FB_HGA
-	{ "hga", hgafb_init, hgafb_setup },
-#endif 
 #ifdef CONFIG_FB_HP300
 	{ "hpfb", hpfb_init, hpfb_setup },
 #endif 
-#ifdef CONFIG_FB_CONTROL
-	{ "controlfb", control_init, control_setup },
-#endif
-#ifdef CONFIG_FB_VALKYRIE
-	{ "valkyriefb", valkyriefb_init, valkyriefb_setup },
-#endif
 #ifdef CONFIG_FB_G364
 	{ "g364", g364fb_init, NULL },
 #endif
 #ifdef CONFIG_FB_SA1100
 	{ "sa1100", sa1100fb_init, sa1100fb_setup },
 #endif
-#ifdef CONFIG_FB_FM2
-	{ "fm2fb", fm2fb_init, fm2fb_setup },
-#endif 
 #ifdef CONFIG_FB_SUN3
        { "sun3", sun3fb_init, sun3fb_setup },
 #endif
 #ifdef CONFIG_FB_HIT
        { "hitfb", hitfb_init, hitfb_setup },
 #endif
+
+	/*
+	 * Generic drivers that don't use resource management (yet)
+	 */
+
+#ifdef CONFIG_FB_VGA16
+	{ "vga16", vga16fb_init, vga16fb_setup },
+#endif 
+
 #ifdef CONFIG_GSP_RESOLVER
 	/* Not a real frame buffer device... */
 	{ "resolver", NULL, resolver_video_setup },
 #endif
-#ifdef CONFIG_FB_SIS
-	{ "sisfb", sisfb_init, sisfb_setup },
-#endif
+
 #ifdef CONFIG_FB_VIRTUAL
-	/* Must be last to avoid that vfb becomes your primary display */
+	/*
+	 * Vfb must be last to avoid that it becomes your primary display if
+	 * other display devices are present
+	 */
 	{ "vfb", vfb_init, vfb_setup },
 #endif
 };
@@ -263,6 +296,10 @@ extern int fbcon_softback_size;
 static int first_fb_vc = 0;
 static int last_fb_vc = MAX_NR_CONSOLES-1;
 static int fbcon_is_default = 1;
+
+#ifdef CONFIG_FB_OF
+static int ofonly __initdata = 0;
+#endif
 
 static int fbmem_read_proc(char *buf, char **start, off_t offset,
 			   int len, int *eof, void *private)
@@ -728,6 +765,13 @@ fbmem_init(void)
 	if (devfs_register_chrdev(FB_MAJOR,"fb",&fb_fops))
 		printk("unable to get major %d for fb devs\n", FB_MAJOR);
 
+#ifdef CONFIG_FB_OF
+	if (ofonly) {
+		offb_init();
+		return;
+	}
+#endif
+
 	/*
 	 *  Probe for all builtin frame buffer devices
 	 */
@@ -786,6 +830,13 @@ int __init video_setup(char *options)
 		last_fb_vc = simple_strtoul(options, &options, 10) - 1;
 	    fbcon_is_default = 0;
     }
+
+#ifdef CONFIG_FB_OF
+    if (!strcmp(options, "ofonly")) {
+	    ofonly = 1;
+	    return 0;
+    }
+#endif
 
     if (num_pref_init_funcs == FB_MAX)
 	    return 0;

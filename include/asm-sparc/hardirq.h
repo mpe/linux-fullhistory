@@ -10,38 +10,16 @@
 #include <linux/config.h>
 #include <linux/threads.h>
 
-#ifndef CONFIG_SMP
-extern unsigned int __local_irq_count;
-#define local_irq_count(cpu)	__local_irq_count
+/* entry.S is sensitive to the offsets of these fields */
+typedef struct {
+	unsigned int __softirq_active;
+	unsigned int __softirq_mask;
+	unsigned int __local_irq_count;
+	unsigned int __local_bh_count;
+	unsigned int __syscall_count;
+} ____cacheline_aligned irq_cpustat_t;
 
-/*
- * Are we in an interrupt context? Either doing bottom half
- * or hardware interrupt processing?
- */
-#define in_interrupt()  ((__local_irq_count + __local_bh_count) != 0)
-
-#define hardirq_trylock(cpu)	((void)(cpu), __local_irq_count == 0)
-#define hardirq_endlock(cpu)	do { (void)(cpu); } while (0)
-
-#define hardirq_enter(cpu)	(__local_irq_count++)
-#define hardirq_exit(cpu)	(__local_irq_count--)
-
-#define synchronize_irq()	barrier()
-
-#define in_irq() (__local_irq_count != 0)
-
-#else
-
-#include <asm/atomic.h>
-#include <linux/spinlock.h>
-#include <asm/system.h>
-#include <asm/smp.h>
-
-extern unsigned int __local_irq_count[NR_CPUS];
-#define local_irq_count(cpu)	__local_irq_count[cpu]
-extern unsigned char global_irq_holder;
-extern spinlock_t global_irq_lock;
-extern atomic_t global_irq_count;
+#include <linux/irq_cpustat.h>	/* Standard mappings for irq_cpustat_t above */
 
 /*
  * Are we in an interrupt context? Either doing bottom half
@@ -52,6 +30,27 @@ extern atomic_t global_irq_count;
 
 #define in_irq() ({ int __cpu = smp_processor_id(); \
 	(local_irq_count(__cpu) != 0); })
+
+#ifndef CONFIG_SMP
+
+#define hardirq_trylock(cpu)	(local_irq_count(cpu) == 0)
+#define hardirq_endlock(cpu)	do { (void)(cpu); } while (0)
+
+#define hardirq_enter(cpu)	(++local_irq_count(cpu))
+#define hardirq_exit(cpu)	(--local_irq_count(cpu))
+
+#define synchronize_irq()	barrier()
+
+#else
+
+#include <asm/atomic.h>
+#include <linux/spinlock.h>
+#include <asm/system.h>
+#include <asm/smp.h>
+
+extern unsigned char global_irq_holder;
+extern spinlock_t global_irq_lock;
+extern atomic_t global_irq_count;
 
 static inline void release_irqlock(int cpu)
 {

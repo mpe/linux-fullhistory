@@ -38,8 +38,11 @@
    - Bottom halves: globally serialized, grr...
  */
 
+/* No separate irq_stat for s390, it is part of PSA */
+#if !defined(CONFIG_ARCH_S390)
+irq_cpustat_t irq_stat[NR_CPUS];
+#endif	/* CONFIG_ARCH_S390 */
 
-struct softirq_state softirq_state[NR_CPUS];
 static struct softirq_action softirq_vec[32];
 
 asmlinkage void do_softirq()
@@ -53,15 +56,15 @@ asmlinkage void do_softirq()
 	local_bh_disable();
 
 	local_irq_disable();
-	mask = softirq_state[cpu].mask;
-	active = softirq_state[cpu].active & mask;
+	mask = softirq_mask(cpu);
+	active = softirq_active(cpu) & mask;
 
 	if (active) {
 		struct softirq_action *h;
 
 restart:
 		/* Reset active bitmask before enabling irqs */
-		softirq_state[cpu].active &= ~active;
+		softirq_active(cpu) &= ~active;
 
 		local_irq_enable();
 
@@ -77,7 +80,7 @@ restart:
 
 		local_irq_disable();
 
-		active = softirq_state[cpu].active;
+		active = softirq_active(cpu);
 		if ((active &= mask) != 0)
 			goto retry;
 	}
@@ -107,7 +110,7 @@ void open_softirq(int nr, void (*action)(struct softirq_action*), void *data)
 	softirq_vec[nr].action = action;
 
 	for (i=0; i<NR_CPUS; i++)
-		softirq_state[i].mask |= (1<<nr);
+		softirq_mask(i) |= (1<<nr);
 	spin_unlock_irqrestore(&softirq_mask_lock, flags);
 }
 

@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.53 2000/05/05 02:17:17 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.54 2000/08/02 06:05:16 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -1581,6 +1581,7 @@ int ipmr_get_route(struct sk_buff *skb, struct rtmsg *rtm, int nowait)
 }
 #endif
 
+#ifdef CONFIG_PROC_FS	
 /*
  *	The /proc interfaces to multicast routing /proc/ip_mr_cache /proc/ip_mr_vif
  */
@@ -1711,7 +1712,6 @@ done:
   	return len;
 }
 
-#ifdef CONFIG_PROC_FS	
 #endif	
 
 #ifdef CONFIG_IP_PIMSM_V2

@@ -118,6 +118,8 @@ static void flush_all_zero_pkmaps(void)
 {
 	int i;
 
+	flush_cache_all();
+
 	for (i = 0; i < LAST_PKMAP; i++) {
 		struct page *page;
 		pte_t pte;
@@ -181,7 +183,7 @@ start:
 		}
 	}
 	vaddr = PKMAP_ADDR(last_pkmap_nr);
-	pkmap_page_table[last_pkmap_nr] = mk_pte(page, kmap_prot);
+	set_pte(pkmap_page_table + last_pkmap_nr, mk_pte(page, kmap_prot));
 
 	pkmap_count[last_pkmap_nr] = 1;
 	page->virtual = vaddr;

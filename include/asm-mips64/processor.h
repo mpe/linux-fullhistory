@@ -63,7 +63,6 @@ struct cpuinfo_mips {
 	unsigned long *pte_quick;
 	unsigned long pgtable_cache_sz;
 	unsigned long last_asn;
-	unsigned int irq_count, bh_count;
 	unsigned long asid_cache;
 #if defined(CONFIG_SGI_IP27)
 	cpuid_t		p_cpuid;	/* PROM assigned cpuid */

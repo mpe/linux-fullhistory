@@ -1816,6 +1816,10 @@ S: Reinholdstrasse 14
 S: D-37083 Goettingen
 S: Germany
 
+N: Thomas Molina
+E: tmolina@home.com
+D: bug fixes, documentation, minor hackery
+
 N: David Mosberger-Tang
 E: davidm@hpl.hp.com if IA-64 related, else David.Mosberger@acm.org
 D: Linux/Alpha and Linux/ia64

@@ -61,8 +61,6 @@
  * interrupt controllers, without having to do assembly magic.
  */
 
-irq_cpustat_t irq_stat [NR_CPUS];
-
 /*
  * Controller mappings for all interrupt sources:
  */
@@ -160,7 +158,7 @@ int get_irq_list(char *buf)
 	p += sprintf(p, "NMI: ");
 	for (j = 0; j < smp_num_cpus; j++)
 		p += sprintf(p, "%10u ",
-			nmi_counter(cpu_logical_map(j)));
+			nmi_count(cpu_logical_map(j)));
 	p += sprintf(p, "\n");
 #if CONFIG_SMP
 	p += sprintf(p, "LOC: ");
@@ -624,7 +622,7 @@ out:
 	desc->handler->end(irq);
 	spin_unlock(&desc->lock);
 
-	if (softirq_state[cpu].active & softirq_state[cpu].mask)
+	if (softirq_active(cpu) & softirq_mask(cpu))
 		do_softirq();
 	return 1;
 }

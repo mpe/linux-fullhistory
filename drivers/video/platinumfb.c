@@ -126,6 +126,7 @@ static void platinum_blank(int blank, struct fb_info *fb);
  * internal functions
  */
 
+static void platinum_of_init(struct device_node *dp);
 static inline int platinum_vram_reqd(int video_mode, int color_mode);
 static int read_platinum_sense(struct fb_info_platinum *info);
 static void set_platinum_clock(struct fb_info_platinum *info);
@@ -153,11 +154,7 @@ static void do_install_cmap(int con, struct fb_info *info);
  */
 
 int platinum_init(void);
-#ifdef CONFIG_FB_OF
-void platinum_of_init(struct device_node *dp);
-#endif
 int platinum_setup(char*);
-
 
 static struct fb_ops platinumfb_ops = {
 	owner:		THIS_MODULE,
@@ -625,13 +622,11 @@ static int __init init_platinum(struct fb_info_platinum *info)
 
 int __init platinum_init(void)
 {
-#ifndef CONFIG_FB_OF
 	struct device_node *dp;
 
 	dp = find_devices("platinum");
 	if (dp != 0)
 		platinum_of_init(dp);
-#endif /* CONFIG_FB_OF */
 	return 0;
 }
 
@@ -643,7 +638,7 @@ int __init platinum_init(void)
 #define invalidate_cache(addr)
 #endif
 
-void __init platinum_of_init(struct device_node *dp)
+static void __init platinum_of_init(struct device_node *dp)
 {
 	struct fb_info_platinum	*info;
 	unsigned long		addr, size;
@@ -664,6 +659,11 @@ void __init platinum_of_init(struct device_node *dp)
 	for (i = 0; i < dp->n_addrs; ++i) {
 		addr = dp->addrs[i].address;
 		size = dp->addrs[i].size;
+		/* Let's assume we can request either all or nothing */
+		if (!request_mem_region(addr, size, "platinumfb")) {
+			kfree(info);
+			return;
+		}
 		if (size >= 0x400000) {
 			/* frame buffer - map only 4MB */
 			info->frame_buffer_phys = addr;
@@ -677,6 +677,7 @@ void __init platinum_of_init(struct device_node *dp)
 	}
 
 	info->cmap_regs_phys = 0xf301b000;	/* XXX not in prom? */
+	request_mem_region(info->cmap_regs_phys, 0x1000, "platinumfb cmap");
 	info->cmap_regs = ioremap(info->cmap_regs_phys, 0x1000);
 
 	/* Grok total video ram */

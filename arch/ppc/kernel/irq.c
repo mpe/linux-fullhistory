@@ -74,7 +74,6 @@ volatile unsigned char *chrp_int_ack_special;
 
 irq_desc_t irq_desc[NR_IRQS];
 int ppc_spurious_interrupts = 0;
-irq_cpustat_t irq_stat [NR_CPUS];
 struct irqaction *ppc_irq_action[NR_IRQS];
 unsigned int ppc_cached_irq_mask[NR_MASK_WORDS];
 unsigned int ppc_lost_interrupts[NR_MASK_WORDS];

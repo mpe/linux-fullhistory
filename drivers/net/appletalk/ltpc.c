@@ -1273,18 +1273,18 @@ static int __init ltpc_setup(char *str)
 __setup("ltpc=", ltpc_setup);
 #endif /* MODULE */
 
-MODULE_PARM(debug, "i");
-MODULE_PARM(io, "i");
-MODULE_PARM(irq, "i");
-MODULE_PARM(dma, "i");
-
-#ifdef MODULE
-
 static struct net_device dev_ltpc = {
 		"", 
 		0, 0, 0, 0,
 	 	0x0, 0,
 	 	0, 0, 0, NULL, ltpc_probe };
+
+#ifdef MODULE
+MODULE_PARM(debug, "i");
+MODULE_PARM(io, "i");
+MODULE_PARM(irq, "i");
+MODULE_PARM(dma, "i");
+
 
 int __init init_module(void)
 {

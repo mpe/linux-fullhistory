@@ -11,13 +11,6 @@
 #include <asm/hardirq.h>
 #include <asm/system.h>		/* for membar() */
 
-#ifndef CONFIG_SMP
-extern unsigned int __local_bh_count;
-#define local_bh_count(cpu)	__local_bh_count
-#else
-#define local_bh_count(cpu)	(cpu_data[cpu].bh_count)
-#endif
-
 #define local_bh_disable()	(local_bh_count(smp_processor_id())++)
 #define local_bh_enable()	(local_bh_count(smp_processor_id())--)
 

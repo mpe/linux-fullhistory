@@ -1,10 +1,11 @@
-# $Id: config.in,v 1.98 2000/07/06 01:41:29 davem Exp $
+# $Id: config.in,v 1.99 2000/08/01 04:53:58 anton Exp $
 # For a description of the syntax of this configuration file,
 # see Documentation/kbuild/config-language.txt.
 #
 mainmenu_name "Linux/SPARC Kernel Configuration"
 
 define_bool CONFIG_UID16 y
+define_bool CONFIG_HIGHMEM y
 
 mainmenu_option next_comment
 comment 'Code maturity level options'

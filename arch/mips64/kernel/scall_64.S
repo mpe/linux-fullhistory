@@ -63,8 +63,8 @@ NESTED(handle_sys64, PT_SIZE, sp)
 1:	sd	v0, PT_R2(sp)		# result
 
 FEXPORT(ret_from_sys_call_64)
-	lw	t0, softirq_state
-	lw	t1, softirq_state+4	# unused delay slot
+	lw	t0, irq_stat		# softirq_active
+	lw	t1, irq_stat+4		# softirq_mask.  unused delay slot
 	and	t0, t1
 	bnez	t0, handle_softirq_64
 

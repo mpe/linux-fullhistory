@@ -35,10 +35,8 @@
 #include <asm/stackframe.h>
 #include <asm/system.h>
 #include <asm/cpu.h>
-#include <linux/sched.h>
 #include <linux/bootmem.h>
 #include <asm/addrspace.h>
-#include <asm/bootinfo.h>
 #include <asm/mc146818rtc.h>
 
 char arcs_cmdline[CL_SIZE] = {0, };

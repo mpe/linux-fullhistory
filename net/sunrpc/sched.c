@@ -336,7 +336,7 @@ __rpc_sleep_on(struct rpc_wait_queue *q, struct rpc_task *task,
 	} else {
 		task->tk_running = 0;
 		if (task->tk_callback) {
-			printk(KERN_ERR "RPC: %4d overwrites an active callback\n", task->tk_pid);
+			dprintk(KERN_ERR "RPC: %4d overwrites an active callback\n", task->tk_pid);
 			BUG();
 		}
 		task->tk_callback = action;

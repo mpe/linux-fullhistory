@@ -26,17 +26,20 @@ static void release(struct task_struct * p)
 {
 	if (p != current) {
 #ifdef CONFIG_SMP
-		int has_cpu;
-
 		/*
 		 * Wait to make sure the process isn't on the
 		 * runqueue (active on some other CPU still)
 		 */
-		do {
+		for (;;) {
 			spin_lock_irq(&runqueue_lock);
-			has_cpu = p->has_cpu;
+			if (!p->has_cpu)
+				break;
 			spin_unlock_irq(&runqueue_lock);
-		} while (has_cpu);
+			do {
+				barrier();
+			} while (p->has_cpu);
+		}
+		spin_unlock_irq(&runqueue_lock);
 #endif
 		atomic_dec(&p->user->processes);
 		free_uid(p->user);

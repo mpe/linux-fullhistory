@@ -59,16 +59,12 @@
  * interrupt controllers, without having to do assembly magic.
  */
 
-irq_cpustat_t irq_stat [NR_CPUS];
-
 extern asmlinkage void ip27_irq(void);
 extern int irq_to_bus[], irq_to_slot[], bus_to_cpu[];
 int (*irq_cannonicalize)(int irq);
 int intr_connect_level(int cpu, int bit);
 int intr_disconnect_level(int cpu, int bit);
 
-unsigned int local_bh_count[NR_CPUS];
-unsigned int local_irq_count[NR_CPUS];
 unsigned long spurious_count = 0;
 
 /*

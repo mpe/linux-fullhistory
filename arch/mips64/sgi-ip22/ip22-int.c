@@ -53,8 +53,6 @@
  * interrupt controllers, without having to do assembly magic.
  */
 
-irq_cpustat_t irq_stat [NR_CPUS];
-
 struct sgi_int2_regs *sgi_i2regs;
 struct sgi_int3_regs *sgi_i3regs;
 struct sgi_ioc_ints *ioc_icontrol;
@@ -73,8 +71,6 @@ int (*irq_cannonicalize)(int irq);
 extern void rs_kgdb_hook(int);
 #endif
 
-unsigned int local_bh_count[NR_CPUS];
-unsigned int local_irq_count[NR_CPUS];
 unsigned long spurious_count = 0;
 
 /* Local IRQ's are layed out logically like this:

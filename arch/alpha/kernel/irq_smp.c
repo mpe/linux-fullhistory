@@ -40,13 +40,13 @@ show(char * str, void *where)
         printk("\n%s, CPU %d: %p\n", str, cpu, where);
         printk("irq:  %d [%d %d]\n",
 	       irqs_running(),
-               cpu_data[0].irq_count,
-	       cpu_data[1].irq_count);
+               local_irq_count(0),
+               local_irq_count(1));
 
         printk("bh:   %d [%d %d]\n",
 	       spin_is_locked(&global_bh_lock) ? 1 : 0,
-	       cpu_data[0].bh_count,
-	       cpu_data[1].bh_count);
+	       local_bh_count(0),
+	       local_bh_count(1));
 #if 0
         stack = (unsigned long *) &str;
         for (i = 40; i ; i--) {

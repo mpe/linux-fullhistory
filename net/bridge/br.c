@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br.c,v 1.43 2000/05/25 02:21:36 davem Exp $
+ *	$Id: br.c,v 1.44 2000/08/04 06:08:32 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -43,7 +43,9 @@ int __init br_init(void)
 	printk(KERN_INFO "NET4: Ethernet Bridge 008 for NET4.0\n");
 
 	br_handle_frame_hook = br_handle_frame;
+#ifdef CONFIG_INET
 	br_ioctl_hook = br_ioctl_deviceless_stub;
+#endif
 #if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
 	br_fdb_get_hook = br_fdb_get;
 	br_fdb_put_hook = br_fdb_put;
@@ -60,7 +62,9 @@ static void __br_clear_frame_hook(void)
 
 static void __br_clear_ioctl_hook(void)
 {
+#ifdef CONFIG_INET
 	br_ioctl_hook = NULL;
+#endif	
 }
 
 static void __exit br_deinit(void)

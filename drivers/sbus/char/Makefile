@@ -37,6 +37,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_DISPLAY7SEG),y)
+O_OBJS += display7seg.o
+else
+  ifeq ($(CONFIG_DISPLAY7SEG),m)
+  M_OBJS += display7seg.o
+  endif
+endif
+
 endif # eq($(CONFIG_PCI,y)
 
 ifeq ($(CONFIG_OBP_FLASH),y)

@@ -168,7 +168,7 @@ asmlinkage void IRQ_NAME(n);						   \
 void atari_slow_irq_##n##_dummy (void) {				   \
 __asm__ (__ALIGN_STR "\n"						   \
 SYMBOL_NAME_STR(atari_slow_irq_) #n "_handler:\t"			   \
-"	addql	#1,"SYMBOL_NAME_STR(local_irq_count)"\n"		   \
+"	addql	#1,"SYMBOL_NAME_STR(irq_stat)"+8\n" /* local_irq_count */  \
 	SAVE_ALL_INT "\n"						   \
 	GET_CURRENT(%%d0) "\n"						   \
 "	andb	#~(1<<(%c3&7)),%a4:w\n"	/* mask this interrupt */	   \
@@ -274,7 +274,7 @@ __asm__ (__ALIGN_STR "\n"
 SYMBOL_NAME_STR(atari_fast_irq_handler) ":
 	orw 	#0x700,%%sr		/* disable all interrupts */
 "SYMBOL_NAME_STR(atari_prio_irq_handler) ":\t
-	addql	#1,"SYMBOL_NAME_STR(local_irq_count)"\n"
+	addql	#1,"SYMBOL_NAME_STR(irq_stat)"+8\n" /* local_irq_count */
 	SAVE_ALL_INT "\n"
 	GET_CURRENT(%%d0) "
 	/* get vector number from stack frame and convert to source */

@@ -5,9 +5,16 @@
  * PPPoE --- PPP over Ethernet (RFC 2516)
  *
  *
- * Version:    0.5.1
+ * Version:    0.6.0
  *
- * 030700 :     Fixed connect logic to allow for disconnect
+ * 030700 :     Fixed connect logic to allow for disconnect.
+ * 270700 :	Fixed potential SMP problems; we must protect against 
+ *		simultaneous invocation of ppp_input 
+ *		and ppp_unregister_channel.
+ *
+ *		Module reference count is decremented in the right spot now,
+ *		guards against sock_put not actually freeing the sk 
+ *		in pppoe_release.
  *
  * Author:	Michal Ostrowski <mostrows@styx.uwaterloo.ca>
  *
@@ -204,6 +211,8 @@ static inline struct pppox_opt *get_item(unsigned long sid,
 
 	read_lock_bh(&pppoe_hash_lock);
 	po = __get_item(sid, addr);
+	if(po)
+		sock_hold(po->sk);
 	read_unlock_bh(&pppoe_hash_lock);
 
 	return po;
@@ -245,14 +254,16 @@ static struct pppox_opt *find_on_dev(struct net_device *dev,
 	struct pppox_opt *po;
 	read_lock_bh(&pppoe_hash_lock);
 	po = __find_on_dev(dev,start);
+	if(po)
+		sock_hold(po->sk);
 	read_unlock_bh(&pppoe_hash_lock);
 	return po;
 }
 
 /***************************************************************************
  *
- *  Handler for device events
- *  Certain device events require that sockets be unconnected
+ *  Handler for device events.
+ *  Certain device events require that sockets be unconnected.
  *
  **************************************************************************/
 static int pppoe_device_event(struct notifier_block *this,
@@ -274,20 +285,14 @@ static int pppoe_device_event(struct notifier_block *this,
 			po = find_on_dev(dev, po);
 			if(!po)
 				break;
-
+			
+			lock_sock(po->sk);
 			if (po->sk->state & PPPOX_CONNECTED)
 				pppox_unbind_sock(po->sk);
 
-			if (po->sk->state & PPPOX_CONNECTED) {
-				lock_sock(po->sk);
-				po->sk->shutdown = RCV_SHUTDOWN&SEND_SHUTDOWN;
-				
-				po->sk->state = PPPOX_DEAD;
-				po->pppoe_dev = NULL;
+			release_sock(po->sk);
+			sock_put(po->sk);
 
-				wake_up(po->sk->sleep);
-				release_sock(po->sk);
-			}
 		} while (1);
 
 		break;
@@ -310,7 +315,49 @@ static struct notifier_block pppoe_notifier = {
 
 /************************************************************************
  *
- * Receive a PPPoE Session frame.
+ * Do the real work of receiving a PPPoE Session frame.
+ *
+ ***********************************************************************/
+int pppoe_rcv_core(struct sock *sk, struct sk_buff *skb){
+	struct pppox_opt  *po=sk->protinfo.pppox;
+
+	if (sk->state & PPPOX_BOUND) {
+		skb_pull(skb, sizeof(struct pppoe_hdr));
+		
+		ppp_input(&po->chan, skb);
+	} else if( sk->state & PPPOX_RELAY ){
+		struct pppox_opt *relay_po;
+
+		relay_po = get_item_by_addr( &po->pppoe_relay );
+
+		if( relay_po == NULL  ||
+		    !( relay_po->sk->state & PPPOX_CONNECTED ) ){
+			sock_put(relay_po->sk);
+			goto abort;
+		}
+		
+		skb_pull(skb, sizeof(struct pppoe_hdr));
+		if( !__pppoe_xmit( relay_po->sk , skb) ){
+			sock_put(relay_po->sk);
+			goto abort;
+		}
+
+	} else {
+		sock_queue_rcv_skb(sk, skb);
+	}
+	return 1;
+abort:
+	sock_put(sk);
+	return 0;
+
+}
+
+
+
+
+/************************************************************************
+ *
+ * Receive wrapper called in BH context.
  *
  ***********************************************************************/
 static int pppoe_rcv(struct sk_buff *skb,
@@ -321,49 +368,51 @@ static int pppoe_rcv(struct sk_buff *skb,
 	struct pppoe_hdr *ph = (struct pppoe_hdr *) skb->nh.raw;
 	struct pppox_opt *po;
 	struct sock *sk ;
-	
+	int ret;
+
 	po = get_item((unsigned long) ph->sid, skb->mac.ethernet->h_source);
 
-	if(!po)
-		goto abort;
-
-	sk = po->sk;
-
-	if (!sk || !(sk->state & PPPOX_CONNECTED))
-		goto abort;
-
-	if (sk->state & PPPOX_BOUND) {
-		skb_pull(skb, sizeof(struct pppoe_hdr));
-
-		ppp_input(&po->chan, skb);
-	} else if( sk->state & PPPOX_RELAY ){
-		struct pppox_opt *relay_po;
-
-		relay_po = get_item_by_addr( &po->pppoe_relay );
-
-		if( relay_po == NULL  ||
-		    !( relay_po->sk->state & PPPOX_CONNECTED ) )
-			goto abort;
-
-		skb_pull(skb, sizeof(struct pppoe_hdr));
-		if( !__pppoe_xmit( relay_po->sk , skb) )
-			goto abort;
-
-	} else {
-		sock_queue_rcv_skb(sk, skb);
+	if(!po){
+		kfree(skb);
+		return 0;
 	}
 
-	return 1;
+	sk = po->sk;
+        bh_lock_sock(sk);
 
-abort:
-	kfree_skb(skb);
+	/* Socket state is unknown, must put skb into backlog. */
+	if( sk->lock.users != 0 ){
+		sk_add_backlog( sk, skb);
+		ret = 1;
+	}else{
+		ret = pppoe_rcv_core(sk, skb);
+	}
+	
+	bh_unlock_sock(sk);
+	sock_put(sk);
+	return ret;
+}
+
+
+/************************************************************************
+ *
+ * Receive wrapper called in process context.
+ *
+ ***********************************************************************/
+int pppoe_backlog_rcv(struct sock *sk, struct sk_buff *skb)
+{
+	lock_sock(sk);
+	pppoe_rcv_core(sk, skb);
+	release_sock(sk);
 	return 0;
 }
+
+
 
 /************************************************************************
  *
  * Receive a PPPoE Discovery frame.
- * -- This is solely for detection of PADT frames
+ * This is solely for detection of PADT frames
  *
  ***********************************************************************/
 static int pppoe_disc_rcv(struct sk_buff *skb,
@@ -373,7 +422,7 @@ static int pppoe_disc_rcv(struct sk_buff *skb,
 {
 	struct pppoe_hdr *ph = (struct pppoe_hdr *) skb->nh.raw;
 	struct pppox_opt *po;
-	struct sock *sk ;
+	struct sock *sk = NULL;
 
 	if (ph->code != PADT_CODE)
 		goto abort;
@@ -381,13 +430,15 @@ static int pppoe_disc_rcv(struct sk_buff *skb,
 	po = get_item((unsigned long) ph->sid, skb->mac.ethernet->h_source);
 
 	if (!po)
-		goto abort;
+		goto abort_put;
 
 	sk = po->sk;
 
 	pppox_unbind_sock(sk);
 
-abort:
+ abort_put:
+	sock_put(sk);
+ abort:
 	kfree_skb(skb);
 	return 0;
 }
@@ -422,22 +473,7 @@ void sock_pppoe_destruct(struct sock *sk)
 	if (sk->protinfo.destruct_hook)
 		kfree(sk->protinfo.destruct_hook);
 
-	while (skb_queue_len(&sk->receive_queue) > 0) {
-		struct sk_buff *skb = skb_dequeue(&sk->receive_queue);
-		if (skb)
-			kfree_skb(skb);
-	}
-}
-
-int pppoe_backlog_rcv(struct sock *sk, struct sk_buff *skb)
-{
-	/* Never seen this called, don't expect it to be called,
-	   though I've curious whether or not it ever will be. */
-	DEBUG(KERN_CRIT "Backlog rcv called: %p\n", sk);
-
-	kfree_skb(skb);
-
-	return 0;
+	MOD_DEC_USE_COUNT;
 }
 
 /***********************************************************************
@@ -487,7 +523,6 @@ static int pppoe_create(struct socket *sock)
 
 free_sk:
 	sk_free(sk);
-	MOD_DEC_USE_COUNT;
 	return error;
 }
 
@@ -505,8 +540,6 @@ int pppoe_release(struct socket *sock)
 
 	pppox_unbind_sock(sk);
 
-	sock_orphan(sk);
-
 	/* Signal the death of the socket. */
 	sk->state = PPPOX_DEAD;
 
@@ -514,12 +547,9 @@ int pppoe_release(struct socket *sock)
 	if (po->pppoe_pa.sid)
 		delete_item(po->pppoe_pa.sid, po->pppoe_pa.remote);
 
-	kfree(po);
-
-
 	/* Should also do a queue purge here */
 
-	sk->protinfo.pppox = NULL;
+	sock_orphan(sk);
 	sock->sk = NULL;
 
 	skb_queue_purge(&sk->receive_queue);

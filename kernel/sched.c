@@ -506,7 +506,7 @@ tq_scheduler_back:
 	release_kernel_lock(prev, this_cpu);
 
 	/* Do "administrative" work here while we don't hold any locks */
-	if (softirq_state[this_cpu].active & softirq_state[this_cpu].mask)
+	if (softirq_active(this_cpu) & softirq_mask(this_cpu))
 		goto handle_softirq;
 handle_softirq_back:
 

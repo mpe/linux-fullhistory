@@ -65,7 +65,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 
         address = S390_lowcore.trans_exc_code&0x7ffff000;
 
-        if (atomic_read(&S390_lowcore.local_irq_count))
+        if (in_irq())
                 die("page fault from irq handler",regs,error_code);
 
         tsk = current;

@@ -23,16 +23,14 @@ BTFIXUPDEF_CALL(char *, __irq_itoa, unsigned int)
 
 /* IRQ handler dispatch entry and exit. */
 #ifdef CONFIG_SMP
-extern unsigned int __local_irq_count[NR_CPUS];
 #define irq_enter(cpu, irq)                     \
 do {    hardirq_enter(cpu);                     \
         spin_unlock_wait(&global_irq_lock);     \
 	} while(0)
 #define irq_exit(cpu, irq)      hardirq_exit(cpu)
 #else
-extern unsigned int __local_irq_count;
-#define irq_enter(cpu, irq)     (__local_irq_count++)
-#define irq_exit(cpu, irq)      (__local_irq_count--)
+#define irq_enter(cpu, irq)     (++local_irq_count(cpu))
+#define irq_exit(cpu, irq)      (--local_irq_count(cpu))
 #endif
 
 /* Dave Redman (djhr@tadpole.co.uk)

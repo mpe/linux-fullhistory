@@ -9,7 +9,7 @@
 #ifdef CONFIG_SMP
 #error SMP not supported
 #else
-		ldr	\rd, __softirq_state
+		ldr	\rd, __irq_stat
 #endif
 		.endm
 
@@ -22,7 +22,7 @@ slow_syscall_return:
 		add	sp, sp, #S_OFF
 ret_from_sys_call:				@ external entry
 		get_softirq r0
-		ldmia	r0, {r0, r1}
+		ldmia	r0, {r0, r1}		@ softirq_active, softirq_mask
 		mov	r4, #1			@ flag this as being syscall return
 		tst	r0, r1
 		blne	SYMBOL_NAME(do_softirq)
@@ -48,7 +48,7 @@ ret_reschedule:	adrsvc	al, lr, ret_with_reschedule	@ internal
 		.globl	ret_from_exception
 ret_from_exception:				@ external entry
 		get_softirq r0
-		ldmia	r0, {r0, r1}
+		ldmia	r0, {r0, r1}		@ softirq_active, softirq_mask
 		mov	r4, #0
 		tst	r0, r1
 		blne	SYMBOL_NAME(do_softirq)
@@ -129,9 +129,9 @@ vector_swi:	save_user_regs
 		b	SYMBOL_NAME(deferred)
 
 		.align	5
-		.type	__softirq_state, #object
-__softirq_state:
-		.word	SYMBOL_NAME(softirq_state)
+		.type	__irq_stat, #object
+__irq_stat:
+		.word	SYMBOL_NAME(irq_stat)
 
 		.type	sys_call_table, #object
 ENTRY(sys_call_table)

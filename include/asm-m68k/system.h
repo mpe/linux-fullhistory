@@ -52,7 +52,7 @@ asmlinkage void resume(void);
 #else
 #include <asm/hardirq.h>
 #define __sti() ({								\
-	if (!local_irq_count[smp_processor_id()])				\
+	if (!local_irq_count(smp_processor_id()))				\
 		asm volatile ("andiw %0,%%sr": : "i" (ALLOWINT) : "memory");	\
 })
 #endif

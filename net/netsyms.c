@@ -617,7 +617,6 @@ EXPORT_SYMBOL(ipt_unregister_match);
 EXPORT_SYMBOL(register_gifconf);
 
 EXPORT_SYMBOL(net_call_rx_atomic);
-EXPORT_SYMBOL(softirq_state);
 EXPORT_SYMBOL(softnet_data);
 
 #endif  /* CONFIG_NET */

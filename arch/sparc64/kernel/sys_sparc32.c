@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.156 2000/07/13 10:59:13 davem Exp $
+/* $Id: sys_sparc32.c,v 1.158 2000/07/29 00:55:49 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -251,45 +251,6 @@ asmlinkage long sys32_getgid16(void)
 asmlinkage long sys32_getegid16(void)
 {
 	return high2lowgid(current->egid);
-}
-
-/* In order to reduce some races, while at the same time doing additional
- * checking and hopefully speeding things up, we copy filenames to the
- * kernel data space before using them..
- *
- * POSIX.1 2.4: an empty pathname is invalid (ENOENT).
- */
-static inline int do_getname32(const char *filename, char *page)
-{
-	int retval;
-
-	/* 32bit pointer will be always far below TASK_SIZE :)) */
-	retval = strncpy_from_user((char *)page, (char *)filename, PAGE_SIZE);
-	if (retval > 0) {
-		if (retval < PAGE_SIZE)
-			return 0;
-		return -ENAMETOOLONG;
-	} else if (!retval)
-		retval = -ENOENT;
-	return retval;
-}
-
-char * getname32(const char *filename)
-{
-	char *tmp, *result;
-
-	result = ERR_PTR(-ENOMEM);
-	tmp = __getname();
-	if (tmp)  {
-		int retval = do_getname32(filename, tmp);
-
-		result = tmp;
-		if (retval < 0) {
-			putname(tmp);
-			result = ERR_PTR(retval);
-		}
-	}
-	return result;
 }
 
 /* 32-bit timeval and related flotsam.  */
@@ -799,7 +760,6 @@ asmlinkage int sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u
 {
 	int version, err;
 
-	lock_kernel();
 	version = call >> 16; /* hack for backward compatibility */
 	call &= 0xffff;
 
@@ -861,7 +821,6 @@ asmlinkage int sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u
 	err = -EINVAL;
 
 out:
-	unlock_kernel();
 	return err;
 }
 
@@ -953,7 +912,7 @@ asmlinkage int sys32_quotactl(int cmd, const char *special, int id, unsigned lon
 		return sys_quotactl(cmd, special,
 				    id, (caddr_t)addr);
 	}
-	spec = getname32 (special);
+	spec = getname (special);
 	err = PTR_ERR(spec);
 	if (IS_ERR(spec)) return err;
 	old_fs = get_fs ();
@@ -998,7 +957,7 @@ asmlinkage int sys32_statfs(const char * path, struct statfs32 *buf)
 	mm_segment_t old_fs = get_fs();
 	char *pth;
 	
-	pth = getname32 (path);
+	pth = getname (path);
 	ret = PTR_ERR(pth);
 	if (!IS_ERR(pth)) {
 		set_fs (KERNEL_DS);
@@ -1064,7 +1023,7 @@ asmlinkage int sys32_utime(char * filename, struct utimbuf32 *times)
 	if (get_user (t.actime, &times->actime) ||
 	    __get_user (t.modtime, &times->modtime))
 		return -EFAULT;
-	filenam = getname32 (filename);
+	filenam = getname (filename);
 	ret = PTR_ERR(filenam);
 	if (!IS_ERR(filenam)) {
 		old_fs = get_fs();
@@ -1572,6 +1531,16 @@ static int cp_new_stat32(struct inode *inode, struct stat32 *statbuf)
 	return err;
 }
 
+/* Perhaps this belongs in fs.h or similar. -DaveM */
+static __inline__ int
+do_revalidate(struct dentry *dentry)
+{
+	struct inode * inode = dentry->d_inode;
+	if (inode->i_op && inode->i_op->revalidate)
+		return inode->i_op->revalidate(dentry);
+	return 0;
+}
+
 asmlinkage int sys32_newstat(char * filename, struct stat32 *statbuf)
 {
 	struct nameidata nd;
@@ -1579,16 +1548,9 @@ asmlinkage int sys32_newstat(char * filename, struct stat32 *statbuf)
 
 	error = user_path_walk(filename, &nd);
 	if (!error) {
-		struct inode *inode = nd.dentry->d_inode;
-
-		if (inode->i_op &&
-		    inode->i_op->revalidate)
-			error = inode->i_op->revalidate(nd.dentry);
-		else
-			error = 0;
+		error = do_revalidate(nd.dentry);
 		if (!error)
-			error = cp_new_stat32(inode, statbuf);
-
+			error = cp_new_stat32(nd.dentry->d_inode, statbuf);
 		path_release(&nd);
 	}
 	return error;
@@ -1601,15 +1563,9 @@ asmlinkage int sys32_newlstat(char * filename, struct stat32 *statbuf)
 
 	error = user_path_walk_link(filename, &nd);
 	if (!error) {
-		struct inode *inode = nd.dentry->d_inode;
-
-		if (inode->i_op &&
-		    inode->i_op->revalidate)
-			error = inode->i_op->revalidate(nd.dentry);
-		else
-			error = 0;
+		error = do_revalidate(nd.dentry);
 		if (!error)
-			error = cp_new_stat32(inode, statbuf);
+			error = cp_new_stat32(nd.dentry->d_inode, statbuf);
 
 		path_release(&nd);
 	}
@@ -1623,16 +1579,11 @@ asmlinkage int sys32_newfstat(unsigned int fd, struct stat32 *statbuf)
 
 	f = fget(fd);
 	if (f) {
-		struct inode *inode = f->f_dentry->d_inode;
+		struct dentry * dentry = f->f_dentry;
 
-		if (inode->i_op &&
-		    inode->i_op->revalidate)
-			err = inode->i_op->revalidate(f->f_dentry);
-		else
-			err = 0;
+		err = do_revalidate(dentry);
 		if (!err)
-			err = cp_new_stat32(inode, statbuf);
-
+			err = cp_new_stat32(dentry->d_inode, statbuf);
 		fput(f);
 	}
 	return err;
@@ -1738,7 +1689,6 @@ asmlinkage int sys32_mount(char *dev_name, char *dir_name, char *type, unsigned 
 
 	is_smb = is_ncp = 0;
 
-	lock_kernel();
 	err = copy_mount_stuff_to_kernel((const void *)type, &type_page);
 	if (err)
 		goto out;
@@ -1764,16 +1714,20 @@ asmlinkage int sys32_mount(char *dev_name, char *dir_name, char *type, unsigned 
 		goto dev_out;
 
 	if (!is_smb && !is_ncp) {
+		lock_kernel();
 		err = do_mount((char*)dev_page, (char*)dir_page,
 				(char*)type_page, new_flags, (char*)data_page);
+		unlock_kernel();
 	} else {
 		if (is_ncp)
 			do_ncp_super_data_conv((void *)data_page);
 		else
 			do_smb_super_data_conv((void *)data_page);
 
+		lock_kernel();
 		err = do_mount((char*)dev_page, (char*)dir_page,
 				(char*)type_page, new_flags, (char*)data_page);
+		unlock_kernel();
 	}
 	free_page(dir_page);
 
@@ -1787,7 +1741,6 @@ type_out:
 	free_page(type_page);
 
 out:
-	unlock_kernel();
 	return err;
 }
 
@@ -2234,34 +2187,9 @@ asmlinkage int sys32_getrusage(int who, struct rusage32 *ru)
 					   24 for IPv6,
 					   about 80 for AX.25 */
 
-/* XXX These as well... */
-extern __inline__ struct socket *socki_lookup(struct inode *inode)
-{
-	return &inode->u.socket_i;
-}
+extern struct socket *sockfd_lookup(int fd, int *err);
 
-extern __inline__ struct socket *sockfd_lookup(int fd, int *err)
-{
-	struct file *file;
-	struct inode *inode;
-
-	if (!(file = fget(fd)))
-	{
-		*err = -EBADF;
-		return NULL;
-	}
-
-	inode = file->f_dentry->d_inode;
-	if (!inode || !inode->i_sock || !socki_lookup(inode))
-	{
-		*err = -ENOTSOCK;
-		fput(file);
-		return NULL;
-	}
-
-	return socki_lookup(inode);
-}
-
+/* XXX This as well... */
 extern __inline__ void sockfd_put(struct socket *sock)
 {
 	fput(sock->file);
@@ -2678,7 +2606,6 @@ asmlinkage int sys32_sendmsg(int fd, struct msghdr32 *user_msg, unsigned user_fl
 	}
 	kern_msg.msg_flags = user_flags;
 
-	lock_kernel();
 	sock = sockfd_lookup(fd, &err);
 	if (sock != NULL) {
 		if (sock->file->f_flags & O_NONBLOCK)
@@ -2686,7 +2613,6 @@ asmlinkage int sys32_sendmsg(int fd, struct msghdr32 *user_msg, unsigned user_fl
 		err = sock_sendmsg(sock, &kern_msg, total_len);
 		sockfd_put(sock);
 	}
-	unlock_kernel();
 
 	/* N.B. Use kfree here, as kern_msg.msg_controllen might change? */
 	if(ctl_buf != ctl)
@@ -2725,7 +2651,6 @@ asmlinkage int sys32_recvmsg(int fd, struct msghdr32 *user_msg, unsigned int use
 	cmsg_ptr = (unsigned long) kern_msg.msg_control;
 	kern_msg.msg_flags = 0;
 
-	lock_kernel();
 	sock = sockfd_lookup(fd, &err);
 	if (sock != NULL) {
 		struct scm_cookie scm;
@@ -2762,7 +2687,6 @@ asmlinkage int sys32_recvmsg(int fd, struct msghdr32 *user_msg, unsigned int use
 		}
 		sockfd_put(sock);
 	}
-	unlock_kernel();
 
 	if(uaddr != NULL && err >= 0)
 		err = move_addr_to_user(addr, kern_msg.msg_namelen, uaddr, uaddr_len);
@@ -3084,7 +3008,7 @@ asmlinkage int sparc32_execve(struct pt_regs *regs)
         if((u32)regs->u_regs[UREG_G1] == 0)
                 base = 1;
 
-        filename = getname32((char *)AA(regs->u_regs[base + UREG_I0]));
+        filename = getname((char *)AA(regs->u_regs[base + UREG_I0]));
 	error = PTR_ERR(filename);
         if(IS_ERR(filename))
                 goto out;
@@ -3926,7 +3850,7 @@ asmlinkage int sys32_utimes(char *filename, struct timeval32 *tvs)
 	mm_segment_t old_fs;
 	int ret;
 
-	kfilename = getname32(filename);
+	kfilename = getname(filename);
 	ret = PTR_ERR(kfilename);
 	if (!IS_ERR(kfilename)) {
 		if (tvs) {

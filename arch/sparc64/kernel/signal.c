@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.52 2000/07/07 04:25:17 davem Exp $
+/*  $Id: signal.c,v 1.53 2000/07/30 23:12:24 davem Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -166,7 +166,6 @@ asmlinkage void sparc64_set_context(struct pt_regs *regs)
 
 	return;
 do_sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -254,7 +253,6 @@ asmlinkage void sparc64_get_context(struct pt_regs *regs)
 
 	return;
 do_sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -566,10 +564,8 @@ setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	return;
 
 sigill:
-	lock_kernel();
 	do_exit(SIGILL);
 sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 

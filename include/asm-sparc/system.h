@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.82 2000/05/09 17:40:15 davem Exp $ */
+/* $Id: system.h,v 1.83 2000/08/04 05:35:55 davem Exp $ */
 #include <linux/config.h>
 
 #ifndef __SPARC_SYSTEM_H

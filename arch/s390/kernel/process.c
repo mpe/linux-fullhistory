@@ -64,8 +64,8 @@ int cpu_idle(void *unused)
 	wait_psw.mask = _WAIT_PSW_MASK;
 	wait_psw.addr = (unsigned long) &&idle_wakeup | 0x80000000L;
 	while(1) {
-                if (softirq_state[smp_processor_id()].active &
-		    softirq_state[smp_processor_id()].mask) {
+                if (softirq_active(smp_processor_id()) &
+		    softirq_mask(smp_processor_id())) {
                         do_softirq();
                         continue;
                 }

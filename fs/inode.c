@@ -489,9 +489,9 @@ static struct inode * find_inode(struct super_block * sb, unsigned long ino, str
 		if (tmp == head)
 			break;
 		inode = list_entry(tmp, struct inode, i_hash);
-		if (inode->i_sb != sb)
-			continue;
 		if (inode->i_ino != ino)
+			continue;
+		if (inode->i_sb != sb)
 			continue;
 		if (find_actor && !find_actor(inode, ino, opaque))
 			continue;

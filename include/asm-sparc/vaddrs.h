@@ -1,4 +1,4 @@
-/* $Id: vaddrs.h,v 1.25 2000/06/05 06:08:46 anton Exp $ */
+/* $Id: vaddrs.h,v 1.26 2000/08/01 04:53:58 anton Exp $ */
 #ifndef _SPARC_VADDRS_H
 #define _SPARC_VADDRS_H
 
@@ -11,6 +11,20 @@
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 2000 Anton Blanchard (anton@linuxcare.com)
  */
+
+#define SRMMU_MAXMEM		0x0c000000
+
+#define SRMMU_NOCACHE_VADDR	0xfc000000	/* KERNBASE + SRMMU_MAXMEM */
+/* XXX Make this dynamic based on ram size - Anton */
+#define SRMMU_NOCACHE_NPAGES	256
+#define SRMMU_NOCACHE_SIZE	(SRMMU_NOCACHE_NPAGES * PAGE_SIZE)
+#define SRMMU_NOCACHE_END	(SRMMU_NOCACHE_VADDR + SRMMU_NOCACHE_SIZE)
+
+#define FIX_KMAP_BEGIN		0xfc100000
+#define FIX_KMAP_END (FIX_KMAP_BEGIN + ((KM_TYPE_NR*NR_CPUS)-1)*PAGE_SIZE)
+
+#define PKMAP_BASE		0xfc140000
+#define PKMAP_BASE_END		(PKMAP_BASE+LAST_PKMAP*PAGE_SIZE)
 
 #define SUN4M_IOBASE_VADDR	0xfd000000 /* Base for mapping pages */
 #define IOBASE_VADDR		0xfe000000

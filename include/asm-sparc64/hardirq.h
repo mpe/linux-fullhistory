@@ -11,12 +11,27 @@
 #include <linux/brlock.h>
 #include <linux/spinlock.h>
 
+/* entry.S is sensitive to the offsets of these fields */
+typedef struct {
+	unsigned int __softirq_active;
+	unsigned int __softirq_mask;
 #ifndef CONFIG_SMP
-extern unsigned int __local_irq_count;
-#define local_irq_count(cpu)	__local_irq_count
-#define irq_enter(cpu, irq)	(__local_irq_count++)
-#define irq_exit(cpu, irq)	(__local_irq_count--)
+	unsigned int __local_irq_count;
 #else
+	unsigned int __unused_on_SMP;	/* DaveM says use brlock for SMP irq. KAO */
+#endif
+	unsigned int __local_bh_count;
+	unsigned int __syscall_count;
+} ____cacheline_aligned irq_cpustat_t;
+
+#include <linux/irq_cpustat.h>	/* Standard mappings for irq_cpustat_t above */
+/* Note that local_irq_count() is replaced by sparc64 specific version for SMP */
+
+#ifndef CONFIG_SMP
+#define irq_enter(cpu, irq)	((void)(irq), local_irq_count(cpu)++)
+#define irq_exit(cpu, irq)	((void)(irq), local_irq_count(cpu)--)
+#else
+#undef local_irq_count
 #define local_irq_count(cpu)	(__brlock_array[cpu][BR_GLOBALIRQ_LOCK])
 #define irq_enter(cpu, irq)	br_read_lock(BR_GLOBALIRQ_LOCK)
 #define irq_exit(cpu, irq)	br_read_unlock(BR_GLOBALIRQ_LOCK)

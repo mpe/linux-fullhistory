@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.89 2000/06/30 10:18:38 davem Exp $
+/* $Id: irq.c,v 1.90 2000/08/01 00:28:33 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -548,13 +548,7 @@ out:
 	restore_flags(flags);
 }
 
-/* Only uniprocessor needs this IRQ/BH locking depth, on SMP it
- * lives in the brlock table for cache reasons.
- */
-#ifndef CONFIG_SMP
-unsigned int __local_irq_count;
-unsigned int __local_bh_count;
-#else
+#ifdef CONFIG_SMP
 
 /* Who has global_irq_lock. */
 unsigned char global_irq_holder = NO_PROC_ID;
@@ -571,7 +565,7 @@ static void show(char * str)
 	printk("]\nbh:   %d [ ",
 	       (spin_is_locked(&global_bh_lock) ? 1 : 0));
 	for (i = 0; i < smp_num_cpus; i++)
-		printk("%u ", cpu_data[i].bh_count);
+		printk("%u ", local_bh_count(i));
 	printk("]\n");
 }
 
@@ -768,10 +762,12 @@ void handler_irq(int irq, struct pt_regs *regs)
 
 		nbp = __bucket(bp->irq_chain);
 		if ((flags & IBF_ACTIVE) != 0) {
+#ifdef CONFIG_PCI
 			if ((flags & IBF_DMA_SYNC) != 0) {
 				upa_readl(dma_sync_reg_table[bp->synctab_ent]);
 				upa_readq(pci_dma_wsync);
 			}
+#endif
 			if ((flags & IBF_MULTI) == 0) {
 				struct irqaction *ap = bp->irq_info;
 				ap->handler(__irq(bp), ap->dev_id, regs);

@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.218 2000/07/10 23:22:32 anton Exp $
+/* $Id: srmmu.c,v 1.219 2000/08/01 04:53:58 anton Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -87,7 +87,7 @@ char *srmmu_name;
 ctxd_t *srmmu_ctx_table_phys;
 ctxd_t *srmmu_context_table;
 
-int viking_mxcc_present = 0;
+int viking_mxcc_present;
 spinlock_t srmmu_context_spinlock = SPIN_LOCK_UNLOCKED;
 
 int is_hypersparc;
@@ -117,10 +117,6 @@ static inline int srmmu_device_memory(unsigned long x)
 int srmmu_cache_pagetables;
 
 /* XXX Make this dynamic based on ram size - Anton */
-#define SRMMU_NOCACHE_NPAGES 256
-#define SRMMU_NOCACHE_VADDR 0xfc000000
-#define SRMMU_NOCACHE_SIZE (SRMMU_NOCACHE_NPAGES*PAGE_SIZE)
-#define SRMMU_NOCACHE_END (SRMMU_NOCACHE_VADDR + SRMMU_NOCACHE_SIZE)
 #define SRMMU_NOCACHE_BITMAP_SIZE (SRMMU_NOCACHE_NPAGES * 16)
 #define SRMMU_NOCACHE_BITMAP_SHIFT (PAGE_SHIFT - 4)
 
@@ -1190,9 +1186,11 @@ void __init srmmu_paging_init(void)
 {
 	int i, cpunode;
 	char node_str[128];
-	unsigned long end_pfn;
+	pgd_t *pgd;
+	pmd_t *pmd;
+	pte_t *pte;
 
-	sparc_iomap.start = 0xfd000000;    /* 16MB of IOSPACE on all sun4m's. */
+	sparc_iomap.start = SUN4M_IOBASE_VADDR;	/* 16MB of IOSPACE on all sun4m's. */
 
 	if (sparc_cpu_model == sun4d)
 		num_contexts = 65536; /* We know it is Viking */
@@ -1215,7 +1213,7 @@ void __init srmmu_paging_init(void)
 		prom_halt();
 	}
 
-	last_valid_pfn = end_pfn = bootmem_init();
+	bootmem_init();
 
 	srmmu_nocache_init();
         srmmu_inherit_prom_mappings(0xfe400000,(LINUX_OPPROM_ENDVM-PAGE_SIZE));
@@ -1238,6 +1236,14 @@ void __init srmmu_paging_init(void)
 	srmmu_allocate_ptable_skeleton(DVMA_VADDR, DVMA_END);
 #endif
 
+	srmmu_allocate_ptable_skeleton(FIX_KMAP_BEGIN, FIX_KMAP_END);
+	srmmu_allocate_ptable_skeleton(PKMAP_BASE, PKMAP_BASE_END);
+
+	pgd = pgd_offset_k(PKMAP_BASE);
+	pmd = pmd_offset(pgd, PKMAP_BASE);
+	pte = pte_offset(pmd, PKMAP_BASE);
+	pkmap_page_table = pte;
+
 	flush_cache_all();
 	flush_tlb_all();
 
@@ -1253,10 +1259,13 @@ void __init srmmu_paging_init(void)
 
 	sparc_context_init(num_contexts);
 
+	kmap_init();
+
 	{
 		unsigned long zones_size[MAX_NR_ZONES] = { 0, 0, 0};
 
-		zones_size[ZONE_DMA] = end_pfn;
+		zones_size[ZONE_DMA] = max_low_pfn;
+		zones_size[ZONE_HIGHMEM] = highend_pfn - max_low_pfn;
 		free_area_init(zones_size);
 	}
 }

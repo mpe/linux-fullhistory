@@ -25,9 +25,6 @@
 
 void (*board_time_init)(struct irqaction *irq);
 extern asmlinkage void orionIRQ(void);
-irq_cpustat_t irq_stat [NR_CPUS];
-unsigned int local_bh_count[NR_CPUS];
-unsigned int local_irq_count[NR_CPUS];
 unsigned long spurious_count = 0;
 irq_desc_t irq_desc[NR_IRQS];
 
@@ -186,7 +183,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 
 	irq_exit(cpu);
 
-	if (softirq_state[cpu].active&softirq_state[cpu].mask)
+	if (softirq_active(cpu)&softirq_mask(cpu))
 		do_softirq();
 
 	/* unmasking and bottom half handling is done magically for us. */

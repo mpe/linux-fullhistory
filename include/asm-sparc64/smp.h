@@ -34,7 +34,7 @@ extern struct prom_cpuinfo linux_cpus[64];
 /* Keep this a multiple of 64-bytes for cache reasons. */
 struct cpuinfo_sparc {
 	/* Dcache line 1 */
-	unsigned int	bh_count;
+	unsigned int	__pad0;		/* bh_count moved to irq_stat for consistency. KAO */
 	unsigned int	multiplier;
 	unsigned int	counter;
 	unsigned int	idle_volume;

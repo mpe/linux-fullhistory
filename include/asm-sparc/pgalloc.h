@@ -1,4 +1,4 @@
-/* $Id: pgalloc.h,v 1.6 2000/07/10 20:56:53 anton Exp $ */
+/* $Id: pgalloc.h,v 1.9 2000/08/01 04:53:58 anton Exp $ */
 #ifndef _SPARC_PGALLOC_H
 #define _SPARC_PGALLOC_H
 
@@ -85,7 +85,9 @@ BTFIXUPDEF_CALL(void, flush_sig_insns, struct mm_struct *, unsigned long)
 #define __flush_page_to_ram(addr) BTFIXUP_CALL(__flush_page_to_ram)(addr)
 #define flush_sig_insns(mm,insn_addr) BTFIXUP_CALL(flush_sig_insns)(mm,insn_addr)
 
-#define flush_page_to_ram(page)    __flush_page_to_ram(page_address(page))
+extern void flush_page_to_ram(struct page *page);
+
+#define flush_dcache_page(page)			do { } while (0)
 
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;

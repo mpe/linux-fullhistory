@@ -68,14 +68,12 @@ struct fb_info_offb {
 #define mach_eieio()	do {} while (0)
 #endif
 
-static int ofonly = 0;
 
     /*
      *  Interface used by the world
      */
 
 int offb_init(void);
-int offb_setup(char*);
 
 static int offb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			struct fb_info *info);
@@ -90,7 +88,6 @@ static int offb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 
 extern boot_infos_t *boot_infos;
 
-static int offb_init_driver(struct device_node *);
 static void offb_init_nodriver(struct device_node *);
 static void offb_init_fb(const char *name, const char *full_name, int width,
 		      int height, int depth, int pitch, unsigned long address,
@@ -238,29 +235,6 @@ static int offb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 }
 
 
-#ifdef CONFIG_FB_S3TRIO
-extern void s3triofb_init_of(struct device_node *dp);
-#endif /* CONFIG_FB_S3TRIO */
-#ifdef CONFIG_FB_IMSTT
-extern void imsttfb_of_init(struct device_node *dp);
-#endif
-#ifdef CONFIG_FB_CT65550
-extern void chips_of_init(struct device_node *dp);
-#endif /* CONFIG_FB_CT65550 */
-#ifdef CONFIG_FB_CONTROL
-extern void control_of_init(struct device_node *dp);
-#endif /* CONFIG_FB_CONTROL */
-#ifdef CONFIG_FB_VALKYRIE
-extern void valkyrie_of_init(struct device_node *dp);
-#endif /* CONFIG_FB_VALKYRIE */
-#ifdef CONFIG_FB_PLATINUM
-extern void platinum_of_init(struct device_node *dp);
-#endif /* CONFIG_FB_PLATINUM */
-#ifdef CONFIG_FB_CLGEN
-extern void clgen_of_init(struct device_node *dp);
-#endif /* CONFIG_FB_CLGEN */
-
-
     /*
      *  Initialisation
      */
@@ -324,88 +298,21 @@ int __init offb_init(void)
 	}
 
 	/* initialize it */
-	if (ofonly || macos_display == NULL 
-	    || !offb_init_driver(macos_display)) {
-	    offb_init_fb(macos_display? macos_display->name: "MacOS display",
-			 macos_display? macos_display->full_name: "MacOS display",
-			 boot_infos->dispDeviceRect[2],
-			 boot_infos->dispDeviceRect[3],
-			 boot_infos->dispDeviceDepth,
-			 boot_infos->dispDeviceRowBytes, addr, NULL);
-	}
+	offb_init_fb(macos_display? macos_display->name: "MacOS display",
+		     macos_display? macos_display->full_name: "MacOS display",
+		     boot_infos->dispDeviceRect[2],
+		     boot_infos->dispDeviceRect[3],
+		     boot_infos->dispDeviceDepth,
+		     boot_infos->dispDeviceRowBytes, addr, NULL);
     }
 
     for (dpy = 0; dpy < prom_num_displays; dpy++) {
 	if ((dp = find_path_device(prom_display_paths[dpy])))
-	    if (ofonly || !offb_init_driver(dp))
-		offb_init_nodriver(dp);
-    }
-
-    if (!ofonly) {
-	for (dp = find_type_devices("display"); dp != NULL; dp = dp->next) {
-	    for (dpy = 0; dpy < prom_num_displays; dpy++)
-		if (strcmp(dp->full_name, prom_display_paths[dpy]) == 0)
-		    break;
-	    if (dpy >= prom_num_displays && dp != macos_display)
-		offb_init_driver(dp);
-	}
+	    offb_init_nodriver(dp);
     }
     return 0;
 }
 
-
-    /*
-     *  This function is intended to go away as soon as all OF-aware frame
-     *  buffer device drivers have been converted to use PCI probing and PCI
-     *  resources. [ Geert ]
-     */
-
-static int __init offb_init_driver(struct device_node *dp)
-{
-#ifdef CONFIG_FB_S3TRIO
-    if (!strncmp(dp->name, "S3Trio", 6)) {
-    	s3triofb_init_of(dp);
-	return 1;
-    }
-#endif /* CONFIG_FB_S3TRIO */
-#ifdef CONFIG_FB_IMSTT
-    if (!strncmp(dp->name, "IMS,tt", 6)) {
-	imsttfb_of_init(dp);
-	return 1;
-    }
-#endif
-#ifdef CONFIG_FB_CT65550
-    if (!strcmp(dp->name, "chips65550")) {
-	chips_of_init(dp);
-	return 1;
-    }
-#endif /* CONFIG_FB_CT65550 */
-#ifdef CONFIG_FB_CONTROL
-    if(!strcmp(dp->name, "control")) {
-	control_of_init(dp);
-	return 1;
-    }
-#endif /* CONFIG_FB_CONTROL */
-#ifdef CONFIG_FB_VALKYRIE
-    if(!strcmp(dp->name, "valkyrie")) {
-	valkyrie_of_init(dp);
-	return 1;
-    }
-#endif /* CONFIG_FB_VALKYRIE */
-#ifdef CONFIG_FB_PLATINUM
-    if (!strncmp(dp->name, "platinum",8)) {
-	platinum_of_init(dp);
-	return 1;
-    }
-#endif /* CONFIG_FB_PLATINUM */
-#ifdef CONFIG_FB_CLGEN
-    if (!strncmp(dp->name, "MacPicasso",10) || !strncmp(dp->name, "54m30",5)) {
-       clgen_of_init(dp);
-       return 1;
-    }
-#endif /* CONFIG_FB_CLGEN */
-    return 0;
-}
 
 static void __init offb_init_nodriver(struct device_node *dp)
 {
@@ -682,21 +589,6 @@ static void offb_init_fb(const char *name, const char *full_name,
 	console_fb_info = &info->info;
     }
 #endif /* CONFIG_FB_COMPAT_XPMAC) */
-}
-
-
-    /*
-     *  Setup: parse used options
-     */
-
-int offb_setup(char *options)
-{
-    if (!options || !*options)
-	return 0;
-
-    if (!strcmp(options, "ofonly"))
-	ofonly = 1;
-    return 0;
 }
 
 

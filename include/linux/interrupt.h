@@ -61,20 +61,9 @@ enum
 	TASKLET_SOFTIRQ
 };
 
-#if SMP_CACHE_BYTES <= 32
-/* It is trick to make assembly easier. */
-#define SOFTIRQ_STATE_PAD 32
-#else
-#define SOFTIRQ_STATE_PAD SMP_CACHE_BYTES
-#endif
-
-struct softirq_state
-{
-	__u32	active;
-	__u32	mask;
-} __attribute__ ((__aligned__(SOFTIRQ_STATE_PAD)));
-
-extern struct softirq_state softirq_state[NR_CPUS];
+/* softirq mask and active fields moved to irq_cpustat_t in
+ * asm/hardirq.h to get better cache usage.  KAO
+ */
 
 struct softirq_action
 {
@@ -87,7 +76,7 @@ extern void open_softirq(int nr, void (*action)(struct softirq_action*), void *d
 
 static inline void __cpu_raise_softirq(int cpu, int nr)
 {
-	softirq_state[cpu].active |= (1<<nr);
+	softirq_active(cpu) |= (1<<nr);
 }
 
 

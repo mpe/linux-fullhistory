@@ -2114,6 +2114,12 @@ static struct {
 #endif /* CONFIG_AGP_SIS */
 
 #ifdef CONFIG_AGP_VIA
+	{ PCI_DEVICE_ID_VIA_8371_0,
+		PCI_VENDOR_ID_VIA,
+		VIA_APOLLO_SUPER,
+		"Via",
+		"Apollo Super",
+		via_generic_setup },
 	{ PCI_DEVICE_ID_VIA_8501_0,
 		PCI_VENDOR_ID_VIA,
 		VIA_MVP4,
@@ -2183,16 +2189,15 @@ static int __init agp_lookup_host_bridge (struct pci_dev *pdev)
 	 * there is a 'generic' bridge entry for this vendor */
 	if (agp_try_unsupported && agp_bridge_info[i].device_id == 0) {
 		printk(KERN_WARNING PFX "Trying generic %s routines"
-		       " for device id: %x\n",
+		       " for device id: %04x\n",
 		       agp_bridge_info[i].vendor_name, pdev->device);
 		agp_bridge.type = agp_bridge_info[i].chipset;
 		return agp_bridge_info[i].chipset_setup (pdev);
 	}
 
-	printk(KERN_ERR PFX "Unsupported %s chipset,"
-	       " you might want to try "
-	       "agp_try_unsupported=1.\n",
-	       agp_bridge_info[i].vendor_name);
+	printk(KERN_ERR PFX "Unsupported %s chipset (device id: %04x),"
+	       " you might want to try agp_try_unsupported=1.\n",
+	       agp_bridge_info[i].vendor_name, pdev->device);
 	return -ENODEV;
 }
 

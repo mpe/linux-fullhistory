@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.87 2000/07/07 22:40:35 davem Exp $
+ * Version:	$Id: arp.c,v 1.88 2000/08/02 06:05:02 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -122,9 +122,6 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
-static char *ax2asc2(ax25_address *a, char *buf);
-#endif
 
 
 /*
@@ -1015,6 +1012,9 @@ out:
 #ifndef CONFIG_PROC_FS
 static int arp_get_info(char *buffer, char **start, off_t offset, int length) { return 0; }
 #else
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
+static char *ax2asc2(ax25_address *a, char *buf);
+#endif
 #define HBUFFERLEN 30
 
 static int arp_get_info(char *buffer, char **start, off_t offset, int length)
@@ -1168,6 +1168,7 @@ void __init arp_init (void)
 }
 
 
+#ifdef CONFIG_PROC_FS
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 
 /*
@@ -1201,4 +1202,5 @@ char *ax2asc2(ax25_address *a, char *buf)
 
 }
 
+#endif
 #endif

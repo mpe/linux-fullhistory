@@ -91,8 +91,6 @@ EXPORT_SYMBOL(kd_mksound);
 EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(udelay);
-EXPORT_SYMBOL(local_bh_count);
-EXPORT_SYMBOL(local_irq_count);
 #ifdef CONFIG_CPU_32
 EXPORT_SYMBOL(__ioremap);
 EXPORT_SYMBOL(__iounmap);

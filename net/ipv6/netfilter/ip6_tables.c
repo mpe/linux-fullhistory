@@ -314,7 +314,7 @@ ip6t_do_table(struct sk_buff **pskb,
 
 	/* Initialization */
 	ipv6 = (*pskb)->nh.ipv6h;
-	protohdr = (u_int32_t *)ipv6 + IPV6_HDR_LEN;
+	protohdr = (u_int32_t *)((char *)ipv6 + IPV6_HDR_LEN);
 	datalen = (*pskb)->len - IPV6_HDR_LEN;
 	indev = in ? in->name : nulldevname;
 	outdev = out ? out->name : nulldevname;

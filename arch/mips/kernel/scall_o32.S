@@ -65,8 +65,8 @@ stack_done:
 1:	sw	v0, PT_R2(sp)		# result
 
 EXPORT(o32_ret_from_sys_call)
-	lw	t0, softirq_state
-	lw	t1, softirq_state+4	# unused delay slot
+	lw	t0, irq_stat		# softirq_active
+	lw	t1, irq_stat+4		# softirq_mask.  unused delay slot
 	and	t0, t1
 	bnez	t0, o32_handle_softirq
 

@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.109 2000/07/11 01:38:57 davem Exp $
+/*  $Id: process.c,v 1.110 2000/07/28 09:43:39 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -524,7 +524,7 @@ void synchronize_user_stack(void)
 	}
 }
 
-void fault_in_user_windows(struct pt_regs *regs)
+void fault_in_user_windows(void)
 {
 	struct thread_struct *t = &current->thread;
 	unsigned long window;

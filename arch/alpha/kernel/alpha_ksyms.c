@@ -199,9 +199,6 @@ EXPORT_SYMBOL(debug_spin_trylock);
 EXPORT_SYMBOL(write_lock);
 EXPORT_SYMBOL(read_lock);
 #endif
-#else /* CONFIG_SMP */
-EXPORT_SYMBOL(__local_bh_count);
-EXPORT_SYMBOL(__local_irq_count);
 #endif /* CONFIG_SMP */
 
 EXPORT_SYMBOL(rtc_lock);

@@ -355,6 +355,7 @@ struct fb_info_imstt {
 	struct imstt_regvals init;
 	struct imstt_cursor cursor;
 	unsigned long frame_buffer_phys;
+	unsigned long board_size;
 	__u8 *frame_buffer;
 	unsigned long dc_regs_phys;
 	__u32 *dc_regs;
@@ -1879,62 +1880,13 @@ init_imstt(struct fb_info_imstt *p)
 #endif /* CONFIG_FB_COMPAT_XPMAC */
 }
 
-#if defined(CONFIG_FB_OF) && !defined(MODULE)
-void __init 
-imsttfb_of_init(struct device_node *dp)
-{
-	struct fb_info_imstt *p;
-	int i;
-	__u32 addr = 0;
-	__u8 bus, devfn;
-	__u16 cmd;
-
-	for (i = 0; i < dp->n_addrs; i++) {
-		if (dp->addrs[i].size >= 0x02000000)
-			addr = dp->addrs[i].address;
-	}
-	if (!addr)
-		return;
-
-	if (!pci_device_loc(dp, &bus, &devfn)) {
-		if (!pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd) && !(cmd & PCI_COMMAND_MEMORY)) {
-			cmd |= PCI_COMMAND_MEMORY;
-			pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
-		}
-	}
-
-	p = kmalloc(sizeof(struct fb_info_imstt), GFP_ATOMIC);
-	if (!p)
-		return;
-	memset(p, 0, sizeof(struct fb_info_imstt));
-
-	if (dp->name[11] == '8' || (dp->name[6] == '3' && dp->name[7] == 'd'))
-		p->ramdac = TVP;
-	else
-		p->ramdac = IBM;
-
-	p->frame_buffer_phys = addr;
-	p->frame_buffer = (__u8 *)ioremap(addr, p->ramdac == IBM ? 0x400000 : 0x800000);
-	p->dc_regs_phys = addr + 0x800000;
-	p->dc_regs = (__u32 *)ioremap(addr + 0x800000, 0x1000);
-	p->cmap_regs_phys = addr + 0x840000;
-	p->cmap_regs = (__u8 *)ioremap(addr + 0x840000, 0x1000);
-
-	init_imstt(p);
-}
-#endif
-
 int __init 
 imsttfb_init(void)
 {
 	int i;
-#if defined(CONFIG_FB_OF) && !defined(MODULE)
-	/* We don't want to be called like this. */
-	/* We rely on Open Firmware (offb) instead. */
-#elif defined(CONFIG_PCI)
 	struct pci_dev *pdev = NULL;
 	struct fb_info_imstt *p;
-	__u32 addr;
+	unsigned long addr, size;
 	__u16 cmd;
 
 	while ((pdev = pci_find_device(PCI_VENDOR_ID_IMS, PCI_ANY_ID, pdev))) {
@@ -1944,6 +1896,7 @@ imsttfb_init(void)
 			continue;
 
 		addr = pci_resource_start (pdev, 0);
+		size = pci_resource_len (pdev, 0);
 		if (!addr)
 			continue;
 
@@ -1952,6 +1905,10 @@ imsttfb_init(void)
 			continue;
 		memset(p, 0, sizeof(struct fb_info_imstt));
 
+		if (!request_mem_region(addr, size, "imsttfb")) {
+			kfree(p);
+			continue;
+		}
 		printk("imsttfb: device=%04x\n", pdev->device);
 
 		switch (pdev->device) {
@@ -1965,6 +1922,7 @@ imsttfb_init(void)
 		}
 
 		p->frame_buffer_phys = addr;
+		p->board_size = size;
 		p->frame_buffer = (__u8 *)ioremap(addr, p->ramdac == IBM ? 0x400000 : 0x800000);
 		p->dc_regs_phys = addr + 0x800000;
 		p->dc_regs = (__u32 *)ioremap(addr + 0x800000, 0x1000);
@@ -1973,7 +1931,6 @@ imsttfb_init(void)
 
 		init_imstt(p);
 	}
-#endif /* CONFIG_PCI */
 	for (i = 0; i < FB_MAX; i++) {
 		if (fb_info_imstt_p[i])
 			return 0;
@@ -2059,6 +2016,7 @@ cleanup_module (void)
 		iounmap(p->dc_regs);
 		iounmap(p->frame_buffer);
 		kfree(p);
+		release_mem_region(p->frame_buffer_phys, p->board_size);
 	}
 }
 

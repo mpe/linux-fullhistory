@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.117 2000/07/11 02:21:12 davem Exp $
+/* $Id: entry.S,v 1.118 2000/08/01 00:11:31 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -980,7 +980,7 @@ linux_syscall_trace:
 	.align	32
 	.globl	linux_sparc_syscall32
 linux_sparc_syscall32:
-	/* Direct access to user regs, must faster. */
+	/* Direct access to user regs, much faster. */
 	cmp		%g1, NR_SYSCALLS			! IEU1	Group
 	bgeu,pn		%xcc, linux_sparc_ni_syscall		! CTI
 	 srl		%i0, 0, %o0				! IEU0
@@ -1009,7 +1009,7 @@ linux_sparc_syscall32:
 	.align	32
 	.globl	linux_sparc_syscall, ret_sys_call
 linux_sparc_syscall:
-	/* Direct access to user regs, must faster. */
+	/* Direct access to user regs, much faster. */
 	cmp		%g1, NR_SYSCALLS			! IEU1	Group
 	bgeu,pn		%xcc, linux_sparc_ni_syscall		! CTI
 	 mov		%i0, %o0				! IEU0

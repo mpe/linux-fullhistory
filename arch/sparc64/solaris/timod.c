@@ -1,4 +1,4 @@
-/* $Id: timod.c,v 1.9 2000/07/12 23:21:02 davem Exp $
+/* $Id: timod.c,v 1.10 2000/07/28 12:15:02 davem Exp $
  * timod.c: timod emulation.
  *
  * Copyright (C) 1998 Patrik Rak (prak3264@ss1000.ms.mff.cuni.cz)
@@ -26,9 +26,6 @@
 
 #include "conv.h"
 #include "socksys.h"
-
-extern char *getname32(u32 filename);
-#define putname32 putname
 
 extern asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, 
 	unsigned long arg);

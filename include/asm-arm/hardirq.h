@@ -4,11 +4,16 @@
 #include <linux/config.h>
 #include <linux/threads.h>
 
-extern unsigned int local_irq_count[NR_CPUS];
-extern unsigned int local_bh_count[NR_CPUS];
+/* entry.S is sensitive to the offsets of these fields */
+typedef struct {
+	unsigned int __softirq_active;
+	unsigned int __softirq_mask;
+	unsigned int __local_irq_count;
+	unsigned int __local_bh_count;
+	unsigned int __syscall_count;
+} ____cacheline_aligned irq_cpustat_t;
 
-#define local_irq_count(cpu)	(local_irq_count[(cpu)])
-#define local_bh_count(cpu)	(local_bh_count[(cpu)])
+#include <linux/irq_cpustat.h>	/* Standard mappings for irq_cpustat_t above */
 
 /*
  * Are we in an interrupt context? Either doing bottom half

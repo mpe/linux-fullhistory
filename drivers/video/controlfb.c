@@ -146,11 +146,9 @@ static int default_cmode = CMODE_NVRAM;
  * Exported functions
  */
 int control_init(void);
-#ifdef CONFIG_FB_OF
-void control_of_init(struct device_node *dp);
-#endif
 void control_setup(char *);
 
+static void control_of_init(struct device_node *dp);
 static int read_control_sense(struct fb_info_control *p);
 static inline int control_vram_reqd(int video_mode, int color_mode);
 static void set_control_clock(unsigned char *params);
@@ -195,6 +193,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
+	/* FIXME: clean up and release regions */
 }
 #endif
 
@@ -638,17 +637,15 @@ static void control_set_hardware(struct fb_info_control *p, struct fb_par_contro
 
 int __init control_init(void)
 {
-#ifndef CONFIG_FB_OF
 	struct device_node *dp;
 
 	dp = find_devices("control");
 	if (dp != 0)
 		control_of_init(dp);
-#endif /* CONFIG_FB_OF */
 	return 0;
 }
 
-void __init control_of_init(struct device_node *dp)
+static void __init control_of_init(struct device_node *dp)
 {
 	struct fb_info_control	*p;
 	unsigned long		addr, size;
@@ -667,6 +664,11 @@ void __init control_of_init(struct device_node *dp)
 	for (i = 0; i < dp->n_addrs; ++i) {
 		addr = dp->addrs[i].address;
 		size = dp->addrs[i].size;
+		/* Let's assume we can request either all or nothing */
+		if (!request_mem_region(addr, size, "controlfb")) {
+		    kfree(p);
+		    return;
+		}
 		if (size >= 0x800000) {
 			/* use the big-endian aperture (??) */
 			addr += 0x800000;
@@ -679,6 +681,7 @@ void __init control_of_init(struct device_node *dp)
 		}
 	}
 	p->cmap_regs_phys = 0xf301b000;	 /* XXX not in prom? */
+	request_mem_region(p->cmap_regs_phys, 0x1000, "controlfb cmap");
 	p->cmap_regs = ioremap(p->cmap_regs_phys, 0x1000);
 
 	/* Work out which banks of VRAM we have installed. */

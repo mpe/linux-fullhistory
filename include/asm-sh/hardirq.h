@@ -4,28 +4,33 @@
 #include <linux/config.h>
 #include <linux/threads.h>
 
-extern unsigned int __local_irq_count[NR_CPUS];
-extern unsigned int __local_bh_count[NR_CPUS];
+/* entry.S is sensitive to the offsets of these fields */
+typedef struct {
+	unsigned int __softirq_active;
+	unsigned int __softirq_mask;
+	unsigned int __local_irq_count;
+	unsigned int __local_bh_count;
+	unsigned int __syscall_count;
+} ____cacheline_aligned irq_cpustat_t;
 
-#define local_irq_count(cpu) (__local_irq_count[(cpu)])
-#define local_bh_count(cpu) (__local_bh_count[(cpu)])
+#include <linux/irq_cpustat.h>	/* Standard mappings for irq_cpustat_t above */
 
 /*
  * Are we in an interrupt context? Either doing bottom half
  * or hardware interrupt processing?
  */
 #define in_interrupt() ({ int __cpu = smp_processor_id(); \
-	(__local_irq_count[__cpu] + __local_bh_count[__cpu] != 0); })
+	(local_irq_count(__cpu) + local_bh_count(__cpu) != 0); })
 
-#define in_irq() (__local_irq_count[smp_processor_id()] != 0)
+#define in_irq() (local_irq_count(smp_processor_id()) != 0)
 
 #ifndef CONFIG_SMP
 
-#define hardirq_trylock(cpu)	(__local_irq_count[cpu] == 0)
+#define hardirq_trylock(cpu)	(local_irq_count(cpu) == 0)
 #define hardirq_endlock(cpu)	do { } while (0)
 
-#define irq_enter(cpu, irq)	(__local_irq_count[cpu]++)
-#define irq_exit(cpu, irq)	(__local_irq_count[cpu]--)
+#define irq_enter(cpu, irq)	(local_irq_count(cpu)++)
+#define irq_exit(cpu, irq)	(local_irq_count(cpu)--)
 
 #define synchronize_irq()	barrier()
 

@@ -32,10 +32,6 @@ EXPORT_SYMBOL(csum_partial_copy_nocheck);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 
-#include <asm/current.h>
-#include <asm/hardirq.h>
-EXPORT_SYMBOL(irq_stat);
-
 #include <asm/processor.h>
 EXPORT_SYMBOL(cpu_data);
 EXPORT_SYMBOL(kernel_thread);

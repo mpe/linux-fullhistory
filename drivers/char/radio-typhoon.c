@@ -300,32 +300,26 @@ static struct video_device typhoon_radio =
 
 static int typhoon_get_info(char *buf, char **start, off_t offset, int len)
 {
+	char *out = buf;
+
 	#ifdef MODULE
 	    #define MODULEPROCSTRING "Driver loaded as a module"
 	#else
 	    #define MODULEPROCSTRING "Driver compiled into kernel"
 	#endif
 
-        #define LIMIT (PAGE_SIZE - 80)
-
-	len = 0;
-	len += sprintf(buf + len, BANNER);
-	if (len > LIMIT) return len;
-	len += sprintf(buf + len, "Load type: " MODULEPROCSTRING "\n\n");
-	if (len > LIMIT) return len;
-	len += sprintf(buf + len, "frequency = %lu kHz\n",
+	/* output must be kept under PAGE_SIZE */
+	out += sprintf(out, BANNER);
+	out += sprintf(out, "Load type: " MODULEPROCSTRING "\n\n");
+	out += sprintf(out, "frequency = %lu kHz\n",
 		typhoon_unit.curfreq >> 4);
-	if (len > LIMIT) return len;
-	len += sprintf(buf + len, "volume = %d\n", typhoon_unit.curvol);
-	if (len > LIMIT) return len;
-	len += sprintf(buf + len, "mute = %s\n", typhoon_unit.muted ?
+	out += sprintf(out, "volume = %d\n", typhoon_unit.curvol);
+	out += sprintf(out, "mute = %s\n", typhoon_unit.muted ?
 		"on" : "off");
-	if (len > LIMIT) return len;
-	len += sprintf(buf + len, "iobase = 0x%x\n", typhoon_unit.iobase);
-	if (len > LIMIT) return len;
-	len += sprintf(buf + len, "mute frequency = %lu kHz\n",
+	out += sprintf(out, "iobase = 0x%x\n", typhoon_unit.iobase);
+	out += sprintf(out, "mute frequency = %lu kHz\n",
 		typhoon_unit.mutefreq >> 4);
-	return len;
+	return out - buf;
 }
 
 #endif /* CONFIG_RADIO_TYPHOON_PROC_FS */

@@ -14,19 +14,16 @@
 #include <linux/threads.h>
 #include <linux/irq.h>
 
+/* entry.S is sensitive to the offsets of these fields */
 typedef struct {
-	unsigned long __local_irq_count;
-	unsigned long __local_bh_count;
-	unsigned long __pad[14];
+	unsigned int __softirq_active;
+	unsigned int __softirq_mask;
+	unsigned int __local_irq_count;
+	unsigned int __local_bh_count;
+	unsigned int __syscall_count;
 } ____cacheline_aligned irq_cpustat_t;
 
-extern irq_cpustat_t irq_stat [NR_CPUS];
-
-/*
- * Simple wrappers reducing source bloat
- */
-#define local_irq_count(cpu) (irq_stat[(cpu)].__local_irq_count)
-#define local_bh_count(cpu) (irq_stat[(cpu)].__local_bh_count)
+#include <linux/irq_cpustat.h>	/* Standard mappings for irq_cpustat_t above */
 
 /*
  * Are we in an interrupt context? Either doing bottom half

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.44 2000/07/10 20:57:35 davem Exp $
+/* $Id: sys_sparc.c,v 1.45 2000/07/30 23:12:24 davem Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -299,13 +299,14 @@ c_sys_nis_syscall (struct pt_regs *regs)
 	static int count=0;
 	
 	/* Don't make the system unusable, if someone goes stuck */
-	if (count++ > 5) return -ENOSYS;
-	lock_kernel();
+	if (count++ > 5)
+		return -ENOSYS;
+
 	printk ("Unimplemented SPARC system call %ld\n",regs->u_regs[1]);
 #ifdef DEBUG_UNIMP_SYSCALL	
 	show_regs (regs);
 #endif
-	unlock_kernel();
+
 	return -ENOSYS;
 }
 
@@ -316,7 +317,6 @@ sparc_breakpoint (struct pt_regs *regs)
 {
 	siginfo_t info;
 
-	lock_kernel();
 #ifdef DEBUG_SPARC_BREAKPOINT
         printk ("TRAP: Entering kernel PC=%lx, nPC=%lx\n", regs->tpc, regs->tnpc);
 #endif
@@ -329,7 +329,6 @@ sparc_breakpoint (struct pt_regs *regs)
 #ifdef DEBUG_SPARC_BREAKPOINT
 	printk ("TRAP: Returning to space: PC=%lx nPC=%lx\n", regs->tpc, regs->tnpc);
 #endif
-	unlock_kernel();
 }
 
 extern void check_pending(int signum);
@@ -364,7 +363,7 @@ asmlinkage int sys_aplib(void)
 asmlinkage int solaris_syscall(struct pt_regs *regs)
 {
 	static int count = 0;
-	lock_kernel();
+
 	regs->tpc = regs->tnpc;
 	regs->tnpc += 4;
 	if(++count <= 5) {
@@ -372,7 +371,7 @@ asmlinkage int solaris_syscall(struct pt_regs *regs)
 		show_regs (regs);
 	}
 	send_sig(SIGSEGV, current, 1);
-	unlock_kernel();
+
 	return -ENOSYS;
 }
 
@@ -380,13 +379,13 @@ asmlinkage int solaris_syscall(struct pt_regs *regs)
 asmlinkage int sunos_syscall(struct pt_regs *regs)
 {
 	static int count = 0;
-	lock_kernel();
+
 	regs->tpc = regs->tnpc;
 	regs->tnpc += 4;
 	if(++count <= 20)
 		printk ("SunOS binary emulation not compiled in\n");
 	force_sig(SIGSEGV, current);
-	unlock_kernel();
+
 	return -ENOSYS;
 }
 #endif
@@ -408,32 +407,37 @@ asmlinkage int sys_utrap_install(utrap_entry_t type, utrap_handler_t new_p,
 			put_user_ret(NULL, old_d, -EFAULT);
 		return 0;
 	}
-	lock_kernel();
 	if (!current->thread.utraps) {
-		current->thread.utraps = kmalloc((UT_TRAP_INSTRUCTION_31+1)*sizeof(long), GFP_KERNEL);
+		current->thread.utraps =
+			kmalloc((UT_TRAP_INSTRUCTION_31+1)*sizeof(long), GFP_KERNEL);
 		if (!current->thread.utraps) return -ENOMEM;
 		current->thread.utraps[0] = 1;
 		memset(current->thread.utraps+1, 0, UT_TRAP_INSTRUCTION_31*sizeof(long));
 	} else {
-		if ((utrap_handler_t)current->thread.utraps[type] != new_p && current->thread.utraps[0] > 1) {
+		if ((utrap_handler_t)current->thread.utraps[type] != new_p &&
+		    current->thread.utraps[0] > 1) {
 			long *p = current->thread.utraps;
-			
-			current->thread.utraps = kmalloc((UT_TRAP_INSTRUCTION_31+1)*sizeof(long), GFP_KERNEL);
+
+			current->thread.utraps =
+				kmalloc((UT_TRAP_INSTRUCTION_31+1)*sizeof(long),
+					GFP_KERNEL);
 			if (!current->thread.utraps) {
 				current->thread.utraps = p;
 				return -ENOMEM;
 			}
 			p[0]--;
 			current->thread.utraps[0] = 1;
-			memcpy(current->thread.utraps+1, p+1, UT_TRAP_INSTRUCTION_31*sizeof(long));
+			memcpy(current->thread.utraps+1, p+1,
+			       UT_TRAP_INSTRUCTION_31*sizeof(long));
 		}
 	}
 	if (old_p)
-		put_user_ret((utrap_handler_t)(current->thread.utraps[type]), old_p, -EFAULT);
+		put_user_ret((utrap_handler_t)(current->thread.utraps[type]),
+			     old_p, -EFAULT);
 	if (old_d)
 		put_user_ret(NULL, old_d, -EFAULT);
 	current->thread.utraps[type] = (long)new_p;
-	unlock_kernel();
+
 	return 0;
 }
 

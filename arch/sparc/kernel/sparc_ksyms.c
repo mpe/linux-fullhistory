@@ -146,8 +146,6 @@ EXPORT_SYMBOL(global_bh_lock);
 EXPORT_SYMBOL(global_irq_count);
 EXPORT_SYMBOL(synchronize_irq);
 #endif
-EXPORT_SYMBOL(__local_irq_count);
-EXPORT_SYMBOL(__local_bh_count);
 
 EXPORT_SYMBOL(udelay);
 EXPORT_SYMBOL(mstk48t02_regs);

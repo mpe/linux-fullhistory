@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.49 2000/03/29 09:55:31 davem Exp $
+/* $Id: rtrap.S,v 1.51 2000/07/28 09:43:39 davem Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -40,8 +40,9 @@ __handle_preemption:
 __handle_user_windows:
 		wrpr			%g0, RTRAP_PSTATE, %pstate
 		call			fault_in_user_windows
-		 add			%sp, STACK_BIAS + REGWIN_SZ, %g0
-		ba,a,pt			%xcc, __handle_user_windows_continue
+		 nop
+		ba,pt			%xcc, __handle_user_windows_continue
+		 nop
 __handle_perfctrs:
 		/* Don't forget to preserve user window invariants. */
 		wrpr			%g0, RTRAP_PSTATE, %pstate
@@ -54,9 +55,9 @@ __handle_perfctrs:
 		wrpr			%g0, RTRAP_PSTATE, %pstate
 
 		call			fault_in_user_windows
-		 add			%sp, STACK_BIAS + REGWIN_SZ, %o0
+		 nop
 		ba,pt			%xcc, __handle_perfctrs_continue
-		 nop			
+		 nop
 __handle_userfpu:
 		rd			%fprs, %l5
 		andcc			%l5, FPRS_FEF, %g0
@@ -69,18 +70,25 @@ __handle_signal:
 		mov			%l6, %o3
 		call			do_signal
 		 add			%sp, STACK_BIAS + REGWIN_SZ, %o1
+		clr			%l6
+
+		/* Signal delivery can modify pt_regs tstate, so we must
+		 * reload it.
+		 */
+		ldx			[%sp + PTREGS_OFF + PT_V9_TSTATE], %l1
+		sethi			%hi(0xf << 20), %l4
+		and			%l1, %l4, %l4
 		ba,pt			%xcc, __handle_signal_continue
-		 clr			%l6
-		nop
+		 andn			%l1, %l4, %l1
 
 		.align			64
 		.globl			rtrap_clr_l6, rtrap
 rtrap_clr_l6:	clr			%l6
 rtrap:		lduw			[%g6 + AOFF_task_processor], %l0
-		sethi			%hi(softirq_state), %l2
-		or			%l2, %lo(softirq_state), %l2
+		sethi			%hi(irq_stat), %l2	! &softirq_active
+		or			%l2, %lo(irq_stat), %l2	! &softirq_active
 		sllx			%l0, 6, %l0
-		ldx			[%l2 + %l0], %l1
+		ldx			[%l2 + %l0], %l1	! softirq_active + softirq_mask
 		srlx			%l1, 32, %l2
 		andcc			%l1, %l2, %g0
 

@@ -734,8 +734,8 @@ static inline void irq_exit(int cpu, unsigned int irq)
 
 #else
 
-#define irq_enter(cpu, irq)     (++local_irq_count[cpu])
-#define irq_exit(cpu, irq)      (--local_irq_count[cpu])
+#define irq_enter(cpu, irq)     (++local_irq_count(cpu))
+#define irq_exit(cpu, irq)      (--local_irq_count(cpu))
 
 #endif
 

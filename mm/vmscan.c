@@ -444,20 +444,24 @@ static inline int memory_pressure(void)
  */
 static inline int keep_kswapd_awake(void)
 {
+	int all_recent = 1;
 	pg_data_t *pgdat = pgdat_list;
 
 	do {
 		int i;
 		for(i = 0; i < MAX_NR_ZONES; i++) {
 			zone_t *zone = pgdat->node_zones+ i;
-			if (zone->size &&
-			    !zone->zone_wake_kswapd)
-				return 0;
+			if (zone->size) {
+				if (zone->free_pages < zone->pages_min)
+					return 1;
+				if (!zone->zone_wake_kswapd)
+					all_recent = 0;
+			}
 		}
 		pgdat = pgdat->node_next;
 	} while (pgdat);
 
-	return 1;
+	return all_recent;
 }
 
 /*
@@ -470,6 +474,9 @@ static inline int keep_kswapd_awake(void)
  *
  * Don't try _too_ hard, though. We don't want to have bad
  * latency.
+ *
+ * Note: only called by kswapd and try_to_free_pages
+ *       both can WAIT at top level.
  */
 #define FREE_COUNT	8
 #define SWAP_COUNT	16
@@ -548,7 +555,7 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 	}
 	/* Return 1 if any page is freed, or
 	 * there are no more memory pressure   */
-	return (count < FREE_COUNT || !memory_pressure());
+	return (count < FREE_COUNT || !keep_kswapd_awake());
  
 done:
 	return 1;

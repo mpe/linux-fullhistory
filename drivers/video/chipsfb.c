@@ -113,8 +113,8 @@ static struct pmu_sleep_notifier chips_sleep_notifier = {
  * Exported functions
  */
 int chips_init(void);
-void chips_of_init(struct device_node *dp);
 
+static void chips_of_init(struct device_node *dp);
 static int chips_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info);
 static int chips_get_var(struct fb_var_screeninfo *var, int con,
@@ -625,17 +625,15 @@ static void __init init_chips(struct fb_info_chips *p)
 
 int __init chips_init(void)
 {
-#ifndef CONFIG_FB_OF
 	struct device_node *dp;
 
 	dp = find_devices("chips65550");
 	if (dp != 0)
 		chips_of_init(dp);
-#endif /* CONFIG_FB_OF */
 	return 0;
 }
 
-void __init chips_of_init(struct device_node *dp)
+static void __init chips_of_init(struct device_node *dp)
 {
 	struct fb_info_chips *p;
 	unsigned long addr;
@@ -649,6 +647,10 @@ void __init chips_of_init(struct device_node *dp)
 		return;
 	memset(p, 0, sizeof(*p));
 	addr = dp->addrs[0].address;
+	if (!request_mem_region(addr, dp->addrs[0].size, "chipsfb")) {
+		kfree(p);
+		return;
+	}
 #ifdef __BIG_ENDIAN
 	addr += 0x800000;	// Use big-endian aperture
 #endif

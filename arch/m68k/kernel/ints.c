@@ -57,10 +57,6 @@ volatile unsigned int num_spurious;
 #define NUM_IRQ_NODES 100
 static irq_node_t nodes[NUM_IRQ_NODES];
 
-unsigned int local_irq_count[NR_CPUS];
-
-unsigned int local_bh_count[NR_CPUS];
-
 static void dummy_enable_irq(unsigned int irq);
 static void dummy_disable_irq(unsigned int irq);
 static int dummy_request_irq(unsigned int irq,

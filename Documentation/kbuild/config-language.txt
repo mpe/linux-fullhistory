@@ -291,6 +291,7 @@ Example:
 This verb displays /prompt/ to the user, accepts a value from the user,
 and assigns that value to /symbol/.  /word/ is the default value.  Legal
 input values are any ASCII string, except for the characters '"' and '\\'.
+Configure will trap an input string of "?" to display help.
 
 The default value is mandatory.
 

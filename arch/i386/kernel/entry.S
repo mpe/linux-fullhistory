@@ -206,11 +206,11 @@ ENTRY(ret_from_sys_call)
 #ifdef CONFIG_SMP
 	movl processor(%ebx),%eax
 	shll $5,%eax
-	movl SYMBOL_NAME(softirq_state)(,%eax),%ecx
-	testl SYMBOL_NAME(softirq_state)+4(,%eax),%ecx
+	movl SYMBOL_NAME(irq_stat)(,%eax),%ecx		# softirq_active
+	testl SYMBOL_NAME(irq_stat)+4(,%eax),%ecx	# softirq_mask
 #else
-	movl SYMBOL_NAME(softirq_state),%ecx
-	testl SYMBOL_NAME(softirq_state)+4,%ecx
+	movl SYMBOL_NAME(irq_stat),%ecx		# softirq_active
+	testl SYMBOL_NAME(irq_stat)+4,%ecx	# softirq_mask
 #endif
 	jne   handle_softirq
 	
@@ -262,11 +262,11 @@ ret_from_exception:
 	GET_CURRENT(%ebx)
 	movl processor(%ebx),%eax
 	shll $5,%eax
-	movl SYMBOL_NAME(softirq_state)(,%eax),%ecx
-	testl SYMBOL_NAME(softirq_state)+4(,%eax),%ecx
+	movl SYMBOL_NAME(irq_stat)(,%eax),%ecx		# softirq_active
+	testl SYMBOL_NAME(irq_stat)+4(,%eax),%ecx	# softirq_mask
 #else
-	movl SYMBOL_NAME(softirq_state),%ecx
-	testl SYMBOL_NAME(softirq_state)+4,%ecx
+	movl SYMBOL_NAME(irq_stat),%ecx		# softirq_active
+	testl SYMBOL_NAME(irq_stat)+4,%ecx	# softirq_mask
 #endif
 	jne   handle_softirq
 

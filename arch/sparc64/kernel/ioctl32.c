@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.93 2000/07/24 22:43:15 anton Exp $
+/* $Id: ioctl32.c,v 1.96 2000/08/02 06:22:35 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
@@ -72,7 +72,7 @@
 #include <asm/envctrl.h>
 #include <asm/audioio.h>
 #include <asm/ethtool.h>
-
+#include <asm/display7seg.h>
 #include <linux/soundcard.h>
 
 #include <linux/atm.h>
@@ -3175,6 +3175,9 @@ COMPATIBLE_IOCTL(RTCGET)
 COMPATIBLE_IOCTL(RTCSET)
 COMPATIBLE_IOCTL(I2CIOCSADR)
 COMPATIBLE_IOCTL(I2CIOCGADR)
+COMPATIBLE_IOCTL(D7SIOCRD)
+COMPATIBLE_IOCTL(D7SIOCWR)
+COMPATIBLE_IOCTL(D7SIOCTM)
 /* Little m */
 COMPATIBLE_IOCTL(MTIOCTOP)
 /* OPENPROMIO, SunOS/Solaris only, the NetBSD one's have
@@ -3725,7 +3728,9 @@ int register_ioctl32_conversion(unsigned int cmd, int (*handler)(unsigned int, u
 	int i;
 	if (!additional_ioctls) {
 		additional_ioctls = module_map(PAGE_SIZE);
-		if (!additional_ioctls) return -ENOMEM;
+		if (!additional_ioctls)
+			return -ENOMEM;
+		memset(additional_ioctls, 0, PAGE_SIZE);
 	}
 	for (i = 0; i < PAGE_SIZE/sizeof(struct ioctl_trans); i++)
 		if (!additional_ioctls[i].cmd)
@@ -3773,7 +3778,6 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	int (*handler)(unsigned int, unsigned int, unsigned long, struct file * filp);
 	struct ioctl_trans *t;
 
-	lock_kernel();
 	filp = fget(fd);
 	if(!filp)
 		goto out2;
@@ -3801,6 +3805,5 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 out:
 	fput(filp);
 out2:
-	unlock_kernel();
 	return error;
 }

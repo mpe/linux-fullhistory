@@ -385,7 +385,6 @@ static dev_link_t *ray_attach(void)
 
     DEBUG(2,"ray_cs ray_attach calling ether_setup.)\n");
     ether_setup(dev);
-    strcpy(dev->name, local->node.dev_name);
     dev->init = &ray_dev_init;
     dev->open = &ray_open;
     dev->stop = &ray_dev_close;
@@ -580,6 +579,8 @@ static void ray_config(dev_link_t *link)
         ray_release((u_long)link);
         return;
     }
+
+    strcpy(local->node.dev_name, dev->name);
 
     link->state &= ~DEV_CONFIG_PENDING;
     printk(KERN_INFO "%s: RayLink, irq %d, hw_addr ",

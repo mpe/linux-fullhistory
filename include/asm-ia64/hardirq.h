@@ -11,23 +11,17 @@
 #include <linux/threads.h>
 #include <linux/irq.h>
 
+/* entry.S is sensitive to the offsets of these fields */
 typedef struct {
+	unsigned int __softirq_active;
+	unsigned int __softirq_mask;
 	unsigned int __local_irq_count;
 	unsigned int __local_bh_count;
-	unsigned int __nmi_counter;
-# if NR_CPUS > 1
-	unsigned int __pad[13];		/* this assumes 64-byte cache-lines... */
-# endif
+	unsigned int __syscall_count;
+	unsigned int __nmi_count;	/* arch dependent */
 } ____cacheline_aligned irq_cpustat_t;
 
-extern irq_cpustat_t irq_stat[NR_CPUS];
-
-/*
- * Simple wrappers reducing source bloat
- */
-#define local_irq_count(cpu)	(irq_stat[(cpu)].__local_irq_count)
-#define local_bh_count(cpu)	(irq_stat[(cpu)].__local_bh_count)
-#define nmi_counter(cpu)	(irq_stat[(cpu)].__nmi_counter)
+#include <linux/irq_cpustat.h>	/* Standard mappings for irq_cpustat_t above */
 
 /*
  * Are we in an interrupt context? Either doing bottom half

@@ -10,6 +10,7 @@
 #ifndef _ASM_MC146818RTC_H
 #define _ASM_MC146818RTC_H
 
+#include <linux/config.h>
 #include <asm/io.h>
 
 #ifndef RTC_PORT

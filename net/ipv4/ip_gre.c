@@ -668,7 +668,6 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	int    gre_hlen;
 	u32    dst;
 	int    mtu;
-	int    err;
 
 	if (tunnel->recursion++) {
 		tunnel->stat.collisions++;
@@ -856,26 +855,12 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 	}
 
-	iph->tot_len		=	htons(skb->len);
-	ip_select_ident(iph, &rt->u.dst);
-	ip_send_check(iph);
-
 #ifdef CONFIG_NETFILTER
 	nf_conntrack_put(skb->nfct);
 	skb->nfct = NULL;
 #endif
 
-	err = NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
-		do_ip_send);
-	if(err < 0) {
-		if(net_ratelimit())
-			printk(KERN_ERR "ipgre_tunnel_xmit: ip_send() failed, err=%d\n", -err);
-		skb = NULL;
-		goto tx_error;
-	}
-
-	stats->tx_bytes += skb->len;
-	stats->tx_packets++;
+	IPTUNNEL_XMIT();
 	tunnel->recursion--;
 	return 0;
 
@@ -884,8 +869,7 @@ tx_error_icmp:
 
 tx_error:
 	stats->tx_errors++;
-	if(skb)
-		dev_kfree_skb(skb);
+	dev_kfree_skb(skb);
 	tunnel->recursion--;
 	return 0;
 }

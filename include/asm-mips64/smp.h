@@ -20,7 +20,6 @@ struct cpuinfo_mips {				/* XXX  */
 	unsigned long smp_local_irq_count;
 	unsigned long prof_multiplier;
 	unsigned long prof_counter;
-	int irq_count, bh_count;
 } __attribute__((aligned(64)));
 
 extern struct cpuinfo_mips cpu_data[NR_CPUS];
