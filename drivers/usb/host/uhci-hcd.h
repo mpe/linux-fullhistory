@@ -358,8 +358,8 @@ struct uhci_hcd {
 	struct uhci_td *term_td;	/* Terminating TD, see UHCI bug */
 	struct uhci_qh *skelqh[UHCI_NUM_SKELQH];	/* Skeleton QH's */
 
-	spinlock_t schedule_lock;
-	struct uhci_frame_list *fl;		/* P: uhci->schedule_lock */
+	spinlock_t lock;
+	struct uhci_frame_list *fl;		/* P: uhci->lock */
 	int fsbr;				/* Full-speed bandwidth reclamation */
 	unsigned long fsbrtimeout;		/* FSBR delay */
 
@@ -375,22 +375,22 @@ struct uhci_hcd {
 	unsigned long resume_timeout;		/* Time to stop signalling */
 
 	/* Main list of URB's currently controlled by this HC */
-	struct list_head urb_list;		/* P: uhci->schedule_lock */
+	struct list_head urb_list;		/* P: uhci->lock */
 
 	/* List of QH's that are done, but waiting to be unlinked (race) */
-	struct list_head qh_remove_list;	/* P: uhci->schedule_lock */
+	struct list_head qh_remove_list;	/* P: uhci->lock */
 	unsigned int qh_remove_age;		/* Age in frames */
 
 	/* List of TD's that are done, but waiting to be freed (race) */
-	struct list_head td_remove_list;	/* P: uhci->schedule_lock */
+	struct list_head td_remove_list;	/* P: uhci->lock */
 	unsigned int td_remove_age;		/* Age in frames */
 
 	/* List of asynchronously unlinked URB's */
-	struct list_head urb_remove_list;	/* P: uhci->schedule_lock */
+	struct list_head urb_remove_list;	/* P: uhci->lock */
 	unsigned int urb_remove_age;		/* Age in frames */
 
 	/* List of URB's awaiting completion callback */
-	struct list_head complete_list;		/* P: uhci->schedule_lock */
+	struct list_head complete_list;		/* P: uhci->lock */
 
 	int rh_numports;
 
@@ -436,13 +436,13 @@ struct urb_priv {
  * Locking in uhci.c
  *
  * Almost everything relating to the hardware schedule and processing
- * of URBs is protected by uhci->schedule_lock.  urb->status is protected
- * by urb->lock; that's the one exception.
+ * of URBs is protected by uhci->lock.  urb->status is protected by
+ * urb->lock; that's the one exception.
  *
- * To prevent deadlocks, never lock uhci->schedule_lock while holding
- * urb->lock.  The safe order of locking is:
+ * To prevent deadlocks, never lock uhci->lock while holding urb->lock.
+ * The safe order of locking is:
  *
- * #1 uhci->schedule_lock
+ * #1 uhci->lock
  * #2 urb->lock
  */
 

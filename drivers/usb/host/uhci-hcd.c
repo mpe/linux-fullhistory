@@ -115,7 +115,7 @@ static void stall_callback(unsigned long ptr)
 	unsigned long flags;
 	int called_uhci_finish_completion = 0;
 
-	spin_lock_irqsave(&uhci->schedule_lock, flags);
+	spin_lock_irqsave(&uhci->lock, flags);
 	if (!list_empty(&uhci->urb_remove_list) &&
 	    uhci_get_current_frame_number(uhci) != uhci->urb_remove_age) {
 		uhci_remove_pending_urbps(uhci);
@@ -134,7 +134,7 @@ static void stall_callback(unsigned long ptr)
 
 		spin_unlock(&u->lock);
 	}
-	spin_unlock_irqrestore(&uhci->schedule_lock, flags);
+	spin_unlock_irqrestore(&uhci->lock, flags);
 
 	/* Wake up anyone waiting for an URB to complete */
 	if (called_uhci_finish_completion)
@@ -202,7 +202,7 @@ static irqreturn_t uhci_irq(struct usb_hcd *hcd, struct pt_regs *regs)
 	if (status & USBSTS_RD)
 		uhci->resume_detect = 1;
 
-	spin_lock(&uhci->schedule_lock);
+	spin_lock(&uhci->lock);
 
 	age = uhci_get_current_frame_number(uhci);
 	if (age != uhci->qh_remove_age)
@@ -229,7 +229,7 @@ static irqreturn_t uhci_irq(struct usb_hcd *hcd, struct pt_regs *regs)
 	}
 	uhci_finish_completion(hcd, regs);
 
-	spin_unlock(&uhci->schedule_lock);
+	spin_unlock(&uhci->lock);
 
 	/* Wake up anyone waiting for an URB to complete */
 	wake_up_all(&uhci->waitqh);
@@ -526,7 +526,7 @@ static int uhci_start(struct usb_hcd *hcd)
 	uhci->fsbr = 0;
 	uhci->fsbrtimeout = 0;
 
-	spin_lock_init(&uhci->schedule_lock);
+	spin_lock_init(&uhci->lock);
 	INIT_LIST_HEAD(&uhci->qh_remove_list);
 
 	INIT_LIST_HEAD(&uhci->td_remove_list);
@@ -743,7 +743,7 @@ static void uhci_stop(struct usb_hcd *hcd)
 
 	reset_hc(uhci);
 
-	spin_lock_irq(&uhci->schedule_lock);
+	spin_lock_irq(&uhci->lock);
 	uhci_free_pending_qhs(uhci);
 	uhci_free_pending_tds(uhci);
 	uhci_remove_pending_urbps(uhci);
@@ -751,7 +751,7 @@ static void uhci_stop(struct usb_hcd *hcd)
 
 	uhci_free_pending_qhs(uhci);
 	uhci_free_pending_tds(uhci);
-	spin_unlock_irq(&uhci->schedule_lock);
+	spin_unlock_irq(&uhci->lock);
 
 	/* Wake up anyone waiting for an URB to complete */
 	wake_up_all(&uhci->waitqh);

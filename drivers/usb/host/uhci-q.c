@@ -1184,7 +1184,7 @@ static int uhci_urb_enqueue(struct usb_hcd *hcd,
 	struct urb *eurb;
 	int bustime;
 
-	spin_lock_irqsave(&uhci->schedule_lock, flags);
+	spin_lock_irqsave(&uhci->lock, flags);
 
 	ret = urb->status;
 	if (ret != -EINPROGRESS)		/* URB already unlinked! */
@@ -1242,7 +1242,7 @@ static int uhci_urb_enqueue(struct usb_hcd *hcd,
 		ret = 0;
 
 out:
-	spin_unlock_irqrestore(&uhci->schedule_lock, flags);
+	spin_unlock_irqrestore(&uhci->lock, flags);
 	return ret;
 }
 
@@ -1373,7 +1373,7 @@ static int uhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb)
 	struct urb_priv *urbp;
 	unsigned int age;
 
-	spin_lock_irqsave(&uhci->schedule_lock, flags);
+	spin_lock_irqsave(&uhci->lock, flags);
 	urbp = urb->hcpriv;
 	if (!urbp)			/* URB was never linked! */
 		goto done;
@@ -1393,7 +1393,7 @@ static int uhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb)
 	list_add_tail(&urbp->urb_list, &uhci->urb_remove_list);
 
 done:
-	spin_unlock_irqrestore(&uhci->schedule_lock, flags);
+	spin_unlock_irqrestore(&uhci->lock, flags);
 	return 0;
 }
 
@@ -1455,16 +1455,16 @@ static void uhci_free_pending_tds(struct uhci_hcd *uhci)
 
 static void
 uhci_finish_urb(struct usb_hcd *hcd, struct urb *urb, struct pt_regs *regs)
-__releases(uhci->schedule_lock)
-__acquires(uhci->schedule_lock)
+__releases(uhci->lock)
+__acquires(uhci->lock)
 {
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 
 	uhci_destroy_urb_priv(uhci, urb);
 
-	spin_unlock(&uhci->schedule_lock);
+	spin_unlock(&uhci->lock);
 	usb_hcd_giveback_urb(hcd, urb, regs);
-	spin_lock(&uhci->schedule_lock);
+	spin_lock(&uhci->lock);
 }
 
 static void uhci_finish_completion(struct usb_hcd *hcd, struct pt_regs *regs)
