@@ -206,7 +206,7 @@ static ctl_table kernel_table2[] = {
 	{ .ctl_name = 99, .procname = "vsyscall64",
 	  .data = &sysctl_vsyscall, .maxlen = sizeof(int), .mode = 0644,
 	  .strategy = vsyscall_sysctl_nostrat,
-	  .proc_handler vsyscall_sysctl_change },
+	  .proc_handler = vsyscall_sysctl_change },
 	{ 0, }
 };
 
