@@ -388,8 +388,7 @@ static int exec_mmap(void)
 
 			current->mm = mm;
 			current->active_mm = mm;
-			SET_PAGE_DIR(current, mm->pgd);
-			activate_context(current);
+			activate_context();
 			mm_release();
 			if (old_mm) {
 				mmput(old_mm);
@@ -836,4 +835,54 @@ out:
 		free_page(bprm.page[i]);
 
 	return retval;
+}
+
+int do_coredump(long signr, struct pt_regs * regs)
+{
+	struct linux_binfmt * binfmt;
+	char corename[6+sizeof(current->comm)];
+	struct file * file;
+	struct dentry * dentry;
+	struct inode * inode;
+
+	lock_kernel();
+	binfmt = current->binfmt;
+	if (!binfmt || !binfmt->core_dump)
+		goto fail;
+	if (!current->dumpable || atomic_read(&current->mm->mm_users) != 1)
+	current->dumpable = 0;
+	if (current->rlim[RLIMIT_CORE].rlim_cur < binfmt->min_coredump)
+		goto fail;
+
+	memcpy(corename,"core.", 5);
+#if 0
+	memcpy(corename+5,current->comm,sizeof(current->comm));
+#else
+	corename[4] = '\0';
+#endif
+	file = filp_open(corename, O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
+	if (IS_ERR(file))
+		goto fail;
+	dentry = file->f_dentry;
+	inode = dentry->d_inode;
+	if (inode->i_nlink > 1)
+		goto close_fail;	/* multiple links - don't dump */
+
+	if (!S_ISREG(inode->i_mode))
+		goto close_fail;
+	if (!inode->i_op || !inode->i_op->default_file_ops)
+		goto close_fail;
+	if (!file->f_op->write)
+		goto close_fail;
+	if (!binfmt->core_dump(signr, regs, file))
+		goto close_fail;
+	filp_close(file, NULL);
+	unlock_kernel();
+	return 1;
+
+close_fail:
+	filp_close(file, NULL);
+fail:
+	unlock_kernel();
+	return 0;
 }

@@ -5,7 +5,7 @@
 # differ on your system.
 #
 PATH=/sbin:/usr/sbin:/bin:/usr/bin:$PATH
-echo '-- Versions installed: (if some fields are empty or looks'
+echo '-- Versions installed: (if some fields are empty or look'
 echo '-- unusual then possibly you have very old versions)'
 uname -a
 insmod -V  2>&1 | awk 'NR==1 {print "Kernel modules        ",$NF}'

@@ -101,11 +101,13 @@ static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 }
 
 struct linux_binfmt script_format = {
+	NULL,
 #ifndef MODULE
-	NULL, 0, load_script, NULL, NULL
+	NULL,
 #else
-	NULL, &__this_module, load_script, NULL, NULL
+	&__this_module,
 #endif
+	load_script, NULL, NULL, 0
 };
 
 int __init init_script_binfmt(void)

@@ -54,7 +54,7 @@ extern void dump_thread(struct pt_regs *, struct user *);
  * don't even try.
  */
 #ifdef USE_ELF_CORE_DUMP
-static int elf_core_dump(long signr, struct pt_regs * regs);
+static int elf_core_dump(long signr, struct pt_regs * regs, struct file * file);
 #else
 #define elf_core_dump	NULL
 #endif
@@ -64,11 +64,13 @@ static int elf_core_dump(long signr, struct pt_regs * regs);
 #define ELF_PAGEALIGN(_v) (((_v) + ELF_EXEC_PAGESIZE - 1) & ~(ELF_EXEC_PAGESIZE - 1))
 
 static struct linux_binfmt elf_format = {
+	NULL,
 #ifndef MODULE
-	NULL, NULL, load_elf_binary, load_elf_library, elf_core_dump
+	NULL,
 #else
-	NULL, &__this_module, load_elf_binary, load_elf_library, elf_core_dump
+	&__this_module,
 #endif
+	load_elf_binary, load_elf_library, elf_core_dump, ELF_EXEC_PAGESIZE
 };
 
 static void set_brk(unsigned long start, unsigned long end)
@@ -1026,10 +1028,10 @@ static int writenote(struct memelfnote *men, struct file *file)
 
 #define DUMP_WRITE(addr, nr)	\
 	if (!dump_write(file, (addr), (nr))) \
-		goto close_coredump;
+		goto end_coredump;
 #define DUMP_SEEK(off)	\
 	if (!dump_seek(file, (off))) \
-		goto close_coredump;
+		goto end_coredump;
 /*
  * Actual dumper
  *
@@ -1037,14 +1039,10 @@ static int writenote(struct memelfnote *men, struct file *file)
  * and then they are actually written out.  If we run out of core limit
  * we just truncate.
  */
-static int elf_core_dump(long signr, struct pt_regs * regs)
+static int elf_core_dump(long signr, struct pt_regs * regs, struct file * file)
 {
 	int has_dumped = 0;
-	struct file *file;
-	struct dentry *dentry;
-	struct inode *inode;
 	mm_segment_t fs;
-	char corefile[6+sizeof(current->comm)];
 	int segs;
 	int i;
 	size_t size;
@@ -1057,12 +1055,6 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	struct elf_prstatus prstatus;	/* NT_PRSTATUS */
 	elf_fpregset_t fpu;		/* NT_PRFPREG */
 	struct elf_prpsinfo psinfo;	/* NT_PRPSINFO */
-
-	if (!current->dumpable ||
-	    limit < ELF_EXEC_PAGESIZE ||
-	    atomic_read(&current->mm->mm_users) != 1)
-		return 0;
-	current->dumpable = 0;
 
 #ifndef CONFIG_BINFMT_ELF
 	MOD_INC_USE_COUNT;
@@ -1111,27 +1103,6 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-
-	memcpy(corefile,"core.",5);
-#if 0
-	memcpy(corefile+5,current->comm,sizeof(current->comm));
-#else
-	corefile[4] = '\0';
-#endif
-	file = filp_open(corefile, O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
-	if (IS_ERR(file))
-		goto end_coredump;
-	dentry = file->f_dentry;
-	inode = dentry->d_inode;
-	if (inode->i_nlink > 1)
-		goto close_coredump;	/* multiple links - don't dump */
-
-	if (!S_ISREG(inode->i_mode))
-		goto close_coredump;
-	if (!inode->i_op || !inode->i_op->default_file_ops)
-		goto close_coredump;
-	if (!file->f_op->write)
-		goto close_coredump;
 
 	has_dumped = 1;
 	current->flags |= PF_DUMPCORE;
@@ -1289,7 +1260,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 
 	for(i = 0; i < numnote; i++)
 		if (!writenote(&notes[i], file))
-			goto close_coredump;
+			goto end_coredump;
 
 	set_fs(fs);
 
@@ -1315,9 +1286,6 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 		printk("elf_core_dump: file->f_pos (%ld) != offset (%ld)\n",
 		       (off_t) file->f_pos, offset);
 	}
-
- close_coredump:
- 	filp_close(file, NULL);
 
  end_coredump:
 	set_fs(fs);

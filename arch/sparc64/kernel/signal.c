@@ -866,12 +866,8 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 
 			case SIGQUIT: case SIGILL: case SIGTRAP:
 			case SIGABRT: case SIGFPE: case SIGSEGV: case SIGBUS:
-				if(current->binfmt && current->binfmt->core_dump) {
-					lock_kernel();
-					if(current->binfmt->core_dump(signr, regs))
-						exit_code |= 0x80;
-					unlock_kernel();
-				}
+				if (do_coredump(signr, regs))
+					exit_code |= 0x80;
 #ifdef DEBUG_SIGNALS
 				/* Very useful to debug the dynamic linker */
 				printk ("Sig %d going...\n", (int)signr);

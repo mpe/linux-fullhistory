@@ -56,21 +56,21 @@ __asm__ __volatile__("invlpg %0": :"m" (*(char *) addr))
 
 static inline void flush_tlb_mm(struct mm_struct *mm)
 {
-	if (mm == current->mm)
+	if (mm == current->active_mm)
 		__flush_tlb();
 }
 
 static inline void flush_tlb_page(struct vm_area_struct *vma,
 	unsigned long addr)
 {
-	if (vma->vm_mm == current->mm)
+	if (vma->vm_mm == current->active_mm)
 		__flush_tlb_one(addr);
 }
 
 static inline void flush_tlb_range(struct mm_struct *mm,
 	unsigned long start, unsigned long end)
 {
-	if (mm == current->mm)
+	if (mm == current->active_mm)
 		__flush_tlb();
 }
 
@@ -301,15 +301,6 @@ extern pte_t * __bad_pagetable(void);
 /* to find an entry in a page-table */
 #define PAGE_PTR(address) \
 ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
-
-/* to set the page-dir */
-#define SET_PAGE_DIR(tsk,pgdir) \
-do { \
-	unsigned long __pgdir = __pa(pgdir); \
-	(tsk)->thread.cr3 = __pgdir; \
-	if ((tsk) == current) \
-		__asm__ __volatile__("movl %0,%%cr3": :"r" (__pgdir)); \
-} while (0)
 
 #define pte_none(x)	(!pte_val(x))
 #define pte_present(x)	(pte_val(x) & (_PAGE_PRESENT | _PAGE_PROTNONE))

@@ -24,6 +24,7 @@
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
 #include <linux/fs.h>
+#include <linux/minix_fs.h>
 
 /*
  * Write to a file (through the page cache).

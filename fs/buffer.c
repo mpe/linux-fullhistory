@@ -44,6 +44,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/bitops.h>
+#include <asm/mmu_context.h>
 
 #define NR_SIZES 7
 static char buffersize_index[65] =
@@ -1955,6 +1956,26 @@ static int sync_old_buffers(void)
 	return 0;
 }
 
+struct mm_struct * start_lazy_tlb(void)
+{
+	struct mm_struct *mm = current->mm;
+	atomic_inc(&mm->mm_count);
+	current->mm = NULL;
+	/* active_mm is still 'mm' */
+	return mm;
+}
+
+void end_lazy_tlb(struct mm_struct *mm)
+{
+	struct mm_struct *active_mm = current->active_mm;
+
+	current->mm = mm;
+	if (mm != active_mm) {
+		current->active_mm = mm;
+		activate_context();
+	}
+	mmdrop(active_mm);
+}
 
 /* This is the interface to bdflush.  As we get more sophisticated, we can
  * pass tuning parameters to this "process", to adjust how it behaves. 
@@ -1963,57 +1984,45 @@ static int sync_old_buffers(void)
 
 asmlinkage int sys_bdflush(int func, long data)
 {
-	int i, error = -EPERM;
-
 	if (!capable(CAP_SYS_ADMIN))
-		goto out;
+		return -EPERM;
 
 	if (func == 1) {
+		int error;
 		struct mm_struct *user_mm;
+
 		/*
 		 * bdflush will spend all of it's time in kernel-space,
 		 * without touching user-space, so we can switch it into
 		 * 'lazy TLB mode' to reduce the cost of context-switches
 		 * to and from bdflush.
 		 */
-		user_mm = current->mm;
-		atomic_inc(&user_mm->mm_count);
-		current->mm = NULL;
-		/* active_mm is still 'user_mm' */
-
+		user_mm = start_lazy_tlb();
 		error = sync_old_buffers();
-
-		current->mm = user_mm;
-		mmdrop(current->active_mm);
-		current->active_mm = user_mm;
-
-		goto out;
+		end_lazy_tlb(user_mm);
+		return error;
 	}
 
 	/* Basically func 1 means read param 1, 2 means write param 1, etc */
 	if (func >= 2) {
-		i = (func-2) >> 1;
-		error = -EINVAL;
-		if (i < 0 || i >= N_PARAM)
-			goto out;
-		if((func & 1) == 0) {
-			error = put_user(bdf_prm.data[i], (int*)data);
-			goto out;
+		int i = (func-2) >> 1;
+		if (i >= 0 && i < N_PARAM) {
+			if ((func & 1) == 0)
+				return put_user(bdf_prm.data[i], (int*)data);
+
+			if (data >= bdflush_min[i] && data <= bdflush_max[i]) {
+				bdf_prm.data[i] = data;
+				return 0;
+			}
 		}
-		if (data < bdflush_min[i] || data > bdflush_max[i])
-			goto out;
-		bdf_prm.data[i] = data;
-		error = 0;
-		goto out;
-	};
+		return -EINVAL;
+	}
 
 	/* Having func 0 used to launch the actual bdflush and then never
 	 * return (unless explicitly killed). We return zero here to 
 	 * remain semi-compatible with present update(8) programs.
 	 */
-	error = 0;
-out:
-	return error;
+	return 0;
 }
 
 /*

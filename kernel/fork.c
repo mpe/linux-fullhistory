@@ -300,7 +300,6 @@ struct mm_struct * mm_alloc(void)
 	mm = kmem_cache_alloc(mm_cachep, SLAB_KERNEL);
 	if (mm) {
 		memset(mm, 0, sizeof(*mm));
-		init_new_context(mm);
 		atomic_set(&mm->mm_users, 1);
 		atomic_set(&mm->mm_count, 1);
 		init_MUTEX(&mm->mmap_sem);
@@ -409,7 +408,7 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 good_mm:
 	tsk->mm = mm;
 	tsk->active_mm = mm;
-	SET_PAGE_DIR(tsk, mm->pgd);
+	init_new_context(tsk,mm);
 	return 0;
 
 free_mm:

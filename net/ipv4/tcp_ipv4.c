@@ -401,10 +401,9 @@ static struct sock *tcp_v4_lookup_listener(u32 daddr, unsigned short hnum, int d
  * The sockhash lock must be held as a reader here.
  */
 static inline struct sock *__tcp_v4_lookup(u32 saddr, u16 sport,
-					   u32 daddr, u16 dport, int dif)
+					   u32 daddr, u16 hnum, int dif)
 {
 	TCP_V4_ADDR_COOKIE(acookie, saddr, daddr)
-	__u16 hnum = ntohs(dport);
 	__u32 ports = TCP_COMBINED_PORTS(sport, hnum);
 	struct sock *sk;
 	int hash;
@@ -439,7 +438,7 @@ __inline__ struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport
 	struct sock *sk;
 
 	SOCKHASH_LOCK_READ();
-	sk = __tcp_v4_lookup(saddr, sport, daddr, dport, dif);
+	sk = __tcp_v4_lookup(saddr, sport, daddr, ntohs(dport), dif);
 	SOCKHASH_UNLOCK_READ();
 
 	return sk;
@@ -1729,7 +1728,7 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 #endif
 		SOCKHASH_LOCK_READ_BH();
 		sk = __tcp_v4_lookup(skb->nh.iph->saddr, th->source,
-				     skb->nh.iph->daddr, th->dest, skb->dev->ifindex);
+				     skb->nh.iph->daddr, ntohs(th->dest), skb->dev->ifindex);
 		SOCKHASH_UNLOCK_READ_BH();
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 		if (!sk)

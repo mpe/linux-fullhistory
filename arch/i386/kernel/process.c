@@ -40,6 +40,7 @@
 #include <asm/ldt.h>
 #include <asm/processor.h>
 #include <asm/desc.h>
+#include <asm/mmu_context.h>
 #ifdef CONFIG_MATH_EMULATION
 #include <asm/math_emu.h>
 #endif
@@ -327,7 +328,8 @@ void machine_restart(char * __unused)
 	 * seldom used feature ;)
 	 */
 
-	SET_PAGE_DIR(current,swapper_pg_dir);
+	current->mm->pgd = swapper_pg_dir;
+	activate_context();
 
 	/* Write 0x1234 to absolute memory location 0x472.  The BIOS reads
 	   this on booting to tell it to "Bypass memory test (also warm

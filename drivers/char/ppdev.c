@@ -85,8 +85,10 @@ static ssize_t do_read (struct pp_struct *pp, void *buf, size_t len)
 {
 	size_t (*fn) (struct parport *, void *, size_t, int);
 	struct parport *port = pp->pdev->port;
+	int addr = pp->mode & IEEE1284_ADDR;
+	int mode = pp->mode & ~(IEEE1284_DEVICEID | IEEE1284_ADDR);
 
-	switch (pp->mode) {
+	switch (mode) {
 	case IEEE1284_MODE_COMPAT:
 		/* This is a write-only mode. */
 		return -EIO;
@@ -100,7 +102,10 @@ static ssize_t do_read (struct pp_struct *pp, void *buf, size_t len)
 		break;
 
 	case IEEE1284_MODE_EPP:
-		fn = port->ops->epp_read_data;
+		if (addr)
+			fn = port->ops->epp_read_addr;
+		else
+			fn = port->ops->epp_read_data;
 		break;
 
 	case IEEE1284_MODE_ECP:
@@ -128,8 +133,10 @@ static ssize_t do_write (struct pp_struct *pp, const void *buf, size_t len)
 {
 	size_t (*fn) (struct parport *, const void *, size_t, int);
 	struct parport *port = pp->pdev->port;
+	int addr = pp->mode & IEEE1284_ADDR;
+	int mode = pp->mode & ~(IEEE1284_DEVICEID | IEEE1284_ADDR);
 
-	switch (pp->mode) {
+	switch (mode) {
 	case IEEE1284_MODE_NIBBLE:
 	case IEEE1284_MODE_BYTE:
 		/* Read-only modes. */
@@ -140,16 +147,25 @@ static ssize_t do_write (struct pp_struct *pp, const void *buf, size_t len)
 		break;
 
 	case IEEE1284_MODE_EPP:
-		fn = port->ops->epp_write_data;
+		if (addr)
+			fn = port->ops->epp_write_addr;
+		else
+			fn = port->ops->epp_write_data;
 		break;
 
 	case IEEE1284_MODE_ECP:
 	case IEEE1284_MODE_ECPRLE:
-		fn = port->ops->ecp_write_data;
+		if (addr)
+			fn = port->ops->ecp_write_addr;
+		else
+			fn = port->ops->ecp_write_data;
 		break;
 
 	case IEEE1284_MODE_ECPSWE:
-		fn = parport_ieee1284_ecp_write_data;
+		if (addr)
+			fn = parport_ieee1284_ecp_write_addr;
+		else
+			fn = parport_ieee1284_ecp_write_data;
 		break;
 
 	default:

@@ -543,12 +543,8 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs, int syscall)
 
 			case SIGQUIT: case SIGILL: case SIGTRAP:
 			case SIGABRT: case SIGFPE: case SIGSEGV:
-				lock_kernel();
-				if (current->binfmt
-				    && current->binfmt->core_dump
-				    && current->binfmt->core_dump(signr, regs))
+				if (do_coredump(signr, regs))
 					exit_code |= 0x80;
-				unlock_kernel();
 				/* FALLTHRU */
 
 			default:
