@@ -40,6 +40,9 @@
  *					(eg for big web sites), but only if
  *					specifically application requested.
  *		Alan Cox	:	New buffering throughout IP. Used dumbly.
+ *		Alan Cox	:	New buffering now used smartly.
+ *		Alan Cox	:	BSD rather than common sense interpretation of
+ *					listen.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -491,6 +494,8 @@ static int inet_listen(struct socket *sock, int backlog)
 	 * else does..
 	 * Now truncate to 128 not 5. 
 	 */
+	if ((unsigned) backlog == 0)	/* BSDism */
+		backlog = 1;
 	if ((unsigned) backlog > 128)
 		backlog = 128;
 	sk->max_ack_backlog = backlog;

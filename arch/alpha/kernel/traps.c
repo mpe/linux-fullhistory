@@ -19,10 +19,10 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 	unsigned long sp;
 	unsigned int * pc;
 
+	if (regs->ps & 8)
+		return;
 	printk("%s(%d): %s %ld\n", current->comm, current->pid, str, err);
 	sp = (unsigned long) (regs+1);
-	if (regs->ps & 8)
-		sp = rdusp();
 	printk("pc = %lx ps = %04lx\n", regs->pc, regs->ps);
 	printk("rp = %lx sp = %lx\n", regs->r26, sp);
 	printk("r0=%lx r1=%lx r2=%lx r3=%lx\n",
@@ -36,8 +36,6 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 		regs->r24, regs->r25, regs->r26, regs->r27);
 	printk("r28=%lx r29=%lx r30=%lx\n",
 		regs->r28, regs->gp, sp);
-	if (regs->ps & 8)
-		return;
 	printk("Code:");
 	pc = (unsigned int *) regs->pc;
 	for (i = -3; i < 6; i++)
@@ -61,8 +59,29 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
 	unsigned long a3, unsigned long a4, unsigned long a5,
 	struct pt_regs regs)
 {
+	extern int ptrace_cancel_bpt (struct task_struct *who);
+
 	die_if_kernel("Instruction fault", &regs, type);
-	send_sig(SIGILL, current, 1);
+	switch (type) {
+	      case 0: /* breakpoint */
+		if (ptrace_cancel_bpt(current)) {
+			regs.pc -= 4;	/* make pc point to former bpt */
+		}
+		if (current->flags & PF_PTRACED)
+		  current->blocked &= ~(1 << (SIGTRAP - 1));
+		send_sig(SIGTRAP, current, 1);
+		break;
+
+	      case 1: /* bugcheck */
+	      case 2: /* gentrap */
+	      case 3: /* FEN fault */
+	      case 4: /* opDEC */
+		send_sig(SIGILL, current, 1);
+		break;
+
+	      default:
+		panic("do_entIF: unexpected instruction-fault type");
+	}
 }
 
 /*
@@ -131,7 +150,8 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 asmlinkage long do_entSys(unsigned long a0, unsigned long a1, unsigned long a2,
 	unsigned long a3, unsigned long a4, unsigned long a5, struct pt_regs regs)
 {
-	printk("<sc %ld(%lx,%lx,%lx)>", regs.r0, a0, a1, a2);
+	if (regs.r0 != 112)
+	  printk("<sc %ld(%lx,%lx,%lx)>", regs.r0, a0, a1, a2);
 	return -1;
 }
 

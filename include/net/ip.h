@@ -44,7 +44,6 @@
 extern void		ip_mc_dropsocket(struct sock *);
 extern void		ip_mc_dropdevice(struct device *dev);
 extern int		ip_mc_procinfo(char *, char **, off_t, int);
-#define MULTICAST(x)	(IN_MULTICAST(htonl(x)))
 #endif
  
 
@@ -89,7 +88,7 @@ extern int		ip_build_header(struct sk_buff *skb,
 /*extern unsigned short	ip_compute_csum(unsigned char * buff, int len);*/
 extern int		ip_rcv(struct sk_buff *skb, struct device *dev,
 			       struct packet_type *pt);
-extern void		ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned long target_addr, int target_strict);			     
+extern int		ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned long target_addr, int target_strict);			     
 extern void		ip_send_check(struct iphdr *ip);
 extern int		ip_id_count;			  
 extern void		ip_queue_xmit(struct sock *sk,

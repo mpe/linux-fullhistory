@@ -6,7 +6,7 @@ driver configuration help.
 
 Because so many people (myself included) seem to have obtained ARCnet cards
 without manuals, this will be a quick listing of all jumper settings I can
-find.  Please e-mail apenwarr@tourism.807-city.on.ca with any settings for
+find.  Please e-mail apenwarr@foxnet.net with any settings for
 your particular card.
 
 Even if your ARCnet model isn't listed, but has the same jumpers, please
@@ -15,7 +15,7 @@ e-mail me to say so.
 If your model isn't listed, and has different settings, PLEASE PLEASE tell
 me.  I had to figure mine out without the manual, and it WASN'T FUN!
 
-Cards Listed in this file:
+Cards Listed in this file (in this order, mostly):
 
 	Manufacturer	Model #		Bits
 	------------	-------		----
@@ -28,10 +28,14 @@ Cards Listed in this file:
 	SMC		PC500Longboard	16
 	SMC		PC550Longboard	16
 	SMC		PC600		16
+	SMC?		LCS-8830-T	16?
 	Puredata	PDI507		16
 	CNet Tech	CN120-Series	8
 	CNet Tech	CN160-Series	16
 	No Name		--		8/16
+	No Name		Taiwan R.O.C(?)	8
+	Tiara		Tiara Lancard(?)
+	
 
 ** SMC = Standard Microsystems Corp.
 ** CNet Tech = CNet Technology, Inc.
@@ -46,7 +50,7 @@ Unclassified Stuff
   
   - And some unknowns (other info is welcome!):
      From: root@ultraworld.xs4all.nl (Timo Hilbrink)
-     To: apenwarr@tourism.807-city.on.ca (Avery Pennarun)
+     To: apenwarr@foxnet.net (Avery Pennarun)
      Date: Wed, 26 Oct 1994 02:10:32 +0000 (GMT)
      Reply-To: timoh@xs4all.nl
 
@@ -55,7 +59,7 @@ Unclassified Stuff
      About the jumpers: On my PC130 there is one more jumper, located near the
      cable-connector and it's for changing to star or bus topology; 
      closed: star - open: bus
-     On the PC500 are some more jumper-pins, one block labeled with RX,PDN,TXI
+     On the PC500 are some more jumper-pins, one block labled with RX,PDN,TXI
      and another with ALE,LA17,LA18,LA19 these are undocumented..
 
      [...more parts deleted...]
@@ -67,16 +71,17 @@ Quick Briefing:
 ---------------
 
 All ARCnet cards should have a total of four different settings:
+
   - the I/O address:  this is the "port" your ARCnet card is on.  Probed
     values, as of v0.14, are only from 0x200 through 0x3F0. (If your card
     has additional ones, which is possible, please tell me.) This should not
-    be the same as any other device on your system.  Supposedly MS Windows
-    prefers values of 0x300 or more, eating net connections on my system
-    otherwise.
+    be the same as any other device on your system.  According to a doc I
+    got from Novell, MS Windows prefers values of 0x300 or more, eating
+    netconnections on my system otherwise.
 	- Avery's favourite: 0x300.
 
   - the IRQ:  on 8-bit cards, it might be 2 (9), 3, 4, 5, or 7.
-             on 16-bit cards, it might be 2 (9), 3, 4, 5, 7, or 9-15.  Make
+             on 16-bit cards, it might be 2 (9), 3, 4, 5, 7, or 10-15.  Make
     sure this is different from any other card on your system.  Note that
     IRQ2 is the same as IRQ9, as far as Linux is concerned.
 	- Avery's favourite: IRQ2.
@@ -108,12 +113,18 @@ All ARCnet cards should have a total of four different settings:
 PC100, PC110, PC120, PC130 (8-bit cards)
 PC500, PC600 (16-bit cards)
 ---------------------------------
-  - mainly from Avery Pennarun <apenwarr@tourism.807-city.on.ca>
-  - values depicted are from Avery's setup.
+  - mainly from Avery Pennarun <apenwarr@foxnet.net>.  Values depicted are
+    from Avery's setup.
   - special thanks to Timo Hilbrink <timoh@xs4all.nl> for noting that PC120,
     130, 500, and 600 all have the same switches as Avery's PC100. 
     PC500/600 have several extra, undocumented pins though. (?)
   - PC110 settings were verified by Stephen A. Wood <saw@cebaf.gov>
+  - On the other hand, John Edward Bauer <jbauer@badlands.NoDak.edu> said
+    the PC110 settings are all wrong.  In his case, you need to switch all
+    the 1's with 0's.  If you're having problems, try that.
+  - Also, the JP- and S-numbers probably don't match your card exactly.  Try
+    to find jumpers/switches with the same number of settings - it's
+    probably more reliable.
   
 
      JP5		       [|]    :    :    :    :
@@ -183,6 +194,7 @@ PC500, PC600 (16-bit cards)
 		Note that this is binary with the digits reversed!
 
 		DO NOT SET THIS TO 0 OR 255 (0xFF)!
+
 
 *****************************************************************************
 
@@ -270,7 +282,7 @@ Setting the Node ID
 
 The eight switches in group S2 are used to set the node ID.
 Each node attached to the network must have an unique node ID which
-must be different from 0.
+must be diffrent from 0.
 Switch 1 serves as the least significant bit (LSB).
 
 The node ID is the sum of the values of all switches set to "1"  
@@ -309,7 +321,7 @@ Setting the I/O Base Address
 ----------------------------
 
 The first three switches in switch group S1 are used to select one
-of eight possible I/O Base addresses using the following table
+of eight possible I/O Base addresses using the followig table
 
 
    Switch | Hex I/O
@@ -317,7 +329,7 @@ of eight possible I/O Base addresses using the following table
    -------|--------
    0 0 0  |  260
    0 0 1  |  290
-   0 1 0  |  2E0  (Manufacturer's default)
+   0 1 0  |  2E0  (Manufactor's default)
    0 1 1  |  2F0
    1 0 0  |  300
    1 0 1  |  350
@@ -352,7 +364,7 @@ positions, determined by the offset, switches 7 and 8 of group S1.
    0 1 0  1 0 |  CD000  |  CE000
    0 1 0  1 1 |  CD800  |  CE000
               |         |
-   0 1 1  0 0 |  D0000  |  D2000  (Manufacturer's default)
+   0 1 1  0 0 |  D0000  |  D2000  (Manufactor's default)
    0 1 1  0 1 |  D0800  |  D2000
    0 1 1  1 0 |  D1000  |  D2000
    0 1 1  1 1 |  D1800  |  D2000
@@ -389,7 +401,7 @@ parameters. These two jumpers are normally left open.
 Refer to the COM9026 Data Sheet for alternate configurations.
 
 To select a hardware interrupt level set one (only one!) of the jumpers
-IRQ2, IRQ3, IRQ4, IRQ5, IRQ7. The manufacturer's default is IRQ2.
+IRQ2, IRQ3, IRQ4, IRQ5, IRQ7. The Manufactor's default is IRQ2.
  
 
 Configuring the PC130E for Star or Bus Topology
@@ -412,7 +424,7 @@ board activity:
  -------|-------------------   ---------|-------------------
   on    | normal activity      flash/on | data transfer
   blink | reconfiguration      off      | no data transfer;
-  off   | defective board or            | incorrect memory or
+  off   | defectiv board or             | incorect memory or
         | node ID is zero               | I/O address
 
 
@@ -506,7 +518,7 @@ Setting the Node ID
 
 The eight switches in group SW3 are used to set the node ID. Each node
 attached to the network must have an unique node ID which must be 
-different from 0.
+diffrent from 0.
 Switch 1 serves as the least significant bit (LSB).
 
 The node ID is the sum of the values of all switches set to "1"  
@@ -546,7 +558,7 @@ Setting the I/O Base Address
 ----------------------------
 
 The first six switches in switch group SW1 are used to select one
-of 32 possible I/O Base addresses using the following table
+of 32 possible I/O Base addresses using the followig table
 
    Switch       | Hex I/O
    6 5  4 3 2 1 | Address
@@ -565,7 +577,7 @@ of 32 possible I/O Base addresses using the following table
    0 1  1 0 1 1 |  2B0
    0 1  1 1 0 0 |  2C0
    0 1  1 1 0 1 |  2D0
-   0 1  1 1 1 0 |  2E0 (Manufacturer's default)
+   0 1  1 1 1 0 |  2E0 (Manufactor's default)
    0 1  1 1 1 1 |  2F0
    1 1  0 0 0 0 |  300
    1 1  0 0 0 1 |  310
@@ -634,8 +646,117 @@ board activity:
  -------|-------------------   ---------|-------------------
   on    | normal activity      flash/on | data transfer
   blink | reconfiguration      off      | no data transfer;
-  off   | defective board or            | incorrect memory or
+  off   | defectiv board or             | incorect memory or
         | node ID is zero               | I/O address
+
+
+*****************************************************************************
+
+** Possibly SMC **
+LCS-8830-T (16-bit card)
+------------------------
+	- from Mathias Katzer <mkatzer@HRZ.Uni-Bielefeld.DE>
+	
+This is a LCS-8830-T made by SMC, I think ('SMC' only appears on one PLCC,
+nowhere else, not even on the few xeroxed sheets from the manual).
+
+SMC Arcnet Board Type LCS-8830-T
+
+   ------------------------------------
+  |                                    |
+  |              JP3 88  8 JP2         |
+  |       #####      | \               |
+  |       #####    ET1 ET2          ###|
+  |                              8  ###|
+  |  U3   SW 1                  JP0 ###|  Phone Jacks
+  |  --                             ###|
+  | |  |                               |
+  | |  |   SW2                         |
+  | |  |                               |
+  | |  |  #####                        |
+  |  --   #####                       ####  BNC Connector 
+  |                                   ####
+  |   888888 JP1                       |
+  |   234567                           |
+   --                           -------
+     |||||||||||||||||||||||||||
+      --------------------------
+
+
+SW1: DIP-Switches for Station Address
+SW2: DIP-Switches for Memory Base and I/O Base addresses
+
+JP0: If closed, internal termination on (default open)
+JP1: IRQ Jumpers
+JP2: Boot-ROM enabled if closed
+JP3: Jumpers for respsonse timeout
+ 
+U3: Boot-ROM Socket          
+
+
+ET1 ET2     Response Time     Idle Time    Reconfiguration Time
+
+               78                86               840
+ X            285               316              1680
+     X        563               624              1680
+ X   X       1130              1237              1680
+
+(X means closed jumper)
+
+(DIP-Switch downwards means "0")
+
+The station address is binary-coded with SW1.
+
+The I/O base address is coded with DIP-Switches 6,7 and 8 of SW2:
+
+Switches        Base
+678             Address
+000		260-26f
+100		290-29f
+010		2e0-2ef
+110		2f0-2ff
+001		300-30f
+101		350-35f
+011		380-38f
+111 		3e0-3ef
+
+
+DIP Switches 1-5 of SW2 encode the RAM and ROM Adress Range:
+
+Switches        Ram           Rom
+12345           Adress Range  Address Range
+00000		C:0000-C:07ff	C:2000-C:3fff
+10000		C:0800-C:0fff
+01000		C:1000-C:17ff
+11000		C:1800-C:1fff
+00100		C:4000-C:47ff	C:6000-C:7fff
+10100		C:4800-C:4fff
+01100		C:5000-C:57ff 
+11100		C:5800-C:5fff
+00010		C:C000-C:C7ff	C:E000-C:ffff
+10010		C:C800-C:Cfff
+01010		C:D000-C:D7ff
+11010		C:D800-C:Dfff
+00110		D:0000-D:07ff	D:2000-D:3fff
+10110		D:0800-D:0fff
+01110		D:1000-D:17ff
+11110		D:1800-D:1fff
+00001		D:4000-D:47ff	D:6000-D:7fff
+10001		D:4800-D:4fff
+01001		D:5000-D:57ff
+11001		D:5800-D:5fff
+00101		D:8000-D:87ff	D:A000-D:bfff
+10101		D:8800-D:8fff
+01101		D:9000-D:97ff
+11101		D:9800-D:9fff 
+00011		D:C000-D:c7ff	D:E000-D:ffff
+10011		D:C800-D:cfff
+01011		D:D000-D:d7ff
+11011		D:D800-D:dfff
+00111		E:0000-E:07ff	E:2000-E:3fff
+10111		E:0800-E:0fff
+01111		E:1000-E:17ff
+11111		E:1800-E:1fff
 
 
 *****************************************************************************
@@ -690,7 +811,7 @@ further information is welcome.]
 
 DIP Switches:
 
-	The dip switches accessible on the accessible end of the card while
+	The dipswitches accessible on the accessible end of the card while
         it is installed, is used to set the arcnet address.  There are 8
         switches.  Use an address from 1 to 254.
 
@@ -781,6 +902,7 @@ DIP Switches:
 ------------------------
   - from Juergen Seifert <seifert@htwm.de>
 
+
 CNET TECHNOLOGY INC. (CNet) ARCNET 120A SERIES
 ==============================================
 
@@ -856,7 +978,7 @@ Setting the Node ID
 -------------------
 
 The eight switches in SW2 are used to set the node ID. Each node attached
-to the network must have an unique node ID which must be different from 0.
+to the network must have an unique node ID which must be diffrent from 0.
 Switch 1 (ID0) serves as the least significant bit (LSB).
 
 The node ID is the sum of the values of all switches set to "1"  
@@ -896,7 +1018,7 @@ Setting the I/O Base Address
 ----------------------------
 
 The last three switches in switch block SW1 are used to select one
-of eight possible I/O Base addresses using the following table
+of eight possible I/O Base addresses using the followig table
 
 
    Switch      | Hex I/O
@@ -904,7 +1026,7 @@ of eight possible I/O Base addresses using the following table
    ------------|--------
    ON  ON  ON  |  260
    OFF ON  ON  |  290
-   ON  OFF ON  |  2E0  (Manufacturer's default)
+   ON  OFF ON  |  2E0  (Manufactor's default)
    OFF OFF ON  |  2F0
    ON  ON  OFF |  300
    OFF ON  OFF |  350
@@ -926,7 +1048,7 @@ Switches 1-5 of switch block SW1 select the Memory Base address.
    ON  ON  ON  ON  ON  |  C0000  |  C2000
    ON  ON  OFF ON  ON  |  C4000  |  C6000
    ON  ON  ON  OFF ON  |  CC000  |  CE000
-   ON  ON  OFF OFF ON  |  D0000  |  D2000  (Manufacturer's default)
+   ON  ON  OFF OFF ON  |  D0000  |  D2000  (Manufactor's default)
    ON  ON  ON  ON  OFF |  D4000  |  D6000
    ON  ON  OFF ON  OFF |  D8000  |  DA000
    ON  ON  ON  OFF OFF |  DC000  |  DE000
@@ -937,7 +1059,7 @@ Switches 1-5 of switch block SW1 select the Memory Base address.
 Note: Since the switches 1 and 2 are always set to ON it may be possible
       that they can be used to add an offset of 2K, 4K or 6K to the base
       address, but this feature is not documented in the manual and I
-      haven't tested it yet.
+      haven't testet it yet.
 
 
 Setting the Interrupt Line
@@ -1066,7 +1188,7 @@ Setting the Node ID
 -------------------
 
 The eight switches in SW2 are used to set the node ID. Each node attached
-to the network must have an unique node ID which must be different from 0.
+to the network must have an unique node ID which must be diffrent from 0.
 Switch 1 (ID0) serves as the least significant bit (LSB).
 
 The node ID is the sum of the values of all switches set to "1"  
@@ -1106,14 +1228,14 @@ Setting the I/O Base Address
 ----------------------------
 
 The first six switches in switch block SW1 are used to select the I/O Base
-address using the following table:
+address using the followig table:
 
              Switch        | Hex I/O
     1   2   3   4   5   6  | Address
    ------------------------|--------
    OFF ON  ON  OFF OFF ON  |  260
    OFF ON  OFF ON  ON  OFF |  290
-   OFF ON  OFF OFF OFF ON  |  2E0  (Manufacturer's default)
+   OFF ON  OFF OFF OFF ON  |  2E0  (Manufactor's default)
    OFF ON  OFF OFF OFF OFF |  2F0
    OFF OFF ON  ON  ON  ON  |  300
    OFF OFF ON  OFF ON  OFF |  350
@@ -1162,9 +1284,9 @@ JP3 through JP13 using the following table:
     13    |   2 (=9) Default!
 
 Note:  - Do not use JP11=IRQ6, it may conflict with your Floppy Disk
-         Controller
+         Controler
        - Use JP3=IRQ14 only, if you don't have an IDE-, MFM-, or RLL-
-         Hard Disk, it may conflict with their controllers
+         Hard Disk, it may conflict with their controlers
 
 
 Setting the Timeout Parameters
@@ -1185,8 +1307,8 @@ NONAME 8-BIT ARCNET
 ===================
 
 I have named this ARCnet card "NONAME", since there is no name of any
-manufacturer on the Installation manual nor on the shipping box. The only
-hint to the existence of a manufacturer at all is written into copper,
+manufactor on the Installation manual nor on the shipping box. The only
+hint to the existence of a manufactor at all is written into cupper,
 it is "Made in Taiwan"
 
 This description has been written by Juergen Seifert <seifert@htwm.de>
@@ -1230,7 +1352,7 @@ ET1, ET2    Extended Timeout Select
 ROM     ROM Enable Select
 CN              RG62 Coax Connector
 STAR| BUS | T/P Three fields for placing a sign (colored circle)
-                indicating the topology of the card
+                indicating the topologie of the card
 
 Setting one of the switches to Off means "1", On means "0".
 
@@ -1240,7 +1362,7 @@ Setting the Node ID
 
 The eight switches in group SW1 are used to set the node ID.
 Each node attached to the network must have an unique node ID which
-must be different from 0.
+must be diffrent from 0.
 Switch 8 serves as the least significant bit (LSB).
 
 The node ID is the sum of the values of all switches set to "1"  
@@ -1280,14 +1402,14 @@ Setting the I/O Base Address
 ----------------------------
 
 The first three switches in switch group SW2 are used to select one
-of eight possible I/O Base addresses using the following table
+of eight possible I/O Base addresses using the followig table
 
    Switch      | Hex I/O
     1   2   3  | Address
    ------------|--------
    ON  ON  ON  |  260
    ON  ON  OFF |  290
-   ON  OFF ON  |  2E0  (Manufacturer's default)
+   ON  OFF ON  |  2E0  (Manufactor's default)
    ON  OFF OFF |  2F0
    OFF ON  ON  |  300
    OFF ON  OFF |  350
@@ -1322,7 +1444,7 @@ positions, determined by the offset, switches 7 and 8 of group SW2.
    0 1 0  1 0 |  CD000  |  CE000
    0 1 0  1 1 |  CD800  |  CE000
               |         |
-   0 1 1  0 0 |  D0000  |  D2000  (Manufacturer's default)
+   0 1 1  0 0 |  D0000  |  D2000  (Manufactor's default)
    0 1 1  0 1 |  D0800  |  D2000
    0 1 1  1 0 |  D1000  |  D2000
    0 1 1  1 1 |  D1800  |  D2000
@@ -1355,14 +1477,14 @@ Setting Interrupt Request Lines (IRQ)
 -------------------------------------
 
 To select a hardware interrupt level set one (only one!) of the jumpers
-IRQ2, IRQ3, IRQ4, IRQ5 or IRQ7. The manufacturer's default is IRQ2.
+IRQ2, IRQ3, IRQ4, IRQ5 or IRQ7. The Manufactor's default is IRQ2.
  
 
 Setting the Timeouts
 --------------------
 
 The two jumpers labeled ET1 and ET2 are used to determine the timeout
-parameters (response and reconfiguration time). Every node in a network
+parameters (respons and reconfiguration time). Every node in a network
 must be set to the same timeout values.
 
    ET1 ET2 | Response Time (us) | Reconfiguration Time (ms)
@@ -1382,7 +1504,7 @@ The manual of my 8-Bit NONAME ARCnet Card contains another description
 of a 16-Bit Coax / Twisted Pair Card. This description is incomplete,
 because there are missing two pages in the manual booklet. (The table
 of contents reports pages ... 2-9, 2-11, 2-12, 3-1, ... but inside
-the booklet there is a different way of counting ... 2-9, 2-10, A-1,
+the booklet there is a diffrent way of counting ... 2-9, 2-10, A-1,
 (empty page), 3-1, ..., 3-18, A-1 (again), A-2)
 Also the picture of the board layout is not as good as the picture of
 8-Bit card, because there isn't any letter like "SW1" written to the
@@ -1429,7 +1551,7 @@ Setting the Node ID
 
 The eight switches in group SW2 are used to set the node ID.
 Each node attached to the network must have an unique node ID which
-must be different from 0.
+must be diffrent from 0.
 Switch 8 serves as the least significant bit (LSB).
 
 The node ID is the sum of the values of all switches set to "1"  
@@ -1469,14 +1591,14 @@ Setting the I/O Base Address
 ----------------------------
 
 The first three switches in switch group SW1 are used to select one
-of eight possible I/O Base addresses using the following table
+of eight possible I/O Base addresses using the followig table
 
    Switch      | Hex I/O
     3   2   1  | Address
    ------------|--------
    ON  ON  ON  |  260
    ON  ON  OFF |  290
-   ON  OFF ON  |  2E0  (Manufacturer's default)
+   ON  OFF ON  |  2E0  (Manufactor's default)
    ON  OFF OFF |  2F0
    OFF ON  ON  |  300
    OFF ON  OFF |  350
@@ -1511,7 +1633,7 @@ positions, determined by the offset, switches 4 and 5 of group SW1.
    0 1 0  1 0 |  CD000  |  CE000
    0 1 0  1 1 |  CD800  |  CE000
               |         |
-   0 1 1  0 0 |  D0000  |  D2000  (Manufacturer's default)
+   0 1 1  0 0 |  D0000  |  D2000  (Manufactor's default)
    0 1 1  0 1 |  D0800  |  D2000
    0 1 1  1 0 |  D1000  |  D2000
    0 1 1  1 1 |  D1800  |  D2000
@@ -1551,11 +1673,239 @@ Setting the Timeouts
 
 *****************************************************************************
 
+** No Name **
+8-bit cards ("Made in Taiwan R.O.C.")
+-----------
+ - from Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz>
+
+I have named this ARCnet card "NONAME", since I got only the card with
+no manual at all and the only text identifying the manufacturer is 
+"MADE IN TAIWAN R.O.C" printed on the card.
+
+This description was written by Vojtech Pavlik 
+(vpav4328@diana.troja.mff.cuni.cz) using parts of the ARCNET-jumpers 
+README file from Linux kernel 1.2.2. 
+
+          ____________________________________________________________
+         |                 1 2 3 4 5 6 7 8                            |
+         | |o|o| JP1       o|o|o|o|o|o|o|o| ON                        |
+         |  +              o|o|o|o|o|o|o|o|                        ___|
+         |  _____________  o|o|o|o|o|o|o|o| OFF         _____     |   | ID7
+         | |             | SW1                         |     |    |   | ID6
+         | > RAM (2k)    |        ____________________ |  H  |    | S | ID5
+         | |_____________|       |                    ||  y  |    | W | ID4
+         |                       |                    ||  b  |    | 2 | ID3
+         |                       |                    ||  r  |    |   | ID2
+         |                       |                    ||  i  |    |   | ID1
+         |                       |       90C65        ||  d  |    |___| ID0
+         |      SW3              |                    ||     |        |      
+         | |o|o|o|o|o|o|o|o| ON  |                    ||  I  |        |
+         | |o|o|o|o|o|o|o|o|     |                    ||  C  |        |
+         | |o|o|o|o|o|o|o|o| OFF |____________________||     |   _____|
+         |  1 2 3 4 5 6 7 8                            |     |  |     |___
+         |  ______________                             |     |  | BNC |___|
+         | |              |                            |_____|  |_____|
+         | > EPROM SOCKET |                                           |
+         | |______________|                                           |
+         |                                              ______________|
+         |                                             |
+         |_____________________________________________|
+
+Legend:
+
+90C65       ARCNET Chip 
+SW1 1-5:    Base Memory Address Select
+    6-8:    Base I/O Address Select
+SW2 1-8:    Node ID Select (ID0-ID7)
+SW3 1-5:    IRQ Select   
+    6-7:    Extra Timeout
+    8  :    Rom Enable   
+JP1         Led connector
+BNC         Coax connector
+
+Although the jumpers SW1 and SW3 are marked SW, not JP, they are jumpers, not 
+switches.
+
+Setting the jumpers to ON means connecting the upper two pins, off the bottom 
+two - or - in case of IRQ setting, connecting none of them at all.
+
+Setting the Node ID
+-------------------
+
+The eight switches in SW2 are used to set the node ID. Each node attached
+to the network must have an unique node ID which must be diffrent from 0.
+Switch 1 (ID0) serves as the least significant bit (LSB).
+
+Setting one of the switches to Off means "1", On means "0".
+
+The node ID is the sum of the values of all switches set to "1"  
+These values are:
+
+   Switch | Label | Value
+   -------|-------|-------
+     1    | ID0   |   1
+     2    | ID1   |   2
+     3    | ID2   |   4
+     4    | ID3   |   8
+     5    | ID4   |  16
+     6    | ID5   |  32
+     7    | ID6   |  64
+     8    | ID7   | 128
+
+Some Examples:
+
+    Switch         | Hex     | Decimal 
+   8 7 6 5 4 3 2 1 | Node ID | Node ID
+   ----------------|---------|---------
+   0 0 0 0 0 0 0 0 |    not allowed
+   0 0 0 0 0 0 0 1 |    1    |    1 
+   0 0 0 0 0 0 1 0 |    2    |    2
+   0 0 0 0 0 0 1 1 |    3    |    3
+       . . .       |         |
+   0 1 0 1 0 1 0 1 |   55    |   85
+       . . .       |         |
+   1 0 1 0 1 0 1 0 |   AA    |  170
+       . . .       |         |  
+   1 1 1 1 1 1 0 1 |   FD    |  253
+   1 1 1 1 1 1 1 0 |   FE    |  254
+   1 1 1 1 1 1 1 1 |   FF    |  255
+
+
+Setting the I/O Base Address
+----------------------------
+
+The last three switches in switch block SW1 are used to select one
+of eight possible I/O Base addresses using the followig table
+
+
+   Switch      | Hex I/O
+    6   7   8  | Address
+   ------------|--------
+   ON  ON  ON  |  260
+   OFF ON  ON  |  290
+   ON  OFF ON  |  2E0  (Manufactor's default)
+   OFF OFF ON  |  2F0
+   ON  ON  OFF |  300
+   OFF ON  OFF |  350
+   ON  OFF OFF |  380
+   OFF OFF OFF |  3E0
+
+
+Setting the Base Memory (RAM) buffer Address
+--------------------------------------------
+
+The memory buffer (RAM) requires 2K. The base of this buffer can be 
+located in any of eight positions. The address of the Boot Prom is
+memory base + 0x2000.
+Jumpers 3-5 of jumper block SW1 select the Memory Base address.
+
+   Switch              | Hex RAM | Hex ROM
+    1   2   3   4   5  | Address | Address *)
+   --------------------|---------|-----------
+   ON  ON  ON  ON  ON  |  C0000  |  C2000
+   ON  ON  OFF ON  ON  |  C4000  |  C6000
+   ON  ON  ON  OFF ON  |  CC000  |  CE000
+   ON  ON  OFF OFF ON  |  D0000  |  D2000  (Manufactor's default)
+   ON  ON  ON  ON  OFF |  D4000  |  D6000
+   ON  ON  OFF ON  OFF |  D8000  |  DA000
+   ON  ON  ON  OFF OFF |  DC000  |  DE000
+   ON  ON  OFF OFF OFF |  E0000  |  E2000
+  
+*) To enable the Boot ROM set the jumper 8 of jumper block SW3 to position ON.
+
+The jumpers 1 and 2 probably add 0x0800, 0x1000 and 0x1800 to RAM addres.
+
+Setting the Interrupt Line
+--------------------------
+
+Jumpers 1-5 of the jumper block SW3 controll the IRQ level.
+
+    Jumper              |  IRQ
+    1   2   3   4   5   |
+   ----------------------------
+    ON  OFF OFF OFF OFF |  2
+    OFF ON  OFF OFF OFF |  3
+    OFF OFF ON  OFF OFF |  4
+    OFF OFF OFF ON  OFF |  5
+    OFF OFF OFF OFF ON  |  7
+
+
+Setting the Timeout Parameters
+------------------------------
+
+The jumpers 6-7 of the jumper block SW3 are used to determine the timeout 
+parameters. These two jumpers are normally left in the OFF position.
+
+
+*****************************************************************************
+** Tiara **
+(model unknown)
+-------------------------
+  - from Christoph Lameter <clameter@netcom.com>
+  
+
+Here is information about my card as far as I could figure it out:
+----------------------------------------------- tiara
+Tiara LanCard of Tiara Computer Systems.
+
++----------------------------------------------+
+!           ! Transmitter Unit !               !
+!           +------------------+             -------
+!          MEM                              Coax Connector
+!  ROM    7654321 <- I/O                     -------
+!  :  :   +--------+                           !
+!  :  :   ! 90C66LJ!                         +++
+!  :  :   !        !                         !D  Switch to set
+!  :  :   !        !                         !I  the Nodenumber
+!  :  :   +--------+                         !P
+!                                            !++
+!         234567 <- IRQ                      !
++------------!!!!!!!!!!!!!!!!!!!!!!!!--------+
+             !!!!!!!!!!!!!!!!!!!!!!!!
+
+0 = Jumper Installed
+1 = Open
+
+Top Jumper line Bit 7 = Rom Enable 654=Memory location 321=I/O
+
+Settings for Memory Location (Top Jumper Line)
+456     Address selected
+000	C0000
+001     C4000
+010     CC000
+011     D0000
+100     D4000
+101     D8000
+110     DC000     
+111     E0000
+
+Settings for I/O Address (Top Jumper Line)
+123     Port
+000	260
+001	290
+010	2E0
+011	2F0
+100	300
+101	350
+110	380
+111	3E0
+
+Settings for IRQ Selection (Lower Jumper Line)
+234567
+011111 IRQ 2
+101111 IRQ 3
+110111 IRQ 4
+111011 IRQ 5
+111110 IRQ 7
+
+*****************************************************************************
+
+
 Other Cards
 -----------
 
 I have no information on other models of ARCnet cards at the moment.  Please
 send any and all info to:
-	apenwarr@tourism.807-city.on.ca
+	apenwarr@foxnet.net
 
 Thanks.

@@ -103,6 +103,10 @@
 
 #define FM_MONO		0x388	/* This is the I/O address used by AdLib */
 
+#ifndef PAS_BASE
+#define PAS_BASE	0x388
+#endif
+
 /* SEQ_MAX_QUEUE is the maximum number of sequencer events buffered by the
    driver. (There is no need to alter this) */
 #define SEQ_MAX_QUEUE	1024

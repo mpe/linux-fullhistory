@@ -14,6 +14,7 @@
  *		Alan Cox	:	Added lots of __inline__ to optimise
  *					the memory usage of all the tiny little
  *					functions.
+ *		Alan Cox	:	Dumped the header building experiment.
  */
  
  
@@ -36,7 +37,6 @@
 #include <net/sock.h>
 #include <linux/igmp.h>
 #include <net/checksum.h>
-#include <net/head_explode.h>
 
 #ifdef CONFIG_IP_MULTICAST
 
@@ -84,7 +84,7 @@ static void igmp_send_report(struct device *dev, unsigned long address, int type
 {
 	struct sk_buff *skb=alloc_skb(MAX_IGMP_SIZE, GFP_ATOMIC);
 	int tmp;
-	unsigned char *dp;
+	struct igmphdr *ih;
 	
 	if(skb==NULL)
 		return;
@@ -95,15 +95,12 @@ static void igmp_send_report(struct device *dev, unsigned long address, int type
 		kfree_skb(skb, FREE_WRITE);
 		return;
 	}
-	dp=skb->data+tmp;
-	skb_put(skb,sizeof(struct igmphdr));
-	
-	*dp++=type;
-	*dp++=0;
-	skb->h.raw=dp;
-	dp=imp_putu16(dp,0);		/* checksum */
-	dp=imp_putn32(dp,address);	/* Address (already in net order) */
-	imp_putn16(skb->h.raw,ip_compute_csum(skb->data+tmp,sizeof(struct igmphdr)));	/* Checksum fill */
+	ih=(struct igmphdr *)skb_put(skb,sizeof(struct igmphdr));
+	ih->type=IGMP_HOST_MEMBERSHIP_REPORT;
+	ih->unused=0;
+	ih->csum=0;
+	ih->group=address;
+	ih->csum=ip_compute_csum((void *)ih,sizeof(struct igmphdr));	/* Checksum fill */
 	ip_queue_xmit(NULL,dev,skb,1);
 }
 
@@ -204,21 +201,20 @@ int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	struct inet_protocol *protocol)
 {
 	/* This basically follows the spec line by line -- see RFC1112 */
-	struct igmp_header igh;
+	struct igmphdr *ih;
 	
-	/* Pull the IGMP header */
-	igmp_explode(skb->h.raw,&igh);
-	
+	ih=(struct igmphdr *)skb->data;
+		
 	if(skb->len <sizeof(struct igmphdr) || skb->ip_hdr->ttl!=1 || ip_compute_csum((void *)skb->h.raw,sizeof(struct igmphdr)))
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
 	
-	if(igh.type==IGMP_HOST_MEMBERSHIP_QUERY && daddr==IGMP_ALL_HOSTS)
+	if(ih->type==IGMP_HOST_MEMBERSHIP_QUERY && daddr==IGMP_ALL_HOSTS)
 		igmp_heard_query(dev);
-	if(igh.type==IGMP_HOST_MEMBERSHIP_REPORT && daddr==igh.group)
-		igmp_heard_report(dev,igh.group);
+	if(ih->type==IGMP_HOST_MEMBERSHIP_REPORT && daddr==ih->group)
+		igmp_heard_report(dev,ih->group);
 	kfree_skb(skb, FREE_READ);
 	return 0;
 }

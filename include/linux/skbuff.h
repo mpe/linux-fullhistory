@@ -90,8 +90,13 @@ struct sk_buff {
   unsigned char 		*end;			/* End pointer					*/
 };
 
+#ifdef CONFIG_SKB_LARGE
+#define SK_WMEM_MAX	65535
+#define SK_RMEM_MAX	65535
+#else
 #define SK_WMEM_MAX	32767
 #define SK_RMEM_MAX	32767
+#endif
 
 #if CONFIG_SKB_CHECK
 #define SK_FREED_SKB	0x0DE2C0DE

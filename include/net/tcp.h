@@ -24,7 +24,9 @@
 #define MAX_FIN_SIZE	40 + MAX_HEADER + 15
 #define MAX_ACK_SIZE	40 + MAX_HEADER + 15
 #define MAX_RESET_SIZE	40 + MAX_HEADER + 15
-#define MAX_WINDOW	16384
+#define MAX_WINDOW	32767		/* Never offer a window over 32767 without using
+					   window scaling (not yet supported). Some poor
+					   stacks do signed 16bit maths! */
 #define MIN_WINDOW	2048
 #define MAX_ACK_BACKLOG	2
 #define MIN_WRITE_SPACE	2048

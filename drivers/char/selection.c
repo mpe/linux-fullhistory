@@ -15,6 +15,7 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/types.h>
 
 #include <asm/segment.h>
 
@@ -69,7 +70,7 @@ clear_selection(void) {
  * User settable table: what characters are to be considered alphabetic?
  * 256 bits
  */
-static unsigned long inwordLut[8]={
+static u32 inwordLut[8]={
   0x00000000, /* control chars     */
   0x03FF0000, /* digits            */
   0x87FFFFFE, /* uppercase and '_' */
@@ -90,7 +91,7 @@ int sel_loadlut(const unsigned long arg)
 	int i = verify_area(VERIFY_READ, (char *) arg, 36);
 	if (i)
 		return i;
-	memcpy_fromfs(inwordLut, (unsigned long *)(arg+4), 32);
+	memcpy_fromfs(inwordLut, (u32 *)(arg+4), 32);
 	return 0;
 }
 

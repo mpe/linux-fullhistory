@@ -44,7 +44,7 @@
 #define ST0_DS		0x03		/* drive select mask */
 #define ST0_HA		0x04		/* Head (Address) */
 #define ST0_NR		0x08		/* Not Ready */
-#define ST0_ECE		0x10		/* Equipment chech error */
+#define ST0_ECE		0x10		/* Equipment check error */
 #define ST0_SE		0x20		/* Seek end */
 #define ST0_INTR	0xC0		/* Interrupt code mask */
 

@@ -118,4 +118,12 @@ struct sockaddr_in {
 
 #include <asm/byteorder.h> 
 
+/* Some random defines to make it easier in the kernel.. */
+#ifdef __KERNEL__
+
+#define LOOPBACK(x)	(((x) & htonl(0xff000000)) == htonl(0x7f000000))
+#define MULTICAST(x)	(((x) & htonl(0xf0000000)) == htonl(0xe0000000))
+
+#endif
+
 #endif	/* _LINUX_IN_H */

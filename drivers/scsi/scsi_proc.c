@@ -105,7 +105,6 @@ int generic_proc_info(char *buffer, char **start, off_t offset,
 extern int dispatch_scsi_info(int ino, char *buffer, char **start, 
 			      off_t offset, int length, int func)
 {
-    int retval;
     struct Scsi_Host *hpnt = scsi_hostlist;
 
     if(func != 2) {    

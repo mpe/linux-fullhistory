@@ -312,7 +312,6 @@ int unregister_netdevice_notifier(struct notifier_block *nb)
 void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 {
 	unsigned long flags;
-	int nitcount;
 	struct packet_type *ptype;
 	int where = 0;		/* used to say if the packet should go	*/
 				/* at the front or the back of the	*/
@@ -367,7 +366,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	restore_flags(flags);
 
 	/* copy outgoing packets to any sniffer packet handlers */
-	if(!where)
+	if(!where && dev_nit)
 	{
 		skb->stamp=xtime;
 		for (ptype = ptype_all; ptype!=NULL; ptype = ptype->next) 
@@ -384,7 +383,6 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 				skb2->h.raw = skb2->data + dev->hard_header_len;
 				skb2->mac.raw = skb2->data;
 				ptype->func(skb2, skb->dev, ptype);
-				nitcount--;
 			}
 		}
 	}
@@ -458,7 +456,7 @@ void netif_rx(struct sk_buff *skb)
 	 */
 
 #ifdef CONFIG_NET_RUNONIRQ	/* Dont enable yet, needs some driver mods */
-	inet_bh();
+	net_bh();
 #else
 	mark_bh(NET_BH);
 #endif
@@ -616,7 +614,8 @@ void net_bh(void *tmp)
 	/*
 	 *	Can we send anything now? We want to clear the
 	 *	decks for any more sends that get done as we
-	 *	process the input.
+	 *	process the input. This also minimises the
+	 *	latency on a transmit interrupt bh.
 	 */
 
 	dev_transmit();
@@ -676,7 +675,7 @@ void net_bh(void *tmp)
 		
 		for (ptype = ptype_base[ntohs(type)&15]; ptype != NULL; ptype = ptype->next) 
 		{
-			if ((ptype->type == type || ptype->type == htons(ETH_P_ALL)) && (!ptype->dev || ptype->dev==skb->dev))
+			if (ptype->type == type && (!ptype->dev || ptype->dev==skb->dev))
 			{
 				/*
 				 *	We already have a match queued. Deliver

@@ -333,4 +333,59 @@ struct termios {
 #define N_MOUSE		2
 #define N_PPP		3
 
-#endif
+#ifdef __KERNEL__
+
+/*
+ * Translate a "termio" structure into a "termios". Ugh.
+ */
+extern inline void trans_from_termio(struct termio * termio,
+	struct termios * termios)
+{
+#define SET_LOW_BITS(x,y)	((x) = (0xffff0000 & (x)) | (y))
+	SET_LOW_BITS(termios->c_iflag, termio->c_iflag);
+	SET_LOW_BITS(termios->c_oflag, termio->c_oflag);
+	SET_LOW_BITS(termios->c_cflag, termio->c_cflag);
+	SET_LOW_BITS(termios->c_lflag, termio->c_lflag);
+#undef SET_LOW_BITS
+	termios->c_cc[VINTR] = termio->c_cc[_VINTR];
+	termios->c_cc[VQUIT] = termio->c_cc[_VQUIT];
+	termios->c_cc[VERASE]= termio->c_cc[_VERASE];
+	termios->c_cc[VKILL] = termio->c_cc[_VKILL];
+	termios->c_cc[VEOF]  = termio->c_cc[_VEOF];
+	termios->c_cc[VMIN]  = termio->c_cc[_VMIN];
+	termios->c_cc[VEOL]  = termio->c_cc[_VEOL];
+	termios->c_cc[VTIME] = termio->c_cc[_VTIME];
+	termios->c_cc[VEOL2] = termio->c_cc[_VEOL2];
+	termios->c_cc[VSWTC] = termio->c_cc[_VSWTC];
+}
+
+/*
+ * Translate a "termios" structure into a "termio". Ugh.
+ *
+ * Note the "fun" _VMIN overloading.
+ */
+extern inline void trans_to_termio(struct termios * termios,
+	struct termio * termio)
+{
+	termio->c_iflag = termios->c_iflag;
+	termio->c_oflag = termios->c_oflag;
+	termio->c_cflag = termios->c_cflag;
+	termio->c_lflag = termios->c_lflag;
+	termio->c_line	= termios->c_line;
+	termio->c_cc[_VINTR] = termios->c_cc[VINTR];
+	termio->c_cc[_VQUIT] = termios->c_cc[VQUIT];
+	termio->c_cc[_VERASE]= termios->c_cc[VERASE];
+	termio->c_cc[_VKILL] = termios->c_cc[VKILL];
+	termio->c_cc[_VEOF]  = termios->c_cc[VEOF];
+	termio->c_cc[_VEOL]  = termios->c_cc[VEOL];
+	termio->c_cc[_VEOL2] = termios->c_cc[VEOL2];
+	termio->c_cc[_VSWTC] = termios->c_cc[VSWTC];
+	if (!(termios->c_lflag & ICANON)) {
+		termio->c_cc[_VMIN]  = termios->c_cc[VMIN];
+		termio->c_cc[_VTIME] = termios->c_cc[VTIME];
+	}
+}
+
+#endif	/* __KERNEL__ */
+
+#endif	/* _ALPHA_TERMIOS_H */

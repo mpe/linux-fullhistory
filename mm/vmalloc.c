@@ -167,6 +167,89 @@ static int alloc_area_pages(unsigned long address, unsigned long size)
 	return 0;
 }
 
+static inline void remap_area_pte(pte_t * pte, unsigned long address, unsigned long size,
+	unsigned long offset)
+{
+	unsigned long end;
+
+	address &= ~PMD_MASK;
+	end = address + size;
+	if (end > PMD_SIZE)
+		end = PMD_SIZE;
+	do {
+		if (!pte_none(*pte))
+			printk("remap_area_pte: page already exists\n");
+		*pte = mk_pte(offset, PAGE_KERNEL);
+		address += PAGE_SIZE;
+		offset += PAGE_SIZE;
+		pte++;
+	} while (address < end);
+}
+
+static inline int remap_area_pmd(pmd_t * pmd, unsigned long address, unsigned long size,
+	unsigned long offset)
+{
+	unsigned long end;
+
+	address &= ~PGDIR_MASK;
+	end = address + size;
+	if (end > PGDIR_SIZE)
+		end = PGDIR_SIZE;
+	offset -= address;
+	do {
+		pte_t * pte = pte_alloc_kernel(pmd, address);
+		if (!pte)
+			return -ENOMEM;
+		remap_area_pte(pte, address, end - address, address + offset);
+		address = (address + PMD_SIZE) & PMD_MASK;
+		pmd++;
+	} while (address < end);
+	return 0;
+}
+
+static int remap_area_pages(unsigned long address, unsigned long offset, unsigned long size)
+{
+	pgd_t * dir;
+	unsigned long end = address + size;
+
+	offset -= address;
+	dir = pgd_offset(&init_task, address);
+	while (address < end) {
+		pmd_t *pmd = pmd_alloc_kernel(dir, address);
+		if (!pmd)
+			return -ENOMEM;
+		if (remap_area_pmd(pmd, address, end - address, offset + address))
+			return -ENOMEM;
+		set_pgdir(address, *dir);
+		address = (address + PGDIR_SIZE) & PGDIR_MASK;
+		dir++;
+	}
+	invalidate();
+	return 0;
+}
+
+static struct vm_struct * get_vm_area(unsigned long size)
+{
+	void *addr;
+	struct vm_struct **p, *tmp, *area;
+
+	area = (struct vm_struct *) kmalloc(sizeof(*area), GFP_KERNEL);
+	if (!area)
+		return NULL;
+	addr = (void *) VMALLOC_START;
+	area->size = size + PAGE_SIZE;
+	area->next = NULL;
+	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
+		if (size + (unsigned long) addr < (unsigned long) tmp->addr)
+			break;
+		addr = (void *) (tmp->size + (unsigned long) tmp->addr);
+	}
+	area->addr = addr;
+	area->next = *p;
+	*p = area;
+	return area;
+}
+
 void vfree(void * addr)
 {
 	struct vm_struct **p, *tmp;
@@ -191,26 +274,44 @@ void vfree(void * addr)
 void * vmalloc(unsigned long size)
 {
 	void * addr;
-	struct vm_struct **p, *tmp, *area;
+	struct vm_struct *area;
 
 	size = PAGE_ALIGN(size);
 	if (!size || size > high_memory)
 		return NULL;
-	area = (struct vm_struct *) kmalloc(sizeof(*area), GFP_KERNEL);
+	area = get_vm_area(size);
 	if (!area)
 		return NULL;
-	addr = (void *) VMALLOC_START;
-	area->size = size + PAGE_SIZE;
-	area->next = NULL;
-	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
-		if (size + (unsigned long) addr < (unsigned long) tmp->addr)
-			break;
-		addr = (void *) (tmp->size + (unsigned long) tmp->addr);
-	}
-	area->addr = addr;
-	area->next = *p;
-	*p = area;
+	addr = area->addr;
 	if (alloc_area_pages(VMALLOC_VMADDR(addr), size)) {
+		vfree(addr);
+		return NULL;
+	}
+	return addr;
+}
+
+/*
+ * Remap an arbitrary physical address space into the kernel virtual
+ * address space. Needed when the kernel wants to access high addresses
+ * directly.
+ */
+void * vremap(unsigned long offset, unsigned long size)
+{
+	void * addr;
+	struct vm_struct * area;
+
+	if (offset < high_memory)
+		return NULL;
+	if (offset & ~PAGE_MASK)
+		return NULL;
+	size = PAGE_ALIGN(size);
+	if (!size || size > offset + size)
+		return NULL;
+	area = get_vm_area(size);
+	if (!area)
+		return NULL;
+	addr = area->addr;
+	if (remap_area_pages(VMALLOC_VMADDR(addr), offset, size)) {
 		vfree(addr);
 		return NULL;
 	}

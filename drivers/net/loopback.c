@@ -139,7 +139,7 @@ int loopback_init(struct device *dev)
 	dev->pa_addr		= in_aton("127.0.0.1");
 	dev->pa_brdaddr	= in_aton("127.255.255.255");
 	dev->pa_mask		= in_aton("255.0.0.0");
-	dev->pa_alen		= sizeof(unsigned long);
+	dev->pa_alen		= 4;
 #endif  
 	dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
 	memset(dev->priv, 0, sizeof(struct enet_statistics));

@@ -244,7 +244,9 @@ print_ip(iph);
 #ifdef TUNNEL_DEBUG
 	printk("tunnel: calling ip_forward()\n");
 #endif
-	ip_forward(skb2, dev, 0, iph->daddr, 0);
+	if(ip_forward(skb2, dev, 0, iph->daddr, 0))
+		kfree_skb(skb2, FREE_WRITE);
+
  
 #ifdef TUNNEL_DEBUG
 	printk("Packet sent through tunnel interface!\n");
@@ -255,8 +257,6 @@ print_ip(iph);
 #ifdef TUNNEL_DEBUG
 	printk("tunnel: Updated usage statistics.\n");
 #endif
-	/* Clean up and return okay. */
-	kfree_skb(skb2, FREE_WRITE);
 	dev->tbusy=0;
 	return 0;
 }

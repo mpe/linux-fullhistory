@@ -82,6 +82,9 @@
  *		Alan Cox	:	Stopped broadcast source route explosions.
  *		Alan Cox	:	Can disable source routing
  *		Takeshi Sone    :	Masquerading didn't work.
+ *	Dave Bonn,Alan Cox	:	Faster IP forwarding whenever possible.
+ *		Alan Cox	:	Memory leaks, tramples, misc debugging.
+ *		Alan Cox	:	Fixed multicast (by popular demand 8))
  *
  *  
  *
@@ -142,7 +145,6 @@ extern int last_retran;
 extern void sort_send(struct sock *sk);
 
 #define min(a,b)	((a)<(b)?(a):(b))
-#define LOOPBACK(x)	(((x) & htonl(0xff000000)) == htonl(0x7f000000))
 
 /*
  *	SNMP management statistics
@@ -1007,7 +1009,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
  *	Forward an IP datagram to its next destination.
  */
 
-void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned long target_addr, int target_strict)
+int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned long target_addr, int target_strict)
 {
 	struct device *dev2;	/* Output device */
 	struct iphdr *iph;	/* Our header */
@@ -1037,7 +1039,7 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
 			/* fall thru */
 		default:
-			return;
+			return -1;
 		}
 	}
 #endif
@@ -1070,7 +1072,7 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 	{
 		/* Tell the sender its packet died... */
 		icmp_send(skb, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0, dev);
-		return;
+		return -1;
 	}
 
 	/*
@@ -1086,7 +1088,7 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 		 *	ICMP is screened later.
 		 */
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_UNREACH, 0, dev);
-		return;
+		return -1;
 	}
 
 
@@ -1109,8 +1111,7 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 		if(target_strict)
 		{
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_SR_FAILED, 0, dev);
-			kfree_skb(skb, FREE_READ);
-			return;
+			return -1;
 		}
 	
 		/*
@@ -1125,7 +1126,7 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 			 *	Tell the sender its packet cannot be delivered...
 			 */
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
-			return;
+			return -1;
 		}
 		if (rt->rt_gateway != 0)
 			raddr = rt->rt_gateway;
@@ -1145,12 +1146,12 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 	 *	we calculated.
 	 */
 #ifndef CONFIG_IP_NO_ICMP_REDIRECT
-	if (dev == dev2 && !((iph->saddr^iph->daddr)&dev->pa_mask) && rt->rt_flags&RTF_MODIFIED)
+	if (dev == dev2 && !((iph->saddr^iph->daddr)&dev->pa_mask) && (rt->rt_flags&RTF_MODIFIED))
 		icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, raddr, dev);
 #endif		
 
 	/*
-	 * We now allocate a new buffer, and copy the datagram into it.
+	 * We now may allocate a new buffer, and copy the datagram into it.
 	 * If the indicated interface is up and running, kick it.
 	 */
 
@@ -1165,13 +1166,9 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 			ip_fw_masquerade(&skb, dev2);
 #endif
 
-		/*
-		 *	Current design decrees we copy the packet. For identical header
-		 *	lengths we could avoid it. The new skb code will let us push
-		 *	data so the problem goes away then.
-		 */
-
-		skb2 = alloc_skb(dev2->hard_header_len + skb->len + 15, GFP_ATOMIC);
+		if(skb_headroom(skb)<dev2->hard_header_len)
+			skb2 = alloc_skb(dev2->hard_header_len + skb->len + 15, GFP_ATOMIC);
+		else skb2=skb;
 		
 		/*
 		 *	This is rare and since IP is tolerant of network failures
@@ -1181,22 +1178,29 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 		if (skb2 == NULL)
 		{
 			NETDEBUG(printk("\nIP: No memory available for IP forward\n"));
-			return;
+			return -1;
 		}
 		
 
 		/* Now build the MAC header. */
 		(void) ip_send(skb2, raddr, skb->len, dev2, dev2->pa_addr);
 
-		ptr = skb_put(skb2,skb->len);
-		skb2->free = 1;
-		skb2->h.raw = ptr;
-
 		/*
-		 *	Copy the packet data into the new buffer.
+		 *	We have to copy the bytes over as the new header wouldn't fit
+		 *	the old buffer. This should be very rare.
 		 */
-		memcpy(ptr, skb->h.raw, skb->len);
+		 
+		if(skb2!=skb)
+		{
+			ptr = skb_put(skb2,skb->len);
+			skb2->free = 1;
+			skb2->h.raw = ptr;
 
+			/*
+			 *	Copy the packet data into the new buffer.
+			 */
+			memcpy(ptr, skb->h.raw, skb->len);
+		}
 
 		ip_statistics.IpForwDatagrams++;
 
@@ -1234,6 +1238,16 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 				dev_queue_xmit(skb2, dev2, SOPRI_NORMAL);
 		}
 	}
+	else
+		return -1;
+	
+	/*
+	 *	Tell the caller if their buffer is free.
+	 */
+	 
+	if(skb==skb2)
+		return 0;
+	return 1;
 }
 
 
@@ -1293,6 +1307,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	/*
 	 *	Our transport medium may have padded the buffer out. Now we know it
 	 *	is IP we can trim to the true length of the frame.
+	 *	Note this now means skb->len holds ntohs(iph->tot_len).
 	 */
 
 	skb_trim(skb,ntohs(iph->tot_len));
@@ -1480,8 +1495,8 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		if (ip_fw_demasquerade(skb)) 
 		{
 			struct iphdr *iph=skb->h.iph;
-			ip_forward(skb, dev, is_frag|4, iph->daddr, 0);
-			kfree_skb(skb, FREE_WRITE);
+			if(ip_forward(skb, dev, is_frag|4, iph->daddr, 0))
+				kfree_skb(skb, FREE_WRITE);
 			return(0);
 		}
 #endif
@@ -1620,15 +1635,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 
 	/*
-	 *	Do any IP forwarding required.  chk_addr() is expensive -- avoid it someday.
-	 *
-	 *	This is inefficient. While finding out if it is for us we could also compute
-	 *	the routing table entry. This is where the great unified cache theory comes
-	 *	in as and when someone implements it
-	 *
-	 *	For most hosts over 99% of packets match the first conditional
-	 *	and don't go via ip_chk_addr. Note: brd is set to IS_MYADDR at
-	 *	function entry.
+	 *	Do any IP forwarding required.
 	 */
 	
 	/*
@@ -1646,18 +1653,14 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 */
 
 #ifdef CONFIG_IP_FORWARD
-	ip_forward(skb, dev, is_frag, target_addr, target_strict);
+	if(ip_forward(skb, dev, is_frag, target_addr, target_strict))
+		kfree_skb(skb, FREE_WRITE);
 #else
 /*	printk("Machine %lx tried to use us as a forwarder to %lx but we have forwarding disabled!\n",
 			iph->saddr,iph->daddr);*/
 	ip_statistics.IpInAddrErrors++;
-#endif
-	/*
-	 *	The forwarder is inefficient and copies the packet. We
-	 *	free the original now.
-	 */
-
 	kfree_skb(skb, FREE_WRITE);
+#endif
 	return(0);
 }
 	
@@ -1694,7 +1697,7 @@ static void ip_loopback(struct device *old_dev, struct sk_buff *skb)
 	/*
 	 *	Add the rest of the data space.	
 	 */
-	newskb->ip_hdr=(struct iphdr *)skb_put(skb, len);
+	newskb->ip_hdr=(struct iphdr *)skb_put(newskb, len);
 	/*
 	 *	Copy the data
 	 */
@@ -1894,7 +1897,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 		}
 	}
 #endif
-	if((dev->flags&IFF_BROADCAST) && iph->daddr==dev->pa_brdaddr && !(dev->flags&IFF_LOOPBACK))
+	if((dev->flags&IFF_BROADCAST) && (iph->daddr==dev->pa_brdaddr||iph->daddr==0xFFFFFFFF) && !(dev->flags&IFF_LOOPBACK))
 		ip_loopback(dev,skb);
 		
 	if (dev->flags & IFF_UP)
@@ -1974,7 +1977,6 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length)
 }
 
 
-#endif	
 /*
  *	Socket option code for IP. This is the end of the line after any TCP,UDP etc options on
  *	an IP socket.
@@ -1996,6 +1998,8 @@ static struct device *ip_mc_find_devfor(unsigned long addr)
 
 	return NULL;
 }
+
+#endif
 
 int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen)
 {
@@ -2343,6 +2347,8 @@ int ip_build_xmit(struct sock *sk,
 	struct iphdr *iph;
 	int local=0;
 	struct device *dev;
+	
+	ip_statistics.IpOutRequests++;
 
 
 #ifdef CONFIG_INET_MULTICAST	
@@ -2420,7 +2426,70 @@ int ip_build_xmit(struct sock *sk,
 	/*
 	 *	Now compute the buffer space we require
 	 */ 
-
+	 
+	/*
+	 *	Try the simple case first. This leaves broadcast, multicast, fragmented frames, and by
+	 *	choice RAW frames within 20 bytes of maximum size(rare) to the long path
+	 */
+	 
+	if(length+20 <= dev->mtu && !MULTICAST(daddr) && daddr!=0xFFFFFFFF && daddr!=dev->pa_brdaddr)
+	{	
+		int error;
+		struct sk_buff *skb=sock_alloc_send_skb(sk, length+20+15+dev->hard_header_len,0,&error);
+		if(skb==NULL)
+			return error;
+		skb->dev=dev;
+		skb->free=1;
+		skb->when=jiffies;
+		skb->sk=sk;
+		skb->arp=0;
+		skb->saddr=saddr;
+		length+=20;	/* We do this twice so the subtract once is quicker */
+		skb->raddr=(rt&&rt->rt_gateway)?rt->rt_gateway:daddr;
+		skb_reserve(skb,(dev->hard_header_len+15)&~15);
+		if(sk->ip_hcache_state>0)
+		{
+			memcpy(skb_push(skb,dev->hard_header_len),sk->ip_hcache_data,dev->hard_header_len);
+			skb->arp=1;
+		}
+		else if(dev->hard_header)
+		{
+			if(dev->hard_header(skb,dev,ETH_P_IP,NULL,NULL,0)>0)
+				skb->arp=1;
+		}
+		skb->ip_hdr=iph=(struct iphdr *)skb_put(skb,length);
+		if(type!=IPPROTO_RAW)
+		{
+			iph->version=4;
+			iph->ihl=5;
+			iph->tos=sk->ip_tos;
+			iph->tot_len = htons(length);
+			iph->id=htons(ip_id_count++);
+			iph->frag_off = 0;
+			iph->ttl=sk->ip_ttl;
+			iph->protocol=type;
+			iph->saddr=saddr;
+			iph->daddr=daddr;
+			iph->check=0;
+			iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
+			getfrag(frag,saddr,(void *)(iph+1),0, length-20);
+		}
+		else
+			getfrag(frag,saddr,(void *)iph,0,length);
+#ifdef CONFIG_IP_ACCT
+		ip_fw_chk((void *)skb->data,dev,ip_acct_chain, IP_FW_F_ACCEPT,1);
+#endif		
+		if(dev->flags&IFF_UP)
+			dev_queue_xmit(skb,dev,sk->priority);
+		else
+		{
+			ip_statistics.IpOutDiscards++;
+			kfree_skb(skb, FREE_WRITE);
+		}
+		return 0;
+	}
+			
+			
 	fragheaderlen = dev->hard_header_len;
 	if(type != IPPROTO_RAW)
 		fragheaderlen += 20;
@@ -2512,7 +2581,7 @@ int ip_build_xmit(struct sock *sk,
 		 
 		if(sk->ip_hcache_state>0)
 		{
-			memcpy(skb->data,sk->ip_hcache_data, dev->hard_header_len);
+			memcpy(skb_push(skb,dev->hard_header_len),sk->ip_hcache_data, dev->hard_header_len);
 			skb->arp=1;
 		}
 		else if (dev->hard_header)
@@ -2526,7 +2595,7 @@ int ip_build_xmit(struct sock *sk,
 		 *	Find where to start putting bytes.
 		 */
 		 
-		iph = (struct iphdr *)data;
+		skb->ip_hdr = iph = (struct iphdr *)data;
 
 		/*
 		 *	Only write IP header onto non-raw packets 
@@ -2620,6 +2689,13 @@ int ip_build_xmit(struct sock *sk,
 				kfree_skb(skb, FREE_READ);
 		}
 #endif
+		/*
+		 *	BSD loops broadcasts
+		 */
+		 
+		if((dev->flags&IFF_BROADCAST) && (daddr==0xFFFFFFFF || daddr==dev->pa_brdaddr) && !(dev->flags&IFF_LOOPBACK))
+			ip_loopback(dev,skb);
+
 		/*
 		 *	Now queue the bytes into the device.
 		 */

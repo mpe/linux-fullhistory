@@ -185,7 +185,7 @@
 
 #define DEBUG 0
 
-#define CDU31A_READAHEAD 64  /* 64 sector, 32kB, 16 reads read-ahead */
+#define CDU31A_READAHEAD 128  /* 128 sector, 64kB, 32 reads read-ahead */
 #define CDU31A_MAX_CONSECUTIVE_ATTENTIONS 10
 
 /* Define the following if you have data corruption problems. */
@@ -380,6 +380,8 @@ cdu31a_interrupt(int irq, struct pt_regs *regs)
 static inline void
 sony_sleep(void)
 {
+   unsigned long flags;
+
    if (irq_used <= 0)
    {
       current->state = TASK_INTERRUPTIBLE;
@@ -388,10 +390,11 @@ sony_sleep(void)
    }
    else /* Interrupt driven */
    {
+      save_flags(flags);
       cli();
       enable_interrupts();
       interruptible_sleep_on(&cdu31a_irq_wait);
-      sti();
+      restore_flags(flags);
    }
 }
 
@@ -515,6 +518,18 @@ set_drive_params(void)
    unsigned int res_size;
    unsigned char params[3];
 
+
+   params[0] = SONY_SD_AUTO_SPIN_DOWN_TIME;
+   params[1] = 0x00; /* Never spin down the drive. */
+   do_sony_cd_cmd(SONY_SET_DRIVE_PARAM_CMD,
+                  params,
+                  2,
+                  res_reg,
+                  &res_size);
+   if ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
+   {
+      printk("  Unable to set spin-down time: 0x%2.2x\n", res_reg[1]);
+   }
 
    params[0] = SONY_SD_MECH_CONTROL;
    params[1] = 0x03; /* Set auto spin up and auto eject */
@@ -753,8 +768,10 @@ do_sony_cd_cmd(unsigned char cmd,
    unsigned int retry_count;
    int num_retries;
    int recursive_call;
+   unsigned long flags;
 
 
+   save_flags(flags);
    cli();
    if (current != has_cd_task) /* Allow recursive calls to this routine */
    {
@@ -777,7 +794,7 @@ do_sony_cd_cmd(unsigned char cmd,
    {
       recursive_call = 1;
    }
-   sti();
+   restore_flags(flags);
 
    num_retries = 0;
 retry_cd_operation:
@@ -1356,24 +1373,31 @@ do_cdu31a_request(void)
    unsigned char res_reg[12];
    unsigned int res_size;
    int num_retries;
+   unsigned long flags;
 
 
    /* 
     * Make sure no one else is using the driver; wait for them
     * to finish if it is so.
     */
+   save_flags(flags);
    cli();
    while (sony_inuse)
    {
       interruptible_sleep_on(&sony_wait);
       if (current->signal & ~current->blocked)
       {
+         restore_flags(flags);
+         if (CURRENT && (CURRENT->dev > 0))
+         {
+            end_request(0);
+         }
          return;
       }
    }
    sony_inuse = 1;
    has_cd_task = current;
-   sti();
+   restore_flags(flags);
 
    /* Get drive status before doing anything. */
    while (handle_sony_cd_attention())
@@ -1507,6 +1531,7 @@ try_read_again:
             }
             if (start_request(block / 4, CDU31A_READAHEAD / 4, 0))
             {
+               printk("CDU31a: start request failed\n");
                end_request(0);
                goto cdu31a_request_startover;
             }
@@ -1991,11 +2016,13 @@ read_audio(struct cdrom_read_audio *ra,
    unsigned char res_reg[12];
    unsigned int res_size;
    unsigned int cframe;
+   unsigned long flags;
 
    /* 
     * Make sure no one else is using the driver; wait for them
     * to finish if it is so.
     */
+   save_flags(flags);
    cli();
    while (sony_inuse)
    {
@@ -2007,7 +2034,7 @@ read_audio(struct cdrom_read_audio *ra,
    }
    sony_inuse = 1;
    has_cd_task = current;
-   sti();
+   restore_flags(flags);
 
    if (!sony_spun_up)
    {
@@ -2167,8 +2194,20 @@ exit_read_audio:
 /*
  * The big ugly ioctl handler.
  */
-static int
-scd_ioctl(struct inode *inode,
+ 
+static int do_sony_cd_cmd_chk(char *name, unsigned char cmd, unsigned char *params, unsigned int num_params,
+		unsigned char *result_buffer, unsigned int *result_size)
+{      
+      do_sony_cd_cmd(cmd, params, num_params, result_buffer, result_size);
+      if ((*result_size < 2) || ((result_buffer[0] & 0xf0) == 0x20))
+      {
+         printk("Sony CDROM error 0x%2.2x (CDROM%s)\n", result_buffer[1], name);
+         return -EIO;
+      }
+      return 0;
+}
+ 
+static int scd_ioctl(struct inode *inode,
           struct file  *file,
           unsigned int  cmd,
           unsigned long arg)
@@ -2187,12 +2226,7 @@ scd_ioctl(struct inode *inode,
    switch (cmd)
    {
    case CDROMSTART:     /* Spin up the drive */
-      do_sony_cd_cmd(SONY_SPIN_UP_CMD, NULL, 0, res_reg, &res_size);
-      if ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
-      {
-         printk("Sony CDROM error 0x%2.2x (CDROMSTART)\n", res_reg[1]);
-         return -EIO;
-      }
+      return do_sony_cd_cmd_chk("START",SONY_SPIN_UP_CMD, NULL, 0, res_reg, &res_size);
       return 0;
       break;
       
@@ -2204,25 +2238,11 @@ scd_ioctl(struct inode *inode,
        * already not spinning.
        */
       sony_audio_status = CDROM_AUDIO_NO_STATUS;
-      do_sony_cd_cmd(SONY_SPIN_DOWN_CMD, NULL, 0, res_reg, &res_size);
-      if (   ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
-          && (res_reg[1] != SONY_NOT_SPIN_ERR))
-      {
-         printk("Sony CDROM error 0x%2.2x (CDROMSTOP)\n", res_reg[1]);
-         return -EIO;
-      }
-      
-      return 0;
-      break;
+      return do_sony_cd_cmd_chk("STOP",SONY_SPIN_DOWN_CMD, NULL, 0, res_reg, &res_size);
 
    case CDROMPAUSE:     /* Pause the drive */
-      do_sony_cd_cmd(SONY_AUDIO_STOP_CMD, NULL, 0, res_reg, &res_size);
-      if ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
-      {
-         printk("Sony CDROM error 0x%2.2x (CDROMPAUSE)\n", res_reg[1]);
-         return -EIO;
-      }
-
+      if(do_sony_cd_cmd_chk("PAUSE", SONY_AUDIO_STOP_CMD, NULL, 0, res_reg, &res_size))
+      	return -EIO;
       /* Get the current position and save it for resuming */
       if (read_subcode() < 0)
       {
@@ -2251,18 +2271,15 @@ scd_ioctl(struct inode *inode,
       params[5] = final_pos_msf[1];
       params[6] = final_pos_msf[2];
       params[0] = 0x03;
-      do_sony_cd_cmd(SONY_AUDIO_PLAYBACK_CMD, params, 7, res_reg, &res_size);
-      if ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
-      {
-         printk("Sony CDROM error 0x%2.2x (CDROMRESUME)\n", res_reg[1]);
-         return -EIO;
-      }
+      if(do_sony_cd_cmd_chk("RESUME",SONY_AUDIO_PLAYBACK_CMD, params, 7, res_reg, &res_size)<0)
+      	return -EIO;
       sony_audio_status = CDROM_AUDIO_PLAY;
       return 0;
-      break;
 
    case CDROMPLAYMSF:   /* Play starting at the given MSF address. */
-      verify_area(VERIFY_READ, (char *) arg, 6);
+      i=verify_area(VERIFY_READ, (char *) arg, 6);
+      if(i)
+      	return i;
       do_sony_cd_cmd(SONY_SPIN_UP_CMD, NULL, 0, res_reg, &res_size);
       memcpy_fromfs(&(params[1]), (void *) arg, 6);
       
@@ -2272,12 +2289,8 @@ scd_ioctl(struct inode *inode,
          params[i] = int_to_bcd(params[i]);
       }
       params[0] = 0x03;
-      do_sony_cd_cmd(SONY_AUDIO_PLAYBACK_CMD, params, 7, res_reg, &res_size);
-      if ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
-      {
-         printk("Sony CDROM error 0x%2.2x (CDROMPLAYMSF)\n", res_reg[1]);
-         return -EIO;
-      }
+      if(do_sony_cd_cmd_chk("PLAYMSF",SONY_AUDIO_PLAYBACK_CMD, params, 7, res_reg, &res_size)<0)
+      	return -EIO;
       
       /* Save the final position for pauses and resumes */
       final_pos_msf[0] = params[4];
@@ -2285,7 +2298,6 @@ scd_ioctl(struct inode *inode,
       final_pos_msf[2] = params[6];
       sony_audio_status = CDROM_AUDIO_PLAY;
       return 0;
-      break;
 
    case CDROMREADTOCHDR:        /* Read the table of contents header */
       {
@@ -2299,13 +2311,14 @@ scd_ioctl(struct inode *inode,
          }
          
          hdr = (struct cdrom_tochdr *) arg;
-         verify_area(VERIFY_WRITE, hdr, sizeof(*hdr));
+         i=verify_area(VERIFY_WRITE, hdr, sizeof(*hdr));
+         if(i<0)
+         	return i;
          loc_hdr.cdth_trk0 = bcd_to_int(sony_toc->first_track_num);
          loc_hdr.cdth_trk1 = bcd_to_int(sony_toc->last_track_num);
          memcpy_tofs(hdr, &loc_hdr, sizeof(*hdr));
       }
       return 0;
-      break;
 
    case CDROMREADTOCENTRY:      /* Read a given table of contents entry */
       {
@@ -2321,8 +2334,12 @@ scd_ioctl(struct inode *inode,
          }
          
          entry = (struct cdrom_tocentry *) arg;
-         verify_area(VERIFY_READ, entry, sizeof(*entry));
-         verify_area(VERIFY_WRITE, entry, sizeof(*entry));
+         i=verify_area(VERIFY_READ, entry, sizeof(*entry));
+         if(i<0)
+         	return i;
+         i=verify_area(VERIFY_WRITE, entry, sizeof(*entry));
+         if(i<0)
+         	return i;
          
          memcpy_fromfs(&loc_entry, entry, sizeof(loc_entry));
          
@@ -2373,7 +2390,9 @@ scd_ioctl(struct inode *inode,
             return -EIO;
          }
          
-         verify_area(VERIFY_READ, (char *) arg, sizeof(ti));
+         i=verify_area(VERIFY_READ, (char *) arg, sizeof(ti));
+         if(i<0)
+         	return i;
          
          memcpy_fromfs(&ti, (char *) arg, sizeof(ti));
          if (   (ti.cdti_trk0 < sony_toc->first_track_num)
@@ -2416,6 +2435,7 @@ scd_ioctl(struct inode *inode,
          do_sony_cd_cmd(SONY_SPIN_UP_CMD, NULL, 0, res_reg, &res_size);
          
          do_sony_cd_cmd(SONY_AUDIO_PLAYBACK_CMD, params, 7, res_reg, &res_size);
+         
          if ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
          {
             printk("Params: %x %x %x %x %x %x %x\n", params[0], params[1],
@@ -2439,34 +2459,22 @@ scd_ioctl(struct inode *inode,
       {
          struct cdrom_volctrl volctrl;
          
-         verify_area(VERIFY_READ, (char *) arg, sizeof(volctrl));
+         i=verify_area(VERIFY_READ, (char *) arg, sizeof(volctrl));
+         if(i<0)
+         	return i;
          
          memcpy_fromfs(&volctrl, (char *) arg, sizeof(volctrl));
          params[0] = SONY_SD_AUDIO_VOLUME;
          params[1] = volctrl.channel0;
          params[2] = volctrl.channel1;
-         do_sony_cd_cmd(SONY_SET_DRIVE_PARAM_CMD, params, 3, res_reg, &res_size);
-         if ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
-         {
-            printk("Sony CDROM error 0x%2.2x (CDROMVOLCTRL)\n", res_reg[1]);
-            return -EIO;
-         }
+         return do_sony_cd_cmd_chk("VOLCTRL",SONY_SET_DRIVE_PARAM_CMD, params, 3, res_reg, &res_size);
       }
-      return 0;
-
    case CDROMEJECT:     /* Eject the drive */
       do_sony_cd_cmd(SONY_AUDIO_STOP_CMD, NULL, 0, res_reg, &res_size);
       do_sony_cd_cmd(SONY_SPIN_DOWN_CMD, NULL, 0, res_reg, &res_size);
 
       sony_audio_status = CDROM_AUDIO_INVALID;
-      do_sony_cd_cmd(SONY_EJECT_CMD, NULL, 0, res_reg, &res_size);
-      if ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
-      {
-         printk("Sony CDROM error 0x%2.2x (CDROMEJECT)\n", res_reg[1]);
-         return -EIO;
-      }
-      return 0;
-      break;
+      return do_sony_cd_cmd_chk("EJECT",SONY_EJECT_CMD, NULL, 0, res_reg, &res_size);
      
     case CDROMREADAUDIO:      /* Read 2352 byte audio tracks and 2340 byte
 				 raw data tracks. */
@@ -2480,10 +2488,14 @@ scd_ioctl(struct inode *inode,
             return -EIO;
          }
          
-         verify_area(VERIFY_READ, (char *) arg, sizeof(ra));
+         i=verify_area(VERIFY_READ, (char *) arg, sizeof(ra));
+         if(i<0)
+         	return i;
          memcpy_fromfs(&ra, (char *) arg, sizeof(ra));
 
-         verify_area(VERIFY_WRITE, ra.buf, CD_FRAMESIZE_RAW * ra.nframes);
+         i=verify_area(VERIFY_WRITE, ra.buf, CD_FRAMESIZE_RAW * ra.nframes);
+         if(i<0)
+         	return i;
 
          if (ra.addr_format == CDROM_LBA)
          {

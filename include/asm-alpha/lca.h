@@ -304,8 +304,15 @@ extern void writew(unsigned short b, unsigned long addr);
 #define inb_p inb
 #define outb_p outb
 
-#define readl(addr)	__readl(addr)
-#define writel(b,addr)	__writel(b,addr)
+extern inline unsigned long readl(unsigned long addr)
+{
+	return __readl(addr);
+}
+
+extern inline void writel(unsigned int b, unsigned long addr)
+{
+	__writel(b, addr);
+}
 
 #undef vuip
 

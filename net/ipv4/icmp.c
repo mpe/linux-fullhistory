@@ -33,7 +33,7 @@
  *		Peter Belding	:	Tightened up ICMP redirect handling
  *		Alan Cox	:	Tightened even more.
  *		Arnt Gulbrandsen:	Misplaced #endif with net redirect and break
- *
+ *		A.N.Kuznetsov	:	ICMP timestamp still used skb+1
  * 
  *
  *		This program is free software; you can redistribute it and/or
@@ -544,7 +544,7 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	 *	Build ICMP_TIMESTAMP Response message. 
 	 */
 
-	icmphr = (struct icmphdr *) ((char *) (skb2 + 1) + offset);
+	icmphr = (struct icmphdr *) (skb2->data + offset);
 	memcpy((char *) icmphr, (char *) icmph, 12);
 	icmphr->type = ICMP_TIMESTAMPREPLY;
 	icmphr->code = icmphr->checksum = 0;

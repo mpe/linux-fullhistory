@@ -16,6 +16,25 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 
+#undef DEBUG
+
+#ifdef DEBUG
+
+  enum {
+      DBG_MEM = (1<<0),
+      DBG_BPT = (1<<1)
+  };
+
+  int debug_mask = DBG_BPT;
+
+# define DBG(fac,args)	{if ((fac) & debug_mask) printk args;}
+
+#else
+# define DBG(fac,args)
+#endif
+
+#define BREAKINST	0x00000080	/* call_pal bpt */
+
 /* This was determined via brute force. */
 #define MAGICNUM 496
 
@@ -24,24 +43,18 @@
  * in exit.c or in signal.c.
  */
 
-/* determines which flags the user has access to. */
-/* 1 = access 0 = no access */
-#define FLAG_MASK 0x00044dd5
-
-/* set's the trap flag. */
-#define TRAP_FLAG 0x100
-
-/*
- * this is the number to subtract from the top of the stack. To find
- * the local frame.
- */
-
 /* A mapping between register number and its offset on the kernel stack.
  * You also need to add MAGICNUM to get past the kernel stack frame
  * to the actual saved user info.
  * The first portion is the switch_stack, then comes the pt_regs.
  * 320 is the size of the switch_stack area.
  */
+
+enum {
+	REG_R0 =  0,
+	REG_F0 = 32,
+	REG_PC = 64
+};
 
 static int map_reg_to_offset[] = {
    320+0,320+8,320+16,320+24,320+32,320+40,320+48,320+56,320+64, /* 0-8 */
@@ -58,17 +71,12 @@ static int map_reg_to_offset[] = {
    320+168
 };
 
-static int offset_of_register(int reg_num) {
-   if(reg_num<0 || reg_num>64) {
-      return -1;
-   }
-   return map_reg_to_offset[reg_num];
-}
-
-static void unset_singlestep(struct task_struct *child) {
-}
-
-static void set_singlestep(struct task_struct *child) {
+static int offset_of_register(int reg_num)
+{
+	if (reg_num < 0 || reg_num > 64) {
+		return -1;
+	}
+	return map_reg_to_offset[reg_num];
 }
 
 /* change a pid into a task struct. */
@@ -130,9 +138,7 @@ static unsigned long get_long(struct vm_area_struct * vma, unsigned long addr)
 	pte_t * pgtable;
 	unsigned long page;
 
-#ifdef DEBUG
-	printk("Getting long at 0x%lx\n",addr);
-#endif
+	DBG(DBG_MEM, ("Getting long at 0x%lx\n", addr));
 repeat:
 	pgdir = pgd_offset(vma->vm_task, addr);
 	if (pgd_none(*pgdir)) {
@@ -177,7 +183,7 @@ repeat:
  * even if a debugger scribbles breakpoints into it.  -M.U-
  */
 static void put_long(struct vm_area_struct * vma, unsigned long addr,
-	unsigned long data)
+		     unsigned long data)
 {
 	pgd_t *pgdir;
 	pmd_t *pgmiddle;
@@ -250,13 +256,11 @@ static struct vm_area_struct * find_extend_vma(struct task_struct * tsk, unsigne
  * within the task area. It then calls get_long() to read a long.
  */
 static int read_long(struct task_struct * tsk, unsigned long addr,
-	unsigned long * result)
+		     unsigned long * result)
 {
 	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
 
-#ifdef DEBUG
-	printk("in read_long\n");
-#endif
+	DBG(DBG_MEM, ("in read_long\n"));
 	if (!vma) {
 	        printk("Unable to find vma for addr 0x%lx\n",addr);
 		return -EIO;
@@ -306,9 +310,7 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 	} else {
 	        long l =get_long(vma, addr);
 
-#ifdef DEBUG
-		printk("value is 0x%lx\n",l);
-#endif
+		DBG(DBG_MEM, ("value is 0x%lx\n",l));
 		*result = l;
 	}
 	return 0;
@@ -391,33 +393,160 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 	return 0;
 }
 
-/* Uh, this does ugly stuff. It stores the specified value in the a3
+/*
+ * Read a 32bit int from address space TSK.
+ */
+static int read_int(struct task_struct * tsk, unsigned long addr, unsigned int *data)
+{
+	unsigned long l, align;
+	int res;
+
+	align = addr & 0x7;
+	addr &= ~0x7;
+
+	res = read_long(tsk, addr, &l);
+	if (res < 0)
+	  return res;
+
+	if (align == 0) {
+		*data = l;
+	} else {
+		*data = l >> 32;
+	}
+	return 0;
+}
+
+/*
+ * Write a 32bit word to address space TSK.
+ *
+ * For simplicity, do a read-modify-write of the 64bit word that
+ * contains the 32bit word that we are about to write.
+ */
+static int write_int(struct task_struct * tsk, unsigned long addr, unsigned int data)
+{
+	unsigned long l, align;
+	int res;
+
+	align = addr & 0x7;
+	addr &= ~0x7;
+
+	res = read_long(tsk, addr, &l);
+	if (res < 0)
+	  return res;
+
+	if (align == 0) {
+		l = (l & 0xffffffff00000000UL) | ((unsigned long) data <<  0);
+	} else {
+		l = (l & 0x00000000ffffffffUL) | ((unsigned long) data << 32);
+	}
+	return write_long(tsk, addr, l);
+}
+
+/*
+ * Uh, this does ugly stuff. It stores the specified value in the a3
  * register. entry.S will swap a3 and the returned value from
  * sys_ptrace() before returning to the user.
  */
 
-static inline void set_success(struct pt_regs *regs,long resval) {
-   regs->r19=resval;
+static inline void set_success(struct pt_regs *regs,long resval)
+{
+	regs->r19 = resval;
 }
 
-/* This doesn't do diddly, actually--if the value returned from 
+/*
+ * This doesn't do diddly, actually--if the value returned from 
  * sys_ptrace() is != 0, it sets things up properly.
  */
 
-static inline void set_failure(struct pt_regs *regs,long errcode) {
-   regs->r19=0;
+static inline void set_failure(struct pt_regs *regs, long errcode)
+{
+	regs->r19 = 0;
 }
 
-asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4, int a5, struct pt_regs regs)
+/*
+ * Set breakpoint.
+ */
+static int set_bpt(struct task_struct *child)
+{
+	int displ, i, res, reg_b, off, nsaved = 0;
+	u32 insn, op_code;
+	unsigned long pc;
+
+	pc  = get_stack_long(child, map_reg_to_offset[REG_PC]);
+	res = read_int(child, pc, &insn);
+	if (res < 0)
+	  return res;
+
+	op_code = insn >> 26;
+	if (op_code >= 0x30) {
+		/*
+		 * It's a branch: instead of trying to figure out
+		 * whether the branch will be taken or not, we'll put
+		 * a breakpoint at either location.  This is simpler,
+		 * more reliable, and probably not a whole lot slower
+		 * than the alternative approach of emulating the
+		 * branch (emulation can be tricky for fp branches).
+		 */
+		displ = ((s32)(insn << 11)) >> 9;
+		child->debugreg[nsaved++] = pc + 4;
+		if (displ)			/* guard against unoptimized code */
+		  child->debugreg[nsaved++] = pc + 4 + displ;
+		DBG(DBG_BPT, ("execing branch\n"));
+	} else if (op_code == 0x1a) {
+		reg_b = (insn >> 16) & 0x1f;
+		off = offset_of_register(reg_b);
+		if (off >= 0) {
+			child->debugreg[nsaved++] = get_stack_long(child, off);
+		} else {
+			/* $31 (aka zero) doesn't have a stack-slot */
+			if (reg_b == 31) {
+				child->debugreg[nsaved++] = 0;
+			} else {
+				return -EIO;
+			}
+		}
+		DBG(DBG_BPT, ("execing jump\n"));
+	} else {
+		child->debugreg[nsaved++] = pc + 4;
+		DBG(DBG_BPT, ("execing normal insn\n"));
+	}
+
+	/* install breakpoints: */
+	for (i = 0; i < nsaved; ++i) {
+		res = read_int(child, child->debugreg[i], &insn);
+		if (res < 0)
+		  return res;
+		child->debugreg[i + 2] = insn;
+		DBG(DBG_BPT, ("    -> next_pc=%lx\n", child->debugreg[i]));
+		res = write_int(child, child->debugreg[i], BREAKINST);
+		if (res < 0)
+		  return res;
+	}
+	child->debugreg[4] = nsaved;
+	return 0;
+}
+
+int ptrace_cancel_bpt(struct task_struct *child)
+{
+	int i, nsaved = child->debugreg[4];
+
+	child->debugreg[4] = 0;
+	for (i = 0; i < nsaved; ++i) {
+		write_int(child, child->debugreg[i], child->debugreg[i + 2]);
+	}
+	return nsaved;
+}
+
+asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4, int a5,
+			   struct pt_regs regs)
 {
 	struct task_struct *child;
 	struct user * dummy;
+	int res;
 
 	dummy = NULL;
 
-#ifdef DEBUG
-	printk("request=%ld pid=%ld addr=0x%lx data=0x%lx\n",request,pid,addr,data);
-#endif
+	DBG(DBG_MEM, ("request=%ld pid=%ld addr=0x%lx data=0x%lx\n",request,pid,addr,data));
 	set_success(&regs,0);
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
@@ -465,25 +594,19 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 	   return 0;
 	}
 	if (!(child->flags & PF_PTRACED)) {
-#ifdef DEBUG
-	   printk("child not traced\n");
-#endif
-	   set_failure(&regs,-ESRCH);
-	   return -ESRCH;
+	    DBG(DBG_MEM, ("child not traced\n"));
+	    set_failure(&regs,-ESRCH);
+	    return -ESRCH;
 	}
 	if (child->state != TASK_STOPPED) {
-#ifdef DEBUG
-	   printk("child process not stopped\n");
-#endif
+	   DBG(DBG_MEM, ("child process not stopped\n"));
 	   if (request != PTRACE_KILL) {
 	      set_failure(&regs,-ESRCH);
 	      return -ESRCH;
 	   }
 	}
 	if (child->p_pptr != current) {
-#ifdef DEBUG
-	   printk("child not parent of this process\n");
-#endif
+	   DBG(DBG_MEM, ("child not parent of this process\n"));
 	   set_failure(&regs,-ESRCH);
 	   return -ESRCH;
 	}
@@ -495,9 +618,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 			unsigned long tmp;
 			int res;
 
-#ifdef DEBUG
-			printk("doing request at addr 0x%lx\n",addr);
-#endif
+			DBG(DBG_MEM, ("doing request at addr 0x%lx\n",addr));
 			res = read_long(child, addr, &tmp);
 			if (res < 0) {
 			   set_failure(&regs,res);
@@ -520,16 +641,16 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 			   tmp=child->tss.usp;
 			}
 			else {
+#ifdef DEBUG
 			   int reg=addr;
+#endif
 			   addr = offset_of_register(addr);
-			   if(addr < 0) {
-			      set_failure(&regs,-EIO);
+			   if (addr < 0) {
+			      set_failure(&regs, -EIO);
 			      return -EIO;
 			   }
 			   tmp = get_stack_long(child, addr);
-#ifdef DEBUG
-			   printk("%d = reg 0x%lx=tmp\n",reg,tmp);
-#endif
+			   DBG(DBG_MEM, ("%d = reg 0x%lx=tmp\n",reg,tmp));
 			}
 			set_success(&regs,tmp);
 			return 0;
@@ -573,12 +694,12 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 				child->flags &= ~PF_TRACESYS;
 			child->exit_code = data;
 			child->state = TASK_RUNNING;
-			unset_singlestep(child);
+			ptrace_cancel_bpt(child);
 			set_success(&regs,data);
 			return 0;
 		}
 
-/*
+ /*
  * make the child exit.  Best I can do is send it a sigkill. 
  * perhaps it should be put in the status that it wants to 
  * exit.
@@ -586,7 +707,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 		case PTRACE_KILL: {
 			child->state = TASK_RUNNING;
 			child->exit_code = SIGKILL;
-			unset_singlestep(child);
+			ptrace_cancel_bpt(child);
 			return 0;
 		}
 
@@ -595,8 +716,11 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 			   set_failure(&regs,-EIO);
 			   return -EIO;
 			}
+			res = set_bpt(child);
+			if (res < 0) {
+				return res;
+			}
 			child->flags &= ~PF_TRACESYS;
-			set_singlestep(child);
 			child->state = TASK_RUNNING;
 			child->exit_code = data;
 			/* give it a chance to run. */
@@ -615,7 +739,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);
 			/* make sure the single step bit is not set. */
-			unset_singlestep(child);
+			ptrace_cancel_bpt(child);
 			return 0;
 		}
 

@@ -59,15 +59,15 @@
 
 
 struct icmphdr {
-  unsigned char		type;
-  unsigned char		code;
-  unsigned short	checksum;
+  __u8		type;
+  __u8		code;
+  __u16		checksum;
   union {
 	struct {
-		unsigned short	id;
-		unsigned short	sequence;
+		__u16	id;
+		__u16	sequence;
 	} echo;
-	unsigned long gateway;
+	__u32	gateway;
   } un;
 };
 

@@ -194,6 +194,7 @@ void ether_setup(struct device *dev)
 	dev->hard_header	= eth_header;
 	dev->rebuild_header = eth_rebuild_header;
 	dev->set_mac_address = eth_mac_addr;
+	dev->header_cache = eth_header_cache;
 
 	dev->type		= ARPHRD_ETHER;
 	dev->hard_header_len = ETH_HLEN;
@@ -209,7 +210,7 @@ void ether_setup(struct device *dev)
 	dev->pa_addr	= 0;
 	dev->pa_brdaddr = 0;
 	dev->pa_mask	= 0;
-	dev->pa_alen	= sizeof(unsigned long);
+	dev->pa_alen	= 4;
 }
 
 #ifdef CONFIG_TR
@@ -239,7 +240,7 @@ void tr_setup(struct device *dev)
 	dev->pa_addr	= 0;
 	dev->pa_brdaddr = 0;
 	dev->pa_mask	= 0;
-	dev->pa_alen	= sizeof(unsigned long);
+	dev->pa_alen	= 4;
 }
 
 #endif

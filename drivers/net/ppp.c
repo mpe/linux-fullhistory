@@ -295,7 +295,7 @@ ppp_init(struct device *dev)
   dev->pa_addr    = 0;
   dev->pa_brdaddr = 0;
   dev->pa_mask    = 0;
-  dev->pa_alen    = sizeof(unsigned long);
+  dev->pa_alen    = 4;
 
   return 0;
 }
@@ -1144,7 +1144,7 @@ ppp_do_ip (struct ppp *ppp, unsigned short proto, unsigned char *c,
  sendit:
   if (ppp_debug_netpackets) {
     struct iphdr *iph = (struct iphdr *) c;
-    PRINTK ((KERN_INFO "%s <--    src %lx dst %lx len %d\n", ppp->dev->name, 
+    PRINTK ((KERN_INFO "%s <--    src %x dst %x len %d\n", ppp->dev->name, 
 	     iph->saddr, iph->daddr, count))
   }
 
@@ -1251,9 +1251,8 @@ ppp_read(struct tty_struct *tty, struct file *file, unsigned char *buf, unsigned
 
   CHECK_PPP(-ENXIO);
 
-  PRINTKN (4,(KERN_DEBUG "ppp_read: called %x num %u\n",
-	      (unsigned int) buf,
-	      nr));
+  PRINTKN (4,(KERN_DEBUG "ppp_read: called %p num %u\n",
+	      buf, nr));
 
   do {
     /* try to acquire read lock */
@@ -1323,8 +1322,8 @@ ppp_stuff_char(struct ppp *ppp, unsigned char c)
 {
   int curpt = ppp->xhead - ppp->xbuff;
   if ((curpt < 0) || (curpt > 3000)) {
-    PRINTK ((KERN_DEBUG "ppp_stuff_char: %x %x %d\n",
-	     (unsigned int) ppp->xbuff, (unsigned int) ppp->xhead, curpt))
+    PRINTK ((KERN_DEBUG "ppp_stuff_char: %p %p %d\n",
+	     ppp->xbuff, ppp->xhead, curpt))
   }
   if (in_xmap (ppp, c)) {
     *ppp->xhead++ = PPP_ESC;
@@ -1402,8 +1401,8 @@ ppp_write(struct tty_struct *tty, struct file *file, unsigned char *buf, unsigne
   if (ppp_debug >= 6)
     ppp_print_buffer ("xmit buffer", ppp->xbuff, ppp->xhead - ppp->xbuff, KERNEL_DS);
   else {
-    PRINTKN (4,(KERN_DEBUG
-		"ppp_write: writing %d chars\n", ppp->xhead - ppp->xbuff));
+    PRINTKN (4,(KERN_DEBUG "ppp_write: writing %d chars\n",
+		(int) (ppp->xhead - ppp->xbuff)));
   }
 
   /* packet is ready-to-go */
@@ -1471,7 +1470,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
     if (error == 0) {
       put_user (ppp->xmit_async_map[0], (int *) l);
       PRINTKN (3,(KERN_INFO "ppp_ioctl: get asyncmap: addr %lx asyncmap %lx\n",
-		  l, ppp->xmit_async_map[0]));
+		  l, (unsigned long) ppp->xmit_async_map[0]));
     }
     break;
 
@@ -1482,7 +1481,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
       bset (ppp->xmit_async_map, PPP_FLAG);
       bset (ppp->xmit_async_map, PPP_ESC);
       PRINTKN (3,(KERN_INFO "ppp_ioctl: set xmit asyncmap %lx\n",
-		  ppp->xmit_async_map[0]));
+		  (unsigned long) ppp->xmit_async_map[0]));
     }
     break;
 
@@ -1491,7 +1490,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
     if (error == 0) {
       ppp->recv_async_map = get_user ((int *) l);
       PRINTKN (3,(KERN_INFO "ppp_ioctl: set recv asyncmap %lx\n",
-		  ppp->recv_async_map));
+		  (unsigned long) ppp->recv_async_map));
     }
     break;
 
@@ -1573,7 +1572,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
     error = verify_area (VERIFY_READ, (void *) l,
 			 sizeof (ppp->xmit_async_map));
     if (error == 0) {
-      unsigned long temp_tbl [8];
+      __u32 temp_tbl [8];
 
       memcpy_fromfs (temp_tbl, (void *) l, sizeof (ppp->xmit_async_map));
       temp_tbl[1]  =  0x00000000; /* must not escape 0x20 - 0x3f */
@@ -1831,8 +1830,8 @@ ppp_xmit(struct sk_buff *skb, struct device *dev)
   if (ppp_debug >= 6)
     ppp_print_buffer ("xmit buffer", ppp->xbuff, ppp->xhead - ppp->xbuff, KERNEL_DS);
   else {
-    PRINTKN (4,(KERN_DEBUG
-		"ppp_write: writing %d chars\n", ppp->xhead - ppp->xbuff));
+    PRINTKN (4,(KERN_DEBUG "ppp_write: writing %d chars\n",
+		(int) (ppp->xhead - ppp->xbuff)));
   }
 
   ppp_kick_tty(ppp);

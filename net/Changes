@@ -53,39 +53,39 @@ o	TCP irtt support				[TESTED]
 o	RTF_REJECT routing support			[TESTED]
 o	Fixed 0 length fragment bug			[TESTED]
 o	Fixed overlapping reasm bug			[TESTED]
-o	Newest AX.25 code from John Naylor		[IN]
-o	NetROM from John Naylor				[IN]
+o	Newest AX.25 code from John Naylor		[TESTED]
+o	NetROM from John Naylor				[TESTED]
 o	Routerless DDP fixes from Wesley		[TESTED]
 
 ------->>>>> ALPHA 005 <<<<<----------
 
-o	Several compile and bugfixes from Jakko		[IN]
+o	Several compile and bugfixes from Jakko		[TESTED]
 o	Connect fix from Matt Day (+ fix to fix)	[TESTED]
 o	RTT, memory leak and other netrom/ax.25 cures	
-			-- John Naylor			[IN]
-o	IP source route via broadcast now illegal	[IN]
+			-- John Naylor			[TESTED]
+o	IP source route via broadcast now illegal	[TESTED]
 
 ------->>>>> ALPHA 006 <<<<<----------
 
-o	Yet more NetROM/AX.25 improvements		[IN]
+o	Yet more NetROM/AX.25 improvements		[TESTED]
 		-- John Naylor
 o	Fixed a _stupid_ appletalk bug			[TESTED]
-o	Missing include					[IN]
+o	Missing include					[TESTED]
 		-- Lots of people
-o	Can drop all source routes			[IN]
+o	Can drop all source routes			[TESTED]
 o	Printing fixes for ip_fw			[IN]
-o	UDP checksum fix (Gerhard)			[IN]
+o	UDP checksum fix (Gerhard)			[TESTED]
 o	Newer 3c505 driver from Juha Laiho		[IN]
-o	Security fix to axassociate			[IN]
+o	Security fix to axassociate			[TESTED]
 o	Loopback driver debugged (fixes named)		[TESTED]
-o	SCC driver from Joerg Reuter			[IN]
-o	IP Firewall accounting zero bug			[IN]
+o	SCC driver from Joerg Reuter			[TESTED]
+o	IP Firewall accounting zero bug			[TESTED]
 
 ////////////////////////////1.3.0/////////////////////////// 
 
 
 o	Merged loadable firewall code			[NOT INCLUDED YET]
-o	New buffers used totally non optimally		[SEEMS OK]
+o	New buffers used totally non optimally		[TESTED]
 o	Fast ip_forwarding (needs changing)		[NOT INCLUDED YET]
 o	Fixed connection hang bug in new SWS code	[TESTED]
 o	Buffer management hack putting skbuff control
@@ -93,10 +93,10 @@ o	Buffer management hack putting skbuff control
 	totally cache non-optimal			[TESTED]
 o	Faster checksum [Tom May]			[IN]
 o	Appletalk router fixes [Michael Callahan]	[IN]
-o	TCP state error fixes [Mark Tamsky]		[IN]
-o	Verify area fixes [Heiko Eissfeldt]		[IN]
+o	TCP state error fixes [Mark Tamsky]		[TESTED]
+o	Verify area fixes [Heiko Eissfeldt]		[TESTED]
 o	Routes use metric field	[John Naylor]		[IN]
-o	Major AX.25/NetROM fixes [John Nalor]		[IN]
+o	Major AX.25/NetROM fixes [John Nalor]		[TESTED]
 
 ------->>>>>  NET3 030  <<<<<----------
 
@@ -104,18 +104,47 @@ o	Long word align ethernet IP headers (64byte align for pentium) [TESTED]
 		(less helpful than I'd have liked)
 o	Fixed variable length header support to really work	[TESTED]
 o	Mend appletalk/ipx partially			[IN]
-o	Start playing with input checksum & copy	[IN]
+o	Start playing with input checksum & copy	[TESTED]
 o	Fixed PPP and other oddments			[IN]
 o	Mended IPIP					[Might work ;)]
 
 ------->>>>>    1.3.7   <<<<<----------
+
+o	Checksum bug fixed				[TESTED]
+o	Lance driver panic cured			[BROKEN]
+o	DEC ALPHA stuff (Linus)				[ASK HIM NOT ME]
+o	Always try to keep output packet order
+	(eg for vat and BSD fast path tcp)		[TESTED]
+o	Copy the mac pointer in skb_clone		[TESTED]
+o	Fix tcpdump panic				[IN]
+o	Fix dev_alloc_skb NULL deref bug		[TESTED]
+o	Fix Security error in SIGURG stuff		[TESTED]
+o	Missing 15 byte slack on ip_loopback		[IN, still has mcast bugs left!]
+
+------->>>>>    1.3.8   <<<<<----------
+
+o	UDP snmp count fixed				[IN]
+o	IP snmp out count fixed				[IN]  (fragment still wrong)
+o	First bit of Dave Bonn's fast forwarding	[IN]
+o	Fix leaks and double free in firewalling	[IN]
+o	Fix memory scribble in ip_build_xmit		[TESTED]
+o	Do fast cases of ip_build_xmit first
+	slows fragmented I/O down, speeds up smaller
+	packets. UDP send ttcp can now touch 7.5Mbyte/sec
+	with nothing else going on. UDP recv is slower 8( [TESTED]
+o	Fixed and enabled ethernet header caches	[IN]
+o	Removed junk from igmp				[IN]
+o	Obscure UDP/copy&sum bug fix			[IN]
+o	Fixed multicast					[IN]
+o	TCP does rerouting for most cases		[NOT WORKING YET]
+
+------->>>>>    1.3.?  <<<<<----------
 
 o	Finish merging the bridge code
 o	Device locking
 o	SIOCSLEEPRT patch
 o	Options support in ip_build_xmit		[PENDING]
 o	Fast checksum/copy on outgoing TCP
-o	Explode/implode headers for alpha,mips etc.
 o	Fast dev_grab_next() transmit reload function
 	and dev_push_failed() ??
 o	Faster ip_forward				[PENDING]
@@ -127,6 +156,7 @@ o	AX.25 set protocol type
 o	Clean up RAW AX.25 sockets.
 o	Finish 802.2 Class I code to be compliant to the oddities of 802.2
 o	Full variable length AX.25 support		[JSN doing]
+o	Tidy BPQ support
 
 0.2
 ---
@@ -139,6 +169,7 @@ o	PPP for Sonix ISDN.
 o	Loadable firewall extensions.
 o	Screend loadable firewall module
 o	LZ SLIP				[Done, resolving patent issues]
+o	AXIP
 
 0.3
 ---
@@ -198,7 +229,7 @@ problem.
 
 10.	Frame Relay/WAN/ISDN drivers [I'm working on the sonix EuroISDN board
 driver but thats for an internal project and its general release is still
-a maybe (so is finishing it ;))].
+a maybe (so is finishing it ;))][Someone is working on Frame Relay].
 
 11.	IP over SCSI.
 

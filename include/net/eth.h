@@ -32,6 +32,6 @@ extern int		eth_rebuild_header(void *buff, struct device *dev,
 extern void		eth_add_arp(unsigned long addr, struct sk_buff *skb,
 				    struct device *dev);
 extern unsigned short	eth_type_trans(struct sk_buff *skb, struct device *dev);
-extern int		eth_header_cache(struct device *dev, struct sock *sk, unsigned long saddr, unsigned long daddr);
+extern void		eth_header_cache(struct device *dev, struct sock *sk, unsigned long saddr, unsigned long daddr);
 
 #endif	/* _ETH_H */

@@ -95,17 +95,17 @@
  */
 
 struct ppp_lqp_packet_hdr {
-  unsigned long		LastOutLQRs;	/* Copied from PeerOutLQRs	 */
-  unsigned long		LastOutPackets; /* Copied from PeerOutPackets	 */
-  unsigned long		LastOutOctets;	/* Copied from PeerOutOctets	 */
-  unsigned long		PeerInLQRs;	/* Copied from SavedInLQRs	 */
-  unsigned long		PeerInPackets;	/* Copied from SavedInPackets	 */
-  unsigned long		PeerInDiscards; /* Copied from SavedInDiscards	 */
-  unsigned long		PeerInErrors;	/* Copied from SavedInErrors	 */
-  unsigned long		PeerInOctets;	/* Copied from SavedInOctets	 */
-  unsigned long		PeerOutLQRs;	/* Copied from OutLQRs, plus 1	 */
-  unsigned long		PeerOutPackets; /* Current ifOutUniPackets, + 1	 */
-  unsigned long		PeerOutOctets;	/* Current ifOutOctets + LQR	 */
+  __u32		LastOutLQRs;	/* Copied from PeerOutLQRs	 */
+  __u32		LastOutPackets; /* Copied from PeerOutPackets	 */
+  __u32		LastOutOctets;	/* Copied from PeerOutOctets	 */
+  __u32		PeerInLQRs;	/* Copied from SavedInLQRs	 */
+  __u32		PeerInPackets;	/* Copied from SavedInPackets	 */
+  __u32		PeerInDiscards; /* Copied from SavedInDiscards	 */
+  __u32		PeerInErrors;	/* Copied from SavedInErrors	 */
+  __u32		PeerInOctets;	/* Copied from SavedInOctets	 */
+  __u32		PeerOutLQRs;	/* Copied from OutLQRs, plus 1	 */
+  __u32		PeerOutPackets; /* Current ifOutUniPackets, + 1	 */
+  __u32		PeerOutOctets;	/* Current ifOutOctets + LQR	 */
   };
 
 /*
@@ -114,11 +114,11 @@ struct ppp_lqp_packet_hdr {
  */
 
 struct ppp_lqp_packet_trailer {
-  unsigned long		SaveInLQRs;	/* Current InLQRs on reception	 */
-  unsigned long		SaveInPackets;	/* Current ifInUniPackets	 */
-  unsigned long		SaveInDiscards; /* Current ifInDiscards		 */
-  unsigned long		SaveInErrors;	/* Current ifInErrors		 */
-  unsigned long		SaveInOctets;	/* Current ifInOctects		 */
+  __u32		SaveInLQRs;	/* Current InLQRs on reception	 */
+  __u32		SaveInPackets;	/* Current ifInUniPackets	 */
+  __u32		SaveInDiscards; /* Current ifInDiscards		 */
+  __u32		SaveInErrors;	/* Current ifInErrors		 */
+  __u32		SaveInOctets;	/* Current ifInOctects		 */
 };
 
 /*
@@ -128,7 +128,7 @@ struct ppp_lqp_packet_trailer {
  */
 
 struct ppp_lpq_packet {
-  unsigned long			magic;	/* current magic value		 */
+  __u32				magic;	/* current magic value		 */
   struct ppp_lqp_packet_hdr	hdr;	/* Header fields for structure	 */
   struct ppp_lqp_packet_trailer tail;	/* Trailer fields (not sent)	 */
 };
@@ -138,21 +138,21 @@ struct ppp_lpq_packet {
  */
 
 struct ppp_stats {
-  unsigned long		rbytes;		/* bytes received		 */
-  unsigned long		rcomp;		/* compressed packets received	 */
-  unsigned long		runcomp;	/* uncompressed packets received */
-  unsigned long		rothers;	/* non-ip frames received	 */
-  unsigned long		rerrors;	/* received errors		 */
-  unsigned long		roverrun;	/* "buffer overrun" counter	 */
-  unsigned long		tossed;		/* packets discarded		 */
-  unsigned long		runts;		/* frames too short to process	 */
-  unsigned long		rgiants;	/* frames too large to process	 */
-  unsigned long		sbytes;		/* bytes sent			 */
-  unsigned long		scomp;		/* compressed packets sent	 */
-  unsigned long		suncomp;	/* uncompressed packets sent	 */
-  unsigned long		sothers;	/* non-ip frames sent		 */
-  unsigned long		serrors;	/* transmitter errors		 */
-  unsigned long		sbusy;		/* "transmitter busy" counter	 */
+  __u32		rbytes;		/* bytes received		 */
+  __u32		rcomp;		/* compressed packets received	 */
+  __u32		runcomp;	/* uncompressed packets received */
+  __u32		rothers;	/* non-ip frames received	 */
+  __u32		rerrors;	/* received errors		 */
+  __u32		roverrun;	/* "buffer overrun" counter	 */
+  __u32		tossed;		/* packets discarded		 */
+  __u32		runts;		/* frames too short to process	 */
+  __u32		rgiants;	/* frames too large to process	 */
+  __u32		sbytes;		/* bytes sent			 */
+  __u32		scomp;		/* compressed packets sent	 */
+  __u32		suncomp;	/* uncompressed packets sent	 */
+  __u32		sothers;	/* non-ip frames sent		 */
+  __u32		serrors;	/* transmitter errors		 */
+  __u32		sbusy;		/* "transmitter busy" counter	 */
 };
 
 /*
@@ -172,17 +172,17 @@ struct ppp {
   int			magic;		/* magic value for structure	*/
 
   /* Bitmapped flag fields. */
-  char			inuse;		/* are we allocated?		*/
   char			sending;	/* "channel busy" indicator	*/
   char			escape;		/* 0x20 if prev char was PPP_ESC*/
   char			toss;		/* toss this frame		*/
+  unsigned long		inuse;		/* are we allocated?		*/
 
   unsigned int		flags;		/* miscellany			*/
 
-  unsigned long		xmit_async_map[8]; /* 1 bit means that given control 
+  __u32			xmit_async_map[8]; /* 1 bit means that given control 
 					   character is quoted on output*/
 
-  unsigned long		recv_async_map; /* 1 bit means that given control 
+  __u32			recv_async_map; /* 1 bit means that given control 
 					   character is ignored on input*/
   int			mtu;		/* maximum xmit frame size	*/
   int			mru;		/* maximum receive frame size	*/
@@ -193,7 +193,7 @@ struct ppp {
   struct tty_struct	*tty;		/* ptr to TTY structure		*/
   struct device		*dev;		/* easy for intr handling	*/
   struct slcompress	*slcomp;	/* for header compression	*/
-  unsigned long		last_xmit;	/* time of last transmission	*/
+  __u32			last_xmit;	/* time of last transmission	*/
 
   /* These are pointers to the malloc()ed frame buffers.
      These buffers are used while processing a packet.	If a packet
@@ -216,7 +216,7 @@ struct ppp {
   unsigned char		*us_rbuff_end;	/* end of allocated space	*/
   unsigned char		*us_rbuff_head; /* head of waiting packets	*/
   unsigned char		*us_rbuff_tail; /* tail of waiting packets	*/
-  unsigned char		us_rbuff_lock;	/* lock: bit 0 head bit 1 tail	*/
+  unsigned long		us_rbuff_lock;	/* lock: bit 0 head bit 1 tail	*/
   int			inp_sig;	/* input ready signal for pgrp	*/
   int			inp_sig_pid;	/* process to get notified	*/
 

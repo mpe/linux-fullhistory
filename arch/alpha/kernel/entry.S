@@ -105,6 +105,9 @@
 
 .text
 .set noat
+#ifdef __linux__
+  .set singlegp
+#endif
 
 .align 3
 .globl	entInt
@@ -191,9 +194,11 @@ kernel_fork:
 	stq $16,24($30)
 	stq $17,32($30)
 	stq $18,40($30)
+	bis $31,2,$0	/* Register v0: syscall nr for fork() */
 	SAVE_ALL
 	lda $27,sys_fork
 	jsr $26,($27),sys_fork
+	stq $0,0($30)	
 	br ret_from_sys_call
 .end	kernel_fork
 
@@ -240,7 +245,7 @@ do_switch_stack:
 	stt $f28,288($30)
 	stt $f29,296($30)
 	stt $f30,304($30)
-	ret $31,($0),1
+	ret $31,($1),1
 .end do_switch_stack
 
 .align 3
@@ -286,7 +291,7 @@ undo_switch_stack:
 	ldt $f29,296($30)
 	ldt $f30,304($30)
 	lda $30,SWITCH_STACK_SIZE($30)
-	ret $31,($0),1
+	ret $31,($1),1
 .end undo_switch_stack
 
 .align 3
@@ -363,14 +368,11 @@ entUna:
 .globl	sys_fork
 .ent	sys_fork
 sys_fork:
-	br $0,do_switch_stack
+	br $1,do_switch_stack
 	bis $30,$30,$16
 	lda $27,alpha_fork
 	jsr $26,($27),alpha_fork
-	br $0,undo_switch_stack
-	ldq $0,0($30)
-	bis $31,2,$19	/* Make sure that the stored user register v0 has */
-	stq $19,0($30)	/* the syscall # for fork */
+	br $1,undo_switch_stack
 	ret $31,($26),1
 .end	sys_fork
 
@@ -378,9 +380,9 @@ sys_fork:
 .globl  alpha_switch_to
 .ent    alpha_switch_to
 alpha_switch_to:
-	br $0,do_switch_stack
+	br $1,do_switch_stack
 	call_pal PAL_swpctx
-	br $0,undo_switch_stack
+	br $1,undo_switch_stack
 	ret $31,($26),1
 .end alpha_switch_to
 
@@ -450,7 +452,7 @@ restore_all:
 .align 3
 signal_return:
 	bis	$30,$30,$17
-	br	$0,do_switch_stack
+	br	$1,do_switch_stack
 	bis	$30,$30,$18
 	lda	$27,do_signal
 	jsr	$26,($27),do_signal
@@ -480,7 +482,7 @@ sys_sigreturn:
 	bis	$30,$30,$18
 	lda	$27,do_sigreturn
 	jsr	$26,($27),do_sigreturn
-	br	$0,undo_switch_stack
+	br	$1,undo_switch_stack
 	br	$31,ret_from_sys_call
 .end sys_sigreturn
 
@@ -488,7 +490,7 @@ sys_sigreturn:
 .ent sys_sigsuspend
 sys_sigsuspend:
 	bis	$30,$30,$17
-	br	$0,do_switch_stack
+	br	$1,do_switch_stack
 	bis	$30,$30,$18
 	lda	$27,do_sigsuspend
 	jsr	$26,($27),do_sigsuspend
@@ -504,7 +506,7 @@ sys_call_table:
 	.quad sys_unlink, do_entSys, sys_chdir, sys_fchdir, sys_mknod
 	.quad sys_chmod, sys_chown, sys_brk, do_entSys, sys_lseek
 	.quad sys_getxpid, osf_mount, osf_umount, sys_setuid, sys_getxuid
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
+	.quad do_entSys, sys_ptrace, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, sys_access, do_entSys
 	.quad do_entSys, sys_sync, sys_kill, do_entSys, sys_setpgid
 	.quad do_entSys, sys_dup, sys_pipe, do_entSys, do_entSys

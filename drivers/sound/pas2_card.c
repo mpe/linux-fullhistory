@@ -57,6 +57,7 @@ static char    *pas_model_names[] =
 /*
  * to support other than the default base address
  */
+extern void mix_write (unsigned char data, int ioaddr);
 
 unsigned char
 pas_read (int ioaddr)
@@ -367,7 +368,7 @@ attach_pas_card (long mem_start, struct address_info *hw_config)
   if (detect_pas_hw (hw_config))
     {
 
-      if (pas_model = pas_read (CHIP_REV))
+      if ((pas_model = pas_read (CHIP_REV)))
 	{
 	  printk (" <%s rev %d>", pas_model_names[(int) pas_model], pas_read (BOARD_REV_ID));
 	}

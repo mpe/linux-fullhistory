@@ -1141,7 +1141,7 @@ slip_init(struct device *dev)
 	dev->pa_addr		= 0;
 	dev->pa_brdaddr	        = 0;
 	dev->pa_mask		= 0;
-	dev->pa_alen		= sizeof(unsigned long);
+	dev->pa_alen		= 4;
 
 	return 0;
 }

@@ -56,8 +56,8 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 #ifdef TUNNEL_DEBUG
 	printk("ipip_rcv: got a packet!\n");
 #endif
-	ip_forward(skb, dev, 0, daddr, 0);
-	kfree_skb(skb, FREE_READ);
+	if(ip_forward(skb, dev, 0, daddr, 0))
+		kfree_skb(skb, FREE_READ);
 	MOD_DEC_USE_COUNT;
 	return(0);
 }

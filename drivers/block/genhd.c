@@ -114,7 +114,9 @@ static int msdos_partition(struct gendisk *hd, unsigned int dev, unsigned long f
 	struct buffer_head *bh;
 	struct partition *p;
 	int mask = (1 << hd->minor_shift) - 1;
+#ifdef CONFIG_BLK_DEV_IDE
 	extern void ide_xlate_1024(dev_t);
+#endif
 
 read_mbr:
 	if (!(bh = bread(dev,0,1024))) {
@@ -149,7 +151,9 @@ read_mbr:
 		first_sector                    += p->end_sector;
 		hd->part[MINOR(dev)].start_sect += p->end_sector;
 		hd->part[MINOR(dev)].nr_sects   -= p->end_sector;
+#ifdef CONFIG_BLK_DEV_IDE
 		ide_xlate_1024(dev);	/* harmless if not an IDE drive */
+#endif
 		bh->b_dirt = 0;		/* prevent re-use of this block */
 		bh->b_uptodate = 0;
 		bh->b_req = 0;
@@ -162,7 +166,9 @@ read_mbr:
 	 */
 	if (p->sys_ind == DM6_AUXPARTITION) {
 		printk(" [DM6]");
+#ifdef CONFIG_BLK_DEV_IDE
 		ide_xlate_1024(dev);	/* harmless if not an IDE drive */
+#endif
 	}
 
 	current_minor += 4;  /* first "extra" minor (for extended partitions) */

@@ -172,13 +172,20 @@ S: East Malvern, Victoria, 3145
 S: Australia
 
 N: Alan Cox
-E: A.Cox@swansea.ac.uk
-E: iiitac@pyr.swan.ac.uk
+E: iialan@iifeak.swan.ac.uk
+E: alan@cymru.net (use for commercial traffic)
 E: gw4pts@gw4pts.ampr.org
 E: GW4PTS@GB7SWN (packet radio)
-D: NET2Debugged author
+S: c/o I^2IT Limited
+S: The Innovation Centre
+S: University Of Wales
+S: Swansea, SA2 8PP
+S: Wales, UK
+D: NET2Debugged/NET3 author
 D: Network layer debugging
-D: AX.25 & IPX alpha releases
+D: Initial AX.25 & IPX releases
+D: Original Linux netatalk patches.
+D: Current 3c501 hacker. >>More 3c501 info/tricks wanted<<.
 
 N: Laurence Culhane
 E: loz@holmes.demon.co.uk

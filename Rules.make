@@ -6,7 +6,7 @@
 # Common rules
 #
 .c.s:
-	$(CC) $(CFLAGS) -S $<
+	$(CC) $(CFLAGS) -S $< -o $@
 
 #
 # A rule to do nothing

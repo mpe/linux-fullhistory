@@ -72,8 +72,10 @@ restart:
 		if(sk->err)
 		{
 			release_sock(sk);
+			cli();
 			*err=-sk->err;
 			sk->err=0;
+			restore_flags(intflags);
 			return NULL;
 		}
 
@@ -163,8 +165,6 @@ void skb_free_datagram(struct sk_buff *skb)
 
 void skb_copy_datagram(struct sk_buff *skb, int offset, char *to, int size)
 {
-	/* We will know all about the fraglist options to allow >4K receives
-	   but not this release */
 	memcpy_tofs(to,skb->h.raw+offset,size);
 }
 

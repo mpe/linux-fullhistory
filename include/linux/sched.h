@@ -147,7 +147,7 @@ struct task_struct {
 	unsigned long blocked;	/* bitmap of masked signals */
 	unsigned long flags;	/* per process flags, defined below */
 	int errno;
-	int debugreg[8];  /* Hardware debugging registers */
+	long debugreg[8];  /* Hardware debugging registers */
 	struct exec_domain *exec_domain;
 /* various fields */
 	struct linux_binfmt *binfmt;

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 9
+SUBLEVEL = 10
 
 ARCH = i386
 
@@ -283,3 +283,5 @@ else
 dummy:
 
 endif
+
+include Rules.make

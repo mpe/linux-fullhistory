@@ -29,6 +29,7 @@
  *		Alan Cox	:	RTF_REJECT support.
  *		Alan Cox	:	TCP irtt support.
  *		Jonathan Naylor	:	Added Metric support.
+ *	Miquel van Smoorenburg	:	BSD API fixes.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -314,8 +315,7 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	while ((r = *rp) != NULL) 
 	{
 		if (r->rt_dst != dst || 
-		    r->rt_mask != mask ||
-		    r->rt_metric < metric)
+		    r->rt_mask != mask)
 		{
 			rp = &r->rt_next;
 			continue;
@@ -381,6 +381,7 @@ static int rt_new(struct rtentry *r)
 	char * devname;
 	struct device * dev = NULL;
 	unsigned long flags, daddr, mask, gw;
+	unsigned char metric;
 
 	/*
 	 *	If a device is specified find it.
@@ -406,13 +407,14 @@ static int rt_new(struct rtentry *r)
 
 	/*
 	 *	Make local copies of the important bits
+	 *	We decrement the metric by one for BSD compatibility.
 	 */
 	 
 	flags = r->rt_flags;
 	daddr = ((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr;
 	mask = ((struct sockaddr_in *) &r->rt_genmask)->sin_addr.s_addr;
 	gw = ((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr;
-
+	metric = r->rt_metric > 0 ? r->rt_metric - 1 : 0;
 
 	/*
 	 *	BSD emulation: Permits route add someroute gw one-of-my-addresses
@@ -475,7 +477,7 @@ static int rt_new(struct rtentry *r)
 	 *	Add the route
 	 */
 	 
-	ip_rt_add(flags, daddr, mask, gw, dev, r->rt_mss, r->rt_window, r->rt_irtt, r->rt_metric);
+	ip_rt_add(flags, daddr, mask, gw, dev, r->rt_mss, r->rt_window, r->rt_irtt, metric);
 	return 0;
 }
 

@@ -17,7 +17,7 @@
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
 
 OBJS  = entry.o traps.o process.o osf_sys.o irq.o signal.o setup.o \
-	lca.o bios32.o
+	lca.o bios32.o ptrace.o
 
 all: kernel.o head.o
 

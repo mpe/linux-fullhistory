@@ -1442,7 +1442,7 @@ static int pi_probe(struct device *dev, int card_type)
     dev->pa_addr = 0;
     dev->pa_brdaddr = 0;
     dev->pa_mask = 0;
-    dev->pa_alen = sizeof(unsigned long);
+    dev->pa_alen = 4;
 
     return 0;
 }

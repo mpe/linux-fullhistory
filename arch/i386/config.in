@@ -60,6 +60,7 @@ bool 'IP: Reverse ARP' CONFIG_INET_RARP n
 bool 'IP: Assume subnets are local' CONFIG_INET_SNARL y
 bool 'IP: Disable NAGLE algorithm (normally enabled)' CONFIG_TCP_NAGLE_OFF n
 bool 'IP: Drop source routed frames' CONFIG_IP_NOSR y
+bool 'IP: Allow large windows (not recommend if <16Mb of memory)' CONFIG_SKB_LARGE y
 fi
 bool 'The IPX protocol' CONFIG_IPX n
 bool 'Appletalk DDP' CONFIG_ATALK n

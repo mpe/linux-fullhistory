@@ -45,6 +45,8 @@
  *	Arnt Gulbrandsen 	:	New udp_send and stuff
  *		Alan Cox	:	Cache last socket
  *		Alan Cox	:	Route cache
+ *		Alan Cox	:	Checksum precompute is bogus is some lame
+ *					software is padding its udp frames in IP!
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -273,7 +275,10 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	else
 		a = ip_build_xmit(sk, udp_getfrag, &ufh, ulen, 
 			sin->sin_addr.s_addr, rt, IPPROTO_UDP);
-	return(a<0 ? a : len);
+	if(a<0)
+		return a;
+	udp_statistics.UdpOutDatagrams++;
+	return len;
 }
 
 
@@ -532,6 +537,9 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 */
 	 
 	ulen = ntohs(uh->len);
+	
+	if(ulen!=len)
+		skb->ip_summed=0;	/* Bogoid padded frame */
 
 	if (ulen > len || len < sizeof(*uh) || ulen < sizeof(*uh)) 
 	{

@@ -1,13 +1,13 @@
 
----------------------------------------------------------------------------
+----------------------------------------------------------------------------
 NOTE:  See also README.arcnet-jumpers in this directory for jumper-setting
-information if you're like most of us and didn't happen to get a manual with
+information if you're like many of us and didn't happen to get a manual with
 your ARCnet card.
----------------------------------------------------------------------------
+----------------------------------------------------------------------------
 
 Since no one seems to listen to me otherwise, perhaps a poem will get your
 attention:
-			This is scary software
+			This is alpha software
 			If it works I DO CARE.
 			
 Hmm, I think I'm allowed to call that a poem, even though it's only two
@@ -30,63 +30,67 @@ Anyway, enough complaining.  Let's get started:
 			
 These are the ARCnet drivers for Linux.
 
-This is the first non-ALPHA release, so please be careful, and send all
-possible success/failure reports to me.  If I don't know when/if/how it
-works, I won't be able to answer people's questions.  Do we want that?  Of
-course not.
+We're now back to more ALPHA releases after the 1.01 release which made it
+into Linux 1.2.2, so please be careful, and send all possible
+success/failure reports to me.  If I don't know when/if/how it works, I
+won't be able to answer people's questions.  Do we want that?  Of course
+not.
 
 Once again:  DO send me success reports!  I want to know if this is working!
 (You know, it might be argued that I'm pushing this point a little too much. 
-If you think so, why not flame me in a quick little email?  Please also
+If you think so, why not flame me in a quick little e-mail?  Please also
 include the type of card(s) you're using, software, size of network, and
 whether it's working or not.)
 
 My e-mail address is:
-	apenwarr@tourism.807-city.on.ca
+	apenwarr@foxnet.net
 
 
 Where do I discuss these drivers?
 ---------------------------------
 
-As of the 0.22 release, we have a mailing list specifically for discussion
-of the ARCnet drivers for Linux, and anything you might want to interface
-them with (ie. DOS).  I'll also post new versions of the Linux-ARCnet
-distribution to the list in tar-gzip-uuencode format.
+There is a mailing list specifically for discussion of the ARCnet drivers
+for Linux, and anything you might want to interface them with (ie. DOS). 
+I'll also post new versions of the Linux-ARCnet distribution to the list in
+tar-gzip-uuencode format.
 
-To subscribe to the list, send a message to listserv@tourism.807-city.on.ca
+To subscribe to the list, send a message to listserv@807-city.on.ca
 with the following line in the BODY (not the SUBJECT) of your message:
 	subscribe linux-arcnet YOUR REAL NAME
 Remember to remove your signature, or you'll get an error back.
 
 Send all bug (or success) reports to me or to the list.
 
-You're free to use the comp.os.linux.development newsgroup too, but I can't
-guarantee I'll see it there.  (Hopefully, if my news server stays sane, I
-will.)
+The people on linux-net@vger.rutgers.edu have also been known to be very
+helpful! :)
+
+
+Other Drivers and Info
+----------------------
 
 Also, SMC (one of the companies that makes ARCnet cards) has a WorldWideWeb
 site you might be interested in, which includes several drivers for various
 cards including ARCnet.  Try:
 	http://www.smc.com/
 	
+Performance Technologies makes various network software that supports
+ARCnet.
+	http://www.perftech.com/ or ftp to ftp.perftech.com.
+	
 Novell makes a networking stack for DOS which includes ARCnet drivers.  Try
 ftp'ing to ftp.novell.com.
 
 You can get the Crynwr packet driver collection (including arcether.com, the
-one you'll want for arcnet cards) from oak.oakland.edu:/pub/msdos/pktdrvr. 
+one you'll want for arcnet cards) from oak.oakland.edu:/simtel/msdos/pktdrvr.
 It won't work perfectly on a 386+ without patches, though, and also doesn't
-like several cards.  Mail me if you want a fixed version.
-
-
-Last warning:  This driver may be extremely dangerous, crash your computer,
-or kill your dog!  (although I'm pretty sure that I've worked that one
-out...)
+like several cards.  Mail me if you want a fixed version.  (Ahem:  I may or
+may not have a 100% fixed version by the time I get your mail!)
 
 
 Loadable Module Support
 -----------------------
 
-This is a new feature as of 0.42 ALPHA.
+This is a available starting with 0.42 ALPHA.
 
 Configure and rebuild Linux.  When asked, say NO to "arcnet support" if you
 want loadable module support.
@@ -124,28 +128,47 @@ How do I get it to work with...?
 --------------------------------
 
 NFS: Should be fine linux->linux, just pretend you're using ethernet cards. 
-        oak.oakland.edu:/pub/msdos/nfs has some nice DOS clients.  I can't
-        get SOSS (dos-based server) to work, although someone has and can't
-        figure out why it won't work for me.
+        oak.oakland.edu:/simtel/msdos/nfs has some nice DOS clients.  There
+        is also a DOS-based NFS server called SOSS.  It doesn't multitask
+        quite the way Linux does (actually, it doesn't multitask AT ALL) but
+        you never know what you might need.
 
 DOS: If you're using the freeware arcether.com, you might want to install
         the source code patch.  It helps with PC/TCP, and also can get
-        arcether to load if it timed out too quickly.  Mail me if you need a
-        precompiled version of arcether.com. (ie. you if don't have a DOS
-        assembler)
+        arcether to load if it timed out too quickly during initialization. 
+        Mail me if you need a precompiled version of arcether.com. (ie. you
+        if don't have a DOS assembler)
 	
-Windows:  See DOS :)
+Windows:  See DOS :)  Trumpet Winsock works fine with either the Novell or
+	Arcether client, assuming you remember to load winpkt of course.
 
-OS2: May work okay.  Please e-mail me if you find a freeware TCP/IP stack
-        for OS/2.
-        
 LAN Manager and Windows for Workgroups: These programs use protocols that
-        are incompatible with ARCnet for Linux.  Rather than using the
-        internet-standard ARCnet protocol, they try to pretend the cards are
-        ethernet, and confuse everyone else on the network.
+        are incompatible with the internet standard.  They try to pretend
+        the cards are ethernet, and confuse everyone else on the network. 
+        However, v1.90 ALPHA and later of the Linux ARCnet driver support
+        this protocol via the 'arc0w' device.  After setting up arc0 as
+        usual, ifconfig and set up routes to your WfWg-protocol hosts
+        through arc0w.
         
-        An upcoming release of ARCnet for Linux may have workarounds for
-	this stupid behaviour.
+	Using the freeware Samba server and clients for Linux, you can now
+	interface quite nicely with TCP/IP-based WfWg or Lan Manager
+	networks.  In addition, the Linux host can be used as a router
+	between the standard and WfWg protocols, so hosts that could
+	previously never talk to each other should now be able to.
+
+        This feature is still in early testing, so please e-mail with any
+	comments/questions you might have.
+	
+OS2: Has not been tested.  The "correct" solution would be to buy either of
+	IBM's "TCP/IP for OS/2" or "Warp Connect" packages.  However,
+	ftp.microsoft.com also has a freeware Lan Manager for OS/2 client
+	which should use the same protocol as WfWg does.  This has not been
+	tested, however.  Please mail me with any results.
+        
+NetBSD/AmiTCP: These use an old version of the Internet standard ARCnet
+	protocol which is incompatible with the Linux driver at present. 
+	Work to support these is underway and should be available in a
+	standard release soon.
 
 
 It works: what now?
@@ -154,11 +177,12 @@ It works: what now?
 Send mail describing your setup, preferably including driver version, kernel
 version, ARCnet card model, CPU type, number of systems on your network, and
 list of software in use to me at the following address:
-	apenwarr@tourism.807-city.on.ca
+	apenwarr@foxnet.net
 
-I do send (sometimes automated) replies to all messages I receive.  My mail
-host is quite weird, so if you don't get a reply within a reasonable time,
-please resend.
+I do send (sometimes automated) replies to all messages I receive.  My email
+can be weird (and also usually gets forwarded all over the place along the
+way to me), so if you don't get a reply within a reasonable time, please
+resend.
 
 
 It doesn't work: what now?
@@ -171,31 +195,36 @@ with "arcnet:" and has shown up since the last reboot) in your mail.
 If you want to try fixing it yourself (I highly recommend that you mail me
 about the problem first, since it might already have been solved) you may
 want to try some of the debug levels available.  For heavy testing on
-DEBUG_DURING or more, it would be a REALLY good idea to kill your klogd
-daemon first!  DEBUG_DURING displays 4-5 lines for each packet sent or
-received.  DEBUG_TX and RX actually DISPLAY each packet as it is sent or
+D_DURING or more, it would be a REALLY good idea to kill your klogd
+daemon first!  D_DURING displays 4-5 lines for each packet sent or
+received.  D_TX and RX actually DISPLAY each packet as it is sent or
 received, which is obviously quite big.
 
-You can run the arcdump shell script (available from me) as root to list the
-contents of the arcnet buffers at any time.  To make any sense at all out of
-this, you should grab the pertinent RFC's. (some are listed near the top of
-arcnet.c).  arcdump assumes your card is at 0xD0000.  If it isn't, edit the
-script.
+You can run the arcdump shell script (available from me or in the full
+ARCnet package if you got it) as root to list the contents of the arcnet
+buffers at any time.  To make any sense at all out of this, you should grab
+the pertinent RFC's. (some are listed near the top of arcnet.c).  arcdump
+assumes your card is at 0xD0000.  If it isn't, edit the script.
 
 Buffers #0 and 1 are used for receiving, and Buffers #2 and 3 are for
-sending.  Ping-pong buffers are implemented both ways, just to confuse you.
+sending.  Ping-pong buffers are implemented both ways.
 
-If your debug level is DEBUG_DURING or more, the buffers are cleared to a
-constant value of 0x42 every time the card is reset (which should only
-happen when you do an ifconfig up, or when Linux decides that the driver is
-broken).  This is to make it easier to figure out which bytes are being used
-by a packet.
+If your debug level includes D_DURING, the buffers are cleared to a constant
+value of 0x42 every time the card is reset (which should only happen when
+you do an ifconfig up, or when Linux decides that the driver is broken). 
+This is to make it easier to figure out which bytes are being used by a
+packet.
 
 You can change the debug level without recompiling the kernel by typing:
-	ifconfig arc0 down metric 1x
+	ifconfig arc0 down metric 1xxx
 	/etc/rc.d/rc.inet1
-where "x" is the debug level you want.  For example, "metric 14" would put
-you at debug level 4.  Debug level 3 is the default (D_EXTRA).
+where "xxx" is the debug level you want.  For example, "metric 1015" would put
+you at debug level 15.  Debug level 7 is currently the default.
+
+Note that the debug level is (as of v1.90 ALPHA) a binary combination of
+different debug flags; so debug level 7 is really 1+2+4 or
+D_NORMAL+D_INIT+D_EXTRA.  To reach D_DURING, you would add 8 to this,
+resulting in debug level 15.
 
 
 I want to send money: what now?

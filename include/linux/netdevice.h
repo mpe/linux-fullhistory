@@ -156,7 +156,7 @@ struct device
   int			  (*do_ioctl)(struct device *dev, struct ifreq *ifr, int cmd);
 #define HAVE_SET_CONFIG
   int			  (*set_config)(struct device *dev, struct ifmap *map);
-  int			  (*header_cache)(struct device *dev, struct sock *sk, unsigned long saddr, unsigned long daddr);  
+  void			  (*header_cache)(struct device *dev, struct sock *sk, unsigned long saddr, unsigned long daddr);
 };
 
 

@@ -123,7 +123,6 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	childregs->r0 = 0;
 	childregs->r19 = 0;
 	childregs->r20 = 1;	/* OSF/1 has some strange fork() semantics.. */
-	regs->r0 = p->pid;
 	regs->r20 = 0;
 	stack = ((struct switch_stack *) regs) - 1;
 	childstack = ((struct switch_stack *) childregs) - 1;
