@@ -636,7 +636,7 @@ config EL16
 	  will be called 3c507.
 
 config EL3
-	tristate "3c509/3c529 (MCA)/3c569B (98)/3c579 \"EtherLink III\" support"
+	tristate "3c509/3c529 (MCA)/3c579 \"EtherLink III\" support"
 	depends on NET_VENDOR_3COM && (ISA || EISA || MCA)
 	---help---
 	  If you have a network (Ethernet) card belonging to the 3Com
@@ -900,7 +900,7 @@ config NI65
 source "drivers/net/tulip/Kconfig"
 
 config AT1700
-	tristate "AT1700/1720/RE1000Plus(C-Bus) support (EXPERIMENTAL)"
+	tristate "AT1700/1720 support (EXPERIMENTAL)"
 	depends on NET_ETHERNET && (ISA || MCA_LEGACY) && EXPERIMENTAL
 	select CRC32
 	---help---
