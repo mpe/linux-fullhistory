@@ -1646,7 +1646,7 @@ int __usb_suspend_device (struct usb_device *udev, int port1, pm_message_t state
  *
  * Returns 0 on success, else negative errno.
  */
-int usb_suspend_device(struct usb_device *udev, u32 state)
+int usb_suspend_device(struct usb_device *udev, pm_message_t state)
 {
 	int	port1, status;
 
@@ -1961,7 +1961,7 @@ static int hub_resume(struct usb_interface *intf)
 
 #else	/* !CONFIG_USB_SUSPEND */
 
-int usb_suspend_device(struct usb_device *udev, u32 state)
+int usb_suspend_device(struct usb_device *udev, pm_message_t state)
 {
 	return 0;
 }

@@ -2521,7 +2521,7 @@ static int radeon_restore_pci_cfg(struct radeonfb_info *rinfo)
 
 static/*extern*/ int susdisking = 0;
 
-int radeonfb_pci_suspend(struct pci_dev *pdev, u32 state)
+int radeonfb_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 {
         struct fb_info *info = pci_get_drvdata(pdev);
         struct radeonfb_info *rinfo = info->par;
