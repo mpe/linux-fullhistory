@@ -342,7 +342,11 @@ config DISCONTIGMEM
 
 config LEDS
 	bool "Timer and CPU usage LEDs"
-	depends on ARCH_NETWINDER || ARCH_EBSA110 || ARCH_EBSA285 || ARCH_SHARK || ARCH_CO285 || ARCH_SA1100 || ARCH_LUBBOCK || MACH_MAINSTONE || ARCH_PXA_IDP || ARCH_INTEGRATOR || ARCH_CDB89712 || ARCH_P720T || ARCH_OMAP || ARCH_VERSATILE || ARCH_IMX
+	depends on ARCH_CDB89712 || ARCH_CO285 || ARCH_EBSA110 || \
+		   ARCH_EBSA285 || ARCH_IMX || ARCH_INTEGRATOR || \
+		   ARCH_LUBBOCK || MACH_MAINSTONE || ARCH_NETWINDER || \
+		   ARCH_OMAP || ARCH_P720T || ARCH_PXA_IDP || \
+		   ARCH_SA1100 || ARCH_SHARK || ARCH_VERSATILE
 	help
 	  If you say Y here, the LEDs on your machine will be used
 	  to provide useful information about your current system status.
@@ -355,8 +359,9 @@ config LEDS
 	  system, but the driver will do nothing.
 
 config LEDS_TIMER
-	bool "Timer LED" if LEDS && (ARCH_NETWINDER || ARCH_EBSA285 || ARCH_SHARK || MACH_MAINSTONE || ARCH_CO285 || ARCH_SA1100 || ARCH_LUBBOCK || ARCH_PXA_IDP || ARCH_INTEGRATOR || ARCH_P720T || ARCH_VERSATILE || ARCH_IMX || MACH_OMAP_H2 || MACH_OMAP_PERSEUS2)
-	depends on ARCH_NETWINDER || ARCH_EBSA110 || ARCH_EBSA285 || ARCH_SHARK || ARCH_CO285 || ARCH_SA1100 || ARCH_LUBBOCK || MACH_MAINSTONE || ARCH_PXA_IDP || ARCH_INTEGRATOR || ARCH_CDB89712 || ARCH_P720T || ARCH_OMAP || ARCH_VERSATILE || ARCH_IMX
+	bool "Timer LED" if (!ARCH_CDB89712 && !ARCH_OMAP) || \
+			    MACH_OMAP_H2 || MACH_OMAP_PERSEUS2
+	depends on LEDS
 	default y if ARCH_EBSA110
 	help
 	  If you say Y here, one of the system LEDs (the green one on the
@@ -370,8 +375,9 @@ config LEDS_TIMER
 	  will overrule the CPU usage LED.
 
 config LEDS_CPU
-	bool "CPU usage LED"
-	depends on LEDS && (ARCH_NETWINDER || ARCH_EBSA285 || ARCH_SHARK || ARCH_CO285 || ARCH_SA1100 || ARCH_LUBBOCK || MACH_MAINSTONE || ARCH_PXA_IDP || ARCH_INTEGRATOR || ARCH_P720T || ARCH_VERSATILE || ARCH_IMX || MACH_OMAP_H2 || MACH_OMAP_PERSEUS2)
+	bool "CPU usage LED" if (!ARCH_CDB89712 && !ARCH_EBSA110 && \
+			!ARCH_OMAP) || MACH_OMAP_H2 || MACH_OMAP_PERSEUS2
+	depends on LEDS
 	help
 	  If you say Y here, the red LED will be used to give a good real
 	  time indication of CPU usage, by lighting whenever the idle task
