@@ -12,8 +12,6 @@
 #include <linux/bootmem.h>
 
 
-int es7000_plat = 0;
-
 struct dmi_header
 {
 	u8	type;
