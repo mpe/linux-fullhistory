@@ -2044,10 +2044,11 @@ W:	http://gyver.homeip.net/sis5513/index.html
 S:	Maintained
 
 SIS 900/7016 FAST ETHERNET DRIVER
-P:	Ollie Lho
-M:	ollie@sis.com.tw
+P:	Daniele Venzano
+M:	venza@brownhat.org
+W:	http://www.brownhat.org/sis900.html
 L:	linux-net@vger.kernel.org
-S:	Supported
+S:	Maintained
 
 SIS FRAMEBUFFER DRIVER
 P:	Thomas Winischhofer
