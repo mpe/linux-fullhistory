@@ -285,8 +285,6 @@ static int tgafb_blank(int blank, struct fb_info_gen *info);
 static void tgafb_set_disp(const void *fb_par, struct display *disp, 
 		struct fb_info_gen *info);
 
-static int tgafb_open(struct fb_info *info, int user);
-static int tgafb_release(struct fb_info *info, int user);
 int tgafb_setup(char*);
 int tgafb_init(void);
 void tgafb_cleanup(struct fb_info *info);
@@ -885,23 +883,15 @@ struct fbgen_hwswitch tgafb_hwswitch = {
      *  Frame buffer operations
      */
 
-static int tgafb_open(struct fb_info *info, int user)
-{
-    MOD_INC_USE_COUNT;
-    return(0);                              
-}
-      
-
-static int tgafb_release(struct fb_info *info, int user)
-{
-    MOD_DEC_USE_COUNT;
-    return(0);                                                    
-}
-
-
 static struct fb_ops tgafb_ops = {
-    tgafb_open, tgafb_release, fbgen_get_fix, fbgen_get_var, fbgen_set_var,
-    fbgen_get_cmap, tgafb_set_cmap, fbgen_pan_display, fbgen_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	fbgen_get_fix,
+	fb_get_var:	fbgen_get_var,
+	fb_set_var:	fbgen_set_var,
+	fb_get_cmap:	fbgen_get_cmap,
+	fb_set_cmap:	tgafb_set_cmap,
+	fb_pan_display:	fbgen_pan_display,
+	fb_ioctl:	fbgen_ioctl,
 };
 
 

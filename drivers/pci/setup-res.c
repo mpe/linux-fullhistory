@@ -77,6 +77,10 @@ pci_assign_resource(struct pci_dev *dev, int i)
 			      pcibios_align_resource, dev) < 0) {
 		printk(KERN_ERR "PCI: Failed to allocate resource %d for %s\n",
 		       i, dev->name);
+		printk(KERN_ERR "  failed root[%lx:%lx] min[%lx] size[%lx]\n",
+		       root->start, root->end, min, size);
+		printk(KERN_ERR "  failed res[%lx:%lx]\n",
+		       res->start, res->end);
 		return -EBUSY;
 	}
 

@@ -34,7 +34,6 @@
 
 #include <linux/notifier.h>
 
-extern struct notifier_block *reboot_notifier_list;
 extern int register_reboot_notifier(struct notifier_block *);
 extern int unregister_reboot_notifier(struct notifier_block *);
 

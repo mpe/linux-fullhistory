@@ -77,8 +77,6 @@ static int ofonly = 0;
 int offb_init(void);
 int offb_setup(char*);
 
-static int offb_open(struct fb_info *info, int user);
-static int offb_release(struct fb_info *info, int user);
 static int offb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			struct fb_info *info);
 static int offb_get_var(struct fb_var_screeninfo *var, int con,
@@ -123,31 +121,15 @@ static void do_install_cmap(int con, struct fb_info *info);
 
 
 static struct fb_ops offb_ops = {
-    offb_open, offb_release, offb_get_fix, offb_get_var, offb_set_var,
-    offb_get_cmap, offb_set_cmap, offb_pan_display, offb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	offb_get_fix,
+	fb_get_var:	offb_get_var,
+	fb_set_var:	offb_set_var,
+	fb_get_cmap:	offb_get_cmap,
+	fb_set_cmap:	offb_set_cmap,
+	fb_pan_display:	offb_pan_display,
+	fb_ioctl:	offb_ioctl,
 };
-
-
-    /*
-     *  Open/Release the frame buffer device
-     */
-
-static int offb_open(struct fb_info *info, int user)
-{
-    /*
-     *  Nothing, only a usage count for the moment
-     */
-
-    MOD_INC_USE_COUNT;
-    return(0);
-}
-
-static int offb_release(struct fb_info *info, int user)
-{
-    MOD_DEC_USE_COUNT;
-    return(0);
-}
-
 
     /*
      *  Get the Fixed Part of the Display
@@ -479,9 +461,11 @@ static void __init offb_init_nodriver(struct device_node *dp)
 	&& len == sizeof(int))
 	height = *pp;
     if ((pp = (int *)get_property(dp, "linebytes", &len)) != NULL
-	&& len == sizeof(int))
+	&& len == sizeof(int)) {
 	pitch = *pp;
-    else
+	if (pitch == 1)
+	    pitch = 0x1000;
+    } else
 	pitch = width;
     if ((up = (unsigned *)get_property(dp, "address", &len)) != NULL
 	&& len == sizeof(unsigned))
@@ -831,7 +815,6 @@ static int offb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			 u_int transp, struct fb_info *info)
 {
     struct fb_info_offb *info2 = (struct fb_info_offb *)info;
-    int i;
 	
     if (!info2->cmap_adr || regno > 255)
 	return 1;
@@ -867,9 +850,11 @@ static int offb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 #endif
 #ifdef FBCON_HAS_CFB32
 	    case 32:
-		i = (regno << 8) | regno;
+	    {
+		int i = (regno << 8) | regno;
 		info2->fbcon_cmap.cfb32[regno] = (i << 16) | i;
 		break;
+	    }
 #endif
        }
 

@@ -269,7 +269,7 @@ find_best_ips_proto(struct ip_conntrack_tuple *tuple,
 		unsigned int score;
 		struct ip_conntrack_tuple tuple;
 	} best = { NULL,  0xFFFFFFFF };
-	u_int32_t *var_ipp, *other_ipp, saved_ip;
+	u_int32_t *var_ipp, *other_ipp, saved_ip, orig_dstip;
 
 	if (HOOK2MANIP(hooknum) == IP_NAT_MANIP_SRC) {
 		var_ipp = &tuple->src.ip;
@@ -280,6 +280,9 @@ find_best_ips_proto(struct ip_conntrack_tuple *tuple,
 		saved_ip = tuple->src.ip;
 		other_ipp = &tuple->src.ip;
 	}
+	/* Don't do do_extra_mangle unless neccessary (overrides
+           explicit socket bindings, for example) */
+	orig_dstip = tuple->dst.ip;
 
 	IP_NF_ASSERT(mr->rangesize >= 1);
 	for (i = 0; i < mr->rangesize; i++) {
@@ -306,6 +309,7 @@ find_best_ips_proto(struct ip_conntrack_tuple *tuple,
 			*other_ipp = saved_ip;
 
 			if (hooknum == NF_IP_LOCAL_OUT
+			    && *var_ipp != orig_dstip
 			    && !do_extra_mangle(*var_ipp, other_ipp)) {
 				DEBUGP("Range %u %u.%u.%u.%u rt failed!\n",
 				       i, IP_PARTS(*var_ipp));
@@ -335,6 +339,35 @@ find_best_ips_proto(struct ip_conntrack_tuple *tuple,
 
 	/* Discard const. */
 	return (struct ip_nat_range *)best.range;
+}
+
+/* Fast version doesn't iterate through hash chains, but only handles
+   common case of single IP address (null NAT, masquerade) */
+static struct ip_nat_range *
+find_best_ips_proto_fast(struct ip_conntrack_tuple *tuple,
+			 const struct ip_nat_multi_range *mr,
+			 const struct ip_conntrack *conntrack,
+			 unsigned int hooknum)
+{
+	if (mr->rangesize != 1
+	    || (mr->range[0].flags & IP_NAT_RANGE_FULL)
+	    || ((mr->range[0].flags & IP_NAT_RANGE_MAP_IPS)
+		&& mr->range[0].min_ip != mr->range[0].max_ip))
+		return find_best_ips_proto(tuple, mr, conntrack, hooknum);
+
+	if (mr->range[0].flags & IP_NAT_RANGE_MAP_IPS) {
+		if (HOOK2MANIP(hooknum) == IP_NAT_MANIP_SRC)
+			tuple->src.ip = mr->range[0].min_ip;
+		else {
+			tuple->dst.ip = mr->range[0].min_ip;
+			if (hooknum == NF_IP_LOCAL_OUT
+			    && !do_extra_mangle(tuple->dst.ip, &tuple->src.ip))
+				return NULL;
+		}
+	}
+
+	/* Discard const. */
+	return (struct ip_nat_range *)&mr->range[0];
 }
 
 static int
@@ -378,7 +411,7 @@ get_unique_tuple(struct ip_conntrack_tuple *tuple,
 	   range.
 	*/
 	*tuple = *orig_tuple;
-	while ((rptr = find_best_ips_proto(tuple, mr, conntrack, hooknum))
+	while ((rptr = find_best_ips_proto_fast(tuple, mr, conntrack, hooknum))
 	       != NULL) {
 		DEBUGP("Found best for "); DUMP_TUPLE(tuple);
 		/* 3) The per-protocol part of the manip is made to
@@ -525,8 +558,7 @@ ip_nat_setup_info(struct ip_conntrack *conntrack,
 	invert_tuplepr(&inv_tuple, &orig_tp);
 
 	/* Has source changed?. */
-	if (memcmp(&new_tuple.src, &orig_tp.src, sizeof(new_tuple.src))
-	    != 0) {
+	if (!ip_ct_tuple_src_equal(&new_tuple, &orig_tp)) {
 		/* In this direction, a source manip. */
 		info->manips[info->num_manips++] =
 			((struct ip_nat_info_manip)
@@ -544,8 +576,7 @@ ip_nat_setup_info(struct ip_conntrack *conntrack,
 	}
 
 	/* Has destination changed? */
-	if (memcmp(&new_tuple.dst, &orig_tp.dst, sizeof(new_tuple.dst))
-	    != 0) {
+	if (!ip_ct_tuple_dst_equal(&new_tuple, &orig_tp)) {
 		/* In this direction, a destination manip */
 		info->manips[info->num_manips++] =
 			((struct ip_nat_info_manip)
@@ -734,12 +765,15 @@ icmp_reply_translation(struct sk_buff *skb,
 		DEBUGP("icmp_reply: manip %u dir %s hook %u\n",
 		       i, info->manips[i].direction == IP_CT_DIR_ORIGINAL ?
 		       "ORIG" : "REPLY", info->manips[i].hooknum);
+
+		if (info->manips[i].direction != dir)
+			continue;
+
 		/* Mapping the inner packet is just like a normal
-		   packet in the other direction, except it was never
-		   src/dst reversed, so where we would normally apply
-		   a dst manip, we reply a src, and vice versa. */
-		if (info->manips[i].direction != dir
-		    && info->manips[i].hooknum == opposite_hook[hooknum]) {
+		   packet, except it was never src/dst reversed, so
+		   where we would normally apply a dst manip, we apply
+		   a src, and vice versa. */
+		if (info->manips[i].hooknum == opposite_hook[hooknum]) {
 			DEBUGP("icmp_reply: inner %s -> %u.%u.%u.%u %u\n",
 			       info->manips[i].maniptype == IP_NAT_MANIP_SRC
 			       ? "DST" : "SRC",
@@ -749,14 +783,13 @@ icmp_reply_translation(struct sk_buff *skb,
 				  skb->len - ((void *)inner - (void *)iph),
 				  &info->manips[i].manip,
 				  !info->manips[i].maniptype);
-		}
 		/* Outer packet needs to have IP header NATed like
                    it's a reply. */
-		else if (info->manips[i].direction != dir
+		} else if (info->manips[i].direction == dir
 			 && info->manips[i].hooknum == hooknum) {
 			/* Use mapping to map outer packet: 0 give no
                            per-proto mapping */
-			DEBUGP("icmp_reply: outer %s %u.%u.%u.%u\n",
+			DEBUGP("icmp_reply: outer %s -> %u.%u.%u.%u\n",
 			       info->manips[i].maniptype == IP_NAT_MANIP_SRC
 			       ? "SRC" : "DST",
 			       IP_PARTS(info->manips[i].manip.ip));

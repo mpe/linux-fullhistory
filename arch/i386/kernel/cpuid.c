@@ -64,11 +64,11 @@ extern inline void do_cpuid(int cpu, u32 reg, u32 *data)
   if ( cpu == smp_processor_id() ) {
     cpuid(reg, &data[0], &data[1], &data[2], &data[3]);
   } else {
-    cmd->cpu  = cpu;
-    cmd->reg  = reg;
-    cmd->data = data;
+    cmd.cpu  = cpu;
+    cmd.reg  = reg;
+    cmd.data = data;
     
-    smp_call_function(cpuid_smp_cpuid, (void *)cmd, 1, 1);
+    smp_call_function(cpuid_smp_cpuid, &cmd, 1, 1);
   }
 }
 #else /* ! CONFIG_SMP */
@@ -120,17 +120,13 @@ static ssize_t cpuid_read(struct file * file, char * buf,
 static int cpuid_open(struct inode *inode, struct file *file)
 {
   int cpu = MINOR(file->f_dentry->d_inode->i_rdev);
-  
-  if ( !(cpu_online_map & (1UL << cpu)) )
-    return -ENXIO;	/* No such CPU */
-  
-  MOD_INC_USE_COUNT;
-  return 0;
-}
+  struct cpuinfo_x86 *c = &(cpu_data)[cpu];
 
-static int cpuid_release(struct inode *inode, struct file *file)
-{
-  MOD_DEC_USE_COUNT;
+  if ( !(cpu_online_map & (1UL << cpu)) )
+    return -ENXIO;		/* No such CPU */
+  if ( c->cpuid_level < 0 )
+    return -EIO;		/* CPUID not supported */
+  
   return 0;
 }
 
@@ -138,10 +134,10 @@ static int cpuid_release(struct inode *inode, struct file *file)
  * File operations we support
  */
 static struct file_operations cpuid_fops = {
+  owner:	THIS_MODULE,
   llseek:	cpuid_seek,
   read:		cpuid_read,
   open:		cpuid_open,
-  release:	cpuid_release,
 };
 
 int __init cpuid_init(void)

@@ -251,7 +251,6 @@ static void initMatroxDH(struct matroxfb_dh_fb_info* m2info, struct display* p) 
 static int matroxfb_dh_open(struct fb_info* info, int user) {
 #define m2info ((struct matroxfb_dh_fb_info*)info)
 	struct matrox_fb_info* minfo = m2info->primary_dev;
-	MOD_INC_USE_COUNT;
 
 	if (minfo) {
 		if (ACCESS_FBINFO(dead)) {
@@ -268,7 +267,6 @@ static int matroxfb_dh_release(struct fb_info* info, int user) {
 
 	if (minfo) {
 	}
-	MOD_DEC_USE_COUNT;
 	return 0;
 #undef m2info
 }
@@ -554,16 +552,16 @@ static int matroxfb_dh_ioctl(struct inode* inode,
 }
 
 static struct fb_ops matroxfb_dh_ops = {
-	matroxfb_dh_open,
-	matroxfb_dh_release,
-	matroxfb_dh_get_fix,
-	matroxfb_dh_get_var,
-	matroxfb_dh_set_var,
-	matroxfb_dh_get_cmap,
-	matroxfb_dh_set_cmap,
-	matroxfb_dh_pan_display,
-	matroxfb_dh_ioctl,
-	NULL			/* mmap */
+	owner:		THIS_MODULE,
+	fb_open:	matroxfb_dh_open,
+	fb_release:	matroxfb_dh_release,
+	fb_get_fix:	matroxfb_dh_get_fix,
+	fb_get_var:	matroxfb_dh_get_var,
+	fb_set_var:	matroxfb_dh_set_var,
+	fb_get_cmap:	matroxfb_dh_get_cmap,
+	fb_set_cmap:	matroxfb_dh_set_cmap,
+	fb_pan_display:	matroxfb_dh_pan_display,
+	fb_ioctl:	matroxfb_dh_ioctl,
 };
 
 static int matroxfb_dh_switch(int con, struct fb_info* info) {

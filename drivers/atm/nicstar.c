@@ -472,7 +472,7 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
    card->index = i;
    card->atmdev = NULL;
    card->pcidev = pcidev;
-   card->membase = pcidev->resource[1].start;
+   card->membase = pci_resource_start(pcidev, 1);
 #ifdef __powerpc__
    /* Compensate for different memory map between host CPU and PCI bus.
       Shouldn't we use a macro for this? */
@@ -893,10 +893,9 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
 #ifdef CONFIG_ATM_NICSTAR_USE_SUNI
    if (card->max_pcr == ATM_OC3_PCR) {
       suni_init(card->atmdev);
-#ifdef MODULE
+
       MOD_INC_USE_COUNT;
       /* Can't remove the nicstar driver or the suni driver would oops */
-#endif /* MODULE */
    }
 #endif /* CONFIG_ATM_NICSTAR_USE_SUNI */
 

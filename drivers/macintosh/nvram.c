@@ -70,24 +70,11 @@ static ssize_t write_nvram(struct file *file, const char *buf,
 	return p - buf;
 }
 
-static int nvram_open(struct inode *inode, struct file *file)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int nvram_release(struct inode *inode, struct file *file)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
 struct file_operations nvram_fops = {
+	owner:		THIS_MODULE,
 	llseek:		nvram_llseek,
 	read:		read_nvram,
 	write:		write_nvram,
-	open:		nvram_open,
-	release:	nvram_release,
 };
 
 static struct miscdevice nvram_dev = {

@@ -1385,7 +1385,7 @@ static int __init zatm_init(struct atm_dev *dev)
 	DPRINTK(">zatm_init\n");
 	zatm_dev = ZATM_DEV(dev);
 	pci_dev = zatm_dev->pci_dev;
-	zatm_dev->base = pci_dev->resource[0].start;
+	zatm_dev->base = pci_resource_start(pci_dev, 0);
 	zatm_dev->irq = pci_dev->irq;
 	if ((error = pci_read_config_word(pci_dev,PCI_COMMAND,&command)) ||
 	    (error = pci_read_config_byte(pci_dev,PCI_REVISION_ID,&revision))) {

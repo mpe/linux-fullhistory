@@ -1102,8 +1102,6 @@ static u_short sprfetchmode[3] = {
 
 int amifb_setup(char*);
 
-static int amifb_open(struct fb_info *info, int user);
-static int amifb_release(struct fb_info *info, int user);
 static int amifb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info);
 static int amifb_get_var(struct fb_var_screeninfo *var, int con,
@@ -1185,9 +1183,14 @@ static void ami_rebuild_copper(void);
 
 
 static struct fb_ops amifb_ops = {
-	amifb_open, amifb_release, amifb_get_fix, amifb_get_var,
-	amifb_set_var, amifb_get_cmap, amifb_set_cmap,
-	amifb_pan_display, amifb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	amifb_get_fix,
+	fb_get_var:	amifb_get_var,
+	fb_set_var:	amifb_set_var,
+	fb_get_cmap:	amifb_get_cmap,
+	fb_set_cmap:	amifb_set_cmap,
+	fb_pan_display:	amifb_pan_display,
+	fb_ioctl:	amifb_ioctl,
 };
 
 int __init amifb_setup(char *options)
@@ -1259,27 +1262,6 @@ cap_invalid:
 	}
 	return 0;
 }
-
-	/*
-	 * Open/Release the frame buffer device
-	 */
-
-static int amifb_open(struct fb_info *info, int user)
-{
-	/*
-	 * Nothing, only a usage count for the moment
-	 */
-
-	MOD_INC_USE_COUNT;
-	return(0);
-}
-
-static int amifb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return(0);
-}
-
 
 	/*
 	 * Get the Fixed Part of the Display

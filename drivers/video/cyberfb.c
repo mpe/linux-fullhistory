@@ -241,8 +241,6 @@ static int cyberfb_usermode __initdata = 0;
 
 int cyberfb_setup(char *options);
 
-static int cyberfb_open(struct fb_info *info, int user);
-static int cyberfb_release(struct fb_info *info, int user);
 static int cyberfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			   struct fb_info *info);
 static int cyberfb_get_var(struct fb_var_screeninfo *var, int con,
@@ -827,28 +825,6 @@ static void do_install_cmap(int con, struct fb_info *info)
 	DPRINTK("EXIT\n");
 }
 
-
-/*
- *  Open/Release the frame buffer device
- */
-
-static int cyberfb_open(struct fb_info *info, int user)
-{
-	/*
-	 * Nothing, only a usage count for the moment
-	 */
-
-	MOD_INC_USE_COUNT;
-	return(0);
-}
-
-static int cyberfb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return(0);
-}
-
-
 /*
  *    Get the Fixed Part of the Display
  */
@@ -1056,11 +1032,15 @@ static int cyberfb_ioctl(struct inode *inode, struct file *file,
 
 
 static struct fb_ops cyberfb_ops = {
-	cyberfb_open, cyberfb_release, cyberfb_get_fix, cyberfb_get_var,
-	cyberfb_set_var, cyberfb_get_cmap, cyberfb_set_cmap,
-	cyberfb_pan_display, cyberfb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	cyberfb_get_fix,
+	fb_get_var:	cyberfb_get_var,
+	fb_set_var:	cyberfb_set_var,
+	fb_get_cmap:	cyberfb_get_cmap,
+	fb_set_cmap:	cyberfb_set_cmap,
+	fb_pan_display:	cyberfb_pan_display,
+	fb_ioctl:	cyberfb_ioctl,
 };
-
 
 int __init cyberfb_setup(char *options)
 {

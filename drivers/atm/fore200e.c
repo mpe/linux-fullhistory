@@ -1409,6 +1409,8 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
     struct fore200e*     fore200e = FORE200E_DEV(vcc->dev);
     struct fore200e_vcc* fore200e_vcc;
     
+    MOD_INC_USE_COUNT;
+
     /* find a free VPI/VCI */
     fore200e_walk_vccs(vcc, &vpi, &vci);
 
@@ -1416,8 +1418,10 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
     vcc->vci = vci;
 
     /* ressource checking only? */
-    if (vci == ATM_VCI_UNSPEC || vpi == ATM_VPI_UNSPEC)
+    if (vci == ATM_VCI_UNSPEC || vpi == ATM_VPI_UNSPEC) {
+    	MOD_DEC_USE_COUNT;
 	return 0;
+    }
 
     set_bit(ATM_VF_ADDR, &vcc->flags);
     vcc->itf    = vcc->dev->number;
@@ -1435,6 +1439,7 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
 	down(&fore200e->rate_sf);
 	if (fore200e->available_cell_rate < vcc->qos.txtp.max_pcr) {
 	    up(&fore200e->rate_sf);
+    	    MOD_DEC_USE_COUNT;
 	    return -EAGAIN;
 	}
 	/* reserving the pseudo-CBR bandwidth at this point grants us
@@ -1451,6 +1456,7 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
 	down(&fore200e->rate_sf);
 	fore200e->available_cell_rate += vcc->qos.txtp.max_pcr;
 	up(&fore200e->rate_sf);
+    	MOD_DEC_USE_COUNT;
 	return -ENOMEM;
     }
 
@@ -1461,13 +1467,10 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
 	down(&fore200e->rate_sf);
 	fore200e->available_cell_rate += vcc->qos.txtp.max_pcr;
 	up(&fore200e->rate_sf);
+    	MOD_DEC_USE_COUNT;
 	return -EBUSY;
     }
     
-#ifdef MODULE
-    MOD_INC_USE_COUNT;
-#endif
-
     /* compute rate control parameters */
     if ((vcc->qos.txtp.traffic_class == ATM_CBR) && (vcc->qos.txtp.max_pcr > 0)) {
 	
@@ -2598,6 +2601,10 @@ fore200e_detect(void)
 
     printk(FORE200E "FORE Systems 200E-series driver - version " FORE200E_VERSION "\n");
 
+#if 0 /* XXX uncomment this to forbid module unloading */
+    MOD_INC_USE_COUNT;
+#endif
+
     /* for each configured bus interface */
     for (link = 0, bus = fore200e_bus; bus->model_name; bus++) {
 
@@ -2624,10 +2631,8 @@ fore200e_detect(void)
     }
 
 #if 0 /* XXX uncomment this to forbid module unloading */
-#ifdef MODULE
-    if (link > 0)
-	MOD_INC_USE_COUNT;
-#endif
+    if (link <= 0)
+	MOD_DEC_USE_COUNT;
 #endif
 
     return link;

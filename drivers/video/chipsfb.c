@@ -115,8 +115,6 @@ static struct pmu_sleep_notifier chips_sleep_notifier = {
 int chips_init(void);
 void chips_of_init(struct device_node *dp);
 
-static int chips_open(struct fb_info *info, int user);
-static int chips_release(struct fb_info *info, int user);
 static int chips_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info);
 static int chips_get_var(struct fb_var_screeninfo *var, int con,
@@ -133,15 +131,14 @@ static int chips_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		       u_long arg, int con, struct fb_info *info);
 
 static struct fb_ops chipsfb_ops = {
-	chips_open,
-	chips_release,
-	chips_get_fix,
-	chips_get_var,
-	chips_set_var,
-	chips_get_cmap,
-	chips_set_cmap,
-	chips_pan_display,
-	chips_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	chips_get_fix,
+	fb_get_var:	chips_get_var,
+	fb_set_var:	chips_set_var,
+	fb_get_cmap:	chips_get_cmap,
+	fb_set_cmap:	chips_set_cmap,
+	fb_pan_display:	chips_pan_display,
+	fb_ioctl:	chips_ioctl,
 };
 
 static int chipsfb_getcolreg(u_int regno, u_int *red, u_int *green,
@@ -150,19 +147,6 @@ static int chipsfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			     u_int transp, struct fb_info *info);
 static void do_install_cmap(int con, struct fb_info *info);
 static void chips_set_bitdepth(struct fb_info_chips *p, struct display* disp, int con, int bpp);
-
-
-static int chips_open(struct fb_info *info, int user)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int chips_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
 
 static int chips_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info)

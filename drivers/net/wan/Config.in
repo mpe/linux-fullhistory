@@ -81,7 +81,9 @@ if [ "$CONFIG_WAN" = "y" ]; then
 	dep_tristate 'LAPB over Ethernet driver' CONFIG_LAPBETHER $CONFIG_LAPB $CONFIG_X25
 	dep_tristate 'X.25 async driver' CONFIG_X25_ASY $CONFIG_LAPB $CONFIG_X25
 
-	tristate 'SBNI12-xx support' CONFIG_SBNI
+	if [ "$CONFIG_X86" = "y" ]; then
+	   tristate 'SBNI12-xx support' CONFIG_SBNI
+	fi
 fi
 
 endmenu

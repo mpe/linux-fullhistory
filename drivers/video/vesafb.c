@@ -105,25 +105,6 @@ static struct display_switch vesafb_sw;
 
 /* --------------------------------------------------------------------- */
 
-	/*
-	 * Open/Release the frame buffer device
-	 */
-
-static int vesafb_open(struct fb_info *info, int user)
-{
-	/*
-	 * Nothing, only a usage count for the moment
-	 */
-	MOD_INC_USE_COUNT;
-	return(0);
-}
-
-static int vesafb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return(0);
-}
-
 static int vesafb_pan_display(struct fb_var_screeninfo *var, int con,
                               struct fb_info *info)
 {
@@ -459,15 +440,14 @@ static int vesafb_ioctl(struct inode *inode, struct file *file,
 }
 
 static struct fb_ops vesafb_ops = {
-	vesafb_open,
-	vesafb_release,
-	vesafb_get_fix,
-	vesafb_get_var,
-	vesafb_set_var,
-	vesafb_get_cmap,
-	vesafb_set_cmap,
-	vesafb_pan_display,
-	vesafb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	vesafb_get_fix,
+	fb_get_var:	vesafb_get_var,
+	fb_set_var:	vesafb_set_var,
+	fb_get_cmap:	vesafb_get_cmap,
+	fb_set_cmap:	vesafb_set_cmap,
+	fb_pan_display:	vesafb_pan_display,
+	fb_ioctl:	vesafb_ioctl,
 };
 
 int vesafb_setup(char *options)
@@ -552,7 +532,7 @@ int __init vesafb_init(void)
 	if (!video_vbase) {
 		release_mem_region(video_base, video_size);
 		printk(KERN_ERR
-		       "vesafb: abort, cannot ioremap video memory 0x%lx @ 0x%lx\n",
+		       "vesafb: abort, cannot ioremap video memory 0x%x @ 0x%lx\n",
 			video_size, video_base);
 		return -EIO;
 	}

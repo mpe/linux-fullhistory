@@ -736,7 +736,7 @@ check_entry(struct ip6t_entry *e, const char *name, unsigned int size,
 	target = find_target_lock(t->u.user.name, &ret, &ip6t_mutex);
 	if (!target) {
 	  //		duprintf("check_entry: `%s' not found\n", t->u.name);
-		return ret;
+		goto cleanup_matches;
 	}
 	if (target->me)
 		__MOD_INC_USE_COUNT(target->me);
@@ -1342,9 +1342,10 @@ ip6t_register_target(struct ip6t_target *target)
 
 	MOD_INC_USE_COUNT;
 	ret = down_interruptible(&ip6t_mutex);
-	if (ret != 0)
+	if (ret != 0) {
+		MOD_DEC_USE_COUNT;
 		return ret;
-
+	}
 	if (!list_named_insert(&ip6t_target, target)) {
 		duprintf("ip6t_register_target: `%s' already in list!\n",
 			 target->name);
@@ -1375,9 +1376,7 @@ ip6t_register_match(struct ip6t_match *match)
 		MOD_DEC_USE_COUNT;
 		return ret;
 	}
-	if (list_named_insert(&ip6t_match, match)) {
-		ret = 0;
-	} else {
+	if (!list_named_insert(&ip6t_match, match)) {
 		duprintf("ip6t_register_match: `%s' already in list!\n",
 			 match->name);
 		MOD_DEC_USE_COUNT;

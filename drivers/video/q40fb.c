@@ -29,8 +29,6 @@ static u16 fbcon_cmap_cfb16[16];
 
 /* frame buffer operations */
 
-static int q40fb_open(struct fb_info *info, int user);
-static int q40fb_release(struct fb_info *info, int user);
 static int q40fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			struct fb_info *info);
 static int q40fb_get_var(struct fb_var_screeninfo *var, int con,
@@ -55,30 +53,20 @@ static void q40fb_set_disp(int con, struct fb_info *info);
 
 static struct display disp[MAX_NR_CONSOLES];
 static struct fb_info fb_info;
-static struct fb_ops q40fb_ops = { 
-	q40fb_open,q40fb_release, q40fb_get_fix, q40fb_get_var, q40fb_set_var,
-	q40fb_get_cmap, q40fb_set_cmap, q40fb_pan_display, q40fb_ioctl
+static struct fb_ops q40fb_ops = {
+	owner:		THIS_MODULE,
+	fb_get_fix:	q40fb_get_fix,
+	fb_get_var:	q40fb_get_var,
+	fb_set_var:	q40fb_set_var,
+	fb_get_cmap:	q40fb_get_cmap,
+	fb_set_cmap:	q40fb_set_cmap,
+	fb_pan_display:	q40fb_pan_display,
+	fb_ioctl:	q40fb_ioctl,
 };
 
 static int currcon=0;
 
 static char q40fb_name[]="Q40";
-
-static int q40fb_open(struct fb_info *info, int user)
-{
-        /*
-         * Nothing, only a usage count for the moment
-         */
-
-        MOD_INC_USE_COUNT;
-        return(0);
-}
-
-static int q40fb_release(struct fb_info *info, int user)
-{
-        MOD_DEC_USE_COUNT;
-        return(0);
-}
 
 static int q40fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			struct fb_info *info)

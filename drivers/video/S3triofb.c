@@ -77,8 +77,6 @@ static struct fb_var_screeninfo fb_var = { 0, };
      *  Interface used by the world
      */
 
-static int s3trio_open(struct fb_info *info, int user);
-static int s3trio_release(struct fb_info *info, int user);
 static int s3trio_get_fix(struct fb_fix_screeninfo *fix, int con,
 			  struct fb_info *info);
 static int s3trio_get_var(struct fb_var_screeninfo *var, int con,
@@ -141,31 +139,15 @@ static void do_install_cmap(int con, struct fb_info *info);
 
 
 static struct fb_ops s3trio_ops = {
-    s3trio_open, s3trio_release, s3trio_get_fix, s3trio_get_var, s3trio_set_var,
-    s3trio_get_cmap, s3trio_set_cmap, s3trio_pan_display, s3trio_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	s3trio_get_fix,
+	fb_get_var:	s3trio_get_var,
+	fb_set_var:	s3trio_set_var,
+	fb_get_cmap:	s3trio_get_cmap,
+	fb_set_cmap:	s3trio_set_cmap,
+	fb_pan_display:	s3trio_pan_display,
+	fb_ioctl:	s3trio_ioctl,
 };
-
-
-    /*
-     *  Open/Release the frame buffer device
-     */
-
-static int s3trio_open(struct fb_info *info, int user)
-{
-    /*
-     *  Nothing, only a usage count for the moment
-     */
-
-    MOD_INC_USE_COUNT;
-    return(0);
-}
-
-static int s3trio_release(struct fb_info *info, int user)
-{
-    MOD_DEC_USE_COUNT;
-    return(0);
-}
-
 
     /*
      *  Get the Fixed Part of the Display

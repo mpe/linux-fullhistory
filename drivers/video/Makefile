@@ -103,7 +103,6 @@ endif
 ifeq ($(CONFIG_FB_RIVA),y)
 SUB_DIRS			  += riva
 obj-y				  += riva/rivafb.o
-MOD_SUB_DIRS			  += riva
 else
   ifeq ($(CONFIG_FB_RIVA),m)
   MOD_SUB_DIRS			  += riva
@@ -115,6 +114,7 @@ obj-$(CONFIG_FB_BWTWO)            += bwtwofb.o
 obj-$(CONFIG_FB_HGA)              += hgafb.o  
 obj-$(CONFIG_FB_SA1100)           += sa1100fb.o
 obj-$(CONFIG_FB_VIRTUAL)          += vfb.o  
+obj-$(CONFIG_FB_HIT)              += hitfb.o fbgen.o
 
 # Generic Low Level Drivers
 

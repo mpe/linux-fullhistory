@@ -267,8 +267,6 @@ static int z3fb_mode __initdata = 0;
 
 int retz3fb_setup(char *options);
 
-static int retz3fb_open(struct fb_info *info, int user);
-static int retz3fb_release(struct fb_info *info, int user);
 static int retz3fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			   struct fb_info *info);
 static int retz3fb_get_var(struct fb_var_screeninfo *var, int con,
@@ -1122,28 +1120,6 @@ static void do_install_cmap(int con, struct fb_info *info)
 					    1, retz3_setcolreg, info);
 }
 
-
-/*
- *    Open/Release the frame buffer device
- */
-
-static int retz3fb_open(struct fb_info *info, int user)
-{
-	/*
-	 * Nothing, only a usage count for the moment
-	 */
-
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int retz3fb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-
 /*
  *    Get the Fixed Part of the Display
  */
@@ -1388,9 +1364,14 @@ static int retz3fb_ioctl(struct inode *inode, struct file *file,
 
 
 static struct fb_ops retz3fb_ops = {
-	retz3fb_open, retz3fb_release, retz3fb_get_fix, retz3fb_get_var,
-	retz3fb_set_var, retz3fb_get_cmap, retz3fb_set_cmap,
-	retz3fb_pan_display, retz3fb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	retz3fb_get_fix,
+	fb_get_var:	retz3fb_get_var,
+	fb_set_var:	retz3fb_set_var,
+	fb_get_cmap:	retz3fb_get_cmap,
+	fb_set_cmap:	retz3fb_set_cmap,
+	fb_pan_display:	retz3fb_pan_display,
+	fb_ioctl:	retz3fb_ioctl,
 };
 
 

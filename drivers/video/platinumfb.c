@@ -101,8 +101,6 @@ struct fb_info_platinum {
  * Frame buffer device API
  */
 
-static int platinum_open(struct fb_info *info, int user);
-static int platinum_release(struct fb_info *info, int user);
 static int platinum_get_fix(struct fb_fix_screeninfo *fix, int con,
 			    struct fb_info *fb);
 static int platinum_get_var(struct fb_var_screeninfo *var, int con,
@@ -166,28 +164,15 @@ int platinum_setup(char*);
 
 
 static struct fb_ops platinumfb_ops = {
-	platinum_open,
-	platinum_release,
-	platinum_get_fix,
-	platinum_get_var,
-	platinum_set_var,
-	platinum_get_cmap,
-	platinum_set_cmap,
-	platinum_pan_display,
-	platinum_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	platinum_get_fix,
+	fb_get_var:	platinum_get_var,
+	fb_set_var:	platinum_set_var,
+	fb_get_cmap:	platinum_get_cmap,
+	fb_set_cmap:	platinum_set_cmap,
+	fb_pan_display:	platinum_pan_display,
+	fb_ioctl:	platinum_ioctl,
 };
-
-static int platinum_open(struct fb_info *info, int user)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int platinum_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
 
 static int platinum_get_fix(struct fb_fix_screeninfo *fix, int con,
 			    struct fb_info *fb)

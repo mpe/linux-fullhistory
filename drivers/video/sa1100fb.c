@@ -53,74 +53,23 @@
 /*
  *  Debug macros 
  */
-// #define DEBUG 
+//#define DEBUG 
 #ifdef DEBUG
-#  define DPRINTK(fmt, args...)	printk(KERN_DEBUG "%s: " fmt, __FUNCTION__ , ## args)
+#  define DPRINTK(fmt, args...)	printk("%s: " fmt, __FUNCTION__ , ## args)
 #else
 #  define DPRINTK(fmt, args...)
 #endif
 
 
-/* 
- *  The MAX_x defines are used to specify the maximum ranges for 
- *  parameters that affect the size of the frame buffer memory
- *  region.  Since the frame buffer memory is not dynamically 
- *  alocated, the maximum size that will be used is allocated.
- */
-#if defined (CONFIG_SA1100_PENNY)
-
-#define MAX_BITS_PER_PIXEL   		8
-#define MAX_SCREEN_SIZE_H   		640
-#define MAX_SCREEN_SIZE_V    		480
-
-#elif defined(CONFIG_SA1100_BRUTUS)
-
-#define MAX_BITS_PER_PIXEL   		8
-#define MAX_SCREEN_SIZE_H   		320
-#define MAX_SCREEN_SIZE_V    		240
-
-#elif defined (CONFIG_SA1100_THINCLIENT)
-
-#define MAX_BITS_PER_PIXEL   		8 
-/*#define MAX_BITS_PER_PIXEL   		16*/
-
-#define MAX_SCREEN_SIZE_H   		640
-#define MAX_SCREEN_SIZE_V    		480
-
-#elif defined(CONFIG_SA1100_TIFON)
-
-#define MAX_BITS_PER_PIXEL   		4
-#define MAX_SCREEN_SIZE_H   		640
-#define MAX_SCREEN_SIZE_V    		200
-
-#define REVERSE_VIDEO_4BIT
-
-#elif defined(CONFIG_SA1100_LART)
-
-#define MAX_BITS_PER_PIXEL     		4
-#define MAX_SCREEN_SIZE_H      		320
-#define MAX_SCREEN_SIZE_V      		240
-
-#endif
-
-/* Default resolutions */
-#if defined(CONFIG_SA1100_PENNY) 
-#define DEFAULT_XRES	640
-#define DEFAULT_YRES	480
-#define DEFAULT_BPP	8
-#else
-#define DEFAULT_XRES	MAX_SCREEN_SIZE_H
-#define DEFAULT_YRES	MAX_SCREEN_SIZE_V
-#define DEFAULT_BPP	MAX_BITS_PER_PIXEL
-#endif
-
 /* Memory size macros for determining required FrameBuffer size */
-#define MAX_PALETTE_NUM_ENTRIES         256
-#define ADJUSTED_MAX_BITS_PER_PIXEL     (MAX_BITS_PER_PIXEL > 8 ? 16 : MAX_BITS_PER_PIXEL)
-#define MAX_PALETTE_MEM_SIZE            (MAX_PALETTE_NUM_ENTRIES * 2)
-#define MAX_PIXEL_MEM_SIZE              ((MAX_SCREEN_SIZE_H * MAX_SCREEN_SIZE_V * ADJUSTED_MAX_BITS_PER_PIXEL ) / 8)
-#define MAX_FRAMEBUFFER_MEM_SIZE   	(MAX_PIXEL_MEM_SIZE + MAX_PALETTE_MEM_SIZE + 32)
-#define ALLOCATED_FB_MEM_SIZE           (PAGE_ALIGN (MAX_FRAMEBUFFER_MEM_SIZE + PAGE_SIZE * 2))
+#define MAX_PALETTE_NUM_ENTRIES		256
+#define MAX_PALETTE_MEM_SIZE		(MAX_PALETTE_NUM_ENTRIES * 2)
+#define MAX_PIXEL_MEM_SIZE \
+	((current_par.max_xres * current_par.max_yres * current_par.max_bpp)/8)
+#define MAX_FRAMEBUFFER_MEM_SIZE \
+	(MAX_PIXEL_MEM_SIZE + MAX_PALETTE_MEM_SIZE + 32)
+#define ALLOCATED_FB_MEM_SIZE \
+	(PAGE_ALIGN(MAX_FRAMEBUFFER_MEM_SIZE + PAGE_SIZE * 2))
 
 #define SA1100_PALETTE_MEM_SIZE(bpp)	(((bpp)==8?256:16)*2)
 #define SA1100_PALETTE_MODE_VAL(bpp)    (((bpp) & 0x018) << 9)
@@ -137,30 +86,54 @@
 #define SA1100_NAME	"SA1100"
 #define NR_MONTYPES	1
 
-static u_char *VideoMemRegion = NULL;
-static u_char *VideoMemRegion_phys = NULL;
+static inline void
+sa1100fb_assabet_set_truecolor(u_int is_true_color)
+{
+#ifdef CONFIG_SA1100_ASSABET
+#if 1
+	// phase 4 or newer Assabet's
+        if (is_true_color)
+		BCR_set(BCR_LCD_12RGB);
+	else
+		BCR_clear(BCR_LCD_12RGB);
+#else
+	// older Assabet's
+        if (is_true_color)
+		BCR_clear(BCR_LCD_12RGB);
+	else
+		BCR_set(BCR_LCD_12RGB);
+#endif
+#endif
+}
+
+static u_char *VideoMemRegion;
+static u_char *VideoMemRegion_phys;
 
 /* Local LCD controller parameters */
 /* These can be reduced by making better use of fb_var_screeninfo parameters.  */
 /* Several duplicates exist in the two structures. */
 struct sa1100fb_par {
-	u_char         	*p_screen_base;
-	u_char         	*v_screen_base;
-	u_short        	*p_palette_base;
-	u_short        	*v_palette_base;
-	unsigned long	 screen_size;
-	unsigned int	 palette_size;
-        unsigned int   	 xres;
-        unsigned int   	 yres;
-        unsigned int   	 xres_virtual;
-        unsigned int   	 yres_virtual;
-        unsigned int   	 bits_per_pixel;
-	  signed int	 montype;
-	unsigned int	 currcon;
-        unsigned int   	 visual;
-	unsigned int	 allow_modeset	: 1;
-	unsigned int   	 active_lcd     : 1;
-	volatile u_char	 controller_state;
+	u_char		*p_screen_base;
+	u_char		*v_screen_base;
+	u_short		*p_palette_base;
+	u_short		*v_palette_base;
+	unsigned long	screen_size;
+	unsigned int	palette_size;
+	unsigned int	max_xres;
+	unsigned int	max_yres;
+	unsigned int	xres;
+	unsigned int	yres;
+	unsigned int	xres_virtual;
+	unsigned int	yres_virtual;
+	unsigned int	max_bpp;
+	unsigned int	bits_per_pixel;
+	  signed int	montype;
+	unsigned int	currcon;
+	unsigned int	visual;
+	unsigned int	allow_modeset : 1;
+	unsigned int	active_lcd : 1;
+	unsigned int	inv_4bpp : 1;
+	volatile u_char	controller_state;
 };
 
 /* Shadows for LCD controller registers */
@@ -177,15 +150,13 @@ static struct fb_monspecs monspecs __initdata = {
 	 30000, 70000, 50, 65, 0 	/* Generic */
 };
 
-static struct display global_disp;            /* Initial (default) Display Settings */
+static struct display global_disp;	/* Initial (default) Display Settings */
 static struct fb_info fb_info;
 static struct sa1100fb_par current_par;
 static struct fb_var_screeninfo __initdata init_var = {};
 static struct sa1100fb_lcd_reg lcd_shadow;
 
 
-static int  sa1100fb_open(struct fb_info *info, int user);
-static int  sa1100fb_release(struct fb_info *info, int user);
 static int  sa1100fb_get_fix(struct fb_fix_screeninfo *fix, int con, struct fb_info *info);
 static int  sa1100fb_ioctl(struct inode *ino, struct file *file, unsigned int cmd,
 	       		  unsigned long arg, int con, struct fb_info *info);
@@ -203,17 +174,15 @@ static void sa1100fb_enable_lcd_controller(void);
 static void sa1100fb_disable_lcd_controller(void);
 
 static struct fb_ops sa1100fb_ops = {
-	sa1100fb_open,
-	sa1100fb_release,
-	sa1100fb_get_fix,		      
-	sa1100fb_get_var,		      
-	sa1100fb_set_var,		      
-	sa1100fb_get_cmap,		      
-	sa1100fb_set_cmap,		      
-	sa1100fb_pan_display,		      
-	sa1100fb_ioctl			      
+	owner:		THIS_MODULE,
+	fb_get_fix:	sa1100fb_get_fix,
+	fb_get_var:	sa1100fb_get_var,
+	fb_set_var:	sa1100fb_set_var,
+	fb_get_cmap:	sa1100fb_get_cmap,
+	fb_set_cmap:	sa1100fb_set_cmap,
+	fb_pan_display:	sa1100fb_pan_display,
+	fb_ioctl:	sa1100fb_ioctl,
 };
-
 
 
 /*
@@ -231,18 +200,16 @@ sa1100fb_palette_write(u_int regno, u_short pal)
 static inline u_short
 sa1100fb_palette_encode(u_int regno, u_int red, u_int green, u_int blue, u_int trans)
 {
-	u_short pal;
-
+	u_int pal;
 
 	if(current_par.bits_per_pixel == 4){
 		/*
 		 * RGB -> luminance is defined to be
 		 * Y =  0.299 * R + 0.587 * G + 0.114 * B
 		 */
-		pal = ((19595 * red + 38470 * green + 7471 * blue) >> 28) & 0x00f;
-#ifdef REVERSE_VIDEO_4BIT
-		pal = 15 - pal;
-#endif
+		pal = (19595 * red + 38470 * green + 7471 * blue) >> 28;
+		if( current_par.inv_4bpp )
+			pal = 15 - pal;
 	}
 	else{
 		pal   = ((red   >>  4) & 0xf00);
@@ -268,9 +235,8 @@ sa1100fb_palette_decode(u_int regno, u_int *red, u_int *green, u_int *blue, u_in
 	pal = sa1100fb_palette_read(regno);
 
 	if( current_par.bits_per_pixel == 4){
-#ifdef REVERSE_VIDEO_4BIT
-		pal = 15 - pal;
-#endif
+		if( current_par.inv_4bpp )
+			pal = 15 - pal;
 		pal &= 0x000f;
 		pal |= pal << 4;
 		pal |= pal << 8;
@@ -317,6 +283,7 @@ sa1100fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 {
 	int err = 0;
 
+        DPRINTK("current_par.visual=%d\n", current_par.visual);
 	if (con == current_par.currcon)
 		err = fb_get_cmap(cmap, kspc, sa1100fb_getcolreg, info);
 	else if (fb_display[con].cmap.len)
@@ -329,13 +296,13 @@ sa1100fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 
 static int
 sa1100fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
-		 struct fb_info *info)
+		  struct fb_info *info)
 {
 	int err = 0;
 
+        DPRINTK("current_par.visual=%d\n", current_par.visual);
 	if (!fb_display[con].cmap.len)
 		err = fb_alloc_cmap(&fb_display[con].cmap,
-
 				    current_par.palette_size, 0);
 	if (!err) {
 		if (con == current_par.currcon)
@@ -372,6 +339,7 @@ sa1100fb_encode_var(struct fb_var_screeninfo *var,
 
 	var->bits_per_pixel = par->bits_per_pixel;
 
+        DPRINTK("var->bits_per_pixel=%d\n", var->bits_per_pixel);
 	switch(var->bits_per_pixel) {
 	case 2:
 	case 4:
@@ -383,14 +351,14 @@ sa1100fb_encode_var(struct fb_var_screeninfo *var,
 		break;
 	case 12:          // This case should differ for Active/Passive mode  
 	case 16:
-        	var->red.length    = 
-        	var->blue.length   =
-        	var->green.length  = 5;
-        	var->transp.length = 0;
-        	var->red.offset    = 10;
-        	var->green.offset  = 5;
-        	var->blue.offset   = 0;
-        	var->transp.offset = 0;
+		var->red.length    = 5;
+		var->green.length  = 6;
+		var->blue.length   = 5;
+		var->transp.length = 0;
+		var->red.offset    = 11;
+		var->green.offset  = 5;
+		var->blue.offset   = 0;
+		var->transp.offset = 0;
 		break;
 	}
 	return 0;
@@ -418,16 +386,17 @@ sa1100fb_decode_var(struct fb_var_screeninfo *var,
 		par->xres = MIN_XRES; 
 	if ((par->yres = var->yres) < MIN_YRES)
 		par->yres = MIN_YRES;
-        if (par->xres > MAX_SCREEN_SIZE_H)
-        	par->xres = MAX_SCREEN_SIZE_H;
-        if (par->yres > MAX_SCREEN_SIZE_V)
-                par->yres = MAX_SCREEN_SIZE_V; 
-        par->xres_virtual = 
+	if (par->xres > current_par.max_xres)
+		par->xres = current_par.max_xres;
+	if (par->yres > current_par.max_yres)
+		par->yres = current_par.max_yres; 
+	par->xres_virtual = 
 		var->xres_virtual < par->xres ? par->xres : var->xres_virtual;
         par->yres_virtual = 
 		var->yres_virtual < par->yres ? par->yres : var->yres_virtual;
         par->bits_per_pixel = var->bits_per_pixel;
 
+        DPRINTK("par->bits_per_pixel=%d\n", par->bits_per_pixel);
 	switch (par->bits_per_pixel) {
 #ifdef FBCON_HAS_CFB4
         case 4:
@@ -442,40 +411,40 @@ sa1100fb_decode_var(struct fb_var_screeninfo *var,
 		break;
 #endif
 #ifdef FBCON_HAS_CFB16
-	case 16:  /* RGB 555 */
+	case 16:  /* RGB 565 */
 		par->visual = FB_VISUAL_TRUECOLOR;
-		par->palette_size = -1; 
+		par->palette_size = 0; 
 		break;
 #endif
 	default:
 		return -EINVAL;
 	}
 
-	palette_mem_size  = SA1100_PALETTE_MEM_SIZE(par->bits_per_pixel);
-	palette_mem_phys  = (u_long)VideoMemRegion_phys + PAGE_SIZE - 
-	                    palette_mem_size;
-	par->p_palette_base  = (u_short *)palette_mem_phys;
-        par->v_palette_base  = (u_short *)((u_long)VideoMemRegion + PAGE_SIZE - palette_mem_size);
-	par->p_screen_base   = (u_char *)((u_long)VideoMemRegion_phys + PAGE_SIZE); 
-	par->v_screen_base   = (u_char *)((u_long)VideoMemRegion      + PAGE_SIZE); 
- 
-        DPRINTK("p_palette_base = 0x%08lx\n",(u_long)par->p_palette_base);
-        DPRINTK("v_palette_base = 0x%08lx\n",(u_long)par->v_palette_base);
-        DPRINTK("p_screen_base  = 0x%08lx\n",(u_long)par->p_screen_base);
-        DPRINTK("v_screen_base  = 0x%08lx\n",(u_long)par->v_screen_base);
-        DPRINTK("VideoMemRegion = 0x%08lx\n",(u_long)VideoMemRegion);
-        DPRINTK("VideoMemRegion_phys = 0x%08lx\n",(u_long)VideoMemRegion_phys);
+	palette_mem_size = SA1100_PALETTE_MEM_SIZE(par->bits_per_pixel);
+	palette_mem_phys = (u_long)VideoMemRegion_phys + PAGE_SIZE - palette_mem_size;
+	par->p_palette_base = (u_short *)palette_mem_phys;
+        par->v_palette_base = (u_short *)((u_long)VideoMemRegion + PAGE_SIZE - palette_mem_size);
+	par->p_screen_base  = (u_char *)((u_long)VideoMemRegion_phys + PAGE_SIZE); 
+	par->v_screen_base  = (u_char *)((u_long)VideoMemRegion      + PAGE_SIZE); 
+
+	DPRINTK("p_palette_base = 0x%08lx\n",(u_long)par->p_palette_base);
+	DPRINTK("v_palette_base = 0x%08lx\n",(u_long)par->v_palette_base);
+	DPRINTK("p_screen_base  = 0x%08lx\n",(u_long)par->p_screen_base);
+	DPRINTK("v_screen_base  = 0x%08lx\n",(u_long)par->v_screen_base);
+	DPRINTK("VideoMemRegion = 0x%08lx\n",(u_long)VideoMemRegion);
+	DPRINTK("VideoMemRegion_phys = 0x%08lx\n",(u_long)VideoMemRegion_phys);
 	return 0;
 }
 
 static int
 sa1100fb_get_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 {
- 	struct sa1100fb_par par;
+	struct sa1100fb_par par;
 
+        DPRINTK("con=%d\n", con);
 	if (con == -1) {
-                sa1100fb_get_par(&par);
-                sa1100fb_encode_var(var, &par);
+		sa1100fb_get_par(&par);
+		sa1100fb_encode_var(var, &par);
 	} else
 		*var = fb_display[con].var;
 
@@ -491,7 +460,7 @@ sa1100fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 {
 	struct display *display;
 	int err, chgvar = 0;
-        struct sa1100fb_par par;
+	struct sa1100fb_par par;
 
 	if (con >= 0)
 		display = &fb_display[con]; /* Display settings for console */
@@ -500,18 +469,18 @@ sa1100fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 
 
 	DPRINTK("xres = %d, yres = %d\n",var->xres, var->yres);
-        // Decode var contents into a par structure, adjusting any
-        // out of range values.  
+	/* Decode var contents into a par structure, adjusting any */
+	/* out of range values. */
 	if ((err = sa1100fb_decode_var(var, &par)))
 		return err;
-        // Store adjusted par values into var structure
-        sa1100fb_encode_var(var, &par);
+	// Store adjusted par values into var structure
+	sa1100fb_encode_var(var, &par);
        
-        if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_TEST)
+	if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_TEST)
 		return 0;
-        else if (((var->activate & FB_ACTIVATE_MASK) != FB_ACTIVATE_NOW) && 
-                 ((var->activate & FB_ACTIVATE_MASK) != FB_ACTIVATE_NXTOPEN))
-             	return -EINVAL;
+	else if (((var->activate & FB_ACTIVATE_MASK) != FB_ACTIVATE_NOW) && 
+		 ((var->activate & FB_ACTIVATE_MASK) != FB_ACTIVATE_NXTOPEN))
+		return -EINVAL;
 
 	if (con >= 0) {
 		if ((display->var.xres != var->xres) ||
@@ -525,6 +494,7 @@ sa1100fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 		    (memcmp(&display->var.blue, &var->blue, sizeof(var->blue)))) 
 			chgvar = 1;
 	}
+	DPRINTK("chgvar=%d\n", chgvar);
 
 	display->var = *var;
 	display->screen_base	= par.v_screen_base;
@@ -539,6 +509,8 @@ sa1100fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 	display->can_soft_blank	= 1;
 	display->inverse	= 0;
 
+        DPRINTK("display->var.bits_per_pixel=%d xres=%d yres=%d display->dispsw=%p\n", 
+                display->var.bits_per_pixel, var->xres, var->yres, display->dispsw);
 	switch (display->var.bits_per_pixel) {
 #ifdef FBCON_HAS_CFB4
         case 4:
@@ -560,26 +532,32 @@ sa1100fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 		break;
 	}
 
-        // If the console has changed and the console has defined
-        // a changevar function, call that function.
+	/* If the console has changed and the console has defined */
+	/* a changevar function, call that function. */
 	if (chgvar && info && info->changevar)
 		info->changevar(con);
 
-        // If the current console is selected, update the palette 
-	if (con == current_par.currcon) 
-        {
+        /* If the current console is selected and it's not truecolor, 
+	 *  update the palette 
+	 */
+	if ((con == current_par.currcon) &&
+	    (current_par.visual != FB_VISUAL_TRUECOLOR)) {
 		struct fb_cmap *cmap;
-
+		
 		current_par = par;
 		if (display->cmap.len)
 			cmap = &display->cmap;
 		else
 			cmap = fb_default_cmap(current_par.palette_size);
+                DPRINTK("visual=%d palette_size=%d cmap=%p\n", current_par.visual, current_par.palette_size, cmap);
 
 		fb_set_cmap(cmap, 1, sa1100fb_setcolreg, info);
-
-               	sa1100fb_activate_var(var);
 	}
+
+	/* If the current console is selected, activate the new var. */
+	if (con == current_par.currcon)
+		sa1100fb_activate_var(var);
+	
 	return 0;
 }
 
@@ -606,7 +584,7 @@ sa1100fb_get_fix(struct fb_fix_screeninfo *fix, int con, struct fb_info *info)
 	else
 		display = &global_disp;      /* Default display settings */
 
-	fix->smem_start	 = current_par.p_screen_base;
+	fix->smem_start	 = (unsigned long)current_par.p_screen_base;
 	fix->smem_len	 = current_par.screen_size;
 	fix->type	 = display->type;
 	fix->type_aux	 = display->type_aux;
@@ -627,78 +605,118 @@ __init sa1100fb_init_fbinfo(void)
 	strcpy(fb_info.modename, SA1100_NAME);
 	strcpy(fb_info.fontname, "Acorn8x8");
 
-	fb_info.node		   = -1;
-	fb_info.flags		   = FBINFO_FLAG_DEFAULT;
-	fb_info.fbops		   = &sa1100fb_ops;
-        fb_info.monspecs           = monspecs;
-	fb_info.disp		   = &global_disp;
-	fb_info.changevar	   = NULL;
-	fb_info.switch_con	   = sa1100fb_switch;
-	fb_info.updatevar	   = sa1100fb_updatevar;
-	fb_info.blank		   = sa1100fb_blank;
+	fb_info.node		= -1;
+	fb_info.flags		= FBINFO_FLAG_DEFAULT;
+	fb_info.fbops		= &sa1100fb_ops;
+        fb_info.monspecs	= monspecs;
+	fb_info.disp		= &global_disp;
+	fb_info.changevar	= NULL;
+	fb_info.switch_con	= sa1100fb_switch;
+	fb_info.updatevar	= sa1100fb_updatevar;
+	fb_info.blank		= sa1100fb_blank;
 
 	/*
 	 * setup initial parameters
 	 */
 	memset(&init_var, 0, sizeof(init_var));
 
-	init_var.xres		   = DEFAULT_XRES;		
-	init_var.yres		   = DEFAULT_YRES;              
-	init_var.xres_virtual      = init_var.xres;
-	init_var.yres_virtual      = init_var.yres;
-	init_var.xoffset           = 0;
-	init_var.yoffset           = 0;
-	init_var.bits_per_pixel	   = DEFAULT_BPP;
+	init_var.transp.length	= 0;
+	init_var.nonstd		= 0;
+	init_var.activate	= FB_ACTIVATE_NOW;
+	init_var.xoffset	= 0;
+	init_var.yoffset	= 0;
+	init_var.height		= -1;
+	init_var.width		= -1;
+	init_var.vmode		= FB_VMODE_NONINTERLACED;
+
+	if (machine_is_assabet()) {
+		current_par.max_xres	= 320;
+		current_par.max_yres	= 240;
+		current_par.max_bpp	= 16;
+		init_var.red.length	= 5;				
+		init_var.green.length	= 6;
+		init_var.blue.length	= 5;
+		init_var.grayscale	= 0;
+		init_var.sync		= 0;
+	} else if (machine_is_bitsy()) {
+		current_par.max_xres	= 320;
+		current_par.max_yres	= 240;
+		current_par.max_bpp	= 16;
+		init_var.red.length	   = 5;
+		init_var.green.length	   = 6;
+		init_var.blue.length	   = 5;
+		init_var.grayscale	   = 0;
+	} else if (machine_is_brutus()) {
+		current_par.max_xres	= 320;
+		current_par.max_yres	= 240;
+		current_par.max_bpp	= 8;
+		init_var.red.length	= 4;				
+		init_var.green		= init_var.red;
+		init_var.blue		= init_var.red;
+		init_var.sync		= 0;
+	} else if (machine_is_lart()) {
+		current_par.max_xres	= 320;
+		current_par.max_yres	= 240;
+		current_par.max_bpp	= 4;
+		init_var.red.length	= 4;				
+		init_var.green		= init_var.red;
+		init_var.blue		= init_var.red;
+		init_var.grayscale	= 1;
+		init_var.pixclock	= 150000;	
+		init_var.sync		= 0;
+	} else if (machine_is_penny()) {
+		current_par.max_xres	= 640;
+		current_par.max_yres	= 480;
+		current_par.max_bpp	= 8;
+		init_var.red.length	= 4;				
+		init_var.green		= init_var.red;
+		init_var.blue		= init_var.red;
+		init_var.sync		= 0;
+	} else if (machine_is_thinclient() || machine_is_graphicsclient()) {
+		current_par.max_xres	= 640;
+		current_par.max_yres	= 480;
+		current_par.max_bpp	= 8;
+		init_var.red.length	= 4;				
+		init_var.green		= init_var.red;
+		init_var.blue		= init_var.red;
+		init_var.sync		= 0;
+	} else if (machine_is_tifon()) {
+		current_par.max_xres	= 640;
+		current_par.max_yres	= 200;
+		current_par.max_bpp	= 4;
+		current_par.inv_4bpp	= 1;
+		init_var.red.length	= 4;				
+		init_var.green		= init_var.red;
+		init_var.blue		= init_var.red;
+		init_var.grayscale	= 1;
+	        init_var.pixclock	= 150000;	
+	        init_var.left_margin	= 20;
+	        init_var.right_margin	= 255;
+	        init_var.upper_margin	= 20;
+	        init_var.lower_margin	= 0;
+	        init_var.hsync_len	= 2;
+	        init_var.vsync_len	= 1;
+		init_var.sync		= FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT;
+		init_var.vmode		= 0;
+	}
+
+	current_par.p_palette_base	= NULL;
+	current_par.v_palette_base	= NULL;
+	current_par.p_screen_base	= NULL;
+	current_par.v_screen_base	= NULL;
+	current_par.palette_size	= MAX_PALETTE_NUM_ENTRIES;
+	current_par.screen_size		= MAX_PIXEL_MEM_SIZE;
+	current_par.montype		= -1;
+	current_par.currcon		= -1;
+	current_par.allow_modeset	=  1;
+	current_par.controller_state	= LCD_MODE_DISABLED;
+
+	init_var.xres			= current_par.max_xres;
+	init_var.yres			= current_par.max_yres;
+	init_var.xres_virtual		= init_var.xres;
+	init_var.yres_virtual		= init_var.yres;
+	init_var.bits_per_pixel		= current_par.max_bpp;
 			
-	init_var.transp.length	   = 0;
-	init_var.nonstd		   = 0;
-	init_var.activate	   = FB_ACTIVATE_NOW;
-	init_var.height		   = -1;
-	init_var.width		   = -1;
-	init_var.vmode		   = FB_VMODE_NONINTERLACED;
-
-#if defined(CONFIG_SA1100_PENNY)
-	init_var.red.length	   = 4;				
-	init_var.green		   = init_var.red;
-	init_var.blue		   = init_var.red;
-	init_var.sync              = 0;
-#elif defined(CONFIG_SA1100_BRUTUS)
-	init_var.red.length	   = 4;				
-	init_var.green		   = init_var.red;
-	init_var.blue		   = init_var.red;
-	init_var.sync              = 0;
-#elif defined(CONFIG_SA1100_THINCLIENT)
-	init_var.red.length	   = 4;				
-	init_var.green		   = init_var.red;
-	init_var.blue		   = init_var.red;
-	init_var.sync              = 0;
-#elif defined(CONFIG_SA1100_TIFON)
-	init_var.red.length	   = 4;				
-	init_var.green		   = init_var.red;
-	init_var.blue		   = init_var.red;
-	init_var.grayscale         = 1;
-        init_var.pixclock	   = 150000;	
-        init_var.left_margin	   = 20;
-        init_var.right_margin	   = 255;
-        init_var.upper_margin	   = 20;
-        init_var.lower_margin	   = 0;
-        init_var.hsync_len	   = 2;
-        init_var.vsync_len	   = 1;
-	init_var.sync              = FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT;
-        init_var.vmode		   = 0;
-#elif defined(CONFIG_SA1100_LART)
-	init_var.red.length	   = 4;				
-	init_var.green		   = init_var.red;
-	init_var.blue		   = init_var.red;
-	init_var.grayscale	   = 1;
-	init_var.pixclock	   = 150000;	
-	init_var.sync		   = 0;
-#endif
-
-	current_par.montype	   = -1;
-	current_par.currcon	  = -1;
-	current_par.allow_modeset =  1;
-	current_par.controller_state = LCD_MODE_DISABLED;
 }
 
 
@@ -723,6 +741,8 @@ __init sa1100fb_map_video_memory(void)
 	if (VideoMemRegion != NULL)
 		return -EINVAL;
 
+	DPRINTK("-1-");
+
 	/* Find order required to allocate enough memory for framebuffer */
 	required_pages = ALLOCATED_FB_MEM_SIZE >> PAGE_SHIFT;
         for (order = 0 ; required_pages >> order ; order++) {;}
@@ -741,7 +761,7 @@ __init sa1100fb_map_video_memory(void)
           free_page((u_int)allocated_region + ((extra_pages-1) << PAGE_SHIFT));
 
         /* Set reserved flag for fb memory to allow it to be remapped into */
-        /* user space by the common fbmem driver using remap_page_range(). */                             
+        /* user space by the common fbmem driver using remap_page_range(). */
         for(i = MAP_NR(VideoMemRegion);                                  
             i < MAP_NR(VideoMemRegion + ALLOCATED_FB_MEM_SIZE); i++) 
           set_bit(PG_reserved, &mem_map[i].flags);
@@ -753,6 +773,7 @@ __init sa1100fb_map_video_memory(void)
 					     L_PTE_YOUNG    |
 					     L_PTE_DIRTY    |
 					     L_PTE_WRITE);
+	memset(VideoMemRegion, 0xAA, ALLOCATED_FB_MEM_SIZE);
 	return (VideoMemRegion == NULL ? -EINVAL : 0);
 }
 
@@ -776,15 +797,20 @@ static const int frequency[16] = {
 };
 
 
-static int get_pcd(unsigned int pixclock)
+static inline int get_pcd(unsigned int pixclock)
 {
-	unsigned int pcd;
-	pcd = frequency[PPCR &0xf] / 1000;
-	pcd *= pixclock/1000;
-	return pcd / 10000000 * 12;
-	/* the last multiplication by 1.2 is to handle */
-	/* sync problems */
+	unsigned int pcd = 0;
+
+	if (machine_is_tifon()) {
+		pcd = frequency[PPCR &0xf] / 1000;
+		pcd *= pixclock/1000;
+		pcd = pcd / 10000000 * 12;
+		/* the last multiplication by 1.2 is to handle */
+		/* sync problems */
+	}
+	return pcd;
 }
+
 
 /*
  * sa1100fb_activate_var():
@@ -797,8 +823,12 @@ sa1100fb_activate_var(struct fb_var_screeninfo *var)
 	u_long	flags;
 	int pcd = get_pcd(var->pixclock);
 
+	DPRINTK("Configuring  SA1100 LCD\n");
+
 	if (current_par.p_palette_base == NULL)
 		return -EINVAL;
+
+	DPRINTK("activating\n");
 
 	/* Disable interrupts and save status */
 	save_flags_cli(flags);		// disable the interrupts and save flags
@@ -806,96 +836,128 @@ sa1100fb_activate_var(struct fb_var_screeninfo *var)
 	/* Reset the LCD Controller's DMA address if it has changed */
   	lcd_shadow.dbar1 = (Address)current_par.p_palette_base;
 
-#if defined(CONFIG_SA1100_PENNY) 
-	DPRINTK("Configuring  SA1100 LCD\n");
-
 	DPRINTK("Configuring xres = %d, yres = %d\n",var->xres, var->yres);
 
-  	lcd_shadow.lccr0 = LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + LCCR0_Act + 
-  	                   LCCR0_LtlEnd + LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + 
-  	                   LCCR0_DMADel(0); 
-  	lcd_shadow.lccr1 = LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth (65) +
-  	                   LCCR1_EndLnDel (43) + LCCR1_BegLnDel(43) ;
-  	lcd_shadow.lccr2 = LCCR2_DisHght (var->yres) + LCCR2_VrtSnchWdth (35) + 
-  	                   LCCR2_EndFrmDel (0) + LCCR2_BegFrmDel (0) ;
-  	lcd_shadow.lccr3 = LCCR3_PixClkDiv(16) +
-  	                   LCCR3_ACBsDiv (2) + LCCR3_ACBsCntOff +
-		           ((var->sync & FB_SYNC_HOR_HIGH_ACT) ?LCCR3_HorSnchH:LCCR3_HorSnchL) +
-		           ((var->sync & FB_SYNC_VERT_HIGH_ACT)?LCCR3_VrtSnchH:LCCR3_VrtSnchL);
-       
-#elif defined(CONFIG_SA1100_BRUTUS) 
-  	DPRINTK("Configuring  BRUTUS LCD\n");
-	lcd_shadow.lccr0 = LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + LCCR0_Pas + 
-	                   LCCR0_LtlEnd + LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + 
-	                   LCCR0_DMADel(0);
-  	lcd_shadow.lccr1 = LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(4) + 
-  	                   LCCR1_BegLnDel(41) + LCCR1_EndLnDel(101);
-  	lcd_shadow.lccr2 = LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(1) + 
-  	                   LCCR2_BegFrmDel(0) + LCCR2_EndFrmDel(0);
-  	lcd_shadow.lccr3 = LCCR3_OutEnH + LCCR3_PixFlEdg + LCCR3_VrtSnchH + LCCR3_HorSnchH +
-  	                    LCCR3_ACBsCntOff + LCCR3_ACBsDiv(2) + LCCR3_PixClkDiv(44);
-#elif defined(CONFIG_SA1100_THINCLIENT) 
-	DPRINTK("Configuring ThinClient LCD\n");
-	DPRINTK("Configuring xres = %d, yres = %d\n",var->xres, var->yres);
+	if (machine_is_assabet()) {
+		DPRINTK("Configuring  Assabet LCD\n");
+		lcd_shadow.lccr0 = 
+			LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + 
+			LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + LCCR0_Act +
+			LCCR0_LtlEnd + LCCR0_DMADel(0);
+		lcd_shadow.lccr1 = 
+			LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(4) + 
+			LCCR1_BegLnDel(30) + LCCR1_EndLnDel(30);
+		lcd_shadow.lccr2 = 
+			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(1) + 
+			LCCR2_BegFrmDel(0) + LCCR2_EndFrmDel(0);
+		lcd_shadow.lccr3 = 
+			LCCR3_OutEnH + LCCR3_PixFlEdg + LCCR3_VrtSnchH + 
+			LCCR3_HorSnchH + LCCR3_ACBsCntOff + 
+			LCCR3_ACBsDiv(2) + LCCR3_PixClkDiv(28);
 
-        lcd_shadow.lccr0 = LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + 
-                           LCCR0_Act;
-  	lcd_shadow.lccr1 = LCCR1_DisWdth(var->xres) +LCCR1_HorSnchWdth(10)+
-  	                   LCCR1_EndLnDel (81) + LCCR1_BegLnDel(81) ;
-  	lcd_shadow.lccr2 = LCCR2_DisHght (var->yres) +LCCR2_VrtSnchWdth(9) + 
-  	                   LCCR2_EndFrmDel (20) + LCCR2_BegFrmDel (20) ;
-  	lcd_shadow.lccr3 = LCCR3_PixClkDiv(6) +
-  	                   LCCR3_ACBsDiv (2) + LCCR3_ACBsCntOff +
-                           LCCR3_HorSnchL + LCCR3_VrtSnchL;
-              
-#elif defined(CONFIG_SA1100_TIFON) 
-	DPRINTK("Configuring TIFON LCD\n");
+		/* Set board control register to handle new color depth */
+		sa1100fb_assabet_set_truecolor(var->bits_per_pixel >= 16);
+	} else if (machine_is_bitsy()) {
+		DPRINTK("Configuring  Bitsy LCD\n");
+		lcd_shadow.lccr0 = LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + LCCR0_Act +
+				   LCCR0_LtlEnd + LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + 
+				   LCCR0_DMADel(0);
+		lcd_shadow.lccr1 = LCCR1_DisWdth( var->xres ) +
+				   LCCR1_HorSnchWdth( 4 ) +
+				   LCCR1_BegLnDel( 0x1f ) +
+				   LCCR1_EndLnDel( 0x1f );
+		lcd_shadow.lccr2 = LCCR2_DisHght( var->yres ) +
+				   LCCR2_VrtSnchWdth( 1 )+
+				   LCCR2_BegFrmDel( 0 ) +
+				   LCCR2_EndFrmDel( 0 );
+		lcd_shadow.lccr3 = 15;
+	} else if (machine_is_brutus()) {
+		DPRINTK("Configuring  Brutus LCD\n");
+		lcd_shadow.lccr0 = 
+			LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + LCCR0_Pas + 
+			LCCR0_LtlEnd + LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + 
+			LCCR0_DMADel(0);
+		lcd_shadow.lccr1 = 
+			LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(4) + 
+			LCCR1_BegLnDel(41) + LCCR1_EndLnDel(101);
+		lcd_shadow.lccr2 = 
+			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(1) + 
+			LCCR2_BegFrmDel(0) + LCCR2_EndFrmDel(0);
+		lcd_shadow.lccr3 = 
+			LCCR3_OutEnH + LCCR3_PixFlEdg + LCCR3_VrtSnchH + 
+			LCCR3_HorSnchH + LCCR3_ACBsCntOff + 
+			LCCR3_ACBsDiv(2) + LCCR3_PixClkDiv(44);
+	} else if (machine_is_lart()) {
+		DPRINTK("Configuring LART LCD\n");
+		lcd_shadow.lccr0 = 
+			LCCR0_LEN + LCCR0_Mono + LCCR0_Sngl + LCCR0_Pas +
+			LCCR0_LtlEnd + LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + 
+			LCCR0_DMADel(0);
+		lcd_shadow.lccr1 = 
+			LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(2) +
+			LCCR1_BegLnDel(4) + LCCR1_EndLnDel(2);
+		lcd_shadow.lccr2 = 
+			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(1) +
+			LCCR2_BegFrmDel(0) + LCCR2_EndFrmDel(0);
+		lcd_shadow.lccr3 = 
+			LCCR3_PixClkDiv(34) + LCCR3_ACBsDiv(512) +
+			LCCR3_ACBsCntOff + LCCR3_HorSnchH + LCCR3_VrtSnchH;
+	} else if (machine_is_penny()) {
+		DPRINTK("Configuring  Penny LCD\n");
+		lcd_shadow.lccr0 = 
+			LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + LCCR0_Act + 
+			LCCR0_LtlEnd + LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + 
+			LCCR0_DMADel(0); 
+		lcd_shadow.lccr1 = 
+			LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(65) +
+			LCCR1_EndLnDel(43) + LCCR1_BegLnDel(43);
+		lcd_shadow.lccr2 = 
+			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(35) + 
+			LCCR2_EndFrmDel(0) + LCCR2_BegFrmDel(0);
+		lcd_shadow.lccr3 = 
+			LCCR3_PixClkDiv(16) + LCCR3_ACBsDiv (2) + LCCR3_ACBsCntOff +
+			((var->sync & FB_SYNC_HOR_HIGH_ACT) ? LCCR3_HorSnchH : LCCR3_HorSnchL) +
+			((var->sync & FB_SYNC_VERT_HIGH_ACT) ? LCCR3_VrtSnchH : LCCR3_VrtSnchL);
+	} else if (machine_is_thinclient() || machine_is_graphicsclient()) {
+		DPRINTK("Configuring ThinClient LCD\n");
+		lcd_shadow.lccr0 = 
+			LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + LCCR0_Act;
+		lcd_shadow.lccr1 = 
+			LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(10) +
+			LCCR1_EndLnDel(81) + LCCR1_BegLnDel(81);
+		lcd_shadow.lccr2 = 
+			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(9) + 
+			LCCR2_EndFrmDel (20) + LCCR2_BegFrmDel(20);
+		lcd_shadow.lccr3 = 
+			LCCR3_PixClkDiv(6) + LCCR3_ACBsDiv(2) + 
+			LCCR3_ACBsCntOff + LCCR3_HorSnchL + LCCR3_VrtSnchL;
+	} else if (machine_is_tifon()) {
+		DPRINTK("Configuring TIFON LCD\n");
+		lcd_shadow.lccr0 = 
+			LCCR0_LEN + LCCR0_Mono + LCCR0_Sngl + LCCR0_Pas +
+			LCCR0_BigEnd + LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + 
+			LCCR0_8PixMono + LCCR0_DMADel(0);
+		lcd_shadow.lccr1 = 
+			LCCR1_DisWdth(var->xres) + 
+			LCCR1_HorSnchWdth(var->hsync_len) +
+			LCCR1_BegLnDel(var->left_margin) +
+			LCCR1_EndLnDel(var->right_margin);
+		lcd_shadow.lccr2 = 
+			LCCR2_DisHght(var->yres) + 
+			LCCR2_VrtSnchWdth(var->vsync_len) +
+			LCCR2_BegFrmDel(var->upper_margin) +
+			LCCR2_EndFrmDel(var->lower_margin);
+		lcd_shadow.lccr3 = 
+			LCCR3_PixClkDiv(pcd) + LCCR3_ACBsDiv(512) +
+			LCCR3_ACBsCnt(0) + LCCR3_HorSnchH + LCCR3_VrtSnchH;
+		/*
+			((current_var.sync & FB_SYNC_HOR_HIGH_ACT) ? LCCR3_HorSnchH : LCCR3_HorSnchL) +
+			((current_var.sync & FB_SYNC_VERT_HIGH_ACT) ? LCCR3_VrtSnchH : LCCR3_VrtSnchL);
+		*/
+	}
 
-	lcd_shadow.lccr0 = LCCR0_LEN + LCCR0_Mono + LCCR0_Sngl + LCCR0_Pas +
-		           LCCR0_BigEnd + LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + 
-		           LCCR0_8PixMono + LCCR0_DMADel(0);
-	lcd_shadow.lccr1 = LCCR1_DisWdth( var->xres ) +
-		           LCCR1_HorSnchWdth( var->hsync_len) +
-		           LCCR1_BegLnDel( var->left_margin) +
-		           LCCR1_EndLnDel( var->right_margin);
-	lcd_shadow.lccr2 = LCCR2_DisHght( var->yres ) +
-		           LCCR2_VrtSnchWdth( var->vsync_len )+
-		           LCCR2_BegFrmDel( var->upper_margin ) +
-		           LCCR2_EndFrmDel( var->lower_margin );
-	lcd_shadow.lccr3 = LCCR3_PixClkDiv( pcd ) +
-		           LCCR3_ACBsDiv( 512 ) +
-		           LCCR3_ACBsCnt(0) +
-			   LCCR3_HorSnchH + LCCR3_VrtSnchH;
-	/*
-		           ((current_var.sync & FB_SYNC_HOR_HIGH_ACT) ?
-		           LCCR3_HorSnchH : LCCR3_HorSnchL) +
-		           ((current_var.sync & FB_SYNC_VERT_HIGH_ACT) ?
-		           LCCR3_VrtSnchH : LCCR3_VrtSnchL);
-	*/
-#elif defined(CONFIG_SA1100_LART) 
-  	DPRINTK("Configuring LART LCD\n");
-
-	lcd_shadow.lccr0 = LCCR0_LEN + LCCR0_Mono + LCCR0_Sngl + LCCR0_Pas +
-		           LCCR0_LtlEnd + LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + 
-		           LCCR0_DMADel(0);
-	lcd_shadow.lccr1 = LCCR1_DisWdth( var->xres ) +
-		           LCCR1_HorSnchWdth( 2 ) +
-		           LCCR1_BegLnDel( 4 ) +
-		           LCCR1_EndLnDel( 2 );
-	lcd_shadow.lccr2 = LCCR2_DisHght( var->yres ) +
-		           LCCR2_VrtSnchWdth( 1 )+
-		           LCCR2_BegFrmDel( 0 ) +
-		           LCCR2_EndFrmDel( 0 );
-	lcd_shadow.lccr3 = LCCR3_PixClkDiv( 34 ) +
-		           LCCR3_ACBsDiv( 512 ) +
-		           LCCR3_ACBsCntOff +
-		           LCCR3_HorSnchH +
-		           LCCR3_VrtSnchH;
-#endif
-
-       /* Restore status of interrupts */
-       restore_flags(flags);
-
+	/* Restore interrupt status */
+	restore_flags(flags);
 
 	if (( LCCR0 != lcd_shadow.lccr0 ) ||
 	    ( LCCR1 != lcd_shadow.lccr1 ) ||
@@ -937,26 +999,36 @@ static void sa1100fb_inter_handler(int irq, void *dev_id, struct pt_regs *regs)
  */
 static void sa1100fb_disable_lcd_controller(void)
 {
-	DPRINTK("sa1100fb:  Disabling LCD controller\n");
+        DPRINTK("Disabling LCD controller\n");
 
 	/* Exit if already LCD disabled, or LDD IRQ unmasked */
 	if ((current_par.controller_state == LCD_MODE_DISABLED) ||
 	    (!(LCCR0 & LCCR0_LDM))) {
-		DPRINTK("sa1100fb: LCD already disabled\n");
+		DPRINTK("LCD already disabled\n");
 		return;
 	}
 
-#if defined(CONFIG_SA1100_PENNY)
-  	FpgaLcdCS1 = 0x000;	      /* LCD Backlight to 0%    */
-  	FpgaPortI  &= ~LCD_ON;        /* Turn off LCD Backlight */
-#elif defined(CONFIG_SA1100_TIFON)
-	GPCR = GPIO_GPIO(24);         /* turn off display */
+	if (machine_is_assabet()) {
+#ifdef CONFIG_SA1100_ASSABET
+		BCR_clear(BCR_LCD_ON);
 #endif
+	} else if (machine_is_bitsy()) {
+#ifdef CONFIG_SA1100_BITSY
+	        clr_bitsy_egpio(EGPIO_BITSY_LCD_ON | EGPIO_BITSY_LCD_PCI | EGPIO_BITSY_LCD_5V_ON | EGPIO_BITSY_LVDD_ON);
+#endif
+	} else if (machine_is_penny()) {
+#ifdef CONFIG_SA1100_PENNY
+		FpgaLcdCS1 = 0x000;	/* LCD Backlight to 0%    */
+		FpgaPortI &= ~LCD_ON;	/* Turn off LCD Backlight */
+#endif
+	} else if (machine_is_tifon()) {
+		GPCR = GPIO_GPIO(24);	/* turn off display */
+	}
 	
-	LCSR = 0;		      /* Clear LCD Status Register */
-	LCCR0 &= ~(LCCR0_LDM);	      /* Enable LCD Disable Done Interrupt */
+	LCSR = 0;	/* Clear LCD Status Register */
+	LCCR0 &= ~(LCCR0_LDM);	/* Enable LCD Disable Done Interrupt */
 	enable_irq(IRQ_LCD);	      /* Enable LCD IRQ */
-	LCCR0 &= ~(LCCR0_LEN);	      /* Disable LCD Controller */
+	LCCR0 &= ~(LCCR0_LEN);	/* Disable LCD Controller */
 
 }
 
@@ -977,7 +1049,7 @@ static void sa1100fb_enable_lcd_controller(void)
 		current_par.controller_state = LCD_MODE_DISABLE_BEFORE_ENABLE;
 		sa1100fb_disable_lcd_controller();
 	} else {
-		DPRINTK("sa1100fb: Enabling LCD controller\n");
+		DPRINTK("Enabling LCD controller\n");
 
 		/* Make sure the mode bits are present in the first palette entry */
 		current_par.v_palette_base[0] &= 0x0FFF; 	           
@@ -992,39 +1064,36 @@ static void sa1100fb_enable_lcd_controller(void)
 		LCCR1 = lcd_shadow.lccr1;
 		LCCR0 = lcd_shadow.lccr0;
 
-#if defined(CONFIG_SA1100_PENNY)
-		FpgaLcdCS1 = 0x0FF;	       /* LCD Backlight to 100% */
-		FpgaPortI  |= LCD_ON;          /* Turn on LCD Backlight */
-#elif defined(CONFIG_SA1100_TIFON)
-		GPCR = GPIO_GPIO(24);          /* cycle on/off-switch */
-		udelay(150);
-		GPSR = GPIO_GPIO(24);          /* turn on display */
-		udelay(150);
-		GPSR = GPIO_GPIO(24);          /* turn on display */
+		if (machine_is_assabet()) {
+#ifdef CONFIG_SA1100_ASSABET
+			BCR_set(BCR_LCD_ON);
 #endif
+		} else if (machine_is_bitsy()) {
+#ifdef CONFIG_SA1100_BITSY
+                        set_bitsy_egpio(EGPIO_BITSY_LCD_ON | EGPIO_BITSY_LCD_PCI | EGPIO_BITSY_LCD_5V_ON | EGPIO_BITSY_LVDD_ON)
+			DPRINTK("DBAR1=%p\n", DBAR1);
+			DPRINTK("LCCR0=%x\n", LCCR0);
+			DPRINTK("LCCR1=%x\n", LCCR1);
+			DPRINTK("LCCR2=%x\n", LCCR2);
+			DPRINTK("LCCR3=%x\n", LCCR3);
+#endif
+		} else if (machine_is_penny()) {
+#ifdef CONFIG_SA1100_PENNY
+			FpgaLcdCS1 = 0x0FF;	/* LCD Backlight to 100% */
+			FpgaPortI  |= LCD_ON;	/* Turn on LCD Backlight */
+#endif
+		} else if (machine_is_tifon()) {
+			GPCR = GPIO_GPIO(24);	/* cycle on/off-switch */
+			udelay(150);
+			GPSR = GPIO_GPIO(24);	/* turn on display */
+		}
+
 		current_par.controller_state = LCD_MODE_ENABLED;
 
-       		/* Restore status of interrupts */
-       }
-       restore_flags(flags);
+	}
+	/* Restore interrupt status */
+	restore_flags(flags);
 }
-
-
-
-static int
-sa1100fb_open(struct fb_info *info, int user)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int
-sa1100fb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
 
 static int
 sa1100fb_pan_display(struct fb_var_screeninfo *var, int con,
@@ -1046,12 +1115,14 @@ sa1100fb_blank(int blank, struct fb_info *info)
 {
 	int i;
 
+  	DPRINTK("blank=%d info->modename=%s\n", blank, info->modename);
 	if (blank) {
 		for (i = 0; i < current_par.palette_size; i++)
 			sa1100fb_palette_write(i, sa1100fb_palette_encode(i, 0, 0, 0, 0));
 		sa1100fb_disable_lcd_controller();
 	}
 	else {
+                if (current_par.visual != FB_VISUAL_TRUECOLOR)
 		sa1100fb_set_cmap(&fb_display[current_par.currcon].cmap, 1, 
 		                  current_par.currcon, info); 
 		sa1100fb_enable_lcd_controller();
@@ -1067,18 +1138,22 @@ sa1100fb_blank(int blank, struct fb_info *info)
 static int
 sa1100fb_switch(int con, struct fb_info *info)
 {
-	struct fb_cmap *cmap;
 
-	if (current_par.currcon >= 0) {
-                // Get the colormap for the selected console 
-		cmap = &fb_display[current_par.currcon].cmap;
-
-		if (cmap->len)
-			fb_get_cmap(cmap, 1, sa1100fb_getcolreg, info);
-	}
+  	DPRINTK("con=%d info->modename=%s\n", con, info->modename);
+        if (current_par.visual != FB_VISUAL_TRUECOLOR) {
+                struct fb_cmap *cmap;
+		if (current_par.currcon >= 0) {
+			// Get the colormap for the selected console 
+			cmap = &fb_display[current_par.currcon].cmap;
+			
+			if (cmap->len)
+				fb_get_cmap(cmap, 1, sa1100fb_getcolreg, info);
+		}
+        }
 
 	current_par.currcon = con;
 	fb_display[con].var.activate = FB_ACTIVATE_NOW;
+	DPRINTK("fb_display[%d].var.activate=%x\n", con, fb_display[con].var.activate);
 	sa1100fb_set_var(&fb_display[con].var, con, info);
 	return 0;
 }
@@ -1086,36 +1161,38 @@ sa1100fb_switch(int con, struct fb_info *info)
 
 void __init sa1100fb_init(void)
 {
-        current_par.p_palette_base  = NULL;
-        current_par.v_palette_base  = NULL;
-        current_par.p_screen_base   = NULL;
-        current_par.v_screen_base   = NULL;
-        current_par.palette_size    = MAX_PALETTE_NUM_ENTRIES;
-        current_par.screen_size     = MAX_PIXEL_MEM_SIZE;
-
-#if defined(CONFIG_SA1100_PENNY)
-  	GPDR |= GPIO_GPDR_GFX;     /* GPIO Data Direction register for LCD data bits 8-11     */
-  	GAFR |= GPIO_GAFR_GFX;     /* GPIO Alternate Function register for LCD data bits 8-11 */
-#elif defined(CONFIG_SA1100_TIFON) 
-
-	GPDR = GPDR | GPIO_GPIO(24);  /* set GPIO24 to output */
-#endif
+	sa1100fb_init_fbinfo();
 
 	/* Initialize video memory */
 	if (sa1100fb_map_video_memory())
-	    return;
+		return;
 
-	sa1100fb_init_fbinfo();
 	if (current_par.montype < 0 || current_par.montype > NR_MONTYPES)
 		current_par.montype = 1;
 
-	/* Request the interrupt in the init routine only because */ 
-	/* this driver will not be used as a module.              */ 
-	if (request_irq(IRQ_LCD, sa1100fb_inter_handler, SA_INTERRUPT, "SA1100 LCD", NULL)!= 0) {
-		DPRINTK("sa1100fb: failed in request_irq\n");
+	if (request_irq(IRQ_LCD, sa1100fb_inter_handler, SA_INTERRUPT, "SA1100 LCD", NULL) != 0) {
+		printk("sa1100fb: failed in request_irq\n");
+		return;
 	}
 	DPRINTK("sa1100fb: request_irq succeeded\n");
 	disable_irq(IRQ_LCD);
+
+	if (machine_is_assabet()) {
+		GPDR |= 0x3fc;
+		GAFR |= 0x3fc;
+		sa1100fb_assabet_set_truecolor(current_par.visual ==
+					       FB_VISUAL_TRUECOLOR);
+	} else if (machine_is_bitsy()) {
+		GPDR = (GPIO_LDD15 | GPIO_LDD14 | GPIO_LDD13 | GPIO_LDD12 | GPIO_LDD11 | GPIO_LDD10 | GPIO_LDD9 | GPIO_LDD8);
+		GAFR |= (GPIO_LDD15 | GPIO_LDD14 | GPIO_LDD13 | GPIO_LDD12 | GPIO_LDD11 | GPIO_LDD10 | GPIO_LDD9 | GPIO_LDD8);
+	} else if (machine_is_penny()) {
+#ifdef CONFIG_SA1100_PENNY
+		GPDR |= GPIO_GPDR_GFX;	/* GPIO Data Direction register for LCD data bits 8-11 */
+		GAFR |= GPIO_GAFR_GFX;	/* GPIO Alternate Function register for LCD data bits 8-11 */
+#endif
+	} else if (machine_is_tifon()) {
+		GPDR |= GPIO_GPIO(24);	/* set GPIO24 to output */
+	}
 
 	if (sa1100fb_set_var(&init_var, -1, &fb_info))
 		current_par.allow_modeset = 0;
@@ -1123,7 +1200,7 @@ void __init sa1100fb_init(void)
 
 	register_framebuffer(&fb_info);
 
-	/* This driver cannot be unloaded */
+	/* This driver cannot be unloaded at the moment */
 	MOD_INC_USE_COUNT;
 }
 

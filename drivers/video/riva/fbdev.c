@@ -225,8 +225,6 @@ static struct fb_var_screeninfo rivafb_default_var = {
 
 /* ------------------- prototypes ------------------------------ */
 
-static int rivafb_open (struct fb_info *info, int user);
-static int rivafb_release (struct fb_info *info, int user);
 static int rivafb_get_fix (struct fb_fix_screeninfo *fix, int con,
 		    struct fb_info *info);
 static int rivafb_get_var (struct fb_var_screeninfo *var, int con,
@@ -271,15 +269,14 @@ static void riva_wclut (unsigned char regnum, unsigned char red,
 
 /* kernel interface */
 static struct fb_ops riva_fb_ops = {
-	rivafb_open,
-	rivafb_release,
-	rivafb_get_fix,
-	rivafb_get_var,
-	rivafb_set_var,
-	rivafb_get_cmap,
-	rivafb_set_cmap,
-	rivafb_pan_display,
-	rivafb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	rivafb_get_fix,
+	fb_get_var:	rivafb_get_var,
+	fb_set_var:	rivafb_set_var,
+	fb_get_cmap:	rivafb_get_cmap,
+	fb_set_cmap:	rivafb_set_cmap,
+	fb_pan_display:	rivafb_pan_display,
+	fb_ioctl:	rivafb_ioctl,
 };
 
 
@@ -526,8 +523,8 @@ static int __devinit rivafb_init_one (struct pci_dev *pd,
 	assert (rinfo->base0_region_size >= 0x00800000);	/* from GGI */
 	assert (rinfo->base1_region_size >= 0x01000000);	/* from GGI */
 
-	rinfo->ctrl_base_phys = rinfo->pd->resource[0].start;
-	rinfo->fb_base_phys = rinfo->pd->resource[1].start;
+	rinfo->ctrl_base_phys = pci_resource_start (rinfo->pd, 0);
+	rinfo->fb_base_phys = pci_resource_start (rinfo->pd, 1);
 
 	if (!request_mem_region (rinfo->ctrl_base_phys,
 				 rinfo->base0_region_size, "rivafb")) {
@@ -720,20 +717,6 @@ int __init rivafb_setup (char *options)
     /*
      *  Frame buffer operations
      */
-
-static int rivafb_open (struct fb_info *info, int user)
-{
-	/* Nothing, only a usage count for the moment */
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int rivafb_release (struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
 
 static int rivafb_get_fix (struct fb_fix_screeninfo *fix, int con,
 		    struct fb_info *info)

@@ -231,7 +231,10 @@ do_mmap_fake(struct file *file, unsigned long addr, unsigned long len,
 		back = kmalloc(PAGE_SIZE - ((addr + len) & ~PAGE_MASK), GFP_KERNEL);
 		memcpy(back, addr + len, PAGE_SIZE - ((addr + len) & ~PAGE_MASK));
 	}
-	if ((r = do_mmap(0, baddr, len + (addr - baddr), prot, flags | MAP_ANONYMOUS, 0)) < 0)
+	down(&current->mm->mmap_sem);
+	r = do_mmap(0, baddr, len + (addr - baddr), prot, flags | MAP_ANONYMOUS, 0);
+	up(&current->mm->mmap_sem);
+	if (r < 0)
 		return(r);
 #ifndef	DDD
 	if (addr == 0)
@@ -290,7 +293,6 @@ sys32_mmap(struct mmap_arg_struct *arg)
 	if (copy_from_user(&a, arg, sizeof(a)))
 		return -EFAULT;
 
-	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if (!(a.flags & MAP_ANONYMOUS)) {
 		error = -EBADF;
@@ -306,17 +308,17 @@ sys32_mmap(struct mmap_arg_struct *arg)
 	if (1) {
 #endif	// DDD
 		unlock_kernel();
-		up(&current->mm->mmap_sem);
 		error = do_mmap_fake(file, a.addr, a.len, a.prot, a.flags, a.offset);
-		down(&current->mm->mmap_sem);
 		lock_kernel();
-	} else
+	} else {
+		down(&current->mm->mmap_sem);
 		error = do_mmap(file, a.addr, a.len, a.prot, a.flags, a.offset);
+		up(&current->mm->mmap_sem);
+	}
 	if (file)
 		fput(file);
 out:
 	unlock_kernel();
-	up(&current->mm->mmap_sem);
 	return error;
 }
 

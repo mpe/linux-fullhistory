@@ -61,6 +61,8 @@ extern int retz3fb_init(void);
 extern int retz3fb_setup(char*);
 extern int clgenfb_init(void);
 extern int clgenfb_setup(char*);
+extern int hitfb_init(void);
+extern int hitfb_setup(char*);
 extern int vfb_init(void);
 extern int vfb_setup(char*);
 extern int offb_init(void);
@@ -162,6 +164,9 @@ static struct {
 #ifdef CONFIG_FB_ATY
 	{ "atyfb", atyfb_init, atyfb_setup },
 #endif
+#ifdef CONFIG_FB_MATROX
+	{ "matrox", matroxfb_init, matroxfb_setup },
+#endif
 #ifdef CONFIG_FB_ATY128
 	{ "aty128fb", aty128fb_init, aty128fb_setup },
 #endif
@@ -205,9 +210,6 @@ static struct {
 #ifdef CONFIG_FB_HGA
 	{ "hga", hgafb_init, hgafb_setup },
 #endif 
-#ifdef CONFIG_FB_MATROX
-	{ "matrox", matroxfb_init, matroxfb_setup },
-#endif
 #ifdef CONFIG_FB_HP300
 	{ "hpfb", hpfb_init, hpfb_setup },
 #endif 
@@ -228,6 +230,9 @@ static struct {
 #endif 
 #ifdef CONFIG_FB_SUN3
        { "sun3", sun3fb_init, sun3fb_setup },
+#endif
+#ifdef CONFIG_FB_HIT
+       { "hitfb", hitfb_init, hitfb_setup },
 #endif
 #ifdef CONFIG_GSP_RESOLVER
 	/* Not a real frame buffer device... */
@@ -528,6 +533,8 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	 */
 	pgprot_val(vma->vm_page_prot) &= ~(PTE_CACHEABLE | PTE_BUFFERABLE);
 #endif
+#elif defined(__sh__)
+        pgprot_val(vma->vm_page_prot) &= ~_PAGE_CACHABLE;
 #else
 #warning What do we have to do here??
 #endif
@@ -562,6 +569,7 @@ fb_open(struct inode *inode, struct file *file)
 {
 	int fbidx = GET_FB_IDX(inode->i_rdev);
 	struct fb_info *info;
+	int res = 0;
 
 #ifdef CONFIG_KMOD
 	if (!(info = registered_fb[fbidx]))
@@ -569,7 +577,14 @@ fb_open(struct inode *inode, struct file *file)
 #endif /* CONFIG_KMOD */
 	if (!(info = registered_fb[fbidx]))
 		return -ENODEV;
-	return info->fbops->fb_open(info,1);
+	if (info->fbops->owner)
+		__MOD_INC_USE_COUNT(info->fbops->owner);
+	if (info->fbops->fb_open) {
+		res = info->fbops->fb_open(info,1);
+		if (res && info->fbops->owner)
+			__MOD_DEC_USE_COUNT(info->fbops->owner);
+	}
+	return res;
 }
 
 static int 
@@ -578,11 +593,15 @@ fb_release(struct inode *inode, struct file *file)
 	int fbidx = GET_FB_IDX(inode->i_rdev);
 	struct fb_info *info = registered_fb[fbidx];
 
-	info->fbops->fb_release(info,1);
+	if (info->fbops->fb_release)
+		info->fbops->fb_release(info,1);
+	if (info->fbops->owner)
+		__MOD_DEC_USE_COUNT(info->fbops->owner);
 	return 0;
 }
 
 static struct file_operations fb_fops = {
+	owner:		THIS_MODULE,
 	read:		fb_read,
 	write:		fb_write,
 	ioctl:		fb_ioctl,
@@ -610,13 +629,22 @@ register_framebuffer(struct fb_info *fb_info)
 	fb_info->node = MKDEV(FB_MAJOR, i);
 	registered_fb[i] = fb_info;
 	if (!fb_ever_opened[i]) {
+		struct module *owner = fb_info->fbops->owner;
 		/*
 		 *  We assume initial frame buffer devices can be opened this
 		 *  many times
 		 */
 		for (j = 0; j < MAX_NR_CONSOLES; j++)
-			if (con2fb_map[j] == i)
-				fb_info->fbops->fb_open(fb_info,0);
+			if (con2fb_map[j] == i) {
+				if (owner)
+					__MOD_INC_USE_COUNT(owner);
+				if (!fb_info->fbops->fb_open)
+					continue;
+				if (!fb_info->fbops->fb_open(fb_info,0))
+					continue;
+				if (owner)
+					__MOD_DEC_USE_COUNT(owner);
+			}
 		fb_ever_opened[i] = 1;
 	}
 

@@ -19,7 +19,6 @@
 
 asmlinkage void sys_sync(void);	/* it's really int */
 extern void unblank_console(void);
-extern int C_A_D;
 
 int panic_timeout;
 

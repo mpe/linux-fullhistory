@@ -12,8 +12,13 @@
  * especially for the colourmap stuff.  Once fbcon has been fully migrated,
  * we can kill the last 5 references to cfb->currcon.
  *
- * We also use the new hotplug PCI subsystem.  This doesn't work fully in
- * the case of multiple CyberPro cards yet however.
+ * We also use the new hotplug PCI subsystem.  I'm not sure if there are any
+ * such cards, but I'm erring on the side of caution.  We don't want to go
+ * pop just because someone does have one.
+ *
+ * Note that this doesn't work fully in the case of multiple CyberPro cards
+ * with grabbers.  We currently can only attach to the first CyberPro card
+ * found.
  */
 #include <linux/config.h>
 #include <linux/module.h>
@@ -47,7 +52,7 @@
 /*
  * This is the offset of the PCI space in physical memory
  */
-#ifdef CONFIG_ARCH_FOOTBRIDGE
+#ifdef CONFIG_FOOTBRIDGE
 #define PCI_PHYS_OFFSET	0x80000000
 #else
 #define	PCI_PHYS_OFFSET	0x00000000
@@ -62,6 +67,8 @@ struct cfb_info {
 	struct display_switch	*dispsw;
 	struct pci_dev		*dev;
 	signed int		currcon;
+	int			func_use_count;
+	u_long			ref_ps;
 
 	/*
 	 * Clock divisors
@@ -72,7 +79,10 @@ struct cfb_info {
 		u8 red, green, blue;
 	} palette[NR_PALETTE];
 
+	u_char			mem_ctl1;
 	u_char			mem_ctl2;
+	u_char			mclk_mult;
+	u_char			mclk_div;
 };
 
 /* -------------------- Hardware specific routines ------------------------- */
@@ -363,7 +373,7 @@ static const u_char crtc_idx[] = {
 	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18
 };
 
-static void cyber2000fb_set_timing(struct par_info *hw)
+static void cyber2000fb_set_timing(struct cfb_info *cfb, struct par_info *hw)
 {
 	u_int i;
 
@@ -416,11 +426,10 @@ static void cyber2000fb_set_timing(struct par_info *hw)
 	cyber2000_attrw(0x14, 0x00);
 
 	/* PLL registers */
-	cyber2000_grphw(0xb0, hw->clock_mult);
-	cyber2000_grphw(0xb1, hw->clock_div);
-
-	cyber2000_grphw(0xb2, 0xdb);
-	cyber2000_grphw(0xb3, 0x54);		/* MCLK: 75MHz */
+	cyber2000_grphw(DCLK_MULT, hw->clock_mult);
+	cyber2000_grphw(DCLK_DIV,  hw->clock_div);
+	cyber2000_grphw(MCLK_MULT, cfb->mclk_mult);
+	cyber2000_grphw(MCLK_DIV,  cfb->mclk_div);
 	cyber2000_grphw(0x90, 0x01);
 	cyber2000_grphw(0xb9, 0x80);
 	cyber2000_grphw(0xb9, 0x00);
@@ -438,7 +447,9 @@ static void cyber2000fb_set_timing(struct par_info *hw)
 	cyber2000_grphw(0x15, ((hw->fetch >> 8) & 0x03) |
 			      ((hw->pitch >> 4) & 0x30));
 	cyber2000_grphw(0x77, hw->visualid);
-	cyber2000_grphw(0x33, 0x0c);
+
+	/* make sure we stay in linear mode */
+	cyber2000_grphw(0x33, 0x0d);
 
 	/*
 	 * Set up accelerator registers
@@ -464,21 +475,6 @@ cyber2000fb_update_start(struct cfb_info *cfb, struct fb_var_screeninfo *var)
 	cyber2000_crtcw(0x0c, base >> 8);
 	cyber2000_crtcw(0x0d, base);
 
-	return 0;
-}
-
-/*
- *  Open/Release the frame buffer device
- */
-static int cyber2000fb_open(struct fb_info *info, int user)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int cyber2000fb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -535,6 +531,7 @@ cyber2000fb_decode_crtc(struct par_info *hw, struct cfb_info *cfb,
 
 	Htotal      = var->xres + var->right_margin +
 		      var->hsync_len + var->left_margin;
+
 	if (Htotal > 2080)
 		return -EINVAL;
 
@@ -619,7 +616,7 @@ cyber2000fb_decode_clock(struct par_info *hw, struct cfb_info *cfb,
 			 struct fb_var_screeninfo *var)
 {
 	u_long pll_ps = var->pixclock;
-	const u_long ref_ps = 69842;
+	const u_long ref_ps = cfb->ref_ps;
 	u_int div2, t_div1, best_div1, best_mult;
 	int best_diff;
 
@@ -641,7 +638,6 @@ cyber2000fb_decode_clock(struct par_info *hw, struct cfb_info *cfb,
 	if (div2 == 4)
 		return -EINVAL;
 
-#if 1
 	/*
 	 * Step 2:
 	 *  Given pll_ps and ref_ps, find:
@@ -689,94 +685,7 @@ cyber2000fb_decode_clock(struct par_info *hw, struct cfb_info *cfb,
 		if (diff == 0)
 			break;
 	}
-#else
-	/* Note! This table will be killed shortly. --rmk */
-	/*
-	 *				1600x1200 1280x1024 1152x864 1024x768 800x600 640x480
-	 * 5051		5051	yes	   76*
-	 * 5814		5814	no	   66
-	 * 6411		6411	no	   60
-	 * 7408		7408	yes	             75*
-	 *				             74*
-	 * 7937		7937	yes	             70*
-	 * 9091		4545	yes	                       80*
-	 *				                       75*     100*
-	 * 9260		4630	yes	             60*
-	 * 10000	5000	no	                       70       90
-	 * 12500	6250	yes	             47-lace*  60*
-	 *				             43-lace*
-	 * 12699	6349	yes	                                75*
-	 * 13334	6667	no	                                72
-	 *				                                70
-	 * 14815	7407	yes	                                       100*
-	 * 15385	7692	yes	                       47-lace* 60*
-	 *				                       43-lace*
-	 * 17656	4414	no	                                        90
-	 * 20000	5000	no	                                        72
-	 * 20203	5050	yes	                                        75*
-	 * 22272	5568	yes	                               43-lace* 70*    100*
-	 * 25000	6250	yes	                                        60*
-	 * 25057	6264	no	                                                90
-	 * 27778	6944	yes	                                        56*
-	 *									48-lace*
-	 * 31747	7936	yes	                                                75*
-	 * 32052	8013	no	                                                72
-	 * 39722 /6	6620	no
-	 * 39722 /8	4965	yes	                                                60*
-	 */
-					/*  /1     /2     /4     /6     /8    */
-					/*                      (2010) (2000) */
-	if (pll_ps >= 4543 && pll_ps <= 4549) {
-		best_mult = 169;	/*u220.0  110.0  54.99  36.663 27.497 */
-		best_div1 = 11;		/* 4546    9092  18184  27276  36367  */
-	} else if (pll_ps >= 4596 && pll_ps <= 4602) {
-		best_mult = 243;	/* 217.5  108.7  54.36  36.243 27.181 */
-		best_div1 = 16;		/* 4599    9197  18395  27592  36789  */
-	} else if (pll_ps >= 4627 && pll_ps <= 4633) {
-		best_mult = 181;	/*u216.0, 108.0, 54.00, 36.000 27.000 */
-		best_div1 = 12;		/* 4630    9260  18520  27780  37040  */
-	} else if (pll_ps >= 4962 && pll_ps <= 4968) {
-		best_mult = 211;	/*u201.0, 100.5, 50.25, 33.500 25.125 */
-		best_div1 = 15;		/* 4965    9930  19860  29790  39720  */
-	} else if (pll_ps >= 5005 && pll_ps <= 5011) {
-		best_mult = 251;	/* 200.0   99.8  49.92  33.280 24.960 */
-		best_div1 = 18;		/* 5008   10016  20032  30048  40064  */
-	} else if (pll_ps >= 5047 && pll_ps <= 5053) {
-		best_mult = 83;		/*u198.0,  99.0, 49.50, 33.000 24.750 */
-		best_div1 = 6;		/* 5050   10100  20200  30300  40400  */
-	} else if (pll_ps >= 5490 && pll_ps <= 5496) {
-		best_mult = 89;		/* 182.0   91.0  45.51  30.342 22.756 */
-		best_div1 = 7;		/* 5493   10986  21972  32958  43944  */
-	} else if (pll_ps >= 5567 && pll_ps <= 5573) {
-		best_mult = 163;	/*u179.5   89.8  44.88  29.921 22.441 */
-		best_div1 = 13;		/* 5570   11140  22281  33421  44562  */
-	} else if (pll_ps >= 6246 && pll_ps <= 6252) {
-		best_mult = 190;	/*u160.0,  80.0, 40.00, 26.671 20.003 */
-		best_div1 = 17;		/* 6249   12498  24996  37494  49992  */
-	} else if (pll_ps >= 6346 && pll_ps <= 6352) {
-		best_mult = 209;	/*u158.0,  79.0, 39.50, 26.333 19.750 */
-		best_div1 = 19;		/* 6349   12698  25396  38094  50792  */
-	} else if (pll_ps >= 6648 && pll_ps <= 6655) {
-		best_mult = 210;	/*u150.3   75.2  37.58  25.057 18.792 */
-		best_div1 = 20;		/* 6652   13303  26606  39909  53213  */
-	} else if (pll_ps >= 6943 && pll_ps <= 6949) {
-		best_mult = 181;	/*u144.0   72.0  36.00  23.996 17.997 */
-		best_div1 = 18;		/* 6946   13891  27782  41674  55565  */
-	} else if (pll_ps >= 7404 && pll_ps <= 7410) {
-		best_mult = 198;	/*u134.0   67.5  33.75  22.500 16.875 */
-		best_div1 = 21;		/* 7407   14815  29630  44445  59260  */
-	} else if (pll_ps >= 7689 && pll_ps <= 7695) {
-		best_mult = 227;	/*u130.0   65.0  32.50  21.667 16.251 */
-		best_div1 = 25;		/* 7692   15384  30768  46152  61536  */
-	} else if (pll_ps >= 7808 && pll_ps <= 7814) {
-		best_mult = 152;	/* 128.0   64.0  32.00  21.337 16.003 */
-		best_div1 = 17;		/* 7811   15623  31245  46868  62490  */
-	} else if (pll_ps >= 7934 && pll_ps <= 7940) {
-		best_mult = 44;		/*u126.0   63.0  31.498 20.999 15.749 */
-		best_div1 = 5;		/* 7937   15874  31748  47622  63494  */
-	} else
-		return -EINVAL;
-#endif
+
 	/*
 	 * Step 3:
 	 *  combine values
@@ -1018,7 +927,7 @@ cyber2000fb_set_var(struct fb_var_screeninfo *var, int con,
 		cfb->fb.changevar(con);
 
 	cyber2000fb_update_start(cfb, var);
-	cyber2000fb_set_timing(&hw);
+	cyber2000fb_set_timing(cfb, &hw);
 	fb_set_cmap(&cfb->fb.cmap, 1, cyber2000_setcolreg, &cfb->fb);
 
 	return 0;
@@ -1180,10 +1089,8 @@ gen_get_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 	return 0;
 }
 
-static struct fb_ops cyber2000fb_ops =
-{
-	fb_open:	cyber2000fb_open,
-	fb_release:	cyber2000fb_release,
+static struct fb_ops cyber2000fb_ops = {
+	owner:		THIS_MODULE,
 	fb_set_var:	cyber2000fb_set_var,
 	fb_set_cmap:	cyber2000fb_set_cmap,
 	fb_pan_display:	cyber2000fb_pan_display,
@@ -1195,26 +1102,32 @@ static struct fb_ops cyber2000fb_ops =
 
 /*
  * Enable access to the extended registers
- *  Bug: this should track the usage of these registers
  */
-static void cyber2000fb_enable_extregs(void)
+static void cyber2000fb_enable_extregs(struct cfb_info *cfb)
 {
-	int old;
+	cfb->func_use_count += 1;
 
-	old = cyber2000_grphr(FUNC_CTL);
-	cyber2000_grphw(FUNC_CTL, old | FUNC_CTL_EXTREGENBL);
+	if (cfb->func_use_count == 1) {
+		int old;
+
+		old = cyber2000_grphr(FUNC_CTL);
+		cyber2000_grphw(FUNC_CTL, old | FUNC_CTL_EXTREGENBL);
+	}
 }
 
 /*
  * Disable access to the extended registers
- *  Bug: this should track the usage of these registers
  */
-static void cyber2000fb_disable_extregs(void)
+static void cyber2000fb_disable_extregs(struct cfb_info *cfb)
 {
-	int old;
+	if (cfb->func_use_count == 1) {
+		int old;
 
-	old = cyber2000_grphr(FUNC_CTL);
-	cyber2000_grphw(FUNC_CTL, old & ~FUNC_CTL_EXTREGENBL);
+		old = cyber2000_grphr(FUNC_CTL);
+		cyber2000_grphw(FUNC_CTL, old & ~FUNC_CTL_EXTREGENBL);
+	}
+
+	cfb->func_use_count -= 1;
 }
 
 /*
@@ -1227,7 +1140,7 @@ static struct cfb_info		*int_cfb_info;
 /*
  * Attach a capture/tv driver to the core CyberX0X0 driver.
  */
-int cyber2000fb_attach(struct cyberpro_info *info)
+int cyber2000fb_attach(struct cyberpro_info *info, int idx)
 {
 	if (int_cfb_info != NULL) {
 		info->dev	      = int_cfb_info->dev;
@@ -1236,6 +1149,7 @@ int cyber2000fb_attach(struct cyberpro_info *info)
 		info->fb_size	      = int_cfb_info->fb.fix.smem_len;
 		info->enable_extregs  = cyber2000fb_enable_extregs;
 		info->disable_extregs = cyber2000fb_disable_extregs;
+		info->info            = int_cfb_info;
 
 		strncpy(info->dev_name, int_cfb_info->fb.fix.id, sizeof(info->dev_name));
 
@@ -1248,7 +1162,7 @@ int cyber2000fb_attach(struct cyberpro_info *info)
 /*
  * Detach a capture/tv driver from the core CyberX0X0 driver.
  */
-void cyber2000fb_detach(void)
+void cyber2000fb_detach(int idx)
 {
 	MOD_DEC_USE_COUNT;
 }
@@ -1281,8 +1195,8 @@ int __init cyber2000fb_setup(char *options)
 }
 
 static char igs_regs[] __devinitdata = {
-	0x10, 0x10,			0x12, 0x00,	0x13, 0x00,
-			0x31, 0x00,	0x32, 0x00,	0x33, 0x01,
+					0x12, 0x00,	0x13, 0x00,
+			0x31, 0x00,	0x32, 0x00,
 	0x50, 0x00,	0x51, 0x00,	0x52, 0x00,	0x53, 0x00,
 	0x54, 0x00,	0x55, 0x00,	0x56, 0x00,	0x57, 0x01,
 	0x58, 0x00,	0x59, 0x00,	0x5a, 0x00,
@@ -1290,22 +1204,129 @@ static char igs_regs[] __devinitdata = {
 	0x74, 0x0b,	0x75, 0x17,	0x76, 0x00,	0x7a, 0xc8
 };
 
-static inline void cyberpro_init_hw(struct cfb_info *cfb)
+/*
+ * We need to wake up the CyberPro, and make sure its in linear memory
+ * mode.  Unfortunately, this is specific to the platform and card that
+ * we are running on.
+ *
+ * On x86 and ARM, should we be initialising the CyberPro first via the
+ * IO registers, and then the MMIO registers to catch all cases?  Can we
+ * end up in the situation where the chip is in MMIO mode, but not awake
+ * on an x86 system?
+ *
+ * Note that on the NetWinder, the firmware automatically detects the
+ * type, width and size, and leaves this in extended registers 0x71 and
+ * 0x72 for us.
+ */
+static inline void cyberpro_init_hw(struct cfb_info *cfb, int at_boot)
 {
 	int i;
 
 	/*
-	 * Wake up the CyberPro
+	 * Wake up the CyberPro.
 	 */
+#ifdef __sparc__
+#ifdef __sparc_v9__
+#error "You loose, consult DaveM."
+#else
+	/*
+	 * SPARC does not have an "outb" instruction, so we generate
+	 * I/O cycles storing into a reserved memory space at
+	 * physical address 0x3000000
+	 */
+	{
+		unsigned char *iop;
+
+		iop = ioremap(0x3000000, 0x5000);
+		if (iop == NULL) {
+			prom_printf("iga5000: cannot map I/O\n");
+			return -ENOMEM;
+		}
+
+		writeb(0x18, iop + 0x46e8);
+		writeb(0x01, iop + 0x102);
+		writeb(0x08, iop + 0x46e8);
+		writeb(0x33, iop + 0x3ce);
+		writeb(0x01, iop + 0x3cf);
+
+		iounmap((void *)iop);
+	}
+#endif
+
+	if (at_boot) {
+		/*
+		 * Use mclk from BIOS.  Only read this if we're
+		 * initialising this card for the first time.
+		 * FIXME: what about hotplug?
+		 */
+		cfb->mclk_mult = cyber2000_grphr(MCLK_MULT);
+		cfb->mclk_div  = cyber2000_grphr(MCLK_DIV);
+	}
+#endif
+#ifdef __i386__
+	/*
+	 * x86 is simple, we just do regular outb's instead of
+	 * cyber2000_outb.
+	 */
+	outb(0x18, 0x46e8);
+	outb(0x01, 0x102);
+	outb(0x08, 0x46e8);
+	outb(0x33, 0x3ce);
+	outb(0x01, 0x3cf);
+
+	if (at_boot) {
+		/*
+		 * Use mclk from BIOS.  Only read this if we're
+		 * initialising this card for the first time.
+		 * FIXME: what about hotplug?
+		 */
+		cfb->mclk_mult = cyber2000_grphr(MCLK_MULT);
+		cfb->mclk_div  = cyber2000_grphr(MCLK_DIV);
+	}
+#endif
+#ifdef __arm__
 	cyber2000_outb(0x18, 0x46e8);
 	cyber2000_outb(0x01, 0x102);
 	cyber2000_outb(0x08, 0x46e8);
+	cyber2000_outb(0x33, 0x3ce);
+	cyber2000_outb(0x01, 0x3cf);
+
+	/*
+	 * MCLK on the NetWinder is fixed at 75MHz
+	 */
+	cfb->mclk_mult = 0xdb;
+	cfb->mclk_div  = 0x54;
+#endif
 
 	/*
 	 * Initialise the CyberPro
 	 */
 	for (i = 0; i < sizeof(igs_regs); i += 2)
 		cyber2000_grphw(igs_regs[i], igs_regs[i+1]);
+
+	if (at_boot) {
+		/*
+		 * get the video RAM size and width from the VGA register.
+		 * This should have been already initialised by the BIOS,
+		 * but if it's garbage, claim default 1MB VRAM (woody)
+		 */
+		cfb->mem_ctl1 = cyber2000_grphr(MEM_CTL1);
+		cfb->mem_ctl2 = cyber2000_grphr(MEM_CTL2);
+	} else {
+		/*
+		 * Reprogram the MEM_CTL1 and MEM_CTL2 registers
+		 */
+		cyber2000_grphw(MEM_CTL1, cfb->mem_ctl1);
+		cyber2000_grphw(MEM_CTL2, cfb->mem_ctl2);
+	}
+
+	/*
+	 * Ensure thatwe are using the correct PLL.
+	 * (CyberPro 5000's may be programmed to use
+	 * an additional set of PLLs.
+	 */
+	cyber2000_outb(0xba, 0x3ce);
+	cyber2000_outb(cyber2000_inb(0x3cf) & 0x80, 0x3cf);
 }
 
 static struct cfb_info * __devinit
@@ -1323,6 +1344,7 @@ cyberpro_alloc_fb_info(struct pci_dev *dev, const struct pci_device_id *id)
 
 	cfb->currcon		= -1;
 	cfb->dev		= dev;
+	cfb->ref_ps		= 69842;
 	cfb->divisors[0]	= 1;
 	cfb->divisors[1]	= 2;
 	cfb->divisors[2]	= 4;
@@ -1466,13 +1488,6 @@ cyberpro_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	u_long smem_size;
 	int err;
 
-	/*
-	 * We can only accept one CyberPro device at the moment.  We can
-	 * kill this once int_cfb_info and CyberRegs have been killed.
-	 */
-	if (int_cfb_info)
-		return -EBUSY;
-
 	err = pci_enable_device(dev);
 	if (err)
 		return err;
@@ -1486,14 +1501,7 @@ cyberpro_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if (err)
 		goto failed;
 
-	cyberpro_init_hw(cfb);
-
-	/*
-	 * get the video RAM size and width from the VGA register.
-	 * This should have been already initialised by the BIOS,
-	 * but if it's garbage, claim default 1MB VRAM (woody)
-	 */
-	cfb->mem_ctl2 = cyber2000_grphr(MEM_CTL2);
+	cyberpro_init_hw(cfb, 1);
 
 	switch (cfb->mem_ctl2 & MEM_CTL2_SIZE_MASK) {
 	case MEM_CTL2_SIZE_4MB:	smem_size = 0x00400000; break;
@@ -1519,6 +1527,12 @@ cyberpro_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	cyber2000fb_set_var(&cfb->fb.var, -1, &cfb->fb);
 
+	/*
+	 * Calculate the hsync and vsync frequencies.  Note that
+	 * we split the 1e12 constant up so that we can preserve
+	 * the precision and fit the results into 32-bit registers.
+	 *  (1953125000 * 512 = 1e12)
+	 */
 	h_sync = 1953125000 / cfb->fb.var.pixclock;
 	h_sync = h_sync * 512 / (cfb->fb.var.xres + cfb->fb.var.left_margin +
 		 cfb->fb.var.right_margin + cfb->fb.var.hsync_len);
@@ -1538,7 +1552,8 @@ cyberpro_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	 * Our driver data
 	 */
 	dev->driver_data = cfb;
-	int_cfb_info = cfb;
+	if (int_cfb_info == NULL)
+		int_cfb_info = cfb;
 
 	return 0;
 
@@ -1555,7 +1570,15 @@ static void __devexit cyberpro_remove(struct pci_dev *dev)
 	struct cfb_info *cfb = (struct cfb_info *)dev->driver_data;
 
 	if (cfb) {
-		unregister_framebuffer(&cfb->fb);
+		/*
+		 * If unregister_framebuffer fails, then
+		 * we will be leaving hooks that could cause
+		 * oopsen laying around.
+		 */
+		if (unregister_framebuffer(&cfb->fb))
+			printk(KERN_WARNING "%s: danger Will Robinson, "
+				"danger danger!  Oopsen imminent!\n",
+				cfb->fb.fix.id);
 		cyberpro_unmap_smem(cfb);
 		cyberpro_unmap_mmio(cfb);
 		cyberpro_free_fb_info(cfb);
@@ -1565,7 +1588,8 @@ static void __devexit cyberpro_remove(struct pci_dev *dev)
 		 * valid.
 		 */
 		dev->driver_data = NULL;
-		int_cfb_info = NULL;
+		if (cfb == int_cfb_info)
+			int_cfb_info = NULL;
 	}
 }
 
@@ -1581,12 +1605,7 @@ static void cyberpro_resume(struct pci_dev *dev)
 	struct cfb_info *cfb = (struct cfb_info *)dev->driver_data;
 
 	if (cfb) {
-		cyberpro_init_hw(cfb);
-
-		/*
-		 * Reprogram the MEM_CTL2 register
-		 */
-		cyber2000_grphw(MEM_CTL2, cfb->mem_ctl2);
+		cyberpro_init_hw(cfb, 0);
 
 		/*
 		 * Restore the old video mode and the palette.
@@ -1620,7 +1639,8 @@ static struct pci_driver cyberpro_driver = {
 
 /*
  * I don't think we can use the "module_init" stuff here because
- * the fbcon stuff may not be initialised yet.
+ * the fbcon stuff may not be initialised yet.  Hence the #ifdef
+ * around module_init.
  */
 int __init cyber2000fb_init(void)
 {
@@ -1636,5 +1656,3 @@ static void __exit cyberpro_exit(void)
 module_init(cyber2000fb_init);
 #endif
 module_exit(cyberpro_exit);
-
-MODULE_DEVICE_TABLE(pci, cyberpro_pci_table);

@@ -13,6 +13,7 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 2000/07/06	acme		__exit at cyclomx_cleanup
 * 2000/04/02	acme		dprintk and cycx_debug
 * 				module_init/module_exit
 * 2000/01/21	acme		rename cyclomx_open to cyclomx_mod_inc_use_count
@@ -59,7 +60,7 @@ MODULE_PARM_DESC(debug, "cyclomx debug level");
 /* Defines & Macros */
 
 #define	DRV_VERSION	0		/* version number */
-#define	DRV_RELEASE	7		/* release (minor version) number */
+#define	DRV_RELEASE	8		/* release (minor version) number */
 #define	MAX_CARDS	1		/* max number of adapters */
 
 #ifndef	CONFIG_CYCLOMX_CARDS		/* configurable option */
@@ -102,7 +103,7 @@ static cycx_t *card_array = NULL;	/* adapter data space */
  *		< 0	error.
  * Context:	process
  */
-int __init cyclomx_init (void)
+static int __init cyclomx_init (void)
 {
 	int cnt, err = 0;
 
@@ -156,7 +157,7 @@ int __init cyclomx_init (void)
  * o unregister all adapters from the WAN router
  * o release all remaining system resources
  */
-void cyclomx_cleanup (void)
+static void __exit cyclomx_cleanup (void)
 {
 	int i = 0;
 

@@ -219,7 +219,6 @@ static int matroxfb_open(struct fb_info *info, int user)
 	if (ACCESS_FBINFO(dead)) {
 		return -ENXIO;
 	}
-	MOD_INC_USE_COUNT;
 	ACCESS_FBINFO(usecount)++;
 #undef minfo
 	return(0);
@@ -233,7 +232,6 @@ static int matroxfb_release(struct fb_info *info, int user)
 	if (!(--ACCESS_FBINFO(usecount)) && ACCESS_FBINFO(dead)) {
 		matroxfb_remove(PMINFO 0);
 	}
-	MOD_DEC_USE_COUNT;
 #undef minfo
 	return(0);
 }
@@ -1138,17 +1136,16 @@ static int matroxfb_ioctl(struct inode *inode, struct file *file,
 }
 
 static struct fb_ops matroxfb_ops = {
-	matroxfb_open,
-	matroxfb_release,
-	matroxfb_get_fix,
-	matroxfb_get_var,
-	matroxfb_set_var,
-	matroxfb_get_cmap,
-	matroxfb_set_cmap,
-	matroxfb_pan_display,
-	matroxfb_ioctl,
-	NULL,			/* mmap */
-	NULL,			/* rasterimg */
+	owner:		THIS_MODULE,
+	fb_open:	matroxfb_open,
+	fb_release:	matroxfb_release,
+	fb_get_fix:	matroxfb_get_fix,
+	fb_get_var:	matroxfb_get_var,
+	fb_set_var:	matroxfb_set_var,
+	fb_get_cmap:	matroxfb_get_cmap,
+	fb_set_cmap:	matroxfb_set_cmap,
+	fb_pan_display:	matroxfb_pan_display,
+	fb_ioctl:	matroxfb_ioctl,
 };
 
 static int matroxfb_switch(int con, struct fb_info *info)
@@ -1595,11 +1592,11 @@ static int initMatrox2(WPMINFO struct display* d, struct board* b){
 	if (ACCESS_FBINFO(capable.cross4MB) < 0)
 		ACCESS_FBINFO(capable.cross4MB) = b->flags & DEVF_CROSS4MB;
 	if (b->flags & DEVF_SWAPS) {
-		ctrlptr_phys = ACCESS_FBINFO(pcidev)->resource[1].start;
-		video_base_phys = ACCESS_FBINFO(pcidev)->resource[0].start;
+		ctrlptr_phys = pci_resource_start(ACCESS_FBINFO(pcidev), 1);
+		video_base_phys = pci_resource_start(ACCESS_FBINFO(pcidev), 0);
 	} else {
-		ctrlptr_phys = ACCESS_FBINFO(pcidev)->resource[0].start;
-		video_base_phys = ACCESS_FBINFO(pcidev)->resource[1].start;
+		ctrlptr_phys = pci_resource_start(ACCESS_FBINFO(pcidev), 0);
+		video_base_phys = pci_resource_start(ACCESS_FBINFO(pcidev), 1);
 	}
 	err = -EINVAL;
 	if (!ctrlptr_phys) {

@@ -111,8 +111,6 @@ void dn_video_setup(char *options, int *ints);
 
 /* frame buffer operations */
 
-static int dn_fb_open(struct fb_info *info,int user);
-static int dn_fb_release(struct fb_info *info,int user);
 static int dn_fb_get_fix(struct fb_fix_screeninfo *fix, int con, 
 			 struct fb_info *info);
 static int dn_fb_get_var(struct fb_var_screeninfo *var, int con,
@@ -136,9 +134,15 @@ static void dn_fb_set_disp(int con,struct fb_info *info);
 
 static struct display disp[MAX_NR_CONSOLES];
 static struct fb_info fb_info;
-static struct fb_ops dn_fb_ops = { 
-	dn_fb_open,dn_fb_release, dn_fb_get_fix, dn_fb_get_var, dn_fb_set_var,
-	dn_fb_get_cmap, dn_fb_set_cmap, dn_fb_pan_display, dn_fb_ioctl
+static struct fb_ops dn_fb_ops = {
+	owner:		THIS_MODULE,
+	fb_get_fix:	dn_fb_get_fix,
+	fb_get_var:	dn_fb_get_var,
+	fb_set_var:	dn_fb_set_var,
+	fb_get_cmap:	dn_fb_get_cmap,
+	fb_set_cmap:	dn_fb_set_cmap,
+	fb_pan_display:	dn_fb_pan_display,
+	fb_ioctl:	dn_fb_ioctl,
 };
 
 static int currcon=0;
@@ -156,22 +160,6 @@ static char dn_fb_name[]="Apollo ";
 #define USE_DN_ACCEL
 
 static struct display_switch dispsw_apollofb;
-
-static int dn_fb_open(struct fb_info *info,int user)
-{
-        /*
-         * Nothing, only a usage count for the moment
-         */
-
-        MOD_INC_USE_COUNT;
-        return(0);
-}
-
-static int dn_fb_release(struct fb_info *info,int user)
-{
-        MOD_DEC_USE_COUNT;
-        return(0);
-}
 
 static int dn_fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info) {

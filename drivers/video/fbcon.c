@@ -289,9 +289,17 @@ void set_con2fb_map(int unit, int newidx)
     if (newidx != con2fb_map[unit]) {
        oldfb = registered_fb[oldidx];
        newfb = registered_fb[newidx];
-       if (newfb->fbops->fb_open(newfb,0))
-           return;
-       oldfb->fbops->fb_release(oldfb,0);
+	if (newfb->fbops->owner)
+		__MOD_INC_USE_COUNT(newfb->fbops->owner);
+	if (newfb->fbops->fb_open && newfb->fbops->fb_open(newfb,0)) {
+		if (newfb->fbops->owner)
+			__MOD_DEC_USE_COUNT(newfb->fbops->owner);
+		return;
+	}
+	if (oldfb->fbops->fb_release)
+		oldfb->fbops->fb_release(oldfb,0);
+	if (oldfb->fbops->owner)
+		__MOD_DEC_USE_COUNT(oldfb->fbops->owner);
        conp = fb_display[unit].conp;
        fontdata = fb_display[unit].fontdata;
        fontwidth = fb_display[unit]._fontwidth;

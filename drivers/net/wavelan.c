@@ -3623,7 +3623,7 @@ static int wv_check_ioaddr(unsigned long ioaddr, u8 * mac)
 
 	/* Check if the base address if available. */
 	if (check_region(ioaddr, sizeof(ha_t)))
-		return EADDRINUSE;	/* ioaddr already used */
+		return -EADDRINUSE;	/* ioaddr already used */
 
 	/* Reset host interface */
 	wv_hacr_reset(ioaddr);
@@ -3649,7 +3649,7 @@ static int wv_check_ioaddr(unsigned long ioaddr, u8 * mac)
 	       "WaveLAN (0x%3X): your MAC address might be %02X:%02X:%02X.\n",
 	       ioaddr, mac[0], mac[1], mac[2]);
 #endif
-	return ENODEV;
+	return -ENODEV;
 }
 
 /************************ INTERRUPT HANDLING ************************/
@@ -4002,7 +4002,7 @@ static int __init wavelan_config(device * dev)
 		       "%s: wavelan_config(): could not wavelan_map_irq(%d).\n",
 		       dev->name, irq_mask);
 #endif
-		return EAGAIN;
+		return -EAGAIN;
 	}
 
 	dev->irq = irq;
@@ -4095,7 +4095,7 @@ int __init wavelan_probe(device * dev)
 		printk(KERN_WARNING
 		       "%s: wavelan_probe(): structure/compiler botch: \"%s\"\n",
 		       dev->name, wv_struct_check());
-		return ENODEV;
+		return -ENODEV;
 	}
 #endif				/* STRUCT_CHECK */
 
@@ -4109,7 +4109,7 @@ int __init wavelan_probe(device * dev)
 		       "%s: wavelan_probe(): invalid base address\n",
 		       dev->name);
 #endif
-		return ENXIO;
+		return -ENXIO;
 	}
 
 	/* Check a single specified location. */
@@ -4157,7 +4157,7 @@ int __init wavelan_probe(device * dev)
 	       dev->name);
 #endif
 
-	return ENODEV;
+	return -ENODEV;
 }
 
 /****************************** MODULE ******************************/

@@ -70,8 +70,6 @@ static int currcon;
 static char fontname[40] __initdata = { 0 };
 static int curblink __initdata = 1;
 
-static int sun3fb_open(struct fb_info *info, int user);
-static int sun3fb_release(struct fb_info *info, int user);
 static int sun3fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			struct fb_info *info);
 static int sun3fb_get_var(struct fb_var_screeninfo *var, int con,
@@ -110,26 +108,15 @@ static int sun3fb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 static void do_install_cmap(int con, struct fb_info *info);
 
 static struct fb_ops sun3fb_ops = {
-	sun3fb_open, sun3fb_release, sun3fb_get_fix, sun3fb_get_var, sun3fb_set_var,
-	sun3fb_get_cmap, sun3fb_set_cmap, sun3fb_pan_display, sun3fb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	sun3fb_get_fix,
+	fb_get_var:	sun3fb_get_var,
+	fb_set_var:	sun3fb_set_var,
+	fb_get_cmap:	sun3fb_get_cmap,
+	fb_set_cmap:	sun3fb_set_cmap,
+	fb_pan_display:	sun3fb_pan_display,
+	fb_ioctl:	sun3fb_ioctl,
 };
-
-
-    /*
-     *  Open/Release the frame buffer device
-     */
-
-static int sun3fb_open(struct fb_info *info, int user)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int sun3fb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
 
 static void sun3fb_clear_margin(struct display *p, int s)
 {

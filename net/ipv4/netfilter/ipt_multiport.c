@@ -73,6 +73,9 @@ checkentry(const char *tablename,
 {
 	const struct ipt_multiport *multiinfo = matchinfo;
 
+	if (matchsize != IPT_ALIGN(sizeof(struct ipt_multiport)))
+		return 0;
+
 	/* Must specify proto == TCP/UDP, no unknown flags or bad count */
 	return (ip->proto == IPPROTO_TCP || ip->proto == IPPROTO_UDP)
 		&& !(ip->flags & IPT_INV_PROTO)

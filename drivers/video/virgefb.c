@@ -298,8 +298,6 @@ static struct fb_var_screeninfo virgefb_default;
 
 int virgefb_setup(char*);
 
-static int virgefb_open(struct fb_info *info, int user);
-static int virgefb_release(struct fb_info *info, int user);
 static int virgefb_get_fix(struct fb_fix_screeninfo *fix, int con, struct
 fb_info *info);
 static int virgefb_get_var(struct fb_var_screeninfo *var, int con, struct
@@ -898,28 +896,6 @@ static void do_install_cmap(int con, struct fb_info *info)
 			    1, fbhw->setcolreg, info);
 }
 
-
-/*
- *  Open/Release the frame buffer device
- */
-
-static int virgefb_open(struct fb_info *info, int user)
-{
-	/*
-	 * Nothing, only a usage count for the moment
-	 */
-
-	MOD_INC_USE_COUNT;
-	return(0);
-}
-
-static int virgefb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return(0);
-}
-
-
 /*
  *    Get the Fixed Part of the Display
  */
@@ -1121,9 +1097,14 @@ static int virgefb_ioctl(struct inode *inode, struct file *file,
 
 
 static struct fb_ops virgefb_ops = {
-	virgefb_open, virgefb_release, virgefb_get_fix, virgefb_get_var,
-	virgefb_set_var, virgefb_get_cmap, virgefb_set_cmap,
-	virgefb_pan_display, virgefb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	virgefb_get_fix,
+	fb_get_var:	virgefb_get_var,
+	fb_set_var:	virgefb_set_var,
+	fb_get_cmap:	virgefb_get_cmap,
+	fb_set_cmap:	virgefb_set_cmap,
+	fb_pan_display:	virgefb_pan_display,
+	fb_ioctl:	virgefb_ioctl,
 };
 
 

@@ -106,25 +106,6 @@ static int             currcon   = 0;
 
 /* --------------------------------------------------------------------- */
 
-	/*
-	 * Open/Release the frame buffer device
-	 */
-
-static int vga16fb_open(struct fb_info *info, int user)
-{
-	/*
-	 * Nothing, only a usage count for the moment
-	 */
-	MOD_INC_USE_COUNT;
-	return(0);
-}
-
-static int vga16fb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return(0);
-}
-
 static void vga16fb_pan_var(struct fb_info *info, struct fb_var_screeninfo *var)
 {
 	u32 pos = (var->xres_virtual * var->yoffset + var->xoffset) >> 3;
@@ -387,7 +368,7 @@ static int vga16fb_decode_var(const struct fb_var_screeninfo *var,
 	if (pos & 0x200)
 		r7 |= 0x80;
 	pos += vslen;
-	par->crtc[VGA_CRTC_V_SYNC_END] = (pos & 0x0F) | 0x10; /* disabled IRQ */
+	par->crtc[VGA_CRTC_V_SYNC_END] = (pos & 0x0F) & ~0x10; /* disabled IRQ */
 	pos += upper - 1; /* blank_end + 1 <= ytotal + 2 */
 	par->crtc[VGA_CRTC_V_BLANK_END] = pos & 0xFF; /* 0x7F for original VGA,
                      but some SVGA chips requires all 8 bits to set */
@@ -700,15 +681,14 @@ static int vga16fb_ioctl(struct inode *inode, struct file *file,
 }
 
 static struct fb_ops vga16fb_ops = {
-	vga16fb_open,
-	vga16fb_release,
-	vga16fb_get_fix,
-	vga16fb_get_var,
-	vga16fb_set_var,
-	vga16fb_get_cmap,
-	vga16fb_set_cmap,
-	vga16fb_pan_display,
-	vga16fb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	vga16fb_get_fix,
+	fb_get_var:	vga16fb_get_var,
+	fb_set_var:	vga16fb_set_var,
+	fb_get_cmap:	vga16fb_get_cmap,
+	fb_set_cmap:	vga16fb_set_cmap,
+	fb_pan_display:	vga16fb_pan_display,
+	fb_ioctl:	vga16fb_ioctl,
 };
 
 int vga16fb_setup(char *options)

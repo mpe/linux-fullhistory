@@ -88,6 +88,7 @@ static ssize_t irda_write(struct file *file, const char *buffer,
 static u_int irda_poll(struct file *file, poll_table *wait);
 
 static struct file_operations irda_fops = {
+	owner:		THIS_MODULE,
 	read:		irda_read,
 	write:		irda_write,
 	poll:		irda_poll,
@@ -394,8 +395,6 @@ static int irda_open( struct inode * inode, struct file *file)
 		return -1;
 	}
 	irda.in_use = TRUE;
-		
-	MOD_INC_USE_COUNT;
 	
 	return 0;
 }
@@ -446,8 +445,6 @@ static int irda_ioctl(struct inode *inode, struct file *filp,
 static int irda_close(struct inode *inode, struct file *file)
 {
 	IRDA_DEBUG(4, __FUNCTION__ "()\n");
-	
-	MOD_DEC_USE_COUNT;
 	
 	irda.in_use = FALSE;
 

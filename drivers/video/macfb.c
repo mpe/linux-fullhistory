@@ -207,25 +207,6 @@ static int             inverse   = 0;
 static int             vidtest   = 0;
 static int             currcon   = 0;
 
-/*
- * Open/Release the frame buffer device
- */
-
-static int macfb_open(struct fb_info *info, int user)
-{
-	/*
-	 * Nothing, only a usage count for the moment
-	 */
-	MOD_INC_USE_COUNT;
-	return(0);
-}
-
-static int macfb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return(0);
-}
-
 static int macfb_update_var(int con, struct fb_info *info)
 {
 	return 0;
@@ -863,16 +844,14 @@ static int macfb_pan_display(struct fb_var_screeninfo *var, int con,
 }
 
 static struct fb_ops macfb_ops = {
-	macfb_open,
-	macfb_release,
-	macfb_get_fix,
-	macfb_get_var,
-	macfb_set_var,
-	macfb_get_cmap,
-	macfb_set_cmap,
-	macfb_pan_display,
-	macfb_ioctl,
-	NULL
+	owner:		THIS_MODULE,
+	fb_get_fix:	macfb_get_fix,
+	fb_get_var:	macfb_get_var,
+	fb_set_var:	macfb_set_var,
+	fb_get_cmap:	macfb_get_cmap,
+	fb_set_cmap:	macfb_set_cmap,
+	fb_pan_display:	macfb_pan_display,
+	fb_ioctl:	macfb_ioctl,
 };
 
 void macfb_setup(char *options, int *ints)

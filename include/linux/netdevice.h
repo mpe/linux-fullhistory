@@ -13,6 +13,7 @@
  *		Donald J. Becker, <becker@cesdis.gsfc.nasa.gov>
  *		Alan Cox, <Alan.Cox@linux.org>
  *		Bjorn Ekwall. <bj0rn@blox.se>
+ *              Pekka Riikonen <priikone@poseidon.pspt.fi>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -190,6 +191,17 @@ enum netdev_state_t
 	__LINK_STATE_SCHED,
 	__LINK_STATE_NOCARRIER
 };
+
+
+/*
+ * This structure holds at boot time configured netdevice settings. They
+ * are then used in the device probing. 
+ */
+struct netdev_boot_setup {
+	char name[IFNAMSIZ];
+	struct ifmap map;
+};
+#define NETDEV_BOOT_SETUP_MAX 8
 
 
 /*
@@ -389,8 +401,11 @@ struct packet_type
 
 extern struct net_device		loopback_dev;		/* The loopback */
 extern struct net_device		*dev_base;		/* All devices */
-extern rwlock_t			dev_base_lock;		/* Device list lock */
+extern rwlock_t				dev_base_lock;		/* Device list lock */
+extern struct netdev_boot_setup		dev_boot_setup[];
 
+extern int			netdev_boot_setup_add(char *name, struct ifmap *map);
+extern int 			netdev_boot_setup_check(struct net_device *dev);
 extern struct net_device    *dev_getbyhwaddr(unsigned short type, char *hwaddr);
 extern void		dev_add_pack(struct packet_type *pt);
 extern void		dev_remove_pack(struct packet_type *pt);
@@ -414,7 +429,7 @@ extern int		dev_restart(struct net_device *dev);
 
 typedef int gifconf_func_t(struct net_device * dev, char * bufptr, int len);
 extern int		register_gifconf(unsigned int family, gifconf_func_t * gifconf);
-extern __inline__ int unregister_gifconf(unsigned int family)
+static inline int unregister_gifconf(unsigned int family)
 {
 	return register_gifconf(family, 0);
 }
@@ -437,7 +452,7 @@ extern struct softnet_data softnet_data[NR_CPUS];
 
 #define HAVE_NETIF_QUEUE
 
-extern __inline__ void __netif_schedule(struct net_device *dev)
+static inline void __netif_schedule(struct net_device *dev)
 {
 	if (!test_and_set_bit(__LINK_STATE_SCHED, &dev->state)) {
 		unsigned long flags;
@@ -451,34 +466,34 @@ extern __inline__ void __netif_schedule(struct net_device *dev)
 	}
 }
 
-extern __inline__ void netif_schedule(struct net_device *dev)
+static inline void netif_schedule(struct net_device *dev)
 {
 	if (!test_bit(__LINK_STATE_XOFF, &dev->state))
 		__netif_schedule(dev);
 }
 
-extern __inline__ void netif_start_queue(struct net_device *dev)
+static inline void netif_start_queue(struct net_device *dev)
 {
 	clear_bit(__LINK_STATE_XOFF, &dev->state);
 }
 
-extern __inline__ void netif_wake_queue(struct net_device *dev)
+static inline void netif_wake_queue(struct net_device *dev)
 {
 	if (test_and_clear_bit(__LINK_STATE_XOFF, &dev->state))
 		__netif_schedule(dev);
 }
 
-extern __inline__ void netif_stop_queue(struct net_device *dev)
+static inline void netif_stop_queue(struct net_device *dev)
 {
 	set_bit(__LINK_STATE_XOFF, &dev->state);
 }
 
-extern __inline__ int netif_queue_stopped(struct net_device *dev)
+static inline int netif_queue_stopped(struct net_device *dev)
 {
 	return test_bit(__LINK_STATE_XOFF, &dev->state);
 }
 
-extern __inline__ int netif_running(struct net_device *dev)
+static inline int netif_running(struct net_device *dev)
 {
 	return test_bit(__LINK_STATE_START, &dev->state);
 }
@@ -486,7 +501,7 @@ extern __inline__ int netif_running(struct net_device *dev)
 /* Use this variant when it is known for sure that it
  * is executing from interrupt context.
  */
-extern __inline__ void dev_kfree_skb_irq(struct sk_buff *skb)
+static inline void dev_kfree_skb_irq(struct sk_buff *skb)
 {
 	if (atomic_dec_and_test(&skb->users)) {
 		int cpu =smp_processor_id();
@@ -503,7 +518,7 @@ extern __inline__ void dev_kfree_skb_irq(struct sk_buff *skb)
 /* Use this variant in places where it could be invoked
  * either from interrupt or non-interrupt context.
  */
-extern __inline__ void dev_kfree_skb_any(struct sk_buff *skb)
+static inline void dev_kfree_skb_any(struct sk_buff *skb)
 {
 	if (in_irq())
 		dev_kfree_skb_irq(skb);
@@ -522,14 +537,14 @@ extern void		dev_init(void);
 
 extern int		netdev_nit;
 
-extern __inline__ void dev_init_buffers(struct net_device *dev)
+static inline void dev_init_buffers(struct net_device *dev)
 {
 	/* DO NOTHING */
 }
 
 extern int netdev_finish_unregister(struct net_device *dev);
 
-extern __inline__ void dev_put(struct net_device *dev)
+static inline void dev_put(struct net_device *dev)
 {
 	if (atomic_dec_and_test(&dev->refcnt))
 		netdev_finish_unregister(dev);
@@ -543,32 +558,32 @@ extern __inline__ void dev_put(struct net_device *dev)
  * who is responsible for serialization of these calls.
  */
 
-extern __inline__ int netif_carrier_ok(struct net_device *dev)
+static inline int netif_carrier_ok(struct net_device *dev)
 {
 	return !test_bit(__LINK_STATE_NOCARRIER, &dev->state);
 }
 
 extern void __netdev_watchdog_up(struct net_device *dev);
 
-extern __inline__ void netif_carrier_on(struct net_device *dev)
+static inline void netif_carrier_on(struct net_device *dev)
 {
 	clear_bit(__LINK_STATE_NOCARRIER, &dev->state);
 	if (netif_running(dev))
 		__netdev_watchdog_up(dev);
 }
 
-extern __inline__ void netif_carrier_off(struct net_device *dev)
+static inline void netif_carrier_off(struct net_device *dev)
 {
 	set_bit(__LINK_STATE_NOCARRIER, &dev->state);
 }
 
 /* Hot-plugging. */
-extern __inline__ int netif_device_present(struct net_device *dev)
+static inline int netif_device_present(struct net_device *dev)
 {
 	return test_bit(__LINK_STATE_PRESENT, &dev->state);
 }
 
-extern __inline__ void netif_device_detach(struct net_device *dev)
+static inline void netif_device_detach(struct net_device *dev)
 {
 	if (test_and_clear_bit(__LINK_STATE_PRESENT, &dev->state) &&
 	    netif_running(dev)) {
@@ -576,7 +591,7 @@ extern __inline__ void netif_device_detach(struct net_device *dev)
 	}
 }
 
-extern __inline__ void netif_device_attach(struct net_device *dev)
+static inline void netif_device_attach(struct net_device *dev)
 {
 	if (!test_and_set_bit(__LINK_STATE_PRESENT, &dev->state) &&
 	    netif_running(dev)) {

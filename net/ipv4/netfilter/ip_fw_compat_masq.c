@@ -95,6 +95,24 @@ do_masquerade(struct sk_buff **pskb, const struct net_device *dev)
 	return do_bindings(ct, ctinfo, info, NF_IP_POST_ROUTING, pskb);
 }
 
+void
+check_for_masq_error(struct sk_buff *skb)
+{
+	enum ip_conntrack_info ctinfo;
+	struct ip_conntrack *ct;
+
+	ct = ip_conntrack_get(skb, &ctinfo);
+	/* Wouldn't be here if not tracked already => masq'ed ICMP
+           ping or error related to masq'd connection */
+	IP_NF_ASSERT(ct);
+	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
+		icmp_reply_translation(skb, ct, NF_IP_PRE_ROUTING,
+				       CTINFO2DIR(ctinfo));
+		icmp_reply_translation(skb, ct, NF_IP_POST_ROUTING,
+				       CTINFO2DIR(ctinfo));
+	}
+}
+
 unsigned int
 check_for_demasq(struct sk_buff **pskb)
 {
@@ -114,15 +132,27 @@ check_for_demasq(struct sk_buff **pskb)
 	switch (iph->protocol) {
 	case IPPROTO_ICMP:
 		/* ICMP errors. */
-		if ((ct = icmp_error_track(*pskb, &ctinfo))) {
-			icmp_reply_translation(*pskb, ct,
-					       NF_IP_PRE_ROUTING,
-					       CTINFO2DIR(ctinfo));
+		ct = icmp_error_track(*pskb, &ctinfo, NF_IP_PRE_ROUTING);
+		if (ct) {
+			/* We only do SNAT in the compatibility layer.
+			   So we can manipulate ICMP errors from
+			   server here (== DNAT).  Do SNAT icmp manips
+			   in POST_ROUTING handling. */
+			if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY) {
+				icmp_reply_translation(*pskb, ct,
+						       NF_IP_PRE_ROUTING,
+						       CTINFO2DIR(ctinfo));
+				icmp_reply_translation(*pskb, ct,
+						       NF_IP_POST_ROUTING,
+						       CTINFO2DIR(ctinfo));
+			}
 			return NF_ACCEPT;
 		}
 		/* Fall thru... */
 	case IPPROTO_TCP:
 	case IPPROTO_UDP:
+		IP_NF_ASSERT((skb->nh.iph->frag_off & htons(IP_OFFSET)) == 0);
+
 		if (!get_tuple(iph, (*pskb)->len, &tuple, protocol)) {
 			if (net_ratelimit())
 				printk("ip_fw_compat_masq: Can't get tuple\n");
@@ -237,7 +267,17 @@ masq_procinfo(char *buffer, char **start, off_t offset, int length)
 {
 	unsigned int i;
 	int len = 0;
-	off_t upto = 0;
+	off_t upto = 1;
+
+	/* Header: first record */
+	if (offset == 0) {
+		char temp[128];
+
+		sprintf(temp,
+			"Prc FromIP   FPrt ToIP     TPrt Masq Init-seq  Delta PDelta Expires (free=0,0,0)");
+		len = sprintf(buffer, "%-127s\n", temp);
+		offset = 1;
+	}
 
 	READ_LOCK(&ip_conntrack_lock);
 	/* Traverse hash; print originals then reply. */

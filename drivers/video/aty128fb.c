@@ -80,6 +80,7 @@
 #define DBG(x)
 #endif
 
+#ifndef CONFIG_PPC
 /* default mode */
 static struct fb_var_screeninfo default_var __initdata = {
     /* 640x480, 60 Hz, Non-Interlaced (25.175 MHz dotclock) */
@@ -89,6 +90,18 @@ static struct fb_var_screeninfo default_var __initdata = {
     0, FB_VMODE_NONINTERLACED
 };
 
+#else /* CONFIG_PPC */
+/* default to 1024x768 at 75Hz on PPC - this will work
+ * on the iMac, the usual 640x480 @ 60Hz doesn't. */
+static struct fb_var_screeninfo default_var = {
+    /* 1024x768, 75 Hz, Non-Interlaced (78.75 MHz dotclock) */
+    1024, 768, 1024, 768, 0, 0, 8, 0,
+    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+    0, 0, -1, -1, 0, 12699, 160, 32, 28, 1, 96, 3,
+    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+};
+#endif /* CONFIG_PPC */
+
 #ifndef MODULE
 /* default modedb mode */
 static struct fb_videomode defaultmode __initdata = {
@@ -96,25 +109,35 @@ static struct fb_videomode defaultmode __initdata = {
     NULL, 60, 640, 480, 39722, 48, 16, 33, 10, 96, 2,
     0, FB_VMODE_NONINTERLACED
 };
-#endif
+#endif /* MODULE */
 
-/* chip description information */
+/* struct to hold chip description information */
 struct aty128_chip_info {
     const char *name;
     unsigned short device;
+    int chip_gen;
+};
+
+/* Chip generations */
+enum {
+	rage_128,
+	rage_128_pro,
+	rage_M3
 };
 
 /* supported Rage128 chipsets */
 static const struct aty128_chip_info aty128_pci_probe_list[] __initdata =
 {
-    { "Rage128 RE (PCI)", PCI_DEVICE_ID_ATI_RAGE128_RE },
-    { "Rage128 RF (AGP)", PCI_DEVICE_ID_ATI_RAGE128_RF },
-    { "Rage128 RK (PCI)", PCI_DEVICE_ID_ATI_RAGE128_RK },
-    { "Rage128 RL (AGP)", PCI_DEVICE_ID_ATI_RAGE128_RL },
-    { "Rage128 Pro PF (AGP)", PCI_DEVICE_ID_ATI_RAGE128_PF },
-    { "Rage128 Pro PR (PCI)", PCI_DEVICE_ID_ATI_RAGE128_PR },
-    { NULL, 0 }
-};
+    {"Rage128 RE (PCI)", PCI_DEVICE_ID_ATI_RAGE128_RE, rage_128},
+    {"Rage128 RF (AGP)", PCI_DEVICE_ID_ATI_RAGE128_RF, rage_128},
+    {"Rage128 RK (PCI)", PCI_DEVICE_ID_ATI_RAGE128_RK, rage_128},
+    {"Rage128 RL (AGP)", PCI_DEVICE_ID_ATI_RAGE128_RL, rage_128},
+    {"Rage128 Pro PF (AGP)", PCI_DEVICE_ID_ATI_RAGE128_PF, rage_128_pro},
+    {"Rage128 Pro PR (PCI)", PCI_DEVICE_ID_ATI_RAGE128_PR, rage_128_pro},
+    {"Rage Mobility M3 (PCI)", PCI_DEVICE_ID_ATI_RAGE128_LE, rage_M3},
+    {"Rage Mobility M3 (AGP)", PCI_DEVICE_ID_ATI_RAGE128_LF, rage_M3},
+    {NULL, 0, rage_128}
+ };
 
 /* packed BIOS settings */
 #ifndef CONFIG_PPC
@@ -251,6 +274,7 @@ struct fb_info_aty128 {
     u32 frame_buffer;                   /* remaped framebuffer */
     u32 io_base;                        /* unmapped io         */
     u32 vram_size;                      /* onboard video ram   */
+    int chip_gen;
     const struct aty128_meminfo *mem;   /* onboard mem info    */
     struct aty128fb_par default_par, current_par;
     struct display disp;
@@ -287,8 +311,6 @@ static struct fb_info_aty128 *board_list = NULL;
 
 int aty128fb_setup(char *options);
 
-static int aty128fb_open(struct fb_info *info, int user);
-static int aty128fb_release(struct fb_info *info, int user);
 static int aty128fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 		       struct fb_info *info);
 static int aty128fb_get_var(struct fb_var_screeninfo *var, int con,
@@ -386,10 +408,15 @@ static void fbcon_aty32_putcs(struct vc_data *conp, struct display *p,
 #endif
 
 static struct fb_ops aty128fb_ops = {
-    aty128fb_open, aty128fb_release, aty128fb_get_fix,
-    aty128fb_get_var, aty128fb_set_var, aty128fb_get_cmap,
-    aty128fb_set_cmap, aty128fb_pan_display, aty128fb_ioctl,
-    NULL, aty128fb_rasterimg
+	owner:		THIS_MODULE,
+	fb_get_fix:	aty128fb_get_fix,
+	fb_get_var:	aty128fb_get_var,
+	fb_set_var:	aty128fb_set_var,
+	fb_get_cmap:	aty128fb_get_cmap,
+	fb_set_cmap:	aty128fb_set_cmap,
+	fb_pan_display:	aty128fb_pan_display,
+	fb_ioctl:	aty128fb_ioctl,
+	fb_rasterimg:	aty128fb_rasterimg,
 };
 
 
@@ -630,6 +657,8 @@ aty128_init_engine(const struct aty128fb_par *par,
 {
     u32 pitch_value;
 
+    wait_for_idle(info);
+
     /* 3D scaler not spoken here */
     wait_for_fifo(1, info);
     aty_st_le32(SCALE_3D_CNTL, 0x00000000);
@@ -725,9 +754,12 @@ aty128_set_crtc(const struct aty128_crtc *crtc,
     aty_st_le32(CRTC_PITCH, crtc->pitch);
     aty_st_le32(CRTC_OFFSET, crtc->offset);
     aty_st_le32(CRTC_OFFSET_CNTL, crtc->offset_cntl);
-
-    /* Disable ATOMIC updating.  Is this the right place? */
+    /* Disable ATOMIC updating.  Is this the right place?
+     * -- BenH: Breaks on my G4
+     */
+#if 0
     aty_st_le32(PPLL_CNTL, aty_ld_le32(PPLL_CNTL) & ~(0x00030000));
+#endif
 }
 
 
@@ -969,7 +1001,6 @@ aty128_crtc_to_var(const struct aty128_crtc *crtc,
     return 0;
 }
 
-
 static void
 aty128_set_pll(struct aty128_pll *pll, const struct fb_info_aty128 *info)
 {
@@ -1206,25 +1237,6 @@ aty128_set_par(struct aty128fb_par *par,
     }
 #endif /* CONFIG_FB_COMPAT_XPMAC */
 }
-
-
-    /*
-     *  Open/Release the frame buffer device
-     */
-
-static int aty128fb_open(struct fb_info *info, int user)
-{
-    MOD_INC_USE_COUNT;
-    return(0);                              
-}
-        
-
-static int aty128fb_release(struct fb_info *info, int user)
-{
-    MOD_DEC_USE_COUNT;
-    return(0);                                                    
-}
-
 
     /*
      *  encode/decode the User Defined Part of the Display
@@ -1699,6 +1711,7 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
     /* put a name with the face */
     while (aci->name && info->pdev->device != aci->device) { aci++; }
     video_card = (char *)aci->name;
+    info->chip_gen = aci->chip_gen;
 
     printk(KERN_INFO "aty128fb: %s [chip rev 0x%x] ", video_card, chip_rev);
 
@@ -1745,14 +1758,13 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
             if (mac_vmode_to_var(default_vmode, default_cmode, &var))
                 var = default_var;
         }
-    } else {
+    } else
 #endif /* CONFIG_PPC */
+    {
         if (fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0,
                           &defaultmode, initdepth) == 0)
             var = default_var;
-#ifdef CONFIG_PPC
     }
-#endif
 #endif /* MODULE */
 
     if (noaccel)
@@ -1847,6 +1859,7 @@ aty128_pci_register(struct pci_dev *pdev,
     u32 fb_addr, reg_addr, io_addr = 0;
     int err;
 
+#if 0
     /* Request resources we're going to use */
     io_addr = pci_resource_start(pdev, 1);
     if (!request_region(io_addr, pci_resource_len(pdev, 1),
@@ -1854,6 +1867,7 @@ aty128_pci_register(struct pci_dev *pdev,
         printk(KERN_ERR "aty128fb: cannot reserve I/O ports\n");
         goto err_out_none;
     }
+#endif
 
     fb_addr = pci_resource_start(pdev, 0);
     if (!request_mem_region(fb_addr, pci_resource_len(pdev, 0),
@@ -2226,24 +2240,53 @@ aty128_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     info->palette[regno].green = green;
     info->palette[regno].blue = blue;
 
+    /* Note: For now, on M3, we set palette on both heads, which may
+     * be useless. Can someone with a M3 check this ? */
+
     /* initialize gamma ramp for hi-color+ */
+
     if ((info->current_par.crtc.bpp > 8) && (regno == 0)) {
         int i;
+
+        if (info->chip_gen == rage_M3)
+            aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) & ~PALETTE_ACCESS_CNTL);
 
         for (i=16; i<256; i++) {
             aty_st_8(PALETTE_INDEX, i);
             col = (i << 16) | (i << 8) | i;
             aty_st_le32(PALETTE_DATA, col);
         }
+
+        if (info->chip_gen == rage_M3) {
+            aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) | PALETTE_ACCESS_CNTL);
+
+            for (i=16; i<256; i++) {
+                aty_st_8(PALETTE_INDEX, i);
+                col = (i << 16) | (i << 8) | i;
+                aty_st_le32(PALETTE_DATA, col);
+            }
+        }
     }
 
     /* initialize palette */
+
+    if (info->chip_gen == rage_M3)
+        aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) & ~PALETTE_ACCESS_CNTL);
+
     if (info->current_par.crtc.bpp == 16)
         aty_st_8(PALETTE_INDEX, (regno << 3));
     else
         aty_st_8(PALETTE_INDEX, regno);
     col = (red << 16) | (green << 8) | blue;
     aty_st_le32(PALETTE_DATA, col);
+    if (info->chip_gen == rage_M3) {
+    	aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) | PALETTE_ACCESS_CNTL);
+        if (info->current_par.crtc.bpp == 16)
+            aty_st_8(PALETTE_INDEX, (regno << 3));
+        else
+            aty_st_8(PALETTE_INDEX, regno);
+        aty_st_le32(PALETTE_DATA, col);
+    }
 
     if (regno < 16)
 	switch (info->current_par.crtc.bpp) {

@@ -2,97 +2,27 @@
 # Makefile for the kernel i2c bus driver.
 #
 
-SUB_DIRS     :=
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
 MOD_LIST_NAME := I2C_MODULES
+O_TARGET := i2c.o
 
-L_TARGET := i2c.a
-MX_OBJS :=  
-M_OBJS  := 
-LX_OBJS :=
-L_OBJS  := 
+export-objs	:= i2c-core.o i2c-algo-bit.o i2c-algo-pcf.o
 
-# -----
-# i2c core components
-# -----
-
-ifeq ($(CONFIG_I2C),y)
-  LX_OBJS += i2c-core.o
-else
-  ifeq ($(CONFIG_I2C),m)
-    MX_OBJS += i2c-core.o
-  endif
-endif
-
-ifeq ($(CONFIG_I2C_CHARDEV),y)
-  L_OBJS += i2c-dev.o
-else
-  ifeq ($(CONFIG_I2C_CHARDEV),m)
-    M_OBJS += i2c-dev.o
-  endif
-endif
-
-# -----
-# Bit banging adapters...
-# -----
-
-ifeq ($(CONFIG_I2C_ALGOBIT),y)
-  LX_OBJS += i2c-algo-bit.o
-else
-  ifeq ($(CONFIG_I2C_ALGOBIT),m)
-    MX_OBJS += i2c-algo-bit.o
-  endif
-endif
-
-ifeq ($(CONFIG_I2C_PHILIPSPAR),y)
-  L_OBJS += i2c-philips-par.o
-else
-  ifeq ($(CONFIG_I2C_PHILIPSPAR),m)
-    M_OBJS += i2c-philips-par.o
-  endif
-endif
-
-ifeq ($(CONFIG_I2C_ELV),y)
-  L_OBJS += i2c-elv.o
-else
-  ifeq ($(CONFIG_I2C_ELV),m)
-    M_OBJS += i2c-elv.o
-  endif
-endif
-
-ifeq ($(CONFIG_I2C_VELLEMAN),y)
-  L_OBJS += i2c-velleman.o
-else
-  ifeq ($(CONFIG_I2C_VELLEMAN),m)
-    M_OBJS += i2c-velleman.o
-  endif
-endif
-
-
-
-# -----
-# PCF components
-# -----
-
-ifeq ($(CONFIG_I2C_ALGOPCF),y)
-  LX_OBJS += i2c-algo-pcf.o
-else
-  ifeq ($(CONFIG_I2C_ALGOPCF),m)
-    MX_OBJS += i2c-algo-pcf.o
-  endif
-endif
-
-ifeq ($(CONFIG_I2C_ELEKTOR),y)
-  L_OBJS += i2c-elektor.o
-else
-  ifeq ($(CONFIG_I2C_ELEKTOR),m)
-    M_OBJS += i2c-elektor.o
-  endif
-endif
+obj-$(CONFIG_I2C)		+= i2c-core.o
+obj-$(CONFIG_I2C_CHARDEV)	+= i2c-dev.o
+obj-$(CONFIG_I2C_ALGOBIT)	+= i2c-algo-bit.o
+obj-$(CONFIG_I2C_PHILIPSPAR)	+= i2c-philips-par.o
+obj-$(CONFIG_I2C_ELV)		+= i2c-elv.o
+obj-$(CONFIG_I2C_VELLEMAN)	+= i2c-velleman.o
+obj-$(CONFIG_I2C_ALGOPCF)	+= i2c-algo-pcf.o
+obj-$(CONFIG_I2C_ELEKTOR)	+= i2c-elektor.o
 
 # This is needed for automatic patch generation: sensors code starts here
 # This is needed for automatic patch generation: sensors code ends here
+
+O_OBJS		:= $(filter-out	$(export-objs), $(obj-y))
+OX_OBJS		:= $(filter	$(export-objs), $(obj-y))
+M_OBJS		:= $(sort $(filter-out	$(export-objs), $(obj-m)))
+MX_OBJS		:= $(sort $(filter	$(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make
 

@@ -669,20 +669,6 @@ acornfb_update_dma(struct fb_var_screeninfo *var)
 }
 
 static int
-acornfb_open(struct fb_info *info, int user)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int
-acornfb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-static int
 acornfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 		  u_int *trans, struct fb_info *info)
 {
@@ -1133,15 +1119,14 @@ acornfb_ioctl(struct inode *ino, struct file *file, unsigned int cmd,
 }
 
 static struct fb_ops acornfb_ops = {
-	acornfb_open,
-	acornfb_release,
-	acornfb_get_fix,
-	acornfb_get_var,
-	acornfb_set_var,
-	acornfb_get_cmap,
-	acornfb_set_cmap,
-	acornfb_pan_display,
-	acornfb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	acornfb_get_fix,
+	fb_get_var:	acornfb_get_var,
+	fb_set_var:	acornfb_set_var,
+	fb_get_cmap:	acornfb_get_cmap,
+	fb_set_cmap:	acornfb_set_cmap,
+	fb_pan_display:	acornfb_pan_display,
+	fb_ioctl:	acornfb_ioctl,
 };
 
 static int

@@ -373,10 +373,6 @@ struct fb_info_tdfx {
 /*
  *  Frame buffer device API
  */
-static int tdfxfb_open(struct fb_info* info, 
-		       int user);
-static int tdfxfb_release(struct fb_info* info, 
-			  int user);
 static int tdfxfb_get_fix(struct fb_fix_screeninfo* fix, 
 			  int con,
 			  struct fb_info* fb);
@@ -483,17 +479,14 @@ void tdfxfb_setup(char *options,
 static int currcon = 0;
 
 static struct fb_ops tdfxfb_ops = {
-  tdfxfb_open, 
-  tdfxfb_release, 
-  tdfxfb_get_fix, 
-  tdfxfb_get_var, 
-  tdfxfb_set_var,
-  tdfxfb_get_cmap, 
-  tdfxfb_set_cmap, 
-  tdfxfb_pan_display, 
-  tdfxfb_ioctl,
-  NULL,           // fb_mmap
-  NULL            // fb_rasterimg
+	owner:		THIS_MODULE,
+	fb_get_fix:	tdfxfb_get_fix,
+	fb_get_var:	tdfxfb_get_var,
+	fb_set_var:	tdfxfb_set_var,
+	fb_get_cmap:	tdfxfb_get_cmap,
+	fb_set_cmap:	tdfxfb_set_cmap,
+	fb_pan_display:	tdfxfb_pan_display,
+	fb_ioctl:	tdfxfb_ioctl,
 };
 
 struct mode {
@@ -1257,6 +1250,9 @@ static void tdfx_cfbX_cursor(struct display *p, int mode, int x, int y)
           banshee_make_room(2);
 	  tdfx_outl(VIDPROCCFG, info->cursor.disable);
 	  tdfx_outl(HWCURLOC, (y << 16) + x);
+	  /* fix cursor color - XFree86 forgets to restore it properly */
+	  tdfx_outl(HWCURC0, 0);
+	  tdfx_outl(HWCURC1, 0xffffff);
    }
    info->cursor.state = CM_DRAW;
    mod_timer(&info->cursor.timer,jiffies+HZ/2);
@@ -1665,19 +1661,6 @@ static int tdfxfb_encode_var(struct fb_var_screeninfo* var,
   *var = v;
   return 0;
 }
-
-static int tdfxfb_open(struct fb_info* info, 
-		       int user) {
-  MOD_INC_USE_COUNT;
-  return(0);
-}
-
-static int tdfxfb_release(struct fb_info* info, 
-			  int user) {
-  MOD_DEC_USE_COUNT;
-  return(0);
-}
-
 
 static int tdfxfb_encode_fix(struct fb_fix_screeninfo*  fix,
 			     const struct tdfxfb_par*   par,
@@ -2195,6 +2178,8 @@ static int tdfxfb_switch_con(int con,
 			     struct fb_info *fb) {
    struct fb_info_tdfx *info = (struct fb_info_tdfx*)fb;
    struct tdfxfb_par par;
+   int old_con = currcon;
+   int set_par = 1;
 
    /* Do we have to save the colormap? */
    if (currcon>=0)
@@ -2204,7 +2189,16 @@ static int tdfxfb_switch_con(int con,
    currcon = con;
    fb_display[currcon].var.activate = FB_ACTIVATE_NOW; 
    tdfxfb_decode_var(&fb_display[con].var, &par, info);
-   tdfxfb_set_par(&par, info);
+   if (old_con>=0 && vt_cons[old_con]->vc_mode!=KD_GRAPHICS) {
+     /* check if we have to change video registers */
+     struct tdfxfb_par old_par;
+     tdfxfb_decode_var(&fb_display[old_con].var, &old_par, info);
+     if (!memcmp(&par,&old_par,sizeof(par)))
+	set_par = 0;	/* avoid flicker */
+   }
+   if (set_par)
+     tdfxfb_set_par(&par, info);
+
    if (fb_display[con].dispsw && fb_display[con].conp)
      fb_con.con_cursor(fb_display[con].conp, CM_ERASE);
    

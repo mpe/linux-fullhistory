@@ -34,6 +34,9 @@ extern unsigned int
 do_masquerade(struct sk_buff **pskb, const struct net_device *dev);
 
 extern unsigned int
+check_for_masq_error(struct sk_buff *pskb);
+
+extern unsigned int
 check_for_demasq(struct sk_buff **pskb);
 
 extern int __init masq_init(void);
@@ -151,9 +154,13 @@ fw_in(unsigned int hooknum,
 		if (hooknum == NF_IP_PRE_ROUTING) {
 			check_for_demasq(pskb);
 			check_for_redirect(*pskb);
-		} else if (hooknum == NF_IP_POST_ROUTING)
+		} else if (hooknum == NF_IP_POST_ROUTING) {
 			check_for_unredirect(*pskb);
-
+			/* Handle ICMP errors from client here */
+			if ((*pskb)->nh.iph->protocol == IPPROTO_ICMP
+			    && (*pskb)->nfct)
+				check_for_masq_error(*pskb);
+		}
 		return NF_ACCEPT;
 
 	case FW_MASQUERADE:

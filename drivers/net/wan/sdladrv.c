@@ -1983,8 +1983,9 @@ static int find_s514_adapter(sdlahw_t* hw, char find_first_S514_card)
   
 	while ((pci_dev = pci_find_device(V3_VENDOR_ID, V3_DEVICE_ID, pci_dev))
         	!= NULL) {
-                pci_read_config_word(pci_dev, PCI_SUBSYS_VENDOR_WORD,
-                        &PCI_subsys_vendor);
+		if (pci_enable_device(pci_dev))
+			continue;
+		PCI_subsys_vendor = pci_dev->subsystem_vendor;
                 if(PCI_subsys_vendor != SANGOMA_SUBSYS_VENDOR)
                 	continue;
         	hw->pci_dev = pci_dev;

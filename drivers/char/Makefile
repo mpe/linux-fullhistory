@@ -56,7 +56,7 @@ ifeq ($(ARCH),m68k)
    ifdef CONFIG_AMIGA
       KEYBD = amikeyb.o
    else
-      KEYBD    =
+      KEYBD =
    endif
    SERIAL   =
 endif
@@ -65,7 +65,6 @@ ifeq ($(ARCH),arm)
   KEYMAP   =
   KEYBD    =
   CONSOLE  =
-  SERIAL   =
 endif
 
 ifeq ($(ARCH),sh)
@@ -73,6 +72,11 @@ ifeq ($(ARCH),sh)
   KEYBD    =
   CONSOLE  =
   SERIAL =
+  ifeq ($(CONFIG_SH_HP600),y)
+  KEYMAP   = defkeymap.o
+  KEYBD    = scan_keyb.o hp600_keyb.o
+  CONSOLE  = console.o
+  endif
   ifeq ($(CONFIG_SERIAL),y)
   SERIAL = generic_serial.o sh-sci.o
   else
@@ -134,39 +138,21 @@ obj-$(CONFIG_SYNCLINK) += synclink.o
 obj-$(CONFIG_N_HDLC) += n_hdlc.o
 obj-$(CONFIG_SPECIALIX) += specialix.o
 obj-$(CONFIG_AMIGA_BUILTIN_SERIAL) += amiserial.o
-obj-$(CONFIG_SX) += sx.o
 
-# If either SX or RIO is in the kernel, generic_serial goes in the
-# kernel, and the module is no longer required. The "in kernel" case
-# is last to be able to override the module case....  This is an
-# example of the new "makefile automatically figures out the
-# dependencies"....  -- REW
+# After much ado, we found that an object can safely be declared as
+# both a module and into the kernel. Below that is filtered out.
+# So this should simply provide the wanted functionality!
+obj-$(CONFIG_SX) += sx.o generic_serial.o
+obj-$(CONFIG_RIO) += rio/rio.o generic_serial.o
 
-GS=n
-ifeq ($(CONFIG_RIO),m)
-  M_OBJS += generic_serial.o
-  MOD_SUB_DIRS += rio
-  GS = m
-endif
-
-ifeq ($(CONFIG_SX),m)
-  GS = m
-  M_OBJS += sx.o
-endif
 
 ifeq ($(CONFIG_RIO),y)
-  L_OBJS += rio/rio.o  generic_serial.o
   SUB_DIRS += rio
-  MOD_SUB_DIRS += rio
-  GS = y
+else
+  ifeq ($(CONFIG_RIO),m)
+    MOD_SUB_DIRS += rio
+  endif
 endif
-
-ifeq ($(CONFIG_SX),y)
-  L_OBJS += sx.o
-  GS = y
-endif
-
-obj-$(GS) += generic_serial.o
 
 obj-$(CONFIG_ATIXL_BUSMOUSE) += atixlmouse.o
 obj-$(CONFIG_LOGIBUSMOUSE) += logibusmouse.o
@@ -200,6 +186,7 @@ obj-$(CONFIG_SOFT_WATCHDOG) += softdog.o
 obj-$(CONFIG_PCWATCHDOG) += pcwd.o
 obj-$(CONFIG_ACQUIRE_WDT) += acquirewdt.o
 obj-$(CONFIG_MIXCOMWD) += mixcomwd.o
+obj-$(CONFIG_60XX_WDT) += sbc60xxwdt.o
 obj-$(CONFIG_AMIGAMOUSE) += amigamouse.o
 obj-$(CONFIG_ATARIMOUSE) += atarimouse.o
 obj-$(CONFIG_ADBMOUSE) += adbmouse.o
@@ -217,6 +204,7 @@ obj-$(CONFIG_VIDEO_DEV) += videodev.o
 obj-$(CONFIG_21285_WATCHDOG) += wdt285.o
 obj-$(CONFIG_977_WATCHDOG) += wdt977.o
 obj-$(CONFIG_DS1620) += ds1620.o
+obj-$(CONFIG_INTEL_RNG) += i810_rng.o
 
 #
 # for external dependencies in arm/config.in and video/config.in
@@ -238,6 +226,7 @@ else
     L_TUNERS=m
   endif
 endif
+obj-$(CONFIG_SOUND_TVMIXER) += tvmixer.o
 
 obj-$(CONFIG_VIDEO_ZR36120) += zoran.o
 ifeq ($(CONFIG_VIDEO_ZR36120),y)

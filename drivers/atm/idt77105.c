@@ -334,9 +334,7 @@ static const struct atmphy_ops idt77105_ops = {
 
 int __init idt77105_init(struct atm_dev *dev)
 {
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif /* MODULE */
 
 	dev->phy = &idt77105_ops;
 	return 0;

@@ -124,10 +124,6 @@ static int help(const struct iphdr *iph, size_t len,
 	struct ip_conntrack_tuple t;
 	struct ip_ct_ftp *info = &ct->help.ct_ftp_info;
 
-	/* Can't track connections formed before we registered */
-	if (!info)
-		return NF_ACCEPT;
-
 	/* Until there's been traffic both ways, don't look in packets. */
 	if (ctinfo != IP_CT_ESTABLISHED
 	    && ctinfo != IP_CT_ESTABLISHED+IP_CT_IS_REPLY) {
@@ -200,15 +196,26 @@ static int help(const struct iphdr *iph, size_t len,
 
 	/* Update the ftp info */
 	LOCK_BH(&ip_ftp_lock);
-	info->is_ftp = 1;
-	info->seq = ntohl(tcph->seq) + matchoff;
-	info->len = matchlen;
-	info->ftptype = dir;
-	info->port = array[4] << 8 | array[5];
+	if (htonl((array[0] << 24) | (array[1] << 16) | (array[2] << 8) | array[3])
+	    == ct->tuplehash[dir].tuple.src.ip) {
+		info->is_ftp = 1;
+		info->seq = ntohl(tcph->seq) + matchoff;
+		info->len = matchlen;
+		info->ftptype = dir;
+		info->port = array[4] << 8 | array[5];
+	} else {
+		/* Enrico Scholz's passive FTP to partially RNAT'd ftp
+		   server: it really wants us to connect to a
+		   different IP address.  Simply don't record it for
+		   NAT. */
+		DEBUGP("conntrack_ftp: NOT RECORDING: %u,%u,%u,%u != %u.%u.%u.%u\n",
+		       array[0], array[1], array[2], array[3],
+		       NIPQUAD(ct->tuplehash[dir].tuple.src.ip));
+	}
 
 	t = ((struct ip_conntrack_tuple)
 		{ { ct->tuplehash[!dir].tuple.src.ip,
-		    { 0 }, 0 },
+		    { 0 } },
 		  { htonl((array[0] << 24) | (array[1] << 16)
 			  | (array[2] << 8) | array[3]),
 		    { htons(array[4] << 8 | array[5]) },

@@ -127,6 +127,8 @@ static inline void cyber2000_seqw(int reg, int val)
 #define CAP_DDA_Y_INIT		0x6c
 #define CAP_DDA_Y_INC		0x6e
 
+#define MEM_CTL1		0x71
+
 #define MEM_CTL2		0x72
 #define MEM_CTL2_SIZE_2MB		0x01
 #define MEM_CTL2_SIZE_4MB		0x02
@@ -155,6 +157,11 @@ static inline void cyber2000_seqw(int reg, int val)
 #define CAP_MODE1_SWAPUV		0x20	/* swap UV bytes			*/
 #define CAP_MODE1_MIRRORY		0x40	/* mirror vertically			*/
 #define CAP_MODE1_MIRRORX		0x80	/* mirror horizontally			*/
+
+#define DCLK_MULT		0xb0
+#define DCLK_DIV		0xb1
+#define MCLK_MULT		0xb2
+#define MCLK_DIV		0xb3
 
 #define CAP_MODE2		0xa5
 
@@ -281,6 +288,11 @@ static inline void cyber2000_seqw(int reg, int val)
 #define CO_REG_DEST_PTR		0xbf178
 #define CO_REG_DEST_WIDTH	0xbf218
 
+/*
+ * Private structure
+ */
+struct cfb_info;
+
 struct cyberpro_info {
 	struct pci_dev	*dev;
 	unsigned char	*regs;
@@ -289,16 +301,27 @@ struct cyberpro_info {
 	unsigned int	fb_size;
 
 	/*
-	 * Use these to enable the BM or TV registers.
+	 * The following is a pointer to be passed into the
+	 * functions below.  The modules outside the main
+	 * cyber2000fb.c driver have no knowledge as to what
+	 * is within this structure.
 	 */
-	void (*enable_extregs)(void);
-	void (*disable_extregs)(void);
+	struct cfb_info *info;
+
+	/*
+	 * Use these to enable the BM or TV registers.  In an SMP
+	 * environment, these two function pointers should only be
+	 * called from the module_init() or module_exit()
+	 * functions.
+	 */
+	void (*enable_extregs)(struct cfb_info *);
+	void (*disable_extregs)(struct cfb_info *);
 };
 
 /*
  * Note! Writing to the Cyber20x0 registers from an interrupt
  * routine is definitely a bad idea atm.
  */
-int cyber2000fb_attach(struct cyberpro_info *info);
-void cyber2000fb_detach(void);
+int cyber2000fb_attach(struct cyberpro_info *info, int idx);
+void cyber2000fb_detach(int idx);
 

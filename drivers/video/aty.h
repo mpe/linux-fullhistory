@@ -67,6 +67,8 @@
 #define CUR_HORZ_VERT_POSN	0x006C	/* Dword offset 0_1B */
 #define CUR_HORZ_VERT_OFF	0x0070	/* Dword offset 0_1C */
 
+#define CONFIG_PANEL_LG		0x0074	/* Dword offset 0_1D */
+
 #define GP_IO			0x0078	/* Dword offset 0_1E */
 
 #define HW_DEBUG		0x007C	/* Dword offset 0_1F */
@@ -81,6 +83,9 @@
 #define CONFIG_STAT2		0x0098	/* Dword offset 0_26 */
 
 #define BUS_CNTL		0x00A0	/* Dword offset 0_28 */
+
+#define LCD_INDEX		0x00A4	/* Dword offset 0_29 */
+#define LCD_DATA		0x00A8	/* Dword offset 0_2A */
 
 #define EXT_MEM_CNTL		0x00AC	/* Dword offset 0_2B */
 #define MEM_CNTL		0x00B0	/* Dword offset 0_2C */
@@ -102,8 +107,9 @@
 #define GEN_TEST_CNTL		0x00D0	/* Dword offset 0_34 */
 
 #define CUSTOM_MACRO_CNTL	0x00D4	/* Dword offset 0_35 */
+#define LCD_GEN_CNTL_LG		0x00D4	/* Dword offset 0_35 */
 
-#define POWER_MANAGEMENT	0x00D8	/* Dword offset 0_36 (LG) */
+#define POWER_MANAGEMENT_LG	0x00D8	/* Dword offset 0_36 (LG) */
 
 #define CONFIG_CNTL		0x00DC	/* Dword offset 0_37 (CT, ET, VT) */
 #define CONFIG_CHIP_ID		0x00E0	/* Dword offset 0_38 */
@@ -727,7 +733,7 @@
 /* mach64CT family / mach64GT (3D RAGE) class */
 #define LB_CHIP_ID	0x4c42	/* RAGE LT PRO, AGP */
 #define LD_CHIP_ID	0x4c44	/* RAGE LT PRO */
-#define LG_CHIP_ID	0x4c47	/* RAGE LT PRO */
+#define LG_CHIP_ID	0x4c47	/* RAGE LT */
 #define LI_CHIP_ID	0x4c49	/* RAGE LT PRO */
 #define LP_CHIP_ID	0x4c50	/* RAGE LT PRO */
 #define LT_CHIP_ID	0x4c54	/* RAGE LT */
@@ -741,6 +747,7 @@
 #define GI_CHIP_ID	0x4749	/* RAGE PRO, BGA, PCI33 only */
 #define GP_CHIP_ID	0x4750	/* RAGE PRO, PQFP, PCI33, full 3D */
 #define GQ_CHIP_ID	0x4751	/* RAGE PRO, PQFP, PCI33, limited 3D */
+#define LN_CHIP_ID	0x4c4d	/* RAGE Mobility AGP */
 
 
 /* Mach64 major ASIC revisions */
@@ -953,15 +960,43 @@
 #define MACH64_NUM_CLOCKS	16
 #define MACH64_NUM_FREQS	50
 
-/* Power Management register constants (LTG and LT Pro) */
+/* Power Management register constants (LT & LT Pro) */
 #define PWR_MGT_ON		0x00000001
 #define PWR_MGT_MODE_MASK	0x00000006
 #define AUTO_PWR_UP		0x00000008
+#define USE_F32KHZ		0x00000400
+#define TRISTATE_MEM_EN		0x00000800
 #define SELF_REFRESH		0x00000080
 #define PWR_BLON		0x02000000
 #define STANDBY_NOW		0x10000000
 #define SUSPEND_NOW		0x20000000
 #define PWR_MGT_STATUS_MASK	0xC0000000
 #define PWR_MGT_STATUS_SUSPEND	0x80000000
+
+/* PM Mode constants  */
+#define PWR_MGT_MODE_PIN	0x00000000
+#define PWR_MGT_MODE_REG	0x00000002
+#define PWR_MGT_MODE_TIMER	0x00000004
+#define PWR_MGT_MODE_PCI	0x00000006
+
+/* LCD registers (LT Pro) */
+
+/* LCD Index register */
+#define LCD_INDEX_MASK		0x0000003F
+#define LCD_DISPLAY_DIS		0x00000100
+#define LCD_SRC_SEL		0x00000200
+#define CRTC2_DISPLAY_DIS	0x00000400
+
+/* LCD register indices */
+#define LCD_CONFIG_PANEL	0x00
+#define LCD_GEN_CTRL		0x01
+#define LCD_DSTN_CONTROL	0x02
+#define LCD_HFB_PITCH_ADDR	0x03
+#define LCD_HORZ_STRETCHING	0x04
+#define LCD_VERT_STRETCHING	0x05
+#define LCD_EXT_VERT_STRETCH	0x06
+#define LCD_LT_GIO		0x07
+#define LCD_POWER_MANAGEMENT	0x08
+#define LCD_ZVGPIO		0x09
 
 #endif /* REGMACH64_H */

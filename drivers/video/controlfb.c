@@ -110,8 +110,6 @@ struct fb_info_control {
 };
 
 /******************** Prototypes for exported functions ********************/
-static int control_open(struct fb_info *info, int user);
-static int control_release(struct fb_info *info, int user);
 static int control_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info);
 static int control_get_var(struct fb_var_screeninfo *var, int con,
@@ -170,34 +168,19 @@ static void control_par_to_display(struct fb_par_control *par,
 static int controlfb_updatevar(int con, struct fb_info *info);
 
 static struct fb_ops controlfb_ops = {
-	control_open,
-	control_release,
-	control_get_fix,
-	control_get_var,
-	control_set_var,
-	control_get_cmap,
-	control_set_cmap,
-	control_pan_display,
-	control_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	control_get_fix,
+	fb_get_var:	control_get_var,
+	fb_set_var:	control_set_var,
+	fb_get_cmap:	control_get_cmap,
+	fb_set_cmap:	control_set_cmap,
+	fb_pan_display:	control_pan_display,
+	fb_ioctl:	control_ioctl,
 };
 
 
 
 /********************  The functions for controlfb_ops ********************/
-
-/**********  Dummies for loading control as a module  **********/
-
-int control_open(struct fb_info *info, int user)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int control_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
 
 #ifdef MODULE
 int init_module(void)
@@ -805,14 +788,10 @@ static int control_var_to_par(struct fb_var_screeninfo *var,
      *  bitfields, horizontal timing, vertical timing.
      */
 	/* swiped by jonh from atyfb.c */
-	if (xres <= 512 && yres <= 384)
-		par->vmode = VMODE_512_384_60;		/* 512x384, 60Hz */
-	else if (xres <= 640 && yres <= 480)
+	if (xres <= 640 && yres <= 480)
 		par->vmode = VMODE_640_480_67;		/* 640x480, 67Hz */
 	else if (xres <= 640 && yres <= 870)
 		par->vmode = VMODE_640_870_75P;		/* 640x870, 75Hz (portrait) */
-	else if (xres <= 768 && yres <= 576)
-		par->vmode = VMODE_768_576_50I;		/* 768x576, 50Hz (PAL full frame) */
 	else if (xres <= 800 && yres <= 600)
 		par->vmode = VMODE_800_600_75;		/* 800x600, 75Hz */
 	else if (xres <= 832 && yres <= 624)

@@ -265,7 +265,7 @@ int console_setcmap(int n_entries, unsigned char *red, unsigned char *green,
         n = n_entries - i;
         if (n > 16)
             n = 16;
-        palette_cmap.start = 1;
+        palette_cmap.start = i;
         palette_cmap.len = n;
 
         for (j = 0; j < n; j++) {

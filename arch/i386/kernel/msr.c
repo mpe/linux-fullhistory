@@ -40,44 +40,47 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
+/* Note: "err" is handled in a funny way below.  Otherwise one version
+   of gcc or another breaks. */
+
 extern inline int wrmsr_eio(u32 reg, u32 eax, u32 edx)
 {
-  int err = 0;
+  int err;
 
   asm volatile(
 	       "1:	wrmsr\n"
 	       "2:\n"
 	       ".section .fixup,\"ax\"\n"
 	       "3:	movl %4,%0\n"
-	       "	jmp 1b\n"
+	       "	jmp 2b\n"
 	       ".previous\n"
 	       ".section __ex_table,\"a\"\n"
 	       "	.align 4\n"
 	       "	.long 1b,3b\n"
 	       ".previous"
-	       : "+r" (err)
-	       : "a" (eax), "d" (edx), "c" (reg), "i" (-EIO));
+	       : "=&bDS" (err)
+	       : "a" (eax), "d" (edx), "c" (reg), "i" (-EIO), "0" (0));
 
   return err;
 }
 
 extern inline int rdmsr_eio(u32 reg, u32 *eax, u32 *edx)
 {
-  int err = 0;
+  int err;
 
   asm volatile(
 	       "1:	rdmsr\n"
 	       "2:\n"
 	       ".section .fixup,\"ax\"\n"
 	       "3:	movl %4,%0\n"
-	       "	jmp 1b\n"
+	       "	jmp 2b\n"
 	       ".previous\n"
 	       ".section __ex_table,\"a\"\n"
 	       "	.align 4\n"
 	       "	.long 1b,3b\n"
 	       ".previous"
-	       : "+r" (err), "=a" (*eax), "=d" (*eax)
-	       : "c" (reg),  "i" (-EIO));
+	       : "=&bDS" (err), "=a" (*eax), "=d" (*edx)
+	       : "c" (reg), "i" (-EIO), "0" (0));
 
   return err;
 }
@@ -96,7 +99,7 @@ static void msr_smp_wrmsr(void *cmd_block)
   struct msr_command *cmd = (struct msr_command *) cmd_block;
   
   if ( cmd->cpu == smp_processor_id() )
-    cmd->err = wrmsr_eio(cmd->reg, &cmd->data[0], &cmd->data[1]);
+    cmd->err = wrmsr_eio(cmd->reg, cmd->data[0], cmd->data[1]);
 }
 
 static void msr_smp_rdmsr(void *cmd_block)
@@ -119,7 +122,7 @@ extern inline int do_wrmsr(int cpu, u32 reg, u32 eax, u32 edx)
     cmd.data[0] = eax;
     cmd.data[1] = edx;
     
-    smp_call_function(msr_smp_wrmsr, (void *)cmd, 1, 1);
+    smp_call_function(msr_smp_wrmsr, &cmd, 1, 1);
     return cmd.err;
   }
 }
@@ -134,7 +137,7 @@ extern inline int do_rdmsr(int cpu, u32 reg, u32 *eax, u32 *edx)
     cmd.cpu = cpu;
     cmd.reg = reg;
 
-    smp_call_function(msr_smp_rdmsr, (void *)cmd, 1, 1);
+    smp_call_function(msr_smp_rdmsr, &cmd, 1, 1);
     
     *eax = cmd.data[0];
     *edx = cmd.data[1];
@@ -224,18 +227,13 @@ static ssize_t msr_write(struct file * file, const char * buf,
 static int msr_open(struct inode *inode, struct file *file)
 {
   int cpu = MINOR(file->f_dentry->d_inode->i_rdev);
+  struct cpuinfo_x86 *c = &(cpu_data)[cpu];
   
-  if ( !(cpu_online_map & (1UL << cpu)) ||
-       !((cpu_data)[cpu].x86_capability & X86_FEATURE_MSR) )
-    return -ENXIO;	/* No such CPU */
+  if ( !(cpu_online_map & (1UL << cpu)) )
+    return -ENXIO;		/* No such CPU */
+  if ( !(c->x86_capability & X86_FEATURE_MSR) )
+    return -EIO;		/* MSR not supported */
   
-  MOD_INC_USE_COUNT;
-  return 0;
-}
-
-static int msr_release(struct inode *inode, struct file *file)
-{
-  MOD_DEC_USE_COUNT;
   return 0;
 }
 
@@ -243,11 +241,11 @@ static int msr_release(struct inode *inode, struct file *file)
  * File operations we support
  */
 static struct file_operations msr_fops = {
+  owner:	THIS_MODULE,
   llseek:	msr_seek,
   read:		msr_read,
   write:	msr_write,
   open:		msr_open,
-  release:	msr_release,
 };
 
 int __init msr_init(void)

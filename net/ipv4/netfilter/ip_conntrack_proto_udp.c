@@ -6,7 +6,8 @@
 #include <linux/udp.h>
 #include <linux/netfilter_ipv4/ip_conntrack_protocol.h>
 
-#define UDP_TIMEOUT (60*HZ)
+#define UDP_TIMEOUT (30*HZ)
+#define UDP_STREAM_TIMEOUT (180*HZ)
 
 static int udp_pkt_to_tuple(const void *datah, size_t datalen,
 			    struct ip_conntrack_tuple *tuple)
@@ -48,8 +49,13 @@ static int udp_packet(struct ip_conntrack *conntrack,
 		      struct iphdr *iph, size_t len,
 		      enum ip_conntrack_info conntrackinfo)
 {
-	/* Refresh. */
-	ip_ct_refresh(conntrack, UDP_TIMEOUT);
+	/* If we've seen traffic both ways, this is some kind of UDP
+	   stream.  Extend timeout. */
+	if (conntrack->status & IPS_SEEN_REPLY)
+		ip_ct_refresh(conntrack, UDP_STREAM_TIMEOUT);
+	else
+		ip_ct_refresh(conntrack, UDP_TIMEOUT);
+
 	return NF_ACCEPT;
 }
 

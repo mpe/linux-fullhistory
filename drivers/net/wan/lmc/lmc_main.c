@@ -1042,14 +1042,9 @@ int lmc_probe_fake(struct net_device *dev) /*fold00*/
 int lmc_probe (struct net_device *dev) /*fold00*/
 {
     int pci_index = 0;
-#if LINUX_VERSION_CODE >= 0x20155
     unsigned long pci_ioaddr;
     unsigned short pci_command;
     unsigned int pci_irq_line;
-#else
-    unsigned char pci_irq_line;
-    u32 pci_ioaddr;
-#endif
     u16 vendor, subvendor, device, subdevice;
     u32 foundaddr = 0;
     unsigned char pci_bus, pci_device_fn;
@@ -1065,6 +1060,7 @@ int lmc_probe (struct net_device *dev) /*fold00*/
     }
     /* Loop basically until we don't find anymore. */
     while (pci_index < 0xff){
+    	struct pci_dev *pdev;
         /* The tulip is considered an ethernet class of card... */
         if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8,
                                 pci_index, &pci_bus,
@@ -1075,46 +1071,20 @@ int lmc_probe (struct net_device *dev) /*fold00*/
         /* Read the info we need to determine if this is
          * our card or not
          */
-#if LINUX_VERSION_CODE >= 0x20155
-        vendor = pci_find_slot (pci_bus, pci_device_fn)->vendor;
-        device = pci_find_slot (pci_bus, pci_device_fn)->device;
-        pci_irq_line = pci_find_slot (pci_bus, pci_device_fn)->irq;
-#if LINUX_VERSION_CODE < 0x20363
-        pci_ioaddr = pci_find_slot (pci_bus, pci_device_fn)->base_address[0];
-#else
-        pci_ioaddr = pci_resource_start (pci_find_slot (pci_bus, pci_device_fn), 0);
-#endif
-        pci_read_config_word (pci_find_slot (pci_bus, pci_device_fn),
-                              PCI_SUBSYSTEM_VENDOR_ID, &subvendor);
-        pci_read_config_word (pci_find_slot (pci_bus, pci_device_fn),
-                              PCI_SUBSYSTEM_ID, &subdevice);
-        /*
-         * SPARC PCI Bios doesn't set the BUS Master bit, unlike intel
-         * Without it we won't do much packet work
-         * Do this to everyone
-         */
-        pci_read_config_word(pci_find_slot (pci_bus, pci_device_fn), PCI_COMMAND,
-                             &pci_command);
-        pci_command |= PCI_COMMAND_MASTER;
-        pci_write_config_word(pci_find_slot (pci_bus, pci_device_fn), PCI_COMMAND,
-                              pci_command);
-#else
-        pcibios_read_config_word (pci_bus, pci_device_fn,
-                                  PCI_VENDOR_ID, &vendor);
-        pcibios_read_config_word (pci_bus, pci_device_fn,
-                                  PCI_DEVICE_ID, &device);
-        pcibios_read_config_byte (pci_bus, pci_device_fn,
-                                  PCI_INTERRUPT_LINE, &pci_irq_line);
-        pcibios_read_config_dword(pci_bus, pci_device_fn,
-                                  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-        pcibios_read_config_word (pci_bus, pci_device_fn,
-                                  PCI_SUBSYSTEM_VENDOR_ID, &subvendor);
-        pcibios_read_config_word (pci_bus, pci_device_fn,
-                                  PCI_SUBSYSTEM_ID, &subdevice);
-#endif
+	pdev = pci_find_slot (pci_bus, pci_device_fn);
+	if (!pdev) break;
 
-        /* Align the io address on the 32 bit boundry just in case */
-        pci_ioaddr &= ~3;
+	if (pci_enable_device(pdev))
+		break;
+
+        vendor = pdev->vendor;
+        device = pdev->device;
+        pci_irq_line = pdev->irq;
+        pci_ioaddr = pci_resource_start (pdev, 0);
+	subvendor = pdev->subsystem_vendor;
+	subdevice = pdev->subsystem_device;
+
+	pci_set_master (pdev);
 
         /*
          * Make sure it's the correct card.  CHECK SUBVENDOR ID!

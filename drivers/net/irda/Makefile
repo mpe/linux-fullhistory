@@ -52,22 +52,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_TOSHIBA_FIR),y)
-L_OBJS += toshoboe.o
-else
-  ifeq ($(CONFIG_TOSHIBA_FIR),m)
-  M_OBJS += toshoboe.o
-  endif
-endif
-
-ifeq ($(CONFIG_TOSHIBA_FIR),y)
-L_OBJS += toshoboe.o
-else
-  ifeq ($(CONFIG_TOSHIBA_FIR),m)
-  M_OBJS += toshoboe.o
-  endif
-endif
-
 ifeq ($(CONFIG_SMC_IRCC_FIR),y)
 L_OBJS += smc-ircc.o
 LX_OBJS += irport.o

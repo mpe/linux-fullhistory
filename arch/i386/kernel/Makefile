@@ -13,87 +13,38 @@
 all: kernel.o head.o init_task.o
 
 O_TARGET := kernel.o
-O_OBJS   := process.o semaphore.o signal.o entry.o traps.o irq.o vm86.o \
-	    ptrace.o i8259.o ioport.o ldt.o setup.o time.o sys_i386.o \
-	    pci-dma.o
-OX_OBJS  := i386_ksyms.o
-MX_OBJS  :=
+
+export-objs     := mca.o mtrr.o msr.o cpuid.o microcode.o i386_ksyms.o
+
+obj-y	:= process.o semaphore.o signal.o entry.o traps.o irq.o vm86.o \
+		ptrace.o i8259.o ioport.o ldt.o setup.o time.o sys_i386.o \
+		pci-dma.o i386_ksyms.o
+
 
 ifdef CONFIG_PCI
-O_OBJS += pci-i386.o
+obj-y			+= pci-i386.o
 ifdef CONFIG_VISWS
-O_OBJS += pci-visws.o
+obj-y			+= pci-visws.o
 else
-O_OBJS += pci-pc.o pci-irq.o
+obj-y			+= pci-pc.o pci-irq.o
 endif
 endif
 
-ifdef CONFIG_MCA
-OX_OBJS += mca.o
-endif
+obj-$(CONFIG_MCA)	+= mca.o
+obj-$(CONFIG_MTRR)	+= mtrr.o
+obj-$(CONFIG_X86_MSR)	+= msr.o
+obj-$(CONFIG_X86_CPUID)	+= cpuid.o
+obj-$(CONFIG_MICROCODE)	+= microcode.o
+obj-$(CONFIG_ACPI)	+= acpi.o
+obj-$(CONFIG_APM)	+= apm.o
+obj-$(CONFIG_SMP)	+= smp.o smpboot.o trampoline.o
+obj-$(CONFIG_X86_LOCAL_APIC)	+= apic.o
+obj-$(CONFIG_X86_IO_APIC)	+= io_apic.o mpparse.o
+obj-$(CONFIG_X86_VISWS_APIC)	+= visws_apic.o
 
-ifeq ($(CONFIG_MTRR),y)
-OX_OBJS += mtrr.o
-else
-  ifeq ($(CONFIG_MTRR),m)
-  MX_OBJS += mtrr.o
-  endif
-endif
-
-ifeq ($(CONFIG_X86_MSR),y)
-OX_OBJS += msr.o
-else
-  ifeq ($(CONFIG_X86_MSR),m)
-  MX_OBJS += msr.o
-  endif
-endif
-
-ifeq ($(CONFIG_X86_CPUID),y)
-OX_OBJS += cpuid.o
-else
-  ifeq ($(CONFIG_X86_CPUID),m)
-  MX_OBJS += cpuid.o
-  endif
-endif
-
-ifeq ($(CONFIG_MICROCODE),y)
-OX_OBJS += microcode.o
-else
-  ifeq ($(CONFIG_MICROCODE),m)
-  MX_OBJS += microcode.o
-  endif
-endif
-
-ifeq ($(CONFIG_ACPI),y)
-O_OBJS += acpi.o
-else
-  ifeq ($(CONFIG_ACPI),m)
-  M_OBJS += acpi.o
-  endif
-endif
-
-ifeq ($(CONFIG_APM),y)
-O_OBJS += apm.o
-else
-  ifeq ($(CONFIG_APM),m)
-  M_OBJS += apm.o
-  endif
-endif
-
-ifdef CONFIG_SMP
-O_OBJS += smp.o smpboot.o trampoline.o
-endif
-
-ifdef CONFIG_X86_LOCAL_APIC
-O_OBJS += apic.o
-endif
-
-ifdef CONFIG_X86_IO_APIC
-O_OBJS += io_apic.o mpparse.o
-endif
-
-ifdef CONFIG_X86_VISWS_APIC
-O_OBJS += visws_apic.o
-endif
+O_OBJS		:= $(filter-out	$(export-objs), $(obj-y))
+OX_OBJS		:= $(filter	$(export-objs), $(obj-y))
+M_OBJS		:= $(sort $(filter-out	$(export-objs), $(obj-m)))
+MX_OBJS		:= $(sort $(filter	$(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make

@@ -118,8 +118,8 @@ export SVGA_MODE = -DSVGA_MODE=NORMAL_VGA
 #export RAMDISK = -DRAMDISK=512
 
 CORE_FILES	=kernel/kernel.o mm/mm.o fs/fs.o ipc/ipc.o
-NETWORKS	=net/network.a
-DRIVERS		=drivers/block/block.a \
+NETWORKS	=net/network.o
+DRIVERS		=drivers/block/block.o \
 		 drivers/char/char.o \
 		 drivers/misc/misc.o \
 		 drivers/net/net.o \
@@ -142,8 +142,8 @@ DRIVERS-$(CONFIG_TR) += drivers/net/tokenring/tr.a
 DRIVERS-$(CONFIG_WAN) += drivers/net/wan/wan.a
 DRIVERS-$(CONFIG_ARCNET) += drivers/net/arcnet/arcnet.a
 DRIVERS-$(CONFIG_ATM) += drivers/atm/atm.o
-DRIVERS-$(CONFIG_IDE) += drivers/ide/ide.a
-DRIVERS-$(CONFIG_SCSI) += drivers/scsi/scsi.a
+DRIVERS-$(CONFIG_IDE) += drivers/ide/idedriver.o
+DRIVERS-$(CONFIG_SCSI) += drivers/scsi/scsidrv.o
 DRIVERS-$(CONFIG_IEEE1394) += drivers/ieee1394/ieee1394.a
 
 ifneq ($(CONFIG_CD_NO_IDESCSI)$(CONFIG_BLK_DEV_IDECD)$(CONFIG_BLK_DEV_SR)$(CONFIG_PARIDE_PCD),)
@@ -168,9 +168,9 @@ DRIVERS-$(CONFIG_PARIDE) += drivers/block/paride/paride.a
 DRIVERS-$(CONFIG_HAMRADIO) += drivers/net/hamradio/hamradio.o
 DRIVERS-$(CONFIG_TC) += drivers/tc/tc.a
 DRIVERS-$(CONFIG_USB) += drivers/usb/usbdrv.o
-DRIVERS-$(CONFIG_I2O) += drivers/i2o/i2o.a
+DRIVERS-$(CONFIG_I2O) += drivers/i2o/i2o.o
 DRIVERS-$(CONFIG_IRDA) += drivers/net/irda/irda_drivers.a
-DRIVERS-$(CONFIG_I2C) += drivers/i2c/i2c.a
+DRIVERS-$(CONFIG_I2C) += drivers/i2c/i2c.o
 DRIVERS-$(CONFIG_PHONE) += drivers/telephony/telephony.a
 
 DRIVERS += $(DRIVERS-y)
@@ -421,7 +421,10 @@ psdocs: sgmldocs
 
 pdfdocs: sgmldocs
 	$(MAKE) -C Documentation/DocBook pdf
- 
+
+htmldocs: sgmldocs
+	$(MAKE) -C Documentation/DocBook html
+
 sums:
 	find . -type f -print | sort | xargs sum > .SUMS
 

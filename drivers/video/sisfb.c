@@ -422,8 +422,6 @@ u32 command_reg;
 
 /* Interface used by the world */
 int sisfb_setup(char *options);
-static int sisfb_open(struct fb_info *info, int user);
-static int sisfb_release(struct fb_info *info, int user);
 static int sisfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info);
 static int sisfb_get_var(struct fb_var_screeninfo *var, int con,
@@ -2457,22 +2455,6 @@ static u8 search_refresh_rate(unsigned int rate)
 /* ------------------ Public Routines ------------------------------- */
 
 /*
- * Open/Release the frame buffer device
- */
-
-static int sisfb_open(struct fb_info *info, int user)
-{
-	MOD_INC_USE_COUNT;
-	return (0);
-}
-
-static int sisfb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return (0);
-}
-
-/*
  *    Get the Fixed Part of the Display
  */
 
@@ -2694,16 +2676,15 @@ static int sisfb_mmap(struct fb_info *info, struct file *file,
 }
 
 static struct fb_ops sisfb_ops = {
-	sisfb_open,
-	sisfb_release,
-	sisfb_get_fix,
-	sisfb_get_var,
-	sisfb_set_var,
-	sisfb_get_cmap,
-	sisfb_set_cmap,
-	sisfb_pan_display,
-	sisfb_ioctl,
-	sisfb_mmap
+	owner:		THIS_MODULE,
+	fb_get_fix:	sisfb_get_fix,
+	fb_get_var:	sisfb_get_var,
+	fb_set_var:	sisfb_set_var,
+	fb_get_cmap:	sisfb_get_cmap,
+	fb_set_cmap:	sisfb_set_cmap,
+	fb_pan_display:	sisfb_pan_display,
+	fb_ioctl:	sisfb_ioctl,
+	fb_mmap:	sisfb_mmap,
 };
 
 int sisfb_setup(char *options)

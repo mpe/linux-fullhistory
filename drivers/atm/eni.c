@@ -1711,7 +1711,7 @@ static int __devinit eni_do_init(struct atm_dev *dev)
 	dev->link_rate = ATM_OC3_PCR;
 	eni_dev = ENI_DEV(dev);
 	pci_dev = eni_dev->pci_dev;
-	real_base = pci_dev->resource[0].start;
+	real_base = pci_resource_start(pci_dev, 0);
 	eni_dev->irq = pci_dev->irq;
 	error = pci_read_config_byte(pci_dev,PCI_REVISION_ID,&revision);
 	if (error) {
@@ -2246,8 +2246,16 @@ static int __devinit eni_init_one(struct pci_dev *pci_dev,
 	int error = -ENOMEM;
 
 	DPRINTK("eni_init_one\n");
+
+	MOD_INC_USE_COUNT; /* @@@ we don't support unloading yet */
+
+	if (pci_enable_device(pci_dev)) {
+		error = -EIO;
+		goto out0;
+	}
+
 	eni_dev = (struct eni_dev *) kmalloc(sizeof(struct eni_dev),GFP_KERNEL);
-	if (!eni_dev) return -ENOMEM;
+	if (!eni_dev) goto out0;
 	if (!cpu_zeroes) {
 		cpu_zeroes = pci_alloc_consistent(pci_dev,ENI_ZEROES_SIZE,
 		    &zeroes);
@@ -2265,7 +2273,6 @@ static int __devinit eni_init_one(struct pci_dev *pci_dev,
 	if (error) goto out3;
 	eni_dev->more = eni_boards;
 	eni_boards = dev;
-	MOD_INC_USE_COUNT; /* @@@ we don't support unloading yet */
 	return 0;
 out3:
 	atm_dev_deregister(dev);
@@ -2274,6 +2281,8 @@ out2:
 	cpu_zeroes = NULL;
 out1:
 	kfree(eni_dev);
+out0:
+	MOD_DEC_USE_COUNT; /* @@@ we don't support unloading yet */
 	return error;
 }
 

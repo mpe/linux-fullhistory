@@ -394,7 +394,11 @@ static void math_error_irq(int cpl, void *dev_id, struct pt_regs *regs)
 	math_error((void *)regs->eip);
 }
 
-static struct irqaction irq13 = { math_error_irq, 0, 0, "fpu", NULL, NULL };
+/*
+ * New motherboards sometimes make IRQ 13 be a PCI interrupt,
+ * so allow interrupt sharing.
+ */
+static struct irqaction irq13 = { math_error_irq, SA_SHIRQ, 0, "fpu", NULL, NULL };
 
 /*
  * IRQ2 is cascade interrupt to second interrupt controller

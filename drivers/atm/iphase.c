@@ -2278,7 +2278,7 @@ __initfunc(static int ia_init(struct atm_dev *dev))
 #endif  
 {  
 	IADEV *iadev;  
-	unsigned int real_base, base;  
+	unsigned long real_base, base;  
 	unsigned short command;  
 	unsigned char revision;  
 	int error, i; 
@@ -2292,12 +2292,10 @@ __initfunc(static int ia_init(struct atm_dev *dev))
 	dev->ci_range.vci_bits = NR_VCI_LD;  
 
 	iadev = INPH_IA_DEV(dev);  
+	real_base = pci_resource_start (iadev->pci, 0);
+	iadev->irq = iadev->pci->irq;
 		  
 	if ((error = pci_read_config_word(iadev->pci, PCI_COMMAND,&command))   
-		    || (error = pci_read_config_dword(iadev->pci,   
-				PCI_BASE_ADDRESS_0,&real_base))   
-		    || (error = pci_read_config_byte(iadev->pci,   
-				PCI_INTERRUPT_LINE,&iadev->irq))   
 		    || (error = pci_read_config_byte(iadev->pci,   
 				PCI_REVISION_ID,&revision)))   
 	{  
@@ -2310,26 +2308,8 @@ __initfunc(static int ia_init(struct atm_dev *dev))
 	  
 	/* find mapping size of board */  
 	  
-	/* write all 1's into the base address register.  
-	   read the register whic returns us 0's in the don't care bits.  
-	   size is calculated as ~(don't cre bits) + 1 */  
-	  
-	if (pci_write_config_dword(iadev->pci,   
-			PCI_BASE_ADDRESS_0, 0xffffffff)!=PCIBIOS_SUCCESSFUL)  
-	{  
-		printk(DEV_LABEL "(itf %d): init error 0x%x\n",dev->number,  
-			    error);  
-		return -EINVAL;  
-	}  
-	if(pci_read_config_dword(iadev->pci, PCI_BASE_ADDRESS_0,   
-				&(iadev->pci_map_size)) !=PCIBIOS_SUCCESSFUL)   
-	{  
-		printk(DEV_LABEL "(itf %d): init error 0x%x\n",dev->number,  
-			    error);  
-		return -EINVAL;  
-	}  
-	iadev->pci_map_size &= PCI_BASE_ADDRESS_MEM_MASK;  
-	iadev->pci_map_size = ~iadev->pci_map_size + 1;  
+	iadev->pci_map_size = pci_resource_len(iadev->pci, 0);
+
         if (iadev->pci_map_size == 0x100000){
           iadev->num_vc = 4096;
 	  dev->ci_range.vci_bits = NR_VCI_4K_LD;  
@@ -2344,25 +2324,10 @@ __initfunc(static int ia_init(struct atm_dev *dev))
            return -EINVAL;
         }
 	IF_INIT(printk (DEV_LABEL "map size: %i\n", iadev->pci_map_size);)  
-	if(pci_write_config_dword(iadev->pci, PCI_BASE_ADDRESS_0,  
-				real_base)!=PCIBIOS_SUCCESSFUL)  
-	{  
-		printk(DEV_LABEL "(itf %d): init error 0x%x\n",dev->number,  
-			    error);  
-		return -EINVAL;  
-	}  
 	  
-	/* strip flags (last 4 bits )  ---> mask with 0xfffffff0 */  
-	real_base &= MEM_VALID;   
-	/* enabling the responses in memory space */  
-	command |= (PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);  
-	if ((error = pci_write_config_word(iadev->pci,  
-				       PCI_COMMAND,  command)))  
-	{  
-		printk(DEV_LABEL "(itf %d): can't enable memory (0x%x)\n",  
-		    dev->number,error);  
-		return -EIO;  
-	}  
+	/* enable bus mastering */
+	pci_set_master(iadev->pci);
+
 	/*  
 	 * Delay at least 1us before doing any mem accesses (how 'bout 10?)  
 	 */  

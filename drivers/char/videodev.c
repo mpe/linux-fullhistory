@@ -51,7 +51,6 @@ struct videodev_proc_data {
 	char name[16];
 	struct video_device *vdev;
 	struct proc_dir_entry *proc_entry;
-	struct video_capability vcap;
 };
 
 static struct proc_dir_entry *video_dev_proc_entry = NULL;

@@ -28,6 +28,10 @@ redirect_check(const char *tablename,
 {
 	const struct ip_nat_multi_range *mr = targinfo;
 
+	if (strcmp(tablename, "nat") != 0) {
+		DEBUGP("redirect_check: bad table `%s'.\n", table);
+		return 0;
+	}
 	if (targinfosize != IPT_ALIGN(sizeof(*mr))) {
 		DEBUGP("redirect_check: size %u.\n", targinfosize);
 		return 0;

@@ -23,10 +23,6 @@ static DECLARE_RWLOCK(tcp_lock);
 /* FIXME: Examine ipfilter's timeouts and conntrack transitions more
    closely.  They're more complex. --RR */
 
-/* We steal a bit to indicate no reply yet (can't use status, because
-   it's set before we get into packet handling). */
-#define TCP_REPLY_BIT 0x1000
-
 /* Actually, I believe that neither ipmasq (where this code is stolen
    from) nor ipfilter do it exactly right.  A new conntrack machine taking
    into account packet loss (which creates uncertainty as to exactly
@@ -145,7 +141,7 @@ static unsigned int tcp_print_conntrack(char *buffer,
 	enum tcp_conntrack state;
 
 	READ_LOCK(&tcp_lock);
-	state = (conntrack->proto.tcp_state & ~TCP_REPLY_BIT);
+	state = conntrack->proto.tcp_state;
 	READ_UNLOCK(&tcp_lock);
 
 	return sprintf(buffer, "%s ", tcp_conntrack_names[state]);
@@ -180,7 +176,7 @@ static int tcp_packet(struct ip_conntrack *conntrack,
 	newconntrack
 		= tcp_conntracks
 		[CTINFO2DIR(ctinfo)]
-		[get_conntrack_index(tcph)][oldtcpstate & ~TCP_REPLY_BIT];
+		[get_conntrack_index(tcph)][oldtcpstate];
 
 	/* Invalid */
 	if (newconntrack == TCP_CONNTRACK_MAX) {
@@ -192,17 +188,13 @@ static int tcp_packet(struct ip_conntrack *conntrack,
 	}
 
 	conntrack->proto.tcp_state = newconntrack;
-	if ((oldtcpstate & TCP_REPLY_BIT)
-	    || ctinfo >= IP_CT_IS_REPLY)
-		conntrack->proto.tcp_state |= TCP_REPLY_BIT;
-
 	WRITE_UNLOCK(&tcp_lock);
 
 	/* If only reply is a RST, we can consider ourselves not to
 	   have an established connection: this is a fairly common
 	   problem case, so we can delete the conntrack
 	   immediately.  --RR */
-	if (!(oldtcpstate & TCP_REPLY_BIT) && tcph->rst) {
+	if (!(conntrack->status & IPS_SEEN_REPLY) && tcph->rst) {
 		if (del_timer(&conntrack->timeout))
 			conntrack->timeout.function((unsigned long)conntrack);
 	} else 

@@ -312,7 +312,6 @@ static int ppp_open(struct inode *inode, struct file *file)
 	 */
 	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -333,7 +332,6 @@ static int ppp_release(struct inode *inode, struct file *file)
 			}
 		}
 	}
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -697,6 +695,7 @@ static int ppp_unattached_ioctl(struct ppp_file *pf, struct file *file,
 }
 
 static struct file_operations ppp_device_fops = {
+	owner:		THIS_MODULE,
 	read:		ppp_read,
 	write:		ppp_write,
 	poll:		ppp_poll,

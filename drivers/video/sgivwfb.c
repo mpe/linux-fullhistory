@@ -91,8 +91,6 @@ static struct sgivwfb_par par_current = {
  */
 int sgivwfb_setup(char*);
 
-static int sgivwfb_open(struct fb_info *info, int user);
-static int sgivwfb_release(struct fb_info *info, int user);
 static int sgivwfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			   struct fb_info *info);
 static int sgivwfb_get_var(struct fb_var_screeninfo *var, int con,
@@ -111,16 +109,15 @@ static int sgivwfb_mmap(struct fb_info *info, struct file *file,
                         struct vm_area_struct *vma);
 
 static struct fb_ops sgivwfb_ops = {
-  sgivwfb_open,
-  sgivwfb_release,
-  sgivwfb_get_fix,
-  sgivwfb_get_var,
-  sgivwfb_set_var,
-  sgivwfb_get_cmap,
-  sgivwfb_set_cmap,
-  sgivwfb_pan_display,
-  sgivwfb_ioctl,
-  sgivwfb_mmap
+	owner:		THIS_MODULE,
+	fb_get_fix:	sgivwfb_get_fix,
+	fb_get_var:	sgivwfb_get_var,
+	fb_set_var:	sgivwfb_set_var,
+	fb_get_cmap:	sgivwfb_get_cmap,
+	fb_set_cmap:	sgivwfb_set_cmap,
+	fb_pan_display:	sgivwfb_pan_display,
+	fb_ioctl:	sgivwfb_ioctl,
+	fb_mmap:	sgivwfb_mmap,
 };
 
 /*
@@ -577,24 +574,6 @@ static void do_install_cmap(int con, struct fb_info *info)
 }
 
 /* ---------------------------------------------------- */
-
-/*
- *  Open/Release the frame buffer device
- */
-static int sgivwfb_open(struct fb_info *info, int user)
-{
-  /*
-   *  Nothing, only a usage count for the moment
-   */
-  MOD_INC_USE_COUNT;
-  return(0);
-}
-
-static int sgivwfb_release(struct fb_info *info, int user)
-{
-  MOD_DEC_USE_COUNT;
-  return(0);
-}
 
 /*
  *  Get the Fixed Part of the Display

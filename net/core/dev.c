@@ -17,6 +17,7 @@
  *		David Hinds <dhinds@allegro.stanford.edu>
  *		Alexey Kuznetsov <kuznet@ms2.inr.ac.ru>
  *		Adam Sulmicki <adam@cfar.umd.edu>
+ *              Pekka Riikonen <priikone@poesidon.pspt.fi>
  *
  *	Changes:
  *		Alan Cox	:	device private ioctl copies fields back.
@@ -56,6 +57,7 @@
  *					A network device unload needs to purge
  *					the backlog queue.
  *	Paul Rusty Russell	:	SIOCSIFNAME
+ *              Pekka Riikonen  :	Netdev boot-time settings code
  */
 
 #include <asm/uaccess.h>
@@ -248,6 +250,120 @@ void dev_remove_pack(struct packet_type *pt)
 	br_write_unlock_bh(BR_NETPROTO_LOCK);
 	printk(KERN_WARNING "dev_remove_pack: %p not found.\n", pt);
 }
+
+/******************************************************************************
+
+		      Device Boot-time Settings Routines
+
+*******************************************************************************/
+
+/* Boot time configuration table */
+struct netdev_boot_setup dev_boot_setup[NETDEV_BOOT_SETUP_MAX];
+
+/**
+ *	netdev_boot_setup_add	- add new setup entry
+ *	@name: name of the device
+ *	@map: configured settings for the device
+ *
+ *	Adds new setup entry to the dev_boot_setup list.  The function
+ *	returns 0 on error and 1 on success.  This is a generic routine to
+ *	all netdevices.
+ */
+int netdev_boot_setup_add(char *name, struct ifmap *map)
+{
+	struct netdev_boot_setup *s;
+	int i;
+
+	s = dev_boot_setup;
+	for (i = 0; i < NETDEV_BOOT_SETUP_MAX; i++) {
+		if (s[i].name[0] == '\0' || s[i].name[0] == ' ') {
+			memset(s[i].name, 0, sizeof(s[i].name));
+			strcpy(s[i].name, name);
+			memcpy(&s[i].map, map, sizeof(s[i].map));
+			break;
+		}
+	}
+
+	if (i >= NETDEV_BOOT_SETUP_MAX)
+		return 0;
+
+	return 1;
+}
+
+/**
+ *	netdev_boot_setup_check	- check boot time settings
+ *	@dev: the netdevice
+ *
+ * 	Check boot time settings for the device.  If device's name is a
+ *	mask (eg. eth%d) and settings are found then this will allocate 
+ *	name for the device.  The found settings are set for the device
+ *	to be used later in the device probing.  Returns 0 if no settings
+ *	found, 1 if they are.
+ */
+int netdev_boot_setup_check(struct net_device *dev)
+{
+	struct netdev_boot_setup *s;
+	char buf[IFNAMSIZ + 1];
+	int i, mask = 0;
+
+	memset(buf, 0, sizeof(buf));
+	strcpy(buf, dev->name);
+	if (strchr(dev->name, '%')) {
+		*strchr(buf, '%') = '\0';
+		mask = 1;
+	}
+
+	s = dev_boot_setup;
+	for (i = 0; i < NETDEV_BOOT_SETUP_MAX; i++) {
+		if (s[i].name[0] != '\0' && s[i].name[0] != ' ' &&
+		    !strncmp(buf, s[i].name, mask ? strlen(buf) :
+						    strlen(s[i].name))) {
+			if (__dev_get_by_name(s[i].name)) {
+				if (!mask)
+					return 0;
+				continue;
+			}
+			memset(dev->name, 0, IFNAMSIZ);
+			strcpy(dev->name, s[i].name);
+			dev->irq 	= s[i].map.irq;
+			dev->base_addr 	= s[i].map.base_addr;
+			dev->mem_start 	= s[i].map.mem_start;
+			dev->mem_end 	= s[i].map.mem_end;
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * Saves at boot time configured settings for any netdevice.
+ */
+static int __init netdev_boot_setup(char *str)
+{
+	int ints[5];
+	struct ifmap map;
+
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+	if (!str || !*str)
+		return 0;
+
+	/* Save settings */
+	memset(&map, -1, sizeof(map));
+	if (ints[0] > 0)
+		map.irq = ints[1];
+	if (ints[0] > 1)
+		map.base_addr = ints[2];
+	if (ints[0] > 2)
+		map.mem_start = ints[3];
+	if (ints[0] > 3)
+		map.mem_end = ints[4];
+
+	/* Add new entry to the list */	
+	return netdev_boot_setup_add(str, &map);
+}
+
+__setup("netdev=", netdev_boot_setup);
 
 /*****************************************************************************************
 
@@ -2364,12 +2480,19 @@ int __init net_dev_init(void)
 		dev->xmit_lock_owner = -1;
 		dev->iflink = -1;
 		dev_hold(dev);
-		/*
-		 *	We can allocate the name ahead of time. If the
-		 *	init fails the name will be reissued correctly.
+
+		/* 
+		 * Check boot time settings for the device.
 		 */
-		if (strchr(dev->name, '%'))
-			dev_alloc_name(dev, dev->name);
+		if (!netdev_boot_setup_check(dev)) {
+			/*
+			 * No settings found - allocate name. If the init()
+			 * fails the name will be reissued correctly.
+			 */
+			if (strchr(dev->name, '%'))
+				dev_alloc_name(dev, dev->name);
+		}
+
 		if (dev->init && dev->init(dev)) {
 			/*
 			 *	It failed to come up. Unhook it.

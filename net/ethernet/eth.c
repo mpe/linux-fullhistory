@@ -63,31 +63,25 @@
 static int __init eth_setup(char *str)
 {
 	int ints[5];
-	struct net_device *d;
+	struct ifmap map;
 
 	str = get_options(str, ARRAY_SIZE(ints), ints);
-
 	if (!str || !*str)
 		return 0;
 
-	d = dev_base;
-	while (d) 
-	{
-		if (!strcmp(str,d->name)) 
-		{
-			if (ints[0] > 0)
-				d->irq=ints[1];
-			if (ints[0] > 1)
-				d->base_addr=ints[2];
-			if (ints[0] > 2)
-				d->mem_start=ints[3];
-			if (ints[0] > 3)
-				d->mem_end=ints[4];
-			break;
-		}
-		d=d->next;
-	}
-	return 1;
+ 	/* Save settings */
+ 	memset(&map, -1, sizeof(map));
+	if (ints[0] > 0)
+		map.irq = ints[1];
+	if (ints[0] > 1)
+		map.base_addr = ints[2];
+	if (ints[0] > 2)
+		map.mem_start = ints[3];
+	if (ints[0] > 3)
+		map.mem_end = ints[4];
+
+	/* Add new entry to the list */
+	return netdev_boot_setup_add(str, &map);
 }
 
 __setup("ether=", eth_setup);

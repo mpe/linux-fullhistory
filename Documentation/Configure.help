@@ -9,8 +9,8 @@
 #     http://www.linux.or.jp/JF/JFdocs/Configure.help/
 #   - Russian, by kaf@linux.nevod.perm.su, at
 #     http://nevod.perm.su/service/linux/doc/kernel/Configure.help
-#   - French, by Tane Pierre (tanep@bigfoot.com), at
-#     http://www.kernelfr.org
+#   - French, by Pierre Tane (tanep@bigfoot.com), at
+#     http://www.traduc.org/kernelfr
 #   - Spanish, by Carlos Perelló Marín (fperllo@ehome.encis.es), at
 #     http://visar.csustan.edu/~carlos/
 #   - Italian, by Alessandro Rubini (rubini@linux.it), at
@@ -125,7 +125,7 @@ CONFIG_X86_UP_IOAPIC
   used on systems with several CPU's. If you have a single-CPU system
   which uses APIC, you can say Y here to use it. If you say Y here
   even though your machine doesn't have APIC, then the kernel will
-  still run with now slowdown at all.
+  still run with no slowdown at all.
 
   If you have system with several CPU's, you do not need to say Y
   here: APIC will be used automatically.
@@ -161,23 +161,32 @@ CONFIG_LEDS
 
   If you are compiling a kernel for a NetWinder or EBSA-285, you will
   be able to select which LEDs are active using the options below. If
-  you are compiling a kernel for the EBSA-110 however, the red LED
-  will simply flash regularly to indicate that the system is still
-  functional. It is safe to say Y here if you have a CATS system, but
-  the driver will do nothing.
+  you are compiling a kernel for the EBSA-110 or the LART however, the
+  red LED will simply flash regularly to indicate that the system is
+  still functional. It is safe to say Y here if you have a CATS
+  system, but the driver will do nothing.
 
 Timer LED
 CONFIG_LEDS_TIMER
   If you say Y here, one of the system LEDs (the green one on the
-  NetWinder or the amber one on the EBSA285) will flash regularly to
-  indicate that the system is still operational. This is mainly
-  useful to kernel hackers who are debugging unstable kernels.
+  NetWinder, the amber one on the EBSA285, or the red one on the LART)
+  will flash regularly to indicate that the system is still
+  operational. This is mainly useful to kernel hackers who are
+  debugging unstable kernels.
+
+  The LART uses the same LED for both Timer LED and CPU usage LED
+  functions. You may choose to use both, but the Timer LED function
+  will overrule the CPU usage LED.
 
 CPU usage LED
 CONFIG_LEDS_CPU
   If you say Y here, the red LED will be used to give a good real
   time indication of CPU usage, by lighting whenever the idle task
   is not currently executing.
+
+  The LART uses the same LED for both Timer LED and CPU usage LED
+  functions. You may choose to use both, but the Timer LED function
+  will overrule the CPU usage LED.
 
 Kernel FP software completion (EXPERIMENTAL)
 CONFIG_MATHEMU
@@ -358,7 +367,7 @@ CONFIG_IDE
   Western Digital and Compaq Computer in 1984. It was then named
   ST506. Quite a number of disks use the IDE interface.
 	
-  AT Attachment (ATA) is a subset of the IDE specifications.
+  AT Attachment (ATA) is the superset of the IDE specifications.
   ST506 was also called ATA-1.
 
   Fast-IDE is ATA-2 (also named Fast ATA), Enhanced IDE (EIDE) is
@@ -699,6 +708,14 @@ CONFIG_IDEDMA_PCI_AUTO
   It is normally safe to answer Y to this question unless your
   motherboard uses a VIA VP2 chipset, in which case you should say N.
 
+IGNORE word93 Validation BITS
+CONFIG_IDEDMA_IVB
+  Since various rules were applied and created ... et al. as it relates
+  the detection of vaild cable signals.  This is a result of unclear terms
+  in ATA-4 and ATA-5 standards.
+
+  It is normally safe to answer Y; however, the default is N.
+
 Various ATA, Work(s) In Progress (EXPERIMENTAL)
 CONFIG_IDEDMA_PCI_WIP
   If you enable this you will be able to use and test highly
@@ -733,7 +750,7 @@ CONFIG_BLK_DEV_AEC62XX
   If you say Y here, then say Y to "Use DMA by default when available" as
   well.
 
-AEC62XX Tuning support (WIP)
+AEC62XX Tuning support
 CONFIG_AEC62XX_TUNING
   Please read the comments at the top of drivers/ide/aec62xx.c  
   If unsure, say N.
@@ -763,7 +780,7 @@ CONFIG_WDC_ALI15X3
 
   SAY NO!
 
-AMD7409 chipset support (EXPERIMENTAL)
+AMD7409 chipset support
 CONFIG_BLK_DEV_AMD7409
   This driver ensures (U)DMA support for the AMD756 Viper chipset.
 
@@ -784,12 +801,7 @@ CONFIG_BLK_DEV_CMD64X
   Say Y here if you have an IDE controller which uses any of these
   chipsets: CMD643, CMD646, or CMD648.
 
-CMD64X chipset RAID support (WIP)
-CONFIG_CMD64X_RAID
-  Work in progress for hardware raid ata-33/66..........rev 7 minimum.
-  Say N for now.
-
-CY82C693 chipset support (EXPERIMENTAL)
+CY82C693 chipset support
 CONFIG_BLK_DEV_CY82C693
   This driver adds detection and support for the CY82C693 chipset
   used on Digital's PC-Alpha 164SX boards.
@@ -826,11 +838,13 @@ CONFIG_HPT34X_AUTODMA
 HPT366 chipset support
 CONFIG_BLK_DEV_HPT366
   HPT366 is an Ultra DMA chipset for ATA-66.
-  
+  HPT368 is an Ultra DMA chipset for ATA-66 RAID Based.
+  HPT370 is an Ultra DMA chipset for ATA-100.
+ 
   This driver adds up to 4 more EIDE devices sharing a single
   interrupt. 
 
-  The HPT366 chipset in its current form is non-bootable. One solution
+  The HPT366 chipset in its current form is bootable. One solution
   for this problem are special LILO commands for redirecting the
   reference to device 0x80. The other solution is to say Y to "Boot
   off-board chipsets first support" (CONFIG_BLK_DEV_OFFBOARD) unless
@@ -841,15 +855,6 @@ CONFIG_BLK_DEV_HPT366
   This driver requires dynamic tuning of the chipset during the
   ide-probe at boot. It is reported to support DVD II drives, by the
   manufacturer.
-
-HPT366 Fast Interrupts (WIP)
-CONFIG_HPT366_FIP
-  If unsure, say N.
-
-HPT366 mode three unsupported (EXPERIMENTAL) (WIP)
-CONFIG_HPT366_MODE3
-  This is an undocumented mode that the HA366 can default to in many
-  cases. If unsure, say N.
 
 NS87415 support (EXPERIMENTAL)
 CONFIG_BLK_DEV_NS87415
@@ -877,7 +882,7 @@ CONFIG_BLK_DEV_PIIX
 
   If unsure, say N.
 
-PIIXn Tuning support (EXPERIMENTAL)
+PIIXn Tuning support
 CONFIG_PIIX_TUNING
   This driver extension adds DMA mode setting and tuning for all PIIX
   IDE controllers by Intel. Since the BIOS can sometimes improperly
@@ -889,9 +894,11 @@ CONFIG_PIIX_TUNING
 
   If unsure, say N.
 
-PROMISE PDC20246/PDC20262 support
+PROMISE PDC20246/PDC20262/PDC20267 support
 CONFIG_BLK_DEV_PDC202XX
   Promise Ultra33 or PDC20246
+  Promise Ultra66 or PDC20262
+  Promise Ultra100 or PDC20267
 
   This driver adds up to 4 more EIDE devices sharing a single
   interrupt. This add-on card is a bootable PCI UDMA controller. Since
@@ -902,14 +909,6 @@ CONFIG_BLK_DEV_PDC202XX
   for more than one card. This card may require that you say Y to
   "Special UDMA Feature (EXPERIMENTAL)".
 
-  Promise Ultra66 or PDC20262
-
-  This driver adds up to 4 more EIDE devices sharing a single
-  interrupt. This add-on card is a bootable PCI UDMA ATA-66
-  controller. The driver attempts to dynamic tuning of the chipset at
-  boot-time for max-speed. Note tested limits are UDMA-2. Ultra66 BIOS
-  1.11 or newer required.
-
   If you say Y here, you need to say Y to "Use DMA by default when
   available" as well.
 
@@ -919,20 +918,15 @@ CONFIG_BLK_DEV_PDC202XX
 
 Special UDMA Feature (EXPERIMENTAL)
 CONFIG_PDC202XX_BURST
-  For PDC20246 and PDC20262 Ultra DMA chipsets. Designed originally
-  for PDC20246/Ultra33 that has BIOS setup failures when using 3 or
-  more cards.
+  For PDC20246, PDC20262 and PDC20267 Ultra DMA chipsets. Designed
+  originally for PDC20246/Ultra33 that has BIOS setup failures when
+  using 3 or more cards.
+
+  Unknown for PDC20267 Ultra DMA 100.
 
   Please read the comments at the top of drivers/ide/pdc202xx.c
 
   If unsure, say N.
-
-Special Mode Feature (WIP)
-CONFIG_PDC202XX_MASTER
-  For PDC20246 and PDC20262 Ultra DMA chipsets. This is reserved for
-  possible Hardware RAID 0,1 for the FastTrak Series.
-
-  Say N. 
 
 SiS5513 chipset support
 CONFIG_BLK_DEV_SIS5513
@@ -958,7 +952,7 @@ CONFIG_BLK_DEV_TRM290
   needed for further tweaking and development.
   Please read the comments at the top of drivers/ide/trm290.c.
 
-VIA82CXXX chipset support (EXPERIMENTAL)
+VIA82CXXX chipset support
 CONFIG_BLK_DEV_VIA82CXXX
   This allows you to to configure your chipset for a better use while
   running (U)DMA: it will allow you to enable efficiently the second
@@ -1551,11 +1545,19 @@ CONFIG_MD_RAID5
 
   If unsure, say Y.
 
-Boot support (linear, striped)
+RAID Boot support
 CONFIG_MD_BOOT
-  To boot with an initial linear or striped md device you have to
-  answer Y here. For lilo and loadlin options see the file
-  Documentation/md.txt.
+  To boot with an initial raid volume (any type) you can select
+  autodetect, or answer Y here and appropriate options to the kernel
+  at boot time.
+  For lilo and loadlin options see the file Documentation/md.txt.
+
+RAID AutoDetect support
+CONFIG_AUTODETECT_RAID
+  An alternative to "Raid Boot support" is autodetect support.
+  With this selected, any partitons of type 0xFD will be considered for
+  inclusion in a RAID array.  Information in the RAID-superblock on
+  the partition will determine how it is included.
 
 Support for Acer PICA 1 chipset
 CONFIG_ACER_PICA_61
@@ -1781,7 +1783,8 @@ CONFIG_NETFILTER
   Various modules exist for netfilter which replace the previous
   masquerading (ipmasqadm), packet filtering (ipchains), transparent
   proxying, and portforwarding mechanisms. Please see
-  Documentation/Changes for the location of these packages.
+  Documentation/Changes under "iptables" for the location of these
+  packages.
  
   Make sure to say N to "Fast switching" below if you intend to say Y
   here, as Fast switching currently bypasses netfilter.
@@ -2089,6 +2092,8 @@ CONFIG_ALPHA_GENERIC
   SX164               AlphaPC164-SX
   Sable               AS 2000, AS 2100
   Takara              Takara
+  Titan               Privateer
+  Wildfire            AlphaServer GS 40/80/160/320
 
   If you don't know what to do, choose "generic".
 
@@ -2571,11 +2576,10 @@ CONFIG_SYSVIPC
   http://www.linuxdoc.org/docs.html#guide .
 
   Shared memory is now implemented using a new (minimal) virtual file
-  system, which you need to mount before programs can use shared
-  memory. To do this automatically at system startup just add the
+  system. To mount it automatically at system startup just add the
   following line to your /etc/fstab:
 
-  none	/var/shm	shm	defaults	0 0
+  none	/dev/shm	shm	defaults	0 0
 
   Saying Y here enlarges your kernel by about 18 KB. Just say Y.
 
@@ -2729,25 +2733,27 @@ CONFIG_M386
   all x86 CPU types (albeit not optimally fast), you can specify
   "386" here.
 
-  If you specify one of "486" or "586" or "Pentium" or "PPro" or
-  "Athlon", then the kernel will not necessarily run on earlier
-  architectures (e.g. a Pentium optimized kernel will run on a PPro,
-  but not necessarily on a i486).
+  The kernel will not necessarily run on earlier architectures than
+  the one you have chosen, e.g. a Pentium optimized kernel will run on
+  a PPro, but not necessarily on a i486.
 
   Here are the settings recommended for greatest speed:
    - "386" for the AMD/Cyrix/Intel 386DX/DXL/SL/SLC/SX, Cyrix/TI
-     486DLC/DLC2 and UMC 486SX-S. Only "386" kernels will run on a 386
-     class machine.
+     486DLC/DLC2, UMC 486SX-S and NexGen Nx586. Only "386" kernels will
+     run on a 386 class machine.
    - "486" for the AMD/Cyrix/IBM/Intel 486DX/DX2/DX4 or
-     SL/SLC/SLC2/SLC3/SX/SX2, AMD/Cyrix 5x86, NexGen Nx586 and
-     UMC U5D or U5S.
+     SL/SLC/SLC2/SLC3/SX/SX2 and UMC U5D or U5S.
    - "586" for generic Pentium CPUs, possibly lacking the TSC 
      (time stamp counter) register.
-   - "Pentium" for the Intel Pentium/Pentium MMX, and AMD K5.
-   - "PPro" for the Cyrix/IBM/National Semiconductor 6x86MX, MII and
-     Intel Pentium Pro/Celeron/Pentium II/Pentium III.
-   - "K6/II/III" for the AMD K6, K6-II and K6-III (aka K6-3D).
+   - "Pentium" for the Intel Pentium/Pentium MMX.
+   - "Pentium-Pro" for the Intel Pentium Pro/Celeron/Pentium II.
+   - "Pentium-III" for the Intel Pentium III.
+   - "K6" for the AMD K6, K6-II and K6-III (aka K6-3D).
    - "Athlon" for the AMD Athlon (K7).
+   - "Crusoe" for the Transmeta Crusoe series.
+   - "Winchip-C6" for original IDT Winchip.
+   - "Winchip-2" for IDT Winchip 2.
+   - "Winchip-2A/3" for IDT Winchips with 3dNow! capabilities.
 
   If you don't know what to do, choose "386".
 
@@ -3067,7 +3073,7 @@ CONFIG_FB_COMPAT_XPMAC
   (XF68_FBDev).
 
 HGA monochrome support (EXPERIMENTAL)
-CONFIG_FBCON_HGA
+CONFIG_FB_HGA
   Say Y here if you have a Hercules mono graphics card.
 
   This driver is also available as a module ( = code which can be
@@ -3335,6 +3341,11 @@ CONFIG_FBCON_MAC
   bits per pixel packed pixels on Mac. It supports variable font
   widths for low resolution screens.
   
+HGA monochrome support (EXPERIMENTAL)
+CONFIG_FBCON_HGA
+  This is the low level frame buffer console driver for Hercules mono 
+  graphics cards.
+
 VGA characters/attributes support
 CONFIG_FBCON_VGA
   This is the low level frame buffer console driver for VGA text mode;
@@ -4609,11 +4620,6 @@ CONFIG_NETLINK
   addresses on the local network) small. The ethertap device, which
   lets user space programs read and write raw Ethernet frames, also
   needs the network link driver.
-  
-  This driver is also available as a module called netlink_dev.o ( =
-  code which can be inserted in and removed from the running kernel
-  whenever you want). If you want to compile it as a module, say M
-  here and read Documentation/modules.txt.
 
   If unsure, say Y.
 
@@ -5616,8 +5622,8 @@ CONFIG_SCSI_SYM53C8XX
 
 synchronous data transfers frequency
 CONFIG_SCSI_NCR53C8XX_SYNC
-  The SCSI Parallel Interface-2 Standard defines 4 classes of transfer
-  rates: FAST-5, FAST-10, FAST-20 and FAST-40. The numbers are
+  The SCSI Parallel Interface-2 Standard defines 5 classes of transfer
+  rates: FAST-5, FAST-10, FAST-20, FAST-40 and FAST-80. The numbers are
   respectively the maximum data transfer rates in mega-transfers per
   second for each class. For example, a FAST-20 Wide 16 device is able
   to transfer data at 20 million 16 bit packets per second for a total
@@ -5625,9 +5631,9 @@ CONFIG_SCSI_NCR53C8XX_SYNC
 
   You may specify 0 if you want to only use asynchronous data
   transfers. This is the safest and slowest option. Otherwise, specify
-  a value between 5 and 40, depending on the capability of your SCSI
+  a value between 5 and 80, depending on the capability of your SCSI
   controller. The higher the number, the faster the data transfer.
-  Note that 40 should normally be ok since the driver decreases the
+  Note that 80 should normally be ok since the driver decreases the
   value automatically according to the controller's capabilities.
 
   Your answer to this question is ignored for controllers with NVRAM,
@@ -5638,7 +5644,7 @@ CONFIG_SCSI_NCR53C8XX_SYNC
   second).
 
   The normal answer therefore is not to go with the default but to
-  select the maximum value 40 allowing the driver to use the maximum
+  select the maximum value 80 allowing the driver to use the maximum
   value supported by each controller. If this causes problems with
   your SCSI devices, you should come back and decrease the value.
 
@@ -8527,9 +8533,10 @@ CONFIG_FMV18X
 
 EtherExpress PRO support
 CONFIG_EEXPRESS_PRO
-  If you have a network (Ethernet) card of this type, say Y. Note
-  however that the EtherExpress PRO/100 Ethernet card has its own
-  separate driver. Please read the Ethernet-HOWTO, available from
+  If you have a network (Ethernet) card of this type, say Y. This
+  driver supports intel i82595{FX,TX} based boards. Note however 
+  that the EtherExpress PRO/100 Ethernet card has its own separate
+  driver. Please read the Ethernet-HOWTO, available from
   http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
@@ -8640,6 +8647,22 @@ CONFIG_SKMC
   The module is called sk_mca.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
+
+IBM LAN Adapter/A support
+CONFIG_IBMLANA
+  This is a Micro Channel ethernet adapter.  You need to set CONFIG_MCA
+  to use this driver.  It is both available as an in-kernel driver and
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a module,
+  say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more than
+  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
+  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.  The only
+  currently supported card is the IBM LAN Adapter/A for Ethernet.  It will
+  both support 16K and 32K memory windows, however a 32K window gives
+  a better security against packet losses.  Usage of multiple boards with
+  this driver should be possible, but has not been tested up to now due
+  to lack of hardware.
 
 EISA, VLB, PCI and on board controllers
 CONFIG_NET_PCI
@@ -9584,7 +9607,7 @@ CONFIG_USB_OHCI
 USB Human Interface Device (HID) support
 CONFIG_USB_HID
   Say Y here if you want to connect keyboards, mice, joysticks,
-  graphic tablets, UPS's or any other HID based devices to your
+  graphic tablets, or any other HID based devices to your
   computer via USB. More information is available:
   Documentation/usb/input.txt.
 
@@ -9616,16 +9639,16 @@ CONFIG_USB_MOUSE
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
-  The module will be called usbmouse.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
+  The module will be called usbmouse.o. If you want to compile it as
+  a module, say M here and read Documentation/modules.txt.
 
   If unsure, say N.
 
 Wacom Intuos/Graphire tablet support
 CONFIG_USB_WACOM
-  Say Y here if you want to use the USB version of the Wacom Intuos or
-  Graphire tablet. Make sure to say Y to "Mouse support"
-  (CONFIG_INPUT_MOUSEDEV) and "Event interface support"
+  Say Y here if you want to use the USB version of the Wacom Intuos
+  or Graphire tablet. Make sure to say Y to "Mouse support"
+  (CONFIG_INPUT_MOUSEDEV) and/or "Event interface support"
   (CONFIG_INPUT_EVDEV) as well.
 
   This driver is also available as a module ( = code which can be
@@ -9636,7 +9659,7 @@ CONFIG_USB_WACOM
 Logitech WingMan Force joystick support
 CONFIG_USB_WMFORCE
   Say Y here if you want to use the Logitech WingMan Force with Linux
-  on the USB port. No force-feedback support yet, but other than that,
+  on the USB port. No force-feedback support yet, but other than that
   it should work like a normal joystick.
 
   This driver is also available as a module ( = code which can be
@@ -9657,31 +9680,35 @@ CONFIG_INPUT_KEYBDEV
 Mouse support
 CONFIG_INPUT_MOUSEDEV
   Say Y here if you want your USB HID mouse to be accessible as
-  misc devices 32+ under /dev/, as an emulated PS/2 mouse. That way,
-  all user space programs will be able to use your mouse.
+  char devices 13:32+ - /dev/input/mouseX and 13:63 - /dev/input/mice
+  as an emulated PS/2 mouse.  That way, all user space programs will
+  be able to use your mouse.
   
   If unsure, say Y.
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
-  The module will be called mousedev.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
+  The module will be called mousedev.o. If you want to compile it as
+  a module, say M here and read Documentation/modules.txt.
 
 Horizontal screen resolution
 CONFIG_INPUT_MOUSEDEV_SCREEN_X
-  For the mouse emulation to be correct, the mousedev driver needs to
-  know the screen resolution you are using (in the X window system).
+  If you're using a digitizer, or a graphic tablet, and want to use
+  it as a mouse then the mousedev driver needs to know the X window
+  screen resolution you are using to correctly scale the data. If
+  you're not using a digitizer, this value is ignored.
 
 Vertical screen resolution
 CONFIG_INPUT_MOUSEDEV_SCREEN_Y
-  For the mouse emulation to be correct, the mousedev driver needs to
-  know the screen resolution you are using (in the X window system).
+  If you're using a digitizer, or a graphic tablet, and want to use
+  it as a mouse then the mousedev driver needs to know the X window
+  screen resolution you are using to correctly scale the data. If
+  you're not using a digitizer, this value is ignored.
 
 Joystick support
 CONFIG_INPUT_JOYDEV
   Say Y here if you want your USB HID joystick or gamepad to be
-  accessible as a /dev/js device. You can't use a normal (non-USB)
-  joystick if you say Y here.
+  accessible as char device 13:0+ - /dev/input/jsX device. 
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -9691,7 +9718,7 @@ CONFIG_INPUT_JOYDEV
 Event interface support
 CONFIG_INPUT_EVDEV
   Say Y here if you want your USB HID device events be accessible
-  under /dev/inputX (misc 64+) in a generic way.
+  under char device 13:64+ - /dev/inputX in a generic way.
   This is the future ...
 
 USB Scanner support
@@ -9943,6 +9970,17 @@ CONFIG_USB_DEVICEFS
 
   Most users want to say Y here.
 
+USB Bandwidth allocation
+CONFIG_USB_BANDWIDTH
+  If you say Y here, the USB subsystem enforces USB bandwidth
+  allocation and will prevent some device opens from succeeding
+  if they would cause USB bandwidth usage to go above 90% of
+  the bus bandwidth.
+
+  If you say N here, these conditions will cause warning messages
+  about USB bandwidth usage to be logged and some devices or
+  drivers may not work correctly.
+
 DABUSB driver
 CONFIG_USB_DABUSB
   A Digital Audio Broadcasting (DAB) Receiver for USB and Linux
@@ -9997,6 +10035,15 @@ CONFIG_USB_DSBR
   inserted in and removed from the running kernel whenever you want).
   The module will be called dsbr100.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
+
+Microtek USB scanner support
+CONFIG_USB_MICROTEK
+  Say Y here if you want support for the Microtek X6USB and possibly
+  some other scanners. The scanner will appear as a scsi device to the
+  rest of the system. A patched version of SANE is necessary to use the
+  scanner. It's available at 
+  http://fachschaft.cup.uni-muenchen.de/~neukum/scanner.html
+  This driver can be compiled as a module.
 
 Minix fs support
 CONFIG_MINIX_FS
@@ -10437,6 +10484,13 @@ Provide NFSv3 server support
 CONFIG_NFSD_V3
   If you would like to include the NFSv3 server as well as the NFSv2
   server, say Y here.  If unsure, say Y.
+
+Provide NFS over TCP server support DEVELOPER ONLY
+CONFIG_NFSD_TCP
+  If you are a developer and want to work on fixing problems with
+  NFS server over TCP support, say Y here.  If unsure, say N.
+
+  Some problems can be found by looking for FIXME in net/sunrpc/svcsock.c
 
 OS/2 HPFS file system support
 CONFIG_HPFS_FS
@@ -11661,7 +11715,7 @@ CONFIG_LP_CONSOLE
   If you want kernel messages to be printed out as they occur, you
   can have a console on the printer. This option adds support for
   doing that; to actually get it to happen you need to pass the
-  option "console=lp" to the kernel at boot time.
+  option "console=lp0" to the kernel at boot time.
 
   Note that kernel messages can get lost if the printer is out of
   paper (or off, or unplugged, or too busy..), but this behaviour
@@ -12316,6 +12370,22 @@ CONFIG_APPLICOM
 
   If unsure, say N.
 
+Intel Random Number Generator support
+CONFIG_INTEL_RNG
+  This driver provides kernel-side support for the Random Number
+  Generator hardware found on Intel i8xx-based motherboards.
+
+  Both a character driver, used to read() entropy data, and a timer
+  function which automatically adds entropy directly into the
+  kernel pool, are exported by this driver.
+
+  To compile this driver as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt. The module will be called
+  i810_rng.o.
+
+  If unsure, say N.
+
 Power Management support
 CONFIG_PM
   "Power Management" means that parts of your computer are shut
@@ -12640,7 +12710,7 @@ CONFIG_MICROCODE
 
   For latest news and information on obtaining all the required
   ingredients for this driver, check:
-  http://www.ocston.org/~tigran/patches/microcode .
+  http://www.urbanmyth.org/microcode/
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -13525,16 +13595,19 @@ CONFIG_SOUND_SONICVIBES
   differs slightly from OSS/Free, so PLEASE READ
   Documentation/sound/sonicvibes.
 
-Trident 4DWave DX/NX or SiS 7018 PCI Audio Core
+Trident 4DWave DX/NX, SiS 7018 or ALi 5451 PCI Audio Core
 CONFIG_SOUND_TRIDENT
   Say Y or M if you have a PCI sound card utilizing the Trident
   4DWave-DX/NX chipset or your mother board chipset has SiS 7018
-  built-in. The SiS 7018 PCI Audio Core is embedded in SiS960 
-  Super South Bridge and SiS540/630 Single Chipset.
+  or ALi 5451 built-in. The SiS 7018 PCI Audio Core is embedded
+  in SiS960 Super South Bridge and SiS540/630 Single Chipset.
+  The ALi 5451 PCI Audio Core is embedded in ALi M1535, M1535D,
+  M1535+ or M1535D+ South Bridge.
 
   Use lspci -n to find out if your sound card or chipset uses
   Trident 4DWave or SiS 7018. PCI ID 1023:2000 or 1023:2001 stands
-  for Trident 4Dwave. PCI ID 1039:7018 stands for SiS7018.
+  for Trident 4Dwave. PCI ID 1039:7018 stands for SiS7018. PCI ID
+  10B9:5451 stands for ALi5451.
 
   This driver differs slightly from OSS/Free, so PLEASE READ the
   comments at the top of driver/sound/trident.c
@@ -13598,7 +13671,9 @@ CONFIG_MAGIC_SYSRQ
   if the system crashes for example during kernel debugging (e.g., you
   will be able to flush the buffer cache to disk, reboot the system
   immediately or dump some status information). This is accomplished
-  by pressing various keys while holding SysRq (Alt+PrintScreen). The
+  by pressing various keys while holding SysRq (Alt+PrintScreen). It
+  also works on a serial console (on PC hardware at least), if you
+  send a BREAK and then within 5 seconds a command keypress. The
   keys are documented in Documentation/sysrq.txt. Don't say Y unless
   you really know what this hack does.
 
@@ -14724,11 +14799,19 @@ CONFIG_DIO
 
 Processor Type
 CONFIG_6xx
-  There are three types of PowerPC chips supported. The more common
+  There are four types of PowerPC chips supported. The more common
   types (601, 603, 604, 740, 750), the Motorola embedded versions
-  (821, 823, 850, 855, 860), and the IBM embedded versions (403 and
-  405). Unless you are building a kernel for one of the embedded
-  processor systems, choose 6xx.
+  (821, 823, 850, 855, 860), the IBM embedded versions (403 and
+  405) and the high end 64 bit Power processors (Power 3, Power 4). 
+  Unless you are building a kernel for one of the embedded 
+  processor systems, or a 64 bit IBM RS/6000, choose 6xx.
+
+CONFIG_PPC64BRIDGE
+  Currently there is not a 64 bit PowerPC Linux kernel. As a result
+  if you choose the CONFIG_POWER3 or CONFIG_POWER4 options you 
+  must choose this option as well. This enables gcc to emit
+  both 32 and 64 bit instructions as well as cause your kernel
+  to be built as a 32 bit kernel.
 
 Machine Type
 CONFIG_PMAC
@@ -14739,6 +14822,22 @@ CONFIG_PMAC
   embedded MBX boards from Motorola. Currently, a single kernel binary
   only supports one type or the other. However, there is very early
   work on support for CHRP, PReP and PowerMac's from a single binary.
+
+Power management support for PowerBooks
+CONFIG_PMAC_PBOOK
+  This provides support for putting a PowerBook to sleep; it also
+  enables media bay support.  Power management works on the
+  PB2400/3400/3500, Wallstreet, Lombard, and Bronze PowerBook G3. You
+  must get the power management daemon, pmud, to make it work and you
+  must have the /dev/pmu device (see the pmud README).
+
+  Get pmud from ftp://linuxcare.com.au/pub/ppclinux/pmud/
+
+  If you have a PowerBook, you should say Y.
+
+  You may also want to compile the dma sound driver as a module and
+  have it autoloaded. The act of removing the module shuts down the
+  sound hardware for more power savings.
 
 Support for Open Firmware device tree in /proc
 CONFIG_PROC_DEVICETREE
@@ -15213,6 +15312,11 @@ CONFIG_VIDEO_PMS
   from the running kernel whenever you want). If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
 
+SAB3036 tuner support
+CONFIG_TUNER_3036
+  Say Y here to include support for Philips SAB3036 compatible tuners.
+  If in doubt, say N.
+
 Compaq SMART2 support
 CONFIG_BLK_CPQ_DA
    This is the driver for Compaq Smart Array controllers.  
@@ -15231,23 +15335,18 @@ CONFIG_ARCH_ARC
   to set this option to, please consult any information supplied with
   your system.
 
-Include support for the NetWinder
-CONFIG_ARCH_NETWINDER
-  Say Y here if you intend to run this kernel on the NetWinder.
+Include support for the CATS
+CONFIG_ARCH_CATS
+  Say Y here if you intend to run this kernel on the CATS.
 
-Include support for the Compaq Personal Server
-CONFIG_ARCH_PERSONAL_SERVER
-  Say Y here if you intend to run this kernel on the Compaq
-  Personal Server.
-  
-  The Compaq Personal Server is not available for purchase. 
-  There are no product plans beyond the current research
-  prototypes at this time.  Information is available at:
-  
-  http://crl.research.compaq.com/projects/personalserver
-  
-  If you have any questions or comments about the  Compaq Personal
-  Server, send e-mail to skiff@crl.dec.com
+  Saying N will reduce the size of the Footbridge kernel.
+
+Include support for the EBSA285
+CONFIG_ARCH_EBSA285
+  Say Y here if you intend to run this kernel on the EBSA285 card
+  in host ("central function") mode.
+
+  Saying N will reduce the size of the Footbridge kernel.
 
 Include support for the LinkUp Systems L7200 SDB
 CONFIG_ARCH_L7200
@@ -15259,6 +15358,31 @@ CONFIG_ARCH_L7200
 
   If you have any questions or comments about the Linux kernel port
   to this board, send e-mail to sjhill@cotw.com
+
+Include support for the NetWinder
+CONFIG_ARCH_NETWINDER
+  Say Y here if you intend to run this kernel on the Rebel.COM
+  NetWinder.  Information about this machine can be found at:
+
+  http://www.netwinder.org/
+
+  Saying N will reduce the size of the Footbridge kernel.
+
+Include support for the Compaq Personal Server
+CONFIG_ARCH_PERSONAL_SERVER
+  Say Y here if you intend to run this kernel on the Compaq
+  Personal Server.
+  
+  Saying N will reduce the size of the Footbridge kernel.
+
+  The Compaq Personal Server is not available for purchase. 
+  There are no product plans beyond the current research
+  prototypes at this time.  Information is available at:
+  
+  http://crl.research.compaq.com/projects/personalserver
+  
+  If you have any questions or comments about the  Compaq Personal
+  Server, send e-mail to skiff@crl.dec.com
 
 Math emulation
 CONFIG_NWFPE
@@ -15411,6 +15535,41 @@ CONFIG_BLK_DEV_MFM_AUTODETECT
   the cylinders/heads/sectors count on your hard drive. WARNING: This
   sometimes doesn't work and it also does some dodgy stuff which
   potentially might damage your drive.
+
+NetWinder /dev/flash support
+CONFIG_NWFLASH
+  If you say Y here and create a character device /dev/flash with
+  major 10 and minor 160 you can manipulate the flash ROM containing
+  the NetWinder firmware. Be careful as accidentally overwriting the
+  flash contents can render your computer unbootable. On no account
+  allow random users access to this device. :-)
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called nwflash.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
+  If you're not sure, say N.
+
+Footbridge internal watchdog
+CONFIG_21285_WATCHDOG
+  The Intel Footbridge chip contains a builtin watchdog circuit. Say Y 
+  here if you wish to use this. Alternatively say M to compile the
+  driver as a module, which will be called wdt285.o.
+
+  This driver does not work on all machines. In particular, early CATS 
+  boards have hardware problems that will cause the machine to simply 
+  lock up if the watchdog fires.
+
+  "If in doubt, leave it out" - say N.
+
+NetWinder WB977 watchdog
+CONFIG_977_WATCHDOG
+  Say Y here to include support for the WB977 watchdog included in 
+  NetWinder machines. Alternatively say M to compile the driver as
+  a module, which will be called wdt977.o.
+
+  Not sure? It's safe to say N.
 
 IrDA subsystem support
 CONFIG_IRDA

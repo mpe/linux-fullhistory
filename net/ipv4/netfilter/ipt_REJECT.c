@@ -27,7 +27,7 @@ static unsigned int reject(struct sk_buff **pskb,
 {
 	const struct ipt_reject_info *reject = targinfo;
 
-	/* WARNING: This code has causes reentry within iptables.
+	/* WARNING: This code causes reentry within iptables.
 	   This means that the iptables jump stack is now crap.  We
 	   must return an absolute verdict. --RR */
     	switch (reject->with) {
@@ -95,6 +95,10 @@ static int check(const char *tablename,
   	}
 
 	/* Only allow these for packet filtering. */
+	if (strcmp(tablename, "filter") != 0) {
+		DEBUGP("REJECT: bad table `%s'.\n", table);
+		return 0;
+	}
 	if ((hook_mask & ~((1 << NF_IP_LOCAL_IN)
 			   | (1 << NF_IP_FORWARD)
 			   | (1 << NF_IP_LOCAL_OUT))) != 0) {

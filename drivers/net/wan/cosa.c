@@ -318,6 +318,7 @@ static int cosa_fasync(struct inode *inode, struct file *file, int on);
 #endif
 
 static struct file_operations cosa_fops = {
+	owner:		THIS_MODULE,
 	llseek:		cosa_lseek,
 	read:		cosa_read,
 	write:		cosa_write,
@@ -969,9 +970,6 @@ static int cosa_open(struct inode *inode, struct file *file)
 	chan->tx_done = chrdev_tx_done;
 	chan->setup_rx = chrdev_setup_rx;
 	chan->rx_done = chrdev_rx_done;
-#ifdef MODULE
-	MOD_INC_USE_COUNT;
-#endif
 	spin_unlock_irqrestore(&cosa->lock, flags);
 	return 0;
 }
@@ -985,9 +983,6 @@ static int cosa_release(struct inode *inode, struct file *file)
 	spin_lock_irqsave(&cosa->lock, flags);
 	cosa->usage--;
 	channel->usage--;
-#ifdef MODULE
-	MOD_DEC_USE_COUNT;
-#endif
 	spin_unlock_irqrestore(&cosa->lock, flags);
 	return 0;
 }

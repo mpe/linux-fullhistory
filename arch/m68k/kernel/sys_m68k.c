@@ -143,7 +143,6 @@ asmlinkage long sys_mmap64(struct mmap_arg_struct64 *arg)
 	if ((a.offset >> PAGE_SHIFT) != pgoff)
 		return -EINVAL;
 
-	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if (!(a.flags & MAP_ANONYMOUS)) {
 		error = -EBADF;
@@ -153,12 +152,13 @@ asmlinkage long sys_mmap64(struct mmap_arg_struct64 *arg)
 	}
 	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 
+	down(&current->mm->mmap_sem);
 	error = do_mmap_pgoff(file, a.addr, a.len, a.prot, a.flags, pgoff);
+	up(&current->mm->mmap_sem);
 	if (file)
 		fput(file);
 out:
 	unlock_kernel();
-	up(&current->mm->mmap_sem);
 	return error;
 }
 #endif

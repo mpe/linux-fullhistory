@@ -99,10 +99,6 @@ hash_conntrack(const struct ip_conntrack_tuple *tuple)
 #if 0
 	dump_tuple(tuple);
 #endif
-#ifdef CONFIG_NETFILTER_DEBUG
-	if (tuple->src.pad)
-		DEBUGP("Tuple %p has non-zero padding.\n", tuple);
-#endif
 	/* ntohl because more differences in low bits. */
 	/* To ensure that halves of the same connection don't hash
 	   clash, we add the source per-proto again. */
@@ -120,12 +116,10 @@ get_tuple(const struct iphdr *iph, size_t len,
 {
 	int ret;
 
-	/* Can only happen when extracting tuples from inside ICMP
-           packets */
+	/* Never happen */
 	if (iph->frag_off & htons(IP_OFFSET)) {
-		if (net_ratelimit())
-			printk("ip_conntrack_core: Frag of proto %u.\n",
-			       iph->protocol);
+		printk("ip_conntrack_core: Frag of proto %u.\n",
+		       iph->protocol);
 		return 0;
 	}
 	/* Guarantee 8 protocol bytes: if more wanted, use len param */
@@ -133,7 +127,6 @@ get_tuple(const struct iphdr *iph, size_t len,
 		return 0;
 
 	tuple->src.ip = iph->saddr;
-	tuple->src.pad = 0;
 	tuple->dst.ip = iph->daddr;
 	tuple->dst.protonum = iph->protocol;
 
@@ -149,7 +142,6 @@ invert_tuple(struct ip_conntrack_tuple *inverse,
 	     const struct ip_conntrack_protocol *protocol)
 {
 	inverse->src.ip = orig->dst.ip;
-	inverse->src.pad = 0;
 	inverse->dst.ip = orig->src.ip;
 	inverse->dst.protonum = orig->dst.protonum;
 
@@ -215,6 +207,7 @@ static void death_by_timeout(unsigned long ul_conntrack)
 	struct ip_conntrack *ct = (void *)ul_conntrack;
 
 	WRITE_LOCK(&ip_conntrack_lock);
+	IP_NF_ASSERT(ct->status & IPS_CONFIRMED);
 	clean_from_lists(ct);
 	WRITE_UNLOCK(&ip_conntrack_lock);
 	ip_conntrack_put(ct);
@@ -227,7 +220,7 @@ conntrack_tuple_cmp(const struct ip_conntrack_tuple_hash *i,
 {
 	MUST_BE_READ_LOCKED(&ip_conntrack_lock);
 	return i->ctrack != ignored_conntrack
-		&& memcmp(tuple, &i->tuple, sizeof(*tuple)) == 0;
+		&& ip_ct_tuple_equal(tuple, &i->tuple);
 }
 
 static struct ip_conntrack_tuple_hash *
@@ -269,7 +262,7 @@ ip_conntrack_confirm(struct ip_conntrack *ct)
 	/* Race check */
 	if (!(ct->status & IPS_CONFIRMED)) {
 		IP_NF_ASSERT(!timer_pending(&ct->timeout));
-		ct->status |= IPS_CONFIRMED;
+		set_bit(IPS_CONFIRMED_BIT, &ct->status);
 		/* Timer relative to confirmation time, not original
 		   setting time, otherwise we'd get timer wrap in
 		   wierd delay cases. */
@@ -297,7 +290,9 @@ ip_conntrack_tuple_taken(const struct ip_conntrack_tuple *tuple,
 
 /* Returns conntrack if it dealt with ICMP, and filled in skb fields */
 struct ip_conntrack *
-icmp_error_track(struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
+icmp_error_track(struct sk_buff *skb,
+		 enum ip_conntrack_info *ctinfo,
+		 unsigned int hooknum)
 {
 	const struct iphdr *iph;
 	struct icmphdr *hdr;
@@ -326,6 +321,13 @@ icmp_error_track(struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
 	    && hdr->type != ICMP_REDIRECT)
 		return NULL;
 
+	/* Ignore ICMP's containing fragments (shouldn't happen) */
+	if (inner->frag_off & htons(IP_OFFSET)) {
+		DEBUGP("icmp_error_track: fragment of proto %u\n",
+		       inner->protocol);
+		return NULL;
+	}
+
 	/* Ignore it if the checksum's bogus. */
 	if (ip_compute_csum((unsigned char *)hdr, sizeof(*hdr) + datalen)) {
 		DEBUGP("icmp_error_track: bad csum\n");
@@ -353,7 +355,11 @@ icmp_error_track(struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
 		DEBUGP("icmp_error_track: no match\n");
 		return NULL;
 	}
-	if (!(h->ctrack->status & IPS_CONFIRMED)) {
+
+	/* REJECT target does this commonly, so allow locally
+           generated ICMP errors --RR */
+	if (!(h->ctrack->status & IPS_CONFIRMED)
+	    && hooknum != NF_IP_LOCAL_OUT) {
 		DEBUGP("icmp_error_track: unconfirmed\n");
 		ip_conntrack_put(h->ctrack);
 		return NULL;
@@ -447,6 +453,8 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 		/* Try dropping from random chain, or else from the
                    chain about to put into (in case they're trying to
                    bomb one hash chain). */
+		if (drop_next >= ip_conntrack_htable_size)
+			drop_next = 0;
 		if (!early_drop(&ip_conntrack_hash[drop_next++])
 		    && !early_drop(&ip_conntrack_hash[hash]))
 			return 1;
@@ -528,10 +536,13 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 static inline struct ip_conntrack *
 resolve_normal_ct(struct sk_buff *skb,
 		  struct ip_conntrack_protocol *proto,
+		  int *set_reply,
 		  enum ip_conntrack_info *ctinfo)
 {
 	struct ip_conntrack_tuple tuple;
 	struct ip_conntrack_tuple_hash *h;
+
+	IP_NF_ASSERT((skb->nh.iph->frag_off & htons(IP_OFFSET)) == 0);
 
 	if (!get_tuple(skb->nh.iph, skb->len, &tuple, proto))
 		return NULL;
@@ -554,7 +565,8 @@ resolve_normal_ct(struct sk_buff *skb,
 		}
 
 		*ctinfo = IP_CT_ESTABLISHED + IP_CT_IS_REPLY;
-		h->ctrack->status |= IPS_SEEN_REPLY;
+		/* Please set reply bit if this packet OK */
+		*set_reply = 1;
 	} else {
 		/* Once we've had two way comms, always ESTABLISHED. */
 		if (h->ctrack->status & IPS_SEEN_REPLY) {
@@ -570,6 +582,7 @@ resolve_normal_ct(struct sk_buff *skb,
 			       h->ctrack);
 			*ctinfo = IP_CT_NEW;
 		}
+		*set_reply = 0;
 	}
 	skb->nfct = &h->ctrack->infos[*ctinfo];
 	return h->ctrack;
@@ -602,10 +615,26 @@ unsigned int ip_conntrack_in(unsigned int hooknum,
 	struct ip_conntrack *ct;
 	enum ip_conntrack_info ctinfo;
 	struct ip_conntrack_protocol *proto;
+	int set_reply;
 	int ret;
 
 	/* FIXME: Do this right please. --RR */
 	(*pskb)->nfcache |= NFC_UNKNOWN;
+
+/* Doesn't cover locally-generated broadcast, so not worth it. */
+#if 0
+	/* Ignore broadcast: no `connection'. */
+	if ((*pskb)->pkt_type == PACKET_BROADCAST) {
+		printk("Broadcast packet!\n");
+		return NF_ACCEPT;
+	} else if (((*pskb)->nh.iph->daddr & htonl(0x000000FF)) 
+		   == htonl(0x000000FF)) {
+		printk("Should bcast: %u.%u.%u.%u->%u.%u.%u.%u (sk=%p, ptype=%u)\n",
+		       IP_PARTS((*pskb)->nh.iph->saddr),
+		       IP_PARTS((*pskb)->nh.iph->daddr),
+		       (*pskb)->sk, (*pskb)->pkt_type);
+	}
+#endif
 
 	/* Previously seen (loopback)?  Ignore.  Do this before
            fragment check. */
@@ -622,13 +651,14 @@ unsigned int ip_conntrack_in(unsigned int hooknum,
 	proto = find_proto((*pskb)->nh.iph->protocol);
 
 	/* It may be an icmp error... */
-	if ((*pskb)->nh.iph->protocol != IPPROTO_ICMP 
-	    || !(ct = icmp_error_track(*pskb, &ctinfo))) {
-		if (!(ct = resolve_normal_ct(*pskb, proto, &ctinfo))) {
-			/* Not valid part of a connection */
-			return NF_ACCEPT;
-		}
-	}
+	if ((*pskb)->nh.iph->protocol == IPPROTO_ICMP 
+	    && icmp_error_track(*pskb, &ctinfo, hooknum))
+		return NF_ACCEPT;
+
+	if (!(ct = resolve_normal_ct(*pskb, proto, &set_reply, &ctinfo)))
+		/* Not valid part of a connection */
+		return NF_ACCEPT;
+
 	IP_NF_ASSERT((*pskb)->nfct);
 
 	ret = proto->packet(ct, (*pskb)->nh.iph, (*pskb)->len, ctinfo);
@@ -649,6 +679,8 @@ unsigned int ip_conntrack_in(unsigned int hooknum,
 			return NF_ACCEPT;
 		}
 	}
+	if (set_reply)
+		set_bit(IPS_SEEN_REPLY_BIT, &ct->status);
 
 	return ret;
 }
@@ -845,11 +877,14 @@ ip_ct_selective_cleanup(int (*kill)(const struct ip_conntrack *i, void *data),
 		else if (!(h->ctrack->status & IPS_CONFIRMED)) {
 			/* Unconfirmed connection.  Clean from lists,
 			   mark confirmed so it gets cleaned as soon
-			   as packet comes back. */
+			   as skb freed. */
 			WRITE_LOCK(&ip_conntrack_lock);
+			/* Lock protects race against another setting
+                           of confirmed bit.  set_bit isolates this
+                           bit from the others. */
 			if (!(h->ctrack->status & IPS_CONFIRMED)) {
 				clean_from_lists(h->ctrack);
-				h->ctrack->status |= IPS_CONFIRMED;
+				set_bit(IPS_CONFIRMED_BIT, &h->ctrack->status);
 			}
 			WRITE_UNLOCK(&ip_conntrack_lock);
 		}
@@ -867,8 +902,7 @@ static int
 getorigdst(struct sock *sk, int optval, void *user, int *len)
 {
 	struct ip_conntrack_tuple_hash *h;
-	struct ip_conntrack_tuple tuple = { { sk->rcv_saddr, { sk->sport },
-					      0 },
+	struct ip_conntrack_tuple tuple = { { sk->rcv_saddr, { sk->sport } },
 					    { sk->daddr, { sk->dport },
 					      IPPROTO_TCP } };
 

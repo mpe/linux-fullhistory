@@ -2426,40 +2426,6 @@ do_install_cmap(int con, struct fb_info *info)
 					    1, fbhw->setcolreg, info);		
 }
 
-
-	/*
-	 * Open/Release the frame buffer device
-	 */
-
-static int atafb_open(struct fb_info *info, int user)
-{
-	/*
-	 * Nothing, only a usage count for the moment
-	 */
-
-	MOD_INC_USE_COUNT;
-	return(0);
-}
-
-static int atafb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return(0);
-}
-
-
-static int
-atafb_get_fix(struct fb_fix_screeninfo *fix, int con, struct fb_info *info)
-{
-	struct atafb_par par;
-	if (con == -1)
-		atafb_get_par(&par);
-	else
-		fbhw->decode_var(&fb_display[con].var,&par);
-	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
-	return fbhw->encode_fix(fix, &par);
-}
-	
 static int
 atafb_get_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 {
@@ -2658,9 +2624,14 @@ atafb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 }
 
 static struct fb_ops atafb_ops = {
-	atafb_open, atafb_release, atafb_get_fix, atafb_get_var,
-	atafb_set_var, atafb_get_cmap, atafb_set_cmap,
-	atafb_pan_display, atafb_ioctl	
+	owner:		THIS_MODULE,
+	fb_get_fix:	atafb_get_fix,
+	fb_get_var:	atafb_get_var,
+	fb_set_var:	atafb_set_var,
+	fb_get_cmap:	atafb_get_cmap,
+	fb_set_cmap:	atafb_set_cmap,
+	fb_pan_display:	atafb_pan_display,
+	fb_ioctl:	atafb_ioctl,
 };
 
 static void

@@ -362,16 +362,15 @@ int __init xxxfb_setup(char *options)
      *  Frame buffer operations
      */
 
+/* If all you need is that - just don't define ->fb_open */
 static int xxxfb_open(const struct fb_info *info, int user)
 {
-    /* Nothing, only a usage count for the moment */
-    MOD_INC_USE_COUNT;
     return 0;
 }
 
+/* If all you need is that - just don't define ->fb_release */
 static int xxxfb_release(const struct fb_info *info, int user)
 {
-    MOD_DEC_USE_COUNT;
     return 0;
 }
 
@@ -382,8 +381,16 @@ static int xxxfb_release(const struct fb_info *info, int user)
      */
 
 static struct fb_ops xxxfb_ops = {
-    xxxfb_open, xxxfb_release, fbgen_get_fix, fbgen_get_var, fbgen_set_var,
-    fbgen_get_cmap, fbgen_set_cmap, fbgen_pan_display, fbgen_ioctl
+	owner:		THIS_MODULE,
+	fb_open:	xxxfb_open,    /* only if you need it to do something */
+	fb_release:	xxxfb_release, /* only if you need it to do something */
+	fb_get_fix:	fbgen_get_fix,
+	fb_get_var:	fbgen_get_var,
+	fb_set_var:	fbgen_set_var,
+	fb_get_cmap:	fbgen_get_cmap,
+	fb_set_cmap:	fbgen_set_cmap,
+	fb_pan_display:	fbgen_pan_display,
+	fb_ioctl:	fbgen_ioctl,
 };
 
 

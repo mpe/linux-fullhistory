@@ -25,6 +25,11 @@
  *		and frees the saved copy of applied microcode.
  *	1.03	29 February 2000, Tigran Aivazian <tigran@sco.com>
  *		Made to use devfs (/dev/cpu/microcode) + cleanups.
+ *	1.04	06 June 2000, Simon Trimmer <simon@veritas.com>
+ *		Added misc device support (now uses both devfs and misc).
+ *		Added MICROCODE_IOCFREE ioctl to clear memory.
+ *	1.05	09 June 2000, Simon Trimmer <simon@veritas.com>
+ *		Messages for error cases (non intel & no suitable microcode).
  */
 
 #include <linux/init.h>
@@ -33,16 +38,17 @@
 #include <linux/module.h>
 #include <linux/vmalloc.h>
 #include <linux/smp_lock.h>
+#include <linux/miscdevice.h>
 #include <linux/devfs_fs_kernel.h>
 
 #include <asm/msr.h>
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
-#define MICROCODE_VERSION 	"1.03"
+#define MICROCODE_VERSION 	"1.05"
 
-MODULE_DESCRIPTION("CPU (P6) microcode update driver");
-MODULE_AUTHOR("Tigran Aivazian <tigran@ocston.org>");
+MODULE_DESCRIPTION("Intel CPU (P6) microcode update driver");
+MODULE_AUTHOR("Tigran Aivazian <tigran@veritas.com>");
 EXPORT_NO_SYMBOLS;
 
 /* VFS interface */
@@ -50,6 +56,7 @@ static int microcode_open(struct inode *, struct file *);
 static int microcode_release(struct inode *, struct file *);
 static ssize_t microcode_read(struct file *, char *, size_t, loff_t *);
 static ssize_t microcode_write(struct file *, const char *, size_t, loff_t *);
+static int microcode_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
 
 /* internal helpers to do the work */
@@ -60,43 +67,62 @@ static void do_update_one(void *);
  *  Bits in microcode_status. (31 bits of room for future expansion)
  */
 #define MICROCODE_IS_OPEN	0	/* set if device is in use */
-static unsigned long microcode_status = 0;
+
+static unsigned long microcode_status;
 
 /* the actual array of microcode blocks, each 2048 bytes */
-static struct microcode *microcode = NULL;
-static unsigned int microcode_num = 0;
-static char *mc_applied = NULL; /* holds an array of applied microcode blocks */
-static unsigned int mc_fsize;   /* used often, so compute once at microcode_init() */
+static struct microcode *microcode;
+static unsigned int microcode_num;
+static char *mc_applied; /* holds an array of applied microcode blocks */
+static unsigned int mc_fsize;
 
 static struct file_operations microcode_fops = {
+	owner:		THIS_MODULE,
 	read:		microcode_read,
 	write:		microcode_write,
+	ioctl:		microcode_ioctl,
 	open:		microcode_open,
 	release:	microcode_release,
+};
+
+static struct miscdevice microcode_dev = {
+	minor: MICROCODE_MINOR,
+	name:	"microcode",
+	fops:	&microcode_fops,
 };
 
 static devfs_handle_t devfs_handle;
 
 static int __init microcode_init(void)
 {
-	devfs_handle = devfs_register(NULL, "cpu/microcode", 0, DEVFS_FL_DEFAULT, 0, 0,
-				   S_IFREG | S_IRUSR | S_IWUSR, 0, 0, &microcode_fops, NULL);
-	if (!devfs_handle) {
-		printk(KERN_ERR "microcode: can't create /dev/cpu/microcode\n");
- 		return -ENOMEM;
- 	}
-	/* XXX assume no hotplug CPUs so smp_num_cpus does not change */
-	mc_fsize = smp_num_cpus * sizeof(struct microcode);
-	printk(KERN_INFO "P6 Microcode Update Driver v%s registered\n", MICROCODE_VERSION);
+	int error = 0;
+
+	if (misc_register(&microcode_dev) < 0) {
+		printk(KERN_WARNING 
+			"microcode: can't misc_register on minor=%d\n",
+			MICROCODE_MINOR);
+		error = 1;
+	}
+	devfs_handle = devfs_register(NULL, "cpu/microcode", 0, 
+			DEVFS_FL_DEFAULT, 0, 0, S_IFREG | S_IRUSR | S_IWUSR, 
+			0, 0, &microcode_fops, NULL);
+	if (devfs_handle == NULL && error) {
+		printk(KERN_ERR "microcode: failed to devfs_register()\n");
+		return -EINVAL;
+	}
+	printk(KERN_INFO "P6 Microcode Update Driver v%s registered\n", 
+			MICROCODE_VERSION);
 	return 0;
 }
 
 static void __exit microcode_exit(void)
 {
+	misc_deregister(&microcode_dev);
 	devfs_unregister(devfs_handle);
 	if (mc_applied)
 		kfree(mc_applied);
-	printk(KERN_INFO "P6 Microcode Update Driver v%s unregistered\n", MICROCODE_VERSION);
+	printk(KERN_INFO "P6 Microcode Update Driver v%s unregistered\n", 
+			MICROCODE_VERSION);
 }
 
 module_init(microcode_init);
@@ -114,25 +140,16 @@ static int microcode_open(struct inode *inode, struct file *file)
 	if (test_and_set_bit(MICROCODE_IS_OPEN, &microcode_status))
 		return -EBUSY;
 
-	if ((file->f_flags & O_ACCMODE) == O_WRONLY && mc_applied) {
-		devfs_set_file_size(devfs_handle, 0);
-		memset(mc_applied, 0, mc_fsize);
-		kfree(mc_applied);
-		mc_applied = NULL;
-	}
-
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
 static int microcode_release(struct inode *inode, struct file *file)
 {
 	clear_bit(MICROCODE_IS_OPEN, &microcode_status);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
-/* a pointer to 'struct update_req' is passed to the IPI hanlder = do_update_one()
+/* a pointer to 'struct update_req' is passed to the IPI handler = do_update_one()
  * update_req[cpu].err is set to 1 if update failed on 'cpu', 0 otherwise
  * if err==0, microcode[update_req[cpu].slot] points to applied block of microcode
  */
@@ -167,12 +184,14 @@ static void do_update_one(void *arg)
 	struct cpuinfo_x86 *c = cpu_data + cpu_num;
 	struct update_req *req = (struct update_req *)arg + cpu_num;
 	unsigned int pf = 0, val[2], rev, sig;
-	int i;
+	int i,found=0;
 
 	req->err = 1; /* be pessimistic */
 
-	if (c->x86_vendor != X86_VENDOR_INTEL || c->x86 < 6)
+	if (c->x86_vendor != X86_VENDOR_INTEL || c->x86 < 6){
+		printk(KERN_ERR "microcode: CPU%d not an Intel P6\n", cpu_num );
 		return;
+	}
 
 	sig = c->x86_mask + (c->x86_model<<4) + (c->x86<<8);
 
@@ -185,6 +204,8 @@ static void do_update_one(void *arg)
 	for (i=0; i<microcode_num; i++)
 		if (microcode[i].sig == sig && microcode[i].pf == pf &&
 		    microcode[i].ldrver == 1 && microcode[i].hdrver == 1) {
+
+			found=1;
 
 			rdmsr(0x8B, val[0], rev);
 			if (microcode[i].rev <= rev) {
@@ -205,7 +226,7 @@ static void do_update_one(void *arg)
 				}
 
 				wrmsr(0x79, (unsigned int)(m->bits), 0);
-				__asm__ __volatile__ ("cpuid");
+				__asm__ __volatile__ ("cpuid" : : : "ax", "bx", "cx", "dx", "cc");
 				rdmsr(0x8B, val[0], val[1]);
 
 				req->err = 0;
@@ -216,6 +237,9 @@ static void do_update_one(void *arg)
 			}
 			break;
 		}
+
+	if(!found)
+		printk(KERN_ERR "microcode: found no data for CPU%d (sig=%x, pflags=%d)\n", cpu_num, sig, pf);
 }
 
 static ssize_t microcode_read(struct file *file, char *buf, size_t len, loff_t *ppos)
@@ -240,7 +264,8 @@ static ssize_t microcode_write(struct file *file, const char *buf, size_t len, l
 		return -EINVAL;
 	}
 	if (!mc_applied) {
-		mc_applied = kmalloc(mc_fsize, GFP_KERNEL);
+		mc_applied = kmalloc(smp_num_cpus*sizeof(struct microcode),
+				GFP_KERNEL);
 		if (!mc_applied) {
 			printk(KERN_ERR "microcode: out of memory for saved microcode\n");
 			return -ENOMEM;
@@ -257,17 +282,45 @@ static ssize_t microcode_write(struct file *file, const char *buf, size_t len, l
 	}
 	if (copy_from_user(microcode, buf, len)) {
 		ret = -EFAULT;
-		goto out_vfree;
+		goto out_fsize;
 	}
 	if(do_microcode_update()) {
 		ret = -EIO;
-		goto out_vfree;
+		goto out_fsize;
+	} else {
+		mc_fsize = smp_num_cpus * sizeof(struct microcode);
+		ret = (ssize_t)len;
 	}
+out_fsize:
 	devfs_set_file_size(devfs_handle, mc_fsize);
-	ret = (ssize_t)len;
-out_vfree:
 	vfree(microcode);
 out_unlock:
 	unlock_kernel();
 	return ret;
+}
+
+static int microcode_ioctl(struct inode *inode, struct file *file, 
+		unsigned int cmd, unsigned long arg)
+{
+	switch(cmd) {
+		case MICROCODE_IOCFREE:
+			if (mc_applied) {
+				devfs_set_file_size(devfs_handle, 0);
+				memset(mc_applied, 0, mc_fsize);
+				kfree(mc_applied);
+				mc_applied = NULL;
+				printk(KERN_WARNING 
+					"microcode: freed %d bytes\n", mc_fsize);
+				mc_fsize = 0;
+				return 0;
+			}
+			return -ENODATA;
+
+		default:
+			printk(KERN_ERR "microcode: unknown ioctl cmd=%d\n",
+					cmd);
+			return -EINVAL;
+	}
+	/* NOT REACHED */
+	return -EINVAL;
 }

@@ -345,6 +345,14 @@
 #include "../acorn/scsi/powertec.h"
 #endif
 
+#ifdef CONFIG_SCSI_ARXESCSI
+#include "../acorn/scsi/arxescsi.h"
+#endif
+
+#ifdef CONFIG_I2O_SCSI
+#include "../i2o/i2o_scsi.h"
+#endif
+
 #ifdef CONFIG_JAZZ_ESP
 #include "jazz_esp.h"
 #endif
@@ -636,6 +644,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_CUMANA_2
     CUMANA_FAS216,
 #endif
+#ifdef CONFIG_SCSI_ARXESCSI
+    ARXEScsi,
+#endif
 #ifdef CONFIG_SCSI_ECOSCSI
     ECOSCSI_NCR5380,
 #endif
@@ -654,6 +665,10 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_BLK_DEV_3W_XXXX_RAID
 	TWXXXX,
+#endif
+/* Put I2O last so that host specific controllers always win */
+#ifdef CONFIG_I2O_SCSI
+	I2OSCSI
 #endif
 /* "Removable host adapters" below this line (Parallel Port/USB/other) */
 #ifdef CONFIG_SCSI_PPA
@@ -732,38 +747,41 @@ scsi_unregister(struct Scsi_Host * sh){
  */
 
 struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
-    struct Scsi_Host * retval, *shpnt;
+    struct Scsi_Host * retval, *shpnt, *o_shp;
     Scsi_Host_Name *shn, *shn2;
-    int new = 1;
+    int flag_new = 1;
+    const char * hname;
+    size_t hname_len;
     retval = (struct Scsi_Host *)kmalloc(sizeof(struct Scsi_Host) + j,
-					 (tpnt->unchecked_isa_dma && j ? GFP_DMA : 0) | GFP_ATOMIC);
+					 (tpnt->unchecked_isa_dma && j ? 
+					  GFP_DMA : 0) | GFP_ATOMIC);
     memset(retval, 0, sizeof(struct Scsi_Host) + j);
 
     /* trying to find a reserved entry (host_no) */
-    for (shn = scsi_host_no_list;shn;shn = shn->next)
-	if (!(shn->host_registered) && shn->loaded_as_module && tpnt->proc_dir &&
-		tpnt->proc_dir->name && !strncmp(tpnt->proc_dir->name, shn->name, strlen(tpnt->proc_dir->name))) {
-	    new = 0;
+    hname = (tpnt->proc_name) ?  tpnt->proc_name : "";
+    hname_len = strlen(hname);
+    for (shn = scsi_host_no_list;shn;shn = shn->next) {
+	if (!(shn->host_registered) && shn->loaded_as_module && 
+	    (hname_len > 0) && (0 == strncmp(hname, shn->name, hname_len))) {
+	    flag_new = 0;
 	    retval->host_no = shn->host_no;
 	    shn->host_registered = 1;
 	    shn->loaded_as_module = scsi_loadable_module_flag;
 	    break;
 	}
+    }
     atomic_set(&retval->host_active,0);
     retval->host_busy = 0;
     retval->host_failed = 0;
     if(j > 0xffff) panic("Too many extra bytes requested\n");
     retval->extra_bytes = j;
     retval->loaded_as_module = scsi_loadable_module_flag;
-    if (new) {
-	int len = 0;
+    if (flag_new) {
 	shn = (Scsi_Host_Name *) kmalloc(sizeof(Scsi_Host_Name), GFP_ATOMIC);
-	if (tpnt->proc_dir)
-	    len = strlen(tpnt->proc_dir->name);
-	shn->name = kmalloc(len+1, GFP_ATOMIC);
-	if (tpnt->proc_dir)
-	    strncpy(shn->name, tpnt->proc_dir->name, len);
-	shn->name[len] = 0;
+	shn->name = kmalloc(hname_len + 1, GFP_ATOMIC);
+	if (hname_len > 0)
+	    strncpy(shn->name, hname, hname_len);
+	shn->name[hname_len] = 0;
 	shn->host_no = max_scsi_hosts++;
 	shn->host_registered = 1;
 	shn->loaded_as_module = scsi_loadable_module_flag;
@@ -827,11 +845,26 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 
     if(!scsi_hostlist)
 	scsi_hostlist = retval;
-    else
-    {
+    else {
 	shpnt = scsi_hostlist;
-	while(shpnt->next) shpnt = shpnt->next;
-	shpnt->next = retval;
+	if (retval->host_no < shpnt->host_no) {
+	    retval->next = shpnt;
+	    wmb(); /* want all to see these writes in this order */
+	    scsi_hostlist = retval;
+	}
+	else {
+	    for (o_shp = shpnt, shpnt = shpnt->next; shpnt; 
+		 o_shp = shpnt, shpnt = shpnt->next) {
+		if (retval->host_no < shpnt->host_no) {
+		    retval->next = shpnt;
+		    wmb();
+		    o_shp->next = retval;
+		    break;
+		}
+	    }
+	    if (! shpnt)
+		o_shp->next = retval;
+        }
     }
     
     return retval;

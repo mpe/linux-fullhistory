@@ -115,14 +115,17 @@ static struct net_device *init_netdev(struct net_device *dev, int sizeof_priv, c
 	 *	Allocate a name
 	 */
 	 
-	if (dev->name[0] == '\0' || dev->name[0] == ' ')
-	{
-		if(dev_alloc_name(dev, mask)<0)
-		{
-			if(new_device)
-				kfree(dev);
-			return NULL;
+	if (dev->name[0] == '\0' || dev->name[0] == ' ') {
+		strcpy(dev->name, mask);
+		if (!netdev_boot_setup_check(dev)) {
+			if (dev_alloc_name(dev, mask)<0) {
+				if (new_device)
+					kfree(dev);
+				return NULL;
+			}
 		}
+	} else {
+		netdev_boot_setup_check(dev);
 	}
 	
 	/*

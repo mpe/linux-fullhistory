@@ -375,7 +375,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 				break;
 		}
 	} else if (sig >= SIGRTMIN && info && (unsigned long)info != 1
-		   && info->si_code < 0) {
+		   && info->si_code != SI_USER) {
 		/*
 		 * Queue overflow, abort.  We may abort if the signal was rt
 		 * and sent by user using something other than kill().
@@ -1109,7 +1109,7 @@ sys_ssetmask(int newmask)
 }
 #endif /* !defined(__alpha__) */
 
-#if !defined(__alpha__) && !defined(__mips__)
+#if !defined(__alpha__) && !defined(__ia64__) && !defined(__mips__)
 /*
  * For backwards compatibility.  Functionality superseded by sigaction.
  */

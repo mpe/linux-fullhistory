@@ -124,6 +124,7 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
    tristate '  Software Watchdog' CONFIG_SOFT_WATCHDOG
    tristate '  Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
    tristate '  Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
+   tristate '   SBC-60XX Watchdog Timer' CONFIG_60XX_WDT
    tristate '  Mixcom Watchdog' CONFIG_MIXCOMWD 
    if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
       tristate '  DC21285 watchdog' CONFIG_21285_WATCHDOG
@@ -143,6 +144,7 @@ if [ "$CONFIG_ARCH_NETWINDER" = "y" ]; then
    tristate 'NetWinder flash support' CONFIG_NWFLASH
 fi
 
+dep_tristate 'Intel i8x0 Random Number Generator support' CONFIG_INTEL_RNG $CONFIG_PCI
 tristate '/dev/nvram support' CONFIG_NVRAM
 tristate 'Enhanced Real Time Clock Support' CONFIG_RTC
 if [ "$CONFIG_IA64" = "y" ]; then
@@ -206,7 +208,7 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
    fi
    comment 'Video Adapters'
    if [ "$CONFIG_I2C_ALGOBIT" = "y" -o "$CONFIG_I2C_ALGOBIT" = "m" ]; then
-      dep_tristate '  BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV $CONFIG_PCI $CONFIG_I2C_ALGOBIT $CONFIG_SOUND
+      dep_tristate '  BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV $CONFIG_PCI $CONFIG_I2C_ALGOBIT
    fi
    dep_tristate '  Mediavision Pro Movie Studio Video For Linux' CONFIG_VIDEO_PMS $CONFIG_VIDEO_DEV
    if [ "$CONFIG_ALL_PPC" = "y" ]; then

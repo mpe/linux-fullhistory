@@ -117,8 +117,6 @@ int valkyriefb_init(void);
 void valkyrie_of_init(struct device_node *dp);
 int valkyriefb_setup(char*);
 
-static int valkyrie_open(struct fb_info *info, int user);
-static int valkyrie_release(struct fb_info *info, int user);
 static int valkyrie_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info);
 static int valkyrie_get_var(struct fb_var_screeninfo *var, int con,
@@ -151,15 +149,14 @@ static void valkyrie_par_to_fix(struct fb_par_valkyrie *par, struct fb_fix_scree
 static void valkyrie_init_fix(struct fb_fix_screeninfo *fix, struct fb_info_valkyrie *p);
 
 static struct fb_ops valkyriefb_ops = {
-	valkyrie_open,
-	valkyrie_release,
-	valkyrie_get_fix,
-	valkyrie_get_var,
-	valkyrie_set_var,
-	valkyrie_get_cmap,
-	valkyrie_set_cmap,
-	valkyrie_pan_display,
-	valkyrie_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	valkyrie_get_fix,
+	fb_get_var:	valkyrie_get_var,
+	fb_set_var:	valkyrie_set_var,
+	fb_get_cmap:	valkyrie_get_cmap,
+	fb_set_cmap:	valkyrie_set_cmap,
+	fb_pan_display:	valkyrie_pan_display,
+	fb_ioctl:	valkyrie_ioctl,
 };
 
 static int valkyriefb_getcolreg(u_int regno, u_int *red, u_int *green,
@@ -167,18 +164,6 @@ static int valkyriefb_getcolreg(u_int regno, u_int *red, u_int *green,
 static int valkyriefb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			     u_int transp, struct fb_info *info);
 static void do_install_cmap(int con, struct fb_info *info);
-
-static int valkyrie_open(struct fb_info *info, int user)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int valkyrie_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
 
 static int valkyrie_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info)

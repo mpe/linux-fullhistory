@@ -117,10 +117,18 @@ static int sbusfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 static void do_install_cmap(int con, struct fb_info *info);
 
 static struct fb_ops sbusfb_ops = {
-	sbusfb_open, sbusfb_release, sbusfb_get_fix, sbusfb_get_var, sbusfb_set_var,
-	sbusfb_get_cmap, sbusfb_set_cmap, sbusfb_pan_display, sbusfb_ioctl, sbusfb_mmap
+	owner:		THIS_MODULE,
+	fb_open:	sbusfb_open,
+	fb_release:	sbusfb_release,
+	fb_get_fix:	sbusfb_get_fix,
+	fb_get_var:	sbusfb_get_var,
+	fb_set_var:	sbusfb_set_var,
+	fb_get_cmap:	sbusfb_get_cmap,
+	fb_set_cmap:	sbusfb_set_cmap,
+	fb_pan_display:	sbusfb_pan_display,
+	fb_ioctl:	sbusfb_ioctl,
+	fb_mmap:	sbusfb_mmap,
 };
-
 
     /*
      *  Open/Release the frame buffer device
@@ -133,13 +141,11 @@ static int sbusfb_open(struct fb_info *info, int user)
 	if (user) {
 		if (fb->open == 0) {
 			fb->mmaped = 0;
-			fb->open = 1;
 			fb->vtconsole = -1;
 		}
 		fb->open++;
 	} else
 		fb->consolecnt++;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -160,10 +166,8 @@ static int sbusfb_release(struct fb_info *info, int user)
 			if (fb->reset)
 				fb->reset(fb);
 		}
-		fb->open = 0;
 	} else
 		fb->consolecnt--;
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

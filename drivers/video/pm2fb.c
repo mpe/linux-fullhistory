@@ -379,13 +379,14 @@ static struct fbgen_hwswitch pm2fb_hwswitch={
 	pm2fb_blank, pm2fb_set_disp
 };
 
-static int pm2fb_open(struct fb_info* info, int user);
-static int pm2fb_release(struct fb_info* info, int user);
-
 static struct fb_ops pm2fb_ops={
-	pm2fb_open, pm2fb_release, fbgen_get_fix, fbgen_get_var,
-	fbgen_set_var, fbgen_get_cmap, fbgen_set_cmap, fbgen_pan_display,
-	NULL /* fb_ioctl() */, NULL /* fb_mmap() */
+	owner:		THIS_MODULE,
+	fb_get_fix:	fbgen_get_fix,
+	fb_get_var:	fbgen_get_var,
+	fb_set_var:	fbgen_set_var,
+	fb_get_cmap:	fbgen_get_cmap,
+	fb_set_cmap:	fbgen_set_cmap,
+	fb_pan_display:	fbgen_pan_display,
 };
 
 /***************************************************************************
@@ -1107,12 +1108,12 @@ static int __init pm2pci_detect(struct pm2fb_info* p) {
 	}
 #else
 	if (pm2fb_options.flags & OPTF_VIRTUAL) {
-		p->regions.rg_base= __pa(pci->dev->resource[0].start);
-		p->regions.fb_base= __pa(pci->dev->resource[1].start);
+		p->regions.rg_base = __pa(pci_resource_start(pci->dev, 0));
+		p->regions.fb_base = __pa(pci_resource_start(pci->dev, 1));
 	}
 	else {
-		p->regions.rg_base= (pci->dev->resource[0].start);
-		p->regions.fb_base= (pci->dev->resource[0].start);
+		p->regions.rg_base = pci_resource_start(pci->dev, 0);
+		p->regions.fb_base = pci_resource_start(pci->dev, 0);
 	}
 #endif
 #ifdef PM2FB_BE_APERTURE
@@ -1809,18 +1810,6 @@ static void pm2fb_set_disp(const void* par, struct display* disp,
 	restore_flags(flags);
 }
 
-static int pm2fb_open(struct fb_info* info, int user) {
-
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int pm2fb_release(struct fb_info* info, int user) {
-
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
 #ifdef PM2FB_HW_CURSOR
 /***************************************************************************
  * Hardware cursor support
@@ -2049,10 +2038,13 @@ static void pm2fb_cleanup(void) {
 
 int __init pm2fb_init(void){
 
+	MOD_INC_USE_COUNT;
 	memset(&fb_info, 0, sizeof(fb_info));
 	memcpy(&fb_info.current_par, &pm2fb_options.user_mode, sizeof(fb_info.current_par));
-	if (!pm2fb_conf(&fb_info))
+	if (!pm2fb_conf(&fb_info)) {
+		MOD_DEC_USE_COUNT;
 		return -ENXIO;
+	}
 	pm2fb_reset(&fb_info);
 	fb_info.disp.scrollmode=SCROLL_YNOMOVE;
 	fb_info.gen.parsize=sizeof(struct pm2fb_par);
@@ -2071,6 +2063,7 @@ int __init pm2fb_init(void){
 	fbgen_install_cmap(0, &fb_info.gen);
 	if (register_framebuffer(&fb_info.gen.info)<0) {
 		printk(KERN_ERR "pm2fb: unable to register.\n");
+		MOD_DEC_USE_COUNT;
 		return -EINVAL;
 	}
 	printk(KERN_INFO "fb%d: %s (%s), using %uK of video memory.\n",
@@ -2078,7 +2071,6 @@ int __init pm2fb_init(void){
 				board_table[fb_info.board].name,
 				permedia2_name,
 				(u32 )(fb_info.regions.fb_size>>10));
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 

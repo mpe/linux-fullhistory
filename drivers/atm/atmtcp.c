@@ -330,14 +330,20 @@ static int atmtcp_create(int itf,int persist,struct atm_dev **result)
 	struct atmtcp_dev_data *dev_data;
 	struct atm_dev *dev;
 
+	MOD_INC_USE_COUNT;
+
 	dev_data = kmalloc(sizeof(*dev_data),GFP_KERNEL);
-	if (!dev_data) return -ENOMEM;
+	if (!dev_data) {
+		MOD_DEC_USE_COUNT;
+		return -ENOMEM;
+	}
+
 	dev = atm_dev_register(DEV_LABEL,&atmtcp_v_dev_ops,itf,NULL);
 	if (!dev) {
 		kfree(dev_data);
+		MOD_DEC_USE_COUNT;
 		return itf == -1 ? -ENOMEM : -EBUSY;
 	}
-	MOD_INC_USE_COUNT;
 	dev->ci_range.vpi_bits = MAX_VPI_BITS;
 	dev->ci_range.vci_bits = MAX_VCI_BITS;
 	PRIV(dev) = dev_data;

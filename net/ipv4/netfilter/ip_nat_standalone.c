@@ -70,8 +70,16 @@ ip_nat_fn(unsigned int hooknum,
 	ct = ip_conntrack_get(*pskb, &ctinfo);
 	/* Can't track?  Maybe out of memory: this would make NAT
            unreliable. */
-	if (!ct)
+	if (!ct) {
+		if (net_ratelimit())
+			printk("NAT: %u dropping untracked packet %p %u %u.%u.%u.%u -> %u.%u.%u.%u\n",
+			       hooknum,
+			       *pskb,
+			       (*pskb)->nh.iph->protocol,
+			       NIPQUAD((*pskb)->nh.iph->saddr),
+			       NIPQUAD((*pskb)->nh.iph->daddr));
 		return NF_DROP;
+	}
 
 	switch (ctinfo) {
 	case IP_CT_RELATED:

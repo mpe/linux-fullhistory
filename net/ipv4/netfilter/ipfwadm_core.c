@@ -2,12 +2,15 @@
    Rusty.Russell@rustcorp.com.au
 */
 
+#include <linux/config.h>
 #define CONFIG_IP_FIREWALL
 #define CONFIG_IP_FIREWALL_VERBOSE
 #define CONFIG_IP_MASQUERADE
 #define CONFIG_IP_ACCT
 #define CONFIG_IP_TRANSPARENT_PROXY
+#if defined(CONFIG_NETLINK_DEV) || defined(CONFIG_NETLINK_DEV_MODULE)
 #define CONFIG_IP_FIREWALL_NETLINK
+#endif
 
 /*
  *	IP firewalling code. This is taken from 4.4BSD. Please note the
@@ -17,7 +20,7 @@
  *	license in recognition of the original copyright.
  *				-- Alan Cox.
  *
- *	$Id: ipfwadm_core.c,v 1.2 2000/04/15 01:48:10 davem Exp $
+ *	$Id: ipfwadm_core.c,v 1.3 2000/06/09 07:35:49 davem Exp $
  *
  *	Ported from BSD to Linux,
  *		Alan Cox 22/Nov/1994.
@@ -94,7 +97,6 @@
  * This software is provided ``AS IS'' without any warranties of any kind.
  */
 
-#include <linux/config.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <linux/types.h>
@@ -1094,7 +1096,6 @@ int ip_fw_ctl(int stage, void *m, int len)
 }
 #endif /* CONFIG_IP_FIREWALL */
 
-#ifdef CONFIG_PROC_FS
 #if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
 
 static int ip_chain_procinfo(int stage, char *buffer, char **start,
@@ -1252,7 +1253,6 @@ static int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset,
 	return ip_chain_procinfo(IP_FW_FWD, buffer,start,offset,length,
 				 reset);
 }
-#endif
 #endif
 
 

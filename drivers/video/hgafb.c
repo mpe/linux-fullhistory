@@ -377,25 +377,6 @@ static int __init hga_card_detect(void)
  *
  * ------------------------------------------------------------------------- */
 
-
-	/*
-	 *  Open/Release the frame buffer device
-	 */
-
-static int hgafb_open(struct fb_info *info, int user)
-{
-	/* Nothing, only a usage count for the moment */
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int hgafb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-
 	/*
 	 * Get the Fixed Part of the Display
 	 */
@@ -549,8 +530,14 @@ int hga_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	
 	
 static struct fb_ops hgafb_ops = {
-	hgafb_open, hgafb_release, hga_get_fix, hga_get_var, hga_set_var,
-	hga_get_cmap, hga_set_cmap, hga_pan_display, hga_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	hga_get_fix,
+	fb_get_var:	hga_get_var,
+	fb_set_var:	hga_set_var,
+	fb_get_cmap:	hga_get_cmap,
+	fb_set_cmap:	hga_set_cmap,
+	fb_pan_display:	hga_pan_display,
+	fb_ioctl:	hga_ioctl,
 };
 		
 

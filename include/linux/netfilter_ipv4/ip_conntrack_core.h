@@ -22,7 +22,8 @@ extern struct list_head protocol_list;
 
 /* Returns conntrack if it dealt with ICMP, and filled in skb->nfct */
 extern struct ip_conntrack *icmp_error_track(struct sk_buff *skb,
-					     enum ip_conntrack_info *ctinfo);
+					     enum ip_conntrack_info *ctinfo,
+					     unsigned int hooknum);
 extern int get_tuple(const struct iphdr *iph, size_t len,
 		     struct ip_conntrack_tuple *tuple,
 		     struct ip_conntrack_protocol *protocol);

@@ -642,7 +642,7 @@ check_match(struct ipt_entry_match *m,
 
 	match = find_match_lock(m->u.user.name, &ret, &ipt_mutex);
 	if (!match) {
-		duprintf("check_match: `%s' not found\n", m->u.name);
+		duprintf("check_match: `%s' not found\n", m->u.user.name);
 		return ret;
 	}
 	if (match->me)
@@ -689,8 +689,8 @@ check_entry(struct ipt_entry *e, const char *name, unsigned int size,
 	t = ipt_get_target(e);
 	target = find_target_lock(t->u.user.name, &ret, &ipt_mutex);
 	if (!target) {
-		duprintf("check_entry: `%s' not found\n", t->u.name);
-		return ret;
+		duprintf("check_entry: `%s' not found\n", t->u.user.name);
+		goto cleanup_matches;
 	}
 	if (target->me)
 		__MOD_INC_USE_COUNT(target->me);
@@ -1300,9 +1300,10 @@ ipt_register_target(struct ipt_target *target)
 
 	MOD_INC_USE_COUNT;
 	ret = down_interruptible(&ipt_mutex);
-	if (ret != 0)
+	if (ret != 0) {
+		MOD_DEC_USE_COUNT;
 		return ret;
-
+	}
 	if (!list_named_insert(&ipt_target, target)) {
 		duprintf("ipt_register_target: `%s' already in list!\n",
 			 target->name);
@@ -1333,9 +1334,7 @@ ipt_register_match(struct ipt_match *match)
 		MOD_DEC_USE_COUNT;
 		return ret;
 	}
-	if (list_named_insert(&ipt_match, match)) {
-		ret = 0;
-	} else {
+	if (!list_named_insert(&ipt_match, match)) {
 		duprintf("ipt_register_match: `%s' already in list!\n",
 			 match->name);
 		MOD_DEC_USE_COUNT;

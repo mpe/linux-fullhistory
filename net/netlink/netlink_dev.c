@@ -114,7 +114,6 @@ static int netlink_open(struct inode * inode, struct file * file)
 		return -EBUSY;
 
 	open_map |= (1<<minor);
-	MOD_INC_USE_COUNT;
 
 	err = sock_create(PF_NETLINK, SOCK_RAW, minor, &sock);
 	if (err < 0)
@@ -133,7 +132,6 @@ static int netlink_open(struct inode * inode, struct file * file)
 
 out:
 	open_map &= ~(1<<minor);
-	MOD_DEC_USE_COUNT;
 	return err;
 }
 
@@ -145,7 +143,6 @@ static int netlink_release(struct inode * inode, struct file * file)
 	netlink_user[minor] = NULL;
 	open_map &= ~(1<<minor);
 	sock_release(sock);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -167,6 +164,7 @@ static int netlink_ioctl(struct inode *inode, struct file *file,
 
 
 static struct file_operations netlink_fops = {
+	owner:		THIS_MODULE,
 	llseek:		netlink_lseek,
 	read:		netlink_read,
 	write:		netlink_write,

@@ -1290,7 +1290,11 @@ int __openfirmware powerbook_sleep_G3(void)
 
 	sti();
 
-	set_context(current->mm->context);
+	/* The PGD is only a placeholder until Dan finds a way to make
+	 * this work properly on the 8xx processors.  It is only used on
+	 * 8xx processors, it is ignored here.
+	 */
+	set_context(current->mm->context, current->mm->pgd);
 
 	/* Restore L2 cache */
 	if (save_l2cr)

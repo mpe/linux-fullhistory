@@ -3,6 +3,10 @@
  * communicating with userspace via netlink.
  *
  * (C) 2000 James Morris, this code is GPL.
+ *
+ * 2000-03-27: Simplified code (thanks to Andi Kleen for clues). (JM)
+ * 2000-05-20: Fixed notifier problems (following Miguel Freitas' report). (JM)
+ *
  */
 #include <linux/module.h>
 #include <linux/skbuff.h>
@@ -52,40 +56,36 @@ typedef struct ipq_queue {
  	ipq_peer_t peer;		/* Userland peer */
 } ipq_queue_t;
 
-
 /****************************************************************************
  *
  * Packet queue
  *
  ****************************************************************************/
 
-/* Dequeue with element packet ID, or from end of queue if ID is zero. */
-static ipq_queue_element_t *ipq_dequeue(ipq_queue_t *q, unsigned long id)
+/* Dequeue a packet if matched by cmp, or the next available if cmp is NULL */
+static ipq_queue_element_t *
+ipq_dequeue(ipq_queue_t *q,
+            int (*cmp)(ipq_queue_element_t *, unsigned long),
+            unsigned long data)
 {
 	struct list_head *i;
-	ipq_queue_element_t *e = NULL;
 
 	spin_lock_bh(&q->lock);
-	if (q->len == 0)
-		goto out_unlock;
-	i = q->list.prev;
-	if (id > 0) {
-		while (i != &q->list) {
-			if (id == (unsigned long )i)
-				goto out_unlink;
-			i = i->prev;	
+	for (i = q->list.prev; i != &q->list; i = i->prev) {
+		ipq_queue_element_t *e = (ipq_queue_element_t *)i;
+		
+		if (!cmp || cmp(e, data)) {
+			list_del(&e->list);
+			q->len--;
+			spin_unlock_bh(&q->lock);
+			return e;
 		}
-		goto out_unlock;
 	}
-out_unlink:
-	e = (ipq_queue_element_t *)i;
-	list_del(&e->list);
-	q->len--;
-out_unlock:
 	spin_unlock_bh(&q->lock);
-	return e;
+	return NULL;
 }
 
+/* Flush all packets */
 static void ipq_flush(ipq_queue_t *q)
 {
 	ipq_queue_element_t *e;
@@ -93,7 +93,7 @@ static void ipq_flush(ipq_queue_t *q)
 	spin_lock_bh(&q->lock);
 	q->flushing = 1;
 	spin_unlock_bh(&q->lock);
-	while ((e = ipq_dequeue(q, 0))) {
+	while ((e = ipq_dequeue(q, NULL, 0))) {
 		e->verdict = NF_DROP;
 		nf_reinject(e->skb, e->info, e->verdict);
 		kfree(e);
@@ -232,6 +232,11 @@ static int ipq_mangle_ipv4(ipq_verdict_msg_t *v, ipq_queue_element_t *e)
 	return 0;
 }
 
+static inline int id_cmp(ipq_queue_element_t *e, unsigned long id)
+{
+	return (id == (unsigned long )e);
+}
+
 static int ipq_set_verdict(ipq_queue_t *q,
                            ipq_verdict_msg_t *v, unsigned int len)
 {
@@ -239,7 +244,7 @@ static int ipq_set_verdict(ipq_queue_t *q,
 
 	if (v->value < 0 || v->value > NF_MAX_VERDICT)
 		return -EINVAL;
-	e = ipq_dequeue(q, v->id);
+	e = ipq_dequeue(q, id_cmp, v->id);
 	if (e == NULL)
 		return -ENOENT;
 	else {
@@ -294,6 +299,30 @@ static int ipq_receive_peer(ipq_queue_t *q, ipq_peer_msg_t *m,
 			 status = -EINVAL;
 	}
 	return status;
+}
+
+static inline int dev_cmp(ipq_queue_element_t *e, unsigned long ifindex)
+{
+	if (e->info->indev)
+		if (e->info->indev->ifindex == ifindex)
+			return 1;
+	if (e->info->outdev)
+		if (e->info->outdev->ifindex == ifindex);
+			return 1;
+	return 0;
+	
+}
+
+/* Drop any queued packets associated with device ifindex */
+static void ipq_dev_drop(ipq_queue_t *q, int ifindex)
+{
+	ipq_queue_element_t *e;
+	
+	while ((e = ipq_dequeue(q, dev_cmp, ifindex))) {
+		e->verdict = NF_DROP;
+		nf_reinject(e->skb, e->info, e->verdict);
+		kfree(e);
+	}
 }
 
 /****************************************************************************
@@ -456,9 +485,11 @@ static void netlink_receive_user_sk(struct sock *sk, int len)
 static int receive_event(struct notifier_block *this,
                          unsigned long event, void *ptr)
 {
-	if (event == NETDEV_UNREGISTER)
-		if (nlq)
-			ipq_destroy_queue(nlq);
+	struct net_device *dev = ptr;
+
+	/* Drop any packets associated with the downed device */
+	if (event == NETDEV_DOWN)
+		ipq_dev_drop(nlq, dev->ifindex);
 	return NOTIFY_DONE;
 }
 
@@ -574,5 +605,3 @@ static void __exit fini(void)
 MODULE_DESCRIPTION("IPv4 packet queue handler");
 module_init(init);
 module_exit(fini);
-
-

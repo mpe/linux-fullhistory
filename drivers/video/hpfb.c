@@ -246,15 +246,6 @@ static void hpfb_blank(int blank, struct fb_info *info)
 	/* Not supported */
 }
 
-static int hpfb_open(struct fb_info *info, int user)
-{
-	/*
-	 * Nothing, only a usage count for the moment
-	 */
-	MOD_INC_USE_COUNT;
-	return(0);
-}
-
 static void hpfb_set_disp(int con)
 {
 	struct fb_fix_screeninfo fix;
@@ -281,22 +272,14 @@ static void hpfb_set_disp(int con)
 	display->dispsw = &fbcon_cfb8;
 }
 
-static int hpfb_release(struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return(0);
-}
-
 static struct fb_ops hpfb_ops = {
-	hpfb_open,
-	hpfb_release,
-	hpfb_get_fix,
-	hpfb_get_var,
-	hpfb_set_var,
-	hpfb_get_cmap,
-	hpfb_set_cmap,
-	NULL,
-	hpfb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	hpfb_get_fix,
+	fb_get_var:	hpfb_get_var,
+	fb_set_var:	hpfb_set_var,
+	fb_get_cmap:	hpfb_get_cmap,
+	fb_set_cmap:	hpfb_set_cmap,
+	fb_ioctl:	hpfb_ioctl,
 };
 
 #define TOPCAT_FBOMSB	0x5d

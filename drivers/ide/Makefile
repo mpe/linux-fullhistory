@@ -18,11 +18,11 @@ SUB_DIRS     :=
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
-L_TARGET := ide.a
-L_OBJS   := ide-geometry.o
+O_TARGET := idedriver.o
+O_OBJS   := ide-geometry.o
 M_OBJS   :=
 MOD_LIST_NAME := IDE_MODULES
-LX_OBJS :=
+OX_OBJS :=
 MX_OBJS :=
 
 ifeq ($(CONFIG_BLK_DEV_AEC62XX),y)
@@ -78,7 +78,7 @@ IDE_OBJS += q40ide.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_HD),y)
-L_OBJS += hd.o
+O_OBJS += hd.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_HPT34X),y)
@@ -97,7 +97,7 @@ ifeq ($(CONFIG_BLK_DEV_IDE_ICSIDE),y)
 IDE_OBJS += icside.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_IDEDMA_PCI),y)
+ifeq ($(CONFIG_BLK_DEV_IDEDMA),y)
 IDE_OBJS += ide-dma.o
 endif
 
@@ -178,8 +178,8 @@ endif
 ###Collect
 
 ifeq ($(CONFIG_BLK_DEV_IDE),y)
-  LX_OBJS += ide.o ide-features.o
-  L_OBJS += ide-probe.o $(IDE_OBJS)
+  OX_OBJS += ide.o ide-features.o
+  O_OBJS += ide-probe.o $(IDE_OBJS)
 else
   ifeq ($(CONFIG_BLK_DEV_IDE),m)
   MIX_OBJS += ide.o ide-features.o $(IDE_OBJS)
@@ -190,7 +190,7 @@ endif
 ############
 
 ifeq ($(CONFIG_BLK_DEV_IDECS),y)
-L_OBJS += ide-cs.o
+O_OBJS += ide-cs.o
 else
   ifeq ($(CONFIG_BLK_DEV_IDECS),m)
   M_OBJS += ide-cs.o
@@ -198,7 +198,7 @@ else
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDEDISK),y)
-L_OBJS += ide-disk.o
+O_OBJS += ide-disk.o
 else
   ifeq ($(CONFIG_BLK_DEV_IDEDISK),m)
   M_OBJS += ide-disk.o
@@ -206,7 +206,7 @@ else
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDECD),y)
-L_OBJS += ide-cd.o
+O_OBJS += ide-cd.o
 else
   ifeq ($(CONFIG_BLK_DEV_IDECD),m)
   M_OBJS += ide-cd.o
@@ -214,7 +214,7 @@ else
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDETAPE),y)
-L_OBJS += ide-tape.o
+O_OBJS += ide-tape.o
 else
   ifeq ($(CONFIG_BLK_DEV_IDETAPE),m)
   M_OBJS += ide-tape.o
@@ -222,7 +222,7 @@ else
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDEFLOPPY),y)
-L_OBJS += ide-floppy.o
+O_OBJS += ide-floppy.o
 else
   ifeq ($(CONFIG_BLK_DEV_IDEFLOPPY),m)
   M_OBJS += ide-floppy.o

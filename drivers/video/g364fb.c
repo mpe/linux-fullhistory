@@ -91,8 +91,6 @@ static struct fb_var_screeninfo fb_var = { 0, };
 /*
  *  Interface used by the world
  */
-static int g364fb_open(struct fb_info *info, int user);
-static int g364fb_release(struct fb_info *info, int user);
 static int g364fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			  struct fb_info *info);
 static int g364fb_get_var(struct fb_var_screeninfo *var, int con,
@@ -129,8 +127,14 @@ static void do_install_cmap(int con, struct fb_info *info);
 
 
 static struct fb_ops g364fb_ops = {
-    g364fb_open, g364fb_release, g364fb_get_fix, g364fb_get_var, g364fb_set_var,
-    g364fb_get_cmap, g364fb_set_cmap, g364fb_pan_display, g364fb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	g364fb_get_fix,
+	fb_get_var:	g364fb_get_var,
+	fb_set_var:	g364fb_set_var,
+	fb_get_cmap:	g364fb_get_cmap,
+	fb_set_cmap:	g364fb_set_cmap,
+	fb_pan_display:	g364fb_pan_display,
+	fb_ioctl:	g364fb_ioctl,
 };
 
 
@@ -155,26 +159,6 @@ static struct display_switch fbcon_g364cfb8 = {
     fbcon_cfb8_putcs, fbcon_cfb8_revc, fbcon_g364fb_cursor, NULL,
     fbcon_cfb8_clear_margins, FONTWIDTH(8)
 };
-
-
-/*
- *  Open/Release the frame buffer device
- */
-static int g364fb_open(struct fb_info *info, int user)                                       
-{
-    /*                                                                     
-     *  Nothing, only a usage count for the moment                          
-     */                                                                    
-    MOD_INC_USE_COUNT;
-    return(0);                              
-}
-        
-static int g364fb_release(struct fb_info *info, int user)
-{
-    MOD_DEC_USE_COUNT;
-    return(0);                                                    
-}
-
 
 /*
  *  Get the Fixed Part of the Display

@@ -1265,20 +1265,6 @@ do_install_cmap (int con, struct fb_info *info)
 }
 
 static int
-imsttfb_open (struct fb_info *info, int user)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int
-imsttfb_release (struct fb_info *info, int user)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-static int
 imsttfb_get_fix (struct fb_fix_screeninfo *fix, int con, struct fb_info *info)
 {
 	struct fb_info_imstt *p = (struct fb_info_imstt *)info;
@@ -1608,15 +1594,14 @@ imsttfb_ioctl (struct inode *inode, struct file *file, u_int cmd,
 }
 
 static struct fb_ops imsttfb_ops = {
-	imsttfb_open,
-	imsttfb_release,
-	imsttfb_get_fix,
-	imsttfb_get_var,
-	imsttfb_set_var,
-	imsttfb_get_cmap,
-	imsttfb_set_cmap,
-	imsttfb_pan_display,
-	imsttfb_ioctl
+	owner:		THIS_MODULE,
+	fb_get_fix:	imsttfb_get_fix,
+	fb_get_var:	imsttfb_get_var,
+	fb_set_var:	imsttfb_set_var,
+	fb_get_cmap:	imsttfb_get_cmap,
+	fb_set_cmap:	imsttfb_set_cmap,
+	fb_pan_display:	imsttfb_pan_display,
+	fb_ioctl:	imsttfb_ioctl,
 };
 
 static int

@@ -1531,7 +1531,6 @@ static int mtrr_close (struct inode *ino, struct file *file)
     int i, max;
     unsigned int *fcount = file->private_data;
 
-    MOD_DEC_USE_COUNT;
     if (fcount == NULL) return 0;
     max = get_num_var_ranges ();
     for (i = 0; i < max; ++i)
@@ -1549,6 +1548,7 @@ static int mtrr_close (struct inode *ino, struct file *file)
 
 static struct file_operations mtrr_fops =
 {
+    owner:	THIS_MODULE,
     read:	mtrr_read,
     write:	mtrr_write,
     ioctl:	mtrr_ioctl,
@@ -1881,6 +1881,7 @@ int __init mtrr_init(void)
 
 #ifdef CONFIG_PROC_FS
     proc_root_mtrr = create_proc_entry ("mtrr", S_IWUSR | S_IRUGO, &proc_root);
+    proc_root_mtrr->owner = THIS_MODULE;
     proc_root_mtrr->proc_fops = &mtrr_fops;
 #endif
 #ifdef CONFIG_DEVFS_FS
