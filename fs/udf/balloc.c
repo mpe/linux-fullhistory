@@ -104,7 +104,7 @@ static int read_block_bitmap(struct super_block * sb, unsigned int block,
 	return retval;
 }
 
-static int load__block_bitmap(struct super_block * sb, unsigned int block_group)
+static int __load_block_bitmap(struct super_block * sb, unsigned int block_group)
 {
 	int i, j, retval = 0;
 	unsigned long block_bitmap_number;
@@ -188,7 +188,7 @@ static inline int load_block_bitmap(struct super_block *sb,
 	}
 	else
 	{
-		slot = load__block_bitmap(sb, block_group);
+		slot = __load_block_bitmap(sb, block_group);
 	}
 
 	if (slot < 0)

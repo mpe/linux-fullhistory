@@ -118,8 +118,8 @@ error_out:
  * 
  * Return the slot used to store the bitmap, or a -ve error code.
  */
-static int load__block_bitmap (struct super_block * sb,
-			       unsigned int block_group)
+static int __load_block_bitmap (struct super_block * sb,
+			        unsigned int block_group)
 {
 	int i, j, retval = 0;
 	unsigned long block_bitmap_number;
@@ -136,7 +136,7 @@ static int load__block_bitmap (struct super_block * sb,
 			if (sb->u.ext2_sb.s_block_bitmap_number[block_group] ==
 			    block_group)
 				return block_group;
-			ext2_error (sb, "load_block_bitmap",
+			ext2_error (sb, "__load_block_bitmap",
 				    "block_group != block_bitmap_number");
 		}
 		retval = read_block_bitmap (sb, block_group, block_group);
@@ -192,7 +192,7 @@ static int load__block_bitmap (struct super_block * sb,
  * Return the slot number of the group in the superblock bitmap cache's on
  * success, or a -ve error code.
  *
- * There is still one inconsistancy here --- if the number of groups in this
+ * There is still one inconsistency here --- if the number of groups in this
  * filesystems is <= EXT2_MAX_GROUP_LOADED, then we have no way of 
  * differentiating between a group for which we have never performed a bitmap
  * IO request, and a group for which the last bitmap read request failed.
@@ -224,7 +224,7 @@ static inline int load_block_bitmap (struct super_block * sb,
 	 * If not, then do a full lookup for this block group.
 	 */
 	else {
-		slot = load__block_bitmap (sb, block_group);
+		slot = __load_block_bitmap (sb, block_group);
 	}
 
 	/*
