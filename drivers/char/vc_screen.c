@@ -80,7 +80,6 @@ vcs_read(struct inode *inode, struct file *file, char *buf, int count)
 	if (!vc_cons_allocated(cons))
 		return -ENXIO;
 
-	clear_selection();
 	size = vcs_size(inode);
 	if (count < 0 || p > size)
 		return -EINVAL;
@@ -139,7 +138,6 @@ vcs_write(struct inode *inode, struct file *file, char *buf, int count)
 	if (!vc_cons_allocated(cons))
 		return -ENXIO;
 
-	clear_selection();
 	size = vcs_size(inode);
 	if (count < 0 || p > size)
 		return -EINVAL;

@@ -125,11 +125,11 @@
 #include <linux/genhd.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
-#include <linux/major.h>
 #include <linux/delay.h>
 #include <linux/major.h>
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
+#include <linux/blkdev.h>
 #include <asm/bitops.h>
 #include <asm/irq.h>
 #include <asm/segment.h>

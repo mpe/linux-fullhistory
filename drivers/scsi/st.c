@@ -251,6 +251,7 @@ back_over_eof(int dev)
   Scsi_Cmnd *SCpnt;
   Scsi_Tape *STp = &(scsi_tapes[dev]);
   unsigned char cmd[10];
+  unsigned int flags;
 
   cmd[0] = SPACE;
   cmd[1] = 0x01; /* Space FileMarks */
@@ -264,7 +265,12 @@ back_over_eof(int dev)
 	      (void *) cmd, (void *) (STp->buffer)->b_data, 0,
 	      st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
 
+  /* need to do the check with interrupts off. -RAB */
+  save_flags(flags);
+  cli();
   if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+  restore_flags(flags);
+  
   SCpnt->request.dev = -1;
   if ((STp->buffer)->last_result != 0) {
     printk("st%d: Backing over filemark failed.\n", dev);
@@ -283,6 +289,7 @@ flush_write_buffer(int dev)
 {
   int offset, transfer, blks;
   int result;
+  unsigned int flags;
   unsigned char cmd[10];
   Scsi_Cmnd *SCpnt;
   Scsi_Tape *STp = &(scsi_tapes[dev]);
@@ -327,8 +334,12 @@ flush_write_buffer(int dev)
 		 (void *) cmd, (STp->buffer)->b_data, transfer,
 		 st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
 
+    /* this must be done with interrupts off */
+    save_flags (flags);
+    cli();
     if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
-
+    restore_flags(flags);
+ 
     if ((STp->buffer)->last_result_fatal != 0) {
       printk("st%d: Error on flush.\n", dev);
       if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
@@ -406,6 +417,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 {
     int dev;
     unsigned short flags;
+    unsigned int processor_flags;
     int i;
     unsigned char cmd[10];
     Scsi_Cmnd * SCpnt;
@@ -459,7 +471,12 @@ scsi_tape_open(struct inode * inode, struct file * filp)
                 0, st_sleep_done, ST_LONG_TIMEOUT,
 		MAX_READY_RETRIES);
 
+
+    /* this must be done with interrupts off */
+    save_flags (processor_flags);
+    cli();
     if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+    restore_flags(processor_flags);
 
     if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
 	(SCpnt->sense_buffer[2] & 0x0f) == UNIT_ATTENTION) { /* New media? */
@@ -473,7 +490,13 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 		  0, st_sleep_done, ST_LONG_TIMEOUT,
 		  MAX_READY_RETRIES);
 
-      if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+
+    /* this must be done with interrupts off */
+    save_flags (processor_flags);
+    cli();
+    if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+    restore_flags(processor_flags);
+
       (STp->mt_status)->mt_fileno = STp->drv_block = 0;
       STp->eof = ST_NOEOF;
     }
@@ -509,7 +532,12 @@ scsi_tape_open(struct inode * inode, struct file * filp)
                 (void *) cmd, (void *) (STp->buffer)->b_data,
 		6, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
 
+
+    /* this must be done with interrupts off */
+    save_flags (processor_flags);
+    cli();
     if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+    restore_flags(processor_flags);
 
     if (!SCpnt->result && !SCpnt->sense_buffer[0]) {
       STp->max_block = ((STp->buffer)->b_data[1] << 16) |
@@ -539,7 +567,12 @@ scsi_tape_open(struct inode * inode, struct file * filp)
                 (void *) cmd, (void *) (STp->buffer)->b_data,
                 12, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
 
+
+    /* this must be done with interrupts off */
+    save_flags (processor_flags);
+    cli();
     if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+    restore_flags(flags);
 
     if ((STp->buffer)->last_result_fatal != 0) {
 #ifdef DEBUG
@@ -626,6 +659,7 @@ scsi_tape_close(struct inode * inode, struct file * filp)
     static unsigned char cmd[10];
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
+    unsigned int flags;
    
     dev = MINOR(inode->i_rdev);
     rewind = (dev & 0x80) == 0;
@@ -653,7 +687,13 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 		    (void *) cmd, (void *) (STp->buffer)->b_data,
 		    0, st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
 
+
+	/* this must be done with interrupts off */
+	save_flags (flags);
+	cli();
 	if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+	restore_flags(flags);
+
 
 	if ((STp->buffer)->last_result_fatal != 0) {
 	  SCpnt->request.dev = -1;  /* Mark as not busy */
@@ -710,6 +750,7 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
     char *b_point;
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
+    unsigned int flags;
 
     dev = MINOR(inode->i_rdev) & 127;
     STp = &(scsi_tapes[dev]);
@@ -813,7 +854,12 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
 		   (void *) cmd, (STp->buffer)->b_data, transfer,
 		   st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
 
-      if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+
+	/* this must be done with interrupts off */
+	save_flags (flags);
+	cli();
+	if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+	restore_flags(flags);
 
       if ((STp->buffer)->last_result_fatal != 0) {
 #ifdef DEBUG
@@ -944,6 +990,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
     static unsigned char cmd[10];
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
+    unsigned int flags;
 
     dev = MINOR(inode->i_rdev) & 127;
     STp = &(scsi_tapes[dev]);
@@ -1019,7 +1066,12 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 		     (STp->buffer)->buffer_size,
 		     st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
 
+
+	/* this must be done with interrupts off */
+	save_flags (flags);
+	cli();
 	if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+	restore_flags(flags);
 
 	(STp->buffer)->read_pointer = 0;
 	STp->eof_hit = 0;
@@ -1232,6 +1284,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
    Scsi_Cmnd * SCpnt;
    Scsi_Tape * STp;
    int fileno, blkno, at_sm, undone, datalen;
+   unsigned int flags;
 
    dev = dev & 127;
    STp = &(scsi_tapes[dev]);
@@ -1551,7 +1604,13 @@ st_int_ioctl(struct inode * inode,struct file * file,
 	       (void *) cmd, (void *) (STp->buffer)->b_data, datalen,
 	       st_sleep_done, timeout, MAX_RETRIES);
 
-   if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+
+	/* this must be done with interrupts off */
+	save_flags (flags);
+	cli();
+	if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+	restore_flags(flags);
+
 
    ioctl_result = (STp->buffer)->last_result_fatal;
 
@@ -1676,6 +1735,7 @@ st_ioctl(struct inode * inode,struct file * file,
    unsigned char scmd[10];
    Scsi_Cmnd *SCpnt;
    Scsi_Tape *STp;
+   unsigned int flags;
 
    dev = dev & 127;
    STp = &(scsi_tapes[dev]);
@@ -1803,7 +1863,13 @@ st_ioctl(struct inode * inode,struct file * file,
 		 (void *) scmd, (void *) (STp->buffer)->b_data,
 		 20, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
 
-     if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+
+	/* this must be done with interrupts off */
+	save_flags (flags);
+	cli();
+	if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+	restore_flags(flags);
+
      
      if ((STp->buffer)->last_result_fatal != 0) {
        mt_pos.mt_blkno = (-1);

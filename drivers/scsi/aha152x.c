@@ -223,7 +223,7 @@
 /* DEFINES */
 
 /* For PCMCIA cards, always use AUTOCONF */
-#ifdef PCMCIA
+#if defined(PCMCIA) || defined(MODULE)
 #define AUTOCONF
 #endif
 
