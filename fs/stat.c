@@ -52,6 +52,10 @@ static int cp_old_stat(struct inode * inode, struct __old_kernel_stat * statbuf)
 	SET_OLDSTAT_UID(tmp, inode->i_uid);
 	SET_OLDSTAT_GID(tmp, inode->i_gid);
 	tmp.st_rdev = kdev_t_to_nr(inode->i_rdev);
+#if BITS_PER_LONG == 32
+	if (inode->i_size > 0x7fffffff)
+		return -EOVERFLOW;
+#endif	
 	tmp.st_size = inode->i_size;
 	tmp.st_atime = inode->i_atime;
 	tmp.st_mtime = inode->i_mtime;
@@ -74,6 +78,10 @@ static int cp_new_stat(struct inode * inode, struct stat * statbuf)
 	SET_STAT_UID(tmp, inode->i_uid);
 	SET_STAT_GID(tmp, inode->i_gid);
 	tmp.st_rdev = kdev_t_to_nr(inode->i_rdev);
+#if BITS_PER_LONG == 32
+	if (inode->i_size > 0x7fffffff)
+		return -EOVERFLOW;
+#endif	
 	tmp.st_size = inode->i_size;
 	tmp.st_atime = inode->i_atime;
 	tmp.st_mtime = inode->i_mtime;

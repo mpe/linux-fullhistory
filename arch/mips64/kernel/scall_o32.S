@@ -420,6 +420,7 @@ illegal_syscall:
 	sys	sys_pivot_root	2
 	sys	sys_mincore	3
 	sys	sys_madvise	3
+	sys	sys_getdents64	3
 	.endm
 
 	.macro	sys function, nargs

@@ -1160,3 +1160,4 @@ sys_call_table:
 	.quad sys_pivot_root
 	.quad sys_mincore			/* 375 */
 	.quad sys_pciconfig_iobase
+	.quad sys_getdents64

@@ -122,11 +122,14 @@ revalidate:
 				 * not the directory has been modified
 				 * during the copy operation. */
 				unsigned long version = filp->f_version;
+				unsigned char d_type = DT_UNKNOWN;
 
 				UFSD(("filldir(%s,%u)\n", de->d_name, SWAB32(de->d_ino)))
 				UFSD(("namlen %u\n", ufs_get_de_namlen(de)))
+				if ((flags & UFS_DE_MASK) == UFS_DE_44BSD)
+					d_type = de->d_u.d_44.d_type;
 				error = filldir(dirent, de->d_name, ufs_get_de_namlen(de),
-						filp->f_pos, SWAB32(de->d_ino));
+						filp->f_pos, SWAB32(de->d_ino), d_type);
 				if (error)
 					break;
 				if (version != filp->f_version)

@@ -136,7 +136,7 @@ obj-$(CONFIG_SIS900) += sis900.o
 obj-$(CONFIG_DM9102) += dmfe.o
 obj-$(CONFIG_YELLOWFIN) += yellowfin.o
 obj-$(CONFIG_ACENIC) += acenic.o
-
+obj-$(CONFIG_NATSEMI) += natsemi.o
 obj-$(CONFIG_STNIC) += stnic.o 8390.o
 
 ifeq ($(CONFIG_SK98LIN),y)

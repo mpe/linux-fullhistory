@@ -67,7 +67,7 @@
 #define __NR_geteuid             49 /* SunOS calls getuid()                        */
 #define __NR_getegid             50 /* SunOS calls getgid()                        */
 #define __NR_acct                51 /* Common                                      */
-/* #define __NR_ni_syscall	 52    ENOSYS under SunOS			   */
+/* #define __NR_memory_ordering  52    Linux sparc64 specific			   */
 #define __NR_getgid32            53 /* Linux sparc32 specific                      */
 #define __NR_ioctl               54 /* Common                                      */
 #define __NR_reboot              55 /* Common                                      */
@@ -169,7 +169,7 @@
 /* #define __NR_getmsg          151    SunOS Specific                              */
 /* #define __NR_putmsg          152    SunOS Specific                              */
 #define __NR_poll               153 /* Common                                      */
-/* #define __NR_ni_syscall      154    ENOSYS under SunOS                          */
+#define __NR_getdents64		154 /* Linux specific				   */
 /* #define __NR_nfssvc          155    SunOS Specific                              */
 /* #define __NR_getdirentries   156    SunOS Specific                              */
 #define __NR_statfs             157 /* Common                                      */

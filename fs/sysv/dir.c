@@ -61,7 +61,7 @@ static int sysv_readdir(struct file * filp, void * dirent, filldir_t filldir)
 					       inode->i_ino, (off_t) filp->f_pos, sde.inode);
 
 				i = strnlen(sde.name, SYSV_NAMELEN);
-				if (filldir(dirent, sde.name, i, filp->f_pos, sde.inode) < 0) {
+				if (filldir(dirent, sde.name, i, filp->f_pos, sde.inode, DT_UNKNOWN) < 0) {
 					brelse(bh);
 					return 0;
 				}

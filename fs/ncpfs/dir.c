@@ -446,13 +446,13 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 	result = 0;
 	if (filp->f_pos == 0) {
-		if (filldir(dirent, ".", 1, 0, inode->i_ino))
+		if (filldir(dirent, ".", 1, 0, inode->i_ino, DT_DIR))
 			goto out;
 		filp->f_pos = 1;
 	}
 	if (filp->f_pos == 1) {
 		if (filldir(dirent, "..", 2, 1,
-				dentry->d_parent->d_inode->i_ino))
+				dentry->d_parent->d_inode->i_ino, DT_DIR))
 			goto out;
 		filp->f_pos = 2;
 	}
@@ -503,7 +503,7 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 				goto invalid_cache;
 			res = filldir(dirent, dent->d_name.name,
 					dent->d_name.len, filp->f_pos,
-					dent->d_inode->i_ino);
+					dent->d_inode->i_ino, DT_UNKNOWN);
 			dput(dent);
 			if (res)
 				goto finished;
@@ -650,7 +650,7 @@ end_advance:
 		if (!ino)
 			ino = iunique(inode->i_sb, 2);
 		ctl.filled = filldir(dirent, qname.name, qname.len,
-							filp->f_pos, ino);
+				     filp->f_pos, ino, DT_UNKNOWN);
 		if (!ctl.filled)
 			filp->f_pos += 1;
 	}

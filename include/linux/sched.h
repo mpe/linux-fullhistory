@@ -541,6 +541,7 @@ extern void FASTCALL(wake_up_process(struct task_struct * tsk));
 extern int in_group_p(gid_t);
 extern int in_egroup_p(gid_t);
 
+extern void proc_caches_init(void);
 extern void flush_signals(struct task_struct *);
 extern void flush_signal_handlers(struct task_struct *);
 extern int dequeue_signal(sigset_t *, siginfo_t *);

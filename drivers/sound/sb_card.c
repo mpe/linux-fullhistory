@@ -188,7 +188,7 @@ struct pci_dev 	*sb_dev[SB_CARDS_MAX] 	= {NULL},
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
 static int isapnp	= 1;
 static int isapnpjump	= 0;
-static int multiple	= 0;
+static int multiple	= 1;
 static int reverse	= 0;
 static int uart401	= 0;
 
@@ -197,7 +197,7 @@ static int mpu_activated[SB_CARDS_MAX]   = {0};
 static int opl_activated[SB_CARDS_MAX]   = {0};
 #else
 static int isapnp	= 0;
-static int multiple	= 1;
+static int multiple	= 0;
 #endif
 
 MODULE_DESCRIPTION("Soundblaster driver");
@@ -276,7 +276,7 @@ static struct {
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
 		0,0,0,0,
 		0,1,1,-1},
-       {"Sound Blaster 16",
+	{"Sound Blaster 16",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x002a),
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
 		0,0,0,0,
@@ -435,7 +435,7 @@ static struct {
 		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
 		0,-1,0,0},
 	{"ALS100",
-	       	ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0001), 
+		ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0001), 
 		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001),
 		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001),
 		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
@@ -466,10 +466,6 @@ static struct {
 		1,0,0,0},
 	{0}
 };
-
-/* That's useful. */
-
-#define show_base(devname, resname, resptr) printk(KERN_INFO "sb: %s %s base located at %#lx\n", devname, resname, (resptr)->start)
 
 static struct pci_dev *activate_dev(char *devname, char *resname, struct pci_dev *dev)
 {
@@ -635,7 +631,7 @@ int __init sb_isapnp_probe(struct address_info *hw_config, struct address_info *
 				return 0;
 			}
 		}
-		i += reverse ? -1 : 1;		
+		i += reverse ? -1 : 1;
 	}
 
 	return -ENODEV;
@@ -678,7 +674,7 @@ static int __init init_sb(void)
 		if(cfg[card].slots[0]==-1)
 			return -ENODEV;
 		
-		if (!isapnp) 
+		if (!isapnp)
 			cfg_mpu[card].io_base = mpu_io;
 		if (probe_sbmpu(&cfg_mpu[card]))
 			sbmpu[card] = 1;

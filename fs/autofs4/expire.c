@@ -23,7 +23,9 @@ static int is_tree_busy(struct vfsmount *mnt)
 	int count;
 
 	spin_lock(&dcache_lock);
-	count = atomic_read(&mnt->mnt_count);
+	count = atomic_read(&mnt->mnt_count) - 2;
+	if (!is_autofs4_dentry(mnt->mnt_mountpoint))
+		count--;
 repeat:
 	next = this_parent->mnt_mounts.next;
 resume:
@@ -33,7 +35,7 @@ resume:
 						mnt_child);
 		next = tmp->next;
 		/* Decrement count for unused children */
-		count += atomic_read(&p->mnt_count) - 1;
+		count += atomic_read(&p->mnt_count) - 2;
 		if (!list_empty(&p->mnt_mounts)) {
 			this_parent = p;
 			goto repeat;

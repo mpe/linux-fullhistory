@@ -225,6 +225,8 @@
 #define __NR_mincore		218
 #define __NR_madvise		219
 #define __NR_madvise1		219	/* delete when C lib stub is removed */
+#define __NR_getdents64		220
+#define __NR_fcntl64		221
 
 /* user-visible error numbers are in the range -1 - -124: see <asm-i386/errno.h> */
 

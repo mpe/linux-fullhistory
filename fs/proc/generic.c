@@ -294,15 +294,15 @@ int proc_readdir(struct file * filp,
 	i = filp->f_pos;
 	switch (i) {
 		case 0:
-			if (filldir(dirent, ".", 1, i, ino) < 0)
+			if (filldir(dirent, ".", 1, i, ino, DT_DIR) < 0)
 				return 0;
 			i++;
 			filp->f_pos++;
 			/* fall through */
 		case 1:
 			if (filldir(dirent, "..", 2, i,
-				    filp->f_dentry->d_parent->d_inode->i_ino
-				   ) < 0)
+				    filp->f_dentry->d_parent->d_inode->i_ino,
+				    DT_DIR) < 0)
 				return 0;
 			i++;
 			filp->f_pos++;
@@ -320,7 +320,8 @@ int proc_readdir(struct file * filp,
 			}
 
 			do {
-				if (filldir(dirent, de->name, de->namelen, filp->f_pos, de->low_ino) < 0)
+				if (filldir(dirent, de->name, de->namelen, filp->f_pos,
+					    de->low_ino, de->mode >> 12) < 0)
 					return 0;
 				filp->f_pos++;
 				de = de->next;

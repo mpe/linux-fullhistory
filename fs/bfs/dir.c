@@ -50,7 +50,7 @@ static int bfs_readdir(struct file * f, void * dirent, filldir_t filldir)
 			de = (struct bfs_dirent *)(bh->b_data + offset);
 			if (de->ino) {
 				int size = strnlen(de->name, BFS_NAMELEN);
-				if (filldir(dirent, de->name, size, f->f_pos, de->ino) < 0) {
+				if (filldir(dirent, de->name, size, f->f_pos, de->ino, DT_UNKNOWN) < 0) {
 					brelse(bh);
 					return 0;
 				}

@@ -603,7 +603,8 @@ sys_call_table:
         .long  sys_pivot_root
         .long  sys_mincore
         .long  sys_madvise
-	.rept  255-219
+	.long  sys_getdents64		 /* 220 */
+	.rept  255-220
 	.long  sys_ni_syscall
 	.endr
 

@@ -76,7 +76,7 @@ static int umsdos_dir_once (	void *buf,
 	if (d->count == 0) {
 		PRINTK ((KERN_DEBUG "dir_once :%.*s: offset %Ld\n", 
 			len, name, offset));
-		ret = d->filldir (d->dirbuf, name, len, offset, ino);
+		ret = d->filldir (d->dirbuf, name, len, offset, ino, DT_UNKNOWN);
 		d->stop = ret < 0;
 		d->count = 1;
 	}
@@ -120,7 +120,7 @@ static int umsdos_readdir_x (struct inode *dir, struct file *filp,
 
 		Printk ((KERN_WARNING "umsdos_readdir_x: pseudo_root thing UMSDOS_SPECIAL_DIRFPOS\n"));
 		if (filldir (dirbuf, "DOS", 3, 
-				UMSDOS_SPECIAL_DIRFPOS, UMSDOS_ROOT_INO) == 0) {
+				UMSDOS_SPECIAL_DIRFPOS, UMSDOS_ROOT_INO, DT_DIR) == 0) {
 			filp->f_pos++;
 		}
 		goto out_end;
@@ -235,7 +235,7 @@ dret->d_parent->d_name.name, dret->d_name.name);
 		 */
 		if (inode != pseudo_root && !(entry.flags & UMSDOS_HIDDEN)) {
 			if (filldir (dirbuf, entry.name, entry.name_len,
-				 cur_f_pos, inode->i_ino) < 0) {
+				 cur_f_pos, inode->i_ino, DT_UNKNOWN) < 0) {
 				pos = cur_f_pos;
 			}
 Printk(("umsdos_readdir_x: got %s/%s, ino=%ld\n",

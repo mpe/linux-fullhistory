@@ -1106,6 +1106,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_pivot_root)
 	.long SYMBOL_NAME(sys_mincore)
 	.long SYMBOL_NAME(sys_madvise)
+	.long SYMBOL_NAME(sys_getdents64)	/* 220 */
 
 	/*
 	 * NOTE!! This doesn't have to be exact - we just have
@@ -1113,7 +1114,7 @@ ENTRY(sys_call_table)
 	 * entries. Don't panic if you notice that this hasn't
 	 * been shrunk every time we add a new system call.
 	 */
-	.rept NR_syscalls-219
+	.rept NR_syscalls-220
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr
 

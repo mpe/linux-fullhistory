@@ -108,14 +108,14 @@ int hpfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 			return 0;
 		}
 		if (filp->f_pos == 0) {
-			if (filldir(dirent, ".", 1, filp->f_pos, inode->i_ino) < 0) {
+			if (filldir(dirent, ".", 1, filp->f_pos, inode->i_ino, DT_DIR) < 0) {
 				hpfs_unlock_inode(inode);
 				return 0;
 			}
 			filp->f_pos = 11;
 		}
 		if (filp->f_pos == 11) {
-			if (filldir(dirent, "..", 2, filp->f_pos, inode->i_hpfs_parent_dir) < 0) {
+			if (filldir(dirent, "..", 2, filp->f_pos, inode->i_hpfs_parent_dir, DT_DIR) < 0) {
 				hpfs_unlock_inode(inode);
 				return 0;
 			}
@@ -144,7 +144,7 @@ int hpfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 				goto again;
 			}
 			tempname = hpfs_translate_name(inode->i_sb, de->name, de->namelen, lc, de->not_8x3);
-			if (filldir(dirent, tempname, de->namelen, old_pos, de->fnode) < 0) {
+			if (filldir(dirent, tempname, de->namelen, old_pos, de->fnode, DT_UNKNOWN) < 0) {
 				filp->f_pos = old_pos;
 				if (tempname != (char *)de->name) kfree(tempname);
 				hpfs_brelse4(&qbh);

@@ -866,7 +866,7 @@ EXPORT_SYMBOL(sppp_close);
  *	
  *	Close down any existing synchronous session and commence
  *	from scratch. In the PPP case this means negotiating LCP/IPCP
- *	and friends, while for Cisco HDLC we simply need to staet sending
+ *	and friends, while for Cisco HDLC we simply need to start sending
  *	keepalives
  */
 

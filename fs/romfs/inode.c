@@ -254,6 +254,10 @@ romfs_copyfrom(struct inode *i, void *dest, unsigned long offset, unsigned long 
 	return res;
 }
 
+static unsigned char romfs_dtype_table[] = {
+	DT_UNKNOWN, DT_DIR, DT_REG, DT_LNK, DT_BLK, DT_CHR, DT_SOCK, DT_FIFO
+};
+
 static int
 romfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
@@ -298,7 +302,8 @@ romfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		nextfh = ntohl(ri.next);
 		if ((nextfh & ROMFH_TYPE) == ROMFH_HRD)
 			ino = ntohl(ri.spec);
-		if (filldir(dirent, fsname, j, offset, ino) < 0) {
+		if (filldir(dirent, fsname, j, offset, ino,
+			    romfs_dtype_table[nextfh & ROMFH_TYPE]) < 0) {
 			return stored;
 		}
 		stored++;

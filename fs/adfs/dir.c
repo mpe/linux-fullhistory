@@ -40,12 +40,12 @@ adfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 	switch ((unsigned long)filp->f_pos) {
 	case 0:
-		if (filldir(dirent, ".", 1, 0, inode->i_ino) < 0)
+		if (filldir(dirent, ".", 1, 0, inode->i_ino, DT_DIR) < 0)
 			goto free_out;
 		filp->f_pos += 1;
 
 	case 1:
-		if (filldir(dirent, "..", 2, 1, dir.parent_id) < 0)
+		if (filldir(dirent, "..", 2, 1, dir.parent_id, DT_DIR) < 0)
 			goto free_out;
 		filp->f_pos += 1;
 
@@ -60,7 +60,7 @@ adfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		goto unlock_out;
 	while (ops->getnext(&dir, &obj) == 0) {
 		if (filldir(dirent, obj.name, obj.name_len,
-			    filp->f_pos, obj.file_id) < 0)
+			    filp->f_pos, obj.file_id, DT_UNKNOWN) < 0)
 			goto unlock_out;
 		filp->f_pos += 1;
 	}

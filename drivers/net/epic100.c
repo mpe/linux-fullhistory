@@ -19,16 +19,29 @@
 
 	Information and updates available at
 	http://www.scyld.com/network/epic100.html
+
+	---------------------------------------------------------------------
 	
 	Linux kernel-specific changes:
 	
 	LK1.1.2 (jgarzik):
-	* Merge becker version 1.09
+	* Merge becker version 1.09 (4/08/2000)
 
 	LK1.1.3:
 	* Major bugfix to 1.09 driver (Francis Romieu)
+	
+	LK1.1.4 (jgarzik):
+	* Merge becker test version 1.09 (5/29/2000)
 
 */
+
+/* These identify the driver base version and may not be removed. */
+static const char version[] =
+"epic100.c:v1.09 5/29/2000 Written by Donald Becker <becker@scyld.com>\n";
+static const char version2[] =
+"  http://www.scyld.com/network/epic100.html\n";
+static const char version3[] =
+" (unofficial 2.4.x kernel port, version 1.1.4, August 10, 2000)\n";
 
 /* The user-configurable values.
    These may be modified when a driver module is loaded.*/
@@ -44,11 +57,12 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
    Setting to > 1518 effectively disables this feature. */
-static int rx_copybreak = 200;
+static int rx_copybreak = 0;
 
 /* Operational parameters that are set at compile time. */
 
-/* Keep the ring sizes a power of two for efficiency.
+/* Keep the ring sizes a power of two for operational efficiency.
+   The compiler will convert <unsigned>'%'<2^N> into a bit mask.
    Making the Tx ring too large decreases the effectiveness of channel
    bonding and packet priority.
    There are no ill effects from too-large receive rings. */
@@ -73,7 +87,12 @@ static int rx_copybreak = 200;
 #error You must compile this driver with "-O".
 #endif
 
+#include <linux/version.h>
 #include <linux/module.h>
+#if LINUX_VERSION_CODE < 0x20300  &&  defined(MODVERSIONS)
+#include <linux/modversions.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/timer.h>
@@ -90,15 +109,6 @@ static int rx_copybreak = 200;
 #include <linux/spinlock.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
-
-/* These identify the driver base version and may not be removed. */
-static char version[] __devinitdata =
-"epic100.c:v1.09+LK1.1.3 6/17/2000 Written by Donald Becker <becker@scyld.com>\n";
-static char version2[] __devinitdata =
-"  	http://www.scyld.com/network/epic100.html\n";
-
-#define EPIC100_MODULE_NAME "epic100"
-#define PFX EPIC100_MODULE_NAME ": "
 
 MODULE_AUTHOR("Donald Becker <becker@scyld.com>");
 MODULE_DESCRIPTION("SMC 83c170 EPIC series Ethernet driver");
@@ -133,7 +143,7 @@ IVb. References
 
 http://www.smsc.com/main/datasheets/83c171.pdf
 http://www.smsc.com/main/datasheets/83c175.pdf
-http://cesdis.gsfc.nasa.gov/linux/misc/NWay.html
+http://scyld.com/expert/NWay.html
 http://www.national.com/pf/DP/DP83840A.html
 
 IVc. Errata
@@ -149,9 +159,7 @@ enum pci_id_flags_bits {
         PCI_ADDR_64BITS=0x100, PCI_NO_ACPI_WAKE=0x200, PCI_NO_MIN_LATENCY=0x400,
 };
 
-
 enum chip_capability_flags { MII_PWRDWN=1, TYPE2_INTR=2, NO_MII=4 };
-
 
 #define EPIC_TOTAL_SIZE 0x100
 #ifdef USE_IO_OPS
@@ -289,6 +297,7 @@ struct epic_private {
 	int tx_threshold;
 	unsigned char mc_filter[8];
 	signed char phys[4];				/* MII device addresses. */
+	u16 advertising;					/* NWay media advertisement */
 	int mii_phy_cnt;
 	unsigned int tx_full:1;				/* The Tx queue is full. */
 	unsigned int full_duplex:1;			/* Current duplex setting. */
@@ -332,7 +341,8 @@ static int __devinit epic_init_one (struct pci_dev *pdev,
 	card_idx++;
 	
 	if (!printed_version++)
-		printk (KERN_INFO "%s" KERN_INFO "%s", version, version2);
+		printk (KERN_INFO "%s" KERN_INFO "%s" KERN_INFO "%s",
+			version, version2, version3);
 	
 	if ((pci_resource_len(pdev, 0) < ci->io_size) ||
 	    (pci_resource_len(pdev, 1) < ci->io_size)) {
@@ -357,12 +367,12 @@ static int __devinit epic_init_one (struct pci_dev *pdev,
 	 * to them */
 	if (!request_region (pci_resource_start (pdev, 0),
 			     pci_resource_len (pdev, 0), dev->name)) {
-		printk (KERN_ERR PFX "card %d: I/O region busy\n", card_idx);
+		printk (KERN_ERR "epic100 %d: I/O region busy\n", card_idx);
 		goto err_out_free_netdev;
 	}
 	if (!request_mem_region (pci_resource_start (pdev, 1),
 				 pci_resource_len (pdev, 1), dev->name)) {
-		printk (KERN_ERR PFX "card %d: I/O region busy\n", card_idx);
+		printk (KERN_ERR "epic100 %d: I/O region busy\n", card_idx);
 		goto err_out_free_pio;
 	}
 
@@ -372,7 +382,7 @@ static int __devinit epic_init_one (struct pci_dev *pdev,
 	ioaddr = pci_resource_start (pdev, 1);
 	ioaddr = (long) ioremap (ioaddr, pci_resource_len (pdev, 1));
 	if (!ioaddr) {
-		printk (KERN_ERR PFX "card %d: ioremap failed\n", card_idx);
+		printk (KERN_ERR "epic100 %d: ioremap failed\n", card_idx);
 		goto err_out_free_mmio;
 	}
 #endif
@@ -387,7 +397,7 @@ static int __devinit epic_init_one (struct pci_dev *pdev,
 			duplex = full_duplex[card_idx];
 	}
 
-        pdev->driver_data = dev;
+	pdev->driver_data = dev;
 
 	dev->base_addr = ioaddr;
 	dev->irq = pdev->irq;
@@ -426,25 +436,26 @@ static int __devinit epic_init_one (struct pci_dev *pdev,
 
 	/* Find the connected MII xcvrs.
 	   Doing this in open() would allow detecting external xcvrs later, but
-	   takes too much time. */
+	   takes much time and no cards have external MII. */
 	{
-		int phy, phy_idx;
-		for (phy = 1, phy_idx = 0; phy < 32 && phy_idx < sizeof(ep->phys);
-			 phy++) {
+		int phy, phy_idx = 0;
+		for (phy = 1; phy < 32 && phy_idx < sizeof(ep->phys); phy++) {
 			int mii_status = mdio_read(ioaddr, phy, 1);
-			if (mii_status != 0xffff  && mii_status != 0x0000) {
+			if (mii_status != 0xffff  &&  mii_status != 0x0000) {
 				ep->phys[phy_idx++] = phy;
 				printk(KERN_INFO "%s: MII transceiver #%d control "
-					   "%4.4x status %4.4x.\n"
-					   KERN_INFO "%s:  Autonegotiation advertising %4.4x "
-					   "link partner %4.4x.\n",
-					   dev->name, phy, mdio_read(ioaddr, phy, 0), mii_status,
-					   dev->name, mdio_read(ioaddr, phy, 4),
-					   mdio_read(ioaddr, phy, 5));
+					   "%4.4x status %4.4x.\n",
+					   dev->name, phy, mdio_read(ioaddr, phy, 0), mii_status);
 			}
 		}
 		ep->mii_phy_cnt = phy_idx;
-		if (phy_idx == 0  &&  (ep->chip_flags & NO_MII) == 0) {
+		if (phy_idx != 0) {
+			phy = ep->phys[0];
+			ep->advertising = mdio_read(ioaddr, phy, 4);
+			printk( KERN_INFO "%s: Autonegotiation advertising %4.4x link "
+					"partner %4.4x.\n",
+					dev->name, ep->advertising, mdio_read(ioaddr, phy, 5));
+		} else if ( ! (ep->chip_flags & NO_MII)) {
 			printk(KERN_WARNING "%s: ***WARNING***: No MII transceiver found!\n",
 				   dev->name);
 			/* Use the known PHY address of the EPII. */
@@ -668,7 +679,7 @@ static int epic_open(struct net_device *dev)
 	if (debug > 1)
 		printk(KERN_DEBUG "%s: epic_open() ioaddr %lx IRQ %d status %4.4x "
 			   "%s-duplex.\n",
-			   dev->name, ioaddr, dev->irq, inl(ioaddr + GENCTL),
+			   dev->name, ioaddr, dev->irq, (int)inl(ioaddr + GENCTL),
 			   ep->full_duplex ? "full" : "half");
 
 	/* Set the timer to switch to check for link beat and perhaps switch
@@ -752,8 +763,8 @@ static void epic_restart(struct net_device *dev)
 		 ioaddr + INTMASK);
 	printk(KERN_DEBUG "%s: epic_restart() done, cmd status %4.4x, ctl %4.4x"
 		   " interrupt %4.4x.\n",
-			   dev->name, inl(ioaddr + COMMAND), inl(ioaddr + GENCTL),
-		   inl(ioaddr + INTSTAT));
+		   dev->name, (int)inl(ioaddr + COMMAND), (int)inl(ioaddr + GENCTL),
+		   (int)inl(ioaddr + INTSTAT));
 	return;
 }
 
@@ -764,18 +775,19 @@ static void epic_timer(unsigned long data)
 	long ioaddr = dev->base_addr;
 	int next_tick = 60*HZ;
 	int mii_reg5 = ep->mii_phy_cnt ? mdio_read(ioaddr, ep->phys[0], 5) : 0;
+	int negotiated = mii_reg5 & ep->advertising;
+	int duplex = (negotiated & 0x0100) || (negotiated & 0x01C0) == 0x0040;
 
 	if (debug > 3) {
 		printk(KERN_DEBUG "%s: Media monitor tick, Tx status %8.8x.\n",
-			   dev->name, inl(ioaddr + TxSTAT));
+			   dev->name, (int)inl(ioaddr + TxSTAT));
 		printk(KERN_DEBUG "%s: Other registers are IntMask %4.4x "
 			   "IntStatus %4.4x RxStatus %4.4x.\n",
-			   dev->name, inl(ioaddr + INTMASK), inl(ioaddr + INTSTAT),
-			   inl(ioaddr + RxSTAT));
+			   dev->name, (int)inl(ioaddr + INTMASK),
+			   (int)inl(ioaddr + INTSTAT), (int)inl(ioaddr + RxSTAT));
 	}
 
-	if (! ep->force_fd  &&  mii_reg5 != 0xffff) {
-		int duplex = (mii_reg5&0x0100) || (mii_reg5 & 0x01C0) == 0x0040;
+	if (! ep->force_fd) {
 		if (ep->full_duplex != duplex) {
 			ep->full_duplex = duplex;
 			printk(KERN_INFO "%s: Setting %s-duplex based on MII #%d link"
@@ -797,7 +809,7 @@ static void epic_tx_timeout(struct net_device *dev)
 	if (debug > 0) {
 		printk(KERN_WARNING "%s: Transmit timeout using MII device, "
 			   "Tx status %4.4x.\n",
-			   dev->name, inw(ioaddr + TxSTAT));
+			   dev->name, (int)inw(ioaddr + TxSTAT));
 		if (debug > 1) {
 			printk(KERN_DEBUG "%s: Tx indices: dirty_tx %d, cur_tx %d.\n",
 				   dev->name, ep->dirty_tx, ep->cur_tx);
@@ -880,11 +892,11 @@ static int epic_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	ep->tx_skbuff[entry] = skb;
 	ep->tx_ring[entry].bufaddr = virt_to_le32desc(skb->data);
 
-	if (free_count < TX_RING_SIZE/2) {/* Typical path */
+	if (free_count < TX_QUEUE_LEN/2) {/* Typical path */
 		ctrl_word = cpu_to_le32(0x100000); /* No interrupt */
-	} else if (free_count == TX_RING_SIZE/2) {
+	} else if (free_count == TX_QUEUE_LEN/2) {
 		ctrl_word = cpu_to_le32(0x140000); /* Tx-done intr. */
-	} else if (free_count < TX_RING_SIZE - 1) {
+	} else if (free_count < TX_QUEUE_LEN - 1) {
 		ctrl_word = cpu_to_le32(0x100000); /* No Tx-done intr. */
 	} else {
 		/* Leave room for an additional entry. */
@@ -910,7 +922,7 @@ static int epic_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		printk(KERN_DEBUG "%s: Queued Tx packet size %d to slot %d, "
 			   "flag %2.2x Tx status %8.8x.\n",
 			   dev->name, (int)skb->len, entry, ctrl_word,
-			   inl(dev->base_addr + TxSTAT));
+			   (int)inl(dev->base_addr + TxSTAT));
 
 	return 0;
 }
@@ -924,7 +936,8 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	long ioaddr = dev->base_addr;
 	int status, boguscnt = max_interrupt_work;
 
-	spin_lock(&ep->lock);
+	if (!spin_trylock(&ep->lock))
+		return;
 
 	do {
 		status = inl(ioaddr + INTSTAT);
@@ -932,9 +945,9 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		outl(status & 0x00007fff, ioaddr + INTSTAT);
 
 		if (debug > 4)
-			printk(KERN_DEBUG "%s: interrupt  interrupt=%#8.8x new "
+			printk(KERN_DEBUG "%s: Interrupt, status=%#8.8x new "
 				   "intstat=%#8.8x.\n",
-				   dev->name, status, inl(ioaddr + INTSTAT));
+				   dev->name, status, (int)inl(ioaddr + INTSTAT));
 
 		if ((status & IntrSummary) == 0)
 			break;
@@ -995,7 +1008,7 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 #endif
 			ep->dirty_tx = dirty_tx;
 			if (ep->tx_full
-				&& cur_tx - dirty_tx < TX_RING_SIZE + 2) {
+				&& cur_tx - dirty_tx < TX_QUEUE_LEN - 4) {
 				/* The ring is no longer full, clear tbusy. */
 				ep->tx_full = 0;
 				netif_wake_queue(dev);
@@ -1044,7 +1057,7 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
 	if (debug > 3)
 		printk(KERN_DEBUG "%s: exiting interrupt, intr_status=%#4.4x.\n",
-			   dev->name, inl(ioaddr + INTSTAT));
+			   dev->name, status);
 
 	spin_unlock(&ep->lock);
 }
@@ -1144,7 +1157,7 @@ static int epic_close(struct net_device *dev)
 
 	if (debug > 1)
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was %2.2x.\n",
-			   dev->name, inl(ioaddr + INTSTAT));
+			   dev->name, (int)inl(ioaddr + INTSTAT));
 
 	del_timer_sync(&ep->timer);
 	epic_pause(dev);
@@ -1333,7 +1346,7 @@ static void epic_resume (struct pci_dev *pdev)
 
 
 static struct pci_driver epic_driver = {
-	name:		EPIC100_MODULE_NAME,
+	name:		"epic100",
 	id_table:	epic_pci_tbl,
 	probe:		epic_init_one,
 	remove:		epic_remove_one,
@@ -1356,14 +1369,3 @@ static void __exit epic_cleanup (void)
 
 module_init(epic_init);
 module_exit(epic_cleanup);
-
-
-/*
- * Local variables:
- *  compile-command: "gcc -DMODULE -Wall -Wstrict-prototypes -O6 -c epic100.c"
- *  cardbus-compile-command: "gcc -DCARDBUS -DMODULE -Wall -Wstrict-prototypes -O6 -c epic100.c -o epic_cb.o -I/usr/src/pcmcia/include/"
- *  c-indent-level: 4
- *  c-basic-offset: 4
- *  tab-width: 4
- * End:
- */

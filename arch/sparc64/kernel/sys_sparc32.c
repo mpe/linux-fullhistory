@@ -1235,7 +1235,8 @@ struct getdents_callback32 {
 	int error;
 };
 
-static int filldir(void * __buf, const char * name, int namlen, off_t offset, ino_t ino)
+static int filldir(void * __buf, const char * name, int namlen, off_t offset, ino_t ino,
+		   unsigned int d_type)
 {
 	struct linux_dirent32 * dirent;
 	struct getdents_callback32 * buf = (struct getdents_callback32 *) __buf;

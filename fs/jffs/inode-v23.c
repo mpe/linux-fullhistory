@@ -557,7 +557,7 @@ jffs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	D2(printk("jffs_readdir(): inode: 0x%p, filp: 0x%p\n", inode, filp));
 	if (filp->f_pos == 0) {
 		D3(printk("jffs_readdir(): \".\" %lu\n", inode->i_ino));
-		if (filldir(dirent, ".", 1, filp->f_pos, inode->i_ino) < 0) {
+		if (filldir(dirent, ".", 1, filp->f_pos, inode->i_ino, DT_DIR) < 0) {
 			return 0;
 		}
 		filp->f_pos = 1;
@@ -571,7 +571,7 @@ jffs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 				 inode->u.generic_ip)->pino;
 		}
 		D3(printk("jffs_readdir(): \"..\" %u\n", ddino));
-		if (filldir(dirent, "..", 2, filp->f_pos, ddino) < 0)
+		if (filldir(dirent, "..", 2, filp->f_pos, ddino, DT_DIR) < 0)
 			return 0;
 		filp->f_pos++;
 	}
@@ -583,7 +583,7 @@ jffs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		D3(printk("jffs_readdir(): \"%s\" ino: %u\n",
 			  (f->name ? f->name : ""), f->ino));
 		if (filldir(dirent, f->name, f->nsize,
-			    filp->f_pos , f->ino) < 0)
+			    filp->f_pos , f->ino, DT_UNKNOWN) < 0)
 			return 0;
 		filp->f_pos++;
 	}

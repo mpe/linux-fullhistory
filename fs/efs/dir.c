@@ -78,7 +78,7 @@ static int efs_readdir(struct file *filp, void *dirent, filldir_t filldir) {
 				filp->f_pos = (block << EFS_DIRBSIZE_BITS) | slot;
 
 				/* copy filename and data in dirslot */
-				filldir(dirent, nameptr, namelen, filp->f_pos, inodenum);
+				filldir(dirent, nameptr, namelen, filp->f_pos, inodenum, DT_UNKNOWN);
 
 				/* sanity check */
 				if (nameptr - (char *) dirblock + namelen > EFS_DIRBSIZE) {

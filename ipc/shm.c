@@ -438,12 +438,12 @@ static int shm_readdir (struct file *filp, void *dirent, filldir_t filldir)
 	switch(nr)
 	{
 	case 0:
-		if (filldir(dirent, ".", 1, nr, inode->i_ino) < 0)
+		if (filldir(dirent, ".", 1, nr, inode->i_ino, DT_DIR) < 0)
 			return 0;
 		filp->f_pos = ++nr;
 		/* fall through */
 	case 1:
-		if (filldir(dirent, "..", 2, nr, inode->i_ino) < 0)
+		if (filldir(dirent, "..", 2, nr, inode->i_ino, DT_DIR) < 0)
 			return 0;
 		filp->f_pos = ++nr;
 		/* fall through */
@@ -456,7 +456,7 @@ static int shm_readdir (struct file *filp, void *dirent, filldir_t filldir)
 				continue;
 			if (shp->shm_flags & SHM_UNLK)
 				continue;
-			if (filldir(dirent, shp->shm_name, shp->shm_namelen, nr, nr) < 0 )
+			if (filldir(dirent, shp->shm_name, shp->shm_namelen, nr, nr, DT_REG) < 0 )
 				break;;
 		}
 		filp->f_pos = nr;

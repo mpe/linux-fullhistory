@@ -740,6 +740,14 @@ S: Via Paolo VI n.29
 S: 23900 - LECCO (Lc)
 S: Italy
 
+N: Nils Faerber
+E: nils@kernelconcepts.de
+D: i810 TCO watchdog driver author
+D: Mitsumi LU005 tests and fixes
+S: Dreisbachstrasse 24
+S: D-57250 Netphen
+S: Germany
+
 N: Rik Faith
 E: faith@cs.unc.edu
 E: faith@acm.org
@@ -2010,6 +2018,11 @@ E: kirk@speakeasy.org
 W: http://www.speakeasy.org/~kirk/
 D: implemented kmod
 D: modularized BSD Unix domain sockets
+
+N: Mikael Pettersson
+E: mikpe@csd.uu.se
+W: http://www.csd.uu.se/~mikpe/
+D: Miscellaneous fixes
 
 N: Reed H. Petty
 E: rhp@draper.net

@@ -208,8 +208,16 @@ $(MODINCL)/%.ver: %.c
 	
 $(addprefix $(MODINCL)/,$(SYMTAB_OBJS:.o=.ver)): $(TOPDIR)/include/linux/autoconf.h
 
-$(TOPDIR)/include/linux/modversions.h: $(addprefix $(MODINCL)/,$(SYMTAB_OBJS:.o=.ver))
-	@echo updating $(TOPDIR)/include/linux/modversions.h
+# updates .ver files but not modversions.h
+fastdep: $(addprefix $(MODINCL)/,$(SYMTAB_OBJS:.o=.ver))
+
+# updates .ver files and modversions.h like before (is this needed?)
+dep: fastdep update-modverfile
+
+endif # SYMTAB_OBJS 
+
+# update modversions.h, but only if it would change
+update-modverfile:
 	@(echo "#ifndef _LINUX_MODVERSIONS_H";\
 	  echo "#define _LINUX_MODVERSIONS_H"; \
 	  echo "#include <linux/modsetver.h>"; \
@@ -218,11 +226,14 @@ $(TOPDIR)/include/linux/modversions.h: $(addprefix $(MODINCL)/,$(SYMTAB_OBJS:.o=
 	    if [ -f $$f ]; then echo "#include <linux/modules/$${f}>"; fi; \
 	  done; \
 	  echo "#endif"; \
-	) > $@
-
-dep fastdep: $(TOPDIR)/include/linux/modversions.h
-
-endif # SYMTAB_OBJS 
+	) > $(TOPDIR)/include/linux/modversions.h.tmp
+	@if [ -r $(TOPDIR)/include/linux/modversions.h ] && cmp -s $(TOPDIR)/include/linux/modversions.h $(TOPDIR)/include/linux/modversions.h.tmp; then \
+		echo $(TOPDIR)/include/linux/modversions.h was not updated; \
+		rm -f $(TOPDIR)/include/linux/modversions.h.tmp; \
+	else \
+		echo $(TOPDIR)/include/linux/modversions.h was updated; \
+		mv -f $(TOPDIR)/include/linux/modversions.h.tmp $(TOPDIR)/include/linux/modversions.h; \
+	fi
 
 $(M_OBJS): $(TOPDIR)/include/linux/modversions.h
 ifdef MAKING_MODULES

@@ -124,8 +124,9 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
    tristate '  Software Watchdog' CONFIG_SOFT_WATCHDOG
    tristate '  Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
    tristate '  Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
-   tristate '   SBC-60XX Watchdog Timer' CONFIG_60XX_WDT
+   tristate '  SBC-60XX Watchdog Timer' CONFIG_60XX_WDT
    tristate '  Mixcom Watchdog' CONFIG_MIXCOMWD 
+   tristate '  Intel i810 TCO timer / Watchdog' CONFIG_I810_TCO
    if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
       tristate '  DC21285 watchdog' CONFIG_21285_WATCHDOG
       if [ "$CONFIG_ARCH_NETWINDER" = "y" ]; then

@@ -8736,6 +8736,13 @@ CONFIG_NE2000
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
+National Semiconductor DP83810 series PCI Ethernet support
+CONFIG_NATSEMI
+  This driver is for the National Semiconductor DP83810 series,
+  including the 83815 chip.
+  More specific information and updates are available from 
+  http://www.scyld.com/network/natsemi.html
+
 SK_G16 support
 CONFIG_SK_G16
   If you have a network (Ethernet) card of this type, say Y and read

@@ -234,3 +234,4 @@ SYS(sys_fstat64, 3)				/* 4215 */
 SYS(sys_pivot_root, 2)
 SYS(sys_mincore, 3)
 SYS(sys_madvise, 3)
+SYS(sys_getdents64, 3)

@@ -757,14 +757,14 @@ static int openpromfs_readdir(struct file * filp, void * dirent, filldir_t filld
 	i = filp->f_pos;
 	switch (i) {
 	case 0:
-		if (filldir(dirent, ".", 1, i, ino) < 0) return 0;
+		if (filldir(dirent, ".", 1, i, ino, DT_DIR) < 0) return 0;
 		i++;
 		filp->f_pos++;
 		/* fall thru */
 	case 1:
 		if (filldir(dirent, "..", 2, i, 
 			(NODE(ino).parent == 0xffff) ? 
-			OPENPROM_ROOT_INO : NODE2INO(NODE(ino).parent)) < 0) 
+			OPENPROM_ROOT_INO : NODE2INO(NODE(ino).parent), DT_DIR) < 0) 
 			return 0;
 		i++;
 		filp->f_pos++;
@@ -780,14 +780,14 @@ static int openpromfs_readdir(struct file * filp, void * dirent, filldir_t filld
 			if (prom_getname (nodes[node].node, buffer, 128) < 0)
 				return 0;
 			if (filldir(dirent, buffer, strlen(buffer),
-				    filp->f_pos, NODE2INO(node)) < 0)
+				    filp->f_pos, NODE2INO(node), DT_DIR) < 0)
 				return 0;
 			filp->f_pos++;
 			node = nodes[node].next;
 		}
 		j = NODEP2INO(NODE(ino).first_prop);
 		if (!i) {
-			if (filldir(dirent, ".node", 5, filp->f_pos, j) < 0)
+			if (filldir(dirent, ".node", 5, filp->f_pos, j, DT_REG) < 0)
 				return 0;
 			filp->f_pos++;
 		} else
@@ -798,7 +798,7 @@ static int openpromfs_readdir(struct file * filp, void * dirent, filldir_t filld
 				if (alias_names [i]) {
 					if (filldir (dirent, alias_names [i], 
 						strlen (alias_names [i]), 
-						filp->f_pos, j) < 0) return 0;
+						filp->f_pos, j, DT_REG) < 0) return 0;
 					filp->f_pos++;
 				}
 			}
@@ -810,7 +810,7 @@ static int openpromfs_readdir(struct file * filp, void * dirent, filldir_t filld
 				if (i) i--;
 				else {
 					if (filldir(dirent, p, strlen(p),
-						    filp->f_pos, j) < 0)
+						    filp->f_pos, j, DT_REG) < 0)
 						return 0;
 					filp->f_pos++;
 				}

@@ -58,7 +58,6 @@
  *		J Hadi Salim:		ECN support
  */
 
-#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/sysctl.h>
 #include <net/tcp.h>

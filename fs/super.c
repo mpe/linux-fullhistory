@@ -10,13 +10,12 @@
  *                                   - umount system call
  *                                   - ustat system call
  *
- *  Added options to /proc/mounts
- *  Torbjörn Lindh (torbjorn.lindh@gopta.se), April 14, 1996.
- *
  * GK 2/5/95  -  Changed to support mounting the root fs via NFS
  *
  *  Added kerneld support: Jacques Gelinas and Bjorn Ekwall
  *  Added change_root: Werner Almesberger & Hans Lermen, Feb '96
+ *  Added options to /proc/mounts:
+ *    Torbjörn Lindh (torbjorn.lindh@gopta.se), April 14, 1996.
  *  Added devfs support: Richard Gooch <rgooch@atnf.csiro.au>, 13-JAN-1998
  *  Heavily rewritten for 'one fs - one tree' dcache architecture. AV, Mar 2000
  */
@@ -428,6 +427,33 @@ static void remove_vfsmnt(struct vfsmount *mnt)
 	kfree(mnt);
 }
 
+
+/* Use octal escapes, like mount does, for embedded spaces etc. */
+static unsigned char need_escaping[] = { ' ', '\t', '\n', '\\' };
+
+static int
+mangle(const unsigned char *s, char *buf, int len) {
+        char *sp;
+        int n;
+
+        sp = buf;
+        while(*s && sp-buf < len-3) {
+                for (n = 0; n < sizeof(need_escaping); n++) {
+                        if (*s == need_escaping[n]) {
+                                *sp++ = '\\';
+                                *sp++ = '0' + ((*s & 0300) >> 6);
+                                *sp++ = '0' + ((*s & 070) >> 3);
+                                *sp++ = '0' + (*s & 07);
+                                goto next;
+                        }
+                }
+                *sp++ = *s;
+        next:
+                s++;
+        }
+        return sp - buf;	/* no trailing NUL */
+}
+
 static struct proc_fs_info {
 	int flag;
 	char *str;
@@ -466,27 +492,32 @@ int get_filesystem_info( char *buf )
 	struct proc_fs_info *fs_infop;
 	struct proc_nfs_info *nfs_infop;
 	struct nfs_server *nfss;
-	int len = 0;
-	char *path,*buffer = (char *) __get_free_page(GFP_KERNEL);
+	int len, prevlen;
+	char *path, *buffer = (char *) __get_free_page(GFP_KERNEL);
 
 	if (!buffer) return 0;
-	for (p = vfsmntlist.next; p!=&vfsmntlist && len < PAGE_SIZE - 160;
-	    p = p->next) {
+	len = prevlen = 0;
+
+#define FREEROOM	((int)PAGE_SIZE-200-len)
+#define MANGLE(s)	len += mangle((s), buf+len, FREEROOM);
+
+	for (p = vfsmntlist.next; p != &vfsmntlist; p = p->next) {
 		struct vfsmount *tmp = list_entry(p, struct vfsmount, mnt_list);
 		if (!(tmp->mnt_flags & MNT_VISIBLE))
 			continue;
 		path = d_path(tmp->mnt_root, tmp, buffer, PAGE_SIZE);
 		if (!path)
 			continue;
-		len += sprintf( buf + len, "%s %s %s %s",
-			tmp->mnt_devname ? tmp->mnt_devname : "none", path,
-			tmp->mnt_sb->s_type->name,
-			tmp->mnt_sb->s_flags & MS_RDONLY ? "ro" : "rw" );
+		MANGLE(tmp->mnt_devname ? tmp->mnt_devname : "none");
+		buf[len++] = ' ';
+		MANGLE(path);
+		buf[len++] = ' ';
+		MANGLE(tmp->mnt_sb->s_type->name);
+		len += sprintf(buf+len, " %s",
+			       tmp->mnt_sb->s_flags & MS_RDONLY ? "ro" : "rw");
 		for (fs_infop = fs_info; fs_infop->flag; fs_infop++) {
-		  if (tmp->mnt_sb->s_flags & fs_infop->flag) {
-		    strcpy(buf + len, fs_infop->str);
-		    len += strlen(fs_infop->str);
-		  }
+			if (tmp->mnt_sb->s_flags & fs_infop->flag)
+				MANGLE(fs_infop->str);
 		}
 		if (!strcmp("nfs", tmp->mnt_sb->s_type->name)) {
 			nfss = &tmp->mnt_sb->u.nfs_sb.s_server;
@@ -527,17 +558,24 @@ int get_filesystem_info( char *buf )
 					str = nfs_infop->str;
 				else
 					str = nfs_infop->nostr;
-				strcpy(buf + len, str);
-				len += strlen(str);
+				MANGLE(str);
 			}
-			len += sprintf(buf+len, ",addr=%s",
-				       nfss->hostname);
+			len += sprintf(buf+len, ",addr=");
+			MANGLE(nfss->hostname);
 		}
-		len += sprintf( buf + len, " 0 0\n" );
+		len += sprintf(buf + len, " 0 0\n");
+		if (FREEROOM <= 3) {
+			len = prevlen;
+			len += sprintf(buf+len, "# truncated\n");
+			break;
+		}
+		prevlen = len;
 	}
 
 	free_page((unsigned long) buffer);
 	return len;
+#undef MANGLE
+#undef FREEROOM
 }
 
 /**
@@ -775,7 +813,8 @@ static struct super_block *get_sb_bdev(struct file_system_type *fs_type,
 	dev = to_kdev_t(bdev->bd_dev);
 	sb = get_super(dev);
 	if (sb) {
-		if (fs_type == sb->s_type) {
+		if (fs_type == sb->s_type &&
+		    ((flags ^ sb->s_flags) & MS_RDONLY) == 0) {
 			path_release(&nd);
 			return sb;
 		}
@@ -1090,7 +1129,7 @@ asmlinkage long sys_umount(char * name, int flags)
 	if (retval)
 		goto out;
 	retval = -EINVAL;
-	if (nd.dentry!=nd.mnt->mnt_root)
+	if (nd.dentry != nd.mnt->mnt_root)
 		goto dput_and_out;
 
 	retval = -EPERM;
@@ -1263,8 +1302,8 @@ static int copy_mount_options (const void *data, unsigned long *where)
  * PAGE_SIZE-1 bytes, which can contain arbitrary fs-dependent
  * information (or be NULL).
  *
- * NOTE! As old versions of mount() didn't use this setup, the flags
- * have to have a special 16-bit magic number in the high word:
+ * NOTE! As pre-0.97 versions of mount() didn't use this setup, the
+ * flags have to have a special 16-bit magic number in the high word:
  * 0xC0ED. If this magic word isn't present, the flags and data info
  * aren't used, as the syscall assumes we are talking to an older
  * version that didn't understand them.
@@ -1736,7 +1775,7 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 			printk("okay\n");
 			return 0;
 		}
-		printk(KERN_ERR "error %d\n",blivet);
+		printk(KERN_ERR "error %d\n", blivet);
 		return error;
 	}
 	/* FIXME: we should hold i_zombie on nd.dentry */

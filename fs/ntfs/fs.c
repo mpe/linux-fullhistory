@@ -200,7 +200,7 @@ static int ntfs_printcb(ntfs_u8 *entry,void *param)
 	/* filldir expects an off_t rather than an loff_t.
 	   Hope we don't have more than 65535 index records */
 	error=nf->filldir(nf->dirent,nf->name,nf->namelen,
-			(nf->ph<<16)|nf->pl,inum);
+			(nf->ph<<16)|nf->pl,inum,DT_UNKNOWN);
 	ntfs_free(nf->name);
 	/* Linux filldir errors are negative, other errors positive */
 	return error;
@@ -226,11 +226,11 @@ static int ntfs_readdir(struct file* filp, void *dirent, filldir_t filldir)
 	if(cb.ph==0xFFFF){
 		/* FIXME: Maybe we can return those with the previous call */
 		switch(cb.pl){
-		case 0: filldir(dirent,".",1,filp->f_pos,dir->i_ino);
+		case 0: filldir(dirent,".",1,filp->f_pos,dir->i_ino,DT_DIR);
 			filp->f_pos=0xFFFF0001;
 			return 0;
 			/* FIXME: parent directory */
-		case 1: filldir(dirent,"..",2,filp->f_pos,0);
+		case 1: filldir(dirent,"..",2,filp->f_pos,0,DT_DIR);
 			filp->f_pos=0xFFFF0002;
 			return 0;
 		}

@@ -1312,7 +1312,7 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 			}
 			sg_count -= n;
 		}
-	} else if (Cmnd->request_bufflen) {
+	} else if (Cmnd->request_bufflen && Cmnd->sc_data_direction != PCI_DMA_NONE) {
 		dma64_addr_t busaddr = pci64_map_single(hostdata->pci_dev, Cmnd->request_buffer, Cmnd->request_bufflen,
 							scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
 
@@ -1569,7 +1569,7 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 					pci64_unmap_sg(hostdata->pci_dev,
 						       (struct scatterlist *)Cmnd->buffer, Cmnd->use_sg,
 						       scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
-				else if (Cmnd->request_bufflen)
+				else if (Cmnd->request_bufflen && Cmnd->sc_data_direction != PCI_DMA_NONE)
 					pci64_unmap_single(hostdata->pci_dev, *(dma64_addr_t *)&Cmnd->SCp,
 							   Cmnd->request_bufflen,
 							   scsi_to_pci_dma_dir(Cmnd->sc_data_direction));

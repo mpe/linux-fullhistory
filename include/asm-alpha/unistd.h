@@ -314,6 +314,7 @@
 #define __NR_pivot_root			374
 #define __NR_mincore			375
 #define __NR_pciconfig_iobase		376
+#define __NR_getdents64			377
 
 #if defined(__GNUC__)
 

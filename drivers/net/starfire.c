@@ -17,6 +17,8 @@
 	Support and updates available at
 	http://www.scyld.com/network/starfire.html
 
+	-----------------------------------------------------------
+
 	Linux kernel-specific changes:
 	
 	LK1.1.1 (jgarzik):
@@ -29,7 +31,19 @@
 
 	LK1.1.3 (Andrew Morton)
 	- Timer cleanups
+	
+	LK1.1.4 (jgarzik):
+	- Merge Becker version 1.03
 */
+
+/* These identify the driver base version and may not be removed. */
+static const char version1[] =
+"starfire.c:v1.03 7/26/2000  Written by Donald Becker <becker@scyld.com>\n";
+static const char version2[] =
+" Updates and info at http://www.scyld.com/network/starfire.html\n";
+
+static const char version3[] =
+" (unofficial 2.4.x kernel port, version 1.1.4, August 10, 2000)\n";
 
 /* The user-configurable values.
    These may be modified when a driver module is loaded.*/
@@ -74,8 +88,6 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 
 #define PKT_BUF_SZ		1536			/* Size of each temporary Rx buffer.*/
 
-#define PFX "starfire: "
-
 #if !defined(__OPTIMIZE__)
 #warning  You must compile this file with the correct options!
 #warning  See the last lines of the source file.
@@ -85,6 +97,10 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 /* Include files, designed to support most kernel versions 2.0.0 and later. */
 #include <linux/version.h>
 #include <linux/module.h>
+#if LINUX_VERSION_CODE < 0x20300  &&  defined(MODVERSIONS)
+#include <linux/modversions.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/timer.h>
@@ -100,12 +116,6 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>
-
-/* These identify the driver base version and may not be removed. */
-static char version1[] __devinitdata =
-"starfire.c:v0.15+LK1.1.3 6/17/2000  Written by Donald Becker <becker@scyld.com>\n";
-static char version2[] __devinitdata =
-" Updates and info at http://www.scyld.com/network/starfire.html\n";
 
 MODULE_AUTHOR("Donald Becker <becker@scyld.com>");
 MODULE_DESCRIPTION("Adaptec Starfire Ethernet driver");
@@ -187,18 +197,18 @@ IV. Notes
 
 IVb. References
 
-The Adaptec Starfire manuals.
-http://cesdis.gsfc.nasa.gov/linux/misc/100mbps.html
-http://cesdis.gsfc.nasa.gov/linux/misc/NWay.html
-
+The Adaptec Starfire manuals, available only from Adaptec.
+http://www.scyld.com/expert/100mbps.html
+http://www.scyld.com/expert/NWay.html
 
 IVc. Errata
 
 */
 
+
 
 enum chip_capability_flags {CanHaveMII=1, };
-
+#define PCI_IOTYPE (PCI_USES_MASTER | PCI_USES_MEM | PCI_ADDR0)
 #define MEM_ADDR_SZ 0x80000		/* And maps in 0.5MB(!).  */
 
 #if 0
@@ -211,13 +221,11 @@ enum chipset {
 	CH_6915 = 0,
 };
 
-
 static struct pci_device_id starfire_pci_tbl[] __devinitdata = {
 	{ 0x9004, 0x6915, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_6915 },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, starfire_pci_tbl);
-
 
 /* A chip capabilities table, matching the CH_xxx entries in xxx_pci_tbl[] above. */
 static struct chip_info {
@@ -309,6 +317,7 @@ struct tx_done_report {
 #endif
 };
 
+#define PRIV_ALIGN	15 	/* Required alignment mask */
 struct ring_info {
 	struct sk_buff *skb;
 	dma_addr_t mapping;
@@ -333,7 +342,6 @@ struct netdev_private {
 	dma_addr_t tx_done_q_dma;
 	struct net_device_stats stats;
 	struct timer_list timer;	/* Media monitoring timer. */
-	int chip_id, drv_flags;
 	struct pci_dev *pci_dev;
 	/* Frequently used values: keep some adjacent for cache effect. */
 	unsigned int cur_rx, dirty_rx;		/* Producer/consumer ring indices */
@@ -341,11 +349,10 @@ struct netdev_private {
 	unsigned int rx_buf_sz;				/* Based on MTU+slack. */
 	unsigned int tx_full:1;				/* The Tx queue is full. */
 	/* These values are keep track of the transceiver/media in use. */
-	unsigned int duplex_lock:1;
 	unsigned int full_duplex:1,			/* Full-duplex operation requested. */
+		medialock:1,					/* Xcvr set to fixed speed/duplex. */
 		rx_flowctrl:1,
 		tx_flowctrl:1;					/* Use 802.3x flow control. */
-	unsigned int medialock:1;			/* Do not sense media. */
 	unsigned int default_port:4;		/* Last dev->if_port value. */
 	u32 tx_mode;
 	u8 tx_threshold;
@@ -383,30 +390,31 @@ static int __devinit starfire_init_one (struct pci_dev *pdev,
 	static int card_idx = -1;
 	static int printed_version = 0;
 	long ioaddr;
-	int io_size = netdrv_tbl[chip_idx].io_size;
+	int drv_flags, io_size = netdrv_tbl[chip_idx].io_size;
 
 	card_idx++;
 	option = card_idx < MAX_UNITS ? options[card_idx] : 0;
 	
 	if (!printed_version++)
-		printk(KERN_INFO "%s" KERN_INFO "%s", version1, version2);
+		printk(KERN_INFO "%s" KERN_INFO "%s" KERN_INFO "%s",
+		       version1, version2, version3);
 
 	ioaddr = pci_resource_start (pdev, 0);
 	if (!ioaddr || ((pci_resource_flags (pdev, 0) & IORESOURCE_MEM) == 0)) {
-		printk (KERN_ERR PFX "card %d: no PCI MEM resources, aborting\n", card_idx);
+		printk (KERN_ERR "starfire %d: no PCI MEM resources, aborting\n", card_idx);
 		return -ENODEV;
 	}
 	
 	dev = init_etherdev(NULL, sizeof(*np));
 	if (!dev) {
-		printk (KERN_ERR PFX "card %d: cannot alloc etherdev, aborting\n", card_idx);
+		printk (KERN_ERR "starfire %d: cannot alloc etherdev, aborting\n", card_idx);
 		return -ENOMEM;
 	}
 	
 	irq = pdev->irq; 
 
 	if (request_mem_region (ioaddr, io_size, dev->name) == NULL) {
-		printk (KERN_ERR PFX "card %d: resource 0x%x @ 0x%lx busy, aborting\n",
+		printk (KERN_ERR "starfire %d: resource 0x%x @ 0x%lx busy, aborting\n",
 			card_idx, io_size, ioaddr);
 		goto err_out_free_netdev;
 	}
@@ -416,7 +424,7 @@ static int __devinit starfire_init_one (struct pci_dev *pdev,
 	
 	ioaddr = (long) ioremap (ioaddr, io_size);
 	if (!ioaddr) {
-		printk (KERN_ERR PFX "card %d: cannot remap 0x%x @ 0x%lx, aborting\n",
+		printk (KERN_ERR "starfire %d: cannot remap 0x%x @ 0x%lx, aborting\n",
 			card_idx, io_size, ioaddr);
 		goto err_out_free_res;
 	}
@@ -436,7 +444,7 @@ static int __devinit starfire_init_one (struct pci_dev *pdev,
 #if ! defined(final_version) /* Dump the EEPROM contents during development. */
 	if (debug > 4)
 		for (i = 0; i < 0x20; i++)
-			printk("%2.2x%s", readb(ioaddr + EEPROMCtrl + i),
+			printk("%2.2x%s", (unsigned int)readb(ioaddr + EEPROMCtrl + i),
 				   i % 16 != 15 ? " " : "\n");
 #endif
 
@@ -446,16 +454,11 @@ static int __devinit starfire_init_one (struct pci_dev *pdev,
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 
+	np = dev->priv;
 	pdev->driver_data = dev;
 
-	/* private struct aligned and zeroed by init_etherdev */
-	np = dev->priv;
-
 	np->pci_dev = pdev;
-	np->chip_id = chip_idx;
-	
-	/* save useful data, netdrv_tbl is __devinitdata and might be dropped */
-	np->drv_flags = netdrv_tbl[chip_idx].drv_flags;
+	drv_flags = netdrv_tbl[chip_idx].drv_flags;
 
 	if (dev->mem_start)
 		option = dev->mem_start;
@@ -472,7 +475,7 @@ static int __devinit starfire_init_one (struct pci_dev *pdev,
 		np->full_duplex = 1;
 
 	if (np->full_duplex)
-		np->duplex_lock = 1;
+		np->medialock = 1;
 
 	/* The chip-specific entries in the device structure. */
 	dev->open = &netdev_open;
@@ -487,7 +490,7 @@ static int __devinit starfire_init_one (struct pci_dev *pdev,
 	if (mtu)
 		dev->mtu = mtu;
 
-	if (np->drv_flags & CanHaveMII) {
+	if (drv_flags & CanHaveMII) {
 		int phy, phy_idx = 0;
 		for (phy = 0; phy < 32 && phy_idx < 4; phy++) {
 			int mii_status = mdio_read(dev, phy, 1);
@@ -611,17 +614,18 @@ static int netdev_open(struct net_device *dev)
 
 	/* Fill both the unused Tx SA register and the Rx perfect filter. */
 	for (i = 0; i < 6; i++)
-		writeb(dev->dev_addr[i], ioaddr + StationAddr + 6-i);
+		writeb(dev->dev_addr[i], ioaddr + StationAddr + 5-i);
 	for (i = 0; i < 16; i++) {
 		u16 *eaddrs = (u16 *)dev->dev_addr;
 		long setup_frm = ioaddr + 0x56000 + i*16;
-		writew(eaddrs[0], setup_frm); setup_frm += 4;
-		writew(eaddrs[1], setup_frm); setup_frm += 4;
-		writew(eaddrs[2], setup_frm); setup_frm += 4;
+		writew(cpu_to_be16(eaddrs[2]), setup_frm); setup_frm += 4;
+		writew(cpu_to_be16(eaddrs[1]), setup_frm); setup_frm += 4;
+		writew(cpu_to_be16(eaddrs[0]), setup_frm); setup_frm += 8;
 	}
 
 	/* Initialize other registers. */
 	/* Configure the PCI bus bursts and FIFO thresholds. */
+	np->tx_mode = 0;			/* Initialized when TxMode set. */
 	np->tx_threshold = 4;
 	writel(np->tx_threshold, ioaddr + TxThreshold);
 	writel(interrupt_mitigation, ioaddr + IntrTimerCtrl);
@@ -635,6 +639,7 @@ static int netdev_open(struct net_device *dev)
 		printk(KERN_DEBUG "%s:  Setting the Rx and Tx modes.\n", dev->name);
 	set_rx_mode(dev);
 
+	np->advertising = mdio_read(dev, np->phys[0], 4);
 	check_duplex(dev, 1);
 
 	/* Set the interrupt mask and enable PCI interrupts. */
@@ -666,23 +671,26 @@ static void check_duplex(struct net_device *dev, int startup)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
-	int mii_reg5 = mdio_read(dev, np->phys[0], 5);
-	int negotiated =  mii_reg5 & np->advertising;
-	int duplex, new_tx_mode ;
+	int new_tx_mode ;
 
-	new_tx_mode = 0x0C04 | (np->tx_flowctrl ? 0x0800:0) | (np->rx_flowctrl ? 0x0400:0);
-	if (np->duplex_lock)
-		duplex = 1;
-	else
-		duplex = (negotiated & 0x0100) || (negotiated & 0x01C0) == 0x0040;
-	if (duplex)
-		new_tx_mode |= 2;
-	if (np->full_duplex != duplex) {
-		np->full_duplex = duplex;
-		if (debug)
-			printk(KERN_INFO "%s: Setting %s-duplex based on MII #%d"
-				   " negotiated capability %4.4x.\n", dev->name,
-				   duplex ? "full" : "half", np->phys[0], negotiated);
+	new_tx_mode = 0x0C04 | (np->tx_flowctrl ? 0x0800:0)
+		| (np->rx_flowctrl ? 0x0400:0);
+	if (np->medialock) {
+		if (np->full_duplex)
+			new_tx_mode |= 2;
+	} else {
+		int mii_reg5 = mdio_read(dev, np->phys[0], 5);
+		int negotiated =  mii_reg5 & np->advertising;
+		int duplex = (negotiated & 0x0100) || (negotiated & 0x01C0) == 0x0040;
+		if (duplex)
+			new_tx_mode |= 2;
+		if (np->full_duplex != duplex) {
+			np->full_duplex = duplex;
+			if (debug > 1)
+				printk(KERN_INFO "%s: Setting %s-duplex based on MII #%d"
+					   " negotiated capability %4.4x.\n", dev->name,
+					   duplex ? "full" : "half", np->phys[0], negotiated);
+		}
 	}
 	if (new_tx_mode != np->tx_mode) {
 		np->tx_mode = new_tx_mode;
@@ -700,7 +708,7 @@ static void netdev_timer(unsigned long data)
 
 	if (debug > 3) {
 		printk(KERN_DEBUG "%s: Media selection timer tick, status %8.8x.\n",
-			   dev->name, readl(ioaddr + IntrStatus));
+			   dev->name, (int)readl(ioaddr + IntrStatus));
 	}
 	check_duplex(dev, 0);
 #if ! defined(final_version)
@@ -710,7 +718,7 @@ static void netdev_timer(unsigned long data)
 		/* Bogus hardware IRQ: Fake an interrupt handler call. */
 		if (new_status & 1) {
 			printk(KERN_ERR "%s: Interrupt blocked, status %8.8x/%8.8x.\n",
-				   dev->name, new_status, readl(ioaddr + IntrStatus));
+				   dev->name, new_status, (int)readl(ioaddr + IntrStatus));
 			intr_handler(dev->irq, dev, 0);
 		}
 	}
@@ -726,7 +734,7 @@ static void tx_timeout(struct net_device *dev)
 	long ioaddr = dev->base_addr;
 
 	printk(KERN_WARNING "%s: Transmit timed out, status %8.8x,"
-		   " resetting...\n", dev->name, readl(ioaddr + IntrStatus));
+		   " resetting...\n", dev->name, (int)readl(ioaddr + IntrStatus));
 
 #ifndef __alpha__
 	{
@@ -743,15 +751,13 @@ static void tx_timeout(struct net_device *dev)
 
 	/* Perhaps we should reinitialize the hardware here. */
 	dev->if_port = 0;
-
 	/* Stop and restart the chip's Tx processes . */
-	/* XXX todo */
 
 	/* Trigger an immediate transmit demand. */
-	/* XXX todo */
 
 	dev->trans_start = jiffies;
 	np->stats.tx_errors++;
+	return;
 }
 
 
@@ -952,7 +958,7 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 
 	if (debug > 4)
 		printk(KERN_DEBUG "%s: exiting interrupt, status=%#4.4x.\n",
-			   dev->name, readl(ioaddr + IntrStatus));
+			   dev->name, (int)readl(ioaddr + IntrStatus));
 
 #ifndef final_version
 	/* Code that should never be run!  Remove after testing.. */
@@ -1104,7 +1110,7 @@ static void netdev_error(struct net_device *dev, int intr_status)
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 
 	if (intr_status & LinkChange) {
-		printk(KERN_ERR "%s: Link changed: Autonegotiation advertising"
+		printk(KERN_NOTICE "%s: Link changed: Autonegotiation advertising"
 			   " %4.4x  partner %4.4x.\n", dev->name,
 			   mdio_read(dev, np->phys[0], 4),
 			   mdio_read(dev, np->phys[0], 5));
@@ -1132,9 +1138,7 @@ static struct net_device_stats *get_stats(struct net_device *dev)
 	long ioaddr = dev->base_addr;
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 
-	/* We should lock this segment of code for SMP eventually, although
-	   the vulnerability window is very small and statistics are
-	   non-critical. */
+	/* This adapter architecture needs no SMP locks. */
 	np->stats.tx_bytes = readl(ioaddr + 0x57010);
 	np->stats.rx_bytes = readl(ioaddr + 0x57044);
 	np->stats.tx_packets = readl(ioaddr + 0x57000);
@@ -1201,9 +1205,9 @@ static void set_rx_mode(struct net_device *dev)
 		for (i = 1, mclist = dev->mc_list; mclist  &&  i <= dev->mc_count;
 			 i++, mclist = mclist->next) {
 			u16 *eaddrs = (u16 *)mclist->dmi_addr;
-			writew(*eaddrs++, filter_addr); filter_addr += 4;
-			writew(*eaddrs++, filter_addr); filter_addr += 4;
-			writew(*eaddrs++, filter_addr); filter_addr += 8;
+			writew(cpu_to_be16(eaddrs[2]), filter_addr); filter_addr += 4;
+			writew(cpu_to_be16(eaddrs[1]), filter_addr); filter_addr += 4;
+			writew(cpu_to_be16(eaddrs[0]), filter_addr); filter_addr += 8;
 		}
 		while (i++ < 16) {
 			writew(0xffff, filter_addr); filter_addr += 4;
@@ -1232,16 +1236,17 @@ static void set_rx_mode(struct net_device *dev)
 			writew(mc_filter[i], filter_addr);
 		rx_mode = AcceptBroadcast | AcceptMulticast | AcceptMyPhys;
 	}
-	writel(rx_mode|AcceptAll, ioaddr + RxFilterMode);
+	writel(rx_mode, ioaddr + RxFilterMode);
 }
 
 static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
+	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	u16 *data = (u16 *)&rq->ifr_data;
 
 	switch(cmd) {
 	case SIOCDEVPRIVATE:		/* Get the address of the PHY in use. */
-		data[0] = ((struct netdev_private *)dev->priv)->phys[0] & 0x1f;
+		data[0] = np->phys[0] & 0x1f;
 		/* Fall Through */
 	case SIOCDEVPRIVATE+1:		/* Read the specified MII register. */
 		data[3] = mdio_read(dev, data[0] & 0x1f, data[1] & 0x1f);
@@ -1249,6 +1254,21 @@ static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	case SIOCDEVPRIVATE+2:		/* Write the specified MII register */
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
+		if (data[0] == np->phys[0]) {
+			u16 value = data[2];
+			switch (data[1]) {
+			case 0:
+				if (value & 0x9000)	/* Autonegotiation. */
+					np->medialock = 0;
+				else {
+					np->full_duplex = (value & 0x0100) ? 1 : 0;
+					np->medialock = 1;
+				}
+				break;
+			case 4: np->advertising = value; break;
+			}
+			check_duplex(dev, 0);
+		}
 		mdio_write(dev, data[0] & 0x1f, data[1] & 0x1f, data[2]);
 		return 0;
 	default:
@@ -1267,8 +1287,8 @@ static int netdev_close(struct net_device *dev)
 	del_timer_sync(&np->timer);
 
 	if (debug > 1) {
-		printk(KERN_DEBUG "%s: Shutting down ethercard, status was Int %4.4x.\n",
-			   dev->name, readl(ioaddr + IntrStatus));
+		printk(KERN_DEBUG "%s: Shutting down ethercard, Intr status %4.4x.\n",
+			   dev->name, (int)readl(ioaddr + IntrStatus));
 		printk(KERN_DEBUG "%s: Queue pointers were Tx %d / %d,  Rx %d / %d.\n",
 			   dev->name, np->cur_tx, np->dirty_tx, np->cur_rx, np->dirty_rx);
 	}

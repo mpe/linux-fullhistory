@@ -353,6 +353,7 @@ CONFIG_NET_PCI=y
 # CONFIG_TULIP is not set
 # CONFIG_DGRS is not set
 CONFIG_EEPRO100=y
+# CONFIG_NATSEMI is not set
 # CONFIG_NE2K_PCI is not set
 # CONFIG_8139TOO is not set
 # CONFIG_SIS900 is not set

@@ -264,7 +264,7 @@ int nfs_do_filldir(nfs_readdir_descriptor_t *desc, void *dirent,
 		 *	 retrieving the current dirent on the server */
 		fileid = nfs_fileid_to_ino_t(entry->ino);
 		res = filldir(dirent, entry->name, entry->len, 
-			      entry->prev_cookie, fileid);
+			      entry->prev_cookie, fileid, DT_UNKNOWN);
 		if (res < 0)
 			break;
 		file->f_pos = desc->target = entry->cookie;

@@ -164,15 +164,15 @@ riotopen(struct tty_struct * tty, struct file * filp)
 	Modem   = rio_ismodem (tty->device);
 
 	if ( p->RIOFailed ) {
-		rio_dprint(RIO_DEBUG_TTY, ("System initialisation failed\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "System initialisation failed\n");
 		pseterr(ENXIO);
 		func_exit ();
 		return -ENXIO;
 	}
 
-	rio_dprint(RIO_DEBUG_TTY, ("port open SysPort %d (%s) (mapped:%d)\n",
+	rio_dprintk (RIO_DEBUG_TTY, "port open SysPort %d (%s) (mapped:%d)\n",
 	       SysPort,  Modem ? "Modem" : "tty",
-				   p->RIOPortp[SysPort]->Mapped  ) );
+				   p->RIOPortp[SysPort]->Mapped);
 
 	/*
 	** Validate that we have received a legitimate request.
@@ -181,7 +181,7 @@ riotopen(struct tty_struct * tty, struct file * filp)
 	** has been mapped onto a host.
 	*/
 	if (SysPort >= RIO_PORTS) {	/* out of range ? */
-		rio_dprint(RIO_DEBUG_TTY, ("Illegal port number %d\n",SysPort));
+		rio_dprintk (RIO_DEBUG_TTY, "Illegal port number %d\n",SysPort);
 		pseterr(ENXIO);
 		func_exit();
 		return -ENXIO;
@@ -197,7 +197,7 @@ riotopen(struct tty_struct * tty, struct file * filp)
 		** The system doesn't know which RTA this port
 		** corresponds to.
 		*/
-		rio_dprint(RIO_DEBUG_TTY, ("port not mapped into system\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "port not mapped into system\n");
 		func_exit ();
 		pseterr(ENXIO);
 		return -ENXIO;
@@ -206,17 +206,26 @@ riotopen(struct tty_struct * tty, struct file * filp)
 	tty->driver_data = PortP;
 
 	PortP->gs.tty = tty;
+	if (!PortP->gs.count)
+		rio_inc_mod_count ();
 	PortP->gs.count++;
-	rio_dprint(RIO_DEBUG_TTY, ("%d bytes in tx buffer\n",
-				   PortP->gs.xmit_cnt));
-	gs_init_port (&PortP->gs);
 
+	rio_dprintk (RIO_DEBUG_TTY, "%d bytes in tx buffer\n",
+				   PortP->gs.xmit_cnt);
+
+	retval = gs_init_port (&PortP->gs);
+	if (retval) {
+		PortP->gs.count--;
+		if (PortP->gs.count)
+			rio_dec_mod_count ();
+		return -ENXIO;
+	}
 	/*
 	** If the host hasn't been booted yet, then 
 	** fail
 	*/
 	if ( (PortP->HostP->Flags & RUN_STATE) != RC_RUNNING ) {
-		rio_dprint(RIO_DEBUG_TTY, ("Host not running\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "Host not running\n");
 		pseterr(ENXIO);
 		func_exit ();
 		return -ENXIO;
@@ -230,24 +239,24 @@ riotopen(struct tty_struct * tty, struct file * filp)
 #if 0
 	if (!(PortP->HostP->Mapping[PortP->RupNum].Flags & RTA_BOOTED)) {
 		if (PortP->WaitUntilBooted) {
-			rio_dprint(RIO_DEBUG_TTY, ("Waiting for RTA to boot\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "Waiting for RTA to boot\n");
 			do {
 				if (RIODelay(PortP, HUNDRED_MS) == RIO_FAIL) {
-					rio_dprint(RIO_DEBUG_TTY, ("RTA EINTR in delay \n"));
+					rio_dprintk (RIO_DEBUG_TTY, "RTA EINTR in delay \n");
 					func_exit ();
 					return -EINTR;
 				}
 				if (repeat_this -- <= 0) {
-					rio_dprint(RIO_DEBUG_TTY, ("Waiting for RTA to boot timeout\n"));
+					rio_dprintk (RIO_DEBUG_TTY, "Waiting for RTA to boot timeout\n");
 					RIOPreemptiveCmd(p, PortP, FCLOSE ); 
 					pseterr(EINTR);
 					func_exit ();
 					return -EIO;
 				}
 			} while(!(PortP->HostP->Mapping[PortP->RupNum].Flags & RTA_BOOTED));
-			rio_dprint(RIO_DEBUG_TTY, ("RTA has been booted\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "RTA has been booted\n");
 		} else {
-			rio_dprint(RIO_DEBUG_TTY, ("RTA never booted\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "RTA never booted\n");
 			pseterr(ENXIO);
 			func_exit ();
 			return 0;
@@ -258,10 +267,10 @@ riotopen(struct tty_struct * tty, struct file * filp)
            easier to read and shorter. Now, if it works too that would
 	   be great... -- REW 
 	*/
-	rio_dprint(RIO_DEBUG_TTY, ("Checking if RTA has booted... \n"));
+	rio_dprintk (RIO_DEBUG_TTY, "Checking if RTA has booted... \n");
 	while (!(PortP->HostP->Mapping[PortP->RupNum].Flags & RTA_BOOTED)) {
 	  if (!PortP->WaitUntilBooted) {
-	    rio_dprint(RIO_DEBUG_TTY, ("RTA never booted\n"));
+	    rio_dprintk (RIO_DEBUG_TTY, "RTA never booted\n");
 	    func_exit ();
 	    return -ENXIO;
 	  }
@@ -271,17 +280,17 @@ riotopen(struct tty_struct * tty, struct file * filp)
 	     now. --REW 
 	  */
 	  if (RIODelay(PortP, HUNDRED_MS) == RIO_FAIL) {
-	    rio_dprint(RIO_DEBUG_TTY, ("RTA_wait_for_boot: EINTR in delay \n"));
+	    rio_dprintk (RIO_DEBUG_TTY, "RTA_wait_for_boot: EINTR in delay \n");
 	    func_exit ();
 	    return -EINTR;
 	  }
 	  if (repeat_this -- <= 0) {
-	    rio_dprint(RIO_DEBUG_TTY, ("Waiting for RTA to boot timeout\n"));
+	    rio_dprintk (RIO_DEBUG_TTY, "Waiting for RTA to boot timeout\n");
 	    func_exit ();
 	    return -EIO;
 	  }
 	}
-	rio_dprint(RIO_DEBUG_TTY, ("RTA has been booted\n"));
+	rio_dprintk (RIO_DEBUG_TTY, "RTA has been booted\n");
 #endif
 #if 0
 	tp =  PortP->TtyP;		/* get tty struct */
@@ -304,9 +313,9 @@ riotopen(struct tty_struct * tty, struct file * filp)
 	** for it to finish, so that it doesn't close us!
 	*/
 	while ( (PortP->State & RIO_CLOSING) && !p->RIOHalted ) {
-		rio_dprint(RIO_DEBUG_TTY, ("Waiting for RIO_CLOSING to go away\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "Waiting for RIO_CLOSING to go away\n");
 		if (repeat_this -- <= 0) {
-			rio_dprint(RIO_DEBUG_TTY, ("Waiting for not idle closed broken by signal\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "Waiting for not idle closed broken by signal\n");
 			RIOPreemptiveCmd(p, PortP, FCLOSE ); 
 			retval = -EINTR;
 			goto bombout;
@@ -321,7 +330,7 @@ riotopen(struct tty_struct * tty, struct file * filp)
 	}
 
 	if ( !PortP->Mapped ) {
-		rio_dprint(RIO_DEBUG_TTY, ("Port unmapped while closing!\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "Port unmapped while closing!\n");
 		rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 		retval = -ENXIO;
 		func_exit ();
@@ -344,8 +353,8 @@ riotopen(struct tty_struct * tty, struct file * filp)
 	}
 
 	if (!(PortP->firstOpen)) {	/* First time ? */
-		rio_dprint(RIO_DEBUG_TTY, ("First open for this port\n"));
-		rio_inc_mod_count ();
+		rio_dprintk (RIO_DEBUG_TTY, "First open for this port\n");
+	
 
 		PortP->firstOpen++;
 		PortP->CookMode = 0; /* XXX RIOCookMode(tp); */
@@ -375,7 +384,7 @@ riotopen(struct tty_struct * tty, struct file * filp)
 		** wait for the port to be not closed.
 		*/
 		while ( !(PortP->PortState & PORT_ISOPEN) && !p->RIOHalted ) {
-			rio_dprint(RIO_DEBUG_TTY, ("Waiting for PORT_ISOPEN-currently %x\n",PortP->PortState));
+			rio_dprintk (RIO_DEBUG_TTY, "Waiting for PORT_ISOPEN-currently %x\n",PortP->PortState);
 /*
 ** 15.10.1998 ARG - ESIL 0759
 ** (Part) fix for port being trashed when opened whilst RTA "disconnected"
@@ -392,7 +401,7 @@ riotopen(struct tty_struct * tty, struct file * filp)
 */
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			if (RIODelay(PortP, HUNDRED_MS) == RIO_FAIL) {
-				rio_dprint(RIO_DEBUG_TTY, ("Waiting for open to finish broken by signal\n"));
+				rio_dprintk (RIO_DEBUG_TTY, "Waiting for open to finish broken by signal\n");
 				RIOPreemptiveCmd(p, PortP, FCLOSE );
 				func_exit ();
 				return -EINTR;
@@ -407,52 +416,67 @@ bombout:
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			return retval;
 		}
-		rio_dprint(RIO_DEBUG_TTY, ("PORT_ISOPEN found\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "PORT_ISOPEN found\n");
 	}
 
 #ifdef MODEM_SUPPORT 
 	if (Modem) {
-		rio_dprint(RIO_DEBUG_TTY, ("Modem - test for carrier\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "Modem - test for carrier\n");
 		/*
 		** ACTION
 		** insert test for carrier here. -- ???
 		** I already see that test here. What's the deal? -- REW
 		*/
-		if ((tp->tm.c_cflag & CLOCAL) || (PortP->ModemState & MSVR1_CD))
+		if ((PortP->gs.tty->termios->c_cflag & CLOCAL) || (PortP->ModemState & MSVR1_CD))
 		{
-			rio_dprint(RIO_DEBUG_TTY, (PortP,DBG_OPEN,"open(%d) Modem carr on\n",SysPort));
+			rio_dprintk (RIO_DEBUG_TTY, "open(%d) Modem carr on\n", SysPort);
+			/*
 			tp->tm.c_state |= CARR_ON;
 			wakeup((caddr_t) &tp->tm.c_canq);
+			*/
+			PortP->State |= RIO_CARR_ON;
+			wake_up_interruptible (&PortP->gs.open_wait);
 		}
 		else /* no carrier - wait for DCD */
 		{
-			while (!(tp->tm.c_state&CARR_ON) && 
-			       !(filp->f_flags&O_NONBLOCK) && !p->RIOHalted )
-			{
-				rio_dprint(RIO_DEBUG_TTY, (PortP,DBG_OPEN,"open(%d) sleeping for carr on\n",SysPort));
-				tp->tm.c_state |= WOPEN;
+		  /*
+			while (!(PortP->gs.tty->termios->c_state & CARR_ON) && 
+			       !(filp->f_flags & O_NONBLOCK) && !p->RIOHalted )
+		  */
+			while (!(PortP->State & RIO_CARR_ON) && 
+			       !(filp->f_flags & O_NONBLOCK) && !p->RIOHalted ) {
+
+				rio_dprintk (RIO_DEBUG_TTY, "open(%d) sleeping for carr on\n",SysPort);
+				/*
+				PortP->gs.tty->termios->c_state |= WOPEN;
+				*/
 				PortP->State |= RIO_WOPEN;
-				if ( sleep((caddr_t)&tp->tm.c_canq, TTIPRI|PCATCH))
+#if 0
+				if ( sleep((caddr_t)&tp->tm.c_canqo, TTIPRI|PCATCH))
 				{
 					/*
 					** ACTION: verify that this is a good thing
 					** to do here. -- ???
 					** I think it's OK. -- REW
 					*/
-					rio_dprint(RIO_DEBUG_TTY, ("open(%d) sleeping for carr broken by signal\n",
-					       SysPort));
+					rio_dprintk (RIO_DEBUG_TTY, "open(%d) sleeping for carr broken by signal\n",
+					       SysPort);
 					RIOPreemptiveCmd( p, PortP, FCLOSE );
+					/*
 					tp->tm.c_state &= ~WOPEN;
+					*/
 					PortP->State &= ~RIO_WOPEN;
 					rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 					func_exit ();
 					return -EINTR;
 				}
+#endif
 			}
 			PortP->State &= ~RIO_WOPEN;
 		}
-		if ( RIOHalted )
+		if ( p->RIOHalted )
 			goto bombout;
+		rio_dprintk (RIO_DEBUG_TTY, "Setting RIO_MOPEN\n");
 		PortP->State |= RIO_MOPEN;
 	}
 	else
@@ -470,7 +494,7 @@ bombout:
 		goto bombout;
 	}
 
-	rio_dprint(RIO_DEBUG_TTY, ("high level open done\n"));
+	rio_dprintk (RIO_DEBUG_TTY, "high level open done\n");
 
 #ifdef STATS
 	PortP->Stat.OpenCnt++;
@@ -482,7 +506,7 @@ bombout:
 		PortP->opens++;
 
 	rio_spin_unlock_irqrestore(&PortP->portSem, flags);
-	rio_dprint(RIO_DEBUG_TTY, ("Returning from open\n"));
+	rio_dprintk (RIO_DEBUG_TTY, "Returning from open\n");
 	func_exit ();
 	return 0;
 }
@@ -509,13 +533,13 @@ riotclose(void  *ptr)
 	int Modem;
 	int rv =0;
 	
-	rio_dprint(RIO_DEBUG_TTY, ("port close SysPort %d\n",PortP->PortNum));
+	rio_dprintk (RIO_DEBUG_TTY, "port close SysPort %d\n",PortP->PortNum);
 
 	/* PortP = p->RIOPortp[SysPort]; */
-	rio_dprint(RIO_DEBUG_TTY, ("Port is at address 0x%x\n",(int)PortP));
+	rio_dprintk (RIO_DEBUG_TTY, "Port is at address 0x%x\n",(int)PortP);
 	/* tp = PortP->TtyP;*/			/* Get tty */
 	tty = PortP->gs.tty;
-	rio_dprint(RIO_DEBUG_TTY, ("TTY is at address 0x%x\n",(int)tty));
+	rio_dprintk (RIO_DEBUG_TTY, "TTY is at address 0x%x\n",(int)tty);
 	Modem = rio_ismodem(tty->device);
 #if 0
 	/* What F.CKING cache? Even then, a higly idle multiprocessor,
@@ -533,7 +557,7 @@ riotclose(void  *ptr)
 	PortP->State |= RIO_CLOSING;
 
 	if ( (PortP->State & RIO_DELETED) ) {
-		rio_dprint(RIO_DEBUG_TTY, ("Close on deleted RTA\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "Close on deleted RTA\n");
 		deleted = 1;
 	}
 	
@@ -543,7 +567,7 @@ riotclose(void  *ptr)
 		goto close_end;
 	}
 
-	rio_dprint(RIO_DEBUG_TTY, ("Clear bits\n"));
+	rio_dprintk (RIO_DEBUG_TTY, "Clear bits\n");
 	/*
 	** clear the open bits for this device
 	*/
@@ -561,7 +585,7 @@ riotclose(void  *ptr)
 		** The port is still open for the other task -
 		** return, pretending that we are still active.
 		*/
-		rio_dprint(RIO_DEBUG_TTY, ("Channel %d still open !\n",PortP->PortNum));
+		rio_dprintk (RIO_DEBUG_TTY, "Channel %d still open !\n",PortP->PortNum);
 		PortP->State &= ~RIO_CLOSING;
 		if (PortP->firstOpen)
 			PortP->firstOpen--;
@@ -569,7 +593,7 @@ riotclose(void  *ptr)
 		return -EIO;
 	}
 
-	rio_dprint(RIO_DEBUG_TTY, ("Closing down - everything must go!\n"));
+	rio_dprintk (RIO_DEBUG_TTY, "Closing down - everything must go!\n");
 
 	PortP->State &= ~RIO_DYNOROD;
 
@@ -578,7 +602,7 @@ riotclose(void  *ptr)
 	** to drain down before closing. Bye-bye....
 	** (We never meant to do this)
 	*/
-	rio_dprint(RIO_DEBUG_TTY, ("Timeout 1 starts\n"));
+	rio_dprintk (RIO_DEBUG_TTY, "Timeout 1 starts\n");
 
 #if 0
 	if (!deleted)
@@ -587,14 +611,14 @@ riotclose(void  *ptr)
 		cprintf("Need to flush the ttyport\n");
 		if (repeat_this -- <= 0) {
 			rv = -EINTR;
-			rio_dprint(RIO_DEBUG_TTY, ("Waiting for not idle closed broken by signal\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "Waiting for not idle closed broken by signal\n");
 			RIOPreemptiveCmd(p, PortP, FCLOSE ); 
 			goto close_end;
 		}
-		rio_dprint(RIO_DEBUG_TTY, ("Calling timeout to flush in closing\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "Calling timeout to flush in closing\n");
 		rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 		if (RIODelay_ni(PortP, HUNDRED_MS*10) == RIO_FAIL) {
-			rio_dprint(RIO_DEBUG_TTY, ("RTA EINTR in delay \n"));
+			rio_dprintk (RIO_DEBUG_TTY, "RTA EINTR in delay \n");
 			rv = -EINTR;
 			rio_spin_lock_irqsave(&PortP->portSem, flags);
 			goto close_end;
@@ -611,7 +635,7 @@ riotclose(void  *ptr)
 		** The port has been re-opened for the other task -
 		** return, pretending that we are still active.
 		*/
-		rio_dprint(RIO_DEBUG_TTY, ("Channel %d re-open!\n", PortP->PortNum));
+		rio_dprintk (RIO_DEBUG_TTY, "Channel %d re-open!\n", PortP->PortNum);
 		PortP->State &= ~RIO_CLOSING;
 		rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 		if (PortP->firstOpen)
@@ -638,12 +662,12 @@ riotclose(void  *ptr)
 	  while (try && (PortP->PortState & PORT_ISOPEN)) {
 	        try--;
 		if (try == 0) {
-		  rio_dprint(RIO_DEBUG_TTY, ("Run out of tries - force the bugger shut!\n" ));
+		  rio_dprintk (RIO_DEBUG_TTY, "Run out of tries - force the bugger shut!\n" );
 		  RIOPreemptiveCmd(p, PortP,FCLOSE);
 		  break;
 		}
-		rio_dprint(RIO_DEBUG_TTY, ("Close: PortState:ISOPEN is %d\n", 
-					   PortP->PortState & PORT_ISOPEN));
+		rio_dprintk (RIO_DEBUG_TTY, "Close: PortState:ISOPEN is %d\n", 
+					   PortP->PortState & PORT_ISOPEN);
 
 		if ( p->RIOHalted ) {
 			RIOClearUp( PortP );
@@ -652,7 +676,7 @@ riotclose(void  *ptr)
 		RIODelay_ni(PortP, HUNDRED_MS);
 	}
 	rio_spin_lock_irqsave(&PortP->portSem, flags);
-	rio_dprint(RIO_DEBUG_TTY, ("Close: try was %d on completion\n", try ));
+	rio_dprintk (RIO_DEBUG_TTY, "Close: try was %d on completion\n", try );
  
 	/* RIOPreemptiveCmd(p, PortP, FCLOSE); */
 
@@ -682,7 +706,7 @@ close_end:
 	if (PortP->firstOpen)
 		PortP->firstOpen--;
 	rio_spin_unlock_irqrestore(&PortP->portSem, flags);
-	rio_dprint(RIO_DEBUG_TTY, ("Return from close\n"));
+	rio_dprintk (RIO_DEBUG_TTY, "Return from close\n");
 	return rv;
 }
 
@@ -731,7 +755,7 @@ static void
 RIOClearUp(PortP)
 struct Port *PortP;
 {
-	rio_dprint(RIO_DEBUG_TTY, ("RIOHalted set\n"));
+	rio_dprintk (RIO_DEBUG_TTY, "RIOHalted set\n");
 	PortP->Config = 0;	  /* Direct semaphore */
 	PortP->PortState = 0;
 	PortP->firstOpen = 0;
@@ -761,7 +785,7 @@ static int RIOShortCommand(struct rio_info *p, struct Port *PortP,
 	int		retries = 20; /* at 10 per second -> 2 seconds */
 	unsigned long flags;
 
-	rio_dprint(RIO_DEBUG_TTY, ("entering shortcommand.\n"));
+	rio_dprintk (RIO_DEBUG_TTY, "entering shortcommand.\n");
 #ifdef CHECK
 	CheckPortP( PortP );
 	if ( len < 1 || len > 2 )
@@ -769,7 +793,7 @@ static int RIOShortCommand(struct rio_info *p, struct Port *PortP,
 #endif
 
 	if ( PortP->State & RIO_DELETED ) {
-		rio_dprint(RIO_DEBUG_TTY, ("Short command to deleted RTA ignored\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "Short command to deleted RTA ignored\n");
 		return RIO_FAIL;
 	}
 	rio_spin_lock_irqsave(&PortP->portSem, flags);
@@ -779,8 +803,8 @@ static int RIOShortCommand(struct rio_info *p, struct Port *PortP,
 	** be free again.
 	*/
 	while ( (PortP->InUse != NOT_INUSE) && !p->RIOHalted ) {
-		rio_dprint(RIO_DEBUG_TTY, ("Waiting for not in use (%d)\n", 
-					   retries));
+		rio_dprintk (RIO_DEBUG_TTY, "Waiting for not in use (%d)\n", 
+					   retries);
 		rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 		if (retries-- <= 0) {
 			return RIO_FAIL;
@@ -791,16 +815,16 @@ static int RIOShortCommand(struct rio_info *p, struct Port *PortP,
 		rio_spin_lock_irqsave(&PortP->portSem, flags);
 	}
 	if ( PortP->State & RIO_DELETED ) {
-		rio_dprint(RIO_DEBUG_TTY, ("Short command to deleted RTA ignored\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "Short command to deleted RTA ignored\n");
 		rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 		return RIO_FAIL;
 	}
 
 	while ( !can_add_transmit(&PacketP,PortP) && !p->RIOHalted ) {
-		rio_dprint(RIO_DEBUG_TTY, ("Waiting to add short command to queue (%d)\n", retries));
+		rio_dprintk (RIO_DEBUG_TTY, "Waiting to add short command to queue (%d)\n", retries);
 		rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 		if (retries-- <= 0) {
-		  rio_dprint(RIO_DEBUG_TTY, ("out of tries. Failing\n"));
+		  rio_dprintk (RIO_DEBUG_TTY, "out of tries. Failing\n");
 			return RIO_FAIL;
 		}
 		if ( RIODelay_ni(PortP, HUNDRED_MS)==RIO_FAIL ) {
@@ -865,11 +889,11 @@ register caddr_t arg;
 	int					Modem = rio_ismodem(dev);
 	int					ioctl_processed;
 
-	rio_dprint(RIO_DEBUG_TTY, ("port ioctl SysPort %d command 0x%x argument 0x%x %s\n",
-			SysPort,cmd,arg,Modem?"Modem":"tty"));
+	rio_dprintk (RIO_DEBUG_TTY, "port ioctl SysPort %d command 0x%x argument 0x%x %s\n",
+			SysPort, cmd, arg, Modem?"Modem":"tty") ;
 
 	if ( SysPort >= RIO_PORTS ) {
-		rio_dprint(RIO_DEBUG_TTY, ("Bad port number %d\n",SysPort));
+		rio_dprintk (RIO_DEBUG_TTY, "Bad port number %d\n", SysPort);
 		return -ENXIO;
 	}
 
@@ -926,22 +950,22 @@ register caddr_t arg;
 			return 0;
 
 		case TCRIOTSTATE:
-			rio_dprint(RIO_DEBUG_TTY, ("tbusy/tstop monitoring %sabled\n",
-		 		arg ? "en" : "dis"));
+			rio_dprintk (RIO_DEBUG_TTY, "tbusy/tstop monitoring %sabled\n",
+		 		arg ? "en" : "dis");
 			/* MonitorTstate = 0 ;*/
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			RIOParam(PortP, CONFIG, Modem, OK_TO_SLEEP);
 			return 0;
 
 		case TCRIOSTATE: /* current state of Modem input pins */
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOSTATE\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOSTATE\n");
 			if (RIOPreemptiveCmd(p, PortP, MGET) == RIO_FAIL)
-				rio_dprint(RIO_DEBUG_TTY, ("TCRIOSTATE command failed\n"));
+				rio_dprintk (RIO_DEBUG_TTY, "TCRIOSTATE command failed\n");
 			PortP->State |= RIO_BUSY;
 			current = PortP->ModemState;
 			if ( copyout((caddr_t)&current, (int)arg,
 							sizeof(current))==COPYFAIL ) {
-				rio_dprint(RIO_DEBUG_TTY, ("Copyout failed\n"));
+				rio_dprintk (RIO_DEBUG_TTY, "Copyout failed\n");
 				rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 				pseterr(EFAULT);
 			}
@@ -950,15 +974,15 @@ register caddr_t arg;
 
 		case TCRIOMBIS:		/* Set modem lines */
 		case TCRIOMBIC:		/* Clear modem lines */
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOMBIS/TCRIOMBIC\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOMBIS/TCRIOMBIC\n");
 			if (cmd == TCRIOMBIS) {
 				uint		state;
 				state = (uint)arg;
 				PortP->ModemState |= (ushort)state;
 				PortP->ModemLines = (ulong) arg;
 				if (RIOPreemptiveCmd(p, PortP, MBIS) == RIO_FAIL)
-					rio_dprint(RIO_DEBUG_TTY, (
-					 "TCRIOMBIS command failed\n"));
+					rio_dprintk (RIO_DEBUG_TTY, 
+					 "TCRIOMBIS command failed\n");
 			}
 			else {
 				uint		state;
@@ -967,17 +991,17 @@ register caddr_t arg;
 				PortP->ModemState &= ~(ushort)state;
 				PortP->ModemLines = (ulong) arg;
 				if (RIOPreemptiveCmd(p, PortP, MBIC) == RIO_FAIL)
-					rio_dprint(RIO_DEBUG_TTY, ("TCRIOMBIC command failed\n"));
+					rio_dprintk (RIO_DEBUG_TTY, "TCRIOMBIC command failed\n");
 			}
 			PortP->State |= RIO_BUSY;
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			return 0;
 
 		case TCRIOXPON: /* set Xprint ON string */
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOXPON\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOXPON\n");
 			if ( copyin((int)arg, (caddr_t)PortP->Xprint.XpOn,
 						MAX_XP_CTRL_LEN)==COPYFAIL ) {
-				rio_dprint(RIO_DEBUG_TTY, ("Copyin failed\n"));
+				rio_dprintk (RIO_DEBUG_TTY, "Copyin failed\n");
 				PortP->Xprint.XpOn[0] = '\0';
 				rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 				pseterr(EFAULT);
@@ -989,10 +1013,10 @@ register caddr_t arg;
 			return 0;
 
 		case TCRIOXPOFF: /* set Xprint OFF string */
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOXPOFF\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOXPOFF\n");
 			if ( copyin( (int)arg, (caddr_t)PortP->Xprint.XpOff,
 						MAX_XP_CTRL_LEN)==COPYFAIL ) {
-				rio_dprint(RIO_DEBUG_TTY, ("Copyin failed\n"));
+				rio_dprintk (RIO_DEBUG_TTY, "Copyin failed\n");
 				PortP->Xprint.XpOff[0] = '\0';
 				rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 				pseterr(EFAULT);
@@ -1004,10 +1028,10 @@ register caddr_t arg;
 			return 0;
 
 		case TCRIOXPCPS: /* set Xprint CPS string */
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOXPCPS\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOXPCPS\n");
 			if ( (uint)arg > p->RIOConf.MaxXpCps || 
 					(uint)arg < p->RIOConf.MinXpCps ) {
-				rio_dprint(RIO_DEBUG_TTY, ("%d CPS out of range\n",arg));
+				rio_dprintk (RIO_DEBUG_TTY, "%d CPS out of range\n",arg);
 				rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 				pseterr(EINVAL);
 				return 0;
@@ -1017,7 +1041,7 @@ register caddr_t arg;
 			return 0;
 
 		case TCRIOXPRINT:
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOXPRINT\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOXPRINT\n");
 			if ( copyout((caddr_t)&PortP->Xprint, (int)arg,
 					sizeof(struct Xprint))==COPYFAIL ) {
 			        rio_spin_unlock_irqrestore(&PortP->portSem, flags);
@@ -1027,25 +1051,25 @@ register caddr_t arg;
 			return 0;
 
 		case TCRIOIXANYON:
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOIXANYON\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOIXANYON\n");
 			PortP->Config |= RIO_IXANY;
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			return 0;
 
 		case TCRIOIXANYOFF:
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOIXANYOFF\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOIXANYOFF\n");
 			PortP->Config &= ~RIO_IXANY;
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			return 0;
 
 		case TCRIOIXONON:
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOIXONON\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOIXONON\n");
 			PortP->Config |= RIO_IXON;
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			return 0;
 
 		case TCRIOIXONOFF:
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOIXONOFF\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOIXONOFF\n");
 			PortP->Config &= ~RIO_IXON;
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			return 0;
@@ -1055,28 +1079,28 @@ register caddr_t arg;
 ** Added support for CTS and RTS flow control ioctls :
 */
 		case TCRIOCTSFLOWEN:
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOCTSFLOWEN\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOCTSFLOWEN\n");
 			PortP->Config |= RIO_CTSFLOW;
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			RIOParam(PortP,CONFIG,Modem,OK_TO_SLEEP);	
 			return 0;
 
 		case TCRIOCTSFLOWDIS:
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIOCTSFLOWDIS\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIOCTSFLOWDIS\n");
 			PortP->Config &= ~RIO_CTSFLOW;
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			RIOParam(PortP,CONFIG,Modem,OK_TO_SLEEP);	
 			return 0;
 
 		case TCRIORTSFLOWEN:
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIORTSFLOWEN\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIORTSFLOWEN\n");
 			PortP->Config |= RIO_RTSFLOW;
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			RIOParam(PortP,CONFIG,Modem,OK_TO_SLEEP);	
 			return 0;
 
 		case TCRIORTSFLOWDIS:
-			rio_dprint(RIO_DEBUG_TTY, ("TCRIORTSFLOWDIS\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "TCRIORTSFLOWDIS\n");
 			PortP->Config &= ~RIO_RTSFLOW;
 			rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 			RIOParam(PortP,CONFIG,Modem,OK_TO_SLEEP);	
@@ -1100,13 +1124,13 @@ register caddr_t arg;
 		case TCSETAW:
 		case TCSETAF:
 			ioctl_processed++;
-			rio_dprint(RIO_DEBUG_TTY, ("NON POSIX ioctl\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "NON POSIX ioctl\n");
 			ttyseth_pv(PortP, tp, (struct termios *)arg, 0);
 			break;
 		case TCSETAP:	/* posix tcsetattr() */
 		case TCSETAWP:	/* posix tcsetattr() */
 		case TCSETAFP:	/* posix tcsetattr() */
-			rio_dprint(RIO_DEBUG_TTY, ("NON POSIX SYSV ioctl\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "NON POSIX SYSV ioctl\n");
 			ttyseth_pv(PortP, tp, (struct termios *)arg, 1);
 			ioctl_processed++;
 			break;
@@ -1141,7 +1165,7 @@ register caddr_t arg;
 #endif
 		case TIOCSETD:
 		case TIOCSETN:
-			rio_dprint(RIO_DEBUG_TTY, ("wait for non-BUSY, semaphore set\n"));
+			rio_dprintk (RIO_DEBUG_TTY, "wait for non-BUSY, semaphore set\n");
 			/*
 			** Wait for drain here, at least as far as the double buffer
 			** being empty.
@@ -1208,8 +1232,8 @@ register caddr_t arg;
 
 	PortP->CookMode = RIOCookMode(tp);	/* Set new cooking mode */
 
-	rio_dprint(RIO_DEBUG_TTY, ("RIOIoctl changed %d newcook %d oldcook %d\n",
-			changed,PortP->CookMode,oldcook));
+	rio_dprintk (RIO_DEBUG_TTY, "RIOIoctl changed %d newcook %d oldcook %d\n",
+			changed,PortP->CookMode,oldcook);
 
 #ifdef MODEM_SUPPORT
 	/*
@@ -1232,7 +1256,7 @@ register caddr_t arg;
 	*/
 	if (changed || oldcook != PortP->CookMode || (ioctl_processed)) {
 		rio_spin_unlock_irqrestore(&PortP->portSem, flags);
-		rio_dprint(RIO_DEBUG_TTY, ("Ioctl changing the PORT settings\n"));
+		rio_dprintk (RIO_DEBUG_TTY, "Ioctl changing the PORT settings\n");
 		RIOParam(PortP,CONFIG,Modem,OK_TO_SLEEP);	
 		rio_spin_lock_irqsave(&PortP->portSem, flags);
 	}

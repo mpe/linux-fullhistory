@@ -223,6 +223,7 @@
 #define __NR_setgid32			(__NR_SYSCALL_BASE+214)
 #define __NR_setfsuid32			(__NR_SYSCALL_BASE+215)
 #define __NR_setfsgid32			(__NR_SYSCALL_BASE+216)
+#define __NR_getdents64			(__NR_SYSCALL_BASE+217)
 
 #define __sys2(x) #x
 #define __sys1(x) __sys2(x)

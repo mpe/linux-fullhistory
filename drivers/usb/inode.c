@@ -290,14 +290,14 @@ static int usbdevfs_root_readdir(struct file *filp, void *dirent, filldir_t fill
 	i = filp->f_pos;
 	switch (i) {
 	case 0:
-		if (filldir(dirent, ".", 1, i, IROOT) < 0)
+		if (filldir(dirent, ".", 1, i, IROOT, DT_DIR) < 0)
 			return 0;
 		filp->f_pos++;
 		i++;
 		/* fall through */
 
 	case 1:
-		if (filldir(dirent, "..", 2, i, IROOT) < 0)
+		if (filldir(dirent, "..", 2, i, IROOT, DT_DIR) < 0)
 			return 0;
 		filp->f_pos++;
 		i++;
@@ -307,7 +307,7 @@ static int usbdevfs_root_readdir(struct file *filp, void *dirent, filldir_t fill
 		
 		while (i >= 2 && i < 2+NRSPECIAL) {
 			spec = &special[filp->f_pos-2];
-			if (filldir(dirent, spec->name, strlen(spec->name), i, ISPECIAL | (filp->f_pos-2+IROOT)) < 0)
+			if (filldir(dirent, spec->name, strlen(spec->name), i, ISPECIAL | (filp->f_pos-2+IROOT), DT_UNKNOWN) < 0)
 				return 0;
 			filp->f_pos++;
 			i++;
@@ -323,7 +323,7 @@ static int usbdevfs_root_readdir(struct file *filp, void *dirent, filldir_t fill
 			}
 			bus = list_entry(list, struct usb_bus, bus_list);
 			sprintf(numbuf, "%03d", bus->busnum);
-			if (filldir(dirent, numbuf, 3, filp->f_pos, IBUS | ((bus->busnum & 0xff) << 8)) < 0)
+			if (filldir(dirent, numbuf, 3, filp->f_pos, IBUS | ((bus->busnum & 0xff) << 8), DT_UNKNOWN) < 0)
 				break;
 			filp->f_pos++;
 		}
@@ -343,7 +343,7 @@ static int bus_readdir(struct usb_device *dev, unsigned long ino, int pos, struc
 	if (pos > 0)
 		pos--;
 	else {
-		if (filldir(dirent, numbuf, 3, filp->f_pos, ino | (dev->devnum & 0xff)) < 0)
+		if (filldir(dirent, numbuf, 3, filp->f_pos, ino | (dev->devnum & 0xff), DT_UNKNOWN) < 0)
 			return -1;
 		filp->f_pos++;
 	}
@@ -368,13 +368,13 @@ static int usbdevfs_bus_readdir(struct file *filp, void *dirent, filldir_t filld
 		return -EINVAL;
 	switch ((unsigned int)filp->f_pos) {
 	case 0:
-		if (filldir(dirent, ".", 1, filp->f_pos, ino) < 0)
+		if (filldir(dirent, ".", 1, filp->f_pos, ino, DT_DIR) < 0)
 			return 0;
 		filp->f_pos++;
 		/* fall through */
 
 	case 1:
-		if (filldir(dirent, "..", 2, filp->f_pos, IROOT) < 0)
+		if (filldir(dirent, "..", 2, filp->f_pos, IROOT, DT_DIR) < 0)
 			return 0;
 		filp->f_pos++;
 		/* fall through */

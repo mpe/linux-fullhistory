@@ -81,7 +81,7 @@ static char *_rioinit_c_sccs_ = "@(#)rioinit.c	1.3";
 #include "control.h"
 #include "cirrus.h"
 #include "rioioctl.h"
-
+#include "rio_linux.h"
 
 #undef bcopy
 #define bcopy rio_pcicopy
@@ -109,7 +109,7 @@ struct RioHostInfo	* info;
 	*/
 	if ( !p->RIOPortp )
 	{
-		rio_dprint(RIO_DEBUG_INIT,  ("Allocating and setting up driver data structures\n") );
+		rio_dprintk (RIO_DEBUG_INIT,  "Allocating and setting up driver data structures\n");
 
 		RIOAllocDataStructs(p);		/* allocate host/port structs */
 		RIOSetupDataStructs(p);		/* setup topology structs */
@@ -155,16 +155,16 @@ struct RioHostInfo	* info;
 
 	if ( info->bus & ISA_BUS )
 	{
-		rio_dprint(RIO_DEBUG_INIT,  ("initialising card %d (ISA)\n", p->RIONumHosts) );
+		rio_dprintk (RIO_DEBUG_INIT,  "initialising card %d (ISA)\n", p->RIONumHosts);
 		RIOISAinit(p, p->mode);
 	}
 	else
 	{
-		rio_dprint(RIO_DEBUG_INIT,  ("initialising card %d (PCI)\n", p->RIONumHosts) );
+		rio_dprintk (RIO_DEBUG_INIT,  "initialising card %d (PCI)\n", p->RIONumHosts);
 		RIOPCIinit(p, RIO_PCI_DEFAULT_MODE);
 	}
 
-	rio_dprint(RIO_DEBUG_INIT,  ("Total hosts initialised so far : %d\n", p->RIONumHosts) );
+	rio_dprintk (RIO_DEBUG_INIT,  "Total hosts initialised so far : %d\n", p->RIONumHosts);
 
 
 #ifdef FUTURE_RELEASE
@@ -193,13 +193,13 @@ int					mode;
 	p->intr_tid = iointset(p->RIOHosts[p->RIONumHosts].Ivec,
 					(int (*)())rio_intr, (char*)p->RIONumHosts);
 
-	rio_dprint(RIO_DEBUG_INIT,  ("Set interrupt handler, intr_tid = 0x%x\n", p->intr_tid ) );
+	rio_dprintk (RIO_DEBUG_INIT,  "Set interrupt handler, intr_tid = 0x%x\n", p->intr_tid );
 
 	if (RIODoAT(p, p->RIOHosts[p->RIONumHosts].PaddrP, mode)) {
 		return;
 	}
 	else {
-		rio_dprint(RIO_DEBUG_INIT, ("RIODoAT failed\n"));
+		rio_dprintk (RIO_DEBUG_INIT, "RIODoAT failed\n");
 		p->RIOFailed++;
 	}
 #endif
@@ -268,7 +268,7 @@ int		Base;
 	** map it in in one 64K block.
 	*/
 	if (RIOMapin(Base, RIO_AT_MEM_SIZE, &virtAddr) == -1) {
-		rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Couldn't map the board in!\n"));
+		rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Couldn't map the board in!\n");
 		return((caddr_t)0);
 	}
 
@@ -285,8 +285,8 @@ int		Base;
 			** Signature mismatch - card not at this address
 			*/
 			RIOMapout(Base, RIO_AT_MEM_SIZE, virtAddr);
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Couldn't match the signature 0x%x 0x%x!\n",
-						(int)cardp, off));
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Couldn't match the signature 0x%x 0x%x!\n",
+						(int)cardp, off);
 			return((caddr_t)0);
 		}
 	}
@@ -356,10 +356,10 @@ int		mode;
 		((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[1])&0xFF)<<8)|
 		((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[2])&0xFF)<<16)|
 		((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[3])&0xFF)<<24);
-	rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Uniquenum 0x%x\n",p->RIOHosts[p->RIONumHosts].UniqueNum));
+	rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Uniquenum 0x%x\n",p->RIOHosts[p->RIONumHosts].UniqueNum);
 
 	p->RIONumHosts++;
-	rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Tests Passed at 0x%x\n", Base));
+	rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Tests Passed at 0x%x\n", Base);
 	return(1);
 }
 #if 0
@@ -378,7 +378,7 @@ int RIOMCAinit(int Mode)
 	** is only FAST LINKS
 	*/
 	Mode = (Mode & FAST_LINKS) ? McaTpFastLinks : McaTpSlowLinks;
-	rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"RIOMCAinit(%d)\n",Mode);
+	rio_dprintk (RIO_DEBUG_INIT, "RIOMCAinit(%d)\n",Mode);
 
 
 	/*
@@ -395,7 +395,7 @@ int RIOMCAinit(int Mode)
 	*/
 	if (((inb(McaIdHigh)<< 8)|inb(McaIdLow)) == McaRIOId)
 	{
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"Potential MCA card in slot %d\n",SlotNumber);
+		rio_dprintk (RIO_DEBUG_INIT, "Potential MCA card in slot %d\n", SlotNumber);
 
 		/*
 		** Card appears to be a RIO MCA card!
@@ -417,48 +417,44 @@ int RIOMCAinit(int Mode)
 		*/
 		Ivec = inb(McaIrqEnable);
 
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"Ivec is %x\n",Ivec);
+		rio_dprintk (RIO_DEBUG_INIT, "Ivec is %x\n", Ivec);
 
 		switch ( Ivec & McaIrqMask )
 		{
 		case McaIrq9:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"IRQ9\n");
+		rio_dprintk (RIO_DEBUG_INIT, "IRQ9\n");
 		break;
 		case McaIrq3:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"IRQ3\n");
+		rio_dprintk (RIO_DEBUG_INIT, "IRQ3\n");
 		break;
 		case McaIrq4:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"IRQ4\n");
+		rio_dprintk (RIO_DEBUG_INIT, "IRQ4\n");
 		break;
 		case McaIrq7:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"IRQ7\n");
+		rio_dprintk (RIO_DEBUG_INIT, "IRQ7\n");
 		break;
 		case McaIrq10:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"IRQ10\n");
+		rio_dprintk (RIO_DEBUG_INIT, "IRQ10\n");
 		break;
 		case McaIrq11:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"IRQ11\n");
+		rio_dprintk (RIO_DEBUG_INIT, "IRQ11\n");
 		break;
 		case McaIrq12:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"IRQ12\n");
+		rio_dprintk (RIO_DEBUG_INIT, "IRQ12\n");
 		break;
 		case McaIrq15:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"IRQ15\n");
+		rio_dprintk (RIO_DEBUG_INIT, "IRQ15\n");
 		break;
 		}
 
 		/*
 		** If the card enable bit isn't set, then set it!
 		*/
-		if ((Ivec & McaCardEnable) != McaCardEnable )
-		{
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"McaCardEnable not set - setting!\n");
-		outb(McaIrqEnable,Ivec|McaCardEnable);
-		}
-		else
-		{
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"McaCardEnable already set\n");
-		}
+		if ((Ivec & McaCardEnable) != McaCardEnable) {
+			rio_dprintk (RIO_DEBUG_INIT, "McaCardEnable not set - setting!\n");
+			outb(McaIrqEnable,Ivec|McaCardEnable);
+		} else
+			rio_dprintk (RIO_DEBUG_INIT, "McaCardEnable already set\n");
 
 		/*
 		** Convert the IRQ enable mask into something useful
@@ -468,10 +464,10 @@ int RIOMCAinit(int Mode)
 		/*
 		** Find the physical address
 		*/
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"inb(McaMemory) is %x\n",inb(McaMemory));
+		rio_dprintk (RIO_DEBUG_INIT, "inb(McaMemory) is %x\n", inb(McaMemory));
 		Paddr = McaAddress(inb(McaMemory));
 
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"MCA card has Ivec %d Addr %x\n",Ivec,Paddr);
+		rio_dprintk (RIO_DEBUG_INIT, "MCA card has Ivec %d Addr %x\n", Ivec, Paddr);
 
 		if ( Paddr != 0 )
 		{
@@ -482,21 +478,20 @@ int RIOMCAinit(int Mode)
 		Handle = RIOMapin( Paddr, RIO_MCA_MEM_SIZE, &Caddr );
 
 		if ( Handle == -1 ) {
-			rio_dprint(RIO_DEBUG_INIT, ("Couldn't map %d bytes at %x\n", RIO_MCA_MEM_SIZE,Paddr);
+			rio_dprintk (RIO_DEBUG_INIT, "Couldn't map %d bytes at %x\n", RIO_MCA_MEM_SIZE, Paddr;
 			continue;
 		}
 
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"Board mapped to vaddr 0x%x\n",Caddr);
+		rio_dprintk (RIO_DEBUG_INIT, "Board mapped to vaddr 0x%x\n", Caddr);
 
 		/*
 		** And check that it is actually there!
 		*/
 		if ( RIOBoardTest( Paddr,Caddr,RIO_MCA,SlotNumber ) == RIO_SUCCESS )
 		{
-			rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"Board has passed test\n");
-			rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,
-	"Slot %d. Type %d. Paddr 0x%x. Caddr 0x%x. Mode 0x%x.\n",
-			SlotNumber,RIO_MCA,Paddr,Caddr,Mode);
+			rio_dprintk (RIO_DEBUG_INIT, "Board has passed test\n");
+			rio_dprintk (RIO_DEBUG_INIT, "Slot %d. Type %d. Paddr 0x%x. Caddr 0x%x. Mode 0x%x.\n",
+			                            SlotNumber, RIO_MCA, Paddr, Caddr, Mode);
 
 			/*
 			** Board has passed its scrub test. Fill in all the
@@ -524,25 +519,25 @@ int RIOMCAinit(int Mode)
 			/*
 			** It failed the test, so ignore it.
 			*/
-			rio_dprint(RIO_DEBUG_INIT, NULL,DBG_FAIL,"TEST FAILED\n");
+			rio_dprintk (RIO_DEBUG_INIT, "TEST FAILED\n");
 			RIOMapout(Paddr, RIO_MCA_MEM_SIZE, Caddr );
 		}
 		}
 		else
 		{
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"Slot %d - Paddr zero!\n",SlotNumber);
+		rio_dprintk (RIO_DEBUG_INIT, "Slot %d - Paddr zero!\n", SlotNumber);
 		}
 	}
 	else
 	{
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"Slot %d NOT RIO\n",SlotNumber);
+		rio_dprintk (RIO_DEBUG_INIT, "Slot %d NOT RIO\n", SlotNumber);
 	}
 	}
 	/*
 	** Now we have checked all the slots, turn off the MCA slot selector
 	*/
 	outb(McaSlotSelect,0);
-	rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"Slot %d NOT RIO\n",SlotNumber);
+	rio_dprintk (RIO_DEBUG_INIT, "Slot %d NOT RIO\n", SlotNumber);
 	return ret;
 }
 
@@ -565,13 +560,13 @@ int RIOEISAinit( int Mode )
 
 	if ( EISADone )
 	{
-	rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"RIOEISAinit() - already done, return.\n");
+		rio_dprintk (RIO_DEBUG_INIT, "RIOEISAinit() - already done, return.\n");
 		return(0);
 	}
 
 	EISADone++;
 
-	rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"RIOEISAinit()\n");
+	rio_dprintk (RIO_DEBUG_INIT, "RIOEISAinit()\n");
 
 
 	/*
@@ -584,23 +579,21 @@ int RIOEISAinit( int Mode )
 	Ident = (INBZ(EisaSlot,EISA_PRODUCT_IDENT_HI)<<8) |
 		 INBZ(EisaSlot,EISA_PRODUCT_IDENT_LO);
 
-	/* rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT, "Check EISA slot %d, ID=%x\n",EisaSlot,Ident); */
-
 	if ( Ident == RIO_EISA_IDENT )
 	{
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"Found Specialix product\n");
+		rio_dprintk (RIO_DEBUG_INIT, "Found Specialix product\n");
 
 		if ( INBZ(EisaSlot,EISA_PRODUCT_NUMBER) != RIO_EISA_PRODUCT_CODE )
 		{
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"Not Specialix RIO - Product number %x\n",
-						INBZ(EisaSlot,EISA_PRODUCT_NUMBER));
+		rio_dprintk (RIO_DEBUG_INIT, "Not Specialix RIO - Product number %x\n",
+						INBZ(EisaSlot, EISA_PRODUCT_NUMBER));
 		continue;  /* next slot */
 		}
 		/*
 		** Its a Specialix RIO!
 		*/
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"RIO Revision %d\n",
-					INBZ(EisaSlot,EISA_REVISION_NUMBER));
+		rio_dprintk (RIO_DEBUG_INIT, "RIO Revision %d\n",
+					INBZ(EisaSlot, EISA_REVISION_NUMBER));
 		
 		RIOMachineType |= (1<<RIO_EISA);
 
@@ -627,43 +620,43 @@ int RIOEISAinit( int Mode )
 		switch ( Ivec & EISA_INTERRUPT_MASK )
 		{
 		case EISA_IRQ_3:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA IRQ 3\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA IRQ 3\n");
 		break;
 		case EISA_IRQ_4:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA IRQ 4\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA IRQ 4\n");
 		break;
 		case EISA_IRQ_5:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA IRQ 5\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA IRQ 5\n");
 		break;
 		case EISA_IRQ_6:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA IRQ 6\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA IRQ 6\n");
 		break;
 		case EISA_IRQ_7:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA IRQ 7\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA IRQ 7\n");
 		break;
 		case EISA_IRQ_9:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA IRQ 9\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA IRQ 9\n");
 		break;
 		case EISA_IRQ_10:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA IRQ 10\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA IRQ 10\n");
 		break;
 		case EISA_IRQ_11:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA IRQ 11\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA IRQ 11\n");
 		break;
 		case EISA_IRQ_12:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA IRQ 12\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA IRQ 12\n");
 		break;
 		case EISA_IRQ_14:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA IRQ 14\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA IRQ 14\n");
 		break;
 		case EISA_IRQ_15:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA IRQ 15\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA IRQ 15\n");
 		break;
 		case EISA_POLLED:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"EISA POLLED\n");
+			rio_dprintk (RIO_DEBUG_INIT, "EISA POLLED\n");
 		break;
 		default:
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT|DBG_FAIL,"Shagged interrupt number!\n");
+			rio_dprintk (RIO_DEBUG_INIT, NULL,DBG_INIT|DBG_FAIL,"Shagged interrupt number!\n");
 		Ivec &= EISA_CONTROL_MASK;
 		}
 #endif
@@ -741,7 +734,7 @@ int RIOEISAinit( int Mode )
 		*/
 		Ivec = RIOEisaToIvec(Ivec);
 
-		rio_dprint(RIO_DEBUG_INIT, NULL, DBG_INIT, "EISA host in slot %d has Ivec 0x%x\n",
+		rio_dprintk (RIO_DEBUG_INIT, "EISA host in slot %d has Ivec 0x%x\n",
 		 EisaSlot, Ivec);
 
 		/*
@@ -750,11 +743,11 @@ int RIOEISAinit( int Mode )
 		Paddr = (INBZ(EisaSlot,EISA_MEMORY_BASE_HI)<<24) |
 				(INBZ(EisaSlot,EISA_MEMORY_BASE_LO)<<16);
 
-		rio_dprint(RIO_DEBUG_INIT, NULL, DBG_INIT,"EISA card has Ivec %d Addr %x\n",Ivec,Paddr);
+		rio_dprintk (RIO_DEBUG_INIT, "EISA card has Ivec %d Addr %x\n", Ivec, Paddr);
 
 		if ( Paddr == 0 )
 		{
-		rio_dprint(RIO_DEBUG_INIT, NULL, DBG_INIT | DBG_FAIL,
+		rio_dprintk (RIO_DEBUG_INIT,
 		 "Board in slot %d configured for address zero!\n", EisaSlot);
 		continue;
 		}
@@ -762,23 +755,23 @@ int RIOEISAinit( int Mode )
 		/*
 		** Tell the memory mapper that we want to talk to it
 		*/
-		rio_dprint(RIO_DEBUG_INIT, NULL, DBG_INIT,"About to map EISA card \n");
+		rio_dprintk (RIO_DEBUG_INIT, "About to map EISA card \n");
 
 		if (RIOMapin( Paddr, RIO_EISA_MEM_SIZE, &Caddr) == -1) {
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_FAIL,"Couldn't map %d bytes at %x\n",
+		rio_dprintk (RIO_DEBUG_INIT, "Couldn't map %d bytes at %x\n",
 							RIO_EISA_MEM_SIZE,Paddr);
 		continue;
 		}
 
-		rio_dprint(RIO_DEBUG_INIT, NULL, DBG_INIT,"Board mapped to vaddr 0x%x\n",Caddr);
+		rio_dprintk (RIO_DEBUG_INIT, "Board mapped to vaddr 0x%x\n", Caddr);
 
 		/*
 		** And check that it is actually there!
 		*/
 		if ( RIOBoardTest( Paddr,Caddr,RIO_EISA,EisaSlot) == RIO_SUCCESS )
 			{
-		rio_dprint(RIO_DEBUG_INIT, NULL, DBG_INIT,"Board has passed test\n");
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,
+		rio_dprintk (RIO_DEBUG_INIT, "Board has passed test\n");
+		rio_dprintk (RIO_DEBUG_INIT, 
 		"Slot %d. Ivec %d. Type %d. Paddr 0x%x. Caddr 0x%x. Mode 0x%x.\n",
 			EisaSlot,Ivec,RIO_EISA,Paddr,Caddr,Mode);
 
@@ -818,7 +811,7 @@ int RIOEISAinit( int Mode )
 		/*
 		** It failed the test, so ignore it.
 		*/
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_FAIL,"TEST FAILED\n");
+		rio_dprintk (RIO_DEBUG_INIT, "TEST FAILED\n");
 
 		RIOMapout(Paddr, RIO_EISA_MEM_SIZE, Caddr );
 		}
@@ -917,7 +910,7 @@ int 		Mode;
 	int		Handle;	/* Handle to Virtual memory allocated for current PCI host */
 
 
-	rio_dprint(RIO_DEBUG_INIT,  ("Search for a RIO PCI card - start at slot %d\n", slot ) );
+	rio_dprintk (RIO_DEBUG_INIT,  "Search for a RIO PCI card - start at slot %d\n", slot);
 
 	/*
 	** Initialise the search status
@@ -926,7 +919,7 @@ int 		Mode;
 
 	while ( (slot < MAX_PCI_SLOT) & (p->RIOLastPCISearch != RIO_SUCCESS) )
 	{
-		rio_dprint(RIO_DEBUG_INIT,  ("Currently testing slot %d\n", slot ) );
+		rio_dprintk (RIO_DEBUG_INIT,  "Currently testing slot %d\n", slot);
 
 		if (read_config(0,slot,0) == RIO_PCI_JET_CARD) {
 			p->RIOHosts[p->RIONumHosts].Ivec = 0;
@@ -934,7 +927,7 @@ int 		Mode;
 			Paddr = Paddr - (Paddr & 0x1); /* Mask off the io bit */
 
 			if ( (Paddr == 0) || ((Paddr & 0xffff0000) == 0xffff0000) ) {
-				rio_dprint(RIO_DEBUG_INIT,  ("Goofed up slot\n") );	/* what! */
+				rio_dprintk (RIO_DEBUG_INIT,  "Goofed up slot\n");	/* what! */
 				slot++;
 				continue;
 			}
@@ -942,11 +935,11 @@ int 		Mode;
 			p->RIOHosts[p->RIONumHosts].PaddrP = Paddr;
 			Ivec = (read_config(0,slot,0x3c) & 0xff);
 
-			rio_dprint(RIO_DEBUG_INIT,  ("PCI Host at 0x%x, Intr %d\n", (int)Paddr, Ivec ) );
+			rio_dprintk (RIO_DEBUG_INIT,  "PCI Host at 0x%x, Intr %d\n", (int)Paddr, Ivec);
 
 			Handle = RIOMapin( Paddr, RIO_PCI_MEM_SIZE, &Caddr );
 			if (Handle == -1) {
-				rio_dprint(RIO_DEBUG_INIT,  ("Couldn't map %d bytes at 0x%x\n", RIO_PCI_MEM_SIZE, (int)Paddr ) );
+				rio_dprintk (RIO_DEBUG_INIT,  "Couldn't map %d bytes at 0x%x\n", RIO_PCI_MEM_SIZE, (int)Paddr);
 				slot++;
 				continue;
 			}
@@ -954,9 +947,8 @@ int 		Mode;
 			p->intr_tid = iointset(p->RIOHosts[p->RIONumHosts].Ivec,
 						(int (*)())rio_intr, (char *)p->RIONumHosts);
 			if (RIOBoardTest( Paddr, Caddr, RIO_PCI, 0 ) == RIO_SUCCESS) {
-				rio_dprint(RIO_DEBUG_INIT, ("Board has passed test\n"));
-				rio_dprint(RIO_DEBUG_INIT, ("Paddr 0x%x. Caddr 0x%x. Mode 0x%x.\n", Paddr, Caddr, 
-																Mode));
+				rio_dprintk (RIO_DEBUG_INIT, ("Board has passed test\n");
+				rio_dprintk (RIO_DEBUG_INIT, ("Paddr 0x%x. Caddr 0x%x. Mode 0x%x.\n", Paddr, Caddr, Mode);
 
 				/*
 				** Board has passed its scrub test. Fill in all the
@@ -991,8 +983,8 @@ int 		Mode;
 					((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[2])&0xFF)<<16)|
 					((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[3])&0xFF)<<24);
 
-				rio_dprint(RIO_DEBUG_INIT,  ("Unique no 0x%x.\n", 
-				    p->RIOHosts[p->RIONumHosts].UniqueNum ) );
+				rio_dprintk (RIO_DEBUG_INIT, "Unique no 0x%x.\n", 
+				    p->RIOHosts[p->RIONumHosts].UniqueNum);
 
 				p->RIOLastPCISearch = RIO_SUCCESS;
 				p->RIONumHosts++;
@@ -1002,8 +994,8 @@ int 		Mode;
 	}
 
 	if ( slot >= MAX_PCI_SLOT ) {
-		rio_dprint(RIO_DEBUG_INIT,  ("All %d PCI slots have tested for RIO cards !!!\n",
-		    MAX_PCI_SLOT ) );
+		rio_dprintk (RIO_DEBUG_INIT,  "All %d PCI slots have tested for RIO cards !!!\n",
+			     MAX_PCI_SLOT);
 	}
 
 
@@ -1025,7 +1017,7 @@ void riohalt( void )
 	int host;
 	for ( host=0; host<p->RIONumHosts; host++ )
 	{
-		rio_dprint(RIO_DEBUG_INIT, NULL,DBG_INIT,"Stop host %d\n",host);
+		rio_dprintk (RIO_DEBUG_INIT, "Stop host %d\n", host);
 		(void)RIOBoardTest( p->RIOHosts[host].PaddrP, p->RIOHosts[host].Caddr, p->RIOHosts[host].Type,p->RIOHosts[host].Slot );
 	}
 }
@@ -1058,8 +1050,8 @@ int		slot;
 	int  op, bank;
 	int  nbanks;
 
-	rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Reset host type=%d, DpRam=0x%x, slot=%d\n",
-			type,(int)DpRam,slot));
+	rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Reset host type=%d, DpRam=0x%x, slot=%d\n",
+			type,(int)DpRam, slot);
 
 	RIOHostReset(type, DpRam, slot);
 
@@ -1071,7 +1063,7 @@ int		slot;
 	** scratch	- 1000h bytes
 	*/
 
-	rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Setup ram/size arrays\n"));
+	rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Setup ram/size arrays\n");
 
 	size[0] = DP_SRAM1_SIZE;
 	size[1] = DP_SRAM2_SIZE;
@@ -1087,12 +1079,12 @@ int		slot;
 
 
 	if (nbanks == 3) {
-		rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Memory: 0x%x(0x%x), 0x%x(0x%x), 0x%x(0x%x)\n",
-				(int)ram[0], size[0], (int)ram[1], size[1], (int)ram[2], size[2]));
+		rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Memory: 0x%x(0x%x), 0x%x(0x%x), 0x%x(0x%x)\n",
+				(int)ram[0], size[0], (int)ram[1], size[1], (int)ram[2], size[2]);
 	} else {
-		rio_dprint(RIO_DEBUG_INIT, ("RIO-init: 0x%x(0x%x), 0x%x(0x%x), 0x%x(0x%x), 0x%x(0x%x)\n",
+		rio_dprintk (RIO_DEBUG_INIT, "RIO-init: 0x%x(0x%x), 0x%x(0x%x), 0x%x(0x%x), 0x%x(0x%x)\n",
 			(int)ram[0], size[0], (int)ram[1], size[1], (int)ram[2], size[2], (int)ram[3], 
-					size[3]));
+					size[3]);
 	}
 
 	/*
@@ -1103,14 +1095,14 @@ int		slot;
 	for (op=0; op<TEST_END; op++) {
 		for (bank=0; bank<nbanks; bank++) {
 			if (RIOScrub(op, (BYTE *)ram[bank], size[bank]) == RIO_FAIL) {
-				rio_dprint(RIO_DEBUG_INIT, ("RIO-init: RIOScrub band %d, op %d failed\n", 
-							bank, op));
+				rio_dprintk (RIO_DEBUG_INIT, "RIO-init: RIOScrub band %d, op %d failed\n", 
+							bank, op);
 				return RIO_FAIL;
 			}
 		}
 	}
 
-	rio_dprint(RIO_DEBUG_INIT, ("Test completed\n"));
+	rio_dprintk (RIO_DEBUG_INIT, "Test completed\n");
 	return RIO_SUCCESS;
 }
 
@@ -1158,14 +1150,14 @@ int		size;
 	if (op) {
 		for (off=0; off<size; off++) {
 			if (RBYTE(ram[off]) != oldbyte) {
-				rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Byte Pre Check 1: BYTE at offset 0x%x should have been=%x, was=%x\n", off, oldbyte, RBYTE(ram[off])));
+				rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Byte Pre Check 1: BYTE at offset 0x%x should have been=%x, was=%x\n", off, oldbyte, RBYTE(ram[off]));
 				return RIO_FAIL;
 			}
 		}
 		for (off=0; off<size; off+=2) {
 			if (*(ushort *)&ram[off] != oldword) {
-				rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Word Pre Check: WORD at offset 0x%x should have been=%x, was=%x\n",off,oldword,*(ushort *)&ram[off]));
-				rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Word Pre Check: BYTE at offset 0x%x is %x BYTE at offset 0x%x is %x\n",off,RBYTE(ram[off]),off+1,RBYTE(ram[off+1])));
+				rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Word Pre Check: WORD at offset 0x%x should have been=%x, was=%x\n",off,oldword,*(ushort *)&ram[off]);
+				rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Word Pre Check: BYTE at offset 0x%x is %x BYTE at offset 0x%x is %x\n", off, RBYTE(ram[off]), off+1, RBYTE(ram[off+1]));
 				return RIO_FAIL;
 			}
 		}
@@ -1180,12 +1172,12 @@ int		size;
 	*/
 	for (off=0; off<size; off++) {
 		if (op && (RBYTE(ram[off]) != oldbyte)) {
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Byte Pre Check 2: BYTE at offset 0x%x should have been=%x, was=%x\n",off,oldbyte,RBYTE(ram[off])));
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Byte Pre Check 2: BYTE at offset 0x%x should have been=%x, was=%x\n", off, oldbyte, RBYTE(ram[off]));
 			return RIO_FAIL;
 		}
 		WBYTE(ram[off],invbyte);
 		if (RBYTE(ram[off]) != invbyte) {
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Byte Inv Check: BYTE at offset 0x%x should have been=%x, was=%x\n",off,invbyte,RBYTE(ram[off])));
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Byte Inv Check: BYTE at offset 0x%x should have been=%x, was=%x\n", off, invbyte, RBYTE(ram[off]));
 			return RIO_FAIL;
 		}
 	}
@@ -1199,15 +1191,15 @@ int		size;
 	*/
 	for (off=0; off<size; off+=2) {
 		if (*(ushort *)&ram[off] != invword) {
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Word Inv Check: WORD at offset 0x%x should have been=%x, was=%x\n",off,invword,*(ushort *)&ram[off]));
-		rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Word Inv Check: BYTE at offset 0x%x is %x BYTE at offset 0x%x is %x\n",off,RBYTE(ram[off]),off+1,RBYTE(ram[off+1])));
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Word Inv Check: WORD at offset 0x%x should have been=%x, was=%x\n", off, invword, *(ushort *)&ram[off]);
+		rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Word Inv Check: BYTE at offset 0x%x is %x BYTE at offset 0x%x is %x\n", off, RBYTE(ram[off]), off+1, RBYTE(ram[off+1]));
 			return RIO_FAIL;
 		}
 
 		*(ushort *)&ram[off] = newword;
 		if ( *(ushort *)&ram[off] != newword ) {
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Post Word Check 1: WORD at offset 0x%x should have been=%x, was=%x\n",off,newword,*(ushort *)&ram[off]));
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Post Word Check 1: BYTE at offset 0x%x is %x BYTE at offset 0x%x is %x\n",off,RBYTE(ram[off]),off+1,RBYTE(ram[off+1])));
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Post Word Check 1: WORD at offset 0x%x should have been=%x, was=%x\n", off, newword, *(ushort *)&ram[off]);
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Post Word Check 1: BYTE at offset 0x%x is %x BYTE at offset 0x%x is %x\n", off, RBYTE(ram[off]), off+1, RBYTE(ram[off+1]));
 			return RIO_FAIL;
 		}
 	}
@@ -1219,15 +1211,15 @@ int		size;
 	*/
 	for (off=0; off<size; off++) {
 		if (RBYTE(ram[off]) != newbyte) {
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Post Byte Check: BYTE at offset 0x%x should have been=%x, was=%x\n",off,newbyte,RBYTE(ram[off])));
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Post Byte Check: BYTE at offset 0x%x should have been=%x, was=%x\n", off, newbyte, RBYTE(ram[off]));
 			return RIO_FAIL;
 		}
 	}
 
 	for (off=0; off<size; off+=2) {
 		if ( *(ushort *)&ram[off] != newword ) {
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Post Word Check 2: WORD at offset 0x%x should have been=%x, was=%x\n",off,newword,*(ushort *)&ram[off]));
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: Post Word Check 2: BYTE at offset 0x%x is %x BYTE at offset 0x%x is %x\n",off,RBYTE(ram[off]),off+1,RBYTE(ram[off+1])));
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Post Word Check 2: WORD at offset 0x%x should have been=%x, was=%x\n", off, newword, *(ushort *)&ram[off]);
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: Post Word Check 2: BYTE at offset 0x%x is %x BYTE at offset 0x%x is %x\n", off, RBYTE(ram[off]), off+1, RBYTE(ram[off+1]));
 			return RIO_FAIL;
 		}
 	}
@@ -1244,8 +1236,8 @@ int		size;
 
 	for ( off=0; off<size; off+=2 ) {
 		if (*(ushort *)&ram[off] != swapword) {
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: SwapWord Check 1: WORD at offset 0x%x should have been=%x, was=%x\n",off,swapword,*((ushort *)&ram[off])));
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: SwapWord Check 1: BYTE at offset 0x%x is %x BYTE at offset 0x%x is %x\n",off,RBYTE(ram[off]),off+1,RBYTE(ram[off+1])));
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: SwapWord Check 1: WORD at offset 0x%x should have been=%x, was=%x\n", off, swapword, *((ushort *)&ram[off]));
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: SwapWord Check 1: BYTE at offset 0x%x is %x BYTE at offset 0x%x is %x\n", off, RBYTE(ram[off]), off+1, RBYTE(ram[off+1]));
 			return RIO_FAIL;
 		}
 		*((ushort *)&ram[off]) = ~swapword;
@@ -1253,11 +1245,11 @@ int		size;
 
 	for (off=0; off<size; off+=2) {
 		if (RBYTE(ram[off]) != newbyte) {
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: SwapWord Check 2: BYTE at offset 0x%x should have been=%x, was=%x\n",off,newbyte,RBYTE(ram[off])));
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: SwapWord Check 2: BYTE at offset 0x%x should have been=%x, was=%x\n", off, newbyte, RBYTE(ram[off]));
 			return RIO_FAIL;
 		}
 		if (RBYTE(ram[off+1]) != invbyte) {
-			rio_dprint(RIO_DEBUG_INIT, ("RIO-init: SwapWord Check 2: BYTE at offset 0x%x should have been=%x, was=%x\n",off+1,invbyte,RBYTE(ram[off+1])));
+			rio_dprintk (RIO_DEBUG_INIT, "RIO-init: SwapWord Check 2: BYTE at offset 0x%x should have been=%x, was=%x\n", off+1, invbyte, RBYTE(ram[off+1]));
 			return RIO_FAIL;
 		}
 		*((ushort *)&ram[off]) = newword;
@@ -1384,14 +1376,14 @@ struct rio_info *	p;
 
 	p->RIOPortp = (struct Port *)sysbrk(RIO_PORTS * sizeof(struct Port));
 	if (!p->RIOPortp) {
-		rio_dprint(RIO_DEBUG_INIT, ("RIO-init: No memory for port structures\n"));
+		rio_dprintk (RIO_DEBUG_INIT, "RIO-init: No memory for port structures\n");
 		p->RIOFailed++;
 		return;
 	} 
 	bzero( p->RIOPortp, sizeof(struct Port) * RIO_PORTS );
-	rio_dprint(RIO_DEBUG_INIT,  ("RIO-init: allocated and cleared memory for port structs\n") );
-	rio_dprint(RIO_DEBUG_INIT,  ("First RIO port struct @0x%x, size=0x%x bytes\n",
-	    (int)p->RIOPortp, sizeof(struct Port) ) );
+	rio_dprintk (RIO_DEBUG_INIT,  "RIO-init: allocated and cleared memory for port structs\n");
+	rio_dprintk (RIO_DEBUG_INIT,  "First RIO port struct @0x%x, size=0x%x bytes\n",
+	    (int)p->RIOPortp, sizeof(struct Port));
 
 	for( port=0; port<RIO_PORTS; port++ ) {
 		p->RIOPortp[port].PortNum = port;
@@ -1404,14 +1396,14 @@ struct rio_info *	p;
 
 	p->RIOHosts = (struct Host *)sysbrk(RIO_HOSTS * sizeof(struct Host));
 	if (!p->RIOHosts) {
-		rio_dprint(RIO_DEBUG_INIT, ("RIO-init: No memory for host structures\n"));
+		rio_dprintk (RIO_DEBUG_INIT, "RIO-init: No memory for host structures\n");
 		p->RIOFailed++;
 		return;
 	}
 	bzero(p->RIOHosts, sizeof(struct Host)*RIO_HOSTS);
-	rio_dprint(RIO_DEBUG_INIT,  ("RIO-init: allocated and cleared memory for host structs\n"));
-	rio_dprint(RIO_DEBUG_INIT,  ("First RIO host struct @0x%x, size=0x%x bytes\n",
-	    (int)p->RIOHosts, sizeof(struct Host) ) );
+	rio_dprintk (RIO_DEBUG_INIT,  "RIO-init: allocated and cleared memory for host structs\n");
+	rio_dprintk (RIO_DEBUG_INIT,  "First RIO host struct @0x%x, size=0x%x bytes\n",
+	    (int)p->RIOHosts, sizeof(struct Host));
 
 	for( host=0; host<RIO_HOSTS; host++ ) {
 		spin_lock_init (&p->RIOHosts[host].HostLock);
@@ -1494,10 +1486,10 @@ struct rio_info *	p;
 	char *	RIORelID = RELEASE_ID;
 	int		host;
 
-	rio_dprint(RIO_DEBUG_INIT, ("RIO : Release: %s ID: %s\n", RIORelease, RIORelID));
+	rio_dprintk (RIO_DEBUG_INIT, "RIO : Release: %s ID: %s\n", RIORelease, RIORelID);
 
 	if ( p->RIONumHosts==0 ) {
-		rio_dprint(RIO_DEBUG_INIT, ("\nNo Hosts configured\n"));
+		rio_dprintk (RIO_DEBUG_INIT, "\nNo Hosts configured\n");
 		return(0);
 	}
 
@@ -1505,7 +1497,7 @@ struct rio_info *	p;
 		struct Host *HostP = &p->RIOHosts[host];
 		switch ( HostP->Type ) {
 			case RIO_AT:
-				rio_dprint(RIO_DEBUG_INIT, ("AT BUS : found the card at 0x%x\n", HostP->PaddrP));
+				rio_dprintk (RIO_DEBUG_INIT, "AT BUS : found the card at 0x%x\n", HostP->PaddrP);
 		}
 	}
 	return 0;
@@ -1587,17 +1579,17 @@ uint Slot;
 	/*
 	** Reset the Tpu
 	*/
-	rio_dprint(RIO_DEBUG_INIT,  ("RIOHostReset: type 0x%x", Type ) );
+	rio_dprintk (RIO_DEBUG_INIT,  "RIOHostReset: type 0x%x", Type);
 	switch ( Type ) {
 		case RIO_AT:
-			rio_dprint(RIO_DEBUG_INIT, (" (RIO_AT)\n"));
+			rio_dprintk (RIO_DEBUG_INIT, " (RIO_AT)\n");
 			WBYTE(DpRamP->DpControl,  BOOT_FROM_RAM | EXTERNAL_BUS_OFF | 
 					  INTERRUPT_DISABLE | BYTE_OPERATION |
 					  SLOW_LINKS | SLOW_AT_BUS);
 			WBYTE(DpRamP->DpResetTpu, 0xFF);
 			rio_udelay (3);
 
-			rio_dprint(RIO_DEBUG_INIT,  ("RIOHostReset: Don't know if it worked. Try reset again\n") );
+			rio_dprintk (RIO_DEBUG_INIT,  "RIOHostReset: Don't know if it worked. Try reset again\n");
 			WBYTE(DpRamP->DpControl,  BOOT_FROM_RAM | EXTERNAL_BUS_OFF |
 					  INTERRUPT_DISABLE | BYTE_OPERATION |
 					  SLOW_LINKS | SLOW_AT_BUS);
@@ -1630,7 +1622,7 @@ uint Slot;
 		break;
 #endif
 	case RIO_PCI:
-		rio_dprint(RIO_DEBUG_INIT,  (" (RIO_PCI)\n") );
+		rio_dprintk (RIO_DEBUG_INIT, " (RIO_PCI)\n");
 		DpRamP->DpControl  = RIO_PCI_BOOT_FROM_RAM;
 		DpRamP->DpResetInt = 0xFF;
 		DpRamP->DpResetTpu = 0xFF;
@@ -1645,7 +1637,7 @@ uint Slot;
 #endif
 
 	default:
-		rio_dprint(RIO_DEBUG_INIT,  (" (UNKNOWN)\n") );
+		rio_dprintk (RIO_DEBUG_INIT, " (UNKNOWN)\n");
 		break;
 	}
 	return;

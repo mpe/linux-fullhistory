@@ -13,9 +13,7 @@
 
 #include <asm/uaccess.h>
 
-int vfs_readdir(struct file *file,
-		int (*filler)(void *,const char *,int,off_t,ino_t),
-		void *buf)
+int vfs_readdir(struct file *file, filldir_t filler, void *buf)
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	int res = -ENOTDIR;
@@ -49,13 +47,13 @@ int dcache_readdir(struct file * filp, void * dirent, filldir_t filldir)
 	i = filp->f_pos;
 	switch (i) {
 		case 0:
-			if (filldir(dirent, ".", 1, i, dentry->d_inode->i_ino) < 0)
+			if (filldir(dirent, ".", 1, i, dentry->d_inode->i_ino, DT_DIR) < 0)
 				break;
 			i++;
 			filp->f_pos++;
 			/* fallthrough */
 		case 1:
-			if (filldir(dirent, "..", 2, i, dentry->d_parent->d_inode->i_ino) < 0)
+			if (filldir(dirent, "..", 2, i, dentry->d_parent->d_inode->i_ino, DT_DIR) < 0)
 				break;
 			i++;
 			filp->f_pos++;
@@ -83,7 +81,7 @@ int dcache_readdir(struct file * filp, void * dirent, filldir_t filldir)
 
 				if (!list_empty(&de->d_hash) && de->d_inode) {
 					spin_unlock(&dcache_lock);
-					if (filldir(dirent, de->d_name.name, de->d_name.len, filp->f_pos, de->d_inode->i_ino) < 0)
+					if (filldir(dirent, de->d_name.name, de->d_name.len, filp->f_pos, de->d_inode->i_ino, DT_UNKNOWN) < 0)
 						break;
 					spin_lock(&dcache_lock);
 				}
@@ -124,7 +122,8 @@ struct readdir_callback {
 	int count;
 };
 
-static int fillonedir(void * __buf, const char * name, int namlen, off_t offset, ino_t ino)
+static int fillonedir(void * __buf, const char * name, int namlen, off_t offset,
+		      ino_t ino, unsigned int d_type)
 {
 	struct readdir_callback * buf = (struct readdir_callback *) __buf;
 	struct old_linux_dirent * dirent;
@@ -184,7 +183,8 @@ struct getdents_callback {
 	int error;
 };
 
-static int filldir(void * __buf, const char * name, int namlen, off_t offset, ino_t ino)
+static int filldir(void * __buf, const char * name, int namlen, off_t offset,
+		   ino_t ino, unsigned int d_type)
 {
 	struct linux_dirent * dirent;
 	struct getdents_callback * buf = (struct getdents_callback *) __buf;
@@ -240,3 +240,89 @@ out_putf:
 out:
 	return error;
 }
+
+/*
+ * And even better one including d_type field and 64bit d_ino and d_off.
+ */
+struct linux_dirent64 {
+	u64		d_ino;
+	s64		d_off;
+	unsigned short	d_reclen;
+	unsigned char	d_type;
+	char		d_name[0];
+};
+
+#define ROUND_UP64(x) (((x)+sizeof(u64)-1) & ~(sizeof(u64)-1))
+
+struct getdents_callback64 {
+	struct linux_dirent64 * current_dir;
+	struct linux_dirent64 * previous;
+	int count;
+	int error;
+};
+
+static int filldir64(void * __buf, const char * name, int namlen, off_t offset,
+		     ino_t ino, unsigned int d_type)
+{
+	struct linux_dirent64 * dirent, d;
+	struct getdents_callback64 * buf = (struct getdents_callback64 *) __buf;
+	int reclen = ROUND_UP64(NAME_OFFSET(dirent) + namlen + 1);
+
+	buf->error = -EINVAL;	/* only used if we fail.. */
+	if (reclen > buf->count)
+		return -EINVAL;
+	dirent = buf->previous;
+	if (dirent) {
+		d.d_off = offset;
+		copy_to_user(&dirent->d_off, &d.d_off, sizeof(d.d_off));
+	}
+	dirent = buf->current_dir;
+	buf->previous = dirent;
+	memset(&d, 0, NAME_OFFSET(&d));
+	d.d_ino = ino;
+	d.d_reclen = reclen;
+	d.d_type = d_type;
+	copy_to_user(dirent, &d, NAME_OFFSET(&d));
+	copy_to_user(dirent->d_name, name, namlen);
+	put_user(0, dirent->d_name + namlen);
+	((char *) dirent) += reclen;
+	buf->current_dir = dirent;
+	buf->count -= reclen;
+	return 0;
+}
+
+asmlinkage long sys_getdents64(unsigned int fd, void * dirent, unsigned int count)
+{
+	struct file * file;
+	struct linux_dirent64 * lastdirent;
+	struct getdents_callback64 buf;
+	int error;
+
+	error = -EBADF;
+	file = fget(fd);
+	if (!file)
+		goto out;
+
+	buf.current_dir = (struct linux_dirent64 *) dirent;
+	buf.previous = NULL;
+	buf.count = count;
+	buf.error = 0;
+
+	error = vfs_readdir(file, filldir64, &buf);
+	if (error < 0)
+		goto out_putf;
+	error = buf.error;
+	lastdirent = buf.previous;
+	if (lastdirent) {
+		struct linux_dirent64 d;
+		d.d_off = file->f_pos;
+		copy_to_user(&lastdirent->d_off, &d.d_off, sizeof(d.d_off));
+		error = count - buf.count;
+	}
+
+out_putf:
+	fput(file);
+out:
+	return error;
+}
+

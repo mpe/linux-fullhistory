@@ -258,7 +258,7 @@ static int cramfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 				break;
 			namelen--;
 		}
-		error = filldir(dirent, name, namelen, offset, CRAMINO(de));
+		error = filldir(dirent, name, namelen, offset, CRAMINO(de), de->mode >> 12);
 		if (error)
 			break;
 

@@ -843,9 +843,28 @@ static kmem_cache_t *cache_to_drain = NULL;
 static DECLARE_WAIT_QUEUE_HEAD(cache_drain_wait);
 unsigned long slab_cache_drain_mask;
 
-static void drain_cpu_caches(kmem_cache_t *cachep)
+/*
+ * Waits for all CPUs to execute slab_drain_local_cache().
+ * Caller must be holding cache_drain_sem.
+ */
+static void slab_drain_all_sync(void)
 {
 	DECLARE_WAITQUEUE(wait, current);
+
+	local_irq_disable();
+	slab_drain_local_cache();
+	local_irq_enable();
+
+	add_wait_queue(&cache_drain_wait, &wait);
+	current->state = TASK_UNINTERRUPTIBLE;
+	while (slab_cache_drain_mask != 0UL)
+		schedule();
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&cache_drain_wait, &wait);
+}
+
+static void drain_cpu_caches(kmem_cache_t *cachep)
+{
 	unsigned long cpu_mask = 0;
 	int i;
 
@@ -856,16 +875,7 @@ static void drain_cpu_caches(kmem_cache_t *cachep)
 
 	cache_to_drain = cachep;
 	slab_cache_drain_mask = cpu_mask;
-
-	slab_drain_local_cache();
-
-	add_wait_queue(&cache_drain_wait, &wait);
-	current->state = TASK_UNINTERRUPTIBLE;
-	while (slab_cache_drain_mask != 0UL)
-		schedule();
-	current->state = TASK_RUNNING;
-	remove_wait_queue(&cache_drain_wait, &wait);
-
+	slab_drain_all_sync();
 	cache_to_drain = NULL;
 
 	up(&cache_drain_sem);
@@ -1594,7 +1604,6 @@ static ccupdate_struct_t *ccupdate_state = NULL;
 /* Called from per-cpu timer interrupt. */
 void slab_drain_local_cache(void)
 {
-	local_irq_disable();
 	if (ccupdate_state != NULL) {
 		ccupdate_struct_t *new = ccupdate_state;
 		cpucache_t *old = cc_data(new->cachep);
@@ -1610,7 +1619,6 @@ void slab_drain_local_cache(void)
 			cc->avail = 0;
 		}
 	}
-	local_irq_enable();
 
 	clear_bit(smp_processor_id(), &slab_cache_drain_mask);
 	if (slab_cache_drain_mask == 0)
@@ -1619,7 +1627,6 @@ void slab_drain_local_cache(void)
 
 static void do_ccupdate(ccupdate_struct_t *data)
 {
-	DECLARE_WAITQUEUE(wait, current);
 	unsigned long cpu_mask = 0;
 	int i;
 
@@ -1630,16 +1637,7 @@ static void do_ccupdate(ccupdate_struct_t *data)
 
 	ccupdate_state = data;
 	slab_cache_drain_mask = cpu_mask;
-
-	slab_drain_local_cache();
-
-	add_wait_queue(&cache_drain_wait, &wait);
-	current->state = TASK_UNINTERRUPTIBLE;
-	while (slab_cache_drain_mask != 0UL)
-		schedule();
-	current->state = TASK_RUNNING;
-	remove_wait_queue(&cache_drain_wait, &wait);
-
+	slab_drain_all_sync();
 	ccupdate_state = NULL;
 
 	up(&cache_drain_sem);

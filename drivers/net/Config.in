@@ -143,15 +143,18 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
 	    bool '      Enable Power Management (EXPERIMENTAL)' CONFIG_EEPRO100_PM
 	 fi
 	 tristate '    Mylex EISA LNE390A/B support (EXPERIMENTAL)' CONFIG_LNE390
+      fi
+      dep_tristate '    National Semiconductor DP83810 series PCI Ethernet support' CONFIG_NATSEMI $CONFIG_PCI
+      dep_tristate '    PCI NE2000 support' CONFIG_NE2K_PCI $CONFIG_PCI
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	 tristate '    Novell/Eagle/Microdyne NE3210 EISA support (EXPERIMENTAL)' CONFIG_NE3210
       fi
-      dep_tristate '    PCI NE2000 support' CONFIG_NE2K_PCI $CONFIG_PCI
-      # tristate '    Sundance Alta support' CONFIG_ALTA
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
          tristate '    RealTek 8129 (not 8019/8029!) support (EXPERIMENTAL)' CONFIG_RTL8129
       fi
       tristate '    RealTek RTL-8139 PCI Fast Ethernet Adapter support' CONFIG_8139TOO
       tristate '    SiS 900/7016 PCI Fast Ethernet Adapter support' CONFIG_SIS900
+      # tristate '    Sundance Alta support' CONFIG_ALTA
       tristate '    TI ThunderLAN support' CONFIG_TLAN
       tristate '    VIA Rhine support' CONFIG_VIA_RHINE
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

@@ -1204,11 +1204,12 @@
 #define __NR_Linux32_root_pivot		(__NR_Linux32 + 216)
 #define __NR_Linux32_mincore		(__NR_Linux32 + 217)
 #define __NR_Linux32_madvise		(__NR_Linux32 + 218)
+#define __NR_Linux32_getdents64		(__NR_Linux32 + 219)
 
 /*
  * Offset of the last Linux o32 flavoured syscall
  */
-#define __NR_Linux32_syscalls		218
+#define __NR_Linux32_syscalls		219
 
 /*
  * Linux 64-bit syscalls are in the range from 5000 to 5999.
@@ -1427,11 +1428,12 @@
 #define __NR_root_pivot			(__NR_Linux + 210)
 #define __NR_mincore			(__NR_Linux + 211)
 #define __NR_madvise			(__NR_Linux + 212)
+#define __NR_getdents64			(__NR_Linux + 213)
 
 /*
  * Offset of the last Linux flavoured syscall
  */
-#define __NR_Linux_syscalls		212
+#define __NR_Linux_syscalls		213
 
 #ifndef _LANGUAGE_ASSEMBLY
 

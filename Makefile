@@ -428,6 +428,9 @@ dep-files: scripts/mkdep archdep include/linux/version.h
 	scripts/mkdep init/*.c > .depend
 	scripts/mkdep `find $(FINDHPATH) -name SCCS -prune -o -follow -name \*.h ! -name modversions.h -print` > .hdepend
 	$(MAKE) $(patsubst %,_sfdep_%,$(SUBDIRS)) _FASTDEP_ALL_SUB_DIRS="$(SUBDIRS)"
+ifdef CONFIG_MODVERSIONS
+	$(MAKE) update-modverfile
+endif
 
 ifdef CONFIG_MODVERSIONS
 MODVERFILE := $(TOPDIR)/include/linux/modversions.h
@@ -436,7 +439,7 @@ MODVERFILE :=
 endif
 export	MODVERFILE
 
-depend dep: dep-files $(MODVERFILE)
+depend dep: dep-files
 
 # make checkconfig: Prune 'scripts' directory to avoid "false positives".
 checkconfig:

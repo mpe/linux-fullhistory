@@ -8,4 +8,12 @@ struct dirent {
 	char		d_name[256]; /* We must not include limits.h! */
 };
 
+struct dirent64 {
+	__u64		d_ino;
+	__s64		d_off;
+	unsigned short	d_reclen;
+	unsigned char	d_type;
+	char		d_name[256];
+};
+
 #endif

@@ -522,12 +522,12 @@ static int proc_readfd(struct file * filp, void * dirent, filldir_t filldir)
 	fd = filp->f_pos;
 	switch (fd) {
 		case 0:
-			if (filldir(dirent, ".", 1, 0, inode->i_ino) < 0)
+			if (filldir(dirent, ".", 1, 0, inode->i_ino, DT_DIR) < 0)
 				goto out;
 			filp->f_pos++;
 		case 1:
 			ino = fake_ino(pid, PROC_PID_INO);
-			if (filldir(dirent, "..", 2, 1, ino) < 0)
+			if (filldir(dirent, "..", 2, 1, ino, DT_DIR) < 0)
 				goto out;
 			filp->f_pos++;
 		default:
@@ -555,7 +555,7 @@ static int proc_readfd(struct file * filp, void * dirent, filldir_t filldir)
 				} while (i);
 
 				ino = fake_ino(pid, PROC_PID_FD_DIR + fd);
-				if (filldir(dirent, buf+j, NUMBUF-j, fd+2, ino) < 0)
+				if (filldir(dirent, buf+j, NUMBUF-j, fd+2, ino, DT_LNK) < 0)
 					break;
 			}
 			put_files_struct(files);
@@ -578,13 +578,13 @@ static int proc_base_readdir(struct file * filp,
 	i = filp->f_pos;
 	switch (i) {
 		case 0:
-			if (filldir(dirent, ".", 1, i, inode->i_ino) < 0)
+			if (filldir(dirent, ".", 1, i, inode->i_ino, DT_DIR) < 0)
 				return 0;
 			i++;
 			filp->f_pos++;
 			/* fall through */
 		case 1:
-			if (filldir(dirent, "..", 2, i, PROC_ROOT_INO) < 0)
+			if (filldir(dirent, "..", 2, i, PROC_ROOT_INO, DT_DIR) < 0)
 				return 0;
 			i++;
 			filp->f_pos++;
@@ -595,7 +595,8 @@ static int proc_base_readdir(struct file * filp,
 				return 1;
 			p = base_stuff + i;
 			while (p->name) {
-				if (filldir(dirent, p->name, p->len, filp->f_pos, fake_ino(pid, p->type)) < 0)
+				if (filldir(dirent, p->name, p->len, filp->f_pos,
+					    fake_ino(pid, p->type), p->mode >> 12) < 0)
 					return 0;
 				filp->f_pos++;
 				p++;
@@ -1007,7 +1008,7 @@ int proc_pid_readdir(struct file * filp, void * dirent, filldir_t filldir)
 
 	if (!nr) {
 		ino_t ino = fake_ino(0,PROC_PID_INO);
-		if (filldir(dirent, "self", 4, filp->f_pos, ino) < 0)
+		if (filldir(dirent, "self", 4, filp->f_pos, ino, DT_LNK) < 0)
 			return 0;
 		filp->f_pos++;
 		nr++;
@@ -1022,7 +1023,7 @@ int proc_pid_readdir(struct file * filp, void * dirent, filldir_t filldir)
 
 		do buf[--j] = '0' + (pid % 10); while (pid/=10);
 
-		if (filldir(dirent, buf+j, PROC_NUMBUF-j, filp->f_pos, ino) < 0)
+		if (filldir(dirent, buf+j, PROC_NUMBUF-j, filp->f_pos, ino, DT_DIR) < 0)
 			break;
 		filp->f_pos++;
 	}

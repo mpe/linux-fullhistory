@@ -12,7 +12,12 @@
  *  Version 0.1 -- December, 1998. Initial version.
  *  Version 0.2 -- March, 1999.    Some more routines. Bugfixes. Etc.
  *  Version 0.5 -- August, 1999.   Some more fixes. Reformat for Linus.
- */
+ *
+ *  BitWizard is actively maintaining this file. We sometimes find
+ *  that someone submitted changes to this file. We really appreciate
+ *  your help, but please submit changes through us. We're doing our
+ *  best to be responsive.  -- REW
+ * */
 
 #include <linux/tty.h>
 #include <linux/serial.h>
@@ -80,10 +85,18 @@ static void my_hd (unsigned char *addr, int len)
 
 void gs_put_char(struct tty_struct * tty, unsigned char ch)
 {
-	struct gs_port *port = tty->driver_data;
+	struct gs_port *port;
 	DECL
 
-	/*  func_enter (); */
+	func_enter (); 
+
+	if (!tty) return;
+
+	port = tty->driver_data;
+
+	if (!port) return;
+
+	if (! (port->flags & ASYNC_INITIALIZED)) return;
 
 	/* Take a lock on the serial tranmit buffer! */
 	LOCKIT;
@@ -99,7 +112,7 @@ void gs_put_char(struct tty_struct * tty, unsigned char ch)
 	port->xmit_cnt++;  /* Characters in buffer */
 
 	RELEASEIT;
-	/* func_exit ();*/
+	func_exit ();
 }
 
 
@@ -115,11 +128,17 @@ void gs_put_char(struct tty_struct * tty, unsigned char ch)
 int gs_write(struct tty_struct * tty, int from_user, 
                     const unsigned char *buf, int count)
 {
-	struct gs_port *port = tty->driver_data;
+	struct gs_port *port;
 	int c, total = 0;
 	int t;
 
-	/* func_enter (); */
+	func_enter ();
+
+	if (!tty) return 0;
+
+	port = tty->driver;
+
+	if (!port) return 0;
 
 	if (! (port->flags & ASYNC_INITIALIZED))
 		return 0;
@@ -170,7 +189,7 @@ int gs_write(struct tty_struct * tty, int from_user,
 		port->flags |= GS_TX_INTEN;
 		port->rd->enable_tx_interrupts (port);
 	}
-	/* func_exit (); */
+	func_exit ();
 	return total;
 }
 #else
@@ -309,11 +328,11 @@ int gs_write_room(struct tty_struct * tty)
 	struct gs_port *port = tty->driver_data;
 	int ret;
 
-	/* func_enter (); */
+	func_enter ();
 	ret = SERIAL_XMIT_SIZE - port->xmit_cnt - 1;
 	if (ret < 0)
 		ret = 0;
-	/* func_exit (); */
+	func_exit ();
 	return ret;
 }
 
@@ -361,7 +380,7 @@ static int gs_wait_tx_flushed (void * ptr, int timeout)
 
 	if (!port || port->xmit_cnt < 0 || !port->xmit_buf) {
 		gs_dprintk (GS_DEBUG_FLUSH, "ERROR: !port, !port->xmit_buf or prot->xmit_cnt < 0.\n");
-	func_exit();
+		func_exit();
 		return -EINVAL;  /* This is an error which we don't know how to handle. */
 	}
 
@@ -399,7 +418,7 @@ static int gs_wait_tx_flushed (void * ptr, int timeout)
 		gs_dprintk (GS_DEBUG_FLUSH, "Expect to finish in %d jiffies "
 			    "(%d chars).\n", jiffies_to_transmit, charsleft); 
 
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state (TASK_INTERRUPTIBLE);
 		schedule_timeout(jiffies_to_transmit);
 		if (signal_pending (current)) {
 			gs_dprintk (GS_DEBUG_FLUSH, "Signal pending. Bombing out: "); 
@@ -409,7 +428,7 @@ static int gs_wait_tx_flushed (void * ptr, int timeout)
 	}
 
 	gs_dprintk (GS_DEBUG_FLUSH, "charsleft = %d.\n", charsleft); 
-	current->state = TASK_RUNNING;
+	set_current_state (TASK_RUNNING);
 
 	func_exit();
 	return rv;
@@ -419,10 +438,17 @@ static int gs_wait_tx_flushed (void * ptr, int timeout)
 
 void gs_flush_buffer(struct tty_struct *tty)
 {
-	struct gs_port *port = tty->driver_data;
+	struct gs_port *port;
 	unsigned long flags;
 
 	func_enter ();
+
+	if (!tty) return;
+
+	port = tty->driver_data;
+
+	if (!port) return;
+
 	/* XXX Would the write semaphore do? */
 	save_flags(flags); cli();
 	port->xmit_cnt = port->xmit_head = port->xmit_tail = 0;
@@ -438,9 +464,16 @@ void gs_flush_buffer(struct tty_struct *tty)
 
 void gs_flush_chars(struct tty_struct * tty)
 {
-	struct gs_port *port = tty->driver_data;
+	struct gs_port *port;
 
 	func_enter ();
+
+	if (!tty) return;
+
+	port = tty->driver_data;
+
+	if (!port) return;
+
 	if (port->xmit_cnt <= 0 || tty->stopped || tty->hw_stopped ||
 	    !port->xmit_buf) {
 		func_exit ();
@@ -456,9 +489,16 @@ void gs_flush_chars(struct tty_struct * tty)
 
 void gs_stop(struct tty_struct * tty)
 {
-	struct gs_port *port = tty->driver_data;
+	struct gs_port *port;
 
 	func_enter ();
+
+	if (!tty) return;
+
+	port = tty->driver_data;
+
+	if (!port) return;
+
 	if (port->xmit_cnt && 
 	    port->xmit_buf && 
 	    (port->flags & GS_TX_INTEN) ) {
@@ -471,7 +511,13 @@ void gs_stop(struct tty_struct * tty)
 
 void gs_start(struct tty_struct * tty)
 {
-	struct gs_port *port = tty->driver_data;
+	struct gs_port *port;
+
+	if (!tty) return;
+
+	port = tty->driver_data;
+
+	if (!port) return;
 
 	if (port->xmit_cnt && 
 	    port->xmit_buf && 
@@ -486,7 +532,11 @@ void gs_start(struct tty_struct * tty)
 void gs_shutdown_port (struct gs_port *port)
 {
 	long flags;
+
 	func_enter();
+	
+	if (!port) return;
+	
 	if (!(port->flags & ASYNC_INITIALIZED))
 		return;
 
@@ -505,16 +555,20 @@ void gs_shutdown_port (struct gs_port *port)
 
 	port->flags &= ~ASYNC_INITIALIZED;
 	restore_flags (flags);
+
 	func_exit();
 }
 
 
 void gs_hangup(struct tty_struct *tty)
 {
-	struct gs_port   *port = tty->driver_data;
+	struct gs_port   *port;
 
 	func_enter ();
 
+	if (!tty) return;
+
+	port = tty->driver_data;
 	tty = port->tty;
 	if (!tty) 
 		return;
@@ -534,8 +588,13 @@ void gs_do_softint(void *private_)
 	struct gs_port *port = private_;
 	struct tty_struct *tty;
 
+	func_enter ();
+
+	if (!port) return;
+
 	tty = port->tty;
-	if(!tty) return;
+
+	if (!tty) return;
 
 	if (test_and_clear_bit(RS_EVENT_WRITE_WAKEUP, &port->event)) {
 		if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
@@ -557,7 +616,12 @@ int block_til_ready(void *port_, struct file * filp)
 	struct tty_struct *tty;
 
 	func_enter ();
+
+	if (!port) return 0;
+
 	tty = port->tty;
+
+	if (!tty) return 0;
 
 	gs_dprintk (GS_DEBUG_BTR, "Entering block_till_ready.\n"); 
 	/*
@@ -571,6 +635,7 @@ int block_til_ready(void *port_, struct file * filp)
 		else
 			return -ERESTARTSYS;
 	}
+
 	gs_dprintk (GS_DEBUG_BTR, "after hung up\n"); 
 
 	/*
@@ -593,6 +658,7 @@ int block_til_ready(void *port_, struct file * filp)
 	}
 
 	gs_dprintk (GS_DEBUG_BTR, "after subtype\n");
+
 	/*
 	 * If non-blocking mode is set, or the port is not enabled,
 	 * then make the check up front and then exit.
@@ -606,6 +672,7 @@ int block_til_ready(void *port_, struct file * filp)
 	}
 
 	gs_dprintk (GS_DEBUG_BTR, "after nonblock\n"); 
+ 
 	if (port->flags & ASYNC_CALLOUT_ACTIVE) {
 		if (port->normal_termios.c_cflag & CLOCAL) 
 			do_clocal = 1;
@@ -614,7 +681,6 @@ int block_til_ready(void *port_, struct file * filp)
 			do_clocal = 1;
 	}
 
-	gs_dprintk (GS_DEBUG_BTR, "after clocal check.\n");
 	/*
 	 * Block waiting for the carrier detect and the line to become
 	 * free (i.e., not in use by the callout).  While we are in
@@ -623,9 +689,9 @@ int block_til_ready(void *port_, struct file * filp)
 	 * exit, either normal or abnormal.
 	 */
 	retval = 0;
-	
+
 	add_wait_queue(&port->open_wait, &wait);
-	
+
 	gs_dprintk (GS_DEBUG_BTR, "after add waitq.\n"); 
 	cli();
 	if (!tty_hung_up_p(filp))
@@ -635,7 +701,7 @@ int block_til_ready(void *port_, struct file * filp)
 	while (1) {
 		CD = port->rd->get_CD (port);
 		gs_dprintk (GS_DEBUG_BTR, "CD is now %d.\n", CD);
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state (TASK_INTERRUPTIBLE);
 		if (tty_hung_up_p(filp) ||
 		    !(port->flags & ASYNC_INITIALIZED)) {
 			if (port->flags & ASYNC_HUP_NOTIFY)
@@ -679,12 +745,11 @@ void gs_close(struct tty_struct * tty, struct file * filp)
 
 	func_enter ();
 
+	if (!tty) return;
+
 	port = (struct gs_port *) tty->driver_data;
 
-	if(! port) {
-		func_exit();
-		return;
-	}
+	if (!port) return;
 
 	if (!port->tty) {
 		/* This seems to happen when this is called from vhangup. */
@@ -693,6 +758,7 @@ void gs_close(struct tty_struct * tty, struct file * filp)
 	}
 
 	save_flags(flags); cli();
+
 	if (tty_hung_up_p(filp)) {
 		restore_flags(flags);
 		port->rd->hungup (port);
@@ -761,7 +827,7 @@ void gs_close(struct tty_struct * tty, struct file * filp)
 
 	if (port->blocked_open) {
 		if (port->close_delay) {
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state (TASK_INTERRUPTIBLE);
 			schedule_timeout(port->close_delay);
 		}
 		wake_up_interruptible(&port->open_wait);
@@ -784,14 +850,19 @@ static unsigned int     gs_baudrates[] = {
 void gs_set_termios (struct tty_struct * tty, 
                      struct termios * old_termios)
 {
-	struct gs_port *port = tty->driver_data;
+	struct gs_port *port;
 	int baudrate, tmp, rv;
 	struct termios *tiosp;
 
 	func_enter();
 
-	tiosp = tty->termios;
+	if (!tty) return;
 
+	port = tty->driver_data;
+
+	if (!port) return;
+
+	tiosp = tty->termios;
 
 	if (gs_debug & GS_DEBUG_TERMIOS) {
 		gs_dprintk (GS_DEBUG_TERMIOS, "termios structure (%p):\n", tiosp);

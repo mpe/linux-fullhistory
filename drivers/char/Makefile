@@ -179,6 +179,7 @@ obj-$(CONFIG_VIDEO_DEV) += videodev.o
 
 obj-$(CONFIG_21285_WATCHDOG) += wdt285.o
 obj-$(CONFIG_977_WATCHDOG) += wdt977.o
+obj-$(CONFIG_I810_TCO) += i810-tco.o
 obj-$(CONFIG_DS1620) += ds1620.o
 obj-$(CONFIG_INTEL_RNG) += i810_rng.o
 

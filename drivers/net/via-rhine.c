@@ -51,7 +51,12 @@
 	- Urban Widmark: mdio locking, bounce buffer changes
 	                 merges from Beckers 1.05 version
 	                 added netif_running_on/off support
+
+	LK1.1.6:
+	- Urban Widmark: merges from Beckers 1.08b version (VT6102 + mdio)
+	                 set netif_running_on/off on startup, del_timer_sync
 */
+
 
 /* A few user-configurable values.
    These may be modified when a driver module is loaded. */
@@ -85,7 +90,7 @@ static const int multicast_filter_limit = 32;
    bonding and packet priority.
    There are no ill effects from too-large receive rings. */
 #define TX_RING_SIZE	16
-#define TX_QUEUE_LEN	10				/* Limit ring entries actually used.  */
+#define TX_QUEUE_LEN	10		/* Limit ring entries actually used.  */
 #define RX_RING_SIZE	16
 
 
@@ -122,7 +127,7 @@ static const int multicast_filter_limit = 32;
 
 /* These identify the driver base version and may not be removed. */
 static char version1[] __devinitdata =
-"via-rhine.c:v1.05-LK1.1.5  5/2/2000  Written by Donald Becker\n";
+"via-rhine.c:v1.08b-LK1.1.6  8/9/2000  Written by Donald Becker\n";
 static char version2[] __devinitdata =
 "  http://www.scyld.com/network/via-rhine.html\n";
 
@@ -233,13 +238,13 @@ IV. Notes
 IVb. References
 
 Preliminary VT86C100A manual from http://www.via.com.tw/
-http://cesdis.gsfc.nasa.gov/linux/misc/100mbps.html
-http://cesdis.gsfc.nasa.gov/linux/misc/NWay.html
+http://www.scyld.com/expert/100mbps.html
+http://www.scyld.com/expert/NWay.html
 
 IVc. Errata
 
 The VT86C100A manual is not reliable information.
-The chip does not handle unaligned transmit or receive buffers, resulting
+The 3043 chip does not handle unaligned transmit or receive buffers, resulting
 in significant performance degradation for bounce buffer copies on transmit
 and unaligned IP headers on receive.
 The chip does not pad to minimum transmit length.
@@ -261,6 +266,7 @@ enum pci_flags_bit {
 
 enum via_rhine_chips {
 	VT86C100A = 0,
+	VT6102,
 	VT3043,
 };
 
@@ -272,24 +278,33 @@ struct via_rhine_chip_info {
 };
 
 
-enum chip_capability_flags {CanHaveMII=1, HasESIPhy=2 };
+enum chip_capability_flags {
+	CanHaveMII=1, HasESIPhy=2, HasDavicomPhy=4,
+	ReqTxAlign=0x10, HasWOL=0x20, };
 
 #if defined(VIA_USE_MEMORY)
 #define RHINE_IOTYPE (PCI_USES_MEM | PCI_USES_MASTER | PCI_ADDR1)
+#define RHINEII_IOSIZE 4096
 #else
 #define RHINE_IOTYPE (PCI_USES_IO  | PCI_USES_MASTER | PCI_ADDR0)
+#define RHINEII_IOSIZE 256
 #endif
 
 /* directly indexed by enum via_rhine_chips, above */
 static struct via_rhine_chip_info via_rhine_chip_info[] __devinitdata =
 {
-	{ "VIA VT86C100A Rhine-II", RHINE_IOTYPE, 128, CanHaveMII },
-	{ "VIA VT3043 Rhine", RHINE_IOTYPE, 128, CanHaveMII }
+	{ "VIA VT86C100A Rhine", RHINE_IOTYPE, 128,
+	  CanHaveMII | ReqTxAlign },
+	{ "VIA VT6102 Rhine-II", RHINE_IOTYPE, RHINEII_IOSIZE,
+	  CanHaveMII | HasWOL },
+	{ "VIA VT3043 Rhine",    RHINE_IOTYPE, 128,
+	  CanHaveMII | ReqTxAlign }
 };
 
 static struct pci_device_id via_rhine_pci_tbl[] __devinitdata =
 {
 	{0x1106, 0x6100, PCI_ANY_ID, PCI_ANY_ID, 0, 0, VT86C100A},
+	{0x1106, 0x3065, PCI_ANY_ID, PCI_ANY_ID, 0, 0, VT6102},
 	{0x1106, 0x3043, PCI_ANY_ID, PCI_ANY_ID, 0, 0, VT3043},
 	{0,}			/* terminate list */
 };
@@ -304,7 +319,8 @@ enum register_offsets {
 	RxRingPtr=0x18, TxRingPtr=0x1C,
 	MIIPhyAddr=0x6C, MIIStatus=0x6D, PCIBusConfig=0x6E,
 	MIICmd=0x70, MIIRegAddr=0x71, MIIData=0x72,
-	Config=0x78, RxMissed=0x7C, RxCRCErrs=0x7E,
+	Config=0x78, ConfigA=0x7A, RxMissed=0x7C, RxCRCErrs=0x7E,
+	StickyHW=0x83, WOLcrClr=0xA4, WOLcgClr=0xA7, PwrcsrClr=0xAC,
 };
 
 /* Bits in the interrupt status/mask registers. */
@@ -585,6 +601,12 @@ static int __devinit via_rhine_init_one (struct pci_dev *pdev,
 					   "0x%4.4x advertising %4.4x Link %4.4x.\n",
 					   dev->name, phy, mii_status, np->advertising,
 					   mdio_read(dev, phy, 5));
+
+				/* set IFF_RUNNING */
+				if (mii_status & MIILink)
+					netif_carrier_on(dev);
+				else
+					netif_carrier_off(dev);
 			}
 		}
 	}
@@ -641,8 +663,20 @@ static void mdio_write(struct net_device *dev, int phy_id, int regnum, int value
 	long ioaddr = dev->base_addr;
 	int boguscnt = 1024;
 
-	if (phy_id == np->phys[0]  &&  regnum == 4)
-		np->advertising = value;
+	if (phy_id == np->phys[0]) {
+		switch (regnum) {
+		case 0:							/* Is user forcing speed/duplex? */
+			if (value & 0x9000)			/* Autonegotiation. */
+				np->duplex_lock = 0;
+			else
+				np->full_duplex = (value & 0x0100) ? 1 : 0;
+			break;
+		case 4:
+			np->advertising = value;
+			break;
+		}
+	}
+
 	/* Wait for a previous command to complete. */
 	while ((readb(ioaddr + MIICmd) & 0x60) && --boguscnt > 0)
 		;
@@ -900,7 +934,8 @@ static int via_rhine_start_tx(struct sk_buff *skb, struct net_device *dev)
 
 	np->tx_skbuff[entry] = skb;
 
-	if ((long)skb->data & 3) {			/* Must use alignment buffer. */
+	if ((np->drv_flags & ReqTxAlign) && ((long)skb->data & 3)) {
+		/* Must use alignment buffer. */
 		memcpy(np->tx_buf[entry], skb->data, skb->len);
 		np->tx_skbuff_dma[entry] = 0;
 		np->tx_ring[entry].addr = cpu_to_le32(np->tx_bufs_dma +
@@ -1154,10 +1189,11 @@ static void via_rhine_error(struct net_device *dev, int intr_status)
 	spin_lock (&np->lock);
 
 	if (intr_status & (IntrMIIChange | IntrLinkChange)) {
-		if (readb(ioaddr + MIIStatus) & 0x02)
+		if (readb(ioaddr + MIIStatus) & 0x02) {
 			/* Link failed, restart autonegotiation. */
-			mdio_write(dev, np->phys[0], 0, 0x3300);
-		else
+			if (np->drv_flags & HasDavicomPhy)
+				mdio_write(dev, np->phys[0], 0, 0x3300);
+		} else
 			via_rhine_check_duplex(dev);
 		if (debug)
 			printk(KERN_ERR "%s: MII status changed: Autonegotiation "
@@ -1309,6 +1345,8 @@ static int via_rhine_close(struct net_device *dev)
 	int i;
 	unsigned long flags;
 
+	del_timer_sync(&np->timer);
+
 	spin_lock_irqsave(&np->lock, flags);
 
 	netif_stop_queue(dev);
@@ -1317,13 +1355,14 @@ static int via_rhine_close(struct net_device *dev)
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was %4.4x.\n",
 			   dev->name, readw(ioaddr + ChipCmd));
 
+	/* Switch to loopback mode to avoid hardware races. */
+	writeb(np->tx_thresh | 0x01, ioaddr + TxConfig);
+
 	/* Disable interrupts by clearing the interrupt mask. */
 	writew(0x0000, ioaddr + IntrEnable);
 
 	/* Stop the chip's Tx and Rx processes. */
 	writew(CmdStop, ioaddr + ChipCmd);
-
-	del_timer(&np->timer);
 
 	spin_unlock_irqrestore(&np->lock, flags);
 

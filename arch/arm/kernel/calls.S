@@ -226,8 +226,9 @@
 		.long	SYMBOL_NAME(sys_setgid)
 /* 215 */	.long	SYMBOL_NAME(sys_setfsuid)
 		.long	SYMBOL_NAME(sys_setfsgid)
+		.long	SYMBOL_NAME(sys_getdents64)
 
-		.rept	NR_syscalls-216
+		.rept	NR_syscalls-217
 			.long	SYMBOL_NAME(sys_ni_syscall)
 		.endr
 #endif

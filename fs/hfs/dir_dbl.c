@@ -183,7 +183,8 @@ static int dbl_readdir(struct file * filp,
 
 	if (filp->f_pos == 0) {
 		/* Entry 0 is for "." */
-		if (filldir(dirent, DOT->Name, DOT_LEN, 0, dir->i_ino)) {
+		if (filldir(dirent, DOT->Name, DOT_LEN, 0, dir->i_ino,
+			    DT_DIR)) {
 			return 0;
 		}
 		filp->f_pos = 1;
@@ -192,7 +193,7 @@ static int dbl_readdir(struct file * filp,
 	if (filp->f_pos == 1) {
 		/* Entry 1 is for ".." */
 		if (filldir(dirent, DOT_DOT->Name, DOT_DOT_LEN, 1,
-			    hfs_get_hl(entry->key.ParID))) {
+			    hfs_get_hl(entry->key.ParID), DT_DIR)) {
 			return 0;
 		}
 		filp->f_pos = 2;
@@ -229,7 +230,8 @@ static int dbl_readdir(struct file * filp,
 				    &((struct hfs_cat_key *)brec.key)->CName);
 			}
 
-			if (filldir(dirent, tmp_name, len, filp->f_pos, ino)) {
+			if (filldir(dirent, tmp_name, len, filp->f_pos, ino,
+				    DT_UNKNOWN)) {
 				hfs_cat_close(entry, &brec);
 				return 0;
 			}
@@ -243,7 +245,8 @@ static int dbl_readdir(struct file * filp,
 			/* In root dir last entry is for "%RootInfo" */
 			if (filldir(dirent, PCNT_ROOTINFO->Name,
 				    PCNT_ROOTINFO_LEN, filp->f_pos,
-				    ntohl(entry->cnid) | HFS_DBL_HDR)) {
+				    ntohl(entry->cnid) | HFS_DBL_HDR,
+				    DT_UNKNOWN)) {
 				return 0;
 			}
 		}

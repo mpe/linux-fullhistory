@@ -748,7 +748,7 @@ static int coda_venus_readdir(struct file *filp, void *getdent,
                         char *name  = vdirent->d_name;
 
 			errfill = filldir(getdent,  name, namlen, 
-					  offs, ino); 
+					  offs, ino, DT_UNKNOWN); 
 CDEBUG(D_FILE, "entry %d: ino %ld, namlen %d, reclen %d, type %d, pos %d, string_offs %d, name %*s, offset %d, result: %d, errfill: %d.\n", i,vdirent->d_fileno, vdirent->d_namlen, vdirent->d_reclen, vdirent->d_type, pos,  string_offset, vdirent->d_namlen, vdirent->d_name, (u_int) offs, result, errfill);
 			/* errfill means no space for filling in this round */
 			if ( errfill < 0 ) {

@@ -562,8 +562,8 @@ asmlinkage void __init start_kernel(void)
 	mempages = num_physpages;
 
 	fork_init(mempages);
+	proc_caches_init();
 	vfs_caches_init(mempages);
-	vma_init();
 	buffer_init(mempages);
 	page_cache_init(mempages);
 	kiobuf_setup();

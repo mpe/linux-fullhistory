@@ -36,9 +36,6 @@ pgprot_t protection_map[16] = {
 	__S000, __S001, __S010, __S011, __S100, __S101, __S110, __S111
 };
 
-/* SLAB cache for vm_area_struct's. */
-kmem_cache_t *vm_area_cachep;
-
 int sysctl_overcommit_memory;
 
 /* Check that a process has enough memory to allocate a
@@ -993,21 +990,4 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 		kmem_cache_free(vm_area_cachep, mpnt);
 		mpnt = prev;
 	}
-}
-
-void __init vma_init(void)
-{
-	vm_area_cachep = kmem_cache_create("vm_area_struct",
-					   sizeof(struct vm_area_struct),
-					   0, SLAB_HWCACHE_ALIGN,
-					   NULL, NULL);
-	if(!vm_area_cachep)
-		panic("vma_init: Cannot alloc vm_area_struct cache.");
-
-	mm_cachep = kmem_cache_create("mm_struct",
-				      sizeof(struct mm_struct),
-				      0, SLAB_HWCACHE_ALIGN,
-				      NULL, NULL);
-	if(!mm_cachep)
-		panic("vma_init: Cannot alloc mm_struct cache.");
 }

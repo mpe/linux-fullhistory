@@ -313,7 +313,7 @@ static int fat_readdirx(struct inode *inode, struct file *filp, void *dirent,
 /* Fake . and .. for the root directory. */
 	if (inode->i_ino == MSDOS_ROOT_INO) {
 		while (cpos < 2) {
-			if (filldir(dirent, "..", cpos+1, cpos, MSDOS_ROOT_INO) < 0)
+			if (filldir(dirent, "..", cpos+1, cpos, MSDOS_ROOT_INO, DT_DIR) < 0)
 				return 0;
 			cpos++;
 			filp->f_pos++;
@@ -466,7 +466,8 @@ ParseLong:
 	if (!long_slots||shortnames) {
 		if (both)
 			bufname[i] = '\0';
-		if (filldir(dirent, bufname, i, *furrfu, inum) < 0)
+		if (filldir(dirent, bufname, i, *furrfu, inum,
+			    (de->attr & ATTR_DIR) ? DT_DIR : DT_REG) < 0)
 			goto FillFailed;
 	} else {
 		char longname[275];
@@ -478,7 +479,8 @@ ParseLong:
 			memcpy(&longname[long_len+1], bufname, i);
 			long_len += i;
 		}
-		if (filldir(dirent, longname, long_len, *furrfu, inum) < 0)
+		if (filldir(dirent, longname, long_len, *furrfu, inum,
+			    (de->attr & ATTR_DIR) ? DT_DIR : DT_REG) < 0)
 			goto FillFailed;
 	}
 

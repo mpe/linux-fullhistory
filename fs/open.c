@@ -680,7 +680,7 @@ int get_unused_fd(void)
 
 repeat:
  	fd = find_next_zero_bit(files->open_fds, 
-				current->files->max_fdset, 
+				files->max_fdset, 
 				files->next_fd);
 
 	/*
@@ -691,7 +691,7 @@ repeat:
 		goto out;
 
 	/* Do we need to expand the fdset array? */
-	if (fd >= current->files->max_fdset) {
+	if (fd >= files->max_fdset) {
 		error = expand_fdset(files, fd);
 		if (!error) {
 			error = -EMFILE;
@@ -799,36 +799,27 @@ int filp_close(struct file *filp, fl_owner_t id)
  * Careful here! We test whether the file pointer is NULL before
  * releasing the fd. This ensures that one clone task can't release
  * an fd while another clone is opening it.
- *
- * The "release" argument tells us whether or not to mark the fd as free
- * or not in the open-files bitmap.  dup2 uses this to retain the fd
- * without races.
  */
-int do_close(struct files_struct *files, unsigned int fd, int release)
-{
-	int error;
-	struct file * filp;
-
-	error = -EBADF;
-	write_lock(&files->file_lock);
-	filp = frip(files, fd);
-	if (!filp)
-		goto out_unlock;
-	FD_CLR(fd, files->close_on_exec);
-	if (release)
-		__put_unused_fd(files, fd);
-	write_unlock(&files->file_lock);
-	error = filp_close(filp, files);
-out:
-	return error;
-out_unlock:
-	write_unlock(&files->file_lock);
-	goto out;
-}
-
 asmlinkage long sys_close(unsigned int fd)
 {
-	return do_close(current->files, fd, 1);
+	struct file * filp;
+	struct files_struct *files = current->files;
+
+	write_lock(&files->file_lock);
+	if (fd >= files->max_fds)
+		goto out_unlock;
+	filp = files->fd[fd];
+	if (!filp)
+		goto out_unlock;
+	files->fd[fd] = NULL;
+	FD_CLR(fd, files->close_on_exec);
+	__put_unused_fd(files, fd);
+	write_unlock(&files->file_lock);
+	return filp_close(filp, files);
+
+out_unlock:
+	write_unlock(&files->file_lock);
+	return -EBADF;
 }
 
 /*

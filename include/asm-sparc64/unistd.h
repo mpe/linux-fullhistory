@@ -169,7 +169,7 @@
 /* #define __NR_getmsg          151    SunOS Specific                              */
 /* #define __NR_putmsg          152    SunOS Specific                              */
 #define __NR_poll               153 /* Common                                      */
-/* #define __NR_ni_syscall      154    ENOSYS under SunOS                          */
+#define __NR_getdents64		154 /* Linux specific				   */
 /* #define __NR_nfssvc          155    SunOS Specific                              */
 /* #define __NR_getdirentries   156    SunOS Specific                              */
 #define __NR_statfs             157 /* Common                                      */

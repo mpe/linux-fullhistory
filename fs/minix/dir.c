@@ -43,7 +43,7 @@ static int minix_readdir(struct file * filp,
 			de = (struct minix_dir_entry *) (offset + bh->b_data);
 			if (de->inode) {
 				int size = strnlen(de->name, info->s_namelen);
-				if (filldir(dirent, de->name, size, filp->f_pos, de->inode) < 0) {
+				if (filldir(dirent, de->name, size, filp->f_pos, de->inode, DT_UNKNOWN) < 0) {
 					brelse(bh);
 					return 0;
 				}

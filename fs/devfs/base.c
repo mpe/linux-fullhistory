@@ -2439,14 +2439,14 @@ static int devfs_readdir (struct file *file, void *dirent, filldir_t filldir)
       case 0:
 	scan_dir_for_removable (parent);
 	err = (*filldir) (dirent, "..", 2, file->f_pos,
-			  file->f_dentry->d_parent->d_inode->i_ino);
+			  file->f_dentry->d_parent->d_inode->i_ino, DT_DIR);
 	if (err == -EINVAL) break;
 	if (err < 0) return err;
 	file->f_pos++;
 	++stored;
 	/*  Fall through  */
       case 1:
-	err = (*filldir) (dirent, ".", 1, file->f_pos, inode->i_ino);
+	err = (*filldir) (dirent, ".", 1, file->f_pos, inode->i_ino, DT_DIR);
 	if (err == -EINVAL) break;
 	if (err < 0) return err;
 	file->f_pos++;
@@ -2463,7 +2463,7 @@ static int devfs_readdir (struct file *file, void *dirent, filldir_t filldir)
 	{
 	    if ( IS_HIDDEN (de) ) continue;
 	    err = (*filldir) (dirent, de->name, de->namelen,
-			      file->f_pos, de->inode.ino);
+			      file->f_pos, de->inode.ino, de->mode >> 12);
 	    if (err == -EINVAL) break;
 	    if (err < 0) return err;
 	    file->f_pos++;

@@ -669,7 +669,7 @@ nfs3svc_encode_readdirres(struct svc_rqst *rqstp, u32 *p,
 #define NFS3_ENTRYPLUS_BAGGAGE	(1 + 21 + 1 + (NFS3_FHSIZE >> 2))
 static int
 encode_entry(struct readdir_cd *cd, const char *name,
-			int namlen, off_t offset, ino_t ino, int plus)
+	     int namlen, off_t offset, ino_t ino, unsigned int d_type, int plus)
 {
 	u32		*p = cd->buffer;
 	int		buflen, slen, elen;
@@ -747,16 +747,16 @@ noexec:
 
 int
 nfs3svc_encode_entry(struct readdir_cd *cd, const char *name,
-				int namlen, off_t offset, ino_t ino)
+		     int namlen, off_t offset, ino_t ino, unsigned int d_type)
 {
-	return encode_entry(cd, name, namlen, offset, ino, 0);
+	return encode_entry(cd, name, namlen, offset, ino, d_type, 0);
 }
 
 int
 nfs3svc_encode_entry_plus(struct readdir_cd *cd, const char *name,
-				int namlen, off_t offset, ino_t ino)
+			  int namlen, off_t offset, ino_t ino, unsigned int d_type)
 {
-	return encode_entry(cd, name, namlen, offset, ino, 1);
+	return encode_entry(cd, name, namlen, offset, ino, d_type, 1);
 }
 
 /* FSSTAT */

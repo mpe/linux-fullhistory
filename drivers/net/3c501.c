@@ -280,6 +280,13 @@ static int __init el1_probe1(struct net_device *dev, int ioaddr)
 	int i;
 
 	/*
+	 *	Reserve I/O resource for exclusive use by this driver
+	 */
+
+	if (!request_region(ioaddr, EL1_IO_EXTENT, dev->name))
+		return -ENODEV;
+
+	/*
 	 *	Read the station address PROM data from the special port.
 	 */
 
@@ -302,15 +309,10 @@ static int __init el1_probe1(struct net_device *dev, int ioaddr)
 	{
 		mname = "NP943";
     	}
-    	else
+    	else {
+		release_region(ioaddr, EL1_IO_EXTENT);
 		return -ENODEV;
-
-	/*
-	 *	Grab the region so we can find the another board if autoIRQ fails.
-	 */
-
-	if (!request_region(ioaddr, EL1_IO_EXTENT,"3c501"))
-		return -ENODEV;
+	}
 
 	/*
 	 *	We auto-IRQ by shutting off the interrupt line and letting it float
@@ -332,6 +334,7 @@ static int __init el1_probe1(struct net_device *dev, int ioaddr)
 		{
 			printk("%s probe at %#x failed to detect IRQ line.\n",
 				mname, ioaddr);
+			release_region(ioaddr, EL1_IO_EXTENT);
 			return -EAGAIN;
 		}
 	}
@@ -360,8 +363,10 @@ static int __init el1_probe1(struct net_device *dev, int ioaddr)
 	 */
 
 	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
-	if (dev->priv == NULL)
+	if (dev->priv == NULL) {
+		release_region(ioaddr, EL1_IO_EXTENT);
 		return -ENOMEM;
+	}
 	memset(dev->priv, 0, sizeof(struct net_local));
 
 	lp=dev->priv;

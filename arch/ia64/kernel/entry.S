@@ -1207,7 +1207,7 @@ sys_call_table:
 	data8 sys_newlstat
 	data8 sys_newfstat
 	data8 sys_clone2
-	data8 ia64_ni_syscall
+	data8 sys_getdents64
 	data8 ia64_ni_syscall			// 1215
 	data8 ia64_ni_syscall
 	data8 ia64_ni_syscall

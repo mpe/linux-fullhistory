@@ -191,7 +191,8 @@ static int nat_readdir(struct file * filp,
 
 	if (filp->f_pos == 0) {
 		/* Entry 0 is for "." */
-		if (filldir(dirent, DOT->Name, DOT_LEN, 0, dir->i_ino)) {
+		if (filldir(dirent, DOT->Name, DOT_LEN, 0, dir->i_ino,
+			    DT_DIR)) {
 			return 0;
 		}
 		filp->f_pos = 1;
@@ -208,7 +209,7 @@ static int nat_readdir(struct file * filp,
 		}
 
 		if (filldir(dirent, DOT_DOT->Name,
-			    DOT_DOT_LEN, 1, ntohl(cnid))) {
+			    DOT_DOT_LEN, 1, ntohl(cnid), DT_DIR)) {
 			return 0;
 		}
 		filp->f_pos = 2;
@@ -235,7 +236,7 @@ static int nat_readdir(struct file * filp,
 				len = hfs_namein(dir, tmp_name,
 				    &((struct hfs_cat_key *)brec.key)->CName);
 				if (filldir(dirent, tmp_name, len,
-					    filp->f_pos, ino)) {
+					    filp->f_pos, ino, DT_UNKNOWN)) {
 					hfs_cat_close(entry, &brec);
 					return 0;
 				}
@@ -250,14 +251,16 @@ static int nat_readdir(struct file * filp,
 			/* In normal dirs entry 2 is for ".AppleDouble" */
 			if (filldir(dirent, DOT_APPLEDOUBLE->Name,
 				    DOT_APPLEDOUBLE_LEN, filp->f_pos,
-				    ntohl(entry->cnid) | HFS_NAT_HDIR)) {
+				    ntohl(entry->cnid) | HFS_NAT_HDIR,
+				    DT_UNKNOWN)) {
 				return 0;
 			}
 		} else if (type == HFS_NAT_HDIR) {
 			/* In .AppleDouble entry 2 is for ".Parent" */
 			if (filldir(dirent, DOT_PARENT->Name,
 				    DOT_PARENT_LEN, filp->f_pos,
-				    ntohl(entry->cnid) | HFS_NAT_HDR)) {
+				    ntohl(entry->cnid) | HFS_NAT_HDR,
+				    DT_UNKNOWN)) {
 				return 0;
 			}
 		}
@@ -270,7 +273,8 @@ static int nat_readdir(struct file * filp,
 		    (type == HFS_NAT_HDIR)) {
 			if (filldir(dirent, ROOTINFO->Name,
 				    ROOTINFO_LEN, filp->f_pos,
-				    ntohl(entry->cnid) | HFS_NAT_HDR)) {
+				    ntohl(entry->cnid) | HFS_NAT_HDR,
+				    DT_UNKNOWN)) {
 				return 0;
 			}
 		}

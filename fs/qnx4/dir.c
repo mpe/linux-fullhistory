@@ -62,7 +62,7 @@ static int qnx4_readdir(struct file *filp, void *dirent, filldir_t filldir)
 							QNX4_INODES_PER_BLOCK +
 							le->dl_inode_ndx;
 					}
-					if (filldir(dirent, de->di_fname, size, filp->f_pos, ino) < 0) {
+					if (filldir(dirent, de->di_fname, size, filp->f_pos, ino, DT_UNKNOWN) < 0) {
 						brelse(bh);
 						return 0;
 					}

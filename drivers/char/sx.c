@@ -1518,9 +1518,14 @@ static int sx_open  (struct tty_struct * tty, struct file * filp)
    exit minicom.  I expect an "oops".  -- REW */
 static void sx_hungup (void *ptr)
 {
+  /*
 	struct sx_port *port = ptr; 
+  */
 	func_enter ();
 
+	/* Don't force the SX card to close. mgetty doesn't like it !!!!!! -- pvdl */
+	/* For some reson we added this code. Don't know why anymore ;-( -- pvdl */
+	/*
 	sx_setsignals (port, 0, 0);
 	sx_reconfigure_port(port);	
 	sx_send_command (port, HS_CLOSE, 0, 0);
@@ -1532,7 +1537,7 @@ static void sx_hungup (void *ptr)
 		} else
 			sx_dprintk (SX_DEBUG_CLOSE, "sent the force_close command.\n");
 	}
-
+	*/
 	MOD_DEC_USE_COUNT;
 	func_exit ();
 }
@@ -2368,7 +2373,7 @@ static int sx_init_portstructs (int nboards, int nports)
 	return 0;
 }
 
-
+#ifdef MODULE
 static void sx_release_drivers(void)
 {
 	func_enter();
@@ -2376,6 +2381,7 @@ static void sx_release_drivers(void)
 	tty_unregister_driver(&sx_callout_driver);
 	func_exit();
 }
+#endif
 
 #ifdef TWO_ZERO
 #define PDEV unsigned char pci_bus, unsigned pci_fun

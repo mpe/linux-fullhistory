@@ -390,7 +390,7 @@ nfssvc_encode_statfsres(struct svc_rqst *rqstp, u32 *p,
 
 int
 nfssvc_encode_entry(struct readdir_cd *cd, const char *name,
-					int namlen, off_t offset, ino_t ino)
+		    int namlen, off_t offset, ino_t ino, unsigned int d_type)
 {
 	u32	*p = cd->buffer;
 	int	buflen, slen;

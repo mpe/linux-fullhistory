@@ -535,6 +535,7 @@ struct file_lock {
 #ifndef OFFSET_MAX
 #define INT_LIMIT(x)	(~((x)1 << (sizeof(x)*8 - 1)))
 #define OFFSET_MAX	INT_LIMIT(loff_t)
+#define OFFT_OFFSET_MAX	INT_LIMIT(off_t)
 #endif
 
 extern struct list_head file_lock_list;
@@ -543,6 +544,9 @@ extern struct list_head file_lock_list;
 
 extern int fcntl_getlk(unsigned int, struct flock *);
 extern int fcntl_setlk(unsigned int, unsigned int, struct flock *);
+
+extern int fcntl_getlk64(unsigned int, struct flock64 *);
+extern int fcntl_setlk64(unsigned int, unsigned int, struct flock64 *);
 
 /* fs/locks.c */
 extern void locks_remove_posix(struct file *, fl_owner_t);
@@ -694,12 +698,25 @@ extern int vfs_unlink(struct inode *, struct dentry *);
 extern int vfs_rename(struct inode *, struct dentry *, struct inode *, struct dentry *);
 
 /*
+ * File types
+ */
+#define DT_UNKNOWN	0
+#define DT_FIFO		1
+#define DT_CHR		2
+#define DT_DIR		4
+#define DT_BLK		6
+#define DT_REG		8
+#define DT_LNK		10
+#define DT_SOCK		12
+#define DT_WHT		14
+
+/*
  * This is the "filldir" function type, used by readdir() to let
  * the kernel specify what kind of dirent layout it wants to have.
  * This allows the kernel to read directories into kernel space or
  * to have different dirent layouts depending on the binary type.
  */
-typedef int (*filldir_t)(void *, const char *, int, off_t, ino_t);
+typedef int (*filldir_t)(void *, const char *, int, off_t, ino_t, unsigned);
 
 struct block_device_operations {
 	int (*open) (struct inode *, struct file *);
@@ -875,7 +892,6 @@ static inline int locks_verify_truncate(struct inode *inode,
 
 asmlinkage long sys_open(const char *, int, int);
 asmlinkage long sys_close(unsigned int);	/* yes, it's really unsigned */
-extern int do_close(struct files_struct *, unsigned int, int);		/* yes, it's really unsigned */
 extern int do_truncate(struct dentry *, loff_t start);
 
 extern struct file *filp_open(const char *, int, int);

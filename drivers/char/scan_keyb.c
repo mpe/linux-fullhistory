@@ -82,18 +82,21 @@ int register_scan_keyboard(void (*scan)(unsigned char *buffer),
 {
 	struct scan_keyboard *kbd;
 
-	if((kbd=kmalloc(sizeof(struct scan_keyboard), GFP_KERNEL))==NULL)
+	kbd = kmalloc(sizeof(struct scan_keyboard), GFP_KERNEL);
+	if (kbd == NULL)
 		goto error_out;
 
 	kbd->scan=scan;
 	kbd->table=table;
 	kbd->length=length;
 
-	kbd->s0=kbd->s1=NULL;
-	if((kbd->s0=kmalloc(length, GFP_KERNEL))==NULL)
-		goto error_mem_free;
-	if((kbd->s1=kmalloc(length, GFP_KERNEL))==NULL)
-		goto error_mem_free;
+	kbd->s0 = kmalloc(length, GFP_KERNEL);
+	if (kbd->s0 == NULL)
+		goto error_free_kbd;
+
+	kbd->s1 = kmalloc(length, GFP_KERNEL);
+	if (kbd->s1 == NULL)
+		goto error_free_s0;
 
 	kbd->scan(kbd->s0);
 	kbd->scan(kbd->s1);
@@ -103,11 +106,10 @@ int register_scan_keyboard(void (*scan)(unsigned char *buffer),
 
 	return 0;
 
- error_mem_free:
-	if(kbd->s0)
-		kfree(kbd->s0);
-	if(kbd->s1)
-		kfree(kbd->s1);
+ error_free_s0:
+	kfree(kbd->s0);
+
+ error_free_kbd:
 	kfree(kbd);
 
  error_out:

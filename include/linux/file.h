@@ -30,15 +30,6 @@ static inline struct file * fcheck(unsigned int fd)
 	return file;
 }
 
-static inline struct file * frip(struct files_struct *files, unsigned int fd)
-{
-	struct file * file = NULL;
-
-	if (fd < files->max_fds)
-		file = xchg(&files->fd[fd], NULL);
-	return file;
-}
-
 extern void put_filp(struct file *);
 
 extern int get_unused_fd(void);
@@ -67,18 +58,20 @@ static inline void put_unused_fd(unsigned int fd)
  * array.  At any such point, we are vulnerable to a dup2() race
  * installing a file in the array before us.  We need to detect this and
  * fput() the struct file we are about to overwrite in this case.
+ *
+ * It should never happen - if we allow dup2() do it, _really_ bad things
+ * will follow.
  */
 
 static inline void fd_install(unsigned int fd, struct file * file)
 {
 	struct files_struct *files = current->files;
-	struct file * result;
 	
 	write_lock(&files->file_lock);
-	result = xchg(&files->fd[fd], file);
+	if (files->fd[fd])
+		BUG();
+	files->fd[fd] = file;
 	write_unlock(&files->file_lock);
-	if (result)
-		fput(result);
 }
 
 void put_files_struct(struct files_struct *fs);

@@ -249,6 +249,8 @@ long rio_irqmask = -1;
 
 #ifndef TWO_ZERO
 #ifdef MODULE
+MODULE_AUTHOR("Rogier Wolff <R.E.Wolff@bitwizard.nl>, Patrick van de Lageweg <patrick@bitwizard.nl>");
+MODULE_DESCRIPTION("RIO driver");
 MODULE_PARM(rio_poll, "i");
 MODULE_PARM(rio_debug, "i");
 MODULE_PARM(rio_irqmask, "i");
@@ -394,26 +396,37 @@ void rio_udelay (int usecs)
 
 void rio_inc_mod_count (void)
 {
+#ifdef MODULE
   func_enter ();
+  rio_dprintk (RIO_DEBUG_MOD_COUNT, "rio_inc_mod_count\n");
   MOD_INC_USE_COUNT; 
   func_exit ();
+#endif
 }
 
 
 void rio_dec_mod_count (void)
 {
+#ifdef MODULE
   func_enter ();
+  rio_dprintk (RIO_DEBUG_MOD_COUNT, "rio_dec_mod_count\n");
   MOD_DEC_USE_COUNT; 
   func_exit ();
+#endif
 }
 
 
 static int rio_set_real_termios (void *ptr)
 {
-  int rv;
+  int rv, modem;
+  struct tty_struct *tty;
   func_enter();
 
-  rv = RIOParam( (struct Port *) ptr, CONFIG, 0, 1);
+  tty = ((struct Port *)ptr)->gs.tty;
+
+  modem = (MAJOR(tty->device) == RIO_NORMAL_MAJOR0) || (MAJOR(tty->device) == RIO_NORMAL_MAJOR1);
+
+  rv = RIOParam( (struct Port *) ptr, CONFIG, modem, 1);
 
   func_exit ();
 
@@ -631,6 +644,7 @@ static void rio_shutdown_port (void * ptr)
   func_exit();
 }
 
+
 /* I haven't the foggiest why the decrement use count has to happen
    here. The whole linux serial drivers stuff needs to be redesigned.
    My guess is that this is a hack to minimize the impact of a bug
@@ -641,7 +655,7 @@ static void rio_shutdown_port (void * ptr)
 static void rio_hungup (void *ptr)
 {
   func_enter ();
-  /* rio_dec_mod_count (); */
+  rio_dec_mod_count (); 
   func_exit ();
 }
 
@@ -652,9 +666,22 @@ static void rio_hungup (void *ptr)
  */
 static void rio_close (void *ptr)
 {
+  struct Port *PortP;
+
   func_enter ();
+
+  PortP = (struct Port *)ptr;
+
   riotclose (ptr);
+
+  if(PortP->gs.count) {
+    printk (KERN_ERR "WARNING port count:%d\n", PortP->gs.count);
+    PortP->gs.count = 0; 
+  }                
+
+
   rio_dec_mod_count ();
+
   func_exit ();
 }
 
@@ -974,13 +1001,12 @@ static int rio_init_datastructures (void)
     port->gs.close_delay = HZ/2;
     port->gs.closing_wait = 30 * HZ;
     port->gs.rd = &rio_real_driver;
-
+    port->portSem = SPIN_LOCK_UNLOCKED;
     /*
      * Initializing wait queue
      */
     init_waitqueue_head(&port->gs.open_wait);
-    init_waitqueue_head(&port->gs.close_wait); 
-
+    init_waitqueue_head(&port->gs.close_wait);
   }
 #else
   /* We could postpone initializing them to when they are configured. */
@@ -1010,7 +1036,7 @@ static int rio_init_datastructures (void)
   return -ENOMEM;
 }
 
-
+#ifdef MODULE
 static void rio_release_drivers(void)
 {
   func_enter();
@@ -1020,6 +1046,7 @@ static void rio_release_drivers(void)
   tty_unregister_driver (&rio_driver);
   func_exit();
 }
+#endif 
 
 #ifdef TWO_ZERO
 #define PDEV unsigned char pci_bus, unsigned pci_fun
@@ -1120,7 +1147,7 @@ int rio_init(void)
     while ((pdev = pci_find_device (PCI_VENDOR_ID_SPECIALIX, 
                                     PCI_DEVICE_ID_SPECIALIX_SX_XIO_IO8, 
                                     pdev))) {
-	if (pci_enable_device(pdev)) continue;
+       if (pci_enable_device(pdev)) continue;
 #else
     for (i=0;i< RIO_NBOARDS;i++) {
       if (pcibios_find_device (PCI_VENDOR_ID_SPECIALIX, 
@@ -1157,6 +1184,7 @@ int rio_init(void)
       hp->Type  = RIO_PCI;
       hp->Copy  = rio_pcicopy; 
       hp->Mode  = RIO_PCI_BOOT_FROM_RAM;
+      hp->HostLock = SPIN_LOCK_UNLOCKED;
       rio_reset_interrupt (hp);
       rio_start_card_running (hp);
 
@@ -1206,7 +1234,7 @@ int rio_init(void)
     while ((pdev = pci_find_device (PCI_VENDOR_ID_SPECIALIX, 
                                     PCI_DEVICE_ID_SPECIALIX_RIO, 
                                     pdev))) {
-	if (pci_enable_device(pdev)) continue;
+       if (pci_enable_device(pdev)) continue;
 #else
     for (i=0;i< RIO_NBOARDS;i++) {
       if (pcibios_find_device (PCI_VENDOR_ID_SPECIALIX, 

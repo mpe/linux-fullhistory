@@ -250,19 +250,6 @@ struct ufs_timeval {
 	__s32	tv_usec;
 };
 
-/*
- * File types
- */
-#define DT_UNKNOWN	0
-#define DT_FIFO		1
-#define DT_CHR		2
-#define DT_DIR		4
-#define DT_BLK		6
-#define DT_REG		8
-#define DT_LNK		10
-#define DT_SOCK		12
-#define DT_WHT		14
-   
 struct ufs_dir_entry {
 	__u32  d_ino;			/* inode number of this entry */
 	__u16  d_reclen;		/* length of this entry */

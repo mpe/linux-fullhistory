@@ -205,8 +205,8 @@ static struct file_lock *flock_make_lock(struct file *filp, unsigned int type)
 /* Verify a "struct flock" and copy it to a "struct file_lock" as a POSIX
  * style lock.
  */
-static int posix_make_lock(struct file *filp, struct file_lock *fl,
-			   struct flock *l)
+static int flock_to_posix_lock(struct file *filp, struct file_lock *fl,
+			       struct flock *l)
 {
 	loff_t start;
 
@@ -253,6 +253,57 @@ static int posix_make_lock(struct file *filp, struct file_lock *fl,
 
 	return (1);
 }
+
+#if BITS_PER_LONG == 32
+static int flock64_to_posix_lock(struct file *filp, struct file_lock *fl,
+				 struct flock64 *l)
+{
+	loff_t start;
+
+	switch (l->l_whence) {
+	case 0: /*SEEK_SET*/
+		start = 0;
+		break;
+	case 1: /*SEEK_CUR*/
+		start = filp->f_pos;
+		break;
+	case 2: /*SEEK_END*/
+		start = filp->f_dentry->d_inode->i_size;
+		break;
+	default:
+		return (0);
+	}
+
+	if (((start += l->l_start) < 0) || (l->l_len < 0))
+		return (0);
+	fl->fl_end = start + l->l_len - 1;
+	if (l->l_len > 0 && fl->fl_end < 0)
+		return (0);
+	fl->fl_start = start;	/* we record the absolute position */
+	if (l->l_len == 0)
+		fl->fl_end = OFFSET_MAX;
+	
+	fl->fl_owner = current->files;
+	fl->fl_pid = current->pid;
+	fl->fl_file = filp;
+	fl->fl_flags = FL_POSIX;
+	fl->fl_notify = NULL;
+	fl->fl_insert = NULL;
+	fl->fl_remove = NULL;
+
+	switch (l->l_type) {
+	case F_RDLCK:
+	case F_WRLCK:
+	case F_UNLCK:
+		fl->fl_type = l->l_type;
+		break;
+	default:
+		return (0);
+	}
+
+	return (1);
+}
+#endif
 
 /* Check if two locks overlap each other.
  */
@@ -816,13 +867,12 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 	if (right) {
 		if (left == right) {
 			/* The new lock breaks the old one in two pieces,
-			 * so we have to use the second new lock (in this
-			 * case, even F_UNLCK may fail!).
+			 * so we have to use the second new lock.
 			 */
-			locks_copy_lock(new_fl2, right);
-			locks_insert_lock(before, left);
 			left = new_fl2;
 			new_fl2 = NULL;
+			locks_copy_lock(left, right);
+			locks_insert_lock(before, left);
 		}
 		right->fl_start = caller->fl_end + 1;
 		locks_wake_up_blocks(right, 0);
@@ -909,7 +959,8 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	if (!filp)
 		goto out;
 
-	if (!posix_make_lock(filp, file_lock, &flock))
+	error = -EINVAL;
+	if (!flock_to_posix_lock(filp, file_lock, &flock))
 		goto out_putf;
 
 	if (filp->f_op->lock) {
@@ -928,8 +979,21 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	flock.l_type = F_UNLCK;
 	if (fl != NULL) {
 		flock.l_pid = fl->fl_pid;
+#if BITS_PER_LONG == 32
+		/*
+		 * Make sure we can represent the posix lock via
+		 * legacy 32bit flock.
+		 */
+		error = -EOVERFLOW;
+		if (fl->fl_end > OFFT_OFFSET_MAX)
+			goto out_putf;
+#endif
 		flock.l_start = fl->fl_start;
+#if BITS_PER_LONG == 32
+		flock.l_len = fl->fl_end == OFFT_OFFSET_MAX ? 0 :
+#else
 		flock.l_len = fl->fl_end == OFFSET_MAX ? 0 :
+#endif
 			fl->fl_end - fl->fl_start + 1;
 		flock.l_whence = 0;
 		flock.l_type = fl->fl_type;
@@ -993,7 +1057,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	}
 
 	error = -EINVAL;
-	if (!posix_make_lock(filp, file_lock, &flock))
+	if (!flock_to_posix_lock(filp, file_lock, &flock))
 		goto out_putf;
 	
 	error = -EBADF;
@@ -1043,6 +1107,151 @@ out:
 	locks_free_lock(file_lock);
 	return error;
 }
+
+#if BITS_PER_LONG == 32
+/* Report the first existing lock that would conflict with l.
+ * This implements the F_GETLK command of fcntl().
+ */
+int fcntl_getlk64(unsigned int fd, struct flock64 *l)
+{
+	struct file *filp;
+	struct file_lock *fl, *file_lock = locks_alloc_lock();
+	struct flock64 flock;
+	int error;
+
+	error = -EFAULT;
+	if (copy_from_user(&flock, l, sizeof(flock)))
+		goto out;
+	error = -EINVAL;
+	if ((flock.l_type != F_RDLCK) && (flock.l_type != F_WRLCK))
+		goto out;
+
+	error = -EBADF;
+	filp = fget(fd);
+	if (!filp)
+		goto out;
+
+	error = -EINVAL;
+	if (!flock64_to_posix_lock(filp, file_lock, &flock))
+		goto out_putf;
+
+	if (filp->f_op->lock) {
+		error = filp->f_op->lock(filp, F_GETLK, file_lock);
+		if (error < 0)
+			goto out_putf;
+		else if (error == LOCK_USE_CLNT)
+		  /* Bypass for NFS with no locking - 2.0.36 compat */
+		  fl = posix_test_lock(filp, file_lock);
+		else
+		  fl = (file_lock->fl_type == F_UNLCK ? NULL : file_lock);
+	} else {
+		fl = posix_test_lock(filp, file_lock);
+	}
+ 
+	flock.l_type = F_UNLCK;
+	if (fl != NULL) {
+		flock.l_pid = fl->fl_pid;
+		flock.l_start = fl->fl_start;
+		flock.l_len = fl->fl_end == OFFSET_MAX ? 0 :
+			fl->fl_end - fl->fl_start + 1;
+		flock.l_whence = 0;
+		flock.l_type = fl->fl_type;
+	}
+	error = -EFAULT;
+	if (!copy_to_user(l, &flock, sizeof(flock)))
+		error = 0;
+  
+out_putf:
+	fput(filp);
+out:
+	locks_free_lock(file_lock);
+	return error;
+}
+
+/* Apply the lock described by l to an open file descriptor.
+ * This implements both the F_SETLK and F_SETLKW commands of fcntl().
+ */
+int fcntl_setlk64(unsigned int fd, unsigned int cmd, struct flock64 *l)
+{
+	struct file *filp;
+	struct file_lock *file_lock = locks_alloc_lock();
+	struct flock64 flock;
+	struct inode *inode;
+	int error;
+
+	/*
+	 * This might block, so we do it before checking the inode.
+	 */
+	error = -EFAULT;
+	if (copy_from_user(&flock, l, sizeof(flock)))
+		goto out;
+
+	/* Get arguments and validate them ...
+	 */
+
+	error = -EBADF;
+	filp = fget(fd);
+	if (!filp)
+		goto out;
+
+	error = -EINVAL;
+	inode = filp->f_dentry->d_inode;
+
+	/* Don't allow mandatory locks on files that may be memory mapped
+	 * and shared.
+	 */
+	if (IS_MANDLOCK(inode) &&
+	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID) {
+		struct vm_area_struct *vma;
+		struct address_space *mapping = inode->i_mapping;
+		spin_lock(&mapping->i_shared_lock);
+		for(vma = mapping->i_mmap;vma;vma = vma->vm_next_share) {
+			if (!(vma->vm_flags & VM_MAYSHARE))
+				continue;
+			spin_unlock(&mapping->i_shared_lock);
+			error = -EAGAIN;
+			goto out_putf;
+		}
+		spin_unlock(&mapping->i_shared_lock);
+	}
+
+	error = -EINVAL;
+	if (!flock64_to_posix_lock(filp, file_lock, &flock))
+		goto out_putf;
+	
+	error = -EBADF;
+	switch (flock.l_type) {
+	case F_RDLCK:
+		if (!(filp->f_mode & FMODE_READ))
+			goto out_putf;
+		break;
+	case F_WRLCK:
+		if (!(filp->f_mode & FMODE_WRITE))
+			goto out_putf;
+		break;
+	case F_UNLCK:
+		break;
+	case F_SHLCK:
+	case F_EXLCK:
+	default:
+		error = -EINVAL;
+		goto out_putf;
+	}
+
+	if (filp->f_op->lock != NULL) {
+		error = filp->f_op->lock(filp, cmd, file_lock);
+		if (error < 0)
+			goto out_putf;
+	}
+	error = posix_lock_file(filp, file_lock, cmd == F_SETLKW);
+
+out_putf:
+	fput(filp);
+out:
+	locks_free_lock(file_lock);
+	return error;
+}
+#endif /* BITS_PER_LONG == 32 */
 
 /*
  * This function is called when the file is being removed

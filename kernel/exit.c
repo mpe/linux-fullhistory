@@ -229,7 +229,7 @@ static inline void __put_fs_struct(struct fs_struct *fs)
 			dput(fs->altroot);
 			mntput(fs->altrootmnt);
 		}
-		kfree(fs);
+		kmem_cache_free(fs_cachep, fs);
 	}
 }
 
@@ -264,7 +264,7 @@ static inline void __exit_sighand(struct task_struct *tsk)
 		tsk->sig = NULL;
 		spin_unlock_irq(&tsk->sigmask_lock);
 		if (atomic_dec_and_test(&sig->count))
-			kfree(sig);
+			kmem_cache_free(sigact_cachep, sig);
 	}
 
 	flush_signals(tsk);

@@ -66,12 +66,12 @@ smb_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	switch ((unsigned int) filp->f_pos)
 	{
 	case 0:
-		if (filldir(dirent, ".", 1, 0, dir->i_ino) < 0)
+		if (filldir(dirent, ".", 1, 0, dir->i_ino, DT_DIR) < 0)
 			goto out;
 		filp->f_pos = 1;
 	case 1:
 		if (filldir(dirent, "..", 2, 1,
-				dentry->d_parent->d_inode->i_ino) < 0)
+				dentry->d_parent->d_inode->i_ino, DT_DIR) < 0)
 			goto out;
 		filp->f_pos = 2;
 	}
@@ -127,7 +127,7 @@ smb_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		}
 
 		if (filldir(dirent, entry->name, entry->len, 
-				    filp->f_pos, entry->ino) < 0)
+				    filp->f_pos, entry->ino, DT_UNKNOWN) < 0)
 			break;
 		filp->f_pos += 1;
 	}

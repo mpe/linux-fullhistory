@@ -52,12 +52,12 @@ static int devpts_root_readdir(struct file *filp, void *dirent, filldir_t filldi
 	switch(nr)
 	{
 	case 0:
-		if (filldir(dirent, ".", 1, nr, inode->i_ino) < 0)
+		if (filldir(dirent, ".", 1, nr, inode->i_ino, DT_DIR) < 0)
 			return 0;
 		filp->f_pos = ++nr;
 		/* fall through */
 	case 1:
-		if (filldir(dirent, "..", 2, nr, inode->i_ino) < 0)
+		if (filldir(dirent, "..", 2, nr, inode->i_ino, DT_DIR) < 0)
 			return 0;
 		filp->f_pos = ++nr;
 		/* fall through */
@@ -66,7 +66,7 @@ static int devpts_root_readdir(struct file *filp, void *dirent, filldir_t filldi
 			int ptynr = nr - 2;
 			if ( sbi->inodes[ptynr] ) {
 				genptsname(numbuf, ptynr);
-				if ( filldir(dirent, numbuf, strlen(numbuf), nr, nr) < 0 )
+				if ( filldir(dirent, numbuf, strlen(numbuf), nr, nr, DT_CHR) < 0 )
 					return 0;
 			}
 			filp->f_pos = ++nr;

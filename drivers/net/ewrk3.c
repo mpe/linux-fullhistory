@@ -843,6 +843,7 @@ static int ewrk3_queue_pkt(struct sk_buff *skb, struct net_device *dev)
 					}
 				}
 
+				lp->stats.tx_bytes += skb->len;
 				dev->trans_start = jiffies;
 				dev_kfree_skb(skb);
 			} else {	/* return unused page to the free memory queue */
@@ -1010,6 +1011,7 @@ static int ewrk3_rx(struct net_device *dev)
 						   ** Update stats
 						 */
 						lp->stats.rx_packets++;
+						lp->stats.rx_bytes += pkt_len;
 						for (i = 1; i < EWRK3_PKT_STAT_SZ - 1; i++) {
 							if (pkt_len < i * EWRK3_PKT_BIN_SZ) {
 								lp->pktStats.bins[i]++;

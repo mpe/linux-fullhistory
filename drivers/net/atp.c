@@ -154,7 +154,7 @@ static void set_multicast_list(struct net_device *dev);
    (detachable devices only).
    */
 
-int __init atp_init(struct net_device *dev)
+static int __init atp_init(struct net_device *dev)
 {
 	int *port, ports[] = {0x378, 0x278, 0x3bc, 0};
 	int base_addr = dev->base_addr;
@@ -336,6 +336,9 @@ static int net_open(struct net_device *dev)
 		return -EAGAIN;
 	}
 	hardware_init(dev);
+
+	MOD_INC_USE_COUNT;
+
 	netif_start_queue(dev);
 	return 0;
 }
@@ -702,6 +705,8 @@ static int net_close(struct net_device *dev)
 	/* Leave the hardware in a reset state. */
 	write_reg_high(ioaddr, CMR1, CMR1h_RESET);
 
+	MOD_DEC_USE_COUNT;
+
 	return 0;
 }
 
@@ -735,35 +740,27 @@ static void set_multicast_list(struct net_device *dev)
 	lp->addr_mode = num_addrs ? CMR2h_PROMISC : CMR2h_Normal;
 	write_reg_high(ioaddr, CMR2, lp->addr_mode);
 }
-
-/*
- * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c atp.c"
- *  version-control: t
- *  kept-new-versions: 5
- *  tab-width: 4
- * End:
- */
 
-#ifdef MODULE
-
-static int io = 0;
-static struct net_device atp_dev = {
-	"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, atp_init };
-	
+/* module stuff */
+static int io;
+static struct net_device atp_dev = { init: atp_init };
+MODULE_AUTHOR("Donald Becker <becker@scyld.com>");
+MODULE_DESCRIPTION("Realtek 8002/8012 Pocket Lan Adapter");
 MODULE_PARM(io, "I/O port of the pocket adapter");
 
-int init_module(void)
-{
+static int __init atp_init_module(void) {
 	atp_dev.base_addr = io;
+
 	if (register_netdev(&atp_dev) != 0)
 		return -EIO;
+
 	return 0;
 }
 
-void cleanup_module(void)
-{
+static void __exit atp_cleanup_module(void) {
 	unregister_netdev(&atp_dev);
 }
 
-#endif
+module_init(atp_init_module);
+module_exit(atp_cleanup_module);
+

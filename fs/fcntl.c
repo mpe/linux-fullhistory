@@ -129,7 +129,7 @@ out_putf:
 asmlinkage long sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
 	int err = -EBADF;
-	struct file * file;
+	struct file * file, *tofree;
 	struct files_struct * files = current->files;
 
 	write_lock(&files->file_lock);
@@ -144,30 +144,39 @@ asmlinkage long sys_dup2(unsigned int oldfd, unsigned int newfd)
 	get_file(file);			/* We are now finished with oldfd */
 
 	err = expand_files(files, newfd);
-	if (err < 0) {
-		write_unlock(&files->file_lock);
-		fput(file);
-		goto out;
-	}
+	if (err < 0)
+		goto out_fput;
 
 	/* To avoid races with open() and dup(), we will mark the fd as
 	 * in-use in the open-file bitmap throughout the entire dup2()
 	 * process.  This is quite safe: do_close() uses the fd array
 	 * entry, not the bitmap, to decide what work needs to be
 	 * done.  --sct */
+	/* Doesn't work. open() might be there first. --AV */
+
+	/* Yes. It's a race. In user space. Nothing sane to do */
+	err = -EBUSY;
+	tofree = files->fd[newfd];
+	if (!tofree && FD_ISSET(newfd, files->open_fds))
+		goto out_fput;
+
+	files->fd[newfd] = file;
 	FD_SET(newfd, files->open_fds);
+	FD_CLR(newfd, files->close_on_exec);
 	write_unlock(&files->file_lock);
-	
-	do_close(files, newfd, 0);
 
-	write_lock(&files->file_lock);
-	allocate_fd(files, file, newfd);
+	if (tofree)
+		filp_close(tofree, files);
 	err = newfd;
-
 out:
 	return err;
 out_unlock:
 	write_unlock(&files->file_lock);
+	goto out;
+
+out_fput:
+	write_unlock(&files->file_lock);
+	fput(file);
 	goto out;
 }
 
@@ -209,16 +218,11 @@ static int setfl(int fd, struct file * filp, unsigned long arg)
 	return 0;
 }
 
-asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
-{	
-	struct file * filp;
-	long err = -EBADF;
+static long do_fcntl(unsigned int fd, unsigned int cmd,
+		     unsigned long arg, struct file * filp)
+{
+	long err = 0;
 
-	filp = fget(fd);
-	if (!filp)
-		goto out;
-	err = 0;
-	lock_kernel();
 	switch (cmd) {
 		case F_DUPFD:
 			err = -EINVAL;
@@ -287,11 +291,60 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 				err = sock_fcntl (filp, cmd, arg);
 			break;
 	}
+
+	return err;
+}
+
+asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
+{	
+	struct file * filp;
+	long err = -EBADF;
+
+	filp = fget(fd);
+	if (!filp)
+		goto out;
+
+	lock_kernel();
+	err = do_fcntl(fd, cmd, arg, filp);
+	unlock_kernel();
+
+ 	fput(filp);
+out:
+	return err;
+}
+
+#if BITS_PER_LONG == 32
+asmlinkage long sys_fcntl64(unsigned int fd, unsigned int cmd, unsigned long arg)
+{	
+	struct file * filp;
+	long err;
+
+	err = -EBADF;
+	filp = fget(fd);
+	if (!filp)
+		goto out;
+
+	lock_kernel();
+	switch (cmd) {
+		case F_GETLK64:
+			err = fcntl_getlk64(fd, (struct flock64 *) arg);
+			break;
+		case F_SETLK64:
+			err = fcntl_setlk64(fd, cmd, (struct flock64 *) arg);
+			break;
+		case F_SETLKW64:
+			err = fcntl_setlk64(fd, cmd, (struct flock64 *) arg);
+			break;
+		default:
+			err = do_fcntl(fd, cmd, arg, filp);
+			break;
+	}
 	unlock_kernel();
 	fput(filp);
 out:
 	return err;
 }
+#endif
 
 /* Table to convert sigio signal codes into poll band bitmaps */
 

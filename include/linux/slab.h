@@ -73,6 +73,8 @@ extern kmem_cache_t	*files_cachep;
 extern kmem_cache_t	*filp_cachep;
 extern kmem_cache_t	*dquot_cachep;
 extern kmem_cache_t	*bh_cachep;
+extern kmem_cache_t	*fs_cachep;
+extern kmem_cache_t	*sigact_cachep;
 
 #ifdef CONFIG_SMP
 extern unsigned long slab_cache_drain_mask;

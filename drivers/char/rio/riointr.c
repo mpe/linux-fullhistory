@@ -190,8 +190,8 @@ char *		en;
   tty = PortP->gs.tty;
 
 
-  rio_dprint (RIO_DEBUG_INTR, ("tx port %d: %d chars queued.\n", 
-	      PortP->PortNum, PortP->gs.xmit_cnt));
+  rio_dprintk (RIO_DEBUG_INTR, "tx port %d: %d chars queued.\n", 
+	      PortP->PortNum, PortP->gs.xmit_cnt);
 
   if (!PortP->gs.xmit_cnt) return;
   
@@ -215,10 +215,10 @@ char *		en;
     { int t;
     t = (c > 10)?10:c;
     
-    rio_dprint (RIO_DEBUG_INTR, ("tx port %d: copying %d chars: %s - %s\n", 
-				 PortP->PortNum, c, 
-	 firstchars (PortP->gs.xmit_buf + PortP->gs.xmit_tail      , t),
-	 firstchars (PortP->gs.xmit_buf + PortP->gs.xmit_tail + c-t, t)));
+    rio_dprintk (RIO_DEBUG_INTR, "rio: tx port %d: copying %d chars: %s - %s\n", 
+		 PortP->PortNum, c, 
+		 firstchars (PortP->gs.xmit_buf + PortP->gs.xmit_tail      , t),
+		 firstchars (PortP->gs.xmit_buf + PortP->gs.xmit_tail + c-t, t));
     }
     /* If for one reason or another, we can't copy more data, 
        we're done! */
@@ -244,14 +244,14 @@ char *		en;
   rio_spin_unlock_irqrestore(&PortP->portSem, flags);
 
   if (PortP->gs.xmit_cnt <= (PortP->gs.wakeup_chars + 2*PKT_MAX_DATA_LEN)) {
-    rio_dprint (RIO_DEBUG_INTR, ("Waking up.... ldisc:%d (%d/%d)....",
+    rio_dprintk (RIO_DEBUG_INTR, "Waking up.... ldisc:%d (%d/%d)....",
 		 (int)(PortP->gs.tty->flags & (1 << TTY_DO_WRITE_WAKEUP)),
-		 PortP->gs.wakeup_chars, PortP->gs.xmit_cnt)); 
+		 PortP->gs.wakeup_chars, PortP->gs.xmit_cnt); 
     if ((PortP->gs.tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 	PortP->gs.tty->ldisc.write_wakeup)
       (PortP->gs.tty->ldisc.write_wakeup)(PortP->gs.tty);
-    rio_dprint (RIO_DEBUG_INTR, ("(%d/%d)\n",
-		PortP->gs.wakeup_chars, PortP->gs.xmit_cnt)); 
+    rio_dprintk (RIO_DEBUG_INTR, "(%d/%d)\n",
+		PortP->gs.wakeup_chars, PortP->gs.xmit_cnt); 
     wake_up_interruptible(&PortP->gs.tty->write_wait);
   }
 
@@ -273,7 +273,7 @@ struct rio_info *	p;
 	for ( host=0; host<p->RIONumHosts; host++ ) {
 		struct Host *HostP = &p->RIOHosts[host];
 
-		rio_dprint(RIO_DEBUG_INTR,  ("riointr() doing host %d type %d\n", host, HostP->Type ) );
+		rio_dprintk (RIO_DEBUG_INTR,  "riointr() doing host %d type %d\n", host, HostP->Type);
 
 		switch( HostP->Type ) {
 			case RIO_AT:
@@ -363,7 +363,7 @@ int From;
     static int t =0;
     rio_spin_unlock (&HostP->HostLock); 
     if ((t++ % 200) == 0)
-      rio_dprint(RIO_DEBUG_INTR, ("Interrupt but host not running. flags=%x.\n", (int)HostP->Flags));
+      rio_dprintk (RIO_DEBUG_INTR, "Interrupt but host not running. flags=%x.\n", (int)HostP->Flags);
     return;
   }
   rio_spin_unlock (&HostP->HostLock); 
@@ -372,7 +372,7 @@ int From;
     WWORD( HostP->ParmMapP->rup_intr , 0 );
     p->RIORupCount++;
     RupIntr++;
-    rio_dprint(RIO_DEBUG_INTR, ("RUP interrupt on host %d\n", HostP-p->RIOHosts ));
+    rio_dprintk (RIO_DEBUG_INTR, "rio: RUP interrupt on host %d\n", HostP-p->RIOHosts);
     RIOPollHostCommands(p, HostP );
   }
 
@@ -383,7 +383,7 @@ int From;
     p->RIORxCount++;
     RxIntr++;
 
-    rio_dprint(RIO_DEBUG_INTR, ("RX interrupt on host %d\n", HostP-p->RIOHosts));
+    rio_dprintk (RIO_DEBUG_INTR, "rio: RX interrupt on host %d\n", HostP-p->RIOHosts);
     /*
     ** Loop through every port. If the port is mapped into
     ** the system ( i.e. has /dev/ttyXXXX associated ) then it is
@@ -451,7 +451,7 @@ int From;
 				** MAGIC! ( Basically, handshake the RX buffer, so that
 				** the RTAs upstream can be re-enabled. )
 				*/
-	rio_dprint(RIO_DEBUG_INTR, ("Set RX handshake bit\n" ));
+	rio_dprintk (RIO_DEBUG_INTR, "Set RX handshake bit\n");
 	WWORD( PortP->PhbP->handshake, 
 	       PHB_HANDSHAKE_SET|PHB_HANDSHAKE_RESET );
       }
@@ -466,7 +466,7 @@ int From;
 
     p->RIOTxCount++;
     TxIntr++;
-    rio_dprint(RIO_DEBUG_INTR, ("TX interrupt on host %d\n", HostP-p->RIOHosts));
+    rio_dprintk (RIO_DEBUG_INTR, "rio: TX interrupt on host %d\n", HostP-p->RIOHosts);
 
     /*
     ** Loop through every port.
@@ -504,7 +504,7 @@ int From;
 	continue;
       }
 
-      rio_dprint (RIO_DEBUG_INTR, ("Looking into port %d.\n", port));
+      rio_dprintk (RIO_DEBUG_INTR, "rio: Looking into port %d.\n", port);
       /*
       ** Lock the port before we begin working on it.
       */
@@ -515,7 +515,7 @@ int From;
       ** we need do none of this processing.
       */
       if ( !can_add_transmit( &PacketP, PortP ) ) {
-	rio_dprint (RIO_DEBUG_INTR, ("Can't add to port, so skipping.\n"));
+	rio_dprintk (RIO_DEBUG_INTR, "Can't add to port, so skipping.\n");
 	rio_spin_unlock(&PortP->portSem);
 	continue;
       }
@@ -527,7 +527,7 @@ int From;
       ttyP = PortP->gs.tty;
       /* If ttyP is NULL, the port is getting closed. Forget about it. */
       if (!ttyP) {
-	rio_dprint (RIO_DEBUG_INTR, ("no tty, so skipping.\n"));
+	rio_dprintk (RIO_DEBUG_INTR, "no tty, so skipping.\n");
 	rio_spin_unlock(&PortP->portSem);
 	continue;
       }
@@ -603,10 +603,10 @@ int From;
 	** with WFLUSH
 	*/
 	if ( PortP->WflushFlag ) {
-	  rio_dprint(RIO_DEBUG_INTR, ("Want to WFLUSH mark this port\n"));
+	  rio_dprintk (RIO_DEBUG_INTR, "Want to WFLUSH mark this port\n");
 
 	  if ( PortP->InUse )
-	    rio_dprint(RIO_DEBUG_INTR, ("FAILS - PORT IS IN USE\n"));
+	    rio_dprintk (RIO_DEBUG_INTR, "FAILS - PORT IS IN USE\n");
 	}
 				
 	while ( PortP->WflushFlag &&
@@ -615,7 +615,7 @@ int From;
 	  int p;
 	  struct PktCmd *PktCmdP;
 
-	  rio_dprint(RIO_DEBUG_INTR, ("Add WFLUSH marker to data queue\n"));
+	  rio_dprintk (RIO_DEBUG_INTR, "Add WFLUSH marker to data queue\n");
 	  /*
 	  ** make it look just like a WFLUSH command
 	  */
@@ -670,8 +670,8 @@ int From;
 	    PortP->MagicFlags &= ~MAGIC_FLUSH;
 	  }
 
-	  rio_dprint(RIO_DEBUG_INTR, ("Wflush count now stands at %d\n", 
-		 PortP->WflushFlag));
+	  rio_dprintk (RIO_DEBUG_INTR, "Wflush count now stands at %d\n", 
+		 PortP->WflushFlag);
 	}
 	if ( PortP->MagicFlags & MORE_OUTPUT_EYGOR ) {
 	  if ( PortP->MagicFlags & MAGIC_FLUSH ) {
@@ -747,12 +747,12 @@ struct Port *		PortP;
 
   TtyP = PortP->gs.tty;
   if (!TtyP) {
-    rio_dprint (RIO_DEBUG_INTR, ("RIOReceive: tty is null. \n"));
+    rio_dprintk (RIO_DEBUG_INTR, "RIOReceive: tty is null. \n");
     return;
   }
 
   if (PortP->State & RIO_THROTTLE_RX) {
-    rio_dprint (RIO_DEBUG_INTR, ("RIOReceive: Throttled. Can't handle more input.\n"));
+    rio_dprintk (RIO_DEBUG_INTR, "RIOReceive: Throttled. Can't handle more input.\n");
     return;
   }
 
@@ -786,18 +786,18 @@ struct Port *		PortP;
 	  ** check that it is not a command!
 	  */
 	  if ( PacketP->len & PKT_CMD_BIT ) {
-	    rio_dprint(RIO_DEBUG_INTR, ("RIO: unexpected command packet received on PHB\n"));
+	    rio_dprintk (RIO_DEBUG_INTR, "RIO: unexpected command packet received on PHB\n");
 	    /*	    rio_dprint(RIO_DEBUG_INTR, (" sysport   = %d\n", p->RIOPortp->PortNum)); */
-	    rio_dprint(RIO_DEBUG_INTR, (" dest_unit = %d\n", PacketP->dest_unit));
-	    rio_dprint(RIO_DEBUG_INTR, (" dest_port = %d\n", PacketP->dest_port));
-	    rio_dprint(RIO_DEBUG_INTR, (" src_unit  = %d\n", PacketP->src_unit));
-	    rio_dprint(RIO_DEBUG_INTR, (" src_port  = %d\n", PacketP->src_port));
-	    rio_dprint(RIO_DEBUG_INTR, (" len	   = %d\n", PacketP->len));
-	    rio_dprint(RIO_DEBUG_INTR, (" control   = %d\n", PacketP->control));
-	    rio_dprint(RIO_DEBUG_INTR, (" csum	   = %d\n", PacketP->csum));
-	    rio_dprint(RIO_DEBUG_INTR, ("	 data bytes: "));
+	    rio_dprintk (RIO_DEBUG_INTR, " dest_unit = %d\n", PacketP->dest_unit);
+	    rio_dprintk (RIO_DEBUG_INTR, " dest_port = %d\n", PacketP->dest_port);
+	    rio_dprintk (RIO_DEBUG_INTR, " src_unit  = %d\n", PacketP->src_unit);
+	    rio_dprintk (RIO_DEBUG_INTR, " src_port  = %d\n", PacketP->src_port);
+	    rio_dprintk (RIO_DEBUG_INTR, " len	   = %d\n", PacketP->len);
+	    rio_dprintk (RIO_DEBUG_INTR, " control   = %d\n", PacketP->control);
+	    rio_dprintk (RIO_DEBUG_INTR, " csum	   = %d\n", PacketP->csum);
+	    rio_dprintk (RIO_DEBUG_INTR, "	 data bytes: ");
 	    for ( DataCnt=0; DataCnt<PKT_MAX_DATA_LEN; DataCnt++ )
-	      rio_dprint(RIO_DEBUG_INTR, ("%d\n", PacketP->data[DataCnt]));
+	      rio_dprintk (RIO_DEBUG_INTR, "%d\n", PacketP->data[DataCnt]);
 	    remove_receive( PortP );
 	    put_free_end( PortP->HostP, PacketP );
 	    continue; /* with next packet */
@@ -820,8 +820,8 @@ struct Port *		PortP;
 			
 	  transCount = min(PacketP->len & PKT_LEN_MASK,
 			   TTY_FLIPBUF_SIZE - TtyP->flip.count);
-	  rio_dprint(RIO_DEBUG_REC,  ("port %d: Copy %d bytes\n", 
-				      PortP->PortNum, transCount ) );
+	  rio_dprintk (RIO_DEBUG_REC,  "port %d: Copy %d bytes\n", 
+				      PortP->PortNum, transCount);
 	  /*
 	  ** To use the following 'kkprintfs' for debugging - change the '#undef'
 	  ** to '#define', (this is the only place ___DEBUG_IT___ occurs in the
@@ -880,7 +880,7 @@ struct Port *		PortP;
 	}
     }
   if (copied) {
-    rio_dprint ( RIO_DEBUG_REC, ("port %d: pushing tty flip buffer: %d total bytes copied.\n", PortP->PortNum,  copied));
+    rio_dprintk (RIO_DEBUG_REC, "port %d: pushing tty flip buffer: %d total bytes copied.\n", PortP->PortNum, copied);
     tty_flip_buffer_push (TtyP);
   }
 
@@ -906,25 +906,25 @@ int	port;
 	SysPort = port;	/* Believe me, it works. */
 
 	if ( SysPort < 0 || SysPort >= RIO_PORTS ) {
-		rio_dprint(RIO_DEBUG_INTR, ("Illegal port %d derived from TTY in riotproc()\n",SysPort));
+		rio_dprintk (RIO_DEBUG_INTR, "Illegal port %d derived from TTY in riotproc()\n",SysPort);
 		return 0;
 	}
 	PortP = p->RIOPortp[SysPort];
 
 	if ((uint)PortP->PhbP < (uint)PortP->Caddr || 
 			(uint)PortP->PhbP >= (uint)PortP->Caddr+SIXTY_FOUR_K ) {
-		rio_dprint(RIO_DEBUG_INTR, ("RIO: NULL or BAD PhbP on sys port %d in proc routine\n",
-							SysPort));
-		rio_dprint(RIO_DEBUG_INTR, ("	 PortP = 0x%x\n",PortP));
-		rio_dprint(RIO_DEBUG_INTR, ("	 PortP->PhbP = 0x%x\n",PortP->PhbP));
-		rio_dprint(RIO_DEBUG_INTR, ("	 PortP->Caddr = 0x%x\n",PortP->PhbP));
-		rio_dprint(RIO_DEBUG_INTR, ("	 PortP->HostPort = 0x%x\n",PortP->HostPort));
+		rio_dprintk (RIO_DEBUG_INTR, "RIO: NULL or BAD PhbP on sys port %d in proc routine\n",
+							SysPort);
+		rio_dprintk (RIO_DEBUG_INTR, "	 PortP = 0x%x\n",PortP);
+		rio_dprintk (RIO_DEBUG_INTR, "	 PortP->PhbP = 0x%x\n",PortP->PhbP);
+		rio_dprintk (RIO_DEBUG_INTR, "	 PortP->Caddr = 0x%x\n",PortP->PhbP);
+		rio_dprintk (RIO_DEBUG_INTR, "	 PortP->HostPort = 0x%x\n",PortP->HostPort);
 		return 0;
 	}
 
 	switch(cmd) {
 		case T_WFLUSH:
-			rio_dprint(RIO_DEBUG_INTR, "T_WFLUSH\n");
+			rio_dprintk (RIO_DEBUG_INTR, "T_WFLUSH\n");
 			/*
 			** Because of the spooky way the RIO works, we don't need
 			** to issue a flush command on any of the SET*F commands,
@@ -941,14 +941,14 @@ int	port;
 				** form a wflush packet - 1 byte long, no data
 				*/
 				if ( PortP->State & RIO_DELETED ) {
-					rio_dprint(RIO_DEBUG_INTR, ("WFLUSH on deleted RTA\n"));
+					rio_dprintk (RIO_DEBUG_INTR, "WFLUSH on deleted RTA\n");
 				}
 				else {
 					if ( RIOPreemptiveCmd(p, PortP, WFLUSH ) == RIO_FAIL ) {
-						rio_dprint(RIO_DEBUG_INTR, ("T_WFLUSH Command failed\n"));
+						rio_dprintk (RIO_DEBUG_INTR, "T_WFLUSH Command failed\n");
 					}
 					else
-						rio_dprint(RIO_DEBUG_INTR, ("T_WFLUSH Command\n"));
+						rio_dprintk (RIO_DEBUG_INTR, "T_WFLUSH Command\n");
 				}
 				/*
 				** WFLUSH operation - flush the data!
@@ -956,7 +956,7 @@ int	port;
 				PortP->TxBufferIn = PortP->TxBufferOut = 0;
 			}
 			else {
-				rio_dprint(RIO_DEBUG_INTR, ("T_WFLUSH Command ignored\n"));
+				rio_dprintk (RIO_DEBUG_INTR, "T_WFLUSH Command ignored\n");
 			}
 			/*
 			** sort out the line discipline
@@ -966,16 +966,16 @@ int	port;
 			break;
 	
 		case T_RESUME:
-			rio_dprint(RIO_DEBUG_INTR, ("T_RESUME\n"));
+			rio_dprintk (RIO_DEBUG_INTR, "T_RESUME\n");
 			/*
 			** send pre-emptive resume packet
 			*/
 			if ( PortP->State & RIO_DELETED ) {
-				rio_dprint(RIO_DEBUG_INTR, ("RESUME on deleted RTA\n"));
+				rio_dprintk (RIO_DEBUG_INTR, "RESUME on deleted RTA\n");
 			}
 			else {
 				if ( RIOPreemptiveCmd(p, PortP, RESUME ) == RIO_FAIL ) {
-					rio_dprint(RIO_DEBUG_INTR, ("T_RESUME Command failed\n"));
+					rio_dprintk (RIO_DEBUG_INTR, "T_RESUME Command failed\n");
 				}
 			}
 			/*
@@ -986,7 +986,7 @@ int	port;
 			break;
 	
 		case T_TIME:
-			rio_dprint(RIO_DEBUG_INTR, ("T_TIME\n"));
+			rio_dprintk (RIO_DEBUG_INTR, "T_TIME\n");
 			/*
 			** T_TIME is called when xDLY is set in oflags and
 			** the line discipline timeout has expired. It's
@@ -1008,16 +1008,16 @@ start:
 			break;
 	
 		case T_SUSPEND:
-			rio_dprint(RIO_DEBUG_INTR, ("T_SUSPEND\n"));
+			rio_dprintk (RIO_DEBUG_INTR, "T_SUSPEND\n");
 			/*
 			** send a suspend pre-emptive packet.
 			*/
 			if ( PortP->State & RIO_DELETED ) {
-				rio_dprint(RIO_DEBUG_INTR, ("SUSPEND deleted RTA\n"));
+				rio_dprintk (RIO_DEBUG_INTR, "SUSPEND deleted RTA\n");
 			}
 			else {
 				if ( RIOPreemptiveCmd(p, PortP, SUSPEND ) == RIO_FAIL ) {
-					rio_dprint(RIO_DEBUG_INTR, ("T_SUSPEND Command failed\n"));
+					rio_dprintk (RIO_DEBUG_INTR, "T_SUSPEND Command failed\n");
 				}
 			}
 			/*
@@ -1026,18 +1026,18 @@ start:
 			break;
 	
 		case T_BLOCK:
-			rio_dprint(RIO_DEBUG_INTR, ("T_BLOCK\n"));
+			rio_dprintk (RIO_DEBUG_INTR, "T_BLOCK\n");
 			break;
 	
 		case T_RFLUSH:
-			rio_dprint(RIO_DEBUG_INTR, ("T_RFLUSH\n"));
+			rio_dprintk (RIO_DEBUG_INTR, "T_RFLUSH\n");
 			if ( PortP->State & RIO_DELETED ) {
-				rio_dprint(RIO_DEBUG_INTR, ("RFLUSH on deleted RTA\n"));
+				rio_dprintk (RIO_DEBUG_INTR, "RFLUSH on deleted RTA\n");
 				PortP->RxDataStart = 0;
 			}
 			else {
 				if ( RIOPreemptiveCmd( p, PortP, RFLUSH ) == RIO_FAIL ) {
-					rio_dprint(RIO_DEBUG_INTR, ("T_RFLUSH Command failed\n"));
+					rio_dprintk (RIO_DEBUG_INTR, "T_RFLUSH Command failed\n");
 					return 0;
 				}
 				PortP->RxDataStart = 0;
@@ -1050,14 +1050,14 @@ start:
 					/*
 					** MAGIC!
 					*/
-					rio_dprint(RIO_DEBUG_INTR, ("Set receive handshake bit\n"));
+					rio_dprintk (RIO_DEBUG_INTR, "Set receive handshake bit\n");
 					PortP->PhbP->handshake |= PHB_HANDSHAKE_RESET;
 				}
 			}
 			break;
 			/* FALLTHROUGH */
 		case T_UNBLOCK:
-			rio_dprint(RIO_DEBUG_INTR, ("T_UNBLOCK\n"));
+			rio_dprintk (RIO_DEBUG_INTR, "T_UNBLOCK\n");
 			/*
 			** If there is any data to receive set a timeout to service it.
 			*/
@@ -1065,7 +1065,7 @@ start:
 			break;
 	
 		case T_BREAK:
-			rio_dprint(RIO_DEBUG_INTR, ("T_BREAK\n"));
+			rio_dprintk (RIO_DEBUG_INTR, "T_BREAK\n");
 			/*
 			** Send a break command. For Sys V
 			** this is a timed break, so we
@@ -1075,12 +1075,12 @@ start:
 			** Build a BREAK command
 			*/
 			if ( PortP->State & RIO_DELETED ) {
-				rio_dprint(RIO_DEBUG_INTR, ("BREAK on deleted RTA\n"));
+				rio_dprintk (RIO_DEBUG_INTR, "BREAK on deleted RTA\n");
 			}
 			else {
 				if (RIOShortCommand(PortP,SBREAK,2,
 								p->RIOConf.BreakInterval)==RIO_FAIL) {
-			   		rio_dprint(RIO_DEBUG_INTR, ("SBREAK RIOShortCommand failed\n"));
+			   		rio_dprintk (RIO_DEBUG_INTR, "SBREAK RIOShortCommand failed\n");
 				}
 			}
 	
@@ -1090,18 +1090,18 @@ start:
 			break;
 	
 		case T_INPUT:
-			rio_dprint(RIO_DEBUG_INTR, ("Proc T_INPUT called - I don't know what to do!\n"));
+			rio_dprintk (RIO_DEBUG_INTR, "Proc T_INPUT called - I don't know what to do!\n");
 			break;
 		case T_PARM:
-			rio_dprint(RIO_DEBUG_INTR, ("Proc T_PARM called - I don't know what to do!\n"));
+			rio_dprintk (RIO_DEBUG_INTR, "Proc T_PARM called - I don't know what to do!\n");
 			break;
 	
 		case T_SWTCH:
-			rio_dprint(RIO_DEBUG_INTR, ("Proc T_SWTCH called - I don't know what to do!\n"));
+			rio_dprintk (RIO_DEBUG_INTR, "Proc T_SWTCH called - I don't know what to do!\n");
 			break;
 	
 		default:
-			rio_dprint(RIO_DEBUG_INTR, ("Proc UNKNOWN command %d\n",cmd));
+			rio_dprintk (RIO_DEBUG_INTR, "Proc UNKNOWN command %d\n",cmd);
 	}
 	/*
 	** T_OUTPUT returns without passing through this point!

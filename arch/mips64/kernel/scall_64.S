@@ -344,3 +344,4 @@ sys_call_table:
 	PTR	sys_pivot_root				/* 4210 */
 	PTR	sys_mincore
 	PTR	sys_madvise
+	PTR	sys_getdents64

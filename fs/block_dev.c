@@ -5,6 +5,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/locks.h>
 #include <linux/fcntl.h>
@@ -347,7 +348,7 @@ static void init_once(void * foo, kmem_cache_t * cachep, unsigned long flags)
 	}
 }
 
-void bdev_init(void)
+void __init bdev_init(void)
 {
 	int i;
 	struct list_head *head = bdev_hashtable;
@@ -364,7 +365,7 @@ void bdev_init(void)
 					 0, SLAB_HWCACHE_ALIGN, init_once,
 					 NULL);
 	if (!bdev_cachep)
-		panic("cannot create bdev slab cache");
+		panic("Cannot create bdev_cache SLAB cache");
 }
 
 /*

@@ -32,9 +32,6 @@ int max_threads;
 unsigned long total_forks;	/* Handle normal Linux uptimes. */
 int last_pid;
 
-/* SLAB cache for mm_struct's. */
-kmem_cache_t *mm_cachep;
-
 struct task_struct *pidhash[PIDHASH_SZ];
 
 void add_wait_queue(wait_queue_head_t *q, wait_queue_t * wait)
@@ -341,7 +338,7 @@ fail_nomem:
 
 static inline struct fs_struct *__copy_fs_struct(struct fs_struct *old)
 {
-	struct fs_struct *fs = kmalloc(sizeof(*old), GFP_KERNEL);
+	struct fs_struct *fs = kmem_cache_alloc(fs_cachep, GFP_KERNEL);
 	/* We don't need to lock fs - think why ;-) */
 	if (fs) {
 		atomic_set(&fs->count, 1);
@@ -507,7 +504,7 @@ static inline int copy_sighand(unsigned long clone_flags, struct task_struct * t
 		atomic_inc(&current->sig->count);
 		return 0;
 	}
-	tsk->sig = kmalloc(sizeof(*tsk->sig), GFP_KERNEL);
+	tsk->sig = kmem_cache_alloc(sigact_cachep, GFP_KERNEL);
 	if (!tsk->sig)
 		return -1;
 	spin_lock_init(&tsk->sig->siglock);
@@ -698,4 +695,52 @@ bad_fork_cleanup_count:
 bad_fork_free:
 	free_task_struct(p);
 	goto bad_fork;
+}
+
+/* SLAB cache for signal_struct structures (tsk->sig) */
+kmem_cache_t *sigact_cachep;
+
+/* SLAB cache for files_struct structures (tsk->files) */
+kmem_cache_t *files_cachep;
+
+/* SLAB cache for fs_struct structures (tsk->fs) */
+kmem_cache_t *fs_cachep;
+
+/* SLAB cache for vm_area_struct structures */
+kmem_cache_t *vm_area_cachep;
+
+/* SLAB cache for mm_struct structures (tsk->mm) */
+kmem_cache_t *mm_cachep;
+
+void __init proc_caches_init(void)
+{
+	sigact_cachep = kmem_cache_create("signal_act",
+			sizeof(struct signal_struct), 0,
+			SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if (!sigact_cachep)
+		panic("Cannot create signal action SLAB cache");
+
+	files_cachep = kmem_cache_create("files_cache", 
+			 sizeof(struct files_struct), 0, 
+			 SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if (!files_cachep) 
+		panic("Cannot create files SLAB cache");
+
+	fs_cachep = kmem_cache_create("fs_cache", 
+			 sizeof(struct fs_struct), 0, 
+			 SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if (!fs_cachep) 
+		panic("Cannot create fs_struct SLAB cache");
+ 
+	vm_area_cachep = kmem_cache_create("vm_area_struct",
+			sizeof(struct vm_area_struct), 0,
+			SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if(!vm_area_cachep)
+		panic("vma_init: Cannot alloc vm_area_struct SLAB cache");
+
+	mm_cachep = kmem_cache_create("mm_struct",
+			sizeof(struct mm_struct), 0,
+			SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if(!mm_cachep)
+		panic("vma_init: Cannot alloc mm_struct SLAB cache");
 }

@@ -205,6 +205,7 @@
 #define __NR_sys_pciconfig_write	199
 #define __NR_sys_pciconfig_iobase	200
 #define __NR_multiplexer		201
+#define __NR_getdents64		202
 
 #define __NR(n)	#n
 

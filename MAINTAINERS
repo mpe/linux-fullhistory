@@ -496,6 +496,12 @@ M:	rhw@memalpha.cx
 L:	Linux-Kernel@vger.rutgers.edu
 S:	Maintained
 
+i810 TCO TIMER WATCHDOG
+P:	Nils Faerber
+M:	nils@kernelconcepts.de
+W:	http://www.kernelconcepts.de/
+S:	Maintained
+
 IBM MCA SCSI SUBSYSTEM DRIVER
 P:	Michael Lang
 M:	langa2@kph.uni-mainz.de
