@@ -59,7 +59,7 @@ else
 bool 'SLIP (serial line) support' CONFIG_SLIP n
 if [ "$CONFIG_SLIP" = "y" ]
   bool ' CSLIP compressed headers' SL_COMPRESSED y
-  bool ' SLIP debugging on' SL_DUMP y
+#  bool ' SLIP debugging on' SL_DUMP y
 fi
 #bool 'PPP (point-to-point) support' CONFIG_PPP n
 bool 'PLIP (parallel port) support' CONFIG_PLIP n
@@ -104,8 +104,8 @@ bool 'System V and Coherent filesystem support' CONFIG_SYSV_FS n
 *
 *  character devices
 *
-bool 'Keyboard meta-key sends ESC-prefix' CONFIG_KBD_META y
-bool 'Keyboard Num Lock on by default' CONFIG_KBD_NUML y
+#bool 'Keyboard meta-key sends ESC-prefix' CONFIG_KBD_META y
+#bool 'Keyboard Num Lock on by default' CONFIG_KBD_NUML y
 bool 'Parallel printer support' CONFIG_PRINTER y
 bool 'Logitech busmouse support' CONFIG_BUSMOUSE n
 bool 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE y

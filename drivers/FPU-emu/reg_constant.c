@@ -3,7 +3,7 @@
  |                                                                           |
  | All of the constant FPU_REGs                                              |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -107,7 +107,7 @@ static void fldz(void)
 }
 
 static FUNC constants_table[] = {
-  fld1, fldl2t, fldl2e, fldpi, fldlg2, fldln2, fldz, Un_impl
+  fld1, fldl2t, fldl2e, fldpi, fldlg2, fldln2, fldz, FPU_illegal
 };
 
 void fconst(void)

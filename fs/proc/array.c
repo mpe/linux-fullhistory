@@ -88,10 +88,10 @@ static int get_loadavg(char * buffer)
 
 static int get_kstat(char * buffer)
 {
-        return sprintf(buffer,	"cpu  %u,%u,%u,%lu\n"
-        			"disk %u,%u,%u,%u\n"
-        			"page %u,%u\n"
-        			"swap %u,%u\n"
+        return sprintf(buffer,	"cpu  %u %u %u %lu\n"
+        			"disk %u %u %u %u\n"
+        			"page %u %u\n"
+        			"swap %u %u\n"
         			"intr %u\n"
         			"ctxt %u\n"
         			"btime %lu\n",

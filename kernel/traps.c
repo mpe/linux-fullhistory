@@ -167,14 +167,14 @@ void math_error(void)
 	}
 	env = &last_task_used_math->tss.i387.hard;
 	send_sig(SIGFPE, last_task_used_math, 1);
-	current->tss.trap_no = 16;
-	current->tss.error_code = 0;
+	last_task_used_math->tss.trap_no = 16;
+	last_task_used_math->tss.error_code = 0;
 	__asm__ __volatile__("fnsave %0":"=m" (*env));
 	last_task_used_math = NULL;
 	stts();
 	env->fcs = (env->swd & 0x0000ffff) | (env->fcs & 0xffff0000);
 	env->fos = env->twd;
-	env->swd &= 0xffff0000;
+	env->swd &= 0xffff3800;
 	env->twd = 0xffffffff;
 }
 

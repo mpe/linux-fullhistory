@@ -37,14 +37,20 @@
 void Un_impl(void)
 {
   unsigned char byte1, FPU_modrm;
+  unsigned long address = FPU_ORIG_EIP;
 
   RE_ENTRANT_CHECK_OFF;
   /* No need to verify_area(), we have previously fetched these bytes. */
-  byte1 = get_fs_byte((unsigned char *) FPU_ORIG_EIP);
-  FPU_modrm = get_fs_byte(1 + (unsigned char *) FPU_ORIG_EIP);
-
-  printk("Unimplemented FPU Opcode at eip=%p : %02x ",
-	 (void *) FPU_ORIG_EIP, byte1);
+  printk("Unimplemented FPU Opcode at eip=%p : ", (void *) address);
+  while ( 1 )
+    {
+      byte1 = get_fs_byte((unsigned char *) address);
+      if ( (byte1 & 0xf8) == 0xd8 ) break;
+      printk("[%02x]", byte1);
+      address++;
+    }
+  printk("%02x ", byte1);
+  FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
 
   if (FPU_modrm >= 0300)
     printk("%02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
@@ -57,6 +63,15 @@ void Un_impl(void)
 }
 
 
+/*
+   Called for opcodes which are illegal and which are known to result in a
+   SIGILL with a real 80486.
+   */
+void FPU_illegal(void)
+{
+  math_abort(FPU_info,SIGILL);
+}
+
 
 
 void emu_printall()
@@ -65,11 +80,20 @@ void emu_printall()
   static char *tag_desc[] = { "Valid", "Zero", "ERROR", "ERROR",
                               "DeNorm", "Inf", "NaN", "Empty" };
   unsigned char byte1, FPU_modrm;
+  unsigned long address = FPU_ORIG_EIP;
 
   RE_ENTRANT_CHECK_OFF;
   /* No need to verify_area(), we have previously fetched these bytes. */
-  byte1 = get_fs_byte((unsigned char *) FPU_ORIG_EIP);
-  FPU_modrm = get_fs_byte(1 + (unsigned char *) FPU_ORIG_EIP);
+  printk("At %p: ", (void *) address);
+  while ( 1 )
+    {
+      byte1 = get_fs_byte((unsigned char *) address);
+      if ( (byte1 & 0xf8) == 0xd8 ) break;
+      printk("[%02x]", byte1);
+      address++;
+    }
+  printk("%02x ", byte1);
+  FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
   partial_status = status_word();
 
 #ifdef DEBUGGING
@@ -88,7 +112,6 @@ if ( partial_status & SW_Denorm_Op )   printk("SW: denormalized operand\n");
 if ( partial_status & SW_Invalid )     printk("SW: invalid operation\n");
 #endif DEBUGGING
 
-  printk("At %p: %02x ", (void *) FPU_ORIG_EIP, byte1);
   if (FPU_modrm >= 0300)
     printk("%02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
   else
@@ -210,6 +233,7 @@ static struct {
 	      0x125  in fpu_trig.c
 	      0x126  in fpu_entry.c
 	      0x127  in poly_2xm1.c
+	      0x128  in fpu_entry.c
        0x2nn  in an *.S file:
               0x201  in reg_u_add.S, reg_round.S
               0x202  in reg_u_div.S

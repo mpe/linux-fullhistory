@@ -3,7 +3,7 @@
  |                                                                           |
  | The entry function for wm-FPU-emu                                         |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -34,17 +34,7 @@
 
 #include <asm/segment.h>
 
-#define FWAIT_OPCODE 0x9b
-#define OP_SIZE_PREFIX 0x66
-#define ADDR_SIZE_PREFIX 0x67
-#define PREFIX_CS 0x2e
-#define PREFIX_DS 0x3e
-#define PREFIX_ES 0x26
-#define PREFIX_SS 0x36
-#define PREFIX_FS 0x64
-#define PREFIX_GS 0x65
-
-#define __BAD__ Un_impl   /* Not implemented */
+#define __BAD__ FPU_illegal   /* Illegal on an 80486, causes SIGILL */
 
 #ifndef NO_UNDOC_CODE    /* Un-documented FPU op-codes supported by default. */
 
@@ -147,14 +137,13 @@ unsigned short FPU_data_selector;
 char emulating=0;
 #endif PARANOID
 
-#define bswapw(x) __asm__("xchgb %%al,%%ah":"=a" (x):"0" ((short)x))
-static int valid_prefix(unsigned char byte);
+static int valid_prefix(unsigned char *byte, overrides *override);
 
 
 asmlinkage void math_emulate(long arg)
 {
-  unsigned char  FPU_modrm;
-  unsigned short code;
+  unsigned char  FPU_modrm, byte1;
+  overrides override;
   int unmasked;
 
 #ifdef PARANOID
@@ -181,10 +170,11 @@ asmlinkage void math_emulate(long arg)
 
   SETUP_DATA_AREA(arg);
 
+  FPU_ORIG_EIP = FPU_EIP;
+
   /* We cannot handle emulation in v86-mode */
   if (FPU_EFLAGS & 0x00020000)
     {
-      FPU_ORIG_EIP = FPU_EIP;
       math_abort(FPU_info,SIGILL);
     }
 
@@ -198,7 +188,6 @@ asmlinkage void math_emulate(long arg)
   /* We cannot handle multiple segments yet */
   if (FPU_CS != USER_CS || FPU_DS != USER_DS)
     {
-      FPU_ORIG_EIP = FPU_EIP;
       math_abort(FPU_info,SIGILL);
     }
 
@@ -206,12 +195,18 @@ asmlinkage void math_emulate(long arg)
   if (current->flags & PF_PTRACED)
   	FPU_lookahead = 0;
 
+  if ( !valid_prefix(&byte1, &override) )
+    {
+      RE_ENTRANT_CHECK_OFF;
+      printk("FPU emulator: Unknown prefix byte 0x%02x\n", byte1);
+      RE_ENTRANT_CHECK_ON;
+      EXCEPTION(EX_INTERNAL|0x126);
+      math_abort(FPU_info,SIGILL);
+    }
+
 do_another_FPU_instruction:
 
-  RE_ENTRANT_CHECK_OFF;
-  FPU_code_verify_area(1);
-  code = get_fs_word((unsigned short *) FPU_EIP);
-  RE_ENTRANT_CHECK_ON;
+  FPU_EIP++;  /* We have fetched the prefix and first code bytes. */
 
 #ifdef PECULIAR_486
   /* It would be more logical to do this only in get_address(),
@@ -220,41 +215,36 @@ do_another_FPU_instruction:
   FPU_data_selector = FPU_DS;
 #endif PECULIAR_486
 
-  if ( (code & 0xf8) != 0xd8 )
+  if ( (byte1 & 0xf8) != 0xd8 )
     {
-      if ( (code & 0xff) == FWAIT_OPCODE )
+      if ( byte1 == FWAIT_OPCODE )
 	{
 	  if (partial_status & SW_Summary)
 	    goto do_the_FPU_interrupt;
 	  else
-	    {
-	      FPU_EIP++;
-	      goto FPU_fwait_done;
-	    }
-	}
-      else if ( valid_prefix(code & 0xff) )
-	{
-	  goto do_another_FPU_instruction;
+	    goto FPU_fwait_done;
 	}
 #ifdef PARANOID
-      RE_ENTRANT_CHECK_OFF;
-      printk("FPU emulator: Unknown prefix byte 0x%02x\n", code & 0xff);
-      RE_ENTRANT_CHECK_ON;
-      EXCEPTION(EX_INTERNAL|0x126);
-      FPU_EIP++;
-      goto do_the_FPU_interrupt;
+      EXCEPTION(EX_INTERNAL|0x128);
+      math_abort(FPU_info,SIGILL);
 #endif PARANOID
     }
+
+  RE_ENTRANT_CHECK_OFF;
+  FPU_code_verify_area(1);
+  FPU_modrm = get_fs_byte((unsigned short *) FPU_EIP);
+  RE_ENTRANT_CHECK_ON;
+  FPU_EIP++;
 
   if (partial_status & SW_Summary)
     {
       /* Ignore the error for now if the current instruction is a no-wait
 	 control instruction */
       /* The 80486 manual contradicts itself on this topic,
-	 so I use the following list of such instructions until
-	 I can check on a real 80486:
+	 but a real 80486 uses the following instructions:
 	 fninit, fnstenv, fnsave, fnstsw, fnstenv, fnclex.
        */
+      unsigned short code = (FPU_modrm << 8) | byte1;
       if ( ! ( (((code & 0xf803) == 0xe003) ||    /* fnclex, fninit, fnstsw */
 		(((code & 0x3003) == 0x3001) &&   /* fnsave, fnstcw, fnstenv,
 						     fnstsw */
@@ -290,32 +280,17 @@ do_another_FPU_instruction:
 	}
     }
 
-  FPU_entry_eip = FPU_ORIG_EIP = FPU_EIP;
+  FPU_entry_eip = FPU_ORIG_EIP;
 
-  {
-    unsigned short swapped_code = code;
-    bswapw(swapped_code);
-    FPU_entry_op_cs = (swapped_code << 16) | (FPU_CS & 0xffff) ;
-  }
+  FPU_entry_op_cs = (byte1 << 24) | (FPU_modrm << 16) | (FPU_CS & 0xffff) ;
 
-  if ( (code & 0xff) == OP_SIZE_PREFIX )
-    {
-      FPU_EIP++;
-      RE_ENTRANT_CHECK_OFF;
-      FPU_code_verify_area(1);
-      code = get_fs_word((unsigned short *) FPU_EIP);
-      RE_ENTRANT_CHECK_ON;
-    }
-  FPU_EIP += 2;
-
-  FPU_modrm = code >> 8;
   FPU_rm = FPU_modrm & 7;
 
   if ( FPU_modrm < 0300 )
     {
       /* All of these instructions use the mod/rm byte to get a data address */
-      get_address(FPU_modrm);
-      if ( !(code & 1) )
+      get_address(FPU_modrm, override);
+      if ( !(byte1 & 1) )
 	{
 	  unsigned short status1 = partial_status;
 	  FPU_st0_ptr = &st(0);
@@ -325,19 +300,19 @@ do_another_FPU_instruction:
 	  if ( NOT_EMPTY_0 )
 	    {
 	      unmasked = 0;  /* Do this here to stop compiler warnings. */
-	      switch ( (code >> 1) & 3 )
+	      switch ( (byte1 >> 1) & 3 )
 		{
 		case 0:
-		  unmasked = reg_load_single();
+		  unmasked = reg_load_single(override);
 		  break;
 		case 1:
-		  reg_load_int32();
+		  reg_load_int32(override);
 		  break;
 		case 2:
-		  unmasked = reg_load_double();
+		  unmasked = reg_load_double(override);
 		  break;
 		case 3:
-		  reg_load_int16();
+		  reg_load_int16(override);
 		  break;
 		}
 	      
@@ -465,7 +440,7 @@ do_another_FPU_instruction:
 	}
       else
 	{
-	  load_store_instr(((FPU_modrm & 0x38) | (code & 6)) >> 1);
+	  load_store_instr(((FPU_modrm & 0x38) | (byte1 & 6)) >> 1, override);
 	}
 
     reg_mem_instr_done:
@@ -478,7 +453,7 @@ do_another_FPU_instruction:
   else
     {
       /* None of these instructions access user memory */
-      unsigned char instr_index = (FPU_modrm & 0x38) | (code & 7);
+      unsigned char instr_index = (FPU_modrm & 0x38) | (byte1 & 7);
 
 #ifdef PECULIAR_486
       /* This is supposed to be undefined, but a real 80486 seems
@@ -523,7 +498,7 @@ do_another_FPU_instruction:
 	case _PUSH_:     /* Only used by the fld st(i) instruction */
 	  break;
 	case _null_:
-	  Un_impl();
+	  FPU_illegal();
 	  goto FPU_instruction_done;
 	default:
 	  EXCEPTION(EX_INTERNAL|0x111);
@@ -533,14 +508,6 @@ do_another_FPU_instruction:
     }
 
 FPU_instruction_done:
-
-#ifdef DEBUG
-  { /* !!!!!!!!!!! */
-    static unsigned int count = 0;
-    if ( (++count % 10000) == 0 )
-	printk("%d FP instr., current=0x%04x\n", count, code);
-  } /* !!!!!!!!!!! */
-#endif DEBUG
 
   ip_offset = FPU_entry_eip;
   cs_selector = FPU_entry_op_cs;
@@ -559,13 +526,8 @@ FPU_fwait_done:
 
   if (FPU_lookahead && !need_resched)
     {
-      unsigned char next;
-
-      RE_ENTRANT_CHECK_OFF;
-      FPU_code_verify_area(1);
-      next = get_fs_byte((unsigned char *) FPU_EIP);
-      RE_ENTRANT_CHECK_ON;
-      if ( valid_prefix(next) )
+      FPU_ORIG_EIP = FPU_EIP;
+      if ( valid_prefix(&byte1, &override) )
 	goto do_another_FPU_instruction;
     }
 
@@ -573,27 +535,54 @@ FPU_fwait_done:
 }
 
 
-/* This function is not yet complete. To properly handle all prefix
-   bytes, it will be necessary to change all emulator code which
-   accesses user address space. Access to separate segments is
+/* Support for prefix bytes is not yet complete. To properly handle
+   all prefix bytes, further changes are needed in the emulator code
+   which accesses user address space. Access to separate segments is
    important for msdos emulation. */
-static int valid_prefix(unsigned char byte)
+static int valid_prefix(unsigned char *Byte, overrides *override)
 {
+  unsigned char byte;
   unsigned long ip = FPU_EIP;
+
+  *override = (overrides) { 0, PREFIX_DS };       /* defaults */
+
+  RE_ENTRANT_CHECK_OFF;
+  FPU_code_verify_area(1);
+  byte = get_fs_byte((unsigned char *) FPU_EIP);
+  RE_ENTRANT_CHECK_ON;
 
   while ( 1 )
     {
       switch ( byte )
 	{
 	case ADDR_SIZE_PREFIX:
-	case PREFIX_DS:   /* Redundant */
+	  override->address_size = ADDR_SIZE_PREFIX;
+	  goto do_next_byte;
 	case PREFIX_CS:
+	  override->segment = PREFIX_CS;
+	  goto do_next_byte;
 	case PREFIX_ES:
+	  override->segment = PREFIX_ES;
+	  goto do_next_byte;
 	case PREFIX_SS:
+	  override->segment = PREFIX_SS;
+	  goto do_next_byte;
 	case PREFIX_FS:
+	  override->segment = PREFIX_FS;
+	  goto do_next_byte;
 	case PREFIX_GS:
+	  override->segment = PREFIX_GS;
+	  goto do_next_byte;
 
+	case PREFIX_DS:   /* Redundant unless preceded by another override. */
+	  override->segment = PREFIX_DS;
+
+	  /* rep.. prefixes have no meaning for FPU instructions */
+	case PREFIX_LOCK:
+	case PREFIX_REPE:
+	case PREFIX_REPNE:
 	case OP_SIZE_PREFIX:  /* Used often by gcc, but has no effect. */
+	do_next_byte:
 	  FPU_EIP++;
 	  RE_ENTRANT_CHECK_OFF;
 	  FPU_code_verify_area(1);
@@ -601,10 +590,14 @@ static int valid_prefix(unsigned char byte)
 	  RE_ENTRANT_CHECK_ON;
 	  break;
 	case FWAIT_OPCODE:
+	  *Byte = byte;
 	  return 1;
 	default:
 	  if ( (byte & 0xf8) == 0xd8 )
-	    return 1;
+	    {
+	      *Byte = byte;
+	      return 1;
+	    }
 	  else
 	    {
 	      FPU_EIP = ip;

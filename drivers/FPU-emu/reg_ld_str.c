@@ -44,7 +44,7 @@ FPU_REG FPU_loaded_data;
 
 
 /* Get a long double from user memory */
-int reg_load_extended(void)
+int reg_load_extended(overrides override)
 {
   long double *s = (long double *)FPU_data_address;
   unsigned long sigl, sigh, exp;
@@ -145,7 +145,7 @@ int reg_load_extended(void)
 
 
 /* Get a double from user memory */
-int reg_load_double(void)
+int reg_load_double(overrides override)
 {
   double *dfloat = (double *)FPU_data_address;
   int exp;
@@ -223,7 +223,7 @@ int reg_load_double(void)
 
 
 /* Get a float from user memory */
-int reg_load_single(void)
+int reg_load_single(overrides override)
 {
   float *single = (float *)FPU_data_address;
   unsigned m32;
@@ -292,7 +292,7 @@ int reg_load_single(void)
 
 
 /* Get a long long from user memory */
-void reg_load_int64(void)
+void reg_load_int64(overrides override)
 {
   long long *_s = (long long *)FPU_data_address;
   int e;
@@ -324,7 +324,7 @@ void reg_load_int64(void)
 
 
 /* Get a long from user memory */
-void reg_load_int32(void)
+void reg_load_int32(overrides override)
 {
   long *_s = (long *)FPU_data_address;
   long s;
@@ -356,7 +356,7 @@ void reg_load_int32(void)
 
 
 /* Get a short from user memory */
-void reg_load_int16(void)
+void reg_load_int16(overrides override)
 {
   short *_s = (short *)FPU_data_address;
   int s, e;
@@ -389,7 +389,7 @@ void reg_load_int16(void)
 
 
 /* Get a packed bcd array from user memory */
-void reg_load_bcd(void)
+void reg_load_bcd(overrides override)
 {
   char *s = (char *)FPU_data_address;
   int pos;
@@ -436,7 +436,7 @@ void reg_load_bcd(void)
 /*===========================================================================*/
 
 /* Put a long double into user memory */
-int reg_store_extended(void)
+int reg_store_extended(overrides override)
 {
   /*
     The only exception raised by an attempt to store to an
@@ -475,7 +475,7 @@ int reg_store_extended(void)
 
 
 /* Put a double into user memory */
-int reg_store_double(void)
+int reg_store_double(overrides override)
 {
   double *dfloat = (double *)FPU_data_address;
   unsigned long l[2];
@@ -670,7 +670,7 @@ int reg_store_double(void)
 
 
 /* Put a float into user memory */
-int reg_store_single(void)
+int reg_store_single(overrides override)
 {
   float *single = (float *)FPU_data_address;
   long templ;
@@ -859,7 +859,7 @@ int reg_store_single(void)
 
 
 /* Put a long long into user memory */
-int reg_store_int64(void)
+int reg_store_int64(overrides override)
 {
   long long *d = (long long *)FPU_data_address;
   FPU_REG t;
@@ -918,7 +918,7 @@ int reg_store_int64(void)
 
 
 /* Put a long into user memory */
-int reg_store_int32(void)
+int reg_store_int32(overrides override)
 {
   long *d = (long *)FPU_data_address;
   FPU_REG t;
@@ -972,7 +972,7 @@ int reg_store_int32(void)
 
 
 /* Put a short into user memory */
-int reg_store_int16(void)
+int reg_store_int16(overrides override)
 {
   short *d = (short *)FPU_data_address;
   FPU_REG t;
@@ -1026,7 +1026,7 @@ int reg_store_int16(void)
 
 
 /* Put a packed bcd array into user memory */
-int reg_store_bcd(void)
+int reg_store_bcd(overrides override)
 {
   char *d = (char *)FPU_data_address;
   FPU_REG t;
@@ -1240,7 +1240,7 @@ void frstor(void)
     {
       /* Load each register. */
       FPU_data_address = (void *)(s+i*10);
-      reg_load_extended();
+      reg_load_extended((overrides){0,0});
       stnr = (i+top) & 7;
       tag = regs[stnr].tag;   /* Derived from the loaded tag word. */
       reg_move(&FPU_loaded_data, &regs[stnr]);

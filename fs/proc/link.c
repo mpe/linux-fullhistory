@@ -50,6 +50,10 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 		iput(dir);
 	if (!inode)
 		return -ENOENT;
+	if (!permission(inode, MAY_EXEC)) {
+		iput(inode);
+		return -EACCES;
+	}
 	ino = inode->i_ino;
 	pid = ino >> 16;
 	ino &= 0x0000ffff;

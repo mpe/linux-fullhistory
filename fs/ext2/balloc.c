@@ -267,7 +267,8 @@ void ext2_free_blocks (struct super_block * sb, unsigned long block,
 	if (block < es->s_first_data_block || 
 	    (block + count) > es->s_blocks_count) {
 		ext2_error (sb, "ext2_free_blocks",
-			    "Freeing blocks not in datazone");
+			    "Freeing blocks not in datazone\n"
+			    "block = %lu, count = %lu", block, count);
 		unlock_super (sb);
 		return;
 	}
@@ -303,11 +304,13 @@ void ext2_free_blocks (struct super_block * sb, unsigned long block,
 			ext2_warning (sb, "ext2_free_blocks",
 				      "bit already cleared for block %lu", 
 				      block);
+		else {
+			gdp->bg_free_blocks_count++;
+			es->s_free_blocks_count++;
+		}
 	}
 	
-	gdp->bg_free_blocks_count += count;
 	bh2->b_dirt = 1;
-	es->s_free_blocks_count += count;
 	sb->u.ext2_sb.s_sbh->b_dirt = 1;
 
 	bh->b_dirt = 1;
@@ -355,7 +358,12 @@ int ext2_new_block (struct super_block * sb, unsigned long goal,
 	}
 
 	ext2_debug ("goal=%lu.\n", goal);
-	
+
+	if (goal < es->s_first_data_block || goal >= es->s_blocks_count) {
+		ext2_warning (sb, "ext2_new_block",
+			      "Goal out of bounds: %lu", goal);
+		goal = es->s_first_data_block;
+	}
 repeat:
 	/*
 	 * First, test whether the goal block is free.

@@ -3,7 +3,7 @@
  |                                                                           |
  | Compare two floating point registers                                      |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -336,7 +336,7 @@ void fcompp()
   /* fcompp */
   if (FPU_rm != 1)
     {
-      Un_impl();
+      FPU_illegal();
       return;
     }
   if ( !compare_st_st(1) )
@@ -375,5 +375,5 @@ void fucompp()
 	}
     }
   else
-    Un_impl();
+    FPU_illegal();
 }

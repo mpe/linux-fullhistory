@@ -634,7 +634,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		skb->next = NULL;
 		skb->magic = TCP_WRITE_QUEUE_MAGIC;
 		if (sk->wback == NULL) {
-			sk->wfront=skb;
+			sk->wfront = skb;
 		} else {
 			sk->wback->next = skb;
 		}
@@ -685,7 +685,7 @@ void tcp_enqueue_partial(struct sk_buff * skb, struct sock * sk)
 	if (tmp)
 		del_timer(&sk->partial_timer);
 	sk->partial = skb;
-	sk->partial_timer.expires = 5*HZ;
+	sk->partial_timer.expires = HZ;
 	sk->partial_timer.function = (void (*)(unsigned long)) tcp_send_partial;
 	sk->partial_timer.data = (unsigned long) sk;
 	add_timer(&sk->partial_timer);
@@ -2182,7 +2182,7 @@ tcp_close(struct sock *sk, int timeout)
 			reset_timer(sk, TIME_WRITE, sk->rto);
 			buff->next = NULL;
 			if (sk->wback == NULL) {
-				sk->wfront=buff;
+				sk->wfront = buff;
 			} else {
 				sk->wback->next = buff;
 			}
@@ -2224,7 +2224,7 @@ tcp_write_xmit(struct sock *sk)
         && sk->packets_out < sk->cong_window) {
 		skb = sk->wfront;
 		IS_SKB(skb);
-		sk->wfront =(struct sk_buff *)skb->next;
+		sk->wfront = skb->next;
 		if (sk->wfront == NULL) sk->wback = NULL;
 		skb->next = NULL;
 		if (skb->magic != TCP_WRITE_QUEUE_MAGIC) {

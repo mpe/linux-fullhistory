@@ -69,6 +69,19 @@ extern char emulating;
 #  define RE_ENTRANT_CHECK_ON
 #endif PARANOID
 
+#define FWAIT_OPCODE 0x9b
+#define OP_SIZE_PREFIX 0x66
+#define ADDR_SIZE_PREFIX 0x67
+#define PREFIX_CS 0x2e
+#define PREFIX_DS 0x3e
+#define PREFIX_ES 0x26
+#define PREFIX_SS 0x36
+#define PREFIX_FS 0x64
+#define PREFIX_GS 0x65
+#define PREFIX_REPE 0xf3
+#define PREFIX_REPNE 0xf2
+#define PREFIX_LOCK 0xf0
+
 /* These are to defeat the default action, giving the instruction
    no net effect: */
 #define NO_NET_DATA_EFFECT \
@@ -81,6 +94,7 @@ extern char emulating;
 
 typedef void (*FUNC)(void);
 typedef struct fpu_reg FPU_REG;
+typedef struct { unsigned char address_size, segment; } overrides;
 
 #define	st(x)	( regs[((top+x) &7 )] )
 

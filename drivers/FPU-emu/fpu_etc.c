@@ -3,7 +3,7 @@
  |                                                                           |
  | Implement a few FPU instructions.                                         |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -118,7 +118,7 @@ static void fxam(void)
 }
 
 static FUNC const fp_etc_table[] = {
-  fchs, fabs, Un_impl, Un_impl, ftst_, fxam, Un_impl, Un_impl
+  fchs, fabs, FPU_illegal, FPU_illegal, ftst_, fxam, FPU_illegal, FPU_illegal
 };
 
 void fp_etc()

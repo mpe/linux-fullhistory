@@ -111,13 +111,24 @@ startup_32:
 	movl %ecx,%eax
 	xorl $0x200000,%eax	# check ID flag
 	pushl %eax
-	popfl			# if we are on a 486,
-	pushfl			# we can't change it
+	popfl			# if we are on a straight 486DX, SX, or
+	pushfl			# 487SX we can't change it
 	popl %eax
 	xorl %ecx,%eax
 	andl $0x200000,%eax
 	je is486
-	movl $5,_x86		# 586 setup same as 486 at least for now
+isnew:	pushl %ecx		# restore original EFLAGS
+	popfl
+	movl $1, %eax		# Use the CPUID instruction to 
+	.byte 0x0f, 0xa2	# check the processor type
+	andl $0xf00, %eax	# Set _x86 with the family
+	shrl $8, %eax		# returned.	
+	movl %eax, _x86
+	movl %edi,%esp		# restore esp
+	movl %cr0,%eax		# 486+
+	andl $0x80000011,%eax	# Save PG,PE,ET
+	orl $0x50022,%eax	# set AM, WP, NE and MP
+	jmp 2f
 is486:	pushl %ecx		# restore original EFLAGS
 	popfl
 	movl %edi,%esp		# restore esp

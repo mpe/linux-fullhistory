@@ -624,8 +624,7 @@ static void update_attr(int currcons)
 			attr = (attr & 0xf0) | 0x08;
 	}
 	if (decscnm)
-		video_erase_char = ((color & 0x88) | (((color >> 4) |
-			(color << 4)) & 0x77) << 8) | ' ';
+		video_erase_char = (((color & 0x88) | (((color >> 4) | (color << 4)) & 0x77)) << 8) | ' ';
 	else
 		video_erase_char = (color << 8) | ' ';
 }

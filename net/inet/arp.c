@@ -251,19 +251,14 @@ arp_send_q(void)
 
 
 /* Create and send our response to an ARP request. */
-
-/*
- *	We are now a bit smarter. We know the old buffer must be big enough
- *	so why allocate a new one for the reply ?
- */
- 
-static int arp_response(struct sk_buff *skb,struct arphdr *arp1, struct device *dev,  int addrtype)
+static int
+arp_response(struct arphdr *arp1, struct device *dev,  int addrtype)
 {
   struct arphdr *arp2;
+  struct sk_buff *skb;
   unsigned long src, dst;
   unsigned char *ptr1, *ptr2;
   int hlen;
-  int len;
   struct arp_table *apt = NULL;/* =NULL otherwise the compiler gives warnings */
 
   /* Decode the source (REQUEST) message. */
@@ -275,28 +270,24 @@ static int arp_response(struct sk_buff *skb,struct arphdr *arp1, struct device *
   {
   	apt=arp_lookup_proxy(dst);
   	if(apt==NULL)
-  	{
-  		kfree_skb(skb,FREE_READ);
   		return(1);
-  	}
   }
 
-  skb->h.raw=skb->data;
-  skb->len+=dev->hard_header_len;	/* Grow the packet back to its original form */
-
-  /* Can't check for exceeding the size - some people pad. */
-  len= sizeof(struct arphdr) + (2 * arp1->ar_hln) + (2 * arp1->ar_pln) + dev->hard_header_len;
-  if(len>skb->len)
-  {
-  	printk("Received runt ARP request!\n");
-  	kfree_skb(skb,FREE_READ);
-  	return 1;
+  /* Get some mem and initialize it for the return trip. */
+  skb = alloc_skb(sizeof(struct sk_buff) +
+  		sizeof(struct arphdr) +
+		(2 * arp1->ar_hln) + (2 * arp1->ar_pln) +
+		dev->hard_header_len, GFP_ATOMIC);
+  if (skb == NULL) {
+	printk("ARP: no memory available for ARP REPLY!\n");
+	return(1);
   }
 
-  skb->len      = len;
-
+  skb->mem_addr = skb;
+  skb->len      = sizeof(struct arphdr) + (2 * arp1->ar_hln) + 
+		  (2 * arp1->ar_pln) + dev->hard_header_len;
+  skb->mem_len  = sizeof(struct sk_buff) + skb->len;
   hlen = dev->hard_header(skb->data, dev, ETH_P_ARP, src, dst, skb->len);
-
   if (hlen < 0) {
 	printk("ARP: cannot create HW frame header for REPLY !\n");
 	kfree_skb(skb, FREE_WRITE);
@@ -587,7 +578,8 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
    * Yes, it is for us.
    * Allocate, fill in and send an ARP REPLY packet.
    */
-  ret = arp_response(skb,arp, dev, addr_hint);
+  ret = arp_response(arp, dev, addr_hint);
+  kfree_skb(skb, FREE_READ);
   return(ret);
 }
 
@@ -616,12 +608,14 @@ arp_send(unsigned long paddr, struct device *dev, unsigned long saddr)
   
   /* Fill in the request. */
   skb->sk = NULL;
+  skb->mem_addr = skb;
   skb->len = sizeof(struct arphdr) +
 	     dev->hard_header_len + (2 * dev->addr_len) + 8;
+  skb->mem_len = sizeof(struct sk_buff) + skb->len;
   skb->arp = 1;
   skb->dev = dev;
-  skb->free = 1;
   skb->next = NULL;
+  skb->free = 1;
   tmp = dev->hard_header(skb->data, dev, ETH_P_ARP, 0, saddr, skb->len);
   if (tmp < 0) {
 	kfree_skb(skb,FREE_WRITE);

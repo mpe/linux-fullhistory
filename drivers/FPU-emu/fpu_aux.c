@@ -3,7 +3,7 @@
  |                                                                           |
  | Code to implement some of the FPU auxiliary instructions.                 |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -48,7 +48,8 @@ void finit()
 }
 
 static FUNC const finit_table[] = {
-  Un_impl, Un_impl, fclex, finit, Un_impl, Un_impl, Un_impl, Un_impl
+  Un_impl, Un_impl, fclex, finit,
+  Un_impl, FPU_illegal, FPU_illegal, FPU_illegal
 };
 
 void finit_()
@@ -64,7 +65,8 @@ static void fstsw_ax(void)
 }
 
 static FUNC const fstsw_table[] = {
-  fstsw_ax, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl
+  fstsw_ax, FPU_illegal, FPU_illegal, FPU_illegal,
+  FPU_illegal, FPU_illegal, FPU_illegal, FPU_illegal
 };
 
 void fstsw_()
@@ -79,7 +81,8 @@ static void fnop(void)
 }
 
 static FUNC const fp_nop_table[] = {
-  fnop, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl
+  fnop, FPU_illegal, FPU_illegal, FPU_illegal,
+  FPU_illegal, FPU_illegal, FPU_illegal, FPU_illegal
 };
 
 void fp_nop()

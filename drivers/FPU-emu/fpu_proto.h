@@ -1,5 +1,6 @@
 /* errors.c */
 extern void Un_impl(void);
+extern void FPU_illegal(void);
 extern void emu_printall(void);
 extern void stack_overflow(void);
 extern void stack_underflow(void);
@@ -62,10 +63,10 @@ extern void trig_a(void);
 extern void trig_b(void);
 
 /* get_address.c */
-extern void get_address(unsigned char FPU_modrm);
+extern void get_address(unsigned char FPU_modrm, overrides override);
 
 /* load_store.c */
-extern void load_store_instr(char type);
+extern void load_store_instr(char type, overrides override);
 
 /* poly_2xm1.c */
 extern int poly_2xm1(FPU_REG const *arg, FPU_REG *result);
@@ -104,20 +105,20 @@ extern void fucompp(void);
 extern void fconst(void);
 
 /* reg_ld_str.c */
-extern int reg_load_extended(void);
-extern int reg_load_double(void);
-extern int reg_load_single(void);
-extern void reg_load_int64(void);
-extern void reg_load_int32(void);
-extern void reg_load_int16(void);
-extern void reg_load_bcd(void);
-extern int reg_store_extended(void);
-extern int reg_store_double(void);
-extern int reg_store_single(void);
-extern int reg_store_int64(void);
-extern int reg_store_int32(void);
-extern int reg_store_int16(void);
-extern int reg_store_bcd(void);
+extern int reg_load_extended(overrides override);
+extern int reg_load_double(overrides override);
+extern int reg_load_single(overrides override);
+extern void reg_load_int64(overrides override);
+extern void reg_load_int32(overrides override);
+extern void reg_load_int16(overrides override);
+extern void reg_load_bcd(overrides override);
+extern int reg_store_extended(overrides override);
+extern int reg_store_double(overrides override);
+extern int reg_store_single(overrides override);
+extern int reg_store_int64(overrides override);
+extern int reg_store_int32(overrides override);
+extern int reg_store_int16(overrides override);
+extern int reg_store_bcd(overrides override);
 extern int round_to_int(FPU_REG *r);
 extern char *fldenv(void);
 extern void frstor(void);

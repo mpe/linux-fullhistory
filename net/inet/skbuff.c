@@ -423,8 +423,8 @@ void kfree_skb(struct sk_buff *skb, int rw)
  *	fields and also do memory statistics to find all the [BEEP] leaks.
  */
 
- struct sk_buff *alloc_skb(unsigned int size,int priority)
- {
+struct sk_buff *alloc_skb(unsigned int size,int priority)
+{
 	struct sk_buff *skb=(struct sk_buff *)kmalloc(size,priority);
 	if(skb==NULL)
 		return NULL;
@@ -440,7 +440,7 @@ void kfree_skb(struct sk_buff *skb, int rw)
 	skb->magic_debug_cookie=SK_GOOD_SKB;
 	skb->users=0;
 	return skb;
- }
+}
 
 /*
  *	Free an skbuff by memory
