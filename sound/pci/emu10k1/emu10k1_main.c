@@ -680,12 +680,15 @@ static emu_chip_details_t emu_chip_details[] = {
 	 .driver = "EMU10K1", .name = "E-mu APS [4001]", 
 	 .emu10k1_chip = 1,
 	 .ecard = 1} ,
-	{.vendor = 0x1102, .device = 0x0002, .subsystem = 0x00000000,
+	{.vendor = 0x1102, .device = 0x0002, .subsystem = 0x80641102,
+	 .driver = "EMU10K1", .name = "SB Live 5.1", 
+	 .emu10k1_chip = 1,
+	 .ac97_chip = 1} ,
+	{.vendor = 0x1102, .device = 0x0002,
 	 .driver = "EMU10K1", .name = "SB Live [Unknown]", 
 	 .emu10k1_chip = 1,
 	 .ac97_chip = 1} ,
-	{.vendor = 0x0000, .device = 0x0000, .subsystem = 0x00000000,
-	 .driver = "Unknown", .name = "Unknown"} , 
+	{ } /* terminator */
 };
 
 int __devinit snd_emu10k1_create(snd_card_t * card,
@@ -699,8 +702,8 @@ int __devinit snd_emu10k1_create(snd_card_t * card,
 	emu10k1_t *emu;
 	int err;
 	int is_audigy;
-	int entry_number;
-	emu_chip_details_t *c;
+	unsigned char revision;
+	const emu_chip_details_t *c;
 	static snd_device_ops_t ops = {
 		.dev_free =	snd_emu10k1_dev_free,
 	};
@@ -731,32 +734,33 @@ int __devinit snd_emu10k1_create(snd_card_t * card,
 	emu->synth = NULL;
 	emu->get_synth_voice = NULL;
 	/* read revision & serial */
-	pci_read_config_byte(pci, PCI_REVISION_ID, (char *)&emu->revision);
+	pci_read_config_byte(pci, PCI_REVISION_ID, &revision);
+	emu->revision = revision;
 	pci_read_config_dword(pci, PCI_SUBSYSTEM_VENDOR_ID, &emu->serial);
 	pci_read_config_word(pci, PCI_SUBSYSTEM_ID, &emu->model);
 	emu->card_type = EMU10K1_CARD_CREATIVE;
-	snd_printk("vendor=0x%x, device=0x%x, subsystem_vendor_id=0x%x, subsystem_id=0x%x\n",pci->vendor, pci->device, emu->serial, emu->model);
+	snd_printdd("vendor=0x%x, device=0x%x, subsystem_vendor_id=0x%x, subsystem_id=0x%x\n",pci->vendor, pci->device, emu->serial, emu->model);
 
-	entry_number=0;
-	for (c=emu_chip_details; c->vendor; c++) {
-		if ((c->vendor == pci->vendor) && (c->device == pci->device) ) {
+	for (c = emu_chip_details; c->vendor; c++) {
+		if (c->vendor == pci->vendor && c->device == pci->device) {
 			if (c->subsystem == emu->serial) break;
 			if (c->subsystem == 0) break;
 		}
-		entry_number++;
 	}
-	emu->card_capabilities = c;
 	if (c->vendor == 0) {
-		snd_printk("Card not recognised\n");
+		snd_printk(KERN_ERR "emu10k1: Card not recognised\n");
 		kfree(emu);
 		pci_disable_device(pci);
 		return -ENOENT;
 	}
-	if (c->subsystem != 0) snd_printk("Sound card name=%s\n", c->name);
-	else snd_printk("Sound card name=%s, vendor=0x%x, device=0x%x, subsystem=0x%x\n", c->name, pci->vendor, pci->device, emu->serial);  
+	emu->card_capabilities = c;
+	if (c->subsystem != 0)
+		snd_printdd("Sound card name=%s\n", c->name);
+	else
+		snd_printdd("Sound card name=%s, vendor=0x%x, device=0x%x, subsystem=0x%x\n", c->name, pci->vendor, pci->device, emu->serial);
 	
-	// is_audigy = (int)pci->driver_data;
-	is_audigy = (pci->device == 0x0004) || ( (pci->device == 0x0008) );
+	is_audigy = emu->audigy = c->emu10k2_chip;
+
 	/* set the DMA transfer mask */
 	emu->dma_mask = is_audigy ? AUDIGY_DMA_MASK : EMU10K1_DMA_MASK;
 	if (pci_set_dma_mask(pci, emu->dma_mask) < 0 ||
@@ -766,7 +770,6 @@ int __devinit snd_emu10k1_create(snd_card_t * card,
 		pci_disable_device(pci);
 		return -ENXIO;
 	}
-	emu->audigy = is_audigy;
 	if (is_audigy)
 		emu->gpr_base = A_FXGPREGBASE;
 	else
@@ -813,25 +816,14 @@ int __devinit snd_emu10k1_create(snd_card_t * card,
 
 	pci_set_master(pci);
 
-	if (emu->serial == 0x40011102) {
+	if (c->ecard) {
 		emu->card_type = EMU10K1_CARD_EMUAPS;
 		emu->APS = 1;
-		emu->no_ac97 = 1; /* APS has no AC97 chip */
 	}
-	else if (emu->revision == 4 && emu->serial == 0x10051102) {
-		/* Audigy 2 EX has apparently no effective AC97 controls
-		 * (for both input and output), so we skip the AC97 detections
-		 */
-		snd_printdd(KERN_INFO "Audigy2 EX is detected. skipping ac97.\n");
-		emu->no_ac97 = 1;	
-	}
+	if (! c->ac97_chip)
+		emu->no_ac97 = 1;
 	
-	if (emu->revision == 4 && (emu->model == 0x2001 || emu->model == 0x2002)) {
-		/* Audigy 2 ZS */
-		snd_printdd(KERN_INFO "Audigy2 ZS is detected. setting 7.1 mode.\n");
-		emu->spk71 = 1;
-	}
-	
+	emu->spk71 = c->spk71;
 	
 	emu->fx8010.fxbus_mask = 0x303f;
 	if (extin_mask == 0)

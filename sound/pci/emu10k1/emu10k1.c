@@ -200,7 +200,9 @@ static int __devinit snd_card_emu10k1_probe(struct pci_dev *pci,
  
 	strcpy(card->driver, emu->card_capabilities->driver);
 	strcpy(card->shortname, emu->card_capabilities->name);
-	sprintf(card->longname, "%s (rev.%d, serial:0x%x) at 0x%lx, irq %i", card->shortname, emu->revision, emu->serial, emu->port, emu->irq);
+	snprintf(card->longname, sizeof(card->longname),
+		 "%s (rev.%d, serial:0x%x) at 0x%lx, irq %i",
+		 card->shortname, emu->revision, emu->serial, emu->port, emu->irq);
 
 	if ((err = snd_card_register(card)) < 0) {
 		snd_card_free(card);
