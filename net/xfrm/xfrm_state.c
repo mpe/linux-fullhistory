@@ -304,10 +304,17 @@ xfrm_state_find(xfrm_address_t *daddr, xfrm_address_t *saddr,
 		unsigned short family)
 {
 	unsigned h = xfrm_dst_hash(daddr, family);
-	struct xfrm_state *x;
+	struct xfrm_state *x, *x0;
 	int acquire_in_progress = 0;
 	int error = 0;
 	struct xfrm_state *best = NULL;
+	struct xfrm_state_afinfo *afinfo;
+	
+	afinfo = xfrm_state_get_afinfo(family);
+	if (afinfo == NULL) {
+		*err = -EAFNOSUPPORT;
+		return NULL;
+	}
 
 	spin_lock_bh(&xfrm_state_lock);
 	list_for_each_entry(x, xfrm_state_bydst+h, bydst) {
@@ -343,14 +350,24 @@ xfrm_state_find(xfrm_address_t *daddr, xfrm_address_t *saddr,
 			} else if (x->km.state == XFRM_STATE_ERROR ||
 				   x->km.state == XFRM_STATE_EXPIRED) {
 				if (xfrm_selector_match(&x->sel, fl, family))
-					error = 1;
+					error = -ESRCH;
 			}
 		}
 	}
 
 	x = best;
-	if (!x && !error && !acquire_in_progress &&
-	    ((x = xfrm_state_alloc()) != NULL)) {
+	if (!x && !error && !acquire_in_progress) {
+		x0 = afinfo->state_lookup(&tmpl->id.daddr, tmpl->id.spi, tmpl->id.proto);
+		if (x0 != NULL) {
+			xfrm_state_put(x0);
+			error = -EEXIST;
+			goto out;
+		}
+		x = xfrm_state_alloc();
+		if (x == NULL) {
+			error = -ENOMEM;
+			goto out;
+		}
 		/* Initialize temporary selector matching only
 		 * to current session. */
 		xfrm_init_tempsel(x, fl, tmpl, daddr, saddr, family);
@@ -372,15 +389,16 @@ xfrm_state_find(xfrm_address_t *daddr, xfrm_address_t *saddr,
 			x->km.state = XFRM_STATE_DEAD;
 			xfrm_state_put(x);
 			x = NULL;
-			error = 1;
+			error = -ESRCH;
 		}
 	}
+out:
 	if (x)
 		xfrm_state_hold(x);
 	else
-		*err = acquire_in_progress ? -EAGAIN :
-			(error ? -ESRCH : -ENOMEM);
+		*err = acquire_in_progress ? -EAGAIN : error;
 	spin_unlock_bh(&xfrm_state_lock);
+	xfrm_state_put_afinfo(afinfo);
 	return x;
 }
 
