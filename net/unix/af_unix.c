@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.96 2000/05/12 23:51:26 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.98 2000/06/19 06:24:59 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -662,21 +662,44 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (sunaddr->sun_path[0]) {
 		lock_kernel();
 		err = 0;
+		/*
+		 * Get the parent directory, calculate the hash for last
+		 * component.
+		 */
 		if (path_init(sunaddr->sun_path, LOOKUP_PARENT, &nd))
 			err = path_walk(sunaddr->sun_path, &nd);
 		if (err)
 			goto out_mknod_parent;
+		/*
+		 * Yucky last component or no last component at all?
+		 * (foo/., foo/.., /////)
+		 */
 		err = -EEXIST;
 		if (nd.last_type != LAST_NORM)
 			goto out_mknod;
+		/*
+		 * Lock the directory.
+		 */
 		down(&nd.dentry->d_inode->i_sem);
+		/*
+		 * Do the final lookup.
+		 */
 		dentry = lookup_hash(&nd.last, nd.dentry);
 		err = PTR_ERR(dentry);
 		if (IS_ERR(dentry))
 			goto out_mknod_unlock;
 		err = -ENOENT;
+		/*
+		 * Special case - lookup gave negative, but... we had foo/bar/
+		 * From the vfs_mknod() POV we just have a negative dentry -
+		 * all is fine. Let's be bastards - you had / on the end, you've
+		 * been asking for (non-existent) directory. -ENOENT for you.
+		 */
 		if (nd.last.name[nd.last.len] && !dentry->d_inode)
 			goto out_mknod_dput;
+		/*
+		 * All right, let's create it.
+		 */
 		err = vfs_mknod(nd.dentry->d_inode, dentry,
 			S_IFSOCK|sock->inode->i_mode, 0);
 		if (err)
@@ -772,12 +795,16 @@ static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
 	 * If it was connected, reconnect.
 	 */
 	if (unix_peer(sk)) {
-		sock_put(unix_peer(sk));
-		unix_peer(sk)=NULL;
+		struct sock *old_peer = unix_peer(sk);
+		unix_peer(sk)=other;
+		unix_state_wunlock(sk);
+
+		sock_put(old_peer);
+	} else {
+		unix_peer(sk)=other;
+		unix_state_wunlock(sk);
 	}
-	unix_peer(sk)=other;
-	unix_state_wunlock(sk);
-	return 0;
+ 	return 0;
 
 out_unlock:
 	unix_state_wunlock(sk);
@@ -1089,9 +1116,8 @@ static void unix_destruct_fds(struct sk_buff *skb)
 	unix_detach_fds(&scm, skb);
 
 	/* Alas, it calls VFS */
-	lock_kernel();
+	/* So fscking what? fput() had been SMP-safe since the last Summer */
 	scm_destroy(&scm);
-	unlock_kernel();
 	sock_wfree(skb);
 }
 
@@ -1188,11 +1214,14 @@ restart:
 		err = 0;
 		unix_state_wlock(sk);
 		if (unix_peer(sk) == other) {
-			sock_put(other);
 			unix_peer(sk)=NULL;
+			unix_state_wunlock(sk);
+
+			sock_put(other);
 			err = -ECONNREFUSED;
+		} else {
+			unix_state_wunlock(sk);
 		}
-		unix_state_wunlock(sk);
 
 		other = NULL;
 		if (err)
@@ -1330,8 +1359,8 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	return sent;
 
 pipe_err_free:
-	kfree_skb(skb);
 	unix_state_runlock(other);
+	kfree_skb(skb);
 pipe_err:
 	if (sent==0 && !(msg->msg_flags&MSG_NOSIGNAL))
 		send_sig(SIGPIPE,current,0);

@@ -492,12 +492,12 @@ asmlinkage void __init start_kernel(void)
 	printk(linux_banner);
 	setup_arch(&command_line);
 	printk("Kernel command line: %s\n", saved_command_line);
+	parse_options(command_line);
 	trap_init();
 	init_IRQ();
 	sched_init();
 	time_init();
 	softirq_init();
-	parse_options(command_line);
 
 	/*
 	 * HACK ALERT! This is early. We're enabling the console before
@@ -699,7 +699,8 @@ static void __init do_basic_setup(void)
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	root_mountflags = real_root_mountflags;
-	if (mount_initrd && MAJOR(ROOT_DEV) == RAMDISK_MAJOR && MINOR(ROOT_DEV) == 0) {
+	if (mount_initrd && ROOT_DEV != real_root_dev
+	    && MAJOR(ROOT_DEV) == RAMDISK_MAJOR && MINOR(ROOT_DEV) == 0) {
 		int error;
 		int i, pid;
 
@@ -709,7 +710,7 @@ static void __init do_basic_setup(void)
 		if (MAJOR(real_root_dev) != RAMDISK_MAJOR
 		     || MINOR(real_root_dev) != 0) {
 #ifdef CONFIG_BLK_DEV_MD
-			autodetect_raid();
+			md_run_setup();
 #endif
 			error = change_root(real_root_dev,"/initrd");
 			if (error)

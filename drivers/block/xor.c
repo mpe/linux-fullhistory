@@ -1814,7 +1814,7 @@ static inline void pick_fastest_function(void)
 			fastest = f;
 	}
 #ifdef CONFIG_X86_XMM 
-	if (boot_cpu_data.mmu_cr4_features & X86_CR4_OSXMMEXCPT) {
+	if (cpu_has_xmm) {
 		fastest = &t_xor_block_pIII_kni;
 	}
 #endif
@@ -1849,7 +1849,7 @@ void calibrate_xor_block(void)
 #endif
 
 #ifdef CONFIG_X86_XMM 
-	if (boot_cpu_data.mmu_cr4_features & X86_CR4_OSXMMEXCPT) {
+	if (cpu_has_xmm) {
 		printk(KERN_INFO
 			"raid5: KNI detected, trying cache-avoiding KNI checksum routine\n");
 		/* we force the use of the KNI xor block because it
@@ -1892,4 +1892,3 @@ void calibrate_xor_block(void)
 #endif /* __sparc_v9__ */
 
 MD_EXPORT_SYMBOL(xor_block);
-

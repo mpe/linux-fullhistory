@@ -71,7 +71,7 @@ static unsigned int coda_psdev_poll(struct file *file, poll_table * wait)
         struct venus_comm *vcp = &coda_upc_comm;
 	unsigned int mask = POLLOUT | POLLWRNORM;
 
-	poll_wait(file, &(vcp->vc_waitq), wait);
+	poll_wait(file, &vcp->vc_waitq, wait);
 	if (!list_empty(&vcp->vc_pending))
                 mask |= POLLIN | POLLRDNORM;
 
@@ -99,15 +99,15 @@ static int coda_psdev_ioctl(struct inode * inode, struct file * filp,
  */
  
 static ssize_t coda_psdev_write(struct file *file, const char *buf, 
-				size_t count, loff_t *off)
+				size_t nbytes, loff_t *off)
 {
         struct venus_comm *vcp = &coda_upc_comm;
         struct upc_req *req = NULL;
         struct upc_req *tmp;
 	struct list_head *lh;
 	struct coda_in_hdr hdr;
+	ssize_t retval = 0, count = 0;
 	int error;
-
 
 	if ( !coda_upc_comm.vc_pid ) 
 		return -EIO;
@@ -115,8 +115,8 @@ static ssize_t coda_psdev_write(struct file *file, const char *buf,
 	if (copy_from_user(&hdr, buf, 2 * sizeof(u_long)))
 	        return -EFAULT;
 
-	CDEBUG(D_PSDEV, "(process,opc,uniq)=(%d,%ld,%ld), count %ld\n", 
-	       current->pid, hdr.opcode, hdr.unique, (long)count);
+	CDEBUG(D_PSDEV, "(process,opc,uniq)=(%d,%ld,%ld), nbytes %ld\n", 
+	       current->pid, hdr.opcode, hdr.unique, (long)nbytes);
 
         if (DOWNCALL(hdr.opcode)) {
 		struct super_block *sb = NULL;
@@ -125,41 +125,47 @@ static ssize_t coda_psdev_write(struct file *file, const char *buf,
 
 		sb = coda_super_info.sbi_sb;
 		if ( !sb ) {
-			printk("coda_psdev_write: downcall, no SB!\n");
-			return count;
+			CDEBUG(D_PSDEV, "coda_psdev_write: downcall, no SB!\n");
+                        count = nbytes;
+                        goto out;
 		}
 		CDEBUG(D_PSDEV, "handling downcall\n");
 
-		if  ( count < sizeof(struct coda_out_hdr) ) {
+		if  ( nbytes < sizeof(struct coda_out_hdr) ) {
 		        printk("coda_downcall opc %ld uniq %ld, not enough!\n",
 			       hdr.opcode, hdr.unique);
-			return count;
+			count = nbytes;
+			goto out;
 		}
-		CODA_ALLOC(dcbuf, union outputArgs *, size);
-		if ( count > size ) {
+		if ( nbytes > size ) {
 		        printk("Coda: downcall opc %ld, uniq %ld, too much!",
 			       hdr.opcode, hdr.unique);
-		        count = size;
+		        nbytes = size;
 		}
-		if (copy_from_user(dcbuf, buf, count))
-		        return -EFAULT;
+		CODA_ALLOC(dcbuf, union outputArgs *, nbytes);
+		if (copy_from_user(dcbuf, buf, nbytes)) {
+			CODA_FREE(dcbuf, nbytes);
+			retval = -EFAULT;
+			goto out;
+		}
 
 		/* what downcall errors does Venus handle ? */
 		lock_kernel();
 		error = coda_downcall(hdr.opcode, dcbuf, sb);
 		unlock_kernel();
 
-		if ( error) {
-		        printk("psdev_write: coda_downcall error: %d\n", 
-			       error);
-			return 0;
+		CODA_FREE(dcbuf, nbytes);
+		if (error) {
+		        printk("psdev_write: coda_downcall error: %d\n", error);
+			retval = error;
+			goto out;
 		}
-		CODA_FREE(dcbuf, size);
-		return count;
+		count = nbytes;
+		goto out;
         }
-
         
         /* Look for the message on the processing queue. */
+        lock_kernel();
 	lh  = &vcp->vc_processing;
         while ( (lh = lh->next) != &vcp->vc_processing ) {
 		tmp = list_entry(lh, struct upc_req , uc_chain);
@@ -171,31 +177,40 @@ static ssize_t coda_psdev_write(struct file *file, const char *buf,
 			break;
 		}
 	}
+        unlock_kernel();
+
         if (!req) {
 	        printk("psdev_write: msg (%ld, %ld) not found\n", 
 		       hdr.opcode, hdr.unique);
-		return(-ESRCH);
+		retval = -ESRCH;
+		goto out;
         }
 
         /* move data into response buffer. */
-        if (req->uc_outSize < count) {
+	if (req->uc_outSize < nbytes) {
                 printk("psdev_write: too much cnt: %d, cnt: %ld, opc: %ld, uniq: %ld.\n",
-		       req->uc_outSize, (long)count, hdr.opcode, hdr.unique);
-		count = req->uc_outSize; /* don't have more space! */
+		       req->uc_outSize, (long)nbytes, hdr.opcode, hdr.unique);
+		nbytes = req->uc_outSize; /* don't have more space! */
 	}
-        if (copy_from_user(req->uc_data, buf, count))
-	        return -EFAULT;
+        if (copy_from_user(req->uc_data, buf, nbytes)) {
+		req->uc_flags |= REQ_ABORT;
+		wake_up(&req->uc_sleep);
+		retval = -EFAULT;
+		goto out;
+	}
 
 	/* adjust outsize. is this usefull ?? */
-        req->uc_outSize = count;	
+        req->uc_outSize = nbytes;	
         req->uc_flags |= REQ_WRITE;
+	count = nbytes;
 
 	CDEBUG(D_PSDEV, 
 	       "Found! Count %ld for (opc,uniq)=(%ld,%ld), upc_req at %p\n", 
 	        (long)count, hdr.opcode, hdr.unique, &req);
 
         wake_up(&req->uc_sleep);
-        return(count);  
+out:
+        return(count ? count : retval);  
 }
 
 /*
@@ -203,45 +218,71 @@ static ssize_t coda_psdev_write(struct file *file, const char *buf,
  */
 
 static ssize_t coda_psdev_read(struct file * file, char * buf, 
-			       size_t count, loff_t *off)
+			       size_t nbytes, loff_t *off)
 {
+	DECLARE_WAITQUEUE(wait, current);
         struct venus_comm *vcp = &coda_upc_comm;
         struct upc_req *req;
-	int result = count ;
+	ssize_t retval = 0, count = 0;
 
-        CDEBUG(D_PSDEV, "count %ld\n", (long)count);
-        if (list_empty(&(vcp->vc_pending))) {
-              return -1;	
-        }
-    
-        req = list_entry((vcp->vc_pending.next), struct upc_req, uc_chain);
-        list_del(&(req->uc_chain));
+	if (nbytes == 0)
+		return 0;
 
-        /* Move the input args into userspace */
-        if (req->uc_inSize <= count)
-              result = req->uc_inSize;
+	lock_kernel();
 
-        if (count < req->uc_inSize) {
+	add_wait_queue(&vcp->vc_waitq, &wait);
+	set_current_state(TASK_INTERRUPTIBLE);
+
+	while (list_empty(&vcp->vc_pending)) {
+		if (file->f_flags & O_NONBLOCK) {
+			retval = -EAGAIN;
+			break;
+		}
+		if (signal_pending(current)) {
+			retval = -ERESTARTSYS;
+			break;
+		}
+		schedule();
+	}
+
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&vcp->vc_waitq, &wait);
+
+	if (retval)
+		goto out;
+
+	req = list_entry(vcp->vc_pending.next, struct upc_req,uc_chain);
+	list_del(&req->uc_chain);
+
+	/* Move the input args into userspace */
+	count = req->uc_inSize;
+	if (nbytes < req->uc_inSize) {
                 printk ("psdev_read: Venus read %ld bytes of %d in message\n",
-			(long)count, req->uc_inSize);
+			(long)nbytes, req->uc_inSize);
+		count = nbytes;
         }
 
-        if ( copy_to_user(buf, req->uc_data, result))
-	        return -EFAULT;
+	if (copy_to_user(buf, req->uc_data, count)) {
+	        retval = -EFAULT;
+		goto free_out;
+	}
         
-        /* If request was a signal, don't enqueue */
-        if (req->uc_opcode == CODA_SIGNAL) {
-                    CDEBUG(D_PSDEV, "vcread: signal msg (%d, %d)\n", 
-                              req->uc_opcode, req->uc_unique);
-              CODA_FREE(req->uc_data, sizeof(struct coda_in_hdr));
-              CODA_FREE(req, sizeof(struct upc_req));
-              return count;
-        }
-    
-        req->uc_flags |= REQ_READ;
-        list_add(&(req->uc_chain), vcp->vc_processing.prev);
+	/* If request was not a signal, enqueue and don't free */
+	if (req->uc_opcode != CODA_SIGNAL) {
+		req->uc_flags |= REQ_READ;
+		list_add(&(req->uc_chain), vcp->vc_processing.prev);
+		goto out;
+	}
 
-        return result;
+	CDEBUG(D_PSDEV, "vcread: signal msg (%d, %d)\n", 
+			req->uc_opcode, req->uc_unique);
+
+free_out:
+	CODA_FREE(req->uc_data, sizeof(struct coda_in_hdr));
+	CODA_FREE(req, sizeof(struct upc_req));
+out:
+	unlock_kernel();
+	return (count ? count : retval);
 }
 
 
@@ -251,7 +292,7 @@ static int coda_psdev_open(struct inode * inode, struct file * file)
         ENTRY;
 	
 	/* first opener: must be lento. Initialize & take its pid */
-	if ( file->f_flags == O_RDWR ) {
+	if ( (file->f_flags & O_ACCMODE) == O_RDWR ) {
 		if ( vcp->vc_pid ) {
 			printk("Venus pid already set to %d!!\n", vcp->vc_pid);
 			return -1;
@@ -264,7 +305,7 @@ static int coda_psdev_open(struct inode * inode, struct file * file)
 	
 	vcp->vc_inuse++;
 
-	if ( file->f_flags == O_RDWR ) {
+	if ( (file->f_flags & O_ACCMODE) == O_RDWR ) {
 		vcp->vc_pid = current->pid;
 		vcp->vc_seq = 0;
 		INIT_LIST_HEAD(&vcp->vc_pending);
@@ -334,6 +375,7 @@ static int coda_psdev_release(struct inode * inode, struct file * file)
 
 
 static struct file_operations coda_psdev_fops = {
+	owner:		THIS_MODULE,
 	read:		coda_psdev_read,
 	write:		coda_psdev_write,
 	poll:		coda_psdev_poll,

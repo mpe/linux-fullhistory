@@ -6,6 +6,7 @@
  *  Copyright (C) 1996-1997 Régis Duchesne
  *  Copyright (C) 1998 Joseph Malicki
  *  Copyright (C) 1999 Steve Dodd
+ *  Copyright (C) 2000 Anton Altaparmakov
  */
 
 #include "ntfstypes.h"
@@ -551,11 +552,11 @@ int ntfs_readwrite_attr(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 		dest->size=chunk;
 		error=ntfs_getput_clusters(ino->vol,s_cluster,
 					   offset-s_vcn*clustersize,dest);
-		if(error)/* FIXME: maybe return failure */
+		if(error)
 		{
 			ntfs_error("Read error\n");
 			dest->size=copied;
-			return 0;
+			return error;
 		}
 		l-=chunk;
 		copied+=chunk;

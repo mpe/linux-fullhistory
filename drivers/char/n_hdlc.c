@@ -663,7 +663,7 @@ static void n_hdlc_tty_receive(struct tty_struct *tty,
 #if LINUX_VERSION_CODE < VERSION(2,3,0) 
 		kill_fasync (n_hdlc->tty->fasync, SIGIO);
 #else
-		kill_fasync (n_hdlc->tty->fasync, SIGIO, POLL_IN);
+		kill_fasync(&n_hdlc->tty->fasync, SIGIO, POLL_IN);
 #endif
 }	/* end of n_hdlc_tty_receive() */
 

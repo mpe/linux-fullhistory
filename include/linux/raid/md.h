@@ -78,7 +78,6 @@ extern int md_do_sync(mddev_t *mddev, mdp_disk_t *spare);
 extern void md_done_sync(mddev_t *mddev, int blocks, int ok);
 extern void md_recover_arrays (void);
 extern int md_check_ordering (mddev_t *mddev);
-extern void autodetect_raid(void);
 extern struct gendisk * find_gendisk (kdev_t dev);
 extern int md_notify_reboot(struct notifier_block *this,
 					unsigned long code, void *x);

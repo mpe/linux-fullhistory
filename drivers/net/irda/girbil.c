@@ -201,13 +201,13 @@ static int girbil_reset(struct irda_task *task)
 		self->set_dtr_rts(self->dev, TRUE, FALSE);
 		irda_task_next_state(task, IRDA_TASK_WAIT1);
 		/* Sleep at least 5 ms */
-		ret = MSECS_TO_JIFFIES(10);
+		ret = MSECS_TO_JIFFIES(20);
 		break;
 	case IRDA_TASK_WAIT1:
 		/* Set DTR and clear RTS to enter command mode */
 		self->set_dtr_rts(self->dev, FALSE, TRUE);
 		irda_task_next_state(task, IRDA_TASK_WAIT2);
-		ret = MSECS_TO_JIFFIES(10);
+		ret = MSECS_TO_JIFFIES(20);
 		break;
 	case IRDA_TASK_WAIT2:
 		/* Write control byte */

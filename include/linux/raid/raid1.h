@@ -9,6 +9,7 @@ struct mirror_info {
 	kdev_t		dev;
 	int		next;
 	int		sect_limit;
+	int		head_position;
 
 	/*
 	 * State bits:
@@ -33,6 +34,18 @@ struct raid1_private_data {
 	int			resync_mirrors;
 	struct mirror_info	*spare;
 	md_spinlock_t		device_lock;
+
+	/* buffer pool */
+	/* buffer_heads that we have pre-allocated have b_pprev -> &freebh
+	 * and are linked into a stack using b_next
+	 * raid1_bh that are pre-allocated have R1BH_PreAlloc set.
+	 * All these variable are protected by device_lock
+	 */
+	struct buffer_head	*freebh;
+	int			freebh_cnt;	/* how many are on the list */
+	struct raid1_bh		*freer1;
+	struct raid1_bh		*freebuf; 	/* each bh_req has a page allocated */
+	md_wait_queue_head_t	wait_buffer;
 
 	/* for use when syncing mirrors: */
 	int	start_active, start_ready,
@@ -68,12 +81,12 @@ struct raid1_bh {
 	unsigned long		state;
 	mddev_t			*mddev;
 	struct buffer_head	*master_bh;
-	struct buffer_head	*mirror_bh [MD_SB_DISKS];
+	struct buffer_head	*mirror_bh_list;
 	struct buffer_head	bh_req;
-	struct buffer_head	*next_retry;
+	struct raid1_bh		*next_r1;	/* next for retry or in free list */
 };
 /* bits for raid1_bh.state */
 #define	R1BH_Uptodate	1
 #define	R1BH_SyncPhase	2
-
+#define	R1BH_PreAlloc	3	/* this was pre-allocated, add to free list */
 #endif

@@ -33,7 +33,7 @@
 #include "ibm.h"
 
 extern void device_init(void);
-extern void md_setup_drive(void);
+extern void md_run_setup(void);
 extern int *blk_size[];
 extern void rd_load(void);
 extern void initrd_load(void);
@@ -437,7 +437,7 @@ int __init partition_setup(void)
 	rd_load();
 #endif
 #ifdef CONFIG_BLK_DEV_MD
-	autodetect_raid();
+	md_run_setup();
 #endif
 	return 0;
 }

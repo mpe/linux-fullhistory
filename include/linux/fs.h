@@ -554,6 +554,15 @@ struct fasync_struct {
 	struct	file 		*fa_file;
 };
 
+#define FASYNC_MAGIC 0x4601
+
+/* SMP safe fasync helpers: */
+extern int fasync_helper(int, struct file *, int, struct fasync_struct **);
+/* can be called from interrupts */
+extern void kill_fasync(struct fasync_struct **, int, int);
+/* only for net: no internal synchronization */
+extern void __kill_fasync(struct fasync_struct *, int, int);
+
 struct nameidata {
 	struct dentry *dentry;
 	struct vfsmount *mnt;
@@ -561,10 +570,6 @@ struct nameidata {
 	unsigned int flags;
 	int last_type;
 };
-
-#define FASYNC_MAGIC 0x4601
-
-extern int fasync_helper(int, struct file *, int, struct fasync_struct **);
 
 #define DQUOT_USR_ENABLED	0x01		/* User diskquotas enabled */
 #define DQUOT_GRP_ENABLED	0x02		/* Group diskquotas enabled */
@@ -866,9 +871,6 @@ asmlinkage long sys_open(const char *, int, int);
 asmlinkage long sys_close(unsigned int);	/* yes, it's really unsigned */
 extern int do_close(unsigned int, int);		/* yes, it's really unsigned */
 extern int do_truncate(struct dentry *, loff_t start);
-extern int get_unused_fd(void);
-extern void __put_unused_fd(struct files_struct *, unsigned int); /* locked outside */
-extern void put_unused_fd(unsigned int);                          /* locked inside */
 
 extern struct file *filp_open(const char *, int, int);
 extern struct file * dentry_open(struct dentry *, struct vfsmount *, int);
@@ -878,7 +880,6 @@ extern char * getname(const char *);
 #define putname(name)	free_page((unsigned long)(name))
 
 enum {BDEV_FILE, BDEV_SWAP, BDEV_FS, BDEV_RAW};
-extern void kill_fasync(struct fasync_struct *, int, int);
 extern int register_blkdev(unsigned int, const char *, struct block_device_operations *);
 extern int unregister_blkdev(unsigned int, const char *);
 extern struct block_device *bdget(dev_t);

@@ -328,7 +328,7 @@ nlm_gc_hosts(void)
 			if (host->h_monitored)
 				nsm_unmonitor(host);
 			if ((clnt = host->h_rpcclnt) != NULL) {
-				if (clnt->cl_users) {
+				if (atomic_read(&clnt->cl_users)) {
 					printk(KERN_WARNING
 						"lockd: active RPC handle\n");
 					clnt->cl_dead = 1;

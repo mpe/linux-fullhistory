@@ -747,10 +747,10 @@ int sock_wake_async(struct socket *sock, int how, int band)
 		/* fall through */
 	case 0:
 	call_kill:
-		kill_fasync(sock->fasync_list, SIGIO, band);
+		__kill_fasync(sock->fasync_list, SIGIO, band);
 		break;
 	case 3:
-		kill_fasync(sock->fasync_list, SIGURG, band);
+		__kill_fasync(sock->fasync_list, SIGURG, band);
 	}
 	return 0;
 }

@@ -438,6 +438,11 @@ check_table:
 			continue;
 		add_gd_partition(hd, minor, first_sector+START_SECT(p)*sector_size,
 				 NR_SECTS(p)*sector_size);
+#if CONFIG_BLK_DEV_MD && CONFIG_AUTODETECT_RAID
+		if (SYS_IND(p) == LINUX_RAID_PARTITION) {
+			md_autodetect_dev(MKDEV(hd->major,minor));
+		}
+#endif
 		if (is_extended_partition(p)) {
 			printk(" <");
 			/*

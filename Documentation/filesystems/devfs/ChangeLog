@@ -1533,3 +1533,38 @@ Work sponsored by SGI
 - Updated Documentation/filesystems/devfs/README
 
 - Updated sample modules.conf
+===============================================================================
+Changes for patch v168
+
+Work sponsored by SGI
+
+- Disabled multi-mount capability (use VFS bindings instead)
+
+- Updated README from master HTML file
+===============================================================================
+Changes for patch v169
+
+Work sponsored by SGI
+
+- Removed multi-mount code
+
+- Removed compatibility macros: VFS has changed too much
+===============================================================================
+Changes for patch v170
+
+Work sponsored by SGI
+
+- Updated README from master HTML file
+
+- Merged devfs inode into devfs entry
+===============================================================================
+Changes for patch v171
+
+Work sponsored by SGI
+
+- Updated sample modules.conf
+
+- Removed dead code in <devfs_register> which used to call
+  <free_dentries>
+
+- Ported to kernel 2.4.0-test2-pre3

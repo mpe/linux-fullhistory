@@ -1427,49 +1427,6 @@ static unsigned int tty_poll(struct file * filp, poll_table * wait)
 	return 0;
 }
 
-/*
- * fasync_helper() is used by some character device drivers (mainly mice)
- * to set up the fasync queue. It returns negative on error, 0 if it did
- * no changes and positive if it added/deleted the entry.
- */
-int fasync_helper(int fd, struct file * filp, int on, struct fasync_struct **fapp)
-{
-	struct fasync_struct *fa, **fp;
-	unsigned long flags;
-
-	for (fp = fapp; (fa = *fp) != NULL; fp = &fa->fa_next) {
-		if (fa->fa_file == filp)
-			break;
-	}
-
-	if (on) {
-		if (fa) {
-			fa->fa_fd = fd;
-			return 0;
-		}
-		fa = (struct fasync_struct *)kmalloc(sizeof(struct fasync_struct), GFP_KERNEL);
-		if (!fa)
-			return -ENOMEM;
-		fa->magic = FASYNC_MAGIC;
-		fa->fa_file = filp;
-		fa->fa_fd = fd;
-		save_flags(flags);
-		cli();
-		fa->fa_next = *fapp;
-		*fapp = fa;
-		restore_flags(flags);
-		return 1;
-	}
-	if (!fa)
-		return 0;
-	save_flags(flags);
-	cli();
-	*fp = fa->fa_next;
-	restore_flags(flags);
-	kfree(fa);
-	return 1;
-}
-
 static int tty_fasync(int fd, struct file * filp, int on)
 {
 	struct tty_struct * tty;

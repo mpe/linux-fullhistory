@@ -31,6 +31,7 @@
 static struct rpc_clnt *	pmap_create(char *, struct sockaddr_in *, int);
 static void			pmap_getport_done(struct rpc_task *);
 extern struct rpc_program	pmap_program;
+spinlock_t			pmap_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * Obtain the port for a given RPC service on a given host. This one can
@@ -49,11 +50,14 @@ rpc_getport(struct rpc_task *task, struct rpc_clnt *clnt)
 			task->tk_pid, clnt->cl_server,
 			map->pm_prog, map->pm_vers, map->pm_prot);
 
+	spin_lock(&pmap_lock);
 	if (clnt->cl_binding) {
 		rpc_sleep_on(&clnt->cl_bindwait, task, NULL, 0);
+		spin_unlock(&pmap_lock);
 		return;
 	}
 	clnt->cl_binding = 1;
+	spin_unlock(&pmap_lock);
 
 	task->tk_status = -EACCES; /* why set this? returns -EIO below */
 	if (!(pmap_clnt = pmap_create(clnt->cl_server, sap, map->pm_prot)))
@@ -74,8 +78,10 @@ rpc_getport(struct rpc_task *task, struct rpc_clnt *clnt)
 	return;
 
 bailout:
+	spin_lock(&pmap_lock);
 	clnt->cl_binding = 0;
 	rpc_wake_up(&clnt->cl_bindwait);
+	spin_unlock(&pmap_lock);
 	task->tk_status = -EIO;
 	task->tk_action = NULL;
 }
@@ -129,8 +135,10 @@ pmap_getport_done(struct rpc_task *task)
 		clnt->cl_port = htons(clnt->cl_port);
 		clnt->cl_xprt->addr.sin_port = clnt->cl_port;
 	}
+	spin_lock(&pmap_lock);
 	clnt->cl_binding = 0;
 	rpc_wake_up(&clnt->cl_bindwait);
+	spin_unlock(&pmap_lock);
 }
 
 /*

@@ -1,8 +1,9 @@
 /*
-   dmfe.c: Version 1.28 01/18/2000
+   dmfe.c: Version 1.30 06/11/2000
 
    A Davicom DM9102(A)/DM9132/DM9801 fast ethernet driver for Linux. 
    Copyright (C) 1997  Sten Wang
+   (C)Copyright 1997-1998 DAVICOM Semiconductor,Inc. All Rights Reserved.
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License
@@ -46,19 +47,28 @@
    Made it compile in 2.3 (device to net_device)
    
    Alan Cox <alan@redhat.com> :
+   Cleaned up for kernel merge.
    Removed the back compatibility support
    Reformatted, fixing spelling etc as I went
    Removed IRQ 0-15 assumption
-   
+
+   Jeff Garzik <jgarzik@mandrakesoft.com> :
+   Updated to use new PCI driver API.
+   Resource usage cleanups.
+   Report driver version to user.
+
    TODO
-   
+
+   Implement pci_driver::suspend() and pci_driver::resume()
+   power management methods.
+
    Check and fix on 64bit and big endian boxes.
-   Sort out the PCI latency.
-   
-   (C)Copyright 1997-1998 DAVICOM Semiconductor,Inc. All Rights Reserved.
-     
-   Cleaned up for kernel merge by Alan Cox (alan@redhat.com)
+
+   Test and make sure PCI latency is now correct for all cases.
+
  */
+
+#define DMFE_VERSION "1.30 (June 11, 2000)"
 
 #include <linux/module.h>
 
@@ -142,7 +152,9 @@
 
 #define SROM_CLK_WRITE(data, ioaddr) outl(data|CR9_SROM_READ|CR9_SRCS,ioaddr);DELAY_5US;outl(data|CR9_SROM_READ|CR9_SRCS|CR9_SRCLK,ioaddr);DELAY_5US;outl(data|CR9_SROM_READ|CR9_SRCS,ioaddr);DELAY_5US;
 
-#define CHK_IO_SIZE(pci_id, dev_rev) ( (pci_id==PCI_DM9132_ID) || (dev_rev >= 0x02000030) ) ? DM9102A_IO_SIZE: DM9102_IO_SIZE
+#define __CHK_IO_SIZE(pci_id, dev_rev) ( ((pci_id)==PCI_DM9132_ID) || ((dev_rev) >= 0x02000030) ) ? DM9102A_IO_SIZE: DM9102_IO_SIZE
+#define CHK_IO_SIZE(pci_dev, dev_rev) \
+	__CHK_IO_SIZE(((pci_dev)->device << 16) | (pci_dev)->vendor, dev_rev)
 
 
 /* Structure/enum declaration ------------------------------- */
@@ -164,7 +176,7 @@ struct rx_desc {
 
 struct dmfe_board_info {
 	u32 chip_id;		/* Chip vendor/Device ID */
-	u32 chip_revesion;	/* Chip revesion */
+	u32 chip_revision;	/* Chip revision */
 	struct net_device *next_dev;	/* next device */
 
 	struct pci_dev *net_dev;	/* PCI device */
@@ -221,7 +233,6 @@ enum dmfe_CR6_bits {
 /* Global variable declaration ----------------------------- */
 static int dmfe_debug = 0;
 static unsigned char dmfe_media_mode = 8;
-static struct net_device *dmfe_root_dev = NULL;	/* First device */
 static u32 dmfe_cr6_user_set = 0;
 
 /* For module input parameter */
@@ -299,7 +310,6 @@ static unsigned long CrcTable[256] =
 };
 
 /* function declaration ------------------------------------- */
-static int dmfe_probe(void);
 static int dmfe_open(struct net_device *);
 static int dmfe_start_xmit(struct sk_buff *, struct net_device *);
 static int dmfe_stop(struct net_device *);
@@ -333,110 +343,116 @@ static unsigned long cal_CRC(unsigned char *, unsigned int, u8);
  *	Search DM910X board, allocate space and register it
  */
  
-static int __init dmfe_probe(void)
+
+static int __init dmfe_init_one (struct pci_dev *pdev,
+				 const struct pci_device_id *ent)
 {
 	unsigned long pci_iobase;
-	u16 dm9102_count = 0;
 	u8 pci_irqline;
-	static int index = 0;	/* For multiple call */
 	struct dmfe_board_info *db;	/* Point a board information structure */
 	int i;
-	struct pci_dev *net_dev = NULL;
 	struct net_device *dev;
+	u32 dev_rev;
 
 	DMFE_DBUG(0, "dmfe_probe()", 0);
 
-	if (!pci_present())
-		return -ENODEV;
+	pci_iobase = pci_resource_start(pdev, 0);
+	pci_irqline = pdev->irq;
 
-	index = 0;
-	while ((net_dev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, net_dev)))
-	{
-		u32 pci_id;
-		u32 dev_rev;
-
-		index++;
-		if (pci_read_config_dword(net_dev, PCI_VENDOR_ID, &pci_id) != DMFE_SUCC)
-			continue;
-
-		if ((net_dev->device != PCI_DM9102_ID) && (net_dev->device != PCI_DM9132_ID))
-			continue;
-
-		pci_iobase = pci_resource_start (net_dev, 0);
-		pci_irqline = net_dev->irq;
-				
-		/* Enable Master/IO access, Disable memory access */
-		
-		if (pci_enable_device(net_dev))
-			continue;
-		pci_set_master(net_dev);
-		
-		/* Set Latency Timer 80h */
-		
-		/* FIXME: setting values > 32 breaks some SiS 559x stuff.
-		   Need a PCI quirk.. */
-		   
-		pci_write_config_byte(net_dev, PCI_LATENCY_TIMER, 0x80);
-
-		/* Read Chip revesion */
-		pci_read_config_dword(net_dev, PCI_REVISION_ID, &dev_rev);
-		
-		/* IO range check */
-		if (check_region(pci_iobase, CHK_IO_SIZE(pci_id, dev_rev))) {
-  			continue;
-		}
-		/* Interrupt check */
-		if (pci_irqline == 0) {
-			printk(KERN_ERR "dmfe: Interrupt wrong : IRQ=%d\n", pci_irqline);
-			continue;
-		}
-
-		/* Found DM9102 card and PCI resource allocated OK */
-		dm9102_count++;	/* Found a DM9102 card */
-
-		/* Init network device */
-		dev = init_etherdev(NULL, sizeof(*db));
-		if (dev == NULL)
-			continue;
-		
-		db = dev->priv;
-
-		memset(db, 0, sizeof(*db));
-		db->next_dev = dmfe_root_dev;
-		dmfe_root_dev = dev;
-
-		db->chip_id = pci_id;	/* keep Chip vandor/Device ID */
-		db->ioaddr = pci_iobase;
-		db->chip_revesion = dev_rev;
-
-		db->net_dev = net_dev;
-
-		dev->base_addr = pci_iobase;
-		dev->irq = pci_irqline;
-		dev->open = &dmfe_open;
-		dev->hard_start_xmit = &dmfe_start_xmit;
-		dev->stop = &dmfe_stop;
-		dev->get_stats = &dmfe_get_stats;
-		dev->set_multicast_list = &dmfe_set_filter_mode;
-		dev->do_ioctl = &dmfe_do_ioctl;
-
-		request_region(pci_iobase, CHK_IO_SIZE(pci_id, dev_rev), dev->name);
-
-		/* read 64 word srom data */
-		for (i = 0; i < 64; i++)
-			((u16 *) db->srom)[i] = read_srom_word(pci_iobase, i);
-
-		/* Set Node address */
-		for (i = 0; i < 6; i++)
-			dev->dev_addr[i] = db->srom[20 + i];
-
+	/* Interrupt check */
+	if (pci_irqline == 0) {
+		printk(KERN_ERR "dmfe: Interrupt wrong : IRQ=%d\n",
+		       pci_irqline);
+		goto err_out;
 	}
 
-	if (!dm9102_count)
-		printk(KERN_WARNING "dmfe: Can't find DM910X board\n");
+	/* iobase check */
+	if (pci_iobase == 0) {
+		printk(KERN_ERR "dmfe: I/O base is zero\n");
+		goto err_out;
+	}
 
-	return dm9102_count ? 0 : -ENODEV;
+	/* Enable Master/IO access, Disable memory access */
+	if (pci_enable_device(pdev))
+		goto err_out;
+	pci_set_master(pdev);
+
+#if 0	/* pci_{enable_device,set_master} sets minimum latency for us now */
+
+	/* Set Latency Timer 80h */
+	/* FIXME: setting values > 32 breaks some SiS 559x stuff.
+	   Need a PCI quirk.. */
+
+	pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 0x80);
+#endif
+
+	/* Read Chip revision */
+	pci_read_config_dword(pdev, PCI_REVISION_ID, &dev_rev);
+
+	/* Init network device */
+	dev = init_etherdev(NULL, sizeof(*db));
+	if (dev == NULL)
+		goto err_out;
+
+	/* IO range check */
+	if (!request_region(pci_iobase, CHK_IO_SIZE(pdev, dev_rev), dev->name)) {
+		printk(KERN_ERR "dmfe: I/O conflict : IO=%lx Range=%x\n",
+		       pci_iobase, CHK_IO_SIZE(pdev, dev_rev));
+		goto err_out_netdev;
+	}
+
+	db = dev->priv;
+	pdev->driver_data = dev;
+
+	db->chip_id = ent->driver_data;
+	db->ioaddr = pci_iobase;
+	db->chip_revision = dev_rev;
+
+	db->net_dev = pdev;
+
+	dev->base_addr = pci_iobase;
+	dev->irq = pci_irqline;
+	dev->open = &dmfe_open;
+	dev->hard_start_xmit = &dmfe_start_xmit;
+	dev->stop = &dmfe_stop;
+	dev->get_stats = &dmfe_get_stats;
+	dev->set_multicast_list = &dmfe_set_filter_mode;
+	dev->do_ioctl = &dmfe_do_ioctl;
+
+	/* read 64 word srom data */
+	for (i = 0; i < 64; i++)
+		((u16 *) db->srom)[i] = read_srom_word(pci_iobase, i);
+
+	/* Set Node address */
+	for (i = 0; i < 6; i++)
+		dev->dev_addr[i] = db->srom[20 + i];
+
+	return 0;
+
+err_out_netdev:
+	unregister_netdev(dev);
+	kfree(dev);
+err_out:
+	return -ENODEV;
 }
+
+
+static void __exit dmfe_remove_one (struct pci_dev *pdev)
+{
+	struct net_device *dev = pdev->driver_data;
+	struct dmfe_board_info *db;
+
+	DMFE_DBUG(0, "dmfe_remove_one()", 0);
+	
+	db = dev->priv;
+
+	unregister_netdev(dev);
+	release_region(dev->base_addr, CHK_IO_SIZE(pdev, db->chip_revision));
+	kfree(dev);	/* free board information */
+
+	DMFE_DBUG(0, "dmfe_remove_one() exit", 0);
+}
+
 
 /*
  *	Open the interface.
@@ -482,7 +498,7 @@ static int dmfe_open(struct net_device *dev)
 	db->in_reset_state = 0;
 	db->rx_error_cnt = 0;
 
-	if (!chkmode || (db->chip_id == PCI_DM9132_ID) || (db->chip_revesion >= 0x02000030)) {
+	if (!chkmode || (db->chip_id == PCI_DM9132_ID) || (db->chip_revision >= 0x02000030)) {
 		//db->cr6_data &= ~CR6_SFT;         /* Used Tx threshold */
 		//db->cr6_data |= CR6_NO_PURGE;     /* No purge if rx unavailable */
 		db->cr0_data = 0xc00000;	/* TX/RX desc burst mode */
@@ -933,8 +949,8 @@ static void dmfe_timer(unsigned long data)
 	else
 		tmp_cr12 = inb(db->ioaddr + DCR12);	/* DM9102/DM9102A */
 
-	if (((db->chip_id == PCI_DM9102_ID) && (db->chip_revesion == 0x02000030)) ||
-	    ((db->chip_id == PCI_DM9132_ID) && (db->chip_revesion == 0x02000010))) {
+	if (((db->chip_id == PCI_DM9102_ID) && (db->chip_revision == 0x02000030)) ||
+	    ((db->chip_id == PCI_DM9132_ID) && (db->chip_revision == 0x02000010))) {
 		/* DM9102A Chip */
 		if (tmp_cr12 & 2)
 			tmp_cr12 = 0x0;		/* Link failed */
@@ -1532,6 +1548,21 @@ unsigned long cal_CRC(unsigned char *Data, unsigned int Len, u8 flag)
 }
 
 
+static struct pci_device_id dmfe_pci_tbl[] __initdata = {
+	{ 0x1282, 0x9132, PCI_ANY_ID, PCI_ANY_ID, 0, 0, PCI_DM9132_ID },
+	{ 0x1282, 0x9102, PCI_ANY_ID, PCI_ANY_ID, 0, 0, PCI_DM9102_ID },
+	{ 0x1282, 0x9100, PCI_ANY_ID, PCI_ANY_ID, 0, 0, PCI_DM9100_ID },
+	{ 0, }
+};
+MODULE_DEVICE_TABLE(pci, dmfe_pci_tbl);
+
+static struct pci_driver dmfe_driver = {
+	name:		"dmfe",
+	id_table:	dmfe_pci_tbl,
+	probe:		dmfe_init_one,
+	remove:		dmfe_remove_one,
+};
+
 MODULE_AUTHOR("Sten Wang, sten_wang@davicom.com.tw");
 MODULE_DESCRIPTION("Davicom DM910X fast ethernet driver");
 MODULE_PARM(debug, "i");
@@ -1546,6 +1577,8 @@ MODULE_PARM(chkmode, "i");
  
 static int __init dmfe_init_module(void)
 {
+	int rc;
+	
 	DMFE_DBUG(0, "init_module() ", debug);
 
 	if (debug)
@@ -1565,32 +1598,26 @@ static int __init dmfe_init_module(void)
 		break;
 	}
 
-	return dmfe_probe();	/* search board and register */
+	rc = pci_register_driver(&dmfe_driver);
+	if (rc < 0)
+		return rc;
+	if (rc > 0) {
+		printk (KERN_INFO "Davicom DM91xx net driver loaded, version "
+			DMFE_VERSION "\n");
+		return 0;
+	}
+	return -ENODEV;
 }
 
 /*
  *	Description: 
  *	when user used rmmod to delete module, system invoked clean_module()
- *	to un-register device.
+ *	to un-register all registered services.
  */
  
 static void __exit dmfe_cleanup_module(void)
 {
-	struct net_device *next_dev;
-	struct dmfe_board_info *db;
-
-	DMFE_DBUG(0, "clean_module()", 0);
-
-	while (dmfe_root_dev) {
-		db = dmfe_root_dev->priv;
-		next_dev = db->next_dev;
-		unregister_netdev(dmfe_root_dev);
-		release_region(dmfe_root_dev->base_addr, CHK_IO_SIZE(db->chip_id, db->chip_revesion));
-		kfree(db);	/* free board information */
-		kfree(dmfe_root_dev);	/* free device structure */
-		dmfe_root_dev = next_dev;
-	}
-	DMFE_DBUG(0, "clean_module() exit", 0);
+	pci_unregister_driver(&dmfe_driver);
 }
 
 module_init(dmfe_init_module);

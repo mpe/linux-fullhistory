@@ -11,12 +11,7 @@
 #include <linux/adfs_fs.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
 #include <linux/spinlock.h>
-#else
-#include <asm/spinlock.h>
-#endif
 
 #include "adfs.h"
 #include "dir_f.h"

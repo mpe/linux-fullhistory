@@ -74,6 +74,24 @@ static inline void fput(struct file * file)
 }
 extern void put_filp(struct file *);
 
+extern int get_unused_fd(void);
+
+static inline void __put_unused_fd(struct files_struct *files, unsigned int fd)
+{
+	FD_CLR(fd, files->open_fds);
+	if (fd < files->next_fd)
+		files->next_fd = fd;
+}
+
+static inline void put_unused_fd(unsigned int fd)
+{
+	struct files_struct *files = current->files;
+
+	write_lock(&files->file_lock);
+	__put_unused_fd(files, fd);
+	write_unlock(&files->file_lock);
+}
+
 /*
  * Install a file pointer in the fd array.  
  *

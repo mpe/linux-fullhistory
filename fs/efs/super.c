@@ -185,16 +185,10 @@ struct super_block *efs_read_super(struct super_block *s, void *d, int silent) {
 		s->s_flags |= MS_RDONLY;
 	}
 	s->s_op   = &efs_superblock_operations;
-	s->s_dev  = dev;
 	s->s_root = d_alloc_root(iget(s, EFS_ROOTINODE));
  
 	if (!(s->s_root)) {
 		printk(KERN_ERR "EFS: get root inode failed\n");
-		goto out_no_fs;
-	}
-
-	if (check_disk_change(s->s_dev)) {
-		printk(KERN_ERR "EFS: device changed\n");
 		goto out_no_fs;
 	}
 

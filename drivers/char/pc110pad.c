@@ -83,8 +83,7 @@ static struct semaphore reader_lock;
 static void wake_readers(void)
 {
 	wake_up_interruptible(&queue);
-	if(asyncptr)
-		kill_fasync(asyncptr, SIGIO, POLL_IN);
+	kill_fasync(&asyncptr, SIGIO, POLL_IN);
 }
 
 

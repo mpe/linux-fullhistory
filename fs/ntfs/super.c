@@ -221,7 +221,6 @@ ntfs_init_attrdef(ntfs_inode* attrdef)
 int ntfs_get_version(ntfs_inode* volume)
 {
 	ntfs_attribute *volinfo;
-	int i;
 
 	volinfo = ntfs_find_attr(volume, volume->vol->at_volume_information, 0);
 	if (!volinfo) 

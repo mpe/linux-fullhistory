@@ -133,8 +133,7 @@ static void qp_interrupt(int cpl, void *dev_id, struct pt_regs * regs)
 		head &= QP_BUF_SIZE-1;
 	}
 	queue->head = head;
-	if (queue->fasync)
-		kill_fasync(queue->fasync, SIGIO, POLL_IN);
+	kill_fasync(&queue->fasync, SIGIO, POLL_IN);
 	wake_up_interruptible(&queue->proc_list);
 }
 

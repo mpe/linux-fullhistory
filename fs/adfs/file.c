@@ -29,24 +29,13 @@
 
 #include "adfs.h"
 
-/*
- * We have mostly NULLs here: the current defaults are OK for
- * the adfs filesystem.
- */
 struct file_operations adfs_file_operations = {
 	read:		generic_file_read,
 	mmap:		generic_file_mmap,
 	fsync:		file_fsync,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
 	write:		generic_file_write,
-#endif
 };
 
 struct inode_operations adfs_file_inode_operations = {
 	setattr:	adfs_notify_change,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
-	&adfs_file_operations,	/* default file operations */
-	readpage:	generic_readpage,
-	bmap:		adfs_bmap,
-#endif
 };

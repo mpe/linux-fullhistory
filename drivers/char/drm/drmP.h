@@ -433,9 +433,9 @@ typedef struct drm_device {
 
 				/* Context support */
 	int		  irq;		/* Interrupt used by board	   */
-	__volatile__ int  context_flag;	 /* Context swapping flag	   */
-	__volatile__ int  interrupt_flag;/* Interruption handler flag	   */
-	__volatile__ int  dma_flag;	 /* DMA dispatch flag		   */
+	__volatile__ long context_flag;	 /* Context swapping flag	   */
+	__volatile__ long interrupt_flag;/* Interruption handler flag	   */
+	__volatile__ long dma_flag;	 /* DMA dispatch flag		   */
 	struct timer_list timer;	/* Timer for delaying ctx switch   */
 	wait_queue_head_t context_wait; /* Processes waiting on ctx switch */
 	int		  last_checked;	/* Last context checked for DMA	   */

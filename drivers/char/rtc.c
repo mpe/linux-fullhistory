@@ -179,8 +179,7 @@ static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	/* Now do the rest of the actions */
 	wake_up_interruptible(&rtc_wait);	
 
-	if (rtc_async_queue)
-		kill_fasync (rtc_async_queue, SIGIO, POLL_IN);
+	kill_fasync (&rtc_async_queue, SIGIO, POLL_IN);
 }
 #endif
 
@@ -779,8 +778,7 @@ static void rtc_dropped_irq(unsigned long data)
 	/* Now we have new data */
 	wake_up_interruptible(&rtc_wait);
 
-	if (rtc_async_queue)
-		kill_fasync (rtc_async_queue, SIGIO, POLL_IN);
+	kill_fasync (&rtc_async_queue, SIGIO, POLL_IN);
 }
 #endif
 

@@ -415,8 +415,7 @@ static inline void handle_mouse_event(unsigned char scancode)
 		head = (head + 1) & (AUX_BUF_SIZE-1);
 		if (head != queue->tail) {
 			queue->head = head;
-			if (queue->fasync)
-				kill_fasync(queue->fasync, SIGIO, POLL_IN);
+			kill_fasync(&queue->fasync, SIGIO, POLL_IN);
 			wake_up_interruptible(&queue->proc_list);
 		}
 	}

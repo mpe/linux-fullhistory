@@ -81,6 +81,10 @@ extern int comx_proto_fr_init(void);
 static struct comx_hardware *comx_channels = NULL;
 static struct comx_protocol *comx_lines = NULL;
 
+static int comx_mkdir(struct inode *, struct dentry *, int);
+static int comx_rmdir(struct inode *, struct dentry *);
+static struct dentry *comx_lookup(struct inode *, struct dentry *);
+
 static struct inode_operations comx_root_inode_ops = {
 	lookup:	comx_lookup,
 	mkdir: comx_mkdir,

@@ -669,8 +669,10 @@ __rpc_schedule(void)
 		if (task->tk_lock) {
 			spin_unlock_bh(&rpc_queue_lock);
 			printk(KERN_ERR "RPC: Locked task was scheduled !!!!\n");
+#ifdef RPC_DEBUG			
 			rpc_debug = ~0;
 			rpc_show_tasks();
+#endif			
 			break;
 		}
 		__rpc_remove_wait_queue(task);
@@ -778,7 +780,7 @@ rpc_init_task(struct rpc_task *task, struct rpc_clnt *clnt,
 	spin_unlock(&rpc_sched_lock);
 
 	if (clnt)
-		clnt->cl_users++;
+		atomic_inc(&clnt->cl_users);
 
 #ifdef RPC_DEBUG
 	task->tk_magic = 0xf00baa;
@@ -823,8 +825,8 @@ cleanup:
 	/* Check whether to release the client */
 	if (clnt) {
 		printk("rpc_new_task: failed, users=%d, oneshot=%d\n",
-			clnt->cl_users, clnt->cl_oneshot);
-		clnt->cl_users++; /* pretend we were used ... */
+			atomic_read(&clnt->cl_users), clnt->cl_oneshot);
+		atomic_inc(&clnt->cl_users); /* pretend we were used ... */
 		rpc_release_client(clnt);
 	}
 	goto out;

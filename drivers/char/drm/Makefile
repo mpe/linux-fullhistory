@@ -39,6 +39,17 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_DRM_FFB),y)
+ OX_OBJS += ffb_drv.o
+ O_OBJS += ffb_context.o
+else
+  ifeq ($(CONFIG_DRM_FFB),m)
+    MIX_OBJC += ffb_drv.o
+    MI_OBJS += ffb_context.o
+    M_OBJS += ffb.o
+  endif
+endif
+
 O_OBJS += $(L_OBJS)
 
 include $(TOPDIR)/Rules.make
@@ -48,3 +59,6 @@ gamma.o : gamma_drv.o gamma_dma.o $(L_OBJS)
 
 tdfx.o: tdfx_drv.o tdfx_context.o $(L_OBJS)
 	$(LD) $(LD_RFLAG) -r -o $@ tdfx_drv.o tdfx_context.o $(L_OBJS)
+
+ffb.o: ffb_drv.o ffb_context.o $(L_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ ffb_drv.o ffb_context.o $(L_OBJS)

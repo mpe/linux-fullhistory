@@ -16,11 +16,9 @@
  *
  * The filesystem has the following restrictions/bugs:
  * 1) It only can handle one directory.
- * 2) Because the directory is represented by the SYSV shm array it
- *    can only be mounted one time.
- * 3) Private writeable mappings are not supported
- * 4) Read and write are not implemented (should they?)
- * 5) No special nodes are supported
+ * 2) Private writeable mappings are not supported
+ * 3) Read and write are not implemented (should they?)
+ * 4) No special nodes are supported
  *
  * There are the following mount options:
  * - nr_blocks (^= shmall) is the number of blocks of size PAGE_SIZE
@@ -335,7 +333,7 @@ static inline struct shmid_kernel *shm_rmid(int id)
 	return (struct shmid_kernel *)ipc_rmid(&shm_ids,id);
 }
 
-static __inline__ int shm_addid(struct shmid_kernel *shp)
+static inline int shm_addid(struct shmid_kernel *shp)
 {
 	return ipc_addid(&shm_ids, &shp->shm_perm, shm_ctlmni+1);
 }
@@ -544,13 +542,37 @@ static int shm_unlink (struct inode *dir, struct dentry *dent)
 	return 0;
 }
 
-#define SHM_ENTRY(shp, index) (shp)->shm_dir[(index)/PTRS_PER_PTE][(index)%PTRS_PER_PTE]
+/*
+ * We cannot use kmalloc for shm_alloc since this restricts the
+ * maximum size of the segments.
+ *
+ * We also cannot use vmalloc, since this uses too much of the vmalloc
+ * space and we run out of this on highend machines.
+ *
+ * So we have to use this complicated indirect scheme to alloc the shm
+ * page tables.
+ *
+ */
+
+#ifdef PTE_INIT
+static inline void init_ptes (pte_t *pte, int number) {
+	while (number--)
+		PTE_INIT (pte++);
+}
+#else
+static inline void init_ptes (pte_t *pte, int number) {
+	memset (pte, 0, number*sizeof(*pte));
+}
+#endif
+
+#define PTES_PER_PAGE (PAGE_SIZE/sizeof(pte_t))
+#define SHM_ENTRY(shp, index) (shp)->shm_dir[(index)/PTES_PER_PAGE][(index)%PTES_PER_PAGE]
 
 static pte_t **shm_alloc(unsigned long pages, int doacc)
 {
-	unsigned short dir  = pages / PTRS_PER_PTE;
-	unsigned short last = pages % PTRS_PER_PTE;
-	pte_t **ret, **ptr, *pte;
+	unsigned short dir  = pages / PTES_PER_PAGE;
+	unsigned short last = pages % PTES_PER_PAGE;
+	pte_t **ret, **ptr;
 
 	if (pages == 0)
 		return NULL;
@@ -564,8 +586,7 @@ static pte_t **shm_alloc(unsigned long pages, int doacc)
 		*ptr = (pte_t *)__get_free_page (GFP_KERNEL);
 		if (!*ptr)
 			goto free;
-		for (pte = *ptr; pte < *ptr + PTRS_PER_PTE; pte++)
-			pte_clear (pte);
+		init_ptes (*ptr, PTES_PER_PAGE);
 	}
 
 	/* The last one is probably not of PAGE_SIZE: we use kmalloc */
@@ -573,8 +594,7 @@ static pte_t **shm_alloc(unsigned long pages, int doacc)
 		*ptr = kmalloc (last*sizeof(pte_t), GFP_KERNEL);
 		if (!*ptr)
 			goto free;
-		for (pte = *ptr; pte < *ptr + last; pte++)
-			pte_clear (pte);
+		init_ptes (*ptr, last);
 	}
 	if (doacc) {
 		shm_lockall();
@@ -597,14 +617,14 @@ nomem:
 static void shm_free(pte_t** dir, unsigned long pages, int doacc)
 {
 	int i, rss, swp;
-	pte_t **ptr = dir+pages/PTRS_PER_PTE;
+	pte_t **ptr = dir+pages/PTES_PER_PAGE;
 
 	if (!dir)
 		return;
 
 	for (i = 0, rss = 0, swp = 0; i < pages ; i++) {
 		pte_t pte;
-		pte = dir[i/PTRS_PER_PTE][i%PTRS_PER_PTE];
+		pte = dir[i/PTES_PER_PAGE][i%PTES_PER_PAGE];
 		if (pte_none(pte))
 			continue;
 		if (pte_present(pte)) {
@@ -617,7 +637,7 @@ static void shm_free(pte_t** dir, unsigned long pages, int doacc)
 	}
 
 	/* first the last page */
-	if (pages%PTRS_PER_PTE)
+	if (pages%PTES_PER_PAGE)
 		kfree (*ptr);
 	/* now the whole pages */
 	while (--ptr >= dir)
@@ -663,10 +683,10 @@ static 	int shm_setattr (struct dentry *dentry, struct iattr *attr)
 		BUG();
 	error = -ENOSPC;
 	if (shm_tot - shp->shm_npages >= shm_ctlall)
-		goto out;
+		goto size_out;
 	error = 0;
 	if (shp->shm_segsz == attr->ia_size)
-		goto out;
+		goto size_out;
 	/* Now we set them to the real values */
 	old_dir = shp->shm_dir;
 	old_pages = shp->shm_npages;
@@ -674,8 +694,8 @@ static 	int shm_setattr (struct dentry *dentry, struct iattr *attr)
 		pte_t *swap;
 		int i,j;
 		i = old_pages < new_pages ? old_pages : new_pages;
-		j = i % PTRS_PER_PTE;
-		i /= PTRS_PER_PTE;
+		j = i % PTES_PER_PAGE;
+		i /= PTES_PER_PAGE;
 		if (j)
 			memcpy (new_dir[i], old_dir[i], j * sizeof (pte_t));
 		while (i--) {
@@ -687,10 +707,21 @@ static 	int shm_setattr (struct dentry *dentry, struct iattr *attr)
 	shp->shm_dir = new_dir;
 	shp->shm_npages = new_pages;
 	shp->shm_segsz = attr->ia_size;
-out:
+size_out:
 	shm_unlock(inode->i_ino);
 	shm_free (old_dir, old_pages, 1);
+
 set_attr:
+	if (!(shp = shm_lock(inode->i_ino)))
+		BUG();
+	if (attr->ia_valid & ATTR_MODE)
+		shp->shm_perm.mode = attr->ia_mode;
+	if (attr->ia_valid & ATTR_UID)
+		shp->shm_perm.uid = attr->ia_uid;
+	if (attr->ia_valid & ATTR_GID)
+		shp->shm_perm.gid = attr->ia_gid;
+	shm_unlock (inode->i_ino);
+
 	inode_setattr(inode, attr);
 	return error;
 }
@@ -1073,6 +1104,9 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 
 	case IPC_SET:
 	{
+		struct dentry * dentry;
+		char name[SHM_FMT_LEN+1];
+
 		if ((shmid % SEQ_MULTIPLIER)== zero_id)
 			return -EINVAL;
 
@@ -1098,7 +1132,29 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		shp->shm_flags = (shp->shm_flags & ~S_IRWXUGO)
 			| (setbuf.mode & S_IRWXUGO);
 		shp->shm_ctim = CURRENT_TIME;
-		break;
+		shm_unlock(shmid);
+		up(&shm_ids.sem);
+
+		sprintf (name, SHM_FMT, shmid);
+		lock_kernel();
+		dentry = lookup_one(name, lock_parent(shm_sb->s_root));
+		unlock_dir(shm_sb->s_root);
+		err = PTR_ERR(dentry);
+		if (IS_ERR(dentry))
+			goto bad_dentry;
+		err = -ENOENT;
+		if (dentry->d_inode) {
+			struct inode *ino = dentry->d_inode;
+			ino->i_uid   = setbuf.uid;
+			ino->i_gid   = setbuf.gid;
+			ino->i_mode  = (setbuf.mode & S_IRWXUGO) | (ino->i_mode & ~S_IALLUGO);;
+			ino->i_atime = ino->i_mtime = ino->i_ctime = CURRENT_TIME;
+			err = 0;
+		}
+		dput (dentry);
+	bad_dentry:
+		unlock_kernel();
+		return err;
 	}
 
 	default:
@@ -1142,6 +1198,7 @@ static int shm_mmap(struct file * file, struct vm_area_struct * vma)
  */
 asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 {
+	struct shmid_kernel *shp;
 	unsigned long addr;
 	struct file * file;
 	int    err;
@@ -1169,12 +1226,24 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if (shmflg & SHM_RDONLY) {
 		prot = PROT_READ;
 		o_flags = O_RDONLY;
-		acc_mode = MAY_READ;
+		acc_mode = S_IRUGO;
 	} else {
 		prot = PROT_READ | PROT_WRITE;
 		o_flags = O_RDWR;
-		acc_mode = MAY_READ | MAY_WRITE;
+		acc_mode = S_IRUGO | S_IWUGO;
 	}
+
+	/*
+	 * We cannot rely on the fs check since SYSV IPC does have an
+	 * aditional creator id...
+	 */
+	shp = shm_lock(shmid);
+	if(shp==NULL)
+		return -EINVAL;
+	err = ipcperms(&shp->shm_perm, acc_mode);
+	shm_unlock(shmid);
+	if (err)
+		return -EACCES;
 
 	sprintf (name, SHM_FMT, shmid);
 
@@ -1188,9 +1257,6 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	err = -ENOENT;
 	if (!dentry->d_inode)
 		goto bad_file;
-	err = permission(dentry->d_inode, acc_mode);
-	if (err)
-		goto bad_file1;
 	file = dentry_open(dentry, shm_fs_type.kern_mnt, o_flags);
 	err = PTR_ERR(file);
 	if (IS_ERR (file))
@@ -1492,7 +1558,7 @@ int shm_swap (int prio, int gfp_mask)
 	shm_lockall();
 check_id:
 	shp = shm_get(swap_id);
-	if(shp==NULL || shp->shm_flags & SHM_LOCKED) {
+	if(shp==NULL || shp->shm_flags & PRV_LOCKED) {
 next_id:
 		swap_idx = 0;
 		if (++swap_id > shm_ids.max_id) {

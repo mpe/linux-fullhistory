@@ -19,8 +19,6 @@
 
 struct devpts_sb_info {
 	u32 magic;
-	struct super_block *next;
-	struct super_block **back;
 	int setuid;
 	int setgid;
 	uid_t   uid;

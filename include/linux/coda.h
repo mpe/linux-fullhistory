@@ -331,9 +331,8 @@ struct coda_statfs {
 #if	0
 #define CODA_KERNEL_VERSION 0 /* don't care about kernel version number */
 #define CODA_KERNEL_VERSION 1 /* The old venus 4.6 compatible interface */
-#define CODA_KERNEL_VERSION 2 /* venus_lookup gets an extra parameter */
 #endif
-#define CODA_KERNEL_VERSION 3 /* added CODA_MAKE_CINODE downcall */
+#define CODA_KERNEL_VERSION 2 /* venus_lookup gets an extra parameter */
 
 /*
  *        Venus <-> Coda  RPC arguments

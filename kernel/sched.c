@@ -60,8 +60,8 @@ struct task_struct * init_tasks[NR_CPUS] = {&init_task, };
  * The run-queue lock locks the parts that actually access
  * and change the run-queues, and have to be interrupt-safe.
  */
-spinlock_t runqueue_lock = SPIN_LOCK_UNLOCKED;  /* second */
-rwlock_t tasklist_lock = RW_LOCK_UNLOCKED;	/* third */
+__cacheline_aligned spinlock_t runqueue_lock = SPIN_LOCK_UNLOCKED;  /* second */
+__cacheline_aligned rwlock_t tasklist_lock = RW_LOCK_UNLOCKED;	/* third */
 
 static LIST_HEAD(runqueue_head);
 
@@ -920,16 +920,11 @@ asmlinkage long sys_sched_getscheduler(pid_t pid)
 	if (pid < 0)
 		goto out_nounlock;
 
-	read_lock(&tasklist_lock);
-
 	retval = -ESRCH;
+	read_lock(&tasklist_lock);
 	p = find_process_by_pid(pid);
-	if (!p)
-		goto out_unlock;
-			
-	retval = p->policy;
-
-out_unlock:
+	if (p)
+		retval = p->policy & ~SCHED_YIELD;
 	read_unlock(&tasklist_lock);
 
 out_nounlock:

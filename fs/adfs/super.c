@@ -318,7 +318,7 @@ struct super_block *adfs_read_super(struct super_block *sb, void *data, int sile
 	set_blocksize(dev, BLOCK_SIZE);
 	if (!(bh = bread(dev, ADFS_DISCRECORD / BLOCK_SIZE, BLOCK_SIZE))) {
 		adfs_error(sb, "unable to read superblock");
-		goto error_unlock;
+		goto error;
 	}
 
 	b_data = bh->b_data + (ADFS_DISCRECORD % BLOCK_SIZE);
@@ -354,7 +354,7 @@ struct super_block *adfs_read_super(struct super_block *sb, void *data, int sile
 		if (!bh) {
 			adfs_error(sb, "couldn't read superblock on "
 				"2nd try.");
-			goto error_unlock;
+			goto error;
 		}
 		b_data = bh->b_data + (ADFS_DISCRECORD % sb->s_blocksize);
 		if (adfs_checkbblk(b_data)) {
@@ -416,11 +416,7 @@ struct super_block *adfs_read_super(struct super_block *sb, void *data, int sile
 		sb->u.adfs_sb.s_namelen = ADFS_F_NAME_LEN;
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
 	sb->s_root = d_alloc_root(adfs_iget(sb, &root_obj));
-#else
-	sb->s_root = d_alloc_root(adfs_iget(sb, &root_obj), NULL);
-#endif
 	if (!sb->s_root) {
 		int i;
 
@@ -428,14 +424,12 @@ struct super_block *adfs_read_super(struct super_block *sb, void *data, int sile
 			brelse(sb->u.adfs_sb.s_map[i].dm_bh);
 		kfree(sb->u.adfs_sb.s_map);
 		adfs_error(sb, "get root inode failed\n");
-		goto error_dec_use;
+		goto error;
 	}
 	return sb;
 
 error_free_bh:
 	brelse(bh);
-error_unlock:
-error_dec_use:
 error:
 	return NULL;
 }

@@ -19,7 +19,6 @@
  * Lookup/Create a block at offset 'block' into 'inode'.  We currently do
  * not support creation of new blocks, so we return -EIO for this case.
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
 int
 adfs_get_block(struct inode *inode, long block, struct buffer_head *bh, int create)
 {
@@ -78,16 +77,6 @@ static struct address_space_operations adfs_aops = {
 	commit_write:	generic_commit_write,
 	bmap:		_adfs_bmap
 };
-
-#else
-int adfs_bmap(struct inode *inode, int block)
-{
-	if (block >= inode->i_blocks)
-		return 0;
-
-	return __adfs_block_map(inode->i_sb, inode->i_ino, block);
-}
-#endif
 
 static inline unsigned int
 adfs_filetype(struct inode *inode)

@@ -290,11 +290,12 @@ xprt_adjust_cwnd(struct rpc_xprt *xprt, int result)
 {
 	unsigned long	cwnd = xprt->cwnd;
 
+	spin_lock_bh(&xprt_sock_lock);
 	if (xprt->nocong)
-		return;
+		goto out;
 	if (result >= 0) {
 		if (xprt->cong < cwnd || time_before(jiffies, xprt->congtime))
-			return;
+			goto out;
 		/* The (cwnd >> 1) term makes sure
 		 * the result gets rounded properly. */
 		cwnd += (RPC_CWNDSCALE * RPC_CWNDSCALE + (cwnd >> 1)) / cwnd;
@@ -317,6 +318,8 @@ xprt_adjust_cwnd(struct rpc_xprt *xprt, int result)
 	}
 
 	xprt->cwnd = cwnd;
+ out:
+	spin_unlock_bh(&xprt_sock_lock);
 }
 
 /*
@@ -1294,15 +1297,18 @@ xprt_reserve(struct rpc_task *task)
 
 	dprintk("RPC: %4d xprt_reserve cong = %ld cwnd = %ld\n",
 				task->tk_pid, xprt->cong, xprt->cwnd);
-	if (!RPCXPRT_CONGESTED(xprt) && xprt->free) {
-		xprt_reserve_status(task);
+	spin_lock_bh(&xprt_sock_lock);
+	xprt_reserve_status(task);
+	if (task->tk_rqstp) {
 		task->tk_timeout = 0;
 	} else if (!task->tk_timeout) {
 		task->tk_status = -ENOBUFS;
 	} else {
 		dprintk("RPC:      xprt_reserve waiting on backlog\n");
-		rpc_sleep_on(&xprt->backlog, task, xprt_reserve_status, NULL);
+		task->tk_status = -EAGAIN;
+		rpc_sleep_on(&xprt->backlog, task, NULL, NULL);
 	}
+	spin_unlock_bh(&xprt_sock_lock);
 	dprintk("RPC: %4d xprt_reserve returns %d\n",
 				task->tk_pid, task->tk_status);
 	return task->tk_status;
@@ -1323,25 +1329,20 @@ xprt_reserve_status(struct rpc_task *task)
 		/* NOP */
 	} else if (task->tk_rqstp) {
 		/* We've already been given a request slot: NOP */
-	} else if (!RPCXPRT_CONGESTED(xprt) && xprt->free) {
+	} else {
+		if (RPCXPRT_CONGESTED(xprt) || !(req = xprt->free))
+			goto out_nofree;
 		/* OK: There's room for us. Grab a free slot and bump
 		 * congestion value */
-		spin_lock(&xprt_lock);
-		if (!(req = xprt->free)) {
-			spin_unlock(&xprt_lock);
-			goto out_nofree;
-		}
 		xprt->free     = req->rq_next;
 		req->rq_next   = NULL;
-		spin_unlock(&xprt_lock);
 		xprt->cong    += RPC_CWNDSCALE;
 		task->tk_rqstp = req;
 		xprt_request_init(task, xprt);
 
 		if (xprt->free)
 			xprt_clear_backlog(xprt);
-	} else
-		goto out_nofree;
+	}
 
 	return;
 
@@ -1388,24 +1389,21 @@ xprt_release(struct rpc_task *task)
 
 	dprintk("RPC: %4d release request %p\n", task->tk_pid, req);
 
-	spin_lock(&xprt_lock);
-	req->rq_next = xprt->free;
-	xprt->free   = req;
-
 	/* remove slot from queue of pending */
 	if (task->tk_rpcwait) {
 		printk("RPC: task of released request still queued!\n");
-#ifdef RPC_DEBUG
-		printk("RPC: (task is on %s)\n", rpc_qname(task->tk_rpcwait));
-#endif
 		rpc_remove_wait_queue(task);
 	}
-	spin_unlock(&xprt_lock);
+
+	spin_lock_bh(&xprt_sock_lock);
+	req->rq_next = xprt->free;
+	xprt->free   = req;
 
 	/* Decrease congestion value. */
 	xprt->cong -= RPC_CWNDSCALE;
 
 	xprt_clear_backlog(xprt);
+	spin_unlock_bh(&xprt_sock_lock);
 }
 
 /*

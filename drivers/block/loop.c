@@ -238,7 +238,8 @@ static int lo_read_actor(read_descriptor_t * desc, struct page *page, unsigned l
 	kaddr = (char*)kmap(page);
 	if ((lo->transfer)(lo,READ,kaddr+offset,p->data,size,IV)) {
 		size = 0;
-		printk(KERN_ERR "loop: transfer error block %ld\n",page->index);
+		printk(KERN_ERR "loop: transfer error block %ld\n",
+		       page->index);
 		desc->error = -EINVAL;
 	}
 	kunmap(page);
@@ -345,9 +346,11 @@ repeat:
 			}
 		}
 
-		if ((lo->transfer)(lo, current_request->cmd, bh->b_data + offset,
-				dest_addr, size, block)) {
-			printk(KERN_ERR "loop: transfer error block %d\n", block);
+		if ((lo->transfer)(lo, current_request->cmd,
+				   bh->b_data + offset,
+				   dest_addr, size, block)) {
+			printk(KERN_ERR "loop: transfer error block %d\n",
+			       block);
 			brelse(bh);
 			goto error_out_lock;
 		}
@@ -469,7 +472,7 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		lo->lo_backing_file->f_owner = file->f_owner;
 		lo->lo_backing_file->f_dentry = file->f_dentry;
 		lo->lo_backing_file->f_vfsmnt = mntget(file->f_vfsmnt);
-		lo->lo_backing_file->f_op = file->f_op;
+		lo->lo_backing_file->f_op = fops_get(file->f_op);
 		lo->lo_backing_file->private_data = file->private_data;
 		file_moveto(lo->lo_backing_file, file);
 
@@ -539,8 +542,10 @@ static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 	lo->lo_dentry = NULL;
 
 	if (lo->lo_backing_file != NULL) {
-		put_write_access(lo->lo_backing_file->f_dentry->d_inode);
-		fput(lo->lo_backing_file);
+		struct file *filp = lo->lo_backing_file;
+		if ((filp->f_mode & FMODE_WRITE) == 0)
+			put_write_access(filp->f_dentry->d_inode);
+		fput(filp);
 		lo->lo_backing_file = NULL;
 	} else {
 		dput(dentry);
@@ -636,7 +641,8 @@ static int lo_ioctl(struct inode * inode, struct file * file,
 	if (!inode)
 		return -EINVAL;
 	if (MAJOR(inode->i_rdev) != MAJOR_NR) {
-		printk(KERN_WARNING "lo_ioctl: pseudo-major != %d\n", MAJOR_NR);
+		printk(KERN_WARNING "lo_ioctl: pseudo-major != %d\n",
+		       MAJOR_NR);
 		return -ENODEV;
 	}
 	dev = MINOR(inode->i_rdev);
@@ -698,7 +704,8 @@ static int lo_release(struct inode *inode, struct file *file)
 	if (!inode)
 		return 0;
 	if (MAJOR(inode->i_rdev) != MAJOR_NR) {
-		printk(KERN_WARNING "lo_release: pseudo-major != %d\n", MAJOR_NR);
+		printk(KERN_WARNING "lo_release: pseudo-major != %d\n",
+		       MAJOR_NR);
 		return 0;
 	}
 	dev = MINOR(inode->i_rdev);
@@ -706,7 +713,8 @@ static int lo_release(struct inode *inode, struct file *file)
 		return 0;
 	lo = &loop_dev[dev];
 	if (lo->lo_refcnt <= 0)
-		printk(KERN_ERR "lo_release: refcount(%d) <= 0\n", lo->lo_refcnt);
+		printk(KERN_ERR "lo_release: refcount(%d) <= 0\n",
+		       lo->lo_refcnt);
 	else  {
 		int type  = lo->lo_encrypt_type;
 		--lo->lo_refcnt;
@@ -761,6 +769,10 @@ int loop_unregister_transfer(int number)
 EXPORT_SYMBOL(loop_register_transfer);
 EXPORT_SYMBOL(loop_unregister_transfer);
 
+static void no_plug_device(request_queue_t *q, kdev_t device)
+{
+}
+
 int __init loop_init(void) 
 {
 	int	i;
@@ -806,6 +818,7 @@ int __init loop_init(void)
 	}		
 
 	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
+	blk_queue_pluggable(BLK_DEFAULT_QUEUE(MAJOR_NR), no_plug_device);
 	blk_queue_headactive(BLK_DEFAULT_QUEUE(MAJOR_NR), 0);
 	for (i=0; i < max_loop; i++) {
 		memset(&loop_dev[i], 0, sizeof(struct loop_device));
@@ -828,6 +841,7 @@ void cleanup_module(void)
 	if (devfs_unregister_blkdev(MAJOR_NR, "loop") != 0)
 		printk(KERN_WARNING "loop: cannot unregister blkdev\n");
 
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 	kfree (loop_dev);
 	kfree (loop_sizes);
 	kfree (loop_blksizes);

@@ -630,8 +630,7 @@ send_signal:
 			put_tty_queue(c, tty);
 			tty->canon_head = tty->read_head;
 			tty->canon_data++;
-			if (tty->fasync)
-				kill_fasync(tty->fasync, SIGIO, POLL_IN);
+			kill_fasync(&tty->fasync, SIGIO, POLL_IN);
 			if (waitqueue_active(&tty->read_wait))
 				wake_up_interruptible(&tty->read_wait);
 			return;
@@ -735,8 +734,7 @@ static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 	}
 
 	if (!tty->icanon && (tty->read_cnt >= tty->minimum_to_wake)) {
-		if (tty->fasync)
-			kill_fasync(tty->fasync, SIGIO, POLL_IN);
+		kill_fasync(&tty->fasync, SIGIO, POLL_IN);
 		if (waitqueue_active(&tty->read_wait))
 			wake_up_interruptible(&tty->read_wait);
 	}

@@ -43,13 +43,16 @@
  *	  few races on freeing buffers too.
  *	  Alan Modra <alan@linuxcare.com>
  *
+ *  5/00: Support for the RSA-DV II/S card added.
+ *	  Kiyokazu SUTO <suto@ks-and-ks.ne.jp>
+ * 
  * This module exports the following rs232 io functions:
  *
  *	int rs_init(void);
  */
 
-static char *serial_version = "4.93";
-static char *serial_revdate = "2000-03-20";
+static char *serial_version = "5.01";
+static char *serial_revdate = "2000-05-29";
 
 /*
  * Serial driver configuration section.  Here are the various options:
@@ -133,6 +136,8 @@ static char *serial_revdate = "2000-03-20";
 #define CONFIG_SERIAL_SHARE_IRQ
 #endif
 #endif
+
+#define CONFIG_SERIAL_RSA
 
 #define RS_STROBE_TIME (10*HZ)
 #define RS_ISR_PASS_LIMIT 256
@@ -277,8 +282,19 @@ static struct serial_uart_config uart_config[] = {
 		  UART_STARTECH }, 
 	{ "XR16850", 128, UART_CLEAR_FIFO | UART_USE_FIFO |
 		  UART_STARTECH },
+	{ "RSA", 2048, UART_CLEAR_FIFO | UART_USE_FIFO }, 
 	{ 0, 0}
 };
+
+#if defined(CONFIG_SERIAL_RSA) && defined(MODULE)
+
+#define PORT_RSA_MAX 4
+static int probe_rsa[PORT_RSA_MAX];
+static int force_rsa[PORT_RSA_MAX];
+
+MODULE_PARM(probe_rsa, "1-" __MODULE_STRING(PORT_RSA_MAX) "i");
+MODULE_PARM(force_rsa, "1-" __MODULE_STRING(PORT_RSA_MAX) "i");
+#endif /* CONFIG_SERIAL_RSA  */
 
 static struct serial_state rs_table[RS_TABLE_SIZE] = {
 	SERIAL_PORT_DFNS	/* Defined in serial.h */
@@ -293,11 +309,8 @@ static struct serial_state rs_table[RS_TABLE_SIZE] = {
 static struct pci_board_inst	serial_pci_board[NR_PCI_BOARDS];
 static int serial_pci_board_idx = 0;
 #endif
-#ifndef PCI_BASE_ADDRESS
-#define PCI_BASE_ADDRESS(dev, r) ((dev)->resource[r].start)
-#define PCI_BASE_REGION_SIZE(dev, r) ((dev)->resource[r].end - \
-				      (dev)->resource[r].start)
-#define IS_PCI_REGION_IOPORT(dev, r) ((dev)->resource[r].flags & \
+#ifndef IS_PCI_REGION_IOPORT
+#define IS_PCI_REGION_IOPORT(dev, r) (pci_resource_flags((dev), (r)) & \
 				      IORESOURCE_IO)
 #endif
 #ifndef PCI_IRQ_RESOURCE
@@ -314,7 +327,8 @@ static int serial_pci_board_idx = 0;
 #define ACTIVATE_FUNC(dev)  (dev->activate)
 #define DEACTIVATE_FUNC(dev)  (dev->deactivate)
 #endif
-	
+
+#define HIGH_BITS_OFFSET ((sizeof(long)-sizeof(int))*8)
 
 static struct tty_struct *serial_table[NR_PORTS];
 static struct termios *serial_termios[NR_PORTS];
@@ -996,6 +1010,9 @@ static void do_softint(void *private_)
 		    tty->ldisc.write_wakeup)
 			(tty->ldisc.write_wakeup)(tty);
 		wake_up_interruptible(&tty->write_wait);
+#ifdef SERIAL_HAVE_POLL_WAIT
+		wake_up_interruptible(&tty->poll_wait);
+#endif
 	}
 }
 
@@ -1090,6 +1107,50 @@ static void figure_IRQ_timeout(int irq)
 	IRQ_timeout[irq] = timeout ? timeout : 1;
 }
 
+#ifdef CONFIG_SERIAL_RSA
+/* Attempts to turn on the RSA FIFO.  Returns zero on failure */
+static int enable_rsa(struct async_struct *info)
+{
+	unsigned char mode;
+	int result;
+	unsigned long flags;
+
+	save_flags(flags); cli();
+	mode = serial_inp(info, UART_RSA_MSR);
+	result = mode & UART_RSA_MSR_FIFO;
+
+	if (!result) {
+		serial_outp(info, UART_RSA_MSR, mode | UART_RSA_MSR_FIFO);
+		mode = serial_inp(info, UART_RSA_MSR);
+		result = mode & UART_RSA_MSR_FIFO;
+	}
+
+	restore_flags(flags);
+	return result;
+}
+
+/* Attempts to turn off the RSA FIFO.  Returns zero on failure */
+static int disable_rsa(struct async_struct *info)
+{
+	unsigned char mode;
+	int result;
+	unsigned long flags;
+
+	save_flags(flags); cli();
+	mode = serial_inp(info, UART_RSA_MSR);
+	result = !(mode & UART_RSA_MSR_FIFO);
+
+	if (!result) {
+		serial_outp(info, UART_RSA_MSR, mode & ~UART_RSA_MSR_FIFO);
+		mode = serial_inp(info, UART_RSA_MSR);
+		result = !(mode & UART_RSA_MSR_FIFO);
+	}
+
+	restore_flags(flags);
+	return result;
+}
+#endif /* CONFIG_SERIAL_RSA */
+
 static int startup(struct async_struct * info)
 {
 	unsigned long flags;
@@ -1127,7 +1188,7 @@ static int startup(struct async_struct * info)
 	printk("starting up ttys%d (irq %d)...", info->line, state->irq);
 #endif
 
-	if (uart_config[info->state->type].flags & UART_STARTECH) {
+	if (uart_config[state->type].flags & UART_STARTECH) {
 		/* Wake up UART */
 		serial_outp(info, UART_LCR, 0xBF);
 		serial_outp(info, UART_EFR, UART_EFR_ECB);
@@ -1145,7 +1206,7 @@ static int startup(struct async_struct * info)
 		/*
 		 * For a XR16C850, we need to set the trigger levels
 		 */
-		if (info->state->type == PORT_16850) {
+		if (state->type == PORT_16850) {
 			serial_outp(info, UART_FCTR, UART_FCTR_TRGD |
 					UART_FCTR_RX);
 			serial_outp(info, UART_TRG, UART_TRG_96);
@@ -1156,12 +1217,12 @@ static int startup(struct async_struct * info)
 		serial_outp(info, UART_LCR, 0);
 	}
 
-	if (info->state->type == PORT_16750) {
+	if (state->type == PORT_16750) {
 		/* Wake up UART */
 		serial_outp(info, UART_IER, 0);
 	}
 
-	if (info->state->type == PORT_16C950) {
+	if (state->type == PORT_16C950) {
 		/* Wake up and initialize UART */
 		info->ACR = 0;
 		serial_outp(info, UART_LCR, 0xBF);
@@ -1173,6 +1234,20 @@ static int startup(struct async_struct * info)
 		serial_outp(info, UART_EFR, UART_EFR_ECB);
 		serial_outp(info, UART_LCR, 0);
 	}
+
+#ifdef CONFIG_SERIAL_RSA
+	/*
+	 * If this is an RSA port, see if we can kick it up to the
+	 * higher speed clock.
+	 */
+	if (state->type == PORT_RSA) {
+		if (state->baud_base != SERIAL_RSA_BAUD_BASE &&
+		    enable_rsa(info))
+			state->baud_base = SERIAL_RSA_BAUD_BASE;
+		if (state->baud_base == SERIAL_RSA_BAUD_BASE)
+			serial_outp(info, UART_RSA_FRR, 0);
+	}
+#endif
 
 	/*
 	 * Clear the FIFO buffers and disable them
@@ -1199,7 +1274,8 @@ static int startup(struct async_struct * info)
 	 * if it is, then bail out, because there's likely no UART
 	 * here.
 	 */
-	if (serial_inp(info, UART_LSR) == 0xff) {
+	if (!(info->flags & ASYNC_BUGGY_UART) &&
+	    (serial_inp(info, UART_LSR) == 0xff)) {
 		printk("LSR safety check engaged!\n");
 		if (capable(CAP_SYS_ADMIN)) {
 			if (info->tty)
@@ -1425,6 +1501,17 @@ static void shutdown(struct async_struct * info)
 				     UART_FCR_CLEAR_XMIT));
 	serial_outp(info, UART_FCR, 0);
 
+#ifdef CONFIG_SERIAL_RSA
+	/*
+	 * Reset the RSA board back to 115kbps compat mode.
+	 */
+	if ((state->type == PORT_RSA) &&
+	    (state->baud_base == SERIAL_RSA_BAUD_BASE &&
+	     disable_rsa(info)))
+		state->baud_base = SERIAL_RSA_BAUD_BASE_LO;
+#endif
+	
+
 	(void)serial_in(info, UART_RX);    /* read data port to reset things */
 	
 	if (info->tty)
@@ -1522,6 +1609,12 @@ static void change_speed(struct async_struct *info,
 	baud = tty_get_baud_rate(info->tty);
 	if (!baud)
 		baud = 9600;	/* B0 transition handled in rs_set_termios */
+#ifdef CONFIG_SERIAL_RSA
+	if ((info->state->type == PORT_RSA) &&
+	    (info->state->baud_base != SERIAL_RSA_BAUD_BASE) &&
+	    enable_rsa(info))
+		info->state->baud_base = SERIAL_RSA_BAUD_BASE;
+#endif
 	baud_base = info->state->baud_base;
 	if (info->state->type == PORT_16C950) {
 		if (baud <= baud_base)
@@ -1583,6 +1676,10 @@ static void change_speed(struct async_struct *info,
 	if (uart_config[info->state->type].flags & UART_USE_FIFO) {
 		if ((info->state->baud_base / quot) < 2400)
 			fcr = UART_FCR_ENABLE_FIFO | UART_FCR_TRIGGER_1;
+#ifdef CONFIG_SERIAL_RSA
+		else if (info->state->type == PORT_RSA)
+			fcr = UART_FCR_ENABLE_FIFO | UART_FCR_TRIGGER_14;
+#endif
 		else
 			fcr = UART_FCR_ENABLE_FIFO | UART_FCR_TRIGGER_8;
 	}
@@ -1810,6 +1907,9 @@ static void rs_flush_buffer(struct tty_struct *tty)
 	info->xmit.head = info->xmit.tail = 0;
 	restore_flags(flags);
 	wake_up_interruptible(&tty->write_wait);
+#ifdef SERIAL_HAVE_POLL_WAIT
+	wake_up_interruptible(&tty->poll_wait);
+#endif
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 	    tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
@@ -1912,6 +2012,10 @@ static int get_serial_info(struct async_struct * info,
 	tmp.type = state->type;
 	tmp.line = state->line;
 	tmp.port = state->port;
+	if (HIGH_BITS_OFFSET)
+		tmp.port_high = state->port >> HIGH_BITS_OFFSET;
+	else
+		tmp.port_high = 0;
 	tmp.irq = state->irq;
 	tmp.flags = state->flags;
 	tmp.xmit_fifo_size = state->xmit_fifo_size;
@@ -1933,14 +2037,19 @@ static int set_serial_info(struct async_struct * info,
  	struct serial_state old_state, *state;
 	unsigned int		i,change_irq,change_port;
 	int 			retval = 0;
+	unsigned long		new_port;
 
 	if (copy_from_user(&new_serial,new_info,sizeof(new_serial)))
 		return -EFAULT;
 	state = info->state;
 	old_state = *state;
-  
+
+	new_port = new_serial.port;
+	if (HIGH_BITS_OFFSET)
+		new_port += new_serial.port_high << HIGH_BITS_OFFSET;
+
 	change_irq = new_serial.irq != state->irq;
-	change_port = (new_serial.port != state->port) ||
+	change_port = (new_port != ((int) state->port)) ||
 		(new_serial.hub6 != state->hub6);
   
 	if (!capable(CAP_SYS_ADMIN)) {
@@ -1978,7 +2087,7 @@ static int set_serial_info(struct async_struct * info,
 	if (new_serial.type) {
 		for (i = 0 ; i < NR_PORTS; i++)
 			if ((state != &rs_table[i]) &&
-			    (rs_table[i].port == new_serial.port) &&
+			    (rs_table[i].port == new_port) &&
 			    rs_table[i].type)
 				return -EADDRINUSE;
 	}
@@ -2005,8 +2114,14 @@ static int set_serial_info(struct async_struct * info,
 	info->xmit_fifo_size = state->xmit_fifo_size =
 		new_serial.xmit_fifo_size;
 
-	if ((state->type != PORT_UNKNOWN) && state->port)
+	if ((state->type != PORT_UNKNOWN) && state->port) {
+#ifdef CONFIG_SERIAL_RSA
+		if (old_state.type == PORT_RSA)
+			release_region(state->port + UART_RSA_BASE, 16);
+		else
+#endif
 		release_region(state->port,8);
+	}
 	state->type = new_serial.type;
 	if (change_port || change_irq) {
 		/*
@@ -2015,15 +2130,22 @@ static int set_serial_info(struct async_struct * info,
 		 */
 		shutdown(info);
 		state->irq = new_serial.irq;
-		info->port = state->port = new_serial.port;
+		info->port = state->port = new_port;
 		info->hub6 = state->hub6 = new_serial.hub6;
 		if (info->hub6)
 			info->io_type = state->io_type = SERIAL_IO_HUB6;
 		else if (info->io_type == SERIAL_IO_HUB6)
 			info->io_type = state->io_type = SERIAL_IO_PORT;
 	}
-	if ((state->type != PORT_UNKNOWN) && state->port)
-		request_region(state->port,8,"serial(set)");
+	if ((state->type != PORT_UNKNOWN) && state->port) {
+#ifdef CONFIG_SERIAL_RSA
+		if (state->type == PORT_RSA)
+			request_region(state->port + UART_RSA_BASE,
+				       16, "serial_rsa(set)");
+		else
+#endif
+			request_region(state->port,8,"serial(set)");
+	}
 
 	
 check_and_exit:
@@ -2462,6 +2584,9 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			/* note the counters on entry */
 			cprev = info->state->icount;
 			restore_flags(flags);
+			/* Force modem status interrupts on */
+			info->IER |= UART_IER_MSI;
+			serial_out(info, UART_IER, info->IER);
 			while (1) {
 				interruptible_sleep_on(&info->delta_msr_wait);
 				/* see if a signal did it */
@@ -3348,6 +3473,16 @@ static void autoconfig_startech_uarts(struct async_struct *info,
 	 * LSR register (which serial_icr_read does)
 	 */
 	if (state->type == PORT_16550A) {
+		/*
+		 * EFR [4] must be set else this test fails
+		 *
+		 * This shouldn't be necessary, but Mike Hudson
+		 * (Exoray@isys.ca) claims that it's needed for 952
+		 * dual UART's (which are not recommended for new designs).
+		 */
+		serial_out(info, UART_LCR, 0xBF);
+		serial_out(info, UART_EFR, 0x10);
+		serial_out(info, UART_LCR, 0x00);
 		/* Check for Oxford Semiconductor 16C950 */
 		scratch = serial_icr_read(info, UART_ID1);
 		scratch2 = serial_icr_read(info, UART_ID2);
@@ -3434,7 +3569,8 @@ static void autoconfig(struct serial_state * state)
 
 	save_flags(flags); cli();
 	
-	if (!state->iomem_base) {
+	if (!(state->flags & ASYNC_BUGGY_UART) &&
+	    !state->iomem_base) {
 		/*
 		 * Do a simple existence test first; if we fail this,
 		 * there's no point trying anything else.
@@ -3459,8 +3595,9 @@ static void autoconfig(struct serial_state * state)
 		serial_outp(info, UART_IER, scratch);
 		if (scratch2 || scratch3 != 0x0F) {
 #ifdef SERIAL_DEBUG_AUTOCONF
-			printk("serial: ttyS%d: simple autoconfig failed\n",
-			       state->line);
+			printk("serial: ttyS%d: simple autoconfig failed "
+			       "(%02x, %02x)\n", state->line, 
+			       scratch2, scratch3);
 #endif
 			restore_flags(flags);
 			return;		/* We failed; there's nothing here */
@@ -3545,6 +3682,25 @@ static void autoconfig(struct serial_state * state)
 		}
 		serial_outp(info, UART_FCR, UART_FCR_ENABLE_FIFO);
 	}
+#if defined(CONFIG_SERIAL_RSA) && defined(MODULE)
+	if (state->type == PORT_16550A) {
+		int i;
+
+		for (i = 0 ; i < PORT_RSA_MAX ; ++i) {
+			if (!probe_rsa[i] && !force_rsa[i])
+				break;
+			if (((probe_rsa[i] != state->port) ||
+			     check_region(state->port + UART_RSA_BASE, 16)) &&
+			    (force_rsa[i] != state->port))
+				continue;
+			if (!enable_rsa(info))
+				continue;
+			state->type = PORT_RSA;
+			state->baud_base = SERIAL_RSA_BAUD_BASE;
+			break;
+		}
+	}
+#endif
 	serial_outp(info, UART_LCR, save_lcr);
 	if (state->type == PORT_16450) {
 		scratch = serial_in(info, UART_SCR);
@@ -3564,12 +3720,23 @@ static void autoconfig(struct serial_state * state)
 		return;
 	}
 
-	if (info->port)
-		request_region(info->port,8,"serial(auto)");
+	if (info->port) {
+#ifdef CONFIG_SERIAL_RSA
+		if (state->type == PORT_RSA)
+			request_region(info->port + UART_RSA_BASE, 16,
+				       "serial_rsa(auto)");
+		else
+#endif
+			request_region(info->port,8,"serial(auto)");
+	}
 
 	/*
 	 * Reset the UART.
 	 */
+#ifdef CONFIG_SERIAL_RSA
+	if (state->type == PORT_RSA)
+		serial_outp(info, UART_RSA_FRR, 0);
+#endif
 	serial_outp(info, UART_MCR, save_mcr);
 	serial_outp(info, UART_FCR, (UART_FCR_ENABLE_FIFO |
 				     UART_FCR_CLEAR_RCVR |
@@ -3614,7 +3781,7 @@ static void __init printk_pnp_dev_id(unsigned short vendor,
 
 static _INLINE_ int get_pci_port(struct pci_dev *dev,
 				  struct pci_board *board,
-				  struct serial_struct *state,
+				  struct serial_struct *req,
 				  int idx)
 {
 	unsigned long port;
@@ -3626,24 +3793,28 @@ static _INLINE_ int get_pci_port(struct pci_dev *dev,
 		base_idx += idx;
 
 	if (board->flags & SPCI_FL_REGION_SZ_CAP) {
-		max_port = PCI_BASE_REGION_SIZE(dev, base_idx) / 8;
+		max_port = pci_resource_len(dev, base_idx) / 8;
 		if (idx >= max_port)
 			return 1;
 	}
 			
-	port = PCI_BASE_ADDRESS(dev, base_idx) + board->first_uart_offset;
+	port = pci_resource_start(dev, base_idx) + board->first_uart_offset;
 
 	if ((board->flags & SPCI_FL_BASE_TABLE) == 0)
 		port += idx * (board->uart_offset ? board->uart_offset : 8);
 
 	if (IS_PCI_REGION_IOPORT(dev, base_idx)) {
-		state->port = port;
+		req->port = port;
+		if (HIGH_BITS_OFFSET)
+			req->port_high = port >> HIGH_BITS_OFFSET;
+		else
+			req->port_high = 0;
 		return 0;
 	}
-	state->io_type = SERIAL_IO_MEM;
-	state->iomem_base = ioremap(port, board->uart_offset);
-	state->iomem_reg_shift = board->reg_shift;
-	state->port = 0;
+	req->io_type = SERIAL_IO_MEM;
+	req->iomem_base = ioremap(port, board->uart_offset);
+	req->iomem_reg_shift = board->reg_shift;
+	req->port = 0;
 	return 0;
 }
 
@@ -3670,20 +3841,25 @@ static void __init start_pci_pnp_board(struct pci_dev *dev,
 				       struct pci_board *board)
 {
 	int k, line;
-	struct serial_struct fake_state;
+	struct serial_struct serial_req;
 	int base_baud;
 
        if (PREPARE_FUNC(dev) && (PREPARE_FUNC(dev))(dev) < 0) {
-	       printk("SERIAL: PNP device '");
+	       printk("serial: PNP device '");
 	       printk_pnp_dev_id(board->vendor, board->device);
 	       printk("' prepare failed\n");
 	       return;
        }
 
        if (ACTIVATE_FUNC(dev) && (ACTIVATE_FUNC(dev))(dev) < 0) {
-	       printk("SERIAL: PNP device '");
+	       printk("serial: PNP device '");
 	       printk_pnp_dev_id(board->vendor, board->device);
 	       printk("' activate failed\n");
+	       return;
+       }
+
+       if (!(board->flags & SPCI_FL_ISPNP) && pci_enable_device(dev)) {
+	       printk("serial: PCI device enable failed\n");
 	       return;
        }
 
@@ -3710,18 +3886,18 @@ static void __init start_pci_pnp_board(struct pci_dev *dev,
 	base_baud = board->base_baud;
 	if (!base_baud)
 		base_baud = BASE_BAUD;
-	memset(&fake_state, 0, sizeof(fake_state));
+	memset(&serial_req, 0, sizeof(serial_req));
 
 	for (k=0; k < board->num_ports; k++) {
-		fake_state.irq = get_pci_irq(dev, board, k);
-		if (get_pci_port(dev, board, &fake_state, k))
+		serial_req.irq = get_pci_irq(dev, board, k);
+		if (get_pci_port(dev, board, &serial_req, k))
 			break;
-		fake_state.flags = ASYNC_SKIP_TEST;
+		serial_req.flags = ASYNC_SKIP_TEST | ASYNC_AUTOPROBE;
 #ifdef SERIAL_DEBUG_PCI
 		printk("Setup PCI/PNP port: port %x, irq %d, type %d\n",
-		       fake_state.port, fake_state.irq, fake_state.io_type);
+		       serial_req.port, serial_req.irq, serial_req.io_type);
 #endif
-		line = register_serial(&fake_state);
+		line = register_serial(&serial_req);
 		if (line < 0)
 			break;
 		rs_table[line].baud_base = base_baud;
@@ -3742,27 +3918,44 @@ __init
 #endif
 pci_plx9050_fn(struct pci_dev *dev, struct pci_board *board, int enable)
 {
-	u8 data, *p, scratch;
+	u8 data, *p, irq_config;
+	int pci_config;
 
+	irq_config = 0x41;
+	pci_config = PCI_COMMAND_MEMORY;
+	if (dev->vendor == PCI_VENDOR_ID_PANACOM)
+		irq_config = 0x43;
+	if ((dev->vendor == PCI_VENDOR_ID_PLX) &&
+	    (dev->device == PCI_VENDOR_ID_PLX_ROMULUS)) {
+		/*
+		 * As the megawolf cards have the int pins active
+		 * high, and have 2 UART chips, both ints must be
+		 * enabled on the 9050. Also, the UARTS are set in
+		 * 16450 mode by default, so we have to enable the
+		 * 16C950 'enhanced' mode so that we can use the deep
+		 * FIFOs
+		 */
+		irq_config = 0x5b;
+		pci_config = PCI_COMMAND_MEMORY | PCI_COMMAND_IO;
+	}
+	
 	pci_read_config_byte(dev, PCI_COMMAND, &data);
 
 	if (enable)
 		pci_write_config_byte(dev, PCI_COMMAND,
-				      data | PCI_COMMAND_MEMORY);
+				      data | pci_config);
 	
 	/* enable/disable interrupts */
-	p = ioremap(PCI_BASE_ADDRESS(dev, 0), 0x80);
-	scratch = 0x41;
-	if (dev->vendor == PCI_VENDOR_ID_PANACOM)
-		scratch = 0x43;
-	writel(enable ? scratch : 0x00, (unsigned long)p + 0x4c);
+	p = ioremap(pci_resource_start(dev, 0), 0x80);
+	writel(enable ? irq_config : 0x00, (unsigned long)p + 0x4c);
 	iounmap(p);
 
 	if (!enable)
 		pci_write_config_byte(dev, PCI_COMMAND,
-				      data & ~PCI_COMMAND_MEMORY);
+				      data & ~pci_config);
 	return 0;
 }
+
 
 /*
  * SIIG serial cards have an PCI interface chip which also controls
@@ -3796,7 +3989,7 @@ pci_siig10x_fn(struct pci_dev *dev, struct pci_board *board, int enable)
 
        if (!enable) return 0;
 
-       p = ioremap(PCI_BASE_ADDRESS(dev, 0), 0x80);
+       p = ioremap(pci_resource_start(dev, 0), 0x80);
 
        switch (dev->device & 0xfff8) {
                case PCI_DEVICE_ID_SIIG_1S_10x:         /* 1S */
@@ -3841,6 +4034,36 @@ pci_siig20x_fn(struct pci_dev *dev, struct pci_board *board, int enable)
        return 0;
 }
 
+/* Added for EKF Intel i960 serial boards */
+static int
+#ifndef MODULE
+__init
+#endif
+pci_inteli960ni_fn(struct pci_dev *dev,
+		   struct pci_board *board,
+		   int enable)
+{
+	unsigned long oldval;
+	
+	if (!(board->subdevice & 0x1000))
+		return(-1);
+
+	if (!enable) /* is there something to deinit? */
+		return(0);
+   
+#ifdef SERIAL_DEBUG_PCI
+	printk(KERN_DEBUG " Subsystem ID %lx (intel 960)\n",
+	       (unsigned long) board->subdevice);
+#endif
+	/* is firmware started? */
+	pci_read_config_dword(dev, 0x44, (void*) &oldval); 
+	if (oldval == 0x00001000L) { /* RESET value */ 
+		printk(KERN_DEBUG "Local i960 firmware missing");
+		return(-1); 
+	}
+	return(0);
+}
+
 
 /*
  * This is the configuration table for all of the PCI serial boards
@@ -3851,8 +4074,9 @@ static struct pci_board pci_boards[] __initdata = {
 	 * Vendor ID, 	Device ID,
 	 * Subvendor ID,	Subdevice ID,
 	 * PCI Flags, Number of Ports, Base (Maximum) Baud Rate,
-	 * Offset to get to next UART's registers
-	 * Register shift to use for memory-mapped I/O
+	 * Offset to get to next UART's registers,
+	 * Register shift to use for memory-mapped I/O,
+	 * Initialization function, first UART offset
 	 */
 	{	PCI_VENDOR_ID_V3, PCI_DEVICE_ID_V3_V960,
 		PCI_SUBVENDOR_ID_CONNECT_TECH,
@@ -3942,6 +4166,10 @@ static struct pci_board pci_boards[] __initdata = {
 	{	PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_SPCOM200,
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE2 | SPCI_FL_BASE_TABLE, 2, 921600 },
+	/* VScom SPCOM800, from sl@s.pl */
+	{	PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_SPCOM800, 
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE2, 8, 921600 },
 	{	PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_9050,
 		PCI_SUBVENDOR_ID_KEYSPAN,
 		PCI_SUBDEVICE_ID_KEYSPAN_SX2,
@@ -3979,6 +4207,12 @@ static struct pci_board pci_boards[] __initdata = {
 		PCI_SUBVENDOR_ID_CHASE_PCIRAS,
 		PCI_SUBDEVICE_ID_CHASE_PCIRAS8,
 		SPCI_FL_BASE2, 8, 460800 },
+	/* Megawolf Romulus PCI Serial Card, from Mike Hudson */
+	/* (Exoray@isys.ca) */
+	{	PCI_VENDOR_ID_PLX, PCI_VENDOR_ID_PLX_ROMULUS,
+		0x10b5, 0x106a,
+		SPCI_FL_BASE2, 4, 921600,
+		0x20, 2, pci_plx9050_fn, 0x03 },
 	{	PCI_VENDOR_ID_QUATECH, PCI_DEVICE_ID_QUATECH_QSC100,
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE1, 4, 115200 },
@@ -4164,7 +4398,7 @@ static struct pci_board pci_boards[] __initdata = {
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE0 | SPCI_FL_BASE_TABLE, 4, 921600,
 		0, 0, pci_siig20x_fn },
-	/* Computone devices submitted by Doug McNash dougm@computone.com */
+	/* Computone devices submitted by Doug McNash dmcnash@computone.com */
 	{	PCI_VENDOR_ID_COMPUTONE, PCI_DEVICE_ID_COMPUTONE_PG,
 		PCI_SUBVENDOR_ID_COMPUTONE, PCI_SUBDEVICE_ID_COMPUTONE_PG4,
 		SPCI_FL_BASE0, 4, 921600, /* IOMEM */
@@ -4198,6 +4432,15 @@ static struct pci_board pci_boards[] __initdata = {
 	{	PCI_VENDOR_ID_TITAN, PCI_DEVICE_ID_TITAN_800B,
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE0, 4, 921600 },
+	/* EKF addition for i960 Boards form EKF with serial port */
+	{	PCI_VENDOR_ID_INTEL, 0x1960,
+		0xE4BF, PCI_ANY_ID,
+		SPCI_FL_BASE0, 32, 921600, /* max 256 ports */
+		8<<2, 2, pci_inteli960ni_fn, 0x10000},
+	/* RAStel 2 port modem, gerg@moreton.com.au */
+	{	PCI_VENDOR_ID_MORETON, PCI_DEVICE_ID_RASTEL_2PORT,
+		PCI_ANY_ID, PCI_ANY_ID,
+		SPCI_FL_BASE2 | SPCI_FL_BASE_TABLE, 2, 115200 },
 	/*
 	 * Untested PCI modems, sent in from various folks...
 	 */
@@ -4221,12 +4464,12 @@ static struct pci_board pci_boards[] __initdata = {
 };
 
 /*
- * Given a complete unknown PCI device, try to use some hueristics to
+ * Given a complete unknown PCI device, try to use some heuristics to
  * guess what the configuration might be, based on the pitiful PCI
  * serial specs.  Returns 0 on success, 1 on failure.
  */
-static int _INLINE_ serial_guess_board(struct pci_dev *dev,
-				       struct pci_board *board)
+static int _INLINE_ serial_pci_guess_board(struct pci_dev *dev,
+					   struct pci_board *board)
 {
 	int	num_iomem = 0, num_port = 0, first_port = -1;
 	int	i;
@@ -4281,13 +4524,6 @@ static void __init probe_serial_pci(void)
 	printk(KERN_DEBUG "Entered probe_serial_pci()\n");
 #endif
   
-	if (!pcibios_present()) {
-#ifdef SERIAL_DEBUG_PCI
-		printk(KERN_DEBUG "Leaving probe_serial_pci() (no pcibios)\n");
-#endif
-		return;
-	}
-
 	pci_for_each_dev(dev) {
 		for (board = pci_boards; board->vendor; board++) {
 			if (board->vendor != (unsigned short) PCI_ANY_ID &&
@@ -4305,7 +4541,7 @@ static void __init probe_serial_pci(void)
 			break;
 		}
 	
-		if (board->vendor == 0 && serial_guess_board(dev, board))
+		if (board->vendor == 0 && serial_pci_guess_board(dev, board))
 			continue;
 		
 		start_pci_pnp_board(dev, board);
@@ -4321,58 +4557,280 @@ static void __init probe_serial_pci(void)
 
 #ifdef ENABLE_SERIAL_PNP
 
-static struct pci_board pnp_devices[] __initdata = {
-	/* Motorola VoiceSURFR 56K Modem */
-	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x15F0), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
-	/* Rockwell 56K ACF II Fax+Data+Voice Modem */
-	{	ISAPNP_VENDOR('A', 'K', 'Y'), ISAPNP_DEVICE(0x1021), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_NO_SHIRQ | SPCI_FL_PNPDEFAULT,
-		1, 115200 },
-	/* AZT3005 PnP SOUND DEVICE */
-	{	ISAPNP_VENDOR('A', 'Z', 'T'), ISAPNP_DEVICE(0x4001), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
-	/* Best Data Products Inc. Smart One 336F PnP Modem */
-	{	ISAPNP_VENDOR('B', 'D', 'P'), ISAPNP_DEVICE(0x3336), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
-	/* Boca Research 33,600 ACF Modem */
-	{	ISAPNP_VENDOR('B', 'R', 'I'), ISAPNP_DEVICE(0x1400), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
-	/* Creative Modem Blaster Flash56 DI5601-1 */
-	{	ISAPNP_VENDOR('D', 'M', 'B'), ISAPNP_DEVICE(0x1032), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
-	/* Creative Modem Blaster V.90 DI5660 */
-	{	ISAPNP_VENDOR('D', 'M', 'B'), ISAPNP_DEVICE(0x2001), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
-	/* Pace 56 Voice Internal Plug & Play Modem */
-	{	ISAPNP_VENDOR('P', 'M', 'C'), ISAPNP_DEVICE(0x2430), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
-	/* SupraExpress 28.8 Data/Fax PnP modem */
-	{	ISAPNP_VENDOR('S', 'U', 'P'), ISAPNP_DEVICE(0x1310), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
-	/* US Robotics Sporster 33600 Modem */
-	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x0006), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
-	/* U.S. Robotics 56K FAX INT */
-	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x3031), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
-	/* Viking 56K FAX INT */
-	{	ISAPNP_VENDOR('R', 'S', 'S'), ISAPNP_DEVICE(0x0262), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+struct pnp_board {
+	unsigned short vendor;
+	unsigned short device;
+};
 
-	/* These ID's are taken from M$ documentation */
-	/* Compaq 14400 Modem */
-	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC000), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
-	/* Compaq 2400/9600 Modem */
-	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC001), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+static struct pnp_board pnp_devices[] __initdata = {
+	/* Archtek America Corp. */
+	/* Archtek SmartLink Modem 3334BT Plug & Play */
+	{	ISAPNP_VENDOR('A', 'A', 'C'), ISAPNP_DEVICE(0x000F) },
+	/* Anchor Datacomm BV */
+	/* SXPro 144 External Data Fax Modem Plug & Play */
+	{	ISAPNP_VENDOR('A', 'D', 'C'), ISAPNP_DEVICE(0x0001) },
+	/* SXPro 288 External Data Fax Modem Plug & Play */
+	{	ISAPNP_VENDOR('A', 'D', 'C'), ISAPNP_DEVICE(0x0002) },
+	/* Rockwell 56K ACF II Fax+Data+Voice Modem */
+	{	ISAPNP_VENDOR('A', 'K', 'Y'), ISAPNP_DEVICE(0x1021) },
+	/* AZT3005 PnP SOUND DEVICE */
+	{	ISAPNP_VENDOR('A', 'Z', 'T'), ISAPNP_DEVICE(0x4001) },
+	/* Best Data Products Inc. Smart One 336F PnP Modem */
+	{	ISAPNP_VENDOR('B', 'D', 'P'), ISAPNP_DEVICE(0x3336) },
+	/*  Boca Research */
+	/* Boca Complete Ofc Communicator 14.4 Data-FAX */
+	{	ISAPNP_VENDOR('B', 'R', 'I'), ISAPNP_DEVICE(0x0A49) },
+	/* Boca Research 33,600 ACF Modem */
+	{	ISAPNP_VENDOR('B', 'R', 'I'), ISAPNP_DEVICE(0x1400) },
+	/* Boca 33.6 Kbps Internal FD34FSVD */
+	{	ISAPNP_VENDOR('B', 'R', 'I'), ISAPNP_DEVICE(0x3400) },
+	/* Boca 33.6 Kbps Internal FD34FSVD */
+	{	ISAPNP_VENDOR('B', 'R', 'I'), ISAPNP_DEVICE(0x0A49) },
+	/* Best Data Products Inc. Smart One 336F PnP Modem */
+	{	ISAPNP_VENDOR('B', 'D', 'P'), ISAPNP_DEVICE(0x3336) },
+	/* Computer Peripherals Inc */
+	/* EuroViVa CommCenter-33.6 SP PnP */
+	{	ISAPNP_VENDOR('C', 'P', 'I'), ISAPNP_DEVICE(0x4050) },
+	/* Creative Labs */
+	/* Creative Labs Phone Blaster 28.8 DSVD PnP Voice */
+	{	ISAPNP_VENDOR('C', 'T', 'L'), ISAPNP_DEVICE(0x3001) },
+	/* Creative Labs Modem Blaster 28.8 DSVD PnP Voice */
+	{	ISAPNP_VENDOR('C', 'T', 'L'), ISAPNP_DEVICE(0x3011) },
+	/* Creative */
+	/* Creative Modem Blaster Flash56 DI5601-1 */
+	{	ISAPNP_VENDOR('D', 'M', 'B'), ISAPNP_DEVICE(0x1032) },
+	/* Creative Modem Blaster V.90 DI5660 */
+	{	ISAPNP_VENDOR('D', 'M', 'B'), ISAPNP_DEVICE(0x2001) },
+	/* FUJITSU */
+	/* Fujitsu 33600 PnP-I2 R Plug & Play */
+	{	ISAPNP_VENDOR('F', 'U', 'J'), ISAPNP_DEVICE(0x0202) },
+	/* Fujitsu FMV-FX431 Plug & Play */
+	{	ISAPNP_VENDOR('F', 'U', 'J'), ISAPNP_DEVICE(0x0205) },
+	/* Fujitsu 33600 PnP-I4 R Plug & Play */
+	{	ISAPNP_VENDOR('F', 'U', 'J'), ISAPNP_DEVICE(0x0206) },
+	/* Fujitsu Fax Voice 33600 PNP-I5 R Plug & Play */
+	{	ISAPNP_VENDOR('F', 'U', 'J'), ISAPNP_DEVICE(0x0209) },
+	/* Archtek America Corp. */
+	/* Archtek SmartLink Modem 3334BT Plug & Play */
+	{	ISAPNP_VENDOR('G', 'V', 'C'), ISAPNP_DEVICE(0x000F) },
+	/* Hayes */
+	/* Hayes Optima 288 V.34-V.FC + FAX + Voice Plug & Play */
+	{	ISAPNP_VENDOR('H', 'A', 'Y'), ISAPNP_DEVICE(0x0001) },
+	/* Hayes Optima 336 V.34 + FAX + Voice PnP */
+	{	ISAPNP_VENDOR('H', 'A', 'Y'), ISAPNP_DEVICE(0x000C) },
+	/* Hayes Optima 336B V.34 + FAX + Voice PnP */
+	{	ISAPNP_VENDOR('H', 'A', 'Y'), ISAPNP_DEVICE(0x000D) },
+	/* Hayes Accura 56K Ext Fax Modem PnP */
+	{	ISAPNP_VENDOR('H', 'A', 'Y'), ISAPNP_DEVICE(0x5670) },
+	/* Hayes Accura 56K Ext Fax Modem PnP */
+	{	ISAPNP_VENDOR('H', 'A', 'Y'), ISAPNP_DEVICE(0x5674) },
+	/* Hayes Accura 56K Fax Modem PnP */
+	{	ISAPNP_VENDOR('H', 'A', 'Y'), ISAPNP_DEVICE(0x5675) },
+	/* Hayes 288, V.34 + FAX */
+	{	ISAPNP_VENDOR('H', 'A', 'Y'), ISAPNP_DEVICE(0xF000) },
+	/* Hayes Optima 288 V.34 + FAX + Voice, Plug & Play */
+	{	ISAPNP_VENDOR('H', 'A', 'Y'), ISAPNP_DEVICE(0xF001) },
+	/* IBM */
+	/* IBM Thinkpad 701 Internal Modem Voice */
+	{	ISAPNP_VENDOR('I', 'B', 'M'), ISAPNP_DEVICE(0x0033) },
+	/* Intertex */
+	/* Intertex 28k8 33k6 Voice EXT PnP */
+	{	ISAPNP_VENDOR('I', 'X', 'D'), ISAPNP_DEVICE(0xC801) },
+	/* Intertex 33k6 56k Voice EXT PnP */
+	{	ISAPNP_VENDOR('I', 'X', 'D'), ISAPNP_DEVICE(0xC901) },
+	/* Intertex 28k8 33k6 Voice SP EXT PnP */
+	{	ISAPNP_VENDOR('I', 'X', 'D'), ISAPNP_DEVICE(0xD801) },
+	/* Intertex 33k6 56k Voice SP EXT PnP */
+	{	ISAPNP_VENDOR('I', 'X', 'D'), ISAPNP_DEVICE(0xD901) },
+	/* Intertex 28k8 33k6 Voice SP INT PnP */
+	{	ISAPNP_VENDOR('I', 'X', 'D'), ISAPNP_DEVICE(0xF401) },
+	/* Intertex 28k8 33k6 Voice SP EXT PnP */
+	{	ISAPNP_VENDOR('I', 'X', 'D'), ISAPNP_DEVICE(0xF801) },
+	/* Intertex 33k6 56k Voice SP EXT PnP */
+	{	ISAPNP_VENDOR('I', 'X', 'D'), ISAPNP_DEVICE(0xF901) },
+	/* Kortex International */
+	/* KORTEX 28800 Externe PnP */
+	{	ISAPNP_VENDOR('K', 'O', 'R'), ISAPNP_DEVICE(0x4522) },
+	/* KXPro 33.6 Vocal ASVD PnP */
+	{	ISAPNP_VENDOR('K', 'O', 'R'), ISAPNP_DEVICE(0xF661) },
+	/* Lasat */
+	/* LASAT Internet 33600 PnP */
+	{	ISAPNP_VENDOR('L', 'A', 'S'), ISAPNP_DEVICE(0x4040) },
+	/* Lasat Safire 560 PnP */
+	{	ISAPNP_VENDOR('L', 'A', 'S'), ISAPNP_DEVICE(0x4540) },
+	/* Lasat Safire 336  PnP */
+	{	ISAPNP_VENDOR('L', 'A', 'S'), ISAPNP_DEVICE(0x5440) },
+	/* Microcom, Inc. */
+	/* Microcom TravelPorte FAST V.34 Plug & Play */
+	{	ISAPNP_VENDOR('M', 'N', 'P'), ISAPNP_DEVICE(0x281) },
+	/* Microcom DeskPorte V.34 FAST or FAST+ Plug & Play */
+	{	ISAPNP_VENDOR('M', 'N', 'P'), ISAPNP_DEVICE(0x0336) },
+	/* Microcom DeskPorte FAST EP 28.8 Plug & Play */
+	{	ISAPNP_VENDOR('M', 'N', 'P'), ISAPNP_DEVICE(0x0339) },
+	/* Microcom DeskPorte 28.8P Plug & Play */
+	{	ISAPNP_VENDOR('M', 'N', 'P'), ISAPNP_DEVICE(0x0342) },
+	/* Microcom DeskPorte FAST ES 28.8 Plug & Play */
+	{	ISAPNP_VENDOR('M', 'N', 'P'), ISAPNP_DEVICE(0x0500) },
+	/* Microcom DeskPorte FAST ES 28.8 Plug & Play */
+	{	ISAPNP_VENDOR('M', 'N', 'P'), ISAPNP_DEVICE(0x0501) },
+	/* Microcom DeskPorte 28.8S Internal Plug & Play */
+	{	ISAPNP_VENDOR('M', 'N', 'P'), ISAPNP_DEVICE(0x0502) },
+	/* Motorola */
+	/* Motorola BitSURFR Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1105) },
+	/* Motorola TA210 Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1111) },
+	/* Motorola HMTA 200 (ISDN) Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1114) },
+	/* Motorola BitSURFR Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1115) },
+	/* Motorola Lifestyle 28.8 Internal */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1190) },
+	/* Motorola V.3400 Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1501) },
+	/* Motorola Lifestyle 28.8 V.34 Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1502) },
+	/* Motorola Power 28.8 V.34 Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1505) },
+	/* Motorola ModemSURFR External 28.8 Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1509) },
+	/* Motorola Premier 33.6 Desktop Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x150A) },
+	/* Motorola VoiceSURFR 56K External PnP */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x150F) },
+	/* Motorola ModemSURFR 56K External PnP */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1510) },
+	/* Motorola ModemSURFR 56K Internal PnP */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1550) },
+	/* Motorola ModemSURFR Internal 28.8 Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1560) },
+	/* Motorola Premier 33.6 Internal Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x1580) },
+	/* Motorola OnlineSURFR 28.8 Internal Plug & Play */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x15B0) },
+	/* Motorola VoiceSURFR 56K Internal PnP */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x15F0) },
+	/* Com 1 */
+	/*  Deskline K56 Phone System PnP */
+	{	ISAPNP_VENDOR('M', 'V', 'X'), ISAPNP_DEVICE(0x00A1) },
+	/* PC Rider K56 Phone System PnP */
+	{	ISAPNP_VENDOR('M', 'V', 'X'), ISAPNP_DEVICE(0x00F2) },
+	/* Pace 56 Voice Internal Plug & Play Modem */
+	{	ISAPNP_VENDOR('P', 'M', 'C'), ISAPNP_DEVICE(0x2430) },
+	/* Generic */
 	/* Generic standard PC COM port	 */
-	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0x0500), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0x0500) },
 	/* Generic 16550A-compatible COM port */
-	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0x0501), 0, 0,
-		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0x0501) },
+	/* Compaq 14400 Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC000) },
+	/* Compaq 2400/9600 Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC001) },
+	/* Dial-Up Networking Serial Cable between 2 PCs */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC031) },
+	/* Dial-Up Networking Parallel Cable between 2 PCs */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC032) },
+	/* Standard 9600 bps Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC100) },
+	/* Standard 14400 bps Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC101) },
+	/*  Standard 28800 bps Modem*/
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC102) },
+	/*  Standard Modem*/
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC103) },
+	/*  Standard 9600 bps Modem*/
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC104) },
+	/*  Standard 14400 bps Modem*/
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC105) },
+	/*  Standard 28800 bps Modem*/
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC106) },
+	/*  Standard Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC107) },
+	/* Standard 9600 bps Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC108) },
+	/* Standard 14400 bps Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC109) },
+	/* Standard 28800 bps Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC10A) },
+	/* Standard Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC10B) },
+	/* Standard 9600 bps Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC10C) },
+	/* Standard 14400 bps Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC10D) },
+	/* Standard 28800 bps Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC10E) },
+	/* Standard Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0xC10F) },
+	/* Standard PCMCIA Card Modem */
+	{	ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_DEVICE(0x2000) },
+	/* Rockwell */
+	/* Modular Technology */
+	/* Rockwell 33.6 DPF Internal PnP */
+	/* Modular Technology 33.6 Internal PnP */
+	{	ISAPNP_VENDOR('R', 'O', 'K'), ISAPNP_DEVICE(0x0030) },
+	/* Kortex International */
+	/* KORTEX 14400 Externe PnP */
+	{	ISAPNP_VENDOR('R', 'O', 'K'), ISAPNP_DEVICE(0x0100) },
+	/* Viking Components, Inc */
+	/* Viking 28.8 INTERNAL Fax+Data+Voice PnP */
+	{	ISAPNP_VENDOR('R', 'O', 'K'), ISAPNP_DEVICE(0x4920) },
+	/* Rockwell */
+	/* British Telecom */
+	/* Modular Technology */
+	/* Rockwell 33.6 DPF External PnP */
+	/* BT Prologue 33.6 External PnP */
+	/* Modular Technology 33.6 External PnP */
+	{	ISAPNP_VENDOR('R', 'S', 'S'), ISAPNP_DEVICE(0x00A0) },
+	/* Viking 56K FAX INT */
+	{	ISAPNP_VENDOR('R', 'S', 'S'), ISAPNP_DEVICE(0x0262) },
+	/* SupraExpress 28.8 Data/Fax PnP modem */
+	{	ISAPNP_VENDOR('S', 'U', 'P'), ISAPNP_DEVICE(0x1310) },
+	/* SupraExpress 33.6 Data/Fax PnP modem */
+	{	ISAPNP_VENDOR('S', 'U', 'P'), ISAPNP_DEVICE(0x1421) },
+	/* SupraExpress 33.6 Data/Fax PnP modem */
+	{	ISAPNP_VENDOR('S', 'U', 'P'), ISAPNP_DEVICE(0x1590) },
+	/* SupraExpress 33.6 Data/Fax PnP modem */
+	{	ISAPNP_VENDOR('S', 'U', 'P'), ISAPNP_DEVICE(0x1760) },
+	/* Phoebe Micro */
+	/* Phoebe Micro 33.6 Data Fax 1433VQH Plug & Play */
+	{	ISAPNP_VENDOR('T', 'E', 'X'), ISAPNP_DEVICE(0x0011) },
+	/* Archtek America Corp. */
+	/* Archtek SmartLink Modem 3334BT Plug & Play */
+	{	ISAPNP_VENDOR('U', 'A', 'C'), ISAPNP_DEVICE(0x000F) },
+	/* 3Com Corp. */
+	/* Gateway Telepath IIvi 33.6 */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x0000) },
+	/*  Sportster Vi 14.4 PnP FAX Voicemail */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x0004) },
+	/* U.S. Robotics 33.6K Voice INT PnP */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x0006) },
+	/* U.S. Robotics 33.6K Voice EXT PnP */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x0007) },
+	/* U.S. Robotics 33.6K Voice INT PnP */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x2002) },
+	/* U.S. Robotics 56K Voice INT PnP */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x2070) },
+	/* U.S. Robotics 56K Voice EXT PnP */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x2080) },
+	/* U.S. Robotics 56K FAX INT */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x3031) },
+	/* U.S. Robotics 56K Voice INT PnP */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x3070) },
+	/* U.S. Robotics 56K Voice EXT PnP */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x3080) },
+	/* U.S. Robotics 56K Voice INT PnP */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x3090) },
+	/* U.S. Robotics 56K Message  */
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x9100) },
+	/*  U.S. Robotics 56K FAX EXT PnP*/
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x9160) },
+	/*  U.S. Robotics 56K FAX INT PnP*/
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x9170) },
+	/*  U.S. Robotics 56K Voice EXT PnP*/
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x9180) },
+	/*  U.S. Robotics 56K Voice INT PnP*/
+	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x9190) },
 	{	0, }
 };
 
@@ -4394,10 +4852,80 @@ static void inline avoid_irq_share(struct pci_dev *dev)
 			irq->map = map;
 }
 
+static char *modem_names[] __initdata = {
+       "MODEM", "Modem", "modem", "FAX", "Fax", "fax",
+       "56K", "56k", "K56", "33.6", "28.8", "14.4",
+       "33,600", "28,800", "14,400", "33.600", "28.800", "14.400",
+       "33600", "28800", "14400", "V.90", "V.34", "V.32", 0
+};
+
+static int __init check_name(char *name)
+{
+       char **tmp = modem_names;
+
+       while (*tmp) {
+               if (strstr(name, *tmp))
+                       return 1;
+               tmp++;
+       }
+       return 0;
+}
+
+static int inline check_compatible_id(struct pci_dev *dev)
+{
+       int i;
+       for (i = 0; i < DEVICE_COUNT_COMPATIBLE; i++)
+	       if ((dev->vendor_compatible[i] ==
+		    ISAPNP_VENDOR('P', 'N', 'P')) &&
+		   (swab16(dev->device_compatible[i]) >= 0xc000) &&
+		   (swab16(dev->device_compatible[i]) <= 0xdfff))
+		       return 0;
+       return 1;
+}
+
+/*
+ * Given a complete unknown ISA PnP device, try to use some heuristics to
+ * detect modems. Currently use such heuristic set:
+ *     - dev->name or dev->bus->name must contain "modem" substring;
+ *     - device must have only one IO region (8 byte long) with base adress
+ *       0x2e8, 0x3e8, 0x2f8 or 0x3f8.
+ *
+ * Such detection looks very ugly, but can detect at least some of numerous
+ * ISA PnP modems, alternatively we must hardcode all modems in pnp_devices[]
+ * table.
+ */
+static int _INLINE_ serial_pnp_guess_board(struct pci_dev *dev,
+					  struct pci_board *board)
+{
+       struct isapnp_resources *res = (struct isapnp_resources *)dev->sysdata;
+       struct isapnp_resources *resa;
+
+       if (!(check_name(dev->name) || check_name(dev->bus->name)) &&
+	   !(check_compatible_id(dev)))
+	       return 1;
+
+       if (!res || res->next)
+	       return 1;
+
+       for (resa = res->alt; resa; resa = resa->alt) {
+	       struct isapnp_port *port;
+	       for (port = res->port; port; port = port->next)
+		       if ((port->size == 8) &&
+			   ((port->min == 0x2f8) ||
+			    (port->min == 0x3f8) ||
+			    (port->min == 0x2e8) ||
+			    (port->min == 0x3e8)))
+			       return 0;
+       }
+
+       return 1;
+}
+
 static void __init probe_serial_pnp(void)
 {
        struct pci_dev *dev = NULL;
-       struct pci_board *board;
+       struct pnp_board *pnp_board;
+       struct pci_board board;
 
 #ifdef SERIAL_DEBUG_PNP
        printk("Entered probe_serial_pnp()\n");
@@ -4409,13 +4937,35 @@ static void __init probe_serial_pnp(void)
                return;
        }
 
-       for (board = pnp_devices; board->vendor; board++) {
-               while ((dev = isapnp_find_dev(NULL, board->vendor,
-					     board->device, dev))) {
-			if (board->flags & SPCI_FL_NO_SHIRQ)
-				avoid_irq_share(dev);
-			start_pci_pnp_board(dev, board);
-               }
+       isapnp_for_each_dev(dev) {
+	       if (dev->active)
+		       continue;
+
+	       memset(&board, 0, sizeof(board));
+	       board.flags = SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT;
+	       board.num_ports = 1;
+	       board.base_baud = 115200;
+	       
+	       for (pnp_board = pnp_devices; pnp_board->vendor; pnp_board++)
+		       if ((dev->vendor == pnp_board->vendor) &&
+			   (dev->device == pnp_board->device))
+			       break;
+
+	       if (pnp_board->vendor) {
+		       board.vendor = pnp_board->vendor;
+		       board.device = pnp_board->device;
+		       /* Special case that's more efficient to hardcode */
+		       if ((board.vendor == ISAPNP_VENDOR('A', 'K', 'Y') &&
+			    board.device == ISAPNP_DEVICE(0x1021)))
+			       board.flags |= SPCI_FL_NO_SHIRQ;
+	       } else {
+		       if (serial_pnp_guess_board(dev, &board))
+			       continue;
+	       }
+	       
+	       if (board.flags & SPCI_FL_NO_SHIRQ)
+		       avoid_irq_share(dev);
+	       start_pci_pnp_board(dev, &board);
        }
 
 #ifdef SERIAL_DEBUG_PNP
@@ -4477,7 +5027,7 @@ int __init rs_init(void)
 #if (LINUX_VERSION_CODE > 0x20100)
 	serial_driver.driver_name = "serial";
 #endif
-#ifdef CONFIG_DEVFS_FS
+#if (LINUX_VERSION_CODE > 0x2032D && defined(CONFIG_DEVFS_FS))
 	serial_driver.name = "tts/%d";
 #else
 	serial_driver.name = "ttyS";
@@ -4525,7 +5075,7 @@ int __init rs_init(void)
 	 * major number and the subtype code.
 	 */
 	callout_driver = serial_driver;
-#ifdef CONFIG_DEVFS_FS
+#if (LINUX_VERSION_CODE > 0x2032D && defined(CONFIG_DEVFS_FS))
 	callout_driver.name = "cua/%d";
 #else
 	callout_driver.name = "cua";
@@ -4615,12 +5165,23 @@ int register_serial(struct serial_struct *req)
 	unsigned long flags;
 	struct serial_state *state;
 	struct async_struct *info;
+	unsigned long port;
+
+	port = req->port;
+	if (HIGH_BITS_OFFSET)
+		port += req->port_high << HIGH_BITS_OFFSET;
 
 	save_flags(flags); cli();
 	for (i = 0; i < NR_PORTS; i++) {
-		if ((rs_table[i].port == req->port) &&
+		if ((rs_table[i].port == port) &&
 		    (rs_table[i].iomem_base == req->iomem_base))
 			break;
+	}
+	if (i == NR_PORTS) {
+		for (i = 4; i < NR_PORTS; i++)
+			if ((rs_table[i].type == PORT_UNKNOWN) &&
+			    (rs_table[i].count == 0))
+				break;
 	}
 	if (i == NR_PORTS) {
 		for (i = 0; i < NR_PORTS; i++)
@@ -4636,11 +5197,11 @@ int register_serial(struct serial_struct *req)
 	if (rs_table[i].count) {
 		restore_flags(flags);
 		printk("Couldn't configure serial #%d (port=%ld,irq=%d): "
-		       "device already open\n", i, req->port, req->irq);
+		       "device already open\n", i, port, req->irq);
 		return -1;
 	}
 	state->irq = req->irq;
-	state->port = req->port;
+	state->port = port;
 	state->flags = req->flags;
 	state->io_type = req->io_type;
 	state->iomem_base = req->iomem_base;
@@ -4648,7 +5209,7 @@ int register_serial(struct serial_struct *req)
 	if (req->baud_base)
 		state->baud_base = req->baud_base;
 	if ((info = state->info) != NULL) {
-		info->port = req->port;
+		info->port = port;
 		info->flags = req->flags;
 		info->io_type = req->io_type;
 		info->iomem_base = req->iomem_base;
@@ -4721,10 +5282,10 @@ void rs_fini(void)
 	timer_table[RS_TIMER].expires = 0;
         remove_bh(SERIAL_BH);
 	if ((e1 = tty_unregister_driver(&serial_driver)))
-		printk("SERIAL: failed to unregister serial driver (%d)\n",
+		printk("serial: failed to unregister serial driver (%d)\n",
 		       e1);
 	if ((e2 = tty_unregister_driver(&callout_driver)))
-		printk("SERIAL: failed to unregister callout driver (%d)\n", 
+		printk("serial: failed to unregister callout driver (%d)\n", 
 		       e2);
 	restore_flags(flags);
 
@@ -4733,8 +5294,15 @@ void rs_fini(void)
 			rs_table[i].info = NULL;
 			kfree_s(info, sizeof(struct async_struct));
 		}
-		if ((rs_table[i].type != PORT_UNKNOWN) && rs_table[i].port)
-			release_region(rs_table[i].port, 8);
+		if ((rs_table[i].type != PORT_UNKNOWN) && rs_table[i].port) {
+#ifdef CONFIG_SERIAL_RSA
+			if (rs_table[i].type == PORT_RSA)
+				release_region(rs_table[i].port +
+					       UART_RSA_BASE, 16);
+			else
+#endif
+				release_region(rs_table[i].port, 8);
+		}
 #if defined(ENABLE_SERIAL_PCI) || defined(ENABLE_SERIAL_PNP)
 		if (rs_table[i].iomem_base)
 			iounmap(rs_table[i].iomem_base);
@@ -4881,9 +5449,6 @@ static int __init serial_console_setup(struct console *co, char *options)
 	int	cflag = CREAD | HUPCL | CLOCAL;
 	int	quot = 0;
 	char	*s;
-#if defined(CONFIG_KDB)
-	extern int  kdb_port;
-#endif
 
 	if (options) {
 		baud = simple_strtoul(options, NULL, 10);
@@ -4987,14 +5552,6 @@ static int __init serial_console_setup(struct console *co, char *options)
 	if (serial_in(info, UART_LSR) == 0xff)
 		return -1;
 
-#if defined(CONFIG_KDB)
-	/*
-	 * Remember I/O port for kdb
-	 */
-	if (kdb_port == 0 )
-		kdb_port = ser->port;
-#endif	/* CONFIG_KDB */
-	
 	return 0;
 }
 
@@ -5023,6 +5580,6 @@ void __init serial_console_init(void)
 
 /*
   Local variables:
-  compile-command: "gcc -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strict-aliasing -pipe -fno-strength-reduce  -march=i686 -DMODULE -DMODVERSIONS -include ../../include/linux/modversions.h   -DEXPORT_SYMTAB -c serial.c"
+  compile-command: "gcc -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strict-aliasing -pipe -fno-strength-reduce -march=i586 -DMODULE -DMODVERSIONS -include ../../include/linux/modversions.h   -DEXPORT_SYMTAB -c serial.c"
   End:
 */

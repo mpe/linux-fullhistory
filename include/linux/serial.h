@@ -10,6 +10,7 @@
 #ifndef _LINUX_SERIAL_H
 #define _LINUX_SERIAL_H
 
+#ifdef __KERNEL__
 #include <asm/page.h>
 
 /*
@@ -27,10 +28,12 @@ struct async_icount {
  */
 #define SERIAL_XMIT_SIZE PAGE_SIZE
 
+#endif
+
 struct serial_struct {
 	int	type;
 	int	line;
-	unsigned long	port;
+	unsigned int	port;
 	int	irq;
 	int	flags;
 	int	xmit_fifo_size;
@@ -44,7 +47,8 @@ struct serial_struct {
 	unsigned short	closing_wait2; /* no longer used... */
 	unsigned char	*iomem_base;
 	unsigned short	iomem_reg_shift;
-	int	reserved[2];
+	unsigned int	port_high;
+	int	reserved[1];
 };
 
 /*
@@ -70,7 +74,8 @@ struct serial_struct {
 #define PORT_16C950	10	/* Oxford Semiconductor */
 #define PORT_16654	11
 #define PORT_16850	12
-#define PORT_MAX	12
+#define PORT_RSA	13	/* RSA-DV II/S card */
+#define PORT_MAX	13
 
 #define SERIAL_IO_PORT	0
 #define SERIAL_IO_HUB6	1
@@ -115,7 +120,10 @@ struct serial_uart_config {
 
 #define ASYNC_LOW_LATENCY 0x2000 /* Request low latency behaviour */
 
-#define ASYNC_FLAGS	0x3FFF	/* Possible legal async flags */
+#define ASYNC_BUGGY_UART  0x4000 /* This is a buggy UART, skip some safety
+				  * checks.  Note: can be dangerous! */
+
+#define ASYNC_FLAGS	0x7FFF	/* Possible legal async flags */
 #define ASYNC_USR_MASK	0x3430	/* Legal flags that non-privileged
 				 * users can set or reset */
 
@@ -127,7 +135,9 @@ struct serial_uart_config {
 #define ASYNC_CLOSING		0x08000000 /* Serial port is closing */
 #define ASYNC_CTS_FLOW		0x04000000 /* Do CTS flow control */
 #define ASYNC_CHECK_CD		0x02000000 /* i.e., CLOCAL */
-#define ASYNC_SHARE_IRQ		0x01000000 /* for multifunction cards */
+#define ASYNC_SHARE_IRQ		0x01000000 /* for multifunction cards
+					     --- no longer used */
+#define ASYNC_AUTOPROBE		0x00800000 /* Port was autoprobed */
 
 #define ASYNC_INTERNAL_FLAGS	0xFF000000 /* Internal flags */
 

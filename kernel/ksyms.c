@@ -44,6 +44,7 @@
 #include <linux/capability.h>
 #include <linux/highuid.h>
 #include <linux/brlock.h>
+#include <linux/fs.h>
 
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
@@ -80,6 +81,7 @@ EXPORT_SYMBOL(exec_usermodehelper);
 
 #ifdef CONFIG_MODULES
 EXPORT_SYMBOL(get_module_symbol);
+EXPORT_SYMBOL(put_module_symbol);
 EXPORT_SYMBOL(try_inc_mod_count);
 #endif
 
@@ -491,6 +493,7 @@ EXPORT_SYMBOL(fs_overflowgid);
 
 /* all busmice */
 EXPORT_SYMBOL(fasync_helper);
+EXPORT_SYMBOL(kill_fasync);
 
 #ifdef CONFIG_BLK_DEV_MD
 EXPORT_SYMBOL(disk_name);	/* for md.c */

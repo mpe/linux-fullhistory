@@ -39,9 +39,6 @@ void coda_upcall_stats(int opcode, unsigned long jiffies);
 struct coda_vfs_stats 
 {
 	/* file operations */
-	int file_read;
-	int file_write;
-	int file_mmap;
 	int open;
 	int release;
 	int fsync;
@@ -59,7 +56,6 @@ struct coda_vfs_stats
 	int rmdir;
 	int rename;
 	int permission;
-	int readpage;
 
 	/* symlink operatoins*/
 	int follow_link;

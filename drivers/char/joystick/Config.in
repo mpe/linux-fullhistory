@@ -1,34 +1,56 @@
 #
-# Joystick driver
+# Joystick driver configuration
 #
 
 mainmenu_option next_comment
 comment 'Joysticks'
 
 tristate 'Joystick support' CONFIG_JOYSTICK
-
 if [ "$CONFIG_JOYSTICK" != "n" ]; then
-   dep_tristate '  Classic PC analog' CONFIG_JOY_ANALOG $CONFIG_JOYSTICK
-   dep_tristate '  FPGaming and MadCatz A3D' CONFIG_JOY_ASSASSIN $CONFIG_JOYSTICK
-   dep_tristate '  Gravis GrIP' CONFIG_JOY_GRAVIS $CONFIG_JOYSTICK
-   dep_tristate '  Logitech ADI' CONFIG_JOY_LOGITECH $CONFIG_JOYSTICK
-   dep_tristate '  Microsoft SideWinder' CONFIG_JOY_SIDEWINDER $CONFIG_JOYSTICK
-   dep_tristate '  ThrustMaster DirectConnect' CONFIG_JOY_THRUSTMASTER $CONFIG_JOYSTICK
-   dep_tristate '  Creative Labs Blaster' CONFIG_JOY_CREATIVE $CONFIG_JOYSTICK
-   dep_tristate '  PDPI Lightning 4 card' CONFIG_JOY_LIGHTNING $CONFIG_JOYSTICK
-   dep_tristate '  Trident 4DWave and Aureal Vortex gameport' CONFIG_JOY_PCI $CONFIG_JOYSTICK
-   dep_tristate '  Magellan and Space Mouse' CONFIG_JOY_MAGELLAN $CONFIG_JOYSTICK
-   dep_tristate '  SpaceTec SpaceOrb 360 and SpaceBall Avenger' CONFIG_JOY_SPACEORB $CONFIG_JOYSTICK
-   dep_tristate '  SpaceTec SpaceBall 4000 FLX' CONFIG_JOY_SPACEBALL $CONFIG_JOYSTICK
-   dep_tristate '  Logitech WingMan Warrior' CONFIG_JOY_WARRIOR $CONFIG_JOYSTICK
+  
+   define_tristate CONFIG_USB $CONFIG_JOYSTICK
+   define_tristate CONFIG_INPUT_JOYDEV $CONFIG_JOYSTICK
+  
+   comment 'Game port support'
+      dep_tristate '  ns558 gameports' CONFIG_INPUT_NS558 $CONFIG_JOYSTICK
+      dep_tristate '  PDPI Lightning 4 gamecard' CONFIG_INPUT_LIGHTNING $CONFIG_JOYSTICK
+      dep_tristate '  Aureal Vortex and Trident 4DWave gameports' CONFIG_INPUT_PCIGAME $CONFIG_JOYSTICK
+
+   comment 'Gameport joysticks'
+      dep_tristate '  Classic PC analog joysticks and gamepads' CONFIG_INPUT_ANALOG $CONFIG_JOYSTICK
+      dep_tristate '  Assasin 3D and MadCatz Panther devices' CONFIG_INPUT_A3D $CONFIG_JOYSTICK
+      dep_tristate '  Logitech ADI digital joysticks and gamepads' CONFIG_INPUT_ADI $CONFIG_JOYSTICK
+      dep_tristate '  Creative Labs Blaster Cobra gamepad' CONFIG_INPUT_COBRA $CONFIG_JOYSTICK
+      dep_tristate '  Genius Flight2000 Digital joysticks and gamepads' CONFIG_INPUT_GF2K $CONFIG_JOYSTICK
+      dep_tristate '  Gravis GrIP joysticks and gamepads' CONFIG_INPUT_GRIP $CONFIG_JOYSTICK
+      dep_tristate '  InterAct digital joysticks and gamepads' CONFIG_INPUT_INTERACT $CONFIG_JOYSTICK
+      dep_tristate '  ThrustMaster DirectConnect joysticks and gamepads' CONFIG_INPUT_TMDC $CONFIG_JOYSTICK
+      dep_tristate '  Microsoft SideWinder digital joysticks and gamepads' CONFIG_INPUT_SIDEWINDER $CONFIG_JOYSTICK
+
+   comment 'Serial port support'
+      dep_tristate '  Serial port input line discipline' CONFIG_INPUT_SERPORT $CONFIG_JOYSTICK
+
+   comment 'Serial port joysticks'
+      dep_tristate '  Logitech WingMan Warrior joystick' CONFIG_INPUT_WARRIOR $CONFIG_JOYSTICK
+      dep_tristate '  LogiCad3d Magellan/SpaceMouse 6dof controller' CONFIG_INPUT_MAGELLAN $CONFIG_JOYSTICK
+      dep_tristate '  SpaceTec SpaceOrb/Avenger 6dof controller' CONFIG_INPUT_SPACEORB $CONFIG_JOYSTICK
+      dep_tristate '  SpaceTec SpaceBall 4000 FLX 6dof controller' CONFIG_INPUT_SPACEBALL $CONFIG_JOYSTICK
+      dep_tristate '  I-Force joysticks/wheels' CONFIG_INPUT_IFORCE_232 $CONFIG_JOYSTICK
+      if [ "$CONFIG_INPUT_IFORCE_232" != "n" ];  then
+         define_tristate CONFIG_INPUT_IFORCE $CONFIG_INPUT_IFORCE_232
+      fi
+
    if [ "$CONFIG_PARPORT" != "n" ]; then
-      dep_tristate '  NES, SNES, PSX, N64, Multi' CONFIG_JOY_CONSOLE $CONFIG_JOYSTICK $CONFIG_PARPORT
-      dep_tristate '  Sega, Multi' CONFIG_JOY_DB9 $CONFIG_JOYSTICK $CONFIG_PARPORT
-      dep_tristate '  TurboGraFX interface' CONFIG_JOY_TURBOGRAFX $CONFIG_JOYSTICK $CONFIG_PARPORT
-   fi  
+   comment 'Parallel port joysticks'
+      dep_tristate '  Multisystem, Sega Genesis, Saturn joysticks and gamepads' CONFIG_INPUT_DB9 $CONFIG_JOYSTICK
+      dep_tristate '  Multisystem, NES, SNES, N64, PSX joysticks and gamepads' CONFIG_INPUT_GAMECON $CONFIG_JOYSTICK
+      dep_tristate '  Multisystem joysticks via TurboGraFX device' CONFIG_INPUT_TURBOGRAFX $CONFIG_JOYSTICK
+   fi
+
    if [ "$CONFIG_AMIGA" = "y" ]; then
-      dep_tristate '  Amiga joysticks' CONFIG_JOY_AMIGA $CONFIG_JOYSTICK
+   comment 'System joysticks'
+      dep_tristate '  Amiga joysticks' CONFIG_INPUT_AMIJOY $CONFIG_JOYSTICK
    fi
 fi
-
+   
 endmenu

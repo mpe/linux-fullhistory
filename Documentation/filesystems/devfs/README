@@ -3,7 +3,7 @@ Devfs (Device File System) FAQ
 
 Linux Devfs (Device File System) FAQ
 Richard Gooch
-1-MAY-2000
+14-JUN-2000
 
 -----------------------------------------------------------------------------
 
@@ -797,13 +797,15 @@ which must exist *before* init starts. Once again, you need to
 mount devfs and then create the named pipe *before* init
 starts.
 
-The default behaviour now is not to mount devfs onto /dev at boot time.
-You can correct this with the "devfs=mount" boot option. This solves
-any problems with init, and also prevents the dreaded:
+The default behaviour now is not to mount devfs onto /dev at boot time
+for 2.3.x and later kernels. You can correct this with the
+"devfs=mount" boot option. This solves any problems with init,
+and also prevents the dreaded:
 
 Cannot open initial console
 
-message.
+message. For 2.2.x kernels where you need to apply the devfs patch,
+the default is to mount.
 
 If you have automatic mounting of devfs onto /dev then you may need to
 create /dev/initctl in your boot scripts. The following lines should
@@ -1460,9 +1462,19 @@ Other resources
 Douglas Gilbert has written a useful document at
 
 http://www.torque.net/sg/devfs_scsi.html which
-explores the SCSI subsystem and how it interacts with devfs.
+explores the SCSI subsystem and how it interacts with devfs
 
 
+Douglas Gilbert has written another useful document at
+
+http://www.torque.net/scsi/scsihosts.html which
+discusses the scsihosts= boot option
+
+
+Douglas Gilbert has written yet another useful document at
+
+http://www.torque.net/scsi/linux_scsi_24 which
+discusses the Linux SCSI subsystem in 2.4.
 
 
 

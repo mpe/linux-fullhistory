@@ -742,22 +742,6 @@ out:
 	return error;
 }
 
-inline void __put_unused_fd(struct files_struct *files, unsigned int fd)
-{
-	FD_CLR(fd, files->open_fds);
-	if (fd < files->next_fd)
-		files->next_fd = fd;
-}
-
-inline void put_unused_fd(unsigned int fd)
-{
-	struct files_struct *files = current->files;
-
-	write_lock(&files->file_lock);
-	__put_unused_fd(files, fd);
-	write_unlock(&files->file_lock);
-}
-
 asmlinkage long sys_open(const char * filename, int flags, int mode)
 {
 	char * tmp;

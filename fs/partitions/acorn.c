@@ -139,7 +139,7 @@ static int linux_partition(struct gendisk *hd, kdev_t dev, unsigned long first_s
 				 le32_to_cpu(linuxp->nr_sects));
 		linuxp ++;
 	}
-	printk(" >\n");
+	printk(" >");
 	/*
 	 * Prevent someone doing a mkswap or mkfs on this partition
 	 */

@@ -30,7 +30,7 @@ struct rpc_portmap {
  * The high-level client handle
  */
 struct rpc_clnt {
-	unsigned int		cl_users;	/* number of references */
+	atomic_t		cl_users;	/* number of references */
 	struct rpc_xprt *	cl_xprt;	/* transport */
 	struct rpc_procinfo *	cl_procinfo;	/* procedure info */
 	u32			cl_maxproc;	/* max procedure number */

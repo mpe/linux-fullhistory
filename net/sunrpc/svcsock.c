@@ -301,7 +301,7 @@ svc_recvfrom(struct svc_rqst *rqstp, struct iovec *iov, int nr, int buflen)
 	mm_segment_t	oldfs;
 	struct msghdr	msg;
 	struct socket	*sock;
-	int		len;
+	int		len, alen;
 
 	rqstp->rq_addrlen = sizeof(rqstp->rq_addr);
 	sock = rqstp->rq_sock->sk_sock;
@@ -318,6 +318,13 @@ svc_recvfrom(struct svc_rqst *rqstp, struct iovec *iov, int nr, int buflen)
 	oldfs = get_fs(); set_fs(KERNEL_DS);
 	len = sock_recvmsg(sock, &msg, buflen, MSG_DONTWAIT);
 	set_fs(oldfs);
+
+	/* sock_recvmsg doesn't fill in the name/namelen, so we must..
+	 * possibly we should cache this in the svc_sock structure
+	 * at accept time. FIXME
+	 */
+	alen = sizeof(rqstp->rq_addr);
+	sock->ops->getname(sock, (struct sockaddr *)&rqstp->rq_addr, &alen, 1);
 
 	dprintk("svc: socket %p recvfrom(%p, %Zu) = %d\n",
 		rqstp->rq_sock, iov[0].iov_base, iov[0].iov_len, len);
@@ -539,15 +546,15 @@ svc_tcp_accept(struct svc_sock *svsk)
 	}
 
 	/* Ideally, we would want to reject connections from unauthorized
-	 * hosts here, but we have no generic client tables. For now,
-	 * we just punt connects from unprivileged ports. */
+	 * hosts here, but when we get encription, the IP of the host won't
+	 * tell us anything. For now just warn about unpriv connections.
+	 */
 	if (ntohs(sin.sin_port) >= 1024) {
 		if (net_ratelimit())
 			printk(KERN_WARNING
-				   "%s: connect from unprivileged port: %u.%u.%u.%u:%d",
+				   "%s: connect from unprivileged port: %u.%u.%u.%u:%d\n",
 				   serv->sv_name, 
 				   NIPQUAD(sin.sin_addr.s_addr), ntohs(sin.sin_port));
-		goto failed;
 	}
 
 	dprintk("%s: connect from %u.%u.%u.%u:%04x\n", serv->sv_name,
@@ -584,7 +591,7 @@ svc_tcp_recvfrom(struct svc_rqst *rqstp)
 	struct svc_sock	*svsk = rqstp->rq_sock;
 	struct svc_serv	*serv = svsk->sk_server;
 	struct svc_buf	*bufp = &rqstp->rq_argbuf;
-	int		len, ready;
+	int		len, ready, used;
 
 	dprintk("svc: tcp_recv %p data %d conn %d close %d\n",
 			svsk, svsk->sk_data, svsk->sk_conn, svsk->sk_close);
@@ -618,6 +625,11 @@ svc_tcp_recvfrom(struct svc_rqst *rqstp)
 
 		svsk->sk_reclen = ntohl(svsk->sk_reclen);
 		if (!(svsk->sk_reclen & 0x80000000)) {
+			/* FIXME: technically, a record can be fragmented,
+			 *  and non-terminal fragments will not have the top
+			 *  bit set in the fragment length header.
+			 *  But apparently no known nfs clients send fragmented
+			 *  records. */
 			/* FIXME: shutdown socket */
 			printk(KERN_NOTICE "RPC: bad TCP reclen %08lx",
 			       (unsigned long) svsk->sk_reclen);
@@ -633,11 +645,21 @@ svc_tcp_recvfrom(struct svc_rqst *rqstp)
 		goto error;
 
 	if (len < svsk->sk_reclen) {
+		/* FIXME: if sk_reclen > window-size, then we will
+		 * never be able to receive the record, so should
+		 * shutdown the connection
+		 */
 		dprintk("svc: incomplete TCP record (%d of %d)\n",
 			len, svsk->sk_reclen);
 		svc_sock_received(svsk, ready);
 		return -EAGAIN;	/* record not complete */
 	}
+	/* if we think there is only one more record to read, but
+	 * it is bigger than we expect, then two records must have arrived
+	 * together, so pretend we aren't using the record.. */
+	if (len > svsk->sk_reclen && ready == 1)
+		used = 0;
+	else	used = 1;
 
 	/* Frob argbuf */
 	bufp->iov[0].iov_base += 4;
@@ -664,7 +686,7 @@ svc_tcp_recvfrom(struct svc_rqst *rqstp)
 	svsk->sk_reclen = 0;
 	svsk->sk_tcplen = 0;
 
-	svc_sock_received(svsk, 1);
+	svc_sock_received(svsk, used);
 	if (serv->sv_stats)
 		serv->sv_stats->nettcpcnt++;
 
@@ -692,6 +714,7 @@ static int
 svc_tcp_sendto(struct svc_rqst *rqstp)
 {
 	struct svc_buf	*bufp = &rqstp->rq_resbuf;
+	int sent;
 
 	/* Set up the first element of the reply iovec.
 	 * Any other iovecs that may be in use have been taken
@@ -701,7 +724,17 @@ svc_tcp_sendto(struct svc_rqst *rqstp)
 	bufp->iov[0].iov_len  = bufp->len << 2;
 	bufp->base[0] = htonl(0x80000000|((bufp->len << 2) - 4));
 
-	return svc_sendto(rqstp, bufp->iov, bufp->nriov);
+	sent = svc_sendto(rqstp, bufp->iov, bufp->nriov);
+	if (sent != bufp->len<<2) {
+		printk(KERN_NOTICE "rpc-srv/tcp: %s: sent only %d bytes of %d - should shutdown socket\n",
+		       rqstp->rq_sock->sk_server->sv_name,
+		       sent, bufp->len << 2);
+		/* FIXME: should shutdown the socket, or allocate more memort
+		 * or wait and try again or something.  Otherwise
+		 * client will get confused
+		 */
+	}
+	return sent;
 }
 
 static int

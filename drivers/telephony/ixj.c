@@ -446,8 +446,7 @@ static void ixj_timeout(unsigned long ptr)
 					{
 						j->m_hook = 0;
 						j->ex.bits.hookstate = 1;
-						if (j->async_queue)
-							kill_fasync(j->async_queue, SIGIO, POLL_IN);	// Send apps notice of change
+						kill_fasync(&j->async_queue, SIGIO, POLL_IN);	// Send apps notice of change
 					}
 					goto timer_end;
 				}
@@ -536,8 +535,7 @@ static void ixj_timeout(unsigned long ptr)
 					j->proc_load = j->ssr.high << 8 | j->ssr.low;
 					if (!j->m_hook) {
 						j->m_hook = j->ex.bits.hookstate = 1;
-						if (j->async_queue)
-							kill_fasync(j->async_queue, SIGIO, POLL_IN);	// Send apps notice of change
+						kill_fasync(&j->async_queue, SIGIO, POLL_IN);	// Send apps notice of change
 					}
 				} else {
 					if (j->dsp.low == 0x21 &&
@@ -552,8 +550,7 @@ static void ixj_timeout(unsigned long ptr)
 					if (j->m_hook) {
 						j->m_hook = 0;
 						j->ex.bits.hookstate = 1;
-						if (j->async_queue)
-							kill_fasync(j->async_queue, SIGIO, POLL_IN);	// Send apps notice of change
+						kill_fasync(&j->async_queue, SIGIO, POLL_IN);	// Send apps notice of change
 					}
 				}
 			}
@@ -642,8 +639,7 @@ static void ixj_timeout(unsigned long ptr)
 			}
 			if (j->ex.bytes) {
 				wake_up_interruptible(&j->poll_q);	// Wake any blocked selects
-				if (j->async_queue)
-					kill_fasync(j->async_queue, SIGIO, POLL_IN);	// Send apps notice of change
+				kill_fasync(&j->async_queue, SIGIO, POLL_IN);	// Send apps notice of change
 			}
 		} else {
 			break;
@@ -917,8 +913,7 @@ static int ixj_hookstate(int board)
 		j->r_hook = fOffHook;
 		if (j->port != PORT_POTS) {
 			j->ex.bits.hookstate = 1;
-			if (j->async_queue)
-				kill_fasync(j->async_queue, SIGIO, POLL_IN);	// Send apps notice of change
+			kill_fasync(&j->async_queue, SIGIO, POLL_IN);	// Send apps notice of change
 
 		}
 	}
@@ -1044,8 +1039,6 @@ int ixj_open(struct phone_device *p, struct file *file_p)
 		j->readers++;
 	if (file_p->f_mode & FMODE_WRITE)
 		j->writers++;
-
-	MOD_INC_USE_COUNT;
 
 	if (ixjdebug > 0)
 //    printk(KERN_INFO "Opening board %d\n", NUM(inode->i_rdev));
@@ -1196,7 +1189,6 @@ int ixj_release(struct inode *inode, struct file *file_p)
 	j->rec_frame_size = j->play_frame_size = 0;
 	ixj_fasync(-1, file_p, 0);	// remove from list of async notification
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1471,8 +1463,7 @@ static void ixj_read_frame(int board)
 
 			wake_up_interruptible(&j->poll_q);	// Wake any blocked selects
 
-			if (j->async_queue)
-				kill_fasync(j->async_queue, SIGIO, POLL_IN);	// Send apps notice of frame
+			kill_fasync(&j->async_queue, SIGIO, POLL_IN);	// Send apps notice of frame
 
 		}
 	}
@@ -1557,8 +1548,7 @@ static void ixj_write_frame(int board)
 
 			wake_up_interruptible(&j->poll_q);	// Wake any blocked selects
 
-			if (j->async_queue)
-				kill_fasync(j->async_queue, SIGIO, POLL_IN);	// Send apps notice of empty buffer
+			kill_fasync(&j->async_queue, SIGIO, POLL_IN);	// Send apps notice of empty buffer
 #ifdef PERFMON_STATS
 			++j->frameswritten;
 #endif
@@ -3949,6 +3939,7 @@ static int ixj_fasync(int fd, struct file *file_p, int mode)
 
 struct file_operations ixj_fops =
 {
+	owner:		THIS_MODULE,
 	read:		ixj_enhanced_read,
 	write:		ixj_enhanced_write,
 	poll:		ixj_poll,
@@ -4615,10 +4606,12 @@ int __init ixj_init(void)
 			pci = pci_find_device(0x15E2, 0x0500, pci);
 			if (!pci)
 				break;
+			if (pci_enable_device(pci))
+				break;
 			{
-				ixj[cnt].DSPbase = pci->resource[0].start;
+				ixj[cnt].DSPbase = pci_resource_start(pci, 0);
 				ixj[cnt].XILINXbase = ixj[cnt].DSPbase + 0x10;
-				ixj[cnt].serial = PCIEE_GetSerialNumber(pci->resource[2].start);
+				ixj[cnt].serial = (PCIEE_GetSerialNumber)pci_resource_start(pci, 2);
 
 				result = check_region(ixj[cnt].DSPbase, 16);
 				if (result) {

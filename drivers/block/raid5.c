@@ -16,6 +16,7 @@
  */
 
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/locks.h>
 #include <linux/malloc.h>
@@ -40,18 +41,21 @@ static mdk_personality_t raid5_personality;
  * The following can be used to debug the driver
  */
 #define RAID5_DEBUG	0
-#define RAID5_PARANOIA  1
-#define	CHECK_DEVLOCK() if (!spin_is_locked(&conf->device_lock)) BUG()
-#define	CHECK_SHLOCK(sh) if (!stripe_locked(sh)) BUG()
+#define RAID5_PARANOIA	1
+#if RAID5_PARANOIA && CONFIG_SMP
+# define CHECK_DEVLOCK() if (!spin_is_locked(&conf->device_lock)) BUG()
+# define CHECK_SHLOCK(sh) if (!stripe_locked(sh)) BUG()
+#else
+# define CHECK_DEVLOCK()
+# define CHECK_SHLOCK(unused)
+#endif
 
 #if RAID5_DEBUG
-#define PRINTK(x...)   printk(x)
+#define PRINTK(x...) printk(x)
 #define inline
 #define __inline__
 #else
-#define inline
-#define __inline__
-#define PRINTK(x...)  do { } while (0)
+#define PRINTK(x...) do { } while (0)
 #endif
 
 static void print_raid5_conf (raid5_conf_t *conf);
@@ -365,8 +369,8 @@ static int shrink_stripe_cache(raid5_conf_t *conf, int nr)
 out:
 	md_spin_unlock_irq(&conf->device_lock);
 	PRINTK("shrink completed, nr_hashed_stripes %d, nr_pending_strips %d\n",
-	       atomic_read(&conf->nr_hashed_stripes),
-	       atomic_read(&conf->nr_pending_stripes));
+		atomic_read(&conf->nr_hashed_stripes),
+		atomic_read(&conf->nr_pending_stripes));
 	return count;
 }
 
@@ -422,7 +426,7 @@ static inline struct stripe_head *alloc_stripe(raid5_conf_t *conf, unsigned long
 		sh = get_free_stripe(conf);
 		if (!sh && cnt < (conf->max_nr_stripes/8)) {
 			md_wakeup_thread(conf->thread);
-			PRINTK("waiting for some stripes to complete  - %d %d\n", cnt, conf->max_nr_stripes/8);
+			PRINTK("waiting for some stripes to complete - %d %d\n", cnt, conf->max_nr_stripes/8);
 			schedule();
 		}
 		remove_wait_queue(&conf->wait_for_stripe, &wait);
@@ -570,7 +574,7 @@ static void raid5_end_buffer_io (struct stripe_head *sh, int i, int uptodate)
 {
 	struct buffer_head *bh = sh->bh_new[i];
 
-	PRINTK("raid5_end_buffer_io %lu, uptodate: %d.\n", bh->b_rsector, uptodate);
+	PRINTK("raid5_end_buffer_io %lu, uptodate: %d.\n", bh->b_blocknr, uptodate);
 	sh->bh_new[i] = NULL;
 	raid5_free_bh(sh, sh->bh_req[i]);
 	sh->bh_req[i] = NULL;
@@ -578,7 +582,9 @@ static void raid5_end_buffer_io (struct stripe_head *sh, int i, int uptodate)
 	bh->b_end_io(bh, uptodate);
 	if (!uptodate)
 		printk(KERN_ALERT "raid5: %s: unrecoverable I/O error for "
-		       "block %lu\n", partition_name(bh->b_dev), bh->b_blocknr);
+			"block %lu\n",
+			partition_name(mddev_to_kdev(sh->raid_conf->mddev)),
+			bh->b_blocknr);
 }
 
 static inline void raid5_mark_buffer_uptodate (struct buffer_head *bh, int uptodate)
@@ -600,14 +606,14 @@ static void raid5_end_request (struct buffer_head * bh, int uptodate)
 	md_spin_lock_irqsave(&sh->stripe_lock, flags);
 	raid5_mark_buffer_uptodate(bh, uptodate);
 	if (!uptodate)
-		md_error(bh->b_dev, bh->b_rdev);
+		md_error(mddev_to_kdev(conf->mddev), bh->b_dev);
 	if (conf->failed_disks) {
 		for (i = 0; i < disks; i++) {
 			if (conf->disks[i].operational)
 				continue;
 			if (bh != sh->bh_old[i] && bh != sh->bh_req[i] && bh != sh->bh_copy[i])
 				continue;
-			if (bh->b_rdev != conf->disks[i].dev)
+			if (bh->b_dev != conf->disks[i].dev)
 				continue;
 			set_bit(STRIPE_ERROR, &sh->state);
 		}
@@ -623,10 +629,8 @@ static void raid5_end_request (struct buffer_head * bh, int uptodate)
 static void raid5_build_block (struct stripe_head *sh, struct buffer_head *bh, int i)
 {
 	raid5_conf_t *conf = sh->raid_conf;
-	mddev_t *mddev = conf->mddev;
 	char *b_data;
 	struct page *b_page;
-	kdev_t dev = mddev_to_kdev(mddev);
 	int block = sh->sector / (sh->size >> 9);
 
 	b_data = bh->b_data;
@@ -634,14 +638,14 @@ static void raid5_build_block (struct stripe_head *sh, struct buffer_head *bh, i
 	memset (bh, 0, sizeof (struct buffer_head));
 	init_waitqueue_head(&bh->b_wait);
 	init_buffer(bh, raid5_end_request, sh);
-	bh->b_dev = dev;
+	bh->b_dev = conf->disks[i].dev;
 	bh->b_blocknr = block;
 
 	bh->b_data = b_data;
 	bh->b_page = b_page;
 
 	bh->b_rdev	= conf->disks[i].dev;
-	bh->b_rsector   = sh->sector;
+	bh->b_rsector	= sh->sector;
 
 	bh->b_state	= (1 << BH_Req) | (1 << BH_Mapped);
 	bh->b_size	= sh->size;
@@ -708,14 +712,14 @@ static int raid5_error (mddev_t *mddev, kdev_t dev)
 }	
 
 /*
- * Input: a 'big' sector number, 
+ * Input: a 'big' sector number,
  * Output: index of the data and parity disk, and the sector # in them.
  */
 static unsigned long raid5_compute_sector(int r_sector, unsigned int raid_disks,
 			unsigned int data_disks, unsigned int * dd_idx,
 			unsigned int * pd_idx, raid5_conf_t *conf)
 {
-	unsigned int  stripe;
+	unsigned int stripe;
 	int chunk_number, chunk_offset;
 	unsigned long new_sector;
 	int sectors_per_chunk = conf->chunk_size >> 9;
@@ -770,15 +774,6 @@ static unsigned long raid5_compute_sector(int r_sector, unsigned int raid_disks,
 	 * Finally, compute the new sector number
 	 */
 	new_sector = stripe * sectors_per_chunk + chunk_offset;
-
-#if 0
-	if (	*dd_idx > data_disks || *pd_idx > data_disks || 
-		chunk_offset + bh->b_size / 512 > sectors_per_chunk	)
-
-		printk ("raid5: bug: dd_idx == %d, pd_idx == %d, chunk_offset == %d\n", 
-				*dd_idx, *pd_idx, chunk_offset);
-#endif
-
 	return new_sector;
 }
 
@@ -849,9 +844,8 @@ static void compute_block(struct stripe_head *sh, int dd_idx)
 			count = 1;
 		}
 	}
-	if(count != 1) {
+	if (count != 1)
 		xor_block(count, &bh_ptr[0]);
-	}
 	raid5_mark_buffer_uptodate(sh->bh_old[dd_idx], 1);
 }
 
@@ -1092,20 +1086,20 @@ static void handle_stripe_write (mddev_t *mddev , raid5_conf_t *conf,
 				if (!operational[i] && !conf->resync_parity) {
 					PRINTK("writing spare %d\n", i);
 					atomic_inc(&sh->nr_pending);
-					bh->b_rdev = conf->spare->dev;
+					bh->b_dev = bh->b_rdev = conf->spare->dev;
 					q = blk_get_queue(bh->b_rdev);
 					generic_make_request(q, WRITERAW, bh);
 				} else {
 #if 0
 					atomic_inc(&sh->nr_pending);
-					bh->b_rdev = conf->disks[i].dev;
+					bh->b_dev = bh->b_rdev = conf->disks[i].dev;
 					q = blk_get_queue(bh->b_rdev);
 					generic_make_request(q, WRITERAW, bh);
 #else
 					if (!allclean || (i==sh->pd_idx)) {
 						PRINTK("writing dirty %d\n", i);
 						atomic_inc(&sh->nr_pending);
-						bh->b_rdev = conf->disks[i].dev;
+						bh->b_dev = bh->b_rdev = conf->disks[i].dev;
 						q = blk_get_queue(bh->b_rdev);
 						generic_make_request(q, WRITERAW, bh);
 					} else {
@@ -1151,7 +1145,7 @@ static void handle_stripe_write (mddev_t *mddev , raid5_conf_t *conf,
 			continue;
 		lock_get_bh(sh->bh_old[i]);
 		atomic_inc(&sh->nr_pending);
-		sh->bh_old[i]->b_rdev = conf->disks[i].dev;
+		sh->bh_old[i]->b_dev = sh->bh_old[i]->b_rdev = conf->disks[i].dev;
 		q = blk_get_queue(sh->bh_old[i]->b_rdev);
 		generic_make_request(q, READ, sh->bh_old[i]);
 		atomic_dec(&sh->bh_old[i]->b_count);
@@ -1198,7 +1192,7 @@ static void handle_stripe_read (mddev_t *mddev , raid5_conf_t *conf,
 			raid5_build_block(sh, sh->bh_old[i], i);
 			lock_get_bh(sh->bh_old[i]);
 			atomic_inc(&sh->nr_pending);
-			sh->bh_old[i]->b_rdev = conf->disks[i].dev;
+			sh->bh_old[i]->b_dev = sh->bh_old[i]->b_rdev = conf->disks[i].dev;
 			q = blk_get_queue(sh->bh_old[i]->b_rdev);
 			generic_make_request(q, READ, sh->bh_old[i]);
 			atomic_dec(&sh->bh_old[i]->b_count);
@@ -1228,7 +1222,7 @@ static void handle_stripe_read (mddev_t *mddev , raid5_conf_t *conf,
 #endif
 		lock_get_bh(sh->bh_req[i]);
 		atomic_inc(&sh->nr_pending);
-		sh->bh_req[i]->b_rdev = conf->disks[i].dev;
+		sh->bh_req[i]->b_dev = sh->bh_req[i]->b_rdev = conf->disks[i].dev;
 		q = blk_get_queue(sh->bh_req[i]->b_rdev);
 		generic_make_request(q, READ, sh->bh_req[i]);
 		atomic_dec(&sh->bh_req[i]->b_count);
@@ -1252,8 +1246,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 	 * in bh_old
 	 */
 	PRINTK("handle_stripe_sync: sec=%lu disks=%d nr_cache=%d\n", sh->sector, disks, nr_cache);	
-	if (nr_cache < disks-1
-	    || (nr_cache==disks-1 && !(parity_failed+nr_failed_other+nr_failed_overwrite))
+	if ((nr_cache < disks-1) || ((nr_cache == disks-1) && !(parity_failed+nr_failed_other+nr_failed_overwrite))
 		) {
 		sh->phase = PHASE_READ_OLD;
 		for (i = 0; i < disks; i++) {
@@ -1267,7 +1260,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 			raid5_build_block(sh, bh, i);
 			lock_get_bh(bh);
 			atomic_inc(&sh->nr_pending);
-			bh->b_rdev = conf->disks[i].dev;
+			bh->b_dev = bh->b_rdev = conf->disks[i].dev;
 			q = blk_get_queue(bh->b_rdev);
 			generic_make_request(q, READ, bh);
 			drive_stat_acct(bh->b_rdev, READ, -bh->b_size/512, 0);
@@ -1297,7 +1290,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 				}
 				atomic_inc(&sh->nr_pending);
 				lock_get_bh(bh);
-				bh->b_rdev = conf->spare->dev;
+				bh->b_dev = bh->b_rdev = conf->spare->dev;
 				q = blk_get_queue(bh->b_rdev);
 				generic_make_request(q, WRITERAW, bh);
 				drive_stat_acct(bh->b_rdev, WRITE, -bh->b_size/512, 0);
@@ -1310,7 +1303,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 	}
 
 	/* nr_cache == disks:
-	 *  check parity and compute/write if needed
+	 * check parity and compute/write if needed
 	 */
 	
 	compute_parity(sh, RECONSTRUCT_WRITE);
@@ -1324,13 +1317,13 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 		atomic_set_buffer_dirty(bh);
 		lock_get_bh(bh);
 		atomic_inc(&sh->nr_pending);
-		bh->b_rdev = conf->disks[pd_idx].dev;
+		bh->b_dev = bh->b_rdev = conf->disks[pd_idx].dev;
 		q = blk_get_queue(bh->b_rdev);
 		generic_make_request(q, WRITERAW, bh);
 		drive_stat_acct(bh->b_rdev, WRITE, -bh->b_size/512, 0);
 		atomic_dec(&bh->b_count);
 		PRINTK("handle_stripe_sync() %lu phase WRITE, pending %d buffers\n",
-		        sh->sector, md_atomic_read(&sh->nr_pending));
+			sh->sector, md_atomic_read(&sh->nr_pending));
 	}
 }
 
@@ -1374,8 +1367,8 @@ static void handle_stripe(struct stripe_head *sh)
 	}
 
 	if ((sh->cmd == STRIPE_WRITE && sh->phase == PHASE_WRITE) ||
-	    (sh->cmd == STRIPE_READ && sh->phase == PHASE_READ) ||
-	    (sh->cmd == STRIPE_SYNC && sh->phase == PHASE_WRITE)
+		(sh->cmd == STRIPE_READ && sh->phase == PHASE_READ) ||
+		(sh->cmd == STRIPE_SYNC && sh->phase == PHASE_WRITE)
 		) {
 		/*
 		 * Completed
@@ -1500,7 +1493,7 @@ static int raid5_make_request (request_queue_t *q, mddev_t *mddev, int rw, struc
 	raid5_conf_t *conf = (raid5_conf_t *) mddev->private;
 	const unsigned int raid_disks = conf->raid_disks;
 	const unsigned int data_disks = raid_disks - 1;
-	unsigned int  dd_idx, pd_idx;
+	unsigned int dd_idx, pd_idx;
 	unsigned long new_sector;
 
 	struct stripe_head *sh;
@@ -1508,7 +1501,7 @@ static int raid5_make_request (request_queue_t *q, mddev_t *mddev, int rw, struc
 	if (rw == READA)
 		rw = READ;
 
-	new_sector = raid5_compute_sector(bh->b_blocknr*(bh->b_size>>9),
+	new_sector = raid5_compute_sector(bh->b_rsector,
 			raid_disks, data_disks, &dd_idx, &pd_idx, conf);
 
 	PRINTK("raid5_make_request, sector %lu\n", new_sector);
@@ -1567,13 +1560,12 @@ static int raid5_sync_request (mddev_t *mddev, unsigned long block_nr)
 	if (!conf->buffer_size)
 		conf->buffer_size = /* device_bsize(mddev_to_kdev(mddev))*/ PAGE_SIZE;
 	bufsize = conf->buffer_size;
-        /* Hmm... race on buffer_size ?? */
+	/* Hmm... race on buffer_size ?? */
 	redone = block_nr% (bufsize>>10);
 	block_nr -= redone;
 	sh = get_lock_stripe(conf, block_nr<<1, bufsize);
-	first_sector = raid5_compute_sector(stripe*data_disks*sectors_per_chunk+chunk_offset,
-					    raid_disks, data_disks,
-					    &dd_idx, &pd_idx, conf);
+	first_sector = raid5_compute_sector(stripe*data_disks*sectors_per_chunk
+		+ chunk_offset, raid_disks, data_disks, &dd_idx, &pd_idx, conf);
 	sh->pd_idx = pd_idx;
 	sh->cmd = STRIPE_SYNC;
 	sh->phase = PHASE_BEGIN;
@@ -2147,7 +2139,7 @@ static int raid5_diskop(mddev_t *mddev, mdp_disk_t **d, int state)
 		}
 		/*
 		 * When we activate a spare disk we _must_ have a disk in
-		 * the lower (active) part of the array to replace. 
+		 * the lower (active) part of the array to replace.
 		 */
 		if ((failed_disk == -1) || (failed_disk >= conf->raid_disks)) {
 			MD_BUG();
@@ -2380,18 +2372,16 @@ abort:
 
 static mdk_personality_t raid5_personality=
 {
-	"raid5",
-	raid5_make_request,
-	raid5_end_request,
-	raid5_run,
-	raid5_stop,
-	raid5_status,
-	0,
-	raid5_error,
-	raid5_diskop,
-	raid5_stop_resync,
-	raid5_restart_resync,
-	raid5_sync_request
+	name:		"raid5",
+	make_request:	raid5_make_request,
+	run:		raid5_run,
+	stop:		raid5_stop,
+	status:		raid5_status,
+	error_handler:	raid5_error,
+	diskop:		raid5_diskop,
+	stop_resync:	raid5_stop_resync,
+	restart_resync:	raid5_restart_resync,
+	sync_request:	raid5_sync_request
 };
 
 int raid5_init (void)

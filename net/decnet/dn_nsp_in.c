@@ -440,7 +440,7 @@ static __inline__ int dn_queue_skb(struct sock *sk, struct sk_buff *skb, int sig
 		wake_up_interruptible(sk->sleep);
 		if (sock && sock->fasync_list &&
 		    !test_bit(SOCK_ASYNC_WAITDATA, &sock->flags))
-			kill_fasync(sock->fasync_list, sig, 
+			__kill_fasync(sock->fasync_list, sig, 
 				    (sig == SIGURG) ? POLL_PRI : POLL_IN);
 	}
 	read_unlock(&sk->callback_lock);

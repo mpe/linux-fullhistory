@@ -229,5 +229,54 @@
 #define UART_TRG_120	0x78
 #define UART_TRG_128	0x80
 
+/*
+ * These definitions are for the RSA-DV II/S card, from
+ *
+ * Kiyokazu SUTO <suto@ks-and-ks.ne.jp>
+ */
+
+#define UART_RSA_BASE (-8)
+
+#define UART_RSA_MSR ((UART_RSA_BASE) + 0) /* I/O: Mode Select Register */
+
+#define UART_RSA_MSR_SWAP (1 << 0) /* Swap low/high 8 bytes in I/O port addr */
+#define UART_RSA_MSR_FIFO (1 << 2) /* Enable the external FIFO */
+#define UART_RSA_MSR_FLOW (1 << 3) /* Enable the auto RTS/CTS flow control */
+#define UART_RSA_MSR_ITYP (1 << 4) /* Level (1) / Edge triger (0) */
+
+#define UART_RSA_IER ((UART_RSA_BASE) + 1) /* I/O: Interrupt Enable Register */
+
+#define UART_RSA_IER_Rx_FIFO_H (1 << 0) /* Enable Rx FIFO half full int. */
+#define UART_RSA_IER_Tx_FIFO_H (1 << 1) /* Enable Tx FIFO half full int. */
+#define UART_RSA_IER_Tx_FIFO_E (1 << 2) /* Enable Tx FIFO empty int. */
+#define UART_RSA_IER_Rx_TOUT (1 << 3) /* Enable char receive timeout int */
+#define UART_RSA_IER_TIMER (1 << 4) /* Enable timer interrupt */
+
+#define UART_RSA_SRR ((UART_RSA_BASE) + 2) /* IN: Status Read Register */
+
+#define UART_RSA_SRR_Tx_FIFO_NEMP (1 << 0) /* Tx FIFO is not empty (1) */
+#define UART_RSA_SRR_Tx_FIFO_NHFL (1 << 1) /* Tx FIFO is not half full (1) */
+#define UART_RSA_SRR_Tx_FIFO_NFUL (1 << 2) /* Tx FIFO is not full (1) */
+#define UART_RSA_SRR_Rx_FIFO_NEMP (1 << 3) /* Rx FIFO is not empty (1) */
+#define UART_RSA_SRR_Rx_FIFO_NHFL (1 << 4) /* Rx FIFO is not half full (1) */
+#define UART_RSA_SRR_Rx_FIFO_NFUL (1 << 5) /* Rx FIFO is not full (1) */
+#define UART_RSA_SRR_Rx_TOUT (1 << 6) /* Character reception timeout occured (1) */
+#define UART_RSA_SRR_TIMER (1 << 7) /* Timer interrupt occured */
+
+#define UART_RSA_FRR ((UART_RSA_BASE) + 2) /* OUT: FIFO Reset Register */
+
+#define UART_RSA_TIVSR ((UART_RSA_BASE) + 3) /* I/O: Timer Interval Value Set Register */
+
+#define UART_RSA_TCR ((UART_RSA_BASE) + 4) /* OUT: Timer Control Register */
+
+#define UART_RSA_TCR_SWITCH (1 << 0) /* Timer on */
+
+/*
+ * The RSA DSV/II board has two fixed clock frequencies.  One is the
+ * standard rate, and the other is 8 times faster.
+ */
+#define SERIAL_RSA_BAUD_BASE (921600)
+#define SERIAL_RSA_BAUD_BASE_LO (SERIAL_RSA_BAUD_BASE / 8)
+
 #endif /* _LINUX_SERIAL_REG_H */
 

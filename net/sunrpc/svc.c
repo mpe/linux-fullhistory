@@ -273,8 +273,8 @@ svc_process(struct svc_serv *serv, struct svc_rqst *rqstp)
 	if (prog != progp->pg_prog)
 		goto err_bad_prog;
 
-	versp = progp->pg_vers[vers];
-	if (!versp || vers >= progp->pg_nvers)
+	if (vers >= progp->pg_nvers ||
+	  !(versp = progp->pg_vers[vers]))
 		goto err_bad_vers;
 
 	procp = versp->vs_proc + proc;

@@ -18,7 +18,6 @@
 #include <linux/mman.h>
 #include <linux/random.h>
 #include <linux/init.h>
-#include <linux/joystick.h>
 #include <linux/raw.h>
 #include <linux/capability.h>
 
@@ -652,13 +651,6 @@ int __init chr_dev_init(void)
 #ifdef CONFIG_SPARCAUDIO
 	sparcaudio_init();
 #endif
-#ifdef CONFIG_JOYSTICK
-	/*
-	 *	Some joysticks only appear when the sound card they are
-	 *	connected to is configured. Keep the sound/joystick ordering.
-	 */
-	js_init();
-#endif	
 #if CONFIG_QIC02_TAPE
 	qic02_tape_init();
 #endif

@@ -50,7 +50,6 @@ struct partition {
 struct hd_struct {
 	long start_sect;
 	long nr_sects;
-	int type;			/* currently RAID or normal */
 	devfs_handle_t de;              /* primary (master) devfs entry  */
 };
 

@@ -50,7 +50,7 @@ nlmclnt_setlockargs(struct nlm_rqst *req, struct file_lock *fl)
 	memset(argp, 0, sizeof(*argp));
 	nlmclnt_next_cookie(&argp->cookie);
 	argp->state   = nsm_local_state;
-	lock->fh      = *NFS_FH(fl->fl_file->f_dentry);
+	memcpy(&lock->fh, NFS_FH(fl->fl_file->f_dentry), sizeof(struct nfs_fh));
 	lock->caller  = system_utsname.nodename;
 	lock->oh.data = req->a_owner;
 	lock->oh.len  = sprintf(req->a_owner, "%d@%s",

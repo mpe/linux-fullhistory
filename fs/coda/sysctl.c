@@ -297,9 +297,6 @@ int coda_vfs_stats_get_info( char * buffer, char ** start, off_t offset,
 			"Coda VFS statistics\n"
 			"===================\n\n"
 			"File Operations:\n"
-			"\tfile_read\t%9d\n"
-			"\tfile_write\t%9d\n"
-			"\tfile_mmap\t%9d\n"
 			"\topen\t\t%9d\n"
 			"\trelase\t\t%9d\n"
 			"\tfsync\t\t%9d\n\n"
@@ -314,13 +311,9 @@ int coda_vfs_stats_get_info( char * buffer, char ** start, off_t offset,
 			"\tmkdir\t\t%9d\n"
 			"\trmdir\t\t%9d\n"
 			"\trename\t\t%9d\n"
-			"\tpermission\t%9d\n"
-			"\treadpage\t%9d\n",
+			"\tpermission\t%9d\n",
 
 			/* file operations */
-			ps->file_read,
-			ps->file_write,
-			ps->file_mmap,
 			ps->open,
 			ps->release,
 			ps->fsync,
@@ -337,9 +330,8 @@ int coda_vfs_stats_get_info( char * buffer, char ** start, off_t offset,
 			ps->mkdir,
 			ps->rmdir,
 			ps->rename,
-			ps->permission,
-			ps->readpage );
-  
+			ps->permission); 
+
 	begin = offset;
 	*start = buffer + begin;
 	len -= begin;

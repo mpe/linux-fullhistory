@@ -148,7 +148,7 @@ static int linear_make_request (request_queue_t *q, mddev_t *mddev,
 		return -1;
 	}
 	bh->b_rdev = tmp_dev->dev;
-	bh->b_rsector = (block - tmp_dev->offset) << 1;
+	bh->b_rsector = ((block - tmp_dev->offset) << 1) + (bh->b_rsector & 1);
 
 	return 1;
 }
@@ -183,17 +183,11 @@ static int linear_status (char *page, mddev_t *mddev)
 
 static mdk_personality_t linear_personality=
 {
-	"linear",
-	linear_make_request,
-	NULL,
-	linear_run,
-	linear_stop,
-	linear_status,
-	0,
-	NULL,
-	NULL,
-	NULL,
-	NULL
+	name:		"linear",
+	make_request:	linear_make_request,
+	run:		linear_run,
+	stop:		linear_stop,
+	status:		linear_status,
 };
 
 #ifndef MODULE

@@ -1,7 +1,7 @@
 /*
  *	fs/bfs/inode.c
  *	BFS superblock and inode operations.
- *	Copyright (C) 1999 Tigran Aivazian <tigran@ocston.org>
+ *	Copyright (C) 1999 Tigran Aivazian <tigran@veritas.com>
  *	From fs/minix, Copyright (C) 1991, 1992 Linus Torvalds.
  */
 
@@ -16,7 +16,7 @@
 
 #include "bfs_defs.h"
 
-MODULE_AUTHOR("Tigran A. Aivazian");
+MODULE_AUTHOR("Tigran A. Aivazian <tigran@veritas.com>");
 MODULE_DESCRIPTION("SCO UnixWare BFS filesystem for Linux");
 EXPORT_NO_SYMBOLS;
 

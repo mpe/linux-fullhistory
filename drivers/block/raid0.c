@@ -325,17 +325,11 @@ static int raid0_status (char *page, mddev_t *mddev)
 
 static mdk_personality_t raid0_personality=
 {
-	"raid0",
-	raid0_make_request,
-	NULL,				/* no special end_request */
-	raid0_run,
-	raid0_stop,
-	raid0_status,
-	0,
-	NULL,				/* no error_handler */
-	NULL,				/* no diskop */
-	NULL,				/* no stop resync */
-	NULL				/* no restart resync */
+	name:		"raid0",
+	make_request:	raid0_make_request,
+	run:		raid0_run,
+	stop:		raid0_stop,
+	status:		raid0_status,
 };
 
 #ifndef MODULE

@@ -110,8 +110,7 @@ void busmouse_add_movementbuttons(int mousedev, int dx, int dy, int buttons)
 	if (changed) {
 		wake_up(&mse->wait);
 
-		if (mse->fasyncptr)
-			kill_fasync(mse->fasyncptr, SIGIO, POLL_IN);
+		kill_fasync(&mse->fasyncptr, SIGIO, POLL_IN);
 	}
 }
 

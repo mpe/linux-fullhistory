@@ -88,8 +88,12 @@ asmlinkage long sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			/* Did FASYNC state change ? */
 			if ((flag ^ filp->f_flags) & FASYNC) {
 				if (filp->f_op && filp->f_op->fasync)
-					filp->f_op->fasync(fd, filp, on); 
+					error = filp->f_op->fasync(fd, filp, on);
+				else error = -ENOTTY;
 			}
+			if (error != 0)
+				break;
+
 			if (on)
 				filp->f_flags |= FASYNC;
 			else

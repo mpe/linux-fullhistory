@@ -72,11 +72,13 @@ int drm_addmap(struct inode *inode, struct file *filp, unsigned int cmd,
 	switch (map->type) {
 	case _DRM_REGISTERS:
 	case _DRM_FRAME_BUFFER:	
+#ifndef __sparc__
 		if (map->offset + map->size < map->offset
 		    || map->offset < virt_to_phys(high_memory)) {
 			drm_free(map, sizeof(*map), DRM_MEM_MAPS);
 			return -EINVAL;
 		}
+#endif
 #ifdef CONFIG_MTRR
 		if (map->type == _DRM_FRAME_BUFFER
 		    || (map->flags & _DRM_WRITE_COMBINING)) {
@@ -478,8 +480,10 @@ int drm_mapbufs(struct inode *inode, struct file *filp, unsigned int cmd,
 			   -EFAULT);
 
 	if (request.count >= dma->buf_count) {
+		down(&current->mm->mmap_sem);
 		virtual = do_mmap(filp, 0, dma->byte_count,
 				  PROT_READ|PROT_WRITE, MAP_SHARED, 0);
+		up(&current->mm->mmap_sem);
 		if (virtual > -1024UL) {
 				/* Real error */
 			retcode = (signed long)virtual;

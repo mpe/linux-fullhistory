@@ -432,6 +432,8 @@ NORET_TYPE void do_exit(long code)
 		printk("Aiee, killing interrupt handler\n");
 	if (!tsk->pid)
 		panic("Attempted to kill the idle task!");
+	if (tsk->pid == 1)
+		panic("Attempted to kill init!");
 	tsk->flags |= PF_EXITING;
 	del_timer_sync(&tsk->real_timer);
 

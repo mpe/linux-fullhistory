@@ -7,6 +7,7 @@
 #include <linux/mm.h>
 #include <linux/file.h>
 #include <linux/smp_lock.h>
+#include <linux/slab.h>
 
 #include <asm/poll.h>
 #include <asm/siginfo.h>
@@ -330,7 +331,52 @@ out:
 	read_unlock(&tasklist_lock);
 }
 
-void kill_fasync(struct fasync_struct *fa, int sig, int band)
+/*
+ * fasync_helper() is used by some character device drivers (mainly mice)
+ * to set up the fasync queue. It returns negative on error, 0 if it did
+ * no changes and positive if it added/deleted the entry.
+ */
+static rwlock_t fasync_lock = RW_LOCK_UNLOCKED;
+int fasync_helper(int fd, struct file * filp, int on, struct fasync_struct **fapp)
+{
+	struct fasync_struct *fa, **fp;
+	struct fasync_struct *new = NULL;
+	int result = 0;
+
+	if (on) {
+		new = kmalloc(sizeof(struct fasync_struct), GFP_KERNEL);
+		if (!new)
+			return -ENOMEM;
+	}
+	write_lock_irq(&fasync_lock);
+	for (fp = fapp; (fa = *fp) != NULL; fp = &fa->fa_next) {
+		if (fa->fa_file == filp) {
+			if(on) {
+				fa->fa_fd = fd;
+				kfree(new);
+			} else {
+				*fp = fa->fa_next;
+				kfree(fa);
+				result = 1;
+			}
+			goto out;
+		}
+	}
+
+	if (on) {
+		new->magic = FASYNC_MAGIC;
+		new->fa_file = filp;
+		new->fa_fd = fd;
+		new->fa_next = *fapp;
+		*fapp = new;
+		result = 1;
+	}
+out:
+	write_unlock_irq(&fasync_lock);
+	return result;
+}
+
+void __kill_fasync(struct fasync_struct *fa, int sig, int band)
 {
 	while (fa) {
 		struct fown_struct * fown;
@@ -347,4 +393,11 @@ void kill_fasync(struct fasync_struct *fa, int sig, int band)
 			send_sigio(fown, fa, band);
 		fa = fa->fa_next;
 	}
+}
+
+void kill_fasync(struct fasync_struct **fp, int sig, int band)
+{
+	read_lock(&fasync_lock);
+	__kill_fasync(*fp, sig, band);
+	read_unlock(&fasync_lock);
 }
