@@ -1,13 +1,9 @@
-The BFS filesystem is used on SCO UnixWare machines for /stand slice.
-By default, if you attempt to mount it read-write it will be automatically
-mounted read-only. If you want to enable (limited) write support, you need
-to select "BFS write support" when configuring the kernel. The write support
-at this stage is limited to the blocks preallocated for a given inode.
-This means that writes beyond the value of inode->iu_eblock will fail with EIO.
-In particular, this means you can create empty files but not write data to them
-or you can write data to the existing files and increase their size but not the
-number of blocks allocated to them. I am currently working on removing this
-limitation, i.e. ability to migrate inodes within BFS filesystem.
+BFS FILESYSTEM FOR LINUX
+========================
+
+The BFS filesystem is used by SCO UnixWare OS for the /stand slice, which
+usually contains the kernel image and a few other files required for the
+boot process.
 
 In order to access /stand partition under Linux you obviously need to
 know the partition number and the kernel must support UnixWare disk slices
@@ -29,7 +25,9 @@ You can simplify mounting by just typing:
 # mount -t bfs -o loop stand.img /mnt/stand
 
 this will allocate the first available loopback device (and load loop.o 
-kernel module if necessary) automatically. Beware that umount will not
+kernel module if necessary) automatically. If the loopback driver is not
+loaded automatically, make sure that your kernel is compiled with kmod 
+support (CONFIG_KMOD) enabled. Beware that umount will not
 deallocate /dev/loopN device if /etc/mtab file on your system is a
 symbolic link to /proc/mounts. You will need to do it manually using
 "-d" switch of losetup(8). Read losetup(8) manpage for more info.
@@ -51,9 +49,9 @@ the magic number:
 
 # od -Ad -tx4 stand.img | more
 
-The first 4 bytes should be 0x1BADFACE.
+The first 4 bytes should be 0x1badface.
 
-If you have any questions or suggestions regarding this BFS implementation
-please contact me:
+If you have any patches, questions or suggestions regarding this BFS
+implementation please contact the author:
 
 Tigran A. Aivazian <tigran@ocston.org>.

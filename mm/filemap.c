@@ -289,6 +289,12 @@ int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 			goto cache_unlock_continue;
 
 		/*
+		 * We did the page aging part.
+		 */
+		if (nr_lru_pages < freepages.min * priority)
+			goto cache_unlock_continue;
+
+		/*
 		 * Is it a page swap page? If so, we want to
 		 * drop it if it is no longer used, even if it
 		 * were to be marked referenced..

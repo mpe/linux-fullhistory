@@ -11,7 +11,12 @@
  * adfs file system inode data in memory
  */
 struct adfs_inode_info {
-	unsigned long	file_id;		/* id of fragments containing actual data */
+	unsigned long	parent_id;	/* object id of parent		*/
+	__u32		loadaddr;	/* RISC OS load address		*/
+	__u32		execaddr;	/* RISC OS exec address		*/
+	unsigned int	filetype;	/* RISC OS file type		*/
+	unsigned int	attr;		/* RISC OS permissions		*/
+	int		stamped:1;	/* RISC OS file has date/time	*/
 };
 
 #endif

@@ -826,6 +826,12 @@ M:	pgmdsg@ibi.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+SA1100 SUPPORT
+P:	Nicolas Pitre
+M:	nico@cam.org
+L:	sa1100-linux@pa.dec.com
+S:	Maintained
+
 SBPCD CDROM DRIVER
 P:	Eberhard Moenkeberg
 M:	emoenke@gwdg.de

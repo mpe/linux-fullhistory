@@ -34,10 +34,11 @@
  *	1.09	Nikita Schmidt: epoch support and some Alpha cleanup.
  *	1.09a	Pete Zaitcev: Sun SPARC
  *	1.09b	Jeff Garzik: Modularize, init cleanup
- *
+ *	1.09c	Jeff Garzik: SMP cleanup
+ *	1.10    Paul Barton-Davis: add support for async I/O
  */
 
-#define RTC_VERSION		"1.09b"
+#define RTC_VERSION		"1.10"
 
 #define RTC_IRQ 	8	/* Can't see this changing soon.	*/
 #define RTC_IO_EXTENT	0x10	/* Only really two ports, but...	*/
@@ -79,6 +80,8 @@ static int rtc_irq;
  *	an ioctl, make sure you don't conflict with SPARC's RTC
  *	ioctls.
  */
+
+static struct fasync_struct *rtc_async_queue;
 
 static DECLARE_WAIT_QUEUE_HEAD(rtc_wait);
 
@@ -152,6 +155,9 @@ static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	spin_unlock (&rtc_lock);
 
 	wake_up_interruptible(&rtc_wait);	
+
+	if (rtc_async_queue)
+		kill_fasync (rtc_async_queue, SIGIO, POLL_IN);
 
 	if (atomic_read(&rtc_status) & RTC_TIMER_ON)
 		mod_timer(&rtc_irq_timer, jiffies + HZ/rtc_freq + 2*HZ/100);
@@ -480,6 +486,12 @@ static int rtc_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static int rtc_fasync (int fd, struct file *filp, int on)
+
+{
+	return fasync_helper (fd, filp, on, &rtc_async_queue);
+}
+
 static int rtc_release(struct inode *inode, struct file *file)
 {
 	/*
@@ -502,6 +514,10 @@ static int rtc_release(struct inode *inode, struct file *file)
 	if (atomic_read(&rtc_status) & RTC_TIMER_ON) {
 		atomic_set(&rtc_status, atomic_read(&rtc_status) & ~RTC_TIMER_ON);
 		del_timer(&rtc_irq_timer);
+	}
+
+	if (file->f_flags & FASYNC) {
+		rtc_fasync (-1, file, 0);
 	}
 
 	MOD_DEC_USE_COUNT;
@@ -533,16 +549,13 @@ static unsigned int rtc_poll(struct file *file, poll_table *wait)
  */
 
 static struct file_operations rtc_fops = {
-	rtc_llseek,
-	rtc_read,
-	NULL,		/* No write */
-	NULL,		/* No readdir */
-	rtc_poll,
-	rtc_ioctl,
-	NULL,		/* No mmap */
-	rtc_open,
-	NULL,		/* flush */
-	rtc_release
+	llseek:		rtc_llseek,
+	read:		rtc_read,
+	poll:		rtc_poll,
+	ioctl:		rtc_ioctl,
+	open:		rtc_open,
+	release:	rtc_release,
+	fasync:		rtc_fasync,
 };
 
 static struct miscdevice rtc_dev=

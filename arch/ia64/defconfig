@@ -1,0 +1,146 @@
+#
+# Automatically generated make config: don't edit
+#
+
+#
+# Code maturity level options
+#
+CONFIG_EXPERIMENTAL=y
+
+#
+# Loadable module support
+#
+# CONFIG_MODULES is not set
+
+#
+# General setup
+#
+CONFIG_IA64_SIM=y
+CONFIG_PCI=y
+# CONFIG_PCI_QUIRKS is not set
+CONFIG_PCI_OLD_PROC=y
+# CONFIG_NET is not set
+# CONFIG_SYSVIPC is not set
+# CONFIG_BSD_PROCESS_ACCT is not set
+# CONFIG_SYSCTL is not set
+# CONFIG_BINFMT_ELF is not set
+# CONFIG_BINFMT_MISC is not set
+# CONFIG_BINFMT_JAVA is not set
+# CONFIG_BINFMT_EM86 is not set
+# CONFIG_PARPORT is not set
+
+#
+# Plug and Play support
+#
+# CONFIG_PNP is not set
+
+#
+# Block devices
+#
+# CONFIG_BLK_DEV_FD is not set
+# CONFIG_BLK_DEV_IDE is not set
+
+#
+# Please see Documentation/ide.txt for help/info on IDE drives
+#
+# CONFIG_BLK_DEV_HD_ONLY is not set
+
+#
+# Additional Block Devices
+#
+# CONFIG_BLK_DEV_LOOP is not set
+# CONFIG_BLK_DEV_NBD is not set
+# CONFIG_BLK_DEV_MD is not set
+# CONFIG_BLK_DEV_RAM is not set
+# CONFIG_BLK_DEV_XD is not set
+CONFIG_PARIDE_PARPORT=y
+# CONFIG_PARIDE is not set
+# CONFIG_BLK_DEV_HD is not set
+
+#
+# SCSI support
+#
+# CONFIG_SCSI is not set
+# CONFIG_SCSI_G_NCR5380_PORT is not set
+# CONFIG_SCSI_G_NCR5380_MEM is not set
+
+#
+# Amateur Radio support
+#
+# CONFIG_HAMRADIO is not set
+
+#
+# ISDN subsystem
+#
+# CONFIG_ISDN is not set
+
+#
+# CD-ROM drivers (not for SCSI or IDE/ATAPI drives)
+#
+# CONFIG_CD_NO_IDESCSI is not set
+
+#
+# Character devices
+#
+# CONFIG_VT is not set
+# CONFIG_SERIAL is not set
+# CONFIG_SERIAL_EXTENDED is not set
+# CONFIG_SERIAL_NONSTANDARD is not set
+# CONFIG_UNIX98_PTYS is not set
+# CONFIG_MOUSE is not set
+# CONFIG_QIC02_TAPE is not set
+# CONFIG_WATCHDOG is not set
+# CONFIG_RTC is not set
+CONFIG_EFI_RTC=y
+# CONFIG_VIDEO_DEV is not set
+# CONFIG_NVRAM is not set
+# CONFIG_JOYSTICK is not set
+
+#
+# Ftape, the floppy tape device driver
+#
+# CONFIG_FTAPE is not set
+# CONFIG_FT_NORMAL_DEBUG is not set
+# CONFIG_FT_FULL_DEBUG is not set
+# CONFIG_FT_NO_TRACE is not set
+# CONFIG_FT_NO_TRACE_AT_ALL is not set
+# CONFIG_FT_STD_FDC is not set
+# CONFIG_FT_MACH2 is not set
+# CONFIG_FT_PROBE_FC10 is not set
+# CONFIG_FT_ALT_FDC is not set
+
+#
+# Filesystems
+#
+# CONFIG_QUOTA is not set
+# CONFIG_MINIX_FS is not set
+# CONFIG_EXT2_FS is not set
+# CONFIG_ISO9660_FS is not set
+# CONFIG_FAT_FS is not set
+# CONFIG_PROC_FS is not set
+# CONFIG_HPFS_FS is not set
+# CONFIG_NTFS_FS is not set
+# CONFIG_SYSV_FS is not set
+# CONFIG_AFFS_FS is not set
+# CONFIG_HFS_FS is not set
+# CONFIG_ROMFS_FS is not set
+# CONFIG_AUTOFS_FS is not set
+# CONFIG_UFS_FS is not set
+# CONFIG_BSD_DISKLABEL is not set
+# CONFIG_SMD_DISKLABEL is not set
+# CONFIG_SOLARIS_X86_PARTITION is not set
+# CONFIG_ADFS_FS is not set
+# CONFIG_QNX4FS_FS is not set
+# CONFIG_MAC_PARTITION is not set
+# CONFIG_NLS is not set
+
+#
+# Sound
+#
+# CONFIG_SOUND is not set
+
+#
+# Kernel hacking
+#
+# CONFIG_MATHEMU is not set
+# CONFIG_MAGIC_SYSRQ is not set

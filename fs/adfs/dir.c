@@ -1,345 +1,332 @@
 /*
- *  linux/fs/adfs/dir.c
+ * linux/fs/adfs/dir.c
  *
- * Copyright (C) 1997 Russell King
+ * Copyright (C) 1999 Russell King
+ *
+ * Common directory handling for ADFS
  */
-
+#include <linux/version.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/adfs_fs.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
 
-static ssize_t adfs_dirread (struct file *filp, char *buf,
-			     size_t siz, loff_t *ppos)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
+#include <linux/spinlock.h>
+#else
+#include <asm/spinlock.h>
+#endif
+
+#include "adfs.h"
+
+/*
+ * For future.  This should probably be per-directory.
+ */
+static rwlock_t adfs_dir_lock;
+
+static int
+adfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
+{
+	struct inode *inode = filp->f_dentry->d_inode;
+	struct super_block *sb = filp->f_dentry->d_sb;
+	struct adfs_dir_ops *ops = sb->u.adfs_sb.s_dir;
+	struct object_info obj;
+	struct adfs_dir dir;
+	int ret;
+
+	ret = ops->read(sb, inode->i_ino, inode->i_size, &dir);
+	if (ret)
+		goto out;
+
+	switch (filp->f_pos) {
+	case 0:
+		if (filldir(dirent, ".", 1, 0, inode->i_ino) < 0)
+			goto free_out;
+		filp->f_pos += 1;
+
+	case 1:
+		if (filldir(dirent, "..", 2, 1, dir.parent_id) < 0)
+			goto free_out;
+		filp->f_pos += 1;
+
+	default:
+		break;
+	}
+
+	read_lock(&adfs_dir_lock);
+
+	ret = ops->setpos(&dir, filp->f_pos - 2);
+	if (ret)
+		goto unlock_out;
+	while (ops->getnext(&dir, &obj) == 0) {
+		if (filldir(dirent, obj.name, obj.name_len,
+			    filp->f_pos, obj.file_id) < 0)
+			goto unlock_out;
+		filp->f_pos += 1;
+	}
+
+unlock_out:
+	read_unlock(&adfs_dir_lock);
+
+free_out:
+	ops->free(&dir);
+
+out:
+	return ret;
+}
+
+int
+adfs_dir_update(struct super_block *sb, struct object_info *obj)
+{
+	struct adfs_dir_ops *ops = sb->u.adfs_sb.s_dir;
+	struct adfs_dir dir;
+	int ret = -EINVAL;
+
+	printk(KERN_INFO "adfs_dir_update: object %06X in dir %06X\n",
+		 obj->file_id, obj->parent_id);
+#if 0
+	if (!ops->update) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = ops->read(sb, obj->parent_id, 0, &dir);
+	if (ret)
+		goto out;
+
+	write_lock(&adfs_dir_lock);
+	ret = ops->update(&dir, obj);
+	write_unlock(&adfs_dir_lock);
+
+	ops->free(&dir);
+out:
+#endif
+	return ret;
+}
+
+static int
+adfs_match(struct qstr *name, struct object_info *obj)
+{
+	int i;
+
+	if (name->len != obj->name_len)
+		return 0;
+
+	for (i = 0; i < name->len; i++) {
+		char c1, c2;
+
+		c1 = name->name[i];
+		c2 = obj->name[i];
+
+		if (c1 >= 'A' && c1 <= 'Z')
+			c1 += 'a' - 'A';
+		if (c2 >= 'A' && c2 <= 'Z')
+			c2 += 'a' - 'A';
+
+		if (c1 != c2)
+			return 0;
+	}
+	return 1;
+}
+
+static int
+adfs_dir_lookup_byname(struct inode *inode, struct qstr *name, struct object_info *obj)
+{
+	struct super_block *sb = inode->i_sb;
+	struct adfs_dir_ops *ops = sb->u.adfs_sb.s_dir;
+	struct adfs_dir dir;
+	int ret;
+
+	ret = ops->read(sb, inode->i_ino, inode->i_size, &dir);
+	if (ret)
+		goto out;
+
+	if (inode->u.adfs_i.parent_id != dir.parent_id) {
+		adfs_error(sb, "parent directory changed under me! (%lx but got %lx)\n",
+			   inode->u.adfs_i.parent_id, dir.parent_id);
+		ret = -EIO;
+		goto free_out;
+	}
+
+	obj->parent_id = inode->i_ino;
+
+	/*
+	 * '.' is handled by reserved_lookup() in fs/namei.c
+	 */
+	if (name->len == 2 && name->name[0] == '.' && name->name[1] == '.') {
+		/*
+		 * Currently unable to fill in the rest of 'obj',
+		 * but this is better than nothing.  We need to
+		 * ascend one level to find it's parent.
+		 */
+		obj->name_len = 0;
+		obj->file_id  = obj->parent_id;
+		goto free_out;
+	}
+
+	read_lock(&adfs_dir_lock);
+
+	ret = ops->setpos(&dir, 0);
+	if (ret)
+		goto unlock_out;
+
+	ret = -ENOENT;
+	while (ops->getnext(&dir, obj) == 0) {
+		if (adfs_match(name, obj)) {
+			ret = 0;
+			break;
+		}
+	}
+
+unlock_out:
+	read_unlock(&adfs_dir_lock);
+
+free_out:
+	ops->free(&dir);
+out:
+	return ret;
+}
+
+static ssize_t
+adfs_dir_no_read(struct file *filp, char *buf, size_t siz, loff_t *ppos)
 {
 	return -EISDIR;
 }
 
-static int adfs_readdir (struct file *, void *, filldir_t);
-
 static struct file_operations adfs_dir_operations = {
-	NULL,			/* lseek - default */
-	adfs_dirread,		/* read */
-	NULL,			/* write - bad */
-	adfs_readdir,		/* readdir */
-	NULL,			/* select - default */
-	NULL,			/* ioctl */
-	NULL,			/* mmap */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
+	NULL,			/* lseek - default	*/
+	adfs_dir_no_read,	/* read			*/
+	NULL,			/* write - bad		*/
+	adfs_readdir,		/* readdir		*/
+	NULL,			/* poll - default	*/
+	NULL,			/* ioctl		*/
+	NULL,			/* mmap			*/
+	NULL,			/* no special open code	*/
+	NULL,			/* flush		*/
 	NULL,			/* no special release code */
-	file_fsync,		/* fsync */
-	NULL,			/* fasync */
+	file_fsync,		/* fsync		*/
+	NULL,			/* fasync		*/
 };
+
+static int
+adfs_hash(struct dentry *parent, struct qstr *qstr)
+{
+	const unsigned int name_len = parent->d_sb->u.adfs_sb.s_namelen;
+	const unsigned char *name;
+	unsigned long hash;
+	int i;
+
+	if (qstr->len < name_len)
+		return 0;
+
+	/*
+	 * Truncate the name in place, avoids
+	 * having to define a compare function.
+	 */
+	qstr->len = i = name_len;
+	name = qstr->name;
+	hash = init_name_hash();
+	while (i--) {
+		char c;
+
+		c = *name++;
+		if (c >= 'A' && c <= 'Z')
+			c += 'a' - 'A';
+
+		hash = partial_name_hash(c, hash);
+	}
+	qstr->hash = end_name_hash(hash);
+
+	return 0;
+}
+
+/*
+ * Compare two names, taking note of the name length
+ * requirements of the underlying filesystem.
+ */
+static int
+adfs_compare(struct dentry *parent, struct qstr *entry, struct qstr *name)
+{
+	int i;
+
+	if (entry->len != name->len)
+		return 1;
+
+	for (i = 0; i < name->len; i++) {
+		char a, b;
+
+		a = entry->name[i];
+		b = name->name[i];
+
+		if (a >= 'A' && a <= 'Z')
+			a += 'a' - 'A';
+		if (b >= 'A' && b <= 'Z')
+			b += 'a' - 'A';
+
+		if (a != b)
+			return 1;
+	}
+	return 0;
+}
+
+struct dentry_operations adfs_dentry_operations = {
+	NULL,		/* revalidate */
+	adfs_hash,
+	adfs_compare,
+	NULL,		/* delete  = called by dput */
+	NULL,		/* release - called by d_free */
+	NULL		/* iput    - called by dentry_iput */
+};
+
+struct dentry *adfs_lookup(struct inode *dir, struct dentry *dentry)
+{
+	struct inode *inode = NULL;
+	struct object_info obj;
+	int error;
+
+	dentry->d_op = &adfs_dentry_operations;	
+	error = adfs_dir_lookup_byname(dir, &dentry->d_name, &obj);
+	if (error == 0) {
+		error = -EACCES;
+		/*
+		 * This only returns NULL if get_empty_inode
+		 * fails.
+		 */
+		inode = adfs_iget(dir->i_sb, &obj);
+		if (inode)
+			error = 0;
+	}
+	d_add(dentry, inode);
+	return ERR_PTR(error);
+}
 
 /*
  * directories can handle most operations...
  */
 struct inode_operations adfs_dir_inode_operations = {
 	&adfs_dir_operations,	/* default directory file-ops */
-	NULL,			/* create */
-	adfs_lookup,		/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* read link */
-	NULL,			/* follow link */
-	NULL,			/* get_block */
-	NULL,			/* read page */
-	NULL,			/* write page */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
+	NULL,			/* create		*/
+	adfs_lookup,		/* lookup		*/
+	NULL,			/* link			*/
+	NULL,			/* unlink		*/
+	NULL,			/* symlink		*/
+	NULL,			/* mkdir		*/
+	NULL,			/* rmdir		*/
+	NULL,			/* mknod		*/
+	NULL,			/* rename		*/
+	NULL,			/* read link		*/
+	NULL,			/* follow link		*/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
+	NULL,			/* bmap			*/
+	NULL,			/* read page		*/
+	NULL,			/* write page		*/
+#else
+	NULL,			/* read page		*/
+	NULL,			/* write page		*/
+	NULL,			/* bmap			*/
+#endif
+	NULL,			/* truncate		*/
+	NULL,			/* permission		*/
+	NULL			/* revalidate		*/
 };
-
-unsigned int adfs_val (unsigned char *p, int len)
-{
-	unsigned int val = 0;
-
-	switch (len) {
-	case 4:
-		val |= p[3] << 24;
-	case 3:
-		val |= p[2] << 16;
-	case 2:
-		val |= p[1] << 8;
-	default:
-		val |= p[0];
-	}
-	return val;
-}
-
-static unsigned int adfs_filetype (unsigned int load)
-{
-	if ((load & 0xfff00000) != 0xfff00000)
-		return (unsigned int) -1;
-	return (load >> 8) & 0xfff;
-}
-
-static unsigned int adfs_time (unsigned int load, unsigned int exec)
-{
-	unsigned int high, low;
-
-	/* Check for unstamped files.  */
-	if ((load & 0xfff00000) != 0xfff00000)
-		return 0;
-
-	high = ((load << 24) | (exec >> 8));
-	low  =  exec & 255;
-
-	/* Files dated pre 1970.  */
-	if (high < 0x336e996a)
-		return 0;
-
-	high -= 0x336e996a;
-
-	/* Files dated post 2038 ish.  */
-	if (high > 0x31ffffff)
-		return 0x7fffffff;
-
-	/* 65537 = h256,l1
-	 * (h256 % 100) = 56         h256 / 100 = 2
-	 *    56 << 8 = 14336           2 * 256 = 512
-	 *      + l1 = 14337
-	 *        / 100 = 143
-	 *          + 512 = 655
-	 */
-	return (((high % 100) << 8) + low) / 100 + (high / 100 << 8);
-}
-
-int adfs_readname (char *buf, char *ptr, int maxlen)
-{
-	int size = 0;
-	while (*ptr >= ' ' && maxlen--) {
-		switch (*ptr) {
-		case '/':
-			*buf++ = '.';
-			break;
-		default:
-			*buf++ = *ptr;
-			break;
-		}
-		ptr++;
-		size ++;
-	}
-	*buf = '\0';
-	return size;
-}
-
-int adfs_dir_read_parent (struct inode *inode, struct buffer_head **bhp)
-{
-	struct super_block *sb;
-	int i, size;
-
-	sb = inode->i_sb;
-
-	size = 2048 >> sb->s_blocksize_bits;
-
-	for (i = 0; i < size; i++) {
-		int block;
-
-		block = adfs_parent_bmap (inode, i);
-		if (block)
-			bhp[i] = bread (sb->s_dev, block, sb->s_blocksize);
-		else
-			adfs_error (sb, "adfs_dir_read_parent",
-				    "directory %lu with a hole at offset %d", inode->i_ino, i);
-		if (!block || !bhp[i]) {
-			int j;
-			for (j = i - 1; j >= 0; j--)
-				brelse (bhp[j]);
-			return 0;
-		}
-	}
-	return i;
-}
-
-int adfs_dir_read (struct inode *inode, struct buffer_head **bhp)
-{
-	struct super_block *sb;
-	int i, size;
-
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return 0;
-
-	sb = inode->i_sb;
-
-	size = inode->i_size >> sb->s_blocksize_bits;
-
-	for (i = 0; i < size; i++) {
-		int block;
-
-		block = adfs_bmap (inode, i);
-		if (block)
-			bhp[i] = bread (sb->s_dev, block, sb->s_blocksize);
-		else
-			adfs_error (sb, "adfs_dir_read",
-				    "directory %lX,%lX with a hole at offset %d",
-				    inode->i_ino, inode->u.adfs_i.file_id, i);
-		if (!block || !bhp[i]) {
-			int j;
-			for (j = i - 1; j >= 0; j--)
-				brelse (bhp[j]);
-			return 0;
-		}
-	}
-	return i;
-}
-
-int adfs_dir_check (struct inode *inode, struct buffer_head **bhp, int buffers, union adfs_dirtail *dtp)
-{
-	struct adfs_dirheader dh;
-	union adfs_dirtail dt;
-
-	memcpy (&dh, bhp[0]->b_data, sizeof (dh));
-	memcpy (&dt, bhp[3]->b_data + 471, sizeof(dt));
-
-	if (memcmp (&dh.startmasseq, &dt.new.endmasseq, 5) ||
-	    (memcmp (&dh.startname, "Nick", 4) &&
-	     memcmp (&dh.startname, "Hugo", 4))) {
-		adfs_error (inode->i_sb, "adfs_check_dir",
-			    "corrupted directory inode %lX,%lX",
-			    inode->i_ino, inode->u.adfs_i.file_id);
-		return 1;
-	}
-	if (dtp)
-		*dtp = dt;
-	return 0;
-}
-
-void adfs_dir_free (struct buffer_head **bhp, int buffers)
-{
-	int i;
-
-	for (i = buffers - 1; i >= 0; i--)
-		brelse (bhp[i]);
-}
-
-/* convert a disk-based directory entry to a Linux ADFS directory entry */
-static inline void
-adfs_dirent_to_idirent(struct adfs_idir_entry *ide, struct adfs_direntry *de)
-{
-	ide->name_len =	adfs_readname(ide->name, de->dirobname, ADFS_NAME_LEN);
-	ide->file_id  = adfs_val(de->dirinddiscadd, 3);
-	ide->size     = adfs_val(de->dirlen, 4);
-	ide->mode     = de->newdiratts;
-	ide->mtime    = adfs_time(adfs_val(de->dirload, 4), adfs_val(de->direxec, 4));
-	ide->filetype = adfs_filetype(adfs_val(de->dirload, 4));
-}
-
-int adfs_dir_get (struct super_block *sb, struct buffer_head **bhp,
-		  int buffers, int pos, unsigned long parent_object_id,
-		  struct adfs_idir_entry *ide)
-{
-	struct adfs_direntry de;
-	int thissize, buffer, offset;
-
-	offset = pos & (sb->s_blocksize - 1);
-	buffer = pos >> sb->s_blocksize_bits;
-
-	if (buffer > buffers)
-		return 0;
-
-	thissize = sb->s_blocksize - offset;
-	if (thissize > 26)
-		thissize = 26;
-
-	memcpy (&de, bhp[buffer]->b_data + offset, thissize);
-	if (thissize != 26)
-		memcpy (((char *)&de) + thissize, bhp[buffer + 1]->b_data, 26 - thissize);
-
-	if (!de.dirobname[0])
-		return 0;
-
-	ide->inode_no = adfs_inode_generate (parent_object_id, pos);
-	adfs_dirent_to_idirent(ide, &de);
-	return 1;
-}
-
-int adfs_dir_find_entry (struct super_block *sb, struct buffer_head **bhp,
-			 int buffers, unsigned int pos,
-			 struct adfs_idir_entry *ide)
-{
-	struct adfs_direntry de;
-	int offset, buffer, thissize;
-
-	offset = pos & (sb->s_blocksize - 1);
-	buffer = pos >> sb->s_blocksize_bits;
-
-	if (buffer > buffers)
-		return 0;
-
-	thissize = sb->s_blocksize - offset;
-	if (thissize > 26)
-		thissize = 26;
-
-	memcpy (&de, bhp[buffer]->b_data + offset, thissize);
-	if (thissize != 26)
-		memcpy (((char *)&de) + thissize, bhp[buffer + 1]->b_data, 26 - thissize);
-
-	if (!de.dirobname[0])
-		return 0;
-
-	adfs_dirent_to_idirent(ide, &de);
-	return 1;
-}	
-
-static int adfs_readdir (struct file *filp, void *dirent, filldir_t filldir)
-{
-	struct inode *inode = filp->f_dentry->d_inode;
-	struct super_block *sb;
-	struct buffer_head *bh[4];
-	union  adfs_dirtail dt;
-	unsigned long parent_object_id, dir_object_id;
-	int buffers, pos;
-
-	sb = inode->i_sb;
-
-	if (filp->f_pos > ADFS_NUM_DIR_ENTRIES + 2)
-		return -ENOENT;
-
-	if (!(buffers = adfs_dir_read (inode, bh))) {
-		adfs_error (sb, "adfs_readdir", "unable to read directory");
-		return -EINVAL;
-	}
-
-	if (adfs_dir_check (inode, bh, buffers, &dt)) {
-		adfs_dir_free (bh, buffers);
-		return -ENOENT;
-	}
-
-	parent_object_id = adfs_val (dt.new.dirparent, 3);
-	dir_object_id = adfs_inode_objid (inode);
-
-	if (filp->f_pos < 2) {
-		if (filp->f_pos < 1) {
-			if (filldir (dirent, ".", 1, 0, inode->i_ino) < 0)
-				return 0;
-			filp->f_pos ++;
-		}
-		if (filldir (dirent, "..", 2, 1,
-			     adfs_inode_generate (parent_object_id, 0)) < 0)
-			return 0;
-		filp->f_pos ++;
-	}
-
-	pos = 5 + (filp->f_pos - 2) * 26;
-	while (filp->f_pos < 79) {
-		struct adfs_idir_entry ide;
-
-		if (!adfs_dir_get (sb, bh, buffers, pos, dir_object_id, &ide))
-			break;
-
-		if (filldir (dirent, ide.name, ide.name_len, filp->f_pos, ide.inode_no) < 0)
-			return 0;
-		filp->f_pos ++;
-		pos += 26;
-	}
-	adfs_dir_free (bh, buffers);
-	return 0;
-}

@@ -14,9 +14,9 @@
 #undef DEBUG
 
 #ifdef DEBUG
-#define DBG(x...)	printk(x)
+#define dprintf(x...)	printf(x)
 #else
-#define DBG(x...)
+#define dprintf(x...)
 #endif
 
 static int bfs_add_entry(struct inode * dir, const char * name, int namelen, int ino);
@@ -38,14 +38,13 @@ static int bfs_readdir(struct file * f, void * dirent, filldir_t filldir)
 	int block;
 
 	if (!dir || !dir->i_sb || !S_ISDIR(dir->i_mode)) {
-		printk(KERN_ERR "BFS-fs: %s(): Bad inode or not a directory %s:%08lx\n",
-			__FUNCTION__, bdevname(dev), dir->i_ino);
+		printf("Bad inode or not a directory %s:%08lx\n", bdevname(dev), dir->i_ino);
 		return -EBADF;
 	}
 
 	if (f->f_pos & (BFS_DIRENT_SIZE-1)) {
-		printk(KERN_ERR "BFS-fs: %s(): Bad f_pos=%08lx for %s:%08lx\n", 
-			__FUNCTION__, (unsigned long)f->f_pos, bdevname(dev), dir->i_ino);
+		printf("Bad f_pos=%08lx for %s:%08lx\n", (unsigned long)f->f_pos, 
+			bdevname(dev), dir->i_ino);
 		return -EBADF;
 	}
 
@@ -189,9 +188,8 @@ static int bfs_unlink(struct inode * dir, struct dentry * dentry)
 		goto out_brelse;
 
 	if (!inode->i_nlink) {
-		printk(KERN_WARNING 
-		"BFS-fs: %s(): unlinking non-existent file %s:%lu (nlink=%d)\n",
-		__FUNCTION__, bdevname(inode->i_dev), inode->i_ino, inode->i_nlink);
+		printf("unlinking non-existent file %s:%lu (nlink=%d)\n", bdevname(inode->i_dev), 
+				inode->i_ino, inode->i_nlink);
 		inode->i_nlink = 1;
 	}
 	de->ino = 0;
@@ -294,7 +292,7 @@ static int bfs_add_entry(struct inode * dir, const char * name, int namelen, int
 	kdev_t dev;
 	int i;
 
-	DBG(KERN_ERR "BFS-fs: %s(%s,%d)\n", __FUNCTION__, name, namelen);
+	dprintf("name=%s, namelen=%d\n", name, namelen);
 
 	if (!namelen)
 		return -ENOENT;

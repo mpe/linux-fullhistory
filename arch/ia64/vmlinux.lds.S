@@ -1,0 +1,164 @@
+#include <linux/config.h>
+
+#include <asm/page.h>
+#include <asm/system.h>
+
+OUTPUT_FORMAT("elf64-ia64-little")
+OUTPUT_ARCH(ia64)
+ENTRY(_start)
+SECTIONS
+{
+  v = PAGE_OFFSET;	/* this symbol is here to make debugging with kdb easier... */
+
+  . = KERNEL_START;
+
+  _text = .;
+  _stext = .;
+  .text : AT(ADDR(.text) - PAGE_OFFSET)
+    {
+	*(__ivt_section)
+	/* these are not really text pages, but the zero page needs to be in a fixed location: */
+	*(__special_page_section)
+	__start_gate_section = .;
+	*(__gate_section)
+	__stop_gate_section = .;
+	*(.text)
+    }
+  .text2 : AT(ADDR(.text2) - PAGE_OFFSET)
+	{ *(.text2) }
+#ifdef CONFIG_SMP
+  .text.lock : AT(ADDR(.text.lock) - PAGE_OFFSET)
+	{ *(.text.lock) }
+#endif
+  _etext = .;
+
+  /* Exception table */
+  . = ALIGN(16);
+  __start___ex_table = .;
+  __ex_table : AT(ADDR(__ex_table) - PAGE_OFFSET)
+	{ *(__ex_table) }
+  __stop___ex_table = .;
+
+#if defined(CONFIG_KDB)
+  /* Kernel symbols and strings for kdb */
+# define KDB_MEAN_SYMBOL_SIZE	48
+# define KDB_SPACE		(CONFIG_KDB_STBSIZE * KDB_MEAN_SYMBOL_SIZE)
+  . = ALIGN(8);
+  _skdb = .;
+  .kdb : AT(ADDR(.kdb) - PAGE_OFFSET)
+    {
+	*(kdbsymtab)
+	*(kdbstrings)
+    }
+  _ekdb = .;
+  . = _skdb + KDB_SPACE;
+#endif
+
+  /* Kernel symbol names for modules: */
+  .kstrtab : AT(ADDR(.kstrtab) - PAGE_OFFSET)
+	{ *(.kstrtab) }
+
+  /* The initial task and kernel stack */
+  . = ALIGN(PAGE_SIZE);
+  init_task : AT(ADDR(init_task) - PAGE_OFFSET)
+	{ *(init_task) }
+
+  /* Startup code */
+  __init_begin = .;
+  .text.init : AT(ADDR(.text.init) - PAGE_OFFSET)
+	{ *(.text.init) }
+  .data.init : AT(ADDR(.data.init) - PAGE_OFFSET)
+	{ *(.data.init) }
+   . = ALIGN(16);
+  __setup_start = .;
+  .setup.init : AT(ADDR(.setup.init) - PAGE_OFFSET)
+        { *(.setup.init) }
+  __setup_end = .;
+  __initcall_start = .;
+  .initcall.init : AT(ADDR(.initcall.init) - PAGE_OFFSET)
+        { *(.initcall.init) }
+  __initcall_end = .;
+  . = ALIGN(PAGE_SIZE);
+  __init_end = .;
+
+  .data.page_aligned : AT(ADDR(.data.page_aligned) - PAGE_OFFSET)
+        { *(.data.idt) }
+
+  . = ALIGN(64);
+  .data.cacheline_aligned : AT(ADDR(.data.cacheline_aligned) - PAGE_OFFSET)
+        { *(.data.cacheline_aligned) }
+
+  /* Global data */
+  _data = .;
+
+  .rodata : AT(ADDR(.rodata) - PAGE_OFFSET)
+	{ *(.rodata) }
+  .opd : AT(ADDR(.opd) - PAGE_OFFSET)
+	{ *(.opd) }
+  .data : AT(ADDR(.data) - PAGE_OFFSET)
+	{ *(.data) *(.gnu.linkonce.d*) CONSTRUCTORS }
+
+  __gp = ALIGN (8) + 0x200000;
+
+  .got : AT(ADDR(.got) - PAGE_OFFSET)
+	{ *(.got.plt) *(.got) }
+  /* We want the small data sections together, so single-instruction offsets
+     can access them all, and initialized data all before uninitialized, so
+     we can shorten the on-disk segment size.  */
+  .sdata : AT(ADDR(.sdata) - PAGE_OFFSET)
+	{ *(.sdata) }
+  _edata  =  .;
+  _bss = .;
+  .sbss : AT(ADDR(.sbss) - PAGE_OFFSET)
+	{ *(.sbss) *(.scommon) }
+  .bss : AT(ADDR(.bss) - PAGE_OFFSET)
+	{ *(.bss) *(COMMON) }
+  . = ALIGN(64 / 8);
+  _end = .;
+
+  /* Sections to be discarded */
+  /DISCARD/ : {
+	*(.text.exit)
+	*(.data.exit)
+	}
+
+  /* Stabs debugging sections.  */
+  .stab 0 : { *(.stab) }
+  .stabstr 0 : { *(.stabstr) }
+  .stab.excl 0 : { *(.stab.excl) }
+  .stab.exclstr 0 : { *(.stab.exclstr) }
+  .stab.index 0 : { *(.stab.index) }
+  .stab.indexstr 0 : { *(.stab.indexstr) }
+  /* DWARF debug sections.
+     Symbols in the DWARF debugging sections are relative to the beginning
+     of the section so we begin them at 0.  */
+  /* DWARF 1 */
+  .debug          0 : { *(.debug) }
+  .line           0 : { *(.line) }
+  /* GNU DWARF 1 extensions */
+  .debug_srcinfo  0 : { *(.debug_srcinfo) }
+  .debug_sfnames  0 : { *(.debug_sfnames) }
+  /* DWARF 1.1 and DWARF 2 */
+  .debug_aranges  0 : { *(.debug_aranges) }
+  .debug_pubnames 0 : { *(.debug_pubnames) }
+  /* DWARF 2 */
+  .debug_info     0 : { *(.debug_info) }
+  .debug_abbrev   0 : { *(.debug_abbrev) }
+  .debug_line     0 : { *(.debug_line) }
+  .debug_frame    0 : { *(.debug_frame) }
+  .debug_str      0 : { *(.debug_str) }
+  .debug_loc      0 : { *(.debug_loc) }
+  .debug_macinfo  0 : { *(.debug_macinfo) }
+  /* SGI/MIPS DWARF 2 extensions */
+  .debug_weaknames 0 : { *(.debug_weaknames) }
+  .debug_funcnames 0 : { *(.debug_funcnames) }
+  .debug_typenames 0 : { *(.debug_typenames) }
+  .debug_varnames  0 : { *(.debug_varnames) }
+  /* These must appear regardless of  .  */
+  /* Discard them for now since Intel SoftSDV cannot handle them.
+  .comment 0 : { *(.comment) }
+  .note 0 : { *(.note) }
+  */
+  /DISCARD/ : { *(.comment) }
+  /DISCARD/ : { *(.note) }
+}

@@ -14,20 +14,21 @@
 #ifndef _LINUX_AUTO_FS_H
 #define _LINUX_AUTO_FS_H
 
+#ifdef __KERNEL__
 #include <linux/version.h>
 #include <linux/fs.h>
 #include <linux/limits.h>
-#include <linux/ioctl.h>
 #include <asm/types.h>
+#endif /* __KERNEL__ */
 
-/* This header file describes a range of autofs interface versions;
-   the new implementation ("autofs4") supports them all, but the old
-   implementation only supports v3.  */
-#define AUTOFS_MIN_PROTO_VERSION 3	/* Min version we support */
-#define AUTOFS_MAX_PROTO_VERSION 4	/* Max (current) version */
+#include <linux/ioctl.h>
 
-/* Backwards compat for autofs v3; it just implements a version */
-#define AUTOFS_PROTO_VERSION 3		/* v3 version */
+/* This file describes autofs v3 */
+#define AUTOFS_PROTO_VERSION	3
+
+/* Range of protocol versions defined */
+#define AUTOFS_MAX_PROTO_VERSION	AUTOFS_PROTO_VERSION
+#define AUTOFS_MIN_PROTO_VERSION	AUTOFS_PROTO_VERSION
 
 /*
  * Architectures where both 32- and 64-bit binaries can be executed
@@ -50,15 +51,13 @@ typedef unsigned int autofs_wqt_t;
 typedef unsigned long autofs_wqt_t;
 #endif
 
-enum autofs_packet_type {
-	autofs_ptype_missing,	/* Missing entry (mount request) */
-	autofs_ptype_expire,	/* Expire entry (umount request) */
-	autofs_ptype_expire_multi,	/* Expire entry (umount request) */
-};
+/* Packet types */
+#define autofs_ptype_missing	0	/* Missing entry (mount request) */
+#define autofs_ptype_expire	1	/* Expire entry (umount request) */
 
 struct autofs_packet_hdr {
-	int proto_version;	      /* Protocol version */
-	enum autofs_packet_type type; /* Type of packet */
+	int proto_version;		/* Protocol version */
+	int type;			/* Type of packet */
 };
 
 struct autofs_packet_missing {
@@ -75,28 +74,12 @@ struct autofs_packet_expire {
 	char name[NAME_MAX+1];
 };
 
-/* v4 multi expire (via pipe) */
-struct autofs_packet_expire_multi {
-	struct autofs_packet_hdr hdr;
-        autofs_wqt_t wait_queue_token;
-	int len;
-	char name[NAME_MAX+1];
-};
-
-union autofs_packet_union {
-	struct autofs_packet_hdr hdr;
-	struct autofs_packet_missing missing;
-	struct autofs_packet_expire expire;
-	struct autofs_packet_expire_multi expire_multi;
-};
-
 #define AUTOFS_IOC_READY      _IO(0x93,0x60)
 #define AUTOFS_IOC_FAIL       _IO(0x93,0x61)
 #define AUTOFS_IOC_CATATONIC  _IO(0x93,0x62)
 #define AUTOFS_IOC_PROTOVER   _IOR(0x93,0x63,int)
 #define AUTOFS_IOC_SETTIMEOUT _IOWR(0x93,0x64,unsigned long)
 #define AUTOFS_IOC_EXPIRE     _IOR(0x93,0x65,struct autofs_packet_expire)
-#define AUTOFS_IOC_EXPIRE_MULTI _IOW(0x93,0x66,int)
 
 #ifdef __KERNEL__
 

@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
 O_TARGET := adfs.o
-O_OBJS   := dir.o file.o inode.o map.o namei.o super.o
+O_OBJS   := dir.o dir_f.o dir_fplus.o file.o inode.o map.o super.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -16,9 +16,9 @@ ifeq ($(CONFIG_ISA_DMA),y)
   ISA_DMA_OBJS += dma-isa.o
 endif
 
-O_OBJS_arc        = dma-arc.o iic.o fiq.o oldlatches.o
-O_OBJS_a5k        = dma-a5k.o iic.o fiq.o
-O_OBJS_rpc        = dma-rpc.o iic.o fiq.o
+O_OBJS_arc        = dma-arc.o iic.o fiq.o time-acorn.o oldlatches.o
+O_OBJS_a5k        = dma-a5k.o iic.o fiq.o time-acorn.o
+O_OBJS_rpc        = dma-rpc.o iic.o fiq.o time-acorn.o
 O_OBJS_ebsa110    = dma-dummy.o
 O_OBJS_footbridge = dma-footbridge.o $(ISA_DMA_OBJS) isa.o
 O_OBJS_nexuspci   = dma-dummy.o

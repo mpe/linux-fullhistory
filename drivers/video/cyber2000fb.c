@@ -29,13 +29,6 @@
 #include <video/fbcon-cfb16.h>
 #include <video/fbcon-cfb24.h>
 
-/*
- *    Some defaults
- */
-#define DEFAULT_XRES	640
-#define DEFAULT_YRES	480
-#define DEFAULT_BPP	8
-
 #define MMIO_SIZE	0x000c0000
 
 static char			*CyberRegs;

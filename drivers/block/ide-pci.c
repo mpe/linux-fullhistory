@@ -60,7 +60,7 @@
 #define DEVID_ALI15X3	((ide_pci_devid_t){PCI_VENDOR_ID_AL,      PCI_DEVICE_ID_AL_M5229})
 #define DEVID_CY82C693	((ide_pci_devid_t){PCI_VENDOR_ID_CONTAQ,  PCI_DEVICE_ID_CONTAQ_82C693})
 #define DEVID_HINT	((ide_pci_devid_t){0x3388,                0x8013})
-#define DEVID_CX5530	((ide_pci_devid_t){PCI_VENDOR_ID_CYRIX,   PCI_DEVICE_ID_CYRIX_5530_IDE})
+#define DEVID_CS5530	((ide_pci_devid_t){PCI_VENDOR_ID_CYRIX,   PCI_DEVICE_ID_CYRIX_5530_IDE})
 #define DEVID_AMD7409	((ide_pci_devid_t){PCI_VENDOR_ID_AMD,     PCI_DEVICE_ID_AMD_VIPER_7409})
 
 #define	IDE_IGNORE	((void *)-1)
@@ -132,7 +132,15 @@ extern void ide_init_cy82c693(ide_hwif_t *);
 #define INIT_CY82C693	NULL
 #endif
 
-#define INIT_CX5530	NULL
+#ifdef CONFIG_BLK_DEV_CS5530
+extern unsigned int pci_init_cs5530(struct pci_dev *, const char *);
+extern void ide_init_cs5530(ide_hwif_t *);
+#define INIT_CS5530	&ide_init_cs5530
+#define PCI_CS5530	&pci_init_cs5530
+#else
+#define INIT_CS5530	NULL
+#define PCI_CS5530	NULL
+#endif
 
 #ifdef CONFIG_BLK_DEV_HPT34X
 extern unsigned int pci_init_hpt34x(struct pci_dev *, const char *);
@@ -309,7 +317,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_ALI15X3,	"ALI15X3",	PCI_ALI15X3,	ATA66_ALI15X3,	INIT_ALI15X3,	DMA_ALI15X3,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_CY82C693,"CY82C693",	PCI_CY82C693,	NULL,		INIT_CY82C693,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_HINT,	"HINT_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
-	{DEVID_CX5530,	"CX5530",	NULL,		NULL,		INIT_CX5530,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
+	{DEVID_CS5530,	"CS5530",	PCI_CS5530,	NULL,		INIT_CS5530,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_AMD7409,	"AMD7409",	NULL,		ATA66_AMD7409,	INIT_AMD7409,	NULL,		{{0x40,0x01,0x01}, {0x40,0x02,0x02}},	ON_BOARD,	0 },
 	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 }};
 
@@ -614,6 +622,7 @@ check_if_enabled:
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT34X) ||
 #endif /* CONFIG_BLK_DEV_HPT34X */
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CS5530) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) ||
 		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
 			unsigned long dma_base = ide_get_or_set_dma_base(hwif, (!mate && d->extra) ? d->extra : 0, d->name);

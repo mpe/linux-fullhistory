@@ -1661,6 +1661,7 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 			p->dma = PARPORT_DMA_NONE;
 		}
 
+#ifdef CONFIG_PARPORT_PC_FIFO
 		if (p->dma != PARPORT_DMA_NONE) {
 			if (request_dma (p->dma, p->name)) {
 				printk (KERN_WARNING "%s: dma %d in use, "
@@ -1682,6 +1683,7 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 				}
 			}
 		}
+#endif /* CONFIG_PARPORT_PC_FIFO */
 	}
 
 	/* Done probing.  Now put the port into a sensible start-up state.

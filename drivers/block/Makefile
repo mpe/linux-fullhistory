@@ -198,6 +198,10 @@ ifeq ($(CONFIG_BLK_DEV_PDC202XX),y)
 IDE_OBJS += pdc202xx.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_CS5530),y)
+IDE_OBJS += cs5530.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_PDC4030),y)
 IDE_OBJS += pdc4030.o
 endif

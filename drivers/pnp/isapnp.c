@@ -241,7 +241,7 @@ void isapnp_deactivate(unsigned char logdev)
 static void __init isapnp_peek(unsigned char *data, int bytes)
 {
 	int i, j;
-	unsigned char d;
+	unsigned char d=0;
 
 	for (i = 1; i <= bytes; i++) {
 		for (j = 0; j < 10; j++) {

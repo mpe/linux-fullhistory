@@ -55,9 +55,9 @@ ip_fast_csum(unsigned char * iph, unsigned int ihl)
 	unsigned int sum, tmp1;
 
 	__asm__ __volatile__(
-	"sub	%2, %2, #5		@ ip_fast_csum
-	ldr	%0, [%1], #4
+	"ldr	%0, [%1], #4		@ ip_fast_csum
 	ldr	%3, [%1], #4
+	sub	%2, %2, #5
 	adds	%0, %0, %3
 	ldr	%3, [%1], #4
 	adcs	%0, %0, %3

@@ -2171,7 +2171,8 @@ CONFIG_FB
 Acorn VIDC support
 CONFIG_FB_ACORN
   This is the frame buffer device driver for the Acorn VIDC graphics
-  chipset.
+  hardware found in Acorn RISC PCs and other ARM-based machines.  If
+  unsure, say N.
 
 Apollo frame buffer device
 CONFIG_FB_APOLLO
@@ -2211,6 +2212,13 @@ CONFIG_FB_CYBER
   Cybervision 64 or plan to get one before you next recompile the
   kernel. Please note that this driver DOES NOT support the
   Cybervision 64 3D card, as they use incompatible video chips.
+
+CyberPro 20x0 support
+CONFIG_FB_CYBER2000
+  This enables support for the Integraphics CyberPro 20x0 and 5000
+  VGA chips used in the Rebel.com Netwinder and other machines.
+  Say Y if you have a NetWinder or a graphics card containing this
+  device, otherwise say N.
 
 Amiga CyberVision3D support (EXPERIMENTAL)
 CONFIG_FB_VIRGE
@@ -13801,4 +13809,4 @@ CONFIG_I2C_CHARDEV
 # LocalWords:  adbmouse DRI DRM dlabs GMX PLCs Applicom fieldbus applicom int
 # LocalWords:  VWSND eg ESSSOLO CFU CFNR scribed eiconctrl eicon hylafax KFPU
 # LocalWords:  EXTRAPREC fpu mainboards KHTTPD kHTTPd khttpd Xcelerator
-# LocalWords:  LOGIBUSMOUSE OV511 ov511
+# LocalWords:  LOGIBUSMOUSE OV511 ov511 Integraphics

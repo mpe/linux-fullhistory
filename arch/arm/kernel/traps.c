@@ -370,7 +370,7 @@ asmlinkage void arm_invalidptr(const char *function, int size)
 asmlinkage void
 baddataabort(int code, unsigned long instr, struct pt_regs *regs)
 {
-	unsigned long phys, addr = instruction_pointer(regs);
+	unsigned long addr = instruction_pointer(regs);
 
 #ifdef CONFIG_DEBUG_ERRORS
 	dump_instr(addr, 1);
@@ -383,11 +383,8 @@ baddataabort(int code, unsigned long instr, struct pt_regs *regs)
 			pmd_t *pmd;
 			pmd = pmd_offset (pgd, addr);
 			printk (", *pmd = %08lx", pmd_val (*pmd));
-			if (!pmd_none (*pmd)) {
-				unsigned long ptr = pte_page(*pte_offset(pmd, addr));
-				printk (", *pte = %08lx", pte_val (*pte_offset (pmd, addr)));
-				phys = ptr + (addr & 0x7fff);
-			}
+			if (!pmd_none (*pmd))
+				printk (", *pte = %08lx", pte_val(*pte_offset (pmd, addr)));
 		}
 		printk ("\n");
 	}

@@ -381,7 +381,7 @@ void __init pcibios_init(void)
 	 * Assign any unassigned resources.  Note that we really ought to
 	 * have min/max stuff here - max mem address is 0x0fffffff
 	 */
-	pci_assign_unassigned_resources(hw_pci->io_start, hw_pci->mem_start);
+	pci_assign_unassigned_resources();
 	pci_fixup_irqs(hw_pci->swizzle, hw_pci->map_irq);
 	pci_set_bus_ranges();
 
@@ -404,17 +404,34 @@ char * __init pcibios_setup(char *str)
 	return str;
 }
 
-/*
- * Assign new address to PCI resource.  We hope our resource information
- * is complete.
- *
- * Expects start=0, end=size-1, flags=resource type.
- */
-int pci_assign_resource(struct pci_dev *dev, int i)
-{
-	return 0;
-}
-
 void pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 {
+}
+
+int pcibios_enable_device(struct pci_dev *dev)
+{
+	u16 cmd, old_cmd;
+	int idx;
+	struct resource *r;
+
+	pci_read_config_word(dev, PCI_COMMAND, &cmd);
+	old_cmd = cmd;
+	for (idx = 0; idx < 6; idx++) {
+		r = dev->resource + idx;
+		if (!r->start && r->end) {
+			printk(KERN_ERR "PCI: Device %s not available because"
+			       " of resource collisions\n", dev->slot_name);
+			return -EINVAL;
+		}
+		if (r->flags & IORESOURCE_IO)
+			cmd |= PCI_COMMAND_IO;
+		if (r->flags & IORESOURCE_MEM)
+			cmd |= PCI_COMMAND_MEMORY;
+	}
+	if (cmd != old_cmd) {
+		printk("PCI: enabling device %s (%04x -> %04x)\n",
+		       dev->slot_name, old_cmd, cmd);
+		pci_write_config_word(dev, PCI_COMMAND, cmd);
+	}
+	return 0;
 }

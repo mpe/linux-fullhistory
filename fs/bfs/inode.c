@@ -5,7 +5,6 @@
  *	From fs/minix, Copyright (C) 1991, 1992 Linus Torvalds.
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
@@ -18,15 +17,15 @@
 #include "bfs_defs.h"
 
 MODULE_AUTHOR("Tigran A. Aivazian");
-MODULE_DESCRIPTION("UnixWare BFS filesystem for Linux");
+MODULE_DESCRIPTION("SCO UnixWare BFS filesystem for Linux");
 EXPORT_NO_SYMBOLS;
 
 #undef DEBUG
 
 #ifdef DEBUG
-#define DBG(x...)	printk(x)
+#define dprintf(x...)	printf(x)
 #else
-#define DBG(x...)
+#define dprintf(x...)
 #endif
 
 void dump_imap(const char *prefix, struct super_block * s);
@@ -40,8 +39,7 @@ static void bfs_read_inode(struct inode * inode)
 	int block, off;
 
 	if (ino < BFS_ROOT_INO || ino > inode->i_sb->su_lasti) {
-		printk(KERN_ERR "BFS-fs: %s(): Bad inode number %s:%08lx\n", 
-			__FUNCTION__, bdevname(dev), ino);
+		printf("Bad inode number %s:%08lx\n", bdevname(dev), ino);
 		make_bad_inode(inode);
 		return;
 	}
@@ -49,8 +47,7 @@ static void bfs_read_inode(struct inode * inode)
 	block = (ino - BFS_ROOT_INO)/BFS_INODES_PER_BLOCK + 1;
 	bh = bread(dev, block, BFS_BSIZE);
 	if (!bh) {
-		printk(KERN_ERR "BFS-fs: %s(): Unable to read inode %s:%08lx\n",
-			__FUNCTION__, bdevname(dev), ino);
+		printf("Unable to read inode %s:%08lx\n", bdevname(dev), ino);
 		make_bad_inode(inode);
 		return;
 	}
@@ -94,16 +91,14 @@ static void bfs_write_inode(struct inode * inode)
 	int block, off;
 
 	if (ino < BFS_ROOT_INO || ino > inode->i_sb->su_lasti) {
-		printk(KERN_ERR "BFS-fs: %s(): Bad inode number %s:%08lx\n", 
-			__FUNCTION__, bdevname(dev), ino);
+		printf("Bad inode number %s:%08lx\n", bdevname(dev), ino);
 		return;
 	}
 
 	block = (ino - BFS_ROOT_INO)/BFS_INODES_PER_BLOCK + 1;
 	bh = bread(dev, block, BFS_BSIZE);
 	if (!bh) {
-		printk(KERN_ERR "BFS-fs: %s(): Unable to read inode %s:%08lx\n",
-			__FUNCTION__, bdevname(dev), ino);
+		printf("Unable to read inode %s:%08lx\n", bdevname(dev), ino);
 		return;
 	}
 
@@ -140,30 +135,12 @@ static void bfs_delete_inode(struct inode * inode)
 	int block, off;
 	struct super_block * s = inode->i_sb;
 
-	DBG(KERN_ERR "%s(ino=%08lx)\n", __FUNCTION__, inode->i_ino);
+	dprintf("ino=%08lx\n", inode->i_ino);
 
-	if (!inode)
+	if (!inode || !inode->i_dev || inode->i_count > 1 || inode->i_nlink || !s)
 		return;
-	if (!inode->i_dev) {
-		printk(KERN_ERR "BFS-fs: free_inode(%08lx) !dev\n", inode->i_ino);
-		return;
-	}
-	if (inode->i_count > 1) {
-		printk(KERN_ERR "BFS-fs: free_inode(%08lx) count=%d\n", 
-			inode->i_ino, inode->i_count);
-		return;
-	}
-	if (inode->i_nlink) {
-		printk(KERN_ERR "BFS-fs: free_inode(%08lx) nlink=%d\n", 
-			inode->i_ino, inode->i_nlink);
-		return;
-	}
-	if (!inode->i_sb) {
-		printk(KERN_ERR "BFS-fs: free_inode(%08lx) !sb\n", inode->i_ino);
-		return;
-	}
 	if (inode->i_ino < BFS_ROOT_INO || inode->i_ino > inode->i_sb->su_lasti) {
-		printk(KERN_ERR "BFS-fs: free_inode(%08lx) invalid ino\n", inode->i_ino);
+		printf("invalid ino=%08lx\n", inode->i_ino);
 		return;
 	}
 	
@@ -173,8 +150,7 @@ static void bfs_delete_inode(struct inode * inode)
 	block = (ino - BFS_ROOT_INO)/BFS_INODES_PER_BLOCK + 1;
 	bh = bread(dev, block, BFS_BSIZE);
 	if (!bh) {
-		printk(KERN_ERR "BFS-fs: %s(): Unable to read inode %s:%08lx\n",
-			__FUNCTION__, bdevname(dev), ino);
+		printf("Unable to read inode %s:%08lx\n", bdevname(dev), ino);
 		return;
 	}
 	off = (ino - BFS_ROOT_INO)%BFS_INODES_PER_BLOCK;
@@ -189,6 +165,14 @@ static void bfs_delete_inode(struct inode * inode)
 	di->i_sblock = 0;
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
+
+	/* if this was the last file, make the previous 
+	   block "last files last block" even if there is no real file there,
+	   saves us 1 gap */
+	if (s->su_lf_eblk == inode->iu_eblock) {
+		s->su_lf_eblk = inode->iu_sblock - 1;
+		mark_buffer_dirty(s->su_sbh, 1);
+	}
 	clear_inode(inode);
 }
 
@@ -196,7 +180,6 @@ static void bfs_put_super(struct super_block *s)
 {
 	brelse(s->su_sbh);
 	kfree(s->su_imap);
-	kfree(s->su_bmap);
 	MOD_DEC_USE_COUNT;
 }
 
@@ -251,7 +234,7 @@ void dump_imap(const char *prefix, struct super_block * s)
 		else
 			strcat(tmpbuf, "0");
 	}
-	printk(KERN_ERR "BFS-fs: %s: lasti=%d <%s>\n", prefix, s->su_lasti, tmpbuf);
+	printk(KERN_ERR "BFS-fs: %s: lasti=%08lx <%s>\n", prefix, s->su_lasti, tmpbuf);
 	free_page((unsigned long)tmpbuf);
 #endif
 }
@@ -263,7 +246,7 @@ static struct super_block * bfs_read_super(struct super_block * s,
 	struct buffer_head * bh;
 	struct bfs_super_block * bfs_sb;
 	struct inode * inode;
-	int i, imap_len, bmap_len;
+	int i, imap_len;
 
 	MOD_INC_USE_COUNT;
 	lock_super(s);
@@ -272,58 +255,43 @@ static struct super_block * bfs_read_super(struct super_block * s,
 	s->s_blocksize = BFS_BSIZE;
 	s->s_blocksize_bits = BFS_BSIZE_BITS;
 
-	/* read ahead 8K to get inodes as we'll need them in a tick */
-	bh = breada(dev, 0, BFS_BSIZE, 0, 8192);
+	bh = bread(dev, 0, BFS_BSIZE);
 	if(!bh)
 		goto out;
 	bfs_sb = (struct bfs_super_block *)bh->b_data;
 	if (bfs_sb->s_magic != BFS_MAGIC) {
 		if (!silent)
-			printk(KERN_ERR "BFS-fs: No BFS filesystem on %s (magic=%08x)\n", 
-					bdevname(dev), bfs_sb->s_magic);
+			printf("No BFS filesystem on %s (magic=%08x)\n", 
+				bdevname(dev), bfs_sb->s_magic);
 		goto out;
 	}
 	if (BFS_UNCLEAN(bfs_sb, s) && !silent)
-		printk(KERN_WARNING "BFS-fs: %s is unclean\n", bdevname(dev));
+		printf("%s is unclean, continuing\n", bdevname(dev));
 
-#ifndef CONFIG_BFS_FS_WRITE
-	s->s_flags |= MS_RDONLY; 
-#endif
 	s->s_magic = BFS_MAGIC;
 	s->su_bfs_sb = bfs_sb;
 	s->su_sbh = bh;
 	s->su_lasti = (bfs_sb->s_start - BFS_BSIZE)/sizeof(struct bfs_inode) 
 			+ BFS_ROOT_INO - 1;
 
-	bmap_len = sizeof(struct bfs_bmap) * s->su_lasti;
-	s->su_bmap = kmalloc(bmap_len, GFP_KERNEL);
-	if (!s->su_bmap)
-		goto out;
-	memset(s->su_bmap, 0, bmap_len);
 	imap_len = s->su_lasti/8 + 1;
 	s->su_imap = kmalloc(imap_len, GFP_KERNEL);
-	if (!s->su_imap) {
-		kfree(s->su_bmap);
+	if (!s->su_imap)
 		goto out;
-	}
 	memset(s->su_imap, 0, imap_len);
-	for (i=0; i<BFS_ROOT_INO; i++) {
-		s->su_bmap[i].start = s->su_bmap[i].end = 0;
+	for (i=0; i<BFS_ROOT_INO; i++) 
 		set_bit(i, s->su_imap);
-	}
 
 	s->s_op = &bfs_sops;
 	inode = iget(s, BFS_ROOT_INO);
 	if (!inode) {
 		kfree(s->su_imap);
-		kfree(s->su_bmap);
 		goto out;
 	}
 	s->s_root = d_alloc_root(inode);
 	if (!s->s_root) {
 		iput(inode);
 		kfree(s->su_imap);
-		kfree(s->su_bmap);
 		goto out;
 	}
 
@@ -335,10 +303,9 @@ static struct super_block * bfs_read_super(struct super_block * s,
 	s->su_lf_ioff = 0;
 	for (i=BFS_ROOT_INO; i<=s->su_lasti; i++) {
 		inode = iget(s,i);
-		if (inode->iu_dsk_ino == 0) {
+		if (inode->iu_dsk_ino == 0)
 			s->su_freei++;
-			s->su_bmap[i].start = s->su_bmap[i].end = 0;
-		} else {
+		else {
 			set_bit(i, s->su_imap);
 			s->su_freeb -= inode->i_blocks;
 			if (inode->iu_eblock > s->su_lf_eblk) {
@@ -346,8 +313,6 @@ static struct super_block * bfs_read_super(struct super_block * s,
 				s->su_lf_sblk = inode->iu_sblock;
 				s->su_lf_ioff = BFS_INO2OFF(i);
 			}
-			s->su_bmap[i].start = inode->iu_sblock;
-			s->su_bmap[i].end = inode->iu_eblock;
 		}
 		iput(inode);
 	}

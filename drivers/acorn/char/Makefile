@@ -11,19 +11,17 @@
 
 O_TARGET 	:= acorn-char.o
 M_OBJS   	:=
-O_OBJS   	:=
+O_OBJS   	:= i2c.o pcf8583.o
 
 O_OBJS_arc	:= keyb_arc.o
 O_OBJS_a5k	:= keyb_arc.o
 O_OBJS_rpc	:= keyb_ps2.o
 
-ifeq ($(MACHINE),rpc)
-  ifeq ($(CONFIG_BUSMOUSE),y)
-    OX_OBJS += mouse_rpc.o
-  else
-    ifeq ($(CONFIG_BUSMOUSE),m)
-      MX_OBJS += mouse_rpc.o
-    endif
+ifeq ($(CONFIG_RPCMOUSE),y)
+  OX_OBJS += mouse_rpc.o
+else
+  ifeq ($(CONFIG_RPCSMOUSE),m)
+    MX_OBJS += mouse_rpc.o
   endif
 endif
 

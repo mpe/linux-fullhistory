@@ -96,7 +96,17 @@ pci_find_capability(struct pci_dev *dev, int cap)
 	pci_read_config_word(dev, PCI_STATUS, &status);
 	if (!(status & PCI_STATUS_CAP_LIST))
 		return 0;
-	pci_read_config_byte(dev, PCI_CAPABILITY_LIST, &pos);
+	switch (dev->hdr_type) {
+	case PCI_HEADER_TYPE_NORMAL:
+	case PCI_HEADER_TYPE_BRIDGE:
+		pci_read_config_byte(dev, PCI_CAPABILITY_LIST, &pos);
+		break;
+	case PCI_HEADER_TYPE_CARDBUS:
+		pci_read_config_byte(dev, PCI_CB_CAPABILITY_LIST, &pos);
+		break;
+	default:
+		return 0;
+	}
 	while (ttl-- && pos >= 0x40) {
 		pos &= ~3;
 		pci_read_config_byte(dev, pos + PCI_CAP_LIST_ID, &id);

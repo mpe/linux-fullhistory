@@ -115,7 +115,7 @@ static int remap_area_pages(unsigned long address, unsigned long phys_addr,
  * 'flags' are the extra L_PTE_ flags that you want to specify for this
  * mapping.  See include/asm-arm/proc-armv/pgtable.h for more information.
  */
-void * __ioremap(unsigned long phys_addr, unsigned long size, unsigned long flags)
+void * __ioremap(unsigned long phys_addr, size_t size, unsigned long flags)
 {
 	void * addr;
 	struct vm_struct * area;

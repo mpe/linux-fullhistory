@@ -4,7 +4,7 @@
 #	Maintained by Martin Mares <pci-ids@ucw.cz>
 #	If you have any new entries, send them to the maintainer.
 #
-#	$Id: pci.ids,v 1.46 2000/01/02 20:32:11 mj Exp $
+#	$Id: pci.ids,v 1.50 2000/01/23 05:57:06 mj Exp $
 #
 
 # Vendors, devices and subsystems. Please keep sorted.
@@ -356,12 +356,16 @@
 	2001  79c978 [HomePNA]
 	2020  53c974 [PCscsi]
 	2040  79c974
-	7006  IronGate Host
-	7403  Viper Power Management
-	7408  Viper ISA
-	7409  Viper IDE
-	740B  Viper ACPI
-	740C  Viper USB
+	7006  AMD-751 [Irongate] System Controller
+	7007  AMD-751 [Irongate] AGP Bridge
+	7400  AMD-755 [Cobra] ISA
+	7401  AMD-755 [Cobra] IDE
+	7403  AMD-755 [Cobra] ACPI
+	7404  AMD-755 [Cobra] USB
+	7408  AMD-756 [Viper] ISA
+	7409  AMD-756 [Viper] IDE
+	740b  AMD-756 [Viper] ACPI
+	740c  AMD-756 [Viper] USB
 1023  Trident Microsystems
 	0194  82C194
 	2000  4DWave DX
@@ -682,6 +686,7 @@
 	fe03  12C01A FireWire Host Controller
 104d  Sony Corporation
 	8039  CXD3222 iLINK Controller
+	8056  Rockwell HCF 56K modem
 104e  Oak Technology, Inc
 	0017  OTI-64017
 	0107  OTI-107 [Spitfire]
@@ -831,6 +836,7 @@
 	1240  ISP1240
 	2020  ISP2020A
 	2100  ISP2100
+	2200  ISP2200
 1078  Cyrix Corporation
 	0000  5510 [Grappa]
 	0001  PCI Master
@@ -931,6 +937,16 @@
 	1330  PCI-6031E
 	1350  PCI-6071E
 	2a60  PCI-6023E
+	b001  IMAQ-PCI-1408
+	b011  IMAQ-PXI-1408
+	b021  IMAQ-PCI-1424
+	b031  IMAQ-PCI-1413
+	b041  IMAQ-PCI-1407
+	b051  IMAQ-PXI-1407
+	b061  IMAQ-PCI-1411
+	b071  IMAQ-PCI-1422
+	b081  IMAQ-PXI-1422
+	b091  IMAQ-PXI-1411
 	c801  PCI-GPIB
 1094  First International Computers [FIC]
 1095  CMD Technology Inc
@@ -2217,6 +2233,7 @@
 		127a 1005  PCI56RVP Modem 
 		13df 1005  PCI56RVP Modem 
 		1436 1005  WS-5614PS3G
+	2005  HCF 56k V90 FaxModem
 	8234  RapidFire 616X ATM155 Adapter
 127b  Pixera Corporation
 127c  Crosspoint Solutions, Inc.
@@ -3121,6 +3138,7 @@
 	0005  Permedia
 	0006  GLINT MX
 	0007  3D Extreme
+	0008  GLINT Gamma G1
 	0009  Permedia II 2D+3D
 		3d3d 0100  AccelStar II 3D Accelerator
 		3d3d 0111  Permedia 3:16
@@ -3130,6 +3148,7 @@
 		3d3d 0120  Santa Ana PCL
 		3d3d 0125  Oxygen VX1
 		3d3d 0127  Permedia3 Create!
+	000a  GLINT R3
 	0100  Permedia II 2D+3D
 	1004  Permedia
 	3d04  Permedia
@@ -3309,7 +3328,7 @@
 		0e11 b0dd  NC3131
 		0e11 b0de  NC3132
 		0e11 b0e1  NC3133
-		1014 005c  Ethernet Pro 10/100
+		1014 005c  82558B Ethernet Pro 10/100
 		1014 105c  Netfinity 10/100
 		1033 8000  PC-9821X-B06
 		1033 8016  PK-UG-X006
@@ -3363,13 +3382,13 @@
 		103c 10C7  MegaRaid T5
 		1111 1111  MegaRaid 466
 		113c 03A2  MegaRaid
-	2410  82801 82810 Chipset ISA Bridge (LPC)
-	2411  82801 82810 Chipset IDE
-	2412  82801 82810 Chipset USB
-	2413  82801 82810 Chipset SMBus
-	2415  82801 82810 AC'97 Audio
-	2416  82801 82810 AC'97 Modem
-	2418  82801 82810 PCI Bridge
+	2410  82801AA 82810 Chipset ISA Bridge (LPC)
+	2411  82801AA 82810 Chipset IDE
+	2412  82801AA 82810 Chipset USB
+	2413  82801AA 82810 Chipset SMBus
+	2415  82801AA 82810 AC'97 Audio
+	2416  82801AA 82810 AC'97 Modem
+	2418  82801AA 82810 PCI Bridge
 	2420  82801AB 82810 Chipset ISA Bridge (LPC)
 	2421  82801AB 82810 Chipset IDE
 	2422  82801AB 82810 Chipset USB
@@ -3392,6 +3411,8 @@
 	7121  82810 CGC [Chipset Graphics Controller]
 	7122  82810-DC100 GMCH [Graphics Memory Controller Hub]
 	7123  82810-DC100 CGC [Chipset Graphics Controller]
+	7124  82810E GMCH [Graphics Memory Controller Hub]
+	7125  82810E CGC [Chipset Graphics Controller]
 	7180  440LX/EX - 82443LX/EX Host bridge
 	7181  440LX/EX - 82443LX/EX AGP bridge
 	7190  440BX/ZX - 82443BX/ZX Host bridge

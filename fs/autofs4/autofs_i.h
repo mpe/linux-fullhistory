@@ -12,7 +12,7 @@
 
 /* Internal header file for autofs */
 
-#include <linux/auto_fs.h>
+#include <linux/auto_fs4.h>
 #include <linux/list.h>
 
 /* This is the range of ioctl() numbers we claim as ours */

@@ -15,8 +15,7 @@ tristate 'Amiga FFS filesystem support' CONFIG_AFFS_FS
 
 dep_tristate 'Apple Macintosh filesystem support (EXPERIMENTAL)' CONFIG_HFS_FS $CONFIG_EXPERIMENTAL
 
-dep_tristate 'BFS filesystem (read only) support (EXPERIMENTAL)' CONFIG_BFS_FS $CONFIG_EXPERIMENTAL
-dep_bool '  BFS filesystem write support (DANGEROUS)' CONFIG_BFS_FS_WRITE $CONFIG_BFS_FS
+dep_tristate 'BFS filesystem support (EXPERIMENTAL)' CONFIG_BFS_FS $CONFIG_EXPERIMENTAL
 
 # msdos filesystems
 tristate 'DOS FAT fs support' CONFIG_FAT_FS

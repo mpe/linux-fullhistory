@@ -10,13 +10,6 @@
 #define UART_BASE		0xfff00000
 #define INTCONT			0xffe00000
 
-#define update_rtc()
-
-extern __inline__ unsigned long gettimeoffset (void)
-{
-	return 0;
-}
-
 static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	static int count = 50;
@@ -40,15 +33,6 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	do_timer(regs);	
 }
 
-static struct irqaction timerirq = {
-	timer_interrupt,
-	0,
-	0,
-	"timer",
-	NULL,
-	NULL
-};
-
 extern __inline__ void setup_timer(void)
 {
 	int tick = 3686400 / 16 / 2 / 100;
@@ -58,12 +42,7 @@ extern __inline__ void setup_timer(void)
 	writeb(0x80, UART_BASE + 8);
 	writeb(0x10, UART_BASE + 0x14);
 
-	/*
-	 * Default the date to 1 Jan 1970 0:0:0
-	 * You will have to run a time daemon to set the
-	 * clock correctly at bootup
-	 */
-	xtime.tv_sec = mktime(1970, 1, 1, 0, 0, 0);
+	timer_irq.handler = timer_interrupt;
 
-	setup_arm_irq(IRQ_TIMER, &timerirq);
+	setup_arm_irq(IRQ_TIMER, &timer_irq);
 }

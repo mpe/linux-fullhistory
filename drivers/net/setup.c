@@ -54,6 +54,7 @@ extern int skge_probe(void);
 extern int sparc_lance_probe(void); 
 extern int starfire_probe(void); 
 extern int tc59x_probe(void); 
+extern int tlan_probe(void);
 extern int tulip_probe(void); 
 extern int via_rhine_probe(void); 
 extern int yellowfin_probe(void);
@@ -197,6 +198,9 @@ struct net_probe pci_probes[] __initdata = {
 #endif	
 #ifdef CONFIG_EEXPRESS_PRO100	/* Intel EtherExpress Pro/100 */
 	{eepro100_probe, 0},
+#endif
+#ifdef CONFIG_TLAN
+	{tlan_probe, 0},
 #endif
 #ifdef CONFIG_DEC_ELCP 
 	{tulip_probe, 0},

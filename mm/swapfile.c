@@ -445,12 +445,12 @@ asmlinkage long sys_swapoff(const char * specialfile)
 	struct swap_info_struct * p = NULL;
 	struct dentry * dentry;
 	int i, type, prev;
-	int err = -EPERM;
+	int err;
 	
-	lock_kernel();
 	if (!capable(CAP_SYS_ADMIN))
-		goto out;
+		return -EPERM;
 
+	lock_kernel();
 	dentry = namei(specialfile);
 	err = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
@@ -587,7 +587,7 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 	struct dentry * swap_dentry;
 	unsigned int type;
 	int i, j, prev;
-	int error = -EPERM;
+	int error;
 	static int least_priority = 0;
 	union swap_header *swap_header = 0;
 	int swap_header_version;
@@ -596,15 +596,17 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 	int swapfilesize;
 	struct block_device *bdev = NULL;
 	
-	lock_kernel();
 	if (!capable(CAP_SYS_ADMIN))
-		goto out;
+		return -EPERM;
+	lock_kernel();
 	p = swap_info;
 	for (type = 0 ; type < nr_swapfiles ; type++,p++)
 		if (!(p->flags & SWP_USED))
 			break;
-	if (type >= MAX_SWAPFILES)
+	if (type >= MAX_SWAPFILES) {
+		err = -EPERM;
 		goto out;
+	}
 	if (type >= nr_swapfiles)
 		nr_swapfiles = type+1;
 	p->flags = SWP_USED;

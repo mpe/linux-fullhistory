@@ -2287,23 +2287,32 @@ int CardServices(int func, void *a1, void *a2, void *a3)
     OS-specific module glue goes here
     
 ======================================================================*/
+/* in alpha order */
 EXPORT_SYMBOL(pcmcia_access_configuration_register);
 EXPORT_SYMBOL(pcmcia_adjust_resource_info);
+EXPORT_SYMBOL(pcmcia_bind_device);
+EXPORT_SYMBOL(pcmcia_bind_mtd);
 EXPORT_SYMBOL(pcmcia_check_erase_queue);
 EXPORT_SYMBOL(pcmcia_close_memory);
 EXPORT_SYMBOL(pcmcia_copy_memory);
 EXPORT_SYMBOL(pcmcia_deregister_client);
 EXPORT_SYMBOL(pcmcia_deregister_erase_queue);
+EXPORT_SYMBOL(pcmcia_eject_card);
 EXPORT_SYMBOL(pcmcia_get_first_client);
 EXPORT_SYMBOL(pcmcia_get_card_services_info);
 EXPORT_SYMBOL(pcmcia_get_configuration_info);
+EXPORT_SYMBOL(pcmcia_get_mem_page);
 EXPORT_SYMBOL(pcmcia_get_next_client);
 EXPORT_SYMBOL(pcmcia_get_first_region);
 EXPORT_SYMBOL(pcmcia_get_first_tuple);
+EXPORT_SYMBOL(pcmcia_get_first_window);
 EXPORT_SYMBOL(pcmcia_get_next_region);
 EXPORT_SYMBOL(pcmcia_get_next_tuple);
+EXPORT_SYMBOL(pcmcia_get_next_window);
 EXPORT_SYMBOL(pcmcia_get_status);
 EXPORT_SYMBOL(pcmcia_get_tuple_data);
+EXPORT_SYMBOL(pcmcia_insert_card);
+EXPORT_SYMBOL(pcmcia_lookup_bus);
 EXPORT_SYMBOL(pcmcia_map_mem_page);
 EXPORT_SYMBOL(pcmcia_modify_configuration);
 EXPORT_SYMBOL(pcmcia_modify_window);
@@ -2317,26 +2326,20 @@ EXPORT_SYMBOL(pcmcia_release_configuration);
 EXPORT_SYMBOL(pcmcia_release_io);
 EXPORT_SYMBOL(pcmcia_release_irq);
 EXPORT_SYMBOL(pcmcia_release_window);
+EXPORT_SYMBOL(pcmcia_replace_cis);
+EXPORT_SYMBOL(pcmcia_report_error);
 EXPORT_SYMBOL(pcmcia_request_configuration);
 EXPORT_SYMBOL(pcmcia_request_io);
 EXPORT_SYMBOL(pcmcia_request_irq);
 EXPORT_SYMBOL(pcmcia_request_window);
 EXPORT_SYMBOL(pcmcia_reset_card);
+EXPORT_SYMBOL(pcmcia_resume_card);
 EXPORT_SYMBOL(pcmcia_set_event_mask);
+EXPORT_SYMBOL(pcmcia_suspend_card);
 EXPORT_SYMBOL(pcmcia_validate_cis);
 EXPORT_SYMBOL(pcmcia_write_memory);
-EXPORT_SYMBOL(pcmcia_bind_device);
-EXPORT_SYMBOL(pcmcia_bind_mtd);
-EXPORT_SYMBOL(pcmcia_report_error);
-EXPORT_SYMBOL(pcmcia_suspend_card);
-EXPORT_SYMBOL(pcmcia_resume_card);
-EXPORT_SYMBOL(pcmcia_eject_card);
-EXPORT_SYMBOL(pcmcia_insert_card);
-EXPORT_SYMBOL(pcmcia_replace_cis);
-EXPORT_SYMBOL(pcmcia_get_first_window);
-EXPORT_SYMBOL(pcmcia_get_next_window);
-EXPORT_SYMBOL(pcmcia_get_mem_page);
 
+EXPORT_SYMBOL(dead_socket);
 EXPORT_SYMBOL(register_ss_entry);
 EXPORT_SYMBOL(unregister_ss_entry);
 EXPORT_SYMBOL(CardServices);

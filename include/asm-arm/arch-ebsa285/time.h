@@ -25,32 +25,6 @@
 #include <asm/system.h>
 
 static int rtc_base;
-static unsigned long (*gettimeoffset)(void);
-static int (*set_rtc_mmss)(unsigned long nowtime);
-static long last_rtc_update = 0;	/* last time the cmos clock got updated */
-
-#ifdef CONFIG_LEDS
-static void do_leds(void)
-{
-	static unsigned int count = 50;
-	static int last_pid;
-
-	if (current->pid != last_pid) {
-		last_pid = current->pid;
-		if (last_pid)
-			leds_event(led_idle_end);
-		else
-			leds_event(led_idle_start);
-	}
-		
-	if (--count == 0) {
-		count = 50;
-		leds_event(led_timer);
-	}
-}
-#else
-#define do_leds()
-#endif
 
 #define mSEC_10_from_14 ((14318180 + 100) / 200)
 
@@ -101,33 +75,9 @@ static void isa_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		do_leds();
 
 	do_timer(regs);
-
-	/* If we have an externally synchronized linux clock, then update
-	 * CMOS clock accordingly every ~11 minutes.  Set_rtc_mmss() has to be
-	 * called as close as possible to 500 ms before the new second starts.
-	 */
-	if ((time_status & STA_UNSYNC) == 0 &&
-	    xtime.tv_sec > last_rtc_update + 660 &&
-	    xtime.tv_usec > 50000 - (tick >> 1) &&
-	    xtime.tv_usec < 50000 + (tick >> 1)) {
-		if (set_rtc_mmss(xtime.tv_sec) == 0)
-			last_rtc_update = xtime.tv_sec;
-		else
-			last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
-	}
-
-	if (!user_mode(regs))
-		do_profile(instruction_pointer(regs));
+	do_set_rtc();
+	do_profile(regs);
 }
-
-static struct irqaction isa_timer_irq = {
-	isa_timer_interrupt,
-	0,
-	0,
-	"timer",
-	NULL,
-	NULL
-};
 
 static unsigned long __init get_isa_cmos_time(void)
 {
@@ -175,11 +125,12 @@ static unsigned long __init get_isa_cmos_time(void)
 }
 
 static int
-set_isa_cmos_time(unsigned long nowtime)
+set_isa_cmos_time(void)
 {
 	int retval = 0;
 	int real_seconds, real_minutes, cmos_minutes;
 	unsigned char save_control, save_freq_select;
+	unsigned long nowtime = xtime.tv_sec;
 
 	save_control = CMOS_READ(RTC_CONTROL); /* tell the clock it's being set */
 	CMOS_WRITE((save_control|RTC_SET), RTC_CONTROL);
@@ -228,60 +179,31 @@ set_isa_cmos_time(unsigned long nowtime)
 
 
 
-static unsigned long __ebsa285_text timer1_gettimeoffset (void)
+static unsigned long timer1_gettimeoffset (void)
 {
 	unsigned long value = LATCH - *CSR_TIMER1_VALUE;
 
 	return (tick * value) / LATCH;
 }
 
-static void __ebsa285_text timer1_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static void timer1_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	*CSR_TIMER1_CLR = 0;
 
 	/* Do the LEDs things */
 	do_leds();
-
 	do_timer(regs);
-
-	/* If we have an externally synchronized linux clock, then update
-	 * CMOS clock accordingly every ~11 minutes.  Set_rtc_mmss() has to be
-	 * called as close as possible to 500 ms before the new second starts.
-	 */
-	if ((time_status & STA_UNSYNC) == 0 &&
-	    xtime.tv_sec > last_rtc_update + 660 &&
-	    xtime.tv_usec > 50000 - (tick >> 1) &&
-	    xtime.tv_usec < 50000 + (tick >> 1)) {
-		if (set_rtc_mmss(xtime.tv_sec) == 0)
-			last_rtc_update = xtime.tv_sec;
-		else
-			last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
-	}
-
-	if (!user_mode(regs))
-		do_profile(instruction_pointer(regs));
-}
-
-static struct irqaction __ebsa285_data timer1_irq = {
-	timer1_interrupt,
-	0,
-	0,
-	"timer",
-	NULL,
-	NULL
-};
-
-static int
-set_dummy_time(unsigned long secs)
-{
-	return 1;
+	do_set_rtc();
+	do_profile(regs);
 }
 
 /*
- * Set up timer interrupt, and return the current time in seconds.
+ * Set up timer interrupt.
  */
 extern __inline__ void setup_timer(void)
 {
+	int irq;
+
 	if (machine_is_co285())
 		/*
 		 * Add-in 21285s shouldn't access the RTC
@@ -321,18 +243,11 @@ extern __inline__ void setup_timer(void)
 				printk(KERN_WARNING "RTC: *** warning: CMOS battery bad\n");
 
 			xtime.tv_sec = get_isa_cmos_time();
-			set_rtc_mmss = set_isa_cmos_time;
+			set_rtc = set_isa_cmos_time;
 		} else
 			rtc_base = 0;
 	}
 
-	if (!rtc_base) {
-		/*
-		 * Default the date to 1 Jan 1970 0:0:0
-		 */
-		xtime.tv_sec = mktime(1970, 1, 1, 0, 0, 0);
-		set_rtc_mmss = set_dummy_time;
-	}
 	if (machine_is_ebsa285() || machine_is_co285()) {
 		gettimeoffset = timer1_gettimeoffset;
 
@@ -340,7 +255,8 @@ extern __inline__ void setup_timer(void)
 		*CSR_TIMER1_LOAD = LATCH;
 		*CSR_TIMER1_CNTL = TIMER_CNTL_ENABLE | TIMER_CNTL_AUTORELOAD | TIMER_CNTL_DIV16;
 
-		setup_arm_irq(IRQ_TIMER1, &timer1_irq);
+		timer_irq.handler = timer1_interrupt;
+		irq = IRQ_TIMER1;
 	} else {
 		/* enable PIT timer */
 		/* set for periodic (4) and LSB/MSB write (0x30) */
@@ -349,7 +265,8 @@ extern __inline__ void setup_timer(void)
 		outb((mSEC_10_from_14/6) >> 8, 0x40);
 
 		gettimeoffset = isa_gettimeoffset;
-
-		setup_arm_irq(IRQ_ISA_TIMER, &isa_timer_irq);
+		timer_irq.handler = isa_timer_interrupt;
+		irq = IRQ_ISA_TIMER;
 	}
+	setup_arm_irq(IRQ_ISA_TIMER, &timer_irq);
 }

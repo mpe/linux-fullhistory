@@ -16,7 +16,8 @@ must be loaded at 0xc0008000 in Brutus's memory and execution started at
 0xc0008000 as well.
 
 But prior to execute the kernel, a ramdisk image must also be loaded in
-memory.  Use memory address 0x00800000 for this.
+memory.  Use memory address 0xd8000000 for this.  Note that the file 
+containing the (compressed) ramdisk image must not exceed 4 MB.
 
 Currently supported:
 	- RS232 serial ports
@@ -24,6 +25,10 @@ Currently supported:
 	- LCD screen
 	- keyboard (needs to be cleaned up badly... any volunteer?)
 	
+The actual Brutus support may not be complete without extra patches. 
+If such patches exist, they should be found from 
+ftp.netwinder.org/users/n/nico.
+
 A full PCMCIA support is still missing, although it's possible to hack
 some drivers in order to drive already inserted cards at boot time with
 little modifications.

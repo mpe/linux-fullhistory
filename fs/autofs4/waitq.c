@@ -86,7 +86,7 @@ static int autofs4_write(struct file *file, const void *addr, int bytes)
 	
 static void autofs4_notify_daemon(struct autofs_sb_info *sbi,
 				 struct autofs_wait_queue *wq,
-				 enum autofs_packet_type type)
+				 int type)
 {
 	union autofs_packet_union pkt;
 	size_t pktsz;

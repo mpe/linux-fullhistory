@@ -106,6 +106,7 @@ else
   	       if [ "$CONFIG_X86" = "y" ]; then
 	          bool '    SiS5513 chipset support' CONFIG_BLK_DEV_SIS5513
 	       fi
+	       bool '    Cyrix CS5530 MediaGX chipset support' CONFIG_BLK_DEV_CS5530
 	    fi
 	    if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
 	       bool '    Tekram TRM290 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_TRM290
@@ -239,6 +240,7 @@ if [ "$CONFIG_IDE_CHIPSETS" = "y" -o \
      "$CONFIG_BLK_DEV_PDC202XX" = "y" -o \
      "$CONFIG_BLK_DEV_PIIX" = "y" -o \
      "$CONFIG_BLK_DEV_SIS5513" = "y" -o \
+     "$CONFIG_BLK_DEV_CS5530" = "y" -o \
      "$CONFIG_BLK_DEV_SL82C105" = "y" ]; then
    define_bool CONFIG_BLK_DEV_IDE_MODES y
 else

@@ -45,7 +45,7 @@
 #define TLAN_IGNORE		0
 #define TLAN_RECORD		1
 
-#define TLAN_DBG(lvl, format, args...)	if (debug&lvl) printk( format, ##args );
+#define TLAN_DBG(lvl, format, args...)	if (debug&lvl) printk(KERN_DEBUG "TLAN: " format, ##args );
 #define TLAN_DEBUG_GNRL		0x0001
 #define TLAN_DEBUG_TX		0x0002
 #define TLAN_DEBUG_RX		0x0004 
@@ -182,7 +182,6 @@ typedef struct tlan_private_tag {
 	u32			duplex;
 	u32			phy[2];
 	u32			phyNum;
-	u32			sa_int;
 	u32			speed;
 	u8			tlanRev;
 	u8			tlanFullDuplex;

@@ -3,7 +3,7 @@
  *
  *	PCI Bus Services -- Exported Symbols
  *
- *	Copyright 1998 Martin Mares
+ *	Copyright 1998--2000 Martin Mares <mj@suse.cz>
  */
 
 #include <linux/config.h>
@@ -29,6 +29,7 @@ EXPORT_SYMBOL(pci_assign_resource);
 EXPORT_SYMBOL(pci_register_driver);
 EXPORT_SYMBOL(pci_unregister_driver);
 EXPORT_SYMBOL(pci_match_device);
+EXPORT_SYMBOL(pci_find_parent_resource);
 
 #ifdef CONFIG_HOTPLUG
 EXPORT_SYMBOL(pci_setup_device);

@@ -35,7 +35,7 @@ so far in the emulator.  The file TODO contains a information on what
 remains to be done, and other ideas for the emulator.
 
 Bug reports, comments, suggestions should be directed to me at
-<scottb@netwinder.com>.  General reports of "this program doesn't
+<scottb@netwinder.org>.  General reports of "this program doesn't
 work correctly when your emulator is installed" are useful for
 determining that bugs still exist; but are virtually useless when
 attempting to isolate the problem.  Please report them, but don't

@@ -92,7 +92,6 @@ extern int hydra_probe(struct net_device *);
 extern int apne_probe(struct net_device *);
 extern int bionet_probe(struct net_device *);
 extern int pamsnet_probe(struct net_device *);
-extern int tlan_probe(struct net_device *);
 extern int cs89x0_probe(struct net_device *dev);
 extern int ethertap_probe(struct net_device *dev);
 extern int ether1_probe (struct net_device *dev);
@@ -168,9 +167,6 @@ static int __init probe_list(struct net_device *dev, struct devprobe *plist)
 struct devprobe eisa_probes[] __initdata = {
 #ifdef CONFIG_DE4X5             /* DEC DE425, DE434, DE435 adapters */
 	{de4x5_probe, 0},
-#endif
-#ifdef CONFIG_TLAN
-	{tlan_probe, 0},
 #endif
 #ifdef CONFIG_ULTRA32 
 	{ultra32_probe, 0},	

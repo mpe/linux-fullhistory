@@ -8,6 +8,7 @@
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/module.h>
 
 #include <pcmcia/ss.h>
 
@@ -739,6 +740,7 @@ struct pci_socket_ops yenta_operations = {
 	yenta_set_mem_map,
 	yenta_proc_setup
 };
+EXPORT_SYMBOL(yenta_operations);
 
 /*
  * Ricoh cardbus bridge: standard cardbus, except it needs

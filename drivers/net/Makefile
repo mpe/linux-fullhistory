@@ -20,8 +20,6 @@ MOD_IN_SUB_DIRS :=
 ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan sk98lin arcnet
 
 O_TARGET := net.o
-O_OBJS   :=
-M_OBJS   :=
 MOD_LIST_NAME := NET_MODULES
 
 # All of the (potential) objects that export symbols.

@@ -18,6 +18,10 @@ M_OBJS   :=
 
 ifeq ($(CONFIG_PMAC_PBOOK),y)
   L_OBJS += mediabay.o
+else
+  ifeq ($(CONFIG_MAC_FLOPPY),y)
+    L_OBJS += mediabay.o
+  endif
 endif
 
 ifeq ($(CONFIG_MAC_SERIAL),y)

@@ -149,7 +149,8 @@
 #define  PCI_BRIDGE_CTL_FAST_BACK 0x80	/* Fast Back2Back enabled on secondary interface */
 
 /* Header type 2 (CardBus bridges) */
-/* 0x14-0x15 reserved */
+#define PCI_CB_CAPABILITY_LIST	0x14
+/* 0x15 reserved */
 #define PCI_CB_SEC_STATUS	0x16	/* Secondary status */
 #define PCI_CB_PRIMARY_BUS	0x18	/* PCI bus number */
 #define PCI_CB_CARD_BUS		0x19	/* CardBus bus number */

@@ -7,13 +7,6 @@
 #define _LINUX_BFS_FS_SB
 
 /*
- * BFS block map entry, an array of these is kept in bfs_sb_info.
- */
- struct bfs_bmap {
- 	unsigned long start, end;
- };
-
-/*
  * BFS file system in-core superblock info
  */
 struct bfs_sb_info {
@@ -24,7 +17,6 @@ struct bfs_sb_info {
 	unsigned long si_lf_sblk;
 	unsigned long si_lf_eblk;
 	unsigned long si_lasti;
-	struct bfs_bmap * si_bmap;
 	char * si_imap;
 	struct buffer_head * si_sbh;		/* buffer header w/superblock */
 	struct bfs_super_block * si_bfs_sb;	/* superblock in si_sbh->b_data */

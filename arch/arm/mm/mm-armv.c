@@ -34,6 +34,7 @@ static int __init nocache_setup(char *__unused)
 {
 	cr_alignment &= ~4;
 	cr_no_alignment &= ~4;
+	flush_cache_all();
 	set_cr(cr_alignment);
 	return 1;
 }
@@ -42,6 +43,7 @@ static int __init nowrite_setup(char *__unused)
 {
 	cr_alignment &= ~(8|4);
 	cr_no_alignment &= ~(8|4);
+	flush_cache_all();
 	set_cr(cr_alignment);
 	return 1;
 }
@@ -284,7 +286,7 @@ static void __init create_mapping(struct map_desc *md)
 
 void __init pagetable_init(void)
 {
-	struct map_desc *init_maps, *p;
+	struct map_desc *init_maps, *p, *q;
 	unsigned long address = 0;
 	int i;
 
@@ -358,17 +360,18 @@ void __init pagetable_init(void)
 	 * pgdir entries that are not in the description.
 	 */
 	i = 0;
+	q = init_maps;
 	do {
-		if (address < init_maps->virtual || init_maps == p) {
+		if (address < q->virtual || q == p) {
 			clear_mapping(address);
 			address += PGDIR_SIZE;
 		} else {
-			create_mapping(init_maps);
+			create_mapping(q);
 
-			address = init_maps->virtual + init_maps->length;
+			address = q->virtual + q->length;
 			address = (address + PGDIR_SIZE - 1) & PGDIR_MASK;
 
-			init_maps ++;
+			q ++;
 		}
 	} while (address != 0);
 

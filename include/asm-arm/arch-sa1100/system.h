@@ -41,6 +41,7 @@
 "	b	1f			@ Seems we must align the next \n" \
 "	.align 5			@ instruction on a cache line \n" \
 "1:	mcr	p15, 0, %0, c15, c8, 2	@ Wait for interrupts \n" \
+"	mov	r0, r0			@ insert NOP to ensure SA1100 re-awakes\n" \
 "	mcr	p15, 0, %0, c15, c1, 2	@ Reenable clock switching \n" \
 	: : "r" (&ICIP) : "cc" ); \
 	} while (0)

@@ -538,6 +538,20 @@ S: Evpatoria
 S: Crimea
 S: UKRAINE, 334320
 
+N: Walt Drummond
+E: drummond@valinux.com
+D: Linux/IA-64
+S: 1382 Bordeaux Drive
+S: Sunnyvale, CA 94087
+S: USA
+
+N: Don Dugger
+E: n0ano@valinux.com
+D: Linux/IA-64
+S: 1209 Pearl Street, #12
+S: Boulder, CO 80302
+S: USA
+
 N: Thomas Dunbar
 E: tdunbar@vtaix.cc.vt.edu
 D: TeX & METAFONT hacking/maintenance
@@ -602,11 +616,25 @@ S: Grevgatan 11
 S: S-114 53 Stockholm
 S: Sweden
 
+N: Stephane Eranian
+E: eranian@hpl.hp.com
+D: Linux/ia64
+S: 1501 Page Mill Rd, MS 1U17
+S: Palo Alto, CA 94304
+S: USA
+
 N: Paal-Kristian Engstad
 E: engstad@intermetrics.com
 D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
 S: 17101 Springdale Street #225
 S: Huntington Beach, California 92649
+S: USA
+
+N: Johannes Erdfelt
+E: jerdfelt@valinux.com
+D: Linux/IA-64 bootloader and kernel goop, USB
+S: 6350 Stoneridge Mall Road
+S: Pleasanton, CA 94588
 S: USA
 
 N: Doug Evans
@@ -1418,6 +1446,13 @@ N: Kai Mäkisara
 E: Kai.Makisara@metla.fi
 D: SCSI Tape Driver
 
+N: Asit Mallick
+E: asit.k.mallick@intel.com
+D: Linux/IA-64
+S: 2200 Mission College Blvd
+S: Santa Clara, CA 95052
+S: USA
+
 N: Martin Mares
 E: mj@atrey.karlin.mff.cuni.cz
 W: http://atrey.karlin.mff.cuni.cz/~mj/
@@ -1759,6 +1794,11 @@ S: M"ullerstr. 69
 S: 13349 Berlin
 S: Germany
 
+N: Nicolas Pitre
+E: nico@cam.org
+D: StrongARM SA1100 support integrator & hacker
+S: Montreal, Quebec, Canada
+
 N: Emanuel Pirker
 E: epirker@edu.uni-klu.ac.at
 D: AIC5800 IEEE 1394, RAW I/O on 1394
@@ -1798,6 +1838,13 @@ D: Miscellaneous hacks
 S: R. Otto Marquardt, 226 - Garcia
 S: 89020-350 Blumenau - Santa Catarina
 S: Brazil
+
+N: Goutham Rao
+E: goutham.rao@intel.com
+D: Linux/IA-64
+S: 2200 Mission College Blvd
+S: Santa Clara, CA 95052
+S: USA
 
 N: Eric S. Raymond
 E: esr@thyrsus.com

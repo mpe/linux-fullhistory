@@ -575,14 +575,16 @@ acornfb_adjust_timing(struct fb_var_screeninfo *var, int con)
 			break;
 	}
 
-	if (min_size > size) {
-		/*
-		 * failed, use ypan
-		 */
-		size = current_par.screen_size;
-		var->yres_virtual = size / (font_line_len / fontht);
-	} else
-		var->yres_virtual = nr_y * fontht;
+	if (var->accel_flags & FB_ACCELF_TEXT) {
+		if (min_size > size) {
+			/*
+			 * failed, use ypan
+			 */
+			size = current_par.screen_size;
+			var->yres_virtual = size / (font_line_len / fontht);
+		} else
+			var->yres_virtual = nr_y * fontht;
+	}
 
 	current_par.screen_end = current_par.screen_base_p + size;
 
@@ -1283,7 +1285,7 @@ acornfb_default_mode = {
 	vmode:		FB_VMODE_NONINTERLACED
 };
 
-static void __init 
+static void __init
 acornfb_init_fbinfo(void)
 {
 	static int first = 1;
@@ -1325,6 +1327,7 @@ acornfb_init_fbinfo(void)
 	init_var.height		   = -1;
 	init_var.width		   = -1;
 	init_var.vmode		   = FB_VMODE_NONINTERLACED;
+	init_var.accel_flags	   = FB_ACCELF_TEXT;
 
 	current_par.dram_size	   = 0;
 	current_par.montype	   = -1;
@@ -1363,15 +1366,17 @@ acornfb_init_fbinfo(void)
  *	size can optionally be followed by 'M' or 'K' for
  *	MB or KB respectively.
  */
-static void __init 
+static void __init
 acornfb_parse_font(char *opt)
 {
 	strcpy(fb_info.fontname, opt);
 }
 
-static void __init 
+static void __init
 acornfb_parse_mon(char *opt)
 {
+	current_par.montype = -2;
+
 	fb_info.monspecs.hfmin = simple_strtoul(opt, &opt, 0);
 	if (*opt == '-')
 		fb_info.monspecs.hfmax = simple_strtoul(opt + 1, &opt, 0);
@@ -1403,7 +1408,7 @@ acornfb_parse_mon(char *opt)
 	init_var.height = simple_strtoul(opt + 1, NULL, 0);
 }
 
-static void __init 
+static void __init
 acornfb_parse_montype(char *opt)
 {
 	current_par.montype = -2;
@@ -1445,7 +1450,7 @@ acornfb_parse_montype(char *opt)
 	}
 }
 
-static void __init 
+static void __init
 acornfb_parse_dram(char *opt)
 {
 	unsigned int size;
@@ -1479,7 +1484,7 @@ static struct options {
 	{ NULL, NULL }
 };
 
-int __init 
+int __init
 acornfb_setup(char *options)
 {
 	struct options *optp;
@@ -1517,7 +1522,7 @@ acornfb_setup(char *options)
  * Detect type of monitor connected
  *  For now, we just assume SVGA
  */
-static int __init 
+static int __init
 acornfb_detect_monitortype(void)
 {
 	return 4;
@@ -1554,7 +1559,7 @@ free_unused_pages(unsigned int virtual_start, unsigned int virtual_end)
 	printk("acornfb: freed %dK memory\n", mb_freed);
 }
 
-int __init 
+int __init
 acornfb_init(void)
 {
 	unsigned long size;
@@ -1566,10 +1571,11 @@ acornfb_init(void)
 	if (current_par.montype == -1)
 		current_par.montype = acornfb_detect_monitortype();
 
-	if (current_par.montype < 0 || current_par.montype > NR_MONTYPES)
+	if (current_par.montype == -1 || current_par.montype > NR_MONTYPES)
 		current_par.montype = 4;
 
-	fb_info.monspecs = monspecs[current_par.montype];
+	if (current_par.montype > 0)
+		fb_info.monspecs = monspecs[current_par.montype];
 	fb_info.monspecs.dpms = current_par.dpms;
 
 	/*
@@ -1642,7 +1648,7 @@ acornfb_init(void)
 		for (page = current_par.screen_base + size; page < top; page += PAGE_SIZE)
 			free_page(page);
 		current_par.screen_base_p =
-			virt_to_phys(current_par.screen_base);
+			virt_to_phys((void *)current_par.screen_base);
 	}
 #endif
 #if defined(HAS_VIDC)

@@ -62,7 +62,7 @@
 static int do_mtd_request(memory_handle_t handle, mtd_request_t *req,
 			  caddr_t buf)
 {
-    int ret, tries;
+    int ret=0, tries;
     client_t *mtd;
     socket_info_t *s;
     
