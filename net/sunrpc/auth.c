@@ -15,6 +15,7 @@
 #include <linux/errno.h>
 #include <linux/socket.h>
 #include <linux/sunrpc/clnt.h>
+#include <linux/spinlock.h>
 
 #ifdef RPC_DEBUG
 # define RPCDBG_FACILITY	RPCDBG_AUTH
@@ -71,6 +72,8 @@ rpcauth_destroy(struct rpc_auth *auth)
 	auth->au_ops->destroy(auth);
 }
 
+spinlock_t rpc_credcache_lock = SPIN_LOCK_UNLOCKED;
+
 /*
  * Initialize RPC credential cache
  */
@@ -94,6 +97,7 @@ rpcauth_free_credcache(struct rpc_auth *auth)
 	if (!(destroy = auth->au_ops->crdestroy))
 		destroy = (void (*)(struct rpc_cred *)) rpc_free;
 
+	spin_lock(&rpc_credcache_lock);
 	for (i = 0; i < RPC_CREDCACHE_NR; i++) {
 		q = &auth->au_credcache[i];
 		while ((cred = *q) != NULL) {
@@ -101,6 +105,7 @@ rpcauth_free_credcache(struct rpc_auth *auth)
 			destroy(cred);
 		}
 	}
+	spin_unlock(&rpc_credcache_lock);
 }
 
 /*
@@ -113,6 +118,7 @@ rpcauth_gc_credcache(struct rpc_auth *auth)
 	int		i, safe = 0;
 
 	dprintk("RPC: gc'ing RPC credentials for auth %p\n", auth);
+	spin_lock(&rpc_credcache_lock);
 	for (i = 0; i < RPC_CREDCACHE_NR; i++) {
 		q = &auth->au_credcache[i];
 		while ((cred = *q) != NULL) {
@@ -129,6 +135,7 @@ rpcauth_gc_credcache(struct rpc_auth *auth)
 			q = &cred->cr_next;
 		}
 	}
+	spin_unlock(&rpc_credcache_lock);
 	while ((cred = free) != NULL) {
 		free = cred->cr_next;
 		rpc_free(cred);
@@ -145,10 +152,12 @@ rpcauth_insert_credcache(struct rpc_auth *auth, struct rpc_cred *cred)
 	int		nr;
 
 	nr = (cred->cr_uid % RPC_CREDCACHE_NR);
+	spin_lock(&rpc_credcache_lock);
 	cred->cr_next = auth->au_credcache[nr];
 	auth->au_credcache[nr] = cred;
 	cred->cr_expire = jiffies + auth->au_expire;
 	cred->cr_count++;
+	spin_unlock(&rpc_credcache_lock);
 }
 
 /*
@@ -166,6 +175,7 @@ rpcauth_lookup_credcache(struct rpc_task *task)
 	if (time_before(auth->au_nextgc, jiffies))
 		rpcauth_gc_credcache(auth);
 
+	spin_lock(&rpc_credcache_lock);
 	q = &auth->au_credcache[nr];
 	while ((cred = *q) != NULL) {
 		if (auth->au_ops->crmatch(task, cred)) {
@@ -174,6 +184,7 @@ rpcauth_lookup_credcache(struct rpc_task *task)
 		}
 		q = &cred->cr_next;
 	}
+	spin_unlock(&rpc_credcache_lock);
 
 	if (!cred)
 		cred = auth->au_ops->crcreate(task);
@@ -194,6 +205,7 @@ rpcauth_remove_credcache(struct rpc_auth *auth, struct rpc_cred *cred)
 	int		nr;
 
 	nr = (cred->cr_uid % RPC_CREDCACHE_NR);
+	spin_lock(&rpc_credcache_lock);
 	q = &auth->au_credcache[nr];
 	while ((cr = *q) != NULL) {
 		if (cred == cr) {
@@ -202,6 +214,7 @@ rpcauth_remove_credcache(struct rpc_auth *auth, struct rpc_cred *cred)
 		}
 		q = &cred->cr_next;
 	}
+	spin_unlock(&rpc_credcache_lock);
 }
 
 struct rpc_cred *

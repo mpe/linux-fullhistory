@@ -76,6 +76,9 @@
 static struct rpc_xprt *	sock_list = NULL;
 #endif
 
+/* Spinlock for critical sections in the code. */
+spinlock_t xprt_lock = SPIN_LOCK_UNLOCKED;
+
 #ifdef RPC_DEBUG
 # undef  RPC_DEBUG_DATA
 # define RPCDBG_FACILITY	RPCDBG_XPRT
@@ -497,6 +500,7 @@ xprt_reconn_timeout(struct rpc_task *task)
 	rpc_wake_up_task(task);
 }
 
+extern spinlock_t rpc_queue_lock;
 /*
  * Look up the RPC request corresponding to a reply.
  */
@@ -505,22 +509,28 @@ xprt_lookup_rqst(struct rpc_xprt *xprt, u32 xid)
 {
 	struct rpc_task	*head, *task;
 	struct rpc_rqst	*req;
+	unsigned long	oldflags;
 	int		safe = 0;
 
+	spin_lock_irqsave(&rpc_queue_lock, oldflags);
 	if ((head = xprt->pending.task) != NULL) {
 		task = head;
 		do {
 			if ((req = task->tk_rqstp) && req->rq_xid == xid)
-				return req;
+				goto out;
 			task = task->tk_next;
 			if (++safe > 100) {
 				printk("xprt_lookup_rqst: loop in Q!\n");
-				return NULL;
+				goto out_bad;
 			}
 		} while (task != head);
 	}
 	dprintk("RPC:      unknown XID %08x in reply.\n", xid);
-	return NULL;
+ out_bad:
+	req = NULL;
+ out:
+	spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+	return req;
 }
 
 /*
@@ -1018,6 +1028,7 @@ xprt_down_transmit(struct rpc_task *task)
 	struct rpc_rqst	*req = task->tk_rqstp;
 
 	start_bh_atomic();
+	spin_lock(&xprt_lock);
 	if (xprt->snd_task && xprt->snd_task != task) {
 		dprintk("RPC: %4d TCP write queue full (task %d)\n",
 			task->tk_pid, xprt->snd_task->tk_pid);
@@ -1030,6 +1041,7 @@ xprt_down_transmit(struct rpc_task *task)
 #endif
 		req->rq_bytes_sent = 0;
 	}
+	spin_unlock(&xprt_lock);
 	end_bh_atomic();
 	return xprt->snd_task == task;
 }
@@ -1132,11 +1144,12 @@ do_xprt_transmit(struct rpc_task *task)
 		if (status < 0)
 			break;
 
-		if (xprt->stream)
+		if (xprt->stream) {
 			req->rq_bytes_sent += status;
 
-		if (req->rq_bytes_sent >= req->rq_slen)
-			goto out_release;
+			if (req->rq_bytes_sent >= req->rq_slen)
+				goto out_release;
+		}
 
 		if (status < req->rq_slen)
 			status = -EAGAIN;
@@ -1304,11 +1317,14 @@ xprt_reserve_status(struct rpc_task *task)
 	} else if (!RPCXPRT_CONGESTED(xprt) && xprt->free) {
 		/* OK: There's room for us. Grab a free slot and bump
 		 * congestion value */
+		spin_lock(&xprt_lock);
 		if (!(req = xprt->free)) {
+			spin_unlock(&xprt_lock);
 			goto out_nofree;
 		}
 		xprt->free     = req->rq_next;
 		req->rq_next   = NULL;
+		spin_unlock(&xprt_lock);
 		xprt->cong    += RPC_CWNDSCALE;
 		task->tk_rqstp = req;
 		xprt_request_init(task, xprt);
@@ -1363,8 +1379,19 @@ xprt_release(struct rpc_task *task)
 
 	dprintk("RPC: %4d release request %p\n", task->tk_pid, req);
 
+	spin_lock(&xprt_lock);
 	req->rq_next = xprt->free;
 	xprt->free   = req;
+	spin_unlock(&xprt_lock);
+
+	/* remove slot from queue of pending */
+	start_bh_atomic();
+	if (task->tk_rpcwait) {
+		printk("RPC: task of released request still queued!\n");
+		rpc_del_timer(task);
+		rpc_remove_wait_queue(task);
+	}
+	end_bh_atomic();
 
 	/* Decrease congestion value. */
 	xprt->cong -= RPC_CWNDSCALE;

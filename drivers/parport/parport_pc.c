@@ -1708,58 +1708,83 @@ static int __init parport_pc_init_pci (int irq, int dma)
 	struct {
 		unsigned int vendor;
 		unsigned int device;
+		unsigned int subvendor;
+		unsigned int subdevice;
 		unsigned int numports;
 		struct {
 			unsigned long lo;
 			unsigned long hi; /* -ve if not there */
 		} addr[4];
 	} cards[] = {
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_550, 1,
-		  { { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_650, 1,
-		  { { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_850, 1,
-		  { { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1P_10x, 1,
-		  { { 2, 3 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P_10x, 2,
-		  { { 2, 3 }, { 4, 5 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_550, 1,
-		  { { 4, 5 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_650, 1,
-		  { { 4, 5 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_850, 1,
-		  { { 4, 5 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1P_20x, 1,
-		  { { 0, 1 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P_20x, 2,
-		  { { 0, 1 }, { 2, 3 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_550, 2,
-		  { { 1, 2 }, { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_650, 2,
-		  { { 1, 2 }, { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_850, 2,
-		  { { 1, 2 }, { 3, 4 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_550, 1,
-		  { { 1, 2 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_650, 1,
-		  { { 1, 2 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_850, 1,
-		  { { 1, 2 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_550, 1,
-		  { { 2, 3 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_650, 1,
-		  { { 2, 3 }, } },
-		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_850, 1,
-		  { { 2, 3 }, } },
-		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_PARALLEL, 1,
-		  { { 0, -1 }, } },
-		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_A, 1,
-		  { { 0, -1 }, } },
-		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_B, 1,
-		  { { 0, -1 }, } },
-		{ PCI_VENDOR_ID_EXSYS, PCI_DEVICE_ID_EXSYS_4014, 2,
-		  { { 2, -1 }, { 3, -1 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_550,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_650,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_850,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1P_10x,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 2, 3 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P_10x,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  2, { { 2, 3 }, { 4, 5 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_550,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 4, 5 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_650,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 4, 5 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_850,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 4, 5 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1P_20x,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 0, 1 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P_20x,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  2, { { 0, 1 }, { 2, 3 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_550,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  2, { { 1, 2 }, { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_650,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  2, { { 1, 2 }, { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_850,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  2, { { 1, 2 }, { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_550,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 1, 2 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_650,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 1, 2 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_850,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 1, 2 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_550,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 2, 3 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_650,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 2, 3 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_850,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 2, 3 }, } },
+		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_PARALLEL,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 0, -1 }, } },
+		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_A,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 0, -1 }, } },
+		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_B,
+		  PCI_ANY_ID, PCI_ANY_ID,
+		  1, { { 0, -1 }, } },
+		{ PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_9050,
+		  PCI_SUBVENDOR_ID_EXSYS, PCI_SUBDEVICE_ID_EXSYS_4014,
+		  2, { { 4, -1 }, { 5, -1 }, } },
 		{ 0, }
 	};
 
@@ -1776,6 +1801,15 @@ static int __init parport_pc_init_pci (int irq, int dma)
 						  cards[i].device,
 						  pcidev)) != NULL) {
 			int n;
+
+			if (cards[i].subvendor != PCI_ANY_ID &&
+			    cards[i].subvendor != pcidev->subsystem_vendor)
+				continue;
+
+			if (cards[i].subdevice != PCI_ANY_ID &&
+			    cards[i].subdevice != pcidev->subsystem_device)
+				continue;
+
 			for (n = 0; n < cards[i].numports; n++) {
 				unsigned long lo = cards[i].addr[n].lo;
 				unsigned long hi = cards[i].addr[n].hi;

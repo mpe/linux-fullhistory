@@ -12581,8 +12581,7 @@ CONFIG_PPDEV
   Saying Y to this adds support for /dev/parport device nodes.  This
   is needed for programs that want portable access to the parallel
   port, for instance deviceid (which displays Plug-and-Play device
-  IDs) and vlp (which makes a Linux computer act as though it's a
-  printer).
+  IDs).
 
   This is the parallel port equivalent of SCSI generic support (sg).
   It is safe to say N to this -- it is not needed for normal printing

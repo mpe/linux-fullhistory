@@ -278,6 +278,9 @@ int parport_negotiate (struct parport *port, int mode)
 		return -ENOSYS; /* FIXME (implement BECP) */
 	}
 
+	if (mode & IEEE1284_EXT_LINK)
+		m = 1<<7; /* request extensibility link */
+
 	port->ieee1284.phase = IEEE1284_PH_NEGOTIATION;
 
 	/* Start off with nStrobe and nAutoFd high, and nSelectIn low */
@@ -354,12 +357,59 @@ int parport_negotiate (struct parport *port, int mode)
 		return 1;
 	}
 
+	/* More to do if we've requested extensibility link. */
+	if (mode & IEEE1284_EXT_LINK) {
+		m = mode & 0x7f;
+		udelay (1);
+		parport_write_data (port, m);
+		udelay (1);
+
+		/* Event 51: Set nStrobe low */
+		parport_frob_control (port,
+				      PARPORT_CONTROL_STROBE,
+				      PARPORT_CONTROL_STROBE);
+
+		/* Event 53: Set nStrobe high */
+		udelay (5);
+		parport_frob_control (port,
+				      PARPORT_CONTROL_STROBE,
+				      0);
+
+		/* Event 55: nAck goes high */
+		if (parport_wait_peripheral (port,
+					     PARPORT_STATUS_ACK,
+					     PARPORT_STATUS_ACK)) {
+			/* This shouldn't really happen with a compliant
+			 * device. */
+			DPRINTK (KERN_DEBUG
+				 "%s: Mode 0x%02x not supported? (0x%02x)\n",
+				 port->name, mode,
+				 port->ops->read_status (port));
+			parport_ieee1284_terminate (port);
+			return 1;
+		}
+
+		/* Event 54: Peripheral sets XFlag to reflect support */
+		xflag = parport_read_status (port) & PARPORT_STATUS_SELECT;
+
+		/* xflag should be high. */
+		if (!xflag) {
+			/* Extended mode not supported. */
+			DPRINTK (KERN_DEBUG "%s: Extended mode 0x%02x not "
+				 "supported\n", port->name, mode);
+			parport_ieee1284_terminate (port);
+			return 1;
+		}
+
+		/* Any further setup is left to the caller. */
+	}
+
 	/* Mode is supported */
 	DPRINTK (KERN_DEBUG "%s: In mode 0x%02x\n", port->name, mode);
 	port->ieee1284.mode = mode;
 
 	/* But ECP is special */
-	if (mode & IEEE1284_MODE_ECP) {
+	if (!(mode & IEEE1284_EXT_LINK) && (mode & IEEE1284_MODE_ECP)) {
 		port->ieee1284.phase = IEEE1284_PH_ECP_SETUP;
 
 		/* Event 30: Set nAutoFd low */

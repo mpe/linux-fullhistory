@@ -34,7 +34,7 @@ printk_name(const char *name, int len)
 		len = 80;
 	strncpy(buf, name, len);
 	buf[len] = 0;
-	printk(buf);
+	printk("%s", buf);
 }
 #endif
 
