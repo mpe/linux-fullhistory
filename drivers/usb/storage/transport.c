@@ -1139,11 +1139,11 @@ static int usb_stor_reset_common(struct us_data *us,
 	 * RESETTING bit, and clear the ABORTING bit so that the reset
 	 * may proceed.
 	 */
-	scsi_lock(us->host);
+	scsi_lock(us_to_host(us));
 	usb_stor_report_device_reset(us);
 	set_bit(US_FLIDX_RESETTING, &us->flags);
 	clear_bit(US_FLIDX_ABORTING, &us->flags);
-	scsi_unlock(us->host);
+	scsi_unlock(us_to_host(us));
 
 	/* A 20-second timeout may seem rather long, but a LaCie
 	 * StudioDrive USB2 device takes 16+ seconds to get going

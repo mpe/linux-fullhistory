@@ -155,7 +155,6 @@ struct us_data {
 	proto_cmnd		proto_handler;	 /* protocol handler	   */
 
 	/* SCSI interfaces */
-	struct Scsi_Host	*host;		 /* our dummy host data */
 	struct scsi_cmnd	*srb;		 /* current srb		*/
 
 	/* thread information */
@@ -180,6 +179,14 @@ struct us_data {
 	void			*extra;		 /* Any extra data          */
 	extra_data_destructor	extra_destructor;/* extra data destructor   */
 };
+
+/* Convert between us_data and the corresponding Scsi_Host */
+static struct Scsi_Host inline *us_to_host(struct us_data *us) {
+	return container_of((void *) us, struct Scsi_Host, hostdata);
+}
+static struct us_data inline *host_to_us(struct Scsi_Host *host) {
+	return (struct us_data *) host->hostdata;
+}
 
 /* Function to fill an inquiry response. See usb.c for details */
 extern void fill_inquiry_response(struct us_data *us,
