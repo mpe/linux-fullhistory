@@ -132,6 +132,15 @@ static struct file_lock *file_lock_table = NULL;
 /* Free lock not inserted in any queue */
 static inline void locks_free_lock(struct file_lock *fl)
 {
+	/*
+	 * CAREFUL! We can't free it until everybody waiting for
+	 * this block have removed themselves from the wait queue
+	 */
+	if (fl->fl_wait) {
+		struct wait_queue *head = WAIT_QUEUE_HEAD(&fl->fl_wait);
+		while (fl->fl_wait != head)
+			schedule();
+	}
 	kfree(fl);
 	return;
 }
@@ -636,10 +645,12 @@ next_task:
 	if (my_task == blocked_task)
 		return (1);
 	for (fl = file_lock_table; fl != NULL; fl = fl->fl_nextlink) {
+		struct wait_queue *head;
 		if (fl->fl_owner == NULL || fl->fl_wait == NULL)
 			continue;
+		head = WAIT_QUEUE_HEAD(&fl->fl_wait);
 		dlock_wait = fl->fl_wait;
-		do {
+		while (dlock_wait != head) {
 			if (dlock_wait->task == blocked_task) {
 				if (fl->fl_owner == my_task) {
 					return (1);
@@ -648,7 +659,7 @@ next_task:
 				goto next_task;
 			}
 			dlock_wait = dlock_wait->next;
-		} while (dlock_wait != fl->fl_wait);
+		}
 	}
 	return (0);
 }
@@ -979,7 +990,7 @@ static void locks_delete_lock(struct file_lock **fl_p, unsigned int wait)
 	}
 
 	wake_up(&fl->fl_wait);
-	kfree(fl);
+	locks_free_lock(fl);
 
 	return;
 }
@@ -1014,10 +1025,11 @@ static char *lock_get_status(struct file_lock *fl, char *p, int id, char *pfx)
 		     (long)fl, (long)fl->fl_prevlink, (long)fl->fl_nextlink,
 		     (long)fl->fl_next, (long)fl->fl_block, id, pfx);
 	if ((wt = fl->fl_wait) != NULL) {
-		do {
+		struct wait_queue *head = WAIT_QUEUE_HEAD(&fl->fl_wait);
+		while (wt != head) {
 			p += sprintf(p, " %d", wt->task->pid);
 			wt = wt->next;
-		} while (wt != fl->fl_wait);
+		}
 	}
 	p += sprintf(p, "\n");
 	return (p);

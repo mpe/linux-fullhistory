@@ -1,3 +1,10 @@
+Fri Aug 30  10:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c - Version 1.12c
+	Incorporate the changes of FreeBSD/ncr.c revision 1.76.
+	The changes add support for the 53c860 and 53c875, 
+	but without taking advantage of the new features.
+	Those chips are used exactly as the old 53c810.
+
 Sun Jul 21  00:00 1996 Gerard Roudier (groudier@club-internet.fr)
 	* ncr53c8xx.c, README.ncr53c8xx
 	Add the ncr53c8xx_select_queue_depths() function.

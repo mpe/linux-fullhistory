@@ -1298,6 +1298,7 @@ void net_alias_init(void)
    */
   
 #ifndef ALIAS_USER_LAND_DEBUG
+#ifdef CONFIG_PROC_FS
   proc_net_register(&(struct proc_dir_entry) {
     PROC_NET_ALIAS_TYPES, 11, "alias_types",
     S_IFREG | S_IRUGO, 1, 0, 0,
@@ -1310,6 +1311,7 @@ void net_alias_init(void)
     0, &proc_net_inode_operations,
     net_alias_getinfo
   });
+#endif
 #endif
   
 }

@@ -1182,7 +1182,7 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size, int dontblock)
       if (!audio_devs[dev]->go)
 	tmout = 0;
       else
-	tmout = 2 * HZ;
+	tmout = 10 * HZ;
 
 
       {

@@ -1,4 +1,4 @@
-/* $Id: icn.h,v 1.20 1996/06/24 17:20:37 fritz Exp $
+/* $Id: icn.h,v 1.21 1996/08/29 20:35:57 fritz Exp $
  *
  * ISDN lowlevel-module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: icn.h,v $
+ * Revision 1.21  1996/08/29 20:35:57  fritz
+ * Speed up B-Channel polling interval.
+ *
  * Revision 1.20  1996/06/24 17:20:37  fritz
  * Bugfixes in pollbchan_send():
  *   - Using lock field of skbuff breaks networking.
@@ -156,7 +159,7 @@ typedef struct icn_cdef {
 #define ICN_BOOT_TIMEOUT1  100   /* Delay for Boot-download (jiffies)       */
 #define ICN_CHANLOCK_DELAY  10   /* Delay for Channel-mapping (jiffies)     */
 
-#define ICN_TIMER_BCREAD 3       /* B-Channel poll-cycle                    */
+#define ICN_TIMER_BCREAD 1       /* B-Channel poll-cycle                    */
 #define ICN_TIMER_DCREAD 50      /* D-Channel poll-cycle                    */
 
 #define ICN_CODE_STAGE1 4096     /* Size of bootcode                        */

@@ -13,6 +13,19 @@ struct wait_queue {
 	struct wait_queue * next;
 };
 
+#define WAIT_QUEUE_HEAD(x) ((struct wait_queue *)((x)-1))
+
+static inline void init_waitqueue(struct wait_queue **q)
+{
+	*q = WAIT_QUEUE_HEAD(q);
+}
+
+static inline int waitqueue_active(struct wait_queue **q)
+{
+	struct wait_queue *head = *q;
+	return head && head != WAIT_QUEUE_HEAD(q);
+}
+
 struct semaphore {
 	int count;
 	struct wait_queue * wait;

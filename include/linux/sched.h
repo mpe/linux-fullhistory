@@ -401,12 +401,10 @@ extern inline struct file *file_from_fd(const unsigned int fd)
 extern inline void __add_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
 {
 	struct wait_queue *head = *p;
-	struct wait_queue *next = wait;
+	struct wait_queue *next = WAIT_QUEUE_HEAD(p);
 
-	if (head) {
-		next = head->next;
-		p = &head->next;
-	}
+	if (head)
+		next = head;
 	*p = wait;
 	wait->next = next;
 }
@@ -424,22 +422,15 @@ extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wa
 extern inline void __remove_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
 {
 	struct wait_queue * next = wait->next;
+	struct wait_queue * head = next;
 
-	if (wait == next) {
-		*p = NULL;
-	} else {
-		struct wait_queue *head = *p;
-		if (head == wait)
-			*p = next;
-		for (;;) {
-			struct wait_queue *nextlist = head->next;
-			if (nextlist == wait)
-				break;
-			head = nextlist;
-		}
-		head->next = next;
+	for (;;) {
+		struct wait_queue * nextlist = head->next;
+		if (nextlist == wait)
+			break;
+		head = nextlist;
 	}
-	wait->next = NULL;
+	head->next = next;
 }
 
 extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue * wait)

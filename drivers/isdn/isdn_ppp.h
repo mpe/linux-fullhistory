@@ -51,5 +51,6 @@ extern int  isdn_ppp_select(int, struct file *, int, select_table *);
 extern int  isdn_ppp_ioctl(int, struct file *, unsigned int, unsigned long);
 extern void isdn_ppp_release(int, struct file *);
 extern int  isdn_ppp_dial_slave(char *);
+extern void isdn_ppp_wakeup_daemon(isdn_net_local *);
 
 extern struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];

@@ -20,20 +20,21 @@ prefer a HTML-ized shopping list.
 
    Para aquellos que prefieran una version en castellano de este
 documento, consultad la traduccion de Alfredo Sanjuan en
-http://slug.ctv.es/~alfredo/Cambios.html.
+http://slug.ctv.es/~alfredo/Cambios.html (Spanish translation).
 
    Akik magyarul szeretnenek olvasni az uj kernellel kapcsolatos
 valtozasokrol, az alabbi cimen megtalaljak Nyitrai Tamas forditasat:
-http://www.datanet.hu/generations/linux/newkernel.html.
+http://www.datanet.hu/generations/linux/newkernel.html (Hungarian
+translation).
 
-   Tamas also maintains a version of this file in English at
-http://www.datanet.hu/generations/linux/Changes.html.
+   Tamas also maintains a version of this file at
+http://www.datanet.hu/generations/linux/Changes.html (English).
 
    For people who prefer Japanese (thanks to Mitsuhiro Kojima): Kono
 bunshou no nihongo ban wa
 http://jf.gee.kyoto-u.ac.jp/JF/v2.0/Changes-2.0.html ni arimasu.
 
-Last updated: August 18, 1996.
+Last updated: August 29, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
@@ -152,7 +153,7 @@ the sig11 FAQ.
 
    On the other hand, if you're using a gcc patched for Pentium
 optimization and are getting these errors, downgrade to a standard GNU
-gcc before assuming your hardware (or the kernel) is to blame..
+gcc before assuming your hardware (or the kernel) is to blame.
 
    On a related note, if you get random OOPses that don't seem to be
 related to anything and you have a motherboard with APM support, try
@@ -678,11 +679,14 @@ upgrade to install.  Almost everything you need is available in
 ftp://ftp.redhat.com/pub/current/i386/updates/2.0-kernel/ and its
 mirrors.
 
-   For others, especially those of you running Slackware 3.0, David
-Bourgin has put together a Slackware-compatible package of everything
+   For others, David Bourgin has put together a package of everything
 necessary to quickly and easily upgrade to 2.0.x.  See
 ftp://ftp.wsc.com/pub/freeware/linux/update.linux/ for more information
-and the files.
+and the files.  This package also includes many bug-fixes, including
+one for a recently discovered bug in sendmail-8.7.5 (just look at
+/pub/freeware/linux/update.linux/updat2-0.addon1/sendmail-8.7.5a.tar.gz
+if you only need the bug fix).  There's also an alternate lightweight
+termcap in the same directory that works well for many people.
 
 Please send info about any other packages that 2.0.x "broke" or about
 any new features of 2.0.x that require extra or new packages for use to

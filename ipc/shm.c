@@ -92,16 +92,14 @@ found:
 	shp = (struct shmid_ds *) kmalloc (sizeof (*shp), GFP_KERNEL);
 	if (!shp) {
 		shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
-		if (shm_lock)
-			wake_up (&shm_lock);
+		wake_up (&shm_lock);
 		return -ENOMEM;
 	}
 
 	shp->shm_pages = (ulong *) kmalloc (numpages*sizeof(ulong),GFP_KERNEL);
 	if (!shp->shm_pages) {
 		shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
-		if (shm_lock)
-			wake_up (&shm_lock);
+		wake_up (&shm_lock);
 		kfree(shp);
 		return -ENOMEM;
 	}
@@ -125,8 +123,7 @@ found:
 		max_shmid = id;
 	shm_segs[id] = shp;
 	used_segs++;
-	if (shm_lock)
-		wake_up (&shm_lock);
+	wake_up (&shm_lock);
 	return (unsigned int) shp->shm_perm.seq * SHMMNI + id;
 }
 

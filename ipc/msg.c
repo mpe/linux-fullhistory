@@ -193,8 +193,7 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 	msq->msg_lspid = current->pid;
 	msq->msg_stime = CURRENT_TIME;
 	restore_flags(flags);
-	if (msq->rwait)
-		wake_up (&msq->rwait);
+	wake_up (&msq->rwait);
 	return 0;
 }
 
@@ -350,8 +349,7 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 			msghdrs--; 
 			msq->msg_cbytes -= nmsg->msg_ts;
 			restore_flags(flags);
-			if (msq->wwait)
-				wake_up (&msq->wwait);
+			wake_up (&msq->wwait);
 			/*
 			 * Calls from kernel level (IPC_KERNELD set)
 			 * wants the message copied to kernel space!
@@ -438,8 +436,7 @@ found:
 	msq = (struct msqid_ds *) kmalloc (sizeof (*msq), GFP_KERNEL);
 	if (!msq) {
 		msgque[id] = (struct msqid_ds *) IPC_UNUSED;
-		if (msg_lock)
-			wake_up (&msg_lock);
+		wake_up (&msg_lock);
 		return -ENOMEM;
 	}
 	ipcp = &msq->msg_perm;
@@ -459,8 +456,7 @@ found:
 		max_msqid = id;
 	msgque[id] = msq;
 	used_queues++;
-	if (msg_lock)
-		wake_up (&msg_lock);
+	wake_up (&msg_lock);
 	return (unsigned int) msq->msg_perm.seq * MSGMNI + id;
 }
 
@@ -525,11 +521,9 @@ static void freeque (int id)
 		while (max_msqid && (msgque[--max_msqid] == IPC_UNUSED));
 	msgque[id] = (struct msqid_ds *) IPC_UNUSED;
 	used_queues--;
-	while (msq->rwait || msq->wwait) {
-		if (msq->rwait)
-			wake_up (&msq->rwait); 
-		if (msq->wwait)
-			wake_up (&msq->wwait);
+	while (waitqueue_active(&msq->rwait) || waitqueue_active(&msq->wwait)) {
+		wake_up (&msq->rwait); 
+		wake_up (&msq->wwait);
 		schedule(); 
 	}
 	for (msgp = msq->msg_first; msgp; msgp = msgh ) {

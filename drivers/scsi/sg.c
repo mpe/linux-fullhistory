@@ -275,8 +275,39 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
      * See if the command completed normally, or whether something went
      * wrong.
      */
-    memcpy(device->header.sense_buffer, SCpnt->sense_buffer, sizeof(SCpnt->sense_buffer));
-    device->header.result = (SCpnt->sense_buffer[0] == 0 ? 0 : EIO);
+    memcpy(device->header.sense_buffer, SCpnt->sense_buffer,
+	   sizeof(SCpnt->sense_buffer));
+    switch (host_byte(SCpnt->result)) {
+    case DID_OK:
+      device->header.result = 0;
+      break;
+    case DID_NO_CONNECT:
+    case DID_BUS_BUSY:
+    case DID_TIME_OUT: 
+      device->header.result = EBUSY;
+      break;
+    case DID_BAD_TARGET: 
+    case DID_ABORT: 
+    case DID_PARITY: 
+    case DID_RESET:
+    case DID_BAD_INTR: 
+      device->header.result = EIO;
+      break;
+    case DID_ERROR:
+      /*
+       * There really should be DID_UNDERRUN and DID_OVERRUN error values,
+       * and a means for callers of scsi_do_cmd to indicate whether an
+       * underrun or overrun should signal an error.  Until that can be
+       * implemented, this kludge allows for returning useful error values
+       * except in cases that return DID_ERROR that might be due to an
+       * underrun.
+       */
+      if (SCpnt->sense_buffer[0] == 0 &&
+	  status_byte(SCpnt->result) == GOOD)
+	device->header.result = 0;
+      else device->header.result = EIO;
+      break;
+    }
 
     /*
      * Now wake up the process that is waiting for the

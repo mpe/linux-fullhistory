@@ -966,8 +966,10 @@ void tcp_send_ack(struct sock *sk)
 		sock_wfree(sk, buff);
 		return;
 	}
+#if 0	/* why does this result in problems? */
 #ifndef CONFIG_NO_PATH_MTU_DISCOVERY
 	buff->ip_hdr->frag_off |= htons(IP_DF);
+#endif
 #endif
 
 	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));

@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.15 1996/06/15 14:56:57 fritz Exp $
+/* $Id: isdn.h,v 1.16 1996/08/12 16:20:56 hipp Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.16  1996/08/12 16:20:56  hipp
+ * renamed ppp_minor to ppp_slot
+ *
  * Revision 1.15  1996/06/15 14:56:57  fritz
  * Added version signatures for data structures used
  * by userlevel programs.
@@ -319,7 +322,7 @@ typedef struct isdn_net_local_s {
   struct enet_statistics stats;        /* Ethernet Statistics              */
   int                    isdn_device;  /* Index to isdn-device             */
   int                    isdn_channel; /* Index to isdn-channel            */
-  int			 ppp_minor;    /* PPPD device minor number         */
+  int			 ppp_slot;     /* PPPD device slot number          */
   int                    pre_device;   /* Preselected isdn-device          */
   int                    pre_channel;  /* Preselected isdn-channel         */
   int                    exclusive;    /* If non-zero idx to reserved chan.*/
@@ -549,6 +552,7 @@ struct ippp_struct {
   unsigned int maxcid;
   isdn_net_local *lp;
   int unit; 
+  int minor;
   long last_link_seqno;
   long mp_seqno;
   long range;

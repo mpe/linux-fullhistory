@@ -431,51 +431,55 @@ asmlinkage int sys_pause(void)
  */
 void wake_up(struct wait_queue **q)
 {
-	struct wait_queue *tmp;
-	struct task_struct * p;
+	struct wait_queue *next;
+	struct wait_queue *head;
 
-	if (!q || !(tmp = *q))
+	if (!q || !(next = *q))
 		return;
-	do {
-		if ((p = tmp->task) != NULL) {
+	head = WAIT_QUEUE_HEAD(q);
+	while (next != head) {
+		struct task_struct *p = next->task;
+		next = next->next;
+		if (p != NULL) {
 			if ((p->state == TASK_UNINTERRUPTIBLE) ||
 			    (p->state == TASK_INTERRUPTIBLE))
 				wake_up_process(p);
 		}
-		if (!tmp->next) {
-			printk("wait_queue is bad (eip = %p)\n",
-				__builtin_return_address(0));
-			printk("        q = %p\n",q);
-			printk("       *q = %p\n",*q);
-			printk("      tmp = %p\n",tmp);
-			break;
-		}
-		tmp = tmp->next;
-	} while (tmp != *q);
+		if (!next)
+			goto bad;
+	}
+	return;
+bad:
+	printk("wait_queue is bad (eip = %p)\n",
+		__builtin_return_address(0));
+	printk("        q = %p\n",q);
+	printk("       *q = %p\n",*q);
 }
 
 void wake_up_interruptible(struct wait_queue **q)
 {
-	struct wait_queue *tmp;
-	struct task_struct * p;
+	struct wait_queue *next;
+	struct wait_queue *head;
 
-	if (!q || !(tmp = *q))
+	if (!q || !(next = *q))
 		return;
-	do {
-		if ((p = tmp->task) != NULL) {
+	head = WAIT_QUEUE_HEAD(q);
+	while (next != head) {
+		struct task_struct *p = next->task;
+		next = next->next;
+		if (p != NULL) {
 			if (p->state == TASK_INTERRUPTIBLE)
 				wake_up_process(p);
 		}
-		if (!tmp->next) {
-			printk("wait_queue is bad (eip = %p)\n",
-				__builtin_return_address(0));
-			printk("        q = %p\n",q);
-			printk("       *q = %p\n",*q);
-			printk("      tmp = %p\n",tmp);
-			break;
-		}
-		tmp = tmp->next;
-	} while (tmp != *q);
+		if (!next)
+			goto bad;
+	}
+	return;
+bad:
+	printk("wait_queue is bad (eip = %p)\n",
+		__builtin_return_address(0));
+	printk("        q = %p\n",q);
+	printk("       *q = %p\n",*q);
 }
 
 void __down(struct semaphore * sem)

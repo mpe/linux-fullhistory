@@ -247,6 +247,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->prev_run = NULL;
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
+	init_waitqueue(&p->wait_chldexit);
 	p->signal = 0;
 	p->it_real_value = p->it_virt_value = p->it_prof_value = 0;
 	p->it_real_incr = p->it_virt_incr = p->it_prof_incr = 0;

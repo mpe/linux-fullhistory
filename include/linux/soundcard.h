@@ -742,15 +742,13 @@ typedef struct copr_msg {
 /* Note!	Number 31 cannot be used since the sign bit is reserved */
 
 
-#ifdef NO_LONGER_AVAILABLE
 /*
- * The following unsupported macros will be removed from the API in near
- * future.
+ * The following unsupported macros are no longer functional.
+ * Use SOUND_MIXER_PRIVATE# macros in future.
  */
-#define SOUND_MIXER_ENHANCE	29	/* Enhanced stereo (0, 40, 60 or 80) */
-#define SOUND_MIXER_MUTE	28	/* 0 or 1 */
-#define SOUND_MIXER_LOUD	30	/* 0 or 1 */
-#endif
+#define SOUND_MIXER_ENHANCE	31
+#define SOUND_MIXER_MUTE	31
+#define SOUND_MIXER_LOUD	31
 
 
 #define SOUND_DEVICE_LABELS	{"Vol  ", "Bass ", "Trebl", "Synth", "Pcm  ", "Spkr ", "Line ", \
@@ -790,11 +788,10 @@ typedef struct copr_msg {
 #define SOUND_MASK_LINE2	(1 << SOUND_MIXER_LINE2)
 #define SOUND_MASK_LINE3	(1 << SOUND_MIXER_LINE3)
 
-#ifdef NO_LONGER_AVAILABLE
+/* Obsolete macros */
 #define SOUND_MASK_MUTE		(1 << SOUND_MIXER_MUTE)
 #define SOUND_MASK_ENHANCE	(1 << SOUND_MIXER_ENHANCE)
 #define SOUND_MASK_LOUD		(1 << SOUND_MIXER_LOUD)
-#endif
 
 #define MIXER_READ(dev)		_IOR('M', dev, int)
 #define SOUND_MIXER_READ_VOLUME		MIXER_READ(SOUND_MIXER_VOLUME)
@@ -814,11 +811,11 @@ typedef struct copr_msg {
 #define SOUND_MIXER_READ_LINE1		MIXER_READ(SOUND_MIXER_LINE1)
 #define SOUND_MIXER_READ_LINE2		MIXER_READ(SOUND_MIXER_LINE2)
 #define SOUND_MIXER_READ_LINE3		MIXER_READ(SOUND_MIXER_LINE3)
-#ifdef NO_LONGER_AVAILABLE
+
+/* Obsolete macros */
 #define SOUND_MIXER_READ_MUTE		MIXER_READ(SOUND_MIXER_MUTE)
 #define SOUND_MIXER_READ_ENHANCE	MIXER_READ(SOUND_MIXER_ENHANCE)
 #define SOUND_MIXER_READ_LOUD		MIXER_READ(SOUND_MIXER_LOUD)
-#endif
 
 #define SOUND_MIXER_READ_RECSRC		MIXER_READ(SOUND_MIXER_RECSRC)
 #define SOUND_MIXER_READ_DEVMASK	MIXER_READ(SOUND_MIXER_DEVMASK)
@@ -844,11 +841,11 @@ typedef struct copr_msg {
 #define SOUND_MIXER_WRITE_LINE1		MIXER_WRITE(SOUND_MIXER_LINE1)
 #define SOUND_MIXER_WRITE_LINE2		MIXER_WRITE(SOUND_MIXER_LINE2)
 #define SOUND_MIXER_WRITE_LINE3		MIXER_WRITE(SOUND_MIXER_LINE3)
-#ifdef NO_LONGER_AVAILABLE
+
+/* Obsolete macros */
 #define SOUND_MIXER_WRITE_MUTE		MIXER_WRITE(SOUND_MIXER_MUTE)
 #define SOUND_MIXER_WRITE_ENHANCE	MIXER_WRITE(SOUND_MIXER_ENHANCE)
 #define SOUND_MIXER_WRITE_LOUD		MIXER_WRITE(SOUND_MIXER_LOUD)
-#endif
 
 #define SOUND_MIXER_WRITE_RECSRC	MIXER_WRITE(SOUND_MIXER_RECSRC)
 

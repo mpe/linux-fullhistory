@@ -966,7 +966,7 @@ static int wait_for_completion(int delay, timeout_fn function)
 		return 1;
 	}
 
-	if (jiffies - delay < 0){
+	if ((signed) (jiffies - delay) < 0){
 		del_timer(&fd_timer);
 		fd_timer.function = function;
 		fd_timer.expires = delay;
@@ -1415,7 +1415,7 @@ static void setup_rw_floppy(void)
 		 * again just before spinup completion. Beware that
 		 * after scandrives, we must again wait for selection.
 		 */
-		if (ready_date - jiffies > DP->select_delay){
+		if ((signed) (ready_date - jiffies) > DP->select_delay){
 			ready_date -= DP->select_delay;
 			function = (timeout_fn) floppy_start;
 		} else

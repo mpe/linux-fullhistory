@@ -968,11 +968,6 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
  */
 static void put_unused_buffer_head(struct buffer_head * bh)
 {
-	struct wait_queue * wait;
-
-	wait = ((volatile struct buffer_head *) bh)->b_wait;
-	memset(bh,0,sizeof(*bh));
-	((volatile struct buffer_head *) bh)->b_wait = wait;
 	bh->b_next_free = unused_list;
 	unused_list = bh;
 	wake_up(&buffer_wait);
@@ -1402,6 +1397,11 @@ static int grow_buffers(int pri, int size)
 
 /* =========== Reduce the buffer memory ============= */
 
+static inline int buffer_waiting(struct buffer_head * bh)
+{
+	return waitqueue_active(&bh->b_wait);
+}
+
 /*
  * try_to_free_buffer() checks if all the buffers on this particular page
  * are unused, and free's the page if so.
@@ -1421,7 +1421,8 @@ int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp,
 		if (!tmp)
 			return 0;
 		if (tmp->b_count || buffer_protected(tmp) ||
-		    buffer_dirty(tmp) || buffer_locked(tmp) || tmp->b_wait)
+		    buffer_dirty(tmp) || buffer_locked(tmp) ||
+		    buffer_waiting(bh))
 			return 0;
 		if (priority && buffer_touched(tmp))
 			return 0;

@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.18 1996/07/03 13:48:51 hipp Exp $
+/* $Id: isdn_net.c,v 1.20 1996/08/29 20:06:03 fritz Exp $
  *
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.20  1996/08/29 20:06:03  fritz
+ * Bugfix: Transmission timeout had been much to low.
+ *
+ * Revision 1.19  1996/08/12 16:24:32  hipp
+ * removed some (now) obsolete functions for syncPPP in rebuild_header etc.
+ *
  * Revision 1.18  1996/07/03 13:48:51  hipp
  * bugfix: Call dev_purge_queues() only for master device
  *
@@ -124,7 +130,7 @@ static int isdn_net_xmit(struct device *, isdn_net_local *, struct sk_buff *);
  
 extern void dev_purge_queues(struct device *dev);	/* move this to net/core/dev.c */
 
-char *isdn_net_revision = "$Revision: 1.18 $";
+char *isdn_net_revision = "$Revision: 1.20 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -369,6 +375,10 @@ isdn_net_stat_callback(int idx, int cmd)
                                                  */
                                                 lp->chargetime = jiffies;
                                                 /* Immediately send first skb to speed up arp */
+#ifdef CONFIG_ISDN_PPP
+						if(lp->p_encap == ISDN_NET_ENCAP_SYNCPPP)
+							isdn_ppp_wakeup_daemon(lp);
+#endif
                                                 if (lp->first_skb) {
                                                         if (!(isdn_net_xmit(&p->dev,lp,lp->first_skb)))
                                                                 lp->first_skb = NULL;
@@ -658,7 +668,6 @@ isdn_net_log_packet(u_char * buf, isdn_net_local * lp)
         u_char *p = buf;
 	unsigned short proto = ETH_P_IP;
         int data_ofs;
-        int len;
 	ip_ports *ipp;
 	char addinfo[100];
 
@@ -675,22 +684,6 @@ isdn_net_log_packet(u_char * buf, isdn_net_local * lp)
                 case ISDN_NET_ENCAP_CISCOHDLC:
                         proto = ntohs(*(unsigned short *)&buf[2]);
                         p = &buf[4];
-                        break;
-                case ISDN_NET_ENCAP_SYNCPPP:
-                        len = 4;
-#ifdef CONFIG_ISDN_MPP
-                        if (lp->ppp_minor!=-1) {
-                                if (ippp_table[lp->ppp_minor]->mpppcfg &
-                                    SC_MP_PROT) {
-                                        if (ippp_table[lp->ppp_minor]->mpppcfg &
-                                            SC_OUT_SHORT_SEQ)
-                                                len = 7;
-                                        else
-                                                len = 9;
-                                }
-                        }
-#endif
-                        p = &buf[len];
                         break;
         }
 	data_ofs = ((p[0] & 15) * 4);
@@ -851,7 +844,7 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 	isdn_net_local *lp = (isdn_net_local *) ndev->priv;
 
 	if (ndev->tbusy) {
-		if (jiffies - ndev->trans_start < 20)
+		if (jiffies - ndev->trans_start < (2 * HZ))
 			return 1;
                 if (!lp->dialstate)
                         lp->stats.tx_errors++;
@@ -1248,29 +1241,6 @@ isdn_net_header(struct sk_buff *skb, struct device *dev, unsigned short type,
                         *((ushort*)&skb->data[2]) = htons(type);
                         len = 4;
                         break;
-#ifdef CONFIG_ISDN_PPP
-                case ISDN_NET_ENCAP_SYNCPPP:
-                        /* reserve space to be filled in isdn_ppp_xmit */
-                        len = 4;
-#ifdef CONFIG_ISDN_MPP
-                        if (lp->ppp_minor!=-1) {
-                                if (ippp_table[lp->ppp_minor]->mpppcfg &
-                                    SC_MP_PROT) {
-                                        if (ippp_table[lp->ppp_minor]->mpppcfg &
-                                            SC_OUT_SHORT_SEQ)
-                                                len = 7;
-                                        else
-                                                len = 9;
-                                }
-                        }
-#endif
-                        /* Initialize first 4 bytes to a value, which is
-                         * guaranteed to be invalid. Need that to check
-                         * for already compressed packets in isdn_ppp_xmit().
-                         */
-                        *((u32 *)skb_push(skb, len)) = 0;
-                        break;
-#endif
 	}
 	return len;
 }
@@ -1756,7 +1726,7 @@ isdn_net_find_icall(int di, int ch, int idx, char *num)
                                         dev->st_netdev[idx] = lp->netdev;
 					p->local.isdn_device = di;
 					p->local.isdn_channel = ch;
-					p->local.ppp_minor = -1;
+					p->local.ppp_slot = -1;
 					p->local.pppbind = -1;
 					p->local.flags |= ISDN_NET_CONNECTED;
 					p->local.dialstate = 7;
@@ -1927,7 +1897,7 @@ isdn_net_new(char *name, struct device *master)
 	netdev->local.pre_device = -1;
 	netdev->local.pre_channel = -1;
 	netdev->local.exclusive = -1;
-	netdev->local.ppp_minor = -1;
+	netdev->local.ppp_slot = -1;
 	netdev->local.pppbind = -1;
 	netdev->local.l2_proto = ISDN_PROTO_L2_X75I;
 	netdev->local.l3_proto = ISDN_PROTO_L3_TRANS;
@@ -2443,8 +2413,7 @@ void dev_purge_queues(struct device *dev)
 	for(i=0;i<DEV_NUMBUFFS;i++) {
 		struct sk_buff *skb;
 		while((skb=skb_dequeue(&dev->buffs[i])))
-			if(skb->free)
-				kfree_skb(skb,FREE_WRITE);
+				dev_kfree_skb(skb,FREE_WRITE);
         }
 	
 }

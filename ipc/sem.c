@@ -103,8 +103,7 @@ found:
 	if (!sma) {
 		semary[id] = (struct semid_ds *) IPC_UNUSED;
 		used_sems -= nsems;
-		if (sem_lock)
-			wake_up (&sem_lock);
+		wake_up (&sem_lock);
 		return -ENOMEM;
 	}
 	memset (sma, 0, size);
@@ -124,8 +123,7 @@ found:
 		max_semid = id;
 	used_semids++;
 	semary[id] = sma;
-	if (sem_lock)
-		wake_up (&sem_lock);
+	wake_up (&sem_lock);
 	return (unsigned int) sma->sem_perm.seq * SEMMNI + id;
 }
 

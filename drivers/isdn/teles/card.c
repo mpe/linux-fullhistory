@@ -1,4 +1,4 @@
-/* $Id: card.c,v 1.12 1996/06/24 17:16:52 fritz Exp $
+/* $Id: card.c,v 1.13 1996/07/18 11:21:24 jdenoud Exp $
  *
  * card.c     low level stuff for the Teles S0 isdn card
  * 
@@ -7,6 +7,9 @@
  * Beat Doebeli         log all D channel traffic
  * 
  * $Log: card.c,v $
+ * Revision 1.13  1996/07/18 11:21:24  jdenoud
+ * Use small buffers for incoming audio data
+ *
  * Revision 1.12  1996/06/24 17:16:52  fritz
  * Added check for misconfigured membase.
  *
@@ -424,7 +427,7 @@ hscx_interrupt(struct IsdnCardState *sp, byte val, byte hscx)
 {
 	byte             r;
 	struct HscxState *hsp = sp->hs + hscx;
-	int              count;
+	int              count, err;
 
 	if (!hsp->init)
 		return;
@@ -471,9 +474,15 @@ hscx_interrupt(struct IsdnCardState *sp, byte val, byte hscx)
 	}
       afterRME:
 	if (val & 0x40) {	/* RPF */
-		if (!hsp->rcvibh)
-			if (BufPoolGet(&hsp->rcvibh, &hsp->rbufpool,
-				       GFP_ATOMIC, (void *) 1, 2)) {
+		if (!hsp->rcvibh) {
+			if (hsp->mode == 1)
+				err=BufPoolGet(&hsp->rcvibh, &hsp->smallpool,
+					GFP_ATOMIC, (void *)1, 2);
+			else
+				err=BufPoolGet(&hsp->rcvibh, &hsp->rbufpool,
+					GFP_ATOMIC, (void *)1, 2);
+			
+			if (err) {
 				printk(KERN_WARNING
                                        "HSCX RPF out of buffers at %ld\n",
                                        jiffies);
@@ -482,7 +491,8 @@ hscx_interrupt(struct IsdnCardState *sp, byte val, byte hscx)
 				goto afterRPF;
 			} else
 				hsp->rcvptr = 0;
-
+		}
+		
 		hscx_empty_fifo(hsp, 32);
                 if (hsp->mode == 1) {
                         /* receive audio data */

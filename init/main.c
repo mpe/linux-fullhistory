@@ -94,6 +94,7 @@ extern void BusLogic_Setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
 extern void in2000_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
+extern void wd7000_setup(char *str, int *ints);
 extern void ppa_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
@@ -329,6 +330,9 @@ struct {
 #endif
 #ifdef CONFIG_SCSI_IN2000
 	{ "in2000=", in2000_setup},
+#endif
+#ifdef CONFIG_SCSI_7000FASST
+	{ "wd7000=", wd7000_setup},
 #endif
 #ifdef CONFIG_SCSI_PPA
         { "ppa=", ppa_setup },

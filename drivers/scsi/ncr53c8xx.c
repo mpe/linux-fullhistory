@@ -40,7 +40,7 @@
 */
 
 /*
-**	21 July 1996, version 1.12b
+**	30 August 1996, version 1.12c
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -55,6 +55,8 @@
 **		53C815		(~53C810 with on board rom BIOS)
 **		53C820		(Wide, NCR BIOS in flash bios required)
 **		53C825		(Wide, ~53C820 with on board rom BIOS)
+**		53C860		(not yet tested)
+**		53C875		(not yet tested)
 **
 **	Other features:
 **		Memory mapped IO (linux-1.3.X only)
@@ -1492,7 +1494,7 @@ static	void	ncr_alloc_ccb	(ncb_p np, u_long t, u_long l);
 static	void	ncr_complete	(ncb_p np, ccb_p cp);
 static	void	ncr_exception	(ncb_p np);
 static	void	ncr_free_ccb	(ncb_p np, ccb_p cp);
-static	void	ncr_getclock	(ncb_p np);
+static	void	ncr_getclock	(ncb_p np, u_char scntl3);
 static	ccb_p	ncr_get_ccb	(ncb_p np, u_long t,u_long l);
 static	void	ncr_init	(ncb_p np, char * msg, u_long code);
 static	int	ncr_intr	(ncb_p np);
@@ -3540,7 +3542,7 @@ retry_chip_init:
 	**	Find the right value for scntl3.
 	*/
 
-	ncr_getclock (np);
+	ncr_getclock (np, INB(nc_scntl3));
 
 	/*
 	**	Reset chip.
@@ -4816,8 +4818,8 @@ void ncr_init (ncb_p np, char * msg, u_long code)
 	if ((ChipDevice == PCI_DEVICE_ID_NCR_53C825 && ChipVersion >= 0x10) ||
 	    ChipDevice == PCI_DEVICE_ID_NCR_53C875) {
 		OUTB(nc_dmode, 0xc0);	/* Set 16-transfer burst */
-		OUTB(nc_ctest5, 0x04);	/* Set DMA FIFO to 88 */
 #if 0
+		OUTB(nc_ctest5, 0x04);	/* Set DMA FIFO to 88 */
 		OUTB(nc_ctest5, 0x24);	/* Set DMA FIFO to 536 */
 		OUTB(nc_dmode, 0x40);	/* Set 64-transfer burst */
 		OUTB(nc_ctest3, 0x01);	/* Set write and invalidate */
@@ -6278,9 +6280,18 @@ void ncr_int_sir (ncb_p np)
 		/*
 		**	Check against controller limits.
 		*/
-		fak = (4ul * per - 1) / np->ns_sync - 3;
-		if (ofs && (fak>7))   {chg = 1; ofs = 0;}
-		if (!ofs) fak=7;
+		if (ofs != 0) {
+			fak = (4ul * per - 1) / np->ns_sync - 3;
+			if (fak>7) {
+				chg = 1;
+				ofs = 0;
+			}
+		}
+		if (ofs == 0) {
+			fak = 7;
+			per = 0;
+			tp->minsync = 0;
+		}
 
 		if (DEBUG_FLAGS & DEBUG_NEGO) {
 			PRINT_ADDR(cp->cmd);
@@ -7311,8 +7322,9 @@ static u_long ncr_lookup(char * id)
 #endif /* NCR_CLOCK */
 
 
-static void ncr_getclock (ncb_p np)
+static void ncr_getclock (ncb_p np, u_char scntl3)
 {
+#if 0
 	u_char	tbl[5] = {6,2,3,4,6};
 	u_char	f;
 	u_char	ns_clock = (1000/NCR_CLOCK);
@@ -7335,6 +7347,25 @@ static void ncr_getclock (ncb_p np)
 	if (DEBUG_FLAGS & DEBUG_TIMING)
 		printf ("%s: sclk=%d async=%d sync=%d (ns) scntl3=0x%x\n",
 		ncr_name (np), ns_clock, np->ns_async, np->ns_sync, np->rv_scntl3);
+#else
+	/*
+	 *	For now just preserve the BIOS setting ...
+	 */
+
+	if ((scntl3 & 7) < 3) {
+		printf ("%s: assuming 40MHz clock", ncr_name(np));
+		scntl3 = 3; /* assume 40MHz if no value supplied by BIOS */
+	}
+
+	np->ns_sync   = 25;
+	np->ns_async  = 50;
+	np->rv_scntl3 = ((scntl3 & 0x7) << 4) -0x20 + (scntl3 & 0x7);
+
+	if (bootverbose) {
+		printf ("%s: initial value of SCNTL3 = %02x, final = %02x\n",
+			ncr_name(np), scntl3, np->rv_scntl3);
+	}
+#endif
 }
 
 /*===================== LINUX ENTRY POINTS SECTION ==========================*/
