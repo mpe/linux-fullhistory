@@ -58,10 +58,10 @@ MODULE_PARM_DESC(enable_rc, "Turn on/off IR remote control(default: off)");
 #define DRIVER_NAME		"TechnoTrend/Hauppauge DEC USB"
 
 #define COMMAND_PIPE		0x03
-#define RESULT_PIPE		0x84
-#define IN_PIPE			0x88
+#define RESULT_PIPE		0x04
+#define IN_PIPE			0x08
 #define OUT_PIPE		0x07
-#define IRQ_PIPE		0x8A
+#define IRQ_PIPE		0x0A
 
 #define COMMAND_PACKET_SIZE	0x3c
 #define ARM_PACKET_SIZE		0x1000
@@ -170,7 +170,7 @@ struct filter_info {
 	struct list_head	filter_info_list;
 };
 
-const uint16_t  rc_keys[] = {
+static u16 rc_keys[] = {
 	KEY_POWER,
 	KEY_MUTE,
 	KEY_1,
@@ -1191,8 +1191,9 @@ static void ttusb_init_rc( struct ttusb_dec *dec)
 
 	dec->rc_input_dev.name = "ttusb_dec remote control";
 	dec->rc_input_dev.evbit[0] = BIT(EV_KEY);
-	dec->rc_input_dev.keycodesize = sizeof(unsigned char);
-	dec->rc_input_dev.keycodemax = KEY_MAX;
+	dec->rc_input_dev.keycodesize = sizeof(u16);
+	dec->rc_input_dev.keycodemax = 0x1a;
+	dec->rc_input_dev.keycode = rc_keys;
 
 	 for (i = 0; i < sizeof(rc_keys)/sizeof(rc_keys[0]); i++)
                 set_bit(rc_keys[i], dec->rc_input_dev.keybit);
@@ -1498,6 +1499,26 @@ static void ttusb_dec_exit_dvb(struct ttusb_dec *dec)
 	dvb_unregister_adapter(dec->adapter);
 }
 
+static void ttusb_dec_exit_rc(struct ttusb_dec *dec)
+{
+
+	dprintk("%s\n", __FUNCTION__);
+	/* we have to check whether the irq URB is already submitted.
+	  * As the irq is submitted after the interface is changed,
+	  * this is the best method i figured out.
+	  * Any others?*/
+	if(dec->interface == TTUSB_DEC_INTERFACE_IN)
+		usb_kill_urb(dec->irq_urb);
+
+	usb_free_urb(dec->irq_urb);
+
+	usb_buffer_free(dec->udev,IRQ_PACKET_SIZE,
+		           dec->irq_buffer, dec->irq_dma_handle);
+
+	input_unregister_device(&dec->rc_input_dev);
+}
+
+
 static void ttusb_dec_exit_usb(struct ttusb_dec *dec)
 {
 	int i;
@@ -1510,20 +1531,6 @@ static void ttusb_dec_exit_usb(struct ttusb_dec *dec)
 		usb_kill_urb(dec->iso_urb[i]);
 
 	ttusb_dec_free_iso_urbs(dec);
-
-	if(enable_rc) {
-		/* we have to check whether the irq URB is already submitted.
-		 * As the irq is submitted after the interface is changed,
-		 * this is the best method i figured out.
-		 * Any other possibilities?*/
-		if(dec->interface == TTUSB_DEC_INTERFACE_IN)
-			usb_kill_urb(dec->irq_urb);
-
-		usb_free_urb(dec->irq_urb);
-
-		usb_buffer_free(dec->udev,IRQ_PACKET_SIZE,
-					dec->irq_buffer, dec->irq_dma_handle);
-	}
 }
 
 static void ttusb_dec_exit_tasklet(struct ttusb_dec *dec)
@@ -1663,6 +1670,8 @@ static void ttusb_dec_disconnect(struct usb_interface *intf)
 	if (dec->active) {
 		ttusb_dec_exit_tasklet(dec);
 		ttusb_dec_exit_filters(dec);
+		if(enable_rc)
+			ttusb_dec_exit_rc(dec);
 		ttusb_dec_exit_usb(dec);
 		ttusb_dec_exit_dvb(dec);
 	}
