@@ -21,7 +21,7 @@
 #define I2C_DEBUG(x)  if (i2c_debug) (x)
 
 static int scan      = 0;
-static int verbose   = 1;
+static int verbose   = 0;
 static int i2c_debug = 0;
 
 MODULE_PARM(scan,"i");

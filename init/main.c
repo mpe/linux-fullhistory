@@ -48,6 +48,10 @@
 #include <linux/dio.h>
 #endif
 
+#ifdef CONFIG_ZORRO
+#include <linux/zorro.h>
+#endif
+
 #ifdef CONFIG_MTRR
 #  include <asm/mtrr.h>
 #endif
@@ -1174,9 +1178,6 @@ static void __init do_basic_setup(void)
 #ifdef CONFIG_SYSCTL
 	sysctl_init();
 #endif
-#ifdef CONFIG_DIO
-	dio_init();
-#endif
 
 	/*
 	 * Ok, at this point all CPU's should be initialized, so
@@ -1196,6 +1197,12 @@ static void __init do_basic_setup(void)
 #endif
 #ifdef CONFIG_ARCH_ACORN
 	ecard_init();
+#endif
+#ifdef CONFIG_ZORRO
+	zorro_init();
+#endif
+#ifdef CONFIG_DIO
+	dio_init();
 #endif
 
 	/* Networking initialization needs a process context */ 

@@ -26,7 +26,7 @@ struct fmi_device
 {
 	int port;
         int curvol; /* 1 or 0 */
-        unsigned long curfreq; /* RSF16_PREC * freq in MHz */
+        unsigned long curfreq; /* freq in kHz */
         __u32 flags;
 };
 

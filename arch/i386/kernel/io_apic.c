@@ -723,10 +723,20 @@ void __init print_IO_APIC(void)
 		);
 	}
 
-	printk("IRQ to pin mappings:\n");
-	for (i = 0; i < PIN_MAP_SIZE; i++)
-		printk("%d->%d(%d) ", i, irq_2_pin[i].pin, irq_2_pin[i].next);
-	printk("\n");
+	printk(KERN_DEBUG "IRQ to pin mappings:\n");
+	for (i = 0; i < NR_IRQS; i++) {
+		struct irq_pin_list *entry = irq_2_pin + i;
+		if (entry->pin < 0)
+			continue;
+		printk(KERN_DEBUG "IRQ%d ", i);
+		for (;;) {
+			printk("-> %d", entry->pin);
+			if (!entry->next)
+				break;
+			entry = irq_2_pin + entry->next;
+		}
+		printk("\n");
+	}
 
 	printk(".................................... done.\n");
 

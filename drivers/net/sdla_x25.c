@@ -830,7 +830,7 @@ static struct net_device_stats* if_stats (struct device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 	if(chan==NULL)
-		return chan;
+		return NULL;
 	return &chan->ifstats;
 }
 

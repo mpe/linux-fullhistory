@@ -1291,6 +1291,9 @@ ppp_dev_close (struct device *dev)
 
 	CHECK_PPP_MAGIC(ppp);
 
+	/* ppp_dev_close may be called with tbusy==1 so we must set it to 0 */
+	dev->tbusy=0;
+
 	MOD_DEC_USE_COUNT;
 
 	return 0;

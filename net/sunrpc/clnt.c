@@ -383,7 +383,7 @@ call_reserveresult(struct rpc_task *task)
 		xprt_reserve(task);
 		goto out;
 	} else if (task->tk_status == -ETIMEDOUT) {
-		printk("RPC: task timed out\n");
+		dprintk("RPC: task timed out\n");
 		task->tk_action = call_timeout;
 		goto out;
 	} else {

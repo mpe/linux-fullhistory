@@ -99,6 +99,7 @@
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
+#include <asm/bitops.h>
 
 #include <asm/linux_logo.h>
 
@@ -1962,14 +1963,14 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 {
 	int currcons = fg_console;
 	unsigned char c;
-	static int printing = 0;
+	static unsigned long printing = 0;
 	const ushort *start;
 	ushort cnt = 0;
 	ushort myx = x;
 
-	if (!printable || printing)
-		return;	 /* console not yet initialized */
-	printing = 1;
+	/* console busy or not yet initialized */
+	if (!printable || test_and_set_bit(0, &printing))
+		return;
 
 	if (kmsg_redirect && vc_cons_allocated(kmsg_redirect - 1))
 		currcons = kmsg_redirect - 1;
@@ -1981,7 +1982,7 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 	}
 
 	if (vcmode != KD_TEXT)
-		return;
+		goto quit;
 
 	/* undraw cursor first */
 	if (IS_FG)
@@ -1993,9 +1994,7 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 	 * Problems caused when we have need_wrap set on '\n' character */
 	disable_bh(CONSOLE_BH);	
 	while (count--) {
-		enable_bh(CONSOLE_BH);
 		c = *b++;
-		disable_bh(CONSOLE_BH);
 		if (c == 10 || c == 13 || c == 8 || need_wrap) {
 			if (cnt > 0) {
 				if (IS_VISIBLE)
@@ -2042,7 +2041,7 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 	poke_blanked_console();
 
 quit:
-	printing = 0;
+	clear_bit(0, &printing);
 }
 
 static kdev_t vt_console_device(struct console *c)

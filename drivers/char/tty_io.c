@@ -390,7 +390,9 @@ void do_tty_hangup(void *data)
 {
 	struct tty_struct *tty = (struct tty_struct *) data;
 	struct file * filp;
+	struct file * cons_filp = NULL;
 	struct task_struct *p;
+	int    closecount = 0, n;
 
 	if (!tty)
 		return;
@@ -407,10 +409,13 @@ void do_tty_hangup(void *data)
 		if (!filp->f_dentry->d_inode)
 			continue;
 		if (filp->f_dentry->d_inode->i_rdev == CONSOLE_DEV ||
-		    filp->f_dentry->d_inode->i_rdev == SYSCONS_DEV)
+		    filp->f_dentry->d_inode->i_rdev == SYSCONS_DEV) {
+			cons_filp = filp;
 			continue;
+		}
 		if (filp->f_op != &tty_fops)
 			continue;
+		closecount++;
 		tty_fasync(-1, filp, 0);
 		filp->f_op = &hung_up_tty_fops;
 	}
@@ -470,7 +475,17 @@ void do_tty_hangup(void *data)
 	tty->session = 0;
 	tty->pgrp = -1;
 	tty->ctrl_status = 0;
-	if (tty->driver.hangup)
+	/*
+	 *	If one of the devices matches a console pointer, we
+	 *	cannot just call hangup() because that will cause
+	 *	tty->count and state->count to go out of sync.
+	 *	So we just call close() the right number of times.
+	 */
+	if (cons_filp) {
+		if (tty->driver.close)
+			for (n = 0; n < closecount; n++)
+				tty->driver.close(tty, cons_filp);
+	} else if (tty->driver.hangup)
 		(tty->driver.hangup)(tty);
 	unlock_kernel();
 }
@@ -1243,6 +1258,7 @@ retry_open:
 		if (!c)
                         return -ENODEV;
                 device = c->device(c);
+		filp->f_flags |= O_NONBLOCK; /* Don't let /dev/console block */
 		noctty = 1;
 	}
 #ifdef CONFIG_UNIX98_PTYS

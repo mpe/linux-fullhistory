@@ -103,8 +103,8 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 
 	tsk = current;
 	mm = tsk->mm;
-	if (in_interrupt())
-		die("page fault from irq handler",regs,error_code);
+	if (in_interrupt() || mm == &init_mm)
+		die("page fault without a user context",regs,error_code);
 
 	down(&mm->mmap_sem);
 

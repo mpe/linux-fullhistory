@@ -149,7 +149,6 @@ static int saa5249_attach(struct i2c_device *device)
 	if(device->bus->id!=I2C_BUSID_BT848)
 		return -EINVAL;
 	
-	printk(KERN_DEBUG "saa5249_attach: bus %p\n", device->bus);
 	strcpy(device->name, IF_NAME);
 	
 	/*
@@ -205,7 +204,6 @@ static int saa5249_attach(struct i2c_device *device)
 static int saa5249_detach(struct i2c_device *device)
 {
 	struct video_device *vd=device->data;
-	printk(KERN_DEBUG "saa5249_detach\n");
 	video_unregister_device(vd);
 	kfree(vd->priv);
 	kfree(vd);
@@ -215,7 +213,6 @@ static int saa5249_detach(struct i2c_device *device)
 static int saa5249_command(struct i2c_device *device,
 			     unsigned int cmd, void *arg)
 {
-	printk(KERN_DEBUG "saa5249_command\n");
 	return -EINVAL;
 }
 
@@ -621,11 +618,9 @@ static int saa5249_open(struct video_device *vd, int nb)
 	struct saa5249_device *t=vd->priv;
 	int pgbuf;
 
-	printk("t=%p\n",t);
 	if (t->bus==NULL) 
 		return -ENODEV;
 
-	printk("Do i2c %p\n",t->bus);
 	if (i2c_senddata(t, CCTWR, 0, 0, -1) ||		/* Select R11 */
 						/* Turn off parity checks (we do this ourselves) */
 		i2c_senddata(t, CCTWR, 1, disp_modes[t->disp_mode][0], 0, -1) ||
@@ -636,7 +631,6 @@ static int saa5249_open(struct video_device *vd, int nb)
 		return -EIO;
 	}
 
-	printk("clean\n");
 	for (pgbuf = 0; pgbuf < NUM_DAUS; pgbuf++) 
 	{
 		memset(t->vdau[pgbuf].pgbuf, ' ', sizeof(t->vdau[0].pgbuf));
@@ -648,7 +642,6 @@ static int saa5249_open(struct video_device *vd, int nb)
 		t->is_searching[pgbuf] = FALSE;
 	}
 	t->virtual_mode=FALSE;
-	printk("Go\n");
 	MOD_INC_USE_COUNT;
 	return 0;
 }

@@ -321,10 +321,10 @@ modules_install:
 	if [ -f VIDEO_MODULES ]; then inst_mod VIDEO_MODULES video; fi; \
 	if [ -f FC4_MODULES   ]; then inst_mod FC4_MODULES   fc4;   fi; \
 	\
-	ls *.o > .allmods; \
-	echo $$MODULES | tr ' ' '\n' | sort | comm -23 .allmods - > .misc; \
-	if [ -s .misc ]; then inst_mod .misc misc; fi; \
-	rm -f .misc .allmods; \
+	ls *.o > $$MODLIB/.allmods; \
+	echo $$MODULES | tr ' ' '\n' | sort | comm -23 $$MODLIB/.allmods - > $$MODLIB/.misc; \
+	if [ -s $$MODLIB/.misc ]; then inst_mod $$MODLIB/.misc misc; fi; \
+	rm -f $$MODLIB/.misc $$MODLIB/.allmods; \
 	)
 
 # modules disabled....

@@ -333,7 +333,7 @@ int videodev_init(void)
 {
 	struct video_init *vfli = video_init_list;
 	
-	printk(KERN_INFO "Linux video capture interface: v0.01 ALPHA\n");
+	printk(KERN_INFO "Linux video capture interface: v1.00\n");
 	if(register_chrdev(VIDEO_MAJOR,"video_capture", &video_fops))
 	{
 		printk("video_dev: unable to get major %d\n", VIDEO_MAJOR);

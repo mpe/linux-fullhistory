@@ -18,6 +18,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/vmalloc.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -101,7 +102,7 @@ found:
 		return -ENOMEM;
 	}
 
-	shp->shm_pages = (ulong *) kmalloc (numpages*sizeof(ulong),GFP_KERNEL);
+	shp->shm_pages = (ulong *) vmalloc (numpages*sizeof(ulong));
 	if (!shp->shm_pages) {
 		shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
 		wake_up (&shm_lock);
@@ -204,7 +205,7 @@ static void killseg (int id)
 			shm_swp--;
 		}
 	}
-	kfree(shp->shm_pages);
+	vfree(shp->shm_pages);
 	shm_tot -= numpages;
 	kfree(shp);
 	return;

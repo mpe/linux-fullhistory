@@ -696,7 +696,6 @@ static int md_ioctl (struct inode *inode, struct file *file,
     RO_IOCTLS(inode->i_rdev,arg);
     
     default:
-    printk ("Unknown md_ioctl %d\n", cmd);
     return -EINVAL;
   }
 

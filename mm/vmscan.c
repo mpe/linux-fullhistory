@@ -511,9 +511,10 @@ void __init kswapd_setup(void)
 int kswapd(void *unused)
 {
 	struct wait_queue wait = { current, NULL };
+
 	current->session = 1;
 	current->pgrp = 1;
-	sprintf(current->comm, "kswapd");
+	strcpy(current->comm, "kswapd");
 	sigfillset(&current->blocked);
 	
 	/*

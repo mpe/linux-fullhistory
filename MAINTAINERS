@@ -57,8 +57,7 @@ L: Mailing list that is relevant to this area
 W: Web-page with status/info
 S: Status, one of the following:
 
-	Supported:	Someone is actually paid to look after this (wildly
-			improbable).
+	Supported:	Someone is actually paid to look after this.
 	Maintained:	Someone actually looks after it.
 	Odd Fixes:	It has a maintainer but they don't have time to do
 			much other than throw the odd patch in. See below..

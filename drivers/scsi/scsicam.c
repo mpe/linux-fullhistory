@@ -114,6 +114,8 @@ static int partsize(struct buffer_head *bh, unsigned long capacity,
     	end_head = largest->end_head;
     	end_sector = largest->end_sector & 0x3f;
 
+        if( end_head + 1 == 0 || end_sector == 0 ) return -1;
+
 #ifdef DEBUG
 	printk ("scsicam_bios_param : end at h = %d, c = %d, s = %d\n",
 	    end_head, end_cyl, end_sector);

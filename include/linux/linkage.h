@@ -36,7 +36,7 @@
 #ifdef __ASSEMBLY__
 
 #define ALIGN __ALIGN
-#define ALIGN_STRING __ALIGN_STRING
+#define ALIGN_STR __ALIGN_STR
 
 #define ENTRY(name) \
   .globl SYMBOL_NAME(name); \

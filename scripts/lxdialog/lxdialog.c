@@ -63,6 +63,9 @@ main (int argc, const char * const * argv)
     (void) setlocale (LC_ALL, "");
 #endif
 
+#ifdef TRACE
+    trace(TRACE_CALLS|TRACE_UPDATE);
+#endif
     if (argc < 2) {
 	Usage (argv[0]);
 	exit (-1);

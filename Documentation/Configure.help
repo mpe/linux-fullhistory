@@ -225,7 +225,8 @@ CONFIG_BLK_DEV_IDE
   If you say Y here, you will use the full-featured IDE driver to
   control up to four IDE interfaces, each being able to serve a
   "master" and a "slave" device, for a total of up to eight IDE
-  disk/cdrom/tape/floppy drives.
+  disk/cdrom/tape/floppy drives.  People with SCSI-only systems
+  should say 'N' here.
 
   Useful information about large (>540MB) IDE disks, sound card IDE
   ports, module support, and other topics, is contained in
@@ -256,6 +257,8 @@ CONFIG_BLK_DEV_HD_ONLY
   more detailed information, read the Disk-HOWTO, available via FTP
   (user: anonymous) from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
+  People with SCSI-only systems can say 'N' here.
+
 Use old disk-only driver on primary interface
 CONFIG_BLK_DEV_HD_IDE
   There are two drivers for MFM/RLL/IDE disks. Most people use just
@@ -270,11 +273,13 @@ CONFIG_BLK_DEV_HD_IDE
   addresses. Normally, just say N here; you will then use the new
   driver for all 4 interfaces.
 
+  People with SCSI-only systems can say 'N' here.
+
 Include IDE/ATA-2 DISK support
 CONFIG_BLK_DEV_IDEDISK
   This will include enhanced support for MFM/RLL/IDE hard disks. If you
   have a MFM/RLL/IDE disk, and there is no special reason to use the
-  old hard disk driver instead, say Y.  
+  old hard disk driver instead, say Y.  If all your disks are SCSI, say 'N'.
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -313,7 +318,7 @@ Include IDE/ATAPI TAPE support
 CONFIG_BLK_DEV_IDETAPE
   If you have an IDE tape drive using the ATAPI protocol, say Y.
   ATAPI is a newer protocol used by IDE tape and CDROM drives, similar
-  to the SCSI protocol.  
+  to the SCSI protocol (but say 'N' if your tape is a SCSI device).
 
   If you say Y here, the tape drive will be identified at boot time
   along with other IDE devices, as "hdb" or "hdc", or something
@@ -363,7 +368,7 @@ CONFIG_BLK_DEV_IDESCSI
   If both this SCSI emulation and native ATAPI support are compiled
   into the kernel, the native support will be used.
 
-  If unsure, say N.
+  People with SCSI-only systems should say 'N' here.  If unsure, say N.
 
 CMD640 chipset bugfix/support
 CONFIG_BLK_DEV_CMD640
@@ -387,7 +392,9 @@ CONFIG_BLK_DEV_CMD640
 
   The CMD640 chip is also used on add-in cards by Acculogic, and on
   the "CSA-6400E PCI to IDE controller" that some people have. For
-  details, read Documentation/ide.txt. If unsure, say Y.
+  details, read Documentation/ide.txt. 
+
+  People with SCSI-only systems should say 'N' here.  If unsure, say Y.
 
 CMD640 enhanced support
 CONFIG_BLK_DEV_CMD640_ENHANCED
@@ -405,14 +412,18 @@ CONFIG_BLK_DEV_RZ1000
   severe data corruption under many conditions.  Say Y here to include
   code which automatically detects and corrects the problem under
   Linux.  This may slow disk throughput by a few percent, but at least
-  things will operate 100% reliably. If unsure, say Y.
+  things will operate 100% reliably. 
+
+  People with SCSI-only systems can say 'N' here.  If unsure, say Y.
 
 Generic PCI IDE chipset support
 CONFIG_BLK_DEV_IDEPCI
   Enable this for PCI systems which use IDE drive(s).
   This option helps the IDE driver to automatically detect and
   configure all PCI-based IDE interfaces in your system.
-  It is safe to say Y to this question.
+
+  People with SCSI-only systems should say 'N' here.   It is safe to
+  say 'Y' to this question.
 
 Generic PCI bus-master DMA support
 CONFIG_BLK_DEV_IDEDMA
@@ -467,6 +478,8 @@ CONFIG_IDE_CHIPSETS
   higher speed I/O rates to improve system performance with these
   chipsets.  Most of these also require special kernel boot parameters
   to actually turn on the support at runtime.
+
+  People with SCSI-only systems should say 'N' here. 
 
 Generic 4 drives/port support
 CONFIG_BLK_DEV_4DRIVES
