@@ -489,7 +489,7 @@ int sys_sethostname(char *name, int len)
 		if ((thisname.nodename[i] = get_fs_byte(name+i)) == 0)
 			return 0;
 	}
-	thisname.nodename[__NEW_UTS_LEN] = 0;
+	thisname.nodename[i] = 0;
 	return 0;
 }
 

@@ -29,11 +29,14 @@
 #define NO_META_BIT 0x80
 
 unsigned char kapplic = 0;
+unsigned char ckmode = 0;
+unsigned char krepeat = 1;
 unsigned char kmode = 0;
 unsigned char kleds = NUMLED;
 unsigned char ke0 = 0;
 unsigned char kraw = 0;
 unsigned char kbd_flags = KBDFLAGS;
+unsigned char lfnlmode = 0;
 
 extern void do_keyboard_interrupt(void);
 extern void ctrl_alt_del(void);
@@ -57,7 +60,9 @@ static unsigned int handle_diacr(unsigned int);
 
 void do_keyboard(void)
 {
+	static unsigned char rep = 0xff, repke0 = 0;
 	unsigned char scancode, x;
+	struct tty_struct * tty = TTY_TABLE(0);
 
 	scancode=inb_p(0x60);
 	x=inb_p(0x61);
@@ -69,15 +74,48 @@ void do_keyboard(void)
 	if (kraw) {
 		put_queue(scancode);
 		do_keyboard_interrupt();
-	} else if (scancode == 0xe0)
-		ke0 = 1;
-	else if (scancode == 0xe1)
-		ke0 = 2;
-	else {
-		key_table[scancode](scancode);
-		do_keyboard_interrupt();
-		ke0 = 0;
+		return;
 	}
+	if (scancode == 0xe0) {
+		ke0 = 1;
+		return;
+	}
+	if (scancode == 0xe1) {
+		ke0 = 2;
+		return;
+	}
+	/*
+	 *  The keyboard maintains its own internal caps lock and num lock
+	 *  statuses. In caps lock mode E0 AA precedes make code and E0 2A
+	 *  follows break code. In num lock mode, E0 2A precedes make
+	 *  code and E0 AA follows break code. We do our own book-keeping,
+	 *  so we will just ignore these.
+	 */
+	if (ke0 == 1 && (scancode == 0x2a || scancode == 0xaa)) {
+		ke0 = 0;
+		return;
+	}
+	/*
+	 *  Repeat a key only if the input buffers are empty or the
+	 *  characters get echoed locally. This makes key repeat usable
+	 *  with slow applications and unders heavy loads.
+	 */
+	if (rep == 0xff) {
+		if (scancode < 0x80) {
+			rep = scancode;
+			repke0 = ke0;
+		}
+	} else if (ke0 == repke0 && (scancode & 0x7f) == rep)
+		if (scancode & 0x80)
+			rep = 0xff;
+		else if (!(krepeat && (L_ECHO(tty) || (EMPTY(tty->secondary) &&
+				EMPTY(tty->read_q))))) {
+			ke0 = 0;
+			return;
+		}
+	key_table[scancode](scancode);
+	do_keyboard_interrupt();
+	ke0 = 0;
 }
 
 static void put_queue(int ch)
@@ -167,10 +205,10 @@ static void unrshift(int sc)
 
 static void caps(int sc)
 {
-	if (!(kmode&CAPSDOWN)) {
-		kleds^=CAPSLED;
-		kmode^=CAPS;
-		kmode|=CAPSDOWN;
+	if (!(kmode & CAPSDOWN)) {
+		kleds ^= CAPSLED;
+		kmode ^= CAPS;
+		kmode |= CAPSDOWN;
 		set_leds();
 	}
 }
@@ -178,7 +216,7 @@ static void caps(int sc)
 void set_leds(void)
 {
 	if (kleds != old_leds) {
-		old_leds=kleds;
+		old_leds = kleds;
 		kb_wait();
 		outb(0xed, 0x60);	/* set leds command */
 		kb_ack();
@@ -190,16 +228,16 @@ void set_leds(void)
 
 static void uncaps(int sc)
 {
-	kmode&=(~CAPSDOWN);
+	kmode &= ~CAPSDOWN;
 }
 
 static void scroll(int sc)
 {
-	if (kmode&(LSHIFT|RSHIFT))
+	if (kmode & (LSHIFT | RSHIFT))
 		show_mem();
 	else
 		show_state();
-	kleds^=SCRLED;
+	kleds ^= SCRLED;
 	set_leds();
 }
 
@@ -208,7 +246,7 @@ static void num(int sc)
 	if (kapplic)
 		applkey(0x50);
 	else {
-		kleds^=NUMLED;
+		kleds ^= NUMLED;
 		set_leds();
 	}
 }
@@ -217,7 +255,7 @@ static void applkey(int key)
 {
 	char buf[] = { 0x1b, 0x4f, 0x00, 0x00 };
 
-	buf[2]=key;
+	buf[2] = key;
 	puts_queue(buf);
 }
 
@@ -747,27 +785,27 @@ static void do_self(int sc)
 {
 	unsigned char ch;
 
-	if (kmode&ALTGR)
-		ch=alt_map[sc];
-	else if (kmode&(LSHIFT|RSHIFT|LCTRL|RCTRL))
-		ch=shift_map[sc];
+	if (kmode & ALTGR)
+		ch = alt_map[sc];
+	else if (kmode & (LSHIFT | RSHIFT | LCTRL | RCTRL))
+		ch = shift_map[sc];
 	else
-		ch=key_map[sc];
+		ch = key_map[sc];
 
 	if (ch == 0)
 		return;
 
-	if ((ch=handle_diacr(ch)) == 0)
+	if ((ch = handle_diacr(ch)) == 0)
 		return;
 
-	if (kmode&(LCTRL|RCTRL|CAPS))		/* ctrl or caps */
-		if ((ch>='a' && ch <='z') || (ch>=224 && ch<=254))
+	if (kmode & (LCTRL | RCTRL | CAPS))	/* ctrl or caps */
+		if ((ch >= 'a' && ch <= 'z') || (ch >= 224 && ch <= 254))
 			ch -= 32;
-	if (kmode&(LCTRL|RCTRL))		/* ctrl */
+	if (kmode & (LCTRL | RCTRL))		/* ctrl */
 		ch &= 0x1f;
 
-	if (kmode&ALT)
-		if (kbd_flags&NO_META_BIT) {
+	if (kmode & ALT)
+		if (kbd_flags & NO_META_BIT) {
 			put_queue('\033');
 			put_queue(ch);
 		} else
@@ -910,7 +948,7 @@ static void cur(int sc)
 	buf[2]=cur_table[sc];
 	if (buf[2] < '9')
 		buf[3]='~';
-	if (kapplic)
+	if ((buf[2] >= 'A' && buf[2] <= 'D') ? ckmode : kapplic)
 		buf[1]='O';
 	puts_queue(buf);
 }
@@ -952,12 +990,13 @@ static void star(int sc)
 
 static void enter(int sc)
 {
-	if (ke0 != 1)
-		do_self(sc);
-	else if (kapplic)
+	if (ke0 == 1 && kapplic)
 		applkey('M');
-	else
-		do_self(sc);
+	else {
+		put_queue(13);
+		if (lfnlmode)
+			put_queue(10);
+	}
 }
 
 static void minus(int sc)

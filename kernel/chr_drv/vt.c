@@ -164,8 +164,7 @@ vt_ioctl(struct tty_struct *tty, int dev, int cmd, int arg)
 		}
 		else
 			return -EINVAL;
-		flush(tty->read_q);
-		flush(tty->secondary);
+		flush_input(tty);
 		return 0;
 	case KDGKBMODE:
 		verify_area((void *) arg, sizeof(unsigned long));

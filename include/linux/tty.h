@@ -183,7 +183,7 @@ extern long lp_init(long);
 extern long con_init(long);
 extern long tty_init(long);
 
-extern void flush(struct tty_queue * queue);
+extern void flush_input(struct tty_struct * tty);
 
 extern int tty_ioctl(struct inode *, struct file *, unsigned int, unsigned int);
 extern int is_orphaned_pgrp(int pgrp);

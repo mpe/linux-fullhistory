@@ -195,6 +195,6 @@ init/main.o : init/main.c include/stddef.h include/stdarg.h include/fcntl.h incl
   include/time.h include/asm/system.h include/asm/io.h include/linux/config.h \
   include/linux/config_rel.h include/linux/config_ver.h include/linux/config.dist.h \
   include/linux/sched.h include/linux/head.h include/linux/fs.h include/sys/dirent.h \
-  include/limits.h include/linux/mm.h include/linux/kernel.h include/signal.h \
-  include/sys/param.h include/sys/time.h include/sys/resource.h include/linux/tty.h \
-  include/termios.h include/linux/unistd.h 
+  include/limits.h include/sys/vfs.h include/linux/mm.h include/linux/kernel.h \
+  include/signal.h include/sys/param.h include/sys/time.h include/sys/resource.h \
+  include/linux/tty.h include/termios.h include/linux/unistd.h 

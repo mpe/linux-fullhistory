@@ -177,6 +177,10 @@ void fmul(const temp_real *, const temp_real *, temp_real *);
 
 void fdiv(const temp_real *, const temp_real *, temp_real *);
 
+/* sqrt.c */
+
+void fsqrt(const temp_real *, temp_real *);
+
 /* compare.c */
 
 void fcom(const temp_real *, const temp_real *);

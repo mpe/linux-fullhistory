@@ -94,7 +94,7 @@ int sys_signal(int signum, long handler, long restorer)
 		return -EINVAL;
 	tmp.sa_handler = (void (*)(int)) handler;
 	tmp.sa_mask = 0;
-	tmp.sa_flags = SA_ONESHOT | SA_NOMASK;
+	tmp.sa_flags = SA_ONESHOT | SA_NOMASK | SA_INTERRUPT;
 	tmp.sa_restorer = (void (*)(void)) restorer;
 	handler = (long) current->sigaction[signum-1].sa_handler;
 	current->sigaction[signum-1] = tmp;
@@ -135,16 +135,17 @@ int do_signal(long signr,struct pt_regs * regs)
 		current->pid, signr, regs->eax, regs->orig_eax, 
 		sa->sa_flags & SA_INTERRUPT);
 #endif
+	sa_handler = (unsigned long) sa->sa_handler;
 	if ((regs->orig_eax != -1) &&
 	    ((regs->eax == -ERESTARTSYS) || (regs->eax == -ERESTARTNOINTR))) {
-		if ((regs->eax == -ERESTARTSYS) && ((sa->sa_flags & SA_INTERRUPT)))
+		if ((sa_handler > 1) && (regs->eax == -ERESTARTSYS) &&
+		    (sa->sa_flags & SA_INTERRUPT))
 			regs->eax = -EINTR;
 		else {
 			regs->eax = regs->orig_eax;
 			regs->eip = old_eip -= 2;
 		}
 	}
-	sa_handler = (unsigned long) sa->sa_handler;
 	if (sa_handler==1) {
 /* check for SIGCHLD: it's special */
 		if (signr == SIGCHLD)

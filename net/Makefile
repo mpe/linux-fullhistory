@@ -39,13 +39,14 @@ dep:
 ### Dependencies:
 socket.o : socket.c ../include/signal.h ../include/sys/types.h ../include/errno.h \
   ../include/linux/sched.h ../include/linux/head.h ../include/linux/fs.h ../include/sys/dirent.h \
-  ../include/limits.h ../include/linux/mm.h ../include/linux/kernel.h ../include/sys/param.h \
-  ../include/sys/time.h ../include/time.h ../include/sys/resource.h ../include/asm/system.h \
-  ../include/asm/segment.h ../include/sys/socket.h ../include/sys/stat.h ../include/fcntl.h \
-  ../include/termios.h kern_sock.h socketcall.h 
+  ../include/limits.h ../include/sys/vfs.h ../include/linux/mm.h ../include/linux/kernel.h \
+  ../include/sys/param.h ../include/sys/time.h ../include/time.h ../include/sys/resource.h \
+  ../include/linux/stat.h ../include/asm/system.h ../include/asm/segment.h ../include/sys/socket.h \
+  ../include/fcntl.h ../include/termios.h kern_sock.h socketcall.h 
 unix.o : unix.c ../include/signal.h ../include/sys/types.h ../include/errno.h \
   ../include/linux/string.h ../include/linux/sched.h ../include/linux/head.h ../include/linux/fs.h \
-  ../include/sys/dirent.h ../include/limits.h ../include/linux/mm.h ../include/linux/kernel.h \
-  ../include/sys/param.h ../include/sys/time.h ../include/time.h ../include/sys/resource.h \
-  ../include/asm/system.h ../include/asm/segment.h ../include/sys/socket.h ../include/sys/un.h \
-  ../include/sys/stat.h ../include/fcntl.h ../include/termios.h kern_sock.h 
+  ../include/sys/dirent.h ../include/limits.h ../include/sys/vfs.h ../include/linux/mm.h \
+  ../include/linux/kernel.h ../include/sys/param.h ../include/sys/time.h ../include/time.h \
+  ../include/sys/resource.h ../include/linux/stat.h ../include/asm/system.h ../include/asm/segment.h \
+  ../include/sys/socket.h ../include/sys/un.h ../include/fcntl.h ../include/termios.h \
+  kern_sock.h 

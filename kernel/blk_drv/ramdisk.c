@@ -112,7 +112,7 @@ void rd_load(void)
 			nblocks, rd_length >> BLOCK_SIZE_BITS);
 		return;
 	}
-	printk("Loading %d bytes into ram disk... 0000k", 
+	printk("Loading %d bytes into ram disk\n",
 		nblocks << BLOCK_SIZE_BITS);
 	cp = rd_start;
 	while (nblocks) {
@@ -127,12 +127,12 @@ void rd_load(void)
 		}
 		(void) memcpy(cp, bh->b_data, BLOCK_SIZE);
 		brelse(bh);
-		printk("\010\010\010\010\010%4dk",i);
+		if (!(nblocks-- & 15))
+			printk(".");
 		cp += BLOCK_SIZE;
 		block++;
-		nblocks--;
 		i++;
 	}
-	printk("\010\010\010\010\010done \n");
+	printk("\ndone\n");
 	ROOT_DEV=0x0101;
 }

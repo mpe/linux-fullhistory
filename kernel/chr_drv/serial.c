@@ -70,16 +70,13 @@ static void send_intr(unsigned line, unsigned port, struct tty_struct * tty)
 
 #define TIMER ((SER1_TIMEOUT-1)+line)
 	timer_active &= ~(1 << TIMER);
-	if (!tty->stopped) {
-		do {
-			if ((c = GETCH(tty->write_q)) < 0)
-				return;
-			outb(c,port);
-			i++;
-		} while ( port_table[line] == PORT_16550A && \
-			  i < 14 && !EMPTY(tty->write_q) && \
-			  !tty->stopped);
-	}
+	do {
+		if ((c = GETCH(tty->write_q)) < 0)
+			return;
+		outb(c,port);
+		i++;
+	} while ( port_table[line] == PORT_16550A &&
+		  i < 14 && !EMPTY(tty->write_q));
 	timer_table[TIMER].expires = jiffies + 10;
 	timer_active |= 1 << TIMER;
 	if (LEFT(tty->write_q) > WAKEUP_CHARS)

@@ -126,10 +126,14 @@ static void do_emu(struct info * info)
 			return;
 		case 0x1ef:
 			math_abort(info,1<<(SIGILL-1));
+		case 0x1fa:
+			fsqrt(PST(0),&tmp);
+			real_to_real(&tmp,&ST(0));
+			return;
 		case 0x1f0: case 0x1f1: case 0x1f2: case 0x1f3:
 		case 0x1f4: case 0x1f5: case 0x1f6: case 0x1f7:
-		case 0x1f8: case 0x1f9: case 0x1fa: case 0x1fb:
-		case 0x1fd: case 0x1fe: case 0x1ff:
+		case 0x1f8: case 0x1f9: case 0x1fb: case 0x1fd:
+		case 0x1fe: case 0x1ff:
 			printk("%04x fxxx not implemented\n\r",code + 0xd800);
 			math_abort(info,1<<(SIGILL-1));
 		case 0x1fc:

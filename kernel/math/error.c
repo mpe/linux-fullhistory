@@ -11,6 +11,6 @@
 void math_error(void)
 {
 	if (last_task_used_math)
-		last_task_used_math->signal |= 1<<(SIGFPE-1);
+		send_sig(SIGFPE,last_task_used_math,1);
 	__asm__("fnclex");
 }

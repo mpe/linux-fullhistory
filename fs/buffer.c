@@ -273,11 +273,9 @@ repeat:
 	wait_on_buffer(bh);
 	if (bh->b_count)
 		goto repeat;
-	while (bh->b_dirt) {
+	if (bh->b_dirt) {
 		sync_buffers(bh->b_dev);
-		wait_on_buffer(bh);
-		if (bh->b_count)
-			goto repeat;
+		goto repeat;
 	}
 /* NOTE!! While we slept waiting for this block, somebody else might */
 /* already have added "this" block to the cache. check it */

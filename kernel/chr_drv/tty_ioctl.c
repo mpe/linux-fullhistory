@@ -42,7 +42,7 @@ static void change_speed(struct tty_struct * tty)
 	sti();
 }
 
-void flush(struct tty_queue * queue)
+static void flush(struct tty_queue * queue)
 {
 	if (queue) {
 		cli();
@@ -50,6 +50,14 @@ void flush(struct tty_queue * queue)
 		sti();
 		wake_up(&queue->proc_list);
 	}
+}
+
+void flush_input(struct tty_struct * tty)
+{
+	flush(tty->read_q);
+	flush(tty->secondary);
+	tty->secondary->data = 0;
+	wake_up(&tty->read_q->proc_list);
 }
 
 static void wait_until_sent(struct tty_struct * tty)
@@ -250,8 +258,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 		case TCGETS:
 			return get_termios(tty,(struct termios *) arg);
 		case TCSETSF:
-			flush(tty->read_q);
-			flush(tty->secondary);
+			flush_input(tty);
 			if (other_tty)
 				flush(other_tty->write_q);
 		/* fallthrough */
@@ -263,8 +270,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 		case TCGETA:
 			return get_termio(tty,(struct termio *) arg);
 		case TCSETAF:
-			flush(tty->read_q);
-			flush(tty->secondary);
+			flush_input(tty);
 			if (other_tty)
 				flush(other_tty->write_q);
 		/* fallthrough */
@@ -299,15 +305,13 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			return -EINVAL; /* not implemented */
 		case TCFLSH:
 			if (arg==0) {
-				flush(tty->read_q);
-				flush(tty->secondary);
+				flush_input(tty);
 				if (other_tty)
 					flush(other_tty->write_q);
 			} else if (arg==1)
 				flush(tty->write_q);
 			else if (arg==2) {
-				flush(tty->read_q);
-				flush(tty->secondary);
+				flush_input(tty);
 				flush(tty->write_q);
 				if (other_tty)
 					flush(other_tty->write_q);

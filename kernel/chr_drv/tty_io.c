@@ -175,11 +175,13 @@ void copy_to_cooked(struct tty_struct * tty)
 			if ((INTR_CHAR(tty) != __DISABLED_CHAR) &&
 			    (c==INTR_CHAR(tty))) {
 				kill_pg(tty->pgrp, SIGINT, 1);
+				flush_input(tty);
 				continue;
 			}
 			if ((QUIT_CHAR(tty) != __DISABLED_CHAR) &&
 			    (c==QUIT_CHAR(tty))) {
 				kill_pg(tty->pgrp, SIGQUIT, 1);
+				flush_input(tty);
 				continue;
 			}
 			if ((SUSPEND_CHAR(tty) != __DISABLED_CHAR) &&

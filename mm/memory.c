@@ -565,7 +565,7 @@ static int share_page(struct inode * inode, unsigned long address)
 	struct task_struct ** p;
 	int i;
 
-	if (inode->i_count < 2 || !inode)
+	if (!inode || inode->i_count < 2)
 		return 0;
 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
 		if (!*p)
