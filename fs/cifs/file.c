@@ -51,6 +51,100 @@ static inline struct cifsFileInfo *cifs_init_private(
 	return private_data;
 }
 
+static inline int cifs_convert_flags(unsigned int flags)
+{
+	if ((flags & O_ACCMODE) == O_RDONLY)
+		return GENERIC_READ;
+	else if ((flags & O_ACCMODE) == O_WRONLY)
+		return GENERIC_WRITE;
+	else if ((flags & O_ACCMODE) == O_RDWR) {
+		/* GENERIC_ALL is too much permission to request
+		   can cause unnecessary access denied on create */
+		/* return GENERIC_ALL; */
+		return (GENERIC_READ | GENERIC_WRITE);
+	}
+
+	return 0x20197;
+}
+
+static inline int cifs_get_disposition(unsigned int flags)
+{
+	if ((flags & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL))
+		return FILE_CREATE;
+	else if ((flags & (O_CREAT | O_TRUNC)) == (O_CREAT | O_TRUNC))
+		return FILE_OVERWRITE_IF;
+	else if ((flags & O_CREAT) == O_CREAT)
+		return FILE_OPEN_IF;
+	else
+		return FILE_OPEN;
+}
+
+/* all arguments to this function must be checked for validity in caller */
+static inline int cifs_open_inode_helper(struct inode *inode, struct file *file,
+	struct cifsInodeInfo *pCifsInode, struct cifsFileInfo *pCifsFile,
+	struct cifsTconInfo *pTcon, int *oplock, FILE_ALL_INFO *buf,
+	char *full_path, int xid)
+{
+	struct timespec temp;
+	int rc;
+
+	/* want handles we can use to read with first
+	   in the list so we do not have to walk the
+	   list to search for one in prepare_write */
+	if ((file->f_flags & O_ACCMODE) == O_WRONLY) {
+		list_add_tail(&pCifsFile->flist, 
+			      &pCifsInode->openFileList);
+	} else {
+		list_add(&pCifsFile->flist,
+			 &pCifsInode->openFileList);
+	}
+	write_unlock(&GlobalSMBSeslock);
+	write_unlock(&file->f_owner.lock);
+	if (pCifsInode->clientCanCacheRead) {
+		/* we have the inode open somewhere else
+		   no need to discard cache data */
+		goto client_can_cache;
+	}
+
+	/* BB need same check in cifs_create too? */
+	/* if not oplocked, invalidate inode pages if mtime or file
+	   size changed */
+	temp = cifs_NTtimeToUnix(le64_to_cpu(buf->LastWriteTime));
+	if (timespec_equal(&file->f_dentry->d_inode->i_mtime, &temp) && 
+			   (file->f_dentry->d_inode->i_size == 
+			    (loff_t)le64_to_cpu(buf->EndOfFile))) {
+		cFYI(1, ("inode unchanged on server"));
+	} else {
+		if (file->f_dentry->d_inode->i_mapping) {
+		/* BB no need to lock inode until after invalidate
+		   since namei code should already have it locked? */
+			filemap_fdatawrite(file->f_dentry->d_inode->i_mapping);
+			filemap_fdatawait(file->f_dentry->d_inode->i_mapping);
+		}
+		cFYI(1, ("invalidating remote inode since open detected it "
+			 "changed"));
+		invalidate_remote_inode(file->f_dentry->d_inode);
+	}
+
+client_can_cache:
+	if (pTcon->ses->capabilities & CAP_UNIX)
+		rc = cifs_get_inode_info_unix(&file->f_dentry->d_inode,
+			full_path, inode->i_sb, xid);
+	else
+		rc = cifs_get_inode_info(&file->f_dentry->d_inode,
+			full_path, buf, inode->i_sb, xid);
+
+	if ((*oplock & 0xF) == OPLOCK_EXCLUSIVE) {
+		pCifsInode->clientCanCacheAll = TRUE;
+		pCifsInode->clientCanCacheRead = TRUE;
+		cFYI(1, ("Exclusive Oplock granted on inode %p",
+			 file->f_dentry->d_inode));
+	} else if ((*oplock & 0xF) == OPLOCK_READ)
+		pCifsInode->clientCanCacheRead = TRUE;
+
+	return rc;
+}
+
 int cifs_open(struct inode *inode, struct file *file)
 {
 	int rc = -EACCES;
@@ -61,7 +155,7 @@ int cifs_open(struct inode *inode, struct file *file)
 	struct cifsInodeInfo *pCifsInode;
 	struct list_head *tmp;
 	char *full_path = NULL;
-	int desiredAccess = 0x20197;
+	int desiredAccess;
 	int disposition;
 	__u16 netfid;
 	FILE_ALL_INFO *buf = NULL;
@@ -109,17 +203,9 @@ int cifs_open(struct inode *inode, struct file *file)
 		return -ENOMEM;
 	}
 
-	cFYI(1, (" inode = 0x%p file flags are 0x%x for %s", inode, file->f_flags, full_path));
-	if ((file->f_flags & O_ACCMODE) == O_RDONLY)
-		desiredAccess = GENERIC_READ;
-	else if ((file->f_flags & O_ACCMODE) == O_WRONLY)
-		desiredAccess = GENERIC_WRITE;
-	else if ((file->f_flags & O_ACCMODE) == O_RDWR) {
-		/* GENERIC_ALL is too much permission to request */
-		/* can cause unnecessary access denied on create */
-		/* desiredAccess = GENERIC_ALL; */
-		desiredAccess = GENERIC_READ | GENERIC_WRITE;
-	}
+	cFYI(1, (" inode = 0x%p file flags are 0x%x for %s",
+		 inode, file->f_flags, full_path));
+	desiredAccess = cifs_convert_flags(file->f_flags);
 
 /*********************************************************************
  *  open flag mapping table:
@@ -145,14 +231,7 @@ int cifs_open(struct inode *inode, struct file *file)
  *	 O_FASYNC, O_NOFOLLOW, O_NONBLOCK need further investigation
  *********************************************************************/
 
-	if ((file->f_flags & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL))
-		disposition = FILE_CREATE;
-	else if ((file->f_flags & (O_CREAT | O_TRUNC)) == (O_CREAT | O_TRUNC))
-		disposition = FILE_OVERWRITE_IF;
-	else if ((file->f_flags & O_CREAT) == O_CREAT)
-		disposition = FILE_OPEN_IF;
-	else
-		disposition = FILE_OPEN;
+	disposition = cifs_get_disposition(file->f_flags);
 
 	if (oplockEnabled)
 		oplock = REQ_OPLOCK;
@@ -190,61 +269,17 @@ int cifs_open(struct inode *inode, struct file *file)
 	write_lock(&file->f_owner.lock);
 	write_lock(&GlobalSMBSeslock);
 	list_add(&pCifsFile->tlist, &pTcon->openFileList);
+
 	pCifsInode = CIFS_I(file->f_dentry->d_inode);
 	if (pCifsInode) {
-		/* want handles we can use to read with first */
-		/* in the list so we do not have to walk the */
-		/* list to search for one in prepare_write */
-		if ((file->f_flags & O_ACCMODE) == O_WRONLY) {
-			list_add_tail(&pCifsFile->flist, &pCifsInode->openFileList);
-		} else {
-			list_add(&pCifsFile->flist, &pCifsInode->openFileList);
-		}
-		write_unlock(&GlobalSMBSeslock);
-		write_unlock(&file->f_owner.lock);
-		if (pCifsInode->clientCanCacheRead) {
-			/* we have the inode open somewhere else
-			   no need to discard cache data */
-		} else {
-			if (buf) {
-			/* BB need same check in cifs_create too? */
-
-			/* if not oplocked, invalidate inode pages if mtime 
-				   or file size changed */
-				struct timespec temp;
-				temp = cifs_NTtimeToUnix(le64_to_cpu(buf->LastWriteTime));
-				if (timespec_equal(&file->f_dentry->d_inode->i_mtime, &temp) && 
-					(file->f_dentry->d_inode->i_size == (loff_t)le64_to_cpu(buf->EndOfFile))) {
-					cFYI(1, ("inode unchanged on server"));
-				} else {
-					if (file->f_dentry->d_inode->i_mapping) {
-					/* BB no need to lock inode until after invalidate*/
-					/* since namei code should already have it locked?*/
-						filemap_fdatawrite(file->f_dentry->d_inode->i_mapping);
-						filemap_fdatawait(file->f_dentry->d_inode->i_mapping);
-					}
-					cFYI(1, ("invalidating remote inode since open detected it changed"));
-					invalidate_remote_inode(file->f_dentry->d_inode);
-				}
-			}
-		}
-		if (pTcon->ses->capabilities & CAP_UNIX)
-			rc = cifs_get_inode_info_unix(&file->f_dentry->d_inode,
-				full_path, inode->i_sb, xid);
-		else
-			rc = cifs_get_inode_info(&file->f_dentry->d_inode,
-				full_path, buf, inode->i_sb, xid);
-
-		if ((oplock & 0xF) == OPLOCK_EXCLUSIVE) {
-			pCifsInode->clientCanCacheAll = TRUE;
-			pCifsInode->clientCanCacheRead = TRUE;
-			cFYI(1, ("Exclusive Oplock granted on inode %p", file->f_dentry->d_inode));
-		} else if ((oplock & 0xF) == OPLOCK_READ)
-			pCifsInode->clientCanCacheRead = TRUE;
+		rc = cifs_open_inode_helper(inode, file, pCifsInode,
+					    pCifsFile, pTcon,
+					    &oplock, buf, full_path, xid);
 	} else {
 		write_unlock(&GlobalSMBSeslock);
 		write_unlock(&file->f_owner.lock);
 	}
+
 	if (oplock & CIFS_CREATE_ACTION) {           
 		/* time to set mode which we can not set earlier due to
 		   problems creating new read-only files */
@@ -290,7 +325,7 @@ static int cifs_reopen_file(struct inode *inode, struct file *file,
 	struct cifsFileInfo *pCifsFile;
 	struct cifsInodeInfo *pCifsInode;
 	char *full_path = NULL;
-	int desiredAccess = 0x20197;
+	int desiredAccess;
 	int disposition = FILE_OPEN;
 	__u16 netfid;
 
@@ -330,16 +365,7 @@ static int cifs_reopen_file(struct inode *inode, struct file *file,
 
 	cFYI(1, (" inode = 0x%p file flags are 0x%x for %s",
 		 inode, file->f_flags,full_path));
-	if ((file->f_flags & O_ACCMODE) == O_RDONLY)
-		desiredAccess = GENERIC_READ;
-	else if ((file->f_flags & O_ACCMODE) == O_WRONLY)
-		desiredAccess = GENERIC_WRITE;
-	else if ((file->f_flags & O_ACCMODE) == O_RDWR) {
-		/* GENERIC_ALL is too much permission to request */
-		/* can cause unnecessary access denied on create */
-		/* desiredAccess = GENERIC_ALL;                  */
-		desiredAccess = GENERIC_READ | GENERIC_WRITE;
-	}
+	desiredAccess = cifs_convert_flags(file->f_flags);
 
 	if (oplockEnabled)
 		oplock = REQ_OPLOCK;
