@@ -36,7 +36,7 @@
 
 struct nfs_read_data {
 	struct rpc_task		task;
-	struct dentry		*dentry;
+	struct inode		*inode;
 	struct rpc_cred		*cred;
 	struct nfs_readargs	args;	/* XDR argument struct */
 	struct nfs_readres	res;	/* ... and result struct */
@@ -82,10 +82,10 @@ static void nfs_readdata_release(struct rpc_task *task)
  * Read a page synchronously.
  */
 static int
-nfs_readpage_sync(struct file *file, struct page *page)
+nfs_readpage_sync(struct file *file, struct inode *inode, struct page *page)
 {
 	struct dentry	*dentry = file->f_dentry;
-	struct inode	*inode = dentry->d_inode;
+	struct rpc_cred	*cred = nfs_file_cred(file);
 	struct nfs_fattr fattr;
 	loff_t		offset = page_offset(page);
 	char		*buffer;
@@ -112,8 +112,8 @@ nfs_readpage_sync(struct file *file, struct page *page)
 			(long long)offset, rsize, buffer);
 
 		lock_kernel();
-		result = NFS_PROTO(inode)->read(file, &fattr, flags, offset,
-						rsize, buffer, &eof);
+		result = NFS_PROTO(inode)->read(inode, cred, &fattr, flags,
+						offset, rsize, buffer, &eof);
 		unlock_kernel();
 		nfs_refresh_inode(inode, &fattr);
 
@@ -180,7 +180,7 @@ nfs_find_read(struct inode *inode, struct page *page)
 static inline void
 nfs_mark_request_read(struct nfs_page *req)
 {
-	struct inode *inode = req->wb_dentry->d_inode;
+	struct inode *inode = req->wb_inode;
 
 	spin_lock(&nfs_wreq_lock);
 	if (list_empty(&req->wb_list)) {
@@ -196,9 +196,8 @@ nfs_mark_request_read(struct nfs_page *req)
 }
 
 static int
-nfs_readpage_async(struct file *file, struct page *page)
+nfs_readpage_async(struct file *file, struct inode *inode, struct page *page)
 {
-	struct inode	*inode = file->f_dentry->d_inode;
 	struct nfs_page	*req, *new = NULL;
 	int		result;
 
@@ -228,7 +227,7 @@ nfs_readpage_async(struct file *file, struct page *page)
 		}
 
 		result = -ENOMEM;
-		new = nfs_create_request(file, page, 0, PAGE_CACHE_SIZE);
+		new = nfs_create_request(file, inode, page, 0, PAGE_CACHE_SIZE);
 		if (!new)
 			break;
 	}
@@ -264,9 +263,9 @@ nfs_read_rpcsetup(struct list_head *head, struct nfs_read_data *data)
 		data->args.nriov++;
 	}
 	req = nfs_list_entry(data->pages.next);
-	data->dentry	  = req->wb_dentry;
+	data->inode	  = req->wb_inode;
 	data->cred	  = req->wb_cred;
-	data->args.fh     = NFS_FH(req->wb_dentry);
+	data->args.fh     = NFS_FH(req->wb_inode);
 	data->args.offset = page_offset(req->wb_page) + req->wb_offset;
 	data->args.count  = count;
 	data->res.fattr   = &data->fattr;
@@ -292,9 +291,8 @@ nfs_async_read_error(struct list_head *head)
 }
 
 static int
-nfs_pagein_one(struct list_head *head, struct dentry *dentry)
+nfs_pagein_one(struct list_head *head, struct inode *inode)
 {
-	struct inode		*inode = dentry->d_inode;
 	struct rpc_task		*task;
 	struct rpc_clnt		*clnt = NFS_CLIENT(inode);
 	struct nfs_read_data	*data;
@@ -328,9 +326,9 @@ nfs_pagein_one(struct list_head *head, struct dentry *dentry)
 	msg.rpc_cred = data->cred;
 
 	/* Start the async call */
-	dprintk("NFS: %4d initiated read call (req %s/%s count %d nriov %d.\n",
+	dprintk("NFS: %4d initiated read call (req %x/%Ld count %d nriov %d.\n",
 		task->tk_pid,
-		dentry->d_parent->d_name.name, dentry->d_name.name,
+		inode->i_dev, (long long)NFS_FILEID(inode),
 		data->args.count, data->args.nriov);
 
 	rpc_clnt_sigmask(clnt, &oldset);
@@ -355,7 +353,7 @@ nfs_pagein_list(struct inode *inode, struct list_head *head)
 	while (!list_empty(head)) {
 		pages += nfs_coalesce_requests(head, &one_request, rpages);
 		req = nfs_list_entry(one_request.next);
-		error = nfs_pagein_one(&one_request, req->wb_dentry);
+		error = nfs_pagein_one(&one_request, req->wb_inode);
 		if (error < 0)
 			break;
 	}
@@ -429,8 +427,7 @@ static void
 nfs_readpage_result(struct rpc_task *task)
 {
 	struct nfs_read_data	*data = (struct nfs_read_data *) task->tk_calldata;
-	struct dentry		*dentry = data->dentry;
-	struct inode		*inode = dentry->d_inode;
+	struct inode		*inode = data->inode;
 	int			count = data->res.count;
 
 	dprintk("NFS: %4d nfs_readpage_result, (status %d)\n",
@@ -451,9 +448,9 @@ nfs_readpage_result(struct rpc_task *task)
 		kunmap(page);
 		UnlockPage(page);
 
-		dprintk("NFS: read (%s/%s %d@%Ld)\n",
-                        req->wb_dentry->d_parent->d_name.name,
-                        req->wb_dentry->d_name.name,
+		dprintk("NFS: read (%x/%Ld %d@%Ld)\n",
+                        req->wb_inode->i_dev,
+                        (long long)NFS_FILEID(req->wb_inode),
                         req->wb_bytes,
                         (long long)(page_offset(page) + req->wb_offset));
 		nfs_unlock_request(req);
@@ -473,8 +470,18 @@ nfs_readpage_result(struct rpc_task *task)
 int
 nfs_readpage(struct file *file, struct page *page)
 {
-	struct inode *inode = file->f_dentry->d_inode;
+	struct inode *inode;
 	int		error;
+
+	if (!file) {
+		struct address_space *mapping = page->mapping;
+		if (!mapping)
+			BUG();
+		inode = (struct inode *)mapping->host;
+	} else
+		inode = file->f_dentry->d_inode;
+	if (!inode)
+		BUG();
 
 	dprintk("NFS: nfs_readpage (%p %ld@%lu)\n",
 		page, PAGE_CACHE_SIZE, page->index);
@@ -491,11 +498,11 @@ nfs_readpage(struct file *file, struct page *page)
 
 	error = -1;
 	if (!PageError(page) && NFS_SERVER(inode)->rsize >= PAGE_CACHE_SIZE)
-		error = nfs_readpage_async(file, page);
+		error = nfs_readpage_async(file, inode, page);
 	if (error >= 0)
 		goto out;
 
-	error = nfs_readpage_sync(file, page);
+	error = nfs_readpage_sync(file, inode, page);
 	if (error < 0 && IS_SWAPFILE(inode))
 		printk("Aiee.. nfs swap-in of page failed!\n");
 out:

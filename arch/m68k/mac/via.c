@@ -74,7 +74,6 @@ void via_irq_clear(int irq);
 
 extern void mac_bang(int, void *, struct pt_regs *);
 extern void mac_scc_dispatch(int, void *, struct pt_regs *);
-extern int console_loglevel;
 extern int oss_present;
 
 /*

@@ -1,4 +1,4 @@
-/* $Id: bkm_a8.c,v 1.14.6.1 2000/11/28 12:02:46 kai Exp $
+/* $Id: bkm_a8.c,v 1.14.6.2 2000/11/29 16:00:14 kai Exp $
  * bkm_a8.c     low level stuff for Scitel Quadro (4*S0, passive)
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -27,7 +27,7 @@
 
 extern const char *CardType[];
 
-const char sct_quadro_revision[] = "$Revision: 1.14.6.1 $";
+const char sct_quadro_revision[] = "$Revision: 1.14.6.2 $";
 
 static const char *sct_quadro_subtypes[] =
 {
@@ -283,12 +283,12 @@ sct_alloc_io(u_int adr, u_int len)
 	return(0);
 }
 
-static struct pci_dev *dev_a8 __initdata;
-static u16  sub_vendor_id __initdata;
-static u16  sub_sys_id __initdata;
-static u_char pci_bus __initdata;
-static u_char pci_device_fn __initdata;
-static u_char pci_irq __initdata;
+static struct pci_dev *dev_a8 __initdata = NULL;
+static u16  sub_vendor_id __initdata = 0;
+static u16  sub_sys_id __initdata = 0;
+static u_char pci_bus __initdata = 0;
+static u_char pci_device_fn __initdata = 0;
+static u_char pci_irq __initdata = 0;
 
 #endif /* CONFIG_PCI */
 

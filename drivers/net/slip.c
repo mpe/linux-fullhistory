@@ -549,7 +549,6 @@ sl_close(struct net_device *dev)
 	sl->xleft    = 0;
 	spin_unlock_bh(&sl->lock);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -564,7 +563,6 @@ static int sl_open(struct net_device *dev)
 
 	sl->flags &= (1 << SLF_INUSE);
 	netif_start_queue(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -646,6 +644,8 @@ static int sl_init(struct net_device *dev)
 	dev->addr_len		= 0;
 	dev->type		= ARPHRD_SLIP + sl->mode;
 	dev->tx_queue_len	= 10;
+
+	SET_MODULE_OWNER(dev);
 
 	dev_init_buffers(dev);
 

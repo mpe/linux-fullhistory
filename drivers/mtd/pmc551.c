@@ -1,17 +1,17 @@
 /*
- * $Id: pmc551.c,v 1.8 2000/07/14 07:53:31 dwmw2 Exp $
+ * $Id: pmc551.c,v 1.11 2000/11/23 13:40:12 dwmw2 Exp $
  *
  * PMC551 PCI Mezzanine Ram Device
  *
  * Author:
- *       Mark Ferrell
+ *       Mark Ferrell <mferrell@mvista.com>
  *       Copyright 1999,2000 Nortel Networks
  *
- * License: 
+ * License:
  *	 As part of this driver was derrived from the slram.c driver it falls
  *	 under the same license, which is GNU General Public License v2
  *
- * Description: 
+ * Description:
  *	 This driver is intended to support the PMC551 PCI Ram device from
  *	 Ramix Inc.  The PMC551 is a PMC Mezzanine module for cPCI embeded
  *	 systems.  The device contains a single SROM that initally programs the
@@ -24,6 +24,23 @@
  *	 it as a block device allows us to use it as high speed swap or for a
  *	 high speed disk device of some sort.  Which becomes very usefull on
  *	 diskless systems in the embeded market I might add.
+ *	 
+ * Notes:
+ *	 Due to what I assume is more buggy SROM, the 64M PMC551 I have
+ *	 available claims that all 4 of it's DRAM banks have 64M of ram 
+ *	 configured (making a grand total of 256M onboard).  This is slightly
+ *	 annoying since the BAR0 size reflects the aperture size, not the dram
+ *	 size, and the V370PDC supplies no other method for memory size
+ *	 discovery.  This problem is mostly only relivant when compiled as a
+ *	 module, as the unloading of the module with an aperture size  smaller
+ *	 then the ram will cause the driver to detect the onboard memory size
+ *	 to be equal to the aperture size when the module is reloaded.  Soooo,
+ *	 to help, the module supports an msize option to allow the
+ *	 specification of the onboard memory, and an asize option, to allow the
+ *	 specification of the aperture size.  The aperture must be equal to or
+ *	 less then the memory size, the driver will correct this if you screw
+ *	 it up.  This problem is not relivant for compiled in drivers as
+ *	 compiled in drivers only init once.
  *
  * Credits:
  *       Saeed Karamooz <saeed@ramix.com> of Ramix INC. for the initial
@@ -31,7 +48,7 @@
  *       questions I had concerning operation of the device.
  *
  *       Most of the MTD code for this driver was originally written for the
- *       slram.o module in the MTD drivers package written by David Hinds 
+ *       slram.o module in the MTD drivers package written by David Hinds
  *       <dhinds@allegro.stanford.edu> which allows the mapping of system
  *       memory into an mtd device.  Since the PMC551 memory module is
  *       accessed in the same fashion as system memory, the slram.c code
@@ -44,9 +61,9 @@
  *       * Modified driver to utilize a sliding apature instead of mapping all
  *       memory into kernel space which turned out to be very wastefull.
  *       * Located a bug in the SROM's initialization sequence that made the
- *       memory unussable, added a fix to code to touch up the DRAM some.
+ *       memory unusable, added a fix to code to touch up the DRAM some.
  *
- * Bugs/FIXME's: 
+ * Bugs/FIXME's:
  *       * MUST fix the init function to not spin on a register
  *       waiting for it to set .. this does not safely handle busted devices
  *       that never reset the register correctly which will cause the system to
@@ -72,6 +89,10 @@
 #include <asm/segment.h>
 #include <stdarg.h>
 #include <linux/pci.h>
+
+#ifndef CONFIG_PCI
+#error Enable PCI in your kernel config
+#endif
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/pmc551.h>
@@ -347,14 +368,70 @@ static u32 fixup_pmc551 (struct pci_dev *dev)
 #ifdef CONFIG_MTD_PMC551_BUGFIX
         u32 dram_data;
 #endif
-        u32 size, dcmd;
-        u16 cmd, i;
+        u32 size, dcmd, cfg, dtmp;
+        u16 cmd, tmp, i;
+	u8 bcmd, counter;
 
         /* Sanity Check */
         if(!dev) {
                 return -ENODEV;
         }
 
+	/*
+	 * Attempt to reset the card
+	 * FIXME: Stop Spinning registers
+	 */
+	counter=0;
+	/* unlock registers */
+	pci_write_config_byte(dev, PMC551_SYS_CTRL_REG, 0xA5 );
+	/* read in old data */
+	pci_read_config_byte(dev, PMC551_SYS_CTRL_REG, &bcmd );
+	/* bang the reset line up and down for a few */
+	for(i=0;i<10;i++) {
+		counter=0;
+		bcmd &= ~0x80;
+		while(counter++ < 100) {
+			pci_write_config_byte(dev, PMC551_SYS_CTRL_REG, bcmd);
+		}
+		counter=0;
+		bcmd |= 0x80;
+		while(counter++ < 100) {
+			pci_write_config_byte(dev, PMC551_SYS_CTRL_REG, bcmd);
+		}
+	}
+	bcmd |= (0x40|0x20);
+	pci_write_config_byte(dev, PMC551_SYS_CTRL_REG, bcmd);
+
+        /* 
+	 * Take care and turn off the memory on the device while we
+	 * tweak the configurations
+	 */
+        pci_read_config_word(dev, PCI_COMMAND, &cmd);
+        tmp = cmd & ~(PCI_COMMAND_IO|PCI_COMMAND_MEMORY);
+        pci_write_config_word(dev, PCI_COMMAND, tmp);
+
+	/*
+	 * Disable existing aperture before probing memory size
+	 */
+	pci_read_config_dword(dev, PMC551_PCI_MEM_MAP0, &dcmd);
+        dtmp=(dcmd|PMC551_PCI_MEM_MAP_ENABLE|PMC551_PCI_MEM_MAP_REG_EN);
+	pci_write_config_dword(dev, PMC551_PCI_MEM_MAP0, dtmp);
+	/*
+	 * Grab old BAR0 config so that we can figure out memory size
+	 * This is another bit of kludge going on.  The reason for the
+	 * redundancy is I am hoping to retain the original configuration
+	 * previously assigned to the card by the BIOS or some previous 
+	 * fixup routine in the kernel.  So we read the old config into cfg,
+	 * then write all 1's to the memory space, read back the result into
+	 * "size", and then write back all the old config.
+	 */
+	pci_read_config_dword( dev, PCI_BASE_ADDRESS_0, &cfg );
+#ifndef CONFIG_MTD_PMC551_BUGFIX
+	pci_write_config_dword( dev, PCI_BASE_ADDRESS_0, ~0 );
+	pci_read_config_dword( dev, PCI_BASE_ADDRESS_0, &size );
+	pci_write_config_dword( dev, PCI_BASE_ADDRESS_0, cfg );
+	size=~(size&PCI_BASE_ADDRESS_MEM_MASK)+1;
+#else
         /*
          * Get the size of the memory by reading all the DRAM size values
          * and adding them up.
@@ -363,7 +440,6 @@ static u32 fixup_pmc551 (struct pci_dev *dev)
          * row mux values.  We fix them here, but this will break other
          * memory configurations.
          */
-#ifdef CONFIG_MTD_PMC551_BUGFIX
         pci_read_config_dword(dev, PMC551_DRAM_BLK0, &dram_data);
         size = PMC551_DRAM_BLK_GET_SIZE(dram_data);
         dram_data = PMC551_DRAM_BLK_SET_COL_MUX(dram_data, 0x5);
@@ -387,7 +463,6 @@ static u32 fixup_pmc551 (struct pci_dev *dev)
         dram_data = PMC551_DRAM_BLK_SET_COL_MUX(dram_data, 0x5);
         dram_data = PMC551_DRAM_BLK_SET_ROW_MUX(dram_data, 0x9);
         pci_write_config_dword(dev, PMC551_DRAM_BLK3, dram_data);
-#endif /* CONFIG_MTD_PMC551_BUGFIX */
 
         /*
          * Oops .. something went wrong
@@ -395,34 +470,14 @@ static u32 fixup_pmc551 (struct pci_dev *dev)
         if( (size &= PCI_BASE_ADDRESS_MEM_MASK) == 0) {
                 return -ENODEV;
         }
+#endif /* CONFIG_MTD_PMC551_BUGFIX */
+
+	if ((cfg&PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_MEMORY) {
+                return -ENODEV;
+	}
 
         /*
-         * Set to be prefetchable
-         */
-        pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &dcmd );
-        dcmd |= 0x8;
-
-        /*
-         * Put it back the way it was
-         */
-        pci_write_config_dword(dev, PCI_BASE_ADDRESS_0, dcmd );
-        pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &dcmd );
-
-        /*
-         * Some screen fun
-         */
-        printk(KERN_NOTICE "pmc551: %dM (0x%x) of %sprefetchable memory at 0x%lx\n",
-               size/1024/1024, size, ((dcmd&0x8) == 0)?"non-":"",
-               PCI_BASE_ADDRESS(dev)&PCI_BASE_ADDRESS_MEM_MASK );
-
-        /*
-         * Turn on PCI memory and I/O bus access just for kicks
-         */
-        pci_write_config_word( dev, PCI_COMMAND,
-                               PCI_COMMAND_MEMORY | PCI_COMMAND_IO );
-
-        /*
-         * Config DRAM
+         * Precharge Dram
          */
         pci_write_config_word( dev, PMC551_SDRAM_MA, 0x0400 );
         pci_write_config_word( dev, PMC551_SDRAM_CMD, 0x00bf );
@@ -431,11 +486,16 @@ static u32 fixup_pmc551 (struct pci_dev *dev)
          * Wait untill command has gone through
          * FIXME: register spinning issue
          */
-        do { pci_read_config_word( dev, PMC551_SDRAM_CMD, &cmd );
+        do {	pci_read_config_word( dev, PMC551_SDRAM_CMD, &cmd );
+		if(counter++ > 100)break;
         } while ( (PCI_COMMAND_IO) & cmd );
 
         /*
-         * Must be held high for some duration of time to take effect??
+	 * Turn on auto refresh 
+	 * The loop is taken directly from Ramix's example code.  I assume that
+	 * this must be held high for some duration of time, but I can find no
+	 * documentation refrencing the reasons why.
+	 * 
          */
         for ( i = 1; i<=8 ; i++) {
                 pci_write_config_word (dev, PMC551_SDRAM_CMD, 0x0df);
@@ -444,7 +504,9 @@ static u32 fixup_pmc551 (struct pci_dev *dev)
                  * Make certain command has gone through
                  * FIXME: register spinning issue
                  */
-                do { pci_read_config_word(dev, PMC551_SDRAM_CMD, &cmd);
+		counter=0;
+                do {	pci_read_config_word(dev, PMC551_SDRAM_CMD, &cmd);
+			if(counter++ > 100)break;
                 } while ( (PCI_COMMAND_IO) & cmd );
         }
 
@@ -455,7 +517,9 @@ static u32 fixup_pmc551 (struct pci_dev *dev)
          * Wait until command completes
          * FIXME: register spinning issue
          */
-        do { pci_read_config_word ( dev, PMC551_SDRAM_CMD, &cmd);
+	counter=0;
+        do {	pci_read_config_word ( dev, PMC551_SDRAM_CMD, &cmd);
+		if(counter++ > 100)break;
         } while ( (PCI_COMMAND_IO) & cmd );
 
         pci_read_config_dword ( dev, PMC551_DRAM_CFG, &dcmd);
@@ -481,54 +545,97 @@ static u32 fixup_pmc551 (struct pci_dev *dev)
                 cmd &= ~PCI_STATUS_DEVSEL_MASK;
                 pci_write_config_word( dev, PCI_STATUS, cmd );
         }
+        /*
+         * Set to be prefetchable and put everything back based on old cfg.
+	 * it's possible that the reset of the V370PDC nuked the original
+	 * settup
+         */
+        cfg |= PCI_BASE_ADDRESS_MEM_PREFETCH;
+	pci_write_config_dword( dev, PCI_BASE_ADDRESS_0, cfg );
+
+        /*
+         * Turn PCI memory and I/O bus access back on
+         */
+        pci_write_config_word( dev, PCI_COMMAND,
+                               PCI_COMMAND_MEMORY | PCI_COMMAND_IO );
+#ifdef CONFIG_MTD_PMC551_DEBUG
+        /*
+         * Some screen fun
+         */
+        printk(KERN_DEBUG "pmc551: %d%c (0x%x) of %sprefetchable memory at 0x%lx\n",
+	       (size<1024)?size:(size<1048576)?size/1024:size/1024/1024,
+               (size<1024)?'B':(size<1048576)?'K':'M',
+	       size, ((dcmd&(0x1<<3)) == 0)?"non-":"",
+               PCI_BASE_ADDRESS(dev)&PCI_BASE_ADDRESS_MEM_MASK );
 
         /*
          * Check to see the state of the memory
-         * FIXME: perhaps hide some of this around an #ifdef DEBUG as
-         * it doesn't effect or enhance cards functionality
          */
-        pci_read_config_dword( dev, 0x74, &dcmd );
-        printk(KERN_NOTICE "pmc551: DRAM_BLK3 Flags: %s,%s\n",
-               ((0x2&dcmd) == 0)?"RW":"RO",
-               ((0x1&dcmd) == 0)?"Off":"On" );
+        pci_read_config_dword( dev, PMC551_DRAM_BLK0, &dcmd );
+        printk(KERN_DEBUG "pmc551: DRAM_BLK0 Flags: %s,%s\n"
+			  "pmc551: DRAM_BLK0 Size: %d at %d\n"
+			  "pmc551: DRAM_BLK0 Row MUX: %d, Col MUX: %d\n",
+               (((0x1<<1)&dcmd) == 0)?"RW":"RO",
+               (((0x1<<0)&dcmd) == 0)?"Off":"On",
+	       PMC551_DRAM_BLK_GET_SIZE(dcmd),
+	       ((dcmd>>20)&0x7FF), ((dcmd>>13)&0x7), ((dcmd>>9)&0xF) );
 
-        pci_read_config_dword( dev, 0x70, &dcmd );
-        printk(KERN_NOTICE "pmc551: DRAM_BLK2 Flags: %s,%s\n",
-               ((0x2&dcmd) == 0)?"RW":"RO",
-               ((0x1&dcmd) == 0)?"Off":"On" );
+        pci_read_config_dword( dev, PMC551_DRAM_BLK1, &dcmd );
+        printk(KERN_DEBUG "pmc551: DRAM_BLK1 Flags: %s,%s\n"
+			  "pmc551: DRAM_BLK1 Size: %d at %d\n"
+			  "pmc551: DRAM_BLK1 Row MUX: %d, Col MUX: %d\n",
+               (((0x1<<1)&dcmd) == 0)?"RW":"RO",
+               (((0x1<<0)&dcmd) == 0)?"Off":"On",
+	       PMC551_DRAM_BLK_GET_SIZE(dcmd),
+	       ((dcmd>>20)&0x7FF), ((dcmd>>13)&0x7), ((dcmd>>9)&0xF) );
 
-        pci_read_config_dword( dev, 0x6C, &dcmd );
-        printk(KERN_NOTICE "pmc551: DRAM_BLK1 Flags: %s,%s\n",
-               ((0x2&dcmd) == 0)?"RW":"RO",
-               ((0x1&dcmd) == 0)?"Off":"On" );
+        pci_read_config_dword( dev, PMC551_DRAM_BLK2, &dcmd );
+        printk(KERN_DEBUG "pmc551: DRAM_BLK2 Flags: %s,%s\n"
+			  "pmc551: DRAM_BLK2 Size: %d at %d\n"
+			  "pmc551: DRAM_BLK2 Row MUX: %d, Col MUX: %d\n",
+               (((0x1<<1)&dcmd) == 0)?"RW":"RO",
+               (((0x1<<0)&dcmd) == 0)?"Off":"On",
+	       PMC551_DRAM_BLK_GET_SIZE(dcmd),
+	       ((dcmd>>20)&0x7FF), ((dcmd>>13)&0x7), ((dcmd>>9)&0xF) );
 
-        pci_read_config_dword( dev, 0x68, &dcmd );
-        printk(KERN_NOTICE "pmc551: DRAM_BLK0 Flags: %s,%s\n",
-               ((0x2&dcmd) == 0)?"RW":"RO",
-               ((0x1&dcmd) == 0)?"Off":"On" );
+        pci_read_config_dword( dev, PMC551_DRAM_BLK3, &dcmd );
+        printk(KERN_DEBUG "pmc551: DRAM_BLK3 Flags: %s,%s\n"
+			  "pmc551: DRAM_BLK3 Size: %d at %d\n"
+			  "pmc551: DRAM_BLK3 Row MUX: %d, Col MUX: %d\n",
+               (((0x1<<1)&dcmd) == 0)?"RW":"RO",
+               (((0x1<<0)&dcmd) == 0)?"Off":"On",
+	       PMC551_DRAM_BLK_GET_SIZE(dcmd),
+	       ((dcmd>>20)&0x7FF), ((dcmd>>13)&0x7), ((dcmd>>9)&0xF) );
 
-        pci_read_config_word( dev, 0x4, &cmd );
-        printk( KERN_NOTICE "pmc551: Memory Access %s\n",
-                ((0x2&cmd) == 0)?"off":"on" );
-        printk( KERN_NOTICE "pmc551: I/O Access %s\n",
-                ((0x1&cmd) == 0)?"off":"on" );
+        pci_read_config_word( dev, PCI_COMMAND, &cmd );
+        printk( KERN_DEBUG "pmc551: Memory Access %s\n",
+                (((0x1<<1)&cmd) == 0)?"off":"on" );
+        printk( KERN_DEBUG "pmc551: I/O Access %s\n",
+                (((0x1<<0)&cmd) == 0)?"off":"on" );
 
-        pci_read_config_word( dev, 0x6, &cmd );
-        printk( KERN_NOTICE "pmc551: Devsel %s\n",
+        pci_read_config_word( dev, PCI_STATUS, &cmd );
+        printk( KERN_DEBUG "pmc551: Devsel %s\n",
                 ((PCI_STATUS_DEVSEL_MASK&cmd)==0x000)?"Fast":
                 ((PCI_STATUS_DEVSEL_MASK&cmd)==0x200)?"Medium":
                 ((PCI_STATUS_DEVSEL_MASK&cmd)==0x400)?"Slow":"Invalid" );
 
-        printk( KERN_NOTICE "pmc551: %sFast Back-to-Back\n",
+        printk( KERN_DEBUG "pmc551: %sFast Back-to-Back\n",
                 ((PCI_COMMAND_FAST_BACK&cmd) == 0)?"Not ":"" );
 
+	pci_read_config_byte(dev, PMC551_SYS_CTRL_REG, &bcmd );
+	printk( KERN_DEBUG "pmc551: EEPROM is under %s control\n"
+			   "pmc551: System Control Register is %slocked to PCI access\n"
+			   "pmc551: System Control Register is %slocked to EEPROM access\n", 
+		(bcmd&0x1)?"software":"hardware",
+		(bcmd&0x20)?"":"un", (bcmd&0x40)?"":"un");
+#endif
         return size;
 }
 
 /*
  * Kernel version specific module stuffages
  */
-#if LINUX_VERSION_CODE < 0x20300
+#if LINUX_VERSION_CODE < 0x20211
 #ifdef MODULE
 #define init_pmc551 init_module
 #define cleanup_pmc551 cleanup_module
@@ -536,11 +643,27 @@ static u32 fixup_pmc551 (struct pci_dev *dev)
 #define __exit
 #endif
 
+#if defined(MODULE)
+MODULE_AUTHOR("Mark Ferrell <mferrell@mvista.com>");
+MODULE_DESCRIPTION(PMC551_VERSION);
+MODULE_PARM(msize, "i");
+MODULE_PARM_DESC(msize, "memory size, 6=32M, 7=64M, 8=128M, ect.. [32M-1024M]");
+MODULE_PARM(asize, "i");
+MODULE_PARM_DESC(asize, "aperture size, must be <= memsize [1M-1024M]");
+#endif
+/*
+ * Stuff these outside the ifdef so as to not bust compiled in driver support
+ */
+static int msize=0;
+#if defined(CONFIG_MTD_PMC551_APERTURE_SIZE)
+static int asize=CONFIG_MTD_PMC551_APERTURE_SIZE
+#else
+static int asize=0;
+#endif
 
 /*
  * PMC551 Card Initialization
  */
-//static int __init init_pmc551(void)
 int __init init_pmc551(void)
 {
         struct pci_dev *PCI_Device = NULL;
@@ -549,9 +672,23 @@ int __init init_pmc551(void)
         struct mtd_info *mtd;
         u32 length = 0;
 
+	if(msize) {
+		if (msize < 6 || msize > 11 ) {
+			printk(KERN_NOTICE "pmc551: Invalid memory size\n");
+			return -ENODEV;
+		}
+		msize = (512*1024)<<msize;
+	}
 
-        printk(KERN_NOTICE "Ramix PMC551 PCI Mezzanine Ram Driver. (C) 1999,2000 Nortel Networks.\n");
-        printk(KERN_INFO "$Id: pmc551.c,v 1.8 2000/07/14 07:53:31 dwmw2 Exp $\n");
+	if(asize) {
+		if (asize < 1 || asize > 11 ) {
+			printk(KERN_NOTICE "pmc551: Invalid aperture size\n");
+			return -ENODEV;
+		}
+		asize = (512*1024)<<asize;
+	}
+
+        printk(KERN_INFO PMC551_VERSION);
 
         if(!pci_present()) {
                 printk(KERN_NOTICE "pmc551: PCI not enabled.\n");
@@ -583,6 +720,10 @@ int __init init_pmc551(void)
                         printk(KERN_NOTICE "pmc551: Cannot init SDRAM\n");
                         break;
                 }
+		if(msize) {
+			length = msize;
+			printk(KERN_NOTICE "pmc551: Using specified memory size 0x%x\n", length);
+		}
 
                 mtd = kmalloc(sizeof(struct mtd_info), GFP_KERNEL);
                 if (!mtd) {
@@ -602,13 +743,44 @@ int __init init_pmc551(void)
                 mtd->priv = priv;
 
                 priv->dev = PCI_Device;
-                priv->aperture_size = PMC551_APERTURE_SIZE;
+		if(asize) {
+			if(asize > length) {
+				asize=length;
+				printk(KERN_NOTICE "pmc551: reducing aperture size to fit memory [0x%x]\n",asize);
+			} else {
+				printk(KERN_NOTICE "pmc551: Using specified aperture size 0x%x\n", asize);
+			}
+			priv->aperture_size = asize;
+		} else {
+                	priv->aperture_size = length;
+		}
                 priv->start = ioremap((PCI_BASE_ADDRESS(PCI_Device)
                                        & PCI_BASE_ADDRESS_MEM_MASK),
                                       priv->aperture_size);
-                priv->mem_map0_base_val = (PMC551_APERTURE_VAL
-                                           | PMC551_PCI_MEM_MAP_REG_EN
-                                           | PMC551_PCI_MEM_MAP_ENABLE);
+		
+		/*
+		 * Due to the dynamic nature of the code, we need to figure
+		 * this out in order to stuff the register to set the proper
+		 * aperture size.  If you know of an easier way to do this then
+		 * PLEASE help yourself.
+		 *
+		 * Not with bloody floating point, you don't. Consider yourself
+		 * duly LARTed. dwmw2.
+		 */
+		{
+			u32 size;
+			u16 bits;
+			size = priv->aperture_size>>20;
+			for(bits=0;!(size&0x01)&&size>0;bits++,size=size>>1);
+			//size=((u32)((log10(priv->aperture_size)/.30103)-19)<<4);
+                	priv->mem_map0_base_val = (PMC551_PCI_MEM_MAP_REG_EN
+						| PMC551_PCI_MEM_MAP_ENABLE
+						| size);
+#ifdef CONFIG_MTD_PMC551_DEBUG
+			printk(KERN_NOTICE "pmc551: aperture set to %d[%d]\n", 
+					size, size>>4);
+#endif
+		}
                 priv->curr_mem_map0_val = priv->mem_map0_base_val;
 
                 pci_write_config_dword ( priv->dev,
@@ -641,7 +813,10 @@ int __init init_pmc551(void)
                        priv->aperture_size/1024/1024,
                        priv->start,
                        priv->start + priv->aperture_size);
-                printk(KERN_NOTICE "Total memory is %dM\n", length/1024/1024);
+                printk(KERN_NOTICE "Total memory is %d%c\n",
+	       		(length<1024)?length:
+				(length<1048576)?length/1024:length/1024/1024,
+               		(length<1024)?'B':(length<1048576)?'K':'M');
 		priv->nextpmc551 = pmc551list;
 		pmc551list = mtd;
 		found++;
@@ -651,8 +826,8 @@ int __init init_pmc551(void)
                 printk(KERN_NOTICE "pmc551: not detected,\n");
                 return -ENODEV;
         } else {
-                return 0;
 		printk(KERN_NOTICE "pmc551: %d pmc551 devices loaded\n", found);
+                return 0;
 	}
 }
 
@@ -669,7 +844,7 @@ static void __exit cleanup_pmc551(void)
 		priv = (struct mypriv *)mtd->priv;
 		pmc551list = priv->nextpmc551;
 		
-		if(priv->start) 
+		if(priv->start)
 			iounmap(((struct mypriv *)mtd->priv)->start);
 		
 		kfree (mtd->priv);
@@ -681,10 +856,7 @@ static void __exit cleanup_pmc551(void)
 	printk(KERN_NOTICE "pmc551: %d pmc551 devices unloaded\n", found);
 }
 
-#if LINUX_VERSION_CODE > 0x20300
+#if LINUX_VERSION_CODE >= 0x20211
 module_init(init_pmc551);
 module_exit(cleanup_pmc551);
 #endif
-
-
-

@@ -1319,6 +1319,24 @@ terratv_audio(struct bttv *btv, struct video_audio *v, int set)
 	}
 }
 
+#ifndef MODULE
+
+static int __init bttv_card_setup(char *str)
+{
+	int i,number,res = 2;
+
+	for (i = 0; res == 2 && i < BTTV_MAX; i++) {
+		res = get_option(&str,&number);
+		if (res)
+			card[i] = number;
+	}
+	return 1;
+}
+
+__setup("bttv_card=", bttv_card_setup);
+
+#endif /* not MODULE */
+
 /*
  * Local variables:
  * c-basic-offset: 8

@@ -57,7 +57,7 @@ How to enable CMI 8330 (SOUNDPRO) soundchip on Linux
 ------------------------------------------
 Stefan Laudat <Stefan.Laudat@asit.ro>
 
-[Note: The CMI 8338 is unrelated and right now unsupported]
+[Note: The CMI 8338 is unrelated and is supported by cmpci.o]
 
 	
 	In order to use CMI8330 under Linux  you just have to use a proper isapnp.conf, a good isapnp and a little bit of patience.  I use isapnp 1.17, but

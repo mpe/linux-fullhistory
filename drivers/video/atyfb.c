@@ -466,8 +466,8 @@ static void set_off_pitch(struct atyfb_par *par,
 static int encode_fix(struct fb_fix_screeninfo *fix,
 		      const struct atyfb_par *par,
 		      const struct fb_info_aty *info);
-static void atyfb_set_disp(struct display *disp, struct fb_info_aty *info,
-			   int bpp, int accel);
+static void atyfb_set_dispsw(struct display *disp, struct fb_info_aty *info,
+			     int bpp, int accel);
 static int atyfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 			 u_int *transp, struct fb_info *fb);
 static int atyfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
@@ -2826,8 +2826,8 @@ static int atyfb_get_var(struct fb_var_screeninfo *var, int con,
 }
 
 
-static void atyfb_set_disp(struct display *disp, struct fb_info_aty *info,
-			   int bpp, int accel)
+static void atyfb_set_dispsw(struct display *disp, struct fb_info_aty *info,
+			     int bpp, int accel)
 {
 	    switch (bpp) {
 #ifdef FBCON_HAS_CFB8
@@ -2898,6 +2898,7 @@ static int atyfb_set_var(struct fb_var_screeninfo *var, int con,
 	oldbpp = display->var.bits_per_pixel;
 	oldaccel = display->var.accel_flags;
 	display->var = *var;
+	accel = var->accel_flags & FB_ACCELF_TEXT;
 	if (oldxres != var->xres || oldyres != var->yres ||
 	    oldvxres != var->xres_virtual || oldvyres != var->yres_virtual ||
 	    oldbpp != var->bits_per_pixel || oldaccel != var->accel_flags) {
@@ -2913,8 +2914,6 @@ static int atyfb_set_var(struct fb_var_screeninfo *var, int con,
 	    display->line_length = fix.line_length;
 	    display->can_soft_blank = 1;
 	    display->inverse = 0;
-	    accel = var->accel_flags & FB_ACCELF_TEXT;
-	    atyfb_set_disp(display, info, par.crtc.bpp, accel);
 	    if (accel)
 	    	display->scrollmode = (info->bus_type == PCI) ? SCROLL_YNOMOVE : 0;
 	    else
@@ -2923,8 +2922,10 @@ static int atyfb_set_var(struct fb_var_screeninfo *var, int con,
 		(*info->fb_info.changevar)(con);
 	}
 	if (!info->fb_info.display_fg ||
-	    info->fb_info.display_fg->vc_num == con)
+	    info->fb_info.display_fg->vc_num == con) {
 	    atyfb_set_par(&par, info);
+	    atyfb_set_dispsw(display, info, par.crtc.bpp, accel);
+	}
 	if (oldbpp != var->bits_per_pixel) {
 	    if ((err = fb_alloc_cmap(&display->cmap, 0, 0)))
 		return err;
@@ -4241,8 +4242,8 @@ static int atyfbcon_switch(int con, struct fb_info *fb)
 
     atyfb_decode_var(&fb_display[con].var, &par, info);
     atyfb_set_par(&par, info);
-    atyfb_set_disp(&fb_display[con], info, par.crtc.bpp,
-		   par.accel_flags & FB_ACCELF_TEXT);
+    atyfb_set_dispsw(&fb_display[con], info, par.crtc.bpp,
+		     par.accel_flags & FB_ACCELF_TEXT);
 
     /* Install new colormap */
     do_install_cmap(con, fb);

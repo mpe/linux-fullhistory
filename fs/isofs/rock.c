@@ -72,7 +72,7 @@
       cont_size = 0; \
       cont_offset = 0; \
       goto LABEL; \
-    };    \
+    }    \
     printk("Unable to read rock-ridge attributes\n");    \
   }}
 
@@ -120,22 +120,16 @@ int find_rock_ridge_relocation(struct iso_directory_record * de,
 	CHECK_SP(goto out);
 	break;
       case SIG('C','L'):
-#ifdef DEBUG
-	printk("RR: CL\n");
-#endif
 	if (flag == 0) {
 	  retval = isonum_733(rr->u.CL.location);
 	  goto out;
-	};
+	}
 	break;
       case SIG('P','L'):
-#ifdef DEBUG
-	printk("RR: PL\n");
-#endif
 	if (flag != 0) {
 	  retval = isonum_733(rr->u.PL.location);
 	  goto out;
-	};
+	}
 	break;
       case SIG('C','E'):
 	CHECK_CE; /* This tells is if there is a continuation record */
@@ -143,8 +137,8 @@ int find_rock_ridge_relocation(struct iso_directory_record * de,
       default:
 	break;
       }
-    };
-  };
+    }
+  }
   MAYBE_CONTINUE(repeat, inode);
   return retval;
  out:
@@ -203,24 +197,21 @@ int get_rock_ridge_filename(struct iso_directory_record * de,
 	if (rr->u.NM.flags & ~1) {
 	  printk("Unsupported NM flag settings (%d)\n",rr->u.NM.flags);
 	  break;
-	};
+	}
 	if((strlen(retname) + rr->len - 5) >= 254) {
 	  truncate = 1;
 	  break;
-	};
+	}
 	strncat(retname, rr->u.NM.name, rr->len - 5);
 	retnamlen += rr->len - 5;
 	break;
       case SIG('R','E'):
-#ifdef DEBUG
-	printk("RR: RE (%x)\n", inode->i_ino);
-#endif
 	if (buffer) kfree(buffer);
 	return -1;
       default:
 	break;
       }
-    };
+    }
   }
   MAYBE_CONTINUE(repeat,inode);
   return retnamlen; /* If 0, this file did not have a NM field */
@@ -266,10 +257,10 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	break;
       case SIG('E','R'):
 	inode->i_sb->u.isofs_sb.s_rock = 1;
-	printk(KERN_DEBUG"ISO 9660 Extensions: ");
+	printk(KERN_DEBUG "ISO 9660 Extensions: ");
 	{ int p;
 	  for(p=0;p<rr->u.ER.len_id;p++) printk("%c",rr->u.ER.data[p]);
-	};
+	}
 	  printk("\n");
 	break;
       case SIG('P','X'):
@@ -294,7 +285,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	  } else {
 	    inode->i_rdev = MKDEV(high, low);
 	  }
-	};
+	}
 	break;
       case SIG('T','F'):
 	/* Some RRIP writers incorrectly place ctime in the TF_CREATE field.
@@ -334,7 +325,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	     break;
 	   default:
 	     printk("Symlink component flag not implemented\n");
-	   };
+	   }
 	   slen -= slp->len + 2;
 	   oldslp = slp;
 	   slp = (struct SL_component *) (((char *) slp) + slp->len + 2);
@@ -348,19 +339,16 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	   /*
 	    * If this component record isn't continued, then append a '/'.
 	    */
-	   if(   (!rootflag)
-		 && ((oldslp->flags & 1) == 0) ) inode->i_size += 1;
+	   if (!rootflag && (oldslp->flags & 1) == 0)
+		   inode->i_size += 1;
 	 }
 	}
 	symlink_len = inode->i_size;
 	break;
       case SIG('R','E'):
-	printk("Attempt to read inode for relocated directory\n");
+	printk(KERN_WARNING "Attempt to read inode for relocated directory\n");
 	goto out;
       case SIG('C','L'):
-#ifdef DEBUG
-	printk("RR CL (%x)\n",inode->i_ino);
-#endif
 	inode->u.isofs_i.i_first_extent = isonum_733(rr->u.CL.location);
 	reloc = iget(inode->i_sb,
 		     (inode->u.isofs_i.i_first_extent <<
@@ -381,7 +369,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
       default:
 	break;
       }
-    };
+    }
   }
   MAYBE_CONTINUE(repeat,inode);
   return 0;

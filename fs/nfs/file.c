@@ -52,6 +52,7 @@ struct file_operations nfs_file_operations = {
 };
 
 struct inode_operations nfs_file_inode_operations = {
+	permission:	nfs_permission,
 	revalidate:	nfs_revalidate,
 	setattr:	nfs_notify_change,
 };
@@ -90,13 +91,14 @@ static ssize_t
 nfs_file_read(struct file * file, char * buf, size_t count, loff_t *ppos)
 {
 	struct dentry * dentry = file->f_dentry;
+	struct inode * inode = dentry->d_inode;
 	ssize_t result;
 
 	dfprintk(VFS, "nfs: read(%s/%s, %lu@%lu)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		(unsigned long) count, (unsigned long) *ppos);
 
-	result = nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
+	result = nfs_revalidate_inode(NFS_SERVER(inode), inode);
 	if (!result)
 		result = generic_file_read(file, buf, count, ppos);
 	return result;
@@ -106,12 +108,13 @@ static int
 nfs_file_mmap(struct file * file, struct vm_area_struct * vma)
 {
 	struct dentry *dentry = file->f_dentry;
+	struct inode *inode = dentry->d_inode;
 	int	status;
 
 	dfprintk(VFS, "nfs: mmap(%s/%s)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 
-	status = nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
+	status = nfs_revalidate_inode(NFS_SERVER(inode), inode);
 	if (!status)
 		status = generic_file_mmap(file, vma);
 	return status;
@@ -179,7 +182,7 @@ static int nfs_sync_page(struct page *page)
 	struct address_space *mapping;
 	struct inode	*inode;
 	unsigned long	index = page_index(page);
-	unsigned int	rpages, wpages;
+	unsigned int	rpages;
 	int		result;
 
 	mapping = page->mapping;
@@ -192,14 +195,8 @@ static int nfs_sync_page(struct page *page)
 	rpages = NFS_SERVER(inode)->rpages;
 	result = nfs_pagein_inode(inode, index, rpages);
 	if (result < 0)
-		goto out_bad;
-	wpages = NFS_SERVER(inode)->wpages;
-	result = nfs_sync_file(inode, NULL, index, wpages, FLUSH_STABLE);
-	if (result < 0)
-		goto out_bad;
+		return result;
 	return 0;
- out_bad:
-	return result;
 }
 
 struct address_space_operations nfs_file_aops = {
@@ -227,7 +224,7 @@ nfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	result = -EBUSY;
 	if (IS_SWAPFILE(inode))
 		goto out_swapfile;
-	result = nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
+	result = nfs_revalidate_inode(NFS_SERVER(inode), inode);
 	if (result)
 		goto out;
 

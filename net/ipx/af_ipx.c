@@ -135,7 +135,7 @@ static spinlock_t ipx_interfaces_lock = SPIN_LOCK_UNLOCKED;
 static ipx_interface *ipx_primary_net;
 static ipx_interface *ipx_internal_net;
 
-#define IPX_REFCNT_DEBUG
+#undef IPX_REFCNT_DEBUG
 #ifdef IPX_REFCNT_DEBUG
 atomic_t ipx_sock_nr;
 #endif

@@ -50,7 +50,6 @@ static const char *version =
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include <linux/version.h>
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -220,8 +219,10 @@ static struct net_device_stats *cops_get_stats (struct net_device *dev);
 int __init cops_probe(struct net_device *dev)
 {
 	int i;
-        int base_addr = dev ? dev->base_addr : 0;
-        
+        int base_addr = dev->base_addr;
+
+	SET_MODULE_OWNER(dev);
+
         if(base_addr == 0 && io)
         	base_addr=io;
 
@@ -235,13 +236,9 @@ int __init cops_probe(struct net_device *dev)
 	 * Dayna cards don't autoprobe well at all, but if your card is
 	 * at IRQ 5 & IO 0x240 we find it every time. ;) JS
 	 */
-        for(i=0; cops_portlist[i]; i++) {
-		int ioaddr = cops_portlist[i];
-		if(check_region(ioaddr, COPS_IO_EXTENT))
-                        continue;
-                if(cops_probe1(dev, ioaddr) == 0)
+        for(i=0; cops_portlist[i]; i++)
+                if(cops_probe1(dev, cops_portlist[i]) == 0)
                         return 0;
-        }
 	
         return -ENODEV;
 }
@@ -254,12 +251,16 @@ int __init cops_probe(struct net_device *dev)
 static int __init cops_probe1(struct net_device *dev, int ioaddr)
 {
         struct cops_local *lp;
-	static unsigned version_printed = 0;
-
+	static unsigned version_printed;
 	int board = board_type;
+	int retval;
 	
         if(cops_debug && version_printed++ == 0)
 		printk("%s", version);
+
+	/* Grab the region so no one else tries to probe our ioports. */
+	if (!request_region(ioaddr, COPS_IO_EXTENT, dev->name))
+		return -EBUSY;
 
         /*
          * Since this board has jumpered interrupts, allocate the interrupt
@@ -273,13 +274,14 @@ static int __init cops_probe1(struct net_device *dev, int ioaddr)
 		case 0:
 			/* COPS AutoIRQ routine */
 			dev->irq = cops_irq(ioaddr, board);
-			if(!dev->irq)
-				return -EINVAL;	/* No IRQ found on this port */
-			break;
+			if(!dev->irq) {
+				retval = -EINVAL;	/* No IRQ found on this port */
+				goto err_out;
+			}
 
 		case 1:
-			return -EINVAL;
-			break;
+			retval = -EINVAL;
+			goto err_out;
 
 		/* Fixup for users that don't know that IRQ 2 is really
 		 * IRQ 9, or don't know which one to set.
@@ -301,17 +303,22 @@ static int __init cops_probe1(struct net_device *dev, int ioaddr)
 	}
 
 	/* Reserve any actual interrupt. */
-	if(dev->irq && request_irq(dev->irq, &cops_interrupt, 0, cardname, dev))
-		return -EINVAL;
+	if(dev->irq) {
+		retval = request_irq(dev->irq, &cops_interrupt, 0, dev->name, dev);
+		if (retval)
+			goto err_out;
+	}
 
-	/* Grab the region so no one else tries to probe our ioports. */
-	request_region(ioaddr, COPS_IO_EXTENT, cardname);
-	dev->base_addr          = ioaddr;
+	dev->base_addr		= ioaddr;
 
 	/* Initialize the private device structure. */
         dev->priv = kmalloc(sizeof(struct cops_local), GFP_KERNEL);
-        if(dev->priv == NULL)
-        	return -ENOMEM;
+        if(dev->priv == NULL) {
+		if (dev->irq)
+			free_irq(dev->irq, dev);
+        	retval = -ENOMEM;
+		goto err_out;
+	}
 
         lp = (struct cops_local *)dev->priv;
         memset(lp, 0, sizeof(struct cops_local));
@@ -347,6 +354,10 @@ static int __init cops_probe1(struct net_device *dev, int ioaddr)
 
 	}
         return 0;
+
+err_out:
+	release_region(ioaddr, COPS_IO_EXTENT);
+	return retval;
 }
 
 static int __init cops_irq (int ioaddr, int board)
@@ -426,10 +437,6 @@ static int cops_open(struct net_device *dev)
 	cops_jumpstart(dev);	/* Start the card up. */
 
 	netif_start_queue(dev);
-#ifdef MODULE
-        MOD_INC_USE_COUNT;
-#endif
-
         return 0;
 }
 
@@ -990,10 +997,6 @@ static int cops_close(struct net_device *dev)
 		del_timer(&cops_timer);
 
 	netif_stop_queue(dev);
-#ifdef MODULE
-        MOD_DEC_USE_COUNT;
-#endif
-	
         return 0;
 }
 
@@ -1039,8 +1042,7 @@ void cleanup_module(void)
 {
         /* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	unregister_netdev(&cops0_dev);
-	if(cops0_dev.priv)
-                kfree(cops0_dev.priv);
+	kfree(cops0_dev.priv);
 	if(cops0_dev.irq)
 		free_irq(cops0_dev.irq, &cops0_dev);
         release_region(cops0_dev.base_addr, COPS_IO_EXTENT);

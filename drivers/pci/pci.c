@@ -540,15 +540,9 @@ static u32 pci_size(u32 base, unsigned long mask)
 static void pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 {
 	unsigned int pos, reg, next;
-	u32 l, sz, tmp;
-	u16 cmd;
+	u32 l, sz;
 	struct resource *res;
 
-	/* Disable IO and memory while we fiddle */
-	pci_read_config_word(dev, PCI_COMMAND, &cmd);
-	tmp = cmd & ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY);
-	pci_write_config_word(dev, PCI_COMMAND, tmp);
-	
 	for(pos=0; pos<howmany; pos = next) {
 		next = pos+1;
 		res = &dev->resource[pos];
@@ -611,7 +605,6 @@ static void pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 		}
 		res->name = dev->name;
 	}
-	pci_write_config_word(dev, PCI_COMMAND, cmd);
 }
 
 void __init pci_read_bridge_bases(struct pci_bus *child)

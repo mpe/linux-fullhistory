@@ -65,7 +65,6 @@ struct fb_par_platinum {
 struct fb_info_platinum {
 	struct fb_info			fb_info;
 	struct display			disp;
-	struct display_switch		dispsw;
 	struct fb_par_platinum		default_par;
 	struct fb_par_platinum		current_par;
 
@@ -140,8 +139,9 @@ static int platinum_var_to_par(const struct fb_var_screeninfo *var,
 static int platinum_encode_fix(struct fb_fix_screeninfo *fix,
 			       const struct fb_par_platinum *par,
 			       const struct fb_info_platinum *info);
-static void platinum_set_disp(struct display *disp, struct fb_info_platinum *info,
-			      int cmode, int accel);
+static void platinum_set_dispsw(struct display *disp,
+				struct fb_info_platinum *info, int cmode,
+				int accel);
 static int platinum_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 			      u_int *transp, struct fb_info *fb);
 static int platinum_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
@@ -193,27 +193,25 @@ static int platinum_get_var(struct fb_var_screeninfo *var, int con,
 	return 0;
 }
 
-static void platinum_set_disp(struct display *disp, struct fb_info_platinum *info,
-			      int cmode, int accel)
+static void platinum_set_dispsw(struct display *disp,
+				struct fb_info_platinum *info, int cmode,
+				int accel)
 {
 	switch(cmode) {
 #ifdef FBCON_HAS_CFB8
 	    case CMODE_8:
-		info->dispsw = fbcon_cfb8;
-		disp->dispsw = &info->dispsw;
+		disp->dispsw = &fbcon_cfb8;
 		break;
 #endif
 #ifdef FBCON_HAS_CFB16
 	    case CMODE_16:
-		info->dispsw = fbcon_cfb16;
-		disp->dispsw = &info->dispsw;
+		disp->dispsw = &fbcon_cfb16;
 		disp->dispsw_data = info->fbcon_cmap.cfb16;
 		break;
 #endif
 #ifdef FBCON_HAS_CFB32
 	    case CMODE_32:
-		info->dispsw = fbcon_cfb32;
-		disp->dispsw = &info->dispsw;
+		disp->dispsw = &fbcon_cfb32;
 		disp->dispsw_data = info->fbcon_cmap.cfb32;
 		break;
 #endif
@@ -271,7 +269,7 @@ static int platinum_set_var(struct fb_var_screeninfo *var, int con,
 	    display->line_length = fix.line_length;
 	    display->can_soft_blank = 1;
 	    display->inverse = 0;
-	    platinum_set_disp(display, info, par.cmode, 0);
+	    platinum_set_dispsw(display, info, par.cmode, 0);
 	    display->scrollmode = SCROLL_YREDRAW;
 	    if (info->fb_info.changevar)
 	      (*info->fb_info.changevar)(con);
@@ -341,7 +339,7 @@ static int platinum_switch(int con, struct fb_info *fb)
 
 	platinum_var_to_par(&fb_display[con].var, &par, info);
 	platinum_set_par(&par, info);
-	platinum_set_disp(&fb_display[con], info, par.cmode, 0);
+	platinum_set_dispsw(&fb_display[con], info, par.cmode, 0);
 	do_install_cmap(con, fb);
 
 	return 1;

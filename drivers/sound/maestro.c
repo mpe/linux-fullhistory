@@ -115,6 +115,8 @@
  *	themselves, but we'll see.  
  *	
  * History
+ *  (still kind of v0.14) Nov 23 - Alan Cox <alan@redhat.com>
+ *	Add clocking= for people with seriously warped hardware
  *  (still v0.14) Nov 10 2000 - Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
  *	add __init to maestro_ac97_init() and maestro_install()
  *  (still based on v0.14) Mar 29 2000 - Zach Brown <zab@redhat.com>
@@ -262,6 +264,10 @@ static int debug=0;
 static int dsps_order=0;
 /* wether or not we mess around with power management */
 static int use_pm=2; /* set to 1 for force */
+/* clocking for broken hardware - a few laptops seem to use a 50Khz clock
+	ie insmod with clocking=50000 or so */
+	
+static int clocking=48000;
 
 /* --------------------------------------------------------------------- */
 #define DRIVER_VERSION "0.14"
@@ -1200,7 +1206,10 @@ static u32 compute_rate(struct ess_state *s, u32 freq)
 {
 	u32 clock = clock_freq[s->card->card_type];     
 
-	if (freq == 48000) return 0x10000;
+	freq = (freq * clocking)/48000;
+	
+	if (freq == 48000) 
+		return 0x10000;
 
 	return ((freq / clock) <<16 )+  
 		(((freq % clock) << 16) / clock);
@@ -3578,6 +3587,7 @@ MODULE_PARM(debug,"i");
 #endif
 MODULE_PARM(dsps_order,"i");
 MODULE_PARM(use_pm,"i");
+MODULE_PARM(clocking, "i");
 
 void cleanup_module(void) {
 	M_printk("maestro: unloading\n");

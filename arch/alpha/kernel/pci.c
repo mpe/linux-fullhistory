@@ -56,13 +56,13 @@ struct pci_controler *pci_isa_hose;
 static void __init
 quirk_eisa_bridge(struct pci_dev *dev)
 {
-	dev->class = PCI_CLASS_BRIDGE_EISA;
+	dev->class = PCI_CLASS_BRIDGE_EISA << 8;
 }
 
 static void __init
 quirk_isa_bridge(struct pci_dev *dev)
 {
-	dev->class = PCI_CLASS_BRIDGE_ISA;
+	dev->class = PCI_CLASS_BRIDGE_ISA << 8;
 }
 
 static void __init
@@ -282,7 +282,7 @@ pcibios_fixup_bus(struct pci_bus *bus)
 	}
 }
 
-void __init
+void
 pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 			struct resource *res, int resource)
 {

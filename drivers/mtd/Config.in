@@ -23,6 +23,7 @@ if [ "$CONFIG_MTD" != "n" ]; then
    dep_tristate '  Ramix PMC551 PCI Mezzanine ram card support' CONFIG_MTD_PMC551 $CONFIG_MTD $CONFIG_PCI
    if [ "$CONFIG_MTD_PMC551" != "n" ]; then
       bool '    PMC551 256M DRAM Bugfix' CONFIG_MTD_PMC551_BUGFIX
+      bool '    PMC551 Debugging' CONFIG_MTD_PMC551_DEBUG
    fi
    dep_tristate '  Debugging RAM test driver' CONFIG_MTD_MTDRAM $CONFIG_MTD
    if [ "$CONFIG_MTD_MTDRAM" != "n" ]; then

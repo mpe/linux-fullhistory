@@ -27,9 +27,8 @@
 /* Symlink caching in the page cache is even more simplistic
  * and straight-forward than readdir caching.
  */
-static int nfs_symlink_filler(struct dentry *dentry, struct page *page)
+static int nfs_symlink_filler(struct inode *inode, struct page *page)
 {
-	struct inode *inode = dentry->d_inode;
 	void *buffer = kmap(page);
 	int error;
 
@@ -38,7 +37,7 @@ static int nfs_symlink_filler(struct dentry *dentry, struct page *page)
 	 * XDR response verification will NULL terminate it.
 	 */
 	lock_kernel();
-	error = NFS_PROTO(inode)->readlink(dentry, buffer,
+	error = NFS_PROTO(inode)->readlink(inode, buffer,
 					   PAGE_CACHE_SIZE - sizeof(u32)-4);
 	unlock_kernel();
 	if (error < 0)
@@ -55,15 +54,14 @@ error:
 	return -EIO;
 }
 
-static char *nfs_getlink(struct dentry *dentry, struct page **ppage)
+static char *nfs_getlink(struct inode *inode, struct page **ppage)
 {
-	struct inode *inode = dentry->d_inode;
 	struct page *page;
 	u32 *p;
 
 	/* Caller revalidated the directory inode already. */
 	page = read_cache_page(&inode->i_data, 0,
-				(filler_t *)nfs_symlink_filler, dentry);
+				(filler_t *)nfs_symlink_filler, inode);
 	if (IS_ERR(page))
 		goto read_failed;
 	if (!Page_Uptodate(page))
@@ -81,8 +79,9 @@ read_failed:
 
 static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
+	struct inode *inode = dentry->d_inode;
 	struct page *page = NULL;
-	int res = vfs_readlink(dentry,buffer,buflen,nfs_getlink(dentry,&page));
+	int res = vfs_readlink(dentry,buffer,buflen,nfs_getlink(inode,&page));
 	if (page) {
 		kunmap(page);
 		page_cache_release(page);
@@ -92,8 +91,9 @@ static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 
 static int nfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
+	struct inode *inode = dentry->d_inode;
 	struct page *page = NULL;
-	int res = vfs_follow_link(nd, nfs_getlink(dentry,&page));
+	int res = vfs_follow_link(nd, nfs_getlink(inode,&page));
 	if (page) {
 		kunmap(page);
 		page_cache_release(page);

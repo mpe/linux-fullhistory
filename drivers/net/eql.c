@@ -201,6 +201,8 @@ static int __init eql_init(struct net_device *dev)
 	/* static unsigned num_masters     = 0; */
 	equalizer_t *eql = 0;
 
+	SET_MODULE_OWNER(dev);
+
 	if ( version_printed++ == 0 && eql_debug > 0)
 		printk(version);
 	/*
@@ -259,8 +261,6 @@ static int eql_open(struct net_device *dev)
 	equalizer_t *eql = (equalizer_t *) dev->priv;
 	slave_queue_t *new_queue;
 
-	MOD_INC_USE_COUNT;
-
 #ifdef EQL_DEBUG
 	if (eql_debug >= 5)
 		printk ("%s: open\n", dev->name);
@@ -284,7 +284,6 @@ static int eql_open(struct net_device *dev)
 
 		return 0;
 	}
-	MOD_DEC_USE_COUNT;
 	return -ENOMEM;
 }
 
@@ -310,7 +309,6 @@ static int eql_close(struct net_device *dev)
 
 	eql_delete_slave_queue (eql->queue);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -985,14 +983,12 @@ static void eql_timer(unsigned long param)
 	}
 }
 
-static struct net_device dev_eql = 
-{
-	name:	"eql",
-	init:	eql_init,
-};
+static struct net_device dev_eql;
 
 static int __init eql_init_module(void)
 {
+	strcpy(dev_eql.name, "eql");
+	dev_eql.init = eql_init;
 	if (register_netdev(&dev_eql) != 0) {
 		printk("eql: register_netdev() returned non-zero.\n");
 		return -EIO;

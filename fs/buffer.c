@@ -871,10 +871,11 @@ int fsync_inode_buffers(struct inode *inode)
 		else {
 			bh->b_inode = &tmp;
 			list_add(&bh->b_inode_buffers, &tmp.i_dirty_buffers);
-			atomic_inc(&bh->b_count);
 			if (buffer_dirty(bh)) {
+				atomic_inc(&bh->b_count);
 				spin_unlock(&lru_list_lock);
 				ll_rw_block(WRITE, 1, &bh);
+				brelse(bh);
 				spin_lock(&lru_list_lock);
 			}
 		}
@@ -883,6 +884,7 @@ int fsync_inode_buffers(struct inode *inode)
 	while (!list_empty(&tmp.i_dirty_buffers)) {
 		bh = BH_ENTRY(tmp.i_dirty_buffers.prev);
 		remove_inode_queue(bh);
+		atomic_inc(&bh->b_count);
 		spin_unlock(&lru_list_lock);
 		wait_on_buffer(bh);
 		if (!buffer_uptodate(bh))
@@ -929,9 +931,9 @@ int osync_inode_buffers(struct inode *inode)
 			atomic_inc(&bh->b_count);
 			spin_unlock(&lru_list_lock);
 			wait_on_buffer(bh);
-			brelse(bh);
 			if (!buffer_uptodate(bh))
 				err = -EIO;
+			brelse(bh);
 			spin_lock(&lru_list_lock);
 			goto repeat;
 		}
@@ -947,7 +949,6 @@ int osync_inode_buffers(struct inode *inode)
  * probably unmounting the fs, but that doesn't mean we have already
  * done a sync().  Just drop the buffers from the inode list.
  */
-
 void invalidate_inode_buffers(struct inode *inode)
 {
 	struct list_head *list, *next;

@@ -71,7 +71,7 @@ struct riscom_port {
 	struct tty_struct 	* tty;
 	int			count;
 	int			blocked_open;
-	int			event;
+	long			event; /* long req'd for set_bit --RR */
 	int			timeout;
 	int			close_delay;
 	long			session;

@@ -176,7 +176,7 @@ out_failed:
 		UnlockPage(page);
 		deactivate_page(page);
 		page_cache_release(page);
-		return error;
+		return 1;	/* We released page_table_lock */
 	}
 
 	/*
@@ -620,6 +620,7 @@ dirty_page_rescan:
 			spin_unlock(&pagemap_lru_lock);
 
 			writepage(NULL, page);
+			UnlockPage(page);
 			page_cache_release(page);
 
 			/* And re-start the thing.. */

@@ -1623,7 +1623,7 @@ int fcntl_setlk64(unsigned int fd, unsigned int cmd, struct flock64 *l)
 		if (error < 0)
 			goto out_putf;
 	}
-	error = posix_lock_file(filp, file_lock, cmd == F_SETLKW);
+	error = posix_lock_file(filp, file_lock, cmd == F_SETLKW64);
 
 out_putf:
 	fput(filp);

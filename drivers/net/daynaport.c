@@ -44,8 +44,6 @@ static int version_printed;
 #include <linux/etherdevice.h>
 #include "8390.h"
 
-extern int console_loglevel;
-
 int ns8390_probe1(struct net_device *dev, int word16, char *name, int id,
 				  int prom, struct nubus_dev *ndev);
 

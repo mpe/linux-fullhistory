@@ -197,7 +197,7 @@ static inline int preemption_goodness(struct task_struct * prev, struct task_str
 
 /*
  * This is ugly, but reschedule_idle() is very timing-critical.
- * We `are called with the runqueue spinlock held and we must
+ * We are called with the runqueue spinlock held and we must
  * not claim the tasklist_lock.
  */
 static FASTCALL(void reschedule_idle(struct task_struct * p));
@@ -272,8 +272,10 @@ send_now_idle:
 	}
 	tsk = target_tsk;
 	if (tsk) {
-		if (oldest_idle != -1ULL)
+		if (oldest_idle != -1ULL) {
+			best_cpu = tsk->processor;
 			goto send_now_idle;
+		}
 		tsk->need_resched = 1;
 		if (tsk->processor != this_cpu)
 			smp_send_reschedule(tsk->processor);
@@ -452,7 +454,7 @@ static inline void __schedule_tail(struct task_struct *prev)
 		goto needs_resched;
 
 out_unlock:
-	task_unlock(prev);
+	task_unlock(prev);	/* Synchronise here with release_task() if prev is TASK_ZOMBIE */
 	return;
 
 	/*

@@ -101,7 +101,8 @@ struct sixpack {
   int			mtu;		/* Our mtu (to spot changes!)   */
   int                   buffsize;       /* Max buffers sizes            */
 
-  unsigned char		flags;		/* Flag values/ mode etc	*/
+  unsigned long		flags;		/* Flag values/ mode etc	*/
+					/* long req'd for set_bit --RR */
   unsigned char		mode;		/* 6pack mode			*/
 
 /* 6pack stuff */

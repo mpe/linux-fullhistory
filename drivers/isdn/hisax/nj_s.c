@@ -1,4 +1,4 @@
-// $Id: nj_s.c,v 2.7 2000/11/24 17:05:38 kai Exp $
+// $Id: nj_s.c,v 2.7.6.1 2000/11/29 16:00:14 kai Exp $
 //
 // This file is (c) under GNU PUBLIC LICENSE
 //
@@ -14,7 +14,7 @@
 #include <linux/ppp_defs.h>
 #include "netjet.h"
 
-const char *NETjet_S_revision = "$Revision: 2.7 $";
+const char *NETjet_S_revision = "$Revision: 2.7.6.1 $";
 
 static u_char dummyrr(struct IsdnCardState *cs, int chan, u_char off)
 {
@@ -140,7 +140,7 @@ NETjet_S_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-static struct pci_dev *dev_netjet __initdata;
+static struct pci_dev *dev_netjet __initdata = NULL;
 
 int __init
 setup_netjet_s(struct IsdnCard *card)

@@ -77,7 +77,13 @@ static kmem_cache_t * inode_cachep;
 
 #define alloc_inode() \
 	 ((struct inode *) kmem_cache_alloc(inode_cachep, SLAB_KERNEL))
-#define destroy_inode(inode) kmem_cache_free(inode_cachep, (inode))
+static void destroy_inode(struct inode *inode) 
+{
+	if (!list_empty(&inode->i_dirty_buffers))
+		BUG();
+	kmem_cache_free(inode_cachep, (inode));
+}
+
 
 /*
  * These are initializations that only need to be done
@@ -348,6 +354,9 @@ int generic_osync_inode(struct inode *inode, int datasync)
  
 void clear_inode(struct inode *inode)
 {
+	if (!list_empty(&inode->i_dirty_buffers))
+		invalidate_inode_buffers(inode);
+       
 	if (inode->i_data.nrpages)
 		BUG();
 	if (!(inode->i_state & I_FREEING))
@@ -407,6 +416,7 @@ static int invalidate_list(struct list_head *head, struct super_block * sb, stru
 		inode = list_entry(tmp, struct inode, i_list);
 		if (inode->i_sb != sb)
 			continue;
+		invalidate_inode_buffers(inode);
 		if (!atomic_read(&inode->i_count)) {
 			list_del(&inode->i_hash);
 			INIT_LIST_HEAD(&inode->i_hash);

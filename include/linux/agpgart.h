@@ -207,7 +207,7 @@ typedef struct _agp_file_private {
 	struct _agp_file_private *next;
 	struct _agp_file_private *prev;
 	pid_t my_pid;
-	u32 access_flags;
+	long access_flags;	/* long req'd for set_bit --RR */
 } agp_file_private;
 
 struct agp_front_data {

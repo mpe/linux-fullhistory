@@ -1,16 +1,7 @@
 /*======================================================================
 
-  $Id: doc1000.c,v 1.8 2000/07/03 10:01:38 dwmw2 Exp $
+  $Id: doc1000.c,v 1.11 2000/11/24 13:43:16 dwmw2 Exp $
 
-    A general driver for accessing PCMCIA card memory via Bulk
-    Memory Services.
-
-    This driver provides the equivalent of /dev/mem for a PCMCIA
-    card's attribute and common memory.  It includes character
-    and block devices.
-
-    Written by David Hinds, dhinds@allegro.stanford.edu
-    
 ======================================================================*/
 
 
@@ -295,10 +286,9 @@ int flashcard_write (struct mtd_info *mtd, loff_t to, size_t len, size_t *retlen
 static inline int byte_write (volatile u_char *addr, u_char byte)
 {
 	register u_char status;
-	register u_short i;
-	
-	for (i = 0; i < max_tries; i++)
-	{
+ 	register u_short i = 0;
+  	
+ 	do {
 		status = readb(addr);
 		if (status & CSR_WR_READY)
 		{
@@ -306,7 +296,9 @@ static inline int byte_write (volatile u_char *addr, u_char byte)
 			writeb(byte, addr);
 			return 0;
 		}
-	}
+		i++;
+	} while(i < max_tries);
+
 		
 	printk(KERN_NOTICE "flashcard: byte_write timed out, status 0x%x\n",status);
 	return -EIO;
@@ -314,11 +306,10 @@ static inline int byte_write (volatile u_char *addr, u_char byte)
 
 static inline int word_write (volatile u_char *addr, __u16 word)
 {
-	register u_short status = 0;
-	register u_short i;
+	register u_short status;
+	register u_short i = 0;
 	
-	for (i = 0; i < max_tries; i++)
-	{
+	do {
 		status = readw(addr);
 		if ((status & CSR_WR_READY) == CSR_WR_READY)
 		{
@@ -326,7 +317,8 @@ static inline int word_write (volatile u_char *addr, __u16 word)
 			writew(word, addr);
 			return 0;
 		}
-	}
+		i++;
+	} while(i < max_tries);
 		
 	printk(KERN_NOTICE "flashcard: word_write timed out at %p, status 0x%x\n", addr, status);
 	return -EIO;
@@ -362,24 +354,22 @@ static inline int check_erase(volatile u_char *addr)
 
 static inline int suspend_erase(volatile u_char *addr)
 {
-	__u16 status = 0;
-	u_long i;
+	__u16 status;
+	u_long i = 0;
 	
 	writew(IF_ERASE_SUSPEND, addr);
 	writew(IF_READ_CSR, addr);
 	
-	for (i = 0; i < max_tries; i++) 
-	{
+	do {
 		status = readw(addr);
-		if ((status & CSR_WR_READY) == CSR_WR_READY) break;
-	}
-	if (i == max_tries)
-	{
-		printk(KERN_NOTICE "flashcard: suspend_erase timed out, status 0x%x\n", status);
-	    return -EIO;
-	}
-	
-	return 0;
+		if ((status & CSR_WR_READY) == CSR_WR_READY)
+			return 0;
+		i++;
+	} while(i < max_tries);
+
+	printk(KERN_NOTICE "flashcard: suspend_erase timed out, status 0x%x\n", status);
+	return -EIO;
+
 }
 
 static inline void resume_erase(volatile u_char *addr)
@@ -413,12 +403,11 @@ static inline void reset_block(volatile u_char *addr)
 
 static inline int check_write(volatile u_char *addr)
 {
-	u_short status = 0, i;
+	u_short status, i = 0;
 	
 	writew(IF_READ_CSR, addr);
 	
-	for (i=0; i < max_tries; i++)
-	{
+	do {
 		status = readw(addr);
 		if (status & (CSR_WR_ERR | CSR_VPP_LOW))
 		{
@@ -428,7 +417,9 @@ static inline int check_write(volatile u_char *addr)
 		}
 		if ((status & CSR_WR_READY) == CSR_WR_READY)
 			return 0;
-	}
+		i++;
+	} while (i < max_tries);
+
 	printk(KERN_NOTICE "flashcard: write timed out at %p, status 0x%x\n", addr, status);
 	return -EIO;
 }
@@ -519,7 +510,7 @@ static void flashcard_periodic(unsigned long data)
 
 }
 
-#if defined (MODULE) && LINUX_VERSION_CODE < 0x20300
+#if defined (MODULE) && LINUX_VERSION_CODE < 0x20211
 #define init_doc1000 init_module
 #define cleanup_doc1000 cleanup_module
 #endif
@@ -600,3 +591,7 @@ static void __init cleanup_doc1000(void)
 	kfree(mymtd);
 }
 
+#if LINUX_VERSION_CODE >= 0x20211
+module_init(init_doc1000);
+module_exit(cleanup_doc1000);
+#endif

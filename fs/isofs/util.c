@@ -98,7 +98,7 @@ isonum_733 (char * p)
 
 int iso_date(char * p, int flag)
 {
-	int year, month, day, hour ,minute, second, tz;
+	int year, month, day, hour, minute, second, tz;
 	int crtime, days, i;
 
 	year = p[0] - 70;

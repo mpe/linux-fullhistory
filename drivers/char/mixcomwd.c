@@ -54,7 +54,7 @@ static int mixcomwd_ioports[] = { 0x180, 0x280, 0x380, 0x000 };
 #define FLASHCOM_WATCHDOG_OFFSET 0x4
 #define FLASHCOM_ID 0x18
 
-static int mixcomwd_opened;
+static long mixcomwd_opened; /* long req'd for setbit --RR */
 
 static int watchdog_port;
 

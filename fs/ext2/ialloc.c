@@ -256,7 +256,7 @@ error_return:
  * For other inodes, search forward from the parent directory\'s block
  * group to find a free inode.
  */
-struct inode * ext2_new_inode (const struct inode * dir, int mode, int * err)
+struct inode * ext2_new_inode (const struct inode * dir, int mode)
 {
 	struct super_block * sb;
 	struct buffer_head * bh;
@@ -267,26 +267,22 @@ struct inode * ext2_new_inode (const struct inode * dir, int mode, int * err)
 	struct ext2_group_desc * gdp;
 	struct ext2_group_desc * tmp;
 	struct ext2_super_block * es;
+	int err;
 
 	/* Cannot create files in a deleted directory */
-	if (!dir || !dir->i_nlink) {
-		*err = -EPERM;
-		return NULL;
-	}
+	if (!dir || !dir->i_nlink)
+		return ERR_PTR(-EPERM);
 
 	sb = dir->i_sb;
 	inode = new_inode(sb);
-	if (!inode) {
-		*err = -ENOMEM;
-		return NULL;
-	}
+	if (!inode)
+		return ERR_PTR(-ENOMEM);
 
 	lock_super (sb);
 	es = sb->u.ext2_sb.s_es;
 repeat:
 	gdp = NULL; i=0;
 	
-	*err = -ENOSPC;
 	if (S_ISDIR(mode)) {
 		avefreei = le32_to_cpu(es->s_free_inodes_count) /
 			sb->u.ext2_sb.s_groups_count;
@@ -365,18 +361,14 @@ repeat:
 		}
 	}
 
-	if (!gdp) {
-		unlock_super (sb);
-		iput(inode);
-		return NULL;
-	}
+	err = -ENOSPC;
+	if (!gdp)
+		goto fail;
+
+	err = -EIO;
 	bitmap_nr = load_inode_bitmap (sb, i);
-	if (bitmap_nr < 0) {
-		unlock_super (sb);
-		iput(inode);
-		*err = -EIO;
-		return NULL;
-	}
+	if (bitmap_nr < 0)
+		goto fail;
 
 	bh = sb->u.ext2_sb.s_inode_bitmap[bitmap_nr];
 	if ((j = ext2_find_first_zero_bit ((unsigned long *) bh->b_data,
@@ -397,11 +389,11 @@ repeat:
 			ext2_error (sb, "ext2_new_inode",
 				    "Free inodes count corrupted in group %d",
 				    i);
-			if (sb->s_flags & MS_RDONLY) {
-				unlock_super (sb);
-				iput (inode);
-				return NULL;
-			}
+			/* Is it really ENOSPC? */
+			err = -ENOSPC;
+			if (sb->s_flags & MS_RDONLY)
+				goto fail;
+
 			gdp->bg_free_inodes_count = 0;
 			mark_buffer_dirty(bh2);
 		}
@@ -412,10 +404,8 @@ repeat:
 		ext2_error (sb, "ext2_new_inode",
 			    "reserved inode or inode > inodes count - "
 			    "block_group = %d,inode=%d", i, j);
-		unlock_super (sb);
-		iput (inode);
-		*err = -EIO;
-		return NULL;
+		err = -EIO;
+		goto fail;
 	}
 	gdp->bg_free_inodes_count =
 		cpu_to_le16(le16_to_cpu(gdp->bg_free_inodes_count) - 1);
@@ -464,13 +454,15 @@ repeat:
 		sb->dq_op->drop(inode);
 		inode->i_nlink = 0;
 		iput(inode);
-		*err = -EDQUOT;
-		return NULL;
+		return ERR_PTR(-EDQUOT);
 	}
 	ext2_debug ("allocating inode %lu\n", inode->i_ino);
-
-	*err = 0;
 	return inode;
+
+fail:
+	unlock_super(sb);
+	iput(inode);
+	return ERR_PTR(err);
 }
 
 unsigned long ext2_count_free_inodes (struct super_block * sb)

@@ -1490,9 +1490,11 @@ static int filemap_write_page(struct file *file,
 extern void wakeup_bdflush(int);
 int filemap_swapout(struct page * page, struct file *file)
 {
-	filemap_write_page(file, page, 0);
+	int error;
+
+	error = filemap_write_page(file, page, 0);
 	wakeup_bdflush(0);
-	return 1;	/* We might have slept */
+	return error;
 }
 
 /* Called with mm->page_table_lock held to protect against other

@@ -27,8 +27,6 @@ volatile struct baboon *baboon;
 
 void baboon_irq(int, void *, struct pt_regs *);
 
-extern int console_loglevel;
-
 extern int macide_ack_intr(ide_hwif_t *);
 
 /*

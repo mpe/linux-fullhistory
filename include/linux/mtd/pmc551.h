@@ -1,5 +1,5 @@
 /*
- * $Id: pmc551.h,v 1.2 2000/03/31 14:40:42 dwmw2 Exp $
+ * $Id: pmc551.h,v 1.3 2000/10/30 20:03:23 major Exp $
  *
  * PMC551 PCI Mezzanine Ram Device
  *
@@ -16,6 +16,9 @@
 #define __MTD_PMC551_H__
 
 #include <linux/mtd/mtd.h>
+
+#define PMC551_VERSION "$Id: pmc551.h,v 1.3 2000/10/30 20:03:23 major Exp $\n"\
+       "Ramix PMC551 PCI Mezzanine Ram Driver. (C) 1999,2000 Nortel Networks.\n"
 
 /*
  * Our personal and private information
@@ -54,68 +57,25 @@ static int pmc551_write(struct mtd_info *, loff_t, size_t, size_t *, const u_cha
 #define PMC551_PCI_MEM_MAP1	0x54
 #define PMC551_PCI_MEM_MAP_MAP_ADDR_MASK	0x3ff00000
 #define PMC551_PCI_MEM_MAP_APERTURE_MASK	0x000000f0
-#define PMC551_PCI_MEM_MAP_1MB_APERTURE		0x00000000
-#define PMC551_PCI_MEM_MAP_2MB_APERTURE		0x00000010
 #define PMC551_PCI_MEM_MAP_REG_EN		0x00000002
 #define PMC551_PCI_MEM_MAP_ENABLE		0x00000001
 
 #define PMC551_SDRAM_MA		0x60
 #define PMC551_SDRAM_CMD	0x62
 #define PMC551_DRAM_CFG		0x64
+#define PMC551_SYS_CTRL_REG	0x78
 
 #define PMC551_DRAM_BLK0	0x68
 #define PMC551_DRAM_BLK1	0x6c
 #define PMC551_DRAM_BLK2	0x70
 #define PMC551_DRAM_BLK3	0x74
-#define PMC551_DRAM_BLK_GET_SIZE(x) ((512 * 1024) << ((x >> 4) & 0xf))
+#define PMC551_DRAM_BLK_GET_SIZE(x) (524288<<((x>>4)&0x0f))
 #define PMC551_DRAM_BLK_SET_COL_MUX(x,v) (((x) & ~0x00007000) | (((v) & 0x7) << 12))
 #define PMC551_DRAM_BLK_SET_ROW_MUX(x,v) (((x) & ~0x00000f00) | (((v) & 0xf) << 8))
 
 
-/* Use a 1MB apeture into the card. */
-#define PMC551_APERTURE_SIZE	0x00100000
 #define PMC551_ADDR_HIGH_MASK	0x3ff00000
 #define PMC551_ADDR_LOW_MASK	0x000fffff
-#define PMC551_APERTURE_VAL	PMC551_PCI_MEM_MAP_1MB_APERTURE
-/*
- * Define the PCI ID's if the kernel doesn't define them for us
- */
-#ifndef PCI_VENDOR_ID_V3_SEMI
-#define PCI_VENDOR_ID_V3_SEMI             0x11b0
-#endif
-
-#ifndef PCI_DEVICE_ID_V3_SEMI_V370PDC
-#define PCI_DEVICE_ID_V3_SEMI_V370PDC     0x0200  
-#endif
-
-
-#define PMC551_PCI_MEM_MAP0	0x50
-#define PMC551_PCI_MEM_MAP1	0x54
-#define PMC551_PCI_MEM_MAP_MAP_ADDR_MASK	0x3ff00000
-#define PMC551_PCI_MEM_MAP_APERTURE_MASK	0x000000f0
-#define PMC551_PCI_MEM_MAP_1MB_APERTURE		0x00000000
-#define PMC551_PCI_MEM_MAP_2MB_APERTURE		0x00000010
-#define PMC551_PCI_MEM_MAP_REG_EN		0x00000002
-#define PMC551_PCI_MEM_MAP_ENABLE		0x00000001
-
-#define PMC551_SDRAM_MA		0x60
-#define PMC551_SDRAM_CMD	0x62
-#define PMC551_DRAM_CFG		0x64
-
-#define PMC551_DRAM_BLK0	0x68
-#define PMC551_DRAM_BLK1	0x6c
-#define PMC551_DRAM_BLK2	0x70
-#define PMC551_DRAM_BLK3	0x74
-#define PMC551_DRAM_BLK_GET_SIZE(x) ((512 * 1024) << ((x >> 4) & 0xf))
-#define PMC551_DRAM_BLK_SET_COL_MUX(x,v) (((x) & ~0x00007000) | (((v) & 0x7) << 12))
-#define PMC551_DRAM_BLK_SET_ROW_MUX(x,v) (((x) & ~0x00000f00) | (((v) & 0xf) << 8))
-
-
-/* Use a 1MB apeture into the card. */
-#define PMC551_APERTURE_SIZE	0x00100000
-#define PMC551_ADDR_HIGH_MASK	0x3ff00000
-#define PMC551_ADDR_LOW_MASK	0x000fffff
-#define PMC551_APERTURE_VAL	PMC551_PCI_MEM_MAP_1MB_APERTURE
 
 #endif /* __MTD_PMC551_H__ */
 

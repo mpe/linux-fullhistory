@@ -2172,7 +2172,7 @@ int get_cpuinfo(char * buffer)
 			        "fpu_exception\t: %s\n"
 			        "cpuid level\t: %d\n"
 			        "wp\t\t: %s\n"
-			        "features\t:",
+			        "flags\t:",
 			     c->fdiv_bug ? "yes" : "no",
 			     c->hlt_works_ok ? "no" : "yes",
 			     c->f00f_bug ? "yes" : "no",

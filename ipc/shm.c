@@ -1406,7 +1406,7 @@ static int shm_swapout(struct page * page, struct file *file)
 	 */
 	page_cache_free(page);
 
-	return 1;		/* We might have slept */
+	return 0;
 }
 
 /*

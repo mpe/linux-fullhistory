@@ -211,8 +211,6 @@ static void scc_irq_disable(int);
  * console_loglevel determines NMI handler function
  */
 
-extern int console_loglevel;
-
 extern void mac_bang(int, void *, struct pt_regs *);
 
 void mac_nmi_handler(int, void *, struct pt_regs *);

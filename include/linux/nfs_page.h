@@ -26,7 +26,7 @@ struct nfs_page {
 				wb_list,	/* Defines state of page: */
 				*wb_list_head;	/*      read/write/commit */
 	struct file		*wb_file;
-	struct dentry		*wb_dentry;
+	struct inode		*wb_inode;
 	struct rpc_cred		*wb_cred;
 	struct page		*wb_page;	/* page to read in/write out */
 	wait_queue_head_t	wb_wait;	/* wait queue */
@@ -41,6 +41,7 @@ struct nfs_page {
 #define NFS_WBACK_BUSY(req)	(test_bit(PG_BUSY,&(req)->wb_flags))
 
 extern	struct nfs_page *nfs_create_request(struct file *file,
+					    struct inode *inode,
 					    struct page *page,
 					    unsigned int offset,
 					    unsigned int count);

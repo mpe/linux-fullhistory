@@ -76,8 +76,6 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 
 #ifndef __ASSEMBLY__
 
-extern int console_loglevel;
-
 /*
  * Tell the user there is some problem.
  */

@@ -62,19 +62,7 @@ struct desc_struct default_ldt[] = { { 0, 0 }, { 0, 0 }, { 0, 0 },
  */
 struct desc_struct idt_table[256] __attribute__((__section__(".data.idt"))) = { {0, 0}, };
 
-extern int console_loglevel;
 extern void bust_spinlocks(void);
-
-static inline void console_silent(void)
-{
-	console_loglevel = 0;
-}
-
-static inline void console_verbose(void)
-{
-	if (console_loglevel)
-		console_loglevel = 15;
-}
 
 asmlinkage void divide_error(void);
 asmlinkage void debug(void);

@@ -22,7 +22,7 @@ extern struct task_struct *child_reaper;
 
 int getrusage(struct task_struct *, int, struct rusage *);
 
-static void release(struct task_struct * p)
+static void release_task(struct task_struct * p)
 {
 	if (p != current) {
 #ifdef CONFIG_SMP
@@ -31,15 +31,15 @@ static void release(struct task_struct * p)
 		 * runqueue (active on some other CPU still)
 		 */
 		for (;;) {
-			spin_lock_irq(&runqueue_lock);
+			task_lock(p);
 			if (!p->has_cpu)
 				break;
-			spin_unlock_irq(&runqueue_lock);
+			task_unlock(p);
 			do {
 				barrier();
 			} while (p->has_cpu);
 		}
-		spin_unlock_irq(&runqueue_lock);
+		task_unlock(p);
 #endif
 		atomic_dec(&p->user->processes);
 		free_uid(p->user);
@@ -550,7 +550,7 @@ repeat:
 					do_notify_parent(p, SIGCHLD);
 					write_unlock_irq(&tasklist_lock);
 				} else
-					release(p);
+					release_task(p);
 				goto end_wait4;
 			default:
 				continue;

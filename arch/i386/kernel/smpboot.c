@@ -886,8 +886,10 @@ void __init smp_boot_cpus(void)
 	/*
 	 * If we couldn't find a local APIC, then get out of here now!
 	 */
-	if (!verify_local_APIC()) {
-		printk(KERN_ERR "BIOS bug, local APIC at 0x%lX not detected!...\n", mp_lapic_addr);
+	if (APIC_INTEGRATED(apic_version[boot_cpu_id]) &&
+	    !test_bit(X86_FEATURE_APIC, boot_cpu_data.x86_capability)) {
+		printk(KERN_ERR "BIOS bug, local APIC #%d not detected!...\n",
+			boot_cpu_id);
 		printk(KERN_ERR "... forcing use of dummy APIC emulation. (tell your hw vendor)\n");
 #ifndef CONFIG_VISWS
 		io_apic_irqs = 0;
@@ -896,6 +898,8 @@ void __init smp_boot_cpus(void)
 		smp_num_cpus = 1;
 		goto smp_done;
 	}
+
+	verify_local_APIC();
 
 	/*
 	 * If SMP should be disabled, then really disable it!

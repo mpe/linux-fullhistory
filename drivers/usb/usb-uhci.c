@@ -16,7 +16,7 @@
  * (C) Copyright 1999 Randy Dunlap
  * (C) Copyright 1999 Gregory P. Smith
  *
- * $Id: usb-uhci.c,v 1.249 2000/11/21 12:03:34 acher Exp $
+ * $Id: usb-uhci.c,v 1.251 2000/11/30 09:47:54 acher Exp $
  */
 
 #include <linux/config.h>
@@ -52,7 +52,7 @@
 /* This enables an extra UHCI slab for memory debugging */
 #define DEBUG_SLAB
 
-#define VERSTR "$Revision: 1.249 $ time " __TIME__ " " __DATE__
+#define VERSTR "$Revision: 1.251 $ time " __TIME__ " " __DATE__
 
 #include <linux/usb.h>
 #include "usb-uhci.h"
@@ -582,6 +582,7 @@ _static int init_skel (uhci_t *s)
 	
 	fill_td (td, 0 * TD_CTRL_IOC, 0, 0); // generate 1ms interrupt (enabled on demand)
 	insert_td (s, qh, td, 0);
+	qh->hw.qh.element &= ~UHCI_PTR_TERM; // remove TERM bit
 	s->td1ms=td;
 
 	dbg("allocating qh: bulk_chain");
@@ -2916,6 +2917,9 @@ _static int __devinit alloc_uhci (struct pci_dev *dev, int irq, unsigned int io_
 		return -1;
 	}
 
+	/* Enable PIRQ */
+	pci_write_config_word (dev, USBLEGSUP, USBLEGSUP_DEFAULT);
+
 	s->irq = irq;
 
 	if(uhci_start_usb (s) < 0) {
@@ -2944,14 +2948,14 @@ uhci_pci_probe (struct pci_dev *dev, const struct pci_device_id *id)
 		unsigned int io_addr = dev->resource[i].start;
 		unsigned int io_size =
 		dev->resource[i].end - dev->resource[i].start + 1;
-		if (!(dev->resource[i].flags & 1))
+		if (!(dev->resource[i].flags & IORESOURCE_IO))
 			continue;
 
 		/* Is it already in use? */
 		if (check_region (io_addr, io_size))
 			break;
 		/* disable legacy emulation */
-		pci_write_config_word (dev, USBLEGSUP, USBLEGSUP_DEFAULT);
+		pci_write_config_word (dev, USBLEGSUP, 0);
 	
 		return alloc_uhci(dev, dev->irq, io_addr, io_size);
 	}

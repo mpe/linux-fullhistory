@@ -283,7 +283,6 @@ struct fb_info_aty128 {
     const struct aty128_meminfo *mem;   /* onboard mem info    */
     struct aty128fb_par default_par, current_par;
     struct display disp;
-    struct display_switch dispsw;       /* for cursor and font */
     struct { u8 red, green, blue, pad; } palette[256];
     union {
 #ifdef FBCON_HAS_CFB16
@@ -347,7 +346,7 @@ static void aty128fbcon_blank(int blank, struct fb_info *fb);
 static void aty128_encode_fix(struct fb_fix_screeninfo *fix,
 				struct aty128fb_par *par,
 				const struct fb_info_aty128 *info);
-static void aty128_set_disp(struct display *disp,
+static void aty128_set_dispsw(struct display *disp,
 			struct fb_info_aty128 *info, int bpp, int accel);
 static int aty128_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 				u_int *transp, struct fb_info *info);
@@ -1392,7 +1391,7 @@ aty128fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *fb)
 	display->inverse = 0;
 
 	accel = var->accel_flags & FB_ACCELF_TEXT;
-        aty128_set_disp(display, info, par.crtc.bpp, accel);
+        aty128_set_dispsw(display, info, par.crtc.bpp, accel);
 
 	if (accel)
 	    display->scrollmode = SCROLL_YNOMOVE;
@@ -1417,35 +1416,31 @@ aty128fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *fb)
 
 
 static void
-aty128_set_disp(struct display *disp,
+aty128_set_dispsw(struct display *disp,
 			struct fb_info_aty128 *info, int bpp, int accel)
 {
     switch (bpp) {
 #ifdef FBCON_HAS_CFB8
     case 8:
-	info->dispsw = accel ? fbcon_aty128_8 : fbcon_cfb8;
-        disp->dispsw = &info->dispsw;
+	disp->dispsw = accel ? &fbcon_aty128_8 : &fbcon_cfb8;
 	break;
 #endif
 #ifdef FBCON_HAS_CFB16
     case 15:
     case 16:
-	info->dispsw = accel ? fbcon_aty128_16 : fbcon_cfb16;
-        disp->dispsw = &info->dispsw;
+	disp->dispsw = accel ? &fbcon_aty128_16 : &fbcon_cfb16;
 	disp->dispsw_data = info->fbcon_cmap.cfb16;
 	break;
 #endif
 #ifdef FBCON_HAS_CFB24
     case 24:
-	info->dispsw = accel ? fbcon_aty128_24 : fbcon_cfb24;
-        disp->dispsw = &info->dispsw;
+	disp->dispsw = accel ? &fbcon_aty128_24 : &fbcon_cfb24;
 	disp->dispsw_data = info->fbcon_cmap.cfb24;
 	break;
 #endif
 #ifdef FBCON_HAS_CFB32
     case 32:
-	info->dispsw = accel ? fbcon_aty128_32 : fbcon_cfb32;
-        disp->dispsw = &info->dispsw;
+	disp->dispsw = accel ? &fbcon_aty128_32 : &fbcon_cfb32;
 	disp->dispsw_data = info->fbcon_cmap.cfb32;
 	break;
 #endif
@@ -2135,7 +2130,7 @@ aty128fbcon_switch(int con, struct fb_info *fb)
     aty128_decode_var(&fb_display[con].var, &par, info);
     aty128_set_par(&par, info);
 
-    aty128_set_disp(&fb_display[con], info, par.crtc.bpp,
+    aty128_set_dispsw(&fb_display[con], info, par.crtc.bpp,
         par.accel_flags & FB_ACCELF_TEXT);
 
     do_install_cmap(con, fb);

@@ -1,4 +1,4 @@
-/* $Id: diva.c,v 1.25.6.1 2000/11/28 12:02:46 kai Exp $
+/* $Id: diva.c,v 1.25.6.2 2000/11/29 16:00:14 kai Exp $
  *
  * diva.c     low level stuff for Eicon.Diehl Diva Family ISDN cards
  *
@@ -24,7 +24,7 @@
 
 extern const char *CardType[];
 
-const char *Diva_revision = "$Revision: 1.25.6.1 $";
+const char *Diva_revision = "$Revision: 1.25.6.2 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -820,9 +820,9 @@ Diva_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-static 	struct pci_dev *dev_diva __initdata;
-static 	struct pci_dev *dev_diva_u __initdata;
-static 	struct pci_dev *dev_diva201 __initdata;
+static struct pci_dev *dev_diva __initdata = NULL;
+static struct pci_dev *dev_diva_u __initdata = NULL;
+static struct pci_dev *dev_diva201 __initdata = NULL;
 
 int __init
 setup_diva(struct IsdnCard *card)

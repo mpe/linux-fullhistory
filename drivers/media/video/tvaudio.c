@@ -291,7 +291,7 @@ static int chip_thread(void *data)
 	chip->thread = NULL;
 	dprintk("%s: thread exiting\n", chip->c.name);
 	if(chip->notify != NULL)
-		up(chip->notify);
+		up_and_exit(chip->notify,0);
 
 	return 0;
 }

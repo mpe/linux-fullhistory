@@ -27,19 +27,6 @@
 #include <asm/uaccess.h>
 #include <asm/mmu_context.h>
 
-extern int console_loglevel;
-
-static inline void console_silent(void)
-{
-	console_loglevel = 0;
-}
-
-static inline void console_verbose(void)
-{
-	if (console_loglevel)
-		console_loglevel = 15;
-}
-
 extern asmlinkage void __xtlb_mod(void);
 extern asmlinkage void __xtlb_tlbl(void);
 extern asmlinkage void __xtlb_tlbs(void);

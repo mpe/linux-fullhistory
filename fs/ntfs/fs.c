@@ -557,7 +557,8 @@ ntfs_bmap(struct inode *ino,int block)
 #endif
 
 /* It's fscking broken. */
-
+/* FIXME: [bm]map code is disabled until ntfs_get_block gets sorted! */
+/*
 static int ntfs_get_block(struct inode *inode, long block, struct buffer_head *bh, int create)
 {
 	BUG();
@@ -573,6 +574,7 @@ static struct file_operations ntfs_file_operations = {
 };
 
 static struct inode_operations ntfs_inode_operations;
+*/
 
 static struct file_operations ntfs_dir_operations = {
 	read:		generic_read_dir,
@@ -587,6 +589,7 @@ static struct inode_operations ntfs_dir_inode_operations = {
 #endif
 };
 
+/*
 static int ntfs_writepage(struct file *file, struct page *page)
 {
 	return block_write_full_page(page,ntfs_get_block);
@@ -612,6 +615,8 @@ struct address_space_operations ntfs_aops = {
 	commit_write: generic_commit_write,
 	bmap: _ntfs_bmap
 };
+*/
+
 /* ntfs_read_inode is called by the Virtual File System (the kernel layer that
  * deals with filesystems) when iget is called requesting an inode not already
  * present in the inode table. Typically filesystems have separate
@@ -664,7 +669,10 @@ static void ntfs_read_inode(struct inode* inode)
 	else
 	{
 		inode->i_size=data->size;
-		can_mmap=!data->resident && !data->compressed;
+		/* FIXME: once ntfs_get_block is implemented, uncomment the
+		 * next line and remove the can_mmap = 0; */
+		/* can_mmap=!data->resident && !data->compressed;*/
+		can_mmap = 0;
 	}
 	/* get the file modification times from the standard information */
 	si=ntfs_find_attr(ino,vol->at_standard_information,NULL);
@@ -687,12 +695,17 @@ static void ntfs_read_inode(struct inode* inode)
 	}
 	else
 	{
-		if (can_mmap) {
+		/* As long as ntfs_get_block() is just a call to BUG() do not
+	 	 * define any [bm]map ops or we get the BUG() whenever someone
+		 * runs mc or mpg123 on an ntfs partition!
+		 * FIXME: Uncomment the below code when ntfs_get_block is
+		 * implemented. */
+		/* if (can_mmap) {
 			inode->i_op = &ntfs_inode_operations;
 			inode->i_fop = &ntfs_file_operations;
 			inode->i_mapping->a_ops = &ntfs_aops;
 			inode->u.ntfs_i.mmu_private = inode->i_size;
-		} else {
+		} else */ {
 			inode->i_op=&ntfs_inode_operations_nobmap;
 			inode->i_fop=&ntfs_file_operations_nommap;
 		}
@@ -931,8 +944,7 @@ static int __init init_ntfs_fs(void)
 	/* Comment this if you trust klogd. There are reasons not to trust it
 	 */
 #if defined(DEBUG) && !defined(MODULE)
-	extern int console_loglevel;
-	console_loglevel=15;
+	console_verbose();
 #endif
 	printk(KERN_NOTICE "NTFS version " NTFS_VERSION "\n");
 	SYSCTL(1);

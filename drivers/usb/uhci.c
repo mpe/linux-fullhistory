@@ -2,7 +2,7 @@
  * Universal Host Controller Interface driver for USB.
  *
  * (C) Copyright 1999 Linus Torvalds
- * (C) Copyright 1999-2000 Johannes Erdfelt, jerdfelt@sventech.com
+ * (C) Copyright 1999-2000 Johannes Erdfelt, johannes@erdfelt.com
  * (C) Copyright 1999 Randy Dunlap
  * (C) Copyright 1999 Georg Acher, acher@in.tum.de
  * (C) Copyright 1999 Deti Fliegl, deti@fliegl.de
@@ -2357,6 +2357,8 @@ static int setup_uhci(struct pci_dev *dev, int irq, unsigned int io_addr, unsign
 	if (request_irq(irq, uhci_interrupt, SA_SHIRQ, "usb-uhci", uhci) == 0) {
 		uhci->irq = irq;
 
+		pci_write_config_word(dev, USBLEGSUP, USBLEGSUP_DEFAULT);
+
 		if (!uhci_start_root_hub(uhci))
 			return 0;
 	}
@@ -2370,13 +2372,12 @@ static int setup_uhci(struct pci_dev *dev, int irq, unsigned int io_addr, unsign
 	return retval;
 }
 
-static int __devinit
-uhci_pci_probe (struct pci_dev *dev, const struct pci_device_id *id)
+static int __devinit uhci_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	int i;
 
 	/* disable legacy emulation */
-	pci_write_config_word(dev, USBLEGSUP, USBLEGSUP_DEFAULT);
+	pci_write_config_word(dev, USBLEGSUP, 0);
 
 	if (pci_enable_device(dev) < 0)
 		return -ENODEV;
@@ -2405,8 +2406,7 @@ uhci_pci_probe (struct pci_dev *dev, const struct pci_device_id *id)
 	return -ENODEV;
 }
 
-static void __devexit
-uhci_pci_remove (struct pci_dev *dev)
+static void __devexit uhci_pci_remove(struct pci_dev *dev)
 {
 	struct uhci *uhci = dev->driver_data;
 
@@ -2423,14 +2423,12 @@ uhci_pci_remove (struct pci_dev *dev)
 	release_uhci(uhci);
 }
 
-static void
-uhci_pci_suspend (struct pci_dev *dev)
+static void uhci_pci_suspend(struct pci_dev *dev)
 {
 	reset_hc((struct uhci *) dev->driver_data);
 }
 
-static void
-uhci_pci_resume (struct pci_dev *dev)
+static void uhci_pci_resume(struct pci_dev *dev)
 {
 	reset_hc((struct uhci *) dev->driver_data);
 	start_hc((struct uhci *) dev->driver_data);

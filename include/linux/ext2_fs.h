@@ -552,7 +552,7 @@ extern int ext2_sync_file (struct file *, struct dentry *, int);
 extern int ext2_fsync_inode (struct inode *, int);
 
 /* ialloc.c */
-extern struct inode * ext2_new_inode (const struct inode *, int, int *);
+extern struct inode * ext2_new_inode (const struct inode *, int);
 extern void ext2_free_inode (struct inode *);
 extern unsigned long ext2_count_free_inodes (struct super_block *);
 extern void ext2_check_inodes_bitmap (struct super_block *);

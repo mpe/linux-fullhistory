@@ -20,31 +20,12 @@
  * bit 0 is the LSB of addr; bit 64 is the LSB of (addr+1).
  */
 
-#define BITOPS_NO_BRANCH
-
-extern __inline__ void set_bit(unsigned long nr, volatile void * addr)
+extern __inline__ void
+set_bit(unsigned long nr, volatile void * addr)
 {
-#ifndef BITOPS_NO_BRANCH
-	unsigned long oldbit;
-#endif
 	unsigned long temp;
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	int *m = ((int *) addr) + (nr >> 5);
 
-#ifndef BITOPS_NO_BRANCH
-	__asm__ __volatile__(
-	"1:	ldl_l %0,%4\n"
-	"	and %0,%3,%2\n"
-	"	bne %2,2f\n"
-	"	xor %0,%3,%0\n"
-	"	stl_c %0,%1\n"
-	"	beq %0,3f\n"
-	"2:\n"
-	".subsection 2\n"
-	"3:	br 1b\n"
-	".previous"
-	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
-	:"Ir" (1UL << (nr & 31)), "m" (*m));
-#else
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%3\n"
 	"	bis %0,%2,%0\n"
@@ -55,58 +36,28 @@ extern __inline__ void set_bit(unsigned long nr, volatile void * addr)
 	".previous"
 	:"=&r" (temp), "=m" (*m)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
-#endif
 }
 
 /*
  * WARNING: non atomic version.
  */
-extern __inline__ void __set_bit(unsigned long nr, volatile void * addr)
+extern __inline__ void
+__set_bit(unsigned long nr, volatile void * addr)
 {
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
-	/*
-	 * Asm and C produces the same thing so let
-	 * the compiler to do its good work.
-	 */
-#if 0
-	int tmp;
+	int *m = ((int *) addr) + (nr >> 5);
 
-	__asm__ __volatile__(
-	"ldl %0,%3\n\t"
-	"bis %0,%2,%0\n\t"
-	"stl %0,%1"
-	: "=&r" (tmp), "=m" (*m)
-	: "Ir" (1UL << (nr & 31)), "m" (*m));
-#else
 	*m |= 1UL << (nr & 31);
-#endif
 }
 
 #define smp_mb__before_clear_bit()	smp_mb()
 #define smp_mb__after_clear_bit()	smp_mb()
-extern __inline__ void clear_bit(unsigned long nr, volatile void * addr)
-{
-#ifndef BITOPS_NO_BRANCH
-	unsigned long oldbit;
-#endif
-	unsigned long temp;
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
-#ifndef BITOPS_NO_BRANCH
-	__asm__ __volatile__(
-	"1:	ldl_l %0,%4\n"
-	"	and %0,%3,%2\n"
-	"	beq %2,2f\n"
-	"	xor %0,%3,%0\n"
-	"	stl_c %0,%1\n"
-	"	beq %0,3f\n"
-	"2:\n"
-	".subsection 2\n"
-	"3:	br 1b\n"
-	".previous"
-	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
-	:"Ir" (1UL << (nr & 31)), "m" (*m));
-#else
+extern __inline__ void
+clear_bit(unsigned long nr, volatile void * addr)
+{
+	unsigned long temp;
+	int *m = ((int *) addr) + (nr >> 5);
+
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%3\n"
 	"	and %0,%2,%0\n"
@@ -117,13 +68,13 @@ extern __inline__ void clear_bit(unsigned long nr, volatile void * addr)
 	".previous"
 	:"=&r" (temp), "=m" (*m)
 	:"Ir" (~(1UL << (nr & 31))), "m" (*m));
-#endif
 }
 
-extern __inline__ void change_bit(unsigned long nr, volatile void * addr)
+extern __inline__ void
+change_bit(unsigned long nr, volatile void * addr)
 {
 	unsigned long temp;
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	int *m = ((int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%3\n"
@@ -137,12 +88,12 @@ extern __inline__ void change_bit(unsigned long nr, volatile void * addr)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
 }
 
-extern __inline__ int test_and_set_bit(unsigned long nr,
-				       volatile void * addr)
+extern __inline__ int
+test_and_set_bit(unsigned long nr, volatile void *addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	int *m = ((int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%4\n"
@@ -151,10 +102,10 @@ extern __inline__ int test_and_set_bit(unsigned long nr,
 	"	xor %0,%3,%0\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
+	"2:\n"
 #ifdef CONFIG_SMP
 	"	mb\n"
 #endif
-	"2:\n"
 	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
@@ -167,32 +118,23 @@ extern __inline__ int test_and_set_bit(unsigned long nr,
 /*
  * WARNING: non atomic version.
  */
-extern __inline__ int __test_and_set_bit(unsigned long nr,
-					 volatile void * addr)
+extern __inline__ int
+__test_and_set_bit(unsigned long nr, volatile void * addr)
 {
-	unsigned long oldbit;
-	unsigned long temp;
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	unsigned long mask = 1 << (nr & 0x1f);
+	int *m = ((int *) addr) + (nr >> 5);
+	int old = *m;
 
-	__asm__ __volatile__(
-	"	ldl %0,%4\n"
-	"	and %0,%3,%2\n"
-	"	bne %2,1f\n"
-	"	xor %0,%3,%0\n"
-	"	stl %0,%1\n"
-	"1:\n"
-	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
-	:"Ir" (1UL << (nr & 31)), "m" (*m));
-
-	return oldbit != 0;
+	*m = old | mask;
+	return (old & mask) != 0;
 }
 
-extern __inline__ int test_and_clear_bit(unsigned long nr,
-					 volatile void * addr)
+extern __inline__ int
+test_and_clear_bit(unsigned long nr, volatile void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	int *m = ((int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%4\n"
@@ -201,10 +143,10 @@ extern __inline__ int test_and_clear_bit(unsigned long nr,
 	"	xor %0,%3,%0\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
+	"2:\n"
 #ifdef CONFIG_SMP
 	"	mb\n"
 #endif
-	"2:\n"
 	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
@@ -217,32 +159,23 @@ extern __inline__ int test_and_clear_bit(unsigned long nr,
 /*
  * WARNING: non atomic version.
  */
-extern __inline__ int __test_and_clear_bit(unsigned long nr,
-					   volatile void * addr)
+extern __inline__ int
+__test_and_clear_bit(unsigned long nr, volatile void * addr)
 {
-	unsigned long oldbit;
-	unsigned long temp;
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	unsigned long mask = 1 << (nr & 0x1f);
+	int *m = ((int *) addr) + (nr >> 5);
+	int old = *m;
 
-	__asm__ __volatile__(
-	"	ldl %0,%4\n"
-	"	and %0,%3,%2\n"
-	"	beq %2,1f\n"
-	"	xor %0,%3,%0\n"
-	"	stl %0,%1\n"
-	"1:\n"
-	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
-	:"Ir" (1UL << (nr & 31)), "m" (*m));
-
-	return oldbit != 0;
+	*m = old & ~mask;
+	return (old & mask) != 0;
 }
 
-extern __inline__ int test_and_change_bit(unsigned long nr,
-					  volatile void * addr)
+extern __inline__ int
+test_and_change_bit(unsigned long nr, volatile void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	int *m = ((int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%4\n"
@@ -262,7 +195,8 @@ extern __inline__ int test_and_change_bit(unsigned long nr,
 	return oldbit != 0;
 }
 
-extern __inline__ int test_bit(int nr, volatile void * addr)
+extern __inline__ int
+test_bit(int nr, volatile void * addr)
 {
 	return (1UL & (((const int *) addr)[nr >> 5] >> (nr & 31))) != 0UL;
 }
@@ -289,7 +223,7 @@ extern inline unsigned long ffz_b(unsigned long x)
 extern inline unsigned long ffz(unsigned long word)
 {
 #if defined(__alpha_cix__) && defined(__alpha_fix__)
-	/* Whee.  EV6 can calculate it directly.  */
+	/* Whee.  EV67 can calculate it directly.  */
 	unsigned long result;
 	__asm__("cttz %1,%0" : "=r"(result) : "r"(~word));
 	return result;
@@ -325,7 +259,7 @@ extern inline int ffs(int word)
  */
 
 #if defined(__alpha_cix__) && defined(__alpha_fix__)
-/* Whee.  EV6 can calculate it directly.  */
+/* Whee.  EV67 can calculate it directly.  */
 extern __inline__ unsigned long hweight64(unsigned long w)
 {
 	unsigned long result;
@@ -347,7 +281,8 @@ extern __inline__ unsigned long hweight64(unsigned long w)
 /*
  * Find next zero bit in a bitmap reasonably efficiently..
  */
-extern inline unsigned long find_next_zero_bit(void * addr, unsigned long size, unsigned long offset)
+extern inline unsigned long
+find_next_zero_bit(void * addr, unsigned long size, unsigned long offset)
 {
 	unsigned long * p = ((unsigned long *) addr) + (offset >> 6);
 	unsigned long result = offset & ~63UL;

@@ -63,8 +63,8 @@
 #define PCI_DEVICE_ID_APPLICOM_PCIGENERIC     0x0001
 #define PCI_DEVICE_ID_APPLICOM_PCI2000IBS_CAN 0x0002
 #define PCI_DEVICE_ID_APPLICOM_PCI2000PFB     0x0003
-#define MAX_PCI_DEVICE_NUM 3
 #endif
+#define MAX_PCI_DEVICE_NUM 3
 
 static char *applicom_pci_devnames[] = {
 	"PCI board",

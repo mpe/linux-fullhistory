@@ -38,6 +38,7 @@
   Paul Gortmaker	: add kmod support for auto-loading of the 8390
 			  module by all drivers that require it.
   Alan Cox		: Spinlocking work, added 'BUG_83C690'
+  Paul Gortmaker	: Separate out Tx timeout code from Tx path.
 
   Sources:
   The National Semiconductor LAN Databook, and the 3Com 3c503 databook.
@@ -105,6 +106,7 @@ int ei_debug = 1;
 /* Index to functions. */
 static void ei_tx_intr(struct net_device *dev);
 static void ei_tx_err(struct net_device *dev);
+static void ei_tx_timeout(struct net_device *dev);
 static void ei_receive(struct net_device *dev);
 static void ei_rx_overrun(struct net_device *dev);
 
@@ -161,6 +163,13 @@ int ei_open(struct net_device *dev)
 		printk(KERN_EMERG "%s: ei_open passed a non-existent device!\n", dev->name);
 		return -ENXIO;
 	}
+	
+	/* The card I/O part of the driver (e.g. 3c503) can hook a Tx timeout
+	    wrapper that does e.g. media check & then calls ei_tx_timeout. */
+	if (dev->tx_timeout == NULL)
+		 dev->tx_timeout = ei_tx_timeout;
+	if (dev->watchdog_timeo <= 0)
+		 dev->watchdog_timeo = TX_TIMEOUT;
     
 	/*
 	 *	Grab the page lock so we own the register set, then call
@@ -200,6 +209,52 @@ int ei_close(struct net_device *dev)
 }
 
 /**
+ * ei_tx_timeout - handle transmit time out condition
+ * @dev: network device which has apparently fallen asleep
+ *
+ * Called by kernel when device never acknowledges a transmit has
+ * completed (or failed) - i.e. never posted a Tx related interrupt.
+ */
+
+void ei_tx_timeout(struct net_device *dev)
+{
+	long e8390_base = dev->base_addr;
+	struct ei_device *ei_local = (struct ei_device *) dev->priv;
+	int txsr, isr, tickssofar = jiffies - dev->trans_start;
+	unsigned long flags;
+
+	ei_local->stat.tx_errors++;
+
+	spin_lock_irqsave(&ei_local->page_lock, flags);
+	txsr = inb(e8390_base+EN0_TSR);
+	isr = inb(e8390_base+EN0_ISR);
+	spin_unlock_irqrestore(&ei_local->page_lock, flags);
+
+	printk(KERN_DEBUG "%s: Tx timed out, %s TSR=%#2x, ISR=%#2x, t=%d.\n",
+		dev->name, (txsr & ENTSR_ABT) ? "excess collisions." :
+		(isr) ? "lost interrupt?" : "cable problem?", txsr, isr, tickssofar);
+
+	if (!isr && !ei_local->stat.tx_packets) 
+	{
+		/* The 8390 probably hasn't gotten on the cable yet. */
+		ei_local->interface_num ^= 1;   /* Try a different xcvr.  */
+	}
+
+	/* Ugly but a reset can be slow, yet must be protected */
+		
+	disable_irq_nosync(dev->irq);
+	spin_lock(&ei_local->page_lock);
+		
+	/* Try to restart the card.  Perhaps the user has fixed something. */
+	ei_reset_8390(dev);
+	NS8390_init(dev, 1);
+		
+	spin_unlock(&ei_local->page_lock);
+	enable_irq(dev->irq);
+	netif_wake_queue(dev);
+}
+    
+/**
  * ei_start_xmit - begin packet transmission
  * @skb: packet to be sent
  * @dev: network device to which packet is sent
@@ -214,75 +269,6 @@ static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	int length, send_length, output_page;
 	unsigned long flags;
 
-	/*
-	 *  If it has been too long since the last Tx, we assume the
-	 *  board has died and kick it.
-	 */
- 
-	if (netif_queue_stopped(dev)) {
-		/* Do timeouts, just like the 8003 driver. */
-		int txsr;
-		int isr;
-		int tickssofar = jiffies - dev->trans_start;
-
-		/*
-		 *	Need the page lock. Now see what went wrong. This bit is
-		 *	fast.
-		 */
-		 		
-		spin_lock_irqsave(&ei_local->page_lock, flags);
-		txsr = inb(e8390_base+EN0_TSR);
-		if (tickssofar < TX_TIMEOUT ||	(tickssofar < (TX_TIMEOUT+5) && ! (txsr & ENTSR_PTX))) 
-		{
-			spin_unlock_irqrestore(&ei_local->page_lock, flags);
-			return 1;
-		}
-
-		ei_local->stat.tx_errors++;
-		isr = inb(e8390_base+EN0_ISR);
-		if (!netif_running(dev)) {
-			spin_unlock_irqrestore(&ei_local->page_lock, flags);
-			printk(KERN_WARNING "%s: xmit on stopped card\n", dev->name);
-			return 1;
-		}
-
-		/*
-		 * Note that if the Tx posted a TX_ERR interrupt, then the
-		 * error will have been handled from the interrupt handler
-		 * and not here. Error statistics are handled there as well.
-		 */
-
-		printk(KERN_DEBUG "%s: Tx timed out, %s TSR=%#2x, ISR=%#2x, t=%d.\n",
-			dev->name, (txsr & ENTSR_ABT) ? "excess collisions." :
-			(isr) ? "lost interrupt?" : "cable problem?", txsr, isr, tickssofar);
-
-		if (!isr && !ei_local->stat.tx_packets) 
-		{
-			/* The 8390 probably hasn't gotten on the cable yet. */
-			ei_local->interface_num ^= 1;   /* Try a different xcvr.  */
-		}
-
-		/*
-		 *	Play shuffle the locks, a reset on some chips takes a few
-		 *	mS. We very rarely hit this point.
-		 */
-		 
-		spin_unlock_irqrestore(&ei_local->page_lock, flags);
-
-		/* Ugly but a reset can be slow, yet must be protected */
-		
-		disable_irq_nosync(dev->irq);
-		spin_lock(&ei_local->page_lock);
-		
-		/* Try to restart the card.  Perhaps the user has fixed something. */
-		ei_reset_8390(dev);
-		NS8390_init(dev, 1);
-		
-		spin_unlock(&ei_local->page_lock);
-		enable_irq(dev->irq);
-		dev->trans_start = jiffies;
-	}
-    
 	length = skb->len;
 
 	/* Mask interrupts from the ethercard. 
@@ -1147,6 +1133,7 @@ static void NS8390_trigger_send(struct net_device *dev, unsigned int length,
 EXPORT_SYMBOL(ei_open);
 EXPORT_SYMBOL(ei_close);
 EXPORT_SYMBOL(ei_interrupt);
+EXPORT_SYMBOL(ei_tx_timeout);
 EXPORT_SYMBOL(ethdev_init);
 EXPORT_SYMBOL(NS8390_init);
 

@@ -1,6 +1,10 @@
 /* This version ported to the Linux-MTD system by dwmw2@infradead.org
- * $Id: ftl.c,v 1.20 2000/06/23 15:17:53 dwmw2 Exp $
- * Based on:
+ *
+ * - Based on Id: ftl.c,v 1.21 2000/08/01 13:07:49 dwmw2 Exp
+ * - With the Franz Galiana's set_bam_entry fix from v1.23
+ * - Perhaps it's about time I made a branch for the 2.4 series.
+
+ * Originally based on:
  */
 /*======================================================================
 
@@ -263,12 +267,13 @@ static struct block_device_operations ftl_blk_fops = {
 static int scan_header(partition_t *part)
 {
     erase_unit_header_t header;
-    loff_t offset;
+    loff_t offset, max_offset;
     int ret;
     part->header.FormattedSize = 0;
+    max_offset = (0x100000<part->mtd->size)?0x100000:part->mtd->size;
     /* Search first megabyte for a valid FTL header */
     for (offset = 0;
-	 offset < 0x100000;
+	 offset < max_offset;
 	 offset += part->mtd->erasesize?part->mtd->erasesize:0x2000) {
 
 	ret = part->mtd->read(part->mtd, offset, sizeof(header), &ret, 
@@ -280,7 +285,7 @@ static int scan_header(partition_t *part)
 	if (strcmp(header.DataOrgTuple+3, "FTL100") == 0) break;
     }
 
-    if (offset == 0x100000) {
+    if (offset == max_offset) {
 	printk(KERN_NOTICE "ftl_cs: FTL header not found.\n");
 	return -ENOENT;
     }
@@ -998,7 +1003,7 @@ static int ftl_read(partition_t *part, caddr_t buffer,
 static int set_bam_entry(partition_t *part, u_int32_t log_addr,
 			 u_int32_t virt_addr)
 {
-    u_int32_t bsize, blk;
+    u_int32_t bsize, blk, le_virt_addr;
 #ifdef PSYCHO_DEBUG
     u_int32_t old_addr;
 #endif
@@ -1035,6 +1040,7 @@ static int set_bam_entry(partition_t *part, u_int32_t log_addr,
 	return -EIO;
     }
 #endif
+    le_virt_addr = cpu_to_le32(virt_addr);
     if (part->bam_index == eun) {
 #ifdef PSYCHO_DEBUG
 	if (le32_to_cpu(part->bam_cache[blk]) != old_addr) {
@@ -1049,10 +1055,10 @@ static int set_bam_entry(partition_t *part, u_int32_t log_addr,
 	    return -EIO;
 	}
 #endif
-	part->bam_cache[blk] = cpu_to_le32(virt_addr);
+	part->bam_cache[blk] = le_virt_addr;
     }
     ret = part->mtd->write(part->mtd, offset, sizeof(u_int32_t),
-                            &retlen, (u_char *)&part->bam_cache[blk]);
+                            &retlen, (u_char *)&le_virt_addr);
 
     if (ret) {
 	printk(KERN_NOTICE "ftl_cs: set_bam_entry() failed!\n");
@@ -1409,8 +1415,6 @@ mod_init_t init_ftl(void)
     int i;
 
     memset(myparts, 0, sizeof(myparts));
-    
-    DEBUG(0, "$Id: ftl.c,v 1.20 2000/06/23 15:17:53 dwmw2 Exp $\n");
     
     if (register_blkdev(FTL_MAJOR, "ftl", &ftl_blk_fops)) {
 	printk(KERN_NOTICE "ftl_cs: unable to grab major "

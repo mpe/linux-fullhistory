@@ -529,7 +529,7 @@ yielded code size reductions and simplifications.
 If you want to construct a minimal chroot() gaol, the following
 command should suffice:
 
-mount -t bind /dev/null /gaol/dev/null
+mount --bind /dev/null /gaol/dev/null
 
 
 Repeat for other device nodes you want to expose. Simple!
@@ -739,7 +739,7 @@ create the /dev-state directory
 add the following lines near the very beginning of your boot
 scripts:
 
-mount -t bind /dev /dev-state
+mount --bind /dev /dev-state
 mount -t devfs none /dev
 devfsd /dev
 

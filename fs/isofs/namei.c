@@ -161,13 +161,14 @@ struct dentry *isofs_lookup(struct inode * dir, struct dentry * dentry)
 	struct inode *inode;
 	struct page *page;
 
-#ifdef DEBUG
-	printk("lookup: %x %s\n",dir->i_ino, dentry->d_name.name);
-#endif
 	dentry->d_op = dir->i_sb->s_root->d_op;
 
 	page = alloc_page(GFP_USER);
-	ino = isofs_find_entry(dir, dentry, page_address(page), 1024 + page_address(page));
+	if (!page)
+		return ERR_PTR(-ENOMEM);
+
+	ino = isofs_find_entry(dir, dentry, page_address(page),
+			       1024 + page_address(page));
 	__free_page(page);
 
 	inode = NULL;

@@ -32,8 +32,6 @@ volatile __u8 *psc;
 
 void psc_irq(int, void *, struct pt_regs *);
 
-extern int console_loglevel;
-
 /*
  * Debugging dump, used in various places to see what's going on.
  */

@@ -28,12 +28,6 @@
 #include <asm/atomic.h>
 #include <asm/processor.h>
 
-static inline void console_verbose(void)
-{
-	extern int console_loglevel;
-	console_loglevel = 15;
-}
-
 #define DO_ERROR(trapnr, signr, str, name, tsk) \
 asmlinkage void do_##name(unsigned long r4, unsigned long r5, \
 			  unsigned long r6, unsigned long r7, \

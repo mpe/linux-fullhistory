@@ -406,7 +406,6 @@ static int shaper_open(struct net_device *dev)
 		return -ENODEV;
 	if(shaper->bitspersec==0)
 		return -EINVAL;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -419,7 +418,6 @@ static int shaper_close(struct net_device *dev)
 	struct shaper *shaper=dev->priv;
 	shaper_flush(shaper);
 	del_timer_sync(&shaper->timer);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -618,34 +616,31 @@ static int shaper_ioctl(struct net_device *dev,  struct ifreq *ifr, int cmd)
 	}
 }
 
-static struct shaper *shaper_alloc(struct net_device *dev)
+static void shaper_init_priv(struct net_device *dev)
 {
-	struct shaper *sh=kmalloc(sizeof(struct shaper), GFP_KERNEL);
-	if(sh==NULL)
-		return NULL;
-	memset(sh,0,sizeof(*sh));
+	struct shaper *sh = dev->priv;
+
 	skb_queue_head_init(&sh->sendq);
 	init_timer(&sh->timer);
 	sh->timer.function=shaper_timer;
 	sh->timer.data=(unsigned long)sh;
 	init_waitqueue_head(&sh->wait_queue);
-	return sh;
 }
 
 /*
  *	Add a shaper device to the system
  */
  
-int __init shaper_probe(struct net_device *dev)
+static int __init shaper_probe(struct net_device *dev)
 {
 	/*
 	 *	Set up the shaper.
 	 */
-	
-	dev->priv = shaper_alloc(dev);
-	if(dev->priv==NULL)
-		return -ENOMEM;
-		
+
+	SET_MODULE_OWNER(dev);
+
+	shaper_init_priv(dev);
+
 	dev->open		= shaper_open;
 	dev->stop		= shaper_close;
 	dev->hard_start_xmit 	= shaper_start_xmit;
@@ -685,89 +680,68 @@ int __init shaper_probe(struct net_device *dev)
 	return 0;
 }
  
+static int shapers = 1;
 #ifdef MODULE
 
-static struct net_device dev_shape = 
-{
-	"",
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, shaper_probe 
-};
+MODULE_PARM(shapers, "i");
 
-int init_module(void)
+#else /* MODULE */
+
+static int __init set_num_shapers(char *str)
 {
-	int err=dev_alloc_name(&dev_shape,"shaper%d");
-	if(err<0)
-		return err;
-	printk(SHAPER_BANNER);	
-	if (register_netdev(&dev_shape) != 0)
-		return -EIO;
-	printk("Traffic shaper initialised.\n");
-	return 0;
+	shapers = simple_strtol(str, NULL, 0);
+	return 1;
 }
 
-void cleanup_module(void)
-{
-        struct shaper *sh=dev_shape.priv;
-
-        /*
-	 *	No need to check MOD_IN_USE, as sys_delete_module() checks.
-	 *	To be unloadable we must be closed and detached so we don't
-	 *	need to flush things.
-	 */
-	 
-	unregister_netdev(&dev_shape);
-
-	/*
-	 *	Free up the private structure, or leak memory :-)
-	 */
-	kfree(sh);
-	dev_shape.priv = NULL;
-}
-
-#else
-
-static struct net_device dev_sh0 = 
-{
-	"shaper0",
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, shaper_probe 
-};
-
-
-static struct net_device dev_sh1 = 
-{
-	"shaper1",
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, shaper_probe 
-};
-
-
-static struct net_device dev_sh2 = 
-{
-	"shaper2",
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, shaper_probe 
-};
-
-static struct net_device dev_sh3 = 
-{
-	"shaper3",
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, shaper_probe 
-};
-
-void shaper_init(void)
-{
-	register_netdev(&dev_sh0);
-	register_netdev(&dev_sh1);
-	register_netdev(&dev_sh2);
-	register_netdev(&dev_sh3);
-}
+__setup("shapers=", set_num_shapers);
 
 #endif /* MODULE */
+
+static struct net_device *devs;
+
+static int __init shaper_init(void)
+{
+	int i, err;
+	size_t alloc_size;
+	struct shaper *sp;
+	unsigned int shapers_registered = 0;
+
+	if (shapers < 1)
+		return -ENODEV;
+
+	alloc_size = (sizeof(*devs) * shapers) +
+		     (sizeof(struct shaper) * shapers);
+	devs = kmalloc(alloc_size, GFP_KERNEL);
+	if (!devs)
+		return -ENOMEM;
+	memset(devs, 0, alloc_size);
+	sp = (struct shaper *) &devs[shapers];
+
+	for (i = 0; i < shapers; i++) {
+		err = dev_alloc_name(&devs[i], "shaper%d");
+		if (err < 0)
+			break;
+		devs[i].init = shaper_probe;
+		devs[i].priv = &sp[i];
+		if (register_netdev(&devs[i]))
+			break;
+		shapers_registered++;
+	}
+
+	if (!shapers_registered) {
+		kfree(devs);
+		devs = NULL;
+	}
+
+	return (shapers_registered ? 0 : -ENODEV);
+}
+
+static void __exit shaper_exit (void)
+{
+	kfree(devs);
+	devs = NULL;
+}
+
+module_init(shaper_init);
+module_exit(shaper_exit);
+

@@ -206,11 +206,7 @@ static int io=0;
 static int irq=0;
 static int dma=0;
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -710,22 +706,6 @@ static struct timer_list ltpc_timer;
 static int ltpc_xmit(struct sk_buff *skb, struct net_device *dev);
 static struct net_device_stats *ltpc_get_stats(struct net_device *dev);
 
-static int ltpc_open(struct net_device *dev)
-{
-#ifdef MODULE
-	MOD_INC_USE_COUNT;
-#endif
-	return 0;
-}
-
-static int ltpc_close(struct net_device *dev)
-{
-#ifdef MODULE
-	MOD_DEC_USE_COUNT;
-#endif
-	return 0;
-}
-
 static int read_30 ( struct net_device *dev)
 {
 	lt_command c;
@@ -921,9 +901,6 @@ static int ltpc_init(struct net_device *dev)
 	memset(dev->priv, 0, sizeof(struct ltpc_private));
 	dev->get_stats = ltpc_get_stats;
 
-	dev->open = ltpc_open;
-	dev->stop = ltpc_close;
-
 	/* add the ltpc-specific things */
 	dev->do_ioctl = &ltpc_ioctl;
 
@@ -1008,7 +985,7 @@ static struct net_device_stats *ltpc_get_stats(struct net_device *dev)
 
 /* initialization stuff */
   
-int __init ltpc_probe_dma(int base)
+static int __init ltpc_probe_dma(int base)
 {
 	int dma = 0;
   	int timeout;
@@ -1086,6 +1063,8 @@ int __init ltpc_probe(struct net_device *dev)
 	int autoirq;
 	unsigned long flags;
 	unsigned long f;
+
+	SET_MODULE_OWNER(dev);
 
 	save_flags(flags);
 
@@ -1273,11 +1252,7 @@ static int __init ltpc_setup(char *str)
 __setup("ltpc=", ltpc_setup);
 #endif /* MODULE */
 
-static struct net_device dev_ltpc = {
-		"", 
-		0, 0, 0, 0,
-	 	0x0, 0,
-	 	0, 0, 0, NULL, ltpc_probe };
+static struct net_device dev_ltpc;
 
 #ifdef MODULE
 MODULE_PARM(debug, "i");
@@ -1295,6 +1270,7 @@ int __init init_module(void)
 		       "ltpc: Autoprobing is not recommended for modules\n");
 
 	/* Find a name for this unit */
+	dev_ltpc.init = ltpc_probe;
 	err=dev_alloc_name(&dev_ltpc,"lt%d");
 	
 	if(err<0)

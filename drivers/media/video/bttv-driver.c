@@ -3082,6 +3082,24 @@ void bttv_cleanup_module(void)
 module_init(bttv_init_module);
 module_exit(bttv_cleanup_module);
 
+#ifndef MODULE
+
+static int __init bttv_radio_setup(char *str)
+{
+	int i,number,res = 2;
+
+	for (i = 0; res == 2 && i < BTTV_MAX; i++) {
+		res = get_option(&str,&number);
+		if (res)
+			radio[i] = number;
+	}
+	return 1;
+}
+
+__setup("bttv_radio=", bttv_radio_setup);
+
+#endif /* not MODULE */
+
 /*
  * Local variables:
  * c-basic-offset: 8

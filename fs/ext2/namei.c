@@ -361,11 +361,9 @@ static int ext2_delete_entry (struct inode * dir,
  */
 static int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 {
-	struct inode * inode;
-	int err;
-
-	inode = ext2_new_inode (dir, mode, &err);
-	if (!inode)
+	struct inode * inode = ext2_new_inode (dir, mode);
+	int err = PTR_ERR(inode);
+	if (IS_ERR(inode))
 		return err;
 
 	inode->i_op = &ext2_file_inode_operations;
@@ -387,11 +385,10 @@ static int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 
 static int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 {
-	struct inode * inode;
-	int err;
+	struct inode * inode = ext2_new_inode (dir, mode);
+	int err = PTR_ERR(inode);
 
-	inode = ext2_new_inode (dir, mode, &err);
-	if (!inode)
+	if (IS_ERR(inode))
 		return err;
 
 	inode->i_uid = current->fsuid;
@@ -421,8 +418,9 @@ static int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	if (dir->i_nlink >= EXT2_LINK_MAX)
 		return -EMLINK;
 
-	inode = ext2_new_inode (dir, S_IFDIR, &err);
-	if (!inode)
+	inode = ext2_new_inode (dir, S_IFDIR);
+	err = PTR_ERR(inode);
+	if (IS_ERR(inode))
 		return err;
 
 	inode->i_op = &ext2_dir_inode_operations;
@@ -628,7 +626,9 @@ static int ext2_symlink (struct inode * dir, struct dentry *dentry, const char *
 	if (l > dir->i_sb->s_blocksize)
 		return -ENAMETOOLONG;
 
-	if (!(inode = ext2_new_inode (dir, S_IFLNK, &err)))
+	inode = ext2_new_inode (dir, S_IFLNK);
+	err = PTR_ERR(inode);
+	if (IS_ERR(inode))
 		return err;
 
 	inode->i_mode = S_IFLNK | S_IRWXUGO;

@@ -181,7 +181,7 @@ int get_irq_list(char *buf)
 
 #ifdef CONFIG_SMP
 unsigned int global_irq_holder = NO_PROC_ID;
-volatile unsigned int global_irq_lock;
+volatile unsigned long global_irq_lock; /* long for set_bit --RR */
 
 extern void show_stack(unsigned long* esp);
 

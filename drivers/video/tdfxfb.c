@@ -327,7 +327,6 @@ struct fb_info_tdfx {
   struct tdfxfb_par default_par;
   struct tdfxfb_par current_par;
   struct display disp;
-  struct display_switch dispsw;
 #if defined(FBCON_HAS_CFB16) || defined(FBCON_HAS_CFB24) || defined(FBCON_HAS_CFB32)  
   union {
 #ifdef FBCON_HAS_CFB16
@@ -412,10 +411,10 @@ static int  tdfxfb_encode_var(struct fb_var_screeninfo* var,
 static int  tdfxfb_encode_fix(struct fb_fix_screeninfo* fix,
 			      const struct tdfxfb_par* par,
 			      const struct fb_info_tdfx* info);
-static void tdfxfb_set_disp(struct display* disp, 
-			    struct fb_info_tdfx* info,
-			    int bpp, 
-			    int accel);
+static void tdfxfb_set_dispsw(struct display* disp, 
+			      struct fb_info_tdfx* info,
+			      int bpp, 
+			      int accel);
 static int  tdfxfb_getcolreg(u_int regno,
 			     u_int* red, 
 			     u_int* green, 
@@ -1640,48 +1639,43 @@ static int tdfxfb_get_var(struct fb_var_screeninfo *var,
   return 0;
 }
  
-static void tdfxfb_set_disp(struct display *disp, 
-			    struct fb_info_tdfx *info,
-			    int bpp, 
-			    int accel) {
+static void tdfxfb_set_dispsw(struct display *disp, 
+			      struct fb_info_tdfx *info,
+			      int bpp, 
+			      int accel) {
 
   if (disp->dispsw && disp->conp) 
      fb_con.con_cursor(disp->conp, CM_ERASE);
   switch(bpp) {
 #ifdef FBCON_HAS_CFB8
   case 8:
-    info->dispsw = noaccel ? fbcon_cfb8 : fbcon_banshee8;
-    disp->dispsw = &info->dispsw;
+    disp->dispsw = noaccel ? &fbcon_cfb8 : &fbcon_banshee8;
     if (nohwcursor) fbcon_banshee8.cursor = NULL;
     break;
 #endif
 #ifdef FBCON_HAS_CFB16
   case 16:
-    info->dispsw = noaccel ? fbcon_cfb16 : fbcon_banshee16;
-    disp->dispsw = &info->dispsw;
+    disp->dispsw = noaccel ? &fbcon_cfb16 : &fbcon_banshee16;
     disp->dispsw_data = info->fbcon_cmap.cfb16;
     if (nohwcursor) fbcon_banshee16.cursor = NULL;
     break;
 #endif
 #ifdef FBCON_HAS_CFB24
   case 24:
-    info->dispsw = noaccel ? fbcon_cfb24 : fbcon_banshee24; 
-    disp->dispsw = &info->dispsw;
+    disp->dispsw = noaccel ? &fbcon_cfb24 : &fbcon_banshee24; 
     disp->dispsw_data = info->fbcon_cmap.cfb24;
     if (nohwcursor) fbcon_banshee24.cursor = NULL;
     break;
 #endif
 #ifdef FBCON_HAS_CFB32
   case 32:
-    info->dispsw = noaccel ? fbcon_cfb32 : fbcon_banshee32;
-    disp->dispsw = &info->dispsw;
+    disp->dispsw = noaccel ? &fbcon_cfb32 : &fbcon_banshee32;
     disp->dispsw_data = info->fbcon_cmap.cfb32;
     if (nohwcursor) fbcon_banshee32.cursor = NULL;
     break;
 #endif
   default:
-    info->dispsw = fbcon_dummy;
-    disp->dispsw = &info->dispsw;
+    disp->dispsw = &fbcon_dummy;
   }
    
 }
@@ -1735,7 +1729,7 @@ static int tdfxfb_set_var(struct fb_var_screeninfo *var,
 	 display->can_soft_blank = 1;
 	 display->inverse        = inverse;
 	 accel = var->accel_flags & FB_ACCELF_TEXT;
-	 tdfxfb_set_disp(display, info, par.bpp, accel);
+	 tdfxfb_set_dispsw(display, info, par.bpp, accel);
 	 
 	 if(nopan) display->scrollmode = SCROLL_YREDRAW;
 	
@@ -2083,10 +2077,10 @@ static int tdfxfb_switch_con(int con,
    
    info->cursor.redraw=1;
    
-   tdfxfb_set_disp(&fb_display[con], 
-		   info, 
-		   par.bpp,
-		   par.accel_flags & FB_ACCELF_TEXT);
+   tdfxfb_set_dispsw(&fb_display[con], 
+		     info, 
+		     par.bpp,
+		     par.accel_flags & FB_ACCELF_TEXT);
    
    tdfxfb_install_cmap(&fb_display[con], fb);
    tdfxfb_updatevar(con, fb);

@@ -1,10 +1,14 @@
 /*
- * bluetooth.c   Version 0.6
+ * bluetooth.c   Version 0.7
  *
  * Copyright (c) 2000 Greg Kroah-Hartman	<greg@kroah.com>
  * Copyright (c) 2000 Mark Douglas Corner	<mcorner@umich.edu>
  *
  * USB Bluetooth driver, based on the Bluetooth Spec version 1.0B
+ *
+ * (11/29/2000) Version 0.7 gkh
+ *	Fixed problem with overrunning the tty flip buffer.
+ *	Removed unneeded NULL pointer initialization.
  *
  * (10/05/2000) Version 0.6 gkh
  *	Fixed bug with urb->dev not being set properly, now that the usb
@@ -211,8 +215,7 @@ static struct tty_driver	bluetooth_tty_driver;
 static struct tty_struct *	bluetooth_tty[BLUETOOTH_TTY_MINORS];
 static struct termios *		bluetooth_termios[BLUETOOTH_TTY_MINORS];
 static struct termios *		bluetooth_termios_locked[BLUETOOTH_TTY_MINORS];
-static struct usb_bluetooth	*bluetooth_table[BLUETOOTH_TTY_MINORS] = {NULL, };
-
+static struct usb_bluetooth	*bluetooth_table[BLUETOOTH_TTY_MINORS];
 
 
 static inline int bluetooth_paranoia_check (struct usb_bluetooth *bluetooth, const char *function)
@@ -327,6 +330,11 @@ static int bluetooth_open (struct tty_struct *tty, struct file * filp)
 	tty->driver_data = bluetooth;
 	bluetooth->tty = tty;
 
+	/* force low_latency on so that our tty_push actually forces the data through, 
+	 * otherwise it is scheduled, and with high data rates (like with OHCI) data
+	 * can get lost. */
+	bluetooth->tty->low_latency = 1;
+	
 	bluetooth->active = 1;
 
 	/* Reset the packet position counters */
@@ -786,9 +794,14 @@ static void bluetooth_int_callback (struct urb *urb)
 		return;
 	}
 
-	if (packet_size + EVENT_HDR_SIZE == bluetooth->int_packet_pos){
-		for (i = 0; i < bluetooth->int_packet_pos; ++i)
+	if (packet_size + EVENT_HDR_SIZE == bluetooth->int_packet_pos) {
+		for (i = 0; i < bluetooth->int_packet_pos; ++i) {
+			/* if we insert more than TTY_FLIPBUF_SIZE characters, we drop them */
+			if (bluetooth->tty->flip.count >= TTY_FLIPBUF_SIZE) {
+				tty_flip_buffer_push(bluetooth->tty);
+			}
 			tty_insert_flip_char(bluetooth->tty, bluetooth->int_buffer[i], 0);
+		}
 		tty_flip_buffer_push(bluetooth->tty);
 
 		bluetooth->int_packet_pos = 0;
@@ -900,8 +913,13 @@ static void bluetooth_read_bulk_callback (struct urb *urb)
 	}
 
 	if (packet_size + ACL_HDR_SIZE == bluetooth->bulk_packet_pos) {
-		for (i = 0; i < bluetooth->bulk_packet_pos; ++i)
+		for (i = 0; i < bluetooth->bulk_packet_pos; ++i) {
+			/* if we insert more than TTY_FLIPBUF_SIZE characters, we drop them. */
+			if (bluetooth->tty->flip.count >= TTY_FLIPBUF_SIZE) {
+				tty_flip_buffer_push(bluetooth->tty);
+			}
 			tty_insert_flip_char(bluetooth->tty, bluetooth->bulk_buffer[i], 0);
+		}
 		tty_flip_buffer_push(bluetooth->tty);
 		bluetooth->bulk_packet_pos = 0;
 	}	

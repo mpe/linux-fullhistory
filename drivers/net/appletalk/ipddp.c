@@ -62,21 +62,11 @@ static struct ipddp_route* ipddp_find_route(struct ipddp_route *rt);
 static int ipddp_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 
 
-static int ipddp_open(struct net_device *dev)
-{
-        MOD_INC_USE_COUNT;
-        return 0;
-}
-
-static int ipddp_close(struct net_device *dev)
-{
-        MOD_DEC_USE_COUNT;
-        return 0;
-}
-
 static int __init ipddp_init(struct net_device *dev)
 {
 	static unsigned version_printed = 0;
+
+	SET_MODULE_OWNER(dev);
 
 	if (ipddp_debug && version_printed++ == 0)
                 printk("%s", version);
@@ -100,8 +90,6 @@ static int __init ipddp_init(struct net_device *dev)
                 return -ENOMEM;
         memset(dev->priv,0,sizeof(struct net_device_stats));
 
-	dev->open 	    = ipddp_open;
-        dev->stop 	    = ipddp_close;
         dev->get_stats      = ipddp_get_stats;
         dev->do_ioctl       = ipddp_ioctl;
 
@@ -298,7 +286,7 @@ static int ipddp_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
         }
 }
 
-static struct net_device dev_ipddp = { init: ipddp_init };
+static struct net_device dev_ipddp;
 
 MODULE_PARM(ipddp_mode, "i");
 
@@ -306,6 +294,7 @@ static int __init ipddp_init_module(void)
 {
 	int err;
 
+	dev_ipddp.init = ipddp_init;
 	err=dev_alloc_name(&dev_ipddp, "ipddp%d");
         if(err < 0)
                 return err;

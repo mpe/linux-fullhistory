@@ -35,7 +35,6 @@ void oss_nubus_irq(int, void *, struct pt_regs *);
 
 extern void via1_irq(int, void *, struct pt_regs *);
 extern void mac_scc_dispatch(int, void *, struct pt_regs *);
-extern int console_loglevel;
 
 /*
  * Initialize the OSS

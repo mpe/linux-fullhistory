@@ -347,9 +347,10 @@ static void generic_plug_device(request_queue_t *q, kdev_t dev)
  */
 static inline void __generic_unplug_device(request_queue_t *q)
 {
-	if (!list_empty(&q->queue_head)) {
+	if (q->plugged) {
 		q->plugged = 0;
-		q->request_fn(q);
+		if (!list_empty(&q->queue_head))
+			q->request_fn(q);
 	}
 }
 
@@ -382,6 +383,8 @@ static void blk_init_free_list(request_queue_t *q)
 	init_waitqueue_head(&q->wait_for_request);
 	spin_lock_init(&q->request_lock);
 }
+
+static int __make_request(request_queue_t * q, int rw, struct buffer_head * bh);
 
 /**
  * blk_init_queue  - prepare a request queue for use with a block device
@@ -416,7 +419,6 @@ static void blk_init_free_list(request_queue_t *q)
  *    blk_init_queue() must be paired with a blk_cleanup-queue() call
  *    when the block device is deactivated (such as at module unload).
  **/
-static int __make_request(request_queue_t * q, int rw,  struct buffer_head * bh);
 void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
 {
 	INIT_LIST_HEAD(&q->queue_head);

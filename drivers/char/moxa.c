@@ -152,7 +152,7 @@ struct moxa_str {
 	unsigned short closing_wait;
 	int count;
 	int blocked_open;
-	int event;
+	long event; /* long req'd for set_bit --RR */
 	int asyncflags;
 	long session;
 	long pgrp;

@@ -15,6 +15,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (12/29/2000) gkh
+ *	Small NULL pointer initialization cleanup which saves a bit of disk image
+ *
  * (11/01/2000) Adam J. Richter
  *	instead of using idVendor/idProduct pairs, usb serial drivers
  *	now identify their hardware interest with usb_device_id tables,
@@ -346,7 +349,7 @@ static struct tty_driver	serial_tty_driver;
 static struct tty_struct *	serial_tty[SERIAL_TTY_MINORS];
 static struct termios *		serial_termios[SERIAL_TTY_MINORS];
 static struct termios *		serial_termios_locked[SERIAL_TTY_MINORS];
-static struct usb_serial	*serial_table[SERIAL_TTY_MINORS] = {NULL, };
+static struct usb_serial	*serial_table[SERIAL_TTY_MINORS];	/* initially all NULL */
 
 LIST_HEAD(usb_serial_driver_list);
 

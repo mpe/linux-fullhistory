@@ -1,4 +1,4 @@
-/* $Id: bkm_a4t.c,v 1.13.6.1 2000/11/28 12:02:46 kai Exp $
+/* $Id: bkm_a4t.c,v 1.13.6.2 2000/11/29 16:00:14 kai Exp $
  * bkm_a4t.c    low level stuff for T-Berkom A4T
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -24,7 +24,7 @@
 
 extern const char *CardType[];
 
-const char *bkm_a4t_revision = "$Revision: 1.13.6.1 $";
+const char *bkm_a4t_revision = "$Revision: 1.13.6.2 $";
 
 
 static inline u_char
@@ -264,7 +264,7 @@ BKM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return (0);
 }
 
-static struct pci_dev *dev_a4t __initdata;
+static struct pci_dev *dev_a4t __initdata = NULL;
 
 int __init
 setup_bkm_a4t(struct IsdnCard *card)

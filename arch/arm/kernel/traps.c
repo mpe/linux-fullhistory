@@ -42,12 +42,6 @@ const char *processor_modes[]=
 
 static const char *handler[]= { "prefetch abort", "data abort", "address exception", "interrupt" };
 
-static inline void console_verbose(void)
-{
-	extern int console_loglevel;
-	console_loglevel = 15;
-}
-
 /*
  * Stack pointers should always be within the kernels view of
  * physical memory.  If it is not there, then we can't dump

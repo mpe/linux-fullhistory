@@ -36,6 +36,10 @@ ifeq ($(have_mcpu),y)
     CFLAGS := $(CFLAGS) -mcpu=ev5
     mcpu_done := y
   endif
+  ifeq ($(mcpu_done)$(CONFIG_ALPHA_SX164)$(have_mcpu_pca56),nyy)
+    CFLAGS := $(CFLAGS) -mcpu=pca56
+    mcpu_done := y
+  endif
   ifeq ($(mcpu_done)$(CONFIG_ALPHA_PYXIS),ny)
     CFLAGS := $(CFLAGS) -mcpu=ev56
     mcpu_done := y
@@ -48,12 +52,12 @@ ifeq ($(have_mcpu),y)
     endif
     mcpu_done := y
   endif
-  ifeq ($(mcpu_done)$(CONFIG_ALPHA_NAUTILUS)$(have_mcpu_ev67),nyy)
-    CFLAGS := $(CFLAGS) -mcpu=ev67
-    mcpu_done := y
-  endif
   ifeq ($(mcpu_done)$(CONFIG_ALPHA_EV4),ny)
     CFLAGS := $(CFLAGS) -mcpu=ev4
+    mcpu_done := y
+  endif
+  ifeq ($(mcpu_done)$(CONFIG_ALPHA_EV67)$(have_mcpu_ev67),nyy)
+    CFLAGS := $(CFLAGS) -mcpu=ev67
     mcpu_done := y
   endif
   ifeq ($(mcpu_done)$(CONFIG_ALPHA_EV6),ny)

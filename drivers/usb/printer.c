@@ -82,6 +82,7 @@ struct usblp {
 	int			readcount;		/* Counter for reads */
 	int			ifnum;			/* Interface number */
 	int			minor;			/* minor number of device */
+	unsigned int		quirks;			/* quirks flags */
 	unsigned char		used;			/* True if open */
 	unsigned char		bidir;			/* interface is bidirectional */
 	unsigned char		*device_id_string;	/* IEEE 1284 DEVICE ID string (ptr) */
@@ -89,6 +90,26 @@ struct usblp {
 };
 
 static struct usblp *usblp_table[USBLP_MINORS];
+
+/* Quirks: various printer quirks are handled by this table & its flags. */
+
+struct quirk_printer_struct {
+	__u16 vendorId;
+	__u16 productId;
+	unsigned int quirks;
+};
+
+#define USBLP_QUIRK_BIDIR	0x1	/* reports bidir but requires unidirectional mode (no INs/reads) */
+#define USBLP_QUIRK_USB_INIT	0x2	/* needs vendor USB init string */
+
+static struct quirk_printer_struct quirk_printers[] = {
+	{ 0x03f0, 0x0004, USBLP_QUIRK_BIDIR }, /* HP DeskJet 895C */
+	{ 0x03f0, 0x0104, USBLP_QUIRK_BIDIR }, /* HP DeskJet 880C */
+	{ 0x03f0, 0x0204, USBLP_QUIRK_BIDIR }, /* HP DeskJet 815C */
+	{ 0x03f0, 0x0304, USBLP_QUIRK_BIDIR }, /* HP DeskJet 810C/812C */
+	{ 0x03f0, 0x0404, USBLP_QUIRK_BIDIR }, /* HP DeskJet 830C */
+	{ 0, 0 }
+};
 
 /*
  * Functions for usblp control messages.
@@ -325,8 +346,17 @@ static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, 
 			return -ENODEV;
 
 		if (usblp->writeurb.status) {
-			err = usblp_check_status(usblp, err);
-			continue;
+			if (usblp->quirks & USBLP_QUIRK_BIDIR) {
+				if (usblp->writeurb.status != -EINPROGRESS)
+					err("usblp%d: error %d writing to printer",
+						usblp->minor, usblp->writeurb.status);
+				err = usblp->writeurb.status;
+				continue;
+			}
+			else {
+				err = usblp_check_status(usblp, err);
+				continue;
+			}
 		}
 
 		writecount += usblp->writeurb.transfer_buffer_length;
@@ -393,13 +423,42 @@ static ssize_t usblp_read(struct file *file, char *buffer, size_t count, loff_t 
 	return count;
 }
 
+/*
+ * Checks for printers that have quirks, such as requiring unidirectional
+ * communication but reporting bidirectional; currently some HP printers
+ * have this flaw (HP 810, 880, 895, etc.), or needing an init string
+ * sent at each open (like some Epsons).
+ * Returns 1 if found, 0 if not found.
+ *
+ * HP recommended that we use the bidirectional interface but
+ * don't attempt any bulk IN transfers from the IN endpoint.
+ * Here's some more detail on the problem:
+ * The problem is not that it isn't bidirectional though. The problem
+ * is that if you request a device ID, or status information, while
+ * the buffers are full, the return data will end up in the print data
+ * buffer. For example if you make sure you never request the device ID
+ * while you are sending print data, and you don't try to query the
+ * printer status every couple of milliseconds, you will probably be OK.
+ */
+static unsigned int usblp_quirks (__u16 vendor, __u16 product)
+{
+	int i;
+
+	for (i = 0; quirk_printers[i].vendorId; i++) {
+		if (vendor == quirk_printers[i].vendorId &&
+		    product == quirk_printers[i].productId)
+			return quirk_printers[i].quirks;
+ 	}
+	return 0;
+}
+
 static void *usblp_probe(struct usb_device *dev, unsigned int ifnum,
 			 const struct usb_device_id *id)
 {
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *epread, *epwrite;
 	struct usblp *usblp;
-	int minor, i, bidir = 0;
+	int minor, i, bidir = 0, quirks;
 	int alts = dev->actconfig->interface[ifnum].act_altsetting;
 	int length, err;
 	char *buf;
@@ -453,10 +512,21 @@ static void *usblp_probe(struct usb_device *dev, unsigned int ifnum,
 	}
 	memset(usblp, 0, sizeof(struct usblp));
 
+	/* lookup quirks for this printer */
+	quirks = usblp_quirks(dev->descriptor.idVendor, dev->descriptor.idProduct);
+
+	if (bidir && (quirks & USBLP_QUIRK_BIDIR)) {
+		bidir = 0;
+		epread = NULL;
+		info ("Disabling reads from problem bidirectional printer on usblp%d",
+			minor);
+	}
+
 	usblp->dev = dev;
 	usblp->ifnum = ifnum;
 	usblp->minor = minor;
 	usblp->bidir = bidir;
+	usblp->quirks = quirks;
 
 	init_waitqueue_head(&usblp->wait);
 

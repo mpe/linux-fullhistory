@@ -45,24 +45,28 @@ pbus_assign_resources_sorted(struct pci_bus *bus,
 	head_io.next = head_mem.next = NULL;
 	for (ln=bus->devices.next; ln != &bus->devices; ln=ln->next) {
 		struct pci_dev *dev = pci_dev_b(ln);
+		u16 class = dev->class >> 8;
 		u16 cmd;
 
 		/* First, disable the device to avoid side
 		   effects of possibly overlapping I/O and
 		   memory ranges.
-		   Except the VGA - for obvious reason. :-)  */
-		if (dev->class >> 8 == PCI_CLASS_DISPLAY_VGA)
+		   Leave VGA enabled - for obvious reason. :-)
+		   Same with all sorts of bridges - they may
+		   have VGA behind them.  */
+		if (class == PCI_CLASS_DISPLAY_VGA
+				|| class == PCI_CLASS_NOT_DEFINED_VGA)
 			found_vga = 1;
-		else {
+		else if (class >> 8 != PCI_BASE_CLASS_BRIDGE) {
 			pci_read_config_word(dev, PCI_COMMAND, &cmd);
 			cmd &= ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY
 						| PCI_COMMAND_MASTER);
 			pci_write_config_word(dev, PCI_COMMAND, cmd);
 		}
- 
+
 		/* Reserve some resources for CardBus.
 		   Are these values reasonable? */
-		if (dev->class >> 8 == PCI_CLASS_BRIDGE_CARDBUS) {
+		if (class == PCI_CLASS_BRIDGE_CARDBUS) {
 			io_reserved += 8*1024;
 			mem_reserved += 32*1024*1024;
 			continue;

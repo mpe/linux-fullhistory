@@ -912,7 +912,7 @@ done:
 	msp->thread = NULL;
 
 	if(msp->notify != NULL)
-		up(msp->notify);
+		up_and_exit(msp->notify, 0);
 	return 0;
 }
 

@@ -51,8 +51,8 @@
 extern int con3215_activate(void);
 #endif
 
-#ifdef CONFIG_MAC
-extern void nubus_init(void);
+#ifdef CONFIG_NUBUS
+#include <linux/nubus.h>
 #endif
 
 #ifdef CONFIG_ISAPNP
@@ -79,8 +79,6 @@ extern void nubus_init(void);
 
 extern char _stext, _etext;
 extern char *linux_banner;
-
-extern int console_loglevel;
 
 static int init(void *);
 
@@ -682,7 +680,7 @@ static void __init do_basic_setup(void)
 #ifdef CONFIG_DIO
 	dio_init();
 #endif
-#ifdef CONFIG_MAC
+#ifdef CONFIG_NUBUS
 	nubus_init();
 #endif
 #ifdef CONFIG_ISAPNP

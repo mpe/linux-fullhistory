@@ -1841,9 +1841,9 @@ static int cdrom_play_audio(ide_drive_t *drive, int lba_start, int lba_end)
 	memset(&pc, 0, sizeof (pc));
 	pc.sense = &sense;
 
-	pc.c[0] = GPCMD_PLAY_AUDIO_10;
-	put_unaligned(cpu_to_be32(lba_start), (unsigned int *) &pc.c[2]);
-	put_unaligned(cpu_to_be16(lba_end - lba_start), (unsigned int *) &pc.c[7]);
+	pc.c[0] = GPCMD_PLAY_AUDIO_MSF;
+	lba_to_msf(lba_start, &pc.c[3], &pc.c[4], &pc.c[5]);
+	lba_to_msf(lba_end-1, &pc.c[6], &pc.c[7], &pc.c[8]);
 
 	return cdrom_queue_packet_command(drive, &pc);
 }

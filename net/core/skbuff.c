@@ -417,7 +417,7 @@ struct sk_buff *skb_copy(const struct sk_buff *skb, int gfp_mask)
 }
 
 /**
- *	skb_copy	-	copy and expand sk_buff
+ *	skb_copy_expand	-	copy and expand sk_buff
  *	@skb: buffer to copy
  *	@newheadroom: new free bytes at head
  *	@newtailroom: new free bytes at tail

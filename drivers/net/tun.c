@@ -130,6 +130,7 @@ int tun_net_init(struct net_device *dev)
    
 	DBG(KERN_INFO "%s: tun_net_init\n", tun->name);
 
+	SET_MODULE_OWNER(dev);
 	dev->open = tun_net_open;
 	dev->hard_start_xmit = tun_net_xmit;
 	dev->stop = tun_net_close;
@@ -454,8 +455,6 @@ static int tun_chr_open(struct inode *inode, struct file * file)
 	tun->dev.init = tun_net_init;
 	tun->dev.priv = tun;
 
-	MOD_INC_USE_COUNT;
-	
 	return 0;
 }
 
@@ -479,7 +478,6 @@ static int tun_chr_close(struct inode *inode, struct file *file)
 	kfree(tun);
 	file->private_data = NULL;
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

@@ -163,7 +163,7 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 					return 0;
 				memcpy((void *) tmpde + slop, bh->b_data, offset);
 			}
-			de = tmpde;				
+			de = tmpde;
 		}
 
 		if (de->flags[-high_sierra] & 0x80) {

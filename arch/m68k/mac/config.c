@@ -115,8 +115,6 @@ static void mac_sched_init(void (*vector)(int, void *, struct pt_regs *))
 	via_init_clock(vector);
 }
 
-extern int console_loglevel;
-
 #if 0
 void mac_waitbut (void)
 {

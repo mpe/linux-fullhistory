@@ -53,7 +53,6 @@ extern void (*adb_mouse_interrupt_hook)(unsigned char *, int);
 extern int adb_emulate_buttons;
 extern int adb_button2_keycode;
 extern int adb_button3_keycode;
-extern int console_loglevel;
 
 /*
  *    XXX: need to figure out what ADB mouse packets mean ... 

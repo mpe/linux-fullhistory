@@ -6,13 +6,17 @@ Linux 2.2 and 2.4test kernel trees. Note that if you are interested in video
 card drivers you should probably talk to XFree86 (http://wwww.xfree86.org) 
 instead.
 
+Also read the Documentation/SubmittingPatches document.
+
+
 Allocating Device Numbers
 -------------------------
 
-Major and minor numbers for devices are allocated by the Linux assigned name
-and number authority (currently better known as H Peter Anvin). The
-site is http://www.lanana.org/. This also deals with allocating numbers for
-devices that are not going to be submitted to the mainstream kernel.
+Major and minor numbers for block and character devices are allocated
+by the Linux assigned name and number authority (currently better
+known as H Peter Anvin). The site is http://www.lanana.org/. This
+also deals with allocating numbers for devices that are not going to
+be submitted to the mainstream kernel.
 
 If you don't use assigned numbers then when you device is submitted it will
 get given an assigned number even if that is different from values you may
@@ -76,7 +80,8 @@ Control:	In general if there is active maintainance of a driver by
 		the author then patches will be redirected to them unless 
 		they are totally obvious and without need of checking.
 		If you want to be the contact and update point for the
-		driver it is a good idea to state this in the comments.
+		driver it is a good idea to state this in the comments,
+		and include an entry in MAINTAINERS for your driver.
 
 What Criteria Do Not Determine Acceptance
 -----------------------------------------
@@ -97,7 +102,8 @@ Resources
 ---------
 
 Linux kernel master tree:
-	ftp.kernel.org:/pub/linux/kernel/...
+	ftp.??.kernel.org:/pub/linux/kernel/...
+	?? == your country code, such as "us", "uk", "fr", etc.
 
 Linux kernel mailing list:		
 	linux-kernel@vger.kernel.org

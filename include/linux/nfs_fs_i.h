@@ -3,6 +3,7 @@
 
 #include <asm/types.h>
 #include <linux/list.h>
+#include <linux/nfs.h>
 
 /*
  * nfs fs inode data in memory
@@ -13,6 +14,11 @@ struct nfs_inode_info {
 	 */
 	__u64 fsid;
 	__u64 fileid;
+
+	/*
+	 * NFS file handle
+	 */
+	struct nfs_fh		fh;
 
 	/*
 	 * Various flags
@@ -72,6 +78,7 @@ struct nfs_inode_info {
 /*
  * Legal inode flag values
  */
+#define NFS_INO_STALE		0x0001		/* possible stale inode */
 #define NFS_INO_ADVISE_RDPLUS   0x0002          /* advise readdirplus */
 #define NFS_INO_REVALIDATING	0x0004		/* revalidating attrs */
 #define NFS_IS_SNAPSHOT		0x0010		/* a snapshot file */

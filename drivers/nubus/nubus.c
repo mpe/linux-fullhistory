@@ -27,8 +27,6 @@
 extern void via_nubus_init(void);
 extern void oss_nubus_init(void);
 
-extern int console_loglevel;
-
 /* Constants */
 
 /* This is, of course, the size in bytelanes, rather than the size in
@@ -967,8 +965,9 @@ static int nubus_read_proc(char *buf, char **start, off_t off,
 				int count, int *eof, void *data)
 {
 	int nprinted, len, begin = 0;
-	int slot;
-
+	int slot,size;
+	struct nubus_board* board;
+	
 	len   = sprintf(buf, "Nubus devices found:\n");
 	/* Walk the list of NuBus boards */
 	for (board = nubus_boards; board != NULL; board = board->next)
@@ -987,7 +986,7 @@ static int nubus_read_proc(char *buf, char **start, off_t off,
 	if (slot==16 || len+begin < off)
 		*eof = 1;
 	off -= begin;
-	*strat = buf + off;
+	*start = buf + off;
 	len -= off;
 	if (len>count)
 		len = count;

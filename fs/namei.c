@@ -152,17 +152,9 @@ char * getname(const char * filename)
  * for filesystem access without changing the "normal" uids which
  * are used for other things..
  */
-int permission(struct inode * inode,int mask)
+int vfs_permission(struct inode * inode,int mask)
 {
 	int mode = inode->i_mode;
-
-	if (inode->i_op && inode->i_op->permission) {
-		int retval;
-		lock_kernel();
-		retval = inode->i_op->permission(inode, mask);
-		unlock_kernel();
-		return retval;
-	}
 
 	if ((mask & S_IWOTH) && IS_RDONLY(inode) &&
 		 (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode)))
@@ -186,6 +178,18 @@ int permission(struct inode * inode,int mask)
 			return 0;
 
 	return -EACCES;
+}
+
+int permission(struct inode * inode,int mask)
+{
+	if (inode->i_op && inode->i_op->permission) {
+		int retval;
+		lock_kernel();
+		retval = inode->i_op->permission(inode, mask);
+		unlock_kernel();
+		return retval;
+	}
+	return vfs_permission(inode, mask);
 }
 
 /*

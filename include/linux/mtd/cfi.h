@@ -91,8 +91,9 @@ struct cfi_private {
 				  must be of the same type. */
 	int numchips;
 	unsigned long chipshift; /* Because they're of the same type */
-	struct flchip chips[0];  /* per-chip data structure for each chip */
 	const char *im_name;	 /* inter_module name for cmdset_setup */
+	struct flchip chips[0];  /* per-chip data structure for each chip */
+	/* do not add extra fields after "chips" */
 };
 
 #define MAX_CFI_CHIPS 8 /* Entirely arbitrary to avoid realloc() */

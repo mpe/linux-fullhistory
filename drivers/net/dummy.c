@@ -39,18 +39,6 @@
 static int dummy_xmit(struct sk_buff *skb, struct net_device *dev);
 static struct net_device_stats *dummy_get_stats(struct net_device *dev);
 
-static int dummy_open(struct net_device *dev)
-{
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int dummy_close(struct net_device *dev)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
 /* fake multicast ability */
 static void set_multicast_list(struct net_device *dev)
 {
@@ -74,8 +62,6 @@ static int __init dummy_init(struct net_device *dev)
 	memset(dev->priv, 0, sizeof(struct net_device_stats));
 	dev->get_stats	= dummy_get_stats;
 
-	dev->open = dummy_open;
-	dev->stop = dummy_close;
 	dev->set_multicast_list = set_multicast_list;
 
 	/* Fill in the fields of the device structure with ethernet-generic values. */
@@ -107,12 +93,17 @@ static struct net_device_stats *dummy_get_stats(struct net_device *dev)
 	return dev->priv;
 }
 
-static struct net_device dev_dummy = { init: dummy_init };
+static struct net_device dev_dummy;
 
 static int __init dummy_init_module(void)
 {
+	int err;
+
+	dev_dummy.init = dummy_init;
+	SET_MODULE_OWNER(&dev_dummy);
+
 	/* Find a name for this unit */
-	int err=dev_alloc_name(&dev_dummy,"dummy%d");
+	err=dev_alloc_name(&dev_dummy,"dummy%d");
 	if(err<0)
 		return err;
 	if (register_netdev(&dev_dummy) != 0)

@@ -49,7 +49,7 @@ typedef struct {
 #include <asm/smp.h>
 
 extern unsigned int global_irq_holder;
-extern volatile unsigned int global_irq_lock;
+extern volatile unsigned long global_irq_lock;
 
 static inline int irqs_running (void)
 {

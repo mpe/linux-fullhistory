@@ -27,7 +27,6 @@
 
 extern void wakeup_bdflush(int);
 extern void reset_vc(unsigned int);
-extern int console_loglevel;
 extern struct list_head super_blocks;
 
 /* Whether we react on sysrq keys or just ignore them */

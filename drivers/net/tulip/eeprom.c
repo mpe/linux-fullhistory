@@ -237,6 +237,7 @@ subsequent_board:
 			printk(KERN_INFO "%s:  Index #%d - Media %s (#%d) described "
 				   "by a %s (%d) block.\n",
 				   dev->name, i, medianame[leaf->media], leaf->media,
+				   leaf->type >= ARRAY_SIZE(block_name) ? "UNKNOWN" :
 				   block_name[leaf->type], leaf->type);
 		}
 		if (new_advertise)

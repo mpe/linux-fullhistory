@@ -85,7 +85,7 @@
 $type_constant = "\\\%([-_\\w]+)";
 $type_func = "(\\w+)\\(\\)";
 $type_param = "\\\@(\\w+)";
-$type_struct = "\\\&((struct\\s*)?\\w+)";
+$type_struct = "\\\&((struct\\s*)?[_\\w]+)";
 $type_env = "(\\\$\\w+)";
 
 
@@ -326,7 +326,8 @@ sub output_sgml {
     print "<refnamediv>\n";
     print " <refname>".$args{'function'}."</refname>\n";
     print " <refpurpose>\n";
-    print "  ".$args{'purpose'}."\n";
+    print "  ";
+    output_highlight ($args{'purpose'});
     print " </refpurpose>\n";
     print "</refnamediv>\n";
 

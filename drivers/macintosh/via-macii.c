@@ -125,7 +125,6 @@ static int last_status;
 static int driver_running = 0;
 
 /* debug level 10 required for ADB logging (should be && debug_adb, ideally) */
-extern int console_loglevel;
 
 /* Check for MacII style ADB */
 static int macii_probe(void)

@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.12.6.1 2000/11/28 12:02:46 kai Exp $
+/* $Id: w6692.c,v 1.12.6.2 2000/11/29 16:00:14 kai Exp $
  *
  * w6692.c   Winbond W6692 specific routines
  *
@@ -35,7 +35,7 @@ static const PCI_ENTRY id_list[] =
 
 extern const char *CardType[];
 
-const char *w6692_revision = "$Revision: 1.12.6.1 $";
+const char *w6692_revision = "$Revision: 1.12.6.2 $";
 
 #define DBUSY_TIMER_VALUE 80
 
@@ -957,7 +957,7 @@ w6692_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 
 static int id_idx ;
 
-static struct pci_dev *dev_w6692 __initdata;
+static struct pci_dev *dev_w6692 __initdata = NULL;
 
 int __init 
 setup_w6692(struct IsdnCard *card)

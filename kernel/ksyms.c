@@ -53,7 +53,6 @@
 #include <linux/kmod.h>
 #endif
 
-extern int console_loglevel;
 extern void set_device_ro(kdev_t dev,int flag);
 
 extern void *sys_call_table;
@@ -175,6 +174,7 @@ EXPORT_SYMBOL(invalidate_inode_pages);
 EXPORT_SYMBOL(truncate_inode_pages);
 EXPORT_SYMBOL(fsync_dev);
 EXPORT_SYMBOL(permission);
+EXPORT_SYMBOL(vfs_permission);
 EXPORT_SYMBOL(inode_setattr);
 EXPORT_SYMBOL(inode_change_ok);
 EXPORT_SYMBOL(write_inode_now);

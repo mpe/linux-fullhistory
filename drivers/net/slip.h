@@ -91,7 +91,7 @@ struct slip {
   int			xdata, xbits;	/* 6 bit slip controls 		*/
 #endif
 
-  unsigned int		flags;		/* Flag values/ mode etc	*/
+  unsigned long		flags;		/* Flag values/ mode etc	*/
 #define SLF_INUSE	0		/* Channel in use               */
 #define SLF_ESCAPE	1               /* ESC received                 */
 #define SLF_ERROR	2               /* Parity, etc. error           */
