@@ -818,7 +818,7 @@ static void ttusb_stop_iso_xfer(struct ttusb *ttusb)
 	int i;
 
 	for (i = 0; i < ISO_BUF_COUNT; i++)
-		usb_unlink_urb(ttusb->iso_urb[i]);
+		usb_kill_urb(ttusb->iso_urb[i]);
 
 	ttusb->iso_streaming = 0;
 }
