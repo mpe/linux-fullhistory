@@ -171,28 +171,23 @@ struct old_floppy_raw_cmd {
 /* Dma Memory related stuff */
 
 /* Pure 2^n version of get_order */
-static inline int __get_order (int size)
+static inline int __get_order(unsigned long size)
 {
 	int order;
 
-#ifdef  _ASM_IO_H2
-	__asm__ __volatile__("bsr %1,%0"
-			     : "=r" (order)
-			     : "r" (size / PAGE_SIZE));
-#else
-	for (order = 0; order < NR_MEM_LISTS; ++order)
-		if (size <= (PAGE_SIZE << order))
-			return order;
-#endif
-	return NR_MEM_LISTS;
+	size >>= (PAGE_SHIFT-1);
+	order = -1;
+	do {
+		size >>= 1;
+		order++;
+	} while (size);
+	return order;
 }
 
 static unsigned long dma_mem_alloc(int size)
 {
 	int order = __get_order(size);
 
-	if (order >= NR_MEM_LISTS)
-		return(0);
 	return __get_dma_pages(GFP_KERNEL,order);
 }
 

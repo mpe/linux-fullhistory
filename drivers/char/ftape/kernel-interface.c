@@ -53,10 +53,6 @@
 byte *tape_buffer[NR_BUFFERS] =
 {NULL};
 
-#ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
-#endif
-
 /*      Local vars.
  */
 static int busy_flag = 0;

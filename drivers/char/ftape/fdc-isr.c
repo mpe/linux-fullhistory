@@ -26,7 +26,6 @@
  *      code for the QIC-40/80 tape streamer device driver.
  */
 
-#include <linux/module.h>
 #include <linux/ftape.h>
 #include <asm/io.h>
 #include <asm/dma.h>

@@ -165,6 +165,23 @@ mknod -m 666 /dev/dsp0 c 14 3
 ln -s /dev/dsp0 /dev/dsp
 
 #
+#	DSPW		(14, 5)
+#
+if [ -e /dev/dspW ]; then
+	rm -f /dev/dspW
+fi
+if [ -e /dev/dspW0 ]; then
+	rm -f /dev/dspW0
+fi
+mknod -m 666 /dev/dspW0 c 14 5
+ln -s /dev/dspW0 /dev/dspW
+
+if [ -e /dev/dspW1 ]; then
+	rm -f /dev/dspW1
+fi
+mknod -m 666 /dev/dspW1 c 14 37
+
+#
 #	SPARC compatible /dev/audio	(14, 4)	
 #
 if [ -e /dev/audio ]; then

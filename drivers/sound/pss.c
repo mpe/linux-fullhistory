@@ -518,6 +518,87 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
       }
       break;
 
+    case SNDCTL_COPR_SENDMSG:
+      {
+	copr_msg       *buf;
+	unsigned long   flags;
+	unsigned short *data;
+	unsigned short  tmp;
+	int             i;
+
+	buf = (copr_msg *) kmalloc (sizeof (copr_msg), GFP_KERNEL);
+	if (buf == NULL)
+	  return -ENOSPC;
+
+	memcpy_fromfs ((char *) buf, &(((char *) arg)[0]), sizeof (*buf));
+
+	data = (unsigned short *) (buf->data);
+
+	/* printk( "SNDCTL_COPR_SENDMSG: data = %d", data ); */
+
+	save_flags (flags);
+	cli ();
+
+	for (i = 0; i < buf->len; i++)
+	  {
+	    tmp = *data++;
+	    if (!pss_put_dspword (devc, tmp))
+	      {
+		restore_flags (flags);
+		buf->len = i;	/* feed back number of WORDs sent */
+		memcpy_tofs ((&((char *) arg)[0]), &buf, sizeof (buf));
+		kfree (buf);
+		return -EIO;
+	      }
+	  }
+
+	restore_flags (flags);
+	kfree (buf);
+
+	return 0;
+      }
+      break;
+
+
+    case SNDCTL_COPR_RCVMSG:
+      {
+	copr_msg       *buf;
+	unsigned long   flags;
+	unsigned short *data;
+	unsigned int    i;
+	int             err = 0;
+
+	buf = (copr_msg *) kmalloc (sizeof (copr_msg), GFP_KERNEL);
+	if (buf == NULL)
+	  return -ENOSPC;
+
+	memcpy_fromfs ((char *) buf, &(((char *) arg)[0]), sizeof (*buf));
+
+	data = (unsigned short *) buf->data;
+
+	save_flags (flags);
+	cli ();
+
+	for (i = 0; i < buf->len; i++)
+	  {
+	    if (!pss_get_dspword (devc, data++))
+	      {
+		buf->len = i;	/* feed back number of WORDs read */
+		err = -EIO;
+		break;
+	      }
+	  }
+
+	restore_flags (flags);
+
+	memcpy_tofs ((&((char *) arg)[0]), &buf, sizeof (buf));
+	kfree (buf);
+
+	return err;
+      }
+      break;
+
+
     case SNDCTL_COPR_RDATA:
       {
 	copr_debug_buf  buf;
@@ -610,14 +691,14 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	    return -EIO;
 	  }
 
-	tmp = ((unsigned int) buf.parm2 >> 8) & 0xffff;
+	tmp = (unsigned int) buf.parm2 & 0x00ff;
 	if (!pss_put_dspword (devc, tmp))
 	  {
 	    restore_flags (flags);
 	    return -EIO;
 	  }
 
-	tmp = (unsigned int) buf.parm2 & 0x00ff;
+	tmp = ((unsigned int) buf.parm2 >> 8) & 0xffff;
 	if (!pss_put_dspword (devc, tmp))
 	  {
 	    restore_flags (flags);

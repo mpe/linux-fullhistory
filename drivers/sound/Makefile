@@ -70,7 +70,7 @@ sound.a: $(OBJS)
 
 clean:
 	rm -f core core.* *.o *.a tmp_make *~ x y z *%
-	rm -f configure sound_stub.c objects/*.o 
+	rm -f configure sound_stub.c objects/*.o
 
 indent:
 	for n in *.c;do echo indent $$n;indent $$n;done

@@ -27,7 +27,6 @@
  *      QIC-40, QIC-80, QIC-3010 and QIC-3020 maps are implemented.
  */
 
-#include <linux/module.h>
 #include <linux/ftape.h>
 #include <linux/string.h>
 

@@ -57,6 +57,7 @@
 #define SNDCARD_CS4232_MPU	22
 #define SNDCARD_MAUI		23
 #define SNDCARD_PSEUDO_MSS	24
+#define SNDCARD_GUSPNP		25
 
 /***********************************
  * IOCTL Commands for /dev/sequencer
@@ -614,12 +615,13 @@ typedef struct count_info {
 #define SNDCTL_DSP_GETOPTR		_IOR ('P',18, count_info)
 
 typedef struct buffmem_desc {
-		caddr_t buffer;
+		unsigned *buffer;
 		int size;
 	} buffmem_desc;
 #define SNDCTL_DSP_MAPINBUF		_IOR ('P', 19, buffmem_desc)
 #define SNDCTL_DSP_MAPOUTBUF		_IOR ('P', 20, buffmem_desc)
 #define SNDCTL_DSP_SETSYNCRO		_IO  ('P', 21)
+#define SNDCTL_DSP_SETDUPLEX		_IO  ('P', 22)
 
 #define SOUND_PCM_READ_RATE		_IOR ('P', 2, int)
 #define SOUND_PCM_READ_CHANNELS		_IOR ('P', 6, int)

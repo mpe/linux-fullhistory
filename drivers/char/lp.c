@@ -7,6 +7,7 @@
  * Copyright (C) 1994 by Alan Cox (Modularised it)
  * LPCAREFUL, LPABORT, LPGETSTATUS added by Chris Metcalf, metcalf@lcs.mit.edu
  * Statistics and support for slow printers by Rob Janssen, rob@knoware.nl
+ * "lp=" command line parameters added by Grant Guenther, grant@torque.net
  */
 
 #include <linux/module.h>
@@ -538,6 +539,10 @@ static int lp_probe(int offset)
 	unsigned int testvalue;
 
 	base = LP_B(offset);
+	if (base == 0) 
+		return -1;		/* de-configured by command line */
+	if (LP_IRQ(offset) > 15) 
+		return -1;		/* bogus interrupt value */
 	size = (base == 0x3bc)? 3 : 8;
 	if (check_region(base, size) < 0)
 		return -1;
@@ -557,6 +562,33 @@ static int lp_probe(int offset)
 		return 1;
 	} else
 		return 0;
+}
+
+/* Command line parameters:
+
+   When the lp driver is built in to the kernel, you may use the
+   LILO/LOADLIN command line to set the port addresses and interrupts
+   that the driver will use.
+
+   Syntax:	lp=port0[,irq0[,port1[,irq1[,port2[,irq2]]]]]
+
+   For example:   lp=0x378,0   or   lp=0x278,5,0x378,7
+
+   Note that if this feature is used, you must specify *all* the ports
+   you want considered, there are no defaults.  You can disable a
+   built-in driver with lp=0 .
+
+*/
+
+void	lp_setup(char *str, int *ints)
+
+{	
+        LP_B(0)   = ((ints[0] > 0) ? ints[1] : 0 );
+        LP_IRQ(0) = ((ints[0] > 1) ? ints[2] : 0 );
+        LP_B(1)   = ((ints[0] > 2) ? ints[3] : 0 );
+        LP_IRQ(1) = ((ints[0] > 3) ? ints[4] : 0 );
+        LP_B(2)   = ((ints[0] > 4) ? ints[5] : 0 );
+        LP_IRQ(2) = ((ints[0] > 5) ? ints[6] : 0 );
 }
 
 #ifdef MODULE

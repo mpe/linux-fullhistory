@@ -902,7 +902,7 @@ unsigned long srmmu_alloc_kernel_stack(struct task_struct *tsk)
 {
 	unsigned long pages;
 
-	pages = __get_free_pages(GFP_KERNEL, 1, ~0UL);
+	pages = __get_free_pages(GFP_KERNEL, 1, 0);
 	if(!pages)
 		return 0;
 	memset((void *) pages, 0, (PAGE_SIZE << 1));

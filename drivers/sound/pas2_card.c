@@ -299,6 +299,8 @@ config_pas_hw (struct address_info *hw_config)
 
 	pas_write (irq_dma, EMULATION_CONFIGURATION);
       }
+    else
+      pas_write (0x00, COMPATIBILITY_ENABLE);
   }
 #else
   pas_write (0x00, COMPATIBILITY_ENABLE);

@@ -75,6 +75,7 @@ int             sb_dsp_highspeed = 0;
 int             sbc_major = 0, sbc_minor = 0;
 static int      dsp_stereo = 0;
 static int      dsp_current_speed = DSP_DEFAULT_SPEED;
+static int      dsp_requested_speed = DSP_DEFAULT_SPEED;
 static int      sb16 = 0;
 static int      irq_verified = 0;
 
@@ -334,6 +335,8 @@ dsp_speed (int speed)
   unsigned long   flags;
   int             max_speed = 44100;
 
+  dsp_requested_speed = speed;
+
   if (AudioDrive)
     return ess_speed (speed);
 
@@ -447,6 +450,7 @@ dsp_set_stereo (int mode)
     }
 
   dsp_stereo = !!mode;
+  dsp_speed (dsp_requested_speed);
   return dsp_stereo;
 }
 
@@ -472,9 +476,6 @@ actually_output_block (int dev, unsigned long buf, int nr_bytes,
 {
   unsigned long   flags;
   int             count = nr_bytes;
-
-  if (!sb_irq_mode)
-    dsp_speaker (ON);
 
   DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
 
@@ -563,9 +564,6 @@ actually_start_input (int dev, unsigned long buf, int nr_bytes, int intrflag,
   /*
    * Start a DMA input to the buffer pointed by dmaqtail
    */
-
-  if (!sb_irq_mode)
-    dsp_speaker (OFF);
 
   DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
   sb_irq_mode = 0;
@@ -665,6 +663,7 @@ sb_dsp_prepare_for_input (int dev, int bsize, int bcount)
 
   dsp_cleanup ();
   dsp_speaker (OFF);
+  dsp_speed (dsp_requested_speed);
 
   if (sbc_major == 3)		/*
 				 * SB Pro
@@ -722,7 +721,6 @@ sb_dsp_prepare_for_input (int dev, int bsize, int bcount)
 	  else
 	    sb_dsp_command (dsp_16bit ? 0xa4 : 0xa0);
 
-	  dsp_speed (dsp_current_speed);
 	}			/* !AudioDrive */
     }
   trigger_bits = 0;
@@ -734,6 +732,7 @@ sb_dsp_prepare_for_output (int dev, int bsize, int bcount)
 {
   dsp_cleanup ();
   dsp_speaker (OFF);
+  dsp_speed (dsp_requested_speed);
 
   if (sbc_major == 3)		/* SB Pro (at least ) */
     {
@@ -827,6 +826,9 @@ sb_dsp_open (int dev, int mode)
       printk ("SB Error: SoundBlaster board not installed\n");
       return -ENXIO;
     }
+
+  if (!sb_midi_busy)
+    sb_reset_dsp ();
 
   if (sb_no_recording && mode & OPEN_READ)
     {

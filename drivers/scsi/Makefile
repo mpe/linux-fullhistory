@@ -84,6 +84,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_PPA),y)
+L_OBJS += ppa.o
+else
+  ifeq ($(CONFIG_SCSI_PPA),m)
+  M_OBJS += ppa.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_QLOGIC),y)
 L_OBJS += qlogic.o
 else

@@ -381,7 +381,7 @@ proc dohelp {w varname }  {
 			/^$varname\[ 	\]*\$/ {
 				start=1;
 				printf(\"%s:\\n\\n\",\$0);
-				continue;
+				next;
 			}
 			!/^\[ 	\]/ {
 				start=0;

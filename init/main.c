@@ -64,6 +64,7 @@ extern void swap_setup(char *str, int *ints);
 extern void buff_setup(char *str, int *ints);
 extern void panic_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
+extern void lp_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
 extern void floppy_setup(char *str, int *ints);
@@ -82,6 +83,7 @@ extern void AM53C974_setup(char *str, int *ints);
 extern void BusLogic_Setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
+extern void ppa_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
 #ifdef CONFIG_CDU31A
@@ -227,6 +229,9 @@ struct {
 #ifdef CONFIG_INET
 	{ "ether=", eth_setup },
 #endif
+#ifdef CONFIG_PRINTER
+        { "lp=", lp_setup },
+#endif
 #ifdef CONFIG_SCSI
 	{ "max_scsi_luns=", scsi_luns_setup },
 #endif
@@ -276,6 +281,9 @@ struct {
 #endif
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
 	{ "fdomain=", fdomain_setup},
+#endif
+#ifdef CONFIG_SCSI_PPA
+        { "ppa=", ppa_setup },
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },

@@ -170,6 +170,7 @@ static void unix_delayed_delete(unix_socket *sk)
 static void unix_destroy_socket(unix_socket *sk)
 {
 	struct sk_buff *skb;
+
 	unix_remove_socket(sk);
 	
 	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
@@ -184,7 +185,7 @@ static void unix_destroy_socket(unix_socket *sk)
 		}
 		else
 		{
-/*			unix_kill_credentials(skb);	*//* Throw out any passed fd's */
+			/* passed fds are erased where?? */
 			kfree_skb(skb,FREE_WRITE);
 		}
 	}
@@ -782,7 +783,7 @@ static void unix_fd_free(struct sock *sk, struct file **fp, int num)
  *	but how the old code did it - or like this...
  */
 
-int unix_files_free(void)
+static int unix_files_free(void)
 {
 	int i;
 	int n=0;
@@ -808,13 +809,16 @@ int unix_files_free(void)
 static void unix_detach_fds(struct sk_buff *skb, struct cmsghdr *cmsg)
 {
 	int i;
+	/* count of space in parent for fds */
 	int cmnum;
 	struct file **fp;
 	struct file **ufp;
 	int *cmfptr=NULL;	/* =NULL To keep gcc happy */
+	/* number of fds actually passed */
 	int fdnum;
 	int ffree;
 	int ufn=0;
+
 	if(cmsg==NULL)
 		cmnum=0;
 	else
@@ -858,7 +862,9 @@ static void unix_detach_fds(struct sk_buff *skb, struct cmsghdr *cmsg)
 	}
 	kfree(skb->h.filp);
 	skb->h.filp=NULL;
-	
+
+	/* no need to use destructor */
+	skb->destructor = NULL;
 }
 
 static void unix_destruct_fds(struct sk_buff *skb)
@@ -869,14 +875,16 @@ static void unix_destruct_fds(struct sk_buff *skb)
 /*
  *	Attach the file descriptor array to an sk_buff
  */
- 
 static void unix_attach_fds(int fpnum,struct file **fp,struct sk_buff *skb)
 {
+
 	skb->h.filp=kmalloc(sizeof(int)+fpnum*sizeof(struct file *), 
 							GFP_KERNEL);
+	/* number of descriptors starts block */
 	memcpy(skb->h.filp,&fpnum,sizeof(int));
+	/* actual  descriptors */
 	memcpy(skb->h.filp+sizeof(int),fp,fpnum*sizeof(struct file *));
-	skb->destructor=unix_destruct_fds;
+	skb->destructor = unix_destruct_fds;
 }
 
 /*
@@ -893,8 +901,10 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	int limit=0;
 	int sent=0;
 	struct file *fp[UNIX_MAX_FD];
+	/* number of fds waiting to be passed, 0 means either
+	 * no fds to pass or they've already been passed 
+	 */
 	int fpnum=0;
-	int fp_attached=0;
 
 	if(sk->err)
 		return sock_error(sk);
@@ -935,18 +945,12 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		   cm->cmsg_level!=SOL_SOCKET ||
 		   msg->msg_accrightslen!=cm->cmsg_len)
 		{
-#if 0
-			printk("Sendmsg: bad access rights\n");
-#endif
 			kfree(cm);
 		   	return -EINVAL;
 		}
 		fpnum=unix_fd_copy(sk,cm,fp);
 		kfree(cm);
 		if(fpnum<0) {
-#if 0
-			printk("Sendmsg error = %d\n", fpnum);
-#endif
 			return fpnum;
 		}
 	}
@@ -1001,14 +1005,14 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		skb->sk=sk;
 		skb->free=1;
 		
-		if(fpnum && !fp_attached)
+		if(fpnum)
 		{
-			fp_attached=1;
 			unix_attach_fds(fpnum,fp,skb);
 			fpnum=0;
 		}
 		else
 			skb->h.filp=NULL;
+
 		memcpy_fromiovec(skb_put(skb,size),msg->msg_iov, size);
 
 		cli();
@@ -1090,7 +1094,6 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 
 	if(msg->msg_accrights) 
 	{
-		printk("recvmsg with accrights\n");
 		cm=unix_copyrights(msg->msg_accrights, 
 			msg->msg_accrightslen);
 		if(msg->msg_accrightslen<sizeof(struct cmsghdr)

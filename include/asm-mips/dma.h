@@ -279,7 +279,6 @@ extern void free_dma(unsigned int dmanr);	/* release it again */
 /*
  * DMA memory allocation - formerly in include/linux/mm.h
  */
-#define __get_dma_pages(priority, order) __get_free_pages((priority),(order), \
-                                             0x80000000 + MAX_DMA_ADDRESS)
+#define __get_dma_pages(priority, order) __get_free_pages((priority),(order), 1)
 
 #endif /* __ASM_MIPS_DMA_H */

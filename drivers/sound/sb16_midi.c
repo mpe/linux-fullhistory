@@ -125,7 +125,6 @@ sb16midi_open (int dev, int mode,
       return -EBUSY;
     }
 
-  reset_sb16midi ();
   while (input_avail ())
     sb16midi_read ();
 

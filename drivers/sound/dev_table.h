@@ -334,6 +334,7 @@ struct sound_timer_operations {
 #endif
 #ifdef CONFIG_GUS
 		{"GUS", 0, SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus, unload_gus},
+		{"GUSPNP", 1, SNDCARD_GUSPNP,	"GUS PnP",	attach_gus_card, probe_gus, unload_gus},
 #endif
 #ifdef CONFIG_SSCAPE
 		{"SSCAPE", 0, SNDCARD_SSCAPE, "Ensoniq Soundscape",	attach_sscape, probe_sscape, unload_sscape},

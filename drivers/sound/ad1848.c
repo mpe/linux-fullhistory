@@ -192,7 +192,7 @@ wait_for_calibration (ad1848_info * devc)
   if (!(ad_read (devc, 11) & 0x20))
     return;
 
-  timeout = 40000;
+  timeout = 80000;
   while (timeout > 0 && ad_read (devc, 11) & 0x20)
     timeout--;
   if (ad_read (devc, 11) & 0x20)
@@ -202,11 +202,33 @@ wait_for_calibration (ad1848_info * devc)
 static void
 ad_mute (ad1848_info * devc)
 {
+  int             i;
+  unsigned char   prev;
+
+  if (devc->mode != MD_1848)
+    return;
+  /*
+     * Save old register settings and mute output channels
+   */
+  for (i = 6; i < 8; i++)
+    {
+      prev = devc->saved_regs[i] = ad_read (devc, i);
+      ad_write (devc, i, prev | 0x80);
+    }
 }
 
 static void
 ad_unmute (ad1848_info * devc)
 {
+  int             i;
+
+  /*
+     * Restore back old volume registers (unmute)
+   */
+  for (i = 6; i < 8; i++)
+    {
+      ad_write (devc, i, devc->saved_regs[i] & ~0x80);
+    }
 }
 
 static void
@@ -928,7 +950,7 @@ static int
 ad1848_prepare_for_IO (int dev, int bsize, int bcount)
 {
   int             timeout;
-  unsigned char   fs, old_fs;
+  unsigned char   fs, old_fs, tmp = 0;
   unsigned long   flags;
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
 
@@ -952,14 +974,21 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
 
   old_fs = ad_read (devc, 8);
 
-  if (fs == old_fs)		/* No change */
-    {
-      restore_flags (flags);
-      devc->xfer_count = 0;
-      return 0;
-    }
+  if (devc->mode != MD_4232)
+    if (fs == old_fs)		/* No change */
+      {
+	restore_flags (flags);
+	devc->xfer_count = 0;
+	return 0;
+      }
 
   ad_enter_MCE (devc);		/* Enables changes to the format select reg */
+
+  if (devc->mode == MD_4232)
+    {
+      tmp = ad_read (devc, 16);
+      ad_write (devc, 16, tmp | 0x30);
+    }
 
   ad_write (devc, 8, fs);
   /*
@@ -984,6 +1013,9 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
 	timeout--;
 
     }
+
+  if (devc->mode == MD_4232)
+    ad_write (devc, 16, tmp & ~0x30);
 
   ad_leave_MCE (devc);		/*
 				 * Starts the calibration process.
@@ -1011,38 +1043,14 @@ static void
 ad1848_halt (int dev)
 {
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
-  unsigned long   flags;
-  int             timeout;
 
+  unsigned char   bits = ad_read (devc, 9);
 
-  save_flags (flags);
-  cli ();
+  if (bits & 0x01)
+    ad1848_halt_output (dev);
 
-  ad_mute (devc);
-  ad_enter_MCE (devc);
-  ad_write (devc, 9, ad_read (devc, 9) & ~0x03);	/* Stop DMA */
-  ad_write (devc, 9, ad_read (devc, 9) & ~0x03);	/* Stop DMA */
-
-  ad_write (devc, 15, 4);	/* Clear DMA counter */
-  ad_write (devc, 14, 0);	/* Clear DMA counter */
-
-  if (devc->mode != MD_1848)
-    {
-      ad_write (devc, 30, 4);	/* Clear DMA counter */
-      ad_write (devc, 31, 0);	/* Clear DMA counter */
-    }
-
-  for (timeout = 0; timeout < 10000 && !(inb (io_Status (devc)) & 0x80);
-       timeout++);		/* Wait for interrupt */
-
-  ad_write (devc, 9, ad_read (devc, 9) & ~0x03);	/* Stop DMA */
-  outb (0, io_Status (devc));	/* Clear interrupt status */
-  outb (0, io_Status (devc));	/* Clear interrupt status */
-  devc->irq_mode = 0;
-  ad_leave_MCE (devc);
-
-  /* DMAbuf_reset_dma (dev); */
-  restore_flags (flags);
+  if (bits & 0x02)
+    ad1848_halt_input (dev);
 }
 
 static void
@@ -1051,16 +1059,26 @@ ad1848_halt_input (int dev)
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
   unsigned long   flags;
 
-  if (devc->mode == MD_1848)
-    {
-      ad1848_halt (dev);
-      return;
-    }
-
   save_flags (flags);
   cli ();
 
   ad_mute (devc);
+
+  if (devc->mode == MD_4232)	/* Use applied black magic */
+    {
+      int             tmout;
+
+      disable_dma (audio_devs[dev]->dmachan1);
+
+      for (tmout = 0; tmout < 100000; tmout++)
+	if (ad_read (devc, 11) & 0x10)
+	  break;
+      ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Stop playback */
+
+      enable_dma (audio_devs[dev]->dmachan1);
+      restore_flags (flags);
+      return;
+    }
   ad_write (devc, 9, ad_read (devc, 9) & ~0x02);	/* Stop capture */
 
 
@@ -1078,16 +1096,25 @@ ad1848_halt_output (int dev)
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
   unsigned long   flags;
 
-  if (devc->mode == MD_1848)
-    {
-      ad1848_halt (dev);
-      return;
-    }
-
   save_flags (flags);
   cli ();
 
   ad_mute (devc);
+  if (devc->mode == MD_4232)	/* Use applied black magic */
+    {
+      int             tmout;
+
+      disable_dma (audio_devs[dev]->dmachan1);
+
+      for (tmout = 0; tmout < 100000; tmout++)
+	if (ad_read (devc, 11) & 0x10)
+	  break;
+      ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Stop playback */
+
+      enable_dma (audio_devs[dev]->dmachan1);
+      restore_flags (flags);
+      return;
+    }
   ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Stop playback */
 
 
@@ -1503,7 +1530,7 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
       nr_ad1848_devs++;
 
 #ifdef CONFIG_SEQUENCER
-      if (devc->mode != MD_1848 && devc->irq_ok)
+      if (devc->mode != MD_1848 && devc->mode != MD_1845 && devc->irq_ok)
 	ad1848_tmr_install (my_dev);
 #endif
 
@@ -1592,7 +1619,7 @@ ad1848_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
 
       if (irq > 15)
 	{
-	  printk ("ad1848.c: Bogus interrupt %d\n", irq);
+	  /* printk ("ad1848.c: Bogus interrupt %d\n", irq); */
 	  return;
 	}
 

@@ -394,6 +394,13 @@ N: Philip Gladstone
 E: philipg@onsett.com
 D: Kernel / timekeeping stuff
 
+N: Grant Guenther
+E: grant@torque.net
+D: Iomega PPA / ZIP driver
+S: 906-1001 Bay St.
+S: Toronto, Ontario, M5S 3A6 
+S: Canada
+
 N: Miquel van Smoorenburg
 E: miquels@cistron.nl
 D: Kernel and net hacker. Sysvinit, minicom. doing Debian stuff.

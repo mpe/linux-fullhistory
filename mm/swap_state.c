@@ -49,7 +49,7 @@ void show_swap_cache_info(void)
 }
 #endif
 
-int add_to_swap_cache(unsigned long addr, unsigned long entry)
+int add_to_swap_cache(unsigned long index, unsigned long entry)
 {
 	struct swap_info_struct * p = &swap_info[SWP_TYPE(entry)];
 
@@ -57,7 +57,7 @@ int add_to_swap_cache(unsigned long addr, unsigned long entry)
 	swap_cache_add_total++;
 #endif
 	if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
-		entry = xchg(swap_cache + MAP_NR(addr), entry);
+		entry = xchg(swap_cache + index, entry);
 		if (entry)  {
 			printk("swap_cache: replacing non-NULL entry\n");
 		}

@@ -234,6 +234,7 @@ close_dmap (int dev, struct dma_buffparms *dmap, int chan)
     dmap->dma_mode = DMODE_NONE;
   dmap->flags &= ~DMA_BUSY;
 
+  disable_dma (chan);
   sound_free_dmap (dev, dmap);
 }
 
@@ -1303,35 +1304,41 @@ static void
 polish_buffers (struct dma_buffparms *dmap)
 {
   int             i;
+  int             p, l;
 
-  if (dmap->cfrag < 0)
+  i = dmap->qhead;
+
+  p = dmap->fragment_size * i;
+
+  if (i == dmap->cfrag)
     {
-      memset (dmap->raw_buf,
+      l = dmap->fragment_size - dmap->counts[i];
+    }
+  else
+    l = dmap->fragment_size;
+
+  if (l)
+    {
+      memset (dmap->raw_buf + p,
 	      dmap->neutral_byte,
-	      dmap->bytes_in_use);
-      return;
+	      l);
     }
+}
 
-  for (i = 0; i < dmap->nbufs; i++)
-    {
-      int             p, l;
+static void
+force_restart (int dev, struct dma_buffparms *dmap)
+{
+  if ((audio_devs[dev]->flags & DMA_DUPLEX) &&
+      audio_devs[dev]->halt_output)
+    audio_devs[dev]->halt_output (dev);
+  else
+    audio_devs[dev]->halt_xfer (dev);
 
-      p = dmap->fragment_size * i;
-
-      if (i == dmap->cfrag)
-	{
-	  l = dmap->fragment_size - dmap->counts[i];
-	}
-      else
-	l = dmap->fragment_size;
-
-      if (l)
-	{
-	  memset (dmap->raw_buf + p,
-		  dmap->neutral_byte,
-		  l);
-	}
-    }
+  dmap->flags &= ~DMA_ACTIVE;
+  if (audio_devs[dev]->flags & DMA_AUTOMODE)
+    dmap->flags |= DMA_RESTART;
+  else
+    dmap->flags &= ~DMA_RESTART;
 }
 
 void
@@ -1393,7 +1400,14 @@ DMAbuf_outputintr (int dev, int event_type)
       if (event_type == 1 && dmap->qlen < 1)
 	{
 	  dmap->underrun_count++;
-	  /* Ignore underrun. Just move the tail pointer forward and go */
+
+	  if (dmap->underrun_count > 5 || dmap->flags & DMA_EMPTY)
+	    {
+	      dmap->qlen = 0;
+	      force_restart (dev, dmap);
+	    }
+	  else
+	    /* Ignore underrun. Just move the tail pointer forward and go */
 	  if (dmap->closing)
 	    {
 	      polish_buffers (dmap);
@@ -1482,7 +1496,7 @@ DMAbuf_inputintr (int dev)
 
       if (audio_devs[dev]->flags & DMA_AUTOMODE)
 	{
-	  /* Force restart on next write */
+	  /* Force restart on next read */
 	  if ((audio_devs[dev]->flags & DMA_DUPLEX) &&
 	      audio_devs[dev]->halt_input)
 	    audio_devs[dev]->halt_input (dev);

@@ -68,7 +68,7 @@ static void init_swap_timer(void);
  * have died while we slept).
  */
 static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
-	unsigned long address, pte_t * page_table, unsigned long limit, int wait)
+	unsigned long address, pte_t * page_table, int dma, int wait)
 {
 	pte_t pte;
 	unsigned long entry;
@@ -81,16 +81,15 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	page = pte_page(pte);
 	if (MAP_NR(page) >= MAP_NR(high_memory))
 		return 0;
-	if (page >= limit)
-		return 0;
 
 	page_map = mem_map + MAP_NR(page);
-	if (page_map->reserved || page_map->locked)
+	if (page_map->reserved || page_map->locked ||
+	    (dma && !page_map->dma))
 		return 0;
 	/* Deal with page aging.  Pages age from being unused; they
 	 * rejuvinate on being accessed.  Only swap old pages (age==0
 	 * is oldest). */
-	if ((pte_dirty(pte) && delete_from_swap_cache(page)) 
+	if ((pte_dirty(pte) && delete_from_swap_cache(MAP_NR(page))) 
 	    || pte_young(pte))  {
 		set_pte(page_table, pte_mkold(pte));
 		touch_page(page_map);
@@ -119,7 +118,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 		free_page(page);
 		return 1;	/* we slept: the process may not exist any more */
 	}
-        if ((entry = find_in_swap_cache(page)))  {
+        if ((entry = find_in_swap_cache(MAP_NR(page))))  {
 		if (page_map->count != 1) {
 			set_pte(page_table, pte_mkdirty(pte));
 			printk("Aiee.. duplicated cached swap-cache entry\n");
@@ -154,7 +153,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
  */
 
 static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct * vma,
-	pmd_t *dir, unsigned long address, unsigned long end, unsigned long limit, int wait)
+	pmd_t *dir, unsigned long address, unsigned long end, int dma, int wait)
 {
 	pte_t * pte;
 	unsigned long pmd_end;
@@ -176,7 +175,7 @@ static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct *
 	do {
 		int result;
 		tsk->swap_address = address + PAGE_SIZE;
-		result = try_to_swap_out(tsk, vma, address, pte, limit, wait);
+		result = try_to_swap_out(tsk, vma, address, pte, dma, wait);
 		if (result)
 			return result;
 		address += PAGE_SIZE;
@@ -186,7 +185,7 @@ static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct *
 }
 
 static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct * vma,
-	pgd_t *dir, unsigned long address, unsigned long end, unsigned long limit, int wait)
+	pgd_t *dir, unsigned long address, unsigned long end, int dma, int wait)
 {
 	pmd_t * pmd;
 	unsigned long pgd_end;
@@ -206,7 +205,7 @@ static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct *
 		end = pgd_end;
 	
 	do {
-		int result = swap_out_pmd(tsk, vma, pmd, address, end, limit, wait);
+		int result = swap_out_pmd(tsk, vma, pmd, address, end, dma, wait);
 		if (result)
 			return result;
 		address = (address + PMD_SIZE) & PMD_MASK;
@@ -216,7 +215,7 @@ static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct *
 }
 
 static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
-	pgd_t *pgdir, unsigned long start, unsigned long limit, int wait)
+	pgd_t *pgdir, unsigned long start, int dma, int wait)
 {
 	unsigned long end;
 
@@ -227,7 +226,7 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 
 	end = vma->vm_end;
 	while (start < end) {
-		int result = swap_out_pgd(tsk, vma, pgdir, start, end, limit, wait);
+		int result = swap_out_pgd(tsk, vma, pgdir, start, end, dma, wait);
 		if (result)
 			return result;
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
@@ -236,7 +235,7 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 	return 0;
 }
 
-static int swap_out_process(struct task_struct * p, unsigned long limit, int wait)
+static int swap_out_process(struct task_struct * p, int dma, int wait)
 {
 	unsigned long address;
 	struct vm_area_struct* vma;
@@ -257,7 +256,7 @@ static int swap_out_process(struct task_struct * p, unsigned long limit, int wai
 		address = vma->vm_start;
 
 	for (;;) {
-		int result = swap_out_vma(p, vma, pgd_offset(p->mm, address), address, limit, wait);
+		int result = swap_out_vma(p, vma, pgd_offset(p->mm, address), address, dma, wait);
 		if (result)
 			return result;
 		vma = vma->vm_next;
@@ -269,7 +268,7 @@ static int swap_out_process(struct task_struct * p, unsigned long limit, int wai
 	return 0;
 }
 
-static int swap_out(unsigned int priority, unsigned long limit, int wait)
+static int swap_out(unsigned int priority, int dma, int wait)
 {
 	static int swap_task;
 	int loop, counter;
@@ -308,7 +307,7 @@ static int swap_out(unsigned int priority, unsigned long limit, int wait)
 		}
 		if (!--p->swap_cnt)
 			swap_task++;
-		switch (swap_out_process(p, limit, wait)) {
+		switch (swap_out_process(p, dma, wait)) {
 			case 0:
 				if (p->swap_cnt)
 					swap_task++;
@@ -327,7 +326,7 @@ static int swap_out(unsigned int priority, unsigned long limit, int wait)
  * to be.  This works out OK, because we now do proper aging on page
  * contents. 
  */
-int try_to_free_page(int priority, unsigned long limit, int wait)
+int try_to_free_page(int priority, int dma, int wait)
 {
 	static int state = 0;
 	int i=6;
@@ -335,15 +334,15 @@ int try_to_free_page(int priority, unsigned long limit, int wait)
 	switch (state) {
 		do {
 		case 0:
-			if (shrink_mmap(i, limit))
+			if (shrink_mmap(i, dma))
 				return 1;
 			state = 1;
 		case 1:
-			if (shm_swap(i, limit))
+			if (shm_swap(i, dma))
 				return 1;
 			state = 2;
 		default:
-			if (swap_out(i, limit, wait))
+			if (swap_out(i, dma, wait))
 				return 1;
 			state = 0;
 		} while (i--);
@@ -400,7 +399,7 @@ int kswapd(void *unused)
 		swapstats.wakeups++;
 		/* Do the background pageout: */
 		for (i=0; i < kswapd_ctl.maxpages; i++)
-			try_to_free_page(GFP_KERNEL, ~0UL, 0);
+			try_to_free_page(GFP_KERNEL, 0, 0);
 	}
 }
 

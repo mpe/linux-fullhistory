@@ -53,15 +53,6 @@
 unsigned long high_memory = 0;
 
 /*
- * The free_area_list arrays point to the queue heads of the free areas
- * of different sizes
- */
-int nr_swap_pages = 0;
-int nr_free_pages = 0;
-struct mem_list free_area_list[NR_MEM_LISTS];
-unsigned int * free_area_map[NR_MEM_LISTS];
-
-/*
  * We special-case the C-O-W ZERO_PAGE, because it's such
  * a common occurrence (no need to read the page to know
  * that it's zero - better for the cache and memory subsystem).
@@ -113,6 +104,7 @@ static inline void free_one_pmd(pmd_t * dir)
 
 static inline void free_one_pgd(pgd_t * dir)
 {
+	int j;
 	pmd_t * pmd;
 
 	if (pgd_none(*dir))
@@ -124,11 +116,8 @@ static inline void free_one_pgd(pgd_t * dir)
 	}
 	pmd = pmd_offset(dir, 0);
 	pgd_clear(dir);
-	if (!pmd_inuse(pmd)) {
-		int j;
-		for (j = 0; j < PTRS_PER_PMD ; j++)
-			free_one_pmd(pmd+j);
-	}
+	for (j = 0; j < PTRS_PER_PMD ; j++)
+		free_one_pmd(pmd+j);
 	pmd_free(pmd);
 }
 	
@@ -170,7 +159,7 @@ void free_page_tables(struct task_struct * tsk)
 	invalidate_mm(tsk->mm);
 	SET_PAGE_DIR(tsk, swapper_pg_dir);
 	tsk->mm->pgd = swapper_pg_dir;	/* or else... */
-	for (i = 0 ; i < PTRS_PER_PGD ; i++)
+	for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
 		free_one_pgd(page_dir + i);
 	pgd_free(page_dir);
 }
@@ -193,6 +182,7 @@ int new_page_tables(struct task_struct * tsk)
 static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte, int cow)
 {
 	pte_t pte = *old_pte;
+	unsigned long page_nr;
 
 	if (pte_none(pte))
 		return;
@@ -201,17 +191,18 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte, int cow)
 		set_pte(new_pte, pte);
 		return;
 	}
-	if (pte_page(pte) > high_memory || mem_map[MAP_NR(pte_page(pte))].reserved) {
+	page_nr = MAP_NR(pte_page(pte));
+	if (page_nr >= MAP_NR(high_memory) || mem_map[page_nr].reserved) {
 		set_pte(new_pte, pte);
 		return;
 	}
 	if (cow)
 		pte = pte_wrprotect(pte);
-	if (delete_from_swap_cache(pte_page(pte)))
+	if (delete_from_swap_cache(page_nr))
 		pte = pte_mkdirty(pte);
 	set_pte(new_pte, pte_mkold(pte));
 	set_pte(old_pte, pte);
-	mem_map[MAP_NR(pte_page(pte))].count++;
+	mem_map[page_nr].count++;
 }
 
 static inline int copy_pte_range(pmd_t *dst_pmd, pmd_t *src_pmd, unsigned long address, unsigned long size, int cow)

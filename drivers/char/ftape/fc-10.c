@@ -41,7 +41,6 @@
  *      This file contains code for the CMS FC-10/FC-20 card.
  */
 
-#include <linux/module.h>
 #include <linux/ftape.h>
 #include <asm/io.h>
 

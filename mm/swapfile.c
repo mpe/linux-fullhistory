@@ -168,14 +168,14 @@ static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
 	if (pte_none(pte))
 		return 0;
 	if (pte_present(pte)) {
-		unsigned long page = pte_page(pte);
-		if (page >= high_memory)
+		unsigned long page_nr = MAP_NR(pte_page(pte));
+		if (page_nr >= MAP_NR(high_memory))
 			return 0;
-		if (!in_swap_cache(page))
+		if (!in_swap_cache(page_nr))
 			return 0;
-		if (SWP_TYPE(in_swap_cache(page)) != type)
+		if (SWP_TYPE(in_swap_cache(page_nr)) != type)
 			return 0;
-		delete_from_swap_cache(page);
+		delete_from_swap_cache(page_nr);
 		set_pte(dir, pte_mkdirty(pte));
 		return 0;
 	}
@@ -263,18 +263,18 @@ static int unuse_vma(struct vm_area_struct * vma, pgd_t *pgdir,
 	return 0;
 }
 
-static int unuse_process(struct task_struct * p, unsigned int type, unsigned long page)
+static int unuse_process(struct mm_struct * mm, unsigned int type, unsigned long page)
 {
 	struct vm_area_struct* vma;
 
 	/*
 	 * Go through process' page directory.
 	 */
-	if (!p->mm || pgd_inuse(p->mm->pgd))
+	if (!mm)
 		return 0;
-	vma = p->mm->mmap;
+	vma = mm->mmap;
 	while (vma) {
-		pgd_t * pgd = pgd_offset(p->mm, vma->vm_start);
+		pgd_t * pgd = pgd_offset(mm, vma->vm_start);
 		if (unuse_vma(vma, pgd, vma->vm_start, vma->vm_end, type, page))
 			return 1;
 		vma = vma->vm_next;
@@ -296,8 +296,9 @@ static int try_to_unuse(unsigned int type)
 		return -ENOMEM;
 	nr = 0;
 	while (nr < NR_TASKS) {
-		if (task[nr]) {
-			if (unuse_process(task[nr], type, page)) {
+		struct task_struct * p = task[nr];
+		if (p) {
+			if (unuse_process(p->mm, type, page)) {
 				page = get_free_page(GFP_KERNEL);
 				if (!page)
 					return -ENOMEM;

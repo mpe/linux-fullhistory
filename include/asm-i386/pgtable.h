@@ -288,24 +288,12 @@ do { \
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
-extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)].reserved || mem_map[MAP_NR(ptep)].count != 1; }
 extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
-extern inline void pte_reuse(pte_t * ptep)
-{
-	if (!mem_map[MAP_NR(ptep)].reserved)
-		mem_map[MAP_NR(ptep)].count++;
-}
 
 extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
 extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK) != _PAGE_TABLE || pmd_val(pmd) > high_memory; }
 extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & _PAGE_PRESENT; }
-#ifdef USE_PENTIUM_MM
-extern inline int pmd_inuse(pmd_t *pmdp)	{ return (pmd_val(*pmdp) & _PAGE_4M) != 0; }
-#else
-extern inline int pmd_inuse(pmd_t *pmdp)	{ return 0; }
-#endif
 extern inline void pmd_clear(pmd_t * pmdp)	{ pmd_val(*pmdp) = 0; }
-extern inline void pmd_reuse(pmd_t * pmdp)	{ }
 
 /*
  * The "pgd_xxx()" functions here are trivial for a folded two-level
@@ -315,7 +303,6 @@ extern inline void pmd_reuse(pmd_t * pmdp)	{ }
 extern inline int pgd_none(pgd_t pgd)		{ return 0; }
 extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
 extern inline int pgd_present(pgd_t pgd)	{ return 1; }
-extern inline int pgd_inuse(pgd_t * pgdp)	{ return mem_map[MAP_NR(pgdp)].reserved; }
 extern inline void pgd_clear(pgd_t * pgdp)	{ }
 
 /*
@@ -376,11 +363,10 @@ extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
 /*
  * Allocate and free page tables. The xxx_kernel() versions are
  * used to allocate a kernel page table - this turns on ASN bits
- * if any, and marks the page tables reserved.
+ * if any.
  */
 extern inline void pte_free_kernel(pte_t * pte)
 {
-	mem_map[MAP_NR(pte)].reserved = 0;
 	free_page((unsigned long) pte);
 }
 
@@ -392,7 +378,6 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 		if (pmd_none(*pmd)) {
 			if (page) {
 				pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) page;
-				mem_map[MAP_NR(page)].reserved = 1;
 				return page + address;
 			}
 			pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;

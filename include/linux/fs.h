@@ -491,7 +491,7 @@ extern struct file_operations def_chr_fops;
 extern struct inode_operations chrdev_inode_operations;
 
 extern void init_fifo(struct inode * inode);
-struct inode_operations fifo_inode_operations;
+extern struct inode_operations fifo_inode_operations;
 
 extern struct file_operations connecting_fifo_fops;
 extern struct file_operations read_fifo_fops;
@@ -515,7 +515,6 @@ extern void set_writetime(struct buffer_head * buf, int flag);
 extern void refill_freelist(int size);
 extern int try_to_free_buffer(struct buffer_head*, struct buffer_head**, int);
 
-extern struct buffer_head ** buffer_pages;
 extern int nr_buffers;
 extern int buffermem;
 extern int nr_buffer_heads;

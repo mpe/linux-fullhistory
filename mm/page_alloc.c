@@ -23,17 +23,47 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 
-static inline void add_mem_queue(struct mem_list * head, struct mem_list * entry)
+int nr_swap_pages = 0;
+int nr_free_pages = 0;
+
+/*
+ * Free area management
+ *
+ * The free_area_list arrays point to the queue heads of the free areas
+ * of different sizes
+ */
+
+#define NR_MEM_LISTS 6
+
+struct free_area_struct {
+	struct page list;
+	unsigned int *  map;
+};
+
+static struct free_area_struct free_area[NR_MEM_LISTS];
+
+static inline void init_mem_queue(struct page * head)
 {
+	head->next = head;
+	head->prev = head;
+}
+
+static inline void add_mem_queue(struct page * head, struct page * entry)
+{
+	struct page * next = head->next;
+
 	entry->prev = head;
-	(entry->next = head->next)->prev = entry;
+	entry->next = next;
+	next->prev = entry;
 	head->next = entry;
 }
 
-static inline void remove_mem_queue(struct mem_list * head, struct mem_list * entry)
+static inline void remove_mem_queue(struct page * head, struct page * entry)
 {
-	struct mem_list * next = entry->next;
-	(next->prev = entry->prev)->next = next;
+	struct page * next = entry->next;
+	struct page * prev = entry->prev;
+	next->prev = prev;
+	prev->next = next;
 }
 
 /*
@@ -55,30 +85,33 @@ static inline void remove_mem_queue(struct mem_list * head, struct mem_list * en
 /*
  * Buddy system. Hairy. You really aren't expected to understand this
  */
-static inline void free_pages_ok(unsigned long addr, unsigned long order)
+static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 {
-	unsigned long index = MAP_NR(addr) >> (1 + order);
-	unsigned long mask = PAGE_MASK << order;
+	unsigned long index = map_nr >> (1 + order);
+	unsigned long mask = (~0UL) << order;
 
-	addr &= mask;
+#define list(x) (mem_map+(x))
+
+	map_nr &= mask;
 	nr_free_pages += 1 << order;
 	while (order < NR_MEM_LISTS-1) {
-		if (!change_bit(index, free_area_map[order]))
+		if (!change_bit(index, free_area[order].map))
 			break;
-		remove_mem_queue(free_area_list+order, (struct mem_list *) (addr ^ (1+~mask)));
+		remove_mem_queue(&free_area[order].list, list(map_nr ^ (1+~mask)));
+		mask <<= 1;
 		order++;
 		index >>= 1;
-		mask <<= 1;
-		addr &= mask;
+		map_nr &= mask;
 	}
-	add_mem_queue(free_area_list+order, (struct mem_list *) addr);
+	add_mem_queue(&free_area[order].list, list(map_nr));
+#undef list
 }
 
-static inline void check_free_buffers(unsigned long addr)
+static inline void check_free_buffers(mem_map_t * map)
 {
 	struct buffer_head * bh;
 
-	bh = buffer_pages[MAP_NR(addr)];
+	bh = map->buffers;
 	if (bh) {
 		struct buffer_head *tmp = bh;
 		do {
@@ -92,21 +125,23 @@ static inline void check_free_buffers(unsigned long addr)
 
 void free_pages(unsigned long addr, unsigned long order)
 {
-	if (MAP_NR(addr) < MAP_NR(high_memory)) {
-		unsigned long flag;
-		mem_map_t * map = mem_map + MAP_NR(addr);
+	unsigned long map_nr = MAP_NR(addr);
+
+	if (map_nr < MAP_NR(high_memory)) {
+		mem_map_t * map = mem_map + map_nr;
 		if (map->reserved)
 			return;
 		if (map->count) {
+			unsigned long flag;
 			save_flags(flag);
 			cli();
 			if (!--map->count) {
-				free_pages_ok(addr, order);
-				delete_from_swap_cache(addr);
+				free_pages_ok(map_nr, order);
+				delete_from_swap_cache(map_nr);
 			}
 			restore_flags(flag);
 			if (map->count == 1)
-				check_free_buffers(addr);
+				check_free_buffers(map);
 			return;
 		}
 		printk("Trying to free free memory (%08lx): memory probably corrupted\n",addr);
@@ -118,43 +153,44 @@ void free_pages(unsigned long addr, unsigned long order)
 /*
  * Some ugly macros to speed up __get_free_pages()..
  */
-#define RMQUEUE(order, limit) \
-do { struct mem_list * queue = free_area_list+order; \
+#define MARK_USED(index, order, area) \
+	change_bit((index) >> (1+(order)), (area)->map)
+#define CAN_DMA(x) ((x)->dma)
+#define ADDRESS(x) (PAGE_OFFSET + ((x) << PAGE_SHIFT))
+#define RMQUEUE(order, dma) \
+do { struct free_area_struct * area = free_area+order; \
      unsigned long new_order = order; \
-	do { struct mem_list *prev = queue, *ret; \
-		while (queue != (ret = prev->next)) { \
-			if ((unsigned long) ret < (limit)) { \
+	do { struct page *prev = &area->list, *ret; \
+		while (&area->list != (ret = prev->next)) { \
+			if (!dma || CAN_DMA(ret)) { \
+				unsigned long map_nr = ret - mem_map; \
 				(prev->next = ret->next)->prev = prev; \
-				mark_used((unsigned long) ret, new_order); \
+				MARK_USED(map_nr, new_order, area); \
 				nr_free_pages -= 1 << order; \
+				EXPAND(ret, map_nr, order, new_order, area); \
 				restore_flags(flags); \
-				EXPAND(ret, order, new_order); \
-				return (unsigned long) ret; \
+				return ADDRESS(map_nr); \
 			} \
 			prev = ret; \
 		} \
-		new_order++; queue++; \
+		new_order++; area++; \
 	} while (new_order < NR_MEM_LISTS); \
 } while (0)
 
-static inline int mark_used(unsigned long addr, unsigned long order)
-{
-	return change_bit(MAP_NR(addr) >> (1+order), free_area_map[order]);
-}
-
-#define EXPAND(addr,low,high) \
-do { unsigned long size = PAGE_SIZE << high; \
+#define EXPAND(map,index,low,high,area) \
+do { unsigned long size = 1 << high; \
 	while (high > low) { \
-		high--; size >>= 1; cli(); \
-		add_mem_queue(free_area_list+high, addr); \
-		mark_used((unsigned long) addr, high); \
-		restore_flags(flags); \
-		addr = (struct mem_list *) (size + (unsigned long) addr); \
-	} mem_map[MAP_NR((unsigned long) addr)].count = 1; \
-	mem_map[MAP_NR((unsigned long) addr)].age = PAGE_INITIAL_AGE; \
+		area--; high--; size >>= 1; \
+		add_mem_queue(&area->list, map); \
+		MARK_USED(index, high, area); \
+		index += size; \
+		map += size; \
+	} \
+	map->count = 1; \
+	map->age = PAGE_INITIAL_AGE; \
 } while (0)
 
-unsigned long __get_free_pages(int priority, unsigned long order, unsigned long limit)
+unsigned long __get_free_pages(int priority, unsigned long order, int dma)
 {
 	unsigned long flags;
 	int reserved_pages;
@@ -176,12 +212,12 @@ unsigned long __get_free_pages(int priority, unsigned long order, unsigned long 
 repeat:
 	cli();
 	if ((priority==GFP_ATOMIC) || nr_free_pages > reserved_pages) {
-		RMQUEUE(order, limit);
+		RMQUEUE(order, dma);
 		restore_flags(flags);
 		return 0;
 	}
 	restore_flags(flags);
-	if (priority != GFP_BUFFER && try_to_free_page(priority, limit, 1))
+	if (priority != GFP_BUFFER && try_to_free_page(priority, dma, 1))
 		goto repeat;
 	return 0;
 }
@@ -200,9 +236,9 @@ void show_free_areas(void)
 	save_flags(flags);
 	cli();
  	for (order=0 ; order < NR_MEM_LISTS; order++) {
-		struct mem_list * tmp;
+		struct page * tmp;
 		unsigned long nr = 0;
-		for (tmp = free_area_list[order].next ; tmp != free_area_list + order ; tmp = tmp->next) {
+		for (tmp = free_area[order].list.next ; tmp != &free_area[order].list ; tmp = tmp->next) {
 			nr ++;
 		}
 		total += nr * ((PAGE_SIZE>>10) << order);
@@ -246,18 +282,19 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	memset(mem_map, 0, start_mem - (unsigned long) mem_map);
 	do {
 		--p;
+		p->dma = 1;
 		p->reserved = 1;
 	} while (p > mem_map);
 
 	for (i = 0 ; i < NR_MEM_LISTS ; i++) {
 		unsigned long bitmap_size;
-		free_area_list[i].prev = free_area_list[i].next = &free_area_list[i];
+		init_mem_queue(&free_area[i].list);
 		mask += mask;
 		end_mem = (end_mem + ~mask) & mask;
 		bitmap_size = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT + i);
 		bitmap_size = (bitmap_size + 7) >> 3;
 		bitmap_size = LONG_ALIGN(bitmap_size);
-		free_area_map[i] = (unsigned int *) start_mem;
+		free_area[i].map = (unsigned int *) start_mem;
 		memset((void *) start_mem, 0, bitmap_size);
 		start_mem += bitmap_size;
 	}
@@ -293,7 +330,7 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 	}
 	vma->vm_mm->rss++;
 	tsk->maj_flt++;
-	if (!write_access && add_to_swap_cache(page, entry)) {
+	if (!write_access && add_to_swap_cache(MAP_NR(page), entry)) {
 		set_pte(page_table, mk_pte(page, vma->vm_page_prot));
 		return;
 	}

@@ -123,7 +123,8 @@ typedef struct page {
 		 referenced:1,
 		 locked:1,
 		 free_after:1,
-		 unused:2,
+		 dma:1,
+		 unused:1,
 		 reserved:1;
 	struct wait_queue *wait;
 	struct page *next;
@@ -135,32 +136,19 @@ typedef struct page {
 
 	struct page *prev;
 	struct page *prev_hash;
+	struct buffer_head * buffers;
 } mem_map_t;
 
 extern mem_map_t * mem_map;
-
-/*
- * Free area management
- */
-
-#define NR_MEM_LISTS 6
-
-struct mem_list {
-	struct mem_list * next;
-	struct mem_list * prev;
-};
-
-extern struct mem_list free_area_list[NR_MEM_LISTS];
-extern unsigned int * free_area_map[NR_MEM_LISTS];
 
 /*
  * This is timing-critical - most of the time in getting a new page
  * goes to clearing the page. If you want a page without the clearing
  * overhead, just use __get_free_page() directly..
  */
-#define __get_free_page(priority) __get_free_pages((priority),0,~0UL)
-#define __get_dma_pages(priority, order) __get_free_pages((priority),(order),MAX_DMA_ADDRESS)
-extern unsigned long __get_free_pages(int priority, unsigned long gfporder, unsigned long max_addr);
+#define __get_free_page(priority) __get_free_pages((priority),0,0)
+#define __get_dma_pages(priority, order) __get_free_pages((priority),(order),1)
+extern unsigned long __get_free_pages(int priority, unsigned long gfporder, int dma);
 
 extern inline unsigned long get_free_page(int priority)
 {
@@ -222,7 +210,7 @@ extern unsigned long get_unmapped_area(unsigned long, unsigned long);
 
 /* filemap.c */
 extern unsigned long page_unuse(unsigned long);
-extern int shrink_mmap(int, unsigned long);
+extern int shrink_mmap(int, int);
 extern void truncate_inode_pages(struct inode *, unsigned long);
 
 #define GFP_BUFFER	0x00

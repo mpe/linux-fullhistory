@@ -21,7 +21,6 @@
  *      for the QIC-117 floppy-tape driver for Linux.
  */
 
-#include <linux/module.h>
 #include <linux/ftape.h>
 
 #include "tracing.h"

@@ -54,7 +54,7 @@ FTAPE_OPT       = -DVERIFY_HEADERS -DNR_BUFFERS=3 -DCLK_48MHZ=1 \
 # This enables some (most?) 2Mbps controllers:
 #FDC_OPT         = -DFDC_BASE=0x3E0 -DFDC_IRQ=6 -DFDC_DMA=2
 
-EXTRA_CFLAGS := $(FTAPE_OPT) $(FDC_OPT) -D__NO_VERSION__
+EXTRA_CFLAGS := $(FTAPE_OPT) $(FDC_OPT)
 
 O_TARGET := ftape.o
 O_OBJS   = kernel-interface.o tracing.o fdc-io.o fdc-isr.o \

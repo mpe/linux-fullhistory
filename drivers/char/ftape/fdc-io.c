@@ -21,7 +21,6 @@
  *      for the QIC-40/80 tape streamer device driver.
  */
 
-#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/ioport.h>
@@ -68,6 +67,8 @@ static int fdc_fifo_locked = 0;	/* has fifo && lock set ? */
 static byte fdc_precomp = 0;	/* sets fdc to default precomp. value */
 static byte fdc_drv_spec[4];	/* drive specification bytes for i82078 */
 static int perpend_mode;	/* true if fdc is in perpendicular mode */
+
+static char ftape_id[] = "ftape"; /* used by request irq and free irq */
 
 void fdc_catch_stray_interrupts(unsigned count)
 {
@@ -1179,7 +1180,6 @@ int fdc_grab_irq_and_dma(void)
 {
 	TRACE_FUN(8, "fdc_grab_irq_and_dma");
 	int result = 0;
-	static char ftape_id[] = "ftape";
 
 	if (fdc.hook == &do_ftape) {
 		/*  Get fast interrupt handler.
@@ -1193,7 +1193,7 @@ int fdc_grab_irq_and_dma(void)
 			result = request_dma(fdc.dma, ftape_id);
 			if (result) {
 				TRACEx1(-1, "Unable to grab DMA%d for ftape driver", fdc.dma);
-				free_irq(fdc.irq, NULL);
+				free_irq(fdc.irq, ftape_id);
 				result = -EIO;
 			} else {
 				enable_irq(fdc.irq);
@@ -1224,7 +1224,7 @@ int fdc_release_irq_and_dma(void)
 		disable_dma(fdc.dma);	/* just in case... */
 		free_dma(fdc.dma);
 		disable_irq(fdc.irq);
-		free_irq(fdc.irq, NULL);
+		free_irq(fdc.irq, ftape_id);
 	}
 #ifdef FDC_DMA
 	if (result == 0 && FDC_DMA == 2) {

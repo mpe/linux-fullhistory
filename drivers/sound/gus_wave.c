@@ -80,6 +80,7 @@ static struct voice_alloc_info *voice_alloc;
 
 extern int      gus_base;
 extern int      gus_irq, gus_dma;
+extern int      gus_pnp_flag;
 static int      gus_dma2 = -1;
 static int      dual_dma_mode = 0;
 static long     gus_mem_size = 0;
@@ -2991,13 +2992,14 @@ gus_wave_init (long mem_start, struct address_info *hw_config)
 
   int             irq = hw_config->irq, dma = hw_config->dma, dma2 = hw_config->dma2;
 
-  if (irq < 0 || irq > 15)
-    {
-      printk ("ERROR! Invalid IRQ#%d. GUS Disabled", irq);
-      return mem_start;
-    }
+  if (!gus_pnp_flag)
+    if (irq < 0 || irq > 15)
+      {
+	printk ("ERROR! Invalid IRQ#%d. GUS Disabled", irq);
+	return mem_start;
+      }
 
-  if (dma < 0 || dma > 7)
+  if (dma < 0 || dma > 7 || dma == 4)
     {
       printk ("ERROR! Invalid DMA#%d. GUS Disabled", dma);
       return mem_start;
@@ -3022,14 +3024,21 @@ gus_wave_init (long mem_start, struct address_info *hw_config)
   val = inb (gus_base + 0x0f);
   restore_flags (flags);
 
-  if (val != 0xff && (val & 0x06))	/* Should be 0x02?? */
+#ifndef GUSPNP_NO_AUTODETECT
+  gus_pnp_flag = (val == 1);
+#endif
+
+  if (gus_pnp_flag || (val != 0xff && (val & 0x06)))	/* Should be 0x02?? */
     {
       /*
          * It has the digital ASIC so the card is at least v3.4.
          * Next try to detect the true model.
        */
 
-      val = inb (u_MixSelect);
+      if (gus_pnp_flag)		/* Hack hack hack */
+	val = 10;
+      else
+	val = inb (u_MixSelect);
 
       /*
          * Value 255 means pre-3.7 which don't have mixer.
@@ -3103,7 +3112,11 @@ gus_wave_init (long mem_start, struct address_info *hw_config)
 
   if (hw_config->name)
     {
-      strncpy (gus_info.name, hw_config->name, sizeof (gus_info.name));
+      char            tmp[20];
+
+      strncpy (tmp, hw_config->name, 20);
+      tmp[19] = 0;
+      sprintf (gus_info.name, "%s (%dk)", tmp, (int) gus_mem_size / 1024);
       gus_info.name[sizeof (gus_info.name) - 1] = 0;
     }
   else
@@ -3420,7 +3433,8 @@ guswave_dma_irq (void)
 	    if (pcm_qlen == 0)
 	      flag = 1;		/* Underrun */
 	    dma_active = 0;
-	    DMAbuf_outputintr (gus_devnum, flag);
+	    if (gus_busy)
+	      DMAbuf_outputintr (gus_devnum, flag);
 	  }
 	break;
 

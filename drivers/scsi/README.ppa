@@ -1,0 +1,123 @@
+README.ppa (c) 1996   Grant R. Guenther,  grant@torque.net
+
+
+         The IOMEGA PPA3 parallel port SCSI Host Bus Adapter
+
+                     as embedded in the ZIP drive
+
+
+This README documents the Linux support for the parallel port version of
+IOMEGA's ZIP100.  The ZIP100 is an inexpensive and popular, but relatively 
+low performance, removable medium disk device.  The drive is also available
+as a regular SCSI device, but the driver documented here is for the
+parallel port version.  IOMEGA implemented the parallel port version by
+integrating (or emulating ?) their PPA3 parallel to SCSI converter into
+the ZIP drive.
+
+I have implemented a low-level driver, ppa.c,  for this parallel port 
+host bus adapter, thereby supporting the parallel port ZIP drive as a 
+regular SCSI device under Linux.
+
+It is possible that this driver will also work with the original PPA3
+device (to access a CDrom, for instance). But, the PPA3 is hard to find 
+and costs as much as the ZIP drive itself, so no-one has actually tried
+this, to the best of my knowledge.
+
+The driver was developed without the benefit of any technical specifications 
+for the interface.  Instead, a modified version of DOSemu was used to 
+monitor the protocol used by the DOS driver, 'guest.exe', for this adapter.
+I have no idea how my programming model relates to IOMEGA's design.
+(One technical consequence of this method:  I have never observed a
+SCSI message byte in the protocol transactions between guest.exe and
+the ZIP drive, so I do not know how they are delivered.  My working 
+hypothesis is that we don't have to worry about them if we don't
+send linked commands to the drive.)
+
+I'd like to thank Byron Jeff (byron@cc.gatech.edu) for publishing his
+observation that the 'guest' driver loads under DOSemu.  His remark was
+the stimulus that began this project.
+
+The ppa driver can detect and adapt to 4- and 8-bit parallel ports, but 
+there is currently no support for EPP or ECP ports, as I have been unable 
+to make the DOS drivers work in these modes on my test rig.
+
+The driver may be built in to the kernel, or loaded as a module.  It
+may be configured on the command line in both cases, although the syntax
+is different.  It may also be configured by editing the source file.
+
+Built-in drivers accept parameters using this LILO/LOADLIN command line
+syntax (omitted parameters retain their default values):
+
+        ppa=base[,speed_high[,speed_low[,call_sched[,nybble]]]]
+
+For example:    ppa=0x378,0,3
+
+If a driver is loaded as a module the parameters may be set on the
+insmod command line, but each one must be specified by name:
+
+For example:    insmod ppa.o ppa_base=0x378 ppa_nybble=1
+
+(Notice the ppa_ prefix on each of the parameters in the insmod form.)
+
+Here are the parameters and their functions:
+
+Variable        Default    Description
+
+ppa_base        0x378   The base address of PPA's parallel port.
+ppa_speed_high  1       Microsecond i/o delay used in data transfers
+ppa_speed_low   6       Microsecond delay used in other operations
+ppa_call_sched  1       1 to give up CPU during busy waits
+ppa_nybble      0       1 to force the driver to use 4-bit mode.
+
+A word about the timing parameters:  the ppa_speed_low parameter controls 
+the widths of a large number of pulses that are sent over the parallel bus, 
+the narrower the pulses, the faster things go, but the greater the risk of 
+distortion by noise damping circuits in the parallel ports.  The 
+ppa_speed_high parameter controls the same delays, but during the data 
+transfer phase only.   In this phase, there is a lot of handshaking going 
+on and the pulse shaping should not be so much of an issue, but if you 
+see data corruption, you can increase this parameter as well.
+
+You might also want to reduce the timing values to attempt to increase
+the transfer rates on your system.  Please be careful to watch for
+SCSI timeout errors in your log files.  If you are getting timeouts, you
+have set these parameters too low.  The default values appear to be
+safe on most machines.
+
+The ppa_call_sched parameter controls the 'friendliness' of this driver
+to the rest of your system.  When it is set to zero, the driver waits for
+events on the drive by continuously reading a port until the 0x80 bit is
+asserted.  Since it is in a tight loop inside the kernel, the rest of the
+system becomes very sluggish.  If you set ppa_call_sched to one, then
+ppa will call the scheduler in such circumstances, voluntarily giving up the
+CPU to other processes.   This appears to reduce the ZIP drive's 
+responsiveness, however.
+
+If you have both the lp and ppa drivers in your kernel, you must ensure
+that they access different parallel ports.  By default, the lp driver is
+initialised early in the booting process, and it claims all parallel
+ports that it can find.  You may control this behaviour with a LILO or
+LOADLIN command line argument of the form:
+
+        lp=base0[,irq0[,base1[,irq1[,base2[,irq2]]]]]
+
+For example:    lp=0x278,7
+
+If you use this method, only the ports named will be adopted by the lp
+driver.  You can disable them all with lp=0 .
+
+So, if you have a printer on 0x3bc and a ZIP drive on 0x278 you would
+give the following options on your boot command:
+
+        lp=0x3bc ppa=0x278
+
+In this case lp would use the polling driver, since an interrupt was not 
+specified.
+
+For information about using the ZIP drive, please read the generic
+instructions in the SCSI-HOWTO and the man pages for the normal disk
+management tools,  fdisk, mkfs, mount, umount, etc.  There is a mini-HOWTO
+circulating concerning the use of the normal SCSI version of the ZIP
+drive, most of its comments will apply to disks connected through the
+ppa driver as well.
+

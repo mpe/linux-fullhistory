@@ -176,7 +176,7 @@ int get_order(int size)
 void *kmalloc(size_t size, int priority)
 {
 	unsigned long flags;
-	unsigned long max_addr, type;
+	unsigned long type;
 	int order, i, sz;
 	struct block_header *p;
 	struct page_descriptor *page, **pg;
@@ -187,11 +187,9 @@ void *kmalloc(size_t size, int priority)
 		return (NULL);
 	}
 
-	max_addr = ~0UL;
 	type = MF_USED;
 	pg = &sizes[order].firstfree;
 	if (priority & GFP_DMA) {
-		max_addr = MAX_DMA_ADDRESS;
 		type = MF_DMA;
 		pg = &sizes[order].dmafree;
 	}
@@ -229,7 +227,7 @@ void *kmalloc(size_t size, int priority)
 	sz = BLOCKSIZE(order);
 
 	page = (struct page_descriptor *) __get_free_pages(priority,
-			sizes[order].gfporder, max_addr);
+			sizes[order].gfporder, priority & GFP_DMA);
 
 	if (!page) {
 		static unsigned long last = 0;

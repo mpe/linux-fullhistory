@@ -190,16 +190,16 @@ end_dialog (void)
 
 /*
  * Print a string of text in a window, automatically wrap around to the
- * next line if the string is too long to fit on one line. Note that the
- * string may contain "\n" to represent a newline character or the real
- * newline '\n', but in that case, auto wrap around will be disabled.
+ * next line if the string is too long to fit on one line. Newline
+ * characters '\n' are replaced by spaces.  We start on a new line
+ * if there is no room for at least 4 nonblanks following a double-space.
  */
 void
 print_autowrap (WINDOW * win, const char *prompt, int width, int y, int x)
 {
-    int first = 1, cur_x, cur_y;
-    int i, prompt_len;
-    char tempstr[MAX_LEN + 1], *word /*,  *tempptr, *tempptr1*/;
+    int newl, cur_x, cur_y;
+    int i, prompt_len, room, wlen;
+    char tempstr[MAX_LEN + 1], *word, *sp, *sp2;
 
     strcpy (tempstr, prompt);
 
@@ -212,24 +212,41 @@ print_autowrap (WINDOW * win, const char *prompt, int width, int y, int x)
 	if(tempstr[i] == '\n') tempstr[i] = ' ';
     }
 
-    if (strlen (tempstr) <= width - x * 2) {	/* If prompt is short */
-	wmove (win, y, (width - strlen (tempstr)) / 2);
+    if (prompt_len <= width - x * 2) {	/* If prompt is short */
+	wmove (win, y, (width - prompt_len) / 2);
 	waddstr (win, tempstr);
     } else {
 	cur_x = x;
 	cur_y = y;
-	/* Print prompt word by word, wrap around if necessary */
-	while ((word = strtok (first ? tempstr : NULL, " ")) != NULL) {
-	    if (first)		/* First iteration */
-		first = 0;
-	    if (cur_x + strlen (word) > width) {
-		cur_y++;	/* wrap to next line */
+	newl = 1;
+	word = tempstr;
+	while (word && *word) {
+	    sp = index(word, ' ');
+	    if (sp)
+	        *sp++ = 0;
+
+	    /* Wrap to next line if either the word does not fit,
+	       or it is the first word of a new sentence, and it is
+	       short, and the next word does not fit. */
+	    room = width - cur_x;
+	    wlen = strlen(word);
+	    if (wlen > room ||
+	       (newl && wlen < 4 && sp && wlen+1+strlen(sp) > room
+		     && (!(sp2 = index(sp, ' ')) || wlen+1+(sp2-sp) > room))) {
+		cur_y++;
 		cur_x = x;
 	    }
 	    wmove (win, cur_y, cur_x);
 	    waddstr (win, word);
 	    getyx (win, cur_y, cur_x);
 	    cur_x++;
+	    if (sp && *sp == ' ') {
+	        cur_x++;	/* double space */
+		while (*++sp == ' ');
+		newl = 1;
+	    } else
+	        newl = 0;
+	    word = sp;
 	}
     }
 }

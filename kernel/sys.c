@@ -290,7 +290,7 @@ int acct_process(long exitcode)
 
    if (acct_active) {
       strncpy(ac.ac_comm, current->comm, ACCT_COMM);
-      ac.ac_comm[ACCT_COMM] = '\0';
+      ac.ac_comm[ACCT_COMM-1] = '\0';
       ac.ac_utime = current->utime;
       ac.ac_stime = current->stime;
       ac.ac_btime = CT_TO_SECS(current->start_time) + (xtime.tv_sec - (jiffies / HZ));

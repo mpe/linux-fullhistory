@@ -43,8 +43,8 @@ Read this before trying to configure the driver
 -----------------------------------------------
 
 There are currently many cards that work with this driver. Some of the cards
-have native support while the others work since they emulate some other
-cards (usually SB, MSS/WSS and/or MPU401). The following cards have native
+have native support while others work since they emulate some other
+card (usually SB, MSS/WSS and/or MPU401). The following cards have native
 support in the driver. Detailed instructions for configuring these cards
 will be given later in this document.
 
@@ -65,16 +65,17 @@ Sound Blasters
 	SB 1.0 to 2.0
 	SB Pro
 	SB 16
-	NOTE!	The ASP chip and the EMU synth of the AWE32 is not supported 
+	NOTE!	The ASP chip and the EMU synth of AWE32 are not supported 
 		since their manufacturer doesn't release information about
-		the card. However both the AB16ASP and the AWE32 work with
+		the card. However, both SB16ASP and AWE32 work with
 		the driver just like a SB16. Also see the comment about some
 		unsupported cards at the end of this file.
+		(The OPL3 FM chip of SB32/AWE works but you cannot hear it).
 	SB16 compatible cards by other manufacturers than Creative.
 		You have been fooled since there are no SB16 compatible
-		cards in the market (July95). It's likely that your card
-		is compatible just with SB Pro but there is also a non SB
-		compatible 16 bit mode. Usually it's MSS/WSS but could also
+		cards on the market (Feb 96). It's likely that your card
+		is compatible just with SB Pro but there is also a non-SB-
+		compatible 16 bit mode. Usually it's MSS/WSS but it could also
 		be a proprietary one like MV Jazz16 or ESS ES688.
 
 Gravis Ultrasound (GUS)
@@ -88,26 +89,26 @@ MPU-401	and compatibles
 	The driver works both with the full (intelligent mode) MPU-401
 	cards (such as MPU IPC-T and MQX-32M) and with the UART only
 	dumb MIDI ports. MPU-401 is currently the most common MIDI
-	interface. Most soundcards are compatible with it. However
-	don't enable MPU401 mode blindly. Many cards having native support
+	interface. Most soundcards are compatible with it. However,
+	don't enable MPU401 mode blindly. Many cards with native support
 	in the driver have their own MPU401 driver. Enabling the standard one
-	will cause a conflict with these cards. So look if your card is
+	will cause a conflict with these cards. So check if your card is
 	in the list of supported cards before enabling MPU401.
 
 Windows Sound System (MSS/WSS)
-	Even Microsoft has discontinued their own Sound System card, they
-	managed to make a standard. MSS compatible cards are based on a 
-	codec chip which is easily available from at least two manufacturers
+	Even when Microsoft has discontinued their own Sound System card 
+	they managed to make it a standard. MSS compatible cards are based on 
+	a codec chip which is easily available from at least two manufacturers
 	(AD1848 by Analog Devices and CS4231/CS4248 by Crystal Semiconductor).
 	Currently most soundcards are based on one of the MSS compatible codec
-	chip. The CS4231 is used in the high quality cards such as GUS MAX,
+	chips. The CS4231 is used in the high quality cards such as GUS MAX,
 	MediaTriX AudioTriX Pro and TB Tropez (GUS MAX is not MSS compatible). 
 
 	Having a AD1848, CS4248 or CS4231 codec chip on the card is a good
 	sign. Even if the card is not MSS compatible, it could be easy to write
 	support for it. Note also that most MSS compatible cards
 	require special boot time initialization which may not be present
-	in in the driver. Also some MSS compatible cards have native support.
+	in the driver. Also, some MSS compatible cards have native support.
 	Enabling the MSS support with these cards is likely to
 	cause a conflict. So check if your card is listed in this file before
 	enabling the MSS support.
@@ -121,9 +122,9 @@ Yamaha FM synthesizers (OPL2, OPL3 and OPL4)
 	operator chip used in the original AdLib card. Currently it's used
 	only in the cheapest (8 bit mono) cards. The OPL3 is a 4 operator 
 	FM chip which provides better sound quality and/or more available 
-	voices than the OPL2. The OPL4 is a new chip which has a OPL3 and
-	a wave table synthesizer packed on the same chip. The driver supports
-	just the OPL3 mode directly. Most cards having a OPL4 (like
+	voices than the OPL2. The OPL4 is a new chip that has an OPL3 and
+	a wave table synthesizer packed onto the same chip. The driver supports
+	just the OPL3 mode directly. Most cards with an OPL4 (like
 	SM Wave and AudioTriX Pro) support the OPL4 mode using MPU401
 	emulation. Writing a native OPL4 support is difficult
 	since Yamaha doesn't give information about their sample ROM chip.
@@ -143,7 +144,7 @@ PSS based cards (AD1848 + ADSP-2115 + Echo ESC614 ASIC)
 	The driver supports downloading DSP algorithms to these cards.
 
 MediaTriX AudioTriX Pro
-	The ATP card is built around a CS4231 codec and a OPL4 synthesizer
+	The ATP card is built around a CS4231 codec and an OPL4 synthesizer
 	chips. The OPL4 mode is supported by a microcontroller running a
 	General MIDI emulator. There is also a SB 1.5 compatible playback mode.
 
@@ -158,28 +159,30 @@ Ensoniq SoundScape and compatibles
 MAD16 and Mozart based cards
 	The Mozart (OAK OTI-601) and MAD16 Pro (OPTi 82C929) interface
 	chips are used in many different soundcards, including some
-	cards by Reveal and Turtle Beach (Tropez). Purpose of these
+	cards by Reveal and Turtle Beach (Tropez). The purpose of these
 	chips is to connect other audio components to the PC bus. The
 	interface chip performs address decoding for the other chips.
+	NOTE! Tropez Plus is not MAD16 but CS4232 based.
 
 Audio Excell DSP16 
-	Support for this card is made by Riccardo Faccetti
+	Support for this card was written by Riccardo Faccetti
 	(riccardo@cdc8g5.cdc.polimi.it). See aedsp16.c for more info.
+	(This driver is not functional in version 3.5 of this driver).
 	
-Crystal CS4232 based cards such as AcerMagic S23 and many PC motherboards
-	(Compaq, HP, Intel, ...).
+Crystal CS4232 based cards such as AcerMagic S23, TB Tropez _Plus_ and 
+	many PC motherboards (Compaq, HP, Intel, ...)
 	CS4232 is a PnP multimedia chip which contains a CS3231A codec,
 	SB and MPU401 emulations. There is support for OPL3 too.
 	This is a temporary driver which uses the chip in non PnP mode
 	(The final driver should be included in version 3.6 of the driver).
-	Unfortunately the MPU401 mode doesn't work. The chip may also stop
-	working after it has been used few times (only cold boot resets it).
+	Unfortunately the MPU401 mode doesn't work (I don't know how to
+	initialize it). 
 
 Turtle Beach Maui and Tropez
 	This driver version supports sample, patch and program loading commands
 	described in the Maui/Tropez User's manual. There is no initialization
-	code for Maui so it must be initialized using DOS. Audio side of Tropez
-	is based on the MAD16 chip (see above).
+	code for Maui so it must be initialized with DOS. The audio side of
+	the Tropez is based on the MAD16 chip (see above).
 
 Jumpers and software configuration
 ----------------------------------
@@ -310,6 +313,10 @@ select some options automaticly as well.
 	  you read the above list correctly). Don't answer 'y' if you
 	  have some other card made by Media Vision or Logitech since they
 	  are not PAS16 compatible.
+	  NOTE! Since 3.5-beta10 you need to enable SB support (next question)
+	  if you want to use the SB emulation of PAS16. It's also possible to
+   	  the emulation if you want to use a true SB card together with PAS16
+	  (there is another question about this that is asked later).
   "SoundBlaster support",
 	- Answer 'y' if you have an original SB card made by Creative Labs
 	  or a full 100% hardware compatible clone (like Thunderboard or
@@ -317,6 +324,7 @@ select some options automaticly as well.
 	  please look at the card specific instructions later in this file
 	  before answering this question. For an unknown card you may answer 
 	  'y' if the card claims to be SB compatible.
+	 Enable this option also with PAS16 (changed since v3.5-beta9).
 
 	 Don't enable SB if you have a MAD16 or Mozart compatible card.
 
@@ -477,11 +485,15 @@ simultaneously. Using the MSS mode provides 16 bit recording and playback.
 ProAudioSpectrum 16 and compatibles
 -----------------------------------
 
-There are nothing special with these cards. Just don't enable any
-other cards in case you don't have them also. The PAS16 has
-a SB mode so the driver config program will prompt for the SB settings
-do. Use I/O 0x220 and DMA1 for the SB mode. Ensure that you assign different
-IRQ numbers for the SB and PAS16 modes.
+PAS16 has a SB emulation chip which can be used together with the native
+(16 bit) mode of the card. To enable this emulation you should configure 
+the driver to have SB support too (this has been changed since version
+3.5-beta9 of this driver).
+
+With current driver versions it's also possible to use PAS16 together with 
+another SB compatible card. In this case you should configure SB support
+for the other card and to disable the SB emulation of PAS16 (there is a
+separate questions about this).
 
 With PAS16 you can use two audio device files at the same time. /dev/dsp (and
 /dev/audio) is connected to the 8/16 bit native codec and the /dev/dsp1 (and
@@ -773,11 +785,15 @@ SG NX Pro. Answer 'y' to these questions if you have one of the above 8 or
 There are some new Sound Galaxies in the market. I have no experience with
 them so read the card's manual carefully.
 
-ESS ES1688 'AudioDrive' based cards
------------------------------------
+ESS ES1688 and ES688 'AudioDrive' based cards
+---------------------------------------------
 
 Configure these cards just like SB Pro. Enable the 'SB MPU401 MIDI port'
-if you want to use MIDI features of the card.
+if you want to use MIDI features of ES1688. ES688 doesn't have MPU mode
+so you don't need to enable it (the driver uses normal SB MIDI automaticly
+with ES688).
+
+NOTE! ESS cards are not compatible with MSS/WSS.
 
 Reveal cards
 ------------

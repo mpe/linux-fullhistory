@@ -524,7 +524,7 @@ static void ide_geninit (struct gendisk *gd)
  */
 static void init_gendisk (ide_hwif_t *hwif)
 {
-	struct gendisk *gd, **gdp;
+	struct gendisk *gd;
 	unsigned int unit, units, minors;
 	int *bs;
 
@@ -556,9 +556,8 @@ static void init_gendisk (ide_hwif_t *hwif)
 	gd->init	= ide_geninit;		/* initialization function */
 	gd->real_devices= hwif;			/* ptr to internal data */
 
-	for (gdp = &gendisk_head; *gdp; gdp = &((*gdp)->next)) ;
-	gd->next = NULL;			/* link to tail of list */
-	hwif->gd = *gdp = gd;
+	gd->next = gendisk_head;		/* link new major into list */
+	hwif->gd = gendisk_head = gd;
 }
 
 static void do_reset1 (ide_drive_t *, int);		/* needed below */
@@ -2900,11 +2899,11 @@ static int init_irq (ide_hwif_t *hwif)
 		}
 	}
 	/*
-	 * Check for serialization with ide1.
-	 * This code depends on us having already taken care of ide1.
+	 * Check for serialization with ide0.
+	 * This code depends on us having already taken care of ide0.
 	 */
-	if (hwif->serialized && hwif->index == 0 && ide_hwifs[1].present)
-		hwgroup = ide_hwifs[1].hwgroup;
+	if (hwif->index == 1 && ide_hwifs[0].serialized && ide_hwifs[0].present)
+		hwgroup = ide_hwifs[0].hwgroup;
 	/*
 	 * If this is the first interface in a group,
 	 * then we need to create the hwgroup structure

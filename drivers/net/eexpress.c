@@ -1224,8 +1224,8 @@ static struct device dev_eexp[EEXP_MAX_CARDS] =
 	0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe 
 };
 
-int irq[MAX_EEXP_CARDS] = {0, };
-int io[MAX_EEXP_CARDS] = {0, };
+int irq[EEXP_MAX_CARDS] = {0, };
+int io[EEXP_MAX_CARDS] = {0, };
 
 /* Ideally the user would give us io=, irq= for every card.  If any parameters
  * are specified, we verify and then use them.  If no parameters are given, we
@@ -1261,7 +1261,7 @@ void cleanup_module(void)
 	for (this_dev = 0; this_dev < EEXP_MAX_CARDS; this_dev++) {
 		struct device *dev = &dev_eexp[this_dev];
 		if (dev->priv != NULL) {
-			kfree_s(dev->priv. sizeof(struct net_local));
+			kfree(dev->priv);
 			dev->priv = NULL;
 			release_region(dev->base_addr, EEXP_IO_EXTENT);
 			unregister_netdev(dev);

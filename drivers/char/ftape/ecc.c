@@ -32,7 +32,6 @@
  *      for the QIC-40/80 floppy-tape driver for Linux.
  */
 
-#include <linux/module.h>
 #include <linux/ftape.h>
 #include <stdio.h>
 #include <sys/errno.h>

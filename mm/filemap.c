@@ -109,25 +109,23 @@ repeat:
 	}
 }
 
-int shrink_mmap(int priority, unsigned long limit)
+int shrink_mmap(int priority, int dma)
 {
 	static int clock = 0;
 	struct page * page;
+	unsigned long limit = MAP_NR(high_memory);
 	struct buffer_head *tmp, *bh;
 
-	if (limit > high_memory)
-		limit = high_memory;
-	limit = MAP_NR(limit);
-	if (clock >= limit)
-		clock = 0;
 	priority = (limit<<2) >> priority;
 	page = mem_map + clock;
 	while (priority-- > 0) {
 		if (page->locked)
-		    goto next;
+			goto next;
+		if (dma && !page->dma)
+			goto next;
 		/* First of all, regenerate the page's referenced bit
                    from any buffers in the page */
-		bh = buffer_pages[MAP_NR(page_address(page))];
+		bh = page->buffers;
 		if (bh) {
 			tmp = bh;
 			do {
@@ -505,7 +503,7 @@ static int filemap_write_page(struct vm_area_struct * vma,
 	struct inode * inode;
 	struct buffer_head * bh;
 
-	bh = buffer_pages[MAP_NR(page)];
+	bh = mem_map[MAP_NR(page)].buffers;
 	if (bh) {
 		/* whee.. just mark the buffer heads dirty */
 		struct buffer_head * tmp = bh;

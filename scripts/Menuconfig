@@ -843,11 +843,11 @@ cleanup2 () {
 
 menu_instructions="\
 Arrow keys navigate the menu.  \
-Highlighted letters are hotkeys. \
-Select an item with <Space Bar> or <Enter>. \
+Highlighted letters are hotkeys.  \
+Select an item with <Space Bar> or <Enter>.  \
 When finished press <Esc><Esc> or <X>.  \
-(*) indicates an option will be compiled into the kernel.  \
-(M) indicates an option will be compiled as a module."
+A (*) marks an option to be compiled into the kernel.  \
+An (M) marks an option to be compiled as a module."
 
 radiolist_instructions="\
 Use the arrow keys to navigate this window or \
@@ -970,7 +970,7 @@ the files are correctly re-made.
 EOM
 else
 	clear
-	echo -e "Your kernel configuration changes where NOT saved.\n"
+	echo -e "Your kernel configuration changes were NOT saved.\n"
 fi
 
 

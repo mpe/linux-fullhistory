@@ -27,8 +27,8 @@
  */
 
 
-#include "os.h"
 #include "local.h"
+#include "os.h"
 #include "soundvers.h"
 
 #if defined(ISC) || defined(SCO) || defined(SVR42)

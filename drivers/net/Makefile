@@ -223,6 +223,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_FMV18X),y)
+L_OBJS += fmv18x.o
+else
+  ifeq ($(CONFIG_FMV18X),m)
+  M_OBJS += fmv18x.o
+  endif
+endif
+
 ifeq ($(CONFIG_EL1),y)
 L_OBJS += 3c501.o
 else

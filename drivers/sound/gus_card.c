@@ -41,6 +41,7 @@ int             gus_base, gus_irq, gus_dma;
 extern int      gus_wave_volume;
 extern int      gus_pcm_volume;
 extern int      have_gus_max;
+int             gus_pnp_flag = 0;
 
 int            *gus_osp;
 
@@ -115,6 +116,9 @@ probe_gus (struct address_info *hw_config)
 
   gus_osp = hw_config->osp;
 
+  if (hw_config->card_subtype == 1)
+    gus_pnp_flag = 1;
+
   irq = hw_config->irq;
 
   if (hw_config->card_subtype == 0)	/* GUS/MAX/ACE */
@@ -125,10 +129,12 @@ probe_gus (struct address_info *hw_config)
 	return 0;
       }
 
-  if (!check_region (hw_config->io_base, 16))
-    if (!check_region (hw_config->io_base + 0x100, 16))
-      if (gus_wave_detect (hw_config->io_base))
-	return 1;
+  if (check_region (hw_config->io_base, 16))
+    printk ("GUS: I/O range conflict (1)\n");
+  else if (check_region (hw_config->io_base + 0x100, 16))
+    printk ("GUS: I/O range conflict (2)\n");
+  else if (gus_wave_detect (hw_config->io_base))
+    return 1;
 
 #ifndef EXCLUDE_GUS_IODETECT
 

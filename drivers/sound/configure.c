@@ -1,38 +1,13 @@
 /*
  *	 PnP soundcard support is not included in this version.
  *
- *       AEDSP16 will not work without significant changes.
- *
- *       SB Pro and SB16 drivers are always enabled together with SB.
+ *	 AEDSP16 will not work without significant changes.
  */
-#define DISABLED_OPTIONS 	(B(OPT_PNP)|B(OPT_AEDSP16)|B(OPT_SBPRO)|B(OPT_SB16))
+#define DISABLED_OPTIONS 	(B(OPT_PNP)|B(OPT_AEDSP16)|B(OPT_UNUSED1)|B(OPT_UNUSED2))
 /*
  * sound/configure.c  - Configuration program for the Linux Sound Driver
  */
-/*
- * Copyright by Hannu Savolainen 1993-1996
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- */
-
+#define COPYING2
 
 #include <stdio.h>
 #include <unistd.h>
@@ -66,20 +41,19 @@
 #define OPT_PNP		15
 
 #define OPT_HIGHLEVEL   16	/* This must be same than the next one */
-#define OPT_SBPRO	16
-#define OPT_SB16	17
+#define OPT_UNUSED1	16
+#define OPT_UNUSED2	17
 #define OPT_AEDSP16     18
 #define OPT_AUDIO	19
 #define OPT_MIDI_AUTO	20
 #define OPT_MIDI	21
 #define OPT_YM3812_AUTO	22
 #define OPT_YM3812	23
-#define OPT_SEQUENCER	24
-#define OPT_LAST	24	/* Last defined OPT number */
+#define OPT_LAST	23	/* Last defined OPT number */
 
 #define DUMMY_OPTS (B(OPT_MIDI_AUTO)|B(OPT_YM3812_AUTO))
 
-#define ANY_DEVS (B(OPT_AUDIO)|B(OPT_MIDI)|B(OPT_SEQUENCER)|B(OPT_GUS)| \
+#define ANY_DEVS (B(OPT_AUDIO)|B(OPT_MIDI)|B(OPT_GUS)| \
 		  B(OPT_MPU401)|B(OPT_PSS)|B(OPT_GUS16)|B(OPT_GUSMAX)| \
 		  B(OPT_MSS)|B(OPT_SSCAPE)|B(OPT_UART6850)|B(OPT_TRIX)| \
 		  B(OPT_MAD16)|B(OPT_CS4232)|B(OPT_MAUI))
@@ -94,6 +68,7 @@
 #define AD1848_DEVS (B(OPT_GUS16)|B(OPT_MSS)|B(OPT_PSS)|B(OPT_GUSMAX)|\
 		     B(OPT_SSCAPE)|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_CS4232)|\
 		     B(OPT_PNP))
+#define SEQUENCER_DEVS (OPT_MIDI|OPT_YM3812|OPT_ADLIB|OPT_GUS|OPT_MAUI|MIDI_CARDS)
 /*
  * Options that have been disabled for some reason (incompletely implemented
  * and/or tested). Don't remove from this list before looking at file
@@ -150,15 +125,14 @@ hw_entry        hw_table[] =
   {0, 0, "MAUI", 1, 0, 0},
   {0, 0, "PNP", 1, 0, 0},
 
-  {B (OPT_SB), B (OPT_PAS), "SBPRO", 1, 0, 1},
-  {B (OPT_SB) | B (OPT_SBPRO), B (OPT_PAS), "SB16", 1, 0, 1},
-  {B (OPT_SBPRO) | B (OPT_MSS) | B (OPT_MPU401), 0, "AEDSP16", 1, 0, 0},
+  {B (OPT_SB), B (OPT_PAS), "UNUSED1", 1, 0, 1},
+  {B (OPT_SB) | B (OPT_UNUSED1), B (OPT_PAS), "UNUSED2", 1, 0, 1},
+  {B (OPT_UNUSED1) | B (OPT_MSS) | B (OPT_MPU401), 0, "AEDSP16", 1, 0, 0},
   {AUDIO_CARDS, 0, "AUDIO", 1, 0, 1},
   {B (OPT_MPU401) | B (OPT_MAUI), 0, "MIDI_AUTO", 0, OPT_MIDI, 0},
   {MIDI_CARDS, 0, "MIDI", 1, 0, 1},
   {B (OPT_ADLIB), 0, "YM3812_AUTO", 0, OPT_YM3812, 0},
-  {B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_ADLIB) | B (OPT_MSS) | B (OPT_PSS), B (OPT_YM3812_AUTO), "YM3812", 1, 0, 1},
-  {B (OPT_MIDI) | B (OPT_YM3812) | B (OPT_YM3812_AUTO) | B (OPT_GUS), 0, "SEQUENCER", 0, 0, 1}
+  {B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_ADLIB) | B (OPT_MSS) | B (OPT_PSS), B (OPT_YM3812_AUTO), "YM3812", 1, 0, 1}
 };
 
 char           *questions[] =
@@ -180,15 +154,14 @@ char           *questions[] =
   "Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers",
   "Support for PnP sound cards (_EXPERIMENTAL_)",
 
-  "SoundBlaster Pro support",
-  "SoundBlaster 16 support",
+  "*** Unused option 1 ***",
+  "*** Unused option 2 ***",
   "Audio Excel DSP 16 initialization support",
   "/dev/dsp and /dev/audio support",
   "This should not be asked",
   "MIDI interface support",
   "This should not be asked",
   "FM synthesizer (YM3812/OPL-3) support",
-  "/dev/sequencer support",
   "Is the sky really falling"
 };
 
@@ -248,7 +221,7 @@ char           *help[] =
   "them. In addition the MAD16 chip is used in some cards made by known\n"
   "manufacturers such as Turtle Beach (Tropez), Reveal (some models) and\n"
   "Diamond (latest ones).\n",
-
+  
   "Enable this if you have a card based on the Crystal CS4232 chip set.\n",
 
   "Enable this option if you have a Turtle Beach Wave Front, Maui,\n"
@@ -273,14 +246,11 @@ char           *help[] =
   "This enables the dev/midixx devices and access to any MIDI ports\n"
   "using /dev/sequencer and /dev/music. This option also affects any\n"
   "MPU401 and/or General MIDI compatible devices.\n",
-
+  
   "This should not be asked",
 
   "This enables the Yamaha FM synthesizer chip used on many sound\n"
   "cards.\n",
-
-  "This enables the /dev/sequencer and /dev/music devices used for\n"
-  "playing computer music.\n",
 
   "Is the sky really falling"
 };
@@ -298,6 +268,10 @@ extra_options[] =
   ,
   {
     "AD1848", AD1848_DEVS
+  }
+  ,
+  {
+    "SEQUENCER", SEQUENCER_DEVS
   }
   ,
   {
@@ -323,6 +297,21 @@ int             bin2hex (char *path, char *target, char *varname);
 int
 can_select_option (int nr)
 {
+#if 0
+  switch (nr)
+    {
+    case OPT_LAST_MUTUAL + 1:
+      fprintf (stderr, "\nThe following cards should work with any other cards.\n"
+	       "CAUTION! Don't enable MPU-401 if you don't have it.\n");
+      break;
+
+    case OPT_HIGHLEVEL:
+      fprintf (stderr, "\nSelect one or more of the following options\n");
+      break;
+
+
+    }
+#endif
 
   if (hw_table[nr].conditions)
     if (!(hw_table[nr].conditions & selected_options))
@@ -344,12 +333,12 @@ think_positively (char *prompt, int def_answ, char *help)
   char            answ[512];
   int             len;
 
-response:
-  fprintf (stderr, prompt);
+  response:
+  fprintf(stderr, prompt);
   if (def_answ)
-    fprintf (stderr, " [Y/n/?] ");
+    fprintf(stderr, " [Y/n/?] ");
   else
-    fprintf (stderr, " [N/y/?] ");
+    fprintf(stderr, " [N/y/?] ");
 
   if ((len = read (0, answ, sizeof (answ))) < 1)
     {
@@ -365,13 +354,12 @@ response:
 				 */
     return def_answ;
 
-  if (answ[0] == '?')
-    {				/* display help message */
-      fprintf (stderr, "\n");
-      fprintf (stderr, help);
-      fprintf (stderr, "\n");
-      goto response;
-    }
+  if (answ[0] == '?') {		/* display help message */
+    fprintf(stderr, "\n");
+    fprintf(stderr, help);
+    fprintf(stderr, "\n");
+    goto response;
+  }
 
   answ[len - 1] = 0;
 
@@ -432,7 +420,7 @@ ask_int_choice (int mask, char *macro,
       for (i = 0; i < OPT_LAST; i++)
 	if (mask == B (i))
 	  {
-	    unsigned int    j;
+	    unsigned int             j;
 
 	    for (j = 0; j < strlen (choices); j++)
 	      if (choices[j] == '\'')
@@ -453,7 +441,7 @@ ask_int_choice (int mask, char *macro,
 	return;
 
       fprintf (stderr, "\n%s\n", question);
-      if (strcmp (choices, ""))
+      if (strcmp(choices, ""))
 	fprintf (stderr, "Possible values are: %s\n", choices);
 
       if (format == FMT_INT)
@@ -591,18 +579,18 @@ use_old_config (char *filename)
 	    continue;
 
 	  if (strcmp (tmp, "JAZZ_DMA16") == 0)	/* Rename it (hack) */
-	    {
-	      printf ("#define SB_DMA2 %s\n",
-		      &buf[18]);
-	      continue;
-	    }
+	  {
+		printf("#define SB_DMA2 %s\n",
+			&buf[18]);
+		continue;
+	  }
 
 	  if (strcmp (tmp, "SB16_DMA") == 0)	/* Rename it (hack) */
-	    {
-	      printf ("#define SB_DMA2 %s\n",
-		      &buf[16]);
-	      continue;
-	    }
+	  {
+		printf("#define SB_DMA2 %s\n",
+			&buf[16]);
+		continue;
+	  }
 
 	  tmp[8] = 0;		/* Truncate the string */
 	  if (strcmp (tmp, "EXCLUDE_") == 0)
@@ -690,11 +678,14 @@ use_old_config (char *filename)
   printf ("#define SELECTED_SOUND_OPTIONS\t0x%08x\n", selected_options);
   fprintf (stderr, "Old configuration copied.\n");
 
+#ifdef linux
   build_defines ();
+#endif
   old_config_used = 1;
   return 1;
 }
 
+#ifdef linux
 void
 build_defines (void)
 {
@@ -712,6 +703,10 @@ build_defines (void)
     if (!hw_table[i].alias)
       if (selected_options & B (i))
 	fprintf (optf, "CONFIG_%s=y\n", hw_table[i].macro);
+#if 0
+      else
+	fprintf (optf, "CONFIG_%s=n\n", hw_table[i].macro);
+#endif
 
 
   fprintf (optf, "\n");
@@ -722,16 +717,22 @@ build_defines (void)
     {
       if (selected_options & extra_options[i].mask)
 	fprintf (optf, "CONFIG_%s=y\n", extra_options[i].name);
+#if 0
+      else
+	fprintf (optf, "CONFIG_%s=n\n", extra_options[i].name);
+#endif
       i++;
     }
 
   fprintf (optf, "\n");
   fclose (optf);
 }
+#endif
 
 void
 ask_parameters (void)
 {
+#ifdef linux
   int             num;
 
   build_defines ();
@@ -764,7 +765,7 @@ ask_parameters (void)
 		  "0, 1 or 3");
 
   ask_int_choice (B (OPT_SB), "SB_DMA2",
-		"SoundBlaster 16 bit DMA (_REQUIRED_for SB16, Jazz16, SMW)",
+		  "SoundBlaster 16 bit DMA (_REQUIRED_for SB16, Jazz16, SMW)",
 		  FMT_INT,
 		  5,
 		  "5, 6 or 7");
@@ -796,17 +797,21 @@ ask_parameters (void)
   if (selected_options & B (OPT_PAS))
     {
       if (think_positively ("Enable Joystick port on ProAudioSpectrum", 0,
-	"Enable this option if you want to use the joystick port provided\n"
-			    "on the PAS sound card.\n"));
-
-      printf ("#define PAS_JOYSTICK_ENABLE\n");
+      "Enable this option if you want to use the joystick port provided\n"
+      "on the PAS sound card.\n"))
+         printf ("#define PAS_JOYSTICK_ENABLE\n");
 
       if (think_positively ("Enable PAS16 bus clock option", 0,
-       "The PAS16 can be noisy with some motherboards. There is a command\n"
-	"line switch (:T?) in the DOS driver for PAS16 which solves this.\n"
+      "The PAS16 can be noisy with some motherboards. There is a command\n"
+      "line switch (:T?) in the DOS driver for PAS16 which solves this.\n"
       "Don't enable this feature unless you have problems and have to use\n"
-			    "this switch with DOS\n"))
+      "this switch with DOS\n"))
 	printf ("#define BROKEN_BUS_CLOCK\n");
+
+      if (think_positively ("Disable SB mode of PAS16", 0,
+      "You should disable SB emulation of PAS16 if you want to use\n"
+      "Another SB compatible card in the same system\n"))
+         printf ("#define DISABLE_SB_EMULATION\n");
     }
 
   ask_int_choice (B (OPT_GUS), "GUS_BASE",
@@ -984,10 +989,10 @@ ask_parameters (void)
       int             reveal_spea;
 
       reveal_spea = think_positively (
-		  "Is your SoundScape card made/marketed by Reveal or Spea",
-				       0,
-		 "Enable if you have a SoundScape card with the Reveal or\n"
-				       "Spea name on it.\n");
+        "Is your SoundScape card made/marketed by Reveal or Spea",
+	0,
+	"Enable if you have a SoundScape card with the Reveal or\n"
+	"Spea name on it.\n");
       if (reveal_spea)
 	printf ("#define REVEAL_SPEA\n");
 
@@ -1118,6 +1123,7 @@ ask_parameters (void)
 		  FMT_INT,
 		  9,
 		  "5, 7, 9 or 10");
+#endif
   ask_int_choice (B (OPT_AUDIO), "DSP_BUFFSIZE",
 		  "Audio DMA buffer size",
 		  FMT_INT,
@@ -1137,11 +1143,18 @@ dump_script (void)
 	  printf ("bool '%s' CONFIG_%s\n", questions[i], hw_table[i].macro);
 	}
 
+/*
+ * Some "hardcoded" options
+ */
+  printf ("bool 'Support for SM Wave' CONFIG_SMWAVE\n");
+
   dump_only = 1;
   selected_options = 0;
   ask_parameters ();
 
+#if 1
   printf ("#\n$MAKE -C drivers/sound kernelconfig || exit 1\n");
+#endif
 }
 
 void
@@ -1245,12 +1258,11 @@ main (int argc, char *argv[])
 
   if (access (oldconf, R_OK) == 0)
     {
-      char            str[255];
-
-      sprintf (str, "Old configuration exists in `%s'. Use it", oldconf);
+      char str[255];
+      sprintf(str, "Old configuration exists in `%s'. Use it", oldconf);
       if (think_positively (str, 1,
-      "Enable this option to load the previously saved configuration file\n"
-			    "for all of the sound driver parameters.\n"))
+"Enable this option to load the previously saved configuration file\n"
+"for all of the sound driver parameters.\n"))
 	if (use_old_config (oldconf))
 	  exit (0);
     }
@@ -1293,31 +1305,31 @@ main (int argc, char *argv[])
 	}
   }
 
-  if (selected_options & B (OPT_SBPRO))
+  if (selected_options & B (OPT_SB))
     {
       if (think_positively (
-			     "Support for the SG NX Pro mixer", 0,
-       "Enable this if you want to support the additional mixer functions\n"
-			  "provided on Sound Galaxy NX Pro sound cards.\n"))
+        "Support for the SG NX Pro mixer", 0,
+        "Enable this if you want to support the additional mixer functions\n"
+        "provided on Sound Galaxy NX Pro sound cards.\n"))
 	printf ("#define __SGNXPRO__\n");
     }
 
   if (selected_options & B (OPT_SB))
     {
       if (think_positively ("Support for the MV Jazz16 (ProSonic etc.)", 0,
-	  "Enable this if you have an MV Jazz16 or ProSonic sound card.\n"))
+      "Enable this if you have an MV Jazz16 or ProSonic sound card.\n"))
 	{
 	  if (think_positively ("Do you have SoundMan Wave", 0,
-				"Enable this option of you have the Logitech SoundMan Wave sound card.\n"))
+ "Enable this option of you have the Logitech SoundMan Wave sound card.\n"))
 	    {
 	      printf ("#define SM_WAVE\n");
 
 	    midi0001_again:
 	      if (think_positively (
-			   "Do you have access to the MIDI0001.BIN file", 1,
-				     "The Logitech SoundMan Wave has a microcontroller which must be\n"
-				     "initialized before MIDI emulation works. This is possible only if the\n"
-			   "microcode file is compiled into the driver.\n"))
+"Do you have access to the MIDI0001.BIN file", 1,
+"The Logitech SoundMan Wave has a microcontroller which must be\n"
+"initialized before MIDI emulation works. This is possible only if the\n"
+"microcode file is compiled into the driver.\n"))
 		{
 		  char            path[512];
 
@@ -1331,8 +1343,8 @@ main (int argc, char *argv[])
 		      fprintf (stderr, "Couldn't open file %s\n",
 			       path);
 		      if (think_positively ("Try again with correct path", 1,
-					    "The specified file could not be opened. Enter the correct path to the\n"
-					    "file.\n"))
+"The specified file could not be opened. Enter the correct path to the\n"
+"file.\n"))
 			goto midi0001_again;
 		    }
 		  else
@@ -1348,31 +1360,28 @@ main (int argc, char *argv[])
   if (selected_options & B (OPT_SB))
     {
       if (think_positively ("Do you have a Logitech SoundMan Games", 0,
-	 "The Logitech SoundMan Games supports 44 kHz in stereo while the\n"
-      "standard SB Pro supports just 22 kHz stereo. You have the option of\n"
-			    "enabling SM Games mode.  However, enable it only if you are sure that\n"
-      "your card is an SM Games. Enabling this feature with a plain old SB\n"
-			    "Pro will cause troubles with stereo mode.\n\n"
-		  "DANGER! Read the above once again before answering 'y'\n"
-			    "Answer 'n' if you are unsure what to do!\n"))
+"The Logitech SoundMan Games supports 44 kHz in stereo while the\n"
+"standard SB Pro supports just 22 kHz stereo. You have the option of\n"
+"enabling SM Games mode.  However, enable it only if you are sure that\n"
+"your card is an SM Games. Enabling this feature with a plain old SB\n"
+"Pro will cause troubles with stereo mode.\n\n"
+"DANGER! Read the above once again before answering 'y'\n"
+"Answer 'n' if you are unsure what to do!\n"))
 	printf ("#define SM_GAMES\n");
     }
-
-  if (selected_options & B (OPT_SB16))
-    selected_options |= B (OPT_SBPRO);
 
   if (selected_options & B (OPT_AEDSP16))
     {
       int             sel1 = 0;
 
-      if (selected_options & B (OPT_SBPRO))
+      if (selected_options & B (OPT_SB))
 	{
 
 	  if (think_positively (
-	    "Do you want support for the Audio Excel SoundBlaster Pro mode",
-				 1,
-				 "Enable this option if you want the Audio Excel sound card to operate\n"
-				 "in SoundBlaster Pro mode.\n"))
+"Do you want support for the Audio Excel SoundBlaster Pro mode",
+1,
+"Enable this option if you want the Audio Excel sound card to operate\n"
+"in SoundBlaster Pro mode.\n"))
 	    {
 	      printf ("#define AEDSP16_SBPRO\n");
 	      sel1 = 1;
@@ -1381,12 +1390,12 @@ main (int argc, char *argv[])
 
       if ((selected_options & B (OPT_MSS)) && (sel1 == 0))
 	{
-
+	  
 	  if (think_positively (
-				 "Do you want support for the Audio Excel Microsoft Sound System mode",
-				 1,
-				 "Enable this option if you want the Audio Excel sound card to operate\n"
-				 "in Microsoft Sound System mode.\n"))
+"Do you want support for the Audio Excel Microsoft Sound System mode",
+1,
+"Enable this option if you want the Audio Excel sound card to operate\n"
+"in Microsoft Sound System mode.\n"))
 	    {
 	      printf ("#define AEDSP16_MSS\n");
 	      sel1 = 1;
@@ -1407,8 +1416,8 @@ main (int argc, char *argv[])
     {
     genld_again:
       if (think_positively ("Do you wish to include an LD file", 1,
-			    "If you want to emulate the SoundBlaster card and you have a DSPxxx.LD\n"
-		      "file then you must include the LD in the kernel.\n"))
+     "If you want to emulate the SoundBlaster card and you have a DSPxxx.LD\n"
+     "file then you must include the LD in the kernel.\n"))
 	{
 	  char            path[512];
 
@@ -1419,9 +1428,9 @@ main (int argc, char *argv[])
 
 	  if (!bin2hex (path, "synth-ld.h", "pss_synth"))
 	    {
-	      fprintf (stderr, "couldn't open `%s' as the LD file\n", path);
+              fprintf (stderr, "couldn't open `%s' as the LD file\n", path);
 	      if (think_positively ("try again with correct path", 1,
-				    "The given LD file could not opened.\n"))
+                "The given LD file could not opened.\n"))
 		goto genld_again;
 	    }
 	  else
@@ -1446,12 +1455,12 @@ main (int argc, char *argv[])
     hex2hex_again:
 
       if (think_positively ("Do you want to include TRXPRO.HEX in your kernel",
-			    1,
-	"The MediaTriX AudioTrix Pro has an onboard microcontroller which\n"
-			    "needs to be initialized by downloading the code from the file TRXPRO.HEX\n"
-			    "in the DOS driver directory. If you don't have the TRXPRO.HEX file handy\n"
-			    "you may skip this step. However, the SB and MPU-401 modes of AudioTriX\n"
-			    "Pro will not work without this file!\n"))
+      1,
+"The MediaTriX AudioTrix Pro has an onboard microcontroller which\n"
+"needs to be initialized by downloading the code from the file TRXPRO.HEX\n"
+"in the DOS driver directory. If you don't have the TRXPRO.HEX file handy\n"
+"you may skip this step. However, the SB and MPU-401 modes of AudioTriX\n"
+"Pro will not work without this file!\n"))
 	{
 	  char            path[512];
 
@@ -1470,7 +1479,7 @@ main (int argc, char *argv[])
   if (!(selected_options & ANY_DEVS))
     {
       printf ("invalid_configuration__run_make_config_again\n");
-      fprintf (stderr, "\n*** This combination is useless. Sound driver disabled!!! ***\n*** You need to enable support for at least one device    ***\n\n");
+      fprintf (stderr,"\n*** This combination is useless. Sound driver disabled!!! ***\n*** You need to enable support for at least one device    ***\n\n");
       exit (0);
     }
 
@@ -1507,13 +1516,12 @@ main (int argc, char *argv[])
 
   if (!old_config_used)
     {
-      char            str[255];
-
-      sprintf (str, "Save copy of this configuration to `%s'", oldconf);
-      if (think_positively (str, 1,
-	"If you enable this option then the sound driver configuration is\n"
-      "saved to a file. If you later need to recompile the kernel you have\n"
-			  "the option of using the saved configuration.\n"))
+      char str[255];
+      sprintf(str, "Save copy of this configuration to `%s'", oldconf);
+      if (think_positively (str, 1, 
+"If you enable this option then the sound driver configuration is\n"
+"saved to a file. If you later need to recompile the kernel you have\n"
+"the option of using the saved configuration.\n"))
 	{
 	  char            cmd[200];
 

@@ -2143,7 +2143,7 @@ static int st_detect(Scsi_Device * SDp)
 {
   if(SDp->type != TYPE_TAPE) return 0;
 
-  printk(KERN_NOTICE "Detected scsi tape st%d at scsi%d, channel %d, id %d, lun %d\n", 
+  printk("Detected scsi tape st%d at scsi%d, channel %d, id %d, lun %d\n", 
 	 st_template.dev_noticed++,
 	 SDp->host->host_no, SDp->channel, SDp->id, SDp->lun); 
   

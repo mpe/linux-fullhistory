@@ -246,6 +246,7 @@ sb16_dsp_close (int dev)
   DEB (printk ("sb16_dsp_close()\n"));
   sb_dsp_command01 (0xd9);
   sb_dsp_command01 (0xd5);
+  sb_reset_dsp ();
 
   save_flags (flags);
   cli ();

@@ -43,10 +43,10 @@ struct vm_area_struct;
 struct sysinfo;
 
 /* linux/ipc/shm.c */
-extern int shm_swap (int, unsigned long);
+extern int shm_swap (int, int);
 
 /* linux/mm/vmscan.c */
-extern int try_to_free_page(int, unsigned long, int);
+extern int try_to_free_page(int, int, int);
 
 /* linux/mm/page_io.c */
 extern void rw_swap_page(int, unsigned long, char *, int);
@@ -97,19 +97,19 @@ extern unsigned long swap_cache_find_total;
 extern unsigned long swap_cache_find_success;
 #endif
 
-extern inline unsigned long in_swap_cache(unsigned long addr)
+extern inline unsigned long in_swap_cache(unsigned long index)
 {
-	return swap_cache[MAP_NR(addr)]; 
+	return swap_cache[index]; 
 }
 
-extern inline long find_in_swap_cache (unsigned long addr)
+extern inline long find_in_swap_cache(unsigned long index)
 {
 	unsigned long entry;
 
 #ifdef SWAP_CACHE_INFO
 	swap_cache_find_total++;
 #endif
-	entry = xchg(swap_cache + MAP_NR(addr), 0);
+	entry = xchg(swap_cache + index, 0);
 #ifdef SWAP_CACHE_INFO
 	if (entry)
 		swap_cache_find_success++;
@@ -117,14 +117,14 @@ extern inline long find_in_swap_cache (unsigned long addr)
 	return entry;
 }
 
-extern inline int delete_from_swap_cache(unsigned long addr)
+extern inline int delete_from_swap_cache(unsigned long index)
 {
 	unsigned long entry;
 	
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
 #endif	
-	entry= xchg(swap_cache + MAP_NR(addr), 0);
+	entry = xchg(swap_cache + index, 0);
 	if (entry)  {
 #ifdef SWAP_CACHE_INFO
 		swap_cache_del_success++;

@@ -129,6 +129,10 @@
 #include "AM53C974.h"
 #endif
 
+#ifdef CONFIG_SCSI_PPA
+#include "ppa.h"
+#endif
+
 #ifdef CONFIG_SCSI_DEBUG
 #include "scsi_debug.h"
 #endif
@@ -232,6 +236,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_AM53C974
     AM53C974,
+#endif
+#ifdef CONFIG_SCSI_PPA
+    PPA,
 #endif
 #ifdef CONFIG_SCSI_DEBUG
     SCSI_DEBUG,

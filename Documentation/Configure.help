@@ -815,9 +815,9 @@ CONFIG_IP_MROUTE
 PC/TCP compatibility mode
 CONFIG_INET_PCTCP
   If you have been having difficulties telneting to your Linux machine
-  from a DOS system that uses (broken) PC/TCP networking software, try
-  enabling this option.  Everyone else says N. As of later 1.3.x kernels
-  nobody should need this option. Please report if it solves problems.
+  from a DOS system that uses (broken) PC/TCP networking software (all
+  versions up to OnNet 2.0), try enabling this option.  Everyone else
+  says N.
 
 Reverse ARP
 CONFIG_INET_RARP
@@ -1054,16 +1054,16 @@ CONFIG_BLK_DEV_SR
 SCSI generic support
 CONFIG_CHR_DEV_SG
   If you want to use SCSI scanners, synthesizers or CD-writers or just
-  about anything having "SCSI" in its name, say Y here. Those won't be
-  supported by the kernel directly, so you need some additional
-  software which knows how to talk to these things using the SCSI
-  protocol. Chances are that you'll have to write that software
-  yourself, so have a look at the SCSI-HOWTO and at the
-  SCSI-Programming-HOWTO, both available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you want to compile this
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
-  Documentation/modules.txt and Documentation/scsi.txt.
+  about anything having "SCSI" in its name other than disks, CDROMs or
+  tapes, say Y here. Those won't be supported by the kernel directly,
+  so you need some additional software which knows how to talk to
+  these things using the SCSI protocol. Chances are that you'll have
+  to write that software yourself, so have a look at the SCSI-HOWTO
+  and at the SCSI-Programming-HOWTO, both available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt and Documentation/scsi.txt.
 
 Probe all LUNs on each SCSI device
 CONFIG_SCSI_MULTI_LUN
@@ -1341,6 +1341,18 @@ CONFIG_SCSI_AM53C974
   available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO, is for you.
 
+IOMEGA Parallel Port ZIP drive SCSI support
+CONFIG_SCSI_PPA
+  This driver supports the parallel port version of IOMEGA's ZIP
+  drive (a 100Mb removable media device).  For more infomation 
+  about this driver and how to use it you should read the file
+  drivers/scsi/README.ppa.  You should also read the SCSI-HOWTO,
+  which is available via anonymous ftp from sunsite.unc.edu in
+  the directory /pub/Linux/docs/HOWTO.  This driver is also available
+  as a module which can be inserted in and removed from the
+  running kernel whenever you want. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
 Network device support?
 CONFIG_NETDEVICES
   You can say N here in case you don't intend to connect to any other
@@ -1583,9 +1595,10 @@ CONFIG_ULTRA
 
 SMC 9194 Support
 CONFIG_SMC9194
-  This has support for the SMC9xxx based Ethernet cards.  Choose this option
-  if you have a DELL laptop with the docking station, or another SMC9192/9194
-  based chipset.  Say Y if you want it compiled into the kernel, and read  
+  This is support for the SMC9xxx based Ethernet cards.  Choose this
+  option if you have a DELL laptop with the docking station, or
+  another SMC9192/9194 based chipset.  Say Y if you want it compiled
+  into the kernel, and read the the file drivers/net/README.smc9 and
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is also
   available as a module ( = code which can be inserted in and removed
@@ -1682,9 +1695,9 @@ CONFIG_EL3
   Documentation/networking/net-modules.txt. If you plan to use more
   than one network card under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If your card is not working
-  you may need to use the DOS setup disk to disable Plug & Play mode, and
-  to select the default media type.
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If your card is not
+  working you may need to use the DOS setup disk to disable Plug &
+  Play mode, and to select the default media type.
 
 3c590 series (592/595/597) "Vortex" support
 CONFIG_VORTEX
@@ -2006,7 +2019,9 @@ CONFIG_APRICOT
 
 DE425, DE434, DE435 support
 CONFIG_DE4X5
-  If you have a network (ethernet) card of this type, say Y and read
+  This is support for the DIGITAL series of PCI/EISA ethernet
+  cards. These include the DE425, DE434, DE435, DE450 and DE500
+  models. If you have a network card of this type, say Y and read
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  More specific information is
   contained in drivers/net/README.de4x5. This driver is also available
@@ -2383,7 +2398,8 @@ CONFIG_VFAT_FS
   partitions. It does not support Windows'95 compressed filesystems.
   You cannot use the VFAT filesystem for your root partition; use
   UMSDOS instead. This option enlarges your kernel by about 10 kB and
-  it only works if you enabled the "fat fs support" above. 
+  it only works if you enabled the "fat fs support" above. Please read
+  the file Documentation/filesystems/vfat.txt for details.
   If unsure, say N. If you want to compile this as a module ( = code 
   which can be inserted in and removed from the running kernel whenever 
   you want), say M here and read Documentation/modules.txt.
@@ -2699,7 +2715,9 @@ CONFIG_FTAPE
   (and their companion controller) is also supported. If you have a
   special controller (such as the CMS FC-10, FC-20, Iomega Mach-II, or
   Ditto Dash), you must configure it by editing the file
-  drivers/char/ftape/Makefile.  This driver is also available as a
+  drivers/char/ftape/Makefile. If you want to use such a tape drive on
+  a PCI-bus based system, please read the file
+  drivers/char/ftape/README.PCI. This driver is also available as a
   runtime loadable module ( = code which can be inserted in and
   removed from the running kernel whenever you want). If you want to
   compile it as a module, say M here and read
@@ -2962,3 +2980,5 @@ CONFIG_ISDN_DRV_TELES
 # LocalWords:  NOWAYOUT behaviour dialin isdn callback BTX Teles ICN EDSS Cisco
 # LocalWords:  ipppd syncppp RFC MPP VJ downloaded icn NICCY Creatix shmem ufr
 # LocalWords:  ibp md ARCnet ether encap NDIS arcether ODI Amigas AmiTCP NetBSD
+# LocalWords:  initrd tue util DES funet des OnNet BIOSP smc Travan Iomega CMS
+# LocalWords:  FC

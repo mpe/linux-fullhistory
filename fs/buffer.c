@@ -49,7 +49,6 @@ static int maybe_shrink_lav_buffers(int);
 
 static int nr_hash = 0;  /* Size of hash table */
 static struct buffer_head ** hash_table;
-struct buffer_head ** buffer_pages;
 static struct buffer_head * lru_list[NR_LIST] = {NULL, };
 /* next_to_age is an array of pointers into the lru lists, used to
    cycle through the buffers aging their contents when deciding which
@@ -1327,7 +1326,7 @@ static int grow_buffers(int pri, int size)
 			break;
 	}
 	free_list[isize] = bh;
-	buffer_pages[MAP_NR(page)] = bh;
+	mem_map[MAP_NR(page)].buffers = bh;
 	tmp->b_this_page = bh;
 	buffermem += PAGE_SIZE;
 	return 1;
@@ -1377,7 +1376,7 @@ int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp,
 		put_unused_buffer_head(p);
 	} while (tmp != bh);
 	buffermem -= PAGE_SIZE;
-	buffer_pages[MAP_NR(page)] = NULL;
+	mem_map[MAP_NR(page)].buffers = NULL;
 	free_page(page);
 	return !mem_map[MAP_NR(page)].count;
 }
@@ -1728,7 +1727,7 @@ static unsigned long try_to_generate_cluster(kdev_t dev, int block, int size)
 			break;
 	}
 	buffermem += PAGE_SIZE;
-	buffer_pages[MAP_NR(page)] = bh;
+	mem_map[MAP_NR(page)].buffers = bh;
 	bh->b_this_page = tmp;
 	while (nblock-- > 0)
 		brelse(arr[nblock]);
@@ -1796,11 +1795,6 @@ void buffer_init(void)
 	hash_table = (struct buffer_head **) vmalloc(nr_hash * 
 						     sizeof(struct buffer_head *));
 
-
-	buffer_pages = (struct buffer_head **) vmalloc(MAP_NR(high_memory) * 
-						     sizeof(struct buffer_head *));
-	for (i = 0 ; i < MAP_NR(high_memory) ; i++)
-		buffer_pages[i] = NULL;
 
 	for (i = 0 ; i < nr_hash ; i++)
 		hash_table[i] = NULL;

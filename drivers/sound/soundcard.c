@@ -70,8 +70,8 @@ sound_read (inode_handle * inode, file_handle * file, char *buf, int count)
 {
   int             dev;
 
-  dev = inode_get_rdev (inode);
-  dev = MINOR (dev);
+  dev = MINOR (inode_get_rdev (inode));
+
   files[dev].flags = file_get_flags (file);
 
   return sound_read_sw (dev, &files[dev], buf, count);
@@ -82,8 +82,8 @@ sound_write (inode_handle * inode, file_handle * file, const char *buf, int coun
 {
   int             dev;
 
-  dev = inode_get_rdev (inode);
-  dev = MINOR (dev);
+  dev = MINOR (inode_get_rdev (inode));
+
   files[dev].flags = file_get_flags (file);
 
   return sound_write_sw (dev, &files[dev], buf, count);
@@ -107,8 +107,7 @@ sound_open (inode_handle * inode, file_handle * file)
       return -EBUSY;
     }
 
-  dev = inode_get_rdev (inode);
-  dev = MINOR (dev);
+  dev = MINOR (inode_get_rdev (inode));
 
   if (!soundcard_configured && dev != SND_DEV_CTL && dev != SND_DEV_STATUS)
     {
@@ -142,8 +141,7 @@ sound_release (inode_handle * inode, file_handle * file)
 {
   int             dev;
 
-  dev = inode_get_rdev (inode);
-  dev = MINOR (dev);
+  dev = MINOR (inode_get_rdev (inode));
 
   files[dev].flags = file_get_flags (file);
 
@@ -159,8 +157,8 @@ sound_ioctl (inode_handle * inode, file_handle * file,
 {
   int             dev, err;
 
-  dev = inode_get_rdev (inode);
-  dev = MINOR (dev);
+  dev = MINOR (inode_get_rdev (inode));
+
   files[dev].flags = file_get_flags (file);
 
   if (_IOC_DIR (cmd) != _IOC_NONE)
@@ -196,8 +194,8 @@ sound_select (inode_handle * inode, file_handle * file, int sel_type, select_tab
 {
   int             dev;
 
-  dev = inode_get_rdev (inode);
-  dev = MINOR (dev);
+  dev = MINOR (inode_get_rdev (inode));
+
   files[dev].flags = file_get_flags (file);
 
   DEB (printk ("sound_select(dev=%d, type=0x%x)\n", dev, sel_type));
@@ -239,8 +237,8 @@ sound_mmap (inode_handle * inode, file_handle * file, vm_area_handle * vma)
   unsigned long   size;
   struct dma_buffparms *dmap = NULL;
 
-  dev = inode_get_rdev (inode);
-  dev = MINOR (dev);
+  dev = MINOR (inode_get_rdev (inode));
+
   files[dev].flags = file_get_flags (file);
 
   dev_class = dev & 0x0f;
@@ -442,32 +440,27 @@ init_module (void)
 void
 cleanup_module (void)
 {
-  if (MOD_IN_USE)
-    printk ("sound: module busy -- remove delayed\n");
-  else
-    {
-      int             i;
+  int             i;
 
-      if (chrdev_registered)
-	module_unregister_chrdev (sound_major, "sound");
+  if (chrdev_registered)
+    module_unregister_chrdev (sound_major, "sound");
 
 #ifdef CONFIG_SEQUENCER
-      sound_stop_timer ();
+  sound_stop_timer ();
 #endif
-      sound_unload_drivers ();
+  sound_unload_drivers ();
 
-      for (i = 0; i < sound_num_blocks; i++)
-	kfree (sound_mem_blocks[i]);
+  for (i = 0; i < sound_num_blocks; i++)
+    kfree (sound_mem_blocks[i]);
 
-      free_all_irqs ();		/* If something was left allocated by accident */
+  free_all_irqs ();		/* If something was left allocated by accident */
 
-      for (i = 0; i < 8; i++)
-	if (dma_alloc_map[i] != DMA_MAP_UNAVAIL)
-	  {
-	    printk ("Sound: Hmm, DMA%d was left allocated - fixed\n", i);
-	    sound_free_dma (i);
-	  }
-    }
+  for (i = 0; i < 8; i++)
+    if (dma_alloc_map[i] != DMA_MAP_UNAVAIL)
+      {
+	printk ("Sound: Hmm, DMA%d was left allocated - fixed\n", i);
+	sound_free_dma (i);
+      }
 }
 #endif
 
@@ -499,6 +492,9 @@ snd_set_irq_handler (int interrupt_level, void (*hndlr) (int, void *, struct pt_
 void
 snd_release_irq (int vect)
 {
+  if (!(irqs & (1ul << vect)))
+    return;
+
   irqs &= ~(1ul << vect);
   free_irq (vect, NULL);
 }
@@ -651,7 +647,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 
       audio_devs[dev]->buffsize = PAGE_SIZE * (1 << sz);
 
-      if ((start_addr = (char *) __get_free_pages (GFP_ATOMIC, sz, MAX_DMA_ADDRESS)) == NULL)
+      if ((start_addr = (char *) __get_free_pages (GFP_ATOMIC, sz, 1)) == NULL)
 	audio_devs[dev]->buffsize /= 2;
     }
 
@@ -684,8 +680,6 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
     }
   dmap->raw_buf = start_addr;
   dmap->raw_buf_phys = virt_to_bus (start_addr);
-
-  memset (dmap->raw_buf, 0x00, audio_devs[dev]->buffsize);
 
   for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)
     {
