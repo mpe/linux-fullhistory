@@ -2401,7 +2401,8 @@ S: Socorro NM, 87801
 S: USA
 
 N: Eric Youngdale
-E: eric@aib.com
+E: eric@andante.org
+W: http://www.andante.org
 D: General kernel hacker
 D: SCSI iso9660 and ELF
 S: 17 Canterbury Square #101

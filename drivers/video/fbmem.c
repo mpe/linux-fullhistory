@@ -110,6 +110,13 @@ static struct {
 	int (*init)(void);
 	int (*setup)(char*);
 } fb_drivers[] __initdata = {
+#ifdef CONFIG_FB_SBUS
+	/*
+	 * Sbusfb must be initialized _before_ other frame buffer devices that
+	 * use PCI probing
+	 */
+	{ "sbus", sbusfb_init, sbusfb_setup },
+#endif
 #ifdef CONFIG_FB_3DFX
 	{ "tdfx", tdfxfb_init, tdfxfb_setup },
 #endif
@@ -142,9 +149,6 @@ static struct {
 #endif
 #ifdef CONFIG_FB_CLGEN
 	{ "clgen", clgenfb_init, clgenfb_setup },
-#endif
-#ifdef CONFIG_FB_SBUS
-	{ "sbus", sbusfb_init, sbusfb_setup },
 #endif
 #ifdef CONFIG_FB_ATY
 	{ "atyfb", atyfb_init, atyfb_setup },
@@ -224,9 +228,6 @@ extern const char *global_mode_option;
 static initcall_t pref_init_funcs[FB_MAX];
 static int num_pref_init_funcs __initdata = 0;
 
-
-#define GET_INODE(i) MKDEV(FB_MAJOR, (i) << FB_MODES_SHIFT)
-#define GET_FB_VAR_IDX(node) (MINOR(node) & ((1 << FB_MODES_SHIFT)-1)) 
 
 struct fb_info *registered_fb[FB_MAX];
 int num_registered_fb = 0;
@@ -507,6 +508,24 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 #endif /* !sparc32 */
 }
 
+#if 1 /* to go away in 2.4.0 */
+int GET_FB_IDX(kdev_t rdev)
+{
+    int fbidx = MINOR(rdev);
+    if (fbidx >= 32) {
+	int newfbidx = fbidx >> 5;
+	static int warned = 0;
+	if (!(warned & (1<<newfbidx))) {
+	    warned |= 1<<newfbidx;
+	    printk("Warning: Remapping obsolete /dev/fb* minor %d to %d\n",
+		   fbidx, newfbidx);
+	}
+	fbidx = newfbidx;
+    }
+    return fbidx;
+}
+#endif
+
 static int
 fb_open(struct inode *inode, struct file *file)
 {
@@ -559,7 +578,7 @@ register_framebuffer(struct fb_info *fb_info)
 	for (i = 0 ; i < FB_MAX; i++)
 		if (!registered_fb[i])
 			break;
-	fb_info->node=GET_INODE(i);
+	fb_info->node = MKDEV(FB_MAJOR, i);
 	registered_fb[i] = fb_info;
 	if (!fb_ever_opened[i]) {
 		/*
@@ -703,3 +722,6 @@ __setup("video=", video_setup);
 
 EXPORT_SYMBOL(register_framebuffer);
 EXPORT_SYMBOL(unregister_framebuffer);
+#if 1 /* to go away in 2.4.0 */
+EXPORT_SYMBOL(GET_FB_IDX);
+#endif

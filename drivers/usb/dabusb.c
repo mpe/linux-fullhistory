@@ -750,8 +750,6 @@ static struct file_operations dabusb_fops =
 	dabusb_release,
 	NULL,			/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
 

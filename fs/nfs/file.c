@@ -53,8 +53,6 @@ static struct file_operations nfs_file_operations = {
 	nfs_release,		/* release */
 	nfs_fsync,		/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	nfs_lock,		/* lock */
 };
 

@@ -56,8 +56,6 @@ static struct file_operations affs_file_operations = {
 	NULL,			/* release */
 	file_fsync,		/* brute force, but works */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
 
@@ -95,8 +93,6 @@ static struct file_operations affs_file_operations_ofs = {
 	NULL,			/* release */
 	file_fsync,		/* brute force, but works */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
 

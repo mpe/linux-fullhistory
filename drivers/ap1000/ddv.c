@@ -875,18 +875,10 @@ static int ddv_ioctl(struct inode *inode, struct file *file,
 	};
 }
 
-static struct file_operations ddv_fops = {
-        NULL,                   /* lseek - default */
-        block_read,         /* read */
-        block_write,        /* write */
-        NULL,                   /* readdir - bad */
-        NULL,                   /* poll */
-        ddv_ioctl,               /* ioctl */
-        NULL,                   /* mmap */
-        ddv_open,                /* open */
-	NULL,			/* flush */
-	ddv_release,
-        block_fsync          /* fsync */
+static struct block_device_operations ddv_fops = {
+        open:		ddv_open,
+	release:	ddv_release,
+        ioctl:		ddv_ioctl,
 };
 
 

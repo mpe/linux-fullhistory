@@ -244,18 +244,10 @@ void ap_open_reply(struct cap_request *creq)
   wake_up(&busy_wait);  
 } 
 
-static struct file_operations ap_fops = {
-	NULL,                   /* lseek - default */
-	block_read,             /* read - general block-dev read */
-	block_write,            /* write - general block-dev write */
-	NULL,                   /* readdir - bad */
-	NULL,                   /* poll */
-	ap_ioctl,               /* ioctl */
-	NULL,                   /* mmap */
-	ap_open,                /* open */
-	NULL,			/* flush */
-	ap_release,		/* module needs to decrement use count */
-	block_fsync,            /* fsync */
+static struct block_device_operations ap_fops = {
+	open:		ap_open,
+	release:	ap_release,
+	ioctl:		ap_ioctl,
 };
 
 

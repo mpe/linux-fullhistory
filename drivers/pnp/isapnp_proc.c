@@ -19,9 +19,6 @@
  *
  */
 
-struct pci_bus *isapnp_cards;
-struct pci_dev *isapnp_devices;
-
 struct isapnp_info_buffer {
 	char *buffer;		/* pointer to begin of buffer */
 	char *curr;		/* current position in buffer */
@@ -203,8 +200,6 @@ static struct file_operations isapnp_info_entry_operations =
 	isapnp_info_entry_release,	/* release */
 	NULL,				/* can't fsync */
 	NULL,				/* fasync */
-	NULL,				/* check_media_change */
-	NULL,				/* revalidate */
 	NULL,				/* lock */
 };
 

@@ -284,21 +284,7 @@ static int soundcore_open(struct inode *, struct file *);
 
 static struct file_operations soundcore_fops=
 {
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	soundcore_open,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL
+	open:	soundcore_open,
 };
 
 static struct sound_unit *__look_for_unit(int chain, int unit)

@@ -1365,22 +1365,11 @@ static void mfm_geninit (struct gendisk *gdev)
 	hardsect_size[MAJOR_NR] = mfm_sectsizes;
 }
 
-static struct file_operations mfm_fops =
+static struct block_device_operations mfm_fops =
 {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll */
-	mfm_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	mfm_open,		/* open */
-	NULL,			/* flush */
-	mfm_release,		/* release */
-	block_fsync,		/* fsync */
-	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL			/* revalidate */
+	open:		mfm_open,
+	release:	mfm_release,
+	ioctl:		mfm_ioctl,
 };
 
 

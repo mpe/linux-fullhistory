@@ -1501,8 +1501,6 @@ file_operations kbd_fops =
 	kbd_close,		/* close */
 	NULL,			/* fsync */
 	kbd_fasync,		/* fasync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 };
 
 void __init keyboard_zsinit(void (*put_char)(unsigned char))

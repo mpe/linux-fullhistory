@@ -69,6 +69,9 @@ EXPORT_SYMBOL(scsi_ioctl_send_command);
 EXPORT_SYMBOL(scsi_logging_level);
 #endif
 
+EXPORT_SYMBOL(scsi_get_host_dev);
+EXPORT_SYMBOL(scsi_free_host_dev);
+
 EXPORT_SYMBOL(scsi_sleep);
 
 EXPORT_SYMBOL(proc_print_scsidevice);

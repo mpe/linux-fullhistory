@@ -1468,22 +1468,12 @@ cdu_release(struct inode *inode,
 }
 
 
-static struct file_operations cdu_fops =
+static struct block_device_operations cdu_fops =
 {
-	NULL,						/* lseek - default */
-	block_read,					/* read - general block-dev read */
-	block_write,					/* write - general block-dev write */
-	NULL,						/* readdir - bad */
-	NULL,						/* poll */
-	cdu_ioctl,					/* ioctl */
-	NULL,						/* mmap */
-	cdu_open,					/* open */
-	NULL,						/* flush */
-	cdu_release,					/* release */
-	NULL,						/* fsync */
-	NULL,						/* fasync */
-	cdu535_check_media_change,			/* check media change */
-	NULL						/* revalidate */
+	open:			cdu_open,
+	release:		cdu_release,
+	ioctl:			cdu_ioctl,
+	check_media_change:	cdu535_check_media_change,
 };
 
 static int sonycd535_block_size = CDU535_BLOCK_SIZE;

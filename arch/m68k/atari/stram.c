@@ -1230,18 +1230,9 @@ static int stram_release( struct inode *inode, struct file *filp )
 }
 
 
-static struct file_operations stram_fops = {
-	NULL,                   /* lseek - default */
-	block_read,             /* read - general block-dev read */
-	block_write,            /* write - general block-dev write */
-	NULL,                   /* readdir - bad */
-	NULL,                   /* select */
-	NULL,                   /* ioctl */
-	NULL,                   /* mmap */
-	stram_open,             /* open */
-	NULL,			/* flush */
-	stram_release,          /* release */
-	block_fsync             /* fsync */
+static struct block_device_operations stram_fops = {
+	open:		stram_open,
+	release:	stram_release,
 };
 
 int __init stram_device_init(void)

@@ -3,9 +3,6 @@
  * (c) 1999 Michael Gee (michael@linuxspecific.com)
  * (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
- * In order to support various 'strange' devices, this module supports plug-in
- * device-specific filter modules, which can do their own thing when required.
- *
  * Further reference:
  *	This driver is based on the 'USB Mass Storage Class' document. This
  *	describes in detail the protocol used to communicate with such
@@ -29,7 +26,6 @@
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
-#include <linux/miscdevice.h>
 #include <linux/random.h>
 #include <linux/poll.h>
 #include <linux/init.h>
@@ -55,25 +51,17 @@ unsigned char us_direction[256/8] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-#ifdef REWRITE_PROJECT
-#define IRQ_PERIOD		255
-#else
-#define IRQ_PERIOD		0    /* single IRQ transfer then remove it */
-#endif
-
 /*
  * Per device data
  */
 
 static int my_host_number;
 
-int usbscsi_debug = 1;
+int usb_stor_debug = 1;
 
 struct us_data {
-	struct us_data		*next;		/* next device */
+	struct us_data	*next;		/* next device */
 	struct usb_device	*pusb_dev;
-	struct usb_scsi_filter	*filter;	/* filter driver */
-	void			*fdata;		/* filter data */
 	unsigned int		flags;		/* from filter initially */
 	__u8			ifnum;		/* interface number */
 	__u8			ep_in;		/* in endpoint */
@@ -115,19 +103,20 @@ struct us_data {
 
 static struct us_data *us_list;
 
-static struct usb_scsi_filter *filters;
-
-static void * scsi_probe(struct usb_device *dev, unsigned int ifnum);
-static void scsi_disconnect(struct usb_device *dev, void *ptr);
-static struct usb_driver scsi_driver = {
-	"usb_scsi",
-	scsi_probe,
-	scsi_disconnect,
+static void * storage_probe(struct usb_device *dev, unsigned int ifnum);
+static void storage_disconnect(struct usb_device *dev, void *ptr);
+static struct usb_driver storage_driver = {
+	"usb-storage",
+	storage_probe,
+	storage_disconnect,
 	{ NULL, NULL }
 };
 
-/* Data handling, using SG if required */
+/***********************************************************************
+ * Data transfer routines
+ ***********************************************************************/
 
+/* transfer one buffer (breaking into packets if necessary) */
 static int us_one_transfer(struct us_data *us, int pipe, char *buf, int length)
 {
 	int max_size = usb_maxpacket(us->pusb_dev, pipe, usb_pipeout(pipe)) * 16;
@@ -135,17 +124,23 @@ static int us_one_transfer(struct us_data *us, int pipe, char *buf, int length)
 	int result;
 	unsigned long partial;
 	int maxtry = 100;
+
+	/* while we have data to transfer */
 	while (length) {
+
+		/* calculate how long this will be -- maximum or a remainder */
 		this_xfer = length > max_size ? max_size : length;
 		length -= this_xfer;
+
 		do {
+			/* transfer the data */
 			US_DEBUGP("Bulk xfer %x(%d)\n", (unsigned int)buf, this_xfer);
 			result = usb_bulk_msg(us->pusb_dev, pipe, buf,
 					      this_xfer, &partial, HZ*5);
-
 			US_DEBUGP("bulk_msg returned %d xferred %lu/%d\n",
 				  result, partial, this_xfer);
 
+			/* if we stall, we need to clear it before we go on */
 			if (result == USB_ST_STALL) {
 				US_DEBUGP("clearing endpoint halt for pipe %x\n", pipe);
 				usb_clear_halt(us->pusb_dev,
@@ -154,33 +149,50 @@ static int us_one_transfer(struct us_data *us, int pipe, char *buf, int length)
 
 			/* we want to retry if the device reported NAK */
 			if (result == USB_ST_TIMEOUT) {
-				if (partial != this_xfer) {
-					return 0;   /* I do not like this */
-				}
+
+				/* if our try counter reaches 0, bail out */
 				if (!maxtry--)
 					break;
+
+				/* otherwise, we did transmit some data, and we update pointers */
 				this_xfer -= partial;
 				buf += partial;
+
 			} else if (!result && partial != this_xfer) {
-				/* short data - assume end */
+				/* result is an error, not a NAK, and short data - assume end */
 				result = USB_ST_DATAUNDERRUN;
 				break;
+
 			} else if (result == USB_ST_STALL && us->protocol == US_PR_CB) {
+				/* for CB devices, a stall isn't fatal? */
+
+				/* if our try counter reaches 0, bail out */
 				if (!maxtry--)
 					break;
+
 				this_xfer -= partial;
 				buf += partial;
-			} else
-				break;
+			} 
+
+			/* continue until this transfer is done */
 		} while ( this_xfer );
+
+		/* if we have some nonzero result, we return it here */
 		if (result)
 			return result;
+
+		/* otherwise, we advance the buf pointer
+		 * note that the code above doesn't advance the pointer if all
+		 * goes well
+		 */
 		buf += this_xfer;
 	}
 
+	/* if we get here, we're done and successful */
 	return 0;
 }
 
+/* transfer one SCSI command, using scatter-gather if requested */
 static int us_transfer(Scsi_Cmnd *srb, int dir_in)
 {
 	struct us_data *us = (struct us_data *)srb->host_scribble;
@@ -207,6 +219,9 @@ static int us_transfer(Scsi_Cmnd *srb, int dir_in)
 	return result;
 }
 
+/* calculate the length of the data transfer (not the command) for any
+ * given SCSI command
+ */
 static unsigned int us_transfer_length(Scsi_Cmnd *srb)
 {
 	int i;
@@ -238,11 +253,15 @@ static unsigned int us_transfer_length(Scsi_Cmnd *srb)
 		return srb->request_bufflen;
 }
 
-static int pop_CBI_irq(int state, void *buffer, int len, void *dev_id)
+/***********************************************************************
+ * Transport routines
+ ***********************************************************************/
+
+static int CBI_irq(int state, void *buffer, int len, void *dev_id)
 {
 	struct us_data *us = (struct us_data *)dev_id;
 
-	US_DEBUGP("pop_CBI_irq() called!!\n");
+	US_DEBUGP("CBI_irq() called!!\n");
 
 	if (state != USB_ST_REMOVED) {
 		us->ip_data = le16_to_cpup((__u16 *)buffer);
@@ -254,7 +273,7 @@ static int pop_CBI_irq(int state, void *buffer, int len, void *dev_id)
 		wake_up(&us->ip_waitq);
 	}
 
-	/* we don't want another interrupt */
+	/* this return code is truly meaningless */
 	return 0;
 }
 
@@ -458,7 +477,7 @@ static int pop_CBI(Scsi_Cmnd *srb)
 	int result;
 
 	US_DEBUGP("CBI gets a command:\n");
-	us_show_command(srb);
+	US_DEBUG(us_show_command(srb));
 
 	/* run the command */
 	if ((result = pop_CB_command(srb)) < 0) {
@@ -658,10 +677,8 @@ static int us_release(struct Scsi_Host *psh)
 		usb_release_irq(us->pusb_dev, us->irq_handle, us->irqpipe);
 		us->irq_handle = NULL;
 	}
-	if (us->filter)
-		us->filter->release(us->fdata);
 	if (us->pusb_dev)
-		usb_deregister(&scsi_driver);
+		usb_deregister(&storage_driver);
 
 	/* FIXME - leaves hanging host template copy */
 	/* (because scsi layer uses it after removal !!!) */
@@ -709,6 +726,7 @@ static int us_bus_reset( Scsi_Cmnd *srb )
 {
 	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
 
+	US_DEBUGP("Bus reset requested\n");
 	us->pop_reset(us);
 	return SUCCESS;
 }
@@ -726,7 +744,7 @@ static int us_host_reset( Scsi_Cmnd *srb )
 #undef SPRINTF
 #define SPRINTF(args...) do { if (pos < (buffer + length)) pos += sprintf (pos, ## args); } while (0)
 
-int usb_scsi_proc_info (char *buffer, char **start, off_t offset, 
+int usb_stor_proc_info (char *buffer, char **start, off_t offset, 
 			int length, int hostno, int inout)
 {
 	struct us_data *us = us_list;
@@ -814,7 +832,7 @@ static Scsi_Host_Template my_host_template = {
 	NULL,			    /* next */
 	NULL,			    /* module */
 	NULL,			    /* proc_dir */
-	usb_scsi_proc_info,
+	usb_stor_proc_info,
 	NULL,			    /* name - points to unique */
 	us_detect,
 	us_release,
@@ -861,7 +879,7 @@ static unsigned char sense_notready[] = {
 	0x00
 };
 
-static int usbscsi_control_thread(void * __us)
+static int usb_stor_control_thread(void * __us)
 {
 	struct us_data *us = (struct us_data *)__us;
 	int action;
@@ -872,9 +890,7 @@ static int usbscsi_control_thread(void * __us)
 	 * This thread doesn't need any user-level access,
 	 * so get rid of all our resources..
 	 */
-	exit_mm(current);
-	exit_files(current);
-	//exit_fs(current);
+	daemonize();
 
 	sprintf(current->comm, "usbscsi%d", us->host_number);
 
@@ -911,11 +927,9 @@ static int usbscsi_control_thread(void * __us)
 			} else {
 				US_DEBUG(us_show_command(us->srb));
 
-				if (us->filter && us->filter->command)
-					us->srb->result = us->filter->command(us->fdata, us->srb);
-				else if (us->srb->cmnd[0] == START_STOP &&
-					 us->pusb_dev->descriptor.idProduct == 0x0001 &&
-					 us->pusb_dev->descriptor.idVendor == 0x04e6)
+				if (us->srb->cmnd[0] == START_STOP &&
+				    us->pusb_dev->descriptor.idProduct == 0x0001 &&
+				    us->pusb_dev->descriptor.idVendor == 0x04e6)
 					us->srb->result = DID_OK << 16;
 				else {
 					unsigned int savelen = us->srb->request_bufflen;
@@ -1162,8 +1176,8 @@ static int usbscsi_control_thread(void * __us)
 			spin_unlock_irq(&current->sigmask_lock);
 
 			if (signr == SIGUSR2) {
-				usbscsi_debug = !usbscsi_debug;
-				printk(USB_SCSI "debug toggle = %d\n", usbscsi_debug);
+				usb_stor_debug = !usb_stor_debug;
+				printk(USB_SCSI "debug toggle = %d\n", usb_stor_debug);
 			} else {
 				break;	    /* exit the loop on any other signal */
 			}
@@ -1172,14 +1186,13 @@ static int usbscsi_control_thread(void * __us)
 
 	//  MOD_DEC_USE_COUNT;
 
-	printk("usbscsi_control_thread exiting\n");
+	printk("usb_stor_control_thread exiting\n");
 
 	return 0;
 }	
 
-
 /* Probe to see if a new device is actually a SCSI device */
-static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
+static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_interface_descriptor *interface;
 	int i;
@@ -1187,8 +1200,6 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 	char *prod;		     /* product */
 	char *serial;		     /* serial number */
 	struct us_data *ss = NULL;
-	struct usb_scsi_filter *filter = filters;
-	void *fdata = NULL;
 	unsigned int flags = 0;
 	GUID(guid);		     /* Global Unique Identifier */
 	struct us_data *prev;
@@ -1204,77 +1215,54 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 	prod = usb_string(dev, dev->descriptor.iProduct);
 	serial = usb_string(dev, dev->descriptor.iSerialNumber);
 
-	/* probe with filters first */
-	/* MDD: What are filters?  What do they do? 
-	 * They look like some way to catch certain specific devices and set
-	 * flags for them.  Probably a good idea if we have lots of different
-	 * types of devices.
-	 */
-	if (mf && prod) {
-		while (filter) {
-			if ((fdata = filter->probe(dev, mf, prod, serial)) != NULL) {
-				flags = filter->flags;
-				printk(KERN_INFO "USB Scsi filter %s\n", filter->name);
-				break;
-			}
-			filter = filter->next;
-		}
+	/* let's examine the device now */
+
+	/* We make an exception for the shuttle E-USB */
+	if (dev->descriptor.idVendor == 0x04e6 &&
+	    dev->descriptor.idProduct == 0x0001) {
+		protocol = US_PR_CB;
+		subclass = US_SC_8070;	    /* an assumption */
+	} else if (dev->descriptor.bDeviceClass != 0 ||
+		   altsetting->bInterfaceClass != USB_CLASS_MASS_STORAGE ||
+		   altsetting->bInterfaceSubClass < US_SC_MIN ||
+		   altsetting->bInterfaceSubClass > US_SC_MAX) {
+		/* if it's not a mass storage, we go no further */
+		return NULL;
 	}
 
-	/* generic devices next */
-    
-	/* MDD: Isn't this always true? */
-	if (fdata == NULL) {
+	/* At this point, we know we've got a live one */
+	US_DEBUGP("USB Mass Storage device detected\n");
 
-		/* We make an exception for the shuttle E-USB */
-		if (dev->descriptor.idVendor == 0x04e6 &&
-		    dev->descriptor.idProduct == 0x0001) {
-			protocol = US_PR_CB;
-			subclass = US_SC_8070;	    /* an assumption */
-		} else if (dev->descriptor.bDeviceClass != 0 ||
-			   altsetting->bInterfaceClass != USB_CLASS_MASS_STORAGE ||
-			   altsetting->bInterfaceSubClass < US_SC_MIN ||
-			   altsetting->bInterfaceSubClass > US_SC_MAX) {
-			/* if it's not a mass storage, we go no further */
-			return NULL;
+	/* Create a GUID for this device */
+	if (dev->descriptor.iSerialNumber &&
+	    usb_string(dev, dev->descriptor.iSerialNumber) ) {
+		/* If we have a serial number, and it's a non-NULL string */
+		make_guid(guid, dev->descriptor.idVendor, 
+			  dev->descriptor.idProduct,
+			  usb_string(dev, dev->descriptor.iSerialNumber));
+	} else {
+		/* We don't have a serial number, so we use 0 */
+		make_guid(guid, dev->descriptor.idVendor, 
+			  dev->descriptor.idProduct, "0");
+	}
+
+	/* Now check if we have seen this GUID before, and restore
+	 * the flags if we find it
+	 */
+	for (ss = us_list; ss != NULL; ss = ss->next) {
+		if (!ss->pusb_dev && GUID_EQUAL(guid, ss->guid))    {
+			US_DEBUGP("Found existing GUID " GUID_FORMAT "\n",
+				  GUID_ARGS(guid));
+			flags = ss->flags;
+			break;
 		}
-
-		/* At this point, we know we've got a live one */
-		US_DEBUGP("USB Mass Storage device detected\n");
-
-		/* Create a GUID for this device */
-		if (dev->descriptor.iSerialNumber &&
-		    usb_string(dev, dev->descriptor.iSerialNumber) ) {
-			/* If we have a serial number, and it's a non-NULL string */
-			make_guid(guid, dev->descriptor.idVendor, 
-				  dev->descriptor.idProduct,
-				  usb_string(dev, dev->descriptor.iSerialNumber));
-		} else {
-			/* We don't have a serial number, so we use 0 */
-			make_guid(guid, dev->descriptor.idVendor, 
-				  dev->descriptor.idProduct, "0");
-		}
-
-		/* Now check if we have seen this GUID before, and restore
-		 * the flags if we find it
-		 */
-		for (ss = us_list; ss != NULL; ss = ss->next) {
-			if (!ss->pusb_dev && GUID_EQUAL(guid, ss->guid))    {
-				US_DEBUGP("Found existing GUID " GUID_FORMAT "\n",
-					  GUID_ARGS(guid));
-				flags = ss->flags;
-				break;
-			}
-		}
-	} /* if (fdata == NULL) */
+	}
 
 	/* If ss == NULL, then this is a new device.  Allocate memory for it */
 	if (!ss) {
 		if ((ss = (struct us_data *)kmalloc(sizeof(*ss), 
 						    GFP_KERNEL)) == NULL) {
 			printk(KERN_WARNING USB_SCSI "Out of memory\n");
-			if (filter)
-				filter->release(fdata);
 			return NULL;
 		}
 		memset(ss, 0, sizeof(struct us_data));
@@ -1282,8 +1270,6 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 
 	/* Initialize the us_data structure with some useful info */
 	interface = altsetting;
-	ss->filter = filter;
-	ss->fdata = fdata;
 	ss->flags = flags;
 	ss->ifnum = ifnum;
 	ss->pusb_dev = dev;
@@ -1365,8 +1351,7 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 			kfree(ss->htmplt->name);
 			kfree(ss->htmplt);
 		}
-		if (filter)
-			filter->release(fdata);
+
 		kfree(ss);
 		return NULL;
 	}
@@ -1420,8 +1405,7 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 		     kmalloc(sizeof(*ss->htmplt), GFP_KERNEL)) == NULL ) {
 
 			printk(KERN_WARNING USB_SCSI "Out of memory\n");
-			if (filter)
-				filter->release(fdata);
+
 			kfree(ss);
 			return NULL;
 		}
@@ -1451,19 +1435,12 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 			US_DEBUGP("C0 status %x %x\n", qstat[0], qstat[1]);
 			init_waitqueue_head(&ss->ip_waitq);
 			ss->irqpipe = usb_rcvintpipe(ss->pusb_dev, ss->ep_int);
-			result = usb_request_irq(ss->pusb_dev, ss->irqpipe, pop_CBI_irq,
-						 IRQ_PERIOD, (void *)ss, &ss->irq_handle);
+			result = usb_request_irq(ss->pusb_dev, ss->irqpipe, CBI_irq,
+						 255, (void *)ss, &ss->irq_handle);
 			if (result)
 				return NULL;
 
 			interruptible_sleep_on_timeout(&ss->ip_waitq, HZ*6);
-#ifdef REWRITE_PROJECT
-			/* FIXME: Don't know if this release_irq() call is at the
-			   right place/time. */
-			usb_release_irq(ss->pusb_dev, ss->irq_handle, ss->irqpipe);
-			ss->irq_handle = NULL;
-#endif
-
 		} else if (ss->protocol == US_PR_CBI)
 		{
 			int result; 
@@ -1473,7 +1450,7 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 			/* set up the IRQ pipe and handler */
 			/* FIXME: This needs to get the period from the device */
 			ss->irqpipe = usb_rcvintpipe(ss->pusb_dev, ss->ep_int);
-			result = usb_request_irq(ss->pusb_dev, ss->irqpipe, pop_CBI_irq,
+			result = usb_request_irq(ss->pusb_dev, ss->irqpipe, CBI_irq,
 						 255, (void *)ss, &ss->irq_handle);
 			if (result) {
 				US_DEBUGP("usb_request_irq failed (0x%x), No interrupt for CBI\n",
@@ -1489,13 +1466,12 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 			init_waitqueue_head(&ss->waitq);
 
 			ss->notify = &sem;
-			ss->pid = kernel_thread(usbscsi_control_thread, ss,
+			ss->pid = kernel_thread(usb_stor_control_thread, ss,
 						CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 			if (ss->pid < 0) {
 				printk(KERN_WARNING USB_SCSI "Unable to start control thread\n");
 				kfree(htmplt);
-				if (filter)
-					filter->release(fdata);
+
 				kfree(ss);
 				return NULL;
 			}
@@ -1523,14 +1499,13 @@ static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 }
 
 /* Handle a disconnect event from the USB core */
-static void scsi_disconnect(struct usb_device *dev, void *ptr)
+static void storage_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct us_data *ss = ptr;
 
 	if (!ss)
 		return;
-	if (ss->filter)
-		ss->filter->release(ss->fdata);
+
 	ss->pusb_dev = NULL;
 	//  MOD_DEC_USE_COUNT;
 }
@@ -1540,49 +1515,26 @@ static void scsi_disconnect(struct usb_device *dev, void *ptr)
  * Initialization and registration
  ***********************************************************************/
 
-int usb_scsi_init(void)
+int usb_stor_init(void)
 {
 	//  MOD_INC_USE_COUNT;
 
-	if (usb_register(&scsi_driver) < 0)
+	if (usb_register(&storage_driver) < 0)
 		return -1;
 
 	printk(KERN_INFO "USB SCSI support registered.\n");
 	return 0;
 }
 
-/* Functions to handle filters.	 These are designed to allow us to handle
- * certain odd devices 
- */
-int usb_scsi_register(struct usb_scsi_filter *filter)
-{
-	struct usb_scsi_filter *prev = (struct usb_scsi_filter *)&filters;
-
-	while (prev->next)
-		prev = prev->next;
-	prev->next = filter;
-	return 0;
-}
-
-void usb_scsi_deregister(struct usb_scsi_filter *filter)
-{
-	struct usb_scsi_filter *prev = (struct usb_scsi_filter *)&filters;
-
-	while (prev->next && prev->next != filter)
-		prev = prev->next;
-	if (prev->next)
-		prev->next = filter->next;
-}
-
 #ifdef MODULE
 int init_module(void)
 {
 	/* MDD: Perhaps we should register the host here */
-	return usb_scsi_init();
+	return usb_stor_init();
 }
 
 void cleanup_module(void)
 {
-	usb_deregister(&scsi_driver);
+	usb_deregister(&storage_driver);
 }
 #endif

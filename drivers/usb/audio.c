@@ -1916,8 +1916,6 @@ static /*const*/ struct file_operations usb_mixer_fops = {
 	&usb_audio_release_mixdev,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -2529,8 +2527,6 @@ static /*const*/ struct file_operations usb_audio_fops = {
 	&usb_audio_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 

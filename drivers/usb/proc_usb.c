@@ -673,7 +673,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 	switch (cmd) {
 	case EZUSB_CONTROL:
 		if (obsolete_warn < 20) {
-			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_CONTROL ioctl\n",
+			warn("process %d (%s) used obsolete EZUSB_CONTROL ioctl",
 			       current->pid, current->comm);
 			obsolete_warn++;
 		}
@@ -705,7 +705,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 		}
 		free_page((unsigned long)tbuf);
 		if (i < 0) {
-			printk(KERN_WARNING "procusb: EZUSB_CONTROL failed rqt %u rq %u len %u ret %d\n", 
+			warn("EZUSB_CONTROL failed rqt %u rq %u len %u ret %d", 
 			       ctrl.requesttype, ctrl.request, ctrl.length, i);
 			return i;
 		}
@@ -713,7 +713,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 
 	case EZUSB_BULK:
 		if (obsolete_warn < 20) {
-			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_BULK ioctl\n",
+			warn("process %d (%s) used obsolete EZUSB_BULK ioctl",
 			       current->pid, current->comm);
 			obsolete_warn++;
 		}
@@ -748,7 +748,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 		}
 		free_page((unsigned long)tbuf);
 		if (i < 0) {
-			printk(KERN_WARNING "procusb: EZUSB_BULK failed ep 0x%x len %u ret %d\n", 
+			warn("EZUSB_BULK failed ep 0x%x len %u ret %d", 
 			       bulk.ep, bulk.len, i);
 			return i;
 		}
@@ -756,7 +756,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 
 	case EZUSB_OLD_CONTROL:
 		if (obsolete_warn < 20) {
-			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_OLD_CONTROL ioctl\n",
+			warn("process %d (%s) used obsolete EZUSB_OLD_CONTROL ioctl",
 			       current->pid, current->comm);
 			obsolete_warn++;
 		}
@@ -784,7 +784,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 					}
 		free_page((unsigned long)tbuf);
 		if (i < 0) {
-			printk(KERN_WARNING "procusb: EZUSB_OLD_CONTROL failed rqt %u rq %u len %u ret %d\n", 
+			warn("EZUSB_OLD_CONTROL failed rqt %u rq %u len %u ret %d", 
 			       octrl.requesttype, octrl.request, octrl.length, i);
 			return i;
 		}
@@ -792,7 +792,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 
 	case EZUSB_OLD_BULK:
 		if (obsolete_warn < 20) {
-			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_OLD_BULK ioctl\n",
+			warn("process %d (%s) used obsolete EZUSB_OLD_BULK ioctl",
 			       current->pid, current->comm);
 			obsolete_warn++;
 		}
@@ -827,7 +827,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 		}
 		free_page((unsigned long)tbuf);
 		if (i < 0) {
-			printk(KERN_WARNING "procusb: EZUSB_OLD_BULK failed ep 0x%x len %u ret %d\n", 
+			warn("EZUSB_OLD_BULK failed ep 0x%x len %u ret %d", 
 			       obulk.ep, obulk.len, i);
 			return i;
 		}
@@ -835,7 +835,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 
 	case EZUSB_RESETEP:
 		if (obsolete_warn < 20) {
-			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_RESETEP ioctl\n",
+			warn("process %d (%s) used obsolete EZUSB_RESETEP ioctl",
 			       current->pid, current->comm);
 			obsolete_warn++;
 		}
@@ -849,7 +849,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 
 	case EZUSB_SETINTERFACE:
 		if (obsolete_warn < 20) {
-			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_SETINTERFACE ioctl\n",
+			warn("process %d (%s) used obsolete EZUSB_SETINTERFACE ioctl",
 			       current->pid, current->comm);
 			obsolete_warn++;
 		}
@@ -862,7 +862,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 
 	case EZUSB_SETCONFIGURATION:
 		if (obsolete_warn < 20) {
-			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_SETCONFIGURATION ioctl\n",
+			warn("process %d (%s) used obsolete EZUSB_SETCONFIGURATION ioctl",
 			       current->pid, current->comm);
 			obsolete_warn++;
 		}
@@ -923,7 +923,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		}
 		free_page((unsigned long)tbuf);
 		if (i<0) {
-			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_CONTROL failed rqt %u rq %u len %u ret %d\n", 
+			warn("USB_PROC_CONTROL failed rqt %u rq %u len %u ret %d", 
 			       ctrl.requesttype, ctrl.request, ctrl.length, i);
 			return i;
 		}
@@ -961,7 +961,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		}
 		free_page((unsigned long)tbuf);
 		if (i) {
-			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_BULK failed ep 0x%x len %u ret %d\n", 
+			warn("USB_PROC_BULK failed ep 0x%x len %u ret %d", 
 			       bulk.ep, bulk.len, i);
 			return -ENXIO;
 		}
@@ -996,7 +996,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		}
 		free_page((unsigned long)tbuf);
 		if (i < 0) {
-			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_OLD_CONTROL failed rqt %u rq %u len %u ret %d\n", 
+			warn("USB_PROC_OLD_CONTROL failed rqt %u rq %u len %u ret %d", 
 			       octrl.requesttype, octrl.request, octrl.length, i);
 			return i;
 		}
@@ -1034,7 +1034,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		}
 		free_page((unsigned long)tbuf);
 		if (i < 0) {
-			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_OLD_BULK failed ep 0x%x len %u ret %d\n", 
+			warn("USB_PROC_OLD_BULK failed ep 0x%x len %u ret %d", 
 			       obulk.ep, obulk.len, i);
 			return i;
 		}
@@ -1163,13 +1163,13 @@ int proc_usb_init (void)
 	usbdir = proc_mkdir("usb", proc_bus);
 #endif	
 	if (!usbdir) {
-		printk ("proc_usb: cannot create /proc/bus/usb entry\n");
+		err("cannot create /proc/bus/usb entry");
 		return -1;
 	}
 
 	driversdir = create_proc_entry("drivers", 0, usbdir);
 	if (!driversdir) {
-		printk ("proc_usb: cannot create /proc/bus/usb/drivers entry\n");
+		err("cannot create /proc/bus/usb/drivers entry");
 		proc_usb_cleanup();
 		return -1;
 	}
@@ -1177,7 +1177,7 @@ int proc_usb_init (void)
 
 	devicesdir = create_proc_entry("devices", 0, usbdir);
 	if (!devicesdir) {
-		printk ("proc_usb: cannot create /proc/bus/usb/devices entry\n");
+		err("cannot create /proc/bus/usb/devices entry");
 		proc_usb_cleanup ();
 		return -1;
 	}

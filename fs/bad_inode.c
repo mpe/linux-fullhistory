@@ -42,8 +42,7 @@ static struct file_operations bad_file_ops =
 	EIO_ERROR,		/* release */
 	EIO_ERROR,		/* fsync */
 	EIO_ERROR,		/* fasync */
-	EIO_ERROR,		/* check_media_change */
-	EIO_ERROR		/* revalidate */
+	EIO_ERROR,		/* lock */
 };
 
 struct inode_operations bad_inode_ops =

@@ -446,18 +446,11 @@ static int nbd_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static struct file_operations nbd_fops =
+static struct block_device_operations nbd_fops =
 {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select */
-	nbd_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	nbd_open,		/* open */
-	NULL,			/* flush */
-	nbd_release		/* release */
+	open:		nbd_open,
+	release:	nbd_release,
+	ioctl:		nbd_ioctl,
 };
 
 /*

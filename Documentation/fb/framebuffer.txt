@@ -2,7 +2,7 @@
 			-----------------------
 
 Maintained by Geert Uytterhoeven <geert@linux-m68k.org>
-Last revised: October 7, 1999
+Last revised: January 2, 2000
 
 
 0. Introduction
@@ -294,7 +294,11 @@ under "xc/programs/Xserver/hw/xfree86/doc/modeDB.txt".
 -------------
 
 For more specific information about the frame buffer device and its
-applications, please refer to the following documentation:
+applications, please refer to the Linux-fbdev website:
+
+    http://www.linux-fbdev.org/
+
+and to the following documentation:
 
   - The manual pages for fbset: fbset(8), fb.modes(5)
   - The manual pages for XFree86: XF68_FBDev(1), XF86Config(4/5)

@@ -466,6 +466,9 @@ int __init tc_filter_init(void)
 #ifdef CONFIG_NET_CLS_RSVP
 	INIT_TC_FILTER(rsvp);
 #endif
+#ifdef CONFIG_NET_CLS_TCINDEX
+	INIT_TC_FILTER(tcindex);
+#endif
 #ifdef CONFIG_NET_CLS_RSVP6
 	INIT_TC_FILTER(rsvp6);
 #endif

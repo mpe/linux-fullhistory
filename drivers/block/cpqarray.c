@@ -196,21 +196,11 @@ static void ida_geninit(struct gendisk *g)
 
 }
 
-struct file_operations ida_fops  = {
-	NULL,                        /* lseek - default */
-	block_read,                  /* read - general block-dev read */
-	block_write,                 /* write - general block-dev write */
-	NULL,                        /* readdir - bad */
-	NULL,                        /* select */
-	ida_ioctl,                  /* ioctl */
-	NULL,                        /* mmap */
-	ida_open,                     /* open code */
-	NULL,
-	ida_release,                  /* release */
-	block_fsync,	              /* fsync */
-	NULL,                        /* fasync */
-	NULL,			/* Disk change */
-	frevalidate_logvol,	/* revalidate */
+static struct block_device_operations ida_fops  = {
+	open:		ida_open,
+	release:	ida_release,
+	ioctl:		ida_ioctl,
+	revalidate:	frevalidate_logvol,
 };
 
 

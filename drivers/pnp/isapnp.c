@@ -45,6 +45,12 @@
 LIST_HEAD(isapnp_cards);
 LIST_HEAD(isapnp_devices);
 
+#define isapnp_for_each_card(card) \
+	for(card = pci_bus_b(isapnp_cards.next); card != pci_bus_b(&isapnp_cards); card = pci_bus_b(card->node.next))
+#define isapnp_for_each_dev(dev) \
+	for(dev = pci_dev_g(isapnp_devices.next); dev != pci_dev_g(&isapnp_devices); dev = pci_dev_g(dev->global_list.next))
+
+
 #ifdef CONFIG_PROC_FS
 #include "isapnp_proc.c"
 #endif
@@ -997,7 +1003,7 @@ static int __init isapnp_build_device_list(void)
 
 		list_add_tail(&card->node, &isapnp_cards);
 	}
-	for (dev = isapnp_devices; dev ; dev = dev->next) {
+	isapnp_for_each_dev(dev) {
 		isapnp_fixup_device(dev);
 	}
 	return 0;
@@ -1154,7 +1160,7 @@ struct pci_bus *isapnp_find_card(unsigned short vendor,
 		list = from->node.next;
 
 	while (list != &isapnp_cards) {
-		struct pci_bus *card = list_entry(list, struct pci_bus, node);
+		struct pci_bus *card = pci_bus_b(list);
 		if (card->vendor == vendor && card->device == device)
 			return card;
 		list = list->next;
@@ -1176,7 +1182,7 @@ struct pci_dev *isapnp_find_dev(struct pci_bus *card,
 
 		while (list != &isapnp_devices) {
 			int idx;
-			struct pci_dev *dev = list_entry(list, struct pci_dev, global_list);
+			struct pci_dev *dev = pci_dev_g(list);
 
 			if (dev->vendor == vendor && dev->device == function)
 				return dev;
@@ -1196,7 +1202,7 @@ struct pci_dev *isapnp_find_dev(struct pci_bus *card,
 			return NULL;
 		while (list != &card->devices) {
 			int idx;
-			struct pci_dev *dev = list_entry(list, struct pci_dev, bus_list);
+			struct pci_dev *dev = pci_dev_b(list);
 
 			if (dev->vendor == vendor && dev->device == function)
 				return dev;
@@ -1444,7 +1450,7 @@ static int isapnp_check_port(struct isapnp_cfgtmp *cfg, int port, int size, int 
 {
 	int i, tmp, rport, rsize;
 	struct isapnp_port *xport;
-	struct list_head *list;
+	struct pci_dev *dev;
 
 	if (check_region(port, size))
 		return 1;
@@ -1457,8 +1463,7 @@ static int isapnp_check_port(struct isapnp_cfgtmp *cfg, int port, int size, int 
 			return 1;
 	}
 
-	for (list = isapnp_devices.next; list != &isapnp_devices ; list = list->next) {
-		struct pci_dev *dev = list_entry(list, struct pci_dev, global_list);
+	isapnp_for_each_dev(dev) {
 		if (dev->active) {
 			for (tmp = 0; tmp < 8; tmp++) {
 				if (dev->resource[tmp].flags) {
@@ -1547,7 +1552,7 @@ static void isapnp_test_handler(int irq, void *dev_id, struct pt_regs *regs)
 static int isapnp_check_interrupt(struct isapnp_cfgtmp *cfg, int irq, int idx)
 {
 	int i;
-	struct list_head *list;
+	struct pci_dev *dev;
 
 	if (irq < 0 || irq > 15)
 		return 1;
@@ -1555,8 +1560,7 @@ static int isapnp_check_interrupt(struct isapnp_cfgtmp *cfg, int irq, int idx)
 		if (isapnp_reserve_irq[i] == irq)
 			return 1;
 	}
-	for (list = isapnp_devices.next; list != &isapnp_devices; list = list->next) {
-		struct pci_dev *dev = list_entry(list, struct pci_dev, global_list);
+	isapnp_for_each_dev(dev) {
 		if (dev->active) {
 			if (dev->irq_resource[0].start == irq ||
 			    dev->irq_resource[1].start == irq)
@@ -1627,7 +1631,7 @@ static int isapnp_valid_irq(struct isapnp_cfgtmp *cfg, int idx)
 static int isapnp_check_dma(struct isapnp_cfgtmp *cfg, int dma, int idx)
 {
 	int i;
-	struct list_head *list;
+	struct pci_dev *dev;
 
 	if (dma < 0 || dma == 4 || dma > 7)
 		return 1;
@@ -1635,8 +1639,7 @@ static int isapnp_check_dma(struct isapnp_cfgtmp *cfg, int dma, int idx)
 		if (isapnp_reserve_dma[i] == dma)
 			return 1;
 	}
-	for (list = isapnp_devices.next; list != &isapnp_devices ; list = list->next) {
-		struct pci_dev *dev = list_entry(list, struct pci_dev, global_list);
+	isapnp_for_each_dev(dev) {
 		if (dev->active) {
 			if (dev->dma_resource[0].start == dma || dev->dma_resource[1].start == dma)
 				return 1;
@@ -1702,7 +1705,7 @@ static int isapnp_check_mem(struct isapnp_cfgtmp *cfg, unsigned int addr, unsign
 	int i, tmp;
 	unsigned int raddr, rsize;
 	struct isapnp_mem *xmem;
-	struct list_head *list;
+	struct pci_dev *dev;
 
 	for (i = 0; i < 8; i++) {
 		raddr = (unsigned int)isapnp_reserve_mem[i << 1];
@@ -1714,8 +1717,7 @@ static int isapnp_check_mem(struct isapnp_cfgtmp *cfg, unsigned int addr, unsign
 		if (__check_region(&iomem_resource, addr, size))
 			return 1;
 	}
-	for (list = isapnp_devices.next; list != &isapnp_devices ; list = list->next) {
-		struct pci_dev *dev = list_entry(list, struct pci_dev, global_list);
+	isapnp_for_each_dev(dev) {
 		if (dev->active) {
 			for (tmp = 0; tmp < 4; tmp++) {
 				if (dev->resource[tmp].flags) {
@@ -1995,26 +1997,22 @@ static void isapnp_free_resources(struct isapnp_resources *resources, int alt)
 	}
 }
 
-static void isapnp_free_device(struct pci_dev *dev)
+static void isapnp_free_card(struct pci_bus *card)
 {
-	struct pci_dev *next;
-
-	while (dev) {
-		next = dev->sibling;
+	while (!list_empty(&card->devices)) {
+		struct list_head *list = card->devices.next;
+		struct pci_dev *dev = pci_dev_b(list);
+		list_del(list);
 		isapnp_free_resources((struct isapnp_resources *)dev->sysdata, 0);
 		kfree(dev);
-		dev = next;
 	}
+	kfree(card);
 }
 
 #endif /* MODULE */
 
 static void isapnp_free_all_resources(void)
 {
-#ifdef MODULE
-	struct pci_bus *card, *cardnext;
-#endif
-
 #ifdef ISAPNP_REGION_OK
 	release_resource(pidxr_res);
 #endif
@@ -2022,10 +2020,10 @@ static void isapnp_free_all_resources(void)
 	if (isapnp_rdp >= 0x203 && isapnp_rdp <= 0x3ff)
 		release_resource(isapnp_rdp_res);
 #ifdef MODULE
-	for (card = isapnp_cards; card; card = cardnext) {
-		cardnext = card->next;
-		isapnp_free_device(card->devices);
-		kfree(card);
+	while (!list_empty(&isapnp_cards)) {
+		struct list_head *list = isapnp_cards.next;
+		list_del(list);
+		isapnp_free_card(pci_bus_b(list));
 	}
 #ifdef CONFIG_PROC_FS
 	isapnp_proc_done();
@@ -2092,7 +2090,7 @@ EXPORT_SYMBOL(isapnp_resource_change);
 int __init isapnp_init(void)
 {
 	int cards;
-	struct list_head *list;
+	struct pci_bus *card;
 
 	if (isapnp_disable) {
 		isapnp_detected = 0;
@@ -2142,9 +2140,7 @@ int __init isapnp_init(void)
 	isapnp_build_device_list();
 	cards = 0;
 
-	for (list = isapnp_cards.next; list != &isapnp_cards; list=list->next) {
-		struct pci_bus *card = list_entry(list, struct pci_bus, node);
-
+	isapnp_for_each_card(card) {
 		cards++;
 		if (isapnp_verbose) {
 			struct list_head *devlist;
@@ -2152,7 +2148,7 @@ int __init isapnp_init(void)
 			if (isapnp_verbose < 2)
 				continue;
 			for (devlist = card->devices.next; devlist != &card->devices; devlist = devlist->next) {
-				struct pci_dev *dev = list_entry(list, struct pci_dev, bus_list);
+				struct pci_dev *dev = pci_dev_b(devlist);
 				printk("isapnp:   Device '%s'\n", dev->name[0]?card->name:"Unknown");
 			}
 		}

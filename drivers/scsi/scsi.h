@@ -413,6 +413,10 @@ extern int scsi_insert_special_cmd(Scsi_Cmnd * SCpnt, int);
 extern int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt);
 
 /*
+ * Prototypes for functions in scsi.c
+ */
+
+/*
  *  scsi_abort aborts the current command that is executing on host host.
  *  The error code, if non zero is returned in the host byte, otherwise 
  *  DID_ABORT is returned in the hostbyte.
@@ -429,8 +433,6 @@ extern void scsi_wait_cmd(Scsi_Cmnd *, const void *cmnd,
 			  int timeout, int retries);
 
 extern Scsi_Cmnd *scsi_allocate_device(Scsi_Device *, int, int);
-
-extern Scsi_Cmnd *scsi_request_queueable(struct request *, Scsi_Device *);
 
 extern void scsi_release_command(Scsi_Cmnd *);
 
@@ -461,6 +463,7 @@ struct scsi_device {
 					   device is busy */
 	struct Scsi_Host *host;
 	request_queue_t request_queue;
+        atomic_t                device_active; /* commands checked out for device */
 	volatile unsigned short device_busy;	/* commands actually active on low-level */
 	int (*scsi_init_io_fn) (Scsi_Cmnd *);	/* Used to initialize
 						   new request */
@@ -679,7 +682,6 @@ struct scsi_cmnd {
 #define SCSI_MLQUEUE_DEVICE_BUSY 0x1056
 
 extern int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason);
-extern int scsi_mlqueue_finish(struct Scsi_Host *host, Scsi_Device * device);
 
 extern Scsi_Cmnd *scsi_end_request(Scsi_Cmnd * SCpnt, int uptodate,
 				   int sectors);
@@ -687,33 +689,7 @@ extern Scsi_Cmnd *scsi_end_request(Scsi_Cmnd * SCpnt, int uptodate,
 extern void scsi_io_completion(Scsi_Cmnd * SCpnt, int good_sectors,
 			       int block_sectors);
 
-
-#if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
-#include "hosts.h"
-
-
-/* This is just like INIT_REQUEST, but we need to be aware of the fact
- * that an interrupt may start another request, so we run this with interrupts
- * turned off 
- */
-#if MAJOR_NR == SCSI_DISK0_MAJOR
-#define CHECK_INITREQ_SD_MAJOR(major) SCSI_DISK_MAJOR(major)
-#else
-#define CHECK_INITREQ_SD_MAJOR(major) ((major) == MAJOR_NR)
-#endif
-
-#define INIT_SCSI_REQUEST       			\
-    if (!CURRENT) {             			\
-	CLEAR_INTR;             			\
-	return;                 			\
-    }                           			\
-    if (!CHECK_INITREQ_SD_MAJOR(MAJOR(CURRENT->rq_dev)))\
-	panic(DEVICE_NAME ": request list destroyed");	\
-    if (CURRENT->bh) {                                	\
-	if (!buffer_locked(CURRENT->bh))              	\
-	    panic(DEVICE_NAME ": block not locked");  	\
-    }
-#endif
+extern struct Scsi_Device_Template *scsi_get_request_dev(struct request *);
 
 #define SCSI_SLEEP(QUEUE, CONDITION) {		    \
     if (CONDITION) {			            \

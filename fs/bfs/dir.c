@@ -89,8 +89,6 @@ static struct file_operations bfs_dir_operations = {
 	release:		NULL,
 	fsync:			file_fsync,
 	fasync:			NULL,
-	check_media_change:	NULL,
-	revalidate:		NULL,
 };
 
 extern void dump_imap(const char *, struct super_block *);

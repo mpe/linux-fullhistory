@@ -149,8 +149,6 @@ static struct file_operations ext2_file_operations = {
 	ext2_release_file,	/* release */
 	ext2_sync_file,		/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL			/* revalidate */
 };
 
 struct inode_operations ext2_file_inode_operations = {

@@ -133,6 +133,13 @@ int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason)
 	cmd->bh_next = NULL;
 
 	/*
+	 * Decrement the counters, since these commands are no longer
+	 * active on the host/device.
+	 */
+	cmd->host->host_busy--;
+	cmd->device->device_busy--;
+
+	/*
 	 * Insert this command at the head of the queue for it's device.
 	 * It will go before all other commands that are already in the queue.
 	 */

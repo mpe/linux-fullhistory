@@ -331,22 +331,10 @@ z2_release( struct inode *inode, struct file *filp )
     return 0;
 }
 
-static struct file_operations z2_fops =
+static struct block_device_operations z2_fops =
 {
-	NULL,                   /* lseek - default */
-	block_read,             /* read - general block-dev read */
-	block_write,            /* write - general block-dev write */
-	NULL,                   /* readdir - bad */
-	NULL,                   /* poll */
-	NULL,                   /* ioctl */
-	NULL,                   /* mmap */
-	z2_open,                /* open */
-	NULL,			/* flush */
-	z2_release,             /* release */
-	block_fsync,            /* fsync */
-	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
+	open:		z2_open,
+	release:	z2_release,
 };
 
 int __init 

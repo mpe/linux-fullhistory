@@ -39,7 +39,9 @@
 
 static unsigned char keybdev_x86_e0s[] = 
 	{ 0x1c, 0x1d, 0x35, 0x2a, 0x38, 0x39, 0x47, 0x48,
-	  0x49, 0x4b, 0x4d, 0x4f, 0x50, 0x51, 0x52, 0x53 };
+	  0x49, 0x4b, 0x4d, 0x4f, 0x50, 0x51, 0x52, 0x53,
+	  0x26, 0x25, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x00,
+	  0x23, 0x24, 0x25, 0x26, 0x27 };
 
 #elif CONFIG_MAC_KEYBOARD
 
@@ -49,7 +51,7 @@ static unsigned char keybdev_mac_codes[256] =
 	  2,  3,  5,  4, 38, 40, 37, 41, 39, 50, 56, 42,  6,  7,  8,  9,
 	 11, 45, 46, 43, 47, 44,123, 67, 55, 49, 57,122,120, 99,118, 96,
 	 97, 98,100,101,109, 71,107, 89, 91, 92, 78, 86, 87, 88, 69, 83,
-	 84, 85, 82, 65,  0,  0,  0,103,111,  0,  0,  0,  0,  0,  0,  0,
+	 84, 85, 82, 65, 42,  0, 10,103,111,  0,  0,  0,  0,  0,  0,  0,
 	 76,125, 75,  0,124,  0,115, 62,116, 59, 60,119, 61,121,114,117,
 	  0,  0,  0,  0,127, 81,  0,113 };
 
@@ -61,7 +63,13 @@ void keybdev_event(struct input_handle *handle, unsigned int type, unsigned int 
 
 #ifdef CONFIG_X86
 
-	if (code >= 125) {
+	if (code >= 189) {
+  		printk(KERN_WARNING "keybdev.c: can't emulate keycode %d\n", code);
+		return; 
+	} else if (code >= 162) {
+		handle_scancode(0xe0, 1);
+		handle_scancode(code - 161, down);
+	} else if (code >= 125) {
 		handle_scancode(0xe0, 1);
 		handle_scancode(code - 34, down);
 	} else if (code == 119) {
@@ -79,8 +87,10 @@ void keybdev_event(struct input_handle *handle, unsigned int type, unsigned int 
 
 #elif CONFIG_MAC_KEYBOARD
 
-	if (keycode < 128) 
+	if (keycode < 128 && keybdev_mac_codes[code]) 
 		handle_scancode(keybdev_mac_codes[code], down);
+	else
+		printk(KERN_WARNING "keybdev.c: can't emulate keycode %d\n", code);
 
 #else
 #error "Cannot generate rawmode keyboard for your architecture yet."

@@ -109,18 +109,7 @@ static int h8_monitor_timer_active = 0;
 static char  driver_version[] = "X0.0";/* no spaces */
 
 static struct file_operations h8_fops = {
-        NULL,           /* lseek */
-        NULL,
-        NULL,           /* write */
-        NULL,           /* readdir */
-        NULL,
-        NULL,
-        NULL,           /* mmap */
-        NULL,
-	NULL,		/* flush */
-        NULL,
-        NULL,           /* fsync */
-        NULL            /* fasync */
+	/* twelve lines of crap^WNULLs were here */
 };
 
 static struct miscdevice h8_device = {

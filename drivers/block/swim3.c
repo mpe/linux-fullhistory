@@ -1030,21 +1030,12 @@ static void floppy_off(unsigned int nr)
 {
 }
 
-static struct file_operations floppy_fops = {
-	NULL,			/* lseek */
-	floppy_read,		/* read */
-	floppy_write,		/* write */
-	NULL,			/* readdir */
-	NULL,			/* poll */
-	floppy_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	floppy_open,		/* open */
-	NULL,			/* flush */
-	floppy_release,		/* release */
-	block_fsync,		/* fsync */
-	NULL,			/* fasync */
-	floppy_check_change,	/* check_media_change */
-	floppy_revalidate,	/* revalidate */
+static struct block_device_operations floppy_fops = {
+	open:			floppy_open,
+	release:		floppy_release,
+	ioctl:			floppy_ioctl,
+	check_media_change:	floppy_check_change,
+	revalidate:		floppy_revalidate,
 };
 
 int swim3_init(void)

@@ -1436,21 +1436,11 @@ static int sjcd_release( struct inode *inode, struct file *file ){
 /*
  * A list of file operations allowed for this cdrom.
  */
-static struct file_operations sjcd_fops = {
-  NULL,               /* lseek - default */
-  block_read,         /* read - general block-dev read */
-  block_write,        /* write - general block-dev write */
-  NULL,               /* readdir - bad */
-  NULL,               /* poll */
-  sjcd_ioctl,         /* ioctl */
-  NULL,               /* mmap */
-  sjcd_open,          /* open */
-  NULL,		      /* flush */
-  sjcd_release,       /* release */
-  NULL,               /* fsync */
-  NULL,               /* fasync */
-  sjcd_disk_change,   /* media change */
-  NULL                /* revalidate */
+static struct block_device_operations sjcd_fops = {
+	open:			sjcd_open,
+	release:		sjcd_release,
+	ioctl:			sjcd_ioctl,
+	check_media_change:	sjcd_disk_change,
 };
 
 static int blksize = 2048;

@@ -1,5 +1,5 @@
 /*
- *  scsi.c Copyright (C) 1992 Drew Eckhardt
+ *  scsi_obsolete.c Copyright (C) 1992 Drew Eckhardt
  *         Copyright (C) 1993, 1994, 1995 Eric Youngdale
  *
  *  generic mid-level SCSI driver
@@ -87,9 +87,7 @@ extern void scsi_old_times_out(Scsi_Cmnd * SCpnt);
 
 extern int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt);
 
-extern volatile struct Scsi_Host *host_active;
-#define SCSI_BLOCK(HOST) ((HOST->block && host_active && HOST != host_active) \
-			  || (HOST->can_queue && HOST->host_busy >= HOST->can_queue))
+#define SCSI_BLOCK(HOST) (HOST->can_queue && HOST->host_busy >= HOST->can_queue)
 
 static unsigned char generic_sense[6] =
 {REQUEST_SENSE, 0, 0, 0, 255, 0};
@@ -334,6 +332,7 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 	int checked;
 	int oldto;
 	struct Scsi_Host *host = SCpnt->host;
+        Scsi_Device * device = SCpnt->device;
 	int result = SCpnt->result;
 	SCpnt->serial_number = 0;
 	SCpnt->serial_number_at_timeout = 0;
@@ -655,6 +654,7 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 		printk("Calling done function - at address %p\n", SCpnt->done);
 #endif
 		host->host_busy--;	/* Indicate that we are free */
+                device->device_busy--;	/* Decrement device usage counter. */
 
 		SCpnt->result = result | ((exit & 0xff) << 24);
 		SCpnt->use_sg = SCpnt->old_use_sg;

@@ -329,8 +329,6 @@ static struct file_operations cosa_fops = {
 #else
 	NULL,
 #endif
-	NULL,	/* check media change */
-	NULL,	/* revalidate */
 	NULL	/* lock */
 };
 

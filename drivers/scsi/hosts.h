@@ -397,6 +397,16 @@ struct Scsi_Host
         __attribute__ ((aligned (sizeof(unsigned long))));
 };
 
+/*
+ * These two functions are used to allocate and free a pseudo device
+ * which will connect to the host adapter itself rather than any
+ * physical device.  You must deallocate when you are done with the
+ * thing.  This physical pseudo-device isn't real and won't be available
+ * from any high-level drivers.
+ */
+extern void scsi_free_host_dev(Scsi_Device * SDpnt);
+extern Scsi_Device * scsi_get_host_dev(struct Scsi_Host * SHpnt);
+
 extern struct Scsi_Host * scsi_hostlist;
 extern struct Scsi_Device_Template * scsi_devicelist;
 

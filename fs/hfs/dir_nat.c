@@ -75,8 +75,6 @@ static struct file_operations hfs_nat_dir_operations = {
 	NULL,			/* no special release code */
 	file_fsync,		/* fsync - default */
         NULL,			/* fasync - default */
-        NULL,			/* check_media_change - none */
-        NULL,			/* revalidate - none */
 	NULL                    /* lock - none */
 };
 

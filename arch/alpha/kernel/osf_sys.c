@@ -33,7 +33,6 @@
 #include <linux/file.h>
 #include <linux/types.h>
 #include <linux/ipc.h>
-#include <linux/shm.h>
 
 #include <asm/fpu.h>
 #include <asm/io.h>

@@ -57,8 +57,6 @@ static struct file_operations sysv_file_operations = {
 	NULL,			/* release */
 	sysv_sync_file,		/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL			/* revalidate */
 };
 
 struct inode_operations sysv_file_inode_operations = {

@@ -181,8 +181,6 @@ struct file_operations sgi_usemaclone_fops = {
 	NULL,			/* flush */
 	sgi_usemaclone_release,	/* release */
 	NULL,			/* fsync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
 

@@ -327,8 +327,6 @@ static struct file_operations coda_psdev_fops = {
       coda_psdev_release,    /* release */
       NULL,                  /* fsync */
       NULL,                  /* fasync */
-      NULL,                  /* check_media_change */
-      NULL,                  /* revalidate */
       NULL                   /* lock */
 };
 

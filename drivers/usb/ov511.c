@@ -35,7 +35,7 @@
 
 /* Handle mangled (versioned) external symbols */
 
-#include <linux/autoconf.h> /* retrieve the CONFIG_* macros */
+#include <linux/config.h>   /* retrieve the CONFIG_* macros */
 #if defined(CONFIG_MODVERSIONS) && !defined(MODVERSIONS)
 #	define MODVERSIONS  /* force it on */
 #endif

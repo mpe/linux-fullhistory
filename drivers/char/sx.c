@@ -545,8 +545,6 @@ static struct file_operations sx_fw_fops = {
 	sx_fw_release,
 	NULL,	/*	fsync	*/
 	NULL,	/*	fasync	*/
-	NULL,	/*	check_media_change	*/
-	NULL,	/*	revalidate	*/
 };
 
 struct miscdevice sx_fw_device = {

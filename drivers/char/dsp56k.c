@@ -513,8 +513,6 @@ static struct file_operations dsp56k_fops = {
 	dsp56k_release,
 	NULL,    /* no special dsp56k_fsync */
 	NULL,    /* no special dsp56k_fasync */
-	NULL,    /* no special dsp56k_check_media_change */
-	NULL     /* no special dsp56k_revalidate */
 };
 
 

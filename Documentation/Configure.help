@@ -2537,7 +2537,7 @@ CONFIG_PARPORT
   drive, PLIP link (Parallel Line Internet Protocol is mainly used to
   create a mini network by connecting the parallel ports of two local
   machines) etc., then you need to say Y here; please read
-  Documentation/parport.txt and drivers/misc/BUGS-parport.
+  Documentation/parport.txt and drivers/parport/BUGS-parport.
 
   For extensive information about drivers for many devices attaching
   to the parallel port see http://www.torque.net/linux-pp.html on the

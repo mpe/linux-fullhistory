@@ -21,8 +21,6 @@ static struct file_operations efs_dir_operations = {
 	NULL,			/* release */
 	NULL,			/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL			/* revalidate */
 };
 
 extern int efs_get_block(struct inode *, long, struct buffer_head *, int);

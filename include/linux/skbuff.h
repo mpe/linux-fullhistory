@@ -133,6 +133,10 @@ struct sk_buff {
 		__u32	ifield;
 	} private;
 #endif
+
+#ifdef CONFIG_NET_SCHED
+       __u32           tc_index;               /* traffic control index */
+#endif
 };
 
 /* These are just the default values. This is run time configurable.

@@ -147,18 +147,10 @@ static struct gendisk xd_gendisk = {
 	(void *) xd_info,	/* internal */
 	NULL		/* next */
 };
-static struct file_operations xd_fops = {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll */
-	xd_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	xd_open,		/* open */
-	NULL,			/* flush */
-	xd_release,		/* release */
-	block_fsync		/* fsync */
+static struct block_device_operations xd_fops = {
+	open:		xd_open,
+	release:	xd_release,
+	ioctl:		xd_ioctl,
 };
 static DECLARE_WAIT_QUEUE_HEAD(xd_wait_int);
 static DECLARE_WAIT_QUEUE_HEAD(xd_wait_open);

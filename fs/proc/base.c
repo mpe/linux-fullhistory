@@ -643,7 +643,7 @@ static struct inode *proc_pid_make_inode(struct super_block * sb, struct task_st
 	 * grab the reference to task.
 	 */
 	inode->u.proc_i.task = task;
-	atomic_inc(&mem_map[MAP_NR(task)].count);
+	get_task_struct(task);
 	if (!task->p_pptr)
 		goto out_unlock;
 
@@ -932,7 +932,7 @@ struct dentry *proc_pid_lookup(struct inode *dir, struct dentry * dentry)
 	read_lock(&tasklist_lock);
 	task = find_task_by_pid(pid);
 	if (task)
-		atomic_inc(&mem_map[MAP_NR(task)].count);
+		get_task_struct(task);
 	read_unlock(&tasklist_lock);
 	if (!task)
 		goto out;

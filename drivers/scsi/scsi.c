@@ -1,6 +1,6 @@
 /*
  *  scsi.c Copyright (C) 1992 Drew Eckhardt
- *         Copyright (C) 1993, 1994, 1995 Eric Youngdale
+ *         Copyright (C) 1993, 1994, 1995, 1999 Eric Youngdale
  *
  *  generic mid-level SCSI driver
  *      Initial versions: Drew Eckhardt
@@ -13,7 +13,7 @@
  *      Tommy Thorn <tthorn>
  *      Thomas Wuensche <tw@fgb1.fgb.mw.tu-muenchen.de>
  *
- *  Modified by Eric Youngdale eric@andante.jic.com or ericy@gnu.ai.mit.edu to
+ *  Modified by Eric Youngdale eric@andante.org or ericy@gnu.ai.mit.edu to
  *  add scatter-gather, multiple outstanding request, and other
  *  enhancements.
  *
@@ -85,7 +85,6 @@ static void scsi_dump_status(int level);
 /*
  * Definitions and constants.
  */
-#define INTERNAL_ERROR (panic ("Internal error in file %s, line %d.\n", __FILE__, __LINE__))
 
 /*
  * PAGE_SIZE must be a multiple of the sector size (512).  True
@@ -153,9 +152,6 @@ static unsigned char **dma_malloc_pages = NULL;
  */
 unsigned int scsi_logging_level = 0;
 
-volatile struct Scsi_Host *host_active = NULL;
-
-
 const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
 {
 	"Direct-Access    ",
@@ -192,14 +188,6 @@ static int scsi_unregister_device(struct Scsi_Device_Template *tpnt);
  */
 extern void scsi_old_done(Scsi_Cmnd * SCpnt);
 extern void scsi_old_times_out(Scsi_Cmnd * SCpnt);
-
-#define SCSI_BLOCK(DEVICE, HOST)                                         \
-	        ((HOST->block && host_active && HOST != host_active)          \
-  		|| ((HOST)->can_queue && HOST->host_busy >= HOST->can_queue)  \
-	        || ((HOST)->host_blocked)                                     \
-	        || ((DEVICE) != NULL && (DEVICE)->device_blocked) )
-
-
 
 struct dev_info {
 	const char *vendor;
@@ -497,6 +485,7 @@ static void scan_scsis(struct Scsi_Host *shpnt,
 	 * things are quiet.
 	 */
 	atomic_inc(&shpnt->host_active);
+	atomic_inc(&SDpnt->device_active);
 
 	if (hardcoded == 1) {
 		Scsi_Device *oldSDpnt = SDpnt;
@@ -578,6 +567,7 @@ static void scan_scsis(struct Scsi_Host *shpnt,
 	 * so we know when everything is quiet.
 	 */
 	atomic_dec(&shpnt->host_active);
+	atomic_dec(&SDpnt->device_active);
 
       leave:
 
@@ -1079,16 +1069,10 @@ Scsi_Cmnd *scsi_allocate_device(Scsi_Device * device, int wait,
 					    || SDpnt == device) {
  						continue;
 					}
-					for (SCpnt = SDpnt->device_queue;
-					     SCpnt;
-					     SCpnt = SCpnt->next) {
-						if (SCpnt->request.rq_status != RQ_INACTIVE) {
-							break;
-						}
-					}
-					if (SCpnt) {
-						break;
-					}
+                                        if( atomic_read(&SDpnt->device_active) != 0)
+                                        {
+                                                break;
+                                        }
 				}
 				if (SDpnt) {
 					/*
@@ -1174,6 +1158,7 @@ Scsi_Cmnd *scsi_allocate_device(Scsi_Device * device, int wait,
 	SCpnt->request.sem = NULL;	/* And no one is waiting for this
 					 * to complete */
 	atomic_inc(&SCpnt->host->host_active);
+	atomic_inc(&SCpnt->device->device_active);
 
 	SCpnt->buffer  = NULL;
 	SCpnt->bufflen = 0;
@@ -1185,6 +1170,7 @@ Scsi_Cmnd *scsi_allocate_device(Scsi_Device * device, int wait,
 	SCpnt->transfersize = 0;	/* No default transfer size */
 	SCpnt->cmd_len = 0;
 
+        SCpnt->result = 0;
 	SCpnt->underflow = 0;	/* Do not flag underflow conditions */
 	SCpnt->resid = 0;
 	SCpnt->state = SCSI_STATE_INITIALIZING;
@@ -1226,10 +1212,13 @@ void scsi_release_command(Scsi_Cmnd * SCpnt)
 
 	spin_lock_irqsave(&device_request_lock, flags);
 
+        SDpnt = SCpnt->device;
+
 	SCpnt->request.rq_status = RQ_INACTIVE;
 	SCpnt->state = SCSI_STATE_UNUSED;
 	SCpnt->owner = SCSI_OWNER_NOBODY;
 	atomic_dec(&SCpnt->host->host_active);
+	atomic_dec(&SDpnt->device_active);
 
 	SCSI_LOG_MLQUEUE(5, printk("Deactivating command for device %d (active=%d, failed=%d)\n",
 				   SCpnt->target,
@@ -1251,8 +1240,6 @@ void scsi_release_command(Scsi_Cmnd * SCpnt)
 			     atomic_read(&SCpnt->host->eh_wait->count)));
 		up(SCpnt->host->eh_wait);
 	}
-
-        SDpnt = SCpnt->device;
 
 	spin_unlock_irqrestore(&device_request_lock, flags);
 
@@ -1368,6 +1355,7 @@ int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt)
 			if (rtn != 0) {
 				scsi_delete_timer(SCpnt);
 				scsi_mlqueue_insert(SCpnt, SCSI_MLQUEUE_HOST_BUSY);
+                                SCSI_LOG_MLQUEUE(3, printk("queuecommand : request rejected\n"));                                
 			}
 		} else {
                         spin_lock_irqsave(&io_request_lock, flags);
@@ -1439,7 +1427,6 @@ void scsi_do_cmd(Scsi_Cmnd * SCpnt, const void *cmnd,
 		 int timeout, int retries)
 {
 	struct Scsi_Host *host = SCpnt->host;
-	Scsi_Device *device = SCpnt->device;
 
 	ASSERT_LOCK(&io_request_lock, 0);
 
@@ -1694,6 +1681,8 @@ void scsi_bottom_half_handler(void)
 				 * from being sent to the device, so we shouldn't end up
 				 * with tons of things being sent down that shouldn't be.
 				 */
+				SCSI_LOG_MLCOMPLETE(3, printk("Command rejected as device queue full, put on ml queue %p\n",
+                                                              SCpnt));
 				scsi_mlqueue_insert(SCpnt, SCSI_MLQUEUE_DEVICE_BUSY);
 				break;
 			default:
@@ -1758,6 +1747,13 @@ int scsi_retry_command(Scsi_Cmnd * SCpnt)
 	SCpnt->request_bufflen = SCpnt->bufflen;
 	SCpnt->use_sg = SCpnt->old_use_sg;
 	SCpnt->cmd_len = SCpnt->old_cmd_len;
+
+        /*
+         * Zero the sense information from the last time we tried
+         * this command.
+         */
+	memset((void *) SCpnt->sense_buffer, 0, sizeof SCpnt->sense_buffer);
+
 	return scsi_dispatch_cmd(SCpnt);
 }
 
@@ -1781,6 +1777,14 @@ void scsi_finish_command(Scsi_Cmnd * SCpnt)
 	host->host_busy--;	/* Indicate that we are free */
 	device->device_busy--;	/* Decrement device usage counter. */
 
+        /*
+         * Clear the flags which say that the device/host is no longer
+         * capable of accepting new commands.  These are set in scsi_queue.c
+         * for both the queue full condition on a device, and for a
+         * host full condition on the host.
+         */
+        host->host_blocked = FALSE;
+        device->device_blocked = FALSE;
 
 	/*
 	 * If we have valid sense information, then some kind of recovery
@@ -3428,6 +3432,97 @@ void cleanup_module(void)
 }
 
 #endif				/* MODULE */
+
+/*
+ * Function:    scsi_get_host_dev()
+ *
+ * Purpose:     Create a Scsi_Device that points to the host adapter itself.
+ *
+ * Arguments:   SHpnt   - Host that needs a Scsi_Device
+ *
+ * Lock status: None assumed.
+ *
+ * Returns:     Nothing
+ *
+ * Notes:
+ */
+Scsi_Device * scsi_get_host_dev(struct Scsi_Host * SHpnt)
+{
+        Scsi_Device * SDpnt;
+        Scsi_Cmnd   * SCpnt;
+        /*
+         * Attach a single Scsi_Device to the Scsi_Host - this should
+         * be made to look like a "pseudo-device" that points to the
+         * HA itself.  For the moment, we include it at the head of
+         * the host_queue itself - I don't think we want to show this
+         * to the HA in select_queue_depths(), as this would probably confuse
+         * matters.
+         * Note - this device is not accessible from any high-level
+         * drivers (including generics), which is probably not
+         * optimal.  We can add hooks later to attach 
+         */
+        SDpnt = (Scsi_Device *) kmalloc(sizeof(Scsi_Device),
+                                        GFP_ATOMIC);
+        memset(SDpnt, 0, sizeof(Scsi_Device));
+
+        SDpnt->host = SHpnt;
+        SDpnt->id = SHpnt->this_id;
+        SDpnt->type = -1;
+        SDpnt->queue_depth = 1;
+        
+        SCpnt = kmalloc(sizeof(Scsi_Cmnd), GFP_ATOMIC);
+        memset(SCpnt, 0, sizeof(Scsi_Cmnd));
+        SCpnt->host = SHpnt;
+        SCpnt->device = SDpnt;
+        SCpnt->target = SDpnt->id;
+        SCpnt->state = SCSI_STATE_UNUSED;
+        SCpnt->owner = SCSI_OWNER_NOBODY;
+        SCpnt->request.rq_status = RQ_INACTIVE;
+
+        SDpnt->device_queue = SCpnt;
+
+        blk_init_queue(&SDpnt->request_queue, scsi_request_fn);
+        blk_queue_headactive(&SDpnt->request_queue, 0);
+        SDpnt->request_queue.queuedata = (void *) SDpnt;
+
+	SDpnt->online = TRUE;
+
+        /*
+         * Initialize the object that we will use to wait for command blocks.
+         */
+	init_waitqueue_head(&SDpnt->scpnt_wait);
+        return SDpnt;
+}
+
+/*
+ * Function:    scsi_free_host_dev()
+ *
+ * Purpose:     Create a Scsi_Device that points to the host adapter itself.
+ *
+ * Arguments:   SHpnt   - Host that needs a Scsi_Device
+ *
+ * Lock status: None assumed.
+ *
+ * Returns:     Nothing
+ *
+ * Notes:
+ */
+void scsi_free_host_dev(Scsi_Device * SDpnt)
+{
+        if( SDpnt->id != SDpnt->host->this_id )
+        {
+                panic("Attempt to delete wrong device\n");
+        }
+
+        blk_cleanup_queue(&SDpnt->request_queue);
+
+        /*
+         * We only have a single SCpnt attached to this device.  Free
+         * it now.
+         */
+        kfree(SDpnt->device_queue);
+        kfree(SDpnt);
+}
 
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.

@@ -306,8 +306,6 @@ struct file_operations sgi_graphics_fops = {
 	NULL,			/* flush */
 	sgi_graphics_close,	/* release */
 	NULL,			/* fsync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
 

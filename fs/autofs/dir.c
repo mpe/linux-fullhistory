@@ -47,17 +47,6 @@ static struct file_operations autofs_dir_operations = {
 	NULL,			/* read */
 	NULL,			/* write */
 	autofs_dir_readdir,	/* readdir */
-	NULL,			/* poll */
-	NULL,			/* ioctl */
-	NULL,			/* mmap */
-	NULL,			/* open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
-	NULL			/* lock */
 };
 
 struct inode_operations autofs_dir_inode_operations = {

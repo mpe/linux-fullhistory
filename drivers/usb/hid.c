@@ -39,14 +39,14 @@
 #include <linux/mm.h>
 #include <linux/smp_lock.h>
 #include <linux/config.h>
-#include <linux/input.h>
 #include <linux/spinlock.h>
-#include <linux/list.h>
+
+#undef DEBUG
 
 #include "usb.h"
 #include "hid.h"
 
-#ifdef CONFIG_USB_HID_DEBUG_LOTS
+#ifdef DEBUG
 #include "hid-debug.h"
 #else
 #define hid_dump_input(a,b)	do { } while (0)
@@ -57,7 +57,7 @@ static unsigned char hid_keyboard[256] = {
 	  0,  0,  0,  0, 30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38,
 	 50, 49, 24, 25, 16, 19, 31, 20, 22, 47, 17, 45, 21, 44,  2,  3,
 	  4,  5,  6,  7,  8,  9, 10, 11, 28,  1, 14, 15, 57, 12, 13, 26,
-	 27, 43,192, 39, 40, 41, 51, 52, 53, 58, 59, 60, 61, 62, 63, 64,
+	 27, 43, 84, 39, 40, 41, 51, 52, 53, 58, 59, 60, 61, 62, 63, 64,
 	 65, 66, 67, 68, 87, 88, 99, 70,119,110,102,104,111,107,109,106,
 	105,108,103, 69, 98, 55, 74, 78, 96, 79, 80, 81, 75, 76, 77, 71,
 	 72, 73, 82, 83, 86,127,116,117, 85, 89, 90, 91, 92, 93, 94, 95,
@@ -128,7 +128,7 @@ static struct hid_field *hid_register_field(struct hid_report *report, unsigned 
 		return field;
 	}
 
-	hid_debug("too many fields in report");
+	dbg("too many fields in report");
 	return NULL;
 }
 
@@ -152,7 +152,7 @@ static int open_collection(struct hid_parser *parser, unsigned type)
 		return 0;
 	}
 
-	hid_debug("collection stack overflow");
+	dbg("collection stack overflow");
 	return -1;
 }
 
@@ -166,7 +166,7 @@ static int close_collection(struct hid_parser *parser)
 		parser->collection_stack_ptr--;
 		return 0;
 	}
-	hid_debug("collection stack underflow");
+	dbg("collection stack underflow");
 	return -1;
 }
 
@@ -191,7 +191,7 @@ static unsigned hid_lookup_collection(struct hid_parser *parser, unsigned type)
 static int hid_add_usage(struct hid_parser *parser, unsigned usage)
 {
 	if (parser->local.usage_index >= MAX_USAGES) {
-		hid_debug("usage index exceeded");
+		dbg("usage index exceeded");
 		return -1;
 	}
 	parser->local.usage[parser->local.usage_index++] = usage;
@@ -211,13 +211,13 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 	int i;
 
 	if (!(report = hid_register_report(parser->device, report_type, parser->global.report_id))) {
-    		hid_debug("hid_register_report failed");
+    		dbg("hid_register_report failed");
 		return -1;
 	}
 
 	if (HID_MAIN_ITEM_VARIABLE & ~flags) { /* ARRAY */
 		if (parser->global.logical_maximum <= parser->global.logical_minimum) {
-			hid_debug("logical range invalid %d %d", parser->global.logical_minimum, parser->global.logical_maximum);
+			dbg("logical range invalid %d %d", parser->global.logical_minimum, parser->global.logical_maximum);
 			return -1;
 		}
 		usages = parser->local.usage_index;
@@ -287,20 +287,20 @@ static int hid_parser_global(struct hid_parser *parser, struct hid_item *item)
 
 			if (parser->global_stack_ptr < HID_GLOBAL_STACK_SIZE) {
 				memcpy(parser->global_stack + parser->global_stack_ptr++,
-					&parser->global, sizeof(struct hid_parser));
+					&parser->global, sizeof(struct hid_global));
 				return 0;
 			}
-			hid_debug("global enviroment stack overflow");
+			dbg("global enviroment stack overflow");
 			return -1;
 
 		case HID_GLOBAL_ITEM_TAG_POP:
 
 			if (parser->global_stack_ptr > 0) {
 				memcpy(&parser->global, parser->global_stack + --parser->global_stack_ptr,
-					sizeof(struct hid_parser));
+					sizeof(struct hid_global));
 				return 0;
 			}
-			hid_debug("global enviroment stack underflow");
+			dbg("global enviroment stack underflow");
 			return -1;
 
 		case HID_GLOBAL_ITEM_TAG_USAGE_PAGE:
@@ -333,27 +333,27 @@ static int hid_parser_global(struct hid_parser *parser, struct hid_item *item)
 
 		case HID_GLOBAL_ITEM_TAG_REPORT_SIZE:
 			if ((parser->global.report_size = item_udata(item)) > 32) {
-				hid_debug("invalid report_size %d", parser->global.report_size);
+				dbg("invalid report_size %d", parser->global.report_size);
 				return -1;
 			}
 			return 0;
 
 		case HID_GLOBAL_ITEM_TAG_REPORT_COUNT:
 			if ((parser->global.report_count = item_udata(item)) > MAX_USAGES) {
-				hid_debug("invalid report_count %d", parser->global.report_count);
+				dbg("invalid report_count %d", parser->global.report_count);
 				return -1;
 			}
 			return 0;
 
 		case HID_GLOBAL_ITEM_TAG_REPORT_ID:
 			if ((parser->global.report_id = item_udata(item)) == 0) {
-				hid_debug("report_id 0 is invalid");
+				dbg("report_id 0 is invalid");
 				return -1;
 			}
 			return 0;
 
 		default:
-			hid_debug("unknown global tag 0x%x", item->tag);
+			dbg("unknown global tag 0x%x", item->tag);
 			return -1;
 	}
 }
@@ -367,7 +367,7 @@ static int hid_parser_local(struct hid_parser *parser, struct hid_item *item)
 	__u32 data;
 
 	if (item->size == 0) {
-		hid_debug("item data expected for local item");
+		dbg("item data expected for local item");
 		return -1;
 	}
 
@@ -385,14 +385,14 @@ static int hid_parser_local(struct hid_parser *parser, struct hid_item *item)
 				 * items and the first delimiter set.
 				 */
 				if (parser->local.delimiter_depth != 0) {
-					hid_debug("nested delimiters");
+					dbg("nested delimiters");
 					return -1;
 				}
 				parser->local.delimiter_depth++;
 				parser->local.delimiter_branch++;
 			} else {
 				if (parser->local.delimiter_depth < 1) {
-					hid_debug("bogus close delimiter");
+					dbg("bogus close delimiter");
 					return -1;
 				}
 				parser->local.delimiter_depth--;
@@ -406,7 +406,7 @@ static int hid_parser_local(struct hid_parser *parser, struct hid_item *item)
 					data = (parser->global.usage_page << 16) + data;
 				return hid_add_usage(parser, data);
 			}
-			hid_debug("alternative usage ignored");
+			dbg("alternative usage ignored");
 			return 0;
 
 		case HID_LOCAL_ITEM_TAG_USAGE_MINIMUM:
@@ -417,7 +417,7 @@ static int hid_parser_local(struct hid_parser *parser, struct hid_item *item)
 				parser->local.usage_minimum = data;
 				return 0;
 			}
-			hid_debug("alternative usage ignored");
+			dbg("alternative usage ignored");
 			return 0;
 
 		case HID_LOCAL_ITEM_TAG_USAGE_MAXIMUM:
@@ -428,17 +428,17 @@ static int hid_parser_local(struct hid_parser *parser, struct hid_item *item)
 					data = (parser->global.usage_page << 16) + data;
 				for (n = parser->local.usage_minimum; n <= data; n++)
 					if (hid_add_usage(parser, n)) {
-						hid_debug("hid_add_usage failed\n");
+						dbg("hid_add_usage failed\n");
 						return -1;
 					}
 				return 0;
 			}
-			hid_debug("alternative usage ignored");
+			dbg("alternative usage ignored");
 			return 0;
 
 		default:
 
-			hid_debug("unknown local item tag 0x%x", item->tag);
+			dbg("unknown local item tag 0x%x", item->tag);
 			return 0;
 	}
 }
@@ -471,7 +471,7 @@ static int hid_parser_main(struct hid_parser *parser, struct hid_item *item)
 			ret = hid_add_field(parser, HID_FEATURE_REPORT, data);
 			break;
 		default:
-			hid_debug("unknown main item tag 0x%x", item->tag);
+			dbg("unknown main item tag 0x%x", item->tag);
 			ret = 0;
 	}
 
@@ -486,7 +486,7 @@ static int hid_parser_main(struct hid_parser *parser, struct hid_item *item)
 
 static int hid_parser_reserved(struct hid_parser *parser, struct hid_item *item)
 {
-	hid_debug("reserved item type, tag 0x%x", item->tag);
+	dbg("reserved item type, tag 0x%x", item->tag);
 	return 0;
 }
 
@@ -631,13 +631,13 @@ static struct hid_device *hid_parse_report(__u8 *start, unsigned size)
 	end = start + size;
 	while ((start = fetch_item(start, end, &item)) != 0) {
 		if (item.format != HID_ITEM_FORMAT_SHORT) {
-			hid_debug("unexpected long global item");
+			dbg("unexpected long global item");
 			hid_free_device(device);
 			kfree(parser);
 			return NULL;
 		}
 		if (dispatch_type[item.type](parser, &item)) {
-			hid_debug("item %u %u %u %u parsing failed\n",
+			dbg("item %u %u %u %u parsing failed\n",
 				item.format, (unsigned)item.size, (unsigned)item.type, (unsigned)item.tag);
 			hid_free_device(device);
 			kfree(parser);
@@ -646,13 +646,13 @@ static struct hid_device *hid_parse_report(__u8 *start, unsigned size)
 
 		if (start == end) {
 			if (parser->collection_stack_ptr) {
-				hid_debug("unbalanced collection at end of report description");
+				dbg("unbalanced collection at end of report description");
 				hid_free_device(device);
 				kfree(parser);
 				return NULL;
 			}
 			if (parser->local.delimiter_depth) {
-				hid_debug("unbalanced delimiter at end of report description");
+				dbg("unbalanced delimiter at end of report description");
 				hid_free_device(device);
 				kfree(parser);
 				return NULL;
@@ -662,7 +662,7 @@ static struct hid_device *hid_parse_report(__u8 *start, unsigned size)
 		}
 	}
 
-	hid_debug("item fetching failed at offset %d\n", (int)(end - start));
+	dbg("item fetching failed at offset %d\n", (int)(end - start));
 	hid_free_device(device);
 	kfree(parser);
 	return NULL;
@@ -896,17 +896,17 @@ static void hid_irq(struct urb *urb)
 	int n;
 
 	if (urb->status) {
-		hid_debug("nonzero status in irq %d", urb->status);
+		dbg("nonzero status in irq %d", urb->status);
 		return;
 	}
 
 	if (!len) {
-		hid_debug("empty report");
+		dbg("empty report");
 		return;
 	}
 
-#ifdef CONFIG_USB_HID_DEBUG_LOTS
-	printk(KERN_DEBUG "hid: report (size %u) (%snumbered) = ", len, report_enum->numbered ? "" : "un");
+#ifdef DEBUG
+	printk(KERN_DEBUG __FILE__ ": report (size %u) (%snumbered) = ", len, report_enum->numbered ? "" : "un");
 	for (n = 0; n < len; n++)
 		printk(" %02x", data[n]);
 	printk("\n");
@@ -920,9 +920,9 @@ static void hid_irq(struct urb *urb)
 	} 
 
 	if (!(report = report_enum->report_id_hash[n])) {
-		hid_debug("undefined report_id %d received", n);
-#ifdef CONFIG_USB_HID_DEBUG
-			printk(KERN_DEBUG "hid: report (size %u) = ", len);
+		dbg("undefined report_id %d received", n);
+#ifdef DEBUG
+			printk(KERN_DEBUG __FILE__ ": report (size %u) = ", len);
 			for (n = 0; n < len; n++)
 				printk(" %02x", data[n]);
 			printk("\n");
@@ -932,7 +932,7 @@ static void hid_irq(struct urb *urb)
 	}
 
 	if (len < ((report->size - 1) >> 3) + 1) {
-		hid_debug("report %d is too short, (%d < %d)", report->id, len, ((report->size - 1) >> 3) + 1);
+		dbg("report %d is too short, (%d < %d)", report->id, len, ((report->size - 1) >> 3) + 1);
 		return;
 	}
 
@@ -940,6 +940,45 @@ static void hid_irq(struct urb *urb)
 		hid_input_field(device, report->field[n], data);
 
 	return;
+}
+
+/*
+ * hid_read_report() s intended to read the hid devices values even
+ * before the input device is registered, so that the userland interface
+ * modules start with real values. This is especially important for joydev.c
+ * automagic calibration. Doesn't work yet, though. Don't know why, the control
+ * request just times out on most devices I have and returns nonsense on others.
+ */
+
+static void hid_read_report(struct hid_device *hid, struct hid_report *report)
+{
+#if 0
+	int rlen = ((report->size - 1) >> 3) + 1 + report_enum->numbered;
+	char rdata[rlen];
+	struct urb urb;
+	int read;
+
+	memset(&urb, 0, sizeof(struct urb));
+	memset(rdata, 0, rlen);
+
+	urb.transfer_buffer = rdata;
+	urb.actual_length = rlen;
+	urb.context = hid;
+
+	dbg("getting report type %d id %d len %d", report->type + 1, report->id, rlen);
+
+	if ((read = usb_get_report(hid->dev, report->type + 1, report->id, hid->ifnum, rdata, rlen)) != rlen) {
+		dbg("reading report failed rlen %d read %d", rlen, read);
+#ifdef DEBUG
+		printk(KERN_DEBUG __FILE__ ": report = ");
+		for (j = 0; j < rlen; j++) printk(" %02x", rdata[j]);
+		printk("\n");
+#endif
+		continue;
+	}
+
+	hid_irq(&urb);
+#endif
 }
 
 /*
@@ -958,8 +997,6 @@ static void hid_init_input(struct hid_device *hid)
 	while (list != &report_enum->report_list) {
 
 		struct hid_report *report = (struct hid_report *) list;
-		int rlen = ((report->size - 1) >> 3) + 1 + report_enum->numbered;
-		int read;
 
 		list = list->next;
 
@@ -967,33 +1004,7 @@ static void hid_init_input(struct hid_device *hid)
 			for (j = 0; j < report->field[i]->maxusage; j++)
 				hid_configure_usage(hid, report->field[i], report->field[i]->usage + j);
 
-#if 1
-		{
-			char rdata[rlen];
-			struct urb urb;
-
-			memset(&urb, 0, sizeof(struct urb));
-			memset(rdata, 0, rlen);
-
-			urb.transfer_buffer = rdata;
-			urb.actual_length = rlen;
-			urb.context = hid;
-
-			hid_debug("getting report type %d id %d len %d", report->type + 1, report->id, rlen);
-
-			if ((read = usb_get_report(hid->dev, report->type + 1, report->id, hid->ifnum, rdata, rlen)) != rlen) {
-				hid_debug("reading report failed rlen %d read %d", rlen, read);
-#ifdef CONFIG_USB_HID_DEBUG
-				printk(KERN_DEBUG "hid: report = ");
-				for (j = 0; j < rlen; j++) printk(" %02x", rdata[j]);
-				printk("\n");
-#endif
-				continue;
-			}
-
-			hid_irq(&urb);
-		}
-#endif
+		hid_read_report(hid, report);
 	}
 }
 
@@ -1043,18 +1054,18 @@ int hid_set_field(struct hid_field *field, unsigned offset, __s32 value)
 	unsigned size = field->report_size;
 	
 	if (offset >= field->report_count) {
-		hid_debug("offset exceeds report_count");
+		dbg("offset exceeds report_count");
 		return -1;
 	}
 	if (field->logical_minimum < 0) {
 		if (value != snto32(s32ton(value, size), size)) {
-			hid_debug("value %d is out of range", value);
+			dbg("value %d is out of range", value);
 			return -1;
 		}
 	}
 	if (   (value > field->logical_maximum)
 	    || (value < field->logical_minimum)) {
-		hid_debug("value %d is invalid", value);
+		dbg("value %d is invalid", value);
 		return -1;
 	}
 	field->value[offset] = value;
@@ -1074,7 +1085,7 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum)
 
 	if (usb_get_extra_descriptor(interface, USB_DT_HID, &hdesc)
 		&& usb_get_extra_descriptor(&interface->endpoint[0], USB_DT_HID, &hdesc)) {
-			hid_debug("class descriptor not present\n");
+			dbg("class descriptor not present\n");
 			return NULL;
 	}
 
@@ -1083,7 +1094,7 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum)
 			rsize = le16_to_cpu(hdesc->desc[n].wDescriptorLength);
 
 	if (!rsize || rsize > 1024) {
-		hid_debug("weird size of report descriptor (%u)", rsize);
+		dbg("weird size of report descriptor (%u)", rsize);
 		return NULL;
 	}
 
@@ -1091,19 +1102,19 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum)
 		__u8 rdesc[rsize];
 
 		if ((n = usb_get_class_descriptor(dev, USB_DT_REPORT, 0, ifnum, rdesc, rsize)) < 0) {
-			hid_debug("reading report descriptor failed");
+			dbg("reading report descriptor failed");
 			return NULL;
 		}
 
-#ifdef CONFIG_USB_HID_DEBUG
-		printk(KERN_DEBUG "hid: report (size %u, read %d) = ", rsize, n);
+#ifdef DEBUG
+		printk(KERN_DEBUG __FILE__ ": report (size %u, read %d) = ", rsize, n);
 		for (n = 0; n < rsize; n++)
 			printk(" %02x", (unsigned) rdesc[n]);
 		printk("\n");
 #endif
 
 		if (!(hid = hid_parse_report(rdesc, rsize))) {
-			hid_debug("parsing report descriptor failed");
+			dbg("parsing report descriptor failed");
 			return NULL;
 		}
 	}
@@ -1125,7 +1136,7 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum)
 		FILL_INT_URB(&hid->urb, dev, pipe, hid->buffer, maxp > 32 ? 32 : maxp, hid_irq, hid, endpoint->bInterval);
 	
 		if (usb_submit_urb(&hid->urb)) {
-			hid_debug("submitting interrupt URB failed");
+			dbg("submitting interrupt URB failed");
 			continue;
 		}
 
@@ -1133,7 +1144,7 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum)
 	}
 
 	if (n == interface->bNumEndpoints) {
-		hid_debug("couldn't find an input interrupt endpoint");
+		dbg("couldn't find an input interrupt endpoint");
 		hid_free_device(hid);
 		return NULL;
 	}
@@ -1152,7 +1163,7 @@ static void* hid_probe(struct usb_device *dev, unsigned int ifnum)
 				"Gamepad", "Keyboard", "Keypad", "Multi-Axis Controller"};
 	struct hid_device *hid;
 
-	hid_debug("HID probe called for ifnum %d", ifnum);
+	dbg("HID probe called for ifnum %d", ifnum);
 
 	if (!(hid = usb_hid_configure(dev, ifnum)))
 		return NULL;
@@ -1173,7 +1184,7 @@ static void hid_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct hid_device *hid = ptr;
 
-	hid_debug("cleanup called");
+	dbg("cleanup called");
 	usb_unlink_urb(&hid->urb);
 	input_unregister_device(&hid->input);
 	hid_free_device(hid);

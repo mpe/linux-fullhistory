@@ -934,8 +934,6 @@ static /*const*/ struct file_operations solo1_mixer_fops = {
 	&solo1_release_mixdev,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -1582,8 +1580,6 @@ static /*const*/ struct file_operations solo1_audio_fops = {
 	&solo1_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -1926,8 +1922,6 @@ static /*const*/ struct file_operations solo1_midi_fops = {
 	&solo1_midi_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -2112,8 +2106,6 @@ static /*const*/ struct file_operations solo1_dmfm_fops = {
 	&solo1_dmfm_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 

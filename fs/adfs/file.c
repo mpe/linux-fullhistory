@@ -44,8 +44,6 @@ static struct file_operations adfs_file_operations = {
 	NULL,			/* release		*/
 	file_fsync,		/* fsync		*/
 	NULL,			/* fasync		*/
-	NULL,			/* check_media_change	*/
-	NULL			/* revalidate		*/
 };
 
 struct inode_operations adfs_file_inode_operations = {

@@ -3041,8 +3041,6 @@ static struct file_operations vwsnd_audio_fops = {
 	&vwsnd_audio_release,
 	NULL,				/* fsync */
 	NULL,				/* fasync */
-	NULL,				/* check_media_change */
-	NULL,				/* revalidate */
 	NULL,				/* lock */
 };
 
@@ -3252,8 +3250,6 @@ static struct file_operations vwsnd_mixer_fops = {
 	&vwsnd_mixer_release,
 	NULL,				/* fsync */
 	NULL,				/* fasync */
-	NULL,				/* check_media_change */
-	NULL,				/* revalidate */
 	NULL,				/* lock */
 };
 

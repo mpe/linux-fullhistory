@@ -318,8 +318,6 @@ static /* const */ struct file_operations usb_camera_fops = {
 	camera_release,
 	NULL,		/* async */
 	NULL,		/* fasync */
-	NULL,		/* check_media_change */
-	NULL,		/* revalidate */
 	NULL,		/* lock */
 };
 

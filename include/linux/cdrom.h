@@ -763,8 +763,8 @@ struct cdrom_device_ops {
 			       struct cdrom_generic_command *);
 };
 
-/* the general file operations structure: */
-extern struct file_operations cdrom_fops;
+/* the general block_device operations structure: */
+extern struct block_device_operations cdrom_fops;
 
 extern int register_cdrom(struct cdrom_device_info *cdi);
 extern int unregister_cdrom(struct cdrom_device_info *cdi);

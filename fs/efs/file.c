@@ -74,8 +74,6 @@ static struct file_operations efs_file_operations = {
 	NULL,			/* release */
 	NULL,			/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL			/* revalidate */
 };
 
 struct inode_operations efs_file_inode_operations = {

@@ -681,42 +681,11 @@ static int md_release (struct inode *inode, struct file *file)
   return 0;
 }
 
-
-static ssize_t md_read (struct file *file, char *buf, size_t count,
-			loff_t *ppos)
+static struct block_device_operations md_fops=
 {
-  int minor=MINOR(file->f_dentry->d_inode->i_rdev);
-
-  if (!md_dev[minor].pers)	/* Check if device is being run */
-    return -ENXIO;
-
-  return block_read(file, buf, count, ppos);
-}
-
-static ssize_t md_write (struct file *file, const char *buf,
-			 size_t count, loff_t *ppos)
-{
-  int minor=MINOR(file->f_dentry->d_inode->i_rdev);
-
-  if (!md_dev[minor].pers)	/* Check if device is being run */
-    return -ENXIO;
-
-  return block_write(file, buf, count, ppos);
-}
-
-static struct file_operations md_fops=
-{
-  NULL,
-  md_read,
-  md_write,
-  NULL,
-  NULL,
-  md_ioctl,
-  NULL,
-  md_open,
-  NULL,
-  md_release,
-  block_fsync
+	open:		md_open,
+	release:	md_release,
+	ioctl:		md_ioctl,
 };
 
 int md_map (int minor, kdev_t *rdev, unsigned long *rsector, unsigned long size)

@@ -78,6 +78,8 @@
 	/* 787->799 reserved for fibrechannel media types */
 #define ARPHRD_IEEE802_TR 800		/* Magic type ident for TR	*/
 
+#define ARPHRD_VOID	  0xFFFF	/* Void type, nothing is known */
+
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/
 #define	ARPOP_REPLY	2		/* ARP reply			*/

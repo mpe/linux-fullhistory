@@ -188,7 +188,7 @@ to find out the proper way to upgrade it.  No, the instruction to "rm
    You must use binutils 2.9.1.0.7 or later. Latest release is 2.9.1.0.25.
 Beware that binutils 2.9.1 (note the absence of a suffix) from the FSF
 does not work. If you are upgrading from earlier versions, you should
-consider upgrading to the latest 2.9.5.0.x release.
+consider upgrading to the latest 2.9.5.0.x (beta) release.
 
 Gnu C
 =====
@@ -526,10 +526,10 @@ ftp://ftp.varesearch.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.tar.
 Installation notes:
 ftp://ftp.varesearch.com/pub/support/hjl/binutils/2.9.1/release.binutils-2.9.1.0.25
 
-The 2.9.5.0.16 release:
-ftp://ftp.varesearch.com/pub/support/hjl/binutils/binutils-2.9.5.0.16.tar.bz2
+The 2.9.5.0.22 release:
+ftp://ftp.varesearch.com/pub/support/hjl/binutils/binutils-2.9.5.0.22.tar.bz2
 Installation notes:
-ftp://ftp.varesearch.com/pub/support/hjl/binutils/release.binutils-2.9.5.0.16
+ftp://ftp.varesearch.com/pub/support/hjl/binutils/release.binutils-2.9.5.0.22
 
 Gnu C
 =====
@@ -815,15 +815,15 @@ your favorite Red Hat mirror site before installing the non-RPM
 version.  Remember, you might need to use the --force option to get the
 upgrade to install.  ftp://contrib.redhat.com/ ,
 ftp://developer.redhat.com/ , or ftp://updates.redhat.com/  will have
-almost everything you need, and Red Hat 5.2 ships with most necessary
+almost everything you need, and Red Hat 6.1 ships with most necessary
 software.
 
    Those of you running Debian (or a different distribution that
 supports .deb packages) can look in the "unstable" and
 "project/experimental" directories of your favorite Debian mirror.  The
-Debian 2.0 release ships with most packages you need as well.
+Debian 2.2 release will ship with most packages you need as well.
 
-Please send info about any other packages that 2.2 "broke" or about any
-new features of 2.2 that require extra or new packages for use to Chris
+Please send info about any other packages that 2.3 "broke" or about any
+new features of 2.3 that require extra or new packages for use to Chris
 Ricker (kaboom@gatech.edu or chris.ricker@m.cc.utah.edu).
 

@@ -13,7 +13,7 @@
 int
 pcibios_present(void)
 {
-	return pci_devices.next != &pci_devices;
+	return !list_empty(&pci_devices);
 }
 
 int

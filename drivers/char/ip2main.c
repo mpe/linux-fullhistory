@@ -195,12 +195,6 @@ ip2_ipl = {
 	ip2_ipl_ioctl,
 	NULL,
 	ip2_ipl_open,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	/* NULL, NULL 2.2 */
 }; 
 
 static long irq_counter = 0;

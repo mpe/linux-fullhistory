@@ -2060,8 +2060,6 @@ static /*const*/ struct file_operations trident_mixer_fops = {
 	&trident_release_mixdev,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -2809,8 +2807,6 @@ static /*const*/ struct file_operations trident_audio_fops = {
 	&trident_release,
 	NULL,	/* fsync */
 	NULL,	/* fasync */
-	NULL,	/* check_media_change */
-	NULL,	/* revalidate */
 	NULL,	/* lock */
 };
 

@@ -272,8 +272,6 @@ static struct file_operations pg_fops = {
 	pg_release,             /* release */
 	NULL,                   /* fsync */
 	NULL,                   /* fasync */
-	NULL,                   /* media change ? */
-	NULL                    /* revalidate new media */
 };
 
 void pg_init_units( void )

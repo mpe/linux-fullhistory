@@ -793,18 +793,10 @@ static void hd_geninit(struct gendisk *ignored)
 	hardsect_size[MAJOR_NR] = hd_hardsectsizes;
 }
 
-static struct file_operations hd_fops = {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll */
-	hd_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	hd_open,		/* open */
-	NULL,			/* flush */
-	hd_release,		/* release */
-	block_fsync		/* fsync */
+static struct block_device_operations hd_fops = {
+	open:		hd_open,
+	release:	hd_release,
+	ioctl:		hd_ioctl,
 };
 
 int __init hd_init(void)

@@ -344,7 +344,6 @@ static void free_resources(struct pci_dev *dev)
 void cb_free(socket_info_t * s)
 {
 	cb_config_t *c = s->cb_config;
-	int i;
 
 	if (c) {
 		int i;
@@ -375,59 +374,55 @@ void cb_free(socket_info_t * s)
     
 ======================================================================*/
 
+static int cb_assign_irq(u32 mask)
+{
+	int irq, try;
+
+	for (try = 0; try < 2; try++) {
+		for (irq = 1; irq < 32; irq++) {
+			if ((mask >> irq) & 1) {
+				if (try_irq(IRQ_TYPE_EXCLUSIVE, irq, try) == 0)
+					return irq;
+			}
+		}
+	}
+	return 0;
+}
+
 int cb_config(socket_info_t * s)
 {
 	cb_config_t *c = s->cb_config;
 	u_char fn = s->functions;
-	u_char i, j;
-	int irq, try, ret;
+	int i, irq;
 
 	printk(KERN_INFO "cs: cb_config(bus %d)\n", s->cap.cb_dev->subordinate->number);
 
-	/* Allocate interrupt if needed */
-	s->irq.AssignedIRQ = irq = 0;
-	ret = -1;
+	/*
+	 * If we have a PCI interrupt for the bridge,
+	 * then use that..
+	 */
+	irq = s->cap.pci_irq;
+
 	for (i = 0; i < fn; i++) {
 		struct pci_dev *dev = &c[i].dev;
-		pci_readb(dev, PCI_INTERRUPT_PIN, &j);
-		if (j == 0)
+		u8 irq_pin;
+
+		/* Does this function have an interrupt at all? */
+		pci_readb(dev, PCI_INTERRUPT_PIN, &irq_pin);
+		if (!irq_pin)
 			continue;
-		if (irq == 0) {
-			if (s->cap.irq_mask & (1 << s->cap.pci_irq)) {
-				irq = s->cap.pci_irq;
-				ret = 0;
-			}
-#ifdef CONFIG_ISA
-			else
-				for (try = 0; try < 2; try++) {
-					for (irq = 0; irq < 32; irq++)
-						if ((s->cap.irq_mask >> irq) & 1) {
-							ret = try_irq(IRQ_TYPE_EXCLUSIVE, irq, try);
-							if (ret == 0)
-								break;
-						}
-					if (ret == 0)
-						break;
-				}
-			if (ret != 0) {
-				printk(KERN_NOTICE "cs: could not allocate interrupt"
-				    " for CardBus socket %d\n", s->sock);
-				goto failed;
-			}
-#endif
-			s->irq.AssignedIRQ = irq;
+
+		if (!irq) {
+			irq = cb_assign_irq(s->cap.irq_mask);
+			if (!irq)
+				return CS_OUT_OF_RESOURCE;
 		}
-	}
-	for (i = 0; i < fn; i++) {
-		struct pci_dev *dev = &c[i].dev;
+
 		dev->irq = irq;
+		pci_writeb(dev, PCI_INTERRUPT_LINE, irq);
 	}
-
+	s->irq.AssignedIRQ = irq;
 	return CS_SUCCESS;
-
-      failed:
-	cb_release(s);
-	return CS_OUT_OF_RESOURCE;
 }
 
 /*======================================================================

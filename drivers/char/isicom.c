@@ -121,8 +121,6 @@ static struct file_operations ISILoad_fops = {
 	ISILoad_release,
 	NULL,	/*	fsync	*/
 	NULL,	/*	fasync	*/
-	NULL,	/*	check_media_change	*/
-	NULL,	/*	revalidate	*/
 };
 
 struct miscdevice isiloader_device = {

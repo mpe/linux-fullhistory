@@ -459,8 +459,6 @@ static struct file_operations romfs_file_operations = {
 	NULL,			/* release */
 	NULL,			/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL			/* revalidate */
 };
 
 static struct inode_operations romfs_file_inode_operations = {
@@ -489,16 +487,6 @@ static struct file_operations romfs_dir_operations = {
         NULL,			/* read */
 	NULL,			/* write - bad */
 	romfs_readdir,		/* readdir */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl */
-	NULL,			/* mmap */
-	NULL,			/* open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL			/* revalidate */
 };
 
 /* Merged dir/symlink op table.  readdir/lookup/readlink/follow_link

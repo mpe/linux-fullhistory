@@ -31,8 +31,6 @@ static struct file_operations adfs_dir_operations = {
 	NULL,			/* no special release code */
 	file_fsync,		/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL			/* revalidate */
 };
 
 /*

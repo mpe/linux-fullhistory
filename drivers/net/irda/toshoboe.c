@@ -87,7 +87,7 @@ static char *rcsid = "$Id: toshoboe.c,v 1.91 1999/06/29 14:21:06 root Exp $";
 /* No user servicable parts below here */
 
 #include <linux/module.h>
-
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/skbuff.h>

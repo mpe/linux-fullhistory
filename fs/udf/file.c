@@ -62,8 +62,6 @@ static struct file_operations udf_file_operations = {
 	udf_release_file,	/* release */
 	udf_sync_file,		/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
 
@@ -105,8 +103,6 @@ static struct file_operations udf_file_operations_adinicb = {
 	udf_release_file,	/* release */
 	udf_sync_file,		/* fsync */
 	NULL,				/* fasync */
-	NULL,				/* check_media_change */
-	NULL,				/* revalidate */
 	NULL				/* lock */
 };
 

@@ -3348,21 +3348,12 @@ void ide_unregister_module (ide_module_t *module)
 		*p = (*p)->next;
 }
 
-struct file_operations ide_fops[] = {{
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll */
-	ide_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	ide_open,		/* open */
-	NULL,			/* flush */
-	ide_release,		/* release */
-	block_fsync,		/* fsync */
-	NULL,			/* fasync */
-	ide_check_media_change,	/* check_media_change */
-	ide_revalidate_disk	/* revalidate */
+struct block_device_operations ide_fops[] = {{
+	open:			ide_open,
+	release:		ide_release,
+	ioctl:			ide_ioctl,
+	check_media_change:	ide_check_media_change,
+	revalidate:		ide_revalidate_disk
 }};
 
 EXPORT_SYMBOL(ide_hwifs);

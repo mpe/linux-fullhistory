@@ -160,21 +160,11 @@ static int  AudioEnd_m;
 static int  AudioEnd_f;
  
 
-static struct file_operations gscd_fops = {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll */
-	gscd_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	gscd_open,		/* open */
-	NULL,			/* flush */
-	gscd_release,		/* release */
-	NULL,                   /* fsync */
-	NULL,                   /* fasync*/
-	check_gscd_med_chg,     /* media change */
-	NULL                    /* revalidate */
+static struct block_device_operations gscd_fops = {
+	open:			gscd_open,
+	release:		gscd_release,
+	ioctl:			gscd_ioctl,
+	check_media_change:	check_gscd_med_chg,
 };
 
 /* 

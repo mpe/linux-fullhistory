@@ -789,8 +789,6 @@ static struct file_operations	stli_fsiomem = {
 	stli_memclose,	/* release */
 	NULL,		/* fsync */
 	NULL,		/* fasync */
-	NULL,		/* check_media_change */
-	NULL,		/* revalidate */
 	NULL		/* lock */
 };
 

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.58 1999/12/15 14:19:14 davem Exp $
+/* $Id: processor.h,v 1.60 2000/01/07 20:21:45 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -257,6 +257,7 @@ __out:	__ret; \
 /* Allocation and freeing of task_struct and kernel stack. */
 #define alloc_task_struct()   ((struct task_struct *)__get_free_pages(GFP_KERNEL, 1))
 #define free_task_struct(tsk) free_pages((unsigned long)(tsk),1)
+#define get_task_struct(tsk)      atomic_inc(&mem_map[MAP_NR(tsk)].count)
 
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)

@@ -147,19 +147,11 @@ struct ps2esdi_i_struct ps2esdi_info[] =
 	{0, 0, 0, 0, 0, 0},
 	{0, 0, 0, 0, 0, 0}};
 
-static struct file_operations ps2esdi_fops =
+static struct block_device_operations ps2esdi_fops =
 {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll */
-	ps2esdi_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	ps2esdi_open,		/* open */
-	NULL,			/* flush */
-	ps2esdi_release,	/* release */
-	block_fsync		/* fsync */
+	open:		ps2esdi_open,
+	release:	ps2esdi_release,
+	ioctl:		ps2esdi_ioctl,
 };
 
 static struct gendisk ps2esdi_gendisk =

@@ -272,8 +272,6 @@ static struct file_operations omirr_operations = {
     omirr_release,
     NULL,	/* fsync */
     NULL,       /* fasync */
-    NULL,       /* check_media_change */
-    NULL        /* revalidate */
 };
 
 struct inode_operations proc_omirr_inode_operations = {

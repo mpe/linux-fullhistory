@@ -97,9 +97,6 @@ struct file_operations coda_dir_operations = {
 	NULL,
         coda_release,           /* release */
 	coda_fsync,             /* fsync */
-        NULL,                   
-	NULL,
-	NULL
 };
 
 

@@ -25,17 +25,6 @@ static struct file_operations devpts_root_operations = {
 	NULL,                   /* read */
 	NULL,                   /* write */
 	devpts_root_readdir,    /* readdir */
-	NULL,                   /* poll */
-	NULL,			/* ioctl */
-	NULL,                   /* mmap */
-	NULL,                   /* open */
-	NULL,			/* flush */
-	NULL,                   /* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
-	NULL			/* lock */
 };
 
 struct inode_operations devpts_root_inode_operations = {

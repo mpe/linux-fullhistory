@@ -133,8 +133,6 @@ static struct file_operations ufs_file_operations = {
 	ufs_release_file,	/* release */
 	NULL, 			/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL			/* revalidate */
 };
 
 struct inode_operations ufs_file_inode_operations = {

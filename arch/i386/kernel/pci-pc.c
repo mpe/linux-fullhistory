@@ -633,9 +633,8 @@ static void __init pcibios_sort(void)
 	unsigned char bus, devfn;
 
 	DBG("PCI: Sorting device list...\n");
-	while (pci_devices.next != &pci_devices) {
+	while (!list_empty(&pci_devices)) {
 		ln = pci_devices.next;
-		list_del(ln);
 		dev = pci_dev_g(ln);
 		idx = found = 0;
 		while (pci_bios_find_device(dev->vendor, dev->device, idx, &bus, &devfn) == PCIBIOS_SUCCESSFUL) {

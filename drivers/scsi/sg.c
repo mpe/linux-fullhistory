@@ -946,8 +946,6 @@ static struct file_operations sg_fops = {
     sg_release,      /* release, was formerly sg_close */
     NULL,            /* fsync */
     sg_fasync,       /* fasync */
-    NULL,            /* check_media_change */
-    NULL,            /* revalidate */
     NULL,            /* lock */
 };
 

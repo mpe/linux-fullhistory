@@ -1137,11 +1137,6 @@ static struct file_operations dev_fileops = {
 	dev_release,	/* release */
 	NULL,		/* fsync */
 	NULL,		/* fasync */
-	NULL,		/* check_media_change */
-	NULL,		/* revalidate */
-#ifndef LINUX20
-	NULL,		/* lock */
-#endif
 };
 
 static int reset_dsp(void)

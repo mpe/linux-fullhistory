@@ -103,6 +103,8 @@
 #define COMPAQ_SMART2_MAJOR6	78
 #define COMPAQ_SMART2_MAJOR7	79
 
+#define LVM_BLK_MAJOR	58	/* Logical Volume Manager */
+
 #define SPECIALIX_NORMAL_MAJOR 75
 #define SPECIALIX_CALLOUT_MAJOR 76
 

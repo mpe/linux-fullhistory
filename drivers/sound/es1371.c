@@ -1632,8 +1632,6 @@ static /*const*/ struct file_operations es1371_mixer_fops = {
 	&es1371_release_mixdev,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -2308,8 +2306,6 @@ static /*const*/ struct file_operations es1371_audio_fops = {
 	&es1371_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -2689,8 +2685,6 @@ static /*const*/ struct file_operations es1371_dac_fops = {
 	&es1371_release_dac,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -2962,8 +2956,6 @@ static /*const*/ struct file_operations es1371_midi_fops = {
 	&es1371_midi_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 

@@ -846,8 +846,6 @@ static struct file_operations bpp_fops = {
 	bpp_release,
   NULL,   /* fsync */
   NULL,   /* fasync */
-  NULL,   /* check media change */
-  NULL,   /* revalidate */
   NULL,   /* lock */
 };
 

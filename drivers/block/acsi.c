@@ -1770,21 +1770,12 @@ void acsi_attach_SLMs( int (*attach_func)( int, int ) )
 }
 #endif /* CONFIG_ATARI_SLM_MODULE */
 
-static struct file_operations acsi_fops = {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,	/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select */
-	acsi_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	acsi_open,		/* open */
-	NULL,			/* flush */
-	acsi_release,		/* release */
-	block_fsync,		/* fsync */
-	NULL,			/* fasync */
-	acsi_media_change,	/* media_change */
-	acsi_revalidate,	/* revalidate */
+static struct block_device_operations acsi_fops = {
+	open:			acsi_open,
+	release:		acsi_release,
+	ioctl:			acsi_ioctl,
+	check_media_change:	acsi_media_change,
+	revalidate:		acsi_revalidate,
 };
 
 

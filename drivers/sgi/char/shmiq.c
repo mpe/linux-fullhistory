@@ -452,8 +452,6 @@ file_operations shmiq_fops =
         shmiq_qcntl_close,      /* close */
         NULL,                   /* fsync */
         shmiq_qcntl_fasync,     /* fasync */
-        NULL,                   /* check_media_change */
-        NULL,                   /* revalidate */
 };
 
 void

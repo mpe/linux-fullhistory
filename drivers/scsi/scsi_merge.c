@@ -61,6 +61,14 @@
 #include "constants.h"
 #include <scsi/scsi_ioctl.h>
 
+/*
+ * This means that bounce buffers cannot be allocated in chunks > PAGE_SIZE.
+ * Ultimately we should get away from using a dedicated DMA bounce buffer
+ * pool, and we should instead try and use kmalloc() instead.  If we can
+ * eliminate this pool, then this restriction would no longer be needed.
+ */
+#define DMA_SEGMENT_SIZE_LIMITED
+
 #ifdef CONFIG_SCSI_DEBUG_QUEUES
 /*
  * Enable a bunch of additional consistency checking.   Turn this off
@@ -97,12 +105,12 @@ static int dump_stats(struct request *req,
  * This can be removed for optimization.
  */
 #define SANITY_CHECK(req, _CLUSTER, _DMA)				\
-    if( req->nr_segments != __count_segments(req, _CLUSTER, _DMA) )	\
+    if( req->nr_segments != __count_segments(req, _CLUSTER, _DMA, NULL) )	\
     {									\
 	__label__ here;							\
 here:									\
 	printk("Incorrect segment count at 0x%p", &&here);		\
-	dump_stats(req, _CLUSTER, _DMA, __count_segments(req, _CLUSTER, _DMA)); \
+	dump_stats(req, _CLUSTER, _DMA, __count_segments(req, _CLUSTER, _DMA, NULL)); \
     }
 #else
 #define SANITY_CHECK(req, _CLUSTER, _DMA)
@@ -166,6 +174,9 @@ static void dma_exhausted(Scsi_Cmnd * SCpnt, int i)
  *              dma_host - 1 if this host has ISA DMA issues (bus doesn't
  *                      expose all of the address lines, so that DMA cannot
  *                      be done from an arbitrary address).
+ *		remainder - used to track the residual size of the last
+ *			segment.  Comes in handy when we want to limit the 
+ *			size of bounce buffer segments to PAGE_SIZE.
  *
  * Returns:     Count of the number of SG segments for the request.
  *
@@ -175,12 +186,36 @@ static void dma_exhausted(Scsi_Cmnd * SCpnt, int i)
  */
 __inline static int __count_segments(struct request *req,
 				     int use_clustering,
-				     int dma_host)
+				     int dma_host,
+				     int * remainder)
 {
 	int ret = 1;
+	int reqsize = 0;
 	struct buffer_head *bh;
+	struct buffer_head *bhnext;
 
-	for (bh = req->bh; bh->b_reqnext != NULL; bh = bh->b_reqnext) {
+	if( remainder != NULL ) {
+		reqsize = *remainder;
+	}
+
+	/*
+	 * Add in the size increment for the first buffer.
+	 */
+	bh = req->bh;
+#ifdef DMA_SEGMENT_SIZE_LIMITED
+	if( reqsize + bh->b_size > PAGE_SIZE ) {
+		ret++;
+		reqsize = bh->b_size;
+	} else {
+		reqsize += bh->b_size;
+	}
+#else
+	reqsize += bh->b_size;
+#endif
+
+	for (bh = req->bh, bhnext = bh->b_reqnext; 
+	     bhnext != NULL; 
+	     bh = bhnext, bhnext = bh->b_reqnext) {
 		if (use_clustering) {
 			/* 
 			 * See if we can do this without creating another
@@ -189,18 +224,44 @@ __inline static int __count_segments(struct request *req,
 			 * the DMA threshold boundary.  
 			 */
 			if (dma_host &&
-			    virt_to_phys(bh->b_data) - 1 == ISA_DMA_THRESHOLD) {
+			    virt_to_phys(bhnext->b_data) - 1 == ISA_DMA_THRESHOLD) {
 				ret++;
-			} else if (CONTIGUOUS_BUFFERS(bh, bh->b_reqnext)) {
+				reqsize = bhnext->b_size;
+			} else if (CONTIGUOUS_BUFFERS(bh, bhnext)) {
 				/*
 				 * This one is OK.  Let it go.
+				 */ 
+#ifdef DMA_SEGMENT_SIZE_LIMITED
+				/* Note scsi_malloc is only able to hand out
+				 * chunks of memory in sizes of PAGE_SIZE or
+				 * less.  Thus we need to keep track of
+				 * the size of the piece that we have
+				 * seen so far, and if we have hit
+				 * the limit of PAGE_SIZE, then we are
+				 * kind of screwed and we need to start
+				 * another segment.
 				 */
+				if( dma_host
+				    && virt_to_phys(bh->b_data) - 1 >= ISA_DMA_THRESHOLD
+				    && reqsize + bhnext->b_size > PAGE_SIZE )
+				{
+					ret++;
+					reqsize = bhnext->b_size;
+					continue;
+				}
+#endif
+				reqsize += bhnext->b_size;
 				continue;
 			}
 			ret++;
+			reqsize = bhnext->b_size;
 		} else {
 			ret++;
+			reqsize = bhnext->b_size;
 		}
+	}
+	if( remainder != NULL ) {
+		*remainder = reqsize;
 	}
 	return ret;
 }
@@ -239,7 +300,7 @@ recount_segments(Scsi_Cmnd * SCpnt)
 
 	req->nr_segments = __count_segments(req, 
 					    CLUSTERABLE_DEVICE(SHpnt, SDpnt),
-					    SHpnt->unchecked_isa_dma);
+					    SHpnt->unchecked_isa_dma, NULL);
 }
 
 /*
@@ -282,6 +343,7 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 				    int dma_host)
 {
 	unsigned int sector, count;
+	unsigned int segment_size = 0;
 	Scsi_Device *SDpnt;
 	struct Scsi_Host *SHpnt;
 
@@ -310,6 +372,17 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 				goto new_segment;
 			}
 			if (CONTIGUOUS_BUFFERS(req->bhtail, bh)) {
+#ifdef DMA_SEGMENT_SIZE_LIMITED
+				if( dma_host
+				    && virt_to_phys(bh->b_data) - 1 >= ISA_DMA_THRESHOLD ) {
+					segment_size = 0;
+					count = __count_segments(req, use_clustering, dma_host, &segment_size);
+					if( segment_size + bh->b_size > PAGE_SIZE )
+					{
+						goto new_segment;
+					}
+				}
+#endif
 				/*
 				 * This one is OK.  Let it go.
 				 */
@@ -330,6 +403,16 @@ __inline static int __scsi_merge_fn(request_queue_t * q,
 				goto new_segment;
 			}
 			if (CONTIGUOUS_BUFFERS(bh, req->bh)) {
+#ifdef DMA_SEGMENT_SIZE_LIMITED
+				if( dma_host
+				    && virt_to_phys(bh->b_data) - 1 >= ISA_DMA_THRESHOLD ) {
+					segment_size = bh->b_size;
+					count = __count_segments(req, use_clustering, dma_host, &segment_size);
+					if( count != req->nr_segments ) {
+						goto new_segment;
+					}
+				}
+#endif
 				/*
 				 * This one is OK.  Let it go.
 				 */
@@ -453,6 +536,25 @@ __inline static int __scsi_merge_requests_fn(request_queue_t * q,
 		    virt_to_phys(req->bhtail->b_data) - 1 == ISA_DMA_THRESHOLD) {
 			goto dont_combine;
 		}
+#ifdef DMA_SEGMENT_SIZE_LIMITED
+		/*
+		 * We currently can only allocate scatter-gather bounce
+		 * buffers in chunks of PAGE_SIZE or less.
+		 */
+		if (dma_host
+		    && CONTIGUOUS_BUFFERS(req->bhtail, next->bh)
+		    && virt_to_phys(req->bhtail->b_data) - 1 >= ISA_DMA_THRESHOLD )
+		{
+			int segment_size = 0;
+			int count = 0;
+
+			count = __count_segments(req, use_clustering, dma_host, &segment_size);
+			count += __count_segments(next, use_clustering, dma_host, &segment_size);
+			if( count != req->nr_segments + next->nr_segments ) {
+				goto dont_combine;
+			}
+		}
+#endif
 		if (CONTIGUOUS_BUFFERS(req->bhtail, next->bh)) {
 			/*
 			 * This one is OK.  Let it go.
@@ -587,7 +689,7 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 	 * First we need to know how many scatter gather segments are needed.
 	 */
 	if (!sg_count_valid) {
-		count = __count_segments(req, use_clustering, dma_host);
+		count = __count_segments(req, use_clustering, dma_host, NULL);
 	} else {
 		count = req->nr_segments;
 	}
@@ -648,14 +750,30 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 				/* Nothing - fall through */
 			} else if (CONTIGUOUS_BUFFERS(bhprev, bh)) {
 				/*
-				 * This one is OK.  Let it go.
+				 * This one is OK.  Let it go.  Note that we
+				 * do not have the ability to allocate
+				 * bounce buffer segments > PAGE_SIZE, so
+				 * for now we limit the thing.
 				 */
-				sgpnt[count - 1].length += bh->b_size;
-				if (!dma_host) {
+				if( dma_host ) {
+#ifdef DMA_SEGMENT_SIZE_LIMITED
+					if( virt_to_phys(bh->b_data) - 1 < ISA_DMA_THRESHOLD
+					    || sgpnt[count - 1].length + bh->b_size <= PAGE_SIZE ) {
+						sgpnt[count - 1].length += bh->b_size;
+						bhprev = bh;
+						continue;
+					}
+#else
+					sgpnt[count - 1].length += bh->b_size;
+					bhprev = bh;
+					continue;
+#endif
+				} else {
+					sgpnt[count - 1].length += bh->b_size;
 					SCpnt->request_bufflen += bh->b_size;
+					bhprev = bh;
+					continue;
 				}
-				bhprev = bh;
-				continue;
 			}
 		}
 		count++;
@@ -671,7 +789,8 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 	 * Verify that the count is correct.
 	 */
 	if (count != SCpnt->use_sg) {
-		panic("Incorrect sg segment count");
+		printk("Incorrect number of segments after building list\n");
+		dump_stats(req, use_clustering, dma_host, count);
 	}
 	if (!dma_host) {
 		return 1;

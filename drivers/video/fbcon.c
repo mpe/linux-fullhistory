@@ -311,6 +311,10 @@ void set_con2fb_map(int unit, int newidx)
        fb_display[unit]._fontheightlog = fontheightlog;
        fb_display[unit].userfont = userfont;
        fb_display[unit].fb_info = newfb;
+       if (conp)
+	   conp->vc_display_fg = &newfb->display_fg;
+       if (!newfb->display_fg)
+	   newfb->display_fg = conp;
        if (!newfb->changevar)
            newfb->changevar = oldfb->changevar;
        /* tell console var has changed */
@@ -1167,8 +1171,12 @@ void fbcon_redraw_bmove(struct display *p, int sy, int sx, int dy, int dx, int h
 
 static inline void fbcon_softback_note(struct vc_data *conp, int t, int count)
 {
-    unsigned short *p = (unsigned short *)
-    	(conp->vc_origin + t * conp->vc_size_row);
+    unsigned short *p;
+
+    if (conp->vc_num != fg_console)
+	return;
+    p = (unsigned short *)(conp->vc_origin + t * conp->vc_size_row);
+
     while (count) {
     	scr_memcpyw((u16 *)softback_in, p, conp->vc_size_row);
     	count--;

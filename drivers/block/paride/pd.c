@@ -354,21 +354,12 @@ static struct gendisk pd_gendisk = {
         NULL            /* next */
 };
 
-static struct file_operations pd_fops = {
-        NULL,                   /* lseek - default */
-        block_read,             /* read - general block-dev read */
-        block_write,            /* write - general block-dev write */
-        NULL,                   /* readdir - bad */
-        NULL,                   /* select */
-        pd_ioctl,               /* ioctl */
-        NULL,                   /* mmap */
-        pd_open,                /* open */
-	NULL,			/* flush */
-        pd_release,             /* release */
-        block_fsync,            /* fsync */
-        NULL,                   /* fasync */
-        pd_check_media,         /* media change ? */
-        pd_revalidate           /* revalidate new media */
+static struct block_device_operations pd_fops = {
+        open:			pd_open,
+        release:		pd_release,
+        ioctl:			pd_ioctl,
+        check_media_change:	pd_check_media,
+        revalidate:		pd_revalidate
 };
 
 void pd_init_units( void )

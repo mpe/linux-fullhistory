@@ -34,8 +34,6 @@ static struct file_operations bfs_file_operations = {
 	release:		NULL,
 	fsync:			NULL,
 	fasync:			NULL,
-	check_media_change:	NULL,
-	revalidate:		NULL,
 };
 
 static int bfs_get_block(struct inode * inode, long block, 

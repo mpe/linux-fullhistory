@@ -35,9 +35,12 @@ typedef struct scsi_disk {
 	unsigned has_part_table:1;	/* has partition table */
 } Scsi_Disk;
 
-extern Scsi_Disk *rscsi_disks;
-
 extern int revalidate_scsidisk(kdev_t dev, int maxusage);
+
+/*
+ * Used by pmac to find the device associated with a target.
+ */
+extern kdev_t sd_find_target(void *host, int tgt);
 
 #define N_SD_MAJORS	8
 

@@ -83,8 +83,6 @@ struct file_operations sgi_gfx_fops = {
 	NULL,			/* flush */
 	sgi_gfx_close,		/* release */
 	NULL,			/* fsync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
  
@@ -204,8 +202,6 @@ struct file_operations sgi_keyb_fops = {
 	NULL,			/* flush */
 	NULL,			/* release */
 	NULL,			/* fsync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
 
@@ -345,8 +341,6 @@ struct file_operations sgi_mouse_fops = {
 	NULL,			/* flush */
 	sgi_mouse_close,	/* release */
 	NULL,			/* fsync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
 

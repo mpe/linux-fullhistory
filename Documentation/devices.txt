@@ -613,11 +613,12 @@ Your cooperation is appreciated.
 		disks (see major number 3) except that the limit on
 		partitions is 15, like SCSI.
 
- 29 char	Universal frame buffer
+ 29 char	Universal frame buffers
 		  0 = /dev/fb0		First frame buffer
-		 32 = /dev/fb1		Second frame buffer
+		  1 = /dev/fb1		Second frame buffer
+		  2 = /dev/fb2		Third frame buffer
 		    ...
-		224 = /dev/fb7		Eighth frame buffer
+		 31 = /dev/fb31		32nd frame buffer
 
 		All additional minor numbers are reserved.
 

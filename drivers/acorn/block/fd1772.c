@@ -1570,22 +1570,13 @@ static void floppy_release(struct inode *inode, struct file *filp)
 	}
 }
 
-static struct file_operations floppy_fops =
+static struct block_device_operations floppy_fops =
 {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select */
-	fd_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	floppy_open,		/* open */
-	NULL,			/* flush */
-	floppy_release,		/* release */
-	block_fsync,		/* fsync */
-	NULL,			/* fasync */
-	check_floppy_change,	/* media_change */
-	floppy_revalidate,	/* revalidate */
+	open:			floppy_open,
+	release:		floppy_release,
+	ioctl:			fd_ioctl,
+	check_media_change:	check_floppy_change,
+	revalidate:		floppy_revalidate,
 };
 
 

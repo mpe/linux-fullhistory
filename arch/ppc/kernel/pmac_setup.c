@@ -198,32 +198,12 @@ pmac_get_cpuinfo(char *buffer)
 
 #ifdef CONFIG_SCSI
 /* Find the device number for the disk (if any) at target tgt
-   on host adaptor host.
-   XXX this really really should be in drivers/scsi/sd.c. */
+   on host adaptor host.  We just need to get the prototype from
+   sd.h */
 #include <linux/blkdev.h>
 #include "../../../drivers/scsi/scsi.h"
 #include "../../../drivers/scsi/sd.h"
-#include "../../../drivers/scsi/hosts.h"
 
-#define SD_MAJOR(i)		(!(i) ? SCSI_DISK0_MAJOR : SCSI_DISK1_MAJOR-1+(i))
-#define SD_MAJOR_NUMBER(i)	SD_MAJOR((i) >> 8)
-#define SD_MINOR_NUMBER(i)	((i) & 255)
-#define MKDEV_SD_PARTITION(i)	MKDEV(SD_MAJOR_NUMBER(i), SD_MINOR_NUMBER(i))
-#define MKDEV_SD(index)		MKDEV_SD_PARTITION((index) << 4)
-
-__init
-kdev_t sd_find_target(void *host, int tgt)
-{
-    Scsi_Disk *dp;
-    int i;
-#ifdef CONFIG_BLK_DEV_SD
-    for (dp = rscsi_disks, i = 0; i < sd_template.dev_max; ++i, ++dp)
-        if (dp->device != NULL && dp->device->host == host
-            && dp->device->id == tgt)
-            return MKDEV_SD(i);
-#endif /* CONFIG_BLK_DEV_SD */
-    return 0;
-}
 #endif
 
 /*

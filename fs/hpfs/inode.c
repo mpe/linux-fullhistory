@@ -22,8 +22,6 @@ static const struct file_operations hpfs_file_ops =
 	hpfs_file_release,		/* release */
 	hpfs_file_fsync,		/* fsync */
 	NULL,				/* fasync */
-	NULL,				/* check_media_change */
-	NULL,				/* revalidate */
 	NULL,				/* lock */
 };
 
@@ -63,8 +61,6 @@ static const struct file_operations hpfs_dir_ops =
 	hpfs_dir_release,		/* no special release code */
 	hpfs_file_fsync,		/* fsync */
 	NULL,				/* fasync */
-	NULL,				/* check_media_change */
-	NULL,				/* revalidate */
 	NULL,				/* lock */
 };
 

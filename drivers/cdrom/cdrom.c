@@ -291,22 +291,12 @@ static void cdrom_sysctl_register(void);
 #endif /* CONFIG_SYSCTL */ 
 static struct cdrom_device_info *topCdromPtr = NULL;
 
-struct file_operations cdrom_fops =
+struct block_device_operations cdrom_fops =
 {
-	NULL,                           /* lseek */
-	block_read,                     /* read - general block-dev read */
-	block_write,                    /* write - general block-dev write */
-	NULL,                           /* readdir */
-	NULL,                           /* poll */
-	cdrom_ioctl,                    /* ioctl */
-	NULL,                           /* mmap */
-	cdrom_open,                     /* open */
-	NULL,				/* flush */
-	cdrom_release,                  /* release */
-	NULL,                           /* fsync */
-	NULL,                           /* fasync */
-	cdrom_media_changed,            /* media_change */
-	NULL                            /* revalidate */
+	open:			cdrom_open,
+	release:		cdrom_release,
+	ioctl:			cdrom_ioctl,
+	check_media_change:	cdrom_media_changed,
 };
 
 /* This macro makes sure we don't have to check on cdrom_device_ops

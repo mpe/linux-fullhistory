@@ -24,7 +24,6 @@
 static const char *version = "smctr.c: v1.0 1/1/00 by jschlst@turbolinux.com\n";
 static const char *cardname = "smctr";
 
-#include <linux/config.h>
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
@@ -44,7 +43,6 @@ static const char *cardname = "smctr";
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
-#include <asm/dma.h>
 #include <asm/dma.h>
 #include <asm/irq.h>
 #include <linux/errno.h>

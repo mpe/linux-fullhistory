@@ -379,8 +379,6 @@ static struct file_operations smb_file_operations =
 	smb_file_release,	/* release(struct inode*, struct file*) */
 	smb_fsync,		/* fsync(struct file*, struct dentry*) */
 	NULL,			/* fasync(struct file*, int) */
-	NULL,			/* check_media_change(kdev_t dev) */
-	NULL,			/* revalidate(kdev_t dev) */
 	NULL			/* lock(struct file*, int, struct file_lock*) */
 };
 

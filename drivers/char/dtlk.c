@@ -115,8 +115,6 @@ static struct file_operations dtlk_fops =
 	dtlk_release,
 	NULL,			/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
 

@@ -2008,21 +2008,11 @@ static int __init version_ok(void)
 }
 
 
-static struct file_operations opt_fops = {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll */
-	opt_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	opt_open,		/* open */
-	NULL,			/* flush */
-	opt_release,		/* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
-	opt_media_change,	/* media change */
-	NULL			/* revalidate */
+static struct block_device_operations opt_fops = {
+	open:			opt_open,
+	release:		opt_release,
+	ioctl:			opt_ioctl,
+	check_media_change:	opt_media_change,
 };
 
 #ifndef MODULE

@@ -7,6 +7,8 @@
  *		2 of the License, or (at your option) any later version.
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
+ *              Jamal Hadi Salim, <hadi@nortelnetworks.com> 990601
+ *              - Ingress support
  */
 
 #include <asm/uaccess.h>
@@ -590,6 +592,12 @@ void dev_shutdown(struct net_device *dev)
 	dev->qdisc = &noop_qdisc;
 	dev->qdisc_sleeping = &noop_qdisc;
 	qdisc_destroy(qdisc);
+#ifdef CONFIG_NET_SCH_INGRESS
+        if ((qdisc = dev->qdisc_ingress) != NULL) {
+		dev->qdisc_ingress = NULL;
+		qdisc_destroy(qdisc);
+        }
+#endif
 	BUG_TRAP(dev->qdisc_list == NULL);
 	dev->qdisc_list = NULL;
 	spin_unlock_bh(&dev->queue_lock);

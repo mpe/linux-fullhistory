@@ -117,7 +117,6 @@ unsigned long get_wchan(struct task_struct *p);
 extern struct task_struct *alloc_task_struct(void);
 extern void __free_task_struct(struct task_struct *);
 #define get_task_struct(p)	atomic_inc(&(p)->thread.refcount)
-#define put_task_struct(p)	free_task_struct(p)
 #define free_task_struct(p)					\
  do {								\
 	if (atomic_dec_and_test(&(p)->thread.refcount))		\

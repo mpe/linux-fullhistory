@@ -2044,8 +2044,6 @@ static /*const*/ struct file_operations ess_mixer_fops = {
 	&ess_release_mixdev,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -2920,8 +2918,6 @@ static struct file_operations ess_audio_fops = {
 	&ess_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 

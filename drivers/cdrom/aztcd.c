@@ -371,21 +371,11 @@ static int  aztcd_release(struct inode * inode, struct file * file);
 
 int       aztcd_init(void);
 
-static struct file_operations azt_fops = {
-	NULL,                   /* lseek - default */
-	block_read,             /* read - general block-dev read */
-	block_write,            /* write - general block-dev write */
-	NULL,                   /* readdir - bad */
-	NULL,                   /* poll */
-	aztcd_ioctl,            /* ioctl */
-	NULL,                   /* mmap */
-	aztcd_open,             /* open */
-	NULL,			/* flush */
-	aztcd_release,          /* release */
-	NULL,                   /* fsync */
-	NULL,                   /* fasync*/
-	check_aztcd_media_change, /*media change*/
-	NULL                    /* revalidate*/
+static struct block_device_operations azt_fops = {
+	open:			aztcd_open,
+	release:		aztcd_release,
+	ioctl:			aztcd_ioctl,
+	check_media_change:	check_aztcd_media_change,
 };
 
 /* Aztcd State Machine: Controls Drive Operating State */

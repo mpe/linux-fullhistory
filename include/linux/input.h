@@ -147,7 +147,7 @@ struct input_event {
 #define KEY_KP3			81		
 #define KEY_KP0			82		
 #define KEY_KPDOT		83		
-
+#define KEY_103RD		84
 #define KEY_F13			85		
 #define KEY_102ND		86		
 #define KEY_F11			87		
@@ -207,7 +207,6 @@ struct input_event {
 #define KEY_CALC		140		
 #define KEY_SETUP		141		
 #define KEY_SLEEP		142		
-
 #define KEY_WAKEUP		143		
 #define KEY_FILE		144		
 #define KEY_SENDFILE		145		
@@ -220,7 +219,11 @@ struct input_event {
 #define KEY_COFFEE		152		
 #define KEY_DIRECTION		153		
 #define KEY_CYCLEWINDOWS	154		
-
+#define KEY_MAIL		155
+#define KEY_BOOKMARKS		156
+#define KEY_COMPUTER		157
+#define KEY_BACK		158
+#define KEY_FORWARD		159
 #define KEY_CLOSECD		160		
 #define KEY_EJECTCD		161		
 #define KEY_EJECTCLOSECD	162		

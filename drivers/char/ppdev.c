@@ -50,7 +50,7 @@
 #include <linux/ctype.h>
 #include <linux/poll.h>
 #include <asm/uaccess.h>
-#include "ppdev.h"
+#include <linux/ppdev.h>
 
 #define PP_VERSION "ppdev: user-space parallel port driver"
 #define CHRDEV "ppdev"

@@ -6,12 +6,10 @@ comment 'USB support'
 
 tristate 'Support for USB' CONFIG_USB
 if [ ! "$CONFIG_USB" = "n" ]; then
-comment 'USB Controllers'
-   dep_tristate '  UHCI (Intel PIIX4, VIA, and others) support' CONFIG_USB_UHCI \
-	$CONFIG_USB
 
-   dep_tristate '  OHCI-HCD (Compaq, iMacs, OPTi, SiS, ALi, and others) support' \
-		CONFIG_USB_OHCI_HCD $CONFIG_USB
+comment 'USB Controllers'
+   dep_tristate '  UHCI (Intel PIIX4, VIA, and others) support' CONFIG_USB_UHCI $CONFIG_USB
+   dep_tristate '  OHCI-HCD (Compaq, iMacs, OPTi, SiS, ALi, and others) support' CONFIG_USB_OHCI_HCD $CONFIG_USB
 
 comment 'Miscellaneous USB options'
    if [ "$CONFIG_PROC_FS" != "n" ]; then
@@ -19,20 +17,6 @@ comment 'Miscellaneous USB options'
    fi
 
 comment 'USB Devices'
-   dep_tristate '  USB Human Interface Device (HID) support' CONFIG_USB_HID $CONFIG_USB
-   if [ "$CONFIG_USB_HID" != "y" ]; then
-      dep_tristate '  USB HIDBP Keyboard support' CONFIG_USB_KBD $CONFIG_USB
-      dep_tristate '  USB HIDBP Mouse support' CONFIG_USB_MOUSE $CONFIG_USB
-   fi
-   if [ "$CONFIG_USB_HID" != "n" ]; then
-      dep_tristate '    Keyboard support' CONFIG_INPUT_KEYBDEV $CONFIG_USB_HID
-      dep_tristate '    Mouse support' CONFIG_INPUT_MOUSEDEV $CONFIG_USB_HID
-      if [ "$CONFIG_INPUT_MOUSEDEV" != "n" ]; then
-	 bool '      Mix all mice into one device' CONFIG_INPUT_MOUSEDEV_MIX $CONFIG_USB_HID
-      fi
-      dep_tristate '    Joystick support' CONFIG_INPUT_JOYDEV $CONFIG_USB_HID
-      dep_tristate '    Event interface support' CONFIG_INPUT_EVDEV $CONFIG_USB_HID
-   fi
    dep_tristate '  USB Printer support' CONFIG_USB_PRINTER $CONFIG_USB
    dep_tristate '  USB Scanner support' CONFIG_USB_SCANNER $CONFIG_USB
    dep_tristate '  USB Audio support' CONFIG_USB_AUDIO $CONFIG_USB
@@ -48,6 +32,20 @@ comment 'USB Devices'
    dep_tristate '  EZUSB Firmware downloader' CONFIG_USB_EZUSB $CONFIG_USB
    dep_tristate '  USS720 parport driver' CONFIG_USB_USS720 $CONFIG_USB $CONFIG_PARPORT
    dep_tristate '  DABUSB driver' CONFIG_USB_DABUSB $CONFIG_USB 
+
+comment 'USB HID'
+   dep_tristate '  USB Human Interface Device (HID) support' CONFIG_USB_HID $CONFIG_USB
+   if [ "$CONFIG_USB_HID" != "y" ]; then
+      dep_tristate '  USB HIDBP Keyboard support' CONFIG_USB_KBD $CONFIG_USB
+      dep_tristate '  USB HIDBP Mouse support' CONFIG_USB_MOUSE $CONFIG_USB
+   fi
+   dep_tristate '  Keyboard support' CONFIG_INPUT_KEYBDEV $CONFIG_USB
+   dep_tristate '  Mouse support' CONFIG_INPUT_MOUSEDEV $CONFIG_USB
+   if [ "$CONFIG_INPUT_MOUSEDEV" != "n" ]; then
+      bool '      Mix all mice into one device' CONFIG_INPUT_MOUSEDEV_MIX
+   fi
+   dep_tristate '  Joystick support' CONFIG_INPUT_JOYDEV $CONFIG_USB
+   dep_tristate '  Event interface support' CONFIG_INPUT_EVDEV $CONFIG_USB
 fi
 
 endmenu

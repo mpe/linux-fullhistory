@@ -39,7 +39,6 @@
 #include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/timer.h>
-// #include <linux/spinlock.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>  /* for in_interrupt() */
 
@@ -47,17 +46,10 @@
 #include <asm/irq.h>
 #include <asm/system.h>
 
-// #define DEBUG
+#undef DEBUG
 
 #include "usb.h"
 #include "ohci-hcd.h"
-
-
-#ifdef DEBUG
-	#define dbg(format, arg...) printk(format, ## arg)
-#else
-	#define dbg(format, arg...)
-#endif
 
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
@@ -117,12 +109,11 @@ static void urb_print (urb_t * urb, char * str, int small)
 	int i, len;
 	
 	if (!urb->dev || !urb->dev->bus) {
-		printk(KERN_DEBUG " %s URB: no dev\n", str);
+		dbg("%s URB: no dev", str);
 		return;
 	}
 	
-	printk (KERN_DEBUG "%s URB:[%4x] dev:%2d,ep:%2d-%c,type:%s,"
-			"flags:%4x,len:%d/%d,stat:%d(%x)\n", 
+	dbg("%s URB:[%4x] dev:%2d,ep:%2d-%c,type:%s,flags:%4x,len:%d/%d,stat:%d(%x)", 
 			str,
 		 	sohci_get_current_frame_number (urb->dev), 
 		 	usb_pipedevice (pipe),
@@ -136,13 +127,13 @@ static void urb_print (urb_t * urb, char * str, int small)
 		 	urb->status, urb->status);
 	if (!small) {
 		if (usb_pipecontrol (pipe)) {
-			printk (KERN_DEBUG " cmd(8):");
+			printk (KERN_DEBUG __FILE__ ": cmd(8):");
 			for (i = 0; i < 8 ; i++) 
 				printk (" %02x", ((__u8 *) urb->setup_packet) [i]);
 			printk ("\n");
 		}
 		if (urb->transfer_buffer_length > 0 && urb->transfer_buffer) {
-			printk (KERN_DEBUG " data(%d/%d):", 
+			printk (KERN_DEBUG __FILE__ ": data(%d/%d):", 
 				urb->actual_length, 
 				urb->transfer_buffer_length);
 			len = usb_pipeout (pipe)? 
@@ -160,10 +151,10 @@ void ep_print_int_eds (ohci_t * ohci, char * str) {
 	 __u32 * ed_p;
 	for (i= 0; i < 32; i++) {
 		j = 5;
-		printk (KERN_DEBUG " %s branch int %2d(%2x): ", str, i, i);
+		printk (KERN_DEBUG __FILE__ " %s branch int %2d(%2x):", str, i, i);
 		ed_p = &(ohci->hcca.int_table [i]);
 		while (*ed_p != 0 && j--) {
-			printk ("ed: %4x; ", (((ed_t *) bus_to_virt (*ed_p))->hwINFO));
+			printk (" ed: %4x;", (((ed_t *) bus_to_virt (*ed_p))->hwINFO));
 			ed_p = &(((ed_t *) bus_to_virt (*ed_p))->hwNextED);
 		}
 		printk ("\n");
@@ -388,7 +379,7 @@ static int sohci_unlink_urb (urb_t * urb)
 			if(schedule_timeout (HZ / 10)) /* wait until all TDs are deleted */
 				remove_wait_queue (&op_wakeup, &wait); 
 			else
-				printk (KERN_ERR MODSTR "unlink URB timeout!\n");
+				err("unlink URB timeout!");
 		} else 
 			urb_rm_priv (urb);
 		usb_dec_dev_use (urb->dev);		
@@ -803,7 +794,7 @@ static void td_fill (unsigned int info, void * data, int len, urb_t * urb, int t
 	urb_priv_t * urb_priv = urb->hcpriv;
 
 	if (index >= urb_priv->length) {
-		printk (KERN_ERR MODSTR "internal OHCI error: TD index > length\n");
+		err("internal OHCI error: TD index > length");
 		return;
 	}
 	
@@ -892,10 +883,8 @@ static void td_submit_urb (urb_t * urb)
 			}
 			break;
 	} 
-#ifdef DEBUG
 	if (urb_priv->length != cnt) 
-		dbg (KERN_ERR MODSTR " ********* TD LENGTH %d != CNT %d\n", urb_priv->length, cnt);
-#endif 
+		dbg("TD LENGTH %d != CNT %d", urb_priv->length, cnt);
 }
 
 /*-------------------------------------------------------------------------*
@@ -923,7 +912,7 @@ static td_t * dl_reverse_done_list (ohci_t * ohci)
 
 		if (TD_CC_GET (le32_to_cpu (td_list->hwINFO))) {
 			urb_priv = (urb_priv_t *) td_list->urb->hcpriv;
-			dbg (KERN_DEBUG MODSTR "**** USB-error/status: %x : %p \n", 
+			dbg(" USB-error/status: %x : %p", 
 					TD_CC_GET (le32_to_cpu (td_list->hwINFO)), td_list);
 			if (td_list->ed->hwHeadP & cpu_to_le32 (0x1)) {
 				if (urb_priv && ((td_list->index + 1) < urb_priv->length)) {
@@ -1402,10 +1391,8 @@ static int rh_submit_urb (urb_t * urb)
 			status = TD_CC_STALL;
 	}
 	
-	dbg (KERN_DEBUG MODSTR "USB HC roothubstat1: %x \n",
-			readl ( &(ohci->regs->roothub.portstatus[0]) ));
-	dbg (KERN_DEBUG MODSTR "USB HC roothubstat2: %x \n",
-			readl ( &(ohci->regs->roothub.portstatus[1]) ));
+	dbg("USB HC roothubstat1: %x", readl ( &(ohci->regs->roothub.portstatus[0]) ));
+	dbg("USB HC roothubstat2: %x", readl ( &(ohci->regs->roothub.portstatus[1]) ));
 
 	len = min(len, leni);
 	memcpy (data, data_buf, len);
@@ -1444,25 +1431,25 @@ static void hc_reset (ohci_t * ohci)
 	 	
 	if (readl (&ohci->regs->control) & 0x100) { /* SMM owns the HC */
 		writel (0x08, &ohci->regs->cmdstatus); /* request ownership */
-		printk (KERN_DEBUG MODSTR "USB HC TakeOver from SMM\n");
+		dbg("USB HC TakeOver from SMM");
 		while (readl (&ohci->regs->control) & 0x100) {
 			wait_ms (10);
 			if (--smm_timeout == 0) {
-				printk (KERN_ERR MODSTR "USB HC TakeOver failed!\n");
+				err("USB HC TakeOver failed!");
 				break;
 			}
 		}
 	}	
 		
 	writel ((1 << 31), &ohci->regs->intrdisable); /* Disable HC interrupts */
-	dbg (KERN_DEBUG MODSTR "USB HC reset_hc: %x ; \n", readl (&ohci->regs->control));
+	dbg("USB HC reset_hc: %x ;", readl (&ohci->regs->control));
   	/* this seems to be needed for the lucent controller on powerbooks.. */
 	writel (0, &ohci->regs->control);           /* Move USB to reset state */
       	
 	writel (1,  &ohci->regs->cmdstatus);	   /* HC Reset */
 	while ((readl (&ohci->regs->cmdstatus) & 0x01) != 0) { /* 10us Reset */
 		if (--timeout == 0) {
-			printk (KERN_ERR MODSTR "USB HC reset timed out!\n");
+			err("USB HC reset timed out!");
 			return;
 		}	
 		udelay (1);
@@ -1536,7 +1523,7 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 			return;
 	} 
 
-	dbg (KERN_DEBUG MODSTR "Interrupt: %x frame: %x \n", ints, le16_to_cpu (ohci->hcca.frame_no));
+	dbg("Interrupt: %x frame: %x", ints, le16_to_cpu (ohci->hcca.frame_no));
 	
 	if (ints & OHCI_INTR_WDH) {
 		writel (OHCI_INTR_WDH, &regs->intrdisable);	
@@ -1545,7 +1532,7 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 	}
   
 	if (ints & OHCI_INTR_SO) {
-		dbg (KERN_ERR MODSTR " USB Schedule overrun \n");
+		dbg("USB Schedule overrun");
 		writel (OHCI_INTR_SO, &regs->intrenable); 	 
 	}
 
@@ -1607,7 +1594,7 @@ static ohci_t * hc_alloc_ohci (void * mem_base)
 
 static void hc_release_ohci (ohci_t * ohci)
 {	
-	dbg (KERN_DEBUG MODSTR "USB HC release ohci\n");
+	dbg("USB HC release ohci");
 
 	/* disconnect all devices */    
 	if (ohci->bus->root_hub) usb_disconnect (&ohci->bus->root_hub);
@@ -1638,7 +1625,7 @@ static void hc_release_ohci (ohci_t * ohci)
 static int hc_found_ohci (int irq, void * mem_base)
 {
 	ohci_t * ohci;
-	dbg (KERN_DEBUG MODSTR "USB HC found: irq= %d membase= %x \n", irq, (int) mem_base);
+	dbg("USB HC found: irq= %d membase= %x", irq, (int) mem_base);
     
 	ohci = hc_alloc_ohci (mem_base);
 	if (!ohci) {
@@ -1658,7 +1645,7 @@ static int hc_found_ohci (int irq, void * mem_base)
 		hc_start (ohci);
 		return 0;
  	}	
- 	printk (KERN_ERR MODSTR "request interrupt %d failed\n", irq);
+ 	err("request interrupt %d failed", irq);
 	hc_release_ohci (ohci);
 	return -EBUSY;
 }
@@ -1679,7 +1666,7 @@ static int hc_start_ohci (struct pci_dev * dev)
 	mem_base = (unsigned int) ioremap_nocache (mem_base, 4096);
 
 	if (!mem_base) {
-		printk (KERN_ERR MODSTR "Error mapping OHCI memory\n");
+		err("Error mapping OHCI memory");
 		return -EFAULT;
 	}
 	return hc_found_ohci (dev->irq, (void *) mem_base);
@@ -1735,12 +1722,12 @@ static int handle_apm_event (apm_event_t event)
 	case APM_SYS_SUSPEND:
 	case APM_USER_SUSPEND:
 		if (down) {
-			printk(KERN_DEBUG MODSTR "received extra suspend event\n");
+			dbg("received extra suspend event");
 			break;
 		}
 		for (ohci_l = ohci_hcd_list.next; ohci_l != &ohci_hcd_list; ohci_l = ohci_l->next) {
 			ohci = list_entry (ohci_l, ohci_t, ohci_hcd_list);
-			dbg (KERN_DEBUG MODSTR "USB-Bus suspend: %p\n", ohci);
+			dbg("USB-Bus suspend: %p", ohci);
 			writel (ohci->hc_control = 0xFF, &ohci->regs->control);
 		}
 		wait_ms (10);
@@ -1749,12 +1736,12 @@ static int handle_apm_event (apm_event_t event)
 	case APM_NORMAL_RESUME:
 	case APM_CRITICAL_RESUME:
 		if (!down) {
-			printk (KERN_DEBUG MODSTR "received bogus resume event\n");
+			dbg("received bogus resume event");
 			break;
 		}
 		for (ohci_l = ohci_hcd_list.next; ohci_l != &ohci_hcd_list; ohci_l = ohci_l->next) {
 			ohci = list_entry(ohci_l, ohci_t, ohci_hcd_list);
-			dbg (KERN_DEBUG MODSTR "USB-Bus resume: %p\n", ohci);
+			dbg("USB-Bus resume: %p", ohci);
 			writel (ohci->hc_control = 0x7F, &ohci->regs->control);
 		}		
 		wait_ms (20);

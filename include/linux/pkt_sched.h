@@ -74,6 +74,7 @@ struct tc_estimator
 
 #define TC_H_UNSPEC	(0U)
 #define TC_H_ROOT	(0xFFFFFFFFU)
+#define TC_H_INGRESS    (0xFFFFFFF1U)
 
 struct tc_ratespec
 {
@@ -193,6 +194,50 @@ struct tc_red_qopt
 	unsigned char   Scell_log;	/* cell size for idle damping */
 };
 
+/* GRED section */
+
+#define MAX_DPs 16
+
+enum
+{
+       TCA_GRED_UNSPEC,
+       TCA_GRED_PARMS,
+       TCA_GRED_STAB,
+       TCA_GRED_DPS,
+};
+
+#define TCA_SET_OFF TCA_GRED_PARMS
+struct tc_gred_qopt
+{
+       __u32           limit;          /* HARD maximal queue length (bytes)    
+*/
+       __u32           qth_min;        /* Min average length threshold (bytes) 
+*/
+       __u32           qth_max;        /* Max average length threshold (bytes) 
+*/
+       __u32           DP;             /* upto 2^32 DPs */
+       __u32           backlog;        
+       __u32           qave;   
+       __u32           forced; 
+       __u32           early;  
+       __u32           other;  
+       __u32           pdrop;  
+
+       unsigned char   Wlog;           /* log(W)               */
+       unsigned char   Plog;           /* log(P_max/(qth_max-qth_min)) */
+       unsigned char   Scell_log;      /* cell size for idle damping */
+       __u8            prio;		/* prio of this VQ */
+       __u32	packets;
+       __u32	bytesin;
+};
+/* gred setup */
+struct tc_gred_sopt
+{
+       __u32           DPs;
+       __u32           def_DP;
+       __u8            grio;
+};
+
 /* CBQ section */
 
 #define TC_CBQ_MAXPRIO		8
@@ -276,6 +321,19 @@ enum
 };
 
 #define TCA_CBQ_MAX	TCA_CBQ_POLICE
+
+/* dsmark section */
+
+enum {
+	TCA_DSMARK_UNSPEC,
+	TCA_DSMARK_INDICES,
+	TCA_DSMARK_DEFAULT_INDEX,
+	TCA_DSMARK_SET_TC_INDEX,
+	TCA_DSMARK_MASK,
+	TCA_DSMARK_VALUE
+};
+
+#define TCA_DSMARK_MAX TCA_DSMARK_VALUE
 
 /* ATM  section */
 

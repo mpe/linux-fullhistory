@@ -60,8 +60,8 @@ struct joydev {
 	struct JS_DATA_SAVE_TYPE glue;
 	int nabs;
 	int nkey;
-	__u16 keymap[KEY_MAX - BTN_0];
-	__u16 keypam[KEY_MAX - BTN_0];
+	__u16 keymap[KEY_MAX - BTN_MISC];
+	__u16 keypam[KEY_MAX - BTN_MISC];
 	__u8 absmap[ABS_MAX];
 	__u8 abspam[ABS_MAX];
 };
@@ -111,9 +111,9 @@ static void js_event(struct input_handle *handle, unsigned int type, unsigned in
 	switch (type) {
 
 		case EV_KEY:
-			if (code < BTN_0 || value == 2) return;
+			if (code < BTN_MISC || value == 2) return;
 			event.type = JS_EVENT_BUTTON;
-			event.number = joydev->keymap[code - BTN_0];
+			event.number = joydev->keymap[code - BTN_MISC];
 			event.value = value;
 			break;
 
@@ -407,10 +407,17 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev)
 			joydev->nabs++;
 		}
 
-	for (i = 0; i < KEY_MAX - BTN_0; i++)
-		if (test_bit(i + BTN_0, dev->keybit)) {
+	for (i = BTN_JOYSTICK - BTN_MISC; i < KEY_MAX - BTN_MISC; i++)
+		if (test_bit(i + BTN_MISC, dev->keybit)) {
 			joydev->keymap[i] = joydev->nkey;
-			joydev->keypam[joydev->nkey] = i + BTN_0;
+			joydev->keypam[joydev->nkey] = i + BTN_MISC;
+			joydev->nkey++;
+		}
+
+	for (i = 0; i < BTN_JOYSTICK - BTN_MISC; i++)
+		if (test_bit(i + BTN_MISC, dev->keybit)) {
+			joydev->keymap[i] = joydev->nkey;
+			joydev->keypam[joydev->nkey] = i + BTN_MISC;
 			joydev->nkey++;
 		}
 

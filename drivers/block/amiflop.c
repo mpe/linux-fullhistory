@@ -1750,21 +1750,11 @@ static int amiga_floppy_change(kdev_t dev)
 	return 0;
 }
 
-static struct file_operations floppy_fops = {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select */
-	fd_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	floppy_open,		/* open */
-	NULL,			/* flush */
-	floppy_release, 	/* release */
-	block_fsync,		/* fsync */
-	NULL,			/* fasync */
-	amiga_floppy_change,	/* check_media_change */
-	NULL,			/* revalidate */
+static struct block_device_operations floppy_fops = {
+	open:			floppy_open,
+	release:		floppy_release,
+	ioctl:			fd_ioctl,
+	check_media_change:	amiga_floppy_change,
 };
 
 void __init amiga_floppy_setup (char *str, int *ints)

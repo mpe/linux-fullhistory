@@ -1006,23 +1006,13 @@ struct notifier_block i2ob_reboot_notifier =
 	0
 };
 
-static struct file_operations i2ob_fops =
+static struct block_device_operations i2ob_fops =
 {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select */
-	i2ob_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	i2ob_open,		/* open */
-	NULL,			/* flush */
-	i2ob_release,		/* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
-	i2ob_media_change,	/* Media Change */
-	i2ob_revalidate,	/* Revalidate */
-	NULL			/* File locks */
+	open:			i2ob_open,
+	release:		i2ob_release,
+	ioctl:			i2ob_ioctl,
+	check_media_change:	i2ob_media_change,
+	revalidate:		i2ob_revalidate,
 };
 
 /*

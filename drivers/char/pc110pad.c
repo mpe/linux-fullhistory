@@ -639,8 +639,6 @@ static struct file_operations pad_fops = {
 	close_pad,
 	NULL,		/* fsync */
 	fasync_pad,
-	NULL,		/* check_media_change */
-	NULL,		/* revalidate */
 	NULL		/* lock */
 };
 

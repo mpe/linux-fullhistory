@@ -39,6 +39,7 @@
 #include <linux/hdreg.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
 #include <linux/smp.h>
 
@@ -81,12 +82,9 @@
 #define SD_TIMEOUT (30 * HZ)
 #define SD_MOD_TIMEOUT (75 * HZ)
 
-#define CLUSTERABLE_DEVICE(SC) (SC->host->use_clustering && \
-				SC->device->type != TYPE_MOD)
-
 struct hd_struct *sd;
 
-Scsi_Disk *rscsi_disks = NULL;
+static Scsi_Disk *rscsi_disks = NULL;
 static int *sd_sizes;
 static int *sd_blocksizes;
 static int *sd_hardsizes;	/* Hardware sector size */
@@ -105,6 +103,23 @@ static void sd_detach(Scsi_Device *);
 static void rw_intr(Scsi_Cmnd * SCpnt);
 
 static int sd_init_command(Scsi_Cmnd *);
+
+#if defined(CONFIG_PPC)
+/*
+ * Moved from arch/ppc/pmac_setup.c.  This is where it really belongs.
+ */
+kdev_t __init
+sd_find_target(void *host, int tgt)
+{
+    Scsi_Disk *dp;
+    int i;
+    for (dp = rscsi_disks, i = 0; i < sd_template.dev_max; ++i, ++dp)
+        if (dp->device != NULL && dp->device->host == host
+            && dp->device->id == tgt)
+            return MKDEV_SD(i);
+    return 0;
+}
+#endif
 
 static int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigned long arg)
 {
@@ -232,7 +247,9 @@ static int sd_init_command(Scsi_Cmnd * SCpnt)
 {
 	int dev, devm, block, this_count;
 	Scsi_Disk *dpnt;
+#if CONFIG_SCSI_LOGGING
 	char nbuff[6];
+#endif
 
 	devm = SD_PARTITION(SCpnt->request.rq_dev);
 	dev = DEVICE_NR(SCpnt->request.rq_dev);
@@ -248,7 +265,6 @@ static int sd_init_command(Scsi_Cmnd * SCpnt)
 	    !dpnt->device->online ||
  	    block + SCpnt->request.nr_sectors > sd[devm].nr_sects) {
 		SCSI_LOG_HLQUEUE(2, printk("Finishing %ld sectors\n", SCpnt->request.nr_sectors));
-		SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		SCSI_LOG_HLQUEUE(2, printk("Retry with 0x%p\n", SCpnt));
 		return 0;
 	}
@@ -259,7 +275,6 @@ static int sd_init_command(Scsi_Cmnd * SCpnt)
 		 * bit has been reset
 		 */
 		/* printk("SCSI disk has been changed. Prohibiting further I/O.\n"); */
-		SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		return 0;
 	}
 	SCSI_LOG_HLQUEUE(2, sd_devname(devm, nbuff));
@@ -280,7 +295,6 @@ static int sd_init_command(Scsi_Cmnd * SCpnt)
 	if (dpnt->device->sector_size == 1024) {
 		if ((block & 1) || (SCpnt->request.nr_sectors & 1)) {
 			printk("sd.c:Bad block number requested");
-			SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 			return 0;
 		} else {
 			block = block >> 1;
@@ -290,7 +304,6 @@ static int sd_init_command(Scsi_Cmnd * SCpnt)
 	if (dpnt->device->sector_size == 2048) {
 		if ((block & 3) || (SCpnt->request.nr_sectors & 3)) {
 			printk("sd.c:Bad block number requested");
-			SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 			return 0;
 		} else {
 			block = block >> 2;
@@ -300,7 +313,6 @@ static int sd_init_command(Scsi_Cmnd * SCpnt)
 	switch (SCpnt->request.cmd) {
 	case WRITE:
 		if (!dpnt->device->writeable) {
-			SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 			return 0;
 		}
 		SCpnt->cmnd[0] = WRITE_6;
@@ -459,22 +471,13 @@ static int sd_release(struct inode *inode, struct file *file)
 
 static void sd_geninit(struct gendisk *);
 
-static struct file_operations sd_fops =
+static struct block_device_operations sd_fops =
 {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select */
-	sd_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	sd_open,		/* open code */
-	NULL,			/* flush */
-	sd_release,		/* release */
-	block_fsync,		/* fsync */
-	NULL,			/* fasync */
-	check_scsidisk_media_change,	/* Disk change */
-	fop_revalidate_scsidisk	/* revalidate */
+	open:			sd_open,
+	release:		sd_release,
+	ioctl:			sd_ioctl,
+	check_media_change:	check_scsidisk_media_change,
+	revalidate:		fop_revalidate_scsidisk
 };
 
 /*
@@ -520,7 +523,9 @@ static void sd_geninit(struct gendisk *ignored)
 static void rw_intr(Scsi_Cmnd * SCpnt)
 {
 	int result = SCpnt->result;
+#if CONFIG_SCSI_LOGGING
 	char nbuff[6];
+#endif
 	int this_count = SCpnt->bufflen >> 9;
 	int good_sectors = (result == 0 ? this_count : 0);
 	int block_sectors = 1;
@@ -658,20 +663,6 @@ static int check_scsidisk_media_change(kdev_t full_dev)
 	return retval;
 }
 
-static void sd_wait_cmd(Scsi_Cmnd * SCpnt, const void *cmnd,
-	      void *buffer, unsigned bufflen, void (*done) (Scsi_Cmnd *),
-			int timeout, int retries)
-{
-	DECLARE_MUTEX_LOCKED(sem);
-
-	SCpnt->request.sem = &sem;
-	SCpnt->request.rq_status = RQ_SCSI_BUSY;
-	scsi_do_cmd(SCpnt, (void *) cmnd,
-		    buffer, bufflen, done, timeout, retries);
-	down(&sem);
-	SCpnt->request.sem = NULL;
-}
-
 static void sd_init_done(Scsi_Cmnd * SCpnt)
 {
 	struct request *req;
@@ -729,7 +720,7 @@ static int sd_init_onedisk(int i)
 			SCpnt->sense_buffer[0] = 0;
 			SCpnt->sense_buffer[2] = 0;
 
-			sd_wait_cmd (SCpnt, (void *) cmd, (void *) buffer,
+			scsi_wait_cmd (SCpnt, (void *) cmd, (void *) buffer,
 				0/*512*/, sd_init_done,  SD_TIMEOUT, MAX_RETRIES);
 
 			the_result = SCpnt->result;
@@ -755,7 +746,7 @@ static int sd_init_onedisk(int i)
 				SCpnt->sense_buffer[0] = 0;
 				SCpnt->sense_buffer[2] = 0;
 
-				sd_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
+				scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
 					    512, sd_init_done, SD_TIMEOUT, MAX_RETRIES);
 			}
 			spintime = 1;
@@ -785,7 +776,7 @@ static int sd_init_onedisk(int i)
 		SCpnt->sense_buffer[0] = 0;
 		SCpnt->sense_buffer[2] = 0;
 
-		sd_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
+		scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
 			    8, sd_init_done, SD_TIMEOUT, MAX_RETRIES);
 
 		the_result = SCpnt->result;
@@ -936,7 +927,7 @@ static int sd_init_onedisk(int i)
 		SCpnt->sense_buffer[2] = 0;
 
 		/* same code as READCAPA !! */
-		sd_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
+		scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
 			    512, sd_init_done, SD_TIMEOUT, MAX_RETRIES);
 
 		the_result = SCpnt->result;

@@ -487,10 +487,8 @@ void pci_set_master(struct pci_dev *dev);
 int pci_set_power_state(struct pci_dev *dev, int state);
 int pci_assign_resource(struct pci_dev *dev, int i);
 
-#define __pcidev(entry)	list_entry(entry, struct pci_dev, global_list)
-
 #define pci_for_each_dev(dev) \
-	for(dev = __pcidev(pci_devices.next); dev != __pcidev(&pci_devices); dev = __pcidev(dev->global_list.next))
+	for(dev = pci_dev_g(pci_devices.next); dev != pci_dev_g(&pci_devices); dev = pci_dev_g(dev->global_list.next))
 
 /* Helper functions for low-level code (drivers/pci/setup.c) */
 

@@ -117,13 +117,7 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
                 return -EINTR;
         }
 
-	{
-		DECLARE_MUTEX_LOCKED(sem);
-		SCpnt->request.sem = &sem;
-		scsi_do_cmd(SCpnt, cmd, NULL, 0, scsi_ioctl_done, timeout, retries);
-		down(&sem);
-		SCpnt->request.sem = NULL;
-	}
+        scsi_wait_cmd(SCpnt, cmd, NULL, 0, scsi_ioctl_done, timeout, retries);
 
 	SCSI_LOG_IOCTL(2, printk("Ioctl returned  0x%x\n", SCpnt->result));
 
@@ -306,14 +300,8 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
                 return -EINTR;
         }
 
-	{
-		DECLARE_MUTEX_LOCKED(sem);
-		SCpnt->request.sem = &sem;
-		scsi_do_cmd(SCpnt, cmd, buf, needed, scsi_ioctl_done,
-			    timeout, retries);
-		down(&sem);
-		SCpnt->request.sem = NULL;
-	}
+        scsi_wait_cmd(SCpnt, cmd, buf, needed, scsi_ioctl_done,
+                      timeout, retries);
 
 	/* 
 	 * If there was an error condition, pass the info back to the user. 

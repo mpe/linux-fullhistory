@@ -62,8 +62,6 @@ static struct file_operations udf_dir_operations = {
 	NULL,			/* release */
 	udf_sync_file,	/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
 

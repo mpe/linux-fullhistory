@@ -121,21 +121,12 @@ static void fd_request_timeout(unsigned long);
 static void do_fd_request(request_queue_t * q);
 static void start_request(struct floppy_state *fs);
 
-static struct file_operations floppy_fops = {
-	NULL,			/* lseek */
-	floppy_read,		/* read */
-	floppy_write,		/* write */
-	NULL,			/* readdir */
-	NULL,			/* poll */
-	floppy_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	floppy_open,		/* open */
-	NULL,			/* flush */
-	floppy_release,		/* release */
-	block_fsync,		/* fsync */
-	NULL,			/* fasync */
-	floppy_check_change,	/* check_media_change */
-	floppy_revalidate,	/* revalidate */
+static struct block_device_operations floppy_fops = {
+	open:			floppy_open,
+	release:		floppy_release,
+	ioctl:			floppy_ioctl,
+	check_media_change:	floppy_check_change,
+	revalidate:		floppy_revalidate,
 };
 
 /*

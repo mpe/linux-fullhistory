@@ -1192,8 +1192,6 @@ static /*const*/ struct file_operations cm_mixer_fops = {
 	&cm_release_mixdev,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -1815,8 +1813,6 @@ static /*const*/ struct file_operations cm_audio_fops = {
 	&cm_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -2096,8 +2092,6 @@ static /*const*/ struct file_operations cm_midi_fops = {
 	&cm_midi_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -2270,8 +2264,6 @@ static /*const*/ struct file_operations cm_dmfm_fops = {
 	&cm_dmfm_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 

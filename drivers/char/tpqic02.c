@@ -2777,8 +2777,6 @@ static struct file_operations qic02_tape_fops = {
 	qic02_tape_release,		/* release */
 	NULL,				/* fsync */
 	NULL,				/* fasync */
-	NULL,				/* check_media_change */
-	NULL				/* revalidate */
 };
 
 

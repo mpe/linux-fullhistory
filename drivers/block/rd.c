@@ -379,18 +379,10 @@ static int rd_release(struct inode * inode, struct file * filp)
 	return 0;
 }
 
-static struct file_operations fd_fops = {
-	NULL,		/* lseek - default */
-	block_read,	/* read - block dev read */
-	block_write,	/* write - block dev write */
-	NULL,		/* readdir - not here! */
-	NULL,		/* poll */
-	rd_ioctl, 	/* ioctl */
-	NULL,		/* mmap */
-	rd_open,	/* open */
-	NULL,		/* flush */
-	rd_release,	/* module needs to decrement use count */
-	block_fsync	/* fsync */ 
+static struct block_device_operations fd_fops = {
+	open:		rd_open,
+	release:	rd_release,
+	ioctl:		rd_ioctl,
 };
 
 /* Before freeing the module, invalidate all of the protected buffers! */

@@ -68,8 +68,6 @@ struct file_operations coda_file_operations = {
 	coda_release,           /* release */
 	coda_fsync,		/* fsync */
 	NULL,                   /* fasync */
-	NULL,                   /* check_media_change */
-	NULL,                   /* revalidate */
 	NULL                    /* lock */
 };
 

@@ -472,9 +472,7 @@ static int usb_hub_thread(void *__hub)
 	 * This thread doesn't need any user-level access,
 	 * so get rid of all our resources
 	 */
-	exit_mm(current);
-	exit_files(current);
-	exit_fs(current);
+	daemonize();
 
 	/* Setup a nice name */
 	strcpy(current->comm, "khubd");

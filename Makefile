@@ -401,7 +401,7 @@ modules_install:
 	if [ -f PCMCIA_NET_MODULES ]; then inst_mod PCMCIA_NET_MODULES pcmcia; fi; \
 	if [ -f PCMCIA_CHAR_MODULES ]; then inst_mod PCMCIA_CHAR_MODULES pcmcia; fi; \
 	\
-	ls *.o > $$MODLIB/.allmods; \
+	ls -1 -U *.o | sort > $$MODLIB/.allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 $$MODLIB/.allmods - > $$MODLIB/.misc; \
 	if [ -s $$MODLIB/.misc ]; then inst_mod $$MODLIB/.misc misc; fi; \
 	rm -f $$MODLIB/.misc $$MODLIB/.allmods; \

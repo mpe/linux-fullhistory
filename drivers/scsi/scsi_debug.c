@@ -122,6 +122,9 @@ typedef void (*done_fct_t) (Scsi_Cmnd *);
 static volatile done_fct_t do_done[SCSI_DEBUG_MAILBOXES] =
 {NULL,};
 
+struct Scsi_Host * SHpnt = NULL;
+
+static void scsi_debug_send_self_command(struct Scsi_Host * shpnt);
 static void scsi_debug_intr_handle(unsigned long);
 
 static struct timer_list timeout[SCSI_DEBUG_MAILBOXES];
@@ -232,6 +235,17 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 
 	buff = (unsigned char *) SCpnt->request_buffer;
 
+        /*
+         * If a command comes for the ID of the host itself, just print
+         * a silly message and return.
+         */
+        if( target == 7 ) {
+                printk("How do you do!\n");
+                SCpnt->result = 0;
+                done(SCpnt);
+                return 0;
+        }
+
 	if (target >= NR_FAKE_DISKS || SCpnt->lun != 0) {
 		SCpnt->result = DID_NO_CONNECT << 16;
 		done(SCpnt);
@@ -295,6 +309,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 		break;
 	case READ_CAPACITY:
 		SCSI_LOG_LLQUEUE(3, printk("Read Capacity\n"));
+                SHpnt = SCpnt->host;
 		if (NR_REAL < 0)
 			NR_REAL = (MINOR(SCpnt->request.rq_dev) >> 4) & 0x0f;
 		memset(buff, 0, bufflen);
@@ -306,6 +321,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 		buff[5] = 0;
 		buff[6] = (SIZE(target) >> 8) & 0xff;	/* 512 byte sectors */
 		buff[7] = SIZE(target) & 0xff;
+
 		scsi_debug_errsts = 0;
 		break;
 	case READ_10:
@@ -528,6 +544,45 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 	return 0;
 }
 
+static void sd_test_done(Scsi_Cmnd * SCpnt)
+{
+	struct request *req;
+
+	req = &SCpnt->request;
+	req->rq_status = RQ_SCSI_DONE;	/* Busy, but indicate request done */
+
+	if (req->sem != NULL) {
+		up(req->sem);
+	}
+}
+
+static void scsi_debug_send_self_command(struct Scsi_Host * shpnt)
+{
+	static unsigned char cmd[6] =
+	{TEST_UNIT_READY, 0, 0, 0, 0, 0};
+
+        Scsi_Cmnd     * scp;
+        Scsi_Device   * sdev;
+        
+        printk("Allocating host dev\n");
+        sdev = scsi_get_host_dev(shpnt);
+        printk("Got %p. Allocating command block\n", sdev);
+        scp  = scsi_allocate_device(sdev, 1, FALSE);
+        printk("Got %p\n", scp);
+
+        scp->cmd_len = 6;
+        scp->use_sg = 0;
+        
+        printk("Sending command\n");
+        scsi_wait_cmd (scp, (void *) cmd, (void *) NULL,
+                       0, sd_test_done,  100, 3);
+        
+        printk("Releasing command\n");
+        scsi_release_command(scp);
+        printk("Freeing device\n");
+        scsi_free_host_dev(sdev);
+}
+
 /* A "high" level interrupt handler.  This should be called once per jiffy
  * to simulate a regular scsi disk.  We use a timer to do this. */
 
@@ -672,6 +727,11 @@ int scsi_debug_proc_info(char *buffer, char **start, off_t offset,
 			 * what we are supposed to do here.  Simulate bus lockups
 			 * to test our reset capability.
 			 */
+			if (length == 4 && strncmp(buffer, "test", length) == 0) {
+                                printk("Testing send self command %p\n", SHpnt);
+                                scsi_debug_send_self_command(SHpnt);
+                                return orig_length;
+                        }
 			if (length == 6 && strncmp(buffer, "lockup", length) == 0) {
 				scsi_debug_lockup = 1;
 				return orig_length;

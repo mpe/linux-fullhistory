@@ -917,10 +917,6 @@ struct file_operations psaux_no_fops = {
 	NULL, 		/* ioctl */
 	NULL,		/* mmap */
 	aux_no_open,
-	NULL,		/* flush */
-	NULL,
-	NULL,
-	NULL,
 };
 
 static struct miscdevice psaux_mouse = {

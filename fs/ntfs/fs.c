@@ -421,8 +421,6 @@ static struct file_operations ntfs_file_operations_nommap = {
 	NULL, /* release */
 	NULL, /* fsync */
 	NULL, /* fasync */
-	NULL, /* check_media_change */
-	NULL, /* revalidate */
 	NULL, /* lock */
 };
 
@@ -602,8 +600,6 @@ static struct file_operations ntfs_file_operations = {
 	NULL, /* release */
 	NULL, /* fsync */
 	NULL, /* fasync */
-	NULL, /* check_media_change */
-	NULL, /* revalidate */
 	NULL, /* lock */
 };
 
@@ -633,17 +629,6 @@ static struct file_operations ntfs_dir_operations = {
 	NULL, /* read */
 	NULL, /* write */
 	ntfs_readdir, /* readdir */
-	NULL, /* poll */
-	NULL, /* ioctl */
-	NULL, /* mmap */
-	NULL, /* open */
-	NULL, /* flush */
-	NULL, /* release */
-	NULL, /* fsync */
-	NULL, /* fasync */
-	NULL, /* check_media_change */
-	NULL, /* revalidate */
-	NULL, /* lock */
 };
 
 static struct inode_operations ntfs_dir_inode_operations = {

@@ -311,21 +311,11 @@ static char * pf_buf;                   /* buffer for request in progress */
 
 /* kernel glue structures */
 
-static struct file_operations pf_fops = {
-        NULL,                   /* lseek - default */
-        block_read,             /* read - general block-dev read */
-        block_write,            /* write - general block-dev write */
-        NULL,                   /* readdir - bad */
-        NULL,                   /* select */
-        pf_ioctl,               /* ioctl */
-        NULL,                   /* mmap */
-        pf_open,                /* open */
-	NULL,			/* flush */
-        pf_release,             /* release */
-        block_fsync,            /* fsync */
-        NULL,                   /* fasync */
-        pf_check_media,         /* media change ? */
-        NULL                    /* revalidate new media */
+static struct block_device_operations pf_fops = {
+	open:			pf_open,
+	release:		pf_release,
+	ioctl:			pf_ioctl,
+	check_media_change:	pf_check_media,
 };
 
 void pf_init_units( void )

@@ -4,6 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/locks.h>
 #include <linux/fcntl.h>
@@ -389,6 +390,7 @@ struct block_device *bdget(dev_t dev)
 		return NULL;
 	atomic_set(&new_bdev->bd_count,1);
 	new_bdev->bd_dev = dev;
+	new_bdev->bd_op = NULL;
 	spin_lock(&bdev_lock);
 	bdev = bdfind(dev, head);
 	if (!bdev) {
@@ -415,7 +417,7 @@ void bdput(struct block_device *bdev)
 
 static struct {
 	const char *name;
-	struct file_operations *bdops;
+	struct block_device_operations *bdops;
 } blkdevs[MAX_BLKDEV] = {
 	{ NULL, NULL },
 };
@@ -438,9 +440,9 @@ int get_blkdev_list(char * p)
 	Return the function table of a device.
 	Load the driver if needed.
 */
-struct file_operations * get_blkfops(unsigned int major)
+static const struct block_device_operations * get_blkfops(unsigned int major)
 {
-	const struct file_operations *ret = NULL;
+	const struct block_device_operations *ret = NULL;
 
 	/* major 0 is used for non-device mounts */
 	if (major && major < MAX_BLKDEV) {
@@ -456,7 +458,7 @@ struct file_operations * get_blkfops(unsigned int major)
 	return ret;
 }
 
-int register_blkdev(unsigned int major, const char * name, struct file_operations *bdops)
+int register_blkdev(unsigned int major, const char * name, struct block_device_operations *bdops)
 {
 	if (major == 0) {
 		for (major = MAX_BLKDEV-1; major > 0; major--) {
@@ -502,7 +504,7 @@ int unregister_blkdev(unsigned int major, const char * name)
 int check_disk_change(kdev_t dev)
 {
 	int i;
-	const struct file_operations * bdops;
+	const struct block_device_operations * bdops;
 	struct super_block * sb;
 
 	i = MAJOR(dev);
@@ -530,17 +532,16 @@ int check_disk_change(kdev_t dev)
 int ioctl_by_bdev(struct block_device *bdev, unsigned cmd, unsigned long arg)
 {
 	kdev_t rdev = to_kdev_t(bdev->bd_dev);
-	struct file_operations *fops = get_blkfops(MAJOR(rdev));
 	struct inode inode_fake;
 	int res;
 	mm_segment_t old_fs = get_fs();
 
-	if (!fops || !fops->ioctl)
+	if (!bdev->bd_op->ioctl)
 		return -EINVAL;
 	inode_fake.i_rdev=rdev;
 	init_waitqueue_head(&inode_fake.i_wait);
 	set_fs(KERNEL_DS);
-	res = fops->ioctl(&inode_fake, NULL, cmd, arg);
+	res = bdev->bd_op->ioctl(&inode_fake, NULL, cmd, arg);
 	set_fs(old_fs);
 	return res;
 }
@@ -549,9 +550,10 @@ int blkdev_get(struct block_device *bdev, mode_t mode, unsigned flags, int kind)
 {
 	int ret = -ENODEV;
 	kdev_t rdev = to_kdev_t(bdev->bd_dev); /* this should become bdev */
-	struct file_operations *fops = get_blkfops(MAJOR(rdev));
 	down(&bdev->bd_sem);
-	if (fops) {
+	if (!bdev->bd_op)
+		bdev->bd_op = get_blkfops(MAJOR(rdev));
+	if (bdev->bd_op) {
 		/*
 		 * This crockload is due to bad choice of ->open() type.
 		 * It will go away.
@@ -567,8 +569,8 @@ int blkdev_get(struct block_device *bdev, mode_t mode, unsigned flags, int kind)
 			fake_dentry.d_inode = fake_inode;
 			fake_inode->i_rdev = rdev;
 			ret = 0;
-			if (fops->open)
-				ret = fops->open(fake_inode, &fake_file);
+			if (bdev->bd_op->open)
+				ret = bdev->bd_op->open(fake_inode, &fake_file);
 			if (!ret)
 				atomic_inc(&bdev->bd_openers);
 			iput(fake_inode);
@@ -578,28 +580,74 @@ int blkdev_get(struct block_device *bdev, mode_t mode, unsigned flags, int kind)
 	return ret;
 }
 
+int blkdev_open(struct inode * inode, struct file * filp)
+{
+	int ret = -ENODEV;
+	struct block_device *bdev = inode->i_bdev;
+	down(&bdev->bd_sem);
+	if (!bdev->bd_op)
+		bdev->bd_op = get_blkfops(MAJOR(inode->i_rdev));
+	if (bdev->bd_op) {
+		ret = 0;
+		if (bdev->bd_op->open)
+			ret = bdev->bd_op->open(inode,filp);
+		if (!ret)
+			atomic_inc(&bdev->bd_openers);
+	}	
+	up(&bdev->bd_sem);
+	return ret;
+}	
+
 int blkdev_put(struct block_device *bdev, int kind)
 {
 	int ret = 0;
 	kdev_t rdev = to_kdev_t(bdev->bd_dev); /* this should become bdev */
-	struct file_operations *fops = get_blkfops(MAJOR(rdev));
 	down(&bdev->bd_sem);
 	/* syncing will go here */
 	if (atomic_dec_and_test(&bdev->bd_openers)) {
 		/* invalidating buffers will go here */
 	}
-	if (fops->release) {
+	if (bdev->bd_op->release) {
 		struct inode * fake_inode = get_empty_inode();
 		ret = -ENOMEM;
 		if (fake_inode) {
 			fake_inode->i_rdev = rdev;
-			ret = fops->release(fake_inode, NULL);
+			ret = bdev->bd_op->release(fake_inode, NULL);
 			iput(fake_inode);
 		}
 	}
+	if (!atomic_read(&bdev->bd_openers))
+		bdev->bd_op = NULL;	/* we can't rely on driver being */
+					/* kind to stay around. */
 	up(&bdev->bd_sem);
 	return ret;
 }
+
+static int blkdev_close(struct inode * inode, struct file * filp)
+{
+	return blkdev_put(inode->i_bdev, BDEV_FILE);
+}
+
+static int blkdev_ioctl(struct inode *inode, struct file *file, unsigned cmd,
+			unsigned long arg)
+{
+	if (inode->i_bdev->bd_op->ioctl)
+		return inode->i_bdev->bd_op->ioctl(inode, file, cmd, arg);
+	return -EINVAL;
+}
+
+struct file_operations def_blk_fops = {
+	open:		blkdev_open,
+	release:	blkdev_close,
+	read:		block_read,
+	write:		block_write,
+	fsync:		block_fsync,
+	ioctl:		blkdev_ioctl,
+};
+
+struct inode_operations blkdev_inode_operations = {
+	&def_blk_fops,		/* default file operations */
+};
 
 char * bdevname(kdev_t dev)
 {
@@ -612,40 +660,3 @@ char * bdevname(kdev_t dev)
 	sprintf(buffer, "%s(%d,%d)", name, MAJOR(dev), MINOR(dev));
 	return buffer;
 }
-
-/*
- * Called every time a block special file is opened
- */
-int blkdev_open(struct inode * inode, struct file * filp)
-{
-	int ret = -ENODEV;
-	filp->f_op = get_blkfops(MAJOR(inode->i_rdev));
-	if (filp->f_op != NULL){
-		ret = 0;
-		if (filp->f_op->open != NULL)
-			ret = filp->f_op->open(inode,filp);
-	}	
-	return ret;
-}	
-
-/*
- * Dummy default file-operations: the only thing this does
- * is contain the open that then fills in the correct operations
- * depending on the special file...
- */
-struct file_operations def_blk_fops = {
-	NULL,		/* lseek */
-	NULL,		/* read */
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	blkdev_open,	/* open */
-	NULL,		/* flush */
-	NULL,		/* release */
-};
-
-struct inode_operations blkdev_inode_operations = {
-	&def_blk_fops,		/* default file operations */
-};

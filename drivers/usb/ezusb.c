@@ -965,8 +965,6 @@ static struct file_operations ezusb_fops = {
 	ezusb_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL   /* lock */
 };
 

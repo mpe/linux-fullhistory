@@ -133,9 +133,9 @@ startup_32:
 	movl $ SYMBOL_NAME(empty_zero_page)+2048,%edi
 	movzwl CL_OFFSET,%esi
 	addl $(CL_BASE_ADDR),%esi
-	movl $2048,%ecx
+	movl $512,%ecx
 	rep
-	movsb
+	movsl
 1:
 #ifdef __SMP__
 checkCPUtype:

@@ -1255,8 +1255,6 @@ static /*const*/ struct file_operations sv_mixer_fops = {
 	&sv_release_mixdev,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -1915,8 +1913,6 @@ static /*const*/ struct file_operations sv_audio_fops = {
 	&sv_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -2197,8 +2193,6 @@ static /*const*/ struct file_operations sv_midi_fops = {
 	&sv_midi_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -2376,8 +2370,6 @@ static /*const*/ struct file_operations sv_dmfm_fops = {
 	&sv_dmfm_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 

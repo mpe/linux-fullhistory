@@ -1481,8 +1481,6 @@ static struct file_operations mtrr_fops =
     mtrr_close,  /*  Release           */
     NULL,        /*  Fsync             */
     NULL,        /*  Fasync            */
-    NULL,        /*  CheckMediaChange  */
-    NULL,        /*  Revalidate        */
     NULL,        /*  Lock              */
 };
 

@@ -437,7 +437,7 @@ static int teql_master_init(struct net_device *dev)
 	dev->stop		= teql_master_close;
 	dev->get_stats		= teql_master_stats;
 	dev->change_mtu		= teql_master_mtu;
-	dev->type		= 0;
+	dev->type		= ARPHRD_VOID;
 	dev->mtu		= 1500;
 	dev->tx_queue_len	= 100;
 	dev->flags		= IFF_NOARP;

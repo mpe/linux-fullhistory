@@ -12,6 +12,7 @@
  *
  * Rani Assaf <rani@magic.metawire.com> :980802: JIFFIES and CPU clock sources are repaired.
  * Eduardo J. Blanco <ejbs@netlabs.com.uy> :990222: kmod support
+ * Jamal Hadi Salim <hadi@nortelnetworks.com>: 990601: ingress support
  */
 
 #include <linux/config.h>
@@ -210,6 +211,7 @@ struct Qdisc *qdisc_leaf(struct Qdisc *p, u32 classid)
 	if (cops == NULL)
 		return NULL;
 	cl = cops->get(p, classid);
+
 	if (cl == 0)
 		return NULL;
 	leaf = cops->leaf(p, cl);
@@ -306,17 +308,32 @@ dev_graft_qdisc(struct net_device *dev, struct Qdisc *qdisc)
 
 	write_lock(&qdisc_tree_lock);
 	spin_lock_bh(&dev->queue_lock);
-	oqdisc = dev->qdisc_sleeping;
+	if (qdisc && qdisc->flags&TCQ_F_INGRES) {
+		oqdisc = dev->qdisc_ingress;
+		/* Prune old scheduler */
+		if (oqdisc && atomic_read(&oqdisc->refcnt) <= 1) {
+			/* delete */
+			qdisc_reset(oqdisc);
+			dev->qdisc_ingress = NULL;
+		} else {  /* new */
+			dev->qdisc_ingress = qdisc;
+		}
 
-	/* Prune old scheduler */
-	if (oqdisc && atomic_read(&oqdisc->refcnt) <= 1)
-		qdisc_reset(oqdisc);
+	} else {
 
-	/* ... and graft new one */
-	if (qdisc == NULL)
-		qdisc = &noop_qdisc;
-	dev->qdisc_sleeping = qdisc;
-	dev->qdisc = &noop_qdisc;
+		oqdisc = dev->qdisc_sleeping;
+
+		/* Prune old scheduler */
+		if (oqdisc && atomic_read(&oqdisc->refcnt) <= 1)
+			qdisc_reset(oqdisc);
+
+		/* ... and graft new one */
+		if (qdisc == NULL)
+			qdisc = &noop_qdisc;
+		dev->qdisc_sleeping = qdisc;
+		dev->qdisc = &noop_qdisc;
+	}
+
 	spin_unlock_bh(&dev->queue_lock);
 	write_unlock(&qdisc_tree_lock);
 
@@ -337,9 +354,15 @@ int qdisc_graft(struct net_device *dev, struct Qdisc *parent, u32 classid,
 		struct Qdisc *new, struct Qdisc **old)
 {
 	int err = 0;
+	struct Qdisc *q = *old;
 
-	if (parent == NULL) {
-		*old = dev_graft_qdisc(dev, new);
+
+	if (parent == NULL) { 
+		if (q && q->flags&TCQ_F_INGRES) {
+			*old = dev_graft_qdisc(dev, q);
+		} else {
+			*old = dev_graft_qdisc(dev, new);
+		}
 	} else {
 		struct Qdisc_class_ops *cops = parent->ops->cl_ops;
 
@@ -406,6 +429,10 @@ qdisc_create(struct net_device *dev, u32 handle, struct rtattr **tca, int *errp)
 	memset(sch, 0, size);
 
 	skb_queue_head_init(&sch->q);
+
+	if (handle == TC_H_INGRESS)
+		sch->flags |= TCQ_F_INGRES;
+
 	sch->ops = ops;
 	sch->enqueue = ops->enqueue;
 	sch->dequeue = ops->dequeue;
@@ -418,7 +445,11 @@ qdisc_create(struct net_device *dev, u32 handle, struct rtattr **tca, int *errp)
 		if (handle == 0)
 			goto err_out;
 	}
-	sch->handle = handle;
+
+	if (handle == TC_H_INGRESS)
+                sch->handle =TC_H_MAKE(TC_H_INGRESS, 0);
+        else
+                sch->handle = handle;
 
 	if (!ops->init || (err = ops->init(sch, tca[TCA_OPTIONS-1])) == 0) {
 		write_lock(&qdisc_tree_lock);
@@ -518,12 +549,16 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 
 	if (clid) {
 		if (clid != TC_H_ROOT) {
-			if ((p = qdisc_lookup(dev, TC_H_MAJ(clid))) == NULL)
-				return -ENOENT;
-			q = qdisc_leaf(p, clid);
-		} else
+			if (TC_H_MAJ(clid) != TC_H_MAJ(TC_H_INGRESS)) {
+				if ((p = qdisc_lookup(dev, TC_H_MAJ(clid))) == NULL)
+					return -ENOENT;
+				q = qdisc_leaf(p, clid);
+			} else { /* ingress */
+				q = dev->qdisc_ingress;
+                        }
+		} else {
 			q = dev->qdisc_sleeping;
-
+		}
 		if (!q)
 			return -ENOENT;
 
@@ -575,9 +610,13 @@ static int tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 
 	if (clid) {
 		if (clid != TC_H_ROOT) {
-			if ((p = qdisc_lookup(dev, TC_H_MAJ(clid))) == NULL)
-				return -ENOENT;
-			q = qdisc_leaf(p, clid);
+			if (clid != TC_H_INGRESS) {
+				if ((p = qdisc_lookup(dev, TC_H_MAJ(clid))) == NULL)
+					return -ENOENT;
+				q = qdisc_leaf(p, clid);
+			} else { /*ingress */
+				q = dev->qdisc_ingress;
+			}
 		} else {
 			q = dev->qdisc_sleeping;
 		}
@@ -655,7 +694,10 @@ static int tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 create_n_graft:
 	if (!(n->nlmsg_flags&NLM_F_CREATE))
 		return -ENOENT;
-	q = qdisc_create(dev, tcm->tcm_handle, tca, &err);
+	if (clid == TC_H_INGRESS)
+		q = qdisc_create(dev, tcm->tcm_parent, tca, &err);
+        else
+		q = qdisc_create(dev, tcm->tcm_handle, tca, &err);
 	if (q == NULL)
 		return err;
 
@@ -1189,6 +1231,9 @@ int __init pktsched_init(void)
 #endif
 #ifdef CONFIG_NET_SCH_GRED
        INIT_QDISC(gred);
+#endif
+#ifdef CONFIG_NET_SCH_INGRESS
+       INIT_QDISC(ingress);
 #endif
 #ifdef CONFIG_NET_SCH_DSMARK
        INIT_QDISC(dsmark);

@@ -15,12 +15,16 @@ tristate '  RED queue' CONFIG_NET_SCH_RED
 tristate '  SFQ queue' CONFIG_NET_SCH_SFQ
 tristate '  TEQL queue' CONFIG_NET_SCH_TEQL
 tristate '  TBF queue' CONFIG_NET_SCH_TBF
+tristate '  GRED queue' CONFIG_NET_SCH_GRED
+tristate '  Diffserv field marker' CONFIG_NET_SCH_DSMARK
+tristate '  Ingress Qdisc' CONFIG_NET_SCH_INGRESS
 bool '  QoS support' CONFIG_NET_QOS
 if [ "$CONFIG_NET_QOS" = "y" ]; then
    bool '    Rate estimator' CONFIG_NET_ESTIMATOR
 fi
 bool '  Packet classifier API' CONFIG_NET_CLS
 if [ "$CONFIG_NET_CLS" = "y" ]; then
+   tristate '    TC index classifier' CONFIG_NET_CLS_TCINDEX
    tristate '    Routing table based classifier' CONFIG_NET_CLS_ROUTE4
    if [ "$CONFIG_NET_CLS_ROUTE4" != "n" ]; then
       define_bool CONFIG_NET_CLS_ROUTE y
@@ -30,7 +34,7 @@ if [ "$CONFIG_NET_CLS" = "y" ]; then
    if [ "$CONFIG_NET_QOS" = "y" ]; then
       tristate '    Special RSVP classifier' CONFIG_NET_CLS_RSVP
       tristate '    Special RSVP classifier for IPv6' CONFIG_NET_CLS_RSVP6
-      bool '    Ingres traffic policing' CONFIG_NET_CLS_POLICE
+      bool '    Traffic policing (needed for in/egress)' CONFIG_NET_CLS_POLICE
    fi
 fi
 

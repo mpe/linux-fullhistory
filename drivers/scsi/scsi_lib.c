@@ -294,11 +294,12 @@ void scsi_queue_next_request(request_queue_t * q, Scsi_Cmnd * SCpnt)
  * Function:    scsi_end_request()
  *
  * Purpose:     Post-processing of completed commands called from interrupt
- *              handler.
+ *              handler or a bottom-half handler.
  *
  * Arguments:   SCpnt    - command that is complete.
  *              uptodate - 1 if I/O indicates success, 0 for I/O error.
  *              sectors  - number of sectors we want to mark.
+ *		requeue  - indicates whether we should requeue leftovers.
  *
  * Lock status: Assumed that lock is not held upon entry.
  *
@@ -310,7 +311,10 @@ void scsi_queue_next_request(request_queue_t * q, Scsi_Cmnd * SCpnt)
  *		We are guaranteeing that the request queue will be goosed
  *		at some point during this call.
  */
-Scsi_Cmnd *scsi_end_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
+static Scsi_Cmnd *__scsi_end_request(Scsi_Cmnd * SCpnt, 
+				     int uptodate, 
+				     int sectors,
+				     int requeue)
 {
 	struct request *req;
 	struct buffer_head *bh;
@@ -348,6 +352,11 @@ Scsi_Cmnd *scsi_end_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 	if (req->bh) {
                 request_queue_t *q;
 
+		if( !requeue )
+		{
+			return SCpnt;
+		}
+
                 q = &SCpnt->device->request_queue;
 
 		req->buffer = bh->b_data;
@@ -374,6 +383,83 @@ Scsi_Cmnd *scsi_end_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 	 */
 	scsi_release_command(SCpnt);
 	return NULL;
+}
+
+/*
+ * Function:    scsi_end_request()
+ *
+ * Purpose:     Post-processing of completed commands called from interrupt
+ *              handler or a bottom-half handler.
+ *
+ * Arguments:   SCpnt    - command that is complete.
+ *              uptodate - 1 if I/O indicates success, 0 for I/O error.
+ *              sectors  - number of sectors we want to mark.
+ *
+ * Lock status: Assumed that lock is not held upon entry.
+ *
+ * Returns:     Nothing
+ *
+ * Notes:       This is called for block device requests in order to
+ *              mark some number of sectors as complete.
+ * 
+ *		We are guaranteeing that the request queue will be goosed
+ *		at some point during this call.
+ */
+Scsi_Cmnd *scsi_end_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
+{
+	return __scsi_end_request(SCpnt, uptodate, sectors, 1);
+}
+
+/*
+ * Function:    scsi_release_buffers()
+ *
+ * Purpose:     Completion processing for block device I/O requests.
+ *
+ * Arguments:   SCpnt   - command that we are bailing.
+ *
+ * Lock status: Assumed that no lock is held upon entry.
+ *
+ * Returns:     Nothing
+ *
+ * Notes:       In the event that an upper level driver rejects a
+ *		command, we must release resources allocated during
+ *		the __init_io() function.  Primarily this would involve
+ *		the scatter-gather table, and potentially any bounce
+ *		buffers.
+ */
+static void scsi_release_buffers(Scsi_Cmnd * SCpnt)
+{
+	ASSERT_LOCK(&io_request_lock, 0);
+
+	/*
+	 * Free up any indirection buffers we allocated for DMA purposes. 
+	 */
+	if (SCpnt->use_sg) {
+		struct scatterlist *sgpnt;
+		int i;
+
+		sgpnt = (struct scatterlist *) SCpnt->request_buffer;
+
+		for (i = 0; i < SCpnt->use_sg; i++) {
+			if (sgpnt[i].alt_address) {
+				scsi_free(sgpnt[i].address, sgpnt[i].length);
+			}
+		}
+		scsi_free(SCpnt->request_buffer, SCpnt->sglist_len);
+	} else {
+		if (SCpnt->request_buffer != SCpnt->request.buffer) {
+			scsi_free(SCpnt->request_buffer, SCpnt->request_bufflen);
+		}
+	}
+
+	/*
+	 * Zero these out.  They now point to freed memory, and it is
+	 * dangerous to hang onto the pointers.
+	 */
+	SCpnt->buffer  = NULL;
+	SCpnt->bufflen = 0;
+	SCpnt->request_buffer = NULL;
+	SCpnt->request_bufflen = 0;
 }
 
 /*
@@ -471,14 +557,23 @@ void scsi_io_completion(Scsi_Cmnd * SCpnt, int good_sectors,
 		 * If multiple sectors are requested in one buffer, then
 		 * they will have been finished off by the first command.
 		 * If not, then we have a multi-buffer command.
+		 *
+		 * If block_sectors != 0, it means we had a medium error
+		 * of some sort, and that we want to mark some number of
+		 * sectors as not uptodate.  Thus we want to inhibit
+		 * requeueing right here - we will requeue down below
+		 * when we handle the bad sectors.
 		 */
-		SCpnt = scsi_end_request(SCpnt, 1, good_sectors);
+		SCpnt = __scsi_end_request(SCpnt, 
+					   1, 
+					   good_sectors,
+					   result == 0);
 
 		/*
 		 * If the command completed without error, then either finish off the
 		 * rest of the command, or start a new one.
 		 */
-		if (result == 0) {
+		if (result == 0 || SCpnt == NULL ) {
 			return;
 		}
 	}
@@ -561,7 +656,11 @@ void scsi_io_completion(Scsi_Cmnd * SCpnt, int good_sectors,
 		}
 	}			/* driver byte != 0 */
 	if (result) {
-		printk("SCSI disk error : host %d channel %d id %d lun %d return code = %x\n",
+		struct Scsi_Device_Template *STpnt;
+
+		STpnt = scsi_get_request_dev(&SCpnt->request);
+		printk("SCSI %s error : host %d channel %d id %d lun %d return code = %x\n",
+		       (STpnt ? STpnt->name : "device"),
 		       SCpnt->device->host->host_no,
 		       SCpnt->device->channel,
 		       SCpnt->device->id,
@@ -569,6 +668,11 @@ void scsi_io_completion(Scsi_Cmnd * SCpnt, int good_sectors,
 
 		if (driver_byte(result) & DRIVER_SENSE)
 			print_sense("sd", SCpnt);
+		/*
+		 * Mark a single buffer as not uptodate.  Queue the remainder.
+		 * We sometimes get this cruft in the event that a medium error
+		 * isn't properly reported.
+		 */
 		SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.current_nr_sectors);
 		return;
 	}
@@ -702,6 +806,31 @@ void scsi_request_fn(request_queue_t * q)
 		} else {
 			SDpnt->starved = 0;
 		}
+
+ 		/*
+		 * FIXME(eric)
+		 * I am not sure where the best place to do this is.  We need
+		 * to hook in a place where we are likely to come if in user
+		 * space.   Technically the error handling thread should be
+		 * doing this crap, but the error handler isn't used by
+		 * most hosts.
+		 */
+		if (SDpnt->was_reset) {
+			/*
+			 * We need to relock the door, but we might
+			 * be in an interrupt handler.  Only do this
+			 * from user space, since we do not want to
+			 * sleep from an interrupt.
+			 */
+			SDpnt->was_reset = 0;
+			if (SDpnt->removable && !in_interrupt()) {
+				spin_unlock_irq(&io_request_lock);
+				scsi_ioctl(SDpnt, SCSI_IOCTL_DOORLOCK, 0);
+				spin_lock_irq(&io_request_lock);
+				continue;
+			}
+		}
+
 		/*
 		 * Loop through all of the requests in this queue, and find
 		 * one that is queueable.
@@ -768,30 +897,6 @@ void scsi_request_fn(request_queue_t * q)
 		SDpnt->device_busy++;
 
 		/*
-		 * FIXME(eric)
-		 * I am not sure where the best place to do this is.  We need
-		 * to hook in a place where we are likely to come if in user
-		 * space.   Technically the error handling thread should be
-		 * doing this crap, but the error handler isn't used by
-		 * most hosts.
-		 */
-		if (SDpnt->was_reset) {
-			/*
-			 * We need to relock the door, but we might
-			 * be in an interrupt handler.  Only do this
-			 * from user space, since we do not want to
-			 * sleep from an interrupt.
-			 */
-			if (SDpnt->removable && !in_interrupt()) {
-				spin_unlock_irq(&io_request_lock);
-				scsi_ioctl(SDpnt, SCSI_IOCTL_DOORLOCK, 0);
-				SDpnt->was_reset = 0;
-				spin_lock_irq(&io_request_lock);
-				continue;
-			}
-			SDpnt->was_reset = 0;
-		}
-		/*
 		 * Finally, before we release the lock, we copy the
 		 * request to the command block, and remove the
 		 * request from the request list.   Note that we always
@@ -842,6 +947,10 @@ void scsi_request_fn(request_queue_t * q)
 			 * get those allocated here.  
 			 */
 			if (!SDpnt->scsi_init_io_fn(SCpnt)) {
+				SHpnt->host_busy--;
+				SDpnt->device_busy--;
+				scsi_end_request(SCpnt, 0, 
+						 SCpnt->request.nr_sectors);
 				spin_lock_irq(&io_request_lock);
 				continue;
 			}
@@ -849,6 +958,11 @@ void scsi_request_fn(request_queue_t * q)
 			 * Initialize the actual SCSI command for this request.
 			 */
 			if (!STpnt->init_command(SCpnt)) {
+				SHpnt->host_busy--;
+				SDpnt->device_busy--;
+				scsi_release_buffers(SCpnt);
+				scsi_end_request(SCpnt, 0, 
+						 SCpnt->request.nr_sectors);
 				spin_lock_irq(&io_request_lock);
 				continue;
 			}

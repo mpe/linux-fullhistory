@@ -789,7 +789,7 @@ void do_ide9_request (request_queue_t * q);
 void ide_init_subdrivers (void);
 
 #ifndef _IDE_C
-extern struct file_operations ide_fops[];
+extern struct block_device_operations ide_fops[];
 extern ide_proc_entry_t generic_subdriver_entries[];
 #endif
 

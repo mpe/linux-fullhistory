@@ -150,7 +150,7 @@ int scsi_delete_timer(Scsi_Cmnd * SCset)
 
 	rtn = del_timer(&SCset->eh_timeout);
 
-	SCSI_LOG_ERROR_RECOVERY(5, printk("Clearing timer for command %p\n", SCset));
+	SCSI_LOG_ERROR_RECOVERY(5, printk("Clearing timer for command %p %d\n", SCset, rtn));
 
 	SCset->eh_timeout.data = (unsigned long) NULL;
 	SCset->eh_timeout.function = NULL;
@@ -1057,7 +1057,10 @@ int scsi_decide_disposition(Scsi_Cmnd * SCpnt)
 	if ((++SCpnt->retries) < SCpnt->allowed) {
 		return NEEDS_RETRY;
 	} else {
-		return FAILED;
+                /*
+                 * No more retries - report this one back to upper level.
+                 */
+		return SUCCESS;
 	}
 }
 

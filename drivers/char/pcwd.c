@@ -582,8 +582,6 @@ static struct file_operations pcwd_fops = {
 	pcwd_close,	/* Release */
 	NULL,		/* Fsync */
 	NULL,		/* Fasync */
-	NULL,		/* CheckMediaChange */
-	NULL,		/* Revalidate */
 	NULL,		/* Lock */
 };
 

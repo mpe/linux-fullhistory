@@ -198,16 +198,15 @@ static int yenta_set_socket(pci_socket_t *socket, socket_state_t *state)
 		/* ISA interrupt control? */
 		if (bridge & CB_BRIDGE_INTR) {
 			u8 intr = exca_readb(socket, I365_INTCTL);
-			intr = (intr & ~0xf) ; // | state->io_irq;
+			intr = (intr & ~0xf) | state->io_irq;
 			exca_writeb(socket, I365_INTCTL, intr);
 		}
 	} else {
 		u8 reg;
 
-		reg = exca_readb(socket, I365_INTCTL) & I365_RING_ENA;
+		reg = exca_readb(socket, I365_INTCTL) & (I365_RING_ENA | I365_INTR_ENA);
 		reg |= (state->flags & SS_RESET) ? 0 : I365_PC_RESET;
 		reg |= (state->flags & SS_IOCARD) ? I365_PC_IOCARD : 0;
-		reg |= I365_INTR_ENA;			/* CSC to PCI interrupt */
 		reg |= state->io_irq;
 		exca_writeb(socket, I365_INTCTL, reg);
 
@@ -444,6 +443,10 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket)
 		config_writew(socket, CB_BRIDGE_CONTROL, bridge_ctrl);
 	}
 
+	/*
+	 * Probe for usable interrupts using the force
+	 * register to generate bogus card status events.
+	 */
 	cb_writel(socket, CB_SOCKET_EVENT, -1);
 	cb_writel(socket, CB_SOCKET_MASK, CB_CSTSMASK);
 	val = probe_irq_on();
@@ -456,7 +459,7 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket)
 		cb_writel(socket, CB_SOCKET_EVENT, -1);
 	}
 	cb_writel(socket, CB_SOCKET_MASK, 0);
-	return probe_irq_mask(val);
+	return probe_irq_mask(val) & 0xffff;
 }
 
 static void yenta_clear_maps(pci_socket_t *socket)

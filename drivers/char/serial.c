@@ -199,8 +199,6 @@ static char *serial_revdate = "1999-11-17";
 #include <linux/pci.h>
 #endif
 
-#include <linux/sysrq.h>
-
 /*
  * All of the compatibilty code so we can compile serial.c against
  * older kernels is hidden in serial_compat.h

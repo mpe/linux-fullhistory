@@ -75,24 +75,14 @@ static DAC960_Controller_T
 /*
   DAC960_FileOperations is the File Operations structure for DAC960 Logical
   Disk Devices.
+  Leonard, no offence, but _where_ did this C dialect come from?
 */
 
-static FileOperations_T
-  DAC960_FileOperations =
-    { llseek:		    NULL,
-      read:		    block_read,
-      write:		    block_write,
-      readdir:		    NULL,
-      poll:		    NULL,
-      ioctl:		    DAC960_IOCTL,
-      mmap:		    NULL,
-      open:		    DAC960_Open,
-      release:		    DAC960_Release,
-      fsync:		    block_fsync,
-      fasync:		    NULL,
-      check_media_change:   NULL,
-      revalidate:	    NULL };
-
+static struct block_device_operations DAC960_FileOperations = { 
+	open:		DAC960_Open,
+	release:	DAC960_Release,
+	ioctl:		DAC960_IOCTL,
+};
 
 /*
   DAC960_ProcDirectoryEntry is the DAC960 /proc/driver/rd directory entry.

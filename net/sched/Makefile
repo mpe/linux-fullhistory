@@ -28,6 +28,14 @@ endif
 
 endif
 
+ifeq ($(CONFIG_NET_SCH_INGRESS), y)
+O_OBJS += sch_ingress.o 
+else
+  ifeq ($(CONFIG_NET_SCH_INGRESS), m)
+	M_OBJS += sch_ingress.o 
+  endif
+endif
+
 ifeq ($(CONFIG_NET_SCH_CBQ), y)
 O_OBJS += sch_cbq.o
 else
@@ -98,6 +106,30 @@ O_OBJS += sch_teql.o
 else
   ifeq ($(CONFIG_NET_SCH_TEQL), m)
 	M_OBJS += sch_teql.o
+  endif
+endif
+
+ifeq ($(CONFIG_NET_SCH_GRED), y)
+O_OBJS += sch_gred.o
+else
+  ifeq ($(CONFIG_NET_SCH_GRED), m)
+       M_OBJS += sch_gred.o
+  endif
+endif
+
+ifeq ($(CONFIG_NET_SCH_DSMARK), y)
+O_OBJS += sch_dsmark.o
+else
+  ifeq ($(CONFIG_NET_SCH_DSMARK), m)
+       M_OBJS += sch_dsmark.o
+  endif
+endif
+
+ifeq ($(CONFIG_NET_CLS_TCINDEX), y)
+O_OBJS += cls_tcindex.o
+else
+  ifeq ($(CONFIG_NET_CLS_TCINDEX), m)
+       M_OBJS += cls_tcindex.o
   endif
 endif
 

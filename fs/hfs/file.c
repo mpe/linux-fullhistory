@@ -45,8 +45,6 @@ static struct file_operations hfs_file_operations = {
 	NULL,			/* release */
 	file_fsync,		/* fsync - default */
         NULL,			/* fasync - default */
-        NULL,			/* check_media_change - none */
-        NULL,			/* revalidate - none */
         NULL			/* lock - none */
 };
 

@@ -346,7 +346,7 @@ struct block_device {
 /*	struct address_space	bd_data; */
 	dev_t			bd_dev;  /* not a kdev_t - it's a search key */
 	atomic_t		bd_openers;
-/*	struct bdev_operations *bd_op; */
+	const struct block_device_operations *bd_op;
 	struct semaphore	bd_sem;	/* open/close mutex */
 };
 
@@ -615,7 +615,15 @@ extern int vfs_rename(struct inode *, struct dentry *, struct inode *, struct de
  * to have different dirent layouts depending on the binary type.
  */
 typedef int (*filldir_t)(void *, const char *, int, off_t, ino_t);
-	
+
+struct block_device_operations {
+	int (*open) (struct inode *, struct file *);
+	int (*release) (struct inode *, struct file *);
+	int (*ioctl) (struct inode *, struct file *, unsigned, unsigned long);
+	int (*check_media_change) (kdev_t);
+	int (*revalidate) (kdev_t);
+};
+
 struct file_operations {
 	loff_t (*llseek) (struct file *, loff_t, int);
 	ssize_t (*read) (struct file *, char *, size_t, loff_t *);
@@ -629,8 +637,6 @@ struct file_operations {
 	int (*release) (struct inode *, struct file *);
 	int (*fsync) (struct file *, struct dentry *);
 	int (*fasync) (int, struct file *, int);
-	int (*check_media_change) (kdev_t dev);
-	int (*revalidate) (kdev_t dev);
 	int (*lock) (struct file *, int, struct file_lock *);
 };
 
@@ -758,7 +764,7 @@ extern char * getname(const char *);
 
 enum {BDEV_FILE, BDEV_SWAP, BDEV_FS, BDEV_RAW};
 extern void kill_fasync(struct fasync_struct *, int, int);
-extern int register_blkdev(unsigned int, const char *, struct file_operations *);
+extern int register_blkdev(unsigned int, const char *, struct block_device_operations *);
 extern int unregister_blkdev(unsigned int, const char *);
 extern struct block_device *bdget(dev_t);
 extern void bdput(struct block_device *);

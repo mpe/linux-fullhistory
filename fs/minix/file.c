@@ -53,8 +53,6 @@ static struct file_operations minix_file_operations = {
 	NULL,			/* release */
 	minix_sync_file,	/* fsync */
 	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL			/* revalidate */
 };
 
 struct inode_operations minix_file_inode_operations = {

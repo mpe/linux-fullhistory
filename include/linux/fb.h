@@ -6,12 +6,8 @@
 
 /* Definitions of frame buffers						*/
 
-#define FB_MAJOR	29
-
-#define FB_MODES_SHIFT		5	/* 32 modes per framebuffer */
-#define FB_NUM_MINORS		256	/* 256 Minors               */
-#define FB_MAX			(FB_NUM_MINORS / (1 << FB_MODES_SHIFT))
-#define GET_FB_IDX(node)	(MINOR(node) >> FB_MODES_SHIFT)
+#define FB_MAJOR		29
+#define FB_MAX			32	/* sufficient for now */
 
 /* ioctls
    0x46 is 'F'								*/
@@ -210,6 +206,12 @@ struct fb_monspecs {
 };
 
 #ifdef __KERNEL__
+
+#if 1 /* to go away in 2.4.0 */
+extern int GET_FB_IDX(kdev_t rdev);
+#else
+#define GET_FB_IDX(node)	(MINOR(node))
+#endif
 
 #include <linux/fs.h>
 #include <linux/init.h>

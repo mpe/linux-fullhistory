@@ -274,8 +274,6 @@ static struct file_operations pt_fops = {
         pt_release,             /* release */
         NULL,                   /* fsync */
         NULL,                   /* fasync */
-        NULL,                   /* media change ? */
-        NULL                    /* revalidate new media */
 };
 
 void pt_init_units( void )

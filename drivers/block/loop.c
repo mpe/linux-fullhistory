@@ -668,17 +668,10 @@ static int lo_release(struct inode *inode, struct file *file)
 	return err;
 }
 
-static struct file_operations lo_fops = {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll */
-	lo_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	lo_open,		/* open */
-	NULL,			/* flush */
-	lo_release		/* release */
+static struct block_device_operations lo_fops = {
+	open:		lo_open,
+	release:	lo_release,
+	ioctl:		lo_ioctl,
 };
 
 /*

@@ -3935,8 +3935,6 @@ struct file_operations ixj_fops =
 	ixj_release,
 	NULL,			/* ixj_fsync */
 	ixj_fasync,		/* ixj_fasync */
-	NULL,			/* media change */
-	NULL,			/* revalidate */
 	NULL			/* lock */
 };
 

@@ -267,7 +267,6 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 		/*
 		 * Umm, yeah, right.   Swapping to a cdrom.  Nice try.
 		 */
-		SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		return 0;
 	}
 	SCSI_LOG_HLQUEUE(1, printk("Doing sr request, dev = %d, block = %d\n", devm, block));
@@ -276,7 +275,6 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 	    !scsi_CDs[dev].device ||
 	    !scsi_CDs[dev].device->online) {
 		SCSI_LOG_HLQUEUE(2, printk("Finishing %ld sectors\n", SCpnt->request.nr_sectors));
-		SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		SCSI_LOG_HLQUEUE(2, printk("Retry with 0x%p\n", SCpnt));
 		return 0;
 	}
@@ -286,7 +284,6 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 		 * bit has been reset
 		 */
 		/* printk("SCSI disk has been changed. Prohibiting further I/O.\n"); */
-		SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		return 0;
 	}
 	/*
@@ -300,14 +297,12 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 			printk("sr: can't switch blocksize: in interrupt\n");
 	}
 	if (SCpnt->request.cmd == WRITE) {
-		SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		return 0;
 	}
 	if (scsi_CDs[dev].device->sector_size == 1024) {
 		if ((block & 1) || (SCpnt->request.nr_sectors & 1)) {
 			printk("sr.c:Bad 1K block number requested (%d %ld)",
                                block, SCpnt->request.nr_sectors);
-			SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 			return 0;
 		} else {
 			block = block >> 1;
@@ -318,7 +313,6 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 		if ((block & 3) || (SCpnt->request.nr_sectors & 3)) {
 			printk("sr.c:Bad 2K block number requested (%d %ld)",
                                block, SCpnt->request.nr_sectors);
-			SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 			return 0;
 		} else {
 			block = block >> 2;
@@ -328,7 +322,6 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 	switch (SCpnt->request.cmd) {
 	case WRITE:
 		if (!scsi_CDs[dev].device->writeable) {
-			SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 			return 0;
 		}
 		SCpnt->cmnd[0] = WRITE_10;
