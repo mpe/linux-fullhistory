@@ -17,11 +17,13 @@ extern struct notifier_block *sound_locker;
 
 EXPORT_SYMBOL(mixer_devs);
 EXPORT_SYMBOL(audio_devs);
+EXPORT_SYMBOL(num_mixers);
 EXPORT_SYMBOL(num_audiodevs);
 
 EXPORT_SYMBOL(note_to_freq);
 EXPORT_SYMBOL(compute_finetune);
 EXPORT_SYMBOL(seq_copy_to_input);
+EXPORT_SYMBOL(sequencer_init);
 EXPORT_SYMBOL(sequencer_timer);
 
 EXPORT_SYMBOL(sound_install_audiodrv);
@@ -35,17 +37,25 @@ EXPORT_SYMBOL(sound_alloc_mididev);
 EXPORT_SYMBOL(sound_alloc_mixerdev);
 EXPORT_SYMBOL(sound_alloc_timerdev);
 EXPORT_SYMBOL(sound_alloc_synthdev);
+EXPORT_SYMBOL(sound_mem_blocks);
+EXPORT_SYMBOL(sound_mem_sizes);
+EXPORT_SYMBOL(sound_nblocks);
 EXPORT_SYMBOL(sound_unload_audiodev);
 EXPORT_SYMBOL(sound_unload_mididev);
 EXPORT_SYMBOL(sound_unload_mixerdev);
 EXPORT_SYMBOL(sound_unload_timerdev);
 EXPORT_SYMBOL(sound_unload_synthdev);
 
+EXPORT_SYMBOL(load_mixer_volumes);
+
 EXPORT_SYMBOL(DMAbuf_start_dma);
+EXPORT_SYMBOL(DMAbuf_open_dma);
+EXPORT_SYMBOL(DMAbuf_close_dma);
 EXPORT_SYMBOL(DMAbuf_inputintr);
 EXPORT_SYMBOL(DMAbuf_outputintr);
 EXPORT_SYMBOL(dma_ioctl);
 
+EXPORT_SYMBOL(conf_printf);
 EXPORT_SYMBOL(conf_printf2);
 
 EXPORT_SYMBOL(sound_timer_init);
@@ -76,3 +86,4 @@ EXPORT_SYMBOL(midi_synth_panning);
 EXPORT_SYMBOL(midi_synth_setup_voice);
 EXPORT_SYMBOL(midi_synth_send_sysex);
 EXPORT_SYMBOL(midi_synth_bender);
+EXPORT_SYMBOL(midi_synth_load_patch);

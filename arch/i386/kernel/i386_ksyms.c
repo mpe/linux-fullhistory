@@ -27,10 +27,9 @@ EXPORT_SYMBOL(drive_info);
 #endif
 
 /* platform dependent support */
-EXPORT_SYMBOL(x86);
+EXPORT_SYMBOL(boot_cpu_data);
 EXPORT_SYMBOL(EISA_bus);
 EXPORT_SYMBOL(MCA_bus);
-EXPORT_SYMBOL(wp_works_ok);
 EXPORT_SYMBOL(__verify_write);
 EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);

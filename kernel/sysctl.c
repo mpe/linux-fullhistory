@@ -160,12 +160,6 @@ static ctl_table kern_table[] = {
 	{KERN_REALROOTDEV, "real-root-dev", &real_root_dev, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 #endif
-#ifdef CONFIG_ROOT_NFS
-	{KERN_NFSRNAME, "nfs-root-name", nfs_root_name, NFS_ROOT_NAME_LEN,
-	 0644, NULL, &proc_dostring, &sysctl_string },
-	{KERN_NFSRADDRS, "nfs-root-addrs", nfs_root_addrs, NFS_ROOT_ADDRS_LEN,
-	 0644, NULL, &proc_dostring, &sysctl_string },
-#endif
 #ifdef CONFIG_BINFMT_JAVA
 	{KERN_JAVA_INTERPRETER, "java-interpreter", binfmt_java_interpreter,
 	 64, 0644, NULL, &proc_dostring, &sysctl_string },

@@ -10,7 +10,7 @@
  *	Configuration Switches
  */
 
-#define KBD_REPORT_ERR			/* Report keyboard errors */
+#undef KBD_REPORT_ERR			/* Report keyboard errors */
 #define KBD_REPORT_UNKN			/* Report unknown scan codes */
 #define KBD_REPORT_TIMEOUTS		/* Report keyboard timeouts */
 #undef KBD_IS_FOCUS_9000		/* We have the brain-damaged FOCUS-9000 keyboard */
@@ -87,7 +87,7 @@ extern unsigned char aux_device_present;
  *	Controller Mode Register Bits
  */
 
-#define KBD_MODE_KBD_INT	0x01	/* Keyboard data generage IRQ1 */
+#define KBD_MODE_KBD_INT	0x01	/* Keyboard data generate IRQ1 */
 #define KBD_MODE_MOUSE_INT	0x02	/* Mouse data generate IRQ12 */
 #define KBD_MODE_SYS 		0x04	/* The system flag (?) */
 #define KBD_MODE_NO_KEYLOCK	0x08	/* The keylock doesn't affect the keyboard if set */

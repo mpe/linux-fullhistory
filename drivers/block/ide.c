@@ -1640,6 +1640,7 @@ void ide_unregister (unsigned int index)
 	unregister_blkdev(hwif->major, hwif->name);
 	kfree(blksize_size[hwif->major]);
 	kfree(max_sectors[hwif->major]);
+	kfree(max_readahead[hwif->major]);
 	blk_dev[hwif->major].request_fn = NULL;
 	blk_dev[hwif->major].data = NULL;
 	blk_dev[hwif->major].queue = NULL;
@@ -2598,6 +2599,11 @@ search:
 	return NULL;
 }
 
+static ide_proc_entry_t generic_subdriver_entries[] = {
+	{ "capacity", proc_ide_read_capacity, NULL },
+	{ NULL, NULL, NULL }
+};
+
 int ide_register_subdriver (ide_drive_t *drive, ide_driver_t *driver, int version)
 {
 	unsigned long flags;
@@ -2619,6 +2625,7 @@ int ide_register_subdriver (ide_drive_t *drive, ide_driver_t *driver, int versio
 		drive->nice1 = 1;
 	}
 	drive->revalidate = 1;
+	ide_add_proc_entries(drive, generic_subdriver_entries);
 	ide_add_proc_entries(drive, driver->proc);
 	return 0;
 }
@@ -2634,6 +2641,7 @@ int ide_unregister_subdriver (ide_drive_t *drive)
 		return 1;
 	}
 	ide_remove_proc_entries(drive, DRIVER(drive)->proc);
+	ide_remove_proc_entries(drive, generic_subdriver_entries);
 	drive->driver = NULL;
 	restore_flags(flags);
 	return 0;

@@ -658,8 +658,7 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 	PRINTP("  %d pending writes" ANDP hostdata->pendingw);
     if (hostdata->pendingr || hostdata->pendingw)
 	PRINTP("\n");
-    for (dev = scsi_devices; dev; dev=dev->next) {
-	if (dev->host == scsi_ptr) {
+    for (dev = scsi_ptr->host_queue; dev; dev=dev->next) {
 	    unsigned long br = hostdata->bytes_read[dev->id];
 	    unsigned long bw = hostdata->bytes_write[dev->id];
 	    long tr = hostdata->time_read[dev->id] / HZ;
@@ -687,7 +686,6 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 	    if (tw)
 		PRINTP(" @ %5ld bps" ANDP bw / tw); 
 	    PRINTP("\n");
-	}
     }
 #endif
 	

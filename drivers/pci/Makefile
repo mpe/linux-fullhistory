@@ -12,4 +12,8 @@
 L_OBJS   := pci.o
 L_TARGET := pci.a
 
+ifeq ($(CONFIG_PCI_OPTIMIZE),y)
+L_OBJS   += quirks.o
+endif
+
 include $(TOPDIR)/Rules.make

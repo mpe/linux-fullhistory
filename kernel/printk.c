@@ -324,6 +324,8 @@ void register_console(struct console * console)
 	 *	that registers here.
 	 */
 	if (selected_console == 0) {
+		if (console->index < 0)
+			console->index = 0;
 		if (console->setup == NULL ||
 		    console->setup(console, NULL) == 0) {
 			console->flags |= CON_ENABLED | CON_FIRST;

@@ -76,6 +76,7 @@
  *              Steve Whitehouse:       Added various other default routines
  *                                      common to several socket families.
  *              Chris Evans     :       Call suser() check last on F_SETOWN
+ *		Jay Schulist	:	Added SO_ATTACH_FILTER and SO_DETACH_FILTER.
  *
  * To Fix:
  *
@@ -122,6 +123,10 @@
 #include <net/icmp.h>
 #include <linux/ipsec.h>
 
+#ifdef CONFIG_FILTER
+#include <linux/filter.h>
+#endif
+
 #define min(a,b)	((a)<(b)?(a):(b))
 
 /* Run time adjustable parameters. */
@@ -147,6 +152,10 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	struct linger ling;
 	struct ifreq req;
 	int ret = 0;
+
+#ifdef CONFIG_FILTER
+	struct sock_fprog fprog;
+#endif
 	
 	/*
 	 *	Options without arguments
@@ -278,48 +287,6 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 			
 			
-#ifdef CONFIG_NET_SECURITY			
-		/*
-		 *	FIXME: make these error things that are not
-		 *	available!
-		 */
-		 
-		case SO_SECURITY_AUTHENTICATION:
-			if(val<=IPSEC_LEVEL_DEFAULT)
-			{
-				sk->authentication=val;
-				return 0;
-			}
-			if(net_families[sock->ops->family]->authentication)
-				sk->authentication=val;
-			else
-				return -EINVAL;
-			break;
-			
-		case SO_SECURITY_ENCRYPTION_TRANSPORT:
-			if(val<=IPSEC_LEVEL_DEFAULT)
-			{
-				sk->encryption=val;
-				return 0;
-			}
-			if(net_families[sock->ops->family]->encryption)
-				sk->encryption = val;
-			else
-				return -EINVAL;
-			break;
-			
-		case SO_SECURITY_ENCRYPTION_NETWORK:
-			if(val<=IPSEC_LEVEL_DEFAULT)
-			{
-				sk->encrypt_net=val;
-				return 0;
-			}
-			if(net_families[sock->ops->family]->encrypt_net)
-				sk->encrypt_net = val;
-			else
-				return -EINVAL;
-			break;
-#endif
 		case SO_BINDTODEVICE:
 			/* Bind this socket to a particular device like "eth0",
 			 * as specified in an ifreq structure. If the device
@@ -359,6 +326,33 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			}
 			return 0;
 
+#ifdef CONFIG_FILTER
+		case SO_ATTACH_FILTER:
+			if(optlen < sizeof(struct sock_fprog))
+				return -EINVAL;
+
+			if(copy_from_user(&fprog, optval, sizeof(fprog)))
+			{
+				ret = -EFAULT;
+				break;
+			}
+
+			ret = sk_attach_filter(&fprog, sk);
+			break;
+
+		case SO_DETACH_FILTER:
+                        if(sk->filter)
+			{
+				fprog.filter = sk->filter_data;
+				kfree_s(fprog.filter, (sizeof(fprog.filter) * sk->filter));
+				sk->filter_data = NULL;
+				sk->filter = 0;
+				return 0;
+			}
+			else
+				return -EINVAL;
+			break;
+#endif
 
 		/* We implement the SO_SNDLOWAT etc to
 		   not be settable (1003.1g 5.3) */

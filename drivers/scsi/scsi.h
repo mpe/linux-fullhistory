@@ -24,6 +24,7 @@
 #include <linux/random.h>
 
 #include <asm/hardirq.h>
+#include <asm/scatterlist.h>
 #include <asm/io.h>
 
 /*
@@ -39,9 +40,57 @@
 #define MAX_SCSI_DEVICE_CODE 10
 extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 
-extern void scsi_make_blocked_list(void);
-extern volatile int in_scan_scsis;
-extern const unsigned char scsi_command_size[8];
+/*
+ *  Use these to separate status msg and our bytes
+ *
+ *  These are set by:
+ *
+ *      status byte = set from target device
+ *      msg_byte    = return status from host adapter itself.
+ *      host_byte   = set by low-level driver to indicate status.
+ *      driver_byte = set by mid-level.
+ */
+#define status_byte(result) (((result) >> 1) & 0x1f)
+#define msg_byte(result)    (((result) >> 8) & 0xff)
+#define host_byte(result)   (((result) >> 16) & 0xff)
+#define driver_byte(result) (((result) >> 24) & 0xff)
+#define suggestion(result)  (driver_byte(result) & SUGGEST_MASK)
+
+#define sense_class(sense)  (((sense) >> 4) & 0x7)
+#define sense_error(sense)  ((sense) & 0xf)
+#define sense_valid(sense)  ((sense) & 0x80);
+
+#define NEEDS_RETRY     0x2001
+#define SUCCESS         0x2002
+#define FAILED          0x2003
+#define QUEUED          0x2004
+#define SOFT_ERROR      0x2005
+#define ADD_TO_MLQUEUE  0x2006
+
+/*
+ * These are the values that scsi_cmd->state can take.
+ */
+#define SCSI_STATE_TIMEOUT         0x1000
+#define SCSI_STATE_FINISHED        0x1001
+#define SCSI_STATE_FAILED          0x1002
+#define SCSI_STATE_QUEUED          0x1003
+#define SCSI_STATE_UNUSED          0x1006
+#define SCSI_STATE_DISCONNECTING   0x1008
+#define SCSI_STATE_INITIALIZING    0x1009
+#define SCSI_STATE_BHQUEUE         0x100a
+#define SCSI_STATE_MLQUEUE         0x100b
+
+/*
+ * These are the values that the owner field can take.
+ * They are used as an indication of who the command belongs to.
+ */
+#define SCSI_OWNER_HIGHLEVEL      0x100
+#define SCSI_OWNER_MIDLEVEL       0x101
+#define SCSI_OWNER_LOWLEVEL       0x102
+#define SCSI_OWNER_ERROR_HANDLER  0x103
+#define SCSI_OWNER_BH_HANDLER     0x104
+#define SCSI_OWNER_NOBODY         0x105
+
 #define COMMAND_SIZE(opcode) scsi_command_size[((opcode) >> 5) & 7]
 
 #define IDENTIFY_BASE       0x80
@@ -50,6 +99,126 @@ extern const unsigned char scsi_command_size[8];
 		     ((lun) & 0x07)) 
 
 		 
+/*
+ * This defines the scsi logging feature.  It is a means by which the
+ * user can select how much information they get about various goings on,
+ * and it can be really useful for fault tracing.  The logging word is divided
+ * into 8 nibbles, each of which describes a loglevel.  The division of things
+ * is somewhat arbitrary, and the division of the word could be changed if it
+ * were really needed for any reason.  The numbers below are the only place where these
+ * are specified.  For a first go-around, 3 bits is more than enough, since this
+ * gives 8 levels of logging (really 7, since 0 is always off).  Cutting to 2 bits
+ * might be wise at some point.
+ */
+
+#define SCSI_LOG_ERROR_SHIFT              0
+#define SCSI_LOG_TIMEOUT_SHIFT            3
+#define SCSI_LOG_SCAN_SHIFT               6
+#define SCSI_LOG_MLQUEUE_SHIFT            9
+#define SCSI_LOG_MLCOMPLETE_SHIFT         12
+#define SCSI_LOG_LLQUEUE_SHIFT            15
+#define SCSI_LOG_LLCOMPLETE_SHIFT         18
+#define SCSI_LOG_HLQUEUE_SHIFT            21
+#define SCSI_LOG_HLCOMPLETE_SHIFT         24
+#define SCSI_LOG_IOCTL_SHIFT              27
+
+#define SCSI_LOG_ERROR_BITS               3
+#define SCSI_LOG_TIMEOUT_BITS             3
+#define SCSI_LOG_SCAN_BITS                3
+#define SCSI_LOG_MLQUEUE_BITS             3
+#define SCSI_LOG_MLCOMPLETE_BITS          3
+#define SCSI_LOG_LLQUEUE_BITS             3
+#define SCSI_LOG_LLCOMPLETE_BITS          3
+#define SCSI_LOG_HLQUEUE_BITS             3
+#define SCSI_LOG_HLCOMPLETE_BITS          3
+#define SCSI_LOG_IOCTL_BITS               3
+
+#if CONFIG_SCSI_LOGGING
+
+#define SCSI_CHECK_LOGGING(SHIFT, BITS, LEVEL, CMD)     \
+{                                                       \
+        unsigned int mask;                              \
+                                                        \
+        mask = (1 << (BITS)) - 1;                       \
+        if( ((scsi_logging_level >> (SHIFT)) & mask) > (LEVEL) ) \
+        {                                               \
+                (CMD);                                  \
+        }						\
+}
+
+#define SCSI_SET_LOGGING(SHIFT, BITS, LEVEL)            \
+{                                                       \
+        unsigned int mask;                              \
+                                                        \
+        mask = ((1 << (BITS)) - 1) << SHIFT;            \
+        scsi_logging_level = ((scsi_logging_level & ~mask) \
+                              | ((LEVEL << SHIFT) & mask));     \
+}
+
+
+
+#else
+
+/*
+ * With no logging enabled, stub these out so they don't do anything.
+ */
+#define SCSI_SET_LOGGING(SHIFT, BITS, LEVEL)
+
+#define SCSI_CHECK_LOGGING(SHIFT, BITS, LEVEL, CMD)
+#endif
+
+/*
+ * These are the macros that are actually used throughout the code to
+ * log events.  If logging isn't enabled, they are no-ops and will be
+ * completely absent from the user's code.
+ *
+ * The 'set' versions of the macros are really intended to only be called
+ * from the /proc filesystem, and in production kernels this will be about
+ * all that is ever used.  It could be useful in a debugging environment to
+ * bump the logging level when certain strange events are detected, however.
+ */
+#define SCSI_LOG_ERROR_RECOVERY(LEVEL,CMD)  \
+        SCSI_CHECK_LOGGING(SCSI_LOG_ERROR_SHIFT, SCSI_LOG_ERROR_BITS, LEVEL,CMD);
+#define SCSI_LOG_TIMEOUT(LEVEL,CMD)  \
+        SCSI_CHECK_LOGGING(SCSI_LOG_TIMEOUT_SHIFT, SCSI_LOG_TIMEOUT_BITS, LEVEL,CMD);
+#define SCSI_LOG_SCAN_BUS(LEVEL,CMD)  \
+        SCSI_CHECK_LOGGING(SCSI_LOG_SCAN_SHIFT, SCSI_LOG_SCAN_BITS, LEVEL,CMD);
+#define SCSI_LOG_MLQUEUE(LEVEL,CMD)  \
+        SCSI_CHECK_LOGGING(SCSI_LOG_MLQUEUE_SHIFT, SCSI_LOG_MLQUEUE_BITS, LEVEL,CMD);
+#define SCSI_LOG_MLCOMPLETE(LEVEL,CMD)  \
+        SCSI_CHECK_LOGGING(SCSI_LOG_MLCOMPLETE_SHIFT, SCSI_LOG_MLCOMPLETE_BITS, LEVEL,CMD);
+#define SCSI_LOG_LLQUEUE(LEVEL,CMD)  \
+        SCSI_CHECK_LOGGING(SCSI_LOG_LLQUEUE_SHIFT, SCSI_LOG_LLQUEUE_BITS, LEVEL,CMD);
+#define SCSI_LOG_LLCOMPLETE(LEVEL,CMD)  \
+        SCSI_CHECK_LOGGING(SCSI_LOG_LLCOMPLETE_SHIFT, SCSI_LOG_LLCOMPLETE_BITS, LEVEL,CMD);
+#define SCSI_LOG_HLQUEUE(LEVEL,CMD)  \
+        SCSI_CHECK_LOGGING(SCSI_LOG_HLQUEUE_SHIFT, SCSI_LOG_HLQUEUE_BITS, LEVEL,CMD);
+#define SCSI_LOG_HLCOMPLETE(LEVEL,CMD)  \
+        SCSI_CHECK_LOGGING(SCSI_LOG_HLCOMPLETE_SHIFT, SCSI_LOG_HLCOMPLETE_BITS, LEVEL,CMD);
+#define SCSI_LOG_IOCTL(LEVEL,CMD)  \
+        SCSI_CHECK_LOGGING(SCSI_LOG_IOCTL_SHIFT, SCSI_LOG_IOCTL_BITS, LEVEL,CMD);
+    
+
+#define SCSI_SET_ERROR_RECOVERY_LOGGING(LEVEL)  \
+        SCSI_SET_LOGGING(SCSI_LOG_ERROR_SHIFT, SCSI_LOG_ERROR_BITS, LEVEL);
+#define SCSI_SET_TIMEOUT_LOGGING(LEVEL)  \
+        SCSI_SET_LOGGING(SCSI_LOG_TIMEOUT_SHIFT, SCSI_LOG_TIMEOUT_BITS, LEVEL);
+#define SCSI_SET_SCAN_BUS_LOGGING(LEVEL)  \
+        SCSI_SET_LOGGING(SCSI_LOG_SCAN_SHIFT, SCSI_LOG_SCAN_BITS, LEVEL);
+#define SCSI_SET_MLQUEUE_LOGGING(LEVEL)  \
+        SCSI_SET_LOGGING(SCSI_LOG_MLQUEUE_SHIFT, SCSI_LOG_MLQUEUE_BITS, LEVEL);
+#define SCSI_SET_MLCOMPLETE_LOGGING(LEVEL)  \
+        SCSI_SET_LOGGING(SCSI_LOG_MLCOMPLETE_SHIFT, SCSI_LOG_MLCOMPLETE_BITS, LEVEL);
+#define SCSI_SET_LLQUEUE_LOGGING(LEVEL)  \
+        SCSI_SET_LOGGING(SCSI_LOG_LLQUEUE_SHIFT, SCSI_LOG_LLQUEUE_BITS, LEVEL);
+#define SCSI_SET_LLCOMPLETE_LOGGING(LEVEL)  \
+        SCSI_SET_LOGGING(SCSI_LOG_LLCOMPLETE_SHIFT, SCSI_LOG_LLCOMPLETE_BITS, LEVEL);
+#define SCSI_SET_HLQUEUE_LOGGING(LEVEL)  \
+        SCSI_SET_LOGGING(SCSI_LOG_HLQUEUE_SHIFT, SCSI_LOG_HLQUEUE_BITS, LEVEL);
+#define SCSI_SET_HLCOMPLETE_LOGGING(LEVEL)  \
+        SCSI_SET_LOGGING(SCSI_LOG_HLCOMPLETE_SHIFT, SCSI_LOG_HLCOMPLETE_BITS, LEVEL);
+#define SCSI_SET_IOCTL_LOGGING(LEVEL)  \
+        SCSI_SET_LOGGING(SCSI_LOG_IOCTL_SHIFT, SCSI_LOG_IOCTL_BITS, LEVEL);
     
 /*
  *  the return of the status word will be in the following format :
@@ -81,6 +250,7 @@ extern const unsigned char scsi_command_size[8];
 #define DID_ERROR       0x07 /* Internal error                          */
 #define DID_RESET       0x08 /* Reset by somebody.                      */
 #define DID_BAD_INTR    0x09 /* Got an interrupt we weren't expecting.  */ 
+#define DID_PASSTHROUGH 0x0a /* Force command past mid-layer            */
 #define DRIVER_OK       0x00 /* Driver status                           */ 
 
 /*
@@ -139,14 +309,107 @@ extern const unsigned char scsi_command_size[8];
 #define IS_ABORTING     0x10
 #define ASKED_FOR_SENSE 0x20
 
+
+#define CONTIGUOUS_BUFFERS(X,Y) ((X->b_data+X->b_size) == Y->b_data)
+
+/*
+ * This is the crap from the old error handling code.  We have it in a special
+ * place so that we can more easily delete it later on.
+ */
+#include "scsi_obsolete.h"
+
+/*
+ * Add some typedefs so that we can prototyope a bunch of the functions.
+ */
+typedef struct scsi_device Scsi_Device;
+typedef struct scsi_cmnd   Scsi_Cmnd;
+
+/*
+ * Here is where we prototype most of the mid-layer.
+ */
+
+/*
+ *  Initializes all SCSI devices.  This scans all scsi busses.
+ */ 
+
+extern int scsi_dev_init (void);
+
+
+
+void *   scsi_malloc(unsigned int);
+int      scsi_free(void *, unsigned int);
+extern unsigned int scsi_logging_level; /* What do we log? */
+extern unsigned int scsi_dma_free_sectors;  /* How much room do we have left */
+extern unsigned int scsi_need_isa_buffer;   /* True if some devices need indirection
+					* buffers */
+extern void scsi_make_blocked_list(void);
+extern volatile int in_scan_scsis;
+extern const unsigned char scsi_command_size[8];
+
+/*
+ * These are the error handling functions defined in scsi_error.c
+ */
+extern void scsi_add_timer(Scsi_Cmnd * SCset, int timeout, 
+                                void (*complete)(Scsi_Cmnd *));
+extern void scsi_done (Scsi_Cmnd *SCpnt);
+extern int  scsi_delete_timer(Scsi_Cmnd * SCset);
+extern void scsi_error_handler(void * host);
+extern int  scsi_retry_command(Scsi_Cmnd *);
+extern void scsi_finish_command(Scsi_Cmnd *);
+extern int  scsi_sense_valid(Scsi_Cmnd *);
+extern int  scsi_decide_disposition (Scsi_Cmnd * SCpnt);
+extern int  scsi_block_when_processing_errors(Scsi_Device *);
+extern void scsi_sleep(int);
+
+/*
+ *  scsi_abort aborts the current command that is executing on host host.
+ *  The error code, if non zero is returned in the host byte, otherwise 
+ *  DID_ABORT is returned in the hostbyte.
+ */
+
+extern void scsi_do_cmd (Scsi_Cmnd *, const void *cmnd ,
+			 void *buffer, unsigned bufflen, 
+			 void (*done)(struct scsi_cmnd *),
+			 int timeout, int retries);
+
+
+extern Scsi_Cmnd * scsi_allocate_device(struct request **, Scsi_Device *, int);
+
+extern Scsi_Cmnd * scsi_request_queueable(struct request *, Scsi_Device *);
+
+extern void scsi_release_command(Scsi_Cmnd *);
+
+extern int max_scsi_hosts;
+
+extern void proc_print_scsidevice(Scsi_Device *, char *, int *, int);
+
+extern void print_command(unsigned char *);
+extern void print_sense(const char *, Scsi_Cmnd *);
+extern void print_driverbyte(int scsiresult);
+extern void print_hostbyte(int scsiresult);
+
 /*
  *  The scsi_device struct contains what we know about each given scsi
  *  device.
  */
 
-typedef struct scsi_device {
+struct scsi_device {
+/* private: */
+    /*
+     * This information is private to the scsi mid-layer.  Wrapping it in a
+     * struct private is a way of marking it in a sort of C++ type of way.
+     */
     struct scsi_device * next;      /* Used for linked list */
+    struct scsi_device * prev;      /* Used for linked list */
+    struct wait_queue  * device_wait;/* Used to wait if
+                                                      device is busy */
+    struct Scsi_Host   * host;
+    volatile unsigned short device_busy;   /* commands actually active on low-level */
+    void              (* scsi_request_fn)(void);  /* Used to jumpstart things after an 
+                                     * ioctl */
+    Scsi_Cmnd          * device_queue;    /* queue of SCSI Command structures */
 
+/* public: */
     unsigned char id, lun, channel;
 
     unsigned int manufacturer;      /* Manufacturer of device, for using 
@@ -154,11 +417,7 @@ typedef struct scsi_device {
     int attached;                   /* # of high level drivers attached to 
 				     * this */
     int access_count;               /* Count of open channels/mounts */
-    struct wait_queue * device_wait;/* Used to wait if device is busy */
-    struct Scsi_Host * host;
-    void (*scsi_request_fn)(void);  /* Used to jumpstart things after an 
-				     * ioctl */
-    struct scsi_cmnd *device_queue; /* queue of SCSI Command structures */
+
     void *hostdata;                 /* available to low-level driver */
     char type;
     char scsi_level;
@@ -168,6 +427,7 @@ typedef struct scsi_device {
     unsigned char sync_max_offset;  /* Not greater than this offset */
     unsigned char queue_depth;	    /* How deep a queue to use */
 
+    unsigned online:1;
     unsigned writeable:1;
     unsigned removable:1; 
     unsigned random:1;
@@ -190,35 +450,8 @@ typedef struct scsi_device {
                                      * this device */
     unsigned expecting_cc_ua:1;     /* Expecting a CHECK_CONDITION/UNIT_ATTN
                                      * because we did a bus reset. */
-} Scsi_Device;
-
-/*
- *  Use these to separate status msg and our bytes
- */
-
-#define status_byte(result) (((result) >> 1) & 0x1f)
-#define msg_byte(result)    (((result) >> 8) & 0xff)
-#define host_byte(result)   (((result) >> 16) & 0xff)
-#define driver_byte(result) (((result) >> 24) & 0xff)
-#define suggestion(result)  (driver_byte(result) & SUGGEST_MASK)
-
-#define sense_class(sense)  (((sense) >> 4) & 0x7)
-#define sense_error(sense)  ((sense) & 0xf)
-#define sense_valid(sense)  ((sense) & 0x80);
-
-/*
- *  These are the SCSI devices available on the system.
- */
-
-extern Scsi_Device * scsi_devices;
-
-/*
- *  Initializes all SCSI devices.  This scans all scsi busses.
- */ 
-
-extern int scsi_dev_init (void);
-
-#include <asm/scatterlist.h>
+    unsigned device_blocked:1;      /* Device returned QUEUE_FULL. */
+};
 
 #ifdef __mc68000__
 #include <asm/pgtable.h>
@@ -228,109 +461,6 @@ extern int scsi_dev_init (void);
 #define CONTIGUOUS_BUFFERS(X,Y) ((X->b_data+X->b_size) == Y->b_data)
 #endif
 
-
-/*
- * These are the return codes for the abort and reset functions.  The mid-level
- * code uses these to decide what to do next.  Each of the low level abort
- * and reset functions must correctly indicate what it has done.
- * The descriptions are written from the point of view of the mid-level code,
- * so that the return code is telling the mid-level drivers exactly what
- * the low level driver has already done, and what remains to be done.
- */
-
-/* We did not do anything.  
- * Wait some more for this command to complete, and if this does not work, 
- * try something more serious. */ 
-#define SCSI_ABORT_SNOOZE 0
-
-/* This means that we were able to abort the command.  We have already
- * called the mid-level done function, and do not expect an interrupt that 
- * will lead to another call to the mid-level done function for this command */
-#define SCSI_ABORT_SUCCESS 1
-
-/* We called for an abort of this command, and we should get an interrupt 
- * when this succeeds.  Thus we should not restore the timer for this
- * command in the mid-level abort function. */
-#define SCSI_ABORT_PENDING 2
-
-/* Unable to abort - command is currently on the bus.  Grin and bear it. */
-#define SCSI_ABORT_BUSY 3
-
-/* The command is not active in the low level code. Command probably
- * finished. */
-#define SCSI_ABORT_NOT_RUNNING 4
-
-/* Something went wrong.  The low level driver will indicate the correct
- * error condition when it calls scsi_done, so the mid-level abort function
- * can simply wait until this comes through */
-#define SCSI_ABORT_ERROR 5
-
-/* We do not know how to reset the bus, or we do not want to.  Bummer.
- * Anyway, just wait a little more for the command in question, and hope that
- * it eventually finishes.  If it never finishes, the SCSI device could
- * hang, so use this with caution. */
-#define SCSI_RESET_SNOOZE 0
-
-/* We do not know how to reset the bus, or we do not want to.  Bummer.
- * We have given up on this ever completing.  The mid-level code will
- * request sense information to decide how to proceed from here. */
-#define SCSI_RESET_PUNT 1
-
-/* This means that we were able to reset the bus.  We have restarted all of
- * the commands that should be restarted, and we should be able to continue
- * on normally from here.  We do not expect any interrupts that will return
- * DID_RESET to any of the other commands in the host_queue, and the mid-level
- * code does not need to do anything special to keep the commands alive. 
- * If a hard reset was performed then all outstanding commands on the
- * bus have been restarted. */
-#define SCSI_RESET_SUCCESS 2
-
-/* We called for a reset of this bus, and we should get an interrupt 
- * when this succeeds.  Each command should get its own status
- * passed up to scsi_done, but this has not happened yet. 
- * If a hard reset was performed, then we expect an interrupt
- * for *each* of the outstanding commands that will have the
- * effect of restarting the commands.
- */
-#define SCSI_RESET_PENDING 3
-
-/* We did a reset, but do not expect an interrupt to signal DID_RESET.
- * This tells the upper level code to request the sense info, and this
- * should keep the command alive. */
-#define SCSI_RESET_WAKEUP 4
-
-/* The command is not active in the low level code. Command probably
-   finished. */
-#define SCSI_RESET_NOT_RUNNING 5
-
-/* Something went wrong, and we do not know how to fix it. */
-#define SCSI_RESET_ERROR 6
-
-#define SCSI_RESET_SYNCHRONOUS		0x01
-#define SCSI_RESET_ASYNCHRONOUS		0x02
-#define SCSI_RESET_SUGGEST_BUS_RESET	0x04
-#define SCSI_RESET_SUGGEST_HOST_RESET	0x08
-/*
- * This is a bitmask that is ored with one of the above codes.
- * It tells the mid-level code that we did a hard reset.
- */
-#define SCSI_RESET_BUS_RESET 0x100
-/*
- * This is a bitmask that is ored with one of the above codes.
- * It tells the mid-level code that we did a host adapter reset.
- */
-#define SCSI_RESET_HOST_RESET 0x200
-/*
- * Used to mask off bits and to obtain the basic action that was
- * performed.  
- */
-#define SCSI_RESET_ACTION   0xff
-
-void *   scsi_malloc(unsigned int);
-int      scsi_free(void *, unsigned int);
-extern unsigned int dma_free_sectors;  /* How much room do we have left */
-extern unsigned int need_isa_buffer;   /* True if some devices need indirection
-					* buffers */
 
 /*
  * The Scsi_Cmnd structure is used by scsi.c internally, and for communication
@@ -349,43 +479,22 @@ typedef struct scsi_pointer {
     volatile int phase;
 } Scsi_Pointer;
 
-typedef struct scsi_cmnd {
+
+struct scsi_cmnd {
+/* private: */
+    /*
+     * This information is private to the scsi mid-layer.  Wrapping it in a
+     * struct private is a way of marking it in a sort of C++ type of way.
+     */
     struct Scsi_Host * host;
-    Scsi_Device * device;
-    unsigned char target, lun, channel;
-    unsigned char cmd_len;
-    unsigned char old_cmd_len;
-    struct scsi_cmnd *next, *prev, *device_next, *reset_chain;
+    unsigned short     state;
+    unsigned short     owner;
+    Scsi_Device      * device;
+    struct scsi_cmnd * next;
+    struct scsi_cmnd * reset_chain;
     
-    /* These elements define the operation we are about to perform */
-    unsigned char cmnd[12];
-    unsigned request_bufflen;	/* Actual request size */
-    
-    void * request_buffer;	/* Actual requested buffer */
-    
-    /* These elements define the operation we ultimately want to perform */
-    unsigned char data_cmnd[12];
-    unsigned short old_use_sg;	/* We save  use_sg here when requesting
-				 * sense info */
-    unsigned short use_sg;	/* Number of pieces of scatter-gather */
-    unsigned short sglist_len;	/* size of malloc'd scatter-gather list */
-    unsigned short abort_reason;/* If the mid-level code requests an
-				 * abort, this is the reason. */
-    unsigned bufflen;		/* Size of data buffer */
-    void *buffer;		/* Data buffer */
-    
-    unsigned underflow;		/* Return error if less than this amount is 
-				 * transfered */
-    
-    unsigned transfersize;	/* How much we are guaranteed to transfer with
-				 * each SCSI transfer (ie, between disconnect /
-				 * reconnects.	 Probably == sector size */
-    
-    
-    struct request request;	/* A copy of the command we are working on */
-
-    unsigned char sense_buffer[16];  /* Sense for this command, if needed */
-
+    int                 eh_state; /* Used for state tracking in error handlr */
+    void               (*done)(struct scsi_cmnd *);  /* Mid-level done function */
     /*
       A SCSI Command is assigned a nonzero serial_number when internal_cmnd
       passes it to the driver's queue command function.  The serial_number
@@ -398,41 +507,96 @@ typedef struct scsi_cmnd {
       completed and the SCSI Command structure has already being reused
       for another command, so that we can avoid incorrectly aborting or
       resetting the new command.
-    */
-
-    unsigned long serial_number;
-    unsigned long serial_number_at_timeout;
-
-    int retries;
-    int allowed;
-    int timeout_per_command, timeout_total, timeout;
-
+      */
+    
+    unsigned long      serial_number;
+    unsigned long      serial_number_at_timeout;
+    
+    int                retries;
+    int                allowed;
+    int                timeout_per_command;
+    int                timeout_total;
+    int                timeout;
+    
     /*
-     *	We handle the timeout differently if it happens when a reset, 
-     *	abort, etc are in process. 
+     * We handle the timeout differently if it happens when a reset, 
+     * abort, etc are in process. 
      */
     unsigned volatile char internal_timeout;
+    struct scsi_cmnd  * bh_next;  /* To enumerate the commands waiting 
+                                     to be processed. */
     
-    unsigned flags;
+/* public: */
+
+    unsigned char      target;
+    unsigned char      lun;
+    unsigned char      channel;
+    unsigned char      cmd_len;
+    unsigned char      old_cmd_len;
+
+    /* These elements define the operation we are about to perform */
+    unsigned char      cmnd[12];
+    unsigned           request_bufflen;	/* Actual request size */
     
+    struct timer_list  eh_timeout;         /* Used to time out the command. */
+    void             * request_buffer;	/* Actual requested buffer */
+    
+    /* These elements define the operation we ultimately want to perform */
+    unsigned char      data_cmnd[12];
+    unsigned short     old_use_sg;	/* We save  use_sg here when requesting
+                                         * sense info */
+    unsigned short     use_sg;          /* Number of pieces of scatter-gather */
+    unsigned short     sglist_len;	/* size of malloc'd scatter-gather list */
+    unsigned short     abort_reason;    /* If the mid-level code requests an
+                                         * abort, this is the reason. */
+    unsigned           bufflen;		/* Size of data buffer */
+    void             * buffer;		/* Data buffer */
+    
+    unsigned           underflow;	/* Return error if less than
+                                           this amount is transfered */
+    
+    unsigned           transfersize;	/* How much we are guaranteed to
+                                           transfer with each SCSI transfer
+                                           (ie, between disconnect / 
+                                           reconnects.	 Probably == sector
+                                           size */
+    
+    
+    struct request     request;           /* A copy of the command we are
+                                             working on */
+
+    unsigned char      sense_buffer[16];  /* Sense for this command, 
+                                             needed */
+    
+    unsigned           flags;
+    
+    /*
+     * These two flags are used to track commands that are in the
+     * mid-level queue.  The idea is that a command can be there for
+     * one of two reasons - either the host is busy or the device is
+     * busy.  Thus when a command on the host finishes, we only try
+     * and requeue commands that we might expect to be queueable.
+     */
+    unsigned           host_wait:1;
+    unsigned           device_wait:1;
+
     /* These variables are for the cdrom only. Once we have variable size 
      * buffers in the buffer cache, they will go away. */
-    int this_count; 
+    int                this_count; 
     /* End of special cdrom variables */
     
     /* Low-level done function - can be used by low-level driver to point
      *	to completion function.	 Not used by mid/upper level code. */
-    void (*scsi_done)(struct scsi_cmnd *);  
-    void (*done)(struct scsi_cmnd *);  /* Mid-level done function */
+    void               (*scsi_done)(struct scsi_cmnd *);  
     
     /*
      * The following fields can be written to by the host specific code. 
      * Everything else should be left alone. 
      */
     
-    Scsi_Pointer SCp;	/* Scratchpad used by some host adapters */
+    Scsi_Pointer       SCp;	   /* Scratchpad used by some host adapters */
     
-    unsigned char * host_scribble; /* The host adapter is allowed to
+    unsigned char    * host_scribble; /* The host adapter is allowed to
 				    * call scsi_malloc and get some memory
 				    * and hang it here.	 The host adapter
 				    * is also expected to call scsi_free
@@ -440,42 +604,22 @@ typedef struct scsi_cmnd {
 				    * obtained by scsi_malloc is guaranteed
 				    * to be at an address < 16Mb). */
     
-    int result;			   /* Status code from lower level driver */
+    int                result;	   /* Status code from lower level driver */
     
-    unsigned char tag;		   /* SCSI-II queued command tag */
-    unsigned long pid;		   /* Process ID, starts at 0 */
-} Scsi_Cmnd;	     
+    unsigned char      tag;	   /* SCSI-II queued command tag */
+    unsigned long      pid;	   /* Process ID, starts at 0 */
+};
+
 
 /*
- *  scsi_abort aborts the current command that is executing on host host.
- *  The error code, if non zero is returned in the host byte, otherwise 
- *  DID_ABORT is returned in the hostbyte.
+ * Definitions and prototypes used for scsi mid-level queue.
  */
+#define SCSI_MLQUEUE_HOST_BUSY   0x1055
+#define SCSI_MLQUEUE_DEVICE_BUSY 0x1056
 
-extern int scsi_abort (Scsi_Cmnd *, int code);
+extern scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason);
+extern scsi_mlqueue_finish(struct Scsi_Host * host, Scsi_Device * device);
 
-extern void scsi_do_cmd (Scsi_Cmnd *, const void *cmnd ,
-			 void *buffer, unsigned bufflen, 
-			 void (*done)(struct scsi_cmnd *),
-			 int timeout, int retries);
-
-
-extern Scsi_Cmnd * allocate_device(struct request **, Scsi_Device *, int);
-
-extern Scsi_Cmnd * request_queueable(struct request *, Scsi_Device *);
-extern int scsi_reset (Scsi_Cmnd *, unsigned int);
-
-extern int max_scsi_hosts;
-
-extern void proc_print_scsidevice(Scsi_Device *, char *, int *, int);
-
-extern void print_command(unsigned char *);
-extern void print_sense(const char *, Scsi_Cmnd *);
-extern void print_driverbyte(int scsiresult);
-extern void print_hostbyte(int scsiresult);
-
-extern void scsi_mark_host_reset(struct Scsi_Host *Host);
-extern void scsi_mark_bus_reset(struct Scsi_Host *Host, int channel);
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
 #include "hosts.h"
@@ -527,9 +671,9 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 	    wake_up(&next->host_wait);
     }
     
-    req->rq_status = RQ_INACTIVE;
     wake_up(&wait_for_request);
     wake_up(&SCpnt->device->device_wait);
+    scsi_release_command(SCpnt);
     return NULL;
 }
 

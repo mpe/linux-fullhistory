@@ -26,27 +26,21 @@
  * Use SG_NONE if DMA mode is enabled!
  */
 #define NCR53c406a { \
-     NULL			/* next */, \
-     NULL			/* usage count */, \
-     &proc_scsi_NCR53c406a      /* proc_dir */, \
-     NULL			/* proc_info */, \
-     "NCR53c406a"		/* name */, \
-     NCR53c406a_detect		/* detect */, \
-     NULL			/* release */, \
-     NCR53c406a_info		/* info */, \
-     NCR53c406a_command		/* command */, \
-     NCR53c406a_queue		/* queuecommand */, \
-     NCR53c406a_abort		/* abort */, \
-     NCR53c406a_reset		/* reset */, \
-     NULL			/* slave_attach */, \
-     NCR53c406a_biosparm	/* biosparm */, \
-     1				/* can_queue */, \
-     7				/* SCSI ID of the chip */, \
-     32				/*SG_ALL*/ /*SG_NONE*/, \
-     1				/* commands per lun */, \
-     0				/* number of boards in system */, \
-     1				/* unchecked_isa_dma */, \
-     ENABLE_CLUSTERING \
+     proc_dir:          &proc_scsi_NCR53c406a   /* proc_dir */,         \
+     name:              "NCR53c406a"		/* name */,             \
+     detect:            NCR53c406a_detect	/* detect */,           \
+     info:              NCR53c406a_info		/* info */,             \
+     command:           NCR53c406a_command	/* command */,          \
+     queuecommand:      NCR53c406a_queue	/* queuecommand */,     \
+     abort:             NCR53c406a_abort	/* abort */,            \
+     reset:             NCR53c406a_reset	/* reset */,            \
+     bios_param:        NCR53c406a_biosparm	/* biosparm */,         \
+     can_queue:         1			/* can_queue */,        \
+     this_id:           7			/* SCSI ID of the chip */, \
+     sg_tablesize:      32			/*SG_ALL*/ /*SG_NONE*/, \
+     cmd_per_lun:       1			/* commands per lun */, \
+     unchecked_isa_dma: 1			/* unchecked_isa_dma */, \
+     use_clustering:    ENABLE_CLUSTERING                               \
 }
 
 extern struct proc_dir_entry proc_scsi_NCR53c406a;

@@ -230,7 +230,6 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
     }
     else
       (STp->buffer)->last_result = SCpnt->result;
-
     SCpnt->request.rq_status = RQ_SCSI_DONE;
     (STp->buffer)->last_SCpnt = SCpnt;
 
@@ -252,7 +251,7 @@ st_do_scsi(Scsi_Cmnd *SCpnt, Scsi_Tape *STp, unsigned char *cmd, int bytes,
 	   int timeout, int retries)
 {
   if (SCpnt == NULL)
-    if ((SCpnt = allocate_device(NULL, STp->device, 1)) == NULL) {
+    if ((SCpnt = scsi_allocate_device(NULL, STp->device, 1)) == NULL) {
       printk(KERN_ERR "st%d: Can't get SCSI request.\n", TAPE_NR(STp->devt));
       return NULL;
     }
@@ -293,7 +292,7 @@ write_behind_check(Scsi_Tape *STp)
   down(&(STp->sem));
 
   (STp->buffer)->last_result_fatal = st_chk_result((STp->buffer)->last_SCpnt);
-  ((STp->buffer)->last_SCpnt)->request.rq_status = RQ_INACTIVE;
+  scsi_release_command((STp->buffer)->last_SCpnt);
 
   if (STbuffer->writing < STbuffer->buffer_bytes)
     memcpy(STbuffer->b_data,
@@ -340,7 +339,9 @@ cross_eof(Scsi_Tape *STp, int forward)
   if (!SCpnt)
     return (-EBUSY);
 
-  SCpnt->request.rq_status = RQ_INACTIVE;
+  scsi_release_command(SCpnt);
+  SCpnt = NULL;
+
   if ((STp->buffer)->last_result != 0)
     printk(KERN_ERR "st%d: Stepping over filemark %s failed.\n",
 	   TAPE_NR(STp->devt), forward ? "forward" : "backward");
@@ -421,7 +422,8 @@ flush_write_buffer(Scsi_Tape *STp)
       STp->dirty = 0;
       (STp->buffer)->buffer_bytes = 0;
     }
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
   }
   return result;
 }
@@ -543,6 +545,12 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 
     if (dev >= st_template.dev_max || !scsi_tapes[dev].device)
       return (-ENXIO);
+
+    if( !scsi_block_when_processing_errors(scsi_tapes[dev].device) )
+      {
+        return -ENXIO;
+      }
+
     STp = &(scsi_tapes[dev]);
     if (STp->in_use) {
 #if DEBUG
@@ -644,7 +652,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	STp->ready = ST_NO_TAPE;
       } else
 	STp->ready = ST_NOT_READY;
-      SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+      scsi_release_command(SCpnt);
+      SCpnt = NULL;
       STp->density = 0;   	/* Clear the erroneous "residue" */
       STp->write_prot = 0;
       STp->block_size = 0;
@@ -736,7 +745,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       }
       STp->drv_write_prot = ((STp->buffer)->b_data[2] & 0x80) != 0;
     }
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
 
     if (STp->block_size > 0)
       (STp->buffer)->buffer_blocks = st_buffer_size / STp->block_size;
@@ -874,13 +884,15 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	       SCpnt->sense_buffer[5] |
 	       SCpnt->sense_buffer[6]) == 0))) {
 	    /* Filter out successful write at EOM */
-	    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+	    scsi_release_command(SCpnt);
+	    SCpnt = NULL;
 	    printk(KERN_ERR "st%d: Error on write filemark.\n", dev);
 	    if (result == 0)
 		result = (-EIO);
 	}
 	else {
-	  SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+	  scsi_release_command(SCpnt);
+	  SCpnt = NULL;
 	  if (STps->drv_file >= 0)
 	      STps->drv_file++ ;
 	  STps->drv_block = 0;
@@ -965,6 +977,19 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
     ST_partstat * STps;
     int dev = TAPE_NR(inode->i_rdev);
 
+    STp = &(scsi_tapes[dev]);
+
+    /*
+     * If we are in the middle of error recovery, don't let anyone
+     * else try and use this device.  Also, if error recovery fails, it
+     * may try and take the device offline, in which case all further
+     * access to the device is prohibited.
+     */
+    if( !scsi_block_when_processing_errors(STp->device) )
+      {
+        return -ENXIO;
+      }
+    
     if (ppos != &filp->f_pos) {
       /* "A request was outside the capabilities of the device." */
       return -ENXIO;
@@ -1098,7 +1123,10 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
 			 (STp->buffer)->buffer_bytes, b_point, do_count);
       if (i) {
 	  if (SCpnt != NULL)
-	      SCpnt->request.rq_status = RQ_INACTIVE;
+	    {
+	      scsi_release_command(SCpnt);
+	      SCpnt = NULL;
+	    }
 	  return (-EFAULT);
       }
 
@@ -1167,7 +1195,8 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
 	  retval = (-EIO);
 	}
 
-	SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+	scsi_release_command(SCpnt);
+	SCpnt = NULL;
 	(STp->buffer)->buffer_bytes = 0;
 	STp->dirty = 0;
 	if (count < total)
@@ -1193,7 +1222,10 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
 			 (STp->buffer)->buffer_bytes, b_point, count);
       if (i) {
 	  if (SCpnt != NULL)
-	      SCpnt->request.rq_status = RQ_INACTIVE;
+	    {
+	      scsi_release_command(SCpnt);
+	      SCpnt = NULL;
+	    }
 	  return (-EFAULT);
       }
       filp->f_pos += count;
@@ -1202,7 +1234,8 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
     }
 
     if (doing_write && (STp->buffer)->last_result_fatal != 0) {
-      SCpnt->request.rq_status = RQ_INACTIVE;
+      scsi_release_command(SCpnt);
+      SCpnt = NULL;
       return (STp->buffer)->last_result_fatal;
     }
 
@@ -1212,7 +1245,7 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
 	 STp->block_size == 0) ) {
       /* Schedule an asynchronous write */
       if (!SCpnt) {
-	SCpnt = allocate_device(NULL, STp->device, 1);
+	SCpnt = scsi_allocate_device(NULL, STp->device, 1);
 	if (!SCpnt)
 	  return (-EBUSY);
       }
@@ -1245,8 +1278,10 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
 		   st_sleep_done, STp->timeout, MAX_WRITE_RETRIES);
     }
     else if (SCpnt != NULL)
-      SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
-
+      {
+	scsi_release_command(SCpnt);
+	SCpnt = NULL;
+      }
     STps->at_sm &= (total == 0);
     if (total > 0)
 	STps->eof = ST_NOEOF;
@@ -1346,7 +1381,7 @@ read_tape(struct inode *inode, long count, Scsi_Cmnd **aSCpnt)
 			(STp->buffer)->buffer_bytes = bytes - transfer;
 		    }
 		    else {
-			SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+		        scsi_release_command(SCpnt);
 			SCpnt = *aSCpnt = NULL;
 			if (transfer == blks) {  /* We did not get anything, error */
 			    printk(KERN_NOTICE "st%d: Incorrect block size.\n", dev);
@@ -1457,6 +1492,19 @@ st_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
     ST_partstat * STps;
     int dev = TAPE_NR(inode->i_rdev);
 
+    STp = &(scsi_tapes[dev]);
+
+    /*
+     * If we are in the middle of error recovery, don't let anyone
+     * else try and use this device.  Also, if error recovery fails, it
+     * may try and take the device offline, in which case all further
+     * access to the device is prohibited.
+     */
+    if( !scsi_block_when_processing_errors(STp->device) )
+      {
+        return -ENXIO;
+      }
+    
     if (ppos != &filp->f_pos) {
       /* "A request was outside the capabilities of the device." */
       return -ENXIO;
@@ -1537,7 +1585,9 @@ st_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 	  special = read_tape(inode, count - total, &SCpnt);
 	  if (special < 0) { /* No need to continue read */
 	      if (SCpnt != NULL)
-		  SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+		{
+		  scsi_release_command(SCpnt);
+		}
 	      return special;
 	  }
       }
@@ -1555,7 +1605,10 @@ st_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 			 (STp->buffer)->read_pointer, transfer);
 	if (i) {
 	    if (SCpnt != NULL)
-		SCpnt->request.rq_status = RQ_INACTIVE;
+	      {
+		scsi_release_command(SCpnt);
+		SCpnt = NULL;
+	      }
 	    return (-EFAULT);
 	}
 	filp->f_pos += transfer;
@@ -1571,7 +1624,10 @@ st_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
     } /* for (total = 0, special = 0; total < count && !special; ) */
 
     if (SCpnt != NULL)
-      SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+      {
+	scsi_release_command(SCpnt);
+	SCpnt = NULL;
+      }
 
     /* Change the eof state if no data from tape or buffer */
     if (total == 0) {
@@ -1815,7 +1871,8 @@ st_compression(Scsi_Tape * STp, int state)
     if (debugging)
       printk(ST_DEB_MSG "st%d: Compression mode page not supported.\n", dev);
 #endif
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
     return (-EIO);
   }
 #if DEBUG
@@ -1830,7 +1887,8 @@ st_compression(Scsi_Tape * STp, int state)
     if (debugging)
       printk(ST_DEB_MSG "st%d: Compression not supported.\n", dev);
 #endif
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
     return (-EIO);
   }
 
@@ -1855,7 +1913,8 @@ st_compression(Scsi_Tape * STp, int state)
     if (debugging)
       printk(ST_DEB_MSG "st%d: Compression change failed.\n", dev);
 #endif
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
     return (-EIO);
   }
 
@@ -1865,7 +1924,8 @@ st_compression(Scsi_Tape * STp, int state)
 	   dev, state);
 #endif
 
-  SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+  scsi_release_command(SCpnt);
+  SCpnt = NULL;
   STp->compression_changed = TRUE;
   return 0;
 }
@@ -2238,7 +2298,8 @@ st_int_ioctl(struct inode * inode,
 
    ioctl_result = (STp->buffer)->last_result_fatal;
 
-   SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+   scsi_release_command(SCpnt);
+   SCpnt = NULL;
 
    if (!ioctl_result) {  /* SCSI command successful */
      STps->drv_block = blkno;
@@ -2441,7 +2502,8 @@ get_location(struct inode * inode, unsigned int *block, int *partition,
 #endif
 
     }
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
 
     return result;
 }
@@ -2556,6 +2618,9 @@ set_location(struct inode * inode, unsigned int block, int partition,
       result = 0;
     }
 
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
+
     return result;
 }
 
@@ -2622,7 +2687,8 @@ nbr_partitions(struct inode * inode)
     SCpnt = st_do_scsi(SCpnt, STp, cmd, 200, STp->timeout, MAX_READY_RETRIES);
     if (SCpnt == NULL)
       return (-EBUSY);
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
 
     if ((STp->buffer)->last_result_fatal != 0) {
 #if DEBUG
@@ -2696,7 +2762,8 @@ partition_tape(struct inode * inode, int size)
     SCpnt = st_do_scsi(SCpnt, STp, cmd, cmd[4], STp->long_timeout, MAX_READY_RETRIES);
     if (SCpnt == NULL)
       return (-EBUSY);
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
 
     if ((STp->buffer)->last_result_fatal != 0) {
       printk(KERN_INFO "st%d: Partitioning of tape failed.\n", dev);
@@ -2733,6 +2800,17 @@ st_ioctl(struct inode * inode,struct file * file,
 #endif
    STm = &(STp->modes[STp->current_mode]);
    STps = &(STp->ps[STp->partition]);
+
+    /*
+     * If we are in the middle of error recovery, don't let anyone
+     * else try and use this device.  Also, if error recovery fails, it
+     * may try and take the device offline, in which case all further
+     * access to the device is prohibited.
+     */
+    if( !scsi_block_when_processing_errors(STp->device) )
+      {
+        return -ENXIO;
+      }
 
    cmd_type = _IOC_TYPE(cmd_in);
    cmd_nr   = _IOC_NR(cmd_in);

@@ -27,9 +27,6 @@
 */
 
 
-#include <linux/config.h>
-
-
 /*
   Define types for some of the structures that interface with the rest
   of the Linux Kernel and SCSI Subsystem.
@@ -67,27 +64,18 @@ extern int BusLogic_ProcDirectoryInfo(char *, char **, off_t, int, int, int);
 */
 
 #define BUSLOGIC							 \
-  { NULL,				/* Next			     */	 \
-    NULL,				/* Usage Count Pointer	     */	 \
-    &BusLogic_ProcDirectoryEntry,	/* /proc Directory Entry     */	 \
-    BusLogic_ProcDirectoryInfo,		/* /proc Info Function	     */	 \
-    "BusLogic",				/* Driver Name		     */	 \
-    BusLogic_DetectHostAdapter,		/* Detect Host Adapter	     */	 \
-    BusLogic_ReleaseHostAdapter,	/* Release Host Adapter	     */	 \
-    BusLogic_DriverInfo,		/* Driver Info Function	     */	 \
-    NULL,				/* Command Function	     */	 \
-    BusLogic_QueueCommand,		/* Queue Command Function    */	 \
-    BusLogic_AbortCommand,		/* Abort Command Function    */	 \
-    BusLogic_ResetCommand,		/* Reset Command Function    */	 \
-    NULL,				/* Slave Attach Function     */	 \
-    BusLogic_BIOSDiskParameters,	/* BIOS Disk Parameters	     */	 \
-    0,					/* Can Queue		     */	 \
-    0,					/* This ID		     */	 \
-    0,					/* Scatter/Gather Table Size */	 \
-    0,					/* SCSI Commands per LUN     */	 \
-    0,					/* Present		     */	 \
-    1,					/* Default Unchecked ISA DMA */	 \
-    ENABLE_CLUSTERING }			/* Enable Clustering	     */
+  { proc_dir:          &BusLogic_ProcDirectoryEntry,	/* /proc Directory Entry     */	 \
+    proc_info:         BusLogic_ProcDirectoryInfo,	/* /proc Info Function	     */	 \
+    name:              "BusLogic",			/* Driver Name		     */	 \
+    detect:            BusLogic_DetectHostAdapter,	/* Detect Host Adapter	     */	 \
+    release:           BusLogic_ReleaseHostAdapter,	/* Release Host Adapter	     */	 \
+    info:              BusLogic_DriverInfo,		/* Driver Info Function	     */	 \
+    queuecommand:      BusLogic_QueueCommand,		/* Queue Command Function    */	 \
+    abort:             BusLogic_AbortCommand,		/* Abort Command Function    */	 \
+    reset:             BusLogic_ResetCommand,		/* Reset Command Function    */	 \
+    bios_param:        BusLogic_BIOSDiskParameters,	/* BIOS Disk Parameters	     */	 \
+    unchecked_isa_dma: 1,				/* Default Unchecked ISA DMA */	 \
+    use_clustering:    ENABLE_CLUSTERING }		/* Enable Clustering	     */
 
 
 /*

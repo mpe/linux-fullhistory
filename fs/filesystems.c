@@ -86,6 +86,10 @@ __initfunc(static void do_sys_setup(void))
 	init_nfs_fs();
 #endif
 
+#ifdef CONFIG_CODA_FS
+	init_coda_fs();
+#endif
+
 #ifdef CONFIG_SMB_FS
 	init_smb_fs();
 #endif

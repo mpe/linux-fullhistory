@@ -263,6 +263,17 @@ void sync_dev(kdev_t dev)
 	sync_inodes(dev);
 	sync_buffers(dev, 0);
 	sync_dquots(dev, -1);
+	/* 
+	 * FIXME(eric) we need to sync the physical devices here. 
+	 * This is because some (scsi) controllers have huge amounts of
+	 * cache onboard (hundreds of Mb), and we need to instruct
+	 * them to commit all of the dirty memory to disk, and we should
+	 * not return until this has happened.
+	 *
+	 * This would need to get implemented by going through the assorted
+	 * layers so that each block major number can be synced, and this
+	 * would call down into the upper and mid-layer scsi.
+	 */
 }
 
 int fsync_dev(kdev_t dev)

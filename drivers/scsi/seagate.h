@@ -27,13 +27,18 @@ int seagate_st0x_reset(Scsi_Cmnd *, unsigned int);
 #include <linux/kdev_t.h>
 int seagate_st0x_biosparam(Disk *, kdev_t, int*);
 
-#define SEAGATE_ST0X  {  NULL, NULL, NULL, NULL, \
-			 NULL, seagate_st0x_detect, 	\
-			 NULL, 						\
-			 seagate_st0x_info, seagate_st0x_command,  	\
-			 seagate_st0x_queue_command, seagate_st0x_abort, \
-			 seagate_st0x_reset, NULL, seagate_st0x_biosparam, \
-			 1, 7, SG_ALL, 1, 0, 0, DISABLE_CLUSTERING}
+#define SEAGATE_ST0X  {  detect:         seagate_st0x_detect,		\
+			 info:           seagate_st0x_info,		\
+			 command:        seagate_st0x_command,		\
+			 queuecommand:   seagate_st0x_queue_command,	\
+			 abort:          seagate_st0x_abort,		\
+			 reset:          seagate_st0x_reset,		\
+			 bios_param:     seagate_st0x_biosparam,	\
+			 can_queue:      1,				\
+			 this_id:        7,				\
+			 sg_tablesize:   SG_ALL,			\
+			 cmd_per_lun:    1,				\
+			 use_clustering: DISABLE_CLUSTERING}
 #endif /* ASM */
 
 #endif /* _SEAGATE_H */

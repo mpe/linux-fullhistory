@@ -7,9 +7,10 @@
 
 #ifdef __KERNEL__
 
-#define SIOCADDIPDDPRT SIOCDEVPRIVATE
-#define SIOCDELIPDDPRT SIOCDEVPRIVATE+1
-#define SIOCFINDIPDDPRT SIOCDEVPRIVATE+2
+#define SIOCADDIPDDPRT   (SIOCDEVPRIVATE)
+#define SIOCDELIPDDPRT   (SIOCDEVPRIVATE+1)
+#define SIOCFINDIPDDPRT  (SIOCDEVPRIVATE+2)
+#define SIOCPRINTIPDDPRT (SIOCDEVPRIVATE+3)
 
 struct ipddp_route
 {
@@ -20,8 +21,8 @@ struct ipddp_route
         struct ipddp_route *next;
 };
 
-static struct ipddp_route *ipddp_route_head;
-static struct ipddp_route ipddp_route_test;
+#define IPDDP_ENCAP	1
+#define IPDDP_DECAP	2
 
 #endif	/* __KERNEL__ */
 #endif	/* __LINUX_IPDDP_H */

@@ -16,6 +16,7 @@ if [ "$CONFIG_FIREWALL" = "y" ]; then
   fi
 fi
 bool 'Network aliasing'  CONFIG_NET_ALIAS
+bool 'Socket Filtering'  CONFIG_FILTER
 tristate 'Unix domain sockets' CONFIG_UNIX
 bool 'TCP/IP networking' CONFIG_INET
 if [ "$CONFIG_INET" = "y" ]; then

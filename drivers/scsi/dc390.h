@@ -63,29 +63,22 @@ extern int tmscsim_proc_info(char *buffer, char **start, off_t offset, int lengt
 
 #ifdef	VERSION_2_0_0
 
-#define DC390_T    {			\
-	NULL,	/* *next */		\
-	NULL,	/* *usage_count */	\
-	&proc_scsi_tmscsim,	/* *proc_dir */ 	\
-	tmscsim_proc_info,	/* (*proc_info)() */	\
-	"Tekram DC390(T) V1.10 Dec-05-1996",  /* *name */ \
-	DC390_detect,			\
-	DC390_release,	/* (*release)() */	\
-	NULL,	/* *(*info)() */	\
-	NULL,	/* (*command)() */	\
-	DC390_queue_command,	\
-	DC390_abort,		\
-	DC390_reset,		\
-	NULL, /* slave attach */\
-	DC390_bios_param,	\
-	10,/* can queue(-1) */	\
-	7, /* id(-1) */ 	\
-	SG_ALL, 		\
-	2, /* cmd per lun(2) */ \
-	0, /* present */	\
-	0, /* unchecked isa dma */ \
-	DISABLE_CLUSTERING	\
-	}
+#define DC390_T    {			          \
+   proc_dir:       &proc_scsi_tmscsim,            \
+   proc_info:      tmscsim_proc_info
+   name:           "Tekram DC390(T) V1.10 Dec-05-1996",\
+   detect:         DC390_detect,   		  \
+   release:        DC390_release,		  \
+   queuecommand:   DC390_queue_command,	          \
+   abort:          DC390_abort,    		  \
+   reset:          DC390_reset,    		  \
+   bios_param:     DC390_bios_param,		  \
+   can_queue:      10,                 	          \
+   this_id:        7,                             \
+   sg_tablesize:   SG_ALL,            		  \
+   cmd_per_lun:    2,                 		  \
+   use_clustering: DISABLE_CLUSTERING 		  \
+   }
 #endif
 
 

@@ -8,7 +8,7 @@ int scsi_debug_command(Scsi_Cmnd *);
 int scsi_debug_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int scsi_debug_abort(Scsi_Cmnd *);
 int scsi_debug_biosparam(Disk *, kdev_t, int[]);
-int scsi_debug_reset(Scsi_Cmnd *);
+int scsi_debug_reset(Scsi_Cmnd *, unsigned int);
 int scsi_debug_proc_info(char *, char **, off_t, int, int, int);
  
 #ifndef NULL
@@ -16,15 +16,28 @@ int scsi_debug_proc_info(char *, char **, off_t, int, int, int);
 #endif
 
 
-#define SCSI_DEBUG_MAILBOXES 8
+#define SCSI_DEBUG_MAILBOXES 1
 
-#define SCSI_DEBUG {NULL, NULL, NULL, scsi_debug_proc_info, \
-		"SCSI DEBUG", scsi_debug_detect, NULL, \
-		NULL, scsi_debug_command,		\
-		scsi_debug_queuecommand,			\
-		scsi_debug_abort,				\
-		scsi_debug_reset,				\
-		NULL,						\
-		scsi_debug_biosparam,				\
-		SCSI_DEBUG_MAILBOXES, 7, SG_ALL, 1, 0, 1, ENABLE_CLUSTERING}
+/*
+ * Allow the driver to reject commands.  Thus we accept only one, but
+ * and the mid-level will queue the remainder.
+ */
+#define SCSI_DEBUG_CANQUEUE  255
+
+#define SCSI_DEBUG {proc_info:         scsi_debug_proc_info,	\
+		    name:              "SCSI DEBUG",		\
+		    detect:            scsi_debug_detect,	\
+		    command:           scsi_debug_command,	\
+		    queuecommand:      scsi_debug_queuecommand, \
+		    abort:             scsi_debug_abort,	\
+		    reset:             scsi_debug_reset,	\
+		    bios_param:        scsi_debug_biosparam,	\
+		    can_queue:         SCSI_DEBUG_CANQUEUE,	\
+		    this_id:           7,			\
+		    sg_tablesize:      SG_ALL,			\
+		    cmd_per_lun:       3,			\
+		    unchecked_isa_dma: 1,			\
+		    use_clustering:    ENABLE_CLUSTERING,	\
+		    use_new_eh_code:   1,			\
+}
 #endif

@@ -87,6 +87,26 @@ static int sd_attach(Scsi_Device *);
 static int sd_detect(Scsi_Device *);
 static void sd_detach(Scsi_Device *);
 
+static void sd_devname(unsigned int disknum, char * buffer)
+{
+    if( disknum <= 26 )
+    {
+        sprintf(buffer, "sd%c", 'a' + (disknum >> 4));
+    }
+    else
+    {
+        unsigned int min1;
+        unsigned int min2;
+        /*
+         * For larger numbers of disks, we need to go to a new
+         * naming scheme.
+         */
+        min1 = (disknum >> 4) / 26;
+        min2 = (disknum >> 4) % 26;
+        sprintf(buffer, "sd%c%c", 'a' + min1, 'a' + min2);
+    }
+}
+
 struct Scsi_Device_Template sd_template =
 { NULL, "disk", "sd", NULL, TYPE_DISK,
       SCSI_DISK_MAJOR, 0, 0, 0, 1,
@@ -99,8 +119,19 @@ static int sd_open(struct inode * inode, struct file * filp)
     int target;
     target =  DEVICE_NR(inode->i_rdev);
 
+    SCSI_LOG_HLQUEUE(1,printk("target=%d, max=%d\n", target, sd_template.dev_max));
+
     if(target >= sd_template.dev_max || !rscsi_disks[target].device)
 	return -ENXIO;   /* No such device */
+
+    /*
+     * If the device is in error recovery, wait until it is done.
+     * If the device is offline, then disallow any access to it.
+     */
+    if( !scsi_block_when_processing_errors(rscsi_disks[target].device) )
+      {
+        return -ENXIO;
+      }
 
     /*
      * Make sure that only one process can do a check_change_disk at one time.
@@ -126,6 +157,16 @@ static int sd_open(struct inode * inode, struct file * filp)
 	 */
 	if ( (rscsi_disks[target].write_prot) && (filp->f_mode & 2) )
 	    return -EROFS;
+    }
+
+    /*
+     * It is possible that the disk changing stuff resulted in the device being taken
+     * offline.  If this is the case, report this to the user, and don't pretend that
+     * the open actually succeeded.
+     */
+    if( !rscsi_disks[target].device->online )
+    {
+        return -ENXIO;
     }
 
     /*
@@ -222,14 +263,18 @@ static void sd_geninit (struct gendisk *ignored)
 static void rw_intr (Scsi_Cmnd *SCpnt)
 {
     int result = SCpnt->result;
+    char nbuff[6];
     int this_count = SCpnt->bufflen >> 9;
     int good_sectors = (result == 0 ? this_count : 0);
     int block_sectors = 1;
 
-#ifdef DEBUG
-    printk("sd%c : rw_intr(%d, %d)\n", 'a' + MINOR(SCpnt->request.rq_dev),
-	   SCpnt->host->host_no, result);
-#endif
+    sd_devname(MINOR(SCpnt->request.rq_dev) >> 4, nbuff);
+
+    SCSI_LOG_HLCOMPLETE(1,printk("%s : rw_intr(%d, %x [%x %x])\n", nbuff,
+	   SCpnt->host->host_no, 
+                                 result, 
+                                 SCpnt->sense_buffer[0],
+                                 SCpnt->sense_buffer[2]));
 
     /*
       Handle MEDIUM ERRORs that indicate partial success.  Since this is a
@@ -276,20 +321,21 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 
     if (good_sectors > 0) {
 
-#ifdef DEBUG
-	printk("sd%c : %d sectors remain.\n", 'a' + MINOR(SCpnt->request.rq_dev),
-	       SCpnt->request.nr_sectors);
-	printk("use_sg is %d\n ",SCpnt->use_sg);
-#endif
+	SCSI_LOG_HLCOMPLETE(1,printk("%s : %ld sectors remain.\n", nbuff,
+	       SCpnt->request.nr_sectors));
+	SCSI_LOG_HLCOMPLETE(1,printk("use_sg is %d\n ",SCpnt->use_sg));
+
 	if (SCpnt->use_sg) {
 	    struct scatterlist * sgpnt;
 	    int i;
 	    sgpnt = (struct scatterlist *) SCpnt->buffer;
 	    for(i=0; i<SCpnt->use_sg; i++) {
-#ifdef DEBUG
-		printk(":%x %x %d\n",sgpnt[i].alt_address, sgpnt[i].address,
-		       sgpnt[i].length);
+
+#if 0
+		SCSI_LOG_HLCOMPLETE(3,printk(":%p %p %d\n",sgpnt[i].alt_address, sgpnt[i].address,
+		       sgpnt[i].length));
 #endif
+
 		if (sgpnt[i].alt_address) {
 		    if (SCpnt->request.cmd == READ)
 			memcpy(sgpnt[i].alt_address, sgpnt[i].address,
@@ -302,10 +348,10 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	    scsi_free(SCpnt->buffer, SCpnt->sglist_len);
 	} else {
 	    if (SCpnt->buffer != SCpnt->request.buffer) {
-#ifdef DEBUG
-		printk("nosg: %x %x %d\n",SCpnt->request.buffer, SCpnt->buffer,
-		       SCpnt->bufflen);
-#endif
+		SCSI_LOG_HLCOMPLETE(3,printk("nosg: %p %p %d\n",
+                                             SCpnt->request.buffer, SCpnt->buffer,
+                                             SCpnt->bufflen));
+
 		if (SCpnt->request.cmd == READ)
 		    memcpy(SCpnt->request.buffer, SCpnt->buffer,
 			   SCpnt->bufflen);
@@ -323,10 +369,9 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 
 	    if (!SCpnt->request.bh)
 	    {
-#ifdef DEBUG
-		printk("sd%c : handling page request, no buffer\n",
-		       'a' + MINOR(SCpnt->request.rq_dev));
-#endif
+		SCSI_LOG_HLCOMPLETE(2,printk("%s : handling page request, no buffer\n",
+		       nbuff));
+
 		/*
 		 * The SCpnt->request.nr_sectors field is always done in
 		 * 512 byte sectors, even if this really isn't the case.
@@ -351,20 +396,18 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	int i;
 	sgpnt = (struct scatterlist *) SCpnt->buffer;
 	for(i=0; i<SCpnt->use_sg; i++) {
-#ifdef DEBUG
-	    printk("err: %x %x %d\n",SCpnt->request.buffer, SCpnt->buffer,
-		   SCpnt->bufflen);
-#endif
+	    SCSI_LOG_HLCOMPLETE(3,printk("err: %p %p %d\n",
+                                         SCpnt->request.buffer, SCpnt->buffer,
+                                         SCpnt->bufflen));
 	    if (sgpnt[i].alt_address) {
 		scsi_free(sgpnt[i].address, sgpnt[i].length);
 	    }
 	}
 	scsi_free(SCpnt->buffer, SCpnt->sglist_len);  /* Free list of scatter-gather pointers */
     } else {
-#ifdef DEBUG
-	printk("nosgerr: %x %x %d\n",SCpnt->request.buffer, SCpnt->buffer,
-	       SCpnt->bufflen);
-#endif
+	SCSI_LOG_HLCOMPLETE(2,printk("nosgerr: %p %p %d\n",
+                                     SCpnt->request.buffer, SCpnt->buffer,
+                                     SCpnt->bufflen));
 	if (SCpnt->buffer != SCpnt->request.buffer)
 	    scsi_free(SCpnt->buffer, SCpnt->bufflen);
     }
@@ -485,6 +528,17 @@ static void do_sd_request (void)
         SDev = rscsi_disks[DEVICE_NR(CURRENT->rq_dev)].device;
 
         /*
+         * If the host for this device is in error recovery mode, don't
+         * do anything at all here.  When the host leaves error recovery
+         * mode, it will automatically restart things and start queueing
+         * commands again.
+         */
+        if( SDev->host->in_recovery )
+          {
+            return;
+          }
+
+        /*
          * I am not sure where the best place to do this is.  We need
          * to hook in a place where we are likely to come if in user
          * space.
@@ -495,7 +549,8 @@ static void do_sd_request (void)
 	     * We need to relock the door, but we might
 	     * be in an interrupt handler.  Only do this
 	     * from user space, since we do not want to
-	     * sleep from an interrupt.
+	     * sleep from an interrupt.  FIXME(eric) - do this
+             * from the kernel error handling thred.
 	     */
 	    if( SDev->removable && !in_interrupt() )
 	    {
@@ -507,21 +562,21 @@ static void do_sd_request (void)
 	    SDev->was_reset = 0;
         }
 
-	/* We have to be careful here. allocate_device will get a free pointer,
+	/* We have to be careful here. scsi_allocate_device will get a free pointer,
 	 * but there is no guarantee that it is queueable.  In normal usage,
 	 * we want to call this, because other types of devices may have the
 	 * host all tied up, and we want to make sure that we have at least
 	 * one request pending for this type of device. We can also come
 	 * through here while servicing an interrupt, because of the need to
-	 * start another command. If we call allocate_device more than once,
+	 * start another command. If we call scsi_allocate_device more than once,
 	 * then the system can wedge if the command is not queueable. The
-	 * request_queueable function is safe because it checks to make sure
+	 * scsi_request_queueable function is safe because it checks to make sure
 	 * that the host is able to take another command before it returns
 	 * a pointer.
 	 */
 
 	if (flag++ == 0)
-	    SCpnt = allocate_device(&CURRENT,
+	    SCpnt = scsi_allocate_device(&CURRENT,
 			   rscsi_disks[DEVICE_NR(CURRENT->rq_dev)].device, 0);
 	else SCpnt = NULL;
 
@@ -539,15 +594,19 @@ static void do_sd_request (void)
 	 * one disk drive.  We want to have the interrupts off when monkeying
 	 * with the request list, because otherwise the kernel might try to
 	 * slip in a request in between somewhere.
+         *
+         * FIXME(eric) - this doesn't belong at this level.  The device code in
+         * ll_rw_blk.c should know how to dig down into the device queue to
+         * figure out what it can deal with, and what it can't.  Consider
+         * possibility of pulling entire queue down into scsi layer.
 	 */
-
 	if (!SCpnt && sd_template.nr_dev > 1){
 	    struct request *req1;
 	    req1 = NULL;
 	    cli();
 	    req = CURRENT;
 	    while(req){
-		SCpnt = request_queueable(req,
+		SCpnt = scsi_request_queueable(req,
                                    rscsi_disks[DEVICE_NR(req->rq_dev)].device);
 		if(SCpnt) break;
 		req1 = req;
@@ -573,6 +632,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 {
     int dev, devm, block, this_count;
     unsigned char cmd[10];
+    char nbuff[6];
     int bounce_size, contiguous;
     int max_sg;
     struct buffer_head * bh, *bhp;
@@ -591,15 +651,16 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
     block = SCpnt->request.sector;
     this_count = 0;
 
-#ifdef DEBUG
-    printk("Doing sd request, dev = %d, block = %d\n", devm, block);
-#endif
+    SCSI_LOG_HLQUEUE(1,printk("Doing sd request, dev = %d, block = %d\n", devm, block));
 
     if (devm >= (sd_template.dev_max << 4) ||
 	!rscsi_disks[dev].device ||
+	!rscsi_disks[dev].device->online ||
 	block + SCpnt->request.nr_sectors > sd[devm].nr_sects)
     {
+        SCSI_LOG_HLQUEUE(2,printk("Finishing %ld sectors\n", SCpnt->request.nr_sectors));
 	SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+        SCSI_LOG_HLQUEUE(2,printk("Retry with 0x%p\n", SCpnt));
 	goto repeat;
     }
 
@@ -616,10 +677,9 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	goto repeat;
     }
 
-#ifdef DEBUG
-    printk("sd%c : real dev = /dev/sd%c, block = %d\n",
-	   'a' + devm, dev, block);
-#endif
+    sd_devname(devm, nbuff);
+    SCSI_LOG_HLQUEUE(2,printk("%s : real dev = /dev/%d, block = %d\n",
+	   nbuff, dev, block));
 
     /*
      * If we have a 1K hardware sectorsize, prevent access to single
@@ -702,7 +762,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	SCpnt->use_sg = 0;
 
     } else if (SCpnt->host->sg_tablesize == 0 ||
-	       (need_isa_buffer && dma_free_sectors <= 10)) {
+	       (scsi_need_isa_buffer && scsi_dma_free_sectors <= 10)) {
 
 	/* Case of host adapter that cannot scatter-gather.  We also
 	 * come here if we are running low on DMA buffer memory.  We set
@@ -712,8 +772,8 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	 * we have no choice but to panic.
 	 */
 	if (SCpnt->host->sg_tablesize != 0 &&
-	    need_isa_buffer &&
-	    dma_free_sectors <= 10)
+	    scsi_need_isa_buffer &&
+	    scsi_dma_free_sectors <= 10)
 	    printk("Warning: SCSI DMA buffer space running low.  Using non scatter-gather I/O.\n");
 
 	this_count = SCpnt->request.current_nr_sectors;
@@ -787,7 +847,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		     * easier to control usage here. In other places we might
 		     * have a more pressing need, and we would be screwed if
 		     * we ran out */
-		    if(dma_free_sectors < (sgpnt[count].length >> 9) + 10) {
+		    if(scsi_dma_free_sectors < (sgpnt[count].length >> 9) + 10) {
 			sgpnt[count].address = NULL;
 		    } else {
 			sgpnt[count].address =
@@ -832,7 +892,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 			!sgpnt[count].alt_address) continue;
 
 		    if(!sgpnt[count].alt_address) {count--; continue; }
-		    if(dma_free_sectors > 10)
+		    if(scsi_dma_free_sectors > 10)
 			tmp = (char *) scsi_malloc(sgpnt[count].length
 						   + bhp->b_size);
 		    else {
@@ -861,7 +921,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	       > SCpnt->host->sg_tablesize){
 		bh = SCpnt->request.bh;
 		printk("Use sg, count %d %x %d\n",
-		       SCpnt->use_sg, count, dma_free_sectors);
+		       SCpnt->use_sg, count, scsi_dma_free_sectors);
 		printk("maxsg = %x, counted = %d this_count = %d\n",
 		       max_sg, counted, this_count);
 		while(bh){
@@ -903,12 +963,10 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		memcpy(buff, (char *)SCpnt->request.buffer, this_count << 9);
 	}
     }
-#ifdef DEBUG
-    printk("sd%c : %s %d/%d 512 byte blocks.\n",
-	   'a' + devm,
-	   (SCpnt->request.cmd == WRITE) ? "writing" : "reading",
-	   this_count, SCpnt->request.nr_sectors);
-#endif
+    SCSI_LOG_HLQUEUE(2,printk("%s : %s %d/%ld 512 byte blocks.\n",
+                              nbuff,
+                              (SCpnt->request.cmd == WRITE) ? "writing" : "reading",
+                              this_count, SCpnt->request.nr_sectors));
 
     cmd[1] = (SCpnt->lun << 5) & 0xe0;
 
@@ -989,6 +1047,20 @@ static int check_scsidisk_media_change(kdev_t full_dev){
 
     if(!rscsi_disks[target].device->removable) return 0;
 
+    /*
+     * If the device is offline, don't send any commands - just pretend as if
+     * the command failed.  If the device ever comes back online, we can deal with
+     * it then.  It is only because of unrecoverable errors that we would ever
+     * take a device offline in the first place.
+     */
+    if( rscsi_disks[target].device->online == FALSE )
+    {
+	rscsi_disks[target].ready = 0;
+	rscsi_disks[target].device->changed = 1;
+	return 1; /* This will force a flush, if called from
+		   * check_disk_change */
+    }
+
     inode.i_rdev = full_dev;  /* This is all we really need here */
     retval = sd_ioctl(&inode, NULL, SCSI_IOCTL_TEST_UNIT_READY, 0);
 
@@ -1031,17 +1103,32 @@ static void sd_init_done (Scsi_Cmnd * SCpnt)
 static int sd_init_onedisk(int i)
 {
     unsigned char cmd[10];
+    char          nbuff[6];
     unsigned char *buffer;
     unsigned long spintime;
     int the_result, retries;
     Scsi_Cmnd * SCpnt;
+
+    /*
+     * Get the name of the disk, in case we need to log it somewhere.
+     */
+    sd_devname(i, nbuff);
+
+    /*
+     * If the device is offline, don't try and read capacity or any of the other
+     * nicities.
+     */
+    if( rscsi_disks[i].device->online == FALSE )
+    {
+        return i;
+    }
 
     /* We need to retry the READ_CAPACITY because a UNIT_ATTENTION is
      * considered a fatal error, and many devices report such an error
      * just after a scsi bus reset.
      */
 
-    SCpnt = allocate_device(NULL, rscsi_disks[i].device, 1);
+    SCpnt = scsi_allocate_device(NULL, rscsi_disks[i].device, 1);
     buffer = (unsigned char *) scsi_malloc(512);
 
     spintime = 0;
@@ -1069,6 +1156,7 @@ static int sd_init_onedisk(int i)
 				 512, sd_init_done,  SD_TIMEOUT,
 				 MAX_RETRIES);
 		    down(&sem);
+                    SCpnt->request.sem = NULL;
 		}
 
 		the_result = SCpnt->result;
@@ -1084,7 +1172,7 @@ static int sd_init_onedisk(int i)
 	       SCpnt->sense_buffer[2] == NOT_READY) {
 		unsigned long time1;
 		if(!spintime){
-		    printk( "sd%c: Spinning up disk...", 'a' + i );
+		    printk( "%s: Spinning up disk...", nbuff );
 		    cmd[0] = START_STOP;
 		    cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
 		    cmd[1] |= 1;  /* Return immediately */
@@ -1104,6 +1192,7 @@ static int sd_init_onedisk(int i)
 				     512, sd_init_done,  SD_TIMEOUT,
 				     MAX_RETRIES);
 			down(&sem);
+                        SCpnt->request.sem = NULL;
 		    }
 
 		    spintime = jiffies;
@@ -1141,18 +1230,13 @@ static int sd_init_onedisk(int i)
 			 8, sd_init_done,  SD_TIMEOUT,
 			 MAX_RETRIES);
 	    down(&sem);	/* sleep until it is ready */
+            SCpnt->request.sem = NULL;
 	}
 
 	the_result = SCpnt->result;
 	retries--;
 
     } while(the_result && retries);
-
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
-
-    wake_up(&SCpnt->device->device_wait);
-
-    /* Wake up a process waiting for device */
 
     /*
      * The SCSI standard says:
@@ -1170,22 +1254,22 @@ static int sd_init_onedisk(int i)
 
     if (the_result)
     {
-	printk ("sd%c : READ CAPACITY failed.\n"
-		"sd%c : status = %x, message = %02x, host = %d, driver = %02x \n",
-		'a' + i, 'a' + i,
+	printk ("%s : READ CAPACITY failed.\n"
+		"%s : status = %x, message = %02x, host = %d, driver = %02x \n",
+		nbuff, nbuff,
 		status_byte(the_result),
 		msg_byte(the_result),
 		host_byte(the_result),
 		driver_byte(the_result)
 		);
 	if (driver_byte(the_result)  & DRIVER_SENSE)
-	    printk("sd%c : extended sense code = %1x \n",
-		   'a' + i, SCpnt->sense_buffer[2] & 0xf);
+	    printk("%s : extended sense code = %1x \n",
+		   nbuff, SCpnt->sense_buffer[2] & 0xf);
 	else
-	    printk("sd%c : sense not available. \n", 'a' + i);
+	    printk("%s : sense not available. \n", nbuff);
 
-	printk("sd%c : block size assumed to be 512 bytes, disk size 1GB.  \n",
-	       'a' + i);
+	printk("%s : block size assumed to be 512 bytes, disk size 1GB.  \n",
+	       nbuff);
 	rscsi_disks[i].capacity = 0x1fffff;
 	rscsi_disks[i].sector_size = 512;
 
@@ -1213,7 +1297,7 @@ static int sd_init_onedisk(int i)
 
 	if (rscsi_disks[i].sector_size == 0) {
 	  rscsi_disks[i].sector_size = 512;
-	  printk("sd%c : sector size 0 reported, assuming 512.\n", 'a' + i);
+	  printk("%s : sector size 0 reported, assuming 512.\n", nbuff);
 	}
 
 
@@ -1222,8 +1306,8 @@ static int sd_init_onedisk(int i)
 	    rscsi_disks[i].sector_size != 2048 &&
 	    rscsi_disks[i].sector_size != 256)
 	{
-	    printk ("sd%c : unsupported sector size %d.\n",
-		    'a' + i, rscsi_disks[i].sector_size);
+	    printk ("%s : unsupported sector size %d.\n",
+		    nbuff, rscsi_disks[i].sector_size);
 	    if(rscsi_disks[i].device->removable){
 		rscsi_disks[i].capacity = 0;
 	    } else {
@@ -1231,6 +1315,12 @@ static int sd_init_onedisk(int i)
 		rscsi_disks[i].device = NULL;
 		sd_template.nr_dev--;
 		sd_gendisk.nr_real--;
+
+                /* Wake up a process waiting for device */
+                wake_up(&SCpnt->device->device_wait);
+                scsi_release_command(SCpnt);
+                SCpnt = NULL;
+                
 		return i;
 	    }
 	}
@@ -1268,9 +1358,9 @@ static int sd_init_onedisk(int i)
         m = (mb + 50) / 100;
         sz_quot = m / 10;
         sz_rem = m - (10 * sz_quot);
-	printk ("SCSI device sd%c: hdwr sector= %d bytes."
+	printk ("SCSI device %s: hdwr sector= %d bytes."
                " Sectors= %d [%d MB] [%d.%1d GB]\n",
-		i+'a', hard_sector, rscsi_disks[i].capacity,
+		nbuff, hard_sector, rscsi_disks[i].capacity,
                 mb, sz_quot, sz_rem);
     }
 	if(rscsi_disks[i].sector_size == 2048)
@@ -1315,22 +1405,26 @@ static int sd_init_onedisk(int i)
 			 512, sd_init_done,  SD_TIMEOUT,
 			 MAX_RETRIES);
 	    down(&sem);
+            SCpnt->request.sem = NULL;
 	}
 
 	the_result = SCpnt->result;
-	SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
-	wake_up(&SCpnt->device->device_wait);
 
 	if ( the_result ) {
-	    printk ("sd%c: test WP failed, assume Write Protected\n",i+'a');
+	    printk ("%s: test WP failed, assume Write Protected\n",nbuff);
 	    rscsi_disks[i].write_prot = 1;
 	} else {
 	    rscsi_disks[i].write_prot = ((buffer[2] & 0x80) != 0);
-	    printk ("sd%c: Write Protect is %s\n",i+'a',
+	    printk ("%s: Write Protect is %s\n",nbuff,
 	            rscsi_disks[i].write_prot ? "on" : "off");
 	}
 
     }	/* check for write protect */
+
+    /* Wake up a process waiting for device */
+    wake_up(&SCpnt->device->device_wait);
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
 
     rscsi_disks[i].ten = 1;
     rscsi_disks[i].remap = 1;
@@ -1435,11 +1529,13 @@ static void sd_finish()
 }
 
 static int sd_detect(Scsi_Device * SDp){
+    char nbuff[6];
     if(SDp->type != TYPE_DISK && SDp->type != TYPE_MOD) return 0;
 
-    printk("Detected scsi %sdisk sd%c at scsi%d, channel %d, id %d, lun %d\n",
+    sd_devname(sd_template.dev_noticed++, nbuff);
+    printk("Detected scsi %sdisk %s at scsi%d, channel %d, id %d, lun %d\n",
            SDp->removable ? "removable " : "",
-	   'a'+ (sd_template.dev_noticed++),
+	   nbuff,
 	   SDp->host->host_no, SDp->channel, SDp->id, SDp->lun);
 
     return 1;
@@ -1509,7 +1605,7 @@ int revalidate_scsidisk(kdev_t dev, int maxusage){
     for (i=max_p - 1; i >=0 ; i--) {
 	int minor = start+i;
 	kdev_t devi = MKDEV(MAJOR_NR, minor);
-	struct super_block *sb = get_super(devi);
+        struct super_block *sb = get_super(devi);
 	sync_dev(devi);
 	if (sb) invalidate_inodes(sb);
 	invalidate_buffers(devi);
@@ -1562,7 +1658,7 @@ static void sd_detach(Scsi_Device * SDp)
 	    for (i=max_p - 1; i >=0 ; i--) {
 		int minor = start+i;
 		kdev_t devi = MKDEV(MAJOR_NR, minor);
-		struct super_block *sb = get_super(devi);
+                struct super_block *sb = get_super(devi);
 		sync_dev(devi);
 		if (sb) invalidate_inodes(sb);
 		invalidate_buffers(devi);

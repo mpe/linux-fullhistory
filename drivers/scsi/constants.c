@@ -3,11 +3,6 @@
  * etc.
  */
 
-/*
- * Don't import our own symbols, as this would severely mess up our
- * symbol tables.
- */
-#define _SCSI_SYMS_VER_
 #define __NO_VERSION__
 #include <linux/module.h>
 

@@ -65,12 +65,6 @@ asmlinkage int printk(const char * fmt, ...)
 	printk(KERN_INFO fmt,##arg)
 
 /*
- * "suser()" checks against the effective user id, while "fsuser()"
- * is used for file permission checking and checks against the fsuid..
- */
-#define fsuser() (current->fsuid == 0)
-
-/*
  *      Display an IP address in readable format.
  */
 

@@ -52,29 +52,22 @@ struct AM53C974_hostdata {
 
 extern struct proc_dir_entry proc_scsi_am53c974;
 
-#define AM53C974 { \
-    NULL,              		/* pointer to next in list                      */  \
-    NULL,			/* struct module *module			*/  \
-    &proc_scsi_am53c974,        /* struct proc_dir_entry *proc_dir              */ \
-    NULL,                       /* int (*proc_info)(char *, char **, off_t, int, int, int); */ \
-    "AM53C974",        		/* name                                         */  \
-    AM53C974_detect,   		/* int (* detect)(struct SHT *)                 */  \
-    AM53C974_release,		/* int (*release)(struct Scsi_Host *)           */  \
-    AM53C974_info,     		/* const char *(* info)(struct Scsi_Host *)     */  \
-    AM53C974_command,  		/* int (* command)(Scsi_Cmnd *)                 */  \
-    AM53C974_queue_command,	/* int (* queuecommand)(Scsi_Cmnd *,                \
-                                           void (*done)(Scsi_Cmnd *))           */  \
-    AM53C974_abort,    		/* int (* abort)(Scsi_Cmnd *)                   */  \
-    AM53C974_reset,    		/* int (* reset)(Scsi_Cmnd *)                   */  \
-    NULL,                 	/* int (* slave_attach)(int, int)               */  \
-    scsicam_bios_param,		/* int (* bios_param)(Disk *, int, int[])       */  \
-    12,                 	/* can_queue                                    */  \
-    -1,                         /* this_id                                      */  \
-    SG_ALL,            		/* sg_tablesize                                 */  \
-    1,                 		/* cmd_per_lun                                  */  \
-    0,                 		/* present, i.e. how many adapters of this kind */  \
-    0,                 		/* unchecked_isa_dma                            */  \
-    DISABLE_CLUSTERING 		/* use_clustering                               */  \
+#define AM53C974 {				  \
+    proc_dir:       &proc_scsi_am53c974,          \
+    name:           "AM53C974",        		  \
+    detect:         AM53C974_detect,   		  \
+    release:        AM53C974_release,		  \
+    info:           AM53C974_info,     		  \
+    command:        AM53C974_command,  		  \
+    queuecommand:   AM53C974_queue_command,	  \
+    abort:          AM53C974_abort,    		  \
+    reset:          AM53C974_reset,    		  \
+    bios_param:     scsicam_bios_param,		  \
+    can_queue:      12,                 	  \
+    this_id:        -1,                           \
+    sg_tablesize:   SG_ALL,            		  \
+    cmd_per_lun:    1,                 		  \
+    use_clustering: DISABLE_CLUSTERING 		  \
     }
 
 void AM53C974_setup(char *str, int *ints);
@@ -85,7 +78,7 @@ const char *AM53C974_info(struct Scsi_Host *);
 int AM53C974_command(Scsi_Cmnd *SCpnt);
 int AM53C974_queue_command(Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *));
 int AM53C974_abort(Scsi_Cmnd *cmd);
-int AM53C974_reset (Scsi_Cmnd *cmd);
+int AM53C974_reset (Scsi_Cmnd *cmd, unsigned int);
 
 #endif /* AM53C974_H */
 

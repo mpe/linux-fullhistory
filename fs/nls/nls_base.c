@@ -205,8 +205,10 @@ struct nls_table *find_nls(char *charset)
 struct nls_table *load_nls(char *charset)
 {
 	struct nls_table *nls;
+#ifdef CONFIG_KERNELD
 	char buf[40];
 	int ret;
+#endif
 
 	nls = find_nls(charset);
 	if (nls) {

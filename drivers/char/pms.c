@@ -1045,9 +1045,15 @@ static void shutdown_mediavision(void)
  
 #ifdef MODULE
 
+MODULE_PARM(io_port,"i");
+MODULE_PARM(mem_base,"i");
+
 int init_module(void)
 {
 	printk(KERN_INFO "Mediavision Pro Movie Studio driver 0.01\n");
+	
+	data_port = io_port +1;
+	
 	if(init_mediavision())
 	{
 		printk(KERN_INFO "Board not found.\n");

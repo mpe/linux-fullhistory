@@ -349,9 +349,9 @@ int decompress_kernel(struct moveparams *mv)
 	else setup_output_buffer_if_we_run_high(mv);
 
 	makecrc();
-	puts("Uncompressing Linux...");
+	puts("Uncompressing Linux... ");
 	gunzip();
-	puts("done.\nNow booting the kernel\n");
+	puts("Ok, booting the kernel.\n");
 	if (high_loaded) close_output_buffer_if_we_run_high(mv);
 	return high_loaded;
 }

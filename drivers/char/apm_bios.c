@@ -964,6 +964,13 @@ static int do_open(struct inode * inode, struct file * filp)
 	as->event_tail = as->event_head = 0;
 	as->suspends_pending = as->standbys_pending = 0;
 	as->suspends_read = as->standbys_read = 0;
+	/*
+	 * XXX - this is a tiny bit broken, when we consider BSD
+         * process accounting. If the device is opened by root, we
+	 * instantly flag that we used superuser privs. Who knows,
+	 * we might close the device immediately without doing a
+	 * privileged operation -- cevans
+	 */
 	as->suser = suser();
 	as->next = user_list;
 	user_list = as;

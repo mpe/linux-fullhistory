@@ -395,28 +395,21 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 
 extern struct proc_dir_entry proc_scsi_esp;
 
-#define SCSI_SPARC_ESP {                                                               \
-/* struct SHT *next */                                         NULL,                   \
-/* struct module *module */                                    NULL,                   \
-/* struct proc_dir_entry *proc_dir */                          &proc_scsi_esp,         \
-/* int (*proc_info)(char *, char **, off_t, int, int, int) */  &esp_proc_info,         \
-/* const char *name */                                         "Sun ESP 100/100a/200", \
-/* int detect(struct SHT *) */                                 esp_detect,             \
-/* int release(struct Scsi_Host *) */                          NULL,                   \
-/* const char *info(struct Scsi_Host *) */                     esp_info,               \
-/* int command(Scsi_Cmnd *) */                                 esp_command,            \
-/* int queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *)) */ esp_queue,              \
-/* int abort(Scsi_Cmnd *) */                                   esp_abort,              \
-/* int reset(Scsi_Cmnd *, int) */                              esp_reset,              \
-/* int slave_attach(int, int) */                               NULL,                   \
-/* int bios_param(Disk *, kdev_t, int[]) */                    NULL,                   \
-/* int can_queue */                                            7,                      \
-/* int this_id */                                              7,                      \
-/* short unsigned int sg_tablesize */                          SG_ALL,                 \
-/* short cmd_per_lun */                                        1,                      \
-/* unsigned char present */                                    0,                      \
-/* unsigned unchecked_isa_dma:1 */                             0,                      \
-/* unsigned use_clustering:1 */                                DISABLE_CLUSTERING, }
+#define SCSI_SPARC_ESP {                                        \
+		proc_dir:       &proc_scsi_esp,			\
+		proc_info:      &esp_proc_info,			\
+		name:           "Sun ESP 100/100a/200",		\
+		detect:         esp_detect,			\
+		info:           esp_info,			\
+		command:        esp_command,			\
+		queuecommand:   esp_queue,			\
+		abort:          esp_abort,			\
+		reset:          esp_reset,			\
+		can_queue:      7,				\
+		this_id:        7,				\
+		sg_tablesize:   SG_ALL,				\
+		cmd_per_lun:    1,				\
+		use_clustering: DISABLE_CLUSTERING, }
 
 /* For our interrupt engine. */
 #define for_each_esp(esp) \

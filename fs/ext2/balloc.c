@@ -295,9 +295,9 @@ int ext2_new_block (const struct inode * inode, unsigned long goal,
 	lock_super (sb);
 	es = sb->u.ext2_sb.s_es;
 	if (le32_to_cpu(es->s_free_blocks_count) <= le32_to_cpu(es->s_r_blocks_count) &&
-	    (!fsuser() && (sb->u.ext2_sb.s_resuid != current->fsuid) &&
+	    ((sb->u.ext2_sb.s_resuid != current->fsuid) &&
 	     (sb->u.ext2_sb.s_resgid == 0 ||
-	      !in_group_p (sb->u.ext2_sb.s_resgid)))) {
+	      !in_group_p (sb->u.ext2_sb.s_resgid)) && !fsuser())) {
 		unlock_super (sb);
 		return 0;
 	}

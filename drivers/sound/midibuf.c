@@ -528,4 +528,11 @@ MIDIbuf_init(void)
 {
 }
 
+int
+MIDIbuf_avail(int dev)
+{
+	return DATA_AVAIL (midi_in_buf[dev]);
+}
+
+
 #endif

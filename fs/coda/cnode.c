@@ -12,15 +12,12 @@
 
 extern int coda_debug;
 extern int coda_print_entry;
-extern int coda_fetch_inode(struct inode *inode, struct coda_vattr *attr);
 
 /* cnode.c */
-struct cnode *coda_cnode_alloc(void);
-void coda_cnode_free(struct cnode *);
-int  coda_cnode_make(struct inode **inode, ViceFid *fid, struct super_block *sb);
+static struct cnode *coda_cnode_alloc(void);
 
 /* return pointer to new empty cnode */
-struct cnode *coda_cnode_alloc(void)
+static struct cnode *coda_cnode_alloc(void)
 {
         struct cnode *result = NULL;
 
@@ -31,7 +28,8 @@ struct cnode *coda_cnode_alloc(void)
         }
 
         memset(result, 0, (int) sizeof(struct cnode));
-        return result;
+        INIT_LIST_HEAD(&(result->c_cnhead));
+	return result;
 }
 
 /* release cnode memory */
@@ -39,7 +37,30 @@ void coda_cnode_free(struct cnode *cinode)
 {
         CODA_FREE(cinode, sizeof(struct cnode));
 }
+
               
+static void coda_fill_inode (struct inode *inode, struct coda_vattr *attr)
+{
+        CDEBUG(D_SUPER, "ino: %ld\n", inode->i_ino);
+
+        if (coda_debug & D_SUPER ) 
+		print_vattr(attr);
+
+        coda_vattr_to_iattr(inode, attr);
+
+        if (S_ISREG(inode->i_mode))
+                inode->i_op = &coda_file_inode_operations;
+        else if (S_ISDIR(inode->i_mode))
+                inode->i_op = &coda_dir_inode_operations;
+        else if (S_ISLNK(inode->i_mode))
+                inode->i_op = &coda_symlink_inode_operations;
+        else {
+                printk ("coda_read_inode: what's this? i_mode = %o\n", 
+			inode->i_mode);
+                inode->i_op = NULL;
+        }
+}
+
 /* this is effectively coda_iget:
    - get attributes (might be cached)
    - get the inode for the fid using vfs iget
@@ -97,15 +118,9 @@ int coda_cnode_make(struct inode **inode, ViceFid *fid, struct super_block *sb)
 	}
 	CHECK_CNODE(cnp);
 
-	/* refresh the attributes */
-        error = coda_fetch_inode(*inode, &attr);
-        if ( error ) {
-                printk("coda_cnode_make: fetch_inode returned %d\n", error);
-		clear_inode(*inode);
-		coda_cnode_free(cnp);
-                return -error;
-        }
-		CDEBUG(D_CNODE, "Done linking: ino %ld,  at 0x%x with cnp 0x%x, cnp->c_vnode 0x%x\n", (*inode)->i_ino, (int) (*inode), (int) cnp, (int)cnp->c_vnode);
+	/* fill in the inode attributes */
+        coda_fill_inode(*inode, &attr);
+	CDEBUG(D_CNODE, "Done linking: ino %ld,  at 0x%x with cnp 0x%x, cnp->c_vnode 0x%x\n", (*inode)->i_ino, (int) (*inode), (int) cnp, (int)cnp->c_vnode);
 
         EXIT;
         return 0;
@@ -122,49 +137,31 @@ inline int coda_fideq(ViceFid *fid1, ViceFid *fid2)
 }
 
  
-/* compute the inode number from the FID
-   same routine as in vproc.cc (venus)
-   XXX look at the exceptional case of root fids etc
-*/
-static ino_t
-coda_fid2ino(ViceFid *fid)
-{
-	u_long ROOT_VNODE = 1;
-	u_long ROOT_UNIQUE = 1;
-	ViceFid nullfid = { 0, 0, 0};
-
-	if ( coda_fideq(fid, &nullfid) ) {
-		printk("coda_fid2ino: called with NULL Fid!\n");
-		return 0;
-	}
-
-	/* what do we return for the root fid */
-
-	/* Other volume root.  We need the relevant mount point's 
-	fid, but we don't know what that is! */
-	if (fid->Vnode == ROOT_VNODE && fid->Unique == ROOT_UNIQUE) {
-		return(0);
-	}
-
-	/* Non volume root. */
-	return(fid->Unique + (fid->Vnode << 10) + (fid->Volume << 20));
-}     
 
 /* convert a fid to an inode. Avoids having a hash table
    such as present in the Mach minicache */
-struct inode *
-coda_fid2inode(ViceFid *fid, struct super_block *sb) {
+struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb) {
 	ino_t nr;
 	struct inode *inode;
 	struct cnode *cnp;
-	
-	nr = coda_fid2ino(fid);
+	char str[50];
+ENTRY;
+
+	CDEBUG(D_INODE, "%s\n", coda_f2s(fid, str));
+	nr = coda_f2i(fid);
 	inode = iget(sb, nr);
+
+	if ( !inode ) {
+		printk("coda_fid_to_inode: null from iget, sb %p, nr %ld.\n",
+		       sb, nr);
+		return NULL;
+	}
 
 	/* check if this inode is linked to a cnode */
 	cnp = (struct cnode *) inode->u.generic_ip;
 	if ( cnp == NULL ) {
 		iput(inode);
+		EXIT;
 		return NULL;
 	}
 	/* make sure fid is the one we want */

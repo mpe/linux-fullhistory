@@ -439,7 +439,8 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	 */
 	if (list_empty(&dentry->d_hash) && dentry->d_inode) {
 		struct inode *inode = dentry->d_inode;
-		if (inode->i_count > 1) {
+		int max_count = (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink);
+		if (inode->i_count > max_count) {
 printk("nfs_dentry_delete: %s/%s: ino=%ld, count=%d, nlink=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 inode->i_ino, inode->i_count, inode->i_nlink);
@@ -499,7 +500,7 @@ static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 		inode = nfs_fhget(dir->i_sb, &fhandle, &fattr);
 		if (inode) {
 #ifdef NFS_PARANOIA
-if (inode->i_count > 1)
+if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink))
 printk("nfs_lookup: %s/%s ino=%ld in use, count=%d, nlink=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 inode->i_ino, inode->i_count, inode->i_nlink);
@@ -511,6 +512,11 @@ inode->i_ino, inode->i_count, inode->i_nlink);
 			error = 0;
 		}
 	}
+#ifdef NFS_PARANOIA
+if (error)
+printk("nfs_lookup: %s/%s failed, error=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, error);
+#endif
 out:
 	return error;
 }
@@ -555,7 +561,7 @@ static int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
 	inode = nfs_fhget(dentry->d_sb, fhandle, fattr);
 	if (inode) {
 #ifdef NFS_PARANOIA
-if (inode->i_count > 1)
+if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink))
 printk("nfs_instantiate: %s/%s ino=%ld in use, count=%d, nlink=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 inode->i_ino, inode->i_count, inode->i_nlink);
@@ -669,8 +675,9 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		return -ENOENT;
 	}
 
+	error = -ENAMETOOLONG;
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
-		return -ENAMETOOLONG;
+		goto out;
 
 	/* For some reason mode doesn't have the S_IFDIR flag ... */
 	mode |= S_IFDIR;
@@ -702,6 +709,7 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	drop:
 		d_drop(dentry);
 	}
+out:
 	return error;
 }
 
@@ -876,11 +884,11 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 			goto out;
 	} while(sdentry->d_inode != NULL); /* need negative lookup */
 
+	nfs_invalidate_dircache(dir);
 	error = nfs_proc_rename(NFS_SERVER(dir),
 				NFS_FH(dir), dentry->d_name.name,
 				NFS_FH(dir), silly);
 	if (!error) {
-		nfs_invalidate_dircache(dir);
 		nfs_renew_times(dentry);
 		d_move(dentry, sdentry);
 		dentry->d_flags |= DCACHE_NFSFS_RENAMED;
@@ -1036,10 +1044,10 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	 * can't instantiate the new inode.
 	 */
 	d_drop(dentry);
+	nfs_invalidate_dircache(dir);
 	error = nfs_proc_symlink(NFS_SERVER(dir), NFS_FH(dir),
 				dentry->d_name.name, symname, &sattr);
 	if (!error) {
-		nfs_invalidate_dircache(dir);
 		nfs_renew_times(dentry->d_parent);
 	} else if (error == -EEXIST) {
 		printk("nfs_proc_symlink: %s/%s already exists??\n",
@@ -1068,10 +1076,10 @@ nfs_link(struct inode *inode, struct inode *dir, struct dentry *dentry)
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		goto out;
 
+	nfs_invalidate_dircache(dir);
 	error = nfs_proc_link(NFS_SERVER(inode), NFS_FH(inode), NFS_FH(dir),
 				dentry->d_name.name);
 	if (!error) {
-		nfs_invalidate_dircache(dir);
 		inode->i_count ++;
 		inode->i_nlink ++; /* no need to wait for nfs_refresh_inode() */
 		d_instantiate(dentry, inode);
@@ -1209,6 +1217,8 @@ do_rename:
 		d_drop(new_dentry);
 		rehash = update;
 	}
+	nfs_invalidate_dircache(new_dir);
+	nfs_invalidate_dircache(old_dir);
 	error = nfs_proc_rename(NFS_SERVER(old_dir),
 				NFS_FH(old_dir), old_dentry->d_name.name,
 				NFS_FH(new_dir), new_dentry->d_name.name);
@@ -1221,8 +1231,6 @@ printk("nfs_rename: %s/%s busy after rename, d_count=%d\n",
 new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
 #endif
 	if (!error) {
-		nfs_invalidate_dircache(new_dir);
-		nfs_invalidate_dircache(old_dir);
 		/* Update the dcache if needed */
 		if (update)
 			d_move(old_dentry, new_dentry);

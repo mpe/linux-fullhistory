@@ -77,6 +77,10 @@
 #include <net/dn.h>
 #endif
 
+#ifdef CONFIG_FILTER
+#include <linux/filter.h>
+#endif
+
 #include <asm/atomic.h>
 
 /*
@@ -452,10 +456,12 @@ struct sock
 	unsigned char		localroute;	/* Route locally only */
 	struct ucred		peercred;
 
-	/* What the user has tried to set with the security API */
-	short			authentication;
-	short			encryption;  
-	short			encrypt_net;
+#ifdef CONFIG_FILTER
+	/* Socket Filtering Instructions */
+	int			filter;
+	struct sock_filter      *filter_data;
+#endif /* CONFIG_FILTER */
+
 /*
  *	This is where all the private (optional) areas that don't
  *	overlap will eventually live. 
@@ -832,6 +838,26 @@ extern void sklist_remove_socket(struct sock **list, struct sock *sk);
 extern void sklist_insert_socket(struct sock **list, struct sock *sk);
 extern void sklist_destroy_socket(struct sock **list, struct sock *sk);
 
+#ifdef CONFIG_FILTER
+/*
+ * Run the filter code and then cut skb->data to correct size returned by
+ * sk_run_filter. If pkt_len is 0 we toss packet. If skb->len is smaller
+ * than pkt_len we keep whole skb->data.
+ */
+extern __inline__ int sk_filter(struct sk_buff *skb, struct sock_filter *filter, int flen)
+{
+	int pkt_len;
+
+        pkt_len = sk_run_filter(skb->data, skb->len, filter, flen);
+        if(!pkt_len)
+                return 1;	/* Toss Packet */
+        else
+                skb_trim(skb, pkt_len);
+
+	return 0;
+}
+#endif /* CONFIG_FILTER */
+
 /*
  * 	Queue a received datagram if it will fit. Stream and sequenced
  *	protocols can't normally use this as they need to fit buffers in
@@ -859,8 +885,17 @@ extern __inline__ void skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
 	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= sk->rcvbuf)
-		return -ENOMEM;
-	skb_set_owner_r(skb, sk);
+                return -ENOMEM;
+        skb_set_owner_r(skb, sk);
+
+#ifdef CONFIG_FILTER
+	if (sk->filter)
+	{
+		if (sk_filter(skb, sk->filter_data, sk->filter))
+			return -1;	/* Toss packet */
+	}
+#endif /* CONFIG_FILTER */
+
 	skb_queue_tail(&sk->receive_queue,skb);
 	if (!sk->dead)
 		sk->data_ready(sk,skb->len);

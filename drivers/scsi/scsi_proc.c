@@ -16,11 +16,6 @@
  * Michael A. Griffith <grif@acm.org>
  */
 
-/*
- * Don't import our own symbols, as this would severely mess up our
- * symbol tables.
- */
-#define _SCSI_SYMS_VER_
 #define __NO_VERSION__
 #include <linux/module.h>
 
@@ -39,6 +34,7 @@
 #define FALSE 0
 #endif
 
+#ifdef CONFIG_PROC_FS
 extern int scsi_proc_info(char *, char **, off_t, int, int, int);
  
 struct scsi_dir {
@@ -295,6 +291,7 @@ void proc_print_scsidevice(Scsi_Device *scd, char *buffer, int *size, int len)
     *size = y; 
     return;
 }
+#endif /* CONFIG_SCSI_PROC */
 
 /*
  * Overrides for Emacs so that we get a uniform tabbing style.

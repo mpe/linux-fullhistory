@@ -378,7 +378,7 @@ static void bt848_set_size(struct bttv *btv)
 		 */
 		case 1: 
 			btwrite(BT848_COLOR_FMT_RGB8, BT848_COLOR_FMT);
-			btand(~0x10, BT848_CAP_CTL); // Dithering looks much better in this mode
+			btand(~0x10, BT848_CAP_CTL);  /* Dithering looks much better in this mode */
 			break;
 		case 2: 
 			btwrite(BT848_COLOR_FMT_RGB16, BT848_COLOR_FMT);
@@ -721,7 +721,9 @@ static inline void bt848_sat_v(struct bttv *btv, ulong data)
  *	Cliprect -> risc table.
  *
  *	FIXME: This is generating wrong code when we have some kinds of
- *	rectangle lists. I don't currently understand why.
+ *	rectangle lists. If you generate overlapped rectangles then it
+ *	gets a bit confused. Since we add the frame buffer clip rectangles
+ *	we need to fix this. Better yet to rewrite this function.
  */
  
 static void write_risc_data(struct bttv *btv, struct video_clip *vp, int count)
@@ -818,6 +820,11 @@ static void write_risc_data(struct bttv *btv, struct video_clip *vp, int count)
 			while ((cur=cur->next));
 		}
 
+		/*
+		 *	Fixme - we have to handle overlapped rectangles
+		 *	here, but the overlap might be partial
+		 */
+		 
 		/* add rect to second (x-sorted) list if rect.y == y  */
 		if ((cur=first.next)) 
 		{
@@ -1068,7 +1075,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			/* Only channel 0 has a tuner */
 			if(v.tuner!=0 || lastchan)
 				return -EINVAL;
-			if(v.mode!=VIDEO_MODE_PAL||v.mode!=VIDEO_MODE_NTSC)
+			if(v.mode!=VIDEO_MODE_PAL&&v.mode!=VIDEO_MODE_NTSC)
 				return -EOPNOTSUPP;
 			btv->win.norm = v.mode;
 			bt848_set_size(btv);
@@ -1262,6 +1269,9 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			vp=btv->audio_dev;
 			vp.flags&=~(VIDEO_AUDIO_MUTE|VIDEO_AUDIO_MUTABLE);
 			vp.flags|=VIDEO_AUDIO_MUTABLE;
+			strcpy(vp.name,"TV");
+			if(copy_to_user(&v,arg,sizeof(v)))
+				return -EFAULT;
 			return 0;
 		}
 		case VIDIOCSAUDIO:

@@ -259,8 +259,10 @@ init_module(void)
 void
 cleanup_module(void)
 {
+#if defined(CONFIG_GUS16)
 	if (db16)
 		unload_gus_db16(&config);
+#endif
 	unload_gus(&config);
 	SOUND_LOCK_END;
 }

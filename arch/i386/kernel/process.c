@@ -75,7 +75,7 @@ void enable_hlt(void)
 static void hard_idle(void)
 {
 	while (!need_resched) {
-		if (hlt_works_ok && !hlt_counter) {
+		if (boot_cpu_data.hlt_works_ok && !hlt_counter) {
 #ifdef CONFIG_APM
 				/* If the APM BIOS is not enabled, or there
 				 is an error calling the idle routine, we
@@ -114,8 +114,7 @@ asmlinkage int sys_idle(void)
 	/* endless idle loop with no priority at all */
 	current->priority = -100;
 	current->counter = -100;
-	for (;;) 
-	{
+	for (;;) {
 		/*
 		 *	We are locked at this point. So we can safely call
 		 *	the APM bios knowing only one CPU at a time will do
@@ -124,12 +123,9 @@ asmlinkage int sys_idle(void)
 		if (!start_idle) 
 			start_idle = jiffies;
 		if (jiffies - start_idle > HARD_IDLE_TIMEOUT) 
-		{
 			hard_idle();
-		} 
-		else 
-		{
-			if (hlt_works_ok && !hlt_counter && !need_resched)
+		else  {
+			if (boot_cpu_data.hlt_works_ok && !hlt_counter && !need_resched)
 		        	__asm__("hlt");
 		}
 		run_task_queue(&tq_scheduler);
@@ -154,7 +150,7 @@ int cpu_idle(void *unused)
 	current->priority = -100;
 	while(1)
 	{
-		if(cpu_data[smp_processor_id()].hlt_works_ok &&
+		if(current_cpu_data.hlt_works_ok &&
 		 		!hlt_counter && !need_resched)
 			__asm("hlt");
 		/*
@@ -185,6 +181,7 @@ asmlinkage int sys_idle(void)
  * controller to pulse the reset-line low. We try that for a while,
  * and if it doesn't work, we do some other stupid things.
  */
+
 static long no_idt[2] = {0, 0};
 static int reboot_mode = 0;
 static int reboot_thru_bios = 0;
@@ -226,7 +223,7 @@ real_mode_gdt_entries [3] =
 {
 	0x0000000000000000ULL,	/* Null descriptor */
 	0x00009a000000ffffULL,	/* 16-bit real-mode 64k code at 0x00000000 */
-	0x000092000100ffffULL		/* 16-bit real-mode 64k data at 0x00000100 */
+	0x000092000100ffffULL	/* 16-bit real-mode 64k data at 0x00000100 */
 };
 
 static struct
@@ -260,16 +257,16 @@ static unsigned char real_mode_switch [] =
 {
 	0x66, 0x0f, 0x20, 0xc0,			/*    movl  %cr0,%eax        */
 	0x66, 0x83, 0xe0, 0x11,			/*    andl  $0x00000011,%eax */
-	0x66, 0x0d, 0x00, 0x00, 0x00, 0x60,		/*    orl   $0x60000000,%eax */
+	0x66, 0x0d, 0x00, 0x00, 0x00, 0x60,	/*    orl   $0x60000000,%eax */
 	0x66, 0x0f, 0x22, 0xc0,			/*    movl  %eax,%cr0        */
 	0x66, 0x0f, 0x22, 0xd8,			/*    movl  %eax,%cr3        */
 	0x66, 0x0f, 0x20, 0xc3,			/*    movl  %cr0,%ebx        */
 	0x66, 0x81, 0xe3, 0x00, 0x00, 0x00, 0x60,	/*    andl  $0x60000000,%ebx */
-	0x74, 0x02,					/*    jz    f                */
-	0x0f, 0x08,					/*    invd                   */
-	0x24, 0x10,					/* f: andb  $0x10,al         */
+	0x74, 0x02,				/*    jz    f                */
+	0x0f, 0x08,				/*    invd                   */
+	0x24, 0x10,				/* f: andb  $0x10,al         */
 	0x66, 0x0f, 0x22, 0xc0,			/*    movl  %eax,%cr0        */
-	0xea, 0x00, 0x00, 0xff, 0xff			/*    ljmp  $0xffff,$0x0000  */
+	0xea, 0x00, 0x00, 0xff, 0xff		/*    ljmp  $0xffff,$0x0000  */
 };
 
 static inline void kb_wait(void)
@@ -301,7 +298,7 @@ void machine_restart(char * __unused)
 		}
 	}
 
-	cli ();
+	cli();
 
 	/* Write zero to CMOS register number 0x0f, which the BIOS POST
 	   routine will recognize as telling it to do a proper reboot.  (Well
@@ -325,7 +322,7 @@ void machine_restart(char * __unused)
 	/* Make sure the first page is mapped to the start of physical memory.
 	   It is normally not mapped, to trap kernel NULL pointer dereferences. */
 
-	pg0 [0] = 7;
+	pg0[0] = 7;
 
 	/*
 	 * Use `swapper_pg_dir' as our page directory.  We bother with
@@ -530,7 +527,7 @@ int dump_fpu (struct pt_regs * regs, struct user_i387_struct* fpu)
 	int fpvalid;
 
 	if ((fpvalid = current->used_math) != 0) {
-		if (hard_math) {
+		if (boot_cpu_data.hard_math) {
 		  if (last_task_used_math == current) {
 			  __asm__("clts ; fsave %0; fwait": :"m" (*fpu));
 		  }

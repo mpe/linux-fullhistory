@@ -320,25 +320,18 @@ int Psi240i_BiosParam		(Disk *disk, kdev_t dev, int geom[]);
 
 extern struct proc_dir_entry Proc_Scsi_Psi240i;
 
-#define PSI240I { NULL, NULL,						\
-			&Proc_Scsi_Psi240i,/* proc_dir_entry */	\
-			NULL,		                			\
-			"PSI-240I EIDE Disk Controller",		\
-			Psi240i_Detect,							\
-			NULL,									\
-			NULL,	 								\
-			Psi240i_Command,						\
-			Psi240i_QueueCommand,					\
-			Psi240i_Abort,							\
-			Psi240i_Reset,							\
-			NULL,									\
-			Psi240i_BiosParam,                 		\
-			1, 										\
-			-1, 									\
-			SG_NONE,		 						\
-			1, 										\
-			0, 										\
-			0, 										\
-			DISABLE_CLUSTERING }
+#define PSI240I { proc_dir:       &Proc_Scsi_Psi240i,/* proc_dir_entry */ \
+		  name:           "PSI-240I EIDE Disk Controller",\
+		  detect:         Psi240i_Detect,			\
+		  command:	  Psi240i_Command,			\
+		  queuecommand:	  Psi240i_QueueCommand,		\
+		  abort:	  Psi240i_Abort,			\
+		  reset:	  Psi240i_Reset,			\
+		  biosparam:	  Psi240i_BiosParam,                 	\
+		  can_queue:	  1, 					\
+		  this_id:	  -1, 					\
+		  sg_tablesize:	  SG_NONE,		 		\
+		  cmd_per_lun:	  1, 					\
+		  use_clustering: DISABLE_CLUSTERING }
 
 #endif

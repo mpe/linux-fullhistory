@@ -419,6 +419,11 @@ repeat:
 	current->state = TASK_RUNNING;
 }
 
+/*
+ * Note: check the dirty flag before waiting, so we don't
+ * hold up the sync while mounting a device. (The newly
+ * mounted device won't need syncing.)
+ */
 void sync_supers(kdev_t dev)
 {
 	struct super_block * sb;
@@ -428,6 +433,9 @@ void sync_supers(kdev_t dev)
 			continue;
 		if (dev && sb->s_dev != dev)
 			continue;
+		if (!sb->s_dirt)
+			continue;
+		/* N.B. Should lock the superblock while writing */
 		wait_on_super(sb);
 		if (!sb->s_dev || !sb->s_dirt)
 			continue;
@@ -444,13 +452,14 @@ struct super_block * get_super(kdev_t dev)
 
 	if (!dev)
 		return NULL;
+restart:
 	s = 0+super_blocks;
 	while (s < NR_SUPER+super_blocks)
 		if (s->s_dev == dev) {
 			wait_on_super(s);
 			if (s->s_dev == dev)
 				return s;
-			s = 0+super_blocks;
+			goto restart;
 		} else
 			s++;
 	return NULL;
@@ -494,33 +503,44 @@ static struct super_block * read_super(kdev_t dev,const char *name,int flags,
 	struct file_system_type *type;
 
 	if (!dev)
-		return NULL;
+		goto out_fail;
 	check_disk_change(dev);
 	s = get_super(dev);
 	if (s)
 		return s;
-	if (!(type = get_fs_type(name))) {
+	type = get_fs_type(name);
+	if (!type) {
 		printk("VFS: on device %s: get_fs_type(%s) failed\n",
 		       kdevname(dev), name);
-		return NULL;
+		goto out_fail;
 	}
 	for (s = 0+super_blocks ;; s++) {
 		if (s >= NR_SUPER+super_blocks)
-			return NULL;
-		if (!(s->s_dev))
-			break;
+			goto out_fail;
+		if (s->s_dev)
+			continue;
+		if (s->s_lock) {
+			printk("VFS: empty superblock %p locked!\n", s);
+			continue;
+		}
+		break;
 	}
 	s->s_dev = dev;
 	s->s_flags = flags;
-	if (!type->read_super(s,data, silent)) {
-		s->s_dev = 0;
-		return NULL;
-	}
-	s->s_dev = dev;
-	s->s_rd_only = 0;
 	s->s_dirt = 0;
+	/* N.B. Should lock superblock now ... */
+	if (!type->read_super(s,data, silent))
+		goto fail;
+	s->s_dev = dev; /* N.B. why do this again?? */
+	s->s_rd_only = 0;
 	s->s_type = type;
 	return s;
+
+	/* N.B. s_dev should be cleared in type->read_super */
+fail:
+	s->s_dev = 0;
+out_fail:
+	return NULL;
 }
 
 /*
@@ -1040,35 +1060,26 @@ __initfunc(static void do_mount_root(void))
 	int retval;
   
 #ifdef CONFIG_ROOT_NFS
-	if (MAJOR(ROOT_DEV) == UNNAMED_MAJOR)
-		if (nfs_root_init(nfs_root_name, nfs_root_addrs) < 0) {
-			printk(KERN_ERR "Root-NFS: Unable to contact NFS "
-			    "server for root fs, using /dev/fd0 instead\n");
-			ROOT_DEV = MKDEV(FLOPPY_MAJOR, 0);
-		}
 	if (MAJOR(ROOT_DEV) == UNNAMED_MAJOR) {
 		ROOT_DEV = 0;
 		if ((fs_type = get_fs_type("nfs"))) {
-			sb = &super_blocks[0];
-			while (sb->s_dev) sb++;
-			sb->s_dev = get_unnamed_dev();
-			sb->s_flags = root_mountflags & ~MS_RDONLY;
-			if (nfs_root_mount(sb) >= 0) {
-				sb->s_rd_only = 0;
-				sb->s_dirt = 0;
-				sb->s_type = fs_type;
-				current->fs->root = dget(sb->s_root);
-				current->fs->pwd = dget(sb->s_root);
-				ROOT_DEV = sb->s_dev;
-				printk (KERN_NOTICE "VFS: Mounted root (nfs filesystem).\n");
-				vfsmnt = add_vfsmnt(ROOT_DEV, "/dev/root", "/");
-				if (!vfsmnt)
-					panic("VFS: add_vfsmnt failed for NFS root.\n");
-				vfsmnt->mnt_sb = sb;
-				vfsmnt->mnt_flags = sb->s_flags;
-				return;
+			if ((vfsmnt = add_vfsmnt(ROOT_DEV, "/dev/root", "/"))) {
+				sb = vfsmnt->mnt_sb;
+				sb->s_dev = get_unnamed_dev();
+				sb->s_flags = root_mountflags & ~MS_RDONLY;
+				if (nfs_root_mount(sb) >= 0) {
+					sb->s_rd_only = 0;
+					sb->s_dirt = 0;
+					sb->s_type = fs_type;
+					current->fs->root = dget(sb->s_root);
+					current->fs->pwd = dget(sb->s_root);
+					ROOT_DEV = sb->s_dev;
+					printk (KERN_NOTICE "VFS: Mounted root (nfs filesystem).\n");
+					return;
+				}
+				sb->s_dev = 0;
+				put_unnamed_dev(sb->s_dev);
 			}
-			sb->s_dev = 0;
 		}
 		if (!ROOT_DEV) {
 			printk(KERN_ERR "VFS: Unable to mount root fs via NFS, trying floppy.\n");

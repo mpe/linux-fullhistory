@@ -403,19 +403,15 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 			seminfo.semusz = used_semids;
 			seminfo.semaem = used_sems;
 		}
-		err = verify_area(VERIFY_WRITE, tmp, sizeof(struct seminfo));
-		if (err)
+		err = -EFAULT;
+		if (copy_to_user (tmp, &seminfo, sizeof(struct seminfo))) 
 			goto out;
-		copy_to_user (tmp, &seminfo, sizeof(struct seminfo));
 		err = max_semid;
 		goto out;
 	}
 
 	case SEM_STAT:
 		buf = arg.buf;
-		err = verify_area (VERIFY_WRITE, buf, sizeof (*buf));
-		if (err)
-			goto out;
 		err = -EINVAL;
 		if (semid > max_semid)
 			goto out;
@@ -430,8 +426,9 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		tbuf.sem_otime  = sma->sem_otime;
 		tbuf.sem_ctime  = sma->sem_ctime;
 		tbuf.sem_nsems  = sma->sem_nsems;
-		copy_to_user (buf, &tbuf, sizeof(*buf));
-		err = id;
+		err = -EFAULT;
+		if (copy_to_user (buf, &tbuf, sizeof(*buf)) == 0)
+			err = id;
 		goto out;
 	}
 
@@ -475,9 +472,7 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		case GETZCNT: return count_semzcnt(sma,semnum);
 		case GETALL:
 			array = arg.array;
-			err = verify_area (VERIFY_WRITE, array, nsems*sizeof(ushort));
-			if (err)
-				goto out;
+			break;
 		}
 		break;
 	case SETVAL:
@@ -496,9 +491,10 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		goto out;
 	case SETALL: /* arg is a pointer to an array of ushort */
 		array = arg.array;
-		if ((err = verify_area (VERIFY_READ, array, nsems*sizeof(ushort))))
-			goto out;
-		copy_from_user (sem_io, array, nsems*sizeof(ushort));
+		err = -EFAULT;
+		if (copy_from_user (sem_io, array, nsems*sizeof(ushort)))
+		       goto out;
+		err = 0;
 		for (i = 0; i < nsems; i++)
 			if (sem_io[i] > SEMVMX) {
 				err = -ERANGE;
@@ -507,14 +503,12 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		break;
 	case IPC_STAT:
 		buf = arg.buf;
-		if ((err = verify_area (VERIFY_WRITE, buf, sizeof(*buf))))
-			goto out;
 		break;
 	case IPC_SET:
 		buf = arg.buf;
-		if ((err = verify_area (VERIFY_READ, buf, sizeof (*buf))))
-			goto out;
-		copy_from_user (&tbuf, buf, sizeof (*buf));
+		err = copy_from_user (&tbuf, buf, sizeof (*buf));
+		if (err)
+			err = -EFAULT;
 		break;
 	}
 
@@ -531,7 +525,8 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 			goto out;
 		for (i = 0; i < sma->sem_nsems; i++)
 			sem_io[i] = sma->sem_base[i].semval;
-		copy_to_user (array, sem_io, nsems*sizeof(ushort));
+		if (copy_to_user (array, sem_io, nsems*sizeof(ushort)))
+			err = -EFAULT;
 		break;
 	case SETVAL:
 		err = -EACCES;
@@ -564,7 +559,8 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		tbuf.sem_otime  = sma->sem_otime;
 		tbuf.sem_ctime  = sma->sem_ctime;
 		tbuf.sem_nsems  = sma->sem_nsems;
-		copy_to_user (buf, &tbuf, sizeof(*buf));
+		if (copy_to_user (buf, &tbuf, sizeof(*buf)))
+			err = -EFAULT;
 		break;
 	case SETALL:
 		err = -EACCES;
@@ -606,9 +602,8 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 	error = -EFAULT;
 	if (!tsops)
 		goto out;
-	if ((i = verify_area (VERIFY_READ, tsops, nsops * sizeof(*tsops))))
+	if (copy_from_user (sops, tsops, nsops * sizeof(*tsops)))
 		goto out;
-	copy_from_user (sops, tsops, nsops * sizeof(*tsops));
 	id = (unsigned int) semid % SEMMNI;
 	error = -EINVAL;
 	if ((sma = semary[id]) == IPC_UNUSED || sma == IPC_NOID)

@@ -566,7 +566,7 @@ int fat_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
 	tmp.f_bavail = free;
 	tmp.f_files = 0;
 	tmp.f_ffree = 0;
-	tmp.f_namelen = 12;
+	tmp.f_namelen = MSDOS_SB(sb)->options.isvfat ? 260 : 12;
 	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
 

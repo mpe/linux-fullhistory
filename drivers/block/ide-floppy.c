@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-floppy.c	Version 0.8		Feb  21, 1997
+ * linux/drivers/block/ide-floppy.c	Version 0.8		Dec   7, 1997
  *
  * Copyright (C) 1996, 1997 Gadi Oxman <gadio@netvision.net.il>
  */
@@ -1364,6 +1364,11 @@ static int idefloppy_cleanup (ide_drive_t *drive)
 	return 0;
 }
 
+static ide_proc_entry_t idefloppy_proc[] = {
+	{ "geometry", proc_ide_read_geometry, NULL },
+	{ NULL, NULL, NULL }
+};
+
 int idefloppy_init (void);
 static ide_module_t idefloppy_module = {
 	IDE_DRIVER_MODULE,
@@ -1391,7 +1396,7 @@ static ide_driver_t idefloppy_driver = {
 	NULL,			/* pre_reset */
 	idefloppy_capacity,	/* capacity */
 	NULL,			/* special */
-	NULL			/* proc */
+	idefloppy_proc		/* proc */
 };
 
 /*

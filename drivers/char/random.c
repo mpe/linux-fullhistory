@@ -585,7 +585,7 @@ static void add_timer_randomness(struct random_bucket *r,
 	begin_benchmark(&timer_benchmark);
 #endif
 #if defined (__i386__)
-	if (x86_capability & 16) {
+	if (boot_cpu_data.x86_capability & 16) {
 		unsigned long low, high;
 		__asm__(".byte 0x0f,0x31"
 			:"=a" (low), "=d" (high));

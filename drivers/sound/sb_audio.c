@@ -833,7 +833,7 @@ static unsigned int sb16_audio_set_bits(int dev, unsigned int bits)
 
 	if (bits != 0)
 	{
-		if (devc->bits == AFMT_U8 || bits == AFMT_S16_LE)
+		if (bits == AFMT_U8 || bits == AFMT_S16_LE)
 			devc->bits = bits;
 		else
 			devc->bits = AFMT_U8;

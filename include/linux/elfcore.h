@@ -41,8 +41,8 @@ struct elf_prstatus
 #endif
 	struct elf_siginfo pr_info;	/* Info associated with signal */
 	short	pr_cursig;		/* Current signal */
-	sigset_t pr_sigpend;		/* Set of pending signals */
-	sigset_t pr_sighold;		/* Set of held signals */
+	unsigned long pr_sigpend;	/* Set of pending signals */
+	unsigned long pr_sighold;	/* Set of held signals */
 #if 0
 	struct sigaltstack pr_altstack;	/* Alternate stack info */
 	struct sigaction pr_action;	/* Signal action for current sig */

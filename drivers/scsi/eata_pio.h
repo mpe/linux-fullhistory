@@ -74,26 +74,17 @@ int eata_pio_release(struct Scsi_Host *);
 #endif
 
 
-#define EATA_PIO {	         \
-    NULL, NULL,                  \
-    NULL,               /* proc_dir_entry */ \
-    eata_pio_proc_info, /* procinfo	  */ \
-    "EATA (Extended Attachment) PIO driver", \
-    eata_pio_detect,		 \
-    eata_pio_release,		 \
-    NULL, NULL,			 \
-    eata_pio_queue,		 \
-    eata_pio_abort,		 \
-    eata_pio_reset,		 \
-    NULL,   /* Slave attach */	 \
-    scsicam_bios_param,		 \
-    0,	    /* Canqueue	    */	 \
-    0,	    /* this_id	    */	 \
-    0,	    /* sg_tablesize */	 \
-    0,	    /* cmd_per_lun  */	 \
-    0,	    /* present	    */	 \
-    1,	    /* True if ISA  */	 \
-    ENABLE_CLUSTERING }
+#define EATA_PIO {						\
+    proc_info:         eata_pio_proc_info, /* procinfo	  */	\
+    name:              "EATA (Extended Attachment) PIO driver",	\
+    detect:            eata_pio_detect,				\
+    release:           eata_pio_release,			\
+    queuecommand:      eata_pio_queue,				\
+    abort:             eata_pio_abort,				\
+    reset:             eata_pio_reset,				\
+    bios_param:        scsicam_bios_param,			\
+    unchecked_isa_dma: 1,	    /* True if ISA  */		\
+    use_clustering:    ENABLE_CLUSTERING }
 
 #endif /* _EATA_PIO_H */
 

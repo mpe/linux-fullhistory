@@ -1150,8 +1150,8 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	notes[0].datasz = sizeof(prstatus);
 	notes[0].data = &prstatus;
 	prstatus.pr_info.si_signo = prstatus.pr_cursig = signr;
-	prstatus.pr_sigpend = current->signal;
-	prstatus.pr_sighold = current->blocked;
+	prstatus.pr_sigpend = current->signal.sig[0];
+	prstatus.pr_sighold = current->blocked.sig[0];
 	psinfo.pr_pid = prstatus.pr_pid = current->pid;
 	psinfo.pr_ppid = prstatus.pr_ppid = current->p_pptr->pid;
 	psinfo.pr_pgrp = prstatus.pr_pgrp = current->pgrp;

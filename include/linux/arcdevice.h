@@ -5,7 +5,7 @@
  *
  *		Definitions for the ARCnet handlers.
  *
- * Version:	$Id: arcdevice.h,v 1.2 1997/09/05 08:57:56 mj Exp $
+ * Version:	$Id: arcdevice.h,v 1.3 1997/11/09 11:05:05 mj Exp $
  *
  * Authors:	Avery Pennarun <apenwarr@bond.net>
  *              David Woodhouse <dwmw2@cam.ac.uk>
@@ -74,7 +74,7 @@
 
 /* Display warnings about the driver being an ALPHA version.
  */
-#define ALPHA_WARNING
+#undef ALPHA_WARNING
 
 
 /* New debugging bitflags: each option can be enabled individually.

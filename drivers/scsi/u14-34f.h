@@ -13,27 +13,16 @@ int u14_34f_biosparam(Disk *, kdev_t, int *);
 
 #define U14_34F_VERSION "3.11.00"
 
-#define ULTRASTOR_14_34F {                                            \
-		NULL, /* Ptr for modules */                           \
-		NULL, /* usage count for modules */		      \
-		NULL,		                                      \
-		NULL,		                                      \
-		"UltraStor 14F/34F rev. " U14_34F_VERSION " ",        \
-		u14_34f_detect,                                       \
-		u14_34f_release,                                      \
-		NULL,						      \
-		NULL,                                                 \
-		u14_34f_queuecommand,                                 \
-		u14_34f_abort,                                        \
-		u14_34f_reset,                                        \
-		NULL,                                                 \
-		u14_34f_biosparam,                                    \
-		0,   /* can_queue, reset by detect */                 \
-		7,   /* this_id, reset by detect */                   \
-		0,   /* sg_tablesize, reset by detect */              \
-		0,   /* cmd_per_lun, reset by detect */               \
-		0,   /* number of boards present */                   \
-		1,   /* unchecked isa dma, reset by detect */         \
-		ENABLE_CLUSTERING                                     \
+#define ULTRASTOR_14_34F {							   \
+		name:              "UltraStor 14F/34F rev. " U14_34F_VERSION " ",  \
+		detect:            u14_34f_detect,                                 \
+		release:           u14_34f_release,                                \
+		queuecommand:      u14_34f_queuecommand,                           \
+		abort:             u14_34f_abort,                                  \
+		reset:             u14_34f_reset,                                  \
+		bios_param:        u14_34f_biosparam,                              \
+		this_id:           7,   /* this_id, reset by detect */             \
+		unchecked_isa_dma: 1,   /* unchecked isa dma, reset by detect */   \
+		use_clustering:    ENABLE_CLUSTERING                               \
 		}
 #endif

@@ -436,16 +436,6 @@ static void profile_readahead(int async, struct file *filp)
  *   64k if defined (4K page size assumed).
  */
 
-#define PageAlignSize(size) (((size) + PAGE_SIZE -1) & PAGE_MASK)
-
-#if 0  /* small readahead */
-#define MAX_READAHEAD PageAlignSize(4096*7)
-#define MIN_READAHEAD PageAlignSize(4096*2)
-#else /* large readahead */
-#define MAX_READAHEAD PageAlignSize(4096*18)
-#define MIN_READAHEAD PageAlignSize(4096*3)
-#endif
-
 static inline int get_max_readahead(struct inode * inode)
 {
 	if (!inode->i_dev || !max_readahead[MAJOR(inode->i_dev)])

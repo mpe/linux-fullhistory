@@ -373,7 +373,24 @@ typedef struct {
 void proc_ide_init(void);
 void ide_add_proc_entries(ide_drive_t *drive, ide_proc_entry_t *p);
 void ide_remove_proc_entries(ide_drive_t *drive, ide_proc_entry_t *p);
+read_proc_t proc_ide_read_capacity;
 read_proc_t proc_ide_read_geometry;
+
+/*
+ * Standard exit stuff:
+ */
+#define PROC_IDE_READ_RETURN(page,start,off,count,eof,len) \
+{					\
+	len -= off;			\
+	if (len < count) {		\
+		*eof = 1;		\
+		if (len <= 0)		\
+			return 0;	\
+	} else				\
+		len = count;		\
+	*start = page + off;		\
+	return len;			\
+}
 
 /*
  * Subdrivers support.

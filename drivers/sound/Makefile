@@ -90,18 +90,26 @@ ifeq ($(CONFIG_GUS),y)
 L_OBJS += gus.o
 else
   ifeq ($(CONFIG_GUS),m)
-  M_OBJS += gus.o
+    M_OBJS += gus.o
+  endif
+  ifeq ($(CONFIG_GUSMAX),m)
+    ifneq ($(CONFIG_MSS),y)
+      CONFIG_MSS = m
+    endif
   endif
 endif
 
 ifeq ($(CONFIG_SB),y)
 L_OBJS += sb_audio.o sb_common.o sb_midi.o sb_mixer.o
-LX_OBJS += sb_card.o uart401.o
+LX_OBJS += sb_card.o
+CONFIG_UART401 = y
 else
   ifeq ($(CONFIG_SB),m)
   M_OBJS += sb.o
-  MX_OBJS += uart401.o
   MIX_OBJS += sb_card.o
+  ifneq ($(CONFIG_UART401),y)
+    CONFIG_UART401 = m
+  endif
   endif
 endif
 
@@ -181,7 +189,8 @@ ifeq ($(CONFIG_MAD16),y)
 L_OBJS += mad16.o
 else
   ifeq ($(CONFIG_MAD16),m)
-  M_OBJS += mad16.o
+  M_OBJS += mad16.o sb.o uart401.o
+  MX_OBJS += sb_card.o ad1848.o
   endif
 endif
 
@@ -217,6 +226,14 @@ else
   M_OBJS += opl3sa.o
   MX_OBJS += ad1848.o
   endif
+endif
+
+ifeq ($(CONFIG_VMIDI),y)
+L_OBJS += v_midi.o
+else
+   ifeq ($(CONFIG_VMIDI),m)
+      M_OBJS += v_midi.o
+   endif
 endif
 
 include $(TOPDIR)/Rules.make

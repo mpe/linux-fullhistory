@@ -136,7 +136,11 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	bool 'Dayna firmware support' CONFIG_COPS_DAYNA
 	bool 'Tangent firmware support' CONFIG_COPS_TANGENT
     fi
-    dep_tristate 'IP-over-DDP driver support' CONFIG_IPDDP $CONFIG_ATALK
+    tristate 'Appletalk-IP driver support' CONFIG_IPDDP
+    if [ "$CONFIG_IPDDP" != "n" ]; then
+       bool 'IP to Appletalk-IP Encapsulation support' CONFIG_IPDDP_ENCAP
+       bool 'Appletalk-IP to IP Decapsulation support' CONFIG_IPDDP_DECAP
+    fi
   fi
 fi
 
@@ -156,8 +160,11 @@ if [ "$CONFIG_SLIP" != "n" ]; then
   bool ' Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
 fi
 
-tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
-tristate 'AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
+bool 'Wireless LAN (non-hamradio)' CONFIG_NET_RADIO
+if [ "$CONFIG_NET_RADIO" = "y" ]; then
+  tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
+  tristate 'AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
+fi
 
 bool 'Token Ring driver support' CONFIG_TR
 if [ "$CONFIG_TR" = "y" ]; then

@@ -290,28 +290,19 @@ int ncr53c8xx_release(struct Scsi_Host *);
 #define ncr53c8xx_release NULL
 #endif
 
-#if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
-
-#define NCR53C8XX {NULL,NULL,NULL,NULL,SCSI_NCR_DRIVER_NAME, ncr53c8xx_detect,\
-    	ncr53c8xx_release, /* info */ NULL, /* command, deprecated */ NULL, 		\
-	ncr53c8xx_queue_command, ncr53c8xx_abort, ncr53c8xx_reset,	\
-        NULL /* slave attach */, scsicam_bios_param, /* can queue */ SCSI_NCR_CAN_QUEUE,\
-	/* id */ 7, SCSI_NCR_SG_TABLESIZE /* SG */, /* cmd per lun */ SCSI_NCR_CMD_PER_LUN, 		\
-        /* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
-
-
-#else
-
-
-#define NCR53C8XX {NULL, NULL, SCSI_NCR_DRIVER_NAME, ncr53c8xx_detect,\
-    	ncr53c8xx_release, /* info */ NULL, /* command, deprecated */ NULL, 		\
-	ncr53c8xx_queue_command, ncr53c8xx_abort, ncr53c8xx_reset,	\
-        NULL /* slave attach */, scsicam_bios_param, /* can queue */ SCSI_NCR_CAN_QUEUE,\
-	/* id */ 7, SCSI_NCR_SG_TABLESIZE /* SG */, /* cmd per lun */ SCSI_NCR_CMD_PER_LUN, 		\
-        /* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
-
-#endif /* LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0) */
-
+#define NCR53C8XX {     name:           SCSI_NCR_DRIVER_NAME,	\
+			detect:         ncr53c8xx_detect,	\
+			release:        ncr53c8xx_release,	\
+			queuecommand:   ncr53c8xx_queue_command,\
+			abort:          ncr53c8xx_abort,	\
+			reset:          ncr53c8xx_reset,	\
+			bios_param:     scsicam_bios_param,	\
+			can_queue:      SCSI_NCR_CAN_QUEUE,	\
+			this_id:        7,			\
+			sg_tablesize:   SCSI_NCR_SG_TABLESIZE,	\
+			cmd_per_lun:    SCSI_NCR_CMD_PER_LUN,	\
+			use_clustering: DISABLE_CLUSTERING} 
+  
 #endif /* defined(HOSTS_C) || defined(MODULE) */ 
 
 

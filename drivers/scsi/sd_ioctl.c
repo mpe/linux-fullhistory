@@ -25,9 +25,22 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
     kdev_t dev = inode->i_rdev;
     int error;
     struct Scsi_Host * host;
+    Scsi_Device * SDev;
     int diskinfo[4];
     struct hd_geometry *loc = (struct hd_geometry *) arg;
     
+    SDev = rscsi_disks[MINOR(dev) >> 4].device;
+    /*
+     * If we are in the middle of error recovery, don't let anyone
+     * else try and use this device.  Also, if error recovery fails, it
+     * may try and take the device offline, in which case all further
+     * access to the device is prohibited.
+     */
+    if( !scsi_block_when_processing_errors(SDev) )
+      {
+        return -ENODEV;
+      }
+
     switch (cmd) {
     case HDIO_GETGEO:   /* Return BIOS disk parameters */
 	if (!loc)  return -EINVAL;

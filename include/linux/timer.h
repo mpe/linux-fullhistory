@@ -23,8 +23,6 @@
  *
  * FLOPPY_TIMER		floppy disk timer (not used right now)
  * 
- * SCSI_TIMER		scsi.c timeout timer
- *
  * NET_TIMER		tcp/ip timeout timer
  *
  * COPRO_TIMER		387 timeout for buggy hardware..
@@ -44,7 +42,6 @@
 
 #define HD_TIMER	16
 #define FLOPPY_TIMER	17
-#define SCSI_TIMER 	18
 #define NET_TIMER	19
 #define SOUND_TIMER	20
 #define COPRO_TIMER	21

@@ -414,9 +414,9 @@ int minix_rmdir(struct inode * dir, struct dentry *dentry)
 	retval = -EPERM;
 	inode = dentry->d_inode;
 
-        if ((dir->i_mode & S_ISVTX) && !fsuser() &&
+        if ((dir->i_mode & S_ISVTX) &&
             current->fsuid != inode->i_uid &&
-            current->fsuid != dir->i_uid)
+            current->fsuid != dir->i_uid && !fsuser())
 		goto end_rmdir;
 	if (inode->i_dev != dir->i_dev)
 		goto end_rmdir;
@@ -480,9 +480,9 @@ repeat:
 		schedule();
 		goto repeat;
 	}
-	if ((dir->i_mode & S_ISVTX) && !fsuser() &&
+	if ((dir->i_mode & S_ISVTX) &&
 	    current->fsuid != inode->i_uid &&
-	    current->fsuid != dir->i_uid)
+	    current->fsuid != dir->i_uid && !fsuser())
 		goto end_unlink;
 	if (de->inode != inode->i_ino) {
 		retval = -ENOENT;

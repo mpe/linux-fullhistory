@@ -926,5 +926,7 @@ extern const char *pci_strvendor (unsigned int vendor);
 extern const char *pci_strdev (unsigned int vendor, unsigned int device);
 
 extern int get_pci_list (char *buf);
+
+extern void pci_quirks_init (void);
 #endif /* __KERNEL__ */
 #endif /* LINUX_PCI_H */

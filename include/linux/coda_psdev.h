@@ -4,19 +4,49 @@
 #define CODA_PSDEV_MAJOR 67
 #define MAX_CODADEVS  5	   /* how many do we allow */
 
+#include <linux/config.h>
+
 extern struct vcomm psdev_vcomm[];
+
+/* queue stuff; the rest is static to psdev.c */
+struct queue {
+    struct queue *forw, *back;
+};
+void coda_q_insert(struct queue *el, struct queue *q);
+void coda_q_remove(struct queue *q);
+
 
 #define CODA_SUPER_MAGIC	0x73757245
 
 struct coda_sb_info
 {
-  struct inode *      sbi_psdev;     /* /dev/cfs? Venus/kernel device */
-  struct inode *      sbi_ctlcp;     /* control magic file */
-  int                 sbi_refct;
-  struct vcomm *      sbi_vcomm;
-  struct inode *      sbi_root;
+	struct inode *      sbi_psdev;     /* /dev/cfs? Venus/kernel device */
+	struct inode *      sbi_ctlcp;     /* control magic file */
+	int                 sbi_refct;
+	struct vcomm *      sbi_vcomm;
+	struct inode *      sbi_root;
+	struct list_head    sbi_cchead;
 };
 
+/* communication pending/processing queues queues */
+struct vcomm {
+	u_long		    vc_seq;
+	struct wait_queue  *vc_waitq; /* Venus wait queue */
+	struct queue	    vc_pending;
+	struct queue	    vc_processing;
+	struct super_block *vc_sb;
+	int                 vc_inuse;
+};
+
+static inline int vcomm_open(struct vcomm *vcp)
+{
+        return ((vcp)->vc_pending.forw != NULL);
+}
+
+static inline void mark_vcomm_closed(struct vcomm *vcp)
+{
+        (vcp)->vc_pending.forw = NULL;
+}
 
 static inline struct coda_sb_info *coda_sbp(struct super_block *sb)
 {
@@ -28,22 +58,6 @@ static inline struct coda_sb_info *coda_sbp(struct super_block *sb)
 extern void coda_psdev_detach(int unit);
 extern int  init_coda_psdev(void);
 
-/* to aid procedures make upcalls. They must have a 
-   declaration at the top containing:
-       struct inputArgs *inp;
-	struct outputArgs *outp;
-	int error=0;
-	int size;
-*/
-
-#define UPARG(bsize, op)\
-do {\
-  	CODA_ALLOC(inp, struct inputArgs *, (bsize));\
-	outp = (struct outputArgs *) (inp);\
-	INIT_IN(inp, (op))\
-	coda_load_creds(&(inp->cred));\
-        size = (bsize);\
-} while (0)
 
 /* upcalls */
 int venus_rootfid(struct super_block *sb, ViceFid *fidp);
@@ -80,40 +94,27 @@ int venus_symlink(struct super_block *sb, struct ViceFid *fid,
 int venus_access(struct super_block *sb, struct ViceFid *fid, int mask);
 int venus_pioctl(struct super_block *sb, struct ViceFid *fid,
 		 unsigned int cmd, struct PioctlData *data);
-int coda_downcall(int opcode, struct outputArgs *out);
+int coda_downcall(int opcode, union outputArgs *out, struct super_block *sb);
 int coda_upcall(struct coda_sb_info *mntinfo, int inSize, 
-		int *outSize, struct inputArgs *buffer);
+		int *outSize, union inputArgs *buffer);
+int venus_fsync(struct super_block *sb, struct ViceFid *fid);
 
 
 /* messages between coda filesystem in kernel and Venus */
+extern int coda_hard;
+extern unsigned long coda_timeout;
 struct vmsg {
-    struct queue        vm_chain;
-    caddr_t	        vm_data;
-    u_short	        vm_flags;
-    u_short             vm_inSize;  /* Size is at most 5000 bytes */
-    u_short	        vm_outSize;
-    u_short	        vm_opcode;  /* copied from data to save lookup */
-    int		        vm_unique;
-    struct wait_queue  *vm_sleep;   /* process' wait queue */
+	struct queue        vm_chain;
+	caddr_t	        vm_data;
+	u_short	        vm_flags;
+	u_short             vm_inSize;  /* Size is at most 5000 bytes */
+	u_short	        vm_outSize;
+	u_short	        vm_opcode;  /* copied from data to save lookup */
+	int		        vm_unique;
+	struct wait_queue  *vm_sleep;   /* process' wait queue */
+	unsigned long       vm_posttime;
 };
 
-/* communication pending/processing queues queues */
-struct vcomm {
-	u_long		    vc_seq;
-	struct wait_queue  *vc_waitq; /* Venus wait queue */
-	struct queue	    vc_pending;
-	struct queue	    vc_processing;
-};
-
-static inline int vcomm_open(struct vcomm *vcp)
-{
-        return ((vcp)->vc_pending.forw != NULL);
-}
-
-static inline void mark_vcomm_closed(struct vcomm *vcp)
-{
-        (vcp)->vc_pending.forw = NULL;
-}
 
 /*
  * Statistics

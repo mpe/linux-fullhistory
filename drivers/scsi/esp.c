@@ -1163,7 +1163,7 @@ static int esp_host_info(struct Sparc_ESP *esp, char *ptr, off_t offset, int len
 	copy_info(&info, "Target #\tconfig3\t\tSync Capabilities\tDisconnect\tWide\n");
 	for(i = 0; i < 15; i++) {
 		if(esp->targets_present & (1 << i)) {
-			Scsi_Device *SDptr = scsi_devices;
+			Scsi_Device *SDptr = esp->ehost->host_queue;
 
 			while((SDptr->host != esp->ehost) &&
 			      (SDptr->id != i) &&

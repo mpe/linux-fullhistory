@@ -119,13 +119,18 @@ int t128_proc_info (char *buffer, char **start, off_t offset,
 
 #if defined(HOSTS_C) || defined(MODULE)
 
-#define TRANTOR_T128 {NULL, NULL, NULL, NULL, \
-	"Trantor T128/T128F/T228", t128_detect, NULL,  \
-	NULL,							\
-	NULL, t128_queue_command, t128_abort, t128_reset, NULL, 	\
-	t128_biosparam, 						\
-	/* can queue */ CAN_QUEUE, /* id */ 7, SG_ALL,			\
-	/* cmd per lun */ CMD_PER_LUN , 0, 0, DISABLE_CLUSTERING}
+#define TRANTOR_T128 {					\
+	name:           "Trantor T128/T128F/T228",	\
+	detect:         t128_detect,			\
+	queuecommand:   t128_queue_command,		\
+	abort:          t128_abort,			\
+	reset:          t128_reset,			\
+	bios_param:     t128_biosparam,			\
+	can_queue:      CAN_QUEUE,			\
+        this_id:        7,				\
+	sg_tablesize:   SG_ALL,				\
+	cmd_per_lun:    CMD_PER_LUN,			\
+	use_clustering: DISABLE_CLUSTERING}
 
 #endif
 

@@ -57,13 +57,18 @@ int dtc_proc_info (char *buffer, char **start, off_t offset,
 
 #if defined(HOSTS_C) || defined(MODULE)
 
-#define DTC3x80 {NULL, NULL, NULL, NULL, \
-	"DTC 3180/3280 ", dtc_detect, NULL,  \
-	NULL,							\
-	NULL, dtc_queue_command, dtc_abort, dtc_reset, NULL, 	\
-	dtc_biosparam, 						\
-	/* can queue */ CAN_QUEUE, /* id */ 7, SG_ALL,			\
-	/* cmd per lun */ CMD_PER_LUN , 0, 0, DISABLE_CLUSTERING}
+#define DTC3x80 {				\
+	name:           "DTC 3180/3280 ",	\
+	detect:         dtc_detect,		\
+	queuecommand:   dtc_queue_command,	\
+	abort:          dtc_abort,		\
+	reset:          dtc_reset,		\
+	bios_param:     dtc_biosparam,		\
+	can_queue:      CAN_QUEUE,		\
+	this_id:        7,			\
+	sg_tablesize:   SG_ALL,			\
+	cmd_per_lun:    CMD_PER_LUN ,		\
+	use_clustering: DISABLE_CLUSTERING}
 
 #endif
 

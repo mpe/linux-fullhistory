@@ -58,7 +58,8 @@
 #define OPT_UNUSED5	23
 #define OPT_YM3812_AUTO	24
 #define OPT_YM3812	25
-#define OPT_LAST	25	/* Last defined OPT number */
+#define OPT_VMIDI   26
+#define OPT_LAST	27	/* Last defined OPT number */
 
 #define DUMMY_OPTS (B(OPT_YM3812_AUTO))
 
@@ -66,12 +67,12 @@
 		  B(OPT_MPU401)|B(OPT_PSS)|B(OPT_GUS16)|B(OPT_GUSMAX)| \
 		  B(OPT_MSS)|B(OPT_SSCAPE)|B(OPT_UART6850)|B(OPT_TRIX)| \
 		  B(OPT_MAD16)|B(OPT_CS4232)|B(OPT_MAUI)|B(OPT_ADLIB)| \
-		  B(OPT_SPNP)|B(OPT_OPL3SA1)|B(OPT_SOFTOSS))
+		  B(OPT_SPNP)|B(OPT_OPL3SA1)|B(OPT_SOFTOSS)|B(OPT_VMIDI))
 #define MPU_DEVS (B(OPT_PSS)|\
 		  B(OPT_CS4232)|B(OPT_SPNP)|B(OPT_MAUI)|B(OPT_SSCAPE))
 #define UART401_DEVS (SBDSP_DEVS|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_SPNP)|\
 		  B(OPT_OPL3SA1))
-#define NON_AUDIO_CARDS (B(OPT_ADLIB)|B(OPT_MPU401)|B(OPT_UART6850)|B(OPT_MAUI))
+#define NON_AUDIO_CARDS (B(OPT_ADLIB)|B(OPT_MPU401)|B(OPT_UART6850)|B(OPT_MAUI)|B(OPT_VMIDI))
 #define AUDIO_CARDS (ANY_DEVS & ~NON_AUDIO_CARDS)
 #define MIDI_CARDS (ANY_DEVS & ~(B(OPT_ADLIB)|B(OPT_MSS)))
 #define AD1848_DEVS (B(OPT_GUS16)|B(OPT_MSS)|B(OPT_PSS)|B(OPT_GUSMAX)|\
@@ -144,7 +145,8 @@ hw_entry        hw_table[] =
 	{B(OPT_MPU401) | B(OPT_MAUI), 0, "UNUSED4", 0, 0, 0},
 	{MIDI_CARDS, 0, "UNUSED5", 1, 0, 1},
 	{B(OPT_ADLIB), 0, "YM3812_AUTO", 0, OPT_YM3812, 0},
-	{B(OPT_PSS) | B(OPT_SB) | B(OPT_PAS) | B(OPT_ADLIB) | B(OPT_MSS) | B(OPT_PSS), B(OPT_YM3812_AUTO), "YM3812", 1, 0, 1}
+	{B(OPT_PSS) | B(OPT_SB) | B(OPT_PAS) | B(OPT_ADLIB) | B(OPT_MSS) | B(OPT_PSS), B(OPT_YM3812_AUTO), "YM3812", 1, 0, 1},
+	{0, 0, "VMIDI", 1, 0, 0}
 };
 
 char           *questions[] =
@@ -176,6 +178,7 @@ char           *questions[] =
 	"*** Unused option 5 ***",
 	"This should not be asked",
 	"FM synthesizer (YM3812/OPL-3) support",
+	"Loopback MIDI device support",
 	"Is the sky really falling"
 };
 
@@ -270,6 +273,8 @@ char           *help[] =
 
 	"This enables the Yamaha FM synthesizer chip used on many sound\n"
 	"cards.\n",
+
+	"This enable Loopback virtual MIDI device\n",
 
 	"Is the sky really falling"
 };

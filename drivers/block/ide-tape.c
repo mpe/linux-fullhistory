@@ -3321,6 +3321,9 @@ static int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 	unsigned short mask,i;
 #endif /* IDETAPE_DEBUG_LOG */
 
+	if (!id)
+		return 0;
+
 	*((unsigned short *) &gcw) = id->config;
 
 #if IDETAPE_DEBUG_LOG
@@ -3421,10 +3424,7 @@ static int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 		printk (KERN_ERR "ide-tape: Device type is not set to tape\n");
 	else if (!gcw.removable)
 		printk (KERN_ERR "ide-tape: The removable flag is not set\n");
-	else if (gcw.drq_type != 2) {
-		printk (KERN_ERR "ide-tape: Sorry, DRQ types other than Accelerated DRQ\n");
-		printk (KERN_ERR "ide-tape: are still not supported by the driver\n");
-	} else if (gcw.packet_size != 0) {
+	else if (gcw.packet_size != 0) {
 		printk (KERN_ERR "ide-tape: Packet size is not 12 bytes long\n");
 		if (gcw.packet_size == 1)
 			printk (KERN_ERR "ide-tape: Sorry, padding to 16 bytes is still not supported\n");
@@ -3605,6 +3605,88 @@ static int idetape_cleanup (ide_drive_t *drive)
 	return 0;
 }
 
+static int proc_idetape_read_buffer
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	ide_drive_t	*drive = (ide_drive_t *) data;
+	idetape_tape_t	*tape = drive->driver_data;
+	char		*out = page;
+	int		len;
+
+	len = sprintf(out,"%d\n", tape->capabilities.buffer_size / 2);
+	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
+
+static int proc_idetape_read_name
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	ide_drive_t	*drive = (ide_drive_t *) data;
+	idetape_tape_t	*tape = drive->driver_data;
+	char		*out = page;
+	int		len;
+
+	len = sprintf(out,"%s\n", tape->name);
+	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
+
+static int proc_idetape_read_pipeline
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	ide_drive_t	*drive = (ide_drive_t *) data;
+	idetape_tape_t	*tape = drive->driver_data;
+	char		*out = page;
+	int		len;
+
+	len = sprintf(out,"%d\n", tape->max_stages * tape->stage_size / 1024);
+	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
+
+static int proc_idetape_read_speed
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	ide_drive_t	*drive = (ide_drive_t *) data;
+	idetape_tape_t	*tape = drive->driver_data;
+	char		*out = page;
+	int		len;
+
+	len = sprintf(out,"%d\n", tape->capabilities.speed);
+	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
+
+static int proc_idetape_read_stage
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	ide_drive_t	*drive = (ide_drive_t *) data;
+	idetape_tape_t	*tape = drive->driver_data;
+	char		*out = page;
+	int		len;
+
+	len = sprintf(out,"%d\n", tape->stage_size / 1024);
+	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
+
+static int proc_idetape_read_tdsc
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	ide_drive_t	*drive = (ide_drive_t *) data;
+	idetape_tape_t	*tape = drive->driver_data;
+	char		*out = page;
+	int		len;
+
+	len = sprintf(out,"%lu\n", tape->best_dsc_rw_frequency * 1000 / HZ);
+	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
+
+static ide_proc_entry_t idetape_proc[] = {
+	{ "buffer", proc_idetape_read_buffer, NULL },
+	{ "name", proc_idetape_read_name, NULL },
+	{ "pipeline", proc_idetape_read_pipeline, NULL },
+	{ "speed", proc_idetape_read_speed, NULL },
+	{ "stage", proc_idetape_read_stage, NULL },
+	{ "tdsc", proc_idetape_read_tdsc, NULL },
+	{ NULL, NULL, NULL }
+};
+
 int idetape_init (void);
 
 static ide_module_t idetape_module = {
@@ -3633,7 +3715,7 @@ static ide_driver_t idetape_driver = {
 	idetape_pre_reset,	/* pre_reset */
 	NULL,			/* capacity */
 	NULL,			/* special */
-	NULL			/* proc */
+	idetape_proc		/* proc */
 };
 
 /*

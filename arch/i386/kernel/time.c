@@ -109,8 +109,7 @@ static unsigned long do_fast_gettimeoffset(void)
 	}
 
 	/* Read the time counter */
-	__asm__(".byte 0x0f,0x31"
-		:"=a" (eax), "=d" (edx));
+	__asm__("rdtsc" : "=a" (eax), "=d" (edx));
 
 	/* .. relative to previous jiffy (32 bits is enough) */
 	edx = 0;
@@ -437,7 +436,7 @@ static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 static void pentium_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	/* read Pentium cycle counter */
-	__asm__(".byte 0x0f,0x31"
+	__asm__("rdtsc"
 		:"=a" (last_timer_cc.low),
 		 "=d" (last_timer_cc.high));
 	timer_interrupt(irq, NULL, regs);
@@ -528,26 +527,24 @@ __initfunc(void time_init(void))
 				/* Don't use them if a suspend/resume could
                                    corrupt the timer value.  This problem
                                    needs more debugging. */
-	if (x86_capability & 16) {
+	if (boot_cpu_data.x86_capability & 16) {
 		do_gettimeoffset = do_fast_gettimeoffset;
 		do_get_fast_time = do_x86_get_fast_time;
 
-		if( strcmp( x86_vendor_id, "AuthenticAMD" ) == 0 ) {
-			if( x86 == 5 ) {
-				if( x86_model == 0 ) {
-					/* turn on cycle counters during power down */
-					__asm__ __volatile__ (" movl $0x83, %%ecx \n \
-								.byte 0x0f,0x32 \n \
-								orl $1,%%eax \n \
-								.byte 0x0f,0x30 \n " 
-                                                                : : : "ax", "cx", "dx" );
-					udelay(500);
-				}
-			}
+		if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
+		    boot_cpu_data.x86 == 5 &&
+		    boot_cpu_data.x86_model == 0) {
+			/* turn on cycle counters during power down */
+			__asm__ __volatile__ (" movl $0x83, %%ecx \n \
+				rdmsr \n \
+				orl $1,%%eax \n \
+				wrmsr \n " 
+                                      : : : "ax", "cx", "dx" );
+				udelay(500);
 		}
 
 		/* read Pentium cycle counter */
-		__asm__(".byte 0x0f,0x31"
+		__asm__("rdtsc"
 			:"=a" (init_timer_cc.low),
 			 "=d" (init_timer_cc.high));
 		irq0.handler = pentium_timer_interrupt;

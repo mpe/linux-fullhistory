@@ -2,6 +2,9 @@
  *  linux/arch/i386/kernel/setup.c
  *
  *  Copyright (C) 1995  Linus Torvalds
+ *
+ *  Enhanced CPU type detection by Mike Jagdis, Patrick St. Jean
+ *  and Martin Mares, November 1997.
  */
 
 /*
@@ -34,22 +37,11 @@
 #include <asm/smp.h>
 
 /*
- * Tell us the machine setup..
+ * Machine setup..
  */
-char hard_math = 0;		/* set by kernel/head.S */
-char x86 = 0;			/* set by kernel/head.S to 3..6 */
-char x86_model = 0;		/* set by kernel/head.S */
-char x86_mask = 0;		/* set by kernel/head.S */
-int x86_capability = 0;		/* set by kernel/head.S */
-int fdiv_bug = 0;		/* set if Pentium(TM) with FP bug */
-int pentium_f00f_bug = 0;	/* set if Pentium(TM) with F00F bug */
-int have_cpuid = 0;             /* set if CPUID instruction works */
-
-char x86_vendor_id[13] = "unknown";
 
 char ignore_irq13 = 0;		/* set if exception 16 works */
-char wp_works_ok = -1;		/* set if paging hardware honours WP */ 
-char hlt_works_ok = 1;		/* set if the "hlt" instruction works */
+struct cpuinfo_x86 boot_cpu_data = { 0, 0, 0, 0, -1, 1, 0, 0, -1 };
 
 /*
  * Bus types ..
@@ -93,9 +85,7 @@ extern char empty_zero_page[PAGE_SIZE];
  */
 #define PARAM	empty_zero_page
 #define EXT_MEM_K (*(unsigned short *) (PARAM+2))
-#ifndef STANDARD_MEMORY_BIOS_CALL
 #define ALT_MEM_K (*(unsigned long *) (PARAM+0x1e0))
-#endif
 #ifdef CONFIG_APM
 #define APM_BIOS_INFO (*(struct apm_bios_info *) (PARAM+64))
 #endif
@@ -124,15 +114,12 @@ __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	unsigned long memory_start, memory_end;
-	unsigned long memory_alt_end;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
 	static unsigned char smptrap=0;
 
-	if(smptrap==1)
-	{
+	if (smptrap)
 		return;
-	}
 	smptrap=1;
 
  	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
@@ -150,13 +137,12 @@ __initfunc(void setup_arch(char **cmdline_p,
 	aux_device_present = AUX_DEVICE_INFO;
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 #ifndef STANDARD_MEMORY_BIOS_CALL
-	memory_alt_end = (1<<20) + (ALT_MEM_K<<10);
-	if (memory_alt_end > memory_end) {
-	    printk("Memory: sized by int13 0e801h\n");
-	    memory_end = memory_alt_end;
+	{
+		unsigned long memory_alt_end = (1<<20) + (ALT_MEM_K<<10);
+		/* printk(KERN_DEBUG "Memory sizing: %08x %08x\n", memory_end, memory_alt_end); */
+		if (memory_alt_end > memory_end)
+			memory_end = memory_alt_end;
 	}
-	else
-	    printk("Memory: sized by int13 088h\n");
 #endif
 	memory_end &= PAGE_MASK;
 #ifdef CONFIG_BLK_DEV_RAM
@@ -186,7 +172,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 			if (to != command_line) to--;
 			if (!memcmp(from+4, "nopentium", 9)) {
 				from += 9+4;
-				x86_capability &= ~8;
+				boot_cpu_data.x86_capability &= ~8;
 			} else {
 				memory_end = simple_strtoul(from+4, &from, 0);
 				if ( *from == 'K' || *from == 'k' ) {
@@ -232,79 +218,220 @@ __initfunc(void setup_arch(char **cmdline_p,
 	request_region(0xf0,0x10,"fpu");
 }
 
-static const char * i486model(unsigned int nr)
+/*
+ *	Detection of CPU model.
+ */
+
+extern inline void cpuid(int op, int *eax, int *ebx, int *ecx, int *edx)
 {
-	static const char *model[] = {
-		"0","DX","SX","DX/2","4","SX/2","6","DX/2-WB","DX/4","DX/4-WB",
-		"10","11","12","13","Am5x86-WT","Am5x86-WB"
-	};
-	if (nr < sizeof(model)/sizeof(char *))
-		return model[nr];
-	return NULL;
+	__asm__("cpuid"
+		: "=a" (*eax),
+		  "=b" (*ebx),
+		  "=c" (*ecx),
+		  "=d" (*edx)
+		: "a" (op)
+		: "cc");
 }
 
-static const char * i586model(unsigned int nr)
+__initfunc(static int cyrix_model(struct cpuinfo_x86 *c))
 {
-	static const char *model[] = {
-		"0", "Pentium 60/66","Pentium 75+","OverDrive PODP5V83",
-		"Pentium MMX"
-	};
-	if (nr < sizeof(model)/sizeof(char *))
-		return model[nr];
-	return NULL;
-}
+	int nr = c->x86_model;
+	char *buf = c->x86_model_id;
 
-static const char * k5model(unsigned int nr)
-{
-	static const char *model[] = {
-		"SSA5 (PR-75, PR-90, PR-100)", "5k86 (PR-120, PR-133)",
-		"5k86 (PR-166)", "5k86 (PR-200)", "", "", 
-		"K6(PR-133..PR-166)","K6(PR-133..PR-200)"
-	};
-	if (nr < sizeof(model)/sizeof(char *))
-		return model[nr];
-	return NULL;
-}
-
-static const char * i686model(unsigned int nr)
-{
-	static const char *model[] = {
-		"PPro A-step", "Pentium Pro", "2", "Pentium II"
-	};
-	if (nr < sizeof(model)/sizeof(char *))
-		return model[nr];
-	return NULL;
-}
-
-static const char * getmodel(int x86, int model)
-{
-        const char *p = NULL;
-        static char nbuf[12];
-	switch (x86) {
-		case 4:
-			p = i486model(model);
-			break;
-		case 5:
-			if(strcmp(x86_vendor_id, "AuthenticAMD") == 0){
-				p = k5model(model);
-			} else {
-				p = i586model(model);
+	/* Note that some of the possibilities this decoding allows
+	 * have never actually been manufactured - but those that
+	 * do actually exist are correctly decoded.
+	 */
+	if (nr < 0x20) {
+		strcpy(buf, "Cx486");
+		if (!(nr & 0x10)) {
+			sprintf(buf+5, "%c%s%c",
+				(nr & 0x01) ? 'D' : 'S',
+				(nr & 0x04) ? "Rx" : "LC",
+				(nr & 0x02) ? '2' : '\000');
+		} else if (!(nr & 0x08)) {
+			sprintf(buf+5, "S%s%c",
+				(nr & 0x01) ? "2" : "",
+				(nr & 0x02) ? 'e' : '\000');
+		} else {
+			sprintf(buf+5, "DX%c",
+				nr == 0x1b ? '2'
+					: (nr == 0x1f ? '4' : '\000'));
+		}
+	} else if (nr >= 0x20 && nr <= 0x4f) {	/* 5x86, 6x86 or Gx86 */
+		char *s = "";
+		if (nr >= 0x30 && nr < 0x40) {	/* 6x86 */
+			if (c->x86 == 5 && (c->x86_capability & (1 << 8)))
+				s = "L";	/* 6x86L */
+			else if (c->x86 == 6)
+				s = "MX";	/* 6x86MX */
 			}
-			break;
-		case 6:
-			p = i686model(model);
-			break;
-	}
-        if (p)
-                return p;
-
-        sprintf(nbuf, "%d", model);
-        return nbuf;
+		sprintf(buf, "%cx86%s %cx Core/Bus Clock",
+			"??56G"[nr>>4],
+			s,
+			"12??43"[nr & 0x05]);
+	} else if (nr >= 0x50 && nr <= 0x5f) {	/* Cyrix 6x86MX */
+		sprintf(buf, "6x86MX %c%sx Core/Bus Clock",
+			"12233445"[nr & 0x07],
+			(nr && !(nr&1)) ? ".5" : "");
+	} else if (nr >= 0xfd && c->cpuid_level < 0) {
+		/* Probably 0xfd (Cx486[SD]LC with no ID register)
+		 * or 0xfe (Cx486 A step with no ID register).
+		 */
+		strcpy(buf, "Cx486");
+	} else
+		return 0;	/* Use CPUID if applicable */
+	return 1;
 }
+
+__initfunc(static int amd_model(struct cpuinfo_x86 *c))
+{
+	unsigned int n, dummy, *v;
+
+	/* Actually we must have cpuid or we could never have
+	 * figured out that this was AMD from the vendor info :-).
+	 */
+
+	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
+	if (n < 4)
+		return 0;
+	v = (unsigned int *) c->x86_model_id;
+	cpuid(0x80000002, &v[0], &v[1], &v[2], &v[3]);
+	cpuid(0x80000003, &v[4], &v[5], &v[6], &v[7]);
+	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
+	c->x86_model_id[48] = 0;
+	return 1;
+}
+
+__initfunc(void get_cpu_vendor(struct cpuinfo_x86 *c))
+{
+	char *v = c->x86_vendor_id;
+
+	if (!strcmp(v, "GenuineIntel"))
+		c->x86_vendor = X86_VENDOR_INTEL;
+	else if (!strcmp(v, "AuthenticAMD"))
+		c->x86_vendor = X86_VENDOR_AMD;
+	else if (!strncmp(v, "Cyrix", 5))
+		c->x86_vendor = X86_VENDOR_CYRIX;
+	else if (!strcmp(v, "UMC UMC UMC "))
+		c->x86_vendor = X86_VENDOR_UMC;
+	else if (!strcmp(v, "CentaurHauls"))
+		c->x86_vendor = X86_VENDOR_CENTAUR;
+	else if (!strcmp(v, "NexGenDriven"))
+		c->x86_vendor = X86_VENDOR_NEXGEN;
+	else
+		c->x86_vendor = X86_VENDOR_UNKNOWN;
+}
+
+struct cpu_model_info {
+	int vendor;
+	int x86;
+	char *model_names[16];
+};
+
+static struct cpu_model_info cpu_models[] __initdata = {
+	{ X86_VENDOR_INTEL,	4,
+		{ "486 DX-25/33", "486 DX-50", "486 SX", "487 DX", "486 DX/2", "486 SL", "486 SX/2",
+		  NULL, "486 DX/2-WB", "486 DX/4", "486 DX/4-WB", NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_INTEL,	5,
+	  { "Pentium 60/66 A-step", "Pentium 60/66", "Pentium 75+",
+	    "OverDrive PODP5V83", "Pentium MMX", NULL, NULL,
+	    "Mobile Pentium 75+", "Mobile Pentium MMX", NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_INTEL,	6,
+	  { "Pentium Pro A-step", "Pentium Pro", NULL, "Pentium II", NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_CYRIX,	4,
+	  { NULL, NULL, NULL, NULL, "MediaGX", NULL, NULL, NULL, NULL, "5x86",
+	    NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_CYRIX,	5,
+	  { NULL, NULL, "6x86", NULL, "GXm", NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_CYRIX,	6,
+	  { "6x86MX", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_AMD,	4,
+	  { NULL, NULL, NULL, "DX/2", NULL, NULL, NULL, "DX/2-WB", "DX/4",
+	    "DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT", "Am5x86-WB" }},
+	{ X86_VENDOR_AMD,	5,
+	  { "K5/SSA5 (PR-75, PR-90, PR-100)", "K5 (PR-120, PR-133)",
+	    "K5 (PR-166)", "K5 (PR-200)", NULL, NULL,
+	    "K6 (166 - 266)", "K6 (166 - 300)", "K6 (model 8)",
+	    "K6 (model 9)", NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_UMC,	4,
+	  { NULL, "U5D", "U5S", NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_CENTAUR,	5,
+	  { NULL, NULL, NULL, NULL, "C6", NULL, NULL, NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_NEXGEN,	5,
+	  { "Nx586", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
+};
+
+__initfunc(void identify_cpu(struct cpuinfo_x86 *c))
+{
+	int i;
+	char *p = NULL;
+
+	c->loops_per_sec = loops_per_sec;
+
+	get_cpu_vendor(c);
+
+	if (c->x86_vendor == X86_VENDOR_UNKNOWN &&
+	    c->cpuid_level < 0)
+		return;
+
+	if ((c->x86_vendor == X86_VENDOR_AMD && amd_model(c)) ||
+	    (c->x86_vendor == X86_VENDOR_CYRIX && cyrix_model(c)))
+		return;
+
+	if (c->x86_model < 16)
+		for (i=0; i<sizeof(cpu_models)/sizeof(struct cpu_model_info); i++)
+			if (cpu_models[i].vendor == c->x86_vendor &&
+			    cpu_models[i].x86 == c->x86) {
+				p = cpu_models[i].model_names[c->x86_model];
+				break;
+			}
+	if (p)
+		strcpy(c->x86_model_id, p);
+	else
+		sprintf(c->x86_model_id, "%02x/%02x", c->x86_vendor, c->x86_model);
+}
+
+static char *cpu_vendor_names[] __initdata = {
+	"Intel", "Cyrix", "AMD", "UMC", "NexGen", "Centaur" };
+
+__initfunc(void print_cpu_info(struct cpuinfo_x86 *c))
+{
+	char *vendor = NULL;
+
+	if (c->x86_vendor < sizeof(cpu_vendor_names)/sizeof(char *))
+		vendor = cpu_vendor_names[c->x86_vendor];
+	else if (c->cpuid_level >= 0)
+		vendor = c->x86_vendor_id;
+
+	if (vendor)
+		printk("%s ", vendor);
+
+	if (!c->x86_model_id[0])
+		printk("%d86", c->x86);
+	else
+		printk("%s", c->x86_model_id);
+
+	if (c->x86_mask)
+		printk(" stepping %02x", c->x86_mask);
+
+	printk("\n");
+}
+
+/*
+ *	Get CPU information for use by the procfs.
+ */
 
 int get_cpuinfo(char * buffer)
 {
-        int i, len = 0;
+	char *p = buffer;
 	int sep_bug;
         static const char *x86_cap_flags[] = {
                 "fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
@@ -312,83 +439,63 @@ int get_cpuinfo(char * buffer)
                 "16", "17", "18", "19", "20", "21", "22", "mmx",
                 "24", "25", "26", "27", "28", "29", "30", "31"
         };
-        
+	struct cpuinfo_x86 *c = cpu_data;
+	int i, n;
+
+	for(n=0; n<NR_CPUS; n++, c++) {
 #ifdef __SMP__
-        int n;
-
-#define CD(X)		(cpu_data[n].X)
-/* SMP has the wrong name for loops_per_sec */
-#define loops_per_sec	udelay_val
-#define CPUN n
-
-        for ( n = 0 ; n < 32 ; n++ ) {
-                if ( cpu_present_map & (1<<n) ) {
-                        if (len) buffer[len++] = '\n'; 
-
-#else
-#define CD(X) (X)
-#define CPUN 0
+		if (!(cpu_present_map & (1<<n)))
+			continue;
 #endif
+		p += sprintf(p, "processor\t: %d\n"
+			       "cpu family\t: %c\n"
+			       "model\t\t: %s\n"
+			       "vendor_id\t: %s\n",
+			       n,
+			       c->x86 + '0',
+			       c->x86_model_id[0] ? c->x86_model_id : "unknown",
+			       c->x86_vendor_id[0] ? c->x86_vendor_id : "unknown");
+		if (c->x86_mask) {
+			if (c->x86_vendor == X86_VENDOR_CYRIX)
+				p += sprintf(p, "stepping\t: %d rev %d\n",
+					     c->x86_mask >> 4,
+					     c->x86_mask & 0x0f);
+			else
+				p += sprintf(p, "stepping\t: %d\n", c->x86_mask);
+		} else
+			p += sprintf(p, "stepping\t: unknown\n");
 
-                        len += sprintf(buffer+len,"processor\t: %d\n"
-                                       "cpu\t\t: %c86\n"
-                                       "model\t\t: %s\n"
-                                       "vendor_id\t: %s\n",
-                                       CPUN,
-                                       CD(x86)+'0',
-                                       CD(have_cpuid) ? 
-                                         getmodel(CD(x86), CD(x86_model)) :
-                                         "unknown",
-                                       CD(x86_vendor_id));
+		sep_bug = c->x86_vendor == X86_VENDOR_INTEL &&
+			  c->x86 == 0x06 &&
+			  c->cpuid_level >= 0 &&
+			  (c->x86_capability & 0x800) &&
+			  c->x86_model < 3 &&
+			  c->x86_mask < 3;
         
-                        if (CD(x86_mask))
-                                len += sprintf(buffer+len,
-                                               "stepping\t: %d\n",
-                                               CD(x86_mask));
-                        else
-                                len += sprintf(buffer+len, 
-                                               "stepping\t: unknown\n");
+		p += sprintf(p, "fdiv_bug\t: %s\n"
+			        "hlt_bug\t\t: %s\n"
+			        "sep_bug\t\t: %s\n"
+			        "f00f_bug\t: %s\n"
+			        "fpu\t\t: %s\n"
+			        "fpu_exception\t: %s\n"
+			        "cpuid level\t: %d\n"
+			        "wp\t\t: %s\n"
+			        "flags\t\t:",
+			     c->fdiv_bug ? "yes" : "no",
+			     c->hlt_works_ok ? "no" : "yes",
+			     sep_bug ? "yes" : "no",
+			     c->f00f_bug ? "yes" : "no",
+			     c->hard_math ? "yes" : "no",
+			     (c->hard_math && ignore_irq13) ? "yes" : "no",
+			     c->cpuid_level,
+			     c->wp_works_ok ? "yes" : "no");
 
-			sep_bug = CD(have_cpuid) &&
-			          (CD(x86_capability) & 0x800) &&
-			          !memcmp(x86_vendor_id, "GenuineIntel", 12) &&
-			          CD(x86) == 6 &&
-			          CD(x86_model) < 3 &&
-			          CD(x86_mask) < 3;
-        
-                        len += sprintf(buffer+len,
-                                       "fdiv_bug\t: %s\n"
-                                       "hlt_bug\t\t: %s\n"
-				       "sep_bug\t\t: %s\n"
-				       "f00f_bug\t: %s\n"
-                                       "fpu\t\t: %s\n"
-                                       "fpu_exception\t: %s\n"
-                                       "cpuid\t\t: %s\n"
-                                       "wp\t\t: %s\n"
-                                       "flags\t\t:",
-                                       CD(fdiv_bug) ? "yes" : "no",
-                                       CD(hlt_works_ok) ? "no" : "yes",
-				       sep_bug ? "yes" : "no",
-				       pentium_f00f_bug ? "yes" : "no",
-                                       CD(hard_math) ? "yes" : "no",
-                                       (CD(hard_math) && ignore_irq13)
-                                         ? "yes" : "no",
-                                       CD(have_cpuid) ? "yes" : "no",
-                                       CD(wp_works_ok) ? "yes" : "no");
-        
-                        for ( i = 0 ; i < 32 ; i++ ) {
-                                if ( CD(x86_capability) & (1 << i) ) {
-                                        len += sprintf(buffer+len, " %s",
-                                                       x86_cap_flags[i]);
-                                }
-                        }
-                        len += sprintf(buffer+len,
-                                       "\nbogomips\t: %lu.%02lu\n",
-                                       CD(loops_per_sec+2500)/500000,
-                                       (CD(loops_per_sec+2500)/5000) % 100);
-#ifdef __SMP__
-                }
-        }
-#endif
-        return len;
+		for ( i = 0 ; i < 32 ; i++ )
+			if ( c->x86_capability & (1 << i) )
+				p += sprintf(p, " %s", x86_cap_flags[i]);
+		p += sprintf(p, "\nbogomips\t: %lu.%02lu\n\n",
+			     (c->loops_per_sec+2500)/500000,
+			     ((c->loops_per_sec+2500)/5000) % 100);
+	}
+        return p - buffer;
 }

@@ -50,23 +50,6 @@
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
-/*
- * Standard exit stuff:
- */
-#define PROC_IDE_READ_RETURN(page,start,off,count,eof,len) \
-{					\
-	len -= off;			\
-	if (len < count) {		\
-		*eof = 1;		\
-		if (len <= 0)		\
-			return 0;	\
-	} else				\
-		len = count;		\
-	*start = page + off;		\
-	return len;			\
-}
-
-
 #ifdef CONFIG_PCI
 
 static int ide_getxdigit(char c)
@@ -129,8 +112,9 @@ static int proc_ide_write_pci
 			cli();	/* ensure all PCI writes are done together */
 			while (((ide_hwgroup_t *)(hwif->hwgroup))->active || (hwif->mate && ((ide_hwgroup_t *)(hwif->mate->hwgroup))->active)) {
 				sti();
-				if (0 < (signed long)(timeout - jiffies)) {
+				if (0 < (signed long)(jiffies - timeout)) {
 					printk("/proc/ide/%s/pci: channel(s) busy, cannot write\n", hwif->name);
+					restore_flags(flags);
 					return -EBUSY;
 				}
 				cli();
@@ -311,6 +295,8 @@ static int proc_ide_read_settings
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
 	ide_drive_t	*drive = (ide_drive_t *) data;
+	int		major = HWIF(drive)->major;
+	int		minor = drive->select.b.unit << PARTN_BITS;
 	char		*out = page;
 	int		len;
 
@@ -321,6 +307,9 @@ static int proc_ide_read_settings
 	out += sprintf(out,"nowerr       %i\n", drive->bad_wstat == BAD_R_STAT);
 	out += sprintf(out,"keepsettings %i\n", drive->keep_settings);
 	out += sprintf(out,"nice         %i/%i/%i\n", drive->nice0, drive->nice1, drive->nice2);
+	out += sprintf(out,"dsc_overlap  %i\n", drive->dsc_overlap);
+	out += sprintf(out,"max_sectors  %i\n", max_sectors[major][minor]);
+	out += sprintf(out,"readahead    %i\n", max_readahead[major][minor] / 1024);
 	len = out - page;
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
@@ -329,9 +318,13 @@ int proc_ide_read_capacity
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
 	ide_drive_t	*drive = (ide_drive_t *) data;
+	ide_driver_t    *driver = (ide_driver_t *) drive->driver;
 	int		len;
 
-	len = sprintf(page,"%li\n", ((ide_driver_t *)drive->driver)->capacity(drive));
+	if (!driver)
+	    len = sprintf(page, "(none)\n");
+        else
+	    len = sprintf(page,"%li\n", ((ide_driver_t *)drive->driver)->capacity(drive));
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
 
@@ -399,7 +392,6 @@ static int proc_ide_read_media
 
 
 static ide_proc_entry_t generic_drive_entries[] = {
-	{ "capacity", proc_ide_read_capacity, NULL },
 	{ "driver", proc_ide_read_driver, NULL },
 	{ "identify", proc_ide_read_identify, NULL },
 	{ "media", proc_ide_read_media, NULL },

@@ -129,7 +129,7 @@ static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 	 * The surround logic should disable caching for the high device
 	 * addresses anyway, but right now this seems still needed.
 	 */
-	if (x86 > 3 && offset >= __pa(high_memory))
+	if (boot_cpu_data.x86 > 3 && offset >= __pa(high_memory))
 		pgprot_val(vma->vm_page_prot) |= _PAGE_PCD;
 #endif
 #ifdef __powerpc__

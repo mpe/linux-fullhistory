@@ -97,3 +97,6 @@ ifdef CONFIG_SOFTOSS
 	OBJS := $(OBJS)  softoss.o softoss_rs.o
 endif
 
+ifdef CONFIG_VMIDI
+	OBJS := $(OBJS)  v_midi.o
+endif

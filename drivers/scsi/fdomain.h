@@ -37,25 +37,17 @@ int        fdomain_16x0_proc_info( char *buffer, char **start, off_t offset,
 
 extern struct proc_dir_entry proc_scsi_fdomain;
 
-#define FDOMAIN_16X0 { NULL,                             \
-		       NULL,                             \
-		       NULL,		                 \
-		       fdomain_16x0_proc_info,           \
-		       NULL,		                 \
-		       fdomain_16x0_detect,              \
-		       NULL,				 \
-		       fdomain_16x0_info,                \
-		       fdomain_16x0_command,             \
-		       fdomain_16x0_queue,               \
-		       fdomain_16x0_abort,               \
-		       fdomain_16x0_reset,               \
-		       NULL,                             \
-		       fdomain_16x0_biosparam,           \
-		       1, 				 \
-		       6, 				 \
-		       64, 				 \
-		       1, 				 \
-		       0, 				 \
-		       0, 				 \
-		       DISABLE_CLUSTERING }
+#define FDOMAIN_16X0 { proc_info:      fdomain_16x0_proc_info,           \
+		       detect:         fdomain_16x0_detect,              \
+		       info:           fdomain_16x0_info,                \
+		       command:        fdomain_16x0_command,             \
+		       queuecommand:   fdomain_16x0_queue,               \
+		       abort:          fdomain_16x0_abort,               \
+		       reset:          fdomain_16x0_reset,               \
+		       bios_param:     fdomain_16x0_biosparam,           \
+		       can_queue:      1, 				 \
+		       this_id:        6, 				 \
+		       sg_tablesize:   64, 				 \
+		       cmd_per_lun:    1, 				 \
+		       use_clustering: DISABLE_CLUSTERING }
 #endif

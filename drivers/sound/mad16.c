@@ -112,6 +112,7 @@ static int      already_initialized = 0;
 static int      board_type = C928;
 
 static int     *mad16_osp;
+static int	c931_detected;	/* minor diferences from C930 */
 
 #ifndef DDB
 #define DDB(x)
@@ -225,6 +226,44 @@ detect_c930(void)
 		  DDB(printk("MC7 not writable2 (%x)\n", tmp));
 		  return 0;
 	  }
+
+	tmp = mad_read(MC0_PORT+18);
+	if (tmp == 0xff)
+		return 1;
+	/* We probably have a C931 */
+	DDB(printk("Detected C931 config=0x%02x\n", tmp));
+	c931_detected = 1;
+
+	/*
+         * We cannot configure the chip if it is in PnP mode.
+         * If we have a CSN assigned (bit 8 in MC13) we first try
+         * a software reset, then a software power off, finally
+         * Clearing PnP mode. The last option is not
+	 * Bit 8 in MC13 
+         */
+	if ((mad_read(MC0_PORT+13) & 0x80) == 0)
+		return 1;
+
+	/* Software reset */
+	mad_write(MC9_PORT, 0x02);
+	mad_write(MC9_PORT, 0x00);
+
+	if ((mad_read(MC0_PORT+13) & 0x80) == 0)
+		return 1;
+	
+	/* Power off, and on again */
+	mad_write(MC9_PORT, 0xc2);
+	mad_write(MC9_PORT, 0xc0);
+
+	if ((mad_read(MC0_PORT+13) & 0x80) == 0)
+		return 1;
+	
+	/* Force off PnP mode, This is not recommended because
+	 * the PnP bios will not recognize the chip on the next
+	 * warm boot and may assignd different resources to other
+	 * PnP/PCI cards.
+	*/
+	mad_write(MC0_PORT+17, 0x04);
 	return 1;
 }
 
@@ -329,10 +368,20 @@ wss_init(struct address_info *hw_config)
 static int
 init_c930(struct address_info *hw_config)
 {
-	unsigned char   cfg;
+	unsigned char   cfg = 0;
 
-	cfg = (mad_read(MC1_PORT) & ~0x30);
-	/* mad_write(MC1_PORT, 0); */
+#ifdef MAD16_CONF
+	cfg |= (0x0f & MAD16_CONF);
+#endif
+
+	if(c931_detected)
+	{
+		/* Bit 0 has reversd meaning. Bits 1 and 2 sese
+		   reversed on write.
+		   Support only IDE cdrom. IDE port programmed
+		   somewhere else. */
+		cfg =  (cfg & 0x09) ^ 0x07;
+	}
 
 	switch (hw_config->io_base)
 	  {
@@ -358,7 +407,14 @@ init_c930(struct address_info *hw_config)
 	/* MC2 is CD configuration. Don't touch it. */
 
 	mad_write(MC3_PORT, 0);	/* Disable SB mode IRQ and DMA */
-	mad_write(MC4_PORT, 0x52);	/* ??? */
+#ifdef MAD16_CDSEL
+	if(MAD16_CDSEL & 0x20)
+		mad_write(MC4_PORT, 0x66);	/* opl4 */
+	else
+		mad_write(MC4_PORT, 0x56);	/* opl3 */
+#else
+	mad_write(MC4_PORT, 0x56);
+#endif
 	mad_write(MC5_PORT, 0x3C);	/* Init it into mode2 */
 	mad_write(MC6_PORT, 0x02);	/* Enable WSS, Disable MPU and SB */
 	mad_write(MC7_PORT, 0xCB);

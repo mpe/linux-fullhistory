@@ -67,10 +67,22 @@ static void sg_free(char *buff,int size);
 static int sg_ioctl(struct inode * inode,struct file * file,
 		    unsigned int cmd_in, unsigned long arg)
 {
-    int result;
-    int dev = MINOR(inode->i_rdev);
+    int                         dev = MINOR(inode->i_rdev);
+    int                         result;
+
     if ((dev<0) || (dev>=sg_template.dev_max))
 	return -ENXIO;
+
+    /*
+     * If we are in the middle of error recovery, then don't allow any
+     * access to this device.  Also, error recovery *may* have taken the
+     * device offline, in which case all further access is prohibited.
+     */
+    if( !scsi_block_when_processing_errors(scsi_generics[dev].device) )
+      {
+        return -ENXIO;
+      }
+
     switch(cmd_in)
     {
     case SG_SET_TIMEOUT:
@@ -92,6 +104,12 @@ static int sg_open(struct inode * inode, struct file * filp)
     int flags=filp->f_flags;
     if (dev>=sg_template.dev_max || !scsi_generics[dev].device)
 	return -ENXIO;
+
+    if( !scsi_block_when_processing_errors(scsi_generics[dev].device) )
+      {
+        return -ENXIO;
+      }
+
     if (O_RDWR!=(flags & O_ACCMODE))
 	return -EACCES;
 
@@ -209,6 +227,17 @@ static ssize_t sg_read(struct file *filp, char *buf,
     unsigned long flags;
     struct scsi_generic *device=&scsi_generics[dev];
 
+    /*
+     * If we are in the middle of error recovery, don't let anyone
+     * else try and use this device.  Also, if error recovery fails, it
+     * may try and take the device offline, in which case all further
+     * access to the device is prohibited.
+     */
+    if( !scsi_block_when_processing_errors(scsi_generics[dev].device) )
+      {
+        return -ENXIO;
+      }
+
     if (ppos != &filp->f_pos) {
       /* FIXME: Hmm.  Seek to the right place, or fail?  */
     }
@@ -278,7 +307,8 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
     if (!device->pending)
     {
 	printk("unexpected done for sg %d\n",dev);
-	SCpnt->request.rq_status = RQ_INACTIVE;
+        scsi_release_command(SCpnt);
+        SCpnt = NULL;
 	return;
     }
 
@@ -325,7 +355,8 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
      * result.
      */
     device->complete=1;
-    SCpnt->request.rq_status = RQ_INACTIVE;
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
     wake_up(&scsi_generics[dev].read_wait);
 }
 
@@ -341,6 +372,17 @@ static ssize_t sg_write(struct file *filp, const char *buf,
     int			  input_size;
     unsigned char	  opcode;
     Scsi_Cmnd		* SCpnt;
+
+    /*
+     * If we are in the middle of error recovery, don't let anyone
+     * else try and use this device.  Also, if error recovery fails, it
+     * may try and take the device offline, in which case all further
+     * access to the device is prohibited.
+     */
+    if( !scsi_block_when_processing_errors(scsi_generics[dev].device) )
+      {
+        return -ENXIO;
+      }
 
     if (ppos != &filp->f_pos) {
       /* FIXME: Hmm.  Seek to the right place, or fail?  */
@@ -444,7 +486,7 @@ static ssize_t sg_write(struct file *filp, const char *buf,
      * Grab a device pointer for the device we want to talk to.  If we
      * don't want to block, just return with the appropriate message.
      */
-    if (!(SCpnt=allocate_device(NULL,device->device, !(filp->f_flags & O_NONBLOCK))))
+    if (!(SCpnt=scsi_allocate_device(NULL,device->device, !(filp->f_flags & O_NONBLOCK))))
     {
 	device->pending=0;
 	wake_up(&device->write_wait);

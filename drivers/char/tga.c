@@ -27,6 +27,7 @@
 #include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/init.h>
+#include <linux/console.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -446,14 +447,21 @@ void set_vesa_blanking(const unsigned long arg)
 
 /*
  *	See if we have a TGA card.
+ *	Just a placeholder at the moment, because of the strange
+ *	way the TGA card is initialized. This has to be enabled when
+ *	the kernel initializes PCI devices before the console.
  */
-__initfunc(int con_is_present())
+__initfunc(int con_is_present(void))
 {
+#if 0
+	unsigned char pci_bus, pci_devfn;
 	int status;
 
 	status = pcibios_find_device (PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA,
 				      0, &pci_bus, &pci_devfn);
 	return (status == PCIBIOS_DEVICE_NOT_FOUND) ? 0 : 1;
+#endif
+	return 1;
 }
 
 /*

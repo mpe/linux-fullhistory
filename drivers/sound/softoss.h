@@ -119,7 +119,7 @@ typedef struct softsyn_devc
 /*
  * 	Programs
  */
-	int programs[MAX_SAMPLE];
+	int programs[MAX_PATCH];
 
 /*
  *	Timer parameters

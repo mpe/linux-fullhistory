@@ -16,11 +16,6 @@
  *  hosts currently present in the system.
  */
 
-/*
- * Don't import our own symbols, as this would severely mess up our
- * symbol tables.
- */
-#define _SCSI_SYMS_VER_
 #define __NO_VERSION__
 #include <linux/module.h>
 
@@ -31,6 +26,10 @@
 #include <linux/mm.h>
 #include <linux/proc_fs.h>
 #include <linux/init.h>
+
+#define __KERNEL_SYSCALLS__
+
+#include <linux/unistd.h>
 
 #include "scsi.h"
 
@@ -433,7 +432,9 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     struct Scsi_Host * retval, *shpnt;
     retval = (struct Scsi_Host *)scsi_init_malloc(sizeof(struct Scsi_Host) + j,
 						  (tpnt->unchecked_isa_dma && j ? GFP_DMA : 0) | GFP_ATOMIC);
+    atomic_set(&retval->host_active,0);
     retval->host_busy = 0;
+    retval->host_failed = 0;
     retval->block = NULL;
     retval->wish_block = 0;
     if(j > 0xffff) panic("Too many extra bytes requested\n");
@@ -456,6 +457,16 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     retval->io_port = 0;
     retval->hostt = tpnt;
     retval->next = NULL;
+    retval->in_recovery = 0;
+    retval->ehandler = NULL;    /* Initial value until the thing starts up. */
+    retval->eh_notify   = NULL;    /* Who we notify when we exit. */
+
+    /*
+     * Initialize the fields used for mid-level queueing.
+     */
+    retval->pending_commands = NULL;
+    retval->host_busy = FALSE;
+
 #ifdef DEBUG
     printk("Register %x %x: %d\n", (int)retval, (int)retval->hostt, j);
 #endif
@@ -542,6 +553,25 @@ __initfunc(unsigned int scsi_init(void))
 	    name = shpnt->hostt->name;
 	printk ("scsi%d : %s\n", /* And print a little message */
 		shpnt->host_no, name);
+
+        /*
+         * Now start the error recovery thread for the host.
+         */
+        if( shpnt->hostt->use_new_eh_code )
+        {
+            struct semaphore sem = MUTEX_LOCKED;
+            
+            shpnt->eh_notify = &sem;
+
+            kernel_thread((int (*)(void *))scsi_error_handler, 
+                          (void *) shpnt, 0);
+            /*
+             * Now wait for the kernel error thread to initialize itself
+             * as it might be needed when we scan the bus.
+             */
+            down (&sem);
+            shpnt->eh_notify = NULL;
+        }
     }
     
     printk ("scsi : %d host%s.\n", next_scsi_host,

@@ -15,6 +15,7 @@
  * Naturally it's not a 1:1 relation, but there are similarities.
  */
 
+#include <linux/config.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
@@ -202,7 +203,7 @@ static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
 static void math_error_irq(int cpl, void *dev_id, struct pt_regs *regs)
 {
 	outb(0,0xF0);
-	if (ignore_irq13 || !hard_math)
+	if (ignore_irq13 || !boot_cpu_data.hard_math)
 		return;
 	math_error();
 }

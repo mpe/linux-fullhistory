@@ -1,0 +1,62 @@
+Support for the OPTI 82C931 chip
+--------------------------------
+
+The opti 82C931 is supported in it's non PnP mode.
+You do not need to set jumpers etc... The sound driver
+will check the card status and if it is required it will
+force the card into a mode that it can be programmed.
+
+To compile support for the OPTI 82C931 card you can use
+the regular Linux config menus (ie, "make xconfig").
+
+Sound card support should be enabled as a module (chose m).
+Enable (m) for  these items:
+  100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support (CONFIG_SB)
+  Generic OPL2/OPL3 FM synthesizer support                         (CONFIG_ADLIB)
+  Microsoft Sound System support		                   (CONFIG_MSS)
+  Support for OPTi MAD16 and/or Mozart based cards		   (CONFIG_MAD16)
+  FM synthesizer (YM3812/OPL-3) support				   (CONFIG_YM3812)
+
+The configuration menu may ask for addresses, irq lines or dma
+channels. If the card is used as a module the module loading
+options will override these values.
+
+Go on and compile your kernel and modules, install the modules.
+
+I use this configuration as part of /etc/conf.modules:
+
+options sb mad16=1
+options mad16 irq=10 dma=1 io=0x530 joystick=1 cdtype=0
+options opl3 io=0x388
+
+After installing everything and booting to a kernel that
+matches the modules you can load the sound driver:
+
+modprobe mad16
+modprobe opl3
+
+As a result these modules are loaded:
+Module                  Size  Used by
+opl3                   10416   0  (unused)
+mad16                   6472   0 
+sb                     23544   0  [mad16]
+uart401                 5796   0  [mad16 sb]
+ad1848                 16532   1  [mad16]
+sound                  82052   0  [opl3 mad16 sb uart401 ad1848]
+
+Known problems:
+1. The uart401 cannot be used. This is probably a problem which
+   was introduced when the sound driver was modularized.
+   Do not try to load uart401 with options (io=xxx, irq=yyy) because
+   it will try to initialize itself and fail.
+
+2. Cannot use the sound driver in Duplex mode. Until it is fixed
+   use only one DMA channel (0, 1 or 3) for mad16.
+
+3. Configuration of the cdrom adaptor on the sound card is not
+   tested and probably does not work.
+
+4. General problem with the modularized sound driver: If you 
+   load part of the sound driver while a sound program is
+   running, stopping the program may result with a situation
+   where the "Used by" count becomes negative.

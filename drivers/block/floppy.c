@@ -3295,8 +3295,8 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		return -EINVAL;
 
 	/* permission checks */
-	if (((cmd & 0x80) && !suser()) ||
-	     ((cmd & 0x40) && !IOCTL_ALLOWED))
+	if (((cmd & 0x40) && !IOCTL_ALLOWED) ||
+	    ((cmd & 0x80) && !suser()))
 		return -EPERM;
 
 	/* copyin */

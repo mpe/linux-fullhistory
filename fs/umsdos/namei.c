@@ -335,16 +335,18 @@ chkstk();
 		PRINTK (("ret %d ",ret));
 		if (ret == 0){
 			/* check sticky bit on old_dir */
-			if ( !(old_dir->i_mode & S_ISVTX) || fsuser() ||
+			if ( !(old_dir->i_mode & S_ISVTX) ||
 			    current->fsuid == old_info.entry.uid ||
-			    current->fsuid == old_dir->i_uid ) {
+			    current->fsuid == old_dir->i_uid ||
+			    fsuser()) {
 				/* Does new_name already exist? */
 				PRINTK(("new findentry "));
 				ret = umsdos_findentry(new_dir,&new_info,0);
 				if (ret != 0 || /* if destination file exists, are we allowed to replace it ? */
-				    !(new_dir->i_mode & S_ISVTX) || fsuser() ||
+				    !(new_dir->i_mode & S_ISVTX) ||
 				    current->fsuid == new_info.entry.uid ||
-				    current->fsuid == new_dir->i_uid ) {
+				    current->fsuid == new_dir->i_uid ||
+				    fsuser()) {
 					PRINTK (("new newentry "));
 					umsdos_ren_init(&new_info,&old_info,flags);
 					ret = umsdos_newentry (new_dir,&new_info);
@@ -885,9 +887,10 @@ int UMSDOS_rmdir(
 				PRINTK (("isempty %d i_count %d ",empty,
 					 atomic_read(&sdir->i_count)));
 				/* check sticky bit */
-				if ( !(dir->i_mode & S_ISVTX) || fsuser() ||
+				if ( !(dir->i_mode & S_ISVTX) ||
 				    current->fsuid == sdir->i_uid ||
-				    current->fsuid == dir->i_uid ) {
+				    current->fsuid == dir->i_uid ||
+				    fsuser()) {
 					if (empty == 1){
 						/* We have to removed the EMD file */
 						ret = msdos_unlink(sdir,UMSDOS_EMD_FILE
@@ -948,9 +951,10 @@ int UMSDOS_unlink (
 			if (ret == 0){
 				PRINTK (("UMSDOS_unlink %s ",info.fake.fname));
 				/* check sticky bit */
-				if ( !(dir->i_mode & S_ISVTX) || fsuser() ||
+				if ( !(dir->i_mode & S_ISVTX) ||
 				    current->fsuid == info.entry.uid ||
-				    current->fsuid == dir->i_uid ) {
+				    current->fsuid == dir->i_uid ||
+				    fsuser()) {
 					if (info.entry.flags & UMSDOS_HLINK){
 						/* #Specification: hard link / deleting a link
 						   When we deletes a file, and this file is a link

@@ -1,6 +1,6 @@
 /* -*- linux-c -*-
  *
- *	$Id: sysrq.c,v 1.4 1997/07/17 11:54:15 mj Exp $
+ *	$Id: sysrq.c,v 1.7 1997/11/06 15:57:09 mj Exp $
  *
  *	Linux Magic System Request Key Hacks
  *
@@ -31,10 +31,6 @@ extern void reset_vc(unsigned int);
 extern int console_loglevel;
 extern struct vfsmount *vfsmntlist;
 
-#ifdef __sparc__
-extern void halt_now(void);
-#endif
-
 /* Send a signal to all user processes */
 
 static void send_sig_all(int sig, int even_init)
@@ -60,6 +56,9 @@ void handle_sysrq(int key, struct pt_regs *pt_regs,
 {
 	int orig_log_level = console_loglevel;
 
+	if (!key)
+		return;
+
 	console_loglevel = 7;
 	printk(KERN_INFO "SysRq: ");
 	switch (key) {
@@ -69,7 +68,7 @@ void handle_sysrq(int key, struct pt_regs *pt_regs,
 			printk("Keyboard mode set to XLATE\n");
 		}
 		break;
-	case 'a':					    /* A -- SAK */
+	case 'k':					    /* K -- SAK */
 		printk("SAK\n");
 		if (tty)
 			do_SAK(tty);
@@ -79,12 +78,6 @@ void handle_sysrq(int key, struct pt_regs *pt_regs,
 		printk("Resetting\n");
 		machine_restart(NULL);
 		break;
-#ifdef __sparc__
-	case 'h':					    /* H -- halt immediately */
-		printk("Halting\n");
-		halt_now();
-		break;
-#endif
 #ifdef CONFIG_APM
 	case 'o':					    /* O -- power off */
 		printk("Power off\n");
@@ -123,7 +116,7 @@ void handle_sysrq(int key, struct pt_regs *pt_regs,
 		send_sig_all(SIGTERM, 0);
 		orig_log_level = 8;			    /* We probably have killed syslogd */
 		break;
-	case 'k':					    /* K -- kill all user processes */
+	case 'i':					    /* I -- kill all user processes */
 		printk("Kill All Tasks\n");
 		send_sig_all(SIGKILL, 0);
 		orig_log_level = 8;
@@ -134,14 +127,16 @@ void handle_sysrq(int key, struct pt_regs *pt_regs,
 		orig_log_level = 8;
 		break;
 	default:					    /* Unknown: help */
-		printk("unRaw sAk Boot "
-#ifdef __sparc__
-		       "Halt "
-#endif
+		if (kbd)
+			printk("unRaw ");
+		if (tty)
+			printk("saK ");
+		printk("Boot "
 #ifdef CONFIG_APM
 		       "Off "
 #endif
-		       "Sync Unmount showPc showTasks showMem loglevel0-8 tErm Kill killalL\n");
+		       "Sync Unmount showPc showTasks showMem loglevel0-8 tErm kIll killalL\n");
+		/* Don't use 'A' as it's handled specially on the Sparc */
 	}
 
 	console_loglevel = orig_log_level;

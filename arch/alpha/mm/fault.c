@@ -70,6 +70,20 @@ asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr,
 	struct mm_struct *mm = current->mm;
 	unsigned fixup;
 
+	/* As of EV6, a load into $31/$f31 is a prefetch, and never faults
+	   (or is suppressed by the PALcode).  Support that for older cpu's
+	   by ignoring such an instruction.  */
+	if (cause == 0) {
+		/* No need for get_user.. we know the insn is there.  */
+		unsigned int insn = *(unsigned int *)regs->pc;
+		if ((insn >> 21 & 0x1f) == 0x1f &&
+		    /* ldq ldl ldt lds ldg ldf ldwu ldbu */
+		    (1ul << (insn >> 26) & 0x30f00001400ul)) {
+			regs->pc += 4;
+			return;
+		}
+	}
+
 	down(&mm->mmap_sem);
 	vma = find_vma(mm, address);
 	if (!vma)

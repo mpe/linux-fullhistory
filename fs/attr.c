@@ -41,8 +41,8 @@ int inode_change_ok(struct inode *inode, struct iattr *attr)
 		if ((current->fsuid != inode->i_uid) && !fsuser())
 			goto error;
 		/* Also check the setgid bit! */
-		if (!fsuser() && !in_group_p((ia_valid & ATTR_GID) ? attr->ia_gid :
-					     inode->i_gid))
+		if (!in_group_p((ia_valid & ATTR_GID) ? attr->ia_gid :
+				inode->i_gid) && !fsuser())
 			attr->ia_mode &= ~S_ISGID;
 	}
 
@@ -75,7 +75,7 @@ void inode_setattr(struct inode * inode, struct iattr * attr)
 		inode->i_ctime = attr->ia_ctime;
 	if (ia_valid & ATTR_MODE) {
 		inode->i_mode = attr->ia_mode;
-		if (!fsuser() && !in_group_p(inode->i_gid))
+		if (!in_group_p(inode->i_gid) && !fsuser())
 			inode->i_mode &= ~S_ISGID;
 	}
 	mark_inode_dirty(inode);

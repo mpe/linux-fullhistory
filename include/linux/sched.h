@@ -513,10 +513,24 @@ extern void free_irq(unsigned int irq, void *dev_id);
  * it returns true (to do BSD-style accounting where the process is flagged
  * if it uses root privs). The implication of this is that you should do
  * normal permissions checks first, and check suser() last.
+ *
+ * [Dec 1997 -- Chris Evans]
+ * For correctness, the above considerations need to be extended to
+ * fsuser(). This is done, along with moving fsuser() checks to be
+ * last.
  */
 extern inline int suser(void)
 {
 	if (current->euid == 0) {
+		current->flags |= PF_SUPERPRIV;
+		return 1;
+	}
+	return 0;
+}
+
+extern inline int fsuser(void)
+{
+	if (current->fsuid == 0) {
 		current->flags |= PF_SUPERPRIV;
 		return 1;
 	}

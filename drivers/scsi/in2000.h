@@ -392,28 +392,21 @@ int in2000_reset(Scsi_Cmnd *, unsigned int);
 #define IN2000_CPL      2
 #define IN2000_HOST_ID  7
 
-#define IN2000 {  NULL,                /* link pointer for modules */ \
-                  NULL,                /* usage_count for modules */ \
-                  &proc_scsi_in2000,   /* pointer to /proc/scsi directory entry */ \
-                  in2000_proc_info,    /* pointer to proc info function */ \
-                  "Always IN2000",     /* device name */ \
-                  in2000_detect,       /* returns number of in2000's found */ \
-                  NULL,                /* optional unload function for modules */ \
-                  NULL,                /* optional misc info function */ \
-                  NULL,                /* send scsi command, wait for completion */ \
-                  in2000_queuecommand, /* queue scsi command, don't wait */ \
-                  in2000_abort,        /* abort current command */ \
-                  in2000_reset,        /* reset scsi bus */ \
-                  NULL,                /* slave_attach - unused */ \
-                  in2000_biosparam,    /* figures out BIOS parameters for lilo, etc */ \
-                  IN2000_CAN_Q,        /* max commands we can queue up */ \
-                  IN2000_HOST_ID,      /* host-adapter scsi id */ \
-                  IN2000_SG,           /* scatter-gather table size */ \
-                  IN2000_CPL,          /* commands per lun */ \
-                  0,                   /* board counter */ \
-                  0,                   /* unchecked dma */ \
-                  DISABLE_CLUSTERING \
-               }
+#define IN2000 {  proc_dir:        &proc_scsi_in2000,   /* pointer to /proc/scsi directory entry */ \
+                  proc_info:       in2000_proc_info,    /* pointer to proc info function */ \
+                  name:            "Always IN2000",     /* device name */ \
+                  detect:          in2000_detect,       /* returns number of in2000's found */ \
+                  queuecommand:    in2000_queuecommand, /* queue scsi command, don't wait */ \
+                  abort:           in2000_abort,        /* abort current command */ \
+                  reset:           in2000_reset,        /* reset scsi bus */ \
+                  bios_param:      in2000_biosparam,    /* figures out BIOS parameters for lilo, etc */ \
+                  can_queue:       IN2000_CAN_Q,        /* max commands we can queue up */ \
+                  this_id:         IN2000_HOST_ID,      /* host-adapter scsi id */ \
+                  sg_tablesize:    IN2000_SG,           /* scatter-gather table size */ \
+                  cmd_per_lun:     IN2000_CPL,          /* commands per lun */ \
+                  use_clustering:  DISABLE_CLUSTERING, \
+		  use_new_eh_code: 0			/* Enable new error code */ \
+                }
 
 
 #endif /* IN2000_H */

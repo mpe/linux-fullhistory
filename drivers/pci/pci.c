@@ -1,10 +1,10 @@
 /*
- * $Id: pci.c,v 1.44 1997/09/03 05:08:22 richard Exp $
+ * $Id: pci.c,v 1.51 1997/12/03 06:18:11 davem Exp $
  *
  * PCI services that are built on top of the BIOS32 service.
  *
- * Copyright 1993, 1994, 1995 Drew Eckhardt, Frederic Potter,
- *	David Mosberger-Tang
+ * Copyright 1993, 1994, 1995, 1997 Drew Eckhardt, Frederic Potter,
+ *	David Mosberger-Tang, Martin Mares
  */
 #include <linux/config.h>
 #include <linux/ptrace.h>
@@ -20,20 +20,10 @@
 struct pci_bus pci_root;
 struct pci_dev *pci_devices = 0;
 
-/*
- * The bridge_id field is an offset of an item into the array
- * BRIDGE_MAPPING_TYPE. 0xff indicates that the device is not a PCI
- * bridge, or that we don't know for the moment how to configure it.
- * I'm trying to do my best so that the kernel stays small.  Different
- * chipset can have same optimization structure. i486 and pentium
- * chipsets from the same manufacturer usually have the same
- * structure.
- */
-#define DEVICE(vid,did,name) \
-  {PCI_VENDOR_ID_##vid, PCI_DEVICE_ID_##did, (name), 0xff}
+#undef DEBUG
 
-#define BRIDGE(vid,did,name,bridge) \
-  {PCI_VENDOR_ID_##vid, PCI_DEVICE_ID_##did, (name), (bridge)}
+#define DEVICE(vid,did,name) \
+  {PCI_VENDOR_ID_##vid, PCI_DEVICE_ID_##did, (name)}
 
 /*
  * Sorted in ascending order by vendor and device.
@@ -87,7 +77,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( TSENG,		TSENG_ET6000,	"ET6000"),
 	DEVICE( WEITEK,		WEITEK_P9000,	"P9000"),
 	DEVICE( WEITEK,		WEITEK_P9100,	"P9100"),
-	BRIDGE( DEC,		DEC_BRD,	"DC21050", 		0x00),
+	DEVICE( DEC,		DEC_BRD,	"DC21050"),
 	DEVICE( DEC,		DEC_TULIP,	"DC21040"),
 	DEVICE( DEC,		DEC_TGA,	"TGA"),
 	DEVICE( DEC,		DEC_TULIP_FAST,	"DC21140"),
@@ -180,10 +170,10 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( N9,		N9_I128,	"Imagine 128"),
 	DEVICE( N9,		N9_I128_2,	"Imagine 128v2"),
 	DEVICE( UMC,		UMC_UM8673F,	"UM8673F"),
-	BRIDGE( UMC,		UMC_UM8891A,	"UM8891A", 		0x01),
+	DEVICE( UMC,		UMC_UM8891A,	"UM8891A"),
 	DEVICE( UMC,		UMC_UM8886BF,	"UM8886BF"),
 	DEVICE( UMC,		UMC_UM8886A,	"UM8886A"),
-	BRIDGE( UMC,		UMC_UM8881F,	"UM8881F",		0x02),
+	DEVICE( UMC,		UMC_UM8881F,	"UM8881F"),
 	DEVICE( UMC,		UMC_UM8886F,	"UM8886F"),
 	DEVICE( UMC,		UMC_UM9017F,	"UM9017F"),
 	DEVICE( UMC,		UMC_UM8886N,	"UM8886N"),
@@ -206,7 +196,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( OLICOM,		OLICOM_OC6151,	"OC-6151/6152"),
 	DEVICE( SUN,		SUN_EBUS,	"EBUS"),
 	DEVICE( SUN,		SUN_HAPPYMEAL,	"Happy Meal"),
-	BRIDGE( SUN,		SUN_PBM,	"PCI Bus Module",	0x02),
+	DEVICE( SUN,		SUN_PBM,	"PCI Bus Module"),
 	DEVICE( CMD,		CMD_640,	"640 (buggy)"),
 	DEVICE( CMD,		CMD_643,	"643"),
 	DEVICE( CMD,		CMD_646,	"646"),
@@ -382,10 +372,10 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( S3,		S3_ViRGE_DXGX,	"ViRGE/DX or /GX"),
 	DEVICE( S3,		S3_ViRGE_GX2,	"ViRGE/GX2"),
 	DEVICE( INTEL,		INTEL_82375,	"82375EB"),
-	BRIDGE( INTEL,		INTEL_82424,	"82424ZX Saturn",	0x00),
+	DEVICE( INTEL,		INTEL_82424,	"82424ZX Saturn"),
 	DEVICE( INTEL,		INTEL_82378,	"82378IB"),
 	DEVICE( INTEL,		INTEL_82430,	"82430ZX Aries"),
-	BRIDGE( INTEL,		INTEL_82434,	"82434LX Mercury/Neptune", 0x00),
+	DEVICE( INTEL,		INTEL_82434,	"82434LX Mercury/Neptune"),
 	DEVICE( INTEL,		INTEL_82092AA_0,"82092AA PCMCIA bridge"),
 	DEVICE( INTEL,		INTEL_82092AA_1,"82092AA EIDE"),
 	DEVICE( INTEL,		INTEL_7116,	"SAA7116"),
@@ -434,81 +424,6 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ARK,		ARK_STINGARK,	"Stingray ARK 2000PV"),
 	DEVICE( ARK,		ARK_2000MT,	"2000MT")
 };
-
-
-#ifdef CONFIG_PCI_OPTIMIZE
-
-/*
- * An item of this structure has the following meaning:
- * for each optimization, the register address, the mask
- * and value to write to turn it on.
- * There are 5 optimizations for the moment:
- * Cache L2 write back best than write through
- * Posted Write for CPU to PCI enable
- * Posted Write for CPU to MEMORY enable
- * Posted Write for PCI to MEMORY enable
- * PCI Burst enable
- *
- * Half of the bios I've meet don't allow you to turn that on, and you
- * can gain more than 15% on graphic accesses using those
- * optimizations...
- */
-struct optimization_type {
-	const char	*type;
-	const char	*off;
-	const char	*on;
-} bridge_optimization[] = {
-	{"Cache L2",			"write through",	"write back"},
-	{"CPU-PCI posted write",	"off",		"on"},
-	{"CPU-Memory posted write",	"off",		"on"},
-	{"PCI-Memory posted write",	"off",		"on"},
-	{"PCI burst",			"off",		"on"}
-};
-
-#define NUM_OPTIMIZATIONS \
-	(sizeof(bridge_optimization) / sizeof(bridge_optimization[0]))
-
-struct bridge_mapping_type {
-	unsigned char	addr;	/* config space address */
-	unsigned char	mask;
-	unsigned char	value;
-} bridge_mapping[] = {
-	/*
-	 * Intel Neptune/Mercury/Saturn:
-	 *	If the internal cache is write back,
-	 *	the L2 cache must be write through!
-	 *	I've to check out how to control that
-	 *	for the moment, we won't touch the cache
-	 */
-	{0x0	,0x02	,0x02	},
-	{0x53	,0x02	,0x02	},
-	{0x53	,0x01	,0x01	},
-	{0x54	,0x01	,0x01	},
-	{0x54	,0x02	,0x02	},
-
-	/*
-	 * UMC 8891A Pentium chipset:
-	 *	Why did you think UMC was cheaper ??
-	 */
-	{0x50	,0x10	,0x00	},
-	{0x51	,0x40	,0x40	},
-	{0x0	,0x0	,0x0	},
-	{0x0	,0x0	,0x0	},
-	{0x0	,0x0	,0x0	},
-
-	/*
-	 * UMC UM8881F
-	 *	This is a dummy entry for my tests.
-	 *	I have this chipset and no docs....
-	 */
-	{0x0	,0x1	,0x1	},
-	{0x0	,0x2	,0x0	},
-	{0x0	,0x0	,0x0	},
-	{0x0	,0x0	,0x0	},
-	{0x0	,0x0	,0x0	}
-};
-
-#endif /* CONFIG_PCI_OPTIMIZE */
 
 
 /*
@@ -784,52 +699,6 @@ const char *pcibios_strerror(int error)
 
 
 /*
- * Turn on/off PCI bridge optimization. This should allow benchmarking.
- */
-__initfunc(static void burst_bridge(unsigned char bus, unsigned char devfn,
-				    unsigned char pos, int turn_on))
-{
-#ifdef CONFIG_PCI_OPTIMIZE
-	struct bridge_mapping_type *bmap;
-	unsigned char val;
-	int i;
-
-	pos *= NUM_OPTIMIZATIONS;
-	printk("PCI bridge optimization.\n");
-	for (i = 0; i < NUM_OPTIMIZATIONS; i++) {
-		printk("    %s: ", bridge_optimization[i].type);
-		bmap = &bridge_mapping[pos + i];
-		if (!bmap->addr) {
-			printk("Not supported.");
-		} else {
-			pcibios_read_config_byte(bus, devfn, bmap->addr, &val);
-			if ((val & bmap->mask) == bmap->value) {
-				printk("%s.", bridge_optimization[i].on);
-				if (!turn_on) {
-					pcibios_write_config_byte(bus, devfn,
-								  bmap->addr,
-								  (val | bmap->mask)
-								  - bmap->value);
-					printk("Changed!  Now %s.", bridge_optimization[i].off);
-				}
-			} else {
-				printk("%s.", bridge_optimization[i].off);
-				if (turn_on) {
-					pcibios_write_config_byte(bus, devfn,
-								  bmap->addr,
-								  (val & (0xff - bmap->mask))
-								  + bmap->value);
-					printk("Changed!  Now %s.", bridge_optimization[i].on);
-				}
-			}
-		}
-		printk("\n");
-	}
-#endif /* CONFIG_PCI_OPTIMIZE */
-}
-
-
-/*
  * Convert some of the configuration space registers of the device at
  * address (bus,devfn) into a string (possibly several lines each).
  * The configuration string is stored starting at buf[len].  If the
@@ -1010,42 +879,35 @@ __initfunc(static void *pci_malloc(long size, unsigned long *mem_startp))
 {
 	void *mem;
 
-#ifdef DEBUG
-	printk("...pci_malloc(size=%ld,mem=%p)", size, (void *)*mem_startp);
-#endif
 	mem = (void*) *mem_startp;
 	*mem_startp += (size + sizeof(void*) - 1) & ~(sizeof(void*) - 1);
 	memset(mem, 0, size);
 	return mem;
 }
 
-
 unsigned int pci_scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 {
-	unsigned int devfn, l, max;
-	unsigned char cmd, tmp, irq, hdr_type = 0;
+	unsigned int devfn, l, max, class;
+	unsigned char cmd, irq, tmp, hdr_type = 0;
 	struct pci_dev_info *info;
 	struct pci_dev *dev;
 	struct pci_bus *child;
 	int reg;
 
 #ifdef DEBUG
-	printk("...pci_scan_bus(busno=%d,mem=%p)\n", bus->number,
-	       (void *)*mem_startp);
+	printk("pci_scan_bus for bus %d\n", bus->number);
 #endif
 
 	max = bus->secondary;
 	for (devfn = 0; devfn < 0xff; ++devfn) {
 		if (PCI_FUNC(devfn) == 0) {
-			pcibios_read_config_byte(bus->number, devfn,
-						 PCI_HEADER_TYPE, &hdr_type);
+			pcibios_read_config_byte(bus->number, devfn, PCI_HEADER_TYPE, &hdr_type);
 		} else if (!(hdr_type & 0x80)) {
 			/* not a multi-function device */
 			continue;
 		}
 
-		pcibios_read_config_dword(bus->number, devfn, PCI_VENDOR_ID,
-					  &l);
+		pcibios_read_config_dword(bus->number, devfn, PCI_VENDOR_ID, &l);
 		/* some broken boards return 0 if a slot is empty: */
 		if (l == 0xffffffff || l == 0x00000000) {
 			hdr_type = 0;
@@ -1054,14 +916,6 @@ unsigned int pci_scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 
 		dev = pci_malloc(sizeof(*dev), mem_startp);
 		dev->bus = bus;
-		/*
-		 * Put it into the simple chain of devices on this
-		 * bus.  It is used to find devices once everything is
-		 * set up.
-		 */
-		dev->next = pci_devices;
-		pci_devices = dev;
-
 		dev->devfn  = devfn;
 		dev->vendor = l & 0xffff;
 		dev->device = (l >> 16) & 0xffff;
@@ -1075,47 +929,62 @@ unsigned int pci_scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 		if (!info) {
 			printk("PCI: Warning: Unknown PCI device (%x:%x).  Please read include/linux/pci.h\n",
 				dev->vendor, dev->device);
-		} else {
-			/* Some BIOS' are lazy. Let's do their job: */
-			if (info->bridge_type != 0xff) {
-				burst_bridge(bus->number, devfn,
-					     info->bridge_type, 1);
-			}
 		}
 
 		/* non-destructively determine if device can be a master: */
-		pcibios_read_config_byte(bus->number, devfn, PCI_COMMAND,
-					 &cmd);
-		pcibios_write_config_byte(bus->number, devfn, PCI_COMMAND,
-					  cmd | PCI_COMMAND_MASTER);
-		pcibios_read_config_byte(bus->number, devfn, PCI_COMMAND,
-					 &tmp);
+		pcibios_read_config_byte(bus->number, devfn, PCI_COMMAND, &cmd);
+		pcibios_write_config_byte(bus->number, devfn, PCI_COMMAND, cmd | PCI_COMMAND_MASTER);
+		pcibios_read_config_byte(bus->number, devfn, PCI_COMMAND, &tmp);
 		dev->master = ((tmp & PCI_COMMAND_MASTER) != 0);
-		pcibios_write_config_byte(bus->number, devfn, PCI_COMMAND,
-					  cmd);
+		pcibios_write_config_byte(bus->number, devfn, PCI_COMMAND, cmd);
 
-		/* read irq level (may be changed during pcibios_fixup()): */
-		pcibios_read_config_byte(bus->number, devfn,
-					 PCI_INTERRUPT_LINE, &irq);
-		dev->irq = irq;
+		pcibios_read_config_dword(bus->number, devfn, PCI_CLASS_REVISION, &class);
+		class >>= 8;				    /* upper 3 bytes */
+		dev->class = class;
 
-		/* read base address registers, again pcibios_fixup() can
-		 * tweak these
-		 */
-		for (reg = 0; reg < 6; reg++) {
-			pcibios_read_config_dword(bus->number, devfn,
-					PCI_BASE_ADDRESS_0 + (reg << 2), &l);
-			if (l == 0xffffffff)
-				dev->base_address[reg] = 0;
-			else
-				dev->base_address[reg] = l;
+		switch (hdr_type & 0x7f) {		    /* header type */
+		case 0:					    /* standard header */
+			if (class >> 8 == PCI_CLASS_BRIDGE_PCI)
+				goto bad;
+			/* read irq level (may be changed during pcibios_fixup()): */
+			pcibios_read_config_byte(bus->number, dev->devfn, PCI_INTERRUPT_LINE, &irq);
+			dev->irq = irq;
+			/*
+			 * read base address registers, again pcibios_fixup() can
+			 * tweak these
+			 */
+			for (reg = 0; reg < 6; reg++) {
+				pcibios_read_config_dword(bus->number, devfn, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
+				dev->base_address[reg] = (l == 0xffffffff) ? 0 : l;
+			}
+			break;
+		case 1:					    /* bridge header */
+			if (class >> 8 != PCI_CLASS_BRIDGE_PCI)
+				goto bad;
+			for (reg = 0; reg < 2; reg++) {
+				pcibios_read_config_dword(bus->number, devfn, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
+				dev->base_address[reg] = (l == 0xffffffff) ? 0 : l;
+			}
+			break;
+		default:				    /* unknown header */
+		bad:
+			printk(KERN_ERR "PCI: %02x:%02x [%04x/%04x/%06x] has unknown header type %02x, ignoring.\n",
+			       bus->number, dev->devfn, dev->vendor, dev->device, class, hdr_type);
+			continue;
 		}
 
-		/* check to see if this device is a PCI-PCI bridge: */
-		pcibios_read_config_dword(bus->number, devfn,
-					  PCI_CLASS_REVISION, &l);
-		l = l >> 8;			/* upper 3 bytes */
-		dev->class = l;
+#ifdef DEBUG
+		printk("PCI: %02x:%02x [%04x/%04x]\n",
+		       bus->number, dev->devfn, dev->vendor, dev->device);
+#endif
+
+		/*
+		 * Put it into the global PCI device chain. It's used to
+		 * find devices once everything is set up.
+		 */
+		dev->next = pci_devices;
+		pci_devices = dev;
+
 		/*
 		 * Now insert it into the list of devices held
 		 * by the parent bus.
@@ -1123,7 +992,10 @@ unsigned int pci_scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 		dev->sibling = bus->devices;
 		bus->devices = dev;
 
-		if (dev->class >> 8 == PCI_CLASS_BRIDGE_PCI) {
+		/*
+		 * If it's a bridge, scan the bus behind it.
+		 */
+		if (class >> 8 == PCI_CLASS_BRIDGE_PCI) {
 			unsigned int buses;
 			unsigned short cr;
 
@@ -1131,7 +1003,7 @@ unsigned int pci_scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 			 * Insert it into the tree of buses.
 			 */
 			child = pci_malloc(sizeof(*child), mem_startp);
-			child->next   = bus->children;
+			child->next = bus->children;
 			bus->children = child;
 			child->self = dev;
 			child->parent = bus;
@@ -1147,20 +1019,16 @@ unsigned int pci_scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 			 * Clear all status bits and turn off memory,
 			 * I/O and master enables.
 			 */
-			pcibios_read_config_word(bus->number, devfn,
-						  PCI_COMMAND, &cr);
-			pcibios_write_config_word(bus->number, devfn,
-						  PCI_COMMAND, 0x0000);
-			pcibios_write_config_word(bus->number, devfn,
-						  PCI_STATUS, 0xffff);
+			pcibios_read_config_word(bus->number, devfn, PCI_COMMAND, &cr);
+			pcibios_write_config_word(bus->number, devfn, PCI_COMMAND, 0x0000);
+			pcibios_write_config_word(bus->number, devfn, PCI_STATUS, 0xffff);
 			/*
 			 * Read the existing primary/secondary/subordinate bus
 			 * number configuration to determine if the PCI bridge
 			 * has already been configured by the system.  If so,
 			 * do not modify the configuration, merely note it.
 			 */
-			pcibios_read_config_dword(bus->number, devfn, 0x18,
-						  &buses);
+			pcibios_read_config_dword(bus->number, devfn, 0x18, &buses);
 			if ((buses & 0xFFFFFF) != 0)
 			  {
 			    child->primary = buses & 0xFF;
@@ -1179,8 +1047,7 @@ unsigned int pci_scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 			      (((unsigned int)(child->primary)     <<  0) |
 			       ((unsigned int)(child->secondary)   <<  8) |
 			       ((unsigned int)(child->subordinate) << 16));
-			    pcibios_write_config_dword(bus->number, devfn, 0x18,
-						       buses);
+			    pcibios_write_config_dword(bus->number, devfn, 0x18, buses);
 			    /*
 			     * Now we can scan all subordinate buses:
 			     */
@@ -1192,11 +1059,9 @@ unsigned int pci_scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 			    child->subordinate = max;
 			    buses = (buses & 0xff00ffff)
 			      | ((unsigned int)(child->subordinate) << 16);
-			    pcibios_write_config_dword(bus->number, devfn, 0x18,
-						       buses);
+			    pcibios_write_config_dword(bus->number, devfn, 0x18, buses);
 			  }
-			pcibios_write_config_word(bus->number, devfn,
-						  PCI_COMMAND, cr);
+			pcibios_write_config_word(bus->number, devfn, PCI_COMMAND, cr);
 		}
 	}
 	/*
@@ -1206,6 +1071,9 @@ unsigned int pci_scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 	 *
 	 * Return how far we've got finding sub-buses.
 	 */
+#ifdef DEBUG
+	printk("PCI: pci_scan_bus returning with max=%02x\n", max);
+#endif
 	return max;
 }
 
@@ -1236,5 +1104,10 @@ __initfunc(unsigned long pci_init (unsigned long mem_start, unsigned long mem_en
 		}
 	}
 #endif
+
+#ifdef CONFIG_PCI_OPTIMIZE
+	pci_quirks_init();
+#endif
+
 	return mem_start;
 }

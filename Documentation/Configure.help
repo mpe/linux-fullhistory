@@ -601,6 +601,14 @@ CONFIG_NET_ALIAS
   info.  If you need this feature (for any protocol, like IP) say Y;
   if unsure, say N.
 
+Socket filtering
+CONFIG_FILTER
+  The Linux Socket Filter is a deviation of the Berkely Packet Filter.
+  Through Socket Filtering you can have the kernel decide whether the
+  data is good and to continue processing it. Linux Socket Filtering 
+  works on all socket types except TCP for now. See the text file
+  linux/Documentation/networking/filter.txt for more information.
+
 Network firewalls
 CONFIG_FIREWALL
   A firewall is a computer which protects a local network from the
@@ -642,17 +650,6 @@ CONFIG_SYN_COOKIES
   to one of your startup scripts (e.g. /etc/rc.local or 
   /etc/rc.d/rc.local) in addition.
   If unsure, say Y.
-
-Socket Security API Support (EXPERIMENTAL)
-CONFIG_NET_SECURITY
-  Enable use of the socket security API. This option only really
-  supports security (via encryption of all traffic) over IPv4 links,
-  and then only if you add a security protocol which is also supported
-  at the other end of the link; Linux itself does not include any
-  security protocols, but you can use the enskip package at
-  ftp.tik.ee.ethz.ch/pub/packages/skip/. That package also contains
-  documentation of the API to be used for secure sockets. If unsure,
-  say N.
 
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
@@ -1637,11 +1634,29 @@ CONFIG_ATALK
   hear that the GNU boycott of Apple is over, so even politically
   correct people are allowed to say Y here.
 
-IP-over-DDP support
+Appletalk-IP driver support
 CONFIG_IPDDP
+  Appletalk-IP is a method Macintosh users use IP services. This driver
+  allows you to either send your IP traffic over an Appletalk network to
+  an Appletalk-IP router, or you can have your machine act as an Appletalk-IP
+  router and route Appletalk-IP traffic for your Macintosh users. Both
+  modes require seperate user-space support software, please see each
+  individual options help to get the correct URL of the software.
+
+Appletalk-IP Encapsulation support
+CONFIG_IPDDP_ENCAP
   This allows IP networking for users who only have Appletalk
   networking available.  This feature is experimental. Please see
   http://www.maths.unm.edu/~bradford/ltpc.html for support software.
+
+Appletalk-IP Decapsulation support
+CONFIG_IPDDP_DECAP
+  This allows you to provide IP services to your Appletalk users.
+  It does not matter what interface the Macs are comming into your
+  Linux box on, be it Localtalk, Ethertalk, PPPtalk, etc. The only
+  dependent variable is if the Appletalk layer supports the protocol
+  you need. User space software is required to run this driver, you
+  can pick it up at http://spacs1.spacs.k12.wi.us/~jschlst/MacGate.html
 
 Apple/Farallon LocalTalk PC card support
 CONFIG_LTPC
@@ -1951,6 +1966,20 @@ CONFIG_SCSI_CONSTANTS
   The error messages regarding your SCSI hardware will be easier to
   understand if you say Y here; it will enlarge your kernel by about
   12KB. If in doubt, say Y.
+
+SCSI logging facility
+CONFIG_SCSI_LOGGING
+  This turns on a logging facility that can be used to debug a number
+  of problems.  Normally no logging output will appear, but you can
+  enable logging with a shell command like: 
+  'echo "scsi log token [level]" > /proc/scsi/scsi'
+  There are a number of things that can be used for 'token', and this
+  allows you to select the types of information you want, and the level
+  allows you to select the level of verbosity.  If you say 'N' here,
+  it may be harder to track down some types of scsi problems.  If
+  you say 'Y' here your kernel will be somewhat larger, but there
+  should be no noticable performance impact as long as you have logging
+  turned off.
 
 AdvanSys SCSI support
 CONFIG_SCSI_ADVANSYS
@@ -2585,6 +2614,15 @@ CONFIG_SCSI_PPA_HAVE_PEDANTIC
   2 (check FIFO every other byte) and 3 (check FIFO every time). If
   your EPP chipset is from the SMC series, you are likely to have to
   set this value greater than 0.
+
+SCSI Debug host simulator.
+CONFIG_SCSI_DEBUG
+  This is a host adapter simulator that can be programmed to simulate a
+  large number of conditions that could occur on a real bus.  The advantage
+  is that many hard to reproduce problems can be tested in a controlled
+  environment where there is reduced risk of losing important data.
+  This is primarily of use to people trying to debug the middle and upper
+  layers of the scsi subsystem.
 
 Network device support?
 CONFIG_NETDEVICES
@@ -6231,123 +6269,6 @@ CONFIG_SUN_OPENPROMIO
   removed from the running kernel whenever you want), say M and read
   Documentation/modules.txt. If unsure, say Y.
 
-Support for Cyrix processors
-CONFIG_CYRIX
-  This enables recognition of Cyrix processors. Without it
-  /proc/cpuinfo will list your processor as an unknown model
-  of Cyrix. With it it will list the correct details. It should
-  be safe to say Y here regardless of what processor you are
-  actually using. If this option is not enabled none of the
-  Cyrix feature options are available.
-
-Enable suspend on halt power saving feature
-CONFIG_CYRIX_SUSP_HLT
-  Suspend on halt causes the processor to enter a low power state
-  when the "hlt" instruction is executed. This is disabled at
-  power up and many BIOSs leave it that way. You probably want it
-  enabled since it dramatically reduces the operating temperature
-  of the processor. In a few rare cases there may be problems
-  with some bus master DMA cards if this is enabled.
-
-No I/O recovery delays
-CONFIG_CYRIX_FAST_IO
-  Historically programmers used "jmp $+2" instructions to create
-  delays between I/O instructions. The branch prediction of 5x86
-  and higher processors renders this ineffective and so a selectable
-  delay is implemented for I/O instructions in the processor. Linux
-  uses dummy I/O instructions where necessary rather than jumps
-  and so the extra processor imposed delay should not be necessary.
-  Enabling this option removes this delay.
-
-5x86 performance features
-CONFIG_CYRIX_5X86
-  The Cyrix 5x86 has several performance feature which are enabled
-  using on-chip registers. This code attempts to ensure that the
-  useful features are set to suit Linux. Read Documentation/CPU/Cyrix
-  before enabling this.
-    WARNING: If this is enabled you may find that the only way to
-  reboot is to power cycle the machine. Even a hard reboot seems
-  to fail on some systems.
-
-6x86 performance features
-CONFIG_CYRIX_6X86
-  The Cyrix 6x86 has several performance feature which are enabled
-  using on-chip registers. Most are normally enabled by the BIOS
-  however this code ensures that all the useful ones are set to
-  suit Linux. Read Documentation/CPU/Cyrix before enabling this.
-
-Avoid unnecessary locked cycles
-CONFIG_CYRIX_6X86_NOLOCK
-  Enabling this option causes the 6x86 not to use locked bus cycles
-  except for page table access and interrupt acknowledge cycles.
-  This allows the data used by descriptor tables, xchg instructions
-  and instructions preceeded by the LOCK prefix to be cached leading
-  to improved performance. Enabling this option has no effect if
-  an SMP kernel is being built - SMP requires locked cycles to
-  guarantee processor synchronization.
-
-Allocate L1 cache lines on write misses
-CONFIG_CYRIX_6X86_WTALLOC
-  If this is enabled L1 cache write misses will cause a cache line
-  to be allocated. This may result in increased performance. On the
-  other hand it may cause excessive trashing of the L1 cache when
-  copying or zeroing pages. In general you _probably_ win...
-
-Branch Target Buffer features
-CONFIG_CYRIX_6X86_BTB
-  The Cyrix 6x86 has branch prediction logic which is normally
-  only set to handle short branches (as in small loops and ifs).
-  This code attempts on configure the branch prediction logic
-  appropriately. Read Documentation/CPU/Cyrix before enabling this.
-
-Variable sized paging mechanism (VSPM)
-CONFIG_CYRIX_6X86_VSPM
-  Variable sized paging mechanism (VSPM) is a feature of the Cyrix
-  6x86 family of processors that allows large regions of memory
-  to be mapped in one go, significantly reducing the amount of work
-  the MMU has to do compared with traditional paging. However VSPM
-  is known to be buggy in many 6x86 chip revisions. Please read
-  Documentation/CPU/Cyrix before enabling this.
-    WARNING: If this is enabled you may find that the only way to
-  reboot is to power cycle the machine. Even a hard reboot seems
-  to fail on some systems.
-
-Allocate L1 cache lines on write misses
-CONFIG_AMD_K5_WTALLOC
-  If this is enabled L1 cache write misses will cause a cache line
-  to be allocated. This may result in increased performance. On the
-  other hand it may cause excessive trashing of the L1 cache when
-  copying or zeroing pages. In general you _probably_ win...
-
-Allocate L1 cache lines on write misses
-CONFIG_AMD_K6_WTALLOC
-  If this is enabled L1 cache write misses will cause a cache line
-  to be allocated. This may result in increased performance. On the
-  other hand it may cause excessive trashing of the L1 cache when
-  copying or zeroing pages. In general you _probably_ win...
-
-Use write cacheability detection
-CONFIG_AMD_K6_WTALLOC_WCDE
-  Write cacheability detection requires the system logic to assert
-  the cache enable bus signal during a write cycle. Some chipsets
-  do this and some do not. Some, such as Triton, do but not at
-  the appropriate point during the write cycle. Cacheability
-  detection is not normally useful unless you have memory mapped
-  devices which exist outside the 640k-1M range but within your
-  actual memory. (There is another option that disables write
-  allocate for the 15M-16M range commonly used by older VLB
-  video cards). You probably do not want to enable this.
-
-No write allocate between 15MB-16MB
-CONFIG_AMD_K6_WTALLOC_WAE15M
-  There were a small number of cards, mainly VESA Local Bus
-  video cards, that were memory mapped to the 15M-16M address
-  range. If you have such a card you do not want write allocate
-  to delay or reorder writes to this space so you must enable
-  this option. Other memory mapped cards are either outside the
-  systems memory space or are in the 640k-1M range which is
-  not subject to write allocate so this option is not normally
-  required.
 
 # m68k-specific kernel options
 # Documented by Chris Lawrence <quango@themall.net> et al.

@@ -15,12 +15,6 @@
 #include <asm/smp.h>
 #endif
 
-#ifdef __SMP__
-#define __udelay_val cpu_data[smp_processor_id()].udelay_val
-#else
-#define __udelay_val loops_per_sec
-#endif
-
 void __delay(unsigned long loops)
 {
 	__asm__ __volatile__(
@@ -34,7 +28,7 @@ inline void __const_udelay(unsigned long xloops)
 {
 	__asm__("mull %0"
 		:"=d" (xloops)
-		:"a" (xloops),"0" (__udelay_val)
+		:"a" (xloops),"0" (current_cpu_data.loops_per_sec)
 		:"ax");
         __delay(xloops);
 }

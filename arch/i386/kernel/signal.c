@@ -165,7 +165,7 @@ static inline void restore_i387(struct _fpstate *buf)
 #ifndef CONFIG_MATH_EMULATION
 	restore_i387_hard(buf);
 #else
-	if (hard_math)
+	if (boot_cpu_data.hard_math)
 		restore_i387_hard(buf);
 	else
 		restore_i387_soft(&current->tss.i387.soft, buf);
@@ -325,7 +325,7 @@ static struct _fpstate * save_i387(struct _fpstate *buf)
 #ifndef CONFIG_MATH_EMULATION
 	return save_i387_hard(buf);
 #else
-	return hard_math ? save_i387_hard(buf)
+	return boot_cpu_data.hard_math ? save_i387_hard(buf)
 	  : save_i387_soft(&current->tss.i387.soft, buf);
 #endif
 }

@@ -10,6 +10,16 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
 mainmenu_option next_comment
+comment 'Processor type and features'
+choice 'Processor family' \
+	"386			CONFIG_M386	\
+	 486/Cx486		CONFIG_M486	\
+	 Pentium/K5/5x86/6x86	CONFIG_M586	\
+	 PPro/K6/6x86MX		CONFIG_M686" Pentium
+bool 'Math emulation' CONFIG_MATH_EMULATION
+endmenu
+
+mainmenu_option next_comment
 comment 'Loadable module support'
 bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
@@ -21,7 +31,6 @@ endmenu
 mainmenu_option next_comment
 comment 'General setup'
 
-bool 'Kernel math emulation' CONFIG_MATH_EMULATION
 bool 'Networking support' CONFIG_NET
 bool 'PCI support' CONFIG_PCI
 if [ "$CONFIG_PCI" = "y" ]; then
@@ -41,16 +50,11 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
 fi
 
-choice 'Processor type' \
-	"386		CONFIG_M386	\
-	 486		CONFIG_M486	\
-	 Pentium	CONFIG_M586	\
-	 PPro		CONFIG_M686" Pentium
 bool 'Video mode selection support' CONFIG_VIDEO_SELECT
 
 tristate 'Parallel port support' CONFIG_PARPORT
 if [ "$CONFIG_PARPORT" != "n" ]; then
-  dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
+  dep_tristate '   PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
 fi
 
 endmenu
@@ -140,3 +144,5 @@ if [ "$CONFIG_PROFILE" = "y" ]; then
 fi
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 endmenu
+
+define_bool CONFIG_VGA_CONSOLE y

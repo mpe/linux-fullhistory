@@ -16,27 +16,18 @@ int mac53c94_abort(Scsi_Cmnd *);
 int mac53c94_reset(Scsi_Cmnd *, unsigned int);
 
 #define SCSI_MAC53C94 {					\
-	NULL,			/* next */		\
-	NULL,			/* usage_count */	\
-	&proc_scsi_mac53c94,	/* proc_dir */		\
-	NULL,			/* proc_info */		\
-	"53C94",		/* name */		\
-	mac53c94_detect,	/* detect */		\
-	NULL,			/* release */		\
-	NULL,			/* info */		\
-	mac53c94_command,	/* command */		\
-	mac53c94_queue,		/* queuecommand */	\
-	mac53c94_abort,		/* abort */		\
-	mac53c94_reset,		/* reset */		\
-	NULL,			/* slave_attach */	\
-	NULL,			/* bios_param */	\
-	1,			/* can_queue */		\
-	7,			/* this_id */		\
-	SG_ALL,			/* sg_tablesize */	\
-	1,			/* cmd_per_lun */	\
-	0,			/* present */		\
-	0,			/* unchecked_isa_dma */	\
-	DISABLE_CLUSTERING,	/* use_clustering */	\
+	proc_dir:	&proc_scsi_mac53c94,		\
+	name:		"53C94",			\
+	detect:		mac53c94_detect,		\
+	command:	mac53c94_command,		\
+	queuecommand:	mac53c94_queue,			\
+	abort:		mac53c94_abort,			\
+	reset:		mac53c94_reset,			\
+	can_queue:	1,				\
+	this_id:	7,				\
+	sg_tablesize:	SG_ALL,				\
+	cmd_per_lun:	1,				\
+	use_clustering:	DISABLE_CLUSTERING,		\
 }
 
 /*

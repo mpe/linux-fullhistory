@@ -718,28 +718,18 @@ struct qlogicpti {
 #define HCCTRL_B1ENAB           0x0008      /* Breakpoint 1 enable              */
 #define HCCTRL_B0ENAB           0x0004      /* Breakpoint 0 enable              */
 
-#define QLOGICPTI {							   \
-	/* next */		NULL,					   \
-	/* module */		NULL,					   \
-	/* proc dir */		NULL,					   \
-	/* procfs info */	NULL,					   \
-	/* name */		NULL,					   \
-	/* detect */		qlogicpti_detect,			   \
-	/* release */		qlogicpti_release,			   \
-	/* info */		qlogicpti_info,				   \
-	/* command */		NULL,					   \
-	/* queuecommand */	qlogicpti_queuecommand,			   \
-	/* abort */		qlogicpti_abort,			   \
-	/* reset */		qlogicpti_reset,			   \
-	/* slave_attach */	NULL,					   \
-	/* bios_param */	NULL,			   		   \
-	/* can_queue */		QLOGICISP_REQ_QUEUE_LEN,		   \
-	/* this_id */		7,					   \
-	/* sg_tablesize */	QLOGICISP_MAX_SG(QLOGICISP_REQ_QUEUE_LEN), \
-	/* cmd_per_lun */	1,					   \
-	/* present */		0,					   \
-	/* unchecked_isa_dma */	0,					   \
-	/* use_clustering */	DISABLE_CLUSTERING			   \
+#define QLOGICPTI {						   \
+	detect:		qlogicpti_detect,			   \
+	release:	qlogicpti_release,			   \
+	info:		qlogicpti_info,				   \
+	queuecommand:	qlogicpti_queuecommand,			   \
+	abort:		qlogicpti_abort,			   \
+	reset:		qlogicpti_reset,			   \
+	can_queue:	QLOGICISP_REQ_QUEUE_LEN,		   \
+	this_id:	7,					   \
+	sg_tablesize:	QLOGICISP_MAX_SG(QLOGICISP_REQ_QUEUE_LEN), \
+	cmd_per_lun:	1,					   \
+	use_clustering:	DISABLE_CLUSTERING			   \
 }
 
 /* For our interrupt engine. */

@@ -1,7 +1,7 @@
 /*
  *	Industrial Computer Source WDT500/501 driver for Linux 2.1.x
  *
- *	(c) Copyright 1996 Alan Cox <alan@cymru.net>, All Rights Reserved.
+ *	(c) Copyright 1996-1997 Alan Cox <alan@cymru.net>, All Rights Reserved.
  *				http://www.cymru.net
  *
  *	This program is free software; you can redistribute it and/or
@@ -15,7 +15,7 @@
  *
  *	(c) Copyright 1995    Alan Cox <alan@lxorguk.ukuu.org.uk>
  *
- *	Release 0.06.
+ *	Release 0.07.
  *
  *	Fixes
  *		Dave Gregorich	:	Modularisation and minor bugs
@@ -368,7 +368,7 @@ void cleanup_module(void)
 #ifdef CONFIG_WDT_501	
 	misc_deregister(&temp_miscdev);
 #endif	
-	notifier_chain_unregister(&boot_notifier_list, &wdt_notifier);
+	notifier_chain_unregister(&reboot_notifier_list, &wdt_notifier);
 	release_region(io,8);
 	free_irq(irq, NULL);
 }
@@ -377,7 +377,7 @@ void cleanup_module(void)
 
 __initfunc(int wdt_init(void))
 {
-	printk("WDT500/501-P driver at %X(Interrupt %d)\n", io,irq);
+	printk("WDT500/501-P driver 0.07 at %X (Interrupt %d)\n", io,irq);
 	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p", NULL))
 	{
 		printk("IRQ %d is not free.\n", irq);
@@ -387,8 +387,8 @@ __initfunc(int wdt_init(void))
 #ifdef CONFIG_WDT_501	
 	misc_register(&temp_miscdev);
 #endif	
-	request_region(io, 8, "wdt501");
-	notifier_chain_register(&boot_notifier_list, &wdt_notifier);
+	request_region(io, 8, "wdt501p");
+	notifier_chain_register(&reboot_notifier_list, &wdt_notifier);
 	return 0;
 }
 

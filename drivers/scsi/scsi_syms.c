@@ -38,6 +38,8 @@ extern int scsicam_bios_param (Disk * disk,
 extern void print_command (unsigned char *command);
 extern void print_sense(const char * devclass, Scsi_Cmnd * SCpnt);
 
+extern const char *const scsi_device_types[];
+
 EXPORT_SYMBOL(scsi_register_module);
 EXPORT_SYMBOL(scsi_unregister_module);
 EXPORT_SYMBOL(scsi_free);
@@ -45,7 +47,7 @@ EXPORT_SYMBOL(scsi_malloc);
 EXPORT_SYMBOL(scsi_register);
 EXPORT_SYMBOL(scsi_unregister);
 EXPORT_SYMBOL(scsicam_bios_param);
-EXPORT_SYMBOL(allocate_device);
+EXPORT_SYMBOL(scsi_allocate_device);
 EXPORT_SYMBOL(scsi_do_cmd);
 EXPORT_SYMBOL(scsi_command_size);
 EXPORT_SYMBOL(scsi_init_malloc);
@@ -55,13 +57,17 @@ EXPORT_SYMBOL(print_command);
 EXPORT_SYMBOL(print_sense);
 EXPORT_SYMBOL(print_msg);
 EXPORT_SYMBOL(print_status);
-EXPORT_SYMBOL(dma_free_sectors);
+EXPORT_SYMBOL(scsi_dma_free_sectors);
 EXPORT_SYMBOL(kernel_scsi_ioctl);
-EXPORT_SYMBOL(need_isa_buffer);
-EXPORT_SYMBOL(request_queueable);
+EXPORT_SYMBOL(scsi_need_isa_buffer);
+EXPORT_SYMBOL(scsi_request_queueable);
+EXPORT_SYMBOL(scsi_release_command);
 EXPORT_SYMBOL(print_Scsi_Cmnd);
-EXPORT_SYMBOL(scsi_mark_host_reset);
-EXPORT_SYMBOL(scsi_mark_bus_reset);
+EXPORT_SYMBOL(scsi_block_when_processing_errors);
+#if defined(CONFIG_SCSI_LOGGING) /* { */
+EXPORT_SYMBOL(scsi_logging_level);
+#endif
+
 #if defined(CONFIG_PROC_FS)
 EXPORT_SYMBOL(proc_print_scsidevice);
 #endif
@@ -71,7 +77,6 @@ EXPORT_SYMBOL(proc_print_scsidevice);
 EXPORT_SYMBOL(scsi_hostlist);
 EXPORT_SYMBOL(scsi_hosts);
 EXPORT_SYMBOL(scsi_devicelist);
-EXPORT_SYMBOL(scsi_devices);
 EXPORT_SYMBOL(scsi_device_types);
 
 

@@ -37,7 +37,7 @@ ifeq ($(CONFIG_SCSI),y)
   SCSI=scsi.o
   ifeq ($(CONFIG_MODULES),y)
     O_TARGET := scsi_n_syms.o
-    O_OBJS   := scsi.o
+    O_OBJS   := scsi.o scsi_error.o scsi_obsolete.o scsi_queue.o
     OX_OBJS  := scsi_syms.o
     SCSI     := $(O_TARGET)
   endif
@@ -490,8 +490,10 @@ seagate.o: seagate.c
 	rm fake.c
 
 scsi_mod.o: $(MIX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
-		scsicam.o scsi_proc.o
-	$(LD) $(LD_RFLAG) -r -o $@ $(MIX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
+		scsicam.o scsi_proc.o scsi_error.o scsi_obsolete.o scsi_queue.o
+	$(LD) $(LD_RFLAG) -r -o $@ $(MIX_OBJS) hosts.o scsi.o scsi_ioctl.o \
+		constants.o scsicam.o scsi_proc.o               \
+		scsi_error.o scsi_obsolete.o scsi_queue.o \
 
 sr_mod.o: sr.o sr_ioctl.o sr_vendor.o
 	$(LD) $(LD_RFLAG) -r -o $@ sr.o sr_ioctl.o sr_vendor.o

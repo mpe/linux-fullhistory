@@ -1117,11 +1117,263 @@ static int aha1542_restart(struct Scsi_Host * shost)
   return 0;
 }
 
-/* The abort command does not leave the device in a clean state where
-   it is available to be used again.  Until this gets worked out, we will
-   leave it commented out.  */
-
 int aha1542_abort(Scsi_Cmnd * SCpnt)
+{
+    
+    /*
+     * The abort command does not leave the device in a clean state where
+     *  it is available to be used again.  Until this gets worked out, we
+     * will leave it commented out.  
+     */
+
+    printk("aha1542.c: Unable to abort command for target %d\n", 
+	   SCpnt->target);
+    return FAILED;
+}
+
+/*
+ * This is a device reset.  This is handled by sending a special command
+ * to the device.
+ */
+int aha1542_dev_reset(Scsi_Cmnd * SCpnt)
+{
+    unsigned long flags;
+    struct mailbox * mb;
+    unchar target = SCpnt->target;
+    unchar lun = SCpnt->lun;
+    int mbo;
+    struct ccb  *ccb;
+    unchar ahacmd = CMD_START_SCSI;
+
+    ccb = HOSTDATA(SCpnt->host)->ccb;
+    mb = HOSTDATA(SCpnt->host)->mb;
+
+    save_flags(flags);
+    cli();
+    mbo = HOSTDATA(SCpnt->host)->aha1542_last_mbo_used + 1;
+    if (mbo >= AHA1542_MAILBOXES) mbo = 0;
+    
+    do{
+	if(mb[mbo].status == 0 && HOSTDATA(SCpnt->host)->SCint[mbo] == NULL)
+	    break;
+	mbo++;
+	if (mbo >= AHA1542_MAILBOXES) mbo = 0;
+    } while (mbo != HOSTDATA(SCpnt->host)->aha1542_last_mbo_used);
+    
+    if(mb[mbo].status || HOSTDATA(SCpnt->host)->SCint[mbo])
+	panic("Unable to find empty mailbox for aha1542.\n");
+    
+    HOSTDATA(SCpnt->host)->SCint[mbo] = SCpnt;  /* This will effectively
+						   prevent someone else from
+						   screwing with this cdb. */
+	    
+    HOSTDATA(SCpnt->host)->aha1542_last_mbo_used = mbo;    
+    restore_flags(flags);
+    
+    any2scsi(mb[mbo].ccbptr, SCSI_PA(&ccb[mbo])); /* This gets trashed for some reason*/
+
+    memset(&ccb[mbo], 0, sizeof(struct ccb));
+    
+    ccb[mbo].op = 0x81; /* BUS DEVICE RESET */
+
+    ccb[mbo].idlun = (target&7)<<5 | (lun & 7); /*SCSI Target Id*/
+
+    ccb[mbo].linkptr[0] = ccb[mbo].linkptr[1] = ccb[mbo].linkptr[2] = 0;
+    ccb[mbo].commlinkid = 0;
+    
+    /* 
+     * Now tell the 1542 to flush all pending commands for this 
+     * target 
+     */
+    aha1542_out(SCpnt->host->io_port, &ahacmd, 1);
+
+    printk("aha1542.c: Trying device reset for target %d\n", SCpnt->target);
+
+    return SUCCESS;
+	    
+
+#ifdef ERIC_neverdef
+    /* 
+     * With the 1542 we apparently never get an interrupt to
+     * acknowledge a device reset being sent.  Then again, Leonard
+     * says we are doing this wrong in the first place...
+     *
+     * Take a wait and see attitude.  If we get spurious interrupts,
+     * then the device reset is doing something sane and useful, and
+     * we will wait for the interrupt to post completion.
+     */
+    printk("Sent BUS DEVICE RESET to target %d\n", SCpnt->target);
+    
+    /*
+     * Free the command block for all commands running on this 
+     * target... 
+     */
+    for(i=0; i< AHA1542_MAILBOXES; i++)
+    {
+	if(HOSTDATA(SCpnt->host)->SCint[i] &&
+	   HOSTDATA(SCpnt->host)->SCint[i]->target == SCpnt->target)
+	{
+	    Scsi_Cmnd * SCtmp;
+	    SCtmp = HOSTDATA(SCpnt->host)->SCint[i];
+	    if (SCtmp->host_scribble) 
+	    {
+		scsi_free(SCtmp->host_scribble, 512);
+	    }
+	    
+	    HOSTDATA(SCpnt->host)->SCint[i] = NULL;
+	    HOSTDATA(SCpnt->host)->mb[i].status = 0;
+	}
+    }
+    return SUCCESS;
+
+    return FAILED;
+#endif /* ERIC_neverdef */
+}
+
+int aha1542_bus_reset(Scsi_Cmnd * SCpnt)
+{
+    int i;
+
+    /* 
+     * This does a scsi reset for all devices on the bus.
+     * In principle, we could also reset the 1542 - should
+     * we do this?  Try this first, and we can add that later
+     * if it turns out to be useful.
+     */
+    outb(SCRST, CONTROL(SCpnt->host->io_port));
+
+    /*
+     * Wait for the thing to settle down a bit.  Unfortunately
+     * this is going to basically lock up the machine while we
+     * wait for this to complete.  To be 100% correct, we need to
+     * check for timeout, and if we are doing something like this
+     * we are pretty desperate anyways.
+     */
+    scsi_sleep(4*HZ);
+
+    WAIT(STATUS(SCpnt->host->io_port), 
+	 STATMASK, INIT|IDLE, STST|DIAGF|INVDCMD|DF|CDF);
+    
+    /*
+     * Now try to pick up the pieces.  For all pending commands,
+     * free any internal data structures, and basically clear things
+     * out.  We do not try and restart any commands or anything - 
+     * the strategy handler takes care of that crap.
+     */
+    printk("Sent BUS RESET to scsi host %d\n", SCpnt->host->host_no);
+
+    for(i=0; i< AHA1542_MAILBOXES; i++)
+    {
+	if(HOSTDATA(SCpnt->host)->SCint[i] != NULL)
+	{
+	    Scsi_Cmnd * SCtmp;
+	    SCtmp = HOSTDATA(SCpnt->host)->SCint[i];
+
+    
+	    if( SCtmp->device->soft_reset )
+	    {
+		/*
+		 * If this device implements the soft reset option,
+		 * then it is still holding onto the command, and
+		 * may yet complete it.  In this case, we don't
+		 * flush the data.
+		 */
+		continue;
+	    }
+
+	    if (SCtmp->host_scribble) 
+	    {
+		scsi_free(SCtmp->host_scribble, 512);
+	    }
+	    
+	    HOSTDATA(SCpnt->host)->SCint[i] = NULL;
+	    HOSTDATA(SCpnt->host)->mb[i].status = 0;
+	}
+    }
+
+    return SUCCESS;
+
+fail:
+    return FAILED;
+}
+
+int aha1542_host_reset(Scsi_Cmnd * SCpnt)
+{
+    int i;
+
+    /* 
+     * This does a scsi reset for all devices on the bus.
+     * In principle, we could also reset the 1542 - should
+     * we do this?  Try this first, and we can add that later
+     * if it turns out to be useful.
+     */
+    outb(HRST | SCRST, CONTROL(SCpnt->host->io_port));
+
+    /*
+     * Wait for the thing to settle down a bit.  Unfortunately
+     * this is going to basically lock up the machine while we
+     * wait for this to complete.  To be 100% correct, we need to
+     * check for timeout, and if we are doing something like this
+     * we are pretty desperate anyways.
+     */
+    scsi_sleep(4*HZ);
+
+    WAIT(STATUS(SCpnt->host->io_port), 
+	 STATMASK, INIT|IDLE, STST|DIAGF|INVDCMD|DF|CDF);
+    
+    /*
+     * We need to do this too before the 1542 can interact with
+     * us again.
+     */
+    setup_mailboxes(SCpnt->host->io_port, SCpnt->host);
+    
+    /*
+     * Now try to pick up the pieces.  For all pending commands,
+     * free any internal data structures, and basically clear things
+     * out.  We do not try and restart any commands or anything - 
+     * the strategy handler takes care of that crap.
+     */
+    printk("Sent BUS RESET to scsi host %d\n", SCpnt->host->host_no);
+    
+    for(i=0; i< AHA1542_MAILBOXES; i++)
+    {
+	if(HOSTDATA(SCpnt->host)->SCint[i] != NULL)
+	{
+	    Scsi_Cmnd * SCtmp;
+	    SCtmp = HOSTDATA(SCpnt->host)->SCint[i];
+
+	    if( SCtmp->device->soft_reset )
+	    {
+		/*
+		 * If this device implements the soft reset option,
+		 * then it is still holding onto the command, and
+		 * may yet complete it.  In this case, we don't
+		 * flush the data.
+		 */
+		continue;
+	    }
+
+	    if (SCtmp->host_scribble) 
+	    {
+		scsi_free(SCtmp->host_scribble, 512);
+	    }
+	    
+	    HOSTDATA(SCpnt->host)->SCint[i] = NULL;
+	    HOSTDATA(SCpnt->host)->mb[i].status = 0;
+	}
+    }
+
+    return SUCCESS;
+
+fail:
+    return FAILED;
+}
+
+/*
+ * These are the old error handling routines.  They are only temporarily
+ * here while we play with the new error handling code.
+ */
+int aha1542_old_abort(Scsi_Cmnd * SCpnt)
 {
 #if 0
   unchar ahacmd = CMD_START_SCSI;
@@ -1194,7 +1446,7 @@ int aha1542_abort(Scsi_Cmnd * SCpnt)
    For a first go, we assume that the 1542 notifies us with all of the
    pending commands (it does implement soft reset, after all). */
 
-int aha1542_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
+int aha1542_old_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 {
     unchar ahacmd = CMD_START_SCSI;
     int i;

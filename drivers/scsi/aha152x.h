@@ -28,27 +28,23 @@ int aha152x_proc_info(char *buffer, char **start, off_t offset, int length, int 
 extern struct proc_dir_entry proc_scsi_aha152x;
 
 /* Initial value of Scsi_Host entry */
-#define AHA152X { /* next */               0, \
-                  /* module */             0, \
-                  /* proc_dir */           &proc_scsi_aha152x, \
-                  /* proc_info */          aha152x_proc_info, \
-                  /* name */               AHA152X_REVID, \
-                  /* detect */             aha152x_detect, \
-                  /* release */            0, \
-                  /* info */               0, \
-                  /* command */		       aha152x_command, \
-                  /* queuecommand */       aha152x_queue, \
-                  /* abort */              aha152x_abort, \
-                  /* reset */              aha152x_reset, \
-                  /* slave_attach */       0, \
-                  /* bios_param */         aha152x_biosparam, \
-                  /* can_queue */          1, \
-                  /* this_id */            7, \
-                  /* sg_tablesize */       SG_ALL, \
-                  /* cmd_per_lun */        1, \
-                  /* present */            0, \
-                  /* unchecked_isa_dma */  0, \
-                  /* use_clustering */     DISABLE_CLUSTERING }
+#define AHA152X { proc_dir:           &proc_scsi_aha152x, \
+                  proc_info:          aha152x_proc_info,  \
+                  name:               AHA152X_REVID,	  \
+                  detect:             aha152x_detect,	  \
+                  command:	      aha152x_command,	  \
+                  queuecommand:       aha152x_queue,	  \
+                  abort:              aha152x_abort,	  \
+                  reset:              aha152x_reset,	  \
+                  slave_attach:       0,		  \
+                  bios_param:         aha152x_biosparam,  \
+                  can_queue:          1,		  \
+                  this_id:            7,		  \
+                  sg_tablesize:       SG_ALL,		  \
+                  cmd_per_lun:        1,		  \
+                  present:            0,		  \
+                  unchecked_isa_dma:  0,		  \
+                  use_clustering:     DISABLE_CLUSTERING }
 #endif
 
 

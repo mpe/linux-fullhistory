@@ -43,6 +43,10 @@ nonumtail=<bool> -- When creating 8.3 aliases, normally the alias will
                  be the short alias instead of 'longfi~1.txt'. 
                   
 quiet         -- Stops printing certain warning messages.
+check=s|r|n   -- Case sensitivity checking setting.
+                 s: strict, case sensitive
+                 r: relaxed, case insensitive
+                 n: normal, default setting, currently case insensitive
 
 <bool>: 0,1,yes,no,true,false
 

@@ -152,26 +152,19 @@ int ppa_reset(Scsi_Cmnd *, unsigned int);
 int ppa_proc_info(char *, char **, off_t, int, int, int);
 int ppa_biosparam(Disk *, kdev_t, int *);
 
-#define PPA {	/* next */	 	0, \
-		/* usage_count */	0, \
-		/* proc_dir */		&proc_scsi_ppa, \
-		/* proc_info */		ppa_proc_info, \
-		/* name */		"Iomega parport ZIP drive", \
-		/* detect */		ppa_detect, \
-		/* release */		ppa_release, \
-		/* info */		0, \
-		/* command */		ppa_command, \
-		/* queuecommand */	ppa_queuecommand, \
-		/* abort */		ppa_abort, \
-		/* reset */		ppa_reset, \
-		/* slave_attach */	0, \
-		/* bios_param */	ppa_biosparam, \
-		/* can_queue */		0, \
-		/* this_id */		-1, \
-		/* sg_tablesize */	SG_ALL, \
-		/* cmd_per_lun */	1, \
-		/* present */		0, \
-		/* unchecked_isa_dma */	0, \
-		/* use_clustering */	ENABLE_CLUSTERING \
+#define PPA {	proc_dir:		&proc_scsi_ppa,			\
+		proc_info:		ppa_proc_info,			\
+		name:			"Iomega parport ZIP drive",	\
+		detect:			ppa_detect,			\
+		release:		ppa_release,			\
+		command:		ppa_command,			\
+		queuecommand:		ppa_queuecommand,		\
+		abort:			ppa_abort,			\
+		reset:			ppa_reset,			\
+		bios_param:		ppa_biosparam,			\
+		this_id:		-1,				\
+		sg_tablesize:		SG_ALL,				\
+		cmd_per_lun:		1,				\
+		use_clustering:		ENABLE_CLUSTERING		\
 }
 #endif				/* _PPA_H */

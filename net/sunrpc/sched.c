@@ -395,7 +395,7 @@ __rpc_execute(struct rpc_task *task)
 
 			/* When the task received a signal, remove from
 			 * any queues etc, and make runnable again. */
-			if (signalled())
+			if (0 && signalled())
 				__rpc_wake_up(task);
 
 			dprintk("RPC: %4d sync task resuming\n",
@@ -521,6 +521,7 @@ rpc_allocate(unsigned int flags, unsigned int size)
 		if (flags & RPC_TASK_ASYNC)
 			return NULL;
 		current->timeout = jiffies + (HZ >> 4);
+		current->state = TASK_INTERRUPTIBLE;
 		schedule();
 	} while (!signalled());
 

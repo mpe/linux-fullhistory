@@ -38,18 +38,18 @@ int wd7000_biosparam(Disk *, kdev_t, int *);
 #define WD7000_Q    16
 #define WD7000_SG   16
 
-#define WD7000 { NULL, NULL,            \
-	NULL,		                \
-	NULL,		                \
-	"Western Digital WD-7000",      \
-	wd7000_detect,                  \
-	NULL,				\
-	NULL,				\
-	wd7000_command,			\
-	wd7000_queuecommand,		\
-	wd7000_abort,			\
-	wd7000_reset,			\
-	NULL,                           \
-	wd7000_biosparam,               \
-	WD7000_Q, 7, WD7000_SG, 1, 0, 1, ENABLE_CLUSTERING}
+#define WD7000 {					   \
+	name:              "Western Digital WD-7000",      \
+	detect:            wd7000_detect,                  \
+	command:           wd7000_command,		   \
+	queuecommand:      wd7000_queuecommand,		   \
+	abort:             wd7000_abort,		   \
+	reset:             wd7000_reset,		   \
+	bios_param:        wd7000_biosparam,               \
+	can_queue:         WD7000_Q,			   \
+	this_id:           7,				   \
+	sg_tablesize:      WD7000_SG,			   \
+	cmd_per_lun:       1,				   \
+	unchecked_isa_dma: 1,				   \
+	use_clustering:    ENABLE_CLUSTERING}
 #endif

@@ -131,14 +131,6 @@ extern char __init_begin, __init_end;
 #define X86_FEATURE_MCA		0x4000		/* Machine Check Architecture */
 #define X86_FEATURE_CMOV	0x8000		/* Cmov/fcomi */
 
-#ifdef GAS_KNOWS_CR4
-#define read_cr4	"movl %%cr4,%%eax"
-#define write_cr4	"movl %%eax,%%cr4"
-#else
-#define read_cr4	".byte 0x0f,0x20,0xe0"
-#define write_cr4	".byte 0x0f,0x22,0xe0"
-#endif
-
 /*
  * Save the cr4 feature set we're using (ie
  * Pentium 4MB enable and PPro Global page
@@ -150,9 +142,9 @@ unsigned long mmu_cr4_features __initdata = 0;
 static inline void set_in_cr4(unsigned long mask)
 {
 	mmu_cr4_features |= mask;
-	__asm__(read_cr4 "\n\t"
+	__asm__("movl %%cr4,%%eax\n\t"
 		"orl %0,%%eax\n\t"
-		write_cr4
+		"movl %%eax,%%cr4\n"
 		: : "irg" (mask)
 		:"ax");
 }
@@ -178,9 +170,6 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
  * kernel.
  * It may also hold the MP configuration table when we are booting SMP.
  */
-#if 0
-	memset((void *) 0, 0, PAGE_SIZE);
-#endif
 #ifdef __SMP__
 	if (!smp_scan_config(0x0,0x400))	/* Scan the bottom 1K for a signature */
 	{
@@ -199,9 +188,6 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 	 */
 /*	smp_alloc_memory(8192); */
 #endif
-#ifdef TEST_VERIFY_AREA
-	wp_works_ok = 0;
-#endif
 	start_mem = PAGE_ALIGN(start_mem);
 	address = PAGE_OFFSET;
 	pg_dir = swapper_pg_dir;
@@ -219,14 +205,14 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 		 * virtual memory boundary, but that's OK as we won't
 		 * use that memory anyway.
 		 */
-		if (x86_capability & X86_FEATURE_PSE) {
+		if (boot_cpu_data.x86_capability & X86_FEATURE_PSE) {
 			unsigned long __pe;
 
 			set_in_cr4(X86_CR4_PSE);
-			wp_works_ok = 1;
+			boot_cpu_data.wp_works_ok = 1;
 			__pe = _KERNPG_TABLE + _PAGE_4M + __pa(address);
 			/* Make it "global" too if supported */
-			if (x86_capability & X86_FEATURE_PGE) {
+			if (boot_cpu_data.x86_capability & X86_FEATURE_PGE) {
 				set_in_cr4(X86_CR4_PGE);
 				__pe += _PAGE_GLOBAL;
 			}
@@ -235,6 +221,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 			address += 4*1024*1024;
 			continue;
 		}
+
 		/*
 		 * We're on a [34]86, use normal page tables.
 		 * pg_table is physical at this point
@@ -247,6 +234,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 
 		pgd_val(*pg_dir) = _PAGE_TABLE | (unsigned long) pg_table;
 		pg_dir++;
+
 		/* now change pg_table to kernel virtual addresses */
 		pg_table = (pte_t *) __va(pg_table);
 		for (tmp = 0 ; tmp < PTRS_PER_PTE ; tmp++,pg_table++) {
@@ -288,14 +276,14 @@ __initfunc(void test_wp_bit(void))
 	pg0[0] = old;
 	local_flush_tlb();
 	current->mm->mmap->vm_start -= PAGE_SIZE;
-	if (wp_works_ok < 0) {
-		wp_works_ok = 0;
+	if (boot_cpu_data.wp_works_ok < 0) {
+		boot_cpu_data.wp_works_ok = 0;
 		printk("No.\n");
 #ifndef CONFIG_M386
 		panic("This kernel doesn't support CPU's with broken WP. Recompile it for a 386!");
 #endif
 	} else
-		printk("Ok.\n");
+		printk(".\n");
 }
 
 __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
@@ -377,7 +365,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		datapages << (PAGE_SHIFT-10),
 		initpages << (PAGE_SHIFT-10));
 
-	if (wp_works_ok < 0)
+	if (boot_cpu_data.wp_works_ok < 0)
 		test_wp_bit();
 }
 

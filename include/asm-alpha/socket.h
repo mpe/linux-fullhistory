@@ -39,13 +39,13 @@
 #define SO_PEERCRED	18
 #define SO_BINDTODEVICE 25
 
-#define SO_BINDTODEVICE	25
+/* Socket filtering */
+#define SO_ATTACH_FILTER        26
+#define SO_DETACH_FILTER        27
 
 /* Security levels - as per NRL IPv6 - don't actually do anything */
 #define SO_SECURITY_AUTHENTICATION		19
 #define SO_SECURITY_ENCRYPTION_TRANSPORT	20
 #define SO_SECURITY_ENCRYPTION_NETWORK		21
-
-#define SO_BINDTODEVICE		22
 
 #endif /* _ASM_SOCKET_H */

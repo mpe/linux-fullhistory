@@ -843,6 +843,9 @@ static inline int do_rmdir(const char * name)
 	if (dir->d_inode->i_sb && dir->d_inode->i_sb->dq_op)
 		dir->d_inode->i_sb->dq_op->initialize(dir->d_inode, -1);
 
+	if (dentry->d_count > 1)
+		shrink_dcache_parent(dentry);
+
 	error = dir->d_inode->i_op->rmdir(dir->d_inode, dentry);
 
 exit_lock:

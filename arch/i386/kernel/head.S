@@ -1,11 +1,10 @@
 /*
- *  linux/arch/i386/head.S
+ *  linux/arch/i386/head.S -- the 32-bit startup code.
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
- */
-
-/*
- *  head.S contains the 32-bit startup code.
+ *
+ *  Enhanced CPU detection and feature setting code by Mike Jagdis
+ *  and Martin Mares, November 1997.
  */
 
 .text
@@ -18,6 +17,20 @@
 #define CL_MAGIC	0xA33F
 #define CL_BASE_ADDR	0x90000
 #define CL_OFFSET	0x90022
+
+/*
+ * References to members of the boot_cpu_data structure.
+ */
+
+#define CPU_PARAMS	SYMBOL_NAME(boot_cpu_data)
+#define X86		CPU_PARAMS+0
+#define X86_VENDOR	CPU_PARAMS+1
+#define X86_MODEL	CPU_PARAMS+2
+#define X86_MASK	CPU_PARAMS+3
+#define X86_HARD_MATH	CPU_PARAMS+6
+#define X86_CPUID	CPU_PARAMS+8
+#define X86_CAPABILITY	CPU_PARAMS+12
+#define X86_VENDOR_ID	CPU_PARAMS+16
 
 /*
  * swapper_pg_dir is the main page directory, address 0x00101000
@@ -45,15 +58,9 @@ startup_32:
  *	not yet offset 0xC0000000..
  */
 #define cr4_bits mmu_cr4_features-0xC0000000
-#ifdef GAS_KNOWS_CR4
 	movl %cr4,%eax		# Turn on 4Mb pages
 	orl cr4_bits,%eax
 	movl %eax,%cr4
-#else
-	.byte 0x0f,0x20,0xe0
-	orl cr4_bits,%eax
-	.byte 0x0f,0x22,0xe0
-#endif
 #endif
 /*
  * Setup paging (the tables are already set up, just switch them on)
@@ -135,13 +142,69 @@ startup_32:
 checkCPUtype:
 #endif
 
+	movl $-1,X86_CPUID		#  -1 for no CPUID initially
+
 /* check if it is 486 or 386. */
 /*
  * XXX - this does a lot of unnecessary setup.  Alignment checks don't
  * apply at our cpl of 0 and the stack ought to be aligned already, and
  * we don't need to preserve eflags.
  */
-	movl $3, SYMBOL_NAME(x86)
+	/*
+	 * A Cyrix preserves flags in cases where other CPUs change
+	 * them in undefined ways. We need to know this since we may
+	 * need to enable the CPUID instruction at least. (Cyrix chips
+	 * prior to M2 have CPUID disabled by default, the Cx486s
+	 * didn't have it at all.)
+	 */
+	xor %ax,%ax
+	sahf
+	movb $5,%al
+	movb $2,%bl
+	div %bl
+	lahf
+	cmpb $2,%ah
+	jne ncyrix
+
+	/*
+	 * It behaves like a Cyrix so put "Cyrix" in the vendor id
+	 * field. It may be overwritten later with the real thing
+	 * if CPUID works.
+	 */
+	movl $0x69727943,X86_VENDOR_ID			# low 4 chars
+	movl $0x00000078,X86_VENDOR_ID			# next 4 chars
+
+	/*
+	 * N.B. The pattern of accesses to 0x22 and 0x23 is *important*
+	 *      so do not try and "optimise" it! For the same reason we
+	 *	do all this with interrupts off just to be sure.
+	 */
+#define setCx86(reg, val) \
+	movb reg,%al;	\
+	outb %al,$0x22;	\
+	movb val,%al;	\
+	outb %al,$0x23
+
+#define getCx86(reg) \
+	movb reg,%al;	\
+	outb %al,$0x22;	\
+	inb $0x23,%al
+
+	getCx86($0xc3)		# get CCR3
+	movb %al,%cl		# Save old value
+	movb %al,%bl
+	andb $0x0f,%bl		# Enable all config registers (for CCR4 access)
+	orb $0x10,%bl
+	setCx86($0xc3,%bl)
+
+	getCx86($0xe8)		# CCR4 |= CPUID
+	orb $0x80,%al
+	movb %al,%bl
+	setCx86($0xe8,%bl)
+
+	setCx86($0xc3,%cl)	# Restore old CCR3
+
+ncyrix:	movl $3,X86		# at least 386
 	pushfl			# push EFLAGS
 	popl %eax		# get EFLAGS
 	movl %eax,%ecx		# save original EFLAGS
@@ -153,7 +216,8 @@ checkCPUtype:
 	xorl %ecx,%eax		# change in flags
 	andl $0x40000,%eax	# check if AC bit changed
 	je is386
-	movl $4,SYMBOL_NAME(x86)
+
+	movl $4,X86		# at least 486
 	movl %ecx,%eax
 	xorl $0x200000,%eax	# check ID flag
 	pushl %eax
@@ -161,42 +225,74 @@ checkCPUtype:
 	pushfl			# 487SX we can't change it
 	popl %eax
 	xorl %ecx,%eax
+	pushl %ecx		# restore original EFLAGS
+	popfl
 	andl $0x200000,%eax
-	je is486
-isnew:	pushl %ecx		# restore original EFLAGS
-	popfl
-	incl SYMBOL_NAME(have_cpuid)	# we have CPUID
-	/* get processor type */
-				# LINUS WE HAVE A BUG HERE - MUST CHECK WITH
-				# CPUID#0 THAT CPUID#1 IS SUPPORTED...
-	movl $1, %eax		# Use the CPUID instruction to 
-	.byte 0x0f, 0xa2	# check the processor type
-	movb %al, %cl		# save reg for future use
-	andb $0x0f,%ah		# mask processor family
-	movb %ah,SYMBOL_NAME(x86)
-	andb $0xf0, %eax	# mask model
-	shrb $4, %al
-	movb %al,SYMBOL_NAME(x86_model)
-	andb $0x0f, %cl		# mask mask revision
-	movb %cl,SYMBOL_NAME(x86_mask)
-	movl %edx,SYMBOL_NAME(x86_capability)
-	/* get vendor info */
-	xorl %eax, %eax			# call CPUID with 0 -> return vendor ID
-	.byte 0x0f, 0xa2		# CPUID
-	movl %ebx,SYMBOL_NAME(x86_vendor_id)	# lo 4 chars
-	movl %edx,SYMBOL_NAME(x86_vendor_id)+4	# next 4 chars
-	movl %ecx,SYMBOL_NAME(x86_vendor_id)+8	# last 4 chars
+	je nocpuid
 
-	movl %cr0,%eax		# 486+
+	/* get vendor info */
+	xorl %eax,%eax			# call CPUID with 0 -> return vendor ID
+	cpuid
+	movl %eax,X86_CPUID		# save CPUID level
+	movl %ebx,X86_VENDOR_ID		# lo 4 chars
+	movl %edx,X86_VENDOR_ID+4	# next 4 chars
+	movl %ecx,X86_VENDOR_ID+8	# last 4 chars
+
+	orl %eax,%eax			# do we have processor info as well?
+	je nocpuid
+
+	movl $1,%eax		# Use the CPUID instruction to get CPU type
+	cpuid
+	movb %al,%cl		# save reg for future use
+	andb $0x0f,%ah		# mask processor family
+	movb %ah,X86
+	andb $0xf0,%al		# mask model
+	shrb $4,%al
+	movb %al,X86_MODEL
+	andb $0x0f,%cl		# mask mask revision
+	movb %cl,X86_MASK
+	movl %edx,X86_CAPABILITY
+
+nocpuid:
+	/*
+	 * Even if we had CPUID Cyrix tries to look compatible with
+	 * Intel so we have to go elsewhere for the nitty gritty.
+	 */
+	cmpl $0x69727943,X86_VENDOR_ID		# "Cyri[x.*]"?
+	jne is486				# maybe ...
+
+	movb $0xfe,X86_MODEL			# Generic Cx486?
+	movb $0,X86_MASK
+
+	getCx86($0xc3)		# Test for DEVID by writing CCR3
+	movb %al,%cl
+	movb %al,%bl
+	orb $0x80,%bl
+	setCx86($0xc3,%bl)
+	getCx86($0xc0)		# dummy to change bus
+	getCx86($0xc3)
+	cmpb %al,%cl
+	je is486		# not writable == no DEVID
+
+	setCx86($0xc3,%cl)	# restore CCR3
+
+	getCx86($0xff)		# get DEVID in preference to any CPUID
+	movb %al,X86_MASK
+	getCx86($0xfe)
+	movb %al,X86_MODEL
+	andb $0xf0,%al		# Check for 6x86(L)
+	cmp $0x30,%al
+	jnz is486
+	getCx86($0xe9)		# CCR5: reset SLOP bit, so that the udelay loop
+	andb $0xfd,%al		# works well on 6x86(L) CPU's.
+	movb %al,%bl
+	setCx86($0xe9,%bl)
+
+is486:	movl %cr0,%eax		# 486 or better
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl $0x50022,%eax	# set AM, WP, NE and MP
 	jmp 2f
-is486:	pushl %ecx		# restore original EFLAGS
-	popfl
-	movl %cr0,%eax		# 486
-	andl $0x80000011,%eax	# Save PG,PE,ET
-	orl $0x50022,%eax	# set AM, WP, NE and MP
-	jmp 2f
+
 is386:	pushl %ecx		# restore original EFLAGS
 	popfl
 	movl %cr0,%eax		# 386
@@ -208,17 +304,11 @@ is386:	pushl %ecx		# restore original EFLAGS
 	movb ready,%al		# First CPU if 0
 	orb %al,%al
 	jz 4f			# First CPU skip this stuff
-#ifdef GAS_KNOWS_CR4
 	movl %cr4,%eax		# Turn on 4Mb pages
 	orl $16,%eax
 	movl %eax,%cr4
-#else
-	.byte 0x0f,0x20,0xe0
-	orl $16,%eax
-	.byte 0x0f,0x22,0xe0
-#endif
-	movl %cr3, %eax		# Intel specification clarification says
-	movl %eax, %cr3		# to do this. Maybe it makes a difference.
+	movl %cr3,%eax		# Intel specification clarification says
+	movl %eax,%cr3		# to do this. Maybe it makes a difference.
 				# Who knows ?
 #endif
 4:
@@ -228,7 +318,7 @@ is386:	pushl %ecx		# restore original EFLAGS
 	lgdt gdt_descr
 	lidt idt_descr
 	ljmp $(__KERNEL_CS),$1f
-1:	movl $(__KERNEL_DS),%eax# reload all the segment registers
+1:	movl $(__KERNEL_DS),%eax	# reload all the segment registers
 	mov %ax,%ds		# after changing gdt.
 	mov %ax,%es
 	mov %ax,%fs
@@ -258,7 +348,7 @@ ready:	.byte 0
  * We depend on ET to be correct. This checks for 287/387.
  */
 check_x87:
-	movb $0,SYMBOL_NAME(hard_math)
+	movb $0,X86_HARD_MATH
 	clts
 	fninit
 	fstsw %ax
@@ -269,7 +359,7 @@ check_x87:
 	movl %eax,%cr0
 	ret
 	ALIGN
-1:	movb $1,SYMBOL_NAME(hard_math)
+1:	movb $1,X86_HARD_MATH
 	.byte 0xDB,0xE4		/* fsetpm for 287, ignored by 387 */
 	ret
 
@@ -366,7 +456,7 @@ ENTRY(swapper_pg_dir)
 	.long 0x00102007
 	.fill 767,4,0
 	.long 0x00102007
-	.fill 127,4,0
+	.fill 255,4,0
 
 /*
  * The page tables are initialized to only 4MB here - the final page

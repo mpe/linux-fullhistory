@@ -373,10 +373,9 @@ endif
 ifdef CONFIG_VT
   ifdef CONFIG_TGA_CONSOLE
   L_OBJS += tga.o
-  else
-   ifndef CONFIG_SUN_CONSOLE
-   L_OBJS += vga.o vesa_blank.o
-   endif
+  endif
+  ifdef CONFIG_VGA_CONSOLE
+  L_OBJS += vga.o vesa_blank.o
   endif
 endif
 

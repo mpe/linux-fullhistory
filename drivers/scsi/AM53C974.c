@@ -2543,52 +2543,54 @@ return(SCSI_ABORT_NOT_RUNNING);
 * Inputs : cmd -- which command within the command block was responsible for the reset
 * 
 * Returns : status (SCSI_ABORT_SUCCESS)
+* 
+* FIXME(eric) the reset_flags are ignored.
 **************************************************************************/
-int AM53C974_reset(Scsi_Cmnd *cmd)
+int AM53C974_reset(Scsi_Cmnd *cmd, unsigned int reset_flags)
 {
-AM53C974_local_declare();
-int                      i;
-struct Scsi_Host         *instance = cmd->host;
-struct AM53C974_hostdata *hostdata = (struct AM53C974_hostdata *)instance->hostdata;
-AM53C974_setio(instance);
-
-cli();
-DEB(printk("AM53C974_reset called; "));
-
-printk("AM53C974_reset called\n");
-AM53C974_print(instance);
-AM53C974_keywait();
-
+    AM53C974_local_declare();
+    int                      i;
+    struct Scsi_Host         *instance = cmd->host;
+    struct AM53C974_hostdata *hostdata = (struct AM53C974_hostdata *)instance->hostdata;
+    AM53C974_setio(instance);
+    
+    cli();
+    DEB(printk("AM53C974_reset called; "));
+    
+    printk("AM53C974_reset called\n");
+    AM53C974_print(instance);
+    AM53C974_keywait();
+    
 /* do hard reset */
-AM53C974_write_8(CMDREG, CMDREG_RDEV);
-AM53C974_write_8(CMDREG, CMDREG_NOP);
-hostdata->msgout[0] = NOP;
-for (i = 0; i < 8; i++) {
-    hostdata->busy[i] = 0;
-    hostdata->sync_per[i] = DEF_STP;
-    hostdata->sync_off[i] = 0;
-    hostdata->sync_neg[i] = 0; }
-hostdata->last_message[0] = NOP;
-hostdata->sel_cmd = NULL;
-hostdata->connected = NULL;
-hostdata->issue_queue = NULL;
-hostdata->disconnected_queue = NULL;
-hostdata->in_reset = 0;
-hostdata->aborted = 0;
-hostdata->selecting = 0;
-hostdata->disconnecting = 0;
-hostdata->dma_busy = 0;
-
+    AM53C974_write_8(CMDREG, CMDREG_RDEV);
+    AM53C974_write_8(CMDREG, CMDREG_NOP);
+    hostdata->msgout[0] = NOP;
+    for (i = 0; i < 8; i++) {
+	hostdata->busy[i] = 0;
+	hostdata->sync_per[i] = DEF_STP;
+	hostdata->sync_off[i] = 0;
+	hostdata->sync_neg[i] = 0; }
+    hostdata->last_message[0] = NOP;
+    hostdata->sel_cmd = NULL;
+    hostdata->connected = NULL;
+    hostdata->issue_queue = NULL;
+    hostdata->disconnected_queue = NULL;
+    hostdata->in_reset = 0;
+    hostdata->aborted = 0;
+    hostdata->selecting = 0;
+    hostdata->disconnecting = 0;
+    hostdata->dma_busy = 0;
+    
 /* reset bus */
-AM53C974_write_8(CNTLREG1, CNTLREG1_DISR | instance->this_id); /* disable interrupt upon SCSI RESET */
-AM53C974_write_8(CMDREG, CMDREG_RBUS);     /* reset SCSI bus */
-udelay(40);
-AM53C974_config_after_reset(instance);
-
-sti();
-cmd->result = DID_RESET << 16;
-cmd->scsi_done(cmd);
-return SCSI_ABORT_SUCCESS;
+    AM53C974_write_8(CNTLREG1, CNTLREG1_DISR | instance->this_id); /* disable interrupt upon SCSI RESET */
+    AM53C974_write_8(CMDREG, CMDREG_RBUS);     /* reset SCSI bus */
+    udelay(40);
+    AM53C974_config_after_reset(instance);
+    
+    sti();
+    cmd->result = DID_RESET << 16;
+    cmd->scsi_done(cmd);
+    return SCSI_ABORT_SUCCESS;
 }
 
 

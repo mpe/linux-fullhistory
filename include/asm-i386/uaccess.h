@@ -55,7 +55,7 @@ extern int __verify_write(const void *, unsigned long);
 #else
 #define __access_ok(type,addr,size) \
 	(__kernel_ok || (__user_ok(addr,size) && \
-			 ((type) == VERIFY_READ || wp_works_ok || \
+			 ((type) == VERIFY_READ || boot_cpu_data.wp_works_ok || \
 			  __verify_write((void *)(addr),(size)))))
 #endif /* CPU */
 

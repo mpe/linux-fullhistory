@@ -260,12 +260,8 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	server->client    = clnt;
 
 	/* Fire up rpciod if not yet running */
-#ifdef RPCIOD_RESULT
-	if (rpciod_up())
+	if (rpciod_up() != 0)
 		goto out_no_iod;
-#else
-	rpciod_up();
-#endif
 
 	/*
 	 * Keep the super block locked while we try to get 
@@ -290,13 +286,11 @@ out_no_root:
 	printk("nfs_read_super: get root inode failed\n");
 	iput(root_inode);
 	rpciod_down();
-#ifdef RPCIOD_RESULT
 	goto out_shutdown;
 
 out_no_iod:
-	printk("nfs_read_super: couldn't start rpciod!\n");
+	printk("NFS: couldn't start rpciod!\n");
 out_shutdown:
-#endif
 	rpc_shutdown_client(server->client);
 	goto out_unlock;
 

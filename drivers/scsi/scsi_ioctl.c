@@ -1,8 +1,3 @@
-/*
- * Don't import our own symbols, as this would severely mess up our
- * symbol tables.
- */
-#define _SCSI_SYMS_VER_
 #define __NO_VERSION__
 #include <linux/module.h>
 
@@ -103,8 +98,10 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 {
     int result;
     Scsi_Cmnd * SCpnt;
-    
-    SCpnt = allocate_device(NULL, dev, 1);
+    Scsi_Device * SDpnt;
+
+    SCSI_LOG_IOCTL(1, printk("Trying ioctl with scsi command %d\n", cmd[0]));
+    SCpnt = scsi_allocate_device(NULL, dev, 1);
     {
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
@@ -112,8 +109,11 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 		    scsi_ioctl_done,  MAX_TIMEOUT,
 		    MAX_RETRIES);
 	down(&sem);
+        SCpnt->request.sem = NULL;
     }
     
+    SCSI_LOG_IOCTL(2, printk("Ioctl returned  0x%x\n", SCpnt->result));
+
     if(driver_byte(SCpnt->result) != 0)
 	switch(SCpnt->sense_buffer[2] & 0xf) {
 	case ILLEGAL_REQUEST:
@@ -146,12 +146,16 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 	};
     
     result = SCpnt->result;
-    SCpnt->request.rq_status = RQ_INACTIVE;
 
-    if (!SCpnt->device->was_reset && SCpnt->device->scsi_request_fn)
-	(*SCpnt->device->scsi_request_fn)();
+    SCSI_LOG_IOCTL(2, printk("IOCTL Releasing command\n"));
+    SDpnt = SCpnt->device;
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
 
-    wake_up(&SCpnt->device->device_wait);
+    if (!SDpnt->was_reset && SDpnt->scsi_request_fn)
+	(*SDpnt->scsi_request_fn)();
+
+    wake_up(&SDpnt->device_wait);
     return result;
 }
 
@@ -166,6 +170,7 @@ static int ioctl_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
     unsigned char cmd[12]; 
     char * cmd_in;
     Scsi_Cmnd * SCpnt;
+    Scsi_Device * SDpnt;
     unsigned char opcode;
     int inlen, outlen, cmdlen;
     int needed, buf_needed;
@@ -221,7 +226,7 @@ static int ioctl_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
     cmdlen = COMMAND_SIZE(opcode);
 
     result = verify_area(VERIFY_READ, cmd_in, 
-                         cmdlen + inlen > MAX_BUF ? MAX_BUF : inlen);
+                         cmdlen + inlen > MAX_BUF ? MAX_BUF : cmdlen + inlen);
     if (result) return result;
 
     copy_from_user ((void *) cmd,  cmd_in,  cmdlen);
@@ -261,7 +266,7 @@ static int ioctl_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
 
 #ifndef DEBUG_NO_CMD
     
-    SCpnt = allocate_device(NULL, dev, 1);
+    SCpnt = scsi_allocate_device(NULL, dev, 1);
 
     {
 	struct semaphore sem = MUTEX_LOCKED;
@@ -269,6 +274,7 @@ static int ioctl_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
 	scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,
 		    timeout, retries);
 	down(&sem);
+        SCpnt->request.sem = NULL;
     }
     
     /* 
@@ -289,14 +295,16 @@ static int ioctl_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
     }
     result = SCpnt->result;
 
-    SCpnt->request.rq_status = RQ_INACTIVE;
+    wake_up(&SCpnt->device->device_wait);
+    SDpnt = SCpnt->device;
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
 
     if (buf) scsi_free(buf, buf_needed);
     
-    if(SCpnt->device->scsi_request_fn)
-	(*SCpnt->device->scsi_request_fn)();
+    if(SDpnt->scsi_request_fn)
+	(*SDpnt->scsi_request_fn)();
     
-    wake_up(&SCpnt->device->device_wait);
     return result;
 #else
     {
@@ -328,6 +336,17 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
     
     /* No idea how this happens.... */
     if (!dev) return -ENXIO;
+    
+    /*
+     * If we are in the middle of error recovery, don't let anyone
+     * else try and use this device.  Also, if error recovery fails, it
+     * may try and take the device offline, in which case all further
+     * access to the device is prohibited.
+     */
+    if( !scsi_block_when_processing_errors(dev) )
+      {
+        return -ENODEV;
+      }
     
     switch (cmd) {
     case SCSI_IOCTL_GET_IDLUN:

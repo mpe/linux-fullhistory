@@ -13,6 +13,7 @@ comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
 bool 'Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN
 
 bool 'Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS
+bool 'SCSI logging facility' CONFIG_SCSI_LOGGING
 
 mainmenu_option next_comment
 comment 'SCSI low-level drivers'
@@ -113,7 +114,17 @@ dep_tristate 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F $CONFIG_SCSI
     int  '  maximum number of queued commands' CONFIG_SCSI_U14_34F_MAX_TAGS 8
   fi
 dep_tristate 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR $CONFIG_SCSI
-#dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
+#
+# Note - this is a very special 'host' adapter that simulates the presence of some disks.
+# It can come in very handy for troubleshooting.  Anyone else is welcome to use it - all
+# you do is hack it to simulate the condition you want to test for, and then use it.
+#
+# The actual configuration in any kernel release could change at any time as I hack it to
+# simulate various conditions that I am testing.
+#
+if [ "`whoami`" = "eric" ]; then
+  dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
+fi
 if [ "$CONFIG_PPC" = "y" ]; then
   dep_tristate 'MESH (Power Mac internal SCSI) support' CONFIG_SCSI_MESH $CONFIG_SCSI
   if [ "$CONFIG_SCSI_MESH" != "n" ]; then

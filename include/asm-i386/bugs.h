@@ -18,12 +18,12 @@
 
 __initfunc(static void no_halt(char *s, int *ints))
 {
-	hlt_works_ok = 0;
+	boot_cpu_data.hlt_works_ok = 0;
 }
 
 __initfunc(static void no_387(char *s, int *ints))
 {
-	hard_math = 0;
+	boot_cpu_data.hard_math = 0;
 	__asm__("movl %%cr0,%%eax\n\t"
 		"orl $0xE,%%eax\n\t"
 		"movl %%eax,%%cr0\n\t" : : : "ax");
@@ -49,7 +49,7 @@ __initfunc(static void check_fpu(void))
 {
 	unsigned short control_word;
 
-	if (!hard_math) {
+	if (!boot_cpu_data.hard_math) {
 #ifndef CONFIG_MATH_EMULATION
 		printk(KERN_EMERG "No coprocessor found and no math emulation present.\n");
 		printk(KERN_EMERG "Giving up.\n");
@@ -91,9 +91,9 @@ __initfunc(static void check_fpu(void))
 		"fistpl %0\n\t"
 		"fwait\n\t"
 		"fninit"
-		: "=m" (*&fdiv_bug)
+		: "=m" (*&boot_cpu_data.fdiv_bug)
 		: "m" (*&x), "m" (*&y));
-	if (!fdiv_bug)
+	if (!boot_cpu_data.fdiv_bug)
 		printk("Ok, fpu using exception 16 error reporting.\n");
 	else
 		printk("Hmm, fpu using exception 16 error reporting with FDIV bug.\n");
@@ -102,7 +102,7 @@ __initfunc(static void check_fpu(void))
 __initfunc(static void check_hlt(void))
 {
 	printk(KERN_INFO "Checking 'hlt' instruction... ");
-	if (!hlt_works_ok) {
+	if (!boot_cpu_data.hlt_works_ok) {
 		printk("disabled\n");
 		return;
 	}
@@ -117,7 +117,7 @@ __initfunc(static void check_tlb(void))
 	 * The 386 chips don't support TLB finegrained invalidation.
 	 * They will fault when they hit an invlpg instruction.
 	 */
-	if (x86 == 3) {
+	if (boot_cpu_data.x86 == 3) {
 		printk(KERN_EMERG "CPU is a 386 and this kernel was compiled for 486 or better.\n");
 		printk("Giving up.\n");
 		for (;;) ;
@@ -152,17 +152,53 @@ __initfunc(static void check_popad(void))
  *	misexecution of code under Linux. Owners of such processors should
  *	contact AMD for precise details and a CPU swap.
  *
- *	See	http://www.creaweb.fr/bpc/k6bug_faq.html
+ *	See	http://www.chorus.com/~poulot/k6bug.html
  *		http://www.amd.com/K6/k6docs/revgd.html
+ *
+ *	The following test is erm.. interesting. AMD neglected to up
+ *	the chip setting when fixing the bug but they also tweaked some
+ *	performance at the same time..
  */
  
+extern void vide(void);
+__asm__(".align 4\nvide: ret");
+
 __initfunc(static void check_amd_k6(void))
 {
-	/* B Step AMD K6 */
-	if(x86_model==6 && x86_mask==1 && memcmp(x86_vendor_id, "AuthenticAMD", 12)==0)
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
+	    boot_cpu_data.x86_model == 6 &&
+	    boot_cpu_data.x86_mask == 1)
 	{
-		printk(KERN_INFO "AMD K6 stepping B detected - system stability may be impaired. Please see.\n");
-		printk(KERN_INFO "http://www.creaweb.fr/bpc/k6bug_faq.html");
+		int n;
+		void (*f_vide)(void);
+		unsigned long d, d2;
+
+		printk(KERN_INFO "AMD K6 stepping B detected - ");
+
+#define K6_BUG_LOOP 1000000
+
+		/*
+		 * It looks like AMD fixed the 2.6.2 bug and improved indirect 
+		 * calls at the same time.
+		 */
+
+		n = K6_BUG_LOOP;
+		f_vide = vide;
+		__asm__ ("rdtsc" : "=a" (d));
+		while (n--) 
+			f_vide();
+		__asm__ ("rdtsc" : "=a" (d2));
+		d = d2-d;
+
+		/* Knock these two lines out if it debugs out ok */
+		printk(KERN_INFO "K6 BUG %ld %d (Report these if test report is incorrect)\n", d, 20*K6_BUG_LOOP);
+		printk(KERN_INFO "AMD K6 stepping B detected - ");
+		/* -- cut here -- */
+		if (d > 20*K6_BUG_LOOP) 
+			printk(KERN_INFO "system stability may be impaired when more than 32 MB are used.\n");
+		else 
+			printk(KERN_INFO "probably OK (after B9730xxxx).\n");
+		printk(KERN_INFO "Please see http://www.chorus.com/bpc/k6bug.html\n");
 	}
 }
 
@@ -171,30 +207,33 @@ __initfunc(static void check_amd_k6(void))
  * have the F0 0F bug, which lets nonpriviledged users lock up the system:
  */
 
-extern int pentium_f00f_bug;
 extern void trap_init_f00f_bug(void);
-
 
 __initfunc(static void check_pentium_f00f(void))
 {
 	/*
 	 * Pentium and Pentium MMX
 	 */
-	pentium_f00f_bug = 0;
-	if (x86==5 && !memcmp(x86_vendor_id, "GenuineIntel", 12)) {
+	boot_cpu_data.f00f_bug = 0;
+	if (boot_cpu_data.x86 == 5 && boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) {
 		printk(KERN_INFO "Intel Pentium with F0 0F bug - workaround enabled.\n");
-		pentium_f00f_bug = 1;
+		boot_cpu_data.f00f_bug = 1;
 		trap_init_f00f_bug();
 	}
 }
 
 __initfunc(static void check_bugs(void))
 {
+#ifndef __SMP__
+	identify_cpu(&boot_cpu_data);
+	printk("CPU: ");
+	print_cpu_info(&boot_cpu_data);
+#endif
 	check_tlb();
 	check_fpu();
 	check_hlt();
 	check_popad();
 	check_amd_k6();
 	check_pentium_f00f();
-	system_utsname.machine[1] = '0' + x86;
+	system_utsname.machine[1] = '0' + boot_cpu_data.x86;
 }

@@ -14,27 +14,18 @@ int qlogicfas_biosparam(Disk *, kdev_t, int[]);
 #endif
 
 #define QLOGICFAS {		\
-	NULL,			\
-	NULL,			\
-	NULL,			\
-	NULL,		        \
-	NULL,			\
-	qlogicfas_detect,	\
-	NULL,			\
-	qlogicfas_info,		\
-	qlogicfas_command, 	\
-	qlogicfas_queuecommand,	\
-	qlogicfas_abort,	\
-	qlogicfas_reset,	\
-	NULL,			\
-	qlogicfas_biosparam,	\
-	0,			\
-	-1,			\
-	SG_ALL,			\
-	1,			\
-	0,			\
-	0,			\
-	DISABLE_CLUSTERING	\
+	detect:         qlogicfas_detect,	\
+	info:           qlogicfas_info,		\
+	command:        qlogicfas_command, 	\
+	queuecommand:   qlogicfas_queuecommand,	\
+	abort:          qlogicfas_abort,	\
+	reset:          qlogicfas_reset,	\
+	bios_param:     qlogicfas_biosparam,	\
+	can_queue:      0,			\
+	this_id:        -1,			\
+	sg_tablesize:   SG_ALL,			\
+	cmd_per_lun:    1,			\
+	use_clustering: DISABLE_CLUSTERING	\
 }
 
 #endif /* _QLOGICFAS_H */

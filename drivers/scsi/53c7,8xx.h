@@ -66,66 +66,22 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 #define NCR53c7xx_release NULL
 #endif
 
-#ifdef LINUX_1_2
-#define NCR53c7xx {NULL, NULL, "NCR53c{7,8}xx (rel 17)", NCR53c7xx_detect,\
-	NULL, /* info */ NULL, /* command, deprecated */ NULL, 		\
-	NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,	\
-	NULL /* slave attach */, scsicam_bios_param, /* can queue */ 24, \
-	/* id */ 7, 127 /* old SG_ALL */, /* cmd per lun */ 3, 		\
-	/* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
-#else
-#define NCR53c7xx {NULL, NULL, NULL, NULL, \
-        "NCR53c{7,8}xx (rel 17)", NCR53c7xx_detect,\
-        NULL, /* info */ NULL, /* command, deprecated */ NULL,		\
-	NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,	\
-	NULL /* slave attach */, scsicam_bios_param, /* can queue */ 24, \
-	/* id */ 7, 127 /* old SG_ALL */, /* cmd per lun */ 3, 		\
-	/* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
-#endif
+#define NCR53c7xx {					\
+          name:           "NCR53c{7,8}xx (rel 17)",	\
+	  detect:         NCR53c7xx_detect,		\
+	  queuecommand:   NCR53c7xx_queue_command,	\
+	  abort:          NCR53c7xx_abort,		\
+	  reset:          NCR53c7xx_reset,		\
+	  bios_param:     scsicam_bios_param,		\
+	  can_queue:      24,				\
+	  this_id:        7,				\
+	  sg_tablesize:   127,				\
+	  cmd_per_lun:    3,				\
+	  use_clustering: DISABLE_CLUSTERING} 
 
 #endif /* defined(HOSTS_C) || defined(MODULE) */ 
 
 #ifndef HOSTS_C
-#ifdef LINUX_1_2
-/*
- * Change virtual addresses to physical addresses and vv.
- * These are trivial on the 1:1 Linux/i386 mapping (but if we ever
- * make the kernel segment mapped at 0, we need to do translation
- * on the i386 as well)
- */
-extern inline unsigned long virt_to_phys(volatile void * address)
-{       
-	return (unsigned long) address;
-}       
-
-extern inline void * phys_to_virt(unsigned long address)
-{
-	return (void *) address;      
-}
-
-/*
- * IO bus memory addresses are also 1:1 with the physical address
- */
-#define virt_to_bus virt_to_phys
-#define bus_to_virt phys_to_virt
-
-/*
- * readX/writeX() are used to access memory mapped devices. On some
- * architectures the memory mapped IO stuff needs to be accessed
- * differently. On the x86 architecture, we just read/write the
- * memory location directly.
- */
-#define readb(addr) (*(volatile unsigned char *) (addr))
-#define readw(addr) (*(volatile unsigned short *) (addr))
-#define readl(addr) (*(volatile unsigned int *) (addr))
-
-#define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
-#define writew(b,addr) ((*(volatile unsigned short *) (addr)) = (b))
-#define writel(b,addr) ((*(volatile unsigned int *) (addr)) = (b))
-
-#define mb()
-
-#endif /* def LINUX_1_2 */
 
 /* Register addresses, ordered numerically */
 

@@ -1174,7 +1174,7 @@ do_outputintr(int dev, int dummy)
 	if (!(audio_devs[dev]->flags & DMA_AUTOMODE))
 		dmap->flags &= ~DMA_ACTIVE;
 
-	while (dmap->qlen < 0)
+	while (dmap->qlen <= 0)
 	  {
 		  dmap->underrun_count++;
 

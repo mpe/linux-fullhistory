@@ -25,10 +25,6 @@ if [ "$CONFIG_INET" = "y" ]; then
   tristate 'NFS filesystem support' CONFIG_NFS_FS
   if [ "$CONFIG_NFS_FS" = "y" -a "$CONFIG_IP_PNP" = "y" ]; then
     bool '   Root file system on NFS' CONFIG_ROOT_NFS
-    if [ "$CONFIG_ROOT_NFS" = "y" ]; then
-      bool '      BOOTP support' CONFIG_RNFS_BOOTP
-      bool '      RARP support' CONFIG_RNFS_RARP
-    fi
   fi
   tristate 'NFS server support' CONFIG_NFSD
   if [ "$CONFIG_NFS_FS" = "y" -o "$CONFIG_NFSD" = "y" ]; then

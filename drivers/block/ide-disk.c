@@ -467,7 +467,22 @@ static void idedisk_pre_reset (ide_drive_t *drive)
 		drive->special.b.set_multmode = 1;
 }
 
+static int proc_idedisk_read_cache
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	ide_drive_t	*drive = (ide_drive_t *) data;
+	char		*out = page;
+	int		len;
+
+	if (drive->id)
+		len = sprintf(out,"%i\n", drive->id->buf_size / 2);
+	else
+		len = sprintf(out,"(none)\n");
+	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
+
 static ide_proc_entry_t idedisk_proc[] = {
+	{ "cache", proc_idedisk_read_cache, NULL },
 	{ "geometry", proc_ide_read_geometry, NULL },
 	{ NULL, NULL, NULL }
 };

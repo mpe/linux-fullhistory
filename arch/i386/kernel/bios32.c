@@ -1,7 +1,7 @@
 /*
  * bios32.c - BIOS32, PCI BIOS functions.
  *
- * $Id: bios32.c,v 1.14 1997/08/02 22:20:57 mj Exp $
+ * $Id: bios32.c,v 1.17 1997/11/16 11:03:41 mj Exp $
  *
  * Sponsored by
  *	iX Multiuser Multitasking Magazine
@@ -456,7 +456,7 @@ __initfunc(static struct pci_access *pci_check_direct(void))
     outb (0x00, 0xCFB);
     outb (0x00, 0xCF8);
     outb (0x00, 0xCFA);
-    if (inb (0xCF8) == 0x00 && inb (0xCFB) == 0x00) {
+    if (inb (0xCF8) == 0x00 && inb (0xCFA) == 0x00) {
 	restore_flags(flags);
 	printk("PCI: Using configuration type 2\n");
 	return &pci_direct_conf2;
@@ -897,6 +897,8 @@ __initfunc(unsigned long pcibios_init(unsigned long memory_start, unsigned long 
 #else
 #ifdef CONFIG_PCI_DIRECT
 	a = pci_check_direct();
+#else
+#error "You need to set CONFIG_PCI_BIOS or CONFIG_PCI_DIRECT if you want PCI support."
 #endif
 #endif
 	if (a)

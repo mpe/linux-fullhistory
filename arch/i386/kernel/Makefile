@@ -18,9 +18,13 @@ endif
 all: kernel.o head.o init_task.o
 
 O_TARGET := kernel.o
-O_OBJS   := process.o signal.o entry.o traps.o irq.o vm86.o bios32.o \
+O_OBJS   := process.o signal.o entry.o traps.o irq.o vm86.o \
             ptrace.o ioport.o ldt.o setup.o time.o sys_i386.o
 OX_OBJS  := i386_ksyms.o
+
+ifdef CONFIG_PCI
+O_OBJS += bios32.o
+endif
 
 ifdef CONFIG_MCA
 O_OBJS += mca.o

@@ -26,6 +26,7 @@
 #define SNDCARD_OPL3SA1_SB		39
 #define SNDCARD_OPL3SA1_MPU		40
 #define SNDCARD_SOFTOSS			36
+#define SNDCARD_VMIDI			37
 
 void attach_opl3sa_wss (struct address_info *hw_config);
 int probe_opl3sa_wss (struct address_info *hw_config);
@@ -421,6 +422,10 @@ struct sound_timer_operations {
 		attach_softsyn_card, probe_softsyn, unload_softsyn},
 #endif
 
+#if defined(CONFIG_VMIDI) && defined(CONFIG_MIDI) && !defined(CONFIG_VMIDI_MODULE)
+		{"VMIDI", 0, SNDCARD_VMIDI,"Loopback MIDI Device",      attach_v_midi, probe_v_midi, unload_v_midi},
+#endif
+
 
 
 
@@ -566,6 +571,11 @@ struct sound_timer_operations {
 #if defined(CONFIG_YM3812) 
 		{SNDCARD_ADLIB, {FM_MONO, 0, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
+
+#if defined(CONFIG_VMIDI) && defined(CONFIG_MIDI)
+		{SNDCARD_VMIDI, {0, 0, 0, -1}, SND_DEFAULT_ENABLE},
+#endif
+
 		{0, {0}, 0}
 	};
 

@@ -15,27 +15,16 @@ int eata2x_reset(Scsi_Cmnd *, unsigned int);
 #define EATA_VERSION "3.11.00"
 
 
-#define EATA {                                                 \
-		NULL, /* Ptr for modules */                    \
-		NULL, /* usage count for modules */	       \
-		NULL,                                          \
-		NULL,                                          \
-		"EATA/DMA 2.0x rev. " EATA_VERSION " ",        \
-		eata2x_detect,				       \
-		eata2x_release,          		       \
-		NULL,					       \
-		NULL,    			       	       \
-		eata2x_queuecommand,			       \
-		eata2x_abort,				       \
-		eata2x_reset,				       \
-		NULL,					       \
-		scsicam_bios_param,   			       \
-		0,   /* can_queue, reset by detect */          \
-		7,   /* this_id, reset by detect */            \
-		0,   /* sg_tablesize, reset by detect */       \
-		0,   /* cmd_per_lun, reset by detect */        \
-		0,   /* number of boards present */            \
-		1,   /* unchecked isa dma, reset by detect */  \
-		ENABLE_CLUSTERING                              \
+#define EATA {									\
+		name:              "EATA/DMA 2.0x rev. " EATA_VERSION " ",      \
+		detect:            eata2x_detect,				\
+		release:           eata2x_release,          		        \
+		queuecommand:      eata2x_queuecommand,			        \
+		abort:             eata2x_abort,				\
+		reset:             eata2x_reset,				\
+		bios_param:        scsicam_bios_param,   			\
+		this_id:           7,   /* this_id, reset by detect */          \
+		unchecked_isa_dma: 1,   /* unchecked isa dma, reset by detect */\
+		use_clustering:    ENABLE_CLUSTERING                            \
 		}
 #endif

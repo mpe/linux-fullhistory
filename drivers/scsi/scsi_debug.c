@@ -43,9 +43,16 @@ struct proc_dir_entry proc_scsi_scsi_debug = {
 
 /* A few options that we want selected */
 
+#define NR_HOSTS_PRESENT 1
+#define NR_FAKE_DISKS   3
+#define N_HEAD          32
+#define N_SECTOR        64
+#define DISK_READONLY(TGT)      (1)
+#define DISK_REMOVEABLE(TGT)    (1)
+
 /* Do not attempt to use a timer to simulate a real disk with latency */
 /* Only use this in the actual kernel, not in the simulator. */
-#define IMMEDIATE
+/* #define IMMEDIATE */
 
 /* Skip some consistency checking.  Good for benchmarking */
 #define SPEEDY
@@ -58,12 +65,12 @@ static int NR_REAL=-1;
 #define MAJOR_NR 8
 #endif
 #define START_PARTITION 4
-#define SCSI_DEBUG_TIMER 20
+
 /* Number of jiffies to wait before completing a command */
 #define DISK_SPEED     10
 #define CAPACITY (0x80000)
 
-static int starts[] = {4, 1000, 50000, CAPACITY, 0};
+static int starts[] = {N_HEAD, N_HEAD * N_SECTOR, 50000, CAPACITY, 0};
 static int npart = 0;
 
 #include "scsi_debug.h"
@@ -74,8 +81,8 @@ static int npart = 0;
 #endif
 
 #ifdef SPEEDY
-#define VERIFY1_DEBUG(RW) 1
-#define VERIFY_DEBUG(RW) 1
+#define VERIFY1_DEBUG(RW) 
+#define VERIFY_DEBUG(RW) 
 #else
 
 #define VERIFY1_DEBUG(RW)                           \
@@ -111,12 +118,16 @@ static int npart = 0;
     };
 #endif
 
-static volatile void (*do_done[SCSI_DEBUG_MAILBOXES])(Scsi_Cmnd *) = {NULL, };
-extern void scsi_debug_interrupt();
+typedef void (*done_fct_t)(Scsi_Cmnd *);
 
-volatile Scsi_Cmnd * SCint[SCSI_DEBUG_MAILBOXES] = {NULL,};
+static volatile done_fct_t do_done[SCSI_DEBUG_MAILBOXES] = {NULL, };
+
+static void scsi_debug_intr_handle(unsigned long);
+
+static struct timer_list timeout[SCSI_DEBUG_MAILBOXES];
+
+Scsi_Cmnd * SCint[SCSI_DEBUG_MAILBOXES] = {NULL,};
 static char SCrst[SCSI_DEBUG_MAILBOXES] = {0,};
-static volatile unsigned int timeout[8] ={0,};
 
 /*
  * Semaphore used to simulate bus lockups.
@@ -137,11 +148,11 @@ static void scsi_dump(Scsi_Cmnd * SCpnt, int flag){
 	sgpnt = (struct scatterlist *) SCpnt->buffer;
 	for(i=0; i<SCpnt->use_sg; i++) {
 	    lpnt = (int *) sgpnt[i].alt_address;
-	    printk(":%x %x %d\n",sgpnt[i].alt_address, sgpnt[i].address, sgpnt[i].length);
+	    printk(":%p %p %d\n",sgpnt[i].alt_address, sgpnt[i].address, sgpnt[i].length);
 	    if (lpnt) printk(" (Alt %x) ",lpnt[15]);
 	};
     } else {
-	printk("nosg: %x %x %d\n",SCpnt->request.buffer, SCpnt->buffer,
+	printk("nosg: %p %p %d\n",SCpnt->request.buffer, SCpnt->buffer,
 	       SCpnt->bufflen);
 	lpnt = (int *) SCpnt->request.buffer;
 	if (lpnt) printk(" (Alt %x) ",lpnt[15]);
@@ -167,14 +178,14 @@ static void scsi_dump(Scsi_Cmnd * SCpnt, int flag){
     };
     printk("\n");
 #endif
-    printk("DMA free %d sectors.\n", dma_free_sectors);
+    printk("DMA free %d sectors.\n", scsi_dma_free_sectors);
 }
 
 int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 {
     unchar *cmd = (unchar *) SCpnt->cmnd;
     struct partition * p;
-    int block, start;
+    int block;
     struct buffer_head * bh = NULL;
     unsigned char * buff;
     int nbytes, sgcount;
@@ -187,15 +198,28 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     sgcount = 0;
     sgpnt = NULL;
     
-    DEB(if (target > 1) { SCpnt->result = DID_TIME_OUT << 16;done(SCpnt);return 0;});
+    /*
+     * If we are being notified of the mid-level reposessing a command due to timeout,
+     * just return.
+     */
+    if( done == NULL )
+    {
+        return 0;
+    }
+
+    DEB(if (target >= NR_FAKE_DISKS) 
+        { 
+            SCpnt->result = DID_TIME_OUT << 16;done(SCpnt);return 0;
+        });
     
     buff = (unsigned char *) SCpnt->request_buffer;
     
-    if(target>=1 || SCpnt->lun != 0) {
+    if(target>=NR_FAKE_DISKS || SCpnt->lun != 0) 
+    {
 	SCpnt->result =  DID_NO_CONNECT << 16;
 	done(SCpnt);
 	return 0;
-    };
+    }
     
     if( SCrst[target] != 0 && !scsi_debug_lockup )
     {
@@ -208,11 +232,11 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     }
     switch(*cmd){
     case REQUEST_SENSE:
-	printk("Request sense...\n");
+	SCSI_LOG_LLQUEUE(3,printk("Request sense...\n"));
 #ifndef DEBUG
 	{ 
 	    int i;
-	    printk("scsi_debug: Requesting sense buffer (%x %x %x %d):", SCpnt, buff, done, bufflen);
+	    printk("scsi_debug: Requesting sense buffer (%p %p %p %d):", SCpnt, buff, done, bufflen);
 	    for(i=0;i<12;i++) printk("%d ",sense_buffer[i]);
 	    printk("\n");
 	};
@@ -224,15 +248,21 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	done(SCpnt); 
 	return 0;
     case ALLOW_MEDIUM_REMOVAL:
-	if(cmd[4]) printk("Medium removal inhibited...");
-	else printk("Medium removal enabled...");
+	if(cmd[4]) 
+        {
+            SCSI_LOG_LLQUEUE(2,printk("Medium removal inhibited..."));
+        }
+	else
+        {
+            SCSI_LOG_LLQUEUE(2,printk("Medium removal enabled..."));
+        }
 	scsi_debug_errsts = 0;
 	break;
     case INQUIRY:
-	printk("Inquiry...(%x %d)\n", buff, bufflen);
+	SCSI_LOG_LLQUEUE(3,printk("Inquiry...(%p %d)\n", buff, bufflen));
 	memset(buff, 0, bufflen);
 	buff[0] = TYPE_DISK;
-	buff[1] = 0x80;  /* Removable disk */
+	buff[1] = DISK_REMOVEABLE(target) ? 0x80 : 0;  /* Removable disk */
 	buff[2] = 1;
 	buff[4] = 33 - 5;
 	memcpy(&buff[8],"Foo Inc",7);
@@ -241,13 +271,13 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	scsi_debug_errsts = 0;
 	break;
     case TEST_UNIT_READY:
-	printk("Test unit ready(%x %d)\n", buff, bufflen);
+	SCSI_LOG_LLQUEUE(3,printk("Test unit ready(%p %d)\n", buff, bufflen));
 	if (buff)
 	    memset(buff, 0, bufflen);
 	scsi_debug_errsts = 0;
 	break;
     case READ_CAPACITY:
-	printk("Read Capacity\n");
+	SCSI_LOG_LLQUEUE(3,printk("Read Capacity\n"));
 	if(NR_REAL < 0) NR_REAL = (MINOR(SCpnt->request.rq_dev) >> 4) & 0x0f;
 	memset(buff, 0, bufflen);
 	buff[0] = (CAPACITY >> 24);
@@ -308,6 +338,12 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 		    p->start_sect = starts[npart];
 		    p->nr_sects = starts[npart+1] - starts [npart];
 		    p->sys_ind = 0x81;  /* Linux partition */
+                    p->head       = (npart == 0 ? 1 : 0);
+                    p->sector     = 1;
+                    p->cyl        = starts[npart] / N_HEAD / N_SECTOR;
+                    p->end_head   = N_HEAD - 1;
+                    p->end_sector = N_SECTOR;
+                    p->end_cyl    = starts[npart + 1] / N_HEAD / N_SECTOR;
 		    p++;
 		    npart++;
 		};
@@ -365,7 +401,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	
 	SCpnt->result = 0;
 	(done)(SCpnt);
-	return;
+	return 0;
 	
 	if (SCpnt->use_sg && !scsi_debug_errsts)
 	    if(bh) scsi_dump(SCpnt, 0);
@@ -396,8 +432,15 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 #endif
 	scsi_debug_errsts = 0;
 	break;
+    case MODE_SENSE:
+        /*
+         * Used to detect write protected status.
+         */
+	scsi_debug_errsts = 0;
+        memset(buff, 0, 6);
+        break;
     default:
-	printk("Unknown command %d\n",*cmd);
+	SCSI_LOG_LLQUEUE(3,printk("Unknown command %d\n",*cmd));
 	SCpnt->result =  DID_NO_CONNECT << 16;
 	done(SCpnt);
 	return 0;
@@ -406,45 +449,45 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     save_flags(flags); 
     cli();
     for(i=0;i<SCSI_DEBUG_MAILBOXES; i++){
-	if (SCint[i] == 0) break;
+        if( timeout[i].function == NULL ) break;
     };
     
-    if (i >= SCSI_DEBUG_MAILBOXES || SCint[i] != 0) 
-	panic("Unable to find empty SCSI_DEBUG command slot.\n");
-    
-    SCint[i] = SCpnt;
-    
-    if (done) {
-	DEB(printk("scsi_debug_queuecommand: now waiting for interrupt "););
-	if (do_done[i])
-	    printk("scsi_debug_queuecommand: Two concurrent queuecommand?\n");
-	else
-	    do_done[i] = done;
+    /*
+     * If all of the slots are full, just return 1.  The new error handling scheme
+     * allows this, and the mid-level should queue things.
+     */
+    if (i >= SCSI_DEBUG_MAILBOXES ||  timeout[i].function != 0)
+    {
+        SCSI_LOG_LLQUEUE(1,printk("Command rejected - host busy\n"));
+        restore_flags(flags);
+        return 1;
     }
-    else
-	printk("scsi_debug_queuecommand: done can't be NULL\n");
+
+    SCSI_LOG_LLQUEUE(1,printk("Command accepted - slot %d\n", i));
     
 #ifdef IMMEDIATE
     if( !scsi_debug_lockup )
     {
         SCpnt->result = scsi_debug_errsts;
-        scsi_debug_intr_handle();  /* No timer - do this one right away */
+        scsi_debug_intr_handle(i);  /* No timer - do this one right away */
     }
     restore_flags(flags);
 #else
-    timeout[i] = jiffies+DISK_SPEED;
-    
-    /* If no timers active, then set this one */
-    if ((timer_active & (1 << SCSI_DEBUG_TIMER)) == 0) {
-	timer_table[SCSI_DEBUG_TIMER].expires = timeout[i];
-	timer_active |= 1 << SCSI_DEBUG_TIMER;
-    };
-    
+        
     SCpnt->result = scsi_debug_errsts;
+    timeout[i].function = scsi_debug_intr_handle;
+    timeout[i].data     = i;
+    timeout[i].expires  = jiffies + DISK_SPEED;
+    SCint[i]   = SCpnt;
+    do_done[i] = done;
+    
     restore_flags(flags);
+    add_timer(&timeout[i]);
+    if (!done)
+	panic("scsi_debug_queuecommand: done can't be NULL\n");
     
 #if 0
-    printk("Sending command (%d %x %d %d)...", i, done, timeout[i],jiffies);
+    printk("Sending command (%d %x %d %d)...", i, done, timeout[i].expires,jiffies);
 #endif
 #endif
     
@@ -472,92 +515,52 @@ int scsi_debug_command(Scsi_Cmnd * SCpnt)
 /* A "high" level interrupt handler.  This should be called once per jiffy
  * to simulate a regular scsi disk.  We use a timer to do this. */
 
-static void scsi_debug_intr_handle(void)
+static void scsi_debug_intr_handle(unsigned long indx)
 {
     Scsi_Cmnd * SCtmp;
-    int i, pending;
+    int pending;
     void (*my_done)(Scsi_Cmnd *); 
     unsigned long flags;
     int to;
     
-#ifndef IMMEDIATE
-    timer_table[SCSI_DEBUG_TIMER].expires = 0;
-    timer_active &= ~(1 << SCSI_DEBUG_TIMER);
+#if 0
+    del_timer(&timeout[indx]);
 #endif
     
- repeat:
-    save_flags(flags);
-    cli();
-    for(i=0;i<SCSI_DEBUG_MAILBOXES; i++) {
-	if (SCint[i] == 0) continue;
-#ifndef IMMEDIATE
-	if (timeout[i] == 0) continue;
-	if (timeout[i] <= jiffies) break;
-#else
-	break;
-#endif
-    };
+    SCtmp                  = (Scsi_Cmnd *) SCint[indx];
+    my_done                = do_done[indx];
+    do_done[indx]          = NULL;
+    timeout[indx].function = NULL;
+    SCint[indx]            = NULL;
     
-    if(i == SCSI_DEBUG_MAILBOXES){
-#ifndef IMMEDIATE
-	pending = INT_MAX;
-	for(i=0;i<SCSI_DEBUG_MAILBOXES; i++) {
-	    if (SCint[i] == 0) continue;
-	    if (timeout[i] == 0) continue;
-	    if (timeout[i] <= jiffies) {restore_flags(flags); goto repeat;};
-	    if (timeout[i] > jiffies) {
-		if (pending > timeout[i]) pending = timeout[i];
-		continue;
-	    };
-	};
-	if (pending && pending != INT_MAX) {
-	    timer_table[SCSI_DEBUG_TIMER].expires = 
-		(pending <= jiffies ? jiffies+1 : pending);
-	    timer_active |= 1 << SCSI_DEBUG_TIMER;
-	};
-	restore_flags(flags);
-#endif
-	return;
-    };
+    if (!my_done) {
+      printk("scsi_debug_intr_handle: Unexpected interrupt\n"); 
+      return;
+    }
     
-    if(i < SCSI_DEBUG_MAILBOXES){
-	timeout[i] = 0;
-	my_done = do_done[i];
-	do_done[i] = NULL;
-	to = timeout[i];
-	timeout[i] = 0;
-	SCtmp = (Scsi_Cmnd *) SCint[i];
-	SCint[i] = NULL;
-	restore_flags(flags);
-	
-	if (!my_done) {
-	    printk("scsi_debug_intr_handle: Unexpected interrupt\n"); 
-	    return;
-	}
-	
 #ifdef DEBUG
-	printk("In intr_handle...");
-	printk("...done %d %x %d %d\n",i , my_done, to, jiffies);
-	printk("In intr_handle: %d %x %x\n",i, SCtmp, my_done);
+    printk("In intr_handle...");
+    printk("...done %d %x %d %d\n",i , my_done, to, jiffies);
+    printk("In intr_handle: %d %x %x\n",i, SCtmp, my_done);
 #endif
-	
-	my_done(SCtmp);
+    
+    my_done(SCtmp);
 #ifdef DEBUG
-	printk("Called done.\n");
+    printk("Called done.\n");
 #endif
-    };
-    goto repeat;
 }
 
 
 int scsi_debug_detect(Scsi_Host_Template * tpnt)
 {
-    tpnt->proc_dir = &proc_scsi_scsi_debug;
-#ifndef IMMEDIATE
-    timer_table[SCSI_DEBUG_TIMER].fn = scsi_debug_intr_handle;
-    timer_table[SCSI_DEBUG_TIMER].expires = 0;
-#endif
-    return 1;
+    int i;
+
+    for(i=0; i < NR_HOSTS_PRESENT; i++)
+    {
+        tpnt->proc_dir = &proc_scsi_scsi_debug;
+        scsi_register(tpnt,0);
+    }
+    return NR_HOSTS_PRESENT;
 }
 
 int scsi_debug_abort(Scsi_Cmnd * SCpnt)
@@ -587,20 +590,20 @@ int scsi_debug_abort(Scsi_Cmnd * SCpnt)
 
 int scsi_debug_biosparam(Disk * disk, kdev_t dev, int* info){
     int size = disk->capacity;
-    info[0] = 32;
-    info[1] = 64;
+    info[0] = N_HEAD;
+    info[1] = N_SECTOR;
     info[2] = (size + 2047) >> 11;
     if (info[2] >= 1024) info[2] = 1024;
     return 0;
 }
 
-int scsi_debug_reset(Scsi_Cmnd * SCpnt)
+int scsi_debug_reset(Scsi_Cmnd * SCpnt, unsigned int why)
 {
     int i;
     unsigned long flags;
     
     void (*my_done)(Scsi_Cmnd *);
-    printk("Bus unlocked by reset(%d)\n", SCpnt->host->suggest_bus_reset);
+    printk("Bus unlocked by reset - %d\n", why);
     scsi_debug_lockup = 0;
     DEB(printk("scsi_debug_reset called\n"));
     for(i=0;i<SCSI_DEBUG_MAILBOXES; i++) {
@@ -610,9 +613,9 @@ int scsi_debug_reset(Scsi_Cmnd * SCpnt)
         my_done(SCint[i]);
         save_flags(flags);
         cli();
-        SCint[i] = NULL;
-        do_done[i] = NULL;
-        timeout[i] = 0;
+        SCint[i]            = NULL;
+        do_done[i]          = NULL;
+        timeout[i].function = NULL;
         restore_flags(flags);
     }
     return SCSI_RESET_SUCCESS;
@@ -633,12 +636,21 @@ int scsi_debug_proc_info(char *buffer, char **start, off_t offset,
     int len, pos, begin;
     int orig_length;
 
+    orig_length = length;
+
     if(inout == 1)
     {
         /* First check for the Signature */
         if (length >= 10 && strncmp(buffer, "scsi_debug", 10) == 0) {
             buffer += 11;
             length -= 11;
+
+            if( buffer[length - 1] == '\n' )
+            {
+                buffer[length-1] = '\0';
+                length--;
+            }
+
             /*
              * OK, we are getting some kind of command.  Figure out
              * what we are supposed to do here.  Simulate bus lockups
@@ -647,18 +659,18 @@ int scsi_debug_proc_info(char *buffer, char **start, off_t offset,
             if( length == 6 && strncmp(buffer, "lockup", length) == 0 )
             {
                 scsi_debug_lockup = 1;
-                return length;
+                return orig_length;
             } 
             
             if( length == 6 && strncmp(buffer, "unlock", length) == 0 )
             {
                 scsi_debug_lockup = 0;
-                return length;
+                return orig_length;
             } 
             
-            printk("Unknown command:%s\n", buffer);
+            printk("Unknown command:%s (%d)\n", buffer, length);
         } else 
-            printk("Wrong Signature:%10s\n", (char *) ((ulong)buffer-11));
+            printk("Wrong Signature:%10s\n", (char *) buffer);
 
         return -EINVAL;
         

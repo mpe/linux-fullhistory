@@ -17,12 +17,13 @@ dep_tristate 'Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers' C
 dep_tristate 'Yamaha OPL3-SA1 audio controller' CONFIG_OPL3SA1 $CONFIG_SOUND
 dep_tristate 'SoftOSS software wave table engine' CONFIG_SOFTOSS $CONFIG_SOUND
 dep_tristate 'FM synthesizer (YM3812/OPL-3) support' CONFIG_YM3812 $CONFIG_SOUND
+dep_tristate 'Loopback MIDI device support' CONFIG_VMIDI $CONFIG_VMIDI
 
-if [ "$CONFIG_AEDSP16" = "y" -o "$CONFIG_AEDSP16" = "m" ]; then
+if [ "$CONFIG_AEDSP16" = "y" ]; then
     hex 'I/O base for Audio Excel DSP 16 220 or 240' AEDSP16_BASE 220
 fi
 
-if [ "$CONFIG_SB" = "y" -o "$CONFIG_SB" = "m" ]; then
+if [ "$CONFIG_SB" = "y" ]; then
     hex 'I/O base for SB Check from manual of the card' SBC_BASE 220
     int 'Sound Blaster IRQ Check from manual of the card' SBC_IRQ 7
     int 'Sound Blaster DMA 0, 1 or 3' SBC_DMA 1
@@ -33,12 +34,12 @@ if [ "$CONFIG_SB" = "y" -o "$CONFIG_SB" = "m" ]; then
     int 'SB MPU401 IRQ (Jazz16, SM Wave and ES1688) Check from manual of the card' SB_MPU_IRQ -1
 fi
 
-if [ "$CONFIG_PAS" = "y" -o "$CONFIG_PAS" = "m" ]; then
+if [ "$CONFIG_PAS" = "y" ]; then
     int 'PAS16 IRQ 3, 4, 5, 7, 9, 10, 11, 12, 14 or 15' PAS_IRQ 10
     int 'PAS16 DMA 0, 1, 3, 5, 6 or 7' PAS_DMA 3
 fi
 
-if [ "$CONFIG_GUS" = "y" -o "$CONFIG_GUS" = "m" ]; then
+if [ "$CONFIG_GUS" = "y" ]; then
     hex 'I/O base for GUS 210, 220, 230, 240, 250 or 260' GUS_BASE 220
     int 'GUS IRQ 3, 5, 7, 9, 11, 12 or 15' GUS_IRQ 15
     int 'GUS DMA 1, 3, 5, 6 or 7' GUS_DMA 6
@@ -51,23 +52,23 @@ if [ "$CONFIG_GUS16" = "y" ]; then
     int 'GUS DMA 0, 1 or 3' GUS16_DMA 3
 fi
 
-if [ "$CONFIG_MPU401" = "y" -o "$CONFIG_MPU401" = "m" ]; then
+if [ "$CONFIG_MPU401" = "y" ]; then
     hex 'I/O base for MPU401 Check from manual of the card' MPU_BASE 330
     int 'MPU401 IRQ Check from manual of the card' MPU_IRQ 9
 fi
 
-if [ "$CONFIG_MAUI" = "y" -o "$CONFIG_MAUI" = "M" ]; then
+if [ "$CONFIG_MAUI" = "y" ]; then
     comment 'ERROR! You have to use old sound configuration method with Maui.'
     hex 'I/O base for Maui 210, 230, 260, 290, 300, 320, 338 or 330' MAUI_BASE 330
     int 'Maui IRQ 5, 9, 12 or 15' MAUI_IRQ 9
 fi
 
-if [ "$CONFIG_UART6850" = "y" -o "$CONFIG_UART6850" = "m" ]; then
+if [ "$CONFIG_UART6850" = "y" ]; then
     hex 'I/O base for UART 6850 MIDI port (Unknown)' U6850_BASE 0
     int 'UART6850 IRQ (Unknown)' U6850_IRQ -1
 fi
 
-if [ "$CONFIG_PSS" = "y" -o "$CONFIG_PSS" = "y" ]; then
+if [ "$CONFIG_PSS" = "y" ]; then
     comment 'ERROR! You have to use old sound configuration method with PSS cards.'
     hex 'PSS I/O base 220 or 240' PSS_BASE 220
     hex 'PSS audio I/O base 530, 604, E80 or F40' PSS_MSS_BASE 530
@@ -77,14 +78,14 @@ if [ "$CONFIG_PSS" = "y" -o "$CONFIG_PSS" = "y" ]; then
     int 'PSS MIDI IRQ 3, 4, 5, 7 or 9' PSS_MPU_IRQ 9
 fi
 
-if [ "$CONFIG_MSS" = "y" -o "$CONFIG_MSS" = "m" ]; then
+if [ "$CONFIG_MSS" = "y" ]; then
     hex 'MSS/WSS I/O base 530, 604, E80 or F40' MSS_BASE 530
     int 'MSS/WSS IRQ 7, 9, 10 or 11' MSS_IRQ 11
     int 'MSS/WSS DMA 0, 1 or 3' MSS_DMA 3
     int 'MSS/WSS second DMA (if possible) 0, 1 or 3' MSS_DMA2 -1
 fi
 
-if [ "$CONFIG_SSCAPE" = "y" -o "$CONFIG_SSCAPE" = "m" ]; then
+if [ "$CONFIG_SSCAPE" = "y" ]; then
     hex 'SoundScape MIDI I/O base 320, 330, 340 or 350' SSCAPE_BASE 330
     int 'SoundScape MIDI IRQ ' SSCAPE_IRQ 9
     int 'SoundScape initialization DMA 0, 1 or 3' SSCAPE_DMA 3
@@ -92,7 +93,7 @@ if [ "$CONFIG_SSCAPE" = "y" -o "$CONFIG_SSCAPE" = "m" ]; then
     int 'SoundScape audio IRQ 7, 9, 10 or 11' SSCAPE_MSS_IRQ 11
 fi
 
-if [ "$CONFIG_TRIX" = "y" -o "$CONFIG_TRIX" = "m" ]; then
+if [ "$CONFIG_TRIX" = "y" ]; then
     comment 'ERROR! You have to use old sound configuration method with OPL3-SA1.'
     hex 'OPL3-SA1 audio I/O base 530, 604, E80 or F40' TRIX_BASE 530
     int 'OPL3-SA1 audio IRQ 7, 9, 10 or 11' TRIX_IRQ 11
@@ -105,7 +106,7 @@ if [ "$CONFIG_TRIX" = "y" -o "$CONFIG_TRIX" = "m" ]; then
     int 'OPL3-SA1 SB DMA 1 or 3' TRIX_SB_DMA 1
 fi
 
-if [ "$CONFIG_OPL3SA1" = "y" -o "$CONFIG_OPL3SA1" = "m" ]; then
+if [ "$CONFIG_OPL3SA1" = "y" ]; then
     hex 'OPL3-SA1 audio I/O base 530, 604, E80 or F40' OPL3SA1_BASE 530
     int 'OPL3-SA1 audio IRQ 7, 9, 10 or 11' OPL3SA1_IRQ 11
     int 'OPL3-SA1 audio DMA 0, 1 or 3' OPL3SA1_DMA 0
@@ -114,7 +115,7 @@ if [ "$CONFIG_OPL3SA1" = "y" -o "$CONFIG_OPL3SA1" = "m" ]; then
     int 'OPL3-SA1 MIDI IRQ 3, 4, 5, 7 or 9' OPL3SA1_MPU_IRQ 9
 fi
 
-if [ "$CONFIG_CS4232" = "y" -o "$CONFIG_CS4232" = "m" ]; then
+if [ "$CONFIG_CS4232" = "y" ]; then
     hex 'CS4232 audio I/O base 530, 604, E80 or F40' CS4232_BASE 530
     int 'CS4232 audio IRQ 5, 7, 9, 11, 12 or 15' CS4232_IRQ 11
     int 'CS4232 audio DMA 0, 1 or 3' CS4232_DMA 0
@@ -123,7 +124,7 @@ if [ "$CONFIG_CS4232" = "y" -o "$CONFIG_CS4232" = "m" ]; then
     int 'CS4232 MIDI IRQ 5, 7, 9, 11, 12 or 15' CS4232_MPU_IRQ 9
 fi
 
-if [ "$CONFIG_MAD16" = "y" -o "$CONFIG_MAD16" = "m" ]; then
+if [ "$CONFIG_MAD16" = "y" ]; then
     hex 'MAD16 audio I/O base 530, 604, E80 or F40' MAD16_BASE 530
     int 'MAD16 audio IRQ 7, 9, 10 or 11' MAD16_IRQ 11
     int 'MAD16 audio DMA 0, 1 or 3' MAD16_DMA 3
@@ -132,7 +133,7 @@ if [ "$CONFIG_MAD16" = "y" -o "$CONFIG_MAD16" = "m" ]; then
     int 'MAD16 MIDI IRQ 5, 7, 9 or 10' MAD16_MPU_IRQ 9
 fi
 
-if [ "$CONFIG_SOFTOSS" = "y" -o "$CONFIG_SOFTOSS" = "m" ]; then
+if [ "$CONFIG_SOFTOSS" = "y" ]; then
     int 'Sampling rate for SoftOSS 8000 to 48000' SOFTOSS_RATE 22050
     int 'Max # of concurrent voices for SoftOSS 4 to 32' SOFTOSS_VOICES 32
 fi

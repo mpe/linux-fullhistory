@@ -241,6 +241,7 @@ EXPORT_SYMBOL(tq_disk);
 EXPORT_SYMBOL(efind_buffer);
 EXPORT_SYMBOL(init_buffer);
 EXPORT_SYMBOL(max_sectors);
+EXPORT_SYMBOL(max_readahead);
 
 /* tty routines */
 EXPORT_SYMBOL(tty_hangup);

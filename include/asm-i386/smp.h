@@ -149,28 +149,6 @@ struct mpc_config_intlocal
  */
 
 /*
- *	Per process x86 parameters
- */
- 
-struct cpuinfo_x86
-{
-	char hard_math;
-	char x86;
-	char x86_model;
-	char x86_mask;
-	char x86_vendor_id[16];
-	int  x86_capability;
-	int  fdiv_bug;
-	int  have_cpuid;
-	char wp_works_ok;
-	char hlt_works_ok;
-	unsigned long udelay_val;
-};
-
-
-extern struct cpuinfo_x86 cpu_data[NR_CPUS];
-
-/*
  *	Private routines/data
  */
  

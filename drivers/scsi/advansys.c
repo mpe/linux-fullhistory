@@ -2815,7 +2815,7 @@ advansys_proc_info(char *buffer, char **start, off_t offset, int length,
     int                 leftlen;
     char                *curbuf;
     off_t               advoffset;
-    Scsi_Device         *scd;
+    Scsi_Device         *scd = NULL;
 
     ASC_DBG(1, "advansys_proc_info: begin\n");
 
@@ -2889,8 +2889,7 @@ advansys_proc_info(char *buffer, char **start, off_t offset, int length,
      * Display target driver information for each device attached
      * to the board.
      */
-    for (scd = scsi_devices; scd; scd = scd->next) {
-        if (scd->host == shp) {
+    for (scd = scd->host->host_queue; scd; scd = scd->next) {
             cp = boardp->prtbuf;
             /*
              * Note: If proc_print_scsidevice() writes more than
@@ -2907,7 +2906,6 @@ advansys_proc_info(char *buffer, char **start, off_t offset, int length,
             }
             advoffset += cplen;
             curbuf += cnt;
-        }
     }
     
     /*
@@ -3409,15 +3407,20 @@ advansys_detect(Scsi_Host_Template *tpnt)
             shp->select_queue_depths = advansys_select_queue_depths;
 
 #ifdef MODULE
-            /*
-             * Following v1.3.89, 'cmd_per_lun' is no longer needed
-             * and should be set to zero. But because of a bug introduced
-             * in v1.3.89 if the driver is compiled as a module and
-             * 'cmd_per_lun' is zero, the Mid-Level SCSI function
-             * 'allocate_device' will panic. To allow the driver to
-             * work as a module in these kernels set 'cmd_per_lun' to 1.
-             */
-            shp->cmd_per_lun = 1;
+	    /*
+	     * FIXME(eric) - this is completely bogus.  We need to
+	     * figure out what exactly the real problem is and deal
+	     * with it.
+	     */
+	    /*
+	     * Following v1.3.89, 'cmd_per_lun' is no longer needed
+	     * and should be set to zero. But because of a bug introduced
+	     * in v1.3.89 if the driver is compiled as a module and
+	     * 'cmd_per_lun' is zero, the Mid-Level SCSI function
+	     * 'scsi_allocate_device' will panic. To allow the driver to
+	     * work as a module in these kernels set 'cmd_per_lun' to 1.
+	     */
+	    shp->cmd_per_lun = 1;
 #else /* MODULE */
             shp->cmd_per_lun = 0;
 #endif /* MODULE */
@@ -6677,10 +6680,16 @@ asc_prt_scsi_host(struct Scsi_Host *s)
         (unsigned) s->next, s->extra_bytes, s->host_busy, s->host_no,
         (unsigned) s->last_reset);
 
+#ifdef ERIC_neverdef /* { */
+	/*
+	 * This information is private to the mid-layer scsi and the
+	 * the low-level drivers shouldn't even be aware that it is there.
+	 */
     printk(
 " host_wait %x, host_queue %x, hostt %x, block %x,\n",
         (unsigned) s->host_wait, (unsigned) s->host_queue,
         (unsigned) s->hostt, (unsigned) s->block);
+#endif /* ERIC_neverdef */ /* } */
 
     printk(
 " wish_block %d, base %x, io_port %d, n_io_port %d, irq %d, dma_channel %d,\n",

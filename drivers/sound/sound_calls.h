@@ -74,6 +74,7 @@ void MIDIbuf_release (int dev, struct fileinfo *file);
 int MIDIbuf_ioctl (int dev, struct fileinfo *file,
 	   unsigned int cmd, caddr_t arg);
 int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
+int MIDIbuf_avail(int dev);
 
 void MIDIbuf_bytes_received(int dev, unsigned char *buf, int count);
 void MIDIbuf_init(void);
@@ -285,4 +286,9 @@ void attach_cs4232_mpu (struct address_info *hw_config);
 /*	From maui.c */
 void attach_maui(struct address_info * hw_config);
 int probe_maui(struct address_info *hw_config);
+
+/*	From v_midi.c */
+void attach_v_midi (struct address_info *hw_config);
+int probe_v_midi (struct address_info *hw_config);
+void unload_v_midi (struct address_info *hw_config);
 

@@ -53,7 +53,7 @@ int sr_do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned bufl
     Scsi_Cmnd * SCpnt;
     int result, err = 0, retries = 0;
 
-    SCpnt = allocate_device(NULL, scsi_CDs[target].device, 1);
+    SCpnt = scsi_allocate_device(NULL, scsi_CDs[target].device, 1);
 
 retry:
     {
@@ -63,6 +63,7 @@ retry:
 		    (void *) sr_cmd, buffer, buflength, sr_ioctl_done, 
 		    IOCTL_TIMEOUT, IOCTL_RETRIES);
 	down(&sem);
+        SCpnt->request.sem = NULL;
     }
     
     result = SCpnt->result;
@@ -125,10 +126,10 @@ retry:
 	};
     
     result = SCpnt->result;
-    SCpnt->request.rq_status = RQ_INACTIVE; /* Deallocate */
-    /* Wake up a process waiting for device */
+    /* Wake up a process waiting for device*/
     wake_up(&SCpnt->device->device_wait);
-    
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
     return err;
 }
 
@@ -186,7 +187,7 @@ int sr_disk_status(struct cdrom_device_info *cdi)
         /* look for data tracks */
         if (0 != (rc = sr_audio_ioctl(cdi, CDROMREADTOCHDR, &toc_h)))
                 return (rc == -ENOMEDIUM) ? CDS_NO_DISC : CDS_NO_INFO;
-        
+
         for (i = toc_h.cdth_trk0; i <= toc_h.cdth_trk1; i++) {
                 toc_e.cdte_track  = i;
                 toc_e.cdte_format = CDROM_LBA;
@@ -278,10 +279,23 @@ int sr_select_speed(struct cdrom_device_info *cdi, int speed)
 int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 {
     u_char  sr_cmd[10];    
+    Scsi_Device * SDev;
     int result, target;
     
     target = MINOR(cdi->dev);
     
+    SDev = scsi_CDs[target].device;
+    /*
+     * If we are in the middle of error recovery, don't let anyone
+     * else try and use this device.  Also, if error recovery fails, it
+     * may try and take the device offline, in which case all further
+     * access to the device is prohibited.
+     */
+    if( !scsi_block_when_processing_errors(SDev) )
+      {
+        return -ENODEV;
+      }
+
     switch (cmd) 
     {
 	/* Sun-compatible */
@@ -704,9 +718,22 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
                  unsigned int cmd, unsigned long arg)
 {
     int target, err;
+    Scsi_Device * SDev;
     
     target = MINOR(cdi->dev);
     
+    SDev = scsi_CDs[target].device;
+    /*
+     * If we are in the middle of error recovery, don't let anyone
+     * else try and use this device.  Also, if error recovery fails, it
+     * may try and take the device offline, in which case all further
+     * access to the device is prohibited.
+     */
+    if( !scsi_block_when_processing_errors(SDev) )
+      {
+        return -ENODEV;
+      }
+
     switch (cmd) {
     case CDROMREADMODE1:
     case CDROMREADMODE2:

@@ -53,25 +53,19 @@ int atari_scsi_release (struct Scsi_Host *);
 
 #if defined (HOSTS_C) || defined (MODULE)
 
-#define ATARI_SCSI { NULL, NULL, NULL,				\
-  atari_scsi_proc_info,						\
-  "Atari native SCSI",						\
-  atari_scsi_detect,						\
-  atari_scsi_release,						\
-  atari_scsi_info,						\
-  /* command */ NULL,						\
-  atari_scsi_queue_command,					\
-  atari_scsi_abort,						\
-  atari_scsi_reset,						\
-  /* slave_attach */	NULL,					\
-  /* bios_param */	NULL,					\
-  /* can queue */	0, /* initialized at run-time */	\
-  /* host_id */		0, /* initialized at run-time */	\
-  /* scatter gather */	0, /* initialized at run-time */	\
-  /* cmd per lun */	0, /* initialized at run-time */	\
-  /* present */		0,					\
-  /* unchecked ISA DMA */ 0,					\
-  /* use_clustering */	DISABLE_CLUSTERING }
+#define ATARI_SCSI {    proc_info:         atari_scsi_proc_info,	\
+			name:              "Atari native SCSI",		\
+			detect:            atari_scsi_detect,		\
+			release:           atari_scsi_release,		\
+			info:              atari_scsi_info,		\
+			queuecommand:      atari_scsi_queue_command,	\
+			abort:             atari_scsi_abort,		\
+			reset:             atari_scsi_reset,		\
+			can_queue:         0, /* initialized at run-time */	\
+			this_id:           0, /* initialized at run-time */	\
+			sg_tablesize:      0, /* initialized at run-time */	\
+			cmd_per_lun:       0, /* initialized at run-time */	\
+			use_clustering:	   DISABLE_CLUSTERING }
 
 #endif
 

@@ -110,6 +110,7 @@ struct video_audio
 #define VIDEO_AUDIO_VOLUME	4
 #define VIDEO_AUDIO_BASS	8
 #define VIDEO_AUDIO_TREBLE	16	
+	char    name[16];
 };
 
 struct video_clip
@@ -162,6 +163,9 @@ struct video_key
 #define VIDIOCSFREQ		_IOW('v',15, unsigned long)		/* Set tuner */
 #define VIDIOCGAUDIO		_IOR('v',16, struct video_audio)	/* Get audio info */
 #define VIDIOCSAUDIO		_IOW('v',17, struct video_audio)	/* Audio source, mute etc */
+
+
+#define BASE_VIDIOCPRIVATE	192		/* 192-255 are private */
 
 
 #define VID_HARDWARE_BT848	1

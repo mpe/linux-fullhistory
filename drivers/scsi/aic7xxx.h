@@ -30,33 +30,26 @@
  * to do with card config are filled in after the card is detected.
  */
 #define AIC7XXX	{						\
-	NULL,							\
-	NULL,							\
-	NULL,							\
-	aic7xxx_proc_info,					\
-	NULL,							\
-	aic7xxx_detect,						\
-	NULL,							\
-	aic7xxx_info,						\
-	NULL,							\
-	aic7xxx_queue,						\
-	NULL,							\
-	aic7xxx_reset,						\
-	NULL,							\
-	aic7xxx_biosparam,					\
-	-1,			/* max simultaneous cmds      */\
-	-1,			/* scsi id of host adapter    */\
-	0,			/* max scatter-gather cmds    */\
-	2,			/* cmds per lun (linked cmds) */\
-	0,			/* number of 7xxx's present   */\
-	0,			/* no memory DMA restrictions */\
-	ENABLE_CLUSTERING					\
+	proc_info:       aic7xxx_proc_info,					\
+	detect:          aic7xxx_detect,					\
+	info:            aic7xxx_info,						\
+	queuecommand:    aic7xxx_queue,						\
+	abort:           aic7xxx_abort,						\
+	reset:           aic7xxx_reset,						\
+	bios_param:      aic7xxx_biosparam,					\
+	can_queue:       -1,			/* max simultaneous cmds      */\
+	this_id:         -1,			/* scsi id of host adapter    */\
+	sg_tablesize:    SG_ALL,		/* max scatter-gather cmds    */\
+	cmd_per_lun:     2,			/* cmds per lun (linked cmds) */\
+	use_clustering:  ENABLE_CLUSTERING,					\
+	use_new_eh_code: 0			/* Enable new error code */	\
 }
 
 extern int aic7xxx_queue(Scsi_Cmnd *, void (*)(Scsi_Cmnd *));
 extern int aic7xxx_biosparam(Disk *, kdev_t, int[]);
 extern int aic7xxx_detect(Scsi_Host_Template *);
 extern int aic7xxx_command(Scsi_Cmnd *);
+extern int aic7xxx_abort(Scsi_Cmnd *);
 extern int aic7xxx_reset(Scsi_Cmnd *, unsigned int);
 
 extern const char *aic7xxx_info(struct Scsi_Host *);

@@ -741,8 +741,8 @@ static int floppy_ioctl(struct inode *inode, struct file *filp,
 	struct floppy_state *fs;
 	int err;
 
-	if (((cmd & 0x80) && !suser())
-	    || ((cmd & 0x40) && !(filp && (filp->f_mode & IOCTL_MODE_BIT))))
+	if (((cmd & 0x40) && !(filp && (filp->f_mode & IOCTL_MODE_BIT))) ||
+	    ((cmd & 0x80) && !suser()))
 		return -EPERM;
 
 	fs = &floppy_states[0];

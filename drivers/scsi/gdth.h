@@ -670,51 +670,26 @@ int gdth_reset(Scsi_Cmnd *);
 const char *gdth_info(struct Scsi_Host *);
 
 
-#if LINUX_VERSION_CODE >= 0x010300
 int gdth_bios_param(Disk *,kdev_t,int *);
 extern struct proc_dir_entry proc_scsi_gdth;
 int gdth_proc_info(char *,char **,off_t,int,int,int);
-#define GDTH { NULL, NULL,                              \
-                   &proc_scsi_gdth,                     \
-                   gdth_proc_info,                      \
-                   "GDT SCSI Disk Array Controller",    \
-                   gdth_detect,                         \
-                   gdth_release,                        \
-                   gdth_info,                           \
-                   gdth_command,                        \
-                   gdth_queuecommand,                   \
-                   gdth_abort,                          \
-                   gdth_reset,                          \
-                   NULL,                                \
-                   gdth_bios_param,                     \
-                   GDTH_MAXCMDS,                        \
-                   -1,                                  \
-                   GDTH_MAXSG,                          \
-                   GDTH_MAXC_P_L,                       \
-                   0,                                   \
-                   1,                                   \
-                   ENABLE_CLUSTERING}
-#else
-int gdth_bios_param(Disk *,int,int *);
-#define GDTH { NULL, NULL,                              \
-                   "GDT SCSI Disk Array Controller",    \
-                   gdth_detect,                         \
-                   gdth_release,                        \
-                   gdth_info,                           \
-                   gdth_command,                        \
-                   gdth_queuecommand,                   \
-                   gdth_abort,                          \
-                   gdth_reset,                          \
-                   NULL,                                \
-                   gdth_bios_param,                     \
-                   GDTH_MAXCMDS,                        \
-                   -1,                                  \
-                   GDTH_MAXSG,                          \
-                   GDTH_MAXC_P_L,                       \
-                   0,                                   \
-                   1,                                   \
-                   ENABLE_CLUSTERING}
-#endif
+#define GDTH { proc_dir:          &proc_scsi_gdth,                     \
+               proc_info:         gdth_proc_info,                      \
+               name:              "GDT SCSI Disk Array Controller",    \
+               detect:            gdth_detect,                         \
+               release:           gdth_release,                        \
+               info:              gdth_info,                           \
+               command:           gdth_command,                        \
+               queuecommand:      gdth_queuecommand,                   \
+               abort:             gdth_abort,                          \
+               reset:             gdth_reset,                          \
+               bios_param:        gdth_bios_param,                     \
+               can_queue:         GDTH_MAXCMDS,                        \
+               this_id:           -1,                                  \
+               sg_tablesize:      GDTH_MAXSG,                          \
+               cmd_per_lun:       GDTH_MAXC_P_L,                       \
+               unchecked_isa_dma: 1,                                   \
+               use_clustering:    ENABLE_CLUSTERING}
 
 #endif
 

@@ -502,7 +502,7 @@ static int baycom_ioctl(struct device *dev, struct ifreq *ifr,
 		return 0;
 
 	case HDLCDRVCTL_SETMODE:
-		if (!suser() || dev->start)
+		if (dev->start || !suser())
 			return -EACCES;
 		hi->data.modename[sizeof(hi->data.modename)-1] = '\0';
 		return baycom_setmode(bc, hi->data.modename);

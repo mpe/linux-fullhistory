@@ -321,25 +321,18 @@ int Pci2220i_BiosParam		(Disk *disk, kdev_t dev, int geom[]);
 
 extern struct proc_dir_entry Proc_Scsi_Pci2220i;
 
-#define PCI2220I { NULL, NULL,						\
-			&Proc_Scsi_Pci2220i,/* proc_dir_entry */	\
-			NULL,		                			\
-			"PCI-2220I EIDE Disk Controller",		\
-			Pci2220i_Detect,							\
-			NULL,									\
-			NULL,	 								\
-			Pci2220i_Command,						\
-			Pci2220i_QueueCommand,					\
-			Pci2220i_Abort,							\
-			Pci2220i_Reset,							\
-			NULL,									\
-			Pci2220i_BiosParam,                 		\
-			1, 										\
-			-1, 									\
-			SG_NONE,		 						\
-			1, 										\
-			0, 										\
-			0, 										\
-			DISABLE_CLUSTERING }
+#define PCI2220I { proc_dir:       &Proc_Scsi_Pci2220i,/* proc_dir_entry */ \
+		  name:           "PCI-2220I EIDE Disk Controller",\
+		  detect:         Pci2220i_Detect,			\
+		  command:	  Pci2220i_Command,			\
+		  queuecommand:	  Pci2220i_QueueCommand,		\
+		  abort:	  Pci2220i_Abort,			\
+		  reset:	  Pci2220i_Reset,			\
+		  biosparam:	  Pci2220i_BiosParam,                 	\
+		  can_queue:	  1, 					\
+		  this_id:	  -1, 					\
+		  sg_tablesize:	  SG_NONE,		 		\
+		  cmd_per_lun:	  1, 					\
+		  use_clustering: DISABLE_CLUSTERING }
 
 #endif

@@ -2521,6 +2521,7 @@ ad1848_tmr_install(int dev)
 EXPORT_SYMBOL(ad1848_detect);
 EXPORT_SYMBOL(ad1848_init);
 EXPORT_SYMBOL(ad1848_unload);
+EXPORT_SYMBOL(ad1848_control);
 EXPORT_SYMBOL(adintr);
 EXPORT_SYMBOL(probe_ms_sound);
 EXPORT_SYMBOL(attach_ms_sound);

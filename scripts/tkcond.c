@@ -101,7 +101,7 @@ void fix_choice_cond()
   struct condition * cond;
   struct condition * cond2;
   struct kconfig * cfg;
-  char tmpbuf[10];
+  char tmpbuf[255];
 
   for(cfg = config;cfg != NULL; cfg = cfg->next)
     {

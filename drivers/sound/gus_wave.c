@@ -159,7 +159,7 @@ static int      freq_div_table[] =
 	19293			/* 32 */
 };
 
-static struct patch_info *samples;
+static struct patch_info *samples = NULL;
 static long     sample_ptrs[MAX_SAMPLE + 1];
 static int      sample_map[32];
 static int      free_sample;
@@ -3005,8 +3005,7 @@ gus_default_mixer_init(void)
 	return n;
 }
 
-void
-gus_wave_init(struct address_info *hw_config)
+void gus_wave_init(struct address_info *hw_config)
 {
 	unsigned long   flags;
 	unsigned char   val;
@@ -3025,16 +3024,19 @@ gus_wave_init(struct address_info *hw_config)
 	hw_config->slots[5] = -1;	/* No mixer */
 
 	if (!gus_pnp_flag)
+	{
 		if (irq < 0 || irq > 15)
-		  {
-			  printk("ERROR! Invalid IRQ#%d. GUS Disabled", irq);
-			  return;
-		  }
+		{
+			printk("ERROR! Invalid IRQ#%d. GUS Disabled", irq);
+			return;
+		}
+	}
+	
 	if (dma < 0 || dma > 7 || dma == 4)
-	  {
-		  printk("ERROR! Invalid DMA#%d. GUS Disabled", dma);
-		  return;
-	  }
+	{
+		printk("ERROR! Invalid DMA#%d. GUS Disabled", dma);
+		return;
+	}
 	gus_irq = irq;
 	gus_dma = dma;
 	gus_dma2 = dma2;
@@ -3043,9 +3045,9 @@ gus_wave_init(struct address_info *hw_config)
 		gus_dma2 = dma;
 
 	/*
-	   * Try to identify the GUS model.
-	   *
-	   *  Versions < 3.6 don't have the digital ASIC. Try to probe it first.
+	 * Try to identify the GUS model.
+	 *
+	 *  Versions < 3.6 don't have the digital ASIC. Try to probe it first.
 	 */
 
 	save_flags(flags);
@@ -3055,126 +3057,128 @@ gus_wave_init(struct address_info *hw_config)
 	restore_flags(flags);
 
 	if (gus_pnp_flag || (val != 0xff && (val & 0x06)))	/* Should be 0x02?? */
-	  {
-		  int             ad_flags = 0;
+	{
+		int             ad_flags = 0;
 
-		  if (gus_pnp_flag)
-			  ad_flags = 0x12345678;	/* Interwave "magic" */
-		  /*
-		     * It has the digital ASIC so the card is at least v3.4.
-		     * Next try to detect the true model.
+		if (gus_pnp_flag)
+			ad_flags = 0x12345678;	/* Interwave "magic" */
+		/*
+		 * It has the digital ASIC so the card is at least v3.4.
+		 * Next try to detect the true model.
 		   */
 
-		  if (gus_pnp_flag)	/* Hack hack hack */
-			  val = 10;
-		  else
-			  val = inb(u_MixSelect);
+		if (gus_pnp_flag)	/* Hack hack hack */
+			val = 10;
+		else
+			val = inb(u_MixSelect);
 
-		  /*
-		     * Value 255 means pre-3.7 which don't have mixer.
-		     * Values 5 thru 9 mean v3.7 which has a ICS2101 mixer.
-		     * 10 and above is GUS MAX which has the CS4231 codec/mixer.
-		     *
-		   */
+		/*
+		 * Value 255 means pre-3.7 which don't have mixer.
+		 * Values 5 thru 9 mean v3.7 which has a ICS2101 mixer.
+		 * 10 and above is GUS MAX which has the CS4231 codec/mixer.
+		 *
+		 */
 
-		  if (val == 255 || val < 5)
-		    {
-			    model_num = "3.4";
-			    gus_type = 0x34;
-		  } else if (val < 10)
-		    {
-			    model_num = "3.7";
-			    gus_type = 0x37;
-			    mixer_type = ICS2101;
-			    request_region(u_MixSelect, 1, "GUS mixer");
-		  } else
-		    {
-			    model_num = "MAX";
-			    gus_type = 0x40;
-			    mixer_type = CS4231;
+		if (val == 255 || val < 5)
+		{
+			model_num = "3.4";
+			gus_type = 0x34;
+		}
+		else if (val < 10)
+		{
+			model_num = "3.7";
+			gus_type = 0x37;
+			mixer_type = ICS2101;
+			request_region(u_MixSelect, 1, "GUS mixer");
+		}
+		else
+		{
+			model_num = "MAX";
+			gus_type = 0x40;
+			mixer_type = CS4231;
 #ifdef CONFIG_GUSMAX
-			    {
-				    unsigned char   max_config = 0x40;	/* Codec enable */
+			{
+				unsigned char   max_config = 0x40;	/* Codec enable */
 
-				    if (gus_dma2 == -1)
-					    gus_dma2 = gus_dma;
+				if (gus_dma2 == -1)
+					gus_dma2 = gus_dma;
 
-				    if (gus_dma > 3)
-					    max_config |= 0x10;		/* 16 bit capture DMA */
+				if (gus_dma > 3)
+					max_config |= 0x10;		/* 16 bit capture DMA */
 
-				    if (gus_dma2 > 3)
-					    max_config |= 0x20;		/* 16 bit playback DMA */
+				if (gus_dma2 > 3)
+					max_config |= 0x20;		/* 16 bit playback DMA */
 
-				    max_config |= (gus_base >> 4) & 0x0f;	/* Extract the X from 2X0 */
+				max_config |= (gus_base >> 4) & 0x0f;	/* Extract the X from 2X0 */
 
-				    outb((max_config), gus_base + 0x106);	/* UltraMax control */
-			    }
+				outb((max_config), gus_base + 0x106);	/* UltraMax control */
+			}
 
-			    if (ad1848_detect(gus_base + 0x10c, &ad_flags, hw_config->osp))
-			      {
-				      char           *name = "GUS MAX";
-				      int             old_num_mixers = num_mixers;
+			if (ad1848_detect(gus_base + 0x10c, &ad_flags, hw_config->osp))
+			{
+				char           *name = "GUS MAX";
+				int             old_num_mixers = num_mixers;
 
-				      if (gus_pnp_flag)
-					      name = "GUS PnP";
+				if (gus_pnp_flag)
+					name = "GUS PnP";
 
-				      gus_mic_vol = gus_line_vol = gus_pcm_volume = 100;
-				      gus_wave_volume = 90;
-				      have_gus_max = 1;
-				      if (hw_config->name)
-					      name = hw_config->name;
+				gus_mic_vol = gus_line_vol = gus_pcm_volume = 100;
+				gus_wave_volume = 90;
+				have_gus_max = 1;
+				if (hw_config->name)
+					name = hw_config->name;
 
-				      hw_config->slots[1] = ad1848_init(name, gus_base + 0x10c,
-								    -irq,
-								gus_dma2,	/* Playback DMA */
-								 gus_dma,	/* Capture DMA */
-									1,	/* Share DMA channels with GF1 */
-							 hw_config->osp);
+				hw_config->slots[1] = ad1848_init(name, gus_base + 0x10c,
+							-irq, gus_dma2,	/* Playback DMA */
+							gus_dma,	/* Capture DMA */
+							1,		/* Share DMA channels with GF1 */
+							hw_config->osp);
 
-				      if (num_mixers > old_num_mixers)
-					{	/* GUS has it's own mixer map */
-						AD1848_REROUTE(SOUND_MIXER_LINE1, SOUND_MIXER_SYNTH);
-						AD1848_REROUTE(SOUND_MIXER_LINE2, SOUND_MIXER_CD);
-						AD1848_REROUTE(SOUND_MIXER_LINE3, SOUND_MIXER_LINE);
-					}
-			    } else
-				    printk("[Where's the CS4231?]");
+				if (num_mixers > old_num_mixers)
+				{
+					/* GUS has it's own mixer map */
+					AD1848_REROUTE(SOUND_MIXER_LINE1, SOUND_MIXER_SYNTH);
+					AD1848_REROUTE(SOUND_MIXER_LINE2, SOUND_MIXER_CD);
+					AD1848_REROUTE(SOUND_MIXER_LINE3, SOUND_MIXER_LINE);
+				}
+			}
+			else
+				printk(KERN_WARNING "[Where's the CS4231?]");
 #else
-			    printk("\n\n\nGUS MAX support was not compiled in!!!\n\n\n\n");
+			printk("\n\n\nGUS MAX support was not compiled in!!!\n\n\n\n");
 #endif
-		    }
-	} else
-	  {
-		  /*
-		     * ASIC not detected so the card must be 2.2 or 2.4.
-		     * There could still be the 16-bit/mixer daughter card.
-		   */
-	  }
+		}
+	}
+	else
+	{
+		/*
+		 * ASIC not detected so the card must be 2.2 or 2.4.
+		 * There could still be the 16-bit/mixer daughter card.
+		 */
+	}
 
 	if (hw_config->name)
-	  {
-
-		  strncpy(tmp, hw_config->name, 45);
-		  tmp[45] = 0;
-		  sprintf(tmp2, "%s (%dk)", tmp, (int) gus_mem_size / 1024);
-		  tmp2[sizeof(tmp2) - 1] = 0;
-	} else if (gus_pnp_flag)
-	  {
-		  sprintf(tmp2, "Gravis UltraSound PnP (%dk)",
-			  (int) gus_mem_size / 1024);
-	} else
+	{
+		strncpy(tmp, hw_config->name, 45);
+		tmp[45] = 0;
+		sprintf(tmp2, "%s (%dk)", tmp, (int) gus_mem_size / 1024);
+		tmp2[sizeof(tmp2) - 1] = 0;
+	}
+	else if (gus_pnp_flag)
+	{
+		sprintf(tmp2, "Gravis UltraSound PnP (%dk)",
+			(int) gus_mem_size / 1024);
+	}
+	else
 		sprintf(tmp2, "Gravis UltraSound %s (%dk)", model_num, (int) gus_mem_size / 1024);
 
 
-	samples = (struct patch_info *) (sound_mem_blocks[sound_nblocks] = vmalloc((MAX_SAMPLE + 1) * sizeof(*samples)));
-	sound_mem_sizes[sound_nblocks] = (MAX_SAMPLE + 1) * sizeof(*samples);
-	if (sound_nblocks < 1024)
-		sound_nblocks++;;
+	samples = (struct patch_info *)vmalloc((MAX_SAMPLE + 1) * sizeof(*samples));
 	if (samples == NULL)
-	  {
-		  printk(KERN_WARNING "gus_init: Cant allocate memory for instrument tables\n");
-		  return;
-	  }
+	{
+		printk(KERN_WARNING "gus_init: Cant allocate memory for instrument tables\n");
+		return;
+	}
 	conf_printf(tmp2, hw_config);
 	tmp2[sizeof(gus_info.name) - 1] = 0;
 	strcpy(gus_info.name, tmp2);
@@ -3182,27 +3186,28 @@ gus_wave_init(struct address_info *hw_config)
 	if ((sdev = sound_alloc_synthdev()) == -1)
 		printk(KERN_WARNING "gus_init: Too many synthesizers\n");
 	else
-	  {
-		  voice_alloc = &guswave_operations.alloc;
-		  if (iw_mode)
-			  guswave_operations.id = "IWAVE";
-		  hw_config->slots[0] = sdev;
-		  synth_devs[sdev] = &guswave_operations;
-		  sequencer_init();
+	{
+		voice_alloc = &guswave_operations.alloc;
+		if (iw_mode)
+			guswave_operations.id = "IWAVE";
+		hw_config->slots[0] = sdev;
+		synth_devs[sdev] = &guswave_operations;
+		sequencer_init();
 #if defined(CONFIG_SEQUENCER) || defined(MODULE)
-		  gus_tmr_install(gus_base + 8);
+		gus_tmr_install(gus_base + 8);
 #endif
-	  }
+	}
 
 	reset_sample_memory();
 
 	gus_initialize();
 
 	if (gus_mem_size > 0)
+	{
 		if ((dev = sound_alloc_audiodev()) != -1)
-		  {
-			  hw_config->slots[4] = dev;
-			  if ((gus_devnum = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
+		{
+			hw_config->slots[4] = dev;
+			if ((gus_devnum = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
 							    "Ultrasound",
 						       &gus_audio_driver,
 					     sizeof(struct audio_driver),
@@ -3213,56 +3218,58 @@ gus_wave_init(struct address_info *hw_config)
 								   NULL,
 								   dma,
 							      dma2)) < 0)
-				                  return;
+			{
+				return;
+			}
 
-			  audio_devs[gus_devnum]->min_fragment = 9;	/* 512k */
-			  audio_devs[gus_devnum]->max_fragment = 11;	/* 8k (must match size of bounce_buf */
-			  audio_devs[gus_devnum]->mixer_dev = -1;	/* Next mixer# */
-			  audio_devs[gus_devnum]->flags |= DMA_HARDSTOP;
+			audio_devs[gus_devnum]->min_fragment = 9;	/* 512k */
+			audio_devs[gus_devnum]->max_fragment = 11;	/* 8k (must match size of bounce_buf */
+			audio_devs[gus_devnum]->mixer_dev = -1;	/* Next mixer# */
+			audio_devs[gus_devnum]->flags |= DMA_HARDSTOP;
 		} else
-			printk("GUS: Too many audio devices available\n");
-
+			printk(KERN_WARNING "GUS: Too many audio devices available\n");
+	}
+	
 	/*
-	   *  Mixer dependent initialization.
+	 *  Mixer dependent initialization.
 	 */
 
 	switch (mixer_type)
-	  {
-	  case ICS2101:
-		  gus_mic_vol = gus_line_vol = gus_pcm_volume = 100;
-		  gus_wave_volume = 90;
-		  request_region(u_MixSelect, 1, "GUS mixer");
-		  hw_config->slots[5] = ics2101_mixer_init();
-		  audio_devs[gus_devnum]->mixer_dev = hw_config->slots[5];	/* Next mixer# */
-		  return;
+	{
+		case ICS2101:
+			gus_mic_vol = gus_line_vol = gus_pcm_volume = 100;
+			gus_wave_volume = 90;
+			request_region(u_MixSelect, 1, "GUS mixer");
+			hw_config->slots[5] = ics2101_mixer_init();
+			audio_devs[gus_devnum]->mixer_dev = hw_config->slots[5];	/* Next mixer# */
+			return;
 
-	  case CS4231:
-		  /* Initialized elsewhere (ad1848.c) */
-	  default:
-		  hw_config->slots[5] = gus_default_mixer_init();
-		  audio_devs[gus_devnum]->mixer_dev = hw_config->slots[5];	/* Next mixer# */
-		  return;
-	  }
+		case CS4231:
+			/* Initialized elsewhere (ad1848.c) */
+		default:
+			hw_config->slots[5] = gus_default_mixer_init();
+			audio_devs[gus_devnum]->mixer_dev = hw_config->slots[5];	/* Next mixer# */
+			return;
+	}
 }
 
-void
-gus_wave_unload(struct address_info *hw_config)
+void gus_wave_unload(struct address_info *hw_config)
 {
 #ifdef CONFIG_GUSMAX
 	if (have_gus_max)
-	  {
-		  ad1848_unload(gus_base + 0x10c,
+	{
+		ad1848_unload(gus_base + 0x10c,
 				-gus_irq,
 				gus_dma2,	/* Playback DMA */
 				gus_dma,	/* Capture DMA */
 				1);	/* Share DMA channels with GF1 */
-	  }
+	}
 #endif
 
 	if (mixer_type == ICS2101)
-	  {
-		  release_region(u_MixSelect, 1);
-	  }
+	{
+		release_region(u_MixSelect, 1);
+	}
 	if (hw_config->slots[0] != -1)
 		sound_unload_synthdev(hw_config->slots[0]);
 	if (hw_config->slots[1] != -1)
@@ -3273,10 +3280,13 @@ gus_wave_unload(struct address_info *hw_config)
 		sound_unload_audiodev(hw_config->slots[4]);
 	if (hw_config->slots[5] != -1)
 		sound_unload_mixerdev(hw_config->slots[4]);
+	
+	if(samples)
+		vfree(samples);
+	samples=NULL;
 }
 
-static void
-do_loop_irq(int voice)
+static void do_loop_irq(int voice)
 {
 	unsigned char   tmp;
 	int             mode, parm;

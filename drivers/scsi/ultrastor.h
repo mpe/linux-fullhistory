@@ -31,26 +31,19 @@ int ultrastor_biosparam(Disk *, kdev_t, int *);
 #define ULTRASTOR_24F_PORT 0xC80
 
 
-#define ULTRASTOR_14F { NULL, NULL, /* Ptr for modules*/ \
-			  NULL,                         \
-			  NULL,                         \
-			  "UltraStor 14F/24F/34F", 	\
-			  ultrastor_detect, 		\
-			  NULL,	/* Release */		\
-			  ultrastor_info, 		\
-			  0, 				\
-			  ultrastor_queuecommand,	\
-			  ultrastor_abort, 		\
-			  ultrastor_reset,		\
-			  0,				\
-			  ultrastor_biosparam, 		\
-			  ULTRASTOR_MAX_CMDS,		\
-			  0, 				\
-			  ULTRASTOR_14F_MAX_SG, 	\
-			  ULTRASTOR_MAX_CMDS_PER_LUN, 	\
-			  0, 				\
-			  1, 				\
-			  ENABLE_CLUSTERING }
+#define ULTRASTOR_14F {   name:              "UltraStor 14F/24F/34F", 	\
+			  detect:            ultrastor_detect, 		\
+			  info:              ultrastor_info, 		\
+			  queuecommand:      ultrastor_queuecommand,	\
+			  abort:             ultrastor_abort, 		\
+			  reset:             ultrastor_reset,		\
+			  bios_param:        ultrastor_biosparam, 	\
+			  can_queue:         ULTRASTOR_MAX_CMDS,	\
+			  this_id:           0, 			\
+			  sg_tablesize:      ULTRASTOR_14F_MAX_SG, 	\
+			  cmd_per_lun:       ULTRASTOR_MAX_CMDS_PER_LUN,\
+			  unchecked_isa_dma: 1, 			\
+			  use_clustering:    ENABLE_CLUSTERING }
 
 
 #ifdef ULTRASTOR_PRIVATE

@@ -44,6 +44,8 @@ extern struct net_proto_family inet_family_ops;
 
 #endif
 
+#include <linux/filter.h>
+
 #include <linux/rtnetlink.h>
 
 #include <net/scm.h>
@@ -78,6 +80,13 @@ EXPORT_SYMBOL(sock_register);
 EXPORT_SYMBOL(sock_unregister);
 
 /* Socket layer support routines */
+EXPORT_SYMBOL(sk_alloc);
+EXPORT_SYMBOL(sk_free);
+
+#ifdef CONFIG_FILTER
+EXPORT_SYMBOL(sk_run_filter);
+#endif
+
 EXPORT_SYMBOL(memcpy_fromiovec);
 EXPORT_SYMBOL(sock_create);
 EXPORT_SYMBOL(sock_alloc);
@@ -86,8 +95,6 @@ EXPORT_SYMBOL(sock_setsockopt);
 EXPORT_SYMBOL(sock_getsockopt);
 EXPORT_SYMBOL(sock_sendmsg);
 EXPORT_SYMBOL(sock_recvmsg);
-EXPORT_SYMBOL(sk_alloc);
-EXPORT_SYMBOL(sk_free);
 EXPORT_SYMBOL(sock_wake_async);
 EXPORT_SYMBOL(sock_alloc_send_skb);
 EXPORT_SYMBOL(sock_init_data);

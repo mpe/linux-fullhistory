@@ -193,3 +193,7 @@ if [ "$CONFIG_PROFILE" = "y" ]; then
 fi
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 endmenu
+
+if [ "$CONFIG_TGA_CONSOLE" = "n" ]; then
+  define_bool CONFIG_VGA_CONSOLE y
+fi

@@ -385,6 +385,21 @@ static int sr_open(struct cdrom_device_info *cdi, int purpose)
 {
     check_disk_change(cdi->dev);
 
+    if(   MINOR(cdi->dev) >= sr_template.dev_max 
+       || !scsi_CDs[MINOR(cdi->dev)].device)
+      {
+	return -ENXIO;   /* No such device */
+      }
+
+    /*
+     * If the device is in error recovery, wait until it is done.
+     * If the device is offline, then disallow any access to it.
+     */
+    if( !scsi_block_when_processing_errors(scsi_CDs[MINOR(cdi->dev)].device) )
+      {
+        return -ENXIO;
+      }
+
     scsi_CDs[MINOR(cdi->dev)].device->access_count++;
     if (scsi_CDs[MINOR(cdi->dev)].device->host->hostt->module)
 	__MOD_INC_USE_COUNT(scsi_CDs[MINOR(cdi->dev)].device->host->hostt->module);
@@ -428,6 +443,17 @@ static void do_sr_request (void)
 
 	SDev = scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].device;
 
+        /*
+         * If the host for this device is in error recovery mode, don't
+         * do anything at all here.  When the host leaves error recovery
+         * mode, it will automatically restart things and start queueing
+         * commands again.
+         */
+        if( SDev->host->in_recovery )
+          {
+            return;
+          }
+
 	/*
 	 * I am not sure where the best place to do this is.  We need
 	 * to hook in a place where we are likely to come if in user
@@ -460,7 +486,7 @@ static void do_sr_request (void)
 	}
 
 	if (flag++ == 0)
-	    SCpnt = allocate_device(&CURRENT,
+	    SCpnt = scsi_allocate_device(&CURRENT,
 				    scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].device, 0);
 	else SCpnt = NULL;
 	restore_flags(flags);
@@ -479,7 +505,7 @@ static void do_sr_request (void)
 	    cli();
 	    req = CURRENT;
 	    while(req){
-		SCpnt = request_queueable(req,
+		SCpnt = scsi_request_queueable(req,
 					  scsi_CDs[DEVICE_NR(req->rq_dev)].device);
 		if(SCpnt) break;
 		req1 = req;
@@ -537,6 +563,13 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 		goto repeat;
 	}
 
+	if( !scsi_CDs[dev].device->online )
+          {
+            SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+            tries = 2;
+            goto repeat;
+          }
+
 	if (scsi_CDs[dev].device->changed) {
 	/*
 	 * quietly refuse to do anything to a changed disc
@@ -583,8 +616,8 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	SCpnt->use_sg = 0;
 
 	if (SCpnt->host->sg_tablesize > 0 &&
-	    (!need_isa_buffer ||
-	 dma_free_sectors >= 10)) {
+	    (!scsi_need_isa_buffer ||
+	 scsi_dma_free_sectors >= 10)) {
 	struct buffer_head * bh;
 	struct scatterlist * sgpnt;
 	int count, this_count_max;
@@ -655,7 +688,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 		    /* We try to avoid exhausting the DMA pool, since it is easier
 		     * to control usage here.  In other places we might have a more
 		     * pressing need, and we would be screwed if we ran out */
-		    if(dma_free_sectors < (sgpnt[count].length >> 9) + 5) {
+		    if(scsi_dma_free_sectors < (sgpnt[count].length >> 9) + 5) {
 			sgpnt[count].address = NULL;
 		    } else {
 			sgpnt[count].address = (char *) scsi_malloc(sgpnt[count].length);
@@ -849,7 +882,7 @@ void get_sectorsize(int i){
     Scsi_Cmnd * SCpnt;
 
     buffer = (unsigned char *) scsi_malloc(512);
-    SCpnt = allocate_device(NULL, scsi_CDs[i].device, 1);
+    SCpnt = scsi_allocate_device(NULL, scsi_CDs[i].device, 1);
 
     retries = 3;
     do {
@@ -877,9 +910,10 @@ void get_sectorsize(int i){
 
     } while(the_result && retries);
 
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 
     wake_up(&SCpnt->device->device_wait);
+    scsi_release_command(SCpnt);
+    SCpnt = NULL;
 
     if (the_result) {
 	scsi_CDs[i].capacity = 0x1fffff;

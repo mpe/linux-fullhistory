@@ -95,7 +95,7 @@ int * max_sectors[MAX_BLKDEV] = { NULL, NULL, };
 static inline int get_max_sectors(kdev_t dev)
 {
 	if (!max_sectors[MAJOR(dev)])
-		return 244;	/* 254? */
+		return MAX_SECTORS;
 	return max_sectors[MAJOR(dev)][MINOR(dev)];
 }
 
@@ -684,6 +684,7 @@ __initfunc(int blk_dev_init(void))
 		dev->plug.rq_status  = RQ_INACTIVE;
 		dev->plug.cmd        = -1;
 		dev->plug.next       = NULL;
+		dev->plug_tq.sync    = 0;
 		dev->plug_tq.routine = &unplug_device;
 		dev->plug_tq.data    = dev;
 	}

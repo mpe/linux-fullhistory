@@ -8,102 +8,127 @@
   (version 1.0) as well as improvements we envisage.
   ______________________________________________________________________
 
-  Table of Contents:
+  Table of Contents
 
-  1.      Introduction
 
-  2.      Servicing Coda filesystem calls
 
-  3.      The message layer
 
-  3.1.    Implementation details
 
-  4.      The interface at the call level
 
-  4.1.    Data structures shared by the kernel and Venus
 
-  4.2.    The pioctl interface
 
-  4.3.    root
 
-  4.4.    lookup
 
-  4.5.    getattr
 
-  4.6.    setattr
 
-  4.7.    access
 
-  4.8.    create
 
-  4.9.    mkdir
 
-  4.10.   link
 
-  4.11.   synlink
 
-  4.12.   remove
 
-  4.13.   rmdir
 
-  4.14.   readlink
 
-  4.15.   open
 
-  4.16.   close
 
-  4.17.   ioctl
 
-  4.18.   rename
 
-  4.19.   readdir
 
-  4.20.   vget
 
-  4.21.   fsync
 
-  4.22.   inactive
 
-  4.23.   rdwr
 
-  4.24.   odymount
 
-  4.25.   ody_lookup
 
-  4.26.   ody_expand
 
-  4.27.   prefetch
 
-  4.28.   signal
 
-  5.      The minicache and downcalls
 
-  5.1.    INVALIDATE
 
-  5.2.    FLUSH
 
-  5.3.    PURGEUSER
 
-  5.4.    ZAPFILE
 
-  5.5.    ZAPDIR
 
-  5.6.    ZAPVNODE
 
-  5.7.    PURGEFID
 
-  5.8.    REPLACE
 
-  6.      Initialization and cleanup
 
-  6.1.    Requirements
+
+
+
+
+
+
+
+
+
+
+
+  1. Introduction
+
+  2. Servicing Coda filesystem calls
+
+  3. The message layer
+
+     3.1 Implementation details
+
+  4. The interface at the call level
+
+     4.1 Data structures shared by the kernel and Venus
+     4.2 The pioctl interface
+     4.3 root
+     4.4 lookup
+     4.5 getattr
+     4.6 setattr
+     4.7 access
+     4.8 create
+     4.9 mkdir
+     4.10 link
+     4.11 symlink
+     4.12 remove
+     4.13 rmdir
+     4.14 readlink
+     4.15 open
+     4.16 close
+     4.17 ioctl
+     4.18 rename
+     4.19 readdir
+     4.20 vget
+     4.21 fsync
+     4.22 inactive
+     4.23 rdwr
+     4.24 odymount
+     4.25 ody_lookup
+     4.26 ody_expand
+     4.27 prefetch
+     4.28 signal
+
+  5. The minicache and downcalls
+
+     5.1 INVALIDATE
+     5.2 FLUSH
+     5.3 PURGEUSER
+     5.4 ZAPFILE
+     5.5 ZAPDIR
+     5.6 ZAPVNODE
+     5.7 PURGEFID
+     5.8 REPLACE
+
+  6. Initialization and cleanup
+
+     6.1 Requirements
+
+
   ______________________________________________________________________
   0wpage
 
   11..  IInnttrroodduuccttiioonn
 
+
+
   A key component in the Coda Distributed File System is the cache
   manager, _V_e_n_u_s.
+
 
   When processes on a Coda enabled system access files in the Coda
   filesystem, requests are directed at the filesystem layer in the
@@ -168,7 +193,7 @@
   the Coda FS layer, so the Coda FS driver must expose the VFS interface
   as applicable in the operating system. These differ very significantly
   among operating systems, but share features such as facilities to
-  read/write and create and remove object.  The Coda FS layer services
+  read/write and create and remove objects.  The Coda FS layer services
   such VFS requests in by invoking on or more well defined services
   offered by the cache manager Venus.  When the replies from Venus have
   come back to the FS driver, servicing of the VFS call continues and
@@ -176,13 +201,18 @@
   returns to the process.
 
   As a result of this design a basic interface exposed by the FS driver
-  must allow Venus to handle manage message traffic.  In particular
-  Venus must be able to retrieve and place messages and to be notified
-  of the arrival of a new message. The notification must be through a
-  mechanism which does not block Venus since Venus must attend to other
-  tasks even when no messages are waiting or being processed.
+  must allow Venus to manage message traffic.  In particular Venus must
+  be able to retrieve and place messages and to be notified of the
+  arrival of a new message. The notification must be through a mechanism
+  which does not block Venus since Venus must attend to other tasks even
+  when no messages are waiting or being processed.
 
-                       Interfaces of Coda FS Driver
+
+
+
+
+
+                     Interfaces of the Coda FS Driver
 
   Furthermore the FS layer provides for a special path of communication
   between a user process and Venus, called the pioctl interface. The
@@ -210,8 +240,10 @@
 
   33..  TThhee mmeessssaaggee llaayyeerr
 
+
+
   At the lowest level the communication between Venus and the FS driver
-  proceeds through messages.  The synchronization of between processes
+  proceeds through messages.  The synchronization between processes
   requesting Coda file service and Venus relies on blocking and waking
   up processes.  The Coda FS driver processes VFS- and pioctl-requests
   on behalf of a process P, creates messages for Venus, awaits replies
@@ -256,6 +288,7 @@
   namely when Venus calls sendmsg_to_kernel.  At this moment the Coda FS
   driver looks at the contents of the message and decides if:
 
+
   +o  the message is a reply for a suspended thread P.  If so it removes
      the message from the processing queue and marks the message as
      WRITTEN.  Finally, the FS driver unblocks P (still in the kernel
@@ -266,7 +299,7 @@
 
   +o  The message is a _d_o_w_n_c_a_l_l.  A downcall is a request from Venus to
      the FS Driver. The FS driver processes the request immediately
-     (usually a cach eviction or replacement) and when finishes
+     (usually a cache eviction or replacement) and when finishes
      sendmsg_to_kernel returns.
 
   Now P awakes and continues processing upcall.  There are some
@@ -276,6 +309,12 @@
   sendmsg_to_kernel call.  In the normal case, the upcall routine will
   deallocate message structure and return.  The FS routine can proceed
   with its processing.
+
+
+
+
+
+
 
                       Sleeping and IPC arrangements
 
@@ -290,6 +329,8 @@
   involves more than one upcall, this can lead to complicated state, an
   extra field "handle_signals" could be added in the message structure
   to indicate points of no return have been passed.--)
+
+
 
   33..11..  IImmpplleemmeennttaattiioonn ddeettaaiillss
 
@@ -312,10 +353,12 @@
 
   44..  TThhee iinntteerrffaaccee aatt tthhee ccaallll lleevveell
 
+
   This section describes the upcalls a Coda FS driver can make to Venus.
   Each of these upcalls make use of two structures: inputArgs and
   outputArgs.   In pseudo BNF form the structures take the following
   form:
+
 
   struct inputArgs {
       u_long opcode;
@@ -335,6 +378,8 @@
       <union "out" of call dependent parts of inputArgs>
   };
 
+
+
   Before going on let us elucidate the role of the various fields. The
   inputArgs start with the opcode which defines the type of service
   requested from Venus. There are approximately 30 upcalls at present
@@ -346,7 +391,11 @@
   Before delving into the specific calls we need to discuss a variety of
   data structures shared by the kernel and Venus.
 
+
+
+
   44..11..  DDaattaa ssttrruuccttuurreess sshhaarreedd bbyy tthhee kkeerrnneell aanndd VVeennuuss
+
 
   The CodaCred structure defines a variety of user and group id's as
   they are set for the calling process. The vuid_t and guid_t are 32 bit
@@ -361,9 +410,12 @@
       vgid_t cr_groups[NGROUPS];        /* Group membership for caller */
   };
 
+
+
   NNOOTTEE It is questionable if we need CodaCreds in Venus. Finally Venus
   doesn't know about groups, although it does create files with the
   default uid/gid.  Perhaps the list of group membership is superfluous.
+
 
   The next item is the fundamental identifier used to identify Coda
   files, the ViceFid.  A fid of a file uniquely defines a file or
@@ -372,11 +424,14 @@
   control machine or SCM. See the Coda Administration manual for a
   detailed description of the role of the SCM.--)
 
+
   typedef struct ViceFid {
       VolumeId Volume;
       VnodeId Vnode;
       Unique_t Unique;
   } ViceFid;
+
+
 
   Each of the constituent fields: VolumeId, VnodeId and Unique_t are
   unsigned 32 bit integers.  We envisage that a further field will need
@@ -387,6 +442,23 @@
   the attributes of the file.  The following structure is used to
   exchange information.  It has room for future extensions such as
   support for device files (currently not present in Coda).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   struct coda_vattr {
           enum coda_vtype va_type;        /* vnode type (for create) */
@@ -410,9 +482,13 @@
           long            va_spare;       /* remain quad aligned */
   };
 
+
+
+
   44..22..  TThhee ppiiooccttll iinntteerrffaaccee
 
-  Coda specific requests can be made by application through a pioctl
+
+  Coda specific requests can be made by application through the pioctl
   interface. The pioctl is implemented as an ordinary ioctl on a
   ficticious file /coda/.CONTROL.  The piocl call opens this file, gets
   a file handle and makes the ioctl call. Finally it closes the file.
@@ -429,13 +505,18 @@
           int follow;
       } data;
 
+
+
   where
+
 
   struct ViceIoctl {
           caddr_t in, out;        /* Data to be transferred in, or out */
           short in_size;          /* Size of input buffer <= 2K */
           short out_size;         /* Maximum size of output buffer, <= 2K */
   };
+
+
 
   The path must be a Coda file, otherwise the ioctl upcall will not be
   made.
@@ -449,6 +530,7 @@
 
   44..33..  rroooott
 
+
   AArrgguummeennttss
 
      iinn empty
@@ -458,6 +540,8 @@
                 struct cfs_root_out {
                     ViceFid VFid;
                 } cfs_root;
+
+
 
   DDeessccrriippttiioonn This call is made to Venus during the initialization of
   the Coda filesystem. If the result is zero, the cfs_root structure
@@ -469,6 +553,7 @@
   0wpage
 
   44..44..  llooookkuupp
+
 
   SSuummmmaarryy Find the ViceFid and type of an object in a directory if it
   exists.
@@ -482,12 +567,16 @@
                     char        *name;          /* Place holder for data. */
                 } cfs_lookup;
 
+
+
      oouutt
 
                 struct cfs_lookup_out {
                     ViceFid VFid;
                     int vtype;
                 } cfs_lookup;
+
+
 
   DDeessccrriippttiioonn This call is made to determine the ViceFid and filetype of
   a directory entry.  The directory entry requested carries name name
@@ -512,6 +601,7 @@
 
   44..55..  ggeettaattttrr
 
+
   SSuummmmaarryy Get the attributes of a file.
 
   AArrgguummeennttss
@@ -523,11 +613,15 @@
                     struct coda_vattr attr; /* XXXXX */
                 } cfs_getattr;
 
+
+
      oouutt
 
                 struct cfs_getattr_out {
                     struct coda_vattr attr;
                 } cfs_getattr;
+
+
 
   DDeessccrriippttiioonn This call returns the attributes of the file identified by
   fid.
@@ -549,6 +643,7 @@
 
   44..66..  sseettaattttrr
 
+
   SSuummmmaarryy Set the attributes of a file.
 
   AArrgguummeennttss
@@ -559,6 +654,9 @@
                     ViceFid VFid;
                     struct coda_vattr attr;
                 } cfs_setattr;
+
+
+
 
      oouutt
         empty
@@ -577,6 +675,7 @@
 
   44..77..  aacccceessss
 
+
   SSuummmmaarryy
 
   AArrgguummeennttss
@@ -588,11 +687,13 @@
                     int flags;
                 } cfs_access;
 
+
+
      oouutt
         empty
 
   DDeessccrriippttiioonn Verify if access to the object identified by VFid for
-  operetions described by flags is permitted.  The result indicates if
+  operations described by flags is permitted.  The result indicates if
   access will be granted.  It is important to remember that Coda uses
   ACL's to enforce protection and that ultimately the servers, not the
   clients enforce the security of the system.  The result of this call
@@ -604,6 +705,7 @@
   0wpage
 
   44..88..  ccrreeaattee
+
 
   SSuummmmaarryy Invoked to create a file
 
@@ -619,12 +721,17 @@
                     char        *name;          /* Place holder for data. */
                 } cfs_create;
 
+
+
+
      oouutt
 
                 struct cfs_create_out {
                     ViceFid VFid;
                     struct coda_vattr attr;
                 } cfs_create;
+
+
 
   DDeessccrriippttiioonn  This upcall is invoked to request creation of a file.
   The file will be created in the directory identified by VFid, its name
@@ -636,6 +743,7 @@
   attributes of the file are returned.  The Coda FS Driver will normally
   instantiate a vnode, inode or filehandle at kernel level for the new
   object.
+
 
   EErrrroorrss A variety of errors can occur. Permissions may be insufficient.
   If the object exists and is not a file the error EISDIR is returned
@@ -657,6 +765,7 @@
 
   44..99..  mmkkddiirr
 
+
   SSuummmmaarryy Create a new directory.
 
   AArrgguummeennttss
@@ -669,12 +778,17 @@
                     char        *name;          /* Place holder for data. */
                 } cfs_mkdir;
 
+
+
      oouutt
 
                 struct cfs_mkdir_out {
                     ViceFid VFid;
                     struct coda_vattr attr;
                 } cfs_mkdir;
+
+
+
 
   DDeessccrriippttiioonn This call is similar to create but creates a directory.
   Only the mode field in the input parameters is used for creation.
@@ -693,6 +807,7 @@
 
   44..1100..  lliinnkk
 
+
   SSuummmmaarryy Create a link to an existing file.
 
   AArrgguummeennttss
@@ -705,6 +820,8 @@
                     char        *tname;         /* Place holder for data. */
                 } cfs_link;
 
+
+
      oouutt
         empty
 
@@ -716,7 +833,8 @@
 
   EErrrroorrss The usual errors can occur.0wpage
 
-  44..1111..  ssyynnlliinnkk
+  44..1111..  ssyymmlliinnkk
+
 
   SSuummmmaarryy create a symbolic link
 
@@ -731,12 +849,14 @@
                     char        *tname;
                 } cfs_symlink;
 
+
+
      oouutt
         none
 
   DDeessccrriippttiioonn Create a symbolic link. The link is to be placed in the
   directory identified by VFid and named tname.  It should point to the
-  pathname srcname.  The attributes of the newly creaeted object are to
+  pathname srcname.  The attributes of the newly created object are to
   be set to attr.
 
   EErrrroorrss
@@ -748,6 +868,7 @@
 
   44..1122..  rreemmoovvee
 
+
   SSuummmmaarryy Remove a file
 
   AArrgguummeennttss
@@ -758,6 +879,8 @@
                     ViceFid     VFid;
                     char        *name;          /* Place holder for data. */
                 } cfs_remove;
+
+
 
      oouutt
         none
@@ -774,6 +897,7 @@
 
   44..1133..  rrmmddiirr
 
+
   SSuummmmaarryy Remove a directory
 
   AArrgguummeennttss
@@ -784,6 +908,8 @@
                     ViceFid     VFid;
                     char        *name;          /* Place holder for data. */
                 } cfs_rmdir;
+
+
 
      oouutt
         none
@@ -800,6 +926,7 @@
 
   44..1144..  rreeaaddlliinnkk
 
+
   SSuummmmaarryy Read the value of a symbolic link.
 
   AArrgguummeennttss
@@ -810,12 +937,16 @@
                     ViceFid VFid;
                 } cfs_readlink;
 
+
+
      oouutt
 
                 struct cfs_readlink_out {
                     int count;
                     caddr_t     data;           /* Place holder for data. */
                 } cfs_readlink;
+
+
 
   DDeessccrriippttiioonn This routine reads the contents of symbolic link
   identified by VFid into the buffer data.  The buffer data must be able
@@ -826,6 +957,7 @@
   0wpage
 
   44..1155..  ooppeenn
+
 
   SSuummmmaarryy Open a file.
 
@@ -838,12 +970,16 @@
                     int flags;
                 } cfs_open;
 
+
+
      oouutt
 
                 struct cfs_open_out {
                     dev_t       dev;
                     ino_t       inode;
                 } cfs_open;
+
+
 
   DDeessccrriippttiioonn  This request asks Venus to place the file identified by
   VFid in its cache and to note that the calling process wishes to open
@@ -852,7 +988,6 @@
   informed of the device and inode number of the container file in the
   fields dev and inode.  For Windows the path of the container file is
   returned to the kernel.
-
   EErrrroorrss
 
   NNOOTTEE Currently the cfs_open_out structure is not properly adapted to
@@ -864,6 +999,7 @@
 
   44..1166..  cclloossee
 
+
   SSuummmmaarryy Close a file, update it on the servers.
 
   AArrgguummeennttss
@@ -874,6 +1010,8 @@
                     ViceFid     VFid;
                     int flags;
                 } cfs_close;
+
+
 
      oouutt
         none
@@ -896,6 +1034,7 @@
 
   44..1177..  iiooccttll
 
+
   SSuummmmaarryy Do an ioctl on a file. This includes the piocl interface.
 
   AArrgguummeennttss
@@ -910,12 +1049,17 @@
                     char *data;                 /* Place holder for data. */
                 } cfs_ioctl;
 
+
+
      oouutt
+
 
                 struct cfs_ioctl_out {
                     int len;
                     caddr_t     data;           /* Place holder for data. */
                 } cfs_ioctl;
+
+
 
   DDeessccrriippttiioonn Do an ioctl operation on a file.  The command, len and
   data arguments are filled as usual.  flags is not used by Venus.
@@ -925,9 +1069,11 @@
   NNOOTTEE Another bogus parameter.  flags is not used.  What is the
   business about PREFETCHING in the Venus' code?
 
+
   0wpage
 
   44..1188..  rreennaammee
+
 
   SSuummmmaarryy Rename a fid.
 
@@ -941,6 +1087,8 @@
                     ViceFid destFid;
                     char        *destname;
                 } cfs_rename;
+
+
 
      oouutt
         none
@@ -956,6 +1104,7 @@
 
   44..1199..  rreeaaddddiirr
 
+
   SSuummmmaarryy Read directory entries.
 
   AArrgguummeennttss
@@ -968,12 +1117,17 @@
                     int offset;
                 } cfs_readdir;
 
+
+
+
      oouutt
 
                 struct cfs_readdir_out {
                     int size;
                     caddr_t     data;           /* Place holder for data. */
                 } cfs_readdir;
+
+
 
   DDeessccrriippttiioonn Read directory entries from VFid starting at offset and
   read at most count bytes.  Returns the data into data and indicates
@@ -989,15 +1143,18 @@
 
   44..2200..  vvggeett
 
+
   SSuummmmaarryy instructs Venus to do an FSDB->Get.
 
   AArrgguummeennttss
 
      iinn
 
-                struct cfs_fsync_in {
+                struct cfs_vget_in {
                     ViceFid VFid;
-                } cfs_fsync;
+                } cfs_vget;
+
+
 
      oouutt
 
@@ -1005,6 +1162,8 @@
                     ViceFid VFid;
                     int vtype;
                 } cfs_vget;
+
+
 
   DDeessccrriippttiioonn This upcall asks Venus to do a get operation on an fsobj
   labelled by VFid.
@@ -1020,6 +1179,7 @@
 
   44..2211..  ffssyynncc
 
+
   SSuummmmaarryy Tell Venus to update the RVM attributes of a file.
 
   AArrgguummeennttss
@@ -1029,6 +1189,8 @@
                 struct cfs_fsync_in {
                     ViceFid VFid;
                 } cfs_fsync;
+
+
 
      oouutt
         none
@@ -1045,6 +1207,7 @@
 
   44..2222..  iinnaaccttiivvee
 
+
   SSuummmmaarryy Tell Venus a vnode is no longer in use.
 
   AArrgguummeennttss
@@ -1054,6 +1217,8 @@
                 struct cfs_inactive_in {
                     ViceFid VFid;
                 } cfs_inactive;
+
+
 
      oouutt
         none
@@ -1067,6 +1232,7 @@
   0wpage
 
   44..2233..  rrddwwrr
+
 
   SSuummmmaarryy Read or write from a file
 
@@ -1083,6 +1249,9 @@
                     caddr_t     data;           /* Place holder for data. */
                 } cfs_rdwr;
 
+
+
+
      oouutt
 
                 struct cfs_rdwr_out {
@@ -1090,6 +1259,8 @@
                     int count;
                     caddr_t     data;   /* Place holder for data. */
                 } cfs_rdwr;
+
+
 
   DDeessccrriippttiioonn This upcall asks Venus to read or write from a file.
 
@@ -1099,9 +1270,11 @@
   read/write operations never reach Venus.  I have been told the
   operation does not work.  It is not currently used.
 
+
   0wpage
 
   44..2244..  ooddyymmoouunntt
+
 
   SSuummmmaarryy Allows mounting multiple Coda "filesystems" on one Unix mount
   point.
@@ -1114,11 +1287,15 @@
                     char        *name;          /* Place holder for data. */
                 } ody_mount;
 
+
+
      oouutt
 
                 struct ody_mount_out {
                     ViceFid VFid;
                 } ody_mount;
+
+
 
   DDeessccrriippttiioonn  Asks Venus to return the rootfid of a Coda system named
   name.  The fid is returned in VFid.
@@ -1133,11 +1310,13 @@
 
   44..2255..  ooddyy__llooookkuupp
 
+
   SSuummmmaarryy Looks up something.
 
   AArrgguummeennttss
 
      iinn irrelevant
+
 
      oouutt
         irrelevant
@@ -1151,6 +1330,7 @@
   0wpage
 
   44..2266..  ooddyy__eexxppaanndd
+
 
   SSuummmmaarryy expands something in a dynamic set.
 
@@ -1171,6 +1351,7 @@
 
   44..2277..  pprreeffeettcchh
 
+
   SSuummmmaarryy Prefetch a dynamic set.
 
   AArrgguummeennttss
@@ -1188,9 +1369,11 @@
 
   NNOOTTEE Gut it. It isn't working and isn't used by Coda.
 
+
   0wpage
 
   44..2288..  ssiiggnnaall
+
 
   SSuummmmaarryy Send Venus a signal about an upcall.
 
@@ -1219,6 +1402,7 @@
 
   55..  TThhee mmiinniiccaacchhee aanndd ddoowwnnccaallllss
 
+
   The Coda FS Driver can cache results of lookup and access upcalls, to
   limit the frequency of upcalls.  Upcalls carry a price since a process
   context switch needs to take place.  The counterpart of caching the
@@ -1227,8 +1411,8 @@
 
   The kernel code generally has to maintain a structure which links the
   internal file handles (called vnodes in BSD, inodes in Linux and
-  FileHandles in Windows) with the ViceFid's which Venus maintains.
-  Ther reason is that frequent translations back and forth are needed in
+  FileHandles in Windows) with the ViceFid's which Venus maintains.  The
+  reason is that frequent translations back and forth are needed in
   order to make upcalls and use the results of upcalls.  Such linking
   objects are called ccnnooddeess.
 
@@ -1246,7 +1430,7 @@
   The lookup call in the Coda FS Driver may request the cnode of the
   desired object from the cache, by passing it's name, directory and the
   CodaCred's of the caller.  The cache will return the cnode or indicate
-  and it cannot be found.  The Coda FS Driver must be careful to
+  that it cannot be found.  The Coda FS Driver must be careful to
   invalidate cache entries when it modifies or removes objects.
 
   When Venus obtains information that indicates that cache entries are
@@ -1255,11 +1439,16 @@
   the kind described below.  The Coda FS Driver does not return an error
   unless the downcall data could not be read into kernel memory.
 
+
   55..11..  IINNVVAALLIIDDAATTEE
+
 
   No information is available on this call.
 
+
   55..22..  FFLLUUSSHH
+
+
 
   AArrgguummeennttss None
 
@@ -1270,7 +1459,9 @@
   systems allow the kernel name cache to be switched off dynamically.
   When this is done, this downcall is made.
 
+
   55..33..  PPUURRGGEEUUSSEERR
+
 
   AArrgguummeennttss
 
@@ -1278,16 +1469,22 @@
               struct CodaCred cred;
           } cfs_purgeuser;
 
+
+
   DDeessccrriippttiioonn Remove all entries in the cache carrying the Cred.  This
   call is issued when tokes for a user expire or are flushed.
 
+
   55..44..  ZZAAPPFFIILLEE
+
 
   AArrgguummeennttss
 
           struct cfs_zapfile_out {  /* CFS_ZAPFILE is a venus->kernel call */
               ViceFid CodaFid;
           } cfs_zapfile;
+
+
 
   DDeessccrriippttiioonn Remove all entries which have the (dir vnode, name) pair.
   This is issued as a result of an invalidation of cached attributes of
@@ -1297,7 +1494,10 @@
   zapfile routine takes different arguments. Linux does not implement
   the invalidation of attributes correctly.
 
+
+
   55..55..  ZZAAPPDDIIRR
+
 
   AArrgguummeennttss
 
@@ -1305,11 +1505,16 @@
               ViceFid CodaFid;
           } cfs_zapdir;
 
+
+
   DDeessccrriippttiioonn Remove all entries in the cache lying in a directory
   CodaFid, and all children of this directory. This call is issed when
-  Venus receives a callback on the this directory.
+  Venus receives a callback on the directory.
+
 
   55..66..  ZZAAPPVVNNOODDEE
+
+
 
   AArrgguummeennttss
 
@@ -1318,10 +1523,14 @@
               ViceFid VFid;
           } cfs_zapvnode;
 
+
+
   DDeessccrriippttiioonn Remove all entries in the cache carrying the cred and VFid
   as in the arguments. This downcall is probably never issued.
 
+
   55..77..  PPUURRGGEEFFIIDD
+
 
   SSuummmmaarryy
 
@@ -1331,11 +1540,16 @@
               ViceFid CodaFid;
           } cfs_purgefid;
 
+
+
   DDeessccrriippttiioonn Flush the attribute for the file. If it is a dir (odd
   vnode), purge its children from the namecache remove the file from the
   namecache.
 
+
+
   55..88..  RREEPPLLAACCEE
+
 
   SSuummmmaarryy Replace the Fid's for a collection of names.
 
@@ -1346,6 +1560,8 @@
               ViceFid OldFid;
           } cfs_replace;
 
+
+
   DDeessccrriippttiioonn This routine replaces a ViceFid in the name cache with
   another.  It is added to allow Venus during reintegration to replace
   locally allocated temp fids while disconnected with global fids even
@@ -1355,10 +1571,12 @@
 
   66..  IInniittiiaalliizzaattiioonn aanndd cclleeaannuupp
 
+
   This section gives brief hints as to desirable features for the Coda
   FS Driver at startup and upon shutdown or Venus failures.  Before
   entering the discussion it is useful to repeat that the Coda FS Driver
   maintains the following data:
+
 
   1. message queues
 
@@ -1383,7 +1601,9 @@
      Currently the _p_i_o_c_t_l passes through the VFS for Coda so we can
      treat these similarly.
 
+
   66..11..  RReeqquuiirreemmeennttss
+
 
   The following requirements should be accomodated:
 
@@ -1398,6 +1618,7 @@
      be completed.
 
   +o  Close will free all memory allocated by the message queues.
+
 
   2. At open the namecache shall be initialized to empty state.
 
@@ -1424,4 +1645,6 @@
   NNOOTTEE  NetBSD in particular but also Linux have not implemented the
   above requirements fully.  For smooth operation this needs to be
   corrected.
+
+
 

@@ -16,27 +16,18 @@ int mesh_abort(Scsi_Cmnd *);
 int mesh_reset(Scsi_Cmnd *, unsigned int);
 
 #define SCSI_MESH {					\
-	NULL,			/* next */		\
-	NULL,			/* usage_count */	\
-	&proc_scsi_mesh,	/* proc_dir */		\
-	NULL,			/* proc_info */		\
-	"MESH",			/* name */		\
-	mesh_detect,		/* detect */		\
-	NULL,			/* release */		\
-	NULL,			/* info */		\
-	mesh_command,		/* command */		\
-	mesh_queue,		/* queuecommand */	\
-	mesh_abort,		/* abort */		\
-	mesh_reset,		/* reset */		\
-	NULL,			/* slave_attach */	\
-	NULL,			/* bios_param */	\
-	20,			/* can_queue */		\
-	7,			/* this_id */		\
-	SG_ALL,			/* sg_tablesize */	\
-	2,			/* cmd_per_lun */	\
-	0,			/* present */		\
-	0,			/* unchecked_isa_dma */	\
-	DISABLE_CLUSTERING,	/* use_clustering */	\
+	proc_dir:	&proc_scsi_mesh,		\
+	name:		"MESH",				\
+	detect:		mesh_detect,			\
+	command:	mesh_command,			\
+	queuecommand:	mesh_queue,			\
+	abort:		mesh_abort,			\
+	reset:		mesh_reset,			\
+	can_queue:	20,				\
+	this_id:	7,				\
+	sg_tablesize:	SG_ALL,				\
+	cmd_per_lun:	2,				\
+	use_clustering:	DISABLE_CLUSTERING,		\
 }
 
 /*

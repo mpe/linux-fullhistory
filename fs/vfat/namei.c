@@ -50,9 +50,29 @@ struct vfat_find_info {
 	int long_slots;
 	ino_t ino;
 	int posix;
+	int anycase;
 };
 
 void vfat_read_inode(struct inode *inode);
+static int vfat_valid_shortname(const char *,int, int, int);
+static int vfat_format_name(const char *, int, char *, int, int);
+static int vfat_valid_longname(const char *, int, int, int);
+
+static int strnicmp(const char *s1, const char *s2, int len)
+{
+	int n = 0;
+	while (*s1 && *s2 && (tolower(*s1) == tolower(*s2))) {
+		s1++; s2++; n++;
+		if (n == len) return 0;
+	}
+	if (*s1 == 0 && *s2 == 0) return 0;
+	if (*s1 && *s2) {
+		if (*s1 > *s2) return 1;
+		return -1;
+	}
+	if (*s1) return 1;
+	return -1;
+}
 
 void vfat_put_super(struct super_block *sb)
 {
@@ -138,6 +158,60 @@ static int parse_options(char *options,	struct fat_mount_options *opts)
 	return 1;
 }
 
+/*
+ * Compute the hash for the vfat name corresponding to the dentry.
+ * Note: if the name is invalid, we leave the hash code unchanged so
+ * that the existing dentry can be used. The vfat fs routines will
+ * return ENOENT or EINVAL as appropriate.
+ */
+static int vfat_hash(struct dentry *dentry, struct qstr *qstr)
+{
+	const char *name;
+	int len;
+	char c;
+	unsigned long hash;
+
+	len = qstr->len;
+	name = qstr->name;
+	hash = init_name_hash();
+	while (len--) {
+		c = tolower(*name++);
+		hash = partial_name_hash(tolower(c), hash);
+	}
+	qstr->hash = end_name_hash(hash);
+
+	return 0;
+}
+
+/*
+ * Compare two vfat names.
+ */
+static int vfat_cmp(struct dentry *dentry, struct qstr *a, struct qstr *b)
+{
+	int alen, blen;
+
+	/* A filename cannot end in '.' or we treat it like it has none */
+	alen = a->len;
+	blen = b->len;
+	if (alen != blen) {
+		if (a->name[alen-1] == '.')
+			alen--;
+		if (b->name[blen-1] == '.')
+			blen--;
+		if (alen != blen)
+			return 1;
+	}
+
+	return strnicmp(a->name, b->name, alen);
+}
+
+static struct dentry_operations vfat_dentry_operations = {
+	NULL, 		/* d_revalidate */
+	vfat_hash,
+	vfat_cmp,
+	NULL		/* d_delete */
+};
+
 struct super_block *vfat_read_super(struct super_block *sb,void *data,
 				    int silent)
 {
@@ -159,6 +233,9 @@ struct super_block *vfat_read_super(struct super_block *sb,void *data,
 		MOD_DEC_USE_COUNT;
 	} else {
 		MSDOS_SB(sb)->options.dotsOK = 0;
+		if (MSDOS_SB(sb)->options.name_check != 's') {
+			sb->s_root->d_op = &vfat_dentry_operations;
+		}
 	}
 
 	return res;
@@ -244,22 +321,6 @@ static char replace_chars[] = "[];,+=";
 static int vfat_find(struct inode *dir,struct qstr* name,
 		      int find_long,int new_filename,int is_dir,
 		      struct slot_info *sinfo_out);
-
-static int strnicmp(const char *s1, const char *s2, int len)
-{
-	int n = 0;
-	while (*s1 && *s2 && (tolower(*s1) == tolower(*s2))) {
-		s1++; s2++; n++;
-		if (n == len) return 0;
-	}
-	if (*s1 == 0 && *s2 == 0) return 0;
-	if (*s1 && *s2) {
-		if (*s1 > *s2) return 1;
-		return -1;
-	}
-	if (*s1) return 1;
-	return -1;
-}
 
 /* Checks the validity of a long MS-DOS filename */
 /* Returns negative number on error, 0 for a normal
@@ -888,7 +949,7 @@ static int vfat_readdir_cb(
 
 	s1 = name; s2 = vf->name;
 	for (i = 0; i < name_len; i++) {
-		if (vf->new_filename && !vf->posix) {
+		if (vf->anycase || (vf->new_filename && !vf->posix)) {
 			if (tolower(*s1) != tolower(*s2))
 				return 0;
 		} else {
@@ -933,6 +994,7 @@ static int vfat_find(struct inode *dir,struct qstr* qname,
 	vf.new_filename = new_filename;
 	vf.found = 0;
 	vf.posix = MSDOS_SB(sb)->options.posixfs;
+	vf.anycase = (MSDOS_SB(sb)->options.name_check != 's');
 	res = fat_readdirx(dir,&fil,(void *)&vf,vfat_readdir_cb,NULL,1,find_long,0);
 	PRINTK(("vfat_find: Debug 1\n"));
 	if (res < 0) goto cleanup;
@@ -1038,6 +1100,10 @@ int vfat_lookup(struct inode *dir,struct dentry *dentry)
 	
 	PRINTK (("vfat_lookup: name=%s, len=%d\n", 
 		 dentry->d_name.name, dentry->d_name.len));
+
+	if (MSDOS_SB(dir->i_sb)->options.name_check != 's') {
+		dentry->d_op = &vfat_dentry_operations;
+	}
 
 	result = NULL;
 	if ((res = vfat_find(dir,&dentry->d_name,1,0,0,&sinfo)) < 0) {
