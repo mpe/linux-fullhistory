@@ -562,13 +562,12 @@ static struct sock *netlink_getsockbypid(struct sock *ssk, u32 pid)
 struct sock *netlink_getsockbyfilp(struct file *filp)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
-	struct socket *socket;
 	struct sock *sock;
 
-	if (!inode->i_sock || !(socket = SOCKET_I(inode)))
+	if (!S_ISSOCK(inode->i_mode))
 		return ERR_PTR(-ENOTSOCK);
 
-	sock = socket->sk;
+	sock = SOCKET_I(inode)->sk;
 	if (sock->sk_family != AF_NETLINK)
 		return ERR_PTR(-EINVAL);
 

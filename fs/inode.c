@@ -118,7 +118,6 @@ static struct inode *alloc_inode(struct super_block *sb)
 		inode->i_blkbits = sb->s_blocksize_bits;
 		inode->i_flags = 0;
 		atomic_set(&inode->i_count, 1);
-		inode->i_sock = 0;
 		inode->i_op = &empty_iops;
 		inode->i_fop = &empty_fops;
 		inode->i_nlink = 1;
