@@ -9,6 +9,7 @@
  */
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/kernel_stat.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/config.h>
@@ -406,6 +407,10 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		if (bh[i]) {
 			bh[i]->b_req = 1;
 			make_request(major, rw, bh[i]);
+			if (rw == READ || rw == READA)
+				kstat.pgpgin++;
+			else
+				kstat.pgpgout++;
 		}
 	}
 	if (plugged) {

@@ -90,6 +90,8 @@ static int mmap_mem(struct inode * inode, struct file * file,
 
 	if (off & 0xfff || off + len < off)
 		return -ENXIO;
+	if (x86 > 3 && off >= high_memory)
+		prot |= PAGE_PCD;
 	if (remap_page_range(addr, off, len, prot))
 		return -EAGAIN;
 /* try to create a dummy vmm-structure so that the rest of the kernel knows we are here */

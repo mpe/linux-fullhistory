@@ -11,6 +11,7 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/kernel_stat.h>
 #include <linux/tty.h>
 #include <linux/user.h>
 #include <linux/a.out.h>
@@ -84,6 +85,33 @@ static int get_loadavg(char * buffer)
 		LOAD_INT(b), LOAD_FRAC(b),
 		LOAD_INT(c), LOAD_FRAC(c));
 }
+
+static int get_kstat(char * buffer)
+{
+        return sprintf(buffer,	"cpu  %u,%u,%u,%lu\n"
+        			"disk %u,%u,%u,%u\n"
+        			"page %u,%u\n"
+        			"swap %u,%u\n"
+        			"intr %u\n"
+        			"ctxt %u\n"
+        			"btime %lu\n",
+                kstat.cpu_user,
+                kstat.cpu_nice,
+                kstat.cpu_system,
+                jiffies - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system),
+                kstat.dk_drive[0],
+                kstat.dk_drive[1],
+                kstat.dk_drive[2],
+                kstat.dk_drive[3],
+                kstat.pgpgin,
+                kstat.pgpgout,
+                kstat.pswpin,
+                kstat.pswpout,
+                kstat.interrupts,
+                kstat.context_swtch,
+                xtime.tv_sec - jiffies / HZ);
+}
+
 
 static int get_uptime(char * buffer)
 {
@@ -467,6 +495,9 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 			break;
 		case 16:
 			length = get_module_list(page);
+			break;
+		case 17:
+			length = get_kstat(page);
 			break;
 		default:
 			free_page((unsigned long) page);

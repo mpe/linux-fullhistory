@@ -60,7 +60,7 @@ static int pipe_read(struct inode * inode, struct file * filp, char * buf, int c
 		buf += chars;
 	}
 	PIPE_LOCK(*inode)--;
-	wake_up(&PIPE_WAIT(*inode));
+	wake_up_interruptible(&PIPE_WAIT(*inode));
 	if (read)
 		return read;
 	if (PIPE_WRITERS(*inode))
@@ -109,7 +109,7 @@ static int pipe_write(struct inode * inode, struct file * filp, char * buf, int 
 			buf += chars;
 		}
 		PIPE_LOCK(*inode)--;
-		wake_up(&PIPE_WAIT(*inode));
+		wake_up_interruptible(&PIPE_WAIT(*inode));
 		free = 1;
 	}
 	return written;
@@ -206,7 +206,7 @@ static int connect_read(struct inode * inode, struct file * filp, char * buf, in
 			break;
 		if (filp->f_flags & O_NONBLOCK)
 			return -EAGAIN;
-		wake_up(& PIPE_WAIT(*inode));
+		wake_up_interruptible(& PIPE_WAIT(*inode));
 		if (current->signal & ~current->blocked)
 			return -ERESTARTSYS;
 		interruptible_sleep_on(& PIPE_WAIT(*inode));
@@ -246,20 +246,20 @@ static int connect_select(struct inode * inode, struct file * filp, int sel_type
 static void pipe_read_release(struct inode * inode, struct file * filp)
 {
 	PIPE_READERS(*inode)--;
-	wake_up(&PIPE_WAIT(*inode));
+	wake_up_interruptible(&PIPE_WAIT(*inode));
 }
 
 static void pipe_write_release(struct inode * inode, struct file * filp)
 {
 	PIPE_WRITERS(*inode)--;
-	wake_up(&PIPE_WAIT(*inode));
+	wake_up_interruptible(&PIPE_WAIT(*inode));
 }
 
 static void pipe_rdwr_release(struct inode * inode, struct file * filp)
 {
 	PIPE_READERS(*inode)--;
 	PIPE_WRITERS(*inode)--;
-	wake_up(&PIPE_WAIT(*inode));
+	wake_up_interruptible(&PIPE_WAIT(*inode));
 }
 
 /*

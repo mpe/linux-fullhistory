@@ -1,63 +1,10 @@
 #ifndef __LINUX_KEYBOARD_H
 #define __LINUX_KEYBOARD_H
 
-#include <linux/interrupt.h>
-#define set_leds() mark_bh(KEYBOARD_BH)
-
-/*
- * kbd->xxx contains the VC-local things (flag settings etc..)
- * The low 3 local flags are hardcoded to be the led setting..
- */
-struct kbd_struct {
-	unsigned long flags;
-	unsigned long default_flags;
-};
-
-extern struct kbd_struct kbd_table[];
-
-/*
- * These are the local "softflags", giving actual keyboard modes. The
- * three first flags are coded to the led settings.
- */
-#define VC_SCROLLOCK	0	/* scroll-lock mode */
-#define VC_NUMLOCK	1	/* numeric lock mode */
-#define VC_CAPSLOCK	2	/* capslock mode */
-#define VC_APPLIC	3	/* application key mode */
-#define VC_CKMODE	5	/* cursor key mode */
-#define VC_REPEAT	6	/* keyboard repeat */
-#define VC_RAW		7	/* raw (scancode) mode */
-#define VC_CRLF		8	/* 0 - enter sends CR, 1 - enter sends CRLF */
-#define VC_META		9	/* 0 - meta, 1 - meta=prefix with ESC */
-#define VC_PAUSE	10	/* pause key pressed */
-#define VC_MEDIUMRAW	11	/* medium raw (keycode) mode */
-#define VC_SHIFTLOCK	12	/* shift lock mode */
-#define VC_ALTGRLOCK	13	/* altgr lock mode */
-#define VC_CTRLLOCK	14	/* control lock mode */
-#define VC_ALTLOCK	15	/* alt lock mode */
-
-#define LED_MASK	7
-
-extern unsigned long kbd_init(unsigned long);
-
-extern inline int vc_kbd_flag(struct kbd_struct * kbd, int flag)
-{
-	return ((kbd->flags >> flag) & 1);
-}
-
-extern inline void set_vc_kbd_flag(struct kbd_struct * kbd, int flag)
-{
-	kbd->flags |= 1 << flag;
-}
-
-extern inline void clr_vc_kbd_flag(struct kbd_struct * kbd, int flag)
-{
-	kbd->flags &= ~(1 << flag);
-}
-
-extern inline void chg_vc_kbd_flag(struct kbd_struct * kbd, int flag)
-{
-	kbd->flags ^= 1 << flag;
-}
+#define KG_SHIFT	0
+#define KG_CTRL		2
+#define KG_ALT		3
+#define KG_ALTGR	1
 
 #define NR_KEYS 128
 #define NR_KEYMAPS 16
@@ -71,6 +18,7 @@ extern char func_buf[FUNC_BUFSIZE];
 extern char *func_table[NR_FUNC];
 
 #define KT_LATIN	0	/* we depend on this being zero */
+#define KT_LETTER      11	/* symbol that can be acted upon by CapsLock */
 #define KT_FN		1
 #define KT_SPEC		2
 #define KT_PAD		3
@@ -163,11 +111,6 @@ extern char *func_table[NR_FUNC];
 #define K_RIGHT		K(KT_CUR,2)
 #define K_UP		K(KT_CUR,3)
 
-#define KG_SHIFT	0
-#define KG_CTRL		2
-#define KG_ALT		3
-#define KG_ALTGR	1
-
 #define K_SHIFT		K(KT_SHIFT,KG_SHIFT)
 #define K_CTRL		K(KT_SHIFT,KG_CTRL)
 #define K_ALT		K(KT_SHIFT,KG_ALT)
@@ -188,10 +131,10 @@ extern char *func_table[NR_FUNC];
 #define K_ASC8		K(KT_ASCII,8)
 #define K_ASC9		K(KT_ASCII,9)
 
-#define K_SHIFTLOCK	K(KT_LOCK,0)
-#define K_CTRLLOCK	K(KT_LOCK,2)
-#define K_ALTLOCK	K(KT_LOCK,3)
-#define K_ALTGRLOCK	K(KT_LOCK,1)
+#define K_SHIFTLOCK	K(KT_LOCK,KG_SHIFT)
+#define K_CTRLLOCK	K(KT_LOCK,KG_CTRL)
+#define K_ALTLOCK	K(KT_LOCK,KG_ALT)
+#define K_ALTGRLOCK	K(KT_LOCK,KG_ALTGR)
 
 #define MAX_DIACR       256
 #endif

@@ -5,7 +5,7 @@
  *            and for "no-sound" interfaces like Lasermate and the
  *            Panasonic CI-101P.
  *
- *  NOTE:     This is release 1.0.
+ *  NOTE:     This is release 1.2.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -57,6 +57,11 @@
  *  1.1  Do SpinUp for new drives, too.
  *       Revised for clean compile under "old" kernels (pl9).
  *
+ *  1.2  Found the "workman with double-speed drive" bug: use the driver's
+ *       audio_state, not what the drive is reporting with ReadSubQ.
+ *
+ *
+ *
  *     special thanks to Kai Makisara (kai.makisara@vtt.fi) for his fine
  *     elaborated speed-up experiments (and the fabulous results!), for
  *     the "push" towards load-free wait loops, and for the extensive mail
@@ -68,17 +73,14 @@
  *
  *                  The FTP-home of this driver is 
  *                  ftp.gwdg.de:/pub/linux/cdrom/drivers/sbpcd/.
- *                  I will serve tsx-11.mit.edu, sunsite.unc.edu and
- *                  ftp.funet.fi, too.
- *
  *
  *                  If you change this software, you should mail a .diff
- *                  file with some description lines to emoenke.gwdg.de.
+ *                  file with some description lines to emoenke@gwdg.de.
  *                  I want to know about it.
  *
  *                  If you are the editor of a Linux CD, you should
- *                  add sbpcd.c into your boot floppy kernel and send
- *                  me one of your CDs for free.
+ *                  enable sbpcd.c within your boot floppy kernel and
+ *                  send me one of your CDs for free.
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -125,7 +127,7 @@
 #define MAJOR_NR MATSUSHITA_CDROM_MAJOR
 #include "blk.h"
 
-#define VERSION "1.1"
+#define VERSION "1.2"
 
 #define SBPCD_DEBUG
 
@@ -143,7 +145,7 @@
 #define MANY_SESSION 0
 #define CDMKE
 #undef  FUTURE
-#define WORKMAN 1 /* some testing stuff to make it better */
+#define WORKMAN 0 /* some testing stuff to make it better */
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -2057,7 +2059,6 @@ static int sbpcd_ioctl(struct inode *inode,struct file *file,
 
     case CDROMPLAYMSF:
       DPRINTF((DBG_IOC,"SBPCD: ioctl: CDROMPLAYMSF entered.\n"));
-#if WORKMAN
       if (DS[d].audio_state==audio_playing)
 	{
 	  i=xx_Pause_Resume(1);
@@ -2067,9 +2068,6 @@ static int sbpcd_ioctl(struct inode *inode,struct file *file,
 	  DS[d].pos_audio_start=DS[d].SubQ_run_tot;
 	  i=xx_Seek(DS[d].pos_audio_start,1);
 	}
-#else
-      if (DS[d].audio_state==audio_playing) return (-EINVAL);
-#endif
       st=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_msf));
       if (st) return (st);
       memcpy_fromfs(&msf, (void *) arg, sizeof(struct cdrom_msf));
@@ -2203,8 +2201,21 @@ static int sbpcd_ioctl(struct inode *inode,struct file *file,
       st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_subchnl));
       if (st)	return (st);
       memcpy_fromfs(&SC, (void *) arg, sizeof(struct cdrom_subchnl));
+#if 0
       if (DS[d].SubQ_audio==0x80) DS[d].SubQ_audio=CDROM_AUDIO_NO_STATUS;
-      SC.cdsc_audiostatus=DS[d].SubQ_audio;
+#endif
+      switch (DS[d].audio_state)
+	{
+	case audio_playing:
+	  SC.cdsc_audiostatus=CDROM_AUDIO_PLAY;
+	  break;
+	case audio_pausing:
+	  SC.cdsc_audiostatus=CDROM_AUDIO_PAUSED;
+	  break;
+	default:
+	  SC.cdsc_audiostatus=CDROM_AUDIO_NO_STATUS;
+	  break;
+	}
       SC.cdsc_adr=DS[d].SubQ_ctl_adr;
       SC.cdsc_ctrl=DS[d].SubQ_ctl_adr>>4;
       SC.cdsc_trk=bcd2bin(DS[d].SubQ_trk);

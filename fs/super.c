@@ -210,6 +210,7 @@ static int do_umount(dev_t dev)
 		if (!(sb=get_super(dev)))
 			return -ENOENT;
 		if (!(sb->s_flags & MS_RDONLY)) {
+			fsync_dev(dev);
 			retval = do_remount_sb(sb, MS_RDONLY, 0);
 			if (retval)
 				return retval;

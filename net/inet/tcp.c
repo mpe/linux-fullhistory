@@ -103,7 +103,7 @@
 
 #define SEQ_TICK 3
 unsigned long seq_offset;
-#define LOCALNET_BIGPACKETS
+#define SUBNETSARELOCAL
 
 static __inline__ int 
 min(unsigned int a, unsigned int b)
@@ -180,14 +180,14 @@ static int tcp_select_window(struct sock *sk)
 
 /*
  * two things are going on here.  First, we don't ever offer a
- * window less than min(sk->mtu, MAX_WINDOW/2).  This is the
+ * window less than min(sk->mss, MAX_WINDOW/2).  This is the
  * receiver side of SWS as specified in RFC1122.
  * Second, we always give them at least the window they
  * had before, in order to avoid retracting window.  This
  * is technically allowed, but RFC1122 advises against it and
  * in practice it causes trouble.
  */
-	if (new_window < min(sk->mtu, MAX_WINDOW/2) ||
+	if (new_window < min(sk->mss, MAX_WINDOW/2) ||
 	    new_window < sk->window)
 	  return(sk->window);
 	return(new_window);
@@ -420,7 +420,7 @@ tcp_select(struct sock *sk, int sel_type, select_table *wait)
 		 * Hack so it will probably be able to write
 		 * something if it says it's ok to write.
 		 */
-		if (sk->prot->wspace(sk) >= sk->mtu) {
+		if (sk->prot->wspace(sk) >= sk->mss) {
 			release_sock(sk);
 			/* This should cause connect to work ok. */
 			if (sk->state == TCP_SYN_RECV ||
@@ -656,10 +656,7 @@ static struct sk_buff * dequeue_partial(struct sock * sk)
 	save_flags(flags);
 	cli();
 	skb = sk->send_tmp;
-	if (skb) {
-		sk->send_tmp = skb->next;
-		skb->next = NULL;
-	}
+	sk->send_tmp = NULL;
 	restore_flags(flags);
 	return skb;
 }
@@ -669,7 +666,6 @@ static void enqueue_partial(struct sk_buff * skb, struct sock * sk)
 	struct sk_buff * tmp;
 	unsigned long flags;
 
-	skb->next = NULL;
 	save_flags(flags);
 	cli();
 	tmp = sk->send_tmp;
@@ -888,6 +884,18 @@ tcp_write(struct sock *sk, unsigned char *from,
 		sti();
 	}
 
+/*
+ * The following code can result in copy <= if sk->mss is ever
+ * decreased.  It shouldn't be.  sk->mss is min(sk->mtu, sk->max_window).
+ * sk->mtu is constant once SYN processing is finished.  I.e. we
+ * had better not get here until we've seen his SYN and at least one
+ * valid ack.  (The SYN sets sk->mtu and the ack sets sk->max_window.)
+ * But ESTABLISHED should guarantee that.  sk->max_window is by definition
+ * non-decreasing.  Note that any ioctl to set user_mss must be done
+ * before the exchange of SYN's.  If the initial ack from the other
+ * end has a window of 0, max_window and thus mss will both be 0.
+ */
+
 	/* Now we need to check if we have a half built packet. */
 	if ((skb = dequeue_partial(sk)) != NULL) {
 	        int hdrlen;
@@ -896,11 +904,9 @@ tcp_write(struct sock *sk, unsigned char *from,
 		hdrlen = ((unsigned long)skb->h.th - (unsigned long)skb->data)
 		         + sizeof(struct tcphdr);
 
-		/* If sk->mtu has been changed this could cause problems. */
-
 		/* Add more stuff to the end of skb->len */
 		if (!(flags & MSG_OOB)) {
-			copy = min(sk->mtu - (skb->len - hdrlen), len);
+			copy = min(sk->mss - (skb->len - hdrlen), len);
 			/* FIXME: this is really a bug. */
 			if (copy <= 0) {
 			  printk("TCP: **bug**: \"copy\" <= 0!!\n");
@@ -915,7 +921,7 @@ tcp_write(struct sock *sk, unsigned char *from,
 			sk->send_seq += copy;
 		      }
 		enqueue_partial(skb, sk);
-		if ((skb->len - hdrlen) >= sk->mtu || (flags & MSG_OOB)) {
+		if ((skb->len - hdrlen) >= sk->mss || (flags & MSG_OOB)) {
 		  tcp_send_partial(sk);
 		}
 		continue;
@@ -928,24 +934,26 @@ tcp_write(struct sock *sk, unsigned char *from,
  	 *   silly window prevention, as specified in RFC1122.
  	 *   (Note that this is diffferent than earlier versions of
  	 *   SWS prevention, e.g. RFC813.).  What we actually do is 
-	 *   use the whole MTU.  Since the results in the right
+	 *   use the whole MSS.  Since the results in the right
 	 *   edge of the packet being outside the window, it will
 	 *   be queued for later rather than sent.
 	 */
 
 	copy = diff(sk->window_seq, sk->send_seq);
-	if (sk->max_window > 1) {
-	  if (copy < (sk->max_window >> 1))
-	    copy = sk->mtu;
-	} else  /* no max_window yet, punt this test */
-	  copy = sk->mtu;	
-	copy = min(copy, sk->mtu);
+	/* what if max_window == 1?  In that case max_window >> 1 is 0.
+	 * however in that case copy == max_window, so it's OK to use 
+	 * the window */
+	if (copy < (sk->max_window >> 1))
+	  copy = sk->mss;
+	copy = min(copy, sk->mss);
 	copy = min(copy, len);
 
   /* We should really check the window here also. */
-	if (sk->packets_out && copy < sk->mtu && !(flags & MSG_OOB)) {
+	if (sk->packets_out && copy < sk->mss && !(flags & MSG_OOB)) {
 	/* We will release the socket incase we sleep here. */
 	  release_sock(sk);
+	  /* NB: following must be mtu, because mss can be increased.
+	   * mss is always <= mtu */
 	  skb = prot->wmalloc(sk, sk->mtu + 128 + prot->max_header + sizeof(*skb), 0, GFP_KERNEL);
 	  sk->inuse = 1;
 	  send_tmp = skb;
@@ -1204,6 +1212,14 @@ cleanup_rbuf(struct sock *sk)
 	 * the user reads some more.
 	 */
 	sk->ack_backlog++;
+/*
+ * It's unclear whether to use sk->mtu or sk->mss here.  They differ only
+ * if the other end is offering a window smaller than the agreed on MSS
+ * (called sk->mtu here).  In theory there's no connection between send
+ * and receive, and so no reason to think that they're going to send
+ * small packets.  For the moment I'm using the hack of reducing the mss
+ * only on the send side, so I'm putting mtu here.
+ */
 	if ((sk->prot->rspace(sk) > (sk->window - sk->bytes_rcv + sk->mtu))) {
 		/* Send an ack right now. */
 		tcp_read_wakeup(sk);
@@ -1741,7 +1757,11 @@ tcp_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
 
 
 /*
- *	Look for tcp options. Parses everything but only knows about MSS
+ *	Look for tcp options. Parses everything but only knows about MSS.
+ *      This routine is always called with the packet containing the SYN.
+ *      However it may also be called with the ack to the SYN.  So you
+ *      can't assume this is always the SYN.  It's always called after
+ *      we have set up sk->mtu to our own MTU.
  */
  
 static void
@@ -1749,6 +1769,7 @@ tcp_options(struct sock *sk, struct tcphdr *th)
 {
   unsigned char *ptr;
   int length=(th->doff*4)-sizeof(struct tcphdr);
+  int mss_seen = 0;
     
   ptr = (unsigned char *)(th + 1);
   
@@ -1770,9 +1791,10 @@ tcp_options(struct sock *sk, struct tcphdr *th)
   			switch(opcode)
   			{
   				case TCPOPT_MSS:
-  					if(opsize==4)
+  					if(opsize==4 && th->syn)
   					{
   						sk->mtu=min(sk->mtu,ntohs(*(unsigned short *)ptr));
+						mss_seen = 1;
   					}
   					break;
   				/* Add other options here as people feel the urge to implement stuff like large windows */
@@ -1781,7 +1803,11 @@ tcp_options(struct sock *sk, struct tcphdr *th)
   			length-=opsize;
   	}
   }
-
+  if (th->syn) {
+    if (! mss_seen)
+      sk->mtu=min(sk->mtu, 536);  /* default MSS if none sent */
+  }
+  sk->mss = min(sk->max_window, sk->mtu);
 }
 
 static inline unsigned long default_mask(unsigned long dst)
@@ -1888,6 +1914,7 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
   newsk->state = TCP_SYN_RECV;
   newsk->timeout = 0;
   newsk->send_seq = jiffies * SEQ_TICK - seq_offset;
+  newsk->window_seq = newsk->send_seq;
   newsk->rcv_ack_seq = newsk->send_seq;
   newsk->urg =0;
   newsk->retransmits = 0;
@@ -1919,16 +1946,18 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
   newsk->ip_tos=skb->ip_hdr->tos;
 
 /* use 512 or whatever user asked for */
-/* note use of sk->mss, since user has no direct access to newsk */
-  if (sk->mss)
-    newsk->mtu = sk->mss;
+/* note use of sk->user_mss, since user has no direct access to newsk */
+  if (sk->user_mss)
+    newsk->mtu = sk->user_mss;
   else {
-#ifdef LOCALNET_BIGPACKETS
-    if ((saddr & default_mask(saddr)) == (daddr & default_mask(daddr)))
-      newsk->mtu = MAX_WINDOW;
-    else
+#ifdef SUBNETSARELOCAL
+    if ((saddr ^ daddr) & default_mask(saddr))
+#else
+    if ((saddr ^ daddr) & dev->pa_mask)
 #endif
       newsk->mtu = 576 - HEADER_SIZE;
+    else
+      newsk->mtu = MAX_WINDOW;
   }
 /* but not bigger than device MTU */
   newsk->mtu = min(newsk->mtu, dev->mtu - HEADER_SIZE);
@@ -2261,8 +2290,10 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 	  "sk->rcv_ack_seq=%d, sk->window_seq = %d\n",
 	  ack, ntohs(th->window), sk->rcv_ack_seq, sk->window_seq));
 
-  if (ntohs(th->window) > sk->max_window)
+  if (ntohs(th->window) > sk->max_window) {
   	sk->max_window = ntohs(th->window);
+	sk->mss = min(sk->max_window, sk->mtu);
+  }
 
   if (sk->retransmits && sk->timeout == TIME_KEEPOPEN)
   	sk->retransmits = 0;
@@ -2804,7 +2835,8 @@ tcp_data(struct sk_buff *skb, struct sock *sk,
 	/*
 	 * This is important.  If we don't have much room left,
 	 * we need to throw out a few packets so we have a good
-	 * window.
+	 * window.  Note that mtu is used, not mss, because mss is really
+	 * for the send side.  He could be sending us stuff as large as mtu.
 	 */
 	while (sk->prot->rspace(sk) < sk->mtu) {
 		skb1 = skb_peek(&sk->rqueue);
@@ -3026,6 +3058,7 @@ tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
   sk->inuse = 1;
   sk->daddr = sin.sin_addr.s_addr;
   sk->send_seq = jiffies * SEQ_TICK - seq_offset;
+  sk->window_seq = sk->send_seq;
   sk->rcv_ack_seq = sk->send_seq -1;
   sk->err = 0;
   sk->dummy_th.dest = sin.sin_port;
@@ -3070,16 +3103,17 @@ tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
   t1->doff = 6;
 
 /* use 512 or whatever user asked for */
-  if (sk->mss)
-    sk->mtu = sk->mss;
+  if (sk->user_mss)
+    sk->mtu = sk->user_mss;
   else {
-#ifdef LOCALNET_BIGPACKETS
-    if ((sk->saddr & default_mask(sk->saddr)) == 
-	(sk->daddr & default_mask(sk->daddr)))
-      sk->mtu = MAX_WINDOW;
-    else
+#ifdef SUBNETSARELOCAL
+    if ((sk->saddr ^ sk->daddr) & default_mask(sk->saddr))
+#else
+    if ((sk->saddr ^ sk->daddr) & dev->pa_mask)
 #endif
       sk->mtu = 576 - HEADER_SIZE;
+    else
+      sk->mtu = MAX_WINDOW;
   }
 /* but not bigger than device MTU */
   sk->mtu = min(sk->mtu, dev->mtu - HEADER_SIZE);
@@ -3487,7 +3521,7 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: not in seq\n");
 			sk->shutdown = SHUTDOWN_MASK;
 			tcp_reset(daddr, saddr,  th, sk->prot, opt, dev);
 			if (!sk->dead) {
-				wake_up(sk->sleep);
+				wake_up_interruptible(sk->sleep);
 			}
 			kfree_skb(skb, FREE_READ);
 			release_sock(sk);
@@ -3550,6 +3584,20 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: not in seq\n");
 				sk->copied_seq = sk->acked_seq-1;
 				if (!sk->dead) {
 					sk->state_change(sk);
+				}
+
+				/*
+				 * We've already processed his first
+				 * ack.  In just about all cases that
+				 * will have set max_window.  This is
+				 * to protect us against the possibility
+				 * that the initial window he sent was 0.
+				 * This must occur after tcp_options, which
+				 * sets sk->mtu.
+				 */
+				if (sk->max_window == 0) {
+				  sk->max_window = 32;
+				  sk->mss = min(sk->max_window, sk->mtu);
 				}
 
 				/*
@@ -3775,9 +3823,15 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval, int op
 	switch(optname)
 	{
 		case TCP_MAXSEG:
-			if(val<200||val>2048 || val>sk->mtu)
+/*			if(val<200||val>2048 || val>sk->mtu) */
+/*
+ * values greater than interface MTU won't take effect.  however at
+ * the point when this call is done we typically don't yet know
+ * which interface is going to be used
+ */
+	  		if(val<1||val>MAX_WINDOW)
 				return -EINVAL;
-			sk->mss=val;
+			sk->user_mss=val;
 			return 0;
 		case TCP_NODELAY:
 			sk->nonagle=(val==0)?0:1;
@@ -3797,7 +3851,7 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval, int *o
 	switch(optname)
 	{
 		case TCP_MAXSEG:
-			val=sk->mss;
+			val=sk->user_mss;
 			break;
 		case TCP_NODELAY:
 			val=sk->nonagle;	/* Until Johannes stuff is in */

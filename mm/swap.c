@@ -13,6 +13,7 @@
 #include <linux/sched.h>
 #include <linux/head.h>
 #include <linux/kernel.h>
+#include <linux/kernel_stat.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/stat.h>
@@ -76,6 +77,10 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 	}
 	while (set_bit(offset,p->swap_lockmap))
 		sleep_on(&lock_queue);
+	if (rw == READ)
+		kstat.pswpin++;
+	else
+		kstat.pswpout++;
 	if (p->swap_device) {
 		ll_rw_page(rw,p->swap_device,offset,buf);
 	} else if (p->swap_file) {

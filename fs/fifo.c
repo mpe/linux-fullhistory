@@ -24,7 +24,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	 */
 		filp->f_op = &connecting_fifo_fops;
 		if (!PIPE_READERS(*inode)++)
-			wake_up(&PIPE_WAIT(*inode));
+			wake_up_interruptible(&PIPE_WAIT(*inode));
 		if (!(filp->f_flags & O_NONBLOCK) && !PIPE_WRITERS(*inode)) {
 			PIPE_RD_OPENERS(*inode)++;
 			while (!PIPE_WRITERS(*inode)) {
@@ -35,14 +35,14 @@ static int fifo_open(struct inode * inode,struct file * filp)
 				interruptible_sleep_on(&PIPE_WAIT(*inode));
 			}
 			if (!--PIPE_RD_OPENERS(*inode))
-				wake_up(&PIPE_WAIT(*inode));
+				wake_up_interruptible(&PIPE_WAIT(*inode));
 		}
 		while (PIPE_WR_OPENERS(*inode))
 			interruptible_sleep_on(&PIPE_WAIT(*inode));
 		if (PIPE_WRITERS(*inode))
 			filp->f_op = &read_fifo_fops;
 		if (retval && !--PIPE_READERS(*inode))
-			wake_up(&PIPE_WAIT(*inode));
+			wake_up_interruptible(&PIPE_WAIT(*inode));
 		break;
 	
 	case 2:
@@ -57,7 +57,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 		}
 		filp->f_op = &write_fifo_fops;
 		if (!PIPE_WRITERS(*inode)++)
-			wake_up(&PIPE_WAIT(*inode));
+			wake_up_interruptible(&PIPE_WAIT(*inode));
 		if (!PIPE_READERS(*inode)) {
 			PIPE_WR_OPENERS(*inode)++;
 			while (!PIPE_READERS(*inode)) {
@@ -68,12 +68,12 @@ static int fifo_open(struct inode * inode,struct file * filp)
 				interruptible_sleep_on(&PIPE_WAIT(*inode));
 			}
 			if (!--PIPE_WR_OPENERS(*inode))
-				wake_up(&PIPE_WAIT(*inode));
+				wake_up_interruptible(&PIPE_WAIT(*inode));
 		}
 		while (PIPE_RD_OPENERS(*inode))
 			interruptible_sleep_on(&PIPE_WAIT(*inode));
 		if (retval && !--PIPE_WRITERS(*inode))
-			wake_up(&PIPE_WAIT(*inode));
+			wake_up_interruptible(&PIPE_WAIT(*inode));
 		break;
 	
 	case 3:
@@ -85,11 +85,11 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	 */
 		filp->f_op = &rdwr_fifo_fops;
 		if (!PIPE_READERS(*inode)++)
-			wake_up(&PIPE_WAIT(*inode));
+			wake_up_interruptible(&PIPE_WAIT(*inode));
 		while (PIPE_WR_OPENERS(*inode))
 			interruptible_sleep_on(&PIPE_WAIT(*inode));
 		if (!PIPE_WRITERS(*inode)++)
-			wake_up(&PIPE_WAIT(*inode));
+			wake_up_interruptible(&PIPE_WAIT(*inode));
 		while (PIPE_RD_OPENERS(*inode))
 			interruptible_sleep_on(&PIPE_WAIT(*inode));
 		break;

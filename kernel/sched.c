@@ -16,6 +16,7 @@
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/kernel.h>
+#include <linux/kernel_stat.h>
 #include <linux/sys.h>
 #include <linux/fdreg.h>
 #include <linux/errno.h>
@@ -56,6 +57,7 @@ long time_adj = 0;              /* tick adjust (scaled 1 / HZ) */
 long time_reftime = 0;          /* time at last adjustment (s) */
 
 long time_adjust = 0;
+long time_adjust_step = 0;
 
 int need_resched = 0;
 
@@ -100,6 +102,9 @@ struct {
 	short b;
 	} stack_start = { & user_stack [PAGE_SIZE>>2] , KERNEL_DS };
 
+struct kernel_stat kstat =
+	{ 0, 0, 0, { 0, 0, 0, 0 }, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
 /*
  * int 0x80 entry points.. Moved away from the header file, as
  * iBCS2 may also want to use the '<linux/sys.h>' headers..
@@ -138,7 +143,7 @@ sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync, sys_sigreturn,
 sys_clone, sys_setdomainname, sys_newuname, sys_modify_ldt,
 sys_adjtimex, sys_mprotect, sys_sigprocmask, sys_create_module,
 sys_init_module, sys_delete_module, sys_get_kernel_syms, sys_quotactl,
-sys_getpgid, sys_fchdir };
+sys_getpgid, sys_fchdir, sys_bdflush };
 
 /* So we don't have to do any more manual updating.... */
 int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);
@@ -275,6 +280,8 @@ confuse_gcc2:
 		for_each_task(p)
 			p->counter = (p->counter >> 1) + p->priority;
 	}
+	if(current != next)
+		kstat.context_swtch++;
 	switch_to(next);
 	/* Now maybe reload the debug registers */
 	if(current->debugreg[7]){
@@ -592,41 +599,38 @@ static void do_timer(struct pt_regs * regs)
 	if (time_phase < -FINEUSEC) {
 		ltemp = -time_phase >> SHIFT_SCALE;
 		time_phase += ltemp << SHIFT_SCALE;
-		xtime.tv_usec += tick - ltemp;
+		xtime.tv_usec += tick + time_adjust_step - ltemp;
 	}
 	else if (time_phase > FINEUSEC) {
 		ltemp = time_phase >> SHIFT_SCALE;
 		time_phase -= ltemp << SHIFT_SCALE;
-		xtime.tv_usec += tick + ltemp;
+		xtime.tv_usec += tick + time_adjust_step + ltemp;
 	} else
-		xtime.tv_usec += tick;
+		xtime.tv_usec += tick + time_adjust_step;
 
 	if (time_adjust)
 	{
 	    /* We are doing an adjtime thing. 
-	     */
-
-	    /* Limit the amount of the step for *next* tick to be
+	     *
+	     * Modify the value of the tick for next time.
+	     * Note that a positive delta means we want the clock
+	     * to run fast. This means that the tick should be bigger
+	     *
+	     * Limit the amount of the step for *next* tick to be
 	     * in the range -tickadj .. +tickadj
 	     */
 	     if (time_adjust > tickadj)
-	       ltemp = tickadj;
+	       time_adjust_step = tickadj;
 	     else if (time_adjust < -tickadj)
-	       ltemp = -tickadj;
+	       time_adjust_step = -tickadj;
 	     else
-	       ltemp = time_adjust;
+	       time_adjust_step = time_adjust;
 	     
-	    /* Reduce the amount of time left by this step */
-	    time_adjust -= ltemp;
-
-	    /* Modify the value of the tick for next time.
-	     * Note that a positive delta means we want the clock
-	     * to run fast. This means that the tick should be bigger
-	     */
-	    tick = 1000000/HZ + ltemp;
+	    /* Reduce by this step the amount of time left  */
+	    time_adjust -= time_adjust_step;
 	}
 	else
-	    tick = 1000000/HZ;
+	    time_adjust_step = 0;
 
 	if (xtime.tv_usec >= 1000000) {
 	    xtime.tv_usec -= 1000000;
@@ -638,6 +642,12 @@ static void do_timer(struct pt_regs * regs)
 	calc_load();
 	if ((VM_MASK & regs->eflags) || (3 & regs->cs)) {
 		current->utime++;
+		if(current != task[0]) {
+			if(current->priority != 15)
+				kstat.cpu_nice++;
+			else
+				kstat.cpu_user++;
+		}
 		/* Update ITIMER_VIRT for current task if not in a system call */
 		if (current->it_virt_value && !(--current->it_virt_value)) {
 			current->it_virt_value = current->it_virt_incr;
@@ -645,6 +655,8 @@ static void do_timer(struct pt_regs * regs)
 		}
 	} else {
 		current->stime++;
+		if(current != task[0])
+			kstat.cpu_system++;
 #ifdef CONFIG_PROFILE
 		if (prof_buffer && current != task[0]) {
 			unsigned long eip = regs->eip;

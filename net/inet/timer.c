@@ -101,14 +101,20 @@ net_timer (unsigned long data)
   sk->inuse = 1;
 
   DPRINTF ((DBG_TMR, "net_timer: found sk=%X why = %d\n", sk, why));
-  if (sk->keepopen)
+  if (sk->wfront && 
+      before(sk->window_seq, sk->wfront->h.seq) &&
+      sk->send_head == NULL &&
+      sk->ack_backlog == 0 &&
+      sk->state != TCP_TIME_WAIT)
+    reset_timer(sk, TIME_PROBE0, sk->rto);
+  else if (sk->keepopen)
     reset_timer (sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
 
   /* Always see if we need to send an ack. */
   if (sk->ack_backlog) {
     sk->prot->read_wakeup (sk);
     if (! sk->dead)
-      wake_up (sk->sleep);
+      wake_up_interruptible (sk->sleep);
   }
 
   /* Now we need to figure out why the socket was on the timer. */
@@ -143,7 +149,7 @@ net_timer (unsigned long data)
 	/* Kill the ARP entry in case the hardware has changed. */
 	arp_destroy_maybe (sk->daddr);
 	if (!sk->dead)
-	  wake_up (sk->sleep);
+	  wake_up_interruptible (sk->sleep);
 	sk->shutdown = SHUTDOWN_MASK;
 	reset_timer (sk, TIME_DESTROY, TCP_DONE_TIME);
 	release_sock (sk);
@@ -213,7 +219,7 @@ net_timer (unsigned long data)
 	  if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2) {
 	    sk->state = TCP_TIME_WAIT;
 	    if (!sk->dead)
-	      wake_up (sk->sleep);
+	      wake_up_interruptible (sk->sleep);
 	    release_sock (sk);
 	  } else {
 	    sk->prot->close (sk, 1);

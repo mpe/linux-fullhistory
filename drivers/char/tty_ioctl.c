@@ -192,25 +192,27 @@ static int set_termios_2(struct tty_struct * tty, struct termios * termios)
 		tty->erasing = 0;
 	}
 	sti();
-	if (canon_change && !(tty->termios->c_lflag & ICANON) &&
-	    !EMPTY(&tty->secondary))
+	if (canon_change && !L_ICANON(tty) && !EMPTY(&tty->secondary))
 		/* Get characters left over from canonical mode. */
 		wake_up_interruptible(&tty->secondary.proc_list);
 
 	/* see if packet mode change of state */
 
-	/* The BSD man page pty.4 says that TIOCPKT_NOSTOP should be sent
-	   if the new state differs from ^S/^Q, but that's a bad way of
-	   detecting a new flow control scheme.  Instead, a status byte
-	   is only sent if IXON has changed. */
- 	if (tty->link && tty->link->packet &&
-	    (old_termios.c_iflag ^ tty->termios->c_iflag) & IXON) {
-		tty->ctrl_status &= ~(TIOCPKT_DOSTOP | TIOCPKT_NOSTOP);
-		if (tty->termios->c_iflag & IXON)
-			tty->ctrl_status |= TIOCPKT_DOSTOP;
-		else
-			tty->ctrl_status |= TIOCPKT_NOSTOP;
-		wake_up_interruptible(&tty->link->secondary.proc_list);
+	if (tty->link && tty->link->packet) {
+		int old_flow = ((old_termios.c_iflag & IXON) &&
+				(old_termios.c_cc[VSTOP] == '\023') &&
+				(old_termios.c_cc[VSTART] == '\021'));
+		int new_flow = (I_IXON(tty) &&
+				STOP_CHAR(tty) == '\023' &&
+				START_CHAR(tty) == '\021');
+		if (old_flow != new_flow) {
+			tty->ctrl_status &= ~(TIOCPKT_DOSTOP | TIOCPKT_NOSTOP);
+			if (new_flow)
+				tty->ctrl_status |= TIOCPKT_DOSTOP;
+			else
+				tty->ctrl_status |= TIOCPKT_NOSTOP;
+			wake_up_interruptible(&tty->link->secondary.proc_list);
+		}
 	}
 
 	unset_locked_termios(tty->termios, &old_termios,
@@ -376,8 +378,8 @@ int tty_ioctl(struct inode * inode, struct file * file,
 				return retval;
 			if (cmd == TCSETSF || cmd == TCSETSW) {
 				if (cmd == TCSETSF)
-					flush_input(tty);
-				wait_until_sent(tty);
+					flush_input(termios_tty);
+				wait_until_sent(termios_tty);
 			}
 			return set_termios(termios_tty, (struct termios *) arg,
 					   termios_dev);
@@ -391,8 +393,8 @@ int tty_ioctl(struct inode * inode, struct file * file,
 				return retval;
 			if (cmd == TCSETAF || cmd == TCSETAW) {
 				if (cmd == TCSETAF)
-					flush_input(tty);
-				wait_until_sent(tty);
+					flush_input(termios_tty);
+				wait_until_sent(termios_tty);
 			}
 			return set_termio(termios_tty, (struct termio *) arg,
 					  termios_dev);
@@ -484,7 +486,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			put_fs_long(termios_tty->pgrp, (pid_t *) arg);
 			return 0;
 		case TIOCSPGRP:
-			retval = check_change(tty, dev);
+			retval = check_change(termios_tty, termios_dev);
 			if (retval)
 				return retval;
 			if ((current->tty < 0) ||
@@ -496,7 +498,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 				return -EINVAL;
 			if (session_of_pgrp(pgrp) != current->session)
 				return -EPERM;
-			termios_tty->pgrp = pgrp;			
+			termios_tty->pgrp = pgrp;
 			return 0;
 		case TIOCOUTQ:
 			retval = verify_area(VERIFY_WRITE, (void *) arg,

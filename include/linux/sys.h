@@ -144,6 +144,7 @@ extern int sys_get_kernel_syms(); /* 130 */
 extern int sys_quotactl();
 extern int sys_getpgid();
 extern int sys_fchdir();
+extern int sys_bdflush();
 
 /*
  * These are system calls that will be removed at some time
@@ -167,6 +168,7 @@ extern int sys_fchdir();
  */
 
 #define sys_quotactl	sys_ni_syscall
+#define sys_bdflush	sys_ni_syscall
 
 typedef int (*fn_ptr)();
 

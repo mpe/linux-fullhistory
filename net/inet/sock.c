@@ -741,13 +741,13 @@ inet_listen(struct socket *sock, int backlog)
 static void def_callback1(struct sock *sk)
 {
 	if(!sk->dead)
-		wake_up(sk->sleep);
+		wake_up_interruptible(sk->sleep);
 }
 
 static void def_callback2(struct sock *sk,int len)
 {
 	if(!sk->dead)
-		wake_up(sk->sleep);
+		wake_up_interruptible(sk->sleep);
 }
 
 
@@ -870,7 +870,7 @@ inet_create(struct socket *sock, int protocol)
   sk->dead = 0;
   sk->ack_timed = 0;
   sk->send_tmp = NULL;
-  sk->mss = 0; /* we will try not to send any packets smaller than this. */
+  sk->user_mss = 0;
   sk->debug = 0;
 
   /* this is how many unacked bytes we will accept for this socket.  */

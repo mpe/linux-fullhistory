@@ -101,8 +101,11 @@ struct sock {
   unsigned short		max_unacked;
   unsigned short		window;
   unsigned short		bytes_rcv;
-  unsigned short		mtu;
-  unsigned short		max_window;
+/* mss is min(mtu, max_window) */
+  unsigned short		mtu;       /* mss negotiated in the syn's */
+  volatile unsigned short	mss;       /* current eff. mss - can change */
+  volatile unsigned short	user_mss;  /* mss requested by user in ioctl */
+  volatile unsigned short	max_window;
   unsigned short		num;
   volatile unsigned short	cong_window;
   volatile unsigned short	cong_count;
@@ -110,7 +113,6 @@ struct sock {
   volatile unsigned short	packets_out;
   volatile unsigned short	urg;
   volatile unsigned short	shutdown;
-  unsigned short		mss;
   volatile unsigned long	rtt;
   volatile unsigned long	mdev;
   volatile unsigned long	rto;

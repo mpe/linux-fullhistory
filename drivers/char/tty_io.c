@@ -49,13 +49,13 @@
 #include <linux/kd.h>
 #include <linux/mm.h>
 #include <linux/string.h>
-#include <linux/keyboard.h>
 #include <linux/malloc.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 
+#include "kbd_kern.h"
 #include "vt_kern.h"
 
 #define CONSOLE_DEV MKDEV(TTY_MAJOR,0)
@@ -390,7 +390,8 @@ void complete_change_console(unsigned int new_console)
 		 * to account for and tracking tty count may be undesirable.
 		 */
 			vt_cons[new_console].vc_mode = KD_TEXT;
-			clr_vc_kbd_flag(kbd_table + new_console, VC_RAW);
+			clr_vc_kbd_mode(kbd_table + new_console, VC_RAW);
+			clr_vc_kbd_mode(kbd_table + new_console, VC_MEDIUMRAW);
  			vt_cons[new_console].vt_mode.mode = VT_AUTO;
  			vt_cons[new_console].vt_mode.waitv = 0;
  			vt_cons[new_console].vt_mode.relsig = 0;
@@ -475,7 +476,8 @@ void change_console(unsigned int new_console)
 		 * to account for and tracking tty count may be undesirable.
 		 */
 		vt_cons[fg_console].vc_mode = KD_TEXT;
-		clr_vc_kbd_flag(kbd_table + fg_console, VC_RAW);
+		clr_vc_kbd_mode(kbd_table + fg_console, VC_RAW);
+		clr_vc_kbd_mode(kbd_table + fg_console, VC_MEDIUMRAW);
 		vt_cons[fg_console].vt_mode.mode = VT_AUTO;
 		vt_cons[fg_console].vt_mode.waitv = 0;
 		vt_cons[fg_console].vt_mode.relsig = 0;
@@ -515,7 +517,7 @@ void stop_tty(struct tty_struct *tty)
 	if (tty->stop)
 		(tty->stop)(tty);
 	if (IS_A_CONSOLE(tty->line)) {
-		set_vc_kbd_flag(kbd_table + fg_console, VC_SCROLLOCK);
+		set_vc_kbd_led(kbd_table + fg_console, VC_SCROLLOCK);
 		set_leds();
 	}
 }
@@ -532,11 +534,11 @@ void start_tty(struct tty_struct *tty)
 	}
 	if (tty->start)
 		(tty->start)(tty);
+	TTY_WRITE_FLUSH(tty);
 	if (IS_A_CONSOLE(tty->line)) {
-		clr_vc_kbd_flag(kbd_table + fg_console, VC_SCROLLOCK);
+		clr_vc_kbd_led(kbd_table + fg_console, VC_SCROLLOCK);
 		set_leds();
 	}
-	TTY_WRITE_FLUSH(tty);
 }
 
 /* Perform OPOST processing.  Returns -1 when the write_q becomes full

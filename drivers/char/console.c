@@ -14,6 +14,11 @@
  * 	'void update_screen(int new_console)'
  * 	'void blank_screen(void)'
  * 	'void unblank_screen(void)'
+ *
+ *      'int  con_get_font(char *)' 
+ *      'int  con_set_font(char *)' 
+ *      'int  con_get_trans(char *)'
+ *      'int  con_set_trans(char *)'
  * 
  * Hopefully this will be a rather complete VT102 implementation.
  *
@@ -23,18 +28,22 @@
  *   Chars, and VT100 enhancements by Peter MacDonald.
  *
  * Copy and paste function by Andrew Haylett.
+ *
+ * User definable mapping table and font loading by Eugene G. Crosser,
+ * <crosser@pccross.msk.su>
+ *
+ * Code to check for different video-cards mostly by Galen Hunt,
+ * <g-hunt@ee.utah.edu>
+ *
  */
+
+#define CAN_LOAD_EGA_FONTS    /* undefine if the user must not do this */
 
 /*
  *  NOTE!!! We sometimes disable and enable interrupts for a short while
  * (to put a word in video IO), but this will work even for keyboard
  * interrupts. We know interrupts aren't enabled when getting a keyboard
  * interrupt, as we use trap-gates. Hopefully all is well.
- */
-
-/*
- * Code to check for different video-cards mostly by Galen Hunt,
- * <g-hunt@ee.utah.edu>
  */
 
 #include <linux/sched.h>
@@ -45,12 +54,12 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/kd.h>
-#include <linux/keyboard.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 
+#include "kbd_kern.h"
 #include "vt_kern.h"
 
 #ifdef CONFIG_SELECTION
@@ -128,7 +137,6 @@ static struct {
 	unsigned long	vc_ques		: 1;
 	unsigned long	vc_need_wrap	: 1;
 	unsigned long	vc_tab_stop[5];		/* Tab stops. 160 columns. */
-	unsigned char	vc_kbdmode;
 	unsigned char * vc_translate;
 	unsigned char *	vc_G0_charset;
 	unsigned char *	vc_G1_charset;
@@ -186,16 +194,15 @@ static int console_blanked = 0;
 #define	s_reverse	(vc_cons[currcons].vc_s_reverse)
 #define	ulcolor		(vc_cons[currcons].vc_ulcolor)
 #define	halfcolor	(vc_cons[currcons].vc_halfcolor)
-#define kbdmode		(vc_cons[currcons].vc_kbdmode)
 #define tab_stop	(vc_cons[currcons].vc_tab_stop)
 #define vcmode		(vt_cons[currcons].vc_mode)
 #define vtmode		(vt_cons[currcons].vt_mode)
 #define vtpid		(vt_cons[currcons].vt_pid)
 #define vtnewvt		(vt_cons[currcons].vt_newvt)
 
-#define set_kbd(x) set_vc_kbd_flag(kbd_table+currcons,x)
-#define clr_kbd(x) clr_vc_kbd_flag(kbd_table+currcons,x)
-#define is_kbd(x) vc_kbd_flag(kbd_table+currcons,x)
+#define set_kbd(x) set_vc_kbd_mode(kbd_table+currcons,x)
+#define clr_kbd(x) clr_vc_kbd_mode(kbd_table+currcons,x)
+#define is_kbd(x) vc_kbd_mode(kbd_table+currcons,x)
 
 #define decarm		VC_REPEAT
 #define decckm		VC_CKMODE
@@ -261,12 +268,31 @@ static unsigned char * translations[] = {
 	"\300\301\302\303\304\305\306\307\310\311\312\313\314\315\316\317"
 	"\320\321\322\323\324\325\326\327\330\331\332\333\334\335\336\337"
 	"\340\341\342\343\344\345\346\347\350\351\352\353\354\355\356\357"
+	"\360\361\362\363\364\365\366\367\370\371\372\373\374\375\376\377",
+ /* USER: customizable mappings, initialized as the previous one (IBM) */
+(unsigned char *)
+	"\000\001\002\003\004\005\006\007\010\011\000\013\000\000\016\017"
+	"\020\021\022\023\024\025\026\027\030\031\032\000\034\035\036\037"
+	"\040\041\042\043\044\045\046\047\050\051\052\053\054\055\056\057"
+	"\060\061\062\063\064\065\066\067\070\071\072\073\074\075\076\077"
+	"\100\101\102\103\104\105\106\107\110\111\112\113\114\115\116\117"
+	"\120\121\122\123\124\125\126\127\130\131\132\133\134\135\136\137"
+	"\140\141\142\143\144\145\146\147\150\151\152\153\154\155\156\157"
+	"\160\161\162\163\164\165\166\167\170\171\172\173\174\175\176\177"
+	"\200\201\202\203\204\205\206\207\210\211\212\213\214\215\216\217"
+	"\220\221\222\223\224\225\226\227\230\231\232\233\234\235\236\237"
+	"\240\241\242\243\244\245\246\247\250\251\252\253\254\255\256\257"
+	"\260\261\262\263\264\265\266\267\270\271\272\273\274\275\276\277"
+	"\300\301\302\303\304\305\306\307\310\311\312\313\314\315\316\317"
+	"\320\321\322\323\324\325\326\327\330\331\332\333\334\335\336\337"
+	"\340\341\342\343\344\345\346\347\350\351\352\353\354\355\356\357"
 	"\360\361\362\363\364\365\366\367\370\371\372\373\374\375\376\377"
 };
 
 #define NORM_TRANS (translations[0])
 #define GRAF_TRANS (translations[1])
 #define NULL_TRANS (translations[2])
+#define USER_TRANS (translations[3])
 
 static unsigned char color_table[] = { 0, 4, 2, 6, 1, 5, 3, 7,
 				       8,12,10,14, 9,13,11,15 };
@@ -940,10 +966,8 @@ static void reset_terminal(int currcons, int do_clear)
 	clr_kbd(decckm);
 	clr_kbd(kbdapplic);
 	clr_kbd(lnm);
-	kbd_table[currcons].flags =
-		(kbd_table[currcons].flags & ~LED_MASK) |
-		(kbd_table[currcons].default_flags & LED_MASK);
-	kbdmode		= 0;
+	kbd_table[currcons].lockstate = 0;
+	kbd_table[currcons].ledstate = kbd_table[currcons].default_ledstate;
 	set_leds();
 
 	default_attr(currcons);
@@ -1256,6 +1280,8 @@ void con_write(struct tty_struct * tty)
 					G0_charset = NORM_TRANS;
 				else if (c == 'U')
 					G0_charset = NULL_TRANS;
+				else if (c == 'K')
+					G0_charset = USER_TRANS;
 				if (charset == 0)
 					translate = G0_charset;
 				state = ESnormal;
@@ -1267,6 +1293,8 @@ void con_write(struct tty_struct * tty)
 					G1_charset = NORM_TRANS;
 				else if (c == 'U')
 					G1_charset = NULL_TRANS;
+				else if (c == 'K')
+					G1_charset = USER_TRANS;
 				if (charset == 1)
 					translate = G1_charset;
 				state = ESnormal;
@@ -1793,3 +1821,132 @@ static void clear_selection()
 	}
 }
 #endif /* CONFIG_SELECTION */
+
+/*
+ * PIO_FONT support.
+ */
+
+#define colourmap ((char *)0xa0000)
+#define blackwmap ((char *)0xb0000)
+#define cmapsz 8192
+#define seq_port_reg (0x3c4)
+#define seq_port_val (0x3c5)
+#define gr_port_reg (0x3ce)
+#define gr_port_val (0x3cf)
+
+static int set_get_font(char * arg, int set)
+{
+#ifdef CAN_LOAD_EGA_FONTS
+	int i;
+	char *charmap;
+
+	/* no use to "load" CGA... */
+
+	if (video_type == VIDEO_TYPE_EGAC)
+		charmap = colourmap;
+	else if (video_type == VIDEO_TYPE_EGAM)
+		charmap = blackwmap;
+	else
+		return -EINVAL;
+
+	i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg, cmapsz);
+	if (i)
+	        return i;
+
+	cli();
+	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */
+	outb_p( 0x01, seq_port_val );   /* Synchronous reset */
+	outb_p( 0x02, seq_port_reg );
+	outb_p( 0x04, seq_port_val );   /* CPU writes only to map 2 */
+	outb_p( 0x04, seq_port_reg );
+	outb_p( 0x07, seq_port_val );   /* Sequential addressing */
+	outb_p( 0x00, seq_port_reg );
+	outb_p( 0x03, seq_port_val );   /* Clear synchronous reset */
+
+	outb_p( 0x04, gr_port_reg );    /* Now, the graphics controller */
+	outb_p( 0x02, gr_port_val );    /* select map 2 */
+	outb_p( 0x05, gr_port_reg );
+	outb_p( 0x00, gr_port_val );    /* disable odd-even addressing */
+	outb_p( 0x06, gr_port_reg );
+	outb_p( 0x00, gr_port_val );    /* map start at A000:0000 */
+	sti();
+
+	if (set)
+		for (i=0; i<cmapsz ; i++)
+			*(charmap+i) = get_fs_byte(arg+i);
+	else
+		for (i=0; i<cmapsz ; i++)
+			put_fs_byte(*(charmap+i), arg+i);
+
+	cli();
+	outb_p( 0x00, seq_port_reg );   /* Frist, the sequencer */
+	outb_p( 0x01, seq_port_val );   /* Synchronous reset */
+	outb_p( 0x02, seq_port_reg );
+	outb_p( 0x03, seq_port_val );   /* CPU writes to maps 0 and 1 */
+	outb_p( 0x04, seq_port_reg );
+	outb_p( 0x03, seq_port_val );   /* odd-even addressing */
+	outb_p( 0x00, seq_port_reg );
+	outb_p( 0x03, seq_port_val );   /* clear synchronous reset */
+
+	outb_p( 0x04, gr_port_reg );    /* Now, the graphics controller */
+	outb_p( 0x00, gr_port_val );    /* select map 0 for CPU */
+	outb_p( 0x05, gr_port_reg );
+	outb_p( 0x10, gr_port_val );    /* enable even-odd addressing */
+	outb_p( 0x06, gr_port_reg );
+	outb_p( 0x0e, gr_port_val );    /* map starts at b800:0000 */
+	sti();
+
+	return 0;
+#else
+	return -EINVAL;
+#endif
+}
+
+/*
+ * Load font into the EGA/VGA character generator. arg points to a 8192
+ * byte map, 32 bytes per character. Only first H of them are used for
+ * 8xH fonts (0 < H <= 32).
+ */
+
+int con_set_font (char *arg)
+{
+	return set_get_font (arg,1);
+}
+
+int con_get_font (char *arg)
+{
+	return set_get_font (arg,0);
+}
+
+/*
+ * Load customizable translation table (USER_TRANS[]). All checks are here,
+ * so we need only include 'return con_set_trans(arg)' in the ioctl handler
+ * arg points to a 256 byte translation table.
+ */
+int con_set_trans(char * arg)
+{
+	int i;
+
+	i = verify_area(VERIFY_READ, (void *)arg, E_TABSZ);
+	if (i)
+	        return i;
+
+	for (i=0; i<E_TABSZ ; i++) USER_TRANS[i] = get_fs_byte(arg+i);
+	USER_TRANS[012]=0;
+	USER_TRANS[014]=0;
+	USER_TRANS[015]=0;
+	USER_TRANS[033]=0;
+	return 0;
+}
+
+int con_get_trans(char * arg)
+{
+	int i;
+
+	i = verify_area(VERIFY_WRITE, (void *)arg, E_TABSZ);
+	if (i)
+	        return i;
+
+	for (i=0; i<E_TABSZ ; i++) put_fs_byte(USER_TRANS[i],arg+i);
+	return 0;
+}

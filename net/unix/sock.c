@@ -554,7 +554,7 @@ unix_proto_accept(struct socket *sock, struct socket *newsock, int flags)
   UN_DATA(newsock)->peerupd	       = UN_DATA(clientsock);
   UN_DATA(newsock)->sockaddr_un        = UN_DATA(sock)->sockaddr_un;
   UN_DATA(newsock)->sockaddr_len       = UN_DATA(sock)->sockaddr_len;
-  wake_up(clientsock->wait);
+  wake_up_interruptible(clientsock->wait);
   return(0);
 }
 
@@ -646,7 +646,8 @@ unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblock)
 	upd->bp_tail =(upd->bp_tail + cando) &(BUF_SIZE-1);
 	ubuf += cando;
 	todo -= cando;
-	if (sock->state == SS_CONNECTED) wake_up(sock->conn->wait);
+	if (sock->state == SS_CONNECTED)
+		wake_up_interruptible(sock->conn->wait);
 	avail = UN_BUF_AVAIL(upd);
   } while(todo && avail);
   unix_unlock(upd);
@@ -731,7 +732,8 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 	pupd->bp_head =(pupd->bp_head + cando) &(BUF_SIZE-1);
 	ubuf += cando;
 	todo -= cando;
-	if (sock->state == SS_CONNECTED) wake_up(sock->conn->wait);
+	if (sock->state == SS_CONNECTED)
+		wake_up_interruptible(sock->conn->wait);
 	space = UN_BUF_SPACE(pupd);
   } while(todo && space);
   unix_unlock(pupd);

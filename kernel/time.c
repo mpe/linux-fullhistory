@@ -321,6 +321,11 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 	  if (txc.status < TIME_OK || txc.status > TIME_BAD)
 	    return -EINVAL;
 
+	/* if the quartz is off by more than 10% something is VERY wrong ! */
+	if (txc.mode & ADJ_TICK)
+	  if (txc.tick < 900000/HZ || txc.tick > 1100000/HZ)
+	    return -EINVAL;
+
 	cli();
 
 	/* Save for later - semantics of adjtime is to return old value */
@@ -336,7 +341,7 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 		time_status = txc.status;
 
 	    if (txc.mode & ADJ_FREQUENCY)
-		time_freq = txc.frequency;
+		time_freq = txc.frequency << (SHIFT_KF - 16);
 
 	    if (txc.mode & ADJ_MAXERROR)
 		time_maxerror = txc.maxerror;
@@ -374,9 +379,12 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 		  else if (time_freq < -ltemp)
 		    time_freq = -ltemp;
 		}
+	    if (txc.mode & ADJ_TICK)
+	      tick = txc.tick;
+
 	}
 	txc.offset	   = save_adjust;
-	txc.frequency	   = time_freq;
+	txc.frequency	   = ((time_freq+1) >> (SHIFT_KF - 16));
 	txc.maxerror	   = time_maxerror;
 	txc.esterror	   = time_esterror;
 	txc.status	   = time_status;
@@ -384,6 +392,7 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 	txc.precision	   = time_precision;
 	txc.tolerance	   = time_tolerance;
 	txc.time	   = xtime;
+	txc.tick	   = tick;
 
 	sti();
 

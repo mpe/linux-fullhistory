@@ -222,7 +222,7 @@ static inline void
 sock_release_peer(struct socket *peer)
 {
   peer->state = SS_DISCONNECTING;
-  wake_up(peer->wait);
+  wake_up_interruptible(peer->wait);
 }
 
 
@@ -253,7 +253,7 @@ sock_release(struct socket *sock)
   if (peersock) sock_release_peer(peersock);
   inode = SOCK_INODE(sock);
   sock->state = SS_FREE;		/* this really releases us */
-  wake_up(&socket_wait_free);
+  wake_up_interruptible(&socket_wait_free);
 
   /* We need to do this. If sock alloc was called we already have an inode. */
   iput(inode);
@@ -391,7 +391,7 @@ sock_awaitconn(struct socket *mysock, struct socket *servsock)
    * Wake up server, then await connection. server will set state to
    * SS_CONNECTED if we're connected.
    */
-  wake_up(servsock->wait);
+  wake_up_interruptible(servsock->wait);
   if (mysock->state != SS_CONNECTED) {
 	interruptible_sleep_on(mysock->wait);
 	if (mysock->state != SS_CONNECTED &&

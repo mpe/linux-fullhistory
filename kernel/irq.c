@@ -24,6 +24,7 @@
 
 #include <linux/ptrace.h>
 #include <linux/errno.h>
+#include <linux/kernel_stat.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
@@ -200,6 +201,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 {
 	struct sigaction * sa = irq + irq_sigaction;
 
+	kstat.interrupts++;
 	sa->sa_handler((int) regs);
 }
 
@@ -212,6 +214,7 @@ asmlinkage void do_fast_IRQ(int irq)
 {
 	struct sigaction * sa = irq + irq_sigaction;
 
+	kstat.interrupts++;
 	sa->sa_handler(irq);
 }
 

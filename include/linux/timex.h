@@ -89,6 +89,7 @@ struct timex {
 				 * (read only)
 				 */
 	struct timeval time;	/* (read only) */
+	long tick;		/* (modified) usecs between clock ticks */
 };
 
 /*
@@ -100,6 +101,7 @@ struct timex {
 #define ADJ_ESTERROR		0x0008	/* estimated time error */
 #define ADJ_STATUS		0x0010	/* clock status */
 #define ADJ_TIMECONST		0x0020	/* pll time constant */
+#define ADJ_TICK		0x4000	/* tick value */
 #define ADJ_OFFSET_SINGLESHOT	0x8001	/* old-fashioned adjtime */
 
 /*

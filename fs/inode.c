@@ -12,7 +12,11 @@
 
 #include <asm/system.h>
 
-static struct inode * hash_table[NR_IHASH];
+static struct inode_hash_entry {
+	struct inode * inode;
+	int updating;
+} hash_table[NR_IHASH];
+
 static struct inode * first_inode;
 static struct wait_queue * inode_wait = NULL;
 static int nr_inodes = 0, nr_free_inodes = 0;
@@ -22,7 +26,7 @@ static inline int const hashfn(dev_t dev, unsigned int i)
 	return (dev ^ i) % NR_IHASH;
 }
 
-static inline struct inode ** const hash(dev_t dev, int i)
+static inline struct inode_hash_entry * const hash(dev_t dev, int i)
 {
 	return hash_table + hashfn(dev, i);
 }
@@ -49,23 +53,23 @@ static void remove_inode_free(struct inode *inode)
 
 void insert_inode_hash(struct inode *inode)
 {
-	struct inode **h;
+	struct inode_hash_entry *h;
 	h = hash(inode->i_dev, inode->i_ino);
 
-	inode->i_hash_next = *h;
+	inode->i_hash_next = h->inode;
 	inode->i_hash_prev = NULL;
 	if (inode->i_hash_next)
 		inode->i_hash_next->i_hash_prev = inode;
-	*h = inode;
+	h->inode = inode;
 }
 
 static void remove_inode_hash(struct inode *inode)
 {
-	struct inode **h;
+	struct inode_hash_entry *h;
 	h = hash(inode->i_dev, inode->i_ino);
 
-	if (*h == inode)
-		*h = inode->i_hash_next;
+	if (h->inode == inode)
+		h->inode = inode->i_hash_next;
 	if (inode->i_hash_next)
 		inode->i_hash_next->i_hash_prev = inode->i_hash_prev;
 	if (inode->i_hash_prev)
@@ -309,7 +313,7 @@ void iput(struct inode * inode)
 		return;
 	}
 	if (inode->i_pipe)
-		wake_up(&PIPE_WAIT(*inode));
+		wake_up_interruptible(&PIPE_WAIT(*inode));
 repeat:
 	if (inode->i_count>1) {
 		inode->i_count--;
@@ -421,39 +425,27 @@ struct inode * iget(struct super_block * sb,int nr)
 
 struct inode * __iget(struct super_block * sb, int nr, int crossmntp)
 {
-	struct inode * inode, * empty;
+	static struct wait_queue * update_wait = NULL;
+	struct inode_hash_entry * h;
+	struct inode * inode;
+	struct inode * empty = NULL;
 
 	if (!sb)
 		panic("VFS: iget with sb==NULL");
-	empty = get_empty_inode();
+	h = hash(sb->s_dev, nr);
 repeat:
-	inode = *(hash(sb->s_dev,nr));
-	while (inode) {
-		if (inode->i_dev != sb->s_dev || inode->i_ino != nr) {
-			inode = inode->i_hash_next;
-			continue;
-		}
-		wait_on_inode(inode);
-		if (inode->i_dev != sb->s_dev || inode->i_ino != nr)
-			goto repeat;
-		if (!inode->i_count)
-			nr_free_inodes--;
-		inode->i_count++;
-		if (crossmntp && inode->i_mount) {
-			struct inode * tmp = inode->i_mount;
-			iput(inode);
-			inode = tmp;
-			if (!inode->i_count)
-				nr_free_inodes--;
-			inode->i_count++;
-			wait_on_inode(inode);
-		}
+	for (inode = h->inode; inode ; inode = inode->i_hash_next)
+		if (inode->i_dev == sb->s_dev && inode->i_ino == nr)
+			goto found_it;
+	if (!empty) {
+		h->updating++;
+		empty = get_empty_inode();
+		if (!--h->updating)
+			wake_up(&update_wait);
 		if (empty)
-			iput(empty);
-		return inode;
-	}
-	if (!empty)
+			goto repeat;
 		return (NULL);
+	}
 	inode = empty;
 	inode->i_sb = sb;
 	inode->i_dev = sb->s_dev;
@@ -462,6 +454,31 @@ repeat:
 	put_last_free(inode);
 	insert_inode_hash(inode);
 	read_inode(inode);
+	goto return_it;
+
+found_it:
+	if (!inode->i_count)
+		nr_free_inodes--;
+	inode->i_count++;
+	wait_on_inode(inode);
+	if (inode->i_dev != sb->s_dev || inode->i_ino != nr) {
+		printk("Whee.. inode changed from under us. Tell Linus\n");
+		iput(inode);
+		goto repeat;
+	}
+	if (crossmntp && inode->i_mount) {
+		struct inode * tmp = inode->i_mount;
+		tmp->i_count++;
+		iput(inode);
+		inode = tmp;
+		wait_on_inode(inode);
+	}
+	if (empty)
+		iput(empty);
+
+return_it:
+	while (h->updating)
+		sleep_on(&update_wait);
 	return inode;
 }
 

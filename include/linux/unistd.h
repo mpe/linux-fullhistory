@@ -140,6 +140,7 @@
 #define __NR_quotactl		131
 #define __NR_getpgid		132
 #define __NR_fchdir		133
+#define __NR_bdflush		134
 
 extern int errno;
 

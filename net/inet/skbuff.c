@@ -410,7 +410,7 @@ void kfree_skb(struct sk_buff *skb, int rw)
 			else
 				skb->sk->wmem_alloc-=skb->mem_len;
 			if(!skb->sk->dead)
-			wake_up(skb->sk->sleep);
+			wake_up_interruptible(skb->sk->sleep);
 			kfree_skbmem(skb->mem_addr,skb->mem_len);
 		}
 	}
@@ -471,11 +471,11 @@ void skb_kept_by_device(struct sk_buff *skb)
 void skb_device_release(struct sk_buff *skb, int mode)
 {
 	unsigned long flags;
+
 	save_flags(flags);
-	skb->lock--;
-	if(skb->lock==0)
-	{
-		if(skb->free==1)
+	cli();
+	if (!--skb->lock) {
+		if (skb->free==1)
 			kfree_skb(skb,mode);
 	}
 	restore_flags(flags);

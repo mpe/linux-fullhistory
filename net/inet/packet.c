@@ -74,7 +74,7 @@ packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
   }
   sk->rmem_alloc += skb->mem_len;
   skb_queue_tail(&sk->rqueue,skb);
-  wake_up(sk->sleep);
+  wake_up_interruptible(sk->sleep);
   release_sock(sk);
   return(0);
 }
