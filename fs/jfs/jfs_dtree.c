@@ -268,7 +268,7 @@ static struct dir_table_slot *find_index(struct inode *ip, u32 index,
 		return NULL;
 	}
 
-	if (jfs_ip->next_index <= (MAX_INLINE_DIRTABLE_ENTRY + 1)) {
+	if (jfs_dirtable_inline(ip)) {
 		/*
 		 * Inline directory table
 		 */
@@ -2828,7 +2828,7 @@ void dtInitRoot(tid_t tid, struct inode *ip, u32 idotdot)
 	 * the old directory table.
 	 */
 	if (DO_INDEX(ip)) {
-		if (jfs_ip->next_index > (MAX_INLINE_DIRTABLE_ENTRY + 1)) {
+		if (!jfs_dirtable_inline(ip)) {
 			struct tblock *tblk = tid_to_tblock(tid);
 			/*
 			 * We're playing games with the tid's xflag.  If
