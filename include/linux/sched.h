@@ -378,7 +378,6 @@ extern union task_union init_task_union;
 
 extern struct   mm_struct init_mm;
 extern struct task_struct *task[NR_TASKS];
-extern struct task_struct *last_task_used_math;
 
 extern struct task_struct **tarray_freelist;
 extern spinlock_t taskslot_lock;

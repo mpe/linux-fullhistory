@@ -1,13 +1,19 @@
 /* 
-	bpck.c	(c) 1996,1997  Grant R. Guenther <grant@torque.net>
-		               Under the terms of the GNU public license.
+	bpck.c	(c) 1996-8  Grant R. Guenther <grant@torque.net>
+		            Under the terms of the GNU public license.
 
 	bpck.c is a low-level protocol driver for the MicroSolutions 
 	"backpack" parallel port IDE adapter.  
 
 */
 
-#define	BPCK_VERSION	"1.0" 
+/* Changes:
+
+	1.01	GRG 1998.05.05 init_proto, release_proto, pi->delay 
+
+*/
+
+#define	BPCK_VERSION	"1.01" 
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -338,12 +344,12 @@ static int bpck_test_proto( PIA *pi, char * scratch, int verbose )
 
 static void bpck_read_eeprom ( PIA *pi, char * buf )
 
-{       int i,j,k,n,p,v,f, om;
+{       int i,j,k,n,p,v,f, om, od;
 
 	bpck_force_spp(pi);
 
-	om = pi->mode;
-	pi->mode = 0;
+	om = pi->mode;  od = pi->delay;
+	pi->mode = 0; pi->delay = 6;
 
 	bpck_connect(pi);
 	
@@ -385,7 +391,7 @@ static void bpck_read_eeprom ( PIA *pi, char * buf )
                 bpck_disconnect(pi);
         }
 
-	pi->mode = om;
+	pi->mode = om; pi->delay = od;
 }
 
 static int bpck_test_port ( PIA *pi ) 	/* check for 8-bit port */
@@ -434,17 +440,17 @@ static void bpck_log_adapter( PIA *pi, char * scratch, int verbose )
 		pi->mode,mode_string[pi->mode],pi->delay);
 }
 
-static void bpck_inc_use( void )
+static void bpck_init_proto( PIA *pi)
 
 {	MOD_INC_USE_COUNT;
 }
 
-static void bpck_dec_use( void )
+static void bpck_release_proto( PIA *pi)
 
 {       MOD_DEC_USE_COUNT;
 }
 
-struct pi_protocol bpck = { "bpck",0,5,2,4,256,
+struct pi_protocol bpck = { "bpck",0,5,2,1,256,
 			  bpck_write_regr,
 			  bpck_read_regr,
 			  bpck_write_block,
@@ -455,8 +461,8 @@ struct pi_protocol bpck = { "bpck",0,5,2,4,256,
 			  bpck_probe_unit,
 		          bpck_test_proto,
 			  bpck_log_adapter,
-			  bpck_inc_use,
-			  bpck_dec_use
+			  bpck_init_proto,
+			  bpck_release_proto
 			};
 
 #ifdef MODULE

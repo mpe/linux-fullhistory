@@ -483,13 +483,14 @@ ntfs_search_bits(ntfs_inode* bitmap, int *location, int *count, int flags)
 		error=ntfs_read_attr(bitmap,bitmap->vol->at_data,
 				     0,start,&io);
 		if(error)goto fail;
-		if(io.size==0)
+		if(io.size==0) {
 			if(found)
 				goto success;
 			else{
 				error=ENOSPC;
 				goto fail;
 			}
+		}
 		loc=start*8;
 		cnt=*count;
 		error=search_bits(bits,&loc,&cnt,io.size);

@@ -156,6 +156,30 @@ void enable_IO_APIC_irq(unsigned int irq)
 	}
 }
 
+void mask_IO_APIC_irq(unsigned int irq)
+{
+	int pin = irq_2_pin[irq];
+	struct IO_APIC_route_entry entry;
+
+	if (pin != -1) {
+		*(((int *)&entry)+0) = io_apic_read(0x10+pin*2);
+		entry.mask = 1;
+		io_apic_write(0x10+2*pin, *(((int *)&entry)+0));
+	}
+}
+
+void unmask_IO_APIC_irq(unsigned int irq)
+{
+	int pin = irq_2_pin[irq];
+	struct IO_APIC_route_entry entry;
+
+	if (pin != -1) {
+		*(((int *)&entry)+0) = io_apic_read(0x10+pin*2);
+		entry.mask = 0;
+		io_apic_write(0x10+2*pin, *(((int *)&entry)+0));
+	}
+}
+
 void clear_IO_APIC_pin (unsigned int pin)
 {
 	struct IO_APIC_route_entry entry;

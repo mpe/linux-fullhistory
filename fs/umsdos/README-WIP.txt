@@ -8,7 +8,7 @@ UMSDOS FILESYSTEM, AND MAYBE EVEN OTHER FILESYSTEMS IN USE.
 YOU'VE BEEN WARNED.
 --------- WARNING --------- WARNING --------- WARNING -----------
 
-Current status (980220) - UMSDOS dentry-WIP-Beta 0.82-3:
+Current status (980428) - UMSDOS dentry-WIP-Beta 0.82-4:
 
 (1) pure MSDOS (no --linux-.--- EMD file):
 
@@ -32,14 +32,13 @@ Notes: possible very minor problems with dentry/inode/... kernel structures (ver
 - long file names - works
 - read file - works
 - switching MSDOS/UMSDOS - works?
-- switching UMSDOS/MSDOS - UNTESTED
-- pseudo root things - COMMENTED OUT mostly currently. To be fixed when
-  dentries stuff is straightened out.
+- switching UMSDOS/MSDOS - works?
+- pseudo root things - COMPLETELY UNTESTED
 - resolve symlink - seems to work fully now!
 - dereference symlink - seems to work fully now!
 - hard links - seems to work now
 - special files (block/char device, fifos, sockets...) - seems to work ok.
-- other ioctls - MOSTLY UNTESTED
+- other ioctls - some UNTESTED
 - dangling symlink - UNTESTED !
 
 - create symlink		- seems to work both on short & long names now !
@@ -47,16 +46,16 @@ Notes: possible very minor problems with dentry/inode/... kernel structures (ver
 - create file			- seems to work both on short & long names now !
 - create special file		- seems to work both on short & long names now !
 - write to file			- seems to work both on short & long names now !
-- rename file (same dir)	- WARNING: NOT FIXED YET!
-- rename file (dif. dir)	- WARNING: NOT FIXED YET!
-- rename dir (same dir)		- WARNING: NOT FIXED YET!
-- rename dir (dif. dir)		- WARNING: NOT FIXED YET!
+- rename file (same dir)	- seems to work, but with i_count PROBLEMS
+- rename file (dif. dir)	- seems to work, but with i_count PROBLEMS
+- rename dir (same dir)		- seems to work, but with i_count PROBLEMS
+- rename dir (dif. dir)		- seems to work, but with i_count PROBLEMS
 - delete file			- seems to work fully now!
 - notify_change (chown,perms)	- seems to work!
 - delete hardlink		- WARNING: NOT FIXED YET!
 - mkdir				- seems to work both on short & long names now !
-- rmdir 			- WARNING: NOT FIXED YET!
-- umssyncing			- seems to work, but NEEDS EXTENSIVE TESTING
+- rmdir 			- may work, but readdir blocks linux afterwards. to be FIXED!
+- umssyncing			- seems to work, but NEEDS MORE TESTING
 
 - CVF-FAT stuff (compressed DOS filesystem) - there is some support from
   Frank Gockel <gockel@sent13.uni-duisburg.de> to use it even under
@@ -130,6 +129,8 @@ some of my notes for myself /mn/:
 - what about .dotfiles ? working ? multiple dots ? etc....
 - fix stuff like dir->i_count++ to atomic_inc(&dir->i_count) and simular?
 
+- chase down all "FIXME", "DELME", "CNT", check_dentry, check_inode, kill_dentry
+  and fix it properly.
 
 - umsdos_create_any - calling msdos_create will create dentry for shor name. Hmmmm..?
 - kill_dentry - put it where is needed. Also dput() at needed places.
@@ -143,6 +144,14 @@ something ?
 
 - SECURITY WARNING: short dentries should be invalidated, or they could be
   accessed instead of proper long names.
+
+- I've put many check_dentry() calls to trace down problems. those should be
+  removed in final version.
+
+- iput()s with "FIXME?" comment are uncomented and probably ok. Those with
+  "FIXME??" should be tested but prolly work. Commented iput()s with
+  any "FIXME" comments should probably be uncommented and tested. At some
+  places we may need dput() instead of iput(), but that should be checked.
 
 - as for iput() : (my only pointer so far. anyone else ?)
 

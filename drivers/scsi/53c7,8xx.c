@@ -2202,10 +2202,10 @@ abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
 	ncr_prev = (u32*) ((char*)bus_to_virt(ncr_search) + 
 	    hostdata->dsa_next), ncr_search = le32_to_cpu(*ncr_prev), --left);
 
-    if (left < 0) 
+    if (left < 0) {
 	printk("scsi%d: loop detected in ncr reconnect list\n",
 	    host->host_no);
-    else if (ncr_search) 
+    } else if (ncr_search) {
 	if (found)
 	    printk("scsi%d: scsi %ld in ncr issue array and reconnect lists\n",
 		host->host_no, c->pid);
@@ -2216,6 +2216,7 @@ abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
 /* If we're at the tail end of the issue queue, update that pointer too. */
 	    found = 1;
 	}
+    }
 
     /*
      * Traverse the host running list until we find this command or discover
@@ -6325,11 +6326,12 @@ ncr_halt (struct Scsi_Host *host) {
 	    	}
     	    }
 	}
-	if (!(istat & (ISTAT_SIP|ISTAT_DIP))) 
+	if (!(istat & (ISTAT_SIP|ISTAT_DIP))) {
 	    if (stage == 0)
 	    	++stage;
 	    else if (stage == 3)
 		break;
+	}
     }
     hostdata->state = STATE_HALTED;
     restore_flags(flags);

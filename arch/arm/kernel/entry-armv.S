@@ -10,7 +10,6 @@
  * it to save wrong values...  Be aware!
  */
 #include <linux/config.h> /* for CONFIG_ARCH_EBSA110 */
-#include <linux/autoconf.h>
 #include <linux/linkage.h>
 
 #include <asm/assembler.h>

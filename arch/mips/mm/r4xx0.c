@@ -11,7 +11,6 @@
  *  - many of the bug workarounds are not efficient at all, but at
  *    least they are functional ...
  */
-#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -2720,7 +2719,7 @@ __initfunc(void ld_mmu_r4xx0(void))
 
 	printk("CPU revision is: %08x\n", read_32bit_cp0_register(CP0_PRID));
 
-	set_cp0_config(CONFIG_CM_CMASK, CONFIG_CM_CACHABLE_NONCOHERENT);
+	set_cp0_config(CONF_REG_CM_CMASK, CONF_REG_CM_CACHABLE_NONCOHERENT);
 
 	probe_icache(config);
 	probe_dcache(config);

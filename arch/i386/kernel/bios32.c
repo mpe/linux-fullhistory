@@ -1,12 +1,7 @@
 /*
  * bios32.c - Low-Level PCI Access
  *
- * $Id: bios32.c,v 1.32 1998/05/02 12:03:05 davem Exp $
- *
- * Sponsored by
- *	iX Multiuser Multitasking Magazine
- *	Hannover, Germany
- *	hm@ix.de
+ * $Id: bios32.c,v 1.33 1998/05/12 07:30:11 mj Exp $
  *
  * Copyright 1993, 1994 Drew Eckhardt
  *      Visionary Computing
@@ -14,21 +9,20 @@
  *      Drew@Colorado.EDU
  *      +1 (303) 786-7975
  *
- * For more information, please consult
+ * Drew's work was sponsored by:
+ *	iX Multiuser Multitasking Magazine
+ *	Hannover, Germany
+ *	hm@ix.de
  *
- * PCI BIOS Specification Revision
+ * Copyright 1997, 1998 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+ *
+ * For more information, please consult the following manuals (look at
+ * http://www.pcisig.com/ for how to get them):
+ *
+ * PCI BIOS Specification
  * PCI Local Bus Specification
+ * PCI to PCI Bridge Specification
  * PCI System Design Guide
- *
- * PCI Special Interest Group
- * M/S HF3-15A
- * 5200 N.E. Elam Young Parkway
- * Hillsboro, Oregon 97124-6497
- * +1 (503) 696-2000
- * +1 (800) 433-5177
- *
- * Manuals are $25 each or $50 for all three, plus $7 shipping
- * within the United States, $35 abroad.
  *
  *
  * CHANGELOG :
@@ -458,6 +452,12 @@ __initfunc(static struct pci_access *pci_check_direct(void))
 /* PCI service signature: "$PCI" */
 #define PCI_SERVICE		(('$' << 0) + ('P' << 8) + ('C' << 16) + ('I' << 24))
 
+/* PCI BIOS hardware mechanism flags */
+#define PCIBIOS_HW_TYPE1		0x01
+#define PCIBIOS_HW_TYPE2		0x02
+#define PCIBIOS_HW_TYPE1_SPEC		0x10
+#define PCIBIOS_HW_TYPE2_SPEC		0x20
+
 /*
  * This is the standard structure used to identify the entry point
  * to the BIOS32 Service Directory, as documented in
@@ -487,7 +487,6 @@ union bios32 {
  * the array there.
  */
 
-static unsigned long bios32_entry = 0;
 static struct {
 	unsigned long address;
 	unsigned short segment;
@@ -529,7 +528,6 @@ static unsigned long bios32_service(unsigned long service)
 	}
 }
 
-static long pcibios_entry = 0;
 static struct {
 	unsigned long address;
 	unsigned short segment;
@@ -537,49 +535,48 @@ static struct {
 
 __initfunc(static int check_pcibios(void))
 {
-	unsigned long signature;
-	unsigned char present_status;
-	unsigned char major_revision;
-	unsigned char minor_revision;
-	unsigned long flags;
-	int pack;
+	u32 signature, eax, ebx, ecx;
+	u8 status, major_ver, minor_ver, hw_mech, last_bus;
+	unsigned long flags, pcibios_entry;
 
 	if ((pcibios_entry = bios32_service(PCI_SERVICE))) {
-		pci_indirect.address = pcibios_entry | PAGE_OFFSET;
+		pci_indirect.address = pcibios_entry + PAGE_OFFSET;
 
 		save_flags(flags); cli();
 		__asm__("lcall (%%edi)\n\t"
 			"jc 1f\n\t"
 			"xor %%ah, %%ah\n"
-			"1:\tshl $8, %%eax\n\t"
-			"movw %%bx, %%ax"
+			"1:"
 			: "=d" (signature),
-			  "=a" (pack)
+			  "=a" (eax),
+			  "=b" (ebx),
+			  "=c" (ecx)
 			: "1" (PCIBIOS_PCI_BIOS_PRESENT),
 			  "D" (&pci_indirect)
-			: "bx", "cx");
+			: "memory");
 		restore_flags(flags);
 
-		present_status = (pack >> 16) & 0xff;
-		major_revision = (pack >> 8) & 0xff;
-		minor_revision = pack & 0xff;
-		if (present_status || (signature != PCI_SIGNATURE)) {
-			printk ("PCI: %s: BIOS32 Service Directory says PCI BIOS is present,\n"
-				"	but PCI_BIOS_PRESENT subfunction fails with present status of 0x%x\n"
-				"	and signature of 0x%08lx (%c%c%c%c).  Report to <mj@ucw.cz>.\n",
-				(signature == PCI_SIGNATURE) ?  "WARNING" : "ERROR",
-				present_status, signature,
-				(char) (signature >>  0), (char) (signature >>  8),
-				(char) (signature >> 16), (char) (signature >> 24));
-
-			if (signature != PCI_SIGNATURE)
-				pcibios_entry = 0;
+		status = (eax >> 8) & 0xff;
+		hw_mech = eax & 0xff;
+		major_ver = (ebx >> 8) & 0xff;
+		minor_ver = ebx & 0xff;
+		last_bus = ecx & 0xff;
+		DBG("PCI: BIOS probe returned s=%02x hw=%02x ver=%02x.%02x l=%02x\n",
+			status, hw_mech, major_ver, minor_ver, last_bus);
+		if (status || signature != PCI_SIGNATURE) {
+			printk (KERN_ERR "PCI: BIOS BUG #%x[%08x] found, report to <mj@ucw.cz>\n",
+				status, signature);
+			return 0;
 		}
-		if (pcibios_entry) {
-			printk ("PCI: PCI BIOS revision %x.%02x entry at 0x%lx\n",
-				major_revision, minor_revision, pcibios_entry);
-			return 1;
-		}
+		printk("PCI: PCI BIOS revision %x.%02x entry at 0x%lx\n",
+			major_ver, minor_ver, pcibios_entry);
+#ifdef CONFIG_PCI_DIRECT
+		if (!(hw_mech & PCIBIOS_HW_TYPE1))
+			pci_probe &= ~PCI_PROBE_CONF1;
+		if (!(hw_mech & PCIBIOS_HW_TYPE2))
+			pci_probe &= ~PCI_PROBE_CONF2;
+#endif
+		return 1;
 	}
 	return 0;
 }
@@ -822,7 +819,7 @@ __initfunc(static struct pci_access *pci_find_bios(void))
 			printk("PCI: BIOS32 entry (0x%p) in high memory, cannot use.\n", check);
 			return NULL;
 		} else {
-			bios32_entry = check->fields.entry;
+			unsigned long bios32_entry = check->fields.entry;
 			DBG("PCI: BIOS32 Service Directory entry at 0x%lx\n", bios32_entry);
 			bios32_indirect.address = bios32_entry + PAGE_OFFSET;
 			if (check_pcibios())
@@ -898,6 +895,16 @@ __initfunc(void pcibios_fixup_io_addr(struct pci_dev *dev, int idx))
 
 	if (!pci_last_io_addr) {
 		printk("PCI: Unassigned I/O space for %02x:%02x\n", bus, devfn);
+		return;
+	}
+	if ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && idx < 4) {
+		/*
+		 * In case the BIOS didn't assign an address 0--3 to an IDE
+		 * controller, we don't try to fix it as it means "use default
+		 * addresses" at least with several broken chips and the IDE
+		 * driver needs the original settings to recognize which devices
+		 * correspond to the primary controller.
+		 */
 		return;
 	}
 	pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd);

@@ -470,11 +470,12 @@ int ntfs_readwrite_attr(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 		dest->size=l;
 		return 0;
 	}
-	if(attr->compressed)
+	if(attr->compressed) {
 		if(dest->do_read)
 			return ntfs_read_compressed(ino,attr,offset,dest);
 		else
 			return ntfs_write_compressed(ino,attr,offset,dest);
+	}
 	vcn=0;
 	s_vcn = offset/clustersize;
 	for(rnum=0;rnum<attr->d.r.len && 

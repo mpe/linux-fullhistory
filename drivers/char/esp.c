@@ -2381,13 +2381,15 @@ __initfunc(int espserial_init(void))
 	
 	init_bh(ESP_BH, do_serial_bh);
 
-	for (i = 0; i < NR_PRIMARY; i++)
-		if (irq[i] != 0)
+	for (i = 0; i < NR_PRIMARY; i++) {
+		if (irq[i] != 0) {
 			if ((irq[i] < 2) || (irq[i] > 15) || (irq[i] == 6) ||
 			    (irq[i] == 8) || (irq[i] == 13))
 				irq[i] = 0;
 			else if (irq[i] == 2)
 				irq[i] = 9;
+		}
+	}
 
 	if ((dma != 1) && (dma != 3))
 		dma = 0;

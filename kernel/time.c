@@ -262,7 +262,7 @@ int do_adjtimex(struct timex *txc)
 	    if (txc->modes & ADJ_TIMECONST)
 		time_constant = txc->constant;
 
-	    if (txc->modes & ADJ_OFFSET)
+	    if (txc->modes & ADJ_OFFSET) {
 	      if ((txc->modes == ADJ_OFFSET_SINGLESHOT)
 		  || !(time_status & STA_PLL))
 		{
@@ -327,6 +327,7 @@ int do_adjtimex(struct timex *txc)
 		  else if (time_freq < -time_tolerance)
 		    time_freq = -time_tolerance;
 		} /* STA_PLL || STA_PPSTIME */
+	    }
 	    if (txc->modes & ADJ_TICK)
 	      tick = txc->tick;
 

@@ -12,6 +12,8 @@ void mask_irq(unsigned int irq);
 void unmask_irq(unsigned int irq);
 void enable_IO_APIC_irq (unsigned int irq);
 void disable_IO_APIC_irq (unsigned int irq);
+void unmask_IO_APIC_irq (unsigned int irq);
+void mask_IO_APIC_irq (unsigned int irq);
 void set_8259A_irq_mask (unsigned int irq);
 int i8259A_irq_pending (unsigned int irq);
 void ack_APIC_irq (void);
@@ -69,10 +71,6 @@ static inline void irq_exit(int cpu, unsigned int irq)
 
 #define irq_enter(cpu, irq)	(++local_irq_count[cpu])
 #define irq_exit(cpu, irq)	(--local_irq_count[cpu])
-
-/* Make these no-ops when not using SMP */
-#define enable_IO_APIC_irq(x)	do { } while (0)
-#define disable_IO_APIC_irq(x)	do { } while (0)
 
 #define IO_APIC_IRQ(x)	(0)
 

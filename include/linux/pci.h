@@ -1,25 +1,17 @@
 /*
- *	$Id: pci.h,v 1.70 1998/05/02 19:20:03 mj Exp $
+ *	$Id: pci.h,v 1.72 1998/05/12 07:35:54 mj Exp $
  *
  *	PCI defines and function prototypes
  *	Copyright 1994, Drew Eckhardt
- *	Copyright 1997, Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+ *	Copyright 1997, 1998 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  *
- *	For more information, please consult 
- * 
- *	PCI BIOS Specification Revision
+ *	For more information, please consult the following manuals (look at
+ *	http://www.pcisig.com/ for how to get them):
+ *
+ *	PCI BIOS Specification
  *	PCI Local Bus Specification
+ *	PCI to PCI Bridge Specification
  *	PCI System Design Guide
- *
- *	PCI Special Interest Group
- *	M/S HF3-15A
- *	5200 N.E. Elam Young Parkway
- *	Hillsboro, Oregon 97124-6497
- *	+1 (503) 696-2000 
- *	+1 (800) 433-5177
- * 
- *	Manuals are $25 each or $50 for all three, plus $7 shipping 
- *	within the United States, $35 abroad.
  */
 
 #ifndef LINUX_PCI_H
@@ -1081,6 +1073,7 @@ struct pci_dev {
 	struct pci_dev	*next;		/* chain of all devices */
 
 	void		*sysdata;	/* hook for sys-specific extension */
+	struct proc_dir_entry *procent;	/* device entry in /proc/bus/pci */
 
 	unsigned int	devfn;		/* encoded device & function index */
 	unsigned short	vendor;
@@ -1117,6 +1110,7 @@ struct pci_bus {
 	struct pci_dev	*devices;	/* devices behind this bridge */
 
 	void		*sysdata;	/* hook for sys-specific extension */
+	struct proc_dir_entry *procdir;	/* directory entry in /proc/bus/pci */
 
 	unsigned char	number;		/* bus number */
 	unsigned char	primary;	/* number of primary bridge */
@@ -1134,6 +1128,8 @@ unsigned int pci_scan_bus(struct pci_bus *bus);
 void pci_proc_init(void);
 void proc_old_pci_init(void);
 int get_pci_list(char *buf);
+int pci_proc_attach_device(struct pci_dev *dev);
+int pci_proc_detach_device(struct pci_dev *dev);
 
 struct pci_dev *pci_find_device (unsigned int vendor, unsigned int device, struct pci_dev *from);
 struct pci_dev *pci_find_class (unsigned int class, struct pci_dev *from);

@@ -1,6 +1,6 @@
 /* 
-        aten.c        (c) 1997  Grant R. Guenther <grant@torque.net>
-                          Under the terms of the GNU public license.
+        aten.c  (c) 1997-8  Grant R. Guenther <grant@torque.net>
+                            Under the terms of the GNU public license.
 
 	aten.c is a low-level protocol driver for the ATEN EH-100
 	parallel port adapter.  The EH-100 supports 4-bit and 8-bit
@@ -9,7 +9,13 @@
 
 */
 
-#define ATEN_VERSION      "1.0"
+/* Changes:
+
+	1.01	GRG 1998.05.05	init_proto, release_proto
+
+*/
+
+#define ATEN_VERSION      "1.01"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -123,12 +129,12 @@ static void aten_log_adapter( PIA *pi, char * scratch, int verbose )
 
 }
 
-static void aten_inc_use ( void )
+static void aten_init_proto( PIA *pi )
 
 {       MOD_INC_USE_COUNT;
 }
 
-static void aten_dec_use ( void )
+static void aten_release_proto( PIA *pi )
 
 {       MOD_DEC_USE_COUNT;
 }
@@ -144,8 +150,8 @@ struct pi_protocol aten = {"aten",0,2,2,1,1,
                            0,
                            0,
                            aten_log_adapter,
-                           aten_inc_use, 
-                           aten_dec_use 
+                           aten_init_proto,
+                           aten_release_proto
                           };
 
 

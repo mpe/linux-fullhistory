@@ -27,12 +27,6 @@ int UMSDOS_lookup(struct inode *dir,struct dentry *dentry);
 	 
 int umsdos_hlink2inode (struct inode *hlink, struct inode **result);
 /* emd.c 22/06/95 00.22.04 */
-void fill_new_filp (struct file *filp, struct dentry *dentry);
-void kill_dentry (struct dentry *dentry);
-struct dentry *creat_dentry (const char *name,
-			     const int len,
-			     struct inode *inode,
-			     struct dentry *parent);
 ssize_t umsdos_file_write_kmem_real (struct file *filp,
 				const char *buf,
 				size_t  count,
@@ -77,6 +71,16 @@ int umsdos_findentry (struct inode *dir,
 	 int expect);
 /* file.c 25/01/95 02.25.38 */
 /* inode.c 12/06/95 09.49.40 */
+inline struct dentry *geti_dentry (struct inode *inode);
+inline void inc_count (struct inode *inode);
+void check_inode (struct inode *inode);
+void check_dentry (struct dentry *dentry);
+void fill_new_filp (struct file *filp, struct dentry *dentry);
+void kill_dentry (struct dentry *dentry);
+struct dentry *creat_dentry (const char *name,
+			     const int len,
+			     struct inode *inode,
+			     struct dentry *parent);
 void UMSDOS_put_inode (struct inode *inode);
 void UMSDOS_put_super (struct super_block *sb);
 int UMSDOS_statfs (struct super_block *sb,

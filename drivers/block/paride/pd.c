@@ -1,6 +1,6 @@
 /* 
-        pd.c    (c) 1997  Grant R. Guenther <grant@torque.net>
-                          Under the terms of the GNU public license.
+        pd.c    (c) 1997-8  Grant R. Guenther <grant@torque.net>
+                            Under the terms of the GNU public license.
 
         This is the high-level driver for parallel port IDE hard
         drives based on chips supported by the paride module.
@@ -14,9 +14,9 @@
         parameters are adjustable:
  
 	    drive0  	These four arguments can be arrays of	    
-	    drive1	1-7 integers as follows:
+	    drive1	1-8 integers as follows:
 	    drive2
-	    drive3	<prt>,<pro>,<uni>,<mod>,<geo>,<sby>,<dly>
+	    drive3	<prt>,<pro>,<uni>,<mod>,<geo>,<sby>,<dly>,<slv>
 
 			Where,
 
@@ -54,6 +54,11 @@
 			set this to a small integer, the larger it is
 			the slower the port i/o.  In some cases, setting
 			this to zero will speed up the device. (default -1)
+
+		<slv>   IDE disks can be jumpered to master or slave.
+                        Set this to 0 to choose the master drive, 1 to
+                        choose the slave, -1 (the default) to choose the
+                        first drive found.
 			
 
             major       You may use this parameter to overide the
@@ -100,16 +105,18 @@
 
 	1.01	GRG 1997.01.24	Restored pd_reset()
 				Added eject ioctl
+	1.02    GRG 1998.05.06  SMP spinlock changes, 
+				Added slave support
 
 */
 
-#define PD_VERSION      "1.01"
+#define PD_VERSION      "1.02"
 #define PD_MAJOR	45
 #define PD_NAME		"pd"
 #define PD_UNITS	4
 
 /* Here are things one can override from the insmod command.
-   Most are autoprobed by paride unless set here.  Verbose is on
+   Most are autoprobed by paride unless set here.  Verbose is off
    by default.
 
 */
@@ -121,12 +128,12 @@ static int	cluster = 64;
 static int      nice = 0;
 static int      disable = 0;
 
-static int drive0[7] = {0,0,0,-1,0,1,-1};
-static int drive1[7] = {0,0,0,-1,0,1,-1};
-static int drive2[7] = {0,0,0,-1,0,1,-1};
-static int drive3[7] = {0,0,0,-1,0,1,-1};
+static int drive0[8] = {0,0,0,-1,0,1,-1,-1};
+static int drive1[8] = {0,0,0,-1,0,1,-1,-1};
+static int drive2[8] = {0,0,0,-1,0,1,-1,-1};
+static int drive3[8] = {0,0,0,-1,0,1,-1,-1};
 
-static int (*drives[4])[7] = {&drive0,&drive1,&drive2,&drive3};
+static int (*drives[4])[8] = {&drive0,&drive1,&drive2,&drive3};
 static int pd_drive_count;
 
 #define D_PRT	0
@@ -136,6 +143,7 @@ static int pd_drive_count;
 #define D_GEO	4
 #define D_SBY	5
 #define D_DLY	6
+#define D_SLV   7
 
 #define	DU		(*drives[unit])
 
@@ -150,16 +158,17 @@ static int pd_drive_count;
 #include <linux/hdreg.h>
 #include <linux/cdrom.h>	/* for the eject ioctl */
 
+#include <asm/spinlock.h>
 #include <asm/uaccess.h>
 
 #ifndef MODULE
 
 #include "setup.h"
 
-static STT pd_stt[7] = {{"drive0",7,drive0},
-		        {"drive1",7,drive1},
-		        {"drive2",7,drive2},
-		        {"drive3",7,drive3},
+static STT pd_stt[7] = {{"drive0",8,drive0},
+		        {"drive1",8,drive1},
+		        {"drive2",8,drive2},
+		        {"drive3",8,drive3},
 			{"disable",1,&disable},
 		        {"cluster",1,&cluster},
 		        {"nice",1,&nice}};
@@ -176,10 +185,10 @@ MODULE_PARM(major,"i");
 MODULE_PARM(name,"s");
 MODULE_PARM(cluster,"i");
 MODULE_PARM(nice,"i");
-MODULE_PARM(drive0,"1-7i");
-MODULE_PARM(drive1,"1-7i");
-MODULE_PARM(drive2,"1-7i");
-MODULE_PARM(drive3,"1-7i");
+MODULE_PARM(drive0,"1-8i");
+MODULE_PARM(drive1,"1-8i");
+MODULE_PARM(drive2,"1-8i");
+MODULE_PARM(drive3,"1-8i");
 
 #include "paride.h"
 
@@ -258,7 +267,9 @@ static int pd_release (struct inode *inode, struct file *file);
 static int pd_revalidate(kdev_t dev);
 static int pd_detect(void);
 static void do_pd_read(void);
+static void do_pd_read_start(void);
 static void do_pd_write(void);
+static void do_pd_write_start(void);
 static void do_pd_read_drq( void );
 static void do_pd_write_done( void );
 
@@ -282,6 +293,7 @@ struct pd_unit {
 	int heads;                	/* physical geometry */
 	int sectors;
 	int cylinders;
+	int drive;			/* master=0 slave=1 */
 	int changed;			/* Have we seen a disk change ? */
 	int removable;			/* removable media device  ?  */
 	int standby;
@@ -363,6 +375,7 @@ void pd_init_units( void )
 		PD.access = 0;
 		PD.changed = 1;
 		PD.capacity = 0;
+		PD.drive = DU[D_SLV];
 		PD.present = 0;
 		j = 0;
 		while ((j < PD_NAMELEN-2) && (PD.name[j]=name[j])) j++;
@@ -646,6 +659,8 @@ void    cleanup_module(void)
 #define	WR(c,r,v)	pi_write_regr(PI,c,r,v)
 #define	RR(c,r)		(pi_read_regr(PI,c,r))
 
+#define DRIVE		(0xa0+0x10*PD.drive)
+
 /*  ide command interface */
 
 static void pd_print_error( int unit, char * msg, int status )
@@ -657,7 +672,7 @@ static void pd_print_error( int unit, char * msg, int status )
 	printk("\n");
 }
 
-static void pd_reset( int unit )
+static void pd_reset( int unit )    /* called only for MASTER drive */
 
 {       pi_connect(PI);
 	WR(1,6,4);
@@ -691,7 +706,7 @@ static void pd_send_command( int unit, int n, int s, int h,
 			     int c0, int c1, int func )
 
 {
-        WR(0,6,0xa0+h);
+        WR(0,6,DRIVE+h);
         WR(0,1,0);                /* the IDE task file */
         WR(0,2,n);
         WR(0,3,s);
@@ -793,10 +808,16 @@ static int pd_identify( int unit )
 {       int	j;
 	char id[PD_ID_LEN+1];
 
-	pd_reset(unit);
+/* WARNING:  here there may be dragons.  reset() applies to both drives,
+   but we call it only on probing the MASTER. This should allow most
+   common configurations to work, but be warned that a reset can clear
+   settings on the SLAVE drive.
+*/ 
+
+	if (PD.drive == 0) pd_reset(unit);
 
         pi_connect(PI);
-	WR(0,6,0xa0);
+	WR(0,6,DRIVE);
         pd_wait_for(unit,0,DBMSG("before IDENT"));  
         pd_send_command(unit,1,0,0,0,0,IDE_IDENTIFY);
 
@@ -818,8 +839,10 @@ static int pd_identify( int unit )
 
         PD.removable = (word_val(0) & 0x80);
  
-        printk("%s: %s, %d blocks [%dM], (%d/%d/%d), %s media\n",
-                    PD.name,id,PD.capacity,PD.capacity/2048,
+        printk("%s: %s, %s, %d blocks [%dM], (%d/%d/%d), %s media\n",
+                    PD.name,id,
+		    PD.drive?"slave":"master",
+		    PD.capacity,PD.capacity/2048,
                     PD.cylinders,PD.heads,PD.sectors,
                     PD.removable?"removable":"fixed");
 
@@ -832,36 +855,39 @@ static int pd_identify( int unit )
         return 1;
 }
 
+static int pd_probe_drive( int unit )
+
+{	if (PD.drive == -1) {
+	  for (PD.drive=0;PD.drive<=1;PD.drive++)
+	     if (pd_identify(unit)) return 1;
+	  return 0;
+	  }
+	else return pd_identify(unit);
+}
+
 static int pd_detect( void )
 
-{       long 	flags;
-	int	k, unit;
+{       int	k, unit;
 
 	k = 0;
 	if (pd_drive_count == 0) {  /* nothing spec'd - so autoprobe for 1 */
 	    unit = 0;
 	    if (pi_init(PI,1,-1,-1,-1,-1,-1,pd_scratch,
 	             PI_PD,verbose,PD.name)) {
-		save_flags(flags);
-		sti();
-		if (pd_identify(unit)) {
+		if (pd_probe_drive(unit)) {
 			PD.present = 1;
 			k = 1;
 		} else pi_release(PI);
-		restore_flags(flags);
 	    }
 
    	} else for (unit=0;unit<PD_UNITS;unit++) if (DU[D_PRT])
 	    if (pi_init(PI,0,DU[D_PRT],DU[D_MOD],DU[D_UNI],
 			DU[D_PRO],DU[D_DLY],pd_scratch,
 			PI_PD,verbose,PD.name)) {
-                save_flags(flags);
-                sti();
-                if (pd_identify(unit)) {
+                if (pd_probe_drive(unit)) {
                         PD.present = 1;
                         k = unit+1;
                 } else pi_release(PI);
-                restore_flags(flags);
             }
 
 /* We lie about the number of drives found, as the generic partition
@@ -926,18 +952,24 @@ repeat:
         pd_buf = CURRENT->buffer;
         pd_retries = 0;
 
+	pd_busy = 1;
         if (pd_cmd == READ) pi_do_claimed(PI,do_pd_read);
         else if (pd_cmd == WRITE) pi_do_claimed(PI,do_pd_write);
-        else {  end_request(0);
+        else {  pd_busy = 0;
+		end_request(0);
                 goto repeat;
         }
 }
 
 static void pd_next_buf( int unit )
 
-{	cli();
+{	long	saved_flags;
+
+	spin_lock_irqsave(&io_request_lock,saved_flags);
 	end_request(1);
-	if (!pd_run) { sti(); return; }
+	if (!pd_run) {  spin_unlock_irqrestore(&io_request_lock,saved_flags);
+			return; 
+	}
 	
 /* paranoia */
 
@@ -951,29 +983,34 @@ static void pd_next_buf( int unit )
 
 	pd_count = CURRENT->nr_sectors;
 	pd_buf = CURRENT->buffer;
-	sti();
+	spin_unlock_irqrestore(&io_request_lock,saved_flags);
 }
 
 static void do_pd_read( void )
 
+{	ps_set_intr(do_pd_read_start,0,0,nice);
+}
+
+static void do_pd_read_start( void )
+ 
 {       int	unit = pd_unit;
+	long    saved_flags;
 
 	pd_busy = 1;
-
-        sti();
 
         pi_connect(PI);
         if (pd_wait_for(unit,STAT_READY,"do_pd_read") & STAT_ERR) {
                 pi_disconnect(PI);
                 if (pd_retries < PD_MAX_RETRIES) {
                         pd_retries++;
-                        pi_do_claimed(PI,do_pd_read);
+                        pi_do_claimed(PI,do_pd_read_start);
 			return;
                 }
+		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pd_busy = 0;
-                cli();
                 do_pd_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
         }
         pd_ide_command(unit,IDE_READ,pd_block,pd_run);
@@ -983,21 +1020,21 @@ static void do_pd_read( void )
 static void do_pd_read_drq( void )
 
 {       int	unit = pd_unit;
-
-	sti();
+	long    saved_flags;
 
 	while (1) {
             if (pd_wait_for(unit,STAT_DRQ,"do_pd_read_drq") & STAT_ERR) {
                 pi_disconnect(PI);
                 if (pd_retries < PD_MAX_RETRIES) {
                         pd_retries++;
-                        pi_do_claimed(PI,do_pd_read);
+                        pi_do_claimed(PI,do_pd_read_start);
                         return;
                 }
+		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pd_busy = 0;
-                cli();
                 do_pd_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
             }
             pi_read_block(PI,pd_buf,512);
@@ -1008,32 +1045,38 @@ static void do_pd_read_drq( void )
 	    if (!pd_count) pd_next_buf(unit);
         }
         pi_disconnect(PI);
+	spin_lock_irqsave(&io_request_lock,saved_flags);
         end_request(1);
         pd_busy = 0;
-        cli();
         do_pd_request();
+	spin_unlock_irqrestore(&io_request_lock,saved_flags);
 }
 
 static void do_pd_write( void )
 
+{	 ps_set_intr(do_pd_write_start,0,0,nice);
+}
+
+static void do_pd_write_start( void )
+
 {       int 	unit = pd_unit;
+	long    saved_flags;
 
 	pd_busy = 1;
-
-        sti();
 
         pi_connect(PI);
         if (pd_wait_for(unit,STAT_READY,"do_pd_write") & STAT_ERR) {
                 pi_disconnect(PI);
                 if (pd_retries < PD_MAX_RETRIES) {
                         pd_retries++;
-			pi_do_claimed(PI,do_pd_write);
+			pi_do_claimed(PI,do_pd_write_start);
                         return;
                 }
+		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pd_busy = 0;
-                cli();
                 do_pd_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
         }
         pd_ide_command(unit,IDE_WRITE,pd_block,pd_run);
@@ -1042,14 +1085,15 @@ static void do_pd_write( void )
                 pi_disconnect(PI);
                 if (pd_retries < PD_MAX_RETRIES) {
                         pd_retries++;
-                        pi_do_claimed(PI,do_pd_write);
+                        pi_do_claimed(PI,do_pd_write_start);
                         return;
                 }
+		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pd_busy = 0;
-                cli();
                 do_pd_request();
-                return;
+                spin_unlock_irqrestore(&io_request_lock,saved_flags);
+		return;
             }
             pi_write_block(PI,pd_buf,512);
 	    pd_count--; pd_run--;
@@ -1064,26 +1108,28 @@ static void do_pd_write( void )
 static void do_pd_write_done( void )
 
 {       int	unit = pd_unit;
+	long    saved_flags;
 
-	sti();
         if (pd_wait_for(unit,STAT_READY,"do_pd_write_done") & STAT_ERR) {
                 pi_disconnect(PI);
                 if (pd_retries < PD_MAX_RETRIES) {
                         pd_retries++;
-                        pi_do_claimed(PI,do_pd_write);
+                        pi_do_claimed(PI,do_pd_write_start);
                         return;
                 }
+		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pd_busy = 0;
-                cli();
                 do_pd_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
         }
         pi_disconnect(PI);
+	spin_lock_irqsave(&io_request_lock,saved_flags);
         end_request(1);
         pd_busy = 0;
-        cli();
         do_pd_request();
+	spin_unlock_irqrestore(&io_request_lock,saved_flags);
 }
 
 /* end of pd.c */

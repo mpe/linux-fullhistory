@@ -90,7 +90,16 @@
 
 */
 
-#define PT_VERSION      "1.0"
+/*   Changes:
+
+	1.01	GRG 1998.05.06	Round up transfer size, fix ready_wait,
+			        loosed interpretation of ATAPI standard
+				for clearing error status.
+				Eliminate sti();
+
+*/
+
+#define PT_VERSION      "1.01"
 #define PT_MAJOR	96
 #define PT_NAME		"pt"
 #define PT_UNITS	4
@@ -383,7 +392,7 @@ static int pt_command( int unit, char * cmd, int dlen, char * fun )
         WR(0,5,dlen / 256);
         WR(0,7,0xa0);          /* ATAPI packet command */
 
-        if (pt_wait(unit,STAT_BUSY,STAT_DRQ|STAT_ERR,fun,"command DRQ")) {
+        if (pt_wait(unit,STAT_BUSY,STAT_DRQ,fun,"command DRQ")) {
                 pi_disconnect(PI);
                 return -1;
         }
@@ -407,7 +416,7 @@ static int pt_completion( int unit, char * buf, char * fun )
 			fun,"completion");
 
         if (RR(0,7)&STAT_DRQ) { 
-           n = (RR(0,4)+256*RR(0,5));
+           n = (((RR(0,4)+256*RR(0,5))+3)&0xfffc);
 	   p = RR(0,2)&3;
 	   if (p == 0) pi_write_block(PI,buf,n);
 	   if (p == 2) pi_read_block(PI,buf,n);
@@ -512,22 +521,16 @@ static int pt_reset( int unit )
 
 {	int	i, k, flg;
 	int	expect[5] = {1,1,1,0x14,0xeb};
-	long	flags;
 
 	pi_connect(PI);
 	WR(0,6,DRIVE);
 	WR(0,7,8);
-
-	save_flags(flags);
-	sti();
 
 	pt_sleep(2);
 
         k = 0;
         while ((k++ < PT_RESET_TMO) && (RR(1,6)&STAT_BUSY))
                 pt_sleep(10);
-
-	restore_flags(flags);
 
 	flg = 1;
 	for(i=0;i<5;i++) flg &= (RR(0,i+1) == expect[i]);
@@ -554,7 +557,7 @@ static int pt_ready_wait( int unit, int tmo )
 	  pt_atapi(unit,tr_cmd,0,NULL,DBMSG("test unit ready"));
 	  p = PT.last_sense;
 	  if (!p) return 0;
-	  if (!((p == 0x010402)||((p & 0xff) == 6))) return p;
+	  if (!(((p & 0xffff) == 0x0402)||((p & 0xff) == 6))) return p;
 	  k++;
           pt_sleep(100);
 	}

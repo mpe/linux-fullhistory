@@ -114,6 +114,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_PARIDE_FIT2),y)
+  LX_OBJS += fit2.o
+else
+  ifeq ($(CONFIG_PARIDE_FIT2),m)
+    MX_OBJS += fit2.o
+  endif
+endif
+
 ifeq ($(CONFIG_PARIDE_FRPW),y)
   LX_OBJS += frpw.o
 else
@@ -138,4 +146,13 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_PARIDE_KTTI),y)
+  LX_OBJS += ktti.o
+else
+  ifeq ($(CONFIG_PARIDE_KTTI),m)
+    MX_OBJS += ktti.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
+

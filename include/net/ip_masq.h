@@ -258,9 +258,10 @@ extern atomic_t __ip_masq_lock;
 extern int ip_masq_get_debug_level(void);
 
 #ifndef CONFIG_IP_MASQ_NDEBUG
-#define IP_MASQ_DEBUG(level, msg...) \
+#define IP_MASQ_DEBUG(level, msg...) do { \
 	if (level <= ip_masq_get_debug_level()) \
-		printk(KERN_DEBUG "IP_MASQ:" ## msg)
+		printk(KERN_DEBUG "IP_MASQ:" ## msg); \
+	} while (0)
 #else	/* NO DEBUGGING at ALL */
 #define IP_MASQ_DEBUG(level, msg...) do { } while (0)
 #endif

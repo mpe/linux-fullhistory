@@ -1592,8 +1592,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			        if ((unsigned int)v.base>=0xe0000000UL)
 			                btv->win.vidadr=(uint)v.base;
 				else 
-				  btv->win.vidadr=PAGE_OFFSET|
-				    uvirt_to_bus((uint)v.base);
+				  btv->win.vidadr= __va(uvirt_to_bus((uint)v.base));
 			btv->win.sheight=v.height;
 			btv->win.swidth=v.width;
 			btv->win.bpp=v.depth/8;

@@ -238,6 +238,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		sector = min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame;
 		if (sector)
 			sector -= CD_MSF_OFFSET;
+		sr_set_blocklength(minor,2048);
 		break;
 	}
 

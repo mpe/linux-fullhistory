@@ -69,11 +69,12 @@ static struct buffer_head * sysv_find_entry(struct inode * dir,
 	if (!dir)
 		return NULL;
 	sb = dir->i_sb;
-	if (namelen > SYSV_NAMELEN)
+	if (namelen > SYSV_NAMELEN) {
 		if (sb->sv_truncate)
 			namelen = SYSV_NAMELEN;
 		else
 			return NULL;
+	}
 	bh = NULL;
 	pos = block = offset = 0;
 	while (pos < dir->i_size) {
@@ -152,11 +153,12 @@ static int sysv_add_entry(struct inode * dir,
 	if (!dir)
 		return -ENOENT;
 	sb = dir->i_sb;
-	if (namelen > SYSV_NAMELEN)
+	if (namelen > SYSV_NAMELEN) {
 		if (sb->sv_truncate)
 			namelen = SYSV_NAMELEN;
 		else
 			return -ENAMETOOLONG;
+	}
 	if (!namelen)
 		return -ENOENT;
 	bh = NULL;

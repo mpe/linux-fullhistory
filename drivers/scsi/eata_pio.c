@@ -155,7 +155,7 @@ void eata_pio_int_handler(int irq, void *dev_id, struct pt_regs * regs)
 	do
 	{
 	    stat=inb(base+HA_RSTATUS);
-	    if (stat&HA_SDRQ)
+	    if (stat&HA_SDRQ) {
 		if (cp->DataIn)
 		{
 		    z=256; odd=FALSE;
@@ -215,6 +215,7 @@ void eata_pio_int_handler(int irq, void *dev_id, struct pt_regs * regs)
 			odd=FALSE;
 		    }
 		}
+	    }
 	}
 	while ((stat&HA_SDRQ)||((stat&HA_SMORE)&&hd->moresupport));
 	

@@ -96,7 +96,7 @@ static void free_condition(struct condition * cnd)
  * Walk all of the conditions, and look for choice values.  Convert
  * the tokens into something more digestible.
  */
-void fix_choice_cond()
+void fix_choice_cond(void)
 {
   struct condition * cond;
   struct condition * cond2;

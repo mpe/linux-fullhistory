@@ -613,11 +613,12 @@ static inline Scsi_Cmnd *remove_SC(Scsi_Cmnd **SC, int target, int lun)
       prev = ptr, ptr = (Scsi_Cmnd *) ptr->host_scribble)
     ;
 
-  if(ptr)
+  if(ptr){
     if(prev)
       prev->host_scribble = ptr->host_scribble;
     else
       *SC= (Scsi_Cmnd *) ptr->host_scribble;
+  }
 
   return ptr;
 }
@@ -1727,7 +1728,7 @@ void aha152x_intr(int irqno, void *dev_id, struct pt_regs * regs)
 
   /* we are waiting for the result of a selection attempt */
   if(CURRENT_SC->SCp.phase & in_selection) {
-    if(TESTLO(SSTAT1, SELTO))
+    if(TESTLO(SSTAT1, SELTO)) {
       /* no timeout */
       if(TESTHI(SSTAT0, SELDO)) {
         /* clear BUS FREE interrupt */
@@ -1803,7 +1804,7 @@ void aha152x_intr(int irqno, void *dev_id, struct pt_regs * regs)
         return;
       } else
         aha152x_panic(shpnt, "neither timeout nor selection\007");
-    else {
+    } else {
 #if defined(DEBUG_SELECTION) || defined(DEBUG_PHASES)
       if(HOSTDATA(shpnt)->debug & (debug_selection|debug_phases))
         printk("SELTO, ");

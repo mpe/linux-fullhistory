@@ -969,13 +969,13 @@ static unsigned choose_conv(unsigned char *p, unsigned len)
 
 	while (len--) {
 		c = *p++;
-		if (c < ' ')
+		if (c < ' ') {
 			if (c == '\r' && len && *p == '\n')
 				tvote += 10;
 			else if (c == '\t' || c == '\n');
 			else
 				bvote += 5;
-		else if (c < '\177')
+		} else if (c < '\177')
 			tvote++;
 		else
 			bvote += 5;

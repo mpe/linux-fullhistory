@@ -1,12 +1,18 @@
 /* 
-	on20.c	(c) 1996  Grant R. Guenther <grant@torque.net>
-		          Under the terms of the GNU public license.
+	on20.c	(c) 1996-8  Grant R. Guenther <grant@torque.net>
+		            Under the terms of the GNU public license.
 
         on20.c is a low-level protocol driver for the
         Onspec 90c20 parallel to IDE adapter. 
 */
 
-#define	ON20_VERSION	"1.0"
+/* Changes:
+
+        1.01    GRG 1998.05.06 init_proto, release_proto
+
+*/
+
+#define	ON20_VERSION	"1.01"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -114,12 +120,12 @@ static void on20_log_adapter( PIA *pi, char * scratch, int verbose )
 
 }
 
-static void on20_inc_use ( void )
+static void on20_init_proto( PIA *pi)
 
 {       MOD_INC_USE_COUNT;
 }
 
-static void on20_dec_use ( void )
+static void on20_release_proto( PIA *pi)
 
 {       MOD_DEC_USE_COUNT;
 }
@@ -135,8 +141,8 @@ struct pi_protocol on20 = {"on20",0,2,2,1,1,
                            0,
                            0,
                            on20_log_adapter,
-                           on20_inc_use, 
-                           on20_dec_use 
+                           on20_init_proto,
+                           on20_release_proto
                           };
 
 

@@ -253,6 +253,7 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 #define DID_RESET       0x08 /* Reset by somebody.                      */
 #define DID_BAD_INTR    0x09 /* Got an interrupt we weren't expecting.  */ 
 #define DID_PASSTHROUGH 0x0a /* Force command past mid-layer            */
+#define DID_SOFT_ERROR  0x0b /* The low level driver just wish a retry  */
 #define DRIVER_OK       0x00 /* Driver status                           */ 
 
 /*

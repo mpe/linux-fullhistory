@@ -272,6 +272,7 @@
 #include <linux/proc_fs.h>
 #include <linux/pci.h>
 #include <linux/stat.h>
+#include <linux/delay.h>
 
 #include <linux/config.h>	/* for CONFIG_PCI */
 
@@ -553,9 +554,9 @@ void fdomain_setup( char *str, int *ints )
 
 static void do_pause( unsigned amount )	/* Pause for amount*10 milliseconds */
 {
-   unsigned long the_time = jiffies + amount; /* 0.01 seconds per jiffy */
-
-   while (jiffies < the_time);
+   do {
+	udelay(10*1000);
+   } while (--amount);
 }
 
 inline static void fdomain_make_bus_idle( void )
@@ -1101,12 +1102,13 @@ static int fdomain_arbitrate( void )
    outb( adapter_mask, port_base + SCSI_Data_NoACK ); /* Set our id bit */
    outb( 0x04 | PARITY_MASK, TMC_Cntl_port ); /* Start arbitration */
 
-   timeout = jiffies + 50;		      /* 500 mS */
-   while (jiffies < timeout) {
+   timeout = 500;
+   do {
       status = inb( TMC_Status_port );        /* Read adapter status */
       if (status & 0x02)		      /* Arbitration complete */
-	    return 0;	
-   }
+	    return 0;
+      udelay(1000);			/* Wait one millisecond */
+   } while (--timeout);
 
    /* Make bus idle */
    fdomain_make_bus_idle();
@@ -1134,17 +1136,17 @@ static int fdomain_select( int target )
    /* Stop arbitration and enable parity */
    outb( PARITY_MASK, TMC_Cntl_port ); 
 
-   timeout = jiffies + 35;		/* 350mS -- because of timeouts
-					   (was 250mS) */
+   timeout = 350;			/* 350 msec */
 
-   while (jiffies < timeout) {
+   do {
       status = inb( SCSI_Status_port ); /* Read adapter status */
       if (status & 1) {			/* Busy asserted */
 	 /* Enable SCSI Bus (on error, should make bus idle with 0) */
 	 outb( 0x80, SCSI_Cntl_port );
 	 return 0;
       }
-   }
+      udelay(1000);			/* wait one msec */
+   } while (--timeout);
    /* Make bus idle */
    fdomain_make_bus_idle();
 #if EVERY_ACCESS

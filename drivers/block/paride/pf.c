@@ -1,6 +1,6 @@
 /* 
-        pf.c    (c) 1997  Grant R. Guenther <grant@torque.net>
-                          Under the terms of the GNU public license.
+        pf.c    (c) 1997-8  Grant R. Guenther <grant@torque.net>
+                            Under the terms of the GNU public license.
 
         This is the high-level driver for parallel port ATAPI disk
         drives based on chips supported by the paride module.
@@ -83,8 +83,8 @@
 	    nice        This parameter controls the driver's use of
 			idle CPU time, at the expense of some speed.
 
-        If this driver is built into the kernel, you can use kernel
-        the following command line parameters, with the same values
+        If this driver is built into the kernel, you can use the
+        following command line parameters, with the same values
         as the corresponding module parameters listed above:
 
             pf.drive0
@@ -99,13 +99,23 @@
 
 */
 
-#define PF_VERSION      "1.0"
+/* Changes:
+
+	1.01	GRG 1998.05.03  Changes for SMP.  Eliminate sti().
+				Fix for drives that don't clear STAT_ERR
+			        until after next CDB delivered.
+				Small change in pf_completion to round
+				up transfer size.
+
+*/
+
+#define PF_VERSION      "1.01"
 #define PF_MAJOR	47
 #define PF_NAME		"pf"
 #define PF_UNITS	4
 
 /* Here are things one can override from the insmod command.
-   Most are autoprobed by paride unless set here.  Verbose is on
+   Most are autoprobed by paride unless set here.  Verbose is off
    by default.
 
 */
@@ -146,6 +156,7 @@ static int pf_drive_count;
 #include <linux/genhd.h>
 #include <linux/hdreg.h>
 #include <linux/cdrom.h>
+#include <asm/spinlock.h>
 
 #include <asm/uaccess.h>
 
@@ -238,7 +249,9 @@ static int pf_release (struct inode *inode, struct file *file);
 
 static int pf_detect(void);
 static void do_pf_read(void);
+static void do_pf_read_start(void);
 static void do_pf_write(void);
+static void do_pf_write_start(void);
 static void do_pf_read_drq( void );
 static void do_pf_write_done( void );
 
@@ -562,7 +575,7 @@ static int pf_command( int unit, char * cmd, int dlen, char * fun )
         WR(0,5,dlen / 256);
         WR(0,7,0xa0);          /* ATAPI packet command */
 
-        if (pf_wait(unit,STAT_BUSY,STAT_DRQ|STAT_ERR,fun,"command DRQ")) {
+        if (pf_wait(unit,STAT_BUSY,STAT_DRQ,fun,"command DRQ")) {
                 pi_disconnect(PI);
                 return -1;
         }
@@ -586,7 +599,7 @@ static int pf_completion( int unit, char * buf, char * fun )
 			fun,"completion");
 
         if ((RR(0,2)&2) && (RR(0,7)&STAT_DRQ)) { 
-                n = (RR(0,4)+256*RR(0,5));
+                n = (((RR(0,4)+256*RR(0,5))+3)&0xfffc);
                 pi_read_block(PI,buf,n);
         }
 
@@ -661,22 +674,16 @@ static int pf_reset( int unit )
 
 {	int	i, k, flg;
 	int	expect[5] = {1,1,1,0x14,0xeb};
-	long	flags;
 
 	pi_connect(PI);
 	WR(0,6,DRIVE);
 	WR(0,7,8);
-
-	save_flags(flags);
-	sti();
 
 	pf_sleep(2);
 
         k = 0;
         while ((k++ < PF_RESET_TMO) && (RR(1,6)&STAT_BUSY))
                 pf_sleep(10);
-
-	restore_flags(flags);
 
 	flg = 1;
 	for(i=0;i<5;i++) flg &= (RR(0,i+1) == expect[i]);
@@ -906,19 +913,24 @@ repeat:
         pf_buf = CURRENT->buffer;
         pf_retries = 0;
 
-
+	pf_busy = 1;
         if (pf_cmd == READ) pi_do_claimed(PI,do_pf_read);
         else if (pf_cmd == WRITE) pi_do_claimed(PI,do_pf_write);
-        else {  end_request(0);
+        else {  pf_busy = 0;
+		end_request(0);
                 goto repeat;
         }
 }
 
 static void pf_next_buf( int unit )
 
-{	cli();
+{	long	saved_flags;
+
+	spin_lock_irqsave(&io_request_lock,saved_flags);
 	end_request(1);
-	if (!pf_run) { sti(); return; }
+	if (!pf_run) { spin_unlock_irqrestore(&io_request_lock,saved_flags);
+		       return; 
+	}
 	
 /* paranoia */
 
@@ -932,39 +944,46 @@ static void pf_next_buf( int unit )
 
 	pf_count = CURRENT->nr_sectors;
 	pf_buf = CURRENT->buffer;
-	sti();
+	spin_unlock_irqrestore(&io_request_lock,saved_flags);
 }
 
 static void do_pf_read( void )
 
+/* detach from the calling context - in case the spinlock is held */
+
+{	ps_set_intr(do_pf_read_start,0,0,nice);
+}
+
+static void do_pf_read_start( void )
+
 {       int	unit = pf_unit;
+	long	saved_flags;
 
 	pf_busy = 1;
-
-        sti();
 
 	if (pf_start(unit,ATAPI_READ_10,pf_block,pf_run)) {
                 pi_disconnect(PI);
                 if (pf_retries < PF_MAX_RETRIES) {
                         pf_retries++;
-                        pi_do_claimed(PI,do_pf_read);
+                        pi_do_claimed(PI,do_pf_read_start);
 			return;
                 }
+		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pf_busy = 0;
-                cli();
                 do_pf_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
         }
-	pf_mask=STAT_DRQ;
+	pf_mask = STAT_DRQ;
         ps_set_intr(do_pf_read_drq,pf_ready,PF_TMO,nice);
 }
 
 static void do_pf_read_drq( void )
 
 {       int	unit = pf_unit;
-
-	sti();
+	long	saved_flags;
+	
 	while (1) {
             if (pf_wait(unit,STAT_BUSY,STAT_DRQ|STAT_ERR,
 			"read block","completion") & STAT_ERR) {
@@ -972,13 +991,14 @@ static void do_pf_read_drq( void )
                 if (pf_retries < PF_MAX_RETRIES) {
 			pf_req_sense(unit,0);
                         pf_retries++;
-                        pi_do_claimed(PI,do_pf_read);
+                        pi_do_claimed(PI,do_pf_read_start);
                         return;
                 }
+		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pf_busy = 0;
-                cli();
                 do_pf_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
             }
             pi_read_block(PI,pf_buf,512);
@@ -989,31 +1009,37 @@ static void do_pf_read_drq( void )
 	    if (!pf_count) pf_next_buf(unit);
         }
         pi_disconnect(PI);
+	spin_lock_irqsave(&io_request_lock,saved_flags); 
         end_request(1);
         pf_busy = 0;
-        cli();
         do_pf_request();
+	spin_unlock_irqrestore(&io_request_lock,saved_flags);
 }
 
 static void do_pf_write( void )
 
+{	ps_set_intr(do_pf_write_start,0,0,nice);
+}
+
+static void do_pf_write_start( void )
+
 {       int	unit = pf_unit;
+	long	saved_flags;
 
 	pf_busy = 1;
-
-        sti();
 
 	if (pf_start(unit,ATAPI_WRITE_10,pf_block,pf_run)) {
                 pi_disconnect(PI);
                 if (pf_retries < PF_MAX_RETRIES) {
                         pf_retries++;
-                        pi_do_claimed(PI,do_pf_write);
+                        pi_do_claimed(PI,do_pf_write_start);
 			return;
                 }
+		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pf_busy = 0;
-                cli();
                 do_pf_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
         }
 
@@ -1023,13 +1049,14 @@ static void do_pf_write( void )
                 pi_disconnect(PI);
                 if (pf_retries < PF_MAX_RETRIES) {
                         pf_retries++;
-                        pi_do_claimed(PI,do_pf_write);
+                        pi_do_claimed(PI,do_pf_write_start);
                         return;
                 }
+		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pf_busy = 0;
-                cli();
                 do_pf_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
             }
             pi_write_block(PI,pf_buf,512);
@@ -1046,26 +1073,28 @@ static void do_pf_write( void )
 static void do_pf_write_done( void )
 
 {       int	unit = pf_unit;
+	long	saved_flags;
 
-	sti();
         if (pf_wait(unit,STAT_BUSY,0,"write block","done") & STAT_ERR) {
                 pi_disconnect(PI);
                 if (pf_retries < PF_MAX_RETRIES) {
                         pf_retries++;
-			pi_do_claimed(PI,do_pf_write);
+			pi_do_claimed(PI,do_pf_write_start);
                         return;
                 }
+		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pf_busy = 0;
-                cli();
                 do_pf_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
         }
         pi_disconnect(PI);
+	spin_lock_irqsave(&io_request_lock,saved_flags);
         end_request(1);
         pf_busy = 0;
-        cli();
         do_pf_request();
+	spin_unlock_irqrestore(&io_request_lock,saved_flags);
 }
 
 /* end of pf.c */

@@ -44,7 +44,7 @@ static struct file_operations ext2_dir_operations = {
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL,			/* no special release code */
-	file_fsync,		/* fsync */
+	ext2_sync_file,		/* fsync */
 	NULL,			/* fasync */
 	NULL,			/* check_media_change */
 	NULL			/* revalidate */

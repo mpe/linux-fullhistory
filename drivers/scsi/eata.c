@@ -1,6 +1,18 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *      16 May 1998 Rev. 4.31 for linux 2.0.33 and 2.1.102
+ *          Improved abort handling during the eh recovery process.
+ *
+ *      13 May 1998 Rev. 4.30 for linux 2.0.33 and 2.1.101
+ *          The driver is now fully SMP safe, including the
+ *          abort and reset routines.
+ *          Added command line options (eh:[y|n]) to choose between
+ *          new_eh_code and the old scsi code.
+ *          If linux verion >= 2.1.101 the default is eh:y, while the eh
+ *          option is ignored for previous releases and the old scsi code
+ *          is used.
+ *
  *      18 Apr 1998 Rev. 4.20 for linux 2.0.33 and 2.1.97
  *          Reworked interrupt handler.
  *
@@ -237,6 +249,8 @@
  *  After the optional list of detection probes, other possible command line
  *  options are:
  *
+ *  eh:y  use new scsi code (linux 2.2 only);
+ *  eh:n  use old scsi code;
  *  lc:y  enables linked commands;
  *  lc:n  disables linked commands;
  *  tc:y  enables tagged commands;
@@ -248,13 +262,14 @@
  *  mq:xx set the max queue depth to the value xx (2 <= xx <= 32).
  *
  *  The default value is: "eata=lc:n,tc:n,mq:16,tm:0". An example using
- *  the list of detection probes could be: "eata=0x7410,0x230,lc:y,tc:n,mq:4".
+ *  the list of detection probes could be:
+ *  "eata=0x7410,0x230,lc:y,tc:n,mq:4,eh:n".
  *
  *  When loading as a module, parameters can be specified as well.
  *  The above example would be (use 1 in place of y and 0 in place of n):
  *
  *  modprobe eata io_port=0x7410,0x230 linked_comm=1 tagged_comm=0 \
- *                max_queue_depth=4 tag_mode=0
+ *                max_queue_depth=4 tag_mode=0 use_new_eh_code=0
  *
  *  ----------------------------------------------------------------------------
  *  In this implementation, linked commands are designed to work with any DISK
@@ -310,6 +325,7 @@ MODULE_PARM(tagged_comm, "i");
 MODULE_PARM(link_statistics, "i");
 MODULE_PARM(max_queue_depth, "i");
 MODULE_PARM(tag_mode, "i");
+MODULE_PARM(use_new_eh_code, "i");
 MODULE_AUTHOR("Dario Ballabio");
 #endif
 
@@ -323,11 +339,6 @@ MODULE_AUTHOR("Dario Ballabio");
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/byteorder.h>
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,95)
-#include <asm/spinlock.h>
-#endif
-
 #include <linux/proc_fs.h>
 #include <linux/blk.h>
 #include "scsi.h"
@@ -352,6 +363,34 @@ MODULE_AUTHOR("Dario Ballabio");
 #define __init
 #endif
 
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,101)
+#include <asm/spinlock.h>
+#define IRQ_FLAGS
+#define IRQ_LOCK
+#define IRQ_LOCK_SAVE
+#define IRQ_UNLOCK
+#define IRQ_UNLOCK_RESTORE
+#define SPIN_FLAGS unsigned long spin_flags;
+#define SPIN_LOCK spin_lock_irq(&io_request_lock);
+#define SPIN_LOCK_SAVE spin_lock_irqsave(&io_request_lock, spin_flags);
+#define SPIN_UNLOCK spin_unlock_irq(&io_request_lock);
+#define SPIN_UNLOCK_RESTORE \
+                  spin_unlock_irqrestore(&io_request_lock, spin_flags);
+static int use_new_eh_code = TRUE;
+#else
+#define IRQ_FLAGS unsigned long irq_flags;
+#define IRQ_LOCK cli();
+#define IRQ_LOCK_SAVE do {save_flags(irq_flags); cli();} while (0);
+#define IRQ_UNLOCK sti();
+#define IRQ_UNLOCK_RESTORE do {restore_flags(irq_flags);} while (0);
+#define SPIN_FLAGS
+#define SPIN_LOCK
+#define SPIN_LOCK_SAVE
+#define SPIN_UNLOCK
+#define SPIN_UNLOCK_RESTORE
+static int use_new_eh_code = FALSE;
+#endif
+
 struct proc_dir_entry proc_scsi_eata2x = {
     PROC_SCSI_EATA2X, 6, "eata2x",
     S_IFDIR | S_IRUGO | S_IXUGO, 2
@@ -368,6 +407,8 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #undef  DEBUG_PCI_DETECT
 #undef  DEBUG_INTERRUPT
 #undef  DEBUG_RESET
+#undef  DEBUG_GENERATE_ERRORS
+#undef  DEBUG_GENERATE_ABORTS
 
 #define MAX_ISA 4
 #define MAX_VESA 0
@@ -619,19 +660,19 @@ static int setup_done = FALSE;
 static int link_statistics = 0;
 static int tag_mode = TAG_MIXED;
 
-#if defined (CONFIG_SCSI_EATA_TAGGED_QUEUE)
+#if defined(CONFIG_SCSI_EATA_TAGGED_QUEUE)
 static int tagged_comm = TRUE;
 #else
 static int tagged_comm = FALSE;
 #endif
 
-#if defined (CONFIG_SCSI_EATA_LINKED_COMMANDS)
+#if defined(CONFIG_SCSI_EATA_LINKED_COMMANDS)
 static int linked_comm = TRUE;
 #else
 static int linked_comm = FALSE;
 #endif
 
-#if defined CONFIG_SCSI_EATA_MAX_TAGS
+#if defined(CONFIG_SCSI_EATA_MAX_TAGS)
 static int max_queue_depth = CONFIG_SCSI_EATA_MAX_TAGS;
 #else
 static int max_queue_depth = MAX_CMD_PER_LUN;
@@ -640,11 +681,9 @@ static int max_queue_depth = MAX_CMD_PER_LUN;
 static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
    Scsi_Device *dev;
    int j, ntag = 0, nuntag = 0, tqd, utqd;
-   unsigned long flags;
+   IRQ_FLAGS
 
-   save_flags(flags);
-   cli();
-
+   IRQ_LOCK_SAVE
    j = ((struct hostdata *) host->hostdata)->board_number;
 
    for(dev = devlist; dev; dev = dev->next) {
@@ -697,7 +736,7 @@ static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
              dev->queue_depth, link_suffix, tag_suffix);
       }
 
-   restore_flags(flags);
+   IRQ_UNLOCK_RESTORE
    return;
 }
 
@@ -899,7 +938,7 @@ __initfunc (static inline int port_detect \
       return FALSE;
       }
 
-#if defined (FORCE_CONFIG)
+#if defined(FORCE_CONFIG)
    {
    struct eata_config config;
 
@@ -1016,21 +1055,32 @@ __initfunc (static inline int port_detect \
       }
    else                                 tag_type = 'n';
 
-   printk("%s: 2.0%c, %s 0x%03lx, IRQ %u, %s, SG %d, MB %d, tc:%c, lc:%c, "\
-          "mq:%d.\n", BN(j), HD(j)->protocol_rev, bus_type,
-          (unsigned long)sh[j]->io_port, sh[j]->irq, dma_name,
-          sh[j]->sg_tablesize, sh[j]->can_queue, tag_type, YESNO(linked_comm),
-          max_queue_depth);
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,101)
+   sh[j]->hostt->use_new_eh_code = use_new_eh_code;
+#else
+   use_new_eh_code = FALSE;
+#endif
+
+   if (j == 0) {
+      printk("EATA/DMA 2.0x: Copyright (C) 1994-1998 Dario Ballabio.\n");
+      printk("%s config options -> tc:%c, lc:%c, mq:%d, eh:%c.\n",
+             driver_name, tag_type, YESNO(linked_comm),
+             max_queue_depth, YESNO(use_new_eh_code));
+      }
+
+   printk("%s: 2.0%c, %s 0x%03lx, IRQ %u, %s, SG %d, MB %d.\n",
+          BN(j), HD(j)->protocol_rev, bus_type, (unsigned long)sh[j]->io_port,
+          sh[j]->irq, dma_name, sh[j]->sg_tablesize, sh[j]->can_queue);
 
    if (sh[j]->max_id > 8 || sh[j]->max_lun > 8)
       printk("%s: wide SCSI support enabled, max_id %u, max_lun %u.\n",
              BN(j), sh[j]->max_id, sh[j]->max_lun);
 
    for (i = 0; i <= sh[j]->max_channel; i++)
-      printk("%s: SCSI channel %u enabled, host target ID %u.\n",
+      printk("%s: SCSI channel %u enabled, host target ID %d.\n",
              BN(j), i, info.host_addr[3 - i]);
 
-#if defined (DEBUG_DETECT)
+#if defined(DEBUG_DETECT)
    printk("%s: Vers. 0x%x, ocs %u, tar %u, trnxfr %u, more %u, SYNC 0x%x, "\
           "sec. %u, infol %ld, cpl %ld spl %ld.\n", name, info.version,
           info.ocsena, info.tarsup, info.trnxfr, info.morsup, info.sync,
@@ -1077,6 +1127,7 @@ __initfunc (void eata2x_setup(char *str, int *ints)) {
       else if (!strncmp(cur, "tm:", 3)) tag_mode = val;
       else if (!strncmp(cur, "mq:", 3))  max_queue_depth = val;
       else if (!strncmp(cur, "ls:", 3))  link_statistics = val;
+      else if (!strncmp(cur, "eh:", 3))  use_new_eh_code = val;
 
       if ((cur = strchr(cur, ','))) ++cur;
       }
@@ -1151,13 +1202,11 @@ __initfunc (static void add_pci_ports(void)) {
 }
 
 __initfunc (int eata2x_detect(Scsi_Host_Template *tpnt)) {
-   unsigned long flags;
    unsigned int j = 0, k;
+   IRQ_FLAGS
 
+   IRQ_LOCK_SAVE
    tpnt->proc_dir = &proc_scsi_eata2x;
-
-   save_flags(flags);
-   cli();
 
 #if defined(MODULE)
    /* io_port could have been modified when loading as a module */
@@ -1178,11 +1227,8 @@ __initfunc (int eata2x_detect(Scsi_Host_Template *tpnt)) {
       if (j < MAX_BOARDS && port_detect(io_port[k], j, tpnt)) j++;
       }
 
-   if (j > 0)
-      printk("EATA/DMA 2.0x: Copyright (C) 1994-1998 Dario Ballabio.\n");
-
    num_boards = j;
-   restore_flags(flags);
+   IRQ_UNLOCK_RESTORE
    return j;
 }
 
@@ -1201,8 +1247,7 @@ static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
    cpp->data_len = H2DEV((SCpnt->use_sg * sizeof(struct sg_list)));
 }
 
-int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
-   unsigned long flags;
+static inline int do_qcomm(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    unsigned int i, j, k;
    struct mscp *cpp;
    struct mssp *spp;
@@ -1219,22 +1264,12 @@ int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       0x48, 0x49, 0xa9, 0x4b, 0xa5, 0xa6, 0xb5
       };
 
-   save_flags(flags);
-   cli();
    /* j is the board number */
    j = ((struct hostdata *) SCpnt->host->hostdata)->board_number;
 
-   if (!done) panic("%s: qcomm, pid %ld, null done.\n", BN(j), SCpnt->pid);
-
-   if (SCpnt->cmnd[0] == REQUEST_SENSE && SCpnt->sense_buffer[0]) {
-      SCpnt->result = DID_OK << 16;
-      SCpnt->host_scribble = NULL;
-      printk("%s: qcomm, target %d.%d:%d, pid %ld, request sense ignored.\n",
-             BN(j), SCpnt->channel, SCpnt->target, SCpnt->lun, SCpnt->pid);
-      restore_flags(flags);
-      done(SCpnt);
-      return 0;
-      }
+   if (SCpnt->host_scribble)
+      panic("%s: qcomm, pid %ld, SCpnt %p already active.\n",
+            BN(j), SCpnt->pid, SCpnt);
 
    /* i is the mailbox number, look for the first free mailbox
       starting from last_cp_used */
@@ -1251,19 +1286,7 @@ int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       }
 
    if (k == sh[j]->can_queue) {
-      printk("%s: qcomm, no free mailbox, resetting.\n", BN(j));
-
-      if (HD(j)->in_reset)
-         printk("%s: qcomm, already in reset.\n", BN(j));
-      else if (eata2x_reset(SCpnt, SCSI_RESET_SUGGEST_BUS_RESET)
-               == SCSI_RESET_SUCCESS)
-         panic("%s: qcomm, SCSI_RESET_SUCCESS.\n", BN(j));
-
-      SCpnt->result = DID_BUS_BUSY << 16;
-      SCpnt->host_scribble = NULL;
-      printk("%s: qcomm, pid %ld, DID_BUS_BUSY, done.\n", BN(j), SCpnt->pid);
-      restore_flags(flags);
-      done(SCpnt);
+      printk("%s: qcomm, no free mailbox.\n", BN(j));
       return 1;
       }
 
@@ -1346,40 +1369,41 @@ int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
                                      && TLDEV(SCpnt->device->type)) {
       HD(j)->cp_stat[i] = READY;
       flush_dev(SCpnt->device, SCpnt->request.sector, j, FALSE);
-      restore_flags(flags);
       return 0;
       }
 
    /* Send control packet to the board */
    if (do_dma(sh[j]->io_port, (unsigned int) cpp, SEND_CP_DMA)) {
-      SCpnt->result = DID_ERROR << 16;
       SCpnt->host_scribble = NULL;
-      printk("%s: qcomm, target %d.%d:%d, pid %ld, adapter busy, DID_ERROR,"\
-             " done.\n", BN(j), SCpnt->channel, SCpnt->target, SCpnt->lun,
-             SCpnt->pid);
-      restore_flags(flags);
-      done(SCpnt);
+      printk("%s: qcomm, target %d.%d:%d, pid %ld, adapter busy.\n",
+             BN(j), SCpnt->channel, SCpnt->target, SCpnt->lun, SCpnt->pid);
       return 1;
       }
 
    HD(j)->cp_stat[i] = IN_USE;
-   restore_flags(flags);
    return 0;
 }
 
-int eata2x_abort(Scsi_Cmnd *SCarg) {
-   unsigned long flags;
+int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
+   int rtn;
+   IRQ_FLAGS
+
+   IRQ_LOCK_SAVE
+   rtn = do_qcomm(SCpnt, done);
+   IRQ_UNLOCK_RESTORE
+   return rtn;
+}
+
+static inline int do_old_abort(Scsi_Cmnd *SCarg) {
    unsigned int i, j;
 
-   save_flags(flags);
-   cli();
    j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
 
-   if (SCarg->host_scribble == NULL
-       || SCarg->serial_number != SCarg->serial_number_at_timeout) {
+   if (SCarg->host_scribble == NULL ||
+       (SCarg->serial_number_at_timeout &&
+       (SCarg->serial_number != SCarg->serial_number_at_timeout))) {
       printk("%s: abort, target %d.%d:%d, pid %ld inactive.\n",
              BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
-      restore_flags(flags);
       return SCSI_ABORT_NOT_RUNNING;
       }
 
@@ -1392,13 +1416,11 @@ int eata2x_abort(Scsi_Cmnd *SCarg) {
 
    if (wait_on_busy(sh[j]->io_port, MAXLOOP)) {
       printk("%s: abort, timeout error.\n", BN(j));
-      restore_flags(flags);
       return SCSI_ABORT_ERROR;
       }
 
    if (HD(j)->cp_stat[i] == FREE) {
       printk("%s: abort, mbox %d is free.\n", BN(j), i);
-      restore_flags(flags);
       return SCSI_ABORT_NOT_RUNNING;
       }
 
@@ -1412,19 +1434,16 @@ int eata2x_abort(Scsi_Cmnd *SCarg) {
       if (inb(sh[j]->io_port + REG_AUX_STATUS) & IRQ_ASSERTED)
          printk("%s: abort, mbox %d, interrupt pending.\n", BN(j), i);
 
-      restore_flags(flags);
       return SCSI_ABORT_SNOOZE;
       }
 
    if (HD(j)->cp_stat[i] == IN_RESET) {
       printk("%s: abort, mbox %d is in reset.\n", BN(j), i);
-      restore_flags(flags);
       return SCSI_ABORT_ERROR;
       }
 
    if (HD(j)->cp_stat[i] == LOCKED) {
       printk("%s: abort, mbox %d is locked.\n", BN(j), i);
-      restore_flags(flags);
       return SCSI_ABORT_NOT_RUNNING;
       }
 
@@ -1435,45 +1454,128 @@ int eata2x_abort(Scsi_Cmnd *SCarg) {
       printk("%s, abort, mbox %d ready, DID_ABORT, pid %ld done.\n",
              BN(j), i, SCarg->pid);
       SCarg->scsi_done(SCarg);
-      restore_flags(flags);
       return SCSI_ABORT_SUCCESS;
       }
 
-   restore_flags(flags);
    panic("%s: abort, mbox %d, invalid cp_stat.\n", BN(j), i);
 }
 
-int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
-   unsigned long flags;
+int eata2x_old_abort(Scsi_Cmnd *SCarg) {
+   int rtn;
+   IRQ_FLAGS
+
+   IRQ_LOCK_SAVE
+   rtn = do_old_abort(SCarg);
+   IRQ_UNLOCK_RESTORE
+   return rtn;
+}
+
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,101)
+
+static inline int do_abort(Scsi_Cmnd *SCarg) {
+   unsigned int i, j;
+
+   j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
+
+   if (SCarg->host_scribble == NULL) {
+      printk("%s: abort, target %d.%d:%d, pid %ld inactive.\n",
+             BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
+      return SUCCESS;
+      }
+
+   i = *(unsigned int *)SCarg->host_scribble;
+   printk("%s: abort, mbox %d, target %d.%d:%d, pid %ld.\n",
+          BN(j), i, SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
+
+   if (i >= sh[j]->can_queue)
+      panic("%s: abort, invalid SCarg->host_scribble.\n", BN(j));
+
+   if (wait_on_busy(sh[j]->io_port, MAXLOOP)) {
+      printk("%s: abort, timeout error.\n", BN(j));
+      return FAILED;
+      }
+
+   if (HD(j)->cp_stat[i] == FREE) {
+      printk("%s: abort, mbox %d is free.\n", BN(j), i);
+      return SUCCESS;
+      }
+
+   if (HD(j)->cp_stat[i] == IN_USE) {
+      printk("%s: abort, mbox %d is in use.\n", BN(j), i);
+
+      if (SCarg != HD(j)->cp[i].SCpnt)
+         panic("%s: abort, mbox %d, SCarg %p, cp SCpnt %p.\n",
+               BN(j), i, SCarg, HD(j)->cp[i].SCpnt);
+
+      if (inb(sh[j]->io_port + REG_AUX_STATUS) & IRQ_ASSERTED)
+         printk("%s: abort, mbox %d, interrupt pending.\n", BN(j), i);
+
+      if (SCarg->eh_state == SCSI_STATE_TIMEOUT) {
+         SCarg->host_scribble = NULL;
+         HD(j)->cp_stat[i] = FREE;
+         printk("%s, abort, mbox %d, eh_state timeout, pid %ld.\n",
+                BN(j), i, SCarg->pid);
+         return SUCCESS;
+         }
+
+      return FAILED;
+      }
+
+   if (HD(j)->cp_stat[i] == IN_RESET) {
+      printk("%s: abort, mbox %d is in reset.\n", BN(j), i);
+      return FAILED;
+      }
+
+   if (HD(j)->cp_stat[i] == LOCKED) {
+      printk("%s: abort, mbox %d is locked.\n", BN(j), i);
+      return SUCCESS;
+      }
+
+   if (HD(j)->cp_stat[i] == READY || HD(j)->cp_stat[i] == ABORTING) {
+      SCarg->result = DID_ABORT << 16;
+      SCarg->host_scribble = NULL;
+      HD(j)->cp_stat[i] = FREE;
+      printk("%s, abort, mbox %d ready, DID_ABORT, pid %ld done.\n",
+             BN(j), i, SCarg->pid);
+      SCarg->scsi_done(SCarg);
+      return SUCCESS;
+      }
+
+   panic("%s: abort, mbox %d, invalid cp_stat.\n", BN(j), i);
+}
+
+int eata2x_abort(Scsi_Cmnd *SCarg) {
+
+   return do_abort(SCarg);
+}
+
+#endif /* new_eh_code */
+
+static inline int do_old_reset(Scsi_Cmnd *SCarg) {
    unsigned int i, j, time, k, c, limit = 0;
    int arg_done = FALSE;
    Scsi_Cmnd *SCpnt;
 
-   save_flags(flags);
-   cli();
    j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
-   printk("%s: reset, enter, target %d.%d:%d, pid %ld, reset_flags %u.\n",
-          BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid,
-          reset_flags);
+   printk("%s: reset, enter, target %d.%d:%d, pid %ld.\n",
+          BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
 
    if (SCarg->host_scribble == NULL)
       printk("%s: reset, pid %ld inactive.\n", BN(j), SCarg->pid);
 
-   if (SCarg->serial_number != SCarg->serial_number_at_timeout) {
+   if (SCarg->serial_number_at_timeout &&
+       (SCarg->serial_number != SCarg->serial_number_at_timeout)) {
       printk("%s: reset, pid %ld, reset not running.\n", BN(j), SCarg->pid);
-      restore_flags(flags);
       return SCSI_RESET_NOT_RUNNING;
       }
 
    if (HD(j)->in_reset) {
       printk("%s: reset, exit, already in reset.\n", BN(j));
-      restore_flags(flags);
       return SCSI_RESET_ERROR;
       }
 
    if (wait_on_busy(sh[j]->io_port, MAXLOOP)) {
       printk("%s: reset, exit, timeout error.\n", BN(j));
-      restore_flags(flags);
       return SCSI_RESET_ERROR;
       }
 
@@ -1524,21 +1626,22 @@ int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
 
    if (do_dma(sh[j]->io_port, 0, RESET_PIO)) {
       printk("%s: reset, cannot reset, timeout error.\n", BN(j));
-      restore_flags(flags);
       return SCSI_RESET_ERROR;
       }
 
    printk("%s: reset, board reset done, enabling interrupts.\n", BN(j));
 
-#if defined (DEBUG_RESET)
+#if defined(DEBUG_RESET)
    do_trace = TRUE;
 #endif
 
    HD(j)->in_reset = TRUE;
-
-   /* Wait 2 seconds ???!!! */
-   { unsigned long msec = 2 * 1000; while (--msec) udelay(1000); }
-
+   SPIN_UNLOCK
+   IRQ_UNLOCK
+   time = jiffies;
+   while ((jiffies - time) < (10 * HZ) && limit++ < 200000) udelay(100L);
+   IRQ_LOCK
+   SPIN_LOCK
    printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
 
    for (i = 0; i < sh[j]->can_queue; i++) {
@@ -1572,14 +1675,12 @@ int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
          /* Any other mailbox has already been set free by interrupt */
          continue;
 
-      restore_flags(flags);
       SCpnt->scsi_done(SCpnt);
-      cli();
+      IRQ_LOCK
       }
 
    HD(j)->in_reset = FALSE;
    do_trace = FALSE;
-   restore_flags(flags);
 
    if (arg_done) {
       printk("%s: reset, exit, success.\n", BN(j));
@@ -1590,6 +1691,156 @@ int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
       return SCSI_RESET_PUNT;
       }
 }
+
+int eata2x_old_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
+   int rtn;
+   IRQ_FLAGS
+
+   IRQ_LOCK_SAVE
+   rtn = do_old_reset(SCarg);
+   IRQ_UNLOCK_RESTORE
+   return rtn;
+}
+
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,101)
+
+static inline int do_reset(Scsi_Cmnd *SCarg) {
+   unsigned int i, j, time, k, c, limit = 0;
+   int arg_done = FALSE;
+   Scsi_Cmnd *SCpnt;
+
+   j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
+   printk("%s: reset, enter, target %d.%d:%d, pid %ld.\n",
+          BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
+
+   if (SCarg->host_scribble == NULL)
+      printk("%s: reset, pid %ld inactive.\n", BN(j), SCarg->pid);
+
+   if (HD(j)->in_reset) {
+      printk("%s: reset, exit, already in reset.\n", BN(j));
+      return FAILED;
+      }
+
+   if (wait_on_busy(sh[j]->io_port, MAXLOOP)) {
+      printk("%s: reset, exit, timeout error.\n", BN(j));
+      return FAILED;
+      }
+
+   HD(j)->retries = 0;
+
+   for (c = 0; c <= sh[j]->max_channel; c++)
+      for (k = 0; k < sh[j]->max_id; k++) {
+         HD(j)->target_redo[k][c] = TRUE;
+         HD(j)->target_to[k][c] = 0;
+         }
+
+   for (i = 0; i < sh[j]->can_queue; i++) {
+
+      if (HD(j)->cp_stat[i] == FREE) continue;
+
+      if (HD(j)->cp_stat[i] == LOCKED) {
+         HD(j)->cp_stat[i] = FREE;
+         printk("%s: reset, locked mbox %d forced free.\n", BN(j), i);
+         continue;
+         }
+
+      if (!(SCpnt = HD(j)->cp[i].SCpnt))
+         panic("%s: reset, mbox %d, SCpnt == NULL.\n", BN(j), i);
+
+      if (HD(j)->cp_stat[i] == READY || HD(j)->cp_stat[i] == ABORTING) {
+         HD(j)->cp_stat[i] = ABORTING;
+         printk("%s: reset, mbox %d aborting, pid %ld.\n",
+                BN(j), i, SCpnt->pid);
+         }
+
+      else {
+         HD(j)->cp_stat[i] = IN_RESET;
+         printk("%s: reset, mbox %d in reset, pid %ld.\n",
+                BN(j), i, SCpnt->pid);
+         }
+
+      if (SCpnt->host_scribble == NULL)
+         panic("%s: reset, mbox %d, garbled SCpnt.\n", BN(j), i);
+
+      if (*(unsigned int *)SCpnt->host_scribble != i)
+         panic("%s: reset, mbox %d, index mismatch.\n", BN(j), i);
+
+      if (SCpnt->scsi_done == NULL)
+         panic("%s: reset, mbox %d, SCpnt->scsi_done == NULL.\n", BN(j), i);
+
+      if (SCpnt == SCarg) arg_done = TRUE;
+      }
+
+   if (do_dma(sh[j]->io_port, 0, RESET_PIO)) {
+      printk("%s: reset, cannot reset, timeout error.\n", BN(j));
+      return FAILED;
+      }
+
+   printk("%s: reset, board reset done, enabling interrupts.\n", BN(j));
+
+#if defined(DEBUG_RESET)
+   do_trace = TRUE;
+#endif
+
+   HD(j)->in_reset = TRUE;
+   SPIN_UNLOCK
+   IRQ_UNLOCK
+   time = jiffies;
+   while ((jiffies - time) < (10 * HZ) && limit++ < 200000) udelay(100L);
+   IRQ_LOCK
+   SPIN_LOCK
+   printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
+
+   for (i = 0; i < sh[j]->can_queue; i++) {
+
+      if (HD(j)->cp_stat[i] == IN_RESET) {
+         SCpnt = HD(j)->cp[i].SCpnt;
+         SCpnt->result = DID_RESET << 16;
+         SCpnt->host_scribble = NULL;
+
+         /* This mailbox is still waiting for its interrupt */
+         HD(j)->cp_stat[i] = LOCKED;
+
+         printk("%s, reset, mbox %d locked, DID_RESET, pid %ld done.\n",
+                BN(j), i, SCpnt->pid);
+         }
+
+      else if (HD(j)->cp_stat[i] == ABORTING) {
+         SCpnt = HD(j)->cp[i].SCpnt;
+         SCpnt->result = DID_RESET << 16;
+         SCpnt->host_scribble = NULL;
+
+         /* This mailbox was never queued to the adapter */
+         HD(j)->cp_stat[i] = FREE;
+
+         printk("%s, reset, mbox %d aborting, DID_RESET, pid %ld done.\n",
+                BN(j), i, SCpnt->pid);
+         }
+
+      else
+
+         /* Any other mailbox has already been set free by interrupt */
+         continue;
+
+      SCpnt->scsi_done(SCpnt);
+      IRQ_LOCK
+      }
+
+   HD(j)->in_reset = FALSE;
+   do_trace = FALSE;
+
+   if (arg_done) printk("%s: reset, exit, pid %ld done.\n", BN(j), SCarg->pid);
+   else          printk("%s: reset, exit.\n", BN(j));
+
+   return SUCCESS;
+}
+
+int eata2x_reset(Scsi_Cmnd *SCarg) {
+
+   return do_reset(SCarg);
+}
+
+#endif /* new_eh_code */
 
 static void sort(unsigned long sk[], unsigned int da[], unsigned int n,
                  unsigned int rev) {
@@ -1698,7 +1949,7 @@ static inline int reorder(unsigned int j, unsigned long cursec,
       if (!rev && !s)    { sortcount++; readysorted += n_ready; }
       }
 
-#if defined (DEBUG_LINKED_COMMANDS)
+#if defined(DEBUG_LINKED_COMMANDS)
    if (link_statistics && (overlap || !(flushcount % link_statistics)))
       for (n = 0; n < n_ready; n++) {
          k = il[n]; cpp = &HD(j)->cp[k]; SCpnt = cpp->SCpnt;
@@ -1789,15 +2040,19 @@ static inline void ihdlr(int irq, unsigned int j) {
    reg = inb(sh[j]->io_port + REG_STATUS);
 
    /* Reject any sp with supspect data */
-   if (spp->eoc == FALSE) 
+   if (spp->eoc == FALSE)
       printk("%s: ihdlr, spp->eoc == FALSE, irq %d, reg 0x%x, count %d.\n",
              BN(j), irq, reg, HD(j)->iocount);
-   if (spp->cpp == NULL) 
+   if (spp->cpp == NULL)
       printk("%s: ihdlr, spp->cpp == NULL,  irq %d, reg 0x%x, count %d.\n",
              BN(j), irq, reg, HD(j)->iocount);
    if (spp->eoc == FALSE || spp->cpp == NULL) return;
 
    cpp = spp->cpp;
+
+#if defined(DEBUG_GENERATE_ABORTS)
+   if ((HD(j)->iocount > 500) && ((HD(j)->iocount % 500) < 3)) return;
+#endif
 
    /* Find the mailbox to be serviced on this board */
    i = cpp - HD(j)->cp;
@@ -1846,6 +2101,11 @@ static inline void ihdlr(int irq, unsigned int j) {
       flush_dev(SCpnt->device, SCpnt->request.sector, j, TRUE);
 
    tstatus = status_byte(spp->target_status);
+
+#if defined(DEBUG_GENERATE_ERRORS)
+   if ((HD(j)->iocount > 500) && ((HD(j)->iocount % 200) < 2))
+                                           spp->adapter_status = 0x01;
+#endif
 
    switch (spp->adapter_status) {
       case ASOK:     /* status OK */
@@ -1905,7 +2165,12 @@ static inline void ihdlr(int irq, unsigned int j) {
 
          if (SCpnt->device->type != TYPE_TAPE
              && HD(j)->retries < MAX_INTERNAL_RETRIES) {
+
+#if defined(DID_SOFT_ERROR)
+            status = DID_SOFT_ERROR << 16;
+#else
             status = DID_BUS_BUSY << 16;
+#endif
             HD(j)->retries++;
             HD(j)->last_retried_pid = SCpnt->pid;
             }
@@ -1928,7 +2193,7 @@ static inline void ihdlr(int irq, unsigned int j) {
 
    SCpnt->result = status | spp->target_status;
 
-#if defined (DEBUG_INTERRUPT)
+#if defined(DEBUG_INTERRUPT)
    if (SCpnt->result || do_trace)
 #else
    if ((spp->adapter_status != ASOK && HD(j)->iocount >  1000) ||
@@ -1954,31 +2219,25 @@ static inline void ihdlr(int irq, unsigned int j) {
 }
 
 static void do_interrupt_handler(int irq, void *shap, struct pt_regs *regs) {
-
    unsigned int j;
+   IRQ_FLAGS
+   SPIN_FLAGS
 
    /* Check if the interrupt must be processed by this handler */
    if ((j = (unsigned int)((char *)shap - sha)) >= num_boards) return;
 
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,95)
-   {
-   unsigned long flags;
-   spin_lock_irqsave(&io_request_lock, flags);
+   SPIN_LOCK_SAVE
+   IRQ_LOCK_SAVE
    ihdlr(irq, j);
-   spin_unlock_irqrestore(&io_request_lock, flags);
-   }
-#else
-   ihdlr(irq, j);
-#endif
-
+   IRQ_UNLOCK_RESTORE
+   SPIN_UNLOCK_RESTORE
 }
 
 int eata2x_release(struct Scsi_Host *shpnt) {
-   unsigned long flags;
    unsigned int i, j;
+   IRQ_FLAGS
 
-   save_flags(flags);
-   cli();
+   IRQ_LOCK_SAVE
 
    for (j = 0; sh[j] != NULL && sh[j] != shpnt; j++);
 
@@ -1994,7 +2253,7 @@ int eata2x_release(struct Scsi_Host *shpnt) {
 
    release_region(sh[j]->io_port, sh[j]->n_io_port);
    scsi_unregister(sh[j]);
-   restore_flags(flags);
+   IRQ_UNLOCK_RESTORE
    return FALSE;
 }
 

@@ -1,23 +1,30 @@
-                      MAGIC SYSRQ KEY DOCUMENTATION v1.0
+                      MAGIC SYSRQ KEY DOCUMENTATION v1.2
                      ------------------------------------
-                        [Fri Apr  3 08:27:12 EST 1998]
+                        [Sat May 16 01:09:21 EDT 1998]
 
-1. What is the magic SysRQ key?
+*  What is the magic SysRQ key?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-It is a 'magical' key combo you can hit, and the kernel will respond to
-regardless of anything else, unless it is hard-locked.
+It is a 'magical' key combo you can hit which kernel will respond to
+regardless of whatever else it is doing, unless it is completely locked up.
 
-2. How do I enable the magic SysRQ key?
+*  How do I enable the magic SysRQ key?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 You need to say yes to 'Magic SysRq key (CONFIG_MAGIC_SYSRQ)' when
 configuring the kernel. This option is only available it 2.1.x or later
 kernels.
 
-3. How do I use the magic SysRQ key?
+*  How do I use the magic SysRQ key?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-You press the key combo 'ALT-SysRQ-<command key>'.
+On x86   - You press the key combo 'ALT-SysRQ-<command key>'. Note - Some
+           (older?) may not have a key labeled 'SysRQ'. The 'SysRQ' key is
+           also known as the 'Print Screen' key.
 
-4. What are the 'command' keys?
+On SPARC - You press 'ALT-STOP-<command key>', I believe.
+
+On other - If you know of the key combos for other architectures, please
+           let me know so I can add them to this section. 
+
+*  What are the 'command' keys?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 'r'     - Turns off keyboard raw mode and sets it to XLATE.
 
@@ -51,7 +58,7 @@ You press the key combo 'ALT-SysRQ-<command key>'.
 'l'     - Send a SIGKILL to all processes, INCLUDING init. (Your system
           will be non-functional after this.)
 
-5. Okay, so what can I use them for?
+*  Okay, so what can I use them for?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Well, un'R'aw is very handy when your X server or a svgalib program crashes.
 
@@ -76,14 +83,25 @@ t'E'rm and k'I'll are useful if you have some sort of runaway process you
 are unable to kill any other way, especially if it's spawning other
 processes.
 
-6. Sometimes SysRQ seems to get 'stuck' after using it, what can I do?
+*  Sometimes SysRQ seems to get 'stuck' after using it, what can I do?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 That happens to me, also. I've found that tapping shift, alt, and control
 on both sides of the keyboard, and hitting an invalid sysrq sequence again
 will fix the problem. (ie, something like alt-sysrq-z).
 
-7. I have more questions, who can I ask?
+*  I hit SysRQ, but nothing seems to happen, what's wrong?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+There are some keyboards which do not support 'SysRQ', you can try running
+'showkey -s' and pressing SysRQ or alt-SysRQ to see if it generates any
+0x54 codes. If it doesn't, you may define the magic sysrq sequence to a
+different key. Find the keycode with showkey, and change the define of
+'#define SYSRQ_KEY 0x54' in [/usr/src/linux/]include/asm/keyboard.h to
+the keycode of the key you wish to use, then recompile. Oh, and by the way,
+you exit 'showkey' by not typing anything for ten seconds.
+
+*  I have more questions, who can I ask?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 You may feel free to send email to myrdraal@deathsdoor.com, and I will
-respond as soon as possible.
+respond as soon as possible. If that email address does not work, use
+myrdraal@jackalz.dyn.ml.org.
  -Myrdraal

@@ -1766,11 +1766,12 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 						set_mode(currcons,0);
 						continue;
 					case 'n':
-						if (!ques)
+						if (!ques) {
 							if (par[0] == 5)
 								status_report(tty);
 							else if (par[0] == 6)
 								cursor_report(currcons,tty);
+						}
 						continue;
 				}
 				if (ques) {

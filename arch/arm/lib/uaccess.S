@@ -7,7 +7,6 @@
  *  These are highly optimised both for the 4k page size
  *  and for various alignments.
  */
-#include <linux/autoconf.h>
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <asm/errno.h>

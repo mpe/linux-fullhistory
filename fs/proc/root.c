@@ -684,7 +684,7 @@ void proc_root_init(void)
 
 	if (prof_shift) {
 		proc_register(&proc_root, &proc_root_profile);
-		proc_root_profile.size = (1+prof_len) * sizeof(unsigned long);
+		proc_root_profile.size = (1+prof_len) * sizeof(unsigned int);
 	}
 
 	proc_tty_init();

@@ -1,6 +1,6 @@
 /* 
-	pcd.c	(c) 1997  Grant R. Guenther <grant@torque.net>
-		          Under the terms of the GNU public license.
+	pcd.c	(c) 1997-8  Grant R. Guenther <grant@torque.net>
+		            Under the terms of the GNU public license.
 
 	This is high-level driver for parallel port ATAPI CDrom
         drives based on chips supported by the paride module.
@@ -86,16 +86,20 @@
 /* Changes:
 
 	1.01	GRG 1997.01.24	Added test unit ready support
+	1.02    GRG 1998.05.06  Changes to pcd_completion, ready_wait,
+				and loosen interpretation of ATAPI
+			        standard for clearing error status.
+				Use spinlocks. Eliminate sti().
 
 */
 
-#define	PCD_VERSION	"1.01"
+#define	PCD_VERSION	"1.02"
 #define PCD_MAJOR	46
 #define PCD_NAME	"pcd"
 #define PCD_UNITS	4
 
 /* Here are things one can override from the insmod command.
-   Most are autoprobed by paride unless set here.  Verbose is on
+   Most are autoprobed by paride unless set here.  Verbose is off
    by default.
 
 */
@@ -133,6 +137,7 @@ static int pcd_drive_count;
 #include <linux/cdrom.h>
 
 #include <asm/uaccess.h>
+#include <asm/spinlock.h>
 
 #ifndef MODULE
 
@@ -193,7 +198,7 @@ void cleanup_module( void );
 
 static int 	pcd_open(struct inode *inode, struct file *file);
 static void 	do_pcd_request(void);
-static void 	do_pcd_read(int unit);
+static void 	do_pcd_read(void);
 static int 	pcd_ioctl(struct inode *inode,struct file *file,
                          unsigned int cmd, unsigned long arg);
 
@@ -343,8 +348,9 @@ static void do_pcd_request (void)
 	        pcd_sector = CURRENT->sector;
 	        pcd_count = CURRENT->nr_sectors;
 	        pcd_buf = CURRENT->buffer;
-	        do_pcd_read(unit);
-		if (pcd_busy) return;
+		pcd_busy = 1;
+	        ps_set_intr(do_pcd_read,0,0,nice); 
+		return;
 	    } 
 	    else end_request(0);
 	}
@@ -474,7 +480,7 @@ static int pcd_command( int unit, char * cmd, int dlen, char * fun )
         WR(0,5,dlen / 256);
         WR(0,7,0xa0);          /* ATAPI packet command */
 
-        if (pcd_wait(unit,IDE_BUSY,IDE_DRQ|IDE_ERR,fun,"command DRQ")) {
+        if (pcd_wait(unit,IDE_BUSY,IDE_DRQ,fun,"command DRQ")) {
 		pi_disconnect(PI);
 		return -1;
 	}
@@ -497,7 +503,7 @@ static int pcd_completion( int unit, char * buf,  char * fun )
 	r = pcd_wait(unit,IDE_BUSY,IDE_DRQ|IDE_READY|IDE_ERR,fun,"completion");
 
 	if ((RR(0,2)&2) && (RR(0,7)&IDE_DRQ)) { 
-	        n = (RR(0,4)+256*RR(0,5));
+	        n = (((RR(0,4)+256*RR(0,5))+3)&0xfffc);
 	        pi_read_block(PI,buf,n);
 	}
 
@@ -589,22 +595,16 @@ static int pcd_reset( int unit )
 
 {	int	i, k, flg;
 	int	expect[5] = {1,1,1,0x14,0xeb};
-	long	flags;
 
 	pi_connect(PI);
 	WR(0,6,0xa0 + 0x10*PCD.drive);
 	WR(0,7,8);
-
-	save_flags(flags);
-	sti();
 
 	pcd_sleep(2);  		/* delay a bit*/
 
 	k = 0;
 	while ((k++ < PCD_RESET_TMO) && (RR(1,6)&IDE_BUSY))
 		pcd_sleep(10);
-
-	restore_flags(flags);
 
 	flg = 1;
 	for(i=0;i<5;i++) flg &= (RR(0,i+1) == expect[i]);
@@ -631,7 +631,7 @@ static int pcd_ready_wait( int unit, int tmo )
           pcd_atapi(unit,tr_cmd,0,NULL,DBMSG("test unit ready"));
           p = PCD.last_sense;
           if (!p) return 0;
-          if (!((p == 0x010402)||((p & 0xff) == 6))) return p;
+	  if (!(((p & 0xffff) == 0x0402)||((p & 0xff) == 6))) return p;
           k++;
           pcd_sleep(100);
         }
@@ -749,6 +749,7 @@ static void pcd_start( void )
 {	int	unit = pcd_unit;
 	int	b, i;
 	char	rd_cmd[12] = {0xa8,0,0,0,0,0,0,0,0,1,0,0};
+	long    saved_flags;
 
 	pcd_bufblk = pcd_sector / 4;
         b = pcd_bufblk;
@@ -757,13 +758,13 @@ static void pcd_start( void )
 	   b = b >> 8;
 	}
 
-
 	if (pcd_command(unit,rd_cmd,2048,"read block")) {
 		pcd_bufblk = -1; 
+		spin_lock_irqsave(&io_request_lock,saved_flags);
 		pcd_busy = 0;
-		cli();
 		end_request(0);
 		do_pcd_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
 		return;
 	}
 
@@ -773,17 +774,23 @@ static void pcd_start( void )
 
 }
 
-static void do_pcd_read( int unit )
+static void do_pcd_read( void )
 
-{	pcd_busy = 1;
+
+{	int	unit = pcd_unit;
+	long    saved_flags;
+
+	pcd_busy = 1;
 	pcd_retries = 0;
 	pcd_transfer();
 	if (!pcd_count) {
+		spin_lock_irqsave(&io_request_lock,saved_flags);
 		end_request(1);
 		pcd_busy = 0;
+		do_pcd_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
 		return;
 	}
-	sti();
 
 	pi_do_claimed(PI,pcd_start);
 }
@@ -791,8 +798,7 @@ static void do_pcd_read( int unit )
 static void do_pcd_read_drq( void )
 
 {	int	unit = pcd_unit;
-
-	sti();
+	long    saved_flags;
 
 	if (pcd_completion(unit,pcd_buffer,"read block")) {
                 if (pcd_retries < PCD_RETRIES) {
@@ -801,16 +807,20 @@ static void do_pcd_read_drq( void )
 			pi_do_claimed(PI,pcd_start);
                         return;
                         }
-		cli();
+		spin_lock_irqsave(&io_request_lock,saved_flags);
 		pcd_busy = 0;
 		pcd_bufblk = -1;
 		end_request(0);
 		do_pcd_request();
+		spin_unlock_irqrestore(&io_request_lock,saved_flags);
 		return;
 	}
 
-	do_pcd_read(unit);
+	do_pcd_read();
+	spin_lock_irqsave(&io_request_lock,saved_flags);
 	do_pcd_request();
+	spin_unlock_irqrestore(&io_request_lock,saved_flags); 
 }
 	
 /* end of pcd.c */
+

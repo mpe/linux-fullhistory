@@ -317,20 +317,20 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 #define  CAUSEF_BD		(1   << 31)
 
 /*
- * Bits in the coprozessor 0 config register.
+ * Bits in the coprocessor 0 config register.
  */
-#define CONFIG_CM_CACHABLE_NO_WA	0
-#define CONFIG_CM_CACHABLE_WA		1
-#define CONFIG_CM_UNCACHED		2
-#define CONFIG_CM_CACHABLE_NONCOHERENT	3
-#define CONFIG_CM_CACHABLE_CE		4
-#define CONFIG_CM_CACHABLE_COW		5
-#define CONFIG_CM_CACHABLE_CUW		6
-#define CONFIG_CM_CACHABLE_ACCELERATED	7
-#define CONFIG_CM_CMASK			7
-#define CONFIG_DB			(1 <<  4)
-#define CONFIG_IB			(1 <<  5)
-#define CONFIG_SC			(1 << 17)
+#define CONF_REG_CM_CACHABLE_NO_WA	0
+#define CONF_REG_CM_CACHABLE_WA		1
+#define CONF_REG_CM_UNCACHED		2
+#define CONF_REG_CM_CACHABLE_NONCOHERENT	3
+#define CONF_REG_CM_CACHABLE_CE		4
+#define CONF_REG_CM_CACHABLE_COW		5
+#define CONF_REG_CM_CACHABLE_CUW		6
+#define CONF_REG_CM_CACHABLE_ACCELERATED	7
+#define CONF_REG_CM_CMASK			7
+#define CONF_REG_DB			(1 <<  4)
+#define CONF_REG_IB			(1 <<  5)
+#define CONF_REG_SC			(1 << 17)
 
 /*
  * R10000 performance counter definitions.

@@ -71,6 +71,9 @@ extern unsigned int machine_id;
 extern unsigned int machine_submodel_id;
 extern unsigned int BIOS_revision;
 
+/* Lazy FPU handling on uni-processor */
+extern struct task_struct *last_task_used_math;
+
 /*
  * User space process size: 3GB (default).
  */

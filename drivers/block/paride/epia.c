@@ -1,6 +1,6 @@
 /* 
-        epia.c    (c) 1997  Grant R. Guenther <grant@torque.net>
-                            Under the terms of the GNU public license.
+        epia.c    (c) 1997-8  Grant R. Guenther <grant@torque.net>
+                              Under the terms of the GNU public license.
 
         epia.c is a low-level protocol driver for Shuttle Technologies 
 	EPIA parallel to IDE adapter chip.  This device is now obsolete
@@ -10,7 +10,13 @@
 
 */
 
-#define EPIA_VERSION      "1.0"
+/* Changes:
+
+        1.01    GRG 1998.05.06 init_proto, release_proto
+
+*/
+
+#define EPIA_VERSION      "1.01"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -274,12 +280,12 @@ static void epia_log_adapter( PIA *pi, char * scratch, int verbose )
 
 }
 
-static void epia_inc_use ( void )
+static void epia_init_proto( PIA *pi)
 
 {       MOD_INC_USE_COUNT;
 }
 
-static void epia_dec_use ( void )
+static void epia_release_proto( PIA *pi)
 
 {       MOD_DEC_USE_COUNT;
 }
@@ -295,8 +301,8 @@ struct pi_protocol epia = {"epia",0,6,3,1,1,
                            0,
                            epia_test_proto,
                            epia_log_adapter,
-                           epia_inc_use, 
-                           epia_dec_use 
+                           epia_init_proto,
+                           epia_release_proto
                           };
 
 

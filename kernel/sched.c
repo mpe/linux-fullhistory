@@ -98,8 +98,6 @@ unsigned long volatile jiffies=0;
  *	via the SMP irq return path.
  */
  
-struct task_struct *last_task_used_math = NULL;
-
 struct task_struct * task[NR_TASKS] = {&init_task, };
 
 struct kernel_stat kstat = { 0 };

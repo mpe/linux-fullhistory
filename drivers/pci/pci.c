@@ -1,10 +1,12 @@
 /*
- *	$Id: pci.c,v 1.84 1998/05/02 19:22:06 mj Exp $
+ *	$Id: pci.c,v 1.85 1998/05/12 07:36:01 mj Exp $
  *
- *	PCI Bus Services
+ *	PCI Bus Services, see include/linux/pci.h for further explanation.
  *
- *	Copyright 1993 -- 1998 Drew Eckhardt, Frederic Potter,
- *	David Mosberger-Tang, Martin Mares
+ *	Copyright 1993 -- 1997 Drew Eckhardt, Frederic Potter,
+ *	David Mosberger-Tang
+ *
+ *	Copyright 1997 -- 1998 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  */
 
 #include <linux/config.h>
@@ -370,7 +372,7 @@ __initfunc(void pci_init(void))
 		return;
 	}
 
-	printk("PCI: Probing PCI hardware.\n");
+	printk("PCI: Probing PCI hardware\n");
 
 	memset(&pci_root, 0, sizeof(pci_root));
 	pci_root.subordinate = pci_scan_bus(&pci_root);

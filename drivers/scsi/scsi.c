@@ -127,7 +127,6 @@ const unsigned char       scsi_command_size[8] = { 6, 10, 10, 12,
 static unsigned long      serial_number = 0;
 static Scsi_Cmnd        * scsi_bh_queue_head = NULL;
 static Scsi_Cmnd	* scsi_bh_queue_tail = NULL;
-static spinlock_t	  scsi_bh_queue_spin = SPIN_LOCK_UNLOCKED;
 static FreeSectorBitmap * dma_malloc_freelist = NULL;
 static int                need_isa_bounce_buffers;
 static unsigned int       dma_sectors = 0;
@@ -1260,7 +1259,7 @@ scsi_release_command(Scsi_Cmnd * SCpnt)
    */
   if( SCpnt->host->in_recovery
       && !SCpnt->host->eh_active
-      && atomic_read(&SCpnt->host->host_active) == SCpnt->host->host_failed )
+      && SCpnt->host->host_busy == SCpnt->host->host_failed )
   {
       SCSI_LOG_ERROR_RECOVERY(5, printk("Waking error handler thread (%d)\n",
                                  atomic_read(&SCpnt->host->eh_wait->count)));
@@ -1510,16 +1509,22 @@ SCSI_LOG_MLQUEUE(4,
 void
 scsi_done (Scsi_Cmnd * SCpnt)
 {
-  unsigned long      flags;
 
   /*
    * We don't have to worry about this one timing out any more.
    */
   scsi_delete_timer(SCpnt);
 
+  /* Set the serial numbers back to zero */
+  SCpnt->serial_number = 0;
+
   /*
    * First, see whether this command already timed out.  If so, we ignore
    * the response.  We treat it as if the command never finished.
+   *
+   * Since serial_number is now 0, the error handler cound detect this
+   * situation and avoid to call the the low level driver abort routine.
+   * (DB)
    */
   if( SCpnt->state == SCSI_STATE_TIMEOUT )
     {
@@ -1527,27 +1532,22 @@ scsi_done (Scsi_Cmnd * SCpnt)
       return;
     }
 
-  /* Set the serial numbers back to zero */
-  SCpnt->serial_number = 0;
   SCpnt->serial_number_at_timeout = 0;
-
   SCpnt->state = SCSI_STATE_BHQUEUE;
   SCpnt->owner = SCSI_OWNER_BH_HANDLER;
   SCpnt->bh_next = NULL;
 
   /*
-   * Next, put this command in the BH queue.  All processing of the command
-   * past this point will take place with interrupts turned on.
-   * We start by atomicly swapping the pointer into the queue head slot.
-   * If it was NULL before, then everything is fine, and we are done
-   * (this is the normal case).  If it was not NULL, then we block interrupts,
-   * and link them together.
+   * Next, put this command in the BH queue.
+   * 
    * We need a spinlock here, or compare and exchange if we can reorder incoming
    * Scsi_Cmnds, as it happens pretty often scsi_done is called multiple times
    * before bh is serviced. -jj
+   *
+   * We already have the io_request_lock here, since we are called from the
+   * interrupt handler or the error handler. (DB)
+   *
    */
-
-  spin_lock_irqsave(&scsi_bh_queue_spin, flags);
   if (!scsi_bh_queue_head) {
   	scsi_bh_queue_head = SCpnt;
   	scsi_bh_queue_tail = SCpnt;
@@ -1555,7 +1555,6 @@ scsi_done (Scsi_Cmnd * SCpnt)
   	scsi_bh_queue_tail->bh_next = SCpnt;
   	scsi_bh_queue_tail = SCpnt;
   }
-  spin_unlock_irqrestore(&scsi_bh_queue_spin, flags);
 
   /*
    * Mark the bottom half handler to be run.
@@ -1573,45 +1572,29 @@ scsi_done (Scsi_Cmnd * SCpnt)
  * Notes:       This is called with all interrupts enabled.  This should reduce
  *              interrupt latency, stack depth, and reentrancy of the low-level
  *              drivers.
+ *
+ * The io_request_lock is required in all the routine. There was a subtle
+ * race condition when scsi_done is called after a command has already
+ * timed out but before the time out is processed by the error handler.
+ * (DB)
  */
 void scsi_bottom_half_handler(void)
 {
   Scsi_Cmnd        * SCpnt;
   Scsi_Cmnd        * SCnext;
-  static atomic_t    recursion_depth;
   unsigned long      flags;
   
+  spin_lock_irqsave(&io_request_lock, flags);
+
   while(1==1)
   {
-      /*
-       * If the counter is > 0, that means that there is another interrupt handler
-       * out there somewhere processing commands.  We don't want to get these guys
-       * nested as this can lead to stack overflow problems, and there isn't any
-       * real sense in it anyways.
-       */
-      if( atomic_read(&recursion_depth) > 0 )
-      {
-          printk("SCSI bottom half recursion depth = %d \n", atomic_read(&recursion_depth));
-          SCSI_LOG_MLCOMPLETE(1,printk("SCSI bottom half recursion depth = %d \n", 
-                                       atomic_read(&recursion_depth)));
-          break;
-      }
-      
-      /*
-       * We need to hold the spinlock, so that nobody is tampering with the queue. -jj
-       * We will process everything we find in the list here.
-       */
-      
-      spin_lock_irqsave(&scsi_bh_queue_spin, flags);
       SCpnt = scsi_bh_queue_head;
       scsi_bh_queue_head = NULL;
-      spin_unlock_irqrestore(&scsi_bh_queue_spin, flags);
       
-      if( SCpnt == NULL )
+      if( SCpnt == NULL ) {
+          spin_unlock_irqrestore(&io_request_lock, flags);
           return;
-      
-      spin_lock_irqsave(&io_request_lock, flags);
-      atomic_inc(&recursion_depth);
+          }
       
       SCnext = SCpnt->bh_next;
       
@@ -1684,7 +1667,7 @@ void scsi_bottom_half_handler(void)
                    * If the host is having troubles, then look to see if this was the last
                    * command that might have failed.  If so, wake up the error handler.
                    */
-                  if( atomic_read(&SCpnt->host->host_active) == SCpnt->host->host_failed )
+                  if( SCpnt->host->host_busy == SCpnt->host->host_failed )
                   {
                     SCSI_LOG_ERROR_RECOVERY(5, printk("Waking error handler thread (%d)\n",
                                                       atomic_read(&SCpnt->host->eh_wait->count)));
@@ -1701,10 +1684,9 @@ void scsi_bottom_half_handler(void)
           }
       } /* for(; SCpnt...) */
 
-      atomic_dec(&recursion_depth);
-      spin_unlock_irqrestore(&io_request_lock, flags);
-
   } /* while(1==1) */
+
+  spin_unlock_irqrestore(&io_request_lock, flags);
 
 }
 
@@ -1790,6 +1772,10 @@ scsi_finish_command(Scsi_Cmnd * SCpnt)
     
     SCpnt->owner = SCSI_OWNER_HIGHLEVEL;
     SCpnt->state = SCSI_STATE_FINISHED;
+
+    /* We can get here with use_sg=0, causing a panic in the upper level (DB) */
+    SCpnt->use_sg = SCpnt->old_use_sg;
+
     SCpnt->done (SCpnt);
 }
 
@@ -2305,8 +2291,13 @@ int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
 	    return(-ENOSYS);  /* We do not yet support unplugging */
 
 	scan_scsis (HBA_ptr, 1, channel, id, lun);
+
+        /* FIXME (DB) This assumes that the queue_depth routines can be used
+           in this context as well, while they were all designed to be
+           called only once after the detect routine. (DB) */
 	if (HBA_ptr->select_queue_depths != NULL)
 		(HBA_ptr->select_queue_depths)(HBA_ptr, HBA_ptr->host_queue);
+
 	return(length);
 
     }
@@ -2566,12 +2557,30 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
     Scsi_Device * SDpnt;
     struct Scsi_Device_Template * sdtpnt;
     const char * name;
+    unsigned long flags;
 
     if (tpnt->next || !tpnt->detect) return 1;/* Must be already loaded, or
 					       * no detect routine available
 					       */
     pcount = next_scsi_host;
-    if ((tpnt->present = tpnt->detect(tpnt)))
+
+    /* The detect routine must carefully spinunlock/spinlock if 
+       it enables interrupts, since all interrupt handlers do 
+       spinlock as well.
+       All lame drivers are going to fail due to the following 
+       spinlock. For the time beeing let's use it only for drivers 
+       using the new scsi code. NOTE: the detect routine could
+       redefine the value tpnt->use_new_eh_code. (DB, 13 May 1998) */
+
+    if (tpnt->use_new_eh_code) {
+       spin_lock_irqsave(&io_request_lock, flags);
+       tpnt->present = tpnt->detect(tpnt);
+       spin_unlock_irqrestore(&io_request_lock, flags);
+       }
+    else
+       tpnt->present = tpnt->detect(tpnt);
+
+    if (tpnt->present)
     {
 	if(pcount == next_scsi_host) 
         {
@@ -2784,8 +2793,9 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
                 SDpnt->online = FALSE;
 	        if(SCpnt->request.rq_status != RQ_INACTIVE) 
                 {
-                    printk("SCSI device not inactive - state=%d, id=%d\n",
-                           SCpnt->request.rq_status, SCpnt->target);
+                    printk("SCSI device not inactive - rq_status=%d, target=%d, pid=%ld, state=%d, owner=%d.\n",
+                           SCpnt->request.rq_status, SCpnt->target, SCpnt->pid,
+                           SCpnt->state, SCpnt->owner);
                     for(SDpnt1 = shpnt->host_queue; SDpnt1; 
                         SDpnt1 = SDpnt1->next)
                       {

@@ -5667,8 +5667,10 @@ __initfunc(int SBPCD_INIT(void))
 		i=ResponseStatus();  /* returns orig. status or p_busy_new */
 		if (famT_drive) i=ResponseStatus();  /* returns orig. status or p_busy_new */
 		if (i<0)
+		{
 			if (i!=-402)
 				msg(DBG_INF,"init: ResponseStatus returns %d.\n",i);
+		}
 		else
 		{
 			if (st_check)

@@ -260,9 +260,6 @@ int ext2_sync_file(struct file * file, struct dentry *dentry)
 	int wait, err = 0;
 	struct inode *inode = dentry->d_inode;
 
-	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
-	     S_ISLNK(inode->i_mode)))
-		return -EINVAL;
 	if (S_ISLNK(inode->i_mode) && !(inode->i_blocks))
 		/*
 		 * Don't sync fast links!

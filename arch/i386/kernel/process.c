@@ -46,6 +46,8 @@
 #endif
 #include "irq.h"
 
+struct task_struct *last_task_used_math = NULL;
+
 #ifdef __SMP__
 asmlinkage void ret_from_smpfork(void) __asm__("ret_from_smpfork");
 #else
@@ -528,18 +530,12 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	 */
 	p->tss.bitmap = sizeof(struct thread_struct);
 
-/*
- * This tried to copy the FPU state, but I wonder whether we really
- * want this at all. It is probably nicer to just have a newly started
- * process start with a clean slate wrt the fpu.  - Linus
- */
-#if 1
-	current->used_math = 0;
-	current->flags &= ~PF_USEDFPU;
+#ifdef __SMP__
+	if (current->flags & PF_USEDFPU)
 #else
 	if (last_task_used_math == current)
-		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
 #endif
+		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
 
 	return 0;
 }

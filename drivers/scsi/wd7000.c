@@ -683,7 +683,7 @@ void wd7000_setup (char *str, int *ints)
 	else
 	    configs[wd7000_card_num].bus_off = BUS_OFF;
 
-	if (wd7000_card_num)
+	if (wd7000_card_num) {
 	    for (i = 0; i < (wd7000_card_num - 1); i++)
 		for (j = i + 1; j < wd7000_card_num; j++)
 		    if (configs[i].irq == configs[j].irq) {
@@ -698,6 +698,7 @@ void wd7000_setup (char *str, int *ints)
 	                setup_error ("duplicated I/O base address!", ints);
 			return;
 		    }
+	}
 
 #ifdef WD7000_DEBUG
 	printk ("wd7000_setup: IRQ=%d, DMA=%d, I/O=0x%x, BUS_ON=%dns, BUS_OFF=%dns\n",
@@ -1119,7 +1120,7 @@ void wd7000_intr_handle (int irq, void *dev_id, struct pt_regs *regs)
 		return;
 	    }
 	    /* Aaaargh! (Zaga) */
-	    scb = (struct scb *) (scsi2int ((unchar *) icmbs[icmb].scbptr) | PAGE_OFFSET);
+	    scb = bus_to_virt(scsi2int ((unchar *) icmbs[icmb].scbptr));
 	    icmbs[icmb].status = 0;
 	    if (!(scb->op & ICB_OP_MASK)) {	/* an SCB is done */
 		SCpnt = scb->SCpnt;

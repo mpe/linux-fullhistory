@@ -1,13 +1,19 @@
 /* 
-        on26.c    (c) 1997  Grant R. Guenther <grant@torque.net>
-                            Under the terms of the GNU public license.
+        on26.c    (c) 1997-8  Grant R. Guenther <grant@torque.net>
+                              Under the terms of the GNU public license.
 
         on26.c is a low-level protocol driver for the 
         OnSpec 90c26 parallel to IDE adapter chip.
 
 */
 
-#define ON26_VERSION      "1.0"
+/* Changes:
+
+        1.01    GRG 1998.05.06 init_proto, release_proto
+
+*/
+
+#define ON26_VERSION      "1.01"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -217,12 +223,12 @@ static void on26_log_adapter( PIA *pi, char * scratch, int verbose )
 
 }
 
-static void on26_inc_use ( void )
+static void on26_init_proto( PIA *pi)
 
 {       MOD_INC_USE_COUNT;
 }
 
-static void on26_dec_use ( void )
+static void on26_release_proto( PIA *pi)
 
 {       MOD_DEC_USE_COUNT;
 }
@@ -238,8 +244,8 @@ struct pi_protocol on26 = {"on26",0,5,2,1,1,
                            0,
                            0,
                            on26_log_adapter,
-                           on26_inc_use, 
-                           on26_dec_use 
+                           on26_init_proto,
+                           on26_release_proto
                           };
 
 

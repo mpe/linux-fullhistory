@@ -113,9 +113,9 @@ scsi_add_timer(Scsi_Cmnd * SCset,
     SCset->eh_timeout.data = (unsigned long) SCset;
     SCset->eh_timeout.expires = jiffies + timeout;
     SCset->eh_timeout.function = (void (*)(unsigned long))complete;
-    
+
     SCSI_LOG_ERROR_RECOVERY(5,printk("Adding timer for command %p at %d (%p)\n", SCset, timeout, complete));
-    
+
     add_timer(&SCset->eh_timeout);
 
 }
@@ -204,6 +204,7 @@ static void do_scsi_times_out (Scsi_Cmnd * SCpnt)
     /* Set the serial_number_at_timeout to the current serial_number */
     SCpnt->serial_number_at_timeout = SCpnt->serial_number;
 
+    SCpnt->eh_state = FAILED;
     SCpnt->state = SCSI_STATE_TIMEOUT;
     SCpnt->owner = SCSI_OWNER_ERROR_HANDLER;
     
@@ -219,7 +220,7 @@ static void do_scsi_times_out (Scsi_Cmnd * SCpnt)
      * If the host is having troubles, then look to see if this was the last
      * command that might have failed.  If so, wake up the error handler.
      */
-    if( atomic_read(&SCpnt->host->host_active) == SCpnt->host->host_failed )
+    if( SCpnt->host->host_busy == SCpnt->host->host_failed )
     {
         up(SCpnt->host->eh_wait);
     }
@@ -277,11 +278,22 @@ STATIC
 void scsi_eh_times_out (Scsi_Cmnd * SCpnt)
 {
   unsigned long flags;
+  int rtn = FAILED;
 
   spin_lock_irqsave(&io_request_lock, flags);
+
+  SCpnt->eh_state = SCSI_STATE_TIMEOUT;
+  SCpnt->owner = SCSI_OWNER_LOWLEVEL;
+
+  /*
+   * As far as the low level driver is concerned, this command is still
+   * active, so we must give the low level driver a chance to abort it. (DB)
+   */
+  if (SCpnt->host->hostt->eh_abort_handler)
+     rtn = SCpnt->host->hostt->eh_abort_handler(SCpnt);
+
   SCpnt->request.rq_status = RQ_SCSI_DONE;
   SCpnt->owner = SCSI_OWNER_ERROR_HANDLER;
-  SCpnt->eh_state = SCSI_STATE_TIMEOUT;
 
   SCSI_LOG_ERROR_RECOVERY(5,printk("In scsi_eh_times_out %p\n", SCpnt));
 
@@ -384,8 +396,6 @@ scsi_eh_retry_command(Scsi_Cmnd * SCpnt)
   SCpnt->use_sg = SCpnt->old_use_sg;
   SCpnt->cmd_len = SCpnt->old_cmd_len;
 
-  SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
-
   scsi_send_eh_cmnd (SCpnt, SCpnt->timeout_per_command);
 
   /*
@@ -412,19 +422,56 @@ STATIC int
 scsi_request_sense(Scsi_Cmnd * SCpnt)
 {
   static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};
+  unsigned char scsi_result0[256], *scsi_result=NULL;
+
 
   memcpy ((void *) SCpnt->cmnd , (void *) generic_sense,
 	  sizeof(generic_sense));
 
   SCpnt->cmnd[1] = SCpnt->lun << 5;
-  SCpnt->cmnd[4] = sizeof(SCpnt->sense_buffer);
 
-  SCpnt->request_buffer = &SCpnt->sense_buffer;
-  SCpnt->request_bufflen = sizeof(SCpnt->sense_buffer);
+  scsi_result = (!SCpnt->host->hostt->unchecked_isa_dma)
+             ? &scsi_result0[0] : scsi_init_malloc (512, GFP_ATOMIC|GFP_DMA);
+
+  if (scsi_result == NULL) {
+     printk("cannot allocate scsi_result in scsi_request_sense.\n");
+     return FAILED;
+     }
+
+  /*
+   * Zero the sense buffer.  Some host adapters automatically always request
+   * sense, so it is not a good idea that SCpnt->request_buffer and
+   * SCpnt->sense_buffer point to the same address (DB).
+   * 0 is not a valid sense code. 
+   */
+  memset ((void *) SCpnt->sense_buffer, 0, sizeof(SCpnt->sense_buffer));
+  memset ((void *) scsi_result, 0, 256);
+
+  SCpnt->request_buffer = scsi_result;
+  SCpnt->request_bufflen = 256;
   SCpnt->use_sg = 0;
   SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
 
   scsi_send_eh_cmnd (SCpnt, SENSE_TIMEOUT);
+
+  /* Last chance to have valid sense data */
+  if (!scsi_sense_valid(SCpnt)) memcpy((void *) SCpnt->sense_buffer,
+                                                SCpnt->request_buffer,
+                                                sizeof(SCpnt->sense_buffer));
+
+  if (scsi_result != &scsi_result0[0] && scsi_result != NULL)
+        scsi_init_free (scsi_result, 512);
+
+  /*
+   * When we eventually call scsi_finish, we really wish to complete
+   * the original request, so let's restore the original data. (DB)
+   */
+  memcpy ((void *) SCpnt->cmnd,  (void*) SCpnt->data_cmnd,
+          sizeof(SCpnt->data_cmnd));
+  SCpnt->request_buffer = SCpnt->buffer;
+  SCpnt->request_bufflen = SCpnt->bufflen;
+  SCpnt->use_sg = SCpnt->old_use_sg;
+  SCpnt->cmd_len = SCpnt->old_cmd_len;
 
   /*
    * Hey, we are done.  Let's look to see what happened.
@@ -442,19 +489,54 @@ STATIC int
 scsi_test_unit_ready(Scsi_Cmnd * SCpnt)
 {
   static unsigned char tur_command[6] = {TEST_UNIT_READY, 0,0,0,0,0};
+  unsigned char scsi_result0[256], *scsi_result=NULL;
 
   memcpy ((void *) SCpnt->cmnd , (void *) tur_command,
 	  sizeof(tur_command));
 
   SCpnt->cmnd[1] = SCpnt->lun << 5;
-  SCpnt->cmnd[4] = sizeof(SCpnt->sense_buffer);
 
-  SCpnt->request_buffer = &SCpnt->sense_buffer;
-  SCpnt->request_bufflen = sizeof(SCpnt->sense_buffer);
+  scsi_result = (!SCpnt->host->hostt->unchecked_isa_dma)
+             ? &scsi_result0[0] : scsi_init_malloc (512, GFP_ATOMIC|GFP_DMA);
+
+  if (scsi_result == NULL) {
+     printk("cannot allocate scsi_result in scsi_test_unit_ready.\n");
+     return FAILED;
+     }
+
+  /*
+   * Zero the sense buffer.  Some host adapters automatically always request
+   * sense, so it is not a good idea that SCpnt->request_buffer and
+   * SCpnt->sense_buffer point to the same address (DB).
+   * 0 is not a valid sense code. 
+   */
+  memset ((void *) SCpnt->sense_buffer, 0, sizeof(SCpnt->sense_buffer));
+  memset ((void *) scsi_result, 0, 256);
+
+  SCpnt->request_buffer = scsi_result;
+  SCpnt->request_bufflen = 256;
   SCpnt->use_sg = 0;
   SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
-
   scsi_send_eh_cmnd (SCpnt, SENSE_TIMEOUT);
+
+  /* Last chance to have valid sense data */
+  if (!scsi_sense_valid(SCpnt)) memcpy((void *) SCpnt->sense_buffer,
+                                                SCpnt->request_buffer,
+                                                sizeof(SCpnt->sense_buffer));
+
+  if (scsi_result != &scsi_result0[0] && scsi_result != NULL)
+        scsi_init_free (scsi_result, 512);
+
+  /*
+   * When we eventually call scsi_finish, we really wish to complete
+   * the original request, so let's restore the original data. (DB)
+   */
+  memcpy ((void *) SCpnt->cmnd,  (void*) SCpnt->data_cmnd,
+          sizeof(SCpnt->data_cmnd));
+  SCpnt->request_buffer = SCpnt->buffer;
+  SCpnt->request_bufflen = SCpnt->bufflen;
+  SCpnt->use_sg = SCpnt->old_use_sg;
+  SCpnt->cmd_len = SCpnt->old_cmd_len;
 
   /*
    * Hey, we are done.  Let's look to see what happened.
@@ -490,7 +572,9 @@ void scsi_sleep (int timeout)
     
     add_timer(&timer);
 
+    spin_unlock_irq(&io_request_lock);
     down(&sem);
+    spin_lock_irq(&io_request_lock);
     
     del_timer(&timer);
 }
@@ -532,7 +616,10 @@ retry:
 	SCpnt->request.rq_status = RQ_SCSI_BUSY;
 
 	host->hostt->queuecommand (SCpnt, scsi_eh_done);
-	down(&sem);
+        spin_unlock_irq(&io_request_lock);
+        down(&sem);
+        spin_lock_irq(&io_request_lock);
+
         SCpnt->host->eh_action = NULL;
 
 	del_timer(&SCpnt->eh_timeout);
@@ -678,7 +765,13 @@ scsi_try_to_abort_command(Scsi_Cmnd * SCpnt, int timeout)
     {
       return FAILED;
     }
-  
+
+  /* 
+   * scsi_done was called just after the command timed out and before
+   * we had a chance to process it. (DB)
+   */
+  if (SCpnt->serial_number == 0) return SUCCESS;
+
   SCpnt->owner = SCSI_OWNER_LOWLEVEL;
 
   return SCpnt->host->hostt->eh_abort_handler(SCpnt);
@@ -701,6 +794,8 @@ scsi_try_to_abort_command(Scsi_Cmnd * SCpnt, int timeout)
 STATIC int
 scsi_try_bus_device_reset(Scsi_Cmnd * SCpnt, int timeout)
 {
+  int		   rtn;
+
   SCpnt->eh_state = FAILED; /* Until we come up with something better */
 
   if( SCpnt->host->hostt->eh_device_reset_handler == NULL )
@@ -710,7 +805,11 @@ scsi_try_bus_device_reset(Scsi_Cmnd * SCpnt, int timeout)
   
   SCpnt->owner = SCSI_OWNER_LOWLEVEL;
     
-  return SCpnt->host->hostt->eh_device_reset_handler(SCpnt);
+  rtn = SCpnt->host->hostt->eh_device_reset_handler(SCpnt);
+
+  if (rtn == SUCCESS) SCpnt->eh_state = SUCCESS;
+
+  return SCpnt->eh_state;
 }
 
 /*
@@ -730,6 +829,7 @@ scsi_try_bus_reset(Scsi_Cmnd * SCpnt)
 
   SCpnt->eh_state = FAILED; /* Until we come up with something better */
   SCpnt->owner = SCSI_OWNER_LOWLEVEL;
+  SCpnt->serial_number_at_timeout = SCpnt->serial_number;
 
   if( SCpnt->host->hostt->eh_bus_reset_handler == NULL )
     {
@@ -737,6 +837,8 @@ scsi_try_bus_reset(Scsi_Cmnd * SCpnt)
     }
 
   rtn = SCpnt->host->hostt->eh_bus_reset_handler(SCpnt);
+
+  if (rtn == SUCCESS) SCpnt->eh_state = SUCCESS;
 
   /*
    * If we had a successful bus reset, mark the command blocks to expect
@@ -776,6 +878,7 @@ scsi_try_host_reset(Scsi_Cmnd * SCpnt)
 
     SCpnt->eh_state = FAILED; /* Until we come up with something better */
     SCpnt->owner = SCSI_OWNER_LOWLEVEL;
+    SCpnt->serial_number_at_timeout = SCpnt->serial_number;
     
     if( SCpnt->host->hostt->eh_host_reset_handler == NULL )
     {
@@ -783,6 +886,8 @@ scsi_try_host_reset(Scsi_Cmnd * SCpnt)
     }
     
     rtn = SCpnt->host->hostt->eh_host_reset_handler(SCpnt);
+
+    if (rtn == SUCCESS) SCpnt->eh_state = SUCCESS;
 
     /*
      * If we had a successful host reset, mark the command blocks to expect
@@ -868,8 +973,16 @@ int scsi_decide_disposition (Scsi_Cmnd * SCpnt)
        * sucess.
        */
       return SUCCESS;
-    case DID_PARITY:
+      /*
+       * When the low level driver returns DID_SOFT_ERROR,
+       * it is responsible for keeping an internal retry counter 
+       * in order to avoid endless loops (DB)
+       */
+    case DID_SOFT_ERROR:
+      return NEEDS_RETRY;
+
     case DID_BUS_BUSY:
+    case DID_PARITY:
     case DID_ERROR:
       goto maybe_retry;
     case DID_TIME_OUT:
@@ -1217,6 +1330,7 @@ scsi_unjam_host(struct Scsi_Host * host)
       {
           if( SCpnt->state == SCSI_STATE_FAILED 
               || SCpnt->state == SCSI_STATE_TIMEOUT 
+              || SCpnt->state == SCSI_STATE_INITIALIZING
               || SCpnt->state == SCSI_STATE_UNUSED)
           {
               continue;
@@ -1230,7 +1344,24 @@ scsi_unjam_host(struct Scsi_Host * host)
            * the command will be queued and will be finished along the way.
            */
           SCSI_LOG_ERROR_RECOVERY(1,printk("Error handler prematurely woken - commands still active (%p %x %d)\n", SCpnt, SCpnt->state, SCpnt->target));
-          panic("SCSI Error handler woken too early\n");
+
+/*
+ *        panic("SCSI Error handler woken too early\n");
+ *
+ * This is no longer a problem, since now the code cares only about
+ * SCSI_STATE_TIMEOUT and SCSI_STATE_FAILED.
+ * Other states are useful only to release active commands when devices are
+ * set offline. If (host->host_active == host->host_busy) we can safely assume
+ * that there are no commands in state other then TIMEOUT od FAILED. (DB)
+ *
+ * FIXME:
+ * It is not easy to release correctly commands according to their state when 
+ * devices are set offline, when the state is neither TIMEOUT nor FAILED.
+ * When a device is set offline, we can have some command with
+ * rq_status=RQ_SCSY_BUSY, owner=SCSI_STATE_HIGHLEVEL, 
+ * state=SCSI_STATE_INITIALIZING and the driver module cannot be released.
+ * (DB, 17 May 1998)
+ */
       }
   }
 
@@ -1370,7 +1501,6 @@ scsi_unjam_host(struct Scsi_Host * host)
           }
 
 	  rtn = scsi_try_to_abort_command(SCloop, ABORT_TIMEOUT);
-
 	  if( rtn == SUCCESS )
           {
 	      rtn = scsi_test_unit_ready(SCloop);
@@ -1518,6 +1648,13 @@ next_device:
                        * *after* the error recovery procedure started, and if this
                        * is the case, we are worrying about nothing here.
                        */
+
+                      /*
+                       * Due to the spinlock, we will never get out of this
+                       * loop without a proper wait (DB)
+                       */
+                      scsi_sleep(1 * HZ);
+
                       goto next_device;
                   }
               }
@@ -1620,6 +1757,13 @@ next_device2:
                */
               SCSI_LOG_ERROR_RECOVERY(3,
                         printk("scsi_unjam_host: Unable to try hard host reset\n"));
+
+               /*
+                * Due to the spinlock, we will never get out of this
+                * loop without a proper wait. (DB)
+                */
+               scsi_sleep(1 * HZ);
+
               goto next_device2;
           }
 
@@ -1673,7 +1817,6 @@ next_device2:
           }
       }
   }
-
 
   /*
    * If we solved all of the problems, then let's rev up the engines again.
@@ -1783,6 +1926,7 @@ scsi_error_handler(void * data)
 	struct Scsi_Host     * host = (struct Scsi_Host *) data;
 	int	               rtn;
 	struct semaphore sem = MUTEX_LOCKED;
+        unsigned long flags;
 
 	lock_kernel();
 
@@ -1836,6 +1980,7 @@ scsi_error_handler(void * data)
 
             SCSI_LOG_ERROR_RECOVERY(1,printk("Error handler waking up\n"));
 
+	    spin_lock_irqsave(&io_request_lock, flags);
             host->eh_active = 1;
 
 	    /*
@@ -1862,6 +2007,9 @@ scsi_error_handler(void * data)
 	     * which are still online.
 	     */
 	    scsi_restart_operations(host);
+ 
+            /* The spinlock is really needed up to this point. (DB) */
+	    spin_unlock_irqrestore(&io_request_lock, flags);
 	  }
 
         SCSI_LOG_ERROR_RECOVERY(1,printk("Error handler exiting\n"));

@@ -1,6 +1,6 @@
 /* 
-        comm.c    (c) 1997  Grant R. Guenther <grant@torque.net>
-                            Under the terms of the GNU public license.
+        comm.c    (c) 1997-8  Grant R. Guenther <grant@torque.net>
+                              Under the terms of the GNU public license.
 
 	comm.c is a low-level protocol driver for some older models
 	of the DataStor "Commuter" parallel to IDE adapter.  Some of
@@ -8,7 +8,13 @@
 	use this adapter.
 */
 
-#define COMM_VERSION      "1.0"
+/* Changes:
+
+	1.01	GRG 1998.05.05  init_proto, release_proto
+
+*/
+
+#define COMM_VERSION      "1.01"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -179,12 +185,12 @@ static void comm_log_adapter( PIA *pi, char * scratch, int verbose )
 
 }
 
-static void comm_inc_use ( void )
+static void comm_init_proto(PIA *pi)
 
 {       MOD_INC_USE_COUNT;
 }
 
-static void comm_dec_use ( void )
+static void comm_release_proto(PIA *pi)
 
 {       MOD_DEC_USE_COUNT;
 }
@@ -200,8 +206,8 @@ struct pi_protocol comm = {"comm",0,5,2,1,1,
                            0,
                            0,
                            comm_log_adapter,
-                           comm_inc_use, 
-                           comm_dec_use 
+                           comm_init_proto,
+                           comm_release_proto
                           };
 
 

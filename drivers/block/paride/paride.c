@@ -1,13 +1,20 @@
 /* 
-        paride.c  (c) 1997  Grant R. Guenther <grant@torque.net>
-                            Under the terms of the GNU public license.
+        paride.c  (c) 1997-8  Grant R. Guenther <grant@torque.net>
+                              Under the terms of the GNU public license.
 
 	This is the base module for the family of device drivers
         that support parallel port IDE devices.  
 
 */
 
-#define PI_VERSION      "1.0"
+/* Changes:
+
+	1.01	GRG 1998.05.03	Use spinlocks
+	1.02	GRG 1998.05.05  init_proto, release_proto, ktti
+
+*/
+
+#define PI_VERSION      "1.02"
 
 #include <linux/module.h>
 #include <linux/config.h>
@@ -15,6 +22,7 @@
 #include <linux/kernel.h>
 #include <linux/ioport.h>
 #include <linux/string.h>
+#include <asm/spinlock.h>
 
 #ifdef CONFIG_PARPORT_MODULE
 #define CONFIG_PARPORT
@@ -30,6 +38,7 @@
 
 static struct pi_protocol	*protocols[MAX_PROTOS];
 
+spinlock_t	pi_spinlock = SPIN_LOCK_UNLOCKED;
 
 void pi_write_regr( PIA *pi, int cont, int regr, int val)
 
@@ -59,8 +68,7 @@ static void pi_wake_up( void *p)
 	long flags;
 	void (*cont)(void) = NULL;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&pi_spinlock,flags);
 
 	if (pi->claim_cont && !parport_claim(pi->pardev)) {
 		cont = pi->claim_cont;
@@ -68,8 +76,10 @@ static void pi_wake_up( void *p)
 		pi->claimed = 1;
 	}
 
-	restore_flags(flags);	
+	spin_unlock_irqrestore(&pi_spinlock,flags);	
+
 	wake_up(&(pi->parq));
+
 	if (cont) cont();
 }
 
@@ -81,16 +91,15 @@ void pi_do_claimed( PIA *pi, void(*cont)(void))
 
 {	long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&pi_spinlock,flags); 
 
 	if (!pi->pardev || !parport_claim(pi->pardev)) {
 		pi->claimed = 1;
-		restore_flags(flags);
+		spin_unlock_irqrestore(&pi_spinlock,flags);
 		cont();
 	} else {
 		pi->claim_cont = cont;
-		restore_flags(flags);
+		spin_unlock_irqrestore(&pi_spinlock,flags);	
 	}
 }
 
@@ -148,7 +157,7 @@ void pi_release( PIA *pi)
 {	pi_unregister_parport(pi);
 	if ((!pi->pardev)&&(pi->reserved)) 
 		release_region(pi->port,pi->reserved);
-	pi->proto->dec_use();
+	pi->proto->release_proto(pi);
 }
 
 #define WR(r,v)         pi_write_regr(pi,0,r,v)
@@ -337,12 +346,12 @@ int pi_init(PIA *pi, int autoprobe, int port, int mode,
 	for (p=s;p<e;p++) {
 	  if (protocols[p]) {
 		pi->proto = protocols[p];
-		pi->proto->inc_use();
+		pi->private = 0;
+		pi->proto->init_proto(pi);
 		if (delay == -1) pi->delay = pi->proto->default_delay;
 		  else pi->delay = delay;
 		pi->devtype = devtype;
 		pi->device = device;
-		pi->private = 0;
 
 		pi->parname = NULL;
 		pi->pardev = NULL;
@@ -361,7 +370,7 @@ int pi_init(PIA *pi, int autoprobe, int port, int mode,
 			   if (pi_probe_unit(pi,unit,scratch,verbose)) break;
       			if (pi->port) break;
 		}
-		pi->proto->dec_use();
+		pi->proto->release_proto(pi);
 	  }
 	}
 
@@ -440,11 +449,21 @@ void	paride_init( void )
           pi_register(&frpw);
         };
 #endif
+#ifdef CONFIG_PARIDE_FIT2
+        { extern struct pi_protocol fit2;
+          pi_register(&fit2);
+        };
+#endif
 #ifdef CONFIG_PARIDE_KBIC
         { extern struct pi_protocol k951;
           extern struct pi_protocol k971;
           pi_register(&k951);
           pi_register(&k971);
+        };
+#endif
+#ifdef CONFIG_PARIDE_KTTI
+        { extern struct pi_protocol ktti;
+          pi_register(&ktti);
         };
 #endif
 #ifdef CONFIG_PARIDE_ON20

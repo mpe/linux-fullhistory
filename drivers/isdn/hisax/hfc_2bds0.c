@@ -1042,7 +1042,7 @@ hfc2bds0_interrupt(struct IsdnCardState *cs, u_char val)
 				del_timer(&cs->dbusytimer);
 			if (test_and_clear_bit(FLG_L1_DBUSY, &cs->HW_Flags))
 				sched_event_D(cs, D_CLEARBUSY);
-			if (cs->tx_skb)
+			if (cs->tx_skb) {
 				if (cs->tx_skb->len) {
 					if (!test_and_set_bit(FLG_LOCK_ATOMIC, &cs->HW_Flags)) {
 						hfc_fill_dfifo(cs);
@@ -1056,6 +1056,7 @@ hfc2bds0_interrupt(struct IsdnCardState *cs, u_char val)
 					cs->tx_cnt = 0;
 					cs->tx_skb = NULL;
 				}
+			}
 			if ((cs->tx_skb = skb_dequeue(&cs->sq))) {
 				cs->tx_cnt = 0;
 				if (!test_and_set_bit(FLG_LOCK_ATOMIC, &cs->HW_Flags)) {

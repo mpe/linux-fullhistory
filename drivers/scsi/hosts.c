@@ -575,6 +575,7 @@ __initfunc(unsigned int scsi_init(void))
 {
     static int called = 0;
     int i, pcount;
+    unsigned long flags;
     Scsi_Host_Template * tpnt;
     struct Scsi_Host * shpnt;
     const char * name;
@@ -590,9 +591,27 @@ __initfunc(unsigned int scsi_init(void))
 	 */
 	
 	pcount = next_scsi_host;
-	if ((tpnt->detect) &&
-	    (tpnt->present =
-	     tpnt->detect(tpnt)))
+	if (tpnt->detect) {
+
+           /* The detect routine must carefully spinunlock/spinlock if 
+              it enables interrupts, since all interrupt handlers do 
+              spinlock as well.
+              All lame drivers are going to fail due to the following 
+              spinlock. For the time beeing let's use it only for drivers 
+              using the new scsi code. NOTE: the detect routine could
+              redefine the value tpnt->use_new_eh_code. (DB, 13 May 1998) */
+
+           if (tpnt->use_new_eh_code) {
+              spin_lock_irqsave(&io_request_lock, flags);
+              tpnt->present = tpnt->detect(tpnt);
+              spin_unlock_irqrestore(&io_request_lock, flags);
+              }
+           else
+              tpnt->present = tpnt->detect(tpnt);
+
+           }
+
+	if (tpnt->detect && tpnt->present)
 	{
 	    /* The only time this should come up is when people use
 	     * some kind of patched driver of some kind or another. */

@@ -872,13 +872,14 @@ __initfunc(static void xd_wd_init_drive (u_char drive))
 			xd_info[drive].ecc = 0x0B;
 #endif /* 0 */
 		}
-		if (!wd_1002)
+		if (!wd_1002) {
 			if (use_jumper_geo)
 				xd_setparam(CMD_WDSETPARAM,drive,xd_info[drive].heads,xd_info[drive].cylinders,
 					geometry_table[n][2],geometry_table[n][3],0x0B);
 			else
 				xd_setparam(CMD_WDSETPARAM,drive,xd_info[drive].heads,xd_info[drive].cylinders,
 					((u_short *) (buf))[0xD8],((u_short *) (buf))[0xDA],buf[0x1B4]);
+		}
 	/* 1002 based RLL controler requests converted adressing, but reports physical 
 	   (physical 26 sec., logical 17 sec.) 
 	   1004 based ???? */

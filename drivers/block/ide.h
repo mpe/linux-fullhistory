@@ -670,7 +670,7 @@ void ide_stall_queue (ide_drive_t *drive, unsigned long timeout);
  */
 struct request **ide_get_queue (kdev_t dev);
 
-int  ide_spin_wait_hwgroup(const char *msg, ide_drive_t *drive, unsigned long *flags);
+int  ide_spin_wait_hwgroup(ide_drive_t *drive, unsigned long *flags);
 void ide_timer_expiry (unsigned long data);
 void ide_intr (int irq, void *dev_id, struct pt_regs *regs);
 void ide_geninit (struct gendisk *gd);

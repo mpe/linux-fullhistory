@@ -422,6 +422,18 @@ static struct dev_name_struct {
 #ifdef CONFIG_BLK_DEV_PS2
 	{ "eda",     0x2400 },
 #endif
+#ifdef CONFIG_PARIDE_PD
+	{ "pda",	0x2d00 },
+	{ "pdb",	0x2d10 },
+	{ "pdc",	0x2d20 },
+	{ "pdd",	0x2d30 },
+#endif
+#ifdef CONFIG_PARIDE_PCD
+	{ "pcd",	0x2e00 },
+#endif
+#ifdef CONFIG_PARIDE_PF
+	{ "pf",		0x2f00 },
+#endif
 #if CONFIG_APBLOCK
 	{ "apblock", APBLOCK_MAJOR << 8},
 #endif

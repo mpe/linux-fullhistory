@@ -1,7 +1,7 @@
 
 		Linux and parallel port IDE devices
 
-PARIDE v1.0   (c) 1997  Grant Guenther <grant@torque.net>
+PARIDE v1.02   (c) 1997-8  Grant Guenther <grant@torque.net>
 
 1. Introduction
 
@@ -38,6 +38,7 @@ parallel port IDE subsystem, including:
 	MicroSolutions backpack CD-ROM
 	MicroSolutions backpack PD/CD
 	MicroSolutions backpack hard-drives
+	MicroSolutions backpack 8000t tape drive
 	SyQuest EZ-135, EZ-230 & SparQ drives
 	Avatar Shark
 	Imation Superdisk LS-120
@@ -57,8 +58,7 @@ high-level drivers for each of the different type of supported device:
 	pf	ATAPI disk
 	pt	ATAPI tape
 
-(Support for ATAPI CD-R and CD-RW drives is not yet in development,
-but this may change.)
+(Support for ATAPI CD-R and CD-RW drives is in the design phase.)
 
 The high-level drivers function according to the relevant standards.
 The third component of PARIDE is a set of low-level protocol drivers
@@ -72,13 +72,12 @@ support is available for almost all known adapter protocols:
         dstr    DataStor EP-2000                       (TW)
         epat    Shuttle EPAT                           (UK)
         epia    Shuttle EPIA                           (UK)
+	fit2    FIT TD-2000
         frpw    Freecom Power                          (DE)
         kbic    KingByte KBIC-951A and KBIC-971A       (TW)
+	ktti    KT Technology PHd adapter              (SG)
         on20    OnSpec 90c20                           (US)
         on26    OnSpec 90c26                           (US)
-
-(A driver for some modes of the Noveca RAP// protocol is also under 
-development).	
 
 
 2. Using the PARIDE subsystem
@@ -106,6 +105,7 @@ and high-level drivers that you would use:
 	MicroSolutions		CD-ROM		pcd	bpck
 	MicroSolutions		PD drive	pf	bpck
 	MicroSolutions		hard-drive	pd	bpck
+	MicroSolutions          8000t tape      pt      bpck
 	SyQuest			EZ, SparQ	pd	epat
 	Imation			Superdisk	pf	epat
 	Avatar			Shark		pd	epat

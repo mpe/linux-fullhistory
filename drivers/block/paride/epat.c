@@ -1,6 +1,6 @@
 /* 
-        epat.c  (c) 1997  Grant R. Guenther <grant@torque.net>
-                          Under the terms of the GNU public license.
+        epat.c  (c) 1997-8  Grant R. Guenther <grant@torque.net>
+                            Under the terms of the GNU public license.
 
 	This is the low level protocol driver for the EPAT parallel
         to IDE adapter from Shuttle Technologies.  This adapter is
@@ -9,7 +9,13 @@
 	
 */
 
-#define EPAT_VERSION      "1.0"
+/* Changes:
+
+        1.01    GRG 1998.05.06 init_proto, release_proto
+
+*/
+
+#define EPAT_VERSION      "1.01"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -272,12 +278,12 @@ static void epat_log_adapter( PIA *pi, char * scratch, int verbose )
 
 }
 
-static void epat_inc_use ( void )
+static void epat_init_proto( PIA *pi)
 
 {  	MOD_INC_USE_COUNT;
 }
 
-static void epat_dec_use ( void )
+static void epat_release_proto( PIA *pi)
 
 {	MOD_DEC_USE_COUNT;
 }
@@ -293,8 +299,8 @@ struct pi_protocol epat = {"epat",0,6,3,1,1,
 			   0,
 			   epat_test_proto,
 			   epat_log_adapter,
-			   epat_inc_use, 
-			   epat_dec_use 
+			   epat_init_proto,
+			   epat_release_proto
 			  };
 
 

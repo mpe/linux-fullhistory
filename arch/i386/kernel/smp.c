@@ -365,7 +365,7 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 					printk("I/O APIC #%d Version %d at 0x%lX.\n",
 						m->mpc_apicid,m->mpc_apicver,
 						m->mpc_apicaddr);
-					io_apic_addr = (unsigned long)phys_to_virt(m->mpc_apicaddr);
+					io_apic_addr = m->mpc_apicaddr;
 				}
 				mpt+=sizeof(*m);
 				count+=sizeof(*m);
@@ -1526,7 +1526,7 @@ asmlinkage void smp_mtrr_interrupt(void)
  */
 asmlinkage void smp_spurious_interrupt(void)
 {
-	ack_APIC_irq ();
+	/* ack_APIC_irq ();   see sw-dev-man vol 3, chapter 7.4.13.5 */
 	printk("spurious APIC interrupt, ayiee, should never happen.\n");
 }
 

@@ -1,5 +1,5 @@
 /*
- *	$Id: proc.c,v 1.10 1998/04/16 20:48:30 mj Exp $
+ *	$Id: proc.c,v 1.13 1998/05/12 07:36:07 mj Exp $
  *
  *	Procfs interface for the PCI bus.
  *
@@ -280,41 +280,63 @@ static struct proc_dir_entry proc_pci_devices = {
 	get_pci_dev_info
 };
 
-__initfunc(void proc_bus_pci_add(struct pci_bus *bus, struct proc_dir_entry *proc_pci))
+static struct proc_dir_entry *proc_bus_pci_dir;
+
+int pci_proc_attach_device(struct pci_dev *dev)
+{
+	struct pci_bus *bus = dev->bus;
+	struct proc_dir_entry *de, *e;
+	char name[16];
+
+	if (!(de = bus->procdir)) {
+		sprintf(name, "%02x", bus->number);
+		de = bus->procdir = create_proc_entry(name, S_IFDIR, proc_bus_pci_dir);
+		if (!de)
+			return -ENOMEM;
+	}
+	sprintf(name, "%02x.%x", PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
+	e = dev->procent = create_proc_entry(name, S_IFREG | S_IRUGO | S_IWUSR, de);
+	if (!e)
+		return -ENOMEM;
+	e->ops = &proc_bus_pci_inode_operations;
+	e->data = dev;
+	e->size = PCI_CFG_SPACE_SIZE;
+	return 0;
+}
+
+int pci_proc_detach_device(struct pci_dev *dev)
+{
+	struct proc_dir_entry *e;
+
+	if ((e = dev->procent)) {
+		if (e->count)
+			return -EBUSY;
+		remove_proc_entry(e->name, dev->bus->procdir);
+		dev->procent = NULL;
+	}
+	return 0;
+}
+
+__initfunc(void proc_bus_pci_add(struct pci_bus *bus))
 {
 	while (bus) {
-		char name[16];
-		struct proc_dir_entry *de;
 		struct pci_dev *dev;
 
-		sprintf(name, "%02x", bus->number);
-		de = create_proc_entry(name, S_IFDIR, proc_pci);
-		for(dev = bus->devices; dev; dev = dev->sibling) {
-			struct proc_dir_entry *e;
-
-			sprintf(name, "%02x.%x",
-				PCI_SLOT(dev->devfn),
-				PCI_FUNC(dev->devfn));
-			e = create_proc_entry(name, S_IFREG | S_IRUGO | S_IWUSR, de);
-			e->ops = &proc_bus_pci_inode_operations;
-			e->data = dev;
-			e->size = PCI_CFG_SPACE_SIZE;
-		}
+		for(dev = bus->devices; dev; dev = dev->sibling)
+			pci_proc_attach_device(dev);
 		if (bus->children)
-			proc_bus_pci_add(bus->children, proc_pci);
+			proc_bus_pci_add(bus->children);
 		bus = bus->next;
 	}
 }
 
 __initfunc(void pci_proc_init(void))
 {
-	struct proc_dir_entry *proc_pci;
-
 	if (!pci_present())
 		return;
-	proc_pci = create_proc_entry("pci", S_IFDIR, proc_bus);
-	proc_register(proc_pci, &proc_pci_devices);
-	proc_bus_pci_add(&pci_root, proc_pci);
+	proc_bus_pci_dir = create_proc_entry("pci", S_IFDIR, proc_bus);
+	proc_register(proc_bus_pci_dir, &proc_pci_devices);
+	proc_bus_pci_add(&pci_root);
 
 #ifdef CONFIG_PCI_OLD_PROC
 	proc_old_pci_init();

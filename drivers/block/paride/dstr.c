@@ -1,13 +1,19 @@
 /* 
-        dstr.c    (c) 1997  Grant R. Guenther <grant@torque.net>
-                            Under the terms of the GNU public license.
+        dstr.c    (c) 1997-8  Grant R. Guenther <grant@torque.net>
+                              Under the terms of the GNU public license.
 
         dstr.c is a low-level protocol driver for the 
         DataStor EP2000 parallel to IDE adapter chip.
 
 */
 
-#define DSTR_VERSION      "1.0"
+/* Changes:
+
+        1.01    GRG 1998.05.06 init_proto, release_proto
+
+*/
+
+#define DSTR_VERSION      "1.01"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -194,12 +200,12 @@ static void dstr_log_adapter( PIA *pi, char * scratch, int verbose )
 
 }
 
-static void dstr_inc_use ( void )
+static void dstr_init_proto( PIA *pi)
 
 {       MOD_INC_USE_COUNT;
 }
 
-static void dstr_dec_use ( void )
+static void dstr_release_proto( PIA *pi)
 
 {       MOD_DEC_USE_COUNT;
 }
@@ -215,8 +221,8 @@ struct pi_protocol dstr = {"dstr",0,5,2,1,1,
                            0,
                            0,
                            dstr_log_adapter,
-                           dstr_inc_use, 
-                           dstr_dec_use 
+                           dstr_init_proto,
+                           dstr_release_proto
                           };
 
 

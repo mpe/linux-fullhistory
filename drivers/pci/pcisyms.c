@@ -1,5 +1,5 @@
 /*
- *	$Id: pcisyms.c,v 1.7 1998/05/02 19:20:06 mj Exp $
+ *	$Id: pcisyms.c,v 1.8 1998/05/12 07:36:04 mj Exp $
  *
  *	PCI Bus Services -- Exported Symbols
  *
@@ -28,6 +28,8 @@ EXPORT_SYMBOL(pci_find_class);
 EXPORT_SYMBOL(pci_find_device);
 EXPORT_SYMBOL(pci_find_slot);
 EXPORT_SYMBOL(pci_set_master);
+EXPORT_SYMBOL(pci_proc_attach_device);
+EXPORT_SYMBOL(pci_proc_detach_device);
 
 /* Backward compatibility */
 

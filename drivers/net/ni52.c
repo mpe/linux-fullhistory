@@ -366,11 +366,11 @@ __initfunc(int ni52_probe(struct device *dev))
 #endif
 	int base_addr = dev->base_addr;
 
-	if (base_addr > 0x1ff)		/* Check a single specified location. */
+	if (base_addr > 0x1ff) {		/* Check a single specified location. */
 		if( (inb(base_addr+NI52_MAGIC1) == NI52_MAGICVAL1) &&
 				(inb(base_addr+NI52_MAGIC2) == NI52_MAGICVAL2))
 			return ni52_probe1(dev, base_addr);
-	else if (base_addr > 0)		/* Don't probe at all. */
+	} else if (base_addr > 0)		/* Don't probe at all. */
 		return ENXIO;
 
 #ifdef MODULE

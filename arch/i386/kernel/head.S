@@ -152,6 +152,23 @@ checkCPUtype:
  * apply at our cpl of 0 and the stack ought to be aligned already, and
  * we don't need to preserve eflags.
  */
+
+/*
+ * Don't do this here. Do it in the CPU init code in C, right now we
+ * must _not_ play unsafe games with the IO ports.
+ *
+ * A PPro and a P-II will also preserve the flags after a division,
+ * so this "cyrix" test is just completely unsafe. IO port 0x22 is
+ * some magic ACPI port on non-cyrix chips, so if this trashes that
+ * we're screwed.
+ *
+ * This code belongs in "asm-i386/bugs.h" anyway (at which point we
+ * _have_ done a CPUID for CPU's that support it directly, so we'll
+ * be able to tell a intel P-II trivially at that point).
+ */
+#undef CYRIX_CODE_BREAKAGE
+#ifdef CYRIX_CODE_BREAKAGE
+
 	/*
 	 * A Cyrix preserves flags in cases where other CPUs change
 	 * them in undefined ways. We need to know this since we may
@@ -206,7 +223,11 @@ checkCPUtype:
 
 	setCx86($0xc3,%cl)	# Restore old CCR3
 
-ncyrix:	movl $3,X86		# at least 386
+ncyrix:
+
+#endif
+
+	movl $3,X86		# at least 386
 	pushfl			# push EFLAGS
 	popl %eax		# get EFLAGS
 	movl %eax,%ecx		# save original EFLAGS
@@ -256,6 +277,8 @@ ncyrix:	movl $3,X86		# at least 386
 	movl %edx,X86_CAPABILITY
 
 nocpuid:
+
+#ifdef CYRIX_CODE_BREAKAGE
 	/*
 	 * Even if we had CPUID Cyrix tries to look compatible with
 	 * Intel so we have to go elsewhere for the nitty gritty.
@@ -289,8 +312,10 @@ nocpuid:
 	andb $0xfd,%al		# works well on 6x86(L) CPU's.
 	movb %al,%bl
 	setCx86($0xe9,%bl)
+#endif
 
-is486:	movl %cr0,%eax		# 486 or better
+is486:
+	movl %cr0,%eax		# 486 or better
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl $0x50022,%eax	# set AM, WP, NE and MP
 	jmp 2f

@@ -62,7 +62,7 @@ void die(const char * str, ...)
 
 #define MINIX_HEADER_LEN 32
 
-int minix_open(const char *name)
+void minix_open(const char *name)
 {
 	static byte hdr[] = { 0x01, 0x03, 0x10, 0x04, 0x20, 0x00, 0x00, 0x00 };
 	static u32 *lb = (u32 *) buf;

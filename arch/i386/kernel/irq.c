@@ -761,55 +761,94 @@ static inline void self_IPI (unsigned int irq)
 	}
 }
 
+/*
+ * Edge triggered needs to resend any interrupt
+ * that was delayed.
+ */
 static void enable_edge_ioapic_irq(unsigned int irq)
 {
 	self_IPI(irq);
+	enable_IO_APIC_irq(irq);
 }
 
 static void disable_edge_ioapic_irq(unsigned int irq)
-{
-}
-
-static void enable_level_ioapic_irq(unsigned int irq)
-{
-	enable_IO_APIC_irq(irq);
-	self_IPI(irq);
-}
-
-static void disable_level_ioapic_irq(unsigned int irq)
 {
 	disable_IO_APIC_irq(irq);
 }
 
 /*
- * Has to be called with the irq controller locked, and has to exit
- * with with the lock held as well.
+ * Level triggered interrupts can just be masked
  */
-static void handle_ioapic_event (unsigned int irq, int cpu,
-						struct pt_regs * regs)
+static void enable_level_ioapic_irq(unsigned int irq)
+{
+	unmask_IO_APIC_irq(irq);
+}
+
+static void disable_level_ioapic_irq(unsigned int irq)
+{
+	mask_IO_APIC_irq(irq);
+}
+
+/*
+ * Enter and exit the irq handler context..
+ */
+static inline void enter_ioapic_irq(int cpu)
+{
+	hardirq_enter(cpu);
+	while (test_bit(0,&global_irq_lock)) barrier();
+}
+
+static inline void exit_ioapic_irq(int cpu)
+{
+	hardirq_exit(cpu);
+	release_irqlock(cpu);
+}	
+
+static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 {
 	irq_desc_t *desc = irq_desc + irq;
+	struct irqaction * action;
 
-	desc->status = IRQ_INPROGRESS;
-	desc->events = 0;
-	hardirq_enter(cpu);
+	spin_lock(&irq_controller_lock);
+
+	/*
+	 * Edge triggered IRQs can be acked immediately
+	 * and do not need to be masked.
+	 */
+	ack_APIC_irq();
+	desc->ipi = 0;
+	desc->events = 1;
+
+	/*
+	 * If the irq is disabled for whatever reason, we cannot
+	 * use the action we have..
+	 */
+	action = NULL;
+	if (!(desc->status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
+		action = desc->action;
+		desc->status = IRQ_INPROGRESS;
+		desc->events = 0;
+	}
 	spin_unlock(&irq_controller_lock);
 
-	while (test_bit(0,&global_irq_lock)) barrier();
+	/*
+	 * If there is no IRQ handler or it was disabled, exit early.
+	 */
+	if (!action)
+		return;
 
+	enter_ioapic_irq(cpu);
+
+	/*
+	 * Edge triggered interrupts need to remember
+	 * pending events..
+	 */
 	for (;;) {
-		int pending, handler;
+		int pending;
 
-		/*
-		 * If there is no IRQ handler, exit early, leaving the irq
-		 * "in progress"
-		 */
-		handler = handle_IRQ_event(irq, regs);
+		handle_IRQ_event(irq, regs);
 
 		spin_lock(&irq_controller_lock);
-		if (!handler)
-			goto no_handler;
-
 		pending = desc->events;
 		desc->events = 0;
 		if (!pending)
@@ -817,43 +856,16 @@ static void handle_ioapic_event (unsigned int irq, int cpu,
 		spin_unlock(&irq_controller_lock);
 	}
 	desc->status &= IRQ_DISABLED;
-
-no_handler:
-}
-
-static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
-{
-	irq_desc_t *desc = irq_desc + irq;
-
-	/*
-	 * Edge triggered IRQs can be acked immediately
-	 */
-	ack_APIC_irq();
-
-	spin_lock(&irq_controller_lock);
-	desc->ipi = 0;
-
-	/*
-	 * If the irq is disabled for whatever reason, just
-	 * set a flag and return
-	 */
-	if (desc->status & (IRQ_DISABLED | IRQ_INPROGRESS)) {
-		desc->events = 1;
-		spin_unlock(&irq_controller_lock);
-		return;
-	}
-
-	handle_ioapic_event(irq,cpu,regs);
 	spin_unlock(&irq_controller_lock);
 
-	hardirq_exit(cpu);
-	release_irqlock(cpu);
+	exit_ioapic_irq(cpu);
 }
 
 static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
 						 struct pt_regs * regs)
 {
 	irq_desc_t *desc = irq_desc + irq;
+	struct irqaction * action;
 
 	spin_lock(&irq_controller_lock);
 	/*
@@ -864,28 +876,38 @@ static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
 	 * disable has to happen before the ACK, to avoid IRQ storms.
 	 * So this all has to be within the spinlock.
 	 */
-	disable_IO_APIC_irq(irq);
-	ack_APIC_irq();
+	mask_IO_APIC_irq(irq);
+
 	desc->ipi = 0;
 
 	/*
-	 * If the irq is disabled for whatever reason, just
-	 * set a flag and return
+	 * If the irq is disabled for whatever reason, we must
+	 * not enter the irq action.
 	 */
-	if (desc->status & (IRQ_DISABLED | IRQ_INPROGRESS)) {
-		desc->events = 1;
-		spin_unlock(&irq_controller_lock);
-		return;
+	action = NULL;
+	if (!(desc->status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
+		action = desc->action;
+		desc->status = IRQ_INPROGRESS;
 	}
 
-	handle_ioapic_event(irq,cpu,regs);
-	/* we still have the spinlock held here */
-
-	enable_IO_APIC_irq(irq);
+	ack_APIC_irq();
 	spin_unlock(&irq_controller_lock);
 
-	hardirq_exit(cpu);
-	release_irqlock(cpu);
+	/* Exit early if we had no action or it was disabled */
+	if (!action)
+		return;
+
+	enter_ioapic_irq(cpu);
+
+	handle_IRQ_event(irq, regs);
+
+	spin_lock(&irq_controller_lock);
+	desc->status &= ~IRQ_INPROGRESS;
+	if (!desc->status)
+		unmask_IO_APIC_irq(irq);
+	spin_unlock(&irq_controller_lock);
+
+	exit_ioapic_irq(cpu);
 }
 
 #endif
@@ -1100,7 +1122,8 @@ void free_irq(unsigned int irq, void *dev_id)
 		/* Found it - now free it */
 		*p = action->next;
 		kfree(action);
-		irq_desc[irq].handler->disable(irq);
+		if (!irq_desc[irq].action)
+			irq_desc[irq].handler->disable(irq);
 		goto out;
 	}
 	printk("Trying to free free IRQ%d\n",irq);
@@ -1127,6 +1150,7 @@ unsigned long probe_irq_on (void)
 	spin_lock_irq(&irq_controller_lock);
 	for (i = NR_IRQS-1; i > 0; i--) {
 		if (!irq_desc[i].action) {
+			irq_desc[i].status = 0;
 			irq_desc[i].handler->enable(i);
 			irqs |= (1 << i);
 		}
@@ -1194,8 +1218,8 @@ void init_IO_APIC_traps(void)
 		    (IO_APIC_IRQ(i))) {
 			if (IO_APIC_irq_trigger(i))
 				irq_desc[i].handler = &ioapic_level_irq_type;
-			else /* edge */
-				irq_desc[i].handler = &ioapic_level_irq_type;
+			else
+				irq_desc[i].handler = &ioapic_edge_irq_type;
 			/*
 			 * disable it in the 8259A:
 			 */

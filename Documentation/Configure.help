@@ -626,6 +626,17 @@ CONFIG_PARIDE_EPIA
   The module will be called epia.o.  You must also have a high-level 
   driver for the type of device that you want to support.
 
+FIT TD-2000 protocol
+CONFIG_PARIDE_FIT2
+  This option enables support for the TD-2000 parallel port IDE protocol
+  from Fidelity International Technology.  This is a simple (low speed) 
+  adapter that is used in some portable hard drives.  If you chose to 
+  build PARIDE support into your kernel, you may answer Y here to 
+  build in the protocol driver, otherwise you should answer M to 
+  build it as a loadable module.  The module will be called ktti.o.  
+  You must also have a high-level driver for the type of device 
+  that you want to support.
+
 FreeCom power protocol
 CONFIG_PARIDE_FRPW 
   This option enables support for the Freecom power parallel port IDE 
@@ -645,6 +656,17 @@ CONFIG_PARIDE_KBIC
   answer M to build it as a loadable module.  The module will be called 
   kbic.o.  You must also have a high-level driver for the type of device 
   that you want to support.
+
+KT PHd protocol
+CONFIG_PARIDE_KTTI
+  This option enables support for the "PHd" parallel port IDE protocol
+  from KT Technology.  This is a simple (low speed) adapter that is
+  used in some 2.5" portable hard drives.  If you chose to build PARIDE 
+  support into your kernel, you may answer Y here to build in the 
+  protocol driver, otherwise you should answer M to build it as a 
+  loadable module.  The module will be called ktti.o.  You must also 
+  have a high-level driver for the type of device that you want to
+  support.
 
 OnSpec 90c20 protocol
 CONFIG_PARIDE_ON20 

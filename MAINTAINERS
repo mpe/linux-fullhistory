@@ -581,6 +581,12 @@ M:	dario@milano.europe.dg.com
 L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
+UMSDOS FILESYSTEM
+P:	Matija Nalis
+M:	mnalis@jagor.srce.hr
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 UNIFORM CDROM DRIVER 
 P:	Erik Andersen
 M:	andersee@debian.org

@@ -565,11 +565,12 @@ int sdla_assoc(struct device *slave, struct device *master)
 	flp->dlci[i] = -*(short *)(master->dev_addr);
 	master->mtu = slave->mtu;
 
-	if (slave->start)
+	if (slave->start) {
 		if (flp->config.station == FRAD_STATION_CPE)
 			sdla_reconfig(slave);
 		else
 			sdla_cmd(slave, SDLA_ADD_DLCI, 0, 0, master->dev_addr, sizeof(short), NULL, NULL);
+	}
 
 	return(0);
 }
@@ -593,11 +594,12 @@ int sdla_deassoc(struct device *slave, struct device *master)
 
 	MOD_DEC_USE_COUNT;
 
-	if (slave->start)
+	if (slave->start) {
 		if (flp->config.station == FRAD_STATION_CPE)
 			sdla_reconfig(slave);
 		else
 			sdla_cmd(slave, SDLA_DELETE_DLCI, 0, 0, master->dev_addr, sizeof(short), NULL, NULL);
+	}
 
 	return(0);
 }
@@ -622,13 +624,14 @@ int sdla_dlci_conf(struct device *slave, struct device *master, int get)
 
 	ret = SDLA_RET_OK;
 	len = sizeof(struct dlci_conf);
-	if (slave->start)
+	if (slave->start) {
 		if (get)
 			ret = sdla_cmd(slave, SDLA_READ_DLCI_CONFIGURATION, abs(flp->dlci[i]), 0,  
 			            NULL, 0, &dlp->config, &len);
 		else
 			ret = sdla_cmd(slave, SDLA_SET_DLCI_CONFIGURATION, abs(flp->dlci[i]), 0,  
 			            &dlp->config, sizeof(struct dlci_conf) - 4 * sizeof(short), NULL, NULL);
+	}
 
 	return(ret == SDLA_RET_OK ? 0 : -EIO);
 }

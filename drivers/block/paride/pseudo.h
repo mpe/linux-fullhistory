@@ -1,6 +1,6 @@
 /* 
-        pseudo.h    (c) 1997  Grant R. Guenther <grant@torque.net>
-                              Under the terms of the GNU public license.
+        pseudo.h    (c) 1997-8  Grant R. Guenther <grant@torque.net>
+                                Under the terms of the GNU public license.
 
 	This is the "pseudo-interrupt" logic for parallel port drivers.
 
@@ -22,6 +22,14 @@
 
 */
 
+/* Changes:
+
+	1.01	1998.05.03	Switched from cli()/sti() to spinlocks
+
+*/
+	
+#define PS_VERSION	"1.01"
+
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/tqueue.h>
@@ -37,6 +45,8 @@ static int ps_timeout;
 static int ps_timer_active = 0;
 static int ps_tq_active = 0;
 
+spinlock_t ps_spinlock = SPIN_LOCK_UNLOCKED;
+
 static struct timer_list ps_timer = {0,0,0,0,ps_timer_int};
 static struct tq_struct ps_tq = {0,0,ps_tq_int,NULL};
 
@@ -46,8 +56,7 @@ static void ps_set_intr( void (*continuation)(void),
 
 {       long	flags;
 
-	save_flags(flags); 
-	cli();
+	spin_lock_irqsave(&ps_spinlock,flags);
 
 	ps_continuation = continuation;
 	ps_ready = ready;
@@ -69,7 +78,7 @@ static void ps_set_intr( void (*continuation)(void),
                 add_timer(&ps_timer);
         }
 
-	restore_flags(flags);
+	spin_unlock_irqrestore(&ps_spinlock,flags);
 }
 
 static void ps_tq_int( void *data )
@@ -77,8 +86,7 @@ static void ps_tq_int( void *data )
 {       void (*con)(void);
 	long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&ps_spinlock,flags);
 
         con = ps_continuation;
 
@@ -89,12 +97,12 @@ static void ps_tq_int( void *data )
         ps_tq_active = 0;
 
         if (!con) {
-		restore_flags(flags);
+		spin_unlock_irqrestore(&ps_spinlock,flags);
 		return;
 	}
-        if (ps_ready() || (jiffies >= ps_timeout)) {
+        if (!ps_ready || ps_ready() || (jiffies >= ps_timeout)) {
                 ps_continuation = NULL;
-		restore_flags(flags);
+        	spin_unlock_irqrestore(&ps_spinlock,flags);
                 con();
                 return;
                 }
@@ -105,7 +113,7 @@ static void ps_tq_int( void *data )
 
         ps_tq_active = 1;
 	queue_task(&ps_tq,&tq_scheduler);
-	restore_flags(flags);
+        spin_unlock_irqrestore(&ps_spinlock,flags);
 }
 
 static void ps_timer_int( unsigned long data)
@@ -113,25 +121,24 @@ static void ps_timer_int( unsigned long data)
 {       void (*con)(void);
 	long	flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&ps_spinlock,flags);
 
 	con = ps_continuation;
 	ps_timer_active = 0;
 	if (!con) {
-		restore_flags(flags);
+	        spin_unlock_irqrestore(&ps_spinlock,flags);
 		return;
 	}
-        if (ps_ready() || (jiffies >= ps_timeout)) {
+        if (!ps_ready || ps_ready() || (jiffies >= ps_timeout)) {
                 ps_continuation = NULL;
-		restore_flags(flags);
+	        spin_unlock_irqrestore(&ps_spinlock,flags);
                 con();
 		return;
 		}
 	ps_timer_active = 1;
         ps_timer.expires = jiffies;
         add_timer(&ps_timer);
-	restore_flags(flags);
+        spin_unlock_irqrestore(&ps_spinlock,flags);
 }
 
 /* end of pseudo.h */

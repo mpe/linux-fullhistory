@@ -724,10 +724,10 @@ static int set_dqblk(kdev_t dev, int id, short type, int flags, struct dqblk *dq
 	if (dqblk == (struct dqblk *)NULL)
 		return(-EFAULT);
 
-	if (flags & QUOTA_SYSCALL)
+	if (flags & QUOTA_SYSCALL) {
 		if ((error = copy_from_user((caddr_t)&dq_dqblk, (caddr_t)dqblk, sizeof(struct dqblk))) != 0)
 			return(error);
-	else
+	} else
 		memcpy((caddr_t)&dq_dqblk, (caddr_t)dqblk, sizeof(struct dqblk));
 
 	if ((dquot = dqget(dev, id, type)) != NODQUOT) {

@@ -650,11 +650,12 @@ l2_got_ua(struct FsmInst *fi, int event, void *arg)
 			FsmAddTimer(&st->l2.t200, st->l2.T200, EV_L2_T200, NULL, 4);
 			test_and_set_bit(FLG_T200_RUN, &st->l2.flag);
 		} else {
-			if (!test_and_clear_bit(FLG_L3_INIT, &st->l2.flag))
+			if (!test_and_clear_bit(FLG_L3_INIT, &st->l2.flag)) {
 				if (st->l2.vs != st->l2.va)
 					discard_i_queue(st);
 				else
 					est = 0;
+			}
 			st->l2.vs = 0;
 			st->l2.va = 0;
 			st->l2.vr = 0;

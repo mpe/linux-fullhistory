@@ -1,6 +1,6 @@
 /*
-        kbic.c    (c) 1997  Grant R. Guenther <grant@torque.net>
-                            Under the terms of the GNU public license.
+        kbic.c    (c) 1997-8  Grant R. Guenther <grant@torque.net>
+                              Under the terms of the GNU public license.
 
         This is a low-level driver for the KBIC-951A and KBIC-971A
         parallel to IDE adapter chips from KingByte Information Systems.
@@ -12,7 +12,13 @@
 
 */
 
-#define KBIC_VERSION      "1.0"
+/* Changes:
+
+        1.01    GRG 1998.05.06 init_proto, release_proto
+
+*/
+
+#define KBIC_VERSION      "1.01"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -241,12 +247,12 @@ static void k971_log_adapter( PIA *pi, char * scratch, int verbose )
 {       kbic_log_adapter(pi,scratch,verbose,"KBIC-971A");
 }
 
-static void kbic_inc_use ( void )
+static void kbic_init_proto( PIA *pi)
 
 {       MOD_INC_USE_COUNT;
 }
 
-static void kbic_dec_use ( void )
+static void kbic_release_proto( PIA *pi)
 
 {       MOD_DEC_USE_COUNT;
 }
@@ -262,8 +268,8 @@ struct pi_protocol k951 = {"k951",0,6,3,1,1,
                            0,
                            0,
                            k951_log_adapter,
-                           kbic_inc_use, 
-                           kbic_dec_use 
+                           kbic_init_proto,
+                           kbic_release_proto
   			  };
 
 
@@ -278,8 +284,8 @@ struct pi_protocol k971 = {"k971",0,6,3,1,1,
                            0,
                            0,
                            k971_log_adapter,
-                           kbic_inc_use, 
-                           kbic_dec_use 
+                           kbic_init_proto,
+                           kbic_release_proto
                           };
 
 #ifdef MODULE

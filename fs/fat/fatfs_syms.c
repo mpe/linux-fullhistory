@@ -52,6 +52,8 @@ EXPORT_SYMBOL(unregister_cvf_format);
 EXPORT_SYMBOL(fat_get_cluster);
 EXPORT_SYMBOL(lock_fat);
 EXPORT_SYMBOL(unlock_fat);
+EXPORT_SYMBOL(fat_dir_ioctl);
+EXPORT_SYMBOL(fat_readpage);
 
 int init_fat_fs(void)
 {

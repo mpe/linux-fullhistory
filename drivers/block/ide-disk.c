@@ -588,7 +588,7 @@ static int set_nowerr(ide_drive_t *drive, int arg)
 {
 	unsigned long flags;
 
-	if (ide_spin_wait_hwgroup("set_nowerr", drive, &flags))
+	if (ide_spin_wait_hwgroup(drive, &flags))
 		return -EBUSY;
 	drive->nowerr = arg;
 	drive->bad_wstat = arg ? BAD_R_STAT : BAD_W_STAT;

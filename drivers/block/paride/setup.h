@@ -1,9 +1,15 @@
 /*
-	setup.h	   (c) 1997 Grant R. Guenther <grant@torque.net>
-		            Under the terms of the GNU public license.
+	setup.h	   (c) 1997-8   Grant R. Guenther <grant@torque.net>
+		                Under the terms of the GNU public license.
 
         This is a table driven setup function for kernel modules
         using the module.variable=val,... command line notation.
+
+*/
+
+/* Changes:
+
+	1.01	GRG 1998.05.05	Allow negative and defaulted values
 
 */
 
@@ -29,7 +35,7 @@ typedef struct setup_tab_t STT;
 
 static void generic_setup( STT t[], int n, char *ss )
 
-{	int	j,k;
+{	int	j,k, sgn;
 
 	k = 0;
 	for (j=0;j<n;j++) {
@@ -47,10 +53,17 @@ static void generic_setup( STT t[], int n, char *ss )
 	ss += (k+1);
 
 	k = 0;
-	while (ss && isdigit(*ss) && (k < t[j].size)) {
-		t[j].iv[k++] = simple_strtoul(ss,NULL,0);
+	while (ss && (k < t[j].size)) {
+		if (!*ss) break;
+		sgn = 1;
+		if (*ss == '-') { ss++; sgn = -1; }
+		if (!*ss) break;
+		if (isdigit(*ss))
+		  t[j].iv[k] = sgn * simple_strtoul(ss,NULL,0);
+		k++; 
 		if ((ss = strchr(ss,',')) != NULL) ss++;
 	}
 }
 
 /* end of setup.h */
+

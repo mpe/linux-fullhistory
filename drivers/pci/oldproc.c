@@ -1,5 +1,5 @@
 /*
- *	$Id: oldproc.c,v 1.12 1998/05/01 10:58:21 mj Exp $
+ *	$Id: oldproc.c,v 1.13 1998/05/07 20:49:50 davem Exp $
  *
  *	Backward-compatible procfs interface for PCI.
  *

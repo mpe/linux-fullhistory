@@ -282,11 +282,16 @@ check_if_enabled:
 		ide_pci_enablebit_t *e = &(d->enablebits[port]);
 		if (e->reg && (pci_read_config_byte(dev, e->reg, &tmp) || (tmp & e->mask) != e->val))
 			continue;	/* port not enabled */
-		ctl = dev->base_address[(2*port)+1] & PCI_BASE_ADDRESS_IO_MASK;
+		if ((dev->class >> 8) != PCI_CLASS_STORAGE_IDE || (dev->class & (port ? 4 : 1)) != 0) {
+			ctl  = dev->base_address[(2*port)+1] & PCI_BASE_ADDRESS_IO_MASK;
+			base = dev->base_address[2*port] & ~7;
+		}
+		if ((ctl && !base) || (base && !ctl)) {
+			printk("%s: inconsistent baseregs (BIOS) for port %d, skipping\n", d->name, port);
+			continue;
+		}
 		if (!ctl)
 			ctl = port ? 0x374 : 0x3f4;	/* use default value */
-		base = dev->base_address[2*port] & ~7;
-
 		if (!base)
 			base = port ? 0x170 : 0x1f0;	/* use default value */
 		if ((hwif = ide_match_hwif(base, d->name)) == NULL)

@@ -21,7 +21,6 @@
  * Ok, so this file may be a mess, but its as efficient as possible while
  * adhering to the above criteria.
  */
-#include <linux/autoconf.h>
 #include <linux/linkage.h>
 
 #include <asm/assembler.h>

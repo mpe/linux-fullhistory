@@ -822,37 +822,57 @@ out:
 	return 1;
 }
 
+/*
+ * This should really be a blocking read-write lock
+ * rather than a semaphore. Anybody want to implement
+ * one?
+ */
+struct semaphore uts_sem = MUTEX;
+
 asmlinkage int sys_newuname(struct new_utsname * name)
 {
-	if (!name)
-		return -EFAULT;
+	int errno = 0;
+
+	down(&uts_sem);
 	if (copy_to_user(name,&system_utsname,sizeof *name))
-		return -EFAULT;
-	return 0;
+		errno = -EFAULT;
+	up(&uts_sem);
+	return errno;
 }
 
 asmlinkage int sys_sethostname(char *name, int len)
 {
+	int errno;
+
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
-	if(copy_from_user(system_utsname.nodename, name, len))
-		return -EFAULT;
-	system_utsname.nodename[len] = 0;
-	return 0;
+	down(&uts_sem);
+	errno = -EFAULT;
+	if (!copy_from_user(system_utsname.nodename, name, len)) {
+		system_utsname.nodename[len] = 0;
+		errno = 0;
+	}
+	up(&uts_sem);
+	return errno;
 }
 
 asmlinkage int sys_gethostname(char *name, int len)
 {
-	int i;
+	int i, errno;
 
 	if (len < 0)
 		return -EINVAL;
+	down(&uts_sem);
 	i = 1 + strlen(system_utsname.nodename);
 	if (i > len)
 		i = len;
-	return copy_to_user(name, system_utsname.nodename, i) ? -EFAULT : 0;
+	errno = 0;
+	if (copy_to_user(name, system_utsname.nodename, i))
+		errno = -EFAULT;
+	up(&uts_sem);
+	return errno;
 }
 
 /*
@@ -861,14 +881,21 @@ asmlinkage int sys_gethostname(char *name, int len)
  */
 asmlinkage int sys_setdomainname(char *name, int len)
 {
+	int errno;
+
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
-	if(copy_from_user(system_utsname.domainname, name, len))
-		return -EFAULT;
-	system_utsname.domainname[len] = 0;
-	return 0;
+
+	down(&uts_sem);
+	errno = -EFAULT;
+	if (!copy_from_user(system_utsname.domainname, name, len)) {
+		errno = 0;
+		system_utsname.domainname[len] = 0;
+	}
+	up(&uts_sem);
+	return errno;
 }
 
 asmlinkage int sys_getrlimit(unsigned int resource, struct rlimit *rlim)

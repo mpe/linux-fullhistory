@@ -17,11 +17,11 @@
 
 #include <asm/system.h>
 
-static int check_one_table(struct pde * page_dir)
+static int check_one_table (struct pde *page_dir)
 {
-	if (pgd_none(*page_dir))
+	if (pgd_none (*page_dir))
 		return 0;
-	if (pgd_bad(*page_dir))
+	if (pgd_bad (*page_dir))
 		return 1;
 	return 0;
 }
@@ -29,23 +29,28 @@ static int check_one_table(struct pde * page_dir)
 /*
  * This function checks all page tables of "current"
  */
-void check_page_tables(void)
+void check_page_tables (void)
 {
-	struct pgd * pg_dir;
+	struct pgd *pg_dir;
 	static int err = 0;
 
-	int stack_level = (long)(&pg_dir)-current->kernel_stack_page;
-	if (stack_level < 1500) printk ("** %d ** ",stack_level);
-	pg_dir = PAGE_DIR_OFFSET(current, 0);
+	int stack_level = (long) (&pg_dir) - current->kernel_stack_page;
+
+	if (stack_level < 1500)
+		printk ("** %d ** ", stack_level);
+	pg_dir = PAGE_DIR_OFFSET (current, 0);
 	if (err == 0) {
 		int i;
-		for (i = 0 ; i < PTRS_PER_PAGE ; i++,page_dir++){
-			int notok = check_one_table(page_dir);
-			if (notok){
+
+		for (i = 0; i < PTRS_PER_PAGE; i++, page_dir++) {
+			int notok = check_one_table (page_dir);
+
+			if (notok) {
 				err++;
-				printk ("|%d:%08lx| ",i, page_dir->pgd);
+				printk ("|%d:%08lx| ", i, page_dir->pgd);
 			}
 		}
-		if (err) printk ("\nErreur MM %d\n",err);
+		if (err)
+			printk ("\nErreur MM %d\n", err);
 	}
 }
