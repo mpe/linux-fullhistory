@@ -90,6 +90,7 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	tmp->devices = tmp->cad = NULL;
 	tmp->flags = 0;
 	tmp->ops = ops;
+	tmp->number = portcount;
 	spin_lock_init (&tmp->lock);
 
 	tmp->name = kmalloc(15, GFP_KERNEL);

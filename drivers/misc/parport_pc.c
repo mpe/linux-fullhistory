@@ -58,71 +58,71 @@ static void parport_pc_null_intr_func(int irq, void *dev_id, struct pt_regs *reg
 	/* Null function - does nothing */
 }
 
-void parport_pc_write_epp(struct parport *p, unsigned int d)
+void parport_pc_write_epp(struct parport *p, unsigned char d)
 {
 	outb(d, p->base+EPPREG);
 }
 
-unsigned int parport_pc_read_epp(struct parport *p)
+unsigned char parport_pc_read_epp(struct parport *p)
 {
-	return (unsigned int)inb(p->base+EPPREG);
+	return inb(p->base+EPPREG);
 }
 
-unsigned int parport_pc_read_configb(struct parport *p)
+unsigned char parport_pc_read_configb(struct parport *p)
 {
-	return (unsigned int)inb(p->base+CONFIGB);
+	return inb(p->base+CONFIGB);
 }
 
-void parport_pc_write_data(struct parport *p, unsigned int d)
+void parport_pc_write_data(struct parport *p, unsigned char d)
 {
 	outb(d, p->base+DATA);
 }
 
-unsigned int parport_pc_read_data(struct parport *p)
+unsigned char parport_pc_read_data(struct parport *p)
 {
-	return (unsigned int)inb(p->base+DATA);
+	return inb(p->base+DATA);
 }
 
-void parport_pc_write_control(struct parport *p, unsigned int d)
+void parport_pc_write_control(struct parport *p, unsigned char d)
 {
 	outb(d, p->base+CONTROL);
 }
 
-unsigned int parport_pc_read_control(struct parport *p)
+unsigned char parport_pc_read_control(struct parport *p)
 {
-	return (unsigned int)inb(p->base+CONTROL);
+	return inb(p->base+CONTROL);
 }
 
-unsigned int parport_pc_frob_control(struct parport *p, unsigned int mask,  unsigned int val)
+unsigned char parport_pc_frob_control(struct parport *p, unsigned char mask,  unsigned char val)
 {
-	unsigned int old = (unsigned int)inb(p->base+CONTROL);
+	unsigned char old = inb(p->base+CONTROL);
 	outb(((old & ~mask) ^ val), p->base+CONTROL);
 	return old;
 }
 
-void parport_pc_write_status(struct parport *p, unsigned int d)
+void parport_pc_write_status(struct parport *p, unsigned char d)
 {
 	outb(d, p->base+STATUS);
 }
 
-unsigned int parport_pc_read_status(struct parport *p)
+unsigned char parport_pc_read_status(struct parport *p)
 {
-	return (unsigned int)inb(p->base+STATUS);
+	return inb(p->base+STATUS);
 }
 
-void parport_pc_write_econtrol(struct parport *p, unsigned int d)
+void parport_pc_write_econtrol(struct parport *p, unsigned char d)
 {
 	outb(d, p->base+ECONTROL);
 }
 
-unsigned int parport_pc_read_econtrol(struct parport *p)
+unsigned char parport_pc_read_econtrol(struct parport *p)
 {
-	return (unsigned int)inb(p->base+ECONTROL);
+	return inb(p->base+ECONTROL);
 }
 
-unsigned int parport_pc_frob_econtrol(struct parport *p, unsigned int mask,  unsigned int val)
+unsigned char parport_pc_frob_econtrol(struct parport *p, unsigned char mask,  unsigned char val)
 {
-	unsigned int old = (unsigned int)inb(p->base+ECONTROL);
+	unsigned char old = inb(p->base+ECONTROL);
 	outb(((old & ~mask) ^ val), p->base+ECONTROL);
 	return old;
 }
@@ -132,12 +132,12 @@ void parport_pc_change_mode(struct parport *p, int m)
 	/* FIXME */
 }
 
-void parport_pc_write_fifo(struct parport *p, unsigned int v)
+void parport_pc_write_fifo(struct parport *p, unsigned char v)
 {
 	/* FIXME */
 }
 
-unsigned int parport_pc_read_fifo(struct parport *p)
+unsigned char parport_pc_read_fifo(struct parport *p)
 {
 	return 0; /* FIXME */
 }
@@ -184,22 +184,22 @@ void parport_pc_restore_state(struct parport *p, struct parport_state *s)
 	parport_pc_write_econtrol(p, s->u.pc.ecr);
 }
 
-unsigned int parport_pc_epp_read_block(struct parport *p, void *buf, unsigned  int length)
+size_t parport_pc_epp_read_block(struct parport *p, void *buf, size_t length)
 {
 	return 0; /* FIXME */
 }
 
-unsigned int parport_pc_epp_write_block(struct parport *p, void *buf, unsigned  int length)
+size_t parport_pc_epp_write_block(struct parport *p, void *buf, size_t length)
 {
 	return 0; /* FIXME */
 }
 
-unsigned int parport_pc_ecp_read_block(struct parport *p, void *buf, unsigned  int length, void (*fn)(struct parport *, void *, unsigned int), void *handle)
+int parport_pc_ecp_read_block(struct parport *p, void *buf, size_t length, void (*fn)(struct parport *, void *, size_t), void *handle)
 {
 	return 0; /* FIXME */
 }
 
-unsigned int parport_pc_ecp_write_block(struct parport *p, void *buf, unsigned  int length, void (*fn)(struct parport *, void *, unsigned int), void *handle)
+int parport_pc_ecp_write_block(struct parport *p, void *buf, size_t length, void (*fn)(struct parport *, void *, size_t), void *handle)
 {
 	return 0; /* FIXME */
 }
@@ -337,7 +337,7 @@ static int parport_detect_dma_transfer(int dma, int size)
 /* Only if supports ECP mode */
 static int programmable_dma_support(struct parport *pb)
 {
-	int dma, oldstate = parport_pc_read_econtrol(pb);
+	unsigned char dma, oldstate = parport_pc_read_econtrol(pb);
 
 	parport_pc_write_econtrol(pb, 0xe0); /* Configuration MODE */
 	
@@ -375,7 +375,7 @@ static int programmable_dma_support(struct parport *pb)
 static int parport_dma_probe(struct parport *pb)
 {
 	int dma,retv;
-	int dsr,dsr_read;
+	unsigned char dsr,dsr_read;
 	char *buff;
 
 	retv = programmable_dma_support(pb);
@@ -424,7 +424,7 @@ static int parport_dma_probe(struct parport *pb)
  */
 static int epp_clear_timeout(struct parport *pb)
 {
-	int r;
+	unsigned char r;
 
 	if (!(parport_pc_read_status(pb) & 0x01))
 		return 1;
@@ -470,7 +470,7 @@ static int parport_SPP_supported(struct parport *pb)
  */
 static int parport_ECR_present(struct parport *pb)
 {
-	unsigned int r, octr = parport_pc_read_control(pb), 
+	unsigned char r, octr = parport_pc_read_control(pb), 
 	  oecr = parport_pc_read_econtrol(pb);
 
 	r = parport_pc_read_control(pb);	
@@ -499,7 +499,8 @@ static int parport_ECR_present(struct parport *pb)
 
 static int parport_ECP_supported(struct parport *pb)
 {
-	int i, oecr = parport_pc_read_econtrol(pb);
+	int i;
+	unsigned char oecr = parport_pc_read_econtrol(pb);
 	
 	/* If there is no ECR, we have no hope of supporting ECP. */
 	if (!(pb->modes & PARPORT_MODE_PCECR))
@@ -553,7 +554,8 @@ static int parport_EPP_supported(struct parport *pb)
 
 static int parport_ECPEPP_supported(struct parport *pb)
 {
-	int mode, oecr = parport_pc_read_econtrol(pb);
+	int mode;
+	unsigned char oecr = parport_pc_read_econtrol(pb);
 
 	if (!(pb->modes & PARPORT_MODE_PCECR))
 		return 0;
@@ -587,7 +589,8 @@ static int parport_ECPEPP_supported(struct parport *pb)
 
 static int parport_PS2_supported(struct parport *pb)
 {
-	int ok = 0, octr = parport_pc_read_control(pb);
+	int ok = 0;
+	unsigned char octr = parport_pc_read_control(pb);
   
 	epp_clear_timeout(pb);
 
@@ -606,7 +609,8 @@ static int parport_PS2_supported(struct parport *pb)
 
 static int parport_ECPPS2_supported(struct parport *pb)
 {
-	int mode, oecr = parport_pc_read_econtrol(pb);
+	int mode;
+	unsigned char oecr = parport_pc_read_econtrol(pb);
 
 	if (!(pb->modes & PARPORT_MODE_PCECR))
 		return 0;
@@ -676,33 +680,25 @@ static int close_intr_election(long tmp)
 /* Only if supports ECP mode */
 static int programmable_irq_support(struct parport *pb)
 {
-	int irq, oecr = parport_pc_read_econtrol(pb);
+	int irq, intrLine;
+	unsigned char oecr = parport_pc_read_econtrol(pb);
+	static const int lookup[8] = {
+		PARPORT_IRQ_NONE, 7, 9, 10, 11, 14, 15, 5
+	};
 
 	parport_pc_write_econtrol(pb,0xE0); /* Configuration MODE */
 	
-	irq = (parport_pc_read_configb(pb) >> 3) & 0x07;
+	intrLine = (parport_pc_read_configb(pb) >> 3) & 0x07;
+	irq = lookup[intrLine];
 
-	switch(irq){
-	case 2:
-		irq = 9;
-		break;
-	case 7:
-		irq = 5;
-		break;
-	case 0:
-		irq = PARPORT_IRQ_NONE;
-		break;
-	default:
-		irq += 7;
-	}
-	
 	parport_pc_write_econtrol(pb, oecr);
 	return irq;
 }
 
 static int irq_probe_ECP(struct parport *pb)
 {
-	int irqs, i, oecr = parport_pc_read_econtrol(pb);
+	int irqs, i;
+	unsigned char oecr = parport_pc_read_econtrol(pb);
 		
 	probe_irq_off(probe_irq_on());	/* Clear any interrupts */
 	irqs = open_intr_election();
@@ -725,7 +721,8 @@ static int irq_probe_ECP(struct parport *pb)
  */
 static int irq_probe_EPP(struct parport *pb)
 {
-	int irqs, octr = parport_pc_read_control(pb);
+	int irqs;
+	unsigned char octr = parport_pc_read_control(pb);
 
 #ifndef ADVANCED_DETECT
 	return PARPORT_IRQ_NONE;
@@ -755,7 +752,8 @@ static int irq_probe_EPP(struct parport *pb)
 
 static int irq_probe_SPP(struct parport *pb)
 {
-	int irqs, octr = parport_pc_read_control(pb);
+	int irqs;
+	unsigned char octr = parport_pc_read_control(pb);
 
 #ifndef ADVANCED_DETECT
 	return PARPORT_IRQ_NONE;

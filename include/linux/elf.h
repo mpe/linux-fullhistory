@@ -128,7 +128,7 @@ typedef __u64	Elf64_Word;
 #define AT_GID    13	/* real gid */
 #define AT_EGID   14	/* effective gid */
 #define AT_PLATFORM 15  /* string identifying cpu for optimizations */
-#define AT_HWCAP  16    /* arch dependant hints at cpu capabilities */
+#define AT_HWCAP  16    /* arch dependent hints at cpu capabilities */
 
 typedef struct dynamic{
   Elf32_Sword d_tag;

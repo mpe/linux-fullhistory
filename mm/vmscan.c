@@ -108,17 +108,8 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	 *
 	 * -- Stephen Tweedie 1998 */
 
-	if (pte_write(pte)) {
-		/* 
-		 * We _will_ allow dirty cached mappings later on, once
-		 * MAP_SHARED|MAP_ANONYMOUS is working, but for now
-		 * catch this as a bug.
-		 */
-		if (is_page_shared(page_map)) {
-			printk ("VM: Found a shared writable dirty page!\n");
-			return 0;
-		}
-		if (PageSwapCache(page_map)) {
+	if (PageSwapCache(page_map)) {
+		if (pte_write(pte)) {
 			printk ("VM: Found a writable swap-cached page!\n");
 			return 0;
 		}

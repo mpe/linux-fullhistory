@@ -206,6 +206,10 @@ EXPORT_SYMBOL(shrink_dcache_parent);
 EXPORT_SYMBOL(find_inode_number);
 EXPORT_SYMBOL(is_subdir);
 
+#ifdef CONFIG_AUTOFS_FS_MODULE
+EXPORT_SYMBOL(locks_remove_flock);
+#endif
+
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);
 #endif

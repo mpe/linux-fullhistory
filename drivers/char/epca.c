@@ -185,7 +185,7 @@ static struct channel *card_ptr[MAXCARDS];
 
 /* ----------------------------------------------------------------------
 	Begin generic memory functions.  These functions will be alias
-	(point at) more specific functions dependant on the board being
+	(point at) more specific functions dependent on the board being
 	configured.
 ----------------------------------------------------------------------- */
 	
@@ -461,7 +461,7 @@ static inline void pcxi_assertmemoff(struct channel *ch)
 	cards (Such as PCI) needs no windowing routines at all.  We provide
 	these do nothing routines so that the same code base can be used.
 	The driver will ALWAYS call a windowing routine if it thinks it needs
-	to; regardless of the card.  However, dependant on the card the routine
+	to; regardless of the card.  However, dependent on the card the routine
 	may or may not do anything.
 ---------------------------------------------------------------------------*/
 
@@ -4066,7 +4066,7 @@ int get_PCI_configuration(char bus, char device_fn,
                                       base_addr5);
 
 	/* ------------------------------------------------------------------------
-			 NOTE - The code below mask out either the 2 or 4 bits dependant on the
+			 NOTE - The code below mask out either the 2 or 4 bits dependent on the
 				space being addressed. (base_addr value reflecting io space, have their
 				first 2 bits mask out, while base_addr value reflecting mem space, have
 				their first 4 bits mask out.)  These bits are flag bits and should always

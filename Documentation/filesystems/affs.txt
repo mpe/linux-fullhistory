@@ -65,6 +65,11 @@ quiet		The file system will not return an error for disallowed
 verbose		The volume name, file system type and block size will
 		be written to the syslog when the filesystem is mounted.
 
+mufs		The filesystem is really a muFS, also it doesn't
+		identify itself as one. This option is neccessary if
+		the filesystem wasn't formatted as muFS, but is used
+		as one.
+
 prefix=path	Path will be prefixed to every absolute path name of
 		symbolic links on an AFFS partition. Default = /
 

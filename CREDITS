@@ -37,7 +37,8 @@ N: C. Scott Ananian
 E: cananian@alumni.princeton.edu
 W: http://www.pdos.lcs.mit.edu/~cananian
 P: 1024/85AD9EED AD C0 49 08 91 67 DF D7  FA 04 1A EE 09 E8 44 B0
-D: pty improvements.
+D: Unix98 pty support.
+D: APM update to 1.2 spec.
 
 N: Erik Andersen
 E: andersee@debian.org
@@ -930,8 +931,8 @@ S: Unix Centre of Pedagogical Faculty, University of South Bohemia
 N: Bas Laarhoven
 E: bas@vimec.nl
 D: Loadable modules and ftape driver
-S: Mr. v. Boemellaan 39
-S: NL-5237 KA 's-Hertogenbosch
+S: J. Obrechtstr 23
+S: NL-5216 GP 's-Hertogenbosch
 S: The Netherlands
 
 N: Savio Lam
@@ -1133,8 +1134,8 @@ S: USA
 N: Dirk Melchers
 E: dirk@merlin.nbg.sub.org
 D: 8 bit XT hard disk driver for OMTI5520
-S: Heidackerstrass 19
-S: D-91056 Erlangen
+S: Schloessleinsgasse 31
+S: D-90453 Nuernberg
 S: Germany
 
 N: Michael Meskes

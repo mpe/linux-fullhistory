@@ -201,7 +201,9 @@ void rw_swap_page_nocache(int rw, unsigned long entry, char *buffer)
 	}
 	page->inode = &swapper_inode;
 	page->offset = entry;
+	atomic_inc(&page->count);	/* Protect from shrink_mmap() */
 	rw_swap_page(rw, entry, buffer, 1);
+	atomic_dec(&page->count);
 	page->inode = 0;
 	clear_bit(PG_swap_cache, &page->flags);
 }

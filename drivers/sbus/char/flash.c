@@ -134,7 +134,7 @@ static struct file_operations flash_fops = {
 	flash_llseek,
 	flash_read,
 	NULL,		/* no write to the Flash, use mmap
-			 * and play flash dependant tricks.
+			 * and play flash dependent tricks.
 			 */
 	NULL,		/* readdir */
 	NULL,		/* poll */

@@ -15,7 +15,7 @@ CONFIG_EXPERIMENTAL=y
 # CONFIG_KERNELD is not set
 
 #
-# Platform dependant setup
+# Platform-dependent setup
 #
 CONFIG_AMIGA=y
 # CONFIG_ATARI is not set

@@ -16,37 +16,37 @@ O_OBJS   :=
 M_OBJS   :=
 
 ifeq ($(CONFIG_SPARCAUDIO),y)
-M=y
+SBUS_AUDIO=y
 else
   ifeq ($(CONFIG_SPARCAUDIO),m)
-  MM=y
+  SBUS_AUDIO_MODULE=y
   endif
 endif
 
 ifeq ($(CONFIG_SPARCAUDIO_AMD7930),y)
-M=y
+SBUS_AUDIO=y
 OX_OBJS += amd7930.o
 else
   ifeq ($(CONFIG_SPARCAUDIO_AMD7930),m)
-  MM=y
+  SBUS_AUDIO_MODULE=y
   MX_OBJS += amd7930.o
   endif
 endif
 
 ifeq ($(CONFIG_SPARCAUDIO_CS4231),y)
-M=y
+SBUS_AUDIO=y
 O_OBJS += cs4231.o
 else
   ifeq ($(CONFIG_SPARCAUDIO_CS4231),m)
-  MM=y
+  SBUS_AUDIO_MODULE=y
   M_OBJS += cs4231.o
   endif
 endif
 
-ifdef M
+ifdef SBUS_AUDIO
 OX_OBJS += audio.o
 else
-  ifdef MM
+  ifdef SBUS_AUDIO_MODULE
   MX_OBJS += audio.o
   endif
 endif

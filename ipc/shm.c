@@ -689,7 +689,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 			goto done;
 		}
 		if (!pte_none(pte)) {
-			rw_swap_page(READ, pte_val(pte), (char *) page, 1);	/* FIXME */
+			rw_swap_page_nocache(READ, pte_val(pte), (char *)page);
 			pte = __pte(shp->shm_pages[idx]);
 			if (pte_present(pte))  {
 				free_page (page); /* doesn't sleep */
@@ -820,7 +820,7 @@ int shm_swap (int prio, int dma)
 	if (atomic_read(&mem_map[MAP_NR(pte_page(page))].count) != 1)
 		goto check_table;
 	shp->shm_pages[idx] = swap_nr;
-	rw_swap_page(WRITE, swap_nr, (char *) pte_page(page), 1);	/* FIXME */
+	rw_swap_page_nocache (WRITE, swap_nr, (char *) pte_page(page));
 	free_page(pte_page(page));
 	swap_successes++;
 	shm_swp++;

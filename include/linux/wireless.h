@@ -213,7 +213,7 @@ struct	iw_encoding
 struct	iw_statistics
 {
 	__u8		status;		/* Status
-					 * - device dependant for now */
+					 * - device dependent for now */
 
 	struct iw_quality	qual;		/* Quality of the link
 						 * (instant/mean/max) */

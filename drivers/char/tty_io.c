@@ -1961,8 +1961,10 @@ long console_init(long kmem_start, long kmem_end)
 	return kmem_start;
 }
 
-static struct tty_driver dev_tty_driver, dev_console_driver,
-	dev_syscons_driver, dev_ptmx_driver;
+static struct tty_driver dev_tty_driver, dev_syscons_driver, dev_ptmx_driver;
+#ifdef CONFIG_VT
+static struct tty_driver dev_console_driver;
+#endif
 
 /*
  * Ok, now we can initialize the rest of the tty devices and can count

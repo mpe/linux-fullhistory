@@ -55,83 +55,83 @@ parport_ax_null_intr_func(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 void
-parport_ax_write_epp(struct parport *p, unsigned int d)
+parport_ax_write_epp(struct parport *p, unsigned char d)
 {
 	outb(d, p->base + EPPREG);
 }
 
-unsigned int
+unsigned char
 parport_ax_read_epp(struct parport *p)
 {
-	return (unsigned int)inb(p->base + EPPREG);
+	return inb(p->base + EPPREG);
 }
 
-unsigned int
+unsigned char
 parport_ax_read_configb(struct parport *p)
 {
-	return (unsigned int)inb(p->base + CONFIGB);
+	return inb(p->base + CONFIGB);
 }
 
 void
-parport_ax_write_data(struct parport *p, unsigned int d)
+parport_ax_write_data(struct parport *p, unsigned char d)
 {
 	outb(d, p->base + DATA);
 }
 
-unsigned int
+unsigned char
 parport_ax_read_data(struct parport *p)
 {
-	return (unsigned int)inb(p->base + DATA);
+	return inb(p->base + DATA);
 }
 
 void
-parport_ax_write_control(struct parport *p, unsigned int d)
+parport_ax_write_control(struct parport *p, unsigned char d)
 {
 	outb(d, p->base + CONTROL);
 }
 
-unsigned int
+unsigned char
 parport_ax_read_control(struct parport *p)
 {
-	return (unsigned int)inb(p->base + CONTROL);
+	return inb(p->base + CONTROL);
 }
 
-unsigned int
-parport_ax_frob_control(struct parport *p, unsigned int mask,  unsigned int val)
+unsigned char
+parport_ax_frob_control(struct parport *p, unsigned char mask,  unsigned char val)
 {
-	unsigned int old = (unsigned int)inb(p->base + CONTROL);
+	unsigned char old = inb(p->base + CONTROL);
 	outb(((old & ~mask) ^ val), p->base + CONTROL);
 	return old;
 }
 
 void
-parport_ax_write_status(struct parport *p, unsigned int d)
+parport_ax_write_status(struct parport *p, unsigned char d)
 {
 	outb(d, p->base + STATUS);
 }
 
-unsigned int
+unsigned char
 parport_ax_read_status(struct parport *p)
 {
-	return (unsigned int)inb(p->base + STATUS);
+	return inb(p->base + STATUS);
 }
 
 void
-parport_ax_write_econtrol(struct parport *p, unsigned int d)
+parport_ax_write_econtrol(struct parport *p, unsigned char d)
 {
 	outb(d, p->base + ECONTROL);
 }
 
-unsigned int
+unsigned char
 parport_ax_read_econtrol(struct parport *p)
 {
-	return (unsigned int)inb(p->base + ECONTROL);
+	return inb(p->base + ECONTROL);
 }
 
-unsigned int
-parport_ax_frob_econtrol(struct parport *p, unsigned int mask, unsigned int val)
+unsigned char
+parport_ax_frob_econtrol(struct parport *p, unsigned char mask, unsigned char val)
 {
-	unsigned int old = (unsigned int)inb(p->base + ECONTROL);
+	unsigned char old = inb(p->base + ECONTROL);
 	outb(((old & ~mask) ^ val), p->base + ECONTROL);
 	return old;
 }
@@ -143,12 +143,12 @@ parport_ax_change_mode(struct parport *p, int m)
 }
 
 void
-parport_ax_write_fifo(struct parport *p, unsigned int v)
+parport_ax_write_fifo(struct parport *p, unsigned char v)
 {
 	outb(v, p->base + DFIFO);
 }
 
-unsigned int
+unsigned char
 parport_ax_read_fifo(struct parport *p)
 {
 	return inb(p->base + DFIFO);
@@ -221,29 +221,29 @@ parport_ax_restore_state(struct parport *p, struct parport_state *s)
 	parport_ax_write_econtrol(p, s->u.pc.ecr);
 }
 
-unsigned int
-parport_ax_epp_read_block(struct parport *p, void *buf, unsigned  int length)
+size_t
+parport_ax_epp_read_block(struct parport *p, void *buf, size_t length)
 {
 	return 0; /* FIXME */
 }
 
-unsigned int
-parport_ax_epp_write_block(struct parport *p, void *buf, unsigned  int length)
+size_t
+parport_ax_epp_write_block(struct parport *p, void *buf, size_t length)
 {
 	return 0; /* FIXME */
 }
 
-unsigned int
-parport_ax_ecp_read_block(struct parport *p, void *buf, unsigned  int length,
-			  void (*fn)(struct parport *, void *, unsigned int),
+int
+parport_ax_ecp_read_block(struct parport *p, void *buf, size_t length,
+			  void (*fn)(struct parport *, void *, size_t),
 			  void *handle)
 {
 	return 0; /* FIXME */
 }
 
-unsigned int
-parport_ax_ecp_write_block(struct parport *p, void *buf, unsigned  int length,
-			   void (*fn)(struct parport *, void *, unsigned int),
+int
+parport_ax_ecp_write_block(struct parport *p, void *buf, size_t length,
+			   void (*fn)(struct parport *, void *, size_t),
 			   void *handle)
 {
 	return 0; /* FIXME */
@@ -331,7 +331,8 @@ static struct parport_operations parport_ax_ops =
  */
 static int parport_ECR_present(struct parport *pb)
 {
-	unsigned int r, octr = pb->ops->read_control(pb), 
+	unsigned int r;
+	unsigned char octr = pb->ops->read_control(pb), 
 	  oecr = pb->ops->read_econtrol(pb);
 
 	r = pb->ops->read_control(pb);	
@@ -360,7 +361,8 @@ static int parport_ECR_present(struct parport *pb)
 
 static int parport_ECP_supported(struct parport *pb)
 {
-	int i, oecr = pb->ops->read_econtrol(pb);
+	int i;
+	unsigned char oecr = pb->ops->read_econtrol(pb);
 	
 	/* If there is no ECONTROL, we have no hope of supporting ECP. */
 	if (!(pb->modes & PARPORT_MODE_PCECR))
@@ -398,7 +400,8 @@ static int parport_ECP_supported(struct parport *pb)
 
 static int parport_PS2_supported(struct parport *pb)
 {
-	int ok = 0, octr = pb->ops->read_control(pb);
+	int ok = 0;
+	unsigned char octr = pb->ops->read_control(pb);
   
 	pb->ops->write_control(pb, octr | 0x20);  /* try to tri-state buffer */
 	
@@ -415,7 +418,8 @@ static int parport_PS2_supported(struct parport *pb)
 
 static int parport_ECPPS2_supported(struct parport *pb)
 {
-	int mode, oecr = pb->ops->read_econtrol(pb);
+	int mode;
+	unsigned char oecr = pb->ops->read_econtrol(pb);
 
 	if (!(pb->modes & PARPORT_MODE_PCECR))
 		return 0;

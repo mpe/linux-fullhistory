@@ -92,7 +92,7 @@ found:
 	return isn; 
 }
 
-/* This value should be dependant on TCP_TIMEOUT_INIT and 
+/* This value should be dependent on TCP_TIMEOUT_INIT and 
  * sysctl_tcp_retries1. It's a rather complicated formula 
  * (exponential backoff) to compute at runtime so it's currently hardcoded
  * here.

@@ -69,7 +69,7 @@ typedef struct {
 	caddr_t ptr;
 } svr4_xrs_t;
 
-/* Machine dependant context */
+/* Machine dependent context */
 typedef struct {
 	svr4_gregset_t   greg;	/* registers 0..19 (see top) */
 	svr4_gwindows_t  *gwin;	/* may point to register windows */

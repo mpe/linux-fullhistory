@@ -941,7 +941,7 @@ applies a patch to some files of the kernel tree.
 		Change to linux source directory
 		Configure with NCR53C7,8XX support = N
 		Configure with NCR53C8XX   support = Y (or m)
-		Make dependancies
+		Make dependencies
 		Make the kernel (use make zdisk first)
 		Make and install modules if you have configured with 'm'
 

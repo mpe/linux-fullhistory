@@ -128,7 +128,7 @@ static int lp_preempt(void *handle)
 
 static __inline__ void lp_yield (int minor)
 {
-	if (parport_yield (lp_table[minor].dev, 1) == 1 && need_resched)
+	if (!parport_yield_blocking (lp_table[minor].dev) && need_resched)
 		schedule ();
 }
 
@@ -654,7 +654,14 @@ static int parport_ptr = 0;
 
 __initfunc(void lp_setup(char *str, int *ints))
 {
-	if (!strncmp(str, "parport", 7)) {
+	if (!str) {
+		if (ints[0] == 0 || ints[1] == 0) {
+			/* disable driver on "lp=" or "lp=0" */
+			parport[0] = LP_PARPORT_OFF;
+		} else {
+			printk(KERN_WARNING "warning: 'lp=0x%x' is deprecated, ignored\n", ints[1]);
+		}
+	} else if (!strncmp(str, "parport", 7)) {
 		int n = simple_strtoul(str+7, NULL, 10);
 		if (parport_ptr < LP_NO)
 			parport[parport_ptr++] = n;
@@ -667,13 +674,6 @@ __initfunc(void lp_setup(char *str, int *ints))
 		parport[parport_ptr++] = LP_PARPORT_NONE;
 	} else if (!strcmp(str, "reset")) {
 		reset = 1;
-	} else {
-		if (ints[0] == 0 || ints[1] == 0) {
-			/* disable driver on "lp=" or "lp=0" */
-			parport[0] = LP_PARPORT_OFF;
-		} else {
-			printk(KERN_WARNING "warning: 'lp=0x%x' is deprecated, ignored\n", ints[1]);
-		}
 	}
 }
 

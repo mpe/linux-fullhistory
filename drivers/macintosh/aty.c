@@ -39,11 +39,11 @@ struct aty_cmap_regs {
 typedef struct aty_regvals {
 	int offset[3];		/* first pixel address */
 
-	int crtc_h_sync_strt_wid[3];	/* depth dependant */
+	int crtc_h_sync_strt_wid[3];	/* depth dependent */
 	int crtc_gen_cntl[3];
 	int mem_cntl[3];
 
-	int crtc_h_tot_disp;	/* mode dependant */
+	int crtc_h_tot_disp;	/* mode dependent */
 	int crtc_v_tot_disp;
 	int crtc_v_sync_strt_wid;
 	int crtc_off_pitch;

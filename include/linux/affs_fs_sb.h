@@ -37,6 +37,7 @@ struct affs_zone {
 
 struct affs_sb_info {
 	int s_partition_size;		/* Partition size in blocks. */
+	int s_blksize;			/* Initial device blksize */
 	s32 s_root_block;		/* FFS root block number. */
 	int s_hashsize;			/* Size of hash table. */
 	unsigned long s_flags;		/* See below. */

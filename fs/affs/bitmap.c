@@ -7,6 +7,7 @@
  *  block allocation, deallocation, calculation of free space.
  */
 
+#define DEBUG 0
 #include <linux/sched.h>
 #include <linux/affs_fs.h>
 #include <linux/stat.h>

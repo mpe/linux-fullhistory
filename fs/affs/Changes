@@ -28,6 +28,44 @@ Known bugs:
 
 Please direct bug reports to: hjw@zvw.de
 
+Version 3.8
+-----------
+Bill Hawes kindly reviewed the affs and sent me the
+patches he did. They're marked (BH). Thanks, Bill!
+
+- Cleanup of error handling in read_super().
+  Didn't release all ressources in case of an
+  error. (BH)
+
+- put_inode() releases the ext cache only if it's
+  no longer needed. (BH)
+
+- One set of dentry callbacks is enough. (BH)
+
+- Cleanup of error handling in namei.c. (BH)
+
+- Cleanup of error handling in file.c. (BH)
+
+- The original blocksize of the device is
+  restored when the fs is unmounted. (BH)
+
+- getblock() did not invalidate the key cache
+  when it allocated a new block.
+
+- Removed some unneccessary locks as Bill
+  suggested.
+
+- Simplified match_name(), changed all hashing
+  and case insensitive name comparisons to use
+  uppercase. This makes the tolower() routines
+  obsolete.
+
+- Added mount option 'mufs' to force muFS
+  uid/gid interpretation.
+
+- File mode changes were not updated on disk.
+  This was fixed before, but somehow got lost.
+
 Version 3.7
 -----------
 

@@ -305,17 +305,17 @@ sys_init_module(const char *name_user, struct module *mod_user)
 	for (i = 0, dep = mod->deps; i < mod->ndeps; ++i, ++dep) {
 		struct module *o, *d = dep->dep;
 
-		/* Make sure the indicated dependancies are really modules.  */
+		/* Make sure the indicated dependencies are really modules.  */
 		if (d == mod) {
 			printk(KERN_ERR "init_module: self-referential "
-					"dependancy in mod->deps.\n");
+					"dependency in mod->deps.\n");
 			goto err3;
 		}
 
 		for (o = module_list; o != &kernel_module; o = o->next)
 			if (o == d) goto found_dep;
 
-		printk(KERN_ERR "init_module: found dependancy that is "
+		printk(KERN_ERR "init_module: found dependency that is "
 				"(no longer?) a module.\n");
 		goto err3;
 		
@@ -790,7 +790,7 @@ free_module(struct module *mod, int tag_freed)
 		mod->flags &= ~MOD_RUNNING;
 	}
 
-	/* Remove the module from the dependancy lists.  */
+	/* Remove the module from the dependency lists.  */
 
 	for (i = 0, dep = mod->deps; i < mod->ndeps; ++i, ++dep) {
 		struct module_ref **pp;

@@ -229,36 +229,40 @@ affs_notify_change(struct dentry *dentry, struct iattr *attr)
 
 	error = inode_change_ok(inode,attr);
 	if (error)
-		return error;
+		goto out;
 
 	if (((attr->ia_valid & ATTR_UID) && (inode->i_sb->u.affs_sb.s_flags & SF_SETUID)) ||
 	    ((attr->ia_valid & ATTR_GID) && (inode->i_sb->u.affs_sb.s_flags & SF_SETGID)) ||
 	    ((attr->ia_valid & ATTR_MODE) &&
-	     (inode->i_sb->u.affs_sb.s_flags & (SF_SETMODE | SF_IMMUTABLE))))
-		error = -EPERM;
-
-	if (error)
-		return (inode->i_sb->u.affs_sb.s_flags & SF_QUIET) ? 0 : error;
+	     (inode->i_sb->u.affs_sb.s_flags & (SF_SETMODE | SF_IMMUTABLE)))) {
+		if (!(inode->i_sb->u.affs_sb.s_flags & SF_QUIET))
+			error = -EPERM;
+		goto out;
+	}
 
 	if (attr->ia_valid & ATTR_MODE)
 		inode->u.affs_i.i_protect = mode_to_prot(attr->ia_mode);
 
-	inode_setattr(inode,attr);
-
-	return 0;
+	inode_setattr(inode, attr);
+	mark_inode_dirty(inode);
+	error = 0;
+out:
+	return error;
 }
 
 void
 affs_put_inode(struct inode *inode)
 {
-	pr_debug("AFFS: put_inode(ino=%lu, nlink=%u)\n",inode->i_ino,inode->i_nlink);
-	lock_super(inode->i_sb);
-	if (inode->u.affs_i.i_ec) {
-		pr_debug("AFFS: freeing ext cache\n");
-		free_page((unsigned long)inode->u.affs_i.i_ec);
-		inode->u.affs_i.i_ec = NULL;
+	pr_debug("AFFS: put_inode(ino=%lu, nlink=%u)\n",
+		inode->i_ino,inode->i_nlink);
+	if (inode->i_count == 1) {
+		unsigned long cache_page = (unsigned long) inode->u.affs_i.i_ec;
+		if (cache_page) {
+			pr_debug("AFFS: freeing ext cache\n");
+			inode->u.affs_i.i_ec = NULL;
+			free_page(cache_page);
+		}
 	}
-	unlock_super(inode->i_sb);
 }
 
 void

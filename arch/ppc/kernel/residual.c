@@ -300,10 +300,10 @@ static void printsmallpacket(PnP_TAG_PACKET * pkt, int size) {
 #undef p
 	  break;
 	case StartDepFunc:
-	  printk("Start dependant function:\n");
+	  printk("Start dependent function:\n");
 	  break;
 	case EndDepFunc:
-	  printk("End dependant function\n");
+	  printk("End dependent function\n");
 	  break;
 	case IOPort:
 #define p pkt->S8_Pack

@@ -31,15 +31,15 @@
 #define DATA_LATCH    0x3350010
 
 /* ARC can't read from the data latch, so we must use a soft copy. */
-static unsigned int data_copy;
+static unsigned char data_copy;
 
-static void arc_write_data(struct parport *p, unsigned int data)
+static void arc_write_data(struct parport *p, unsigned char data)
 {
 	data_copy = data;
 	outb(data, DATA_LATCH);
 }
 
-static unsigned int arc_read_data(struct parport *p)
+static unsigned char arc_read_data(struct parport *p)
 {
 	return data_copy;
 }

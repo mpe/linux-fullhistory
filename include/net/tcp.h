@@ -54,7 +54,7 @@ extern int sysctl_tcp_sack;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 
-/* These are AF independant. */
+/* These are AF independent. */
 static __inline__ int tcp_bhashfn(__u16 lport)
 {
 	return (lport ^ (lport >> 7)) & (TCP_BHTABLE_SIZE - 1);

@@ -128,7 +128,7 @@ struct sk_buff *alloc_skb(unsigned int size,int gfp_mask)
 	}
 
 	/*
-	 *	FIXME: We could do with an architecture dependant
+	 *	FIXME: We could do with an architecture dependent
 	 *	'alignment mask'.
 	 */
 	 

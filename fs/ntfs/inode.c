@@ -289,8 +289,14 @@ int ntfs_init_inode(ntfs_inode *ino,ntfs_volume *vol,int inum)
 void ntfs_clear_inode(ntfs_inode *ino)
 {
 	int i;
+	if(!ino->attr){
+		ntfs_error("ntfs_clear_inode: double free\n");
+		return;
+	}
 	ntfs_free(ino->attr);
+	ino->attr=0;
 	ntfs_free(ino->records);
+	ino->records=0;
 	for(i=0;i<ino->attr_count;i++)
 	{
 		if(ino->attrs[i].name)
@@ -305,6 +311,7 @@ void ntfs_clear_inode(ntfs_inode *ino)
 		}
 	}
 	ntfs_free(ino->attrs);
+	ino->attrs=0;
 }
 
 /* Check and fixup a MFT record */

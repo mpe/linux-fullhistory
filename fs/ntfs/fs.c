@@ -668,7 +668,11 @@ static void ntfs_read_inode(struct inode* inode)
 
 static void ntfs_put_inode(struct inode *ino)
 {
-	ntfs_debug(DEBUG_OTHER, "ntfs_put_inode %lx\n",ino->i_ino);
+}
+
+static void _ntfs_clear_inode(struct inode *ino)
+{
+	ntfs_debug(DEBUG_OTHER, "ntfs_clear_inode %lx\n",ino->i_ino);
 #ifdef NTFS_IN_LINUX_KERNEL
 	if(ino->i_ino!=FILE_MFT)
 		ntfs_clear_inode(&ino->u.ntfs_i);
@@ -680,7 +684,7 @@ static void ntfs_put_inode(struct inode *ino)
 		ino->u.generic_ip=0;
 	}
 #endif
-	clear_inode(ino);
+	return;
 }
 
 /* Called when umounting a filesystem by do_umount() in fs/super.c */
@@ -753,6 +757,7 @@ struct super_operations ntfs_super_operations = {
 	NULL, /* write_super */
 	ntfs_statfs,
 	ntfs_remount_fs, /* remount */
+	_ntfs_clear_inode, /* clear_inode */ 
 };
 
 /* Called to mount a filesystem by read_super() in fs/super.c

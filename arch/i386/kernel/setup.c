@@ -341,7 +341,7 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	    NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_INTEL,	6,
 	  { "Pentium Pro A-step", "Pentium Pro", NULL, "Pentium II", NULL,
-	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
+	    "Pentium II (0.25 um)", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_CYRIX,	4,
 	  { NULL, NULL, NULL, NULL, "MediaGX", NULL, NULL, NULL, NULL, "5x86",
 	    NULL, NULL, NULL, NULL, NULL, NULL }},
@@ -383,8 +383,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 	    c->cpuid_level < 0)
 		return;
 
-	if ((c->x86_vendor == X86_VENDOR_AMD && amd_model(c)) ||
-	    (c->x86_vendor == X86_VENDOR_CYRIX && cyrix_model(c)))
+	if (c->x86_vendor == X86_VENDOR_CYRIX && cyrix_model(c))
 		return;
 
 	if (c->x86_model < 16)
@@ -394,10 +393,15 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 				p = cpu_models[i].model_names[c->x86_model];
 				break;
 			}
-	if (p)
+	if (p) {
 		strcpy(c->x86_model_id, p);
-	else
-		sprintf(c->x86_model_id, "%02x/%02x", c->x86_vendor, c->x86_model);
+		return;
+	}
+
+	if (c->x86_vendor == X86_VENDOR_AMD && amd_model(c))
+		return;
+
+	sprintf(c->x86_model_id, "%02x/%02x", c->x86_vendor, c->x86_model);
 }
 
 static char *cpu_vendor_names[] __initdata = {

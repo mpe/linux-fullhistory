@@ -872,7 +872,7 @@ asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
 		   software but have not been seen, enable the exception in
 		   hardware so that we can update our software status mask.  */
 		fpcr = rdfpcr() & (~FPCR_MASK | FPCR_DYN_MASK);
-		fpcr = ieee_swcr_to_fpcr(swcr | (~swcr & IEEE_STATUS_MASK)>>16);
+		fpcr |= ieee_swcr_to_fpcr(swcr | (~swcr & IEEE_STATUS_MASK)>>16);
 		wrfpcr(fpcr);
 		   
 		return 0;

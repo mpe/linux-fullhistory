@@ -21,7 +21,7 @@
  *	When compiled as a loadable module, this driver can operate
  *	the board as either a 4/6 port switch with a 5th or 7th port
  *	that is a conventional NIC interface as far as the host is
- *	concerned, OR as 4/6 independant NICs.  To select multi-NIC
+ *	concerned, OR as 4/6 independent NICs.  To select multi-NIC
  *	mode, add "nicmode=1" on the insmod load line for the driver.
  *
  *	This driver uses the "dev" common ethernet device structure

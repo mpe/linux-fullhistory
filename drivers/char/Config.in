@@ -89,6 +89,7 @@ if [ "$CONFIG_APM" = "y" ]; then
   bool '   Make CPU Idle calls when idle' CONFIG_APM_CPU_IDLE
   bool '   Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
   bool '   Power off on shutdown' CONFIG_APM_POWER_OFF
+  bool '   Ignore multiple suspend' CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
 fi
 bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
 if [ "$CONFIG_WATCHDOG" != "n" ]; then

@@ -62,12 +62,10 @@ affs_put_super(struct super_block *sb)
 	kfree(sb->u.affs_sb.s_bitmap);
 	affs_brelse(sb->u.affs_sb.s_root_bh);
 
-	/* I'm not happy with this. It would be better to save the previous
-	 * value of this devices blksize_size[][] in the super block and
-	 * restore it here, but with the affs superblock being quite large
-	 * already ...
+	/*
+	 * Restore the previous value of this device's blksize_size[][]
 	 */
-	set_blocksize(sb->s_dev,BLOCK_SIZE);
+	set_blocksize(sb->s_dev, sb->u.affs_sb.s_blksize);
 
 	sb->s_dev = 0;
 	unlock_super(sb);
@@ -100,7 +98,7 @@ affs_write_super(struct super_block *sb)
 	} else
 		sb->s_dirt = 0;
 
-	pr_debug("AFFS: write_super() at %d, clean=%d\n",CURRENT_TIME,clean);
+	pr_debug("AFFS: write_super() at %lu, clean=%d\n", CURRENT_TIME, clean);
 }
 
 static struct super_operations affs_sops = {
@@ -119,7 +117,7 @@ static int
 parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, s32 *root,
 		int *blocksize, char **prefix, char *volume, unsigned long *mount_opts)
 {
-	char	*this_char, *value;
+	char	*this_char, *value, *optn;
 	int	 f;
 
 	/* Fill in defaults */
@@ -138,18 +136,18 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, s
 		f = 0;
 		if ((value = strchr(this_char,'=')) != NULL)
 			*value++ = 0;
-		if (!strcmp(this_char,"protect")) {
-			if (value) {
-				printk("AFFS: Option protect does not take an argument\n");
-				return 0;
-			}
+		if ((optn = "protect") && !strcmp(this_char, optn)) {
+			if (value)
+				goto out_inv_arg;
 			*mount_opts |= SF_IMMUTABLE;
-		} else if (!strcmp(this_char,"verbose")) {
-			if (value) {
-				printk("AFFS: Option verbose does not take an argument\n");
-				return 0;
-			}
+		} else if ((optn = "verbose") && !strcmp(this_char, optn)) {
+			if (value)
+				goto out_inv_arg;
 			*mount_opts |= SF_VERBOSE;
+		} else if ((optn = "mufs") && !strcmp(this_char, optn)) {
+			if (value)
+				goto out_inv_arg;
+			*mount_opts |= SF_MUFS;
 		} else if ((f = !strcmp(this_char,"setuid")) || !strcmp(this_char,"setgid")) {
 			if (value) {
 				if (!*value) {
@@ -165,55 +163,51 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, s
 				}
 			}
 		} else if (!strcmp(this_char,"prefix")) {
-			if (!value || !*value) {
-				printk("AFFS: The prefix option requires an argument\n");
-				return 0;
-			}
-			if (*prefix)		/* Free any previous prefix */
+			optn = "prefix";
+			if (!value || !*value)
+				goto out_no_arg;
+			if (*prefix) {		/* Free any previous prefix */
 				kfree(*prefix);
+				*prefix = NULL;
+			}
 			*prefix = kmalloc(strlen(value) + 1,GFP_KERNEL);
 			if (!*prefix)
 				return 0;
 			strcpy(*prefix,value);
 			*mount_opts |= SF_PREFIX;
 		} else if (!strcmp(this_char,"volume")) {
-			if (!value || !*value) {
-				printk("AFFS: The volume option requires an argument\n");
-				return 0;
-			}
+			optn = "volume";
+			if (!value || !*value)
+				goto out_no_arg;
 			if (strlen(value) > 30)
 				value[30] = 0;
 			strncpy(volume,value,30);
 		} else if (!strcmp(this_char,"mode")) {
-			if (!value || !*value) {
-				printk("AFFS: The mode option requires an argument\n");
-				return 0;
-			}
+			optn = "mode";
+			if (!value || !*value)
+				goto out_no_arg;
 			*mode = simple_strtoul(value,&value,8) & 0777;
 			if (*value)
 				return 0;
 			*mount_opts |= SF_SETMODE;
 		} else if (!strcmp(this_char,"reserved")) {
-			if (!value || !*value) {
-				printk("AFFS: The reserved option requires an argument\n");
-				return 0;
-			}
+			optn = "reserved";
+			if (!value || !*value)
+				goto out_no_arg;
 			*reserved = simple_strtoul(value,&value,0);
 			if (*value)
 				return 0;
 		} else if (!strcmp(this_char,"root")) {
-			if (!value || !*value) {
-				printk("AFFS: The root option requires an argument\n");
-				return 0;
-			}
+			optn = "root";
+			if (!value || !*value)
+				goto out_no_arg;
 			*root = simple_strtoul(value,&value,0);
 			if (*value)
 				return 0;
 		} else if (!strcmp(this_char,"bs")) {
-			if (!value || !*value) {
-				printk("AFFS: The bs option requires an argument\n");
-				return 0;
-			}
+			optn = "bs";
+			if (!value || !*value)
+				goto out_no_arg;
 			*blocksize = simple_strtoul(value,&value,0);
 			if (*value)
 				return 0;
@@ -234,6 +228,13 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, s
 		}
 	}
 	return 1;
+
+out_no_arg:
+	printk("AFFS: The %s option requires an argument\n", optn);
+	return 0;
+out_inv_arg:
+	printk("AFFS: Option %s does not take an argument\n", optn);
+	return 0;
 }
 
 /* This function definitely needs to be split up. Some fine day I'll
@@ -241,14 +242,14 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, s
  */
 
 static struct super_block *
-affs_read_super(struct super_block *s,void *data, int silent)
+affs_read_super(struct super_block *s, void *data, int silent)
 {
 	struct buffer_head	*bh = NULL;
 	struct buffer_head	*bb;
 	struct inode		*root_inode;
 	kdev_t			 dev = s->s_dev;
 	s32			 root_block;
-	int			 size;
+	int			 blocks, size, blocksize;
 	u32			 chksum;
 	u32			*bm;
 	s32			 ptype, stype;
@@ -256,7 +257,6 @@ affs_read_super(struct super_block *s,void *data, int silent)
 	int			 num_bm;
 	int			 i, j;
 	s32			 key;
-	int			 blocksize;
 	uid_t			 uid;
 	gid_t			 gid;
 	int			 reserved;
@@ -268,57 +268,55 @@ affs_read_super(struct super_block *s,void *data, int silent)
 	pr_debug("affs_read_super(%s)\n",data ? (const char *)data : "no options");
 
 	MOD_INC_USE_COUNT;
-
-	s->u.affs_sb.s_prefix = NULL;
-	if (!parse_options(data,&uid,&gid,&i,&reserved,&root_block,
-	    &blocksize,&s->u.affs_sb.s_prefix,s->u.affs_sb.s_volume,&mount_flags)) {
-		s->s_dev = 0;
-		printk(KERN_ERR "AFFS: Error parsing options\n");
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
 	lock_super(s);
+	s->s_magic             = AFFS_SUPER_MAGIC;
+	s->s_op                = &affs_sops;
+	s->u.affs_sb.s_bitmap  = NULL;
+	s->u.affs_sb.s_root_bh = NULL;
+	s->u.affs_sb.s_prefix  = NULL;
+	s->u.affs_sb.s_hashsize= 0;
+
+	if (!parse_options(data,&uid,&gid,&i,&reserved,&root_block,
+				&blocksize,&s->u.affs_sb.s_prefix,
+				s->u.affs_sb.s_volume, &mount_flags))
+		goto out_bad_opts;
+	/* N.B. after this point s_prefix must be released */
+
+	s->u.affs_sb.s_flags   = mount_flags;
+	s->u.affs_sb.s_mode    = i;
+	s->u.affs_sb.s_uid     = uid;
+	s->u.affs_sb.s_gid     = gid;
+	s->u.affs_sb.s_reserved= reserved;
 
 	/* Get the size of the device in 512-byte blocks.
 	 * If we later see that the partition uses bigger
 	 * blocks, we will have to change it.
 	 */
 
-	size = blksize_size[MAJOR(dev)][MINOR(dev)];
-	size = (size ? size : BLOCK_SIZE) / 512 * blk_size[MAJOR(dev)][MINOR(dev)];
-
-	s->u.affs_sb.s_bitmap  = NULL;
-	s->u.affs_sb.s_root_bh = NULL;
-	s->u.affs_sb.s_flags   = mount_flags;
-	s->u.affs_sb.s_mode    = i;
-	s->u.affs_sb.s_uid     = uid;
-	s->u.affs_sb.s_gid     = gid;
-
-	if (size == 0) {
-		s->s_dev = 0;
-		unlock_super(s);
-		printk(KERN_ERR "AFFS: Could not determine device size\n");
-		goto out;
-	}
-	s->u.affs_sb.s_partition_size = size;
-	s->u.affs_sb.s_reserved       = reserved;
+	blocks = blk_size[MAJOR(dev)][MINOR(dev)];
+	if (blocks == 0)
+		goto out_bad_size;
+	s->u.affs_sb.s_blksize = blksize_size[MAJOR(dev)][MINOR(dev)];
+	if (!s->u.affs_sb.s_blksize)
+		s->u.affs_sb.s_blksize = BLOCK_SIZE;
+	size = (s->u.affs_sb.s_blksize / 512) * blocks;
+	pr_debug("AFFS: initial blksize=%d, blocks=%d\n",
+		s->u.affs_sb.s_blksize, blocks);
 
 	/* Try to find root block. Its location depends on the block size. */
 
-	s->u.affs_sb.s_hashsize = 0;
+	i = 512;
+	j = 4096;
 	if (blocksize > 0) {
-		i = blocksize;
-		j = blocksize;
-	} else {
-		i = 512;
-		j = 4096;
+		i = j = blocksize;
+		size = size / (blocksize / 512);
 	}
 	for (blocksize = i, key = 0; blocksize <= j; blocksize <<= 1, size >>= 1) {
+		s->u.affs_sb.s_root_block = root_block;
 		if (root_block < 0)
 			s->u.affs_sb.s_root_block = (reserved + size - 1) / 2;
-		else
-			s->u.affs_sb.s_root_block = root_block;
-		set_blocksize(dev,blocksize);
+		pr_debug("AFFS: setting blocksize to %d\n", blocksize);
+		set_blocksize(dev, blocksize);
 
 		/* The root block location that was calculated above is not
 		 * correct if the partition size is an odd number of 512-
@@ -331,35 +329,31 @@ affs_read_super(struct super_block *s,void *data, int silent)
 		 * block behind the calculated one. So we check this one, too.
 		 */
 		for (num_bm = 0; num_bm < 2; num_bm++) {
-			pr_debug("AFFS: Dev %s - trying bs=%d bytes, root at %u, "
-				 "size=%d blocks, %d reserved\n",kdevname(dev),blocksize,
-				 s->u.affs_sb.s_root_block + num_bm,size,reserved);
-			bh = affs_bread(dev,s->u.affs_sb.s_root_block + num_bm,blocksize);
-			if (!bh) {
-				printk(KERN_ERR "AFFS: Cannot read root block\n");
-				goto out;
-			}
+			pr_debug("AFFS: Dev %s, trying root=%u, bs=%d, "
+				"size=%d, reserved=%d\n",
+				kdevname(dev),
+				s->u.affs_sb.s_root_block + num_bm,
+				blocksize, size, reserved);
+			bh = affs_bread(dev, s->u.affs_sb.s_root_block + num_bm,
+					blocksize);
+			if (!bh)
+				continue;
 			if (!affs_checksum_block(blocksize,bh->b_data,&ptype,&stype) &&
 			    ptype == T_SHORT && stype == ST_ROOT) {
 				s->s_blocksize             = blocksize;
 				s->u.affs_sb.s_hashsize    = blocksize / 4 - 56;
 				s->u.affs_sb.s_root_block += num_bm;
 				key                        = 1;
-				break;
+				goto got_root;
 			}
+			affs_brelse(bh);
+			bh = NULL;
 		}
-		if (key)
-			break;
-		affs_brelse(bh);
-		bh = NULL;
 	}
-	if (!key) {
-		affs_brelse(bh);
-		if (!silent)
-			printk(KERN_ERR "AFFS: Cannot find a valid root block on device %s\n",
-				kdevname(dev));
-		goto out;
-	}
+	goto out_no_valid_block;
+
+	/* N.B. after this point bh must be released */
+got_root:
 	root_block = s->u.affs_sb.s_root_block;
 
 	s->u.affs_sb.s_partition_size   = size;
@@ -369,59 +363,54 @@ affs_read_super(struct super_block *s,void *data, int silent)
 
 	/* Find out which kind of FS we have */
 	bb = affs_bread(dev,0,s->s_blocksize);
-	if (bb) {
-		chksum = be32_to_cpu(*(u32 *)bb->b_data);
+	if (!bb)
+		goto out_no_root_block;
+	chksum = be32_to_cpu(*(u32 *)bb->b_data);
+	affs_brelse(bb);
 
-		/* Dircache filesystems are compatible with non-dircache ones
-		 * when reading. As long as they aren't supported, writing is
-		 * not recommended.
-		 */
-		if ((chksum == FS_DCFFS || chksum == MUFS_DCFFS || chksum == FS_DCOFS
-		     || chksum == MUFS_DCOFS) && !(s->s_flags & MS_RDONLY)) {
-			printk(KERN_NOTICE "AFFS: Dircache FS - mounting %s read only\n",
-				kdevname(dev));
-			s->s_flags |= MS_RDONLY;
-			s->u.affs_sb.s_flags |= SF_READONLY;
-		}
-		switch (chksum) {
-			case MUFS_FS:
-			case MUFS_INTLFFS:
-				s->u.affs_sb.s_flags |= SF_MUFS;
-				/* fall thru */
-			case FS_INTLFFS:
-				s->u.affs_sb.s_flags |= SF_INTL;
-				break;
-			case MUFS_DCFFS:
-			case MUFS_FFS:
-				s->u.affs_sb.s_flags |= SF_MUFS;
-				break;
-			case FS_DCFFS:
-			case FS_FFS:
-				break;
-			case MUFS_OFS:
-				s->u.affs_sb.s_flags |= SF_MUFS;
-				/* fall thru */
-			case FS_OFS:
-				s->u.affs_sb.s_flags |= SF_OFS;
-				break;
-			case MUFS_DCOFS:
-			case MUFS_INTLOFS:
-				s->u.affs_sb.s_flags |= SF_MUFS;
-			case FS_DCOFS:
-			case FS_INTLOFS:
-				s->u.affs_sb.s_flags |= SF_INTL | SF_OFS;
-				break;
-			default:
-				printk(KERN_ERR "AFFS: Unknown filesystem on device %s: %08X\n",
-					kdevname(dev),chksum);
-				affs_brelse(bb);
-				goto out;
-		}
-		affs_brelse(bb);
-	} else {
-		printk(KERN_ERR "AFFS: Cannot read boot block\n");
-		goto out;
+	/* Dircache filesystems are compatible with non-dircache ones
+	 * when reading. As long as they aren't supported, writing is
+	 * not recommended.
+	 */
+	if ((chksum == FS_DCFFS || chksum == MUFS_DCFFS || chksum == FS_DCOFS
+	     || chksum == MUFS_DCOFS) && !(s->s_flags & MS_RDONLY)) {
+		printk(KERN_NOTICE "AFFS: Dircache FS - mounting %s read only\n",
+			kdevname(dev));
+		s->s_flags |= MS_RDONLY;
+		s->u.affs_sb.s_flags |= SF_READONLY;
 	}
+	switch (chksum) {
+		case MUFS_FS:
+		case MUFS_INTLFFS:
+			s->u.affs_sb.s_flags |= SF_MUFS;
+			/* fall thru */
+		case FS_INTLFFS:
+			s->u.affs_sb.s_flags |= SF_INTL;
+			break;
+		case MUFS_DCFFS:
+		case MUFS_FFS:
+			s->u.affs_sb.s_flags |= SF_MUFS;
+			break;
+		case FS_DCFFS:
+		case FS_FFS:
+			break;
+		case MUFS_OFS:
+			s->u.affs_sb.s_flags |= SF_MUFS;
+			/* fall thru */
+		case FS_OFS:
+			s->u.affs_sb.s_flags |= SF_OFS;
+			break;
+		case MUFS_DCOFS:
+		case MUFS_INTLOFS:
+			s->u.affs_sb.s_flags |= SF_MUFS;
+		case FS_DCOFS:
+		case FS_INTLOFS:
+			s->u.affs_sb.s_flags |= SF_INTL | SF_OFS;
+			break;
+		default:
+			goto out_unknown_fs;
+	}
+
 	if (mount_flags & SF_VERBOSE) {
 		chksum = cpu_to_be32(chksum);
 		printk(KERN_NOTICE "AFFS: Mounting volume \"%*s\": Type=%.3s\\%c, Blocksize=%d\n",
@@ -430,14 +419,14 @@ affs_read_super(struct super_block *s,void *data, int silent)
 			(char *)&chksum,((char *)&chksum)[3] + '0',blocksize);
 	}
 
-	s->s_magic  = AFFS_SUPER_MAGIC;
 	s->s_flags |= MS_NODEV | MS_NOSUID;
 
 	/* Keep super block in cache */
-	if (!(s->u.affs_sb.s_root_bh = affs_bread(dev,root_block,s->s_blocksize))) {
-		printk(KERN_ERR "AFFS: Cannot read root block\n");
-		goto out;
-	}
+	bb = affs_bread(dev,root_block,s->s_blocksize);
+	if (!bb)
+		goto out_no_root_block;
+	s->u.affs_sb.s_root_bh = bb;
+	/* N.B. after this point s_root_bh must be released */
 
 	/* Allocate space for bitmaps, zones and others */
 
@@ -448,11 +437,10 @@ affs_read_super(struct super_block *s,void *data, int silent)
 		 az_no * sizeof(struct affs_alloc_zone) +
 		 MAX_ZONES * sizeof(struct affs_zone);
 	pr_debug("num_bm=%d, az_no=%d, sum=%d\n",num_bm,az_no,ptype);
-	if (!(s->u.affs_sb.s_bitmap = kmalloc(ptype,GFP_KERNEL))) {
-		printk(KERN_ERR "AFFS: Not enough memory\n");
-		goto out;
-	}
+	if (!(s->u.affs_sb.s_bitmap = kmalloc(ptype, GFP_KERNEL)))
+		goto out_no_bitmap;
 	memset(s->u.affs_sb.s_bitmap,0,ptype);
+	/* N.B. after the point s_bitmap must be released */
 
 	s->u.affs_sb.s_zones   = (struct affs_zone *)&s->u.affs_sb.s_bitmap[num_bm];
 	s->u.affs_sb.s_alloc   = (struct affs_alloc_zone *)&s->u.affs_sb.s_zones[MAX_ZONES];
@@ -490,91 +478,79 @@ affs_read_super(struct super_block *s,void *data, int silent)
 				s->u.affs_sb.s_flags |= SF_READONLY;
 				continue;
 			}
-			bb = affs_bread(s->s_dev,be32_to_cpu(bm[i]),s->s_blocksize);
-			if (bb) {
-				if (affs_checksum_block(s->s_blocksize,bb->b_data,NULL,NULL) &&
-				    !(s->s_flags & MS_RDONLY)) {
-					printk(KERN_WARNING "AFFS: Bitmap (%d,key=%u) invalid - "
-					       "mounting %s read only.\n",mapidx,be32_to_cpu(bm[i]),
-						kdevname(dev));
-					s->s_flags |= MS_RDONLY;
-					s->u.affs_sb.s_flags |= SF_READONLY;
-				}
-				/* Mark unused bits in the last word as allocated */
-				if (size <= s->s_blocksize * 8 - 32) {	/* last bitmap */
-					ptype = size / 32 + 1;		/* word number */
-					key   = size & 0x1F;		/* used bits */
-					if (key && !(s->s_flags & MS_RDONLY)) {
-						chksum = cpu_to_be32(0x7FFFFFFF >> (31 - key));
-						((u32 *)bb->b_data)[ptype] &= chksum;
-						affs_fix_checksum(s->s_blocksize,bb->b_data,0);
-						mark_buffer_dirty(bb,1);
-						bmalt = 1;
-					}
-					ptype = (size + 31) & ~0x1F;
-					size  = 0;
-					s->u.affs_sb.s_flags |= SF_BM_VALID;
-				} else {
-					ptype = s->s_blocksize * 8 - 32;
-					size -= ptype;
-				}
-				s->u.affs_sb.s_bitmap[mapidx].bm_firstblk = offset;
-				s->u.affs_sb.s_bitmap[mapidx].bm_bh       = NULL;
-				s->u.affs_sb.s_bitmap[mapidx].bm_key      = be32_to_cpu(bm[i]);
-				s->u.affs_sb.s_bitmap[mapidx].bm_count    = 0;
-				offset += ptype;
-
-				for (j = 0; ptype > 0; j++, az_no++, ptype -= key) {
-					key = MIN(ptype,AFFS_ZONE_SIZE);	/* size in bits */
-					s->u.affs_sb.s_alloc[az_no].az_size = key / 32;
-					s->u.affs_sb.s_alloc[az_no].az_free =
-						affs_count_free_bits(key / 8,bb->b_data +
-								     j * (AFFS_ZONE_SIZE / 8) + 4);
-				}
-				affs_brelse(bb);
-			} else {
-				printk(KERN_ERR "AFFS: Cannot read bitmap\n");
-				goto out;
+			bb = affs_bread(dev,be32_to_cpu(bm[i]),s->s_blocksize);
+			if (!bb)
+				goto out_no_read_bm;
+			if (affs_checksum_block(s->s_blocksize,bb->b_data,NULL,NULL) &&
+			    !(s->s_flags & MS_RDONLY)) {
+				printk(KERN_WARNING "AFFS: Bitmap (%d,key=%u) invalid - "
+				       "mounting %s read only.\n",mapidx,be32_to_cpu(bm[i]),
+					kdevname(dev));
+				s->s_flags |= MS_RDONLY;
+				s->u.affs_sb.s_flags |= SF_READONLY;
 			}
+			/* Mark unused bits in the last word as allocated */
+			if (size <= s->s_blocksize * 8 - 32) {	/* last bitmap */
+				ptype = size / 32 + 1;		/* word number */
+				key   = size & 0x1F;		/* used bits */
+				if (key && !(s->s_flags & MS_RDONLY)) {
+					chksum = cpu_to_be32(0x7FFFFFFF >> (31 - key));
+					((u32 *)bb->b_data)[ptype] &= chksum;
+					affs_fix_checksum(s->s_blocksize,bb->b_data,0);
+					mark_buffer_dirty(bb,1);
+					bmalt = 1;
+				}
+				ptype = (size + 31) & ~0x1F;
+				size  = 0;
+				s->u.affs_sb.s_flags |= SF_BM_VALID;
+			} else {
+				ptype = s->s_blocksize * 8 - 32;
+				size -= ptype;
+			}
+			s->u.affs_sb.s_bitmap[mapidx].bm_firstblk = offset;
+			s->u.affs_sb.s_bitmap[mapidx].bm_bh       = NULL;
+			s->u.affs_sb.s_bitmap[mapidx].bm_key      = be32_to_cpu(bm[i]);
+			s->u.affs_sb.s_bitmap[mapidx].bm_count    = 0;
+			offset += ptype;
+
+			for (j = 0; ptype > 0; j++, az_no++, ptype -= key) {
+				key = MIN(ptype,AFFS_ZONE_SIZE);	/* size in bits */
+				s->u.affs_sb.s_alloc[az_no].az_size = key / 32;
+				s->u.affs_sb.s_alloc[az_no].az_free =
+					affs_count_free_bits(key / 8,bb->b_data +
+					     j * (AFFS_ZONE_SIZE / 8) + 4);
+			}
+			affs_brelse(bb);
 		}
 		key   = be32_to_cpu(bm[stype]);		/* Next block of bitmap pointers	*/
 		ptype = 0;
 		stype = s->s_blocksize / 4 - 1;
 		affs_brelse(bh);
+		bh = NULL;
 		if (key) {
-			if (!(bh = affs_bread(s->s_dev,key,s->s_blocksize))) {
-				printk(KERN_ERR "AFFS: Cannot read bitmap extension\n");
-				goto out;
-			}
-		} else
-			bh = NULL;
+			bh = affs_bread(dev,key,s->s_blocksize);
+			if (!bh)
+				goto out_no_bm_ext;
+		}
 	}
-	if (mapidx < num_bm) {
-		printk(KERN_ERR "AFFS: Got only %d bitmap blocks, expected %d\n",mapidx,num_bm);
-		goto out;
-	}
+	if (mapidx < num_bm)
+		goto out_bad_num;
+
 nobitmap:
 	s->u.affs_sb.s_bm_count = num_bm;
 
 	/* set up enough so that it can read an inode */
 
-	s->s_dev   = dev;
-	s->s_op    = &affs_sops;
 	s->s_dirt  = 1;
 	root_inode = iget(s,root_block);
-	s->s_root  = d_alloc_root(root_inode,NULL);
+	if (!root_inode)
+		goto out_no_root;
+	s->s_root  = d_alloc_root(root_inode, NULL);
+	if (!s->s_root)
+		goto out_no_root;
+	s->s_root->d_op = &affs_dentry_operations;
+
 	unlock_super(s);
-
-	if (!(s->s_root)) {
-		s->s_dev = 0;
-		affs_brelse(s->u.affs_sb.s_root_bh);
-		printk(KERN_ERR "AFFS: get root inode failed\n");
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
-	s->s_root->d_op = (s->u.affs_sb.s_flags & SF_INTL) ? &affs_dentry_operations_intl
-							   : &affs_dentry_operations;
-
 	/* Record date of last change if the bitmap was truncated and
 	 * create data zones if the volume is writable.
 	 */
@@ -592,12 +568,56 @@ nobitmap:
 	pr_debug("AFFS: s_flags=%lX\n",s->s_flags);
 	return s;
 
- out: /* Kick out for various error conditions */
-	affs_brelse (bh);
+out_bad_opts:
+	printk(KERN_ERR "AFFS: Error parsing options\n");
+	goto out_fail;
+out_bad_size:
+	printk(KERN_ERR "AFFS: Could not determine device size\n");
+	goto out_free_prefix;
+out_no_valid_block:
+	if (!silent)
+		printk(KERN_ERR "AFFS: No valid root block on device %s\n",
+			kdevname(dev));
+	goto out_restore;
+out_unknown_fs:
+	printk(KERN_ERR "AFFS: Unknown filesystem on device %s: %08X\n",
+		kdevname(dev), chksum);
+	goto out_free_bh;
+out_no_root_block:
+	printk(KERN_ERR "AFFS: Cannot read root block\n");
+	goto out_free_bh;
+out_no_bitmap:
+	printk(KERN_ERR "AFFS: Bitmap allocation failed\n");
+	goto out_free_root_block;
+out_no_read_bm:
+	printk(KERN_ERR "AFFS: Cannot read bitmap\n");
+	goto out_free_bitmap;
+out_no_bm_ext:
+	printk(KERN_ERR "AFFS: Cannot read bitmap extension\n");
+	goto out_free_bitmap;
+out_bad_num:
+	printk(KERN_ERR "AFFS: Got only %d bitmap blocks, expected %d\n",
+		mapidx, num_bm);
+	goto out_free_bitmap;
+out_no_root:
+	printk(KERN_ERR "AFFS: get root inode failed\n");
+
+	/*
+	 * Begin the cascaded cleanup ...
+	 */
+	iput(root_inode);
+out_free_bitmap:
+	kfree(s->u.affs_sb.s_bitmap);
+out_free_root_block:
 	affs_brelse(s->u.affs_sb.s_root_bh);
-	if (s->u.affs_sb.s_bitmap)
-		kfree(s->u.affs_sb.s_bitmap);
-	set_blocksize(dev,BLOCK_SIZE);
+out_free_bh:
+	affs_brelse(bh);
+out_restore:
+	set_blocksize(dev, s->u.affs_sb.s_blksize);
+out_free_prefix:
+	if (s->u.affs_sb.s_prefix)
+		kfree(s->u.affs_sb.s_prefix);
+out_fail:
 	s->s_dev = 0;
 	unlock_super(s);
 	MOD_DEC_USE_COUNT;

@@ -13,80 +13,80 @@
 #define STATUS   0x1
 #define DATA     0
 
-extern __inline__ void parport_pc_write_epp(struct parport *p, unsigned int d)
+extern __inline__ void parport_pc_write_epp(struct parport *p, unsigned char d)
 {
 	outb(d, p->base+EPPREG);
 }
 
-extern __inline__ unsigned int parport_pc_read_epp(struct parport *p)
+extern __inline__ unsigned char parport_pc_read_epp(struct parport *p)
 {
-	return (unsigned int)inb(p->base+EPPREG);
+	return inb(p->base+EPPREG);
 }
 
-extern __inline__ unsigned int parport_pc_read_configb(struct parport *p)
+extern __inline__ unsigned char parport_pc_read_configb(struct parport *p)
 {
-	return (unsigned int)inb(p->base+CONFIGB);
+	return inb(p->base+CONFIGB);
 }
 
-extern __inline__ void parport_pc_write_data(struct parport *p, unsigned int d)
+extern __inline__ void parport_pc_write_data(struct parport *p, unsigned char d)
 {
 	outb(d, p->base+DATA);
 }
 
-extern __inline__ unsigned int parport_pc_read_data(struct parport *p)
+extern __inline__ unsigned char parport_pc_read_data(struct parport *p)
 {
-	return (unsigned int)inb(p->base+DATA);
+	return inb(p->base+DATA);
 }
 
-extern __inline__ void parport_pc_write_control(struct parport *p, unsigned int d)
+extern __inline__ void parport_pc_write_control(struct parport *p, unsigned char d)
 {
 	outb(d, p->base+CONTROL);
 }
 
-extern __inline__ unsigned int parport_pc_read_control(struct parport *p)
+extern __inline__ unsigned char parport_pc_read_control(struct parport *p)
 {
-	return (unsigned int)inb(p->base+CONTROL);
+	return inb(p->base+CONTROL);
 }
 
-extern __inline__ unsigned int parport_pc_frob_control(struct parport *p, unsigned int mask,  unsigned int val)
+extern __inline__ unsigned char parport_pc_frob_control(struct parport *p, unsigned char mask,  unsigned char val)
 {
-	unsigned int old = (unsigned int)inb(p->base+CONTROL);
+	unsigned char old = inb(p->base+CONTROL);
 	outb(((old & ~mask) ^ val), p->base+CONTROL);
 	return old;
 }
 
-extern __inline__ void parport_pc_write_status(struct parport *p, unsigned int d)
+extern __inline__ void parport_pc_write_status(struct parport *p, unsigned char d)
 {
 	outb(d, p->base+STATUS);
 }
 
-extern __inline__ unsigned int parport_pc_read_status(struct parport *p)
+extern __inline__ unsigned char parport_pc_read_status(struct parport *p)
 {
-	return (unsigned int)inb(p->base+STATUS);
+	return inb(p->base+STATUS);
 }
 
-extern __inline__ void parport_pc_write_econtrol(struct parport *p, unsigned int d)
+extern __inline__ void parport_pc_write_econtrol(struct parport *p, unsigned char d)
 {
 	outb(d, p->base+ECONTROL);
 }
 
-extern __inline__ unsigned int parport_pc_read_econtrol(struct parport *p)
+extern __inline__ unsigned char parport_pc_read_econtrol(struct parport *p)
 {
-	return (unsigned int)inb(p->base+ECONTROL);
+	return inb(p->base+ECONTROL);
 }
 
-extern __inline__ unsigned int parport_pc_frob_econtrol(struct parport *p, unsigned int mask,  unsigned int val)
+extern __inline__ unsigned char parport_pc_frob_econtrol(struct parport *p, unsigned char mask,  unsigned char val)
 {
-	unsigned int old = (unsigned int)inb(p->base+ECONTROL);
+	unsigned char old = inb(p->base+ECONTROL);
 	outb(((old & ~mask) ^ val), p->base+ECONTROL);
 	return old;
 }
 
 extern void parport_pc_change_mode(struct parport *p, int m);
 
-extern void parport_pc_write_fifo(struct parport *p, unsigned int v);
+extern void parport_pc_write_fifo(struct parport *p, unsigned char v);
 
-extern unsigned int parport_pc_read_fifo(struct parport *p);
+extern unsigned char parport_pc_read_fifo(struct parport *p);
 
 extern void parport_pc_disable_irq(struct parport *p);
 
@@ -100,13 +100,13 @@ extern void parport_pc_save_state(struct parport *p, struct parport_state *s);
 
 extern void parport_pc_restore_state(struct parport *p, struct parport_state *s);
 
-extern unsigned int parport_pc_epp_read_block(struct parport *p, void *buf, unsigned  int length);
+extern size_t parport_pc_epp_read_block(struct parport *p, void *buf, size_t length);
 
-extern unsigned int parport_pc_epp_write_block(struct parport *p, void *buf, unsigned  int length);
+extern size_t parport_pc_epp_write_block(struct parport *p, void *buf, size_t length);
 
-extern unsigned int parport_pc_ecp_read_block(struct parport *p, void *buf, unsigned  int length, void (*fn)(struct parport *, void *, unsigned int), void *handle);
+extern int parport_pc_ecp_read_block(struct parport *p, void *buf, size_t length, void (*fn)(struct parport *, void *, size_t), void *handle);
 
-extern unsigned int parport_pc_ecp_write_block(struct parport *p, void *buf, unsigned  int length, void (*fn)(struct parport *, void *, unsigned int), void *handle);
+extern int parport_pc_ecp_write_block(struct parport *p, void *buf, size_t length, void (*fn)(struct parport *, void *, size_t), void *handle);
 
 extern int parport_pc_examine_irq(struct parport *p);
 

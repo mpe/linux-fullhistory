@@ -285,7 +285,7 @@ README for the ISDN-subsystem
 5. Application
 
    a) For some card-types, firmware has to be loaded into the cards, before
-      proceeding with device-independant setup. See README.<yourDriver>
+      proceeding with device-independent setup. See README.<yourDriver>
       for how to do that.
 
    b) If you only intend to use ttys, you are nearly ready now.

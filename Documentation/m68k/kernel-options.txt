@@ -567,7 +567,7 @@ Syntax: ataflop=<drive type>[,<trackbuffering>[,<steprateA>[,<steprateB>]]]
    type.
 
    The second parameter <trackbuffer> tells the kernel whether to use
-   track buffering (1) or not (0). The default is machine dependant:
+   track buffering (1) or not (0). The default is machine-dependent:
    no for the Medusa and yes for all others.
 
    With the two following parameters, you can change the default

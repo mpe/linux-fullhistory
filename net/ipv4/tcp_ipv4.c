@@ -174,7 +174,7 @@ static __inline__ int tcp_lport_inuse(int num)
 	return 0;
 }
 
-/* Find a "good" local port, this is family independant.
+/* Find a "good" local port, this is family independent.
  * There are several strategies working in unison here to
  * get the best possible performance.  The current socket
  * load is kept track of, if it is zero there is a strong
