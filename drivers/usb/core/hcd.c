@@ -701,7 +701,7 @@ void usb_host_cleanup(void)
  * This code is used to initialize a usb_bus structure, memory for which is
  * separately managed.
  */
-void usb_bus_init (struct usb_bus *bus)
+static void usb_bus_init (struct usb_bus *bus)
 {
 	memset (&bus->devmap, 0, sizeof(struct usb_devmap));
 
@@ -719,7 +719,6 @@ void usb_bus_init (struct usb_bus *bus)
 	class_device_initialize(&bus->class_dev);
 	bus->class_dev.class = &usb_host_class;
 }
-EXPORT_SYMBOL (usb_bus_init);
 
 /**
  * usb_alloc_bus - creates a new USB host controller structure
@@ -745,7 +744,6 @@ struct usb_bus *usb_alloc_bus (struct usb_operations *op)
 	bus->op = op;
 	return bus;
 }
-EXPORT_SYMBOL (usb_alloc_bus);
 
 /*-------------------------------------------------------------------------*/
 
@@ -792,7 +790,6 @@ int usb_register_bus(struct usb_bus *bus)
 	dev_info (bus->controller, "new USB bus registered, assigned bus number %d\n", bus->busnum);
 	return 0;
 }
-EXPORT_SYMBOL (usb_register_bus);
 
 /**
  * usb_deregister_bus - deregisters the USB host controller
@@ -822,7 +819,6 @@ void usb_deregister_bus (struct usb_bus *bus)
 
 	class_device_del(&bus->class_dev);
 }
-EXPORT_SYMBOL (usb_deregister_bus);
 
 /**
  * usb_register_root_hub - called by HCD to register its root hub 
@@ -1557,7 +1553,6 @@ irqreturn_t usb_hcd_irq (int irq, void *__hcd, struct pt_regs * r)
 		usb_hc_died (hcd);
 	return IRQ_HANDLED;
 }
-EXPORT_SYMBOL (usb_hcd_irq);
 
 /*-------------------------------------------------------------------------*/
 

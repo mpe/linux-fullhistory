@@ -208,7 +208,6 @@ struct hc_driver {
 };
 
 extern void usb_hcd_giveback_urb (struct usb_hcd *hcd, struct urb *urb, struct pt_regs *regs);
-extern void usb_bus_init (struct usb_bus *bus);
 
 extern struct usb_hcd *usb_create_hcd (const struct hc_driver *driver,
 		struct device *dev, char *bus_name);

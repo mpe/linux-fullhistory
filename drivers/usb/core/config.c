@@ -221,7 +221,7 @@ skip_to_next_interface_descriptor:
 	return buffer - buffer0 + i;
 }
 
-int usb_parse_configuration(struct device *ddev, int cfgidx,
+static int usb_parse_configuration(struct device *ddev, int cfgidx,
     struct usb_host_config *config, unsigned char *buffer, int size)
 {
 	unsigned char *buffer0 = buffer;

@@ -794,7 +794,7 @@ exit:
  * manufacturing revisions. In any event, we consider these 
  * IDs to not be model-specific nor unique.
  */
-struct usb_device_id aiptek_ids[] = {
+static const struct usb_device_id aiptek_ids[] = {
 	{USB_DEVICE(USB_VENDOR_ID_AIPTEK, 0x01)},
 	{USB_DEVICE(USB_VENDOR_ID_AIPTEK, 0x10)},
 	{USB_DEVICE(USB_VENDOR_ID_AIPTEK, 0x20)},

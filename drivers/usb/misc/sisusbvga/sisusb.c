@@ -2271,7 +2271,7 @@ sisusb_init_gfxdevice(struct sisusb_usb_data *sisusb, int initscreen)
 
 /* fops */
 
-int
+static int
 sisusb_open(struct inode *inode, struct file *file)
 {
 	struct sisusb_usb_data *sisusb;
@@ -2361,7 +2361,7 @@ sisusb_delete(struct kref *kref)
 	kfree(sisusb);
 }
 
-int
+static int
 sisusb_release(struct inode *inode, struct file *file)
 {
 	struct sisusb_usb_data *sisusb;
@@ -2399,7 +2399,7 @@ sisusb_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-ssize_t
+static ssize_t
 sisusb_read(struct file *file, char __user *buffer, size_t count, loff_t *ppos)
 {
 	struct sisusb_usb_data *sisusb;
@@ -2540,7 +2540,7 @@ sisusb_read(struct file *file, char __user *buffer, size_t count, loff_t *ppos)
 	return errno ? errno : bytes_read;
 }
 
-ssize_t
+static ssize_t
 sisusb_write(struct file *file, const char __user *buffer, size_t count,
 								loff_t *ppos)
 {

@@ -1533,7 +1533,8 @@ static int hub_port_suspend(struct usb_hub *hub, int port1,
  * Linux (2.6) currently has NO mechanisms to initiate that:  no khubd
  * timer, no SRP, no requests through sysfs.
  */
-int __usb_suspend_device (struct usb_device *udev, int port1, pm_message_t state)
+static int __usb_suspend_device (struct usb_device *udev, int port1,
+				 pm_message_t state)
 {
 	int	status;
 

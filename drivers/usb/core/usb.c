@@ -60,7 +60,7 @@ extern void usb_host_cleanup(void);
 
 const char *usbcore_name = "usbcore";
 
-int nousb;		/* Disable USB when built into kernel image */
+static int nousb;	/* Disable USB when built into kernel image */
 			/* Not honored on modular build */
 
 static DECLARE_RWSEM(usb_all_devices_rwsem);
@@ -86,7 +86,7 @@ static struct device_driver usb_generic_driver = {
 static int usb_generic_driver_data;
 
 /* called from driver core with usb_bus_type.subsys writelock */
-int usb_probe_interface(struct device *dev)
+static int usb_probe_interface(struct device *dev)
 {
 	struct usb_interface * intf = to_usb_interface(dev);
 	struct usb_driver * driver = to_usb_driver(dev->driver);
@@ -114,7 +114,7 @@ int usb_probe_interface(struct device *dev)
 }
 
 /* called from driver core with usb_bus_type.subsys writelock */
-int usb_unbind_interface(struct device *dev)
+static int usb_unbind_interface(struct device *dev)
 {
 	struct usb_interface *intf = to_usb_interface(dev);
 	struct usb_driver *driver = to_usb_driver(intf->dev.driver);
@@ -1148,6 +1148,7 @@ void usb_buffer_free (
  *
  * Reverse the effect of this call with usb_buffer_unmap().
  */
+#if 0
 struct urb *usb_buffer_map (struct urb *urb)
 {
 	struct usb_bus		*bus;
@@ -1177,6 +1178,7 @@ struct urb *usb_buffer_map (struct urb *urb)
 				| URB_NO_SETUP_DMA_MAP);
 	return urb;
 }
+#endif  /*  0  */
 
 /* XXX DISABLED, no users currently.  If you wish to re-enable this
  * XXX please determine whether the sync is to transfer ownership of
@@ -1221,6 +1223,7 @@ void usb_buffer_dmasync (struct urb *urb)
  *
  * Reverses the effect of usb_buffer_map().
  */
+#if 0
 void usb_buffer_unmap (struct urb *urb)
 {
 	struct usb_bus		*bus;
@@ -1247,6 +1250,7 @@ void usb_buffer_unmap (struct urb *urb)
 	urb->transfer_flags &= ~(URB_NO_TRANSFER_DMA_MAP
 				| URB_NO_SETUP_DMA_MAP);
 }
+#endif  /*  0  */
 
 /**
  * usb_buffer_map_sg - create scatterlist DMA mapping(s) for an endpoint
@@ -1527,11 +1531,11 @@ EXPORT_SYMBOL(usb_get_current_frame_number);
 EXPORT_SYMBOL (usb_buffer_alloc);
 EXPORT_SYMBOL (usb_buffer_free);
 
-EXPORT_SYMBOL (usb_buffer_map);
 #if 0
+EXPORT_SYMBOL (usb_buffer_map);
 EXPORT_SYMBOL (usb_buffer_dmasync);
-#endif
 EXPORT_SYMBOL (usb_buffer_unmap);
+#endif
 
 EXPORT_SYMBOL (usb_buffer_map_sg);
 #if 0
