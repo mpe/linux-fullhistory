@@ -11,7 +11,7 @@ O_TARGET := math-emu.o
 O_OBJS   := math.o fabsq.o faddq.o fdivq.o fdmulq.o fitoq.o 		\
 		fmovq.o fmulq.o fnegq.o fqtoi.o fqtox.o fsubq.o		\
 		fxtoq.o fdtoq.o fstoq.o fqtos.o fqtod.o fsqrtq.o	\
-		fcmpq.o fcmpeq.o udivmodti4.o				\
+		fcmpq.o fcmpeq.o					\
 		fsqrts.o fsqrtd.o fadds.o faddd.o fsubs.o fsubd.o	\
 		fmuls.o fmuld.o fdivs.o fdivd.o fsmuld.o		\
 		fstoi.o fdtoi.o fstox.o fdtox.o fstod.o fdtos.o

@@ -32,13 +32,19 @@
 #include <linux/smp_lock.h>
 #include <linux/errno.h>
 
+#include <linux/sched.h>
+#include <linux/unistd.h>
+#include <linux/smp_lock.h>
+
+#include <asm/uaccess.h>
+
+
 #include <asm/spinlock.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/system.h>
 
 #include "uhci.h"
-#include "inits.h"
 
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
@@ -317,6 +323,7 @@ static void uhci_remove_irq_list(struct uhci_td *td)
 static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
+	struct uhci_device *root_hub=usb_to_uhci(dev->uhci->bus->root_hub);
 	struct uhci_td *td = uhci_td_allocate(dev);
 	struct uhci_qh *interrupt_qh = uhci_qh_allocate(dev);
 
@@ -338,14 +345,14 @@ static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_d
 	td->buffer = virt_to_bus(dev->data);
 	td->first = td;
 	td->qh = interrupt_qh;
-	interrupt_qh->skel = &dev->uhci->root_hub->skel_int8_qh;
+	interrupt_qh->skel = &root_hub->skel_int8_qh;
 
 	uhci_add_irq_list(dev->uhci, td, handler, dev_id);
 
 	uhci_insert_td_in_qh(interrupt_qh, td);
 
 	/* Add it into the skeleton */
-	uhci_insert_qh(&dev->uhci->root_hub->skel_int8_qh, interrupt_qh);
+	uhci_insert_qh(&root_hub->skel_int8_qh, interrupt_qh);
 	return 0;
 }
 
@@ -567,7 +574,7 @@ static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, stru
 	DECLARE_WAITQUEUE(wait, current);
 	struct uhci_qh *ctrl_qh = uhci_qh_allocate(dev);
 	struct uhci_td *curtd;
-
+	struct uhci_device *root_hub=usb_to_uhci(dev->uhci->bus->root_hub);
 	current->state = TASK_UNINTERRUPTIBLE;
 	add_wait_queue(&control_wakeup, &wait);
 
@@ -595,9 +602,18 @@ static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, stru
 	uhci_insert_tds_in_qh(ctrl_qh, first, last);
 
 	/* Add it into the skeleton */
-	uhci_insert_qh(&dev->uhci->root_hub->skel_control_qh, ctrl_qh);
+	uhci_insert_qh(&root_hub->skel_control_qh, ctrl_qh);
+
+//	control should be full here...	
+//	printk("control\n");
+//	show_status(dev->uhci);
+//	show_queues(dev->uhci);
 
 	schedule_timeout(HZ/10);
+
+//	control should be empty here...	
+//	show_status(dev->uhci);
+//	show_queues(dev->uhci);
 
 	remove_wait_queue(&control_wakeup, &wait);
 
@@ -609,7 +625,7 @@ static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, stru
 #endif
 
 	/* Remove it from the skeleton */
-	uhci_remove_qh(&dev->uhci->root_hub->skel_control_qh, ctrl_qh);
+	uhci_remove_qh(&root_hub->skel_control_qh, ctrl_qh);
 
 	uhci_qh_deallocate(ctrl_qh);
 
@@ -772,8 +788,7 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
 	DECLARE_WAITQUEUE(wait, current);
 	struct uhci_qh *bulk_qh = uhci_qh_allocate(dev);
 	struct uhci_td *curtd;
-
-
+	struct uhci_device *root_hub=usb_to_uhci(dev->uhci->bus->root_hub);
 
 	current->state = TASK_UNINTERRUPTIBLE;
 	add_wait_queue(&bulk_wakeup, &wait);
@@ -801,19 +816,17 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
 
 	uhci_insert_tds_in_qh(bulk_qh, first, last);
 
-//	bulk0 is empty here...	
-//	show_status(dev->uhci);
-//	show_queues(dev->uhci);
-	
 	/* Add it into the skeleton */
-	/*WARNING! HUB HAS NO BULK QH TIL NOW!!!!!!!!!!!*/
-	uhci_insert_qh(&dev->uhci->root_hub->skel_bulk0_qh, bulk_qh);
+	uhci_insert_qh(&root_hub->skel_bulk0_qh, bulk_qh);
 
 //	now we're in the queue... but don't ask WHAT is in there ;-(
+//	printk("bulk\n");
 //	show_status(dev->uhci);
 //	show_queues(dev->uhci);
 
 	schedule_timeout(HZ/10);
+//	show_status(dev->uhci);
+//	show_queues(dev->uhci);
 
 	remove_wait_queue(&bulk_wakeup, &wait);
 
@@ -825,7 +838,7 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
 #endif
 
 	/* Remove it from the skeleton */
-	uhci_remove_qh(&dev->uhci->root_hub->skel_bulk0_qh, bulk_qh);
+	uhci_remove_qh(&root_hub->skel_bulk0_qh, bulk_qh);
 
 	uhci_qh_deallocate(bulk_qh);
 
@@ -866,10 +879,10 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	  I FORGOT WHAT IT EXACTLY DOES
 	*/
 	if (usb_pipeout(pipe)) {
-		destination = (pipe & 0x0007ff00) | 0xE1;
+		destination = (pipe & 0x000Aff00) | 0xE1;
 	}
 	else {
-		destination = (pipe & 0x0007ff00) | 0x69;
+		destination = (pipe & 0x000Aff00) | 0x69;
 	}
 
 	/* Status:    slow/fast,       Active,    Short Packet Detect     Three Errors */
@@ -883,7 +896,6 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	while (len > 0) {
 		/* Build the TD for control status */
 		int pktsze = len;
-
 		if (pktsze > maxsze)
 			pktsze = maxsze;
 
@@ -906,7 +918,12 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 		/* Alternate Data0/1 (start with Data0) */
 		usb_dotoggle(usb_dev, usb_pipeendpoint(pipe));
 	}
-	td->link = 1;					/* Terminate */
+	prevtd->link = 1;				/* Terminate */
+	prevtd->status = status | (1 << 24);		/* IOC */
+	prevtd->first = first;
+	uhci_td_deallocate(td);
+
+	/* CHANGE DIRECTION HERE! SAVE IT SOMEWHERE IN THE ENDPOINT!!! */
 
 	/* Start it up.. */
 	ret = uhci_run_bulk(dev, first, td, rval);
@@ -1064,7 +1081,7 @@ static void uhci_connect_change(struct uhci *uhci, unsigned int port, unsigned i
 	struct usb_device *usb_dev;
 	struct uhci_device *dev;
 	unsigned short status;
-
+	struct uhci_device *root_hub=usb_to_uhci(uhci->bus->root_hub);
 	printk("uhci_connect_change: called for %d\n", nr);
 
 	/*
@@ -1074,7 +1091,7 @@ static void uhci_connect_change(struct uhci *uhci, unsigned int port, unsigned i
 	 *
 	 * So start off by getting rid of any old devices..
 	 */
-	usb_disconnect(&uhci->root_hub->usb->children[nr]);
+	usb_disconnect(&root_hub->usb->children[nr]);
 
 	status = inw(port);
 
@@ -1089,14 +1106,14 @@ static void uhci_connect_change(struct uhci *uhci, unsigned int port, unsigned i
 	 * Ok, we got a new connection. Allocate a device to it,
 	 * and find out what it wants to do..
 	 */
-	usb_dev = uhci_usb_allocate(uhci->root_hub->usb);
+	usb_dev = uhci_usb_allocate(root_hub->usb);
 	dev = usb_dev->hcpriv;
 
 	dev->uhci = uhci;
 
 	usb_connect(usb_dev);
 
-	uhci->root_hub->usb->children[nr] = usb_dev;
+	root_hub->usb->children[nr] = usb_dev;
 
 	wait_ms(200); /* wait for powerup */
 	uhci_reset_port(port);
@@ -1119,8 +1136,9 @@ static void uhci_connect_change(struct uhci *uhci, unsigned int port, unsigned i
  */
 static void uhci_check_configuration(struct uhci *uhci)
 {
+	struct uhci_device * root_hub=usb_to_uhci(uhci->bus->root_hub);
 	unsigned int io_addr = uhci->io_addr + USBPORTSC1;
-	int maxchild = uhci->root_hub->usb->maxchild;
+	int maxchild = root_hub->usb->maxchild;
 	int nr = 0;
 
 	do {
@@ -1184,7 +1202,8 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 static void uhci_root_hub_events(struct uhci *uhci, unsigned int io_addr)
 {
 	if (waitqueue_active(&uhci_configure)) {
-		int ports = uhci->root_hub->usb->maxchild;
+		struct uhci_device * root_hub=usb_to_uhci(uhci->bus->root_hub);
+		int ports = root_hub->usb->maxchild;
 		io_addr += USBPORTSC1;
 		do {
 			if (inw(io_addr) & USBPORTSC_CSC) {
@@ -1227,7 +1246,7 @@ static void uhci_interrupt(int irq, void *__uhci, struct pt_regs *regs)
  */
 static void uhci_init_ticktd(struct uhci *uhci)
 {
-	struct uhci_device *dev = uhci->root_hub;
+	struct uhci_device *dev = usb_to_uhci(uhci->bus->root_hub);
 	struct uhci_td *td = uhci_td_allocate(dev);
 
 	td->link = 1;
@@ -1344,10 +1363,9 @@ static struct uhci *alloc_uhci(unsigned int io_addr)
 	if (!usb)
 		return NULL;
 
-	dev = uhci->root_hub = usb_to_uhci(usb);
-
 	usb->bus = bus;
-
+	dev = usb_to_uhci(usb);
+	uhci->bus->root_hub=uhci_to_usb(dev);
 	/* Initialize the root hub */
 	/* UHCI specs says devices must have 2 ports, but goes on to say */
 	/* they may have more but give no way to determine how many they */
@@ -1428,9 +1446,9 @@ static void release_uhci(struct uhci *uhci)
 	}
 
 #if 0
-	if (uhci->root_hub) {
-		uhci_usb_deallocate(uhci_to_usb(uhci->root_hub));
-		uhci->root_hub = NULL;
+	if (uhci->bus->root_hub) {
+		uhci_usb_deallocate(uhci_to_usb(uhci->bus->root_hub));
+		uhci->bus->root_hub = NULL;
 	}
 #endif
 
@@ -1443,12 +1461,10 @@ static void release_uhci(struct uhci *uhci)
 	kfree(uhci);
 }
 
-void cleanup_drivers(void);
-
 static int uhci_control_thread(void * __uhci)
 {
 	struct uhci *uhci = (struct uhci *)__uhci;
-
+	struct uhci_device * root_hub =usb_to_uhci(uhci->bus->root_hub);
 	lock_kernel();
 	request_region(uhci->io_addr, 32, "usb-uhci");
 
@@ -1467,6 +1483,7 @@ static int uhci_control_thread(void * __uhci)
 	 * Ok, all systems are go..
 	 */
 	start_hc(uhci);
+	usb_register_bus(uhci->bus);
 	for(;;) {
 		siginfo_t info;
 		int unsigned long signr;
@@ -1498,12 +1515,12 @@ static int uhci_control_thread(void * __uhci)
 
 	{
 	int i;
-	if(uhci->root_hub)
-		for(i = 0; i < uhci->root_hub->usb->maxchild; i++)
-			usb_disconnect(uhci->root_hub->usb->children + i);
+	if(root_hub)
+		for(i = 0; i < root_hub->usb->maxchild; i++)
+			usb_disconnect(root_hub->usb->children + i);
 	}
 
-	cleanup_drivers();
+	usb_deregister_bus(uhci->bus);
 
 	reset_hc(uhci);
 	release_region(uhci->io_addr, 32);
@@ -1534,10 +1551,10 @@ static int found_uhci(int irq, unsigned int io_addr)
 	retval = -EBUSY;
 	if (request_irq(irq, uhci_interrupt, SA_SHIRQ, "usb", uhci) == 0) {
 		int pid;
-
 		MOD_INC_USE_COUNT;
 		uhci->irq = irq;
-		pid = kernel_thread(uhci_control_thread, uhci, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+		pid = kernel_thread(uhci_control_thread, uhci,
+			CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 		if (pid >= 0)
 			return 0;
 
@@ -1602,21 +1619,6 @@ static int handle_apm_event(apm_event_t event)
 }
 #endif
 
-#ifdef MODULE
-
-void cleanup_module(void)
-{
-#ifdef CONFIG_APM
-	apm_unregister_callback(&handle_apm_event);
-#endif
-}
-
-int init_modules(void)
-{
-	return uhci_init();
-}
-
-#endif
 
 int uhci_init(void)
 {
@@ -1645,3 +1647,17 @@ int uhci_init(void)
 	}
 	return retval;
 }
+
+#ifdef MODULE
+int init_module(void)
+{
+	return uhci_init();
+}
+
+void cleanup_module(void)
+{
+#ifdef CONFIG_APM
+	apm_unregister_callback(&handle_apm_event);
+#endif
+}
+#endif //MODULE

@@ -367,7 +367,6 @@ struct ohci {
     	int irq;
 	struct ohci_regs *regs;			/* OHCI controller's memory */
 	struct usb_bus *bus;
-	struct ohci_device *root_hub;		/* Root hub & controller */
 	struct list_head interrupt_list;	/* List of interrupt active TDs for this OHCI */
 };
 

@@ -4,24 +4,29 @@
  * Version:       
  * Description:   
  * Status:        Experimental.
- * Author:        Haris Zukanovic <haris@stud.cs.uit.no>
+ * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Tue Apr 20 11:06:28 1999
+ * Modified at:   Mon May 10 15:46:02 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Haris Zukanovic, <haris@stud.cs.uit.no>
- *     Copyright (c) 1998 Dag Brattli, <dagb@cs.uit.no>
+ *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
  *     Copyright (c) 1998 Thomas Davis, <ratbert@radiks.net>,
- *     All Rights Reserved.
- *      
+ *     Copyright (c) 1998 Haris Zukanovic, <haris@stud.cs.uit.no>
+ *
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
  *     published by the Free Software Foundation; either version 2 of 
  *     the License, or (at your option) any later version.
- *  
- *     Neither Haris Zukanovic nor University of Tromsø admit liability nor
- *     provide warranty for any of this software. This material is 
- *     provided "AS-IS" and at no charge.
+ * 
+ *     This program is distributed in the hope that it will be useful,
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *     GNU General Public License for more details.
+ * 
+ *     You should have received a copy of the GNU General Public License 
+ *     along with this program; if not, write to the Free Software 
+ *     Foundation, Inc., 59 Temple Place, Suite 330, Boston, 
+ *     MA 02111-1307 USA
  *     
  ********************************************************************/
 
@@ -35,6 +40,7 @@
 
 #include <net/irda/irda.h>
 #include <net/irda/qos.h>
+#include <net/irda/dongle.h>
 #include <net/irda/irqueue.h>
 #include <net/irda/irlap_frame.h>
 
@@ -51,6 +57,11 @@
 
 #define IO_XMIT 0x01
 #define IO_RECV 0x02
+
+struct dongle_q {
+	QUEUE q;
+	struct dongle *dongle;
+};
 
 /* Chip specific info */
 struct chipio_t {
@@ -111,6 +122,8 @@ struct irda_device {
 	struct iobuff_t tx_buff;
 	struct iobuff_t rx_buff;
 
+	struct dongle *dongle; /* Dongle driver */
+
 	/* spinlock_t lock; */ /* For serializing operations */
 	
 	/* Media busy stuff */
@@ -120,7 +133,8 @@ struct irda_device {
 	/* Callbacks for driver specific implementation */
         void (*change_speed)(struct irda_device *driver, int baud);
  	int  (*is_receiving)(struct irda_device *);    /* receiving? */
-	/* int (*is_tbusy)(struct irda_device *); */   /* transmitting? */
+	void (*set_dtr_rts)(struct irda_device *idev, int dtr, int rts);
+	int  (*raw_write)(struct irda_device *idev, __u8 *buf, int len);
 	void (*wait_until_sent)(struct irda_device *);
 	void (*set_caddr)(struct irda_device *);      /* Set connection addr */
 };
@@ -142,6 +156,9 @@ inline void irda_device_change_speed(struct irda_device *, int);
 
 inline struct qos_info *irda_device_get_qos(struct irda_device *self);
 int irda_device_txqueue_empty(struct irda_device *self);
+void irda_device_init_dongle(struct irda_device *self, int type);
+void irda_device_unregister_dongle(struct dongle *dongle);
+int irda_device_register_dongle(struct dongle *dongle);
 
 int irda_device_setup(struct device *dev);
 
@@ -153,7 +170,7 @@ void setup_dma(int channel, char *buffer, int count, int mode);
  *    Utility function for getting the minimum turnaround time out of 
  *    the skb, where it has been hidden in the cb field.
  */
-inline static __u16 irda_get_mtt(struct sk_buff *skb)
+extern inline __u16 irda_get_mtt(struct sk_buff *skb)
 {
 	__u16 mtt;
 
@@ -165,6 +182,23 @@ inline static __u16 irda_get_mtt(struct sk_buff *skb)
 	ASSERT(mtt <= 10000, return 10000;);
 	
 	return mtt;
+}
+
+extern inline void irda_device_set_dtr_rts(struct irda_device *self, int dtr,
+					   int rts)
+{
+	if (self->set_dtr_rts)
+		self->set_dtr_rts(self, dtr, rts);
+}
+
+extern inline int irda_device_raw_write(struct irda_device *self, __u8 *buf,
+					int len)
+{
+	int ret = -1;
+
+	if (self->raw_write)
+		ret = self->raw_write(self, buf, len);
+	return ret;
 }
 
 #endif

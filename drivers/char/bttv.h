@@ -210,6 +210,7 @@ struct bttv
 #define BTTV_VHX           0x0e
 #define BTTV_ZOLTRIX       0x0f
 #define BTTV_PIXVIEWPLAYTV 0x10
+#define BTTV_WINVIEW_601   0x11
 
 #define AUDIO_TUNER        0x00
 #define AUDIO_RADIO        0x01
@@ -259,5 +260,13 @@ struct bttv
 #define TEA6300_TR         0x03		/* treble control */
 #define TEA6300_FA         0x04		/* fader control */
 #define TEA6300_SW         0x05		/* mute and source switch */
+
+#define PT2254_L_CHANEL 0x10
+#define PT2254_R_CHANEL 0x08
+#define PT2254_DBS_IN_2 0x400
+#define PT2254_DBS_IN_10 0x20000
+#define WINVIEW_PT2254_CLK  0x40
+#define WINVIEW_PT2254_DATA 0x20
+#define WINVIEW_PT2254_STROBE 0x80
 
 #endif

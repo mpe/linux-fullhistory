@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Sep  2 20:22:08 1998
- * Modified at:   Wed Apr 21 09:48:19 1999
+ * Modified at:   Mon May 10 23:02:47 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -31,6 +31,8 @@
 #include <linux/netdevice.h>
 #include <linux/init.h>
 #include <linux/tty.h>
+#include <linux/kmod.h>
+#include <linux/wireless.h>
 
 #include <asm/ioctls.h>
 #include <asm/segment.h>
@@ -53,7 +55,8 @@ extern int tekram_init(void);
 extern int actisys_init(void);
 extern int girbil_init(void);
 
-hashbin_t *irda_device = NULL;
+static hashbin_t *irda_device = NULL;
+static hashbin_t *dongles = NULL;
 
 /* Netdevice functions */
 static int irda_device_net_rebuild_header(struct sk_buff *skb);
@@ -61,9 +64,9 @@ static int irda_device_net_hard_header(struct sk_buff *skb,
 				       struct device *dev,
 				       unsigned short type, void *daddr, 
 				       void *saddr, unsigned len);
-static int irda_device_net_set_config( struct device *dev, struct ifmap *map);
-static int irda_device_net_change_mtu( struct device *dev, int new_mtu);
-
+static int irda_device_net_set_config(struct device *dev, struct ifmap *map);
+static int irda_device_net_change_mtu(struct device *dev, int new_mtu);
+static int irda_device_net_ioctl(struct device *dev, struct ifreq *rq,int cmd);
 #ifdef CONFIG_PROC_FS
 int irda_device_proc_read( char *buf, char **start, off_t offset, int len, 
 			   int unused);
@@ -74,8 +77,15 @@ __initfunc(int irda_device_init( void))
 {
 	/* Allocate master array */
 	irda_device = hashbin_new( HB_LOCAL);
-	if ( irda_device == NULL) {
-		printk( KERN_WARNING "IrDA: Can't allocate irda_device hashbin!\n");
+	if (irda_device == NULL) {
+		WARNING("IrDA: Can't allocate irda_device hashbin!\n");
+		return -ENOMEM;
+	}
+
+	dongles = hashbin_new(HB_LOCAL);
+	if (dongles == NULL) {
+		printk(KERN_WARNING 
+		       "IrDA: Can't allocate dongles hashbin!\n");
 		return -ENOMEM;
 	}
 
@@ -113,6 +123,7 @@ void irda_device_cleanup(void)
 
 	ASSERT(irda_device != NULL, return;);
 
+	hashbin_delete(dongles, NULL);
 	hashbin_delete(irda_device, (FREE_FUNC) irda_device_close);
 }
 
@@ -238,7 +249,7 @@ void __irda_device_close(struct irda_device *self)
 /*
  * Function irda_device_close (self)
  *
- *    
+ *    Close the device
  *
  */
 void irda_device_close(struct irda_device *self)
@@ -247,6 +258,10 @@ void irda_device_close(struct irda_device *self)
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return;);
+
+	/* We are not using any dongle anymore! */
+	if (self->dongle)
+		self->dongle->close(self);
 
 	/* Stop and remove instance of IrLAP */
 	if (self->irlap)
@@ -298,15 +313,19 @@ static void __irda_device_change_speed(struct irda_device *self, int speed)
 	 */
 	if (self->wait_until_sent) {
 		self->wait_until_sent(self);
+		
+		if (self->dongle)
+			self->dongle->change_speed(self, speed);
+		
 		if (self->change_speed) {
 			self->change_speed(self, speed);
-
+			
 			/* Update the QoS value only */
 			self->qos.baud_rate.value = speed;
 		}
 	} else {
-		printk(KERN_WARNING "wait_until_sent() "
-		       "has not implemented by the IrDA device driver!\n");
+		WARNING("IrDA: wait_until_sent() "
+			"has not implemented by the IrDA device driver!\n");
 	}
 }
 
@@ -386,6 +405,7 @@ int irda_device_setup(struct device *dev)
 	dev->set_config      = irda_device_net_set_config;
 	dev->change_mtu      = irda_device_net_change_mtu;
 /*  	dev->hard_header     = irda_device_net_hard_header; */
+	dev->do_ioctl        = irda_device_net_ioctl;
         dev->hard_header_len = 0;
         dev->addr_len        = 0;
 
@@ -444,6 +464,125 @@ static int irda_device_net_change_mtu( struct device *dev, int new_mtu)
      return 0;  
 }
 
+static int irda_device_net_ioctl(struct device *dev, /* ioctl device */
+				 struct ifreq *rq,   /* Data passed */
+				 int	cmd)	     /* Ioctl number */
+{
+	unsigned long flags;
+	int			ret = 0;
+#ifdef WIRELESS_EXT
+	struct iwreq *wrq = (struct iwreq *) rq;
+#endif
+	struct irda_device *self;
+
+	DEBUG(4, __FUNCTION__ "()\n");
+
+	ASSERT(dev != NULL, return -1;);
+
+	self = (struct irda_device *) dev->priv;
+
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return -1;);
+
+	DEBUG(0, "%s: ->irda_device_net_ioctl(cmd=0x%X)\n", dev->name, cmd);
+	
+	/* Disable interrupts & save flags */
+	save_flags(flags);
+	cli();
+	
+	/* Look what is the request */
+	switch (cmd) {
+#ifdef WIRELESS_EXT
+	case SIOCGIWNAME:
+		/* Get name */
+		strcpy(wrq->u.name, self->name);
+		break;
+	case SIOCSIWNWID:
+		/* Set domain */
+		if (wrq->u.nwid.on) {
+			
+		} break;
+	case SIOCGIWNWID:
+		/* Read domain*/
+/* 		wrq->u.nwid.nwid = domain; */
+/* 		wrq->u.nwid.on = 1; */
+		break;
+	case SIOCGIWENCODE:
+		/* Get scramble key */
+		/* 	wrq->u.encoding.code = scramble_key; */
+/* 		wrq->u.encoding.method = 1; */
+		break;
+	case SIOCSIWENCODE:
+		/* Set  scramble key */
+		/* scramble_key = wrq->u.encoding.code; */
+		break;
+	case SIOCGIWRANGE:
+		/* Basic checking... */
+		if(wrq->u.data.pointer != (caddr_t) 0) {
+			struct iw_range	range;
+			
+			/* Verify the user buffer */
+			ret = verify_area(VERIFY_WRITE, wrq->u.data.pointer,
+					  sizeof(struct iw_range));
+			if(ret)
+				break;
+			
+			/* Set the length (useless : its constant...) */
+			wrq->u.data.length = sizeof(struct iw_range);
+			
+			/* Set information in the range struct */
+			range.throughput = 1.6 * 1024 * 1024;	/* don't argue on this ! */
+			range.min_nwid = 0x0000;
+			range.max_nwid = 0x01FF;
+			
+			range.num_channels = range.num_frequency = 0;
+			
+			range.sensitivity = 0x3F;
+			range.max_qual.qual = 255;
+			range.max_qual.level = 255;
+			range.max_qual.noise = 0;
+			
+			/* Copy structure to the user buffer */
+			copy_to_user(wrq->u.data.pointer, &range,
+				     sizeof(struct iw_range));
+		}
+		break;
+	case SIOCGIWPRIV:
+		/* Basic checking... */
+#if 0
+		if (wrq->u.data.pointer != (caddr_t) 0) {
+			struct iw_priv_args	priv[] =
+			{	/* cmd,		set_args,	get_args,	name */
+				{ SIOCGIPSNAP, IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED | 0, 
+				  sizeof(struct site_survey), 
+				  "getsitesurvey" },
+			};
+			
+			/* Verify the user buffer */
+			ret = verify_area(VERIFY_WRITE, wrq->u.data.pointer,
+					  sizeof(priv));
+			if (ret)
+				break;
+			
+			/* Set the number of ioctl available */
+			wrq->u.data.length = 1;
+			
+			/* Copy structure to the user buffer */
+			copy_to_user(wrq->u.data.pointer, (u_char *) priv,
+				     sizeof(priv));
+		}
+#endif 
+		break;
+#endif
+	default:
+		ret = -EOPNOTSUPP;
+	}
+	
+	restore_flags(flags);
+	
+	return ret;
+}
+
 /*
  * Function irda_device_transmit_finished (void)
  *
@@ -451,7 +590,7 @@ static int irda_device_net_change_mtu( struct device *dev, int new_mtu)
  *    device. Maybe we should use: q->q.qlen == 0.
  *
  */
-int irda_device_txqueue_empty( struct irda_device *self)
+int irda_device_txqueue_empty(struct irda_device *self)
 {
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return -1;);	
@@ -460,6 +599,117 @@ int irda_device_txqueue_empty( struct irda_device *self)
 		return FALSE;
 
 	return TRUE;
+}
+
+/*
+ * Function irda_device_init_dongle (self, type)
+ *
+ *    Initialize attached dongle. Warning, must be called with a process
+ *    context!
+ */
+void irda_device_init_dongle(struct irda_device *self, int type)
+{
+	struct dongle_q *node;
+
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return;);
+
+#ifdef CONFIG_KMOD
+	/* Try to load the module needed */
+	switch (type) {
+	case ESI_DONGLE:
+		MESSAGE("IrDA: Initializing ESI dongle!\n");
+		request_module("esi");
+		break;
+	case TEKRAM_DONGLE:
+		MESSAGE("IrDA: Initializing Tekram dongle!\n");
+		request_module("tekram");
+		break;
+	case ACTISYS_DONGLE:     /* FALLTHROUGH */
+	case ACTISYS_PLUS_DONGLE:
+		MESSAGE("IrDA: Initializing ACTiSYS dongle!\n");
+		request_module("actisys");
+		break;
+	case GIRBIL_DONGLE:
+		MESSAGE("IrDA: Initializing GIrBIL dongle!\n");
+		request_module("girbil");
+		break;
+	case LITELINK_DONGLE:
+		MESSAGE("IrDA: Initializing Litelink dongle!\n");
+		request_module("litelink");
+		break;
+	default:
+		ERROR("Unknown dongle type!\n");
+		return;
+	}
+#endif /* CONFIG_KMOD */
+
+	node = hashbin_find(dongles, type, NULL);
+	if (!node) {
+		ERROR("IrDA: Unable to find requested dongle\n");
+		return;
+	}
+
+	/* Set the dongle to be used by this driver */
+	self->dongle = node->dongle;
+
+	/* Now initialize the dongle!  */
+	node->dongle->open(self, type);
+	node->dongle->qos_init(self, &self->qos);
+	
+	/* Reset dongle */
+	node->dongle->reset(self, 0);
+
+	/* Set to default baudrate */
+	irda_device_change_speed(self, 9600);
+}
+
+/*
+ * Function irda_device_register_dongle (dongle)
+ *
+ *    
+ *
+ */
+int irda_device_register_dongle(struct dongle *dongle)
+{
+	struct dongle_q *new;
+	
+	/* Check if this dongle has been registred before */
+	if (hashbin_find(dongles, dongle->type, NULL)) {
+		MESSAGE(__FUNCTION__ "(), Dongle already registered\n");
+                return 0;
+        }
+	
+	/* Make new IrDA dongle */
+        new = (struct dongle_q *) kmalloc(sizeof(struct dongle_q), GFP_KERNEL);
+        if (new == NULL)
+                return -1;
+		
+	memset(new, 0, sizeof( struct dongle_q));
+        new->dongle = dongle;
+
+	/* Insert IrDA dongle into hashbin */
+	hashbin_insert(dongles, (QUEUE *) new, dongle->type, NULL);
+	
+        return 0;
+}
+
+/*
+ * Function irda_device_unregister_dongle (dongle)
+ *
+ *    
+ *
+ */
+void irda_device_unregister_dongle(struct dongle *dongle)
+{
+	struct dongle_q *node;
+
+	node = hashbin_remove(dongles, dongle->type, NULL);
+	if (!node) {
+		ERROR(__FUNCTION__ "(), dongle not found!\n");
+		return;
+	}
+	kfree(node);
 }
 
 /*
@@ -536,7 +786,7 @@ int irda_device_proc_read(char *buf, char **start, off_t offset, int len,
 
 	self = (struct irda_device *) hashbin_get_first(irda_device);
 	while ( self != NULL) {
-		len += sprintf(buf+len, "%s,", self->name);
+		len += sprintf(buf+len, "\n%s,", self->name);
 		len += sprintf(buf+len, "\tbinding: %s\n", 
 			       self->description);
 		

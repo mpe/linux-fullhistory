@@ -6,11 +6,11 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Oct  9 09:18:07 1998
- * Modified at:   Mon Feb  8 01:23:52 1999
+ * Modified at:   Sun May  9 11:37:06 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       ppp.c, isdn_ppp.c
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -255,11 +255,11 @@ struct sk_buff *irlap_compress_frame( struct irlap_cb *self,
 	}
 
 	/* FIXME: Find out what is the max overhead (not 10) */
-	new_skb = dev_alloc_skb( skb->len+LAP_HEADER+10);
+	new_skb = dev_alloc_skb( skb->len+LAP_MAX_HEADER+10);
 	if(!new_skb)
 		return skb;
 
-	skb_reserve( new_skb, LAP_HEADER);
+	skb_reserve( new_skb, LAP_MAX_HEADER);
 	skb_put( new_skb, skb->len+10);
 	
 	count = (self->compressor.cp->compress)( self->compressor.state, 

@@ -269,7 +269,7 @@ static void dn_dev_sysctl_register(struct device *dev, struct dn_dev_parms *parm
 	memcpy(t, &dn_dev_sysctl, sizeof(*t));
 
 	for(i = 0; i < (sizeof(t->dn_dev_vars)/sizeof(t->dn_dev_vars[0]) - 1); i++) {
-		int offset = (int)t->dn_dev_vars[i].data;
+		long offset = (long)t->dn_dev_vars[i].data;
 		t->dn_dev_vars[i].data = ((char *)parms) + offset;
 		t->dn_dev_vars[i].de = NULL;
 	}

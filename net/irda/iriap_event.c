@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Tue Jan 26 12:29:36 1999
+ * Modified at:   Sun May  9 11:01:47 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -387,9 +387,9 @@ static void state_r_disconnect( struct iriap_cb *self, IRIAP_EVENT event,
 		}
 
 		/* Reserve space for MUX_CONTROL and LAP header */
-		skb_reserve( tx_skb, LMP_CONTROL_HEADER+LAP_HEADER);
+		skb_reserve(tx_skb, LMP_MAX_HEADER);
 		
-		irlmp_connect_response( self->lsap, tx_skb);
+		irlmp_connect_response(self->lsap, tx_skb);
 		/*LM_Idle_request(idle); */
 		
 		iriap_next_server_state( self, R_CALL);

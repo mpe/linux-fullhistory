@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      girbil.c
- * Version:       1.0
+ * Version:       1.1
  * Description:   Implementation for the Greenwich GIrBIL dongle
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Feb  6 21:02:33 1999
- * Modified at:   Sat Apr 10 19:53:12 1999
+ * Modified at:   Mon May 10 16:01:33 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -80,19 +80,19 @@ static struct dongle dongle = {
 	girbil_init_qos,
 };
 
-__initfunc(void girbil_init(void))
+__initfunc(int girbil_init(void))
 {
-	irtty_register_dongle(&dongle);
+	return irda_device_register_dongle(&dongle);
 }
 
 void girbil_cleanup(void)
 {
-	irtty_unregister_dongle(&dongle);
+	irda_device_unregister_dongle(&dongle);
 }
 
 static void girbil_open(struct irda_device *idev, int type)
 {
-	strcat( idev->description, " <-> girbil");
+	strcat(idev->description, " <-> girbil");
 
 	idev->io.dongle_id = type;
 	idev->flags |= IFF_DONGLE;
@@ -100,8 +100,11 @@ static void girbil_open(struct irda_device *idev, int type)
 	MOD_INC_USE_COUNT;
 }
 
-static void girbil_close(struct irda_device *dev)
+static void girbil_close(struct irda_device *idev)
 {
+	/* Power off dongle */
+	irda_device_set_dtr_rts(idev, FALSE, FALSE);
+
 	MOD_DEC_USE_COUNT;
 }
 
@@ -114,71 +117,42 @@ static void girbil_close(struct irda_device *dev)
  */
 static void girbil_change_speed(struct irda_device *idev, int speed)
 {
-	struct irtty_cb *self;
-	struct tty_struct *tty;
-	struct termios old_termios;
-	int cflag;
 	__u8 control[2];
 	
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 	
-	self = (struct irtty_cb *) idev->priv;
-	
-	ASSERT(self != NULL, return;); 
-	ASSERT(self->magic == IRTTY_MAGIC, return;);
-	
-	if (!self->tty)
-		return;
-
-	tty = self->tty;
-	
-	old_termios = *(tty->termios);
-	cflag = tty->termios->c_cflag;
-
-	cflag &= ~CBAUD;
-
 	switch (speed) {
 	case 9600:
 	default:
-		cflag |= B9600;
 		control[0] = GIRBIL_9600;
 		break;
 	case 19200:
-		cflag |= B19200;
 		control[0] = GIRBIL_19200;
 		break;
 	case 34800:
-		cflag |= B38400;
 		control[0] = GIRBIL_38400;
 		break;
 	case 57600:
-		cflag |= B57600;
 		control[0] = GIRBIL_57600;
 		break;
 	case 115200:
-		cflag |= B115200;
 		control[0] = GIRBIL_115200;
 		break;
 	}
 	control[1] = GIRBIL_LOAD;
 
 	/* Set DTR and Clear RTS to enter command mode */
-	irtty_set_dtr_rts(tty, FALSE, TRUE);
+	irda_device_set_dtr_rts(idev, FALSE, TRUE);
 
 	/* Write control bytes */
-	if (tty->driver.write)
-		tty->driver.write(self->tty, 0, control, 2);
+	irda_device_raw_write(idev, control, 2);
 
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(2);
 	
 	/* Go back to normal mode */
-	irtty_set_dtr_rts(tty, TRUE, TRUE);
-
-	/* Now change the speed of the serial port */
-	tty->termios->c_cflag = cflag;
-	tty->driver.set_termios(tty, &old_termios);	
+	irda_device_set_dtr_rts(idev, TRUE, TRUE);
 }
 
 /*
@@ -193,44 +167,32 @@ static void girbil_change_speed(struct irda_device *idev, int speed)
  */
 void girbil_reset(struct irda_device *idev, int unused)
 {
-	struct irtty_cb *self;
-	struct tty_struct *tty;
 	__u8 control = GIRBIL_TXEN | GIRBIL_RXEN;
 
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 	
-	self = (struct irtty_cb *) idev->priv;
-	
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == IRTTY_MAGIC, return;);
-
-	tty = self->tty;
-	if (!tty)
-		return;
-
 	/* Reset dongle */
-	irtty_set_dtr_rts(tty, TRUE, FALSE);
+	irda_device_set_dtr_rts(idev, TRUE, FALSE);
 
 	/* Sleep at least 5 ms */
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(2);
 	
 	/* Set DTR and clear RTS to enter command mode */
-	irtty_set_dtr_rts(tty, FALSE, TRUE);
+	irda_device_set_dtr_rts(idev, FALSE, TRUE);
 
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(2);
 
 	/* Write control byte */
-	if (tty->driver.write)
-		tty->driver.write(self->tty, 0, &control, 1);
+	irda_device_raw_write(idev, &control, 1);
 
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(2);
 
 	/* Go back to normal mode */
-	irtty_set_dtr_rts(tty, TRUE, TRUE);
+	irda_device_set_dtr_rts(idev, TRUE, TRUE);
 }
 
 /*
@@ -258,8 +220,7 @@ MODULE_DESCRIPTION("Greenwich GIrBIL dongle driver");
  */
 int init_module(void)
 {
-	girbil_init();
-	return(0);
+	return girbil_init();
 }
 
 /*

@@ -592,17 +592,21 @@ int dn_nsp_rx(struct sk_buff *skb)
 	 */
 	if ((sk = dn_find_by_skb(skb)) != NULL) {
 		struct dn_scp *scp = &sk->protinfo.dn;
+		int ret;
 		/* printk(KERN_DEBUG "dn_nsp_rx: Found a socket\n"); */
 
 		/* Reset backoff */
 		scp->nsp_rxtshift = 0;
 
-		if (!atomic_read(&sk->sock_readers))
-			return dn_nsp_backlog_rcv(sk, skb);
+		bh_lock_sock(sk);
+		ret = 0;
+		if (sk->lock.users == 0)
+			ret = dn_nsp_backlog_rcv(sk, skb);
+		else
+			sk_add_backlog(sk, skb);
+		bh_unlock_sock(sk);
 
-		__skb_queue_tail(&sk->back_log, skb);
-
-		goto out;
+		return ret;
 	}
 	return 1;
 
@@ -621,8 +625,6 @@ int dn_nsp_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	struct dn_scp *scp = &sk->protinfo.dn;
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
-
-	lock_sock(sk); /* SMP locking */
 
 	/*
 	 * Control packet.
@@ -695,8 +697,6 @@ free_out:
 			kfree_skb(skb);
 		}
 	}
-
-	release_sock(sk);
 
 	return 0;
 }

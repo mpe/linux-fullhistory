@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.93 1999/04/21 06:15:45 anton Exp $
+/*  $Id: irq.c,v 1.94 1999/05/28 14:59:20 anton Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -491,15 +491,13 @@ void handler_irq(int irq, struct pt_regs * regs)
 	extern void smp4m_irq_rotate(int cpu);
 #endif
 
+	irq_enter(cpu, irq);
 	disable_pil_irq(irq);
-#if 0 /* FIXME: rotating IRQs halts the machine during SCSI probe. -ecd */
 #ifdef __SMP__
 	/* Only rotate on lower priority IRQ's (scsi, ethernet, etc.). */
 	if(irq < 10)
 		smp4m_irq_rotate(cpu);
 #endif
-#endif
-	irq_enter(cpu, irq);
 	action = *(irq + irq_action);
 	kstat.irqs[cpu][irq]++;
 	do {
@@ -508,8 +506,8 @@ void handler_irq(int irq, struct pt_regs * regs)
 		action->handler(irq, action->dev_id, regs);
 		action = action->next;
 	} while (action);
-	irq_exit(cpu, irq);
 	enable_pil_irq(irq);
+	irq_exit(cpu, irq);
 }
 
 #ifdef CONFIG_BLK_DEV_FD

@@ -158,7 +158,8 @@ struct irlpt_cb {
 	struct miscdevice ir_dev; /* used to register the misc device. */
 
 	int count;                /* open count */
-	int irlap_data_size;	/* max frame size we can send */
+	int max_data_size;	/* max frame size we can send */
+	int max_header_size;    /* how much header space is needed */
 	int pkt_count;		/* how many packets are queued up */
 
 	wait_queue_head_t read_wait;	/* wait queues */

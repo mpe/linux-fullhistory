@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Oct 20 09:10:16 1998
- * Modified at:   Wed Feb  3 21:42:27 1999
+ * Modified at:   Sun May  9 21:17:44 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -38,22 +38,22 @@ char *irlan_state[] = {
 	"IRLAN_SYNC",
 };
 
-void irlan_next_client_state( struct irlan_cb *self, IRLAN_STATE state) 
+void irlan_next_client_state(struct irlan_cb *self, IRLAN_STATE state) 
 {
 	DEBUG(2, __FUNCTION__"(), %s\n", irlan_state[state]);
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRLAN_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
 	self->client.state = state;
 }
 
-void irlan_next_provider_state( struct irlan_cb *self, IRLAN_STATE state) 
+void irlan_next_provider_state(struct irlan_cb *self, IRLAN_STATE state) 
 {
 	DEBUG(2, __FUNCTION__"(), %s\n", irlan_state[state]);
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRLAN_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
 	self->provider.state = state;
 }

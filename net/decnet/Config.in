@@ -1,7 +1,7 @@
 #
 # DECnet configuration
 #
-bool 'DECnet: SIOCFIGCONF support' CONFIG_DECNET_SIOCGIFCONF 
+bool 'DECnet: SIOCGIFCONF support' CONFIG_DECNET_SIOCGIFCONF 
 bool 'DECnet: router support (VERY VERY EXPERIMENTAL)' CONFIG_DECNET_ROUTER
 bool 'DECnet: raw socket support' CONFIG_DECNET_RAW
 #bool 'DECnet: MOP support' CONFIG_DECNET_MOP

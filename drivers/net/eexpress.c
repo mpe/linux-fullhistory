@@ -81,7 +81,20 @@
  * ftp's, which is significantly better than I get in DOS, so the overhead of
  * stopping and restarting the CU with each transmit is not prohibitive in
  * practice.
+ *
+ * Update by David Woodhouse 11/5/99:
+ *
+ * I've seen "CU wedged" messages in 16-bit mode, on the Alpha architecture.
+ * I assume that this is because 16-bit accesses are actually handled as two
+ * 8-bit accesses.
  */
+
+#ifdef __alpha__
+#define LOCKUP16 1
+#endif
+#ifndef LOCKUP16
+#define LOCKUP16 0
+#endif
   
 #include <linux/config.h>
 #include <linux/module.h>
@@ -297,7 +310,7 @@ static inline void clear_loopback(struct device *dev)
 	outb(inb(dev->base_addr + Config) & ~2, dev->base_addr + Config);
 }
 
-static inline short int SHADOW(short int addr)
+static inline unsigned short int SHADOW(short int addr)
 {
 	addr &= 0x1f;
 	if (addr > 0xf) addr += 0x3ff0;
@@ -400,7 +413,10 @@ static int eexp_close(struct device *dev)
 	outb(0,ioaddr+SIGNAL_CA);
 	free_irq(irq,dev);
 	outb(i586_RST,ioaddr+EEPROM_Ctrl);
-	release_region(ioaddr,16);
+	release_region(ioaddr, EEXP_IO_EXTENT);
+	release_region(ioaddr+0x4000, 16);
+	release_region(ioaddr+0x8000, 16);
+	release_region(ioaddr+0xc000, 16);
 
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -887,7 +903,7 @@ static void eexp_hw_tx_pio(struct device *dev, unsigned short *buf,
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short ioaddr = dev->base_addr;
 
-	if (lp->width) {
+	if (LOCKUP16 || lp->width) {
 		/* Stop the CU so that there is no chance that it
 		   jumps off to a bogus address while we are writing the
 		   pointer to the next transmit packet in 8-bit mode -- 
@@ -927,7 +943,7 @@ static void eexp_hw_tx_pio(struct device *dev, unsigned short *buf,
 	if (lp->tx_head != lp->tx_reap)
 		dev->tbusy = 0;
 
-	if (lp->width) {
+	if (LOCKUP16 || lp->width) {
 		/* Restart the CU so that the packet can actually
 		   be transmitted. (Zoltan Szilagyi 10-12-96) */
 		scb_command(dev, SCB_CUresume);

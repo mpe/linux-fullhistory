@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Sat Apr 10 10:19:56 1999
+ * Modified at:   Mon May 10 19:14:51 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -36,7 +36,8 @@
 
 #define TTP_MAX_CONNECTIONS    LM_MAX_CONNECTIONS
 #define TTP_HEADER             1
-#define TTP_HEADER_WITH_SAR    6
+#define TTP_MAX_HEADER         (TTP_HEADER + LMP_MAX_HEADER)
+#define TTP_SAR_HEADER         5
 #define TTP_PARAMETERS         0x80
 #define TTP_MORE               0x80
 
@@ -60,8 +61,6 @@
 struct tsap_cb {
 	QUEUE queue;          /* For linking it into the hashbin */
 	int  magic;           /* Just in case */
-
-	int max_seg_size;     /* Max data that fit into an IrLAP frame */
 
 	__u8 stsap_sel;       /* Source TSAP */
 	__u8 dtsap_sel;       /* Destination TSAP */
@@ -88,6 +87,9 @@ struct tsap_cb {
 	struct irda_statistics stats;
 	struct timer_list todo_timer; 
 	
+	__u32 max_seg_size;     /* Max data that fit into an IrLAP frame */
+	__u8  max_header_size;
+
 	int   rx_sdu_busy;     /* RxSdu.busy */
 	__u32 rx_sdu_size;     /* Current size of a partially received frame */
 	__u32 rx_max_sdu_size; /* Max receive user data size */
@@ -120,8 +122,6 @@ int irttp_connect_request(struct tsap_cb *self, __u8 dtsap_sel,
 			  __u32 saddr, __u32 daddr,
 			  struct qos_info *qos, __u32 max_sdu_size, 
 			  struct sk_buff *userdata);
-void irttp_connect_confirm(void *instance, void *sap, struct qos_info *qos, 
-			   __u32 max_sdu_size, struct sk_buff *skb);
 void irttp_connect_response(struct tsap_cb *self, __u32 max_sdu_size, 
 			    struct sk_buff *userdata);
 struct tsap_cb *irttp_dup(struct tsap_cb *self, void *instance);

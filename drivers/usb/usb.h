@@ -220,7 +220,7 @@ struct usb_operations {
 	struct usb_device *(*allocate)(struct usb_device *);
 	int (*deallocate)(struct usb_device *);
 	int (*control_msg)(struct usb_device *, unsigned int, void *, void *, int);
-	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int, unsigned long *);
+	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int,unsigned long *);
 	int (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
 };
 
@@ -231,6 +231,7 @@ struct usb_bus {
 	struct usb_devmap devmap;       /* Device map */
 	struct usb_operations *op;      /* Operations (specific to the HC) */
 	struct usb_device *root_hub;    /* Root hub */
+	struct list_head bus_list;
 	void *hcpriv;                   /* Host Controller private data */
 };
 
@@ -259,7 +260,7 @@ struct usb_device {
 	 * (if this is a hub device), or different instances
 	 * of this same device.
 	 *
-	 * Each instance needs its own set of data structuctures.
+	 * Each instance needs its own set of data structures.
 	 */
 
 	int maxchild;			/* Number of ports if hub */
@@ -272,13 +273,18 @@ struct usb_device {
 extern int usb_register(struct usb_driver *);
 extern void usb_deregister(struct usb_driver *);
 
+extern void usb_register_bus(struct usb_bus *);
+extern void usb_deregister_bus(struct usb_bus *);
+
 extern int usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *);
 
 extern void usb_init_root_hub(struct usb_device *dev);
 extern void usb_connect(struct usb_device *dev);
 extern void usb_disconnect(struct usb_device **);
-extern void usb_device_descriptor(struct usb_device *dev);
 
+extern int usb_device_descriptor(struct usb_device *dev);
+void usb_check_support(struct usb_device *);
+void usb_driver_purge(struct usb_driver *,struct usb_device *);
 extern int  usb_parse_configuration(struct usb_device *dev, void *buf, int len);
 extern void usb_destroy_configuration(struct usb_device *dev);
 
@@ -356,8 +362,6 @@ static inline unsigned int __default_pipe(struct usb_device *dev)
 #define usb_rcvbulkpipe(dev,endpoint)	((3 << 30) | __create_pipe(dev,endpoint) | 0x80)
 #define usb_snddefctrl(dev)		((2 << 30) | __default_pipe(dev))
 #define usb_rcvdefctrl(dev)		((2 << 30) | __default_pipe(dev) | 0x80)
-
-/* Create .. */
 
 /*
  * Send and receive control messages..

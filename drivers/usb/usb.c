@@ -43,81 +43,117 @@
 
 #include "usb.h"
 
-#ifdef CONFIG_USB_UHCI
-int uhci_init(void);
-#endif
-#ifdef CONFIG_USB_OHCI
-int ohci_init(void);
-#endif
-#ifdef CONFIG_USB_OHCI_HCD
-int ohci_hcd_init(void);
-#endif
-
-int usb_init(void)
-{
-#ifdef CONFIG_USB_UHCI
-	uhci_init();
-#endif
-#ifdef CONFIG_USB_OHCI
-	ohci_init();
-#endif
-#ifdef CONFIG_USB_OHCI_HCD
-	ohci_hcd_init(); 
-#endif
-#ifdef CONFIG_USB_MOUSE
-	usb_mouse_init();
-#endif
-#ifdef CONFIG_USB_KBD
-	usb_kbd_init();
-#endif
-#ifdef CONFIG_USB_AUDIO
-	usb_audio_init();
-#endif
-#ifdef CONFIG_USB_ACM
-	usb_acm_init();
-#endif
-#ifdef CONFIG_USB_CPIA
-	usb_cpia_init();
-#endif
-#ifdef CONFIG_USB_PRINTER
-	usb_printer_init();
-#endif
-
-	usb_hub_init();
-	return 0;
-}
-
-void cleanup_drivers(void)
-{
-	hub_cleanup();
-#ifdef CONFIG_USB_MOUSE
-	usb_mouse_cleanup();
-#endif
-}
-
 /*
  * We have a per-interface "registered driver" list.
  */
 static LIST_HEAD(usb_driver_list);
+static LIST_HEAD(usb_bus_list);
 
 int usb_register(struct usb_driver *new_driver)
 {
+	struct list_head *tmp = usb_bus_list.next;
 	/* Add it to the list of known drivers */
 	list_add(&new_driver->driver_list, &usb_driver_list);
 
 	/*
-	 * We should go through all existing devices, and see if any of
-	 * them would be acceptable to the new driver.. Let's do that
-	 * in version 2.0.
+         * We go through all existing devices, and see if any of them would
+         * be acceptable to the new driver.. This is done using a depth-first
+         * search for devices without a registered driver already, then 
+	 * running 'probe' with each of the drivers registered on every one 
+	 * of these.
 	 */
+        while (tmp!= &usb_bus_list) {
+		struct usb_bus * bus = list_entry(tmp,struct
+			usb_bus,bus_list);
+	        tmp=tmp->next;  
+		usb_check_support(bus->root_hub);
+        }
 	return 0;
 }
 
 void usb_deregister(struct usb_driver *driver)
 {
+      struct list_head *tmp = usb_bus_list.next;
+      /*first we remove the driver, to be sure it doesn't get used by
+       *another thread while we are stepping through removing entries
+       */
 	list_del(&driver->driver_list);
+      printk("usbcore: deregistering driver\n");
+      while (tmp!= &usb_bus_list) {
+              struct usb_bus * bus = list_entry(tmp,struct 
+            		usb_bus,bus_list);
+              tmp=tmp->next;
+              usb_driver_purge(driver,bus->root_hub);
+      }
 }
 
+/* This function is part of a depth-first search down the device tree,
+ * removing any instances of a device driver.
+ */
+void usb_driver_purge(struct usb_driver *driver,struct usb_device *dev)
+{
+       int i;
+       if (dev==NULL){
+               printk("null device being passed in!!!\n");
+               return;
+       }
+       for (i=0;i<USB_MAXCHILDREN;i++)
+               if (dev->children[i]!=NULL)
+                       usb_driver_purge(driver,dev->children[i]);
+       /*now we check this device*/
+       if(dev->driver==driver) {
+               /*
+                * Note: this is not the correct way to do this, this
+                * uninitializes and reinitializes EVERY driver
+                */
+               printk("disconnecting driverless device\n");
+               dev->driver->disconnect(dev);
+               dev->driver=NULL;
+               /* This will go back through the list looking for a driver
+                * that can handle the device
+		*/
+               usb_device_descriptor(dev);
+      }
+}
+
+/*
+ * New functions for (de)registering a controller
+ */
+void usb_register_bus(struct usb_bus *new_bus)
+{
+      /* Add it to the list of buses */
+      list_add(&new_bus->bus_list, &usb_bus_list);
+      printk("New bus registered");
+}
+
+void usb_deregister_bus(struct usb_bus *bus)
+{
+        /* NOTE: make sure that all the devices are removed by the
+         * controller code, as well as having it call this when cleaning
+	 * itself up
+         */
+	list_del(&bus->bus_list);
+}
+
+/*
+ * This function is for doing a depth-first search for devices which
+ * have support, for dynamic loading of driver modules.
+ */
+void usb_check_support(struct usb_device *dev)
+{
+      int i;
+      if (dev==NULL)
+      {
+              printk("null device being passed in!!!\n");
+              return;
+      }
+      for (i=0;i<USB_MAXCHILDREN;i++)
+              if ((dev->children[i]!=NULL)&&
+                      (dev->children[i]->driver==NULL))
+                      usb_check_support(dev->children[i]);
+      /*now we check this device*/
+      usb_device_descriptor(dev);
+}
 /*
  * This entrypoint gets called for each new device.
  *
@@ -125,25 +161,24 @@ void usb_deregister(struct usb_driver *driver)
  * looking for one that will accept this device as
  * his..
  */
-void usb_device_descriptor(struct usb_device *dev)
+int usb_device_descriptor(struct usb_device *dev)
 {
 	struct list_head *tmp = usb_driver_list.next;
 
 	while (tmp != &usb_driver_list) {
-		struct usb_driver *driver = list_entry(tmp, struct usb_driver, driver_list);
+		struct usb_driver *driver = list_entry(tmp, struct usb_driver,
+						       driver_list);
 		tmp = tmp->next;
 		if (driver->probe(dev))
 			continue;
 		dev->driver = driver;
-		return;
+		return 1;
 	}
-
 	/*
 	 * Ok, no driver accepted the device, so show the info
 	 * for debugging..
 	 */
-	printk("Unknown new USB device:\n");
-	usb_show_device(dev);
+	return 0;
 }
 
 /*
@@ -882,7 +917,15 @@ void usb_new_device(struct usb_device *dev)
 	printk("Product: %X\n", dev->descriptor.idProduct);
 #endif
 
-	usb_device_descriptor(dev);
+	if (usb_device_descriptor(dev)==0)
+	{
+		/*
+		 * Ok, no driver accepted the device, so show the info for
+		 * debugging
+		 */
+		printk ("Unknown new USB device:\n");
+		usb_show_device(dev);
+	}
 }
 
 int usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)

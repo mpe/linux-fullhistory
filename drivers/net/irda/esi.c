@@ -1,17 +1,17 @@
 /*********************************************************************
  *                
  * Filename:      esi.c
- * Version:       1.2
+ * Version:       1.4
  * Description:   Driver for the Extended Systems JetEye PC dongle
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 18:54:38 1998
- * Modified at:   Mon Apr 12 11:55:30 1999
+ * Modified at:   Mon May 10 15:13:12 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  esi.c
  *
+ *     Copyright (c) 1998-1999, Dag Brattli, <dagb@cs.uit.no>
  *     Copyright (c) 1998, Thomas Davis, <ratbert@radiks.net>,
- *     Copyright (c) 1998, Dag Brattli,  <dagb@cs.uit.no>
  *     All Rights Reserved.
  *
  *     This program is free software; you can redistribute it and/or
@@ -41,11 +41,11 @@
 #include <net/irda/irtty.h>
 #include <net/irda/dongle.h>
 
-static void esi_open( struct irda_device *idev, int type);
-static void esi_close( struct irda_device *driver);
-static void esi_change_speed( struct irda_device *idev, int baud);
-static void esi_reset( struct irda_device *idev, int unused);
-static void esi_qos_init( struct irda_device *idev, struct qos_info *qos);
+static void esi_open(struct irda_device *idev, int type);
+static void esi_close(struct irda_device *driver);
+static void esi_change_speed(struct irda_device *idev, int baud);
+static void esi_reset(struct irda_device *idev, int unused);
+static void esi_qos_init(struct irda_device *idev, struct qos_info *qos);
 
 static struct dongle dongle = {
 	ESI_DONGLE,
@@ -58,17 +58,17 @@ static struct dongle dongle = {
 
 __initfunc(int esi_init(void))
 {
-	return irtty_register_dongle(&dongle);
+	return irda_device_register_dongle(&dongle);
 }
 
 void esi_cleanup(void)
 {
-	irtty_unregister_dongle( &dongle);
+	irda_device_unregister_dongle(&dongle);
 }
 
-static void esi_open( struct irda_device *idev, int type)
+static void esi_open(struct irda_device *idev, int type)
 {
-	strcat( idev->description, " <-> esi");
+	strcat(idev->description, " <-> esi");
 
 	idev->io.dongle_id = type;
 	idev->flags |= IFF_DONGLE;
@@ -76,8 +76,11 @@ static void esi_open( struct irda_device *idev, int type)
 	MOD_INC_USE_COUNT;
 }
 
-static void esi_close( struct irda_device *driver)
-{
+static void esi_close(struct irda_device *idev)
+{		
+	/* Power off dongle */
+	irda_device_set_dtr_rts(idev, FALSE, FALSE);
+
 	MOD_DEC_USE_COUNT;
 }
 
@@ -87,54 +90,30 @@ static void esi_close( struct irda_device *driver)
  *    Set the speed for the Extended Systems JetEye PC ESI-9680 type dongle
  *
  */
-static void esi_change_speed( struct irda_device *idev, int baud)
+static void esi_change_speed(struct irda_device *idev, int baud)
 {
-	struct irtty_cb *self;
-	struct tty_struct *tty;
 	int dtr, rts;
-        struct termios old_termios;
-	int cflag;
 	
-	ASSERT( idev != NULL, return;);
-	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(idev != NULL, return;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 	
-	self = (struct irtty_cb *) idev->priv;
-	
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRTTY_MAGIC, return;);
-
-	if ( !self->tty)
-		return;
-
-	tty = self->tty;
-	
-	old_termios = *(tty->termios);
-	cflag = tty->termios->c_cflag;
-
-	cflag &= ~CBAUD;
-
 	switch (baud) {
 	case 19200:
-		cflag |= B19200;
 		dtr = TRUE;
 		rts = FALSE;
 		break;
 	case 115200:
-		cflag |= B115200;
 		dtr = rts = TRUE;
 		break;
 	case 9600:
 	default:
-		cflag |= B9600;
 		dtr = FALSE;
 		rts = TRUE;
 		break;
 	}
-	/* Change speed of serial driver */
-	tty->termios->c_cflag = cflag;
-	tty->driver.set_termios(tty, &old_termios);
 
-	irtty_set_dtr_rts(tty, dtr, rts);
+	/* Change speed of dongle */
+	irda_device_set_dtr_rts(idev, dtr, rts);
 }
 
 static void esi_reset( struct irda_device *idev, int unused)
@@ -148,14 +127,17 @@ static void esi_reset( struct irda_device *idev, int unused)
  *    Init QoS capabilities for the dongle
  *
  */
-static void esi_qos_init( struct irda_device *idev, struct qos_info *qos)
+static void esi_qos_init(struct irda_device *idev, struct qos_info *qos)
 {
 	qos->baud_rate.bits &= IR_9600|IR_19200|IR_115200;
 	qos->min_turn_time.bits &= 0x01; /* Needs at least 10 ms */
 }
 
 #ifdef MODULE
-		
+
+MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
+MODULE_DESCRIPTION("Extended Systems JetEye PC dongle driver");
+
 /*
  * Function init_module (void)
  *

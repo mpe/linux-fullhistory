@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Wed Apr 21 17:49:00 1999
+ * Modified at:   Mon May 10 09:51:13 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -109,6 +109,8 @@ struct irda_sock {
 	
 	__u32 max_sdu_size_rx;
 	__u32 max_sdu_size_tx;
+	__u32 max_data_size;
+	__u8  max_header_size;
 	struct qos_info qos_tx;
 
 	__u16 mask;           /* Hint bits mask */
@@ -225,10 +227,10 @@ struct notify_t {
 	int (*udata_indication)(void *priv, void *sap, struct sk_buff *skb);
 	void (*connect_confirm)(void *instance, void *sap, 
 				struct qos_info *qos, __u32 max_sdu_size,
-				struct sk_buff *skb);
+				__u8 max_header_size, struct sk_buff *skb);
 	void (*connect_indication)(void *instance, void *sap, 
 				   struct qos_info *qos, __u32 max_sdu_size,
-				   struct sk_buff *skb);
+				   __u8 max_header_size, struct sk_buff *skb);
 	void (*disconnect_indication)(void *instance, void *sap, 
 				      LM_REASON reason, struct sk_buff *);
 	void (*flow_indication)(void *instance, void *sap, LOCAL_FLOW flow);

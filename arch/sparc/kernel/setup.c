@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.105 1999/04/13 14:17:08 jj Exp $
+/*  $Id: setup.c,v 1.106 1999/05/28 16:03:18 anton Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -456,6 +456,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 					prom_printf("MrCoffee keyboard\n");
 				} else {
 					prom_printf("Inconsistent or unknown console\n");
+					prom_printf("You cannot mix serial and non serial input/output devices\n");
 					prom_halt();
 				}
 			}

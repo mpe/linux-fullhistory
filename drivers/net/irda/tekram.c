@@ -1,15 +1,15 @@
 /*********************************************************************
  *                
  * Filename:      tekram.c
- * Version:       1.0
+ * Version:       1.1
  * Description:   Implementation of the Tekram IrMate IR-210B dongle
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Tue Apr 13 16:33:54 1999
+ * Modified at:   Mon May 10 16:10:17 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -62,15 +62,15 @@ static struct dongle dongle = {
 
 __initfunc(int tekram_init(void))
 {
-	return irtty_register_dongle(&dongle);
+	return irda_device_register_dongle(&dongle);
 }
 
 void tekram_cleanup(void)
 {
-	irtty_unregister_dongle( &dongle);
+	irda_device_unregister_dongle(&dongle);
 }
 
-static void tekram_open( struct irda_device *idev, int type)
+static void tekram_open(struct irda_device *idev, int type)
 {
 	strcat(idev->description, " <-> tekram");
 
@@ -80,8 +80,11 @@ static void tekram_open( struct irda_device *idev, int type)
 	MOD_INC_USE_COUNT;
 }
 
-static void tekram_close( struct irda_device *dev)
-{
+static void tekram_close(struct irda_device *idev)
+{		
+	/* Power off dongle */
+	irda_device_set_dtr_rts(idev, FALSE, FALSE);
+
 	MOD_DEC_USE_COUNT;
 }
 
@@ -101,79 +104,49 @@ static void tekram_close( struct irda_device *dev)
  *    6. wait at least 50 us, new setting (baud rate, etc) takes effect here 
  *       after
  */
-static void tekram_change_speed( struct irda_device *dev, int baud)
+static void tekram_change_speed(struct irda_device *idev, int baud)
 {
-	struct irtty_cb *self;
-	struct tty_struct *tty;
-	struct termios old_termios;
-	int cflag;
 	__u8 byte;
 	
 	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT(dev != NULL, return;);
-	ASSERT(dev->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(idev != NULL, return;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 	
-	self = (struct irtty_cb *) dev->priv;
-	
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == IRTTY_MAGIC, return;);
-	
-	if (!self->tty)
-		return;
-
-	tty = self->tty;
-	
-	old_termios = *(tty->termios);
-	cflag = tty->termios->c_cflag;
-
-	cflag &= ~CBAUD;
-
 	switch (baud) {
 	default:
-		/* FALLTHROUGH */
 	case 9600:
-		cflag |= B9600;
 		byte = TEKRAM_PW|TEKRAM_9600;
 		break;
 	case 19200:
-		cflag |= B19200;
 		byte = TEKRAM_PW|TEKRAM_19200;
 		break;
 	case 34800:
-		cflag |= B38400;
 		byte = TEKRAM_PW|TEKRAM_38400;
 		break;
 	case 57600:
-		cflag |= B57600;
 		byte = TEKRAM_PW|TEKRAM_57600;
 		break;
 	case 115200:
-		cflag |= B115200;
 		byte = TEKRAM_PW|TEKRAM_115200;
 		break;
 	}
 
 	/* Set DTR, Clear RTS */
-	irtty_set_dtr_rts(tty, TRUE, FALSE);
+	irda_device_set_dtr_rts(idev, TRUE, FALSE);
 	
 	/* Wait at least 7us */
 	udelay(7);
 
 	/* Write control byte */
-	if (tty->driver.write)
-		tty->driver.write(self->tty, 0, &byte, 1);
+	irda_device_raw_write(idev, &byte, 1);
 	
 	/* Wait at least 100 ms */
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(MSECS_TO_JIFFIES(100));
         
 	/* Set DTR, Set RTS */
-	irtty_set_dtr_rts(tty, TRUE, TRUE);
-
-	/* Now change the speed of the serial port */
-	tty->termios->c_cflag = cflag;
-	tty->driver.set_termios(tty, &old_termios);	
+	irda_device_set_dtr_rts(idev, TRUE, TRUE);
 }
 
 /*
@@ -189,41 +162,27 @@ static void tekram_change_speed( struct irda_device *dev, int baud)
  *        3. clear DTR to SPACE state, wait at least 50 us for further 
  *         operation
  */
-void tekram_reset(struct irda_device *dev, int unused)
+void tekram_reset(struct irda_device *idev, int unused)
 {
-	struct irtty_cb *self;
-	struct tty_struct *tty;
-
-	DEBUG(4, __FUNCTION__ "()\n");
-
-	ASSERT(dev != NULL, return;);
-	ASSERT(dev->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(idev != NULL, return;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 	
-	self = (struct irtty_cb *) dev->priv;
-	
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == IRTTY_MAGIC, return;);
-
-	tty = self->tty;
-	if (!tty)
-		return;
-
 	/* Power off dongle */
-	irtty_set_dtr_rts(tty, FALSE, FALSE);
+	irda_device_set_dtr_rts(idev, FALSE, FALSE);
 
 	/* Sleep 50 ms */
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(MSECS_TO_JIFFIES(50));
 
 	/* Clear DTR, Set RTS */
-	irtty_set_dtr_rts(tty, FALSE, TRUE); 
+	irda_device_set_dtr_rts(idev, FALSE, TRUE); 
 
 	/* Should sleep 1 ms, but 10-20 should not do any harm */
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(MSECS_TO_JIFFIES(20));
 
 	/* Set DTR, Set RTS */
-	irtty_set_dtr_rts(tty, TRUE, TRUE);
+	irda_device_set_dtr_rts(idev, TRUE, TRUE);
 	
 	udelay(50);
 

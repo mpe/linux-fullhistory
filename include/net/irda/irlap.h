@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Fri Apr 23 09:51:15 1999
+ * Modified at:   Sun May  9 11:38:18 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -42,11 +42,11 @@
 #define LAP_COMP_HEADER 1  /* IrLAP Compression Header */
 
 #ifdef CONFIG_IRDA_COMPRESSION
-#  define LAP_HEADER  (LAP_ADDR_HEADER + LAP_CTRL_HEADER + LAP_COMP_HEADER)
+#  define LAP_MAX_HEADER  (LAP_ADDR_HEADER + LAP_CTRL_HEADER + LAP_COMP_HEADER)
 #  define IRDA_COMPRESSED 1
 #  define IRDA_NORMAL     0
 #else
-#define LAP_HEADER (LAP_ADDR_HEADER + LAP_CTRL_HEADER)
+#define LAP_MAX_HEADER (LAP_ADDR_HEADER + LAP_CTRL_HEADER)
 #endif
 
 #define BROADCAST  0xffffffff /* Broadcast device address */
@@ -138,7 +138,7 @@ struct irlap_cb {
 
 	__u8    vs;           /* Next frame to be sent */
 	__u8    vr;           /* Next frame to be received */
-	int     tmp;
+/* 	int     tmp; */
 	__u8    va;           /* Last frame acked */
  	int     window;       /* Nr of I-frames allowed to send */
 	int     window_size;  /* Current negotiated window size */
@@ -155,8 +155,7 @@ struct irlap_cb {
  	__u8    s;           /* Current slot */
 	int     frame_sent;  /* Have we sent reply? */
 
-	int discovery_count;
-	hashbin_t *discovery_log;
+	hashbin_t   *discovery_log;
  	discovery_t *discovery_cmd;
 
 	struct qos_info qos_tx;    /* QoS requested by peer */
@@ -226,5 +225,10 @@ void irlap_wait_min_turn_around(struct irlap_cb *, struct qos_info *);
 void irlap_init_qos_capabilities(struct irlap_cb *, struct qos_info *);
 void irlap_apply_default_connection_parameters(struct irlap_cb *self);
 void irlap_apply_connection_parameters(struct irlap_cb *, struct qos_info *);
+
+extern inline __u8 irlap_get_header_size(struct irlap_cb *self)
+{
+	return 2;
+}
 
 #endif

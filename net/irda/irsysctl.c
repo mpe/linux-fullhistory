@@ -1,15 +1,15 @@
 /*********************************************************************
  *                
  * Filename:      irsysctl.c
- * Version:       
- * Description:   
+ * Version:       1.0
+ * Description:   Sysctl interface for IrDA
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 24 22:12:06 1998
- * Modified at:   Fri Apr 23 09:46:38 1999
+ * Modified at:   Thu May  6 21:32:46 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 

@@ -8,7 +8,7 @@
  * Author:        Takahide Higuchi <thiguchi@pluto.dti.ne.jp>
  * Source:        irlpt_event.c
  *
- *     Copyright (c) 1998, Takahide Higuchi, <thiguchi@pluto.dti.ne.jp>,
+ *     Copyright (c) 1998-1999, Takahide Higuchi, <thiguchi@pluto.dti.ne.jp>,
  *     All Rights Reserved.
  *
  *     This program is free software; you can redistribute it and/or
@@ -44,18 +44,17 @@
 static char *revision_date = "Sun Apr 18 00:40:19 1999";
 
 
-static void ircomm_state_idle( struct ircomm_cb *self, IRCOMM_EVENT event, 
-			       struct sk_buff *skb );
-
-static void ircomm_state_discoverywait( struct ircomm_cb *self, IRCOMM_EVENT event, 
+static void ircomm_state_idle(struct ircomm_cb *self, IRCOMM_EVENT event, 
+			      struct sk_buff *skb );
+static void ircomm_state_discoverywait(struct ircomm_cb *self, 
+				       IRCOMM_EVENT event, 
+				       struct sk_buff *skb );
+static void ircomm_state_queryparamwait(struct ircomm_cb *self, 
+					IRCOMM_EVENT event, 
 					struct sk_buff *skb );
-
-static void ircomm_state_queryparamwait( struct ircomm_cb *self, IRCOMM_EVENT event, 
-					 struct sk_buff *skb );
-
-static void ircomm_state_querylsapwait( struct ircomm_cb *self, IRCOMM_EVENT event, 
-					struct sk_buff *skb );
-
+static void ircomm_state_querylsapwait(struct ircomm_cb *self, 
+				       IRCOMM_EVENT event, 
+				       struct sk_buff *skb );
 static void ircomm_state_waiti( struct ircomm_cb *self, IRCOMM_EVENT event, 
 				struct sk_buff *skb );
 static void ircomm_state_waitr( struct ircomm_cb *self, IRCOMM_EVENT event, 
@@ -207,7 +206,7 @@ __initfunc(int ircomm_init(void))
 		ircomm[i]->ack_char = 0x06;  
 
 		ircomm[i]->max_txbuff_size = COMM_DEFAULT_DATA_SIZE;   /* 64 */
-		ircomm[i]->maxsdusize = SAR_DISABLE;  
+		ircomm[i]->max_sdu_size = SAR_DISABLE;  
 		ircomm[i]->ctrl_skb = dev_alloc_skb(COMM_DEFAULT_DATA_SIZE);
 		if (ircomm[i]->ctrl_skb == NULL){
 			DEBUG(0,"ircomm:init_module:alloc_skb failed!\n");
@@ -225,7 +224,6 @@ __initfunc(int ircomm_init(void))
 #ifdef CONFIG_PROC_FS
 	create_proc_entry("ircomm", 0, proc_irda)->get_info = ircomm_proc_read;
 #endif /* CONFIG_PROC_FS */
-
 
 	discovering_instance = NULL;
 	return 0;
@@ -275,51 +273,53 @@ void ircomm_cleanup(void)
 static int ircomm_accept_data_indication(void *instance, void *sap, 
 					 struct sk_buff *skb)
 {
-	
-	struct ircomm_cb *self = (struct ircomm_cb *)instance;
+	struct ircomm_cb *self = (struct ircomm_cb *) instance;
 
-	ASSERT( self != NULL, return -1;);
-	ASSERT( self->magic == IRCOMM_MAGIC, return -1;);
-	ASSERT( skb != NULL, return -1;);
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRCOMM_MAGIC, return -1;);
+	ASSERT(skb != NULL, return -1;);
        
 	DEBUG(4,__FUNCTION__"():\n");
-	ircomm_do_event( self, TTP_DATA_INDICATION, skb);
+	ircomm_do_event(self, TTP_DATA_INDICATION, skb);
 	self->rx_packets++;
 	
 	return 0;
 }
 
 static void ircomm_accept_connect_confirm(void *instance, void *sap,
-				   struct qos_info *qos, 
-				   __u32 maxsdusize, struct sk_buff *skb)
+					  struct qos_info *qos, 
+					  __u32 max_sdu_size, 
+					  __u8 max_header_size,
+					  struct sk_buff *skb)
 {
+	struct ircomm_cb *self = (struct ircomm_cb *) instance;
 
-	struct ircomm_cb *self = (struct ircomm_cb *)instance;
-
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRCOMM_MAGIC, return;);
-	ASSERT( skb != NULL, return;);
-	ASSERT( qos != NULL, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRCOMM_MAGIC, return;);
+	ASSERT(skb != NULL, return;);
+	ASSERT(qos != NULL, return;);
 
 	DEBUG(0,__FUNCTION__"(): got connected!\n");
 
-	if(maxsdusize == SAR_DISABLE)
-		self->max_txbuff_size = qos->data_size.value; 
+	if (max_sdu_size == SAR_DISABLE)
+		self->max_txbuff_size = qos->data_size.value - max_header_size;
 	else {
-		ASSERT(maxsdusize >= COMM_DEFAULT_DATA_SIZE, return;);
-		self->max_txbuff_size = maxsdusize; /* use fragmentation */
+		ASSERT(max_sdu_size >= COMM_DEFAULT_DATA_SIZE, return;);
+		self->max_txbuff_size = max_sdu_size; /* use fragmentation */
 	}
 
 	self->qos = qos;
-	self->null_modem_mode = 0;            	/* disable null modem emulation */
+	self->max_header_size = max_header_size;
+	self->null_modem_mode = 0;         /* disable null modem emulation */
 
-	ircomm_do_event( self, TTP_CONNECT_CONFIRM, skb);
+	ircomm_do_event(self, TTP_CONNECT_CONFIRM, skb);
 }
 
 static void ircomm_accept_connect_indication(void *instance, void *sap,
-				      struct qos_info *qos,
-				      __u32 maxsdusize,
-				      struct sk_buff *skb )
+					     struct qos_info *qos,
+					     __u32 max_sdu_size,
+					     __u8 max_header_size,
+					     struct sk_buff *skb)
 {
 	struct ircomm_cb *self = (struct ircomm_cb *)instance;
 
@@ -330,12 +330,14 @@ static void ircomm_accept_connect_indication(void *instance, void *sap,
 
 	DEBUG(0,__FUNCTION__"()\n");
 
-	if(maxsdusize == SAR_DISABLE)
-		self->max_txbuff_size = qos->data_size.value;
+	if (max_sdu_size == SAR_DISABLE)
+		self->max_txbuff_size = qos->data_size.value - max_header_size;
 	else
-		self->max_txbuff_size = maxsdusize;
+		self->max_txbuff_size = max_sdu_size;
 
 	self->qos = qos;
+	self->max_header_size = max_header_size;
+
 	ircomm_do_event( self, TTP_CONNECT_INDICATION, skb);
 
 	/* stop connecting */
@@ -556,7 +558,7 @@ static void issue_connect_request(struct ircomm_cb *self,
 
 		irttp_connect_request(self->tsap, self->dlsap, 
 				      self->saddr, self->daddr, 
-				      NULL, self->maxsdusize, userdata); 
+				      NULL, self->max_sdu_size, userdata); 
 		break;
 
 	default:
@@ -588,9 +590,9 @@ static void connect_indication(struct ircomm_cb *self, struct qos_info *qos,
 /* 	if( !ircomm_parse_controlchannel( self, data)) */
 /* 		self->servicetype = DEFAULT;     TODOD:fix this! TH */
 
-	if(self->notify.connect_indication)
+	if (self->notify.connect_indication)
 		self->notify.connect_indication(self->notify.instance, self, 
-						qos, 0, skb);
+						qos, 0, 0, skb);
 }
     
 #if 0
@@ -602,28 +604,26 @@ static void connect_indication_three_wire_raw(void)
 #endif 
 
 
-static void connect_confirmation(struct ircomm_cb *self, struct sk_buff *skb)
+static void connect_confirm(struct ircomm_cb *self, struct sk_buff *skb)
 {
 	DEBUG(4 ,__FUNCTION__"()\n");
 
 	/* give a connect_confirm to the client */
 	if( self->notify.connect_confirm )
 		self->notify.connect_confirm(self->notify.instance,
-					     self, NULL, SAR_DISABLE, skb);
+					     self, NULL, SAR_DISABLE, 0, skb);
 }
 
 static void issue_connect_response(struct ircomm_cb *self,
 				   struct sk_buff *skb)
 {
-
 	DEBUG(0,__FUNCTION__"()\n");
 	
 	if( self->servicetype == THREE_WIRE_RAW){
 		DEBUG(0,__FUNCTION__"():THREE_WIRE_RAW is not implemented yet\n");
 		/* irlmp_connect_rsp(); */
-	} else {
-		irttp_connect_response(self->tsap, self->maxsdusize, skb);
-	}
+	} else
+		irttp_connect_response(self->tsap, self->max_sdu_size, skb);
 }
 
 static void issue_disconnect_request(struct ircomm_cb *self,
@@ -642,30 +642,29 @@ static void issue_data_request(struct ircomm_cb *self,
 {
 	int err;
 
-	if(self->servicetype == THREE_WIRE_RAW){
+	if (self->servicetype == THREE_WIRE_RAW){
 		/* irlmp_data_request(self->lmhandle,userdata); */
 		DEBUG(0,__FUNCTION__"():not implemented!");
 		return;
 	}
 
 	DEBUG(4,__FUNCTION__"():sending frame\n");
-	err = irttp_data_request(self->tsap , userdata  );
-	if(err){
+	err = irttp_data_request(self->tsap, userdata);
+	if (err){
 		printk(KERN_ERR __FUNCTION__":ttp_data_request failed\n");
-		if(userdata)
+		if (userdata)
 			dev_kfree_skb( userdata);
 	}
 	self->tx_packets++;
 }
 
 static void issue_control_request(struct ircomm_cb *self,
-				  struct sk_buff *userdata )
+				  struct sk_buff *userdata)
 {
 	int err;
 
 	DEBUG(4,__FUNCTION__"()\n"); 
-	if(self->servicetype == THREE_WIRE_RAW)
-	{
+	if (self->servicetype == THREE_WIRE_RAW) {
 		DEBUG(0,__FUNCTION__"():THREE_WIRE_RAW is not implemented\n");
 		
 	}
@@ -676,7 +675,7 @@ static void issue_control_request(struct ircomm_cb *self,
 		{
 			printk( __FUNCTION__"():ttp_data_request failed\n");
 			if(userdata)
-				dev_kfree_skb( userdata);
+				dev_kfree_skb(userdata);
 		}
 		else
 			self->tx_controls++;
@@ -701,7 +700,7 @@ static void process_data(struct ircomm_cb *self, struct sk_buff *skb )
 
  	/* ircomm_parse_control(self, skb, CONTROL_CHANNEL); */
 
-	if(self->notify.data_indication && skb->len)
+	if (self->notify.data_indication && skb->len)
 		self->notify.data_indication(self->notify.instance, self,
 					     skb);
 }
@@ -728,7 +727,7 @@ static void ircomm_do_event( struct ircomm_cb *self, IRCOMM_EVENT event,
 	
 	DEBUG( 4, __FUNCTION__": STATE = %s, EVENT = %s\n",
 	       ircommstate[self->state], ircommevent[event]);
-	(*state[ self->state ]) ( self, event, skb);
+	(*state[self->state])(self, event, skb);
 }
 
 static void ircomm_next_state( struct ircomm_cb *self, IRCOMM_STATE state) 
@@ -747,7 +746,7 @@ static void ircomm_next_state( struct ircomm_cb *self, IRCOMM_STATE state)
 static void ircomm_state_idle( struct ircomm_cb *self, IRCOMM_EVENT event, 
 			       struct sk_buff *skb )
 {
-	switch(event){
+	switch (event){
 	case IRCOMM_CONNECT_REQUEST:
 
 		/* ircomm_next_state(self, COMM_WAITI); */
@@ -779,7 +778,8 @@ static void ircomm_state_idle( struct ircomm_cb *self, IRCOMM_EVENT event,
 /*
  * ircomm_state_discoverywait
  */
-static void ircomm_state_discoverywait(struct ircomm_cb *self, IRCOMM_EVENT event, 
+static void ircomm_state_discoverywait(struct ircomm_cb *self, 
+				       IRCOMM_EVENT event, 
 				       struct sk_buff *skb )
 {
 	switch(event){
@@ -817,11 +817,11 @@ static void ircomm_state_discoverywait(struct ircomm_cb *self, IRCOMM_EVENT even
  * ircomm_state_queryparamwait
  */
 
-static void ircomm_state_queryparamwait(struct ircomm_cb *self, IRCOMM_EVENT event, 
-					struct sk_buff *skb )
+static void ircomm_state_queryparamwait(struct ircomm_cb *self, 
+					IRCOMM_EVENT event, 
+					struct sk_buff *skb)
 {
-	switch(event){
-
+	switch (event) {
 	case TTP_CONNECT_INDICATION:
 
 		ircomm_next_state(self, COMM_WAITR);
@@ -855,10 +855,11 @@ static void ircomm_state_queryparamwait(struct ircomm_cb *self, IRCOMM_EVENT eve
  * ircomm_state_querylsapwait
  */
 
-static void ircomm_state_querylsapwait(struct ircomm_cb *self, IRCOMM_EVENT event, 
+static void ircomm_state_querylsapwait(struct ircomm_cb *self, 
+				       IRCOMM_EVENT event, 
 				       struct sk_buff *skb )
 {
-	switch(event){
+	switch (event) {
 
 	case TTP_CONNECT_INDICATION:
 
@@ -898,10 +899,10 @@ static void ircomm_state_querylsapwait(struct ircomm_cb *self, IRCOMM_EVENT even
 static void ircomm_state_waiti(struct ircomm_cb *self, IRCOMM_EVENT event, 
 			  struct sk_buff *skb )
 {
-	switch(event){
+	switch (event) {
 	case TTP_CONNECT_CONFIRM:
 		ircomm_next_state(self, COMM_CONN);
-		connect_confirmation( self, skb );
+		connect_confirm(self, skb );
 		break;
 	case TTP_DISCONNECT_INDICATION:
 		ircomm_next_state(self, COMM_IDLE);
@@ -921,21 +922,18 @@ static void ircomm_state_waiti(struct ircomm_cb *self, IRCOMM_EVENT event,
 	}
 }
 
-
-
 /*
  * ircomm_state_waitr
  */
 static void ircomm_state_waitr(struct ircomm_cb *self, IRCOMM_EVENT event, 
-			  struct sk_buff *skb ) 
+			       struct sk_buff *skb ) 
 {
-	
-	switch(event){
+	switch (event) {
 	case IRCOMM_CONNECT_RESPONSE:
 
 	        /* issue_connect_response */
 		
-		if(self->servicetype==THREE_WIRE_RAW){
+		if (self->servicetype==THREE_WIRE_RAW) {
 			DEBUG(0,__FUNCTION__"():3WIRE_RAW is not implemented\n");
 			/* irlmp_connect_response(Vpeersap,
 			 *                         ACCEPT,null);
@@ -987,7 +985,7 @@ static void ircomm_state_waitr(struct ircomm_cb *self, IRCOMM_EVENT event,
 static void ircomm_state_conn(struct ircomm_cb *self, IRCOMM_EVENT event, 
 			      struct sk_buff *skb )
 {
-	switch(event){
+	switch (event) {
 	case TTP_DATA_INDICATION:
 		process_data(self, skb);
 		break;
@@ -1033,8 +1031,6 @@ static void ircomm_state_conn(struct ircomm_cb *self, IRCOMM_EVENT event,
 	}
 }
 
-
-
 /*
  *  ----------------------------------------------------------------------
  *  IrCOMM service interfaces and supporting functions
@@ -1042,12 +1038,12 @@ static void ircomm_state_conn(struct ircomm_cb *self, IRCOMM_EVENT event,
  *  ----------------------------------------------------------------------
  */
 
-/* 
- * start_discovering()
+/*
+ * Function start_discovering (self)
  *
- * start discovering and enter DISCOVERY_WAIT state
+ *    Start discovering and enter DISCOVERY_WAIT state
+ *
  */
-
 static void start_discovering(struct ircomm_cb *self)
 {
 	__u16  hints; 
@@ -1092,19 +1088,26 @@ static void start_discovering(struct ircomm_cb *self)
 /*
  * queryias_done(self)
  *
- * called when discovery process got wrong results, completed, or terminated.
+ * 
  */
 
+/*
+ * Function queryias_done (self)
+ *
+ *    Called when discovery process got wrong results, completed, or
+ *    terminated.
+ * 
+ */
 static void queryias_done(struct ircomm_cb *self)
 {
 	DEBUG(0, __FUNCTION__"():\n");
-	if(self->queryias_lock){
+	if (self->queryias_lock){
 		self->queryias_lock = 0;
 		discovering_instance = NULL;
 		MOD_DEC_USE_COUNT;
 		irlmp_unregister_client(self->ckey);
 	}
-	if(ircomm_cs != 1)
+	if (ircomm_cs != 1)
 		irlmp_unregister_service(self->skey);
 	return;
 }
@@ -1120,7 +1123,6 @@ static void query_parameters(struct ircomm_cb *self)
 				       ircomm_getvalue_confirm, self );
 }
 
-
 static void query_lsapsel(struct ircomm_cb * self)
 {
 	DEBUG(0, __FUNCTION__"():querying IAS: Lsapsel...\n");
@@ -1135,13 +1137,13 @@ static void query_lsapsel(struct ircomm_cb * self)
 	}
 }
 
-/* 
- * ircomm_connect_request()
- * Impl. of this function is differ from one of the reference.
- * This functin does discovery as well as sending connect request
+/*
+ * Function ircomm_connect_request (self, servicetype)
+ *
+ *    Impl. of this function is differ from one of the reference. This
+ *    function does discovery as well as sending connect request
+ * 
  */
-
-
 void ircomm_connect_request(struct ircomm_cb *self, __u8 servicetype)
 {
 	/*
@@ -1158,12 +1160,12 @@ void ircomm_connect_request(struct ircomm_cb *self, __u8 servicetype)
 	self->servicetype= servicetype;
 	/* ircomm_control_request(self, SERVICETYPE); */ /*servictype*/
 
-	self->maxsdusize = SAR_DISABLE;
-	ircomm_do_event( self, IRCOMM_CONNECT_REQUEST, NULL);
+	self->max_sdu_size = SAR_DISABLE;
+	ircomm_do_event(self, IRCOMM_CONNECT_REQUEST, NULL);
 }
 
 void ircomm_connect_response(struct ircomm_cb *self, struct sk_buff *userdata,
-			     __u32 maxsdusize)
+			     __u32 max_sdu_size)
 {
 
 	ASSERT( self != NULL, return;);
@@ -1177,10 +1179,11 @@ void ircomm_connect_response(struct ircomm_cb *self, struct sk_buff *userdata,
 	 * and send it with connect_response
 	 */
 
-	if(!userdata){
+	if (!userdata){
 		/* FIXME: check for errors and initialize? DB */
 		userdata = dev_alloc_skb(COMM_DEFAULT_DATA_SIZE);
-		ASSERT(userdata != NULL, return;);
+		if (userdata == NULL)
+			return;
 
 		skb_reserve(userdata,COMM_HEADER_SIZE);
 	}
@@ -1188,9 +1191,10 @@ void ircomm_connect_response(struct ircomm_cb *self, struct sk_buff *userdata,
 	/* enable null-modem emulation (i.e. server mode )*/
 	self->null_modem_mode = 1;
 
-	self->maxsdusize = maxsdusize;
-	if(maxsdusize != SAR_DISABLE)
-		self->max_txbuff_size = maxsdusize;
+	self->max_sdu_size = max_sdu_size;
+	if (max_sdu_size != SAR_DISABLE)
+		self->max_txbuff_size = max_sdu_size;
+
 	ircomm_do_event(self, IRCOMM_CONNECT_RESPONSE, userdata);
 }	
 
@@ -1341,14 +1345,13 @@ static void append_tuple(struct ircomm_cb *self, __u8 instruction, __u8 pl ,
 	self->control_ch_pending = 1;
 }
 
-
-
 /*
- * ircomm_control_request();
- * this function is exported as a request to send some control-channel tuples
- * to peer device
+ * Function ircomm_control_request (self, instruction)
+ *
+ *    This function is exported as a request to send some control-channel
+ *    tuples * to peer device
+ * 
  */
-
 void ircomm_control_request(struct ircomm_cb *self,  __u8 instruction)
 {
 

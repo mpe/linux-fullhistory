@@ -3,12 +3,14 @@
  *
  * (C) Copyright 1999 Roman Weissgaerber <weissg@vienna.at>
  *
- * The OHCI HCD layer is a simple but nearly complete implementation of what the
- * USB people would call a HCD  for the OHCI. 
+ * The OHCI HCD layer is a simple but nearly complete implementation of what 
+ * the USB people would call a HCD  for the OHCI. 
  * (ISO comming soon, Bulk disabled, INT u. CTRL transfers enabled)
- * The layer on top of it, is for interfacing to the alternate-usb device-drivers.
+ * The layer on top of it, is for interfacing to the alternate-usb 
+ * device-drivers.
  * 
- * [ This is based on Linus' UHCI code and gregs OHCI fragments (0.03c source tree). ]
+ * [ This is based on Linus' UHCI code and gregs OHCI fragments 
+ * (0.03c source tree). ]
  * [ Open Host Controller Interface driver for USB. ]
  * [ (C) Copyright 1999 Linus Torvalds (uhci.c) ]
  * [ (C) Copyright 1999 Gregory P. Smith <greg@electricrain.com> ]
@@ -51,9 +53,6 @@
 
 #include "usb.h"
 #include "ohci-hcd.h"
-#include "inits.h" 
-
- 
 
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
@@ -1000,15 +999,15 @@ void start_hc(struct ohci *ohci)
 
 	struct usb_device * usb_dev;
 	struct ohci_device *dev;
-
-	usb_dev = sohci_usb_allocate(ohci->root_hub->usb);
+	struct ohci_device *tmp_root_hub= usb_to_ohci(ohci->bus->root_hub);
+	usb_dev = sohci_usb_allocate(tmp_root_hub->usb);
 	dev = usb_dev->hcpriv; 
 
 	dev->ohci = ohci; 
 
 	usb_connect(usb_dev);
 
-	ohci->root_hub->usb->children[0] = usb_dev;
+	tmp_root_hub->usb->children[0] = usb_dev;
 
 	usb_new_device(usb_dev);
 	}
@@ -1085,6 +1084,7 @@ static void ohci_connect_change(struct ohci *ohci, unsigned int port_nr)
 {
 	struct usb_device *usb_dev;
     struct ohci_device *dev;
+	struct ohci_device *tmp_root_hub=usb_to_ohci(ohci->bus->root_hub);
 	OHCI_DEBUG(printk("uhci_connect_change: called for %d stat %x\n", port_nr,readl(&ohci->regs->roothub.portstatus[port_nr]) );)
 
 	/*
@@ -1094,7 +1094,7 @@ static void ohci_connect_change(struct ohci *ohci, unsigned int port_nr)
 	 *
 	 * So start off by getting rid of any old devices..
 	 */
-	usb_disconnect(&ohci->root_hub->usb->children[port_nr]);
+	usb_disconnect(&tmp_root_hub->usb->children[port_nr]);
 
 	 if(!(readl(&ohci->regs->roothub.portstatus[port_nr]) & RH_PS_CCS)) {
 	 	writel(RH_PS_CCS, &ohci->regs->roothub.portstatus[port_nr]);
@@ -1104,11 +1104,11 @@ static void ohci_connect_change(struct ohci *ohci, unsigned int port_nr)
 	 * Ok, we got a new connection. Allocate a device to it,
 	 * and find out what it wants to do..
 	 */
-	usb_dev = sohci_usb_allocate(ohci->root_hub->usb);
+	usb_dev = sohci_usb_allocate(tmp_root_hub->usb);
 	dev = usb_dev->hcpriv; 
 	dev->ohci = ohci; 
 	usb_connect(dev->usb);
-	ohci->root_hub->usb->children[port_nr] = usb_dev;
+	tmp_root_hub->usb->children[port_nr] = usb_dev;
 	wait_ms(200); /* wait for powerup */
     /* reset port/device */
  	writel(RH_PS_PRS, &ohci->regs->roothub.portstatus[port_nr]); /* reset port */
@@ -1253,10 +1253,9 @@ static struct ohci *alloc_ohci(void* mem_base)
 	if (!usb)
 		return NULL;
 
-	dev = ohci->root_hub = usb_to_ohci(usb);
-
+	dev = usb_to_ohci(usb);
 	usb->bus = bus;
-	/* bus->root_hub = ohci_to_usb(ohci->root_hub); */
+	bus->root_hub = usb;
 	dev->ohci = ohci;
 	
 	/* Initialize the root hub */
@@ -1275,10 +1274,11 @@ static struct ohci *alloc_ohci(void* mem_base)
 static void release_ohci(struct ohci *ohci)
 {
 	int i;
+	struct ohci_device *tmp_root_hub=usb_to_ohci(ohci->bus->root_hub);
 	union ep_addr_ ep_addr;
 	ep_addr.iep = 0;
 	
-    OHCI_DEBUG(printk("USB HC release ohci \n");)
+	OHCI_DEBUG(printk("USB HC release ohci \n"););
     
 	if (ohci->irq >= 0) {
 		free_irq(ohci->irq, ohci);
@@ -1296,24 +1296,21 @@ static void release_ohci(struct ohci *ohci)
 	ohci_rm_eds(ohci); /* remove eds */
 	
     /* disconnect all devices */    
-	if(ohci->root_hub)
-		for(i = 0; i < ohci->root_hub->usb->maxchild; i++)
-			  usb_disconnect(ohci->root_hub->usb->children + i);
+	if(ohci->bus->root_hub)
+		for(i = 0; i < tmp_root_hub->usb->maxchild; i++)
+			usb_disconnect(tmp_root_hub->usb->children + i);
 	    
-    USB_FREE(ohci->root_hub->usb);
-    USB_FREE(ohci->root_hub);
+    usb_deregister_bus(ohci->bus);
+    USB_FREE(tmp_root_hub->usb);
+    USB_FREE(tmp_root_hub);
     USB_FREE(ohci->bus);
     
 	/* unmap the IO address space */
 	iounmap(ohci->regs);
        
-	
 	free_pages((unsigned int) ohci->hc_area, 1);
 	
 }
-
- 
-void cleanup_drivers(void);
 
 static int ohci_roothub_thread(void * __ohci)
 {
@@ -1336,6 +1333,7 @@ static int ohci_roothub_thread(void * __ohci)
 		start_hc(ohci);
 		writel( 0x10000, &ohci->regs->roothub.status);
 		wait_ms(50); /* root hub power on */
+	usb_register_bus(ohci->bus);
          do {
 #ifdef CONFIG_APM
 		if (apm_resume) {
@@ -1345,7 +1343,7 @@ static int ohci_roothub_thread(void * __ohci)
 		}
 #endif
  	 
-         OHCI_DEBUG(printk("USB RH tasks: int: %x\n", ohci->intrstatus); )
+		OHCI_DEBUG(printk("USB RH tasks: int: %x\n",ohci->intrstatus););
 #ifndef VROOTHUB
 		/*	if (ohci->intrstatus & OHCI_INTR_RHSC)  */
 			{
@@ -1379,9 +1377,6 @@ static int ohci_roothub_thread(void * __ohci)
 
         return 0;
 }
-
-
- 
 
 /*
  * Increment the module usage count, start the control thread and
@@ -1480,20 +1475,6 @@ static int handle_apm_event(apm_event_t event)
 }
 #endif
 
-
-#ifdef MODULE
-
-void cleanup_module(void)
-{
-#ifdef CONFIG_APM
-	apm_unregister_callback(&handle_apm_event);
-#endif
-}
-
-#define ohci_hcd_init init_module
-
-#endif
-
 #define PCI_CLASS_SERIAL_USB_OHCI 0x0C0310
 #define PCI_CLASS_SERIAL_USB_OHCI_PG 0x10
  
@@ -1519,3 +1500,17 @@ int ohci_hcd_init(void)
   }
   return retval;
 }
+
+#ifdef MODULE
+int init_module(void){
+	return ohci_hcd_init();
+}
+
+void cleanup_module(void)
+{
+#	ifdef CONFIG_APM
+	apm_unregister_callback(&handle_apm_event);
+#	endif
+}
+#endif //MODULE
+

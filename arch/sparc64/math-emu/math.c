@@ -1,7 +1,7 @@
-/* $Id: math.c,v 1.7 1999/02/10 14:16:26 davem Exp $
+/* $Id: math.c,v 1.8 1999/05/28 13:43:11 jj Exp $
  * arch/sparc64/math-emu/math.c
  *
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1999 Jakub Jelinek (jj@ultra.linux.cz)
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
  *
  * Emulation routines originate from soft-fp package, which is part
@@ -15,6 +15,7 @@
 #include <asm/ptrace.h>
 #include <asm/uaccess.h>
 
+#include "sfp-util.h"
 #include "soft-fp.h"
 
 #define FLOATFUNC(x) extern int x(void *,void *,void *);
@@ -84,46 +85,36 @@ static int record_exception(struct pt_regs *regs, int eflag)
 	if(would_trap != 0) {
 		eflag &= ((fsr & FSR_TEM_MASK) >> FSR_TEM_SHIFT);
 		if((eflag & (eflag - 1)) != 0) {
-			if(eflag & EFLAG_INVALID)
-				eflag = EFLAG_INVALID;
-			else if(eflag & EFLAG_DIVZERO)
-				eflag = EFLAG_DIVZERO;
-			else if(eflag & EFLAG_INEXACT)
-				eflag = EFLAG_INEXACT;
+			if(eflag & FP_EX_INVALID)
+				eflag = FP_EX_INVALID;
+			else if(eflag & FP_EX_OVERFLOW)
+				eflag = FP_EX_OVERFLOW;
+			else if(eflag & FP_EX_UNDERFLOW)
+				eflag = FP_EX_UNDERFLOW;
+			else if(eflag & FP_EX_DIVZERO)
+				eflag = FP_EX_DIVZERO;
+			else if(eflag & FP_EX_INEXACT)
+				eflag = FP_EX_INEXACT;
 		}
 	}
 
-	/* Set CEXC, here are the rules:
+	/* Set CEXC, here is the rule:
 	 *
-	 * 1) In general all FPU ops will set one and only one
+	 *    In general all FPU ops will set one and only one
 	 *    bit in the CEXC field, this is always the case
 	 *    when the IEEE exception trap is enabled in TEM.
-	 *
-	 * 2) As a special case, if an overflow or underflow
-	 *    is being signalled, AND the trap is not enabled
-	 *    in TEM, then the inexact field shall also be set.
 	 */
 	fsr &= ~(FSR_CEXC_MASK);
-	if(would_trap ||
-	   (eflag & (EFLAG_OVERFLOW | EFLAG_UNDERFLOW)) == 0) {
-		fsr |= ((long)eflag << FSR_CEXC_SHIFT);
-	} else {
-		fsr |= (((long)eflag << FSR_CEXC_SHIFT) |
-			(EFLAG_INEXACT << FSR_CEXC_SHIFT));
-	}
+	fsr |= ((long)eflag << FSR_CEXC_SHIFT);
 
-	/* Set the AEXC field, rules are:
+	/* Set the AEXC field, rule is:
 	 *
-	 * 1) If a trap would not be generated, the
+	 *    If a trap would not be generated, the
 	 *    CEXC just generated is OR'd into the
 	 *    existing value of AEXC.
-	 *
-	 * 2) When a trap is generated, AEXC is cleared.
 	 */
 	if(would_trap == 0)
 		fsr |= ((long)eflag << FSR_AEXC_SHIFT);
-	else
-		fsr &= ~(FSR_AEXC_MASK);
 
 	/* If trapping, indicate fault trap type IEEE. */
 	if(would_trap != 0)
@@ -242,7 +233,7 @@ int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 		}
 		freg = ((insn >> 25) & 0x1f);
 		switch ((type >> 4) & 0x3) {
-		case 0: rd = (void *)(((long)&current->tss.xfsr[0]) | (freg & 3)); break;
+		case 0: rd = (void *)(long)(freg & 3); break;
 		case 3: if (freg & 2) {
 				current->tss.xfsr[0] |= (6 << 14) /* invalid_fp_register */;
 				goto err;

@@ -307,7 +307,6 @@ struct ohci {
         struct usb_ohci_ed * ed_bulktail;       /* last endpoint of bulk list */
         struct usb_ohci_ed * ed_controltail;    /* last endpoint of control list */
         struct usb_ohci_ed * ed_isotail;        /* last endpoint of iso list */
-        struct ohci_device * root_hub;
         struct usb_ohci_ed ed_rh_ep0;
         struct usb_ohci_ed ed_rh_epi;
         struct ohci_rep_td *td_rh_epi;

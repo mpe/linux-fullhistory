@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr  6 15:33:50 1999
- * Modified at:   Sun Apr 11 00:41:58 1999
+ * Modified at:   Sun May  9 22:40:43 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -39,28 +39,51 @@
 /*
  * Function irlmp_add_discovery (cachelog, discovery)
  *
- *    
- *
+ *    Add a new discovery to the cachelog, and remove any old discoveries
+ *    from the same device
  */
-void irlmp_add_discovery(hashbin_t *cachelog, discovery_t *discovery)
+void irlmp_add_discovery(hashbin_t *cachelog, discovery_t *new)
 {
-	discovery_t *old;
+	discovery_t *discovery, *node;
+	unsigned long flags;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	spin_lock_irqsave(&irlmp->lock, flags);
 
-	/* Check if we have discovered this device before */
-	old = hashbin_remove(cachelog, discovery->daddr, NULL);
-	if (old)
-		kfree(old);
+	/* 
+	 * Remove all discoveries of devices that has previously been 
+	 * discovered on the same link with the same name (info), or the 
+	 * same daddr. We do this since some devices (mostly PDAs) change
+	 * their device address between every discovery.
+	 */
+	discovery = (discovery_t *) hashbin_get_first(cachelog);
+	while (discovery != NULL ) {
+			node = discovery;
+
+			/* Be sure to stay one item ahead */
+			discovery = (discovery_t *) hashbin_get_next(cachelog);
+			
+			if ((node->daddr == new->daddr) || 
+			    (strcmp(node->info, new->info) == 0))
+			{
+				/* This discovery is a previous discovery 
+				 * from the same device, so just remove it
+				 */
+				hashbin_remove(cachelog, node->daddr, NULL);
+				kfree(node);
+			}
+		}
+
 
 	/* Insert the new and updated version */
-	hashbin_insert(cachelog, (QUEUE *) discovery, discovery->daddr, NULL);
+	hashbin_insert(cachelog, (QUEUE *) new, new->daddr, NULL);
+
+	spin_unlock_irqrestore(&irlmp->lock, flags);
 }
 
 /*
  * Function irlmp_add_discovery_log (cachelog, log)
  *
- *    
+ *    Merge a disovery log into the cachlog.
  *
  */
 void irlmp_add_discovery_log(hashbin_t *cachelog, hashbin_t *log)

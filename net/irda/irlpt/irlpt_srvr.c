@@ -51,15 +51,21 @@ int irlpt_server_init(void);
 static void irlpt_server_disconnect_indication(void *instance, void *sap, 
 						LM_REASON reason,
 						struct sk_buff *skb);
+
+#if 0
 static void irlpt_server_connect_confirm(void *instance, void *sap, 
 					 struct qos_info *qos,  
 					 __u32 max_seg_size,
+					 __u8 max_header_size,
 					 struct sk_buff *skb);
 static void irlpt_server_connect_indication(void *instance, 
 					    void *sap, 
 					    struct qos_info *qos, 
 					    __u32 max_seg_size,
+					    __u8 max_header_size,
 					    struct sk_buff *skb);
+#endif
+
 static int irlpt_server_data_indication(void *instance, void *sap, 
 					struct sk_buff *skb);
 static void register_irlpt_server(void);
@@ -161,7 +167,6 @@ static int irlpt_server_proc_read(char *buf, char **start, off_t offset,
 }
 
 extern struct proc_dir_entry *proc_irda;
-
 #endif /* CONFIG_PROC_FS */
 
 /*
@@ -171,9 +176,9 @@ extern struct proc_dir_entry *proc_irda;
  *
  */
 
-/*int irlpt_init( struct device *dev) {*/
 __initfunc(int irlpt_server_init(void))
 {
+	struct irmanager_event mgr_event;
 	__u16 hints;
 
 	DEBUG( irlpt_server_debug, "--> " __FUNCTION__ "\n");
@@ -212,6 +217,10 @@ __initfunc(int irlpt_server_init(void))
 		= irlpt_server_proc_read;
 #endif /* CONFIG_PROC_FS */
 
+	mgr_event.event = EVENT_IRLPT_START;
+        sprintf(mgr_event.devname, "%s", irlpt_server->ifname);
+        irmanager_notify(&mgr_event);
+
 	DEBUG( irlpt_server_debug, __FUNCTION__ " -->\n");
 
 	return 0;
@@ -225,6 +234,7 @@ __initfunc(int irlpt_server_init(void))
  */
 static void irlpt_server_cleanup(void)
 {
+	struct irmanager_event mgr_event;
 	struct sk_buff *skb;
 
 	DEBUG( irlpt_server_debug, "--> " __FUNCTION__ "\n");
@@ -245,6 +255,10 @@ static void irlpt_server_cleanup(void)
 	remove_proc_entry("irlpt_server", proc_irda);
 #endif
 
+        mgr_event.event = EVENT_IRLPT_STOP;
+        sprintf( mgr_event.devname, "%s", irlpt_server->ifname);
+        irmanager_notify( &mgr_event);
+ 
 	DEBUG( irlpt_server_debug, __FUNCTION__ " -->\n");
 }
 
@@ -304,6 +318,7 @@ static void irlpt_server_connect_confirm(void *instance,
 					 void *sap, 
 					 struct qos_info *qos,
 					 __u32 max_seg_size,
+					 __u8 max_header_size,
 					 struct sk_buff *skb)
 {
 	struct irlpt_cb *self;
@@ -313,6 +328,9 @@ static void irlpt_server_connect_confirm(void *instance,
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IRLPT_MAGIC, return;);
+
+	self->max_data_size = max_seg_size;
+	self->max_header_size = max_header_size;
 
 	self->connected = TRUE;
 
@@ -329,6 +347,7 @@ static void irlpt_server_connect_indication(void *instance,
 					    void *sap, 
 					    struct qos_info *qos, 
 					    __u32 max_seg_size,
+					    __u8 max_header_size,
 					    struct sk_buff *skb)
 {
 	struct irlpt_cb *self;
@@ -343,14 +362,16 @@ static void irlpt_server_connect_indication(void *instance,
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IRLPT_MAGIC, return;);
 
+	self->max_data_size = max_seg_size;
+	self->max_header_size = max_header_size;
+
 	self->connected = IRLPT_CONNECTED;
 	self->eof = FALSE;
 
 	irlpt_server_do_event( self, LMP_CONNECT, NULL, &info);
 
-	if (skb) {
+	if (skb)
 		dev_kfree_skb( skb);
-	}
 
 	DEBUG( irlpt_server_debug, __FUNCTION__ " -->\n");
 }

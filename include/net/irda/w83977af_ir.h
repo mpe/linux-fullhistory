@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Thu Nov 19 13:55:34 1998
- * Modified at:   Thu Dec 10 14:06:18 1998
+ * Modified at:   Mon May  3 12:07:25 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -149,6 +149,29 @@
 #define IRM_CR		0x07 /* Infrared module control register */
 #define IRM_CR_IRX_MSL	0x40
 #define IRM_CR_AF_MNT   0x80 /* Automatic format */
+
+/* For storing entries in the status FIFO */
+struct st_fifo_entry {
+	int status;
+	int len;
+};
+
+struct st_fifo {
+	struct st_fifo_entry entries[10];
+	int head;
+	int tail;
+	int len;
+};
+
+/* Private data for each instance */
+struct w83977af_ir {
+	struct st_fifo st_fifo;
+
+	int tx_buff_offsets[10]; /* Offsets between frames in tx_buff */
+	int tx_len;          /* Number of frames in tx_buff */
+
+	struct irda_device idev;
+};
 
 static inline void switch_bank( int iobase, int set)
 {

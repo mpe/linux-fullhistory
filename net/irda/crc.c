@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Sat Dec 12 09:56:35 1998
+ * Modified at:   Sun May  2 20:28:08 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       ppp.c by Michael Callahan <callahan@maths.ox.ac.uk>
  *                Al Longyear <longyear@netcom.com>
@@ -59,7 +59,7 @@ __u16 const irda_crc16_table[256] =
 
 unsigned short crc_calc( __u16 fcs, __u8 const *buf, size_t len) 
 {
-    while ( len--)
-		fcs = IR_FCS(fcs, *buf++);
-    return fcs;
+	while (len--)
+                fcs = irda_fcs(fcs, *buf++);
+	return fcs;
 }

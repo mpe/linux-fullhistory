@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Wed Apr 21 16:37:21 1999
+ * Modified at:   Sun May  9 10:56:57 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -81,6 +81,8 @@ struct iriap_cb {
 	CONFIRM_CALLBACK confirm;
 	void *priv;
 
+	__u8 max_header_size;
+	
 	struct timer_list watchdog_timer;
 };
 
@@ -92,8 +94,6 @@ void iriap_getvaluebyclass_request( char *name, char *attr,
 void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb);
 
 void iriap_send_ack( struct iriap_cb *self);
-void iriap_connect_confirm(void *instance, void *sap, struct qos_info *qos, 
-			   __u32 max_sdu_size, struct sk_buff *skb);
 void iriap_call_indication(struct iriap_cb *self, struct sk_buff *skb);
 
 void iriap_register_server(void);

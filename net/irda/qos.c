@@ -6,10 +6,11 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Sep  9 00:00:26 1997
- * Modified at:   Mon Apr 12 11:49:24 1999
+ * Modified at:   Mon May  3 21:15:08 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -52,10 +53,10 @@ int compression[] = { CI_BZIP2, CI_DEFLATE, CI_DEFLATE_DRAFT };
  *    Compute the intersection of the old QoS capabilites with new ones
  *
  */
-void irda_qos_compute_intersection( struct qos_info *qos, struct qos_info *new)
+void irda_qos_compute_intersection(struct qos_info *qos, struct qos_info *new)
 {
-	ASSERT( qos != NULL, return;);
-	ASSERT( new != NULL, return;);
+	ASSERT(qos != NULL, return;);
+	ASSERT(new != NULL, return;);
 
 	/* Apply */
 	qos->baud_rate.bits       &= new->baud_rate.bits;

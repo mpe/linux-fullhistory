@@ -225,8 +225,6 @@ struct uhci {
 	/* These are "standard" QH's for the entire bus */
 	struct uhci_qh qh[UHCI_MAXQH];
 #endif
-	struct uhci_device *root_hub;		/* Root hub device descriptor.. */
-
 	struct uhci_framelist *fl;		/* Frame list */
 	struct list_head interrupt_list;	/* List of interrupt-active TD's for this uhci */
 };

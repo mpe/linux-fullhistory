@@ -6,12 +6,12 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:18:38 1997
- * Modified at:   Thu Apr 22 09:20:24 1999
+ * Modified at:   Mon May 10 15:45:50 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -38,19 +38,21 @@
 #include <net/irda/irlap.h>
 #include <net/irda/timer.h>
 #include <net/irda/irda_device.h>
-#include <linux/kmod.h>
 
 static hashbin_t *irtty = NULL;
-static hashbin_t *dongles = NULL;
 
 static struct tty_ldisc irda_ldisc;
 
-static int irtty_hard_xmit(struct sk_buff *skb, struct device *dev);
+static int qos_mtt_bits = 0x03;      /* 5 ms or more */
+
+static int  irtty_hard_xmit(struct sk_buff *skb, struct device *dev);
 static void irtty_wait_until_sent(struct irda_device *driver);
-static int irtty_is_receiving(struct irda_device *idev);
-static int irtty_net_init(struct device *dev);
-static int irtty_net_open(struct device *dev);
-static int irtty_net_close(struct device *dev);
+static int  irtty_is_receiving(struct irda_device *idev);
+static void irtty_set_dtr_rts(struct irda_device *idev, int dtr, int rts);
+static int  irtty_raw_write(struct irda_device *idev, __u8 *buf, int len);
+static int  irtty_net_init(struct device *dev);
+static int  irtty_net_open(struct device *dev);
+static int  irtty_net_close(struct device *dev);
 
 static int  irtty_open(struct tty_struct *tty);
 static void irtty_close(struct tty_struct *tty);
@@ -70,13 +72,6 @@ __initfunc(int irtty_init(void))
 	irtty = hashbin_new( HB_LOCAL);
 	if ( irtty == NULL) {
 		printk( KERN_WARNING "IrDA: Can't allocate irtty hashbin!\n");
-		return -ENOMEM;
-	}
-
-	dongles = hashbin_new(HB_LOCAL);
-	if (dongles == NULL) {
-		printk(KERN_WARNING 
-		       "IrDA: Can't allocate dongles hashbin!\n");
 		return -ENOMEM;
 	}
 
@@ -132,7 +127,6 @@ static void irtty_cleanup(void)
 	 *  function to hashbin_destroy().
 	 */
 	hashbin_delete(irtty, NULL);
-	hashbin_delete(dongles, NULL);
 }
 #endif /* MODULE */
 
@@ -201,7 +195,7 @@ static int irtty_open(struct tty_struct *tty)
 	/* The only value we must override it the baudrate */
 	self->idev.qos.baud_rate.bits = IR_9600|IR_19200|IR_38400|IR_57600|
 		IR_115200;
-	self->idev.qos.min_turn_time.bits = 0x0f;
+	self->idev.qos.min_turn_time.bits = qos_mtt_bits;
 	self->idev.flags = IFF_SIR | IFF_PIO;
 	irda_qos_bits_to_value(&self->idev.qos);
 
@@ -216,7 +210,8 @@ static int irtty_open(struct tty_struct *tty)
 	/* Initialize callbacks */
 	self->idev.change_speed    = irtty_change_speed;
  	self->idev.is_receiving    = irtty_is_receiving;
-	/* self->idev.is_tbusy        = irtty_is_tbusy; */
+	self->idev.set_dtr_rts     = irtty_set_dtr_rts;
+	self->idev.raw_write       = irtty_raw_write;
 	self->idev.wait_until_sent = irtty_wait_until_sent;
 
 	/* Override the network functions we need to use */
@@ -247,10 +242,6 @@ static void irtty_close(struct tty_struct *tty)
 	/* First make sure we're connected. */
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRTTY_MAGIC, return;);
-
-	/* We are not using any dongle anymore! */
-	if (self->dongle_q)
-		self->dongle_q->dongle->close(&self->idev);
 
 	/* Remove driver */
 	irda_device_close(&self->idev);
@@ -359,68 +350,6 @@ static void irtty_change_speed(struct irda_device *idev, int baud)
 }
 
 /*
- * Function irtty_init_dongle (self, type)
- *
- *    Initialize attached dongle. Warning, must be called with a process
- *    context!
- */
-static void irtty_init_dongle(struct irtty_cb *self, int type)
-{
-	struct dongle_q *node;
-
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == IRTTY_MAGIC, return;);
-
-#ifdef CONFIG_KMOD
-	/* Try to load the module needed */
-	switch( type) {
-	case ESI_DONGLE:
-		MESSAGE("IrDA: Trying to initialize ESI dongle!\n");
-		request_module("esi");
-		break;
-	case TEKRAM_DONGLE:
-		MESSAGE("IrDA: Trying to initialize Tekram dongle!\n");
-		request_module("tekram");
-		break;
-	case ACTISYS_DONGLE:     /* FALLTHROUGH */
-	case ACTISYS_PLUS_DONGLE:
-		MESSAGE("IrDA: Trying to initialize ACTiSYS dongle!\n");
-		request_module("actisys");
-		break;
-	case GIRBIL_DONGLE:
-		MESSAGE("IrDA: Trying to initialize GIrBIL dongle!\n");
-		request_module("girbil");
-		break;
-	default:
-		ERROR("Unknown dongle type!\n");
-		return;
-	}
-#endif /* CONFIG_KMOD */
-
-	node = hashbin_find(dongles, type, NULL);
-	if ( !node) {
-		ERROR("Unable to find requested dongle\n");
-		return;
-	}
-	self->dongle_q = node;
-
-	/* Use this change speed function instead of the default */
-	self->idev.change_speed = node->dongle->change_speed;
-
-	/*
-	 * Now initialize the dongle!
-	 */
-	node->dongle->open(&self->idev, type);
-	node->dongle->qos_init(&self->idev, &self->idev.qos);
-	
-	/* Reset dongle */
-	node->dongle->reset(&self->idev, 0);
-
-	/* Set to default baudrate */
-	node->dongle->change_speed(&self->idev, 9600);
-}
-
-/*
  * Function irtty_ioctl (tty, file, cmd, arg)
  *
  *     The Swiss army knife of system calls :-)
@@ -452,7 +381,7 @@ static int irtty_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		break;
 	case IRTTY_IOCTDONGLE:
 		/* Initialize dongle */
-		irtty_init_dongle(self, (int) arg);
+		irda_device_init_dongle(&self->idev, (int) arg);
 		break;
 	default:
 		return -ENOIOCTLCMD;
@@ -645,53 +574,22 @@ static void irtty_wait_until_sent(struct irda_device *idev)
 	tty_wait_until_sent(self->tty, 0);
 }
 
-int irtty_register_dongle(struct dongle *dongle)
-{
-	struct dongle_q *new;
-	
-	/* Check if this compressor has been registred before */
-	if ( hashbin_find ( dongles, dongle->type, NULL)) {
-		DEBUG( 0, __FUNCTION__ "(), Dongle already registered\n");
-                return 0;
-        }
-	
-	/* Make new IrDA dongle */
-        new = (struct dongle_q *) kmalloc(sizeof(struct dongle_q), GFP_KERNEL);
-        if (new == NULL)
-                return -1;
-		
-	memset(new, 0, sizeof( struct dongle_q));
-        new->dongle = dongle;
-
-	/* Insert IrDA dongle into hashbin */
-	hashbin_insert(dongles, (QUEUE *) new, dongle->type, NULL);
-	
-        return 0;
-}
-
-void irtty_unregister_dongle(struct dongle *dongle)
-{
-	struct dongle_q *node;
-
-	node = hashbin_remove(dongles, dongle->type, NULL);
-	if (!node) {
-		ERROR(__FUNCTION__ "(), dongle not found!\n");
-		return;
-	}
-	kfree(node);
-}
-
-
 /*
  * Function irtty_set_dtr_rts (tty, dtr, rts)
  *
  *    This function can be used by dongles etc. to set or reset the status
  *    of the dtr and rts lines
  */
-void irtty_set_dtr_rts(struct tty_struct *tty, int dtr, int rts)
+static void irtty_set_dtr_rts(struct irda_device *idev, int dtr, int rts)
 {
+	struct tty_struct *tty;
+	struct irtty_cb *self;
 	mm_segment_t fs;
 	int arg = 0;
+
+	self = (struct irtty_cb *) idev->priv;
+
+	tty = self->tty;
 
 #ifdef TIOCM_OUT2 /* Not defined for ARM */
 	arg = TIOCM_OUT2;
@@ -716,6 +614,25 @@ void irtty_set_dtr_rts(struct tty_struct *tty, int dtr, int rts)
 		ERROR(__FUNCTION__ "(), error doing ioctl!\n");
 	}
 	set_fs(fs);
+}
+
+static int irtty_raw_write(struct irda_device *idev, __u8 *buf, int len)
+{
+	struct irtty_cb *self;
+	int actual = 0;
+
+	ASSERT(idev != NULL, return 0;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return -1;);
+	
+	self = (struct irtty_cb *) idev->priv;
+
+	ASSERT(self != NULL, return 0;);
+	ASSERT(self->magic == IRTTY_MAGIC, return 0;);
+
+	if (self->tty->driver.write)
+		actual = self->tty->driver.write(self->tty, 0, buf, len);
+
+	return actual;
 }
 
 static int irtty_net_init(struct device *dev)
@@ -759,6 +676,8 @@ static int irtty_net_close(struct device *dev)
 
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
 MODULE_DESCRIPTION("IrDA TTY device driver");
+
+MODULE_PARM(qos_mtt_bits, "i");
 
 /*
  * Function init_module (void)

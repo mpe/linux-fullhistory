@@ -3,6 +3,9 @@
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
+#include <linux/config.h>
+#include <linux/module.h>
+
 #include <linux/kbd_ll.h>
 #include "usb.h"
 
@@ -218,9 +221,21 @@ usb_kbd_disconnect(struct usb_device *dev)
     printk(KERN_INFO "USB HID boot protocol keyboard removed.\n");
 }
 
-int
-usb_kbd_init(void)
+int usb_kbd_init(void)
 {
     usb_register(&usb_kbd_driver);
     return 0;
 }
+
+#ifdef MODULE
+int init_module(void)
+{
+	return usb_kbd_init();
+}
+
+void module_cleanup(void)
+{
+	usb_deregister(&usb_kbd_driver);
+}
+#endif
+

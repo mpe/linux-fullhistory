@@ -64,58 +64,168 @@
 
 #define IO_EXTENT 8
 
-/* static unsigned int io[]  = { 0x3e8, ~0, ~0, ~0 }; */
-/* static unsigned int irq[] = { 11, 0, 0, 0 }; */
+/* 
+ * Currently you'll need to set these values using insmod like this:
+ * insmod irport io=0x3e8 irq=11
+ */
+static unsigned int io[]  = { ~0, ~0, ~0, ~0 };
+static unsigned int irq[] = { 0, 0, 0, 0 };
+
+static unsigned int qos_mtt_bits = 0x03;
+
+static struct irda_device *dev_self[] = { NULL, NULL, NULL, NULL};
+static char *driver_name = "irport";
+
+static int irport_open(int i, unsigned int iobase, unsigned int irq);
+static int irport_close(struct irda_device *idev);
 
 static void irport_write_wakeup(struct irda_device *idev);
 static int  irport_write(int iobase, int fifo_size, __u8 *buf, int len);
 static void irport_receive(struct irda_device *idev);
 
+static int  irport_net_init(struct device *dev);
+static int  irport_net_open(struct device *dev);
+static int  irport_net_close(struct device *dev);
+static void irport_wait_until_sent(struct irda_device *idev);
+static int  irport_is_receiving(struct irda_device *idev);
+static void irport_set_dtr_rts(struct irda_device *idev, int dtr, int rts);
+static int  irport_raw_write(struct irda_device *idev, __u8 *buf, int len);
+
 __initfunc(int irport_init(void))
 {
-/* 	int i; */
+ 	int i;
 
-/* 	for ( i=0; (io[i] < 2000) && (i < 4); i++) { */
-/* 		int ioaddr = io[i]; */
-/* 		if (check_region(ioaddr, IO_EXTENT)) */
-/* 			continue; */
-/* 		if (irport_open( i, io[i], io2[i], irq[i], dma[i]) == 0) */
-/* 			return 0; */
-/* 	} */
-/* 	return -ENODEV; */
-	return 0;
+ 	for (i=0; (io[i] < 2000) && (i < 4); i++) {
+ 		int ioaddr = io[i];
+ 		if (check_region(ioaddr, IO_EXTENT))
+ 			continue;
+ 		if (irport_open(i, io[i], irq[i]) == 0)
+ 			return 0;
+ 	}
+	/* 
+	 * Maybe something failed, but we can still be usable for FIR drivers 
+	 */
+ 	return 0;
 }
 
 /*
- * Function pc87108_cleanup ()
+ * Function irport_cleanup ()
  *
- *    Close all configured chips
+ *    Close all configured ports
  *
  */
 #ifdef MODULE
 static void irport_cleanup(void)
 {
-/* 	int i; */
+ 	int i;
 
         DEBUG( 4, __FUNCTION__ "()\n");
 
-	/* for ( i=0; i < 4; i++) { */
-/* 		if ( dev_self[i]) */
-/* 			irport_close( &(dev_self[i]->idev)); */
-/* 	} */
+	for (i=0; i < 4; i++) {
+ 		if (dev_self[i])
+ 			irport_close(dev_self[i]);
+ 	}
 }
 #endif /* MODULE */
 
-/*
- * Function irport_open (void)
- *
- *    Start IO port 
- *
- */
-int irport_open(int iobase)
+static int irport_open(int i, unsigned int iobase, unsigned int irq)
 {
-	DEBUG(4, __FUNCTION__ "(), iobase=%#x\n", iobase);
+	struct irda_device *idev;
+	int ret;
 
+	DEBUG( 0, __FUNCTION__ "()\n");
+
+/* 	if (irport_probe(iobase, irq) == -1) */
+/* 		return -1; */
+
+	/*
+	 *  Allocate new instance of the driver
+	 */
+	idev = kmalloc(sizeof(struct irda_device), GFP_KERNEL);
+	if (idev == NULL) {
+		printk( KERN_ERR "IrDA: Can't allocate memory for "
+			"IrDA control block!\n");
+		return -ENOMEM;
+	}
+	memset(idev, 0, sizeof(struct irda_device));
+   
+	/* Need to store self somewhere */
+	dev_self[i] = idev;
+
+	/* Initialize IO */
+	idev->io.iobase2   = iobase;
+        idev->io.irq2      = irq;
+        idev->io.io_ext    = IO_EXTENT;
+        idev->io.fifo_size = 16;
+
+	/* Lock the port that we need */
+	ret = check_region(idev->io.iobase2, idev->io.io_ext);
+	if (ret < 0) { 
+		DEBUG( 0, __FUNCTION__ "(), can't get iobase of 0x%03x\n",
+		       idev->io.iobase2);
+		/* w83977af_cleanup( self->idev);  */
+		return -ENODEV;
+	}
+	request_region(idev->io.iobase2, idev->io.io_ext, idev->name);
+
+	/* Initialize QoS for this device */
+	irda_init_max_qos_capabilies(&idev->qos);
+	
+	idev->qos.baud_rate.bits = IR_9600|IR_19200|IR_38400|IR_57600|
+		IR_115200;
+
+	idev->qos.min_turn_time.bits = qos_mtt_bits;
+	irda_qos_bits_to_value(&idev->qos);
+	
+	idev->flags = IFF_SIR|IFF_PIO;
+
+	/* Specify which buffer allocation policy we need */
+	idev->rx_buff.flags = GFP_KERNEL;
+	idev->tx_buff.flags = GFP_KERNEL;
+
+	idev->rx_buff.truesize = 4000; 
+	idev->tx_buff.truesize = 4000;
+	
+	/* Initialize callbacks */
+	idev->change_speed    = irport_change_speed;
+	idev->wait_until_sent = irport_wait_until_sent;
+        idev->is_receiving    = irport_is_receiving;
+	idev->set_dtr_rts     = irport_set_dtr_rts;
+	idev->raw_write       = irport_raw_write;
+
+	/* Override the network functions we need to use */
+	idev->netdev.init            = irport_net_init;
+	idev->netdev.hard_start_xmit = irport_hard_xmit;
+	idev->netdev.open            = irport_net_open;
+	idev->netdev.stop            = irport_net_close;
+
+	/* Open the IrDA device */
+	irda_device_open(idev, driver_name, NULL);
+	
+	return 0;
+}
+
+static int irport_close(struct irda_device *idev)
+{
+	DEBUG(0, __FUNCTION__ "()\n");
+
+	ASSERT(idev != NULL, return -1;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return -1;);
+
+	/* Release the PORT that this driver is using */
+	DEBUG(0 , __FUNCTION__ "(), Releasing Region %03x\n", 
+	      idev->io.iobase2);
+	release_region(idev->io.iobase2, idev->io.io_ext);
+
+	irda_device_close(idev);
+
+	kfree(idev);
+
+	return 0;
+}
+
+void irport_start(int iobase)
+{
 	/* Initialize UART */
 	outb(UART_LCR_WLEN8, iobase+UART_LCR);  /* Reset DLAB */
 	outb((UART_MCR_DTR | UART_MCR_RTS | UART_MCR_OUT2), iobase+UART_MCR);
@@ -123,24 +233,29 @@ int irport_open(int iobase)
 	/* Turn on interrups */
 	outb((UART_IER_RLSI | UART_IER_RDI), iobase+UART_IER);
 
-	return 0;
+}
+
+void irport_stop(int iobase)
+{
+	/* Reset UART */
+	outb(0, iobase+UART_MCR);
+	
+	/* Turn off interrupts */
+	outb(0, iobase+UART_IER);
 }
 
 /*
- * Function irport_cleanup ()
+ * Function irport_probe (void)
  *
- *    Stop IO port
+ *    Start IO port 
  *
  */
-void irport_close(int iobase) 
+int irport_probe(int iobase)
 {
-	DEBUG(4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "(), iobase=%#x\n", iobase);
 
-	/* Reset UART */
-	outb(0, iobase+UART_MCR);
 
-	/* Turn off interrupts */
-	outb(0, iobase+UART_IER);
+	return 0;
 }
 
 /*
@@ -149,13 +264,22 @@ void irport_close(int iobase)
  *    Set speed of port to specified baudrate
  *
  */
-void irport_change_speed( int iobase, int speed) 
+void irport_change_speed(struct irda_device *idev, int speed)
 {
+	int iobase; 
 	int fcr;    /* FIFO control reg */
 	int lcr;    /* Line control reg */
 	int divisor;
 
 	DEBUG( 0, __FUNCTION__ "(), Setting speed to: %d\n", speed);
+
+	ASSERT(idev != NULL, return;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
+
+	iobase = idev->io.iobase2;
+	
+	/* Update accounting for new speed */
+	idev->io.baudrate = speed;
 
 	/* Turn off interrupts */
 	outb(0, iobase+UART_IER); 
@@ -373,7 +497,144 @@ void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	idev->netdev.interrupt = 0;
 }
 
+static int irport_net_init(struct device *dev)
+{
+	/* Set up to be a normal IrDA network device driver */
+	irda_device_setup(dev);
+
+	/* Insert overrides below this line! */
+
+	return 0;
+}
+
+/*
+ * Function irport_net_open (dev)
+ *
+ *    
+ *
+ */
+static int irport_net_open(struct device *dev)
+{
+	struct irda_device *idev;
+	int iobase;
+
+	ASSERT(dev != NULL, return -1;);
+	idev = (struct irda_device *) dev->priv;
+
+	iobase = idev->io.iobase2;
+
+	if (request_irq(idev->io.irq2, irport_interrupt, 0, idev->name, 
+			(void *) idev)) {
+		return -EAGAIN;
+	}
+
+	/* Ready to play! */
+	dev->tbusy = 0;
+	dev->interrupt = 0;
+	dev->start = 1;
+
+	MOD_INC_USE_COUNT;
+
+	irport_start(iobase);
+
+	return 0;
+}
+
+/*
+ * Function irport_net_close (idev)
+ *
+ *    
+ *
+ */
+static int irport_net_close(struct device *dev)
+{
+	struct irda_device *idev;
+	int iobase;
+
+	ASSERT(dev != NULL, return -1;);
+	idev = (struct irda_device *) dev->priv;
+
+	DEBUG(4, __FUNCTION__ "()\n");
+
+	iobase = idev->io.iobase2;
+
+	irport_stop(iobase);
+
+	/* Stop device */
+	dev->tbusy = 1;
+	dev->start = 0;
+
+	free_irq(idev->io.irq2, idev);
+
+	MOD_DEC_USE_COUNT;
+
+	return 0;
+}
+
+static void irport_wait_until_sent(struct irda_device *idev)
+{
+	current->state = TASK_INTERRUPTIBLE;
+	schedule_timeout(60*HZ/1000);
+}
+
+static int irport_is_receiving(struct irda_device *idev)
+{
+	return (idev->rx_buff.state != OUTSIDE_FRAME);
+}
+
+/*
+ * Function irtty_set_dtr_rts (tty, dtr, rts)
+ *
+ *    This function can be used by dongles etc. to set or reset the status
+ *    of the dtr and rts lines
+ */
+static void irport_set_dtr_rts(struct irda_device *idev, int dtr, int rts)
+{
+	int iobase;
+
+	ASSERT(idev != NULL, return;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
+
+	iobase = idev->io.iobase2;
+
+	if (dtr)
+		dtr = UART_MCR_DTR;
+	if (rts)
+		rts = UART_MCR_RTS;
+
+	outb(dtr|rts|UART_MCR_OUT2, iobase+UART_MCR);
+}
+
+static int irport_raw_write(struct irda_device *idev, __u8 *buf, int len)
+{
+	int iobase;
+	int actual = 0;
+
+	ASSERT(idev != NULL, return -1;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return -1;);
+
+	iobase = idev->io.iobase2;
+
+	/* Tx FIFO should be empty! */
+	if (!(inb(iobase+UART_LSR) & UART_LSR_THRE)) {
+		DEBUG( 0, __FUNCTION__ "(), failed, fifo not empty!\n");
+		return -1;
+	}
+        
+	/* Fill FIFO with current frame */
+	while (actual < len) {
+		/* Transmit next byte */
+		outb(buf[actual], iobase+UART_TX);
+		actual++;
+	}
+
+	return actual;
+}
+
 #ifdef MODULE
+
+MODULE_PARM(io, "1-4i");
+MODULE_PARM(irq, "1-4i");
 
 /*
  * Function cleanup_module (void)
@@ -393,11 +654,7 @@ void cleanup_module(void)
  */
 int init_module(void)
 {
-	if (irport_init() < 0) {
-		cleanup_module();
-		return 1;
-	}
-	return(0);
+	return irport_init();
 }
 
 #endif /* MODULE */

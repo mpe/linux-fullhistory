@@ -8,7 +8,7 @@
  * Source:        serial.c by Linus Torvalds
  *                isdn_tty.c by Fritz Elfert
  *
- *     Copyright (c) 1998, Takahide Higuchi, <thiguchi@pluto.dti.ne.jp>,
+ *     Copyright (c) 1998-1999, Takahide Higuchi, <thiguchi@pluto.dti.ne.jp>,
  *     All Rights Reserved.
  *
  *     This program is free software; you can redistribute it and/or
@@ -341,15 +341,15 @@ static void irvtd_send_data_request(struct irvtd_cb *driver)
  ***********************************************************************
  */
 
-
 /*
  * Function irvtd_connect_confirm (instance, sap, qos, max_sdu_size, skb)
  *
- *    ircomm_connect_request which we have send have succeed!
+ *    ircomm_connect_request which we have send, has succeeded!
  *
  */
 void irvtd_connect_confirm(void *instance, void *sap, struct qos_info *qos,
-			   __u32 max_sdu_size, struct sk_buff *skb)
+			   __u32 max_sdu_size, __u8 max_header_size, 
+			   struct sk_buff *skb)
 {
 	struct irvtd_cb *driver = (struct irvtd_cb *)instance;
 	ASSERT(driver != NULL, return;);
@@ -364,7 +364,7 @@ void irvtd_connect_confirm(void *instance, void *sap, struct qos_info *qos,
 	/*
 	 * sending initial control parameters here
 	 */
-	if(driver->comm->servicetype ==	THREE_WIRE_RAW)
+	if (driver->comm->servicetype ==	THREE_WIRE_RAW)
 		return;                /* do nothing */
 
 	driver->comm->dte |= (MCR_DTR | MCR_RTS | DELTA_DTR | DELTA_RTS);
@@ -376,7 +376,7 @@ void irvtd_connect_confirm(void *instance, void *sap, struct qos_info *qos,
 	ircomm_control_request(driver->comm, XON_XOFF_CHAR);
 	/* ircomm_control_request(driver->comm, ENQ_ACK_CHAR); */
 
-	switch(driver->comm->servicetype){
+	switch (driver->comm->servicetype) {
 	case CENTRONICS:
 		break;
 
@@ -397,17 +397,18 @@ void irvtd_connect_confirm(void *instance, void *sap, struct qos_info *qos,
  *
  */
 void irvtd_connect_indication(void *instance, void *sap, struct qos_info *qos,
-			      __u32 max_sdu_size, struct sk_buff *skb)
+			      __u32 max_sdu_size, __u8 max_header_size, 
+			      struct sk_buff *skb)
 {
-
 	struct irvtd_cb *driver = (struct irvtd_cb *)instance;
 	struct ircomm_cb *comm = (struct ircomm_cb *)sap;
+
 	ASSERT(driver != NULL, return;);
 	ASSERT(driver->magic == IRVTD_MAGIC, return;);
 	ASSERT(comm != NULL, return;);
 	ASSERT(comm->magic == IRCOMM_MAGIC, return;);
 
-	DEBUG(4,"irvtd_connect_indication:sending connect_response...\n");
+	DEBUG(4, __FUNCTION__ "():sending connect_response...\n");
 
 	ircomm_connect_response(comm, NULL, SAR_DISABLE );
 
@@ -416,7 +417,7 @@ void irvtd_connect_indication(void *instance, void *sap, struct qos_info *qos,
 	/*
 	 * send initial control parameters
 	 */
-	if(driver->comm->servicetype ==	THREE_WIRE_RAW)
+	if (driver->comm->servicetype == THREE_WIRE_RAW)
 		return;                /* do nothing */
 
 	driver->comm->dte |= (MCR_DTR | MCR_RTS | DELTA_DTR | DELTA_RTS);
@@ -426,6 +427,7 @@ void irvtd_connect_indication(void *instance, void *sap, struct qos_info *qos,
 		ircomm_control_request(driver->comm, DTELINE_STATE);
 		break;
 	default:
+		DEBUG(0, __FUNCTION__ "(), not implemented!\n");
 	}
 
 
@@ -576,6 +578,7 @@ void irvtd_control_indication(void *instance, void *sap, IRCOMM_CMD cmd)
 	case DATA_RATE:
 	case XON_XOFF_CHAR:
 	case DTELINE_STATE:
+	case ENQ_ACK_CHAR:	/* got this from win95 */
 		/* (maybe) nothing to do  */
 		break;
 	default:
@@ -778,7 +781,7 @@ static int irvtd_startup(struct irvtd_cb *driver)
 	skb_queue_head_init(&driver->rxbuff);
 	driver->txbuff = dev_alloc_skb(COMM_DEFAULT_DATA_SIZE); 
 	if (!driver->txbuff){
-		DEBUG(0,__FUNCTION__"():alloc_skb failed!\n");
+		DEBUG(0,__FUNCTION__"(), alloc_skb failed!\n");
 		return -ENOMEM;
 	}
 	skb_reserve(driver->txbuff, COMM_HEADER_SIZE);
@@ -793,9 +796,8 @@ static int irvtd_startup(struct irvtd_cb *driver)
 	irvtd_notify.instance = driver;
 
 	driver->comm = ircomm_open_instance(irvtd_notify);
-	if(!driver->comm){
+	if (!driver->comm)
 		return -ENODEV;
-	}
 
 
 	/* 

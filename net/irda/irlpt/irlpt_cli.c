@@ -51,10 +51,11 @@ static void irlpt_client_discovery_indication(discovery_t *);
 static void irlpt_client_connect_confirm(void *instance, void *sap, 
 					 struct qos_info *qos, 
 					 __u32 max_seg_size, 
+					 __u8 max_header_size,
 					 struct sk_buff *skb);
-static void irlpt_client_disconnect_indication( void *instance, void *sap, 
-						LM_REASON reason,
-						struct sk_buff *userdata);
+static void irlpt_client_disconnect_indication(void *instance, void *sap, 
+					       LM_REASON reason,
+					       struct sk_buff *userdata);
 static void irlpt_client_expired(unsigned long data);
 
 #if 0
@@ -187,7 +188,7 @@ __initfunc(int irlpt_client_init(void))
 
 #ifdef CONFIG_PROC_FS
 	create_proc_entry("irlpt_client", 0, proc_irda)->get_info
-			= irlpt_client_proc_read;
+		= irlpt_client_proc_read;
 #endif /* CONFIG_PROC_FS */
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
@@ -215,7 +216,6 @@ static void irlpt_client_cleanup(void)
 #ifdef CONFIG_PROC_FS
 	remove_proc_entry("irlpt_client", proc_irda);
 #endif
-
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
 }
 #endif /* MODULE */
@@ -403,9 +403,8 @@ static void irlpt_client_disconnect_indication( void *instance,
 
 	irlpt_client_do_event( self, LMP_DISCONNECT, NULL, NULL);
 
-	if (skb) {
+	if (skb)
 		dev_kfree_skb( skb);
-	}
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
 }
@@ -417,7 +416,8 @@ static void irlpt_client_disconnect_indication( void *instance,
  */
 static void irlpt_client_connect_confirm(void *instance, void *sap, 
 					 struct qos_info *qos, 
-					 __u32 max_sdu_size,
+					 __u32 max_seg_size,
+					 __u8 max_header_size,
 					 struct sk_buff *skb)
 {
 	struct irlpt_info info;
@@ -443,14 +443,14 @@ static void irlpt_client_connect_confirm(void *instance, void *sap,
 	}
 #endif
 
-	self->irlap_data_size = (qos->data_size.value - IRLPT_MAX_HEADER);
+	self->max_data_size = max_seg_size;
+	self->max_header_size = max_header_size;
 	self->connected = TRUE;
 	
 	irlpt_client_do_event( self, LMP_CONNECT, NULL, NULL);
 
-	if (skb) {
+	if (skb)
 		dev_kfree_skb( skb);
-	}
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
 }
@@ -603,7 +603,7 @@ static void irlpt_client_expired(unsigned long data)
 			return;
 		}
 
-		skb_reserve( skb, LMP_CONTROL_HEADER+LAP_HEADER);
+		skb_reserve(skb, LMP_MAX_HEADER);
 		irlmp_disconnect_request(self->lsap, skb);
 		DEBUG(irlpt_client_debug, __FUNCTION__
 		      ": irlmp_close_slap(self->lsap)\n");

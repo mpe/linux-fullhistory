@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Sat Apr 10 10:32:21 1999
+ * Modified at:   Mon May 10 17:12:53 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -48,8 +48,10 @@ static void irttp_disconnect_indication(void *instance, void *sap,
 					struct sk_buff *);
 static void irttp_connect_indication(void *instance, void *sap, 
 				     struct qos_info *qos, __u32 max_sdu_size,
-				     struct sk_buff *skb);
-
+				     __u8 header_size, struct sk_buff *skb);
+static void irttp_connect_confirm(void *instance, void *sap, 
+				  struct qos_info *qos, __u32 max_sdu_size, 
+				  __u8 header_size, struct sk_buff *skb);
 static void irttp_run_tx_queue(struct tsap_cb *self);
 static void irttp_run_rx_queue(struct tsap_cb *self);
 
@@ -337,6 +339,7 @@ int irttp_data_request(struct tsap_cb *self, struct sk_buff *skb)
 	/* Queue frame, or queue frame segments */
 	if ((self->tx_max_sdu_size == 0) || (skb->len < self->max_seg_size)) {
 		/* Queue frame */
+		ASSERT(skb_headroom(skb) >= TTP_HEADER, return -1;);
 		frame = skb_push(skb, TTP_HEADER);
 		frame[0] = 0x00; /* Clear more bit */
 		
@@ -360,8 +363,8 @@ int irttp_data_request(struct tsap_cb *self, struct sk_buff *skb)
 		self->tx_sdu_busy = TRUE;
 		
 	 	if (self->notify.flow_indication) {
- 			self->notify.flow_indication(
-				self->notify.instance, self, FLOW_STOP);
+ 			self->notify.flow_indication(self->notify.instance, 
+						     self, FLOW_STOP);
 		}
  	}
 	
@@ -472,7 +475,7 @@ void irttp_give_credit(struct tsap_cb *self)
 		return;
 
 	/* Reserve space for LMP, and LAP header */
-	skb_reserve(tx_skb, LMP_HEADER+LAP_HEADER);
+	skb_reserve(tx_skb, self->max_header_size);
 
 	/*
 	 *  Since we can transmit and receive frames concurrently, 
@@ -655,15 +658,14 @@ int irttp_connect_request(struct tsap_cb *self, __u8 dtsap_sel,
 			return -ENOMEM;
 		
 		/* Reserve space for MUX_CONTROL and LAP header */
-		skb_reserve(skb, (TTP_HEADER+LMP_CONTROL_HEADER+LAP_HEADER));
+		skb_reserve(skb, TTP_MAX_HEADER);
 	} else {
 		skb = userdata;
 		/*  
 		 *  Check that the client has reserved enough space for 
 		 *  headers
 		 */
-		ASSERT(skb_headroom(userdata) >= 
-		       (TTP_HEADER+LMP_CONTROL_HEADER+LAP_HEADER), return -1;);
+		ASSERT(skb_headroom(userdata) >= TTP_MAX_HEADER, return -1;);
 	}
 
 	/* Initialize connection parameters */
@@ -691,12 +693,11 @@ int irttp_connect_request(struct tsap_cb *self, __u8 dtsap_sel,
 
 	/* SAR enabled? */
 	if (max_sdu_size > 0) {
-		ASSERT(skb_headroom(skb) >= 
-			(TTP_HEADER_WITH_SAR+LMP_CONTROL_HEADER+LAP_HEADER), 
-			return -1;);
+		ASSERT(skb_headroom(skb) >= (TTP_MAX_HEADER + TTP_SAR_HEADER), 
+		       return -1;);
 
 		/* Insert SAR parameters */
-		frame = skb_push(skb, TTP_HEADER_WITH_SAR);
+		frame = skb_push(skb, TTP_HEADER+TTP_SAR_HEADER);
 		
 		frame[0] = TTP_PARAMETERS | n; 
 		frame[1] = 0x04; /* Length */
@@ -724,8 +725,10 @@ int irttp_connect_request(struct tsap_cb *self, __u8 dtsap_sel,
  *    Sevice user confirms TSAP connection with peer. 
  *
  */
-void irttp_connect_confirm(void *instance, void *sap, struct qos_info *qos,
-			   __u32 max_seg_size, struct sk_buff *skb) 
+static void irttp_connect_confirm(void *instance, void *sap, 
+				  struct qos_info *qos,
+				  __u32 max_seg_size, __u8 max_header_size,
+				  struct sk_buff *skb) 
 {
 	struct tsap_cb *self;
 	int parameters;
@@ -741,7 +744,8 @@ void irttp_connect_confirm(void *instance, void *sap, struct qos_info *qos,
 	ASSERT(self->magic == TTP_TSAP_MAGIC, return;);
 	ASSERT(skb != NULL, return;);
 
-	self->max_seg_size = max_seg_size-LMP_HEADER-LAP_HEADER;
+	self->max_seg_size = max_seg_size;
+	self->max_header_size = max_header_size + TTP_HEADER;
 
 	/*
 	 *  Check if we have got some QoS parameters back! This should be the
@@ -797,9 +801,9 @@ void irttp_connect_confirm(void *instance, void *sap, struct qos_info *qos,
 	skb_pull(skb, TTP_HEADER);
 
 	if (self->notify.connect_confirm) {
-		self->notify.connect_confirm(self->notify.instance, self, 
-					     qos, self->tx_max_sdu_size, 
-					     skb);
+		self->notify.connect_confirm(self->notify.instance, self, qos,
+					     self->tx_max_sdu_size, 
+					     self->max_header_size, skb);
 	}
 }
 
@@ -809,8 +813,8 @@ void irttp_connect_confirm(void *instance, void *sap, struct qos_info *qos,
  *    Some other device is connecting to this TSAP
  *
  */
-void irttp_connect_indication(void *instance, void *sap, 
-			      struct qos_info *qos, __u32 max_seg_size, 
+void irttp_connect_indication(void *instance, void *sap, struct qos_info *qos,
+			      __u32 max_seg_size,  __u8 max_header_size, 
 			      struct sk_buff *skb) 
 {
 	struct tsap_cb *self;
@@ -828,7 +832,9 @@ void irttp_connect_indication(void *instance, void *sap,
 
 	lsap = (struct lsap_cb *) sap;
 
-	self->max_seg_size = max_seg_size-LMP_HEADER-LAP_HEADER;
+	self->max_seg_size = max_seg_size;
+
+	self->max_header_size = max_header_size+TTP_HEADER;
 
 	DEBUG(4, __FUNCTION__ "(), TSAP sel=%02x\n", self->stsap_sel);
 
@@ -850,7 +856,7 @@ void irttp_connect_indication(void *instance, void *sap,
 
 		switch (pl) {
 		case 1:
-			self->tx_max_sdu_size = *(frame+4);
+			self->tx_max_sdu_size = frame[4];
 			break;
 		case 2:
 			self->tx_max_sdu_size = 
@@ -878,7 +884,7 @@ void irttp_connect_indication(void *instance, void *sap,
 	if (self->notify.connect_indication) {
 		self->notify.connect_indication(self->notify.instance, self, 
 						qos, self->rx_max_sdu_size, 
-						skb);
+						self->max_header_size, skb);
 	}
 }
 
@@ -909,15 +915,14 @@ void irttp_connect_response(struct tsap_cb *self, __u32 max_sdu_size,
 			return;
 
 		/* Reserve space for MUX_CONTROL and LAP header */
-		skb_reserve(skb, (TTP_HEADER+LMP_CONTROL_HEADER+LAP_HEADER));
+		skb_reserve(skb, TTP_MAX_HEADER);
 	} else {
 		skb = userdata;
 		/*  
 		 *  Check that the client has reserved enough space for 
 		 *  headers
 		 */
-		ASSERT(skb_headroom(skb) >= 
-			(TTP_HEADER+LMP_CONTROL_HEADER+LAP_HEADER), return;);
+		ASSERT(skb_headroom(skb) >= TTP_MAX_HEADER, return;);
 	}
 	
 	self->avail_credit = 0;
@@ -939,12 +944,11 @@ void irttp_connect_response(struct tsap_cb *self, __u32 max_sdu_size,
 
 	/* SAR enabled? */
 	if (max_sdu_size > 0) {
-		ASSERT(skb_headroom(skb) >= 
-		       (TTP_HEADER_WITH_SAR+LMP_CONTROL_HEADER+LAP_HEADER), 
+		ASSERT(skb_headroom(skb) >= (TTP_MAX_HEADER+TTP_SAR_HEADER), 
 		       return;);
 		
 		/* Insert TTP header with SAR parameters */
-		frame = skb_push(skb, TTP_HEADER_WITH_SAR);
+		frame = skb_push(skb, TTP_HEADER+TTP_SAR_HEADER);
 		
 		frame[0] = TTP_PARAMETERS | n;
 		frame[1] = 0x04; /* Length */
@@ -1079,7 +1083,7 @@ void irttp_disconnect_request(struct tsap_cb *self, struct sk_buff *userdata,
 		/* 
 		 *  Reserve space for MUX and LAP header 
 		 */
-		skb_reserve(skb, LMP_CONTROL_HEADER+LAP_HEADER);
+		skb_reserve(skb, TTP_MAX_HEADER);
 		
 		userdata = skb;
 	}
@@ -1357,13 +1361,11 @@ static void irttp_fragment_skb(struct tsap_cb *self, struct sk_buff *skb)
 		}
 		
 		/* Make new segment */
-		frag = dev_alloc_skb(self->max_seg_size+
-				      TTP_HEADER+LMP_HEADER+
-				      LAP_HEADER);
+		frag = dev_alloc_skb(self->max_seg_size+self->max_header_size);
 		if (!frag)
 			return;
 
-		skb_reserve(frag, LMP_HEADER+LAP_HEADER);
+		skb_reserve(frag, self->max_header_size);
 
 		/*
 		 *  Copy data from the original skb into this fragment. We

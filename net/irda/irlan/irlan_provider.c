@@ -6,13 +6,14 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Thu Apr 22 14:28:52 1999
+ * Modified at:   Sun May  9 12:22:56 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -31,6 +32,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/init.h>
+#include <linux/random.h>
 
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -50,14 +52,20 @@
 #include <net/irda/irlan_filter.h>
 #include <net/irda/irlan_client.h>
 
+static void irlan_provider_connect_indication(void *instance, void *sap, 
+					      struct qos_info *qos, 
+					      __u32 max_sdu_size,
+					      __u8 max_header_size,
+					      struct sk_buff *skb);
+
 /*
  * Function irlan_provider_control_data_indication (handle, skb)
  *
  *    This function gets the data that is received on the control channel
  *
  */
-int irlan_provider_data_indication(void *instance, void *sap, 
-				   struct sk_buff *skb) 
+static int irlan_provider_data_indication(void *instance, void *sap, 
+					  struct sk_buff *skb) 
 {
 	struct irlan_cb *self;
 	__u8 code;
@@ -111,14 +119,17 @@ int irlan_provider_data_indication(void *instance, void *sap,
  *    Got connection from peer IrLAN layer
  *
  */
-void irlan_provider_connect_indication(void *instance, void *sap, 
-				       struct qos_info *qos,
-				       __u32 max_sdu_size, struct sk_buff *skb)
+static void irlan_provider_connect_indication(void *instance, void *sap, 
+					      struct qos_info *qos,
+					      __u32 max_sdu_size, 
+					      __u8 max_header_size,
+					       struct sk_buff *skb)
 {
-	struct irlan_cb *self, *entry, *new;
+	struct irlan_cb *self, *new;
 	struct tsap_cb *tsap;
+	__u32 saddr, daddr;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	DEBUG(0, __FUNCTION__ "()\n");
 	
 	self = (struct irlan_cb *) instance;
 	tsap = (struct tsap_cb *) sap;
@@ -126,34 +137,69 @@ void irlan_provider_connect_indication(void *instance, void *sap,
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 	
+	self->provider.max_sdu_size = max_sdu_size;
+	self->provider.max_header_size = max_header_size;
+
 	ASSERT(tsap == self->provider.tsap_ctrl,return;);
 	ASSERT(self->provider.state == IRLAN_IDLE, return;);
 
-	/* Check if this provider is currently unused */
-	if (self->daddr == DEV_ADDR_ANY) {
-		/*
-		 * Rehash instance, now we have a client (daddr) to serve.
-		 */
-		entry = hashbin_remove(irlan, self->daddr, NULL);
-		ASSERT( entry == self, return;);
-		
-		self->daddr = irttp_get_daddr(tsap);
-		DEBUG(2, __FUNCTION__ "(), daddr=%08x\n", self->daddr);
-		hashbin_insert(irlan, (QUEUE*) self, self->daddr, NULL);
+	daddr = irttp_get_daddr(tsap);
+	saddr = irttp_get_saddr(tsap);
+
+	/* Check if we already dealing with this client or peer */
+	new = (struct irlan_cb *) hashbin_find(irlan, daddr, NULL);
+      	if (new) {
+		ASSERT(new->magic == IRLAN_MAGIC, return;);
+		DEBUG(0, __FUNCTION__ "(), found instance!\n");
+
+		/* Update saddr, since client may have moved to a new link */
+		new->saddr = saddr;
+		DEBUG(2, __FUNCTION__ "(), saddr=%08x\n", new->saddr);
+
+		/* Make sure that any old provider control TSAP is removed */
+		if ((new != self) && new->provider.tsap_ctrl) {
+			irttp_disconnect_request(new->provider.tsap_ctrl, 
+						 NULL, P_NORMAL);
+			irttp_close_tsap(new->provider.tsap_ctrl);
+			new->provider.tsap_ctrl = NULL;
+		}
 	} else {
-		/*
-		 * If we already have the daddr set, this means that the
-		 * client must already have started (peer mode). We must
-		 * make sure that this connection attempt is from the same
-		 * device as the client is dealing with!  
-		 */
-		ASSERT(self->daddr == irttp_get_daddr(tsap), return;);
+		/* This must be the master instance, so start a new instance */
+		DEBUG(0, __FUNCTION__ "(), starting new provider!\n");
+
+		new = irlan_open(saddr, daddr, TRUE); 
 	}
-	
-	/* Update saddr, since client may have moved to a new link */
-	self->saddr = irttp_get_saddr(tsap);
-	DEBUG(2, __FUNCTION__ "(), saddr=%08x\n", self->saddr);
-	
+
+	/*  
+	 * Check if the connection came in on the master server, or the
+	 * slave server. If it came on the slave, then everything is
+	 * really, OK (reconnect), if not we need to dup the connection and
+	 * hand it over to the slave.  
+	 */
+	if (new != self) {
+				
+		/* Now attach up the new "socket" */
+		new->provider.tsap_ctrl = irttp_dup(self->provider.tsap_ctrl, 
+						    new);
+		if (!new->provider.tsap_ctrl) {
+			DEBUG(0, __FUNCTION__ "(), dup failed!\n");
+			return;
+		}
+		
+		/* new->stsap_sel = new->tsap->stsap_sel; */
+		new->dtsap_sel_ctrl = new->provider.tsap_ctrl->dtsap_sel;
+
+		/* Clean up the original one to keep it in listen state */
+		self->provider.tsap_ctrl->dtsap_sel = LSAP_ANY;
+		self->provider.tsap_ctrl->lsap->dlsap_sel = LSAP_ANY;
+		self->provider.tsap_ctrl->lsap->lsap_state = LSAP_DISCONNECTED;
+		
+		/* 
+		 * Use the new instance from here instead of the master
+		 * struct! 
+		 */
+		self = new;
+	}
 	/* Check if network device has been registered */
 	if (!self->netdev_registered)
 		irlan_register_netdev(self);
@@ -165,9 +211,10 @@ void irlan_provider_connect_indication(void *instance, void *sap,
 	 * indication it needs to make progress. If the client is still in 
 	 * IDLE state, we must kick it to 
 	 */
-	if ((self->access_type == ACCESS_PEER) && 
-	    (self->client.state == IRLAN_IDLE))
+	if ((self->provider.access_type == ACCESS_PEER) && 
+	    (self->client.state == IRLAN_IDLE)) {
 		irlan_client_wakeup(self, self->saddr, self->daddr);
+	}
 }
 
 /*
@@ -224,6 +271,9 @@ int irlan_parse_open_data_cmd(struct irlan_cb *self, struct sk_buff *skb)
 	int ret;
 	
 	ret = irlan_provider_parse_command(self, CMD_OPEN_DATA_CHANNEL, skb);
+
+	/* Open data channel */
+	irlan_open_data_tsap(self);
 
 	return ret;
 }
@@ -314,7 +364,7 @@ void irlan_provider_send_reply(struct irlan_cb *self, int command,
 		return;
 
 	/* Reserve space for TTP, LMP, and LAP header */
-	skb_reserve(skb, TTP_HEADER+LMP_HEADER+LAP_HEADER);
+	skb_reserve(skb, self->provider.max_header_size);
 	skb_put(skb, 2);
        
 	switch (command) {
@@ -334,6 +384,7 @@ void irlan_provider_send_reply(struct irlan_cb *self, int command,
 		}
 		irlan_insert_short_param(skb, "IRLAN_VER", 0x0101);
 		break;
+
 	case CMD_GET_MEDIA_CHAR:
 		skb->data[0] = 0x00; /* Success */
 		skb->data[1] = 0x05; /* 5 parameters */
@@ -341,7 +392,7 @@ void irlan_provider_send_reply(struct irlan_cb *self, int command,
 		irlan_insert_string_param(skb, "FILTER_TYPE", "BROADCAST");
 		irlan_insert_string_param(skb, "FILTER_TYPE", "MULTICAST");
 
-		switch(self->access_type) {
+		switch (self->provider.access_type) {
 		case ACCESS_DIRECT:
 			irlan_insert_string_param(skb, "ACCESS_TYPE", "DIRECT");
 			break;

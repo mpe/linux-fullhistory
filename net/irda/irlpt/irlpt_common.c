@@ -251,18 +251,18 @@ ssize_t irlpt_write(struct file *file, const char *buffer,
 	}
 
 	DEBUG( irlpt_common_debug, __FUNCTION__ 
-	       ": count = %d, irlap_data_size = %d, IRLPT_MAX_HEADER = %d\n",
-		count, self->irlap_data_size, IRLPT_MAX_HEADER);
+	       ": count = %d, max_data_size = %d, IRLPT_MAX_HEADER = %d\n",
+		count, self->max_data_size, IRLPT_MAX_HEADER);
 
- 	if (count > (self->irlap_data_size - IRLPT_MAX_HEADER)) {
- 		count = (self->irlap_data_size - IRLPT_MAX_HEADER);
+ 	if (count > self->max_data_size) {
+ 		count = self->max_data_size;
  		DEBUG(irlpt_common_debug, __FUNCTION__ 
 		      ": setting count to %d\n", count);
  	}
 
 	DEBUG( irlpt_common_debug, __FUNCTION__ ": count = %d\n", count);
 
-	skb = dev_alloc_skb(count + IRLPT_MAX_HEADER);
+	skb = dev_alloc_skb(count + self->max_header_size);
 	if ( skb == NULL) {
 		printk( KERN_INFO 
 			__FUNCTION__ ": couldn't allocate skbuff!\n");
@@ -417,7 +417,7 @@ int irlpt_close(struct inode *inode,
 			return 0;
 		}
 
-		skb_reserve( skb, LMP_CONTROL_HEADER+LAP_HEADER);
+		skb_reserve( skb, LMP_MAX_HEADER);
 		irlmp_disconnect_request(self->lsap, skb);
 		DEBUG(irlpt_common_debug, __FUNCTION__
 		      ": irlmp_close_slap(self->lsap)\n");

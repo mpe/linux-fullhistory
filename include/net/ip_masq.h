@@ -231,24 +231,6 @@ extern void ip_masq_put(struct ip_masq *ms);
 
 extern rwlock_t __ip_masq_lock;
 
-#ifdef __SMP__
-#define read_lock_bh(lock) 	do { start_bh_atomic(); read_lock(lock); \
-					} while (0)
-#define read_unlock_bh(lock)	do { read_unlock(lock); end_bh_atomic(); \
-					} while (0)
-#define write_lock_bh(lock)	do { start_bh_atomic(); write_lock(lock); \
-					} while (0)
-#define write_unlock_bh(lock)	do { write_unlock(lock); end_bh_atomic(); \
-					} while (0)
-#else
-#define read_lock_bh(lock)	start_bh_atomic()
-#define read_unlock_bh(lock)	end_bh_atomic()
-#define write_lock_bh(lock)	start_bh_atomic()
-#define write_unlock_bh(lock)	end_bh_atomic()
-#endif 
-/*
- *
- */
 
 /*
  *	Debugging stuff

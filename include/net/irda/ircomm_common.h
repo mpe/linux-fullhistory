@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Takahide Higuchi <thiguchi@pluto.dti.ne.jp>
  *
- *     Copyright (c) 1998, Takahide Higuchi, <thiguchi@pluto.dti.ne.jp>,
+ *     Copyright (c) 1998-1999, Takahide Higuchi, <thiguchi@pluto.dti.ne.jp>,
  *     All Rights Reserved.
  *
  *     This program is free software; you can redistribute it and/or
@@ -78,7 +78,7 @@ typedef enum {
 #define IRCOMM_MAGIC            0x434f4d4d
 #define COMM_INIT_CTRL_PARAM    3          /* length of initial control parameters */
 #define COMM_HEADER             1          /* length of clen field */
-#define COMM_HEADER_SIZE        (LAP_HEADER+LMP_HEADER+TTP_HEADER+COMM_HEADER)
+#define COMM_HEADER_SIZE        (TTP_MAX_HEADER+COMM_HEADER)
 #define COMM_DEFAULT_DATA_SIZE  64
 #define IRCOMM_MAX_CONNECTION   1          /* Don't change for now */
 
@@ -167,7 +167,7 @@ typedef enum {
 #define LSR_BI     0x01    /* Break interrupt indicator */
 
 
-struct ircomm_cb{
+struct ircomm_cb {
 	int magic;
 	int state;          /* Current state of IrCOMM layer: 
 			     *  DISCOVERY,COMM_IDLE, COMM_WAITR,
@@ -178,7 +178,8 @@ struct ircomm_cb{
 	int ttp_stop;
 
 	int max_txbuff_size;          
-	__u32 maxsdusize;
+	__u32 max_sdu_size;
+	__u8 max_header_size;
 
  	__u32 daddr;        /* Device address of the peer device */ 
 	__u32 saddr;
@@ -210,8 +211,6 @@ struct ircomm_cb{
 	int                 tx_controls;
 	int                 pending_control_tuples;
 	int                 ignored_control_tuples;
-
-
 
 	__u8 pi ;            /* instruction of control channel*/ 
 
@@ -252,8 +251,6 @@ struct ircomm_cb{
 	char port_name[33];
 	int port_name_critical;
 };
-
-
 
 void ircomm_connect_request(struct ircomm_cb *self, __u8 servicetype);
 void ircomm_connect_response(struct ircomm_cb *self, struct sk_buff *userdata,

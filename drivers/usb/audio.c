@@ -3,6 +3,9 @@
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
+#include <linux/config.h>
+#include <linux/module.h>
+
 #include "usb.h"
 
 static int usb_audio_probe(struct usb_device *dev);
@@ -124,3 +127,15 @@ void usb_audio_endpoint(struct usb_endpoint_descriptor *interface, u8 *data)
 {
 }
 
+#ifdef MODULE
+int init_module(void)
+{
+	return usb_audio_init();
+}
+
+void module_cleanup(void)
+{
+	usb_deregister(&usb_audio_driver);
+}
+
+#endif

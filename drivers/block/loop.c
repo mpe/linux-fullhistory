@@ -504,6 +504,8 @@ static int loop_set_status(struct loop_device *lo, struct loop_info *arg)
 	if ((unsigned int) info.lo_encrypt_key_size > LO_KEY_SIZE)
 		return -EINVAL;
 	type = info.lo_encrypt_type; 
+	if (info.lo_encrypt_key_size == 0 && type == LO_CRYPT_XOR)
+		return -EINVAL;
 	if (type >= MAX_LO_CRYPT || xfer_funcs[type] == NULL)
 		return -EINVAL;
 	err = loop_release_xfer(lo);

@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Jan 12 11:06:00 1999
- * Modified at:   Tue Jan 26 12:02:31 1999
+ * Modified at:   Sun May  9 13:36:13 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998, Thomas Davis, <ratbert@radiks.net>
+ *     Copyright (c) 1998-1999, Thomas Davis, <ratbert@radiks.net>
  *     Copyright (c) 1998, Dag Brattli, <dagb@cs.uit.no>
  *     All Rights Reserved.
  *      
@@ -43,10 +43,10 @@ static int irlpt_client_state_query ( struct irlpt_cb *self,
 				      IRLPT_EVENT event,
 				      struct sk_buff *skb, 
 				      struct irlpt_info *info);
-static int irlpt_client_state_ready  ( struct irlpt_cb *self, 
-				       IRLPT_EVENT event, 
-				       struct sk_buff *skb, 
-				       struct irlpt_info *info);
+static int irlpt_client_state_ready ( struct irlpt_cb *self, 
+				      IRLPT_EVENT event, 
+				      struct sk_buff *skb, 
+				      struct irlpt_info *info);
 static int irlpt_client_state_waiti ( struct irlpt_cb *self, 
 				      IRLPT_EVENT event,
 				      struct sk_buff *skb, 

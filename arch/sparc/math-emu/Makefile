@@ -14,13 +14,13 @@ O_OBJS   := math.o ashldi3.o fabss.o faddd.o faddq.o fadds.o 		\
 		fdtos.o fitoq.o fmovs.o fmuld.o fmulq.o fmuls.o		\
 		fnegs.o fqtod.o fqtoi.o fqtos.o fsmuld.o fsqrtd.o	\
 		fsqrtq.o fsqrts.o fstod.o fstoi.o fstoq.o fsubd.o 	\
-		fsubq.o	fsubs.o udivmodti4.o
+		fsubq.o	fsubs.o
 
 LINKS	 := double.h faddd.c faddq.c fadds.c fdivd.c fdivq.c fdivs.c	\
 		fdtoi.c fitoq.c fmuld.c fmulq.c fmuls.c fqtoi.c		\
 		fsqrtd.c fsqrtq.c fsqrts.c fstoi.c fsubd.c 		\
-		fsubq.c	fsubs.c op-1.h op-2.h op-4.h op-common.h quad.h	\
-		single.h soft-fp.h udivmodti4.c
+		fsubq.c	fsubs.c op-1.h op-2.h op-4.h op-8.h		\
+		op-common.h quad.h single.h soft-fp.h
 
 .S.s:
 	$(CPP) -D__ASSEMBLY__ -ansi $< -o $*.s

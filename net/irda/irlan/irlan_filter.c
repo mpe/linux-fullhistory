@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Jan 29 11:16:38 1999
- * Modified at:   Thu Feb 25 15:10:54 1999
+ * Modified at:   Sat May  8 15:25:23 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -41,29 +41,29 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
 	    (self->provider.filter_operation == DYNAMIC))
 	{
 		DEBUG(0, "Giving peer a dynamic Ethernet address\n");
-
 		self->provider.mac_address[0] = 0x40;
 		self->provider.mac_address[1] = 0x00;
 		self->provider.mac_address[2] = 0x00;
 		self->provider.mac_address[3] = 0x00;
 		
 		/* Use arbitration value to generate MAC address */
-		if (self->access_type == ACCESS_PEER) {
+		if (self->provider.access_type == ACCESS_PEER) {
 			self->provider.mac_address[4] = 
 				self->provider.send_arb_val & 0xff;
 			self->provider.mac_address[5] = 
 				(self->provider.send_arb_val >> 8) & 0xff;;
 		} else {
 			/* Just generate something for now */
-			self->provider.mac_address[4] = jiffies & 0xff;
-			self->provider.mac_address[5] = (jiffies >> 8) & 0xff;
+			get_random_bytes(self->provider.mac_address+4, 1);
+			get_random_bytes(self->provider.mac_address+5, 1);
 		}
 
 		skb->data[0] = 0x00; /* Success */
 		skb->data[1] = 0x03;
 		irlan_insert_string_param(skb, "FILTER_MODE", "NONE");
 		irlan_insert_short_param(skb, "MAX_ENTRY", 0x0001);
-		irlan_insert_array_param(skb, "FILTER_ENTRY", self->provider.mac_address, 6);
+		irlan_insert_array_param(skb, "FILTER_ENTRY", 
+					 self->provider.mac_address, 6);
 		return;
 	}
 	
@@ -138,8 +138,7 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
  *    Check parameters in request from peer device
  *
  */
-void irlan_check_command_param(struct irlan_cb *self, char *param, 
-			       char *value)
+void irlan_check_command_param(struct irlan_cb *self, char *param, char *value)
 {
 	__u8 *bytes;
 
@@ -210,6 +209,12 @@ void irlan_check_command_param(struct irlan_cb *self, char *param,
 	}
 }
 
+/*
+ * Function irlan_print_filter (filter_type, buf)
+ *
+ *    Print status of filter. Used by /proc file system
+ *
+ */
 int irlan_print_filter(int filter_type, char *buf)
 {
 	int len = 0;

@@ -1,6 +1,26 @@
-/*
- * Basic one-word fraction declaration and manipulation.
- */
+/* Software floating-point emulation.
+   Basic one-word fraction declaration and manipulation.
+   Copyright (C) 1997,1998,1999 Free Software Foundation, Inc.
+   This file is part of the GNU C Library.
+   Contributed by Richard Henderson (rth@cygnus.com),
+		  Jakub Jelinek (jj@ultra.linux.cz),
+		  David S. Miller (davem@redhat.com) and
+		  Peter Maydell (pmaydell@chiark.greenend.org.uk).
+
+   The GNU C Library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Library General Public License as
+   published by the Free Software Foundation; either version 2 of the
+   License, or (at your option) any later version.
+
+   The GNU C Library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Library General Public License for more details.
+
+   You should have received a copy of the GNU Library General Public
+   License along with the GNU C Library; see the file COPYING.LIB.  If
+   not, write to the Free Software Foundation, Inc.,
+   59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #define _FP_FRAC_DECL_1(X)	_FP_W_TYPE X##_f
 #define _FP_FRAC_COPY_1(D,S)	(D##_f = S##_f)
@@ -28,6 +48,7 @@
 
 #define _FP_FRAC_ADD_1(R,X,Y)	(R##_f = X##_f + Y##_f)
 #define _FP_FRAC_SUB_1(R,X,Y)	(R##_f = X##_f - Y##_f)
+#define _FP_FRAC_DEC_1(X,Y)	(X##_f -= Y##_f)
 #define _FP_FRAC_CLZ_1(z, X)	__FP_CLZ(z, X##_f)
 
 /* Predicates */
@@ -40,6 +61,7 @@
 
 #define _FP_ZEROFRAC_1		0
 #define _FP_MINFRAC_1		1
+#define _FP_MAXFRAC_1		(~(_FP_WS_TYPE)0)
 
 /*
  * Unpack the raw bits of a native fp value.  Do not classify or
@@ -55,6 +77,15 @@
     X##_s = _flo.bits.sign;					\
   } while (0)
 
+#define _FP_UNPACK_RAW_1_P(fs, X, val)				\
+  do {								\
+    union _FP_UNION_##fs *_flo =				\
+      (union _FP_UNION_##fs *)(val);				\
+								\
+    X##_f = _flo->bits.frac;					\
+    X##_e = _flo->bits.exp;					\
+    X##_s = _flo->bits.sign;					\
+  } while (0)
 
 /*
  * Repack the raw bits of a native fp value.
@@ -69,6 +100,16 @@
     _flo.bits.sign = X##_s;					\
 								\
     (val) = _flo.flt;						\
+  } while (0)
+
+#define _FP_PACK_RAW_1_P(fs, val, X)				\
+  do {								\
+    union _FP_UNION_##fs *_flo =				\
+      (union _FP_UNION_##fs *)(val);				\
+								\
+    _flo->bits.frac = X##_f;					\
+    _flo->bits.exp  = X##_e;					\
+    _flo->bits.sign = X##_s;					\
   } while (0)
 
 
@@ -207,7 +248,7 @@
  
 #define _FP_SQRT_MEAT_1(R, S, T, X, q)			\
   do {							\
-    while (q)						\
+    while (q != _FP_WORK_ROUND)				\
       {							\
         T##_f = S##_f + q;				\
         if (T##_f <= X##_f)				\
@@ -218,6 +259,12 @@
           }						\
         _FP_FRAC_SLL_1(X, 1);				\
         q >>= 1;					\
+      }							\
+    if (X##_f)						\
+      {							\
+	if (S##_f < X##_f)				\
+	  R##_f |= _FP_WORK_ROUND;			\
+	R##_f |= _FP_WORK_STICKY;			\
       }							\
   } while (0)
 
@@ -238,8 +285,13 @@
   do {									\
     D##_f = S##_f;							\
     if (_FP_WFRACBITS_##sfs > _FP_WFRACBITS_##dfs)			\
-      _FP_FRAC_SRS_1(D, (_FP_WFRACBITS_##sfs-_FP_WFRACBITS_##dfs),	\
-		     _FP_WFRACBITS_##sfs);				\
+      {									\
+	if (S##_c != FP_CLS_NAN)					\
+	  _FP_FRAC_SRS_1(D, (_FP_WFRACBITS_##sfs-_FP_WFRACBITS_##dfs),	\
+			 _FP_WFRACBITS_##sfs);				\
+	else								\
+	  _FP_FRAC_SRL_1(D, (_FP_WFRACBITS_##sfs-_FP_WFRACBITS_##dfs));	\
+      }									\
     else								\
       D##_f <<= _FP_WFRACBITS_##dfs - _FP_WFRACBITS_##sfs;		\
   } while (0)

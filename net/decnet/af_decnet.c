@@ -1503,7 +1503,7 @@ _dn_getsockopt(struct socket *sock, int level,int optname, char *optval,int *opt
 			break;
 
 		case DSO_ACCEPTMODE:
-			if (put_user(optval, &mode))
+			if (put_user(mode, optval))
 				return -EFAULT;
 			break;
 

@@ -58,10 +58,12 @@ static void dn_slow_timer(unsigned long arg)
 	struct sock *sk = (struct sock *)arg;
 	struct dn_scp *scp = &sk->protinfo.dn;
 
-	if (atomic_read(&sk->sock_readers)) {
+	bh_lock_sock(sk);
+
+	if (sk->lock.users != 0) {
 		sk->timer.expires = jiffies + HZ / 10;
 		add_timer(&sk->timer);
-		return;
+		goto out;
 	}
 
 	/*
@@ -78,7 +80,7 @@ static void dn_slow_timer(unsigned long arg)
 			scp->persist = 0;
 
 			if (scp->persist_fxn(sk))
-				return;
+				goto out;
 		} else {
 			scp->persist -= SLOW_INTERVAL;
 		}
@@ -103,6 +105,8 @@ static void dn_slow_timer(unsigned long arg)
 	sk->timer.expires = jiffies + SLOW_INTERVAL;
 
 	add_timer(&sk->timer);
+out:
+	bh_unlock_sock(sk);
 }
 
 static void dn_fast_timer(unsigned long arg)
@@ -110,16 +114,19 @@ static void dn_fast_timer(unsigned long arg)
 	struct sock *sk = (struct sock *)arg;
 	struct dn_scp *scp = &sk->protinfo.dn;
 
-	if (atomic_read(&sk->sock_readers)) {
+	bh_lock_sock(sk);
+	if (sk->lock.users != 0) {
 		scp->delack_timer.expires = jiffies + HZ / 20;
 		add_timer(&scp->delack_timer);
-		return;
+		goto out;
 	}
 
 	scp->delack_pending = 0;
 
 	if (scp->delack_fxn)
 		scp->delack_fxn(sk);
+out:
+	bh_unlock_sock(sk);
 }
 
 void dn_start_fast_timer(struct sock *sk)

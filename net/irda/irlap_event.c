@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Fri Apr 23 11:55:12 1999
+ * Modified at:   Sun May  9 22:44:32 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>,
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>,
  *                        Thomas Davis <ratbert@radiks.net>
  *     All Rights Reserved.
  *     
@@ -274,22 +274,22 @@ void irlap_do_event( struct irlap_cb *self, IRLAP_EVENT event,
  *    Switches state and provides debug information
  *
  */
-void irlap_next_state( struct irlap_cb *self, IRLAP_STATE state) 
+void irlap_next_state(struct irlap_cb *self, IRLAP_STATE state) 
 {	
-	if ( !self || self->magic != LAP_MAGIC)
+	if (!self || self->magic != LAP_MAGIC)
 		return;
 	
-	DEBUG( 4, "next LAP state = %s\n", irlap_state[ state]);
+	DEBUG(4, "next LAP state = %s\n", irlap_state[ state]);
 
 	self->state = state;
 
 	/*
 	 *  If we are swithing away from a XMIT state then we are allowed to 
 	 *  transmit a maximum number of bytes again when we enter the XMIT 
-	 *  state again. Since its possible to "switch" from XMIT to XMIT and
+	 *  state again. Since its possible to "switch" from XMIT to XMIT,
 	 *  we cannot do this when swithing into the XMIT state :-)
 	 */
-	if (( state != LAP_XMIT_P) && ( state != LAP_XMIT_S))
+	if ((state != LAP_XMIT_P) && (state != LAP_XMIT_S))
 		self->bytes_left = self->window_bytes;
 }
 
@@ -310,7 +310,7 @@ static int irlap_state_ndm( struct irlap_cb *self, IRLAP_EVENT event,
 	ASSERT( self != NULL, return -1;);
 	ASSERT( self->magic == LAP_MAGIC, return -1;);
 
-	switch( event) {
+	switch(event) {
 	case CONNECT_REQUEST:
 		ASSERT( self->irdev != NULL, return -1;);
 
@@ -393,7 +393,6 @@ static int irlap_state_ndm( struct irlap_cb *self, IRLAP_EVENT event,
 			irlap_start_query_timer( self, QUERY_TIMEOUT);
 			irlap_next_state( self, LAP_REPLY);
 		}
-
 		dev_kfree_skb(skb);
 		break;
 
@@ -530,7 +529,7 @@ static int irlap_state_reply(struct irlap_cb *self, IRLAP_EVENT event,
 			irlap_send_discovery_xid_frame(self, info->S,
 						       self->slot, FALSE,
 						       discovery_rsp);
-
+			
 			self->frame_sent = TRUE;
 			irlap_next_state(self, LAP_REPLY);
 		}
@@ -568,27 +567,28 @@ static int irlap_state_conn(struct irlap_cb *self, IRLAP_EVENT event,
 
 	switch (event) {
 	case CONNECT_RESPONSE:
-		skb_pull( skb, 11);
+		/* skb_pull(skb, 11); */
+		skb_pull(skb, sizeof(struct snrm_frame));
 
-		ASSERT( self->irdev != NULL, return -1;);
-		irda_qos_negotiate( &self->qos_rx, &self->qos_tx, skb);
+		ASSERT(self->irdev != NULL, return -1;);
+		irda_qos_negotiate(&self->qos_rx, &self->qos_tx, skb);
 
 		irlap_initiate_connection_state( self);
 
 		/*
 		 * We are allowed to send two frames!
 		 */
-		irlap_send_ua_response_frame( self, &self->qos_rx);
-		irlap_send_ua_response_frame( self, &self->qos_rx);
+		irlap_send_ua_response_frame(self, &self->qos_rx);
+		irlap_send_ua_response_frame(self, &self->qos_rx);
 		
-		irlap_apply_connection_parameters( self, &self->qos_tx);
+		irlap_apply_connection_parameters(self, &self->qos_tx);
 
 		/*
 		 *  The WD-timer could be set to the duration of the P-timer 
-		 *  for this case, but it is recommomended to use twice the 
+		 *  for this case, but it is recommended to use twice the 
 		 *  value (note 3 IrLAP p. 60). 
 		 */
-		irlap_start_wd_timer( self, self->wd_timeout);
+		irlap_start_wd_timer(self, self->wd_timeout);
 		irlap_next_state( self, LAP_NRM_S);
 		break;
 
@@ -669,28 +669,30 @@ static int irlap_state_setup( struct irlap_cb *self, IRLAP_EVENT event,
 		 *  The device with the largest device address wins the battle
 		 *  (both have sent a SNRM command!)
 		 */
-		if ( info->daddr > self->saddr) {
-			del_timer( &self->final_timer);
-			irlap_initiate_connection_state( self);
+		if (info->daddr > self->saddr) {
+			del_timer(&self->final_timer);
+			irlap_initiate_connection_state(self);
 
-			ASSERT( self->irdev != NULL, return -1;);
-			irda_qos_negotiate( &self->qos_rx, &self->qos_tx, skb);
+			ASSERT(self->irdev != NULL, return -1;);
+			/* skb_pull(skb, 11); */
+			skb_pull(skb, sizeof(struct snrm_frame));
+			irda_qos_negotiate(&self->qos_rx, &self->qos_tx, skb);
 			
 			irlap_send_ua_response_frame(self, &self->qos_rx);
-			irlap_apply_connection_parameters( self, &self->qos_tx);
-			irlap_connect_confirm( self, skb);
+			irlap_apply_connection_parameters(self, &self->qos_tx);
+			irlap_connect_confirm(self, skb);
 			
 			/* 
 			 *  The WD-timer could be set to the duration of the
-			 *  P-timer for this case, but it is recommomended
+			 *  P-timer for this case, but it is recommended
 			 *  to use twice the value (note 3 IrLAP p. 60).  
 			 */
-			irlap_start_wd_timer( self, self->wd_timeout);
+			irlap_start_wd_timer(self, self->wd_timeout);
 			
-			irlap_next_state( self, LAP_NRM_S);
+			irlap_next_state(self, LAP_NRM_S);
 		} else {
 			/* We just ignore the other device! */
-			irlap_next_state( self, LAP_SETUP);
+			irlap_next_state(self, LAP_SETUP);
 		}
 		break;
 	case RECV_UA_RSP:
@@ -702,9 +704,10 @@ static int irlap_state_setup( struct irlap_cb *self, IRLAP_EVENT event,
 
 		/* Negotiate connection parameters */
 		ASSERT( skb->len > 10, return -1;);
-		skb_pull( skb, 10);
+		/* skb_pull(skb, 10); */
+		skb_pull(skb, sizeof(struct ua_frame));
 
-		ASSERT( self->irdev != NULL, return -1;);
+		ASSERT(self->irdev != NULL, return -1;);
 		irda_qos_negotiate( &self->qos_rx, &self->qos_tx, skb);
 
 		irlap_apply_connection_parameters( self, &self->qos_tx); 
@@ -1570,7 +1573,7 @@ static int irlap_state_nrm_s( struct irlap_cb *self, IRLAP_EVENT event,
 			/* 
 			 *  poll bit cleared?
 			 */
-			if ( !info->pf) {
+			if (!info->pf) {
 				self->vr = (self->vr + 1) % 8;
 				
 				/* Update Nr received */
@@ -1600,27 +1603,32 @@ static int irlap_state_nrm_s( struct irlap_cb *self, IRLAP_EVENT event,
 				 *  also before changing to XMIT_S
 				 *  state. (note 1, IrLAP p. 82) 
 				 */
-				irlap_wait_min_turn_around( self, &self->qos_tx);
-				/*
-				 *  Any pending data requests?
+				irlap_wait_min_turn_around(self, &self->qos_tx);
+
+				/*  
+				 * Give higher layers a chance to
+				 * immediately reply with some data before
+				 * we decide if we should send a RR frame
+				 * or not
 				 */
-				if (( skb_queue_len( &self->tx_list) > 0) && 
-				    ( self->window > 0)) 
+				irlap_data_indication(self, skb);
+
+				/* Any pending data requests?  */
+				if ((skb_queue_len(&self->tx_list) > 0) && 
+				    (self->window > 0)) 
 				{
 					self->ack_required = TRUE;
 					
-					del_timer( &self->wd_timer);
+					del_timer(&self->wd_timer);
 					
-					irlap_next_state( self, LAP_XMIT_S);
+					irlap_next_state(self, LAP_XMIT_S);
 				} else {
-					irlap_send_rr_frame( self, RSP_FRAME);
-					irlap_start_wd_timer( self, self->wd_timeout);
+					irlap_send_rr_frame(self, RSP_FRAME);
+					irlap_start_wd_timer(self, self->wd_timeout);
 
 					/* Keep the state */
-					irlap_next_state( self, LAP_NRM_S);
+					irlap_next_state(self, LAP_NRM_S);
 				}
-				irlap_data_indication( self, skb);
-
 				break;
 			}
 		}

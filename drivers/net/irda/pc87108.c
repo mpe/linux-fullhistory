@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Tue Apr 20 11:11:39 1999
+ * Modified at:   Sun May  9 12:57:46 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
  *     Copyright (c) 1998 Lichen Wang, <lwang@actisys.com>
  *     Copyright (c) 1998 Actisys Corp., www.actisys.com
  *     All Rights Reserved
@@ -67,6 +67,7 @@
 #define BROKEN_DONGLE_ID
 
 static char *driver_name = "pc87108";
+static int qos_mtt_bits = 0x07;  /* 1 ms or more */
 
 #define CHIP_IO_EXTENT 8
 
@@ -219,7 +220,7 @@ static int pc87108_open( int i, unsigned int iobase, unsigned int board_addr,
 	idev->qos.baud_rate.bits = IR_9600|IR_19200|IR_38400|IR_57600|
 		IR_115200|IR_576000|IR_1152000|(IR_4000000 << 8);
 	
-	idev->qos.min_turn_time.bits = 0x07;
+	idev->qos.min_turn_time.bits = qos_mtt_bits;
 	irda_qos_bits_to_value( &idev->qos);
 	
 	idev->flags = IFF_FIR|IFF_MIR|IFF_SIR|IFF_DMA|IFF_PIO|IFF_DONGLE;
@@ -259,8 +260,9 @@ static int pc87108_open( int i, unsigned int iobase, unsigned int board_addr,
  *    Close driver instance
  *
  */
-static int pc87108_close( struct irda_device *idev)
+static int pc87108_close(struct irda_device *idev)
 {
+	struct pc87108 *self;
 	int iobase;
 
 	DEBUG( 4, __FUNCTION__ "()\n");
@@ -269,13 +271,16 @@ static int pc87108_close( struct irda_device *idev)
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return -1;);
 
         iobase = idev->io.iobase;
+	self = (struct pc87108 *) idev->priv;
 
 	/* Release the PORT that this driver is using */
 	DEBUG( 4, __FUNCTION__ "(), Releasing Region %03x\n", 
 	       idev->io.iobase);
-	release_region( idev->io.iobase, idev->io.io_ext);
+	release_region(idev->io.iobase, idev->io.io_ext);
 
-	irda_device_close( idev);
+	irda_device_close(idev);
+
+	kfree(self);
 
 	return 0;
 }
@@ -805,7 +810,6 @@ static void pc87108_dma_write( struct irda_device *idev, int iobase)
 	setup_dma(idev->io.dma, idev->tx_buff.data, idev->tx_buff.len, 
 		  DMA_MODE_WRITE);
 	
-	/* idev->media_busy = TRUE; */
 	idev->io.direction = IO_XMIT;
 	
 	/* Choose transmit DMA channel  */ 
@@ -973,7 +977,7 @@ static int pc87108_dma_receive(struct irda_device *idev)
  *
  *    
  */
-static int pc87108_dma_receive_complete( struct irda_device *idev, int iobase)
+static int pc87108_dma_receive_complete(struct irda_device *idev, int iobase)
 {
 	struct sk_buff *skb;
 	struct pc87108 *self;
@@ -988,8 +992,6 @@ static int pc87108_dma_receive_complete( struct irda_device *idev, int iobase)
 	/* Save current bank */
 	bank = inb( iobase+BSR);
 	
-	iobase = idev->io.iobase;
-
 	/* Read status FIFO */
 	switch_bank(iobase, BANK5);
 	while (( status = inb( iobase+FRM_ST)) & FRM_ST_VLD) {
@@ -1003,18 +1005,18 @@ static int pc87108_dma_receive_complete( struct irda_device *idev, int iobase)
 	}
 	
 	/* Try to process all entries in status FIFO */
-	switch_bank( iobase, BANK0);
-	while ( st_fifo->len) {
+	switch_bank(iobase, BANK0);
+	while (st_fifo->len) {
       
 		/* Get first entry */
-		status = st_fifo->entries[ st_fifo->head].status;
-		len    = st_fifo->entries[ st_fifo->head].len;
+		status = st_fifo->entries[st_fifo->head].status;
+		len    = st_fifo->entries[st_fifo->head].len;
 		st_fifo->head++;
 		st_fifo->len--;
 
 		/* Check for errors */
-		if ( status & FRM_ST_ERR_MSK) {
-			if ( status & FRM_ST_LOST_FR) {
+		if (status & FRM_ST_ERR_MSK) {
+			if (status & FRM_ST_LOST_FR) {
 				/* Add number of lost frames to stats */
 				idev->stats.rx_errors += len;	
 			} else {
@@ -1188,8 +1190,8 @@ static __u8 pc87108_fir_interrupt( struct irda_device *idev, int iobase,
 	bank = inb( iobase+BSR);
 	
 	/* Status event, or end of frame detected in FIFO */
-	if ( eir & (EIR_SFIF_EV|EIR_LS_EV)) {
-		if ( pc87108_dma_receive_complete( idev, iobase)) {
+	if (eir & (EIR_SFIF_EV|EIR_LS_EV)) {
+		if (pc87108_dma_receive_complete( idev, iobase)) {
 
 			/* Wait for next status FIFO interrupt */
 			new_ier |= IER_SFIF_IE;
@@ -1459,6 +1461,11 @@ static int pc87108_net_close(struct device *dev)
 }
 
 #ifdef MODULE
+
+MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
+MODULE_DESCRIPTION("NSC PC87108 IrDA Device Driver");
+
+MODULE_PARM(qos_mtt_bits, "i");
 
 /*
  * Function init_module (void)

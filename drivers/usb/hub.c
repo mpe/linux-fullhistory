@@ -1,10 +1,6 @@
 /*
  * USB hub driver.
  *
- * This is horrible, it knows about the UHCI driver
- * internals, but it's just meant as a rough example,
- * let's do the virtualization later when this works.
- *
  * (C) Copyright 1999 Linus Torvalds
  * (C) Copyright 1999 Johannes Erdfelt
  */
@@ -14,14 +10,13 @@
 #include <linux/list.h>
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
+#include <linux/config.h>
+#include <linux/module.h>
 
 #include <asm/spinlock.h>
 
 #include "usb.h"
-#include "uhci.h"
 #include "hub.h"
-
-extern struct usb_operations uhci_device_operations;
 
 /* Wakes up khubd */
 static DECLARE_WAIT_QUEUE_HEAD(usb_hub_wait);
@@ -413,10 +408,20 @@ int usb_hub_init(void)
 	return 0;
 }
 
-void hub_cleanup(void)
+void usb_hub_cleanup(void)
 {
 	if (khubd_pid >= 0)
 		kill_proc(khubd_pid, SIGINT, 1);
 
 	usb_deregister(&hub_driver);
 }
+
+#ifdef MODULE
+int init_module(void){
+	return usb_hub_init();
+}
+
+void module_cleanup(void){
+	usb_hub_cleanup();
+}
+#endif

@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:55:39 1997
- * Modified at:   Mon Apr 12 11:31:01 1999
+ * Modified at:   Mon May 10 15:28:49 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -110,6 +110,7 @@ EXPORT_SYMBOL(irttp_disconnect_request);
 EXPORT_SYMBOL(irttp_flow_request);
 EXPORT_SYMBOL(irttp_connect_request);
 EXPORT_SYMBOL(irttp_udata_request);
+EXPORT_SYMBOL(irttp_dup);
 
 /* Main IrDA module */
 #ifdef CONFIG_IRDA_DEBUG
@@ -151,6 +152,7 @@ EXPORT_SYMBOL(irlmp_connect_response);
 EXPORT_SYMBOL(irlmp_disconnect_request);
 EXPORT_SYMBOL(irlmp_get_daddr);
 EXPORT_SYMBOL(irlmp_get_saddr);
+EXPORT_SYMBOL(irlmp_dup);
 EXPORT_SYMBOL(lmp_reasons);
 
 /* Queue */
@@ -174,10 +176,15 @@ EXPORT_SYMBOL(irda_device_close);
 EXPORT_SYMBOL(irda_device_setup);
 EXPORT_SYMBOL(irda_device_set_media_busy);
 EXPORT_SYMBOL(irda_device_txqueue_empty);
+
+EXPORT_SYMBOL(irda_device_init_dongle);
+EXPORT_SYMBOL(irda_device_register_dongle);
+EXPORT_SYMBOL(irda_device_unregister_dongle);
+
 EXPORT_SYMBOL(async_wrap_skb);
 EXPORT_SYMBOL(async_unwrap_char);
 EXPORT_SYMBOL(irda_start_timer);
-EXPORT_SYMBOL(irda_get_mtt);
+/* EXPORT_SYMBOL(irda_get_mtt); */
 EXPORT_SYMBOL(setup_dma);
 
 #ifdef CONFIG_IRTTY
@@ -505,19 +512,28 @@ void irda_mod_dec_use_count(void)
 #endif
 }
 
-#ifdef MODULE
-#ifdef CONFIG_PROC_FS
+/*
+ * Function irda_proc_modcount (inode, fill)
+ *
+ *    Use by the proc file system functions to prevent the irda module
+ *    being removed while the use is standing in the net/irda directory
+ */
 void irda_proc_modcount(struct inode *inode, int fill)
 {
+#ifdef MODULE
+#ifdef CONFIG_PROC_FS
 	if (fill)
 		MOD_INC_USE_COUNT;
 	else
 		MOD_DEC_USE_COUNT;
-}
 #endif /* CONFIG_PROC_FS */
+#endif /* MODULE */
+}
+
+#ifdef MODULE
 
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
-MODULE_DESCRIPTION("The Linux IrDA protocol subsystem"); 
+MODULE_DESCRIPTION("The Linux IrDA Protocol Subsystem"); 
 MODULE_PARM(irda_debug, "1l");
 
 /*

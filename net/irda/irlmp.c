@@ -6,10 +6,10 @@
  * Status:        Stable.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Fri Apr 23 09:13:24 1999
+ * Modified at:   Sun May  9 22:45:06 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -197,7 +197,7 @@ struct lsap_cb *irlmp_open_lsap(__u8 slsap_sel, struct notify_t *notify)
 }
 
 /*
- * Function irlmp_close_lsap (self)
+ * Function __irlmp_close_lsap (self)
  *
  *    Remove an instance of LSAP
  */
@@ -369,11 +369,11 @@ int irlmp_connect_request(struct lsap_cb *self, __u8 dlsap_sel,
 		if (!skb)
 			return -ENOMEM;
 
-		skb_reserve(skb, LMP_CONTROL_HEADER+LAP_HEADER);
+		skb_reserve(skb, LMP_MAX_HEADER);
 	} else
 		skb = userdata;
 	
-	/* Make room for MUX control header ( 3 bytes) */
+	/* Make room for MUX control header (3 bytes) */
 	ASSERT(skb_headroom(skb) >= LMP_CONTROL_HEADER, return -1;);
 	skb_push(skb, LMP_CONTROL_HEADER);
 
@@ -443,25 +443,36 @@ int irlmp_connect_request(struct lsap_cb *self, __u8 dlsap_sel,
 void irlmp_connect_indication(struct lsap_cb *self, struct sk_buff *skb) 
 {
 	int max_seg_size;
-
-	DEBUG(3, __FUNCTION__ "()\n");
+	int lap_header_size;
+	int max_header_size;
 	
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LMP_LSAP_MAGIC, return;);
 	ASSERT(skb != NULL, return;);
 	ASSERT(self->lap != NULL, return;);
 
+	DEBUG(0, __FUNCTION__ "(), slsap_sel=%02x, dlsap_sel=%02x\n", 
+	      self->slsap_sel, self->dlsap_sel);
+
 	self->qos = *self->lap->qos;
 
-	max_seg_size = self->lap->qos->data_size.value;
-	DEBUG(4, __FUNCTION__ "(), max_seg_size=%d\n", max_seg_size);
+	lap_header_size = irlap_get_header_size(self->lap->irlap);
+
+	max_seg_size = self->lap->qos->data_size.value-LMP_HEADER-
+		lap_header_size;
+	DEBUG(2, __FUNCTION__ "(), max_seg_size=%d\n", max_seg_size);
 	
+	max_header_size = LMP_HEADER + lap_header_size;
+
+	DEBUG(2, __FUNCTION__ "(), max_header_size=%d\n", max_header_size);
+
 	/* Hide LMP_CONTROL_HEADER header from layer above */
 	skb_pull(skb, LMP_CONTROL_HEADER);
 
 	if (self->notify.connect_indication)
 		self->notify.connect_indication(self->notify.instance, self, 
-						&self->qos, max_seg_size, skb);
+						&self->qos, max_seg_size, 
+						max_header_size, skb);
 }
 
 /*
@@ -470,24 +481,22 @@ void irlmp_connect_indication(struct lsap_cb *self, struct sk_buff *skb)
  *    Service user is accepting connection
  *
  */
-void irlmp_connect_response( struct lsap_cb *self, struct sk_buff *userdata) 
+void irlmp_connect_response(struct lsap_cb *self, struct sk_buff *userdata) 
 {
-	DEBUG(3, __FUNCTION__ "()\n");
-	
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LMP_LSAP_MAGIC, return;);
-	ASSERT( userdata != NULL, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LMP_LSAP_MAGIC, return;);
+	ASSERT(userdata != NULL, return;);
 
 	self->connected = TRUE;
 
-	DEBUG( 4, "irlmp_connect_response: slsap_sel=%02x, dlsap_sel=%02x\n", 
-	       self->slsap_sel, self->dlsap_sel);
+	DEBUG(2, __FUNCTION__ "(), slsap_sel=%02x, dlsap_sel=%02x\n", 
+	      self->slsap_sel, self->dlsap_sel);
 
 	/* Make room for MUX control header ( 3 bytes) */
-	ASSERT( skb_headroom( userdata) >= LMP_CONTROL_HEADER, return;);
-	skb_push( userdata, LMP_CONTROL_HEADER);
+	ASSERT(skb_headroom(userdata) >= LMP_CONTROL_HEADER, return;);
+	skb_push(userdata, LMP_CONTROL_HEADER);
 	
-	irlmp_do_lsap_event( self, LM_CONNECT_RESPONSE, userdata);
+	irlmp_do_lsap_event(self, LM_CONNECT_RESPONSE, userdata);
 }
 
 /*
@@ -498,25 +507,35 @@ void irlmp_connect_response( struct lsap_cb *self, struct sk_buff *userdata)
 void irlmp_connect_confirm(struct lsap_cb *self, struct sk_buff *skb) 
 {
 	int max_seg_size;
+	int max_header_size;
+	int lap_header_size;
 
 	DEBUG(3, __FUNCTION__ "()\n");
 	
-	ASSERT( skb != NULL, return;);
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LMP_LSAP_MAGIC, return;);
+	ASSERT(skb != NULL, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LMP_LSAP_MAGIC, return;);
 	
-	ASSERT( self->lap != NULL, return;);
+	ASSERT(self->lap != NULL, return;);
 	self->qos = *self->lap->qos;
 
-	max_seg_size = self->qos.data_size.value;
-	DEBUG( 4, __FUNCTION__ "(), max_seg_size=%d\n", max_seg_size);
-	
-	/* Hide LMP_CONTROL_HEADER header from layer above */
-	skb_pull( skb, LMP_CONTROL_HEADER);
+	lap_header_size = irlap_get_header_size(self->lap->irlap);
 
-	if ( self->notify.connect_confirm) {
-		self->notify.connect_confirm( self->notify.instance, self,
-					      &self->qos, max_seg_size, skb);
+	max_seg_size = self->lap->qos->data_size.value-LMP_HEADER-
+		lap_header_size;
+	DEBUG(2, __FUNCTION__ "(), max_seg_size=%d\n", max_seg_size);
+	
+	max_header_size = LMP_HEADER + lap_header_size;
+
+	DEBUG(2, __FUNCTION__ "(), max_header_size=%d\n", max_header_size);
+
+	/* Hide LMP_CONTROL_HEADER header from layer above */
+	skb_pull(skb, LMP_CONTROL_HEADER);
+
+	if (self->notify.connect_confirm) {
+		self->notify.connect_confirm(self->notify.instance, self,
+					     &self->qos, max_seg_size, 
+					     max_header_size, skb);
 	}
 }
 
@@ -620,8 +639,8 @@ void irlmp_disconnect_request(struct lsap_cb *self, struct sk_buff *userdata)
  *
  *    LSAP is being closed!
  */
-void irlmp_disconnect_indication( struct lsap_cb *self, LM_REASON reason, 
-				  struct sk_buff *userdata) 
+void irlmp_disconnect_indication(struct lsap_cb *self, LM_REASON reason, 
+				 struct sk_buff *userdata) 
 {
 	struct lsap_cb *lsap;
 
@@ -636,6 +655,10 @@ void irlmp_disconnect_indication( struct lsap_cb *self, LM_REASON reason,
 
 	self->connected = FALSE;
 	self->dlsap_sel = LSAP_ANY;
+
+#ifdef CONFIG_IRDA_CACHE_LAST_LSAP
+	irlmp->cache.valid = FALSE;
+#endif
 
 	/* 
 	 *  Remove association between this LSAP and the link it used 
@@ -975,7 +998,7 @@ void irlmp_status_request(void)
 	DEBUG( 1, "irlmp_status_request(), Not implemented\n");
 }
 
-void irlmp_status_indication( LINK_STATUS link, LOCK_STATUS lock) 
+void irlmp_status_indication(LINK_STATUS link, LOCK_STATUS lock) 
 {
 	DEBUG( 4, "irlmp_status_indication(), Not implemented\n");
 }
@@ -1418,14 +1441,14 @@ __u32 irlmp_get_daddr(struct lsap_cb *self)
  *    Give some info to the /proc file system
  *
  */
-int irlmp_proc_read( char *buf, char **start, off_t offset, int len, 
-		     int unused)
+int irlmp_proc_read(char *buf, char **start, off_t offset, int len, 
+		    int unused)
 {
 	struct lsap_cb *self;
 	struct lap_cb *lap;
 	unsigned long flags;
 
-	ASSERT( irlmp != NULL, return 0;);
+	ASSERT(irlmp != NULL, return 0;);
 	
 	save_flags( flags);
 	cli();
@@ -1449,35 +1472,34 @@ int irlmp_proc_read( char *buf, char **start, off_t offset, int len,
  	} 
 
 	len += sprintf( buf+len, "\nRegistred Link Layers:\n");
-	lap = (struct lap_cb *) hashbin_get_first( irlmp->links);
-	while ( lap != NULL) {
-		ASSERT( lap->magic == LMP_LAP_MAGIC, return 0;);
 
-		len += sprintf( buf+len, "lap state: %s, ", 
-				irlmp_state[ lap->lap_state]);
+	lap = (struct lap_cb *) hashbin_get_first(irlmp->links);
+	while (lap != NULL) {
+		len += sprintf(buf+len, "lap state: %s, ", 
+			       irlmp_state[lap->lap_state]);
 
-		len += sprintf( buf+len, "saddr: %#08x, daddr: %#08x, ",
-				lap->saddr, lap->daddr); 
-		len += sprintf( buf+len, "\n");
+		len += sprintf(buf+len, "saddr: %#08x, daddr: %#08x, ",
+			       lap->saddr, lap->daddr); 
+		len += sprintf(buf+len, "\n");
 
 		len += sprintf( buf+len, "\nConnected LSAPs:\n");
 		self = (struct lsap_cb *) hashbin_get_first( lap->lsaps);
-		while ( self != NULL) {
-			ASSERT( self->magic == LMP_LSAP_MAGIC, return 0;);
-			len += sprintf( buf+len, "lsap state: %s, ", 
-					irlsap_state[ self->lsap_state]);
-			len += sprintf( buf+len, 
-					"slsap_sel: %#02x, dlsap_sel: %#02x, ",
-					self->slsap_sel, self->dlsap_sel);
-			len += sprintf( buf+len, "(%s)", self->notify.name);
-			len += sprintf( buf+len, "\n");
+		while (self != NULL) {
+			ASSERT(self->magic == LMP_LSAP_MAGIC, return 0;);
+			len += sprintf(buf+len, "lsap state: %s, ", 
+				       irlsap_state[ self->lsap_state]);
+			len += sprintf(buf+len, 
+				       "slsap_sel: %#02x, dlsap_sel: %#02x, ",
+				       self->slsap_sel, self->dlsap_sel);
+			len += sprintf(buf+len, "(%s)", self->notify.name);
+			len += sprintf(buf+len, "\n");
 			
-			self = ( struct lsap_cb *) hashbin_get_next( 
+			self = (struct lsap_cb *) hashbin_get_next( 
 				lap->lsaps);
 		} 
+		len += sprintf(buf+len, "\n");
 
-		lap = ( struct lap_cb *) hashbin_get_next( 
-			irlmp->links);
+		lap = (struct lap_cb *) hashbin_get_next(irlmp->links);
  	} 
 
 	restore_flags( flags);

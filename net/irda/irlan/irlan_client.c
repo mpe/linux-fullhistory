@@ -6,13 +6,14 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Thu Apr 22 23:03:55 1999
+ * Modified at:   Tue May 11 00:22:39 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane, <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -61,6 +62,7 @@ static int irlan_client_ctrl_data_indication(void *instance, void *sap,
 static void irlan_client_ctrl_connect_confirm(void *instance, void *sap, 
 					      struct qos_info *qos, 
 					      __u32 max_sdu_size,
+					      __u8 max_header_size,
 					      struct sk_buff *);
 static void irlan_check_response_param(struct irlan_cb *self, char *param, 
 				       char *value, int val_len);
@@ -79,7 +81,7 @@ static void irlan_client_kick_timer_expired(unsigned long data)
 	 * indication it needs to make progress. If the client is still in 
 	 * IDLE state, we must kick it to, but only if the provider is not IDLE
  	 */
-	if ((self->access_type == ACCESS_PEER) && 
+	if ((self->provider.access_type == ACCESS_PEER) && 
 	    (self->client.state == IRLAN_IDLE) &&
 	    (self->provider.state != IRLAN_IDLE)) {
 		irlan_client_wakeup(self, self->saddr, self->daddr);
@@ -105,23 +107,29 @@ void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
 {
 	struct irmanager_event mgr_event;
 
-	DEBUG(0, __FUNCTION__ "()\n");
+	DEBUG(1, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
-	/* Check if we are already awake */
-	if (self->client.state != IRLAN_IDLE)
+	/* 
+	 * Check if we are already awake, or if we are a provider in direct
+	 * mode (in that case we must leave the client idle
+	 */
+	if ((self->client.state != IRLAN_IDLE) || 
+	    (self->provider.access_type == ACCESS_DIRECT))
 		return;
 
 	/* saddr may have changed! */
 	self->saddr = saddr;
 	
-	/* Check if network device is up */
+	/* Before we try to connect, we check if network device is up. If it
+	 * is up, that means that the "user" really wants to connect. If not
+	 * we notify the user about the possibility of an IrLAN connection
+	 */
 	if (self->dev.start) {
 		/* Open TSAPs */
 		irlan_client_open_ctrl_tsap(self);
- 		irlan_provider_open_ctrl_tsap(self);
  		irlan_open_data_tsap(self);
 		
 		irlan_do_client_event(self, IRLAN_DISCOVERY_INDICATION, NULL);
@@ -161,7 +169,7 @@ void irlan_client_discovery_indication(discovery_t *discovery)
 	struct irlan_cb *self, *entry;
 	__u32 saddr, daddr;
 	
-	DEBUG(0, __FUNCTION__"()\n");
+	DEBUG(1, __FUNCTION__"()\n");
 
 	ASSERT(irlan != NULL, return;);
 	ASSERT(discovery != NULL, return;);
@@ -176,7 +184,8 @@ void irlan_client_discovery_indication(discovery_t *discovery)
       	if (self) {
 		ASSERT(self->magic == IRLAN_MAGIC, return;);
 
-		DEBUG(2, __FUNCTION__ "(), Found instance!\n");
+		DEBUG(1, __FUNCTION__ "(), Found instance (%08x)!\n",
+		      daddr);
 		
 		irlan_client_wakeup(self, saddr, daddr);
 
@@ -184,30 +193,13 @@ void irlan_client_discovery_indication(discovery_t *discovery)
 	}
 	
 	/* 
-	 * We have no instance for daddr, so try and find an unused one
+	 * We have no instance for daddr, so start a new one
 	 */
-	self = hashbin_find(irlan, DEV_ADDR_ANY, NULL);
-	if (self) {
-		DEBUG(0, __FUNCTION__ "(), Found instance with DEV_ADDR_ANY!\n");
-		/*
-		 * Rehash instance, now we have a client (daddr) to serve.
-		 */
-		entry = hashbin_remove(irlan, self->daddr, NULL);
-		ASSERT(entry == self, return;);
+	DEBUG(1, __FUNCTION__ "(), starting new instance!\n");
+	self = irlan_open(saddr, daddr, TRUE);
 
-		self->daddr = daddr;
-		self->saddr = saddr;
-
-		DEBUG(0, __FUNCTION__ "(), daddr=%08x\n", self->daddr);
-		hashbin_insert(irlan, (QUEUE*) self, self->daddr, NULL);
-		
-		/* Check if network device has been registered */
-		if (!self->netdev_registered)
-			irlan_register_netdev(self);
-		
-		/* Restart watchdog timer */
-		irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
-	}
+	/* Restart watchdog timer */
+	irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
 }
 	
 /*
@@ -302,6 +294,7 @@ void irlan_client_open_ctrl_tsap(struct irlan_cb *self)
 static void irlan_client_ctrl_connect_confirm(void *instance, void *sap, 
 					      struct qos_info *qos, 
 					      __u32 max_sdu_size,
+					      __u8 max_header_size,
 					      struct sk_buff *skb) 
 {
 	struct irlan_cb *self;
@@ -312,6 +305,9 @@ static void irlan_client_ctrl_connect_confirm(void *instance, void *sap,
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
+
+	self->client.max_sdu_size = max_sdu_size;
+	self->client.max_header_size = max_header_size;
 
 	/* TODO: we could set the MTU depending on the max_sdu_size */
 
@@ -339,7 +335,7 @@ void irlan_client_reconnect_data_channel(struct irlan_cb *self)
 		return;
 
 	/* Reserve space for TTP, LMP, and LAP header */
-	skb_reserve(skb, TTP_HEADER+LMP_HEADER+LAP_HEADER);
+	skb_reserve(skb, self->max_header_size);
 	skb_put(skb, 2);
 	
 	frame = skb->data;
@@ -410,11 +406,11 @@ void irlan_client_parse_response(struct irlan_cb *self, struct sk_buff *skb)
 	/* For all parameters */
  	for (i=0; i<count;i++) {
 		ret = irlan_extract_param(ptr, name, value, &val_len);
-		if (ret == -1) {
+		if (ret < 0) {
 			DEBUG(2, __FUNCTION__ "(), IrLAN, Error!\n");
 			break;
 		}
-		ptr+=ret;
+		ptr += ret;
 		irlan_check_response_param(self, name, value, val_len);
  	}
 	/* Cleanup */
@@ -423,9 +419,9 @@ void irlan_client_parse_response(struct irlan_cb *self, struct sk_buff *skb)
 }
 
 /*
- * Function check_param (param, value)
+ * Function irlan_check_response_param (self, param, value, val_len)
  *
- *    Check which parameter is received and update local variables
+ *     Check which parameter is received and update local variables
  *
  */
 static void irlan_check_response_param(struct irlan_cb *self, char *param, 
@@ -469,11 +465,11 @@ static void irlan_check_response_param(struct irlan_cb *self, char *param,
 	}
 	if (strcmp(param, "ACCESS_TYPE") == 0) {
 		if (strcmp(value, "DIRECT") == 0)
-			self->access_type = ACCESS_DIRECT;
+			self->client.access_type = ACCESS_DIRECT;
 		else if (strcmp(value, "PEER") == 0)
-			self->access_type = ACCESS_PEER;
+			self->client.access_type = ACCESS_PEER;
 		else if (strcmp(value, "HOSTED") == 0)
-			self->access_type = ACCESS_HOSTED;
+			self->client.access_type = ACCESS_HOSTED;
 		else {
 			DEBUG(2, __FUNCTION__ "(), unknown access type!\n");
 		}

@@ -1,3 +1,25 @@
+/* Software floating-point emulation. Common operations.
+   Copyright (C) 1997,1998,1999 Free Software Foundation, Inc.
+   This file is part of the GNU C Library.
+   Contributed by Richard Henderson (rth@cygnus.com),
+		  Jakub Jelinek (jj@ultra.linux.cz),
+		  David S. Miller (davem@redhat.com) and
+		  Peter Maydell (pmaydell@chiark.greenend.org.uk).
+
+   The GNU C Library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Library General Public License as
+   published by the Free Software Foundation; either version 2 of the
+   License, or (at your option) any later version.
+
+   The GNU C Library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Library General Public License for more details.
+
+   You should have received a copy of the GNU Library General Public
+   License along with the GNU C Library; see the file COPYING.LIB.  If
+   not, write to the Free Software Foundation, Inc.,
+   59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #define _FP_DECL(wc, X)			\
   _FP_I_TYPE X##_c, X##_s, X##_e;	\
@@ -13,7 +35,7 @@ do {									\
   switch (X##_e)							\
   {									\
   default:								\
-    _FP_FRAC_HIGH_##wc(X) |= _FP_IMPLBIT_##fs;				\
+    _FP_FRAC_HIGH_RAW_##fs(X) |= _FP_IMPLBIT_##fs;			\
     _FP_FRAC_SLL_##wc(X, _FP_WORKBITS);					\
     X##_e -= _FP_EXPBIAS_##fs;						\
     X##_c = FP_CLS_NORMAL;						\
@@ -31,6 +53,7 @@ do {									\
 	_FP_FRAC_SLL_##wc(X, (_shift+_FP_WORKBITS));			\
 	X##_e -= _FP_EXPBIAS_##fs - 1 + _shift;				\
 	X##_c = FP_CLS_NORMAL;						\
+	FP_SET_EXCEPTION(FP_EX_DENORM);					\
       }									\
     break;								\
 									\
@@ -38,12 +61,15 @@ do {									\
     if (_FP_FRAC_ZEROP_##wc(X))						\
       X##_c = FP_CLS_INF;						\
     else								\
-      /* we don't differentiate between signaling and quiet nans */	\
-      X##_c = FP_CLS_NAN;						\
+      {									\
+	X##_c = FP_CLS_NAN;						\
+	/* Check for signaling NaN */					\
+	if (!(_FP_FRAC_HIGH_RAW_##fs(X) & _FP_QNANBIT_##fs))		\
+	  FP_SET_EXCEPTION(FP_EX_INVALID);				\
+      }									\
     break;								\
   }									\
 } while (0)
-
 
 /*
  * Before packing the bits back into the native fp result, take care
@@ -53,14 +79,14 @@ do {									\
  */
 
 #define _FP_PACK_CANONICAL(fs, wc, X)				\
-({int __ret = 0;						\
+do {								\
   switch (X##_c)						\
   {								\
   case FP_CLS_NORMAL:						\
     X##_e += _FP_EXPBIAS_##fs;					\
     if (X##_e > 0)						\
       {								\
-	__ret |= _FP_ROUND(wc, X);				\
+	_FP_ROUND(wc, X);					\
 	if (_FP_FRAC_OVERP_##wc(fs, X))				\
 	  {							\
 	    _FP_FRAC_SRL_##wc(X, (_FP_WORKBITS+1));		\
@@ -70,10 +96,33 @@ do {									\
 	  _FP_FRAC_SRL_##wc(X, _FP_WORKBITS);			\
 	if (X##_e >= _FP_EXPMAX_##fs)				\
 	  {							\
-	    /* overflow to infinity */				\
-	    X##_e = _FP_EXPMAX_##fs;				\
-	    _FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);		\
-            __ret |= EFLAG_OVERFLOW;				\
+	    /* overflow */					\
+	    switch (FP_ROUNDMODE)				\
+	      {							\
+	      case FP_RND_NEAREST:				\
+		X##_c = FP_CLS_INF;				\
+		break;						\
+	      case FP_RND_PINF:					\
+		if (!X##_s) X##_c = FP_CLS_INF;			\
+		break;						\
+	      case FP_RND_MINF:					\
+		if (X##_s) X##_c = FP_CLS_INF;			\
+		break;						\
+	      }							\
+	    if (X##_c == FP_CLS_INF)				\
+	      {							\
+		/* Overflow to infinity */			\
+		X##_e = _FP_EXPMAX_##fs;			\
+		_FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);	\
+	      }							\
+	    else						\
+	      {							\
+		/* Overflow to maximum normal */		\
+		X##_e = _FP_EXPMAX_##fs - 1;			\
+		_FP_FRAC_SET_##wc(X, _FP_MAXFRAC_##wc);		\
+	      }							\
+	    FP_SET_EXCEPTION(FP_EX_OVERFLOW);			\
+            FP_SET_EXCEPTION(FP_EX_INEXACT);			\
 	  }							\
       }								\
     else							\
@@ -83,9 +132,9 @@ do {									\
 	if (X##_e <= _FP_WFRACBITS_##fs)			\
 	  {							\
 	    _FP_FRAC_SRS_##wc(X, X##_e, _FP_WFRACBITS_##fs);	\
-	    __ret |= _FP_ROUND(wc, X);				\
-	    _FP_FRAC_SLL_##wc(X, 1);				\
-	    if (_FP_FRAC_OVERP_##wc(fs, X))			\
+	    _FP_ROUND(wc, X);					\
+	    if (_FP_FRAC_HIGH_##fs(X)				\
+		& (_FP_OVERFLOW_##fs >> 1))			\
 	      {							\
 	        X##_e = 1;					\
 	        _FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);	\
@@ -93,16 +142,21 @@ do {									\
 	    else						\
 	      {							\
 		X##_e = 0;					\
-		_FP_FRAC_SRL_##wc(X, _FP_WORKBITS+1);		\
-                __ret |= EFLAG_UNDERFLOW;			\
+		_FP_FRAC_SRL_##wc(X, _FP_WORKBITS);		\
+		FP_SET_EXCEPTION(FP_EX_UNDERFLOW);		\
 	      }							\
 	  }							\
 	else							\
 	  {							\
 	    /* underflow to zero */				\
 	    X##_e = 0;						\
-	    _FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);		\
-            __ret |= EFLAG_UNDERFLOW;				\
+	    if (!_FP_FRAC_ZEROP_##wc(X))			\
+	      {							\
+	        _FP_FRAC_SET_##wc(X, _FP_MINFRAC_##wc);		\
+	        _FP_ROUND(wc, X);				\
+	        _FP_FRAC_LOW_##wc(X) >>= (_FP_WORKBITS);	\
+	      }							\
+	    FP_SET_EXCEPTION(FP_EX_UNDERFLOW);			\
 	  }							\
       }								\
     break;							\
@@ -122,14 +176,31 @@ do {									\
     if (!_FP_KEEPNANFRACP)					\
       {								\
 	_FP_FRAC_SET_##wc(X, _FP_NANFRAC_##fs);			\
-	X##_s = 0;						\
+	X##_s = _FP_NANSIGN_##fs;				\
       }								\
     else							\
-      _FP_FRAC_HIGH_##wc(X) |= _FP_QNANBIT_##fs;		\
+      _FP_FRAC_HIGH_RAW_##fs(X) |= _FP_QNANBIT_##fs;		\
     break;							\
   }								\
+} while (0)
+
+/* This one accepts raw argument and not cooked,  returns
+ * 1 if X is a signaling NaN.
+ */
+#define _FP_ISSIGNAN(fs, wc, X)					\
+({								\
+  int __ret = 0;						\
+  if (X##_e == _FP_EXPMAX_##fs)					\
+    {								\
+      if (!_FP_FRAC_ZEROP_##wc(X)				\
+	  && !(_FP_FRAC_HIGH_RAW_##fs(X) & _FP_QNANBIT_##fs))	\
+	__ret = 1;						\
+    }								\
   __ret;							\
 })
+
+
+
 
 
 /*
@@ -152,8 +223,6 @@ do {									     \
 	    _FP_FRAC_SRS_##wc(X, diff, _FP_WFRACBITS_##fs);		     \
 	  else if (!_FP_FRAC_ZEROP_##wc(X))				     \
 	    _FP_FRAC_SET_##wc(X, _FP_MINFRAC_##wc);			     \
-	  else								     \
-	    _FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);			     \
 	  R##_e = Y##_e;						     \
 	}								     \
       else								     \
@@ -164,8 +233,6 @@ do {									     \
 	        _FP_FRAC_SRS_##wc(Y, diff, _FP_WFRACBITS_##fs);		     \
 	      else if (!_FP_FRAC_ZEROP_##wc(Y))				     \
 	        _FP_FRAC_SET_##wc(Y, _FP_MINFRAC_##wc);			     \
-	      else							     \
-	        _FP_FRAC_SET_##wc(Y, _FP_ZEROFRAC_##wc);		     \
 	    }								     \
 	  R##_e = X##_e;						     \
 	}								     \
@@ -245,8 +312,9 @@ do {									     \
       {									     \
 	/* +INF + -INF => NAN */					     \
 	_FP_FRAC_SET_##wc(R, _FP_NANFRAC_##fs);				     \
-	R##_s = X##_s ^ Y##_s;						     \
+	R##_s = _FP_NANSIGN_##fs;					     \
 	R##_c = FP_CLS_NAN;						     \
+	FP_SET_EXCEPTION(FP_EX_INVALID);				     \
 	break;								     \
       }									     \
     /* FALLTHRU */							     \
@@ -343,8 +411,10 @@ do {							\
 							\
   case _FP_CLS_COMBINE(FP_CLS_INF,FP_CLS_ZERO):		\
   case _FP_CLS_COMBINE(FP_CLS_ZERO,FP_CLS_INF):		\
+    R##_s = _FP_NANSIGN_##fs;				\
     R##_c = FP_CLS_NAN;					\
     _FP_FRAC_SET_##wc(R, _FP_NANFRAC_##fs);		\
+    FP_SET_EXCEPTION(FP_EX_INVALID);			\
     break;						\
 							\
   default:						\
@@ -396,6 +466,7 @@ do {							\
     break;						\
 							\
   case _FP_CLS_COMBINE(FP_CLS_NORMAL,FP_CLS_ZERO):	\
+    FP_SET_EXCEPTION(FP_EX_DIVZERO);			\
   case _FP_CLS_COMBINE(FP_CLS_INF,FP_CLS_ZERO):		\
   case _FP_CLS_COMBINE(FP_CLS_INF,FP_CLS_NORMAL):	\
     R##_c = FP_CLS_INF;					\
@@ -403,8 +474,10 @@ do {							\
 							\
   case _FP_CLS_COMBINE(FP_CLS_INF,FP_CLS_INF):		\
   case _FP_CLS_COMBINE(FP_CLS_ZERO,FP_CLS_ZERO):	\
+    R##_s = _FP_NANSIGN_##fs;				\
     R##_c = FP_CLS_NAN;					\
     _FP_FRAC_SET_##wc(R, _FP_NANFRAC_##fs);		\
+    FP_SET_EXCEPTION(FP_EX_INVALID);			\
     break;						\
 							\
   default:						\
@@ -485,15 +558,17 @@ do {									\
     switch (X##_c)							\
     {									\
     case FP_CLS_NAN:							\
-    	R##_s = 0;							\
+	_FP_FRAC_COPY_##wc(R, X);					\
+	R##_s = X##_s;							\
     	R##_c = FP_CLS_NAN;						\
-    	_FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);			\
     	break;								\
     case FP_CLS_INF:							\
     	if (X##_s)							\
     	  {								\
-    	    R##_s = 0;							\
-	    R##_c = FP_CLS_NAN; /* sNAN */				\
+    	    R##_s = _FP_NANSIGN_##fs;					\
+	    R##_c = FP_CLS_NAN; /* NAN */				\
+	    _FP_FRAC_SET_##wc(R, _FP_NANFRAC_##fs);			\
+	    FP_SET_EXCEPTION(FP_EX_INVALID);				\
     	  }								\
     	else								\
     	  {								\
@@ -503,13 +578,16 @@ do {									\
     	break;								\
     case FP_CLS_ZERO:							\
 	R##_s = X##_s;							\
-    	R##_c = FP_CLS_ZERO; /* sqrt(+-0) = +-0 */			\
+	R##_c = FP_CLS_ZERO; /* sqrt(+-0) = +-0 */			\
 	break;								\
     case FP_CLS_NORMAL:							\
     	R##_s = 0;							\
         if (X##_s)							\
           {								\
 	    R##_c = FP_CLS_NAN; /* sNAN */				\
+	    R##_s = _FP_NANSIGN_##fs;					\
+	    _FP_FRAC_SET_##wc(R, _FP_NANFRAC_##fs);			\
+	    FP_SET_EXCEPTION(FP_EX_INVALID);				\
 	    break;							\
           }								\
     	R##_c = FP_CLS_NORMAL;						\
@@ -518,10 +596,8 @@ do {									\
         R##_e = X##_e >> 1;						\
         _FP_FRAC_SET_##wc(S, _FP_ZEROFRAC_##wc);			\
         _FP_FRAC_SET_##wc(R, _FP_ZEROFRAC_##wc);			\
-        q = _FP_OVERFLOW_##fs;						\
-        _FP_FRAC_SLL_##wc(X, 1);					\
+        q = _FP_OVERFLOW_##fs >> 1;					\
         _FP_SQRT_MEAT_##wc(R, S, T, X, q);				\
-        _FP_FRAC_SRL_##wc(R, 1);					\
     }									\
   } while (0)
 
@@ -529,28 +605,15 @@ do {									\
  * Convert from FP to integer
  */
 
-/* "When a NaN, infinity, large positive argument >= 2147483648.0, or 
- * large negative argument <= -2147483649.0 is converted to an integer,
- * the invalid_current bit...should be set and fp_exception_IEEE_754 should
- * be raised. If the floating point invalid trap is disabled, no trap occurs
- * and a numerical result is generated: if the sign bit of the operand
- * is 0, the result is 2147483647; if the sign bit of the operand is 1,
- * the result is -2147483648."
- * Similarly for conversion to extended ints, except that the boundaries
- * are >= 2^63, <= -(2^63 + 1), and the results are 2^63 + 1 for s=0 and
- * -2^63 for s=1.
- * -- SPARC Architecture Manual V9, Appendix B, which specifies how
- * SPARCs resolve implementation dependencies in the IEEE-754 spec.
- * I don't believe that the code below follows this. I'm not even sure
- * it's right! 
- * It doesn't cope with needing to convert to an n bit integer when there
- * is no n bit integer type. Fortunately gcc provides long long so this
- * isn't a problem for sparc32.
- * I have, however, fixed its NaN handling to conform as above.
- *         -- PMM 02/1998
- * NB: rsigned is not 'is r declared signed?' but 'should the value stored
- * in r be signed or unsigned?'. r is always(?) declared unsigned.
- * Comments below are mine, BTW -- PMM 
+/* RSIGNED can have following values:
+ * 0:  the number is required to be 0..(2^rsize)-1, if not, NV is set plus
+ *     the result is either 0 or (2^rsize)-1 depending on the sign in such case.
+ * 1:  the number is required to be -(2^(rsize-1))..(2^(rsize-1))-1, if not, NV is
+ *     set plus the result is either -(2^(rsize-1)) or (2^(rsize-1))-1 depending
+ *     on the sign in such case.
+ * -1: the number is required to be -(2^(rsize-1))..(2^rsize)-1, if not, NV is
+ *     set plus the result is either -(2^(rsize-1)) or (2^(rsize-1))-1 depending
+ *     on the sign in such case.
  */
 #define _FP_TO_INT(fs, wc, r, X, rsize, rsigned)				\
   do {										\
@@ -559,26 +622,26 @@ do {									\
       case FP_CLS_NORMAL:							\
 	if (X##_e < 0)								\
 	  {									\
-	  /* case FP_CLS_NAN: see above! */					\
+	    FP_SET_EXCEPTION(FP_EX_INEXACT);					\
 	  case FP_CLS_ZERO:							\
 	    r = 0;								\
 	  }									\
-	else if (X##_e >= rsize - (rsigned != 0))				\
+	else if (X##_e >= rsize - (rsigned > 0 || X##_s)			\
+		 || (!rsigned && X##_s))					\
 	  {	/* overflow */							\
 	  case FP_CLS_NAN:                                                      \
-          case FP_CLS_INF:							\
+	  case FP_CLS_INF:							\
 	    if (rsigned)							\
 	      {									\
 		r = 1;								\
 		r <<= rsize - 1;						\
 		r -= 1 - X##_s;							\
-	      }									\
-	    else								\
-	      {									\
+	      } else {								\
 		r = 0;								\
-		if (!X##_s)							\
+		if (X##_s)							\
 		  r = ~r;							\
 	      }									\
+	    FP_SET_EXCEPTION(FP_EX_INVALID);					\
 	  }									\
 	else									\
 	  {									\
@@ -591,8 +654,14 @@ do {									\
 	      {									\
 		if (X##_e >= _FP_WFRACBITS_##fs)				\
 		  _FP_FRAC_SLL_##wc(X, (X##_e - _FP_WFRACBITS_##fs + 1));	\
-		else								\
-		  _FP_FRAC_SRL_##wc(X, (_FP_WFRACBITS_##fs - X##_e - 1));	\
+		else if (X##_e < _FP_WFRACBITS_##fs - 1)			\
+		  {								\
+		    _FP_FRAC_SRS_##wc(X, (_FP_WFRACBITS_##fs - X##_e - 2),	\
+				      _FP_WFRACBITS_##fs);			\
+		    if (_FP_FRAC_LOW_##wc(X) & 1)				\
+		      FP_SET_EXCEPTION(FP_EX_INEXACT);				\
+		    _FP_FRAC_SRL_##wc(X, 1);					\
+		  }								\
 		_FP_FRAC_ASSEMBLE_##wc(r, X, rsize);				\
 	      }									\
 	    if (rsigned && X##_s)						\
@@ -610,8 +679,6 @@ do {									\
 									\
 	if ((X##_s = (r < 0)))						\
 	  r = -r;							\
-	/* Note that `r' is now considered unsigned, so we don't have	\
-	   to worry about the single signed overflow case.  */		\
 									\
 	if (rsize <= _FP_W_TYPE_SIZE)					\
 	  __FP_CLZ(X##_e, r);						\
@@ -624,7 +691,7 @@ do {									\
 									\
 	if (_FP_FRACBITS_##fs < rsize && _FP_WFRACBITS_##fs < X##_e)	\
 	  __FP_FRAC_SRS_1(r, (X##_e - _FP_WFRACBITS_##fs), rsize);	\
-	r &= ~((_FP_W_TYPE)1 << X##_e);					\
+	r &= ~((rtype)1 << X##_e);					\
 	_FP_FRAC_DISASSEMBLE_##wc(X, ((unsigned rtype)r), rsize);	\
 	_FP_FRAC_SLL_##wc(X, (_FP_WFRACBITS_##fs - X##_e - 1));		\
       }									\

@@ -33,6 +33,8 @@
 #include <linux/poll.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
+#include <linux/config.h>
+#include <linux/module.h>
 
 #include <asm/spinlock.h>
 
@@ -285,6 +287,7 @@ static void mouse_disconnect(struct usb_device *dev)
 
 	/* this might need work */
 	mouse->present = 0;
+	printk("Mouse disconnected\n");
 }
 
 static struct usb_driver mouse_driver = {
@@ -315,3 +318,15 @@ void usb_mouse_cleanup(void)
 	usb_deregister(&mouse_driver);
 	misc_deregister(&usb_mouse);
 }
+
+#ifdef MODULE
+int init_module(void)
+{
+	return usb_mouse_init();
+}
+
+void cleanup_module(void)
+{
+	usb_mouse_cleanup();
+}
+#endif

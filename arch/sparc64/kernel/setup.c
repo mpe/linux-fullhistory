@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.43 1999/04/12 08:08:24 davem Exp $
+/*  $Id: setup.c,v 1.44 1999/05/28 02:17:29 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -550,7 +550,9 @@ __initfunc(void setup_arch(char **cmdline_p,
 			ic_servaddr = sv;
 			if (gw)
 				ic_gateway = gw;
+#if defined(CONFIG_IP_PNP_BOOTP) || defined(CONFIG_IP_PNP_RARP)
 			ic_proto_enabled = 0;
+#endif
 		}
 	}
 #endif

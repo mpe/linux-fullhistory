@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Fri Apr 23 09:57:12 1999
+ * Modified at:   Sun May  9 15:59:05 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -62,12 +62,17 @@ static __u32 service_handle;
 extern char *lmp_reasons[];
 
 static struct iriap_cb *iriap_open( __u8 slsap, int mode);
-static void __iriap_close( struct iriap_cb *self);
+static void __iriap_close(struct iriap_cb *self);
 static void iriap_disconnect_indication(void *instance, void *sap, 
 					LM_REASON reason, struct sk_buff *skb);
 static void iriap_connect_indication(void *instance, void *sap, 
 				     struct qos_info *qos, __u32 max_sdu_size,
+				     __u8 max_header_size, 
 				     struct sk_buff *skb);
+static void iriap_connect_confirm(void *instance, void *sap, 
+				  struct qos_info *qos, 
+				  __u32 max_sdu_size, __u8 max_header_size,
+				  struct sk_buff *skb);
 static int iriap_data_indication(void *instance, void *sap, 
 				 struct sk_buff *skb);
 
@@ -181,7 +186,7 @@ struct iriap_cb *iriap_open( __u8 slsap_sel, int mode)
 	self->slsap_sel = slsap_sel;
 	self->mode = mode;
 
-	init_timer( &self->watchdog_timer);
+	init_timer(&self->watchdog_timer);
 
 	hashbin_insert( iriap, (QUEUE*) self, slsap_sel, NULL);
 	
@@ -206,7 +211,7 @@ static void __iriap_close( struct iriap_cb *self)
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IAS_MAGIC, return;);
 
-	del_timer( &self->watchdog_timer);
+	del_timer(&self->watchdog_timer);
 
 	self->magic = 0;
 
@@ -260,7 +265,7 @@ static void iriap_disconnect_indication( void *instance, void *sap,
 
 	ASSERT( iriap != NULL, return;);
 
-	del_timer( &self->watchdog_timer);
+	del_timer(&self->watchdog_timer);
 
 	if ( self->mode == IAS_CLIENT) {
 		DEBUG( 4, __FUNCTION__ "(), disconnect as client\n");
@@ -284,9 +289,8 @@ static void iriap_disconnect_indication( void *instance, void *sap,
 				       NULL);
 	}
 
-	if ( userdata) {
+	if (userdata)
 		dev_kfree_skb( userdata);
-	}
 }
 
 /*
@@ -295,28 +299,28 @@ static void iriap_disconnect_indication( void *instance, void *sap,
  *    
  *
  */
-void iriap_disconnect_request( struct iriap_cb *self)
+void iriap_disconnect_request(struct iriap_cb *self)
 {
 	struct sk_buff *skb;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IAS_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IAS_MAGIC, return;);
 
-	skb = dev_alloc_skb( 64);
+	skb = dev_alloc_skb(64);
 	if (skb == NULL) {
-		DEBUG( 0, __FUNCTION__
-		       "(), Could not allocate an sk_buff of length %d\n", 64);
+		DEBUG(0, __FUNCTION__
+		      "(), Could not allocate an sk_buff of length %d\n", 64);
 		return;
 	}
 
 	/* 
-	 *  Reserve space for MUX and LAP header 
+	 *  Reserve space for MUX control and LAP header 
 	 */
- 	skb_reserve( skb, LMP_CONTROL_HEADER+LAP_HEADER);
+ 	skb_reserve(skb, LMP_MAX_HEADER);
 
-	irlmp_disconnect_request( self->lsap, skb);
+	irlmp_disconnect_request(self->lsap, skb);
 }
 
 void iriap_getinfobasedetails_request(void) 
@@ -381,7 +385,7 @@ void iriap_getvaluebyclass_request(char *name, char *attr,
 	/* Give ourselves 10 secs to finish this operation */
 	iriap_start_watchdog_timer(self, 10*HZ);
 	
-	skb = dev_alloc_skb( 64);
+	skb = dev_alloc_skb(64);
 	if (!skb)
 		return;
 
@@ -389,7 +393,7 @@ void iriap_getvaluebyclass_request(char *name, char *attr,
 	attr_len = strlen(attr);
 
 	/* Reserve space for MUX and LAP header */
- 	skb_reserve(skb, LMP_CONTROL_HEADER+LAP_HEADER);
+ 	skb_reserve(skb, self->max_header_size);
 	skb_put(skb, 3+name_len+attr_len);
 	frame = skb->data;
 
@@ -535,13 +539,13 @@ void iriap_getvaluebyclass_response(struct iriap_cb *self, __u16 obj_id,
 	 *  value. We add 9 bytes because of the 6 bytes for the frame and
 	 *  max 3 bytes for the value coding.
 	 */
-	skb = dev_alloc_skb(value->len + LMP_HEADER + LAP_HEADER + 9);
+	skb = dev_alloc_skb(value->len + self->max_header_size + 9);
 	if (!skb)
 		return;
 
 	/* Reserve space for MUX and LAP header */
- 	skb_reserve( skb, LMP_HEADER+LAP_HEADER);
-	skb_put( skb, 6);
+ 	skb_reserve(skb, self->max_header_size);
+	skb_put(skb, 6);
 	
 	fp = skb->data;
 
@@ -666,7 +670,7 @@ void iriap_getvaluebyclass_indication(struct iriap_cb *self,
 /*
  * Function iriap_send_ack (void)
  *
- *    
+ *    Currently not used
  *
  */
 void iriap_send_ack( struct iriap_cb *self) 
@@ -679,13 +683,13 @@ void iriap_send_ack( struct iriap_cb *self)
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IAS_MAGIC, return;);
 
-	skb = dev_alloc_skb( 64);
+	skb = dev_alloc_skb(64);
 	if (!skb)
 		return;
 
 	/* Reserve space for MUX and LAP header */
- 	skb_reserve( skb, 4);
-	skb_put( skb, 3);
+ 	skb_reserve(skb, self->max_header_size);
+	skb_put(skb, 1);
 	frame = skb->data;
 
 	/* Build frame */
@@ -698,8 +702,10 @@ void iriap_send_ack( struct iriap_cb *self)
  *    LSAP connection confirmed!
  *
  */
-void iriap_connect_confirm(void *instance, void *sap, struct qos_info *qos, 
-			   __u32 max_sdu_size, struct sk_buff *userdata)
+static void iriap_connect_confirm(void *instance, void *sap, 
+				  struct qos_info *qos, 
+				  __u32 max_sdu_size, __u8 header_size, 
+				  struct sk_buff *userdata)
 {
 	struct iriap_cb *self;
 	
@@ -711,7 +717,7 @@ void iriap_connect_confirm(void *instance, void *sap, struct qos_info *qos,
 	
 	DEBUG(4, __FUNCTION__ "()\n");
 	
-	/* del_timer( &self->watchdog_timer); */
+	del_timer(&self->watchdog_timer);
 
 	iriap_do_client_event(self, IAP_LM_CONNECT_CONFIRM, userdata);
 }
@@ -724,19 +730,17 @@ void iriap_connect_confirm(void *instance, void *sap, struct qos_info *qos,
  */
 static void iriap_connect_indication(void *instance, void *sap, 
 				     struct qos_info *qos, __u32 max_sdu_size,
+				     __u8 header_size, 
 				     struct sk_buff *userdata)
 {
 	struct iriap_cb *self;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	self = (struct iriap_cb *) instance;
 
-	self = ( struct iriap_cb *) instance;
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IAS_MAGIC, return;);
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IAS_MAGIC, return;);
-	ASSERT( self->mode == IAS_SERVER, return;);
-
-	iriap_do_server_event( self, IAP_LM_CONNECT_INDICATION, userdata);
+	iriap_do_server_event(self, IAP_LM_CONNECT_INDICATION, userdata);
 }
  
 /*
@@ -856,7 +860,7 @@ void iriap_call_indication( struct iriap_cb *self, struct sk_buff *skb)
 	}
 	opcode &= 0x7f; /* Mask away LST bit */
 	
-	switch( opcode) {
+	switch (opcode) {
 	case GET_INFO_BASE:
 		DEBUG( 0, "IrLMP GetInfoBaseDetails not implemented!\n");
 		break;

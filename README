@@ -46,11 +46,11 @@ DOCUMENTATION:
  - There is a lot of documentation available both in electronic form on
    the Internet and in books, both Linux-specific and pertaining to
    general UNIX questions.  I'd recommend looking into the documentation
-   subdirectories on any Linux ftp site for the LDP (Linux Documentation
+   subdirectories on any Linux FTP site for the LDP (Linux Documentation
    Project) books.  This README is not meant to be documentation on the
    system: there are much better sources available.
 
- - There are various readme's in the kernel Documentation/ subdirectory:
+ - There are various README files in the Documentation/ subdirectory:
    these typically contain kernel-specific installation notes for some 
    drivers for example. See ./Documentation/00-INDEX for a list of what
    is contained in each file.  Please read the Changes file, as it
@@ -233,7 +233,7 @@ IF SOMETHING GOES WRONG:
    isn't anyone listed there, then the second best thing is to mail
    them to me (torvalds@transmeta.com), and possibly to any other
    relevant mailing-list or to the newsgroup.  The mailing-lists are
-   useful especially for SCSI and NETworking problems, as I can't test
+   useful especially for SCSI and networking problems, as I can't test
    either of those personally anyway. 
 
  - In all bug-reports, *please* tell what kernel you are talking about,

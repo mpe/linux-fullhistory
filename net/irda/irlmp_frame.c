@@ -1,15 +1,15 @@
 /*********************************************************************
  *                
  * Filename:      irlmp_frame.c
- * Version:       0.8
+ * Version:       0.9
  * Description:   IrLMP frame implementation
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 02:09:59 1997
- * Modified at:   Fri Apr 23 09:12:23 1999
+ * Modified at:   Sun May  9 21:00:05 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -59,16 +59,16 @@ inline void irlmp_send_data_pdu(struct lap_cb *self, __u8 dlsap, __u8 slsap,
  *
  *    Send Link Control Frame to IrLAP
  */
-void irlmp_send_lcf_pdu( struct lap_cb *self, __u8 dlsap, __u8 slsap,
-			 __u8 opcode, struct sk_buff *skb) 
+void irlmp_send_lcf_pdu(struct lap_cb *self, __u8 dlsap, __u8 slsap,
+			__u8 opcode, struct sk_buff *skb) 
 {
 	__u8 *frame;
 	
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 	
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LMP_LAP_MAGIC, return;);
-	ASSERT( skb != NULL, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LMP_LAP_MAGIC, return;);
+	ASSERT(skb != NULL, return;);
 	
 	frame = skb->data;
 	
@@ -82,8 +82,8 @@ void irlmp_send_lcf_pdu( struct lap_cb *self, __u8 dlsap, __u8 slsap,
 	else
 		frame[3] = 0x00; /* rsvd */
 
-	ASSERT( self->irlap != NULL, return;);
-	irlap_data_request( self->irlap, skb, TRUE);
+	ASSERT(self->irlap != NULL, return;);
+	irlap_data_request(self->irlap, skb, TRUE);
 }
 
 /*
@@ -112,7 +112,7 @@ void irlmp_link_data_indication(struct lap_cb *self, int reliable,
 	 */
 	slsap_sel = fp[0] & LSAP_MASK; 
 	dlsap_sel = fp[1];
-	
+
 	/*
 	 *  Check if this is an incoming connection, since we must deal with
 	 *  it in a different way than other established connections.
@@ -224,11 +224,11 @@ void irlmp_link_disconnect_indication(struct lap_cb *lap,
  *    Incoming LAP connection!
  *
  */
-void irlmp_link_connect_indication( struct lap_cb *self, __u32 saddr, 
-				    __u32 daddr, struct qos_info *qos,
-				    struct sk_buff *skb) 
+void irlmp_link_connect_indication(struct lap_cb *self, __u32 saddr, 
+				   __u32 daddr, struct qos_info *qos,
+				   struct sk_buff *skb) 
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
 	/* Copy QoS settings for this session */
 	self->qos = qos;
@@ -237,7 +237,7 @@ void irlmp_link_connect_indication( struct lap_cb *self, __u32 saddr,
 	self->daddr = daddr;
 	ASSERT(self->saddr == saddr, return;);
 
-	irlmp_do_lap_event( self, LM_LAP_CONNECT_INDICATION, skb);
+	irlmp_do_lap_event(self, LM_LAP_CONNECT_INDICATION, skb);
 }
 
 /*
@@ -246,19 +246,19 @@ void irlmp_link_connect_indication( struct lap_cb *self, __u32 saddr,
  *    LAP connection confirmed!
  *
  */
-void irlmp_link_connect_confirm( struct lap_cb *self, struct qos_info *qos, 
-				 struct sk_buff *userdata)
+void irlmp_link_connect_confirm(struct lap_cb *self, struct qos_info *qos, 
+				struct sk_buff *userdata)
 {
-	DEBUG( 4, "irlmp_link_connect_confirm()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LMP_LAP_MAGIC, return;);
-	ASSERT( qos != NULL, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LMP_LAP_MAGIC, return;);
+	ASSERT(qos != NULL, return;);
 
 	/* Copy QoS settings for this session */
 	self->qos = qos;
 
-	irlmp_do_lap_event( self, LM_LAP_CONNECT_CONFIRM, NULL);
+	irlmp_do_lap_event(self, LM_LAP_CONNECT_CONFIRM, NULL);
 }
 
 /*
@@ -276,7 +276,9 @@ void irlmp_link_discovery_indication(struct lap_cb *self,
 	irlmp_add_discovery(irlmp->cachelog, discovery);
 
 	/* Just handle it the same way as a discovery confirm */
+#if 0
 	irlmp_do_lap_event(self, LM_LAP_DISCOVERY_CONFIRM, NULL);
+#endif
 }
 
 /*
@@ -365,7 +367,7 @@ static struct lsap_cb *irlmp_find_lsap(struct lap_cb *self, __u8 dlsap_sel,
 #endif
 			return lsap;
 		}
-		lsap = ( struct lsap_cb *) hashbin_get_next(queue);
+		lsap = (struct lsap_cb *) hashbin_get_next(queue);
 	}
 
 	/* Sorry not found! */

@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Thu Apr 22 14:29:16 1999
+ * Modified at:   Sun May  9 12:26:11 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -36,13 +36,7 @@ void irlan_provider_ctrl_disconnect_indication(void *instance, void *sap,
 					       LM_REASON reason, 
 					       struct sk_buff *skb);
 
-void irlan_provider_ctrl_data_indication(void *instance, void *sap,
-					 struct sk_buff *skb);
 
-void irlan_provider_connect_indication(void *instance, void *sap, 
-				       struct qos_info *qos, 
-				       __u32 max_sdu_size,
-				       struct sk_buff *skb);
 void irlan_provider_connect_response(struct irlan_cb *, struct tsap_cb *);
 
 int irlan_parse_open_data_cmd(struct irlan_cb *self, struct sk_buff *skb);

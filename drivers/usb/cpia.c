@@ -17,6 +17,8 @@
 #include <linux/videodev.h>
 #include <linux/vmalloc.h>
 #include <linux/wrapper.h>
+#include <linux/config.h>
+#include <linux/module.h>
 
 #include <asm/spinlock.h>
 #include <asm/io.h>
@@ -1252,4 +1254,14 @@ int usb_cpia_init(void)
 
 	return 0;
 }
+
+#ifdef MODULE
+int init_module(void)
+{
+	return usb_cpia_init();
+}
+void module_cleanup(void)
+{
+}
+#endif
 

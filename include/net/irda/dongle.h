@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 22:47:12 1998
- * Modified at:   Sat Feb  6 07:37:49 1999
+ * Modified at:   Mon May 10 14:51:06 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -26,7 +26,6 @@
 #define DONGLE_H
 
 #include <net/irda/qos.h>
-#include <net/irda/irda_device.h>
 
 /* These are the currently known dongles */
 typedef enum {
@@ -35,7 +34,10 @@ typedef enum {
 	ACTISYS_DONGLE,
 	ACTISYS_PLUS_DONGLE,
 	GIRBIL_DONGLE,
+	LITELINK_DONGLE,
 } DONGLE_T;
+
+struct irda_device;
 
 struct dongle {
 	DONGLE_T type;

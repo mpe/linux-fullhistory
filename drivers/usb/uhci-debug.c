@@ -147,9 +147,9 @@ void show_queue(struct uhci_qh *qh)
 int is_skeleton_qh(struct uhci *uhci, struct uhci_qh *qh)
 {
 	int j;
-
+	struct uhci_device * root_hub=usb_to_uhci(uhci->bus->root_hub);
 	for (j = 0; j < UHCI_MAXQH; j++)
-		if (qh == uhci->root_hub->qh + j)
+		if (qh == root_hub->qh + j)
 			return 1;
 
 	return 0;
@@ -165,15 +165,16 @@ void show_queues(struct uhci *uhci)
 {
 	int i;
 	struct uhci_qh *qh;
+	struct uhci_device * root_hub=usb_to_uhci(uhci->bus->root_hub);
 
 	for (i = 0; i < UHCI_MAXQH; ++i) {
 		printk("  %s:\n", qh_names[i]);
 #if 0
-		printk("  qh #%d, %p\n", i, virt_to_bus(uhci->root_hub->qh + i));
+		printk("  qh #%d, %p\n", i, virt_to_bus(root_hub->qh + i));
 		show_queue(uhci->root_hub->qh + i);
 #endif
 
-		qh = uhci_link_to_qh(uhci->root_hub->qh[i].link);
+		qh = uhci_link_to_qh(root_hub->qh[i].link);
 		for (; qh; qh = uhci_link_to_qh(qh->link)) {
 			if (is_skeleton_qh(uhci, qh))
 				break;
@@ -182,4 +183,3 @@ void show_queues(struct uhci *uhci)
 		}
 	}
 }
-

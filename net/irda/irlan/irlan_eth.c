@@ -6,13 +6,13 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct 15 08:37:58 1998
- * Modified at:   Thu Apr 22 14:26:39 1999
+ * Modified at:   Mon May 10 20:23:49 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -29,6 +29,7 @@
 #include <linux/etherdevice.h>
 #include <linux/inetdevice.h>
 #include <linux/if_arp.h>
+#include <linux/random.h>
 #include <net/arp.h>
 
 #include <net/irda/irda.h>
@@ -67,19 +68,19 @@ int irlan_eth_init(struct device *dev)
 	
 	dev->tx_queue_len = TTP_MAX_QUEUE;
 
-#if 0
-	/*  
-	 *  OK, since we are emulating an IrLAN sever we will have to give
-	 *  ourself an ethernet address!
-	 *  FIXME: this must be more dynamically
-	 */
-	dev->dev_addr[0] = 0x40;
-	dev->dev_addr[1] = 0x00;
-	dev->dev_addr[2] = 0x00;
-	dev->dev_addr[3] = 0x00;
-	dev->dev_addr[4] = 0x23;
-	dev->dev_addr[5] = 0x45;
-#endif
+	if (self->provider.access_type == ACCESS_DIRECT) {
+		/*  
+		 * Since we are emulating an IrLAN sever we will have to
+		 * give ourself an ethernet address!  
+		 */
+		dev->dev_addr[0] = 0x40;
+		dev->dev_addr[1] = 0x00;
+		dev->dev_addr[2] = 0x00;
+		dev->dev_addr[3] = 0x00;
+		get_random_bytes(dev->dev_addr+4, 1);
+		get_random_bytes(dev->dev_addr+5, 1);
+	}
+
 	/* 
 	 * Network device has now been registered, so tell irmanager about
 	 * it, so it can be configured with network parameters
@@ -180,8 +181,6 @@ int irlan_eth_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct irlan_cb *self;
 
-	DEBUG(4, __FUNCTION__ "()\n");
-	
 	self = (struct irlan_cb *) dev->priv;
 
 	ASSERT(self != NULL, return 0;);
@@ -202,19 +201,19 @@ int irlan_eth_xmit(struct sk_buff *skb, struct device *dev)
  		dev->trans_start = jiffies;
 	}
 	
-	DEBUG(4, "Room left at head: %d\n", skb_headroom(skb));
-	DEBUG(4, "Room left at tail: %d\n", skb_tailroom(skb));
-	DEBUG(4, "Required room: %d\n", IRLAN_MAX_HEADER);
-	
-	/* skb headroom large enough to contain IR-headers? */
-	if ((skb_headroom(skb) < IRLAN_MAX_HEADER) || (skb_shared(skb))) {
+	/* skb headroom large enough to contain all IrDA-headers? */
+	if ((skb_headroom(skb) < self->max_header_size) || (skb_shared(skb))) {
 		struct sk_buff *new_skb = 
-			skb_realloc_headroom(skb, IRLAN_MAX_HEADER);
-		ASSERT(new_skb != NULL, return 0;);
-		ASSERT(skb_headroom(new_skb) >= IRLAN_MAX_HEADER, return 0;);
+			skb_realloc_headroom(skb, self->max_header_size);
 
-		/*  Free original skb, and use the new one */
+		/*  We have to free the original skb anyway */
 		dev_kfree_skb(skb);
+
+		/* Did the realloc succeed? */
+		if (new_skb == NULL)
+			return 0;
+
+		/* Use the new skb instead */
 		skb = new_skb;
 	} 
 
@@ -222,31 +221,26 @@ int irlan_eth_xmit(struct sk_buff *skb, struct device *dev)
 	self->stats.tx_packets++;
 	self->stats.tx_bytes += skb->len; 
 
-	/*
-	 *  Now queue the packet in the transport layer
-	 *  FIXME: clean up the code below! DB
-	 */
-	if (self->use_udata) {
+	/* Now queue the packet in the transport layer */
+	if (self->use_udata)
 		irttp_udata_request(self->tsap_data, skb);
-		dev->tbusy = 0;
-	
-		return 0;
-	}
-
-	if (irttp_data_request(self->tsap_data, skb) == -1) {
-		/*  
-		 *  IrTTPs tx queue is full, so we just have to drop the
-		 *  frame! You might think that we should just return -1
-		 *  and don't deallocate the frame, but that is dangerous
-		 *  since it's possible that we have replaced the original
-		 *  skb with a new one with larger headroom, and that would
-		 *  really confuse do_dev_queue_xmit() in dev.c! I have
-		 *  tried :-) DB
-		 */
-		dev_kfree_skb(skb);
-		++self->stats.tx_dropped;
+	else {
+		if (irttp_data_request(self->tsap_data, skb) < 0) {
+			/*   
+			 * IrTTPs tx queue is full, so we just have to
+			 * drop the frame! You might think that we should
+			 * just return -1 and don't deallocate the frame,
+			 * but that is dangerous since it's possible that
+			 * we have replaced the original skb with a new
+			 * one with larger headroom, and that would really
+			 * confuse do_dev_queue_xmit() in dev.c! I have
+			 * tried :-) DB 
+			 */
+			dev_kfree_skb(skb);
+			++self->stats.tx_dropped;
 		
-		return 0;
+			return 0;
+		}
 	}
 	dev->tbusy = 0; /* Finished! */
 	
@@ -314,26 +308,16 @@ void irlan_eth_flow_indication(void *instance, void *sap, LOCAL_FLOW flow)
 	
 	switch (flow) {
 	case FLOW_STOP:
-		DEBUG(4, "IrLAN, stopping Ethernet layer\n");
-
 		dev->tbusy = 1;
 		break;
 	case FLOW_START:
-		/* 
-		 *  Tell upper layers that its time to transmit frames again
-		 */
-		DEBUG(4, "IrLAN, starting Ethernet layer\n");
-
+	default:
+		/* Tell upper layers that its time to transmit frames again */
 		dev->tbusy = 0;
 
-		/* 
-		 *  Ready to receive more frames, so schedule the network
-		 *  layer
-		 */
+		/* Schedule network layer */
 		mark_bh(NET_BH);		
 		break;
-	default:
-		DEBUG(0, __FUNCTION__ "(), Unknown flow command!\n");
 	}
 }
 
@@ -373,7 +357,7 @@ void irlan_etc_send_gratuitous_arp(struct device *dev)
 	in_dev = dev->ip_ptr;
 	arp_send(ARPOP_REQUEST, ETH_P_ARP, 
 		 in_dev->ifa_list->ifa_address,
-		 &dev, 
+		 dev, 
 		 in_dev->ifa_list->ifa_address,
 		 NULL, dev->dev_addr, NULL);
 }

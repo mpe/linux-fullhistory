@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Thu Apr 22 10:46:28 1999
+ * Modified at:   Fri May  7 10:53:58 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -108,7 +108,7 @@ static int irlan_provider_state_info(struct irlan_cb *self, IRLAN_EVENT event,
 	switch(event) {
 	case IRLAN_GET_INFO_CMD:
 		/* Be sure to use 802.3 in case of peer mode */
-		if (self->access_type == ACCESS_PEER) {
+		if (self->provider.access_type == ACCESS_PEER) {
 			self->media = MEDIA_802_3;
 			
 			/* Check if client has started yet */
@@ -129,7 +129,7 @@ static int irlan_provider_state_info(struct irlan_cb *self, IRLAN_EVENT event,
 		break;		
 	case IRLAN_OPEN_DATA_CMD:
 		ret = irlan_parse_open_data_cmd(self, skb);
-		if (self->access_type == ACCESS_PEER) {
+		if (self->provider.access_type == ACCESS_PEER) {
 			/* FIXME: make use of random functions! */
 			self->provider.send_arb_val = (jiffies & 0xffff);
 		}
@@ -205,8 +205,6 @@ static int irlan_provider_state_open(struct irlan_cb *self, IRLAN_EVENT event,
 static int irlan_provider_state_data(struct irlan_cb *self, IRLAN_EVENT event, 
 				     struct sk_buff *skb) 
 {
-	struct irmanager_event mgr_event;
-
 	DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return -1;);
@@ -220,10 +218,6 @@ static int irlan_provider_state_data(struct irlan_cb *self, IRLAN_EVENT event,
 		break;
 	case IRLAN_LMP_DISCONNECT: /* FALLTHROUGH */
 	case IRLAN_LAP_DISCONNECT:
-		mgr_event.event = EVENT_IRLAN_STOP;
-		sprintf(mgr_event.devname, "%s", self->ifname);
-		irmanager_notify(&mgr_event);
-
 		irlan_next_provider_state(self, IRLAN_IDLE);
 		break;
 	default:

@@ -49,7 +49,6 @@
 #include <asm/system.h>
 
 #include "ohci.h"
-#include "inits.h"
 
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
@@ -63,9 +62,7 @@ static DECLARE_WAIT_QUEUE_HEAD(ohci_configure);
 #define OHCI_DEBUG    /* to make typing it easier.. */
 #endif
 
-#ifdef OHCI_DEBUG
 int MegaDebug = 0;	/* SIGUSR2 to the control thread toggles this */
-#endif
 
 
 #ifdef OHCI_TIMER
@@ -207,12 +204,13 @@ void ohci_add_bulk_ed(struct ohci *ohci, struct ohci_ed *ed)
 void ohci_add_periodic_ed(struct ohci *ohci, struct ohci_ed *ed, int period)
 {
 	struct ohci_ed *int_ed;
+	struct ohci_device *root_hub=usb_to_ohci(ohci->bus->root_hub);
 	unsigned long flags;
 
 	/*
 	 * Pick a good frequency endpoint based on the requested period
 	 */
-	int_ed = &ohci->root_hub->ed[ms_to_ed_int(period)];
+	int_ed = &root_hub->ed[ms_to_ed_int(period)];
 #ifdef OHCI_DEBUG
 	printk("usb-ohci: Using INT ED queue %d for %dms period\n",
 			ms_to_ed_int(period), period);
@@ -632,7 +630,7 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	 * Set the max packet size, device speed, endpoint number, usb
 	 * device number (function address), and type of TD.
 	 */
-	ohci_fill_ed(dev, interrupt_ed, usb_maxpacket(pipe), usb_pipeslow(pipe),
+	ohci_fill_ed(dev, interrupt_ed, usb_maxpacket(usb,pipe), usb_pipeslow(pipe),
 		usb_pipe_endpdev(pipe), 0 /* normal TDs */);
 
 	/* Fill in the TD */
@@ -732,7 +730,7 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe, void *cmd
 	 * device number (function address), and type of TD.
 	 *
 	 */
-	ohci_fill_ed(dev, control_ed, usb_maxpacket(pipe), usb_pipeslow(pipe),
+	ohci_fill_ed(dev, control_ed, usb_maxpacket(usb,pipe), usb_pipeslow(pipe),
 		usb_pipe_endpdev(pipe), 0 /* normal TDs */);
 
 	/*
@@ -1015,6 +1013,8 @@ static int start_hc(struct ohci *ohci)
 	int fminterval;
 	__u32 what_to_enable;
 
+	struct ohci_device *root_hub=usb_to_ohci(ohci->bus->root_hub);
+
 	fminterval = readl(&ohci->regs->fminterval) & 0x3fff;
 #if 0
 	printk(KERN_DEBUG "entering start_hc %p\n", ohci);
@@ -1024,7 +1024,7 @@ static int start_hc(struct ohci *ohci)
 		return -1;
 
 	/* restore registers cleared by the reset */
-	writel(virt_to_bus(ohci->root_hub->hcca), &ohci->regs->hcca);
+	writel(virt_to_bus(root_hub->hcca), &ohci->regs->hcca);
 
 	/*
 	 * XXX Should fminterval also be set here?
@@ -1120,6 +1120,7 @@ static void ohci_connect_change(struct ohci * ohci, int port)
 {
 	struct usb_device *usb_dev;
 	struct ohci_device *dev;
+	struct ohci_device *root_hub=usb_to_ohci(ohci->bus->root_hub);
 	/* memory I/O address of the port status register */
 	__u32 *portaddr = &ohci->regs->roothub.portstatus[port];
 	int portstatus;	
@@ -1133,7 +1134,7 @@ static void ohci_connect_change(struct ohci * ohci, int port)
 	 * everything we think we know about the device
 	 * on this root hub port.  It may have changed.
 	 */
-	usb_disconnect(ohci->root_hub->usb->children + port);
+	usb_disconnect(root_hub->usb->children + port);
 
 	portstatus = readl(portaddr);
 
@@ -1154,7 +1155,7 @@ static void ohci_connect_change(struct ohci * ohci, int port)
 	/*
 	 * Allocate a device for the new thingy that's been attached
 	 */
-	usb_dev = ohci_usb_allocate(ohci->root_hub->usb);
+	usb_dev = ohci_usb_allocate(root_hub->usb);
 	dev = usb_dev->hcpriv;
 
 	dev->ohci = ohci;
@@ -1162,7 +1163,7 @@ static void ohci_connect_change(struct ohci * ohci, int port)
 	usb_connect(dev->usb);
 
 	/* link it into the bus's device tree */
-	ohci->root_hub->usb->children[port] = usb_dev;
+	root_hub->usb->children[port] = usb_dev;
 
 	wait_ms(200); /* wait for powerup; XXX is this needed? */
 	ohci_reset_port(ohci, port);
@@ -1220,10 +1221,12 @@ static void ohci_check_configuration(struct ohci *ohci)
  */
 static void ohci_root_hub_events(struct ohci *ohci)
 {
-	if (waitqueue_active(&ohci_configure)) {
 		int num = 0;
-		int maxport = ohci->root_hub->usb->maxchild;
+	struct ohci_device *root_hub=usb_to_ohci(ohci->bus->root_hub);
+	int maxport = root_hub->usb->maxchild;
 
+	if (!waitqueue_active(&ohci_configure))
+		return;
 		do {
 			__u32 *portstatus_p = &ohci->regs->roothub.portstatus[num];
 			if (readl(portstatus_p) & PORT_CSC) {
@@ -1232,7 +1235,7 @@ static void ohci_root_hub_events(struct ohci *ohci)
 				return;
 			}
 		} while (++num < maxport);
-	}
+	
 } /* ohci_root_hub_events() */
 
 
@@ -1248,7 +1251,8 @@ static void ohci_root_hub_events(struct ohci *ohci)
 static struct ohci_td * ohci_reverse_donelist(struct ohci * ohci)
 {
 	__u32 td_list_hc;
-	struct ohci_hcca *hcca = ohci->root_hub->hcca;
+	struct ohci_device *root_hub=usb_to_ohci(ohci->bus->root_hub);
+	struct ohci_hcca *hcca = root_hub->hcca;
 	struct ohci_td *td_list = NULL;
 	struct ohci_td *td_rev = NULL;
   	
@@ -1326,7 +1330,8 @@ static void ohci_interrupt(int irq, void *__ohci, struct pt_regs *r)
 {
 	struct ohci *ohci = __ohci;
 	struct ohci_regs *regs = ohci->regs;
-	struct ohci_hcca *hcca = ohci->root_hub->hcca;
+	struct ohci_device *root_hub=usb_to_ohci(ohci->bus->root_hub);
+	struct ohci_hcca *hcca = root_hub->hcca;
 	__u32 status, context;
 
 	/* Save the status of the interrupts that are enabled */
@@ -1481,8 +1486,8 @@ static struct ohci *alloc_ohci(void* mem_base)
 	if (!usb)
 		return NULL;
 
-	dev = ohci->root_hub = usb_to_ohci(usb);
-
+	dev = usb_to_ohci(usb);
+	ohci->bus->root_hub= ohci_to_usb(dev);
 	usb->bus = bus;
 
 	/* Initialize the root hub */
@@ -1588,13 +1593,14 @@ static void release_ohci(struct ohci *ohci)
 	/* stop all OHCI interrupts */
 	writel(~0x0, &ohci->regs->intrdisable);
 
-	if (ohci->root_hub) {
+	if (ohci->bus->root_hub) {
+		struct ohci_device *root_hub=usb_to_ohci(ohci->bus->root_hub);
 		/* ensure that HC is stopped before releasing the HCCA */
 		writel(OHCI_USB_SUSPEND, &ohci->regs->control);
-		free_page((unsigned long) ohci->root_hub->hcca);
-		kfree(ohci->root_hub);
-		ohci->root_hub->hcca = NULL;
-		ohci->root_hub = NULL;
+		free_page((unsigned long) root_hub->hcca);
+		kfree(ohci->bus->root_hub);
+		root_hub->hcca = NULL;
+		ohci->bus->root_hub = NULL;
 	}
 
 	/* unmap the IO address space */
@@ -1634,12 +1640,15 @@ static int ohci_control_thread(void * __ohci)
 
 	strcpy(current->comm, "ohci-control");
 
+	usb_register_bus(ohci->bus);
+
 	/*
 	 * Damn the torpedoes, full speed ahead
 	 */
 	if (start_hc(ohci) < 0) {
 		printk("usb-ohci: failed to start the controller\n");
 		release_ohci(ohci);
+		usb_deregister_bus(ohci->bus);
 		printk(KERN_INFO "leaving ohci_control_thread %p\n", __ohci);
 		return 0;
 	}
@@ -1697,7 +1706,7 @@ static int ohci_control_thread(void * __ohci)
 
 	reset_hc(ohci);
 	release_ohci(ohci);
-
+	usb_deregister_bus(ohci->bus);
 	printk(KERN_INFO "ohci-control thread for 0x%p exiting\n", __ohci);
 
 	return 0;
@@ -1864,26 +1873,6 @@ static int init_ohci(struct pci_dev *dev)
 	return 0;
 } /* init_ohci() */
 
-#ifdef MODULE
-/*
- *  Clean up when unloading the module
- */
-void cleanup_module(void)
-{
-#ifdef CONFIG_APM
-	apm_unregister_callback(&handle_apm_event);
-#endif
-#ifdef CONFIG_USB_MOUSE
-	usb_mouse_cleanup();
-#endif
-	printk("usb-ohci: module unloaded\n");
-}
-
-#define ohci_init init_module
-
-#endif
-
-
 /* TODO this should be named following Linux convention and go in pci.h */
 #define PCI_CLASS_SERIAL_USB_OHCI ((PCI_CLASS_SERIAL_USB << 8) | 0x0010)
 
@@ -1935,3 +1924,21 @@ int ohci_init(void)
 
 /* vim:sw=8
  */
+
+#ifdef MODULE
+/*
+ *  Clean up when unloading the module
+ */
+void module_cleanup(void){
+#	ifdef CONFIG_APM
+	apm_unregister_callback(&handle_apm_event);
+#	endif
+	printk("usb-ohci: module unloaded\n");
+}
+
+int init_module(void){
+	return ohci_init();
+}
+#endif //MODULE
+
+

@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug  3 13:49:59 1997
- * Modified at:   Thu Jan  7 14:17:31 1999
+ * Modified at:   Mon May 10 22:12:56 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997, 1998 Dag Brattli <dagb@cs.uit.no>
+ *     Copyright (c) 1997, 1998-1999 Dag Brattli <dagb@cs.uit.no>
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -49,13 +49,13 @@
 
 #define FRAME_MAX_SIZE 2048
 
-void irport_close( int iobase);
-int  irport_open( int iobase);
-int  irport_detect(struct irda_device *idev);
+void irport_start(int iobase);
+void irport_stop(int iobase);
+int  irport_probe(int iobase);
 
-void irport_change_speed( int iobase, int speed);
+void irport_change_speed(struct irda_device *idev, int speed);
 void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
-int  irport_hard_xmit( struct sk_buff *skb, struct device *dev);
+int  irport_hard_xmit(struct sk_buff *skb, struct device *dev);
 
 #endif

@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Sun Feb  7 01:57:33 1999
+ * Modified at:   Mon May 10 13:22:23 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *  
- *     Copyright (c) 1997 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -33,8 +33,6 @@
 #include <net/irda/irqueue.h>
 #include <net/irda/irda_device.h>
 
-#include <net/irda/dongle.h>
-
 #define IRTTY_IOC_MAGIC 'e'
 #define IRTTY_IOCTDONGLE  _IO(IRTTY_IOC_MAGIC, 1)
 #define IRTTY_IOC_MAXNR   1
@@ -43,28 +41,21 @@
 #define N_IRDA         11   /* This one should go in </asm/termio.h> */
 #endif
 
-struct dongle_q {
-	QUEUE q;
-
-	struct dongle *dongle;
-};
-
 struct irtty_cb {
 	QUEUE q; /* Must be first */
-
-/* 	char name[16]; */
 
 	int	magic;
 	
 	struct  tty_struct  *tty;  /* Ptr to TTY structure */
 	struct  irda_device idev;
-
-	struct dongle_q *dongle_q; /* Has this tty got a dongle attached? */
 };
  
-int irtty_register_dongle( struct dongle *dongle);
-void irtty_unregister_dongle( struct dongle *dongle);
-
-void irtty_set_dtr_rts(struct tty_struct *tty, int dtr, int rts);
+int irtty_register_dongle(struct dongle *dongle);
+void irtty_unregister_dongle(struct dongle *dongle);
 
 #endif
+
+
+
+
+

@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Fri Apr 23 09:15:07 1999
+ * Modified at:   Sun May  9 11:01:34 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -52,7 +52,7 @@
 
 #define LMP_HEADER          2    /* Dest LSAP + Source LSAP */
 #define LMP_CONTROL_HEADER  4
-#define LMP_MAX_HEADER      (LAP_HEADER+LMP_HEADER)
+#define LMP_MAX_HEADER      (LMP_CONTROL_HEADER+LAP_MAX_HEADER)
 
 #define LM_MAX_CONNECTIONS  10
 

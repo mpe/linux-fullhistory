@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Thu Apr 22 12:23:22 1999
+ * Modified at:   Thu May  6 13:42:38 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -97,7 +97,7 @@ static int irlan_client_state_idle(struct irlan_cb *self, IRLAN_EVENT event,
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == IRLAN_MAGIC, return -1;);
 	
-	switch(event) {
+	switch (event) {
 	case IRLAN_DISCOVERY_INDICATION:
 		/* Get some values from peer IAS */
 		iriap_getvaluebyclass_request(
@@ -152,7 +152,7 @@ static int irlan_client_state_query(struct irlan_cb *self, IRLAN_EVENT event,
 		irlan_next_client_state(self, IRLAN_IDLE);
 
 		/* Give the client a kick! */
-		if ((self->access_type == ACCESS_PEER) && 
+		if ((self->provider.access_type == ACCESS_PEER) && 
 		    (self->provider.state != IRLAN_IDLE))
 			irlan_client_wakeup(self, self->saddr, self->daddr);
 		break;
@@ -222,7 +222,7 @@ static int irlan_client_state_info(struct irlan_cb *self, IRLAN_EVENT event,
 
 	ASSERT(self != NULL, return -1;);
 	
-	switch(event) {
+	switch (event) {
 	case IRLAN_DATA_INDICATION:
 		ASSERT(skb != NULL, return -1;);
 	
@@ -314,7 +314,7 @@ static int irlan_client_state_open(struct irlan_cb *self, IRLAN_EVENT event,
 	  	ASSERT(self->dtsap_sel_data != 0, return -1;);
 
 		/* Check which access type we are dealing with */
-		switch(self->access_type) {
+		switch (self->client.access_type) {
 		case ACCESS_PEER:
 		    if (self->provider.state == IRLAN_OPEN) {
 			    

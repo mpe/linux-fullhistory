@@ -2,6 +2,9 @@
 
 /*
  *  Copyright (C) 1995-1997  Jan "Yenya" Kasprzak <kas@fi.muni.cz>
+ * 
+ * 	5/25/1999 : Marcelo Tosatti <marcelo@conectiva.com.br>
+ * 		fixed a deadlock in cosa_sppp_open 
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -599,6 +602,7 @@ static int cosa_sppp_open(struct device *d)
 	if (chan->usage != 0) {
 		printk(KERN_WARNING "%s: sppp_open called with usage count %d\n",
 			chan->name, chan->usage);
+		spin_unlock_irqrestore(&chan->cosa->lock, flags);
 		return -EBUSY;
 	}
 	chan->setup_rx = sppp_setup_rx;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 31 10:12:43 1998
- * Modified at:   Thu Apr 22 12:08:04 1999
+ * Modified at:   Tue May 11 12:42:26 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       af_netroom.c, af_ax25.c, af_rose.c, af_x25.c etc.
  * 
@@ -30,6 +30,7 @@
 #include <linux/if_arp.h>
 #include <linux/net.h>
 #include <linux/irda.h>
+#include <linux/poll.h>
 
 #include <asm/uaccess.h>
 
@@ -46,11 +47,12 @@ extern void irda_cleanup(void);
 extern int  irlap_driver_rcv(struct sk_buff *, struct device *, 
 			     struct packet_type *);
 
-static struct proto_ops irda_proto_ops;
+static struct proto_ops irda_stream_ops;
+static struct proto_ops irda_dgram_ops;
 static hashbin_t *cachelog = NULL;
 static DECLARE_WAIT_QUEUE_HEAD(discovery_wait); /* Wait for discovery */
 
-#define IRDA_MAX_HEADER (TTP_HEADER+LMP_HEADER+LAP_HEADER)
+#define IRDA_MAX_HEADER (TTP_MAX_HEADER)
 
 /*
  * Function irda_data_indication (instance, sap, skb)
@@ -121,7 +123,8 @@ static void irda_disconnect_indication(void *instance, void *sap,
  */
 static void irda_connect_confirm(void *instance, void *sap, 
 				 struct qos_info *qos,
-				 __u32 max_sdu_size, struct sk_buff *skb)
+				 __u32 max_sdu_size, __u8 max_header_size, 
+				 struct sk_buff *skb)
 {
 	struct irda_sock *self;
 	struct sock *sk;
@@ -130,12 +133,27 @@ static void irda_connect_confirm(void *instance, void *sap,
 
 	self = (struct irda_sock *) instance;
 
+	/* How much header space do we need to reserve */
+	self->max_header_size = max_header_size;
+
+	/* IrTTP max SDU size in transmit direction */
 	self->max_sdu_size_tx = max_sdu_size;
+
+	/* Find out what the largest chunk of data that we can transmit is */
+	if (max_sdu_size == SAR_DISABLE)
+		self->max_data_size = qos->data_size.value - max_header_size;
+	else
+		self->max_data_size = max_sdu_size;
+
+	DEBUG(0, __FUNCTION__ "(), max_data_size=%d\n", self->max_data_size);
+
 	memcpy(&self->qos_tx, qos, sizeof(struct qos_info));
 
 	sk = self->sk;
 	if (sk == NULL)
 		return;
+
+	skb_queue_tail(&sk->receive_queue, skb);
 
 	/* We are now connected! */
 	sk->state = TCP_ESTABLISHED;
@@ -150,7 +168,7 @@ static void irda_connect_confirm(void *instance, void *sap,
  */
 static void irda_connect_indication(void *instance, void *sap, 
 				    struct qos_info *qos, __u32 max_sdu_size,
-				    struct sk_buff *skb)
+				    __u8 max_header_size, struct sk_buff *skb)
 {
 	struct irda_sock *self;
 	struct sock *sk;
@@ -158,8 +176,21 @@ static void irda_connect_indication(void *instance, void *sap,
 	DEBUG(1, __FUNCTION__ "()\n");
 
 	self = (struct irda_sock *) instance;
-	
-	self->max_sdu_size_tx = max_sdu_size;
+
+	/* How much header space do we need to reserve */
+	self->max_header_size = max_header_size;
+
+	/* IrTTP max SDU size in transmit direction */
+	self->max_sdu_size_tx = max_sdu_size;	
+
+	/* Find out what the largest chunk of data that we can transmit is */
+	if (max_sdu_size == SAR_DISABLE)
+		self->max_data_size = qos->data_size.value - max_header_size;
+	else
+		self->max_data_size = max_sdu_size;
+
+	DEBUG(0, __FUNCTION__ "(), max_data_size=%d\n", self->max_data_size);
+
 	memcpy(&self->qos_tx, qos, sizeof(struct qos_info));
 
 	sk = self->sk;
@@ -187,12 +218,12 @@ void irda_connect_response(struct irda_sock *self)
 
 	skb = dev_alloc_skb(64);
 	if (skb == NULL) {
-		DEBUG( 0, __FUNCTION__ "() Could not allocate sk_buff!\n");
+		DEBUG(0, __FUNCTION__ "() Unable to allocate sk_buff!\n");
 		return;
 	}
 
 	/* Reserve space for MUX_CONTROL and LAP header */
-	skb_reserve(skb, TTP_HEADER+LMP_CONTROL_HEADER+LAP_HEADER);
+	skb_reserve(skb, IRDA_MAX_HEADER);
 
 	irttp_connect_response(self->tsap, self->max_sdu_size_rx, skb);
 }
@@ -514,10 +545,13 @@ static int irda_accept(struct socket *sock, struct socket *newsock, int flags)
 	new->stsap_sel = new->tsap->stsap_sel;
 	new->dtsap_sel = new->tsap->dtsap_sel;
 	new->saddr = irttp_get_saddr(new->tsap);
-	new->saddr = irttp_get_saddr(new->tsap);
+	new->daddr = irttp_get_daddr(new->tsap);
 
 	new->max_sdu_size_tx = self->max_sdu_size_tx;
 	new->max_sdu_size_rx = self->max_sdu_size_rx;
+	new->max_data_size   = self->max_data_size;
+	new->max_header_size = self->max_header_size;
+
 	memcpy(&new->qos_tx, &self->qos_tx, sizeof(struct qos_info));
 
 	/* Clean up the original one to keep it in listen state */
@@ -669,7 +703,7 @@ static int irda_create(struct socket *sock, int protocol)
 
 	sock_init_data(sock, sk);
 
-	sock->ops    = &irda_proto_ops;
+	sock->ops    = &irda_stream_ops;
 	sk->protocol = protocol;
 
 	/* Register as a client with IrLMP */
@@ -786,12 +820,20 @@ static int irda_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			return -ENOTCONN;
 	}
 
-	skb = sock_alloc_send_skb(sk, len + IRDA_MAX_HEADER, 0, 
+	/* Check that we don't send out to big frames */
+	if (len > self->max_data_size) {
+		DEBUG(0, __FUNCTION__ "(), Warning to much data! "
+		      "Chopping frame from %d to %d bytes!\n", len, 
+		      self->max_data_size);
+		len = self->max_data_size;
+	}
+
+	skb = sock_alloc_send_skb(sk, len + self->max_header_size, 0, 
 				  msg->msg_flags & MSG_DONTWAIT, &err);
 	if (!skb)
 		return -ENOBUFS;
 
-	skb_reserve(skb, IRDA_MAX_HEADER);
+	skb_reserve(skb, self->max_header_size);
 	
 	DEBUG(4, __FUNCTION__ "(), appending user data\n");
 	asmptr = skb->h.raw = skb_put(skb, len);
@@ -815,8 +857,8 @@ static int irda_sendmsg(struct socket *sock, struct msghdr *msg, int len,
  *    Try to receive message and copy it to user
  *
  */
-static int irda_recvmsg(struct socket *sock, struct msghdr *msg, int size,
-			int flags, struct scm_cookie *scm)
+static int irda_recvmsg_dgram(struct socket *sock, struct msghdr *msg, 
+			      int size, int flags, struct scm_cookie *scm)
 {
 	struct irda_sock *self;
 	struct sock *sk = sock->sk;
@@ -862,6 +904,161 @@ static int irda_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 }
 
 /*
+ * Function irda_data_wait (sk)
+ *
+ *    Sleep until data has arrive. But check for races..
+ *
+ */
+static void irda_data_wait(struct sock *sk)
+{
+	if (!skb_peek(&sk->receive_queue)) {
+		sk->socket->flags |= SO_WAITDATA;
+		interruptible_sleep_on(sk->sleep);
+		sk->socket->flags &= ~SO_WAITDATA;
+	}
+}
+
+/*
+ * Function irda_recvmsg_stream (sock, msg, size, flags, scm)
+ *
+ *    
+ *
+ */
+static int irda_recvmsg_stream(struct socket *sock, struct msghdr *msg, 
+			       int size, int flags, struct scm_cookie *scm)
+{
+	struct irda_sock *self;
+	struct sock *sk = sock->sk;
+	int noblock = flags & MSG_DONTWAIT;
+	int copied = 0;
+	int target = 1;
+
+	DEBUG(3, __FUNCTION__ "()\n");
+
+	self = sk->protinfo.irda;
+	ASSERT(self != NULL, return -1;);
+
+	if (sock->flags & SO_ACCEPTCON) 
+		return(-EINVAL);
+
+	if (flags & MSG_OOB)
+		return -EOPNOTSUPP;
+
+	if (flags & MSG_WAITALL)
+		target = size;
+		
+		
+	msg->msg_namelen = 0;
+
+	/* Lock the socket to prevent queue disordering
+	 * while sleeps in memcpy_tomsg
+	 */
+/* 	down(&self->readsem); */
+
+	do {
+		int chunk;
+		struct sk_buff *skb;
+
+		skb=skb_dequeue(&sk->receive_queue);
+		if (skb==NULL) {
+			if (copied >= target)
+				break;
+			
+			/*
+			 *	POSIX 1003.1g mandates this order.
+			 */
+			
+			if (sk->err) {
+				/* up(&self->readsem); */
+				return sock_error(sk);
+			}
+
+			if (sk->shutdown & RCV_SHUTDOWN)
+				break;
+
+		/* 	up(&self->readsem); */
+
+			if (noblock)
+				return -EAGAIN;
+			irda_data_wait(sk);
+			if (signal_pending(current))
+				return -ERESTARTSYS;
+		/* 	down(&self->readsem); */
+			continue;
+		}
+
+		/* Never glue messages from different writers */
+/* 		if (check_creds && */
+/* 		    memcmp(UNIXCREDS(skb), &scm->creds, sizeof(scm->creds)) != 0) */
+/* 		{ */
+/* 			skb_queue_head(&sk->receive_queue, skb); */
+/* 			break; */
+/* 		} */
+
+		chunk = min(skb->len, size);
+		if (memcpy_toiovec(msg->msg_iov, skb->data, chunk)) {
+			skb_queue_head(&sk->receive_queue, skb);
+			if (copied == 0)
+				copied = -EFAULT;
+			break;
+		}
+		copied += chunk;
+		size -= chunk;
+
+ 		/* Copy credentials */
+/* 		scm->creds = *UNIXCREDS(skb); */
+/* 		check_creds = 1; */
+
+		/* Mark read part of skb as used */
+		if (!(flags & MSG_PEEK)) {
+			skb_pull(skb, chunk);
+
+/* 			if (UNIXCB(skb).fp) */
+/* 				unix_detach_fds(scm, skb); */
+
+			/* put the skb back if we didn't use it up.. */
+			if (skb->len) {
+				DEBUG(1, __FUNCTION__ "(), back on q!\n");
+				skb_queue_head(&sk->receive_queue, skb);
+				break;
+			}
+
+			kfree_skb(skb);
+			
+/* 			if (scm->fp) */
+/* 				break; */
+		} else {
+			DEBUG(0, __FUNCTION__ "() questionable!?\n");
+			/* It is questionable, see note in unix_dgram_recvmsg. */
+/* 			if (UNIXCB(skb).fp) */
+/* 				scm->fp = scm_fp_dup(UNIXCB(skb).fp); */
+
+			/* put message back and return */
+			skb_queue_head(&sk->receive_queue, skb);
+			break;
+		}
+	} while (size);
+
+	/*
+	 *  Check if we have previously stopped IrTTP and we know
+	 *  have more free space in our rx_queue. If so tell IrTTP
+	 *  to start delivering frames again before our rx_queue gets
+	 *  empty
+	 */
+	if (self->rx_flow == FLOW_STOP) {
+		if ((atomic_read(&sk->rmem_alloc) << 2) <= sk->rcvbuf) {
+			DEBUG(2, __FUNCTION__ "(), Starting IrTTP\n");
+			self->rx_flow = FLOW_START;
+			irttp_flow_request(self->tsap, FLOW_START);
+		}
+	}
+
+	/* up(&self->readsem); */
+
+	return copied;
+}
+
+/*
  * Function irda_shutdown (sk, how)
  *
  *    
@@ -875,19 +1072,45 @@ static int irda_shutdown( struct socket *sk, int how)
         return -EOPNOTSUPP;
 }
 
-
 /*
  * Function irda_poll (file, sock, wait)
  *
  *    
  *
  */
-unsigned int irda_poll(struct file *file, struct socket *sock, 
-		       struct poll_table_struct *wait)
+static unsigned int irda_poll(struct file * file, struct socket *sock, 
+			      poll_table *wait)
 {
-	DEBUG(0, __FUNCTION__ "()\n");
+	struct sock *sk = sock->sk;
+	unsigned int mask;
 
-	return 0;
+	DEBUG(1, __FUNCTION__ "()\n");
+
+	poll_wait(file, sk->sleep, wait);
+	mask = 0;
+
+	/* exceptional events? */
+	if (sk->err)
+		mask |= POLLERR;
+	if (sk->shutdown & RCV_SHUTDOWN)
+		mask |= POLLHUP;
+
+	/* readable? */
+	if (!skb_queue_empty(&sk->receive_queue))
+		mask |= POLLIN | POLLRDNORM;
+
+	/* Connection-based need to check for termination and startup */
+	if (sk->type == SOCK_STREAM && sk->state==TCP_CLOSE)
+		mask |= POLLHUP;
+
+	/*
+	 * we set writable also when the other side has shut down the
+	 * connection. This prevents stuck sockets.
+	 */
+	if (sk->sndbuf - (int)atomic_read(&sk->wmem_alloc) >= MIN_WRITE_SPACE)
+			mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
+
+	return mask;
 }
 
 /*
@@ -947,6 +1170,7 @@ static int irda_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		return -EINVAL;
 		
 	default:
+		DEBUG(0, __FUNCTION__ "(), doing device ioctl!\n");
 		return dev_ioctl(cmd, (void *) arg);
 	}
 
@@ -1082,13 +1306,7 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 			return -EFAULT;
 		break;
 	case IRTTP_MAX_SDU_SIZE:
-		if (self->max_sdu_size_tx != SAR_DISABLE)
-			val = self->max_sdu_size_tx;
-		else
-			/* SAR is disabled, so use the IrLAP data size
-			 * instead */
-			val = self->qos_tx.data_size.value - IRDA_MAX_HEADER;
-
+		val = self->max_data_size;
 		DEBUG(0, __FUNCTION__ "(), getting max_sdu_size = %d\n", val);
 		len = sizeof(int);
 		if (put_user(len, optlen))
@@ -1110,7 +1328,7 @@ static struct net_proto_family irda_family_ops =
 	irda_create
 };
 
-static struct proto_ops irda_proto_ops = {
+static struct proto_ops irda_stream_ops = {
 	PF_IRDA,
 	
 	sock_no_dup,
@@ -1128,7 +1346,28 @@ static struct proto_ops irda_proto_ops = {
 	irda_getsockopt,
 	sock_no_fcntl,
 	irda_sendmsg,
-	irda_recvmsg
+	irda_recvmsg_stream
+};
+
+static struct proto_ops irda_dgram_ops = {
+	PF_IRDA,
+	
+	sock_no_dup,
+	irda_release,
+	irda_bind,
+	irda_connect,
+	sock_no_socketpair,
+	irda_accept,
+	irda_getname,
+	datagram_poll,
+	irda_ioctl,
+	irda_listen,
+	irda_shutdown,
+	irda_setsockopt,
+	irda_getsockopt,
+	sock_no_fcntl,
+	irda_sendmsg,
+	irda_recvmsg_dgram
 };
 
 /*
@@ -1215,7 +1454,7 @@ void irda_proto_cleanup(void)
 	irda_packet_type.type = htons(ETH_P_IRDA);
         dev_remove_pack(&irda_packet_type);
 
-        unregister_netdevice_notifier( &irda_dev_notifier);
+        unregister_netdevice_notifier(&irda_dev_notifier);
 	
 	sock_unregister(PF_IRDA);
 	irda_cleanup();
