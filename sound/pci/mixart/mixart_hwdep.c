@@ -546,6 +546,7 @@ int snd_mixart_setup_firmware(mixart_mgr_t *mgr)
 		release_firmware(fw_entry);
 		if (err < 0)
 			return err;
+		mgr->dsp_loaded |= 1 << i;
 	}
 	return 0;
 }
@@ -573,7 +574,7 @@ static int mixart_hwdep_dsp_status(snd_hwdep_t *hw, snd_hwdep_dsp_status_t *info
 	strcpy(info->id, "miXart");
         info->num_dsps = MIXART_HARDW_FILES_MAX_INDEX;
 
-	if (mgr->hwdep->dsp_loaded & (1 <<  MIXART_MOTHERBOARD_ELF_INDEX))
+	if (mgr->dsp_loaded & (1 <<  MIXART_MOTHERBOARD_ELF_INDEX))
 		info->chip_ready = 1;
 
 	info->version = MIXART_DRIVER_VERSION;
@@ -599,6 +600,9 @@ static int mixart_hwdep_dsp_load(snd_hwdep_t *hw, snd_hwdep_dsp_image_t *dsp)
 	}
 	err = mixart_dsp_load(mgr, dsp->index, &fw);
 	vfree(fw.data);
+	if (err < 0)
+		return err;
+	mgr->dsp_loaded |= 1 << dsp->index;
 	return err;
 }
 
@@ -619,8 +623,7 @@ int snd_mixart_setup_firmware(mixart_mgr_t *mgr)
 	hw->ops.dsp_load = mixart_hwdep_dsp_load;
 	hw->exclusive = 1;
 	sprintf(hw->name,  SND_MIXART_HWDEP_ID);
-	mgr->hwdep = hw;
-	mgr->hwdep->dsp_loaded = 0;
+	mgr->dsp_loaded = 0;
 
 	return snd_card_register(mgr->chip[0]->card);
 }
