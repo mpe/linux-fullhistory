@@ -260,11 +260,9 @@ static inline void borken_wait(void) {
   register int count;
   for (count = borken_calibration; count && (STATUS & STAT_REQ); 
   	--count);
-  if (count)
 #if (DEBUG & DEBUG_BORKEN) 
+  if (count)
   	printk("scsi%d : borken timeout\n", hostno);
-#else
-	;
 #endif 
 }
 

@@ -20,10 +20,19 @@
  * General Public License for more details.
  
  *
- * $Id: aha152x.c,v 1.2 1994/07/03 12:56:36 root Exp $
+ * $Id: aha152x.c,v 1.4 1994/09/12 11:33:01 root Exp $
  *
 
  * $Log: aha152x.c,v $
+ * Revision 1.4  1994/09/12  11:33:01  root
+ * - irqaction to request_irq
+ * - abortion updated
+ *
+ * Revision 1.3  1994/08/04  13:53:05  root
+ * - updates for mid-level-driver changes
+ * - accept unexpected BUSFREE phase as error condition
+ * - parity check now configurable
+ *
  * Revision 1.2  1994/07/03  12:56:36  root
  * - cleaned up debugging code
  * - more tweaking on reset delays
@@ -133,19 +142,20 @@
  AUTOCONF       : use configuration the controller reports (only 152x)
  IRQ            : override interrupt channel (9,10,11 or 12) (default 11)
  SCSI_ID        : override scsiid of AIC-6260 (0-7) (default 7)
- RECONNECT      : override target dis-/reconnection/multiple outstanding commands
+ RECONNECT      : override target dis-/reconnection/multiple outstanding commands (default on)
+ PARITY		: override parity check (default on)
  SKIP_BIOSTEST  : Don't test for BIOS signature (AHA-1510 or disabled BIOS)
  PORTBASE       : Force port base. Don't try to probe
 
 
  LILO COMMAND LINE OPTIONS:
 
- aha152x=<PORTBASE>,<IRQ>,<SCSI-ID>,<RECONNECT>
+ aha152x=<PORTBASE>[,<IRQ>[,<SCSI-ID>[,<RECONNECT>[,<PARITY>]]]]
 
  The normal configuration can be overridden by specifying a command line.
  When you do this, the BIOS test is skipped. Entered values have to be
  valid (known). Don't use values that aren't support under normal operation.
- If you think that you need other value: contact me.
+ If you think that you need other values: contact me.
 
 
  REFERENCES USED:
@@ -175,7 +185,7 @@
 #include <asm/io.h>
 #include "../block/blk.h"
 #include "scsi.h"
-#include "sd.h" /* Reqd for biosparam definition */
+#include "sd.h"
 #include "hosts.h"
 #include "constants.h"
 #include <asm/system.h>
@@ -200,6 +210,9 @@
 #endif
 #if !defined(RECONNECT)
 #error undefined RECONNECT; define AUTOCONF or RECONNECT
+#endif
+#if !defined(PARITY)
+#error undefined PARITY; define AUTOCONF or PARITY
 #endif
 #endif
 
@@ -250,6 +263,7 @@ static char *aha152x_id = AHA152X_REVID;
 static int port_base      = 0;
 static int this_host      = 0;
 static int can_disconnect = 0;
+static int can_doparity   = 0;
 static int commands       = 0;
 
 /* set by aha152x_setup according to the command line */
@@ -258,6 +272,7 @@ static int setup_portbase  = 0;
 static int setup_irq       = 0;
 static int setup_scsiid    = 0;
 static int setup_reconnect = 0;
+static int setup_doparity  = 0;
 
 static char *setup_str = (char *)NULL;
 
@@ -474,13 +489,11 @@ void aha152x_setup( char *str, int *ints)
   setup_called=ints[0];
   setup_str=str;
 
-  if(ints[0] != 4)
-    return; 
-
-  setup_portbase  = ints[1];
-  setup_irq       = ints[2];
-  setup_scsiid    = ints[3];
-  setup_reconnect = ints[4];
+  setup_portbase  = ints[0] >= 1 ? ints[1] : 0x340;
+  setup_irq       = ints[0] >= 2 ? ints[2] : 11;
+  setup_scsiid	  = ints[0] >= 3 ? ints[3] : 7;
+  setup_reconnect = ints[0] >= 4 ? ints[4] : 1;
+  setup_doparity  = ints[0] >= 5 ? ints[5] : 1;
 }
 
 /*
@@ -514,10 +527,10 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
     {
       printk("aha152x: processing commandline: ");
    
-      if(setup_called!=4)
+      if(setup_called>5)
         {
           printk("\naha152x: %s\n", setup_str );
-          printk("aha152x: usage: aha152x=<PORTBASE>,<IRQ>,<SCSI ID>,<RECONNECT>\n");
+          printk("aha152x: usage: aha152x=<PORTBASE>[,<IRQ>[,<SCSI ID>[,<RECONNECT>[,<PARITY>]]]]\n");
           panic("aha152x panics in line %d", __LINE__);
         }
 
@@ -525,6 +538,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       interrupt_level = setup_irq;
       this_host       = setup_scsiid;
       can_disconnect  = setup_reconnect;
+      can_doparity    = setup_doparity;
 
       for( i=0; i<PORT_COUNT && (port_base != ports[i]); i++)
         ;
@@ -559,6 +573,12 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       if( (can_disconnect < 0) || (can_disconnect > 1) )
         {
           printk("reconnect %d should be 0 or 1\n", can_disconnect);
+          panic("aha152x panics in line %d", __LINE__);
+        }
+
+      if( (can_doparity < 0) || (can_doparity > 1) )
+        {
+          printk("parity %d should be 0 or 1\n", can_doparity);
           panic("aha152x panics in line %d", __LINE__);
         }
       printk("ok\n");
@@ -605,6 +625,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       interrupt_level = ints[conf.cf_irq];
       this_host       = conf.cf_id;
       can_disconnect  = conf.cf_tardisc;
+      can_doparity    = !conf.cf_parity;
 
       printk("auto configuration: ok, ");
 
@@ -620,6 +641,10 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 
 #if defined(RECONNECT)
       can_disconnect=RECONNECT;
+#endif
+
+#if defined(PARITY)
+      can_doparity=PARITY;
 #endif
     }
 
@@ -661,8 +686,12 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 
   aha152x_reset(NULL);
 
-  printk("aha152x: vital data: PORTBASE=0x%03x, IRQ=%d, SCSI ID=%d, reconnect=%s, parity=enabled\n",
-         port_base, interrupt_level, this_host, can_disconnect ? "enabled" : "disabled" );
+  printk("aha152x: vital data: PORTBASE=0x%03x, IRQ=%d, SCSI ID=%d, reconnect=%s, parity=%s\n",
+         port_base,
+         interrupt_level,
+         this_host,
+         can_disconnect ? "enabled" : "disabled",
+         can_doparity ? "enabled" : "disabled");
 
   snarf_region(port_base, TEST-SCSISEQ);        /* Register */
   
@@ -809,11 +838,14 @@ int aha152x_abort( Scsi_Cmnd *SCpnt)
       return SCSI_ABORT_SUCCESS;
     }
 
-  if (current_SC)
+  if (!current_SC && TESTLO(SSTAT1, BUSFREE))
+    printk("bus busy w/o current command, ");
+
+  if (current_SC==SCpnt)
     if( TESTLO(SSTAT1, BUSFREE) ) {
-       /* fail abortion, if current command is on the bus */
-       sti();
-       return SCSI_ABORT_BUSY;
+      /* fail abortion, if current command is on the bus */
+      sti();
+      return SCSI_ABORT_BUSY;
     }
     else
     { 
@@ -831,10 +863,8 @@ int aha152x_abort( Scsi_Cmnd *SCpnt)
        prev=ptr, ptr=(Scsi_Cmnd *) ptr->host_scribble)
     ;
 
-  if(ptr && TESTLO(SSTAT1, BUSFREE) )
-    printk("bus busy but no current command, ");
-
-  if(ptr && TESTHI(SSTAT1, BUSFREE) )
+  if(ptr)
+    if( TESTHI(SSTAT1, BUSFREE) )
     {
       /* dequeue */
       if(prev)
@@ -863,10 +893,14 @@ int aha152x_abort( Scsi_Cmnd *SCpnt)
       sleep_on( &abortion_complete );
       return abort_result;
     }
-  else
-    printk("aha152x: bus busy but no current command\n");
+  else {
+      /* fail abortion, if we can't abort the disconnected command */
+      sti();
+      return SCSI_ABORT_BUSY;
+    }
 
   /* command wasn't found */
+  printk("command not found\n");
   sti();
   return SCSI_ABORT_NOT_RUNNING;
 }
@@ -1189,7 +1223,7 @@ void aha152x_intr( int irqno )
       sti();
 
       SETPORT( SIMODE0, 0 );
-      SETPORT( SIMODE1, ENPHASEMIS );
+      SETPORT( SIMODE1, ENPHASEMIS|ENBUSFREE );
 #if defined(DEBUG_RACE)
       leave_driver("(reselected) intr");
 #endif
@@ -1221,7 +1255,7 @@ void aha152x_intr( int irqno )
           SETPORT( SCSIID, (this_host << OID_) | current_SC->target );
 
           /* Enable interrupts for SELECTION OUT DONE and SELECTION OUT INITIATED */
-          SETPORT( SXFRCTL1, ENSPCHK|ENSTIMER);
+          SETPORT( SXFRCTL1, can_doparity ? (ENSPCHK|ENSTIMER) : ENSTIMER);
 
           /* enable interrupts for SELECTION OUT DONE and SELECTION TIME OUT */
           SETPORT( SIMODE0, ENSELDO | (disconnected_SC ? ENSELDI : 0) );
@@ -1305,7 +1339,7 @@ void aha152x_intr( int irqno )
             SETPORT( SCSISIG, P_MSGO );
 
             SETPORT( SIMODE0, 0 );
-            SETPORT( SIMODE1, ENREQINIT );
+            SETPORT( SIMODE1, ENREQINIT|ENBUSFREE );
             SETBITS( DMACNTRL0, INTEN);
             return;
           }
@@ -1397,7 +1431,7 @@ void aha152x_intr( int irqno )
         CLRBITS( SXFRCTL0, ENDMA);
 
         SETPORT( SIMODE0, 0 );
-        SETPORT( SIMODE1, ENPHASEMIS|ENREQINIT );
+        SETPORT( SIMODE1, ENPHASEMIS|ENREQINIT|ENBUSFREE );
 
         /* wait for data latch to become ready or a phase change */
         while( TESTLO( DMASTAT, INTSTAT ) )
@@ -1456,7 +1490,7 @@ void aha152x_intr( int irqno )
   
           /* missing phase raises INTSTAT */
           SETPORT( SIMODE0, 0 );
-          SETPORT( SIMODE1, ENPHASEMIS );
+          SETPORT( SIMODE1, ENPHASEMIS|ENBUSFREE );
   
 #if defined(DEBUG_CMD)
           printk("waiting, ");
@@ -1673,7 +1707,7 @@ void aha152x_intr( int irqno )
       SETPORT( SXFRCTL0, CH1);
 
       SETPORT( SIMODE0, 0 );
-      SETPORT( SIMODE1, ENREQINIT );
+      SETPORT( SIMODE1, ENREQINIT|ENBUSFREE );
 
       if( TESTHI( SSTAT1, PHASEMIS ) )
 	printk("aha152x: passing STATUS phase");
@@ -1870,7 +1904,7 @@ void aha152x_intr( int irqno )
         SETPORT(SXFRCTL0, SCSIEN|DMAEN|CH1);
  
         SETPORT( SIMODE0, 0 );
-        SETPORT( SIMODE1, ENPHASEMIS );
+        SETPORT( SIMODE1, ENPHASEMIS|ENBUSFREE );
 
         /* while current buffer is not empty or
            there are more buffers to transfer */
@@ -2027,7 +2061,7 @@ void aha152x_intr( int irqno )
 
       SETPORT(SIMODE0, disconnected_SC ? ENSELDI : 0 );
       SETPORT(SIMODE1, issue_SC ? ENBUSFREE : 0);
-      SETPORT( SCSISEQ, disconnected_SC ? ENRESELI : 0 );
+      SETPORT(SCSISEQ, disconnected_SC ? ENRESELI : 0 );
 
       SETBITS( DMACNTRL0, INTEN );
 
@@ -2046,7 +2080,7 @@ void aha152x_intr( int irqno )
     current_SC->SCp.phase |= 1<<16 ;
 
   SETPORT( SIMODE0, 0 );
-  SETPORT( SIMODE1, ENPHASEMIS );
+  SETPORT( SIMODE1, ENPHASEMIS|ENBUSFREE );
 #if defined(DEBUG_INTR)
   disp_enintr();
 #endif

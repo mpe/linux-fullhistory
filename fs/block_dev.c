@@ -19,7 +19,7 @@ extern int *blksize_size[];
 
 int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 {
-	int blocksize, blocksize_bits, i, j;
+	int blocksize, blocksize_bits, i, j, buffercount,write_error;
 	int block, blocks;
 	loff_t offset;
 	int chars;
@@ -29,9 +29,10 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 	int blocks_per_cluster;
 	unsigned int size;
 	unsigned int dev;
-	struct buffer_head * bh;
+	struct buffer_head * bh, *bufferlist[NBUF];
 	register char * p;
 
+	write_error = buffercount = 0;
 	dev = inode->i_rdev;
 	if ( is_read_only( inode->i_rdev ))
 		return -EPERM;
@@ -118,13 +119,35 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 		buf += chars;
 		bh->b_uptodate = 1;
 		mark_buffer_dirty(bh, 0);
-		if (filp->f_flags & O_SYNC) {
-			ll_rw_block(WRITE, 1, &bh);
-			wait_on_buffer(bh);
+		if (filp->f_flags & O_SYNC)
+			bufferlist[buffercount++] = bh;
+		else
+			brelse(bh);
+		if (buffercount == NBUF){
+			ll_rw_block(WRITE, buffercount, bufferlist);
+			for(i=0; i<buffercount; i++){
+				wait_on_buffer(bufferlist[i]);
+				if (!bufferlist[i]->b_uptodate)
+					write_error=1;
+				brelse(bufferlist[i]);
+			}
+			buffercount=0;
 		}
-		brelse(bh);
+		if(write_error)
+			break;
 	}
+	if ( buffercount ){
+		ll_rw_block(WRITE, buffercount, bufferlist);
+		for(i=0; i<buffercount; i++){
+			wait_on_buffer(bufferlist[i]);
+			if (!bufferlist[i]->b_uptodate)
+				write_error=1;
+			brelse(bufferlist[i]);
+		}
+	}		
 	filp->f_reada = 1;
+	if(write_error)
+		return -EIO;
 	return written;
 }
 

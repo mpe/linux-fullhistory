@@ -107,17 +107,32 @@ static inline int mprotect_fixup_middle(struct vm_area_struct * vma,
 	unsigned long start, unsigned long end,
 	int newflags, int prot)
 {
-	int error;
-	unsigned long tmpflags, tmpprot;
+	struct vm_area_struct * left, * right;
 
-	tmpflags = vma->vm_flags;
-	tmpprot = vma->vm_page_prot;
+	left = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	if (!left)
+		return -ENOMEM;
+	right = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	if (!right) {
+		kfree(left);
+		return -ENOMEM;
+	}
+	*left = *vma;
+	*right = *vma;
+	left->vm_end = start;
+	vma->vm_start = start;
+	vma->vm_end = end;
+	right->vm_start = end;
+	vma->vm_offset += vma->vm_start - left->vm_start;
+	right->vm_offset += right->vm_start - left->vm_start;
 	vma->vm_flags = newflags;
 	vma->vm_page_prot = prot;
-	error = mprotect_fixup_end(vma, end, tmpflags, tmpprot);
-	if (!error)
-		error = mprotect_fixup_start(vma, start, tmpflags, tmpprot);
-	return error;
+	if (vma->vm_inode)
+		vma->vm_inode->i_count += 2;
+	insert_vm_struct(current, left);
+	insert_vm_struct(current, right);
+	merge_segments(current->mm->mmap);
+	return 0;
 }
 
 static int mprotect_fixup(struct vm_area_struct * vma, 
@@ -155,7 +170,7 @@ static int mprotect_fixup(struct vm_area_struct * vma,
 
 asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 {
-	unsigned long end;
+	unsigned long end, tmp;
 	struct vm_area_struct * vma;
 
 	if (start & ~PAGE_MASK)
@@ -188,12 +203,15 @@ asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 		if (vma->vm_end >= end)
 			return mprotect_fixup(vma, start, end, newflags);
 
-		error = mprotect_fixup(vma, start, vma->vm_end, newflags);
+		tmp = vma->vm_end;
+		error = mprotect_fixup(vma, start, tmp, newflags);
 		if (error)
 			return error;
-		start = vma->vm_end;
-		vma = vma->vm_next;
-		if (!vma || vma->vm_start != start)
-			return -EFAULT;
+		start = tmp;
+		if (vma->vm_end <= start) {
+			vma = vma->vm_next;
+			if (!vma || vma->vm_start != start)
+				return -EFAULT;
+		}
 	}
 }

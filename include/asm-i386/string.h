@@ -482,7 +482,7 @@ __asm__("cld\n\t" \
 
 #define memset(s, c, count) \
 (__builtin_constant_p(c) ? \
- __constant_c_x_memset((s),(0x01010101*(unsigned char)c),(count)) : \
+ __constant_c_x_memset((s),(0x01010101UL*(unsigned char)c),(count)) : \
  __memset((s),(c),(count)))
 
 /*

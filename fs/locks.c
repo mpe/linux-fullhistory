@@ -4,13 +4,15 @@
  *  Provide support for fcntl()'s F_GETLK, F_SETLK, and F_SETLKW calls.
  *  Doug Evans, 92Aug07, dje@sspiff.uucp.
  *
- * FIXME: two things aren't handled yet:
- *	- deadlock detection/avoidance (of dubious merit, but since it's in
- *	  the definition, I guess it should be provided eventually)
+ *  Deadlock Detection added by Kelly Carmichael, kelly@[142.24.8.65]
+ *  September 17, 1994.
+ *
+ * FIXME: one thing isn't handled yet:
  *	- mandatory locks (requires lots of changes elsewhere)
  *
  *  Edited by Kai Petzke, wpp@marie.physik.tu-berlin.de
  */
+#define DEADLOCK_DETECTION
 
 #include <asm/segment.h>
 
@@ -30,6 +32,9 @@ static int lock_it(struct file *filp, struct file_lock *caller, unsigned int fd)
 static struct file_lock *alloc_lock(struct file_lock **pos, struct file_lock *fl,
                                     unsigned int fd);
 static void free_lock(struct file_lock **fl);
+#ifdef DEADLOCK_DETECTION
+int locks_deadlocked(int my_pid,int blocked_pid);
+#endif
 
 static struct file_lock file_lock_table[NR_FILE_LOCKS];
 static struct file_lock *file_lock_free_list;
@@ -145,11 +150,13 @@ repeat:
 			/*
 			 * File is locked by another process. If this is
 			 * F_SETLKW wait for the lock to be released.
-			 * FIXME: We need to check for deadlocks here.
 			 */
 			if (cmd == F_SETLKW) {
 				if (current->signal & ~current->blocked)
 					return -ERESTARTSYS;
+#ifdef DEADLOCK_DETECTION
+				if (locks_deadlocked(file_lock.fl_owner->pid,fl->fl_owner->pid)) return -EDEADLOCK;
+#endif
 				interruptible_sleep_on(&fl->fl_wait);
 				if (current->signal & ~current->blocked)
 					return -ERESTARTSYS;
@@ -165,6 +172,36 @@ repeat:
 
 	return lock_it(filp, &file_lock, fd);
 }
+
+#ifdef DEADLOCK_DETECTION
+/*
+ * This function tests for deadlock condition before putting a process to sleep
+ * this detection scheme is recursive... we may need some test as to make it
+ * exit if the function gets stuck due to bad lock data.
+ */
+
+int locks_deadlocked(int my_pid,int blocked_pid)
+{
+	int ret_val;
+	struct wait_queue *dlock_wait;
+	struct file_lock *fl;
+	for (fl = &file_lock_table[0]; fl < file_lock_table + NR_FILE_LOCKS - 1; fl++) {
+		if (fl->fl_owner == NULL) continue;	/* not a used lock */
+		if (fl->fl_owner->pid != my_pid) continue;
+		if (fl->fl_wait == NULL) continue;	/* no queues */
+		dlock_wait = fl->fl_wait;
+		do {
+			if (dlock_wait->task != NULL) {
+				if (dlock_wait->task->pid == blocked_pid) return -EDEADLOCK;
+				ret_val = locks_deadlocked(dlock_wait->task->pid,blocked_pid);
+				if (ret_val) return -EDEADLOCK;
+			}
+			dlock_wait = dlock_wait->next;
+		} while (dlock_wait != fl->fl_wait);
+	}
+	return 0;
+}
+#endif
 
 /*
  * This function is called when the file is closed.

@@ -2,7 +2,7 @@
 #define _AHA152X_H
 
 /*
- * $Id: aha152x.h,v 1.2 1994/07/03 13:01:47 root Exp $
+ * $Id: aha152x.h,v 1.4 1994/09/12 11:32:41 root Exp $
  */
 
 #include "../block/blk.h"
@@ -22,7 +22,7 @@ int        aha152x_biosparam(Disk *, int, int*);
    (unless we support more than 1 cmd_per_lun this should do) */
 #define AHA152X_MAXQUEUE	7		
 
-#define AHA152X_REVID "Adaptec 152x SCSI driver; $Revision: 1.2 $"
+#define AHA152X_REVID "Adaptec 152x SCSI driver; $Revision: 1.4 $"
 
 /* Initial value of Scsi_Host entry */
 #define AHA152X       { /* next */		NULL,			    \

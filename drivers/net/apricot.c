@@ -188,20 +188,18 @@ static void i596_interrupt(int reg_ptr);
 static int i596_close(struct device *dev);
 static struct enet_statistics *i596_get_stats(struct device *dev);
 static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd);
-static void i596_cleanup_cmd(struct i596_private *lp);
 static void print_eth(char *);
 #ifdef HAVE_MULTICAST
 static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 #endif
 
 
-
 static inline void
 init_rx_bufs(struct device *dev)
 {
     struct i596_private *lp = (struct i596_private *)dev->priv;
     int i;
-    int boguscnt = 50;
+    int boguscnt = 100;
     short ioaddr = dev->base_addr;
 
     if (i596_debug > 1) printk ("%s: init_rx_bufs.\n", dev->name);
@@ -249,7 +247,7 @@ init_i596_mem(struct device *dev)
 {
     struct i596_private *lp = (struct i596_private *)dev->priv;
     short ioaddr = dev->base_addr;
-    int boguscnt = 50;
+    int boguscnt = 100;
 
     /* change the scp address */
     outw(0, ioaddr);
@@ -295,8 +293,16 @@ init_i596_mem(struct device *dev)
 
     init_rx_bufs(dev);
 
-    return;
+    boguscnt=200;
+    while (lp->scb.status, lp->scb.command)
+        if (--boguscnt == 0)
+	{
+	    printk("i82596 init timed out with status %4.4x, cmd %4.4x.\n",
+		lp->scb.status, lp->scb.command);
+	    break;
+	}
 
+    return;
 }
 
 static inline int
@@ -361,77 +367,11 @@ i596_rx(struct device *dev)
     return 0;
 }
 
-
-static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd)
-{
-    struct i596_private *lp = (struct i596_private *)dev->priv;
-    int ioaddr = dev->base_addr;
-    unsigned long flags;
-    int boguscnt = 50;
-
-    if (i596_debug > 4) printk ("i596_add_cmd\n");
-
-    cmd->status = 0;
-    cmd->command |= (CMD_EOL|CMD_INTR);
-    cmd->next = (struct i596_cmd *) -1;
-
-    save_flags(flags);
-    cli();
-    if (lp->cmd_head != (struct i596_cmd *) -1)
-	lp->cmd_tail->next = cmd;
-    else 
-    {
-	lp->cmd_head=cmd;
-	while (lp->scb.status, lp->scb.command)
-	    if (--boguscnt == 0)
-	    {
-		printk("i596_add_cmd timed out with status %4.4x, cmd %4.4x.\n",
-		   lp->scb.status, lp->scb.command);
-		break;
-    	    }
-
-	lp->scb.cmd = cmd;
-	lp->scb.command = CUC_START;
-        outw (0, ioaddr+4);
-    }
-    lp->cmd_tail=cmd;
-    lp->cmd_backlog++;
-
-    lp->cmd_head=lp->scb.cmd;
-    restore_flags(flags);
-
-    if (lp->cmd_backlog > 8) 
-    {
-	int tickssofar = jiffies - lp->last_cmd;
-	if (tickssofar < 10)
-	    return;
-	printk("%s: command unit timed out, status resetting.\n",
-	       dev->name);
-
-	boguscnt = 50;
-	while (lp->scb.status, lp->scb.command)
-	    if (--boguscnt == 0)
-	    {
-		printk("i596_add_cmd timed out with status %4.4x, cmd %4.4x.\n",
-		    lp->scb.status, lp->scb.command);
-		break;
-    	    }
-	lp->scb.command=CUC_ABORT|RX_ABORT;
-	outw(0, ioaddr+4);
-
-	i596_cleanup_cmd(lp);
-	i596_rx(dev);
-	init_i596_mem(dev);
-    }
-
-}
-
-
-
-static void i596_cleanup_cmd(struct i596_private *lp)
+static inline void
+i596_cleanup_cmd(struct i596_private *lp)
 {
     struct i596_cmd *ptr;
-    int boguscnt = 50;
+    int boguscnt = 100;
 
     if (i596_debug > 4) printk ("i596_cleanup_cmd\n");
 
@@ -482,8 +422,96 @@ static void i596_cleanup_cmd(struct i596_private *lp)
     lp->scb.cmd = lp->cmd_head;
 }
 
+static inline void
+i596_reset(struct device *dev, struct i596_private *lp, int ioaddr)
+{
+    int boguscnt = 100;
 
+    if (i596_debug > 4) printk ("i596_reset\n");
 
+    while (lp->scb.status, lp->scb.command)
+        if (--boguscnt == 0)
+	{
+	    printk("i596_reset timed out with status %4.4x, cmd %4.4x.\n",
+		lp->scb.status, lp->scb.command);
+	    break;
+	}
+
+    dev->start=0;
+    dev->tbusy=1;
+
+    lp->scb.command=CUC_ABORT|RX_ABORT;
+    outw(0, ioaddr+4);
+
+    /* wait for shutdown */
+    boguscnt = 400;
+
+    while ((lp->scb.status, lp->scb.command) || lp->scb.command)
+        if (--boguscnt == 0)
+	{
+	    printk("i596_reset 2 timed out with status %4.4x, cmd %4.4x.\n",
+		lp->scb.status, lp->scb.command);
+	    break;
+	}
+
+    i596_cleanup_cmd(lp);
+    i596_rx(dev);
+
+    dev->start=1;
+    dev->tbusy=0;
+    dev->interrupt=0;
+    init_i596_mem(dev);
+}
+
+static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd)
+{
+    struct i596_private *lp = (struct i596_private *)dev->priv;
+    int ioaddr = dev->base_addr;
+    unsigned long flags;
+    int boguscnt = 100;
+
+    if (i596_debug > 4) printk ("i596_add_cmd\n");
+
+    cmd->status = 0;
+    cmd->command |= (CMD_EOL|CMD_INTR);
+    cmd->next = (struct i596_cmd *) -1;
+
+    save_flags(flags);
+    cli();
+    if (lp->cmd_head != (struct i596_cmd *) -1)
+	lp->cmd_tail->next = cmd;
+    else 
+    {
+	lp->cmd_head=cmd;
+	while (lp->scb.status, lp->scb.command)
+	    if (--boguscnt == 0)
+	    {
+		printk("i596_add_cmd timed out with status %4.4x, cmd %4.4x.\n",
+		   lp->scb.status, lp->scb.command);
+		break;
+    	    }
+
+	lp->scb.cmd = cmd;
+	lp->scb.command = CUC_START;
+        outw (0, ioaddr+4);
+    }
+    lp->cmd_tail=cmd;
+    lp->cmd_backlog++;
+
+    lp->cmd_head=lp->scb.cmd;
+    restore_flags(flags);
+
+    if (lp->cmd_backlog > 16) 
+    {
+	int tickssofar = jiffies - lp->last_cmd;
+
+	if (tickssofar < 25) return;
+
+	printk("%s: command unit timed out, status resetting.\n", dev->name);
+
+	i596_reset(dev, lp, ioaddr);
+    }
+}
 
 static int
 i596_open(struct device *dev)
@@ -528,13 +556,9 @@ i596_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* Try to restart the adaptor */
 	if (lp->last_restart == lp->stats.tx_packets) {
 	    if (i596_debug > 1) printk ("Resetting board.\n");
-	    /* Shutdown and restart */
-	    
-	    lp->scb.command=CUC_ABORT|RX_ABORT;
-	    outw(0, ioaddr+4);
 
-	    i596_cleanup_cmd(lp);
-	    init_i596_mem(dev);
+	    /* Shutdown and restart */
+            i596_reset(dev,lp, ioaddr);
 	} else {
 	    /* Issue a channel attention signal */
 	    if (i596_debug > 1) printk ("Kicking board.\n");
@@ -604,7 +628,6 @@ i596_start_xmit(struct sk_buff *skb, struct device *dev)
 
     return 0;
 }
-
 
 
 static void print_eth(char *add)
@@ -676,7 +699,6 @@ unsigned long apricot_init(unsigned long mem_start, unsigned long mem_end)
     return mem_start;
 }
 
-
 static void
 i596_interrupt(int reg_ptr)
 {
@@ -684,7 +706,7 @@ i596_interrupt(int reg_ptr)
     struct device *dev = (struct device *)(irq2dev_map[irq]);
     struct i596_private *lp;
     short ioaddr;
-    int boguscnt = 100;
+    int boguscnt = 200;
     unsigned short status, ack_cmd=0;
 
     if (dev == NULL) {

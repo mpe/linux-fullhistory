@@ -72,7 +72,7 @@ have on-board buffer memory needed to support the slower shared memory mode.)
 Most ISA boards have jumpered settings for the I/O base, IRQ line, and DMA
 channel.  This driver probes the likely base addresses:
 {0x300, 0x320, 0x340, 0x360}.
-After the board is found it generates an DMA-timeout interrupt and uses
+After the board is found it generates a DMA-timeout interrupt and uses
 autoIRQ to find the IRQ line.  The DMA channel can be set with the low bits
 of the otherwise-unused dev->mem_start value (aka PARAM1).  If unset it is
 probed for by enabling each free DMA channel in turn and checking if
@@ -102,14 +102,14 @@ statically allocates full-sized (slightly oversized -- PKT_BUF_SZ) buffers to
 avoid the administrative overhead. For the Rx side this avoids dynamically
 allocating full-sized buffers "just in case", at the expense of a
 memory-to-memory data copy for each packet received.  For most systems this
-is an good tradeoff: the Rx buffer will always be in low memory, the copy
+is a good tradeoff: the Rx buffer will always be in low memory, the copy
 is inexpensive, and it primes the cache for later packet processing.  For Tx
 the buffers are only used when needed as low-memory bounce buffers.
 
 IIIB. 16M memory limitations.
 For the ISA bus master mode all structures used directly by the LANCE,
 the initialization block, Rx and Tx rings, and data buffers, must be
-accessable from the ISA bus, i.e. in the lower 16M of real memory.
+accessible from the ISA bus, i.e. in the lower 16M of real memory.
 This is a problem for current Linux kernels on >16M machines. The network
 devices are initialized after memory initialization, and the kernel doles out
 memory from the top of memory downward.	 The current solution is to have a
@@ -237,7 +237,7 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 
 /* This lance probe is unlike the other board probes in 1.0.*.  The LANCE may
    have to allocate a contiguous low-memory region for bounce buffers.
-   This requirement is satified by having the lance initialization occur before the
+   This requirement is satisfied by having the lance initialization occur before the
    memory management system is started, and thus well before the other probes. */
 unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 {
@@ -737,7 +737,7 @@ lance_interrupt(int reg_ptr)
 
 			lp->tx_ring[entry].base = 0;
 
-			if (status & 0x40000000) { /* There was an major error, log it. */
+			if (status & 0x40000000) { /* There was a major error, log it. */
 				int err_status = lp->tx_ring[entry].misc;
 				lp->stats.tx_errors++;
 				if (err_status & 0x0400) lp->stats.tx_aborted_errors++;
@@ -808,7 +808,7 @@ lance_rx(struct device *dev)
 		int status = lp->rx_ring[entry].base >> 24;
 
 		if (status != 0x03) {			/* There was an error. */
-			/* There is an tricky error noted by John Murphy,
+			/* There is a tricky error noted by John Murphy,
 			   <murf@perftech.com> to Russ Nelson: Even with full-sized
 			   buffers it's possible for a jabber packet to use two
 			   buffers, with only the last correctly noting the error. */

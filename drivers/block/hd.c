@@ -212,7 +212,7 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 	if (reset)
 		return;
 	if (!controller_ready(drive, head)) {
-		special_op[drive] += reset = 1;
+		reset = 1;
 		return;
 	}
 	SET_INTR(intr_addr);
@@ -311,7 +311,7 @@ static void identify_intr(void)
 		/* In fact, we should probably do a reset in any case in */
 		/* case we changed the geometry */
 		if (!strncmp(id.model, "QUANTUM", 7))
-			special_op[dev] += reset = 1;
+			reset = 1;
 
 		/* flush remaining 384 (reserved/undefined) ID bytes: */
 		insw(HD_DATA,(char *)&id,sizeof(id)/2);
@@ -439,7 +439,7 @@ static void bad_rw_intr(void)
 		end_request(0);
 		special_op[dev] += recalibrate[dev] = 1;
 	} else if (CURRENT->errors % RESET_FREQ == 0)
-		special_op[dev] += reset = 1;
+		reset = 1;
 	else if ((hd_error & TRK0_ERR) || CURRENT->errors % RECAL_FREQ == 0)
 		special_op[dev] += recalibrate[dev] = 1;
 	/* Otherwise just retry */
@@ -644,7 +644,7 @@ static void hd_times_out(void)
 	sti();
 	if (!CURRENT)
 		return;
-	special_op [DEVICE_NR(CURRENT->dev)] += reset = 1;
+	reset = 1;
 	printk(KERN_DEBUG "HD timeout\n");
 	cli();
 	if (++CURRENT->errors >= MAX_ERRORS) {
@@ -701,16 +701,16 @@ repeat:
 #endif
 	if (!unmask_intr[dev])
 		cli();
+	if (reset) {
+		int i;
+
+		for (i=0; i < NR_HD; i++)
+			special_op[i] = recalibrate[i] = 1;
+		cli(); /* better play it safe, as resets are the last resort */
+		reset_hd();
+		return;
+	}
 	if (special_op[dev]) {	/* we use "special_op" to reduce overhead on r/w */
-		if (reset) {
-			int i;
-	
-			for (i=0; i < NR_HD; i++)
-				special_op[i] = recalibrate[i] = 1;
-			cli(); /* better play it safe, as resets are the last resort */
-			reset_hd();
-			return;
-		}
 		if (recalibrate[dev]) {
 			recalibrate[dev] = 0;
 			hd_out(dev,hd_info[dev].sect,0,0,0,WIN_RESTORE,&recal_intr);

@@ -82,7 +82,7 @@
  *		Matt Dillon	:	More TCP improvements and RST bug fixes
  *		Matt Dillon	:	Yet more small nasties remove from the TCP code
  *					(Be very nice to this man if tcp finally works 100%) 8)
- *		Alan Cox	:	BSD accept sematics. 
+ *		Alan Cox	:	BSD accept semantics. 
  *
  *
  * To Fix:

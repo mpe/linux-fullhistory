@@ -26,6 +26,8 @@
 #define FDGETDRVSTAT 22 /* get drive state */
 #define FDPOLLDRVSTAT 23 /* get drive state */
 #define FDGETFDCSTAT 25 /* get fdc state */
+#define FDWERRORCLR  27 /* clear write error and badness information */
+#define FDWERRORGET  28 /* get write error and badness information */
 
 #define FDRESET 24 /* reset FDC */
 #define FD_RESET_IF_NEEDED 0
@@ -51,7 +53,7 @@
 
 #define FD_2M 0x4
 #define FD_SIZECODEMASK 0x38
-#define FD_SIZECODE(floppy) (((( (floppy)->rate ) & FD_SIZECODEMASK) >> 3)+ 2)
+#define FD_SIZECODE(floppy) (((((floppy)->rate&FD_SIZECODEMASK)>> 3)+ 2) %8)
 #define FD_SECTSIZE(floppy) ( (floppy)->rate & FD_2M ? \
 			     512 : 128 << FD_SIZECODE(floppy) )
 #define FD_PERP 0x40
@@ -170,6 +172,27 @@ struct floppy_drive_struct {
   int fd_device;
   int last_checked; /* when was the drive last checked for a disk change? */
 
+
+};
+
+struct floppy_write_errors {
+  /* Write error logging.
+   *
+   * These fields can be cleared with the FDWERRORCLR ioctl.
+   * Only writes that were attempted but failed due to a physical media
+   * error are logged.  write(2) calls that fail and return an error code
+   * to the user process are not counted.
+   */
+
+  unsigned int write_errors;  /* number of physical write errors encountered */
+
+  /* position of first and last write errors */
+  unsigned long first_error_sector;
+  int           first_error_generation;
+  unsigned long last_error_sector;
+  int           last_error_generation;
+
+  unsigned int badness; /* highest retry count for a read or write operation */
 };
 
 struct floppy_fdc_state {	

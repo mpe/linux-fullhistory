@@ -428,6 +428,13 @@ void merge_segments(struct vm_area_struct *mpnt)
 		 */
 		prev->vm_end = mpnt->vm_end;
 		prev->vm_next = mpnt->vm_next;
+		if (mpnt->vm_ops && mpnt->vm_ops->close) {
+			mpnt->vm_offset += mpnt->vm_end - mpnt->vm_start;
+			mpnt->vm_start = mpnt->vm_end;
+			mpnt->vm_ops->close(mpnt);
+		}
+		if (mpnt->vm_inode)
+			mpnt->vm_inode->i_count--;
 		kfree_s(mpnt, sizeof(*mpnt));
 		mpnt = prev;
 	}
