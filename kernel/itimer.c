@@ -71,6 +71,17 @@ asmlinkage int sys_getitimer(int which, struct itimerval *value)
 	return 0;
 }
 
+void it_real_fn(unsigned long __data)
+{
+	struct task_struct * p = (struct task_struct *) __data;
+
+	send_sig(SIGALRM, p, 1);
+	if (p->it_real_incr) {
+		p->real_timer.expires = p->it_real_incr;
+		add_timer(&p->real_timer);
+	}
+}
+
 int _setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 {
 	register unsigned long i, j;
@@ -82,10 +93,10 @@ int _setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 		return k;
 	switch (which) {
 		case ITIMER_REAL:
+			del_timer(&current->real_timer);
 			if (j) {
-				j += 1+itimer_ticks;
-				if (j < itimer_next)
-					itimer_next = j;
+				current->real_timer.expires = j;
+				add_timer(&current->real_timer);
 			}
 			current->it_real_value = j;
 			current->it_real_incr = i;

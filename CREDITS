@@ -688,7 +688,9 @@ S: United Kingdom
 
 N: Michael Neuffer
 E: neuffer@goofy.zdv.uni-mainz.de
-D: developer and maintainer of the eata_dma SCSI driver 
+D: Developer and maintainer of the EATA-DMA SCSI driver
+D: Co-developer EATA-PIO SCSI driver
+D: Assorted other snippets 
 S: Zum Schiersteiner Grund 2
 S: 55127 Mainz
 S: Germany

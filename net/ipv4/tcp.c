@@ -145,6 +145,11 @@
  *					sk->retransmits misupdating fixed.
  *					Fixed tcp_write_timeout: stuck close,
  *					and TCP syn retries gets used now.
+ *		Mark Yarvis	:	In tcp_read_wakeup(), don't send an
+ *					ack if stat is TCP_CLOSED.
+ *		Alan Cox	:	Look up device on a retransmit - routes may
+ *					change. Doesn't yet cope with MSS shrink right
+ *					but its a start!
  *
  *
  * To Fix:
@@ -439,6 +444,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 	struct proto *prot;
 	struct device *dev;
 	int ct=0;
+	struct rtable *rt;
 
 	prot = sk->prot;
 	skb = sk->send_head;
@@ -454,6 +460,12 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		skb->when = jiffies;
 
 		/*
+		 *	Discard the surplus MAC header
+		 */
+		 
+		skb_pull(skb,((unsigned char *)skb->ip_hdr)-skb->data);
+
+		/*
 		 * In general it's OK just to use the old packet.  However we
 		 * need to use the current ack and window fields.  Urg and
 		 * urg_ptr could possibly stand to be updated as well, but we
@@ -462,60 +474,89 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		 * changing the packet, we have to issue a new IP identifier.
 		 */
 
-		iph = (struct iphdr *)(skb->data + dev->hard_header_len);
+		iph = (struct iphdr *)skb->data;
 		th = (struct tcphdr *)(((char *)iph) + (iph->ihl << 2));
-		size = skb->len - (((unsigned char *) th) - skb->data);
+		size = ntohs(iph->tot_len) - (iph->ihl<<2);
 		
 		/*
 		 *	Note: We ought to check for window limits here but
 		 *	currently this is done (less efficiently) elsewhere.
-		 *	We do need to check for a route change but can't handle
-		 *	that until we have the new 1.3.x buffers in.
-		 *
 		 */
 
 		iph->id = htons(ip_id_count++);
 		ip_send_check(iph);
-
-		/*
-		 *	This is not the right way to handle this. We have to
-		 *	issue an up to date window and ack report with this 
-		 *	retransmit to keep the odd buggy tcp that relies on 
-		 *	the fact BSD does this happy. 
-		 *	We don't however need to recalculate the entire 
-		 *	checksum, so someone wanting a small problem to play
-		 *	with might like to implement RFC1141/RFC1624 and speed
-		 *	this up by avoiding a full checksum.
-		 */
-		 
-		th->ack_seq = ntohl(sk->acked_seq);
-		th->window = ntohs(tcp_select_window(sk));
-		tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
 		
 		/*
-		 *	If the interface is (still) up and running, kick it.
+		 *	Put a MAC header back on (may cause ARPing)
 		 */
-
-		if (dev->flags & IFF_UP)
+		 
+		if(skb->localroute)
+			rt=ip_rt_local(iph->daddr,NULL,NULL);
+		else
+			rt=ip_rt_route(iph->daddr,NULL,NULL);
+			
+		if(rt==NULL)	/* Deep poo */
 		{
-			/*
-			 *	If the packet is still being sent by the device/protocol
-			 *	below then don't retransmit. This is both needed, and good -
-			 *	especially with connected mode AX.25 where it stops resends
-			 *	occurring of an as yet unsent anyway frame!
-			 *	We still add up the counts as the round trip time wants
-			 *	adjusting.
-			 */
-			if (sk && !skb_device_locked(skb))
+			if(skb->sk)
 			{
-				/* Remove it from any existing driver queue first! */
-				skb_unlink(skb);
-				/* Now queue it */
-				ip_statistics.IpOutRequests++;
-				dev_queue_xmit(skb, dev, sk->priority);
+				skb->sk->err=ENETUNREACH;
+				skb->sk->error_report(skb->sk);
 			}
 		}
-
+		else
+		{
+			dev=rt->rt_dev;
+			skb->raddr=rt->rt_gateway;
+			if(skb->raddr==0)
+				skb->raddr=iph->daddr;
+			skb->dev=dev;
+			skb->arp=1;
+			if(dev->hard_header)
+			{
+				if(dev->hard_header(skb, dev, ETH_P_IP, NULL, NULL, skb->len)<0)
+					skb->arp=0;
+			}
+		
+			/*
+			 *	This is not the right way to handle this. We have to
+			 *	issue an up to date window and ack report with this 
+			 *	retransmit to keep the odd buggy tcp that relies on 
+			 *	the fact BSD does this happy. 
+			 *	We don't however need to recalculate the entire 
+			 *	checksum, so someone wanting a small problem to play
+			 *	with might like to implement RFC1141/RFC1624 and speed
+			 *	this up by avoiding a full checksum.
+			 */
+		 
+			th->ack_seq = ntohl(sk->acked_seq);
+			th->window = ntohs(tcp_select_window(sk));
+			tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
+		
+			/*
+			 *	If the interface is (still) up and running, kick it.
+			 */
+	
+			if (dev->flags & IFF_UP)
+			{
+				/*
+				 *	If the packet is still being sent by the device/protocol
+				 *	below then don't retransmit. This is both needed, and good -
+				 *	especially with connected mode AX.25 where it stops resends
+				 *	occurring of an as yet unsent anyway frame!
+				 *	We still add up the counts as the round trip time wants
+				 *	adjusting.
+				 */
+				if (sk && !skb_device_locked(skb))
+				{
+					/* Remove it from any existing driver queue first! */
+					skb_unlink(skb);
+					/* Now queue it */
+					ip_statistics.IpOutRequests++;
+					dev_queue_xmit(skb, dev, sk->priority);
+				}
+			}
+		}
+		
 		/*
 		 *	Count retransmissions
 		 */
@@ -1770,6 +1811,13 @@ static void tcp_read_wakeup(struct sock *sk)
 
 	if (!sk->ack_backlog) 
 		return;
+
+	/*
+	 * If we're closed, don't send an ack, or we'll get a RST
+	 * from the closed destination.
+	 */
+	if ((sk->state == TCP_CLOSE) || (sk->state == TCP_TIME_WAIT))
+		return; 
 
 	/*
 	 * FIXME: we need to put code here to prevent this routine from
@@ -3034,8 +3082,7 @@ static void tcp_write_xmit(struct sock *sk)
  * Ack and window will in general have changed since this packet was put
  * on the write queue.
  */
-			iph = (struct iphdr *)(skb->data +
-					       skb->dev->hard_header_len);
+			iph = skb->ip_hdr;
 			th = (struct tcphdr *)(((char *)iph) +(iph->ihl << 2));
 			size = skb->len - (((unsigned char *) th) - skb->data);
 			

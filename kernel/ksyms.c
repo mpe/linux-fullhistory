@@ -151,6 +151,7 @@ struct symbol_table symbol_table = {
 	X(kfree_s),
 	X(vmalloc),
 	X(vfree),
+ 	X(mem_map),
 
 	/* filesystem internal functions */
 	X(getname),
@@ -243,6 +244,7 @@ struct symbol_table symbol_table = {
 	X(tq_last),
 	X(timer_active),
 	X(timer_table),
+ 	X(intr_count),
 
 	/* dma handling */
 	X(request_dma),
@@ -310,6 +312,7 @@ struct symbol_table symbol_table = {
 	X(slhc_remember),
 	X(slhc_compress),
 	X(slhc_uncompress),
+	X(slhc_toss),
 #endif
 #endif
 	/* Device callback registration */
@@ -384,8 +387,6 @@ struct symbol_table symbol_table = {
 	X(generic_proc_info),
  	X(scsi_devices),
  	X(free_pages),
- 	X(intr_count),
- 	X(mem_map),
     	X(print_msg),
 	X(print_status),
 	X(gendisk_head), /* Needed for sd.c */
@@ -395,8 +396,6 @@ struct symbol_table symbol_table = {
 	 * With no scsi configured, we still need to export a few
 	 * symbols so that scsi can be loaded later via insmod.
 	 */
- 	X(intr_count),
- 	X(mem_map),
 	X(gendisk_head),
 	X(resetup_one_dev),
 

@@ -7,6 +7,10 @@
  *
  *  Modularised by Alan Cox <Alan.Cox@linux.org>, while hacking some
  *  experimental NFS changes. Modularisation taken straight from SYS5 fs.
+ *
+ *  Change to nfs_read_super() to permit NFS mounts to multi-homed hosts.
+ *  J.S.Peatfield@damtp.cam.ac.uk
+ *
  */
 
 #ifdef MODULE
@@ -76,6 +80,7 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	struct nfs_server *server;
 	unsigned int fd;
 	struct file *filp;
+
 	dev_t dev = sb->s_dev;
 
 	MOD_INC_USE_COUNT;
@@ -104,6 +109,7 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	}
 	filp->f_count++;
 	lock_super(sb);
+
 	sb->s_blocksize = 1024; /* XXX */
 	sb->s_blocksize_bits = 10;
 	sb->s_magic = NFS_SUPER_MAGIC;
@@ -131,6 +137,31 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	server->acdirmin = data->acdirmin*HZ;
 	server->acdirmax = data->acdirmax*HZ;
 	strcpy(server->hostname, data->hostname);
+
+	/* Start of JSP NFS patch */
+	/* Check if passed address in data->addr */
+	if (data->addr.sin_addr.s_addr == INADDR_ANY) {  /* No address passed */
+	  if (((struct sockaddr_in *)(&server->toaddr))->sin_addr.s_addr == INADDR_ANY) {
+	    printk("NFS: Error passed unconnected socket and no address\n") ;
+	    return NULL ;
+	  } else {
+	    /* Need access to socket internals  JSP */
+	    struct socket *sock;
+	    int dummylen ;
+
+	 /*   printk("NFS: using socket address\n") ;*/
+
+	    sock = &((filp->f_inode)->u.socket_i);
+
+	    /* extract the other end of the socket into server->toaddr */
+	    sock->ops->getname(sock, &(server->toaddr), &dummylen, 1) ;
+	  }
+	} else {
+	/*  printk("NFS: coppying passed addr to server->toaddr\n") ;*/
+	  memcpy((char *)&(server->toaddr),(char *)(&data->addr),sizeof(server->toaddr));
+	}
+	/* End of JSP NFS patch */
+
 	sb->u.nfs_sb.s_root = data->root;
 	unlock_super(sb);
 	if (!(sb->s_mounted = nfs_fhget(sb, &data->root, NULL))) {

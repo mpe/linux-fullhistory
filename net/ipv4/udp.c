@@ -45,8 +45,7 @@
  *	Arnt Gulbrandsen 	:	New udp_send and stuff
  *		Alan Cox	:	Cache last socket
  *		Alan Cox	:	Route cache
- *		Alan Cox	:	Checksum precompute is bogus is some lame
- *					software is padding its udp frames in IP!
+ *		Jon Peatfield	:	Minor efficientcy fix to sendto().
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -301,10 +300,9 @@ static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock
 	{
 		if (addr_len < sizeof(sin)) 
 			return(-EINVAL);
-		memcpy(&sin,usin,sizeof(sin));
-		if (sin.sin_family && sin.sin_family != AF_INET) 
+		if (usin->sin_family && usin->sin_family != AF_INET) 
 			return(-EINVAL);
-		if (sin.sin_port == 0) 
+		if (usin->sin_port == 0) 
 			return(-EINVAL);
 	} 
 	else 
@@ -314,6 +312,7 @@ static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock
 		sin.sin_family = AF_INET;
 		sin.sin_port = sk->dummy_th.dest;
 		sin.sin_addr.s_addr = sk->daddr;
+		usin = &sin;
   	}
   
   	/*
@@ -321,16 +320,16 @@ static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock
   	 *	broadcasting of data.
   	 */
   	 
-  	if(sin.sin_addr.s_addr==INADDR_ANY)
-  		sin.sin_addr.s_addr=ip_my_addr();
+  	if(usin->sin_addr.s_addr==INADDR_ANY)
+  		usin->sin_addr.s_addr=ip_my_addr();
   		
-  	if(!sk->broadcast && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
+  	if(!sk->broadcast && ip_chk_addr(usin->sin_addr.s_addr)==IS_BROADCAST)
 	    	return -EACCES;			/* Must turn broadcast on first */
 
 	sk->inuse = 1;
 
 	/* Send the packet. */
-	tmp = udp_send(sk, &sin, from, len, flags);
+	tmp = udp_send(sk, usin, from, len, flags);
 
 	/* The datagram has been sent off.  Release the socket. */
 	release_sock(sk);
@@ -538,9 +537,6 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 
 	ulen = ntohs(uh->len);
 	
-	if(ulen!=len)
-		skb->ip_summed=0;	/* Bogoid padded frame */
-
 	if (ulen > len || len < sizeof(*uh) || ulen < sizeof(*uh)) 
 	{
 		NETDEBUG(printk("UDP: short packet: %d/%d\n", ulen, len));

@@ -138,32 +138,32 @@ __asm__ __volatile__ ( \
 	:"ax")
 
 
-extern inline unsigned long xchg_u8(char * m, unsigned long val)
-{
-	__asm__("xchgb %b0,%1":"=q" (val),"=m" (*m):"0" (val):"memory");
-	return val;
-}
+#define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
+#define tas(ptr) (xchg((ptr),1))
 
-extern inline unsigned long xchg_u16(short * m, unsigned long val)
-{
-	__asm__("xchgw %w0,%1":"=r" (val),"=m" (*m):"0" (val):"memory");
-	return val;
-}
+struct __xchg_dummy { unsigned long a[100]; };
+#define __xg(x) ((volatile struct __xchg_dummy *)(x))
 
-extern inline unsigned long xchg_u32(int * m, unsigned long val)
+static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
 {
-	__asm__("xchgl %0,%1":"=r" (val),"=m" (*m):"0" (val):"memory");
-	return val;
-}
-
-extern inline int tas(char * m)
-{
-	return xchg_u8(m,1);
-}
-
-extern inline void * xchg_ptr(void * m, void * val)
-{
-	return (void *) xchg_u32(m, (unsigned long) val);
+	switch (size) {
+		case 1:
+			__asm__("xchgb %b0,%1"
+				:"=q" (x), "=m" (*__xg(ptr))
+				:"0" (x), "m" (*__xg(ptr)));
+			break;
+		case 2:
+			__asm__("xchgw %w0,%1"
+				:"=r" (x), "=m" (*__xg(ptr))
+				:"0" (x), "m" (*__xg(ptr)));
+			break;
+		case 4:
+			__asm__("xchgl %0,%1"
+				:"=r" (x), "=m" (*__xg(ptr))
+				:"0" (x), "m" (*__xg(ptr)));
+			break;
+	}
+	return x;
 }
 
 #define mb()  __asm__ __volatile__ (""   : : :"memory")

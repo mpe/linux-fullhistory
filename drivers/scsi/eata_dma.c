@@ -1,52 +1,54 @@
 /************************************************************
- *                                                          *
- *                  Linux EATA SCSI driver                  *
- *                                                          *
- *  based on the CAM document CAM/89-004 rev. 2.0c,         *
+ *							    *
+ *		    Linux EATA SCSI driver		    *
+ *							    *
+ *  based on the CAM document CAM/89-004 rev. 2.0c,	    *
  *  DPT's driver kit, some internal documents and source,   *
  *  and several other Linux scsi drivers and kernel docs.   *
- *                                                          *
- *  The driver currently:                                   *
- *      -supports all ISA based EATA-DMA boards             *
- *      -supports all EISA based EATA-DMA boards            *
- *      -supports all PCI based EATA-DMA boards             *
- *      -supports multiple HBAs with & without IRQ sharing  *
- *      -supports all SCSI channels on multi channel boards *
- *      -can be loaded as module                            *
- *      -displays statistical and hardware information      *
- *       in /proc/scsi/eata_dma                             *
- *      -needs identical HBA ids on all channels            * 
- *                                                          *
- *  (c)1993,94,95 Michael Neuffer                           *
- *                neuffer@goofy.zdv.uni-mainz.de            *
- *                                                          *
+ *							    *
+ *  The driver currently:				    *
+ *	-supports all ISA based EATA-DMA boards		    *
+ *	-supports all EISA based EATA-DMA boards	    *
+ *	-supports all PCI based EATA-DMA boards		    *
+ *	-supports multiple HBAs with & without IRQ sharing  *
+ *	-supports all SCSI channels on multi channel boards *
+ *	-needs identical IDs on all channels of a HBA	    * 
+ *	-can be loaded as module			    *
+ *	-displays statistical and hardware information	    *
+ *	 in /proc/scsi/eata_dma				    *
+ *      -provides rudimentary latency measurement           * 
+ *       possibilities via /proc/scsi/eata_dma/<hostnum>    *
+ *							    *
+ *  (c)1993,94,95 Michael Neuffer			    *
+ *		  neuffer@goofy.zdv.uni-mainz.de	    *
+ *							    *
  *  This program is free software; you can redistribute it  *
- *  and/or modify it under the terms of the GNU General     *
- *  Public License as published by the Free Software        *
- *  Foundation; either version 2 of the License, or         *
- *  (at your option) any later version.                     *
- *                                                          *
+ *  and/or modify it under the terms of the GNU General	    *
+ *  Public License as published by the Free Software	    *
+ *  Foundation; either version 2 of the License, or	    *
+ *  (at your option) any later version.			    *
+ *							    *
  *  This program is distributed in the hope that it will be *
- *  useful, but WITHOUT ANY WARRANTY; without even the      *
+ *  useful, but WITHOUT ANY WARRANTY; without even the	    *
  *  implied warranty of MERCHANTABILITY or FITNESS FOR A    *
- *  PARTICULAR PURPOSE.  See the GNU General Public License *
- *  for more details.                                       *
- *                                                          *
- *  You should have received a copy of the GNU General      *
+ *  PARTICULAR PURPOSE.	 See the GNU General Public License *
+ *  for more details.					    *
+ *							    *
+ *  You should have received a copy of the GNU General	    *
  *  Public License along with this kernel; if not, write to *
- *  the Free Software Foundation, Inc., 675 Mass Ave,       *
- *  Cambridge, MA 02139, USA.                               *
- *                                                          *
+ *  the Free Software Foundation, Inc., 675 Mass Ave,	    *
+ *  Cambridge, MA 02139, USA.				    *
+ *							    *
  * I have to thank DPT for their excellent support. I took  *
  * me almost a year and a stopover at their HQ, on my first *
  * trip to the USA, to get it, but since then they've been  *
- * very helpful and tried to give me all the infos and      *
- * support I need.                                          *
- *                                                          *
+ * very helpful and tried to give me all the infos and	    *
+ * support I need.					    *
+ *							    *
  * Thanks also to Greg Hosler who did a lot of testing and  *
- * found quite a number of bugs during the development.     *
+ * found quite a number of bugs during the development.	    *
  ************************************************************
- *  last change: 95/06/28 OS: Linux 1.3.4 + pre1.3 SCSI pat.*
+ *  last change: 95/07/11		   OS: Linux 1.3.9  *
  ************************************************************/
 
 /* Look in eata_dma.h for configuration and revision information */
@@ -205,13 +207,33 @@ void eata_int_handler(int irq, struct pt_regs * regs)
 			     eata_stat, hba_stat));
 
 	switch (hba_stat) {
-	case HA_NO_ERROR:       /* NO Error */
+	case HA_NO_ERROR:	/* NO Error */
 	    if (scsi_stat == CONDITION_GOOD
 		&& cmd->device->type == TYPE_DISK
 		&& (HD(cmd)->t_state[cp->cp_channel][cp->cp_id] == RESET))
-		result = DID_BUS_BUSY << 16;        
-	    else if (scsi_stat == GOOD)
+		result = DID_BUS_BUSY << 16;	    
+	    else if (scsi_stat == GOOD) {
 		HD(cmd)->t_state[cp->cp_channel][cp->cp_id] = OK;
+		if(HD(cmd)->do_latency == TRUE && cp->timestamp) {
+		    uint time;
+		    time = jiffies - cp->timestamp;
+		    if((cp->rw_latency) == TRUE) { /* was WRITE */
+			if(HD(cmd)->writes_lat[cp->sizeindex][1] > time)
+			    HD(cmd)->writes_lat[cp->sizeindex][1] = time;
+			if(HD(cmd)->writes_lat[cp->sizeindex][2] < time)
+			    HD(cmd)->writes_lat[cp->sizeindex][2] = time;
+			HD(cmd)->writes_lat[cp->sizeindex][3] += time;
+			HD(cmd)->writes_lat[cp->sizeindex][0]++;
+		    } else {
+			if(HD(cmd)->reads_lat[cp->sizeindex][1] > time)
+			    HD(cmd)->reads_lat[cp->sizeindex][1] = time;
+			if(HD(cmd)->reads_lat[cp->sizeindex][2] < time)
+			    HD(cmd)->reads_lat[cp->sizeindex][2] = time;
+			HD(cmd)->reads_lat[cp->sizeindex][3] += time;
+			HD(cmd)->reads_lat[cp->sizeindex][0]++;
+		    }
+		}
+	    }
 	    else if (scsi_stat == CHECK_CONDITION
 		     && cmd->device->type == TYPE_DISK
 		     && (cmd->sense_buffer[2] & 0xf) == RECOVERED_ERROR)
@@ -220,10 +242,10 @@ void eata_int_handler(int irq, struct pt_regs * regs)
 		result = DID_OK << 16;
 	    HD(cmd)->t_timeout[cp->cp_channel][cp->cp_id] = OK;
 	    break;
-	case HA_ERR_SEL_TO:     /* Selection Timeout */
+	case HA_ERR_SEL_TO:	/* Selection Timeout */
 	    result = DID_BAD_TARGET << 16;  
 	    break;
-	case HA_ERR_CMD_TO:     /* Command Timeout   */
+	case HA_ERR_CMD_TO:	/* Command Timeout   */
 	    if (HD(cmd)->t_timeout[cp->cp_channel][cp->cp_id] > 1)
 		result = DID_ERROR << 16;
 	    else {
@@ -231,8 +253,8 @@ void eata_int_handler(int irq, struct pt_regs * regs)
 		HD(cmd)->t_timeout[cp->cp_channel][cp->cp_id]++;
 	    }
 	    break;
-	case HA_ERR_RESET:              /* SCSI Bus Reset Received */
-	case HA_INIT_POWERUP:           /* Initial Controller Power-up */
+	case HA_ERR_RESET:		/* SCSI Bus Reset Received */
+	case HA_INIT_POWERUP:		/* Initial Controller Power-up */
 	    if (cmd->device->type != TYPE_TAPE)
 		result = DID_BUS_BUSY << 16;
 	    else
@@ -241,14 +263,14 @@ void eata_int_handler(int irq, struct pt_regs * regs)
 	    for (i = 0; i < MAXTARGET; i++)
 		HD(cmd)->t_state[cp->cp_channel][i] = RESET;
 	    break;
-	case HA_UNX_BUSPHASE:       /* Unexpected Bus Phase */
-	case HA_UNX_BUS_FREE:       /* Unexpected Bus Free */
-	case HA_BUS_PARITY:         /* Bus Parity Error */
-	case HA_SCSI_HUNG:          /* SCSI Hung */
-	case HA_UNX_MSGRJCT:        /* Unexpected Message Reject */
-	case HA_RESET_STUCK:        /* SCSI Bus Reset Stuck */
-	case HA_RSENSE_FAIL:        /* Auto Request-Sense Failed */
-	case HA_PARITY_ERR:         /* Controller Ram Parity */
+	case HA_UNX_BUSPHASE:	    /* Unexpected Bus Phase */
+	case HA_UNX_BUS_FREE:	    /* Unexpected Bus Free */
+	case HA_BUS_PARITY:	    /* Bus Parity Error */
+	case HA_SCSI_HUNG:	    /* SCSI Hung */
+	case HA_UNX_MSGRJCT:	    /* Unexpected Message Reject */
+	case HA_RESET_STUCK:	    /* SCSI Bus Reset Stuck */
+	case HA_RSENSE_FAIL:	    /* Auto Request-Sense Failed */
+	case HA_PARITY_ERR:	    /* Controller Ram Parity */
 	default:
 	    result = DID_ERROR << 16;
 	    break;
@@ -267,7 +289,7 @@ void eata_int_handler(int irq, struct pt_regs * regs)
 	DBG(DBG_INTR&&DBG_DELAY,DEL2(800));
 #endif
 	
-	cp->status = FREE;          /* now we can release the slot  */
+	cp->status = FREE;	    /* now we can release the slot  */
 	
 	restore_flags(flags);
 	if(cmd->scsi_done != eata_scsi_done) cmd->scsi_done(cmd);
@@ -291,7 +313,7 @@ inline int eata_send_command(u32 addr, u32 base, u8 command)
 	if (--loop == 0)
 	    return(FALSE);
     
-    outb( addr & 0x000000ff,        base + HA_WDMAADDR);
+    outb( addr & 0x000000ff,	    base + HA_WDMAADDR);
     outb((addr & 0x0000ff00) >> 8,  base + HA_WDMAADDR + 1);
     outb((addr & 0x00ff0000) >> 16, base + HA_WDMAADDR + 2);
     outb((addr & 0xff000000) >> 24, base + HA_WDMAADDR + 3);
@@ -304,8 +326,8 @@ inline int eata_send_immediate(u32 addr, u32 base, u8 cmnd, u8 cmnd2, u8 id,
 			       u8 lun)
 {
     if(addr){
-	outb( addr & 0x000000ff,        base + HA_WDMAADDR);
-	outb((addr & 0x0000ff00) >> 8,  base + HA_WDMAADDR + 1);
+	outb( addr & 0x000000ff,	base + HA_WDMAADDR);
+	outb((addr & 0x0000ff00) >> 8,	base + HA_WDMAADDR + 1);
 	outb((addr & 0x00ff0000) >> 16, base + HA_WDMAADDR + 2);
 	outb((addr & 0xff000000) >> 24, base + HA_WDMAADDR + 3);
     } else {
@@ -314,7 +336,7 @@ inline int eata_send_immediate(u32 addr, u32 base, u8 cmnd, u8 cmnd2, u8 id,
     }
     
     outb(cmnd2, base + HA_WCOMMAND2);
-    outb(cmnd,  base + HA_WCOMMAND);
+    outb(cmnd,	base + HA_WCOMMAND);
     return(TRUE);
 }
 #endif
@@ -327,10 +349,10 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
     struct Scsi_Host *sh;
     struct eata_ccb *cp;
     struct scatterlist *sl;
-
+    
     save_flags(flags);
     cli();
-
+    
     queue_counter++;
     
     if (done == (void *)eata_scsi_done) { 
@@ -354,61 +376,93 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
     hd->last_ccb = y;
     
     if (x == sh->can_queue) { 
-	
 	DBG(DBG_QUEUE, printk("can_queue %d, x %d, y %d\n", 
 			      sh->can_queue, x, y));
-#if DEBUG_EATA
+	
 	panic("eata_dma: run out of queue slots cmdno:%ld intrno: %ld\n", 
 	      queue_counter, int_counter);
-#else
-	panic("eata_dma: run out of queue slots....\n");
-#endif
     }
     
     cp = &hd->ccb[y];
     
     memset(cp, 0, sizeof(struct eata_ccb) - sizeof(struct eata_sg_list *));
     
-    cp->status = USED;      /* claim free slot */
+    cp->status = USED;			/* claim free slot */
     
     DBG(DBG_QUEUE, printk("eata_queue pid %ld, target: %x, lun: %x, y %d\n",
 			  cmd->pid, cmd->target, cmd->lun, y));
     DBG(DBG_QUEUE && DBG_DELAY, DEL2(250));
+    
+    if(hd->do_latency == TRUE) {
+	int x, z;
+	short *sho;
+	long *lon;
+	x = 0;	/* just to keep GCC quiet */ 
+	if (cmd->cmnd[0] == WRITE_6 || cmd->cmnd[0] == WRITE_10 || 
+	    cmd->cmnd[0] == WRITE_12 || cmd->cmnd[0] == READ_6 || 
+	    cmd->cmnd[0] == READ_10 || cmd->cmnd[0] == READ_12) {
+	    
+	    cp->timestamp = jiffies;	/* For latency measurements */
+	    switch(cmd->cmnd[0]) {
+	    case WRITE_6:   
+	    case READ_6:    
+		x = cmd->cmnd[4]/2; 
+		break;
+	    case WRITE_10:   
+	    case READ_10:
+		sho = (short *) &cmd->cmnd[7];
+		x = ntohs(*sho)/2;	      
+		break;
+	    case WRITE_12:   
+	    case READ_12:
+		lon = (long *) &cmd->cmnd[6];
+		x = ntohl(*lon)/2;	      
+		break;
+	    }
+	    for(z = 0; z <= 11, x > (1 << z); z++) 
+		/* nothing */;
+	    cp->sizeindex = z;
+	    if (cmd->cmnd[0] ==	WRITE_6 || cmd->cmnd[0] == WRITE_10 || 
+		cmd->cmnd[0] ==	WRITE_12){
+		cp->rw_latency = TRUE;
+	    }
+	}
+    }
     cmd->scsi_done = (void *)done;
     
     switch (cmd->cmnd[0]) {
-    case CHANGE_DEFINITION: case COMPARE:         case COPY:
-    case COPY_VERIFY:       case LOG_SELECT:      case MODE_SELECT:
+    case CHANGE_DEFINITION: case COMPARE:	  case COPY:
+    case COPY_VERIFY:	    case LOG_SELECT:	  case MODE_SELECT:
     case MODE_SELECT_10:    case SEND_DIAGNOSTIC: case WRITE_BUFFER:
-    case FORMAT_UNIT:       case REASSIGN_BLOCKS: case RESERVE:
-    case SEARCH_EQUAL:      case SEARCH_HIGH:     case SEARCH_LOW:
-    case WRITE_6:           case WRITE_10:        case WRITE_VERIFY:
-    case UPDATE_BLOCK:      case WRITE_LONG:      case WRITE_SAME:      
+    case FORMAT_UNIT:	    case REASSIGN_BLOCKS: case RESERVE:
+    case SEARCH_EQUAL:	    case SEARCH_HIGH:	  case SEARCH_LOW:
+    case WRITE_6:	    case WRITE_10:	  case WRITE_VERIFY:
+    case UPDATE_BLOCK:	    case WRITE_LONG:	  case WRITE_SAME:	
     case SEARCH_HIGH_12:    case SEARCH_EQUAL_12: case SEARCH_LOW_12:
-    case WRITE_12:          case WRITE_VERIFY_12: case SET_WINDOW: 
-    case MEDIUM_SCAN:       case SEND_VOLUME_TAG:            
-    case 0xea:      /* alternate number for WRITE LONG */
-	cp->DataOut = TRUE;     /* Output mode */
+    case WRITE_12:	    case WRITE_VERIFY_12: case SET_WINDOW: 
+    case MEDIUM_SCAN:	    case SEND_VOLUME_TAG:	     
+    case 0xea:	    /* alternate number for WRITE LONG */
+	cp->DataOut = TRUE;	/* Output mode */
 	break;
     case TEST_UNIT_READY:
     default:
-	cp->DataIn = TRUE;      /* Input mode  */
+	cp->DataIn = TRUE;	/* Input mode  */
     }
     
     if ((done == (void *) eata_scsi_done && HBA_interpret == TRUE) 
 	|| cmd->target == sh->this_id) 
-	cp->Interpret = TRUE;   /* Interpret command */
+	cp->Interpret = TRUE;	/* Interpret command */
     
     if (cmd->use_sg) {
-	cp->scatter = TRUE;     /* SG mode     */
+	cp->scatter = TRUE;	/* SG mode     */
 	if (cp->sg_list == NULL) {
 	    cp->sg_list = kmalloc(SG_SIZE_BIG*sizeof(struct eata_sg_list),
-				     GFP_ATOMIC | GFP_DMA);
+				  GFP_ATOMIC | GFP_DMA);
 	}
 	cp->cp_dataDMA = htonl((ulong)cp->sg_list); 
 	if (cp->cp_dataDMA == 0)
 	    panic("eata_dma: Run out of DMA memory for SG lists !\n");
-
+	
 	cp->cp_datalen = htonl(cmd->use_sg * sizeof(struct eata_sg_list));
 	sl=(struct scatterlist *)cmd->request_buffer;
 	for(i = 0; i < cmd->use_sg; i++, sl++){
@@ -436,7 +490,7 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
     
     cp->cp_viraddr = cp;
     cp->cmd = cmd;
-    cmd->host_scribble = (char *)&hd->ccb[y];   
+    cmd->host_scribble = (char *)&hd->ccb[y];	
     
     if(eata_send_command((u32) cp, (u32) sh->base, EATA_CMD_DMA_SEND_CP) == FALSE) {
 	cmd->result = DID_ERROR << 16;
@@ -563,7 +617,7 @@ int eata_reset(Scsi_Cmnd * cmd)
     }
     
     /* hard reset the HBA  */
-    inb((u32) (cmd->host->base) + HA_RSTATUS);  /* This might cause trouble */
+    inb((u32) (cmd->host->base) + HA_RSTATUS);	/* This might cause trouble */
     eata_send_command(0, (u32) cmd->host->base, EATA_CMD_RESET);
     
     DBG(DBG_ABNORM, printk("eata_reset: board reset done, enabling interrupts.\n"));
@@ -572,7 +626,7 @@ int eata_reset(Scsi_Cmnd * cmd)
     restore_flags(flags);
     
     time = jiffies;
-    while (jiffies < (time + 300) && limit++ < 10000000)
+    while (jiffies < (time + (3 * HZ)) && limit++ < 10000000)
 	/* nothing */;
     
     save_flags(flags);
@@ -635,7 +689,7 @@ char * get_board_data(u32 base, u32 irq, u32 id)
     memset(sp, 0, sizeof(struct eata_sp));
     memset(buff, 0, 256);
 
-    cp->DataIn = TRUE;     
+    cp->DataIn = TRUE;	   
     cp->Interpret = TRUE;   /* Interpret command */
  
     cp->cp_datalen = htonl(255);  
@@ -659,7 +713,7 @@ char * get_board_data(u32 base, u32 irq, u32 id)
 
     eata_send_command((u32) cp, (u32) base, EATA_CMD_DMA_SEND_CP);
     
-    i = jiffies + 300;
+    i = jiffies + (3 * HZ) ;
     while (fake_int_result == FALSE && jiffies <= i) 
 	barrier();
     
@@ -676,7 +730,7 @@ char * get_board_data(u32 base, u32 irq, u32 id)
 	inb((u32) (base) + HA_RSTATUS);
 	eata_send_command(0, base, EATA_CMD_RESET);
 	i = jiffies;
-	while (jiffies < (i + 300) && limit++ < 10000000)
+	while (jiffies < (i + (3 * HZ)) && limit++ < 10000000)
 	    barrier();
 	return (NULL);
     } else
@@ -734,7 +788,7 @@ int get_conf_PIO(u32 base, struct get_conf *buf)
 	*p = inw(base + HA_RDATA);
     }
 
-    if (!(inb(base + HA_RSTATUS) & HA_SERROR)) {            /* Error ? */
+    if (!(inb(base + HA_RSTATUS) & HA_SERROR)) {	    /* Error ? */
 	if (htonl(EATA_SIGNATURE) == buf->signature) {
 	    DBG(DBG_PIO&&DBG_PROBE, printk("EATA Controller found at %x "
 					   "EATA Level: %x\n", (uint) base, 
@@ -767,7 +821,7 @@ void print_config(struct get_conf *gc)
 	   gc->SG_64K, gc->SG_UAE, gc->MAX_ID, gc->MAX_CHAN, gc->MAX_LUN); 
     printk("RIDQ:%d PCI:%d EISA:%d\n",
 	   gc->ID_qest, gc->is_PCI, gc->is_EISA);
-    DBG(DPT_DEBUG, DELAY(1400));
+    DBG(DPT_DEBUG, DELAY(14));
 }
 
 short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt, 
@@ -779,6 +833,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
     unchar bugs = 0;
     struct Scsi_Host *sh;
     hostdata *hd;
+    int x;
     
     
     DBG(DBG_REGISTER, print_config(gc));
@@ -792,7 +847,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
     if(gc->HAA_valid == FALSE || ntohl(gc->len) < 0x22) 
 	gc->MAX_CHAN = 0;
     
-    if (reg_IRQ[gc->IRQ] == FALSE) {    /* Interrupt already registered ? */
+    if (reg_IRQ[gc->IRQ] == FALSE) {	/* Interrupt already registered ? */
 	if (!request_irq(gc->IRQ, (void *) eata_fake_int_handler, SA_INTERRUPT,
 			 "eata_dma")){
 	    reg_IRQ[gc->IRQ]++;
@@ -802,7 +857,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 	    printk("Couldn't allocate IRQ %d, Sorry.", gc->IRQ);
 	    return (FALSE);
 	}
-    } else {            /* More than one HBA on this IRQ */
+    } else {		/* More than one HBA on this IRQ */
 	if (reg_IRQL[gc->IRQ] == TRUE) {
 	    printk("Can't support more than one HBA on this IRQ,\n"
 		   "  if the IRQ is edge triggered. Sorry.\n");
@@ -861,7 +916,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
     if(ntohs(gc->queuesiz) == 0) {
 	gc->queuesiz = ntohs(64);
 	printk("Warning: Queue size has to be corrected. Assuming 64 queueslots\n"
-	       "         This might be a PM2012B with a defective Firmware\n");
+	       "	 This might be a PM2012B with a defective Firmware\n");
     }
 
     size = sizeof(hostdata) + ((sizeof(struct eata_ccb) + sizeof(long)) 
@@ -883,7 +938,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 	return (FALSE);
     }
     
-    hd = SD(sh);                   
+    hd = SD(sh);		   
     
     memset(hd->ccb, 0, sizeof(struct eata_ccb) * ntohs(gc->queuesiz));
     memset(hd->reads, 0, sizeof(u32) * 26); 
@@ -894,7 +949,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 	strcpy(SD(sh)->vendor, "DPT");
 	strcpy(SD(sh)->name, "??????????");
 	strcpy(SD(sh)->revision, "???.?");
-    } else {    
+    } else {	
 	strncpy(SD(sh)->vendor, &buff[8], 8);
 	SD(sh)->vendor[8] = 0;
 	strncpy(SD(sh)->name, &buff[16], 17);
@@ -918,7 +973,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 	SD(sh)->EATA_revision = 'c';
 	break;
     case 0x24:
-	SD(sh)->EATA_revision = 'z';            
+	SD(sh)->EATA_revision = 'z';		
     default:
 	SD(sh)->EATA_revision = '?';
     }
@@ -948,7 +1003,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 	sh->max_lun = 8;
     }
 
-    hd->channel = gc->MAX_CHAN;     
+    hd->channel = gc->MAX_CHAN;	    
     sh->max_channel = gc->MAX_CHAN; 
     sh->base = (char *) base;
     sh->io_port = (u16) base;
@@ -960,7 +1015,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
      * SCSI midlevel code should support different HBA ids on every channel
      */
     sh->this_id = gc->scsi_id[3];
-    sh->can_queue = ntohs(gc->queuesiz);
+    sh->can_queue = ntohs(gc->queuesiz) - 1; /* Keep one free for internals */
     
     if (gc->OCS_enabled == TRUE) 
 	if(hd->bustype != IS_ISA)
@@ -997,15 +1052,20 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
     else
 	hd->primary = TRUE;
     
-    sh->wish_block = FALSE;        
+    sh->wish_block = FALSE;	   
     
     if (hd->bustype != IS_ISA) {
 	sh->unchecked_isa_dma = FALSE;
     } else {
-	sh->unchecked_isa_dma = TRUE;   /* We're doing ISA DMA */
+	sh->unchecked_isa_dma = TRUE;	/* We're doing ISA DMA */
     }
     
-    hd->next = NULL;    /* build a linked list of all HBAs */
+    for(x = 0; x <= 11; x++){		 /* Initialize min. latency */
+	hd->writes_lat[x][1] = 0xffffffff;
+	hd->reads_lat[x][1] = 0xffffffff;
+    }
+
+    hd->next = NULL;	/* build a linked list of all HBAs */
     hd->prev = last_HBA;
     if(hd->prev != NULL)
 	SD(hd->prev)->next = sh;
@@ -1028,7 +1088,7 @@ void find_EISA(struct get_conf *buf, Scsi_Host_Template * tpnt)
 #endif
     
     for (i = 0; i < MAXEISA; i++) {
-	if (EISAbases[i] == TRUE) { /* Still a possibility ?          */
+	if (EISAbases[i] == TRUE) { /* Still a possibility ?	      */
 	    
 	    base = 0x1c88 + (i * 0x1000);
 #if CHECKPAL
@@ -1090,7 +1150,7 @@ void find_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 #else
     
     u8 pci_bus, pci_device_fn;
-    static s16 pci_index = 0;   /* Device index to PCI BIOS calls */
+    static s16 pci_index = 0;	/* Device index to PCI BIOS calls */
     u32 base = 0;
     u16 com_adr;
     u16 rev_device;
@@ -1142,8 +1202,8 @@ void find_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 		    if (base != 0x1f8) {
 			/* We didn't find it in the primary search */
 			if (get_conf_PIO(base, buf) == TRUE) {
-			    if (buf->FORCADR)   /* If the address is forced */
-				continue;       /* we'll find it later      */
+			    if (buf->FORCADR)	/* If the address is forced */
+				continue;	/* we'll find it later	    */
 			    
 			    /* OK. We made it till here, so we can go now  
 			     * and register it. We  only have to check and 
@@ -1177,7 +1237,7 @@ void find_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
     } else
 	printk("eata_dma: No BIOS32 extensions present. This driver release "
 	       "still depends on it.\n"
-               "          Skipping scan for PCI HBAs. \n");
+	       "	  Skipping scan for PCI HBAs. \n");
 #endif /* #ifndef CONFIG_PCI */
     return;
 }
@@ -1210,14 +1270,14 @@ int eata_detect(Scsi_Host_Template * tpnt)
     
     if (registered_HBAs != 0) {
 	printk("EATA (Extended Attachment) driver version: %d.%d%s\n"
-	       "developed in co-operation with DPT\n"             
+	       "developed in co-operation with DPT\n"		  
 	       "(c) 1993-95 Michael Neuffer, neuffer@goofy.zdv.uni-mainz.de\n",
 	       VER_MAJOR, VER_MINOR, VER_SUB);
 	printk("Registered HBAs:");
 	printk("\nHBA no. Boardtype: Revis: EATA: Bus: BaseIO: IRQ: DMA: Ch: "
 	       "ID: Pr: QS: SG: CPL:\n");
 	for (i = 1; i <= registered_HBAs; i++) {
-	    printk("scsi%-2d: %.10s v%s 2.0%c  %s %#.4x   %2d",
+	    printk("scsi%-2d: %.10s v%s 2.0%c  %s %#.4x	  %2d",
 		   HBA_ptr->host_no, SD(HBA_ptr)->name, SD(HBA_ptr)->revision,
 		   SD(HBA_ptr)->EATA_revision, (SD(HBA_ptr)->bustype == 'P')? 
 		   "PCI ":(SD(HBA_ptr)->bustype == 'E')?"EISA":"ISA ",
@@ -1226,7 +1286,7 @@ int eata_detect(Scsi_Host_Template * tpnt)
 		printk("   %2x ", HBA_ptr->dma_channel);
 	    else
 		printk("  %s", "BMST");
-	    printk("  %d   %d   %c  %2d  %2d   %2d\n", SD(HBA_ptr)->channel, 
+	    printk("  %d   %d	%c  %2d	 %2d   %2d\n", SD(HBA_ptr)->channel, 
 		   HBA_ptr->this_id, (SD(HBA_ptr)->primary == TRUE)?'Y':'N', 
 		   HBA_ptr->can_queue, HBA_ptr->sg_tablesize, HBA_ptr->cmd_per_lun);
 	    HBA_ptr = SD(HBA_ptr)->next;
@@ -1237,7 +1297,7 @@ int eata_detect(Scsi_Host_Template * tpnt)
 
     scsi_init_free((void *)dma_scratch, 512);
 
-    DBG(DPT_DEBUG, DELAY(1200));
+    DBG(DPT_DEBUG, DELAY(12));
 
     return(registered_HBAs);
 }
@@ -1262,7 +1322,6 @@ Scsi_Host_Template driver_template = EATA_DMA;
  * c-label-offset: -4
  * c-continued-statement-offset: 4
  * c-continued-brace-offset: 0
- * indent-tabs-mode: nil
  * tab-width: 8
  * End:
  */

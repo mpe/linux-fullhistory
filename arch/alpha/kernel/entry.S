@@ -9,7 +9,7 @@
 #define halt	.long PAL_halt
 #define rti	.long PAL_rti
 
-#define NR_SYSCALLS 310
+#define NR_SYSCALLS 320
 #define osf_vfork sys_fork
 
 /*
@@ -565,3 +565,6 @@ sys_call_table:
 /* linux-specific system calls start at 300 */
 /*300*/	.quad sys_bdflush, sys_sethae, sys_mount, sys_adjtimex, sys_swapoff
 	.quad sys_getdents, sys_create_module, sys_init_module, sys_delete_module, sys_get_kernel_syms
+	.quad sys_syslog, do_entSys, do_entSys, do_entSys, do_entSys
+	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
+

@@ -1,4 +1,3 @@
-/* $Id: scc.h,v 1.9 1995/01/12 18:24:40 JReuter Exp JReuter $ */
 
 #ifndef	_SCC_H
 #define	_SCC_H
@@ -15,9 +14,9 @@
 /* Constants */
 
 #define MAXSCC		4	/* number of max. supported chips */
-#define MAX_IBUFS	200	/* change this if you run out of memory */
-#define BUFSIZE	  	128	/* must not exceed 4096 */
-#define TPS		25	/* scc_timer():  Ticks Per Second */
+#define MAX_IBUFS	300	/* change this if you run out of memory */
+#define BUFSIZE	  	64	/* must not exceed 4096 */
+#define TPS		25	/* scc_timer(): 25  Ticks Per Second */
 
 #define SCC_TIMER	3
 
@@ -134,15 +133,13 @@ typedef unsigned short ioaddr;  /* old def */
 
 /* Basic message buffer structure */
 
-/* looks familiar? Hmm, yes... */
-
 struct mbuf {
 	struct mbuf *next;	/* Links mbufs belonging to single packets */
 	struct mbuf *anext;	/* Links packets on queues */
-	
+
 	char type;		/* who allocated this buffer? */
-	int  time_out;		/* unimplemented yet */
-	
+	unsigned long  time_out;/* buffer time out */
+
 	int size;		/* Size of associated data buffer */
 	int refcnt;		/* Reference count */
 	struct mbuf *dup;	/* Pointer to duplicated mbuf */
@@ -240,16 +237,19 @@ struct scc_channel {
         struct scc_stat stat;	/* statistical information */
         struct scc_modem modem; /* modem information */
 
-	struct mbuf *rbp;	/* rx: Head of mbuf chain being filled */
-	struct mbuf *rbp1;	/* rx: Pointer to mbuf currently being written */
-	struct mbuf *rcvq;	/* Pointer to mbuf packets currently received */
-	
+	char rxbuf[2048];	/* Rx frame buffer max framesize * 2 */
+	int rxbufcnt;		/* Rx frame counter */
+
 	struct mbuf *sndq;	/* tx: Packets awaiting transmission */
 	struct mbuf *tbp;	/* tx: Transmit mbuf being sent */
 
 	struct mbuf *sndq1;	/* Pointer to mbuf currently under construction */
 	struct mbuf *sndq2;	/* Pointer to mbuf currently under construction */
 
+/*	unsigned char 		*xmit_buf;
+	int			xmit_head;
+	int			xmit_tail;
+	int			xmit_cnt;*/
 	
 	/* Timer */
 

@@ -74,7 +74,7 @@ int request_dma(unsigned int dmanr, char * device_id)
 	if (dmanr >= MAX_DMA_CHANNELS)
 		return -EINVAL;
 
-	if (xchg_u32(&dma_chan_busy[dmanr].lock, 1) != 0)
+	if (xchg(&dma_chan_busy[dmanr].lock, 1) != 0)
 		return -EBUSY;
 
 	dma_chan_busy[dmanr].device_id = device_id;
@@ -91,7 +91,7 @@ void free_dma(unsigned int dmanr)
 		return;
 	}
 
-	if (xchg_u32(&dma_chan_busy[dmanr].lock, 0) == 0) {
+	if (xchg(&dma_chan_busy[dmanr].lock, 0) == 0) {
 		printk("Trying to free free DMA%d\n", dmanr);
 		return;
 	}	

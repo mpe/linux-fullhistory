@@ -27,18 +27,18 @@ static int generate(unsigned long sig, struct task_struct * p)
 	struct sigaction * sa = sig + p->sigaction - 1;
 
 	/* always generate signals for traced processes ??? */
-	if (p->flags & PF_PTRACED) {
-		p->signal |= mask;
-		return 1;
+	if (!(p->flags & PF_PTRACED)) {
+		/* don't bother with ignored signals (but SIGCHLD is special) */
+		if (sa->sa_handler == SIG_IGN && sig != SIGCHLD)
+			return 0;
+		/* some signals are ignored by default.. (but SIGCONT already did its deed) */
+		if ((sa->sa_handler == SIG_DFL) &&
+		    (sig == SIGCONT || sig == SIGCHLD || sig == SIGWINCH))
+			return 0;
 	}
-	/* don't bother with ignored signals (but SIGCHLD is special) */
-	if (sa->sa_handler == SIG_IGN && sig != SIGCHLD)
-		return 0;
-	/* some signals are ignored by default.. (but SIGCONT already did its deed) */
-	if ((sa->sa_handler == SIG_DFL) &&
-	    (sig == SIGCONT || sig == SIGCHLD || sig == SIGWINCH))
-		return 0;
 	p->signal |= mask;
+	if (p->state == TASK_INTERRUPTIBLE && (p->signal & ~p->blocked))
+		wake_up_process(p);
 	return 1;
 }
 
@@ -58,7 +58,7 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 		return 0;
 	if ((sig == SIGKILL) || (sig == SIGCONT)) {
 		if (p->state == TASK_STOPPED)
-			p->state = TASK_RUNNING;
+			wake_up_process(p);
 		p->exit_code = 0;
 		p->signal &= ~( (1<<(SIGSTOP-1)) | (1<<(SIGTSTP-1)) |
 				(1<<(SIGTTIN-1)) | (1<<(SIGTTOU-1)) );
@@ -382,6 +382,7 @@ NORET_TYPE void do_exit(long code)
 	}
 fake_volatile:
 	current->flags |= PF_EXITING;
+	del_timer(&current->real_timer);
 	sem_exit();
 	exit_mmap(current);
 	free_page_tables(current);

@@ -1,4 +1,5 @@
-/*
+/* -- sjcd.h
+ *
  * Definitions for a Sanyo CD-ROM interface
  *
  *   Copyright (C) 1995  Vadim V. Model
@@ -21,6 +22,11 @@
  * Change this to set the irq.
  */
 #define SJCD_INTR_NR        10
+
+/*
+ * Change this to set the dma channel.
+ */
+#define SJCD_DMA            0
 
 /*
  * port access macros

@@ -733,7 +733,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  		if (portptr[1]==htons(21)) 
  		{
  			skb = revamp(*skb_ptr, dev, ms);
- 			skb = *skb_ptr;
+ 			*skb_ptr = skb;
  			iph = skb->h.iph;
  			portptr = (unsigned short *)&(((char *)iph)[iph->ihl*4]);
  		}

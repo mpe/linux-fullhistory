@@ -178,7 +178,6 @@ static void aarp_send_reply(struct device *dev, struct at_addr *us, struct at_ad
 	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));	 
 	skb->arp	=	1;
 	skb->free	=	1;
-	skb_put(skb,len);
 	skb->dev	=	dev;
 	
 	/*
@@ -243,7 +242,6 @@ void aarp_send_probe(struct device *dev, struct at_addr *us)
 	
 	skb->arp	=	1;
 	skb->free	=	1;
-	skb_put(skb,len);
 	skb->dev	=	dev;
 	
 	/*

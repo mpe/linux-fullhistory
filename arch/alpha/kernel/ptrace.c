@@ -693,7 +693,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 			else
 				child->flags &= ~PF_TRACESYS;
 			child->exit_code = data;
-			child->state = TASK_RUNNING;
+			wake_up_process(child);
 			ptrace_cancel_bpt(child);
 			set_success(&regs,data);
 			return 0;
@@ -705,7 +705,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
  * exit.
  */
 		case PTRACE_KILL: {
-			child->state = TASK_RUNNING;
+			wake_up_process(child);
 			child->exit_code = SIGKILL;
 			ptrace_cancel_bpt(child);
 			return 0;
@@ -721,7 +721,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 				return res;
 			}
 			child->flags &= ~PF_TRACESYS;
-			child->state = TASK_RUNNING;
+			wake_up_process(child);
 			child->exit_code = data;
 			/* give it a chance to run. */
 			return 0;
@@ -733,7 +733,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 			   return -EIO;
 			}
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
-			child->state = TASK_RUNNING;
+			wake_up_process(child);
 			child->exit_code = data;
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;

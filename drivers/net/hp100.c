@@ -65,6 +65,7 @@
  *      0.11    14-Jun-95   Reset interface bug fixed?
  *			    Little bug in hp100_close function fixed.
  *                          100Mb/s connection debugged.
+ *      0.12    14-Jul-95   Link down is now handled better.
  *
  */
 
@@ -350,12 +351,6 @@ static int hp100_open( struct device *dev )
   int ioaddr = dev -> base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev -> priv;
 
-  if ( ( lp -> lan_type = hp100_sense_lan( dev ) ) < 0 )
-    {
-      printk( "%s: no connection found - check wire\n", dev -> name );
-      return -EIO;
-    }
-
   if ( request_irq( dev -> irq, hp100_interrupt, SA_INTERRUPT, lp -> id -> name ) )
     {
       printk( "%s: unable to get IRQ %d\n", dev -> name, dev -> irq );
@@ -372,6 +367,7 @@ static int hp100_open( struct device *dev )
   dev -> interrupt = 0;
   dev -> start = 1;
 
+  lp -> lan_type = hp100_sense_lan( dev );
   lp -> mac1_mode = HP100_MAC1MODE3;
   lp -> mac2_mode = HP100_MAC2MODE3;
   
@@ -424,11 +420,11 @@ static int hp100_close( struct device *dev )
   struct hp100_private *lp = (struct hp100_private *)dev -> priv;
 
   hp100_page( PERFORMANCE );
-  hp100_outw( 0xfefe, IRQ_MASK );		/* mask off all ints */
+  hp100_outw( 0xfefe, IRQ_MASK );		/* mask off all IRQs */
 
-  hp100_stop_interface( dev );			/* relogin */
+  hp100_stop_interface( dev );
 
-  if ( lp -> lan_type == HP100_LAN_100 )
+  if ( lp -> lan_type == HP100_LAN_100 )	/* relogin */
     hp100_login_to_vg_hub( dev );
 
   dev -> tbusy = 1;
@@ -452,6 +448,20 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
   int ioaddr = dev -> base_addr;
   u_short val;
   struct hp100_private *lp = (struct hp100_private *)dev -> priv;
+
+  if ( lp -> lan_type < 0 )
+    {
+      hp100_stop_interface( dev );
+      if ( ( lp -> lan_type = hp100_sense_lan( dev ) ) < 0 )
+        {
+          printk( "%s: no connection found - check wire\n", dev -> name );
+          hp100_start_interface( dev );	/* 10Mb/s RX packets maybe handled */
+          return -EIO;
+        }
+      if ( lp -> lan_type == HP100_LAN_100 )
+        lp -> hub_status = hp100_login_to_vg_hub( dev );
+      hp100_start_interface( dev );
+    }
   
   if ( ( i = ( hp100_inl( TX_MEM_FREE ) & ~0x7fffffff ) ) < skb -> len + 16 )
     {
@@ -463,11 +473,9 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
  				/* 100Mb/s adapter isn't connected to hub */
         {
           printk( "%s: login to 100Mb/s hub retry\n", dev -> name );
-          hp100_ints_off();
           hp100_stop_interface( dev );
           lp -> hub_status = hp100_login_to_vg_hub( dev );
           hp100_start_interface( dev );
-          hp100_ints_on();
         }
        else
         {
@@ -483,20 +491,16 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
               /* it's very heavy - all network setting must be changed!!! */
               printk( "%s: cable change 10Mb/s <-> 100Mb/s detected\n", dev -> name );
               lp -> lan_type = i;
-              hp100_ints_off();
               hp100_stop_interface( dev );
               if ( lp -> lan_type == HP100_LAN_100 )
                 lp -> hub_status = hp100_login_to_vg_hub( dev );
               hp100_start_interface( dev );
-              hp100_ints_on();
             }
            else
             {
               printk( "%s: interface reset\n", dev -> name );
-              hp100_ints_off();
               hp100_stop_interface( dev );
               hp100_start_interface( dev );
-              hp100_ints_on();
             }
         }
       dev -> trans_start = jiffies;
@@ -566,6 +570,15 @@ static void hp100_rx( struct device *dev )
   u_int header;
   struct sk_buff *skb;
 
+#if 0
+  if ( lp -> lan_type < 0 )
+    {
+      if ( ( lp -> lan_type = hp100_sense_lan( dev ) ) == HP100_LAN_100 )
+        lp -> hub_status = hp100_login_to_vg_hub( dev );
+      hp100_page( PERFORMANCE );
+    }
+#endif
+  
   packets = hp100_inb( RX_PKT_CNT );
 #ifdef HP100_DEBUG
   if ( packets > 1 )
@@ -730,6 +743,7 @@ static void hp100_interrupt( int irq )
     printk( "%s: re-entering the interrupt handler\n", dev -> name );
   hp100_ints_off();
   dev -> interrupt = 1;
+  hp100_page( PERFORMANCE );
   val = hp100_inw( IRQ_STATUS );
 #ifdef HP100_DEBUG_IRQ
   printk( "hp100_interrupt: irq_status = 0x%x\n", val );

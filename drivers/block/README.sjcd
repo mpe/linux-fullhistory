@@ -1,3 +1,4 @@
+ -- README.sjcd
 				80% of the work takes 20% of the time,
 				20% of the work takes 80% of the time...
 						(Murphy law)
@@ -5,21 +6,36 @@
 				Once started, training can not be stopped...
 						(StarWars)
 
+This is the README for the sjcd cdrom driver, version 1.3.
+
 This file is meant as a tips & tricks edge for the usage of the SANYO CDR-H94A
 cdrom drive. It will grow as the questions arise. ;-)
+Since the drive often comes with an ISP16 soundcard, which can be used
+as cdrom interface, this is also the place for ISP16 related issues.
 
 The driver should work with any SoundBlaster/Panasonic style CDROM interface,
 including the "soft configurable" MediaMagic sound card.
 To make this sound card (and others like "Mozart") working, it has to get 
 "configured" by software.
-So, you should boot DOS once (and by this, run the "configuration driver")
+The suggestion to configure the ISP16 soundcard by booting DOS and 
+a warm reboot to boot Linux somehow doesn't work, at least not
+on Eric's machine (IPC P90), with the version of the ISP16
+card he has (there appear to be at least two versions: Eric's card with
+no jumpered IDE support and Vadim's version with a jumper to enable
+IDE support).
+Therefore detection and configuration of the ISP16 interfaces is included
+in the driver.
+If we should support any other interfaces (which cannot be configured
+through DOS) or if there are any more ISP16 types, please let us
+know (maarel@marin.nl) and we'll see.
+
+Otherwise, you should boot DOS once (and by this, run the "configuration driver")
 and then switch to Linux by use of CTL-ALT-DEL. Each use of the RESET
 button or the power switch makes this procedure necessary again.
+If no ISP16 is detected, there's no harm done; a card configured trough DOS
+may still work as expected.
 
-Vadim has implemented a Linux "configuration driver" to set up the
-registers of the MediaMagic (ISP-16) sound card. These routines have to get
-integrated into the related CDROM and sound drivers directly at a later
-time. Currently, they reside at Vadim's server
+ISP16 configuration routines reside at Vadim's server
       rbrf.msk.su:/linux/mediamagic/
 and at Eberhard's mirror
       ftp.gwdg.de:/pub/linux/cdrom/drivers/sanyo/
@@ -28,6 +44,26 @@ Leo Spiekman's configuration routines for the ISP-16 card can get found at
       dutette.et.tudelft.nl:/pub/linux/
 and at Eberhard's mirror
       ftp.gwdg.de:/pub/linux/cdrom/drivers/optics/
+
+Eric van der Maarel's routines are included in sjcd.c.
+This, and any related stuff may be found by anonymous ftp at
+      ftp.gwdg.de:/pub/linux/cdrom/drivers/sanyo/
+
+The device major for sjcd is 18, and minor is 0. Create a block special
+file in your /dev directory (e.g., /dev/sjcd) with these numbers.
+(For those who don't know, being root and the following should do the trick:
+  mknod -m 644 /dev/sjcd b 18 0
+and mount the cdrom by /dev/sjcd).
+
+The default configuration parameters are:
+  base address 0x340
+  irq 10
+  no dma
+As of version 1.2, setting base address, irq and dma at boot time is supported
+through the use of command line options: type at the "boot:" prompt:
+  linux sjcd=<base address>,<irq>,<dma>
+(where your kernel is assumed to be called by saying "linux" to
+the boot manager).
 
 If something is wrong, e-mail to		vadim@rbrf.msk.su
 					or 	vadim@ipsun.ras.ru

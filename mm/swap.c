@@ -82,7 +82,7 @@ static int add_to_swap_cache(unsigned long addr, unsigned long entry)
 	swap_cache_add_total++;
 #endif
 	if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
-		entry = (unsigned long) xchg_ptr(swap_cache + MAP_NR(addr), (void *) entry);
+		entry = xchg(swap_cache + MAP_NR(addr), entry);
 		if (entry)  {
 			printk("swap_cache: replacing non-NULL entry\n");
 		}

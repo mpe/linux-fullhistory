@@ -4,11 +4,11 @@ const char *const scsi_dev_types[MAX_SCSI_DEVICE_CODE] =
 {
     "Direct-Access    ",
     "Sequential-Access",
-    "Printer          ",
-    "Processor        ",
-    "WORM             ",
-    "CD-ROM           ",
-    "Scanner          ",
+    "Printer	      ",
+    "Processor	      ",
+    "WORM	      ",
+    "CD-ROM	      ",
+    "Scanner	      ",
     "Optical Device   ",
     "Medium Changer   ",
     "Communications   "
@@ -47,8 +47,24 @@ void swap_statistics(u8 *p)
  */
 int eata_set_info(char *buffer, int length, struct Scsi_Host *HBA_ptr)
 {
-    DBG(DBG_PROC_WRITE, printk("%s\n", buffer));
-    return(-ENOSYS);  /* Currently this is a no-op */
+    if (length >= 8 && strncmp(buffer, "eata_dma", 8) == 0) {
+        buffer += 9;
+        length -= 9;
+        if(length >= 8 && strncmp(buffer, "latency", 7) == 0) {
+            SD(HBA_ptr)->do_latency = TRUE;
+            return(length+9);
+        } 
+        
+        if(length >=10 && strncmp(buffer, "nolatency", 9) == 0) {
+            SD(HBA_ptr)->do_latency = FALSE;
+            return(length+9);
+        } 
+        
+        printk("Unknown command:%s length: %d\n", buffer, length);
+    } else 
+        printk("Wrong Signature:%10s\n", (char *) ((ulong)buffer-9));
+    
+    return(-EINVAL);
 }
 
 /*
@@ -72,19 +88,19 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
     static u8 buff[512];
     static u8 buff2[512];
     hst_cmd_stat *rhcs, *whcs;
-    coco         *cc;
-    scsitrans    *st;
-    scsimod      *sm;
-    hobu         *hb;
-    scbu         *sb;
-    boty         *bt;
-    memco        *mc;
-    firm         *fm;
-    subinf       *si; 
-    pcinf        *pi;
-    arrlim       *al;
+    coco	 *cc;
+    scsitrans	 *st;
+    scsimod	 *sm;
+    hobu	 *hb;
+    scbu	 *sb;
+    boty	 *bt;
+    memco	 *mc;
+    firm	 *fm;
+    subinf	 *si; 
+    pcinf	 *pi;
+    arrlim	 *al;
     int i, x; 
-    int   size, len = 0;
+    int	  size, len = 0;
     off_t begin = 0;
     off_t pos = 0;
 
@@ -327,7 +343,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 		       SD(HBA_ptr)->writes[11]);
 	len += size; 
 	pos = begin + len;
-	size = sprintf(buffer+len,"Sum	 :%12u %12u\n",
+	size = sprintf(buffer+len,"Sum   : %12u %12u\n",
 		       SD(HBA_ptr)->reads[12], 
 		       SD(HBA_ptr)->writes[12]);
 	len += size; 
@@ -341,6 +357,79 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
     if (pos > offset + length)
 	goto stop_output;
 
+    if(SD(HBA_ptr)->do_latency == TRUE) {
+	size = sprintf(buffer + len, "Host Latency Command Statistics:\n"
+                       "Current timer resolution: 10ms\n"
+		       "	 Reads:	      Min:(ms)     Max:(ms)     Ave:(ms)\n");
+	len += size; 
+	pos = begin + len;
+	for (x = 0; x <= 10; x++) {
+	    size = sprintf(buffer+len,"%5dk:%12u %12u %12u %12u\n", 
+                           1 << x,
+			   SD(HBA_ptr)->reads_lat[x][0], 
+			   (SD(HBA_ptr)->reads_lat[x][1] == 0xffffffff) 
+                           ? 0:(SD(HBA_ptr)->reads_lat[x][1] * 10), 
+			   SD(HBA_ptr)->reads_lat[x][2] * 10, 
+			   SD(HBA_ptr)->reads_lat[x][3] * 10 /
+                           ((SD(HBA_ptr)->reads_lat[x][0])
+                            ? SD(HBA_ptr)->reads_lat[x][0]:1));
+	    len += size; 
+	    pos = begin + len;
+	}
+	size = sprintf(buffer+len,">1024k:%12u %12u %12u %12u\n",
+			   SD(HBA_ptr)->reads_lat[11][0], 
+			   (SD(HBA_ptr)->reads_lat[11][1] == 0xffffffff)
+                           ? 0:(SD(HBA_ptr)->reads_lat[11][1] * 10), 
+			   SD(HBA_ptr)->reads_lat[11][2] * 10, 
+			   SD(HBA_ptr)->reads_lat[11][3] * 10 /
+                           ((SD(HBA_ptr)->reads_lat[x][0])
+                            ? SD(HBA_ptr)->reads_lat[x][0]:1));
+	len += size; 
+	pos = begin + len;
+
+        if (pos < offset) {
+            len = 0;
+            begin = pos;
+        }
+        if (pos > offset + length)
+            goto stop_output;
+
+	size = sprintf(buffer + len,
+		       "	 Writes:      Min:(ms)     Max:(ms)     Ave:(ms)\n");
+	len += size; 
+	pos = begin + len;
+	for (x = 0; x <= 10; x++) {
+	    size = sprintf(buffer+len,"%5dk:%12u %12u %12u %12u\n", 
+                           1 << x,
+			   SD(HBA_ptr)->writes_lat[x][0], 
+			   (SD(HBA_ptr)->writes_lat[x][1] == 0xffffffff)
+                           ? 0:(SD(HBA_ptr)->writes_lat[x][1] * 10), 
+			   SD(HBA_ptr)->writes_lat[x][2] * 10, 
+			   SD(HBA_ptr)->writes_lat[x][3] * 10 /
+                           ((SD(HBA_ptr)->writes_lat[x][0])
+                            ? SD(HBA_ptr)->writes_lat[x][0]:1));
+	    len += size; 
+	    pos = begin + len;
+	}
+	size = sprintf(buffer+len,">1024k:%12u %12u %12u %12u\n",
+			   SD(HBA_ptr)->writes_lat[11][0], 
+			   (SD(HBA_ptr)->writes_lat[11][1] == 0xffffffff)
+                           ? 0:(SD(HBA_ptr)->writes_lat[x][1] * 10), 
+			   SD(HBA_ptr)->writes_lat[11][2] * 10, 
+			   SD(HBA_ptr)->writes_lat[11][3] * 10/
+                           ((SD(HBA_ptr)->writes_lat[x][0])
+                            ? SD(HBA_ptr)->writes_lat[x][0]:1));
+	len += size; 
+	pos = begin + len;
+
+        if (pos < offset) {
+            len = 0;
+            begin = pos;
+        }
+        if (pos > offset + length)
+            goto stop_output;
+    }
+
     scd = scsi_devices;
     
     size = sprintf(buffer+len,"Attached devices: %s\n", (scd)?"":"none");
@@ -350,7 +439,8 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
     while (scd) {
 	if (scd->host == HBA_ptr) {
 	    
-	    size = sprintf(buffer + len, "Channel: %02d Id: %02d Lun: %02d\n  Vendor: ",
+	    size = sprintf(buffer + len, 
+                           "Channel: %02d Id: %02d Lun: %02d\n  Vendor: ",
 			   scd->channel, scd->id, scd->lun);
 	    for (x = 0; x < 8; x++) {
 		if (scd->vendor[x] >= 0x20)

@@ -42,6 +42,8 @@ endif
 
 ifdef CONFIG_HP100
 NETDRV_OBJS := $(NETDRV_OBJS) hp100.o
+else
+MODULES := $(MODULES) hp100.o
 endif
 
 ifdef CONFIG_WD80x3

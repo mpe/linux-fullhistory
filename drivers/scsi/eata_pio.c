@@ -32,7 +32,7 @@
  *  Cambridge, MA 02139, USA.                               *
  *                                                          *
  ************************************************************
- *  last change: 95/06/20 OS: Linux 1.3.3 + pre1.3 SCSI pat.*
+ *  last change: 95/07/13                  OS: Linux 1.3.9  *
  ************************************************************/
 
 /* Look in eata_pio.h for configuration information */
@@ -504,7 +504,7 @@ int eata_pio_reset(Scsi_Cmnd * cmd)
     HD(cmd)->state = RESET;
     
     time = jiffies;
-    while (jiffies < (time + 300) && limit++ < 10000000);
+    while (jiffies < (time + (3 * HZ)) && limit++ < 10000000);
     
     DBG(DBG_ABNORM, printk("eata_pio_reset: interrupts disabled, loops %d.\n", limit));
     DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
@@ -650,7 +650,7 @@ void print_pio_config(struct get_conf *gc)
     printk("IRQ:%d IRQT:%d FORCADR:%d MCH:%d RIDQ:%d\n",
 	   gc->IRQ, gc->IRQ_TR, gc->FORCADR, 
 	   gc->MAX_CHAN, gc->ID_qest);
-    DBG(DPT_DEBUG, DELAY(1400));
+    DBG(DPT_DEBUG, DELAY(14));
 }
 
 static uint print_selftest(uint base)
@@ -1014,7 +1014,7 @@ int eata_pio_detect(Scsi_Host_Template * tpnt)
 	    HBA_ptr = SD(HBA_ptr)->next;
 	}
     }
-    DBG(DPT_DEBUG,DELAY(1200));
+    DBG(DPT_DEBUG,DELAY(12));
     
     return (registered_HBAs);
 }

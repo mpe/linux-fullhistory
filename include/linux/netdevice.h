@@ -31,7 +31,11 @@
 /* for future expansion when we will have different priorities. */
 #define DEV_NUMBUFFS	3
 #define MAX_ADDR_LEN	7
-#define MAX_HEADER	38
+#ifndef CONFIG_AX25
+#define MAX_HEADER	32		/* We really need about 18 worst case .. so 32 is aligned */
+#else
+#define MAX_HEADER	96		/* AX.25 + NetROM */
+#endif
 
 #define IS_MYADDR	1		/* address is (one of) our own	*/
 #define IS_LOOPBACK	2		/* address is for LOOPBACK	*/
@@ -73,12 +77,12 @@ struct device
   unsigned long		  mem_end;		/* sahared mem end	*/
   unsigned long		  mem_start;		/* shared mem start	*/
   unsigned long		  base_addr;		/* device I/O address	*/
-  unsigned long		  tbusy;		/* transmitter busy must be long for bitops */
   unsigned char		  irq;			/* device IRQ number	*/
 
   /* Low-level status flags. */
   volatile unsigned char  start,		/* start an operation	*/
                           interrupt;		/* interrupt arrived	*/
+  unsigned long		  tbusy;		/* transmitter busy must be long for bitops */
 
   struct device		  *next;
 

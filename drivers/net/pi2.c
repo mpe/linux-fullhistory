@@ -49,6 +49,7 @@
    April 23, 1995 (dp) Fixed ioctl so it works properly with piconfig program
                        when changing the baud rate or clock mode.
                        version 0.8 ALPHA
+   July 17, 1995 (ac)  Finally polishing of AX25.030+ support
          
 */
 
@@ -59,7 +60,7 @@
    of each transmitted packet. If this causes you to lose sleep, #undefine it.
 */
 
-#define STUFF2 1
+/*#define STUFF2 1*/
 
 /* The default configuration */
 #define PI_DMA 3
@@ -1429,10 +1430,10 @@ static int pi_probe(struct device *dev, int card_type)
     dev->rebuild_header = pi_rebuild_header;
     dev->set_mac_address = pi_set_mac_address;
 
-    dev->type = ARPHRD_AX25;	/* AF_AX25 device */
-    dev->hard_header_len = 17;	/* We don't do digipeaters */
-    dev->mtu = 1500;		/* eth_mtu is the default */
-    dev->addr_len = 7;		/* sizeof an ax.25 address */
+    dev->type = ARPHRD_AX25;			/* AF_AX25 device */
+    dev->hard_header_len = 73;			/* We do digipeaters now */
+    dev->mtu = 1500;				/* eth_mtu is the default */
+    dev->addr_len = 7;				/* sizeof an ax.25 address */
     memcpy(dev->broadcast, ax25_bcast, 7);
     memcpy(dev->dev_addr, ax25_test, 7);
 

@@ -5,6 +5,7 @@
 
 struct nfs_server {
 	struct file *file;
+	struct sockaddr toaddr ;  /* Added for change to NFS code to use sendto()  1995-06-02  JSP */
 	int lock;
 	struct wait_queue *wait;
 	int flags;

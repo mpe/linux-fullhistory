@@ -197,6 +197,8 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->signal = 0;
 	p->it_real_value = p->it_virt_value = p->it_prof_value = 0;
 	p->it_real_incr = p->it_virt_incr = p->it_prof_incr = 0;
+	init_timer(&p->real_timer);
+	p->real_timer.data = (unsigned long) p;
 	p->leader = 0;		/* process leadership doesn't inherit */
 	p->tty_old_pgrp = 0;
 	p->utime = p->stime = 0;
@@ -219,7 +221,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->mm->swappable = 1;
 	p->exit_signal = clone_flags & CSIGNAL;
 	p->counter = current->counter >> 1;
-	p->state = TASK_RUNNING;	/* do this last, just in case */
+	wake_up_process(p);			/* do this last, just in case */
 	return p->pid;
 bad_fork_cleanup:
 	task[nr] = NULL;

@@ -87,6 +87,8 @@ struct timer_list {
 extern void add_timer(struct timer_list * timer);
 extern int  del_timer(struct timer_list * timer);
 
+extern void it_real_fn(unsigned long);
+
 extern inline void init_timer(struct timer_list * timer)
 {
 	timer->next = NULL;

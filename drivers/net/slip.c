@@ -36,6 +36,7 @@
  *                                      statistics. Include CSLIP code only
  *                                      if it really needed.
  *		Alan Cox	:	Free slhc buffers in the right place.
+ *		Alan Cox	:	Allow for digipeated IP over AX.25
  *
  *
  *
@@ -1014,7 +1015,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 #else
 		if ((tmp & SL_MODE_AX25) || (tmp & SL_MODE_AX25VC)) {
 			sl->dev->addr_len=AX25_ADDR_LEN;	  /* sizeof an AX.25 addr */
-			sl->dev->hard_header_len=AX25_HEADER_LEN; /* We don't do digipeaters */
+			sl->dev->hard_header_len=73; /* We don't do digipeaters */
 		} else	{
 			sl->dev->addr_len=0;	/* No mac addr in slip mode */
 			sl->dev->hard_header_len=0;

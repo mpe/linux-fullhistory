@@ -26,6 +26,7 @@
  *		Alan Cox	: ARP only when compiled with CONFIG_INET
  *		Greg Page	: 802.2 and SNAP stuff.
  *		Alan Cox	: MAC layer pointers/new format.
+ *		Paul Gortmaker	: eth_copy_and_sum shouldn't csum padding.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -231,11 +232,13 @@ void eth_header_cache(struct device *dev, struct sock *sk, unsigned long saddr, 
 
 /*
  *	Copy from an ethernet device memory space to an sk_buff while checksumming if IP
+ *	The magic "34" is Rx_addr+Tx_addr+type_field+sizeof(struct iphdr) == 6+6+2+20.
  */
  
 void eth_copy_and_sum(struct sk_buff *dest, unsigned char *src, int length, int base)
 {
 	struct ethhdr *eth;
+	struct iphdr *iph;
 
 	IS_SKB(dest);
 	eth=(struct ethhdr *)dest->data;
@@ -246,6 +249,14 @@ void eth_copy_and_sum(struct sk_buff *dest, unsigned char *src, int length, int 
 		memcpy(dest->data+34,src+34,length);
 		return;
 	}
+	/*
+	 * We have to watch for padded packets. The csum doesn't include the
+	 * padding, and there is no point in copying the padding anyway.
+	 */
+	iph=(struct iphdr*)(src+14);	/* 14 = Rx_addr+Tx_addr+type_field */
+	if (ntohs(iph->tot_len)-sizeof(struct iphdr) <= length)
+		length=ntohs(iph->tot_len)-sizeof(struct iphdr);
+
 	dest->csum=csum_partial_copy(src+34,dest->data+34,length,base);
 	dest->ip_summed=1;
 }

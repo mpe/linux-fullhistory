@@ -92,8 +92,27 @@ struct task_struct * task[NR_TASKS] = {&init_task, };
 
 struct kernel_stat kstat = { 0 };
 
-unsigned long itimer_ticks = 0;
-unsigned long itimer_next = ~0;
+/*
+ * Wake up a process. Put it on the run-queue if it's not
+ * already there.  The "current" process is always on the
+ * run-queue, and as such you're allowed to do the simpler
+ * "current->state = TASK_RUNNING" to mark yourself runnable
+ * without the overhead of this.
+ *
+ * (actually, the run-queue isn't implemented yet, so this
+ * function is mostly a dummy one)
+ */
+inline void wake_up_process(struct task_struct * p)
+{
+	long oldstate;
+
+	oldstate = xchg(&p->state, TASK_RUNNING);
+	/* already on run-queue? */
+	if (oldstate == TASK_RUNNING || p == current)
+		return;
+	if (p->counter > current->counter + 3)
+		need_resched = 1;
+}
 
 /*
  *  'schedule()' is the scheduler function. It's a very simple and nice
@@ -103,16 +122,12 @@ unsigned long itimer_next = ~0;
  *   NOTE!!  Task 0 is the 'idle' task, which gets called when no other
  * tasks can run. It can not be killed, and it cannot sleep. The 'state'
  * information in task[0] is never used.
- *
- * The "confuse_gcc" goto is used only to get better assembly code..
- * Dijkstra probably hates me.
  */
 asmlinkage void schedule(void)
 {
 	int c;
 	struct task_struct * p;
 	struct task_struct * next;
-	unsigned long ticks;
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
 
@@ -121,69 +136,35 @@ asmlinkage void schedule(void)
 		intr_count = 0;
 	}
 	run_task_queue(&tq_scheduler);
-	cli();
-	ticks = itimer_ticks;
-	itimer_ticks = 0;
-	itimer_next = ~0;
-	sti();
+
+	if (current->state == TASK_INTERRUPTIBLE) {
+		if (current->signal & ~current->blocked)
+			current->state = TASK_RUNNING;
+	}
 	need_resched = 0;
 	nr_running = 0;
-	p = &init_task;
-	for (;;) {
-		if ((p = p->next_task) == &init_task)
-			goto confuse_gcc1;
-		if (ticks && p->it_real_value) {
-			if (p->it_real_value <= ticks) {
-				send_sig(SIGALRM, p, 1);
-				if (!p->it_real_incr) {
-					p->it_real_value = 0;
-					goto end_itimer;
-				}
-				do {
-					p->it_real_value += p->it_real_incr;
-				} while (p->it_real_value <= ticks);
-			}
-			p->it_real_value -= ticks;
-			if (p->it_real_value < itimer_next)
-				itimer_next = p->it_real_value;
-		}
-end_itimer:
-		if (p->state != TASK_INTERRUPTIBLE)
-			continue;
-		if (p->signal & ~p->blocked) {
-			p->state = TASK_RUNNING;
-			continue;
-		}
-		if (p->timeout && p->timeout <= jiffies) {
-			p->timeout = 0;
-			p->state = TASK_RUNNING;
-		}
-	}
-confuse_gcc1:
 
 /* this is the scheduler proper: */
-#if 0
-	/* give processes that go to sleep a bit higher priority.. */
-	/* This depends on the values for TASK_XXX */
-	/* This gives smoother scheduling for some things, but */
-	/* can be very unfair under some circumstances, so.. */
- 	if (TASK_UNINTERRUPTIBLE >= (unsigned) current->state &&
-	    current->counter < current->priority*2) {
-		++current->counter;
-	}
-#endif
 	c = -1000;
-	next = p = &init_task;
-	for (;;) {
-		if ((p = p->next_task) == &init_task)
-			goto confuse_gcc2;
-		if (p->state == TASK_RUNNING) {
-			nr_running++;
-			if (p->counter > c)
-				c = p->counter, next = p;
+	next = &init_task;
+	for_each_task(p) {
+		switch (p->state) {
+			case TASK_INTERRUPTIBLE:
+				if (!p->timeout)
+					continue;
+				if (p->timeout > jiffies)
+					continue;
+				p->timeout = 0;
+				p->state = TASK_RUNNING;
+			/* fall through */
+			case TASK_RUNNING:
+				nr_running++;
+				if (p->counter > c)
+					c = p->counter, next = p;
 		}
 	}
-confuse_gcc2:
+
+	/* if all runnable processes have "counter == 0", re-calculate counters */
 	if (!c) {
 		for_each_task(p)
 			p->counter = (p->counter >> 1) + p->priority;
@@ -219,11 +200,8 @@ void wake_up(struct wait_queue **q)
 	do {
 		if ((p = tmp->task) != NULL) {
 			if ((p->state == TASK_UNINTERRUPTIBLE) ||
-			    (p->state == TASK_INTERRUPTIBLE)) {
-				p->state = TASK_RUNNING;
-				if (p->counter > current->counter + 3)
-					need_resched = 1;
-			}
+			    (p->state == TASK_INTERRUPTIBLE))
+				wake_up_process(p);
 		}
 		if (!tmp->next) {
 			printk("wait_queue is bad (eip = %p)\n",
@@ -246,11 +224,8 @@ void wake_up_interruptible(struct wait_queue **q)
 		return;
 	do {
 		if ((p = tmp->task) != NULL) {
-			if (p->state == TASK_INTERRUPTIBLE) {
-				p->state = TASK_RUNNING;
-				if (p->counter > current->counter + 3)
-					need_resched = 1;
-			}
+			if (p->state == TASK_INTERRUPTIBLE)
+				wake_up_process(p);
 		}
 		if (!tmp->next) {
 			printk("wait_queue is bad (eip = %p)\n",
@@ -665,9 +640,6 @@ static void do_timer(int irq, struct pt_regs * regs)
 		mark_bh(TIMER_BH);
 	}
 	cli();
-	itimer_ticks++;
-	if (itimer_ticks > itimer_next)
-		need_resched = 1;
 	if (timer_head.next->expires < jiffies)
 		mark_bh(TIMER_BH);
 	if (tq_timer != &tq_last)

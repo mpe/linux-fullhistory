@@ -143,7 +143,7 @@ _INLINE_ void run_task_queue(task_queue *list)
 	void (*f) (void *);
 
 	while(1) {
-		p = xchg_ptr(list,&tq_last);
+		p = xchg(list,&tq_last);
 		if(p == &tq_last)
 			break;
 

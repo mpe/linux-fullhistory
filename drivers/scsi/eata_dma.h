@@ -16,7 +16,7 @@
 
 #define VER_MAJOR 2
 #define VER_MINOR 5
-#define VER_SUB   "6a"
+#define VER_SUB   "7a"
 
 
 /************************************************************************

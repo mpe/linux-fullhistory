@@ -85,7 +85,7 @@ __old_ipl; })
 #define save_flags(flags)	do { flags = getipl(); } while (0)
 #define restore_flags(flags)	setipl(flags)
 
-extern inline unsigned long xchg_u32(int * m, unsigned long val)
+extern inline unsigned long xchg_u32(volatile int * m, unsigned long val)
 {
 	unsigned long dummy, dummy2;
 
@@ -100,7 +100,7 @@ extern inline unsigned long xchg_u32(int * m, unsigned long val)
 	return val;
 }
 
-extern inline unsigned long xchg_u64(long * m, unsigned long val)
+extern inline unsigned long xchg_u64(volatile long * m, unsigned long val)
 {
 	unsigned long dummy, dummy2;
 
@@ -115,9 +115,19 @@ extern inline unsigned long xchg_u64(long * m, unsigned long val)
 	return val;
 }
 
-extern inline void * xchg_ptr(void *m, void *val)
+#define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
+#define tas(ptr) (xchg((ptr),1))
+
+static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
 {
-	return (void *) xchg_u64((long *) m, (unsigned long) val);
+	switch (size) {
+		case 4:
+			return xchg_u32(ptr, x);
+		case 8:
+			return xchg_u64(ptr, x);
+	}
+	printk("Argh.. xchg() with unsupported size\n");
+	return x;
 }
 
 #endif /* __ASSEMBLY__ */

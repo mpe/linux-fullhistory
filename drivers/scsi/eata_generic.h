@@ -51,19 +51,19 @@
 #define SG_SIZE_BIG	509	       /* max. 509 */
 
 #define C_P_L_DIV	2 /* 1 <= C_P_L_DIV <= 8	    
-	       * You can use this parameter to fine-tune
-	       * the driver. Depending on the number of 
-	       * devices and their speed and ability to queue 
-	       * commands, you will get the best results with a
-	       * value
-	       * ~= numdevices-(devices_unable_to_queue_commands/2)
-	       * The reason for this is that the disk driver 
-	       * tends to flood the queue, so that other 
-	       * drivers have problems to queue commands 
-	       * themselves. This can for example result in 
-	       * the effect that the tape stops during disk 
-	       * accesses. 
-	       */
+			   * You can use this parameter to fine-tune
+			   * the driver. Depending on the number of 
+			   * devices and their speed and ability to queue 
+			   * commands, you will get the best results with a
+			   * value
+			   * ~= numdevices-(devices_unable_to_queue_commands/2)
+			   * The reason for this is that the disk driver 
+			   * tends to flood the queue, so that other 
+			   * drivers have problems to queue commands 
+			   * themselves. This can for example result in 
+			   * the effect that the tape stops during disk 
+			   * accesses. 
+			   */
 
 #define FREE	   0
 #define OK	   0
@@ -77,7 +77,7 @@
 #define CD(cmd)	 ((struct eata_ccb *)(cmd->host_scribble))
 #define SD(host) ((hostdata *)&(host->hostdata))
 
-#define DELAY(x) { __u32 i; i = jiffies + x; while (jiffies < i); }
+#define DELAY(x) { __u32 i; i = jiffies + (x * HZ); while (jiffies < i) barrier(); }
 #define DEL2(x)	 { __u32 i; for (i = 0; i < 0xffff * x; i++); }
 
 /***********************************************
@@ -189,9 +189,9 @@ struct eata_register {	    /* EATA register set */
     __u8 data_reg[2];	    /* R, couldn't figure this one out		*/
     __u8 cp_addr[4];	    /* W, CP address register			*/
     union { 
-    __u8 command;	/* W, command code: [read|set] conf, send CP*/
-    struct reg_bit status;  /* R, see register_bit1		    */
-    __u8 statusbyte;
+	__u8 command;	    /* W, command code: [read|set] conf, send CP*/
+	struct reg_bit status;	/* R, see register_bit1			*/
+	__u8 statusbyte;
     } ovr;   
     struct reg_abit aux_stat; /* R, see register_bit2			*/
 };
@@ -200,48 +200,48 @@ struct get_conf {	      /* Read Configuration Array		*/
     __u32  len;		      /* Should return 0x22, 0x24, etc		*/
     __u32 signature;	      /* Signature MUST be "EATA"		*/
     __u8    version2:4,
-	 version:4;	  /* EATA Version level			    */
+	     version:4;	      /* EATA Version level			*/
     __u8 OCS_enabled:1,	      /* Overlap Command Support enabled	*/
-     TAR_support:1,	  /* SCSI Target Mode supported		    */
-	  TRNXFR:1,	  /* Truncate Transfer Cmd not necessary    */
-		  /* Only used in PIO Mode		    */
-    MORE_support:1,	  /* MORE supported (only PIO Mode)	    */
-     DMA_support:1,	  /* DMA supported Driver uses only	    */
-		  /* this mode				    */
-       DMA_valid:1,	  /* DRQ value in Byte 30 is valid	    */
-	 ATA:1,	      /* ATA device connected (not supported)	*/
-       HAA_valid:1;	  /* Hostadapter Address is valid	    */
+	 TAR_support:1,	      /* SCSI Target Mode supported		*/
+	      TRNXFR:1,	      /* Truncate Transfer Cmd not necessary	*
+			       * Only used in PIO Mode			*/
+	MORE_support:1,	      /* MORE supported (only PIO Mode)		*/
+	 DMA_support:1,	      /* DMA supported Driver uses only		*
+			       * this mode				*/
+	   DMA_valid:1,	      /* DRQ value in Byte 30 is valid		*/
+		 ATA:1,	      /* ATA device connected (not supported)	*/
+	   HAA_valid:1;	      /* Hostadapter Address is valid		*/
 
-    __u16 cppadlen;	      /* Number of pad bytes send after CD data */
-		  /* set to zero for DMA commands	    */
-    __u8 scsi_id[4];	      /* SCSI ID of controller 2-0 Byte 0 res.	*/
-		  /* if not, zero is returned		    */
+    __u16 cppadlen;	      /* Number of pad bytes send after CD data *
+			       * set to zero for DMA commands		*/
+    __u8 scsi_id[4];	      /* SCSI ID of controller 2-0 Byte 0 res.	*
+			       * if not, zero is returned		*/
     __u32  cplen;	      /* CP length: number of valid cp bytes	*/
-    __u32  splen;	      /* Number of bytes returned after		*/ 
-		  /* Receive SP command			    */
+    __u32  splen;	      /* Number of bytes returned after		* 
+			       * Receive SP command			*/
     __u16 queuesiz;	      /* max number of queueable CPs		*/
     __u16 dummy;
     __u16 SGsiz;	      /* max number of SG table entries		*/
     __u8    IRQ:4,	      /* IRQ used this HA			*/
-     IRQ_TR:1,		  /* IRQ Trigger: 0=edge, 1=level	    */
-     SECOND:1,		  /* This is a secondary controller	    */	
+	 IRQ_TR:1,	      /* IRQ Trigger: 0=edge, 1=level		*/
+	 SECOND:1,	      /* This is a secondary controller		*/
     DMA_channel:2;	      /* DRQ index, DRQ is 2comp of DRQX	*/
-    __u8 sync;		      /* device at ID 7 tru 0 is running in	*/
-		  /* synchronous mode, this will disappear  */
+    __u8 sync;		      /* device at ID 7 tru 0 is running in	*
+			       * synchronous mode, this will disappear	*/
     __u8   DSBLE:1,	      /* ISA i/o addressing is disabled		*/
-     FORCADR:1,		  /* i/o address has been forced	    */
-      SG_64K:1,
-      SG_UAE:1,
-	:4;
+	 FORCADR:1,	      /* i/o address has been forced		*/
+	  SG_64K:1,
+	  SG_UAE:1,
+		:4;
     __u8  MAX_ID:5,	      /* Max number of SCSI target IDs		*/
-    MAX_CHAN:3;		  /* Number of SCSI busses on HBA	    */
+	MAX_CHAN:3;	      /* Number of SCSI busses on HBA		*/
     __u8 MAX_LUN;	      /* Max number of LUNs			*/
     __u8	:3,
-     AUTOTRM:1,
-     M1_inst:1,
-     ID_qest:1,		  /* Raidnum ID is questionable		    */
-      is_PCI:1,		  /* HBA is PCI				    */
-     is_EISA:1;		  /* HBA is EISA			    */
+	 AUTOTRM:1,
+	 M1_inst:1,
+	 ID_qest:1,	      /* Raidnum ID is questionable		*/
+	  is_PCI:1,	      /* HBA is PCI				*/
+	 is_EISA:1;	      /* HBA is EISA				*/
     __u8 unused[478]; 
 };
 
@@ -253,60 +253,62 @@ struct eata_sg_list
 
 struct eata_ccb {	      /* Send Command Packet structure	    */
  
-    __u8 SCSI_Reset:1,	      /* Cause a SCSI Bus reset on the cmd  */
-       HBA_Init:1,	  /* Cause Controller to reinitialize	*/
-       Auto_Req_Sen:1,	      /* Do Auto Request Sense on errors    */
-	scatter:1,	  /* Data Ptr points to a SG Packet	*/
-	 Resrvd:1,	  /* RFU				*/
-      Interpret:1,	  /* Interpret the SCSI cdb of own use	*/
-	DataOut:1,	  /* Data Out phase with command	*/
-	 DataIn:1;	  /* Data In phase with command		*/
-    __u8 reqlen;	      /* Request Sense Length		    */ 
-		  /* Valid if Auto_Req_Sen=1		*/
+    __u8 SCSI_Reset:1,	      /* Cause a SCSI Bus reset on the cmd	*/
+	   HBA_Init:1,	      /* Cause Controller to reinitialize	*/
+       Auto_Req_Sen:1,	      /* Do Auto Request Sense on errors	*/
+	    scatter:1,	      /* Data Ptr points to a SG Packet		*/
+	     Resrvd:1,	      /* RFU					*/
+	  Interpret:1,	      /* Interpret the SCSI cdb of own use	*/
+	    DataOut:1,	      /* Data Out phase with command		*/
+	     DataIn:1;	      /* Data In phase with command		*/
+    __u8 reqlen;	      /* Request Sense Length			* 
+			       * Valid if Auto_Req_Sen=1		*/
     __u8 unused[3];
-    __u8  FWNEST:1,	      /* send cmd to phys RAID component*/
-     unused2:7;
-    __u8 Phsunit:1,	      /* physical unit on mirrored pair */
-	I_AT:1,		  /* inhibit address translation    */
-     I_HBA_C:1,		  /* HBA inhibit caching	    */
-     unused3:5;
+    __u8  FWNEST:1,	      /* send cmd to phys RAID component	*/
+	 unused2:7;
+    __u8 Phsunit:1,	      /* physical unit on mirrored pair		*/
+	    I_AT:1,	      /* inhibit address translation		*/
+	 I_HBA_C:1,	      /* HBA inhibit caching			*/
+	 unused3:5;
 
-    __u8     cp_id:5,	      /* SCSI Device ID of target	*/ 
-    cp_channel:3;	  /* SCSI Channel # of HBA	    */
+    __u8     cp_id:5,	      /* SCSI Device ID of target		*/ 
+	cp_channel:3;	      /* SCSI Channel # of HBA			*/
     __u8    cp_lun:3,
-	  :2,
-     cp_luntar:1,	  /* CP is for target ROUTINE	    */
-     cp_dispri:1,	  /* Grant disconnect privilege	    */
-       cp_identify:1;	      /* Always TRUE			*/	   
-    __u8 cp_msg1;	      /* Message bytes 0-3		*/
+		  :2,
+	 cp_luntar:1,	      /* CP is for target ROUTINE		*/
+	 cp_dispri:1,	      /* Grant disconnect privilege		*/
+       cp_identify:1;	      /* Always TRUE				*/
+    __u8 cp_msg1;	      /* Message bytes 0-3			*/
     __u8 cp_msg2;
     __u8 cp_msg3;
-    __u8 cp_cdb[12];	      /* Command Descriptor Block	*/
-    __u32 cp_datalen;	      /* Data Transfer Length		*/
-		  /* If scatter=1 len of sg package */
-    void *cp_viraddr;	      /* address of this ccb		*/
-    __u32 cp_dataDMA;	      /* Data Address, if scatter=1	*
-		   * address of scatter packet	    */	
-    __u32 cp_statDMA;	      /* address for Status Packet	*/ 
-    __u32 cp_reqDMA;	      /* Request Sense Address, used if */
-		  /* CP command ends with error	    */
-		  /* Additional CP info begins here */
+    __u8 cp_cdb[12];	      /* Command Descriptor Block		*/
+    __u32 cp_datalen;	      /* Data Transfer Length			*
+			       * If scatter=1 len of sg package		*/
+    void *cp_viraddr;	      /* address of this ccb			*/
+    __u32 cp_dataDMA;	      /* Data Address, if scatter=1		*
+			       * address of scatter packet		*/
+    __u32 cp_statDMA;	      /* address for Status Packet		*/ 
+    __u32 cp_reqDMA;	      /* Request Sense Address, used if		*
+			       * CP command ends with error		*/
+    /* Additional CP info begins here */
+    __u32 timestamp;	      /* Needed to measure command latency	*/
     __u32 timeout;
+    __u8 sizeindex;
+    __u8 rw_latency;
     __u8 retries;
-    __u8 status;	      /* status of this queueslot	*/
-
-    Scsi_Cmnd *cmd;	      /* address of cmd			*/
+    __u8 status;	      /* status of this queueslot		*/
+    Scsi_Cmnd *cmd;	      /* address of cmd				*/
     struct eata_sg_list *sg_list;
 };
 
 
 struct eata_sp {
-    __u8 hba_stat:7,	      /* HBA status			*/
-	  EOC:1;	  /* True if command finished	    */
-    __u8 scsi_stat;	      /* Target SCSI status		*/	 
+    __u8 hba_stat:7,	      /* HBA status				*/
+	      EOC:1;	      /* True if command finished		*/
+    __u8 scsi_stat;	      /* Target SCSI status			*/
     __u8 reserved[2];
-    __u32  residue_len;	      /* Number of bytes not transferred */
-    struct eata_ccb *ccb;     /* Address set in COMMAND PACKET	*/
+    __u32  residue_len;	      /* Number of bytes not transferred	*/
+    struct eata_ccb *ccb;     /* Address set in COMMAND PACKET		*/
     __u8 msg[12];
 };
 
@@ -320,12 +322,15 @@ typedef struct hstd {
     __u8   state;		 /* state of HBA	       */
     __u8   primary;		 /* true if primary	       */
     __u8   broken_INQUIRY:1;	 /* This is an EISA HBA with   *
-		  * broken INQUIRY	       */
+				  * broken INQUIRY	       */
+    __u8   do_latency;		 /* Latency measurement flag   */
     __u32  reads[13];
     __u32  writes[13];
-		 /* state of Target (RESET,..) */
+    __u32  reads_lat[12][4];
+    __u32  writes_lat[12][4];
+				 /* state of Target (RESET,..) */
     __u8   t_state[MAXCHANNEL][MAXTARGET];   
-		 /* timeouts on target	       */
+				 /* timeouts on target	       */
     __u32  t_timeout[MAXCHANNEL][MAXTARGET]; 
     __u32  last_ccb;		 /* Last used ccb	       */
     __u32  cplen;		 /* size of CP in words	       */
@@ -372,7 +377,6 @@ struct geom_emul {
  * c-label-offset: -4
  * c-continued-statement-offset: 4
  * c-continued-brace-offset: 0
- * indent-tabs-mode: nil
  * tab-width: 8
  * End:
  */

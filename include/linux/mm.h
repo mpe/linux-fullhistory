@@ -275,7 +275,7 @@ extern inline long find_in_swap_cache (unsigned long addr)
 #ifdef SWAP_CACHE_INFO
 	swap_cache_find_total++;
 #endif
-	entry = (unsigned long) xchg_ptr(swap_cache + MAP_NR(addr), NULL);
+	entry = xchg(swap_cache + MAP_NR(addr), 0);
 #ifdef SWAP_CACHE_INFO
 	if (entry)
 		swap_cache_find_success++;
@@ -290,7 +290,7 @@ extern inline int delete_from_swap_cache(unsigned long addr)
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
 #endif	
-	entry= (unsigned long) xchg_ptr(swap_cache + MAP_NR(addr), NULL);
+	entry= xchg(swap_cache + MAP_NR(addr), 0);
 	if (entry)  {
 #ifdef SWAP_CACHE_INFO
 		swap_cache_del_success++;

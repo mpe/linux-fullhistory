@@ -15,7 +15,6 @@
 	$(CC) $(CFLAGS) -c $<
 
 SUBDIRS	= block char net #streams
-ALL_SUBDIRS = block char net scsi #streams
 
 ifdef CONFIG_PCI
 SUBDIRS := $(SUBDIRS) pci
@@ -35,9 +34,9 @@ driversubdirs: dummy
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
 
 modules: dummy
-	set -e; for i in $(ALL_SUBDIRS); do $(MAKE) -C $$i modules; done
+	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i modules; done
 
 dep:
-	set -e; for i in $(ALL_SUBDIRS); do $(MAKE) -C $$i dep; done
+	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
 
 include $(TOPDIR)/Rules.make

@@ -102,7 +102,10 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end, int 
 	fs = get_fs();
 	set_fs(get_ds());
 	for (n = 0, timeout = init_timeout; ; n++, timeout <<= 1) {
-		result = sock->ops->send(sock, (void *) start, len, 0, 0);
+	  /* JSP 1995-07-01  Use sendto() not send() to cope with multi-homed hosts
+	     as we have set the socket to have INADDR_ANY as it's desination */
+		result = sock->ops->sendto(sock, (void *) start, len, 0, 0,
+					   &(server->toaddr), sizeof((server->toaddr))) ;
 		if (result < 0) {
 			printk("nfs_rpc_call: send error = %d\n", result);
 			break;

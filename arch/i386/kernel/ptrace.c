@@ -466,7 +466,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			else
 				child->flags &= ~PF_TRACESYS;
 			child->exit_code = data;
-			child->state = TASK_RUNNING;
+			wake_up_process(child);
 	/* make sure the single step bit is not set. */
 			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
 			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
@@ -481,7 +481,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		case PTRACE_KILL: {
 			long tmp;
 
-			child->state = TASK_RUNNING;
+			wake_up_process(child);
 			child->exit_code = SIGKILL;
 	/* make sure the single step bit is not set. */
 			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
@@ -497,7 +497,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			child->flags &= ~PF_TRACESYS;
 			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) | TRAP_FLAG;
 			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
-			child->state = TASK_RUNNING;
+			wake_up_process(child);
 			child->exit_code = data;
 	/* give it a chance to run. */
 			return 0;
@@ -509,7 +509,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			if ((unsigned long) data > NSIG)
 				return -EIO;
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
-			child->state = TASK_RUNNING;
+			wake_up_process(child);
 			child->exit_code = data;
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;

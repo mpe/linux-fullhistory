@@ -1358,7 +1358,7 @@ static int ide_open(struct inode * inode, struct file * filp)
 		sleep_on(&dev->wqueue);
 	dev->usage++;
 	restore_flags(flags);
-	if (dev->id->config & (1<<7))	/* for removeable disks */
+	if (dev->id && (dev->id->config & (1<<7)))	/* for removeable disks */
 		check_disk_change(inode->i_rdev);
 #ifdef CONFIG_BLK_DEV_IDECD
 	if (dev->type == cdrom)
@@ -1654,7 +1654,7 @@ static int ide_check_media_change (dev_t full_dev)
 	if (dev->type == cdrom)
 		return cdrom_check_media_change (dev);
 #endif	/* CONFIG_BLK_DEV_IDECD */
-	if (dev->id->config & (1<<7))	/* for removeable disks */
+	if (dev->id && (dev->id->config & (1<<7))) /* for removeable disks */
 		return 1;	/* always assume it was changed */
 	return 0;
 }

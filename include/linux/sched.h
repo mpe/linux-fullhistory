@@ -61,6 +61,7 @@ extern int nr_running, nr_tasks;
 #include <linux/vm86.h>
 #include <linux/math_emu.h>
 #include <linux/ptrace.h>
+#include <linux/timer.h>
 
 #include <asm/processor.h>
 
@@ -174,6 +175,7 @@ struct task_struct {
 	unsigned long timeout;
 	unsigned long it_real_value, it_prof_value, it_virt_value;
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
+	struct timer_list real_timer;
 	long utime, stime, cutime, cstime, start_time;
 	struct rlimit rlim[RLIM_NLIMITS]; 
 	unsigned short used_math;
@@ -237,7 +239,9 @@ struct task_struct {
 /* suppl grps*/ {NOGROUP,}, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL,NULL, \
 /* uid etc */	0,0,0,0,0,0,0,0, \
-/* timeout */	0,0,0,0,0,0,0,0,0,0,0,0, \
+/* timeout */	0,0,0,0,0,0,0, \
+/* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
+/* utime */	0,0,0,0,0, \
 /* rlimits */   { {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
 		  {LONG_MAX, LONG_MAX}, {_STK_LIM, _STK_LIM},  \
 		  {       0, LONG_MAX}, {LONG_MAX, LONG_MAX}, \
@@ -271,6 +275,7 @@ extern void sleep_on(struct wait_queue ** p);
 extern void interruptible_sleep_on(struct wait_queue ** p);
 extern void wake_up(struct wait_queue ** p);
 extern void wake_up_interruptible(struct wait_queue ** p);
+extern void wake_up_process(struct task_struct * tsk);
 
 extern void notify_parent(struct task_struct * tsk);
 extern int send_sig(unsigned long sig,struct task_struct * p,int priv);
