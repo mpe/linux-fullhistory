@@ -100,10 +100,15 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_UMISC),y)
+# To support third-party modules, misc.c must reside in the kernel
+M = y
+endif
+
 ifdef CONFIG_SOFT_WATCHDOG
 L_OBJS += softdog.o
 M = y
-# This is not modularized, so if configured then "mouse.c" will be resident
+# This is not modularized, so if configured then "misc.c" will be resident
 endif
 
 ifeq ($(CONFIG_WDT),y)
@@ -134,10 +139,10 @@ LX_OBJS += apm_bios.o
 endif
 
 ifdef M
-LX_OBJS += mouse.o
+LX_OBJS += misc.o
 else
   ifdef MM
-  MX_OBJS += mouse.o
+  MX_OBJS += misc.o
   endif
 endif
 

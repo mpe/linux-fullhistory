@@ -27,7 +27,7 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
-#include <linux/mouse.h>
+#include <linux/miscdevice.h>
 #include "wd501p.h"
 #include <linux/malloc.h>
 #include <linux/ioport.h>
@@ -213,7 +213,7 @@ static struct file_operations wdt_fops = {
 	wdt_release
 };
 
-static struct mouse wdt_mouse=
+static struct miscdevice wdt_mouse=
 {
 	WATCHDOG_MINOR,
 	"wdt",
@@ -221,7 +221,7 @@ static struct mouse wdt_mouse=
 };
 
 #ifdef CONFIG_WDT_501
-static struct mouse temp_mouse=
+static struct miscdevice temp_mouse=
 {
 	TEMP_MINOR,
 	"temperature",
@@ -251,7 +251,7 @@ void cleanup_module(void)
 {
 	mouse_deregister(&wdt_mouse);
 #ifdef CONFIG_WDT_501	
-	mouse_deregister(&temp_mouse);
+	misc_deregister(&temp_mouse);
 #endif	
 	release_region(io,8);
 	free_irq(irq, NULL);
@@ -269,7 +269,7 @@ int wdt_init(void)
 	}
 	mouse_register(&wdt_mouse);
 #ifdef CONFIG_WDT_501	
-	mouse_register(&temp_mouse);
+	misc_register(&temp_mouse);
 #endif	
 	request_region(io, 8, "wdt501");
 	return 0;

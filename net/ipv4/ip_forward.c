@@ -29,6 +29,9 @@
 #include <linux/udp.h>
 #include <linux/firewall.h>
 #include <linux/ip_fw.h>
+#ifdef CONFIG_IP_MASQUERADE
+#include <net/ip_masq.h>
+#endif
 #include <net/checksum.h>
 #include <linux/route.h>
 #include <net/route.h>
@@ -210,7 +213,10 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 #ifndef CONFIG_IP_NO_ICMP_REDIRECT
 		if (dev == dev2 && 
 			!((iph->saddr^dev->pa_addr)&dev->pa_mask) &&
-		    	(rt->rt_flags&RTF_MODIFIED) && !opt->srr)
+			/* The daddr!=raddr test isnt obvious - what its doing
+			   is avoiding sending a frame the receiver will not 
+			   believe anyway.. */
+			iph->daddr != raddr/*ANK*/ && !opt->srr)
 				icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, raddr, dev);
 #endif
 #ifdef CONFIG_IP_MROUTE

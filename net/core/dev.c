@@ -1349,7 +1349,9 @@ int net_dev_init(void)
 	 *	SLHC if present needs attaching so other people see it
 	 *	even if not opened.
 	 */
-#if (defined(CONFIG_SLIP_COMPRESSED) || defined(CONFIG_PPP)) && defined(CONFIG_SLHC_BUILTIN)
+#if (defined(CONFIG_SLIP) && defined(CONFIG_SLIP_COMPRESSED)) \
+	 || defined(CONFIG_PPP) \
+    || (defined(CONFIG_ISDN) && defined(CONFIG_ISDN_PPP))
 	slhc_install();
 #endif	
 

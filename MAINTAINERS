@@ -102,6 +102,12 @@ M:      faith@cs.unc.edu
 L:      linux-scsi@vger.rutgers.edu
 S:      Odd fixes (e.g., new signatures)
 
+SCSI TAPE DRIVER
+P:	Kai Mdkisara
+M:	Kai.Makisara@metla.fi
+L:	linux-scsi@vger.rutgers.edu
+S:	Maintained
+
 FTAPE/QIC-117:
 P:	Kai Harrekilde-Petersen
 M:	khp@@dolphinics.no

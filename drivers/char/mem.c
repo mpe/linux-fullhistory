@@ -11,7 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/tty.h>
-#include <linux/mouse.h>
+#include <linux/miscdevice.h>
 #include <linux/tpqic02.h>
 #include <linux/ftape.h>
 #include <linux/malloc.h>
@@ -387,10 +387,10 @@ int chr_dev_init(void)
 #ifdef CONFIG_PRINTER
 	lp_init();
 #endif
-#if defined (CONFIG_BUSMOUSE) || \
+#if defined (CONFIG_BUSMOUSE) || defined(CONFIG_UMISC) || \
     defined (CONFIG_PSMOUSE) || defined (CONFIG_MS_BUSMOUSE) || \
     defined (CONFIG_ATIXL_BUSMOUSE) || defined(CONFIG_SOFT_WATCHDOG)
-	mouse_init();
+	misc_init();
 #endif
 #ifdef CONFIG_SOUND
 	soundcard_init();

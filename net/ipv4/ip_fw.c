@@ -34,6 +34,7 @@
  *	Add support for matching on device names.
  *		Jos Vos <jos@xos.nl> 15/2/1996.
  *
+ *
  * Masquerading functionality
  *
  * Copyright (c) 1994 Pauline Middelink
@@ -51,6 +52,8 @@
  *	Alan Cox		:	Cleaned up retransmits in spoofing.
  *	Alan Cox		:	Cleaned up length setting.
  *	Wouter Gadeyne		:	Fixed masquerading support of ftp PORT commands
+ *
+ *	Juan Jose Ciarlante	:	Masquerading code moved to ip_masq.c
  *
  *	All the real work was done by .....
  *
@@ -98,6 +101,11 @@
 #include <net/icmp.h>
 #include <linux/firewall.h>
 #include <linux/ip_fw.h>
+
+#ifdef CONFIG_IP_MASQUERADE
+#include <net/ip_masq.h>
+#endif
+
 #include <net/checksum.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
@@ -145,17 +153,6 @@ int ip_fw_out_policy=IP_FW_F_ACCEPT;
 
 static int *policies[] =
 	{&ip_fw_fwd_policy, &ip_fw_in_policy, &ip_fw_out_policy};
-
-#endif
-
-#ifdef CONFIG_IP_MASQUERADE
-/*
- *	Implement IP packet masquerading
- */
-
-static unsigned short masq_port = PORT_MASQ_BEGIN;
-static const char *strProt[] = {"UDP","TCP"};
-struct ip_masq *ip_msq_hosts;
 
 #endif
 
@@ -522,517 +519,6 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 		return 0;
 }
 
-#ifdef CONFIG_IP_MASQUERADE
-
-static void masq_expire(unsigned long data)
-{
-	struct ip_masq *ms = (struct ip_masq *)data;
-	struct ip_masq *old,*cur;
-	unsigned long flags;
-
-#ifdef DEBUG_MASQ
-	printk("Masqueraded %s %lX:%X expired\n",
-			strProt[ms->protocol==IPPROTO_TCP],
-			ntohl(ms->src),ntohs(ms->sport));
-#endif
-	
-	save_flags(flags);
-	cli();
-
-	/* delete from list of hosts */
-	old = NULL;
-	cur = ip_msq_hosts;
-	while (cur!=NULL) {
-		if (cur==ms) {
-			if (old==NULL) ip_msq_hosts = ms->next;
-			else old->next = ms->next;
-			kfree_s(ms,sizeof(*ms));
-			break;
-		}
-		old = cur;
-		cur=cur->next;
-	}
-	restore_flags(flags);
-}
-
-/*
- * Create a new masquerade list entry, also allocate an
- * unused mport, keeping the portnumber between the
- * given boundaries MASQ_BEGIN and MASQ_END.
- *
- * FIXME: possible deadlock if all free ports are exhausted! 
- */
-static struct ip_masq *alloc_masq_entry(void)
-{
-	struct ip_masq *ms, *mst;
-	unsigned long flags;
-
-	ms = (struct ip_masq *) kmalloc(sizeof(struct ip_masq), GFP_ATOMIC);
-	if (ms==NULL) 
-		return NULL;
-
-	memset(ms,0,sizeof(*ms));
-	init_timer(&ms->timer);
-	ms->timer.data     = (unsigned long)ms;
-	ms->timer.function = masq_expire;
-
-	save_flags(flags);
-	cli();
-	do 
-	{
-		/* Try the next available port number */
-		ms->mport = htons(masq_port++);
-		if (masq_port==PORT_MASQ_END)
-			masq_port = PORT_MASQ_BEGIN;
-
-		/* Now hunt through the used ports to see if
-		 * this port is in use... */
-		mst = ip_msq_hosts;
-		while (mst && mst->mport!=ms->mport)
-			mst = mst->next;
-	}
-	while (mst!=NULL); 
-
-	/* add new entry in front of list to minimize lookup-time */
-	ms->next  = ip_msq_hosts;
-	ip_msq_hosts = ms;
-	restore_flags(flags);
-
-	return ms;
-}
-
-/*
- * When passing an FTP 'PORT' command, try to replace the IP
- * address with an newly assigned (masquereded) port on this
- * host, so the ftp-data connect FROM the site will succeed...
- *
- * Also, when the size of the packet changes, create an delta
- * offset, which will be added to every th->seq (and subtracted for
- * (th->acqseq) whose seq > init_seq.
- *
- * Not for the faint of heart!
- */
-
-static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip_masq *ftp)
-{
-	struct iphdr *iph = skb->h.iph;
-	struct tcphdr *th = (struct tcphdr *)&(((char *)iph)[iph->ihl*4]);
-	struct sk_buff *skb2;
-	char *p, *data = (char *)&th[1];
-	unsigned char p1,p2,p3,p4,p5,p6;
-	unsigned long from;
-	unsigned short port;
-	struct ip_masq *ms;
-	char buf[24];		/* xxx.xxx.xxx.xxx,ppp,ppp\000 */
-	int diff;
-	__u32 seq;
-	
-	/*
-	 * Adjust seq with delta-offset for all packets after the most recent resized PORT command
-	 * and with previous_delta offset for all packets before most recent resized PORT
-	 */
-	
-	/*
-	 * seq & seq_ack are in network byte order; need conversion before comparing
-	 */
-	seq=ntohl(th->seq);
-	if (ftp->delta || ftp->previous_delta)
-	{
-		if(after(seq,ftp->init_seq) ) 
-		{
-			th->seq = htonl(seq + ftp->delta);
-#ifdef DEBUG_MASQ
-			printk("masq_revamp : added delta (%d) to seq\n",ftp->delta);
-#endif
-		}
-		else
-		{
-			th->seq = htonl(seq + ftp->previous_delta);
-#ifdef DEBUG_MASQ
-	 		printk("masq_revamp : added previous_delta (%d) to seq\n",ftp->previous_delta);
-#endif
-		}
-	}
-
-	while (skb->len - ((unsigned char *)data - skb->h.raw) > 18)
-	{
-		if (memcmp(data,"PORT ",5) && memcmp(data,"port ",5)) 
-		{
-			data ++;
-			continue;
-		}
-		p = data+5;
- 		p1 = simple_strtoul(data+5,&data,10);
-		if (*data!=',')
-			continue;
-		p2 = simple_strtoul(data+1,&data,10);
-		if (*data!=',')
-			continue;
-		p3 = simple_strtoul(data+1,&data,10);
-		if (*data!=',')
-			continue;
-		p4 = simple_strtoul(data+1,&data,10);
-		if (*data!=',')
-			continue;
-		p5 = simple_strtoul(data+1,&data,10);
-		if (*data!=',')
-			continue;
-		p6 = simple_strtoul(data+1,&data,10);
-		if (*data!='\r' && *data!='\n')
-			continue;
-
-		from = (p1<<24) | (p2<<16) | (p3<<8) | p4;
-		port = (p5<<8) | p6;
-#ifdef MASQ_DEBUG
-		printk("PORT %lX:%X detected\n",from,port);
-#endif	
-		/*
-		 * Now create an masquerade entry for it
-		 */
-		ms = alloc_masq_entry();
-		if (ms==NULL)
-			return skb;
-		ms->protocol = IPPROTO_TCP;
-		ms->src      = htonl(from);	/* derived from PORT cmd */
-		ms->sport    = htons(port);	/* derived from PORT cmd */
-		ms->dst      = iph->daddr;
-		/*
-		 * Hardcoding 20 as dport is not always correct
-		 * At least 1 Windows ftpd uses a random port number instead of 20
-		 * Leave it undefined for now & wait for the first connection request to fill it out
-		 */ 
-		ms->dport    = htons(FTP_DPORT_TBD);	/* ftp-data */
-		ms->timer.expires = jiffies+MASQUERADE_EXPIRE_TCP_FIN;
-		add_timer(&ms->timer);
-
-		/*
-		 * Replace the old PORT with the new one
-		 */
-		from = ntohl(dev->pa_addr);
-		port = ntohs(ms->mport);
-		sprintf(buf,"%ld,%ld,%ld,%ld,%d,%d",
-			from>>24&255,from>>16&255,from>>8&255,from&255,
-			port>>8&255,port&255);
-
-		/*
-		 * Calculate required delta-offset to keep TCP happy
-		 */
-		
-		diff = strlen(buf) - (data-p);
-		
-		/*
-		 *	No shift.
-		 */
-		 
-		if (diff==0) 
-		{
-			/*
-			 * simple case, just replace the old PORT cmd
- 			 */
- 			memcpy(p,buf,strlen(buf));
- 			return skb;
- 		}
- 
- 		/*
- 		 *	If the PORT command we have fiddled is the first, or is a
- 		 *	resend don't do the delta shift again. Doesn't work for
- 		 *	pathological cases, but we would need a history for that.
- 		 *	Also fails if you send 2^31 bytes of data down the link 
- 		 *	after the first port command.
- 		 *
- 		 *	FIXME: use ftp->init_seq_valid - 0 is a valid sequence.
- 		 */
- 		 
- 		if(!ftp->init_seq || after(seq,ftp->init_seq) )
- 		{
- 			ftp->previous_delta=ftp->delta;
- 			ftp->delta+=diff;
- 			ftp->init_seq = seq;
- 		}
- 		
- 		/*
- 		 * Sizes differ, make a copy
- 		 */
-#ifdef DEBUG_MASQ
-                printk("MASQUERADE: resizing needed for %d bytes (%ld)\n",diff, skb->len);
-#endif
-		skb2 = alloc_skb(MAX_HEADER + skb->len+diff, GFP_ATOMIC);
- 		if (skb2 == NULL) {
- 			printk("MASQUERADE: No memory available\n");
- 			return skb;
- 		}
- 		skb2->free = skb->free;
- 		skb_reserve(skb2,MAX_HEADER);
- 		skb_put(skb2,skb->len + diff);
-		skb2->h.raw = skb2->data + (skb->h.raw - skb->data);
-		iph=skb2->h.iph;
-		/*
-		 *	Mend the IP header too
-		 */
-		iph->tot_len = htons(diff+ntohs(iph->tot_len));
-		iph->check = 0;
-		iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
- 
- 		/*
- 		 *	Copy the packet data into the new buffer.
- 		 *	Thereby replacing the PORT cmd.
- 		 */
- 		memcpy(skb2->data, skb->data, (p - (char *)skb->data));
- 		memcpy(&skb2->data[(p - (char *)skb->data)], buf, strlen(buf));
-		memcpy(&skb2->data[(p - (char *)skb->data) + strlen(buf)], data,
-			skb->len - (data-(char *)skb->data));
-
-		/*
-		 * Update tot_len field in ip header !
-		 * Sequence numbers were allready modified in original packet
-		 */
-		iph->tot_len = htons(skb->len + diff);
-
-		/*
-		 * Problem, how to replace the new skb with old one,
-		 * preferably inplace, so all the pointers in the
-		 * calling tree keep ok :(
-		 */
-		kfree_skb(skb, FREE_WRITE);
-		return skb2;
-	}
-	return skb;
-}
-
-static void recalc_check(struct udphdr *uh, unsigned long saddr,
-	unsigned long daddr, int len)
-{
-	uh->check=0;
-	uh->check=csum_tcpudp_magic(saddr,daddr,len,
-		IPPROTO_UDP, csum_partial((char *)uh,len,0));
-	if(uh->check==0)
-		uh->check=0xFFFF;
-}
-	
-void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
-{
-	struct sk_buff  *skb=*skb_ptr;
-	struct iphdr	*iph = skb->h.iph;
-	unsigned short	*portptr;
-	struct ip_masq	*ms;
-	int		size;
-
-	/*
-	 * We can only masquerade protocols with ports...
-	 */
-
-	if (iph->protocol!=IPPROTO_UDP && iph->protocol!=IPPROTO_TCP)
-		return;
- 
-	/*
-	 *	Now hunt the list to see if we have an old entry
-	 */
-
-	portptr = (unsigned short *)&(((char *)iph)[iph->ihl*4]);
-	ms = ip_msq_hosts;
-
-#ifdef DEBUG_MASQ
-	printk("Outgoing %s %lX:%X -> %lX:%X\n",
-		strProt[iph->protocol==IPPROTO_TCP],
-		ntohl(iph->saddr), ntohs(portptr[0]),
-		ntohl(iph->daddr), ntohs(portptr[1]));
-#endif
-	while (ms!=NULL) 
-	{
-		if (iph->protocol == ms->protocol &&
-		    iph->saddr == ms->src   && iph->daddr == ms->dst &&
-		    portptr[0] == ms->sport && portptr[1] == ms->dport) 
-		{
-			del_timer(&ms->timer);
-			break;
- 		}
-		ms = ms->next;
-	}
-
-	/*
-	 *	Nope, not found, create a new entry for it
-	 */
-	 
-	if (ms==NULL) 
-	{
-		ms = alloc_masq_entry();
-		if (ms==NULL) 
-		{
-			printk("MASQUERADE: no memory left !\n");
-			return;
-		}
-		ms->protocol = iph->protocol;
-		ms->src      = iph->saddr;
- 		ms->dst      = iph->daddr;
- 		ms->sport    = portptr[0];
- 		ms->dport    = portptr[1];
- 	}
- 
- 	/*
- 	 *	Change the fragments origin
- 	 */
- 	 
- 	size = skb->len - ((unsigned char *)portptr - skb->h.raw);
- 	iph->saddr = dev->pa_addr; /* my own address */
- 	portptr[0] = ms->mport;
- 
- 	/*
- 	 *	Adjust packet accordingly to protocol
- 	 */
- 	 
- 	if (iph->protocol==IPPROTO_UDP) 
- 	{
- 		ms->timer.expires = jiffies+MASQUERADE_EXPIRE_UDP;
- 		recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,size);
- 	}
- 	else 
- 	{
- 		struct tcphdr *th;
- 		if (portptr[1]==htons(21)) 
- 		{
- 			skb = revamp(*skb_ptr, dev, ms);
- 			*skb_ptr = skb;
- 			iph = skb->h.iph;
- 			portptr = (unsigned short *)&(((char *)iph)[iph->ihl*4]);
- 			size = skb->len - ((unsigned char *)portptr-skb->h.raw);
- 		}
- 		th = (struct tcphdr *)portptr;
- 
- 		/*
- 		 *	Timeout depends if FIN packet was seen
- 		 */
- 		if (ms->sawfin || th->fin) 
- 		{
- 			ms->timer.expires = jiffies+MASQUERADE_EXPIRE_TCP_FIN;
- 			ms->sawfin = 1;
- 		}
- 		else ms->timer.expires = jiffies+MASQUERADE_EXPIRE_TCP;
- 
-		skb->csum = csum_partial((void *)(th + 1), size - sizeof(*th), 0);
- 		tcp_send_check(th,iph->saddr,iph->daddr,size,skb);
- 	}
- 	add_timer(&ms->timer);
- 	ip_send_check(iph);
- 
- #ifdef DEBUG_MASQ
- 	printk("O-routed from %lX:%X over %s\n",ntohl(dev->pa_addr),ntohs(ms->mport),dev->name);
- #endif
- }
- 
- /*
-  *	Check if it's an masqueraded port, look it up,
-  *	and send it on it's way...
-  *
-  *	Better not have many hosts using the designated portrange
-  *	as 'normal' ports, or you'll be spending lots of time in
-  *	this function.
-  */
-
-int ip_fw_demasquerade(struct sk_buff *skb)
-{
- 	struct iphdr	*iph = skb->h.iph;
- 	unsigned short	*portptr;
- 	struct ip_masq	*ms;
- 	struct tcphdr   *th = (struct tcphdr *)(skb->h.raw+(iph->ihl<<2));
- 
- 	if (iph->protocol!=IPPROTO_UDP && iph->protocol!=IPPROTO_TCP)
- 		return 0;
- 
- 	portptr = (unsigned short *)&(((char *)iph)[iph->ihl*4]);
- 	if (ntohs(portptr[1]) < PORT_MASQ_BEGIN ||
- 	    ntohs(portptr[1]) > PORT_MASQ_END)
- 		return 0;
- 
-#ifdef DEBUG_MASQ
- 	printk("Incoming %s %lX:%X -> %lX:%X\n",
- 		strProt[iph->protocol==IPPROTO_TCP],
- 		ntohl(iph->saddr), ntohs(portptr[0]),
- 		ntohl(iph->daddr), ntohs(portptr[1]));
-#endif
-
- 	/*
- 	 * reroute to original host:port if found...
- 	 *
- 	 * NB. Cannot check destination address, just for the incoming port.
- 	 * reason: archie.doc.ac.uk has 6 interfaces, you send to
- 	 * phoenix and get a reply from any other interface(==dst)!
- 	 *
- 	 * [Only for UDP] - AC
- 	 */
- 	ms = ip_msq_hosts;
- 	while (ms!=NULL) 
- 	{
- 		if (iph->protocol==ms->protocol &&
-		    (iph->saddr==ms->dst || iph->protocol==IPPROTO_UDP) && 
- 		    (ms->dport==htons(FTP_DPORT_TBD) || portptr[0]==ms->dport) &&
- 		    portptr[1]==ms->mport)
- 		{
- 		
- 			int size = skb->len - ((unsigned char *)portptr - skb->h.raw);
- 			iph->daddr = ms->src;
- 			portptr[1] = ms->sport;
- 			
- 			if(ms->dport==htons(FTP_DPORT_TBD))
- 			{
- 				ms->dport=portptr[0];
-#ifdef DEBUG_MASQ
-	 			printk("demasq : Filled out dport entry (%d) based on initial connect attempt from FTP deamon\n",ntohs(ms->dport));
-#endif
-			}
-
- 			/*
- 			 * Yug! adjust UDP/TCP and IP checksums
- 			 */
- 			if (iph->protocol==IPPROTO_UDP)
- 				recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,size);
- 			else
- 			{
- 				__u32 ack_seq;
- 				/*
-				 * Adjust ack_seq with delta-offset for
-				 * the packets AFTER most recent PORT command has caused a shift
-				 * for packets before most recent PORT command, use previous_delta
-				 */
-#ifdef DEBUG_MASQ
-	 			printk("demasq : delta=%d ; previous_delta=%d ; init_seq=%lX ; ack_seq=%lX ; after=%d\n",ms->delta,ms->previous_delta,ntohl(ms->init_seq),ntohl(th->ack_seq),after(ntohl(th->ack_seq),ntohl(ms->init_seq)));
-#endif
-				ack_seq=ntohl(th->ack_seq);
-				if (ms->delta || ms->previous_delta)
-				{
-					if(after(ack_seq,ms->init_seq))
-					{
-				 		th->ack_seq = htonl(ack_seq-ms->delta);
-#ifdef DEBUG_MASQ
-						printk("demasq : substracted delta (%d) from ack_seq\n",ms->delta);
-#endif
-					}
-					else
-					{
-				 		th->ack_seq = htonl(ack_seq-ms->previous_delta);
-#ifdef DEBUG_MASQ
-						printk("demasq : substracted previous_delta (%d) from ack_seq\n",ms->previous_delta);
-#endif
-					}
-				}
-				skb->csum = csum_partial((void *)(((struct tcphdr *)portptr) + 1),
-					size - sizeof(struct tcphdr), 0);
- 				tcp_send_check((struct tcphdr *)portptr,iph->saddr,iph->daddr,size,skb);
- 			}
- 			ip_send_check(iph);
-#ifdef DEBUG_MASQ
- 			printk("I-routed to %lX:%X\n",ntohl(iph->daddr),ntohs(portptr[1]));
-#endif
- 			return 1;
- 		}
- 		ms = ms->next;
- 	}
- 
- 	/* sorry, all this trouble for a no-hit :) */
- 	return 0;
-}
-#endif
-  
-
 
 static void zero_fw_chain(struct ip_fw *chainptr)
 {
@@ -1079,8 +565,12 @@ static int insert_in_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,
 	}
 
 	memcpy(ftmp, frwl, len);
-	ftmp->fw_tosand |= 0x03;
-	ftmp->fw_tosxor &= 0xFC;
+	/*
+	 *	Allow the more recent "minimise cost" flag to be
+	 *	set. [Rob van Nieuwkerk]
+	 */
+	ftmp->fw_tosand |= 0x01;
+	ftmp->fw_tosxor &= 0xFE;
 	ftmp->fw_pcnt=0L;
 	ftmp->fw_bcnt=0L;
 
@@ -1567,54 +1057,6 @@ static int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset,
 }
 #endif
 
-#ifdef CONFIG_IP_MASQUERADE
-
-static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
-			      int length, int unused)
-{
-	off_t pos=0, begin=0;
-	struct ip_masq *ms;
-	unsigned long flags;
-	int len=0;
-	
-	len=sprintf(buffer,"Prc FromIP   FPrt ToIP     TPrt Masq Init-seq  Delta PDelta Expires\n"); 
-	save_flags(flags);
-	cli();
-	
-	ms=ip_msq_hosts;
-	while (ms!=NULL) 
-	{
-		int timer_active = del_timer(&ms->timer);
-		if (!timer_active)
-			ms->timer.expires = jiffies;
-		len+=sprintf(buffer+len,"%s %08lX:%04X %08lX:%04X %04X %08X %6d %6d %lu\n",
-			strProt[ms->protocol==IPPROTO_TCP],
-			ntohl(ms->src),ntohs(ms->sport),
-			ntohl(ms->dst),ntohs(ms->dport),
-			ntohs(ms->mport),
-			ms->init_seq,ms->delta,ms->previous_delta,ms->timer.expires-jiffies);
-		if (timer_active)
-			add_timer(&ms->timer);
-
-		pos=begin+len;
-		if(pos<offset) 
-		{
- 			len=0;
-			begin=pos;
-		}
-		if(pos>offset+length)
-			break;
-		ms=ms->next;
-	}
-	restore_flags(flags);
-	*start=buffer+(offset-begin);
-	len-=(offset-begin);
-	if(len>length)
-		len=length;
-	return len;
-}
-  
-#endif
 
 #ifdef CONFIG_IP_FIREWALL
 /*
@@ -1722,14 +1164,16 @@ void ip_fw_init(void)
 		ip_fw_fwd_procinfo
 	});
 #endif
+
 #ifdef CONFIG_IP_MASQUERADE
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPMSQHST, 13, "ip_masquerade",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		ip_msqhst_procinfo
-	});
+        
+        /*
+         *	Initialize masquerading. 
+         */
+        
+        ip_masq_init();
 #endif
+        
 #if defined(CONFIG_IP_ACCT) || defined(CONFIG_IP_FIREWALL)
 	/* Register for device up/down reports */
 	register_netdevice_notifier(&ipfw_dev_notifier);

@@ -19,6 +19,7 @@ if [ "$CONFIG_PSMOUSE" != "n" ]; then
 fi
 tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE
 tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE
+bool 'Support for user misc device modules' CONFIG_UMISC
 
 bool 'QIC-02 tape support' CONFIG_QIC02_TAPE
 if [ "$CONFIG_QIC02_TAPE" = "y" ]; then

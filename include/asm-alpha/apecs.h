@@ -18,9 +18,60 @@
  * david.rusling@reo.mts.dec.com Initial Version.
  *
  */
+#include <linux/config.h>
 
+#ifdef CONFIG_ALPHA_XL
+/*
+   An AVANTI *might* be an XL, and an XL has only 27 bits of ISA address
+   that get passed through the PCI<->ISA bridge chip. So we've gotta use
+   both windows to max out the physical memory we can DMA to. Sigh...
+
+   If we try a window at 0 for 1GB as a work-around, we run into conflicts
+   with ISA/PCI bus memory which can't be relocated, like VGA aperture and
+   BIOS ROMs. So we must put the windows high enough to avoid these areas.
+
+   We put window 1 at BUS 64Mb for 64Mb, mapping physical 0 to 64Mb-1,
+   and window 2 at BUS 512Mb for 512Mb, mapping physical 0 to 512Mb-1.
+   Yes, this does map 0 to 64Mb-1 twice, but only window 1 will actually
+   be used for that range (via virt_to_bus()).
+
+   Window 1 will be used for all DMA from the ISA bus; yes, that does
+   limit what memory an ISA floppy or soundcard or Ethernet can touch, but
+   it's also a known limitation on other platforms as well. We use the
+   same technique that is used on INTEL platforms with similar limitation:
+   set MAX_DMA_ADDRESS and clear some pages' DMAable flags during mem_init().
+   We trust that any ISA bus device drivers will *always* ask for DMAable
+   memory explicitly via kmalloc()/get_free_pages() flags arguments.
+
+   Note that most PCI bus devices' drivers do *not* explicitly ask for
+   DMAable memory; they count on being able to DMA to any memory they
+   get from kmalloc()/get_free_pages(). They will also use window 1 for
+   any physical memory accesses below 64Mb; the rest will be handled by
+   window 2, maxing out at 512Mb of memory. I trust this is enough... :-)
+
+   Finally, the reason we make window 2 start at 512Mb for 512Mb, is so that
+   we can allocate PCI bus devices' memory starting at 1Gb and up, to ensure
+   that no conflicts occur and bookkeeping is simplified (ie we don't
+   try to fill the gap between the two windows, we just go above the top).
+
+   Note that the XL is treated differently from the AVANTI, even though
+   for most other things they are identical. It didn't seem reasonable to
+   make the AVANTI support pay for the limitations of the XL. It is true,
+   however, that an XL kernel will run on an AVANTI without problems.
+
+*/
+#define APECS_XL_DMA_WIN1_BASE	(64*1024*1024)
+#define APECS_XL_DMA_WIN1_SIZE	(64*1024*1024)
+#define APECS_XL_DMA_WIN2_BASE	(512*1024*1024)
+#define APECS_XL_DMA_WIN2_SIZE	(512*1024*1024)
+
+#else /* CONFIG_ALPHA_XL */
+
+/* these are for normal APECS family machines, AVANTI/MUSTANG/EB64/PC64 */
 #define APECS_DMA_WIN_BASE	(1024*1024*1024)
 #define APECS_DMA_WIN_SIZE	(1024*1024*1024)
+
+#endif /* CONFIG_ALPHA_XL */
 
 /*
  * 21071-DA Control and Status registers.
@@ -165,7 +216,15 @@
  */
 extern inline unsigned long virt_to_bus(void * address)
 {
-	return virt_to_phys(address) + APECS_DMA_WIN_BASE;
+	unsigned long paddr = virt_to_phys(address);
+#ifdef CONFIG_ALPHA_XL
+	if (paddr < APECS_XL_DMA_WIN1_SIZE)
+	  return paddr + APECS_XL_DMA_WIN1_BASE;
+	else
+	  return paddr + APECS_XL_DMA_WIN2_BASE; /* win 2 xlates to 0 also */
+#else /* CONFIG_ALPHA_XL */
+	return paddr + APECS_DMA_WIN_BASE;
+#endif /* CONFIG_ALPHA_XL */
 }
 
 extern inline void * bus_to_virt(unsigned long address)
@@ -176,9 +235,18 @@ extern inline void * bus_to_virt(unsigned long address)
 	 * detect null "pointers" (the NCR driver is much simpler if
 	 * NULL pointers are preserved).
 	 */
+#ifdef CONFIG_ALPHA_XL
+        if (address < APECS_XL_DMA_WIN1_BASE)
+                return 0;
+        else if (address < (APECS_XL_DMA_WIN1_BASE + APECS_XL_DMA_WIN1_SIZE))
+                return phys_to_virt(address - APECS_XL_DMA_WIN1_BASE);
+	else /* should be more checking here, maybe? */
+                return phys_to_virt(address - APECS_XL_DMA_WIN2_BASE);
+#else /* CONFIG_ALPHA_XL */
 	if (address < APECS_DMA_WIN_BASE)
 		return 0;
 	return phys_to_virt(address - APECS_DMA_WIN_BASE);
+#endif /* CONFIG_ALPHA_XL */
 }
 
 /*

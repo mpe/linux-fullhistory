@@ -517,15 +517,14 @@ static void ip_mc_dec_group(struct device *dev, unsigned long addr)
 	{
 		if((*i)->multiaddr==addr)
 		{
-			if(--((*i)->users))
-				return;
-			else
+			if(--((*i)->users) == 0)
 			{
 				struct ip_mc_list *tmp= *i;
 				igmp_group_dropped(tmp);
 				*i=(*i)->next;
 				kfree_s(tmp,sizeof(*tmp));
 			}
+			return;
 		}
 	}
 }

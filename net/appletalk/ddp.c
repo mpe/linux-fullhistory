@@ -151,7 +151,8 @@ static atalk_socket *atalk_search_socket(struct sockaddr_at *to, struct atalk_if
 	    	}
 
 	    	if ( to->sat_addr.s_net == s->protinfo.af_at.src_net &&
-		    to->sat_addr.s_node == s->protinfo.af_at.src_node ) 
+		    (to->sat_addr.s_node == s->protinfo.af_at.src_node 
+		     ||to->sat_addr.s_node == ATADDR_BCAST ))
 		{
 			break;
 	   	}

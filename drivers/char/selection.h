@@ -6,7 +6,7 @@
 extern int sel_cons;
 
 extern void clear_selection(void);
-extern int set_selection(const unsigned long arg, struct tty_struct *tty);
+extern int set_selection(const unsigned long arg, struct tty_struct *tty, int user);
 extern int paste_selection(struct tty_struct *tty);
 extern int sel_loadlut(const unsigned long arg);
 extern int mouse_reporting(void);

@@ -149,6 +149,9 @@
 #include <net/checksum.h>
 #include <linux/igmp.h>
 #include <linux/ip_fw.h>
+#ifdef CONFIG_IP_MASQUERADE
+#include <net/ip_masq.h>
+#endif
 #include <linux/firewall.h>
 #include <linux/mroute.h>
 #include <net/netlink.h>
@@ -423,7 +426,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		/*
 		 * Do we need to de-masquerade this fragment?
 		 */
-		if (ip_fw_demasquerade(skb)) 
+		if (ip_fw_demasquerade(&skb,dev)) 
 		{
 			struct iphdr *iph=skb->h.iph;
 			if (ip_forward(skb, dev, is_frag|IPFWD_MASQUERADED, iph->daddr))

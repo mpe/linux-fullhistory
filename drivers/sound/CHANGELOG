@@ -1,6 +1,8 @@
-Changelog for version 3.5.1
+Changelog for version 3.5.2
 ---------------------------
 
+Since 3.5.1
+- TB Maui initialization support
 Since 3.5
 - Improved handling of playback underrunt situations.
 

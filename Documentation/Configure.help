@@ -2815,6 +2815,13 @@ CONFIG_ATIXL_BUSMOUSE
   plugging in a COM port (9 or 25 pins) which is supported
   automatically.
 
+Support for user miscellaneous modules
+CONFIG_UMISC
+  This option forces generic miscellaneous minor device  support in the
+  kernel, and allows later loading of user miscellaneous device  modules,
+  such as drivers for optic pens and touchscreens. Unless you need such
+  specific modules, or are willing to write/test one, just say N.
+
 QIC-02 tape support
 CONFIG_QIC02_TAPE
   If you have a non-SCSI tape drive like that, say Y.

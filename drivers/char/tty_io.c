@@ -1543,7 +1543,7 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 					return do_get_ps_info(arg);
 #endif
 				case 2:
-					return set_selection(arg, tty);
+					return set_selection(arg, tty, 1);
 				case 3:
 					return paste_selection(tty);
 				case 4:

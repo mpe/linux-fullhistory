@@ -861,11 +861,6 @@ static inline void do_process_times(struct task_struct *p,
 	long psecs;
 
 	p->utime += user;
-	if (p->priority < DEF_PRIORITY)
-		kstat.cpu_nice += user;
-	else
-		kstat.cpu_user += user;
-	kstat.cpu_system += system;
 	p->stime += system;
 
 	psecs = (p->stime + p->utime) / HZ;
@@ -917,14 +912,20 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 {
 #ifndef  __SMP__
 	struct task_struct * p = current;
+	unsigned long user = ticks - system;
 	if (p->pid) {
 		p->counter -= ticks;
 		if (p->counter < 0) {
 			p->counter = 0;
 			need_resched = 1;
 		}
+		if (p->priority < DEF_PRIORITY)
+			kstat.cpu_nice += user;
+		else
+			kstat.cpu_user += user;
+		kstat.cpu_system += system;
 	}
-	update_one_process(p, ticks, ticks-system, system);
+	update_one_process(p, ticks, user, system);
 #else
 	int cpu,j;
 	cpu = smp_processor_id();

@@ -110,8 +110,8 @@ static inline unsigned short limit(const unsigned short v, const unsigned short 
 	return v;
 }
 
-/* set the current selection. Invoked by ioctl(). */
-int set_selection(const unsigned long arg, struct tty_struct *tty)
+/* set the current selection. Invoked by ioctl() or by kernel code. */
+int set_selection(const unsigned long arg, struct tty_struct *tty, int user)
 {
 	int sel_mode, new_sel_start, new_sel_end, spc;
 	char *bp, *obp;
@@ -122,12 +122,19 @@ int set_selection(const unsigned long arg, struct tty_struct *tty)
 	{ unsigned short *args, xs, ys, xe, ye;
 
 	  args = (unsigned short *)(arg + 1);
-	  xs = get_user(args++) - 1;
-	  ys = get_user(args++) - 1;
-	  xe = get_user(args++) - 1;
-	  ye = get_user(args++) - 1;
-	  sel_mode = get_user(args);
-
+	  if (user) {
+		  xs = get_user(args++) - 1;
+		  ys = get_user(args++) - 1;
+		  xe = get_user(args++) - 1;
+		  ye = get_user(args++) - 1;
+		  sel_mode = get_user(args);
+	  } else {
+		  xs = *(args++) - 1; /* set selection from kernel */
+		  ys = *(args++) - 1;
+		  xe = *(args++) - 1;
+		  ye = *(args++) - 1;
+		  sel_mode = *args;
+	  }
 	  xs = limit(xs, video_num_columns - 1);
 	  ys = limit(ys, video_num_lines - 1);
 	  xe = limit(xe, video_num_columns - 1);

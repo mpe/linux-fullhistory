@@ -55,6 +55,10 @@ static int     *maui_osp;
 static int      (*orig_load_patch) (int dev, int format, const char *addr,
 				 int offs, int count, int pmgr_flag) = NULL;
 
+#ifdef HAVE_MAUI_BOOT
+#include "maui_boot.h"
+#endif
+
 static wait_handle *maui_sleeper = NULL;
 static volatile struct snd_wait maui_sleep_flag =
 {0};
@@ -139,6 +143,158 @@ mauiintr (int irq, void *dev_id, struct pt_regs *dummy)
   irq_ok = 1;
 }
 
+static int
+download_code (void)
+{
+  int             i, lines = 0;
+  int             eol_seen = 0, done = 0;
+  int             skip = 1;
+
+  printk ("Code download (%d bytes): ", maui_osLen);
+
+  for (i = 0; i < maui_osLen; i++)
+    {
+      if (maui_os[i] != '\r')
+	if (!skip || (maui_os[i] == 'S' && (i == 0 || maui_os[i - 1] == '\n')))
+	  {
+	    skip = 0;
+
+	    if (maui_os[i] == '\n')
+	      eol_seen = skip = 1;
+	    else if (maui_os[i] == 'S')
+	      {
+		if (maui_os[i + 1] == '8')
+		  done = 1;
+		if (!maui_write (0xF1))
+		  goto failure;
+		if (!maui_write ('S'))
+		  goto failure;
+	      }
+	    else
+	      {
+		if (!maui_write (maui_os[i]))
+		  goto failure;
+	      }
+
+	    if (eol_seen)
+	      {
+		int             c = 0;
+
+		int             n;
+
+		eol_seen = 0;
+
+		for (n = 0; n < 2; n++)
+		  if (maui_wait (STAT_RX_AVAIL))
+		    {
+		      c = inb (HOST_DATA_PORT);
+		      break;
+		    }
+
+		if (c != 0x80)
+		  {
+		    printk ("Doanload not acknowledged\n");
+		    return 0;
+		  }
+		else if (!(lines++ % 10))
+		  printk (".");
+
+		if (done)
+		  {
+		    printk ("\nDownload complete\n");
+		    return 1;
+		  }
+	      }
+	  }
+    }
+
+failure:
+
+  printk ("\nDownload failed!!!\n");
+  return 0;
+}
+
+static int
+maui_init (int irq)
+{
+  int             i;
+  unsigned char   bits;
+
+  switch (irq)
+    {
+    case 9:
+      bits = 0x00;
+      break;
+    case 5:
+      bits = 0x08;
+      break;
+    case 12:
+      bits = 0x10;
+      break;
+    case 15:
+      bits = 0x18;
+      break;
+
+    default:
+      printk ("Maui: Invalid IRQ %d\n", irq);
+      return 0;
+    }
+
+  outb (0x00, HOST_CTRL_PORT);	/* Reset */
+
+  outb (bits, HOST_DATA_PORT);	/* Set the IRQ bits */
+  outb (bits | 0x80, HOST_DATA_PORT);	/* Set the IRQ bits again? */
+
+  outb (0x80, HOST_CTRL_PORT);	/* Leave reset */
+  outb (0x80, HOST_CTRL_PORT);	/* Leave reset */
+
+  outb (0xD0, HOST_CTRL_PORT);	/* Cause interrupt */
+
+  for (i = 0; i < 1000000 && !irq_ok; i++);
+
+  if (!irq_ok)
+    return 0;
+
+  outb (0x80, HOST_CTRL_PORT);	/* Leave reset */
+
+  printk ("Turtle Beach Maui initialization\n");
+
+  if (!download_code ())
+    return 0;
+
+  outb (0xE0, HOST_CTRL_PORT);	/* Normal operation */
+
+  /* Select mpu401 mode */
+
+  maui_write (0xf0);
+  maui_write (1);
+  if (maui_read () != 0x80)
+    {
+      maui_write (0xf0);
+      maui_write (1);
+      if (maui_read () != 0x80)
+	printk ("Maui didn't acknowledge set HW mode command\n");
+    }
+
+  printk ("Maui initialized OK\n");
+  return 1;
+}
+
+static int
+maui_short_wait (int mask)
+{
+  int             i;
+
+  for (i = 0; i < 1000; i++)
+    {
+      if (inb (HOST_STAT_PORT) & mask)
+	{
+	  return 1;
+	}
+    }
+
+  return 0;
+}
 
 int
 maui_load_patch (int dev, int format, const char *addr,
@@ -222,6 +378,22 @@ probe_maui (struct address_info *hw_config)
     return 0;
 
   maui_sleep_flag.mode = WK_NONE;
+/*
+ * Initialize the processor if necessary
+ */
+
+  if (maui_osLen > 0)
+    {
+      if (!(inb (HOST_STAT_PORT) & STAT_TX_AVAIL) ||
+	  !maui_write (0x9F) ||	/* Report firmware version */
+	  !maui_short_wait (STAT_RX_AVAIL) ||
+	  maui_read () == -1 || maui_read () == -1)
+	if (!maui_init (hw_config->irq))
+	  {
+	    snd_release_irq (hw_config->irq);
+	    return 0;
+	  }
+    }
 
   if (!maui_write (0xCF))	/* Report hardware version */
     {

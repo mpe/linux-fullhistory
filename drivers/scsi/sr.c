@@ -1016,8 +1016,10 @@ static void get_sectorsize(int i){
 	scsi_CDs[i].sector_size = 2048;  /* A guess, just in case */
 	scsi_CDs[i].needs_sector_size = 1;
     } else {
-	scsi_CDs[i].capacity = (buffer[0] << 24) |
-	    (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
+	scsi_CDs[i].capacity = 1 + ((buffer[0] << 24) |
+				    (buffer[1] << 16) |
+				    (buffer[2] << 8) |
+				    buffer[3]);
 	scsi_CDs[i].sector_size = (buffer[4] << 24) |
 	    (buffer[5] << 16) | (buffer[6] << 8) | buffer[7];
 	switch (scsi_CDs[i].sector_size) {
@@ -1042,7 +1044,7 @@ static void get_sectorsize(int i){
 			scsi_CDs[i].needs_sector_size = 1;
 	}
 	scsi_CDs[i].needs_sector_size = 0;
-	sr_sizes[i] = scsi_CDs[i].capacity;
+	sr_sizes[i] = scsi_CDs[i].capacity >> (BLOCK_SIZE_BITS - 9);
     };
     scsi_free(buffer, 512);
 }
@@ -1103,7 +1105,7 @@ void sr_finish()
 	scsi_CDs[i].ten = 1;
 	scsi_CDs[i].remap = 1;
 	scsi_CDs[i].auto_eject = 0; /* Default is not to eject upon unmount. */
-	sr_sizes[i] = scsi_CDs[i].capacity;
+	sr_sizes[i] = scsi_CDs[i].capacity >> (BLOCK_SIZE_BITS - 9);
     }
     
     

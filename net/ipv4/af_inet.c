@@ -90,6 +90,9 @@
 #include <net/raw.h>
 #include <net/icmp.h>
 #include <linux/ip_fw.h>
+#ifdef CONFIG_IP_MASQUERADE
+#include <net/ip_masq.h>
+#endif
 #ifdef CONFIG_IP_ALIAS
 #include <net/ip_alias.h>
 #endif

@@ -23,7 +23,7 @@
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
-#include <linux/mouse.h>
+#include <linux/miscdevice.h>
 
 #define WATCHDOG_MINOR	130
 #define TIMER_MARGIN	(60*HZ)		/* Allow 1 minute */
@@ -106,13 +106,13 @@ void watchdog_init(void)
 		NULL,		
 		NULL		/* Fasync */
 	};
-	static struct mouse softdog_mouse={
+	static struct miscdevice softdog_mouse={
 		WATCHDOG_MINOR,
 		"softdog",
 		&softdog_fops
 	};
 
-	mouse_register(&softdog_mouse);
+	misc_register(&softdog_mouse);
 	init_timer(&watchdog_ticktock);
 	watchdog_ticktock.function=watchdog_fire;
 	printk("Software Watchdog Timer: 0.03\n");

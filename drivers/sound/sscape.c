@@ -1196,7 +1196,9 @@ attach_ss_ms_sound (long mem_start, struct address_info *hw_config)
 void
 unload_sscape (struct address_info *hw_config)
 {
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   unload_mpu401 (hw_config);
+#endif
   snd_release_irq (hw_config->irq);
   sound_free_dma (hw_config->dma);
 }

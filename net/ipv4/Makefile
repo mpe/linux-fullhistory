@@ -37,6 +37,11 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_IP_MASQUERADE),y)
+IPV4_OBJS += ip_masq.o ip_masq_app.o
+M_OBJS += ip_masq_ftp.o ip_masq_irc.o
+endif
+
 ifeq ($(CONFIG_IP_ALIAS),y)
 IPV4_OBJS += ip_alias.o
 else

@@ -78,18 +78,17 @@ extern __inline__ int find_first_zero_bit(void * addr, unsigned size)
 
 	if (!size)
 		return 0;
-	__asm__("
-		cld
-		movl $-1,%%eax
-		xorl %%edx,%%edx
-		repe; scasl
-		je 1f
-		xorl -4(%%edi),%%eax
-		subl $4,%%edi
-		bsfl %%eax,%%edx
-1:		subl %%ebx,%%edi
-		shll $3,%%edi
-		addl %%edi,%%edx"
+	__asm__("cld\n\t"
+		"movl $-1,%%eax\n\t"
+		"xorl %%edx,%%edx\n\t"
+		"repe; scasl\n\t"
+		"je 1f\n\t"
+		"xorl -4(%%edi),%%eax\n\t"
+		"subl $4,%%edi\n\t"
+		"bsfl %%eax,%%edx\n"
+		"1:\tsubl %%ebx,%%edi\n\t"
+		"shll $3,%%edi\n\t"
+		"addl %%edi,%%edx"
 		:"=d" (res)
 		:"c" ((size + 31) >> 5), "D" (addr), "b" (addr)
 		:"ax", "cx", "di");
@@ -105,11 +104,10 @@ extern __inline__ int find_next_zero_bit (void * addr, int size, int offset)
 		/*
 		 * Look for zero in first byte
 		 */
-		__asm__("
-			bsfl %1,%0
-			jne 1f
-			movl $32, %0
-1:			"
+		__asm__("bsfl %1,%0\n\t"
+			"jne 1f\n\t"
+			"movl $32, %0\n"
+			"1:"
 			: "=r" (set)
 			: "r" (~(*p >> bit)));
 		if (set < (32 - bit))

@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994, 1995 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Mon Jan 29 21:18:12 1996 by root@kai.makisara.fi
+  Last modified: Fri Mar 29 20:55:05 1996 by root@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 
@@ -84,8 +84,8 @@ static int st_max_buffers = ST_MAX_BUFFERS;
 
 Scsi_Tape * scsi_tapes = NULL;
 
-static ST_buffer *new_tape_buffer(int);
-static int enlarge_buffer(ST_buffer *, int);
+static ST_buffer *new_tape_buffer(int, int);
+static int enlarge_buffer(ST_buffer *, int, int);
 static void normalize_buffer(ST_buffer *);
 
 static int st_init(void);
@@ -171,7 +171,8 @@ st_chk_result(Scsi_Cmnd * SCpnt)
 	     scsi_tapes[dev].recover_count);
     }
 #endif
-    return 0;
+    if ((sense[2] & 0xe0) == 0)
+      return 0;
   }
   return (-EIO);
 }
@@ -453,7 +454,7 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
 scsi_tape_open(struct inode * inode, struct file * filp)
 {
     unsigned short flags;
-    int i;
+    int i, need_dma_buffer;
     unsigned char cmd[10];
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
@@ -471,13 +472,15 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     STp->rew_at_close = (MINOR(inode->i_rdev) & 0x80) == 0;
 
     /* Allocate buffer for this user */
+    need_dma_buffer = STp->restr_dma;
     for (i=0; i < st_nbr_buffers; i++)
-      if (!st_buffers[i]->in_use)
+      if (!st_buffers[i]->in_use &&
+	  (!need_dma_buffer || st_buffers[i]->dma))
 	break;
     if (i >= st_nbr_buffers) {
-      STp->buffer = new_tape_buffer(FALSE);
+      STp->buffer = new_tape_buffer(FALSE, need_dma_buffer);
       if (STp->buffer == NULL) {
-	printk(KERN_WARNING "st%d: No free buffers.\n", dev);
+	printk(KERN_WARNING "st%d: Can't allocate tape buffer.\n", dev);
 	return (-EBUSY);
       }
     }
@@ -608,7 +611,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       }
 
       if (STp->block_size > (STp->buffer)->buffer_size &&
-	  !enlarge_buffer(STp->buffer, STp->block_size)) {
+	  !enlarge_buffer(STp->buffer, STp->block_size, STp->restr_dma)) {
 	printk(KERN_NOTICE "st%d: Blocksize %d too large for buffer.\n", dev,
 	       STp->block_size);
 	(STp->buffer)->in_use = 0;
@@ -775,7 +778,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
 
     if (STp->block_size == 0 &&
        count > (STp->buffer)->buffer_size &&
-       !enlarge_buffer(STp->buffer, count))
+       !enlarge_buffer(STp->buffer, count, STp->restr_dma))
       return (-EOVERFLOW);
 
     if (STp->do_auto_lock && STp->door_locked == ST_UNLOCKED &&
@@ -1016,7 +1019,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 
     if (STp->block_size == 0 &&
 	count > (STp->buffer)->buffer_size &&
-	!enlarge_buffer(STp->buffer, count))
+	!enlarge_buffer(STp->buffer, count, STp->restr_dma))
       return (-EOVERFLOW);
 
     if (!(STp->do_read_ahead) && STp->block_size != 0 &&
@@ -1968,7 +1971,7 @@ st_ioctl(struct inode * inode,struct file * file,
 
 /* Try to allocate a new tape buffer */
 	static ST_buffer *
-new_tape_buffer( int from_initialization )
+new_tape_buffer( int from_initialization, int need_dma )
 {
   int priority, a_size;
   ST_buffer *tb;
@@ -1977,16 +1980,18 @@ new_tape_buffer( int from_initialization )
     return NULL;  /* Should never happen */
 
   if (from_initialization) {
-    priority = GFP_ATOMIC | GFP_DMA;
+    priority = GFP_ATOMIC;
     a_size = st_buffer_size;
   }
   else {
-    priority = GFP_KERNEL | GFP_DMA;
+    priority = GFP_KERNEL;
     for (a_size = PAGE_SIZE; a_size < st_buffer_size; a_size <<= 1)
       ; /* Make sure we allocate efficiently */
   }
   tb = (ST_buffer *)scsi_init_malloc(sizeof(ST_buffer), priority);
   if (tb) {
+    if (need_dma)
+      priority |= GFP_DMA;
     tb->b_data = (unsigned char *)scsi_init_malloc(a_size, priority);
     if (!tb->b_data) {
       scsi_init_free((char *)tb, sizeof(ST_buffer));
@@ -1998,13 +2003,14 @@ new_tape_buffer( int from_initialization )
 	   st_nbr_buffers);
     return NULL;
   }
-
 #if DEBUG
   if (debugging)
-    printk(ST_DEB_MSG "st: Allocated tape buffer %d (%d bytes).\n",
-	   st_nbr_buffers, a_size);
+    printk(ST_DEB_MSG
+	   "st: Allocated tape buffer %d (%d bytes, dma: %d, a: %p).\n",
+	   st_nbr_buffers, a_size, need_dma, tb->b_data);
 #endif
   tb->in_use = 0;
+  tb->dma = need_dma;
   tb->buffer_size = a_size;
   tb->writing = 0;
   tb->orig_b_data = NULL;
@@ -2015,9 +2021,9 @@ new_tape_buffer( int from_initialization )
 
 /* Try to allocate a temporary enlarged tape buffer */
 	static int
-enlarge_buffer(ST_buffer *STbuffer, int new_size)
+enlarge_buffer(ST_buffer *STbuffer, int new_size, int need_dma)
 {
-  int a_size;
+  int a_size, priority;
   unsigned char *tbd;
 
   normalize_buffer(STbuffer);
@@ -2025,13 +2031,17 @@ enlarge_buffer(ST_buffer *STbuffer, int new_size)
   for (a_size = PAGE_SIZE; a_size < new_size; a_size <<= 1)
     ;  /* Make sure that we allocate efficiently */
 
-  tbd = (unsigned char *)scsi_init_malloc(a_size, GFP_DMA | GFP_KERNEL);
+  priority = GFP_KERNEL;
+  if (need_dma)
+    priority |= GFP_DMA;
+  tbd = (unsigned char *)scsi_init_malloc(a_size, priority);
   if (!tbd)
     return FALSE;
-
 #if DEBUG
   if (debugging)
-    printk(ST_DEB_MSG "st: Buffer enlarged to %d bytes.\n", a_size);
+    printk(ST_DEB_MSG
+	   "st: Buffer at %p enlarged to %d bytes (dma: %d, a: %p).\n",
+	   STbuffer->b_data, a_size, need_dma, tbd);
 #endif
 
   STbuffer->orig_b_data = STbuffer->b_data;
@@ -2056,8 +2066,8 @@ normalize_buffer(ST_buffer *STbuffer)
 
 #if DEBUG
   if (debugging)
-    printk(ST_DEB_MSG "st: Buffer normalized to %d bytes.\n",
-	   STbuffer->buffer_size);
+    printk(ST_DEB_MSG "st: Buffer at %p normalized to %d bytes.\n",
+	   STbuffer->b_data, STbuffer->buffer_size);
 #endif
 }
 
@@ -2123,6 +2133,7 @@ static int st_attach(Scsi_Device * SDp){
    tpnt->waiting = NULL;
    tpnt->in_use = 0;
    tpnt->drv_buffer = 1;  /* Try buffering if no mode sense */
+   tpnt->restr_dma = (SDp->host)->unchecked_isa_dma;
    tpnt->density = 0;
    tpnt->do_buffer_writes = ST_BUFFER_WRITES;
    tpnt->do_async_writes = ST_ASYNC_WRITES;
@@ -2131,9 +2142,10 @@ static int st_attach(Scsi_Device * SDp){
    tpnt->two_fm = ST_TWO_FM;
    tpnt->fast_mteom = ST_FAST_MTEOM;
    tpnt->write_threshold = st_write_threshold;
-   tpnt->drv_block = 0;
+   tpnt->drv_block = (-1);
    tpnt->moves_after_eof = 1;
    tpnt->at_sm = 0;
+   (tpnt->mt_status)->mt_fileno = (tpnt->mt_status)->mt_blkno = (-1);
 
    st_template.nr_dev++;
    return 0;
@@ -2238,8 +2250,9 @@ static int st_init()
     target_nbr = st_max_buffers;
 
   for (i=st_nbr_buffers=0; i < target_nbr; i++) {
-    if (!new_tape_buffer(TRUE)) {
+    if (!new_tape_buffer(TRUE, TRUE)) {
       if (i == 0) {
+#if 0
 	printk(KERN_ERR "Can't continue without at least one tape buffer.\n");
 	unregister_chrdev(SCSI_TAPE_MAJOR, "st");
 	scsi_init_free((char *) st_buffers,
@@ -2247,6 +2260,10 @@ static int st_init()
 	scsi_init_free((char *) scsi_tapes,
 		       st_template.dev_max * sizeof(Scsi_Tape));
 	return 1;
+#else
+	printk(KERN_INFO "No tape buffers allocated at initialization.\n");
+	break;
+#endif
       }
       printk(KERN_INFO "Number of tape buffers adjusted.\n");
       break;

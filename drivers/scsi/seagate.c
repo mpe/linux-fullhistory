@@ -1638,6 +1638,7 @@ int seagate_st0x_biosparam(Disk * disk, kdev_t dev, int* ip) {
   unsigned char buf[256 + sizeof(int) * 2], cmd[6], *data, *page;
   int *sizes, result, formatted_sectors, total_sectors;
   int cylinders, heads, sectors;
+  int capacity;
 
 /*
  * Only SCSI-I CCS drives and later implement the necessary mode sense 
@@ -1718,12 +1719,22 @@ printk("scsi%d : heads = %d cylinders = %d sectors = %d total = %d formatted = %
  */
 
       if ((cylinders > 1024) || (sectors > 64)) 
-	result = -1;
-      else {
-	ip[0] = heads;
-	ip[1] = sectors;
-	ip[2] = cylinders;
+	/* The Seagate's seem to have some mapping
+	 * Multiple heads * sectors * cyl to get capacity
+	 * Then start rounding down. */
+	capacity = heads * sectors * cylinders;
+	sectors = 17;	/* Old MFM Drives use this, so does the Seagate */
+	heads = 2;
+	capacity = capacity / sectors;
+	while (cylinders > 1024)
+	{
+		heads *= 2;	/* For some reason, they go in multiples */
+		cylinders = capacity / heads;
+	};
       }
+      ip[0] = heads;
+      ip[1] = sectors;
+      ip[2] = cylinders;
 
 /* 
  * There should be an alternate mapping for things the seagate doesn't

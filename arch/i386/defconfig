@@ -147,6 +147,7 @@ CONFIG_SERIAL=y
 # CONFIG_PSMOUSE is not set
 # CONFIG_MS_BUSMOUSE is not set
 # CONFIG_ATIXL_BUSMOUSE is not set
+# CONFIG_UMISC is not set
 # CONFIG_QIC02_TAPE is not set
 # CONFIG_FTAPE is not set
 # CONFIG_APM is not set

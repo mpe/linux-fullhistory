@@ -10,6 +10,8 @@
 #ifndef __ASM_ALPHA_FLOPPY_H
 #define __ASM_ALPHA_FLOPPY_H
 
+#include <linux/config.h>
+
 #define fd_inb(port)			inb_p(port)
 #define fd_outb(port,value)		outb_p(port,value)
 
@@ -47,8 +49,13 @@ static int FDC2 = -1;
 #define N_DRIVE 8
 
 /*
- * The Alpha has no problems with floppy DMA crossing 64k borders.
+ * Most Alphas have no problems with floppy DMA crossing 64k borders. Sigh...
  */
-#define CROSS_64KB(a,s)	(0)
+#ifdef CONFIG_ALPHA_XL
+#define CROSS_64KB(a,s) \
+    ((unsigned long)(a)/0x10000 != ((unsigned long)(a) + (s) - 1) / 0x10000)
+#else /* CONFIG_ALPHA_XL */
+#define CROSS_64KB(a,s) (0)
+#endif /* CONFIG_ALPHA_XL */
 
 #endif /* __ASM_ALPHA_FLOPPY_H */

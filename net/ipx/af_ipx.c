@@ -74,6 +74,7 @@
 #include <linux/termios.h>	/* For TIOCOUTQ/INQ */
 #include <linux/interrupt.h>
 #include <net/p8022.h>
+#include <net/p8022tr.h>
 #include <net/psnap.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
@@ -90,6 +91,7 @@ static char		ipxcfg_auto_create_interfaces = 0;
 
 /* Global Variables */
 static struct datalink_proto	*p8022_datalink = NULL;
+static struct datalink_proto	*p8022tr_datalink = NULL;
 static struct datalink_proto	*pEII_datalink = NULL;
 static struct datalink_proto	*p8023_datalink = NULL;
 static struct datalink_proto	*pSNAP_datalink = NULL;
@@ -840,6 +842,7 @@ ipx_map_frame_type(unsigned char type)
 	switch (type) {
 	case IPX_FRAME_ETHERII: return htons(ETH_P_IPX);
 	case IPX_FRAME_8022: return htons(ETH_P_802_2);
+	case IPX_FRAME_TR_8022: return htons(ETH_P_TR_802_2);
 	case IPX_FRAME_SNAP: return htons(ETH_P_SNAP);
 	case IPX_FRAME_8023: return htons(ETH_P_802_3);
 	}
@@ -868,6 +871,10 @@ ipxitf_create(ipx_interface_definition *idef)
 	case IPX_FRAME_ETHERII: 
 		dlink_type = htons(ETH_P_IPX);
 		datalink = pEII_datalink;
+		break;
+	case IPX_FRAME_TR_8022:
+		dlink_type = htons(ETH_P_TR_802_2);
+		datalink = p8022tr_datalink;
 		break;
 	case IPX_FRAME_8022:
 		dlink_type = htons(ETH_P_802_2);
@@ -969,6 +976,7 @@ ipxitf_auto_create(struct device *dev, unsigned short dlink_type)
 	switch (htons(dlink_type)) {
 	case ETH_P_IPX: datalink = pEII_datalink; break;
 	case ETH_P_802_2: datalink = p8022_datalink; break;
+	case ETH_P_TR_802_2: datalink = p8022tr_datalink; break;
 	case ETH_P_SNAP: datalink = pSNAP_datalink; break;
 	case ETH_P_802_3: datalink = p8023_datalink; break;
 	default: return NULL;
@@ -1318,6 +1326,7 @@ ipx_frame_name(unsigned short frame)
 	case ETH_P_802_2: return "802.2";
 	case ETH_P_SNAP: return "SNAP";
 	case ETH_P_802_3: return "802.3";
+	case ETH_P_TR_802_2: return "802.2TR";
 	default: return "None";
 	}
 }
@@ -2257,6 +2266,9 @@ ipx_proto_init(struct net_proto *pro)
 	if ((p8022_datalink = register_8022_client(ipx_8022_type, ipx_rcv)) == NULL)
 		printk("IPX: Unable to register with 802.2\n");
 
+	if ((p8022tr_datalink = register_8022tr_client(ipx_8022_type, ipx_rcv)) == NULL)
+		printk("IPX: Unable to register with 802.2TR\n");
+ 
 	if ((pSNAP_datalink = register_snap_client(ipx_snap_id, ipx_rcv)) == NULL)
 		printk("IPX: Unable to register with SNAP\n");
 	

@@ -1470,6 +1470,39 @@ main (int argc, char *argv[])
 	}
     }
 
+  if (selected_options & B (OPT_MAUI))
+    {
+    oswf_again:
+      if (think_positively (
+			     "Do you have access to the OSWF.MOT file", 1,
+			     "TB Maui and Tropez have a microcontroller which needs to be initialized\n"
+			     "prior use. OSWF.MOT is a file distributed with card's DOS/Windows drivers\n"
+			     "which is required during initialization\n"))
+	{
+	  char            path[512];
+
+	  fprintf (stderr,
+		   "Enter full name of the OSWF.MOT file (pwd is sound): ");
+	  scanf ("%s", path);
+	  fprintf (stderr, "including microcode file %s\n", path);
+
+	  if (!bin2hex (path, "maui_boot.h", "maui_os"))
+	    {
+	      fprintf (stderr, "Couldn't open file %s\n",
+		       path);
+	      if (think_positively ("Try again with correct path", 1,
+				    "The specified file could not be opened. Enter the correct path to the\n"
+				    "file.\n"))
+		goto oswf_again;
+	    }
+	  else
+	    {
+	      printf ("#define HAVE_MAUI_BOOT\n");
+	      printf ("/*build bin2hex %s maui_boot.h maui_os */\n", path);
+	    }
+	}
+    }
+
   if (!(selected_options & ANY_DEVS))
     {
       printf ("invalid_configuration__run_make_config_again\n");

@@ -16,7 +16,7 @@
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
-#include <linux/mouse.h>
+#include <linux/miscdevice.h>
 #include <linux/random.h>
 
 #include <asm/io.h>
@@ -194,7 +194,7 @@ struct file_operations atixl_busmouse_fops = {
 	fasync_mouse,
 };
 
-static struct mouse atixl_mouse = { 
+static struct miscdevice atixl_mouse = { 
 	ATIXL_BUSMOUSE, "atixl", &atixl_busmouse_fops
 };
 
@@ -222,7 +222,7 @@ int atixl_busmouse_init(void)
 	mouse.dx = mouse.dy = 0;
 	mouse.wait = NULL;
 	printk("Bus mouse detected and installed.\n");
-	mouse_register(&atixl_mouse);
+	misc_register(&atixl_mouse);
 	return 0;
 }
 
@@ -235,6 +235,6 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	mouse_deregister(&atixl_mouse);
+	misc_deregister(&atixl_mouse);
 }
 #endif

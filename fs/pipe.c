@@ -14,6 +14,11 @@
 #include <linux/termios.h>
 #include <linux/mm.h>
 
+/*
+ * Define this if you want SunOS compatibility wrt braindead
+ * select behaviour on FIFO's.
+ */
+#undef FIFO_SUNOS_BRAINDAMAGE
 
 /* We don't use the head/tail construction any more. Now we use the start/len*/
 /* construction providing full use of PIPE_BUF (multiple of PAGE_SIZE) */
@@ -169,6 +174,7 @@ static int pipe_select(struct inode * inode, struct file * filp, int sel_type, s
 	return 0;
 }
 
+#ifdef FIFO_SUNOS_BRAINDAMAGE
 /*
  * Arggh. Why does SunOS have to have different select() behaviour
  * for pipes and fifos? Hate-Hate-Hate. See difference in SEL_IN..
@@ -194,6 +200,11 @@ static int fifo_select(struct inode * inode, struct file * filp, int sel_type, s
 	}
 	return 0;
 }
+#else
+
+#define fifo_select pipe_select
+
+#endif /* FIFO_SUNOS_BRAINDAMAGE */
 
 /*
  * The 'connect_xxx()' functions are needed for named pipes when

@@ -1074,6 +1074,7 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 	int length;
 	int end;
 	unsigned int type, pid;
+	struct proc_dir_entry *dp;
 
 	if (count < 0)
 		return -EINVAL;
@@ -1085,8 +1086,13 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 	pid = type >> 16;
 	type &= 0x0000ffff;
 	start = NULL;
-	length = fill_array((char *) page, pid, type,
-			    &start, file->f_pos, count);
+	dp = (struct proc_dir_entry *) inode->u.generic_ip;
+	if (dp->get_info)
+		length = dp->get_info((char *)page, &start, file->f_pos,
+				      count, 0);
+	else
+		length = fill_array((char *) page, pid, type,
+				    &start, file->f_pos, count);
 	if (length < 0) {
 		free_page(page);
 		return length;

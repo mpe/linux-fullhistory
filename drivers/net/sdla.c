@@ -344,24 +344,24 @@ static void sdla_errors(struct device *dev, int cmd, int dlci, int ret, int len,
       case SDLA_RET_MODEM:
          state = data;
          if (*state & SDLA_MODEM_DCD_LOW)
-            printk(KERN_NOTICE "%s: Modem DCD unexpectedly low!\n", dev->name);
+            printk(KERN_INFO "%s: Modem DCD unexpectedly low!\n", dev->name);
          if (*state & SDLA_MODEM_CTS_LOW)
-            printk(KERN_NOTICE "%s: Modem CTS unexpectedly low!\n", dev->name);
+            printk(KERN_INFO "%s: Modem CTS unexpectedly low!\n", dev->name);
 /* I should probably do something about this! */
          break;
 
       case SDLA_RET_CHANNEL_OFF:
-         printk(KERN_NOTICE "%s: Channel became inoperative!\n", dev->name);
+         printk(KERN_INFO "%s: Channel became inoperative!\n", dev->name);
 /* same here */
          break;
 
       case SDLA_RET_CHANNEL_ON:
-         printk(KERN_NOTICE "%s: Channel became operative!\n", dev->name);
+         printk(KERN_INFO "%s: Channel became operative!\n", dev->name);
 /* same here */
          break;
 
       case SDLA_RET_DLCI_STATUS:
-         printk(KERN_NOTICE "%s: Status change reported by Access Node.\n", dev->name);
+         printk(KERN_INFO "%s: Status change reported by Access Node.\n", dev->name);
          len /= sizeof(struct _dlci_stat);
          for(pstatus = data, i=0;i < len;i++,pstatus++)
          {
@@ -376,14 +376,14 @@ static void sdla_errors(struct device *dev, int cmd, int dlci, int ret, int len,
                   else
                      state = "unknown status";
  
-            printk(KERN_NOTICE "%s: DLCI %i: %s.\n", dev->name, pstatus->dlci, state);
+            printk(KERN_INFO "%s: DLCI %i: %s.\n", dev->name, pstatus->dlci, state);
 /* same here */
          }
          break;
 
       case SDLA_RET_DLCI_UNKNOWN:
-         printk(KERN_DEBUG "%s: Received unknown DLCIs:", dev->name);
-         len /= 2;
+         printk(KERN_INFO "%s: Received unknown DLCIs:", dev->name);
+         len /= sizeof(short);
          for(pdlci = data,i=0;i < len;i++,pdlci++)
             printk(" %i", *pdlci);
          printk("\n");
@@ -1058,6 +1058,7 @@ static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
    struct frad_local *flp;
    struct conf_data  data;
    int               i, err;
+   short             size;
 
    if (dev->type == 0xFFFF)
       return(-EUNATCH);
@@ -1127,11 +1128,22 @@ static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
       if (err)
          return(err);
 
-      sdla_cmd(dev, SDLA_READ_DLCI_CONFIGURATION, 0, 0, &data, sizeof(data), NULL, NULL);
-      memcpy(&flp->config, &data.config, sizeof(struct frad_conf));
+      /* no sense reading if the CPU isnt' started */
+      if (dev->start)
+      {
+         size = sizeof(data);
+         if (sdla_cmd(dev, SDLA_READ_DLCI_CONFIGURATION, 0, 0, NULL, 0, &data, &size) != SDLA_RET_OK)
+            return(-EIO);
+      }
+      else
+         if (flp->configured)
+            memcpy(&data.config, &flp->config, sizeof(struct frad_conf));
+         else
+            memset(&data.config, 0, sizeof(struct frad_conf));
 
+      memcpy(&flp->config, &data.config, sizeof(struct frad_conf));
       data.config.flags &= ~SDLA_DIRECT_RECV;
-      data.config.mtu -= sizeof(struct fradhdr);
+      data.config.mtu -= data.config.mtu > sizeof(struct fradhdr) ? sizeof(struct fradhdr) : data.config.mtu;
       memcpy_tofs(conf, &data.config, sizeof(struct frad_conf));
    }
 

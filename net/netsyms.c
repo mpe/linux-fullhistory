@@ -56,11 +56,11 @@ extern void destroy_8023_client(struct datalink_proto *);
 static struct symbol_table net_syms = {
 #include <linux/symtab_begin.h>
 
-        /* Socket layer registration */
-        X(sock_register),
-        X(sock_unregister),
+	/* Socket layer registration */
+	X(sock_register),
+	X(sock_unregister),
 
-        /* Socket layer support routines */
+	/* Socket layer support routines */
 	X(memcpy_fromiovec),
 	X(sock_setsockopt),
 	X(sock_getsockopt),
@@ -116,8 +116,8 @@ static struct symbol_table net_syms = {
 #endif
 
 #ifdef CONFIG_TR
-        X(tr_setup),
-        X(tr_type_trans),
+	X(tr_setup),
+	X(tr_type_trans),
 #endif
                           
 #ifdef CONFIG_NET_ALIAS

@@ -553,7 +553,7 @@ static int sprint_command (char* buffer, int len, unsigned char *command) {
 
 static int sprint_Scsi_Cmnd (char* buffer, int len, Scsi_Cmnd *cmd) {
     int start = len;
-    PRINTP("destination target %d, lun %d\n" ANDP
+    PRINTP("host number %d destination target %d, lun %d\n" ANDP
        cmd->host->host_no ANDP
        cmd->target ANDP
        cmd->lun);
@@ -562,7 +562,7 @@ static int sprint_Scsi_Cmnd (char* buffer, int len, Scsi_Cmnd *cmd) {
     return len-start;
 }
 
-const char *const scsi_device_types[] =
+const char *const private_scsi_device_types[] =
 {
     "Direct-Access    ",
     "Sequential-Access",
@@ -575,7 +575,7 @@ const char *const scsi_device_types[] =
     "Medium Changer   ",
     "Communications   "
 };
-#define MAX_SCSI_DEVICE_CODE sizeof(scsi_device_types)/sizeof(char*)
+#define MAX_SCSI_DEVICE_CODE sizeof(private_scsi_device_types)/sizeof(char*)
 
 int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int length, int hostno, int inout)
 {
@@ -630,7 +630,7 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 	    long tr = hostdata->time_read[dev->id] / HZ;
 	    long tw = hostdata->time_write[dev->id] / HZ;
 
-	    PRINTP("  T:%d %s " ANDP dev->id ANDP (dev->type < MAX_SCSI_DEVICE_CODE) ? scsi_device_types[(int)dev->type] : "Unknown");
+	    PRINTP("  T:%d %s " ANDP dev->id ANDP (dev->type < MAX_SCSI_DEVICE_CODE) ? private_scsi_device_types[(int)dev->type] : "Unknown");
 	    for (i=0; i<8; i++)
 		if (dev->vendor[i] >= 0x20)
 		    *(buffer+(len++)) = dev->vendor[i];
@@ -644,13 +644,13 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 		    *(buffer+(len++)) = dev->rev[i];
 	    *(buffer+(len++)) = ' ';
 				    
-	    PRINTP("\n%10d kb read    in %5d secs" ANDP br/1024 ANDP tr);
+	    PRINTP("\n%10ld kb read    in %5ld secs" ANDP br/1024 ANDP tr);
 	    if (tr)
-		PRINTP(" @ %5d bps" ANDP br / tr); 
+		PRINTP(" @ %5ld bps" ANDP br / tr); 
 
-	    PRINTP("\n%10d kb written in %5d secs" ANDP bw/1024 ANDP tw);
+	    PRINTP("\n%10ld kb written in %5ld secs" ANDP bw/1024 ANDP tw);
 	    if (tw)
-		PRINTP(" @ %5d bps" ANDP bw / tw); 
+		PRINTP(" @ %5ld bps" ANDP bw / tw); 
 	    PRINTP("\n");
 	}
     }

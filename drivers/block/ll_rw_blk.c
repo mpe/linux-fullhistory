@@ -306,7 +306,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 				return;
 			}
 			kstat.pgpgin++;
-			max_req = NR_REQUEST;	/* reads take precedence */
+			max_req = (major == MD_MAJOR) ? NR_REQUEST/2 : NR_REQUEST;	/* reads take precedence */
 			break;
 		case WRITEA:
 			rw_ahead = 1;
@@ -322,7 +322,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			 * requests are only for reads.
 			 */
 			kstat.pgpgout++;
-			max_req = (NR_REQUEST * 2) / 3;
+			max_req =  (major == MD_MAJOR) ? NR_REQUEST/3 : (NR_REQUEST * 2) / 3;
 			break;
 		default:
 			printk("make_request: bad block dev cmd, must be R/W/RA/WA\n");

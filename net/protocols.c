@@ -21,6 +21,7 @@
 #if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
 #include <net/ipxcall.h>
 #include <net/p8022call.h>
+#include <net/p8022trcall.h>
 #endif
 #ifdef CONFIG_AX25
 #include <net/ax25call.h>
@@ -31,6 +32,7 @@
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
 #if ! ( defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE) )
 #include <net/p8022call.h>
+#include <net/p8022trcall.h>
 #endif
 #include <net/atalkcall.h>
 #endif
@@ -51,6 +53,7 @@ struct net_proto protocols[] = {
 #if defined(CONFIG_IPX)   || defined(CONFIG_IPX_MODULE) || \
     defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
   { "802.2",	p8022_proto_init },			/* 802.2 demultiplexor		*/
+  { "802.2TR",	p8022tr_proto_init },			/* 802.2 demultiplexor		*/
   { "SNAP",	snap_proto_init },			/* SNAP demultiplexor		*/
 #endif
 #ifdef CONFIG_TR

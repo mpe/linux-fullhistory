@@ -28,7 +28,7 @@ if [ "$CONFIG_INET" = "y" ]; then
   fi
   tristate 'SMB filesystem support (to mount WfW shares etc..)' CONFIG_SMB_FS
 fi
-if [ "$CONFIG_IPX" = "y" ]; then
+if [ "$CONFIG_IPX" != "n" ]; then
   tristate 'NCP filesystem support (to mount NetWare volumes)' CONFIG_NCP_FS
 fi
 tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS

@@ -343,12 +343,30 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	static unsigned int prev_scancode = 0;   /* remember E0, E1 */
 	char up_flag;				 /* 0 or 0200 */
 	char raw_mode;
+	int status;
 
 	pt_regs = regs;
 	send_cmd(0xAD);		/* disable keyboard */
 	kb_wait();
-	if ((inb_p(0x64) & kbd_read_mask) != 0x01)
-		goto end_kbd_intr;
+	status = inb_p(0x64);
+	if ((status & kbd_read_mask) != 0x01) {
+	  /*
+	   * On some platforms (Alpha XL for one), the init code may leave
+	   *  an interrupt hanging, yet with status indicating no data.
+	   * After making sure that there's no data indicated and its not a
+	   *  mouse interrupt, we will read the data register to clear it.
+	   * If we don't do this, the data reg stays full and will not
+	   *  allow new data or interrupt from the keyboard. Sigh...
+	   */
+	  if (!(status & 0x21)) { /* neither ODS nor OBF */
+	    scancode = inb(0x60); /* read data anyway */
+#if 0
+	    printk("keyboard: status 0x%x  mask 0x%x  data 0x%x\n",
+		   status, kbd_read_mask, scancode);
+#endif
+	  }
+	  goto end_kbd_intr;
+	}
 	scancode = inb(0x60);
 	mark_bh(KEYBOARD_BH);
 	if (reply_expected) {

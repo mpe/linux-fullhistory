@@ -39,7 +39,7 @@
 #include <linux/errno.h>
 #include <linux/timer.h>
 #include <linux/malloc.h>
-#include <linux/mouse.h>
+#include <linux/miscdevice.h>
 #include <linux/random.h>
 
 #include <asm/io.h>
@@ -481,7 +481,7 @@ struct file_operations psaux_fops = {
  * Initialize driver. First check for a 82C710 chip; if found
  * forget about the Aux port and use the *_qp functions.
  */
-static struct mouse psaux_mouse = {
+static struct miscdevice psaux_mouse = {
 	PSMOUSE_MINOR, "ps2aux", &psaux_fops
 };
 
@@ -506,7 +506,7 @@ int psaux_init(void)
 	} else {
 		return -EIO;
 	}
-	mouse_register(&psaux_mouse);
+	misc_register(&psaux_mouse);
 	queue = (struct aux_queue *) kmalloc(sizeof(*queue), GFP_KERNEL);
 	memset(queue, 0, sizeof(*queue));
 	queue->head = queue->tail = 0;
@@ -538,7 +538,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	mouse_deregister(&psaux_mouse);
+	misc_deregister(&psaux_mouse);
 }
 #endif
 

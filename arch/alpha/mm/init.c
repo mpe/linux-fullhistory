@@ -21,6 +21,7 @@
 #include <asm/segment.h>
 #include <asm/pgtable.h>
 #include <asm/hwrpb.h>
+#include <asm/dma.h>
 
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
@@ -156,6 +157,8 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	}
 
 	for (tmp = PAGE_OFFSET ; tmp < high_memory ; tmp += PAGE_SIZE) {
+		if (tmp >= MAX_DMA_ADDRESS)
+			mem_map[MAP_NR(tmp)].dma = 0;
 		if (mem_map[MAP_NR(tmp)].reserved)
 			continue;
 		mem_map[MAP_NR(tmp)].count = 1;

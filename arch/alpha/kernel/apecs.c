@@ -393,10 +393,34 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char device_fn,
 
 unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 {
+
+#ifdef CONFIG_ALPHA_XL
 	/*
 	 * Set up the PCI->physical memory translation windows.
-	 * For now, window 1 is disabled.  In the future, we may
-	 * want to use it to do scatter/gather DMA.  Window 0
+	 * For the XL we *must* use both windows, in order to
+	 * maximize the amount of physical memory that can be used
+	 * to DMA from the ISA bus, and still allow PCI bus devices
+	 * access to all of host memory.
+	 *
+	 * see <asm/apecs.h> for window bases and sizes.
+	 *
+	 * this restriction due to the true XL motherboards' 82379AB SIO
+	 * PCI<->ISA bridge chip which passes only 27 bits of address...
+	 */
+
+	*(vuip)APECS_IOC_PB1R = 1U<<19 | (APECS_XL_DMA_WIN1_BASE & 0xfff00000U);
+	*(vuip)APECS_IOC_PM1R = (APECS_XL_DMA_WIN1_SIZE - 1) & 0xfff00000U;
+	*(vuip)APECS_IOC_TB1R = 0;
+
+	*(vuip)APECS_IOC_PB2R = 1U<<19 | (APECS_XL_DMA_WIN2_BASE & 0xfff00000U);
+	*(vuip)APECS_IOC_PM2R = (APECS_XL_DMA_WIN2_SIZE - 1) & 0xfff00000U;
+	*(vuip)APECS_IOC_TB2R = 0;
+
+#else  /* CONFIG_ALPHA_XL */
+	/*
+	 * Set up the PCI->physical memory translation windows.
+	 * For now, window 2 is disabled.  In the future, we may
+	 * want to use it to do scatter/gather DMA.  Window 1
 	 * goes at 1 GB and is 1 GB large.
 	 */
 	*(vuip)APECS_IOC_PB2R  = 0U; /* disable window 2 */
@@ -404,6 +428,7 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 	*(vuip)APECS_IOC_PB1R  = 1U<<19 | (APECS_DMA_WIN_BASE & 0xfff00000U);
 	*(vuip)APECS_IOC_PM1R  = (APECS_DMA_WIN_SIZE - 1) & 0xfff00000U;
 	*(vuip)APECS_IOC_TB1R  = 0;
+#endif /* CONFIG_ALPHA_XL */
 
 #ifdef CONFIG_ALPHA_CABRIOLET
 	/*

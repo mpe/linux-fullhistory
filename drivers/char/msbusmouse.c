@@ -38,7 +38,7 @@
 #include <linux/busmouse.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
-#include <linux/mouse.h>
+#include <linux/miscdevice.h>
 #include <linux/random.h>
 
 #include <asm/io.h>
@@ -170,7 +170,7 @@ struct file_operations ms_bus_mouse_fops = {
 	fasync_mouse,
 };
 
-static struct mouse ms_bus_mouse = {
+static struct miscdevice ms_bus_mouse = {
 	MICROSOFT_BUSMOUSE, "msbusmouse", &ms_bus_mouse_fops
 };
 
@@ -205,7 +205,7 @@ int ms_bus_mouse_init(void)
 	MS_MSE_INT_OFF();
 	request_region(MS_MSE_CONTROL_PORT, 0x04, "MS Busmouse");
 	printk("Microsoft BusMouse detected and installed.\n");
-	mouse_register(&ms_bus_mouse);
+	misc_register(&ms_bus_mouse);
 	return 0;
 }
 
@@ -217,7 +217,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	mouse_deregister(&ms_bus_mouse);
+	misc_deregister(&ms_bus_mouse);
 	release_region(MS_MSE_CONTROL_PORT, 0x04);
 }
 #endif

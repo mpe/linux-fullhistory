@@ -82,7 +82,20 @@ extern struct hwrpb_struct *hwrpb;
 #if PCI_MODIFY
 
 static unsigned int	io_base	 = 64*KB;	/* <64KB are (E)ISA ports */
+
+#if defined(CONFIG_ALPHA_XL)
+/*
+   an AVANTI *might* be an XL, and an XL has only 27 bits of ISA address
+   that get passed through the PCI<->ISA bridge chip. Because this causes
+   us to set the PCI->Mem window bases lower than normal, we've gotta allocate
+   PCI bus devices' memory addresses *above* the PCI<->memory mapping windows,
+   so that CPU memory DMA addresses issued by a bus device don't conflict
+   with bus memory addresses, like frame buffer memory for graphics cards.
+*/
+static unsigned int	mem_base = 1024*MB;
+#else /* CONFIG_ALPHA_XL */
 static unsigned int	mem_base = 16*MB;	/* <16MB is ISA memory */
+#endif /* CONFIG_ALPHA_XL */
 
 /*
  * Disable PCI device DEV so that it does not respond to I/O or memory
@@ -418,7 +431,7 @@ unsigned long pcibios_init(unsigned long mem_start,
  * or 0x398/0x399.  Unfortunately, autodetecting which base address is
  * in use works only once (right after a reset).  The Super I/O chip
  * has the additional quirk that configuration register data must be
- * written twice (I believe this is a saftey feature to prevent
+ * written twice (I believe this is a safety feature to prevent
  * accidental modification---fun, isn't it?).
  */
 static inline void enable_ide(long ide_base)

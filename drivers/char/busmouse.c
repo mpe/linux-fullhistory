@@ -41,7 +41,7 @@
 #include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
-#include <linux/mouse.h>
+#include <linux/miscdevice.h>
 #include <linux/random.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
@@ -240,7 +240,7 @@ struct file_operations bus_mouse_fops = {
 	fasync_mouse,
 };
 
-static struct mouse bus_mouse = {
+static struct miscdevice bus_mouse = {
 	LOGITECH_BUSMOUSE, "busmouse", &bus_mouse_fops
 };
 
@@ -272,7 +272,7 @@ int bus_mouse_init(void)
 	mouse.wait = NULL;
 	printk("Logitech bus mouse detected, using IRQ %d.\n",
 	       mouse_irq);
-	mouse_register(&bus_mouse);
+	misc_register(&bus_mouse);
 	return 0;
 }
 
@@ -285,7 +285,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	mouse_deregister(&bus_mouse);
+	misc_deregister(&bus_mouse);
 	release_region(LOGIBM_BASE, LOGIBM_EXTENT);
 }
 #endif

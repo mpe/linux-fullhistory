@@ -1158,6 +1158,7 @@ static void tr_tx(struct device *dev)
 	__u32 dhb;
 	unsigned char xmit_command;
 	int i;
+	struct trllc	*llc;
 	
 	if (readb(ti->asb + offsetof(struct asb_xmit_resp, ret_code))!=0xFF)
 		DPRINTK("ASB not free !!!\n");
@@ -1169,13 +1170,14 @@ static void tr_tx(struct device *dev)
 	   effective address where we will place data.*/
 	dhb=ti->sram 
 		+ntohs(readw(ti->arb + offsetof(struct arb_xmit_req, dhb_address)));
+	llc = (struct trllc *) &(ti->current_skb->data[sizeof(struct trh_hdr)]);
 	
 	xmit_command = readb(ti->srb + offsetof(struct srb_xmit, command));
 	
 	writeb(xmit_command, ti->asb + offsetof(struct asb_xmit_resp, command));
 	writew(readb(ti->srb + offsetof(struct srb_xmit, station_id)),
 	       ti->asb + offsetof(struct asb_xmit_resp, station_id));
-	writeb(EXTENDED_SAP, ti->asb + offsetof(struct asb_xmit_resp, rsap_value));
+	writeb(llc->ssap, ti->asb + offsetof(struct asb_xmit_resp, rsap_value));
 	writeb(readb(ti->srb + offsetof(struct srb_xmit, cmd_corr)),
 	       ti->asb + offsetof(struct asb_xmit_resp, cmd_corr));
 	writeb(0, ti->asb + offsetof(struct asb_xmit_resp, ret_code));
@@ -1248,6 +1250,8 @@ static void tr_rx(struct device *dev)
 	unsigned int rbuffer_len, lan_hdr_len;
 	unsigned int arb_frame_len;
 	struct sk_buff *skb;
+	unsigned int skb_size = 0;
+	int	is8022 = 0;
 	
 	rbuffer=(ti->sram
 		 +ntohs(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))));
@@ -1293,6 +1297,11 @@ static void tr_rx(struct device *dev)
 			return;
 			}
 		
+		if ((readb(llc + offsetof(struct trllc, dsap))!=0xAA) ||
+		    (readb(llc + offsetof(struct trllc, ssap))!=0xAA)) {
+			is8022 = 1;
+		}
+			
 #if TR_VERBOSE
 		if ((readb(llc + offsetof(struct trllc, dsap))!=0xAA) ||
 		    (readb(llc + offsetof(struct trllc, ssap))!=0xAA)) {
@@ -1322,8 +1331,12 @@ static void tr_rx(struct device *dev)
 #endif
 		
 		arb_frame_len=ntohs(readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
+		skb_size = arb_frame_len-lan_hdr_len+sizeof(struct trh_hdr);
+		if (is8022) {
+			skb_size += sizeof(struct trllc);
+		}
 		
-		if (!(skb=dev_alloc_skb(arb_frame_len-lan_hdr_len+sizeof(struct trh_hdr)))) {
+		if (!(skb=dev_alloc_skb(skb_size))) {
 			DPRINTK("out of memory. frame dropped.\n");	
 			ti->tr_stats.rx_dropped++;
 			writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
@@ -1331,7 +1344,7 @@ static void tr_rx(struct device *dev)
 			return;
 		}
 		
-		skb_put(skb, arb_frame_len-lan_hdr_len+sizeof(struct trh_hdr));
+		skb_put(skb, skb_size);
 		skb->dev=dev;
 		
 		data=skb->data;
@@ -1344,6 +1357,12 @@ static void tr_rx(struct device *dev)
 		data+=sizeof(struct trh_hdr);
 		rbuffer_len=ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)))
 			-lan_hdr_len;
+		if (is8022) {
+			struct trllc	*local_llc = (struct trllc *)data;
+			memset(local_llc, 0, sizeof(*local_llc));
+			local_llc->ethertype = htons(ETH_P_TR_802_2);
+			data += sizeof(struct trllc);
+		}
 		
 #if TR_VERBOSE
 		DPRINTK("rbuffer_len: %d, data: %p\n", rbuffer_len, data);

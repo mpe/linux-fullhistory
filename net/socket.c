@@ -65,7 +65,10 @@
 #include <linux/netdevice.h>
 #include <linux/proc_fs.h>
 #include <linux/firewall.h>
+
+#ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
+#endif
 
 #include <net/netlink.h>
 
@@ -1027,7 +1030,7 @@ asmlinkage int sys_recvfrom(int fd, void * ubuf, int size, unsigned flags,
 	  	return err;
   
   	msg.msg_accrights=NULL;
-  	msg.msg_iovlen=0;
+  	msg.msg_iovlen=1;
   	msg.msg_iov=&iov;
   	iov.iov_len=size;
   	iov.iov_base=ubuf;

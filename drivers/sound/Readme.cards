@@ -34,8 +34,6 @@ mail me and ask about these cards. The unsupported cards are:
 		(Early 3.6-alpha versions?)
 	- Sound Galaxy Washington/Waverider
 		(3.6-alpha versions. Can't promise the waverider synth).
-	- TB Maui
-		(v3.6)
 	- Yamaha OPL4 (on cards having _RAM_ for samples)
 		(Late 96?. Works as OPL3 with current driver versions)
 
@@ -180,8 +178,8 @@ Crystal CS4232 based cards such as AcerMagic S23, TB Tropez _Plus_ and
 
 Turtle Beach Maui and Tropez
 	This driver version supports sample, patch and program loading commands
-	described in the Maui/Tropez User's manual. There is no initialization
-	code for Maui so it must be initialized with DOS. The audio side of
+	described in the Maui/Tropez User's manual. 
+	There is now full initialization support too. The audio side of
 	the Tropez is based on the MAD16 chip (see above).
 
 Jumpers and software configuration
@@ -385,9 +383,8 @@ select some options automaticly as well.
 	  cards made by known manufacturers such as Turtle Beach (Tropez),
 	  Reveal (some models) and Diamond (some recent models).
   "Support for TB Maui"
-	- This is just an experimental extension to the MPU401 driver.
-	  Don't enable this option unless you are writing a .MOD
-	  player for Maui.
+	- This enables TB Maui spesific initialization. Works with TB Maui
+	and TB Tropez (may not work with Tropez Plus).
 
   "Audio Excel DSP 16 initialization support",
 	- Don't know much about this card. Look at aedsp16.c for more info.

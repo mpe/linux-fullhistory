@@ -1115,7 +1115,6 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  * 	check if that someone else is one of our proxies.  If it isn't,
  * 	we can toss it.
  */
-			grat = (sip == tip) && (sha == tha);
 			arp_fast_lock();
 
 			for (proxy_entry=arp_proxy_list;
@@ -1137,12 +1136,6 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			}
 			if (proxy_entry)
 			{
-				if (grat)
-				{
-					if(!(proxy_entry->flags&ATF_PERM))
-						arp_destroy(proxy_entry);
-					goto gratuitous;
-				}
 				memcpy(ha, proxy_entry->ha, dev->addr_len);
 				arp_unlock();
 				arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,ha, sha);
@@ -1151,11 +1144,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			}
 			else
 			{
-				if (grat) 
-					goto gratuitous;
 				arp_unlock();
-				kfree_skb(skb, FREE_READ);
-				return 0;
 			}
 		}
 		else
@@ -1165,6 +1154,8 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  */
 			arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr,sha);
 		}
+		grat = 1;
+		goto gratuitous;
 	}
 /*
  *	It is now an arp reply.
@@ -1182,13 +1173,13 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  * needs to be added to the arp cache, or have its entry updated if it is 
  * there.
  */
+ 
+gratuitous:
 
 	arp_fast_lock();
 
-gratuitous:
 
 	hash = HASH(sip);
-
 	for (entry=arp_tables[hash]; entry; entry=entry->next)
 		if (entry->ip == sip && entry->dev == dev)
 			break;
@@ -1198,8 +1189,14 @@ gratuitous:
 /*
  *	Entry found; update it only if it is not a permanent entry.
  */
-		if (!(entry->flags & ATF_PERM)) {
-			memcpy(entry->ha, sha, dev->addr_len);
+		if (!(entry->flags & ATF_PERM)) 
+		{
+			if(memcmp(entry->ha, sha,dev->addr_len)!=0)
+			{
+				memcpy(entry->ha, sha, dev->addr_len);
+				if(entry->flags & ATF_COM)
+					arp_update_hhs(entry);
+			}
 			entry->last_updated = jiffies;
 			arpd_update(entry, __LINE__);
 		}

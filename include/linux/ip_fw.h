@@ -174,24 +174,6 @@ struct ip_fwpkt
 #ifdef __KERNEL__
 
 #include <linux/config.h>
-
-#ifdef CONFIG_IP_MASQUERADE
-struct ip_masq {
-	struct ip_masq	*next;		/* next member in list */
-	struct timer_list timer;	/* Expiration timer */
-	__u16 		protocol;	/* Which protocol are we talking? */
-	__u32 		src, dst;	/* Source and destination IP addresses */
-	__u16		sport,dport;	/* Source and destination ports */
-	__u16		mport;		/* Masquaraded port */
-	__u32		init_seq;	/* Add delta from this seq. on */
-	short		delta;		/* Delta in sequence numbers */
-	short		previous_delta;	/* Delta in sequence numbers before last resized PORT command */
-	char		sawfin;		/* Did we saw an FIN packet? */
-};
-extern struct ip_masq *ip_msq_hosts;
-extern void ip_fw_masquerade(struct sk_buff **, struct device *);
-extern int ip_fw_demasquerade(struct sk_buff *);
-#endif
 #ifdef CONFIG_IP_FIREWALL
 extern struct ip_fw *ip_fw_in_chain;
 extern struct ip_fw *ip_fw_out_chain;
@@ -212,21 +194,5 @@ extern int ip_fw_chk(struct iphdr *, struct device *rif,struct ip_fw *, int, int
 extern void ip_fw_init(void);
 #endif /* KERNEL */
 
-#ifdef CONFIG_IP_MASQUERADE
-
-#undef DEBUG_MASQ
-
-#define MASQUERADE_EXPIRE_TCP     15*60*HZ
-#define MASQUERADE_EXPIRE_TCP_FIN  2*60*HZ
-#define MASQUERADE_EXPIRE_UDP      5*60*HZ
-
-/*
- *	Linux ports don't normally get allocated above 32K. I used an extra 4K port-space
- */
- 
-#define PORT_MASQ_BEGIN	60000
-#define PORT_MASQ_END	(PORT_MASQ_BEGIN+4096)
-#define FTP_DPORT_TBD (PORT_MASQ_END+1) /* Avoid using hardcoded port 20 for ftp data connection */
-#endif
 
 #endif /* _IP_FW_H */

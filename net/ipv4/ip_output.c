@@ -239,7 +239,7 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 	if ((LOOPBACK(saddr) && !LOOPBACK(daddr)) || !saddr)
 		saddr = rt ? rt->rt_src : (*dev)->pa_addr;
 
-	raddr = rt ? rt->rt_gateway : 0;
+	raddr = rt ? rt->rt_gateway : daddr;
 
 	if (opt && opt->is_strictroute && rt && (rt->rt_flags & RTF_GATEWAY))
 	{
@@ -247,13 +247,6 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 		ip_statistics.IpOutNoRoutes++;
 		return -ENETUNREACH;
 	}
-
-	/*
-	 *	No gateway so aim at the real destination
-	 */
-
-	if (raddr == 0)
-		raddr = daddr;
 
 	/*
 	 *	Now build the MAC header.

@@ -166,10 +166,14 @@ endif
 
 ifeq ($(CONFIG_SLIP),y)
 L_OBJS += slip.o
-CONFIG_SLHC_BUILTIN = y
+  ifeq ($(CONFIG_SLIP_COMPRESSED),y)
+  CONFIG_SLHC_BUILTIN = y
+  endif
 else
   ifeq ($(CONFIG_SLIP),m)
-  CONFIG_SLHC_MODULE = y
+    ifeq ($(CONFIG_SLIP_COMPRESSED),y)
+    CONFIG_SLHC_MODULE = y
+  endif
   M_OBJS += slip.o
   endif
 endif

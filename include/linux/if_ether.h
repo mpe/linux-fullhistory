@@ -71,6 +71,7 @@
 #define ETH_P_PPP_MP    0x0008          /* Dummy type for PPP MP frames */
 #define ETH_P_LOCALTALK 0x0009		/* Localtalk pseudeo type 	*/
 #define ETH_P_PPPTALK	0x0010		/* Dummy type for Atalk over PPP*/
+#define ETH_P_TR_802_2	0x0011		/* 802.2 frames 		*/
 
 /*
  *	This is an Ethernet frame header.

@@ -15,12 +15,12 @@ O_OBJS += tr.o
 endif
 
 ifdef CONFIG_IPX
-OX_OBJS += p8022.o psnap.o
+O_OBJS += p8022.o psnap.o p8022tr.o
 endif
 
 ifdef CONFIG_ATALK
 ifndef CONFIG_IPX
-OX_OBJS += p8022.o psnap.o
+O_OBJS += p8022.o psnap.o p8022tr.o
 endif
 endif
 

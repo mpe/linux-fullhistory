@@ -41,6 +41,7 @@
  *		Olaf Erb	:	irtt wasnt being copied right.
  *		Bjorn Ekwall	:	Kerneld route support.
  *		Alan Cox	:	Multicast fixed (I hope)
+ * 		Pavel Krauz	:	Limited broadcast fixed
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -1558,9 +1559,9 @@ struct rtable * ip_rt_slow_route (__u32 daddr, int local)
 	if (!(rth->rt_flags & RTF_GATEWAY))
 		rth->rt_gateway = rth->rt_dst;
 	/*
-	 *	Multicast is never gatewayed.
+	 *	Multicast or limited broadcast is never gatewayed.
 	 */
-	if (MULTICAST(daddr))
+	if (MULTICAST(daddr) || daddr == 0xFFFFFFFF)
 		rth->rt_gateway = rth->rt_dst;
 
 	if (ip_rt_lock == 1)

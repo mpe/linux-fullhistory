@@ -43,10 +43,17 @@ then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_LCA y
 fi
+if [ "$CONFIG_ALPHA_AVANTI" = "y" ]
+then
+	bool 'Is it really a true XL' CONFIG_ALPHA_XL
+fi
 if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
 	-o "$CONFIG_ALPHA_EB64P" = "y" ]
 then
-	bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
+	if [ "$CONFIG_ALPHA_XL" = "n" ]
+	then
+		bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
+	fi
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_APECS y
 fi

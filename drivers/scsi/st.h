@@ -10,7 +10,8 @@
 #endif
 
 typedef struct {
-  int in_use;
+  unsigned char in_use;
+  unsigned char dma;	/* DMA-able buffer */
   int buffer_size;
   int buffer_blocks;
   int buffer_bytes;
@@ -37,6 +38,7 @@ typedef struct {
   unsigned char in_use;
   unsigned char eof_hit;
   unsigned char drv_buffer;
+  unsigned char restr_dma;
   unsigned char do_buffer_writes;
   unsigned char do_async_writes;
   unsigned char do_read_ahead;
