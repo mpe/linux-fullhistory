@@ -6,7 +6,6 @@
  * These are the low level assembler for performing cache and TLB
  * functions on the sa110.
  */
-#include <linux/config.h>
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <asm/procinfo.h>

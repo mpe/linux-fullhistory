@@ -21,6 +21,10 @@
  * Make real block number available to downstream transfer functions, enables
  * CBC (and relatives) mode encryption requiring unique IVs per data block. 
  * Reed H. Petty, rhp@draper.net
+ *
+ * Maximum number of loop devices now dynamic via max_loop module parameter.
+ * Still fixed at 8 devices when compiled into the kernel normally.
+ * Russell Kroll <rkroll@exploits.org> 19990701
  * 
  * Still To Fix:
  * - Advisory locking is ignored here. 
@@ -61,10 +65,11 @@
 #define TIMEOUT_VALUE (6 * HZ)
 #include <linux/blk.h>
 
-#define MAX_LOOP 8
-static struct loop_device loop_dev[MAX_LOOP];
-static int loop_sizes[MAX_LOOP];
-static int loop_blksizes[MAX_LOOP];
+#include <linux/malloc.h>
+static int max_loop = 8;
+static struct loop_device *loop_dev;
+static int *loop_sizes;
+static int *loop_blksizes;
 
 #define FALSE 0
 #define TRUE (!FALSE)
@@ -169,7 +174,7 @@ repeat:
 	INIT_REQUEST;
 	current_request=CURRENT;
 	CURRENT=current_request->next;
-	if (MINOR(current_request->rq_dev) >= MAX_LOOP)
+	if (MINOR(current_request->rq_dev) >= max_loop)
 		goto error_out;
 	lo = &loop_dev[MINOR(current_request->rq_dev)];
 	if (!lo->lo_dentry || !lo->transfer)
@@ -578,7 +583,7 @@ static int lo_ioctl(struct inode * inode, struct file * file,
 		return -ENODEV;
 	}
 	dev = MINOR(inode->i_rdev);
-	if (dev >= MAX_LOOP)
+	if (dev >= max_loop)
 		return -ENODEV;
 	lo = &loop_dev[dev];
 	switch (cmd) {
@@ -615,7 +620,7 @@ static int lo_open(struct inode *inode, struct file *file)
 		return -ENODEV;
 	}
 	dev = MINOR(inode->i_rdev);
-	if (dev >= MAX_LOOP) {
+	if (dev >= max_loop) {
 		return -ENODEV;
 	}
 	lo = &loop_dev[dev];
@@ -640,7 +645,7 @@ static int lo_release(struct inode *inode, struct file *file)
 		return 0;
 	}
 	dev = MINOR(inode->i_rdev);
-	if (dev >= MAX_LOOP)
+	if (dev >= max_loop)
 		return 0;
 	err = fsync_dev(inode->i_rdev);
 	lo = &loop_dev[dev];
@@ -674,6 +679,8 @@ static struct file_operations lo_fops = {
  */
 #ifdef MODULE
 #define loop_init init_module
+MODULE_PARM(max_loop, "i");
+MODULE_PARM_DESC(max_loop, "Maximum number of loop devices (1-255)");
 #endif
 
 int loop_register_transfer(struct loop_func_table *funcs)
@@ -690,7 +697,7 @@ int loop_unregister_transfer(int number)
 
 	if ((unsigned)number >= MAX_LO_CRYPT)
 		return -EINVAL; 
-	for (lo = &loop_dev[0]; lo < &loop_dev[MAX_LOOP]; lo++) { 
+	for (lo = &loop_dev[0]; lo < &loop_dev[max_loop]; lo++) { 
 		int type = lo->lo_encrypt_type;
 		if (type == number) { 
 			xfer_funcs[type]->release(lo);
@@ -714,17 +721,46 @@ int __init loop_init(void)
 		       MAJOR_NR);
 		return -EIO;
 	}
+
+	if ((max_loop < 1) || (max_loop > 255)) {
+		printk (KERN_WARNING "loop: max_loop must be between 1 and 255\n");
+		return -EINVAL;
+	}
+
 #ifndef MODULE
 	printk(KERN_INFO "loop: registered device at major %d\n", MAJOR_NR);
+#else
+	printk(KERN_INFO "loop: enabling %d loop devices\n", max_loop);
 #endif
 
+	loop_dev = kmalloc (max_loop * sizeof(struct loop_device), GFP_KERNEL);
+	if (!loop_dev) {
+		printk (KERN_ERR "loop: Unable to create loop_dev\n");
+		return -ENOMEM;
+	}
+
+	loop_sizes = kmalloc(max_loop * sizeof(int), GFP_KERNEL);
+	if (!loop_sizes) {
+		printk (KERN_ERR "loop: Unable to create loop_sizes\n");
+		kfree (loop_dev);
+		return -ENOMEM;
+	}
+
+	loop_blksizes = kmalloc (max_loop * sizeof(int), GFP_KERNEL);
+	if (!loop_blksizes) {
+		printk (KERN_ERR "loop: Unable to create loop_blksizes\n");
+		kfree (loop_dev);
+		kfree (loop_sizes);
+		return -ENOMEM;
+	}		
+
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-	for (i=0; i < MAX_LOOP; i++) {
+	for (i=0; i < max_loop; i++) {
 		memset(&loop_dev[i], 0, sizeof(struct loop_device));
 		loop_dev[i].lo_number = i;
 	}
-	memset(&loop_sizes, 0, sizeof(loop_sizes));
-	memset(&loop_blksizes, 0, sizeof(loop_blksizes));
+	memset(loop_sizes, 0, max_loop * sizeof(int));
+	memset(loop_blksizes, 0, max_loop * sizeof(int));
 	blk_size[MAJOR_NR] = loop_sizes;
 	blksize_size[MAJOR_NR] = loop_blksizes;
 
@@ -736,5 +772,9 @@ void cleanup_module(void)
 {
 	if (unregister_blkdev(MAJOR_NR, "loop") != 0)
 		printk(KERN_WARNING "loop: cannot unregister blkdev\n");
+
+	kfree (loop_dev);
+	kfree (loop_sizes);
+	kfree (loop_blksizes);
 }
 #endif

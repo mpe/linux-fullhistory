@@ -1,20 +1,19 @@
 /*
  *	pci_syscall.c
+ *
+ * For architectures where we want to allow direct access
+ * to the PCI config stuff - it would probably be preferable
+ * on PCs too, but there people just do it by hand with the
+ * magic northbridge registers..
  */
 
 #include <linux/config.h>
+#include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/pci.h>
 #include <linux/smp_lock.h>
 #include <asm/uaccess.h>
 
-
-#ifndef CONFIG_PCI
-
-asmlinkage int sys_pciconfig_read() { return -ENOSYS; }
-asmlinkage int sys_pciconfig_write() { return -ENOSYS; }
-
-#else
 
 asmlinkage long
 sys_pciconfig_read(unsigned long bus, unsigned long dfn,
@@ -144,5 +143,3 @@ sys_pciconfig_write(unsigned long bus, unsigned long dfn,
 
 	return err;
 }
-
-#endif /* CONFIG_PCI */

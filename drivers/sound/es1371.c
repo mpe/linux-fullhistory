@@ -81,6 +81,9 @@
  *                     added a /proc file system for dumping hardware state
  *                     updated SRC and CODEC w/r functions to accomodate bugs
  *                     in some versions of the ES137x chips.
+ *    31.08.99   0.17  add spin_lock_init
+ *                     __initlocaldata to fix gcc 2.7.x problems
+ *                     replaced current->state = x with set_current_state(x)
  *
  */
 
@@ -1608,8 +1611,8 @@ static int drain_dac1(struct es1371_state *s, int nonblock)
 	if (s->dma_dac1.mapped || !s->dma_dac1.ready)
 		return 0;
 
+        __set_current_state(TASK_INTERRUPTIBLE);
         add_wait_queue(&s->dma_dac1.wait, &wait);
-        current->state = TASK_INTERRUPTIBLE;
         for (;;) {
                 spin_lock_irqsave(&s->lock, flags);
 		count = s->dma_dac1.count;
@@ -1620,7 +1623,7 @@ static int drain_dac1(struct es1371_state *s, int nonblock)
                         break;
                 if (nonblock) {
                         remove_wait_queue(&s->dma_dac1.wait, &wait);
-                        current->state = TASK_RUNNING;
+                        set_current_state(TASK_RUNNING);
                         return -EBUSY;
                 }
 		tmo = 3 * HZ * (count + s->dma_dac1.fragsize) / 2 / s->dac1rate;
@@ -1629,7 +1632,7 @@ static int drain_dac1(struct es1371_state *s, int nonblock)
 			printk(KERN_DEBUG "es1371: dac1 dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac1.wait, &wait);
-        current->state = TASK_RUNNING;
+        set_current_state(TASK_RUNNING);
         if (signal_pending(current))
                 return -ERESTARTSYS;
         return 0;
@@ -1644,8 +1647,8 @@ static int drain_dac2(struct es1371_state *s, int nonblock)
 	if (s->dma_dac2.mapped || !s->dma_dac2.ready)
 		return 0;
 
+        __set_current_state(TASK_UNINTERRUPTIBLE);
         add_wait_queue(&s->dma_dac2.wait, &wait);
-        current->state = TASK_UNINTERRUPTIBLE;
         for (;;) {
                 spin_lock_irqsave(&s->lock, flags);
 		count = s->dma_dac2.count;
@@ -1656,7 +1659,7 @@ static int drain_dac2(struct es1371_state *s, int nonblock)
                         break;
                 if (nonblock) {
                         remove_wait_queue(&s->dma_dac2.wait, &wait);
-                        current->state = TASK_RUNNING;
+                        set_current_state(TASK_RUNNING);
                         return -EBUSY;
                 }
 		tmo = 3 * HZ * (count + s->dma_dac2.fragsize) / 2 / s->dac2rate;
@@ -1665,7 +1668,7 @@ static int drain_dac2(struct es1371_state *s, int nonblock)
 			printk(KERN_DEBUG "es1371: dac2 dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac2.wait, &wait);
-        current->state = TASK_RUNNING;
+        set_current_state(TASK_RUNNING);
         if (signal_pending(current))
                 return -ERESTARTSYS;
         return 0;
@@ -2781,7 +2784,7 @@ static int es1371_midi_release(struct inode *inode, struct file *file)
 
 	VALIDATE_STATE(s);
 	if (file->f_mode & FMODE_WRITE) {
-		current->state = TASK_INTERRUPTIBLE;
+		__set_current_state(TASK_INTERRUPTIBLE);
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
 			spin_lock_irqsave(&s->lock, flags);
@@ -2793,7 +2796,7 @@ static int es1371_midi_release(struct inode *inode, struct file *file)
 				break;
 			if (file->f_flags & O_NONBLOCK) {
 				remove_wait_queue(&s->midi.owait, &wait);
-				current->state = TASK_RUNNING;
+				set_current_state(TASK_RUNNING);
 				return -EBUSY;
 			}
 			tmo = (count * HZ) / 3100;
@@ -2801,7 +2804,7 @@ static int es1371_midi_release(struct inode *inode, struct file *file)
 				printk(KERN_DEBUG "es1371: midi timed out??\n");
 		}
 		remove_wait_queue(&s->midi.owait, &wait);
-		current->state = TASK_RUNNING;
+		set_current_state(TASK_RUNNING);
 	}
 	down(&s->open_sem);
 	s->open_mode &= (~(file->f_mode << FMODE_MIDI_SHIFT)) & (FMODE_MIDI_READ|FMODE_MIDI_WRITE);
@@ -2910,6 +2913,11 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_IGAIN, 0x4040 }
 };
 
+#define RSRCISIOREGION(dev,num) ((dev)->resource[(num)].start != 0 && \
+				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
+#define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
+
+
 static int __init init_es1371(void)
 {
 	struct es1371_state *s;
@@ -2920,11 +2928,10 @@ static int __init init_es1371(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.15 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1371: version v0.17 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1371, pcidev))) {
-		if (pcidev->resource[0].flags == 0 || 
-		    (pcidev->resource[0].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
+		if (!RSRCISIOREGION(pcidev, 0))
 			continue;
 		if (pcidev->irq == 0) 
 			continue;
@@ -2940,8 +2947,9 @@ static int __init init_es1371(void)
 		init_waitqueue_head(&s->midi.iwait);
 		init_waitqueue_head(&s->midi.owait);
 		init_MUTEX(&s->open_sem);
+		spin_lock_init(&s->lock);
 		s->magic = ES1371_MAGIC;
-		s->io = pcidev->resource[0].start;
+		s->io = RSRCADDRESS(pcidev, 0);
 		s->irq = pcidev->irq;
 		pci_read_config_byte(pcidev, PCI_REVISION_ID, &s->rev);
 		if (check_region(s->io, ES1371_EXTENT)) {
@@ -3106,12 +3114,12 @@ module_exit(cleanup_es1371);
 
 static int __init es1371_setup(char *str)
 {
-	static unsigned __initdata nr_dev = 0;
+	static unsigned __initlocaldata nr_dev = 0;
 
 	if (nr_dev >= NR_DEVICE)
 		return 0;
 	if (get_option(&str, &joystick[nr_dev]) == 2)
-		get_option(&str, &spdif[nr_dev]);
+		(void)get_option(&str, &spdif[nr_dev]);
 	nr_dev++;
 	return 1;
 }

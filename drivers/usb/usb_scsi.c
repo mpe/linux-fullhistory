@@ -92,6 +92,7 @@ struct us_data {
 	int			ip_wanted;		/* needed */
 	int			pid;			/* control thread */
 	struct semaphore      	*notify; 		/* wait for thread to begin */
+	void			*irq_handle;		/* for USB interrupt requests */
 };
 
 /*
@@ -374,6 +375,7 @@ static int pop_CB_status(Scsi_Cmnd *srb)
     __u8 status[2];
     devrequest dr;
     int retry = 5;
+    void *irq_handle;
 
     US_DEBUGP("pop_CB_status, proto=%x\n", us->protocol);
     switch (us->protocol) {
@@ -409,13 +411,15 @@ static int pop_CB_status(Scsi_Cmnd *srb)
 
 	/* add interrupt transfer, marked for removal */
 	us->ip_wanted = 1;
-	result = us->pusb_dev->bus->op->request_irq(us->pusb_dev, 
+	irq_handle = us->pusb_dev->bus->op->request_irq(us->pusb_dev, 
 						    usb_rcvctrlpipe(us->pusb_dev, us->ep_int),
 						     pop_CBI_irq, 0, (void *)us);
-	if (result) {
-	    US_DEBUGP("No interrupt for CBI %x\n", result);
+	if (!irq_handle) {
+	    US_DEBUGP("No interrupt for CBI\n");
 	    return DID_ABORT << 16;
 	}
+	us->irq_handle = irq_handle;
+
 	sleep_on(&us->ip_waitq);
 	if (us->ip_wanted) {
 	    US_DEBUGP("Did not get interrupt on CBI\n");
@@ -647,13 +651,17 @@ static int us_release(struct Scsi_Host *psh)
     struct us_data *us = (struct us_data *)psh->hostdata[0];
     struct us_data *prev = (struct us_data *)&us_list;
 
+    if (us->irq_handle) {
+    	usb_release_irq(us->pusb_dev, us->irq_handle);
+	us->irq_handle = NULL;
+    }
     if (us->filter)
 	us->filter->release(us->fdata);
     if (us->pusb_dev)
 	usb_deregister(&scsi_driver);
 
     /* FIXME - leaves hanging host template copy */
-    /* (bacause scsi layer uses it after removal !!!) */
+    /* (because scsi layer uses it after removal !!!) */
     while(prev->next != us)
 	prev = prev->next;
     prev->next = us->next;
@@ -1280,6 +1288,7 @@ static int scsi_probe(struct usb_device *dev)
 	    dev->descriptor.idProduct == 0x0001) {
 	    devrequest dr;
 	    __u8 qstat[2];
+	    void *irq_handle;
 
 	    /* shuttle E-USB */
 	    dr.requesttype = 0xC0;
@@ -1290,9 +1299,12 @@ static int scsi_probe(struct usb_device *dev)
 	    ss->pusb_dev->bus->op->control_msg(ss->pusb_dev, usb_rcvctrlpipe(dev,0), &dr, qstat, 2);
 	    US_DEBUGP("C0 status %x %x\n", qstat[0], qstat[1]);
 	    init_waitqueue_head(&ss->ip_waitq);
-	    ss->pusb_dev->bus->op->request_irq(ss->pusb_dev, 
+	    irq_handle = ss->pusb_dev->bus->op->request_irq(ss->pusb_dev, 
 						usb_rcvctrlpipe(ss->pusb_dev, ss->ep_int),
 						pop_CBI_irq, 0, (void *)ss);
+	    if (!irq_handle)
+	    	return -1;
+	    ss->irq_handle = irq_handle;
 	    interruptible_sleep_on_timeout(&ss->ip_waitq, HZ*5);
 
 	} else if (ss->protocol == US_PR_CBI)

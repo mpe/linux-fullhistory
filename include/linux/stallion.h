@@ -4,7 +4,7 @@
  *	stallion.h  -- stallion multiport serial driver.
  *
  *	Copyright (C) 1996-1998  Stallion Technologies (support@stallion.oz.au).
- *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
+ *	Copyright (C) 1994-1996  Greg Ungerer.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -95,8 +95,13 @@ typedef struct stlport {
 	unsigned long		hwid;
 	void			*uartp;
 	struct tty_struct	*tty;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
+	struct wait_queue	*open_wait;
+	struct wait_queue	*close_wait;
+#else
 	wait_queue_head_t	open_wait;
 	wait_queue_head_t	close_wait;
+#endif
 	struct termios		normaltermios;
 	struct termios		callouttermios;
 	struct tq_struct	tqueue;

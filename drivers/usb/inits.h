@@ -5,5 +5,6 @@ int usb_acm_init(void);
 int usb_printer_init(void);
 void usb_hub_cleanup(void);
 void usb_mouse_cleanup(void);
+int usb_scsi_init(void);
 int proc_usb_init (void);
 void proc_usb_cleanup (void);

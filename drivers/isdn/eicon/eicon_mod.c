@@ -1275,8 +1275,8 @@ eicon_addcard(int Type, int membase, int irq, char *id)
 #define eicon_init init_module
 #endif
 
-__initfunc(int
-eicon_init(void))
+int __init
+eicon_init(void)
 {
 	int card_count = 0;
 	int release = 0;
@@ -1392,8 +1392,8 @@ eicon_setup(char *line)
 
 	str = get_options(line, 4, ints);
 #else
-__initfunc(void
-eicon_setup(char *str, int *ints))
+void __init
+eicon_setup(char *str, int *ints)
 {
         int i, argc;
 #endif

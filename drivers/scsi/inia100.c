@@ -73,13 +73,19 @@
 
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 #include <stdarg.h>
+#include <asm/io.h>
 #include <asm/irq.h>
+#include <linux/string.h>
 #include <linux/errno.h>
+#include <linux/kernel.h>
+#include <linux/ioport.h>
 #include <linux/delay.h>
+#include <linux/sched.h>
 #if LINUX_VERSION_CODE <= CVT_LINUX_VERSION(2,1,92)
 #include <linux/bios32.h>
 #endif
 #include <linux/pci.h>
+#include <linux/proc_fs.h>
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,23)
 #include <linux/init.h>
 #endif
@@ -87,27 +93,34 @@
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 #include <asm/spinlock.h>
 #endif
+#include "sd.h"
+#include "scsi.h"
+#include "hosts.h"
+#include "inia100.h"
 #include <linux/stat.h>
+#include <linux/malloc.h>
+#include <linux/config.h>
+
 
 #else
 
+#include <linux/kernel.h>
 #include <linux/head.h>
 #include <linux/types.h>
-#include <asm/system.h>
-#include "../block/blk.h"
-#endif
-
-#include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
+
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
+#include <asm/system.h>
 #include <asm/io.h>
+#include "../block/blk.h"
 #include "scsi.h"
 #include "sd.h"
 #include "hosts.h"
 #include <linux/malloc.h>
 #include "inia100.h"
+#endif
 
 #ifdef MODULE
 Scsi_Host_Template driver_template = INIA100;
@@ -119,7 +132,7 @@ Scsi_Host_Template driver_template = INIA100;
 char *inia100_Copyright = "Copyright (C) 1998-99";
 char *inia100_InitioName = "by Initio Corporation";
 char *inia100_ProductName = "INI-A100U2W";
-char *inia100_Version = "v1.02a";
+char *inia100_Version = "v1.02c";
 
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 struct proc_dir_entry proc_scsi_inia100 =

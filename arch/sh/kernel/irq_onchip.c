@@ -7,7 +7,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>

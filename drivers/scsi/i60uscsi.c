@@ -64,16 +64,21 @@
  * 09/24/98 hl - v1.01b Fixed reset.
  * 10/05/98 hl - v1.02 split the source code and release.
  * 12/19/98 bv - v1.02a Use spinlocks for 2.1.95 and up
+ * 01/31/99 bv - v1.02b Use mdelay instead of waitForPause
+ * 08/08/99 bv - v1.02c Use waitForPause again.
  **************************************************************************/
 
 #ifndef CVT_LINUX_VERSION
 #define CVT_LINUX_VERSION(V,P,S)        (V * 65536 + P * 256 + S)
 #endif
 
+#include <linux/version.h>
 #include <linux/sched.h>
 #include <asm/io.h>
 #include "i60uscsi.h"
 
+#define JIFFIES_TO_MS(t) ((t) * 1000 / HZ)
+#define MS_TO_JIFFIES(j) ((j * HZ) / 1000)
 
 /* ---- INTERNAL FUNCTIONS ---- */
 static UCHAR waitChipReady(ORC_HCS * hcsp);
@@ -155,7 +160,7 @@ static UCHAR dftNvRam[64] =
 /***************************************************************************/
 static void waitForPause(unsigned amount)
 {
-	ULONG the_time = jiffies + amount;	/* 0.01 seconds per jiffy */
+	ULONG the_time = jiffies + MS_TO_JIFFIES(amount);
 
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	while (time_before_eq(jiffies, the_time));
@@ -169,10 +174,10 @@ UCHAR waitChipReady(ORC_HCS * hcsp)
 {
 	int i;
 
-	for (i = 0; i < 2000; i++) {	/* Wait 1 second for report timeout     */
+	for (i = 0; i < 10; i++) {	/* Wait 1 second for report timeout     */
 		if (ORC_RD(hcsp->HCS_Base, ORC_HCTRL) & HOSTSTOP)	/* Wait HOSTSTOP set */
 			return (TRUE);
-		waitForPause(5);	/* wait 500ms before try again  */
+		waitForPause(100);	/* wait 100ms before try again  */
 	}
 	return (FALSE);
 }
@@ -182,10 +187,10 @@ UCHAR waitFWReady(ORC_HCS * hcsp)
 {
 	int i;
 
-	for (i = 0; i < 2000; i++) {	/* Wait 1 second for report timeout     */
+	for (i = 0; i < 10; i++) {	/* Wait 1 second for report timeout     */
 		if (ORC_RD(hcsp->HCS_Base, ORC_HSTUS) & RREADY)		/* Wait READY set */
 			return (TRUE);
-		waitForPause(5);	/* wait 500ms before try again  */
+		waitForPause(100);	/* wait 100ms before try again  */
 	}
 	return (FALSE);
 }
@@ -195,10 +200,10 @@ UCHAR waitSCSIRSTdone(ORC_HCS * hcsp)
 {
 	int i;
 
-	for (i = 0; i < 2000; i++) {	/* Wait 1 second for report timeout     */
+	for (i = 0; i < 10; i++) {	/* Wait 1 second for report timeout     */
 		if (!(ORC_RD(hcsp->HCS_Base, ORC_HCTRL) & SCSIRST))	/* Wait SCSIRST done */
 			return (TRUE);
-		waitForPause(5);	/* wait 500ms before try again  */
+		waitForPause(100);	/* wait 100ms before try again  */
 	}
 	return (FALSE);
 }
@@ -208,10 +213,10 @@ UCHAR waitHDOoff(ORC_HCS * hcsp)
 {
 	int i;
 
-	for (i = 0; i < 2000; i++) {	/* Wait 1 second for report timeout     */
+	for (i = 0; i < 10; i++) {	/* Wait 1 second for report timeout     */
 		if (!(ORC_RD(hcsp->HCS_Base, ORC_HCTRL) & HDO))		/* Wait HDO off */
 			return (TRUE);
-		waitForPause(5);	/* wait 500ms before try again  */
+		waitForPause(100);	/* wait 100ms before try again  */
 	}
 	return (FALSE);
 }
@@ -221,10 +226,10 @@ UCHAR waitHDIset(ORC_HCS * hcsp, UCHAR * pData)
 {
 	int i;
 
-	for (i = 0; i < 2000; i++) {	/* Wait 1 second for report timeout     */
+	for (i = 0; i < 10; i++) {	/* Wait 1 second for report timeout     */
 		if ((*pData = ORC_RD(hcsp->HCS_Base, ORC_HSTUS)) & HDI)
 			return (TRUE);	/* Wait HDI set */
-		waitForPause(5);	/* wait 500ms before try again  */
+		waitForPause(100);	/* wait 100ms before try again  */
 	}
 	return (FALSE);
 }
@@ -463,15 +468,9 @@ void setup_SCBs(ORC_HCS * hcsp)
 	pVirEscb = (ESCB *) hcsp->HCS_virEscbArray;
 
 	for (i = 0; i < orc_num_scb; i++) {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
-		pPhysEscb = (PVOID) ((ULONG) hcsp->HCS_virEscbArray + (sizeof(ESCB) * i));
-		pVirScb->SCB_SGPAddr = (U32) VIRT_TO_BUS(pPhysEscb);
-		pVirScb->SCB_SensePAddr = (U32) VIRT_TO_BUS(pPhysEscb);
-#else
 		pPhysEscb = (PVOID) (hcsp->HCS_physEscbArray + (sizeof(ESCB) * i));
 		pVirScb->SCB_SGPAddr = (U32) pPhysEscb;
 		pVirScb->SCB_SensePAddr = (U32) pPhysEscb;
-#endif
 		pVirScb->SCB_EScb = pVirEscb;
 		pVirScb->SCB_ScbIdx = i;
 		pVirScb++;

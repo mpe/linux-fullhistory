@@ -64,6 +64,14 @@ ifeq ($(CONFIG_USB_MOUSE),m)
   MIX_OBJS += mouse.o
 endif
 
+ifeq ($(CONFIG_USB_HP_SCANNER),y)
+  L_OBJS += hp_scanner.o
+endif
+ifeq ($(CONFIG_USB_HP_SCANNER),m)
+  M_OBJS  +=hp_scanner.o
+  MIX_OBJS +=hp_scanner.o
+endif
+
 ifeq ($(CONFIG_USB_HUB),y)
   L_OBJS += hub.o
 endif

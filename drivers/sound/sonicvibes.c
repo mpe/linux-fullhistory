@@ -74,6 +74,11 @@
  *    03.08.99   0.17  adapt to Linus' new __setup/__initcall
  *                     added kernel command line options "sonicvibes=reverb" and "sonicvibesdmaio=dmaioaddr"
  *    12.08.99   0.18  module_init/__setup fixes
+ *    24.08.99   0.19  get rid of the dmaio kludge, replace with allocate_resource
+ *    31.08.99   0.20  add spin_lock_init
+ *                     __initlocaldata to fix gcc 2.7.x problems
+ *                     use new resource allocation to allocate DDMA IO space
+ *                     replaced current->state = x with set_current_state(x)
  *
  */
 
@@ -121,6 +126,12 @@
 #define SV_EXTENT_GAME    0x8
 #define SV_EXTENT_DMA     0x10
 
+#define RESOURCE_SB       0
+#define RESOURCE_ENH      1
+#define RESOURCE_SYNTH    2
+#define RESOURCE_MIDI     3
+#define RESOURCE_GAME     4
+#define RESOURCE_DDMA     7
 
 #define SV_MIDI_DATA      0
 #define SV_MIDI_COMMAND   1
@@ -1254,7 +1265,7 @@ static int drain_dac(struct sv_state *s, int nonblock)
 
 	if (s->dma_dac.mapped || !s->dma_dac.ready)
 		return 0;
-        current->state = TASK_INTERRUPTIBLE;
+        __set_current_state(TASK_INTERRUPTIBLE);
         add_wait_queue(&s->dma_dac.wait, &wait);
         for (;;) {
                 spin_lock_irqsave(&s->lock, flags);
@@ -1266,7 +1277,7 @@ static int drain_dac(struct sv_state *s, int nonblock)
                         break;
                 if (nonblock) {
                         remove_wait_queue(&s->dma_dac.wait, &wait);
-                        current->state = TASK_RUNNING;
+                        set_current_state(TASK_RUNNING);
                         return -EBUSY;
                 }
 		tmo = 3 * HZ * (count + s->dma_dac.fragsize) / 2 / s->ratedac;
@@ -1275,7 +1286,7 @@ static int drain_dac(struct sv_state *s, int nonblock)
 			printk(KERN_DEBUG "sv: dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac.wait, &wait);
-        current->state = TASK_RUNNING;
+        set_current_state(TASK_RUNNING);
         if (signal_pending(current))
                 return -ERESTARTSYS;
         return 0;
@@ -2057,7 +2068,7 @@ static int sv_midi_release(struct inode *inode, struct file *file)
 	VALIDATE_STATE(s);
 
 	if (file->f_mode & FMODE_WRITE) {
-		current->state = TASK_INTERRUPTIBLE;
+		__set_current_state(TASK_INTERRUPTIBLE);
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
 			spin_lock_irqsave(&s->lock, flags);
@@ -2069,7 +2080,7 @@ static int sv_midi_release(struct inode *inode, struct file *file)
 				break;
 			if (file->f_flags & O_NONBLOCK) {
 				remove_wait_queue(&s->midi.owait, &wait);
-				current->state = TASK_RUNNING;
+				set_current_state(TASK_RUNNING);
 				return -EBUSY;
 			}
 			tmo = (count * HZ) / 3100;
@@ -2077,7 +2088,7 @@ static int sv_midi_release(struct inode *inode, struct file *file)
 				printk(KERN_DEBUG "sv: midi timed out??\n");
 		}
 		remove_wait_queue(&s->midi.owait, &wait);
-		current->state = TASK_RUNNING;
+		set_current_state(TASK_RUNNING);
 	}
 	down(&s->open_sem);
 	s->open_mode &= (~(file->f_mode << FMODE_MIDI_SHIFT)) & (FMODE_MIDI_READ|FMODE_MIDI_WRITE);
@@ -2296,17 +2307,12 @@ static int reverb[NR_DEVICE] = { 0, };
 static int wavetable[NR_DEVICE] = { 0, };
 #endif
 
-static unsigned dmaio = 0xac00;
-
 MODULE_PARM(reverb, "1-" __MODULE_STRING(NR_DEVICE) "i");
 MODULE_PARM_DESC(reverb, "if 1 enables the reverb circuitry. NOTE: your card must have the reverb RAM");
 #if 0
 MODULE_PARM(wavetable, "1-" __MODULE_STRING(NR_DEVICE) "i");
 MODULE_PARM_DESC(wavetable, "if 1 the wavetable synth is enabled");
 #endif
-
-MODULE_PARM(dmaio, "i");
-MODULE_PARM_DESC(dmaio, "if the motherboard BIOS did not allocate DDMA io, allocate them starting at this address");
 
 MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
 MODULE_DESCRIPTION("S3 SonicVibes Driver");
@@ -2328,6 +2334,11 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_PCM, 0x4040 }
 };
 
+#define RSRCISIOREGION(dev,num) ((dev)->resource[(num)].start != 0 && \
+				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
+#define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
+
+
 static int __init init_sonicvibes(void)
 {
 	struct sv_state *s;
@@ -2337,24 +2348,31 @@ static int __init init_sonicvibes(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.18 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.20 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
 #endif
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_S3, PCI_DEVICE_ID_S3_SONICVIBES, pcidev))) {
-		if (pcidev->resource[1].flags == 0 || 
-		    (pcidev->resource[1].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
-			continue;
-		if (pcidev->resource[2].flags == 0 || 
-		    (pcidev->resource[2].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
-			continue;
-		if (pcidev->resource[3].flags == 0 || 
-		    (pcidev->resource[3].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
+		if (!RSRCISIOREGION(pcidev, RESOURCE_SB) ||
+		    !RSRCISIOREGION(pcidev, RESOURCE_ENH) ||
+		    !RSRCISIOREGION(pcidev, RESOURCE_SYNTH) ||
+		    !RSRCISIOREGION(pcidev, RESOURCE_MIDI) ||
+		    !RSRCISIOREGION(pcidev, RESOURCE_GAME))
 			continue;
 		if (pcidev->irq == 0)
 			continue;
+		/* try to allocate a DDMA resource if not already available */
+		if (!RSRCISIOREGION(pcidev, RESOURCE_DDMA)) {
+			/* take care of ISA aliases */
+			if (allocate_resource(&ioport_resource, pcidev->resource+RESOURCE_DDMA, 
+					      2*SV_EXTENT_DMA, 0x1000, 0x10000-2*SV_EXTENT_DMA, 1024)) {
+				printk(KERN_ERR "sv: cannot allocate DDMA controller io ports\n");
+				continue;
+			}
+			pcidev->resource[RESOURCE_DDMA].flags = PCI_BASE_ADDRESS_SPACE_IO | IORESOURCE_IO;
+		}
 		if (!(s = kmalloc(sizeof(struct sv_state), GFP_KERNEL))) {
 			printk(KERN_WARNING "sv: out of memory\n");
 			continue;
@@ -2366,35 +2384,19 @@ static int __init init_sonicvibes(void)
 		init_waitqueue_head(&s->midi.iwait);
 		init_waitqueue_head(&s->midi.owait);
 		init_MUTEX(&s->open_sem);
+		spin_lock_init(&s->lock);
 		s->magic = SV_MAGIC;
-		s->iosb = pcidev->resource[0].start;
-		s->ioenh = pcidev->resource[1].start;
-		s->iosynth = pcidev->resource[2].start;
-		s->iomidi = pcidev->resource[3].start;
-		s->iogame = pcidev->resource[4].start;
-		pci_read_config_dword(pcidev, 0x40, &s->iodmaa);
-		pci_read_config_dword(pcidev, 0x48, &s->iodmac);
-		dmaio &= ~(SV_EXTENT_DMA-1);
-		s->iodmaa &= ~(SV_EXTENT_DMA-1);
-		s->iodmac &= ~(SV_EXTENT_DMA-1);
-		if (!(s->iodmaa)) {
-			s->iodmaa = dmaio;
-			dmaio += SV_EXTENT_DMA;
-			printk(KERN_INFO "sv: BIOS did not allocate DDMA channel A io, allocated at %#x\n",
-			       s->iodmaa);
-		}
-		if (!(s->iodmac)) {
-			s->iodmac = dmaio;
-			dmaio += SV_EXTENT_DMA;
-			printk(KERN_INFO "sv: BIOS did not allocate DDMA channel C io, allocated at %#x\n",
-			       s->iodmac);
-		}
+		s->iosb = RSRCADDRESS(pcidev, RESOURCE_SB);
+		s->ioenh = RSRCADDRESS(pcidev, RESOURCE_ENH);
+		s->iosynth = RSRCADDRESS(pcidev, RESOURCE_SYNTH);
+		s->iomidi = RSRCADDRESS(pcidev, RESOURCE_MIDI);
+		s->iogame = RSRCADDRESS(pcidev, RESOURCE_GAME);
+		s->iodmaa = RSRCADDRESS(pcidev, RESOURCE_DDMA);
+		s->iodmac = RSRCADDRESS(pcidev, RESOURCE_DDMA) + SV_EXTENT_DMA;
 		pci_write_config_dword(pcidev, 0x40, s->iodmaa | 9);  /* enable and use extended mode */
 		pci_write_config_dword(pcidev, 0x48, s->iodmac | 9);  /* enable */
 		printk(KERN_DEBUG "sv: io ports: %#lx %#lx %#lx %#lx %#lx %#x %#x\n",
 		       s->iosb, s->ioenh, s->iosynth, s->iomidi, s->iogame, s->iodmaa, s->iodmac);
-		if (s->ioenh == 0 || s->iodmaa == 0 || s->iodmac == 0)
-			continue;
 		s->irq = pcidev->irq;
 
 		/* hack */
@@ -2436,8 +2438,8 @@ static int __init init_sonicvibes(void)
 		wrindir(s, SV_CIDRIVECONTROL, 0);  /* drive current 16mA */
 		wrindir(s, SV_CIENABLE, s->enable = 0);  /* disable DMAA and DMAC */
 		outb(~(SV_CINTMASK_DMAA | SV_CINTMASK_DMAC), s->ioenh + SV_CODEC_INTMASK);
-		//outb(0xff, s->iodmaa + SV_DMA_RESET);
-		//outb(0xff, s->iodmac + SV_DMA_RESET);
+		/* outb(0xff, s->iodmaa + SV_DMA_RESET); */
+		/* outb(0xff, s->iodmac + SV_DMA_RESET); */
 		inb(s->ioenh + SV_CODEC_STATUS); /* ack interrupts */
 		wrindir(s, SV_CIADCCLKSOURCE, 0); /* use pll as ADC clock source */
 		wrindir(s, SV_CIANALOGPWRDOWN, 0); /* power up the analog parts of the device */
@@ -2550,31 +2552,21 @@ module_exit(cleanup_sonicvibes);
 
 static int __init sonicvibes_setup(char *str)
 {
-	static unsigned __initdata nr_dev = 0;
+	static unsigned __initlocaldata nr_dev = 0;
 
 	if (nr_dev >= NR_DEVICE)
 		return 0;
 #if 0
 	if (get_option(&str, &reverb[nr_dev]) == 2)
-		get_option(&str, &wavetable[nr_dev]);
+		(void)get_option(&str, &wavetable[nr_dev]);
 #else
-	get_option(&str, &reverb[nr_dev]);
+	(void)get_option(&str, &reverb[nr_dev]);
 #endif
 
 	nr_dev++;
 	return 1;
 }
 
-static int __init sonicvibesdmaio_setup(char *str)
-{
-        int io;
-
-	if (get_option(&str, &io))
-		dmaio = io;
-	return 1;
-}
-
 __setup("sonicvibes=", sonicvibes_setup);
-__setup("sonicvibesdmaio=", sonicvibesdmaio_setup);
 
 #endif /* MODULE */

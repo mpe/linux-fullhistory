@@ -11,7 +11,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/init.h>

@@ -69,7 +69,9 @@ if [ "$CONFIG_BUSMOUSE" != "n" ]; then
   dep_tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE $CONFIG_BUSMOUSE
   dep_tristate 'Logitech busmouse support' CONFIG_LOGIBUSMOUSE $CONFIG_BUSMOUSE
   dep_tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE $CONFIG_BUSMOUSE
-  dep_tristate 'Apple Desktop Bus mouse support' CONFIG_ADBMOUSE $CONFIG_BUSMOUSE
+  if [ "$CONFIG_PPC" = "y" ; then
+    dep_tristate 'Apple Desktop Bus mouse support' CONFIG_ADBMOUSE $CONFIG_BUSMOUSE
+  fi
 fi
 
 tristate 'Mouse Support (not serial and bus mice)' CONFIG_MOUSE

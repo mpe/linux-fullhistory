@@ -4835,8 +4835,8 @@ CONFIG_SCSI_AM53C974
 
 AMI MegaRAID support
 CONFIG_SCSI_MEGARAID
-  This driver supports the AMI MegaRAID 428 and 438 (and maybe 466)
-  SCSI host adapters. 
+  This driver supports the AMI MegaRAID 418, 428, 438, 466, 762, 490
+  and 467 SCSI host adapters. 
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -6043,6 +6043,25 @@ CONFIG_YELLOWFIN
   say M here and read Documentation/modules.txt. This is recommended.
   The module will be called yellowfin.o.
 
+General Instruments Surfboard 1000
+CONFIG_NET_SB1000
+  This is a driver for the General Instrument SURFboard 1000 internal cable
+  modem.  This is an ISA card which is used by a number of cable TV companies
+  to provide cable modem access.  It's a one-way downstream-only cable modem,
+  meaning that your upstream net link is provided by your regular phone modem.
+
+  At present this driver only compiles as a module, so say M here if you
+  have this card.  Then read Documentation/networking/README.sb1000 for
+  information on how to use this module, as it needs special ppp scripts for
+  establishing a connection.  Further documentation and the necessary scripts
+  can be found at:
+
+  http://www.jacksonville.net/~fventuri/
+  http://home.adelphia.net/~siglercm/sb1000.html
+  http://linuxpower.cx/~cable/
+
+  If you don't have this card, of course say N.
+
 Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support
 CONFIG_ACENIC
   Say Y here if you have an Alteon AceNIC or 3Com 3C985 PCI Gigabit
@@ -7216,7 +7235,7 @@ CONFIG_MINIX_FS
   You don't want to use the minix filesystem on your hard disk because
   of certain built-in restrictions, but it is sometimes found on older
   Linux floppy disks. This option will enlarge your kernel by about 
-  25 kB. If unsure, say N.
+  28 kB. If unsure, say N.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -7242,7 +7261,7 @@ CONFIG_EXT2_FS
   ext2fs is a diskless Linux box which mounts all files over the
   network using NFS (in this case it's sufficient to say Y to "NFS
   filesystem support" below). Saying Y here will enlarge your kernel
-  by about 41 kB.
+  by about 44 kB.
 
   The Ext2fs-Undeletion mini-HOWTO, available via FTP (user:
   anonymous) from ftp://metalab.unc.edu/pub/Linux/docs/HOWTO/mini,
@@ -7430,7 +7449,7 @@ CONFIG_PROC_FS
   that has a program like lynx or netscape), and also on the proc(8)
   manpage ("man 8 proc").
 
-  This option will enlarge your kernel by about 18 KB. Several
+  This option will enlarge your kernel by about 67 KB. Several
   programs depend on this, so everyone should say Y here.
 
 NFS filesystem support
@@ -7717,6 +7736,18 @@ CONFIG_EFS_FS
   This implementation only offers read-only access. If you don't know
   what all this is about, it's safe to say N. For more information
   about EFS see its homepage at http://aeschi.ch.eu.org/efs/.
+
+SGI disklabel support
+CONFIG_SGI_DISKLABEL
+  Say Y to this only if you plan on mounting disks with SGI disklabels.
+  This is not required to mount EFS-format CDROMs.
+
+EFS filesystem support (experimental)
+CONFIG_EFS_FS
+  EFS is the filesystem used for CDROMs and filesystems by SGI's IRIX.
+  This implementation only offers read-only access.  If you don't know
+  what all this is about, it's safe to say N.  For more information
+  about EFS see it's homepage at http://aeschi.ch.eu.org/efs.
 
 SGI disklabel support
 CONFIG_SGI_DISKLABEL
@@ -8243,6 +8274,16 @@ CONFIG_NLS_ISO8859_10
   set, which adds the last Inuit (Greenlandic) and Sami (Lappish)
   letters that were missing in Latin 4 to cover the entire Nordic
   area.
+
+nls iso8859-14
+CONFIG_NLS_ISO8859_14
+  If you want to display filenames with native language characters
+  from the Microsoft fat filesystem family or from JOLIET CDROMs
+  correctly on the screen, you need to include the appropriate
+  input/output character sets. Say Y here for the Latin 8 character
+  set, which adds the last accented vowels for Welsh (and Manx Gaelic)
+  that were missing in Latin 1. http://linux.speech.cymru.org/
+  has further information.
 
 nls iso8859-15
 CONFIG_NLS_ISO8859_15
@@ -10091,6 +10132,12 @@ CONFIG_AEDSP16_MPU_IRQ
   you compiled aedsp16.o as a module you can specify this parameter as
   'mpu_irq=NN'.
 
+SGI Visual Workstation on-board audio
+CONFIG_SOUND_VWSND
+  Say Y or M if you have an SGI Visual Workstation and you want to
+  be able to use its on-board audio.  Read Documentation/sound/visws
+  for more info on this driver's capabilities.
+
 Ensoniq ES1370 based PCI sound cards
 CONFIG_SOUND_ES1370
   Say Y or M if you have a PCI sound card utilizing the Ensoniq
@@ -11751,31 +11798,6 @@ CONFIG_IRCOMM
   will create two modules called ircomm and ircomm_tty. For more
   information go to http://www.pluto.dti.ne.jp/~thiguchi/irda/
 
-IrLPT Protocol
-CONFIG_IRLPT
-  Say Y here if you want to build support for the IrLPT protocol. If
-  you want to compile it as a module, say M here and read
-  Documentation/modules.txt. IrLPT makes it possible to print
-  documents to IrDA capable printers.
-
-IrLPT Client Protocol 
-CONFIG_IRLPT_CLIENT
-  Say Y here if you want to build support for the IrLPT client
-  protocol. If you want to compile it as a module, say M here and read
-  Documentation/modules.txt. The IrLPT client protocol can be used to
-  print documents to IrDA compatible printers like the HP-5MP, or
-  IrLPT printer adapters like the ACTiSYS IR-100M.
-
-IrLPT Server Protocol 
-CONFIG_IRLPT_SERVER
-  Say Y here if you want to build support for the IrLPT server
-  protocol. If you want to compile it as a module, say M here and read
-  Documentation/modules.txt. The IrLPT server protocol makes it
-  possible to use a Linux machine as an infrared printer server for
-  other laptops. So if your Linux machine has a cable connection to a
-  printer, then other laptops can use the Linux machine to print out 
-  documents using infrared communication.
-
 IrTTY IrDA Device Driver
 CONFIG_IRTTY_SIR
   Say Y here if you want to build support for the IrTTY line
@@ -11869,6 +11891,15 @@ CONFIG_GIRBIL_DONGLE
   normal 9-pin serial port connector, and can currently only be used
   by IrTTY. To activate support for Greenwich dongles you will have to
   insert "irattach -d girbil" in the /etc/irda/drivers script.
+
+Adaptec Airport 1000 and 2000 dongle
+CONFIG_AIRPORT_DONGLE
+  Say Y here if you want to build support for the Adaptec Airport 1000
+  and 2000 dongles. If you want to compile it as a module, say M here
+  and read Documentation/modules.txt. The Airport dongle attaches to
+  the normal 9-pin serial port connector, and can currently only be
+  used by IrTTY. To activate support for Airport dongles you will have
+  to insert "irattach -d airport" in the /etc/irda/drivers script.
 
 Parallax Litelink dongle
 CONFIG_LITELINK_DONGLE

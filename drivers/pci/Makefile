@@ -25,6 +25,6 @@ ifdef CONFIG_PROC_FS
 L_OBJS   += proc.o
 endif
 
-L_OBJS   += compat.o quirks.o names.o
+L_OBJS   += compat.o quirks.o names.o syscall.o setup.o
 
 include $(TOPDIR)/Rules.make

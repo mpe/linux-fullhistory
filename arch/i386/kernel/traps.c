@@ -67,8 +67,8 @@ asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 { \
 	tsk->thread.error_code = error_code; \
 	tsk->thread.trap_no = trapnr; \
-	force_sig(signr, tsk); \
 	die_if_no_fixup(str,regs,error_code); \
+	force_sig(signr, tsk); \
 }
 
 #define DO_VM86_ERROR(trapnr, signr, str, name, tsk) \

@@ -214,9 +214,9 @@ situation, and they don't change anyhow.
 
 */
 
-static char NoPerm[] = "403 Permission denied\r\nServer: kHTTPd 0.1.6\r\n\r\n Permission denied";
-static char TryLater[] = "500 Try again later\r\nServer: kHTTPd 0.1.6\r\n\r\n Try again later";
-static char NotModified[] = "304 Not Modified\r\nServer: kHTTPd 0.1.6\r\n\r\n";
+static char NoPerm[] = "HTTP/1.0 403 Forbidden\r\nServer: kHTTPd 0.1.6\r\n\r\n";
+static char TryLater[] = "HTTP/1.0 503 Service Unavailable\r\nServer: kHTTPd 0.1.6\r\nContent-Length: 15\r\n\r\nTry again later";
+static char NotModified[] = "HTTP/1.0 304 Not Modified\r\nServer: kHTTPd 0.1.6\r\n\r\n";
 
 
 void Send403(struct socket *sock)
@@ -229,7 +229,7 @@ void Send403(struct socket *sock)
 void Send304(struct socket *sock)
 {
 	EnterFunction("Send304");
-	(void)SendBuffer(sock,NotModified,strlen(NoPerm));
+	(void)SendBuffer(sock,NotModified,strlen(NotModified));
 	LeaveFunction("Send304");
 }
 

@@ -349,6 +349,8 @@ typedef int (*usb_device_irq)(int, void *, int, void *);
  */
 #define START_FRAME_FUDGE      3
 
+#define USB_WRAP_FRAMENR(x) ((x) & 2047)
+
 /* for start_type: */
 enum {
 	START_ASAP = 0,
@@ -527,13 +529,6 @@ extern void usb_connect(struct usb_device *dev);
 extern void usb_disconnect(struct usb_device **);
 
 extern void usb_destroy_configuration(struct usb_device *dev);
-
-extern void *usb_allocate_isochronous (struct usb_device *usb_dev, unsigned int pipe, void *data, int len,
-					int maxsze, usb_device_irq completed, void *dev_id);
-extern void usb_delete_isochronous (struct usb_device *dev, void *_isodesc);
-extern int usb_schedule_isochronous (struct usb_device *usb_dev, void *_isodesc, void *_pisodesc);
-extern int usb_unschedule_isochronous (struct usb_device *usb_dev, void *_isodesc);
-extern int usb_compress_isochronous (struct usb_device *usb_dev, void *_isodesc);
 
 int usb_get_current_frame_number (struct usb_device *usb_dev);
 

@@ -266,14 +266,14 @@ static char command_line[COMMAND_LINE_SIZE] = { 0, };
        char saved_command_line[COMMAND_LINE_SIZE];
 
 struct resource standard_io_resources[] = {
-	{ "dma1", 0x00, 0x1f },
-	{ "pic1", 0x20, 0x3f },
-	{ "timer", 0x40, 0x5f },
-	{ "keyboard", 0x60, 0x6f },
-	{ "dma page reg", 0x80, 0x8f },
-	{ "pic2", 0xa0, 0xbf },
-	{ "dma2", 0xc0, 0xdf },
-	{ "fpu", 0xf0, 0xff }
+	{ "dma1", 0x00, 0x1f, IORESOURCE_BUSY },
+	{ "pic1", 0x20, 0x3f, IORESOURCE_BUSY },
+	{ "timer", 0x40, 0x5f, IORESOURCE_BUSY },
+	{ "keyboard", 0x60, 0x6f, IORESOURCE_BUSY },
+	{ "dma page reg", 0x80, 0x8f, IORESOURCE_BUSY },
+	{ "pic2", 0xa0, 0xbf, IORESOURCE_BUSY },
+	{ "dma2", 0xc0, 0xdf, IORESOURCE_BUSY },
+	{ "fpu", 0xf0, 0xff, IORESOURCE_BUSY }
 };
 
 #define STANDARD_IO_RESOURCES (sizeof(standard_io_resources)/sizeof(struct resource))
@@ -284,7 +284,7 @@ struct resource standard_io_resources[] = {
 static struct resource ram_resources[] = {
 	{ "System RAM", 0x000000, 0x09ffff, IORESOURCE_BUSY },
 	{ "System RAM", 0x100000, 0x100000, IORESOURCE_BUSY },
-	{ "Video RAM area", 0x0a0000, 0x0bffff },
+	{ "Video RAM area", 0x0a0000, 0x0bffff, IORESOURCE_BUSY },
 	{ "Kernel code", 0x100000, 0 },
 	{ "Kernel data", 0, 0 }
 };
@@ -293,7 +293,7 @@ static struct resource ram_resources[] = {
 #define MAXROMS 6
 static struct resource rom_resources[MAXROMS] = {
 	{ "System ROM", 0xF0000, 0xFFFFF, IORESOURCE_BUSY },
-	{ "Video ROM", 0xc0000, 0xc7fff }
+	{ "Video ROM", 0xc0000, 0xc7fff, IORESOURCE_BUSY }
 };
 
 #define romsignature(x) (*(unsigned short *)(x) == 0xaa55)
@@ -337,6 +337,7 @@ static void __init probe_roms(void)
 				rom_resources[roms].start = base;
 				rom_resources[roms].end = base + length - 1;
 				rom_resources[roms].name = "Extension ROM";
+				rom_resources[roms].flags = IORESOURCE_BUSY;
 
 				request_resource(&iomem_resource, rom_resources + roms);
 				roms++;
@@ -354,6 +355,7 @@ static void __init probe_roms(void)
 		rom_resources[roms].start = base;
 		rom_resources[roms].end = base + 65535;
 		rom_resources[roms].name = "Extension ROM";
+		rom_resources[roms].flags = IORESOURCE_BUSY;
 
 		request_resource(&iomem_resource, rom_resources + roms);
 	}
@@ -528,6 +530,10 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 
 	memory_end = 0;
 	for (i=0; i < e820.nr_map; i++) {
+		printk("type=%d, addr=%08x, size=%08x",
+			e820.map[i].type,
+			e820.map[i].addr,
+			e820.map[i].size);
 		/* RAM? */
 		if (e820.map[i].type == 1) {
 			unsigned long end = e820.map[i].addr + e820.map[i].size;

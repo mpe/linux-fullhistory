@@ -17,7 +17,7 @@
 #include <asm/irq.h>
 #include <asm/pgtable.h>
 #include <asm/ap1000/pgtapmmu.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 

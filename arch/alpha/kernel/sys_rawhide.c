@@ -24,7 +24,6 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/core_mcpcia.h>
-#include <asm/pci.h>
 
 #include "proto.h"
 #include "irq_impl.h"

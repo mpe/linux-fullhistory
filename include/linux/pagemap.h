@@ -108,6 +108,4 @@ static inline void wait_on_page(struct page * page)
 		___wait_on_page(page);
 }
 
-extern void update_vm_cache(struct inode *, unsigned long, const char *, int);
-
 #endif

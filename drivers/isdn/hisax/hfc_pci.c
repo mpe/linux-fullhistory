@@ -1513,8 +1513,8 @@ hfcpci_bh(struct IsdnCardState *cs)
 /*************************************/
 /* Alloc memory send data for queues */
 /*************************************/
-__initfunc(unsigned int
-	   *init_send_hfcpci(int cnt))
+unsigned int * __init 
+	init_send_hfcpci(int cnt)
 {
 	int i, *send;
 
@@ -1531,8 +1531,8 @@ __initfunc(unsigned int
 /********************************/
 /* called for card init message */
 /********************************/
-__initfunc(void
-	   inithfcpci(struct IsdnCardState *cs))
+void __init
+	inithfcpci(struct IsdnCardState *cs)
 {
 	cs->setstack_d = setstack_hfcpci;
 	cs->dbusytimer.function = (void *) hfcpci_dbusy_timer;
@@ -1604,8 +1604,8 @@ static int pci_index __initdata = 0;
 
 #endif				/* CONFIG_PCI */
 
-__initfunc(int
-	   setup_hfcpci(struct IsdnCard *card))
+int __init
+	setup_hfcpci(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

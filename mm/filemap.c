@@ -1303,7 +1303,7 @@ static unsigned long filemap_nopage(struct vm_area_struct * area,
 	struct dentry * dentry = file->f_dentry;
 	struct inode * inode = dentry->d_inode;
 	struct page * page, **hash;
-	unsigned long old_page, new_page = 0;
+	unsigned long old_page;
 
 	unsigned long offset = address - area->vm_start + area->vm_offset;
 
@@ -1339,18 +1339,19 @@ success:
 	 * and possibly copy it over to another page..
 	 */
 	old_page = page_address(page);
-	if (!no_share) {
-		flush_page_to_ram(old_page);
-		return old_page;
-	}
+	if (no_share) {
+		unsigned long new_page = page_cache_alloc();
 
-	new_page = page_cache_alloc();
-	if (new_page) {
-		copy_page(new_page, old_page);
-		flush_page_to_ram(new_page);
+		if (new_page) {
+			copy_page(new_page, old_page);
+			flush_page_to_ram(new_page);
+		}
+		page_cache_release(page);
+		return new_page;
 	}
-	page_cache_release(page);
-	return new_page;
+		
+	flush_page_to_ram(old_page);
+	return old_page;
 
 no_cached_page:
 	/*
@@ -1408,8 +1409,6 @@ page_not_uptodate:
 	 * mm layer so, possibly freeing the page cache page first.
 	 */
 	page_cache_release(page);
-	if (new_page)
-		page_cache_free(new_page);
 	return 0;
 }
 

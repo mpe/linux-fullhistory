@@ -347,8 +347,8 @@ static struct pci_dev *dev_a8 __initdata = NULL;
 static int pci_index __initdata = 0;
 #endif
 
-__initfunc(int
-	   setup_sct_quadro(struct IsdnCard *card))
+int __init
+	   setup_sct_quadro(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

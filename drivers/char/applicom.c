@@ -182,7 +182,7 @@ void cleanup_module(void)
 
 #endif /* MODULE */
 
-__initfunc(int applicom_init(void))
+int __init applicom_init(void)
 {
 	int i, numisa=0;
 	struct pci_dev *dev = NULL;

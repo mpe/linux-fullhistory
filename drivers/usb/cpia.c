@@ -597,9 +597,9 @@ int cpia_init_isoc(struct usb_cpia *cpia)
 	/* First for desc. [0] */
 	id = cpia->sbuf [0].isodesc;
 	id->start_type = START_ASAP;
-	id->callback_frames = 1;        /* on every frame */
+	id->callback_frames = 10;	/* on every 10th frame */
 	id->callback_fn = cpia_isoc_irq;
-	id->data = cpia->sbuf [0].data;
+	id->data = cpia->sbuf[0].data;
 	id->buf_size = FRAME_SIZE_PER_DESC * FRAMES_PER_DESC;
 	for (fx = 0; fx < FRAMES_PER_DESC; fx++)
 		id->frames [fx].frame_length = FRAME_SIZE_PER_DESC;
@@ -607,15 +607,15 @@ int cpia_init_isoc(struct usb_cpia *cpia)
 	/* and the desc. [1] */
 	id = cpia->sbuf [1].isodesc;
 	id->start_type = 0;             /* will follow the first desc. */
-	id->callback_frames = 1;        /* on every frame */
+	id->callback_frames = 10;	/* on every 10th frame */
 	id->callback_fn = cpia_isoc_irq;
-	id->data = cpia->sbuf [1].data;
+	id->data = cpia->sbuf[1].data;
 	id->buf_size = FRAME_SIZE_PER_DESC * FRAMES_PER_DESC;
 	for (fx = 0; fx < FRAMES_PER_DESC; fx++)
 		id->frames [fx].frame_length = FRAME_SIZE_PER_DESC;
 
-	usb_run_isoc (cpia->sbuf [0].isodesc, NULL);
-	usb_run_isoc (cpia->sbuf [1].isodesc, cpia->sbuf [0].isodesc);
+	usb_run_isoc (cpia->sbuf[0].isodesc, NULL);
+	usb_run_isoc (cpia->sbuf[1].isodesc, cpia->sbuf[0].isodesc);
 
 #if 0
 	usb_schedule_isochronous(dev, cpia->sbuf[0].isodesc, NULL);

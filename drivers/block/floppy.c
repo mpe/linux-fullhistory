@@ -4384,7 +4384,7 @@ static void __init parse_floppy_cfg_string(char *cfg)
 	}
 }
 
-static void __init mod_setup(char *pattern, void (*setup)(char *))
+static void __init mod_setup(char *pattern, int (*setup)(char *))
 {
 	unsigned long i;
 	char c;

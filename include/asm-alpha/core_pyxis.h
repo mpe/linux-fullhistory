@@ -1,7 +1,6 @@
 #ifndef __ALPHA_PYXIS__H__
 #define __ALPHA_PYXIS__H__
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <asm/compiler.h>
 

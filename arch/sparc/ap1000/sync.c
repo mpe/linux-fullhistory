@@ -10,7 +10,7 @@
 #include <asm/ap1000/apreg.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 
 extern int cap_cid0;
 extern unsigned _ncel, _ncelx, _ncely, _cid;

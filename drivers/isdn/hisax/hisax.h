@@ -1007,6 +1007,10 @@ struct IsdnCardState {
 #define __initdata
 #endif
 
+#ifndef __init
+#define __init
+#endif
+
 #define HISAX_INITFUNC(__arginit) __initfunc(__arginit)
 #define HISAX_INITDATA __initdata
 

@@ -295,7 +295,7 @@ void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 	pci_write_config_word(dev, PCI_COMMAND, cmd);
 }
 
-static void __init pci_read_bridge_bases(struct pci_dev *dev, struct pci_bus *child)
+void __init pci_read_bridge_bases(struct pci_dev *dev, struct pci_bus *child)
 {
 	u8 io_base_lo, io_limit_lo;
 	u16 mem_base_lo, mem_limit_lo, io_base_hi, io_limit_hi;
@@ -513,7 +513,6 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 			child->primary = bus->secondary;
 			child->subordinate = 0xff;
 			sprintf(child->name, "PCI Bus #%02x", child->number);
-			pci_read_bridge_bases(dev, child);
 			/*
 			 * Clear all status bits and turn off memory,
 			 * I/O and master enables.

@@ -4,7 +4,7 @@
  *	cdk.h  -- CDK interface definitions.
  *
  *	Copyright (C) 1996-1998  Stallion Technologies (support@stallion.oz.au).
- *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
+ *	Copyright (C) 1994-1996  Greg Ungerer.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by

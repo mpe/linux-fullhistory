@@ -5,7 +5,7 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 #include <linux/init.h>
 #include <linux/ioport.h>
 

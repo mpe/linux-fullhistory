@@ -6,7 +6,6 @@
  * Code common to all MCbus-PCI Adaptor core logic chipsets
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/pci.h>

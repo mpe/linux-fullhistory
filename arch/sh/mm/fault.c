@@ -23,7 +23,6 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/hardirq.h>
-#include <asm/uaccess.h>	/* to get __m() macro */
 #include <asm/mmu_context.h>
 
 extern void die(const char *,struct pt_regs *,long);

@@ -27,6 +27,7 @@
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
 #include <net/checksum.h>
+#include <net/sock.h>
 
 /*
  *	Verify iovec. The caller must ensure that the iovec is big enough

@@ -1455,7 +1455,7 @@ static void * ohci_request_bulk(struct usb_device *usb_dev, unsigned int pipe, u
 
 	return ohci_generic_trans(usb_dev, pipe,
 			TOGGLE_AUTO,
-			1 /* round */, 1 /* autofree */,
+			0 /* round */, 1 /* autofree */,
 			dev_id, handler, data, len,
 			HCD_ED_BULK,
 			NULL /* no setup_td */, NULL /* no status_td */ );
@@ -1504,7 +1504,7 @@ static int ohci_bulk_msg_td_handler(int stats, void *buffer, int len, void *dev_
 #endif
 
 	/* only count TDs that were completed successfully */
-	if (stats == USB_ST_NOERROR)
+	if (stats == USB_ST_NOERROR || stats == USB_ST_DATAUNDERRUN) /*DEN*/
 		req->_bytes_done += len;
 
 #ifdef OHCI_DEBUG

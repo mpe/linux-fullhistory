@@ -265,8 +265,8 @@ saphir_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 }
 
 
-__initfunc(int
-setup_saphir(struct IsdnCard *card))
+int __init
+setup_saphir(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

@@ -466,8 +466,8 @@ unsigned int __init pci_init_hpt366 (struct pci_dev *dev, const char *name)
 	byte ata66 = 0;
 
 	pci_read_config_byte(dev, 0x5a, &ata66);
-	if (dev->rom_address)
-		pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->rom_address | PCI_ROM_ADDRESS_ENABLE);
+	if (dev->resource[PCI_ROM_RESOURCE].start)
+		pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
 	printk("%s: reg5ah=0x%02x ATA-%s Cable Port%d\n", name, ata66, (ata66 & 0x02) ? "33" : "66", PCI_FUNC(dev->devfn));
 	return dev->irq;
 }

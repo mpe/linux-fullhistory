@@ -1,3 +1,4 @@
+#include <linux/config.h>
 
 #ifndef __ASSEMBLER__
 #define __IOMD(offset)	(IO_IOMD_BASE + (offset >> 2))

@@ -10,7 +10,6 @@
 
 #include "ppc_asm.tmpl"
 #include "ppc_defs.h"
-#include <linux/config.h>
 #include <asm/processor.h>
 #include <asm/page.h>
 #include <asm/gemini.h>

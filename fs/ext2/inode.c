@@ -856,10 +856,11 @@ int ext2_notify_change(struct dentry *dentry, struct iattr *iattr)
 	unsigned int	flags;
 	
 	retval = -EPERM;
-	if ((iattr->ia_attr_flags &
-	     (ATTR_FLAG_APPEND | ATTR_FLAG_IMMUTABLE)) ^
-	    (inode->u.ext2_i.i_flags &
-	     (EXT2_APPEND_FL | EXT2_IMMUTABLE_FL))) {
+	if (iattr->ia_valid & ATTR_ATTR_FLAG &&
+	    ((!(iattr->ia_attr_flags & ATTR_FLAG_APPEND) !=
+	      !(inode->u.ext2_i.i_flags & EXT2_APPEND_FL)) ||
+	     (!(iattr->ia_attr_flags & ATTR_FLAG_IMMUTABLE) !=
+	      !(inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL)))) {
 		if (!capable(CAP_LINUX_IMMUTABLE))
 			goto out;
 	} else if ((current->fsuid != inode->i_uid) && !capable(CAP_FOWNER))

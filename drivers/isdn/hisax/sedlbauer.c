@@ -549,8 +549,8 @@ static  int pci_index __initdata = 0;
 #endif
 #endif
 
-__initfunc(int
-setup_sedlbauer(struct IsdnCard *card))
+int __init
+setup_sedlbauer(struct IsdnCard *card)
 {
 	int bytecnt, ver, val;
 	struct IsdnCardState *cs = card->cs;

@@ -67,13 +67,8 @@ static void __init quirk_s3_64M(struct pci_dev *dev)
 	struct resource *r = &dev->resource[0];
 
 	if ((r->start & 0x3ffffff) || r->end != r->start + 0x3ffffff) {
-		printk("PCI: Re-allocating buggy S3 card at %s: ", dev->name);
 		r->start = 0;
 		r->end = 0x3ffffff;
-		if (pcibios_assign_resource(dev, 0))
-			printk("FAILED\n");
-		else
-			printk("moved to %08lx\n", r->start);
 	}
 }
 
@@ -90,8 +85,8 @@ static struct pci_fixup pci_fixups[] __initdata = {
 	 * quantity.
 	 */
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C586_0,	quirk_isa_dma_hangs },
-	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_868,		quirk_s3_64M },
-	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_968,		quirk_s3_64M },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_868,		quirk_s3_64M },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_968,		quirk_s3_64M },
 	{ 0 }
 };
 

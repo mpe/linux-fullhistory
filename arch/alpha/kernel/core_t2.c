@@ -9,7 +9,6 @@
  * Code common to all T2 core logic chips.
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/pci.h>

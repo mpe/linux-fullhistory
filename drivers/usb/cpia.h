@@ -82,7 +82,7 @@
 
 #define SCRATCH_BUF_SIZE (STREAM_BUF_SIZE * 2)
 
-#define FRAMES_PER_DESC		500
+#define FRAMES_PER_DESC		10
 #define FRAME_SIZE_PER_DESC	960	/* Shouldn't be hardcoded */
 
 enum {

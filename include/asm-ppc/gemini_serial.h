@@ -1,6 +1,7 @@
 #ifndef __ASMPPC_GEMINI_SERIAL_H
 #define __ASMPPC_GEMINI_SERIAL_H
 
+#include <linux/config.h>
 #include <asm/gemini.h>
 
 /* Rate for the 24.576 Mhz clock for the onboard serial chip */

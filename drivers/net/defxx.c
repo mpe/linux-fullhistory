@@ -549,7 +549,7 @@ int __init dfx_probe(struct net_device *dev)
 
 				/* Get I/O base address from PCI Configuration Space */
 
-				port = pdev->resource[1].start
+				port = pdev->resource[1].start;
 
 				/* Verify port address range is not already being used */
 

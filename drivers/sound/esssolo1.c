@@ -54,6 +54,8 @@
  *                     The fun part is that the Windows Solo1 driver doesn't
  *                     seem to do these tricks.
  *                     Bugs remaining: plops and clicks when starting/stopping playback
+ *    31.08.99   0.7   add spin_lock_init
+ *                     replaced current->state = x with set_current_state(x)
  *
  */
 
@@ -929,7 +931,7 @@ static int drain_dac(struct solo1_state *s, int nonblock)
 	
 	if (s->dma_dac.mapped)
 		return 0;
-        current->state = TASK_INTERRUPTIBLE;
+        __set_current_state(TASK_INTERRUPTIBLE);
         add_wait_queue(&s->dma_dac.wait, &wait);
         for (;;) {
                 spin_lock_irqsave(&s->lock, flags);
@@ -941,7 +943,7 @@ static int drain_dac(struct solo1_state *s, int nonblock)
                         break;
                 if (nonblock) {
                         remove_wait_queue(&s->dma_dac.wait, &wait);
-                        current->state = TASK_RUNNING;
+                        set_current_state(TASK_RUNNING);
                         return -EBUSY;
                 }
 		tmo = 3 * HZ * (count + s->dma_dac.fragsize) / 2 / s->rate;
@@ -953,7 +955,7 @@ static int drain_dac(struct solo1_state *s, int nonblock)
                         printk(KERN_DEBUG "solo1: dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac.wait, &wait);
-        current->state = TASK_RUNNING;
+        set_current_state(TASK_RUNNING);
         if (signal_pending(current))
                 return -ERESTARTSYS;
         return 0;
@@ -1779,7 +1781,7 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 	VALIDATE_STATE(s);
 
 	if (file->f_mode & FMODE_WRITE) {
-		current->state = TASK_INTERRUPTIBLE;
+		__set_current_state(TASK_INTERRUPTIBLE);
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
 			spin_lock_irqsave(&s->lock, flags);
@@ -1791,7 +1793,7 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 				break;
 			if (file->f_flags & O_NONBLOCK) {
 				remove_wait_queue(&s->midi.owait, &wait);
-				current->state = TASK_RUNNING;
+				set_current_state(TASK_RUNNING);
 				return -EBUSY;
 			}
 			tmo = (count * HZ) / 3100;
@@ -1799,7 +1801,7 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 				printk(KERN_DEBUG "solo1: midi timed out??\n");
 		}
 		remove_wait_queue(&s->midi.owait, &wait);
-		current->state = TASK_RUNNING;
+		set_current_state(TASK_RUNNING);
 	}
 	down(&s->open_sem);
 	s->open_mode &= (~(file->f_mode << FMODE_MIDI_SHIFT)) & (FMODE_MIDI_READ|FMODE_MIDI_WRITE);
@@ -2030,6 +2032,11 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_MIC, 0x4040 }
 };
 
+#define RSRCISIOREGION(dev,num) ((dev)->resource[(num)].start != 0 && \
+				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
+#define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
+
+
 static int __init init_solo1(void)
 {
 	struct solo1_state *s;
@@ -2039,17 +2046,13 @@ static int __init init_solo1(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "solo1: version v0.6 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "solo1: version v0.7 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, pcidev))) {
-		if (pcidev->resource[0].start == 0 ||
-		    (pcidev->resource[0].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO ||
-		    pcidev->resource[1].start == 0 ||
-		    (pcidev->resource[1].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO ||
-		    pcidev->resource[2].start == 0 ||
-		    (pcidev->resource[2].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO ||
-		    pcidev->resource[3].start == 0 ||
-		    (pcidev->resource[3].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
+		if (!RSRCISIOREGION(pcidev, 0) ||
+		    !RSRCISIOREGION(pcidev, 1) ||
+		    !RSRCISIOREGION(pcidev, 2) ||
+		    !RSRCISIOREGION(pcidev, 3))
 			continue;
 		if (pcidev->irq == 0)
 			continue;
@@ -2064,14 +2067,15 @@ static int __init init_solo1(void)
 		init_waitqueue_head(&s->midi.iwait);
 		init_waitqueue_head(&s->midi.owait);
 		init_MUTEX(&s->open_sem);
+		spin_lock_init(&s->lock);
 		s->magic = SOLO1_MAGIC;
 		s->pcidev = pcidev;
-		s->iobase = pcidev->resource[0].start;
-		s->sbbase = pcidev->resource[1].start;
-		s->vcbase = pcidev->resource[2].start;
+		s->iobase = RSRCADDRESS(pcidev, 0);
+		s->sbbase = RSRCADDRESS(pcidev, 1);
+		s->vcbase = RSRCADDRESS(pcidev, 2);
 		s->ddmabase = s->vcbase + DDMABASE_OFFSET;
-		s->mpubase = pcidev->resource[3].start;
-		s->gpbase = pcidev->resource[4].start;
+		s->mpubase = RSRCADDRESS(pcidev, 3);
+		s->gpbase = RSRCADDRESS(pcidev, 4);
 		s->irq = pcidev->irq;
 		if (check_region(s->iobase, IOBASE_EXTENT) ||
 		    check_region(s->sbbase, SBBASE_EXTENT) ||

@@ -888,8 +888,8 @@ static 	struct pci_dev *dev_diva201 __initdata = NULL;
 static  int pci_index __initdata = 0;
 #endif
 
-__initfunc(int
-setup_diva(struct IsdnCard *card))
+int __init
+setup_diva(struct IsdnCard *card)
 {
 	int bytecnt;
 	u_char val;

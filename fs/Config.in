@@ -71,11 +71,10 @@ if [ "$CONFIG_INET" = "y" ]; then
   if [ "$CONFIG_NFS_FS" = "y" -a "$CONFIG_IP_PNP" = "y" ]; then
     bool '   Root file system on NFS' CONFIG_ROOT_NFS
   fi
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    tristate 'NFS server support' CONFIG_NFSD
-    if [ "$CONFIG_NFSD" != "n" ]; then
-      bool '   Emulate SUN NFS server' CONFIG_NFSD_SUN
-    fi
+  # considering that RedHat-6.0 ships with this on, I guess it's not really experimental
+  tristate 'NFS server support' CONFIG_NFSD
+  if [ "$CONFIG_NFSD" != "n" ]; then
+    bool '   Emulate SUN NFS server' CONFIG_NFSD_SUN
   fi
   if [ "$CONFIG_NFS_FS" = "y" -o "$CONFIG_NFSD" = "y" ]; then
     define_bool CONFIG_SUNRPC y

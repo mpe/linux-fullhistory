@@ -104,7 +104,8 @@ S:	Maintained
 ADVANSYS SCSI DRIVER
 P:	Bob Frey
 M:	Bob Frey <bobf@advansys.com>
-W:	http://www.advansys.com/linux
+W:	http://www.advansys.com/linux.html
+L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 AEDSP16 DRIVER
@@ -808,9 +809,7 @@ L:	linux-net@vger.rutgers.edu
 S:	Supported
 
 STALLION TECHNOLOGIES MULTIPORT SERIAL BOARDS
-P:	Greg Ungerer
 M:	support@stallion.oz.au
-M:	gerg@stallion.com
 W:	http://www.stallion.com
 S:	Supported
 

@@ -1,16 +1,21 @@
 /*
- *	linux/arch/alpha/kernel/pci_setup.c
+ *	drivers/pci/setup.c
  *
  * Extruded from code written by
  *      Dave Rusling (david.rusling@reo.mts.dec.com)
  *      David Mosberger (davidm@cs.arizona.edu)
  *	David Miller (davem@redhat.com)
+ *
+ * Support routines for initializing a PCI subsystem.
  */
 
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
+#include <linux/errno.h>
 #include <linux/ioport.h>
+
+#include <asm/cache.h>
 #include <asm/pci.h>
 
 
@@ -22,45 +27,45 @@
 #endif
 
 
-void __init
-pci_record_assignment(struct pci_dev *dev, int resource)
+int __init
+pci_claim_resource(struct pci_dev *dev, int resource)
 {
-	struct pci_controler *hose = dev->sysdata;
         struct resource *res = &dev->resource[resource];
-	struct resource *base;
-	int ok;
+	struct resource *root = pci_find_parent_resource(dev, res);
+	int err;
 
-	if (res->flags == 0)
-		return;
-	if (res->flags & IORESOURCE_IO)
-		base = hose->io_space;
-	else
-		base = hose->mem_space;
+	err = -EINVAL;
+	if (root != NULL) {
+		/* If `dev' is on a secondary pci bus, `root' may not be
+		   at the origin.  In that case, adjust the resource into
+		   range.  */
+		res->start += root->start;
+		res->end += root->start;
 
-	res->start += base->start;
-	res->end += base->start;
+		err = request_resource(root, res);
+	}
+	if (err) {
+		printk(KERN_ERR "PCI: Address space collision on region %d "
+		       "of device %s\n", resource, dev->name);
+	}
 
-	ok = request_resource(base, res);
-
-	DBGC(("PCI record assignment: (%s) resource %d %s\n",
-	      dev->name, resource, (ok < 0 ? "failed" : "ok")));
+	return err;
 }
 
-static void inline
-pdev_assign_unassigned(struct pci_dev *dev, int min_io, int min_mem)
+static void
+pdev_assign_unassigned_resources(struct pci_dev *dev, u32 min_io, u32 min_mem)
 {
 	u32 reg;
 	u16 cmd;
 	int i;
 
-	DBGC(("PCI assign resources : (%s)\n", dev->name));
+	DBGC(("PCI assign unassigned: (%s)\n", dev->name));
 
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 
 	for (i = 0; i < PCI_NUM_RESOURCES; i++) {
-		struct pci_controler *hose;
 		struct resource *root, *res;
-		unsigned long size, min, max;
+		unsigned long size, min;
 
 		res = &dev->resource[i];
 
@@ -71,41 +76,33 @@ pdev_assign_unassigned(struct pci_dev *dev, int min_io, int min_mem)
 
 		/* If it is already assigned or the resource does
 		   not exist, there is nothing to do.  */
-		if (res->parent != NULL || res->flags == 0UL)
+		if (res->parent != NULL || res->flags == 0)
 			continue;
 
-		hose = dev->sysdata;
-
 		/* Determine the root we allocate from.  */
-		if (res->flags & IORESOURCE_IO) {
-			root = hose->io_space;
-			min = root->start + min_io;
-			max = root->end;
-		} else {
-			root = hose->mem_space;
-			min = root->start + min_mem;
-			max = root->end;
-		}
+		root = pci_find_parent_resource(dev, res);
+		if (root == NULL)
+			continue;
 
+		min = (res->flags & IORESOURCE_IO ? min_io : min_mem);
+		min += root->start;
 		size = res->end - res->start + 1;
 
-		DBGC(("  for root[%016lx:%016lx]\n"
-		      "       res[%016lx:%016lx]\n"
-		      "      span[%016lx:%016lx] size[%lx]\n",
-		      root->start, root->end, res->start, res->end,
-		      min, max, size));
+		DBGC(("  for root[%lx:%lx] min[%lx] size[%lx]\n",
+		      root->start, root->end, min, size));
 
-		if (allocate_resource(root, res, size, min, max, size) < 0) {
+		if (allocate_resource(root, res, size, min, -1, size) < 0) {
 			printk(KERN_ERR
 			       "PCI: Failed to allocate resource %d for %s\n",
 			       i, dev->name);
+			continue;
 		}
 
-		DBGC(("  got res[%016lx:%016lx] for resource %d\n",
+		DBGC(("  got res[%lx:%lx] for resource %d\n",
 		      res->start, res->end, i));
 
 		/* Update PCI config space.  */
-		pcibios_base_address_update(dev, i);
+		pcibios_update_resource(dev, root, res, i);
 	}
 
 	/* Special case, disable the ROM.  Several devices act funny
@@ -117,7 +114,7 @@ pdev_assign_unassigned(struct pci_dev *dev, int min_io, int min_mem)
 	pci_write_config_dword(dev, PCI_ROM_ADDRESS, reg);
 
 	/* All of these (may) have I/O scattered all around and may not
-	   use IO-base address registers at all.  So we just have to
+	   use I/O base address registers at all.  So we just have to
 	   always enable IO to these devices.  */
 	if ((dev->class >> 8) == PCI_CLASS_NOT_DEFINED
 	    || (dev->class >> 8) == PCI_CLASS_NOT_DEFINED_VGA
@@ -126,7 +123,8 @@ pdev_assign_unassigned(struct pci_dev *dev, int min_io, int min_mem)
 		cmd |= PCI_COMMAND_IO;
 	}
 
-	/* ??? Always turn on bus mastering.  */
+	/* ??? Always turn on bus mastering.  If the device doesn't support
+	   it, the bit will go into the bucket. */
 	cmd |= PCI_COMMAND_MASTER;
 
 	/* Enable the appropriate bits in the PCI command register.  */
@@ -136,19 +134,17 @@ pdev_assign_unassigned(struct pci_dev *dev, int min_io, int min_mem)
 
 	/* If this is a PCI bridge, set the cache line correctly.  */
 	if ((dev->class >> 8) == PCI_CLASS_BRIDGE_PCI) {
-		/* ??? EV4/EV5 cache line is 32 bytes.  */
 		pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE,
-				      (64 / sizeof(u32)));
+				      (L1_CACHE_BYTES / sizeof(u32)));
 	}
 }
 
 void __init
-pci_assign_unassigned(int min_io, int min_mem)
+pci_assign_unassigned_resources(u32 min_io, u32 min_mem)
 {
 	struct pci_dev *dev;
-
 	for (dev = pci_devices; dev; dev = dev->next)
-		pdev_assign_unassigned(dev, min_io, min_mem);
+		pdev_assign_unassigned_resources(dev, min_io, min_mem);
 }
 
 struct pbus_set_ranges_data
@@ -157,6 +153,9 @@ struct pbus_set_ranges_data
 	unsigned int io_start, io_end;
 	unsigned int mem_start, mem_end;
 };
+
+#define ROUND_UP(x, a)		(((x) + (a) - 1) & ~((a) - 1))
+#define ROUND_DOWN(x, a)	((x) & ~((a) - 1))
 
 static void __init
 pbus_set_ranges(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
@@ -195,12 +194,11 @@ pbus_set_ranges(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
 		pbus_set_ranges(child, &inner);
 
 	/* Align the values.  */
-	inner.io_start &= ~(4*1024 - 1);
-	inner.mem_start &= ~(1*1024*1024 - 1);
-	if (inner.io_end & (4*1024-1))
-		inner.io_end = (inner.io_end | (4*1024 - 1)) + 1;
-	if (inner.mem_end & (1*1024*1024-1))
-		inner.mem_end = (inner.mem_end | (1*1024*1024 - 1)) + 1;
+	inner.io_start = ROUND_DOWN(inner.io_start, 4*1024);
+	inner.io_end = ROUND_UP(inner.io_end, 4*1024);
+
+	inner.mem_start = ROUND_DOWN(inner.mem_start, 1*1024*1024);
+	inner.mem_end = ROUND_UP(inner.mem_end, 1*1024*1024);
 
 	/* Configure the bridge, if possible.  */
 	if (bus->self) {
@@ -278,12 +276,11 @@ void __init
 pci_set_bus_ranges(void)
 {
 	struct pci_bus *bus;
-
 	for (bus = pci_root; bus; bus = bus->next)
 		pbus_set_ranges(bus, NULL);
 }
 
-static void inline
+static void
 pdev_fixup_irq(struct pci_dev *dev,
 	       u8 (*swizzle)(struct pci_dev *, u8 *),
 	       int (*map_irq)(struct pci_dev *, u8, u8))
@@ -310,19 +307,18 @@ pdev_fixup_irq(struct pci_dev *dev,
 		irq = 0;
 	dev->irq = irq;
 
-	DBGC(("PCI fixup irq : (%s) got %d\n", dev->name, dev->irq));
+	DBGC(("PCI fixup irq: (%s) got %d\n", dev->name, dev->irq));
 
 	/* Always tell the device, so the driver knows what is
 	   the real IRQ to use; the device does not use it. */
-	pcibios_irq_update(dev, irq);
+	pcibios_update_irq(dev, irq);
 }
 
 void __init
-pci_fixup_irq(u8 (*swizzle)(struct pci_dev *, u8 *),
-	      int (*map_irq)(struct pci_dev *, u8, u8))
+pci_fixup_irqs(u8 (*swizzle)(struct pci_dev *, u8 *),
+	       int (*map_irq)(struct pci_dev *, u8, u8))
 {
 	struct pci_dev *dev;
-
 	for (dev = pci_devices; dev; dev = dev->next)
 		pdev_fixup_irq(dev, swizzle, map_irq);
 }

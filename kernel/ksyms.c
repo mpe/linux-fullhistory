@@ -320,6 +320,7 @@ EXPORT_SYMBOL(enable_hlt);
 /* resource handling */
 EXPORT_SYMBOL(request_resource);
 EXPORT_SYMBOL(release_resource);
+EXPORT_SYMBOL(allocate_resource);
 EXPORT_SYMBOL(__request_region);
 EXPORT_SYMBOL(__check_region);
 EXPORT_SYMBOL(__release_region);

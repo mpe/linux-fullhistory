@@ -4,7 +4,7 @@
  *	istallion.c  -- stallion intelligent multiport serial driver.
  *
  *	Copyright (C) 1996-1999  Stallion Technologies (support@stallion.oz.au).
- *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
+ *	Copyright (C) 1994-1996  Greg Ungerer.
  *
  *	This code is loosely based on the Linux serial driver, written by
  *	Linus Torvalds, Theodore T'so and others.
@@ -167,7 +167,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  */
 static char	*stli_drvtitle = "Stallion Intelligent Multiport Serial Driver";
 static char	*stli_drvname = "istallion";
-static char	*stli_drvversion = "5.5.1";
+static char	*stli_drvversion = "5.6.0";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -186,7 +186,7 @@ static int			stli_refcount;
  *	is already swapping a shared buffer won't make things any worse.
  */
 static char			*stli_tmpwritebuf = (char *) NULL;
-static struct semaphore		stli_tmpwritesem = MUTEX;
+static DECLARE_MUTEX(stli_tmpwritesem);
 
 #define	STLI_TXBUFSIZE		4096
 
@@ -3375,6 +3375,9 @@ static inline int stli_initports(stlibrd_t *brdp)
 		portp->closing_wait = 30 * HZ;
 		portp->tqhangup.routine = stli_dohangup;
 		portp->tqhangup.data = portp;
+		init_waitqueue_head(&portp->open_wait);
+		init_waitqueue_head(&portp->close_wait);
+		init_waitqueue_head(&portp->raw_wait);
 		portp->normaltermios = stli_deftermios;
 		portp->callouttermios = stli_deftermios;
 		panelport++;
@@ -4671,16 +4674,16 @@ static inline int stli_initpcibrd(int brdtype, struct pci_dev *devp)
 
 #if DEBUG
 	printk("%s(%d): BAR[]=%x,%x,%x,%x\n", __FILE__, __LINE__,
-		devp->base_address[0], devp->base_address[1],
-		devp->base_address[2], devp->base_address[3]);
+		devp->resource[0].start, devp->resource[1].start,
+		devp->resource[2].start, devp->resource[3].start);
 #endif
 
 /*
  *	We have all resources from the board, so lets setup the actual
  *	board structure now.
  */
-	brdp->iobase = (devp->base_address[3] & PCI_BASE_ADDRESS_IO_MASK);
-	brdp->memaddr = (devp->base_address[2] & PCI_BASE_ADDRESS_MEM_MASK);
+	brdp->iobase = (devp->resource[3].start & PCI_BASE_ADDRESS_IO_MASK);
+	brdp->memaddr = (devp->resource[2].start & PCI_BASE_ADDRESS_MEM_MASK);
 	stli_brdinit(brdp);
 
 	return(0);

@@ -12,7 +12,7 @@
 #include <asm/page.h>
 #include <asm/ap1000/apservice.h>
 #include <asm/ap1000/apbif.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 
 /*
  * Macros for accessing I/O registers.

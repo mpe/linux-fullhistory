@@ -19,6 +19,7 @@
  * For definitions of the flags field, see tty.h
  */
 
+#include <linux/config.h>
 #include <linux/termios.h>
 #include <linux/tqueue.h>
 #include <linux/wait.h>

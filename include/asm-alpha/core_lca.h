@@ -1,7 +1,6 @@
 #ifndef __ALPHA_LCA__H__
 #define __ALPHA_LCA__H__
 
-#include <linux/config.h>
 #include <asm/system.h>
 #include <asm/compiler.h>
 

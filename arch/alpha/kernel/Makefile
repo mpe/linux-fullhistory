@@ -16,7 +16,7 @@ all: kernel.o head.o
 
 O_TARGET := kernel.o
 O_OBJS   := entry.o traps.o process.o osf_sys.o irq.o signal.o setup.o \
-	    ptrace.o time.o fpreg.o semaphore.o pci_syscall.o
+	    ptrace.o time.o fpreg.o semaphore.o
 OX_OBJS  := alpha_ksyms.o
 
 
@@ -28,12 +28,11 @@ O_OBJS	 += core_apecs.o core_cia.o core_lca.o core_mcpcia.o core_pyxis.o \
 	    sys_jensen.o sys_miata.o sys_mikasa.o sys_noritake.o \
 	    sys_rawhide.o sys_ruffian.o sys_sable.o sys_sio.o \
 	    sys_sx164.o sys_takara.o sys_rx164.o \
-	    es1888.o smc37c669.o smc37c93x.o ns87312.o \
-	    pci.o pci_setup.o
+	    es1888.o smc37c669.o smc37c93x.o ns87312.o pci.o
 else
 
 ifdef CONFIG_PCI
-O_OBJS   += pci.o pci_setup.o
+O_OBJS   += pci.o
 endif
 
 # Core logic support

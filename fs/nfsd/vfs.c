@@ -995,12 +995,15 @@ out_nfserr:
  * that the parent is still our parent and
  * that we are still hashed onto it..
  *
- * This is requied in case two processes race
+ * This is required in case two processes race
  * on removing (or moving) the same entry: the
  * parent lock will serialize them, but the
  * other process will be too late..
+ *
+ * Note that this nfsd_check_parent is different
+ * than the one in linux/include/dcache_func.h.
  */
-#define check_parent(dir, dentry) \
+#define nfsd_check_parent(dir, dentry) \
 	((dir) == (dentry)->d_parent->d_inode && !list_empty(&dentry->d_hash))
 
 /*
@@ -1079,8 +1082,8 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	nfsd_double_down(&tdir->i_sem, &fdir->i_sem);
 	err = -ENOENT;
 	/* GAM3 check for parent changes after locking. */
-	if (check_parent(fdir, odentry) &&
-	    check_parent(tdir, ndentry)) {
+	if (nfsd_check_parent(fdir, odentry) &&
+	    nfsd_check_parent(tdir, ndentry)) {
 
 		err = vfs_rename(fdir, odentry, tdir, ndentry);
 		if (!err && EX_ISSYNC(tfhp->fh_export)) {
@@ -1168,7 +1171,7 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		fhp->fh_locked = 1;
 
 		err = -ENOENT;
-		if (check_parent(dirp, rdentry))
+		if (nfsd_check_parent(dirp, rdentry))
 			err = vfs_rmdir(dirp, rdentry);
 
 		rdentry->d_count--;

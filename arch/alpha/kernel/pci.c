@@ -6,7 +6,6 @@
  *	David Mosberger (davidm@cs.arizona.edu)
  */
 
-#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/pci.h>
 #include <linux/init.h>
@@ -70,19 +69,21 @@ struct pci_fixup pcibios_fixups[] __initdata = {
  */
 
 static void __init
-pci_assign_special(void)
+pcibios_assign_special(void)
 {
 	struct pci_dev *dev;
+	int i;
 
-	/* The first three resources of the Cypress IDE controler need
-	   to remain unchanged.  So allocate them as-is.  */
-	dev = NULL;
-	while ((dev = pci_find_device(PCI_VENDOR_ID_CONTAQ,
-				       PCI_DEVICE_ID_CONTAQ_82C693, dev))) {
-		if ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE) {
-			pci_record_assignment(dev, 0);
-			pci_record_assignment(dev, 1);
-			pci_record_assignment(dev, 2);
+	/* The first three resources of an IDE controler are often magic, 
+	   so leave them unchanged.  This is true, for instance, of the
+	   Contaq 82C693 as seen on SX164 and DP264.  */
+
+	for (dev = pci_devices; dev; dev = dev->next) {
+		if (dev->class >> 8 != PCI_CLASS_STORAGE_IDE)
+			continue;
+	        for (i = 0; i < PCI_NUM_RESOURCES; i++) {
+			if (dev->resource[i].flags)
+				pci_claim_resource(dev, i);
 		}
 	}
 }
@@ -107,40 +108,35 @@ pcibios_fixup_bus(struct pci_bus *bus)
 {
 	/* Propogate hose info into the subordinate devices.  */
 
+	struct pci_controler *hose = probing_hose;
 	struct pci_dev *dev;
-	void *sysdata;
 
-	sysdata = (bus->parent ? bus->parent->sysdata : bus->sysdata);
+	bus->resource[0] = hose->io_space;
+	bus->resource[1] = hose->mem_space;
 	for (dev = bus->devices; dev; dev = dev->sibling)
-		dev->sysdata = sysdata;
+		dev->sysdata = hose;
 }
 
 void __init
-pcibios_base_address_update(struct pci_dev *dev, int resource)
+pcibios_update_resource(struct pci_dev *dev, struct resource *root,
+			struct resource *res, int resource)
 {
-	struct pci_controler *hose = dev->sysdata;
-        struct resource *res = &dev->resource[resource];
-        unsigned long base, where, size;
+        unsigned long where, size;
         u32 reg;
-
-        if (res->flags & IORESOURCE_IO)
-                base = hose->io_space->start;
-        else
-                base = hose->mem_space->start;
 
         where = PCI_BASE_ADDRESS_0 + (resource * 4);
         size = res->end - res->start;
         pci_read_config_dword(dev, where, &reg);
-        reg = (reg & size) | (((u32)(res->start - base)) & ~size);
+        reg = (reg & size) | (((u32)(res->start - root->start)) & ~size);
         pci_write_config_dword(dev, where, reg);
 
 	/* ??? FIXME -- record old value for shutdown.  */
 }
 
 void __init
-pcibios_irq_update(struct pci_dev *dev, u8 irq)
+pcibios_update_irq(struct pci_dev *dev, int irq)
 {
-	pci_write_config_byte(dev, PCI_INTERRUPT_LINE, dev->irq);
+	pci_write_config_byte(dev, PCI_INTERRUPT_LINE, irq);
 
 	/* ??? FIXME -- record old value for shutdown.  */
 }
@@ -186,10 +182,10 @@ common_init_pci(void)
 	}
 	probing_hose = NULL;
 
-	pci_assign_special();
-	pci_assign_unassigned(alpha_mv.min_io_address,
-			      alpha_mv.min_mem_address);
-	pci_fixup_irq(alpha_mv.pci_swizzle, alpha_mv.pci_map_irq);
+	pcibios_assign_special();
+	pci_assign_unassigned_resources(alpha_mv.min_io_address,
+				        alpha_mv.min_mem_address);
+	pci_fixup_irqs(alpha_mv.pci_swizzle, alpha_mv.pci_map_irq);
 	pci_set_bus_ranges();
 }
 

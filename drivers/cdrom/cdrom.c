@@ -473,7 +473,8 @@ int open_for_data(struct cdrom_device_info * cdi)
 		    /* give people a warning shot, now that CDO_CHECK_TYPE
 		       is the default case! */
 		    cdinfo(CD_OPEN, "bummer. wrong media type.\n"); 
-		    cdinfo(CD_WARNING, "pid %d is buggy!\n", (unsigned int)current->pid); 
+		    cdinfo(CD_WARNING, "pid %d must open device O_NONBLOCK!\n",
+					(unsigned int)current->pid); 
 		    ret=-EMEDIUMTYPE;
 		    goto clean_up_and_return;
 		}
@@ -835,7 +836,7 @@ static int dvd_do_auth (struct cdrom_device_info *cdi, dvd_authinfo *ai)
 	case DVD_HOST_SEND_CHALLENGE:
 		cdinfo(CD_DO_IOCTL, "entering DVD_HOST_SEND_CHALLENGE\n"); 
 		setup_send_key (&cgc, ai->hsc.agid, 1);
-		cgc.buflen = -(cgc.cmd[9] = 16);
+		cgc.buflen = cgc.cmd[9] = 16;
 		buf[1] = 14;
 		copy_chal (&buf[4], ai->hsc.chal);
 
@@ -848,7 +849,7 @@ static int dvd_do_auth (struct cdrom_device_info *cdi, dvd_authinfo *ai)
 	case DVD_HOST_SEND_KEY2:
 		cdinfo(CD_DO_IOCTL, "entering DVD_HOST_SEND_KEY2\n"); 
 		setup_send_key (&cgc, ai->hsk.agid, 3);
-		cgc.buflen = -(cgc.cmd[9] = 12);
+		cgc.buflen = cgc.cmd[9] = 12;
 		buf[1] = 10;
 		copy_key (&buf[4], ai->hsk.key);
 
@@ -1080,13 +1081,8 @@ static int cdrom_mode_select(struct cdrom_device_info *cdi,
 	
 	cgc->cmd[0] = GPCMD_MODE_SELECT_10;
 	cgc->cmd[1] = 0x10;		/* PF */
-
-	/* generic_packet() wants the length as seen from the drive, i.e.
-	   it will transfer data _to_ us. The CD-ROM wants the absolute
-	   value, however. */
-	cgc->cmd[7] = (-cgc->buflen) >> 8;
-	cgc->cmd[8] = (-cgc->buflen) & 0xff;
-
+	cgc->cmd[7] = cgc->buflen >> 8;
+	cgc->cmd[8] = cgc->buflen & 0xff;
 	return cdo->generic_packet(cdi, cgc);
 }
 
@@ -1734,7 +1730,6 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		memset(buffer, 0, 3);
 
 		/* set volume */
-		cgc.buflen = -cgc.buflen;
 		cgc.buffer = buffer;
 		return cdrom_mode_select(cdi, &cgc);
 		}
@@ -2234,12 +2229,3 @@ void cleanup_module(void)
 }
 
 #endif /* endif MODULE */
-
-
-
-/*
- * Local variables:
- * comment-column: 40
- * compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -fno-strength-reduce -m486 -DCPU=486 -DMODULE -DMODVERSIONS -include /usr/src/linux/include/linux/modversions.h  -c -o cdrom.o cdrom.c"
- * End:
- */

@@ -19,7 +19,7 @@ __hard_smp_processor_id(void)
 
 #ifdef __SMP__
 
-#include <linux/tasks.h>
+#include <linux/threads.h>
 
 struct cpuinfo_alpha {
 	unsigned long loops_per_sec;

@@ -169,7 +169,6 @@ struct i2o_device
 	char dev_name[8];		/* linux /dev name if available */
 };
 
-#ifdef CONFIG_I2O_PCI_MODULE
 /*
  *	Resource data for each PCI I2O controller
  */	 	
@@ -177,7 +176,7 @@ struct i2o_pci
 {
 	int irq;
 };
-#endif
+
 
 /*
  *	Each I2O controller has one of these objects

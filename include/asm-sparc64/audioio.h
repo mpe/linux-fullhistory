@@ -237,7 +237,6 @@ typedef struct audio_device {
 
 #ifdef __KERNEL__
 
-#include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/tqueue.h>
 #include <linux/wait.h>

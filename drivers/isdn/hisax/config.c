@@ -571,8 +571,8 @@ HiSax_setup(char *line)
 
 	str = get_options(line, MAX_ARG, ints);
 #else
-__initfunc(void
-HiSax_setup(char *str, int *ints))
+void __init
+HiSax_setup(char *str, int *ints)
 {
 	int i, j, argc;
 #endif        
@@ -1442,8 +1442,8 @@ HiSax_reportcard(int cardnr)
 }
 
 
-__initfunc(int
-HiSax_init(void))
+int __init
+HiSax_init(void)
 {
 	int i;
 

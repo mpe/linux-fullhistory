@@ -1,0 +1,67 @@
+August 30, 1999
+
+NOTE: This is all VERY alpha.  Use at your own risk.  There is no
+warranty expressed nor implied.
+
+
+Introduction
+
+This document will hopefully provide enough info on how to get SANE
+working with a Hewlett Packard USB capable scanner using the USB
+interface.  The majority of HP Scanners support the Scanner Control
+Language (SCL) which is both published by HP and supported by SANE.
+The only HP Scanner that I'm aware of that does not support SCL is the
+4200C.  All other HP scanners with USB interfaces should work (4100C,
+5200C, 6200C).  Of course as HP releases new scanners this information
+may change.
+
+
+Requirements
+
+In order to get this running you'll need USB support in your kernel in
+addition to USB HP Scanner support.  Please refer to README.hp_scanner
+for issues pertaining to Linux USB and USB HP Scanner support.
+
+An installed version of SANE which is available from
+http://www.mostang.com/sane/.  Testing has been performed using
+version SANE-1.0.1.  For instructions on building and installing SANE,
+refer to the various README files within the distribution.
+
+
+Ok, so what do I do?
+
+NOTE: $INSTALL_DIR is the location where SANE was installed.  It may
+be /usr/local, /usr, /opt or somewhere else.  If you don't know, ask
+your system administrator.
+
+1) Make sure that you have the libsane-hp.* libraries under the
+$INSTALL_DIR/lib/sane/ directory.
+
+2) Under the directory $INSTALL_DIR/etc/sane.d/ edit the following
+files: dll.conf, hp.conf.
+
+  dll.conf:  Make sure that the 'hp' entry is present and uncommented.
+
+  hp.conf: This should contain two lines:
+
+    option connect-device
+    /dev/usbscanner
+
+3) You should now be able to use SANE (xscanimage or scanimage).
+
+Don't forget to read any relevant man pages regarding the usage of
+SANE.  If you have other entries uncommented in dll.conf, you my have
+to specify the device to (x)scanimage.  The xscanimage (1) man page
+has info on how to get 'The Gimp' to work with xscanimage.  Note that
+Gimp support must be compiled into SANE for it work.  If you are
+dealing with a RedHat system, you'll also need to install the
+gimp-devel rpm package.
+
+NOTE: Most of the time xscanimage will run without incident, then on
+the next invocation it'll core dump at different locations.  I don't
+know why yet and I don't have a work around either other than to try
+again.  But once you get it started, it'll scan without any problems
+(or at least it does for me).
+
+David /\/elson
+dnelson@jump.net

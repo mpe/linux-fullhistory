@@ -23,6 +23,12 @@
 /* 4/4/1999 added data toggle for interrupt pipes -keryan */
 /* 5/16/1999 added global toggles for bulk and control */
 /* 6/25/1999 added fix for data toggles on bidirectional bulk endpoints */ 
+/*
+ * 1999-09-02: Thomas Sailer <sailer@ife.ee.ethz.ch>
+ *             Added explicit frame list manipulation routines
+ *             for inserting/removing iso td's to/from the frame list.
+ *             START_ABSOLUTE fixes
+ */
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -463,6 +469,84 @@ static void uhci_remove_irq_list(struct uhci_td *td)
 }
 
 /*
+ * frame list manipulation. Used for Isochronous transfers.
+ * the list of (iso) TD's enqueued in a frame list entry
+ * is basically a doubly linked list with link being
+ * the forward pointer and backptr the backward ptr.
+ * the frame list entry itself doesn't have a back ptr
+ * (therefore the list is not circular), and the forward pointer
+ * stops at link entries having the UHCI_PTR_TERM or the UHCI_PTR_QH
+ * bit set. Maybe it could be extended to handle the QH's also,
+ * but it doesn't seem necessary right now.
+ * The layout looks as follows:
+ * frame list pointer -> iso td's (if any) -> 
+ * periodic interrupt td (if framelist 0) -> irq qh -> control qh -> bulk qh
+ */
+
+static spinlock_t framelist_lock = SPIN_LOCK_UNLOCKED;
+
+static void uhci_add_frame_list(struct uhci *uhci, struct uhci_td *td, unsigned framenum)
+{
+	unsigned long flags;
+	struct uhci_td *nexttd;
+
+	framenum %= UHCI_NUMFRAMES;
+	spin_lock_irqsave(&framelist_lock, flags);
+	td->backptr = &uhci->fl->frame[framenum];
+	td->link = uhci->fl->frame[framenum];
+	if (!(td->link & (UHCI_PTR_TERM | UHCI_PTR_QH))) {
+		nexttd = (struct uhci_td *)bus_to_virt(td->link & ~15);
+		nexttd->backptr = &td->link;
+	}
+	wmb();
+	uhci->fl->frame[framenum] = virt_to_bus(td);
+	spin_unlock_irqrestore(&framelist_lock, flags);
+}
+
+static void uhci_remove_frame_list(struct uhci *uhci, struct uhci_td *td)
+{
+	unsigned long flags;
+	struct uhci_td *nexttd;
+
+	if (!td->backptr)
+		return;
+	spin_lock_irqsave(&framelist_lock, flags);
+	*(td->backptr) = td->link;
+	if (!(td->link & (UHCI_PTR_TERM | UHCI_PTR_QH))) {
+		nexttd = (struct uhci_td *)bus_to_virt(td->link & ~15);
+		nexttd->backptr = td->backptr;
+	}
+	spin_unlock_irqrestore(&framelist_lock, flags);
+	td->backptr = NULL;
+	/*
+	 * attention: td->link might still be in use by the
+	 * hardware if the td is still active and the hardware
+	 * was processing it. So td->link should be preserved
+	 * until the frame number changes. Don't know what to do...
+	 * udelay(1000) doesn't sound nice, and schedule()
+	 * can't be used as this is called from within interrupt context.
+	 */
+	/* for now warn if there's a possible problem */
+	if (td->status & TD_CTRL_ACTIVE) {
+		unsigned frn = inw(uhci->io_addr + USBFRNUM);
+		__u32 link = uhci->fl->frame[frn % UHCI_NUMFRAMES];
+		if (!(link & (UHCI_PTR_TERM | UHCI_PTR_QH))) {
+			struct uhci_td *tdl = (struct uhci_td *)bus_to_virt(link & ~15);
+			for (;;) {
+				if (tdl == td) {
+					printk(KERN_WARNING "uhci_remove_frame_list: td possibly still in use!!\n");
+					break;
+				}
+				if (tdl->link & (UHCI_PTR_TERM | UHCI_PTR_QH))
+					break;
+				tdl = (struct uhci_td *)bus_to_virt(tdl->link & ~15);
+			}
+		}	
+	}
+}
+
+
+/*
  * This function removes and disallocates all structures set up for a transfer.
  * It takes the qh out of the skeleton, removes the tq and the td's.
  * It only removes the associated interrupt handler if removeirq is set.
@@ -619,6 +703,7 @@ static int uhci_init_isoc (struct usb_device *usb_dev,
 				struct usb_isoc_desc **isocdesc)
 {
 	struct usb_isoc_desc *id;
+	int i;
 
 #ifdef BANDWIDTH_ALLOCATION
 	/* TBD: add bandwidth allocation/checking/management HERE. */
@@ -628,7 +713,7 @@ static int uhci_init_isoc (struct usb_device *usb_dev,
 	*isocdesc = NULL;
 
 	/* Check some parameters. */
-	if ((frame_count < 0) || (frame_count > UHCI_NUMFRAMES)) {
+	if ((frame_count <= 0) || (frame_count > UHCI_NUMFRAMES)) {
 #ifdef CONFIG_USB_DEBUG_ISOC
 		printk (KERN_DEBUG "uhci_init_isoc: invalid frame_count (%d)\n",
 			frame_count);
@@ -648,15 +733,19 @@ static int uhci_init_isoc (struct usb_device *usb_dev,
 	if (!id)
 		return -ENOMEM;
 
+	memset (id, 0, sizeof (*id) +
+		(sizeof (struct isoc_frame_desc) * frame_count));
+
 	id->td = kmalloc (sizeof (struct uhci_td) * frame_count, GFP_KERNEL);
 	if (!id->td) {
 		kfree (id);
 		return -ENOMEM;
 	}
 
-	memset (id, 0, sizeof (*id) +
-		(sizeof (struct isoc_frame_desc) * frame_count));
 	memset (id->td, 0, sizeof (struct uhci_td) * frame_count);
+
+	for (i = 0; i < frame_count; i++)
+		INIT_LIST_HEAD(&((struct uhci_td *)(id->td))[i].irq_list);
 
 	id->frame_count = frame_count;
 	id->frame_size  = usb_maxpacket (usb_dev, pipe, usb_pipeout(pipe));
@@ -755,7 +844,7 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 	cur_frame = uhci_get_current_frame_number (isocdesc->usb_dev);
 
 	/* if not START_ASAP (i.e., RELATIVE or ABSOLUTE): */
-	if (!pr_isocdesc)
+	if (!pr_isocdesc) {
 		if (isocdesc->start_type == START_RELATIVE) {
 			if ((isocdesc->start_frame < 0) || (isocdesc->start_frame > CAN_SCHEDULE_FRAMES)) {
 #ifdef CONFIG_USB_DEBUG_ISOC
@@ -766,9 +855,10 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 			}
 		} /* end START_RELATIVE */
 		else
-		if (isocdesc->start_type == START_ABSOLUTE) {
-			if (isocdesc->start_frame > cur_frame) {
-				if ((isocdesc->start_frame - cur_frame) > CAN_SCHEDULE_FRAMES) {
+  		if (isocdesc->start_type == START_ABSOLUTE) { /* within the scope of cur_frame */
+			ix = USB_WRAP_FRAMENR(isocdesc->start_frame - cur_frame);
+			if (ix < START_FRAME_FUDGE || /* too small */
+			    ix > CAN_SCHEDULE_FRAMES) { /* too large */
 #ifdef CONFIG_USB_DEBUG_ISOC
 					printk (KERN_DEBUG "uhci_init_isoc: bad start_frame value (%d)\n",
 						isocdesc->start_frame);
@@ -787,6 +877,7 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 				}
 			}
 		} /* end START_ABSOLUTE */
+	}
 
 	/*
 	 * Set the start/end frame numbers.
@@ -800,16 +891,14 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 	} else if (isocdesc->start_type == START_ASAP) {
 		isocdesc->start_frame = cur_frame + START_FRAME_FUDGE;
 	}
-	/* else for start_type == START_ABSOLUTE, use start_frame as is. */
 
 	/* and see if start_frame needs any correction */
-	if (isocdesc->start_frame >= UHCI_NUMFRAMES)
-		isocdesc->start_frame -= UHCI_NUMFRAMES;
+	/* only wrap to USB frame numbers, the frame_list insertion routine
+	   takes care of the wrapping to the frame_list size */
+	isocdesc->start_frame = USB_WRAP_FRAMENR(isocdesc->start_frame);
 
 	/* and fix the end_frame value */
-	isocdesc->end_frame = isocdesc->start_frame + isocdesc->frame_count - 1;
-	if (isocdesc->end_frame >= UHCI_NUMFRAMES)
-		isocdesc->end_frame -= UHCI_NUMFRAMES;
+	isocdesc->end_frame = USB_WRAP_FRAMENR(isocdesc->start_frame + isocdesc->frame_count - 1);
 
 	isocdesc->prev_completed_frame = -1;
 	isocdesc->cur_completed_frame  = -1;
@@ -857,6 +946,7 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 			td->status |= TD_CTRL_IOC;
 			td->completed = isocdesc->callback_fn;
 			cb_frames = 0;
+			uhci_add_irq_list (dev->uhci, td, isocdesc->callback_fn, isocdesc->context);
 		}
 
 		bufptr += fd->frame_length;  /* or isocdesc->frame_size; */
@@ -864,21 +954,20 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 		/*
 		 * Insert the TD in the frame list.
 		 */
-		td->backptr = &uhci->fl->frame [cur_frame];
-		td->link    = uhci->fl->frame [cur_frame];
-		uhci->fl->frame [cur_frame] = virt_to_bus (td);
+		uhci_add_frame_list(uhci, td, cur_frame);
 
-		if (++cur_frame >= UHCI_NUMFRAMES)
-			cur_frame = 0;
+		cur_frame = USB_WRAP_FRAMENR(cur_frame+1);
 	} /* end for ix */
 
 	/*
 	 * Add IOC on the last TD.
 	 */
 	td--;
-	td->status |= TD_CTRL_IOC;
-	uhci_add_irq_list (dev->uhci, td, isocdesc->callback_fn, isocdesc->context); /* TBD: D.K. ??? */
-
+	if (!(td->status & TD_CTRL_IOC)) {
+		td->status |= TD_CTRL_IOC;
+		td->completed = isocdesc->callback_fn;
+		uhci_add_irq_list(dev->uhci, td, isocdesc->callback_fn, isocdesc->context); /* TBD: D.K. ??? */
+	}
 	return 0;
 } /* end uhci_run_isoc */
 
@@ -897,9 +986,9 @@ static int uhci_kill_isoc (struct usb_isoc_desc *isocdesc)
 	struct uhci_device *dev = usb_to_uhci (isocdesc->usb_dev);
 	struct uhci     *uhci = dev->uhci;
 	struct uhci_td  *td;
-	int             ix, cur_frame;
+	int             ix;
 
-	if ((isocdesc->start_frame < 0) || (isocdesc->start_frame >= UHCI_NUMFRAMES)) {
+	if (USB_WRAP_FRAMENR(isocdesc->start_frame) != isocdesc->start_frame) {
 #ifdef CONFIG_USB_DEBUG_ISOC
 		printk (KERN_DEBUG "uhci_kill_isoc: invalid start_frame (%d)\n",
 			isocdesc->start_frame);
@@ -907,13 +996,9 @@ static int uhci_kill_isoc (struct usb_isoc_desc *isocdesc)
 		return -EINVAL;
 	}
 
-	for (ix = 0, td = isocdesc->td, cur_frame = isocdesc->start_frame;
-	     ix < isocdesc->frame_count; ix++, td++) {
+	for (ix = 0, td = isocdesc->td; ix < isocdesc->frame_count; ix++, td++) {
+		uhci_remove_frame_list(uhci, td);
 		td->status &= ~(TD_CTRL_ACTIVE | TD_CTRL_IOC);
-		uhci->fl->frame [cur_frame] = td->link;
-
-		if (++cur_frame >= UHCI_NUMFRAMES)
-			cur_frame = 0;
 	} /* end for ix */
 
 	isocdesc->start_frame = -1;
@@ -922,18 +1007,21 @@ static int uhci_kill_isoc (struct usb_isoc_desc *isocdesc)
 
 static void uhci_free_isoc (struct usb_isoc_desc *isocdesc)
 {
+	int i;
+
 	/* If still Active, kill it. */
 	if (isocdesc->start_frame >= 0)
-		uhci_kill_isoc (isocdesc);
+		uhci_kill_isoc(isocdesc);
 
-	/* Remove it from the IRQ list. */
-	uhci_remove_irq_list ((struct uhci_td *)&(isocdesc->td [isocdesc->frame_count - 1]));
+	/* Remove all td's from the IRQ list. */
+	for(i = 0; i < isocdesc->frame_count; i++)
+		uhci_remove_irq_list(((struct uhci_td *)(isocdesc->td))+i);
 
 	/* Free the associate memory. */
 	if (isocdesc->td)
-		kfree (isocdesc->td);
+		kfree(isocdesc->td);
 
-	kfree (isocdesc);
+	kfree(isocdesc);
 } /* end uhci_free_isoc */
 
 /*
@@ -1512,7 +1600,7 @@ static int fixup_isoc_desc (struct uhci_td *td)
 			td, isocdesc, first_comp, cur_comp, num_comp);
 #endif
 
-	for (ix = 0, fx = first_comp, prtd = &isocdesc->td [first_comp], frm = &isocdesc->frames [first_comp];
+	for (ix = 0, fx = first_comp, prtd = ((struct uhci_td *)(isocdesc->td))+first_comp, frm = &isocdesc->frames [first_comp];
 	    ix < num_comp; ix++) {
 		frm->frame_length = uhci_actual_length (prtd->status);
 		isocdesc->total_length += frm->frame_length;
@@ -1666,6 +1754,7 @@ static void uhci_init_ticktd(struct uhci *uhci)
 
 	/* Don't clobber the frame */
 	td->link = uhci->fl->frame[0];
+	td->backptr = &uhci->fl->frame[0];
 	td->status = TD_CTRL_IOC;
 	td->info = (15 << 21) | (0x7f << 8) | USB_PID_IN;	/* (ignored) input packet, 16 bytes, device 127 */
 	td->buffer = 0;

@@ -83,7 +83,7 @@ extern struct proc_dir_entry proc_scsi_inia100;
 extern int inia100_biosparam(Disk *, int, int *);	/*for linux v1.13 */
 #endif
 
-#define inia100_REVID "Initio INI-A100U2W SCSI device driver; Revision: 1.02a"
+#define inia100_REVID "Initio INI-A100U2W SCSI device driver; Revision: 1.02c"
 
 #if LINUX_VERSION_CODE < CVT_LINUX_VERSION(1, 3, 0)
 #define INIA100	{ \

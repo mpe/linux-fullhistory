@@ -559,8 +559,8 @@ setstack_hfc(struct PStack *st, struct BCState *bcs)
 	return (0);
 }
 
-__initfunc(void
-init_send(struct BCState *bcs))
+void __init
+init_send(struct BCState *bcs)
 {
 	int i;
 
@@ -573,8 +573,8 @@ init_send(struct BCState *bcs))
 		bcs->hw.hfc.send[i] = 0x1fff;
 }
 
-__initfunc(void
-inithfc(struct IsdnCardState *cs))
+void __init
+inithfc(struct IsdnCardState *cs)
 {
 	init_send(&cs->bcs[0]);
 	init_send(&cs->bcs[1]);

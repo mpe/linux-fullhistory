@@ -105,7 +105,7 @@ int __init i2o_pci_install(struct pci_dev *dev)
 		/* Skip I/O spaces */
 		if(!(dev->resource[i].flags&PCI_BASE_ADDRESS_SPACE))
 		{
-			memptr=dev->resource[i].flags;
+			memptr=dev->resource[i].start;
 			break;
 		}
 	}
@@ -113,14 +113,21 @@ int __init i2o_pci_install(struct pci_dev *dev)
 	if(i==6)
 	{
 		printk(KERN_ERR "i2o_pci: I2O controller has no memory regions defined.\n");
-		return -ENOMEM;
+		kfree(c);
+		return -EINVAL;
 	}
 	
 	size = dev->resource[i].end-dev->resource[i].start+1;	
 	/* Map the I2O controller */
 	
-	printk(KERN_INFO "PCI I2O controller at 0x%08X size=%d\n", memptr, -size);
-	mem = ioremap(memptr, -size);
+	printk(KERN_INFO "PCI I2O controller at 0x%08X size=%d\n", memptr, size);
+	mem = ioremap(memptr, size);
+	if(mem==NULL)
+	{
+		printk(KERN_ERR "i2o_pci: Unable to map controller.\n");
+		kfree(c);
+		return -EINVAL;
+	}
 	
 	c->bus.pci.irq = -1;
 
@@ -148,6 +155,8 @@ int __init i2o_pci_install(struct pci_dev *dev)
 	if(i<0)
 	{
 		printk(KERN_ERR "i2o: unable to install controller.\n");
+		kfree(c);
+		iounmap(mem);
 		return i;
 	}
 
@@ -165,7 +174,9 @@ int __init i2o_pci_install(struct pci_dev *dev)
 			core->delete(c);
 #else
 			i2o_delete_controller(c);
-#endif /* MODULE */
+#endif /* MODULE */	
+			kfree(c);
+			iofree(mem);
 			return -EBUSY;
 		}
 	}
@@ -190,8 +201,7 @@ int __init i2o_pci_scan(void)
 		}
 		printk(KERN_INFO "I2O controller on bus %d at %d.\n",
 			dev->bus->number, dev->devfn);
-		if(!dev->master)
-			printk(KERN_WARNING "Controller not master enabled.\n");
+		pci_set_master(dev);
 		if(i2o_pci_install(dev)==0)
 			count++;
 	}

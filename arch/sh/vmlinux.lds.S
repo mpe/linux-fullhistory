@@ -1,6 +1,7 @@
 /* ld script to make SuperH Linux kernel
  * Written by Niibe Yutaka
  */
+#include <linux/config.h>
 #ifdef CONFIG_LITTLE_ENDIAN
 OUTPUT_FORMAT("elf32-shl", "elf32-shl", "elf32-shl")
 #else

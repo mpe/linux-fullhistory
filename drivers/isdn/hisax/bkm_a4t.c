@@ -294,8 +294,8 @@ static struct pci_dev *dev_a4t __initdata = NULL;
 static int pci_index __initdata = 0;
 #endif
 
-__initfunc(int
-	   setup_bkm_a4t(struct IsdnCard *card))
+int __init
+	   setup_bkm_a4t(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

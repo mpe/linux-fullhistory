@@ -26,7 +26,6 @@
 #include <asm/delay.h>
 
 #include <linux/timex.h>
-#include <linux/config.h>
 #include <linux/irq.h>
 
 #define TMU_TOCR	0xfffffe90	/* Byte access */

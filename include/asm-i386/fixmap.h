@@ -18,7 +18,7 @@
 #include <asm/apic.h>
 #include <asm/page.h>
 #ifdef CONFIG_BIGMEM
-#include <linux/tasks.h>
+#include <linux/threads.h>
 #include <asm/kmap_types.h>
 #endif
 

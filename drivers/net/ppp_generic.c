@@ -22,7 +22,7 @@
  * ==FILEVERSION 990806==
  */
 
-/* $Id$ */
+/* $Id: ppp_generic.c,v 1.3 1999/09/02 05:30:12 paulus Exp $ */
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -94,7 +94,7 @@ struct ppp {
 	void		*rc_state;	/* its internal state */
 	unsigned long	last_xmit;	/* jiffies when last pkt sent */
 	unsigned long	last_recv;	/* jiffies when last pkt rcvd */
-	struct net_device	dev;		/* network interface device */
+	struct net_device *dev;		/* network interface device */
 	struct net_device_stats stats;	/* statistics */
 };
 
@@ -144,6 +144,7 @@ static void ppp_ccp_closed(struct ppp *ppp);
 static struct compressor *find_compressor(int type);
 static void ppp_get_stats(struct ppp *ppp, struct ppp_stats *st);
 static struct ppp *ppp_create_unit(int unit, int *retp);
+static void ppp_release_unit(struct ppp *ppp);
 static struct ppp *ppp_find_unit(int unit);
 
 /* Translates a PPP protocol number to a NP index (NP == network protocol) */
@@ -267,49 +268,11 @@ static int ppp_open(struct inode *inode, struct file *file)
 static int ppp_release(struct inode *inode, struct file *file)
 {
 	struct ppp *ppp = (struct ppp *) file->private_data;
-	struct list_head *list, *next;
-	int ref;
 
-	if (ppp == 0)
-		goto out;
-	file->private_data = 0;
-	spin_lock(&all_ppp_lock);
-	ref = --ppp->refcnt;
-	if (ref == 0)
-		list_del(&ppp->list);
-	spin_unlock(&all_ppp_lock);
-	if (ref != 0)
-		goto out;
-
-	/* Last fd open to this ppp unit is being closed -
-	   mark the interface down, free the ppp unit */
-	rtnl_lock();
-	dev_close(&ppp->dev);
-	rtnl_unlock();
-	for (list = ppp->channels.next; list != &ppp->channels; list = next) {
-		/* forcibly detach this channel */
-		struct channel *chan;
-		chan = list_entry(list, struct channel, list);
-		chan->chan->ppp = 0;
-		next = list->next;
-		kfree(chan);
+	if (ppp != 0) {
+		file->private_data = 0;
+		ppp_release_unit(ppp);
 	}
-
-	/* Free up resources. */
-	ppp_ccp_closed(ppp);
-	lock_xmit_path(ppp);
-	lock_recv_path(ppp);
-	if (ppp->vj) {
-		slhc_free(ppp->vj);
-		ppp->vj = 0;
-	}
-	free_skbs(&ppp->xq);
-	free_skbs(&ppp->rq);
-	free_skbs(&ppp->recv_pending);
-	unregister_netdev(&ppp->dev);
-	kfree(ppp);
-
- out:
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -453,6 +416,12 @@ static int ppp_ioctl(struct inode *inode, struct file *file,
 		return -ENXIO;
 	err = -EFAULT;
 	switch (cmd) {
+	case PPPIOCDETACH:
+		file->private_data = 0;
+		ppp_release_unit(ppp);
+		err = 0;
+		break;
+
 	case PPPIOCSMRU:
 		if (get_user(val, (int *) arg))
 			break;
@@ -832,7 +801,7 @@ ppp_send_frame(struct ppp *ppp, struct sk_buff *skb)
 	/* try to do packet compression */
 	if ((ppp->xstate & SC_COMP_RUN) && ppp->xc_state != 0
 	    && proto != PPP_LCP && proto != PPP_CCP) {
-		new_skb = alloc_skb(ppp->dev.mtu + PPP_HDRLEN, GFP_ATOMIC);
+		new_skb = alloc_skb(ppp->dev->mtu + PPP_HDRLEN, GFP_ATOMIC);
 		if (new_skb == 0) {
 			printk(KERN_ERR "PPP: no memory (comp pkt)\n");
 			goto drop;
@@ -841,7 +810,7 @@ ppp_send_frame(struct ppp *ppp, struct sk_buff *skb)
 		/* compressor still expects A/C bytes in hdr */
 		len = ppp->xcomp->compress(ppp->xc_state, skb->data - 2,
 					   new_skb->data, skb->len + 2,
-					   ppp->dev.mtu + PPP_HDRLEN);
+					   ppp->dev->mtu + PPP_HDRLEN);
 		if (len > 0 && (ppp->flags & SC_CCP_UP)) {
 			kfree_skb(skb);
 			skb = new_skb;
@@ -852,6 +821,10 @@ ppp_send_frame(struct ppp *ppp, struct sk_buff *skb)
 			kfree_skb(new_skb);
 		}
 	}
+
+	/* for data packets, record the time */
+	if (proto < 0x8000)
+		ppp->last_xmit = jiffies;
 
 	/*
 	 * If we are waiting for traffic (demand dialling),
@@ -994,7 +967,7 @@ ppp_receive_frame(struct ppp *ppp, struct sk_buff *skb)
 			goto err;
 		if (skb_tailroom(skb) < 124) {
 			/* copy to a new sk_buff with more tailroom */
-			ns = alloc_skb(skb->len + 128, GFP_ATOMIC);
+			ns = dev_alloc_skb(skb->len + 128);
 			if (ns == 0) {
 				printk(KERN_ERR"PPP: no memory (VJ decomp)\n");
 				goto err;
@@ -1051,12 +1024,12 @@ ppp_receive_frame(struct ppp *ppp, struct sk_buff *skb)
 	} else {
 		/* network protocol frame - give it to the kernel */
 		ppp->last_recv = jiffies;
-		if ((ppp->dev.flags & IFF_UP) == 0
+		if ((ppp->dev->flags & IFF_UP) == 0
 		    || ppp->npmode[npi] != NPMODE_PASS) {
 			kfree_skb(skb);
 		} else {
 			skb_pull(skb, 2);	/* chop off protocol */
-			skb->dev = &ppp->dev;
+			skb->dev = ppp->dev;
 			skb->protocol = htons(npindex_to_ethertype[npi]);
 			skb->mac.raw = skb->data;
 			netif_rx(skb);
@@ -1079,7 +1052,7 @@ ppp_decompress_frame(struct ppp *ppp, struct sk_buff *skb)
 	int len;
 
 	if (proto == PPP_COMP) {
-		ns = alloc_skb(ppp->mru + PPP_HDRLEN, GFP_ATOMIC);
+		ns = dev_alloc_skb(ppp->mru + PPP_HDRLEN);
 		if (ns == 0) {
 			printk(KERN_ERR "ppp_receive: no memory\n");
 			goto err;
@@ -1189,7 +1162,7 @@ ppp_output_wakeup(struct ppp_channel *chan)
 	if (trylock_xmit_path(ppp))
 		ppp_xmit_unlock(ppp);
 	if (ppp->xmit_pending == 0) {
-		ppp->dev.tbusy = 0;
+		ppp->dev->tbusy = 0;
 		mark_bh(NET_BH);
 	}
 }
@@ -1476,6 +1449,7 @@ static struct ppp *
 ppp_create_unit(int unit, int *retp)
 {
 	struct ppp *ppp;
+	struct net_device *dev;
 	struct list_head *list;
 	int last_unit = -1;
 	int ret = -EEXIST;
@@ -1501,6 +1475,12 @@ ppp_create_unit(int unit, int *retp)
 	if (ppp == 0)
 		goto out;
 	memset(ppp, 0, sizeof(struct ppp));
+	dev = kmalloc(sizeof(struct net_device), GFP_KERNEL);
+	if (dev == 0) {
+		kfree(ppp);
+		goto out;
+	}
+	memset(dev, 0, sizeof(struct net_device));
 
 	ppp->index = unit;
 	sprintf(ppp->name, "ppp%d", unit);
@@ -1514,13 +1494,18 @@ ppp_create_unit(int unit, int *retp)
 	INIT_LIST_HEAD(&ppp->channels);
 	skb_queue_head_init(&ppp->recv_pending);
 
-	ppp->dev.init = ppp_net_init;
-	ppp->dev.name = ppp->name;
-	ppp->dev.priv = ppp;
+	ppp->dev = dev;
+	dev->init = ppp_net_init;
+	dev->name = ppp->name;
+	dev->priv = ppp;
+	dev->new_style = 1;
 
-	ret = register_netdev(&ppp->dev);
+	rtnl_lock();
+	ret = register_netdevice(dev);
+	rtnl_unlock();
 	if (ret != 0) {
 		printk(KERN_ERR "PPP: couldn't register device (%d)\n", ret);
+		kfree(dev);
 		kfree(ppp);
 		goto out;
 	}
@@ -1532,6 +1517,59 @@ ppp_create_unit(int unit, int *retp)
 	if (ret != 0)
 		ppp = 0;
 	return ppp;
+}
+
+/*
+ * Remove a reference to a ppp unit, and destroy it if
+ * the reference count goes to 0.
+ */
+static void ppp_release_unit(struct ppp *ppp)
+{
+	struct list_head *list, *next;
+	int ref;
+
+	spin_lock(&all_ppp_lock);
+	ref = --ppp->refcnt;
+	if (ref == 0)
+		list_del(&ppp->list);
+	spin_unlock(&all_ppp_lock);
+	if (ref != 0)
+		return;
+
+	/* Last fd open to this ppp unit is being closed or detached:
+	   mark the interface down, free the ppp unit */
+	if (ppp->dev) {
+		rtnl_lock();
+		dev_close(ppp->dev);
+		rtnl_unlock();
+	}
+	for (list = ppp->channels.next; list != &ppp->channels; list = next) {
+		/* forcibly detach this channel */
+		struct channel *chan;
+		chan = list_entry(list, struct channel, list);
+		chan->chan->ppp = 0;
+		next = list->next;
+		kfree(chan);
+	}
+
+	/* Free up resources. */
+	ppp_ccp_closed(ppp);
+	lock_xmit_path(ppp);
+	lock_recv_path(ppp);
+	if (ppp->vj) {
+		slhc_free(ppp->vj);
+		ppp->vj = 0;
+	}
+	free_skbs(&ppp->xq);
+	free_skbs(&ppp->rq);
+	free_skbs(&ppp->recv_pending);
+	if (ppp->dev) {
+		rtnl_lock();
+		unregister_netdevice(ppp->dev);
+		ppp->dev = 0;
+		rtnl_unlock();
+	}
+	kfree(ppp);
 }
 
 /*
@@ -1568,7 +1606,7 @@ void
 cleanup_module(void)
 {
 	/* should never happen */
-	if (all_ppp_units.next != &all_ppp_units)
+	if (!list_empty(&all_ppp_units))
 		printk(KERN_ERR "PPP: removing module but units remain!\n");
 	if (unregister_chrdev(PPP_MAJOR, "ppp") != 0)
 		printk(KERN_ERR "PPP: failed to unregister PPP device\n");

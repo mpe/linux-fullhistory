@@ -1391,7 +1391,7 @@ static int apm(void *unused)
 		}
 	}
 #endif
-	if (((apm_bios_info.flags & APM_BIOS_DISABLED) == 0)
+	if (((apm_bios_info.flags & APM_BIOS_DISENGAGED) == 0)
 	    && (apm_bios_info.version > 0x0100)) {
 		if (apm_engage_power_management(0x0001) == APM_SUCCESS)
 			apm_bios_info.flags &= ~APM_BIOS_DISENGAGED;

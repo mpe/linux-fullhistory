@@ -12,7 +12,6 @@
  * I don't know of any Super-H bugs yet.
  */
 
-#include <linux/config.h>
 #include <asm/processor.h>
 
 __initfunc(static void check_bugs(void))

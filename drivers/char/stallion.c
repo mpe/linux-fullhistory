@@ -4,7 +4,7 @@
  *	stallion.c  -- stallion multiport serial driver.
  *
  *	Copyright (C) 1996-1999  Stallion Technologies (support@stallion.oz.au).
- *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
+ *	Copyright (C) 1994-1996  Greg Ungerer.
  *
  *	This code is loosely based on the Linux serial driver, written by
  *	Linus Torvalds, Theodore T'so and others.
@@ -135,7 +135,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  */
 static char	*stl_drvtitle = "Stallion Multiport Serial Driver";
 static char	*stl_drvname = "stallion";
-static char	*stl_drvversion = "5.5.1";
+static char	*stl_drvversion = "5.6.0";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 
@@ -2294,7 +2294,7 @@ static int __init stl_mapirq(int irq, char *name)
 			break;
 	}
 	if (i >= stl_numintrs) {
-		if (request_irq(irq, stl_intr, SA_INTERRUPT, name, NULL) != 0) {
+		if (request_irq(irq, stl_intr, SA_SHIRQ, name, NULL) != 0) {
 			printk("STALLION: failed to register interrupt "
 				"routine for %s irq=%d\n", name, irq);
 			rc = -ENODEV;
@@ -2348,6 +2348,8 @@ static int __init stl_initports(stlbrd_t *brdp, stlpanel_t *panelp)
 		portp->callouttermios = stl_deftermios;
 		portp->tqueue.routine = stl_offintr;
 		portp->tqueue.data = portp;
+		init_waitqueue_head(&portp->open_wait);
+		init_waitqueue_head(&portp->close_wait);
 		portp->stats.brd = portp->brdnr;
 		portp->stats.panel = portp->panelnr;
 		portp->stats.port = portp->portnr;
@@ -2780,7 +2782,7 @@ static inline int stl_initpcibrd(int brdtype, struct pci_dev *devp)
 
 #if DEBUG
 	printk("stl_initpcibrd(brdtype=%d,busnr=%x,devnr=%x)\n", brdtype,
-		dev->bus->number, dev->devfn);
+		devp->bus->number, devp->devfn);
 #endif
 
 	if ((brdp = stl_allocbrd()) == (stlbrd_t *) NULL)
@@ -2798,8 +2800,8 @@ static inline int stl_initpcibrd(int brdtype, struct pci_dev *devp)
  */
 #if DEBUG
 	printk("%s(%d): BAR[]=%x,%x,%x,%x IRQ=%x\n", __FILE__, __LINE__,
-		devp->base_address[0], devp->base_address[1],
-		devp->base_address[2], devp->base_address[3], devp->irq);
+		devp->resource[0].start, devp->resource[1].start,
+		devp->resource[2].start, devp->resource[3].start, devp->irq);
 #endif
 
 /*
@@ -2808,21 +2810,21 @@ static inline int stl_initpcibrd(int brdtype, struct pci_dev *devp)
  */
 	switch (brdtype) {
 	case BRD_ECHPCI:
-		brdp->ioaddr2 = (devp->base_address[0] &
+		brdp->ioaddr2 = (devp->resource[0].start &
 			PCI_BASE_ADDRESS_IO_MASK);
-		brdp->ioaddr1 = (devp->base_address[1] &
+		brdp->ioaddr1 = (devp->resource[1].start &
 			PCI_BASE_ADDRESS_IO_MASK);
 		break;
 	case BRD_ECH64PCI:
-		brdp->ioaddr2 = (devp->base_address[2] &
+		brdp->ioaddr2 = (devp->resource[2].start &
 			PCI_BASE_ADDRESS_IO_MASK);
-		brdp->ioaddr1 = (devp->base_address[1] &
+		brdp->ioaddr1 = (devp->resource[1].start &
 			PCI_BASE_ADDRESS_IO_MASK);
 		break;
 	case BRD_EASYIOPCI:
-		brdp->ioaddr1 = (devp->base_address[2] &
+		brdp->ioaddr1 = (devp->resource[2].start &
 			PCI_BASE_ADDRESS_IO_MASK);
-		brdp->ioaddr2 = (devp->base_address[1] &
+		brdp->ioaddr2 = (devp->resource[1].start &
 			PCI_BASE_ADDRESS_IO_MASK);
 		break;
 	default:
@@ -4209,6 +4211,7 @@ static void stl_cd1400rxisr(stlpanel_t *panelp, int ioaddr)
 		if ((tty == (struct tty_struct *) NULL) ||
 		    (tty->flip.char_buf_ptr == (char *) NULL) ||
 		    ((buflen = TTY_FLIPBUF_SIZE - tty->flip.count) == 0)) {
+			len = MIN(len, sizeof(stl_unwanted));
 			outb((RDSR + portp->uartaddr), ioaddr);
 			insb((ioaddr + EREG_DATA), &stl_unwanted[0], len);
 			portp->stats.rxlost += len;
@@ -5175,6 +5178,7 @@ static void stl_sc26198rxisr(stlport_t *portp, unsigned int iack)
 		if ((tty == (struct tty_struct *) NULL) ||
 		    (tty->flip.char_buf_ptr == (char *) NULL) ||
 		    ((buflen = TTY_FLIPBUF_SIZE - tty->flip.count) == 0)) {
+			len = MIN(len, sizeof(stl_unwanted));
 			outb(GRXFIFO, (ioaddr + XP_ADDR));
 			insb((ioaddr + XP_DATA), &stl_unwanted[0], len);
 			portp->stats.rxlost += len;

@@ -20,7 +20,7 @@
  * ==FILEVERSION 990806==
  */
 
-/* $Id$ */
+/* $Id: ppp_async.c,v 1.3 1999/09/02 05:30:10 paulus Exp $ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -895,8 +895,7 @@ ppp_async_input(struct asyncppp *ap, const unsigned char *buf,
 			/* stuff the chars in the skb */
 			skb = ap->rpkt;
 			if (skb == 0) {
-				skb = alloc_skb(ap->mru + PPP_HDRLEN + 2,
-						GFP_ATOMIC);
+				skb = dev_alloc_skb(ap->mru + PPP_HDRLEN + 2);
 				if (skb == 0)
 					goto nomem;
 				/* Try to get the payload 4-byte aligned */

@@ -16,7 +16,7 @@
  * Head.S contains the MIPS exception handler and startup code.
  */
 #include <linux/config.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 
 #include <asm/asm.h>
 #include <asm/cacheops.h>

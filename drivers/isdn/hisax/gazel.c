@@ -690,8 +690,8 @@ setup_gazelpci(struct IsdnCardState *cs)
 	return (0);
 }
 
-__initfunc(int
-	   setup_gazel(struct IsdnCard *card))
+int __init
+	   setup_gazel(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

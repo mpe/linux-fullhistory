@@ -898,19 +898,21 @@ void __brelse(struct buffer_head * buf)
  */
 void __bforget(struct buffer_head * buf)
 {
+	/* grab the lru lock here to block bdflush. */
 	spin_lock(&lru_list_lock);
 	write_lock(&hash_table_lock);
-	if (atomic_read(&buf->b_count) != 1 || buffer_locked(buf)) {
-		touch_buffer(buf);
-		atomic_dec(&buf->b_count);
-	} else {
-		atomic_set(&buf->b_count, 0);
-		buf->b_state = 0;
-		if (buf->b_pprev)
-			__hash_unlink(buf);
-		__remove_from_lru_list(buf, buf->b_list);
-		put_last_free(buf);
-	}
+	if (!atomic_dec_and_test(&buf->b_count) || buffer_locked(buf))
+		goto in_use;
+	if (buf->b_pprev)
+		__hash_unlink(buf);
+	write_unlock(&hash_table_lock);
+	__remove_from_lru_list(buf, buf->b_list);
+	spin_unlock(&lru_list_lock);
+	buf->b_state = 0;
+	put_last_free(buf);
+	return;
+
+ in_use:
 	write_unlock(&hash_table_lock);
 	spin_unlock(&lru_list_lock);
 }
@@ -1231,16 +1233,12 @@ int block_flushpage(struct inode *inode, struct page *page, unsigned long offset
 		 */
 		if (offset <= curr_off) {
 			if (buffer_mapped(bh)) {
-				atomic_inc(&bh->b_count);
-				wait_on_buffer(bh);
-				if (bh->b_dev == B_FREE)
-					BUG();
 				mark_buffer_clean(bh);
+				wait_on_buffer(bh);
 				clear_bit(BH_Uptodate, &bh->b_state);
 				clear_bit(BH_Mapped, &bh->b_state);
 				clear_bit(BH_Req, &bh->b_state);
 				bh->b_blocknr = 0;
-				atomic_dec(&bh->b_count);
 			}
 		}
 		curr_off = next_off;
@@ -1258,8 +1256,7 @@ int block_flushpage(struct inode *inode, struct page *page, unsigned long offset
 	 * instead.
 	 */
 	if (!offset) {
-		if (!try_to_free_buffers(page))
-		{
+		if (!try_to_free_buffers(page)) {
 			atomic_add(PAGE_CACHE_SIZE, &buffermem);
 			return 0;
 		}

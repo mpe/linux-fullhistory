@@ -148,8 +148,8 @@ hfcs_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_hfcs(struct IsdnCard *card))
+int __init
+setup_hfcs(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

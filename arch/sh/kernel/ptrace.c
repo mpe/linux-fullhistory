@@ -3,7 +3,6 @@
  * linux/arch/sh/kernel/ptrace.c
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>

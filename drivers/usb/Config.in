@@ -28,6 +28,7 @@ if [ ! "$CONFIG_USB" = "n" ]; then
 
   dep_tristate 'USB hub support' CONFIG_USB_HUB $CONFIG_USB
   dep_tristate 'USB mouse support' CONFIG_USB_MOUSE $CONFIG_USB
+  dep_tristate 'USB HP scanner support' CONFIG_USB_HP_SCANNER $CONFIG_USB
   dep_tristate 'USB keyboard support' CONFIG_USB_KBD $CONFIG_USB
   dep_tristate 'USB audio parsing support' CONFIG_USB_AUDIO $CONFIG_USB
   dep_tristate 'USB Communications Device Class (ACM) support' CONFIG_USB_ACM $CONFIG_USB

@@ -6,7 +6,7 @@
 #ifndef __SPARC64_HARDIRQ_H
 #define __SPARC64_HARDIRQ_H
 
-#include <linux/tasks.h>
+#include <linux/threads.h>
 
 #ifndef __SMP__
 extern unsigned int local_irq_count;

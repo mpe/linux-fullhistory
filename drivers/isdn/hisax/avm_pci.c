@@ -779,8 +779,8 @@ static 	struct pci_dev *dev_avm __initdata = NULL;
 static  int pci_index __initdata = 0;
 #endif
 
-__initfunc(int
-setup_avm_pcipnp(struct IsdnCard *card))
+int __init
+setup_avm_pcipnp(struct IsdnCard *card)
 {
 	u_int val, ver;
 	struct IsdnCardState *cs = card->cs;

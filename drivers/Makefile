@@ -22,6 +22,10 @@ ifdef CONFIG_PCI
 SUB_DIRS += pci
 endif
 
+ifdef CONFIG_PCMCIA
+SUB_DIRS += pcmcia
+endif
+
 ifdef CONFIG_SBUS
 SUB_DIRS += sbus
 MOD_SUB_DIRS += sbus

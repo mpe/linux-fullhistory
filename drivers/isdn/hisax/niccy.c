@@ -265,8 +265,8 @@ static 	struct pci_dev *niccy_dev __initdata = NULL;
 static  int pci_index __initdata = 0;
 #endif
 
-__initfunc(int
-setup_niccy(struct IsdnCard *card))
+int __init
+setup_niccy(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

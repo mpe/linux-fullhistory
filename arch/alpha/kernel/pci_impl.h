@@ -127,7 +127,6 @@ static inline u8 bridge_swizzle(u8 pin, u8 slot)
 extern struct pci_controler *hose_head, **hose_tail;
 extern struct pci_controler *probing_hose;
 
-/* pci_common.c */
 extern void common_init_pci(void);
 extern u8 common_swizzle(struct pci_dev *, u8 *);
 extern struct pci_controler *alloc_pci_controler(unsigned long *);
@@ -136,11 +135,3 @@ extern struct resource *alloc_resource(unsigned long *);
 extern const char *const pci_io_names[];
 extern const char *const pci_mem_names[];
 extern const char pci_hae0_name[];
-
-/* pci_setup.c */
-void pci_record_assignment(struct pci_dev *dev, int resource);
-void pci_assign_unassigned(int, int);
-void pci_fixup_irq(u8 (*swizzle)(struct pci_dev *, u8 *),
-		   int (*map_irq)(struct pci_dev *, u8, u8));
-void pci_set_bus_ranges(void);
-

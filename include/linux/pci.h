@@ -654,6 +654,12 @@
 #define PCI_DEVICE_ID_MYLEX_DAC960P_V4	0x0010
 #define PCI_DEVICE_ID_MYLEX_DAC960P_V5	0x0020
 
+#define PCI_VENDOR_ID_MYLEX		0x1069
+#define PCI_DEVICE_ID_MYLEX_DAC960P_V2	0x0001
+#define PCI_DEVICE_ID_MYLEX_DAC960P_V3	0x0002
+#define PCI_DEVICE_ID_MYLEX_DAC960P_V4	0x0010
+#define PCI_DEVICE_ID_MYLEX_DAC960P_V5	0x0020
+
 #define PCI_VENDOR_ID_PICOP		0x1066
 #define PCI_DEVICE_ID_PICOP_PT86C52X	0x0001
 #define PCI_DEVICE_ID_PICOP_PT80C524	0x8002
@@ -1341,6 +1347,10 @@
 #define PCI_DEVICE_ID_INTERPHASE_5526	0x0004
 #define PCI_DEVICE_ID_INTERPHASE_55x6	0x0005
 
+#define PCI_VENDOR_ID_INTERPHASE		0x107e
+#define PCI_DEVICE_ID_INTERPHASE_5526	0x0004
+#define PCI_DEVICE_ID_INTERPHASE_55x6	0x0005
+
 /*
  * The PCI interface treats multi-function devices as independent
  * devices.  The slot/function address of each device is encoded
@@ -1478,7 +1488,9 @@ struct pci_ops {
 void pcibios_init(void);
 void pcibios_fixup_bus(struct pci_bus *);
 char *pcibios_setup (char *str);
-int pcibios_assign_resource(struct pci_dev *, int i);
+void pcibios_update_resource(struct pci_dev *, struct resource *,
+			     struct resource *, int);
+void pcibios_update_irq(struct pci_dev *, int irq);
 
 
 /* Backward compatibility, don't use in new code! */
@@ -1519,6 +1531,12 @@ struct pci_dev *pci_find_subsys (unsigned int vendor, unsigned int device,
 struct pci_dev *pci_find_class (unsigned int class, struct pci_dev *from);
 struct pci_dev *pci_find_slot (unsigned int bus, unsigned int devfn);
 int pci_find_capability (struct pci_dev *dev, int cap);
+
+int pci_claim_resource(struct pci_dev *, int);
+void pci_assign_unassigned_resources(u32 min_io, u32 min_mem);
+void pci_set_bus_ranges(void);
+void pci_fixup_irqs(u8 (*)(struct pci_dev *, u8 *),
+		    int (*)(struct pci_dev *, u8, u8));
 
 #define PCI_ANY_ID (~0)
 

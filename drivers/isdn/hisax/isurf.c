@@ -206,8 +206,8 @@ isurf_auxcmd(struct IsdnCardState *cs, isdn_ctrl *ic) {
 	return(isar_auxcmd(cs, ic));
 }
 
-__initfunc(int
-setup_isurf(struct IsdnCard *card))
+int __init
+setup_isurf(struct IsdnCard *card)
 {
 	int ver;
 	struct IsdnCardState *cs = card->cs;

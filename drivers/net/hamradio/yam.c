@@ -131,7 +131,6 @@ extern __inline__ void dev_init_buffers(struct net_device *dev)
 #else
 #define __init
 #define __initdata
-#define __initfunc(x) x
 #endif
 
 /* --------------------------------------------------------------------- */
@@ -1201,7 +1200,7 @@ static int yam_probe(struct net_device *dev)
 
 /* --------------------------------------------------------------------- */
 
-__initfunc(int yam_init(struct net_device *dev))
+int __init yam_init(struct net_device *dev)
 {
 	int i;
 
@@ -1267,7 +1266,7 @@ MODULE_DESCRIPTION("Yam amateur radio modem driver");
 
 #endif
 
-__initfunc(int init_module(void))
+int init_module(void)
 {
 	int ret = yam_init(NULL);
 

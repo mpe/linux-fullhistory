@@ -53,7 +53,7 @@ static char __initdata fpu_error = 0;
 static void __init copro_timeout(void)
 {
 	fpu_error = 1;
-	timer_table[COPRO_TIMER].expires = jiffies+100;
+	timer_table[COPRO_TIMER].expires = jiffies+HZ;
 	timer_active |= 1<<COPRO_TIMER;
 	printk(KERN_ERR "387 failed: trying to reset\n");
 	send_sig(SIGFPE, current, 1);

@@ -2,6 +2,7 @@
 # Automatically generated make config: don't edit
 #
 CONFIG_X86=y
+CONFIG_ISA=y
 
 #
 # Code maturity level options
@@ -50,6 +51,12 @@ CONFIG_PCI_DIRECT=y
 # CONFIG_VISWS is not set
 CONFIG_X86_IO_APIC=y
 CONFIG_X86_LOCAL_APIC=y
+
+#
+# PCMCIA/Cardbus support
+#
+CONFIG_PCMCIA=y
+CONFIG_CARDBUS=y
 CONFIG_SYSVIPC=y
 # CONFIG_BSD_PROCESS_ACCT is not set
 CONFIG_SYSCTL=y
@@ -373,6 +380,8 @@ CONFIG_EXT2_FS=y
 #
 # CONFIG_CODA_FS is not set
 CONFIG_NFS_FS=y
+CONFIG_NFSD=y
+# CONFIG_NFSD_SUN is not set
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
 # CONFIG_SMB_FS is not set
