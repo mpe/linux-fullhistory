@@ -3,14 +3,15 @@
 
 #ifdef __KERNEL__
 
-#include <linux/config.h> /* CONFIG_ATARI, CONFIG_HADES */
-#include <asm/byteorder.h>
+#include <linux/config.h>
 
 #ifdef CONFIG_ATARI
 #include <asm/atarihw.h>
 
 #define SLOW_DOWN_IO	do { if (MACH_IS_ATARI) MFPDELAY(); } while (0)
 #endif
+
+#include <asm/virtconvert.h>
 
 /*
  * readX/writeX() are used to access memory mapped devices. On some
@@ -41,34 +42,6 @@
 
 #define outb(x,addr) ((void) writeb(x,addr))
 #define outb_p(x,addr) outb(x,addr)
-
-/*
- * Change virtual addresses to physical addresses and vv.
- */
-extern unsigned long mm_vtop(unsigned long addr) __attribute__ ((const));
-extern unsigned long mm_ptov(unsigned long addr) __attribute__ ((const));
-
-extern inline unsigned long virt_to_phys(volatile void * address)
-{
-	return mm_vtop((unsigned long)address);
-}
-
-extern inline void * phys_to_virt(unsigned long address)
-{
-	return (void *) mm_ptov(address);
-}
-
-/*
- * IO bus memory addresses are 1:1 with the physical address,
- * except on the PCI bus of the Hades.
- */
-#ifdef CONFIG_HADES
-#define virt_to_bus(a) (virt_to_phys(a) + (MACH_IS_HADES ? 0x80000000 : 0))
-#define bus_to_virt(a) (phys_to_virt((a) - (MACH_IS_HADES ? 0x80000000 : 0)))
-#else
-#define virt_to_bus virt_to_phys
-#define bus_to_virt phys_to_virt
-#endif
 
 #endif /* __KERNEL__ */
 

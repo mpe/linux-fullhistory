@@ -48,6 +48,7 @@
  *    03.08.98   0.3   Do not include modversions.h
  *                     Now mixer behaviour can basically be selected between
  *                     "OSS documented" and "OSS actual" behaviour
+ *    31.08.98   0.4   Fix realplayer problems - dac.count issues
  *
  */
 
@@ -693,7 +694,7 @@ static void start_adc(struct es1371_state *s)
 	unsigned fragremain, fshift;
 
 	spin_lock_irqsave(&s->lock, flags);
-	if (!(s->ctrl & CTRL_ADC_EN) && (s->dma_adc.mapped || s->dma_adc.count < s->dma_adc.dmasize - 2*s->dma_adc.fragsize)
+	if (!(s->ctrl & CTRL_ADC_EN) && (s->dma_adc.mapped || s->dma_adc.count < (signed)(s->dma_adc.dmasize - 2*s->dma_adc.fragsize))
 	    && s->dma_adc.ready) {
 		s->ctrl |= CTRL_ADC_EN;
 		s->sctrl = (s->sctrl & ~SCTRL_R1LOOPSEL) | SCTRL_R1INTEN;
@@ -838,7 +839,7 @@ static void es1371_update_ptr(struct es1371_state *s)
 			if (s->dma_adc.count >= s->dma_adc.fragsize) 
 				wake_up(&s->dma_adc.wait);
 		} else {
-			if (s->dma_adc.count > s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1)) {
+			if (s->dma_adc.count > (signed)(s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1))) {
 				s->ctrl &= ~CTRL_ADC_EN;
 				outl(s->ctrl, s->io+ES1371_REG_CONTROL);
 				s->dma_adc.error++;
@@ -853,7 +854,7 @@ static void es1371_update_ptr(struct es1371_state *s)
 		s->dma_dac1.total_bytes += diff;
 		if (s->dma_dac1.mapped) {
 			s->dma_dac1.count += diff;
-			if (s->dma_dac1.count >= s->dma_dac1.fragsize)
+			if (s->dma_dac1.count >= (signed)s->dma_dac1.fragsize)
 				wake_up(&s->dma_dac1.wait);
 		} else {
 			s->dma_dac1.count -= diff;
@@ -861,12 +862,12 @@ static void es1371_update_ptr(struct es1371_state *s)
 				s->ctrl &= ~CTRL_DAC1_EN;
 				outl(s->ctrl, s->io+ES1371_REG_CONTROL);
 				s->dma_dac1.error++;
-			} else if (s->dma_dac1.count <= s->dma_dac1.fragsize && !s->dma_dac1.endcleared) {
+			} else if (s->dma_dac1.count <= (signed)s->dma_dac1.fragsize && !s->dma_dac1.endcleared) {
 				clear_advance(s->dma_dac1.rawbuf, s->dma_dac1.dmasize, s->dma_dac1.swptr, 
 					      s->dma_dac1.fragsize, (s->sctrl & SCTRL_P1SEB) ? 0 : 0x80);
 				s->dma_dac1.endcleared = 1;
 			}
-			if (s->dma_dac1.count < s->dma_dac1.dmasize)
+			if (s->dma_dac1.count < (signed)s->dma_dac1.dmasize)
 				wake_up(&s->dma_dac1.wait);
 		}
 	}
@@ -876,7 +877,7 @@ static void es1371_update_ptr(struct es1371_state *s)
 		s->dma_dac2.total_bytes += diff;
 		if (s->dma_dac2.mapped) {
 			s->dma_dac2.count += diff;
-			if (s->dma_dac2.count >= s->dma_dac2.fragsize)
+			if (s->dma_dac2.count >= (signed)s->dma_dac2.fragsize)
 				wake_up(&s->dma_dac2.wait);
 		} else {
 			s->dma_dac2.count -= diff;
@@ -884,12 +885,12 @@ static void es1371_update_ptr(struct es1371_state *s)
 				s->ctrl &= ~CTRL_DAC2_EN;
 				outl(s->ctrl, s->io+ES1371_REG_CONTROL);
 				s->dma_dac2.error++;
-			} else if (s->dma_dac2.count <= s->dma_dac2.fragsize && !s->dma_dac2.endcleared) {
+			} else if (s->dma_dac2.count <= (signed)s->dma_dac2.fragsize && !s->dma_dac2.endcleared) {
 				clear_advance(s->dma_dac2.rawbuf, s->dma_dac2.dmasize, s->dma_dac2.swptr, 
 					      s->dma_dac2.fragsize, (s->sctrl & SCTRL_P2SEB) ? 0 : 0x80);
 				s->dma_dac2.endcleared = 1;
 			}
-			if (s->dma_dac2.count < s->dma_dac2.dmasize)
+			if (s->dma_dac2.count < (signed)s->dma_dac2.dmasize)
 				wake_up(&s->dma_dac2.wait);
 		}
 	}
@@ -1636,7 +1637,7 @@ static unsigned int es1371_poll(struct file *file, struct poll_table_struct *wai
 	es1371_update_ptr(s);
 	if (file->f_flags & FMODE_READ) {
 		if (s->dma_adc.mapped) {
-			if (s->dma_adc.count >= s->dma_adc.fragsize)
+			if (s->dma_adc.count >= (signed)s->dma_adc.fragsize)
 				mask |= POLLIN | POLLRDNORM;
 		} else {
 			if (s->dma_adc.count > 0)
@@ -1645,10 +1646,10 @@ static unsigned int es1371_poll(struct file *file, struct poll_table_struct *wai
 	}
 	if (file->f_flags & FMODE_WRITE) {
 		if (s->dma_dac2.mapped) {
-			if (s->dma_dac2.count >= s->dma_dac2.fragsize) 
+			if (s->dma_dac2.count >= (signed)s->dma_dac2.fragsize) 
 				mask |= POLLOUT | POLLWRNORM;
 		} else {
-			if (s->dma_dac2.dmasize > s->dma_dac2.count)
+			if ((signed)s->dma_dac2.dmasize > s->dma_dac2.count)
 				mask |= POLLOUT | POLLWRNORM;
 		}
 	}
@@ -2150,10 +2151,10 @@ static unsigned int es1371_poll_dac(struct file *file, struct poll_table_struct 
 	spin_lock_irqsave(&s->lock, flags);
 	es1371_update_ptr(s);
 	if (s->dma_dac1.mapped) {
-		if (s->dma_dac1.count >= s->dma_dac1.fragsize)
+		if (s->dma_dac1.count >= (signed)s->dma_dac1.fragsize)
 			mask |= POLLOUT | POLLWRNORM;
 	} else {
-		if (s->dma_dac1.dmasize > s->dma_dac1.count)
+		if ((signed)s->dma_dac1.dmasize > s->dma_dac1.count)
 			mask |= POLLOUT | POLLWRNORM;
 	}
 	spin_unlock_irqrestore(&s->lock, flags);
@@ -2716,7 +2717,7 @@ __initfunc(int init_es1371(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.3 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1371: version v0.4 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1371, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 

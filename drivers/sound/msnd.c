@@ -20,7 +20,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.c,v 1.5 1998/07/18 00:12:15 andrewtv Exp $
+ * $Id: msnd.c,v 1.9 1998/09/04 18:41:27 andrewtv Exp $
  *
  ********************************************************************/
 
@@ -168,16 +168,8 @@ int msnd_fifo_write(msnd_fifo *f, const char *buf, size_t len, int user)
 		}
 
 		if (user) {
-#ifdef LINUX20
-			if (verify_area(VERIFY_READ, buf , nwritten))
-				return nwritten;
-			
-			memcpy_fromfs(f->data + f->tail, buf, nwritten);
-#else
 			if (copy_from_user(f->data + f->tail, buf, nwritten))
 				return -EFAULT;
-#endif
-
 		} else
 			memcpy(f->data + f->tail, buf, nwritten);
 
@@ -214,15 +206,8 @@ int msnd_fifo_read(msnd_fifo *f, char *buf, size_t len, int user)
 		}
 		
 		if (user) {
-#ifdef LINUX20
-			if (verify_area(VERIFY_WRITE, buf, nread))
-				return nread;
-			
-			memcpy_tofs(buf, f->data + f->head, nread);
-#else
 			if (copy_to_user(buf, f->data + f->head, nread))
 				return -EFAULT;
-#endif
 		} else
 			memcpy(buf, f->data + f->head, nread);
 		
@@ -356,8 +341,10 @@ int msnd_disable_irq(multisound_dev_t *dev)
 	if (--dev->irq_ref > 0)
 		return 0;
 
-	if (dev->irq_ref < 0)
-		dev->irq_ref = 0;
+	if (dev->irq_ref < 0) {
+		printk(KERN_WARNING LOGNAME ": IRQ ref count is %d\n", dev->irq_ref);
+/*		dev->irq_ref = 0; */
+	}
 
 	printk(KERN_DEBUG LOGNAME ": Disabling IRQ\n");
 	

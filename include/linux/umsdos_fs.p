@@ -6,7 +6,7 @@ int compat_msdos_create(struct inode *dir,
 			int len,
 			int mode,
 			struct inode **inode);
-int  UMSDOS_dir_read ( struct file *filp,
+int  dummy_dir_read ( struct file *filp,
 	 char *buf,
 	 size_t size,
 	 loff_t *count);
@@ -24,37 +24,29 @@ int umsdos_lookup_x (
 			    struct dentry *dentry,
 			    int nopseudo);
 int UMSDOS_lookup(struct inode *dir,struct dentry *dentry);
-	 
-int umsdos_hlink2inode (struct inode *hlink, struct inode **result);
+
+struct dentry *umsdos_solve_hlink (struct dentry *hlink);
 /* emd.c 22/06/95 00.22.04 */
 ssize_t umsdos_file_write_kmem_real (struct file *filp,
 				const char *buf,
-				size_t  count,
-				loff_t *offs);
+				size_t  count);
 
-ssize_t umsdos_file_read_kmem (struct inode *emd_dir,
-	 struct file *filp,
+int fix_emd_filp (struct file *filp);
+
+ssize_t umsdos_file_read_kmem (struct file *filp,
 	 char *buf,
-	 size_t count,
-	 loff_t *offs);
-ssize_t umsdos_file_write_kmem (struct inode *emd_dir,
-	 struct file *filp,
+	 size_t count);
+ssize_t umsdos_file_write_kmem (struct file *filp,
 	 const char *buf,
-	 size_t count,
-	 loff_t *offs);
-ssize_t umsdos_emd_dir_write (struct inode *emd_dir,
-	 struct file *filp,
+	 size_t count);
+ssize_t umsdos_emd_dir_write (struct file *filp,
 	 char *buf,
-	 size_t count,
-	 loff_t *offs);
-ssize_t umsdos_emd_dir_read (struct inode *emd_dir,
-	 struct file *filp,
+	 size_t count);
+ssize_t umsdos_emd_dir_read (struct file *filp,
 	 char *buf,
-	 size_t count,
-	 loff_t *loffs);
+	 size_t count);
 struct inode *umsdos_emd_dir_lookup (struct inode *dir, int creat);
-int umsdos_emd_dir_readentry (struct inode *emd_dir,
-	 struct file *filp,
+int umsdos_emd_dir_readentry (struct file *filp,
 	 struct umsdos_dirent *entry);
 int umsdos_writeentry (struct inode *dir,
 	 struct inode *emd_dir,
@@ -72,11 +64,14 @@ int umsdos_findentry (struct inode *dir,
 /* file.c 25/01/95 02.25.38 */
 /* inode.c 12/06/95 09.49.40 */
 inline struct dentry *geti_dentry (struct inode *inode);
+void checkd_inode (struct inode *inode);
 inline void inc_count (struct inode *inode);
 void check_inode (struct inode *inode);
 void check_dentry (struct dentry *dentry);
+void check_dentry_path (struct dentry *dentry, const char *desc);
 void fill_new_filp (struct file *filp, struct dentry *dentry);
 void kill_dentry (struct dentry *dentry);
+void fin_dentry (struct dentry *dentry);
 struct dentry *creat_dentry (const char *name,
 			     const int len,
 			     struct inode *inode,
@@ -86,10 +81,9 @@ void UMSDOS_put_super (struct super_block *sb);
 int UMSDOS_statfs (struct super_block *sb,
 	 struct statfs *buf,
 	 int bufsiz);
-int compat_umsdos_real_lookup (struct inode *dir,
+struct dentry *compat_umsdos_real_lookup (struct dentry *d_dir,
 	 const char *name,
-	 int len,
-	 struct inode **result);
+	 int len);
 int umsdos_real_lookup(struct inode *inode,struct dentry *dentry);	 
 void umsdos_setup_dir_inode (struct inode *inode);
 void umsdos_set_dirinfo (struct inode *inode,
@@ -121,6 +115,9 @@ void umsdos_startlookup (struct inode *dir);
 void umsdos_unlockcreate (struct inode *dir);
 void umsdos_endlookup (struct inode *dir);
 
+int umsdos_readlink_x (	     struct dentry *dentry,
+			     char *buffer,
+			     int bufsiz);
 int UMSDOS_symlink (struct inode *dir,
 		    struct dentry *dentry,
 		    const char *symname);

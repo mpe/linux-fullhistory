@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * Clean swab support by Fare <rideau@ens.fr>
+ * Clean swab support by Fare <fare@tunes.org>
  * just hope no one is using NNUUXXI on __?64 structure elements
  * 64-bit clean thanks to Maciej W. Rozycki <macro@ds2.pg.gda.pl>
  *
@@ -31,8 +31,8 @@
 #define UFS_SBLOCK 8192
 #define UFS_SBSIZE 8192
 
-#define SECTOR_SIZE 512
-#define SECTOR_BITS 9
+#define UFS_SECTOR_SIZE 512
+#define UFS_SECTOR_BITS 9
 #define UFS_MAGIC 0x00011954
 #define UFS_CIGAM 0x54190100 /* byteswapped MAGIC */
 
@@ -68,8 +68,15 @@
 /* From here to next blank line, s_flags for ufs_sb_info */
 /* endianness */
 #define UFS_BYTESEX		0x00000001	/* mask; leave room to 0xF */
+#if defined(__LITTLE_ENDIAN) || defined(__BIG_ENDIAN)
+/* these are for sane architectures */
+#define UFS_NATIVE_ENDIAN	0x00000000
+#define UFS_SWABBED_ENDIAN	0x00000001
+#else
+/* these are for pervert architectures */
 #define UFS_LITTLE_ENDIAN	0x00000000
 #define UFS_BIG_ENDIAN		0x00000001
+#endif
 /* directory entry encoding */
 #define UFS_DE_MASK		0x00000010	/* mask for the following */
 #define UFS_DE_OLD		0x00000000

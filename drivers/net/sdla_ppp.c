@@ -848,7 +848,16 @@ static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_
 static struct enet_statistics *if_stats(struct device *dev)
 {
 	ppp_private_area_t *ppp_priv_area = dev->priv;
-	sdla_t *card = ppp_priv_area->card;
+	sdla_t *card;
+	
+	/*
+	 *	Device is down:No statistics
+	 */
+	 
+	if(ppp_priv_area==NULL)
+		return NULL;
+	
+	card = ppp_priv_area->card;
 	return &card->wandev.stats;
 }
 

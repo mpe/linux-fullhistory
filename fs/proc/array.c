@@ -530,14 +530,12 @@ static unsigned long get_wchan(struct task_struct *p)
 	    unsigned long fp, pc;
 	    unsigned long stack_page;
 	    int count = 0;
-	    extern int sys_pause (void);
 
-	    stack_page = p->kernel_stack_page;
-	    if (!stack_page)
-		    return 0;
+	    stack_page = (unsigned long)p;
 	    fp = ((struct switch_stack *)p->tss.ksp)->a6;
 	    do {
-		    if (fp < stack_page || fp >= 4088+stack_page)
+		    if (fp < stack_page+sizeof(struct task_struct) ||
+			fp >= 8184+stack_page)
 			    return 0;
 		    pc = ((unsigned long *)fp)[1];
 		/* FIXME: This depends on the order of these functions. */

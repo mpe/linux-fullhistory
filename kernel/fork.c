@@ -29,8 +29,10 @@
 #include <asm/mmu_context.h>
 #include <asm/uaccess.h>
 
-int nr_tasks=1;
-int nr_running=1;
+/* The idle tasks do not count.. */
+int nr_tasks=0;
+int nr_running=0;
+
 unsigned long int total_forks=0;	/* Handle normal Linux uptimes. */
 int last_pid=0;
 
@@ -556,19 +558,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->lock_depth = -1;		/* -1 = no lock */
 	p->start_time = jiffies;
 
-	{
-		/* This makes it visible to the rest of the system */
-		unsigned long flags;
-		write_lock_irqsave(&tasklist_lock, flags);
-		SET_LINKS(p);
-		hash_pid(p);
-		write_unlock_irqrestore(&tasklist_lock, flags);
-	}
-
-	nr_tasks++;
-	if (p->user)
-		atomic_inc(&p->user->count);
-
 	retval = -ENOMEM;
 	/* copy all the process information */
 	if (copy_files(clone_flags, p))
@@ -598,9 +587,23 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	current->counter >>= 1;
 	p->counter = current->counter;
 
-	/* Ok, add it to the run-queues, let it rip! */
+	/*
+	 * Ok, add it to the run-queues and make it
+	 * visible to the rest of the system.
+	 *
+	 * Let it rip!
+	 */
 	retval = p->pid;
 	if (retval) {
+		write_lock_irq(&tasklist_lock);
+		SET_LINKS(p);
+		hash_pid(p);
+		write_unlock_irq(&tasklist_lock);
+
+		nr_tasks++;
+		if (p->user)
+			atomic_inc(&p->user->count);
+
 		p->next_run = NULL;
 		p->prev_run = NULL;
 		wake_up_process(p);		/* do this last */
@@ -624,17 +627,6 @@ bad_fork_cleanup:
 	if (p->binfmt && p->binfmt->module)
 		__MOD_DEC_USE_COUNT(p->binfmt->module);
 
-	{
-		unsigned long flags;
-		write_lock_irqsave(&tasklist_lock, flags); 
-		unhash_pid(p);
-		REMOVE_LINKS(p);
-		write_unlock_irqrestore(&tasklist_lock, flags);
-	}
-
-	if (p->user)
-		atomic_dec(&p->user->count);
-	nr_tasks--;
 	add_free_taskslot(p->tarray_ptr);
 bad_fork_free:
 	free_task_struct(p);

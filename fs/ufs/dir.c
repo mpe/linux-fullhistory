@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * swab support by Francois-Rene Rideau <rideau@ens.fr> 19970406
+ * swab support by Francois-Rene Rideau <fare@tunes.org> 19970406
  *
  * 4.4BSD (FreeBSD) support added on February 1st 1998 by
  * Niels Kristian Bech Jensen <nkbj@image.dk> partially based
@@ -46,14 +46,14 @@ ufs_readdir (struct file * filp, void * dirent, filldir_t filldir)
 
 
 	/* Isn't that already done in the upper layer???
-         * the VFS layer really needs some explicit documentation!
-         */
+	 * the VFS layer really needs some explicit documentation!
+	 */
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
 
 	sb = inode->i_sb;
 	swab = sb->u.ufs_sb.s_swab;
-        flags = sb->u.ufs_sb.s_flags;
+	flags = sb->u.ufs_sb.s_flags;
 
 	UFSD(("ENTER, ino %lu  f_pos %lu\n", inode->i_ino, (unsigned long) filp->f_pos))
 
@@ -63,14 +63,14 @@ ufs_readdir (struct file * filp, void * dirent, filldir_t filldir)
 
 	while (!error && !stored && filp->f_pos < inode->i_size) {
 		lblk = (filp->f_pos) >> sb->s_blocksize_bits;
-	        /* XXX - ufs_bmap() call needs error checking */
-	        blk = ufs_bmap(inode, lblk);
+		/* XXX - ufs_bmap() call needs error checking */
+		blk = ufs_bmap(inode, lblk);
 		bh = bread (sb->s_dev, blk, sb->s_blocksize);
 		if (!bh) {
-	                /* XXX - error - skip to the next block */
-	                printk("ufs_readdir: "
+			/* XXX - error - skip to the next block */
+			printk("ufs_readdir: "
 			       "dir inode %lu has a hole at offset %lu\n",
-	                       inode->i_ino, (unsigned long int)filp->f_pos);
+			       inode->i_ino, (unsigned long int)filp->f_pos);
 			filp->f_pos += sb->s_blocksize - offset;
 			continue;
 		}
@@ -103,23 +103,23 @@ revalidate:
 		while (!error && filp->f_pos < inode->i_size
 		       && offset < sb->s_blocksize) {
 			de = (struct ufs_dir_entry *) (bh->b_data + offset);
-	                /* XXX - put in a real ufs_check_dir_entry() */
-	                if ((de->d_reclen == 0) || (ufs_namlen(de) == 0)) {
+			/* XXX - put in a real ufs_check_dir_entry() */
+			if ((de->d_reclen == 0) || (ufs_namlen(de) == 0)) {
 			/* SWAB16() was unneeded -- compare to 0 */
-	                        filp->f_pos = (filp->f_pos &
-				              (sb->s_blocksize - 1)) +
-				               sb->s_blocksize;
-	                        brelse(bh);
-	                        return stored;
-	                }
+				filp->f_pos = (filp->f_pos &
+					      (sb->s_blocksize - 1)) +
+					       sb->s_blocksize;
+				brelse(bh);
+				return stored;
+			}
 #if 0 /* XXX */
 			if (!ext2_check_dir_entry ("ext2_readdir", inode, de,
 			/* XXX - beware about de having to be swabped somehow */
 						   bh, offset)) {
 				/* On error, skip the f_pos to the
-	                           next block. */
+				   next block. */
 				filp->f_pos = (filp->f_pos &
-				              (sb->s_blocksize - 1)) +
+					      (sb->s_blocksize - 1)) +
 					       sb->s_blocksize;
 				brelse (bh);
 				return stored;
@@ -139,7 +139,7 @@ revalidate:
 				UFSD(("filldir(%s,%u)\n", de->d_name, SWAB32(de->d_ino)))
 				UFSD(("namlen %u\n", ufs_namlen(de)))
 				error = filldir(dirent, de->d_name, ufs_namlen(de),
-				                filp->f_pos, SWAB32(de->d_ino));
+						filp->f_pos, SWAB32(de->d_ino));
 				if (error)
 					break;
 				if (version != inode->i_version)

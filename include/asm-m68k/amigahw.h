@@ -20,7 +20,7 @@
      *  Different Amiga models
      */
 
-extern u_long amiga_model;
+extern unsigned long amiga_model;
 
 #define AMI_UNKNOWN	(0)
 #define AMI_500		(1)
@@ -44,7 +44,7 @@ extern u_long amiga_model;
      *  Chipsets
      */
 
-extern u_long amiga_chipset;
+extern unsigned long amiga_chipset;
 
 #define CS_STONEAGE	(0)
 #define CS_OCS		(1)
@@ -56,12 +56,12 @@ extern u_long amiga_chipset;
      *  Miscellaneous
      */
 
-extern u_long amiga_eclock;		/* 700 kHz E Peripheral Clock */
-extern u_long amiga_masterclock;	/* 28 MHz Master Clock */
-extern u_long amiga_colorclock;		/* 3.5 MHz Color Clock */
-extern u_long amiga_chip_size;		/* Chip RAM Size (bytes) */
-extern u_char amiga_vblank;		/* VBLANK Frequency */
-extern u_char amiga_psfreq;		/* Power Supply Frequency */
+extern unsigned long amiga_eclock;	/* 700 kHz E Peripheral Clock */
+extern unsigned long amiga_masterclock;	/* 28 MHz Master Clock */
+extern unsigned long amiga_colorclock;	/* 3.5 MHz Color Clock */
+extern unsigned long amiga_chip_size;	/* Chip RAM Size (bytes) */
+extern unsigned char amiga_vblank;	/* VBLANK Frequency */
+extern unsigned char amiga_psfreq;	/* Power Supply Frequency */
 
 
 #define AMIGAHW_DECLARE(name)	unsigned name : 1
@@ -111,122 +111,122 @@ struct amiga_hw_present {
 extern struct amiga_hw_present amiga_hw_present;
 
 struct CUSTOM {
-    u_short bltddat;
-    u_short dmaconr;
-    u_short vposr;
-    u_short vhposr;
-    u_short dskdatr;
-    u_short joy0dat;
-    u_short joy1dat;
-    u_short clxdat;
-    u_short adkconr;
-    u_short pot0dat;
-    u_short pot1dat;
-    u_short potgor;
-    u_short serdatr;
-    u_short dskbytr;
-    u_short intenar;
-    u_short intreqr;
-    u_char  *dskptr;
-    u_short dsklen;
-    u_short dskdat;
-    u_short refptr;
-    u_short vposw;
-    u_short vhposw;
-    u_short copcon;
-    u_short serdat;
-    u_short serper;
-    u_short potgo;
-    u_short joytest;
-    u_short strequ;
-    u_short strvbl;
-    u_short strhor;
-    u_short strlong;
-    u_short bltcon0;
-    u_short bltcon1;
-    u_short bltafwm;
-    u_short bltalwm;
-    u_char  *bltcpt;
-    u_char  *bltbpt;
-    u_char  *bltapt;
-    u_char  *bltdpt;
-    u_short bltsize;
-    u_char  pad2d;
-    u_char  bltcon0l;
-    u_short bltsizv;
-    u_short bltsizh;
-    u_short bltcmod;
-    u_short bltbmod;
-    u_short bltamod;
-    u_short bltdmod;
-    u_short spare2[4];
-    u_short bltcdat;
-    u_short bltbdat;
-    u_short bltadat;
-    u_short spare3[3];
-    u_short deniseid;
-    u_short dsksync;
-    u_short *cop1lc;
-    u_short *cop2lc;
-    u_short copjmp1;
-    u_short copjmp2;
-    u_short copins;
-    u_short diwstrt;
-    u_short diwstop;
-    u_short ddfstrt;
-    u_short ddfstop;
-    u_short dmacon;
-    u_short clxcon;
-    u_short intena;
-    u_short intreq;
-    u_short adkcon;
+    unsigned short bltddat;
+    unsigned short dmaconr;
+    unsigned short vposr;
+    unsigned short vhposr;
+    unsigned short dskdatr;
+    unsigned short joy0dat;
+    unsigned short joy1dat;
+    unsigned short clxdat;
+    unsigned short adkconr;
+    unsigned short pot0dat;
+    unsigned short pot1dat;
+    unsigned short potgor;
+    unsigned short serdatr;
+    unsigned short dskbytr;
+    unsigned short intenar;
+    unsigned short intreqr;
+    unsigned char  *dskptr;
+    unsigned short dsklen;
+    unsigned short dskdat;
+    unsigned short refptr;
+    unsigned short vposw;
+    unsigned short vhposw;
+    unsigned short copcon;
+    unsigned short serdat;
+    unsigned short serper;
+    unsigned short potgo;
+    unsigned short joytest;
+    unsigned short strequ;
+    unsigned short strvbl;
+    unsigned short strhor;
+    unsigned short strlong;
+    unsigned short bltcon0;
+    unsigned short bltcon1;
+    unsigned short bltafwm;
+    unsigned short bltalwm;
+    unsigned char  *bltcpt;
+    unsigned char  *bltbpt;
+    unsigned char  *bltapt;
+    unsigned char  *bltdpt;
+    unsigned short bltsize;
+    unsigned char  pad2d;
+    unsigned char  bltcon0l;
+    unsigned short bltsizv;
+    unsigned short bltsizh;
+    unsigned short bltcmod;
+    unsigned short bltbmod;
+    unsigned short bltamod;
+    unsigned short bltdmod;
+    unsigned short spare2[4];
+    unsigned short bltcdat;
+    unsigned short bltbdat;
+    unsigned short bltadat;
+    unsigned short spare3[3];
+    unsigned short deniseid;
+    unsigned short dsksync;
+    unsigned short *cop1lc;
+    unsigned short *cop2lc;
+    unsigned short copjmp1;
+    unsigned short copjmp2;
+    unsigned short copins;
+    unsigned short diwstrt;
+    unsigned short diwstop;
+    unsigned short ddfstrt;
+    unsigned short ddfstop;
+    unsigned short dmacon;
+    unsigned short clxcon;
+    unsigned short intena;
+    unsigned short intreq;
+    unsigned short adkcon;
     struct {
-	u_short	*audlc;
-	u_short audlen;
-	u_short audper;
-	u_short audvol;
-	u_short auddat;
-	u_short audspare[2];
+	unsigned short	*audlc;
+	unsigned short audlen;
+	unsigned short audper;
+	unsigned short audvol;
+	unsigned short auddat;
+	unsigned short audspare[2];
     } aud[4];
-    u_char  *bplpt[8];
-    u_short bplcon0;
-    u_short bplcon1;
-    u_short bplcon2;
-    u_short bplcon3;
-    u_short bpl1mod;
-    u_short bpl2mod;
-    u_short bplcon4;
-    u_short clxcon2;
-    u_short bpldat[8];
-    u_char  *sprpt[8];
+    unsigned char  *bplpt[8];
+    unsigned short bplcon0;
+    unsigned short bplcon1;
+    unsigned short bplcon2;
+    unsigned short bplcon3;
+    unsigned short bpl1mod;
+    unsigned short bpl2mod;
+    unsigned short bplcon4;
+    unsigned short clxcon2;
+    unsigned short bpldat[8];
+    unsigned char  *sprpt[8];
     struct {
-	u_short pos;
-	u_short ctl;
-	u_short dataa;
-	u_short datab;
+	unsigned short pos;
+	unsigned short ctl;
+	unsigned short dataa;
+	unsigned short datab;
     } spr[8];
-    u_short color[32];
-    u_short htotal;
-    u_short hsstop;
-    u_short hbstrt;
-    u_short hbstop;
-    u_short vtotal;
-    u_short vsstop;
-    u_short vbstrt;
-    u_short vbstop;
-    u_short sprhstrt;
-    u_short sprhstop;
-    u_short bplhstrt;
-    u_short bplhstop;
-    u_short hhposw;
-    u_short hhposr;
-    u_short beamcon0;
-    u_short hsstrt;
-    u_short vsstrt;
-    u_short hcenter;
-    u_short diwhigh;
-    u_short spare4[11];
-    u_short fmode;
+    unsigned short color[32];
+    unsigned short htotal;
+    unsigned short hsstop;
+    unsigned short hbstrt;
+    unsigned short hbstop;
+    unsigned short vtotal;
+    unsigned short vsstop;
+    unsigned short vbstrt;
+    unsigned short vbstop;
+    unsigned short sprhstrt;
+    unsigned short sprhstop;
+    unsigned short bplhstrt;
+    unsigned short bplhstop;
+    unsigned short hhposw;
+    unsigned short hhposr;
+    unsigned short beamcon0;
+    unsigned short hsstrt;
+    unsigned short vsstrt;
+    unsigned short hcenter;
+    unsigned short diwhigh;
+    unsigned short spare4[11];
+    unsigned short fmode;
 };
 
 /*
@@ -249,21 +249,21 @@ struct CUSTOM {
 #define DMAF_ALL		(0x01FF)
 
 struct CIA {
-    u_char pra; 		char pad0[0xff];
-    u_char prb; 		char pad1[0xff];
-    u_char ddra;		char pad2[0xff];
-    u_char ddrb;		char pad3[0xff];
-    u_char talo;		char pad4[0xff];
-    u_char tahi;		char pad5[0xff];
-    u_char tblo;		char pad6[0xff];
-    u_char tbhi;		char pad7[0xff];
-    u_char todlo;		char pad8[0xff];
-    u_char todmid;		char pad9[0xff];
-    u_char todhi;		char pada[0x1ff];
-    u_char sdr; 		char padb[0xff];
-    u_char icr; 		char padc[0xff];
-    u_char cra; 		char padd[0xff];
-    u_char crb; 		char pade[0xff];
+    unsigned char pra; 		char pad0[0xff];
+    unsigned char prb; 		char pad1[0xff];
+    unsigned char ddra;		char pad2[0xff];
+    unsigned char ddrb;		char pad3[0xff];
+    unsigned char talo;		char pad4[0xff];
+    unsigned char tahi;		char pad5[0xff];
+    unsigned char tblo;		char pad6[0xff];
+    unsigned char tbhi;		char pad7[0xff];
+    unsigned char todlo;	char pad8[0xff];
+    unsigned char todmid;	char pad9[0xff];
+    unsigned char todhi;	char pada[0x1ff];
+    unsigned char sdr; 		char padb[0xff];
+    unsigned char icr; 		char padc[0xff];
+    unsigned char cra; 		char padd[0xff];
+    unsigned char crb; 		char pade[0xff];
 };
 
 #define zTwoBase (0x80000000)

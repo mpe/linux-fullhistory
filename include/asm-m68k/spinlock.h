@@ -5,8 +5,16 @@
  * We don't do SMP on the m68k .... at least not yet.
  */
 
-typedef struct { int dummy; } spinlock_t;
+/*
+ * Gcc-2.7.x has a nasty bug with empty initializers.
+ */
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
+typedef struct { } spinlock_t;
+#define SPIN_LOCK_UNLOCKED { }
+#else
+typedef struct { int gcc_is_buggy; } spinlock_t;
 #define SPIN_LOCK_UNLOCKED { 0 }
+#endif
 
 #define spin_lock_init(lock)	do { } while(0)
 #define spin_lock(lock)		do { } while(0)
@@ -31,8 +39,8 @@ typedef struct { int dummy; } spinlock_t;
  * irq-safe write-lock, but readers can get non-irqsafe
  * read-locks.
  */
-typedef struct { int dummy; } rwlock_t;
-#define RW_LOCK_UNLOCKED { 0 }
+typedef struct { } rwlock_t;
+#define RW_LOCK_UNLOCKED { }
 
 #define read_lock(lock)		do { } while(0)
 #define read_unlock(lock)	do { } while(0)

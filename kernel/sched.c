@@ -844,8 +844,7 @@ static unsigned long count_active_tasks(void)
 
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
-		if (p->pid &&
-		    (p->state == TASK_RUNNING ||
+		if ((p->state == TASK_RUNNING ||
 		     p->state == TASK_UNINTERRUPTIBLE ||
 		     p->state == TASK_SWAPPING))
 			nr += FIXED_1;

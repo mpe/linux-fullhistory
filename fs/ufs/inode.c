@@ -91,7 +91,7 @@ static inline unsigned ufs_block_bmap (struct buffer_head * bh, unsigned nr,
 		return 0;
 	tmp = SWAB32(((u32 *) bh->b_data)[nr >> uspi->s_fpbshift]) + (nr & uspi->s_fpbmask);
 	brelse (bh);
-	UFSD(("EXIT, resutl %u\n", tmp))
+	UFSD(("EXIT, result %u\n", tmp))
 	return tmp;
 }
 
@@ -254,7 +254,7 @@ repeat:
 	 */
 	else /* (lastblock > block) */ {
 		if (lastblock && (tmp = SWAB32(inode->u.ufs_i.i_u1.i_data[lastblock-1])))
- 			goal = tmp + uspi->s_fpb;
+			goal = tmp + uspi->s_fpb;
 		tmp = ufs_new_fragments (inode, p, fragment - blockoff, 
 			goal, uspi->s_fpb, err);
 	}
@@ -322,10 +322,10 @@ repeat:
 		*err = -EFBIG;
 		return NULL;
 	}
- 	if (block && (tmp = SWAB32(((u32*)bh->b_data)[block-1]) + uspi->s_fpb))
- 		goal = tmp + uspi->s_fpb;
- 	else
- 		goal = bh->b_blocknr + uspi->s_fpb;
+	if (block && (tmp = SWAB32(((u32*)bh->b_data)[block-1]) + uspi->s_fpb))
+		goal = tmp + uspi->s_fpb;
+	else
+		goal = bh->b_blocknr + uspi->s_fpb;
 	tmp = ufs_new_fragments (inode, p, ufs_blknum(new_fragment), goal, uspi->s_fpb, err);
 	if (!tmp) {
 		if (SWAB32(*p)) {
@@ -345,7 +345,7 @@ repeat:
 	inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);
 	brelse (bh);
-	UFSD(("EXIT, resutl %u\n", tmp + blockoff))
+	UFSD(("EXIT, result %u\n", tmp + blockoff))
 	return result;
 }
 
@@ -492,7 +492,7 @@ void ufs_read_inode (struct inode * inode)
 	}
 	
 	/*
-	 * Linux i_size can be 32 on some architektures. We will mark 
+	 * Linux i_size can be 32 on some architectures. We will mark 
 	 * big files as read only and let user access first 32 bits.
 	 */
 	inode->u.ufs_i.i_size = SWAB64(ufs_inode->ui_size);

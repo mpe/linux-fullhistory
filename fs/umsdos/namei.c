@@ -18,9 +18,6 @@
 #include <linux/umsdos_fs.h>
 #include <linux/malloc.h>
 
-#define PRINTK(x)
-#define Printk(x)	printk x
-
 #if 1
 /*
  * Wait for creation exclusivity.
@@ -230,7 +227,7 @@ static int umsdos_create_any (
 	struct dentry *fake;
 
 	Printk (("umsdos_create_any /mn/: create %.*s in dir=%lu - nevercreat=/", (int) dentry->d_name.len, dentry->d_name.name, dir->i_ino));
-	check_dentry (dentry);
+	check_dentry_path (dentry, "umsdos_create_any");
 	ret = umsdos_nevercreat (dir, dentry, -EEXIST);
 	Printk (("%d/\n", ret));
 	if (ret == 0) {
@@ -262,8 +259,14 @@ static int umsdos_create_any (
 					Printk (("Creation OK: [dir %lu] %.*s pid=%d pos %ld\n", dir->i_ino,
 						 info.fake.len, info.fake.fname, current->pid, info.f_pos));
 
+					check_dentry_path (dentry, "umsdos_create_any: BEG dentry");
+					check_dentry_path (fake, "umsdos_create_any: BEG fake");
 					d_instantiate (dentry, inode);	/* long name also gets inode info */
-					dput (fake);	/* FIXME: is this ok ? we try to kill short name dentry that we don't need */
+					inc_count (fake->d_inode); /* we must do it, since dput(fake) will iput(our_inode) which we still need for long name (dentry) */
+					/* dput (fake);	/ * FIXME: is this OK ? we try to kill short name dentry that we don't need */
+					check_dentry_path (dentry, "umsdos_create_any: END dentry");
+					check_dentry_path (fake, "umsdos_create_any: END fake");
+
 				} else {
 					/* #Specification: create / file exist in DOS
 					 * Here is a situation. Trying to create a file with
@@ -350,14 +353,12 @@ static int umsdos_rename_f (
 				/* != 0, this is the value of flags */
 	int ret = -EPERM;
 	struct umsdos_info old_info;
-	int old_ret = umsdos_parse (old_dentry->d_name.name,
-				    old_dentry->d_name.len, &old_info);
+	int old_ret = umsdos_parse (old_dentry->d_name.name, old_dentry->d_name.len, &old_info);
 	struct umsdos_info new_info;
-	int new_ret = umsdos_parse (new_dentry->d_name.name,
-				    new_dentry->d_name.len, &new_info);
+	int new_ret = umsdos_parse (new_dentry->d_name.name, new_dentry->d_name.len, &new_info);
 
-	check_dentry (old_dentry);
-	check_dentry (new_dentry);
+	check_dentry_path (old_dentry, "umsdos_rename_f OLD");
+	check_dentry_path (new_dentry, "umsdos_rename_f OLD");
 
 	chkstk ();
 	Printk (("umsdos_rename %d %d ", old_ret, new_ret));
@@ -386,10 +387,12 @@ static int umsdos_rename_f (
 					chkstk ();
 					Printk (("ret %d %d ", ret, new_info.fake.len));
 					if (ret == 0) {
-						struct dentry *old, *new;
+						struct dentry *old, *new, *d_old_dir, *dret;
 						struct inode *oldid = NULL;
 
-						ret = compat_umsdos_real_lookup (old_dir, old_info.fake.fname, old_info.fake.len, &oldid);
+						d_old_dir = creat_dentry ("@d_old_dir@", 11, old_dir, NULL);
+						dret = compat_umsdos_real_lookup (d_old_dir, old_info.fake.fname, old_info.fake.len);
+						if (dret) oldid = dret->d_inode;
 						old = creat_dentry (old_info.fake.fname, old_info.fake.len, oldid, old_dentry->d_parent);
 
 						new = creat_dentry (new_info.fake.fname, new_info.fake.len, NULL, new_dentry->d_parent);
@@ -398,7 +401,9 @@ static int umsdos_rename_f (
 						inc_count (old_dir);
 						inc_count (new_dir);	/* Both inode are needed later */
 						
-						check_dentry (old); check_dentry (new);	/* FIXME: debug only */
+						check_dentry_path (old, "umsdos_rename_f OLD2");
+						check_dentry_path (new, "umsdos_rename_f NEW2");
+						
 						ret = msdos_rename (old_dir, old, new_dir, new);
 						chkstk ();
 						Printk (("after m_rename ret %d ", ret));
@@ -441,6 +446,7 @@ static int umsdos_rename_f (
 									/* iput (inode); FIXME */
 								}
 							}
+							fin_dentry (dret);
 						}
 					}
 				} else {
@@ -458,8 +464,8 @@ static int umsdos_rename_f (
 		umsdos_unlockcreate (old_dir);
 		umsdos_unlockcreate (new_dir);
 	}
-	check_dentry (old_dentry);
-	check_dentry (new_dentry);
+	check_dentry_path (old_dentry, "umsdos_rename_f OLD3");
+	check_dentry_path (new_dentry, "umsdos_rename_f NEW3");
 
 	Printk ((" _ret=%d\n", ret));
 	return ret;
@@ -467,7 +473,7 @@ static int umsdos_rename_f (
 
 /*
  * Setup un Symbolic link or a (pseudo) hard link
- * Return a negative error code or 0 if ok.
+ * Return a negative error code or 0 if OK.
  */
 static int umsdos_symlink_x (
 				    struct inode *dir,
@@ -497,14 +503,14 @@ static int umsdos_symlink_x (
 	if (ret == 0) {
 		int len = strlen (symname);
 		struct file filp;
-		loff_t myofs = 0;
 
 		fill_new_filp (&filp, dentry);
+		filp.f_pos = 0;
 
 		/* Make the inode acceptable to MSDOS FIXME */
-		Printk ((KERN_WARNING "umsdos_symlink_x: /mn/ Is this ok?\n"));
+		Printk ((KERN_WARNING "umsdos_symlink_x:  /mn/ is this OK?\n"));
 		Printk ((KERN_WARNING "   symname=%s ; dentry name=%.*s (ino=%lu)\n", symname, (int) dentry->d_name.len, dentry->d_name.name, dentry->d_inode->i_ino));
-		ret = umsdos_file_write_kmem_real (&filp, symname, len, &myofs);
+		ret = umsdos_file_write_kmem_real (&filp, symname, len);
 		/* dput(dentry); ?? where did this come from FIXME */
 		
 		if (ret >= 0) {
@@ -528,7 +534,7 @@ static int umsdos_symlink_x (
 
 /*
  * Setup un Symbolic link.
- * Return a negative error code or 0 if ok.
+ * Return a negative error code or 0 if OK.
  */
 int UMSDOS_symlink (
 			   struct inode *dir,
@@ -550,19 +556,18 @@ int UMSDOS_link (
 	struct inode *oldinode = olddentry->d_inode;
 
 	/* #Specification: hard link / strategy
-	 * Well ... hard link are difficult to implement on top of an
-	 * MsDOS fat file system. Unlike UNIX file systems, there are no
-	 * inode. A directory entry hold the functionality of the inode
-	 * and the entry.
+	 * Hard links are difficult to implement on top of an MS-DOS FAT file
+	 * system. Unlike Unix file systems, there are no inodes. A directory
+	 * entry holds the functionality of the inode and the entry.
 	 * 
 	 * We will used the same strategy as a normal Unix file system
-	 * (with inode) except we will do it symbolically (using paths).
+	 * (with inodes) except we will do it symbolically (using paths).
 	 * 
 	 * Because anything can happen during a DOS session (defragment,
-	 * directory sorting, etc...), we can't rely on MsDOS pseudo
+	 * directory sorting, etc.), we can't rely on an MS-DOS pseudo
 	 * inode number to record the link. For this reason, the link
 	 * will be done using hidden symbolic links. The following
-	 * scenario illustrate how it work.
+	 * scenario illustrates how it works.
 	 * 
 	 * Given a file /foo/file
 	 * 
@@ -733,9 +738,12 @@ int UMSDOS_create (
 			  int mode	/* Permission bit + file type ??? */
 )
 {				/* Will hold the inode of the newly created file */
+	int ret;
 	Printk ((KERN_ERR "UMSDOS_create: entering\n"));
-	check_dentry (dentry);
-	return umsdos_create_any (dir, dentry, mode, 0, 0);
+	check_dentry_path (dentry, "UMSDOS_create START");
+	ret = umsdos_create_any (dir, dentry, mode, 0, 0);
+	check_dentry_path (dentry, "UMSDOS_create END");
+	return ret;
 }
 
 
@@ -771,7 +779,7 @@ int UMSDOS_mkdir (
 			if (ret == 0) {
 				struct dentry *temp, *tdir;
 
-				tdir = creat_dentry ("mkd-dir", 7, dir, NULL);
+				tdir = creat_dentry ("@mkd-dir@", 9, dir, NULL);
 				temp = creat_dentry (info.fake.fname, info.fake.len, NULL, tdir);
 				inc_count (dir);
 				ret = msdos_mkdir (dir, temp, mode);
@@ -789,15 +797,17 @@ int UMSDOS_mkdir (
 					 * create immediately an EMD file in the new
 					 * sub-directory so it inherit UMSDOS semantic.
 					 */
-					struct inode *subdir;
+					struct inode *subdir=NULL;
+					struct dentry *d_dir, *dret;
 
-					ret = compat_umsdos_real_lookup (dir, info.fake.fname,
-						 info.fake.len, &subdir);
-					if (ret == 0) {
-						struct dentry *tdentry,
-						*tdsub;
+					d_dir = creat_dentry ("@d_dir5@", 7, dir, NULL);
+					dret = compat_umsdos_real_lookup (d_dir, info.fake.fname, info.fake.len);
+					if (dret) {
+						struct dentry *tdentry,	*tdsub;
 
-						tdsub = creat_dentry ("mkd-emd", 7, subdir, NULL);
+						subdir = dret->d_inode;
+
+						tdsub = creat_dentry ("@mkd-emd@", 9, subdir, NULL);
 						tdentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, NULL, tdsub);
 						ret = msdos_create (subdir, tdentry, S_IFREG | 0777);
 						kill_dentry (tdentry);	/* we don't want empty EMD file to be visible ! too bad kill_dentry does nothing at the moment :-)  FIXME */
@@ -806,11 +816,12 @@ int UMSDOS_mkdir (
 						subdir = NULL;
 						d_instantiate (dentry, temp->d_inode);
 						/* iput (result); FIXME */
+						fin_dentry (dret);
 					}
 					if (ret < 0) {
 						printk ("UMSDOS: Can't create empty --linux-.---\n");
 					}
-					/* iput (subdir); FIXME */
+					/*iput (subdir); FIXME*/
 				}
 			}
 			umsdos_unlockcreate (dir);
@@ -847,9 +858,9 @@ int UMSDOS_mknod (
 
 	int ret;
 	
-	check_dentry (dentry);
+	check_dentry_path (dentry, "UMSDOS_mknod START");
 	ret = umsdos_create_any (dir, dentry, mode, rdev, 0);
-	check_dentry (dentry);
+	check_dentry_path (dentry, "UMSDOS_mknod END");
 
 	/* dput(dentry); / * /mn/ FIXME! */
 	return ret;
@@ -864,19 +875,19 @@ int UMSDOS_rmdir (
 {
 	/* #Specification: style / iput strategy
 	 * In the UMSDOS project, I am trying to apply a single
-	 * programming style regarding inode management. Many
-	 * entry point are receiving an inode to act on, and must
+	 * programming style regarding inode management.  Many
+	 * entry points are receiving an inode to act on, and must
 	 * do an iput() as soon as they are finished with
 	 * the inode.
 	 * 
-	 * For simple case, there is no problem. When you introduce
-	 * error checking, you end up with many iput placed around the
+	 * For simple cases, there is no problem.  When you introduce
+	 * error checking, you end up with many iput() calls in the
 	 * code.
 	 * 
 	 * The coding style I use all around is one where I am trying
 	 * to provide independent flow logic (I don't know how to
-	 * name this). With this style, code is easier to understand
-	 * but you rapidly get iput() all around. Here is an exemple
+	 * name this).  With this style, code is easier to understand
+	 * but you must do iput() everywhere.  Here is an example
 	 * of what I am trying to avoid.
 	 * 
 	 * #
@@ -887,7 +898,7 @@ int UMSDOS_rmdir (
 	 * }
 	 * ...
 	 * if (c){
-	 * // Complex state. Was b true ? 
+	 * // Complex state. Was b true? 
 	 * ...
 	 * }
 	 * ...
@@ -896,19 +907,19 @@ int UMSDOS_rmdir (
 	 * if (d){
 	 * // ...
 	 * }
-	 * // Was iput finally done ?
+	 * // Was iput finally done?
 	 * return status;
 	 * #
 	 * 
-	 * Here is the style I am using. Still sometime I do the
-	 * first when things are very simple (or very complicated :-( )
+	 * Here is the style I am using.  Still sometimes I do the
+	 * first when things are very simple (or very complicated :-( ).
 	 * 
 	 * #
 	 * if (a){
 	 * if (b){
 	 * ...
 	 * }else if (c){
-	 * // A single state gets here
+	 * // A single state gets here.
 	 * }
 	 * }else if (d){
 	 * ...
@@ -926,7 +937,7 @@ int UMSDOS_rmdir (
 	 * to do an iput()). One iput by inode. There is also one iput()
 	 * at the places where a successful operation is achieved. This
 	 * iput() is often done by a sub-function (often from the msdos
-	 * file system). So I get one too many iput() ? At the place
+	 * file system).  So I get one too many iput()?  At the place
 	 * where an iput() is done, the inode is simply nulled, disabling
 	 * the last one.
 	 * 
@@ -954,7 +965,7 @@ int UMSDOS_rmdir (
 
 	ret = umsdos_nevercreat (dir, dentry, -EPERM);
 	if (ret == 0) {
-		volatile struct inode *sdir;
+		/* volatile - DELME: I see no reason vor volatile /mn/ */ struct inode *sdir;
 
 		inc_count (dir);
 		ret = umsdos_lookup_x (dir, dentry, 0);
@@ -974,7 +985,7 @@ int UMSDOS_rmdir (
 			} else if ((empty = umsdos_isempty (sdir)) != 0) {
 				struct dentry *tdentry, *tedir;
 
-				tedir = creat_dentry ("emd-rmd", 7, dir, NULL);
+				tedir = creat_dentry ("@emd-rmd@", 9, dir, NULL);
 				tdentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, NULL, tedir);
 				umsdos_real_lookup (dir, tdentry);	/* fill inode part */
 				Printk (("isempty %d i_count %d ", empty, sdir->i_count));
@@ -1002,7 +1013,7 @@ int UMSDOS_rmdir (
 						/* the mangling */
 						umsdos_findentry (dir, &info, 2);
 
-						tdir = creat_dentry ("dir-rmd", 7, dir, NULL);
+						tdir = creat_dentry ("@dir-rmd@", 9, dir, NULL);
 						temp = creat_dentry (info.fake.fname, info.fake.len, NULL, tdir);
 						umsdos_real_lookup (dir, temp);		/* fill inode part */
 
@@ -1078,7 +1089,7 @@ int UMSDOS_unlink (
 				    current->fsuid == dir->i_uid) {
 					if (info.entry.flags & UMSDOS_HLINK) {
 						/* #Specification: hard link / deleting a link
-						 * When we deletes a file, and this file is a link
+						 * When we delete a file, and this file is a link
 						 * we must subtract 1 to the nlink field of the
 						 * hidden link.
 						 * 
@@ -1123,9 +1134,9 @@ int UMSDOS_unlink (
 							struct dentry *temp,
 							*tdir;
 
-							Printk (("Avant msdos_unlink %.*s ", info.fake.len, info.fake.fname));
-							inc_count (dir);	/* FIXME /mn/ is this needed anymore now that msdos_unlink locks dir using d_parent ? */
-							tdir = creat_dentry ("dir-del", 7, dir, NULL);	/* FIXME /mn/: do we need iget(dir->i_ino) or would dir itself suffice ? */
+							Printk (("Before msdos_unlink %.*s ", info.fake.len, info.fake.fname));
+							/* inc_count (dir);	/ * FIXME /mn/ is this needed any more now that msdos_unlink locks directories using d_parent ? */
+							tdir = creat_dentry ("@dir-del@", 9, dir, NULL);	/* FIXME /mn/: do we need iget(dir->i_ino) or would dir itself suffice ? */
 							temp = creat_dentry (info.fake.fname, info.fake.len, NULL, tdir);
 							umsdos_real_lookup (dir, temp);		/* fill inode part */
 
@@ -1141,7 +1152,7 @@ int UMSDOS_unlink (
 					}
 				} else {
 					/* sticky bit set and we've not got permission */
-					Printk (("sticky set "));
+					Printk (("Sticky bit set. "));
 					ret = -EPERM;
 				}
 			}
@@ -1156,7 +1167,7 @@ int UMSDOS_unlink (
 
 
 /*
- * Rename a file (move) in the file system.
+ * Rename (move) a file.
  */
 int UMSDOS_rename (
 			  struct inode *old_dir,
@@ -1166,14 +1177,14 @@ int UMSDOS_rename (
 {
 	/* #Specification: weakness / rename
 	 * There is a case where UMSDOS rename has a different behavior
-	 * than normal UNIX file system. Renaming an open file across
-	 * directory boundary does not work. Renaming an open file within
-	 * a directory does work however.
+	 * than a normal Unix file system.  Renaming an open file across
+	 * directory boundary does not work.  Renaming an open file within
+	 * a directory does work, however.
 	 * 
-	 * The problem (not sure) is in the linux VFS msdos driver.
+	 * The problem may is in Linux VFS driver for msdos.
 	 * I believe this is not a bug but a design feature, because
-	 * an inode number represent some sort of directory address
-	 * in the MSDOS directory structure. So moving the file into
+	 * an inode number represents some sort of directory address
+	 * in the MSDOS directory structure, so moving the file into
 	 * another directory does not preserve the inode number.
 	 */
 	int ret = umsdos_nevercreat (new_dir, new_dentry, -EEXIST);
@@ -1185,9 +1196,9 @@ int UMSDOS_rename (
 		ret = umsdos_rename_f (old_dir, old_dentry, new_dir, new_dentry, 0);
 		if (ret == -EEXIST) {
 			/* #Specification: rename / new name exist
-			 * If the destination name already exist, it will
-			 * silently be removed. EXT2 does it this way
-			 * and this is the spec of SUNOS. So does UMSDOS.
+			 * If the destination name already exists, it will
+			 * silently be removed.  EXT2 does it this way
+			 * and this is the spec of SunOS.  So does UMSDOS.
 			 * 
 			 * If the destination is an empty directory it will
 			 * also be removed.
@@ -1195,19 +1206,19 @@ int UMSDOS_rename (
 			/* #Specification: rename / new name exist / possible flaw
 			 * The code to handle the deletion of the target (file
 			 * and directory) use to be in umsdos_rename_f, surrounded
-			 * by proper directory locking. This was insuring that only
+			 * by proper directory locking.  This was ensuring that only
 			 * one process could achieve a rename (modification) operation
-			 * in the source and destination directory. This was also
-			 * insuring the operation was "atomic".
+			 * in the source and destination directory.  This was also
+			 * ensuring the operation was "atomic".
 			 * 
-			 * This has been changed because this was creating a kernel
-			 * stack overflow (stack is only 4k in the kernel). To avoid
+			 * This has been changed because this was creating a
+			 * stack overflow (the stack is only 4 kB) in the kernel.  To avoid
 			 * the code doing the deletion of the target (if exist) has
 			 * been moved to a upper layer. umsdos_rename_f is tried
 			 * once and if it fails with EEXIST, the target is removed
 			 * and umsdos_rename_f is done again.
 			 * 
-			 * This makes the code cleaner and (not sure) solve a
+			 * This makes the code cleaner and may solve a
 			 * deadlock problem one tester was experiencing.
 			 * 
 			 * The point is to mention that possibly, the semantic of
@@ -1217,7 +1228,7 @@ int UMSDOS_rename (
 			 * same target at the same time. Again, I am not sure it
 			 * is a problem at all.
 			 */
-			/* This is not super efficient but should work */
+			/* This is not terribly efficient but should work. */
 			inc_count (new_dir);
 			ret = UMSDOS_unlink (new_dir, new_dentry);
 			chkstk ();

@@ -168,7 +168,7 @@ static void sound_remove_unit(struct sound_unit **list, int unit)
  *	6	--		sndstat (obsolete)
  *	7	*16		unused
  *	8	--		alternate sequencer (see above)
- *	9	*16		unused
+ *	9	*16		raw synthesizer access
  *	10	*16		unused
  *	11	*16		unused
  *	12	*16		unused
@@ -212,6 +212,13 @@ int register_sound_dsp(struct file_operations *fops)
 
 EXPORT_SYMBOL(register_sound_dsp);
 
+int register_sound_synth(struct file_operations *fops)
+{
+	return sound_insert_unit(&chains[9], fops, 9, 137);
+}
+
+EXPORT_SYMBOL(register_sound_synth);
+
 void unregister_sound_special(int unit)
 {
 	sound_remove_unit(&chains[unit&15], unit);
@@ -240,6 +247,12 @@ void unregister_sound_dsp(int unit)
 
 EXPORT_SYMBOL(unregister_sound_dsp);
 
+void unregister_sound_synth(int unit)
+{
+	return sound_remove_unit(&chains[9], unit);
+}
+
+EXPORT_SYMBOL(unregister_sound_synth);
 
 /*
  *	Now our file operations

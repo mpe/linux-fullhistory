@@ -1,7 +1,7 @@
 /* -*- linux-c -*-
  * APM BIOS driver for Linux
- * Copyright 1994, 1995, 1996 Stephen Rothwell
- *                           (Stephen.Rothwell@canb.auug.org.au)
+ * Copyright 1994-1998 Stephen Rothwell
+ *                     (Stephen.Rothwell@canb.auug.org.au)
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -12,8 +12,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * $Id: apm_bios.c,v 0.22 1995/03/09 14:12:02 sfr Exp $
  *
  * October 1995, Rik Faith (faith@cs.unc.edu):
  *    Minor enhancements and updates (to the patch set) for 1.3.x
@@ -28,6 +26,7 @@
  * May 1996, Version 1.2
  * Feb 1998, Version 1.3
  * Feb 1998, Version 1.4
+ * Aug 1998, Version 1.5
  *
  * History:
  *    0.6b: first version in official kernel, Linux 1.3.46
@@ -50,6 +49,9 @@
  *    1.4: Upgraded to support APM 1.2. Integrated ThinkPad suspend patch by 
  *         Dean Gaudet <dgaudet@arctic.org>.
  *         C. Scott Ananian <cananian@alumni.princeton.edu> Linux 2.1.87
+ *    1.5: Fix segment register reloading (in case of bad segments saved
+ *         across BIOS call).
+ *         Stephen ROthwell
  *
  * APM 1.1 Reference:
  *
@@ -158,6 +160,7 @@ extern unsigned long get_cmos_time(void);
  *                         [Confirmed by TI representative]
  * U: ACER 486DX4/75: uses dseg 0040, in violation of APM specification
  *                    [Confirmed by BIOS disassembly]
+ *                    [This may work now ...]
  * P: Toshiba 1950S: battery life information only gets updated after resume
  * P: Midwest Micro Soundbook Elite DX2/66 monochrome: screen blanking
  * 	broken in BIOS [Reported by Garst R. Reese <reese@isn.net>]
@@ -180,6 +183,7 @@ extern unsigned long get_cmos_time(void);
 /*
  * Define to disable interrupts in APM BIOS calls (the CPU Idle BIOS call
  * should turn interrupts on before it does a 'hlt').
+ * This reportedly needs undefining for the ThinkPad 600.
  */
 #define APM_NOINTS
 
@@ -207,121 +211,9 @@ extern unsigned long get_cmos_time(void);
 #define APM_CHECK_TIMEOUT	(HZ)
 
 /*
- * These are the actual BIOS calls in assembler.  Depending on
- * APM_ZERO_SEGS and APM_NOINTS, we are being really paranoid here!  Not
- * only are interrupts disabled, but all the segment registers (except SS)
- * are saved and zeroed this means that if the BIOS tries to reference any
- * data without explicitly loading the segment registers, the kernel will
- * fault immediately rather than have some unforeseen circumstances for the
- * rest of the kernel.  And it will be very obvious!  :-) Doing this
- * depends on CS referring to the same physical memory as DS so that DS can
- * be zeroed before the call. Unfortunately, we can't do anything about the
- * stack segment/pointer.  Also, we tell the compiler that everything could
- * change.
+ * Save a segment register away
  */
-#ifdef APM_NOINTS
-#	define APM_DO_CLI	"cli\n\t"
-#else
-#	define APM_DO_CLI
-#endif
-#ifdef APM_ZERO_SEGS
-#	define APM_DO_ZERO_SEGS	\
-		"pushl %%ds\n\t" \
-		"pushl %%es\n\t" \
-		"pushl %%fs\n\t" \
-		"pushl %%gs\n\t" \
-		"xorl %%edx, %%edx\n\t" \
-		"movl %%dx, %%ds\n\t" \
-		"movl %%dx, %%es\n\t" \
-		"movl %%dx, %%fs\n\t" \
-		"movl %%dx, %%gs\n\t"
-#	define APM_DO_RESTORE_SEGS	\
-		"popl %%gs\n\t" \
-		"popl %%fs\n\t" \
-		"popl %%es\n\t" \
-		"popl %%ds\n\t"
-#else
-#	define APM_DO_ZERO_SEGS
-#	define APM_DO_RESTORE_SEGS
-#endif
-
-#define APM_BIOS_CALL(error_reg) \
-	__asm__ __volatile__( \
-		APM_DO_ZERO_SEGS \
-		"pushfl\n\t" \
-		APM_DO_CLI \
-		"lcall %%cs:" SYMBOL_NAME_STR(apm_bios_entry) "\n\t" \
-		"setc %%" # error_reg "\n\t" \
-		"popfl\n\t" \
-		APM_DO_RESTORE_SEGS
-#define APM_BIOS_CALL_END \
-		: "ax", "bx", "cx", "dx", "si", "di", "bp", "memory")
-
-#ifdef CONFIG_APM_CPU_IDLE
-#define APM_SET_CPU_IDLE(error) \
-	APM_BIOS_CALL(al) \
-	: "=a" (error) \
-	: "a" (0x5305) \
-	APM_BIOS_CALL_END
-#endif
-
-#define APM_SET_CPU_BUSY(error) \
-	APM_BIOS_CALL(al) \
-	: "=a" (error) \
-	: "a" (0x5306) \
-	APM_BIOS_CALL_END
-
-#define APM_SET_POWER_STATE(state, error) \
-	APM_BIOS_CALL(al) \
-	: "=a" (error) \
-	: "a" (0x5307), "b" (0x0001), "c" (state) \
-	APM_BIOS_CALL_END
-
-#ifdef CONFIG_APM_DISPLAY_BLANK
-#define APM_SET_DISPLAY_POWER_STATE(state, error) \
-	APM_BIOS_CALL(al) \
-	: "=a" (error) \
-	: "a" (0x5307), "b" (0x01ff), "c" (state) \
-	APM_BIOS_CALL_END
-#endif
-
-#ifdef CONFIG_APM_DO_ENABLE
-#define APM_ENABLE_POWER_MANAGEMENT(device, error) \
-	APM_BIOS_CALL(al) \
-	: "=a" (error) \
-	: "a" (0x5308), "b" (device), "c" (1) \
-	APM_BIOS_CALL_END
-#endif
-
-#define APM_GET_POWER_STATUS(bx, cx, dx, error) \
-	APM_BIOS_CALL(al) \
-	: "=a" (error), "=b" (bx), "=c" (cx), "=d" (dx) \
-	: "a" (0x530a), "b" (1) \
-	APM_BIOS_CALL_END
-
-#define APM_GET_BATTERY_STATUS(which, bx, cx, dx, si, error) \
-	APM_BIOS_CALL(al) \
-	: "=a" (error), "=b" (bx), "=c" (cx), "=d" (dx), "=S" (si) \
-	: "a" (0x530a), "b" (0x8000 | (which)) \
-	APM_BIOS_CALL_END
-
-#define APM_GET_EVENT(event, info, error)	\
-	APM_BIOS_CALL(al) \
-	: "=a" (error), "=b" (event), "=c" (info) \
-	: "a" (0x530b) \
-	APM_BIOS_CALL_END
-
-#define APM_DRIVER_VERSION(ver, ax, error) \
-	APM_BIOS_CALL(bl) \
-	: "=a" (ax), "=b" (error) \
-	: "a" (0x530e), "b" (0), "c" (ver) \
-	APM_BIOS_CALL_END
-
-#define APM_ENGAGE_POWER_MANAGEMENT(device, error) \
-	APM_BIOS_CALL(al) \
-	: "=a" (error) \
-	: "a" (0x530f), "b" (device), "c" (1) \
-	APM_BIOS_CALL_END
+#define savesegment(seg, where)	__asm__ __volatile__("movw %%" #seg ", %0\n" : "=m" (where))
 
 /*
  * Forward declarations
@@ -371,7 +263,7 @@ static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;
 
-static char			driver_version[] = "1.4";	/* no spaces */
+static char			driver_version[] = "1.5";	/* no spaces */
 
 #ifdef APM_DEBUG
 static char *	apm_event_name[] = {
@@ -445,74 +337,197 @@ static const lookup_t error_table[] = {
 };
 #define ERROR_COUNT	(sizeof(error_table)/sizeof(lookup_t))
 
+/*
+ * These are the actual BIOS calls.  Depending on APM_ZERO_SEGS
+ * and APM_NOINTS, we are being really paranoid here!  Not only are
+ * interrupts disabled, but all the segment registers (except SS) are
+ * saved and zeroed this means that if the BIOS tries to reference any
+ * data without explicitly loading the segment registers, the kernel will
+ * fault immediately rather than have some unforeseen circumstances for
+ * the rest of the kernel.  And it will be very obvious!  :-) Doing this
+ * depends on CS referring to the same physical memory as DS so that DS
+ * can be zeroed before the call. Unfortunately, we can't do anything
+ * about the stack segment/pointer.  Also, we tell the compiler that
+ * everything could change.
+ */
+
+static inline int apm_bios_call(u32 eax_in, u32 ebx_in, u32 ecx_in,
+	u32 *eax, u32 *ebx, u32 *ecx, u32 *edx, u32 *esi)
+{
+	u16	old_fs;
+	u16	old_gs;
+	int	error;
+
+#ifdef APM_ZERO_SEGS
+	savesegment(fs, old_fs);
+	savesegment(gs, old_gs);
+#endif
+	__asm__ __volatile__(
+		"pushfl\n\t"
+#ifdef APM_NOINTS
+		"cli\n\t"
+#endif
+#ifdef APM_ZERO_SEGS
+		"pushl %%ds\n\t"
+		"pushl %%es\n\t"
+		"movw %9, %%ds\n\t"
+		"movw %9, %%es\n\t"
+		"movw %9, %%fs\n\t"
+		"movw %9, %%gs\n\t"
+#endif
+		"lcall %%cs:" SYMBOL_NAME_STR(apm_bios_entry) "\n\t"
+		"movl $0, %%edi\n\t"
+		"jnc 1f\n\t"
+		"movl $1, %%edi\n"
+		"1:\tpopl %%es\n\t"
+		"popl %%ds\n\t"
+		"popfl\n\t"
+		:  "=a" (*eax), "=b" (*ebx), "=c" (*ecx), "=d" (*edx),
+		   "=S" (*esi), "=D" (error)
+		: "a" (eax_in), "b" (ebx_in), "c" (ecx_in)
+#ifdef APM_ZERO_SEGS
+		  , "r" (0)
+#endif
+		: "ax", "bx", "cx", "dx", "si", "di", "bp", "memory");
+#ifdef APM_ZERO_SEGS
+	loadsegment(fs, old_fs);
+	loadsegment(gs, old_gs);
+#endif
+	return error;
+}
+
+/*
+ * This version only returns one value (usually an error code)
+ */
+
+static inline int apm_bios_call_simple(u32 eax_in, u32 ebx_in, u32 ecx_in, u32 *eax)
+{
+	u16	old_fs;
+	u16	old_gs;
+	int	error;
+
+#ifdef APM_ZERO_SEGS
+	savesegment(fs, old_fs);
+	savesegment(gs, old_gs);
+#endif
+	__asm__ __volatile__(
+		"pushfl\n\t"
+#ifdef APM_NOINTS
+		"cli\n\t"
+#endif
+#ifdef APM_ZERO_SEGS
+		"pushl %%ds\n\t"
+		"pushl %%es\n\t"
+		"movw %5, %%ds\n\t"
+		"movw %5, %%es\n\t"
+		"movw %5, %%fs\n\t"
+		"movw %5, %%gs\n\t"
+#endif
+		"lcall %%cs:" SYMBOL_NAME_STR(apm_bios_entry) "\n\t"
+		"movl $0, %%edi\n\t"
+		"jnc 1f\n\t"
+		"movl $1, %%edi\n"
+		"1:\tpopl %%es\n\t"
+		"popl %%ds\n\t"
+		"popfl\n\t"
+		: "=a" (*eax), "=D" (error)
+		: "a" (eax_in), "b" (ebx_in), "c" (ecx_in)
+#ifdef APM_ZERO_SEGS
+		  , "r" (0)
+#endif
+		: "ax", "bx", "cx", "dx", "si", "di", "bp", "memory");
+#ifdef APM_ZERO_SEGS
+	loadsegment(fs, old_fs);
+	loadsegment(gs, old_gs);
+#endif
+	return error;
+}
+
 static int apm_driver_version(u_short *val)
 {
-	u_short	error;
+	int	error;
+	u32	eax;
 
-	APM_DRIVER_VERSION(*val, *val, error);
-
-	if (error & 0xff)
-		return (*val >> 8);
+	error = apm_bios_call_simple(0x530e, 0, *val, &eax);
+	if (error)
+		return (eax >> 8) & 0xff;
+	*val = eax;
 	return APM_SUCCESS;
 }
 
 static int apm_get_event(apm_event_t *event, apm_eventinfo_t *info)
 {
-	u_short	error;
+	int	error;
+	u32	eax;
+	u32	ebx;
+	u32	ecx;
+	u32	dummy;
 
-	APM_GET_EVENT(*event, *info, error);
-	if (error & 0xff)
-		return (error >> 8);
+	error = apm_bios_call(0x530b, 0, 0, &eax, &ebx, &ecx, &dummy, &dummy);
+	if (error)
+		return (eax >> 8) & 0xff;
+	*event = ebx;
 	if (apm_bios_info.version < 0x0102)
 		*info = ~0; /* indicate info not valid */
+	else
+		*info = ecx;
+	return APM_SUCCESS;
+}
+
+static int set_power_state(u_short what, u_short state)
+{
+	int	error;
+	u32	eax;
+
+	error = apm_bios_call_simple(0x5307, what, state, &eax);
+	if (error)
+		return (eax >> 8) & 0xff;
 	return APM_SUCCESS;
 }
 
 int apm_set_power_state(u_short state)
 {
-	u_short	error;
-
-	APM_SET_POWER_STATE(state, error);
-	if (error & 0xff)
-		return (error >> 8);
-	return APM_SUCCESS;
+	return set_power_state(0x0001, state);
 }
 
 #ifdef CONFIG_APM_DISPLAY_BLANK
 /* Called by apm_display_blank and apm_display_unblank when apm_enabled. */
 static int apm_set_display_power_state(u_short state)
 {
-	u_short	error;
-
-	APM_SET_DISPLAY_POWER_STATE(state, error);
-	if (error & 0xff)
-		return (error >> 8);
-	return APM_SUCCESS;
+	return set_power_state(0x01ff, state);
 }
 #endif
 
 #ifdef CONFIG_APM_DO_ENABLE
 /* Called by apm_setup if apm_enabled will be true. */
-static inline int apm_enable_power_management(void)
+static int apm_enable_power_management(void)
 {
-	u_short	error;
+	int	error;
+	u32	eax;
 
-	APM_ENABLE_POWER_MANAGEMENT((apm_bios_info.version > 0x100)
-				    ? 0x0001 : 0xffff,
-				    error);
-	if (error & 0xff)
-		return (error >> 8);
+	error = apm_bios_call_simple(0x5308,
+			(apm_bios_info.version > 0x100) ? 0x0001 : 0xffff, 1, &eax);
+	if (error)
+		return (eax >> 8) & 0xff;
 	return APM_SUCCESS;
 }
 #endif
 
 static int apm_get_power_status(u_short *status, u_short *bat, u_short *life)
 {
-	u_short	error;
+	int	error;
+	u32	eax;
+	u32	ebx;
+	u32	ecx;
+	u32	edx;
+	u32	dummy;
 
-	APM_GET_POWER_STATUS(*status, *bat, *life, error);
-	if (error & 0xff)
-		return (error >> 8);
+	error = apm_bios_call(0x530a, 1, 0, &eax, &ebx, &ecx, &edx, &dummy);
+	if (error)
+		return (eax >> 8) & 0xff;
+	*status = ebx;
+	*bat = ecx;
+	*life = edx;
 	return APM_SUCCESS;
 }
 
@@ -521,29 +536,40 @@ static int apm_get_power_status(u_short *status, u_short *bat, u_short *life)
 static int apm_get_battery_status(u_short which, 
 				  u_short *bat, u_short *life, u_short *nbat)
 {
-	u_short status, error;
+	u_short status;
+	int	error;
+	u32	eax;
+	u32	ebx;
+	u32	ecx;
+	u32	edx;
+	u32	esi;
 
 	if (apm_bios_info.version < 0x0102) {
 		/* pretend we only have one battery. */
-		if (which!=1) return APM_BAD_DEVICE;
+		if (which != 1)
+			return APM_BAD_DEVICE;
 		*nbat = 1;
 		return apm_get_power_status(&status, bat, life);
 	}
 
-	APM_GET_BATTERY_STATUS(which, status, *bat, *life, *nbat, error);
-	if (error & 0xff)
-		return (error >> 8);
+	error = apm_bios_call(0x530a, (0x8000 | (which)), 0, &eax, &ebx, &ecx, &edx, &esi);
+	if (error)
+		return (eax >> 8) & 0xff;
+	*bat = ecx;
+	*life = edx;
+	*nbat = esi;
 	return APM_SUCCESS;
 }
 #endif
 
-static inline int apm_engage_power_management(u_short device)
+static int apm_engage_power_management(u_short device)
 {
-	u_short	error;
+	int	error;
+	u32	eax;
 
-	APM_ENGAGE_POWER_MANAGEMENT(device, error);
-	if (error & 0xff)
-		return (error >> 8);
+	error = apm_bios_call_simple(0x530f, device, 1, &eax);
+	if (error)
+		return (eax >> 8) & 0xff;
 	return APM_SUCCESS;
 }
 
@@ -850,13 +876,14 @@ static void do_apm_timer(unsigned long unused)
 int apm_do_idle(void)
 {
 #ifdef CONFIG_APM_CPU_IDLE
-	unsigned short	error;
+	int	error;
+	u32	dummy;
 
 	if (!apm_enabled)
 		return 0;
 
-	APM_SET_CPU_IDLE(error);
-	if (error & 0xff)
+	error = apm_bios_call_simple(0x5305, 0, 0, &dummy);
+	if (error)
 		return 0;
 
 	clock_slowed = (apm_bios_info.flags & APM_IDLE_SLOWS_CLOCK) != 0;
@@ -870,19 +897,16 @@ int apm_do_idle(void)
 void apm_do_busy(void)
 {
 #ifdef CONFIG_APM_CPU_IDLE
-	unsigned short	error;
+	u32	dummy;
 
-	if (!apm_enabled)
-		return;
-
+	if (apm_enabled
 #ifndef ALWAYS_CALL_BUSY
-	if (!clock_slowed)
-		return;
+		&& clock_slowed
 #endif
-
-	APM_SET_CPU_BUSY(error);
-
-	clock_slowed = 0;
+	) {
+		(void) apm_bios_call_simple(0x5306, 0, 0, &dummy);
+		clock_slowed = 0;
+	}
 #endif
 }
 
@@ -1242,11 +1266,11 @@ __initfunc(void apm_bios_init(void))
 		 */
 		apm_bios_info.version = 0x0102;
 		error = apm_driver_version(&apm_bios_info.version);
-		if (error != 0) { /* Fall back to an APM 1.1 connection. */
+		if (error != APM_SUCCESS) { /* Fall back to an APM 1.1 connection. */
 			apm_bios_info.version = 0x0101;
 			error = apm_driver_version(&apm_bios_info.version);
 		}
-		if (error != 0) /* Fall back to an APM 1.0 connection. */
+		if (error != APM_SUCCESS) /* Fall back to an APM 1.0 connection. */
 			apm_bios_info.version = 0x100;
 		else {
 			apm_engage_power_management(0x0001);

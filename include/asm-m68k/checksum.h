@@ -16,7 +16,7 @@
 unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum);
 
 /*
- * the same as csum_partial_copy, but copies from src while it
+ * the same as csum_partial, but copies from src while it
  * checksums
  *
  * here even more important to align src and dst on a 32-bit (or even
@@ -33,13 +33,9 @@ unsigned int csum_partial_copy(const char *src, char *dst, int len, int sum);
  * better 64-bit) boundary
  */
 
-unsigned int csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum);
+extern unsigned int csum_partial_copy_from_user(const char *src, char *dst,
+						int len, int sum, int *csum_err);
 
-extern unsigned int
-csum_partial_copy_from_user ( const char *src, char *dst,
-			      int len, int sum, int *csum_err);
-
-/* FIXME: this needs to be written to really do no check -- Cort */
 #define csum_partial_copy_nocheck(src, dst, len, sum)	\
 	csum_partial_copy((src), (dst), (len), (sum))
 

@@ -15,9 +15,6 @@
 #include <linux/msdos_fs.h>
 #include <linux/umsdos_fs.h>
 
-#define PRINTK(x)
-#define Printk(x) printk x
-
 struct UMSDOS_DIR_ONCE {
 	struct dirent *ent;
 	int count;
@@ -53,14 +50,14 @@ static int umsdos_ioctl_fill (
 /*
  * Perform special function on a directory
  */
-int UMSDOS_ioctl_dir (
-			     struct inode *dir,
+int UMSDOS_ioctl_dir (	     struct inode *dir,
 			     struct file *filp,
 			     unsigned int cmd,
 			     unsigned long data)
 {
 	int ret = -EPERM;
 	int err;
+	struct dentry *old_dent;
 
 	/* forward non-umsdos ioctls - this hopefully doesn't cause conflicts */
 	if (cmd != UMSDOS_GETVERSION
@@ -154,18 +151,18 @@ int UMSDOS_ioctl_dir (
 			 * 
 			 * Return > 0 if success.
 			 */
-			struct inode *emd_dir = umsdos_emd_dir_lookup (dir, 0);
 
-			if (emd_dir != NULL) {
+			old_dent = filp->f_dentry;
+			if (fix_emd_filp (filp) == 0) {
 				while (1) {
-					if (filp->f_pos >= emd_dir->i_size) {
+					if (filp->f_pos >= filp->f_dentry->d_inode->i_size) {
 						ret = 0;
 						break;
 					} else {
 						struct umsdos_dirent entry;
 						off_t f_pos = filp->f_pos;
 
-						ret = umsdos_emd_dir_readentry (emd_dir, filp, &entry);
+						ret = umsdos_emd_dir_readentry (filp, &entry);
 						if (ret < 0) {
 							break;
 						} else if (entry.name_len > 0) {
@@ -175,15 +172,15 @@ int UMSDOS_ioctl_dir (
 							umsdos_parse (entry.name, entry.name_len, &info);
 							info.f_pos = f_pos;
 							umsdos_manglename (&info);
-							copy_to_user (&idata->umsdos_dirent, &entry
-							,sizeof (entry));
-							copy_to_user (&idata->dos_dirent.d_name
-								      ,info.fake.fname, info.fake.len + 1);
+							copy_to_user (&idata->umsdos_dirent, &entry, sizeof (entry));
+							copy_to_user (&idata->dos_dirent.d_name, info.fake.fname, info.fake.len + 1);
 							break;
 						}
 					}
 				}
-				iput (emd_dir); /* FIXME? */
+				fin_dentry (filp->f_dentry);
+				filp->f_dentry = old_dent;
+				/* iput (filp->f_dentry->d_inode); / * FIXME? */
 			} else {
 				/* The absence of the EMD is simply seen as an EOF */
 				ret = 0;
@@ -204,7 +201,7 @@ int UMSDOS_ioctl_dir (
 			struct inode *emd_dir = umsdos_emd_dir_lookup (dir, 1);
 
 			ret = emd_dir != NULL;
-			iput (emd_dir); /* FIXME?? */
+			/* iput (emd_dir); / * FIXME?? */
 
 			dir->i_op = ret
 			    ? &umsdos_dir_inode_operations
@@ -251,7 +248,7 @@ int UMSDOS_ioctl_dir (
 				 * ,dir
 				 * ,data.umsdos_dirent.name,data.umsdos_dirent.name_len);
 				 */
-				old_dentry = creat_dentry (data.dos_dirent.d_name, data.dos_dirent.d_reclen, NULL, geti_dentry (dir));	/* FIXME: prolly should fill inode part */
+				old_dentry = creat_dentry (data.dos_dirent.d_name, data.dos_dirent.d_reclen, NULL, geti_dentry (dir));	/* FIXME: probably should fill inode part */
 				new_dentry = creat_dentry (data.umsdos_dirent.name, data.umsdos_dirent.name_len, NULL, geti_dentry (dir));
 				ret = msdos_rename (dir, old_dentry, dir, new_dentry);
 			} else if (cmd == UMSDOS_UNLINK_EMD) {
@@ -283,10 +280,10 @@ int UMSDOS_ioctl_dir (
 				 * 
 				 * Return 0 if success.
 				 */
-				inc_count (dir);
-				dp = creat_dentry (data.dos_dirent.d_name, data.dos_dirent.d_reclen, dir, NULL);
-				dentry = creat_dentry ("ioctl_unlink", 12, NULL, dp);
+				dp = geti_dentry (dir);
+				dentry = compat_umsdos_real_lookup (dp, data.dos_dirent.d_name, data.dos_dirent.d_reclen);
 				ret = msdos_unlink (dir, dentry);
+				dput (dentry);	/* FIXME: is this OK now? */
 
 			} else if (cmd == UMSDOS_RMDIR_DOS) {
 				struct dentry *dentry, *dp;
@@ -298,10 +295,10 @@ int UMSDOS_ioctl_dir (
 				 * 
 				 * Return 0 if success.
 				 */
-				inc_count (dir);
-				dp = creat_dentry (data.dos_dirent.d_name, data.dos_dirent.d_reclen, dir, NULL);
-				dentry = creat_dentry ("ioctl_unlink", 12, NULL, dp);
+				dp = geti_dentry (dir);
+				dentry = compat_umsdos_real_lookup (dp, data.dos_dirent.d_name, data.dos_dirent.d_reclen);
 				ret = msdos_rmdir (dir, dentry);
+				dput (dentry);	/* FIXME: is this OK now? */
 
 			} else if (cmd == UMSDOS_STAT_DOS) {
 				/* #Specification: ioctl / UMSDOS_STAT_DOS
@@ -315,9 +312,12 @@ int UMSDOS_ioctl_dir (
 				 * Return 0 if success.
 				 */
 				struct inode *inode;
+				struct dentry *d_dir, *dret;
 
-				ret = compat_umsdos_real_lookup (dir, data.dos_dirent.d_name, data.dos_dirent.d_reclen, &inode);
-				if (ret == 0) {
+				d_dir = geti_dentry (dir);
+				dret = compat_umsdos_real_lookup (d_dir, data.dos_dirent.d_name, data.dos_dirent.d_reclen);
+				if (dret) {
+					inode = dret->d_inode;
 					data.stat.st_ino = inode->i_ino;
 					data.stat.st_mode = inode->i_mode;
 					data.stat.st_size = inode->i_size;
@@ -325,20 +325,20 @@ int UMSDOS_ioctl_dir (
 					data.stat.st_ctime = inode->i_ctime;
 					data.stat.st_mtime = inode->i_mtime;
 					copy_to_user (&idata->stat, &data.stat, sizeof (data.stat));
-					/* iput (inode); FIXME */
+					fin_dentry (dret);
 				}
 			} else if (cmd == UMSDOS_DOS_SETUP) {
 				/* #Specification: ioctl / UMSDOS_DOS_SETUP
 				 * The UMSDOS_DOS_SETUP ioctl allow changing the
-				 * default permission of the MsDOS file system driver
-				 * on the fly. The MsDOS driver apply global permission
+				 * default permission of the MS-DOS filesystem driver
+				 * on the fly.  The MS-DOS driver applies global permissions
 				 * to every file and directory. Normally these permissions
 				 * are controlled by a mount option. This is not
 				 * available for root partition, so a special utility
 				 * (umssetup) is provided to do this, normally in
 				 * /etc/rc.local.
 				 * 
-				 * Be aware that this apply ONLY to MsDOS directory
+				 * Be aware that this applies ONLY to MS-DOS directories
 				 * (those without EMD --linux-.---). Umsdos directory
 				 * have independent (standard) permission for each
 				 * and every file.

@@ -96,7 +96,7 @@ typedef struct x25_channel
 	struct sk_buff* tx_skb;		/* transmit socket buffer */
 	sdla_t* card;			/* -> owner */
 	int ch_idx;
-	struct enet_statistics ifstats;	/* interface statistics */
+	struct net_device_stats ifstats;	/* interface statistics */
 } x25_channel_t;
 
 typedef struct x25_call_info
@@ -829,6 +829,8 @@ tx_done:
 static struct net_device_stats* if_stats (struct device* dev)
 {
 	x25_channel_t* chan = dev->priv;
+	if(chan==NULL)
+		return chan;
 	return &chan->ifstats;
 }
 

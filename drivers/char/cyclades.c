@@ -1,7 +1,7 @@
 #define BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.2.1.6 $$Date: 1998/08/20 17:15:39 $";
+"$Revision: 2.2.1.7 $$Date: 1998/09/03 12:07:28 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,6 +31,11 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
+ * Revision 2.2.1.7  1998/09/03 12:07:28 ivan
+ * Fixed bug in cy_close function, which was not informing HW of
+ * which port should have the reception disabled before doing so;
+ * fixed Cyclom-8YoP hardware detection bug.
+ *
  * Revision 2.2.1.6  1998/08/20 17:15:39 ivan
  * Fixed bug in cy_close function, which causes malfunction
  * of one of the first 4 ports when a higher port is closed
@@ -2690,6 +2695,8 @@ cy_close(struct tty_struct * tty, struct file * filp)
 			(cy_card[info->card].base_addr +
 			 (cy_chip_offset[channel>>2] <<index));
 	/* Stop accepting input */
+	channel &= 0x03;
+	cy_writeb((ulong)base_addr+(CyCAR<<index), (u_char)channel);
 	cy_writeb((u_long)base_addr+(CySRER<<index),
 			cy_readb(base_addr+(CySRER<<index)) & ~CyRxData);
 	if (info->flags & ASYNC_INITIALIZED) {
@@ -4539,7 +4546,7 @@ cy_detect_pci(void))
   unsigned long         pci_intr_ctrl;
   unsigned char         cy_pci_irq = 0;
   uclong                cy_pci_addr0, cy_pci_addr1, cy_pci_addr2;
-  unsigned short        i,j,cy_pci_nchan;
+  unsigned short        i,j,cy_pci_nchan, plx_ver;
   unsigned short        device_id,dev_index = 0;
   uclong		mailbox;
   uclong		Ze_addr0[NR_CARDS], Ze_addr2[NR_CARDS], ZeIndex = 0;
@@ -4651,10 +4658,26 @@ cy_detect_pci(void))
                 IRQ_cards[cy_pci_irq] = &cy_card[j];
 
                 /* enable interrupts in the PCI interface */
-                outw(inw(cy_pci_addr1+0x68)|0x0900,cy_pci_addr1+0x68);
-                pci_intr_ctrl = (unsigned long)
-		                (inw(cy_pci_addr1+0x68)
+		plx_ver = cy_readb(cy_pci_addr2 + CyPLX_VER) & 0x0f;
+		switch (plx_ver) {
+		    case PLX_9050:
+
+		    outw(inw(cy_pci_addr1+0x4c)|0x0040,cy_pci_addr1+0x4c);
+		    pci_intr_ctrl = (unsigned long)
+				(inw(cy_pci_addr1+0x4c)
+				| inw(cy_pci_addr1+0x4e)<<16);
+		    break;
+
+		    case PLX_9060:
+		    case PLX_9080:
+		    default: /* Old boards, use PLX_9060 */
+
+		    outw(inw(cy_pci_addr1+0x68)|0x0900,cy_pci_addr1+0x68);
+		    pci_intr_ctrl = (unsigned long)
+				(inw(cy_pci_addr1+0x68)
 				| inw(cy_pci_addr1+0x6a)<<16);
+		    break;
+		}
 
                 /* print message */
                 printk("Cyclom-Y/PCI #%d: 0x%lx-0x%lx, IRQ%d, ",

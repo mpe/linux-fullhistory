@@ -109,7 +109,7 @@ static int ufs_readlink (struct dentry * dentry, char * buffer, int buflen)
 		i++;
 	if (copy_to_user(buffer, link, i))
 		i = -EFAULT;
- 	UPDATE_ATIME(inode);
+	UPDATE_ATIME(inode);
 	if (bh)
 		brelse (bh);
 	UFSD(("ENTER\n"))

@@ -3,7 +3,6 @@
  *
  *      Written 1993 by Jacques Gelinas
  *      Inspired from linux/fs/msdos/... by Werner Almesberger
- *
  */
 
 #include <linux/module.h>
@@ -24,28 +23,11 @@ extern struct inode_operations umsdos_rdir_inode_operations;
 
 
 struct inode *pseudo_root = NULL;	/* Useful to simulate the pseudo DOS */
-
-				/* directory. See UMSDOS_readdir_x() */
-
-/* #Specification: convention / PRINTK Printk and printk
- * Here is the convention for the use of printk inside fs/umsdos
- * 
- * printk carry important message (error or status).
- * Printk is for debugging (it is a macro defined at the beginning of
- * most source.
- * PRINTK is a nulled Printk macro.
- * 
- * This convention makes the source easier to read, and Printk easier
- * to shut off.
- */
-#define PRINTK(x)
-#define Printk(x) printk x
-
-
+					/* directory. See UMSDOS_readdir_x() */
 
 
 /*
- * makes return inode->i_dentry
+ * returns inode->i_dentry
  *
  */
 
@@ -53,13 +35,24 @@ inline struct dentry *geti_dentry (struct inode *inode)
 {
 	struct dentry *ret;
 	if (!inode) {
-		printk (KERN_ERR "geti_dentry: inode is NULL!\n");
+		printk (KERN_ERR "geti_dentry: ERROR: inode is NULL!\n");
 		return NULL;
 	}
-	ret = list_entry (inode->i_dentry.next, struct dentry, d_alias); /* FIXME: does this really work ? :) */
-	Printk ((KERN_DEBUG "geti_dentry : inode %lu: i_dentry is %p\n", inode->i_ino, ret));
+	if (inode->i_dentry.next == inode->i_dentry.next->next) {
+		printk (KERN_WARNING "geti_dentry: WARNING: inode does not have an dentry. returning NULL.\n");
+		return NULL;
+	}
+	ret = list_entry (inode->i_dentry.next, struct dentry, d_alias);
+
+	if (IS_ERR(ret)) {
+		Printk ((KERN_WARNING "geti_dentry: checking dentry... it is ERR(%ld) !\n", PTR_ERR(ret)));
+	}
+	
+	PRINTK ((KERN_DEBUG "geti_dentry : inode %lu: i_dentry is %p\n", inode->i_ino, ret));
 	return ret;
 }
+
+
 
 /*
  * makes inode->i_count++
@@ -69,7 +62,7 @@ inline struct dentry *geti_dentry (struct inode *inode)
 inline void inc_count (struct inode *inode)
 {
 	inode->i_count++;
-	Printk ((KERN_DEBUG "inc_count: inode %lu incremented count to %d\n", inode->i_ino, inode->i_count));
+	PRINTK ((KERN_DEBUG "inc_count: inode %lu incremented count to %d\n", inode->i_ino, inode->i_count));
 }
 
 
@@ -95,6 +88,9 @@ void fill_new_filp (struct file *filp, struct dentry *dentry)
 	filp->f_op = &umsdos_file_operations;	/* /mn/ - we have to fill it with SOMETHING */
 }
 
+
+
+#if UMS_DEBUG
 /*
  * check a superblock
  */
@@ -146,6 +142,56 @@ void check_inode (struct inode *inode)
 	}
 }
 
+/*
+ * checks all inode->i_dentry
+ *
+ */
+void checkd_inode (struct inode *inode)
+{
+	struct dentry *ret;
+	struct list_head *cur;
+	int count = 0;
+	if (!inode) {
+		printk (KERN_ERR "checkd_inode: inode is NULL!\n");
+		return;
+	}
+
+	Printk ((KERN_DEBUG "checkd_inode:  inode %lu\n", inode->i_ino));
+	cur = inode->i_dentry.next;
+	while (count++ < 10) {
+		PRINTK (("1..."));
+		if (!cur) {
+			Printk ((KERN_ERR "checkd_inode: *** NULL reached. exit.\n"));
+			return;
+		}
+		PRINTK (("2..."));
+		ret = list_entry (cur, struct dentry, d_alias);
+		PRINTK (("3..."));
+		if (cur == cur->next) {
+			Printk ((KERN_DEBUG "checkd_inode: *** cur=cur->next: normal exit.\n"));
+			return;
+		}
+		PRINTK (("4..."));
+		if (!ret) {
+			Printk ((KERN_ERR "checkd_inode: *** ret dentry is NULL. exit.\n"));
+			return;
+		}
+		PRINTK (("5... (ret=%p)...", ret));
+		PRINTK (("5.1.. (ret->d_dname=%p)...", &(ret->d_name)));
+		PRINTK (("5.1.1. (ret->d_dname.len=%d)...", (int) ret->d_name.len));
+		PRINTK (("5.1.2. (ret->d_dname.name=%c)...", ret->d_name.name));
+		Printk ((KERN_DEBUG "checkd_inode:   i_dentry is %.*s\n", (int) ret->d_name.len, ret->d_name.name));
+		PRINTK (("6..."));
+		cur = cur->next;
+		PRINTK (("7..."));
+#if 1
+		Printk ((KERN_DEBUG "checkd_inode: *** finished after count 1 (operator forced)\n"));
+		return;
+#endif		
+	}
+	Printk ((KERN_ERR "checkd_inode: *** OVER LIMIT (loop?) !\n"));
+	return;
+}
 
 /*
  * internal part of check_dentry. does the real job.
@@ -155,9 +201,9 @@ void check_inode (struct inode *inode)
 void check_dent_int (struct dentry *dentry, int parent)
 {
 	if (parent) {
-		Printk ((KERN_DEBUG "*  parent dentry: %.*s\n", (int) dentry->d_name.len, dentry->d_name.name));
+		Printk ((KERN_DEBUG "*  parent(%d) dentry: %.*s\n", parent, (int) dentry->d_name.len, dentry->d_name.name));
 	} else {
-		Printk ((KERN_DEBUG "\n*** checking dentry: %.*s\n", (int) dentry->d_name.len, dentry->d_name.name));
+		Printk ((KERN_DEBUG "*  checking dentry: %.*s\n", (int) dentry->d_name.len, dentry->d_name.name));
 	}
 	check_inode (dentry->d_inode);
 	Printk ((KERN_DEBUG "*   d_count=%d", dentry->d_count));
@@ -170,32 +216,53 @@ void check_dent_int (struct dentry *dentry, int parent)
 }
 
 /*
- * checks dentry and prints info
+ * checks dentry with full traceback to root and prints info. Limited to 10 recursive depths to avoid infinite loops.
  *
  */
 
-void check_dentry (struct dentry *dentry)
+void check_dentry_path (struct dentry *dentry, const char *desc)
 {
+	int count=0;
+	Printk ((KERN_DEBUG "*** check_dentry_path: %.60s\n", desc));
+
 	if (!dentry) {
-		Printk ((KERN_DEBUG "\n*** checking dentry... it is NULL !\n"));
+		Printk ((KERN_DEBUG "*** checking dentry... it is NULL !\n"));
 		return;
 	}
-	check_dent_int (dentry, 0);
-
-	if (dentry->d_parent) {
-		check_dent_int (dentry->d_parent, 1);
-	} else {
-		Printk ((KERN_DEBUG "*   has no parent.\n"));
+	if (IS_ERR(dentry)) {
+		Printk ((KERN_DEBUG "*** checking dentry... it is ERR(%ld) !\n", PTR_ERR(dentry)));
+		return;
+	}
+	
+	while (dentry && count < 10) {
+		check_dent_int (dentry, count++);
+		if (dentry == dentry->d_parent) {
+			Printk ((KERN_DEBUG "*** end checking dentry (root reached ok)\n"));
+			break;
+		}
+		dentry = dentry->d_parent;
 	}
 
-	Printk ((KERN_DEBUG "*** end checking dentry\n"));
+	if (count >= 10) {	/* if infinite loop detected */
+		Printk ((KERN_ERR "*** WARNING ! INFINITE LOOP ! check_dentry_path aborted !\n"));
+	}
+	
+	if (!dentry) {
+		Printk ((KERN_ERR "*** WARNING ! found NULL dentry ! check_dentry_path aborted !\n"));
+	}
 }
+#else
+void check_sb (struct super_block *sb, const char c) {};
+void check_inode (struct inode *inode) {};
+void checkd_inode (struct inode *inode) {};
+void check_dentry_path (struct dentry *dentry, const char *desc) {};
+#endif	/* UMS_DEBUG */
+
 
 
 /*
- * makes dentry. for name name with length len. /mn/
+ * makes dentry. for name name with length len.
  * if inode is not NULL, puts it also.
- *
  */
 
 struct dentry *creat_dentry (const char *name, const int len, struct inode *inode, struct dentry *parent)
@@ -206,68 +273,111 @@ struct dentry *creat_dentry (const char *name, const int len, struct inode *inod
 	struct qstr qname;
 
 	if (inode)
-		Printk ((KERN_DEBUG "/mn/ creat_dentry: creating dentry with inode=%lu for %.*s\n", inode->i_ino, len, name));
+		Printk ((KERN_DEBUG "creat_dentry: creating dentry with inode=%lu for %.*s\n", inode->i_ino, len, name));
 	else
-		Printk ((KERN_DEBUG "/mn/ creat_dentry: creating empty dentry for %.*s\n", len, name));
+		Printk ((KERN_DEBUG "creat_dentry: creating empty dentry for %.*s\n", len, name));
 
 	qname.name = name;
 	qname.len = len;
+#if 1
+	#warning is full_name_hash OK for normal filenames? And for MSDOSFS accessed EMD files?
+	qname.hash = full_name_hash (name, len);
+#else
 	qname.hash = 0;
+#endif	
 
 	ret = d_alloc (parent, &qname);		/* create new dentry */
 	ret->d_inode = NULL;
 
-	if (!parent) {
+	if (parent) {
+#if 0
+		Printk ((KERN_DEBUG "creat_dentry: cloning parent d_op !\n"));
+		ret->d_op = parent->d_op;
+#else
+		ret->d_op = NULL;
+#endif		
+	} else {
 		ret->d_parent = ret;
-		Printk ((KERN_WARNING "creat_dentry: WARNING: NO parent! faking! beware !\n"));
+		Printk ((KERN_WARNING "creat_dentry: WARNING: NO parent! faking root! beware !\n"));
 	}
 
 
 	if (inode) {
-		ret->d_sb = inode->i_sb;	/* try to fill it in if avalaible. If avalaible in parent->d_sb, d_alloc will add it automatically */
+		if (!ret->d_sb)	ret->d_sb = inode->i_sb;	/* try to fill it in if available. If available in parent->d_sb, d_alloc will add it automatically */
 		d_add (ret, inode);
 	}
 
+	if (!ret->d_sb) {
+		printk (KERN_ERR "creat_dentry: ERROR: NO d_sb !\n");
+	} else if (!ret->d_sb->s_dev) {
+		printk (KERN_WARNING "creat_dentry: WARNING: NO s_dev. Ugh. !\n");
+	}
+	
 	return ret;
 }
 
 
 /*
  * removes temporary dentry created by creat_dentry
+ * it must have d_count of 1, and associated inode i_count of 1
+ * to be completely cleared.
  *
  */
 
 void kill_dentry (struct dentry *dentry)
 {
 	if (dentry) {
-		Printk (("/mn/ kill_dentry: kill_dentry %.*s :", (int) dentry->d_name.len, dentry->d_name.name));
-		if (dentry->d_inode)
-			Printk (("inode=%lu (i_count=%d)\n", dentry->d_inode->i_ino, dentry->d_inode->i_count));
-		else
-			Printk (("inode is NULL\n"));
-
-		/* FIXME: is this ok ?! /mn/ */
-		/* d_drop (dentry); */
-		/* d_invalidate (dentry); */
-		/*dput (dentry); */
-		/*d_delete (dentry) */
+		check_dentry_path (dentry, "KILL_DENTRY B4");
+		/* this idea for killing dentry (d_drop/dput pair) from NFS code. dcache.c code&comments seems to agree */
+#if 0
+		d_drop (dentry);
+		dput (dentry);	/* we are done with it */
+#endif		
+		check_dentry_path (dentry, "KILL_DENTRY AFT");
 	} else {
-		Printk (("/mn/ kill_dentry: dentry is NULL ?!\n"));
+		Printk (("kill_dentry: dentry is NULL ?!\n"));
 	}
 
 
-	Printk ((KERN_DEBUG "/mn/ kill_dentry: exiting...\n"));
+	Printk ((KERN_DEBUG "kill_dentry: exiting...\n"));
 	return;
 }
 
 
+/*
+ * finishes work with dentry
+ * it must have d_count of 1, and associated inode i_count of 1
+ * to be completely cleared.
+ *
+ * Currently, this is same as kill_dentry, but this may (will) change.
+ * kill_dentry will eventualy be killed (he who lives by the sword, dies
+ * by the sword :-) when all faked dentries are nuked out...
+ *
+ */
 
+void fin_dentry (struct dentry *dentry)
+{
+	if (dentry) {
+		if (IS_ERR(dentry)) {
+			Printk ((KERN_WARNING "fin_dentry: dentry is IS_ERR (%ld)?!\n", PTR_ERR (dentry)));
+		} else {
+			/* this idea for killing dentry (d_drop/dput pair) from NFS code. dcache.c code&comments seems to agree */
+			d_drop (dentry);
+			dput (dentry);	/* we are done with it */
+		}
+	} else {
+		Printk ((KERN_WARNING "fin_dentry: dentry is NULL ?!\n"));
+	}
 
+	PRINTK ((KERN_DEBUG "fin_dentry: exiting...\n"));
+	return;
+}
 
 
 void UMSDOS_put_inode (struct inode *inode)
 {
-	PRINTK ((KERN_DEBUG "put inode %p (%lu) owner %lu pos %lu dir %lu count=%d\n", inode, inode->i_ino
+	PRINTK ((KERN_DEBUG "put inode %p (%lu) owner %lu pos %lu dir %lu count=%d\n", inode
+		 ,inode->i_ino
 		 ,inode->u.umsdos_i.i_emd_owner, inode->u.umsdos_i.pos
 		 ,inode->u.umsdos_i.i_emd_dir, inode->i_count));
 
@@ -282,6 +392,7 @@ void UMSDOS_put_inode (struct inode *inode)
 void UMSDOS_put_super (struct super_block *sb)
 {
 	Printk ((KERN_DEBUG "UMSDOS_put_super: entering\n"));
+	check_dentry_path (sb->s_root, "put_super: START");
 	msdos_put_super (sb);
 	MOD_DEC_USE_COUNT;
 }
@@ -290,18 +401,18 @@ void UMSDOS_put_super (struct super_block *sb)
 
 /*
  * Call msdos_lookup, but set back the original msdos function table.
- * Return 0 if ok, or a negative error code if not.
+ * Return 0 if OK, or a negative error code if not.
  */
-int umsdos_real_lookup (
-			       struct inode *dir,
-			       struct dentry *dentry
-)
-{				/* Will hold inode of the file, if successful */
+int umsdos_real_lookup (       struct inode *dir,
+			       struct dentry *dentry)	/* Will hold inode of the file, if successful */
+{
 	int ret;
 
-	PRINTK ((KERN_DEBUG "umsdos_real_lookup: looking for %s /", dentry->d_name.name));
-	inc_count (dir);	/* should be here ? Causes all kind of missing iput()'s all around, but panics w/o it /mn/ */
+	PRINTK ((KERN_DEBUG "umsdos_real_lookup: looking for %.*s /", dentry->d_name.len, dentry->d_name.name));
+	inc_count (dir);
 	ret = msdos_lookup (dir, dentry);
+	dentry->d_op = NULL;	/* FIXME: Not needed? - if it was good once for MSDOS, it will be good any other time also. I hope :) */
+	iput (dir);		/* pair to inc_count(dir) above */
 	PRINTK (("/ returned %d\n", ret));
 
 	return ret;
@@ -312,6 +423,8 @@ int umsdos_real_lookup (
  * First, it completes the function pointers, then
  * it locates the EMD file. If the EMD is there, then plug the
  * umsdos function table. If not, use the msdos one.
+ *
+ * {i,d}_counts are untouched by this function.
  */
 void umsdos_setup_dir_inode (struct inode *inode)
 {
@@ -319,8 +432,12 @@ void umsdos_setup_dir_inode (struct inode *inode)
 	{
 		struct inode *emd_dir;
 
+		Printk ((KERN_DEBUG "umsdos_setup_dir_inode: Entering for inode=%lu\n", inode->i_ino));
+		check_inode (inode);
 		emd_dir = umsdos_emd_dir_lookup (inode, 0);
-		Printk ((KERN_DEBUG "umsdos_setup_dir_inode: umsdos_emd_dir_lookup for inode=%p returned %p\n", inode, emd_dir));
+		Printk ((KERN_DEBUG "umsdos_setup_dir_inode: umsdos_emd_dir_lookup for inode=%lu returned %p\n", inode->i_ino, emd_dir));
+		check_inode (inode);
+		check_inode (emd_dir);
 
 		if (emd_dir == NULL) {
 			Printk ((KERN_DEBUG "umsdos_setup_dir_inode /mn/: Setting up rdir_inode_ops --> eg. NOT using EMD.\n"));
@@ -328,9 +445,8 @@ void umsdos_setup_dir_inode (struct inode *inode)
 		} else {
 			Printk ((KERN_DEBUG "umsdos_setup_dir_inode /mn/: Setting up dir_inode_ops --> eg. using EMD.\n"));
 			inode->i_op = &umsdos_dir_inode_operations;
+			iput (emd_dir);
 		}
-
-		iput (emd_dir);	/* FIXME? OK? */
 	}
 }
 
@@ -338,20 +454,19 @@ void umsdos_setup_dir_inode (struct inode *inode)
 /*
  * Add some info into an inode so it can find its owner quickly
  */
-void umsdos_set_dirinfo (
-				struct inode *inode,
+void umsdos_set_dirinfo (	struct inode *inode,
 				struct inode *dir,
 				off_t f_pos)
 {
 	struct inode *emd_owner;
 
-	/* FIXME, I don't have a clue on this one - /mn/ hmmm ? ok ? */
+	/* FIXME, I don't have a clue on this one - /mn/ Hmmm?  OK? */
 /*    Printk ((KERN_WARNING "umsdos_set_dirinfo: /mn/ FIXME: no clue. inode=%lu dir=%lu\n", inode->i_ino, dir->i_ino)); */
 	emd_owner = umsdos_emd_dir_lookup (dir, 1);
 	Printk (("umsdos_set_dirinfo: emd_owner is %lu for dir %lu\n", emd_owner->i_ino, dir->i_ino));
 	inode->u.umsdos_i.i_dir_owner = dir->i_ino;
 	inode->u.umsdos_i.i_emd_owner = emd_owner->i_ino;
-	iput (emd_owner); /* FIXME? */
+	/* iput (emd_owner); / * FIXME? */
 	inode->u.umsdos_i.pos = f_pos;
 }
 
@@ -374,16 +489,17 @@ int umsdos_isinit (struct inode *inode)
 
 /*
  * Connect the proper tables in the inode and add some info.
+ * i_counts is not changed.
  */
-void umsdos_patch_inode (
-				struct inode *inode,
+ 
+void umsdos_patch_inode (	struct inode *inode,
 				struct inode *dir,	/* May be NULL */
 				off_t f_pos)
 {
 	/*
 	 * This function is called very early to setup the inode, somewhat
 	 * too early (called by UMSDOS_read_inode). At this point, we can't
-	 * do to much, such as lookup up EMD files and so on. This causes
+	 * do too much, such as lookup up EMD files and so on. This causes
 	 * confusion in the kernel. This is why some initialisation
 	 * will be done when dir != NULL only.
 	 * 
@@ -404,18 +520,18 @@ void umsdos_patch_inode (
 		if (S_ISREG (inode->i_mode)) {
 			if (MSDOS_SB (inode->i_sb)->cvf_format) {
 				if (MSDOS_SB (inode->i_sb)->cvf_format->flags & CVF_USE_READPAGE) {
-					Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = umsdos_file_inode_operations_readpage\n"));
+					Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: setting i_op = umsdos_file_inode_operations_readpage\n"));
 					inode->i_op = &umsdos_file_inode_operations_readpage;
 				} else {
-					Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = umsdos_file_inode_operations_no_bmap\n"));
+					Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: setting i_op = umsdos_file_inode_operations_no_bmap\n"));
 					inode->i_op = &umsdos_file_inode_operations_no_bmap;
 				}
 			} else {
 				if (inode->i_op->bmap != NULL) {
-					Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = umsdos_file_inode_operations\n"));
+					Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: setting i_op = umsdos_file_inode_operations\n"));
 					inode->i_op = &umsdos_file_inode_operations;
 				} else {
-					Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = umsdos_file_inode_operations_no_bmap\n"));
+					Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: setting i_op = umsdos_file_inode_operations_no_bmap\n"));
 					inode->i_op = &umsdos_file_inode_operations_no_bmap;
 				}
 			}
@@ -424,13 +540,13 @@ void umsdos_patch_inode (
 				umsdos_setup_dir_inode (inode);
 			}
 		} else if (S_ISLNK (inode->i_mode)) {
-			Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = umsdos_symlink_inode_operations\n"));
+			Printk ((KERN_DEBUG "umsdos_patch_inode /mn/:  setting i_op = umsdos_symlink_inode_operations\n"));
 			inode->i_op = &umsdos_symlink_inode_operations;
 		} else if (S_ISCHR (inode->i_mode)) {
-			Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = chrdev_inode_operations\n"));
+			Printk ((KERN_DEBUG "umsdos_patch_inode /mn/:  setting i_op = chrdev_inode_operations\n"));
 			inode->i_op = &chrdev_inode_operations;
 		} else if (S_ISBLK (inode->i_mode)) {
-			Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = blkdev_inode_operations\n"));
+			Printk ((KERN_DEBUG "umsdos_patch_inode /mn/:  setting i_op = blkdev_inode_operations\n"));
 			inode->i_op = &blkdev_inode_operations;
 		} else if (S_ISFIFO (inode->i_mode)) {
 			Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: uhm, init_fifo\n"));
@@ -460,7 +576,7 @@ void umsdos_patch_inode (
 
 		Printk ((KERN_WARNING "umsdos_patch_inode: /mn/ Warning: untested emd_owner thingy...\n"));
 		emd_owner = umsdos_emd_dir_lookup (dir, 1);
-		iput (emd_owner); /* FIXME? */
+		/* iput (emd_owner); / * FIXME? */
 		if (emd_owner->i_ino != inode->u.umsdos_i.i_emd_owner) {
 			printk ("UMSDOS: *** EMD_OWNER ??? *** ino = %ld %ld <> %ld "
 				,inode->i_ino, emd_owner->i_ino, inode->u.umsdos_i.i_emd_owner);
@@ -471,12 +587,11 @@ void umsdos_patch_inode (
 
 /*
  * Get the inode of the directory which owns this inode.
- * Return 0 if ok, -EIO if error.
+ * Return 0 if OK, -EIO if error.
  */
-int umsdos_get_dirowner (
-				struct inode *inode,
-				struct inode **result)
-{				/* Hold NULL if any error */
+int umsdos_get_dirowner (	struct inode *inode,
+				struct inode **result)	/* Hold NULL if any error */
+{				
 	/* else, the inode of the directory */
 	int ret = -EIO;
 	unsigned long ino = inode->u.umsdos_i.i_dir_owner;
@@ -489,7 +604,7 @@ int umsdos_get_dirowner (
 
 		if (dir != NULL) {
 			umsdos_patch_inode (dir, NULL, 0);
-			/* iput (dir);	/ * FIXME: /mn/ added this. Is it ok ? */
+			/* iput (dir);	/ * FIXME: /mn/ added this. Is it OK? */
 			ret = 0;
 		}
 	}
@@ -503,9 +618,9 @@ int umsdos_get_dirowner (
  */
 void UMSDOS_read_inode (struct inode *inode)
 {
-	Printk ((KERN_DEBUG "UMSDOS_read_inode %p ino = %lu ", inode, inode->i_ino));
+	PRINTK ((KERN_DEBUG "UMSDOS_read_inode %p ino = %lu ", inode, inode->i_ino));
 	msdos_read_inode (inode);
-	Printk (("ino after msdos_read_inode= %lu i_count=%d\n", inode->i_ino, inode->i_count));
+	PRINTK (("ino after msdos_read_inode= %lu i_count=%d\n", inode->i_ino, inode->i_count));
 	if (S_ISDIR (inode->i_mode)
 	    && (inode->u.umsdos_i.u.dir_info.creating != 0
 		|| inode->u.umsdos_i.u.dir_info.looking != 0
@@ -537,7 +652,7 @@ int internal_notify_change (struct inode *inode, struct iattr *attr)
 	int ret = 0;
 	struct inode *root;
 
-	PRINTK ((KERN_DEBUG "UMSDOS_notify_change: entering\n"));
+	Printk ((KERN_DEBUG "UMSDOS_notify_change: entering\n"));
 
 	if ((ret = inode_change_ok (inode, attr)) != 0)
 		return ret;
@@ -564,7 +679,7 @@ int internal_notify_change (struct inode *inode, struct iattr *attr)
 			 * UMSDOS_notify_change() (right here).
 			 * 
 			 * I am not sure of the behavior of the root inode for
-			 * a real UNIX file system. For now, this is a nop.
+			 * a real Unix file system. For now, this is a nop.
 			 */
 		} else if (i_emd_owner != 0xffffffff && i_emd_owner != 0) {
 			/* This inode is not a EMD file nor an inode used internally
@@ -582,18 +697,16 @@ int internal_notify_change (struct inode *inode, struct iattr *attr)
 				struct file filp;
 				struct umsdos_dirent entry;
 				struct dentry *emd_dentry;
-				loff_t offs;
 
-				emd_dentry = creat_dentry ("notify_emd", 10, emd_owner, NULL);
+				emd_dentry = geti_dentry (emd_owner); /* FIXME? */
 				fill_new_filp (&filp, emd_dentry);
 
 				filp.f_pos = inode->u.umsdos_i.pos;
 				filp.f_reada = 0;
-				offs = filp.f_pos;	/* FIXME: /mn/ is this ok ? */
 				Printk (("pos = %Lu ", filp.f_pos));
 				/* Read only the start of the entry since we don't touch */
 				/* the name */
-				ret = umsdos_emd_dir_read (emd_owner, &filp, (char *) &entry, UMSDOS_REC_SIZE, &offs);
+				ret = umsdos_emd_dir_read (&filp, (char *) &entry, UMSDOS_REC_SIZE);
 				if (ret == 0) {
 					if (attr->ia_valid & ATTR_UID)
 						entry.uid = attr->ia_uid;
@@ -610,22 +723,19 @@ int internal_notify_change (struct inode *inode, struct iattr *attr)
 
 					entry.nlink = inode->i_nlink;
 					filp.f_pos = inode->u.umsdos_i.pos;
-					offs = filp.f_pos;	/* FIXME: /mn/ is this ok ? */
-					ret = umsdos_emd_dir_write (emd_owner, &filp, (char *) &entry, UMSDOS_REC_SIZE, &offs);
+					ret = umsdos_emd_dir_write (&filp, (char *) &entry, UMSDOS_REC_SIZE);
 
-					Printk (("notify pos %lu ret %d nlink %d "
-						 ,inode->u.umsdos_i.pos
-						 ,ret, entry.nlink));
+					Printk (("notify pos %lu ret %d nlink %d ", inode->u.umsdos_i.pos, ret, entry.nlink));
 					/* #Specification: notify_change / msdos fs
 					 * notify_change operation are done only on the
 					 * EMD file. The msdos fs is not even called.
 					 */
 				}
-				iput (emd_owner);	/* FIXME? /mn/ */
+				/* iput (emd_owner);	/ * FIXME? /mn/ */
 			}
 			Printk (("\n"));
 		}
-		iput (root);	/* FIXME - /mn/ this is hopefully ok */
+		/* iput (root);	/ * FIXME - /mn/ This is should be OK. */
 	}
 	if (ret == 0)
 		inode_setattr (inode, attr);
@@ -660,7 +770,7 @@ void UMSDOS_write_inode (struct inode *inode)
 
 /*      
  * internal_notify_change (inode, &newattrs);
- * inode->i_state &= ~I_DIRTY; / * FIXME: this doesn't work... we need to remove ourselfs from list on dirty inodes /mn/ */
+ * inode->i_state &= ~I_DIRTY; / * FIXME: this doesn't work.  We need to remove ourselves from list on dirty inodes. /mn/ */
 }
 
 
@@ -668,13 +778,13 @@ void UMSDOS_write_inode (struct inode *inode)
 
 
 /* #Specification: function name / convention
- * A simple convention for function name has been used in
- * the UMSDOS file system. First all function use the prefix
- * umsdos_ to avoid name clash with other part of the kernel.
+ * A simple convention for function names has been used in
+ * the UMSDOS filesystem. First, all functions use the prefix
+ * umsdos_ to avoid name clashes with other parts of the kernel.
  * 
- * And standard VFS entry point use the prefix UMSDOS (upper case)
+ * Standard VFS entry points use the prefix UMSDOS (upper case)
  * so it's easier to tell them apart.
- * N.B. (FIXME) PTW, the order and contents of this struct changed
+ * N.B. (FIXME) PTW, the order and contents of this struct changed.
  */
 
 static struct super_operations umsdos_sops =
@@ -693,8 +803,7 @@ static struct super_operations umsdos_sops =
 /*
  * Read the super block of an Extended MS-DOS FS.
  */
-struct super_block *UMSDOS_read_super (
-					      struct super_block *sb,
+struct super_block *UMSDOS_read_super (	      struct super_block *sb,
 					      void *data,
 					      int silent)
 {
@@ -716,27 +825,39 @@ struct super_block *UMSDOS_read_super (
 
 	Printk ((KERN_DEBUG "UMSDOS /mn/: starting UMSDOS_read_super\n"));
 	MOD_INC_USE_COUNT;
-	PRINTK ((KERN_DEBUG "UMSDOS /mn/: sb = %p\n", sb));
+	Printk ((KERN_DEBUG "UMSDOS /mn/: sb = %p\n", sb));
+
+	MSDOS_SB(sb)->options.isvfat = 0;
 	res = msdos_read_super (sb, data, silent);
-	PRINTK ((KERN_DEBUG "UMSDOS /mn/: res = %p\n", res));
-	printk (KERN_INFO "UMSDOS dentry-WIP-Beta 0.82-4 (compatibility level %d.%d, fast msdos)\n", UMSDOS_VERSION, UMSDOS_RELEASE);
+	sb->s_op = &umsdos_sops;
+	Printk ((KERN_DEBUG "UMSDOS /mn/: res = %p\n", res));
+	printk (KERN_INFO "UMSDOS dentry-WIP-Beta 0.82-7 (compatibility level %d.%d, fast msdos)\n", UMSDOS_VERSION, UMSDOS_RELEASE);
 
 	if (res == NULL) {
+		sb->s_dev = 0;
 		MOD_DEC_USE_COUNT;
+		Printk ((KERN_DEBUG "UMSDOS: msdos_read_super failed ! mount aborted.\n"));
 		return NULL;
 	}
+	
 	MSDOS_SB (res)->options.dotsOK = 0;	/* disable hidden==dotfile */
-	res->s_op = &umsdos_sops;
+#if 1
+	res->s_root->d_op = NULL;	/* FIXME:?? clear d_op on root so it will not be inherited */
+#endif	
+	
 	Printk ((KERN_DEBUG "umsdos /mn/: here goes the iget ROOT_INO\n"));
 
-	pseudo = iget (res, UMSDOS_ROOT_INO);
-	Printk ((KERN_DEBUG "umsdos_read_super %p\n", pseudo));
+/*	pseudo = iget (res, UMSDOS_ROOT_INO);	// we probably could do it as below (and remove iput() below), but we want use_count to go up. Do we ? :) */
+	pseudo = res->s_root->d_inode;	/* msdos_read_super already did iget() it */
+	
+	Printk ((KERN_DEBUG "umsdos_read_super pseudo=%p\n", pseudo));
 
 	umsdos_setup_dir_inode (pseudo);
 	Printk ((KERN_DEBUG "umsdos_setup_dir_inode passed. pseudo i_count=%d\n", pseudo->i_count));
 
 	/* if (s == super_blocks){ FIXME, super_blocks no longer exported */
 	if (pseudo) {
+#if 0	/* FIXME URGENT: disable pseudo root-for the moment of testing. re-enable this before release ! */
 		/* #Specification: pseudo root / mount
 		 * When a umsdos fs is mounted, a special handling is done
 		 * if it is the root partition. We check for the presence
@@ -769,8 +890,8 @@ struct super_block *UMSDOS_read_super (
 		 */
 		struct dentry *root, *etc, *etc_rc, *sbin, *init = NULL;
 
-		root = creat_dentry (UMSDOS_PSDROOT_NAME, strlen (UMSDOS_PSDROOT_NAME), NULL, NULL);
-		sbin = creat_dentry ("sbin", 4, NULL, NULL);
+		root = creat_dentry (UMSDOS_PSDROOT_NAME, strlen (UMSDOS_PSDROOT_NAME), NULL, res->s_root);
+		sbin = creat_dentry ("sbin", 4, NULL, NULL); /* FIXME: should last NULL be root or res->s_root ?  Not NULL in any case.. */
 
 		Printk ((KERN_DEBUG "Mounting root\n"));
 		if (umsdos_real_lookup (pseudo, root) == 0
@@ -791,14 +912,14 @@ struct super_block *UMSDOS_read_super (
 				init = creat_dentry ("init", 4, NULL, etc);
 				etc_rc = creat_dentry ("rc", 2, NULL, etc);
 
-				/* if ((umsdos_real_lookup (etc,"init",4,init)==0 */
 				if ((umsdos_real_lookup (pseudo, init) == 0
 				     && S_ISREG (init->d_inode->i_mode))
-				/*       || (umsdos_real_lookup (etc,"rc",2,&rc)==0 */
 				    || (umsdos_real_lookup (pseudo, etc_rc) == 0
 				 && S_ISREG (etc_rc->d_inode->i_mode))) {
 					pseudo_ok = 1;
 				}
+				/* iput (pseudo); iput (pseudo);	/ * because msdos_real_lookup does inc_count (pseudo) */
+
 				/* FIXME !!!!!! */
 				/* iput(init); */
 				/* iput(rc); */
@@ -809,11 +930,11 @@ struct super_block *UMSDOS_read_super (
 			    && S_ISDIR (sbin->d_inode->i_mode)) {
 
 				Printk ((KERN_DEBUG "/%s/sbin is there\n", UMSDOS_PSDROOT_NAME));
-				/* if (umsdos_real_lookup (sbin,"init",4,init)==0 */
 				if (umsdos_real_lookup (pseudo, init) == 0
 				    && S_ISREG (init->d_inode->i_mode)) {
 					pseudo_ok = 1;
 				}
+				/*iput (pseudo);*/
 				/* FIXME !!! 
 				 * iput (init); */
 			}
@@ -830,8 +951,17 @@ struct super_block *UMSDOS_read_super (
 			 * iput (etc);
 			 */
 		}
-		iput (pseudo);
+#endif	
+		/*iput (pseudo); // iget was removed... so this no longer needed ? */
 	}
+#if 1
+	#warning UMSDOS: using ugly mount kludge only if necessary (DEBUG)
+	if (res->s_root->d_count != 1) {	/* if it is not 1, mount will fail with -EBUSY! */
+		printk (KERN_ERR "UMSDOS: mount kludge activated: root d_count was %d !\n", res->s_root->d_count);
+		res->s_root->d_count = 1;
+	}
+#endif	
+	check_dentry_path (res->s_root, "ROOT dentry check");
 	Printk ((KERN_DEBUG "umsdos_read_super /mn/: (pseudo=%lu, i_count=%d) returning %p\n", pseudo->i_ino, pseudo->i_count, res));
 	return res;
 }

@@ -6,7 +6,7 @@
  * Byte-swapping, independently from CPU endianness
  *	swabXX[ps]?(foo)
  *
- * Francois-Rene Rideau <rideau@ens.fr> 19971205
+ * Francois-Rene Rideau <fare@tunes.org> 19971205
  *    separated swab functions from cpu_to_XX,
  *    to clean up support for bizarre-endian architectures.
  *
@@ -15,10 +15,13 @@
  *
  */
 
+/* casts are necessary for constants, because we never know how for sure
+ * how U/UL/ULL map to __u16, __u32, __u64. At least not in a portable way.
+ */
 #define ___swab16(x) \
 	((__u16)( \
-		(((__u16)(x) & 0x00ffU) << 8) | \
-		(((__u16)(x) & 0xff00U) >> 8) ))
+		(((__u16)(x) & (__u16)0x00ffU) << 8) | \
+		(((__u16)(x) & (__u16)0xff00U) >> 8) ))
 #define ___swab32(x) \
 	((__u32)( \
 		(((__u32)(x) & (__u32)0x000000ffUL) << 24) | \

@@ -126,6 +126,7 @@ struct file_operations atari_joystick_fops = {
 	NULL,		/* joystick_ioctl */
 	NULL,		/* joystick_mmap */
 	open_joystick,
+	NULL,		/* flush */
 	release_joystick
 };
 

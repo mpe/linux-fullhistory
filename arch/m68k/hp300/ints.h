@@ -4,3 +4,6 @@ extern void hp300_free_irq(unsigned int irq, void *dev_id);
 extern int hp300_request_irq(unsigned int irq,
 		void (*handler) (int, void *, struct pt_regs *),
 		unsigned long flags, const char *devname, void *dev_id);
+
+/* number of interrupts, includes 0 (what's that?) */
+#define HP300_NUM_IRQS 8

@@ -1159,6 +1159,31 @@ static inline void check_timer(void)
 	}
 }
 
+/*
+ *
+ * IRQ's that are handled by the old PIC in all cases:
+ * - IRQ2 is the cascade IRQ, and cannot be a io-apic IRQ.
+ *   Linux doesn't really care, as it's not actually used
+ *   for any interrupt handling anyway.
+ * - IRQ13 is the FPU error IRQ, and may be connected
+ *   directly from the FPU to the old PIC. Linux doesn't
+ *   really care, because Linux doesn't want to use IRQ13
+ *   anyway (exception 16 is the proper FPU error signal)
+ * - IRQ9 is broken on PIIX4 motherboards:
+ *
+ *		"IRQ9 cannot be re-assigned"
+ *
+ *		IRQ9 is not available to assign to
+ *		ISA add-in cards because it is
+ *		dedicated to the power
+ *		management function of the PIIX4
+ *		controller on the motherboard.
+ *		This is true for other motherboards
+ *		which use the 82371AB PIIX4
+ *		component.
+ */
+#define PIC_IRQS	((1<<2)|(1<<9)|(1<<13))
+
 void __init setup_IO_APIC(void)
 {
 	init_sym_mode();
@@ -1176,7 +1201,7 @@ void __init setup_IO_APIC(void)
 		pirqs_enabled)
 	{
 		printk("ENABLING IO-APIC IRQs\n");
-		io_apic_irqs = ~((1<<2)|(1<<9)|(1<<13));
+		io_apic_irqs = ~PIC_IRQS;
 	} else {
 		if (ioapic_blacklisted())
 			printk(" blacklisted board, DISABLING IO-APIC IRQs\n");

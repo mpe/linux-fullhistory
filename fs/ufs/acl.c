@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1998
  * Daniel Pirkl <daniel.pirkl@email.cz>
- * Charles Uiversity, Faculty of Mathematics and Physics
+ * Charles University, Faculty of Mathematics and Physics
  *
  *  from
  *
@@ -16,8 +16,7 @@
  */
 
 /*
- * This file will contain the Access Control Lists management for the
- * second extended file system.
+ * This file will contain the Access Control Lists management for UFS
  */
 
 #include <linux/errno.h>
@@ -39,8 +38,8 @@ int ufs_permission (struct inode * inode, int mask)
 	 * Nobody gets write access to a file on a readonly-fs
 	 */
 	if ((mask & S_IWOTH) && 
-            (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode)) &&
-            IS_RDONLY(inode))
+	    (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode)) &&
+	    IS_RDONLY(inode))
 		return -EROFS;
 	/*
 	 * Nobody gets write access to an immutable file
@@ -57,7 +56,7 @@ int ufs_permission (struct inode * inode, int mask)
 		mode >>= 3;
 	/*
 	 * Access is always granted for root. We now check last,
-         * though, for BSD process accounting correctness
+	 * though, for BSD process accounting correctness
 	 */
 	if (((mode & mask & S_IRWXO) == mask) || fsuser())
 		return 0;

@@ -236,8 +236,6 @@ extern __inline__ int ffs(int x)
 #define hweight16(x) generic_hweight16(x)
 #define hweight8(x) generic_hweight8(x)
 
-#endif /* __KERNEL__ */
-
 /* Bitmap functions for the minix filesystem */
 
 extern __inline__ int
@@ -365,5 +363,7 @@ ext2_find_next_zero_bit (const void *vaddr, unsigned size, unsigned offset)
 	res = ext2_find_first_zero_bit (p, size - 32 * (p - addr));
 	return (p - addr) * 32 + res;
 }
+
+#endif /* __KERNEL__ */
 
 #endif /* _M68K_BITOPS_H */

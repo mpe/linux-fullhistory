@@ -149,8 +149,8 @@
            retransmit immediately)
          - Add support for the new 1.3.x IP header cache, and other features.
          - Replace setting of debug level with the "metric" flag hack by
-	   something better. SIOCDEVPRIVATE is a good candidate, but it would
-	   require an extra user-level utility.
+	   something that still exists. SIOCDEVPRIVATE is a good candidate, 
+	   but it would require an extra user-level utility.
 
          - What about cards with shared memory that can be "turned off?"
            (or that have none at all, like the SMC PC500longboard)
@@ -428,13 +428,13 @@ arcnet_open(struct device *dev)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 
-  if (dev->metric>=1000)
-    {
-      arcnet_debug=dev->metric-1000;
-      printk(KERN_INFO "%6s: debug level set to %d\n",dev->name,arcnet_debug);
-      dev->metric=1;
-    }
-
+  /*  if (dev->metric>=1000)
+   *  {
+   *  arcnet_debug=dev->metric-1000;
+   *  printk(KERN_INFO "%6s: debug level set to %d\n",dev->name,arcnet_debug);
+   *  dev->metric=1;
+   *}
+   */
   BUGMSG(D_INIT,"arcnet_open: resetting card.\n");
 
   /* try to put the card in a defined state - if it fails the first

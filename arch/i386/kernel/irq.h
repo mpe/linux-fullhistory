@@ -22,6 +22,7 @@ struct hw_interrupt_type {
 #define IRQ_DISABLED	2	/* IRQ disabled - do not enter! */
 #define IRQ_PENDING	4	/* IRQ pending - replay on enable */
 #define IRQ_REPLAY	8	/* IRQ has been replayed but not acked yet */
+#define IRQ_AUTODETECT	16	/* IRQ is being autodetected */
 
 /*
  * This is the "IRQ descriptor", which contains various information

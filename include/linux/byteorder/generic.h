@@ -5,18 +5,18 @@
  * linux/byteorder_generic.h
  * Generic Byte-reordering support
  *
- * Francois-Rene Rideau <rideau@ens.fr> 19970707
+ * Francois-Rene Rideau <fare@tunes.org> 19970707
  *    gathered all the good ideas from all asm-foo/byteorder.h into one file,
  *    cleaned them up.
  *    I hope it is compliant with non-GCC compilers.
  *    I decided to put __BYTEORDER_HAS_U64__ in byteorder.h,
  *    because I wasn't sure it would be ok to put it in types.h
  *    Upgraded it to 2.1.43
- * Francois-Rene Rideau <rideau@ens.fr> 19971012
+ * Francois-Rene Rideau <fare@tunes.org> 19971012
  *    Upgraded it to 2.1.57
  *    to please Linus T., replaced huge #ifdef's between little/big endian
  *    by nestedly #include'd files.
- * Francois-Rene Rideau <rideau@ens.fr> 19971205
+ * Francois-Rene Rideau <fare@tunes.org> 19971205
  *    Made it to 2.1.71; now a facelift:
  *    Put files under include/linux/byteorder/
  *    Split swab from generic support.
@@ -31,6 +31,11 @@
  *    nybble swapping support...
  *   = every architecture could add their byteswap macro in asm/byteorder.h
  *    see how some architectures already do (i386, alpha, ppc, etc)
+ *   = cpu_to_beXX and beXX_to_cpu might some day need to be well
+ *    distinguished throughout the kernel. This is not the case currently,
+ *    since little endian, big endian, and pdp endian machines needn't it.
+ *    But this might be the case for, say, a port of Linux to 20/21 bit
+ *    architectures (and F21 Linux addict around?).
  */
 
 /*

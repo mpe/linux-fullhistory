@@ -46,6 +46,7 @@
  *    03.08.98   0.6   Do not include modversions.h
  *                     Now mixer behaviour can basically be selected between
  *                     "OSS documented" and "OSS actual" behaviour
+ *    31.08.98   0.7   Fix realplayer problems - dac.count issues
  *
  */
 
@@ -619,7 +620,7 @@ static void start_adc(struct sv_state *s)
 	unsigned long flags;
 
 	spin_lock_irqsave(&s->lock, flags);
-	if ((s->dma_adc.mapped || s->dma_adc.count < s->dma_adc.dmasize - 2*s->dma_adc.fragsize) 
+	if ((s->dma_adc.mapped || s->dma_adc.count < (signed)(s->dma_adc.dmasize - 2*s->dma_adc.fragsize)) 
 	    && s->dma_adc.ready) {
 		s->enable |= SV_CENABLE_RE;
 		wrindir(s, SV_CIENABLE, s->enable);
@@ -763,10 +764,10 @@ static void sv_update_ptr(struct sv_state *s)
 		s->dma_adc.total_bytes += diff;
 		s->dma_adc.count += diff;
 		if (s->dma_adc.mapped) {
-			if (s->dma_adc.count >= s->dma_adc.fragsize) 
+			if (s->dma_adc.count >= (signed)s->dma_adc.fragsize) 
 				wake_up(&s->dma_adc.wait);
 		} else {
-			if (s->dma_adc.count > s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1)) {
+			if (s->dma_adc.count > (signed)(s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1))) {
 				s->enable &= ~SV_CENABLE_RE;
 				wrindir(s, SV_CIENABLE, s->enable);
 				s->dma_adc.error++;
@@ -783,7 +784,7 @@ static void sv_update_ptr(struct sv_state *s)
 		s->dma_dac.total_bytes += diff;
 		if (s->dma_dac.mapped) {
 			s->dma_dac.count += diff;
-			if (s->dma_dac.count >= s->dma_dac.fragsize)
+			if (s->dma_dac.count >= (signed)s->dma_dac.fragsize)
 				wake_up(&s->dma_dac.wait);
 		} else {
 			s->dma_dac.count -= diff;
@@ -791,11 +792,11 @@ static void sv_update_ptr(struct sv_state *s)
 				s->enable &= ~SV_CENABLE_PE;
 				wrindir(s, SV_CIENABLE, s->enable);
 				s->dma_dac.error++;
-			} else if (s->dma_dac.count <= s->dma_dac.fragsize && !s->dma_dac.endcleared) {
+			} else if (s->dma_dac.count <= (signed)s->dma_dac.fragsize && !s->dma_dac.endcleared) {
 				clear_advance(s);
 				s->dma_dac.endcleared = 1;
 			}
-			if (s->dma_dac.count < s->dma_dac.dmasize)
+			if (s->dma_dac.count < (signed)s->dma_dac.dmasize)
 				wake_up(&s->dma_dac.wait);
 		}
 	}
@@ -1391,7 +1392,7 @@ static unsigned int sv_poll(struct file *file, struct poll_table_struct *wait)
 	sv_update_ptr(s);
 	if (file->f_flags & FMODE_READ) {
 		if (s->dma_adc.mapped) {
-			if (s->dma_adc.count >= s->dma_adc.fragsize)
+			if (s->dma_adc.count >= (signed)s->dma_adc.fragsize)
 				mask |= POLLIN | POLLRDNORM;
 		} else {
 			if (s->dma_adc.count > 0)
@@ -1400,10 +1401,10 @@ static unsigned int sv_poll(struct file *file, struct poll_table_struct *wait)
 	}
 	if (file->f_flags & FMODE_WRITE) {
 		if (s->dma_dac.mapped) {
-			if (s->dma_dac.count >= s->dma_dac.fragsize) 
+			if (s->dma_dac.count >= (signed)s->dma_dac.fragsize) 
 				mask |= POLLOUT | POLLWRNORM;
 		} else {
-			if (s->dma_dac.dmasize > s->dma_dac.count)
+			if ((signed)s->dma_dac.dmasize > s->dma_dac.count)
 				mask |= POLLOUT | POLLWRNORM;
 		}
 	}
@@ -2282,7 +2283,7 @@ __initfunc(int init_sonicvibes(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.6 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.7 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");

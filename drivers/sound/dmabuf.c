@@ -206,6 +206,7 @@ static void close_dmap(struct audio_operations *adev, struct dma_buffparms *dmap
 		dmap->dma_mode = DMODE_NONE;
 	dmap->flags &= ~DMA_BUSY;
 	disable_dma(dmap->dma);
+	sound_free_dmap(dmap);
 }
 
 

@@ -17,6 +17,7 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/traps.h>
+#include <asm/io.h>
 #ifdef CONFIG_AMIGA
 #include <asm/amigahw.h>
 #endif
@@ -299,14 +300,14 @@ static unsigned long transp_transl_matches( unsigned long regval,
     return( (vaddr & mask) == (base & mask) );
 }
 
-static unsigned long mm_vtop_fallback (unsigned long);
-
+#ifndef CONFIG_SINGLE_MEMORY_CHUNK
 /*
  * The following two routines map from a physical address to a kernel
  * virtual address and vice versa.
  */
 unsigned long mm_vtop (unsigned long vaddr)
 {
+#ifndef CONFIG_SINGLE_MEMORY_CHUNK
 	int i=0;
 	unsigned long voff = vaddr;
 	unsigned long offset = 0;
@@ -322,12 +323,18 @@ unsigned long mm_vtop (unsigned long vaddr)
 			offset += m68k_memory[i].size;
 		i++;
 	}while (i < m68k_num_memory);
+#else
+	if (vaddr < m68k_memory[0].size)
+		return m68k_memory[0].addr + vaddr;
+#endif
+
 	return mm_vtop_fallback(vaddr);
 }
+#endif
 
 /* Separate function to make the common case faster (needs to save less
    registers) */
-static unsigned long mm_vtop_fallback (unsigned long vaddr)
+unsigned long mm_vtop_fallback (unsigned long vaddr)
 {
 	/* not in one of the memory chunks; test for applying transparent
 	 * translation */
@@ -420,7 +427,7 @@ static unsigned long mm_vtop_fallback (unsigned long vaddr)
 	  if (mmusr & (MMU_I|MMU_B|MMU_L))
 	    panic ("VTOP030: bad virtual address %08lx (%x)", vaddr, mmusr);
 
-	  descaddr = (unsigned long *)PTOV(descaddr);
+	  descaddr = phys_to_virt((unsigned long)descaddr);
 
 	  switch (mmusr & MMU_NUM) {
 	  case 1:
@@ -438,8 +445,10 @@ static unsigned long mm_vtop_fallback (unsigned long vaddr)
 	panic ("VTOP: bad virtual address %08lx", vaddr);
 }
 
+#ifndef CONFIG_SINGLE_MEMORY_CHUNK
 unsigned long mm_ptov (unsigned long paddr)
 {
+#ifndef CONFIG_SINGLE_MEMORY_CHUNK
 	int i = 0;
 	unsigned long offset = 0;
 
@@ -456,6 +465,11 @@ unsigned long mm_ptov (unsigned long paddr)
 			offset += m68k_memory[i].size;
 		i++;
 	}while (i < m68k_num_memory);
+#else
+	unsigned long base = m68k_memory[0].addr;
+	if (paddr >= base && paddr < (base + m68k_memory[0].size))
+		return (paddr - base);
+#endif
 
 	/*
 	 * assume that the kernel virtual address is the same as the
@@ -482,6 +496,7 @@ unsigned long mm_ptov (unsigned long paddr)
 #endif
 	return paddr;
 }
+#endif
 
 /* invalidate page in both caches */
 #define	clear040(paddr)					\
@@ -635,6 +650,7 @@ void cache_push (unsigned long paddr, int len)
 #undef pushcl040
 #undef pushcli040
 
+#ifndef CONFIG_SINGLE_MEMORY_CHUNK
 int mm_end_of_chunk (unsigned long addr, int len)
 {
 	int i;
@@ -644,4 +660,4 @@ int mm_end_of_chunk (unsigned long addr, int len)
 			return 1;
 	return 0;
 }
-
+#endif

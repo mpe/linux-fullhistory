@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1998
  * Daniel Pirkl <daniel.pirkl@email.cz>
- * Charles Uiversity, Faculty of Mathematics and Physics
+ * Charles University, Faculty of Mathematics and Physics
  *
  *  from
  *
@@ -68,7 +68,7 @@ static int ufs_trunc_direct (struct inode * inode)
 	struct ufs_sb_private_info * uspi;
 	struct buffer_head * bh;
 	u32 * p;
-   	unsigned frag1, frag2, frag3, frag4, block1, block2;
+	unsigned frag1, frag2, frag3, frag4, block1, block2;
 	unsigned frag_to_free, free_count;
 	unsigned i, j, tmp;
 	int retry;

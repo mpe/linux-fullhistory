@@ -24,16 +24,16 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.h,v 1.9 1998/08/06 21:06:14 andrewtv Exp $
+ * $Id: msnd.h,v 1.18 1998/09/04 18:43:40 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_H
 #define __MSND_H
 
-#define VERSION			"0.7.2"
+#define VERSION			"0.7.13"
 
 #define DEFSAMPLERATE		DSP_DEFAULT_SPEED
-#define DEFSAMPLESIZE		8
+#define DEFSAMPLESIZE		AFMT_U8
 #define DEFCHANNELS		1
 
 #define DEFFIFOSIZE		64
@@ -142,9 +142,9 @@
 #define	HDEX_MIDI_OUT_STOP	(9 + HDEX_BASE)
 #define	HDEX_AUX_REQ		(10 + HDEX_BASE)
 
-#define HIWORD(l)		((WORD)((((DWORD)(l)) >> 16) & 0xFFFF ))
+#define HIWORD(l)		((WORD)((((DWORD)(l)) >> 16) & 0xFFFF))
 #define LOWORD(l)		((WORD)(DWORD)(l))
-#define HIBYTE(w)		((BYTE)(((WORD)(w) >> 8 ) & 0xFF ))
+#define HIBYTE(w)		((BYTE)(((WORD)(w) >> 8) & 0xFF))
 #define LOBYTE(w)		((BYTE)(w))
 #define MAKELONG(low,hi)	((long)(((WORD)(low))|(((DWORD)((WORD)(hi)))<<16)))
 #define MAKEWORD(low,hi)	((WORD)(((BYTE)(low))|(((WORD)((BYTE)(hi)))<<8)))
@@ -166,33 +166,31 @@
 #  define spin_unlock_irqrestore(junk,flags)	do { restore_flags(flags); } while (0)
 #endif
 
-typedef unsigned char		BYTE;
-typedef unsigned short		USHORT;
-typedef unsigned short		WORD;
-typedef unsigned int		DWORD;
-typedef 
-struct DAQueueDataStruct *	LPDAQD;
+/* JobQueueStruct */
+#define JQS_wStart		0x00
+#define JQS_wSize		0x02
+#define JQS_wHead		0x04
+#define JQS_wTail		0x06
+#define JQS__size		0x08
 
-#define GCC_PACKED		__attribute__ ((packed))
+/* DAQueueDataStruct */
+#define DAQDS_wStart		0x00
+#define DAQDS_wSize		0x02
+#define DAQDS_wFormat		0x04
+#define DAQDS_wSampleSize	0x06
+#define DAQDS_wChannels		0x08
+#define DAQDS_wSampleRate	0x0A
+#define DAQDS_wIntMsg		0x0C
+#define DAQDS_wFlags		0x0E
+#define DAQDS__size		0x10
 
-struct JobQueueStruct {
-	WORD wStart;
-	WORD wSize;
-	WORD wHead;
-	WORD wTail;
-} GCC_PACKED;
+typedef u8			BYTE;
+typedef u16			USHORT;
+typedef u16			WORD;
+typedef u32			DWORD;
+typedef volatile BYTE *		LPDAQD;
 
-struct DAQueueDataStruct {
-	WORD wStart;
-	WORD wSize;
-	WORD wFormat;
-	WORD wSampleSize;
-	WORD wChannels;
-	WORD wSampleRate;
-	WORD wIntMsg;
-	WORD wFlags;
-} GCC_PACKED;
-
+/* Generic FIFO */
 typedef struct {
 	size_t n, len;
 	char *data;
@@ -200,12 +198,12 @@ typedef struct {
 } msnd_fifo;
 
 typedef struct multisound_dev {
-
+	/* Linux device info */
 	char *name;
 	int dsp_minor, mixer_minor;
 
 	/* Hardware resources */
-	unsigned int io, numio;
+	int io, numio;
 	int memid, irqid;
 	int irq, irq_ref;
 	unsigned char info;
@@ -214,16 +212,14 @@ typedef struct multisound_dev {
 	spinlock_t lock;
 #endif
 
-	/* MultiSound DDK variables */
-	enum { msndClassic, msndPinnacle } type;
-	struct SMA0_CommonData *SMA;	/* diff. structure for classic vs. pinnacle */
-	struct DAQueueDataStruct *CurDAQD;
-	struct DAQueueDataStruct *CurDARQD;
-	volatile WORD *pwDSPQData , *pwMIDQData , *pwMODQData;
-	volatile struct JobQueueStruct *DAPQ , *DARQ , *MODQ , *MIDQ , *DSPQ;
-	BYTE bCurrentMidiPatch;
+	/* Motorola 56k DSP SMA */
+	volatile BYTE *SMA;
+	volatile BYTE *CurDAQD, *CurDARQD;
+	volatile BYTE *DAPQ, *DARQ, *MODQ, *MIDQ, *DSPQ;
+	volatile WORD *pwDSPQData, *pwMIDQData, *pwMODQData;
 
 	/* State variables */
+	enum { msndClassic, msndPinnacle } type;
 	mode_t mode;
 	unsigned long flags;
 #define F_BANKONE			0
@@ -237,7 +233,6 @@ typedef struct multisound_dev {
 #define F_INT_MIDI_INUSE		8
 #define F_WRITEFLUSH			9
 #define F_HAVEDIGITAL			10
-
 	struct wait_queue *writeblock, *readblock;
 	struct wait_queue *writeflush;
 	unsigned long recsrc;
@@ -248,17 +243,17 @@ typedef struct multisound_dev {
 	int sample_size;
 	int sample_rate;
 	int channels;
+	BYTE bCurrentMidiPatch;
 	void (*inc_ref)(void);
 	void (*dec_ref)(void);
 
 	/* Digital audio FIFOs */
-	int fifosize;
 	msnd_fifo DAPF, DARF;
+	int fifosize;
 	int lastbank;
 
 	/* MIDI in callback */
 	void (*midi_in_interrupt)(struct multisound_dev *);
-
 } multisound_dev_t;
 
 #ifndef mdelay

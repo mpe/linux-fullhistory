@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1998
  * Daniel Pirkl <daniel.pirkl@email.cz>
- * Charles Uiversity, Faculty of Mathematics and Physics
+ * Charles University, Faculty of Mathematics and Physics
  */
  
 #include <linux/malloc.h>
@@ -194,4 +194,3 @@ void _ubh_memcpyubh_(struct ufs_sb_private_info * uspi,
 		bhno++;
 	}
 }
-		

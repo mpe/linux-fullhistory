@@ -32,7 +32,7 @@
 #define UFSDM \
 ufs_print_cylinder_stuff (ucg, swab); \
 printk("inode: total %u, fs %u, cg %u\n", SWAB32(usb1->fs_cstotal.cs_nifree), \
-swab32(sb->fs_cs(ucpi->c_cgx).cs_nifree), SWAB32(ucg->cg_cs.cs_nifree)); \
+SWAB32(sb->fs_cs(ucpi->c_cgx).cs_nifree), SWAB32(ucg->cg_cs.cs_nifree)); \
 printk("block: total %u, fs %u, cg %u\n", SWAB32(usb1->fs_cstotal.cs_nbfree), \
 SWAB32(sb->fs_cs(ucpi->c_cgx).cs_nbfree), SWAB32(ucg->cg_cs.cs_nbfree)); \
 printk("fragment: total %u, fs %u, cg %u\n", SWAB32(usb1->fs_cstotal.cs_nffree), \
@@ -133,7 +133,7 @@ void ufs_free_fragments (struct inode * inode, unsigned fragment, unsigned count
 	if (sb->s_flags & MS_SYNCHRONOUS) {
 		ubh_ll_rw_block (WRITE, 1, (struct ufs_buffer_head **)&ucpi);
 		ubh_wait_on_buffer (UCPI_UBH);
-        }
+	}
 	sb->s_dirt = 1;
 	
 	unlock_super (sb);
@@ -211,7 +211,7 @@ do_more:
 		cylno = ufs_cbtocylno(i);
 		INC_SWAB16(ubh_cg_blks(ucpi, cylno, ufs_cbtorpos(i)));
 		INC_SWAB32(ubh_cg_blktot(ucpi, cylno));
-  	}
+	}
 
 	UFSDM
 	
@@ -220,7 +220,7 @@ do_more:
 	if (sb->s_flags & MS_SYNCHRONOUS) {
 		ubh_ll_rw_block (WRITE, 1, (struct ufs_buffer_head **)&ucpi);
 		ubh_wait_on_buffer (UCPI_UBH);
-        }
+	}
 
 	if (overflow) {
 		fragment += count;
@@ -249,7 +249,7 @@ failed:
 		mark_buffer_dirty (bh, 1); \
 		if (IS_SYNC(inode)) { \
 			ll_rw_block (WRITE, 1, &bh); \
-  			wait_on_buffer (bh); \
+			wait_on_buffer (bh); \
 		} \
 		brelse (bh); \
 	}
@@ -328,7 +328,7 @@ unsigned ufs_new_fragments (struct inode * inode, u32 * p, unsigned fragment,
 	 * allocate new fragment
 	 */
 	if (oldcount == 0) {
-	        result = ufs_alloc_fragments (inode, cgno, goal, count, err);
+		result = ufs_alloc_fragments (inode, cgno, goal, count, err);
 		if (result) {
 			*p = SWAB32(result);
 			*err = 0;
@@ -373,7 +373,7 @@ unsigned ufs_new_fragments (struct inode * inode, u32 * p, unsigned fragment,
 		request = uspi->s_fpb;
 		if (SWAB32(usb1->fs_cstotal.cs_nffree) < uspi->s_dsize *
 		    (uspi->s_minfree - 2) / 100)
-		    	break;
+			break;
 		usb1->fs_optim = SWAB32(UFS_OPTSPACE);
 		break;
 	}
@@ -532,7 +532,7 @@ unsigned ufs_alloc_fragments (struct inode * inode, unsigned cgno,
 	}
 
 	/*
- 	 * 3. brute force search
+	 * 3. brute force search
 	 * We start at i = 2 ( 0 is checked at 1.step, 1 at 2.step )
 	 */
 	cgno = (oldcg + 1) % uspi->s_ncg;
@@ -642,7 +642,7 @@ unsigned ufs_alloccg_block (struct inode * inode,
 		goto norot;
 	}
 	goal = ufs_blknum (goal);
- 	goal = ufs_dtogd (goal);
+	goal = ufs_dtogd (goal);
 	
 	/*
 	 * If the requested block is available, use it.
@@ -652,7 +652,7 @@ unsigned ufs_alloccg_block (struct inode * inode,
 		goto gotit;
 	}
 	
-	/*** This function should be optimalized later ***/
+	/*** This function should be optimized later ***/
 
 norot:	
 	result = ufs_bitmap_search (sb, ucpi, goal, uspi->s_fpb);

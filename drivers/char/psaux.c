@@ -245,6 +245,9 @@ static int release_aux(struct inode * inode, struct file * file)
 	fasync_aux(-1, file, 0);
 	if (--aux_count)
 		return 0;
+#ifdef CONFIG_VT
+	pckbd_read_mask = KBD_STAT_OBF;
+#endif
 	aux_start_atomic();
 	aux_write_cmd(AUX_INTS_OFF);			    /* Disable controller ints */
 	poll_aux_status();
@@ -296,6 +299,10 @@ static int open_aux(struct inode * inode, struct file * file)
 	aux_write_cmd(AUX_INTS_ON);			    /* Enable controller ints */
 	poll_aux_status();
 	aux_end_atomic();
+
+#ifdef CONFIG_VT
+	pckbd_read_mask = AUX_STAT_OBF;
+#endif
 
 	aux_ready = 0;
 	return 0;
@@ -613,9 +620,6 @@ __initfunc(int psaux_init(void))
 	if (aux_device_present == 0xaa) {
 		printk(KERN_INFO "PS/2 auxiliary pointing device detected -- driver installed.\n");
 	 	aux_present = 1;
-#ifdef CONFIG_VT
-		pckbd_read_mask = AUX_STAT_OBF;
-#endif
 	} else {
 		return -EIO;
 	}
@@ -643,6 +647,7 @@ __initfunc(int psaux_init(void))
 		poll_aux_status();
 		aux_end_atomic();
 	}
+
 	return 0;
 }
 

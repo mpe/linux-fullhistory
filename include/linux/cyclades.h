@@ -754,6 +754,13 @@ struct cyclades_port {
 #define CyTBPR		(0x72*2)
 #define CyTCOR		(0x76*2)
 
+/* Custom Registers */
+
+#define	CyPLX_VER	(0x3400)
+#define	PLX_9050	0x11
+#define	PLX_9060	0x12
+#define	PLX_9080	0x13
+
 /***************************************************************************/
 
 #endif /* __KERNEL__ */

@@ -23,6 +23,7 @@
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
 #include <asm/irq.h>
+#include <asm/io.h>
 #include <asm/machdep.h>
 #ifdef CONFIG_AMIGA
 #include <asm/amigahw.h>
@@ -123,7 +124,7 @@ __initfunc(static void m68k_parse_bootinfo(const struct bi_record *record))
 		/* Already set up by head.S */
 		break;
 
-	    case BI_MEMCHUNK:
+ 	    case BI_MEMCHUNK:
 		if (m68k_num_memory < NUM_MEMINFO) {
 		    m68k_memory[m68k_num_memory].addr = data[0];
 		    m68k_memory[m68k_num_memory].size = data[1];
@@ -157,6 +158,14 @@ __initfunc(static void m68k_parse_bootinfo(const struct bi_record *record))
 		   record->tag);
 	record = (struct bi_record *)((u_long)record+record->size);
     }
+
+#ifdef CONFIG_SINGLE_MEMORY_CHUNK
+    if (m68k_num_memory > 1) {
+	printk("Ignoring last %i chunks of physical memory\n",
+	       (m68k_num_memory - 1));
+	m68k_num_memory = 1;
+    }
+#endif
 }
 
 __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
@@ -270,7 +279,7 @@ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (m68k_ramdisk.size) {
-		initrd_start = PTOV (m68k_ramdisk.addr);
+		initrd_start = (unsigned long)phys_to_virt(m68k_ramdisk.addr);
 		initrd_end = initrd_start + m68k_ramdisk.size;
 	}
 #endif

@@ -20,6 +20,7 @@
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/init.h>
+#include <linux/zorro.h>
 
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
@@ -29,7 +30,7 @@
 #include <asm/amigaints.h>
 #include <asm/irq.h>
 #include <asm/machdep.h>
-#include <linux/zorro.h>
+#include <asm/io.h>
 
 unsigned long amiga_model;
 unsigned long amiga_eclock;
@@ -421,10 +422,6 @@ __initfunc(void config_amiga(void))
    */
   if (AMIGAHW_PRESENT(MAGIC_REKICK))
 	  *(unsigned char *)ZTWO_VADDR(0xde0002) |= 0x80;
-
-#ifdef CONFIG_ZORRO
-  zorro_init();
-#endif
 }
 
 static unsigned short jiffy_ticks;
@@ -689,8 +686,8 @@ static NORET_TYPE void amiga_reset( void )
 
 static void amiga_reset (void)
 {
-  unsigned long jmp_addr040 = VTOP(&&jmp_addr_label040);
-  unsigned long jmp_addr = VTOP(&&jmp_addr_label);
+  unsigned long jmp_addr040 = virt_to_phys(&&jmp_addr_label040);
+  unsigned long jmp_addr = virt_to_phys(&&jmp_addr_label);
 
   cli();
   if (CPU_IS_040_OR_060)
@@ -785,7 +782,7 @@ static void amiga_savekmsg_init(void)
     savekmsg = (struct savekmsg *)amiga_chip_alloc(SAVEKMSG_MAXMEM);
     savekmsg->magic1 = SAVEKMSG_MAGIC1;
     savekmsg->magic2 = SAVEKMSG_MAGIC2;
-    savekmsg->magicptr = VTOP(savekmsg);
+    savekmsg->magicptr = virt_to_phys(savekmsg);
     savekmsg->size = 0;
 }
 

@@ -105,23 +105,21 @@ ENOSYS = 38
 	popl %eax;	\
 1:	popl %ds;	\
 2:	popl %es;	\
-3:	addl $4,%esp;	\
-4:	iret;		\
+	addl $4,%esp;	\
+3:	iret;		\
 .section fixup,"ax";	\
-5:	pushl $0;	\
-	popl %ds;	\
+4:	movl $0,(%esp);	\
+	jmp 1b;		\
+5:	movl $0,(%esp);	\
 	jmp 2b;		\
-6:	pushl $0;	\
-	popl %es;	\
-	jmp 3b;		\
-7:	pushl $11;	\
+6:	pushl $11;	\
 	call do_exit;	\
 .previous;		\
 .section __ex_table,"a";\
 	.align 4;	\
-	.long 1b,5b;	\
-	.long 2b,6b;	\
-	.long 4b,7b;	\
+	.long 1b,4b;	\
+	.long 2b,5b;	\
+	.long 3b,6b;	\
 .previous
 
 #define GET_CURRENT(reg) \

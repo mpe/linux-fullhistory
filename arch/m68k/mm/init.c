@@ -23,6 +23,7 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/machdep.h>
+#include <asm/io.h>
 #ifdef CONFIG_ATARI
 #include <asm/atari_stram.h>
 #endif
@@ -238,7 +239,7 @@ map_chunk (unsigned long addr, unsigned long size, unsigned long *memavailp))
 				ktablep = kernel_page_table (memavailp);
 			}
 
-			ktable = VTOP(ktablep);
+			ktable = virt_to_phys(ktablep);
 
 			/*
 			 * initialize section of the page table mapping
@@ -278,7 +279,7 @@ map_chunk (unsigned long addr, unsigned long size, unsigned long *memavailp))
 				
 				tbl = (unsigned long *)get_kpointer_table();
 
-				kpointerp[pindex++] = VTOP(tbl) | _PAGE_TABLE |_PAGE_ACCESSED;
+				kpointerp[pindex++] = virt_to_phys(tbl) | _PAGE_TABLE |_PAGE_ACCESSED;
 
 				for (i = 0; i < 64; i++, physaddr += PAGE_SIZE)
 					tbl[i] = physaddr | _PAGE_PRESENT | _PAGE_ACCESSED;
@@ -289,7 +290,7 @@ map_chunk (unsigned long addr, unsigned long size, unsigned long *memavailp))
 				/* not the first 256K */
 				kpointerp[pindex++] = physaddr | _PAGE_PRESENT | _PAGE_ACCESSED;
 #ifdef DEBUG
-				printk ("%lx=%lx ", VTOP(&kpointerp[pindex-1]),
+				printk ("%lx=%lx ", virt_to_phys(&kpointerp[pindex-1]),
 					kpointerp[pindex-1]);
 #endif
 				physaddr += 64 * PAGE_SIZE;
@@ -398,7 +399,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem,
 
 	/* setup CPU root pointer for swapper task */
 	task[0]->tss.crp[0] = 0x80000000 | _PAGE_TABLE;
-	task[0]->tss.crp[1] = VTOP (swapper_pg_dir);
+	task[0]->tss.crp[1] = virt_to_phys (swapper_pg_dir);
 
 #ifdef DEBUG
 	printk ("task 0 pagedir at %p virt, %#lx phys\n",
@@ -456,7 +457,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 #endif
 
 	for (tmp = 0 ; tmp < end_mem ; tmp += PAGE_SIZE) {
-		if (VTOP (tmp) >= mach_max_dma_address)
+		if (virt_to_phys ((void *)tmp) >= mach_max_dma_address)
 			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
 		if (PageReserved(mem_map+MAP_NR(tmp))) {
 			if (tmp >= (unsigned long)&_text

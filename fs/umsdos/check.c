@@ -1,7 +1,5 @@
 /*
  * linux/fs/umsdos/check.c
- *
- *
  */
 
 #include <linux/signal.h>
@@ -51,6 +49,6 @@ void check_page_tables (void)
 			}
 		}
 		if (err)
-			printk ("\nErreur MM %d\n", err);
+			printk ("\nError MM %d\n", err);
 	}
 }

@@ -277,8 +277,11 @@ unsigned long kernel_map(unsigned long phys_addr, unsigned long size,
 	size = (size + KMAP_STEP - 1) & ~(KMAP_STEP-1);
 	
 	down( &kmap_sem );
-	if (!(kmap = kmap_get_region( size, memavailp == NULL )))
-		return( 0 );
+	kmap = kmap_get_region(size, memavailp == NULL);
+	if (!kmap) {
+		up(&kmap_sem);
+		return 0;
+	}
 	from = kmap->addr;
 	retaddr += from;
 	kmap->mapaddr = retaddr;

@@ -100,8 +100,8 @@
 #include "version.h"
 #else
 #include <linux/rocket.h>
-#define ROCKET_VERSION "1.14b"
-#define ROCKET_DATE "29-Jun-98"
+#define ROCKET_VERSION "1.14c"
+#define ROCKET_DATE "24-Aug-98"
 #endif /* LOCAL_ROCKET_H */
 
 #define ROCKET_PARANOIA_CHECK
@@ -1935,7 +1935,8 @@ static void rp_flush_buffer(struct tty_struct *tty)
 #ifdef ENABLE_PCI
 #if (LINUX_VERSION_CODE < 0x020163) /* 2.1.99 */
 /* For compatibility */
-static struct pci_dev *pci_find_slot(char bus, char device_fn)
+static struct pci_dev *pci_find_slot(unsigned char bus,
+				     unsigned char device_fn)
 {
 	unsigned short		vendor_id, device_id;
 	int			ret, error;
@@ -1962,7 +1963,7 @@ static struct pci_dev *pci_find_slot(char bus, char device_fn)
 }
 #endif
      
-__initfunc(int register_PCI(int i, char bus, char device_fn))
+__initfunc(int register_PCI(int i, unsigned int bus, unsigned int device_fn))
 {
 	int	num_aiops, aiop, max_num_aiops, num_chan, chan;
 	unsigned int	aiopio[MAX_AIOPS_PER_BOARD];

@@ -230,8 +230,6 @@ struct audio_operations
 
 	/* fields formerly in audio.c */
 	int audio_mode;
-	/* why don't we use file->f_flags & O_NONBLOCK for the following? - ts */
-	int dev_nblock;	/* 1 if in nonblocking mode */
 
 #define		AM_NONE		0
 #define		AM_WRITE	OPEN_WRITE

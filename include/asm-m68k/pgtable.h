@@ -16,6 +16,9 @@
 /* For virtual address to physical address conversion */
 extern unsigned long mm_vtop(unsigned long addr) __attribute__ ((const));
 extern unsigned long mm_ptov(unsigned long addr) __attribute__ ((const));
+
+#include<asm/virtconvert.h>
+
 #define VTOP(addr)  (mm_vtop((unsigned long)(addr)))
 #define PTOV(addr)  (mm_ptov((unsigned long)(addr)))
 
@@ -126,7 +129,7 @@ extern inline void flush_page_to_ram (unsigned long address)
 			      "cpushp %%dc,(%0)\n\t"
 			      "cinvp %%ic,(%0)\n\t"
 			      ".chip 68k"
-			      : : "a" (VTOP(address)));
+			      : : "a" (virt_to_phys((void *)address)));
     }
     else {
 	unsigned long _tmp;
@@ -151,7 +154,7 @@ extern inline void flush_icache_range (unsigned long address,
 				  "cpushp %%dc,(%0)\n\t"
 				  "cinvp %%ic,(%0)\n\t"
 				  ".chip 68k"
-				  : : "a" (VTOP(address)));
+				  : : "a" (virt_to_phys((void *)address)));
 	    address += PAGE_SIZE;
 	}
     }
@@ -423,9 +426,9 @@ extern pte_t * __bad_pagetable(void);
  * and a page entry and page directory to the page they refer to.
  */
 #define mk_pte(page, pgprot) \
-({ pte_t __pte; pte_val(__pte) = VTOP(page) + pgprot_val(pgprot); __pte; })
+({ pte_t __pte; pte_val(__pte) = virt_to_phys((void *)page) + pgprot_val(pgprot); __pte; })
 #define mk_pte_phys(physpage, pgprot) \
-({ pte_t __pte; pte_val(__pte) = VTOP(physpage) + pgprot_val(pgprot); __pte; })
+({ pte_t __pte; pte_val(__pte) = virt_to_phys((void *)physpage) + pgprot_val(pgprot); __pte; })
 
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
@@ -434,7 +437,7 @@ extern inline void pmd_set(pmd_t * pmdp, pte_t * ptep)
 {
 	int i;
 
-	ptep = (pte_t *) VTOP(ptep);
+	ptep = (pte_t *) virt_to_phys(ptep);
 	for (i = 0; i < 16; i++, ptep += PTRS_PER_PTE/16)
 		pmdp->pmd[i] = _PAGE_TABLE | _PAGE_ACCESSED | (unsigned long)ptep;
 }
@@ -444,23 +447,23 @@ extern inline void pmd_set_et(pmd_t * pmdp, pte_t * ptep)
 {
 	int i;
 
-	ptep = (pte_t *) VTOP(ptep);
+	ptep = (pte_t *) virt_to_phys(ptep);
 	for (i = 0; i < 16; i++, ptep += PTRS_PER_PTE/16)
 		pmdp->pmd[i] = _PAGE_PRESENT | _PAGE_ACCESSED | (unsigned long)ptep;
 }
 
 extern inline void pgd_set(pgd_t * pgdp, pmd_t * pmdp)
-{ pgd_val(*pgdp) = _PAGE_TABLE | _PAGE_ACCESSED | VTOP(pmdp); }
+{ pgd_val(*pgdp) = _PAGE_TABLE | _PAGE_ACCESSED | virt_to_phys(pmdp); }
 
 extern inline unsigned long pte_page(pte_t pte)
-{ return PTOV(pte_val(pte) & PAGE_MASK); }
+{ return (unsigned long)phys_to_virt((unsigned long)(pte_val(pte) & PAGE_MASK)); }
 
 extern inline unsigned long pmd_page2(pmd_t *pmd)
-{ return PTOV(pmd_val(*pmd) & _TABLE_MASK); }
+{ return (unsigned long)phys_to_virt((unsigned long)(pmd_val(*pmd) & _TABLE_MASK)); }
 #define pmd_page(pmd) pmd_page2(&(pmd))
 
 extern inline unsigned long pgd_page(pgd_t pgd)
-{ return PTOV(pgd_val(pgd) & _TABLE_MASK); }
+{ return (unsigned long)phys_to_virt((unsigned long)(pgd_val(pgd) & _TABLE_MASK)); }
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & (_PAGE_PRESENT | _PAGE_FAKE_SUPER); }
@@ -517,7 +520,7 @@ extern inline pte_t pte_mkcache(pte_t pte)	{ pte_val(pte) = (pte_val(pte) & _CAC
 extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
 {
 	tsk->tss.crp[0] = 0x80000000 | _PAGE_TABLE;
-	tsk->tss.crp[1] = VTOP(pgdir);
+	tsk->tss.crp[1] = virt_to_phys(pgdir);
 	if (tsk == current) {
 		if (CPU_IS_040_OR_060)
 			__asm__ __volatile__ (".chip 68040\n\t"
@@ -632,7 +635,7 @@ extern __inline__ pte_t *get_pte_fast(void)
 	ret = pte_quicklist;
 	if (ret) {
 		pte_quicklist = (unsigned long *)*ret;
-		ret[0] = ret[1];
+		ret[0] = 0;
 		quicklists.pgtable_cache_sz -= 8;
 	}
 	return (pte_t *)ret;
@@ -658,7 +661,7 @@ extern __inline__ pmd_t *get_pmd_fast(void)
 	ret = pmd_quicklist;
 	if (ret) {
 		pmd_quicklist = (unsigned long *)*ret;
-		ret[0] = ret[1];
+		ret[0] = 0;
 		quicklists.pgtable_cache_sz--;
 	}
 	return (pmd_t *)ret;
@@ -799,7 +802,18 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
  * Check if the addr/len goes up to the end of a physical
  * memory chunk.  Used for DMA functions.
  */
+#ifdef CONFIG_SINGLE_MEMORY_CHUNK
+/*
+ * It makes no sense to consider whether we cross a memory boundary if
+ * we support just one physical chunk of memory.
+ */
+extern inline int mm_end_of_chunk (unsigned long addr, int len)
+{
+	return 0;
+}
+#else
 int mm_end_of_chunk (unsigned long addr, int len);
+#endif
 
 /*
  * Map some physical address range into the kernel address space.

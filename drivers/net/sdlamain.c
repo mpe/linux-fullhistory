@@ -45,6 +45,7 @@
 #include <linux/wanrouter.h>	/* WAN router definitions */
 #include <linux/wanpipe.h>	/* WANPIPE common user API definitions */
 #include <asm/uaccess.h>	/* kernel <-> user copy */
+#include <asm/io.h>		/* phys_to_virt() */
 
 
 /****** Defines & Macros ****************************************************/
@@ -162,8 +163,13 @@ int init_module (void)
 			break;
 		}
 	}
-	if (cnt) ncards = cnt;	/* adjust actual number of cards */
-	else kfree(card_array);
+	if (cnt)
+		ncards = cnt;	/* adjust actual number of cards */
+	else
+	{
+		kfree(card_array);
+		err = -ENODEV;
+	}
 	return err;
 }
 
@@ -202,6 +208,7 @@ void cleanup_module (void)
  * configuration structure is in kernel memory (including extended data, if
  * any).
  */
+ 
 static int setup (wan_device_t* wandev, wandev_conf_t* conf)
 {
 	sdla_t* card;
@@ -210,33 +217,31 @@ static int setup (wan_device_t* wandev, wandev_conf_t* conf)
 
 	/* Sanity checks */
 	if ((wandev == NULL) || (wandev->private == NULL) || (conf == NULL))
-		return -EFAULT
-	;
+		return -EFAULT;
+		
 	card = wandev->private;
 	if (wandev->state != WAN_UNCONFIGURED)
-		return -EBUSY		/* already configured */
-	;
+		return -EBUSY;		/* already configured */
+
 	if (!conf->data_size || (conf->data == NULL))
 	{
 		printk(KERN_ERR
 			"%s: firmware not found in configuration data!\n",
-			wandev->name)
-		;
+			wandev->name);
 		return -EINVAL;
 	}
 	if (conf->ioport <= 0)
 	{
 		printk(KERN_ERR
 			"%s: can't configure without I/O port address!\n",
-			wandev->name)
-		;
+			wandev->name);
 		return -EINVAL;
 	}
+	
 	if (conf->irq <= 0)
 	{
 		printk(KERN_ERR "%s: can't configure without IRQ!\n",
-			wandev->name)
-		;
+			wandev->name);
 		return -EINVAL;
 	}
 
@@ -245,8 +250,7 @@ static int setup (wan_device_t* wandev, wandev_conf_t* conf)
 	{
 		printk(KERN_ERR "%s: I/O region 0x%X - 0x%X is in use!\n",
 			wandev->name, conf->ioport,
-			conf->ioport + SDLA_MAXIORANGE)
-		;
+			conf->ioport + SDLA_MAXIORANGE);
 		return -EINVAL;
 	}
 
@@ -255,8 +259,7 @@ static int setup (wan_device_t* wandev, wandev_conf_t* conf)
 	if (request_irq(irq, sdla_isr, 0, wandev->name, card))
 	{
 		printk(KERN_ERR "%s: can't reserve IRQ %d!\n",
-			wandev->name, irq)
-		;
+			wandev->name, irq);
 		return -EINVAL;
 	}
 
@@ -264,7 +267,12 @@ static int setup (wan_device_t* wandev, wandev_conf_t* conf)
 	memset(&card->hw, 0, sizeof(sdlahw_t));
 	card->hw.port    = conf->ioport;
 	card->hw.irq     = (conf->irq == 9) ? 2 : conf->irq;
-	card->hw.dpmbase = conf->maddr;
+	/* Compute the virtual address of the card in kernel space */
+	if(conf->maddr)
+		card->hw.dpmbase = (unsigned long)phys_to_virt(conf->maddr);
+	else	/* But 0 means NULL */
+		card->hw.dpmbase = conf->maddr;
+
 	card->hw.dpmsize = SDLA_WINDOWSIZE;
 	card->hw.type    = conf->hw_opt[0];
 	card->hw.pclk    = conf->hw_opt[1];
@@ -323,10 +331,12 @@ static int setup (wan_device_t* wandev, wandev_conf_t* conf)
 		return err;
 	}
   	/* Reserve I/O region and schedule background task */
+/*	printk(KERN_INFO "about to request\n");*/
 	request_region(card->hw.port, card->hw.io_range, wandev->name);
+/*	printk(KERN_INFO "request done\n");*/
 	if (++active == 1)
-		queue_task(&sdla_tq, &tq_scheduler)
-	;
+		queue_task(&sdla_tq, &tq_scheduler);
+		
 	wandev->critical = 0;
 	return 0;
 }
@@ -345,20 +355,32 @@ static int shutdown (wan_device_t* wandev)
 
 	/* sanity checks */
 	if ((wandev == NULL) || (wandev->private == NULL))
-		return -EFAULT
-	;
+		return -EFAULT;
+		
 	if (wandev->state == WAN_UNCONFIGURED)
-		return 0
-	;
+		return 0;
+		
+	/* If wee are in a critical section we lose */
 	if (test_and_set_bit(0, (void*)&wandev->critical))
-		return -EAGAIN
-	;
+		return -EAGAIN;
+		
 	card = wandev->private;
 	wandev->state = WAN_UNCONFIGURED;
-	if (--active == 0) schedule();	/* stop background thread */
+
+	if (--active == 0)
+		schedule();	/* stop background thread */
+	
+/*	printk(KERN_INFO "active now %d\n", active);
+
+	printk(KERN_INFO "About to call sdla_down\n");*/
 	sdla_down(&card->hw);
+/*	printk(KERN_INFO "sdla_down done\n");
+	printk(KERN_INFO "About to call free_irq\n");*/
 	free_irq(wandev->irq, card);
+/*	printk(KERN_INFO "free_irq done\n");
+	printk(KERN_INFO "About to call release_region\n");*/
 	release_region(card->hw.port, card->hw.io_range);
+/*	printk(KERN_INFO "release_region done\n");*/
 	wandev->critical = 0;
 	return 0;
 }

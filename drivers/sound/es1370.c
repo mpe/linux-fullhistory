@@ -1,7 +1,7 @@
 /*****************************************************************************/
 
 /*
- *      es1370.c  --  Ensoniq ES1370/Ashai Kasei AK4531 audio driver.
+ *      es1370.c  --  Ensoniq ES1370/Asahi Kasei AK4531 audio driver.
  *
  *      Copyright (C) 1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
@@ -73,6 +73,9 @@
  *                     On module startup, set DAC2 to 11kSPS instead of 5.5kSPS,
  *                     as it produces an annoying ssssh in the lower sampling rate
  *                     Do not include modversions.h
+ *    22.08.98   0.12  Mixer registers actually have 5 instead of 4 bits
+ *                     pointed out by Itai Nahshon
+ *    31.08.98   0.13  Fix realplayer problems - dac.count issues
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -455,7 +458,7 @@ static void start_adc(struct es1370_state *s)
 	unsigned fragremain, fshift;
 
 	spin_lock_irqsave(&s->lock, flags);
-	if (!(s->ctrl & CTRL_ADC_EN) && (s->dma_adc.mapped || s->dma_adc.count < s->dma_adc.dmasize - 2*s->dma_adc.fragsize)
+	if (!(s->ctrl & CTRL_ADC_EN) && (s->dma_adc.mapped || s->dma_adc.count < (signed)(s->dma_adc.dmasize - 2*s->dma_adc.fragsize))
 	    && s->dma_adc.ready) {
 		s->ctrl |= CTRL_ADC_EN;
 		s->sctrl = (s->sctrl & ~SCTRL_R1LOOPSEL) | SCTRL_R1INTEN;
@@ -486,7 +489,6 @@ extern inline void dealloc_dmabuf(struct dmabuf *db)
 		for (map = MAP_NR(db->rawbuf); map <= mapend; map++)
 			clear_bit(PG_reserved, &mem_map[map].flags);	
 		free_pages((unsigned long)db->rawbuf, db->buforder);
-		printk(KERN_DEBUG "es: freeing dmabuf %8.8lx order %d\n", (unsigned long)db->rawbuf, db->buforder);
 	}
 	db->rawbuf = NULL;
 	db->mapped = db->ready = 0;
@@ -511,7 +513,6 @@ static int prog_dmabuf(struct es1370_state *s, struct dmabuf *db, unsigned rate,
 		mapend = MAP_NR(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
 		for (map = MAP_NR(db->rawbuf); map <= mapend; map++)
 			set_bit(PG_reserved, &mem_map[map].flags);
-		printk(KERN_DEBUG "es: allocating dmabuf %8.8lx order %d\n", (unsigned long)db->rawbuf, db->buforder);
 	}
 	fmt &= ES1370_FMT_MASK;
 	bytepersec = rate << sample_shift[fmt];
@@ -598,10 +599,10 @@ static void es1370_update_ptr(struct es1370_state *s)
 		s->dma_adc.total_bytes += diff;
 		s->dma_adc.count += diff;
 		if (s->dma_adc.mapped) {
-			if (s->dma_adc.count >= s->dma_adc.fragsize) 
+			if (s->dma_adc.count >= (signed)s->dma_adc.fragsize) 
 				wake_up(&s->dma_adc.wait);
 		} else {
-			if (s->dma_adc.count > s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1)) {
+			if (s->dma_adc.count > (signed)(s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1))) {
 				s->ctrl &= ~CTRL_ADC_EN;
 				outl(s->ctrl, s->io+ES1370_REG_CONTROL);
 				s->dma_adc.error++;
@@ -616,7 +617,7 @@ static void es1370_update_ptr(struct es1370_state *s)
 		s->dma_dac1.total_bytes += diff;
 		if (s->dma_dac1.mapped) {
 			s->dma_dac1.count += diff;
-			if (s->dma_dac1.count >= s->dma_dac1.fragsize)
+			if (s->dma_dac1.count >= (signed)s->dma_dac1.fragsize)
 				wake_up(&s->dma_dac1.wait);
 		} else {
 			s->dma_dac1.count -= diff;
@@ -624,12 +625,12 @@ static void es1370_update_ptr(struct es1370_state *s)
 				s->ctrl &= ~CTRL_DAC1_EN;
 				outl(s->ctrl, s->io+ES1370_REG_CONTROL);
 				s->dma_dac1.error++;
-			} else if (s->dma_dac1.count <= s->dma_dac1.fragsize && !s->dma_dac1.endcleared) {
+			} else if (s->dma_dac1.count <= (signed)s->dma_dac1.fragsize && !s->dma_dac1.endcleared) {
 				clear_advance(s->dma_dac1.rawbuf, s->dma_dac1.dmasize, s->dma_dac1.swptr, 
 					      s->dma_dac1.fragsize, (s->sctrl & SCTRL_P1SEB) ? 0 : 0x80);
 				s->dma_dac1.endcleared = 1;
 			}
-			if (s->dma_dac1.count < s->dma_dac1.dmasize)
+			if (s->dma_dac1.count < (signed)s->dma_dac1.dmasize)
 				wake_up(&s->dma_dac1.wait);
 		}
 	}
@@ -639,7 +640,7 @@ static void es1370_update_ptr(struct es1370_state *s)
 		s->dma_dac2.total_bytes += diff;
 		if (s->dma_dac2.mapped) {
 			s->dma_dac2.count += diff;
-			if (s->dma_dac2.count >= s->dma_dac2.fragsize)
+			if (s->dma_dac2.count >= (signed)s->dma_dac2.fragsize)
 				wake_up(&s->dma_dac2.wait);
 		} else {
 			s->dma_dac2.count -= diff;
@@ -647,12 +648,12 @@ static void es1370_update_ptr(struct es1370_state *s)
 				s->ctrl &= ~CTRL_DAC2_EN;
 				outl(s->ctrl, s->io+ES1370_REG_CONTROL);
 				s->dma_dac2.error++;
-			} else if (s->dma_dac2.count <= s->dma_dac2.fragsize && !s->dma_dac2.endcleared) {
+			} else if (s->dma_dac2.count <= (signed)s->dma_dac2.fragsize && !s->dma_dac2.endcleared) {
 				clear_advance(s->dma_dac2.rawbuf, s->dma_dac2.dmasize, s->dma_dac2.swptr, 
 					      s->dma_dac2.fragsize, (s->sctrl & SCTRL_P2SEB) ? 0 : 0x80);
 				s->dma_dac2.endcleared = 1;
 			}
-			if (s->dma_dac2.count < s->dma_dac2.dmasize)
+			if (s->dma_dac2.count < (signed)s->dma_dac2.dmasize)
 				wake_up(&s->dma_dac2.wait);
 		}
 	}
@@ -757,7 +758,6 @@ static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long a
 	unsigned char l, r, rl, rr;
 
 	VALIDATE_STATE(s);
-
 	if (cmd == SOUND_MIXER_PRIVATE1) {
 		/* enable/disable/query mixer preamp */
 		get_user_ret(val, (int *)arg, -EFAULT);
@@ -886,19 +886,19 @@ static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long a
 			r = (val >> 8) & 0xff;
 			if (r > 100)
 				r = 100;
-			if (l < 10) {
+			if (l < 7) {
 				rl = 0x80;
 				l = 0;
 			} else {
-				rl = 15 - ((l - 10) / 6);
-				l = (15 - rl) * 6 + 10;
+				rl = 31 - ((l - 7) / 3);
+				l = (31 - rl) * 3 + 7;
 			}
-			if (r < 10) {
+			if (r < 7) {
 				rr = 0x80;
 				r = 0;
 			} else {
-				rr =  15 - ((r - 10) / 6);
-				r = (15 - rr) * 6 + 10;
+				rr =  31 - ((r - 7) / 3);
+				r = (31 - rr) * 3 + 7;
 			}
 			wrcodec(s, mixtable[i].right, rr);
 		} else { 
@@ -911,12 +911,12 @@ static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long a
 					r = l = (7 - rl) * 14 + 2;
 				}
 			} else {
-				if (l < 10) {
+				if (l < 7) {
 					rl = 0x80;
 					r = l = 0;
 				} else {
-					rl = 15 - ((l - 10) / 6);
-					r = l = (15 - rl) * 6 + 10;
+					rl = 31 - ((l - 7) / 3);
+					r = l = (31 - rl) * 3 + 7;
 				}
 			}
 		}
@@ -982,10 +982,8 @@ static /*const*/ struct file_operations es1370_mixer_fops = {
 	NULL,  /* fsync */
 	NULL,  /* fasync */
 	NULL,  /* check_media_change */
-#if 0
 	NULL,  /* revalidate */
 	NULL,  /* lock */
-#endif
 };
 
 /* --------------------------------------------------------------------- */
@@ -1190,7 +1188,7 @@ static unsigned int es1370_poll(struct file *file, struct poll_table_struct *wai
 	es1370_update_ptr(s);
 	if (file->f_mode & FMODE_READ) {
 		if (s->dma_adc.mapped) {
-			if (s->dma_adc.count >= s->dma_adc.fragsize)
+			if (s->dma_adc.count >= (signed)s->dma_adc.fragsize)
 				mask |= POLLIN | POLLRDNORM;
 		} else {
 			if (s->dma_adc.count > 0)
@@ -1199,10 +1197,10 @@ static unsigned int es1370_poll(struct file *file, struct poll_table_struct *wai
 	}
 	if (file->f_mode & FMODE_WRITE) {
 		if (s->dma_dac2.mapped) {
-			if (s->dma_dac2.count >= s->dma_dac2.fragsize) 
+			if (s->dma_dac2.count >= (signed)s->dma_dac2.fragsize) 
 				mask |= POLLOUT | POLLWRNORM;
 		} else {
-			if (s->dma_dac2.dmasize > s->dma_dac2.count)
+			if ((signed)s->dma_dac2.dmasize > s->dma_dac2.count)
 				mask |= POLLOUT | POLLWRNORM;
 		}
 	}
@@ -1704,10 +1702,10 @@ static unsigned int es1370_poll_dac(struct file *file, struct poll_table_struct 
 	spin_lock_irqsave(&s->lock, flags);
 	es1370_update_ptr(s);
 	if (s->dma_dac1.mapped) {
-		if (s->dma_dac1.count >= s->dma_dac1.fragsize)
+		if (s->dma_dac1.count >= (signed)s->dma_dac1.fragsize)
 			mask |= POLLOUT | POLLWRNORM;
 	} else {
-		if (s->dma_dac1.dmasize > s->dma_dac1.count)
+		if ((signed)s->dma_dac1.dmasize > s->dma_dac1.count)
 			mask |= POLLOUT | POLLWRNORM;
 	}
 	spin_unlock_irqrestore(&s->lock, flags);
@@ -2280,7 +2278,7 @@ __initfunc(int init_es1370(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.10 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1370: version v0.13 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 

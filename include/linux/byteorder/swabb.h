@@ -8,8 +8,8 @@
  *
  * Support for obNUXIous pdp-endian and other bizarre architectures.
  * Will Linux ever run on such ancient beasts? if not, this file
- * will be but a programming pearl. Still, it's a reminder that
- * cpu_to_beXX and beXX_to_cpu should be well distinguished.
+ * will be but a programming pearl. Still, it's a reminder that we
+ * shouldn't be making too many assumptions when trying to be portable.
  *
  */
 

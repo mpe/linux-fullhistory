@@ -470,7 +470,7 @@ lca_machine_check (unsigned long vector, unsigned long la,
 	case MCHK_K_OS_BUGCHECK: reason = "callsys in kernel mode"; break;
 	case MCHK_K_DCPERR:	reason = "d-cache parity error"; break;
 	case MCHK_K_ICPERR:	reason = "i-cache parity error"; break;
-	case MCHK_K_SIO_SERR:	reason = "SIO SERR occurred on on PCI bus"; break;
+	case MCHK_K_SIO_SERR:	reason = "SIO SERR occurred on PCI bus"; break;
 	case MCHK_K_SIO_IOCHK:	reason = "SIO IOCHK occurred on ISA bus"; break;
 	case MCHK_K_DCSR:	reason = "MCHK_K_DCSR"; break;
 	case MCHK_K_UNKNOWN:

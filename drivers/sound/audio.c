@@ -17,6 +17,7 @@
  *                   (which is grossly misnamed btw.) because they have the same
  *                   lifetime as the rest in there and dynamic allocation saves
  *                   12k or so
+ * Thomas Sailer   : use more logical O_NONBLOCK semantics
  */
 
 #include <linux/config.h>
@@ -99,7 +100,6 @@ int audio_open(int dev, struct file *file)
 		set_format(dev, bits);
 
 	audio_devs[dev]->audio_mode = AM_NONE;
-	audio_devs[dev]->dev_nblock = 0;
 
 
 	return ret;
@@ -203,10 +203,10 @@ int audio_write(int dev, struct file *file, const char *buf, int count)
 	
 	while (c)
 	{
-		if ((err = DMAbuf_getwrbuffer(dev, &dma_buf, &buf_size, audio_devs[dev]->dev_nblock)) < 0)
+		if ((err = DMAbuf_getwrbuffer(dev, &dma_buf, &buf_size, !!(file->f_flags & O_NONBLOCK))) < 0)
 		{
 			    /* Handle nonblocking mode */
-			if (audio_devs[dev]->dev_nblock && err == -EAGAIN)
+			if ((file->f_flags & O_NONBLOCK) && err == -EAGAIN)
 				return p;	/* No more space. Return # of accepted bytes */
 			return err;
 		}
@@ -273,14 +273,13 @@ int audio_read(int dev, struct file *file, char *buf, int count)
 
 	while(c)
 	{
-		if ((buf_no = DMAbuf_getrdbuffer(dev, &dmabuf, &l,
-			audio_devs[dev]->dev_nblock)) < 0)
+		if ((buf_no = DMAbuf_getrdbuffer(dev, &dmabuf, &l, !!(file->f_flags & O_NONBLOCK))) < 0)
 		{
 			/*
 			 *	Nonblocking mode handling. Return current # of bytes
 			 */
 
-			if (audio_devs[dev]->dev_nblock && buf_no == -EAGAIN)
+			if (file->f_flags & O_NONBLOCK && buf_no == -EAGAIN)
 				return p;
 
 			if (p > 0) 		/* Avoid throwing away data */
@@ -388,7 +387,7 @@ int audio_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 			return dma_ioctl(dev, cmd, arg);
 		
 		case SNDCTL_DSP_NONBLOCK:
-  			audio_devs[dev]->dev_nblock = 1;
+			file->f_flags |= O_NONBLOCK;
 			return 0;
 
 		case SNDCTL_DSP_GETCAPS:

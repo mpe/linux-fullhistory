@@ -3,7 +3,7 @@ and has some KNOWN BUGS (and quite a few unknown :-). Please read
 fs/umsdos/README-WIP.txt for more information on current status. Thanks.
 
 ----------------------------------------------------------------------------
-Very short explanation for the impatient!!!
+Very short explanation for the impatient!
 
 Umsdos is a file system driver that run on top the MSDOS fs driver.
 It is written by Jacques Gelinas (jacques@solucorp.qc.ca)
@@ -24,9 +24,7 @@ There is plenty of documentation on it in the source. A formatted document
 made from those comments is available from
 sunsite.unc.edu:/pub/Linux/system/Filesystems/umsdos.
 
-Mostly...
-
-You mount a DOS partition like this
+You mount a DOS partition like this:
 
 mount -t umsdos /dev/hda3 /mnt
          ^
@@ -41,7 +39,7 @@ the default. After doing the mount on a DOS partition, nothing special
 happens. This is why all mount options are passed to the msdos fs driver.
 
 Umsdos uses a special DOS file --linux-.--- to store the information
-which can't be handle by the normal MsDOS file system. This is the trick.
+which can't be handled by the normal MS-DOS filesystem. This is the trick.
 
 --linux-.--- is optional. There is one per directory.
 
@@ -65,12 +63,12 @@ A compiled version is available in umsdos_progs-0.7.bin.tar.gz.
 
 So in our example, after mounting mnt, we do
 
-umssync .
+	umssync .
 
 This will promote this directory (a recursive option is available) to full
-umsdos capabilities (long name ...). A ls -l before and after won't show
-much difference however. The files which were there are still there. But now
-you can do all this:
+umsdos capabilities (long name, etc.).  However, an "ls -l" before and after
+won't show much difference.  The files which were there are still there, but
+now you can do all this:
 
 	chmod 644 *
 	chown you.your_group *
@@ -94,7 +92,7 @@ after the "mount -a":
 
 	(You put one for each umsdos mount point in the fstab)
 
-This will insure nice operation. A umsdos.fsck is in the making,
+This will ensure nice operation.  A umsdos.fsck is in the making,
 so you will be allowed to manage umsdos partitions in the same way
 other filesystems are, using the generic fsck front end.
 

@@ -418,7 +418,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_lseek)
 	.long SYMBOL_NAME(sys_getpid)		/* 20 */
 	.long SYMBOL_NAME(sys_mount)
-	.long SYMBOL_NAME(sys_umount)
+	.long SYMBOL_NAME(sys_oldumount)
 	.long SYMBOL_NAME(sys_setuid)
 	.long SYMBOL_NAME(sys_getuid)
 	.long SYMBOL_NAME(sys_stime)		/* 25 */
@@ -448,7 +448,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_geteuid)
 	.long SYMBOL_NAME(sys_getegid)		/* 50 */
 	.long SYMBOL_NAME(sys_acct)
-	.long SYMBOL_NAME(sys_ni_syscall)				/* old phys syscall holder */
+	.long SYMBOL_NAME(sys_umount)					/* recycled never used phys() */
 	.long SYMBOL_NAME(sys_ni_syscall)				/* old lock syscall holder */
 	.long SYMBOL_NAME(sys_ioctl)
 	.long SYMBOL_NAME(sys_fcntl)		/* 55 */

@@ -439,8 +439,8 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	    NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_INTEL,	6,
 	  { "Pentium Pro A-step", "Pentium Pro", NULL, "Pentium II (Klamath)", 
-	    NULL, "Pentium II (Deschutes)", NULL, NULL, NULL, NULL, NULL, NULL,
-	    NULL, NULL, NULL, NULL }},
+	    NULL, "Pentium II (Deschutes)", "Celeron (Mendocino)", NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_AMD,	4,
 	  { NULL, NULL, NULL, "486 DX/2", NULL, NULL, NULL, "486 DX/2-WB",
 	    "486 DX/4", "486 DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT",
@@ -467,6 +467,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 	char *p = NULL;
 
 	c->loops_per_sec = loops_per_sec;
+	c->x86_cache_size = -1;
 
 	get_cpu_vendor(c);
 
@@ -479,13 +480,64 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 		return;
 	}
 
-	if (c->x86_model < 16)
-		for (i=0; i<sizeof(cpu_models)/sizeof(struct cpu_model_info); i++)
-			if (cpu_models[i].vendor == c->x86_vendor &&
-			    cpu_models[i].x86 == c->x86) {
-				p = cpu_models[i].model_names[c->x86_model];
-				break;
+	for (i = 0; i < sizeof(cpu_models)/sizeof(struct cpu_model_info); i++) {
+		if (c->cpuid_level > 1) {
+			/* supports eax=2  call */
+			int edx, cache_size, dummy;
+			
+			cpuid(2, &dummy, &dummy, &dummy, &edx);
+
+			/* We need only the LSB */
+			edx &= 0xff;
+
+			switch (edx) {
+				case 0x40:
+					cache_size = 0;
+
+				case 0x41:
+					cache_size = 128;
+					break;
+
+				case 0x42:
+					cache_size = 256;
+					break;
+
+				case 0x43:
+					cache_size = 512;
+					break;
+
+				case 0x44:
+					cache_size = 1024;
+					break;
+
+				case 0x45:
+					cache_size = 2048;
+					break;
+
+				default:
+					cache_size = 0;
+					break;
 			}
+
+			c->x86_cache_size = cache_size; 
+		}
+
+		if (cpu_models[i].vendor == c->x86_vendor &&
+		    cpu_models[i].x86 == c->x86) {
+			if (c->x86_model <= 16)
+				p = cpu_models[i].model_names[c->x86_model];
+
+			/* Names for the Pentium II processors */
+			if ((cpu_models[i].vendor == X86_VENDOR_INTEL)
+			    && (cpu_models[i].x86 == 6) 
+			    && (c->x86_model == 5)
+			    && (c->x86_cache_size == 0)) {
+				p = "Celeron";
+			}
+		}
+			
+	}
+
 	if (p) {
 		strcpy(c->x86_model_id, p);
 		return;
@@ -548,14 +600,17 @@ int get_cpuinfo(char * buffer)
 		if (!(cpu_present_map & (1<<n)))
 			continue;
 #endif
-		p += sprintf(p, "processor\t: %d\n"
+		p += sprintf(p,"processor\t: %d\n"
+			       "vendor_id\t: %s\n"
 			       "cpu family\t: %c\n"
-			       "model\t\t: %s\n"
-			       "vendor_id\t: %s\n",
+			       "model\t\t: %d\n"
+			       "model name\t: %s\n",
 			       n,
+			       c->x86_vendor_id[0] ? c->x86_vendor_id : "unknown",
 			       c->x86 + '0',
-			       c->x86_model_id[0] ? c->x86_model_id : "unknown",
-			       c->x86_vendor_id[0] ? c->x86_vendor_id : "unknown");
+			       c->x86_model,
+			       c->x86_model_id[0] ? c->x86_model_id : "unknown");
+		
 		if (c->x86_mask) {
 			if (c->x86_vendor == X86_VENDOR_CYRIX)
 				p += sprintf(p, "stepping\t: %s\n", Cx86_step);
@@ -564,6 +619,10 @@ int get_cpuinfo(char * buffer)
 		} else
 			p += sprintf(p, "stepping\t: unknown\n");
 
+		/* Cache size */
+		if (c->x86_cache_size >= 0)
+			p += sprintf(p, "cache size\t: %d KB\n", c->x86_cache_size);
+		
 		/* Modify the capabilities according to chip type */
 		if (c->x86_mask) {
 			if (c->x86_vendor == X86_VENDOR_CYRIX) {

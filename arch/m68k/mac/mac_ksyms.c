@@ -2,6 +2,6 @@
 #include <asm/ptrace.h>
 #include <asm/traps.h>
 /* Hook for mouse driver */
-extern void (*mac_mouse_interrupt_hook) (char *);
+extern void (*adb_mouse_interrupt_hook) (char *);
 
-EXPORT_SYMBOL(mac_mouse_interrupt_hook);
+EXPORT_SYMBOL(adb_mouse_interrupt_hook);

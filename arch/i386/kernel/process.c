@@ -488,21 +488,19 @@ void free_task_struct(struct task_struct *p)
 
 void release_segments(struct mm_struct *mm)
 {
-	void * ldt = mm->segments;
-	int nr;
-
 	/* forget local segments */
-	__asm__ __volatile__("movl %w0,%%fs ; movl %w0,%%gs ; lldt %w0"
+	__asm__ __volatile__("movl %w0,%%fs ; movl %w0,%%gs"
 		: /* no outputs */
 		: "r" (0));
-	current->tss.ldt = 0;
-	/*
-	 * Set the GDT entry back to the default.
-	 */
-	nr = current->tarray_ptr - &task[0];
-	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY, &default_ldt, 1);
+	if (mm->segments) {
+		void * ldt = mm->segments;
 
-	if (ldt) {
+		/*
+		 * Get the LDT entry from init_task.
+		 */
+		current->tss.ldt = _LDT(0);
+		load_ldt(0);
+
 		mm->segments = NULL;
 		vfree(ldt);
 	}
@@ -557,23 +555,22 @@ void copy_segments(int nr, struct task_struct *p, struct mm_struct *new_mm)
 	void * old_ldt = old_mm->segments, * ldt = old_ldt;
 	int ldt_size = LDT_ENTRIES;
 
-	p->tss.ldt = _LDT(nr);
+	/* "default_ldt" - use the one from init_task */
+	p->tss.ldt = _LDT(0);
 	if (old_ldt) {
 		if (new_mm) {
 			ldt = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
 			new_mm->segments = ldt;
 			if (!ldt) {
 				printk(KERN_WARNING "ldt allocation failed\n");
-				goto no_ldt;
+				return;
 			}
 			memcpy(ldt, old_ldt, LDT_ENTRIES*LDT_ENTRY_SIZE);
 		}
-	} else {
-	no_ldt:
-		ldt = &default_ldt;
-		ldt_size = 1;
+		p->tss.ldt = _LDT(nr);
+		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY, ldt, ldt_size);
+		return;
 	}
-	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY, ldt, ldt_size);
 }
 
 /*

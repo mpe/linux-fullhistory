@@ -59,9 +59,7 @@ static void mac_leds_done(struct adb_request *);
 static void keyboard_input(unsigned char *, int, struct pt_regs *);
 static void mouse_input(unsigned char *, int, struct pt_regs *);
 /* Hook for mouse driver */
-void (*mac_mouse_interrupt_hook) (char *);
-int mac_emulate_button2;
-int mac_emulate_button3;
+void (*adb_mouse_interrupt_hook) (unsigned char *, int);
 /* The mouse driver - for debugging */
 extern void mac_mouse_interrupt(char *);
 /* end keyb */
@@ -290,11 +288,11 @@ input_keycode(int keycode, int repeat)
 	 *	(wanted: command and alt/option, or KP= and KP( ...)
 	 *	Debug version; might be rewritten to be faster on normal keys.
 	 */
-	if (mac_mouse_interrupt_hook || console_loglevel >= 8) {
+	if (adb_mouse_interrupt_hook || console_loglevel >= 8) {
 		unsigned char button, button2, button3, fake_event;
 		static unsigned char button2state=0, button3state=0; /* up */
-		/* faked ADB packet: device type ff, handler 4 ! */
-		static char data[6] = { 0xff, 0x40, 0x3c, 0x80, 0x80, 0x80 };
+		/* faked ADB packet */
+		static unsigned char data[4] = { 0, 0x80, 0x80, 0x80 };
 
 		button = 0;
 		fake_event = 0;
@@ -321,16 +319,16 @@ input_keycode(int keycode, int repeat)
 #endif
 		if (button) {		/* there's been a button state change */
 			/* fake a mouse packet : send all bytes, change one! */
-			data[button+2] = (up_flag ? 0x80 : 0);
-			if (mac_mouse_interrupt_hook)
-				mac_mouse_interrupt_hook(data);
+			data[button] = (up_flag ? 0x80 : 0);
+			if (adb_mouse_interrupt_hook)
+				adb_mouse_interrupt_hook(data, 4);
 #ifdef DEBUG_ADBMOUSE
 			else
 				printk("mouse_fake: data %2x %2x %2x buttons %2x \n", 
-					data[3], data[4], data[5],
-					~( (data[3] & 0x80 ? 0 : 4) 
-					 | (data[4] & 0x80 ? 0 : 1) 
-					 | (data[5] & 0x80 ? 0 : 2) )&7 );
+					data[1], data[2], data[3],
+					~( (data[1] & 0x80 ? 0 : 4) 
+					 | (data[2] & 0x80 ? 0 : 1) 
+					 | (data[3] & 0x80 ? 0 : 2) )&7 );
 #endif
 		}
 		/*
@@ -485,8 +483,8 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs)
 		return;
 	}
 
-	if (mac_mouse_interrupt_hook) {
-		mac_mouse_interrupt_hook(data);
+	if (adb_mouse_interrupt_hook) {
+		adb_mouse_interrupt_hook(data+2, nb-2);
 		/*
 		 * passing the mouse data to i.e. the X server as done for
 		 * Xpmac will confuse applications on a sane X server :-)
@@ -609,10 +607,7 @@ __initfunc(int mac_keyb_init(void))
 	memcpy(key_maps[12], mac_ctrl_alt_map, sizeof(plain_map));
 
 	/* initialize mouse interrupt hook */
-	mac_mouse_interrupt_hook = NULL;
-	/* assume broken mouse :-) */
-	mac_emulate_button2 = 1;
-	mac_emulate_button3 = 1;
+	adb_mouse_interrupt_hook = NULL;
 
 	/*
 	 * Might put that someplace else, possibly ....

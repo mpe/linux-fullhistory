@@ -8272,6 +8272,24 @@ CONFIG_MSNDPIN_PERM_FILE
   obtained from Turtle Beach.  See Documentation/sound/MultiSound for
   information on how to obtain this.
 
+MSND Pinnacle Non-PnP Mode
+CONFIG_MSNDPIN_NONPNP
+  The Pinnacle and Fiji card resources can be configured either with
+  PnP, or through a configuration port.  For the Pinnacle,
+  configuration in non-PnP mode allows use of the IDE and joystick
+  peripherals on the card as well, since they do not show up when the
+  card is in PnP mode.  Specifying zero for any resource of a device
+  will disable the device.  If you are running the card in PnP mode,
+  you must say N here and use isapnptools to configure the card's
+  resources.
+
+MSND Pinnacle Config Port
+CONFIG_MSNDPIN_CFG
+  This is the port which the Pinnacle and Fiji uses to configure
+  the card's resources when not in PnP mode.  If your card is in
+  PnP mode, then be sure to say N to the previous option,
+  CONFIG_MSNDPIN_NONPNP.
+
 /dev/dsp and /dev/audio support
 CONFIG_SOUND_AUDIO
   Answering N disables /dev/dsp and /dev/audio, the A/D and D/A

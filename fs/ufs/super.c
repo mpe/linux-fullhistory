@@ -15,7 +15,7 @@
  * Gertjan van Wingerde <gertjan@cs.vu.nl>
  *
  * Clean swab support on 19970406 by
- * Francois-Rene Rideau <rideau@ens.fr>
+ * Francois-Rene Rideau <fare@tunes.org>
  *
  * 4.4BSD (FreeBSD) support added on February 1st 1998 by
  * Niels Kristian Bech Jensen <nkbj@image.dk> partially based
@@ -26,10 +26,10 @@
  *
  * write support Daniel Pirkl <daniel.pirkl@email.cz> 1998
  * 
- 
  */
 
 #include <linux/module.h>
+#include <linux/init.h>
 
 #include <linux/kernel.h>
 #include <linux/fs.h>
@@ -130,7 +130,7 @@ void ufs_print_cylinder_stuff(struct ufs_cylinder_group *cg, unsigned swab)
 
 /*
  * Called while file system is mounted, read super block
- * and create important imtermal structures.
+ * and create important internal structures.
  */
 struct super_block * ufs_read_super (
 	struct super_block * sb,
@@ -148,7 +148,7 @@ struct super_block * ufs_read_super (
 	unsigned flags, swab;
 	s64 tmp;
 	static unsigned offsets[] = {0, 96, 160};  /* different superblock locations */
-	            
+		    
 	UFSD(("ENTER\n"))
 	
 	uspi = NULL;
@@ -156,13 +156,12 @@ struct super_block * ufs_read_super (
 	base = space = NULL;
 	sb->u.ufs_sb.s_ucg = NULL;
 	flags = 0;
-	swab = 0;
 	
 	/* sb->s_dev and sb->s_flags are set by our caller
 	 * data is the mystery argument to sys_mount()
 	 *
 	 * Our caller also sets s_dev, s_covered, s_rd_only, s_dirt,
- 	 *   and s_type when we return.
+	 *   and s_type when we return.
 	 */
 
 	MOD_INC_USE_COUNT;
@@ -183,7 +182,7 @@ struct super_block * ufs_read_super (
 	i = 0;
 	uspi->s_sbbase = offsets[i];
 	
-again:	
+again:
 	set_blocksize (sb->s_dev, block_size);
 
 	/*
@@ -199,30 +198,47 @@ again:
 	
 	/*
 	 * Check ufs magic number
+	 * This code uses goto, because it's a lesser evil than unbalanced
+	 * structure in conditional code. Brought to you by Fare' as a minimal
+	 * hack to live with Daniel's (unnecessary, IMNSHO) manual swab
+	 * optimization -- see swab.h.
 	 */
-	if (usb3->fs_magic != UFS_MAGIC) {
-		switch (le32_to_cpup(&usb3->fs_magic)) {
+#if defined(__LITTLE_ENDIAN) || defined(__BIG_ENDIAN) /* sane bytesex */
+	switch (usb3->fs_magic) {
 		case UFS_MAGIC:
-			swab = UFS_LITTLE_ENDIAN; break;
+			swab = UFS_NATIVE_ENDIAN;
+			goto magic_found;
 		case UFS_CIGAM:
-			swab = UFS_BIG_ENDIAN; break;
-		default:
-			/*
-			 * Try another super block location
-			 */
-			if (++i < sizeof(offsets)/sizeof(unsigned)) {
-				ubh_brelse2(ubh);
-				ubh = NULL;
-				uspi->s_sbbase = offsets[i];
-				goto again;
-			}
-			else {
-				printk("ufs_read_super: super block loacation not in { 0, 96, 160} or bad magic number\n");
-				goto failed;
-			}
-		}
+			swab = UFS_SWABBED_ENDIAN;
+			goto magic_found;
 	}
-	
+#else /* bytesex perversion */
+	switch (le32_to_cpup(&usb3->fs_magic)) {
+		case UFS_MAGIC:
+			swab = UFS_LITTLE_ENDIAN;
+			goto magic_found;
+		case UFS_CIGAM:
+			swab = UFS_BIG_ENDIAN;
+			goto magic_found;
+	}
+#endif
+	/*
+	 * Magic number not found -- try another super block location
+	 */
+	if (++i < sizeof(offsets)/sizeof(unsigned)) {
+		ubh_brelse2(ubh);
+		ubh = NULL;
+		uspi->s_sbbase = offsets[i];
+		goto again;
+	} else {
+		printk("ufs_read_super: "
+		       "super block location not in "
+		       "{ 0, 96, 160} "
+		       "or bad magic number\n");
+		goto failed;
+	}
+	magic_found:
+
 	/*
 	 * Check block and fragment sizes
 	 */
@@ -231,23 +247,27 @@ again:
 	uspi->s_sbsize = SWAB32(usb1->fs_sbsize);
 
 	if (uspi->s_bsize != 4096 && uspi->s_bsize != 8192) {
-		printk("ufs_read_super: fs_bsize %u != {4096, 8192}\n", uspi->s_bsize);
+		printk("ufs_read_super: fs_bsize %u != {4096, 8192}\n",
+		       uspi->s_bsize);
 		goto failed;
 	}
 	if (uspi->s_fsize != 512 && uspi->s_fsize != 1024) {
-		printk("ufs_read_super: fs_fsize %u != {512, 1024}\n", uspi->s_fsize);
-	        goto failed;
+		printk("ufs_read_super: fs_fsize %u != {512, 1024}\n",
+		       uspi->s_fsize);
+		goto failed;
 	}
 	
 	/*
-	 * Block size is not 1024, set block_size to 512, 
-	 * free buffers and read it again
+	 * Block size is not 1024. Free buffers, set block_size and
+	 * super_block_size to superblock-declared values, and try again.
 	 */
 	if (uspi->s_fsize != block_size || uspi->s_sbsize != super_block_size) {
 		ubh_brelse2(ubh);
 		ubh = NULL;
 		uspi->s_fmask = SWAB32(usb1->fs_fmask);
 		uspi->s_fshift = SWAB32(usb1->fs_fshift);
+		block_size = uspi->s_fsize;
+		super_block_size = uspi->s_sbsize;
 		goto again;
 	}
 
@@ -255,54 +275,59 @@ again:
 	ufs_print_super_stuff (usb1, usb2, usb3, swab);
 #endif
 	/*
-	 * Check file system type
+	 * Check file system flavor
 	 */
 	flags |= UFS_VANILLA;
 	/* XXX more consistency check */
 	UFSD(("ufs_read_super: maxsymlinklen 0x%8.8x\n", usb3->fs_u.fs_44.fs_maxsymlinklen))
 	if (usb3->fs_u.fs_44.fs_maxsymlinklen >= 0) {
 		if (usb3->fs_u.fs_44.fs_inodefmt >= UFS_44INODEFMT) {
-			UFSD(("44BSD\n"))
+			UFSD(("Flavor: 44BSD\n"))
 			flags |= UFS_44BSD;
 			sb->s_flags |= MS_RDONLY;
 		} else {
-			UFSD(("OLD\n"))
+			UFSD(("Flavor: OLD\n"))
 			sb->s_flags |= UFS_OLD;       /* 4.2BSD */
 		}
 	} else if (uspi->s_sbbase > 0) {
-		UFSD(("NEXT\n"))
+		UFSD(("Flavor: NEXT\n"))
 		flags |= UFS_NEXT;
 		sb->s_flags |= MS_RDONLY;
 	} else {
-		UFSD(("SUN\n"))
+		UFSD(("Flavor: SUN\n"))
 		flags |= UFS_SUN;
-        }
+	}
 
 	/*
-	 * Check, if file system was correctly unmounted.
+	 * Check whether file system was correctly unmounted.
 	 * If not, make it read only.
 	 */
-        if (((flags & UFS_ST_MASK) == UFS_ST_44BSD) ||
-            ((flags & UFS_ST_MASK) == UFS_ST_OLD) ||
-            ((flags & UFS_ST_MASK) == UFS_ST_NEXT) ||
-            (((flags & UFS_ST_MASK) == UFS_ST_SUN) &&
-            ufs_state(usb3) == UFS_FSOK - usb1->fs_time)) {
+	if (((flags & UFS_ST_MASK) == UFS_ST_44BSD) ||
+	    ((flags & UFS_ST_MASK) == UFS_ST_OLD) ||
+	    ((flags & UFS_ST_MASK) == UFS_ST_NEXT) ||
+	    (((flags & UFS_ST_MASK) == UFS_ST_SUN) &&
+	    ufs_state(usb3) == UFS_FSOK - usb1->fs_time)) {
 		switch(usb1->fs_clean) {
-		    case UFS_FSCLEAN:
-			UFSD(("fs is clean\n"))
-			break;
-		    case UFS_FSSTABLE:
-			UFSD(("fs is stable\n"))
-			break;
-		    case UFS_FSACTIVE:
+		case UFS_FSACTIVE:	/* 0x00 */
 			printk("ufs_read_super: fs is active\n");
 			sb->s_flags |= MS_RDONLY;
 			break;
-		    case UFS_FSBAD:
+		case UFS_FSCLEAN:	/* 0x01 */
+			UFSD(("ufs_read_super: fs is clean\n"))
+			break;
+		case UFS_FSSTABLE:
+			UFSD(("ufs_read_super: fs is stable\n"))
+			break;
+		case UFS_FSOSF1:	/* 0x03 */
+		/* XXX - is this the correct interpretation under DEC OSF/1? */
+			printk("ufs_read_super: "
+			       "fs is clean and stable (OSF/1)\n");
+			break;
+		case UFS_FSBAD:		/* 0xFF */
 			printk("ufs_read_super: fs is bad\n");
 			sb->s_flags |= MS_RDONLY;
 			break;
-		    default:
+		default:
 			printk("ufs_read_super: can't grok fs_clean 0x%x\n",
 				usb1->fs_clean);
 			sb->s_flags |= MS_RDONLY;
@@ -335,7 +360,7 @@ again:
 	/* s_bsize already set */
 	/* s_fsize already set */
 	uspi->s_fpb = SWAB32(usb1->fs_frag);
-        uspi->s_minfree = SWAB32(usb1->fs_minfree);
+	uspi->s_minfree = SWAB32(usb1->fs_minfree);
 	uspi->s_bmask = SWAB32(usb1->fs_bmask);
 	uspi->s_fmask = SWAB32(usb1->fs_fmask);
 	uspi->s_bshift = SWAB32(usb1->fs_bshift);
@@ -345,7 +370,7 @@ again:
 	/* s_sbsize already set */
 	uspi->s_csmask = SWAB32(usb1->fs_csmask);
 	uspi->s_csshift = SWAB32(usb1->fs_csshift);
-        uspi->s_nindir = SWAB32(usb1->fs_nindir);
+	uspi->s_nindir = SWAB32(usb1->fs_nindir);
 	uspi->s_inopb = SWAB32(usb1->fs_inopb);
 	uspi->s_nspf = SWAB32(usb1->fs_nspf);
 	uspi->s_npsect = SWAB32(usb1->fs_npsect);
@@ -360,11 +385,11 @@ again:
 	uspi->s_ipg = SWAB32(usb1->fs_ipg);
 	uspi->s_fpg = SWAB32(usb1->fs_fpg);
 	uspi->s_cpc = SWAB32(usb2->fs_cpc);
-        ((u32 *)&tmp)[0] = usb3->fs_u.fs_sun.fs_qbmask[0];
-        ((u32 *)&tmp)[1] = usb3->fs_u.fs_sun.fs_qbmask[1];
+	((u32 *)&tmp)[0] = usb3->fs_u.fs_sun.fs_qbmask[0];
+	((u32 *)&tmp)[1] = usb3->fs_u.fs_sun.fs_qbmask[1];
 	uspi->s_qbmask = SWAB64(tmp);
-        ((u32 *)&tmp)[0] = usb3->fs_u.fs_sun.fs_qfmask[0];
-        ((u32 *)&tmp)[1] = usb3->fs_u.fs_sun.fs_qfmask[1];
+	((u32 *)&tmp)[0] = usb3->fs_u.fs_sun.fs_qfmask[0];
+	((u32 *)&tmp)[1] = usb3->fs_u.fs_sun.fs_qfmask[1];
 	uspi->s_qfmask = SWAB64(tmp);
 	uspi->s_postblformat = SWAB32(usb3->fs_postblformat);
 	uspi->s_nrpos = SWAB32(usb3->fs_nrpos);
@@ -372,7 +397,7 @@ again:
 	uspi->s_rotbloff = SWAB32(usb3->fs_rotbloff);
 
 	/*
-	 * Compute another fraquently used values
+	 * Compute another frequently used values
 	 */
 	uspi->s_fpbmask = uspi->s_fpb - 1;
 	uspi->s_apbshift = uspi->s_bshift - 2;
@@ -382,15 +407,18 @@ again:
 	uspi->s_2apb = 1 << uspi->s_2apbshift;
 	uspi->s_3apb = 1 << uspi->s_3apbshift;
 	uspi->s_apbmask = uspi->s_apb - 1;
- 	uspi->s_nspfshift = uspi->s_fshift - SECTOR_BITS;
+	uspi->s_nspfshift = uspi->s_fshift - UFS_SECTOR_BITS;
 	uspi->s_nspb = uspi->s_nspf << uspi->s_fpbshift;
 	uspi->s_inopf = uspi->s_inopb >> uspi->s_fpbshift;
-		
+
+	/* we could merge back s_swab and s_flags by having
+	   foo.s_flags = flags | swab; here, and #defining
+	   s_swab to s_flags & UFS_BYTESEX in swab.h */
 	sb->u.ufs_sb.s_flags = flags;
 	sb->u.ufs_sb.s_swab = swab;
 	sb->u.ufs_sb.s_rename_lock = 0;
 	sb->u.ufs_sb.s_rename_wait = NULL;
-         	                                                          
+									  
 	sb->s_root = d_alloc_root(iget(sb, UFS_ROOTINO), NULL);
 
 	/*
@@ -419,6 +447,7 @@ again:
 	/*
 	 * Read cylinder group (we read only first fragment from block
 	 * at this time) and prepare internal data structures for cg caching.
+	 * XXX - something here fails on CDROMs from DEC!
 	 */
 	if (!(sb->u.ufs_sb.s_ucg = kmalloc (sizeof(struct buffer_head *) * uspi->s_ncg, GFP_KERNEL)))
 		goto failed;
@@ -669,7 +698,7 @@ static struct file_system_type ufs_fs_type = {
 };
 
 
-int init_ufs_fs(void)
+__initfunc(int init_ufs_fs(void))
 {
 	return(register_filesystem(&ufs_fs_type));
 }

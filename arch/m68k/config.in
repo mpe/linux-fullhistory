@@ -63,9 +63,10 @@ fi
 if [ "$CONFIG_VME" = "y" -a "$CONFIG_M68060" = "y" ]; then
   define_bool CONFIG_060_WRITETHROUGH y
 fi
-bool 'Advanced processor options' CONFIG_ADVANCED_CPU
-if [ "$CONFIG_ADVANCED_CPU" = "y" ]; then
+bool 'Advanced configuration options' CONFIG_ADVANCED
+if [ "$CONFIG_ADVANCED" = "y" ]; then
   bool 'Use read-modify-write instructions' CONFIG_RMW_INSNS
+  bool 'Use one physical chunk of memory only' CONFIG_SINGLE_MEMORY_CHUNK
   if [ "$CONFIG_M68060" = "y" -a "$CONFIG_VME" = "n" ]; then
     bool 'Use write-through caching for 68060 supervisor accesses' CONFIG_060_WRITETHROUGH
   fi
@@ -235,22 +236,13 @@ if [ "$CONFIG_ATARI" = "y" ]; then
     tristate 'PAMsNet support' CONFIG_ATARI_PAMSNET
   fi
 fi
+if [ "$CONFIG_HP300" = "y" ]; then
+  bool 'HP on-board LANCE support' CONFIG_HPLANCE
+fi
 fi
 endmenu
 
 fi
-
-source fs/Config.in
-
-if [ "$CONFIG_VME" = "n" ]; then
-  define_bool CONFIG_FB y
-  mainmenu_option next_comment
-  comment 'Console drivers'
-  source drivers/video/Config.in
-  endmenu
-fi
-
-source fs/nls/Config.in
 
 mainmenu_option next_comment
 comment 'Character devices'
@@ -277,7 +269,7 @@ if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari mouse support' CONFIG_ATARIMOUSE
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
-   bool 'Mac ADB mouse support' CONFIG_MACMOUSE
+   bool 'Mac ADB mouse support' CONFIG_ADBMOUSE
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari MFP serial support' CONFIG_ATARI_MFPSER
@@ -344,6 +336,11 @@ fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   bool 'Enhanced Real Time Clock Support' CONFIG_RTC
 fi
+bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
+if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
+  int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
+fi
+
 endmenu
 
 mainmenu_option next_comment
@@ -354,6 +351,22 @@ if [ "$CONFIG_SOUND" != "n" ]; then
   dep_tristate 'Amiga or Atari DMA sound support' CONFIG_DMASOUND $CONFIG_SOUND
 fi
 endmenu
+
+source fs/Config.in
+
+if [ "$CONFIG_VME" = "n" ]; then
+  if [ "$CONFIG_HP300" = "y" ]; then
+    bool 'Frame buffer support' CONFIG_FB
+  else
+    define_bool CONFIG_FB y
+  fi
+  mainmenu_option next_comment
+  comment 'Console drivers'
+  source drivers/video/Config.in
+  endmenu
+fi
+
+source fs/nls/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

@@ -2569,15 +2569,21 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 
 	MOD_INC_USE_COUNT;
 	line = MINOR(tty->device) - tty->driver.minor_start;
-	if ((line < 0) || (line >= NR_PORTS))
+	if ((line < 0) || (line >= NR_PORTS)) {
+		MOD_DEC_USE_COUNT;
 		return -ENODEV;
+	}
 	retval = get_async_struct(line, &info);
-	if (retval)
+	if (retval) {
+		MOD_DEC_USE_COUNT;
 		return retval;
+	}
 	tty->driver_data = info;
 	info->tty = tty;
-	if (serial_paranoia_check(info, tty->device, "rs_open"))
+	if (serial_paranoia_check(info, tty->device, "rs_open")) {
+		MOD_DEC_USE_COUNT;
 		return -ENODEV;
+	}
 
 #ifdef SERIAL_DEBUG_OPEN
 	printk("rs_open %s%d, count = %d\n", tty->driver.name, info->line,
@@ -2587,8 +2593,10 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 
 	if (!tmp_buf) {
 		page = get_free_page(GFP_KERNEL);
-		if (!page)
+		if (!page) {
+			MOD_DEC_USE_COUNT;
 			return -ENOMEM;
+		}
 		if (tmp_buf)
 			free_page(page);
 		else
@@ -2602,6 +2610,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	    (info->flags & ASYNC_CLOSING)) {
 		if (info->flags & ASYNC_CLOSING)
 			interruptible_sleep_on(&info->close_wait);
+		MOD_DEC_USE_COUNT;
 #ifdef SERIAL_DO_RESTART
 		return ((info->flags & ASYNC_HUP_NOTIFY) ?
 			-EAGAIN : -ERESTARTSYS);
@@ -2614,11 +2623,14 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	 * Start up serial port
 	 */
 	retval = startup(info);
-	if (retval)
+	if (retval) {
+		MOD_DEC_USE_COUNT;
 		return retval;
+	}
 
 	retval = block_til_ready(tty, filp, info);
 	if (retval) {
+		MOD_DEC_USE_COUNT;
 #ifdef SERIAL_DEBUG_OPEN
 		printk("rs_open returning after block_til_ready with %d\n",
 		       retval);

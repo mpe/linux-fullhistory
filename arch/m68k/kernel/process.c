@@ -134,29 +134,20 @@ void flush_thread(void)
 
 asmlinkage int m68k_fork(struct pt_regs *regs)
 {
-	int ret;
-
-	lock_kernel();
-	ret = do_fork(SIGCHLD, rdusp(), regs);
-	unlock_kernel();
-	return ret;
+	return do_fork(SIGCHLD, rdusp(), regs);
 }
 
 asmlinkage int m68k_clone(struct pt_regs *regs)
 {
 	unsigned long clone_flags;
 	unsigned long newsp;
-	int ret;
 
-	lock_kernel();
 	/* syscall2 puts clone_flags in d1 and usp in d2 */
 	clone_flags = regs->d1;
 	newsp = regs->d2;
 	if (!newsp)
-	  newsp  = rdusp();
-	ret = do_fork(clone_flags, newsp, regs);
-	unlock_kernel();
-	return ret;
+		newsp = rdusp();
+	return do_fork(clone_flags, newsp, regs);
 }
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,

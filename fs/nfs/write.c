@@ -61,6 +61,7 @@
 
 static void			nfs_wback_lock(struct rpc_task *task);
 static void			nfs_wback_result(struct rpc_task *task);
+static void			nfs_cancel_request(struct nfs_wreq *req);
 
 /*
  * Cache parameters
@@ -248,7 +249,7 @@ nfs_find_dentry_request(struct inode *inode, struct dentry *dentry)
 
 	req = head = NFS_WRITEBACK(inode);
 	while (req != NULL) {
-		if (req->wb_dentry == dentry) {
+		if (req->wb_dentry == dentry && !WB_CANCELLED(req)) {
 			found = 1;
 			break;
 		}
@@ -474,6 +475,7 @@ wait_on_write_request(struct nfs_wreq *req)
 		if (!PageLocked(page))
 			break;
 		retval = -ERESTARTSYS;
+		checksignals();
 		if (signalled())
 			break;
 		schedule();
@@ -585,8 +587,11 @@ done:
 			transfer_page_lock(req);
 			/* rpc_execute(&req->wb_task); */
 			if (sync) {
-				/* N.B. if signalled, result not ready? */
-				wait_on_write_request(req);
+				/* if signalled, ensure request is cancelled */
+				if ((count = wait_on_write_request(req)) != 0) {
+					nfs_cancel_request(req);
+					status = count;
+				}
 				if ((count = nfs_write_error(inode)) < 0)
 					status = count;
 			}

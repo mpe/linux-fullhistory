@@ -157,12 +157,24 @@ __generic_copy_from_user(void *to, const void *from, unsigned long n)
 	 "6:\n"
 	 ".section .fixup,\"ax\"\n"
 	 "   .even\n"
-	 "7: lsll #2,%2\n"
+	 "7: movel %2,%%d0\n"
+	 "71:clrl (%0)+\n"
+	 "   subql #1,%%d0\n"
+	 "   jne 71b\n"
+	 "   lsll #2,%2\n"
 	 "   addl %4,%2\n"
+	 "   btst #1,%4\n"
+	 "   jne 81f\n"
+	 "   btst #0,%4\n"
+	 "   jne 91f\n"
 	 "   jra 6b\n"
 	 "8: addql #2,%2\n"
+	 "81:clrw (%0)+\n"
+	 "   btst #0,%4\n"
+	 "   jne 91f\n"
 	 "   jra 6b\n"
 	 "9: addql #1,%2\n"
+	 "91:clrb (%0)+\n"
 	 "   jra 6b\n"
          ".previous\n"
 	 ".section __ex_table,\"a\"\n"
@@ -233,7 +245,11 @@ __generic_copy_to_user(void *to, const void *from, unsigned long n)
 	 "    jne 10b\n"				\
 	 ".section .fixup,\"ax\"\n"			\
 	 "    .even\n"					\
-	 "11: lsll #2,%2\n"				\
+	 "11: movel %2,%%d0\n"				\
+	 "13: clrl (%0)+\n"				\
+	 "    subql #1,%%d0\n"				\
+	 "    jne 13b\n"				\
+	 "    lsll #2,%2\n"				\
 	 fixup "\n"					\
 	 "    jra 12f\n"				\
 	 ".previous\n"					\
@@ -261,6 +277,7 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     ".section .fixup,\"ax\"\n"
 	     "   .even\n"
 	     "3: addql #1,%2\n"
+	     "   clrb (%0)+\n"
 	     "   jra 2b\n"
 	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
@@ -279,6 +296,7 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     ".section .fixup,\"ax\"\n"
 	     "   .even\n"
 	     "3: addql #2,%2\n"
+	     "   clrw (%0)+\n"
 	     "   jra 2b\n"
 	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
@@ -299,7 +317,9 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     ".section .fixup,\"ax\"\n"
 	     "   .even\n"
 	     "4: addql #2,%2\n"
+	     "   clrw (%0)+\n"
 	     "5: addql #1,%2\n"
+	     "   clrb (%0)+\n"
 	     "   jra 3b\n"
 	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
@@ -319,6 +339,7 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     ".section .fixup,\"ax\"\n"
 	     "   .even\n"
 	     "3: addql #4,%2\n"
+	     "   clrl (%0)+\n"
 	     "   jra 2b\n"
 	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
@@ -339,7 +360,9 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     ".section .fixup,\"ax\"\n"
 	     "   .even\n"
 	     "4: addql #4,%2\n"
+	     "   clrl (%0)+\n"
 	     "5: addql #4,%2\n"
+	     "   clrl (%0)+\n"
 	     "   jra 3b\n"
 	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
@@ -363,8 +386,11 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     ".section .fixup,\"ax\"\n"
 	     "   .even\n"
 	     "5: addql #4,%2\n"
+	     "   clrl (%0)+\n"
 	     "6: addql #4,%2\n"
+	     "   clrl (%0)+\n"
 	     "7: addql #4,%2\n"
+	     "   clrl (%0)+\n"
 	     "   jra 4b\n"
 	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
@@ -391,9 +417,13 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     ".section .fixup,\"ax\"\n"
 	     "   .even\n"
 	     "6: addql #4,%2\n"
+	     "   clrl (%0)+\n"
 	     "7: addql #4,%2\n"
+	     "   clrl (%0)+\n"
 	     "8: addql #4,%2\n"
+	     "   clrl (%0)+\n"
 	     "9: addql #4,%2\n"
+	     "   clrl (%0)+\n"
 	     "   jra 5b\n"
 	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
@@ -415,7 +445,8 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	case 1:
 	    __copy_from_user_big(to, from, n,
 				 /* fixup */
-				 "1: addql #1,%2",
+				 "1: addql #1,%2\n"
+				 "   clrb (%0)+",
 				 /* copy */
 				 "2: movesb (%1)+,%%d0\n"
 				 "   moveb %%d0,(%0)+\n"
@@ -426,7 +457,8 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	case 2:
 	    __copy_from_user_big(to, from, n,
 				 /* fixup */
-				 "1: addql #2,%2",
+				 "1: addql #2,%2\n"
+				 "   clrw (%0)+",
 				 /* copy */
 				 "2: movesw (%1)+,%%d0\n"
 				 "   movew %%d0,(%0)+\n"
@@ -438,7 +470,9 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	    __copy_from_user_big(to, from, n,
 				 /* fixup */
 				 "1: addql #2,%2\n"
-				 "2: addql #1,%2",
+				 "   clrw (%0)+\n"
+				 "2: addql #1,%2\n"
+				 "   clrb (%0)+",
 				 /* copy */
 				 "3: movesw (%1)+,%%d0\n"
 				 "   movew %%d0,(%0)+\n"
@@ -712,16 +746,9 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 }
 
 #define copy_from_user(to, from, n)		\
-{ void *__to = (to);				\
-  void *__from = (from);			\
-  unsigned long __n = (n);			\
-  char *__end = (char *)__to + __n;		\
-  unsigned long __res =				\
 (__builtin_constant_p(n) ?			\
  __constant_copy_from_user(to, from, n) :	\
- __generic_copy_from_user(to, from, n));	\
-  if (__res) memset(__end - __res, 0, __res);	\
-  res; }
+ __generic_copy_from_user(to, from, n))
 
 #define copy_to_user(to, from, n)		\
 (__builtin_constant_p(n) ?			\

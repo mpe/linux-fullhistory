@@ -5,7 +5,7 @@
 *		the following common services for the WAN Link Drivers:
 *		 o WAN device managenment (registering, unregistering)
 *		 o Network interface management
-*		 o Physical connection management (dial-up, incoming calls)
+*		 o Physical connection management (dial-up, incomming calls)
 *		 o Logical connection management (switched virtual circuits)
 *		 o Protocol encapsulation/decapsulation
 *
@@ -25,7 +25,6 @@
 * Oct 15, 1997  Farhan Thawar   changed wan_encapsulate to add a pad byte of 0
 * Apr 20, 1998	Alan Cox	Fixed 2.1 symbols
 * May 17, 1998  K. Baranowski	Fixed SNAP encapsulation in wan_encapsulate
-* Aug 15, 1998	Arnaldo C. Melo	Fixed device_setup return value
 *****************************************************************************/
 
 #include <linux/stddef.h>	/* offsetof(), etc. */
@@ -373,8 +372,9 @@ int wanrouter_ioctl(struct inode* inode, struct file* file,
 	struct proc_dir_entry* dent;
 	wan_device_t* wandev;
 
-	if (!capable(CAP_NET_ADMIN))
+	if (!capable(CAP_NET_ADMIN)){
 		return -EPERM;
+	}
 		
 	if ((cmd >> 8) != ROUTER_IOCTL)
 		return -EINVAL;
@@ -443,7 +443,7 @@ static int device_setup (wan_device_t* wandev, wandev_conf_t* u_conf)
 
 	if (wandev->setup == NULL)	/* Nothing to do ? */
 		return 0;
-		
+	
 	conf = kmalloc(sizeof(wandev_conf_t), GFP_KERNEL);
 	if (conf == NULL)
 		return -ENOBUFS;
@@ -459,15 +459,17 @@ static int device_setup (wan_device_t* wandev, wandev_conf_t* u_conf)
 
 	if (conf->data_size && conf->data)
 	{
-		if(conf->data_size > 1024 || conf->data_size < 0)
+		if(conf->data_size > 64000 || conf->data_size < 0){
 			goto bail;
+		}
 		data = kmalloc(conf->data_size, GFP_KERNEL);
 		if (data)
 		{
 			if(!copy_from_user(data, conf->data, conf->data_size))
 			{
 				conf->data=data;
-				err = wandev->setup(wandev,conf);
+				wandev->setup(wandev,conf);
+				err = 0;
 			}
 			else 
 				err = -ENOBUFS;
@@ -681,6 +683,7 @@ static int delete_interface (wan_device_t* wandev, char* name, int force)
 	--wandev->ndev;
 	sti();			/****** critical section end ******/
 
+	printk("Unregistering '%s'\n", dev->name);
 	unregister_netdev(dev);
 	kfree(dev);
 	return 0;

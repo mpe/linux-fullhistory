@@ -133,31 +133,23 @@ static int strnicmp(const char *s1, const char *s2, int len)
 	/* Yes, Virginia, it had better be unsigned */
 	unsigned char c1, c2;
 
-	while (len) {
+	c1 = 0;	c2 = 0;
+	while (len > 0) {
 		c1 = *s1; c2 = *s2;
 		s1++; s2++;
 		if (!c1)
-			goto end_of_string1;
+			break;
 		if (!c2)
-			goto end_of_string2;
-		if (c1 != c2) {
-			c1 = tolower(c1);
-			c2 = tolower(c2);
-			if (c1 != c2)
-				goto different;
-		}
+			break;
+		if (c1 == c2)
+			continue;
+		c1 = tolower(c1);
+		c2 = tolower(c2);
+		if (c1 != c2)
+			break;
 		len--;
 	}
-	return 0;
-
-end_of_string1:
-	return c2 ? -1 : 0;
-
-end_of_string2:
-	return 1;
-
-different:
-	return c1 < c2 ? -1 : 1;
+	return (int)c1 - (int)c2;
 }
 
 /*

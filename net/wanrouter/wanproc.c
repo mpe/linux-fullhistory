@@ -29,6 +29,7 @@
 #include <asm/segment.h>	/* kernel <-> user copy */
 #include <asm/byteorder.h>	/* htons(), etc. */
 #include <asm/uaccess.h>	/* copy_to_user */
+#include <asm/io.h>
 #include <linux/wanrouter.h>	/* WAN router API definitions */
 
 
@@ -243,7 +244,7 @@ static struct proc_dir_entry proc_router_stat =
 
 /* Strings */
 static char conf_hdr[] =
-	"Device name    | port |IRQ|DMA|mem.addr|mem.size|"
+	"Device name    | port |IRQ|DMA| mem.addr |mem.size|"
 	"option1|option2|option3|option4\n";
 	
 static char stat_hdr[] =
@@ -386,16 +387,16 @@ static int config_get_info(char* buf, char** start, off_t offs, int len,
 	wan_device_t* wandev;
 	strcpy(buf, conf_hdr);
 	for (wandev = router_devlist;
-	     wandev && (cnt < (PROC_BUFSZ - 80));
+	     wandev && (cnt < (PROC_BUFSZ - 120));
 	     wandev = wandev->next)
 	{
 		if (wandev->state) cnt += sprintf(&buf[cnt],
-			"%-15s|0x%-4X|%3u|%3u|0x%-6lX|0x%-6X|%7u|%7u|%7u|%7u\n",
+			"%-15s|0x%-4X|%3u|%3u| 0x%-8lX |0x%-6X|%7u|%7u|%7u|%7u\n",
 			wandev->name,
 			wandev->ioport,
 			wandev->irq,
 			wandev->dma,
-			wandev->maddr,
+			virt_to_phys(wandev->maddr),
 			wandev->msize,
 			wandev->hw_opt[0],
 			wandev->hw_opt[1],

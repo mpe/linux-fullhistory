@@ -19,10 +19,6 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
-#define PRINTK(x)
-#define Printk(x)	printk x
-
-
 /*
  * Read a file into user space memory
  */

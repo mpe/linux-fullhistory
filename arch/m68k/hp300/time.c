@@ -31,10 +31,10 @@
 #define	CLKMSB2		0x9
 #define	CLKMSB3		0xD
 
-unsigned long hp300_gettimeoffset (void)
-{
-	return 0L;
-}
+/* This is for machines which generate the exact clock. */
+#define USECS_PER_JIFFY (1000000/HZ)
+
+#define INTVAL ((10000 / 4) - 1)
 
 static void hp300_tick(int irq, void *dev_id, struct pt_regs *regs)
 {
@@ -45,18 +45,31 @@ static void hp300_tick(int irq, void *dev_id, struct pt_regs *regs)
   vector(irq, NULL, regs);
 }
 
+unsigned long hp300_gettimeoffset(void)
+{
+  /* Read current timer 1 value */
+  unsigned char lsb, msb1, msb2;
+  unsigned short ticks;
+
+  msb1 = readb(CLOCKBASE + 5);
+  lsb = readb(CLOCKBASE + 7);
+  msb2 = readb(CLOCKBASE + 5);
+  if (msb1 != msb2)
+    /* A carry happened while we were reading.  Read it again */
+    lsb = readb(CLOCKBASE + 7);
+  ticks = INTVAL - ((msb2 << 8) | lsb);
+  return (USECS_PER_JIFFY * ticks) / INTVAL;
+}
+
 __initfunc(void hp300_sched_init(void (*vector)(int, void *, struct pt_regs *)))
 {
-  unsigned int intval = (10000 / 4) - 1;
-
   writeb(0x1, CLOCKBASE + CLKCR2);		/* select CR1 */
   writeb(0x1, CLOCKBASE + CLKCR1);		/* reset */
 
-  asm volatile(" movpw %0,%1@(5)" : : "d" (intval), "a" (CLOCKBASE));
+  asm volatile(" movpw %0,%1@(5)" : : "d" (INTVAL), "a" (CLOCKBASE));
 
   sys_request_irq(6, hp300_tick, IRQ_FLG_STD, "timer tick", vector);
 
   writeb(0x1, CLOCKBASE + CLKCR2);		/* select CR1 */
   writeb(0x40, CLOCKBASE + CLKCR1);		/* enable irq */
 }
-

@@ -1472,8 +1472,8 @@ D: Generic Z8530 driver, AX.25 DAMA slave implementation
 D: Several AX.25 hacks
 
 N: Francois-Rene Rideau
-E: rideau@ens.fr
-W: http://www.eleves.ens.fr:8080/home/rideau/
+E: fare@tunes.org
+W: http://www.tunes.org/~fare
 D: petty kernel janitor (byteorder, ufs)
 S: 6, rue Augustin Thierry
 S: 75019 Paris
@@ -1511,10 +1511,12 @@ S: Germany
 
 N: Stephen Rothwell
 E: Stephen.Rothwell@canb.auug.org.au
+W: http://www.canb.auug.org.au/~sfr
+P: 1024/BD8C7805 CD A4 9D 01 10 6E 7E 3B  91 88 FA D9 C8 40 AA 02
 D: Boot/setup/build work for setup > 2K
 D: Author, APM driver
-S: 59 Bugden Avenue
-S: Gowrie ACT 2904
+S: 66 Maltby Circuit
+S: Wanniassa ACT 2903
 S: Australia
 
 N: Gerard Roudier

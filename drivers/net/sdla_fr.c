@@ -158,7 +158,7 @@ typedef struct fr_channel {
 	unsigned long IB_addr;	/* physical address of Interface Byte */
 	unsigned long state_tick;	/* time of the last state change */
 	sdla_t *card;		/* -> owner */
-	struct enet_statistics ifstats;		/* interface statistics */
+	struct net_device_stats ifstats;		/* interface statistics */
 	unsigned long if_send_entry;
 	unsigned long if_send_skb_null;
 	unsigned long if_send_broadcast;
@@ -252,7 +252,7 @@ static int if_header(struct sk_buff *skb, struct device *dev,
 	    unsigned short type, void *daddr, void *saddr, unsigned len);
 static int if_rebuild_hdr(struct sk_buff *skb);
 static int if_send(struct sk_buff *skb, struct device *dev);
-static struct enet_statistics *if_stats(struct device *dev);
+static struct net_device_stats *if_stats(struct device *dev);
 /* Interrupt handlers */
 static void fr502_isr(sdla_t * card);
 static void fr508_isr(sdla_t * card);
@@ -1225,12 +1225,15 @@ static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_
 
 /*============================================================================
  * Get Ethernet-style interface statistics.
- * Return a pointer to struct enet_statistics.
+ * Return a pointer to struct net_device_stats.
  */
 
 static struct net_device_stats *if_stats(struct device *dev)
 {
 	fr_channel_t *chan = dev->priv;
+	if(chan==NULL)
+		return NULL;
+		
 	return &chan->ifstats;
 }
 

@@ -879,9 +879,9 @@ out:
  * with "IRQ_INPROGRESS" asserted and the interrupt
  * disabled.
  */
-unsigned long probe_irq_on (void)
+unsigned long probe_irq_on(void)
 {
-	unsigned int i, irqs = 0;
+	unsigned int i;
 	unsigned long delay;
 
 	/*
@@ -890,51 +890,68 @@ unsigned long probe_irq_on (void)
 	spin_lock_irq(&irq_controller_lock);
 	for (i = NR_IRQS-1; i > 0; i--) {
 		if (!irq_desc[i].action) {
-			irq_desc[i].status &= ~IRQ_INPROGRESS;
+			unsigned int status = irq_desc[i].status | IRQ_AUTODETECT;
+			irq_desc[i].status = status & ~(IRQ_INPROGRESS | IRQ_PENDING);
 			irq_desc[i].handler->enable(i);
-			irqs |= (1 << i);
 		}
 	}
 	spin_unlock_irq(&irq_controller_lock);
 
 	/*
-	 * wait for spurious interrupts to increase counters
+	 * Wait for spurious interrupts to trigger
 	 */
 	for (delay = jiffies + HZ/10; delay > jiffies; )
 		/* about 100ms delay */ synchronize_irq();
 
 	/*
-	 * now filter out any obviously spurious interrupts
+	 * Now filter out any obviously spurious interrupts
 	 */
 	spin_lock_irq(&irq_controller_lock);
 	for (i=0; i<NR_IRQS; i++) {
-		if (irq_desc[i].status & IRQ_INPROGRESS)
-			irqs &= ~(1UL << i);
+		unsigned int status = irq_desc[i].status;
+
+		if (!(status & IRQ_AUTODETECT))
+			continue;
+		
+		/* It triggered already - consider it spurious. */
+		if (status & IRQ_INPROGRESS) {
+			irq_desc[i].status = status & ~IRQ_AUTODETECT;
+			irq_desc[i].handler->disable(i);
+		}
 	}
 	spin_unlock_irq(&irq_controller_lock);
 
-	return irqs;
+	return 0x12345678;
 }
 
-int probe_irq_off (unsigned long irqs)
+int probe_irq_off(unsigned long unused)
 {
-	int i, irq_found = -1;
+	int i, irq_found, nr_irqs;
 
+	if (unused != 0x12345678)
+		printk("Bad IRQ probe from %lx\n", (&unused)[-1]);
+
+	nr_irqs = 0;
+	irq_found = 0;
 	spin_lock_irq(&irq_controller_lock);
 	for (i=0; i<NR_IRQS; i++) {
-		if ((irqs & 1) && (irq_desc[i].status & IRQ_INPROGRESS)) {
-			if (irq_found != -1) {
-				irq_found = -irq_found;
-				goto out;
-			}
-			irq_found = i;
+		unsigned int status = irq_desc[i].status;
+
+		if (!(status & IRQ_AUTODETECT))
+			continue;
+
+		if (status & IRQ_INPROGRESS) {
+			if (!nr_irqs)
+				irq_found = i;
+			nr_irqs++;
 		}
-		irqs >>= 1;
+		irq_desc[i].status = status & ~IRQ_AUTODETECT;
+		irq_desc[i].handler->disable(i);
 	}
-	if (irq_found == -1)
-		irq_found = 0;
-out:
 	spin_unlock_irq(&irq_controller_lock);
+
+	if (nr_irqs > 1)
+		irq_found = -irq_found;
 	return irq_found;
 }
 

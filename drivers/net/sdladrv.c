@@ -421,7 +421,7 @@ int sdla_setup (sdlahw_t* hw, void* sfm, unsigned len)
  			return err;
 		}
 	}
-	else if (!get_option_index(dpmbase_opt, hw->dpmbase))
+	else if (!get_option_index(dpmbase_opt, virt_to_phys((void *)hw->dpmbase)))
 	{
 		printk(KERN_ERR "%s: memory address 0x%lX is illegal!\n",
 			modname, hw->dpmbase)
@@ -437,7 +437,7 @@ int sdla_setup (sdlahw_t* hw, void* sfm, unsigned len)
 		return -EINVAL;
 	} 
 	printk(KERN_INFO "%s: dual-port memory window is set at 0x%lX.\n",
-		modname, hw->dpmbase)
+		modname, virt_to_phys(hw->dpmbase))
 	;
 	printk(KERN_INFO "%s: found %luK bytes of on-board memory.\n",
 		modname, hw->memory / 1024)
@@ -495,7 +495,7 @@ int sdla_down (sdlahw_t* hw)
 }
 
 /*============================================================================
- * Map shared memory window into SDLA address space.
+ * Map shared memory window into SDLA adress space.
  */
 
 EXPORT_SYMBOL(sdla_mapmem);
@@ -980,7 +980,7 @@ static int sdla_autodpm (sdlahw_t* hw)
 
 	for (i = opt[0]; i && err; --i)
 	{
-		hw->dpmbase = opt[i];
+		hw->dpmbase = (unsigned long )(phys_to_virt(opt[i]));
 		err = sdla_setdpm(hw);
 	}
 	return err;
@@ -1333,7 +1333,7 @@ static int init_s502a (sdlahw_t* hw)
 	hw->regs[1] = 0xFF;
 
 	/* Verify configuration options */
-	i = get_option_index(s502a_dpmbase_options, hw->dpmbase);
+	i = get_option_index(s502a_dpmbase_options, virt_to_phys((void *)hw->dpmbase));
 	if (i == 0)
 		return -EINVAL
 	;
@@ -1372,7 +1372,7 @@ static int init_s502e (sdlahw_t* hw)
 	;
 
 	/* Verify configuration options */
-	i = get_option_index(s508_dpmbase_options, hw->dpmbase);
+	i = get_option_index(s508_dpmbase_options, virt_to_phys((void *)hw->dpmbase));
 	if (i == 0)
 		return -EINVAL
 	;
@@ -1416,7 +1416,7 @@ static int init_s503 (sdlahw_t* hw)
 	;
 
 	/* Verify configuration options */
-	i = get_option_index(s508_dpmbase_options, hw->dpmbase);
+	i = get_option_index(s508_dpmbase_options, virt_to_phys((void *)hw->dpmbase));
 	if (i == 0)
 		return -EINVAL
 	;
@@ -1458,7 +1458,7 @@ static int init_s507 (sdlahw_t* hw)
 	;
 
 	/* Verify configuration options */
-	i = get_option_index(s507_dpmbase_options, hw->dpmbase);
+	i = get_option_index(s507_dpmbase_options, virt_to_phys((void *)hw->dpmbase));
 	if (i == 0)
 		return -EINVAL
 	;
@@ -1515,7 +1515,7 @@ static int init_s508 (sdlahw_t* hw)
 	;
 
 	/* Verify configuration options */
-	i = get_option_index(s508_dpmbase_options, hw->dpmbase);
+	i = get_option_index(s508_dpmbase_options, virt_to_phys((void *)hw->dpmbase));
 	if (i == 0)
 		return -EINVAL
 	;
@@ -1776,7 +1776,7 @@ static int get_option_index (unsigned* optlist, unsigned optval)
 	int i;
 
 	for (i = 1; i <= optlist[0]; ++i)
-		if (optlist[i] == optval) return i
+		if ( optlist[i] == optval) return i
 	;
 	return 0;
 }

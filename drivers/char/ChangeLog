@@ -1,3 +1,8 @@
+1998-08-26  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* serial.c (rs_open): Correctly decrement the module in-use count
+		on errors.
+
 Thu Feb 19 14:24:08 1998  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 
 	* tty_io.c (tty_name): Remove the non-reentrant (and non-SMP safe)

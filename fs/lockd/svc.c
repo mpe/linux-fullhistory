@@ -36,7 +36,7 @@
 
 #define NLMDBG_FACILITY		NLMDBG_SVC
 #define LOCKD_BUFSIZE		(1024 + NLMSSVC_XDRSIZE)
-#define ALLOWED_SIGS		(sigmask(SIGKILL) | sigmask(SIGSTOP))
+#define ALLOWED_SIGS		(sigmask(SIGKILL))
 
 extern struct svc_program	nlmsvc_program;
 struct nlmsvc_binding *		nlmsvc_ops = NULL;
@@ -79,6 +79,12 @@ lockd(struct svc_rqst *rqstp)
 	current->session = 1;
 	current->pgrp = 1;
 	sprintf(current->comm, "lockd");
+
+	/* Process request with signals blocked.  */
+	spin_lock_irq(&current->sigmask_lock);
+	siginitsetinv(&current->blocked, sigmask(SIGKILL));
+	recalc_sigpending(current);
+	spin_unlock_irq(&current->sigmask_lock);		
 
 	/* kick rpciod */
 	rpciod_up();
@@ -160,18 +166,7 @@ lockd(struct svc_rqst *rqstp)
 				nlmsvc_ops->exp_getclient(&rqstp->rq_addr);
 		}
 
-		/* Process request with signals blocked.  */
-		spin_lock_irq(&current->sigmask_lock);
-		siginitsetinv(&current->blocked, ALLOWED_SIGS);
-		recalc_sigpending(current);
-		spin_unlock_irq(&current->sigmask_lock);
-		
 		svc_process(serv, rqstp);
-
-		spin_lock_irq(&current->sigmask_lock);
-		sigemptyset(&current->blocked);
-		recalc_sigpending(current);
-		spin_unlock_irq(&current->sigmask_lock);
 
 		/* Unlock export hash tables */
 		if (nlmsvc_ops)

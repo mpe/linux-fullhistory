@@ -808,16 +808,11 @@ static void setup_frame (int sig, struct k_sigaction *ka,
 
 	push_cache ((unsigned long) &frame->retcode);
 
-	/*
-	 * no matter what frame format we were using before, we
-	 * will do the "RTE" using a normal 4 word frame.
-	 */
-	regs->format = 0;
-
 	/* Set up registers for signal handler */
 	wrusp ((unsigned long) frame);
 	regs->pc = (unsigned long) ka->sa.sa_handler;
 
+adjust_stack:
 	/* Prepare to skip over the extra stuff in the exception frame.  */
 	if (regs->stkadj) {
 		struct pt_regs *tregs =
@@ -827,8 +822,8 @@ static void setup_frame (int sig, struct k_sigaction *ka,
 #endif
 		/* This must be copied with decreasing addresses to
                    handle overlaps.  */
-		tregs->vector = regs->vector;
-		tregs->format = regs->format;
+		tregs->vector = 0;
+		tregs->format = 0;
 		tregs->pc = regs->pc;
 		tregs->sr = regs->sr;
 	}
@@ -838,6 +833,7 @@ give_sigsegv:
 	if (sig == SIGSEGV)
 		ka->sa.sa_handler = SIG_DFL;
 	force_sig(SIGSEGV, current);
+	goto adjust_stack;
 }
 
 static void setup_rt_frame (int sig, struct k_sigaction *ka, siginfo_t *info,
@@ -895,16 +891,11 @@ static void setup_rt_frame (int sig, struct k_sigaction *ka, siginfo_t *info,
 
 	push_cache ((unsigned long) &frame->retcode);
 
-	/*
-	 * no matter what frame format we were using before, we
-	 * will do the "RTE" using a normal 4 word frame.
-	 */
-	regs->format = 0;
-
 	/* Set up registers for signal handler */
 	wrusp ((unsigned long) frame);
 	regs->pc = (unsigned long) ka->sa.sa_handler;
 
+adjust_stack:
 	/* Prepare to skip over the extra stuff in the exception frame.  */
 	if (regs->stkadj) {
 		struct pt_regs *tregs =
@@ -914,8 +905,8 @@ static void setup_rt_frame (int sig, struct k_sigaction *ka, siginfo_t *info,
 #endif
 		/* This must be copied with decreasing addresses to
                    handle overlaps.  */
-		tregs->vector = regs->vector;
-		tregs->format = regs->format;
+		tregs->vector = 0;
+		tregs->format = 0;
 		tregs->pc = regs->pc;
 		tregs->sr = regs->sr;
 	}
@@ -925,6 +916,7 @@ give_sigsegv:
 	if (sig == SIGSEGV)
 		ka->sa.sa_handler = SIG_DFL;
 	force_sig(SIGSEGV, current);
+	goto adjust_stack;
 }
 
 static inline void
@@ -970,7 +962,7 @@ handle_signal(int sig, struct k_sigaction *ka, siginfo_t *info,
 		setup_frame(sig, ka, oldset, regs);
 
 	if (ka->sa.sa_flags & SA_ONESHOT)
-		ka->sa.sa_handler = NULL;
+		ka->sa.sa_handler = SIG_DFL;
 
 	if (!(ka->sa.sa_flags & SA_NODEFER)) {
 		sigorsets(&current->blocked,&current->blocked,&ka->sa.sa_mask);
@@ -1030,10 +1022,8 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 			discard_frame:
 			    /* Make sure that a faulted bus cycle isn't
 			       restarted (only needed on the 680[23]0).  */
-			    if (regs->format == 10 || regs->format == 11) {
+			    if (regs->format == 10 || regs->format == 11)
 				regs->stkadj = frame_extra_sizes[regs->format];
-				regs->format = 0;
-			    }
 			    continue;
 			}
 			current->exit_code = 0;
@@ -1126,8 +1116,8 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 
 		/* This must be copied with decreasing addresses to
 		   handle overlaps.  */
-		tregs->vector = regs->vector;
-		tregs->format = regs->format;
+		tregs->vector = 0;
+		tregs->format = 0;
 		tregs->pc = regs->pc;
 		tregs->sr = regs->sr;
 	}

@@ -35,6 +35,18 @@ if [ "$CONFIG_SOUND_MSNDPIN" = "y" ]; then
    int 'MSND Pinnacle IRQ 5,7,9,10,11,12' CONFIG_MSNDPIN_IRQ 5
    hex 'MSND Pinnacle Memory B0000,C8000,D0000,D8000,E0000,E8000' CONFIG_MSNDPIN_MEM D0000
    hex 'MSND Pinnacle I/O 210,220,230,240,250,260,290,3E0' CONFIG_MSNDPIN_IO 290
+   bool 'MSND Pinnacle Non-PnP Mode' CONFIG_MSNDPIN_NONPNP
+   if [ "$CONFIG_MSNDPIN_NONPNP" = "y" ]; then
+     comment 'MSND Pinnacle DSP section will be configured to above parameters.'
+     hex 'MSDN Pinnacle Config Port 250,260,270' CONFIG_MSNDPIN_CFG 250
+     comment 'Pinnacle-specific Device Configuration (0 disables)'
+     hex 'MSDN Pinnacle MPU I/O (e.g. 330)' CONFIG_MSNDPIN_MPU_IO 0
+     int 'MSDN Pinnacle MPU IRQ (e.g. 9)' CONFIG_MSNDPIN_MPU_IRQ 0
+     hex 'MSDN Pinnacle IDE I/O 0 (e.g. 170)' CONFIG_MSNDPIN_IDE_IO0 0
+     hex 'MSDN Pinnacle IDE I/O 1 (e.g. 376)' CONFIG_MSNDPIN_IDE_IO1 0
+     int 'MSDN Pinnacle IDE IRQ (e.g. 15)' CONFIG_MSNDPIN_IDE_IRQ 0
+     hex 'MSDN Pinnacle Joystick I/O (e.g. 200)' CONFIG_MSNDPIN_JOYSTICK_IO 0
+   fi
 fi
 
 dep_tristate 'OSS sound modules' CONFIG_SOUND_OSS $CONFIG_SOUND

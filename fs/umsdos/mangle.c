@@ -4,7 +4,7 @@
  *      Written 1993 by Jacques Gelinas 
  *
  * Control the mangling of file name to fit msdos name space.
- * Many optimisation by GLU == dglaude@is1.vub.ac.be (GLAUDE DAVID)
+ * Many optimisations by GLU == dglaude@is1.vub.ac.be (Glaude David)
  */
 
 #include <linux/errno.h>
@@ -47,7 +47,7 @@ void umsdos_manglename (struct umsdos_info *info)
 		 * different extensions which should not clash with any useful
 		 * extension already popular or meaningful. Since most directory
 		 * have much less than 32 * 32 files in it, the first character
-		 * of the extension of any mangle name will be {.
+		 * of the extension of any mangled name will be {.
 		 * 
 		 * Here are the reason to do this (this kind of mangling).
 		 * 
@@ -72,10 +72,11 @@ void umsdos_manglename (struct umsdos_info *info)
 		} u;
 		char *pt = info->fake.fname + info->fake.len;
 
-		/* lookup for encoding the last character of the extension */
-		/* It contain valid character after the ugly one to make sure */
-		/* even if someone overflow the 32 * 32 * 9 limit, it still do */
-		/* something */
+		/* lookup for encoding the last character of the extension 
+		 * It contains valid character after the ugly one to make sure 
+		 * even if someone overflows the 32 * 32 * 9 limit, it still 
+		 * does something 
+		 */
 #define SPECIAL_MANGLING '{','}','(',')','!','`','^','&','@'
 		static char lookup3[] =
 		{
@@ -89,7 +90,7 @@ void umsdos_manglename (struct umsdos_info *info)
 #define lookup12 (lookup3+9)
 		u.entry_num = info->f_pos / UMSDOS_REC_SIZE;
 		if (u.entry_num > (9 * 32 * 32)) {
-			printk ("UMSDOS: More than 9216 file in a directory.\n"
+			printk (KERN_WARNING "UMSDOS: more than 9216 files in a directory.\n"
 				"This may break the mangling strategy.\n"
 				"Not a killer problem. See doc.\n");
 		}
@@ -136,7 +137,7 @@ int umsdos_evalrecsize_old (int len)
 
 /*
  * Fill the struct info with the full and msdos name of a file
- * Return 0 if all is ok, a negative error code otherwise.
+ * Return 0 if all is OK, a negative error code otherwise.
  */
 int umsdos_parse (
 			 const char *fname,
@@ -153,10 +154,10 @@ int umsdos_parse (
 	if (len > UMSDOS_MAXNAME)
 		len = UMSDOS_MAXNAME;
 	{
-		const char *firstpt = NULL;	/* First place we saw a . in fname */
+		const char *firstpt = NULL;	/* First place we saw a "." in fname */
 
 		/* #Specification: file name / non MSDOS conforming / base length 0
-		 * file name beginning with a period '.' are invalid for MsDOS.
+		 * file names beginning with a period '.' are invalid for MS-DOS.
 		 * It needs absolutely a base name. So the file name is mangled
 		 */
 		int ivldchar = fname[0] == '.';		/* At least one invalid character */
@@ -164,8 +165,8 @@ int umsdos_parse (
 		int base_len;
 
 		/*
-		 * cardinal_per_size tells if there exist at least one
-		 * DOS pseudo devices on length n. See the test below.
+		 * cardinal_per_size tells if there exists at least one
+		 * DOS pseudo device on length n.  See the test below.
 		 */
 		static const char cardinal_per_size[9] =
 		{
@@ -175,15 +176,15 @@ int umsdos_parse (
 		/*
 		 * lkp translate all character to acceptable character (for DOS).
 		 * When lkp[n] == n, it means also it is an acceptable one.
-		 * So it serve both as a flag and as a translator.
+		 * So it serves both as a flag and as a translator.
 		 */
 		static char lkp[256];
 		static char is_init = 0;
 
 		if (!is_init) {
 			/*
-			 * Initialisation of the array is easier and less error prone
-			 * like this.
+			 * Initialisation of the array is easier and less error
+                         * prone like this.
 			 */
 			int i;
 			static const char *spc = "\"*+,/:;<=>?[\\]|~";
@@ -205,9 +206,9 @@ int umsdos_parse (
 				lkp[(unsigned char) (*spc++)] = '#';
 		}
 		/*  GLU
-		 * file name which are longer than 8+'.'+3 are invalid for MsDOS.
-		 * So the file name is to be mangled no more test needed.
-		 * This Speed Up for long and very long name.
+		 * File names longer than 8+'.'+3 are invalid for MS-DOS,
+		 * so the file name is to be mangled--no further test is needed.
+		 * This speeds up handling of long names.
 		 * The position of the last point is no more necessary anyway.
 		 */
 		if (len <= (8 + 1 + 3)) {
@@ -235,8 +236,8 @@ int umsdos_parse (
 						} else if (extlen == 1) {
 							/* #Specification: file name / non MSDOS conforming / last char == .
 							 * If the last character of a file name is
-							 * a period, mangling is applied. MsDOS do
-							 * not support those file name.
+							 * a period, mangling is applied. MS-DOS does
+							 * not support those file names.
 							 */
 							ivldchar = 1;
 							break;
@@ -244,7 +245,7 @@ int umsdos_parse (
 							/* #Specification: file name / non MSDOS conforming / mangling clash
 							 * To avoid clash with    the umsdos mangling, any file
 							 * with a special character as the first character
-							 * of the extension will be mangled. This solve the
+							 * of the extension will be mangled. This solves the
 							 * following problem:
 							 * 
 							 * #
@@ -285,7 +286,7 @@ int umsdos_parse (
 			 * name. So UMSDOS does not restrict its use.
 			 */
 			/* #Specification: file name / non MSDOS conforming / mangling
-			 * Non MSDOS conforming file name must use some alias to fit
+			 * Non MSDOS conforming file names must use some alias to fit
 			 * in the MSDOS name space.
 			 * 
 			 * The strategy is simple. The name is simply truncated to
@@ -294,15 +295,15 @@ int umsdos_parse (
 			 * to the entry number in the EMD file. The EMD file
 			 * only need to carry the real name.
 			 * 
-			 * Upper case is also convert to lower case.
+			 * Upper case is also converted to lower case.
 			 * Control character are converted to #.
-			 * Space are converted to #.
-			 * The following character are also converted to #.
+			 * Spaces are converted to #.
+			 * The following characters are also converted to #.
 			 * #
 			 * " * + , / : ; < = > ? [ \ ] | ~
 			 * #
 			 * 
-			 * Sometime, the problem is not in MsDOS itself but in
+			 * Sometimes the problem is not in MS-DOS itself but in
 			 * command.com.
 			 */
 			int i;
@@ -316,7 +317,7 @@ int umsdos_parse (
 			memcpy (info->fake.fname, fname, msdos_len);
 			for (i = 0; i < msdos_len; i++, pt++)
 				*pt = lkp[(unsigned char) (*pt)];
-			*pt = '\0';	/* GLU  C'est sur on a un 0 a la fin */
+			*pt = '\0';	/* GLU  We force null termination. */
 			info->msdos_reject = 1;
 			/*
 			 * The numeric extension is added only when we know
@@ -332,15 +333,15 @@ int umsdos_parse (
 		}
 		if (cardinal_per_size[base_len]) {
 			/* #Specification: file name / MSDOS devices / mangling
-			 * To avoid unreachable file from MsDOS, any MsDOS conforming
-			 * file with a basename equal to one of the MsDOS pseudo
+			 * To avoid unreachable file from MS-DOS, any MS-DOS conforming
+			 * file with a basename equal to one of the MS-DOS pseudo
 			 * devices will be mangled.
 			 * 
 			 * If a file such as "prn" was created, it would be unreachable
-			 * under MsDOS because prn is assumed to be the printer, even
+			 * under MS-DOS because "prn" is assumed to be the printer, even
 			 * if the file does have an extension.
 			 * 
-			 * Since the extension is unimportant to MsDOS, we must patch
+			 * Since the extension is unimportant to MS-DOS, we must patch
 			 * the basename also. We simply insert a minus '-'. To avoid
 			 * conflict with valid file with a minus in front (such as
 			 * "-prn"), we add an mangled extension like any other
@@ -359,10 +360,10 @@ int umsdos_parse (
 			 * 
 			 * "emmxxxx0","xmsxxxx0","setverxx"
 			 * 
-			 * (Thanks to Chris Hall <CAH17@PHOENIX.CAMBRIDGE.AC.UK>
-			 * for pointing these to me).
+			 * (Thanks to Chris Hall <cah17@phoenix.cambridge.ac.uk>
+			 * for pointing these out to me).
 			 * 
-			 * Is there one missing ?
+			 * Is there one missing?
 			 */
 			/* This table must be ordered by length */
 			static const char *tbdev[] =
@@ -386,13 +387,13 @@ int umsdos_parse (
 			for (i = start_ind_dev[base_len - 1]; i < start_ind_dev[base_len]; i++) {
 				if (memcmp (info->fake.fname, tbdev[i], base_len) == 0) {
 					memcpy (basen, info->fake.fname, base_len);
-					basen[base_len] = '\0';		/* GLU  C'est sur on a un 0 a la fin */
+					basen[base_len] = '\0';		/* GLU  We force null termination. */
 					/*
-					 * GLU        On ne fait cela que si necessaire, on essaye d'etre le
-					 * GLU        simple dans le cas general (le plus frequent).
+					 * GLU        We do that only if necessary; we try to do the
+					 * GLU        simple thing in the usual circumstance. 
 					 */
 					info->fake.fname[0] = '-';
-					strcpy (info->fake.fname + 1, basen);	/* GLU  C'est sur on a un 0 a la fin */
+					strcpy (info->fake.fname + 1, basen);	/* GLU  We already guaranteed a null would be at the end. */
 					msdos_len = (base_len == 8) ? 8 : base_len + 1;
 					info->msdos_reject = 1;
 					break;
@@ -400,15 +401,16 @@ int umsdos_parse (
 			}
 		}
 		info->fake.fname[msdos_len] = '\0';	/* Help doing printk */
-		/* GLU      Ce zero devrais deja y etre ! (invariant ?) */
+		/* GLU      This zero should (always?) be there already. */
 		info->fake.len = msdos_len;
-		/* Pourquoi ne pas utiliser info->fake.len partout ??? plus long ? */
+		/* Why not use info->fake.len everywhere? Is it longer?
+                 */
 		memcpy (info->entry.name, fname, len);
 		info->entry.name_len = len;
 		ret = 0;
 	}
 	/*
-	 * Evaluate how many record are needed to store this entry.
+	 * Evaluate how many records are needed to store this entry.
 	 */
 	info->recsize = umsdos_evalrecsize (len);
 	return ret;
@@ -435,15 +437,15 @@ struct MANG_TEST tb[] =
 	"Hello.c", 1, "hello.c",
 #elseif
 /*
- * Je trouve les trois exemples ci-dessous tres "malheureux".
- * Je propose de mettre en minuscule dans un passe preliminaire,
- * et de tester apres si il y a d'autres caracters "mechants".
- * Bon, je ne l'ai pas fait, parceque ce n'est pas si facilement
- * modifiable que ca. Mais c'est pour le principe.
- * Evidemment cela augmente les chances de "Collision",
- * par exemple: entre "HELLO" et "Hello", mais ces problemes
- * peuvent etre traiter ailleur avec les autres collisions.
+ * I find the three examples below very unfortunate.  I propose to
+ * convert them to lower case in a quick preliminary pass, then test
+ * whether there are other troublesome characters.  I have not made
+ * this change, because it is not easy, but I wanted to mention the 
+ * principle.  Obviously something like that would increase the chance
+ * of collisions, for example between "HELLO" and "Hello", but these
+ * can be treated elsewhere along with the other collisions.
  */
+
 	"HELLO", 1, "hello",
 	"Hello.1", 1, "hello_1",
 	"Hello.c", 1, "hello_c",
@@ -465,11 +467,12 @@ struct MANG_TEST tb[] =
 	"prn.abc", 1, "-prn",
 	"PRN", 1, "-prn",
   /* 
-   * GLU        ATTENTION : Le resultat de ceux-ci sont differents avec ma version
-   * GLU        du mangle par rapport au mangle originale.
-   * GLU        CAUSE: La maniere de calculer la variable baselen. 
-   * GLU                Pour toi c'est toujours 3
-   * GLU                Pour moi c'est respectivement 7, 8 et 8
+   * GLU        WARNING:  the results of these are different with my version
+   * GLU        of mangling compared to the original one.
+   * GLU        CAUSE:  the manner of calculating the baselen variable.
+   * GLU                For you they are always 3.
+   * GLU                For me they are respectively 7, 8, and 8.
+
    */
 	"PRN.abc", 1, "prn_abc",
 	"Prn.abcd", 1, "prn_abcd",

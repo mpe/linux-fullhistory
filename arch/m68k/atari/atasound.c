@@ -61,17 +61,21 @@ void atari_mksound (unsigned int hz, unsigned int ticks)
 	save_flags(flags);
 	cli();
 
-	/* Convert from frequency value to PSG period value (base
-	   frequency 125 kHz).  */
-	period = PSG_FREQ / hz;
-
-	if (period > 0xfff) period = 0xfff;
 
 	/* Disable generator A in mixer control.  */
 	sound_ym.rd_data_reg_sel = 7;
 	tmp = sound_ym.rd_data_reg_sel;
 	tmp |= 011;
 	sound_ym.wd_data = tmp;
+
+	if (hz) {
+	    /* Convert from frequency value to PSG period value (base
+	       frequency 125 kHz).  */
+		
+	    period = PSG_FREQ / hz;
+
+	    if (period > 0xfff) period = 0xfff;
+
 	/* Set generator A frequency to hz.  */
 	sound_ym.rd_data_reg_sel = 0;
 	sound_ym.wd_data = period & 0xff;
@@ -101,6 +105,6 @@ void atari_mksound (unsigned int hz, unsigned int ticks)
 	sound_ym.rd_data_reg_sel = 7;
 	tmp &= ~1;
 	sound_ym.wd_data = tmp;
-
+	}
 	restore_flags(flags);
 }

@@ -39,6 +39,7 @@
 #include <asm/system.h>
 #include <asm/machdep.h>
 #include <asm/hwtest.h>
+#include <asm/io.h>
 
 u_long atari_mch_cookie;
 u_long atari_mch_type = 0;
@@ -616,7 +617,7 @@ static void atari_reset (void)
 	 : : : "d0" );
     
     if (CPU_IS_040_OR_060) {
-        unsigned long jmp_addr040 = VTOP(&&jmp_addr_label040);
+        unsigned long jmp_addr040 = virt_to_phys(&&jmp_addr_label040);
 	if (CPU_IS_060) {
 	    /* 68060: clear PCR to turn off superscalar operation */
 	    __asm__ __volatile__

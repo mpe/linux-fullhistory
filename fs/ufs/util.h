@@ -11,7 +11,7 @@
 
 
 /*
- * some usefull marcos
+ * some useful macros
  */
 #define in_range(b,first,len)	((b)>=(first)&&(b)<(first)+(len))
 #define howmany(x,y)		(((x)+(y)-1)/(y))
@@ -28,7 +28,7 @@
 	: (usb3)->fs_u.fs_44.fs_state /* 4.4BSD way */)
 
 /*
- * namlen, it's format depends of flags
+ * namlen, its format depends of flags
  */
 #define ufs_namlen(de) _ufs_namlen_(de,flags,swab)
 static inline __u16 _ufs_namlen_(struct ufs_dir_entry * de, unsigned flags, unsigned swab) {
@@ -43,7 +43,7 @@ static inline __u16 _ufs_namlen_(struct ufs_dir_entry * de, unsigned flags, unsi
  * Here is how the uid is computed:
  * if the file system is 4.2BSD, get it from oldids.
  * if it has sun extension and oldids is USEEFT, get it from ui_sun.
- * if it is 4.4 or Hurd, get it from ui_44 (which is the same as ui_hurd).
+ * if it is 4.4 or Hurd, get it from ui_44 (which is the same as from ui_hurd).
  */
 #define ufs_uid(inode) _ufs_uid_(inode,flags,swab)
 static inline __u32 _ufs_uid_(struct ufs_inode * inode, unsigned flags, unsigned swab) {
@@ -72,13 +72,13 @@ static inline __u32 _ufs_gid_(struct ufs_inode * inode, unsigned flags, unsigned
 }
 
 /*
- * marcros used for retyping
+ * macros used to avoid needless retyping
  */
 #define UCPI_UBH ((struct ufs_buffer_head *)ucpi)
 #define USPI_UBH ((struct ufs_buffer_head *)uspi)
 
 /*
- * This functions manipulate with ufs_buffers
+ * These functions manipulate ufs buffers
  */
 #define ubh_bread(dev,fragment,size) _ubh_bread_(uspi,dev,fragment,size)  
 extern struct ufs_buffer_head * _ubh_bread_(struct ufs_sb_private_info *, kdev_t, unsigned, unsigned);
@@ -106,11 +106,11 @@ extern void _ubh_memcpyubh_(struct ufs_sb_private_info *, struct ufs_buffer_head
 
 #define ubh_get_usb_second(ubh) \
 	((struct ufs_super_block_second *)(ubh)-> \
-	bh[SECTOR_SIZE >> uspi->s_fshift]->b_data + (SECTOR_SIZE & ~uspi->s_fmask))
+	bh[UFS_SECTOR_SIZE >> uspi->s_fshift]->b_data + (UFS_SECTOR_SIZE & ~uspi->s_fmask))
 
 #define ubh_get_usb_third(ubh) \
 	((struct ufs_super_block_third *)((ubh)-> \
-	bh[SECTOR_SIZE*2 >> uspi->s_fshift]->b_data + (SECTOR_SIZE*2 & ~uspi->s_fmask)))
+	bh[UFS_SECTOR_SIZE*2 >> uspi->s_fshift]->b_data + (UFS_SECTOR_SIZE*2 & ~uspi->s_fmask)))
 
 #define ubh_get_ucg(ubh) \
 	((struct ufs_cylinder_group *)((ubh)->bh[0]->b_data))
@@ -160,7 +160,7 @@ extern void _ubh_memcpyubh_(struct ufs_sb_private_info *, struct ufs_buffer_head
 	SWAB32((usb)->fs_cstotal.cs_nffree) - (uspi->s_dsize * (percentreserved) / 100))
 
 /*
- * Macros for access to cylinder group array structures
+ * Macros to access cylinder group array structures
  */
 #define ubh_cg_blktot(ucpi,cylno) \
 	(*((__u32*)ubh_get_addr(UCPI_UBH, (ucpi)->c_btotoff + ((cylno) << 2))))
@@ -170,12 +170,12 @@ extern void _ubh_memcpyubh_(struct ufs_sb_private_info *, struct ufs_buffer_head
 	(ucpi)->c_boff + (((cylno) * uspi->s_nrpos + (rpos)) << 1 ))))
 
 /*
- * Bitmap operation
- * This functions work like classical bitmap operations. The diference 
- * is that we havn't the whole bitmap in one continuous part of memory,
- * but in a few buffers.
- * The parameter of each function is super_block, ufs_buffer_head and
- * position of the begining of the bitmap.
+ * Bitmap operations
+ * These functions work like classical bitmap operations.
+ * The difference is that we don't have the whole bitmap
+ * in one contiguous chunk of memory, but in several buffers.
+ * The parameters of each function are super_block, ufs_buffer_head and
+ * position of the beginning of the bitmap.
  */
 #define ubh_setbit(ubh,begin,bit) \
 	(*ubh_get_addr(ubh, (begin) + ((bit) >> 3)) |= (1 << ((bit) & 7)))
@@ -188,8 +188,11 @@ extern void _ubh_memcpyubh_(struct ufs_sb_private_info *, struct ufs_buffer_head
 
 #define ubh_isclr(ubh,begin,bit) (!ubh_isset(ubh,begin,bit))
 
-#define ubh_find_first_zero_bit(ubh,begin,size) _ubh_find_next_zero_bit_(uspi,ubh,begin,size,0)
-#define ubh_find_next_zero_bit(ubh,begin,size,offset) _ubh_find_next_zero_bit_(uspi,ubh,begin,size,offset)
+#define ubh_find_first_zero_bit(ubh,begin,size) \
+	_ubh_find_next_zero_bit_(uspi,ubh,begin,size,0)
+#define ubh_find_next_zero_bit(ubh,begin,size,offset) \
+	_ubh_find_next_zero_bit_(uspi,ubh,begin,size,offset)
+
 static inline unsigned _ubh_find_next_zero_bit_(
 	struct ufs_sb_private_info * uspi, struct ufs_buffer_head * ubh,
 	unsigned begin, unsigned size, unsigned offset)
@@ -213,14 +216,17 @@ static inline unsigned _ubh_find_next_zero_bit_(
 	return (base << (uspi->s_fshift + 3)) + offset - begin;
 } 	
 
-#define ubh_isblockclear(ubh,begin,block) (!_ubh_isblockset_(uspi,ubh,begin,block))
-#define ubh_isblockset(ubh,begin,block) _ubh_isblockset_(uspi,ubh,begin,block)
+#define ubh_isblockclear(ubh,begin,block) \
+	(!_ubh_isblockset_(uspi,ubh,begin,block))
+#define ubh_isblockset(ubh,begin,block) \
+	_ubh_isblockset_(uspi,ubh,begin,block)
+
 static inline int _ubh_isblockset_(struct ufs_sb_private_info * uspi,
 	struct ufs_buffer_head * ubh, unsigned begin, unsigned block)
 {
 	switch (uspi->s_fpb) {
 	case 8:
-	    	return (*ubh_get_addr (ubh, begin + block) == 0xff);
+		return (*ubh_get_addr (ubh, begin + block) == 0xff);
 	case 4:
 		return (*ubh_get_addr (ubh, begin + (block >> 1)) == (0x0f << ((block & 0x01) << 2)));
 	case 2:
@@ -237,8 +243,8 @@ static inline void _ubh_clrblock_(struct ufs_sb_private_info * uspi,
 {
 	switch (uspi->s_fpb) {
 	case 8:
-	    	*ubh_get_addr (ubh, begin + block) = 0x00;
-	    	return; 
+		*ubh_get_addr (ubh, begin + block) = 0x00;
+		return; 
 	case 4:
 		*ubh_get_addr (ubh, begin + (block >> 1)) &= ~(0x0f << ((block & 0x01) << 2));
 		return;
@@ -257,8 +263,8 @@ static inline void _ubh_setblock_(struct ufs_sb_private_info * uspi,
 {
 	switch (uspi->s_fpb) {
 	case 8:
-	    	*ubh_get_addr(ubh, begin + block) = 0xff;
-	    	return;
+		*ubh_get_addr(ubh, begin + block) = 0xff;
+		return;
 	case 4:
 		*ubh_get_addr(ubh, begin + (block >> 1)) |= (0x0f << ((block & 0x01) << 2));
 		return;
@@ -295,7 +301,8 @@ static inline void ufs_fragacct (struct super_block * sb, unsigned blockmap,
 		ADD_SWAB32(fraglist[fragsize], cnt);
 }
 
-#define ubh_scanc(ubh,begin,size,table,mask) _ubh_scanc_(uspi,ubh,begin,size,table,mask)
+#define ubh_scanc(ubh,begin,size,table,mask) \
+	_ubh_scanc_(uspi,ubh,begin,size,table,mask)
 static inline unsigned _ubh_scanc_(struct ufs_sb_private_info * uspi, struct ufs_buffer_head * ubh, 
 	unsigned begin, unsigned size, unsigned char * table, unsigned char mask)
 {

@@ -106,7 +106,7 @@ int ax25_rebuild_header(struct sk_buff *skb)
 {
 	struct sk_buff *ourskb;
 	unsigned char *bp  = skb->data;
-	struct device *dev = skb->dev;
+	struct device *dev;
 	ax25_address *src, *dst;
 	ax25_route *route;
 	ax25_dev *ax25_dev;
@@ -117,10 +117,14 @@ int ax25_rebuild_header(struct sk_buff *skb)
   	if (arp_find(bp + 1, skb))
   		return 1;
 
-	if ((ax25_dev = ax25_dev_ax25dev(dev)) == NULL)
-		return 1;
+	route    = ax25_rt_find_route(dst, NULL);
+	dev      = route->dev;
 
-	route = ax25_rt_find_route(dst, dev);
+	if (dev == NULL)
+		dev = skb->dev;
+
+        if ((ax25_dev = ax25_dev_ax25dev(dev)) == NULL)
+                return 1;
 
 	if (bp[16] == AX25_P_IP) {
 		if (route->ip_mode == 'V' || (route->ip_mode == ' ' && ax25_dev->values[AX25_VALUES_IPDEFMODE])) {
@@ -139,6 +143,10 @@ int ax25_rebuild_header(struct sk_buff *skb)
 			 *      instead of using skb_clone() unless this
 			 *	gets fixed.
 			 */
+
+			ax25_address src_c;
+			ax25_address dst_c;
+
 			if ((ourskb = skb_copy(skb, GFP_ATOMIC)) == NULL) {
 				kfree_skb(skb);
 				return 1;
@@ -149,9 +157,13 @@ int ax25_rebuild_header(struct sk_buff *skb)
 
 			kfree_skb(skb);
 
+			src_c = *src;
+			dst_c = *dst;
+
 			skb_pull(ourskb, AX25_HEADER_LEN - 1);	/* Keep PID */
 
-			ax25_send_frame(ourskb, ax25_dev->values[AX25_VALUES_PACLEN], src, dst, route->digipeat, dev);
+			ax25_send_frame(ourskb, ax25_dev->values[AX25_VALUES_PACLEN], &src_c, 
+&dst_c, route->digipeat, dev);
 
 			return 1;
 		}

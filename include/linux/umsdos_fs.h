@@ -1,6 +1,8 @@
 #ifndef LINUX_UMSDOS_FS_H
 #define LINUX_UMSDOS_FS_H
 
+#define UMS_DEBUG 1
+
 #define UMSDOS_VERSION	0
 #define UMSDOS_RELEASE	4
 
@@ -20,6 +22,27 @@
 #endif
 #ifndef _LINUX_IOCTL_H
 #include <linux/ioctl.h>
+#endif
+
+
+#ifdef __KERNEL__
+/* #Specification: convention / PRINTK Printk and printk
+ * Here is the convention for the use of printk inside fs/umsdos
+ * 
+ * printk carry important message (error or status).
+ * Printk is for debugging (it is a macro defined at the beginning of
+ * most source.
+ * PRINTK is a nulled Printk macro.
+ * 
+ * This convention makes the source easier to read, and Printk easier
+ * to shut off.
+ */
+#	define PRINTK(x)
+#	ifdef UMS_DEBUG
+#		define Printk(x) printk x
+#	else
+#		define Printk(x)
+#	endif
 #endif
 
 
@@ -93,7 +116,7 @@ struct umsdos_info {
 #define UMSDOS_READDIR_EMD _IO(0x04,216)	/* read the EMD file only. */
 #define UMSDOS_GETVERSION  _IO(0x04,217)	/* Get the release number of UMSDOS */
 #define UMSDOS_INIT_EMD    _IO(0x04,218)	/* Create the EMD file if not there */
-#define UMSDOS_DOS_SETUP   _IO(0x04,219)	/* Set the defaults of the MsDOS driver */
+#define UMSDOS_DOS_SETUP   _IO(0x04,219)	/* Set the defaults of the MS-DOS driver. */
 
 #define UMSDOS_RENAME_DOS  _IO(0x04,220)	/* rename a file/directory in the DOS
 						 * directory only */

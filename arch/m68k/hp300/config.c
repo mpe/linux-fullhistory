@@ -24,7 +24,17 @@
 #include "time.h"
 
 extern void hp300_reset(void);
-extern void hp300_hil_init(void);
+extern void (*hp300_default_handler[])(int, void *, struct pt_regs *);
+extern int hp300_get_irq_list(char *buf);
+
+#ifdef CONFIG_VT
+extern int hp300_keyb_init(void);
+#else
+/* Dummy function for when there is no keyboard. */
+__initfunc(int hp300_keyb_init(void))
+{
+}
+#endif
 
 #ifdef CONFIG_HEARTBEAT
 static void hp300_pulse(int x)
@@ -45,20 +55,30 @@ static void hp300_kbd_leds(unsigned int leds)
 {
 }
 
+/* for "kbd-reset" cmdline param */
+__initfunc(void hp300_kbd_reset_setup(char *str, int i))
+{
+}
+
+static void hp300_get_model(char *model)
+{
+  strcpy(model, "HP9000/300");
+}
+
 __initfunc(void config_hp300(void))
 {
   mach_sched_init      = hp300_sched_init;
-  mach_keyb_init       = hp300_hil_init;
+  mach_keyb_init       = hp300_keyb_init;
   mach_kbdrate         = hp300_kbdrate;
   mach_kbd_leds        = hp300_kbd_leds;
   mach_init_IRQ        = hp300_init_IRQ;
   mach_request_irq     = hp300_request_irq;
   mach_free_irq        = hp300_free_irq;
-#if 0
+  kbd_reset_setup      = hp300_kbd_reset_setup;
   mach_get_model       = hp300_get_model;
   mach_get_irq_list    = hp300_get_irq_list;
-#endif
   mach_gettimeoffset   = hp300_gettimeoffset;
+  mach_default_handler = &hp300_default_handler;
 #if 0
   mach_gettod          = hp300_gettod;
 #endif
@@ -70,9 +90,4 @@ __initfunc(void config_hp300(void))
   conswitchp	       = &dummy_con;
 #endif
   mach_max_dma_address = 0xffffffff;
-}
-
-/* for "kbd-reset" cmdline param */
-__initfunc(void kbd_reset_setup(char *str, int *ints))
-{
 }

@@ -19,9 +19,6 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
-#define PRINTK(x)
-#define Printk(x)	printk x
-
 static struct file_operations umsdos_symlink_operations;
 
 
@@ -31,10 +28,9 @@ static struct file_operations umsdos_symlink_operations;
  * 
  */
 
-static int umsdos_readlink_x (
-				     struct dentry *dentry,
-				     char *buffer,
-				     int bufsiz)
+int umsdos_readlink_x (	     struct dentry *dentry,
+			     char *buffer,
+			     int bufsiz)
 {
 	int ret;
 	loff_t loffs = 0;
@@ -42,7 +38,10 @@ static int umsdos_readlink_x (
 
 	ret = dentry->d_inode->i_size;
 
-	check_dentry (dentry);
+	if (!(dentry->d_inode)) {
+		return -EBADF;
+	}
+
 	fill_new_filp (&filp, dentry);
 
 	filp.f_reada = 0;
@@ -68,7 +67,7 @@ static int umsdos_readlink_x (
 	if (fat_file_read (&filp, buffer, (size_t) ret, &loffs) != ret) {
 		ret = -EIO;
 	}
-#if 0				/* DEBUG */
+#if 0
 	{
 		struct umsdos_dirent *mydirent = buffer;
 
@@ -89,9 +88,11 @@ static int UMSDOS_readlink (struct dentry *dentry, char *buffer, int buflen)
 	int ret;
 
 	PRINTK ((KERN_DEBUG "UMSDOS_readlink: calling umsdos_readlink_x for %.*s\n", (int) dentry->d_name.len, dentry->d_name.name));
+
 	ret = umsdos_readlink_x (dentry, buffer, buflen);
 	PRINTK ((KERN_DEBUG "readlink %d bufsiz %d\n", ret, buflen));
-	/* dput(dentry); / * FIXME /mn/ */
+	/* dput(dentry); / * FIXME /mn/? It seems it is unneeded. d_count is not changed by umsdos_readlink_x */
+
 	Printk ((KERN_WARNING "UMSDOS_readlink /mn/: FIXME! skipped dput(dentry). returning %d\n", ret));
 	return ret;
 

@@ -178,6 +178,7 @@ struct bttv
 #define BTTV_AVERMEDIA     0x06 
 #define BTTV_MATRIX_VISION 0x07 
 #define BTTV_FLYVIDEO      0x08
+#define BTTV_HAUPPAUGE878  0x09
 
 #define AUDIO_TUNER        0x00
 #define AUDIO_RADIO        0x01

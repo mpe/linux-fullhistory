@@ -13,7 +13,7 @@
  * 	This driver is for PCnet32 and PCnetPCI based ethercards
  */
 
-static const char *version = "pcnet32.c:v1.01 29.8.98 tsbogend@alpha.franken.de\n";
+static const char *version = "pcnet32.c:v1.02 3.9.98 tsbogend@alpha.franken.de\n";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -100,7 +100,7 @@ static const int rx_copybreak = 200;
  *         added support for byte counters in net_dev_stats
  * v1.01:  do ring dumps, only when debugging the driver
  *         increased the transmit timeout
- *         
+ * v1.02:  fixed memory leak in pcnet32_init_ring()
  */
 
 
@@ -186,7 +186,7 @@ struct pcnet32_private {
 int  pcnet32_probe(struct device *dev);
 static int  pcnet32_probe1(struct device *dev, unsigned int ioaddr, unsigned char irq_line, int shared);
 static int  pcnet32_open(struct device *dev);
-static void pcnet32_init_ring(struct device *dev);
+static int  pcnet32_init_ring(struct device *dev);
 static int  pcnet32_start_xmit(struct sk_buff *skb, struct device *dev);
 static int  pcnet32_rx(struct device *dev);
 static void pcnet32_interrupt(int irq, void *dev_id, struct pt_regs *regs);
@@ -443,7 +443,8 @@ pcnet32_open(struct device *dev)
 	lp->init_block.mode = 0x0000;
 	lp->init_block.filter[0] = 0x00000000;
 	lp->init_block.filter[1] = 0x00000000;
-	pcnet32_init_ring(dev);
+	if (pcnet32_init_ring(dev))
+		return -ENOMEM;
     
 	/* Re-initialize the PCNET32, and start it when done. */
 	outw(0x0001, ioaddr+PCNET32_ADDR);
@@ -508,28 +509,28 @@ pcnet32_purge_tx_ring(struct device *dev)
 
 
 /* Initialize the PCNET32 Rx and Tx rings. */
-static void
+static int
 pcnet32_init_ring(struct device *dev)
 {
 	struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
 	int i;
-        struct sk_buff *skb;
 
 	lp->lock = 0, lp->tx_full = 0;
 	lp->cur_rx = lp->cur_tx = 0;
 	lp->dirty_rx = lp->dirty_tx = 0;
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
-	    skb = dev_alloc_skb (PKT_BUF_SZ);
-	    if (skb) {
-		lp->rx_skbuff[i] = skb;
-		skb_reserve (skb, 2);
-		lp->rx_ring[i].base = (u32)le32_to_cpu(virt_to_bus(skb->tail));
-		lp->rx_ring[i].buf_length = le16_to_cpu(-PKT_BUF_SZ);
-	        lp->rx_ring[i].status = le16_to_cpu(0x8000);
+	    if (lp->rx_skbuff[i] == NULL) {
+		if (!(lp->rx_skbuff[i] = dev_alloc_skb (PKT_BUF_SZ))) {
+		    /* there is not much, we can do at this point */
+		    printk ("%s: pcnet32_init_ring dev_alloc_skb failed.\n",dev->name);
+		    return -1;
+		}
+		skb_reserve (lp->rx_skbuff[i], 2);
 	    }
-	    else
-		break;
+	    lp->rx_ring[i].base = (u32)le32_to_cpu(virt_to_bus(lp->rx_skbuff[i]->tail));
+	    lp->rx_ring[i].buf_length = le16_to_cpu(-PKT_BUF_SZ);
+	    lp->rx_ring[i].status = le16_to_cpu(0x8000);
 	}
 	/* The Tx buffer address is filled in as needed, but we do need to clear
 	   the upper ownership bit. */
@@ -543,6 +544,7 @@ pcnet32_init_ring(struct device *dev)
 		lp->init_block.phys_addr[i] = dev->dev_addr[i];
 	lp->init_block.rx_ring = (u32)le32_to_cpu(virt_to_bus(lp->rx_ring));
 	lp->init_block.tx_ring = (u32)le32_to_cpu(virt_to_bus(lp->tx_ring));
+	return 0;
 }
 
 static void
@@ -552,7 +554,8 @@ pcnet32_restart(struct device *dev, unsigned int csr0_bits)
 	unsigned int ioaddr = dev->base_addr;
     
 	pcnet32_purge_tx_ring(dev);
-	pcnet32_init_ring(dev);
+	if (pcnet32_init_ring(dev))
+		return;
     
 	outw(0x0000, ioaddr + PCNET32_ADDR);
         /* ReInit Ring */
@@ -602,7 +605,7 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 
 		dev->tbusy = 0;
 		dev->trans_start = jiffies;
-
+		dev_kfree_skb(skb);
 		return 0;
 	}
 

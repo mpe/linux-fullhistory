@@ -26,6 +26,10 @@
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
+ *
+ * 1998/8/31	Andreas Schwab:
+ *		Zero out rest of buffer on exception in
+ *		csum_partial_copy_from_user.
  */
 
 #include <net/checksum.h>
@@ -239,23 +243,71 @@ csum_partial_copy_from_user(const char *src, char *dst, int len,
 	     "8:\n"
 		".section .fixup,\"ax\"\n"
 		".even\n"
+		/* If any execption occurs zero out the rest.
+		   Similarities with the code above are intentional :-) */
+	     "90:\t"
+		"clrw %3@+\n\t"
+		"movel %1,%4\n\t"
+		"lsrl #5,%1\n\t"
+		"jeq 1f\n\t"
+		"subql #1,%1\n"
+	     "91:\t"
+		"clrl %3@+\n"
+	     "92:\t"
+		"clrl %3@+\n"
+	     "93:\t"
+		"clrl %3@+\n"
+	     "94:\t"
+		"clrl %3@+\n"
+	     "95:\t"
+		"clrl %3@+\n"
+	     "96:\t"
+		"clrl %3@+\n"
+	     "97:\t"
+		"clrl %3@+\n"
+	     "98:\t"
+		"clrl %3@+\n\t"
+		"dbra %1,91b\n\t"
+		"clrw %1\n\t"
+		"subql #1,%1\n\t"
+		"jcc 91b\n"
+	     "1:\t"
+		"movel %4,%1\n\t"
+		"andw #0x1c,%4\n\t"
+		"jeq 1f\n\t"
+		"lsrw #2,%4\n\t"
+		"subqw #1,%4\n"
+	     "99:\t"
+		"clrl %3@+\n\t"
+		"dbra %4,99b\n\t"
+	     "1:\t"
+		"andw #3,%1\n\t"
+		"jeq 9f\n"
+	     "100:\t"
+		"clrw %3@+\n\t"
+		"tstw %1\n\t"
+		"jeq 9f\n"
+	     "101:\t"
+		"clrb %3@+\n"
 	     "9:\t"
-		"moveq #-14,%5\n\t"	/* -EFAULT, out of inputs to asm ;( */
+#define STR(X) STR1(X)
+#define STR1(X) #X
+		"moveq #-" STR(EFAULT) ",%5\n\t"
 		"jra 8b\n"
 		".previous\n"
 		".section __ex_table,\"a\"\n"
-		".long 10b,9b\n"
-		".long 11b,9b\n"
-		".long 12b,9b\n"
-		".long 13b,9b\n"
-		".long 14b,9b\n"
-		".long 15b,9b\n"
-		".long 16b,9b\n"
-		".long 17b,9b\n"
-		".long 18b,9b\n"
-		".long 19b,9b\n"
-		".long 20b,9b\n"
-		".long 21b,9b\n"
+		".long 10b,90b\n"
+		".long 11b,91b\n"
+		".long 12b,92b\n"
+		".long 13b,93b\n"
+		".long 14b,94b\n"
+		".long 15b,95b\n"
+		".long 16b,96b\n"
+		".long 17b,97b\n"
+		".long 18b,98b\n"
+		".long 19b,99b\n"
+		".long 20b,100b\n"
+		".long 21b,101b\n"
 		".previous"
 		: "=d" (sum), "=d" (len), "=a" (src), "=a" (dst),
 		  "=&d" (tmp1), "=d" (tmp2)
@@ -267,16 +319,6 @@ csum_partial_copy_from_user(const char *src, char *dst, int len,
 	return(sum);
 }
 
-/*
- * This one will go away soon.
- */
-unsigned int
-csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum)
-{
-	int dummy;
-
-	return csum_partial_copy_from_user(src, dst, len, sum, &dummy);
-}
 /*
  * copy from kernel space while checksumming, otherwise like csum_partial
  */

@@ -31,6 +31,8 @@ struct cpuinfo_x86 {
 	__u32	x86_capability;
 	char	x86_vendor_id[16];
 	char	x86_model_id[64];
+	int 	x86_cache_size;  /* in KB - valid for CPUS which support this
+				    call  */
 	int	fdiv_bug;
 	int	f00f_bug;
 	unsigned long loops_per_sec;

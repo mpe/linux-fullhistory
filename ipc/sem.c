@@ -466,10 +466,10 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		if (ipcperms (ipcp, S_IRUGO))
 			goto out;
 		switch (cmd) {
-		case GETVAL : return curr->semval;
-		case GETPID : return curr->sempid;
-		case GETNCNT: return count_semncnt(sma,semnum);
-		case GETZCNT: return count_semzcnt(sma,semnum);
+		case GETVAL : err = curr->semval; goto out;
+		case GETPID : err = curr->sempid; goto out;
+		case GETNCNT: err = count_semncnt(sma,semnum); goto out;
+		case GETZCNT: err = count_semzcnt(sma,semnum); goto out;
 		case GETALL:
 			array = arg.array;
 			break;
