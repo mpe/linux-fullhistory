@@ -85,10 +85,21 @@ static __inline__ void __list_del(struct list_head * prev,
 /**
  * list_del - deletes entry from list.
  * @entry: the element to delete from the list.
+ * Note: list_empty on entry does not return true after this, the entry is in an undefined state.
  */
 static __inline__ void list_del(struct list_head *entry)
 {
 	__list_del(entry->prev, entry->next);
+}
+
+/**
+ * list_del_init - deletes entry from list and reinitialize it.
+ * @entry: the element to delete from the list.n 
+ */
+static __inline__ void list_del_init(struct list_head *entry)
+{
+	__list_del(entry->prev, entry->next);
+	INIT_LIST_HEAD(entry); 
 }
 
 /**

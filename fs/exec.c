@@ -320,9 +320,11 @@ int setup_arg_pages(struct linux_binprm *bprm)
 	} 
 
 	for (i = 0 ; i < MAX_ARG_PAGES ; i++) {
-		if (bprm->page[i]) {
+		struct page *page = bprm->page[i];
+		if (page) {
+			bprm->page[i] = NULL;
 			current->mm->rss++;
-			put_dirty_page(current,bprm->page[i],stack_base);
+			put_dirty_page(current,page,stack_base);
 		}
 		stack_base += PAGE_SIZE;
 	}
@@ -873,11 +875,11 @@ out:
 	if (bprm.file)
 		fput(bprm.file);
 
-	/* Assumes that free_page() can take a NULL argument. */ 
-	/* I hope this is ok for all architectures */ 
-	for (i = 0 ; i < MAX_ARG_PAGES ; i++)
-		if (bprm.page[i])
-			__free_page(bprm.page[i]);
+	for (i = 0 ; i < MAX_ARG_PAGES ; i++) {
+		struct page * page = bprm.page[i];
+		if (page)
+			__free_page(page);
+	}
 
 	return retval;
 }

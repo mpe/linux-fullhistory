@@ -51,9 +51,9 @@ struct stat {
  */
 struct stat64 {
         unsigned short  st_dev;
-        unsigned char   __pad0[10];
+        unsigned char   __pad0[6];
 
-        unsigned long   st_ino;
+        unsigned long long st_ino;
         unsigned int    st_mode;
         unsigned int    st_nlink;
 

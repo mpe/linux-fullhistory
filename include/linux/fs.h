@@ -91,6 +91,9 @@ extern int max_super_blocks, nr_super_blocks;
 			   */
 #define FS_NOMOUNT	16 /* Never mount from userland */
 #define FS_LITTER	32 /* Keeps the tree in dcache */
+#define FS_ODD_RENAME	32768	/* Temporary stuff; will go away as soon
+				  * as nfs_rename() will be cleaned up
+				  */
 /*
  * These are the fs-independent mount-flags: up to 16 flags are supported
  */
@@ -101,16 +104,8 @@ extern int max_super_blocks, nr_super_blocks;
 #define MS_SYNCHRONOUS	16	/* Writes are synced at once */
 #define MS_REMOUNT	32	/* Alter flags of a mounted FS */
 #define MS_MANDLOCK	64	/* Allow mandatory locks on an FS */
-#define S_QUOTA		128	/* Quota initialized for file/directory/symlink */
-#define S_APPEND	256	/* Append-only file */
-#define S_IMMUTABLE	512	/* Immutable file */
 #define MS_NOATIME	1024	/* Do not update access times. */
 #define MS_NODIRATIME	2048	/* Do not update directory access times */
-
-#define MS_ODD_RENAME	32768	/* Temporary stuff; will go away as soon
-				  * as nfs_rename() will be cleaned up
-				  */
-#define S_DEAD		(1<<16)	/* removed, but still open directory */
 
 /*
  * Flags that can be altered by MS_REMOUNT
@@ -123,6 +118,15 @@ extern int max_super_blocks, nr_super_blocks;
  */
 #define MS_MGC_VAL 0xC0ED0000	/* magic flag number to indicate "new" flags */
 #define MS_MGC_MSK 0xffff0000	/* magic flag number mask */
+
+/* Inode flags - they have nothing to superblock flags now */
+
+#define S_SYNC		1	/* Writes are synced at once */
+#define S_NOATIME	2	/* Do not update access times */
+#define S_QUOTA		4	/* Quota initialized for file */
+#define S_APPEND	8	/* Append-only file */
+#define S_IMMUTABLE	16	/* Immutable file */
+#define S_DEAD		32	/* removed, but still open directory */
 
 /*
  * Note that nosuid etc flags are inode-specific: setting some file-system
@@ -137,20 +141,19 @@ extern int max_super_blocks, nr_super_blocks;
  * i_flags updated.  Hence, i_flags no longer inherit the superblock mount
  * flags, so these have to be checked separately. -- rmk@arm.uk.linux.org
  */
-#define __IS_FLG(inode,flg) (((inode)->i_sb && (inode)->i_sb->s_flags & (flg)) \
-				|| (inode)->i_flags & (flg))
+#define __IS_FLG(inode,flg) ((inode)->i_sb->s_flags & (flg))
 
-#define IS_RDONLY(inode) (((inode)->i_sb) && ((inode)->i_sb->s_flags & MS_RDONLY))
+#define IS_RDONLY(inode) ((inode)->i_sb->s_flags & MS_RDONLY)
 #define IS_NOSUID(inode)	__IS_FLG(inode, MS_NOSUID)
 #define IS_NODEV(inode)		__IS_FLG(inode, MS_NODEV)
 #define IS_NOEXEC(inode)	__IS_FLG(inode, MS_NOEXEC)
-#define IS_SYNC(inode)		__IS_FLG(inode, MS_SYNCHRONOUS)
+#define IS_SYNC(inode)		(__IS_FLG(inode, MS_SYNCHRONOUS) || ((inode)->i_flags & S_SYNC))
 #define IS_MANDLOCK(inode)	__IS_FLG(inode, MS_MANDLOCK)
 
 #define IS_QUOTAINIT(inode)	((inode)->i_flags & S_QUOTA)
 #define IS_APPEND(inode)	((inode)->i_flags & S_APPEND)
 #define IS_IMMUTABLE(inode)	((inode)->i_flags & S_IMMUTABLE)
-#define IS_NOATIME(inode)	__IS_FLG(inode, MS_NOATIME)
+#define IS_NOATIME(inode)	(__IS_FLG(inode, MS_NOATIME) || ((inode)->i_flags & S_NOATIME))
 #define IS_NODIRATIME(inode)	__IS_FLG(inode, MS_NODIRATIME)
 
 #define IS_DEADDIR(inode)	((inode)->i_flags & S_DEAD)

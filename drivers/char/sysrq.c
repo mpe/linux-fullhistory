@@ -30,6 +30,9 @@ extern void reset_vc(unsigned int);
 extern int console_loglevel;
 extern struct list_head super_blocks;
 
+/* Whether we react on sysrq keys or just ignore them */
+int sysrq_enabled = 1;
+
 /* Machine specific power off function */
 void (*sysrq_power_off)(void) = NULL;
 
@@ -59,6 +62,9 @@ void handle_sysrq(int key, struct pt_regs *pt_regs,
 		  struct kbd_struct *kbd, struct tty_struct *tty)
 {
 	int orig_log_level = console_loglevel;
+
+	if (!sysrq_enabled)
+		return;
 
 	if (!key)
 		return;

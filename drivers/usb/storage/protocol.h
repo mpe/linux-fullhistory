@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Protocol Functions Header File
  *
- * $Id: protocol.h,v 1.1 2000/06/27 01:25:28 mdharm Exp $
+ * $Id: protocol.h,v 1.2 2000/08/01 22:01:19 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -57,6 +57,7 @@
 #define US_SC_MAX	US_SC_SCSI
 
 extern void usb_stor_ATAPI_command(Scsi_Cmnd*, struct us_data*);
+extern void usb_stor_qic157_command(Scsi_Cmnd*, struct us_data*);
 extern void usb_stor_ufi_command(Scsi_Cmnd*, struct us_data*);
 extern void usb_stor_transparent_scsi_command(Scsi_Cmnd*, struct us_data*);
 

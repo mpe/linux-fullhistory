@@ -1,13 +1,14 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI layer glue code
  *
- * $Id: scsiglue.c,v 1.6 2000/07/25 23:04:47 mdharm Exp $
+ * $Id: scsiglue.c,v 1.7 2000/07/28 20:33:18 gowdy Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
  * Developed with the assistance of:
  *   (c) 2000 David L. Brown, Jr. (usb-storage@davidb.org)
+ *   (c) 2000 Stephen J. Gowdy (SGowdy@lbl.gov)
  *
  * Initial work by:
  *   (c) 1999 Michael Gee (michael@linuxspecific.com)

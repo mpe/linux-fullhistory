@@ -41,8 +41,11 @@ else
       M_OBJS += tcic.o
     endif
      ifeq ($(CONFIG_CARDBUS),y)
+	M_OBJS += yenta_socket.o
 	CORE_OBJS += cardbus.o
-	MX_OBJS += cb_enabler.o yenta.o pci_socket.o
+	CARDBUS_OBJS := pci_socket.o yenta.o
+	OX_OBJS += pci_socket.o yenta.o
+	MX_OBJS += cb_enabler.o
      endif
   endif
 endif
@@ -51,3 +54,6 @@ include $(TOPDIR)/Rules.make
 
 pcmcia_core.o:  $(CORE_OBJS)
 	$(LD) $(LD_RFLAG) -r -o $@ $(CORE_OBJS)
+
+yenta_socket.o: $(CARDBUS_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ yenta.o pci_socket.o

@@ -81,8 +81,7 @@ static inline void dentry_iput(struct dentry * dentry)
 	struct inode *inode = dentry->d_inode;
 	if (inode) {
 		dentry->d_inode = NULL;
-		list_del(&dentry->d_alias);
-		INIT_LIST_HEAD(&dentry->d_alias);
+		list_del_init(&dentry->d_alias);
 		spin_unlock(&dcache_lock);
 		if (dentry->d_op && dentry->d_op->d_iput)
 			dentry->d_op->d_iput(dentry, inode);
@@ -153,7 +152,7 @@ repeat:
 	return;
 
 unhash_it:
-	list_del(&dentry->d_hash);
+	list_del_init(&dentry->d_hash);
 
 kill_it: {
 		struct dentry *parent;
@@ -218,8 +217,7 @@ int d_invalidate(struct dentry * dentry)
 		}
 	}
 
-	list_del(&dentry->d_hash);
-	INIT_LIST_HEAD(&dentry->d_hash);
+	list_del_init(&dentry->d_hash);
 	spin_unlock(&dcache_lock);
 	return 0;
 }
@@ -307,7 +305,7 @@ static inline void prune_one_dentry(struct dentry * dentry)
 {
 	struct dentry * parent;
 
-	list_del(&dentry->d_hash);
+	list_del_init(&dentry->d_hash);
 	list_del(&dentry->d_child);
 	dentry_iput(dentry);
 	parent = dentry->d_parent;
@@ -342,8 +340,7 @@ void prune_dcache(int count)
 		if (tmp == &dentry_unused)
 			break;
 		dentry_stat.nr_unused--;
-		list_del(tmp);
-		INIT_LIST_HEAD(tmp);
+		list_del_init(tmp);
 		dentry = list_entry(tmp, struct dentry, d_lru);
 
 		/* Unused dentry with a count? */

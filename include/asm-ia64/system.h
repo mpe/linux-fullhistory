@@ -96,7 +96,6 @@ ia64_insn_group_barrier (void)
  * Linus just yet.  Grrr...
  */
 #define set_mb(var, value)	do { (var) = (value); mb(); } while (0)
-#define set_rmb(var, value)	do { (var) = (value); mb(); } while (0)
 #define set_wmb(var, value)	do { (var) = (value); mb(); } while (0)
 
 /*

@@ -15,8 +15,8 @@ CONFIG_UID16=y
 # Loadable module support
 #
 CONFIG_MODULES=y
-# CONFIG_MODVERSIONS is not set
-# CONFIG_KMOD is not set
+CONFIG_MODVERSIONS=y
+CONFIG_KMOD=y
 
 #
 # Processor type and features

@@ -26,6 +26,7 @@ int umsdos_newhidden (struct dentry *, struct umsdos_info *);
 int umsdos_delentry (struct dentry *, struct umsdos_info *, int);
 int umsdos_findentry (struct dentry *, struct umsdos_info *, int);
 int umsdos_isempty (struct dentry *);
+int umsdos_writeentry (struct dentry *, struct umsdos_info *, int);
 
 /* file.c 25/01/95 02.25.38 */
 
@@ -36,7 +37,7 @@ void UMSDOS_write_inode (struct inode *, int);
 int UMSDOS_notify_change (struct dentry *, struct iattr *attr);
 int umsdos_notify_change_locked(struct dentry *, struct iattr *attr);
 void UMSDOS_put_inode (struct inode *);
-int UMSDOS_statfs (struct super_block *, struct statfs *, int);
+int UMSDOS_statfs (struct super_block *, struct statfs *);
 struct super_block *UMSDOS_read_super (struct super_block *, void *, int);
 void UMSDOS_put_super (struct super_block *);
 

@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: protocol.c,v 1.2 2000/07/19 17:21:39 groovyjava Exp $
+ * $Id: protocol.c,v 1.4 2000/08/01 22:01:19 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -50,8 +50,57 @@
 #include "transport.h"
 
 /***********************************************************************
+ * Helper routines
+ ***********************************************************************/
+
+/* Fix-up the return data from an INQUIRY command to show 
+ * ANSI SCSI rev 2 so we don't confuse the SCSI layers above us
+ */
+void fix_inquiry_data(Scsi_Cmnd *srb)
+{
+	unsigned char *data_ptr;
+
+	/* verify that it's an INQUIRY command */
+	if (srb->cmnd[0] != INQUIRY)
+		return;
+
+	US_DEBUGP("Fixing INQUIRY data to show SCSI rev 2\n");
+
+	/* find the location of the data */
+	if (srb->use_sg) {
+		struct scatterlist *sg;
+
+		sg = (struct scatterlist *) srb->request_buffer;
+		data_ptr = (unsigned char *) sg[0].address;
+	} else
+		data_ptr = (unsigned char *)srb->request_buffer;
+
+	/* Change the SCSI revision number */
+	data_ptr[2] |= 0x2;
+}
+
+/***********************************************************************
  * Protocol routines
  ***********************************************************************/
+
+void usb_stor_qic157_command(Scsi_Cmnd *srb, struct us_data *us)
+{
+	/* Pad the ATAPI command with zeros 
+	 * NOTE: This only works because a Scsi_Cmnd struct field contains
+	 * a unsigned char cmnd[12], so we know we have storage available
+	 */
+	for (; srb->cmd_len<12; srb->cmd_len++)
+		srb->cmnd[srb->cmd_len] = 0;
+
+	/* set command length to 12 bytes */
+	srb->cmd_len = 12;
+
+	/* send the command to the transport layer */
+	usb_stor_invoke_transport(srb, us);
+
+	/* fix the INQUIRY data if necessary */
+	fix_inquiry_data(srb);
+}
 
 void usb_stor_ATAPI_command(Scsi_Cmnd *srb, struct us_data *us)
 {
@@ -65,7 +114,6 @@ void usb_stor_ATAPI_command(Scsi_Cmnd *srb, struct us_data *us)
 	 */
 
 	/* Pad the ATAPI command with zeros */
-
 	for (; srb->cmd_len<12; srb->cmd_len++)
 		srb->cmnd[srb->cmd_len] = 0;
 
@@ -125,12 +173,8 @@ void usb_stor_ATAPI_command(Scsi_Cmnd *srb, struct us_data *us)
 	if ((old_cmnd == MODE_SENSE) && (srb->result == GOOD))
 		usb_stor_scsiSense10to6(srb);
 
-	/* Fix-up the return data from an INQUIRY command to show 
-	 * ANSI SCSI rev 2 so we don't confuse the SCSI layers above us
-	 */
-	if (srb->cmnd[0] == INQUIRY) {
-		((unsigned char *)us->srb->request_buffer)[2] |= 0x2;
-	}
+	/* fix the INQUIRY data if necessary */
+	fix_inquiry_data(srb);
 }
 
 
@@ -224,12 +268,8 @@ void usb_stor_ufi_command(Scsi_Cmnd *srb, struct us_data *us)
 	if ((old_cmnd == MODE_SENSE) && (srb->result == GOOD))
 		usb_stor_scsiSense10to6(srb);
 
-	/* Fix-up the return data from an INQUIRY command to show 
-	 * ANSI SCSI rev 2 so we don't confuse the SCSI layers above us
-	 */
-	if (srb->cmnd[0] == INQUIRY) {
-		((unsigned char *)us->srb->request_buffer)[2] |= 0x2;
-	}
+	/* Fix the data for an INQUIRY, if necessary */
+	fix_inquiry_data(srb);
 }
 
 void usb_stor_transparent_scsi_command(Scsi_Cmnd *srb, struct us_data *us)
@@ -300,10 +340,7 @@ void usb_stor_transparent_scsi_command(Scsi_Cmnd *srb, struct us_data *us)
 	/* send the command to the transport layer */
 	usb_stor_invoke_transport(srb, us);
 
-	/* fix the results of an INQUIRY */
-	if (srb->cmnd[0] == INQUIRY) {
-		US_DEBUGP("Fixing INQUIRY data, setting SCSI rev to 2\n");
-		((unsigned char*)us->srb->request_buffer)[2] |= 2;
-	}
+	/* fix the INQUIRY data if necessary */
+	fix_inquiry_data(srb);
 }
 

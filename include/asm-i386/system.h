@@ -271,8 +271,7 @@ static inline unsigned long __cmpxchg(volatile void *ptr, unsigned long old,
 #define mb() 	__asm__ __volatile__ ("lock; addl $0,0(%%esp)": : :"memory")
 #define rmb()	mb()
 #define wmb()	__asm__ __volatile__ ("": : :"memory")
-#define set_rmb(var, value) do { xchg(&var, value); } while (0)
-#define set_mb(var, value) set_rmb(var, value)
+#define set_mb(var, value) do { xchg(&var, value); } while (0)
 #define set_wmb(var, value) do { var = value; wmb(); } while (0)
 
 /* interrupt control.. */

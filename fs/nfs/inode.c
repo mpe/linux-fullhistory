@@ -275,8 +275,6 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	if (srvaddr.sin_addr.s_addr == INADDR_ANY)
 		goto out_no_remote;
 
-	sb->s_flags |= MS_ODD_RENAME; /* This should go away */
-
 	sb->s_magic      = NFS_SUPER_MAGIC;
 	sb->s_op         = &nfs_sops;
 	sb->s_blocksize_bits = 0;
@@ -1164,7 +1162,7 @@ out_changed:
 /*
  * File system information
  */
-static DECLARE_FSTYPE(nfs_fs_type, "nfs", nfs_read_super, 0);
+static DECLARE_FSTYPE(nfs_fs_type, "nfs", nfs_read_super, FS_ODD_RENAME);
 
 extern int nfs_init_fhcache(void);
 extern void nfs_destroy_fhcache(void);

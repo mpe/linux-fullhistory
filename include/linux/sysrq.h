@@ -36,5 +36,3 @@ void do_emergency_sync(void);
 #else
 #define CHECK_EMERGENCY_SYNC
 #endif
-
-extern int sysrq_enabled;

@@ -34,7 +34,6 @@
 #define wmb()  __asm__ __volatile__ ("eieio" : : : "memory")
 
 #define set_mb(var, value)	do { var = value; mb(); } while (0)
-#define set_rmb(var, value)	do { var = value; rmb(); } while (0)
 #define set_wmb(var, value)	do { var = value; wmb(); } while (0)
 
 extern void xmon_irq(int, void *, struct pt_regs *);

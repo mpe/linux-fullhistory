@@ -28,4 +28,11 @@
 
 extern int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us);
 
+struct sddr09_card_info {
+	unsigned long		capacity; /* Size of card in bytes */
+	int			pagesize;  /* Size of page in bytes */
+	int			*lba_to_pba; /* logical to physical map */
+	int			*pba_to_lba; /* physical to logical map */
+};
+
 #endif

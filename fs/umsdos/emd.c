@@ -22,6 +22,7 @@
 static void copy_entry(struct umsdos_dirent *p, struct umsdos_dirent *q)
 {
 	p->name_len = q->name_len;
+	p->name[p->name_len]='\0';
 	p->flags = q->flags;
 	p->nlink = le16_to_cpu (q->nlink);
 	/* FIXME -- 32bit UID/GID issues */
@@ -119,6 +120,7 @@ int umsdos_emd_dir_readentry (struct dentry *demd, loff_t *pos, struct umsdos_di
 	struct umsdos_dirent *p;
 	int offs = *pos & ~PAGE_CACHE_MASK;
 	int recsize;
+	int ret = 0;
 
 	page = read_cache_page(mapping, *pos>>PAGE_CACHE_SHIFT,
 			(filler_t*)mapping->a_ops->readpage, NULL);
@@ -128,6 +130,15 @@ int umsdos_emd_dir_readentry (struct dentry *demd, loff_t *pos, struct umsdos_di
 	if (!Page_Uptodate(page))
 		goto async_fail;
 	p = (struct umsdos_dirent*)((char*)kmap(page)+offs);
+
+	/* if this is an invalid entry (invalid name length), ignore it */
+	if( p->name_len > UMSDOS_MAXNAME )
+	{
+		printk (KERN_WARNING "Ignoring invalid EMD entry with size %d\n", entry->name_len);
+		p->name_len = 0; 
+		ret = -ENAMETOOLONG; /* notify umssync(8) code that something is wrong */
+	}
+
 	recsize = umsdos_evalrecsize(p->name_len);
 	if (offs + recsize > PAGE_CACHE_SIZE) {
 		struct page *page2;
@@ -157,7 +168,7 @@ int umsdos_emd_dir_readentry (struct dentry *demd, loff_t *pos, struct umsdos_di
 	kunmap(page);
 	page_cache_release(page);
 	*pos += recsize;
-	return 0;
+	return ret;
 async_fail:
 	page_cache_release(page);
 	page = ERR_PTR(-EIO);
@@ -172,7 +183,7 @@ sync_fail:
  *
  * Note: the caller must hold a lock on the parent directory.
  */
-static int umsdos_writeentry (struct dentry *parent, struct umsdos_info *info,
+int umsdos_writeentry (struct dentry *parent, struct umsdos_info *info,
 				int free_entry)
 {
 	struct inode *dir = parent->d_inode;
@@ -266,7 +277,7 @@ static int umsdos_writeentry (struct dentry *parent, struct umsdos_info *info,
 			goto out_unlock;
 	} else {
 		ret = mapping->a_ops->prepare_write(NULL,page,offs,
-					info->recsize);
+					offs + info->recsize);
 		if (ret)
 			goto out_unlock;
 		p->name_len = entry->name_len;
@@ -281,7 +292,7 @@ static int umsdos_writeentry (struct dentry *parent, struct umsdos_info *info,
 		p->mode = cpu_to_le16(entry->mode);
 		memcpy(p->spare,entry->spare,((char*)p+info->recsize)-p->spare);
 		ret = mapping->a_ops->commit_write(NULL,page,offs,
-					info->recsize);
+					offs + info->recsize);
 		if (ret)
 			goto out_unlock;
 	}
@@ -373,6 +384,7 @@ static int umsdos_find (struct dentry *demd, struct umsdos_info *info)
 			if (page) {
 				kunmap(page);
 				page_cache_release(page);
+				page = NULL;
 			}
 			if (pos >= emd_dir->i_size) {
 				info->f_pos = empty.posok;

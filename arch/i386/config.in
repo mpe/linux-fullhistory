@@ -344,5 +344,5 @@ mainmenu_option next_comment
 comment 'Kernel hacking'
 
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
-dep_bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ $CONFIG_VT
+bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 endmenu

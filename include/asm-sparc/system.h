@@ -279,7 +279,6 @@ extern void __global_restore_flags(unsigned long flags);
 #define rmb()	mb()
 #define wmb()	mb()
 #define set_mb(__var, __value)  do { __var = __value; mb(); } while(0)
-#define set_rmb(__var, __value) set_mb(__var, __value)
 #define set_wmb(__var, __value) set_mb(__var, __value)
 
 #define nop() __asm__ __volatile__ ("nop");

@@ -33,8 +33,6 @@
 #include <linux/config.h>
 #include "drmP.h"
 #include "mga_drv.h"
-#include <linux/sched.h>
-#include <linux/smp_lock.h>
 
 #define MGA_NAME	 "mga"
 #define MGA_DESC	 "Matrox g200/g400"
@@ -339,7 +337,7 @@ static int mga_takedown(drm_device_t *dev)
 /* mga_init is called via init_module at module load time, or via
  * linux/init/main.c (this is not currently supported). */
 
-int mga_init(void)
+static int mga_init(void)
 {
 	int		      retcode;
 	drm_device_t	      *dev = &mga_device;
@@ -404,7 +402,7 @@ int mga_init(void)
 
 /* mga_cleanup is called via cleanup_module at module unload time. */
 
-void mga_cleanup(void)
+static void mga_cleanup(void)
 {
 	drm_device_t	      *dev = &mga_device;
 
@@ -481,6 +479,9 @@ int mga_open(struct inode *inode, struct file *filp)
 	
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_open_helper(inode, filp, dev))) {
+#if LINUX_VERSION_CODE < 0x020333
+		MOD_INC_USE_COUNT; /* Needed before Linux 2.3.51 */
+#endif
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -561,6 +562,9 @@ int mga_release(struct inode *inode, struct file *filp)
 	up(&dev->struct_sem);
 	
 	drm_free(priv, sizeof(*priv), DRM_MEM_FILES);
+#if LINUX_VERSION_CODE < 0x020333
+	MOD_DEC_USE_COUNT; /* Needed before Linux 2.3.51 */
+#endif
    	atomic_inc(&dev->total_close);
    	spin_lock(&dev->count_lock);
    	if (!--dev->open_count) {
@@ -573,9 +577,10 @@ int mga_release(struct inode *inode, struct file *filp)
 		   	return -EBUSY;
 		}
 	   	spin_unlock(&dev->count_lock);
-	   	retcode = mga_takedown(dev);
-	} else
-		spin_unlock(&dev->count_lock);
+		unlock_kernel();
+	   	return mga_takedown(dev);
+	}
+	spin_unlock(&dev->count_lock);
 	unlock_kernel();
 	return retcode;
 }

@@ -164,10 +164,8 @@ int ide_driveid_update (ide_drive_t *drive)
 	 * change (copied from ide-probe.c)
 	 */
 	struct hd_driveid *id;
-	unsigned long timeout, irqs, flags;
+	unsigned long timeout, flags;
 
-	probe_irq_off(probe_irq_on());
-	irqs = probe_irq_on();
 	SELECT_MASK(HWIF(drive), drive, 1);
 	if (IDE_CONTROL_REG)
 		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
@@ -176,8 +174,6 @@ int ide_driveid_update (ide_drive_t *drive)
 	timeout = jiffies + WAIT_WORSTCASE;
 	do {
 		if (0 < (signed long)(jiffies - timeout)) {
-			if (irqs)
-				(void) probe_irq_off(irqs);
 			SELECT_MASK(HWIF(drive), drive, 0);
 			return 0;	/* drive timed-out */
 		}

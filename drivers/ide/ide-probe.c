@@ -184,22 +184,16 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
  *		1  device timed-out (no response to identify request)
  *		2  device aborted the command (refused to identify itself)
  */
-static int try_to_identify (ide_drive_t *drive, byte cmd)
+static int actual_try_to_identify (ide_drive_t *drive, byte cmd)
 {
 	int rc;
 	ide_ioreg_t hd_status;
 	unsigned long timeout;
-	unsigned long irqs = 0;
 	byte s, a;
 
 	if (IDE_CONTROL_REG) {
-		if (!HWIF(drive)->irq) {		/* already got an IRQ? */
-			probe_irq_off(probe_irq_on());	/* clear dangling irqs */
-			irqs = probe_irq_on();		/* start monitoring irqs */
-			OUT_BYTE(drive->ctl,IDE_CONTROL_REG);	/* enable device irq */
-		}
-
-		ide_delay_50ms();				/* take a deep breath */
+		/* take a deep breath */
+		ide_delay_50ms();
 		a = IN_BYTE(IDE_ALTSTATUS_REG);
 		s = IN_BYTE(IDE_STATUS_REG);
 		if ((a ^ s) & ~INDEX_STAT) {
@@ -222,8 +216,6 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 		/* DC4030 hosted drives need their own identify... */
 		extern int pdc4030_identify(ide_drive_t *);
 		if (pdc4030_identify(drive)) {
-			if (irqs)
-				(void) probe_irq_off(irqs);
 			return 1;
 		}
 	} else
@@ -233,8 +225,6 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	timeout += jiffies;
 	do {
 		if (0 < (signed long)(jiffies - timeout)) {
-			if (irqs)
-				(void) probe_irq_off(irqs);
 			return 1;	/* drive timed-out */
 		}
 		ide_delay_50ms();		/* give drive a breather */
@@ -251,31 +241,48 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 		__restore_flags(flags);	/* local CPU only */
 	} else
 		rc = 2;			/* drive refused ID */
-	if (IDE_CONTROL_REG && !HWIF(drive)->irq) {
-		irqs = probe_irq_off(irqs);	/* get our irq number */
-		if (irqs > 0) {
-			HWIF(drive)->irq = irqs; /* save it for later */
-			irqs = probe_irq_on();
-			OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG); /* mask device irq */
-			udelay(5);
-			(void) probe_irq_off(irqs);
-			(void) probe_irq_off(probe_irq_on()); /* clear self-inflicted irq */
-			(void) GET_STAT();	/* clear drive IRQ */
-
-		} else {	/* Mmmm.. multiple IRQs.. don't know which was ours */
-			printk("%s: IRQ probe failed (%ld)\n", drive->name, irqs);
-#ifdef CONFIG_BLK_DEV_CMD640
-#ifdef CMD640_DUMP_REGS
-			if (HWIF(drive)->chipset == ide_cmd640) {
-				printk("%s: Hmmm.. probably a driver problem.\n", drive->name);
-				CMD640_DUMP_REGS;
-			}
-#endif /* CMD640_DUMP_REGS */
-#endif /* CONFIG_BLK_DEV_CMD640 */
-		}
-	}
 	return rc;
 }
+
+static int try_to_identify (ide_drive_t *drive, byte cmd)
+{
+	int retval;
+	int autoprobe = 0;
+	unsigned long cookie = 0;
+
+	if (IDE_CONTROL_REG && !HWIF(drive)->irq) {
+		autoprobe = 1;
+		cookie = probe_irq_on();
+		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);	/* enable device irq */
+	}
+
+	retval = actual_try_to_identify(drive, cmd);
+
+	if (autoprobe) {
+		int irq;
+		OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG);	/* mask device irq */
+		(void) GET_STAT();			/* clear drive IRQ */
+		udelay(5);
+		irq = probe_irq_off(cookie);
+		if (!HWIF(drive)->irq) {
+			if (irq > 0) {
+				HWIF(drive)->irq = irq;
+			} else {	/* Mmmm.. multiple IRQs.. don't know which was ours */
+				printk("%s: IRQ probe failed (0x%lx)\n", drive->name, cookie);
+#ifdef CONFIG_BLK_DEV_CMD640
+#ifdef CMD640_DUMP_REGS
+				if (HWIF(drive)->chipset == ide_cmd640) {
+					printk("%s: Hmmm.. probably a driver problem.\n", drive->name);
+					CMD640_DUMP_REGS;
+				}
+#endif /* CMD640_DUMP_REGS */
+#endif /* CONFIG_BLK_DEV_CMD640 */
+			}
+		}
+	}
+	return retval;
+}
+
 
 /*
  * do_probe() has the difficult job of finding a drive if it exists,

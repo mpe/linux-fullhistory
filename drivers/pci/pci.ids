@@ -1910,6 +1910,7 @@
 1105  Sigma Designs, Inc.
 	8300  REALmagic Hollywood Plus DVD Decoder
 1106  VIA Technologies, Inc.
+	0305  VT8363 [KT133]
 	0391  VT8371 [KX133]
 	0501  VT8501
 	0505  VT82C505
@@ -1953,6 +1954,7 @@
 	5030  VT82C596 ACPI [Apollo PRO]
 	6100  VT85C100A [Rhine II]
 	8231  VT8231 [PCI-to-ISA Bridge]
+	8305  VT8363 [PCI-PCI Bridge]
 	8391  VT8371 [PCI-PCI Bridge]
 	8501  VT8501
 	8596  VT82C596 [Apollo PRO AGP]

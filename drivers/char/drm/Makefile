@@ -3,58 +3,69 @@
 # the Direct Rendering Infrastructure (DRI) in XFree86 4.x.
 #
 
-O_TARGET =	drm.o
+# drm.o is a fake target -- it is never built
+# The real targets are in the module-list
+O_TARGET	:= drm.o
+module-list     := gamma.o tdfx.o r128.o ffb.o mga.o i810.o
+export-objs     := $(patsubst %.o,%_drv.o,$(module-list))
 
-export-objs =	drm_syms.o	
-list-multi =	drm.o gamma.o tdfx.o r128.o ffb.o mga.o i810.o
-drm-objs =	init.o memory.o proc.o auth.o context.o \
-		drawable.o bufs.o lists.o lock.o ioctl.o \
-		fops.o vm.o dma.o ctxbitmap.o drm_syms.o
-gamma-objs =	gamma_drv.o			gamma_dma.o
-tdfx-objs =	tdfx_drv.o	tdfx_context.o
-r128-objs =	r128_drv.o	r128_context.o	r128_dma.o	r128_bufs.o
-ffb-objs =	ffb_drv.o	ffb_context.o
-mga-objs =	mga_drv.o	mga_context.o	mga_dma.o mga_bufs.o mga_state.o
-i810-objs =	i810_drv.o	i810_context.o	i810_dma.o	i810_bufs.o
+# libs-objs are included in every module so that radical changes to the
+# architecture of the DRM support library can be made at a later time.
+#
+# The downside is that each module is larger, and a system that uses
+# more than one module (i.e., a dual-head system) will use more memory
+# (but a system that uses exactly one module will use the same amount of
+# memory).
+#
+# The upside is that if the DRM support library ever becomes insufficient
+# for new families of cards, a new library can be implemented for those new
+# cards without impacting the drivers for the old cards.  This is significant,
+# because testing architectural changes to old cards may be impossible, and
+# may delay the implementation of a better architecture.  We've traded slight
+# memory waste (in the dual-head case) for greatly improved long-term
+# maintainability.
+#
+lib-objs   := init.o memory.o proc.o auth.o context.o drawable.o bufs.o
+lib-objs   += lists.o lock.o ioctl.o fops.o vm.o dma.o ctxbitmap.o
 
-ifeq ($(CONFIG_AGP), y)
-   drm-objs += agpsupport.o
+ifeq ($(CONFIG_AGP),y)
+ lib-objs  += agpsupport.o
 else
- ifeq ($(CONFIG_AGP), m)
-   drm-objs += agpsupport.o
+ ifeq ($(CONFIG_AGP),m)
+  lib-objs  += agpsupport.o
  endif
 endif
 
-obj-$(CONFIG_DRM) 	+= drm.o
-obj-$(CONFIG_DRM_GAMMA) += gamma.o 
-obj-$(CONFIG_DRM_TDFX)  += tdfx.o
-obj-$(CONFIG_DRM_R128)  += r128.o
-obj-$(CONFIG_DRM_FFB)   += ffb.o
-obj-$(CONFIG_DRM_MGA)   += mga.o
-obj-$(CONFIG_DRM_I810)  += i810.o
+gamma-objs := $(lib-objs) gamma_drv.o gamma_dma.o
+tdfx-objs  := $(lib-objs) tdfx_drv.o                tdfx_context.o
+r128-objs  := $(lib-objs) r128_drv.o  r128_dma.o    r128_context.o r128_bufs.o
+ffb-objs   := $(lib-objs) ffb_drv.o                 ffb_context.o
+mga-objs   := $(lib-objs) mga_drv.o   mga_dma.o     mga_context.o  mga_bufs.o \
+	      mga_state.o
+i810-objs  := $(lib-objs) i810_drv.o  i810_dma.o    i810_context.o i810_bufs.o
 
+obj-$(CONFIG_DRM_GAMMA) += gamma.o $(gamma-objs)
+obj-$(CONFIG_DRM_TDFX)  += tdfx.o  $(tdfx-objs)
+obj-$(CONFIG_DRM_R128)  += r128.o  $(r128-objs)
+obj-$(CONFIG_DRM_FFB)   += ffb.o   $(ffb-objs)
 
-# Extract lists of the multi-part drivers.
-# The 'int-*' lists are the intermediate files used to build the multi's.
-multi-y		:= $(filter $(list-multi), $(obj-y))
-multi-m		:= $(filter $(list-multi), $(obj-m))
-int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
-int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
+ifneq ($CONFIG_AGP),)
+obj-$(CONFIG_DRM_MGA)   += mga.o   $(mga-objs)
+obj-$(CONFIG_DRM_I810)  += i810.o  $(i810-objs)
+endif
 
-# Files that are both resident and modular: remove from modular.
-obj-m		:= $(filter-out $(obj-y), $(obj-m))
-int-m		:= $(filter-out $(int-y), $(int-m))
+# Take module names out of obj-y and int-m
 
-# Take multi-part drivers out of obj-y and put components in.
-obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
+obj-y           := $(filter-out $(module-list), $(obj-y))
+int-m           := $(filter-out $(module-list), $(obj-m))
 
 # Translate to Rules.make lists.
-O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
-OX_OBJS		:= $(filter     $(export-objs), $(obj-y))
-M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
-MI_OBJS		:= $(sort $(filter-out $(export-objs), $(int-m)))
-MIX_OBJS	:= $(sort $(filter     $(export-objs), $(int-m)))
+
+O_OBJS          := $(filter-out $(export-objs), $(obj-y))
+OX_OBJS         := $(filter     $(export-objs), $(obj-y))
+M_OBJS          := $(sort $(filter     $(module-list), $(obj-m)))
+MI_OBJS         := $(sort $(filter-out $(export-objs), $(int-m)))
+MIX_OBJS        := $(sort $(filter     $(export-objs), $(int-m)))
 
 include $(TOPDIR)/Rules.make
 

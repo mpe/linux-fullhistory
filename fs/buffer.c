@@ -482,16 +482,12 @@ static void __remove_from_queues(struct buffer_head *bh)
 	__remove_from_lru_list(bh, bh->b_list);
 }
 
-static void insert_into_queues(struct buffer_head *bh)
+static void __insert_into_queues(struct buffer_head *bh)
 {
 	struct buffer_head **head = &hash(bh->b_dev, bh->b_blocknr);
 
-	spin_lock(&lru_list_lock);
-	write_lock(&hash_table_lock);
 	__hash_link(bh, head);
 	__insert_into_lru_list(bh, bh->b_list);
-	write_unlock(&hash_table_lock);
-	spin_unlock(&lru_list_lock);
 }
 
 /* This function must only run if there are no other
@@ -524,19 +520,27 @@ static void put_last_free(struct buffer_head * bh)
  * will force it bad). This shouldn't really happen currently, but
  * the code is ready.
  */
-struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
+static inline struct buffer_head * __get_hash_table(kdev_t dev, int block, int size)
 {
-	struct buffer_head **head = &hash(dev, block);
-	struct buffer_head *bh;
+	struct buffer_head *bh = hash(dev, block);
 
-	read_lock(&hash_table_lock);
-	for(bh = *head; bh; bh = bh->b_next)
+	for (; bh; bh = bh->b_next)
 		if (bh->b_blocknr == block	&&
 		    bh->b_size    == size	&&
 		    bh->b_dev     == dev)
 			break;
 	if (bh)
 		atomic_inc(&bh->b_count);
+
+	return bh;
+}
+
+struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
+{
+	struct buffer_head *bh;
+
+	read_lock(&hash_table_lock);
+	bh = __get_hash_table(dev, block, size);
 	read_unlock(&hash_table_lock);
 
 	return bh;
@@ -804,7 +808,9 @@ struct buffer_head * getblk(kdev_t dev, int block, int size)
 	int isize;
 
 repeat:
-	bh = get_hash_table(dev, block, size);
+	spin_lock(&lru_list_lock);
+	write_lock(&hash_table_lock);
+	bh = __get_hash_table(dev, block, size);
 	if (bh)
 		goto out;
 
@@ -829,9 +835,10 @@ repeat:
 		bh->b_state = 1 << BH_Mapped;
 
 		/* Insert the buffer into the regular lists */
-		insert_into_queues(bh);
+		__insert_into_queues(bh);
 	out:
-		touch_buffer(bh);
+		write_unlock(&hash_table_lock);
+		spin_unlock(&lru_list_lock);
 		return bh;
 	}
 
@@ -839,6 +846,8 @@ repeat:
 	 * If we block while refilling the free list, somebody may
 	 * create the buffer first ... search the hashes again.
 	 */
+	write_unlock(&hash_table_lock);
+	spin_unlock(&lru_list_lock);
 	refill_freelist(size);
 	goto repeat;
 }
@@ -2118,6 +2127,11 @@ out:
  *
  * This all is required so that we can free up memory
  * later.
+ *
+ * Wait:
+ *	0 - no wait (this does not get called - see try_to_free_buffers below)
+ *	1 - start IO for dirty buffers
+ *	2 - wait for completion of locked buffers
  */
 static void sync_page_buffers(struct buffer_head *bh, int wait)
 {
@@ -2127,7 +2141,7 @@ static void sync_page_buffers(struct buffer_head *bh, int wait)
 		struct buffer_head *p = tmp;
 		tmp = tmp->b_this_page;
 		if (buffer_locked(p)) {
-			if (wait)
+			if (wait > 1)
 				__wait_on_buffer(p);
 		} else if (buffer_dirty(p))
 			ll_rw_block(WRITE, 1, &p);
@@ -2200,8 +2214,9 @@ busy_buffer_page:
 	/* Uhhuh, start writeback so that we don't end up with all dirty pages */
 	spin_unlock(&free_list[index].lock);
 	write_unlock(&hash_table_lock);
-	spin_unlock(&lru_list_lock);	
-	sync_page_buffers(bh, wait);
+	spin_unlock(&lru_list_lock);
+	if (wait)
+		sync_page_buffers(bh, wait);
 	return 0;
 }
 

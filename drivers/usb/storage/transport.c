@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.4 2000/07/25 23:04:47 mdharm Exp $
+ * $Id: transport.c,v 1.5 2000/07/28 22:40:20 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -717,6 +717,8 @@ int usb_stor_Bulk_max_lun(struct us_data *us)
 	return 0;
 }
 
+int usb_stor_Bulk_reset(struct us_data *us);
+
 int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 {
 	struct bulk_cb_wrap bcb;
@@ -820,7 +822,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	}
 	
 	/* check bulk status */
-	US_DEBUGP("Bulk status S 0x%x T 0x%x R %d V 0x%x\n",
+	US_DEBUGP("Bulk status Sig 0x%x T 0x%x R %d Stat 0x%x\n",
 		  le32_to_cpu(bcs.Signature), bcs.Tag, 
 		  bcs.Residue, bcs.Status);
 	if (bcs.Signature != cpu_to_le32(US_BULK_CS_SIGN) || 
@@ -842,6 +844,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 		
 	case US_BULK_STAT_PHASE:
 		/* phase error */
+		usb_stor_Bulk_reset(us);
 		return USB_STOR_TRANSPORT_ERROR;
 	}
 	
@@ -883,10 +886,14 @@ int usb_stor_CB_reset(struct us_data *us)
 	return 0;
 }
 
-/* FIXME: Does this work? */
+/* This issues a Bulk-only Reset to the device in question, including
+ * clearing the subsequent endpoint halts that may occur.
+ */
 int usb_stor_Bulk_reset(struct us_data *us)
 {
 	int result;
+
+	US_DEBUGP("Bulk reset requested\n");
 
 	result = usb_control_msg(us->pusb_dev, 
 				 usb_sndctrlpipe(us->pusb_dev,0), 

@@ -29,7 +29,6 @@
 #include <asm/uaccess.h>
 #include <asm/mmu_context.h>
 
-
 extern void timer_bh(void);
 extern void tqueue_bh(void);
 extern void immediate_bh(void);

@@ -1142,7 +1142,7 @@ UMSDOS FILESYSTEM
 P:	Matija Nalis
 M:	Matija Nalis <mnalis-umsdos@voyager.hr>
 L:	linux-kernel@vger.rutgers.edu
-W:	http://www.voyager.hr/~mnalis/umsdos/
+W:	http://linux.voyager.hr/umsdos/
 S:	Maintained
 
 UNIFORM CDROM DRIVER

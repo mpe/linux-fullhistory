@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: usb.c,v 1.14 2000/07/27 14:42:43 groovyjava Exp $
+ * $Id: usb.c,v 1.16 2000/08/01 22:01:19 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -685,13 +685,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 		case US_SC_QIC:
 			ss->protocol_name = "QIC-157";
-			US_DEBUGP("Sorry, device not supported.	 Please\n");
-			US_DEBUGP("contact mdharm-usb@one-eyed-alien.net\n");
-			US_DEBUGP("if you see this message.\n");
-			up(&us_list_semaphore);
-			kfree(ss->current_urb);
-			kfree(ss);
-			return NULL;
+			ss->proto_handler = usb_stor_qic157_command;
 			break;
 
 		case US_SC_8070:
@@ -862,6 +856,16 @@ void __exit usb_stor_exit(void)
                 /* Now that scsi_unregister_module is done with the host
                  * template, we can free the us_data structure (the host
                  * template is inline in this structure). */
+
+		/* If there's extra data in the us_data structure then
+		 * free that first */
+
+		if (us_list->extra) {
+			if (us_list->extra_destructor)
+				(*us_list->extra_destructor)(
+					us_list->extra);
+			kfree(us_list->extra);
+		}
                 kfree (us_list);
 
 		/* advance the list pointer */

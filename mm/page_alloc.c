@@ -385,7 +385,7 @@ unsigned int nr_free_buffer_pages (void)
 	zone_t *zone;
 	int i;
 
-	sum = nr_lru_pages;
+	sum = nr_lru_pages / 3;
 	for (i = 0; i < NUMNODES; i++)
 		for (zone = NODE_DATA(i)->node_zones; zone <= NODE_DATA(i)->node_zones+ZONE_NORMAL; zone++)
 			sum += zone->free_pages;

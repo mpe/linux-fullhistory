@@ -38,8 +38,7 @@ void UMSDOS_put_inode (struct inode *inode)
 		 ,atomic_read(&inode->i_count)));
 
 	if (inode == pseudo_root) {
-		printk (KERN_ERR "Umsdos: Oops releasing pseudo_root."
-			" Notify jacques@solucorp.qc.ca\n");
+		printk (KERN_ERR "Umsdos: debug: releasing pseudo_root - ino=%lu count=%d\n", inode->i_ino, atomic_read(&inode->i_count));
 	}
 
 	if (atomic_read(&inode->i_count) == 1)
@@ -203,15 +202,15 @@ dentry->d_parent->d_name.name, dentry->d_name.name, inode->u.umsdos_i.i_patched)
 	ret = PTR_ERR(demd);
 	if (IS_ERR(demd))
 		goto out;
-	ret = -EPERM;
-	if (!demd->d_inode) {
-		printk(KERN_WARNING
+	ret = 0;
+	/* don't do anything if directory is not promoted to umsdos yet */
+	if (!demd->d_inode) { 
+		Printk((KERN_DEBUG
 			"UMSDOS_notify_change: no EMD file %s/%s\n",
-			demd->d_parent->d_name.name, demd->d_name.name);
+			demd->d_parent->d_name.name, demd->d_name.name));
 		goto out_dput;
 	}
 
-	ret = 0;
 	/* don't do anything if this is the EMD itself */
 	if (inode == demd->d_inode)
 		goto out_dput;
@@ -295,9 +294,18 @@ static struct super_operations umsdos_sops =
 	put_inode:	UMSDOS_put_inode,
 	delete_inode:	fat_delete_inode,
 	put_super:	UMSDOS_put_super,
-	statfs:		fat_statfs,
+	statfs:		UMSDOS_statfs,
 	clear_inode:	fat_clear_inode,
 };
+
+int UMSDOS_statfs(struct super_block *sb,struct statfs *buf)
+{
+	int ret;
+	ret = fat_statfs (sb, buf);
+	if (!ret)	
+		buf->f_namelen = UMSDOS_MAXNAME;
+	return ret;
+}
 
 /*
  * Read the super block of an Extended MS-DOS FS.
@@ -317,7 +325,7 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 	if (!res)
 		goto out_fail;
 
-	printk (KERN_INFO "UMSDOS 0.86 "
+	printk (KERN_INFO "UMSDOS 0.86i "
 		"(compatibility level %d.%d, fast msdos)\n", 
 		UMSDOS_VERSION, UMSDOS_RELEASE);
 

@@ -2663,7 +2663,7 @@ static int build_auth_frame(ray_dev_t *local, UCHAR *dest, int auth_type)
 } /* End build_auth_frame */
 
 /*===========================================================================*/
-
+#ifdef CONFIG_PROC_FS
 static void raycs_write(const char *name, write_proc_t *w, void *data)
 {
 	struct proc_dir_entry * entry = create_proc_entry(name, S_IFREG | S_IWUSR, NULL);
@@ -2713,6 +2713,7 @@ static int write_int(struct file *file, const char *buffer, unsigned long count,
 	*(int *)data = nr;
 	return count;
 }
+#endif
 
 static int __init init_ray_cs(void)
 {
@@ -2722,12 +2723,14 @@ static int __init init_ray_cs(void)
     rc = register_pcmcia_driver(&dev_info, &ray_attach, &ray_detach);
     DEBUG(1, "raylink init_module register_pcmcia_driver returns 0x%x\n",rc);
 
+#ifdef CONFIG_PROC_FS
     proc_mkdir("driver/ray_cs", 0);
 
-    create_proc_info_entry("driver/ray_cs/ray_cs", 0, NULL, ray_cs_proc_read);
+    create_proc_info_entry("driver/ray_cs/ray_cs", 0, NULL, &ray_cs_proc_read);
     raycs_write("driver/ray_cs/essid", write_essid, NULL);
     raycs_write("driver/ray_cs/net_type", write_int, &net_type);
     raycs_write("driver/ray_cs/translate", write_int, &translate);
+#endif
     if (translate != 0) translate = 1;
     return 0;
 } /* init_ray_cs */
@@ -2739,17 +2742,22 @@ static void __exit exit_ray_cs(void)
     DEBUG(0, "ray_cs: cleanup_module\n");
 
 
+#ifdef CONFIG_PROC_FS
     remove_proc_entry("ray_cs", proc_root_driver);
+#endif
+
     unregister_pcmcia_driver(&dev_info);
     while (dev_list != NULL) {
         if (dev_list->state & DEV_CONFIG) ray_release((u_long)dev_list);
         ray_detach(dev_list);
     }
+#ifdef CONFIG_PROC_FS
     remove_proc_entry("driver/ray_cs/ray_cs", NULL);
     remove_proc_entry("driver/ray_cs/essid", NULL);
     remove_proc_entry("driver/ray_cs/net_type", NULL);
     remove_proc_entry("driver/ray_cs/translate", NULL);
     remove_proc_entry("driver/ray_cs", NULL);
+#endif
 } /* exit_ray_cs */
 
 module_init(init_ray_cs);

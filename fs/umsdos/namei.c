@@ -335,19 +335,6 @@ static void umsdos_ren_init (struct umsdos_info *new_info,
 	new_info->entry.nlink = old_info->entry.nlink;
 }
 
-#ifdef OBSOLETE
-#define chkstk() \
-if (STACK_MAGIC != *(unsigned long *)current->kernel_stack_page){\
-    printk(KERN_ALERT "UMSDOS: %s magic %x != %lx ligne %d\n" \
-	   , current->comm,STACK_MAGIC \
-	   ,*(unsigned long *)current->kernel_stack_page \
-	   ,__LINE__); \
-}
-
-#undef chkstk
-#define chkstk() do { } while (0);
-#endif
-
 /*
  * Rename a file (move) in the file system.
  */

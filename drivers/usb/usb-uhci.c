@@ -1,10 +1,10 @@
 /* 
  * Universal Host Controller Interface driver for USB (take II).
  *
- * (c) 1999 Georg Acher, acher@in.tum.de (executive slave) (base guitar)
- *          Deti Fliegl, deti@fliegl.de (executive slave) (lead voice)
- *          Thomas Sailer, sailer@ife.ee.ethz.ch (chief consultant) (cheer leader)
- *          Roman Weissgaerber, weissg@vienna.at (virt root hub) (studio porter)
+ * (c) 1999-2000 Georg Acher, acher@in.tum.de (executive slave) (base guitar)
+ *               Deti Fliegl, deti@fliegl.de (executive slave) (lead voice)
+ *               Thomas Sailer, sailer@ife.ee.ethz.ch (chief consultant) (cheer leader)
+ *               Roman Weissgaerber, weissg@vienna.at (virt root hub) (studio porter)
  *          
  * HW-initalization based on material of
  *
@@ -12,7 +12,7 @@
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Randy Dunlap
  *
- * $Id: usb-uhci.c,v 1.232 2000/06/11 13:18:30 acher Exp $
+ * $Id: usb-uhci.c,v 1.236 2000/08/02 20:28:28 acher Exp $
  */
 
 #include <linux/config.h>
@@ -48,7 +48,7 @@
 /* This enables an extra UHCI slab for memory debugging */
 #define DEBUG_SLAB
 
-#define VERSTR "$Revision: 1.232 $ time " __TIME__ " " __DATE__
+#define VERSTR "$Revision: 1.236 $ time " __TIME__ " " __DATE__
 
 #include <linux/usb.h>
 #include "usb-uhci.h"
@@ -791,7 +791,7 @@ _static int uhci_submit_bulk_urb (urb_t *urb, urb_t *bulk_urb)
 	char *data;
 	unsigned int pipe = urb->pipe;
 	int maxsze = usb_maxpacket (urb->dev, pipe, usb_pipeout (pipe));
-	int info, len;
+	int info, len, last;
 	int depth_first=USE_BULK_DEPTH_FIRST;  // UHCI descriptor chasing method
 	urb_priv_t *upriv, *bpriv;
 
@@ -888,13 +888,15 @@ _static int uhci_submit_bulk_urb (urb_t *urb, urb_t *bulk_urb)
 		data += pktsze;
 		len -= pktsze;
 
-		if (!len)
+		last = (len == 0 && (usb_pipein(pipe) || pktsze < maxsze || (urb->transfer_flags & USB_DISABLE_SPD)));
+
+		if (last)
 			td->hw.td.status |= TD_CTRL_IOC;	// last one generates INT
 
 		insert_td (s, qh, td, UHCI_PTR_DEPTH * depth_first);
 		usb_dotoggle (urb->dev, usb_pipeendpoint (pipe), usb_pipeout (pipe));
 
-	} while (len > 0);
+	} while (!last);
 
 	list_add (&qh->desc_list, &urb_priv->desc_list);
 
@@ -1036,11 +1038,18 @@ _static int uhci_unlink_urb_sync (uhci_t *s, urb_t *urb)
 
 	spin_lock_irqsave (&s->urb_list_lock, flags);
 
+	if (!in_interrupt())		// shouldn't be called from interrupt at all...
+		spin_lock(&urb->lock); 
+	
 	if (urb->status == -EINPROGRESS) {
 		// URB probably still in work
 		dequeue_urb (s, urb);
 		uhci_switch_timer_int(s);
 		s->unlink_urb_done=1;
+
+		if (!in_interrupt())	
+			spin_unlock(&urb->lock); 
+
 		spin_unlock_irqrestore (&s->urb_list_lock, flags);		
 		
 		urb->status = -ENOENT;	// mark urb as killed		
@@ -1076,10 +1085,13 @@ _static int uhci_unlink_urb_sync (uhci_t *s, urb_t *urb)
 			urb->complete ((struct urb *) urb);
 		}
 		usb_dec_dev_use (urb->dev);
-		return 0;
 	}
-	else
+	else {
+		if (!in_interrupt())	
+			spin_unlock(&urb->lock); 
 		spin_unlock_irqrestore (&s->urb_list_lock, flags);
+	}
+
 	return 0;
 }
 /*-------------------------------------------------------------------*/
@@ -1198,9 +1210,10 @@ _static int uhci_unlink_urb_async (uhci_t *s,urb_t *urb)
 			break;
 		}
 		((urb_priv_t*)urb->hcpriv)->started = UHCI_GET_CURRENT_FRAME(s);
+		return -EINPROGRESS;  // completion will follow
 	}		
 
-	return -EINPROGRESS;
+	return 0;    // URB already dead
 }
 /*-------------------------------------------------------------------*/
 _static int uhci_unlink_urb (urb_t *urb)
@@ -1222,9 +1235,20 @@ _static int uhci_unlink_urb (urb_t *urb)
 	if (urb->transfer_flags & USB_ASYNC_UNLINK) {
 		int ret;
 
-		spin_lock_irqsave (&s->urb_list_lock, flags);
+       		spin_lock_irqsave (&s->urb_list_lock, flags);
+
+		// The URB needs to be locked if called outside completion context
+
+		if (!in_interrupt())
+			spin_lock(&urb->lock);
+
 		ret = uhci_unlink_urb_async(s, urb);
-		spin_unlock_irqrestore (&s->urb_list_lock, flags);
+
+		if (!in_interrupt())
+			spin_unlock(&urb->lock);
+
+		spin_unlock_irqrestore (&s->urb_list_lock, flags);	
+
 		return ret;
 	}
 	else
@@ -1427,10 +1451,10 @@ _static int uhci_submit_iso_urb (urb_t *urb)
 
 #ifdef ISO_SANITY_CHECK
 		if(urb->iso_frame_desc[n].length > maxsze) {
+
 			err("submit_iso: urb->iso_frame_desc[%d].length(%d)>%d",n , urb->iso_frame_desc[n].length, maxsze);
 			tdm[n] = 0;
-			ret=-EINVAL;
-			goto inval;
+			ret=-EINVAL;		
 		}
 		else
 #endif
@@ -2177,10 +2201,9 @@ _static int process_transfer (uhci_t *s, urb_t *urb, int mode)
 			usb_endpoint_halt (urb->dev, usb_pipeendpoint (urb->pipe), usb_pipeout (urb->pipe));
 		}
 
-		if (status != 0) {		// if any error occured stop processing of further TDs
+		if (status && (status != -EPIPE)) {	// if any error occurred stop processing of further TDs
 			// only set ret if status returned an error
-			if (status != -EPIPE) 
-				uhci_show_td (desc);
+  is_error:
 			ret = status;
 			urb->error_count++;
 			break;
@@ -2212,6 +2235,8 @@ _static int process_transfer (uhci_t *s, urb_t *urb, int mode)
 			data_toggle = uhci_toggle (desc->hw.td.info);
 			break;
 		}
+		else if (status)
+			goto is_error;
 
 		data_toggle = uhci_toggle (desc->hw.td.info);
 		queue_dbg("process_transfer: len:%d status:%x mapped:%x toggle:%d", actual_length, desc->hw.td.status,status, data_toggle);      
@@ -2457,10 +2482,11 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 					is_ring = 1;
 			}
 
+			spin_lock(&urb->lock);
 			spin_unlock(&s->urb_list_lock);
 
-			// In case you need the current URB status for your completion handler
-			if (urb->complete && (!proceed || (urb->transfer_flags & USB_URB_EARLY_COMPLETE))) {
+			// In case you need the current URB status for your completion handler (before resubmit)
+			if (urb->complete && (!proceed )) {
 				dbg("process_transfer: calling early completion");
 				urb->complete ((struct urb *) urb);
 				if (!proceed && is_ring && (urb->status != -ENOENT))
@@ -2478,15 +2504,15 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 				}
 				while (tmp != NULL && tmp != urb->next);	// submit until we reach NULL or our own pointer or submit fails
 
-				if (urb->complete && !(urb->transfer_flags & USB_URB_EARLY_COMPLETE)) {
+				if (urb->complete) {
 					dbg("process_transfer: calling completion");
 					urb->complete ((struct urb *) urb);
 				}
 			}
 
-			spin_lock(&s->urb_list_lock);
-
 			usb_dec_dev_use (urb->dev);
+			spin_unlock(&urb->lock);		
+			spin_lock(&s->urb_list_lock);
 		}
 	}
 
@@ -2790,10 +2816,6 @@ _static int __init start_uhci (struct pci_dev *dev)
 			break;
 		/* disable legacy emulation */
 		pci_write_config_word (dev, USBLEGSUP, USBLEGSUP_DEFAULT);
-		if(dev->vendor==0x8086) {
-			info("Intel USB controller: setting latency timer to %d", UHCI_LATENCY_TIMER);
-			pci_write_config_byte(dev, PCI_LATENCY_TIMER, UHCI_LATENCY_TIMER);
-		}
 	
 		return alloc_uhci(dev, dev->irq, io_addr, io_size);
 	}

@@ -45,7 +45,9 @@ struct stat64 {
 	unsigned short	st_dev;
 	unsigned char	__pad0[10];
 
-	unsigned long	st_ino;
+#define STAT64_HAS_BROKEN_ST_INO	1
+	unsigned long	__st_ino;
+
 	unsigned int	st_mode;
 	unsigned int	st_nlink;
 
@@ -70,8 +72,7 @@ struct stat64 {
 	unsigned long	st_ctime;
 	unsigned long	__pad7;		/* will be high 32 bits of ctime someday */
 
-	unsigned long	__unused1;
-	unsigned long	__unused2;
+	unsigned long long	st_ino;
 };
 
 #endif

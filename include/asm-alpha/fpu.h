@@ -153,7 +153,7 @@ wrfpcr(unsigned long val)
 	unsigned long tmp;
 
 #if defined(__alpha_cix__) || defined(__alpha_fix__)
-	__asm__ ("ftoit $f0,%0\n\t"
+	__asm__ __volatile__ ("ftoit $f0,%0\n\t"
 		 "itoft %1,$f0\n\t"
 		 "mt_fpcr $f0\n\t"
 		 "itoft %0,$f0"

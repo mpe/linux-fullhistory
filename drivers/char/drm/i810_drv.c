@@ -32,8 +32,6 @@
 #include <linux/config.h>
 #include "drmP.h"
 #include "i810_drv.h"
-#include <linux/sched.h>
-#include <linux/smp_lock.h>
 
 #define I810_NAME	 "i810"
 #define I810_DESC	 "Intel I810"
@@ -340,7 +338,7 @@ static int i810_takedown(drm_device_t *dev)
 /* i810_init is called via init_module at module load time, or via
  * linux/init/main.c (this is not currently supported). */
 
-int i810_init(void)
+static int i810_init(void)
 {
 	int		      retcode;
 	drm_device_t	      *dev = &i810_device;
@@ -399,7 +397,7 @@ int i810_init(void)
 
 /* i810_cleanup is called via cleanup_module at module unload time. */
 
-void i810_cleanup(void)
+static void i810_cleanup(void)
 {
 	drm_device_t	      *dev = &i810_device;
 
@@ -465,6 +463,9 @@ int i810_open(struct inode *inode, struct file *filp)
 	
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_open_helper(inode, filp, dev))) {
+#if LINUX_VERSION_CODE < 0x020333
+		MOD_INC_USE_COUNT; /* Needed before Linux 2.3.51 */
+#endif
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -545,6 +546,9 @@ int i810_release(struct inode *inode, struct file *filp)
 	up(&dev->struct_sem);
 	
 	drm_free(priv, sizeof(*priv), DRM_MEM_FILES);
+#if LINUX_VERSION_CODE < 0x020333
+	MOD_DEC_USE_COUNT; /* Needed before Linux 2.3.51 */
+#endif
    	atomic_inc(&dev->total_close);
    	spin_lock(&dev->count_lock);
    	if (!--dev->open_count) {
@@ -557,9 +561,10 @@ int i810_release(struct inode *inode, struct file *filp)
 		   	return -EBUSY;
 		}
 	   	spin_unlock(&dev->count_lock);
-	   	retcode = i810_takedown(dev);
-	} else
-		spin_unlock(&dev->count_lock);
+		unlock_kernel();
+		return i810_takedown(dev);
+	}
+	spin_unlock(&dev->count_lock);
 	unlock_kernel();
 	return retcode;
 }

@@ -775,8 +775,8 @@ struct usb_device *usb_alloc_dev(struct usb_device *parent, struct usb_bus *bus)
 void usb_free_dev(struct usb_device *dev)
 {
 	if (atomic_dec_and_test(&dev->refcnt)) {
-		usb_destroy_configuration(dev);
 		dev->bus->op->deallocate(dev);
+		usb_destroy_configuration(dev);
 		kfree(dev);
 	}
 }
@@ -819,7 +819,7 @@ int usb_submit_urb(urb_t *urb)
 	if (urb && urb->dev)
 		return urb->dev->bus->op->submit_urb(urb);
 	else
-		return -1;
+		return -ENODEV;
 }
 
 /*-------------------------------------------------------------------*/
@@ -828,7 +828,7 @@ int usb_unlink_urb(urb_t *urb)
 	if (urb && urb->dev)
 		return urb->dev->bus->op->unlink_urb(urb);
 	else
-		return -1;
+		return -ENODEV;
 }
 /*-------------------------------------------------------------------*
  *                     COMPLETION HANDLERS                           *
@@ -1330,13 +1330,6 @@ void usb_destroy_configuration(struct usb_device *dev)
 	}
 	kfree(dev->config);
 }
-			
-void usb_init_root_hub(struct usb_device *dev)
-{
-	dev->devnum = -1;
-	dev->slow = 0;
-	dev->actconfig = NULL;
-}
 
 /* for returning string descriptors in UTF-16LE */
 static int ascii2utf (char *ascii, __u8 *utf, int utfmax)
@@ -1451,13 +1444,13 @@ void usb_disconnect(struct usb_device **pdev)
 			usb_disconnect(child);
 	}
 
-	/* remove /proc/bus/usb entry */
-	usbdevfs_remove_device(dev);
-
-	/* Free up the device itself, including its device number */
-	if (dev->devnum > 0)
+	/* Free the device number and remove the /proc/bus/usb entry */
+	if (dev->devnum > 0) {
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
+		usbdevfs_remove_device(dev);
+	}
 
+	/* Free up the device itself */
 	usb_free_dev(dev);
 }
 
@@ -1631,7 +1624,7 @@ int usb_clear_halt(struct usb_device *dev, int pipe)
 	if (result < 0)
 		return result;
 
-	if (status & 1)
+	if (le16_to_cpu(status) & 1)
 		return -EPIPE;		/* still halted */
 
 	usb_endpoint_running(dev, usb_pipeendpoint(pipe), usb_pipeout(pipe));
@@ -1679,7 +1672,7 @@ int usb_set_configuration(struct usb_device *dev, int configuration)
 	}
 	if (!cp) {
 		warn("selecting invalid configuration %d", configuration);
-		return -1;
+		return -EINVAL;
 	}
 
 	if ((ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
@@ -1719,12 +1712,12 @@ int usb_get_configuration(struct usb_device *dev)
 
 	if (dev->descriptor.bNumConfigurations > USB_MAXCONFIG) {
 		warn("too many configurations");
-		return -1;
+		return -EINVAL;
 	}
 
 	if (dev->descriptor.bNumConfigurations < 1) {
 		warn("not enough configurations");
-		return -1;
+		return -EINVAL;
 	}
 
 	dev->config = (struct usb_config_descriptor *)
@@ -1732,7 +1725,7 @@ int usb_get_configuration(struct usb_device *dev)
 		sizeof(struct usb_config_descriptor), GFP_KERNEL);
 	if (!dev->config) {
 		err("out of memory");
-		return -1;	
+		return -ENOMEM;	
 	}
 	memset(dev->config, 0, dev->descriptor.bNumConfigurations *
 		sizeof(struct usb_config_descriptor));
@@ -1741,7 +1734,7 @@ int usb_get_configuration(struct usb_device *dev)
 		dev->descriptor.bNumConfigurations, GFP_KERNEL);
 	if (!dev->rawdescriptors) {
 		err("out of memory");
-		return -1;
+		return -ENOMEM;
 	}
 
 	for (cfgno = 0; cfgno < dev->descriptor.bNumConfigurations; cfgno++) {
@@ -1751,8 +1744,10 @@ int usb_get_configuration(struct usb_device *dev)
 		if (result < 8) {
 			if (result < 0)
 				err("unable to get descriptor");
-			else
+			else {
 				err("config descriptor too short (expected %i, got %i)", 8, result);
+				result = -EINVAL;
+			}
 			goto err;
 		}
 
@@ -1776,6 +1771,7 @@ int usb_get_configuration(struct usb_device *dev)
 	
 		if (result < length) {
 			err("config descriptor too short (expected %i, got %i)", length, result);
+			result = -EINVAL;
 			kfree(bigbuffer);
 			goto err;
 		}
@@ -1786,7 +1782,7 @@ int usb_get_configuration(struct usb_device *dev)
 		if (result > 0)
 			dbg("descriptor data left");
 		else if (result < 0) {
-			result = -1;
+			result = -EINVAL;
 			goto err;
 		}
 	}
@@ -1921,14 +1917,13 @@ int usb_new_device(struct usb_device *dev)
 		return 1;
 	}
 
-	dev->actconfig = dev->config;
-	usb_set_maxpacket(dev);
-
 	/* we set the default configuration here */
 	err = usb_set_configuration(dev, dev->config[0].bConfigurationValue);
 	if (err) {
 		err("failed to set default configuration (error=%d)", err);
-		return -1;
+		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
+		dev->devnum = -1;
+		return 1;
 	}
 
 	dbg("new device strings: Mfr=%d, Product=%d, SerialNumber=%d",
@@ -2035,7 +2030,6 @@ EXPORT_SYMBOL(usb_driver_claim_interface);
 EXPORT_SYMBOL(usb_interface_claimed);
 EXPORT_SYMBOL(usb_driver_release_interface);
 
-EXPORT_SYMBOL(usb_init_root_hub);
 EXPORT_SYMBOL(usb_root_hub_string);
 EXPORT_SYMBOL(usb_new_device);
 EXPORT_SYMBOL(usb_reset_device);

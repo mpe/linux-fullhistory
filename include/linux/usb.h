@@ -576,7 +576,6 @@ extern void usb_release_bandwidth(struct usb_device *dev, struct urb *urb, int i
 
 extern int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size, int timeout);
 
-extern void usb_init_root_hub(struct usb_device *dev);
 extern int usb_root_hub_string(int id, int serial, char *type, __u8 *data, int len);
 extern void usb_connect(struct usb_device *dev);
 extern void usb_disconnect(struct usb_device **);

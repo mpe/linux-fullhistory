@@ -86,9 +86,8 @@ struct page * replace_with_highmem(struct page * page)
 	copy_page((void *)vaddr, (void *)page_address(page));
 	kunmap(highpage);
 
-	/* Preserve the caching of the swap_entry. */
-	highpage->index = page->index;
-	highpage->mapping = page->mapping;
+	if (page->mapping)
+		BUG();
 
 	/*
 	 * We can just forget the old page since 

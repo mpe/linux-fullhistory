@@ -153,9 +153,6 @@ __asm__ __volatile__(					\
 #define set_mb(var, value) \
 do { var = value; mb(); } while (0)
 
-#define set_rmb(var, value) \
-do { var = value; rmb(); } while (0)
-
 #define set_wmb(var, value) \
 do { var = value; wmb(); } while (0)
 

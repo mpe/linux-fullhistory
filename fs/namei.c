@@ -1739,7 +1739,7 @@ int vfs_rename_other(struct inode *old_dir, struct dentry *old_dentry,
 	if (error)
 		return error;
 	/* The following d_move() should become unconditional */
-	if (!(old_dir->i_sb->s_flags & MS_ODD_RENAME)) {
+	if (!(old_dir->i_sb->s_type->fs_flags & FS_ODD_RENAME)) {
 		d_move(old_dentry, new_dentry);
 	}
 	return 0;

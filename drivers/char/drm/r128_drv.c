@@ -32,8 +32,6 @@
 #include <linux/config.h>
 #include "drmP.h"
 #include "r128_drv.h"
-#include <linux/sched.h>
-#include <linux/smp_lock.h>
 
 #define R128_NAME	 "r128"
 #define R128_DESC	 "ATI Rage 128"
@@ -325,7 +323,7 @@ static int r128_takedown(drm_device_t *dev)
 /* r128_init is called via init_module at module load time, or via
  * linux/init/main.c (this is not currently supported). */
 
-int r128_init(void)
+static int r128_init(void)
 {
 	int		      retcode;
 	drm_device_t	      *dev = &r128_device;
@@ -389,7 +387,7 @@ int r128_init(void)
 
 /* r128_cleanup is called via cleanup_module at module unload time. */
 
-void r128_cleanup(void)
+static void r128_cleanup(void)
 {
 	drm_device_t	      *dev = &r128_device;
 
@@ -457,6 +455,9 @@ int r128_open(struct inode *inode, struct file *filp)
 
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_open_helper(inode, filp, dev))) {
+#if LINUX_VERSION_CODE < 0x020333
+		MOD_INC_USE_COUNT; /* Needed before Linux 2.3.51 */
+#endif
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -476,10 +477,12 @@ int r128_release(struct inode *inode, struct file *filp)
 	int	      retcode = 0;
 
 	lock_kernel();
-	dev    = priv->dev;
+	dev = priv->dev;
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_release(inode, filp))) {
-		MOD_DEC_USE_COUNT;
+#if LINUX_VERSION_CODE < 0x020333
+		MOD_DEC_USE_COUNT; /* Needed before Linux 2.3.51 */
+#endif
 		atomic_inc(&dev->total_close);
 		spin_lock(&dev->count_lock);
 		if (!--dev->open_count) {
@@ -492,10 +495,12 @@ int r128_release(struct inode *inode, struct file *filp)
 				return -EBUSY;
 			}
 			spin_unlock(&dev->count_lock);
-			retcode = r128_takedown(dev);
-		} else
-			spin_unlock(&dev->count_lock);
+			unlock_kernel();
+			return r128_takedown(dev);
+		}
+		spin_unlock(&dev->count_lock);
 	}
+	
 	unlock_kernel();
 	return retcode;
 }

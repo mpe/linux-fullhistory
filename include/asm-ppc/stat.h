@@ -42,8 +42,7 @@ struct stat {
  */
 struct stat64 {
 	unsigned long long st_dev; 	/* Device.  */
-	unsigned short int __pad1;
-	unsigned long st_ino;		/* File serial number.  */
+	unsigned long long st_ino;	/* File serial number.  */
 	unsigned int st_mode;		/* File mode.  */
 	unsigned int st_nlink;		/* Link count.  */
 	unsigned int st_uid;		/* User ID of the file's owner.  */

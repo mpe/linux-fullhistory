@@ -294,7 +294,13 @@ int shrink_mmap(int priority, int gfp_mask)
 		 * of zone - it's old.
 		 */
 		if (page->buffers) {
-			int wait = ((gfp_mask & __GFP_IO) && (nr_dirty-- < 0));
+			int wait;
+			/*
+			 * 0 - free it if can do so without IO
+			 * 1 - start write-out of dirty buffers
+			 * 2 - wait for locked buffers
+			 */
+			wait = (gfp_mask & __GFP_IO) ? (nr_dirty-- < 0) ? 2 : 1 : 0;
 			if (!try_to_free_buffers(page, wait))
 				goto unlock_continue;
 			/* page was locked, inode can't go away under us */

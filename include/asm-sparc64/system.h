@@ -104,8 +104,6 @@ extern void __global_restore_flags(unsigned long flags);
 #define wmb()		membar("#StoreLoad | #StoreStore")
 #define set_mb(__var, __value) \
 	do { __var = __value; membar("#StoreLoad | #StoreStore"); } while(0)
-#define set_rmb(__var, __value) \
-	do { __var = __value; membar("#StoreLoad"); } while(0)
 #define set_wmb(__var, __value) \
 	do { __var = __value; membar("#StoreStore"); } while(0)
 

@@ -500,6 +500,7 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket, u32 isa_irq_mask)
 	 */
 	cb_writel(socket, CB_SOCKET_EVENT, -1);
 	cb_writel(socket, CB_SOCKET_MASK, CB_CSTSMASK);
+	exca_writeb(socket, I365_CSCINT, 0);
 	val = probe_irq_on() & isa_irq_mask;
 	for (i = 1; i < 16; i++) {
 		if (!((val >> i) & 1))
@@ -547,6 +548,7 @@ static int yenta_socket_thread(void * data)
 	pci_socket_t * socket = (pci_socket_t *) data;
 	DECLARE_WAITQUEUE(wait, current);
 
+	MOD_INC_USE_COUNT;
 	daemonize();
 	strcpy(current->comm, "CardBus Watcher");
 
@@ -572,6 +574,7 @@ static int yenta_socket_thread(void * data)
 			schedule_timeout(HZ);
 		remove_wait_queue(&socket->wait, &wait);
 	} while (!signal_pending(current));
+	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -699,7 +702,7 @@ static void yenta_allocate_res(pci_socket_t *socket, int nr, unsigned type)
 	min = PCIBIOS_MIN_MEM; max = ~0U;
 	if (type & IORESOURCE_IO) {
 		align = 1024;
-		size = 1024;
+		size = 256;
 		min = PCIBIOS_MIN_IO;
 		max = 0xffff;
 	}
@@ -719,6 +722,7 @@ static void yenta_allocate_resources(pci_socket_t *socket)
 	yenta_allocate_res(socket, 0, IORESOURCE_MEM|IORESOURCE_PREFETCH);
 	yenta_allocate_res(socket, 1, IORESOURCE_MEM);
 	yenta_allocate_res(socket, 2, IORESOURCE_IO);
+	yenta_allocate_res(socket, 3, IORESOURCE_IO);	/* PCI isn't clever enough to use this one yet */
 }
 
 /*

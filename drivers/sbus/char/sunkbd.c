@@ -177,9 +177,6 @@ static unsigned char handle_diacr(unsigned char);
 static struct pt_regs * pt_regs;
 
 #ifdef CONFIG_MAGIC_SYSRQ
-#ifndef CONFIG_PCI
-int sysrq_enabled = 1;
-#endif
 unsigned char sun_sysrq_xlate[128] =
 	"\0\0\0\0\0\201\202\212\203\213\204\214\205\0\206\0"	/* 0x00 - 0x0f */
 	"\207\210\211\0\0\0\0\0\0\0\0\0\0\03312"		/* 0x10 - 0x1f */
@@ -556,7 +553,7 @@ static void __sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 
 #ifdef CONFIG_MAGIC_SYSRQ			/* Handle the SysRq hack */
 	if (l1a_state.l1_down) {
-		if (!up_flag && sysrq_enabled)
+		if (!up_flag)
 			handle_sysrq(sun_sysrq_xlate[keycode], pt_regs, kbd, tty);
 		goto out;
 	}

@@ -177,6 +177,16 @@ dentry->d_parent->d_name.name, dentry->d_name.name, cmd, data_ptr));
 			struct umsdos_info info;
 
 			ret = umsdos_emd_dir_readentry (demd, &pos, &entry);
+
+			if (ret == -ENAMETOOLONG) {
+				printk (KERN_INFO "Fixing EMD entry with invalid size -- zeroing out\n");
+				memset (&info, 0, sizeof (info));
+				info.f_pos = f_pos;
+				info.recsize = UMSDOS_REC_SIZE;
+				ret = umsdos_writeentry (dentry, &info, 1);
+				continue;
+			}
+
 			if (ret)
 				break;
 			if (entry.name_len <= 0)

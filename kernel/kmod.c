@@ -108,7 +108,12 @@ int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 	}
 
 	/* Drop the "current user" thing */
-	free_uid(current);
+	{
+		struct user_struct *user = current->user;
+		current->user = INIT_USER;
+		atomic_inc(&current->user->__count);
+		free_uid(user);
+	}
 
 	/* Give kmod all effective privileges.. */
 	current->uid = current->euid = current->fsuid = 0;

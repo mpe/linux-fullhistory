@@ -31,8 +31,6 @@
 
 #define __NO_VERSION__
 #include "drmP.h"
-#include <linux/sched.h>
-#include <linux/smp_lock.h>
 
 struct vm_operations_struct   drm_vm_ops = {
 	nopage:	 drm_vm_nopage,
@@ -147,6 +145,11 @@ void drm_vm_open(struct vm_area_struct *vma)
 	DRM_DEBUG("0x%08lx,0x%08lx\n",
 		  vma->vm_start, vma->vm_end - vma->vm_start);
 	atomic_inc(&dev->vma_count);
+#if LINUX_VERSION_CODE < 0x020333
+				/* The map can exist after the fd is closed. */
+	MOD_INC_USE_COUNT; /* Needed before Linux 2.3.51 */
+#endif
+
 
 #if DRM_DEBUG_CODE
 	vma_entry = drm_alloc(sizeof(*vma_entry), DRM_MEM_VMAS);
@@ -171,6 +174,9 @@ void drm_vm_close(struct vm_area_struct *vma)
 
 	DRM_DEBUG("0x%08lx,0x%08lx\n",
 		  vma->vm_start, vma->vm_end - vma->vm_start);
+#if LINUX_VERSION_CODE < 0x020333
+	MOD_DEC_USE_COUNT; /* Needed before Linux 2.3.51 */
+#endif
 	atomic_dec(&dev->vma_count);
 
 #if DRM_DEBUG_CODE

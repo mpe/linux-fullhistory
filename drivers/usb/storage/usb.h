@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Main Header File
  *
- * $Id: usb.h,v 1.3 2000/07/20 01:14:56 mdharm Exp $
+ * $Id: usb.h,v 1.4 2000/07/28 20:14:49 groovyjava Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -176,6 +176,8 @@ struct us_data {
 	/* mutual exclusion structures */
 	struct semaphore	notify;		 /* thread begin/end	    */
 	struct semaphore	queue_exclusion; /* to protect data structs */
+	void			*extra;		 /* Any extra data          */
+	void (*extra_destructor)(void *);	 /* extra data destructor   */
 };
 
 /* The list of structures and the protective lock for them */

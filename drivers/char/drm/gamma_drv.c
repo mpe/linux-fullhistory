@@ -30,9 +30,6 @@
  */
 
 #include <linux/config.h>
-#include <linux/sched.h>
-#include <linux/pci.h>
-#include <linux/smp_lock.h>	/* For (un)lock_kernel */
 #include "drmP.h"
 #include "gamma_drv.h"
 
@@ -342,7 +339,7 @@ int gamma_find_devices(void)
 /* gamma_init is called via init_module at module load time, or via
  * linux/init/main.c (this is not currently supported). */
 
-int gamma_init(void)
+static int gamma_init(void)
 {
 	int		      retcode;
 	drm_device_t	      *dev = &gamma_device;
@@ -383,7 +380,7 @@ int gamma_init(void)
 
 /* gamma_cleanup is called via cleanup_module at module unload time. */
 
-void gamma_cleanup(void)
+static void gamma_cleanup(void)
 {
 	drm_device_t	      *dev = &gamma_device;
 
@@ -443,6 +440,9 @@ int gamma_open(struct inode *inode, struct file *filp)
 	
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_open_helper(inode, filp, dev))) {
+#if LINUX_VERSION_CODE < 0x020333
+		MOD_INC_USE_COUNT; /* Needed before Linux 2.3.51 */
+#endif
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -465,6 +465,9 @@ int gamma_release(struct inode *inode, struct file *filp)
 
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_release(inode, filp))) {
+#if LINUX_VERSION_CODE < 0x020333
+		MOD_DEC_USE_COUNT; /* Needed before Linux 2.3.51 */
+#endif
 		atomic_inc(&dev->total_close);
 		spin_lock(&dev->count_lock);
 		if (!--dev->open_count) {
@@ -477,9 +480,8 @@ int gamma_release(struct inode *inode, struct file *filp)
 				return -EBUSY;
 			}
 			spin_unlock(&dev->count_lock);
-			retcode = gamma_takedown(dev);
 			unlock_kernel();
-			return retcode;
+			return gamma_takedown(dev);
 		}
 		spin_unlock(&dev->count_lock);
 	}
