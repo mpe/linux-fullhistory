@@ -404,8 +404,8 @@ static int my_atoi(const char *name)
  *
  */
 
-int fb_try_mode(struct fb_var_screeninfo *var, struct fb_info *info,
-		const struct fb_videomode *mode, unsigned int bpp)
+static int fb_try_mode(struct fb_var_screeninfo *var, struct fb_info *info,
+		       const struct fb_videomode *mode, unsigned int bpp)
 {
     int err = 0;
 

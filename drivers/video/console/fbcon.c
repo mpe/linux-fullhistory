@@ -107,15 +107,15 @@ enum {
 };
 
 struct display fb_display[MAX_NR_CONSOLES];
-signed char con2fb_map[MAX_NR_CONSOLES];
-signed char con2fb_map_boot[MAX_NR_CONSOLES];
+static signed char con2fb_map[MAX_NR_CONSOLES];
+static signed char con2fb_map_boot[MAX_NR_CONSOLES];
 static int logo_height;
 static int logo_lines;
 /* logo_shown is an index to vc_cons when >= 0; otherwise follows FBCON_LOGO
    enums.  */
 static int logo_shown = FBCON_LOGO_CANSHOW;
 /* Software scrollback */
-int fbcon_softback_size = 32768;
+static int fbcon_softback_size = 32768;
 static unsigned long softback_buf, softback_curr;
 static unsigned long softback_in;
 static unsigned long softback_top, softback_end;
@@ -129,6 +129,8 @@ static char fontname[40];
 
 /* current fb_info */
 static int info_idx = -1;
+
+static const struct consw fb_con;
 
 #define CM_SOFTBACK	(8)
 
@@ -309,7 +311,8 @@ static void cursor_timer_handler(unsigned long dev_addr)
 	mod_timer(&ops->cursor_timer, jiffies + HZ/5);
 }
 
-int __init fb_console_setup(char *this_opt)
+#ifndef MODULE
+static int __init fb_console_setup(char *this_opt)
 {
 	char *options;
 	int i, j;
@@ -363,6 +366,7 @@ int __init fb_console_setup(char *this_opt)
 }
 
 __setup("fbcon=", fb_console_setup);
+#endif
 
 static int search_fb_in_map(int idx)
 {
@@ -1117,7 +1121,7 @@ static int scrollback_phys_max = 0;
 static int scrollback_max = 0;
 static int scrollback_current = 0;
 
-int update_var(int con, struct fb_info *info)
+static int update_var(int con, struct fb_info *info)
 {
 	if (con == ((struct fbcon_ops *)info->fbcon_par)->currcon)
 		return fb_pan_display(info, &info->var);
@@ -2724,7 +2728,7 @@ static int fbcon_event_notify(struct notifier_block *self,
  *  The console `switch' structure for the frame buffer based console
  */
 
-const struct consw fb_con = {
+static const struct consw fb_con = {
 	.owner			= THIS_MODULE,
 	.con_startup 		= fbcon_startup,
 	.con_init 		= fbcon_init,
@@ -2754,7 +2758,7 @@ static struct notifier_block fbcon_event_notifier = {
 	.notifier_call	= fbcon_event_notify,
 };
 
-int __init fb_console_init(void)
+static int __init fb_console_init(void)
 {
 	int i;
 
@@ -2782,7 +2786,7 @@ module_init(fb_console_init);
 
 #ifdef MODULE
 
-void __exit fb_console_exit(void)
+static void __exit fb_console_exit(void)
 {
 	acquire_console_sem();
 	fb_unregister_client(&fbcon_event_notifier);
@@ -2793,11 +2797,5 @@ void __exit fb_console_exit(void)
 module_exit(fb_console_exit);
 
 #endif
-
-/*
- *  Visible symbols for modules
- */
-
-EXPORT_SYMBOL(fb_con);
 
 MODULE_LICENSE("GPL");

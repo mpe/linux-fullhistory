@@ -564,7 +564,7 @@ static int mdacon_scroll(struct vc_data *c, int t, int b, int dir, int lines)
  *  The console `switch' structure for the MDA based console
  */
 
-const struct consw mda_con = {
+static const struct consw mda_con = {
 	.owner =		THIS_MODULE,
 	.con_startup =		mdacon_startup,
 	.con_init =		mdacon_init,
@@ -591,7 +591,7 @@ int __init mda_console_init(void)
 	return take_over_console(&mda_con, mda_first_vc-1, mda_last_vc-1, 0);
 }
 
-void __exit mda_console_exit(void)
+static void __exit mda_console_exit(void)
 {
 	give_up_console(&mda_con);
 }

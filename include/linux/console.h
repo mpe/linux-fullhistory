@@ -59,7 +59,6 @@ struct consw {
 extern const struct consw *conswitchp;
 
 extern const struct consw dummy_con;	/* dummy console buffer */
-extern const struct consw fb_con;	/* frame buffer based console */
 extern const struct consw vga_con;	/* VGA text console */
 extern const struct consw newport_con;	/* SGI Newport console  */
 extern const struct consw prom_con;	/* SPARC PROM console */

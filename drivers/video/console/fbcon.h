@@ -157,13 +157,10 @@ struct fbcon_ops {
 #define SCROLL_REDRAW	   0x004
 #define SCROLL_PAN_REDRAW  0x005
 
-extern int fb_console_init(void);
 #ifdef CONFIG_FB_TILEBLITTING
 extern void fbcon_set_tileops(struct vc_data *vc, struct fb_info *info,
 			      struct display *p, struct fbcon_ops *ops);
 #endif
 extern void fbcon_set_bitops(struct fbcon_ops *ops);
-
-extern const struct consw fb_con;
 
 #endif /* _VIDEO_FBCON_H */

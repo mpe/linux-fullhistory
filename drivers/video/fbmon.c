@@ -74,10 +74,9 @@ static struct broken_edid brokendb[] = {
 	},
 };
 
-const unsigned char edid_v1_header[] = { 0x00, 0xff, 0xff, 0xff,
+static const unsigned char edid_v1_header[] = { 0x00, 0xff, 0xff, 0xff,
 	0xff, 0xff, 0xff, 0x00
 };
-const unsigned char edid_v1_descriptor_flag[] = { 0x00, 0x00 };
 
 static void copy_string(unsigned char *c, unsigned char *s)
 {
@@ -872,18 +871,6 @@ void fb_edid_to_monspecs(unsigned char *edid, struct fb_monspecs *specs)
 	DPRINTK("========================================\n");
 }
 
-char *get_EDID_from_firmware(struct device *dev)
-{
-	unsigned char *pedid = NULL;
-
-#if defined(CONFIG_EDID_FIRMWARE) && defined(CONFIG_X86)
-	pedid = edid_info.dummy;
-	if (!pedid)
-		return NULL;
-#endif
-	return pedid;
-}
-
 /* 
  * VESA Generalized Timing Formula (GTF) 
  */
@@ -1193,10 +1180,6 @@ void fb_edid_to_monspecs(unsigned char *edid, struct fb_monspecs *specs)
 {
 	specs = NULL;
 }
-char *get_EDID_from_firmware(struct device *dev)
-{
-	return NULL;
-}
 void fb_destroy_modedb(struct fb_videomode *modedb)
 {
 }
@@ -1270,7 +1253,6 @@ int fb_validate_mode(const struct fb_var_screeninfo *var, struct fb_info *info)
 
 EXPORT_SYMBOL(fb_parse_edid);
 EXPORT_SYMBOL(fb_edid_to_monspecs);
-EXPORT_SYMBOL(get_EDID_from_firmware);
 
 EXPORT_SYMBOL(fb_get_mode);
 EXPORT_SYMBOL(fb_validate_mode);
