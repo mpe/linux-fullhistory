@@ -37,6 +37,7 @@
 #include <asm/bug.h>
 #include <asm/cputable.h>
 #include <asm/setup.h>
+#include <asm/hvcall.h>
 
 #ifdef CONFIG_PPC_ISERIES
 #define DO_SOFT_DISABLE
@@ -45,7 +46,6 @@
 /*
  * hcall interface to pSeries LPAR
  */
-#define HVSC		.long 0x44000022
 #define H_SET_ASR	0x30
 
 /*
