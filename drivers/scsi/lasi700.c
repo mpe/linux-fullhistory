@@ -111,8 +111,8 @@ lasi700_probe(struct parisc_device *dev)
 	memset(hostdata, 0, sizeof(struct NCR_700_Host_Parameters));
 
 	hostdata->dev = &dev->dev;
-	dma_set_mask(&dev->dev, 0xffffffffUL);
-	hostdata->base = base;
+	dma_set_mask(&dev->dev, DMA_32BIT_MASK);
+	hostdata->base = ioremap(base, 0x100);
 	hostdata->differential = 0;
 
 	if (dev->id.sversion == LASI_700_SVERSION) {
@@ -138,6 +138,7 @@ lasi700_probe(struct parisc_device *dev)
 	return 0;
 
  out_kfree:
+	iounmap(hostdata->base);
 	kfree(hostdata);
 	return -ENODEV;
 }
@@ -152,6 +153,7 @@ lasi700_driver_remove(struct parisc_device *dev)
 	scsi_remove_host(host);
 	NCR_700_release(host);
 	free_irq(host->irq, host);
+	iounmap(hostdata->base);
 	kfree(hostdata);
 
 	return 0;
