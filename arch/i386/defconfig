@@ -284,7 +284,8 @@ CONFIG_EEXPRESS_PRO100=y
 #
 # PCMCIA network devices
 #
-CONFIG_PCMCIA_RAYCS=m
+# CONFIG_PCMCIA_PCNET is not set
+CONFIG_PCMCIA_RAYCS=y
 
 #
 # Amateur Radio support

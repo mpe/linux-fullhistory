@@ -8,8 +8,8 @@ SUB_DIRS     :=
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
-L_TARGET := pcmcia_net.a
-L_OBJS   :=
+O_TARGET := pcmcia_net.o
+O_OBJS   :=
 M_OBJS   :=
 MOD_LIST_NAME := NET_MODULES
 
@@ -22,7 +22,7 @@ else
 endif
 
 ifeq ($(CONFIG_PCMCIA_RAYCS),y)
-LX_OBJS += ray_cs.o
+  OX_OBJS += ray_cs.o
 else
   ifeq ($(CONFIG_PCMCIA_RAYCS),m)
   MX_OBJS += ray_cs.o

@@ -96,7 +96,7 @@ struct sysinfo {
 	unsigned short procs;		/* Number of current processes */
 	unsigned long totalbig;		/* Total big memory size */
 	unsigned long freebig;		/* Available big memory size */
-	char _f[22-2*sizeof(long)];	/* Padding: libc5 uses this.. */
+	char _f[12];			/* Padding to 64 bytes: libc5 uses this.. */
 };
 
 #endif

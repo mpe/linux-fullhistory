@@ -30,6 +30,8 @@
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/timer.h>
+#include <linux/init.h>
+
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/byteorder.h>
@@ -156,7 +158,7 @@ static int hop_dwell = 128;
 MODULE_PARM(hop_dwell,"i");
 
 /* Beacon period in Kus */
-static int beacon_period = 128;
+static int beacon_period = 256;
 MODULE_PARM(beacon_period,"i");
 
 /* power save mode (0 = off, 1 = save power) */
@@ -168,7 +170,7 @@ static char *essid = NULL;
 MODULE_PARM(essid,"s");
 
 /* Default to encapsulation unless translation requested */
-static int translate = 0;
+static int translate = 1;
 MODULE_PARM(translate,"i");
 
 static int country = USA;
@@ -951,36 +953,6 @@ int ray_event(event_t event, int priority,
     return 0;
     DEBUG(2,"ray_event ending\n");
 } /* ray_event */
-/*===========================================================================*/
-int init_module(void)
-{
-    int rc;
-    servinfo_t serv;
-    
-    DEBUG(1, "%s\n", rcsid);
-    CardServices(GetCardServicesInfo, &serv);
-    if (serv.Revision != CS_RELEASE_CODE) {
-        printk(KERN_NOTICE "ray: Card Services release does not match!\n");
-        return -1;
-    }
-    rc = register_pcmcia_driver(&dev_info, &ray_attach, &ray_detach);
-    DEBUG(1, "raylink init_module register_pcmcia_driver returns 0x%x\n",rc);
-    proc_register(&proc_root, &ray_cs_proc_entry);
-    if (translate != 0) translate = 1;
-    return 0;
-} /* init_module */
-/*===========================================================================*/
-void cleanup_module(void)
-{
-    DEBUG(0, "ray_cs: cleanup_module\n");
-
-    unregister_pcmcia_driver(&dev_info);
-    while (dev_list != NULL) {
-        if (dev_list->state & DEV_CONFIG) ray_release((u_long)dev_list);
-        ray_detach(dev_list);
-    }
-    proc_unregister(&proc_root, ray_cs_proc_entry.low_ino);
-} /* cleanup_module */
 /*===========================================================================*/
 int ray_dev_init(struct net_device *dev)
 {
@@ -2324,4 +2296,53 @@ int  build_auth_frame(ray_dev_t *local, UCHAR *dest, int auth_type)
     }
     return 0;
 } /* End build_auth_frame */
+/*===========================================================================*/
+int init_ray_cs(void)
+{
+    int rc;
+    servinfo_t serv;
+    
+    DEBUG(1, "%s\n", rcsid);
+    CardServices(GetCardServicesInfo, &serv);
+    if (serv.Revision != CS_RELEASE_CODE) {
+        printk(KERN_NOTICE "ray: Card Services release does not match!\n");
+        return -1;
+    }
+    rc = register_pcmcia_driver(&dev_info, &ray_attach, &ray_detach);
+    DEBUG(1, "raylink init_module register_pcmcia_driver returns 0x%x\n",rc);
+    proc_register(&proc_root, &ray_cs_proc_entry);
+    if (translate != 0) translate = 1;
+    return 0;
+} /* init_module */
+
+static char init_ess_id[ESSID_SIZE];
+
+static int __init essid_setup(char *str)
+{
+	strncpy(init_ess_id, str, ESSID_SIZE);
+	essid = init_ess_id;
+	return 1;
+}
+
+__setup("essid=", essid_setup);
+
+/*===========================================================================*/
+#ifdef MODULE
+int init_module(void)
+{
+	init_ray_cs();
+}
+
+void cleanup_module(void)
+{
+    DEBUG(0, "ray_cs: cleanup_module\n");
+
+    unregister_pcmcia_driver(&dev_info);
+    while (dev_list != NULL) {
+        if (dev_list->state & DEV_CONFIG) ray_release((u_long)dev_list);
+        ray_detach(dev_list);
+    }
+    proc_unregister(&proc_root, ray_cs_proc_entry.low_ino);
+} /* cleanup_module */
+#endif
 /*===========================================================================*/
