@@ -1073,6 +1073,7 @@ xprt_release(struct rpc_task *task)
 
 	if (!(req = task->tk_rqstp))
 		return;
+	task->tk_rqstp = NULL;
 	memset(req, 0, sizeof(*req));	/* mark unused */
 
 	dprintk("RPC: %4d release request %p\n", task->tk_pid, req);

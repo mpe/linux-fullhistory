@@ -750,7 +750,7 @@ again:
 		rqstp->rq_wait = NULL;
 		svc_serv_enqueue(serv, rqstp);
 
-		current->state = TASK_INTERRUPTIBLE;
+		current->state = TASK_UNINTERRUPTIBLE;
 		add_wait_queue(&rqstp->rq_wait, &wait);
 		enable_bh(NET_BH);
 		schedule();

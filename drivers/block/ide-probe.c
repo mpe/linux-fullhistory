@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-probe.c	Version 1.01  Jan  26, 1997
+ *  linux/drivers/block/ide-probe.c	Version 1.02  Jul  29, 1997
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -38,6 +38,8 @@
  *
  * Version 1.00		move drive probing code from ide.c to ide-probe.c
  * Version 1.01		fix compilation problem for m68k
+ * Version 1.02		increase WAIT_PIDENTIFY to avoid CD-ROM locking at boot
+ *			by Andrea Arcangeli <arcangeli@mbox.queen.it>
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */

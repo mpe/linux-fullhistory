@@ -179,7 +179,12 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 	dentry->d_count = 1;
 	dentry->d_flags = 0;
 	dentry->d_inode = NULL;
-	dentry->d_parent = dget(parent);
+	dentry->d_parent = NULL;
+	dentry->d_sb = NULL;
+	if (parent) {
+		dentry->d_parent = dget(parent);
+		dentry->d_sb = parent->d_sb;
+	}
 	dentry->d_mounts = dentry;
 	dentry->d_covers = dentry;
 	INIT_LIST_HEAD(&dentry->d_hash);
@@ -214,6 +219,7 @@ struct dentry * d_alloc_root(struct inode * root_inode, struct dentry *old_root)
 	if (root_inode) {
 		res = d_alloc(NULL, &(const struct qstr) { "/", 1, 0 });
 		if (res) {
+			res->d_sb = root_inode->i_sb;
 			res->d_parent = res;
 			d_instantiate(res, root_inode);
 		}

@@ -82,7 +82,7 @@ affs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct buffer_head	 *dir_bh;
 	struct buffer_head	 *fh_bh;
 	struct inode		 *dir;
-	struct inode 		 *inode = file->f_dentry->d_inode;
+	struct inode 		 *inode = filp->f_dentry->d_inode;
 
 	pr_debug("AFFS: readdir(ino=%ld,f_pos=%lu)\n",inode->i_ino,filp->f_pos);
 

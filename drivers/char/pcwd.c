@@ -28,6 +28,7 @@
  *              drivers to panic the system if it's overheating at bootup.
  * 961118	Changed some verbiage on some of the output, tidied up
  *		code bits, and added compatibility to 2.1.x.
+ * 970912       Enabled board on open and disable on close.
  */
 
 #include <linux/module.h>
@@ -209,9 +210,6 @@ static void pcwd_send_heartbeat(void)
 {
 	int wdrst_stat;
 
-	if (!is_open)
-		return;
-
 	wdrst_stat = inb_p(current_readport);
 	wdrst_stat &= 0x0F;
 
@@ -373,7 +371,13 @@ static long pcwd_write(struct inode *inode, struct file *file, const char *buf, 
 
 static int pcwd_open(struct inode *ino, struct file *filep)
 {
+	if (is_open)
+		return -EIO;
 	MOD_INC_USE_COUNT;
+	/*  Enable the port  */
+	if (revision == PCWD_REVISION_C)
+		outb_p(0x00, current_readport + 3);
+	is_open = 1;
 	return(0);
 }
 
@@ -397,7 +401,15 @@ static long pcwd_read(struct inode *inode, struct file *file, char *buf,
 
 static int pcwd_close(struct inode *ino, struct file *filep)
 {
+	is_open = 0;
 	MOD_DEC_USE_COUNT;
+#ifndef CONFIG_WATCHDOG_NOWAYOUT
+	/*  Disable the board  */
+	if (revision == PCWD_REVISION_C) {
+		outb_p(0xA5, current_readport + 3);
+		outb_p(0xA5, current_readport + 3);
+	}
+#endif
 	return 0;
 }
 
@@ -531,8 +543,6 @@ __initfunc(int pcwatchdog_init(void))
 	}
 #endif
 
-	is_open = 1;
-
 #ifdef	PCWD_BLIND
 	current_readport = PCWD_BLIND;
 #endif
@@ -571,6 +581,11 @@ __initfunc(int pcwatchdog_init(void))
 #ifdef	MODULE
 void cleanup_module(void)
 {
+	/*  Disable the board  */
+	if (revision == PCWD_REVISION_C) {
+		outb_p(0xA5, current_readport + 3);
+		outb_p(0xA5, current_readport + 3);
+	}
 	misc_deregister(&pcwd_miscdev);
 	if (supports_temp)
 		misc_deregister(&temp_miscdev);

@@ -179,6 +179,13 @@ floppy=fifo
 	Uses a less noisy way to clear the disk change line (which
 	doesn't involve seeks). Implied by daring.
 
+ floppy=<nr>,irq
+	Sets the floppy IRQ to <nr> instead of 6
+
+ floppy=<nr>,dma
+	Sets the floppy DMA channel to <nr> instead of 2
+
+
 Supporting utilities and additional documentation:
 ==================================================
 

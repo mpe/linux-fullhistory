@@ -38,18 +38,12 @@
 static int sync_block (struct inode * inode, u32 * block, int wait)
 {
 	struct buffer_head * bh;
-	int tmp;
 	
 	if (!*block)
 		return 0;
-	tmp = *block;
 	bh = get_hash_table (inode->i_dev, *block, blocksize);
 	if (!bh)
 		return 0;
-	if (*block != tmp) {
-		brelse (bh);
-		return 1;
-	}
 	if (wait && buffer_req(bh) && !buffer_uptodate(bh)) {
 		brelse (bh);
 		return -1;
@@ -67,18 +61,12 @@ static int sync_block (struct inode * inode, u32 * block, int wait)
 static int sync_block_swab32 (struct inode * inode, u32 * block, int wait)
 {
 	struct buffer_head * bh;
-	int tmp;
 	
 	if (!le32_to_cpu(*block))
 		return 0;
-	tmp = le32_to_cpu(*block);
 	bh = get_hash_table (inode->i_dev, le32_to_cpu(*block), blocksize);
 	if (!bh)
 		return 0;
-	if (le32_to_cpu(*block) != tmp) {
-		brelse (bh);
-		return 1;
-	}
 	if (wait && buffer_req(bh) && !buffer_uptodate(bh)) {
 		brelse (bh);
 		return -1;
@@ -109,11 +97,6 @@ static int sync_iblock (struct inode * inode, u32 * iblock,
 	if (rc)
 		return rc;
 	*bh = bread (inode->i_dev, tmp, blocksize);
-	if (tmp != *iblock) {
-		brelse (*bh);
-		*bh = NULL;
-		return 1;
-	}
 	if (!*bh)
 		return -1;
 	return 0;
@@ -133,11 +116,6 @@ static int sync_iblock_swab32 (struct inode * inode, u32 * iblock,
 	if (rc)
 		return rc;
 	*bh = bread (inode->i_dev, tmp, blocksize);
-	if (tmp != le32_to_cpu(*iblock)) {
-		brelse (*bh);
-		*bh = NULL;
-		return 1;
-	}
 	if (!*bh)
 		return -1;
 	return 0;
@@ -153,8 +131,6 @@ static int sync_direct (struct inode * inode, int wait)
 
 	for (i = 0; i < EXT2_NDIR_BLOCKS; i++) {
 		rc = sync_block (inode, inode->u.ext2_i.i_data + i, wait);
-		if (rc > 0)
-			break;
 		if (rc)
 			err = rc;
 	}
@@ -175,8 +151,6 @@ static int sync_indirect (struct inode * inode, u32 * iblock, int wait)
 		rc = sync_block_swab32 (inode, 
 					((u32 *) ind_bh->b_data) + i,
 					wait);
-		if (rc > 0)
-			break;
 		if (rc)
 			err = rc;
 	}
@@ -199,8 +173,6 @@ static __inline__ int sync_indirect_swab32 (struct inode * inode, u32 * iblock, 
 		rc = sync_block_swab32 (inode, 
 					((u32 *) ind_bh->b_data) + i,
 					wait);
-		if (rc > 0)
-			break;
 		if (rc)
 			err = rc;
 	}
@@ -225,8 +197,6 @@ static int sync_dindirect (struct inode * inode, u32 * diblock, int wait)
 		rc = sync_indirect_swab32 (inode,
 					   ((u32 *) dind_bh->b_data) + i,
 					   wait);
-		if (rc > 0)
-			break;
 		if (rc)
 			err = rc;
 	}
@@ -249,8 +219,6 @@ static __inline__ int sync_dindirect_swab32 (struct inode * inode, u32 * diblock
 		rc = sync_indirect_swab32 (inode,
 					   ((u32 *) dind_bh->b_data) + i,
 					   wait);
-		if (rc > 0)
-			break;
 		if (rc)
 			err = rc;
 	}
@@ -275,8 +243,6 @@ static int sync_tindirect (struct inode * inode, u32 * tiblock, int wait)
 		rc = sync_dindirect_swab32 (inode,
 					    ((u32 *) tind_bh->b_data) + i,
 					    wait);
-		if (rc > 0)
-			break;
 		if (rc)
 			err = rc;
 	}
@@ -318,5 +284,5 @@ int ext2_sync_file(struct file * file, struct dentry *dentry)
 	}
 skip:
 	err |= ext2_sync_inode (inode);
-	return (err < 0) ? -EIO : 0;
+	return err ? -EIO : 0;
 }

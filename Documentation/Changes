@@ -26,10 +26,7 @@ HTML-ized shopping list.
 http://www.datanet.hu/generations/linux/Changes2.html is an
 English-language HTML version.
 
-   Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
-needs.
-
-Last updated: July 22. 1997
+Last updated: September 13. 1997
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Minimal Requirements
@@ -39,22 +36,21 @@ Current Minimal Requirements
 encountered a bug!  If you're unsure what version you're currently
 running, the suggested command should tell you.
 
-- Kernel modules	 modutils-2.1.42         ; insmod -V
-- Gnu C 		 2.7.2.1                 ; gcc --version
+- Kernel modules	 modutils-2.1.55         ; insmod -V
+- Gnu C 		 2.7.2.3                 ; gcc --version
 - Binutils		 2.8.1.0.1               ; ld -v
-- Linux C Library	 5.4.33                  ; ls -l /lib/libc.so.*
-- Dynamic Linker (ld.so) 1.9.2                   ; ldd -v
-- Linux C++ Library	 2.7.2.1                 ; ls -l /usr/lib/libg++.so.*
-- Procps		 1.01                    ; ps --version
+- Linux C Library	 5.4.38                  ; ls -l /lib/libc.so.*
+- Dynamic Linker (ld.so) 1.9.5                   ; ldd -v
+- Linux C++ Library	 2.7.2.8                 ; ls -l /usr/lib/libg++.so.*
+- Procps		 1.2                    ; ps --version
 - Procinfo               0.11                    ; procinfo -v
-- Mount                  2.6g                    ; mount --version
+- Mount                  2.6h                    ; mount --version
 - Net-tools              1.41                    ; hostname -V
 - Loadlin                1.6a
 - Sh-utils               1.16                    ; expr --v
-- Autofs                 0.3.7                   ; automount --version
+- Autofs                 0.3.11                   ; automount --version
 - NFS                    0.4.21                  ; showmount --version
 - Bash                   1.14.7                  ; bash -version
-- Smbfs                  2.1.0
 
 Upgrade notes
 *************
@@ -80,15 +76,16 @@ accordingly.
    For modules to work, you need to be running libc-5.4.x or greater.
 Since updates to libc fix other problems as well (security flaws, for
 example) and since 5.4.7 is missing a few needed symbols, try to get
-the latest 5.4.x you can.  Currently, libc-5.4.33 is the latest public
+the latest 5.4.x you can.  Currently, libc-5.4.38 is the latest public
 release.
 
    If you upgrade to libc-5.4.x, you also have to upgrade your dynamic
-linker (ld.so) to at least 1.9.2, or all sorts of weirdness will
-happen.  Actually, ld.so-1.8.2 and later will work, but 1.9.2 is widely
+linker (ld.so) to at least 1.9.5, or all sorts of weirdness will
+happen.  Actually, ld.so-1.8.2 and later will work, but 1.9.5 is widely
 available, so if you need to upgrade, use it.  If you get a release
 later than 1.8.5, avoid 1.8.10 as it introduces a few bugs that are
-fixed in later releases.
+fixed in later releases.  Please make sure you don't install ld.so-2.x
+unless you're running glibc2 / libc6.
 
    If you upgrade to libc-5.4.x, you may also need to upgrade ypbind if
 you're using NIS.
@@ -96,7 +93,7 @@ you're using NIS.
 Modules
 =======
 
-   You need to upgrade to modutils-2.1.42 for kernels 2.1.42 and later.
+   You need to upgrade to modutils-2.1.55 for kernels 2.1.55 and later.
 This version will also work with 2.0.x kernels.
 
 Binutils
@@ -110,7 +107,7 @@ Gnu C
 =====
 
    You need at least GCC 2.7.2 to compile the kernel.  If you're
-upgrading from an earlier release, you might as well get GCC 2.7.2.1,
+upgrading from an earlier release, you might as well get GCC 2.7.2.3,
 the latest public release.  If you already have GCC 2.7.2 on your
 system, you don't have to upgrade just so the kernel will work (though
 feel free to upgrade if you want the gcc bug fixes).
@@ -146,24 +143,17 @@ Memory
 ======
 
    As of 2.1.41, the format of /proc/meminfo has changed.  This broke
-many memory utils, which have to be upgraded.  Get the new procinfo and
-procps (which, AFAIK, is not yet available) to fix this.  Until you
-upgrade, programs which read /proc/meminfo will seg-fault or give an
-error.  There is an unofficial update to 1.12.2 available that fixes
-most problems.
+many memory utils, which have to be upgraded.  Get the new procps-1.2
+and you should be set.
 
 Mount and network file systems
 ==============================
 
    The NFS code in the kernel is currently being revised, resulting in
 much-improved performance.  As a result, you'll need to upgrade mount
-to a 2.6 release.  Also, amd is being phased out in favor of the much
-better autofs.  You'll also have to get the appropriate utils to use
-autofs as well as the new NFS utils.
-
-The smbfs code is also being revised. This results in an incompatible
-mount interface. See the README of smbfs-2.1.0 or later for a
-description of the new mount command.
+to a recent 2.6 release.  Also, amd is being phased out in favor of the
+much better autofs.  You'll also have to get the appropriate utils to
+use autofs as well as the new NFS utils.
 
 RPM
 ===
@@ -223,55 +213,53 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.8.1.0.1
 Gnu C
 =====
 
-The 2.7.2.1 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/gcc-2.7.2.1.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/gcc-2.7.2.1.bin.tar.gz
+The 2.7.2.3 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/gcc-2.7.2.3.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/gcc-2.7.2.3.bin.tar.gz
 Installation notes:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.gcc-2.7.2.1
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.gcc-2.7.2.1
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.gcc-2.7.2.3
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.gcc-2.7.2.3
 
 Linux C Library
 ===============
 
-The 5.4.33 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libc-5.4.33.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.33.bin.tar.gz
-Installation notes for 5.4.33:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libc-5.4.33
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.33
+The 5.4.38 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libc-5.4.38.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.38.bin.tar.gz
+Installation notes for 5.4.38:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libc-5.4.38
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.38
 
 Linux C++ Library
 =================
 
-The 2.7.2.1 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libg++-2.7.2.1.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.2.1.bin.tar.gz
+The 2.7.2.8 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libg++-2.7.2.8.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.2.8.bin.tar.gz
 Installation notes:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libg++-2.7.2.1
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.2.1
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libg++-2.7.2.8
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.2.8
 
 Dynamic Linker
 ==============
 
-The 1.9.2 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/ld.so-1.9.2.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/ld.so-1.9.2.tar.gz
+The 1.9.5 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/ld.so-1.9.5.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/ld.so-1.9.5.tar.gz
 
 Modules utilities
 =================
 
-The 2.1.42 release:
-ftp://ftp.redhat.com/pub/alphabits/modutils-2.1.42.tar.gz
-ftp://ftp.kernel.org/pub/linux/kernel/v2.1/modutils-2.1.42.tar.gz
+The 2.1.55 release:
+ftp://ftp.redhat.com/pub/alphabits/modutils/modutils-2.1.55.tar.gz
+ftp://ftp.kernel.org/pub/linux/kernel/v2.1/modutils-2.1.55.tar.gz
 
 Procps utilities
 ================
 
-The 1.01 release:
-ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/procps-1.01.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/system/status/ps/procps-1.01.tgz
-The unofficial 1.12.2 release:
-ftp://ftp.debian.org/pub/debian/hamm/hamm/source/base/procps_1.12.2.tar.gz
+The 1.2 release:
+ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/procps-1.2.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/status/ps/procps-1.2.tgz
 
 Procinfo utilities
 ==================
@@ -316,14 +304,14 @@ ftp://prep.ai.mit.edu/pub/gnu/sh-utils-1.16.tar.gz
 Mount
 =====
 
-The 2.6g release:
-ftp://ftp.win.tue.nl/pub/linux/util/mount-2.6g.tar.gz
+The 2.6h release:
+ftp://ftp.win.tue.nl/pub/linux/util/mount-2.6h.tar.gz
 
 Autofs
 ======
 
-The 0.3.7 release:
-ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-0.3.7.tar.gz
+The 0.3.11 release:
+ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-0.3.11.tar.gz
 
 NFS
 ===
@@ -335,7 +323,7 @@ ftp://linux.nrao.edu/pub/people/okir/linux-nfs-0.4.21.tar.gz
 Net-tools
 =========
 
-The 0.41 release:
+The 1.41 release:
 ftp://ftp.london.uk.eu.org/pub/ipv6/net-tools-1.41.tar.gz
 ftp://ftp.cs-ipv6.lancs.ac.uk/pub/Code/Linux/Net_Tools/net-tools-1.41.tar.gz
 

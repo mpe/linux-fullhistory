@@ -138,8 +138,8 @@ sound_release (struct inode *inode, struct file *file)
   sound_release_sw (dev, &files[dev]);
 #ifdef MODULE
   MOD_DEC_USE_COUNT;
-  return 0;
 #endif
+  return 0;
 }
 
 static int

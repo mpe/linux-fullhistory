@@ -71,7 +71,7 @@ nlmclnt_block(struct nlm_host *host, struct file_lock *fl, u32 *statp)
 	 * nlmclnt_lock for an explanation.
 	 */
 	current->timeout = jiffies + 30 * HZ;
-	interruptible_sleep_on(&block.b_wait);
+	sleep_on(&block.b_wait);
 
 	for (head = &nlm_blocked; *head; head = &(*head)->b_next) {
 		if (*head == &block) {

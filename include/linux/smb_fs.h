@@ -77,7 +77,7 @@ void smb_free_all_inodes(struct smb_sb_info *server);
 void smb_init_root(struct smb_sb_info *server);
 int  smb_stat_root(struct smb_sb_info *server);
 void smb_init_dir_cache(void);
-void smb_invalid_dir_cache(unsigned long ino);
+void smb_invalid_dir_cache(struct inode *);
 void smb_free_dir_cache(void);
 
 /* linux/fs/smbfs/ioctl.c */
@@ -104,7 +104,7 @@ __u8 *smb_setup_header(struct smb_sb_info *server, __u8 command,
 		       __u16 wct, __u16 bcc);
 int smb_offerconn(struct smb_sb_info *server);
 int smb_newconn(struct smb_sb_info *server, struct smb_conn_opt *opt);
-int smb_close(struct dentry *);
+int smb_close(struct inode *);
 int smb_open(struct dentry *, int);
 static inline int
 smb_is_open(struct inode *i)

@@ -121,7 +121,7 @@ extern void minix_read_inode(struct inode *);
 extern void minix_write_inode(struct inode *);
 extern int minix_statfs(struct super_block *, struct statfs *, int);
 extern int minix_sync_inode(struct inode *);
-extern int minix_sync_file(struct inode *, struct file *);
+extern int minix_sync_file(struct file *, struct dentry *);
 
 extern struct inode_operations minix_file_inode_operations;
 extern struct inode_operations minix_dir_inode_operations;

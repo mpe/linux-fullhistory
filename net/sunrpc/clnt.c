@@ -352,7 +352,7 @@ call_allocate(struct rpc_task *task)
 	if ((task->tk_buffer = rpc_malloc(task, bufsiz)) != NULL)
 		return;
 
-	if (!signalled()) {
+	if (1 || !signalled()) {
 		xprt_release(task);
 		task->tk_action = call_reserve;
 		rpc_delay(task, HZ);

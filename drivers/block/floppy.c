@@ -3866,6 +3866,9 @@ static struct param_table {
 	{ "all_drives", 0, &allowed_drive_mask, 0xff, 0 }, /* obsolete */
 	{ "asus_pci", 0, &allowed_drive_mask, 0x33, 0},
 
+	{ "irq", 0, &FLOPPY_IRQ, 6, 0 },
+	{ "dma", 0, &FLOPPY_DMA, 2, 0 },
+
 	{ "daring", daring, 0, 1, 0},
 
 	{ "two_fdc",  0, &FDC2, 0x370, 0 },

@@ -1213,11 +1213,16 @@ static int msync_interval(struct vm_area_struct * vma,
 	if (vma->vm_ops->sync) {
 		int error;
 		error = vma->vm_ops->sync(vma, start, end-start, flags);
-		if (error)
-			return error;
-		if (flags & MS_SYNC)
-			return file_fsync(NULL,vma->vm_dentry);
-		return 0;
+		if (!error && (flags & MS_SYNC)) {
+			struct dentry * dentry = vma->vm_dentry;
+			if (dentry) {
+				struct inode * inode = dentry->d_inode;
+				down(&inode->i_sem);
+				error = file_fsync(NULL,dentry);
+				up(&inode->i_sem);
+			}
+		}
+		return error;
 	}
 	return 0;
 }

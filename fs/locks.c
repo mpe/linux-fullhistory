@@ -132,7 +132,9 @@ static int flock_lock_file(struct file *filp, struct file_lock *caller,
 static int posix_locks_deadlock(struct file_lock *caller,
 				struct file_lock *blocker);
 
-static struct file_lock *locks_alloc_lock(struct file_lock *fl);
+static struct file_lock *locks_empty_lock(void);
+static struct file_lock *locks_init_lock(struct file_lock *,
+					 struct file_lock *);
 static void locks_insert_lock(struct file_lock **pos, struct file_lock *fl);
 static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait);
 static char *lock_get_status(struct file_lock *fl, int id, char *pfx);
@@ -142,6 +144,15 @@ static void locks_delete_block(struct file_lock *blocker, struct file_lock *wait
 static void locks_wake_up_blocks(struct file_lock *blocker, unsigned int wait);
 
 struct file_lock *file_lock_table = NULL;
+
+/* Allocate a new lock, and initialize its fields from fl.
+ * The lock is not inserted into any lists until locks_insert_lock() or 
+ * locks_insert_block() are called.
+ */
+static inline struct file_lock *locks_alloc_lock(struct file_lock *fl)
+{
+	return locks_init_lock(locks_empty_lock(), fl);
+}
 
 /* Free lock not inserted in any queue.
  */
@@ -250,6 +261,7 @@ static void locks_wake_up_blocks(struct file_lock *blocker, unsigned int wait)
 	struct file_lock *waiter;
 
 	while ((waiter = blocker->fl_nextblock) != NULL) {
+		/* N.B. Is it possible for the notify function to block?? */
 		if (waiter->fl_notify)
 			waiter->fl_notify(waiter);
 		wake_up(&waiter->fl_wait);
@@ -330,6 +342,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 		fl = posix_test_lock(filp, &file_lock);
 	}
  
+	flock.l_type = F_UNLCK;
 	if (fl != NULL) {
 		flock.l_pid = fl->fl_pid;
 		flock.l_start = fl->fl_start;
@@ -337,10 +350,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 			fl->fl_end - fl->fl_start + 1;
 		flock.l_whence = 0;
 		flock.l_type = fl->fl_type;
-		return (copy_to_user(l, &flock, sizeof(flock)) ? -EFAULT : 0);
-	} else {
-		flock.l_type = F_UNLCK;
-  	}
+	}
   
 	return (copy_to_user(l, &flock, sizeof(flock)) ? -EFAULT : 0);
 }
@@ -368,7 +378,12 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 
 	if (!(inode = dentry->d_inode))
 		return -EINVAL;
-	
+	/*
+	 * This might block, so we do it before checking the inode.
+	 */
+	if (copy_from_user(&flock, l, sizeof(flock)))
+		return (-EFAULT);
+
 	/* Don't allow mandatory locks on files that may be memory mapped
 	 * and shared.
 	 */
@@ -382,8 +397,6 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		} while ((vma = vma->vm_next_share) != NULL);
 	}
 
-	if (copy_from_user(&flock, l, sizeof(flock)))
-		return (-EFAULT);
 	if (!posix_make_lock(filp, &file_lock, &flock))
 		return (-EINVAL);
 	
@@ -441,8 +454,8 @@ void locks_remove_locks(struct task_struct *task, struct file *filp)
 	 * close on that file.
 	 */
 	inode = filp->f_dentry->d_inode;
+repeat:
 	before = &inode->i_flock;
-
 	while ((fl = *before) != NULL) {
 		if (((fl->fl_flags & FL_POSIX) && (fl->fl_owner == task)) ||
 		    ((fl->fl_flags & FL_FLOCK) && (fl->fl_file == filp) &&
@@ -453,11 +466,11 @@ void locks_remove_locks(struct task_struct *task, struct file *filp)
 				file_lock.fl_type = F_UNLCK;
 				filp->f_op->lock(filp, F_SETLK, &file_lock);
 				/* List may have changed: */
-				before = &inode->i_flock;
+				goto repeat;
 			}
-		} else {
-			before = &fl->fl_next;
+			continue;
 		}
+		before = &fl->fl_next;
 	}
 
 	return;
@@ -762,16 +775,30 @@ static int flock_lock_file(struct file *filp, struct file_lock *caller,
 			   unsigned int wait)
 {
 	struct file_lock *fl;
-	struct file_lock *new_fl;
+	struct file_lock *new_fl = NULL;
 	struct file_lock **before;
 	struct inode * inode = filp->f_dentry->d_inode;
-	int change = 0;
+	int error, change;
+	int unlock = (caller->fl_type == F_UNLCK);
 
+	/*
+	 * If we need a new lock, get it in advance to avoid races.
+	 */
+	if (!unlock) {
+		error = -ENOLCK;
+		new_fl = locks_alloc_lock(caller);
+		if (!new_fl)
+			goto out;
+	}
+
+	error = 0;
+search:
+	change = 0;
 	before = &inode->i_flock;
 	while (((fl = *before) != NULL) && (fl->fl_flags & FL_FLOCK)) {
 		if (caller->fl_file == fl->fl_file) {
 			if (caller->fl_type == fl->fl_type)
-				return (0);
+				goto out;
 			change = 1;
 			break;
 		}
@@ -780,44 +807,43 @@ static int flock_lock_file(struct file *filp, struct file_lock *caller,
 	/* change means that we are changing the type of an existing lock, or
 	 * or else unlocking it.
 	 */
-	if (change)
-		locks_delete_lock(before, caller->fl_type != F_UNLCK);
-	if (caller->fl_type == F_UNLCK)
-		return (0);
-	if ((new_fl = locks_alloc_lock(caller)) == NULL)
-		return (-ENOLCK);
+	if (change) {
+		/* N.B. What if the wait argument is false? */
+		locks_delete_lock(before, !unlock);
+		/*
+		 * If we waited, another lock may have been added ...
+		 */
+		if (!unlock)
+			goto search;
+	}
+	if (unlock)
+		goto out;
+
 repeat:
+	/* Check signals each time we start */
+	error = -ERESTARTSYS;
+	if (current->signal & ~current->blocked)
+		goto out;
 	for (fl = inode->i_flock; (fl != NULL) && (fl->fl_flags & FL_FLOCK);
 	     fl = fl->fl_next) {
 		if (!flock_locks_conflict(new_fl, fl))
 			continue;
-		if (!wait) {
-			locks_free_lock(new_fl);
-			return (-EAGAIN);
-		}
-		if (current->signal & ~current->blocked) {
-			/* Note: new_fl is not in any queue at this
-			 * point, so we must use locks_free_lock()
-			 * instead of locks_delete_lock()
-			 * 	Dmitry Gorodchanin 09/02/96.
-			 */
-			locks_free_lock(new_fl);
-			return (-ERESTARTSYS);
-		}
+		error = -EAGAIN;
+		if (!wait)
+			goto out;
 		locks_insert_block(fl, new_fl);
 		interruptible_sleep_on(&new_fl->fl_wait);
 		locks_delete_block(fl, new_fl);
-		if (current->signal & ~current->blocked) {
-			/* Awakened by a signal. Free the new
-			 * lock and return an error.
-			 */
-			locks_free_lock(new_fl);
-			return (-ERESTARTSYS);
-		}
 		goto repeat;
 	}
 	locks_insert_lock(&inode->i_flock, new_fl);
-	return (0);
+	new_fl = NULL;
+	error = 0;
+
+out:
+	if (new_fl)
+		locks_free_lock(new_fl);
+	return error;
 }
 
 /* Add a POSIX style lock to a file.
@@ -836,36 +862,51 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 			   unsigned int wait)
 {
 	struct file_lock *fl;
-	struct file_lock *new_fl;
+	struct file_lock *new_fl, *new_fl2;
 	struct file_lock *left = NULL;
 	struct file_lock *right = NULL;
 	struct file_lock **before;
 	struct inode * inode = filp->f_dentry->d_inode;
-	int added = 0;
+	int error, added = 0;
+
+	/*
+	 * We may need two file_lock structures for this operation,
+	 * so we get them in advance to avoid races.
+	 */
+	new_fl  = locks_empty_lock();
+	new_fl2 = locks_empty_lock();
+	error = -ENOLCK; /* "no luck" */
+	if (!(new_fl && new_fl2))
+		goto out;
 
 	if (caller->fl_type != F_UNLCK) {
   repeat:
+		error = -ERESTARTSYS;
+		if (current->signal & ~current->blocked)
+			goto out;
 		for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
 			if (!(fl->fl_flags & FL_POSIX))
 				continue;
 			if (!posix_locks_conflict(caller, fl))
 				continue;
+			error = -EAGAIN;
 			if (!wait)
-				return (-EAGAIN);
-			if (current->signal & ~current->blocked)
-				return (-ERESTARTSYS);
+				goto out;
+			error = -EDEADLK;
 			if (posix_locks_deadlock(caller, fl))
-				return (-EDEADLK);
+				goto out;
 			locks_insert_block(fl, caller);
 			interruptible_sleep_on(&caller->fl_wait);
 			locks_delete_block(fl, caller);
-			if (current->signal & ~current->blocked)
-				return (-ERESTARTSYS);
 			goto repeat;
   		}
   	}
 
-	/* Find the first old lock with the same owner as the new lock.
+	/*
+	 * We've allocated the new locks in advance, so there are no
+	 * errors possible (and no blocking operations) from here on.
+	 * 
+	 * Find the first old lock with the same owner as the new lock.
 	 */
 	
 	before = &inode->i_flock;
@@ -958,25 +999,23 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 		before = &fl->fl_next;
 	}
 
+	error = 0;
 	if (!added) {
 		if (caller->fl_type == F_UNLCK)
-			return (0);
-		if ((new_fl = locks_alloc_lock(caller)) == NULL)
-			return (-ENOLCK);
+			goto out;
+		locks_init_lock(new_fl, caller);
 		locks_insert_lock(before, new_fl);
+		new_fl = NULL;
 	}
 	if (right) {
 		if (left == right) {
-			/* The new lock breaks the old one in two pieces, so we
-			 * have to allocate one more lock (in this case, even
-			 * F_UNLCK may fail!).
+			/* The new lock breaks the old one in two pieces,
+			 * so we have to use the second new lock (in this
+			 * case, even F_UNLCK may fail!).
 			 */
-			if ((left = locks_alloc_lock(right)) == NULL) {
-				if (!added)
-					locks_delete_lock(before, 0);
-				return (-ENOLCK);
-			}
+			left = locks_init_lock(new_fl2, right);
 			locks_insert_lock(before, left);
+			new_fl2 = NULL;
 		}
 		right->fl_start = caller->fl_end + 1;
 		locks_wake_up_blocks(right, 0);
@@ -985,35 +1024,48 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 		left->fl_end = caller->fl_start - 1;
 		locks_wake_up_blocks(left, 0);
 	}
-	return (0);
+out:
+	/*
+	 * Free any unused locks.  (They haven't
+	 * ever been used, so we use kfree().)
+	 */
+	if (new_fl)
+		kfree(new_fl);
+	if (new_fl2)
+		kfree(new_fl2);
+	return error;
 }
 
-/* Allocate new lock.
- * Initialize its fields from fl. The lock is not inserted into any
- * lists until locks_insert_lock() or locks_insert_block() are called.
+/*
+ * Allocate an empty lock structure. We can use GFP_KERNEL now that
+ * all allocations are done in advance.
  */
-static struct file_lock *locks_alloc_lock(struct file_lock *fl)
+static struct file_lock *locks_empty_lock(void)
 {
-	struct file_lock *tmp;
-
 	/* Okay, let's make a new file_lock structure... */
-	if ((tmp = (struct file_lock *)kmalloc(sizeof(struct file_lock),
-					       GFP_ATOMIC)) == NULL)
-		return (tmp);
+	return ((struct file_lock *) kmalloc(sizeof(struct file_lock),
+						GFP_KERNEL));
+}
 
-	memset(tmp, 0, sizeof(*tmp));
-
-	tmp->fl_flags = fl->fl_flags;
-	tmp->fl_owner = fl->fl_owner;
-	tmp->fl_pid = fl->fl_pid;
-	tmp->fl_file = fl->fl_file;
-	tmp->fl_type = fl->fl_type;
-	tmp->fl_start = fl->fl_start;
-	tmp->fl_end = fl->fl_end;
-	tmp->fl_notify = fl->fl_notify;
-	tmp->fl_u = fl->fl_u;
-
-	return (tmp);
+/*
+ * Initialize a new lock from an existing file_lock structure.
+ */
+static struct file_lock *locks_init_lock(struct file_lock *new,
+					 struct file_lock *fl)
+{
+	if (new) {
+		memset(new, 0, sizeof(*new));
+		new->fl_owner = fl->fl_owner;
+		new->fl_pid = fl->fl_pid;
+		new->fl_file = fl->fl_file;
+		new->fl_flags = fl->fl_flags;
+		new->fl_type = fl->fl_type;
+		new->fl_start = fl->fl_start;
+		new->fl_end = fl->fl_end;
+		new->fl_notify = fl->fl_notify;
+		new->fl_u = fl->fl_u;
+	}
+	return new;
 }
 
 /* Insert file lock fl into an inode's lock list at the position indicated

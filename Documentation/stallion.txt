@@ -4,8 +4,8 @@ Stallion Multiport Serial Driver Readme
 
 Copyright (C) 1994-1997,  Stallion Technologies (support@stallion.oz.au).
 
-Version:   5.3.2
-Date:      11FEB97
+Version:   5.3.4
+Date:      15SEP97
 
 
 

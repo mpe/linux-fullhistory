@@ -25,6 +25,10 @@ ifeq ($(CONFIG_PARPORT),y)
   endif
   ifeq ($(CONFIG_PARPORT_PC),y)
     LX_OBJS += parport_pc.o
+  else
+    ifeq ($(CONFIG_PARPORT_PC),m)
+      M_OBJS += parport_pc.o
+    endif
   endif
   LX_OBJS += parport_init.o
 else

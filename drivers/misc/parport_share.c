@@ -33,9 +33,13 @@ static int portcount = 0;
 struct parport *parport_enumerate(void)
 {
 #ifdef CONFIG_KERNELD
-	if (portlist == NULL)
+	if (portlist == NULL) {
 		request_module("parport_lowlevel");
-#endif
+#ifdef CONFIG_PNP_PARPORT_MODULE
+		request_module("parport_probe");
+#endif /* CONFIG_PNP_PARPORT_MODULE */
+	}
+#endif /* CONFIG_KERNELD */
 	return portlist;
 }
 

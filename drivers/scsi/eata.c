@@ -1,5 +1,14 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
+ *   
+ *      12 Sep 1997 rev. 3.11 for linux 2.0.30 and 2.1.55
+ *          Use of udelay inside the wait loops to avoid timeout
+ *          problems with fast cpus.
+ *          Removed check about useless calls to the interrupt service
+ *          routine (reported on SMP systems only).
+ *          At initialization time "sorted/unsorted" is displayed instead
+ *          of "linked/unlinked" to reinforce the fact that "linking" is
+ *          nothing but "elevator sorting" in the actual implementation.
  *
  *      17 May 1997 rev. 3.10 for linux 2.0.30 and 2.1.38
  *          Use of serial_number_at_timeout in abort and reset processing.
@@ -283,6 +292,7 @@ MODULE_AUTHOR("Dario Ballabio");
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/ioport.h>
+#include <linux/delay.h>
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/byteorder.h>
@@ -323,6 +333,7 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #undef  DEBUG_INTERRUPT
 #undef  DEBUG_STATISTICS
 #undef  DEBUG_RESET
+#undef  DEBUG_SMP
 
 #define MAX_ISA 4
 #define MAX_VESA 0 
@@ -351,7 +362,7 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #define READY    5
 #define ABORTING 6
 #define NO_DMA  0xff
-#define MAXLOOP 200000
+#define MAXLOOP  10000
 #define TAG_MIXED    0
 #define TAG_SIMPLE   1
 #define TAG_HEAD     2
@@ -630,9 +641,9 @@ static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
 
       if (TLDEV(dev->type)) {
          if (linked_comm && dev->queue_depth > 2)
-            link_suffix = ", linked";
+            link_suffix = ", sorted";
          else
-            link_suffix = ", unlinked";
+            link_suffix = ", unsorted";
          }
 
       if (tagged_comm && dev->tagged_supported && TLDEV(dev->type)) {
@@ -656,8 +667,10 @@ static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
 
 static inline int wait_on_busy(unsigned int iobase, unsigned int loop) {
 
-   while (inb(iobase + REG_AUX_STATUS) & ABSY_ASSERTED)
+   while (inb(iobase + REG_AUX_STATUS) & ABSY_ASSERTED) {
+      udelay(1L);
       if (--loop == 0) return TRUE;
+      }
 
    return FALSE;
 }
@@ -683,8 +696,10 @@ static inline int read_pio(unsigned int iobase, ushort *start, ushort *end) {
 
    for (p = start; p <= end; p++) {
 
-      while (!(inb(iobase + REG_STATUS) & DRQ_ASSERTED)) 
+      while (!(inb(iobase + REG_STATUS) & DRQ_ASSERTED)) {
+         udelay(1L);
 	 if (--loop == 0) return TRUE;
+         }
 
       loop = MAXLOOP;
       *p = inw(iobase);
@@ -1416,7 +1431,7 @@ int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
    HD(j)->in_reset = TRUE;
    sti();
    time = jiffies;
-   while ((jiffies - time) < HZ && limit++ < 100000000);
+   while ((jiffies - time) < (10 * HZ) && limit++ < 200000) udelay(100L);
    cli();
    printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
 
@@ -1831,9 +1846,11 @@ static void eata2x_interrupt_handler(int irq, void *dev_id,
 
    calls[irq]++;
 
+#if defined (DEBUG_SMP)
    if (total_loops == 0) 
      printk("%s: ihdlr, irq %d, no command completed, calls %d.\n",
 	    driver_name, irq, calls[irq]);
+#endif
 
    if (do_trace) printk("%s: ihdlr, exit, irq %d, calls %d.\n", 
 			driver_name, irq, calls[irq]);

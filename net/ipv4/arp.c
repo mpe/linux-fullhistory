@@ -797,10 +797,11 @@ static struct arp_table * arp_alloc(int how)
 
 	entry = (struct arp_table *)neigh_alloc(sizeof(struct arp_table),
 						&arp_neigh_ops);
-	atomic_set(&entry->u.neigh.refcnt, 1);
 
 	if (entry != NULL)
 	{
+		atomic_set(&entry->u.neigh.refcnt, 1);
+
 		if (how)
 			atomic_inc(&arp_size);
 

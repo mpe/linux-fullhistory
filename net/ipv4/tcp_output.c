@@ -605,10 +605,13 @@ static int tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb)
 	memcpy(skb_put(skb, size2), ((char *) th2) + (th2->doff << 2), size2);
 	
 	/* Update sizes on original skb, both TCP and IP. */
-	skb->end_seq += size2;
+	skb->end_seq += buff->end_seq - buff->seq;
 	if (th2->urg) {
 		th1->urg = 1;
 		th1->urg_ptr = th2->urg_ptr + size1;
+	}
+	if (th2->fin) {
+		th1->fin = 1;
 	}
 
 	/* ... and off you go. */

@@ -129,8 +129,7 @@ typedef struct {
 } stlconf_t;
 
 static stlconf_t	stli_brdconf[] = {
- 	/*{ BRD_ECP, 0x2a0, 0, 0xcc000, 0, 0 },*/
- 	{ BRD_ECP, 0x2b0, 0, 0xcc000, 0, 0 },
+ 	{ BRD_ECP, 0x2a0, 0, 0xcc000, 0, 0 },
 };
 
 static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
@@ -168,7 +167,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stli_drvname = "Stallion Intelligent Multiport Serial Driver";
-static char	*stli_drvversion = "5.3.2";
+static char	*stli_drvversion = "5.3.4";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -447,6 +446,7 @@ int		stli_eisaprobe = STLI_EISAPROBE;
 #define	ECH_PNLSTATUS	2
 #define	ECH_PNL16PORT	0x20
 #define	ECH_PNLIDMASK	0x07
+#define	ECH_PNLXPID	0x40
 #define	ECH_PNLINTRPEND	0x80
 
 /*
@@ -542,12 +542,12 @@ static void	stli_flushbuffer(struct tty_struct *tty);
 static void	stli_hangup(struct tty_struct *tty);
 
 static inline int stli_initbrds(void);
-static int	stli_brdinit(stlibrd_t *brdp);
 static inline int stli_initecp(stlibrd_t *brdp);
 static inline int stli_initonb(stlibrd_t *brdp);
-static int	stli_eisamemprobe(stlibrd_t *brdp);
 static inline int stli_findeisabrds(void);
 static inline int stli_initports(stlibrd_t *brdp);
+static int	stli_eisamemprobe(stlibrd_t *brdp);
+static int	stli_brdinit(stlibrd_t *brdp);
 static int	stli_startbrd(stlibrd_t *brdp);
 static long	stli_memread(struct inode *ip, struct file *fp, char *buf, unsigned long count);
 static long	stli_memwrite(struct inode *ip, struct file *fp, const char *buf, unsigned long count);
@@ -3341,7 +3341,7 @@ static inline int stli_initecp(stlibrd_t *brdp)
 	cdkecpsig_t	sig;
 	cdkecpsig_t	*sigsp;
 	unsigned int	status, nxtid;
-	int		panelnr;
+	int		panelnr, nrports;
 
 #if DEBUG
 	printk("stli_initecp(brdp=%x)\n", (int) brdp);
@@ -3448,16 +3448,13 @@ static inline int stli_initecp(stlibrd_t *brdp)
 		status = sig.panelid[nxtid];
 		if ((status & ECH_PNLIDMASK) != nxtid)
 			break;
-		if (status & ECH_PNL16PORT) {
-			brdp->panels[panelnr] = 16;
-			brdp->nrports += 16;
-			nxtid += 2;
-		} else {
-			brdp->panels[panelnr] = 8;
-			brdp->nrports += 8;
-			nxtid++;
-		}
 		brdp->panelids[panelnr] = status;
+		nrports = (status & ECH_PNL16PORT) ? 16 : 8;
+		if ((nrports == 16) && ((status & ECH_PNLXPID) == 0))
+			nxtid++;
+		brdp->panels[panelnr] = nrports;
+		brdp->nrports += nrports;
+		nxtid++;
 		brdp->nrpanels++;
 	}
 

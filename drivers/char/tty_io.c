@@ -1313,11 +1313,10 @@ static int tty_fasync(struct file * filp, int on)
 	if (on) {
 		if (!waitqueue_active(&tty->read_wait))
 			tty->minimum_to_wake = 1;
-		if (filp->f_owner == 0) {
-			if (tty->pgrp)
-				filp->f_owner = -tty->pgrp;
-			else
-				filp->f_owner = current->pid;
+		if (filp->f_owner.pid == 0) {
+			filp->f_owner.pid = (-tty->pgrp) ? : current->pid;
+			filp->f_owner.uid = current->uid;
+			filp->f_owner.euid = current->euid;
 		}
 	} else {
 		if (!tty->fasync && !waitqueue_active(&tty->read_wait))

@@ -93,7 +93,7 @@ extern int max_files, nr_files;
 /*
  * Flags that can be altered by MS_REMOUNT
  */
-#define MS_RMT_MASK (MS_RDONLY|MS_MANDLOCK|MS_NOATIME)
+#define MS_RMT_MASK (MS_RDONLY|MS_NOSUID|MS_NODEV|MS_NOEXEC|MS_SYNCHRONOUS|MS_MANDLOCK|MS_NOATIME)
 
 /*
  * Magic mount flag number. Has to be or-ed to the flag values.
@@ -367,6 +367,11 @@ static inline void mark_inode_dirty(struct inode *inode)
 		__mark_inode_dirty(inode);
 }
 
+struct fown_struct {
+	int pid;		/* pid or -pgrp where SIGIO should be sent */
+	uid_t uid, euid;	/* uid/euid of process setting the owner */
+};
+
 struct file {
 	struct file		*f_next, **f_pprev;
 	struct dentry		*f_dentry;
@@ -375,9 +380,7 @@ struct file {
 	loff_t			f_pos;
 	unsigned short 		f_count, f_flags;
 	unsigned long 		f_reada, f_ramax, f_raend, f_ralen, f_rawin;
-
-	/* pid or -pgrp where SIGIO should be sent */
-	int 			f_owner;
+	struct fown_struct	f_owner;
 
 	unsigned long		f_version;
 

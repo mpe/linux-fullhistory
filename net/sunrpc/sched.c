@@ -390,7 +390,7 @@ __rpc_execute(struct rpc_task *task)
 			dprintk("RPC: %4d sync task going to sleep\n",
 							task->tk_pid);
 			current->timeout = 0;
-			interruptible_sleep_on(&task->tk_wait);
+			sleep_on(&task->tk_wait);
 
 			/* When the task received a signal, remove from
 			 * any queues etc, and make runnable again. */
@@ -408,7 +408,7 @@ __rpc_execute(struct rpc_task *task)
 		 * clean up after sleeping on some queue, we don't
 		 * break the loop here, but go around once more.
 		 */
-		if (!RPC_IS_ASYNC(task) && signalled()) {
+		if (0 && !RPC_IS_ASYNC(task) && signalled()) {
 			dprintk("RPC: %4d got signal (map %08lx)\n",
 				task->tk_pid,
 				current->signal & ~current->blocked);

@@ -56,6 +56,16 @@
 #include <linux/nfs_fs.h>
 #include <asm/uaccess.h>
 
+/*
+ * NOTE! We must NOT default to soft-mounting: that breaks too many
+ * programs that depend on POSIX behaviour of uninterruptible reads
+ * and writes.
+ *
+ * Until we have a per-mount soft/hard mount policy that we can honour
+ * we must default to hard mounting!
+ */
+#define IS_SOFT 0
+
 #define NFSDBG_FACILITY		NFSDBG_PAGECACHE
 
 static void			nfs_wback_lock(struct rpc_task *task);
@@ -397,19 +407,24 @@ wait_on_write_request(struct nfs_wreq *req)
 {
 	struct wait_queue	wait = { current, NULL };
 	struct page		*page = req->wb_page;
+	int			retval;
 
 	add_wait_queue(&page->wait, &wait);
 	atomic_inc(&page->count);
-repeat:
-	current->state = TASK_INTERRUPTIBLE;
-	if (PageLocked(page)) {
+	for (;;) {
+		current->state = IS_SOFT ? TASK_INTERRUPTIBLE : TASK_UNINTERRUPTIBLE;
+		retval = 0;
+		if (!PageLocked(page))
+			break;
+		retval = -ERESTARTSYS;
+		if (IS_SOFT && signalled())
+			break;
 		schedule();
-		goto repeat;
 	}
 	remove_wait_queue(&page->wait, &wait);
 	current->state = TASK_RUNNING;
 	atomic_dec(&page->count);
-	return signalled()? -ERESTARTSYS : 0;
+	return retval;
 }
 
 /*
@@ -613,10 +628,13 @@ nfs_flush_dirty_pages(struct inode *inode, off_t offset, off_t len)
 				inode->i_dev, inode->i_ino, current->pid,
 				offset, len);
 
-	if (signalled())
+	if (IS_SOFT && signalled())
 		nfs_cancel_dirty(inode, current->pid);
 
-	while (!signalled()) {
+	for (;;) {
+		if (IS_SOFT && signalled())
+			return -ERESTARTSYS;
+
 		/* Flush all pending writes for this pid and file region */
 		last = nfs_flush_pages(inode, current->pid, offset, len, 0);
 		if (last == NULL)
@@ -624,7 +642,7 @@ nfs_flush_dirty_pages(struct inode *inode, off_t offset, off_t len)
 		wait_on_write_request(last);
 	}
 
-	return signalled()? -ERESTARTSYS : 0;
+	return 0;
 }
 
 /*

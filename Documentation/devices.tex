@@ -47,7 +47,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: September 5, 1997}
+\date{Last revised: September 11, 1997}
 \maketitle
 %
 \noindent
@@ -57,8 +57,9 @@ is a registry of allocated major device numbers, as well as the
 recommended {\file /dev} directory nodes for these devices.
 
 The latest version of this list is included with the Linux kernel
-sources in \LaTeX\ and ASCII form.  In case of discrepancy, the
-\LaTeX\ version is authoritative.
+sources in \LaTeX\ and ASCII form.  It is also available separate from
+{\url ftp://ftp.kernel.org/pub/linux/docs/device-list/}.  In case of
+discrepancy, the \LaTeX\ version is authoritative.
 
 This document is included by reference into the Linux Filesystem
 Standard (FSSTND).  The FSSTND is available from
@@ -66,10 +67,10 @@ Standard (FSSTND).  The FSSTND is available from
 
 To have a major number allocated, or a minor number in situations
 where that applies (e.g.\ busmice), please contact me with the
-appropriate device information.  I *very* much appreciate if you send
-me a device description in the same format as the ones already in this
-file.  Also, if you have additional information regarding any of the
-devices listed below, or if I have made a mistake, I would greatly
+appropriate device information.  I {\em very\/} much appreciate if you
+send me a device description in the same format as the ones already in
+this file.  Also, if you have additional information regarding any of
+the devices listed below, or if I have made a mistake, I would greatly
 appreciate a note.
 
 NOTE: When sending me mail, {\em please\/} include the word ``device''
@@ -176,6 +177,7 @@ reply.
 \major{43}{}{char }{isdn4linux virtual modem}
 \major{  }{}{block}{Network block devices}
 \major{44}{}{char }{isdn4linux virtual modem -- alternate devices}
+\major{  }{}{block}{Flash Translation Layer (FTL) filesystems}
 \major{45}{}{char }{isdn4linux ISDN BRI driver}
 \major{46}{}{char }{Comtrol Rocketport serial card}
 \major{47}{}{char }{Comtrol Rocketport serial card -- alternate devices}
@@ -218,7 +220,8 @@ reply.
 \major{87}{}{char }{Sony Control-A1 stereo control bus}
 \major{88}{}{char }{COMX synchronous serial card}
 \major{89}{}{char }{I$^2$C bus interface}
-\major{90}{--119}{}{Unallocated}
+\major{90}{}{char }{Memory Technology Device (RAM, ROM, Flash)}
+\major{91}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
 \major{128}{--239}{}{Unallocated}
 \major{240}{--254}{}{Local/experimental use}
@@ -1094,7 +1097,19 @@ net, implementing block device in userland etc.
 	\minor{0}{/dev/cui0}{Callout device corresponding to {\file ttyI0}}
 	\minordots
 	\minor{63}{/dev/cui63}{Callout device corresponding to {\file ttyI63}}
+\\
+\major{  }{}{block}{Flash Translation Layer (FTL) filesystems}
+        \minor{0}{/dev/ftla}{FTL on first Memory Technology Device}
+        \minor{16}{/dev/ftlb}{FTL on second Memory Technology Device}
+        \minor{32}{/dev/ftlc}{FTL on third Memory Technology Device}
+        \minordots
+        \minor{240}{/dev/ftlp}{FTL on 16th Memory Technology Device}
 \end{devicelist}
+
+\noindent
+Partitions are handled in the same way as for IDE disks (see major
+number 3) expect that the partition limit is 15 rather than 63 per
+disk (same as SCSI.)
 
 \begin{devicelist}
 \major{45}{}{char }{isdn4linux ISDN BRI driver}
@@ -1482,7 +1497,16 @@ on {\url http://home.pages.de/~videotext/\/}.
 \end{devicelist}
 
 \begin{devicelist}
-\major{90}{--119}{}{Unallocated}
+\major{90}{}{char }{Memory Technology Device (RAM, ROM, Flash)}
+        \minor{0}{/dev/mtd0}{First MTD (rw)}
+        \minor{1}{/dev/mtdr0}{First MTD (ro)}
+        \minordots
+        \minor{30}{/dev/mtd15}{16th MTD (rw)}
+        \minor{31}{/dev/mtdr15}{16th MTD (ro)}
+\end{devicelist}
+
+\begin{devicelist}
+\major{91}{--119}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

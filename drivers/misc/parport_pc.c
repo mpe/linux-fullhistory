@@ -881,9 +881,9 @@ int parport_pc_init(int *io, int *irq, int *dma)
 		} while (*io && (++i < PC_MAX_PORTS));
 	} else {
 		/* Probe all the likely ports. */
+		count += probe_one_port(0x3bc, PARPORT_IRQ_AUTO, PARPORT_DMA_AUTO);
 		count += probe_one_port(0x378, PARPORT_IRQ_AUTO, PARPORT_DMA_AUTO);
 		count += probe_one_port(0x278, PARPORT_IRQ_AUTO, PARPORT_DMA_AUTO);
-		count += probe_one_port(0x3bc, PARPORT_IRQ_AUTO, PARPORT_DMA_AUTO);
 	}
 	return count;
 }

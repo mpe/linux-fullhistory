@@ -27,6 +27,7 @@
 #include <linux/fcntl.h>
 #include <linux/delay.h>
 
+#include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -103,7 +104,13 @@ static int lp_reset(int minor)
 	return r_str(minor);
 }
 
-static inline int lp_char_polled(char lpchar, int minor)
+static inline int must_use_polling(int minor)
+{
+	return lp_table[minor].dev->port->irq == PARPORT_IRQ_NONE ||
+                      lp_table[minor].dev->port->devices->next;
+}
+
+static inline int lp_char(char lpchar, int minor, int use_polling)
 {
 	int status;
 	unsigned int wait = 0;
@@ -115,12 +122,13 @@ static inline int lp_char_polled(char lpchar, int minor)
 		count++;
 		if (need_resched)
 			lp_schedule (minor);
-	} while (!LP_READY(minor, status) && count < LP_CHAR(minor));
+	} while (((use_polling && !LP_READY(minor, status)) || 
+		 (!use_polling && !(status & LP_PBUSY))) &&
+		 (count < LP_CHAR(minor)));
 
-	if (count == LP_CHAR(minor)) {
+	if (count == LP_CHAR(minor) ||
+	    (!use_polling && !LP_CAREFUL_READY(minor, status)))
 		return 0;
-		/* we timed out, and the character was /not/ printed */
-	}
 	w_dtr(minor, lpchar);
 	stats = &LP_STAT(minor);
 	stats->chars++;
@@ -150,50 +158,6 @@ static inline int lp_char_polled(char lpchar, int minor)
 	return 1;
 }
 
-static inline int lp_char_interrupt(char lpchar, int minor)
-{
-	unsigned int wait;
-	unsigned long count = 0;
-	unsigned char status;
-	struct lp_stats *stats;
-
-	do {
-		if(need_resched)
-			lp_schedule (minor);
-		if ((status = r_str(minor)) & LP_PBUSY) {
-			if (!LP_CAREFUL_READY(minor, status))
-				return 0;
-			w_dtr(minor, lpchar);
-			stats = &LP_STAT(minor);
-			stats->chars++;
-			/* must wait before taking strobe high, and after taking strobe
-			   low, according spec.  Some printers need it, others don't. */
-			wait = 0;
-			while (wait != LP_WAIT(minor)) /* FIXME: should be */
-				wait++;		       /* a udelay ()      */
-			/* control port takes strobe high */
-			w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PSTROBE);
-			while (wait)
-				wait--;	/* FIXME: should be a udelay() */
-			/* take strobe low */
-			w_ctr(minor, LP_PSELECP | LP_PINITP);
-			/* update waittime statistics */
-			if (count) {
-				if (count > stats->maxwait)
-					stats->maxwait = count;
-				count *= 256;
-				wait = (count > stats->meanwait) ? count - stats->meanwait :
-				    stats->meanwait - count;
-				stats->meanwait = (255 * stats->meanwait + count + 128) / 256;
-				stats->mdev = ((127 * stats->mdev) + wait + 64) / 128;
-			}
-			return 1;
-		}
-	} while (count++ < LP_CHAR(minor));
-
-	return 0;
-}
-
 static void lp_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct parport *pb = (struct parport *) dev_id;
@@ -204,7 +168,16 @@ static void lp_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		wake_up(&lp_dev->lp_wait_q);
 }
 
-static inline int lp_write_interrupt(unsigned int minor, const char *buf, int count)
+static void lp_error(int minor)
+{
+	if (must_use_polling(minor)) {
+		current->state = TASK_INTERRUPTIBLE;
+		current->timeout = jiffies + LP_TIMEOUT_POLLED;
+		lp_schedule (minor);
+	}
+}
+
+static inline int lp_write_buf(unsigned int minor, const char *buf, int count)
 {
 	unsigned long copy_size;
 	unsigned long total_bytes_written = 0;
@@ -223,7 +196,7 @@ static inline int lp_write_interrupt(unsigned int minor, const char *buf, int co
 		copy_from_user(lp->lp_buffer, buf, copy_size);
 
 		while (copy_size) {
-			if (lp_char_interrupt(lp->lp_buffer[bytes_written], minor)) {
+			if (lp_char(lp->lp_buffer[bytes_written], minor, must_use_polling(minor))) {
 				--copy_size;
 				++bytes_written;
 				lp_table[minor].runchars++;
@@ -236,32 +209,48 @@ static inline int lp_write_interrupt(unsigned int minor, const char *buf, int co
 					printk(KERN_INFO "lp%d out of paper\n", minor);
 					if (LP_F(minor) & LP_ABORT)
 						return rc ? rc : -ENOSPC;
+					lp_error(minor);
 				} else if (!(status & LP_PSELECD)) {
 					printk(KERN_INFO "lp%d off-line\n", minor);
 					if (LP_F(minor) & LP_ABORT)
 						return rc ? rc : -EIO;
+					lp_error(minor);
 				} else if (!(status & LP_PERRORP)) {
 					printk(KERN_ERR "lp%d printer error\n", minor);
 					if (LP_F(minor) & LP_ABORT)
 						return rc ? rc : -EIO;
+					lp_error(minor);
 				}
+
 				LP_STAT(minor).sleeps++;
-				cli();
-				enable_irq(lp->dev->port->irq);
-				w_ctr(minor, LP_PSELECP|LP_PINITP|LP_PINTEN);
-				status = r_str(minor);
-				if ((!(status & LP_PACK) || (status & LP_PBUSY))
-				    && LP_CAREFUL_READY(minor, status)) {
+
+				if (must_use_polling(minor)) {
+#ifdef LP_DEBUG
+					printk(KERN_DEBUG "lp%d sleeping at %d characters for %d jiffies\n", minor, lp_table[minor].runchars, LP_TIME(minor));
+#endif
+					lp_table[minor].runchars = 0;
+					current->state = TASK_INTERRUPTIBLE;
+					current->timeout = jiffies + LP_TIME(minor);
+					lp_schedule (minor);
+				} else {
+					cli();
+					enable_irq(lp->dev->port->irq);
+					w_ctr(minor, LP_PSELECP|LP_PINITP|LP_PINTEN);
+					status = r_str(minor);
+					if ((!(status & LP_PACK) || (status & LP_PBUSY))
+					    && LP_CAREFUL_READY(minor, status)) {
+						w_ctr(minor, LP_PSELECP | LP_PINITP);
+						sti();
+						continue;
+					}
+					lp_table[minor].runchars = 0;
+					current->timeout = jiffies + LP_TIMEOUT_INTERRUPT;
+					interruptible_sleep_on(&lp->lp_wait_q);
+
 					w_ctr(minor, LP_PSELECP | LP_PINITP);
 					sti();
-					continue;
 				}
-				lp_table[minor].runchars = 0;
-				current->timeout = jiffies + LP_TIMEOUT_INTERRUPT;
-				interruptible_sleep_on(&lp->lp_wait_q);
 
-				w_ctr(minor, LP_PSELECP | LP_PINITP);
-				sti();
 				if (current->signal & ~current->blocked) {
 					if (total_bytes_written + bytes_written)
 						return total_bytes_written + bytes_written;
@@ -280,72 +269,6 @@ static inline int lp_write_interrupt(unsigned int minor, const char *buf, int co
 	return total_bytes_written;
 }
 
-static inline int lp_write_polled(unsigned int minor, const char *buf, int count)
-{
-	int  retval, status;
-	char c;
-	const char *temp;
-
-	temp = buf;
-	while (count > 0) {
-		get_user(c, temp);
-		retval = lp_char_polled(c, minor);
-		/* only update counting vars if character was printed */
-		if (retval) {
-			count--; temp++;
-			lp_table[minor].runchars++;
-		} else { /* if printer timed out */
-			if (lp_table[minor].runchars > LP_STAT(minor).maxrun)
-				 LP_STAT(minor).maxrun = lp_table[minor].runchars;
-			status = r_str(minor);
-
-			if (status & LP_POUTPA) {
-				printk(KERN_INFO "lp%d out of paper\n", minor);
-				if(LP_F(minor) & LP_ABORT)
-					return temp-buf?temp-buf:-ENOSPC;
-				current->state = TASK_INTERRUPTIBLE;
-				current->timeout = jiffies + LP_TIMEOUT_POLLED;
-				lp_schedule (minor);
-			} else
-			if (!(status & LP_PSELECD)) {
-				printk(KERN_INFO "lp%d off-line\n", minor);
-				if(LP_F(minor) & LP_ABORT)
-					return temp-buf?temp-buf:-EIO;
-				current->state = TASK_INTERRUPTIBLE;
-				current->timeout = jiffies + LP_TIMEOUT_POLLED;
-				lp_schedule (minor);
-			} else
-			/* not offline or out of paper. on fire? */
-			if (!(status & LP_PERRORP)) {
-				printk(KERN_ERR "lp%d on fire\n", minor);
-				if(LP_F(minor) & LP_ABORT)
-					return temp-buf?temp-buf:-EIO;
-				current->state = TASK_INTERRUPTIBLE;
-				current->timeout = jiffies + LP_TIMEOUT_POLLED;
-				lp_schedule (minor);
-			}
-
-			/* check for signals before going to sleep */
-			if (current->signal & ~current->blocked) {
-				if (temp != buf)
-					return temp-buf;
-				else
-					return -EINTR;
-			}
-			LP_STAT(minor).sleeps++;
-#ifdef LP_DEBUG
-			printk(KERN_DEBUG "lp%d sleeping at %d characters for %d jiffies\n",
-				minor,lp_table[minor].runchars, LP_TIME(minor));
-#endif
-			lp_table[minor].runchars=0;
-			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + LP_TIME(minor);
-			lp_schedule (minor);
-		}
-	}
-	return temp-buf;
-}
-
 static long lp_write(struct inode * inode, struct file * file,
 	const char * buf, unsigned long count)
 {
@@ -362,10 +285,7 @@ static long lp_write(struct inode * inode, struct file * file,
  	 */
  	lp_parport_claim (minor);
 
- 	if (LP_IRQ(minor) > 0)
- 		retv = lp_write_interrupt(minor, buf, count);
-  	else
- 		retv = lp_write_polled(minor, buf, count);
+ 	retv = lp_write_buf(minor, buf, count);
  
  	lp_parport_release (minor);
  	return retv;
@@ -431,7 +351,7 @@ static long lp_read(struct inode * inode, struct file * file,
 			udelay(50);
 			counter++;
 			if (need_resched)
-				lp_schedule (minor);
+				schedule ();
 		} while ( (status == 0x40) && (counter < 20) );
 		if ( counter == 20 ) { /* Timeout */
 #ifdef LP_READ_DEBUG
@@ -450,7 +370,7 @@ static long lp_read(struct inode * inode, struct file * file,
 			udelay(20);
 			counter++;
 			if (need_resched)
-				lp_schedule (minor);
+				schedule ();
 		} while ( (status == 0) && (counter < 20) );
 		if (counter == 20) { /* Timeout */
 #ifdef LP_READ_DEBUG
@@ -466,7 +386,7 @@ static long lp_read(struct inode * inode, struct file * file,
 			}
 			current->state=TASK_INTERRUPTIBLE;
 			current->timeout=jiffies + LP_TIME(minor);
-			lp_schedule (minor);
+			schedule ();
 		}
 		counter=0;
 		if (( i & 1) != 0) {
@@ -516,12 +436,10 @@ static int lp_open(struct inode * inode, struct file * file)
 			return -EIO;
 		}
 	}
-	if (LP_IRQ(minor) > 0) {
-		lp_table[minor].lp_buffer = (char *) kmalloc(LP_BUFFER_SIZE, GFP_KERNEL);
-		if (!lp_table[minor].lp_buffer) {
-			MOD_DEC_USE_COUNT;
-			return -ENOMEM;
-		}
+	lp_table[minor].lp_buffer = (char *) kmalloc(LP_BUFFER_SIZE, GFP_KERNEL);
+	if (!lp_table[minor].lp_buffer) {
+		MOD_DEC_USE_COUNT;
+		return -ENOMEM;
 	}
 	LP_F(minor) |= LP_BUSY;
 	return 0;
@@ -530,12 +448,9 @@ static int lp_open(struct inode * inode, struct file * file)
 static int lp_release(struct inode * inode, struct file * file)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
-	unsigned int irq;
 
-	if ((irq = LP_IRQ(minor)) != PARPORT_IRQ_NONE) {
-		kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
-		lp_table[minor].lp_buffer = NULL;
-	}
+	kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
+	lp_table[minor].lp_buffer = NULL;
 	LP_F(minor) &= ~LP_BUSY;
 	MOD_DEC_USE_COUNT;
 	return 0;

@@ -42,7 +42,7 @@ D: VFS fixes (new notify_change in particular)
 D: Moving all VFS access checks into the file systems
 S: MIT Room E15-341
 S: 20 Ames Street
-S: Cambridge, Massachusetts  02139
+S: Cambridge, Massachusetts 02139
 S: USA
 
 N: John Aycock
@@ -86,7 +86,7 @@ E: james.banks@caldera.com
 D: TLAN network driver
 S: Caldera, Inc.
 S: 633 South 550 East
-S: Provo, UT 84606
+S: Provo, Utah 84606
 S: USA
 
 N: Peter Bauer
@@ -115,9 +115,9 @@ S: USA
 
 N: Randolph Bentson
 E: bentson@grieg.seaslug.org
-D: author of driver for Cyclom-Y and Cyclades-Z async mux
-P: 1024/39ED5729 5C A8 7A F4 B2 7A D1 3E  B5 3B 81 CF 47 30 11 71
 W: http://www.aa.net/~bentson/
+P: 1024/39ED5729 5C A8 7A F4 B2 7A D1 3E  B5 3B 81 CF 47 30 11 71
+D: Author of driver for Cyclom-Y and Cyclades-Z async mux
 S: 2322 37th Ave SW
 S: Seattle, Washington 98126-2010
 S: USA
@@ -221,7 +221,7 @@ S: 3674 Oakwood Terrace #201
 S: Fremont, California 94536
 S: USA
 
-N: Chih-Jen Chang     
+N: Chih-Jen Chang
 E: chihjenc@scf.usc.edu
 E: chihjen@iis.sinica.edu.tw
 D: IGMP(Internet Group Management Protocol) version 2
@@ -266,11 +266,6 @@ E: alan@lxorguk.ukuu.org.uk (linux related - except big patches)
 E: iialan@www.uk.linux.org (linux.org.uk/big patches)
 E: alan@cymru.net (commercial CymruNET stuff)
 E: Alan.Cox@linux.org (if others fail)
-S: CymruNet Limited
-S: The Innovation Centre
-S: Singleton Park
-S: Swansea, SA2 8PP
-S: Wales, UK
 D: NET2Debugged/NET3 author
 D: Network layer debugging
 D: Initial AX.25 & IPX releases
@@ -278,6 +273,11 @@ D: Original Linux netatalk patches.
 D: Current 3c501 hacker. >>More 3c501 info/tricks wanted<<.
 D: Watchdog timer drivers
 D: Linux/SMP
+S: CymruNet Limited
+S: The Innovation Centre
+S: Singleton Park
+S: Swansea, SA2 8PP
+S: Wales, United Kingdom
 
 N: Laurence Culhane
 E: loz@holmes.demon.co.uk
@@ -299,12 +299,12 @@ S: The Netherlands
 
 N: David Davies
 E: davies@wanton.lkg.dec.com
-S: Digital Equipment Corporation
-S: 550 King Street
-S: Littleton, MA 01460
-S: U.S.A.
 D: Network driver author - depca, ewrk3 and de4x5
 D: Wrote shared interrupt support
+S: Digital Equipment Corporation
+S: 550 King Street
+S: Littleton, Massachusetts 01460
+S: USA
 
 N: Wayne Davison
 E: davison@borland.com
@@ -319,12 +319,10 @@ D: ax25-utils maintainer.
 
 N: Todd J. Derr
 E: tjd@fore.com
-D: x86 VESA console blanking enhancements
-D: maintainer of dual-monitor patches for 1.0+
-D: MouseMan driver for selection
-S: Fore Systems, Inc.
-S: 5800 Corporate Drive
-S: Pittsburgh, Pennsylvania 15237-5829
+W: http://www.wordsmith.org/~tjd
+D: Random console hacks and other miscellaneous stuff
+S: 3000 FORE Drive
+S: Warrendale, Pennsylvania 15086
 S: USA
 
 N: Eddie C. Dost
@@ -341,7 +339,7 @@ W: http://www.cs.nmt.edu/~cort/
 D: PowerPC PReP port
 S: Computer Science Department
 S: New Mexico Tech
-S: Socorro NM 87801
+S: Socorro, New Mexico 87801
 S: USA
 
 N: Thomas Dunbar
@@ -486,15 +484,6 @@ N: Philip Gladstone
 E: philip@raptor.com
 D: Kernel / timekeeping stuff
 
-N: Michael A. Griffith
-E: grif@cs.ucr.edu
-W: http://www.cs.ucr.edu/~grif
-D: Loopback speedup, qlogic scsi hacking, VT_LOCKSWITCH
-S: Department of Computer Science
-S: University of California, Riverside
-S: Riverside, California  92521-0304
-S: USA
-
 N: Dmitry S. Gorodchanin
 E: begemot@bgm.rosprint.net
 D: RISCom/8 driver, misc kernel fixes.
@@ -516,7 +505,16 @@ N: John E. Gotts
 E: jgotts@engin.umich.edu
 D: kernel hacker
 S: 8124 Constitution Apt. 7
-S: Sterling Heights, Michigan  48313
+S: Sterling Heights, Michigan 48313
+S: USA
+
+N: Michael A. Griffith
+E: grif@cs.ucr.edu
+W: http://www.cs.ucr.edu/~grif
+D: Loopback speedup, qlogic scsi hacking, VT_LOCKSWITCH
+S: Department of Computer Science
+S: University of California, Riverside
+S: Riverside, California 92521-0304
 S: USA
 
 N: Grant Guenther
@@ -655,7 +653,7 @@ N: Christopher Horn
 E: chorn@warwick.net
 D: Miscellaneous sysctl hacks
 S: 36 Mudtown Road
-S: Wantage, NJ 07461
+S: Wantage, New Jersey 07461
 S: USA
 
 N: Miguel de Icaza Amozurrutia
@@ -813,8 +811,8 @@ S: Germany
 
 N: Jaroslav Kysela
 E: perex@jcu.cz
-D: Original Author and Maintainer for HP 10/100 Mbit Network Adapters
 W: http://www.pf.jcu.cz/~perex
+D: Original Author and Maintainer for HP 10/100 Mbit Network Adapters
 S: Unix Centre of Pedagogical Faculty, University of South Bohemia
 
 N: Bas Laarhoven
@@ -864,13 +862,13 @@ E: beans@bucket.ualr.edu
 D: Promised to send money if I would put his name in the source tree.
 S: PO Box 371
 S: North Little Rock, Arkansas 72115
-S: US
+S: USA
 
 N: Siegfried "Frieder" Loeffler (dg1sek)
 E: floeff@tunix.mathematik.uni-stuttgart.de, fl@LF.net
 W: http://www.mathematik.uni-stuttgart.de/~floeff
 D: Busmaster driver for HP 10/100 Mbit Network Adapters
-S: University of Stuttgart, Germany  and
+S: University of Stuttgart, Germany and
 S: Ecole Nationale Superieure des Telecommunications, Paris
 
 N: Martin von Loewis
@@ -890,7 +888,7 @@ N: Warner Losh
 E: imp@village.org
 D: Linux/MIPS Deskstation support, Provided OI/OB for Linux
 S: 8786 Niwot Rd
-S: Niwot, CO 80503
+S: Niwot, Colorado 80503
 S: USA
 
 N: H.J. Lu
@@ -920,20 +918,28 @@ N: Peter MacDonald
 D: SLS distribution
 D: Initial implementation of VC's, pty's and select()
 
-N: Paul Mackerras
-E: paulus@cs.anu.edu.au
-D: Linux port for PCI Power Macintosh
-S: Dept. of Computer Science
-S: Australian National University
-S: Canberra  ACT  0200
-S: AUSTRALIA
-
 N: Pavel Machek
 E: pavel@atrey.karlin.mff.cuni.cz
 D: Softcursor for vga, hypertech cdrom support, vcsa bugfix
 S: Volkova 1131
 S: 198 00 Praha 9
 S: Czech Republic
+
+N: Paul Mackerras
+E: paulus@cs.anu.edu.au
+D: Linux port for PCI Power Macintosh
+S: Dept. of Computer Science
+S: Australian National University
+S: Canberra  ACT  0200
+S: Australia
+
+N: Pat Mackinlay
+E: pat@it.com.au
+D: 8 bit XT hard disk driver
+D: Miscellaneous ST0x, TMC-8xx and other SCSI hacking
+S: 25 McMillan Street
+S: Victoria Park 6100
+S: Australia
 
 N: James B. MacLean
 E: macleajb@ednet.ns.ca
@@ -943,14 +949,6 @@ D: Program in DOSEMU
 S: PO BOX 220, HFX. CENTRAL
 S: Halifax, Nova Scotia
 S: Canada B3J 3C8
-
-N: Pat Mackinlay
-E: pat@it.com.au
-D: 8 bit XT hard disk driver
-D: Miscellaneous ST0x, TMC-8xx and other SCSI hacking
-S: 25 McMillan Street
-S: Victoria Park 6100
-S: Australia
 
 N: Martin Mares
 E: mj@k332.feld.cvut.cz
@@ -965,6 +963,9 @@ S: Czech Republic
 
 N: John A. Martin
 E: jam@acm.org
+W: http://linux.wauug.org/~jam/
+P: 1024/04456D53 9D A3 6C 6B 88 80 8A 61  D7 06 22 4F 95 40 CE D2
+P: 1024/3B986635 5A61 7EE6 9E20 51FB 59FB  2DA5 3E18 DD55 3B98 6635
 D: FSSTND contributor
 D: Credit file compilator
 
@@ -983,7 +984,7 @@ W: http://www.invlogic.com/~mmclagan
 D: DLCI/FRAD drivers for Sangoma SDLAs
 S: Innovative Logic Corp
 S: P.O. Box 1068
-S: Laurel, MD  20732
+S: Laurel, Maryland 20732
 S: USA
 
 N: Bradley McLean
@@ -1017,7 +1018,7 @@ P: 1024/31455639 B7 99 BD B8 00 17 BD 46  C1 15 B8 AB 87 BC 25 FA
 D: IP Masquerading work and minor fixes
 S: Planet Online
 S: The White House, Melbourne Street, LEEDS
-S: LS2  7PS,   UK
+S: LS2 7PS, United Kingdom
 
 N: Craig Metz
 E: cmetz@inner.net
@@ -1050,8 +1051,9 @@ S: East Brunswick, New Jersey 08816
 S: USA
 
 N: Rick Miller
-E: rick@digalogsys.com
-D: Original Linux Device Registrar (Major/minor numbers), au-play, bwBASIC
+E: rdmiller@execpc.com
+D: Original Linux Device Registrar (Major/minor numbers)
+D: au-play, bwBASIC
 S: S78 W16203 Woods Road
 S: Muskego, Wisconsin 53150
 S: USA
@@ -1084,7 +1086,7 @@ N: David Mosberger-Tang
 E: davidm@azstarnet.com
 D: Linux/Alpha
 S: 2552 E. Copper Street
-S: Tucson, AZ 85716-2406
+S: Tucson, Arizona 85716-2406
 S: USA
 
 N: Ian A. Murdock
@@ -1146,6 +1148,10 @@ N: Greg Page
 E: greg@caldera.com
 D: IPX development and support
 
+N: David Parsons
+E: orc@pell.chi.il.us
+D: improved memory detection code.
+
 N: Barak A. Pearlmutter
 E: bap@cs.unm.edu
 W: http://www.cs.unm.edu/~bap/
@@ -1154,12 +1160,8 @@ D: Author of mark-and-sweep GC integrated by Alan Cox
 S: Computer Science Department
 S: FEC 313
 S: University of New Mexico
-S: Albuquerque, NM  87131
+S: Albuquerque, New Mexico 87131
 S: USA
-
-N: David Parsons
-E: orc@pell.chi.il.us
-D: improved memory detection code.
 
 N: Avery Pennarun
 E: apenwarr@bond.net
@@ -1242,7 +1244,7 @@ E: roadcapw@cfw.com
 W: http://www.cfw.com/~roadcapw
 D: Author of menu based configuration tool, Menuconfig.
 S: 1407 Broad Street
-S: Waynesboro, Virginia  22980
+S: Waynesboro, Virginia 22980
 S: USA
 
 N: Andrew J. Robinson
@@ -1335,7 +1337,7 @@ W: http://www.-i-Connect.Net/~shimon
 D: SCSI debugging
 D: Maintainer of the Debian Kernel packages
 S: 14355 SW Allen Blvd., Suite #140
-S: Beaverton, OR 97008
+S: Beaverton, Oregon 97008
 S: USA
 
 N: Mike Shaver
@@ -1400,7 +1402,7 @@ N: Leo Spiekman
 E: leo@netlabs.net
 W: http://www.netlabs.net/hp/leo/
 D: Optics Storage 8000AT cdrom driver
-S: Cliffwood, NJ 07721
+S: Cliffwood, New Jersey 07721
 S: USA
 
 N: Henrik Storner
@@ -1472,7 +1474,7 @@ E: winni@xpilot.org
 W: http://www.shop.de/~winni/
 D: German HOWTO, Crash-Kurs Linux (German, 100 comprehensive pages)
 D: CD-Writing HOWTO, various mini-HOWTOs
-D: one-week tutorials on Linux twice a year (free of charge)
+D: One-week tutorials on Linux twice a year (free of charge)
 D: Linux-Workshop Köln (aka LUG Cologne, Germany), Installfests
 S: Tacitusstr. 6
 S: D-50968 Köln
@@ -1611,7 +1613,7 @@ S: Dr. Greg Wettstein, Ph.D.
 S: Oncology Research Division Computing Facility
 S: Roger Maris Cancer Center
 S: 820 4th St. N.
-S: Fargo, North Dakota  58122
+S: Fargo, North Dakota 58122
 S: USA
 
 N: Steven Whitehouse

@@ -18,12 +18,14 @@
  *              Some XA-Sector tweaking, required for older drives.
  *
  *   - SONY:	Detection and support of multisession CD's.
- *              added by Thomas Quinot <operator@melchior.cuivre.fdn.fr>
+ *              added by Thomas Quinot <thomas@cuivre.freenix.fr>
  *
- *   - PIONEER, HITACHI, PLEXTOR, MATSHITA, TEAC: known to work with SONY code.
+ *   - PIONEER, HITACHI, PLEXTOR, MATSHITA, TEAC, PHILIPS:
+ *		Known to work with SONY code.
  *
  *   - HP:	Much like SONY, but a little different... (Thomas)
  *              HP-Writers only ??? Maybe other CD-Writers work with this too ?
+ *		HP 6020 writers now supported.
  */
 
 #include <linux/errno.h>
@@ -44,7 +46,10 @@
 #define VENDOR_NEC             2
 #define VENDOR_TOSHIBA         3
 #define VENDOR_SONY_LIKE       4   /* much drives are Sony compatible */
-#define VENDOR_HP              5   /* HP Writers, others too ?? */
+#define VENDOR_HP_4020         5   /* HP 4xxx writers, others too ?? */
+#define VENDOR_HP_6020         6   /* HP 6020 writers */
+
+#define VENDOR_ID (scsi_CDs[minor].vendor)
 
 #if 0
 #define DEBUG
@@ -58,10 +63,13 @@ sr_vendor_init(int minor)
 		
 	if ((!strncmp(vendor,"HP",2) || !strncmp(vendor,"PHILIPS",7)) &&
 	    scsi_CDs[minor].device->type == TYPE_WORM) {
-		scsi_CDs[minor].vendor = VENDOR_HP;
+		if (!strncmp(model,"CD-Writer 6020",14))
+                    VENDOR_ID = VENDOR_HP_6020;
+                else
+                    VENDOR_ID = VENDOR_HP_4020;
 
 	} else if (!strncmp (vendor, "NEC", 3)) {
-		scsi_CDs[minor].vendor = VENDOR_NEC;
+		VENDOR_ID = VENDOR_NEC;
 		if (!strncmp (model,"CD-ROM DRIVE:25", 15)  ||
 		    !strncmp (model,"CD-ROM DRIVE:36", 15)  ||
 		    !strncmp (model,"CD-ROM DRIVE:83", 15)  ||
@@ -70,12 +78,12 @@ sr_vendor_init(int minor)
 			scsi_CDs[minor].cdi.mask |= CDC_MULTI_SESSION;
 
 	} else if (!strncmp (vendor, "TOSHIBA", 7)) {
-		scsi_CDs[minor].vendor = VENDOR_TOSHIBA;
+		VENDOR_ID = VENDOR_TOSHIBA;
 		
 	} else {
-		/* most drives can handled like sony ones, so we take
+		/* most drives can handled like Sony ones, so we take
 		 * it as default */
-		scsi_CDs[minor].vendor = VENDOR_SONY_LIKE;
+		VENDOR_ID = VENDOR_SONY_LIKE;
 #ifdef DEBUG
 		printk(KERN_DEBUG
 		       "sr: using \"Sony group\" multisession code\n");
@@ -128,7 +136,7 @@ sr_read_sector(int minor, int lba, int blksize, unsigned char *dest)
 	unsigned char   cmd[12];    /* the scsi-command */
 	int             rc, density;
 
-	density = (scsi_CDs[minor].vendor == VENDOR_TOSHIBA) ? 0x83 : 0;
+	density = (VENDOR_ID == VENDOR_TOSHIBA) ? 0x83 : 0;
 
 	buffer = (unsigned char *) scsi_malloc(512);
 	if (!buffer) return -ENOMEM;
@@ -177,7 +185,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 	no_multi = 0;         /* flag: the drive can't handle multisession */
 	rc       = 0;
     
-	switch(scsi_CDs[minor].vendor) {
+	switch(VENDOR_ID) {
 	
 	case VENDOR_NEC:
 		memset(cmd,0,12);
@@ -222,12 +230,16 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 			sector -= CD_BLOCK_OFFSET;
 		break;
 
-	case VENDOR_HP:
+	case VENDOR_HP_4020:
+		/* Fallthrough */
+	case VENDOR_HP_6020:
 		cmd[0] = READ_TOC;
 		cmd[1] = (scsi_CDs[minor].device->lun << 5);
-		cmd[8] = 0x04;
+		cmd[8] = (VENDOR_ID == VENDOR_HP_4020) ?
+			0x04 : 0x0c;
 		cmd[9] = 0x40;
-		rc = sr_do_ioctl(minor, cmd, buffer, 12);	
+		rc = sr_do_ioctl(minor, cmd, buffer,
+		    (VENDOR_ID == VENDOR_HP_4020) ? 0x04 : 0x0c);
 		if (rc != 0) {
 			break;
 		}
@@ -237,31 +249,23 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 			break;
 		}
 
-		cmd[0] = READ_TOC; /* Read TOC */
-		cmd[1] = (scsi_CDs[minor].device->lun << 5);
-		cmd[6] = rc & 0x7f;  /* number of last session */
-		cmd[8] = 0x0c;
-		cmd[9] = 0x40;
-		rc = sr_do_ioctl(minor, cmd, buffer, 12);	
-		if (rc != 0) {
-			break;
+		if (VENDOR_ID == VENDOR_HP_4020) {
+		    cmd[0] = READ_TOC; /* Read TOC */
+		    cmd[1] = (scsi_CDs[minor].device->lun << 5);
+		    cmd[6] = rc & 0x7f;  /* number of last session */
+		    cmd[8] = 0x0c;
+		    cmd[9] = 0x40;
+		    rc = sr_do_ioctl(minor, cmd, buffer, 12);	
+		    if (rc != 0) {
+			    break;
+		    }
 		}
 
-#undef STRICT_HP
-#ifdef STRICT_HP
-		sector = buffer[11] + (buffer[10] << 8) + (buffer[9] << 16);
-		/* HP documentation states that Logical Start Address is
-		   returned as three (!) bytes, and that buffer[8] is
-		   reserved. This is strange, because a LBA usually is
-		   4 bytes long. */
-#else
 		sector = buffer[11] + (buffer[10] << 8) +
 			(buffer[9] << 16) + (buffer[8] << 24);
-#endif
 		break;
 
 	case VENDOR_SONY_LIKE:
-		/* Thomas QUINOT <thomas@melchior.cuivre.fdn.fr> */
 		memset(cmd,0,12);
 		cmd[0] = READ_TOC;
 		cmd[1] = (scsi_CDs[minor].device->lun << 5);
@@ -293,7 +297,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		/* should not happen */
 		printk(KERN_WARNING
 		       "sr: unknown vendor code (%i), not initialized ?\n",
-		       scsi_CDs[minor].vendor);
+		       VENDOR_ID);
 		sector = 0;
 		no_multi = 1;
 		break;

@@ -45,7 +45,7 @@ dep_tristate 'EATA-PIO (old DPT PM2001, PM2012A) support' CONFIG_SCSI_EATA_PIO $
 dep_tristate 'EATA ISA/EISA/PCI (DPT and generic EATA/DMA-compliant boards) support' CONFIG_SCSI_EATA $CONFIG_SCSI
   if [ "$CONFIG_SCSI_EATA" != "n" ]; then
     bool '  enable tagged command queueing' CONFIG_SCSI_EATA_TAGGED_QUEUE
-    bool '  enable linked commands' CONFIG_SCSI_EATA_LINKED_COMMANDS
+    bool '  enable elevator sorting' CONFIG_SCSI_EATA_LINKED_COMMANDS
     int  '  maximum number of queued commands' CONFIG_SCSI_EATA_MAX_TAGS 16
   fi
 dep_tristate 'Future Domain 16xx SCSI/AHA 2920 support' CONFIG_SCSI_FUTURE_DOMAIN $CONFIG_SCSI
@@ -103,7 +103,7 @@ fi
 dep_tristate 'Trantor T128/T128F/T228 SCSI support' CONFIG_SCSI_T128 $CONFIG_SCSI
 dep_tristate 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F $CONFIG_SCSI
   if [ "$CONFIG_SCSI_U14_34F" != "n" ]; then
-    bool '  enable linked commands' CONFIG_SCSI_U14_34F_LINKED_COMMANDS
+    bool '  enable elevator sorting' CONFIG_SCSI_U14_34F_LINKED_COMMANDS
     int  '  maximum number of queued commands' CONFIG_SCSI_U14_34F_MAX_TAGS 8
   fi
 dep_tristate 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR $CONFIG_SCSI

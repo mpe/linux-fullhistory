@@ -107,7 +107,7 @@ union bdflush_param{
 		int dummy3;    /* unused */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{60, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
+} bdf_prm = {{40, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
 
 /* These are the min and max parameter values that we will allow to be assigned */
 int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   100,   100, 1, 1};
@@ -320,7 +320,10 @@ asmlinkage int sys_fsync(unsigned int fd)
 	if (!file->f_op || !file->f_op->fsync)
 		goto out;
 
+	/* We need to protect against concurrent writers.. */
+	down(&inode->i_sem);
 	err = file->f_op->fsync(file, file->f_dentry);
+	up(&inode->i_sem);
 
 out:
 	unlock_kernel();

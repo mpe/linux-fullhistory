@@ -84,13 +84,13 @@ static long read_polled(struct parport *port, char *buf,
 	return count; 
 }
 
-static struct wait_queue *wait_q = NULL;
+static struct wait_queue *wait_q;
 
 static void wakeup(void *ref)
 {
 	struct pardevice **dev = (struct pardevice **)ref;
 	
-	if (!wait_q || parport_claim(*dev))
+	if (!waitqueue_active || parport_claim(*dev))
 		return;
 
 	wake_up(&wait_q);
@@ -108,10 +108,9 @@ int parport_probe(struct parport *port, char *buffer, int len)
 		return -EINVAL;
 	}
 
-	if (parport_claim(dev)) {
+	init_waitqueue (&wait_q);
+	if (parport_claim(dev))
 		sleep_on(&wait_q);
-		wait_q = NULL;
-	}
 
 	switch (parport_ieee1284_nibble_mode_ok(port, 4)) {
 	case 1:

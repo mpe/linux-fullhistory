@@ -6,12 +6,61 @@ You can pass parameters to the parport code to override its automatic
 detection of your hardware.  This is particularly useful if you want
 to use IRQs, since in general these can't be autoprobed successfully.
 
+The parport code is split into two parts: generic (which deals with
+port-sharing) and architecture-dependent (which deals with actually
+using the port).
+
+Parport as modules
+==================
+
 If you load the parport code as a module, say
 
-	# insmod parport.o io=0x378,0x278 irq=7,5
+	# insmod parport.o
 
-to tell the parport code that you want two ports, one at 0x378 using
-IRQ 7, and one at 0x278 using IRQ 5. 
+to load the generic parport code.  You then must load the
+architecture-dependent code with (for example):
+
+	# insmod parport_pc.o io=0x378,0x278 irq=7,5
+
+to tell the parport code that you want two PC-style ports, one at
+0x378 using IRQ 7, and one at 0x278 using IRQ 5.  Currently, PC-style
+(parport_pc) and ARC onboard (parport_arc) parallel ports are
+supported.
+
+Kerneld
+-------
+
+If you use kerneld, you will find it useful to edit /etc/conf.modules.
+Here is an example of the lines that need to be added:
+
+	alias parport_lowlevel parport_pc
+	options parport_pc io=0x378,0x278 irq=7,5
+
+Kerneld, in conjunction with parport, will automatically load
+parport_pc whenever a parallel port device driver (such as lp) is
+loaded.
+
+Parport probe [optional]
+-------------
+
+Once the architecture-dependent part of the parport code is loaded
+into the kernel, you insert the parport_probe module with:
+
+	# insmod parport_probe.o
+
+This will perform an IEEE1284 probe of any attached devices and log a
+message similar to:
+
+	parport0: Printer, BJC-210 (Canon)
+
+Additionally, if you use kerneld, you can add to /etc/conf.modules the
+following lines, to have the probe happen automatically:
+
+	post-install parport modprobe parport_probe
+	pre-remove parport modprobe -r parport_probe
+
+Parport, but not as modules
+===========================
 
 If you compile the parport code into the kernel, then you can use
 kernel boot parameters to get the same effect.  Add something like the
@@ -20,12 +69,15 @@ following to your LILO command line:
 	parport=0x378,7 parport=0x278,5
 
 You can have many `parport=...' statements, one for each port you want
-to add.  Adding `parport=0' or just `parport=' to the command-line
-will disable parport support entirely.
+to add.  Adding `parport=0' to the kernel command-line will disable
+parport support entirely.
+
+Device drivers
+==============
 
 Once the parport code is initialised, you can attach device drivers to
-ports.  Normally this happens automatically; if the lp driver is
-loaded it will create one lp device for each port found.  You can
+specific ports.  Normally this happens automatically; if the lp driver
+is loaded it will create one lp device for each port found.  You can
 override this, though, by using parameters either when you load the lp
 driver:
 
@@ -57,3 +109,8 @@ Also:
  * If your BIOS allows you to engage "ECP mode", you may find that
    your port's IRQ can be autoprobed, without having to specify any 
    parameters.
+
+
+--
+Philip.Blundell@pobox.com
+tim@cyberelk.demon.co.uk

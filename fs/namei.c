@@ -593,8 +593,12 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 	 * An append-only file must be opened in append mode for writing.
 	 */
 	error = -EPERM;
-	if (IS_APPEND(inode) && ((flag & FMODE_WRITE) && !(flag & O_APPEND)))
-		goto exit;
+	if (IS_APPEND(inode)) {
+		if  ((flag & FMODE_WRITE) && !(flag & O_APPEND))
+			goto exit;
+		if (flag & O_TRUNC)
+			goto exit;
+	}
 
 	if (flag & O_TRUNC) {
 		error = get_write_access(inode);

@@ -132,8 +132,9 @@ static void release(struct task_struct * p)
 	if (p != current) {
 #ifdef __SMP__
 		/* FIXME! Cheesy, but kills the window... -DaveM */
-		while (p->has_cpu)
+		do {
 			barrier();
+		} while (p->has_cpu);
 		spin_unlock_wait(&scheduler_lock);
 #endif
 		charge_uid(p, -1);

@@ -102,8 +102,7 @@ typedef struct {
 } stlconf_t;
 
 static stlconf_t	stl_brdconf[] = {
-	/*{ BRD_EASYIO, 0x2a0, 0, 0, 10, 0 },*/
-	{ BRD_ECH, 0x2a0, 0x280, 0, 15, 0 },
+	{ BRD_EASYIO, 0x2a0, 0, 0, 10, 0 },
 };
 
 static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
@@ -141,7 +140,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stl_drvname = "Stallion Multiport Serial Driver";
-static char	*stl_drvversion = "5.3.2";
+static char	*stl_drvversion = "5.3.4";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 
@@ -391,9 +390,9 @@ static void	stl_hangup(struct tty_struct *tty);
 static int	stl_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg);
 
 static inline int stl_initbrds(void);
-static int	stl_brdinit(stlbrd_t *brdp);
 static inline int stl_initeio(stlbrd_t *brdp);
 static inline int stl_initech(stlbrd_t *brdp);
+static int	stl_brdinit(stlbrd_t *brdp);
 static int	stl_initports(stlbrd_t *brdp, stlpanel_t *panelp);
 static int	stl_mapirq(int irq);
 static void	stl_getserial(stlport_t *portp, struct serial_struct *sp);
@@ -436,7 +435,8 @@ static void	stl_cd1400disableintrs(stlport_t *portp);
 static void	stl_cd1400sendbreak(stlport_t *portp, long len);
 static void	stl_cd1400flowctrl(stlport_t *portp, int state);
 static void	stl_cd1400flush(stlport_t *portp);
-static void	stl_cd1400intr(stlpanel_t *panelp, unsigned int iobase);
+static void	stl_cd1400eiointr(stlpanel_t *panelp, unsigned int iobase);
+static void	stl_cd1400echintr(stlpanel_t *panelp, unsigned int iobase);
 static void	stl_cd1400txisr(stlpanel_t *panelp, int ioaddr);
 static void	stl_cd1400rxisr(stlpanel_t *panelp, int ioaddr);
 static void	stl_cd1400mdmisr(stlpanel_t *panelp, int ioaddr);
@@ -519,7 +519,7 @@ static uart_t stl_cd1400uart = {
 	stl_cd1400sendbreak,
 	stl_cd1400flowctrl,
 	stl_cd1400flush,
-	stl_cd1400intr
+	stl_cd1400eiointr
 };
 
 /*
@@ -1912,7 +1912,7 @@ static inline int stl_initeio(stlbrd_t *brdp)
 		panelp->isr = stl_sc26198intr;
 	} else {
 		panelp->uartp = (void *) &stl_cd1400uart;
-		panelp->isr = stl_cd1400intr;
+		panelp->isr = stl_cd1400eiointr;
 	}
 
 	brdp->panels[0] = panelp;
@@ -2053,10 +2053,8 @@ static inline int stl_initech(stlbrd_t *brdp)
 			}
 		} else {
 			panelp->uartp = (void *) &stl_cd1400uart;
-			panelp->isr = stl_cd1400intr;
+			panelp->isr = stl_cd1400echintr;
 			if (status & ECH_PNL16PORT) {
-				if ((brdp->nrports + 16) > 32)
-					break;
 				panelp->nrports = 16;
 				panelp->ackmask = 0x80;
 				if (brdp->brdtype != BRD_ECHPCI)
@@ -3217,15 +3215,45 @@ static void stl_cd1400flush(stlport_t *portp)
 /*****************************************************************************/
 
 /*
- *	Interrupt service routine for cd1400 panels.
+ *	Interrupt service routine for cd1400 EasyIO boards.
  */
 
-static void stl_cd1400intr(stlpanel_t *panelp, unsigned int iobase)
+static void stl_cd1400eiointr(stlpanel_t *panelp, unsigned int iobase)
 {
 	unsigned char	svrtype;
 
 #if DEBUG
-	printk("stl_cd1400intr(panelp=%x,iobase=%x)\n", (int) panelp, iobase);
+	printk("stl_cd1400eiointr(panelp=%x,iobase=%x)\n", (int) panelp, iobase);
+#endif
+
+	outb(SVRR, iobase);
+	svrtype = inb(iobase + EREG_DATA);
+	if (panelp->nrports > 4) {
+		outb((SVRR + 0x80), iobase);
+		svrtype |= inb(iobase + EREG_DATA);
+	}
+
+	if (svrtype & SVRR_RX)
+		stl_cd1400rxisr(panelp, iobase);
+	if (svrtype & SVRR_TX)
+		stl_cd1400txisr(panelp, iobase);
+	if (svrtype & SVRR_MDM)
+		stl_cd1400mdmisr(panelp, iobase);
+}
+
+
+/*****************************************************************************/
+
+/*
+ *	Interrupt service routine for cd1400 panels.
+ */
+
+static void stl_cd1400echintr(stlpanel_t *panelp, unsigned int iobase)
+{
+	unsigned char	svrtype;
+
+#if DEBUG
+	printk("stl_cd1400echintr(panelp=%x,iobase=%x)\n", (int) panelp, iobase);
 #endif
 
 	outb(SVRR, iobase);
@@ -3562,7 +3590,7 @@ static int stl_sc26198panelinit(stlbrd_t *brdp, stlpanel_t *panelp)
  *	Check that each chip is present and started up OK.
  */
 	chipmask = 0;
-	nrchips = panelp->nrports / SC26198_PORTS;
+	nrchips = (panelp->nrports + 4) / SC26198_PORTS;
 	if (brdp->brdtype == BRD_ECHPCI)
 		outb(panelp->pagenr, brdp->ioctrl);
 
@@ -3778,7 +3806,7 @@ static void stl_sc26198setport(stlport_t *portp, struct termios *tiosp)
 	stl_sc26198setreg(portp, IMR, 0);
 	stl_sc26198updatereg(portp, MR0, mr0);
 	stl_sc26198updatereg(portp, MR1, mr1);
-	stl_sc26198setreg(portp, CCR, CR_RXERRBLOCK);
+	stl_sc26198setreg(portp, SCCR, CR_RXERRBLOCK);
 	stl_sc26198updatereg(portp, MR2, mr2);
 	stl_sc26198updatereg(portp, IOPIOR,
 		((stl_sc26198getreg(portp, IOPIOR) & ~IPR_CHANGEMASK) | iopr));
@@ -3792,7 +3820,7 @@ static void stl_sc26198setport(stlport_t *portp, struct termios *tiosp)
 	stl_sc26198setreg(portp, XOFFCR, tiosp->c_cc[VSTOP]);
 
 	ipr = stl_sc26198getreg(portp, IPR);
-	if (ipr & MSVR1_DCD)
+	if (ipr & IPR_DCD)
 		portp->sigs &= ~TIOCM_CD;
 	else
 		portp->sigs |= TIOCM_CD;
@@ -4120,7 +4148,7 @@ static void stl_sc26198intr(stlpanel_t *panelp, unsigned int iobase)
 	outb(0, (iobase + 1));
 
 	iack = inb(iobase + XP_IACK);
-	portp = panelp->ports[(iack & IVR_CHANMASK)];
+	portp = panelp->ports[(iack & IVR_CHANMASK) + ((iobase & 0x4) << 1)];
 
 	if (iack & IVR_RXDATA)
 		stl_sc26198rxisr(portp, iack);
@@ -4178,7 +4206,7 @@ static void stl_sc26198txisr(stlport_t *portp)
 		len = MIN(len, SC26198_TXFIFOSIZE);
 		portp->stats.txtotal += len;
 		stlen = MIN(len, ((portp->tx.buf + STL_TXBUFSIZE) - tail));
-		outb((GTXFIFO | portp->uartaddr), (ioaddr + XP_ADDR));
+		outb(GTXFIFO, (ioaddr + XP_ADDR));
 		outsb((ioaddr + XP_DATA), tail, stlen);
 		len -= stlen;
 		tail += stlen;
@@ -4215,21 +4243,21 @@ static void stl_sc26198rxisr(stlport_t *portp, unsigned int iack)
 
 	tty = portp->tty;
 	ioaddr = portp->ioaddr;
-	outb((GIBCR | portp->uartaddr), (ioaddr + XP_ADDR));
+	outb(GIBCR, (ioaddr + XP_ADDR));
 	len = inb(ioaddr + XP_DATA) + 1;
 
 	if ((iack & IVR_TYPEMASK) == IVR_RXDATA) {
 		if ((tty == (struct tty_struct *) NULL) ||
 		    (tty->flip.char_buf_ptr == (char *) NULL) ||
 		    ((buflen = TTY_FLIPBUF_SIZE - tty->flip.count) == 0)) {
-			outb((GRXFIFO | portp->uartaddr), (ioaddr + XP_ADDR));
+			outb(GRXFIFO, (ioaddr + XP_ADDR));
 			insb((ioaddr + XP_DATA), &stl_unwanted[0], len);
 			portp->stats.rxlost += len;
 			portp->stats.rxtotal += len;
 		} else {
 			len = MIN(len, buflen);
 			if (len > 0) {
-				outb((GRXFIFO | portp->uartaddr), (ioaddr + XP_ADDR));
+				outb(GRXFIFO, (ioaddr + XP_ADDR));
 				insb((ioaddr + XP_DATA), tty->flip.char_buf_ptr, len);
 				memset(tty->flip.flag_buf_ptr, 0, len);
 				tty->flip.flag_buf_ptr += len;
@@ -4342,7 +4370,7 @@ static void stl_sc26198rxbadchars(stlport_t *portp)
 	stl_sc26198setreg(portp, MR1, (mr1 & ~MR1_ERRBLOCK));
 
 	while ((status = stl_sc26198getreg(portp, SR)) & SR_RXRDY) {
-		stl_sc26198setreg(portp, CCR, CR_CLEARRXERR);
+		stl_sc26198setreg(portp, SCCR, CR_CLEARRXERR);
 		ch = stl_sc26198getreg(portp, RXFIFO);
 		stl_sc26198rxbadch(portp, status, ch);
 	}

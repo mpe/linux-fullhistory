@@ -158,7 +158,8 @@ typedef unsigned char	byte;	/* used everywhere */
 #else
 #define WAIT_READY	(3*HZ/100)	/* 30msec - should be instantaneous */
 #endif /* CONFIG_APM */
-#define WAIT_PIDENTIFY	(1*HZ)	/* 1sec   - should be less than 3ms (?) */
+#define WAIT_PIDENTIFY	(10*HZ)	/* 10sec  - should be less than 3ms (?)
+				            if all ATAPI CD is closed at boot */
 #define WAIT_WORSTCASE	(30*HZ)	/* 30sec  - worst case when spinning up */
 #define WAIT_CMD	(10*HZ)	/* 10sec  - maximum wait for an IRQ to happen */
 #define WAIT_MIN_SLEEP	(2*HZ/100)	/* 20msec - minimum sleep time */

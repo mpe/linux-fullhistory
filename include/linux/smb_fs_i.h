@@ -22,6 +22,7 @@ struct smb_inode_info {
 	 * (open == generation).
 	 */
         unsigned int open;
+	void * dentry;		/* The dentry we were opened with */
 	__u16 fileid;		/* What id to handle a file with? */
 	__u16 attr;		/* Attribute fields, DOS value */
 
