@@ -36,15 +36,14 @@
 
 /*
  *	All incoming frames pass thru mac_data_indicate().
- *	Here an llc structure is associated with an skb depending on the source
- *	MAC address in the pdu.
+ *	On entry the llc structure related to the frame is passed as parameter. 
  *	The received sk_buffs with pdus other than I_CMD and I_RSP
  *	are freed by mac_data_indicate() after processing,
  *	the I pdu buffers are freed by the cl2llc client when it no longer needs
  *	the skb.
 */
 
-int llc_mac_data_indicate(llcptr lp, struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+int llc_mac_data_indicate(llcptr lp, struct sk_buff *skb)
 {
 	int ll;      		/* logical length == 802.3 length field */
 	unsigned char p_flag;
@@ -142,7 +141,7 @@ int llc_mac_data_indicate(llcptr lp, struct sk_buff *skb, struct device *dev, st
 
 	if(lp->llc_callbacks)
 	{
-		lp->llc_event(lp);
+		if ( lp->llc_event != NULL ) lp->llc_event(lp);
 		lp->llc_callbacks=0;
 	}
 	return 0;
@@ -173,8 +172,7 @@ int register_cl2llc_client(llcptr lp, const char *device, void (*event)(llcptr),
 	lp->timer_interval[BUSY_TIMER] = HZ*2;
 	lp->local_sap = ssap;
 	lp->llc_event = event;
-	lp->remote_mac_len = lp->dev->addr_len;
-	memcpy(lp->remote_mac, rmac, lp->remote_mac_len);
+	memcpy(lp->remote_mac, rmac, sizeof(lp->remote_mac));
 	lp->state = 0;
 	lp->llc_mode = MODE_ADM;
 	lp->remote_sap = dsap;
@@ -199,7 +197,8 @@ EXPORT_SYMBOL(llc_data_request);
 EXPORT_SYMBOL(llc_unit_data_request);
 EXPORT_SYMBOL(llc_test_request);
 EXPORT_SYMBOL(llc_xid_request);
-
+EXPORT_SYMBOL(llc_mac_data_indicate);
+EXPORT_SYMBOL(llc_cancel_timers);
 
 #define ALL_TYPES_8022 0
 

@@ -49,7 +49,7 @@
 #include <asm/uaccess.h>
 
 #define	_GNUC_
-#include <linux/sdla_ppp.h>		/* PPP firmware API definitions */
+#include <linux/sdla_ppp.h>	/* PPP firmware API definitions */
 
 /****** Defines & Macros ****************************************************/
 
@@ -59,63 +59,63 @@
 #define	STATIC		static
 #endif
 
-#define	CMD_OK		0		/* normal firmware return code */
-#define	CMD_TIMEOUT	0xFF		/* firmware command timed out */
+#define	CMD_OK		0	/* normal firmware return code */
+#define	CMD_TIMEOUT	0xFF	/* firmware command timed out */
 
-#define	PPP_DFLT_MTU	1500		/* default MTU */
-#define	PPP_MAX_MTU	4000		/* maximum MTU */
+#define	PPP_DFLT_MTU	1500	/* default MTU */
+#define	PPP_MAX_MTU	4000	/* maximum MTU */
 #define PPP_HDR_LEN	1
 
-#define	CONNECT_TIMEOUT	(90*HZ)		/* link connection timeout */
-#define	HOLD_DOWN_TIME	(30*HZ)		/* link hold down time */
+#define	CONNECT_TIMEOUT	(90*HZ)	/* link connection timeout */
+#define	HOLD_DOWN_TIME	(30*HZ)	/* link hold down time */
 
 /****** Function Prototypes *************************************************/
 
 /* WAN link driver entry points. These are called by the WAN router module. */
-static int update (wan_device_t* wandev);
-static int new_if (wan_device_t* wandev, struct device* dev,
-	wanif_conf_t* conf);
-static int del_if (wan_device_t* wandev, struct device* dev);
+static int update(wan_device_t * wandev);
+static int new_if(wan_device_t * wandev, struct device *dev,
+		  wanif_conf_t * conf);
+static int del_if(wan_device_t * wandev, struct device *dev);
 
 /* WANPIPE-specific entry points */
-static int wpp_exec (struct sdla* card, void* u_cmd, void* u_data);
+static int wpp_exec(struct sdla *card, void *u_cmd, void *u_data);
 
 /* Network device interface */
-static int if_init   (struct device* dev);
-static int if_open   (struct device* dev);
-static int if_close  (struct device* dev);
-static int if_header (struct sk_buff* skb, struct device* dev,
-	unsigned short type, void* daddr, void* saddr, unsigned len);
-static int if_rebuild_hdr (struct sk_buff* skb);
-static int if_send (struct sk_buff* skb, struct device* dev);
-static struct enet_statistics* if_stats (struct device* dev);
+static int if_init(struct device *dev);
+static int if_open(struct device *dev);
+static int if_close(struct device *dev);
+static int if_header(struct sk_buff *skb, struct device *dev,
+	    unsigned short type, void *daddr, void *saddr, unsigned len);
+static int if_rebuild_hdr(struct sk_buff *skb);
+static int if_send(struct sk_buff *skb, struct device *dev);
+static struct enet_statistics *if_stats(struct device *dev);
 
 /* PPP firmware interface functions */
-static int ppp_read_version (sdla_t* card, char* str);
-static int ppp_configure (sdla_t* card, void* data);
-static int ppp_set_intr_mode (sdla_t* card, unsigned mode);
-static int ppp_comm_enable (sdla_t* card);
-static int ppp_comm_disable (sdla_t* card);
-static int ppp_get_err_stats (sdla_t* card);
-static int ppp_send (sdla_t* card, void* data, unsigned len, unsigned proto);
-static int ppp_error (sdla_t *card, int err, ppp_mbox_t* mb);
+static int ppp_read_version(sdla_t * card, char *str);
+static int ppp_configure(sdla_t * card, void *data);
+static int ppp_set_intr_mode(sdla_t * card, unsigned mode);
+static int ppp_comm_enable(sdla_t * card);
+static int ppp_comm_disable(sdla_t * card);
+static int ppp_get_err_stats(sdla_t * card);
+static int ppp_send(sdla_t * card, void *data, unsigned len, unsigned proto);
+static int ppp_error(sdla_t * card, int err, ppp_mbox_t * mb);
 
 /* Interrupt handlers */
-STATIC void wpp_isr (sdla_t* card);
-static void rx_intr (sdla_t* card);
-static void tx_intr (sdla_t* card);
+STATIC void wpp_isr(sdla_t * card);
+static void rx_intr(sdla_t * card);
+static void tx_intr(sdla_t * card);
 
 /* Background polling routines */
-static void wpp_poll (sdla_t* card);
-static void poll_active (sdla_t* card);
-static void poll_connecting (sdla_t* card);
-static void poll_disconnected (sdla_t* card);
+static void wpp_poll(sdla_t * card);
+static void poll_active(sdla_t * card);
+static void poll_connecting(sdla_t * card);
+static void poll_disconnected(sdla_t * card);
 
 /* Miscellaneous functions */
-static int config502 (sdla_t* card);
-static int config508 (sdla_t* card);
-static void show_disc_cause (sdla_t* card, unsigned cause);
-static unsigned char bps_to_speed_code (unsigned long bps);
+static int config502(sdla_t * card);
+static int config508(sdla_t * card);
+static void show_disc_cause(sdla_t * card, unsigned cause);
+static unsigned char bps_to_speed_code(unsigned long bps);
 
 static char TracingEnabled;
 /****** Public Functions ****************************************************/
@@ -132,33 +132,28 @@ static char TracingEnabled;
  * Return:	0	o.k.
  *		< 0	failure.
  */
-__initfunc(int wpp_init (sdla_t* card, wandev_conf_t* conf))
+__initfunc(int wpp_init(sdla_t * card, wandev_conf_t * conf))
 {
-	union
-	{
+	union {
 		char str[80];
 	} u;
 
 	/* Verify configuration ID */
-	if (conf->config_id != WANCONFIG_PPP)
-	{
+	if (conf->config_id != WANCONFIG_PPP) {
 		printk(KERN_INFO "%s: invalid configuration ID %u!\n",
-			card->devname, conf->config_id)
-		;
+		       card->devname, conf->config_id);
 		return -EINVAL;
 	}
-
 	/* Initialize protocol-specific fields */
-	switch (card->hw.fwid)
-	{
+	switch (card->hw.fwid) {
 	case SFID_PPP502:
-		card->mbox  = (void*)(card->hw.dpmbase + PPP502_MB_OFFS);
-		card->flags = (void*)(card->hw.dpmbase + PPP502_FLG_OFFS);
+		card->mbox = (void *) (card->hw.dpmbase + PPP502_MB_OFFS);
+		card->flags = (void *) (card->hw.dpmbase + PPP502_FLG_OFFS);
 		break;
 
 	case SFID_PPP508:
-		card->mbox  = (void*)(card->hw.dpmbase + PPP508_MB_OFFS);
-		card->flags = (void*)(card->hw.dpmbase + PPP508_FLG_OFFS);
+		card->mbox = (void *) (card->hw.dpmbase + PPP508_MB_OFFS);
+		card->flags = (void *) (card->hw.dpmbase + PPP508_FLG_OFFS);
 		break;
 
 	default:
@@ -172,28 +167,27 @@ __initfunc(int wpp_init (sdla_t* card, wandev_conf_t* conf))
 	 */
 	if (ppp_read_version(card, NULL) || ppp_read_version(card, u.str))
 		return -EIO
-	;
+		    ;
 	printk(KERN_INFO "%s: running PPP firmware v%s\n",
-		card->devname, u.str)
-	;
+	       card->devname, u.str);
 
 	/* Adjust configuration and set defaults */
 	card->wandev.mtu = (conf->mtu) ?
-		min(conf->mtu, PPP_MAX_MTU) : PPP_DFLT_MTU
-	;
-	card->wandev.bps	= conf->bps;
-	card->wandev.interface	= conf->interface;
-	card->wandev.clocking	= conf->clocking;
-	card->wandev.station	= conf->station;
-	card->isr		= &wpp_isr;
-	card->poll		= &wpp_poll;
-	card->exec		= &wpp_exec;
-	card->wandev.update	= &update;
-	card->wandev.new_if	= &new_if;
-	card->wandev.del_if	= &del_if;
-	card->wandev.state	= WAN_DISCONNECTED;
-        card->wandev.udp_port   = conf->udp_port;
-        TracingEnabled          = '0';
+	    min(conf->mtu, PPP_MAX_MTU) : PPP_DFLT_MTU
+	    ;
+	card->wandev.bps = conf->bps;
+	card->wandev.interface = conf->interface;
+	card->wandev.clocking = conf->clocking;
+	card->wandev.station = conf->station;
+	card->isr = &wpp_isr;
+	card->poll = &wpp_poll;
+	card->exec = &wpp_exec;
+	card->wandev.update = &update;
+	card->wandev.new_if = &new_if;
+	card->wandev.del_if = &del_if;
+	card->wandev.state = WAN_DISCONNECTED;
+	card->wandev.udp_port = conf->udp_port;
+	TracingEnabled = '0';
 	return 0;
 }
 
@@ -202,20 +196,20 @@ __initfunc(int wpp_init (sdla_t* card, wandev_conf_t* conf))
 /*============================================================================
  * Update device status & statistics.
  */
-static int update (wan_device_t* wandev)
+static int update(wan_device_t * wandev)
 {
-	sdla_t* card;
+	sdla_t *card;
 
 	/* sanity checks */
 	if ((wandev == NULL) || (wandev->private == NULL))
 		return -EFAULT
-	;
+		    ;
 	if (wandev->state == WAN_UNCONFIGURED)
 		return -ENODEV
-	;
-	if (test_and_set_bit(0, (void*)&wandev->critical))
+		    ;
+	if (test_and_set_bit(0, (void *) &wandev->critical))
 		return -EAGAIN
-	;
+		    ;
 	card = wandev->private;
 
 	ppp_get_err_stats(card);
@@ -235,21 +229,18 @@ static int update (wan_device_t* wandev)
  * Return:	0	o.k.
  *		< 0	failure (channel will not be created)
  */
-static int new_if (wan_device_t* wandev, struct device* dev, wanif_conf_t* conf)
+static int new_if(wan_device_t * wandev, struct device *dev, wanif_conf_t * conf)
 {
-	sdla_t* card = wandev->private;
+	sdla_t *card = wandev->private;
 
 	if (wandev->ndev)
 		return -EEXIST
-	;
-	if ((conf->name[0] == '\0') || (strlen(conf->name) > WAN_IFNAME_SZ))
-	{
+		    ;
+	if ((conf->name[0] == '\0') || (strlen(conf->name) > WAN_IFNAME_SZ)) {
 		printk(KERN_INFO "%s: invalid interface name!\n",
-			card->devname)
-		;
+		       card->devname);
 		return -EINVAL;
 	}
-
 	/* initialize data */
 	strcpy(card->u.p.if_name, conf->name);
 
@@ -263,7 +254,7 @@ static int new_if (wan_device_t* wandev, struct device* dev, wanif_conf_t* conf)
 /*============================================================================
  * Delete logical channel.
  */
-static int del_if (wan_device_t* wandev, struct device* dev)
+static int del_if(wan_device_t * wandev, struct device *dev)
 {
 	return 0;
 }
@@ -273,30 +264,28 @@ static int del_if (wan_device_t* wandev, struct device* dev)
 /*============================================================================
  * Execute adapter interface command.
  */
-static int wpp_exec (struct sdla* card, void* u_cmd, void* u_data)
+static int wpp_exec(struct sdla *card, void *u_cmd, void *u_data)
 {
-	ppp_mbox_t* mbox = card->mbox;
+	ppp_mbox_t *mbox = card->mbox;
 	int len;
 
-	if(copy_from_user((void*)&mbox->cmd, u_cmd, sizeof(ppp_cmd_t)))
+	if (copy_from_user((void *) &mbox->cmd, u_cmd, sizeof(ppp_cmd_t)))
 		return -EFAULT;
 	len = mbox->cmd.length;
-	if (len)
-	{
-		if(copy_from_user((void*)&mbox->data, u_data, len))
+	if (len) {
+		if (copy_from_user((void *) &mbox->data, u_data, len))
 			return -EFAULT;
 	}
-
 	/* execute command */
 	if (!sdla_exec(mbox))
 		return -EIO;
 
 	/* return result */
-	if(copy_to_user(u_cmd, (void*)&mbox->cmd, sizeof(ppp_cmd_t)))
+	if (copy_to_user(u_cmd, (void *) &mbox->cmd, sizeof(ppp_cmd_t)))
 		return -EFAULT;
 	len = mbox->cmd.length;
-	if (len && u_data && copy_to_user(u_data, (void*)&mbox->data, len))
-			return -EFAULT;
+	if (len && u_data && copy_to_user(u_data, (void *) &mbox->data, len))
+		return -EFAULT;
 	return 0;
 }
 
@@ -309,40 +298,39 @@ static int wpp_exec (struct sdla* card, void* u_cmd, void* u_data)
  * interface registration.  Returning anything but zero will fail interface
  * registration.
  */
-static int if_init (struct device* dev)
+static int if_init(struct device *dev)
 {
-	sdla_t* card = dev->priv;
-	wan_device_t* wandev = &card->wandev;
+	sdla_t *card = dev->priv;
+	wan_device_t *wandev = &card->wandev;
 	int i;
 
 	/* Initialize device driver entry points */
-	dev->open		= &if_open;
-	dev->stop		= &if_close;
-	dev->hard_header	= &if_header;
-	dev->rebuild_header	= &if_rebuild_hdr;
-	dev->hard_start_xmit	= &if_send;
-	dev->get_stats		= &if_stats;
+	dev->open = &if_open;
+	dev->stop = &if_close;
+	dev->hard_header = &if_header;
+	dev->rebuild_header = &if_rebuild_hdr;
+	dev->hard_start_xmit = &if_send;
+	dev->get_stats = &if_stats;
 
 	/* Initialize media-specific parameters */
-	dev->family		= AF_INET;	/* address family */
-	dev->type		= ARPHRD_PPP;	/* ARP h/w type */
-	dev->mtu		= wandev->mtu;
-	dev->hard_header_len	= PPP_HDR_LEN;	/* media header length */
+	dev->family = AF_INET;	/* address family */
+	dev->type = ARPHRD_PPP;	/* ARP h/w type */
+	dev->mtu = wandev->mtu;
+	dev->hard_header_len = PPP_HDR_LEN;	/* media header length */
 
 	/* Initialize hardware parameters (just for reference) */
-	dev->irq		= wandev->irq;
-	dev->dma		= wandev->dma;
-	dev->base_addr		= wandev->ioport;
-	dev->mem_start		= wandev->maddr;
-	dev->mem_end		= wandev->maddr + wandev->msize - 1;
+	dev->irq = wandev->irq;
+	dev->dma = wandev->dma;
+	dev->base_addr = wandev->ioport;
+	dev->mem_start = wandev->maddr;
+	dev->mem_end = wandev->maddr + wandev->msize - 1;
 
-        /* Set transmit buffer queue length */
-        dev->tx_queue_len = 30;
-   
+	/* Set transmit buffer queue length */
+	dev->tx_queue_len = 30;
+
 	/* Initialize socket buffers */
 	for (i = 0; i < DEV_NUMBUFFS; ++i)
-		skb_queue_head_init(&dev->buffs[i])
-	;
+		skb_queue_head_init(&dev->buffs[i]);
 	return 0;
 }
 
@@ -353,69 +341,53 @@ static int if_init (struct device* dev)
  *
  * Return 0 if O.k. or errno.
  */
-static int if_open (struct device* dev)
+static int if_open(struct device *dev)
 {
-	sdla_t* card = dev->priv;
+	sdla_t *card = dev->priv;
 	int err = 0;
 
 	if (dev->start)
-		return -EBUSY		/* only one open is allowed */
-	;
-	if (test_and_set_bit(0, (void*)&card->wandev.critical))
+		return -EBUSY	/* only one open is allowed */
+		    ;
+	if (test_and_set_bit(0, (void *) &card->wandev.critical))
 		return -EAGAIN;
 	;
-	if ((card->hw.fwid == SFID_PPP502) ? config502(card) : config508(card))
-	{
+	if ((card->hw.fwid == SFID_PPP502) ? config502(card) : config508(card)) {
 		err = -EIO;
 		goto split;
 	}
-
 	/* Initialize Rx/Tx buffer control fields */
-	if (card->hw.fwid == SFID_PPP502)
-	{
-		ppp502_buf_info_t* info =
-			(void*)(card->hw.dpmbase + PPP502_BUF_OFFS)
-		;
+	if (card->hw.fwid == SFID_PPP502) {
+		ppp502_buf_info_t *info =
+		(void *) (card->hw.dpmbase + PPP502_BUF_OFFS);
 
-		card->u.p.txbuf_base = (void*)(card->hw.dpmbase +
-			info->txb_offs)
-		;
-		card->u.p.txbuf_last = (ppp_buf_ctl_t*)card->u.p.txbuf_base +
-			(info->txb_num - 1)
-		;
-		card->u.p.rxbuf_base = (void*)(card->hw.dpmbase +
-			info->rxb_offs)
-		;
-		card->u.p.rxbuf_last = (ppp_buf_ctl_t*)card->u.p.rxbuf_base +
-			(info->rxb_num - 1)
-		;
-	}
-	else
-	{
-		ppp508_buf_info_t* info =
-			(void*)(card->hw.dpmbase + PPP508_BUF_OFFS)
-		;
+		card->u.p.txbuf_base = (void *) (card->hw.dpmbase +
+						 info->txb_offs);
+		card->u.p.txbuf_last = (ppp_buf_ctl_t *) card->u.p.txbuf_base +
+		    (info->txb_num - 1);
+		card->u.p.rxbuf_base = (void *) (card->hw.dpmbase +
+						 info->rxb_offs);
+		card->u.p.rxbuf_last = (ppp_buf_ctl_t *) card->u.p.rxbuf_base +
+		    (info->rxb_num - 1);
+	} else {
+		ppp508_buf_info_t *info =
+		(void *) (card->hw.dpmbase + PPP508_BUF_OFFS);
 
-		card->u.p.txbuf_base = (void*)(card->hw.dpmbase +
-			(info->txb_ptr - PPP508_MB_VECT))
-		;
-		card->u.p.txbuf_last = (ppp_buf_ctl_t*)card->u.p.txbuf_base +
-			(info->txb_num - 1)
-		;
-		card->u.p.rxbuf_base = (void*)(card->hw.dpmbase +
-			(info->rxb_ptr - PPP508_MB_VECT))
-		;
-		card->u.p.rxbuf_last = (ppp_buf_ctl_t*)card->u.p.rxbuf_base +
-			(info->rxb_num - 1)
-		;
+		card->u.p.txbuf_base = (void *) (card->hw.dpmbase +
+				       (info->txb_ptr - PPP508_MB_VECT));
+		card->u.p.txbuf_last = (ppp_buf_ctl_t *) card->u.p.txbuf_base +
+		    (info->txb_num - 1);
+		card->u.p.rxbuf_base = (void *) (card->hw.dpmbase +
+				       (info->rxb_ptr - PPP508_MB_VECT));
+		card->u.p.rxbuf_last = (ppp_buf_ctl_t *) card->u.p.rxbuf_base +
+		    (info->rxb_num - 1);
 		card->u.p.rx_base = info->rxb_base;
-		card->u.p.rx_top  = info->rxb_end;
+		card->u.p.rx_top = info->rxb_end;
 	}
 	card->u.p.txbuf = card->u.p.txbuf_base;
 	card->rxmb = card->u.p.rxbuf_base;
 
-	if (ppp_set_intr_mode(card, 0x03) || ppp_comm_enable(card))
-	{
+	if (ppp_set_intr_mode(card, 0x03) || ppp_comm_enable(card)) {
 		err = -EIO;
 		goto split;
 	}
@@ -426,7 +398,7 @@ static int if_open (struct device* dev)
 	dev->tbusy = 0;
 	dev->start = 1;
 
-split:
+      split:
 	card->wandev.critical = 0;
 	return err;
 }
@@ -436,11 +408,11 @@ split:
  * o if this is the last open, then disable communications and interrupts.
  * o reset flags.
  */
-static int if_close (struct device* dev)
+static int if_close(struct device *dev)
 {
-	sdla_t* card = dev->priv;
+	sdla_t *card = dev->priv;
 
-	if (test_and_set_bit(0, (void*)&card->wandev.critical))
+	if (test_and_set_bit(0, (void *) &card->wandev.critical))
 		return -EAGAIN;
 	;
 	dev->start = 0;
@@ -461,11 +433,10 @@ static int if_close (struct device* dev)
  *
  * Return:	media header length.
  */
-static int if_header (struct sk_buff* skb, struct device* dev,
-	unsigned short type, void* daddr, void* saddr, unsigned len)
+static int if_header(struct sk_buff *skb, struct device *dev,
+	     unsigned short type, void *daddr, void *saddr, unsigned len)
 {
-	switch (type)
-	{
+	switch (type) {
 	case ETH_P_IP:
 	case ETH_P_IPX:
 		skb->protocol = type;
@@ -483,13 +454,12 @@ static int if_header (struct sk_buff* skb, struct device* dev,
  * Return:	1	physical address resolved.
  *		0	physical address not resolved
  */
-static int if_rebuild_hdr (struct sk_buff* skb)
+static int if_rebuild_hdr(struct sk_buff *skb)
 {
-	sdla_t* card = skb->dev->priv;
+	sdla_t *card = skb->dev->priv;
 
 	printk(KERN_INFO "%s: rebuild_header() called for interface %s!\n",
-		card->devname, skb->dev->name)
-	;
+	       card->devname, skb->dev->name);
 	return 1;
 }
 
@@ -510,47 +480,40 @@ static int if_rebuild_hdr (struct sk_buff* skb)
  * 2. Setting tbusy flag will inhibit further transmit requests from the
  *    protocol stack and can be used for flow control with protocol layer.
  */
-static int if_send (struct sk_buff* skb, struct device* dev)
+static int if_send(struct sk_buff *skb, struct device *dev)
 {
-	sdla_t* card = dev->priv;
+	sdla_t *card = dev->priv;
 	int retry = 0;
 
-	if (test_and_set_bit(0, (void*)&card->wandev.critical))
-	{
+	if (test_and_set_bit(0, (void *) &card->wandev.critical)) {
 #ifdef _DEBUG_
 		printk(KERN_INFO "%s: if_send() hit critical section!\n",
-			card->devname)
-		;
+		       card->devname);
 #endif
 		return 1;
 	}
-
-	if (test_and_set_bit(0, (void*)&dev->tbusy))
-	{
+	if (test_and_set_bit(0, (void *) &dev->tbusy)) {
 #ifdef _DEBUG_
 		printk(KERN_INFO "%s: Tx collision on interface %s!\n",
-			card->devname, dev->name)
-		;
+		       card->devname, dev->name);
 #endif
 		++card->wandev.stats.collisions;
 		retry = 1;
 	} else if (card->wandev.state != WAN_CONNECTED)
 		++card->wandev.stats.tx_dropped
-	;
+		    ;
 	else if (!skb->protocol)
 		++card->wandev.stats.tx_errors
-	;
-	else if (ppp_send(card, skb->data, skb->len, skb->protocol))
-	{
-		ppp_flags_t* flags = card->flags;
+		    ;
+	else if (ppp_send(card, skb->data, skb->len, skb->protocol)) {
+		ppp_flags_t *flags = card->flags;
 
 		flags->imask |= 0x02;	/* unmask Tx interrupts */
 		retry = 1;
-	}
-	else ++card->wandev.stats.tx_packets;
+	} else
+		++card->wandev.stats.tx_packets;
 
-	if (!retry)
-	{
+	if (!retry) {
 		dev_kfree_skb(skb, FREE_WRITE);
 		dev->tbusy = 0;
 	}
@@ -563,9 +526,9 @@ static int if_send (struct sk_buff* skb, struct device* dev)
  * Return a pointer to struct enet_statistics.
  */
 
-static struct enet_statistics* if_stats (struct device* dev)
+static struct enet_statistics *if_stats(struct device *dev)
 {
-	sdla_t* card = dev->priv;
+	sdla_t *card = dev->priv;
 
 	return &card->wandev.stats;
 }
@@ -576,17 +539,17 @@ static struct enet_statistics* if_stats (struct device* dev)
  * Read firmware code version.
  *	Put code version as ASCII string in str. 
  */
-static int ppp_read_version (sdla_t* card, char* str)
+static int ppp_read_version(sdla_t * card, char *str)
 {
-	ppp_mbox_t* mb = card->mbox;
+	ppp_mbox_t *mb = card->mbox;
 	int err;
 
 	memset(&mb->cmd, 0, sizeof(ppp_cmd_t));
 	mb->cmd.command = PPP_READ_CODE_VERSION;
 	err = sdla_exec(mb) ? mb->cmd.result : CMD_TIMEOUT;
-	if (err != CMD_OK) ppp_error(card, err, mb);
-	else if (str)
-	{
+	if (err != CMD_OK)
+		ppp_error(card, err, mb);
+	else if (str) {
 		int len = mb->cmd.length;
 
 		memcpy(str, mb->data, len);
@@ -598,37 +561,36 @@ static int ppp_read_version (sdla_t* card, char* str)
 /*============================================================================
  * Configure PPP firmware.
  */
-static int ppp_configure (sdla_t* card, void* data)
+static int ppp_configure(sdla_t * card, void *data)
 {
-	ppp_mbox_t* mb = card->mbox;
+	ppp_mbox_t *mb = card->mbox;
 	int data_len = (card->hw.fwid == SFID_PPP502) ?
-		sizeof(ppp502_conf_t) : sizeof(ppp508_conf_t)
-	;
+	sizeof(ppp502_conf_t) : sizeof(ppp508_conf_t);
 	int err;
 
 	memset(&mb->cmd, 0, sizeof(ppp_cmd_t));
 	memcpy(mb->data, data, data_len);
-	mb->cmd.length  = data_len;
+	mb->cmd.length = data_len;
 	mb->cmd.command = PPP_SET_CONFIG;
 	err = sdla_exec(mb) ? mb->cmd.result : CMD_TIMEOUT;
-	if (err != CMD_OK) ppp_error(card, err, mb);
+	if (err != CMD_OK)
+		ppp_error(card, err, mb);
 	return err;
 }
 
 /*============================================================================
  * Set interrupt mode.
  */
-static int ppp_set_intr_mode (sdla_t* card, unsigned mode)
+static int ppp_set_intr_mode(sdla_t * card, unsigned mode)
 {
-	ppp_mbox_t* mb = card->mbox;
+	ppp_mbox_t *mb = card->mbox;
 	int err;
 
 	memset(&mb->cmd, 0, sizeof(ppp_cmd_t));
 	mb->data[0] = mode;
-	switch (card->hw.fwid)
-	{
+	switch (card->hw.fwid) {
 	case SFID_PPP502:
-		mb->cmd.length  = 1;
+		mb->cmd.length = 1;
 		break;
 
 	case SFID_PPP508:
@@ -638,62 +600,64 @@ static int ppp_set_intr_mode (sdla_t* card, unsigned mode)
 	}
 	mb->cmd.command = PPP_SET_INTR_FLAGS;
 	err = sdla_exec(mb) ? mb->cmd.result : CMD_TIMEOUT;
-	if (err != CMD_OK) ppp_error(card, err, mb);
+	if (err != CMD_OK)
+		ppp_error(card, err, mb);
 	return err;
 }
 
 /*============================================================================
  * Enable communications.
  */
-static int ppp_comm_enable (sdla_t* card)
+static int ppp_comm_enable(sdla_t * card)
 {
-	ppp_mbox_t* mb = card->mbox;
+	ppp_mbox_t *mb = card->mbox;
 	int err;
 
 	memset(&mb->cmd, 0, sizeof(ppp_cmd_t));
 	mb->cmd.command = PPP_COMM_ENABLE;
 	err = sdla_exec(mb) ? mb->cmd.result : CMD_TIMEOUT;
-	if (err != CMD_OK) ppp_error(card, err, mb);
+	if (err != CMD_OK)
+		ppp_error(card, err, mb);
 	return err;
 }
 
 /*============================================================================
  * Disable communications.
  */
-static int ppp_comm_disable (sdla_t* card)
+static int ppp_comm_disable(sdla_t * card)
 {
-	ppp_mbox_t* mb = card->mbox;
+	ppp_mbox_t *mb = card->mbox;
 	int err;
 
 	memset(&mb->cmd, 0, sizeof(ppp_cmd_t));
 	mb->cmd.command = PPP_COMM_DISABLE;
 	err = sdla_exec(mb) ? mb->cmd.result : CMD_TIMEOUT;
-	if (err != CMD_OK) ppp_error(card, err, mb);
+	if (err != CMD_OK)
+		ppp_error(card, err, mb);
 	return err;
 }
 
 /*============================================================================
  * Get communications error statistics.
  */
-static int ppp_get_err_stats (sdla_t* card)
+static int ppp_get_err_stats(sdla_t * card)
 {
-	ppp_mbox_t* mb = card->mbox;
+	ppp_mbox_t *mb = card->mbox;
 	int err;
 
 	memset(&mb->cmd, 0, sizeof(ppp_cmd_t));
 	mb->cmd.command = PPP_READ_ERROR_STATS;
 	err = sdla_exec(mb) ? mb->cmd.result : CMD_TIMEOUT;
-	if (err == CMD_OK)
-	{
-		ppp_err_stats_t* stats = (void*)mb->data;
+	if (err == CMD_OK) {
+		ppp_err_stats_t *stats = (void *) mb->data;
 
-		card->wandev.stats.rx_over_errors    = stats->rx_overrun;
-		card->wandev.stats.rx_crc_errors     = stats->rx_bad_crc;
-		card->wandev.stats.rx_missed_errors  = stats->rx_abort;
-		card->wandev.stats.rx_length_errors  = stats->rx_lost;
+		card->wandev.stats.rx_over_errors = stats->rx_overrun;
+		card->wandev.stats.rx_crc_errors = stats->rx_bad_crc;
+		card->wandev.stats.rx_missed_errors = stats->rx_abort;
+		card->wandev.stats.rx_length_errors = stats->rx_lost;
 		card->wandev.stats.tx_aborted_errors = stats->tx_abort;
-	}
-	else ppp_error(card, err, mb);
+	} else
+		ppp_error(card, err, mb);
 	return err;
 }
 
@@ -702,34 +666,34 @@ static int ppp_get_err_stats (sdla_t* card)
  *	Return:	0 - o.k.
  *		1 - no transmit buffers available
  */
-static int ppp_send (sdla_t* card, void* data, unsigned len, unsigned proto)
+static int ppp_send(sdla_t * card, void *data, unsigned len, unsigned proto)
 {
-	ppp_buf_ctl_t* txbuf = card->u.p.txbuf;
+	ppp_buf_ctl_t *txbuf = card->u.p.txbuf;
 	unsigned long addr, cpu_flags;
 
 	if (txbuf->flag)
 		return 1
-	;
+		    ;
 	if (card->hw.fwid == SFID_PPP502)
-		addr = (txbuf->buf.o_p[1] << 8) + txbuf->buf.o_p[0]
-	; 
-	else addr = txbuf->buf.ptr;
+		addr = (txbuf->buf.o_p[1] << 8) + txbuf->buf.o_p[0];
+	else
+		addr = txbuf->buf.ptr;
 
 	save_flags(cpu_flags);
 	cli();
 	sdla_poke(&card->hw, addr, data, len);
 	restore_flags(cpu_flags);
-	txbuf->length = len;		/* frame length */
+	txbuf->length = len;	/* frame length */
 	if (proto == ETH_P_IPX)
 		txbuf->proto = 0x01	/* protocol ID */
-	;
-	txbuf->flag = 1;		/* start transmission */
+		    ;
+	txbuf->flag = 1;	/* start transmission */
 
 	/* Update transmit buffer control fields */
 	card->u.p.txbuf = ++txbuf;
-	if ((void*)txbuf > card->u.p.txbuf_last)
+	if ((void *) txbuf > card->u.p.txbuf_last)
 		card->u.p.txbuf = card->u.p.txbuf_base
-	;
+		    ;
 	return 0;
 }
 
@@ -742,22 +706,19 @@ static int ppp_send (sdla_t* card, void* data, unsigned len, unsigned proto)
  *
  * Return zero if previous command has to be cancelled.
  */
-static int ppp_error (sdla_t *card, int err, ppp_mbox_t* mb)
+static int ppp_error(sdla_t * card, int err, ppp_mbox_t * mb)
 {
 	unsigned cmd = mb->cmd.command;
 
-	switch (err)
-	{
+	switch (err) {
 	case CMD_TIMEOUT:
 		printk(KERN_ERR "%s: command 0x%02X timed out!\n",
-			card->devname, cmd)
-		;
+		       card->devname, cmd);
 		break;
 
 	default:
 		printk(KERN_INFO "%s: command 0x%02X returned 0x%02X!\n",
-			card->devname, cmd, err)
-		;
+		       card->devname, cmd, err);
 	}
 	return 0;
 }
@@ -767,25 +728,23 @@ static int ppp_error (sdla_t *card, int err, ppp_mbox_t* mb)
 /*============================================================================
  * PPP interrupt service routine.
  */
-STATIC void wpp_isr (sdla_t* card)
+STATIC void wpp_isr(sdla_t * card)
 {
-	ppp_flags_t* flags = card->flags;
+	ppp_flags_t *flags = card->flags;
 
-	switch (flags->iflag)
-	{
-	case 0x01:	/* receive interrupt */
+	switch (flags->iflag) {
+	case 0x01:		/* receive interrupt */
 		rx_intr(card);
 		break;
 
-	case 0x02:	/* transmit interrupt */
+	case 0x02:		/* transmit interrupt */
 		flags->imask &= ~0x02;
 		tx_intr(card);
 		break;
 
-	default:	/* unexpected interrupt */
+	default:		/* unexpected interrupt */
 		printk(KERN_INFO "%s: spurious interrupt 0x%02X!\n",
-			card->devname, flags->iflag)
-		;
+		       card->devname, flags->iflag);
 	}
 	flags->iflag = 0;
 }
@@ -793,52 +752,42 @@ STATIC void wpp_isr (sdla_t* card)
 /*============================================================================
  * Receive interrupt handler.
  */
-static void rx_intr (sdla_t* card)
+static void rx_intr(sdla_t * card)
 {
-	ppp_buf_ctl_t* rxbuf = card->rxmb;
-	struct device* dev = card->wandev.dev;
-	struct sk_buff* skb;
+	ppp_buf_ctl_t *rxbuf = card->rxmb;
+	struct device *dev = card->wandev.dev;
+	struct sk_buff *skb;
 	unsigned len;
-	void* buf;
-   
-	if (rxbuf->flag != 0x01)
-	{
+	void *buf;
+
+	if (rxbuf->flag != 0x01) {
 		printk(KERN_INFO "%s: corrupted Rx buffer @ 0x%X!\n",
-			card->devname, (unsigned)rxbuf)
-		;
+		       card->devname, (unsigned) rxbuf);
 		return;
 	}
-
 	if (!dev || !dev->start)
 		goto rx_done
-	;
-	len  = rxbuf->length;
+		    ;
+	len = rxbuf->length;
 
 	/* Allocate socket buffer */
 	skb = dev_alloc_skb(len);
-	if (skb == NULL)
-	{
+	if (skb == NULL) {
 		printk(KERN_INFO "%s: no socket buffers available!\n",
-			card->devname)
-		;
+		       card->devname);
 		++card->wandev.stats.rx_dropped;
 		goto rx_done;
 	}
-
 	/* Copy data to the socket buffer */
-	if (card->hw.fwid == SFID_PPP502)
-	{
-		unsigned addr = (rxbuf->buf.o_p[1] << 8) + rxbuf->buf.o_p[0]; 
+	if (card->hw.fwid == SFID_PPP502) {
+		unsigned addr = (rxbuf->buf.o_p[1] << 8) + rxbuf->buf.o_p[0];
 
 		buf = skb_put(skb, len);
 		sdla_peek(&card->hw, addr, buf, len);
-	}
-	else
-	{
+	} else {
 		unsigned addr = rxbuf->buf.ptr;
 
-		if ((addr + len) > card->u.p.rx_top + 1)
-		{
+		if ((addr + len) > card->u.p.rx_top + 1) {
 			unsigned tmp = card->u.p.rx_top - addr + 1;
 
 			buf = skb_put(skb, tmp);
@@ -851,8 +800,7 @@ static void rx_intr (sdla_t* card)
 	}
 
 	/* Decapsulate packet */
-        switch (rxbuf->proto)
-	{
+	switch (rxbuf->proto) {
 	case 0x00:
 		skb->protocol = htons(ETH_P_IP);
 		break;
@@ -866,27 +814,26 @@ static void rx_intr (sdla_t* card)
 	skb->dev = dev;
 	netif_rx(skb);
 	++card->wandev.stats.rx_packets;
-rx_done:
+      rx_done:
 	/* Release buffer element and calculate a pointer to the next one */
 	rxbuf->flag = (card->hw.fwid == SFID_PPP502) ? 0xFF : 0x00;
 	card->rxmb = ++rxbuf;
-	if ((void*)rxbuf > card->u.p.rxbuf_last)
+	if ((void *) rxbuf > card->u.p.rxbuf_last)
 		card->rxmb = card->u.p.rxbuf_base
-	;
+		    ;
 }
 
 /*============================================================================
  * Transmit interrupt handler.
  */
-static void tx_intr (sdla_t* card)
+static void tx_intr(sdla_t * card)
 {
-	struct device* dev = card->wandev.dev;
+	struct device *dev = card->wandev.dev;
 
 	if (!dev || !dev->start)
-		return
-	;
+		return;
 	dev->tbusy = 0;
-	dev_tint(dev);
+	mark_bh(NET_BH);
 }
 
 /****** Background Polling Routines  ****************************************/
@@ -900,10 +847,9 @@ static void tx_intr (sdla_t* card)
  * 1. This routine may be called on interrupt context with all interrupts
  *    enabled. Beware!
  */
-static void wpp_poll (sdla_t* card)
+static void wpp_poll(sdla_t * card)
 {
-	switch(card->wandev.state)
-	{
+	switch (card->wandev.state) {
 	case WAN_CONNECTED:
 		poll_active(card);
 		break;
@@ -921,12 +867,11 @@ static void wpp_poll (sdla_t* card)
 /*============================================================================
  * Monitor active link phase.
  */
-static void poll_active (sdla_t* card)
+static void poll_active(sdla_t * card)
 {
-	ppp_flags_t* flags = card->flags;
+	ppp_flags_t *flags = card->flags;
 
-	if (flags->disc_cause & 0x03)
-	{
+	if (flags->disc_cause & 0x03) {
 		wanpipe_set_state(card, WAN_DISCONNECTED);
 		show_disc_cause(card, flags->disc_cause);
 	}
@@ -936,16 +881,13 @@ static void poll_active (sdla_t* card)
  * Monitor link establishment phase.
  * o if connection timed out, disconnect the link.
  */
-static void poll_connecting (sdla_t* card)
+static void poll_connecting(sdla_t * card)
 {
-	ppp_flags_t* flags = card->flags;
+	ppp_flags_t *flags = card->flags;
 
-	if (flags->lcp_state == 0x09)
-	{
+	if (flags->lcp_state == 0x09) {
 		wanpipe_set_state(card, WAN_CONNECTED);
-	}
-	else if (flags->disc_cause & 0x03)
-	{
+	} else if (flags->disc_cause & 0x03) {
 		wanpipe_set_state(card, WAN_DISCONNECTED);
 		show_disc_cause(card, flags->disc_cause);
 	}
@@ -956,13 +898,12 @@ static void poll_connecting (sdla_t* card)
  *  o if interface is up and the hold-down timeout has expired, then retry
  *    connection.
  */
-static void poll_disconnected (sdla_t* card)
+static void poll_disconnected(sdla_t * card)
 {
-	struct device* dev = card->wandev.dev;
+	struct device *dev = card->wandev.dev;
 
 	if (dev && dev->start &&
-	    ((jiffies - card->state_tick) > HOLD_DOWN_TIME))
-	{
+	    ((jiffies - card->state_tick) > HOLD_DOWN_TIME)) {
 		wanpipe_set_state(card, WAN_CONNECTING);
 		ppp_comm_enable(card);
 	}
@@ -973,7 +914,7 @@ static void poll_disconnected (sdla_t* card)
 /*============================================================================
  * Configure S502 adapter.
  */
-static int config502 (sdla_t* card)
+static int config502(sdla_t * card)
 {
 	ppp502_conf_t cfg;
 
@@ -981,35 +922,34 @@ static int config502 (sdla_t* card)
 	memset(&cfg, 0, sizeof(ppp502_conf_t));
 
 	if (card->wandev.clocking)
-		cfg.line_speed = bps_to_speed_code(card->wandev.bps)
-	;
-	cfg.txbuf_num		= 4;
-	cfg.mtu_local		= card->wandev.mtu;
-	cfg.mtu_remote		= card->wandev.mtu;
-	cfg.restart_tmr		= 30;
-	cfg.auth_rsrt_tmr	= 30;
-	cfg.auth_wait_tmr	= 300;
-	cfg.mdm_fail_tmr	= 5;
-	cfg.dtr_drop_tmr	= 1;
-	cfg.connect_tmout	= 0;	/* changed it from 900 */
-	cfg.conf_retry		= 10;
-	cfg.term_retry		= 2;
-	cfg.fail_retry		= 5;
-	cfg.auth_retry		= 10;
-	cfg.ip_options		= 0x80;
-	cfg.ipx_options		= 0xA0;
-        cfg.conf_flags         |= 0x0E;
+		cfg.line_speed = bps_to_speed_code(card->wandev.bps);
+	cfg.txbuf_num = 4;
+	cfg.mtu_local = card->wandev.mtu;
+	cfg.mtu_remote = card->wandev.mtu;
+	cfg.restart_tmr = 30;
+	cfg.auth_rsrt_tmr = 30;
+	cfg.auth_wait_tmr = 300;
+	cfg.mdm_fail_tmr = 5;
+	cfg.dtr_drop_tmr = 1;
+	cfg.connect_tmout = 0;	/* changed it from 900 */
+	cfg.conf_retry = 10;
+	cfg.term_retry = 2;
+	cfg.fail_retry = 5;
+	cfg.auth_retry = 10;
+	cfg.ip_options = 0x80;
+	cfg.ipx_options = 0xA0;
+	cfg.conf_flags |= 0x0E;
 /*
-	cfg.ip_local		= dev->pa_addr;
-	cfg.ip_remote		= dev->pa_dstaddr;
-*/
+   cfg.ip_local         = dev->pa_addr;
+   cfg.ip_remote                = dev->pa_dstaddr;
+ */
 	return ppp_configure(card, &cfg);
 }
 
 /*============================================================================
  * Configure S508 adapter.
  */
-static int config508 (sdla_t* card)
+static int config508(sdla_t * card)
 {
 	ppp508_conf_t cfg;
 
@@ -1018,95 +958,108 @@ static int config508 (sdla_t* card)
 
 	if (card->wandev.clocking)
 		cfg.line_speed = card->wandev.bps
-	;
+		    ;
 	if (card->wandev.interface == WANOPT_RS232)
 		cfg.conf_flags |= 0x0020;
 	;
-        cfg.conf_flags 	|= 0x300; /*send Configure-Request packets forever*/
-	cfg.txbuf_percent	= 60;	/* % of Tx bufs */
-	cfg.mtu_local		= card->wandev.mtu;
-	cfg.mtu_remote		= card->wandev.mtu;
-	cfg.restart_tmr		= 30;
-	cfg.auth_rsrt_tmr	= 30;
-	cfg.auth_wait_tmr	= 300;
-	cfg.mdm_fail_tmr	= 5;
-	cfg.dtr_drop_tmr	= 1;
-	cfg.connect_tmout	= 0; 	/* changed it from 900 */
-	cfg.conf_retry		= 10;
-	cfg.term_retry		= 2;
-	cfg.fail_retry		= 5;
-	cfg.auth_retry		= 10;
-	cfg.ip_options		= 0x80;
-	cfg.ipx_options		= 0xA0;
+	cfg.conf_flags |= 0x300;	/*send Configure-Request packets forever */
+	cfg.txbuf_percent = 60;	/* % of Tx bufs */
+	cfg.mtu_local = card->wandev.mtu;
+	cfg.mtu_remote = card->wandev.mtu;
+	cfg.restart_tmr = 30;
+	cfg.auth_rsrt_tmr = 30;
+	cfg.auth_wait_tmr = 300;
+	cfg.mdm_fail_tmr = 5;
+	cfg.dtr_drop_tmr = 1;
+	cfg.connect_tmout = 0;	/* changed it from 900 */
+	cfg.conf_retry = 10;
+	cfg.term_retry = 2;
+	cfg.fail_retry = 5;
+	cfg.auth_retry = 10;
+	cfg.ip_options = 0x80;
+	cfg.ipx_options = 0xA0;
 /*
-	cfg.ip_local		= dev->pa_addr;
-	cfg.ip_remote		= dev->pa_dstaddr;
-*/
+   cfg.ip_local         = dev->pa_addr;
+   cfg.ip_remote                = dev->pa_dstaddr;
+ */
 	return ppp_configure(card, &cfg);
 }
 
 /*============================================================================
  * Show disconnection cause.
  */
-static void show_disc_cause (sdla_t* card, unsigned cause)
+static void show_disc_cause(sdla_t * card, unsigned cause)
 {
-	if (cause & 0x0002) printk(KERN_INFO
-		"%s: link terminated by peer\n", card->devname)
-	;
-	else if (cause & 0x0004) printk(KERN_INFO
-		"%s: link terminated by user\n", card->devname)
-	;
-	else if (cause & 0x0008) printk(KERN_INFO
-		"%s: authentication failed\n", card->devname)
-	;
-	else if (cause & 0x0010) printk(KERN_INFO
-		"%s: authentication protocol negotiation failed\n",
-		card->devname)
-	;
-	else if (cause & 0x0020) printk(KERN_INFO
-		"%s: peer's request for authentication rejected\n",
-		card->devname)
-	;
-	else if (cause & 0x0040) printk(KERN_INFO
-		"%s: MRU option rejected by peer\n", card->devname)
-	;
-	else if (cause & 0x0080) printk(KERN_INFO
-		"%s: peer's MRU was too small\n", card->devname)
-	;
-	else if (cause & 0x0100) printk(KERN_INFO
-		"%s: failed to negotiate peer's LCP options\n",
-		card->devname)
-	;
-	else if (cause & 0x0200) printk(KERN_INFO
-		"%s: failed to negotiate peer's IPCP options\n",
-		card->devname)
-	;
-	else if (cause & 0x0400) printk(KERN_INFO
-		"%s: failed to negotiate peer's IPXCP options\n",
-		card->devname)
-	;
+	if (cause & 0x0002)
+		printk(KERN_INFO
+		       "%s: link terminated by peer\n", card->devname);
+	else if (cause & 0x0004)
+		printk(KERN_INFO
+		       "%s: link terminated by user\n", card->devname);
+	else if (cause & 0x0008)
+		printk(KERN_INFO
+		       "%s: authentication failed\n", card->devname);
+	else if (cause & 0x0010)
+		printk(KERN_INFO
+		       "%s: authentication protocol negotiation failed\n",
+		       card->devname);
+	else if (cause & 0x0020)
+		printk(KERN_INFO
+		       "%s: peer's request for authentication rejected\n",
+		       card->devname);
+	else if (cause & 0x0040)
+		printk(KERN_INFO
+		     "%s: MRU option rejected by peer\n", card->devname);
+	else if (cause & 0x0080)
+		printk(KERN_INFO
+		       "%s: peer's MRU was too small\n", card->devname);
+	else if (cause & 0x0100)
+		printk(KERN_INFO
+		       "%s: failed to negotiate peer's LCP options\n",
+		       card->devname);
+	else if (cause & 0x0200)
+		printk(KERN_INFO
+		       "%s: failed to negotiate peer's IPCP options\n",
+		       card->devname);
+	else if (cause & 0x0400)
+		printk(KERN_INFO
+		       "%s: failed to negotiate peer's IPXCP options\n",
+		       card->devname);
 }
 
 /*============================================================================
  * Convert line speed in bps to a number used by S502 code.
  */
-static unsigned char bps_to_speed_code (unsigned long bps)
+static unsigned char bps_to_speed_code(unsigned long bps)
 {
-	unsigned char	number;
+	unsigned char number;
 
-	if (bps <= 1200)        number = 0x01 ;
-	else if (bps <= 2400)   number = 0x02;
-	else if (bps <= 4800)   number = 0x03;
-	else if (bps <= 9600)   number = 0x04;
-	else if (bps <= 19200)  number = 0x05;
-	else if (bps <= 38400)  number = 0x06;
-	else if (bps <= 45000)  number = 0x07;
-	else if (bps <= 56000)  number = 0x08;
-	else if (bps <= 64000)  number = 0x09;
-	else if (bps <= 74000)  number = 0x0A;
-	else if (bps <= 112000) number = 0x0B;
-	else if (bps <= 128000) number = 0x0C;
-	else number = 0x0D;
+	if (bps <= 1200)
+		number = 0x01;
+	else if (bps <= 2400)
+		number = 0x02;
+	else if (bps <= 4800)
+		number = 0x03;
+	else if (bps <= 9600)
+		number = 0x04;
+	else if (bps <= 19200)
+		number = 0x05;
+	else if (bps <= 38400)
+		number = 0x06;
+	else if (bps <= 45000)
+		number = 0x07;
+	else if (bps <= 56000)
+		number = 0x08;
+	else if (bps <= 64000)
+		number = 0x09;
+	else if (bps <= 74000)
+		number = 0x0A;
+	else if (bps <= 112000)
+		number = 0x0B;
+	else if (bps <= 128000)
+		number = 0x0C;
+	else
+		number = 0x0D;
 
 	return number;
 }

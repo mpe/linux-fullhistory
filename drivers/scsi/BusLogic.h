@@ -1529,7 +1529,12 @@ static inline void BusLogic_Delay(int Seconds)
   unsigned long ProcessorFlags;
   save_flags(ProcessorFlags);
   sti();
-  while (--Seconds >= 0) udelay(1000000);
+  while (--Seconds >= 0) {
+  	int i = 1000;
+  	do {
+	  	udelay(1000);
+	} while (--i);
+  }
   restore_flags(ProcessorFlags);
 }
 

@@ -484,7 +484,7 @@ __initfunc(int pt_init(void))
     { 0x230, 0x240, 0x250, 0x260, 0x270, 0x280, 0x290, 0x2a0,
       0x2b0, 0x300, 0x330, 0x3f0,  0};
 
-    printk(KERN_INFO "PT: 0.41 ALPHA 07 October 1995 Craig Small (vk2xlz@vk2xlz.ampr.org)\n");
+    printk(KERN_INFO "PT: 0.41 ALPHA 07 October 1995 Craig Small (csmall@small.dropbear.id.au)\n");
 
     for (port = &ports[0]; *port && !card_type; port++) {
         ioaddr = *port;
@@ -866,11 +866,6 @@ static int pt_probe(struct device *dev)
 
     /* New style flags */
     dev->flags = 0;
-    dev->family = AF_INET;
-    dev->pa_addr = 0;
-    dev->pa_brdaddr = 0;
-    dev->pa_mask = 0;
-    dev->pa_alen = sizeof(unsigned long);
 
     return 0;
 } /* pt_probe() */

@@ -591,16 +591,9 @@ int dlci_init(struct device *dev)
 	dlp->receive		= dlci_receive;
 
 	dev->type		= ARPHRD_DLCI;
-	dev->family		= AF_INET;
 	dev->hard_header_len	= sizeof(struct frhdr);
-	dev->pa_alen		= 4;
 	dev->addr_len		= sizeof(short);
 	memset(dev->dev_addr, 0, sizeof(dev->dev_addr));
-
-	dev->pa_addr		= 0;
-	dev->pa_dstaddr		= 0;
-	dev->pa_brdaddr		= 0;
-	dev->pa_mask		= 0;
 
 	dev_init_buffers(dev);
 	

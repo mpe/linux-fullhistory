@@ -113,7 +113,7 @@ static void softdog_ping(void)
 	return;
 }
 
-static long softdog_write(struct inode *inode, struct file *file, const char *data, unsigned long len)
+static ssize_t softdog_write(struct file *file, const char *data, size_t len, loff_t *ppos)
 {
 	/*
 	 *	Refresh the timer.

@@ -1,3 +1,5 @@
+#warning "Needs new networking merges before it will work"
+#if 0
 /*
  *	ipddp.c: IP-over-DDP driver for Linux
  *
@@ -46,6 +48,7 @@ static const char *version =
 #include <asm/dma.h>
 #include <linux/errno.h>
 #include <linux/netdevice.h>
+#include <linux/inetdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
@@ -118,7 +121,6 @@ int ipddp_init(struct device *dev)
 	dev->rebuild_header = ipddp_rebuild_header;
 
         dev->type = ARPHRD_IPDDP;       	/* IP over DDP tunnel */
-        dev->family = AF_INET;
         dev->mtu = 585;
         dev->flags |= IFF_NOARP;
 
@@ -307,3 +309,4 @@ void cleanup_module(void)
 }
 
 #endif /* MODULE */
+#endif

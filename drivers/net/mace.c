@@ -45,6 +45,7 @@ struct mace_data {
     unsigned char tx_bad_runt;
     struct net_device_stats stats;
     struct timer_list tx_timeout;
+    int timeout_active;
 };
 
 /*
@@ -165,6 +166,8 @@ mace_probe(struct device *dev)
 	memset(&mp->stats, 0, sizeof(mp->stats));
 	memset((char *) mp->tx_cmds, 0,
 	      (NCMDS_TX*N_TX_RING + N_RX_RING + 2) * sizeof(struct dbdma_cmd));
+	init_timer(&mp->tx_timeout);
+	mp->timeout_active = 0;
 
 	mace_reset(dev);
 
@@ -346,11 +349,18 @@ static int mace_close(struct device *dev)
 static inline void mace_set_timeout(struct device *dev)
 {
     struct mace_data *mp = (struct mace_data *) dev->priv;
+    unsigned long flags;
 
+    save_flags(flags);
+    cli();
+    if (mp->timeout_active)
+	del_timer(&mp->tx_timeout);
     mp->tx_timeout.expires = jiffies + TX_TIMEOUT;
     mp->tx_timeout.function = mace_tx_timeout;
     mp->tx_timeout.data = (unsigned long) dev;
     add_timer(&mp->tx_timeout);
+    mp->timeout_active = 1;
+    restore_flags(flags);
 }
 
 static int mace_xmit_start(struct sk_buff *skb, struct device *dev)
@@ -524,6 +534,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    mp->tx_bad_runt = 0;
 	    mb->xmtfc = AUTO_PAD_XMIT;
 	    del_timer(&mp->tx_timeout);
+	    mp->timeout_active = 0;
 	    continue;
 	}
 	dstat = ld_le32(&td->status);
@@ -597,17 +608,18 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	mace_last_fs = fs;
 	mace_last_xcount = xcount;
 	del_timer(&mp->tx_timeout);
+	mp->timeout_active = 0;
     }
 
-    mp->tx_empty = i;
-    i += mp->tx_active;
-    if (i >= N_TX_RING)
-	i -= N_TX_RING;
-    if (i != mp->tx_fill && mp->tx_fullup) {
+    if (i != mp->tx_empty && mp->tx_fullup) {
 	mp->tx_fullup = 0;
 	dev->tbusy = 0;
 	mark_bh(NET_BH);
     }
+    mp->tx_empty = i;
+    i += mp->tx_active;
+    if (i >= N_TX_RING)
+	i -= N_TX_RING;
     if (!mp->tx_bad_runt && i != mp->tx_fill && mp->tx_active < MAX_TX_ACTIVE) {
 	do {
 	    /* set up the next one */
@@ -636,6 +648,7 @@ static void mace_tx_timeout(unsigned long data)
 
     save_flags(flags);
     cli();
+    mp->timeout_active = 0;
     if (mp->tx_active == 0 && !mp->tx_bad_runt)
 	goto out;
 

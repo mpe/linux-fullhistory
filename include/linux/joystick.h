@@ -1,61 +1,81 @@
 #ifndef _LINUX_JOYSTICK_H
 #define _LINUX_JOYSTICK_H
 
-#define JS_RETURN sizeof(struct js_status)	/*number of bytes returned by js_read*/
-#define JS_TRUE 1
-#define JS_FALSE 0
-#define JS_PORT 0x201		/*io port for joystick operations*/
-#define JS_DEF_TIMEOUT 0x1300	/*default timeout value for js_read()*/
-#define JS_DEF_CORR	0	/*default correction factor*/
-#define JS_DEF_TIMELIMIT 10L	/*default data valid time =10 jiffies == 100ms*/
-#define JS_X_0	0x01		/*bit mask for x-axis js0*/
-#define JS_Y_0	0x02		/*bit mask for y-axis js0*/
-#define JS_X_1	0x04		/*bit mask for x-axis js1*/
-#define JS_Y_1	0x08		/*bit mask for y-axis js1*/
-#define JS_MAX 2		/*Max number of joysticks*/
-#define PIT_MODE 0x43		/*io port for timer 0*/
-#define PIT_COUNTER_0 0x40	/*io port for timer 0*/
-#define JSIOCSCAL 0x01		/*ioctl cmd to set joystick correction factor*/
-#define JSIOCGCAL 0x02		/*ioctl cmd to get joystick correction factor*/
-#define JSIOCSTIMEOUT 0x03	/*ioctl cmd to set maximum number of iterations
-				  to wait for a timeout*/
-#define JSIOCGTIMEOUT		0x04	/*as above, to get*/
-#define JSIOCSTIMELIMIT	0x05	/*set data retention time*/
-#define JSIOCGTIMELIMIT	0x06	/*get data retention time*/
-#define JSIOCGCONFIG		0x07	/*get the whole js_data[minor] struct*/
-#define JSIOCSCONFIG		0x08	/*set the whole js_data[minor] struct
-						  except js_busy!*/
-
 /*
- *	This union is used for the ioctl to set the scaling factor and to 
- *	return the current values for a joystick. 'buttons' is ignored on
- *	the ioctl call
+ *  $Id: joystick.h,v 1.2 1997/10/31 19:11:57 mj Exp $
+ *
+ *  Copyright (C) 1997 Vojtech Pavlik
  */
 
-struct js_status 
-{
-	int buttons;
-	int x;
-	int y;
+#include <linux/ioctl.h>
+#include <asm/types.h>
+
+/*
+ * Version
+ */
+
+#define JS_VERSION		0x00010006L		/* 1.0.6 BCD */
+
+/*
+ * IOCTL commands for joystick driver
+ */
+
+#define JSIOCGVERSION		_IOR('j', 0x01, __u32)				/* get driver version */
+
+#define JSIOCGAXES		_IOR('j', 0x11, __u8)				/* get number of axes */
+#define JSIOCGBUTTONS		_IOR('j', 0x12, __u8)				/* get number of buttons */
+
+#define JSIOCSCORR		_IOW('j', 0x21, struct js_corr[4])		/* set correction values */
+#define JSIOCGCORR		_IOR('j', 0x22, struct js_corr[4])		/* get correction values */
+
+/*
+ * Types and constants for get/set correction
+ */
+
+#define JS_CORR_NONE		0x00		/* returns raw values */
+#define JS_CORR_BROKEN		0x01		/* broken line */
+
+struct js_corr {
+	__s32 coef[8];
+	__u16 prec;
+	__u16 type;
 };
 
 /*
- *	This struct is used for misc data about the joystick
+ * Types and constants for reading from /dev/js
  */
 
-struct js_config 
-{
-	int js_timeout;		/*timeout*/
-	int busy;		/*joystick is in use*/
-	long js_expiretime;	/*Time when stick after which stick must be re-read*/
-	long js_timelimit;	/*Max time before data is invalid*/
-	struct js_status js_save;	/*last read data*/
-	struct js_status js_corr;	/*correction factor*/
+#define JS_EVENT_BUTTON		0x01	/* button pressed/released */
+#define JS_EVENT_AXIS		0x02	/* joystick moved */
+#define JS_EVENT_INIT		0x80	/* initial state of device */
+
+struct js_event {
+        __u32 time;		/* time when event happened in miliseconds since open */
+        __u16 value;		/* new value */
+        __u8  type;		/* type of event, see above */
+        __u8  number;		/* axis/button number */
 };
 
-#define LATCH (1193180L/HZ)	/*initial timer 0 value*/
-#define DELTA_TIME(X,Y) ((X)-(Y)+(((X)>=(Y))?0:LATCH))
+/*
+ * Backward (version 0.x) compatibility definitions
+ */
 
-extern int joystick_init(void);
+#define JS_RETURN 	sizeof(struct JS_DATA_TYPE)
+#define JS_TRUE 	1
+#define JS_FALSE 	0
+#define JS_X_0		0x01		/* bit mask for x-axis js0 */
+#define JS_Y_0		0x02		/* bit mask for y-axis js0 */
+#define JS_X_1		0x04		/* bit mask for x-axis js1 */
+#define JS_Y_1		0x08		/* bit mask for y-axis js1 */
+#define JS_MAX 		2		/* max number of joysticks */
+
+struct JS_DATA_TYPE {
+	int buttons;		/* immediate button state */
+	int x;                  /* immediate x axis value */
+	int y;                  /* immediate y axis value */
+};
+
+
+extern int js_init(void);
 
 #endif /* _LINUX_JOYSTICK_H */

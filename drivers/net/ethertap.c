@@ -20,11 +20,12 @@
 #include <linux/errno.h>
 
 #include <linux/netdevice.h>
+#include <linux/inetdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/init.h>
 
-#include <net/netlink.h>
+#include <linux/netlink.h>
 
 /*
  *	Index to functions.
@@ -98,14 +99,25 @@ __initfunc(int ethertap_probe(struct device *dev))
 
 static int ethertap_open(struct device *dev)
 {
+	struct in_device *in_dev;
 	if (ethertap_debug > 2)
 		printk("%s: Doing ethertap_open()...", dev->name);
 	netlink_attach(dev->base_addr, ethertap_rx);
 	dev->start = 1;
 	dev->tbusy = 0;
+
 	/* Fill in the MAC based on the IP address. We do the same thing
 	   here as PLIP does */
-	memcpy(dev->dev_addr+2,&dev->pa_addr,4);
+	
+	if((in_dev=dev->ip_ptr)!=NULL)
+	{
+		/*
+		 *	Any address wil do - we take the first
+		 */
+		struct in_ifaddr *ifa=in_dev->ifa_list;
+		if(ifa!=NULL)
+			memcpy(dev->dev_addr+2,&ifa->ifa_local,4);
+	}
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -147,7 +159,7 @@ static int ethertap_rx(int id, struct sk_buff *skb)
 	
 	if(dev==NULL)
 	{
-		printk("%s: bad unit!\n",dev->name);
+		printk("ethertap: bad unit!\n");
 		kfree_skb(skb, FREE_WRITE);
 		return -ENXIO;
 	}

@@ -7,10 +7,7 @@
    This small document describes the "Video Mode Selection" feature which
 allows to use various special video modes supported by the video BIOS. Due
 to usage of the BIOS, the selection is limited to the boot time (before the
-kernel decompression starts and works only on 80X86 machines.
-
-   IF YOU USE THIS FEATURE, I'LL BE MUCH PLEASED IF YOU SEND ME A MAIL
-DESCRIBING YOUR EXPERIENCE WITH IT. BUG REPORTS ARE ALSO WELCOME.
+kernel decompression starts) and works only on 80X86 machines.
 
    The video mode to be used is selected by a kernel parameter which can be
 specified in the kernel Makefile (the SVGA_MODE=... line) or by the "vga=..."

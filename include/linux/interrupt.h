@@ -39,7 +39,8 @@ enum {
 	IMMEDIATE_BH,
 	KEYBOARD_BH,
 	CYCLADES_BH,
-	CM206_BH
+	CM206_BH,
+	JS_BH
 };
 
 #include <asm/hardirq.h>

@@ -598,11 +598,6 @@ __initfunc(int shaper_probe(struct device *dev))
 	dev->addr_len		= 0;
 	dev->tx_queue_len	= 10;
 	dev->flags		= 0;
-	dev->family		= AF_INET;
-	dev->pa_addr		= 0;
-	dev->pa_brdaddr		= 0;
-	dev->pa_mask		= 0;
-	dev->pa_alen		= 4;
 		
 	/*
 	 *	Shaper is ok

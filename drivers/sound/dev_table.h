@@ -338,12 +338,13 @@ struct sound_timer_operations {
  */
 
 	struct driver_info sound_drivers[] = {
-#ifdef CONFIG_PSS
+#if defined(CONFIG_PSS) && !defined(CONFIG_PSS_MODULE)
 	  {"PSS", 0, SNDCARD_PSS, "Echo Personal Sound System PSS (ESC614)", attach_pss, probe_pss, unload_pss},
 	  {"PSSMPU", 0, SNDCARD_PSS_MPU, "PSS-MPU", attach_pss_mpu, probe_pss_mpu, unload_pss_mpu},
 	  {"PSSMSS", 0, SNDCARD_PSS_MSS, "PSS-MSS", attach_pss_mss, probe_pss_mss, unload_pss_mss},
 #endif
 
+#if defined(CONFIG_GUS) && !defined(CONFIG_GUS_MODULE)
 #ifdef CONFIG_GUS16
 		{"GUS16", 0, SNDCARD_GUS16,	"Ultrasound 16-bit opt.",	attach_gus_db16, probe_gus_db16, unload_gus_db16},
 #endif
@@ -351,8 +352,9 @@ struct sound_timer_operations {
 		{"GUS", 0, SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus, unload_gus},
 		{"GUSPNP", 1, SNDCARD_GUSPNP,	"GUS PnP",	attach_gus_card, probe_gus, unload_gus},
 #endif
+#endif
 
-#ifdef CONFIG_MSS
+#if defined(CONFIG_MSS) && !defined(CONFIG_MSS_MODULE)
 		{"MSS", 0, SNDCARD_MSS,	"MS Sound System",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
 	/* Compaq Deskpro XL */
 		{"DESKPROXL", 2, SNDCARD_DESKPROXL,	"Compaq Deskpro XL",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
@@ -365,30 +367,30 @@ struct sound_timer_operations {
 		{"CS4232", 0, SNDCARD_CS4232,	"CS4232",		attach_cs4232, probe_cs4232, unload_cs4232},
 		{"CS4232MPU", 0, SNDCARD_CS4232_MPU,	"CS4232 MIDI",		attach_cs4232_mpu, probe_cs4232_mpu, unload_cs4232_mpu},
 #endif
-#if defined(CONFIG_YM3812)
+#if defined(CONFIG_YM3812) && !defined(CONFIG_YM3812_MODULE)
 		{"OPL3", 0, SNDCARD_ADLIB,	"OPL-2/OPL-3 FM",		attach_adlib_card, probe_adlib, unload_adlib},
 #endif
-#ifdef CONFIG_PAS
+#if defined(CONFIG_PAS) && !defined(CONFIG_PAS_MODULE)
 		{"PAS16", 0, SNDCARD_PAS,	"ProAudioSpectrum",	attach_pas_card, probe_pas, unload_pas},
 #endif
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI) && !defined(CONFIG_MPU401_MODULE)
 		{"MPU401", 0, SNDCARD_MPU401,"Roland MPU-401",	attach_mpu401, probe_mpu401, unload_mpu401},
 #endif
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI) && !defined(CONFIG_UART401_MODULE)
 	{"UART401", 0, SNDCARD_UART401,"MPU-401 (UART)", 
 		attach_uart401, probe_uart401, unload_uart401},
 #endif
-#if defined(CONFIG_MAUI)
+#if defined(CONFIG_MAUI) && !defined(CONFIG_MAUI_MODULE)
 		{"MAUI", 0, SNDCARD_MAUI,"TB Maui",	attach_maui, probe_maui, unload_maui},
 #endif
-#if defined(CONFIG_UART6850) && defined(CONFIG_MIDI)
+#if defined(CONFIG_UART6850) && defined(CONFIG_MIDI) && !defined(CONFIG_UART6850_MODULE)
 		{"MIDI6850", 0, SNDCARD_UART6850,"6860 UART Midi",	attach_uart6850, probe_uart6850, unload_uart6850},
 #endif
 
 
 
 
-#ifdef CONFIG_SBDSP
+#if defined(CONFIG_SBDSP) && !defined(CONFIG_SBDSP_MODULE)
 		{"SBLAST", 0, SNDCARD_SB,	"Sound Blaster",		attach_sb_card, probe_sb, unload_sb},
 		{"SBPNP", 6, SNDCARD_SBPNP,	"Sound Blaster PnP",		attach_sb_card, probe_sb, unload_sb},
 
@@ -408,13 +410,13 @@ struct sound_timer_operations {
 	{"OPL3SAMPU", 0, SNDCARD_OPL3SA1_MPU, "OPL3-SA MIDI",	attach_opl3sa_mpu, probe_opl3sa_mpu, unload_opl3sa_mpu},
 #endif
 
-#ifdef CONFIG_TRIX
+#if defined (CONFIG_TRIX) && !defined(CONFIG_TRIX_MODULE)
 		{"TRXPRO", 0, SNDCARD_TRXPRO, "MediaTrix AudioTrix Pro",	attach_trix_wss, probe_trix_wss, unload_trix_wss},
 		{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTrix (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
 		{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTrix MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
 #endif
 
-#ifdef CONFIG_SOFTOSS
+#if defined(CONFIG_SOFTOSS) && !defined(CONFIG_SOFTOSS_MODULE)
 		{"SOFTSYN", 0, SNDCARD_SOFTOSS,	"SoftOSS Virtual Wave Table", 
 		attach_softsyn_card, probe_softsyn, unload_softsyn},
 #endif
@@ -561,7 +563,7 @@ struct sound_timer_operations {
 		{SNDCARD_GUS, {GUS_BASE, GUS_IRQ, GUS_DMA, GUS_DMA2}, SND_DEFAULT_ENABLE},
 #endif
 
-#ifdef CONFIG_YM3812
+#if defined(CONFIG_YM3812) 
 		{SNDCARD_ADLIB, {FM_MONO, 0, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 		{0, {0}, 0}
@@ -638,4 +640,15 @@ int sound_install_mixer(int vers,
 			int driver_size,
 			void *devc);
 
+void sound_unload_audiodev(int dev);
+void sound_unload_mixerdev(int dev);
+void sound_unload_mididev(int dev);
+void sound_unload_synthdev(int dev);
+void sound_unload_timerdev(int dev);
+int sound_alloc_audiodev(void);
+int sound_alloc_mixerdev(void);
+int sound_alloc_timerdev(void);
+int sound_alloc_synthdev(void);
+int sound_alloc_mididev(void);
 #endif	/* _DEV_TABLE_H_ */
+

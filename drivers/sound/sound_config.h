@@ -11,7 +11,7 @@
  */
 
 
-#include "local.h"
+#include "local.h.master"
 
 #include "os.h"
 #include "soundvers.h"
@@ -116,7 +116,9 @@ struct address_info {
 	int driver_use_1;	/* Driver defined field 1 */
 	int driver_use_2;	/* Driver defined field 2 */
 	int *osp;	/* OS specific info */
-	int card_subtype;	/* Driver spesific. Usually 0 */
+	int card_subtype;	/* Driver specific. Usually 0 */
+	void *memptr;           /* Module memory chainer */
+	int slots[6];           /* To remember driver slot ids */
 };
 
 #define SYNTH_MAX_VOICES	32
@@ -163,5 +165,17 @@ struct channel_info {
 #define DDB(x) {}
 #endif
 
+#ifndef MDB
+#ifdef MODULE
+#define MDB(x) x
+#else
+#define MDB(x)
+#endif
+#endif
+
 #define TIMER_ARMED	121234
 #define TIMER_NOT_ARMED	1
+
+
+
+

@@ -1750,11 +1750,10 @@ static long long qic02_tape_lseek(struct file * file, long long offset, int orig
  * request would return the EOF flag for the previous file.
  */
 
-static long qic02_tape_read(struct inode * inode, struct file * filp,
-			    char * buf, unsigned long count)
+static ssize_t qic02_tape_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 {
     int err;
-    kdev_t dev = inode->i_rdev;
+    kdev_t dev = filp->f_dentry->d_inode->i_rdev;
     unsigned short flags = filp->f_flags;
     unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
     int stat;
@@ -1925,7 +1924,7 @@ static long qic02_tape_read(struct inode * inode, struct file * filp,
 	{
 	    status_bytes_rd = YES;
 	    buf += bytes_done;
-	    filp->f_pos += bytes_done;
+	    *ppos += bytes_done;
 	    total_bytes_done += bytes_done;
 	    count -= bytes_done;
 	}
@@ -1964,11 +1963,11 @@ static long qic02_tape_read(struct inode * inode, struct file * filp,
  * tape device again. The driver will detect an exception status in (No Cartridge)
  * and force a rewind. After that tar may continue writing.
  */
-static long qic02_tape_write(struct inode * inode, struct file * filp, 
-			     const char * buf, unsigned long count)
+static ssize_t qic02_tape_write( struct file * filp,  const char * buf, 
+		size_t count, loff_t *ppos)
 {
     int err;
-    kdev_t dev = inode->i_rdev;
+    kdev_t dev = filp->f_dentry->d_inode->i_rdev;
     unsigned short flags = filp->f_flags;
     unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
     
@@ -2120,7 +2119,7 @@ static long qic02_tape_write(struct inode * inode, struct file * filp,
 	{
 	    status_bytes_wr = YES;
 	    buf += bytes_done;
-	    filp->f_pos += bytes_done;
+	    *ppos += bytes_done;
 	    total_bytes_done += bytes_done;
 	    count -= bytes_done;
 	}

@@ -1,4 +1,4 @@
-/*	$Id: com90io.c,v 1.2 1997/09/05 08:57:52 mj Exp $
+/*	$Id: com90io.c,v 1.6 1997/11/09 11:04:59 mj Exp $
 
         Written 1997 by David Woodhouse <dwmw2@cam.ac.uk>
 
@@ -184,7 +184,7 @@ void put_whole_buffer (struct device *dev, unsigned offset, unsigned length, cha
 
 
 static const char *version =
- "com90io.c: v2.91 97/08/19 Avery Pennarun <apenwarr@bond.net> et al.\n";
+ "com90io.c: v3.00 97/11/09 Avery Pennarun <apenwarr@bond.net> et al.\n";
 
 
 /****************************************************************************
@@ -805,7 +805,8 @@ arc90io_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
        * frame.
        */
 
-      put_whole_buffer(dev, lp->txbuf*512+offset,4,"\0\0xff\0xff\0xff");
+      put_buffer_byte(dev, lp->txbuf*512+offset,hdr[0]);
+      put_whole_buffer(dev, lp->txbuf*512+offset+1,3,"\377\377\377");
       offset+=4;
     }
   else				/* "other" Exception packet */

@@ -91,6 +91,7 @@ Code	Seq#	Include File		Comments
 					<mailto:natalia@nikhefk.nikhef.nl>
 'c'	all	linux/comstats.h
 'f'	all	linux/ext2_fs.h
+'j'	00-3F	linux/joystick.h
 'k'	all	asm-sparc/kbio.h, asm-sparc64/kbio.h
 'l'	00-3F	linux/tcfs_fs.h		in development:
 					<http://mikonos.dia.unisa.it/tcfs>
@@ -125,3 +126,4 @@ Code	Seq#	Include File		Comments
 					<mailto:tlewis@mindspring.com>
 0xA3	90-9F	DoubleTalk driver	in development:
 					<mailto:jrv@vanzandt.mv.com>
+0xAB	00-06	Network block device

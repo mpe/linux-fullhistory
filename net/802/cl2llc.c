@@ -196,7 +196,7 @@ void llc_interpret_pseudo_code(llcptr lp, int pc_label, struct sk_buff *skb,
 		switch(pseudo_code[pc])
 		{
 			case 9:
-				if ((type != I_CMD) || (fr->i_hdr.i_pflag =0))
+				if ((type != I_CMD) || (fr->i_hdr.i_pflag == 0))
 					break;
 			case 1:
 				lp->remote_busy = 0;

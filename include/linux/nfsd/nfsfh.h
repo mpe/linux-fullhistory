@@ -76,7 +76,9 @@ typedef struct svc_fh {
  */
 u32	fh_verify(struct svc_rqst *, struct svc_fh *, int, int);
 void	fh_compose(struct svc_fh *, struct svc_export *, struct dentry *);
+void	fh_update(struct svc_fh *);
 void	fh_put(struct svc_fh *);
+void	nfsd_fh_flush(dev_t);
 void	nfsd_fh_init(void);
 void	nfsd_fh_free(void);
 

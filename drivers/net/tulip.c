@@ -368,7 +368,7 @@ struct eeprom {
 	u_char sign[EE_SIGNLEN];
 };
 
-static int read_eeprom(int ioaddr, struct eeprom *eepp);
+static int read_eeprom(unsigned long ioaddr, struct eeprom *eepp);
 static int tulip_open(struct device *dev);
 static void tulip_init_ring(struct device *dev);
 static int tulip_start_xmit(struct sk_buff *skb, struct device *dev);
@@ -462,7 +462,7 @@ static int full_duplex=0;
 #define	tio_read(port)			inl(ioaddr + port)
 
 static void inline
-tio_sia_write(u32 ioaddr, u32 val13, u32 val14, u32 val15)
+tio_sia_write(unsigned long ioaddr, u32 val13, u32 val14, u32 val15)
 {
 	tio_write(0,CSR13);
 	tio_write(val15,CSR15);
@@ -490,7 +490,7 @@ card_type(struct tulip_private *tp, int device_id, int vendor_id))
 }
 
 __initfunc(static int
-read_eeprom(int ioaddr, struct eeprom *eepp))
+read_eeprom(unsigned long ioaddr, struct eeprom *eepp))
 {
     int i, n;
     unsigned short val = 0;
@@ -524,8 +524,8 @@ read_eeprom(int ioaddr, struct eeprom *eepp))
 
 		/* Terminate the EEPROM access. */
 		tio_write(EE_ENB & ~EE_CS, CSR9);
-		*p ++ = val;
-		*p ++ = val >> 8;
+		*p ++ = le16_to_cpu(val);
+		*p ++ = le16_to_cpu(val) >> 8;
     }
 	/* broken eeprom ? */
 	p = (u_char *)eepp;
@@ -538,7 +538,7 @@ read_eeprom(int ioaddr, struct eeprom *eepp))
 static int
 generic21040_fail(struct device *dev)
 {
-	int ioaddr = dev->base_addr;
+	unsigned long ioaddr = dev->base_addr;
 
 	return(tio_read(CSR12) & TSIAS_CONERROR);
 }
@@ -546,7 +546,7 @@ generic21040_fail(struct device *dev)
 static int
 generic21041_fail(struct device *dev)
 {
-	int ioaddr = dev->base_addr;
+	unsigned long ioaddr = dev->base_addr;
 	u32 csr12 = tio_read(CSR12);
 
 	return((!(csr12 & TSIAS_CONERROR)
@@ -556,7 +556,7 @@ generic21041_fail(struct device *dev)
 static void
 generic21040_select(struct device *dev)
 {
-	int ioaddr = dev->base_addr;
+	unsigned long ioaddr = dev->base_addr;
 	const char *media;
 
 	dev->if_port &= 3;
@@ -587,7 +587,7 @@ generic21040_select(struct device *dev)
 static void
 generic_timer(struct device *dev, u32 count)
 {
-	int ioaddr = dev->base_addr;
+	unsigned long ioaddr = dev->base_addr;
 
 	tio_write(count, CSR11);
 	while (tio_read(CSR11) & TGEPT_COUNT);
@@ -597,7 +597,7 @@ generic_timer(struct device *dev, u32 count)
 static void
 generic21041_select(struct device *dev)
 {
-	int ioaddr = dev->base_addr;
+	unsigned long ioaddr = dev->base_addr;
 	u32 tsiac = TSIAC_C21041;
 	u32 tsiax = TSIAX_10TP;
 	u32 tsiag = TSIAG_10TP;
@@ -627,7 +627,8 @@ generic21041_select(struct device *dev)
 static void
 auto21140_select(struct device *dev)
 {
-	int i, ioaddr = dev->base_addr;
+	int i;
+	unsigned long ioaddr = dev->base_addr;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 
 	/* kick port */
@@ -647,7 +648,7 @@ auto21140_select(struct device *dev)
 static void
 cogent21140_select(struct device *dev)
 {
-	int ioaddr = dev->base_addr, csr6;
+	unsigned long ioaddr = dev->base_addr, csr6;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	dev->if_port &= 1;
 	csr6 = tio_read(CSR6) &
@@ -667,7 +668,7 @@ cogent21140_select(struct device *dev)
 static void
 generic21140_select(struct device *dev)
 {
-	int ioaddr = dev->base_addr, csr6;
+	unsigned long ioaddr = dev->base_addr, csr6;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 
 	dev->if_port &= 1;
@@ -689,7 +690,7 @@ static int
 tulip_open(struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	int ioaddr = dev->base_addr;
+	unsigned long ioaddr = dev->base_addr;
 	int i;
 
 	/* Reset the chip, holding bit 0 set at least 10 PCI cycles. */
@@ -713,20 +714,20 @@ tulip_open(struct device *dev)
 		int *setup_frm = tp->setup_frame, i;
 
 		/* You must add the broadcast address when doing perfect filtering! */
-		*setup_frm++ = 0xffff;
-		*setup_frm++ = 0xffff;
-		*setup_frm++ = 0xffff;
+		*setup_frm++ = cpu_to_le32(0xffff);
+		*setup_frm++ = cpu_to_le32(0xffff);
+		*setup_frm++ = cpu_to_le32(0xffff);
 		/* Fill the rest of the accept table with our physical address. */
 		for (i = 1; i < 16; i++) {
-			*setup_frm++ = eaddrs[0];
-			*setup_frm++ = eaddrs[1];
-			*setup_frm++ = eaddrs[2];
+			*setup_frm++ = cpu_to_le32(eaddrs[0]);
+			*setup_frm++ = cpu_to_le32(eaddrs[1]);
+			*setup_frm++ = cpu_to_le32(eaddrs[2]);
 		}
 		/* Put the setup frame on the Tx list. */
-		tp->tx_ring[0].length = 0x08000000 | 192;
-		tp->tx_ring[0].buffer1 = virt_to_bus(tp->setup_frame);
-		tp->tx_ring[0].buffer2 = 0;
-		tp->tx_ring[0].status = TRING_OWN;
+		tp->tx_ring[0].length = cpu_to_le32(0x08000000 | 192);
+		tp->tx_ring[0].buffer1 = cpu_to_le32(virt_to_bus(tp->setup_frame));
+		tp->tx_ring[0].buffer2 = cpu_to_le32(0);
+		tp->tx_ring[0].status = cpu_to_le32(TRING_OWN);
 		barrier();
 		tp->cur_tx++, tp->dirty_tx++;
 	}
@@ -744,7 +745,7 @@ tulip_open(struct device *dev)
 	tio_write(TPOLL_TRIGGER, CSR1);
 	sti();
 	for (i = 0; i < 1000; i++) {
-		if (tp->tx_ring[0].status >= 0) {
+		if (((s32)le32_to_cpu(tp->tx_ring[0].status)) >= 0) {
 			break;
 		}
 		udelay(1000);
@@ -788,19 +789,19 @@ tulip_init_ring(struct device *dev)
 	tp->dirty_rx = tp->dirty_tx = 0;
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
-		tp->rx_ring[i].status = TRING_OWN;
-		tp->rx_ring[i].length = PKT_BUF_SZ;
-		tp->rx_ring[i].buffer1 = virt_to_bus(tp->rx_buffs[i]);
-		tp->rx_ring[i].buffer2 = virt_to_bus(&tp->rx_ring[i+1]);
+		tp->rx_ring[i].status = cpu_to_le32(TRING_OWN);
+		tp->rx_ring[i].length = cpu_to_le32(PKT_BUF_SZ);
+		tp->rx_ring[i].buffer1 = cpu_to_le32(virt_to_bus(tp->rx_buffs[i]));
+		tp->rx_ring[i].buffer2 = cpu_to_le32(virt_to_bus(&tp->rx_ring[i+1]));
 	}
 	/* Mark the last entry as wrapping the ring. */ 
-	tp->rx_ring[i-1].length = PKT_BUF_SZ | 0x02000000;
-	tp->rx_ring[i-1].buffer2 = virt_to_bus(&tp->rx_ring[0]);
+	tp->rx_ring[i-1].length = cpu_to_le32(PKT_BUF_SZ | 0x02000000);
+	tp->rx_ring[i-1].buffer2 = cpu_to_le32(virt_to_bus(&tp->rx_ring[0]));
 
 	/* The Tx buffer descriptor is filled in as needed, but we
 	   do need to clear the ownership bit. */
 	for (i = 0; i < TX_RING_SIZE; i++) {
-		tp->tx_ring[i].status = 0x00000000;
+		tp->tx_ring[i].status = cpu_to_le32(0x00000000);
 	}
 }
 
@@ -808,7 +809,7 @@ static int
 tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	int ioaddr = dev->base_addr;
+	unsigned long ioaddr = dev->base_addr;
 	int entry, len;
 	unsigned long daddr;
 
@@ -827,16 +828,16 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 			   "SIA %8.8x %8.8x %8.8x %8.8x, resetting...\n",
 			   dev->name, tio_read(CSR5), tio_read(CSR12),
 			   tio_read(CSR13), tio_read(CSR14), tio_read(CSR15));
-#ifndef	__alpha__
+#if !defined(__alpha__) && !defined(__sparc_v9__)
 		printk("  Rx ring %8.8x: ", (int)tp->rx_ring);
 #endif
 		for (i = 0; i < RX_RING_SIZE; i++)
-			printk(" %8.8x", (unsigned int)tp->rx_ring[i].status);
-#ifndef	__alpha__
+			printk(" %8.8x", (unsigned int)le32_to_cpu(tp->rx_ring[i].status));
+#if !defined(__alpha__) && !defined(__sparc_v9__)
 		printk("\n  Tx ring %8.8x: ", (int)tp->tx_ring);
 #endif
 		for (i = 0; i < TX_RING_SIZE; i++)
-			printk(" %8.8x", (unsigned int)tp->tx_ring[i].status);
+			printk(" %8.8x", (unsigned int)le32_to_cpu(tp->tx_ring[i].status));
 		printk("\n");
 
 		tp->stats.tx_errors++;
@@ -850,13 +851,6 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 
 		dev->tbusy=0;
 		dev->trans_start = jiffies;
-		return(0);
-	}
-
-	if (skb == NULL || (skb != (struct sk_buff *) -1 && skb->len <= 0)) {
-		printk("%s: Obsolete driver layer request made: skbuff==NULL.\n",
-			   dev->name);
-		dev_tint(dev);
 		return(0);
 	}
 
@@ -880,7 +874,11 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 	 */
 	if (skb == (struct sk_buff *) -1) {
 		daddr = virt_to_bus((char *)tp->setup_frame);
+#ifdef NO_ANK_FIX
 		len = 192;
+#else
+		len = 192 | 0x08000000;
+#endif
 		skb = NULL;
 	} else {
 		daddr = virt_to_bus(skb->data);
@@ -888,11 +886,11 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 		tp->stats.tx_bytes+=len;
 	}
 	tp->tx_skbuff[entry] = skb;
-	tp->tx_ring[entry].length = len |
-		(entry == TX_RING_SIZE-1 ? 0xe2000000 : 0xe0000000);
-	tp->tx_ring[entry].buffer1 = daddr;
-	tp->tx_ring[entry].buffer2 = 0;
-	tp->tx_ring[entry].status = TRING_OWN;	/* Pass ownership to the chip. */
+	tp->tx_ring[entry].length = cpu_to_le32(len |
+		(entry == TX_RING_SIZE-1 ? 0xe2000000 : 0xe0000000));
+	tp->tx_ring[entry].buffer1 = cpu_to_le32(daddr);
+	tp->tx_ring[entry].buffer2 = cpu_to_le32(0);
+	tp->tx_ring[entry].status = cpu_to_le32(TRING_OWN);	/* Pass ownership to the chip. */
 	barrier();
 
 	tp->cur_tx++;
@@ -911,7 +909,8 @@ static void tulip_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)dev_id;
 	struct tulip_private *lp;
-	int csr5, ioaddr, boguscnt=10;
+	int csr5, boguscnt=10;
+	unsigned long ioaddr;
 
 	if (dev == NULL) {
 		printk ("tulip_interrupt(): irq %d for unknown device.\n", irq);
@@ -940,7 +939,7 @@ static void tulip_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 			while (dirty_tx < lp->cur_tx) {
 				int entry = dirty_tx % TX_RING_SIZE;
-				int status = lp->tx_ring[entry].status;
+				int status = le32_to_cpu(lp->tx_ring[entry].status);
 
 				if (status < 0)
 					break;			/* It still hasn't been Txed */
@@ -1034,8 +1033,8 @@ tulip_rx(struct device *dev)
 	int i;
 
 	/* If we own the next entry, it's a new packet. Send it up. */
-	while (lp->rx_ring[entry].status >= 0) {
-		int status = lp->rx_ring[entry].status;
+	while (((s32)le32_to_cpu(lp->rx_ring[entry].status)) >= 0) {
+		int status = le32_to_cpu(lp->rx_ring[entry].status);
 
 		if ((status & TRING_RxDESCMASK) != TRING_RxDESCMASK) {
 			printk("%s: Ethernet frame spanned multiple buffers,"
@@ -1050,7 +1049,7 @@ tulip_rx(struct device *dev)
 		} else {
 			/* Malloc up new buffer, compatible with net-2e. */
 			/* Omit the four octet CRC from the length. */
-			short pkt_len = (lp->rx_ring[entry].status >> 16) - 4;
+			short pkt_len = (le32_to_cpu(lp->rx_ring[entry].status) >> 16) - 4;
 			struct sk_buff *skb;
 
 			skb = dev_alloc_skb(pkt_len + 2);
@@ -1060,12 +1059,12 @@ tulip_rx(struct device *dev)
 				/* Check that at least two ring entries are free.
 				   If not, free one and mark stats->rx_dropped++. */
 				for (i=0; i < RX_RING_SIZE; i++)
-					if (lp->rx_ring[(entry+i) % RX_RING_SIZE].status < 0)
+					if (((s32)le32_to_cpu(lp->rx_ring[(entry+i) % RX_RING_SIZE].status)) < 0)
 						break;
 
 				if (i > RX_RING_SIZE -2) {
 					lp->stats.rx_dropped++;
-					lp->rx_ring[entry].status = TRING_OWN;
+					lp->rx_ring[entry].status = cpu_to_le32(TRING_OWN);
 					lp->cur_rx++;
 				}
 				break;
@@ -1081,7 +1080,7 @@ tulip_rx(struct device *dev)
 			lp->stats.rx_bytes+=skb->len;
 		}
 
-		lp->rx_ring[entry].status = TRING_OWN;
+		lp->rx_ring[entry].status = cpu_to_le32(TRING_OWN);
 		entry = (++lp->cur_rx) % RX_RING_SIZE;
 	}
 	return(0);
@@ -1090,7 +1089,7 @@ tulip_rx(struct device *dev)
 static int
 tulip_close(struct device *dev)
 {
-	int ioaddr = dev->base_addr;
+	unsigned long ioaddr = dev->base_addr;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 
 	dev->start = 0;
@@ -1129,7 +1128,7 @@ tulip_config(struct device *dev, struct ifmap *map)
 static struct net_device_stats *tulip_get_stats(struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	/*	short ioaddr = dev->base_addr;*/
+	/*	unsigned long ioaddr = dev->base_addr;*/
 
 	return(&tp->stats);
 }
@@ -1140,7 +1139,7 @@ static struct net_device_stats *tulip_get_stats(struct device *dev)
 
 static void set_multicast_list(struct device *dev)
 {
-	short ioaddr = dev->base_addr;
+	unsigned long ioaddr = dev->base_addr;
 	int csr6 = tio_read(CSR6) & ~(TCMOD_MODEMASK|TCMOD_FILTERMASK);
 
 	if (dev->flags&IFF_PROMISC) 
@@ -1169,20 +1168,20 @@ static void set_multicast_list(struct device *dev)
 		for (i = 0; i < dev->mc_count; i ++) {
 			eaddrs=(unsigned short *)dmi->dmi_addr;
 			dmi=dmi->next;
-			*setup_frm++ = *eaddrs++;
-			*setup_frm++ = *eaddrs++;
-			*setup_frm++ = *eaddrs++;
+			*setup_frm++ = cpu_to_le32(*eaddrs++);
+			*setup_frm++ = cpu_to_le32(*eaddrs++);
+			*setup_frm++ = cpu_to_le32(*eaddrs++);
 		}
 		/* Fill the rest of the table with our physical address. */
 		eaddrs = (unsigned short *)dev->dev_addr;
 		/* Always accept broadcast packets */
-		*setup_frm++ = 0xffff;
-		*setup_frm++ = 0xffff;
-		*setup_frm++ = 0xffff;
+		*setup_frm++ = cpu_to_le32(0xffff);
+		*setup_frm++ = cpu_to_le32(0xffff);
+		*setup_frm++ = cpu_to_le32(0xffff);
 		do {
-			*setup_frm++ = eaddrs[0];
-			*setup_frm++ = eaddrs[1];
-			*setup_frm++ = eaddrs[2];
+			*setup_frm++ = cpu_to_le32(eaddrs[0]);
+			*setup_frm++ = cpu_to_le32(eaddrs[1]);
+			*setup_frm++ = cpu_to_le32(eaddrs[2]);
 		} while (++i < 15);
 
 		/* Now add this frame to the Tx list. */
@@ -1191,7 +1190,7 @@ static void set_multicast_list(struct device *dev)
 }
 
 __initfunc(int
-tulip_hwinit(struct device *dev, int ioaddr,
+tulip_hwinit(struct device *dev, unsigned long ioaddr,
 			 int irq, int device_id))
 {
 	/* See note below on the Znyx 315 etherarray. */
@@ -1203,7 +1202,7 @@ tulip_hwinit(struct device *dev, int ioaddr,
 	unsigned short sum, bitsum;
 
 	if (check_region(ioaddr, TULIP_TOTAL_SIZE) != 0) {
-		printk("tulip_hwinit: region already allocated at %#3x.\n",
+		printk("tulip_hwinit: region already allocated at %#3lx.\n",
 			   ioaddr);
 		return(-1);
 	}
@@ -1258,7 +1257,7 @@ tulip_hwinit(struct device *dev, int ioaddr,
 	}
 	/* Make certain the data structures are quadword aligned. */
 
-	mesgp += sprintf(mesgp, ") at %#3x, ", ioaddr);
+	mesgp += sprintf(mesgp, ") at %016lx, ", ioaddr);
 
 	/* On the Zynx 315 etherarray boards only the first Tulip has an EEPROM.
 	   The addresses of the subsequent ports are derived from the first. */
@@ -1324,8 +1323,15 @@ tulip_hwinit(struct device *dev, int ioaddr,
 __initfunc(int tulip_probe(struct device *dev))
 {
 	static struct device *tulip_head=NULL;
-	u_char pci_bus, pci_device_fn, pci_latency, pci_irq;
-	u_int pci_ioaddr;
+#ifdef __sparc_v9__
+	struct pci_dev *pdev;
+#else
+	u_char btmp;
+	u_int itmp;
+#endif
+	u_char pci_bus, pci_device_fn, pci_latency;
+	u_int pci_irq;
+	unsigned long pci_ioaddr;
 	u_short pci_command, vendor_id, device_id;
 	u_int pci_chips[] = {
 		PCI_DEVICE_ID_DEC_TULIP,
@@ -1336,27 +1342,48 @@ __initfunc(int tulip_probe(struct device *dev))
 	int num=0, cno;
 	static int pci_index = 0;
 
-    if (!pcibios_present()) return(-ENODEV);
+    if (!pcibios_present())
+			return(-ENODEV);
 
 	for (; pci_index < 0xff; pci_index++) {
 		if (pcibios_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, pci_index,
 							   &pci_bus, &pci_device_fn) != PCIBIOS_SUCCESSFUL)
 				break;
 
+#ifdef __sparc_v9__
+		for(pdev = pci_devices; pdev; pdev = pdev->next)
+				if(pdev->bus->number == pci_bus &&
+				   pdev->devfn == pci_device_fn)
+						break;
+		if(!pdev)
+				panic("tulip: Cannot find pci_dev for [%x:%x]\n",
+					  pci_bus, pci_device_fn);
+#endif
+
 		/* get vendor id */
 		pcibios_read_config_word(pci_bus, pci_device_fn, PCI_VENDOR_ID,
 								 &vendor_id);
-		/* get IRQ */
-		pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_INTERRUPT_LINE,
-								 &pci_irq);
-
 		/* get device id */
 		pcibios_read_config_word(pci_bus, pci_device_fn, PCI_DEVICE_ID,
 								 &device_id);
 
+#ifndef __sparc_v9__
 		/* get IO address */
 		pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_0,
-								  &pci_ioaddr);
+								  &itmp);
+		pci_ioaddr = itmp;
+
+		/* get IRQ */
+		pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_INTERRUPT_LINE,
+								 &btmp);
+		pci_irq = btmp;
+#else
+		/* get IO address */
+		pci_ioaddr = pdev->base_address[0];
+
+		/* get IRQ */
+		pci_irq = pdev->irq;
+#endif
 
 		/* Remove I/O space marker in bit 0. */
 		pci_ioaddr &= ~3;

@@ -262,12 +262,6 @@ __initfunc(int eql_init(struct device *dev))
 	dev->mtu        	= EQL_DEFAULT_MTU;	/* set to 576 in eql.h */
 	dev->flags      	= IFF_MASTER;
 
-	dev->family     	= AF_INET;
-	dev->pa_addr    	= 0;
-	dev->pa_brdaddr 	= 0;
-	dev->pa_mask    	= 0;
-	dev->pa_alen    	= 4;
-
 	dev->type       	= ARPHRD_SLIP;
 	dev->tx_queue_len 	= 5;		/* Hands them off fast */
 

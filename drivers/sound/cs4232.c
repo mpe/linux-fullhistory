@@ -21,19 +21,20 @@
  * for more info.
  */
 #include <linux/config.h>
-
+#include <linux/module.h>
 
 #include "sound_config.h"
+#include "soundmodule.h"
 
-#ifdef CONFIG_CS4232
+#if defined(CONFIG_CS4232) || defined (MODULE)
 
 #define KEY_PORT	0x279	/* Same as LPT1 status port */
 #define CSN_NUM		0x99	/* Just a random number */
 
-static void 
-CS_OUT (unsigned char a)
+static void
+CS_OUT(unsigned char a)
 {
-  outb ((a), KEY_PORT);
+	outb((a), KEY_PORT);
 }
 #define CS_OUT2(a, b)		{CS_OUT(a);CS_OUT(b);}
 #define CS_OUT3(a, b, c)	{CS_OUT(a);CS_OUT(b);CS_OUT(c);}
@@ -42,55 +43,54 @@ static int      mpu_base = 0, mpu_irq = 0;
 static int      mpu_detected = 0;
 
 int
-probe_cs4232_mpu (struct address_info *hw_config)
+probe_cs4232_mpu(struct address_info *hw_config)
 {
 /*
  * Just write down the config values.
  */
 
-  mpu_base = hw_config->io_base;
-  mpu_irq = hw_config->irq;
+	mpu_base = hw_config->io_base;
+	mpu_irq = hw_config->irq;
 
-  return 1;
+	return 1;
 }
 
 void
-attach_cs4232_mpu (struct address_info *hw_config)
+attach_cs4232_mpu(struct address_info *hw_config)
 {
 }
 
 static unsigned char crystal_key[] =	/* A 32 byte magic key sequence */
 {
-  0x96, 0x35, 0x9a, 0xcd, 0xe6, 0xf3, 0x79, 0xbc,
-  0x5e, 0xaf, 0x57, 0x2b, 0x15, 0x8a, 0xc5, 0xe2,
-  0xf1, 0xf8, 0x7c, 0x3e, 0x9f, 0x4f, 0x27, 0x13,
-  0x09, 0x84, 0x42, 0xa1, 0xd0, 0x68, 0x34, 0x1a
+	0x96, 0x35, 0x9a, 0xcd, 0xe6, 0xf3, 0x79, 0xbc,
+	0x5e, 0xaf, 0x57, 0x2b, 0x15, 0x8a, 0xc5, 0xe2,
+	0xf1, 0xf8, 0x7c, 0x3e, 0x9f, 0x4f, 0x27, 0x13,
+	0x09, 0x84, 0x42, 0xa1, 0xd0, 0x68, 0x34, 0x1a
 };
 
 int
-probe_cs4232 (struct address_info *hw_config)
+probe_cs4232(struct address_info *hw_config)
 {
-  int             i, n;
-  int             base = hw_config->io_base, irq = hw_config->irq;
-  int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
+	int             i, n;
+	int             base = hw_config->io_base, irq = hw_config->irq;
+	int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
 
-  static struct wait_queue *cs_sleeper = NULL;
-  static volatile struct snd_wait cs_sleep_flag =
-  {0};
+	static struct wait_queue *cs_sleeper = NULL;
+	static volatile struct snd_wait cs_sleep_flag =
+	{0};
 
 
 /*
  * Verify that the I/O port range is free.
  */
 
-  if (check_region (base, 4))
-    {
-      printk ("cs4232.c: I/O port 0x%03x not free\n", base);
-      return 0;
-    }
-
-  if (ad1848_detect (hw_config->io_base, NULL, hw_config->osp))
-    return 1;			/* The card is already active */
+	if (check_region(base, 4))
+	  {
+		  printk("cs4232.c: I/O port 0x%03x not free\n", base);
+		  return 0;
+	  }
+	if (ad1848_detect(hw_config->io_base, NULL, hw_config->osp))
+		return 1;	/* The card is already active */
 
 /*
  * This version of the driver doesn't use the PnP method when configuring
@@ -105,241 +105,287 @@ probe_cs4232 (struct address_info *hw_config)
  * first time.
  */
 
-  for (n = 0; n < 4; n++)
-    {
-      cs_sleep_flag.opts = WK_NONE;
+	for (n = 0; n < 4; n++)
+	  {
+		  cs_sleep_flag.opts = WK_NONE;
 /*
  * Wake up the card by sending a 32 byte Crystal key to the key port.
  */
-      for (i = 0; i < 32; i++)
-	CS_OUT (crystal_key[i]);
+		  for (i = 0; i < 32; i++)
+			  CS_OUT(crystal_key[i]);
 
 
-      {
-	unsigned long   tlimit;
+		  {
+			  unsigned long   tlimit;
 
-	if (HZ / 10)
-	  current->timeout = tlimit = jiffies + (HZ / 10);
-	else
-	  tlimit = (unsigned long) -1;
-	cs_sleep_flag.opts = WK_SLEEP;
-	interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.opts & WK_WAKEUP))
-	  {
-	    if (jiffies >= tlimit)
-	      cs_sleep_flag.opts |= WK_TIMEOUT;
-	  }
-	cs_sleep_flag.opts &= ~WK_SLEEP;
-      };			/* Delay */
+			  if (HZ / 10)
+				  current->timeout = tlimit = jiffies + (HZ / 10);
+			  else
+				  tlimit = (unsigned long) -1;
+			  cs_sleep_flag.opts = WK_SLEEP;
+			  interruptible_sleep_on(&cs_sleeper);
+			  if (!(cs_sleep_flag.opts & WK_WAKEUP))
+			    {
+				    if (jiffies >= tlimit)
+					    cs_sleep_flag.opts |= WK_TIMEOUT;
+			    }
+			  cs_sleep_flag.opts &= ~WK_SLEEP;
+		  };		/* Delay */
 
 /*
  * Now set the CSN (Card Select Number).
  */
 
-      CS_OUT2 (0x06, CSN_NUM);
+		  CS_OUT2(0x06, CSN_NUM);
 
 
 /*
  * Then set some config bytes. First logical device 0 
  */
 
-      CS_OUT2 (0x15, 0x00);	/* Select logical device 0 (WSS/SB/FM) */
-      CS_OUT3 (0x47, (base >> 8) & 0xff, base & 0xff);	/* WSS base */
+		  CS_OUT2(0x15, 0x00);	/* Select logical device 0 (WSS/SB/FM) */
+		  CS_OUT3(0x47, (base >> 8) & 0xff, base & 0xff);	/* WSS base */
 
-      if (check_region (0x388, 4))	/* Not free */
-	CS_OUT3 (0x48, 0x00, 0x00)	/* FM base off */
-	  else
-	CS_OUT3 (0x48, 0x03, 0x88);	/* FM base 0x388 */
+		  if (check_region(0x388, 4))	/* Not free */
+			  CS_OUT3(0x48, 0x00, 0x00)	/* FM base off */
+			      else
+			  CS_OUT3(0x48, 0x03, 0x88);	/* FM base 0x388 */
 
-      CS_OUT3 (0x42, 0x00, 0x00);	/* SB base off */
-      CS_OUT2 (0x22, irq);	/* SB+WSS IRQ */
-      CS_OUT2 (0x2a, dma1);	/* SB+WSS DMA */
+		  CS_OUT3(0x42, 0x00, 0x00);	/* SB base off */
+		  CS_OUT2(0x22, irq);	/* SB+WSS IRQ */
+		  CS_OUT2(0x2a, dma1);	/* SB+WSS DMA */
 
-      if (dma2 != -1)
-	CS_OUT2 (0x25, dma2)	/* WSS DMA2 */
-	  else
-	CS_OUT2 (0x25, 4);	/* No WSS DMA2 */
+		  if (dma2 != -1)
+			  CS_OUT2(0x25, dma2)	/* WSS DMA2 */
+			      else
+			  CS_OUT2(0x25, 4);	/* No WSS DMA2 */
 
-      CS_OUT2 (0x33, 0x01);	/* Activate logical dev 0 */
+		  CS_OUT2(0x33, 0x01);	/* Activate logical dev 0 */
 
 
-      {
-	unsigned long   tlimit;
+		  {
+			  unsigned long   tlimit;
 
-	if (HZ / 10)
-	  current->timeout = tlimit = jiffies + (HZ / 10);
-	else
-	  tlimit = (unsigned long) -1;
-	cs_sleep_flag.opts = WK_SLEEP;
-	interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.opts & WK_WAKEUP))
-	  {
-	    if (jiffies >= tlimit)
-	      cs_sleep_flag.opts |= WK_TIMEOUT;
-	  }
-	cs_sleep_flag.opts &= ~WK_SLEEP;
-      };			/* Delay */
+			  if (HZ / 10)
+				  current->timeout = tlimit = jiffies + (HZ / 10);
+			  else
+				  tlimit = (unsigned long) -1;
+			  cs_sleep_flag.opts = WK_SLEEP;
+			  interruptible_sleep_on(&cs_sleeper);
+			  if (!(cs_sleep_flag.opts & WK_WAKEUP))
+			    {
+				    if (jiffies >= tlimit)
+					    cs_sleep_flag.opts |= WK_TIMEOUT;
+			    }
+			  cs_sleep_flag.opts &= ~WK_SLEEP;
+		  };		/* Delay */
 
 /*
  * Initialize logical device 3 (MPU)
  */
 
 #if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
-      if (mpu_base != 0 && mpu_irq != 0)
-	{
-	  CS_OUT2 (0x15, 0x03);	/* Select logical device 3 (MPU) */
-	  CS_OUT3 (0x47, (mpu_base >> 8) & 0xff, mpu_base & 0xff);	/* MPU base */
-	  CS_OUT2 (0x22, mpu_irq);	/* MPU IRQ */
-	  CS_OUT2 (0x33, 0x01);	/* Activate logical dev 3 */
-	}
+		  if (mpu_base != 0 && mpu_irq != 0)
+		    {
+			    CS_OUT2(0x15, 0x03);	/* Select logical device 3 (MPU) */
+			    CS_OUT3(0x47, (mpu_base >> 8) & 0xff, mpu_base & 0xff);	/* MPU base */
+			    CS_OUT2(0x22, mpu_irq);	/* MPU IRQ */
+			    CS_OUT2(0x33, 0x01);	/* Activate logical dev 3 */
+		    }
 #endif
 
 /*
  * Finally activate the chip
  */
-      CS_OUT (0x79);
+		  CS_OUT(0x79);
 
 
-      {
-	unsigned long   tlimit;
+		  {
+			  unsigned long   tlimit;
 
-	if (HZ / 5)
-	  current->timeout = tlimit = jiffies + (HZ / 5);
-	else
-	  tlimit = (unsigned long) -1;
-	cs_sleep_flag.opts = WK_SLEEP;
-	interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.opts & WK_WAKEUP))
-	  {
-	    if (jiffies >= tlimit)
-	      cs_sleep_flag.opts |= WK_TIMEOUT;
-	  }
-	cs_sleep_flag.opts &= ~WK_SLEEP;
-      };			/* Delay */
+			  if (HZ / 5)
+				  current->timeout = tlimit = jiffies + (HZ / 5);
+			  else
+				  tlimit = (unsigned long) -1;
+			  cs_sleep_flag.opts = WK_SLEEP;
+			  interruptible_sleep_on(&cs_sleeper);
+			  if (!(cs_sleep_flag.opts & WK_WAKEUP))
+			    {
+				    if (jiffies >= tlimit)
+					    cs_sleep_flag.opts |= WK_TIMEOUT;
+			    }
+			  cs_sleep_flag.opts &= ~WK_SLEEP;
+		  };		/* Delay */
 
 /*
  * Then try to detect the codec part of the chip
  */
 
-      if (ad1848_detect (hw_config->io_base, NULL, hw_config->osp))
-	return 1;
+		  if (ad1848_detect(hw_config->io_base, NULL, hw_config->osp))
+			  return 1;
 
 
-      {
-	unsigned long   tlimit;
+		  {
+			  unsigned long   tlimit;
 
-	if (HZ)
-	  current->timeout = tlimit = jiffies + (HZ);
-	else
-	  tlimit = (unsigned long) -1;
-	cs_sleep_flag.opts = WK_SLEEP;
-	interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.opts & WK_WAKEUP))
-	  {
-	    if (jiffies >= tlimit)
-	      cs_sleep_flag.opts |= WK_TIMEOUT;
+			  if (HZ)
+				  current->timeout = tlimit = jiffies + (HZ);
+			  else
+				  tlimit = (unsigned long) -1;
+			  cs_sleep_flag.opts = WK_SLEEP;
+			  interruptible_sleep_on(&cs_sleeper);
+			  if (!(cs_sleep_flag.opts & WK_WAKEUP))
+			    {
+				    if (jiffies >= tlimit)
+					    cs_sleep_flag.opts |= WK_TIMEOUT;
+			    }
+			  cs_sleep_flag.opts &= ~WK_SLEEP;
+		  };		/* Longer delay */
 	  }
-	cs_sleep_flag.opts &= ~WK_SLEEP;
-      };			/* Longer delay */
-    }
 
-  return 0;
+	return 0;
 }
 
 void
-attach_cs4232 (struct address_info *hw_config)
+attach_cs4232(struct address_info *hw_config)
 {
-  int             base = hw_config->io_base, irq = hw_config->irq;
-  int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
-  int             old_num_mixers = num_mixers;
+	int             base = hw_config->io_base, irq = hw_config->irq;
+	int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
+	int             old_num_mixers = num_mixers;
 
-  if (dma2 == -1)
-    dma2 = dma1;
+	if (dma2 == -1)
+		dma2 = dma1;
 
-  ad1848_init ("Crystal audio controller", base,
-	       irq,
-	       dma1,		/* Playback DMA */
-	       dma2,		/* Capture DMA */
-	       0,
-	       hw_config->osp);
+	hw_config->slots[0] = ad1848_init("Crystal audio controller", base,
+					  irq,
+					  dma1,		/* Playback DMA */
+					  dma2,		/* Capture DMA */
+					  0,
+					  hw_config->osp);
 
-  if (num_mixers > old_num_mixers)
-    {				/* Assume the mixer map is as suggested in the CS4232 databook */
-      AD1848_REROUTE (SOUND_MIXER_LINE1, SOUND_MIXER_LINE);
-      AD1848_REROUTE (SOUND_MIXER_LINE2, SOUND_MIXER_CD);
-      AD1848_REROUTE (SOUND_MIXER_LINE3, SOUND_MIXER_SYNTH);	/* FM synth */
-    }
-
+	if (num_mixers > old_num_mixers)
+	  {			/* Assume the mixer map is as suggested in the CS4232 databook */
+		  AD1848_REROUTE(SOUND_MIXER_LINE1, SOUND_MIXER_LINE);
+		  AD1848_REROUTE(SOUND_MIXER_LINE2, SOUND_MIXER_CD);
+		  AD1848_REROUTE(SOUND_MIXER_LINE3, SOUND_MIXER_SYNTH);		/* FM synth */
+	  }
 #if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
-  if (mpu_base != 0 && mpu_irq != 0)
-    {
-      static struct address_info hw_config2 =
-      {0};			/* Ensure it's initialized */
+	if (mpu_base != 0 && mpu_irq != 0)
+	  {
+		  static struct address_info hw_config2 =
+		  {0};		/* Ensure it's initialized */
 
-      hw_config2.io_base = mpu_base;
-      hw_config2.irq = mpu_irq;
-      hw_config2.dma = -1;
-      hw_config2.dma2 = -1;
-      hw_config2.always_detect = 0;
-      hw_config2.name = NULL;
-      hw_config2.driver_use_1 = 0;
-      hw_config2.driver_use_2 = 0;
-      hw_config2.card_subtype = 0;
+		  hw_config2.io_base = mpu_base;
+		  hw_config2.irq = mpu_irq;
+		  hw_config2.dma = -1;
+		  hw_config2.dma2 = -1;
+		  hw_config2.always_detect = 0;
+		  hw_config2.name = NULL;
+		  hw_config2.driver_use_1 = 0;
+		  hw_config2.driver_use_2 = 0;
+		  hw_config2.card_subtype = 0;
 
-      if (probe_uart401 (&hw_config2))
-	{
-	  mpu_detected = 1;
-	  attach_uart401 (&hw_config2);
-	}
-      else
-	{
-	  mpu_base = mpu_irq = 0;
-	}
-    }
+		  if (probe_uart401(&hw_config2))
+		    {
+			    mpu_detected = 1;
+			    attach_uart401(&hw_config2);
+		  } else
+		    {
+			    mpu_base = mpu_irq = 0;
+		    }
+		  hw_config->slots[1] = hw_config2.slots[1];
+	  }
 #endif
 }
 
 void
-unload_cs4232 (struct address_info *hw_config)
+unload_cs4232(struct address_info *hw_config)
 {
-  int             base = hw_config->io_base, irq = hw_config->irq;
-  int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
+	int             base = hw_config->io_base, irq = hw_config->irq;
+	int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
 
-  if (dma2 == -1)
-    dma2 = dma1;
+	if (dma2 == -1)
+		dma2 = dma1;
 
-  ad1848_unload (base,
-		 irq,
-		 dma1,		/* Playback DMA */
-		 dma2,		/* Capture DMA */
-		 0);
-
+	ad1848_unload(base,
+		      irq,
+		      dma1,	/* Playback DMA */
+		      dma2,	/* Capture DMA */
+		      0);
+	sound_unload_audiodev(hw_config->slots[0]);
 #if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
-  if (mpu_base != 0 && mpu_irq != 0 && mpu_detected)
-    {
-      static struct address_info hw_config2 =
-      {0};			/* Ensure it's initialized */
+	if (mpu_base != 0 && mpu_irq != 0 && mpu_detected)
+	  {
+		  static struct address_info hw_config2 =
+		  {0};		/* Ensure it's initialized */
 
-      hw_config2.io_base = mpu_base;
-      hw_config2.irq = mpu_irq;
-      hw_config2.dma = -1;
-      hw_config2.dma2 = -1;
-      hw_config2.always_detect = 0;
-      hw_config2.name = NULL;
-      hw_config2.driver_use_1 = 0;
-      hw_config2.driver_use_2 = 0;
-      hw_config2.card_subtype = 0;
+		  hw_config2.io_base = mpu_base;
+		  hw_config2.irq = mpu_irq;
+		  hw_config2.dma = -1;
+		  hw_config2.dma2 = -1;
+		  hw_config2.always_detect = 0;
+		  hw_config2.name = NULL;
+		  hw_config2.driver_use_1 = 0;
+		  hw_config2.driver_use_2 = 0;
+		  hw_config2.card_subtype = 0;
+		  hw_config2.slots[1] = hw_config->slots[1];
 
-      unload_uart401 (&hw_config2);
-    }
+		  unload_uart401(&hw_config2);
+	  }
 #endif
 }
 
 void
-unload_cs4232_mpu (struct address_info *hw_config)
+unload_cs4232_mpu(struct address_info *hw_config)
 {
-  /* Not required. Handled by cs4232_unload */
+	/* Not required. Handled by cs4232_unload */
 }
 
+#ifdef MODULE
+
+int             io = -1;
+int             irq = -1;
+int             dma = -1;
+int             dma2 = -1;
+
+struct address_info cfg;
+
+/*
+ *    Install a CS4232 based card. Need to have ad1848 and mpu401
+ *      loaded ready.
+ */
+
+int
+init_module(void)
+{
+	if (io == -1 || irq == -1 || dma == -1 || dma2 == -1)
+	  {
+		  printk(KERN_ERR "cs4232: dma, dma2, irq and io must be set.\n");
+		  return -EINVAL;
+	  }
+	cfg.io_base = io;
+	cfg.irq = irq;
+	cfg.dma = dma;
+	cfg.dma2 = dma2;
+
+	if (probe_cs4232(&cfg) == 0)
+		return -ENODEV;
+
+	probe_cs4232_mpu(&cfg);	/* Bug always returns 0 not OK -- AC */
+
+	attach_cs4232(&cfg);
+	attach_cs4232_mpu(&cfg);
+	SOUND_LOCK;
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	unload_cs4232_mpu(&cfg);
+	unload_cs4232(&cfg);
+	SOUND_LOCK_END;
+}
+#endif
 
 #endif

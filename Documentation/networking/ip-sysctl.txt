@@ -143,10 +143,22 @@ tcp_syn_taildrop  - BOOLEAN
 tcp_max_syn_backlog - INTEGER
 	Undocumented (work in progress)
 
+ip_local_port_range - 2 INTEGERS
+	Defines the local port range that is used by TCP and UDP to
+	choose the local port. The first number is the first, the 
+	second the last local port number. For high-usage systems
+	change this to 32768-61000.
+
+icmp_echo_ignore_all - BOOLEAN
+icmp_echo_ignore_broadcasts - BOOLEAN
+	If either is set to true, then the kernel will ignore either all
+	ICMP ECHO requests sent to it or just those to broadcast/multicast
+	addresses, respectively.
+
 Alexey Kuznetsov.
 kuznet@ms2.inr.ac.ru
 
 Updated by:
 Andi Kleen
 ak@muc.de
-$Id: ip-sysctl.txt,v 1.3 1997/08/22 19:22:00 freitag Exp $
+$Id: ip-sysctl.txt,v 1.5 1997/10/17 03:58:23 tdyas Exp $

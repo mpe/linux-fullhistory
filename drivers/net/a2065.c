@@ -129,7 +129,7 @@ struct lance_private {
 	unsigned short busmaster_regval;
 
 #ifdef CONFIG_AMIGA
-	int key;
+	unsigned int key;
 #endif
 #ifdef CONFIG_SUNLANCE
 	struct Linux_SBus_DMA *ledma; /* if set this points to ledma and arch=4m */
@@ -585,16 +585,6 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 		return status;
 	}
 
-	if (skb == NULL) {
-		dev_tint (dev);
-		printk ("skb is NULL\n");
-		return 0;
-	}
-
-	if (skb->len <= 0) {
-		printk ("skb len is %d\n", skb->len);
-		return 0;
-	}
 	/* Block a timer-based transmit from overlapping. */
 #ifdef OLD_METHOD
 	dev->tbusy = 1;
@@ -737,20 +727,20 @@ static void lance_set_multicast (struct device *dev)
 
 __initfunc(int a2065_probe(struct device *dev))
 {
-	int key1, key2 = 0;
-	struct ConfigDev *cd;
+	unsigned int key, is_cbm;
+	const struct ConfigDev *cd;
 	u_long board;
 	u_long sn;
 	struct lance_private *priv;
 	struct A2065Board *a2065;
 
-	if ((key1 = zorro_find(MANUF_COMMODORE, PROD_A2065, 0, 0)) ||
-	    (key1 = zorro_find(MANUF_COMMODORE, PROD_A2065_2, 0, 0)) ||
-	    (key2 = zorro_find(MANUF_AMERISTAR, PROD_AMERISTAR2065, 0, 0))) {
-		cd = zorro_get_board(key1 ? key1 : key2);
+	if ((key = is_cbm = zorro_find(ZORRO_PROD_CBM_A2065_1, 0, 0)) ||
+	    (key = is_cbm = zorro_find(ZORRO_PROD_CBM_A2065_2, 0, 0)) ||
+	    (key = zorro_find(ZORRO_PROD_AMERISTAR_A2065, 0, 0))) {
+		cd = zorro_get_board(key);
 		if ((board = (u_long)cd->cd_BoardAddr)) {
 			sn = cd->cd_Rom.er_SerialNumber;
-			if (key1) {			/* Commodore */
+			if (is_cbm) {			/* Commodore */
 				dev->dev_addr[0] = 0x00;
 				dev->dev_addr[1] = 0x80;
 				dev->dev_addr[2] = 0x10;
@@ -783,7 +773,7 @@ __initfunc(int a2065_probe(struct device *dev))
 			priv->lance_init_block = (struct lance_init_block *)
 					      offsetof(struct A2065Board, RAM);
 			priv->auto_select = 0;
-			priv->key = key1 ? key1 : key2;
+			priv->key = key;
 			priv->busmaster_regval = LE_C3_BSWP;
 
 			priv->lance_log_rx_bufs = LANCE_LOG_RX_BUFFERS;
@@ -799,11 +789,11 @@ __initfunc(int a2065_probe(struct device *dev))
 			dev->dma = 0;
 
 			ether_setup(dev);
-			zorro_config_board(key1 ? key1 : key2, 0);
+			zorro_config_board(key, 0);
 			return(0);
 		}
 	}
-	return(ENODEV);
+	return(-ENODEV);
 }
 
 

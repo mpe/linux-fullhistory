@@ -88,4 +88,15 @@ struct icmp_err {
 };
 #endif
 
+/*
+ *	constants for (set|get)sockopt
+ */
+
+#define ICMP_FILTER			1
+
+struct icmp_filter {
+	__u32		data;
+};
+
+
 #endif	/* _LINUX_ICMP_H */

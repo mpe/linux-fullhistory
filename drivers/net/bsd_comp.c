@@ -39,17 +39,18 @@
 /*
  * This version is for use with contiguous buffers on Linux-derived systems.
  *
- *  ==FILEVERSION 4==
+ *  ==FILEVERSION 970607==
  *
  *  NOTE TO MAINTAINERS:
- *     If you modify this file at all, increment the number above.
+ *     If you modify this file at all, please set the number above to the
+ *     date of the modification as YYMMDD (year month day).
  *     bsd_comp.c is shipped with a PPP distribution as well as with
  *     the kernel; if everyone increases the FILEVERSION number above,
  *     then scripts can do the right thing when deciding whether to
  *     install a new bsd_comp.c file. Don't change the format of that
  *     line otherwise, so the installation script can recognize it.
  *
- * $Id: bsd_comp.c,v 1.1 1994/12/08 01:59:58 paulus Exp $
+ * From: bsd_comp.c,v 1.3 1994/12/08 01:59:58 paulus Exp
  */
 
 #ifndef MODULE
@@ -57,7 +58,6 @@
 #endif
 
 #include <linux/module.h>
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -76,7 +76,6 @@
 
 #include <asm/system.h>
 #include <asm/bitops.h>
-#include <asm/uaccess.h>
 #include <asm/byteorder.h>
 
 #include <linux/if.h>
@@ -88,14 +87,6 @@
 #include <linux/ioctl.h>
 
 #include <linux/ppp_defs.h>
-
-#ifdef NEW_SKBUFF
-# /*nodep*/ include <linux/netprotocol.h>
-#endif
-
-#include <linux/ip.h>
-#include <linux/tcp.h>
-#include <linux/if_arp.h>
 
 #undef   PACKETPTR
 #define  PACKETPTR 1
@@ -142,14 +133,16 @@ struct bsd_dict {
     union {				/* hash value */
 	unsigned long	fcode;
 	struct {
-#if defined(__LITTLE_ENDIAN) /* Little endian order */
+#if defined(__LITTLE_ENDIAN)		/* Little endian order */
 	    unsigned short	prefix;	/* preceding code */
 	    unsigned char	suffix; /* last character of new code */
 	    unsigned char	pad;
-#elif defined(__BIG_ENDIAN) /* Big endian order */
+#elif defined(__BIG_ENDIAN)		/* Big endian order */
 	    unsigned char	pad;
 	    unsigned char	suffix; /* last character of new code */
 	    unsigned short	prefix; /* preceding code */
+#else
+#error Endianness not defined...
 #endif
 	} hs;
     } f;
@@ -250,7 +243,6 @@ bsd_clear(struct bsd_db *db)
     db->n_bits       = BSD_INIT_BITS;
     db->bytes_out    = 0;
     db->in_count     = 0;
-    db->incomp_count = 0;
     db->ratio	     = 0;
     db->checkpoint   = CHECK_GAP;
 }
@@ -685,7 +677,7 @@ static int bsd_compress (void *state, unsigned char *rptr, unsigned char *obuf,
     /* Skip the input header */
     rptr  += PPP_HDRLEN;
     isize -= PPP_HDRLEN;
-    ilen   = ++isize; /* This is off by one, but that is what is in draft! */
+    ilen   = ++isize;	/* Low byte of protocol is counted as input */
 
     while (--ilen > 0)
       {
@@ -774,7 +766,7 @@ nomatch:
     
     OUTPUT(ent);		/* output the last code */
 
-    db->bytes_out    += olen;	/* Do not count bytes from here */
+    db->bytes_out    += olen - PPP_HDRLEN - BSD_OVHD;
     db->uncomp_bytes += isize;
     db->in_count     += isize;
     ++db->uncomp_count;

@@ -166,7 +166,11 @@
 /*
 ** PCI Configuration Base I/O Address Register (PCI_CBIO)
 */
+#ifdef __sparc_v9__
+#define CBIO_MASK   0xffffffffffffff80       /* Base I/O Address Mask */
+#else
 #define CBIO_MASK   0xffffff80       /* Base I/O Address Mask */
+#endif
 #define CBIO_IOSI   0x00000001       /* I/O Space Indicator (RO, value is 1) */
 
 /*
@@ -903,7 +907,6 @@
 #define OPEN                 2     /* Running */
 
 /*
-** Various wait times
 */
 #define PDET_LINK_WAIT    1200    /* msecs to wait for link detect bits     */
 #define ANS_FINISH_WAIT   1000    /* msecs to wait for link detect bits     */
@@ -933,7 +936,7 @@
   } else if (lp->useSROM && !lp->useMII) {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
-    outl(omr | (lp->infoblock_csr6 & ~(OMR_SCR | OMR_HBD)), DE4X5_OMR);\
+    outl(omr | lp->infoblock_csr6, DE4X5_OMR);\
   } else {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
@@ -961,7 +964,7 @@
   } else if (lp->useSROM && !lp->useMII) {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
-    outl(omr | lp->infoblock_csr6, DE4X5_OMR);\
+    outl(omr | (lp->infoblock_csr6 & ~(OMR_SCR | OMR_HBD)), DE4X5_OMR);\
   } else {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
@@ -978,7 +981,7 @@
     outl(omr, DE4X5_OMR);\
   } else if (lp->useSROM && !lp->useMII) {\
     omr = (inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
-    outl(omr, DE4X5_OMR);\
+    outl(omr | lp->infoblock_csr6, DE4X5_OMR);\
   } else {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\

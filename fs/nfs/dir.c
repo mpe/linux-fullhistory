@@ -478,15 +478,16 @@ static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 	int error;
 
 	dfprintk(VFS, "NFS: lookup(%x/%ld, %.*s)\n",
-				dir->i_dev, dir->i_ino, len, dentry->d_name.name);
+			dir->i_dev, dir->i_ino, len, dentry->d_name.name);
 
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk("nfs_lookup: inode is NULL or not a directory\n");
 		return -ENOENT;
 	}
 
+	error = -ENAMETOOLONG;
 	if (len > NFS_MAXNAMLEN)
-		return -ENAMETOOLONG;
+		goto out;
 
 	error = nfs_proc_lookup(NFS_SERVER(dir), NFS_FH(dir), 
 				dentry->d_name.name, &fhandle, &fattr);
@@ -504,6 +505,7 @@ static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 			error = 0;
 		}
 	}
+out:
 	return error;
 }
 
@@ -516,7 +518,6 @@ static int nfs_instantiate(struct inode *dir, struct dentry *dentry,
 	struct inode *inode;
 	int error = -EACCES;
 
-	nfs_invalidate_dircache(dir);
 	inode = nfs_fhget(dir->i_sb, fhandle, fattr);
 	if (inode) {
 		d_instantiate(dentry, inode);
@@ -526,6 +527,12 @@ static int nfs_instantiate(struct inode *dir, struct dentry *dentry,
 	return error;
 }
 
+/*
+ * Following a failed create operation, we drop the dentry rather
+ * than retain a negative dentry. This avoids a problem in the event
+ * that the operation succeeded on the server, but an error in the
+ * reply path made it appear to have failed.
+ */
 static int nfs_create(struct inode *dir, struct dentry * dentry, int mode)
 {
 	struct nfs_sattr sattr;
@@ -541,19 +548,36 @@ static int nfs_create(struct inode *dir, struct dentry * dentry, int mode)
 		return -ENOENT;
 	}
 
+	error = -ENAMETOOLONG;
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
-		return -ENAMETOOLONG;
+		goto out;
 
 	sattr.mode = mode;
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
+
+	/*
+	 * Invalidate the dir cache before the operation to avoid a race.
+	 */
+	nfs_invalidate_dircache(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 			dentry->d_name.name, &sattr, &fhandle, &fattr);
 	if (!error)
 		error = nfs_instantiate(dir, dentry, &fattr, &fhandle);
+	else {
+#ifdef NFS_PARANOIA
+printk("nfs_create: %s/%s failed, error=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, error);
+#endif
+		d_drop(dentry);
+	}
+out:
 	return error;
 }
 
+/*
+ * See comments for nfs_proc_create regarding failed operations.
+ */
 static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rdev)
 {
 	struct nfs_sattr sattr;
@@ -576,15 +600,26 @@ static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rde
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	if (S_ISCHR(mode) || S_ISBLK(mode))
 		sattr.size = rdev; /* get out your barf bag */
-
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
+
+	nfs_invalidate_dircache(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 				dentry->d_name.name, &sattr, &fhandle, &fattr);
 	if (!error)
 		error = nfs_instantiate(dir, dentry, &fattr, &fhandle);
+	else {
+#ifdef NFS_PARANOIA
+printk("nfs_mknod: %s/%s failed, error=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, error);
+#endif
+		d_drop(dentry);
+	}
 	return error;
 }
 
+/*
+ * See comments for nfs_proc_create regarding failed operations.
+ */
 static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	struct nfs_sattr sattr;
@@ -607,10 +642,18 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 
+	nfs_invalidate_dircache(dir);
 	error = nfs_proc_mkdir(NFS_SERVER(dir), NFS_FH(dir),
 				dentry->d_name.name, &sattr, &fhandle, &fattr);
 	if (!error)
 		error = nfs_instantiate(dir, dentry, &fattr, &fhandle);
+	else {
+#ifdef NFS_PARANOIA
+printk("nfs_mkdir: %s/%s failed, error=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, error);
+#endif
+		d_drop(dentry);
+	}
 	return error;
 }
 
@@ -897,7 +940,7 @@ nfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	int error;
 
 	dfprintk(VFS, "NFS: symlink(%x/%ld, %s, %s)\n",
-				dir->i_dev, dir->i_ino, dentry->d_name.name, symname);
+			dir->i_dev, dir->i_ino, dentry->d_name.name, symname);
 
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk("nfs_symlink: inode is NULL or not a directory\n");
@@ -911,25 +954,35 @@ nfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	if (strlen(symname) > NFS_MAXPATHLEN)
 		goto out;
 
-	sattr.mode = S_IFLNK | S_IRWXUGO; /* SunOS 4.1.2 crashes without this! */
+#ifdef NFS_PARANOIA
+if (dentry->d_inode)
+printk("nfs_proc_symlink: %s/%s not negative!\n",
+dentry->d_parent->d_name.name, dentry->d_name.name);
+#endif
+	/*
+	 * Fill in the sattr for the call.
+ 	 * Note: SunOS 4.1.2 crashes if the mode isn't initialized!
+	 */
+	sattr.mode = S_IFLNK | S_IRWXUGO;
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 
+	/*
+	 * Drop the dentry in advance to force a new lookup.
+	 * Since nfs_proc_symlink doesn't return a fattr, we
+	 * can't instantiate the new inode.
+	 */
+	d_drop(dentry);
 	error = nfs_proc_symlink(NFS_SERVER(dir), NFS_FH(dir),
 				dentry->d_name.name, symname, &sattr);
 	if (!error) {
 		nfs_invalidate_dircache(dir);
 		nfs_renew_times(dentry->d_parent);
-		/*  this looks _funny_ doesn't it? But: nfs_proc_symlink()
-		 *  only fills in sattr, not fattr. Thus nfs_fhget() cannot be
-		 *  called, it would be pointless, without a valid fattr
-		 *  argument. Other possibility: call nfs_proc_lookup()
-		 *  HERE. But why? If somebody wants to reference this
-		 *  symlink, the cached_lookup() will fail, and
-		 *  nfs_proc_symlink() will be called anyway.
-		 */
-		d_drop(dentry);
+	} else if (error == -EEXIST) {
+		printk("nfs_proc_symlink: %s/%s already exists??\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name);
 	}
+
 out:
 	return error;
 }

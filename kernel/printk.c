@@ -109,7 +109,7 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 			log_size--;
 			log_start &= LOG_BUF_LEN-1;
 			sti();
-			put_user(c,buf);
+			__put_user(c,buf);
 			buf++;
 			i++;
 			cli();
@@ -138,7 +138,7 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 		j = log_start + log_size - count;
 		for (i = 0; i < count; i++) {
 			c = *((char *) log_buf+(j++ & (LOG_BUF_LEN-1)));
-			put_user(c, buf++);
+			__put_user(c, buf++);
 		}
 		if (do_clear)
 			logged_chars = 0;

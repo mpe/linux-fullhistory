@@ -1,3 +1,5 @@
+#warning "will not compile until the networking is merged"
+#if 0
 /*
  * Copyright 1996 The Board of Trustees of The Leland Stanford
  * Junior University. All Rights Reserved.
@@ -106,6 +108,7 @@ static const char StripVersion[] = "1.2-STUART.CHESHIRE";
 #include <linux/tty.h>
 #include <linux/errno.h>
 #include <linux/netdevice.h>
+#include <linux/inetdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
@@ -1505,16 +1508,18 @@ static void strip_send(struct strip *strip_info, struct sk_buff *skb)
         memcmp(strip_info->dev.dev_addr, zero_address.c, sizeof(zero_address)) &&
         *strip_info->dev.broadcast!=0xFF)
     {
+	struct in_device *in_dev = strip_info->dev.ip_ptr;
         /*printk(KERN_INFO "%s: Sending gratuitous ARP with interval %ld\n",
             strip_info->dev.name, strip_info->arp_interval / HZ);*/
         strip_info->gratuitous_arp = jiffies + strip_info->arp_interval;
         strip_info->arp_interval *= 2;
         if (strip_info->arp_interval > MaxARPInterval)
             strip_info->arp_interval = MaxARPInterval;
+	if (in_dev && in_dev->ifa_list)
         arp_send(ARPOP_REPLY, ETH_P_ARP,
-            strip_info->dev.pa_addr,	/* Target address of ARP packet is our address */
+	    in_dev->ifa_list->ifa_address,/* Target address of ARP packet is our address */
             &strip_info->dev,		/* Device to send packet on */
-            strip_info->dev.pa_addr,	/* Source IP address this ARP packet comes from */
+            in_dev->ifa_list->ifa_address,/* Source IP address this ARP packet comes from */
             NULL,			/* Destination HW address is NULL (broadcast it) */
             strip_info->dev.dev_addr,	/* Source HW address is our HW address */
             strip_info->dev.dev_addr);	/* Target HW address is our HW address (redundant) */
@@ -2430,7 +2435,6 @@ static int strip_dev_init(struct device *dev)
     dev->tx_queue_len       = 30;         /* Drop after 30 frames queued */
 
     dev->flags              = 0;
-    dev->family             = AF_INET;
     dev->metric             = 0;
     dev->mtu                = DEFAULT_STRIP_MTU;
     dev->type               = ARPHRD_METRICOM;        /* dtang */
@@ -2442,10 +2446,6 @@ static int strip_dev_init(struct device *dev)
     *(MetricomAddress*)&dev->broadcast = broadcast_address;
     dev->dev_addr[0]        = 0;
     dev->addr_len           = sizeof(MetricomAddress);
-    dev->pa_addr            = 0;
-    dev->pa_brdaddr         = 0;
-    dev->pa_mask            = 0;
-    dev->pa_alen            = sizeof(unsigned long);
 
     /*
      * Pointer to the interface buffers.
@@ -2634,7 +2634,6 @@ static void strip_close(struct tty_struct *tty)
     if (!strip_info || strip_info->magic != STRIP_MAGIC)
         return;
 
-    dev_close(&strip_info->dev);
     unregister_netdev(&strip_info->dev);
 
     tty->disc_data = 0;
@@ -2783,3 +2782,4 @@ void cleanup_module(void)
     printk(KERN_INFO "STRIP: Module Unloaded\n");
 }
 #endif /* MODULE */
+#endif

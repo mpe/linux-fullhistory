@@ -267,6 +267,7 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 	struct tok_info *ti=0;
 	__u32 cd_chanid;
 	unsigned char *tchanid, ctemp;
+	unsigned long timeout;
 
 #ifndef MODULE
 	dev = init_trdev(dev,0);
@@ -406,10 +407,14 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 				irq=10;
 			if (intr==3)
 				irq=11;
-			/*
-			 *	FIXME: this wait should have a timeout
-			 */
-			while(!readb(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN));
+
+			timeout = jiffies + TR_SPIN_INTERVAL;
+			while(!readb(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN))
+				if (jiffies > timeout) {
+					DPRINTK("Hardware timeout during initialization.\n");
+					kfree_s(ti, sizeof(struct tok_info));
+					return -ENODEV;
+			        }
 			ti->sram=((__u32)readb(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN)<<12);
 			ti->global_int_enable=PIOaddr+ADAPTINTREL;
 			ti->adapter_int_enable=PIOaddr+ADAPTINTREL;
@@ -1474,12 +1479,6 @@ static int tok_send_packet(struct sk_buff *skb, struct device *dev)
 		DPRINTK("Arrg. Transmitter busy.\n");
 		dev->trans_start+=5; /* we fake the transmission start time... */
 		return 1;
-	}
-
-	/* Donald does this, so we do too. */
-	if (skb==NULL) {
-		dev_tint(dev);
-		return 0;
 	}
 
 	if (test_and_set_bit(0,(void *)&dev->tbusy)!=0)

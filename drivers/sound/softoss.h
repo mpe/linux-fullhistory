@@ -92,6 +92,7 @@ typedef struct softsyn_devc
 	int ram_used;
 
 	int synthdev;
+	int timerdev;
 	int sequencer_mode;
 /*
  *	Audio parameters

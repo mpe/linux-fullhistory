@@ -29,7 +29,6 @@
  * 961118	Changed some verbiage on some of the output, tidied up
  *		code bits, and added compatibility to 2.1.x.
  * 970912       Enabled board on open and disable on close.
- * 971107       Took account of recent VFS changes (broke read).
  */
 
 #include <linux/module.h>
@@ -223,7 +222,7 @@ static void pcwd_send_heartbeat(void)
 }
 
 static int pcwd_ioctl(struct inode *inode, struct file *file,
-		      unsigned int cmd, unsigned long arg)
+	unsigned int cmd, unsigned long arg)
 {
 	int i, cdat, rv;
 	static struct watchdog_info ident=
@@ -360,12 +359,8 @@ static int pcwd_ioctl(struct inode *inode, struct file *file,
 	return 0;
 }
 
-static ssize_t pcwd_write(struct file *file, const char *buf, size_t len,
-			  loff_t *ppos)
+static long pcwd_write(struct inode *inode, struct file *file, const char *buf, unsigned long len)
 {
-	/*  Can't seek (pwrite) on this device  */
-	if (ppos != &file->f_pos)
-		return -ESPIPE;
 	if (len)
 	{
 		pcwd_send_heartbeat();
@@ -386,15 +381,11 @@ static int pcwd_open(struct inode *ino, struct file *filep)
 	return(0);
 }
 
-static ssize_t pcwd_read(struct file *file, char *buf, size_t count,
-			 loff_t *ppos)
+static ssize_t pcwd_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 {
 	unsigned short c = inb(current_readport);
 	unsigned char cp;
 
-	/*  Can't seek (pread) on this device  */
-	if (ppos != &file->f_pos)
-		return -ESPIPE;
 	switch(MINOR(file->f_dentry->d_inode->i_rdev)) 
 	{
 		case TEMP_MINOR:
@@ -497,16 +488,11 @@ static struct file_operations pcwd_fops = {
 	pcwd_read,	/* Read */
 	pcwd_write,	/* Write */
 	NULL,		/* Readdir */
-	NULL,		/* Poll */
+	NULL,		/* Select */
 	pcwd_ioctl,	/* IOctl */
 	NULL,		/* MMAP */
 	pcwd_open,	/* Open */
-	pcwd_close,	/* Release */
-	NULL,           /* Fsync */
-	NULL,           /* Fasync */
-	NULL,           /* CheckMediaChange */
-	NULL,           /* Revalidate */
-	NULL,           /* Lock */
+	pcwd_close	/* Close */
 };
 
 static struct miscdevice pcwd_miscdev = {

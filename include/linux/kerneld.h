@@ -8,6 +8,7 @@
 #define KERNELD_CANCEL_RELEASE_MODULE 5 /* "rmmod" */
 #define KERNELD_REQUEST_ROUTE 6 /* from net/ipv4/route.c */
 #define KERNELD_BLANKER 7 /* from drivers/char/console.c */
+#define KERNELD_PNP 8 /* from drivers/pnp/kerneld.c */
 #define KERNELD_ARP 256 /* from net/ipv4/arp.c */
 
 /*

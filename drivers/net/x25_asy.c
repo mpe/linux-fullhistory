@@ -662,7 +662,12 @@ static void x25_asy_close_tty(struct tty_struct *tty)
 	if (!sl || sl->magic != X25_ASY_MAGIC)
 		return;
 
-	(void) dev_close(sl->dev);
+	if (sl->dev->flags & IFF_UP)
+	{
+		dev_lock_wait();
+		(void) dev_close(sl->dev);
+		dev_unlock_list();
+	}
 
 	tty->disc_data = 0;
 	sl->tty = NULL;
@@ -896,11 +901,6 @@ int x25_asy_init(struct device *dev)
 	
 	/* New-style flags. */
 	dev->flags		= IFF_NOARP;
-	dev->family		= AF_X25;
-	dev->pa_addr		= 0;
-	dev->pa_brdaddr	        = 0;
-	dev->pa_mask		= 0;
-	dev->pa_alen		= 4;
 
 	return 0;
 }

@@ -1293,7 +1293,6 @@ NOTE:  This is rather a useless action right now, as the
 			{
 				case ARPHRD_FRAD:
 					dev->type = ifr->ifr_flags;
-					dev->family = AF_UNSPEC;
 					break;
 				default:
 					return(-ENOPROTOOPT);
@@ -1643,12 +1642,6 @@ __initfunc(int sdla_init(struct device *dev))
 	dev->change_mtu		= sdla_change_mtu;
 
 	dev->type		= 0xFFFF;
-	dev->family		= AF_UNSPEC;
-	dev->pa_alen		= 0;
-	dev->pa_addr		= 0;
-	dev->pa_dstaddr 	= 0;
-	dev->pa_brdaddr		= 0;
-	dev->pa_mask		= 0;
 	dev->hard_header_len = 0;
 	dev->addr_len		= 0;
 	dev->mtu		= SDLA_MAX_MTU;

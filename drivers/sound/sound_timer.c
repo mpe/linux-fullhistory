@@ -1,3 +1,5 @@
+
+
 /*
  * sound/sound_timer.c
  */
@@ -13,7 +15,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SEQUENCER)
+#if defined(CONFIG_SEQUENCER) || defined(CONFIG_SEQUENCER_MODULE)
 
 static volatile int initialized = 0, opened = 0, tmr_running = 0;
 static volatile time_t tmr_offs, tmr_ctr;
@@ -27,320 +29,315 @@ static volatile unsigned long usecs_per_tmr;	/* Length of the current interval *
 static struct sound_lowlev_timer *tmr = NULL;
 
 static unsigned long
-tmr2ticks (int tmr_value)
+tmr2ticks(int tmr_value)
 {
-  /*
-   *    Convert timer ticks to MIDI ticks
-   */
+	/*
+	 *    Convert timer ticks to MIDI ticks
+	 */
 
-  unsigned long   tmp;
-  unsigned long   scale;
+	unsigned long   tmp;
+	unsigned long   scale;
 
-  tmp = tmr_value * usecs_per_tmr;	/* Convert to usecs */
+	tmp = tmr_value * usecs_per_tmr;	/* Convert to usecs */
 
-  scale = (60 * 1000000) / (curr_tempo * curr_timebase);	/* usecs per MIDI tick */
+	scale = (60 * 1000000) / (curr_tempo * curr_timebase);	/* usecs per MIDI tick */
 
-  return (tmp + (scale / 2)) / scale;
+	return (tmp + (scale / 2)) / scale;
 }
 
 static void
-reprogram_timer (void)
+reprogram_timer(void)
 {
-  unsigned long   usecs_per_tick;
+	unsigned long   usecs_per_tick;
 
-  usecs_per_tick = (60 * 1000000) / (curr_tempo * curr_timebase);
+	usecs_per_tick = (60 * 1000000) / (curr_tempo * curr_timebase);
 
-  /*
-     * Don't kill the system by setting too high timer rate
-   */
-  if (usecs_per_tick < 2000)
-    usecs_per_tick = 2000;
+	/*
+	   * Don't kill the system by setting too high timer rate
+	 */
+	if (usecs_per_tick < 2000)
+		usecs_per_tick = 2000;
 
-  usecs_per_tmr = tmr->tmr_start (tmr->dev, usecs_per_tick);
+	usecs_per_tmr = tmr->tmr_start(tmr->dev, usecs_per_tick);
 }
 
 void
-sound_timer_syncinterval (unsigned int new_usecs)
+sound_timer_syncinterval(unsigned int new_usecs)
 {
 /*
  *    This routine is called by the hardware level if
  *      the clock frequency has changed for some reason.
  */
-  tmr_offs = tmr_ctr;
-  ticks_offs += tmr2ticks (tmr_ctr);
-  tmr_ctr = 0;
+	tmr_offs = tmr_ctr;
+	ticks_offs += tmr2ticks(tmr_ctr);
+	tmr_ctr = 0;
 
-  usecs_per_tmr = new_usecs;
+	usecs_per_tmr = new_usecs;
 }
 
 static void
-tmr_reset (void)
+tmr_reset(void)
 {
-  unsigned long   flags;
+	unsigned long   flags;
 
-  save_flags (flags);
-  cli ();
-  tmr_offs = 0;
-  ticks_offs = 0;
-  tmr_ctr = 0;
-  next_event_time = (unsigned long) -1;
-  prev_event_time = 0;
-  curr_ticks = 0;
-  restore_flags (flags);
+	save_flags(flags);
+	cli();
+	tmr_offs = 0;
+	ticks_offs = 0;
+	tmr_ctr = 0;
+	next_event_time = (unsigned long) -1;
+	prev_event_time = 0;
+	curr_ticks = 0;
+	restore_flags(flags);
 }
 
 static int
-timer_open (int dev, int mode)
+timer_open(int dev, int mode)
 {
-  if (opened)
-    return -EBUSY;
+	if (opened)
+		return -EBUSY;
 
-  tmr_reset ();
-  curr_tempo = 60;
-  curr_timebase = 100;
-  opened = 1;
-  reprogram_timer ();
+	tmr_reset();
+	curr_tempo = 60;
+	curr_timebase = 100;
+	opened = 1;
+	reprogram_timer();
 
-  return 0;
+	return 0;
 }
 
 static void
-timer_close (int dev)
+timer_close(int dev)
 {
-  opened = tmr_running = 0;
-  tmr->tmr_disable (tmr->dev);
+	opened = tmr_running = 0;
+	tmr->tmr_disable(tmr->dev);
 }
 
 static int
-timer_event (int dev, unsigned char *event)
+timer_event(int dev, unsigned char *event)
 {
-  unsigned char   cmd = event[1];
-  unsigned long   parm = *(int *) &event[4];
+	unsigned char   cmd = event[1];
+	unsigned long   parm = *(int *) &event[4];
 
-  switch (cmd)
-    {
-    case TMR_WAIT_REL:
-      parm += prev_event_time;
-    case TMR_WAIT_ABS:
-      if (parm > 0)
-	{
-	  long            time;
+	switch (cmd)
+	  {
+	  case TMR_WAIT_REL:
+		  parm += prev_event_time;
+	  case TMR_WAIT_ABS:
+		  if (parm > 0)
+		    {
+			    long            time;
 
-	  if (parm <= curr_ticks)	/* It's the time */
-	    return TIMER_NOT_ARMED;
+			    if (parm <= curr_ticks)	/* It's the time */
+				    return TIMER_NOT_ARMED;
 
-	  time = parm;
-	  next_event_time = prev_event_time = time;
+			    time = parm;
+			    next_event_time = prev_event_time = time;
 
-	  return TIMER_ARMED;
-	}
-      break;
+			    return TIMER_ARMED;
+		    }
+		  break;
 
-    case TMR_START:
-      tmr_reset ();
-      tmr_running = 1;
-      reprogram_timer ();
-      break;
+	  case TMR_START:
+		  tmr_reset();
+		  tmr_running = 1;
+		  reprogram_timer();
+		  break;
 
-    case TMR_STOP:
-      tmr_running = 0;
-      break;
+	  case TMR_STOP:
+		  tmr_running = 0;
+		  break;
 
-    case TMR_CONTINUE:
-      tmr_running = 1;
-      reprogram_timer ();
-      break;
+	  case TMR_CONTINUE:
+		  tmr_running = 1;
+		  reprogram_timer();
+		  break;
 
-    case TMR_TEMPO:
-      if (parm)
-	{
-	  if (parm < 8)
-	    parm = 8;
-	  if (parm > 250)
-	    parm = 250;
-	  tmr_offs = tmr_ctr;
-	  ticks_offs += tmr2ticks (tmr_ctr);
-	  tmr_ctr = 0;
-	  curr_tempo = parm;
-	  reprogram_timer ();
-	}
-      break;
+	  case TMR_TEMPO:
+		  if (parm)
+		    {
+			    if (parm < 8)
+				    parm = 8;
+			    if (parm > 250)
+				    parm = 250;
+			    tmr_offs = tmr_ctr;
+			    ticks_offs += tmr2ticks(tmr_ctr);
+			    tmr_ctr = 0;
+			    curr_tempo = parm;
+			    reprogram_timer();
+		    }
+		  break;
 
-    case TMR_ECHO:
-      seq_copy_to_input (event, 8);
-      break;
+	  case TMR_ECHO:
+		  seq_copy_to_input(event, 8);
+		  break;
 
-    default:;
-    }
+	  default:;
+	  }
 
-  return TIMER_NOT_ARMED;
+	return TIMER_NOT_ARMED;
 }
 
 static unsigned long
-timer_get_time (int dev)
+timer_get_time(int dev)
 {
-  if (!opened)
-    return 0;
+	if (!opened)
+		return 0;
 
-  return curr_ticks;
+	return curr_ticks;
 }
 
 static int
-timer_ioctl (int dev,
-	     unsigned int cmd, caddr_t arg)
+timer_ioctl(int dev,
+	    unsigned int cmd, caddr_t arg)
 {
-  int             val;
+	int             val;
 
-  switch (cmd)
-    {
-    case SNDCTL_TMR_SOURCE:
-      return (*(int *) arg = TMR_INTERNAL);
-      break;
+	switch (cmd)
+	  {
+	  case SNDCTL_TMR_SOURCE:
+		  return (*(int *) arg = TMR_INTERNAL);
+		  break;
 
-    case SNDCTL_TMR_START:
-      tmr_reset ();
-      tmr_running = 1;
-      return 0;
-      break;
+	  case SNDCTL_TMR_START:
+		  tmr_reset();
+		  tmr_running = 1;
+		  return 0;
+		  break;
 
-    case SNDCTL_TMR_STOP:
-      tmr_running = 0;
-      return 0;
-      break;
+	  case SNDCTL_TMR_STOP:
+		  tmr_running = 0;
+		  return 0;
+		  break;
 
-    case SNDCTL_TMR_CONTINUE:
-      tmr_running = 1;
-      return 0;
-      break;
+	  case SNDCTL_TMR_CONTINUE:
+		  tmr_running = 1;
+		  return 0;
+		  break;
 
-    case SNDCTL_TMR_TIMEBASE:
-      val = *(int *) arg;
+	  case SNDCTL_TMR_TIMEBASE:
+		  val = *(int *) arg;
 
-      if (val)
-	{
-	  if (val < 1)
-	    val = 1;
-	  if (val > 1000)
-	    val = 1000;
-	  curr_timebase = val;
-	}
+		  if (val)
+		    {
+			    if (val < 1)
+				    val = 1;
+			    if (val > 1000)
+				    val = 1000;
+			    curr_timebase = val;
+		    }
+		  return (*(int *) arg = curr_timebase);
+		  break;
 
-      return (*(int *) arg = curr_timebase);
-      break;
+	  case SNDCTL_TMR_TEMPO:
+		  val = *(int *) arg;
 
-    case SNDCTL_TMR_TEMPO:
-      val = *(int *) arg;
+		  if (val)
+		    {
+			    if (val < 8)
+				    val = 8;
+			    if (val > 250)
+				    val = 250;
+			    tmr_offs = tmr_ctr;
+			    ticks_offs += tmr2ticks(tmr_ctr);
+			    tmr_ctr = 0;
+			    curr_tempo = val;
+			    reprogram_timer();
+		    }
+		  return (*(int *) arg = curr_tempo);
+		  break;
 
-      if (val)
-	{
-	  if (val < 8)
-	    val = 8;
-	  if (val > 250)
-	    val = 250;
-	  tmr_offs = tmr_ctr;
-	  ticks_offs += tmr2ticks (tmr_ctr);
-	  tmr_ctr = 0;
-	  curr_tempo = val;
-	  reprogram_timer ();
-	}
+	  case SNDCTL_SEQ_CTRLRATE:
+		  val = *(int *) arg;
 
-      return (*(int *) arg = curr_tempo);
-      break;
+		  if (val != 0)	/* Can't change */
+			  return -EINVAL;
 
-    case SNDCTL_SEQ_CTRLRATE:
-      val = *(int *) arg;
+		  return (*(int *) arg = ((curr_tempo * curr_timebase) + 30) / 60);
+		  break;
 
-      if (val != 0)		/* Can't change */
+	  case SNDCTL_SEQ_GETTIME:
+		  return (*(int *) arg = curr_ticks);
+		  break;
+
+	  case SNDCTL_TMR_METRONOME:
+		  /* NOP */
+		  break;
+
+	  default:;
+	  }
+
 	return -EINVAL;
-
-      return (*(int *) arg = ((curr_tempo * curr_timebase) + 30) / 60);
-      break;
-
-    case SNDCTL_SEQ_GETTIME:
-      return (*(int *) arg = curr_ticks);
-      break;
-
-    case SNDCTL_TMR_METRONOME:
-      /* NOP */
-      break;
-
-    default:;
-    }
-
-  return -EINVAL;
 }
 
 static void
-timer_arm (int dev, long time)
+timer_arm(int dev, long time)
 {
-  if (time < 0)
-    time = curr_ticks + 1;
-  else if (time <= curr_ticks)	/* It's the time */
-    return;
+	if (time < 0)
+		time = curr_ticks + 1;
+	else if (time <= curr_ticks)	/* It's the time */
+		return;
 
-  next_event_time = prev_event_time = time;
+	next_event_time = prev_event_time = time;
 
-  return;
+	return;
 }
 
 static struct sound_timer_operations sound_timer =
 {
-  {"Sound Timer", 0},
-  1,				/* Priority */
-  0,				/* Local device link */
-  timer_open,
-  timer_close,
-  timer_event,
-  timer_get_time,
-  timer_ioctl,
-  timer_arm
+	{"Sound Timer", 0},
+	1,			/* Priority */
+	0,			/* Local device link */
+	timer_open,
+	timer_close,
+	timer_event,
+	timer_get_time,
+	timer_ioctl,
+	timer_arm
 };
 
 void
-sound_timer_interrupt (void)
+sound_timer_interrupt(void)
 {
-  if (!opened)
-    return;
+	if (!opened)
+		return;
 
-  tmr->tmr_restart (tmr->dev);
+	tmr->tmr_restart(tmr->dev);
 
-  if (!tmr_running)
-    return;
+	if (!tmr_running)
+		return;
 
-  tmr_ctr++;
-  curr_ticks = ticks_offs + tmr2ticks (tmr_ctr);
+	tmr_ctr++;
+	curr_ticks = ticks_offs + tmr2ticks(tmr_ctr);
 
-  if (curr_ticks >= next_event_time)
-    {
-      next_event_time = (unsigned long) -1;
-      sequencer_timer (0);
-    }
+	if (curr_ticks >= next_event_time)
+	  {
+		  next_event_time = (unsigned long) -1;
+		  sequencer_timer(0);
+	  }
 }
 
-void
-sound_timer_init (struct sound_lowlev_timer *t, char *name)
+void 
+sound_timer_init(struct sound_lowlev_timer *t, char *name)
 {
-  int             n;
+	int             n;
 
-  if (initialized)
-    {
-      if (t->priority <= tmr->priority)
-	return;			/* There is already a similar or better timer */
-      tmr = t;
-      return;
-    }
-  initialized = 1;
+	if (initialized)
+	  {
+		  if (t->priority <= tmr->priority)
+			  return;	/* There is already a similar or better timer */
+		  tmr = t;
+		  return;
+	  }
+	initialized = 1;
 
-  tmr = t;
+	tmr = t;
 
-  if (num_sound_timers >= MAX_TIMER_DEV)
-    n = 0;			/* Overwrite the system timer */
-  else
-    n = num_sound_timers++;
-
-  strcpy (sound_timer.info.name, name);
-
-  sound_timer_devs[n] = &sound_timer;
+	n = sound_alloc_timerdev();
+	if (n == -1)
+		n = 0;		/* Overwrite the system timer */
+	strcpy(sound_timer.info.name, name);
+	sound_timer_devs[n] = &sound_timer;
 }
 
 #endif

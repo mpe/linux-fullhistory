@@ -25,6 +25,14 @@ S: INR (Ecublens)
 S: CH-1015 Lausanne
 S: Switzerland
 
+N: Tim Alpaerts
+E: tim_alpaerts@toyota-motor-europe.com
+D: 802.2 class II logical link control layer,
+D: the humble start of an opening towards the IBM SNA protocols
+S: Klaproosstraat 72 c 10
+S: B-2610 Wilrijk-Antwerpen
+S: Belgium
+
 N: H. Peter Anvin
 E: hpa@zytor.com
 W: http://www.zytor.com/~hpa/
@@ -144,11 +152,11 @@ D: Original author of the Linux networking code
 
 N: Philip Blundell
 E: Philip.Blundell@pobox.com
-D: Device driver hacking (especially EtherExpress16/3C505 net cards)
+D: Device driver hacking 
 D: Some Linux/ARM stuff
 D: Co-architect of the parallel port sharing system
-S: 201 Gilbert Road
-S: Cambridge, UK. CB4 3PA
+S: Nexus Electronics Ltd
+S: 10 St Barnabas Road, Cambridge, UK. CB1 2BY
 
 N: Thomas Bogendoerfer
 E: tsbogend@alpha.franken.de
@@ -359,6 +367,11 @@ S: Grevenbroicher Str. 17
 S: 47807 Krefeld
 S: Germany
 
+N: Tom Dyas
+E: tdyas@eden.rutgers.edu
+D: minor hacks and some sparc port stuff
+S: New Jersey, USA
+
 N: Drew Eckhardt
 E: drew@PoohSticks.ORG
 D: SCSI code
@@ -505,6 +518,15 @@ S: P.O. Box 76, Epping
 S: N.S.W., 2121
 S: Australia
 
+N: Richard E. Gooch
+E: rgooch@atnf.csiro.au
+D: parent process death signal to children
+D: prctl() syscall
+S: CSIRO Australia Telescope National Facility
+S: P.O. Box 76, Epping
+S: N.S.W., 2121
+S: Australia
+
 N: Dmitry S. Gorodchanin
 E: begemot@bgm.rosprint.net
 D: RISCom/8 driver, misc kernel fixes.
@@ -606,9 +628,12 @@ S: 34131 Kassel
 S: Germany
 
 N: Richard Henderson
-E: richard@gnu.ai.mit.edu
 E: rth@cygnus.com
+E: richard@gnu.org
 D: Alpha/ELF, gcc, binutils, and glibc
+S: 5450 Mayme #25
+S: San Jose, California 95129
+S: USA
 
 N: Sebastian Hetze
 E: she@lunetix.de
@@ -798,6 +823,13 @@ N: Rudolf Koenig
 E: rfkoenig@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
 
+N: Andi Kleen
+E: ak@muc.de
+D: network hacker, syncookies
+S: Schwalbenstr. 96
+S: 85551 Ottobrunn
+S: Germany
+
 N: Willy Konynenberg
 E: willy@xos.nl
 W: http://www.xos.nl/
@@ -849,6 +881,13 @@ N: Savio Lam
 E: lam836@cs.cuhk.hk
 D: Author of the dialog utility, foundation
 D: for Menuconfig's lxdialog.
+
+N: Tom Lees
+E: tom@lpsg.demon.co.uk
+W: http://www.lpsg.demon.co.uk/
+P: 1024/87D4D065 2A 66 86 9D 02 4D A6 1E  B8 A2 17 9D 4F 9B 89 D6
+D: Original author and current maintainer of
+D: PnP code.
 
 N: David van Leeuwen
 E: david@tm.tno.nl
@@ -950,6 +989,7 @@ D: Initial implementation of VC's, pty's and select()
 N: Pavel Machek
 E: pavel@atrey.karlin.mff.cuni.cz
 D: Softcursor for vga, hypertech cdrom support, vcsa bugfix
+D: Network block device
 S: Volkova 1131
 S: 198 00 Praha 9
 S: Czech Republic
@@ -980,12 +1020,12 @@ S: Halifax, Nova Scotia
 S: Canada B3J 3C8
 
 N: Martin Mares
-E: mj@k332.feld.cvut.cz
+E: mj@atrey.karlin.mff.cuni.cz
 W: http://atrey.karlin.mff.cuni.cz/~mj/
 D: BIOS video mode handling code
-D: Miscellaneous kernel fixes and hacks
 D: MOXA C-218 serial board driver
-D: BOOTP support
+D: Network autoconfiguration
+D: Random kernel hacking
 S: Kankovskeho 1241
 S: 182 00 Praha 8
 S: Czech Republic 
@@ -1182,6 +1222,15 @@ N: David Parsons
 E: orc@pell.chi.il.us
 D: improved memory detection code.
 
+N: Vojtech Pavlik
+E: vojtech@atrey.karlin.mff.cuni.cz
+D: Joystick driver
+D: arcnet-hardware readme
+D: Minor ARCnet hacking
+S: Ucitelska 1576
+S: Prague 8
+S: 182 00 Czech Republic
+
 N: Barak A. Pearlmutter
 E: bap@cs.unm.edu
 W: http://www.cs.unm.edu/~bap/
@@ -1208,6 +1257,11 @@ D: Some smbfs fixes
 S: Demonstratsii 8-382
 S: Tula 300000
 S: Russia
+
+N: Kirk Petersen
+E: kirk@speakeasy.org
+W: http://www.speakeasy.org/~kirk/
+D: modularized BSD Unix domain sockets
 
 N: Kai Petzke
 E: wpp@marie.physik.tu-berlin.de
@@ -1660,8 +1714,8 @@ S: 73650 Winterbach
 S: Germany
 
 N: Marco van Wieringen
-E: mvw@mercury.mcs.nl.mugnet.org
-D: Author of acct and quota
+E: mvw@planets.elm.net
+D: Author of process accounting and diskquota
 S: Breeburgsingel 12
 S: 2135 CN Hoofddorp
 S: The Netherlands
@@ -1700,6 +1754,7 @@ N: David Woodhouse
 E: dwmw2@cam.ac.uk
 D: Extensive ARCnet rewrite
 D: ARCnet COM20020, COM90xx IO-MAP drivers
+D: SO_BINDTODEVICE in 2.1.x (from Elliot Poger's code in 2.0.31)
 S: Robinson College, Grange Road
 S: Cambridge. CB3 9AN
 S: England

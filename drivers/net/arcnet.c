@@ -1,4 +1,4 @@
-/*	$Id: arcnet.c,v 1.30 1997/09/05 08:57:46 mj Exp $
+/*	$Id: arcnet.c,v 1.34 1997/11/09 11:04:55 mj Exp $
 
 	Written 1994-1996 by Avery Pennarun,
 	derived from skeleton.c by Donald Becker.
@@ -18,13 +18,21 @@
 
 	**********************
 
-	v2.92 ALPHA (97/02/09)
+	v3.00 (97/11/09)
+	  - Minor cleanup of debugging messages. [mj]
+
+	v2.93 ALPHA (97/11/06)
+	  - irq2dev mapping removed.
+	  - Interrupt handler now checks whether dev->priv is non-null in order
+	    to avoid crashes in interrupts which come during card init. [mj]
+
+	v2.92 ALPHA (97/09/02)
 	  - Code cleanup [Martin Mares <mj@atrey.karlin.mff.cuni.cz>]
 	  - Better probing for the COM90xx chipset, although only as
 	    a temporary solution until we implement adding of all found
 	    devices at once. [mj]
 
-	v2.91 ALPHA (97/19/08)
+	v2.91 ALPHA (97/08/19)
 	  - Add counting of octets in/out.
 
 	v2.90 ALPHA (97/08/08)
@@ -162,7 +170,7 @@
 */
 
 static const char *version =
- "arcnet.c: v2.92 97/09/02 Avery Pennarun <apenwarr@bond.net> et al.\n";
+ "arcnet.c: v3.00 97/11/09 Avery Pennarun <apenwarr@bond.net> et al.\n";
 
 #include <linux/module.h>
 #include <linux/config.h>
@@ -377,11 +385,6 @@ void arcnet_setup(struct device *dev)
 
 	/* New-style flags. */
 	dev->flags		= IFF_BROADCAST;
-	dev->family		= AF_INET;
-	dev->pa_addr		= 0;
-	dev->pa_brdaddr 	= 0;
-	dev->pa_mask		= 0;
-	dev->pa_alen		= 4;
 
 	/* Put in this stuff here, so we don't have to export the symbols
 	 * to the chipset drivers.
@@ -541,7 +544,6 @@ arcnet_close(struct device *dev)
 #ifdef CONFIG_ARCNET_ETH
   /* free the ethernet-encap protocol device */
   lp->edev->priv=NULL;
-  dev_close(lp->edev);
   unregister_netdev(lp->edev);
   kfree(lp->edev->name);
   kfree(lp->edev);
@@ -551,7 +553,6 @@ arcnet_close(struct device *dev)
 #ifdef CONFIG_ARCNET_1051
   /* free the RFC1051-encap protocol device */
   lp->sdev->priv=NULL;
-  dev_close(lp->sdev);
   unregister_netdev(lp->sdev);
   kfree(lp->sdev->name);
   kfree(lp->sdev);
@@ -924,14 +925,18 @@ arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs)
 
 	if (dev==NULL)
 	  {
-	    BUGLVL(D_DURING)
-	      printk(KERN_DEBUG "arcnet: irq %d for unknown device.\n", irq);
+	    BUGMSG(D_DURING, "arcnet: irq %d for unknown device.\n", irq);
 	    return;
 	  }
 
 	BUGMSG(D_DURING,"in arcnet_interrupt\n");
 
 	lp=(struct arcnet_local *)dev->priv;
+	if (!lp)
+	  {
+	    BUGMSG(D_DURING, "arcnet: irq ignored.\n");
+	    return;
+	  }
 
 	/* RESET flag was enabled - if !dev->start, we must clear it right
 	 * away (but nothing else) since inthandler() is never called.

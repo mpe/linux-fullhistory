@@ -1,6 +1,6 @@
 ================================================================
 	AWE32 Sound Driver for Linux / FreeBSD
-		version 0.4.2; Sep. 1, 1997
+		version 0.4.2c; Oct. 7, 1997
 ================================================================
 
 * GENERAL NOTES
@@ -41,7 +41,7 @@ The GM and GS sounds include multiple instrument layers.
 The current version supports this type of sounds with a special
 extension, but it uses a non-standard way of sequencer calls.  Then,
 so far, only drvmidi and playmidi can play the multiple instruments
-and stereo sounds properly.
+and stereo sounds properly as MIDI sequencers.
 
 To load SoundFont files, sfxload utility is required.
 All AWE32 driver and utilities can be downloaded from:

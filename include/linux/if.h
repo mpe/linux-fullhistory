@@ -39,6 +39,8 @@
 
 #define IFF_MULTICAST	0x1000		/* Supports multicast		*/
 
+#define IFF_VOLATILE	(IFF_LOOPBACK|IFF_POINTOPOINT|IFF_BROADCAST|IFF_ALLMULTI)
+
 #define IFF_PORTSEL	0x2000          /* can set media type		*/
 #define IFF_AUTOMEDIA	0x4000		/* auto media select active	*/
 
@@ -129,6 +131,7 @@ struct ifreq
 #define ifr_slave	ifr_ifru.ifru_slave	/* slave device		*/
 #define	ifr_data	ifr_ifru.ifru_data	/* for use by interface	*/
 #define ifr_ifindex	ifr_ifru.ifru_ivalue	/* interface index	*/
+#define ifr_bandwidth	ifr_ifru.ifru_ivalue    /* link bandwidth	*/
 
 /*
  * Structure used in SIOCGIFCONF request.
@@ -148,5 +151,6 @@ struct ifconf
 };
 #define	ifc_buf	ifc_ifcu.ifcu_buf		/* buffer address	*/
 #define	ifc_req	ifc_ifcu.ifcu_req		/* array of structures	*/
+
 
 #endif /* _LINUX_IF_H */

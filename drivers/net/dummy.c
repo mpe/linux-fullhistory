@@ -82,7 +82,7 @@ __initfunc(int dummy_init(struct device *dev))
 	if (dev->priv == NULL)
 		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct net_device_stats));
-	dev->get_stats		= dummy_get_stats;
+	dev->get_stats	= dummy_get_stats;
 
 	dev->open = dummy_open;
 	dev->stop = dummy_close;
@@ -92,6 +92,7 @@ __initfunc(int dummy_init(struct device *dev))
 	ether_setup(dev);
 	dev->tx_queue_len = 0;
 	dev->flags |= IFF_NOARP;
+	dev->flags &= ~IFF_BROADCAST;
 
 	return 0;
 }

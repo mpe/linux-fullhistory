@@ -672,13 +672,14 @@ nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
 	int		err;
 
 	if ((err = fh_verify(rqstp, fhp, S_IFLNK, MAY_READ)) != 0)
-		return err;
+		goto out;
 
 	dentry = fhp->fh_dentry;
 	inode = dentry->d_inode;
 
+	err = nfserr_inval;
 	if (!inode->i_op || !inode->i_op->readlink)
-		return nfserr_io;
+		goto out;
 
 	UPDATE_ATIME(inode);
 	oldfs = get_fs(); set_fs(KERNEL_DS);
@@ -686,10 +687,14 @@ nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
 	set_fs(oldfs);
 
 	if (err < 0)
-		return nfserrno(-err);
-	*lenp = err;
+		err = nfserrno(-err);
+	else {
+		*lenp = err;
+		err = 0;
+	}
 
-	return 0;
+out:
+	return err;
 }
 
 /*
@@ -706,41 +711,43 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct inode	*dirp;
 	int		err;
 
+	err = nfserr_noent;
 	if (!flen || !plen)
-		return nfserr_noent;
+		goto out;
 
 	if ((err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE)) != 0)
-		return err;
-
+		goto out;
 	dentry = fhp->fh_dentry;
-	dirp = dentry->d_inode;
 
-	if (nfsd_iscovered(dentry, fhp->fh_export)	||
-	    !dirp->i_op					||
-	    !dirp->i_op->symlink)
-		return nfserr_perm;
+	err = nfserr_perm;
+	if (nfsd_iscovered(dentry, fhp->fh_export))
+		goto out;
+	dirp = dentry->d_inode;
+	if (!dirp->i_op	|| !dirp->i_op->symlink)
+		goto out;
 
 	dnew = lookup_dentry(fname, dget(dentry), 0);
 	err = PTR_ERR(dnew);
 	if (IS_ERR(dnew))
-		goto out;
+		goto out_nfserr;
 
 	err = -EEXIST;
-	if(dnew->d_inode)
-		goto compose_and_out;
-
-	fh_lock(fhp);
-	err = dirp->i_op->symlink(dirp, dnew, path);
-	fh_unlock(fhp);
-
-	if (!err) {
-		if (EX_ISSYNC(fhp->fh_export))
-			write_inode_now(dirp);
+	if (!dnew->d_inode) {
+		fh_lock(fhp);
+		err = dirp->i_op->symlink(dirp, dnew, path);
+		fh_unlock(fhp);
+		if (!err) {
+			if (EX_ISSYNC(fhp->fh_export))
+				write_inode_now(dirp);
+		}
 	}
-compose_and_out:
 	fh_compose(resfhp, fhp->fh_export, dnew);
+
+out_nfserr:
+	if (err)
+		err = nfserrno(-err);
 out:
-	return (err ? nfserrno(-err) : 0);
+	return err;
 }
 
 /*

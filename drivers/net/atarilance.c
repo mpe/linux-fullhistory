@@ -763,14 +763,6 @@ static int lance_start_xmit( struct sk_buff *skb, struct device *dev )
 		return( 0 );
 	}
 
-	if (skb == NULL) {
-		dev_tint( dev );
-		return( 0 );
-	}
-
-	if (skb->len <= 0)
-		return( 0 );
-
 	DPRINTK( 2, ( "%s: lance_start_xmit() called, csr0 %4.4x.\n",
 				  dev->name, DREG ));
 

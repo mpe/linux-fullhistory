@@ -77,7 +77,6 @@
 #include <linux/stat.h>
 #include <linux/firewall.h>
 #include <linux/module.h>
-#include <linux/net_alias.h>
 #include <linux/init.h>
 
 #include <net/ip.h>
@@ -159,9 +158,6 @@ static __inline__ int dev_is_ethdev(struct device *dev)
 	return (
 			dev->type == ARPHRD_ETHER
 			&& strncmp(dev->name, "dummy", 5)
-#ifdef CONFIG_NET_ALIAS
-			&& !net_alias_is(dev)
-#endif
 	);
 }
 
@@ -552,17 +548,7 @@ static int bpq_new_device(struct device *dev)
 	memcpy(dev->broadcast, ax25_bcast, AX25_ADDR_LEN);
 	memcpy(dev->dev_addr,  ax25_defaddr, AX25_ADDR_LEN);
 
-	/* preset with reasonable values */
-
 	dev->flags      = 0;
-	dev->family     = AF_INET;
-
-#ifdef CONFIG_INET
-	dev->pa_addr    = in_aton("192.168.0.1");
-	dev->pa_brdaddr = in_aton("192.168.0.255");
-	dev->pa_mask    = in_aton("255.255.255.0");
-	dev->pa_alen    = 4;
-#endif
 
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 	dev->hard_header     = ax25_encapsulate;

@@ -1,0 +1,1069 @@
+/*
+ *	Media Vision Pro Movie Studio
+ *			or
+ *	"all you need is an I2C bus some RAM and a prayer"
+ *
+ *	This draws heavily on code
+ *
+ *	(c) Wolfgang Koehler,  wolf@first.gmd.de, Dec. 1994
+ *	Kiefernring 15
+ *	14478 Potsdam, Germany
+ *
+ *	Most of this code is directly derived from his userspace driver.
+ *	His driver works so send any reports to alan@cymru.net unless the
+ *	userspace driver also doesnt work for you...
+ */
+
+#include <linux/module.h>
+#include <linux/config.h>
+#include <linux/delay.h>
+#include <linux/errno.h>
+#include <linux/fs.h>
+#include <linux/kernel.h>
+#include <linux/malloc.h>
+#include <linux/mm.h>
+#include <linux/ioport.h>
+#include <asm/io.h>
+#include <linux/sched.h>
+#include <linux/videodev.h>
+#include <linux/version.h>
+#include <asm/uaccess.h>
+
+
+#define MOTOROLA	1
+#define PHILIPS2	2
+#define PHILIPS1	3
+#define MVVMEMORYWIDTH	0x40		/* 512 bytes */
+
+struct pms_device
+{
+	struct video_device v;
+	struct video_picture picture;
+	int height;
+	int width;
+};
+
+struct i2c_info
+{
+	u8 slave;
+	u8 sub;
+	u8 data;
+	u8 hits;
+};
+
+static int i2c_count 		= 0;
+static struct i2c_info i2cinfo[64];
+
+static int decoder 		= PHILIPS2;
+static int standard 		= 0;	/* 0 - auto 1 - ntsc 2 - pal 3 - secam */
+
+/*
+ *	I/O ports and Shared Memory
+ */
+ 
+static int io_port		=	0x250;
+static int data_port		=	0x251;
+static int mem_base		=	0xC8000;
+
+	
+
+extern __inline__ void mvv_write(u8 index, u8 value)
+{
+	outw(index|(value<<8), io_port);
+}
+
+extern __inline__ u8 mvv_read(u8 index)
+{
+	outb(index, io_port);
+	return inb(data_port);
+}
+
+extern int i2c_stat(u8 slave)
+{
+	int counter;
+	int i;
+	
+	outb(0x28, io_port);
+	
+	counter=0;
+	while((inb(data_port)&0x01)==0)
+		if(counter++==256)
+			break;
+
+	while((inb(data_port)&0x01)!=0)
+		if(counter++==256)
+			break;
+			
+	outb(slave, io_port);
+	
+	counter=0;
+	while((inb(data_port)&0x01)==0)
+		if(counter++==256)
+			break;
+
+	while((inb(data_port)&0x01)!=0)
+		if(counter++==256)
+			break;
+			
+	for(i=0;i<12;i++)
+	{
+		char st=inb(data_port);
+		if((st&2)!=0)
+			return -1;
+		if((st&1)==0)
+			break;
+	}
+	outb(0x29, io_port);
+	return inb(data_port);		
+}
+
+int i2c_write(u16 slave, u16 sub, u16 data)
+{
+	int skip=0;
+	int count;
+	int i;
+	
+	for(i=0;i<i2c_count;i++)
+	{
+		if((i2cinfo[i].slave==slave) &&
+		   (i2cinfo[i].sub == sub))
+		{
+		   	if(i2cinfo[i].data==data)
+		   		skip=1;
+		   	i2cinfo[i].data=data;
+		   	i=i2c_count+1;
+		}
+	}
+	
+	if(i==i2c_count && i2c_count<64)
+	{
+		i2cinfo[i2c_count].slave=slave;
+		i2cinfo[i2c_count].sub=sub;
+		i2cinfo[i2c_count].data=data;
+		i2c_count++;
+	}
+	
+	if(skip)
+		return 0;
+		
+	mvv_write(0x29, sub);
+	mvv_write(0x2A, data);
+	mvv_write(0x28, slave);
+	
+	outb(0x28, io_port);
+	
+	count=0;
+	while((inb(data_port)&1)==0)
+		if(count>255)
+			break;
+	while((inb(data_port)&1)!=0)
+		if(count>255)
+			break;
+			
+	count=inb(data_port);
+	
+	if(count&2)
+		return -1;
+	return count;
+}
+
+int i2c_read(int slave, int sub)
+{
+	int i=0;
+	for(i=0;i<i2c_count;i++)
+	{
+		if(i2cinfo[i].slave==slave && i2cinfo[i].sub==sub)
+			return i2cinfo[i].data;
+	}
+	return 0;
+}
+
+
+void i2c_andor(int slave, int sub, int and, int or)
+{
+	u8 tmp;	
+	
+	tmp=i2c_read(slave, sub);
+	tmp = (tmp&and)|or;
+	i2c_write(slave, sub, tmp);
+}
+
+/*
+ *	Control functions
+ */
+ 
+
+static void pms_videosource(short source)
+{
+	mvv_write(0x2E, source?0x31:0x30);
+}
+
+static void pms_hue(short hue)
+{
+	switch(decoder)
+	{
+		case MOTOROLA:
+			i2c_write(0x8A, 0x00, hue);
+			break;
+		case PHILIPS2:
+			i2c_write(0x8A, 0x07, hue);
+			break;
+		case PHILIPS1:
+			i2c_write(0x42, 0x07, hue);
+			break;
+	}
+}
+
+static void pms_colour(short colour)
+{
+	switch(decoder)
+	{
+		case MOTOROLA:
+			i2c_write(0x8A, 0x00, colour);
+			break;
+		case PHILIPS1:
+			i2c_write(0x42, 012, colour);
+			break;
+	}
+}
+ 
+ 
+static void pms_contrast(short contrast)
+{
+	switch(decoder)
+	{
+		case MOTOROLA:
+			i2c_write(0x8A, 0x00, contrast);
+			break;
+		case PHILIPS1:
+			i2c_write(0x42, 0x13, contrast);
+			break;
+	}
+}
+
+static void pms_brightness(short brightness)
+{
+	switch(decoder)
+	{
+		case MOTOROLA:
+			i2c_write(0x8A, 0x00, brightness);
+			i2c_write(0x8A, 0x00, brightness);
+			i2c_write(0x8A, 0x00, brightness);
+			break;
+		case PHILIPS1:
+			i2c_write(0x42, 0x19, brightness);
+			break;
+	}
+}
+
+static void pms_hstart(short start)
+{
+	switch(decoder)
+	{
+		case PHILIPS1:
+			i2c_write(0x8A, 0x05, start);
+			i2c_write(0x8A, 0x18, start);
+			break;
+		case PHILIPS2:
+			i2c_write(0x42, 0x05, start);
+			i2c_write(0x42, 0x18, start);
+			break;
+	}
+}
+
+static void pms_format(short format)
+{
+	int target;
+	standard = format;
+	
+	if(decoder==PHILIPS1)
+		target=0x42;
+	else if(decoder==PHILIPS2)
+		target=0x8A;
+	else
+		return;
+				
+	switch(format)
+	{
+		case 0:	/* Auto */
+			i2c_andor(target, 0x0D, 0xFE,0x00);
+			i2c_andor(target, 0x0F, 0x3F,0x80);
+			break;
+		case 1: /* NTSC */
+			i2c_andor(target, 0x0D, 0xFE, 0x00);
+			i2c_andor(target, 0x0F, 0x3F, 0x40);
+			break;
+		case 2: /* PAL */
+			i2c_andor(target, 0x0D, 0xFE, 0x00);
+			i2c_andor(target, 0x0F, 0x3F, 0x00);
+			break;
+		case 3:	/* SECAM */
+			i2c_andor(target, 0x0D, 0xFE, 0x01);
+			i2c_andor(target, 0x0F, 0x3F, 0x00);
+			break;
+	}
+}
+
+/*
+ *	Bandpass filters
+ */
+ 
+static void pms_bandpass(short pass)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0x8A, 0x06, 0xCF, (pass&0x03)<<4);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x06, 0xCF, (pass&0x03)<<4);
+}
+
+static void pms_antisnow(short snow)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0x8A, 0x06, 0xF3, (snow&0x03)<<2);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x06, 0xF3, (snow&0x03)<<2);
+}
+
+static void pms_sharpness(short sharp)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0x8A, 0x06, 0xFC, sharp&0x03);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x06, 0xFC, sharp&0x03);
+}
+
+static void pms_chromaagc(short agc)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0x8A, 0x0C, 0x9F, (agc&0x03)<<5);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x0C, 0x9F, (agc&0x03)<<5);
+}
+
+static void pms_vertnoise(short noise)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0x8A, 0x10, 0xFC, noise&3);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x10, 0xFC, noise&3);
+}
+
+static void pms_secamcross(short cross)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0x8A, 0x0F, 0xDF, (cross&1)<<5);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x0F, 0xDF, (cross&1)<<5);
+}
+
+static void pms_forcecolour(short colour)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0x8A, 0x0C, 0x7F, (colour&1)<<7);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x0C, 0x7, (colour&1)<<7);
+}
+
+static void pms_antigamma(short gamma)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0xB8, 0x00, 0x7F, (gamma&1)<<7);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x20, 0x7, (gamma&1)<<7);
+}
+
+static void pms_prefilter(short filter)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0x8A, 0x06, 0xBF, (filter&1)<<6);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x06, 0xBF, (filter&1)<<6);
+}
+
+static void pms_hfilter(short filter)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0xB8, 0x04, 0x1F, (filter&7)<<5);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x24, 0x1F, (filter&7)<<5);
+}
+
+static void pms_vfilter(short filter)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0xB8, 0x08, 0x9F, (filter&3)<<5);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42, 0x28, 0x9F, (filter&3)<<5);
+}
+
+static void pms_killcolour(short colour)
+{
+	if(decoder==PHILIPS2)
+	{
+		i2c_andor(0x8A, 0x08, 0x07, (colour&0x1F)<<3);
+		i2c_andor(0x8A, 0x09, 0x07, (colour&0x1F)<<3);
+	}
+	else if(decoder==PHILIPS1)
+	{
+		i2c_andor(0x42, 0x08, 0x07, (colour&0x1F)<<3);
+		i2c_andor(0x42, 0x09, 0x07, (colour&0x1F)<<3);
+	}
+}
+
+static void pms_swsense(short sense)
+{
+	if(decoder==PHILIPS2)
+	{
+		i2c_write(0x8A, 0x0A, sense);
+		i2c_write(0x8A, 0x0B, sense);
+	}
+	else if(decoder==PHILIPS1)
+	{
+		i2c_write(0x42, 0x08, sense);
+		i2c_write(0x42, 0x09, sense);
+	}
+}
+
+static void pms_chromagain(short chroma)
+{
+	if(decoder==PHILIPS2)
+	{
+		i2c_write(0x8A, 0x0A, chroma);
+		i2c_write(0x8A, 0x0B, chroma);
+	}
+	else if(decoder==PHILIPS1)
+	{
+		i2c_write(0x42, 0x08, chroma);
+		i2c_write(0x42, 0x09, chroma);
+	}
+}
+
+
+static void pms_spacialcompl(short data)
+{
+	mvv_write(0x3B, data);
+}
+
+static void pms_spacialcomph(short data)
+{
+	mvv_write(0x3A, data);
+}
+
+static void pms_framerate(short frr)
+{
+	int fps=(standard==1)?30:25;
+	if(frr==0)
+		return;
+	fps=fps/frr;
+	mvv_write(0x14,0x80|fps);
+	mvv_write(0x15,1);
+}
+
+static void pms_vert(u8 deciden, u8 decinum)
+{
+	mvv_write(0x1C, deciden);	/* Denominator */
+	mvv_write(0x1D, decinum);	/* Numerator */
+}
+
+/*
+ *	Turn 16bit ratios into best small ratio the chipset can grok
+ */
+ 
+static void pms_vertdeci(unsigned short decinum, unsigned short deciden)
+{
+	/* Knock it down by /5 once */
+	if(decinum%5==0)
+	{
+		deciden/=5;
+		decinum/=5;
+	}
+	/*
+	 *	3's
+	 */
+	while(decinum%3==0 && deciden%3==0)
+	{
+		deciden/=3;
+		decinum/=3;
+	}
+	/*
+	 *	2's
+	 */
+	while(decinum%2==0 && deciden%2==0)
+	{
+		decinum/=2;
+		deciden/=2;
+	}
+	/*
+	 *	Fudgyify
+	 */
+	while(deciden>32)
+	{
+		deciden/=2;
+		decinum=(decinum+1)/2;
+	}
+	if(deciden==32)
+		deciden--;
+	pms_vert(deciden,decinum);
+}
+
+static void pms_horzdeci(short decinum, short deciden)
+{
+	if(decinum<=512)
+	{
+		if(decinum%5==0)
+		{
+			decinum/=5;
+			deciden/=5;
+		}
+	}
+	else
+	{
+		decinum=512;
+		deciden=640;	/* 768 would be ideal */
+	}
+	
+	while(decinum%2==0 && deciden%2==0)
+	{
+		decinum/=2;
+		deciden/=2;
+	}
+	while(deciden>32)
+	{
+		deciden/=2;
+		decinum=(decinum+1)/2;
+	}
+	if(deciden==32)
+		deciden--;
+		
+	mvv_write(0x24, 0x80|deciden);
+	mvv_write(0x25, deciden);
+}
+
+static void pms_resolution(short width, short height)
+{
+	int fg_height;
+	
+	fg_height=height;
+	if(fg_height>280)
+		fg_height=280;
+		
+	mvv_write(0x18, fg_height);
+	mvv_write(0x19, fg_height>>8);
+	
+	if(standard==1)
+	{
+		mvv_write(0x1A, 0xFC);
+		mvv_write(0x1B, 0x00);
+		if(height>width)
+			pms_vertdeci(240,240);
+		else
+			pms_vertdeci(fg_height,240);
+	}
+	else
+	{
+		mvv_write(0x1A, 0x1A);
+		mvv_write(0x1B, 0x01);
+		if(fg_height>256)
+			pms_vertdeci(270,270);
+		else
+			pms_vertdeci(fg_height, 270);
+	}
+	mvv_write(0x12,0);
+	mvv_write(0x13, MVVMEMORYWIDTH);
+	mvv_write(0x42, 0x00);
+	mvv_write(0x43, 0x00);
+	mvv_write(0x44, MVVMEMORYWIDTH);
+	
+	mvv_write(0x22, width+8);
+	mvv_write(0x23, (width+8)>> 8);
+	
+	if(standard==1)
+		pms_horzdeci(width,640);
+	else
+		pms_horzdeci(width+8, 768);
+	
+	mvv_write(0x30, mvv_read(0x30)&0xFE);
+	mvv_write(0x08, mvv_read(0x08)|0x01);
+	mvv_write(0x01, mvv_read(0x01)&0xFD);
+	mvv_write(0x32, 0x00);
+	mvv_write(0x33, MVVMEMORYWIDTH);
+}
+
+static void pms_vstart(short start)
+{
+	mvv_write(0x16, start);
+	mvv_write(0x17, (start>>8)&0x01);
+}
+
+/*
+ *	Set Input
+ */
+ 
+static void pms_vcrinput(short input)
+{
+	if(decoder==PHILIPS2)
+		i2c_andor(0x8A,0x0D,0x7F,(input&1)<<7);
+	else if(decoder==PHILIPS1)
+		i2c_andor(0x42,0x0D,0x7F,(input&1)<<7);
+}
+
+
+static int pms_capture(struct pms_device *dev, char *buf, int rgb555, int count)
+{
+	char dump[16];
+	int y;
+	int ww= dev->width, wh= dev->height;
+	int dinc, zz;
+	int dw=2*ww, loops;
+	unsigned char r8;
+	int len=0;
+	
+	short *dst=(short *)buf;
+	short *src=(short *)bus_to_virt((void *)mem_base);
+	
+	if(wh>256)
+	{
+		dinc=2*ww; 
+		zz=wh/2; 
+		loops=2;
+	}
+	else
+	{
+		dinc=ww; 
+		zz=wh; 
+		loops=1;
+	}
+	
+	
+	r8=0x5;
+	if(rgb555)
+		r8|=0x20;
+		
+field_cap:
+	
+	mvv_write(0x08, r8);	/* Capture mode, Enable DRAM, PC enable */
+	
+	for(y=0;y<zz;y++)
+	{
+		int n;
+		
+		len+=16;
+		
+		/*
+		 *	Avoid overrunning the given buffer	
+		 */
+		 
+		n=((char *)dst)-buf;		/* Bytes left in frame */
+		n=count-n;
+		if(n>dw)			/* But only as many as needed */
+			n=dw;
+		memcpy(dump, src, 16);		/* Junk */
+		if(n)
+			copy_to_user(dst, src, n);	/* Data */
+		dst+=dinc;
+		*src=0;				/* Synchronization */
+	}
+	
+	if(--loops>0)
+	{
+		mvv_write(0x14, mvv_read(0x14)|0xC0);	/* Other frame */
+		dst=(short *)buf+ww;
+		goto field_cap;
+	}
+	
+	/*
+	 *	Set back to capture even frames
+	 */
+	 
+	if(wh>256)
+		mvv_write(0x14, (mvv_read(0x14)|0x80)&~0x40);
+	return len;
+}
+
+
+/*
+ *	Video4linux interfacing
+ */
+
+static int pms_open(struct video_device *dev, int flags)
+{
+	MOD_INC_USE_COUNT;
+	return 0;
+}
+
+static void pms_close(struct video_device *dev)
+{
+	MOD_DEC_USE_COUNT;
+}
+
+static int pms_init_done(struct video_device *dev)
+{
+	return 0;
+}
+
+static long pms_write(struct video_device *v, const char *buf, unsigned long count, int noblock)
+{
+	return -EINVAL;
+}
+
+static int pms_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
+{
+	struct pms_device *pd=(struct pms_device *)dev;
+	
+	switch(cmd)
+	{
+		case VIDIOCGCAP:
+		{
+			struct video_capability b;
+			strcpy(b.name, "Mediavision PMS");
+			b.type = VID_TYPE_CAPTURE|VID_TYPE_SCALES;
+			b.channels = 4;
+			b.audios = 0;
+			b.maxwidth = 640;
+			b.maxheight = 480;
+			b.minwidth = 16;
+			b.minheight = 16;
+			if(copy_to_user(arg, &b,sizeof(b)))
+				return -EFAULT;
+			return 0;
+		}
+		case VIDIOCGCHAN:
+		{
+			struct video_channel v;
+			if(copy_from_user(&v, arg, sizeof(v)))
+				return -EFAULT;
+			if(v.channel<0 || v.channel>3)
+				return -EINVAL;
+			v.flags=0;
+			v.tuners=1;
+			/* Good question.. its composite or SVHS so.. */
+			v.type = VIDEO_TYPE_CAMERA;
+			if(copy_to_user(arg, &v, sizeof(v)))
+				return -EFAULT;
+			return 0;
+		}
+		case VIDIOCSCHAN:
+		{
+			int v;
+			if(copy_from_user(&v, arg,sizeof(v)))
+				return -EFAULT;
+			if(v<0 && v>3)
+				return -EINVAL;
+			pms_videosource(v&1);
+			pms_vcrinput(v>>1);
+			return 0;
+		}
+		case VIDIOCGTUNER:
+		{
+			struct video_tuner v;
+			if(copy_from_user(&v, arg, sizeof(v))!=0)
+				return -EFAULT;
+			if(v.tuner)
+				return -EINVAL;
+			strcpy(v.name, "Format");
+			v.rangelow=0;
+			v.rangehigh=0;
+			v.flags= VIDEO_TUNER_PAL|VIDEO_TUNER_NTSC|VIDEO_TUNER_SECAM;
+			switch(standard)
+			{
+				case 0:
+					v.mode = VIDEO_MODE_AUTO;
+					break;
+				case 1:
+					v.mode = VIDEO_MODE_NTSC;
+					break;
+				case 2:
+					v.mode = VIDEO_MODE_PAL;
+					break;
+				case 3:
+					v.mode = VIDEO_MODE_SECAM;
+					break;
+			}
+			if(copy_to_user(arg,&v,sizeof(v))!=0)
+				return -EFAULT;
+			return 0;
+		}
+		case VIDIOCSTUNER:
+		{
+			struct video_tuner v;
+			if(copy_from_user(&v, arg, sizeof(v))!=0)
+				return -EFAULT;
+			if(v.tuner)
+				return -EINVAL;
+			switch(v.mode)
+			{
+				case VIDEO_MODE_AUTO:
+					pms_framerate(25);
+					pms_secamcross(0);
+					pms_format(0);
+					break;
+				case VIDEO_MODE_NTSC:
+					pms_framerate(30);
+					pms_secamcross(0);
+					pms_format(1);
+					break;
+				case VIDEO_MODE_PAL:
+					pms_framerate(25);
+					pms_secamcross(0);
+					pms_format(2);
+					break;
+				case VIDEO_MODE_SECAM:
+					pms_framerate(25);
+					pms_secamcross(1);
+					pms_format(2);
+					break;
+				default:
+					return -EINVAL;
+			}
+			return 0;
+		}
+		case VIDIOCGPICT:
+		{
+			struct video_picture p=pd->picture;
+			if(copy_to_user(arg, &p, sizeof(p)))
+				return -EFAULT;
+			return 0;
+		}
+		case VIDIOCSPICT:
+		{
+			struct video_picture p;
+			if(copy_from_user(&p, arg, sizeof(p)))
+				return -EFAULT;
+			if(!((p.palette==VIDEO_PALETTE_RGB565 && p.depth==16)
+			    ||(p.palette==VIDEO_PALETTE_RGB555 && p.depth==15)))
+			    	return -EINVAL;
+			pd->picture=p;
+			
+			/*
+			 *	Now load the card.
+			 */
+
+			pms_brightness(p.brightness);
+			pms_hue(p.hue);
+			pms_colour(p.colour);
+			pms_contrast(p.contrast);	
+			return 0;
+		}
+		case VIDIOCSWIN:
+		{
+			struct video_window vw;
+			if(copy_from_user(&vw, arg,sizeof(vw)))
+				return -EFAULT;
+			if(vw.flags)
+				return -EINVAL;
+			if(vw.clipcount)
+				return -EINVAL;
+			if(vw.height<16||vw.height>480)
+				return -EINVAL;
+			if(vw.width<16||vw.width>640)
+				return -EINVAL;
+			pd->width=vw.width;
+			pd->height=vw.height;
+			pms_resolution(pd->width, pd->height);
+			/* Ok we figured out what to use from our wide choice */
+			return 0;
+		}
+		case VIDIOCGWIN:
+		{
+			struct video_window vw;
+			vw.x=0;
+			vw.y=0;
+			vw.width=pd->width;
+			vw.height=pd->height;
+			vw.chromakey=0;
+			vw.flags=0;
+			if(copy_to_user(arg, &vw, sizeof(vw)))
+				return -EFAULT;
+			return 0;
+		}
+		case VIDIOCCAPTURE:
+			return -EINVAL;
+		case VIDIOCGFBUF:
+			return -EINVAL;
+		case VIDIOCSFBUF:
+			return -EINVAL;
+		case VIDIOCKEY:
+			return 0;
+		case VIDIOCGFREQ:
+			return -EINVAL;
+		case VIDIOCSFREQ:
+			return -EINVAL;
+		case VIDIOCGAUDIO:
+			return -EINVAL;
+		case VIDIOCSAUDIO:
+			return -EINVAL;
+		default:
+			return -ENOIOCTLCMD;
+	}
+	return 0;
+}
+
+static long pms_read(struct video_device *v, char *buf, unsigned long count,  int noblock)
+{
+	struct pms_device *pd=(struct pms_device *)v;
+	int len;
+	
+	/* FIXME: semaphore this */
+	len=pms_capture(pd, buf, (pd->picture.depth==16)?0:1,count);
+	return len;
+}
+
+ 
+struct video_device pms_template=
+{
+	"Mediavision PMS",
+	VID_TYPE_CAPTURE,
+	VID_HARDWARE_PMS,
+	pms_open,
+	pms_close,
+	pms_read,
+	pms_write,
+	pms_ioctl,
+	NULL,
+	pms_init_done,
+	NULL,
+	0,
+	0
+};
+
+struct pms_device pms_device;
+
+
+/*
+ *	Probe for and initialise the Mediavision PMS
+ */
+ 
+static int init_mediavision(void)
+{
+	int id;
+	int idec, decst;
+	int i;
+		
+	unsigned char i2c_defs[]={
+		0x4C,0x30,0x00,0xE8,
+		0xB6,0xE2,0x00,0x00,
+		0xFF,0xFF,0x00,0x00,
+		0x00,0x00,0x78,0x98,
+		0x00,0x00,0x00,0x00,
+		0x34,0x0A,0xF4,0xCE,
+		0xE4
+	};
+	
+	if(check_region(0x9A01,1))
+	{
+		printk(KERN_WARNING "mediavision: unable to detect: 0x9A01 in use.\n");
+		return -EBUSY;
+	}
+	if(check_region(io_port,3))
+	{
+		printk(KERN_WARNING "mediavision: I/O port %d in use.\n", io_port);
+		return -EBUSY;
+	}
+	outb(0xB8, 0x9A01);		/* Unlock */
+	outb(io_port>>4, 0x9A01);	/* Set IO port */
+	
+	
+	id=mvv_read(3);
+	decst=i2c_stat(0x43);
+	
+	if(decst!=-1)
+		idec=2;
+	else if(i2c_stat(0xb9)!=-1)
+		idec=3;
+	else if(i2c_stat(0x8b)!=-1)
+		idec=1;
+	else 
+		idec=0;
+		
+	if(idec==0)
+		return -ENODEV;	
+
+	/*
+	 *	Ok we have a PMS of some sort
+	 */
+	 
+	request_region(io_port,3, "Mediavision PMS");
+	request_region(0x9A01, 1, "Mediavision PMS config");
+	
+	mvv_write(0x04, mem_base>>12);	/* Set the memory area */
+	
+	/* Ok now load the defaults */
+	
+	for(i=0;i<0x19;i++)
+	{
+		if(i2c_defs[i]==0xFF)
+			i2c_andor(0x8A, i, 0x07,0x00);
+		else
+			i2c_write(0x8A, i, i2c_defs[i]);
+	}
+	
+	i2c_write(0xB8,0x00,0x12);
+	i2c_write(0xB8,0x04,0x00);
+	i2c_write(0xB8,0x07,0x00);
+	i2c_write(0xB8,0x08,0x00);
+	i2c_write(0xB8,0x09,0xFF);
+	i2c_write(0xB8,0x0A,0x00);
+	i2c_write(0xB8,0x0B,0x10);
+	i2c_write(0xB8,0x10,0x03);
+	
+	mvv_write(0x01, 0x00);
+	mvv_write(0x05, 0xA0);
+	mvv_write(0x08, 0x25);
+	mvv_write(0x09, 0x00);
+	mvv_write(0x0A, 0x20|MVVMEMORYWIDTH);	
+	
+	mvv_write(0x10, 0x02);
+	mvv_write(0x1E, 0x0C);
+	mvv_write(0x1F, 0x03);
+	mvv_write(0x26, 0x06);
+	
+	mvv_write(0x2B, 0x00);
+	mvv_write(0x2C, 0x20);
+	mvv_write(0x2D, 0x00);
+	mvv_write(0x2F, 0x70);
+	mvv_write(0x32, 0x00);
+	mvv_write(0x33, MVVMEMORYWIDTH);
+	mvv_write(0x34, 0x00);
+	mvv_write(0x35, 0x00);
+	mvv_write(0x3A, 0x80);
+	mvv_write(0x3B, 0x10);
+	mvv_write(0x20, 0x00);
+	mvv_write(0x21, 0x00);
+	mvv_write(0x30, 0x22);
+	return 0;
+}
+
+static void shutdown_mediavision(void)
+{
+	release_region(io_port,3);
+	release_region(0x9A01, 1);
+}
+
+/*
+ *	Module stuff
+ */
+ 
+#ifdef MODULE
+
+int init_module(void)
+{
+	printk(KERN_INFO "Mediavision Pro Movie Studio driver 0.01\n");
+	if(init_mediavision())
+	{
+		printk(KERN_INFO "Board not found.\n");
+		return -ENODEV;
+	}
+	memcpy(&pms_device, &pms_template, sizeof(pms_template));
+	pms_device.height=240;
+	pms_device.width=320;
+	pms_resolution(320,240);
+	return video_register_device((struct video_device *)&pms_device);
+}
+
+void cleanup_module(void)
+{
+	shutdown_mediavision();
+	video_unregister_device((struct video_device *)&pms_device);
+}
+
+#endif

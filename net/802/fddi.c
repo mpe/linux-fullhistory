@@ -56,11 +56,11 @@ int fddi_header(struct sk_buff	*skb, struct device *dev, unsigned short type,
 	int hl = FDDI_K_SNAP_HLEN;
 	struct fddihdr *fddi;
 	
-	if(type!=htons(ETH_P_IP))
+	if(type != ETH_P_IP && type != ETH_P_ARP)
 		hl=FDDI_K_8022_HLEN-3;
 	fddi = (struct fddihdr *)skb_push(skb, hl);
 	fddi->fc			 = FDDI_FC_K_ASYNC_LLC_DEF;
-	if(type==htons(ETH_P_IP))
+	if(type == ETH_P_IP || type == ETH_P_ARP)
 	{
 		fddi->hdr.llc_snap.dsap		 = FDDI_EXTENDED_SAP;
 		fddi->hdr.llc_snap.ssap		 = FDDI_EXTENDED_SAP;
@@ -68,7 +68,7 @@ int fddi_header(struct sk_buff	*skb, struct device *dev, unsigned short type,
 		fddi->hdr.llc_snap.oui[0]	 = 0x00;
 		fddi->hdr.llc_snap.oui[1]	 = 0x00;
 		fddi->hdr.llc_snap.oui[2]	 = 0x00;
-		fddi->hdr.llc_snap.ethertype = htons(type);
+		fddi->hdr.llc_snap.ethertype	 = htons(type);
 	}
 
 	/* Set the source and destination hardware addresses */
@@ -83,6 +83,7 @@ int fddi_header(struct sk_buff	*skb, struct device *dev, unsigned short type,
 		memcpy(fddi->daddr, daddr, dev->addr_len);
 		return(hl);
 	}
+
 	return(-hl);
 }
 
@@ -96,18 +97,29 @@ int fddi_header(struct sk_buff	*skb, struct device *dev, unsigned short type,
 int fddi_rebuild_header(struct sk_buff	*skb)
 {
 	struct fddihdr *fddi = (struct fddihdr *)skb->data;
+#if 0
+ 	struct neighbour *neigh = NULL;
 
-	/* Only ARP/IP is currently supported */
-	 
-	if (fddi->hdr.llc_snap.ethertype != htons(ETH_P_IP))
+	if (skb->dst)
+		neigh = skb->dst->neighbour;
+
+	if (neigh)
+		return neigh->ops->resolve(fddi->daddr, skb);
+#endif
+	/*
+	 * Only ARP/IP is currently supported
+	 */
+
+	if (fddi->hdr.llc_snap.ethertype != __constant_htons(ETH_P_IP))
 	{
-		printk("fddi_rebuild_header: Don't know how to resolve type %04X addresses?\n", (unsigned int)htons(fddi->hdr.llc_snap.ethertype));
+		printk("%s: Don't know how to resolve type %02X addresses.\n",
+		       skb->dev->name, htons(fddi->hdr.llc_snap.ethertype));
 		return(0);
 	}
 
 	/* Try to get ARP to resolve the header and fill destination address */
 
-	return arp_find(fddi->daddr, skb) ? 1 : 0;
+	return arp_find(fddi->daddr, skb);
 }
 
 /*
@@ -127,12 +139,12 @@ unsigned short fddi_type_trans(struct sk_buff *skb, struct device *dev)
 	 * to start of packet data.  Assume 802.2 SNAP frames for now.
 	 */
 
-	skb->mac.raw = skb->data;			/* point to frame control (FC) */
+	skb->mac.raw = skb->data;	/* point to frame control (FC) */
 	
 	if(fddi->hdr.llc_8022_1.dsap==0xe0)
 	{
 		skb_pull(skb, FDDI_K_8022_HLEN-3);
-		type=htons(ETH_P_802_2);
+		type = __constant_htons(ETH_P_802_2);
 	}
 	else
 	{
@@ -159,5 +171,4 @@ unsigned short fddi_type_trans(struct sk_buff *skb, struct device *dev)
 	/* Assume 802.2 SNAP frames, for now */
 
 	return(type);
-	
 }

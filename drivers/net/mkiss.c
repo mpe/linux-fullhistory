@@ -489,9 +489,6 @@ static int ax_open(struct device *dev)
 	ax->xleft    = 0;
 
 	ax->flags   &= (1 << AXF_INUSE);      /* Clear ESCAPE & ERROR flags */
-	/* Needed because address '0' is special */
-	if (dev->pa_addr == 0)
-		dev->pa_addr = ntohl(0xC0A80001);
 	dev->tbusy  = 0;
 	dev->start  = 1;
 
@@ -632,7 +629,12 @@ static void ax25_close(struct tty_struct *tty)
 		return;
 
 	mkiss = ax->mode;
-	dev_close(ax->dev);
+	if (ax->dev->flags & IFF_UP)
+	{
+		dev_lock_wait();
+		dev_close(ax->dev);
+		dev_unlock_list();
+	}
 
 	tty->disc_data = 0;
 	ax->tty        = NULL;
@@ -910,14 +912,6 @@ static int ax25_init(struct device *dev)
 
 	/* New-style flags. */
 	dev->flags      = 0;
-	dev->family     = AF_INET;
-
-#ifdef CONFIG_INET
-	dev->pa_addr    = in_aton("192.168.0.1");
-	dev->pa_brdaddr = in_aton("192.168.0.255");
-	dev->pa_mask    = in_aton("255.255.255.0");
-	dev->pa_alen    = 4;
-#endif
 
 	return 0;
 }

@@ -87,7 +87,7 @@ struct hydra_private
 	u16 rx_page_stop;
 	u16 next_pkt;
 	struct net_device_stats stats;
-	int key;
+	unsigned int key;
 };
 
 static int hydra_open(struct device *dev);
@@ -161,15 +161,15 @@ __initfunc(int hydra_probe(struct device *dev))
 {
 	struct hydra_private *priv;
 	u32 board;
-	int key;
-	struct ConfigDev *cd;
+	unsigned int key;
+	const struct ConfigDev *cd;
 	int j;
 
 #ifdef HYDRA_DEBUG
  printk("hydra_probe(%x)\n", dev);
 #endif
 
-	if ((key = zorro_find(MANUF_HYDRA_SYSTEMS, PROD_AMIGANET, 0, 0))) 
+	if ((key = zorro_find(ZORRO_PROD_HYDRA_SYSTEMS_AMIGANET, 0, 0))) 
 	{
 		cd = zorro_get_board(key);
 		if((board = (u32) cd->cd_BoardAddr))
@@ -206,7 +206,7 @@ __initfunc(int hydra_probe(struct device *dev))
 			return(0);
 		}
 	}
-	return(ENODEV);
+	return(-ENODEV);
 }
 
 

@@ -90,6 +90,7 @@ __attribute__((section("__ksymtab"))) = {
 };
 #endif
 
+
 #ifdef CONFIG_MODULES
 EXPORT_SYMBOL(get_module_symbol);
 #endif
@@ -123,6 +124,7 @@ EXPORT_SYMBOL(exit_files);
 /* internal kernel memory management */
 EXPORT_SYMBOL(__get_free_pages);
 EXPORT_SYMBOL(free_pages);
+EXPORT_SYMBOL(__free_page);
 EXPORT_SYMBOL(kmem_find_general_cachep);
 EXPORT_SYMBOL(kmem_cache_create);
 EXPORT_SYMBOL(kmem_cache_shrink);
@@ -142,6 +144,7 @@ EXPORT_SYMBOL(update_vm_cache);
 EXPORT_SYMBOL(vmtruncate);
 
 /* filesystem internal functions */
+EXPORT_SYMBOL(get_super);
 EXPORT_SYMBOL(getname);
 EXPORT_SYMBOL(putname);
 EXPORT_SYMBOL(__fput);
@@ -197,6 +200,7 @@ EXPORT_SYMBOL(posix_unblock_lock);
 EXPORT_SYMBOL(dput);
 EXPORT_SYMBOL(get_cached_page);
 EXPORT_SYMBOL(put_cached_page);
+EXPORT_SYMBOL(prune_dcache);
 EXPORT_SYMBOL(shrink_dcache_sb);
 EXPORT_SYMBOL(shrink_dcache_parent);
 
@@ -364,7 +368,6 @@ EXPORT_SYMBOL(read_exec);
 EXPORT_SYMBOL(si_meminfo);
 
 /* Added to make file system as module */
-EXPORT_SYMBOL(get_super);
 EXPORT_SYMBOL(set_writetime);
 EXPORT_SYMBOL(sys_tz);
 EXPORT_SYMBOL(__wait_on_super);
@@ -374,7 +377,6 @@ EXPORT_SYMBOL(refile_buffer);
 EXPORT_SYMBOL(nr_async_pages);
 EXPORT_SYMBOL(___strtok);
 EXPORT_SYMBOL(init_fifo);
-EXPORT_SYMBOL(super_blocks);
 EXPORT_SYMBOL(fifo_inode_operations);
 EXPORT_SYMBOL(chrdev_inode_operations);
 EXPORT_SYMBOL(blkdev_inode_operations);

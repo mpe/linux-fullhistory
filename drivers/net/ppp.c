@@ -405,11 +405,6 @@ ppp_init_dev (struct device *dev)
 	
 	/* New-style flags */
 	dev->flags	= IFF_POINTOPOINT;
-	dev->family	= AF_INET;
-	dev->pa_addr	= 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask	= 0;
-	dev->pa_alen	= 4; /* sizeof (__u32) */
 
 	return 0;
 }
@@ -687,9 +682,9 @@ ppp_release (struct ppp *ppp)
 	if (tty != NULL && tty->disc_data == ppp)
 		tty->disc_data = NULL;	/* Break the tty->ppp link */
 
+	/* Strong layering violation. */
 	if (dev && dev->flags & IFF_UP) {
 		dev_close (dev); /* close the device properly */
-		dev->flags = 0;	 /* prevent recursion */
 	}
 
 	ppp_free_buf (ppp->rbuf);
@@ -2401,7 +2396,7 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 				     sizeof (struct ppp_idle));
 		if (error == 0) {
 			struct ppp_idle cur_ddinfo;
-			__u32 cur_jiffies = jiffies;
+			unsigned long cur_jiffies = jiffies;
 
 			/* change absolute times to relative times. */
 			cur_ddinfo.xmit_idle = (cur_jiffies - ppp->ddinfo.xmit_idle) / HZ;
@@ -2621,9 +2616,6 @@ static int
 ppp_dev_open (struct device *dev)
 {
 	struct ppp *ppp = dev2ppp (dev);
-
-	/* reset POINTOPOINT every time, since dev_close zaps it! */
-	dev->flags |= IFF_POINTOPOINT;
 
 	if (ppp2tty (ppp) == NULL) {
 		if (ppp->flags & SC_DEBUG)
@@ -3019,12 +3011,16 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
 			printk (KERN_WARNING "ppp_dev_xmit: null packet!\n");
 		return 0;
 	}
+
 /*
  * Avoid timing problem should tty hangup while data is queued to be sent
  */
 	if (!ppp->inuse) {
 		dev_kfree_skb (skb, FREE_WRITE);
+		printk("I am dying to know, are you still alive?\n");
+#ifdef main_got_it_is_something
 		dev_close (dev);
+#endif
 		return 0;
 	}
 /*

@@ -31,129 +31,126 @@
 
 
 static int
-sb_midi_open (int dev, int mode,
-	      void            (*input) (int dev, unsigned char data),
-	      void            (*output) (int dev)
+sb_midi_open(int dev, int mode,
+	     void            (*input) (int dev, unsigned char data),
+	     void            (*output) (int dev)
 )
 {
-  sb_devc        *devc = midi_devs[dev]->devc;
-  unsigned long   flags;
+	sb_devc        *devc = midi_devs[dev]->devc;
+	unsigned long   flags;
 
-  if (devc == NULL)
-    return -ENXIO;
+	if (devc == NULL)
+		return -ENXIO;
 
-  save_flags (flags);
-  cli ();
-  if (devc->opened)
-    {
-      restore_flags (flags);
-      return -EBUSY;
-    }
-  devc->opened = 1;
-  restore_flags (flags);
+	save_flags(flags);
+	cli();
+	if (devc->opened)
+	  {
+		  restore_flags(flags);
+		  return -EBUSY;
+	  }
+	devc->opened = 1;
+	restore_flags(flags);
 
-  devc->irq_mode = IMODE_MIDI;
-  devc->midi_broken = 0;
+	devc->irq_mode = IMODE_MIDI;
+	devc->midi_broken = 0;
 
-  sb_dsp_reset (devc);
+	sb_dsp_reset(devc);
 
-  if (!sb_dsp_command (devc, 0x35))	/* Start MIDI UART mode */
-    {
-      devc->opened = 0;
-      return -EIO;
-    }
+	if (!sb_dsp_command(devc, 0x35))	/* Start MIDI UART mode */
+	  {
+		  devc->opened = 0;
+		  return -EIO;
+	  }
+	devc->intr_active = 1;
 
-  devc->intr_active = 1;
-
-  if (mode & OPEN_READ)
-    {
-      devc->input_opened = 1;
-      devc->midi_input_intr = input;
-    }
-
-  return 0;
+	if (mode & OPEN_READ)
+	  {
+		  devc->input_opened = 1;
+		  devc->midi_input_intr = input;
+	  }
+	return 0;
 }
 
 static void
-sb_midi_close (int dev)
+sb_midi_close(int dev)
 {
-  sb_devc        *devc = midi_devs[dev]->devc;
-  unsigned long   flags;
+	sb_devc        *devc = midi_devs[dev]->devc;
+	unsigned long   flags;
 
-  if (devc == NULL)
-    return;
+	if (devc == NULL)
+		return;
 
-  save_flags (flags);
-  cli ();
-  sb_dsp_reset (devc);
-  devc->intr_active = 0;
-  devc->input_opened = 0;
-  devc->opened = 0;
-  restore_flags (flags);
+	save_flags(flags);
+	cli();
+	sb_dsp_reset(devc);
+	devc->intr_active = 0;
+	devc->input_opened = 0;
+	devc->opened = 0;
+	restore_flags(flags);
 }
 
 static int
-sb_midi_out (int dev, unsigned char midi_byte)
+sb_midi_out(int dev, unsigned char midi_byte)
 {
-  sb_devc        *devc = midi_devs[dev]->devc;
+	sb_devc        *devc = midi_devs[dev]->devc;
 
-  if (devc == NULL)
-    return 1;
+	if (devc == NULL)
+		return 1;
 
-  if (devc->midi_broken)
-    return 1;
+	if (devc->midi_broken)
+		return 1;
 
-  if (!sb_dsp_command (devc, midi_byte))
-    {
-      devc->midi_broken = 1;
-      return 1;
-    }
-
-  return 1;
+	if (!sb_dsp_command(devc, midi_byte))
+	  {
+		  devc->midi_broken = 1;
+		  return 1;
+	  }
+	return 1;
 }
 
 static int
-sb_midi_start_read (int dev)
+sb_midi_start_read(int dev)
 {
-  return 0;
+	return 0;
 }
 
 static int
-sb_midi_end_read (int dev)
+sb_midi_end_read(int dev)
 {
-  sb_devc        *devc = midi_devs[dev]->devc;
+	sb_devc        *devc = midi_devs[dev]->devc;
 
-  if (devc == NULL)
-    return -ENXIO;
+	if (devc == NULL)
+		return -ENXIO;
 
-  sb_dsp_reset (devc);
-  devc->intr_active = 0;
-  return 0;
+	sb_dsp_reset(devc);
+	devc->intr_active = 0;
+	return 0;
 }
 
 static int
-sb_midi_ioctl (int dev, unsigned cmd, caddr_t arg)
+sb_midi_ioctl(int dev, unsigned cmd, caddr_t arg)
 {
-  return -EPERM;
+	return -EPERM;
 }
 
 void
-sb_midi_interrupt (sb_devc * devc)
+sb_midi_interrupt(sb_devc * devc)
 {
-  unsigned long   flags;
-  unsigned char   data;
+	unsigned long   flags;
+	unsigned char   data;
 
-  if (devc == NULL)
-    return;
+	if (devc == NULL)
+		return;
 
-  save_flags (flags);
-  cli ();
+	save_flags(flags);
+	cli();
 
-  data = inb (DSP_READ);
-  if (devc->input_opened)
-    devc->midi_input_intr (devc->my_mididev, data);
+	data = inb(DSP_READ);
+	if (devc->input_opened)
+		devc->midi_input_intr(devc->my_mididev, data);
 
-  restore_flags (flags);
+	restore_flags(flags);
 }
 
 #define MIDI_SYNTH_NAME	"Sound Blaster Midi"
@@ -162,74 +159,76 @@ sb_midi_interrupt (sb_devc * devc)
 
 static struct midi_operations sb_midi_operations =
 {
-  {"Sound Blaster", 0, 0, SNDCARD_SB},
-  &std_midi_synth,
-  {0},
-  sb_midi_open,
-  sb_midi_close,
-  sb_midi_ioctl,
-  sb_midi_out,
-  sb_midi_start_read,
-  sb_midi_end_read,
-  NULL,
-  NULL,
-  NULL,
-  NULL
+	{"Sound Blaster", 0, 0, SNDCARD_SB},
+	&std_midi_synth,
+	{0},
+	sb_midi_open,
+	sb_midi_close,
+	sb_midi_ioctl,
+	sb_midi_out,
+	sb_midi_start_read,
+	sb_midi_end_read,
+	NULL,
+	NULL,
+	NULL,
+	NULL
 };
 
 void
-sb_dsp_midi_init (sb_devc * devc)
+sb_dsp_midi_init(sb_devc * devc)
 {
-  if (devc->model < 2)		/* No MIDI support for SB 1.x */
-    return;
+	int             dev;
 
-  if (num_midis >= MAX_MIDI_DEV)
-    {
-      printk ("Sound: Too many midi devices detected\n");
-      return;
-    }
+	if (devc->model < 2)	/* No MIDI support for SB 1.x */
+		return;
 
-  std_midi_synth.midi_dev = num_midis;
-  devc->my_mididev = num_midis;
+	dev = sound_alloc_mididev();
 
-  std_midi_synth.midi_dev = devc->my_mididev = num_midis;
+	if (dev == -1)
+	  {
+		  printk("Sound: Too many midi devices detected\n");
+		  return;
+	  }
+	std_midi_synth.midi_dev = dev;
+	devc->my_mididev = dev;
 
-
-  midi_devs[num_midis] = (struct midi_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct midi_operations)));
-  sound_mem_sizes[sound_nblocks] = sizeof (struct midi_operations);
-
-  if (sound_nblocks < 1024)
-    sound_nblocks++;;
-  if (midi_devs[num_midis] == NULL)
-    {
-      printk ("sb MIDI: Failed to allocate memory\n");
-      return;
-    }
-
-  memcpy ((char *) midi_devs[num_midis], (char *) &sb_midi_operations,
-	  sizeof (struct midi_operations));
-
-  midi_devs[num_midis]->devc = devc;
+	std_midi_synth.midi_dev = devc->my_mididev = dev;
 
 
-  midi_devs[num_midis]->converter = (struct synth_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct synth_operations)));
-  sound_mem_sizes[sound_nblocks] = sizeof (struct synth_operations);
+	midi_devs[dev] = (struct midi_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc(sizeof(struct midi_operations)));
+	sound_mem_sizes[sound_nblocks] = sizeof(struct midi_operations);
 
-  if (sound_nblocks < 1024)
-    sound_nblocks++;;
+	if (sound_nblocks < 1024)
+		sound_nblocks++;;
+	if (midi_devs[dev] == NULL)
+	  {
+		  printk(KERN_WARNING "sb MIDI: Failed to allocate memory\n");
+		  sound_unload_mididev(dev);
+		  return;
+	  }
+	memcpy((char *) midi_devs[dev], (char *) &sb_midi_operations,
+	       sizeof(struct midi_operations));
 
-  if (midi_devs[num_midis]->converter == NULL)
-    {
-      printk ("sb MIDI: Failed to allocate memory\n");
-      return;
-    }
+	midi_devs[dev]->devc = devc;
 
-  memcpy ((char *) midi_devs[num_midis]->converter, (char *) &std_midi_synth,
-	  sizeof (struct synth_operations));
 
-  midi_devs[num_midis]->converter->id = "SBMIDI";
-  num_midis++;
-  sequencer_init ();
+	midi_devs[dev]->converter = (struct synth_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc(sizeof(struct synth_operations)));
+	sound_mem_sizes[sound_nblocks] = sizeof(struct synth_operations);
+
+	if (sound_nblocks < 1024)
+		sound_nblocks++;;
+
+	if (midi_devs[dev]->converter == NULL)
+	  {
+		  printk(KERN_WARNING "sb MIDI: Failed to allocate memory\n");
+		  sound_unload_mididev(dev);
+		  return;
+	  }
+	memcpy((char *) midi_devs[dev]->converter, (char *) &std_midi_synth,
+	       sizeof(struct synth_operations));
+
+	midi_devs[dev]->converter->id = "SBMIDI";
+	sequencer_init();
 }
 
 #endif

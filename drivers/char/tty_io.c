@@ -1140,27 +1140,9 @@ static void release_dev(struct file * filp)
 	}
 	
 	/*
-	 * Make sure that the tty's task queue isn't activated.  If it
-	 * is, take it out of the linked list.  The tqueue isn't used by
-	 * pty's, so skip the test for them.
+	 * Make sure that the tty's task queue isn't activated. 
 	 */
-	if (tty->driver.type != TTY_DRIVER_TYPE_PTY) {
-		spin_lock_irq(&tqueue_lock);
-		if (tty->flip.tqueue.sync) {
-			struct tq_struct *tq, *prev;
-
-			for (tq=tq_timer, prev=0; tq; prev=tq, tq=tq->next) {
-				if (tq == &tty->flip.tqueue) {
-					if (prev)
-						prev->next = tq->next;
-					else
-						tq_timer = tq->next;
-					break;
-				}
-			}
-		}
-		spin_unlock_irq(&tqueue_lock);
-	}
+	run_task_queue(&tq_timer);
 
 	/* 
 	 * The release_mem function takes care of the details of clearing

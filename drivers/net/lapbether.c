@@ -41,7 +41,6 @@
 #include <linux/stat.h>
 #include <linux/firewall.h>
 #include <linux/module.h>
-#include <linux/net_alias.h>
 #include <linux/lapb.h>
 #include <linux/init.h>
 
@@ -109,9 +108,6 @@ static __inline__ int dev_is_ethdev(struct device *dev)
 	return (
 			dev->type == ARPHRD_ETHER
 			&& strncmp(dev->name, "dummy", 5)
-#ifdef CONFIG_NET_ALIAS
-			&& !net_alias_is(dev)
-#endif
 	);
 }
 
@@ -468,17 +464,7 @@ static int lapbeth_new_device(struct device *dev)
 	dev->get_stats	     = lapbeth_get_stats;
 	dev->do_ioctl	     = lapbeth_ioctl;
 
-	/* preset with reasonable values */
-
 	dev->flags      = 0;
-	dev->family     = AF_INET;
-
-#ifdef CONFIG_INET
-	dev->pa_addr    = in_aton("192.168.0.1");
-	dev->pa_brdaddr = in_aton("192.168.0.255");
-	dev->pa_mask    = in_aton("255.255.255.0");
-	dev->pa_alen    = 4;
-#endif
 
 	dev->type            = ARPHRD_X25;
 	dev->hard_header_len = 3;

@@ -63,7 +63,6 @@
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>
-#include <linux/net_alias.h>
 
 /* --------------------------------------------------------------------- */
 
@@ -569,15 +568,6 @@ static int hdlcdrv_send_packet(struct sk_buff *skb, struct device *dev)
 	if (hdlcdrv_paranoia_check(dev, "hdlcdrv_send_packet"))
 		return 0;
 	sm = (struct hdlcdrv_state *)dev->priv;
-	/*
-	 * If some higher layer thinks we've missed an tx-done interrupt
-         * we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	 * itself. 
-	 */
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
 	skb_queue_tail(&sm->send_queue, skb);
 	dev->trans_start = jiffies;	
 	return 0;
@@ -908,11 +898,6 @@ static int hdlcdrv_probe(struct device *dev)
 
 	/* New style flags */
 	dev->flags = 0;
-	dev->family = AF_INET;
-	dev->pa_addr = 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask = 0;
-	dev->pa_alen = sizeof(unsigned long);
 
 	return 0;
 }

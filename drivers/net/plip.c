@@ -1,3 +1,5 @@
+#warning This wont work until we merge the networking changes
+#if 0
 /* $Id: plip.c,v 1.3.6.2 1997/04/16 15:07:56 phil Exp $ */
 /* PLIP: A parallel port "network" driver for Linux. */
 /* This driver is for parallel port with 5-bit cable (LapLink (R) cable). */
@@ -99,6 +101,7 @@ static const char *version = "NET3 PLIP version 2.2-parport gniibe@mri.co.jp\n";
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/inetdevice.h>
 #include <linux/skbuff.h>
 #include <linux/if_plip.h>
 
@@ -258,6 +261,7 @@ plip_init_dev(struct device *dev, struct parport *pb))
 	dev->do_ioctl		= plip_ioctl;
 	dev->tx_queue_len	= 10;
 	dev->flags	        = IFF_POINTOPOINT|IFF_NOARP;
+	memset(dev->dev_addr, 0xfc, ETH_ALEN);
 
 	/* Set the private structure */
 	dev->priv = kmalloc(sizeof (struct net_local), GFP_KERNEL);
@@ -857,32 +861,12 @@ plip_rebuild_header(struct sk_buff *skb)
 	struct device *dev = skb->dev;
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct ethhdr *eth = (struct ethhdr *)skb->data;
-	int i;
 
 	if ((dev->flags & IFF_NOARP)==0)
 		return nl->orig_rebuild_header(skb);
 
-	if (eth->h_proto != __constant_htons(ETH_P_IP)
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-		&& eth->h_proto != __constant_htons(ETH_P_IPV6)
-#endif
-	) {
-		printk("plip_rebuild_header: Don't know how to resolve type %d addresses?\n", (int)eth->h_proto);
-		memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
-		return 0;
-	}
-
-	for (i=0; i < ETH_ALEN - sizeof(u32); i++)
-		eth->h_dest[i] = 0xfc;
-#if 0
-	*(u32 *)(eth->h_dest+i) = dst;
-#else
-	/* Do not want to include net/route.h here.
-	 * In any case, it is TOP of silliness to emulate
-	 * hardware addresses on PtP link. --ANK
-	 */
-	*(u32 *)(eth->h_dest+i) = 0;
-#endif
+	memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
+	memcpy(eth->h_dest, dev->broadcast, dev->addr_len);
 	return 0;
 }
 
@@ -900,14 +884,6 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
 		if (parport_claim(nl->pardev))
 			return 1;
 		nl->port_owner = 1;
-	}
-
-	/* If some higher layer thinks we've missed an tx-done interrupt
-	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	   itself. */
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
 	}
 
 	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
@@ -950,7 +926,7 @@ static int
 plip_open(struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
-	int i;
+	struct in_device *in_dev;
 
 	/* Grab the port */
 	if (!nl->port_owner) {
@@ -973,11 +949,23 @@ plip_open(struct device *dev)
 	nl->is_deferred = 0;
 
 	/* Fill in the MAC-level header. */
-	for (i=0; i < ETH_ALEN - sizeof(u32); i++)
-		dev->dev_addr[i] = 0xfc;
-	/* Ugh, this is like death. */
-	*(u32 *)(dev->dev_addr+i) = dev->pa_addr;
 
+	memset(dev->dev_addr,  0xfc, ETH_ALEN);
+
+	/* Now PLIP doesnt have a real mac addr which is a pain..
+	   we need to create one, and to be DOS compatible its a good
+	   idea to use the same rules. Layering purists please look away */
+	
+	if((in_dev=dev->ip_ptr)!=NULL)
+	{
+		/*
+		 *	Any address wil do - we take the first
+		 */
+		struct in_ifaddr *ifa=in_dev->ifa_list;
+		if(ifa!=NULL)
+			memcpy(dev->dev_addr+2,&ifa->ifa_local,4);
+	}
+	
 	dev->interrupt = 0;
 	dev->start = 1;
 	dev->tbusy = 0;
@@ -1117,7 +1105,7 @@ plip_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	return 0;
 }
 
-static int parport[PLIP_MAX] = { -1, };
+static int parport[PLIP_MAX] = { [0 ... PLIP_MAX-1] = -1 };
 static int timid = 0;
 
 MODULE_PARM(parport, "1-" __MODULE_STRING(PLIP_MAX) "i");
@@ -1250,3 +1238,4 @@ plip_init(void))
  * compile-command: "gcc -DMODULE -DMODVERSIONS -D__KERNEL__ -Wall -Wstrict-prototypes -O2 -g -fomit-frame-pointer -pipe -m486 -c plip.c"
  * End:
  */
+#endif

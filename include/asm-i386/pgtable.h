@@ -37,7 +37,7 @@
 #define __flush_tlb() \
 do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3":"=r" (tmpreg) : :"memory"); } while (0)
 
-#ifdef CONFIG_M386
+#if defined(CONFIG_M386) || defined(CONFIG_AMD_K5_INVBUG)
 #define __flush_tlb_one(addr) flush_tlb()
 #else
 #define __flush_tlb_one(addr) \

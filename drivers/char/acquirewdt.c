@@ -62,7 +62,7 @@ static void acq_ping(void)
 	inb_p(WDT_START);
 }
 
-static long acq_write(struct inode *inode, struct file *file, const char *buf, unsigned long count)
+static ssize_t acq_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
 	if(count)
 	{
@@ -72,7 +72,7 @@ static long acq_write(struct inode *inode, struct file *file, const char *buf, u
 	return 0;
 }
 
-static long acq_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
+static ssize_t acq_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 {
 	return -EINVAL;
 }

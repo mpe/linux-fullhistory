@@ -1,4 +1,4 @@
-/* $Id: sgiseeq.c,v 1.1 1997/06/09 08:34:30 ralf Exp $
+/* $Id: sgiseeq.c,v 1.3 1997/11/16 13:57:45 alan Exp $
  * sgiseeq.c: Seeq8003 ethernet driver for SGI machines.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -507,17 +507,7 @@ static inline int verify_tx(struct sgiseeq_private *sp,
 		sgiseeq_reset(dev);
 		return 0;
 	}
-	/* Is the skippy buf even reasonable? */
-	if(skb == NULL) {
-		dev_tint(dev);
-		printk("%s: skb is NULL\n", dev->name);
-		return -1;
-	}
 
-	if(skb->len <= 0) {
-		printk("%s: skb len is %ld\n", dev->name, skb->len);
-		return -1;
-	}
 	/* Are we getting in someone else's way? */
 	if(test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
 		printk("%s: Transmitter access conflict.\n", dev->name);

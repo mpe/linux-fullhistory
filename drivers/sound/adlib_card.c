@@ -12,38 +12,62 @@
  * for more info.
  */
 #include <linux/config.h>
+#include <linux/module.h>
 
 
 #include "sound_config.h"
+#include "soundmodule.h"
 
-#ifdef CONFIG_YM3812
+#if defined(CONFIG_YM3812) || defined(MODULE)
 
-void
-attach_adlib_card (struct address_info *hw_config)
+void attach_adlib_card(struct address_info *hw_config)
 {
-
-  opl3_init (hw_config->io_base, hw_config->osp);
-  request_region (hw_config->io_base, 4, "OPL3/OPL2");
+	hw_config->slots[0] = opl3_init(hw_config->io_base, hw_config->osp);
+	request_region(hw_config->io_base, 4, "OPL3/OPL2");
 }
 
-int
-probe_adlib (struct address_info *hw_config)
+int probe_adlib(struct address_info *hw_config)
 {
 
-  if (check_region (hw_config->io_base, 4))
-    {
-      DDB (printk ("opl3.c: I/O port %x already in use\n", hw_config->io_base));
-      return 0;
-    }
-
-  return opl3_detect (hw_config->io_base, hw_config->osp);
+	if (check_region(hw_config->io_base, 4)) {
+		DDB(printk("opl3.c: I/O port %x already in use\n", hw_config->io_base));
+		return 0;
+	}
+	return opl3_detect(hw_config->io_base, hw_config->osp);
 }
 
-void
-unload_adlib (struct address_info *hw_config)
+void unload_adlib(struct address_info *hw_config)
 {
-  release_region (hw_config->io_base, 4);
+	release_region(hw_config->io_base, 4);
+	sound_unload_synthdev(hw_config->slots[0]);
 }
 
+#ifdef MODULE
 
+int io = -1;
+MODULE_PARM(io, "i");
+
+struct address_info cfg;
+
+int init_module(void)
+{
+	if (io == -1) {
+		printk("adlib: must specify I/O address.\n");
+		return -EINVAL;
+	}
+	cfg.io_base = io;
+	if (probe_adlib(&cfg) == 0)
+		return -ENODEV;
+	attach_adlib_card(&cfg);
+	SOUND_LOCK;
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	unload_adlib(&cfg);
+	SOUND_LOCK_END;
+}
+
+#endif
 #endif

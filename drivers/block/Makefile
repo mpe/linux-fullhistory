@@ -218,4 +218,12 @@ endif
 
 endif
 
+ifeq ($(CONFIG_BLK_DEV_NBD),y)
+L_OBJS += nbd.o
+else
+  ifeq ($(CONFIG_BLK_DEV_NBD),m)
+  M_OBJS += nbd.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make

@@ -24,7 +24,10 @@
 #ifndef _FRAD_H_
 #define _FRAD_H_
 
+#include <linux/config.h>
 #include <linux/if.h>
+
+#if defined(CONFIG_DLCI) || defined(CONFIG_DLCI_MODULE)
 
 /* Structures and constants associated with the DLCI device driver */
 
@@ -189,6 +192,10 @@ struct frad_local
 int register_frad(const char *name);
 int unregister_frad(const char *name);
 
+int (*dlci_ioctl_hook)(unsigned int, void *);
+
 #endif __KERNEL__
+
+#endif /* CONFIG_DLCI || CONFIG_DLCI_MODULE */
 
 #endif

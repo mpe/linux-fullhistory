@@ -1,0 +1,57 @@
+            Information about PowerPC Sound support
+=====================================================================
+
+Please mail me me (Cort Dougan, cort@cs.nmt.edu) if you have questions,
+comments or corrections.
+
+This just covers sound on the PReP systems for now, and later will
+contain information on the PowerMac's.
+
+Sound has been tested and is working with the PowerStack and IBM Power
+Series onboard sound systems which are based on the cs4231(2) chip.
+The sound options when doing the make config are a bit different from the
+default, though.
+
+The I/O base, irq and dma lines that you enter during the make config
+are ignored and are set when booting according to the machine type.
+This is so that one binary can be used for Motorola and IBM machines
+which use different values and isn't allowed by the driver, so things are
+hacked together in such a way as to allow this information to be set
+automatically on boot.
+
+1. PowerStack
+
+  Enable support for "Crystal CS4232 based (PnP) cards".  Although the
+  options you set are ignored and determined automatically on boot these
+  are included for information only:
+
+  (830) CS4232 audio I/O base 530, 604, E80 or F40
+  (10) CS4232 audio IRQ 5, 7, 9, 11, 12 or 15
+  (6) CS4232 audio DMA 0, 1 or 3
+  (7) CS4232 second (duplex) DMA 0, 1 or 3
+
+  This will allow simultaneous record and playback, as 2 different dma
+  channels are used.
+
+  Midi is not supported since the cs4232 driver doesn't support midi yet.
+
+2. IBM machines
+
+  I've only tested sound on the Power Personal Series of IBM workstations
+  so if you try it on others please let me know the result.
+
+  Enable support for "Crystal CS4232 based (PnP) cards".  Although the
+  options you set are ignored and determined automatically on boot these
+  are included for information only:
+
+  (530) CS4232 audio I/O base 530, 604, E80 or F40
+  (5) CS4232 audio IRQ 5, 7, 9, 11, 12 or 15
+  (1) CS4232 audio DMA 0, 1 or 3
+  (7) CS4232 second (duplex) DMA 0, 1 or 3
+  (330) CS4232 MIDI I/O base 330, 370, 3B0 or 3F0
+  (9) CS4232 MIDI IRQ 5, 7, 9, 11, 12 or 15
+
+  This setup does _NOT_ allow for recording yet.
+
+  Midi is not supported since the cs4232 driver doesn't support midi yet.
+

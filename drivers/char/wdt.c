@@ -169,7 +169,7 @@ static void wdt_ping(void)
 	outb_p(0, WDT_DC);
 }
 
-static long wdt_write(struct inode *inode, struct file *file, const char *buf, unsigned long count)
+static ssize_t wdt_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
 	if(count)
 	{
@@ -183,13 +183,13 @@ static long wdt_write(struct inode *inode, struct file *file, const char *buf, u
  *	Read reports the temperature in farenheit
  */
  
-static long wdt_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
+static ssize_t wdt_read(struct file *file, char *buf, size_t count, loff_t *ptr)
 {
 	unsigned short c=inb_p(WDT_RT);
 	unsigned char cp;
 	int err;
 	
-	switch(MINOR(inode->i_rdev))
+	switch(MINOR(file->f_dentry->d_inode->i_rdev))
 	{
 		case TEMP_MINOR:
 			err=verify_area(VERIFY_WRITE, buf, 1);

@@ -1,0 +1,88 @@
+Documentation on setup and use of EtherTap.
+
+Contact Jay Schulist <Jay.Schulist@spacs.k12.wi.us> if you
+have questions or need futher assistance.
+
+Introduction
+============
+
+Ethertap provides packet reception and transmission for user
+space programs. It can be viewed as a simple ethernet device,
+which instead of recieving packets from a network wire, it recieves
+them from user space.
+
+Ethertap can be used for anything from Appletalk to IPX to even 
+building bridging tunnels. It also has many other general purpose
+uses.
+
+Ethertap also can do ARP for you. Although this is not enabled per
+default.
+
+SetUp
+=====
+
+First you will have to enable Ethertap in the kernel configuration.
+Then you will need to create any number of ethertap device files,
+/dev/tap0->/dev/tap15. This is done by the following command.
+
+mknod /dev/tap* c 36 16  ( 17 18 19 20 for tap1,2,3,4...)
+
+** Replace * with the proper tap device number you need. **
+
+Now with your kernel that has ethertap enabled, you will need
+to ifconfig /dev/tap* 192.168.1.1 (replace 192.168.1.1 with the
+proper IP number for your situation.)
+
+If you want your Ethertap device to ARP for you would ifconfig
+the interface like this: ifconfig tap* 192.168.1.1 arp
+
+Remember that the you need to have a corresponding /dev/tap* file
+for each tap* device you need to ifconfig.
+
+Now Ethertap should be ready to use.
+
+Diagram of how Ethertap works. (Courtesy of Alan Cox)
+====================================================
+
+This is for a tunnel, but you should be able to
+get the general idea.
+
+        1.2.3.4 will be the router to the outside world
+        1.2.3.5 our box
+        2.0.0.1 our box (appletalk side)
+        2.0.0.* a pile of macintoys
+
+
+[1.2.3.4]-------------1.2.3.5[Our Box]2.0.0.1---------> macs
+
+The routing on our box would be
+
+                ifconfig eth0 1.2.3.5 netmask 255.255.255.0 up
+                route add default gw 1.2.3.4
+                ifconfig tap0   2.0.0.1 netmask 255.255.255.0 up arp
+                (route add 2.0.0.0 netmask 255.255.255.0)
+
+C code for a Simple program using an EtherTap device
+====================================================
+
+This code is just excepts from a real program, so some parts are missing
+but the important stuff is below.
+
+void main (void)
+{
+	int TapDevice, eth_pkt_len = 0;
+	unsigned char full_pkt_len[MAX_PKT_LEN];
+
+	TapDevice = open("/dev/tap0", O_RDWR);
+        if(TapDevice < 0)
+        {
+                perror("Error opening device");
+                exit(1);
+        }
+
+	write(TapDevice, full_packet, eth_pkt_len);
+
+	close(TapDevice);
+
+	return;
+}

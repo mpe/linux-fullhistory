@@ -1,4 +1,4 @@
-/*	$Id: arc-rimi.c,v 1.2 1997/09/05 08:57:51 mj Exp $
+/*	$Id: arc-rimi.c,v 1.5 1997/11/09 11:04:57 mj Exp $
 
         Derived from the original arcnet.c,
         Written 1994-1996 by Avery Pennarun,
@@ -131,7 +131,7 @@ extern int arcnet_num_devs;
 #define SETCONF	writeb(lp->config,_CONFIG)
 
 static const char *version =
-"arc-rimi.c: v2.92 97/09/02 Avery Pennarun <apenwarr@bond.net> et al.\n";
+"arc-rimi.c: v3.00 97/11/09 Avery Pennarun <apenwarr@bond.net> et al.\n";
 
 /****************************************************************************
  *                                                                          *

@@ -15,6 +15,7 @@
 #include <asm/checksum.h>
 #include <asm/io.h>
 #include <asm/hardirq.h>
+#include <asm/delay.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
@@ -42,6 +43,11 @@ EXPORT_SYMBOL_NOVERS(__up_wakeup);
 EXPORT_SYMBOL(__intel_bh_counter);
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);
+/* Delay loops */
+EXPORT_SYMBOL(__udelay);
+EXPORT_SYMBOL(__delay);
+EXPORT_SYMBOL(__const_udelay);
+
 
 #ifdef __SMP__
 EXPORT_SYMBOL(apic_reg);	/* Needed internally for the I386 inlines */

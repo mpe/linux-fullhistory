@@ -32,11 +32,15 @@ nfsd_proc_read(char *buffer, char **start, off_t offset, int count,
 {
 	int	len;
 
-	len = sprintf(buffer,
-		"rc %d %d %d\n",
+	len = sprintf(buffer, "rc %d %d %d  %d %d %d %d %d\n",
 			nfsdstats.rchits,
 			nfsdstats.rcmisses,
-			nfsdstats.rcnocache);
+			nfsdstats.rcnocache,
+			nfsdstats.fh_cached,
+			nfsdstats.fh_valid,
+			nfsdstats.fh_fixup,
+			nfsdstats.fh_lookup,
+			nfsdstats.fh_stale);
 
 	/* Assume we haven't hit EOF yet. Will be set by svc_proc_read. */
 	*eof = 0;

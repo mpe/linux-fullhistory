@@ -3,7 +3,7 @@
  *
  * Access routines and definitions for the low level driver for the 
  * AWE32/Sound Blaster 32 wave table synth.
- *   version 0.4.2; Sep. 1, 1997
+ *   version 0.4.2; Sep. 15, 1997
  *
  * Copyright (C) 1996,1997 Takashi Iwai
  *

@@ -156,9 +156,9 @@ extern struct at_addr *atalk_find_dev_addr(struct device *dev);
 extern struct device *atrtr_get_dev(struct at_addr *sa);
 extern int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, void *hwaddr);
 extern void aarp_send_probe(struct device *dev, struct at_addr *addr);
+extern void aarp_device_down(struct device *dev);
 
 #ifdef MODULE
-extern void aarp_device_down(struct device *dev);
 extern void aarp_cleanup_module(void);
 #endif /* MODULE */
 

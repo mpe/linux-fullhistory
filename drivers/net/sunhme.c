@@ -974,16 +974,20 @@ static void happy_meal_init_rings(struct happy_meal *hp, int from_irq)
 		/* Because we reserve afterwards. */
 		skb_put(skb, (ETH_FRAME_LEN + RX_OFFSET));
 
+#ifdef CONFIG_PCI
 		if(hp->happy_flags & HFLAG_PCI) {
 			pcihme_write_rxd(&hb->happy_meal_rxd[i],
 					 (RXFLAG_OWN |
 					  ((RX_BUF_ALLOC_SIZE-RX_OFFSET)<<16)),
 					 (u32)virt_to_bus((volatile void *)skb->data));
 		} else {
+#endif
 			hb->happy_meal_rxd[i].rx_addr = (u32)((unsigned long) skb->data);
 			hb->happy_meal_rxd[i].rx_flags =
 				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
+#ifdef CONFIG_PCI
 		}
+#endif
 		skb_reserve(skb, RX_OFFSET);
 	}
 
@@ -2301,12 +2305,6 @@ static int sun4c_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 		}
 	}
 
-	if(skb == NULL || skb->len <= 0) {
-		printk("%s: skb is NULL\n", dev->name);
-		dev_tint(dev);
-		return 0;
-	}
-
 	if(test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
 		printk("happy meal: Transmitter access conflict.\n");
 		return 1;
@@ -2547,7 +2545,7 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 	dev->get_stats = &happy_meal_get_stats;
 	dev->set_multicast_list = &happy_meal_set_multicast;
 
-	dev->irq = (unsigned char) sdev->irqs[0].pri;
+	dev->irq = sdev->irqs[0].pri;
 	dev->dma = 0;
 	ether_setup(dev);
 #ifdef MODULE

@@ -1,20 +1,22 @@
-bool 'ProAudioSpectrum 16 support' CONFIG_PAS
-bool '100%% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support' CONFIG_SB
-bool 'Generic OPL2/OPL3 FM synthesizer support' CONFIG_ADLIB
-bool 'Gravis Ultrasound support' CONFIG_GUS
-bool 'MPU-401 support (NOT for SB16)' CONFIG_MPU401
-bool 'PSS (ECHO-ADI2111) support' CONFIG_PSS
-bool '16 bit sampling option of GUS (_NOT_ GUS MAX)' CONFIG_GUS16
-bool 'GUS MAX support' CONFIG_GUSMAX
-bool 'Microsoft Sound System support' CONFIG_MSS
-bool 'Ensoniq SoundScape support' CONFIG_SSCAPE
-bool 'MediaTrix AudioTrix Pro support' CONFIG_TRIX
-bool 'Support for OPTi MAD16 and/or Mozart based cards' CONFIG_MAD16
-bool 'Support for Crystal CS4232 based (PnP) cards' CONFIG_CS4232
-bool 'Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers' CONFIG_MAUI
-bool 'Yamaha OPL3-SA1 audio controller' CONFIG_OPL3SA1
-bool 'SoftOSS software wave table engine' CONFIG_SOFTOSS
-bool 'FM synthesizer (YM3812/OPL-3) support' CONFIG_YM3812
+dep_tristate 'ProAudioSpectrum 16 support' CONFIG_PAS $CONFIG_SOUND
+dep_tristate '100%% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support' CONFIG_SB $CONFIG_SOUND
+dep_tristate 'Generic OPL2/OPL3 FM synthesizer support' CONFIG_ADLIB $CONFIG_SOUND
+dep_tristate 'Gravis Ultrasound support' CONFIG_GUS $CONFIG_SOUND
+dep_tristate 'MPU-401 support (NOT for SB16)' CONFIG_MPU401 $CONFIG_SOUND
+dep_tristate 'PSS (ECHO-ADI2111) support' CONFIG_PSS $CONFIG_SOUND
+if [ "$CONFIG_GUS" != "n" ]; then
+	bool '16 bit sampling option of GUS (_NOT_ GUS MAX)' CONFIG_GUS16 
+	bool 'GUS MAX support' CONFIG_GUSMAX
+fi
+dep_tristate 'Microsoft Sound System support' CONFIG_MSS $CONFIG_SOUND
+dep_tristate 'Ensoniq SoundScape support' CONFIG_SSCAPE $CONFIG_SOUND
+dep_tristate 'MediaTrix AudioTrix Pro support' CONFIG_TRIX $CONFIG_SOUND
+dep_tristate 'Support for OPTi MAD16 and/or Mozart based cards' CONFIG_MAD16 $CONFIG_SOUND
+dep_tristate 'Support for Crystal CS4232 based (PnP) cards' CONFIG_CS4232 $CONFIG_SOUND
+dep_tristate 'Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers' CONFIG_MAUI $CONFIG_SOUND
+dep_tristate 'Yamaha OPL3-SA1 audio controller' CONFIG_OPL3SA1 $CONFIG_SOUND
+dep_tristate 'SoftOSS software wave table engine' CONFIG_SOFTOSS $CONFIG_SOUND
+dep_tristate 'FM synthesizer (YM3812/OPL-3) support' CONFIG_YM3812 $CONFIG_SOUND
 
 if [ "$CONFIG_AEDSP16" = "y" ]; then
 hex 'I/O base for Audio Excel DSP 16 220 or 240' AEDSP16_BASE 220
@@ -309,8 +311,8 @@ $MAKE -C drivers/sound kernelconfig || exit 1
 bool 'Additional low level drivers' CONFIG_LOWLEVEL_SOUND
 
 if [ "$CONFIG_LOWLEVEL_SOUND" = "y" ]; then
-   bool 'ACI mixer (miroPCM12)' CONFIG_ACI_MIXER
-   bool 'AWE32 synth' CONFIG_AWE32_SYNTH
+   dep_tristate 'ACI mixer (miroPCM12)' CONFIG_ACI_MIXER $CONFIG_SOUND
+   dep_tristate 'AWE32 synth' CONFIG_AWE32_SYNTH $CONFIG_SOUND
    bool 'Gallant Audio Cards (SC-6000 and SC-6600 based)' CONFIG_AEDSP16
 
    if [ "$CONFIG_AEDSP16" = "y" ]; then

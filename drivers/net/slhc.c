@@ -246,6 +246,14 @@ slhc_compress(struct slcompress *comp, unsigned char *icp, int isize,
 	struct iphdr *ip;
 	struct tcphdr *th, *oth;
 
+
+	/*
+	 *	Don't play with runt packets.
+	 */
+	 
+	if(isize<sizeof(struct iphdr))
+		return isize;
+		
 	ip = (struct iphdr *) icp;
 
 	/* Bail if this packet isn't TCP, or is an IP fragment */
@@ -264,9 +272,10 @@ slhc_compress(struct slcompress *comp, unsigned char *icp, int isize,
 	hlen = ip->ihl*4 + th->doff*4;
 
 	/*  Bail if the TCP packet isn't `compressible' (i.e., ACK isn't set or
-	 *  some other control bit is set).
+	 *  some other control bit is set). Also uncompressible if
+	 *  its a runt.
 	 */
-	if(th->syn || th->fin || th->rst ||
+	if(hlen > isize || th->syn || th->fin || th->rst ||
 	    ! (th->ack)){
 		/* TCP connection stuff; send as regular IP */
 		comp->sls_o_tcp++;
@@ -697,7 +706,7 @@ slhc_toss(struct slcompress *comp)
 void slhc_i_status(struct slcompress *comp)
 {
 	if (comp != NULLSLCOMPR) {
-		printk("\t%ld Cmp, %ld Uncmp, %ld Bad, %ld Tossed\n",
+		printk("\t%d Cmp, %d Uncmp, %d Bad, %d Tossed\n",
 			comp->sls_i_compressed,
 			comp->sls_i_uncompressed,
 			comp->sls_i_error,
@@ -709,12 +718,12 @@ void slhc_i_status(struct slcompress *comp)
 void slhc_o_status(struct slcompress *comp)
 {
 	if (comp != NULLSLCOMPR) {
-		printk("\t%ld Cmp, %ld Uncmp, %ld AsIs, %ld NotTCP\n",
+		printk("\t%d Cmp, %d Uncmp, %d AsIs, %d NotTCP\n",
 			comp->sls_o_compressed,
 			comp->sls_o_uncompressed,
 			comp->sls_o_tcp,
 			comp->sls_o_nontcp);
-		printk("\t%10ld Searches, %10ld Misses\n",
+		printk("\t%10d Searches, %10d Misses\n",
 			comp->sls_o_searches,
 			comp->sls_o_misses);
 	}

@@ -1,4 +1,4 @@
-/*	$Id: com90xx.c,v 1.3 1997/09/05 18:27:23 mj Exp $
+/*	$Id: com90xx.c,v 1.6 1997/11/09 11:05:01 mj Exp $
 
 	Derived from the original arcnet.c,
 	Written 1994-1996 by Avery Pennarun,
@@ -154,7 +154,7 @@ extern int arcnet_num_devs;
 #define ARCRESET	inb(_RESET)
 
 static const char *version =
- "com90xx.c: v2.92 97/09/02 Avery Pennarun <apenwarr@bond.net> et al.\n";
+ "com90xx.c: v3.00 97/11/09 Avery Pennarun <apenwarr@bond.net> et al.\n";
 
 
 /****************************************************************************

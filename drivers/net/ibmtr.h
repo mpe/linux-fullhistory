@@ -6,6 +6,7 @@
 #define TR_RETRY_INTERVAL (5*HZ) /* 500 on PC = 5 s */
 #define TR_RESET_INTERVAL (HZ/20) /* 5 on PC = 50 ms */
 #define TR_BUSY_INTERVAL (HZ/5) /* 5 on PC = 200 ms */
+#define TR_SPIN_INTERVAL (3*HZ) /* 3 seconds before init timeout */
 
 #define TR_ISA 1
 #define TR_MCA 2
@@ -227,7 +228,7 @@ struct tok_info {
 
 /* DIR_OPEN_ADAPTER options */
 #define OPEN_PASS_BCON_MAC 0x0100
-#define NUM_RCV_BUF 3
+#define NUM_RCV_BUF 2
 #define RCV_BUF_LEN 1024
 #define DHB_LENGTH 2048
 #define NUM_DHB 2

@@ -589,12 +589,7 @@ sl_open(struct device *dev)
 	sl->outfill_timer.data=(unsigned long)sl;
 	sl->outfill_timer.function=sl_outfill;
 #endif
-	/* Needed because address '0' is special */
-	if (dev->pa_addr == 0)  {
-		dev->pa_addr=ntohl(0xC0A80001);
-	}
 	dev->tbusy  = 0;
-/*	dev->flags |= IFF_UP; */
 	dev->start  = 1;
 
 	return 0;
@@ -625,8 +620,6 @@ sl_close(struct device *dev)
 	sl->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 	dev->tbusy = 1;
 	dev->start = 0;
-
-/*	dev->flags &= ~IFF_UP; */
 
 	return 0;
 }
@@ -740,7 +733,11 @@ slip_close(struct tty_struct *tty)
 		return;
 	}
 
-	(void) dev_close(sl->dev);
+	if (sl->dev->flags & IFF_UP)
+	{
+		/* STRONG layering violation! --ANK */
+		(void) dev_close(sl->dev);
+	}
 
 	tty->disc_data = 0;
 	sl->tty = NULL;
@@ -752,7 +749,6 @@ slip_close(struct tty_struct *tty)
 		(void)del_timer (&sl->outfill_timer);
 #endif
 	sl_free(sl);
-	unregister_netdev(sl->dev);
 	MOD_DEC_USE_COUNT;
 }
 
@@ -1237,12 +1233,7 @@ int slip_init(struct device *dev)
 	dev_init_buffers(dev);
 	
 	/* New-style flags. */
-	dev->flags		= IFF_NOARP|IFF_MULTICAST;
-	dev->family		= AF_INET;
-	dev->pa_addr		= 0;
-	dev->pa_brdaddr	        = 0;
-	dev->pa_mask		= 0;
-	dev->pa_alen		= 4;
+	dev->flags		= IFF_NOARP|IFF_POINTOPOINT|IFF_MULTICAST;
 
 	return 0;
 }

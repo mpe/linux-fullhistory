@@ -162,7 +162,6 @@ void llc_sendpdu(llcptr lp, char type, char pf, int data_len, char *pdu_data)
 		lp->dev->hard_header(skb, lp->dev, ETH_P_802_3,
 			 lp->remote_mac, NULL, fl);
 		skb->arp = 1;
-		skb->priority=SOPRI_NORMAL;
 		skb->dev=lp->dev;
 		dev_queue_xmit(skb);
 	}
@@ -220,7 +219,6 @@ void llc_sendipdu(llcptr lp, char type, char pf, struct sk_buff *skb)
 	if(tmp!=NULL)
 	{
 		tmp->dev=lp->dev;
-		tmp->priority=SOPRI_NORMAL;
 		dev_queue_xmit(tmp);
 	}
 }
@@ -288,7 +286,6 @@ int llc_resend_ipdu(llcptr lp, unsigned char ack_nr, unsigned char type, char p)
 		{
 			tmp->arp = 1;
 			tmp->dev = lp->dev;
-			tmp->priority = SOPRI_NORMAL;
 			dev_queue_xmit(skb);
 		}
 		resend_count++;

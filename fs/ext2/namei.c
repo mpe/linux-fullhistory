@@ -614,10 +614,9 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 	/*
 	 * Prune any child dentries so that this dentry becomes negative.
 	 */
-	if (dentry->d_count > 1) {
-		printk("ext2_rmdir: d_count=%d, pruning\n", dentry->d_count);
+	if (dentry->d_count > 1)
 		shrink_dcache_parent(dentry);
-	}
+
 	if (!empty_dir (inode))
 		retval = -ENOTEMPTY;
 	else if (le32_to_cpu(de->inode) != inode->i_ino)

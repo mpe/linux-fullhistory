@@ -32,8 +32,6 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 
-#include <net/netlink.h>
-
 #define	NEXT_DEV	NULL
 
 
@@ -99,6 +97,11 @@ extern int ethertap_probe(struct device *dev);
 extern int atp_init(struct device *);
 extern int de600_probe(struct device *);
 extern int de620_probe(struct device *);
+
+/* FDDI adapters */
+extern int dfx_probe(struct device *dev);
+extern int apfddi_init(struct device *dev);
+
 
 __initfunc(static int ethif_probe(struct device *dev))
 {
@@ -280,6 +283,27 @@ __initfunc(static int ethif_probe(struct device *dev))
 }
 
 
+#ifdef CONFIG_FDDI
+__initfunc(static int fddiif_probe(struct device *dev))
+{
+    unsigned long base_addr = dev->base_addr;
+
+    if ((base_addr == 0xffe0)  ||  (base_addr == 1))
+	    return 1;		/* ENXIO */
+
+    if (1
+#ifdef CONFIG_DEFXX
+	&& dfx_probe(dev)
+#endif
+#ifdef CONFIG_APFDDI
+	&& apfddi_init(dev);
+#endif
+	&& 1 ) {
+	    return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
+    }
+    return 0;
+}
+#endif
 
 
 #ifdef CONFIG_ETHERTAP
@@ -317,13 +341,11 @@ static struct device atp_dev = {
 
 #if defined(CONFIG_COPS)
     extern int cops_probe(struct device *);
-    static struct device dev_cops = {
-        "lt0",
-        0, 0, 0, 0,
-        0x0, 0,
-        0, 0, 0, NEXT_DEV, cops_probe };
+    static struct device cops2_dev = { "lt2", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, NEXT_DEV, cops_probe };
+    static struct device cops1_dev = { "lt1", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, &cops2_dev, cops_probe };
+    static struct device cops0_dev = { "lt0", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, &cops1_dev, cops_probe };
 #   undef NEXT_DEV
-#   define NEXT_DEV     (&dev_cops)
+#   define NEXT_DEV     (&cops0_dev)
 #endif  /* COPS */
 
 #if defined(CONFIG_IPDDP)
@@ -483,48 +505,26 @@ static struct device tr0_dev = {
 
 #endif 
 
-#ifdef CONFIG_NET_IPIP
-	extern int tunnel_init(struct device *);
-	
-	static struct device tunnel_dev1 = 
-	{
-		"tunl1",		/* IPIP tunnel  			*/
-		0x0,			/* recv memory end			*/
-		0x0,			/* recv memory start			*/
-		0x0,			/* memory end				*/
-		0x0,			/* memory start				*/
-		0x0,			/* base I/O address			*/
-		0,			/* IRQ					*/
-		0, 0, 0,		/* flags				*/
-		NEXT_DEV,		/* next device				*/
-		tunnel_init		/* Fill in the details			*/
-	};
-
-	static struct device tunnel_dev0 = 
-	{
-		"tunl0",		/* IPIP tunnel  			*/
-		0x0,			/* recv memory end			*/
-		0x0,			/* recv memory start			*/
-		0x0,			/* memory end				*/
-		0x0,			/* memory start				*/
-		0x0,			/* base I/O address			*/
-		0,			/* IRQ					*/
-		0, 0, 0,		/* flags				*/
-		&tunnel_dev1,		/* next device				*/
-		tunnel_init		/* Fill in the details			*/
-    };
-#   undef	NEXT_DEV
-#   define	NEXT_DEV	(&tunnel_dev0)
-
-#endif
-
-#ifdef CONFIG_APFDDI
-    extern int apfddi_init(struct device *dev);
-    static struct device fddi_dev = {
-	"fddi", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, apfddi_init };
-#   undef       NEXT_DEV
-#   define      NEXT_DEV        (&fddi_dev)
-#endif
+#ifdef CONFIG_FDDI
+	static struct device fddi7_dev =
+		{"fddi7", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, fddiif_probe};
+	static struct device fddi6_dev =
+		{"fddi6", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi7_dev, fddiif_probe};
+	static struct device fddi5_dev =
+		{"fddi5", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi6_dev, fddiif_probe};
+	static struct device fddi4_dev =
+		{"fddi4", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi5_dev, fddiif_probe};
+	static struct device fddi3_dev =
+		{"fddi3", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi4_dev, fddiif_probe};
+	static struct device fddi2_dev =
+		{"fddi2", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi3_dev, fddiif_probe};
+	static struct device fddi1_dev =
+		{"fddi1", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi2_dev, fddiif_probe};
+	static struct device fddi0_dev =
+		{"fddi0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi1_dev, fddiif_probe};
+#undef	NEXT_DEV
+#define	NEXT_DEV	(&fddi0_dev)
+#endif 
 
 #ifdef CONFIG_APBIF
     extern int bif_init(struct device *dev);

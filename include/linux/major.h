@@ -67,6 +67,7 @@
 #define Z2RAM_MAJOR	37
 #define APBLOCK_MAJOR   38   /* AP1000 Block device */
 #define DDV_MAJOR       39   /* AP1000 DDV block device */
+#define NBD_MAJOR	43   /* Network block device	*/
 #define RISCOM8_NORMAL_MAJOR 48
 #define RISCOM8_CALLOUT_MAJOR 49
 #define MKISS_MAJOR	55

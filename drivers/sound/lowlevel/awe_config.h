@@ -2,7 +2,7 @@
  * sound/awe_config.h
  *
  * Configuration of AWE32 sound driver
- *   version 0.4.2; Sep. 1, 1997
+ *   version 0.4.2; Sep. 15, 1997
  *
  * Copyright (C) 1996 Takashi Iwai
  *
@@ -27,12 +27,20 @@
 /*----------------------------------------------------------------
  * system configuration
  *----------------------------------------------------------------*/
-#define AWE_NEW_KERNEL_INTERFACE
 
 /* if you're using obsolete VoxWare 3.0.x on Linux 1.2.x (or FreeBSD),
  * define the following line.
  */
 #undef AWE_OBSOLETE_VOXWARE
+
+#ifdef __FreeBSD__
+#  define AWE_OBSOLETE_VOXWARE
+#endif
+
+/* if you're using OSS-Lite on Linux 2.1.6 or later, define the
+ * following line.
+ */
+#define AWE_NEW_KERNEL_INTERFACE
 
 /* if you have lowlevel.h in the lowlevel directory (OSS-Lite), define
  * the following line.
@@ -90,7 +98,7 @@
  *----------------------------------------------------------------*/
 
 /* initialize FM passthrough even without extended RAM */
-#define AWE_ALWAYS_INIT_FM
+#undef AWE_ALWAYS_INIT_FM
 
 /* debug on */
 #define AWE_DEBUG_ON

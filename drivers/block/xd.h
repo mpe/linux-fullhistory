@@ -35,7 +35,7 @@
 #define CMD_SEEK	0x0B	/* seek */
 
 /* Controller specific commands */
-#define CMD_DTCSETPARAM	0x0C	/* set drive parameters (DTC 5150X only?) */
+#define CMD_DTCSETPARAM	0x0C	/* set drive parameters (DTC 5150X & CX only?) */
 #define CMD_DTCGETECC	0x0D	/* get ecc error length (DTC 5150X only?) */
 #define CMD_DTCREADBUF	0x0E	/* read sector buffer (DTC 5150X only?) */
 #define CMD_DTCWRITEBUF 0x0F	/* write sector buffer (DTC 5150X only?) */
@@ -85,8 +85,6 @@ typedef struct {
 	u_char control;
 } XD_INFO;
 
-#define	HDIO_GETGEO	0x0301		/* get drive geometry */
-
 /* this structure is returned to the HDIO_GETGEO ioctl */
 typedef struct {
 	__u8 heads;
@@ -105,6 +103,9 @@ typedef struct {
 } XD_SIGNATURE;
 
 void xd_setup (char *command,int *integers);
+#ifndef MODULE
+void xd_manual_geo_init (char *command,int *integers);
+#endif /* MODULE */
 static u_char xd_detect (u_char *controller, unsigned int *address);
 static u_char xd_initdrives (void (*init_drive)(u_char drive));
 static void xd_geninit (struct gendisk *);
@@ -120,11 +121,14 @@ static void xd_recalibrate (u_char drive);
 static void xd_interrupt_handler (int irq, void *dev_id, struct pt_regs *regs);
 static u_char xd_setup_dma (u_char opcode,u_char *buffer,u_int count);
 static u_char *xd_build (u_char *cmdblk,u_char command,u_char drive,u_char head,u_short cylinder,u_char sector,u_char count,u_char control);
+static void xd_wakeup (void);
+static void xd_watchdog (void);
 static inline u_char xd_waitport (u_short port,u_char flags,u_char mask,u_long timeout);
 static u_int xd_command (u_char *command,u_char mode,u_char *indata,u_char *outdata,u_char *sense,u_long timeout);
 
 /* card specific setup and geometry gathering code */
 static void xd_dtc_init_controller (unsigned int address);
+static void xd_dtc5150cx_init_drive (u_char drive);
 static void xd_dtc_init_drive (u_char drive);
 static void xd_wd_init_controller (unsigned int address);
 static void xd_wd_init_drive (u_char drive);

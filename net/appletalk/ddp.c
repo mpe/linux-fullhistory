@@ -54,10 +54,11 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/if_ether.h>
-#include <linux/route.h>
-#include <linux/inet.h>
 #include <linux/notifier.h>
 #include <linux/netdevice.h>
+/*#include <linux/inetdevice.h> -- coming soon */
+#include <linux/route.h>
+#include <linux/inet.h>
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
 #include <linux/skbuff.h>
@@ -268,12 +269,12 @@ static void atif_drop_device(struct device *dev)
 			*iface = tmp->next;
 			kfree_s(tmp, sizeof(struct atalk_iface));
 			dev->atalk_ptr=NULL;
+			MOD_DEC_USE_COUNT;
 		}
 		else
 			iface = &tmp->next;
 	}
 
-	MOD_DEC_USE_COUNT;
 }
 
 static struct atalk_iface *atif_add_device(struct device *dev, struct at_addr *sa)
@@ -301,49 +302,42 @@ static struct atalk_iface *atif_add_device(struct device *dev, struct at_addr *s
 }
 
 /*
+ * Probe a Phase 1 device or a device that requires its Net:Node to
+ * be set via an ioctl.
+ */
+void atif_send_probe_phase1(struct atalk_iface *iface)
+{
+        struct ifreq atreq;
+        struct sockaddr_at *sa = (struct sockaddr_at *)&atreq.ifr_addr;
+
+        sa->sat_addr.s_node = iface->address.s_node;
+        sa->sat_addr.s_net  = ntohs(iface->address.s_net);
+
+         /* We pass the Net:Node to the drivers/cards by a Device ioctl. */
+        if(!(iface->dev->do_ioctl(iface->dev, &atreq, SIOCSIFADDR)))
+        {
+                (void)iface->dev->do_ioctl(iface->dev, &atreq, SIOCGIFADDR);
+                if((iface->address.s_net != htons(sa->sat_addr.s_net))
+			|| (iface->address.s_node != sa->sat_addr.s_node))
+                        iface->status |= ATIF_PROBE_FAIL;
+
+                iface->address.s_net  = htons(sa->sat_addr.s_net);
+		iface->address.s_node = sa->sat_addr.s_node;
+        }
+
+        return;
+}
+
+/*
  * Perform phase 2 AARP probing on our tentative address.
  */
 static int atif_probe_device(struct atalk_iface *atif)
 {
-	int ct;
 	int netrange=ntohs(atif->nets.nr_lastnet)-ntohs(atif->nets.nr_firstnet)+1;
 	int probe_net=ntohs(atif->address.s_net);
 	int probe_node=atif->address.s_node;
-	int netct;
-	int nodect;
+	int ct, netct, nodect;
 
-	struct ifreq atreq;
-	struct sockaddr_at *sa;
-	int err;
-
-/*
- *	THIS IS A HACK: Farallon cards want to do their own picking of
- *	addresses. This needs tidying up when someone does localtalk
- *	drivers
- */
-
-	if((atif->dev->type == ARPHRD_LOCALTLK || atif->dev->type == ARPHRD_PPP)
-		&& atif->dev->do_ioctl)
-	{
-		/* fake up the request and pass it down */
-		sa = (struct sockaddr_at*)&atreq.ifr_addr;
-		sa->sat_addr.s_node = probe_node;
-        	sa->sat_addr.s_net  = probe_net;
-		if(!(err=atif->dev->do_ioctl(atif->dev,&atreq,SIOCSIFADDR)))
-		{
-			(void)atif->dev->do_ioctl(atif->dev,&atreq,SIOCGIFADDR);
-			atif->address.s_net=htons(sa->sat_addr.s_net);
-			atif->address.s_node=sa->sat_addr.s_node;
-			return (0);
-		}
-		/*
-		 *	If it didn't like our faked request then fail:
-		 *	This should check against -ENOIOCTLCMD and fall
-		 *	through. That needs us to fix all the devices up
-		 *	properly. We can then also dump the localtalk test.
-		 */
-		return (err);
-	}
 	/*
 	 * Offset the network we start probing with.
 	 */
@@ -378,17 +372,23 @@ static int atif_probe_device(struct atalk_iface *atif)
 				/*
 				 * Probe a proposed address.
 				 */
-				for(ct = 0; ct < AARP_RETRANSMIT_LIMIT; ct++)
-				{
-					aarp_send_probe(atif->dev, &atif->address);
-					/*
-					 * Defer 1/10th
-					 */
-					current->timeout = jiffies + (HZ/10);
-					current->state = TASK_INTERRUPTIBLE;
-					schedule();
-					if(atif->status & ATIF_PROBE_FAIL)
-						break;
+
+				if(atif->dev->type == ARPHRD_LOCALTLK || atif->dev->type == ARPHRD_PPP)
+                                        atif_send_probe_phase1(atif);
+                                else
+                                {
+					for(ct = 0; ct < AARP_RETRANSMIT_LIMIT; ct++)
+					{
+						aarp_send_probe(atif->dev, &atif->address);
+						/*
+						 * Defer 1/10th
+						 */
+						current->timeout = jiffies + (HZ/10);
+						current->state = TASK_INTERRUPTIBLE;
+						schedule();
+						if(atif->status & ATIF_PROBE_FAIL)
+							break;
+					}
 				}
 				if(!(atif->status & ATIF_PROBE_FAIL))
 					return (0);
@@ -664,6 +664,16 @@ void atrtr_device_down(struct device *dev)
 }
 
 /*
+ * Actually down the interface.
+ */
+static inline void atalk_dev_down(struct device *dev)
+{
+	atrtr_device_down(dev);	/* Remove all routes for the device */
+	aarp_device_down(dev);	/* Remove AARP entries for the device */
+	atif_drop_device(dev);	/* Remove the device */
+}
+
+/*
  * A device event has occurred. Watch for devices going down and
  * delete our use of them (iface and route).
  */
@@ -672,8 +682,7 @@ static int ddp_device_event(struct notifier_block *this, unsigned long event, vo
 	if(event == NETDEV_DOWN)
 	{
 		/* Discard any use of this */
-		atrtr_device_down((struct device *)ptr);
-		atif_drop_device((struct device *)ptr);
+	        atalk_dev_down((struct device *) ptr);
 	}
 
 	return (NOTIFY_DONE);
@@ -820,14 +829,12 @@ int atif_ioctl(int cmd, void *arg)
 			break;
 
 	        case SIOCATALKDIFADDR:
+	        case SIOCDIFADDR:
 			if(!suser())
 				return (-EPERM);
 			if(sa->sat_family != AF_APPLETALK)
 				return (-EINVAL);
-			if(atif == NULL)
-				return (-EADDRNOTAVAIL);
-			atrtr_device_down(atif->dev);
-			atif_drop_device(atif->dev);
+			atalk_dev_down(dev);
 			break;			
 	}
 
@@ -1431,6 +1438,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		skb_pull(skb, 13);
 		skb->dev = dev;
 		skb->h.raw = skb->data;
+		skb->nh.raw = skb->data;
 
 	/*	printk("passing up ipddp, 0x%02x better be 45\n",skb->data[0]);
 	 *	printk("tot_len %d, skb->len %d\n",
@@ -1821,6 +1829,7 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		case SIOCSIFADDR:
 		case SIOCGIFBRDADDR:
 		case SIOCATALKDIFADDR:
+		case SIOCDIFADDR:
 			return (atif_ioctl(cmd,(void *)arg));
 
 		/*
@@ -1834,10 +1843,12 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		case SIOCGIFMTU:
 		case SIOCGIFCONF:
 		case SIOCADDMULTI:
-		case SIOCDELMULTI:
+		case SIOCDELMULTI:		
 		case SIOCGIFCOUNT:
-		case SIOGIFINDEX:
-		case SIOGIFNAME:
+#if 0			/* Also coming in the IP merge */
+		case SIOCGIFINDEX:
+#endif		
+		case SIOCGIFNAME:
 			return ((dev_ioctl(cmd,(void *) arg)));
 
 		case SIOCSIFMETRIC:
@@ -1984,18 +1995,6 @@ int init_module(void)
 }
 
 /*
- * Actually down the interface.
- */
-static void atalk_iface_down(struct atalk_iface *iface)
-{
-	atrtr_device_down(iface->dev);	/* Remove all routes for the device */
-	aarp_device_down(iface->dev);	/* Remove AARP entries for the device */
-	atif_drop_device(iface->dev);	/* Remove the device */
-
-	return;
-}
-
-/*
  * Note on MOD_{INC,DEC}_USE_COUNT:
  *
  * Use counts are incremented/decremented when
@@ -2010,16 +2009,6 @@ static void atalk_iface_down(struct atalk_iface *iface)
 
 void cleanup_module(void)
 {
-	struct atalk_iface *ifaces = atalk_iface_list, *tmp;
-
-        while(ifaces != NULL)
-        {
-                tmp = ifaces->next;
-                ifaces->dev->atalk_ptr = NULL;
-                atalk_iface_down(ifaces);
-                ifaces = tmp;
-        }
-
 #ifdef CONFIG_SYSCTL
 	atalk_unregister_sysctl();
 #endif /* CONFIG_SYSCTL */

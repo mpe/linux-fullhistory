@@ -598,17 +598,6 @@ i596_start_xmit(struct sk_buff *skb, struct device *dev)
 	dev->trans_start = jiffies;
     }
 
-    /* If some higher level thinks we've misses a tx-done interrupt
-       we are passed NULL. n.b. dev_tint handles the cli()/sti()
-       itself. */
-    if (skb == NULL) {
-	dev_tint(dev);
-	return 0;
-    }
-
-    /* shouldn't happen */
-    if (skb->len <= 0) return 0;
-
     if (i596_debug > 3) printk("%s: i596_start_xmit() called\n", dev->name);
 
     /* Block a timer-based transmit from overlapping.  This could better be

@@ -140,9 +140,9 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   fi
 fi
 
-if [ ! "$CONFIG_PARPORT" = "n" ]; then
-  dep_tristate 'PLIP (parallel port) support' CONFIG_PLIP $CONFIG_PARPORT
-fi
+#if [ ! "$CONFIG_PARPORT" = "n" ]; then
+#  dep_tristate 'PLIP (parallel port) support' CONFIG_PLIP $CONFIG_PARPORT
+#fi
 
 tristate 'PPP (point-to-point) support' CONFIG_PPP
 if [ ! "$CONFIG_PPP" = "n" ]; then
@@ -181,7 +181,7 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
       bool 'HFmodem support for WSS and Crystal cards' CONFIG_HFMODEM_WSS
     fi
   fi
-  tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
+#  tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
   tristate 'AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
 fi
 

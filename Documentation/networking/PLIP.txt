@@ -1,17 +1,62 @@
-\title{PLIP: The Parallel Line Internet Protocol Device}
+PLIP: The Parallel Line Internet Protocol Device
 
-\author{ Donald Becker (becker@super.org)}
-\affiliation{I.D.A. Supercomputing Research Center, Bowie MD 20715}
+Donald Becker (becker@super.org)
+I.D.A. Supercomputing Research Center, Bowie MD 20715
 
-%% At some point T. Thorn will probably contribute text,
-%% \author{ Tommy Thorn (tthorn@daimi.aau.dk)}
+At some point T. Thorn will probably contribute text,
+Tommy Thorn (tthorn@daimi.aau.dk)
 
-\section{PLIP Introduction}
+PLIP Introduction
+-----------------
+
 This document describes the parallel port packet pusher for Net/LGX.
 This device interface allows a point-to-point connection between two
 parallel ports to appear as a IP network interface.
 
-\chapter{PLIP hardware interconnection}
+What is PLIP?
+=============
+
+PLIP is Parallel Line IP, that is, the transportation of IP packages
+over a parallel port. In the case of a PC, the obvious choice is the
+printer port.  PLIP is a non-standard, but [can use] uses the standard
+LapLink null-printer cable [can also work in turbo mode, with a PLIP
+cable]. [The protocol used to pack IP packages, is a simple one
+initiated by Crynwr.]
+
+Advantages of PLIP
+==================
+
+It's cheap, it's available everywhere, and it's easy.
+
+The PLIP cable is all that's needed to connect two Linux boxes, and it
+can be build for very few bucks.
+
+Connecting two Linux boxes takes only a seconds decision and a few
+minutes work, no need to search for a [supported] netcard. This might
+even be especially important in the case of notebooks, where netcard
+are not easily available.
+
+Not requiring a netcard also means that apart from connecting the
+cables, everything else is software configuration [which in principle
+could be made very easy.]
+
+Disadvantages of PLIP
+=====================
+
+Doesn't work over a modem, like SLIP and PPP. Limited range, 15 m.
+Can only be used to connect three (?) Linux boxes. Doesn't connect to
+an exiting ethernet. Isn't standard (not even de facto standard, like
+SLIP).
+
+Performance
+==========
+
+PLIP easily outperforms ethernet cards....(ups, I was dreaming, but
+it *is* getting late. EOB)
+
+PLIP hardware interconnection
+-----------------------------
+
 PLIP uses several different data transfer methods.  The first (and the
 only one implemented in the early version of the code) uses a standard
 printer "null" cable to transfers data four bits at a time using
@@ -22,7 +67,9 @@ bi-directional parallel ports, rather than output-only ``printer''
 ports.  This allows byte-wide transfers and avoids reconstructing
 nibbles into bytes, leading to much faster transfers.
 
-\section{Parallel Transfer Mode 0 Cable}
+Parallel Transfer Mode 0 Cable
+==============================
+
 The cable for the first transfer mode is a standard
 printer "null" cable which transfers data four bits at a time using
 data bit outputs of the first port (machine T) connected to the
@@ -52,7 +99,9 @@ two DB-25 male connectors symmetrically connected as follows:
 If the cable you are using has a metallic shield it should be
 connected to the metallic DB-25 shell at one end only.
 
-\section{Parallel Transfer Mode 1}
+Parallel Transfer Mode 1
+========================
+
 The second data transfer method relies on both machines having
 bi-directional parallel ports, rather than output-only ``printer''
 ports.  This allows byte-wide transfers, and avoids reconstructing
@@ -83,7 +132,9 @@ The cable for this transfer mode should be constructed as follows:
 Once again, if the cable you are using has a metallic shield it should
 be connected to the metallic DB-25 shell at one end only.
 
-\section{PLIP Mode 0 transfer protocol}
+PLIP Mode 0 transfer protocol
+=============================
+
 The PLIP driver is compatible with the "Crynwr" parallel port transfer
 standard in Mode 0.  That standard specifies the following protocol:
 
@@ -109,5 +160,3 @@ Send_Byte:
    WAIT FOR IN.4 = 1
    OUT := high nibble, OUT.4 := 0
    WAIT FOR IN.4 = 0
-
-

@@ -594,12 +594,6 @@ static int myri_start_xmit(struct sk_buff *skb, struct device *dev)
 		}
 	}
 
-	if(skb == NULL || skb->len <= 0) {
-		DTX(("skb is null, aieee... returning 0\n"));
-		dev_tint(dev);
-		return 0;
-	}
-
 	if(test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
 		DTX(("tbusy, maybe a race? returning 1\n"));
 		printk("%s: Transmitter access conflict.\n", dev->name);
@@ -1089,7 +1083,7 @@ static inline int myri_ether_init(struct device *dev, struct linux_sbus_device *
 	dev->hard_start_xmit = &myri_start_xmit;
 	dev->get_stats = &myri_get_stats;
 	dev->set_multicast_list = &myri_set_multicast;
-	dev->irq = (unsigned char) sdev->irqs[0].pri;
+	dev->irq = sdev->irqs[0].pri;
 	dev->dma = 0;
 
 	/* Register interrupt handler now. */

@@ -1,3 +1,15 @@
+ver.0.4.2c
+	- Add a mode to enable drum channel toggle via bank number
+	  change.
+
+ver.0.4.2b
+	- Clear voice position after note on
+	- Change nrvoices according to the current playing mode
+
+ver.0.4.2a
+	- Fix a bug in pitch calculation with scale parameter
+	- Change default chorus & reverb modes
+
 ver.0.4.2
 	- Use indirect voice allocation mode; used as default mode
 	- Add preset mapping
@@ -10,6 +22,10 @@ ver.0.4.2
 	- Add channel priority mode macro, and disable it as default
 	- Add unset effect macro
 	- Add user defined chorus/reverb modes
+	- Do not initialize effect parameters when allocating voices
+	- Accept realtime filter-Q parameter change
+	- Check value range of set/add effects
+	- Change drum flags automatically when receiving bank #128
 
 ver.0.4.1	development versions
 

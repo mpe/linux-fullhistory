@@ -28,7 +28,6 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  */
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
@@ -129,14 +128,7 @@ __initfunc(int loopback_init(struct device *dev))
 	dev->type		= ARPHRD_LOOPBACK;	/* 0x0001		*/
 	dev->rebuild_header	= eth_rebuild_header;
 	dev->open		= loopback_open;
-	dev->flags		= IFF_LOOPBACK|IFF_BROADCAST;
-	dev->family		= AF_INET;
-#ifdef CONFIG_INET    
-	dev->pa_addr		= in_aton("127.0.0.1");
-	dev->pa_brdaddr		= in_aton("127.255.255.255");
-	dev->pa_mask		= in_aton("255.0.0.0");
-	dev->pa_alen		= 4;
-#endif  
+	dev->flags		= IFF_LOOPBACK;
 	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
 	if (dev->priv == NULL)
 			return -ENOMEM;

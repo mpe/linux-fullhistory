@@ -23,10 +23,11 @@
  *					Can set board type in insmod
  *					Hooks for cops_setup routine
  *					(not yet implemented).
+ *	19971101	Jay Schulist	Fixes for multiple lt* devices.
  */
 
 static const char *version =
-	"cops.c:v0.01 3/17/97 Jay Schulist <Jay.Schulist@spacs.k12.wi.us>\n";
+	"cops.c:v0.02 3/17/97 Jay Schulist <Jay.Schulist@spacs.k12.wi.us>\n";
 /*
  *  Sources:
  *      COPS Localtalk SDK. This provides almost all of the information
@@ -62,6 +63,7 @@ static const char *version =
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -119,9 +121,9 @@ static int irq = 0;		/* Default IRQ */
  *      TANGENT driver mode:
  *              Tangent ATB-II, Novell NL-1000, Daystar Digital LT-200
  *      DAYNA driver mode:
- *              Dayna DL2000/DaynaTalk PC (Half Length), COPS LT-95, Farallon PhoneNET PC III
+ *              Dayna DL2000/DaynaTalk PC (Half Length), COPS LT-95, 
+ *		Farallon PhoneNET PC III, Farallon PhoneNET PC II
  *	Other cards possibly supported mode unkown though:
- *		Farallon PhoneNET PC II
  *		Dayna DL2000 (Full length)
  *
  *	Cards NOT supported by this driver but supported by the ltpc.c
@@ -165,28 +167,8 @@ struct cops_local
         int board;			/* Holds what board type is. */
 	int nodeid;			/* Set to 1 once have nodeid. */
         unsigned char node_acquire;	/* Node ID when acquired. */
+        struct at_addr node_addr;	/* Full node addres */
 };
-
-/* Allocate a new device with the form of lt0, lt1, lt2, etc. */
-struct device *cops_dev_alloc(char *name)
-{
-        int i=0;
-        struct device *d=kmalloc(sizeof(struct device)+8, GFP_KERNEL);
-	
-	memset(d,0,sizeof(*d));         /* Clear the structure */
-        if(d==NULL)
-                return NULL;
-        d->name=(char *)(d+1);  /* Name string space */
-
-	/* Get next free device name */
-        for(i=0;i<100;i++)
-        {
-                sprintf(d->name,name,i);
-                if(dev_get(d->name)==NULL)
-                        return d;
-        }
-        return NULL;    /* Over 100 of the things .. bail out! */
-}
 
 /* Index to functions, as function prototypes. */
 extern int  cops_probe (struct device *dev);
@@ -218,29 +200,27 @@ static struct enet_statistics *cops_get_stats (struct device *dev);
  *      If dev->base_addr == 2, allocate space for the device and return success 
  *      (detachable devices only).
  */
-int cops_probe(struct device *dev)
+__initfunc(int cops_probe(struct device *dev))
 {
 	int i;
         int base_addr = dev ? dev->base_addr : 0;
         
-        if (base_addr == 0 && io)
+        if(base_addr == 0 && io)
         	base_addr=io;
 
-        if (base_addr > 0x1ff)    /* Check a single specified location. */
+        if(base_addr > 0x1ff)    /* Check a single specified location. */
                 return cops_probe1(dev, base_addr);
-	else if (base_addr != 0)  /* Don't probe at all. */
+	else if(base_addr != 0)  /* Don't probe at all. */
                	return -ENXIO;
 	
-        for (i=0; cops_portlist[i]; i++) {
+        for(i=0; cops_portlist[i]; i++) {
 		int ioaddr = cops_portlist[i];
-		if (check_region(ioaddr, COPS_IO_EXTENT))
+		if(check_region(ioaddr, COPS_IO_EXTENT))
                         continue;
-                if (cops_probe1(dev, ioaddr) == 0)
+                if(cops_probe1(dev, ioaddr) == 0)
                         return 0;
         }
 	
-	/* No "lt" devices found. */
-	printk(KERN_WARNING "%s: No COPS localtalk devices found!\n", dev->name);
         return -ENODEV;
 }
 
@@ -249,7 +229,7 @@ int cops_probe(struct device *dev)
  *      probes on the ISA bus. A good device probes avoids doing writes, and
  *      verifies that the correct device exists and functions.
  */
-static int cops_probe1(struct device *dev, int ioaddr)
+__initfunc(static int cops_probe1(struct device *dev, int ioaddr))
 {
         struct cops_local *lp;
 	static unsigned version_printed = 0;
@@ -258,17 +238,7 @@ static int cops_probe1(struct device *dev, int ioaddr)
 
 	int board = board_type;
 	
-/* Defined here to save some trouble */	
-
-        /* Allocate a new 'dev' if needed. */
-	if (dev == NULL)
-        {
-                dev=cops_dev_alloc(dev->name);	/* New "lt" device; beyond lt0. */
-		if(dev==NULL)
-                       return -ENOMEM;
-        }
-
-        if (cops_debug && version_printed++ == 0)
+        if(cops_debug && version_printed++ == 0)
 		printk("%s", version);
 
 	/* Fill in the 'dev' fields. */
@@ -280,21 +250,20 @@ static int cops_probe1(struct device *dev, int ioaddr)
          * can use the interrupt, and this marks the irq as busy. Jumpered
          * interrupts are typically not reported by the boards, and we must
          * used AutoIRQ to find them.
-         *
 	 */
 	 
-	if (dev->irq < 2 && irq)
+	if(dev->irq < 2 && irq)
 		dev->irq = irq;
 		
-        if (dev->irq < 2)
+        if(dev->irq < 2)
 	{
 		irqaddr = cops_irq(ioaddr, board);	/* COPS AutoIRQ routine */
-		if (irqaddr == 0)
+		if(irqaddr == 0)
 			return -EAGAIN;		/* No IRQ found on this port */
 		else
 			dev->irq = irqaddr;	
 	}	
-	else if (dev->irq == 2)
+	else if(dev->irq == 2)
 		/* 
 		 * Fixup for users that don't know that IRQ 2 is really
 		 * IRQ 9, or don't know which one to set.
@@ -303,17 +272,18 @@ static int cops_probe1(struct device *dev, int ioaddr)
 
 	/* Snarf the interrupt now. */
         irqval = request_irq(dev->irq, &cops_interrupt, 0, cardname, dev);
-        if (irqval)
-	{	
-        	printk(KERN_WARNING "%s: Unable to get IRQ %d (irqval=%d).\n", dev->name, dev->irq, irqval);
-                return -EAGAIN;
-        }
+
+	/* If its in use set it to 0 and disallow open() calls.. users can still
+	   ifconfig the irq one day */
+
+        if(irqval)
+		dev->irq = 0;	
 
 	dev->hard_start_xmit    = &cops_send_packet;
 
         /* Initialize the device structure. */
         dev->priv = kmalloc(sizeof(struct cops_local), GFP_KERNEL);
-        if (dev->priv == NULL)
+        if(dev->priv == NULL)
         	return -ENOMEM;
 
         lp = (struct cops_local *)dev->priv;
@@ -347,7 +317,7 @@ static int cops_probe1(struct device *dev, int ioaddr)
         return 0;
 }
 
-static int cops_irq (int ioaddr, int board)
+__initfunc(static int cops_irq (int ioaddr, int board))
 {       /*
          * This does not use the IRQ to determine where the IRQ is. We just
          * assume that when we get a correct status response that is the IRQ then.
@@ -379,7 +349,7 @@ static int cops_irq (int ioaddr, int board)
                         if(board==DAYNA)
                         {
                                 status = (inb(ioaddr+DAYNA_CARD_STATUS)&3);
-                                if (status == 1)
+                                if(status == 1)
                                         return irqaddr;
                         }
                         if(board==TANGENT)
@@ -398,6 +368,12 @@ static int cops_irq (int ioaddr, int board)
  */
 static int cops_open(struct device *dev)
 {
+	if(dev->irq==0)
+	{
+		printk(KERN_WARNING "%s: No irq line set.\n", dev->name);
+		return -EAGAIN;
+	}
+
 	cops_jumpstart(dev);	/* Start the card up. */
 
         dev->tbusy = 0;
@@ -508,7 +484,7 @@ static void cops_load (struct device *dev)
 
         /* Get card's firmware code and do some checks on it. */
 #ifdef CONFIG_COPS_DAYNA        
-        if (lp->board==DAYNA)
+        if(lp->board==DAYNA)
         {
                 ltf->length=sizeof(ffdrv_code);
                 ltf->data=ffdrv_code;
@@ -516,7 +492,7 @@ static void cops_load (struct device *dev)
         else
 #endif        
 #ifdef CONFIG_COPS_TANGENT
-        if (lp->board==TANGENT)
+        if(lp->board==TANGENT)
         {
                 ltf->length=sizeof(ltdrv_code);
                 ltf->data=ltdrv_code;
@@ -595,7 +571,7 @@ static int cops_nodeid (struct device *dev, int nodeid)
 	struct cops_local *lp = (struct cops_local *) dev->priv;
 	int ioaddr = dev->base_addr;
 
-	if (lp->board == DAYNA)
+	if(lp->board == DAYNA)
         {
         	/* Empty any pending adapter responses. */
                 while((inb(ioaddr+DAYNA_CARD_STATUS)&DAYNA_TX_READY)==0)
@@ -612,7 +588,7 @@ static int cops_nodeid (struct device *dev, int nodeid)
                 outb(nodeid, ioaddr);       	/* Suggest node address. */
         }
 
-	if (lp->board == TANGENT)
+	if(lp->board == TANGENT)
         {
                 /* Empty any pending adapter responses. */
                 while(inb(ioaddr+TANG_CARD_STATUS)&TANG_RX_READY)
@@ -669,7 +645,7 @@ static void cops_interrupt(int irq, void *dev_id, struct pt_regs * regs)
         int ioaddr, status;
         int boguscount = 0;
 
-        if (dev == NULL)
+        if(dev == NULL)
         {
                 printk(KERN_WARNING "%s: irq %d for unknown device.\n", cardname, irq);
                 return;
@@ -693,7 +669,7 @@ static void cops_interrupt(int irq, void *dev_id, struct pt_regs * regs)
                 else
                 {
                         status=inb(ioaddr+TANG_CARD_STATUS);
-                        if (status&TANG_RX_READY)
+                        if(status&TANG_RX_READY)
                                 cops_rx(dev);
                 }
 
@@ -747,7 +723,7 @@ static void cops_rx(struct device *dev)
 
         /* Malloc up new buffer. */
         skb = dev_alloc_skb(pkt_len);
-        if (skb == NULL)
+        if(skb == NULL)
         {
                 printk(KERN_NOTICE "%s: Memory squeeze, dropping packet.\n", dev->name);
                 lp->stats.rx_dropped++;
@@ -767,7 +743,7 @@ static void cops_rx(struct device *dev)
         sti();  /* Restore interrupts. */
 
         /* Check for bad response length */
-        if (pkt_len < 0 || pkt_len > MAX_LLAP_SIZE)
+        if(pkt_len < 0 || pkt_len > MAX_LLAP_SIZE)
         {
                 printk(KERN_NOTICE "%s: Bad packet length of %d bytes.\n", dev->name, pkt_len);
                 lp->stats.tx_errors++;
@@ -814,14 +790,14 @@ static int cops_send_packet(struct sk_buff *skb, struct device *dev)
         struct cops_local *lp = (struct cops_local *)dev->priv;
         int ioaddr = dev->base_addr;
 
-        if (dev->tbusy)
+        if(dev->tbusy)
         {
                 /*
                  * If we get here, some higher level has decided we are broken.
                  * There should really be a "kick me" function call instead.
                  */
                 int tickssofar = jiffies - dev->trans_start;
-                if (tickssofar < 5)
+                if(tickssofar < 5)
                         return 1;
 		lp->stats.tx_errors++;
                 if(lp->board==TANGENT)
@@ -839,7 +815,7 @@ static int cops_send_packet(struct sk_buff *skb, struct device *dev)
          * Block a timer-based transmit from overlapping. This could better be
          * done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
 	 */
-        if (test_and_set_bit(0, (void*) &dev->tbusy) != 0)
+        if(test_and_set_bit(0, (void*) &dev->tbusy) != 0)
                 printk(KERN_WARNING "%s: Transmitter access conflict.\n", dev->name);
         else
         {
@@ -916,7 +892,7 @@ static int cops_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 {
         struct cops_local *lp = (struct cops_local *)dev->priv;
         struct sockaddr_at *sa=(struct sockaddr_at *)&ifr->ifr_addr;
-        struct at_addr *aa=(struct at_addr *)&dev->pa_addr;
+        struct at_addr *aa=(struct at_addr *)&lp->node_addr;
 
         switch(cmd)
         {
@@ -971,9 +947,11 @@ static struct enet_statistics *cops_get_stats(struct device *dev)
 }
 
 #ifdef MODULE
-static struct device dev_cops =
+static char lt_name[16];
+
+static struct device cops0_dev =
 {
-	"lt0",	/* device name */
+	lt_name,	/* device name */
         0, 0, 0, 0,
         0x0, 0,  /* I/O address, IRQ */
         0, 0, 0, NULL, cops_probe
@@ -986,16 +964,20 @@ MODULE_PARM(board_type, "i");
 
 int init_module(void)
 {
-        int result;
+        int result, err;
 
-        if (io == 0)
+        if(io == 0)
                 printk(KERN_WARNING "%s: You shouldn't use auto-probing with insmod!\n", cardname);
 
         /* Copy the parameters from insmod into the device structure. */
-        dev_cops.base_addr = io;
-        dev_cops.irq       = irq;
+        cops0_dev.base_addr = io;
+        cops0_dev.irq       = irq;
 
-        if ((result = register_netdev(&dev_cops)) != 0)
+	err=dev_alloc_name(&cops0_dev, "lt%d");
+        if(err < 0)
+                return err;
+
+        if((result = register_netdev(&cops0_dev)) != 0)
                 return result;
 
         return 0;
@@ -1004,12 +986,10 @@ int init_module(void)
 void cleanup_module(void)
 {
         /* No need to check MOD_IN_USE, as sys_delete_module() checks. */
-
-        free_irq(dev_cops.irq, &dev_cops);
-        release_region(dev_cops.base_addr, COPS_IO_EXTENT);
-	unregister_netdev(&dev_cops);
-
-        if (dev_cops.priv)
-                kfree_s(dev_cops.priv, sizeof(struct cops_local));
+	unregister_netdev(&cops0_dev);
+	if(cops0_dev.priv)
+                kfree_s(cops0_dev.priv, sizeof(struct cops_local));
+        free_irq(cops0_dev.irq, &cops0_dev);
+        release_region(cops0_dev.base_addr, COPS_IO_EXTENT);
 }
 #endif /* MODULE */

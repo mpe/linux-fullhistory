@@ -60,6 +60,10 @@
 #define ARPHRD_BIF      775             /* AP1000 BIF                   */
 #define ARPHRD_SIT	776		/* sit0 device - IPv6-in-IPv4	*/
 #define ARPHRD_IPDDP	777		/* IP over DDP tunneller	*/
+#define ARPHRD_IPGRE	778		/* GRE over IP			*/
+#define ARPHRD_PIMREG	779		/* PIMSM register interface	*/
+#define ARPHRD_HIPPI	780		/* High Performance Parallel Interface */
+#define ARPHRD_ASH	781		/* Nexus 64Mbps Ash		*/
 
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/

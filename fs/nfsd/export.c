@@ -26,6 +26,9 @@
 #include <linux/nfsd/syscall.h>
 #include <linux/lockd/bind.h>
 
+#define NFSDDBG_FACILITY	NFSDDBG_EXPORT
+#define NFSD_PARANOIA 1
+
 typedef struct svc_client	svc_client;
 typedef struct svc_export	svc_export;
 
@@ -37,9 +40,7 @@ static svc_client *	exp_getclientbyname(char *name);
 static void		exp_freeclient(svc_client *clp);
 static void		exp_unhashclient(svc_client *clp);
 static int		exp_verify_string(char *cp, int max);
-struct inode *		exp_lnamei(char *pathname, int *errp);
 
-#define NFSDDBG_FACILITY	NFSDDBG_EXPORT
 #define CLIENT_HASHBITS		6
 #define CLIENT_HASHMAX		(1 << CLIENT_HASHBITS)
 #define CLIENT_HASHMASK		(CLIENT_HASHMAX - 1)
@@ -65,7 +66,7 @@ static struct wait_queue *	hash_wait = NULL;
 #define WRITELOCK		1
 
 /*
- * Find the export entry matching xdev/xino.
+ * Find a client's export for a device.
  */
 static inline svc_export *
 exp_find(svc_client *clp, dev_t dev)
@@ -78,6 +79,9 @@ exp_find(svc_client *clp, dev_t dev)
 	return exp;
 }
 
+/*
+ * Find the client's export entry matching xdev/xino.
+ */
 svc_export *
 exp_get(svc_client *clp, dev_t dev, ino_t ino)
 {
@@ -90,8 +94,22 @@ exp_get(svc_client *clp, dev_t dev, ino_t ino)
 }
 
 /*
- * Look up the root inode of the parent fs.
- * We have to go through iget in order to allow for wait_on_inode.
+ * Check whether there are any exports for a device.
+ */
+static int
+exp_device_in_use(dev_t dev)
+{
+	struct svc_client *clp;
+
+	for (clp = clients; clp; clp = clp->cl_next) {
+		if (exp_find(clp, dev))
+			return 1;
+	}
+	return 0;
+}
+
+/*
+ * Look up the device of the parent fs.
  */
 static inline int
 nfsd_parentdev(dev_t *devp)
@@ -153,13 +171,12 @@ exp_export(struct nfsctl_export *nxp)
 
 	/* Try to lock the export table for update */
 	if ((err = exp_writelock()) < 0)
-		return err;
+		goto out;
 
 	/* Look up client info */
-	if (!(clp = exp_getclientbyname(nxp->ex_client))) {
-		err = -EINVAL;
-		goto finish;
-	}
+	err = -EINVAL;
+	if (!(clp = exp_getclientbyname(nxp->ex_client)))
+		goto out_unlock;
 
 	/*
 	 * If there's already an export for this file, assume this
@@ -167,22 +184,22 @@ exp_export(struct nfsctl_export *nxp)
 	 */
 	if ((exp = exp_find(clp, dev)) != NULL) {
 		/* Ensure there's only one export per FS. */
-		if (exp->ex_ino != ino) {
-			err = -EPERM;
-		} else {
+		err = -EPERM;
+		if (exp->ex_ino == ino) {
 			exp->ex_flags    = nxp->ex_flags;
 			exp->ex_anon_uid = nxp->ex_anon_uid;
 			exp->ex_anon_gid = nxp->ex_anon_gid;
 			err = 0;
 		}
-		goto finish;
+		goto out_unlock;
 	}
 
 	/* Look up the dentry */
 	err = -EINVAL;
 	dentry = lookup_dentry(nxp->ex_path, NULL, 0);
 	if (IS_ERR(dentry))
-		goto finish;
+		goto out_unlock;
+
 	err = -ENOENT;
 	inode = dentry->d_inode;
 	if(!inode)
@@ -199,11 +216,15 @@ exp_export(struct nfsctl_export *nxp)
 		goto finish;
 
 	/* If this is a sub-export, must be root of FS */
+	err = -EINVAL;
 	if ((parent = exp_parent(clp, dev)) != NULL) {
 		struct super_block *sb = inode->i_sb;
 
-		if (sb && (inode != sb->s_root->d_inode)) {
-			err = -EINVAL;
+		if (inode != sb->s_root->d_inode) {
+#ifdef NFSD_PARANOIA
+printk("exp_export: sub-export %s not root of device %s\n",
+nxp->ex_path, kdevname(sb->s_dev));
+#endif
 			goto finish;
 		}
 	}
@@ -242,14 +263,16 @@ exp_export(struct nfsctl_export *nxp)
 
 	err = 0;
 
-finish:
-	/* Release dentry */
-	if (err < 0 && !IS_ERR(dentry))
-		dput(dentry);
-
 	/* Unlock hashtable */
+out_unlock:
 	exp_unlock();
+out:
 	return err;
+
+	/* Release the dentry */
+finish:
+	dput(dentry);
+	goto out_unlock;
 }
 
 /*
@@ -273,12 +296,21 @@ exp_do_unexport(svc_export *unexp)
 				exp->ex_parent = unexp->ex_parent;
 	}
 
+	/*
+	 * Check whether this is the last export for this device,
+	 * and if so flush any cached dentries.
+	 */
+	if (!exp_device_in_use(unexp->ex_dev)) {
+printk("exp_do_unexport: %s last use, flushing cache\n",
+kdevname(unexp->ex_dev));
+		nfsd_fh_flush(unexp->ex_dev);
+	}
+
 	dentry = unexp->ex_dentry;
 	inode = dentry->d_inode;
 	if (unexp->ex_dev != inode->i_dev || unexp->ex_ino != inode->i_ino)
 		printk(KERN_WARNING "nfsd: bad dentry in unexport!\n");
-	else
-		dput(dentry);
+	dput(dentry);
 
 	kfree(unexp);
 }
@@ -321,15 +353,19 @@ exp_unexport(struct nfsctl_export *nxp)
 		return -EINVAL;
 
 	if ((err = exp_writelock()) < 0)
-		return err;
+		goto out;
 
 	err = -EINVAL;
-	if ((clp = exp_getclientbyname(nxp->ex_client)) != NULL) {
+	clp = exp_getclientbyname(nxp->ex_client);
+	if (clp) {
+printk("exp_unexport: found client %s\n", nxp->ex_client);
 		expp = clp->cl_export + EXPORT_HASH(nxp->ex_dev);
 		while ((exp = *expp) != NULL) {
 			if (exp->ex_dev == nxp->ex_dev) {
-				if (exp->ex_ino != nxp->ex_ino)
+				if (exp->ex_ino != nxp->ex_ino) {
+printk("exp_unexport: ino mismatch, %ld not %ld\n", exp->ex_ino, nxp->ex_ino);
 					break;
+				}
 				*expp = exp->ex_next;
 				exp_do_unexport(exp);
 				err = 0;
@@ -340,6 +376,7 @@ exp_unexport(struct nfsctl_export *nxp)
 	}
 
 	exp_unlock();
+out:
 	return err;
 }
 
@@ -477,27 +514,27 @@ exp_addclient(struct nfsctl_client *ncp)
 	int			i, err, change = 0, ilen;
 
 	/* First, consistency check. */
+	err = -EINVAL;
 	if (!(ilen = exp_verify_string(ncp->cl_ident, NFSCLNT_IDMAX)))
-		return -EINVAL;
+		goto out;
 	if (ncp->cl_naddr > NFSCLNT_ADDRMAX)
-		return -EINVAL;
+		goto out;
 
 	/* Lock the hashtable */
 	if ((err = exp_writelock()) < 0)
-		return err;
+		goto out;
 
 	/* First check if this is a change request for a client. */
 	for (clp = clients; clp; clp = clp->cl_next)
 		if (!strcmp(clp->cl_ident, ncp->cl_ident))
 			break;
 
+	err = -ENOMEM;
 	if (clp) {
 		change = 1;
 	} else {
-		if (!(clp = kmalloc(sizeof(*clp), GFP_KERNEL))) {
-			exp_unlock();
-			return -ENOMEM;
-		}
+		if (!(clp = kmalloc(sizeof(*clp), GFP_KERNEL)))
+			goto out_unlock;
 		memset(clp, 0, sizeof(*clp));
 
 		dprintk("created client %s (%p)\n", ncp->cl_ident, clp);
@@ -508,13 +545,13 @@ exp_addclient(struct nfsctl_client *ncp)
 
 	/* Allocate hash buckets */
 	for (i = 0; i < ncp->cl_naddr; i++) {
-		if (!(ch[i] = kmalloc(GFP_KERNEL, sizeof(ch[0])))) {
+		ch[i] = kmalloc(sizeof(struct svc_clnthash), GFP_KERNEL);
+		if (!ch[i]) {
 			while (i--)
 				kfree(ch[i]);
 			if (!change)
 				kfree(clp);
-			exp_unlock();
-			return -ENOMEM;
+			goto out_unlock;
 		}
 	}
 
@@ -544,9 +581,12 @@ exp_addclient(struct nfsctl_client *ncp)
 		clp->cl_next = clients;
 		clients = clp;
 	}
+	err = 0;
 
+out_unlock:
 	exp_unlock();
-	return 0;
+out:
+	return err;
 }
 
 /*

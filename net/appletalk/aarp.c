@@ -157,7 +157,6 @@ static void aarp_send_query(struct aarp_entry *a)
 	 *	Send it.
 	 */	
 	
-	skb->priority = SOPRI_NORMAL; 
 	dev_queue_xmit(skb);
 	
 	/*
@@ -219,7 +218,6 @@ static void aarp_send_reply(struct device *dev, struct at_addr *us, struct at_ad
 	/*
 	 *	Send it.
 	 */	
-	skb->priority = SOPRI_NORMAL;
 	dev_queue_xmit(skb);
 	
 }
@@ -279,7 +277,6 @@ void aarp_send_probe(struct device *dev, struct at_addr *us)
 	/*
 	 *	Send it.
 	 */	
-	skb->priority = SOPRI_NORMAL; 
 	dev_queue_xmit(skb);
 	
 }
@@ -433,9 +430,12 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	struct aarp_entry *a;
 	unsigned long flags;
 	
+	skb->nh.raw=skb->data;
+	
 	/*
 	 *	Check for localtalk first
 	 */
+	 
 	 
 	if(dev->type==ARPHRD_LOCALTLK)
 	{
@@ -472,9 +472,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 		skb->data[1]=at->s_node;
 		skb->data[2]=ft;
 		 
-		if(skb->sk==NULL)
-			skb->priority = SOPRI_NORMAL;
-		else
+		if(skb->sk)
 			skb->priority = skb->sk->priority;
 		skb->dev = dev;
 		dev_queue_xmit(skb);
@@ -487,9 +485,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	if(dev->type==ARPHRD_PPP)
 	{
 		skb->protocol = htons(ETH_P_PPPTALK);
-		if(skb->sk==NULL)
-			skb->priority = SOPRI_NORMAL;
-		else
+		if(skb->sk)
 			skb->priority = skb->sk->priority;
 		skb->dev = dev;
 		dev_queue_xmit(skb);
@@ -519,9 +515,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	if(sa->s_node==ATADDR_BCAST)
 	{
 		ddp_dl->datalink_header(ddp_dl, skb, ddp_eth_multicast);
-		if(skb->sk==NULL)
-			skb->priority = SOPRI_NORMAL;
-		else
+		if(skb->sk)
 			skb->priority = skb->sk->priority;
 		dev_queue_xmit(skb);
 		restore_flags(flags);
@@ -536,9 +530,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 
 		a->expires_at=jiffies+sysctl_aarp_expiry_time*10;
 		ddp_dl->datalink_header(ddp_dl, skb, a->hwaddr);
-		if(skb->sk==NULL)
-			skb->priority = SOPRI_NORMAL;
-		else
+		if(skb->sk)
 			skb->priority = skb->sk->priority;
 		dev_queue_xmit(skb);
 		restore_flags(flags);
@@ -644,9 +636,7 @@ static void aarp_resolved(struct aarp_entry **list, struct aarp_entry *a, int ha
 			{
 				a->expires_at=jiffies+sysctl_aarp_expiry_time*10;
 				ddp_dl->datalink_header(ddp_dl,skb,a->hwaddr);
-				if(skb->sk==NULL)
-					skb->priority = SOPRI_NORMAL;
-				else
+				if(skb->sk)
 					skb->priority = skb->sk->priority;
 				dev_queue_xmit(skb);
 			}
@@ -828,11 +818,9 @@ __initfunc(void aarp_proto_init(void))
 }
 
 
-#ifdef MODULE
 
 /*
  * Remove the AARP entries associated with a device.
- * Called from cleanup_module() in ddp.c.
  */
 void aarp_device_down(struct device *dev)
 {
@@ -847,6 +835,7 @@ void aarp_device_down(struct device *dev)
 	return;
 }
 
+#ifdef MODULE
 /*
  * General module cleanup. Called from cleanup_module() in ddp.c.
  */

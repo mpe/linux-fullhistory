@@ -116,7 +116,7 @@ static int misc_open(struct inode * inode, struct file * file)
 			return -ENODEV;
 	}
 
-	if ((file->f_op = c->fops))
+	if ((file->f_op = c->fops) && file->f_op->open)
 		return file->f_op->open(inode,file);
 	else
 		return -ENODEV;

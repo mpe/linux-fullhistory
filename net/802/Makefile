@@ -17,7 +17,7 @@ endif
 ifeq ($(CONFIG_LLC),y)
 SUB_DIRS += transit
 O_OBJS += llc_sendpdu.o llc_utility.o cl2llc.o
-OX_OBJS += llc_macinit.o
+OX_OBJS += llc_macinit.o p8022.o psnap.o p8022tr.o
 endif
 
 ifdef CONFIG_TR

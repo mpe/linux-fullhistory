@@ -38,7 +38,7 @@ extern __inline__ void prim_spin_lock(struct spinlock *sp)
 			 *	Wait for any invalidates to go off
 			 */
 			 
-			if(smp_invalidate_needed&(1<<processor));
+			if(smp_invalidate_needed&(1<<processor))
 				while(lock_clear_bit(processor,&smp_invalidate_needed))
 					local_flush_tlb();
 			sp->spins++;

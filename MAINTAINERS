@@ -70,6 +70,12 @@ M:	Remy.Card@linux.org
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+DISKQUOTA:
+P:	Marco van Wieringen
+M:	mvw@planets.elm.net
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 3C501 NETWORK DRIVER
 P:	Alan Cox
 M:	net-patches@lxorguk.ukuu.org.uk
@@ -85,13 +91,13 @@ W:	http://rsphy1.anu.edu.au/~gpg109/ne2000.html
 
 ETHEREXPRESS-16 NETWORK DRIVER
 P:	Philip Blundell
-M:	pjb27@cam.ac.uk
+M:	Philip.Blundell@pobox.com
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
 3C505 NETWORK DRIVER
 P:	Philip Blundell
-M:	phil@tazenda.demon.co.uk
+M:	Philip.Blundell@pobox.com
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
@@ -165,6 +171,13 @@ Z8530 DRIVER FOR AX.25
 P:	Joerg Reuter
 M:	jreuter@lykos.oche.de
 L:	linux-hams@vger.rutgers.edu
+S:	Maintained
+
+BAYCOM/HDLCDRV/SOUNDMODEM DRIVERS FOR AX.25
+P:	Thomas Sailer
+M:	sailer@ife.ee.ethz.ch
+L:	linux-hams@vger.rutgers.edu
+W:	http://www.ife.ee.ethz.ch/~sailer/ham/ham.html
 S:	Maintained
 
 BUSLOGIC SCSI DRIVER
@@ -270,7 +283,7 @@ M68K:
 P:	Jes Sorensen
 M:	Jes.Sorensen@cern.ch
 W:	http://www.clark.net/pub/lawrencc/linux/index.html
-L:	linux-m68k@phil.uni-sb.de
+L:	linux-m68k@lists.linux-m68k.org
 S:	Maintained
 
 MODULE SUPPORT [GENERAL], KERNELD
@@ -466,6 +479,14 @@ W:	http://www.cyberelk.demon.co.uk/parport.html
 W:	http://www.cage.curtin.edu.au/~campbell/parbus/
 S:	Maintained
 
+PNP SUPPORT
+P:	Tom Lees
+M:	tom@lpsg.demon.co.uk
+L:	pnp-list@lpsg.demon.co.uk
+L:	pnp-list@redhat.com (maybe)
+W:	http://www.lpsg.demon.co.uk/pnp-linux.html
+S:	Maintained
+
 LINUX FOR POWERPC (PREP)
 P:	Cort Dougan
 M:	cort@cs.nmt.edu
@@ -499,6 +520,16 @@ DEVICE NUMBER REGISTRY
 P:	H. Peter Anvin
 M:	hpa@zytor.com
 L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+JOYSTICK DRIVER
+P:	Vojtech Pavlik
+M:	vojtech@atrey.karlin.mff.cuni.cz
+S:	Maintained
+
+NETWORK BLOCK DEVICE
+P:	Pavel Machek
+M:	pavel@atrey.karlin.mff.cuni.cz
 S:	Maintained
 
 REST:

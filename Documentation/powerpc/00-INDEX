@@ -7,3 +7,5 @@ please mail me.
 	- this file
 ppc_htab.txt
 	- info about the Linux/PPC /proc/ppc_htab entry
+sound.txt
+	- info on sound support under Linux/PPC

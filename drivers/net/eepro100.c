@@ -1040,13 +1040,6 @@ speedo_start_xmit(struct sk_buff *skb, struct device *dev)
 	int ioaddr = dev->base_addr;
 	int entry;
 
-	if (skb == NULL || skb->len <= 0) {
-		printk(KERN_ERR "%s: Obsolete driver layer request made: skbuff==NULL.\n",
-			   dev->name);
-		dev_tint(dev);
-		return 0;
-	}
-
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
 	   If this ever occurs the queue layer is doing something evil! */

@@ -1,0 +1,76 @@
+#
+# Video configuration
+#
+
+if [ "$CONFIG_FB" = "y" ]; then
+
+  mainmenu_option next_comment
+  comment 'Frame buffer devices'
+
+ if [ "$CONFIG_AMIGA" = "y" ]; then
+    bool 'Amiga native chipset support' CONFIG_FB_AMIGA
+    if [ "$CONFIG_FB_AMIGA" != "n" ]; then
+      bool 'Amiga OCS chipset support' CONFIG_FB_AMIGA_OCS
+      bool 'Amiga ECS chipset support' CONFIG_FB_AMIGA_ECS
+      bool 'Amiga AGA chipset support' CONFIG_FB_AMIGA_AGA
+    fi
+    tristate 'Amiga Cybervision support' CONFIG_FB_CYBER
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'Amiga RetinaZ3 support' CONFIG_FB_RETINAZ3
+    fi
+  fi
+  if [ "$CONFIG_ATARI" = "y" ]; then
+    bool 'Atari native chipset support' CONFIG_FB_ATARI
+#    tristate 'Mach64 Frame Buffer support' CONFIG_FB_MACH64
+  fi
+  if [ "$CONFIG_CHRP" = "y" -o "$CONFIG_PMAC" = "y" ]; then
+    bool 'Open Firmware frame buffer device support' CONFIG_FB_OPEN_FIRMWARE
+  fi 
+  tristate 'Virtual Frame Buffer support' CONFIG_FB_VIRTUAL
+
+  bool 'Advanced low level driver options' CONFIG_FBCON_ADVANCED
+  if [ "$CONFIG_FBCON_ADVANCED" = "y" ]; then
+    tristate 'Monochrome support' CONFIG_FBCON_MFB
+    tristate 'Interleaved bitplanes support' CONFIG_FBCON_ILBM
+    tristate 'Normal bitplanes support' CONFIG_FBCON_AFB
+    tristate 'Atari interleaved bitplanes (2 planes) support' CONFIG_FBCON_IPLAN2P2
+    tristate 'Atari interleaved bitplanes (4 planes) support' CONFIG_FBCON_IPLAN2P4
+    tristate 'Atari interleaved bitplanes (8 planes) support' CONFIG_FBCON_IPLAN2P8
+    tristate '8 bpp packed pixel support' CONFIG_FBCON_CFB8
+    tristate '16 bpp packed pixel support' CONFIG_FBCON_CFB16
+    tristate 'Cybervision support (accelerated)' CONFIG_FBCON_CYBER
+    tristate 'RetinaZ3 support (accelerated)' CONFIG_FBCON_RETINAZ3
+  else
+    if [ "$CONFIG_FB_AMIGA" != "n" -o "$CONFIG_FB_ATARI" != "n" -o \
+	 "$CONFIG_FB_CYBER" != "n" -o "$CONFIG_FB_RETINAZ3" != "n" -o \
+	 "$CONFIG_FB_VIRTUAL" != "n" ]; then
+      define_bool CONFIG_FBCON_MFB y
+    fi
+    if [ "$CONFIG_FB_AMIGA" = "y" -o "$CONFIG_FB_AMIGA" = "m" ]; then
+      define_bool CONFIG_FBCON_ILBM y
+      define_bool CONFIG_FBCON_AFB y
+    fi
+    if [ "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATARI" = "m" ]; then
+      define_bool CONFIG_FBCON_IPLAN2P2 y
+      define_bool CONFIG_FBCON_IPLAN2P4 y
+      define_bool CONFIG_FBCON_IPLAN2P8 y
+    fi
+    if [ "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATARI" = "m" -o \
+	 "$CONFIG_FB_OPEN_FIRMWARE" = "y" -o \
+	 "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
+      define_bool CONFIG_FBCON_CFB8 y
+    fi
+    if [ "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATARI" = "m" -o \
+	 "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
+      define_bool CONFIG_FBCON_CFB16 y
+    fi
+    if [ "$CONFIG_FB_CYBER" = "y" -o "$CONFIG_FB_CYBER" = "m" ]; then
+      define_bool CONFIG_FBCON_CYBER y
+    fi
+    if [ "$CONFIG_FB_RETINAZ3" = "y" -o "$CONFIG_FB_RETINAZ3" = "m" ]; then
+      define_bool CONFIG_FBCON_RETINAZ3 y
+    fi
+  fi
+
+  endmenu
+fi

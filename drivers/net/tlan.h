@@ -1,6 +1,5 @@
 #ifndef TLAN_H
 #define TLAN_H
-
 /********************************************************************
  *
  *  Linux ThunderLAN Driver
@@ -16,6 +15,7 @@
  ** This file is best viewed/edited with tabstop=4, colums>=132
  *
  ********************************************************************/
+
 
 #include <asm/io.h>
 #include <asm/types.h>
@@ -33,23 +33,23 @@
 	 *
 	 ****************************************************************/
 
-	 	#define FALSE				0
-		#define TRUE				1
+#define FALSE				0
+#define TRUE				1
 
-		#define TLAN_MIN_FRAME_SIZE	64
-		#define TLAN_MAX_FRAME_SIZE	1600
+#define TLAN_MIN_FRAME_SIZE	64
+#define TLAN_MAX_FRAME_SIZE	1600
 
-		#define TLAN_NUM_RX_LISTS 4
-		#define TLAN_NUM_TX_LISTS 8
+#define TLAN_NUM_RX_LISTS 4
+#define TLAN_NUM_TX_LISTS 8
 
-		#define TLAN_IGNORE	0
-		#define TLAN_RECORD	1
+#define TLAN_IGNORE	0
+#define TLAN_RECORD	1
 
-		#define TLAN_DBG(lvl, format, args...)	if ( debug & lvl ) printk( format, ##args );
-		#define TLAN_DEBUG_GNRL	0x0001
-		#define TLAN_DEBUG_TX	0x0002
-		#define TLAN_DEBUG_RX	0x0004 
-		#define TLAN_DEBUG_LIST	0x0008
+#define TLAN_DBG(lvl, format, args...)	if (debug&lvl) printk( format, ##args );
+#define TLAN_DEBUG_GNRL	0x0001
+#define TLAN_DEBUG_TX	0x0002
+#define TLAN_DEBUG_RX	0x0004 
+#define TLAN_DEBUG_LIST	0x0008
 
 
 
@@ -59,22 +59,23 @@
 	 *
 	 ****************************************************************/
 		
-		/* NOTE: These should be moved to pci.h someday */
-		#define PCI_DEVICE_ID_NETELLIGENT_10 0xAE34
-		#define PCI_DEVICE_ID_NETELLIGENT_10_100 0xAE32
-		#define PCI_DEVICE_ID_NETFLEX_3P_INTEGRATED 0xAE35
-		#define PCI_DEVICE_ID_NETFLEX_3P 0xF130
-		#define PCI_DEVICE_ID_NETFLEX_3P_BNC 0xF150
-		#define PCI_DEVICE_ID_NETELLIGENT_10_100_PROLIANT 0xAE43
-		#define PCI_DEVICE_ID_NETELLIGENT_10_100_DUAL 0xAE40
-		#define PCI_DEVICE_ID_DESKPRO_4000_5233MMX 0xB011
+	/* NOTE: These have been moved to pci.h, will use them
+	   eventually */
+#define PCI_DEVICE_ID_NETELLIGENT_10 0xAE34
+#define PCI_DEVICE_ID_NETELLIGENT_10_100 0xAE32
+#define PCI_DEVICE_ID_NETFLEX_3P_INTEGRATED 0xAE35
+#define PCI_DEVICE_ID_NETFLEX_3P 0xF130
+#define PCI_DEVICE_ID_NETFLEX_3P_BNC 0xF150
+#define PCI_DEVICE_ID_NETELLIGENT_10_100_PROLIANT 0xAE43
+#define PCI_DEVICE_ID_NETELLIGENT_10_100_DUAL 0xAE40
+#define PCI_DEVICE_ID_DESKPRO_4000_5233MMX 0xB011
 
 
-		typedef struct tlan_pci_id {
-			u16	vendorId;
-			u16	deviceId;
-			char *deviceName;
-		} TLanPciId;
+typedef struct tlan_pci_id {
+	u16	vendorId;
+	u16	deviceId;
+	char *deviceName;
+} TLanPciId;
 
 
 
@@ -84,32 +85,32 @@
 	 *
 	 ****************************************************************/
 
-		#define TLAN_BUFFERS_PER_LIST	10
-		#define TLAN_LAST_BUFFER	0x80000000
-		#define TLAN_CSTAT_UNUSED	0x8000
-		#define TLAN_CSTAT_FRM_CMP	0x4000
-		#define TLAN_CSTAT_READY	0x3000
-		#define TLAN_CSTAT_EOC		0x0800
-		#define TLAN_CSTAT_RX_ERROR	0x0400
-		#define TLAN_CSTAT_PASS_CRC	0x0200
-		#define TLAN_CSTAT_DP_PR	0x0100
+#define TLAN_BUFFERS_PER_LIST	10
+#define TLAN_LAST_BUFFER	0x80000000
+#define TLAN_CSTAT_UNUSED	0x8000
+#define TLAN_CSTAT_FRM_CMP	0x4000
+#define TLAN_CSTAT_READY	0x3000
+#define TLAN_CSTAT_EOC		0x0800
+#define TLAN_CSTAT_RX_ERROR	0x0400
+#define TLAN_CSTAT_PASS_CRC	0x0200
+#define TLAN_CSTAT_DP_PR	0x0100
 
 
-		typedef struct tlan_buffer_ref_tag {
-			u32		count;
-			u32		address;
-		} TLanBufferRef;
+typedef struct tlan_buffer_ref_tag {
+	u32	count;
+	u32	address;
+} TLanBufferRef;
 
 
-		typedef struct tlan_list_tag {
-			u32						forward;
-			u16						cStat;
-			u16						frameSize;
-			TLanBufferRef			buffer[TLAN_BUFFERS_PER_LIST];
-		} TLanList;
+typedef struct tlan_list_tag {
+	u32		forward;
+	u16		cStat;
+	u16		frameSize;
+	TLanBufferRef	buffer[TLAN_BUFFERS_PER_LIST];
+} TLanList;
 
 
-		typedef u8 TLanBuffer[TLAN_MAX_FRAME_SIZE];
+typedef u8 TLanBuffer[TLAN_MAX_FRAME_SIZE];
 
 
 
@@ -119,23 +120,26 @@
 	 *
 	 ****************************************************************/
 
-		#define TLAN_PHY_MAX_ADDR   0x1F
-		#define TLAN_PHY_INTERNAL	0x1F
+#define TLAN_PHY_MAX_ADDR	0x1F
 
-		#define TLAN_PHY_ACTIVITY	0x00000001
-		#define TLAN_PHY_AUTONEG	0x00000002
+#define TLAN_PHY_ACTIVITY	0x00000001
+#define TLAN_PHY_AUTONEG	0x00000002
+#define TLAN_PHY_INTS		0x00000004
+#define TLAN_PHY_BIT_RATE	0x00000008
+#define TLAN_PHY_UNMANAGED	0x00000010
+#define TLAN_PHY_INTERNAL	0x00000020
 
 
-    	typedef int (TLanPhyFunc)( struct device * );
+typedef int (TLanPhyFunc)( struct device * );
 
 
-    	typedef struct tlan_phy_id_entry_tag {
-        	u16         idHi;
-        	u16         idLo;
-        	TLanPhyFunc *check;
-        	TLanPhyFunc *service;
-			u32			flags;
-    	} TLanPhyIdEntry;
+typedef struct tlan_phy_id_entry_tag {
+	u16		idHi;
+	u16		idLo;
+	TLanPhyFunc	*check;
+	TLanPhyFunc	*service;
+	u32		flags;
+} TLanPhyIdEntry;
 
 
 
@@ -145,38 +149,38 @@
 	 *
 	 ****************************************************************/
 
-		typedef struct tlan_private_tag {
-			struct device           *nextDevice;
-			void					*dmaStorage;
-			u8						*padBuffer;
-			TLanList                *rxList;
-			u8						*rxBuffer;
-			u32                     rxHead;
-			u32                     rxTail;
-			u32			rxEocCount;
-			TLanList                *txList;
-			u8						*txBuffer;
-			u32                     txHead;
-			u32                     txInProgress;
-			u32                     txTail;
-			u32			txBusyCount;
-			u32                     phyAddr;
-			u32                     phyEntry;
-			u32                     phyOnline;
-			u32                     phyFlags;
-			TLanPhyFunc             *phyCheck;
-			TLanPhyFunc             *phyService;
-			u32						timerSetAt;
-			u32						timerType;
-			struct timer_list		timer;
-			struct net_device_stats	stats;
-			u32                     pciEntry;
-			u8                      pciRevision;
-			u8                      pciBus;
-			u8                      pciDeviceFn;
-			u8						tlanRev;
-			char                    devName[8];
-		} TLanPrivateInfo;
+typedef struct tlan_private_tag {
+	struct device           *nextDevice;
+	void			*dmaStorage;
+	u8			*padBuffer;
+	TLanList                *rxList;
+	u8			*rxBuffer;
+	u32                     rxHead;
+	u32                     rxTail;
+	u32			rxEocCount;
+	TLanList                *txList;
+	u8			*txBuffer;
+	u32                     txHead;
+	u32                     txInProgress;
+	u32                     txTail;
+	u32			txBusyCount;
+	u32                     phyAddr;
+	u32                     phyEntry;
+	u32                     phyOnline;
+	u32                     phyFlags;
+	TLanPhyFunc             *phyCheck;
+	TLanPhyFunc             *phyService;
+	u32			timerSetAt;
+	u32			timerType;
+	struct timer_list	timer;
+	struct net_device_stats	stats;
+	u32                     pciEntry;
+	u8                      pciRevision;
+	u8                      pciBus;
+	u8                      pciDeviceFn;
+	u8			tlanRev;
+	char                    devName[8];
+} TLanPrivateInfo;
 
 
 
@@ -186,11 +190,11 @@
 	 *
 	 ****************************************************************/
 
-	 	#define TLAN_TIMER_LINK			1
-		#define TLAN_TIMER_ACT			2
+#define TLAN_TIMER_LINK			1
+#define TLAN_TIMER_ACT			2
 
-		#define TLAN_TIMER_LINK_DELAY	230
-		#define TLAN_TIMER_ACT_DELAY	10
+#define TLAN_TIMER_LINK_DELAY	230
+#define TLAN_TIMER_ACT_DELAY	10
 
 
 
@@ -200,8 +204,8 @@
 	 *
 	 ****************************************************************/
 
-		#define TLAN_EEPROM_ACK		0
-		#define TLAN_EEPROM_STOP	1
+#define TLAN_EEPROM_ACK		0
+#define TLAN_EEPROM_STOP	1
 
 
 
@@ -211,29 +215,29 @@
 	 *
 	 ****************************************************************/
 
-		#define TLAN_HOST_CMD		0x00
-		#define 	TLAN_HC_GO		0x80000000
-		#define		TLAN_HC_STOP	0x40000000
-		#define		TLAN_HC_ACK		0x20000000
-		#define		TLAN_HC_CS_MASK 0x1FE00000
-		#define		TLAN_HC_EOC		0x00100000
-		#define		TLAN_HC_RT		0x00080000
-		#define		TLAN_HC_NES		0x00040000
-		#define		TLAN_HC_AD_RST	0x00008000
-		#define		TLAN_HC_LD_TMR	0x00004000
-		#define		TLAN_HC_LD_THR	0x00002000
-		#define		TLAN_HC_REQ_INT	0x00001000
-		#define		TLAN_HC_INT_OFF	0x00000800
-		#define		TLAN_HC_INT_ON	0x00000400
-		#define		TLAN_HC_AC_MASK	0x000000FF
-		#define TLAN_CH_PARM		0x04
-		#define TLAN_DIO_ADR		0x08
-		#define		TLAN_DA_ADR_INC	0x8000
-		#define		TLAN_DA_RAM_ADR	0x4000
-		#define TLAN_HOST_INT		0x0A
-		#define		TLAN_HI_IV_MASK	0x1FE0
-		#define		TLAN_HI_IT_MASK	0x001C
-		#define TLAN_DIO_DATA		0x0C
+#define TLAN_HOST_CMD		0x00
+#define 	TLAN_HC_GO		0x80000000
+#define		TLAN_HC_STOP	0x40000000
+#define		TLAN_HC_ACK		0x20000000
+#define		TLAN_HC_CS_MASK 0x1FE00000
+#define		TLAN_HC_EOC		0x00100000
+#define		TLAN_HC_RT		0x00080000
+#define		TLAN_HC_NES		0x00040000
+#define		TLAN_HC_AD_RST	0x00008000
+#define		TLAN_HC_LD_TMR	0x00004000
+#define		TLAN_HC_LD_THR	0x00002000
+#define		TLAN_HC_REQ_INT	0x00001000
+#define		TLAN_HC_INT_OFF	0x00000800
+#define		TLAN_HC_INT_ON	0x00000400
+#define		TLAN_HC_AC_MASK	0x000000FF
+#define TLAN_CH_PARM		0x04
+#define TLAN_DIO_ADR		0x08
+#define		TLAN_DA_ADR_INC	0x8000
+#define		TLAN_DA_RAM_ADR	0x4000
+#define TLAN_HOST_INT		0x0A
+#define		TLAN_HI_IV_MASK	0x1FE0
+#define		TLAN_HI_IT_MASK	0x001C
+#define TLAN_DIO_DATA		0x0C
 
 
 /* ThunderLAN Internal Register DIO Offsets */
@@ -479,19 +483,26 @@ inline	u32	xor( u32 a, u32 b )
 {
 	return ( ( a && ! b ) || ( ! a && b ) );
 }
-#define XOR8( a, b, c, d, e, f, g, h )	xor( a, xor( b, xor( c, xor( d, xor( e, xor( f, xor( g, h ) ) ) ) ) ) )
+#define XOR8( a, b, c, d, e, f, g, h )	xor( a, xor( b, xor( c, xor( d, xor( e, x
+or( f, xor( g, h ) ) ) ) ) ) )
 #define DA( a, bit )					( ( (u8) a[bit/8] ) & ( (u8) ( 1 << bit%8 ) ) )
 
 inline u32 TLan_HashFunc( u8 *a )
 {
 	u32	hash;
 
-	hash  = XOR8( DA(a,0), DA(a, 6), DA(a,12), DA(a,18), DA(a,24), DA(a,30), DA(a,36), DA(a,42) );
-	hash |= XOR8( DA(a,1), DA(a, 7), DA(a,13), DA(a,19), DA(a,25), DA(a,31), DA(a,37), DA(a,43) ) << 1;
-	hash |= XOR8( DA(a,2), DA(a, 8), DA(a,14), DA(a,20), DA(a,26), DA(a,32), DA(a,38), DA(a,44) ) << 2;
-	hash |= XOR8( DA(a,3), DA(a, 9), DA(a,15), DA(a,21), DA(a,27), DA(a,33), DA(a,39), DA(a,45) ) << 3;
-	hash |= XOR8( DA(a,4), DA(a,10), DA(a,16), DA(a,22), DA(a,28), DA(a,34), DA(a,40), DA(a,46) ) << 4;
-	hash |= XOR8( DA(a,5), DA(a,11), DA(a,17), DA(a,23), DA(a,29), DA(a,35), DA(a,41), DA(a,47) ) << 5;
+	hash  = XOR8( DA(a,0), DA(a, 6), DA(a,12), DA(a,18), DA(a,24), DA(a,30), DA(a,3
+6), DA(a,42) );
+	hash |= XOR8( DA(a,1), DA(a, 7), DA(a,13), DA(a,19), DA(a,25), DA(a,31), DA(a,3
+7), DA(a,43) ) << 1;
+	hash |= XOR8( DA(a,2), DA(a, 8), DA(a,14), DA(a,20), DA(a,26), DA(a,32), DA(a,3
+8), DA(a,44) ) << 2;
+	hash |= XOR8( DA(a,3), DA(a, 9), DA(a,15), DA(a,21), DA(a,27), DA(a,33), DA(a,3
+9), DA(a,45) ) << 3;
+	hash |= XOR8( DA(a,4), DA(a,10), DA(a,16), DA(a,22), DA(a,28), DA(a,34), DA(a,4
+0), DA(a,46) ) << 4;
+	hash |= XOR8( DA(a,5), DA(a,11), DA(a,17), DA(a,23), DA(a,29), DA(a,35), DA(a,4
+1), DA(a,47) ) << 5;
 
 	return hash;
 

@@ -55,8 +55,4 @@ previous (non-GPL) versions of the driver, please update to this one.
 I hope that this all works well for you.  I would be pleased to hear how
 many people use the driver and if it does its job.
 
-  - Craig vk2xlz
-
-INET: csmall@acacia.itd.uts.edu.au  craig.small@eol.ieaust.org.au
-AMPR: vk2xlz@gonzo.vk2xlz.ampr.org
-AX25: vk2xlz@vk2gdm.nsw.aus.oc
+  - Craig vk2xlz <csmall@small.dropbear.id.au>

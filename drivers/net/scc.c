@@ -1590,11 +1590,6 @@ static int scc_net_init(struct device *dev)
 	memcpy(dev->dev_addr,  ax25_nocall, AX25_ADDR_LEN);
  
 	dev->flags      = 0;
-	dev->family     = AF_INET;
-	dev->pa_addr    = 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask    = 0;
-	dev->pa_alen    = 4;
 
 	dev->type = ARPHRD_AX25;
 	dev->hard_header_len = AX25_MAX_HEADER_LEN + AX25_BPQ_HEADER_LEN;

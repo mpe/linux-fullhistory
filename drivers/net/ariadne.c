@@ -6,7 +6,7 @@
  *			Peter De Schrijver
  *		       (Peter.DeSchrijver@linux.cc.kuleuven.ac.be)
  *
- *  ----------------------------------------------------------------------------------
+ *  ---------------------------------------------------------------------------
  *
  *  This program is based on
  *
@@ -20,13 +20,13 @@
  *	MC68230:	Parallel Interface/Timer (PI/T)
  *			Motorola Semiconductors, December, 1983
  *
- *  ----------------------------------------------------------------------------------
+ *  ---------------------------------------------------------------------------
  *
  *  This file is subject to the terms and conditions of the GNU General Public
  *  License.  See the file COPYING in the main directory of the Linux
  *  distribution for more details.
  *
- *  ----------------------------------------------------------------------------------
+ *  ---------------------------------------------------------------------------
  *
  *  The Ariadne is a Zorro-II board made by Village Tronic. It contains:
  *
@@ -107,7 +107,7 @@ struct ariadne_private {
     struct net_device_stats stats;
     char tx_full;
     unsigned long lock;
-    int key;
+    unsigned int key;
 };
 
 
@@ -148,13 +148,13 @@ static void memcpyw(u_short *dest, u_short *src, int len)
 
 __initfunc(int ariadne_probe(struct device *dev))
 {
-    int key;
-    struct ConfigDev *cd;
+    unsigned int key;
+    const struct ConfigDev *cd;
     u_long board;
     struct ariadne_private *priv;
 
     /* Ethernet is part 0, Parallel is part 1 */
-    if ((key = zorro_find(MANUF_VILLAGE_TRONIC, PROD_ARIADNE, 0, 0))) {
+    if ((key = zorro_find(ZORRO_PROD_VILLAGE_TRONIC_ARIADNE, 0, 0))) {
 	cd = zorro_get_board(key);
 	if ((board = (u_long)cd->cd_BoardAddr)) {
 	    dev->dev_addr[0] = 0x00;

@@ -325,16 +325,27 @@ call_reserveresult(struct rpc_task *task)
 {
 	dprintk("RPC: %4d call_reserveresult (status %d)\n",
 				task->tk_pid, task->tk_status);
+	/*
+	 * After a call to xprt_reserve(), we must have either
+	 * a request slot or else an error status.
+	 */
+	if ((task->tk_status >= 0 && !task->tk_rqstp) ||
+	    (task->tk_status < 0 && task->tk_rqstp))
+		printk("call_reserveresult: status=%d, request=%p??\n",
+		 task->tk_status, task->tk_rqstp);
 
 	if (task->tk_status >= 0) {
 		task->tk_action = call_allocate;
+		goto out;
 	} else if (task->tk_status == -EAGAIN) {
 		task->tk_timeout = task->tk_client->cl_timeout.to_resrvval;
 		task->tk_status = 0;
 		xprt_reserve(task);
-		return;
+		goto out;
 	} else if (task->tk_status == -ETIMEDOUT) {
+		printk("RPC: task timed out\n");
 		task->tk_action = call_timeout;
+		goto out;
 	} else {
 		task->tk_action = NULL;
 	}
@@ -342,6 +353,8 @@ call_reserveresult(struct rpc_task *task)
 		printk("RPC: task has no request, exit EIO\n");
 		rpc_exit(task, -EIO);
 	}
+out:
+	return;
 }
 
 /*

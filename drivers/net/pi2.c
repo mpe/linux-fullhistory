@@ -1413,12 +1413,6 @@ static int pi_probe(struct device *dev, int card_type)
 
     /* New-style flags. */
     dev->flags = 0;
-    dev->family = AF_INET;
-    dev->pa_addr = 0;
-    dev->pa_brdaddr = 0;
-    dev->pa_mask = 0;
-    dev->pa_alen = 4;
-
     return 0;
 }
 

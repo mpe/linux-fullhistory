@@ -13,6 +13,7 @@
  *	0.1 1997-05-19 Robin O'Leary <robin@acm.org> - PS/2 emulation
  *	0.2 1997-06-03 Robin O'Leary <robin@acm.org> - tap gesture
  *	0.3 1997-06-27 Alan Cox <alan@cymru.net> - 2.1 commit
+ *	0.4 1997-11-09 Alan Cox <alan@cymru.net> - Single Unix VFS API changes
  */
 
 #include <linux/config.h>
@@ -532,7 +533,7 @@ static int open_pad(struct inode * inode, struct file * file)
 /*
  * writes are disallowed
  */
-static long write_pad(struct inode * inode, struct file * file, const char * buffer, unsigned long  count)
+static ssize_t write_pad(struct file * file, const char * buffer, size_t count, loff_t *ppos)
 {
 	return -EINVAL;
 }
@@ -553,7 +554,7 @@ void new_sample(int d[3])
 /*
  * Read pad data.  Currently never blocks.
  */
-static long read_pad(struct inode * inode, struct file * file, char * buffer, unsigned long count)
+static ssize_t read_pad(struct file * file, char * buffer, size_t count, loff_t *ppos)
 {
 	int r;
 

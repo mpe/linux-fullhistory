@@ -3,15 +3,19 @@ all:	lowlevel.o
 ALLOBJS = init.o aci.o awe_wave.o aedsp16.o
 OBJS = init.o
 
-ifdef CONFIG_LOWLEVEL_SOUND
-ifdef CONFIG_ACI_MIXER
-OBJS := $(OBJS) aci.o
+ifeq ($(CONFIG_LOWLEVEL_SOUND),y)
+ifeq ($(CONFIG_ACI_MIXER),y)
+   OBJS := $(OBJS) aci.o
 endif
-ifdef CONFIG_AWE32_SYNTH
+ifeq ($(CONFIG_AWE32_SYNTH),y)
 OBJS := $(OBJS) awe_wave.o
+else 
+  ifeq ($(CONFIG_AWE32_SYNTH),m)
+     MX_OBJS := $(MX_OBJS) awe_wave.o
+  endif
 endif
-ifdef CONFIG_AEDSP16
-OBJS := $(OBJS) aedsp16.o
+ifeq ($(CONFIG_AEDSP16),y)
+   OBJS := $(OBJS) aedsp16.o
 endif
 endif
 
