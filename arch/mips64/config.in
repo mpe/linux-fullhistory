@@ -35,7 +35,8 @@ unset CONFIG_ARC64
 unset CONFIG_BOARD_SCACHE
 unset CONFIG_COHERENT_IO
 unset CONFIG_BINFMT_ELF32
-unset CONFIG_PCI
+
+define_bool CONFIG_ISA n
 
 if [ "$CONFIG_SGI_IP22" = "y" ]; then
    define_bool CONFIG_BOOT_ELF32 y
@@ -50,6 +51,8 @@ if [ "$CONFIG_SGI_IP27" = "y" ]; then
    define_bool CONFIG_COHERENT_IO y
    define_bool CONFIG_PCI y
    define_bool CONFIG_QL_ISP_A64 y
+else
+   define_bool CONFIG_PCI n
 fi
 
 mainmenu_option next_comment

@@ -19,7 +19,7 @@ choice 'Processor Type'	\
 	 4xx			CONFIG_4xx	\
 	 630/Power3(64-Bit)	CONFIG_PPC64	\
 	 82xx			CONFIG_82xx	\
-	 8xx			CONFIG_8xx"	6xx/7xx
+	 8xx			CONFIG_8xx"	6xx
 
 if [ "$CONFIG_4xx" = "y" ]; then
     choice 'Machine Type'			\
@@ -82,20 +82,18 @@ endmenu
 mainmenu_option next_comment
 comment 'General setup'
 
-if [ "$CONFIG_APUS" = "y" ]; then
-  define_bool CONFIG_PCI n
-fi
-if [ "$CONFIG_OAK" = "y" ]; then
-  define_bool CONFIG_PCI n
-fi
-if [ "$CONFIG_8xx" = "y" ]; then
-    bool 'QSpan PCI' CONFIG_PCI
-fi
-if [ "$CONFIG_6xx" = "y" -a "$CONFIG_APUS" != "y" ]; then
-    define_bool CONFIG_PCI y
-fi
-if [ "$CONFIG_PREP" = "y" -o "$CONFIG_PMAC" = "y" -o "$CONFIG_CHRP" = "y" -o "$CONFIG_ALL_PPC" = "y" ]; then
-    define_bool CONFIG_PCI y
+define_bool CONFIG_ISA n
+
+if [ "$CONFIG_APUS" = "y" -o "$CONFIG_4xx" = "y" -o \
+     "$CONFIG_82xx" = "y" ]; then
+   define_bool CONFIG_PCI n
+else
+   if [ "$CONFIG_6xx" = "y" -o CONFIG_PPC64 ]; then
+      define_bool CONFIG_PCI y
+   else
+   # CONFIG_8xx
+      bool 'QSpan PCI' CONFIG_PCI
+   fi
 fi
 
 bool 'Networking support' CONFIG_NET

@@ -26,34 +26,37 @@ bool 'Support for SNI RM200 PCI' CONFIG_SNI_RM200_PCI
 #
 # Select some configuration options automatically for certain systems.
 #
-unset CONFIG_PCI
-unset CONFIG_ISA
 unset CONFIG_MIPS_JAZZ
 unset CONFIG_VIDEO_G364
 
-if [ "$CONFIG_ALGOR_P4032" = "y" ]; then
+if [ "$CONFIG_ALGOR_P4032" = "y" -o "$CONFIG_SNI_RM200_PCI" = "y" -o \
+     "$CONFIG_DDB5074" = "y" ]; then
    define_bool CONFIG_PCI y
+else
+   define_bool CONFIG_PCI n
 fi
+if [ "$CONFIG_MIPS_MAGNUM_4000" = "y" -o "$CONFIG_OLIVETTI_M700" = "y" -o \
+     "$CONFIG_SNI_RM200_PCI" = "y" -o "$CONFIG_ACER_PICA_61" = "y" ]; then
+   define_bool CONFIG_ISA y
+else
+   define_bool CONFIG_ISA n
+fi
+
 if [ "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
      "$CONFIG_OLIVETTI_M700" = "y" ]; then
-   define_bool CONFIG_ISA y
    define_bool CONFIG_HAVE_IO_PORTS y
    define_bool CONFIG_MIPS_JAZZ y
    define_bool CONFIG_FB y
    define_bool CONFIG_FB_G364 y	
 fi
 if [ "$CONFIG_ACER_PICA_61" = "y" ]; then
-   define_bool CONFIG_ISA y
    define_bool CONFIG_HAVE_IO_PORTS y
    define_bool CONFIG_MIPS_JAZZ y
 fi
 if [ "$CONFIG_SNI_RM200_PCI" = "y" ]; then
-   define_bool CONFIG_ISA y
    define_bool CONFIG_HAVE_IO_PORTS y
-   define_bool CONFIG_PCI y
 fi
 if [ "$CONFIG_DDB5074" = "y" ]; then
-   define_bool CONFIG_PCI y
    define_bool CONFIG_HAVE_IO_PORTS y
 fi
 endmenu

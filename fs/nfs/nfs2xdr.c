@@ -9,7 +9,6 @@
 
 #define NFS_NEED_XDR_TYPES
 
-#include <linux/config.h>
 #include <linux/param.h>
 #include <linux/sched.h>
 #include <linux/mm.h>

@@ -28,6 +28,7 @@ CONFIG_MEMORY_START=0c000000
 #
 # General setup
 #
+# CONFIG_ISA is not set
 # CONFIG_NET is not set
 CONFIG_CF_ENABLER=y
 # CONFIG_PCI is not set
@@ -39,12 +40,18 @@ CONFIG_KCORE_ELF=y
 # CONFIG_KCORE_AOUT is not set
 CONFIG_BINFMT_ELF=y
 # CONFIG_BINFMT_MISC is not set
+
+#
+# Parallel port support
+#
 # CONFIG_PARPORT is not set
 
 #
 # Block devices
 #
 # CONFIG_BLK_DEV_FD is not set
+# CONFIG_BLK_DEV_XD is not set
+# CONFIG_PARIDE is not set
 
 #
 # Additional Block Devices
@@ -53,21 +60,25 @@ CONFIG_BINFMT_ELF=y
 # CONFIG_BLK_DEV_MD is not set
 CONFIG_BLK_DEV_RAM=y
 CONFIG_BLK_DEV_INITRD=y
-# CONFIG_BLK_DEV_XD is not set
-# CONFIG_PARIDE is not set
 
 #
 # ATA/IDE/MFM/RLL support
 #
 CONFIG_IDE=y
+
+#
+# IDE, ATA and ATAPI Block devices
+#
 CONFIG_BLK_DEV_IDE=y
 
 #
 # Please see Documentation/ide.txt for help/info on IDE drives
 #
 # CONFIG_BLK_DEV_HD_IDE is not set
+# CONFIG_BLK_DEV_HD is not set
 CONFIG_BLK_DEV_IDEDISK=y
 # CONFIG_IDEDISK_MULTI_MODE is not set
+# CONFIG_BLK_DEV_IDECS is not set
 # CONFIG_BLK_DEV_IDECD is not set
 # CONFIG_BLK_DEV_IDETAPE is not set
 # CONFIG_BLK_DEV_IDEFLOPPY is not set
@@ -77,9 +88,11 @@ CONFIG_BLK_DEV_IDEDISK=y
 # IDE chipset support/bugfixes
 #
 # CONFIG_BLK_DEV_CMD640 is not set
+# CONFIG_BLK_DEV_CMD640_ENHANCED is not set
+# CONFIG_BLK_DEV_ISAPNP is not set
 # CONFIG_IDE_CHIPSETS is not set
+# CONFIG_IDEDMA_AUTO is not set
 # CONFIG_BLK_DEV_IDE_MODES is not set
-# CONFIG_BLK_DEV_HD is not set
 
 #
 # SCSI support
@@ -101,13 +114,20 @@ CONFIG_SERIAL_CONSOLE=y
 # CONFIG_UNIX98_PTYS is not set
 
 #
-# Filesystems
+# File systems
 #
 # CONFIG_QUOTA is not set
 # CONFIG_AUTOFS_FS is not set
 # CONFIG_AUTOFS4_FS is not set
+# CONFIG_ADFS_FS is not set
 # CONFIG_AFFS_FS is not set
+# CONFIG_HFS_FS is not set
+# CONFIG_BFS_FS is not set
 # CONFIG_FAT_FS is not set
+# CONFIG_MSDOS_FS is not set
+# CONFIG_UMSDOS_FS is not set
+# CONFIG_VFAT_FS is not set
+# CONFIG_EFS_FS is not set
 # CONFIG_CRAMFS is not set
 # CONFIG_ISO9660_FS is not set
 # CONFIG_JOLIET is not set
@@ -115,6 +135,10 @@ CONFIG_SERIAL_CONSOLE=y
 # CONFIG_NTFS_FS is not set
 # CONFIG_HPFS_FS is not set
 CONFIG_PROC_FS=y
+# CONFIG_DEVFS_FS is not set
+# CONFIG_DEVFS_DEBUG is not set
+# CONFIG_DEVPTS_FS is not set
+# CONFIG_QNX4FS_FS is not set
 # CONFIG_ROMFS_FS is not set
 CONFIG_EXT2_FS=y
 # CONFIG_SYSV_FS is not set

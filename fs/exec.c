@@ -328,12 +328,16 @@ struct file *open_exec(const char *name)
 		if (dentry->d_inode && S_ISREG(dentry->d_inode->i_mode)) {
 			int err = permission(dentry->d_inode, MAY_EXEC);
 			file = ERR_PTR(err);
-			if (!err)
+			if (!err) {
 				file = dentry_open(dentry, O_RDONLY);
+out:
+				unlock_kernel();
+				return file;
+			}
 		}
+		dput(dentry);
 	}
-	unlock_kernel();
-	return file;
+	goto out;
 }
 
 int kernel_read(struct file *file, unsigned long offset,

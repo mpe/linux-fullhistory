@@ -1,29 +1,28 @@
-/* $Id: memcmp.S,v 1.2 1997/04/01 03:43:18 davem Exp $
+/* $Id: memcmp.S,v 1.3 2000/03/23 07:51:08 davem Exp $
  * Sparc64 optimized memcmp code.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 2000 David S. Miller (davem@redhat.com)
  */
 
 	.text
-	.align 4
-	.globl __memcmp, memcmp
+	.align	32
+	.globl	__memcmp, memcmp
 __memcmp:
 memcmp:
-	brlez,pn %o2, 2f
-	 sub	%g0, %o2, %o3
-	add	%o0, %o2, %o0
-	add	%o1, %o2, %o1
-	ldub	[%o0 + %o3], %o4
-1:
-	ldub	[%o1 + %o3], %o5
-	sub	%o4, %o5, %o4
-	brnz,pn	%o4, 3f
-	 addcc	%o3, 1, %o3
-	bne,a,pt %xcc, 1b
-	 ldub	[%o0 + %o3], %o4
-2:
-	retl
-	 clr	%o0
-3:
-	retl
-	 mov	%o4, %o0
+	cmp	%o2, 0		! IEU1	Group
+loop:	be,pn	%icc, ret_0	! CTI
+	 nop			! IEU0
+	ldub	[%o0], %g5	! LSU	Group
+	ldub	[%o1], %g3	! LSU	Group
+	sub	%o2, 1, %o2	! IEU0
+	add	%o0, 1, %o0	! IEU1
+	add	%o1, 1, %o1	! IEU0	Group
+	subcc	%g5, %g3, %g3	! IEU1	Group
+	be,pt	%icc, loop	! CTI
+	 cmp	%o2, 0		! IEU1	Group
+
+ret_n0:	retl
+	 mov	%g3, %o0
+ret_0:	retl
+	 mov	0, %o0

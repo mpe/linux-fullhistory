@@ -119,6 +119,8 @@ if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o \
      "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
    define_bool CONFIG_PCI y
    source drivers/pci/Config.in
+else
+   define_bool CONFIG_PCI n
 fi
 
 #
@@ -127,8 +129,10 @@ fi
 if [ "$CONFIG_ARCH_CATS" = "y" -o \
      "$CONFIG_ARCH_SHARK" = "y" -o \
      "$CONFIG_ARCH_NETWINDER" = "y" ]; then
+   define_bool CONFIG_ISA y
    define_bool CONFIG_ISA_DMA y
 else
+   define_bool CONFIG_ISA n
    define_bool CONFIG_ISA_DMA n
 fi
 

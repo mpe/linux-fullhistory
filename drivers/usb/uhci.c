@@ -1315,8 +1315,8 @@ static __u8 root_hub_dev_des[] =
 	0x00,			/*  __u16 bcdDevice; */
 	0x00,
 	0x00,			/*  __u8  iManufacturer; */
-	0x00,			/*  __u8  iProduct; */
-	0x00,			/*  __u8  iSerialNumber; */
+	0x02,			/*  __u8  iProduct; */
+	0x01,			/*  __u8  iSerialNumber; */
 	0x01			/*  __u8  bNumConfigurations; */
 };
 
@@ -1617,7 +1617,13 @@ static int rh_submit_urb(urb_t *urb)
 			memcpy (data, root_hub_config_des, len);
 			OK(len);
 		case 0x03:	/* string descriptors */
-			stat = -EPIPE;
+			len = usb_root_hub_string (wValue & 0xff,
+				uhci->io_addr, "UHCI",
+				data, wLength);
+			if (len > 0) {
+				OK (min (leni, len));
+			} else 
+				stat = -EPIPE;
 		}
 		break;
 	case RH_GET_DESCRIPTOR | RH_CLASS:

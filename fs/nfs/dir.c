@@ -596,12 +596,12 @@ static int nfs_lookup_revalidate(struct dentry * dentry, int flags)
 out_valid:
 	return 1;
 out_bad:
-	d_drop(dentry);
 	if (!list_empty(&dentry->d_subdirs))
 		shrink_dcache_parent(dentry);
 	/* If we have submounts, don't unhash ! */
 	if (have_submounts(dentry))
 		goto out_valid;
+	d_drop(dentry);
 	/* Purge readdir caches. */
 	if (dentry->d_parent->d_inode) {
 		nfs_zap_caches(dentry->d_parent->d_inode);
@@ -914,7 +914,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 		dfprintk(VFS, "trying to rename %s to %s\n",
 			 dentry->d_name.name, silly);
 		
-		sdentry = lookup_one(silly, dentry->d_parent);
+		sdentry = lookup_one(silly, dget(dentry->d_parent));
 		/*
 		 * N.B. Better to return EBUSY here ... it could be
 		 * dangerous to delete the file while it's in use.

@@ -1184,6 +1184,54 @@ void usb_init_root_hub(struct usb_device *dev)
 	dev->actconfig = NULL;
 }
 
+/* for returning string descriptors in UTF-16LE */
+static int ascii2utf (char *ascii, __u8 *utf, int utfmax)
+{
+	int retval;
+
+	for (retval = 0; *ascii && utfmax > 1; utfmax -= 2, retval += 2) {
+		*utf++ = *ascii++ & 0x7f;
+		*utf++ = 0;
+	}
+	return retval;
+}
+
+/*
+ * root_hub_string is used by each host controller's root hub code,
+ * so that they're identified consistently throughout the system.
+ */
+int usb_root_hub_string (int id, int serial, char *type, __u8 *data, int len)
+{
+	char buf [20];
+
+	// assert (len > (2 * (sizeof (buf) + 1)));
+	// assert (strlen (type) ~== 4);
+
+	// language ids
+	if (id == 0) {
+		*data++ = 4; *data++ = 3;	/* 4 bytes data */
+		*data++ = 0; *data++ = 0;	/* some language id */
+		return 4;
+
+	// serial number
+	} else if (id == 1) {
+		sprintf (buf, "%x", serial);
+
+	// product description
+	} else if (id == 2) {
+		sprintf (buf, "USB %s Root Hub", type);
+
+	// id 3 == vendor description
+
+	// unsupported IDs --> "stall"
+	} else
+	    return 0;
+
+	data [0] = 2 + ascii2utf (buf, data + 2, len - 2);
+	data [1] = 3;
+	return data [0];
+}
+
 /*
  * __usb_get_extra_descriptor() finds a descriptor of specific type in the
  * extra field of the interface and endpoint descriptor structs.
@@ -1824,6 +1872,7 @@ EXPORT_SYMBOL(usb_interface_claimed);
 EXPORT_SYMBOL(usb_driver_release_interface);
 
 EXPORT_SYMBOL(usb_init_root_hub);
+EXPORT_SYMBOL(usb_root_hub_string);
 EXPORT_SYMBOL(usb_new_device);
 EXPORT_SYMBOL(usb_connect);
 EXPORT_SYMBOL(usb_disconnect);

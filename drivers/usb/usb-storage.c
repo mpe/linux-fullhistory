@@ -3,20 +3,19 @@
  * (c) 1999 Michael Gee (michael@linuxspecific.com)
  * (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
- * Further reference:
- *	This driver is based on the 'USB Mass Storage Class' document. This
- *	describes in detail the protocol used to communicate with such
- *      devices.  Clearly, the designers had SCSI and ATAPI commands in mind 
- *      when they created this document.  The commands are all very similar 
- *      to commands in the SCSI-II and ATAPI specifications.
+ * This driver is based on the 'USB Mass Storage Class' document. This
+ * describes in detail the protocol used to communicate with such
+ * devices.  Clearly, the designers had SCSI and ATAPI commands in
+ * mind when they created this document.  The commands are all very
+ * similar to commands in the SCSI-II and ATAPI specifications.
  *
- *	It is important to note that in a number of cases this class exhibits
- *	class-specific exemptions from the USB specification. Notably the
- *	usage of NAK, STALL and ACK differs from the norm, in that they are
- *	used to communicate wait, failed and OK on commands.
- *	Also, for certain devices, the interrupt endpoint is used to convey
- *	status of a command.
+ * It is important to note that in a number of cases this class
+ * exhibits class-specific exemptions from the USB specification.
+ * Notably the usage of NAK, STALL and ACK differs from the norm, in
+ * that they are used to communicate wait, failed and OK on commands.
  *
+ * Also, for certain devices, the interrupt endpoint is used to convey
+ * status of a command.
  */
 
 #include <linux/module.h>
@@ -39,7 +38,6 @@
 
 #include "usb-storage.h"
 #include "usb-storage-debug.h"
-
 
 /*
  * This is the size of the structure Scsi_Host_Template.  We create
@@ -75,34 +73,47 @@ typedef int (*trans_cmnd)(Scsi_Cmnd*, struct us_data*);
 typedef int (*trans_reset)(struct us_data*);
 typedef void (*proto_cmnd)(Scsi_Cmnd*, struct us_data*);
 
+/* we allocate one of these for every device that we remember */
 struct us_data {
 	struct us_data	        *next;	         /* next device */
 	struct usb_device	*pusb_dev;       /* this usb_device */
 	unsigned int		flags;		 /* from filter initially */
+
+	/* information about the device -- only good if device is attached */
 	__u8			ifnum;		 /* interface number */
 	__u8			ep_in;		 /* in endpoint */
 	__u8			ep_out;		 /* out ....... */
 	__u8			ep_int;		 /* interrupt . */
-	__u8			subclass;	 /* as in overview */
-	__u8			protocol;	 /* .............. */
-	trans_cmnd              transport;	 /* protocol specific do cmd */
-	trans_reset             transport_reset; /* .......... device reset */
+	__u8			subclass;
+	__u8			protocol;
+
+	/* function pointers for this device */
+	trans_cmnd              transport;	 /* transport function */
+	trans_reset             transport_reset; /* transport device reset */
 	proto_cmnd              proto_handler;   /* protocol handler */
+
+	/* SCSI interfaces */
 	GUID(guid);				 /* unique dev id */
 	struct Scsi_Host	*host;		 /* our dummy host data */
 	Scsi_Host_Template	htmplt;  	 /* own host template */
 	int			host_number;	 /* to find us */
 	int			host_no;	 /* allocated by scsi */
 	Scsi_Cmnd		*srb;		 /* current srb */
+	
+	/* thread information */
 	Scsi_Cmnd		*queue_srb;	 /* the single queue slot */
 	int			action;		 /* what to do */
+	int			pid;		 /* control thread */
+
+	/* interrupt info for CBI devices */
 	struct semaphore	ip_waitq;	 /* for CBI interrupts */
 	__u16			ip_data;	 /* interrupt data */
 	int			ip_wanted;	 /* needed */
-	int			pid;		 /* control thread */
-	struct semaphore	*notify;	 /* wait for thread to begin */
 	void			*irq_handle;	 /* for USB int requests */
 	unsigned int		irqpipe;	 /* pipe for release_irq */
+
+	/* mutual exclusion structures */
+	struct semaphore	notify;          /* wait for thread to begin */
 	struct semaphore        sleeper;         /* to sleep on */
 	struct semaphore        queue_exclusion; /* to protect data structs */
 };
@@ -116,6 +127,7 @@ struct us_data {
 #define US_ACT_DEVICE_RESET	3
 #define US_ACT_BUS_RESET	4
 #define US_ACT_HOST_RESET	5
+#define US_ACT_EXIT		6
 
 /* The list of structures and the protective lock for them */
 static struct us_data *us_list;
@@ -253,11 +265,6 @@ static unsigned int us_transfer_length(Scsi_Cmnd *srb)
 	case INQUIRY:
 	case MODE_SENSE:
 		return srb->cmnd[4];
-
-		/* FIXME: this needs to come out when the other
-		 * fix is in place */
-	case READ_CAPACITY:
-		return 8;
 
 		/* FIXME: these should be removed and tested */
 	case LOG_SENSE:
@@ -791,9 +798,8 @@ static int CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 				 us->ifnum, srb->cmnd, srb->cmd_len, HZ*5);
 
 	/* check the return code for the command */
+	US_DEBUGP("Call to usb_control_msg() returned %d\n", result);
 	if (result < 0) {
-		US_DEBUGP("Call to usb_control_msg() returned %d\n", result);
-
 		/* a stall is a fatal condition from the device */
 		if (result == -EPIPE) {
 			US_DEBUGP("-- Stall on control pipe. Clearing\n");
@@ -820,15 +826,10 @@ static int CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 	/* STATUS STAGE */
 
-	/* go to sleep until we get this interrup */
-	/* FIXME: this should be changed to use a timeout -- or let the
-	 * device reset routine up() this for us to unjam us
-	 */
+	/* go to sleep until we get this interrupt */
 	down(&(us->ip_waitq));
 	
-	/* FIXME: currently this code is unreachable, but the idea is
-	 * necessary.  See above comment.
-	 */
+	/* if we were woken up by a reset instead of the actual interrupt */
 	if (us->ip_wanted) {
 		US_DEBUGP("Did not get interrupt on CBI\n");
 		us->ip_wanted = 0;
@@ -837,8 +838,9 @@ static int CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 	
 	US_DEBUGP("Got interrupt data 0x%x\n", us->ip_data);
 	
-	/* UFI gives us ASC and ASCQ, like a request sense */
-	/* REQUEST_SENSE and INQUIRY don't affect the sense data, so we
+	/* UFI gives us ASC and ASCQ, like a request sense
+	 *
+	 * REQUEST_SENSE and INQUIRY don't affect the sense data, so we
 	 * ignore the information for those commands
 	 */
 	if (us->subclass == US_SC_UFI) {
@@ -1114,29 +1116,27 @@ static int us_detect(struct SHT *sht)
 static int us_release(struct Scsi_Host *psh)
 {
 	struct us_data *us = (struct us_data *)psh->hostdata[0];
-	struct us_data *prev;
 	unsigned long flags;
+	int result;
 
+	/* lock the data structures */
+	spin_lock_irqsave(&us_list_spinlock, flags);
+
+	US_DEBUGP("us_release() called for host %s\n", us->htmplt.name);
+
+	/* release the interrupt handler, if necessary */
 	if (us->irq_handle) {
-		usb_release_irq(us->pusb_dev, us->irq_handle, us->irqpipe);
+		US_DEBUGP("-- releasing irq\n");
+		result = usb_release_irq(us->pusb_dev, us->irq_handle, 
+					 us->irqpipe);
+		US_DEBUGP("-- usb_release_irq() returned %d\n", result);
 		us->irq_handle = NULL;
 	}
 
-	/* FIXME: release the interface claim here? */
-
-	/* FIXME: we need to move this elsewhere -- 
-	 * the remove function only gets called to remove the module
-	 */
-	spin_lock_irqsave(&us_list_spinlock, flags);
-	if (us_list == us)
-		us_list = us->next;
-	else {
-		prev = us_list;
-		while (prev->next != us)
-			prev = prev->next;
-		prev->next = us->next;
-	}
+	/* lock the data structures */
 	spin_unlock_irqrestore(&us_list_spinlock, flags);
+
+	/* we always have a successful release */
 	return 0;
 }
 
@@ -1153,7 +1153,7 @@ static int us_queuecommand( Scsi_Cmnd *srb , void (*done)(Scsi_Cmnd *))
 {
 	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
 
-	US_DEBUGP("Command wakeup\n");
+	US_DEBUGP("us_queuecommand() called\n");
 	srb->host_scribble = (unsigned char *)us;
 
 	/* get exclusive access to the structures we want */
@@ -1180,9 +1180,11 @@ static int us_abort( Scsi_Cmnd *srb )
 /* FIXME: this doesn't do anything right now */
 static int us_bus_reset( Scsi_Cmnd *srb )
 {
-	//  struct us_data *us = (struct us_data *)srb->host->hostdata[0];
+	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
 
 	US_DEBUGP("Bus reset requested\n");
+	if (us->ip_wanted)
+		up(&(us->ip_waitq));
 	//  us->transport_reset(us);
 	return SUCCESS;
 }
@@ -1364,12 +1366,9 @@ static int usb_stor_control_thread(void * __us)
 
 	unlock_kernel();
 
-	up(us->notify);
+	up(&(us->notify));
 
 	for(;;) {
-		siginfo_t info;
-		int unsigned long signr;
-
 		US_DEBUGP("*** thread sleeping.\n");
 		down(&(us->sleeper));
 		down(&(us->queue_exclusion));
@@ -1378,7 +1377,7 @@ static int usb_stor_control_thread(void * __us)
 				/* take the command off the queue */
 		action = us->action;
 		us->action = 0;
-		us->srb = us-> queue_srb;
+		us->srb = us->queue_srb;
      	
 		/* release the queue lock as fast as possible */
 		up(&(us->queue_exclusion));
@@ -1433,7 +1432,8 @@ static int usb_stor_control_thread(void * __us)
 				us->proto_handler(us->srb, us);
 			}
       
-			US_DEBUGP("scsi cmd done, result=0x%x\n", us->srb->result);
+			US_DEBUGP("scsi cmd done, result=0x%x\n", 
+				  us->srb->result);
 			us->srb->scsi_done(us->srb);
 			us->srb = NULL;
 			break;
@@ -1452,19 +1452,12 @@ static int usb_stor_control_thread(void * __us)
 
 		} /* end switch on action */
 
-		/* FIXME: we ignore TERM and KILL... is this right? */
-		if (signal_pending(current)) {
-			/* sending SIGUSR1 makes us print out some info */
-			spin_lock_irq(&current->sigmask_lock);
-			signr = dequeue_signal(&current->blocked, &info);
-			spin_unlock_irq(&current->sigmask_lock);
-		} /* if (singal_pending(current)) */
+		/* exit if we get a signal to exit */
+		if (action == US_ACT_EXIT)
+			break;
 	} /* for (;;) */
   
-	//  MOD_DEC_USE_COUNT;
-
 	printk("usb_stor_control_thread exiting\n");
-
 	return 0;
 }	
 
@@ -1495,14 +1488,12 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 	/* FIXME: this isn't quite right... */
 	/* We make an exception for the shuttle E-USB */
-	if (dev->descriptor.idVendor == 0x04e6 &&
-	    dev->descriptor.idProduct == 0x0001) {
-		protocol = US_PR_CB;
-		subclass = US_SC_8070;	    /* an assumption */
-	} else if (dev->descriptor.bDeviceClass != 0 ||
-		   altsetting->bInterfaceClass != USB_CLASS_MASS_STORAGE ||
-		   altsetting->bInterfaceSubClass < US_SC_MIN ||
-		   altsetting->bInterfaceSubClass > US_SC_MAX) {
+	if (!(dev->descriptor.idVendor == 0x04e6 &&
+	      dev->descriptor.idProduct == 0x0001) &&
+	    !(dev->descriptor.bDeviceClass == 0 &&
+	      altsetting->bInterfaceClass == USB_CLASS_MASS_STORAGE &&
+	      altsetting->bInterfaceSubClass >= US_SC_MIN &&
+	      altsetting->bInterfaceSubClass <= US_SC_MAX)) {
 		/* if it's not a mass storage, we go no further */
 		return NULL;
 	}
@@ -1510,42 +1501,15 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 	/* At this point, we know we've got a live one */
 	US_DEBUGP("USB Mass Storage device detected\n");
 
-	/*
-	 * We are expecting a minimum of 2 endpoints - in and out (bulk).
-	 * An optional interrupt is OK (necessary for CBI protocol).
-	 * We will ignore any others.
-	 */
-	for (i = 0; i < altsetting->bNumEndpoints; i++) {
-		/* is it an BULK endpoint? */
-		if ((altsetting->endpoint[i].bmAttributes & 
-		     USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_BULK) {
-			if (altsetting->endpoint[i].bEndpointAddress & 
-			    USB_DIR_IN)
-				ep_in = altsetting->endpoint[i].bEndpointAddress &
-					USB_ENDPOINT_NUMBER_MASK;
-			else
-				ep_out = altsetting->endpoint[i].bEndpointAddress &
-					USB_ENDPOINT_NUMBER_MASK;
-		}
-
-		/* is it an interrupt endpoint? */
-		if ((altsetting->endpoint[i].bmAttributes & 
-		     USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_INT) {
-			ep_int = altsetting->endpoint[i].bEndpointAddress &
-				USB_ENDPOINT_NUMBER_MASK;
-		}
-	}
-	US_DEBUGP("Endpoints In %d Out %d Int %d\n",
-		  ep_in, ep_out, ep_int);
-
-	/* set the interface -- STALL is an acceptable response here */
-	result = usb_set_interface(dev, altsetting->bInterfaceNumber, 0);
-	US_DEBUGP("Result from usb_set_interface is %d\n", result);
-	if (result == -EPIPE) {
-		usb_clear_halt(dev, usb_sndctrlpipe(dev, 0));
-	} else if (result != 0) {
-		/* it's not a stall, but another error -- time to bail */
-		return NULL;
+	/* Determine subclass and protocol, or copy from the interface */
+	/* FIXME: this isn't quite right */
+	if (dev->descriptor.idVendor == 0x04e6 &&
+	    dev->descriptor.idProduct == 0x0001) {
+		protocol = US_PR_CB;
+		subclass = US_SC_8070;	    /* an assumption */
+	} else {
+		subclass = altsetting->bInterfaceSubClass;
+		protocol = altsetting->bInterfaceProtocol;
 	}
 
 	/* shuttle E-USB */	
@@ -1571,7 +1535,49 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		/* FIXME: what is this?? */
 		down(&(ss->ip_waitq));
 	}
-		
+			
+	/*
+	 * Find the endpoints we need
+	 * We are expecting a minimum of 2 endpoints - in and out (bulk).
+	 * An optional interrupt is OK (necessary for CBI protocol).
+	 * We will ignore any others.
+	 */
+	for (i = 0; i < altsetting->bNumEndpoints; i++) {
+		/* is it an BULK endpoint? */
+		if ((altsetting->endpoint[i].bmAttributes & 
+		     USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_BULK) {
+			/* BULK in or out? */
+			if (altsetting->endpoint[i].bEndpointAddress & 
+			    USB_DIR_IN)
+				ep_in = altsetting->endpoint[i].bEndpointAddress &
+					USB_ENDPOINT_NUMBER_MASK;
+			else
+				ep_out = altsetting->endpoint[i].bEndpointAddress &
+					USB_ENDPOINT_NUMBER_MASK;
+		}
+
+		/* is it an interrupt endpoint? */
+		if ((altsetting->endpoint[i].bmAttributes & 
+		     USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_INT) {
+			ep_int = altsetting->endpoint[i].bEndpointAddress &
+				USB_ENDPOINT_NUMBER_MASK;
+		}
+	}
+	US_DEBUGP("Endpoints In %d Out %d Int %d\n",
+		  ep_in, ep_out, ep_int);
+
+	/* set the interface -- STALL is an acceptable response here */
+	result = usb_set_interface(dev, altsetting->bInterfaceNumber, 0);
+	US_DEBUGP("Result from usb_set_interface is %d\n", result);
+	if (result == -EPIPE) {
+		US_DEBUGP("-- clearing stall on control interface\n");
+		usb_clear_halt(dev, usb_sndctrlpipe(dev, 0));
+	} else if (result != 0) {
+		/* it's not a stall, but another error -- time to bail */
+		US_DEBUGP("-- unknown error.  rejecting device\n");
+		return NULL;
+	}
+
 	/* Do some basic sanity checks, and bail if we find a problem */
 	if (!ep_in || !ep_out || (protocol == US_PR_CBI && !ep_int)) {
 		US_DEBUGP("Problems with device\n");
@@ -1638,8 +1644,8 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			US_DEBUGP("Allocating IRQ for CBI transport\n");
 			ss->irqpipe = usb_rcvintpipe(ss->pusb_dev, ss->ep_int);
 			result = usb_request_irq(ss->pusb_dev, ss->irqpipe, 
-						 CBI_irq, 255, 
-						 (void *)ss, &ss->irq_handle);
+						 CBI_irq, 255, (void *)ss, 
+						 &(ss->irq_handle));
 			US_DEBUGP("usb_request_irq returned %d\n", result);
 		}
 	} else { 
@@ -1656,23 +1662,12 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 		/* Initialize the mutexes only when the struct is new */
 		init_MUTEX_LOCKED(&(ss->sleeper));
+		init_MUTEX_LOCKED(&(ss->notify));
 		init_MUTEX(&(ss->queue_exclusion));
 
-		/*
-		 * If we've allready determined the subclass and protocol, 
-		 * use that.  Otherwise, use the interface ones.  This 
-		 * allows us to support devices which are compliant but 
-		 * don't announce it.  Note that this information is 
-		 * maintained in the us_data struct so we only have to do 
-		 * this for new devices.
-		 */
-		if (subclass) {
-			ss->subclass = subclass;
-			ss->protocol = protocol;
-		} else {
-			ss->subclass = altsetting->bInterfaceSubClass;
-			ss->protocol = altsetting->bInterfaceProtocol;
-		}
+		/* copy over the subclass and protocol data */
+		ss->subclass = subclass;
+		ss->protocol = protocol;
 
 		/* copy over the endpoint data */
 		ss->ep_in = ep_in;
@@ -1762,9 +1757,9 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			US_DEBUGP("Allocating IRQ for CBI transport\n");
 			ss->irqpipe = usb_rcvintpipe(ss->pusb_dev, ss->ep_int);
 			result = usb_request_irq(ss->pusb_dev, ss->irqpipe, 
-						 CBI_irq, 255, 
-						 (void *)ss, &ss->irq_handle);
-			US_DEBUGP("usb_request_irq returned %d", result);
+						 CBI_irq, 255, (void *)ss,
+						 &(ss->irq_handle));
+			US_DEBUGP("usb_request_irq returned %d\n", result);
 		}
 		
 		/*
@@ -1786,23 +1781,18 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		(struct us_data *)ss->htmplt.proc_dir = ss; 
 		
 		/* start up our thread */
-		{
-			DECLARE_MUTEX_LOCKED(sem);
-			
-			ss->notify = &sem;
-			ss->pid = kernel_thread(usb_stor_control_thread, ss,
-						CLONE_FS | CLONE_FILES |
-						CLONE_SIGHAND);
-			if (ss->pid < 0) {
-				printk(KERN_WARNING USB_STORAGE 
-				       "Unable to start control thread\n");
-				kfree(ss);
-				return NULL;
-			}
-			
-	       		/* wait for it to start */
-			down(&sem);
+		ss->pid = kernel_thread(usb_stor_control_thread, ss,
+					CLONE_FS | CLONE_FILES |
+					CLONE_SIGHAND);
+		if (ss->pid < 0) {
+			printk(KERN_WARNING USB_STORAGE 
+			       "Unable to start control thread\n");
+			kfree(ss);
+			return NULL;
 		}
+		
+		/* wait for it to start */
+		down(&(ss->notify));
 			
 		/* now register - our detect function will be called */
 		ss->htmplt.module = &__this_module;
@@ -1829,18 +1819,26 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 static void storage_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct us_data *ss = ptr;
+	int result;
 
-	if (!ss)
+	US_DEBUGP("storage_disconnect() called\n");
+ 
+	/* this is the odd case -- we disconnected but weren't using it */
+	if (!ss) {
+		US_DEBUGP("-- device was not in use\n");
 		return;
-
-	/* FIXME: we need mututal exclusion and resource freeing here */
+	}
 
 	/* release the IRQ, if we have one */
 	if (ss->irq_handle) {
-		usb_release_irq(ss->pusb_dev, ss->irq_handle, ss->irqpipe);
+		US_DEBUGP("-- releasing irq handle\n");
+		result = usb_release_irq(ss->pusb_dev, ss->irq_handle, 
+					 ss->irqpipe);
+		US_DEBUGP("-- usb_release_irq() returned %d\n", result);
 		ss->irq_handle = NULL;
 	}
 
+	/* mark the device as gone */
 	ss->pusb_dev = NULL;
 }
 
@@ -1851,11 +1849,16 @@ static void storage_disconnect(struct usb_device *dev, void *ptr)
 
 int __init usb_stor_init(void)
 {
+	/* 
+	 * Check to see if the host template is a different size from
+	 * what we're expected -- people have updated this in the past
+	 * and forgotten about this driver.
+	 */
 	if (sizeof(my_host_template) != SCSI_HOST_TEMPLATE_SIZE) {
-		printk(KERN_ERR "usb-storage: SCSI_HOST_TEMPLATE_SIZE does not match\n") ;
-		printk(KERN_ERR "usb-storage: expected %d bytes, got %d bytes\n", 
+		printk(KERN_ERR "usb-storage: SCSI_HOST_TEMPLATE_SIZE bad\n");
+		printk(KERN_ERR 
+		       "usb-storage: expected %d bytes, got %d bytes\n", 
 		       SCSI_HOST_TEMPLATE_SIZE, sizeof(my_host_template)) ;
-
 		return -1 ;
 	}
 
@@ -1863,6 +1866,7 @@ int __init usb_stor_init(void)
 	if (usb_register(&storage_driver) < 0)
 		return -1;
 
+	/* we're all set */
 	printk(KERN_INFO "USB Mass Storage support registered.\n");
 	return 0;
 }
@@ -1870,17 +1874,35 @@ int __init usb_stor_init(void)
 void __exit usb_stor_exit(void)
 {
 	static struct us_data *ptr;
-
+	static struct us_data *next;
+	unsigned long flags;
+	
+	/*
+	 * deregister the driver -- this eliminates races with probes and
+	 * disconnects 
+	 */
+	usb_deregister(&storage_driver) ;
+	
+	/* lock access to the data structures */
+	spin_lock_irqsave(&us_list_spinlock, flags);
+	
 	/* unregister all the virtual hosts */
 	for (ptr = us_list; ptr != NULL; ptr = ptr->next)
-	  scsi_unregister_module(MODULE_SCSI_HA, &(ptr->htmplt));
+		scsi_unregister_module(MODULE_SCSI_HA, &(ptr->htmplt));
+	
+	/* kill the threads */
+	/* FIXME: we can do this by sending them a signal to die */
 
 	/* free up the data structures */
-
-	/* kill the threads */
-
-	/* deregister the driver */
-	usb_deregister(&storage_driver) ;
+	/* FIXME: we need to eliminate the host structure also */
+	while (ptr) {
+		next = ptr->next;
+		kfree(ptr);
+		ptr = next;
+	}
+	
+	/* unlock the data structures */
+	spin_unlock_irqrestore(&us_list_spinlock, flags);
 }
 
 module_init(usb_stor_init) ;

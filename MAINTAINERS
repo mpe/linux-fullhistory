@@ -1133,6 +1133,13 @@ L:	linux-usb@suse.com
 S:	Maintained
 W:	http://www.kroah.com/linux-usb/
 
+USB MASS STORAGE DRIVER
+P:	Matthew Dharm
+M:	mdharm-usb@one-eyed-alien.net
+L:	linux-usb@suse.com
+S:	Maintained
+W:	http://www.one-eyed-alien.net/~mdharm/linux-usb/
+
 USB UHCI DRIVER
 P:	Georg Acher
 M:	usb@in.tum.de

@@ -339,10 +339,11 @@ static int sohci_submit_urb (urb_t * urb)
 								(le16_to_cpu (ohci->hcca.frame_no) + 10)) & 0xffff;
 	}	
 	
-	td_submit_urb (urb); /* fill the TDs and link it to the ed */
-						
 	if (ed->state != ED_OPER)  /* link the ed into a chain if is not already */
 		ep_link (ohci, ed);
+	
+	td_submit_urb (urb); /* fill the TDs and link it to the ed */
+
 	spin_unlock_irqrestore (&usb_ed_lock, flags);
 	
 	urb->status = USB_ST_URB_PENDING; 
@@ -1128,8 +1129,8 @@ static __u8 root_hub_dev_des[] =
 	0x00,       /*  __u16 bcdDevice; */
  	0x00,
 	0x00,       /*  __u8  iManufacturer; */
-	0x00,       /*  __u8  iProduct; */
-	0x00,       /*  __u8  iSerialNumber; */
+	0x02,       /*  __u8  iProduct; */
+	0x01,       /*  __u8  iSerialNumber; */
 	0x01        /*  __u8  bNumConfigurations; */
 };
 
@@ -1388,6 +1389,14 @@ static int rh_submit_urb (urb_t * urb)
 					len = min (leni, min (sizeof (root_hub_config_des), wLength));
 					data_buf = root_hub_config_des; OK(len);
 				case (0x03): /* string descriptors */
+					len = usb_root_hub_string (wValue & 0xff,
+						(int) ohci->regs, "OHCI",
+						data, wLength);
+					if (len > 0) {
+						data_buf = data;
+						OK (min (leni, len));
+					}
+					// else fallthrough
 				default: 
 					status = TD_CC_STALL;
 			}
@@ -1436,7 +1445,8 @@ static int rh_submit_urb (urb_t * urb)
 	dbg("USB HC roothubstat2: %x", readl ( &(ohci->regs->roothub.portstatus[1]) ));
 
 	len = min(len, leni);
-	memcpy (data, data_buf, len);
+	if (data != data_buf)
+	    memcpy (data, data_buf, len);
   	urb->actual_length = len;
 	urb->status = cc_to_error [status];
 	

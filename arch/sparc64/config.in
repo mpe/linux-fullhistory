@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.104 2000/03/15 15:02:28 jj Exp $
+# $Id: config.in,v 1.105 2000/03/24 00:34:11 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -29,6 +29,7 @@ define_bool CONFIG_SUN_KEYBOARD y
 define_bool CONFIG_SUN_CONSOLE y
 define_bool CONFIG_SUN_AUXIO y
 define_bool CONFIG_SUN_IO y
+define_bool CONFIG_ISA n
 bool 'PCI support' CONFIG_PCI
 source drivers/pci/Config.in
 
@@ -230,6 +231,7 @@ if [ "$CONFIG_NET" = "y" ]; then
 	 tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
 	 tristate 'RealTek RTL-8139 support' CONFIG_8139TOO
 	 tristate 'PCI NE2000 support' CONFIG_NE2K_PCI
+	 tristate 'VIA Rhine support' CONFIG_VIA_RHINE
 	 tristate 'EtherExpressPro/100 support' CONFIG_EEPRO100
 	 tristate 'Adaptec Starfire support' CONFIG_ADAPTEC_STARFIRE
       fi

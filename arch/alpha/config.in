@@ -55,7 +55,7 @@ choice 'Alpha system type' \
 
 # clear all implied options (don't want default values for those):
 unset CONFIG_ALPHA_EV4 CONFIG_ALPHA_EV5 CONFIG_ALPHA_EV6
-unset CONFIG_PCI CONFIG_ISA CONFIG_ALPHA_EISA
+unset CONFIG_ALPHA_EISA
 unset CONFIG_ALPHA_LCA CONFIG_ALPHA_APECS CONFIG_ALPHA_CIA
 unset CONFIG_ALPHA_T2 CONFIG_ALPHA_PYXIS CONFIG_ALPHA_POLARIS
 unset CONFIG_ALPHA_TSUNAMI CONFIG_ALPHA_MCPCIA
@@ -66,10 +66,13 @@ unset CONFIG_ALPHA_BROKEN_IRQ_MASK
 # and this doesn't activate hordes of code, so do it always.
 define_bool CONFIG_ISA y
 
-if [ "$CONFIG_ALPHA_GENERIC" = "y" ]
+if [ "$CONFIG_ALPHA_JENSEN" = "y" ]
 then
+	define_bool CONFIG_PCI n
+else
 	define_bool CONFIG_PCI y
 fi
+
 if [ "$CONFIG_ALPHA_BOOK1" = "y" ]
 then
 	define_bool CONFIG_ALPHA_NONAME y
@@ -77,22 +80,18 @@ fi
 if [ "$CONFIG_ALPHA_NONAME" = "y" -o "$CONFIG_ALPHA_EB66" = "y" \
 	-o "$CONFIG_ALPHA_EB66P" = "y" -o "$CONFIG_ALPHA_P2K" = "y" ]
 then
-	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV4 y
 	define_bool CONFIG_ALPHA_LCA y
 fi
 if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
 	-o "$CONFIG_ALPHA_EB64P" = "y" -o "$CONFIG_ALPHA_XL" = "y" ]
 then
-	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV4 y
 	define_bool CONFIG_ALPHA_APECS y
 fi
 if [ "$CONFIG_ALPHA_EB164" = "y" -o "$CONFIG_ALPHA_PC164" = "y" \
-	-o "$CONFIG_ALPHA_ALCOR" = "y" -o "$CONFIG_ALPHA_XLT" = "y" \
-	-o "$CONFIG_ALPHA_TAKARA" = "y" ]
+	-o "$CONFIG_ALPHA_ALCOR" = "y" -o "$CONFIG_ALPHA_TAKARA" = "y" ]
 then
-	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV5 y
 	define_bool CONFIG_ALPHA_CIA y
 fi
@@ -107,11 +106,9 @@ then
 		define_bool CONFIG_ALPHA_EV4 y
 		define_bool CONFIG_ALPHA_APECS y
 	fi
-	define_bool CONFIG_PCI y
 fi
 if [ "$CONFIG_ALPHA_SABLE" = "y" ]
 then
-	define_bool CONFIG_PCI y
 	bool 'EV5 CPU(s) (model 5/xxx)?' CONFIG_ALPHA_GAMMA
 	if [ "$CONFIG_ALPHA_GAMMA" = "y" ]
 	then
@@ -124,26 +121,22 @@ fi
 if [ "$CONFIG_ALPHA_MIATA" = "y" -o "$CONFIG_ALPHA_LX164" = "y" \
 	-o "$CONFIG_ALPHA_SX164" = "y" -o "$CONFIG_ALPHA_RUFFIAN" = "y" ]
 then
-	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV5 y
 	define_bool CONFIG_ALPHA_CIA y
 	define_bool CONFIG_ALPHA_PYXIS y
 fi
 if [ "$CONFIG_ALPHA_DP264" = "y" -o "$CONFIG_ALPHA_EIGER" = "y" ]
 then
-	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV6 y
 	define_bool CONFIG_ALPHA_TSUNAMI y
 fi
 if [ "$CONFIG_ALPHA_RAWHIDE" = "y" ]
 then
-	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV5 y
 	define_bool CONFIG_ALPHA_MCPCIA y
 fi
 if [ "$CONFIG_ALPHA_RX164" = "y" ]
 then
-	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV5 y
 	define_bool CONFIG_ALPHA_POLARIS y
 fi
@@ -153,7 +146,6 @@ then
 fi
 if [ "$CONFIG_ALPHA_NAUTILUS" = "y" ]
 then
-	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV6 y
 	define_bool CONFIG_ALPHA_IRONGATE y
 fi

@@ -19,11 +19,11 @@ choice 'Kernel page size'						\
 
 if [ "$CONFIG_IA64_DIG" = "y" ]; then
 	bool '  Enable Itanium A-step specific code' CONFIG_ITANIUM_ASTEP_SPECIFIC
-	bool '  Enable SoftSDV hacks' CONFIG_IA64_SOFTSDV_HACKS n
-	bool '  Enable BigSur hacks' CONFIG_IA64_BIGSUR_HACKS y
-	bool '  Enable Lion hacks' CONFIG_IA64_LION_HACKS n
-	bool '  Emulate PAL/SAL/EFI firmware' CONFIG_IA64_FW_EMU n
-	bool '  Get PCI IRQ routing from firmware/ACPI'	CONFIG_IA64_IRQ_ACPI y
+	bool '  Enable SoftSDV hacks' CONFIG_IA64_SOFTSDV_HACKS
+	bool '  Enable BigSur hacks' CONFIG_IA64_BIGSUR_HACKS
+	bool '  Enable Lion hacks' CONFIG_IA64_LION_HACKS
+	bool '  Emulate PAL/SAL/EFI firmware' CONFIG_IA64_FW_EMU
+	bool '  Get PCI IRQ routing from firmware/ACPI'	CONFIG_IA64_IRQ_ACPI
 fi
 
 if [ "$CONFIG_IA64_GENERIC" = "y" ]; then
@@ -37,33 +37,32 @@ fi
 
 define_bool CONFIG_KCORE_ELF y	# On IA-64, we always want an ELF /proc/kcore.
 
-bool 'SMP support' CONFIG_SMP n
-bool 'Performance monitor support' CONFIG_PERFMON n
+bool 'SMP support' CONFIG_SMP
+bool 'Performance monitor support' CONFIG_PERFMON
 
-bool 'Networking support' CONFIG_NET n
-bool 'System V IPC' CONFIG_SYSVIPC n
-bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT n
-bool 'Sysctl support' CONFIG_SYSCTL n
+bool 'Networking support' CONFIG_NET
+bool 'System V IPC' CONFIG_SYSVIPC
+bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
+bool 'Sysctl support' CONFIG_SYSCTL
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
-bool 'PCI support' CONFIG_PCI n
+bool 'PCI support' CONFIG_PCI
 source drivers/pci/Config.in
 
 source drivers/pcmcia/Config.in
 
 mainmenu_option next_comment
  comment 'Code maturity level options'
- bool 'Prompt for development and/or incomplete code/drivers' \
-	CONFIG_EXPERIMENTAL n
+ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
 mainmenu_option next_comment
  comment 'Loadable module support'
- bool 'Enable loadable module support' CONFIG_MODULES n
+ bool 'Enable loadable module support' CONFIG_MODULES
  if [ "$CONFIG_MODULES" = "y" ]; then
-  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS n
-  bool 'Kernel module loader' CONFIG_KMOD n
+  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+  bool 'Kernel module loader' CONFIG_KMOD
  fi
 endmenu
 
@@ -99,7 +98,7 @@ tristate 'SCSI support' CONFIG_SCSI
 
 if [ "$CONFIG_SCSI" != "n" ]; then
   source drivers/scsi/Config.in
-  bool 'Simulated SCSI disk' CONFIG_SCSI_SIM n
+  bool 'Simulated SCSI disk' CONFIG_SCSI_SIM
 fi
 endmenu
 
@@ -107,7 +106,7 @@ if [ "$CONFIG_NET" = "y" ]; then
   mainmenu_option next_comment
   comment 'Network device support'
 
-  bool 'Network device support' CONFIG_NETDEVICES n
+  bool 'Network device support' CONFIG_NETDEVICES
   if [ "$CONFIG_NETDEVICES" = "y" ]; then
     source drivers/net/Config.in
   fi
@@ -128,7 +127,7 @@ endmenu
 mainmenu_option next_comment
 comment 'CD-ROM drivers (not for SCSI or IDE/ATAPI drives)'
 
-bool 'Support non-SCSI/IDE/ATAPI drives' CONFIG_CD_NO_IDESCSI n
+bool 'Support non-SCSI/IDE/ATAPI drives' CONFIG_CD_NO_IDESCSI
 if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
   source drivers/cdrom/Config.in
 fi
@@ -145,11 +144,11 @@ source fs/nls/Config.in
 if [ "$CONFIG_VT" = "y" ]; then
   mainmenu_option next_comment
   comment 'Console drivers'
-  bool 'VGA text console' CONFIG_VGA_CONSOLE n
+  bool 'VGA text console' CONFIG_VGA_CONSOLE
+  source drivers/video/Config.in
   if [ "$CONFIG_FB" = "y" ]; then
     define_bool CONFIG_PCI_CONSOLE y
   fi
-  source drivers/video/Config.in
   endmenu
 fi
 
@@ -173,11 +172,11 @@ else
   define_bool CONFIG_MATHEMU y
 fi
 
-bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ n
-bool 'Early printk support (requires VGA!)' CONFIG_IA64_EARLY_PRINTK n
-bool 'Turn on compare-and-exchange bug checking (slow!)' CONFIG_IA64_DEBUG_CMPXCHG n
-bool 'Turn on irq debug checks (slow!)' CONFIG_IA64_DEBUG_IRQ n
-bool 'Print possible IA64 hazards to console' CONFIG_IA64_PRINT_HAZARDS n
+bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
+bool 'Early printk support (requires VGA!)' CONFIG_IA64_EARLY_PRINTK
+bool 'Turn on compare-and-exchange bug checking (slow!)' CONFIG_IA64_DEBUG_CMPXCHG
+bool 'Turn on irq debug checks (slow!)' CONFIG_IA64_DEBUG_IRQ
+bool 'Print possible IA64 hazards to console' CONFIG_IA64_PRINT_HAZARDS
 bool 'Built-in Kernel Debugger support' CONFIG_KDB
 if [ "$CONFIG_KDB" = "y" ]; then
   bool 'Compile the kernel with frame pointers' CONFIG_KDB_FRAMEPTR

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.140 2000/03/22 02:44:35 davem Exp $
+/* $Id: sys_sparc32.c,v 1.141 2000/03/24 01:31:30 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -4144,7 +4144,7 @@ asmlinkage long sparc32_open(const char * filename, int flags, int mode)
 		if (fd >= 0) {
 			struct file * f;
 			lock_kernel();
-			f = filp_open(tmp, flags, mode);
+			f = filp_open(tmp, flags, mode, NULL);
 			unlock_kernel();
 			error = PTR_ERR(f);
 			if (IS_ERR(f))

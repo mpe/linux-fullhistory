@@ -47,6 +47,8 @@ endmenu
 mainmenu_option next_comment
 comment 'General setup'
 
+define_bool CONFIG_ISA n
+
 bool 'Networking support' CONFIG_NET
 
 bool 'Directy Connected Compact Flash support' CONFIG_CF_ENABLER

@@ -36,6 +36,8 @@ bool 'Support for SUN4 machines (disables SUN4[CDM] support)' CONFIG_SUN4
 if [ "$CONFIG_SUN4" != "y" ]; then
    bool 'Support for PCI and PS/2 keyboard/mouse' CONFIG_PCI
    source drivers/pci/Config.in
+else
+   define_bool CONFIG_PCI n
 fi
 
 tristate 'Openprom tree appears in /proc/openprom' CONFIG_SUN_OPENPROMFS

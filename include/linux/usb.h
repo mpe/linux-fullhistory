@@ -604,6 +604,7 @@ extern void *usb_request_bulk(struct usb_device *, unsigned int, usb_device_irq,
 extern int usb_terminate_bulk(struct usb_device *, void *);
 
 extern void usb_init_root_hub(struct usb_device *dev);
+extern int usb_root_hub_string(int id, int serial, char *type, __u8 *data, int len);
 extern void usb_connect(struct usb_device *dev);
 extern void usb_disconnect(struct usb_device **);
 

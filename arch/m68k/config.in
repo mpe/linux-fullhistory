@@ -15,6 +15,7 @@ endmenu
 mainmenu_option next_comment
 comment 'Platform dependent setup'
 
+define_bool CONFIG_ISA n
 bool 'Amiga support' CONFIG_AMIGA
 bool 'Atari support' CONFIG_ATARI
 if [ "$CONFIG_ATARI" = "y" ]; then

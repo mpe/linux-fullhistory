@@ -269,6 +269,8 @@ void shrink_dcache_sb(struct super_block * sb)
 	struct list_head *tmp, *next;
 	struct dentry *dentry;
 
+	check_lock();
+
 	/*
 	 * Pass one ... move the dentries for the specified
 	 * superblock to the most recent end of the unused list.
@@ -315,6 +317,8 @@ int is_root_busy(struct dentry *root)
 	struct dentry *this_parent = root;
 	struct list_head *next;
 	int count = root->d_count;
+
+	check_lock();
 
 repeat:
 	next = this_parent->d_subdirs.next;
@@ -394,6 +398,8 @@ static int select_parent(struct dentry * parent)
 	struct dentry *this_parent = parent;
 	struct list_head *next;
 	int found = 0;
+
+	check_lock();
 
 repeat:
 	next = this_parent->d_subdirs.next;
@@ -655,6 +661,8 @@ out:
  */
 void d_delete(struct dentry * dentry)
 {
+	check_lock();
+
 	check_lock();
 
 	/*
