@@ -98,84 +98,85 @@ ifeq ($(CONFIG_BLK_DEV_HD),y)
 L_OBJS += hd.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_IDE),y)
-  LX_OBJS += ide.o
-  ifeq ($(CONFIG_PROC_FS),y)
-    L_OBJS += ide-proc.o
-  endif
-  L_OBJS += ide-probe.o
-else
-  ifeq ($(CONFIG_BLK_DEV_IDE),m)
-  MIX_OBJS += ide.o
-  # ide-mod includes ide-proc
-  M_OBJS += ide-mod.o
-  MX_OBJS += ide-probe.o
-  endif
-endif
-
 ifeq ($(CONFIG_BLK_DEV_RZ1000),y)
-L_OBJS += rz1000.o
+IDE_OBJS += rz1000.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_CMD640),y)
-L_OBJS += cmd640.o
+IDE_OBJS += cmd640.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDEPCI),y)
-L_OBJS += ide-pci.o
+IDE_OBJS += ide-pci.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDEDMA),y)
-L_OBJS += ide-dma.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_PS2),y)
-L_OBJS += ps2esdi.o
+IDE_OBJS += ide-dma.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_DTC2278),y)
-L_OBJS += dtc2278.o
+IDE_OBJS += dtc2278.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_HT6560B),y)
-L_OBJS += ht6560b.o
+IDE_OBJS += ht6560b.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_QD6580),y)
-L_OBJS += qd6580.o
+IDE_OBJS += qd6580.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_UMC8672),y)
-L_OBJS += umc8672.o
+IDE_OBJS += umc8672.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_ALI14XX),y)
-L_OBJS += ali14xx.o
+IDE_OBJS += ali14xx.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_PDC4030),y)
-L_OBJS += pdc4030.o
+IDE_OBJS += pdc4030.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_TRM290),y)
-L_OBJS += trm290.o
+IDE_OBJS += trm290.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_OPTI621),y)
-L_OBJS += opti621.o
+IDE_OBJS += opti621.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_NS87415),y)
-L_OBJS += ns87415.o
+IDE_OBJS += ns87415.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_CMD646),y)
-L_OBJS += cmd646.o
+IDE_OBJS += cmd646.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_SL82C105),y)
-L_OBJS += sl82c105.o
+IDE_OBJS += sl82c105.o
 endif
+
+### if CONFIG_BLK_DEV_IDE is n, IDE_OBJS will be ignored
+
+ifeq ($(CONFIG_PROC_FS),y)
+IDE_OBJS += ide-proc.o
+endif
+  
+###Collect
+
+ifeq ($(CONFIG_BLK_DEV_IDE),y)
+  LX_OBJS += ide.o
+  L_OBJS += ide-probe.o $(IDE_OBJS)
+else
+  ifeq ($(CONFIG_BLK_DEV_IDE),m)
+  MIX_OBJS += ide.o $(IDE_OBJS)
+  M_OBJS += ide-mod.o ide-probe.o
+  endif
+endif
+
+############
 
 ifeq ($(CONFIG_BLK_DEV_IDEDISK),y)
 L_OBJS += ide-disk.o
@@ -207,6 +208,10 @@ else
   ifeq ($(CONFIG_BLK_DEV_IDEFLOPPY),m)
   M_OBJS += ide-floppy.o
   endif
+endif
+
+ifeq ($(CONFIG_BLK_DEV_PS2),y)
+L_OBJS += ps2esdi.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_XD),y)
@@ -273,5 +278,5 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-ide-mod.o: ide.o ide-proc.o
-	$(LD) $(LD_RFLAG) -r -o $@ ide.o ide-proc.o
+ide-mod.o: ide.o $(IDE_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ ide.o $(IDE_OBJS)

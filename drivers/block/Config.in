@@ -16,7 +16,7 @@ else
   dep_tristate '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
   dep_tristate '   Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
   dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
-  if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
+  if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
     bool '   CMD640 chipset bugfix/support' CONFIG_BLK_DEV_CMD640
     if [ "$CONFIG_BLK_DEV_CMD640" = "y" ]; then
       bool '     CMD640 enhanced support' CONFIG_BLK_DEV_CMD640_ENHANCED
@@ -48,7 +48,9 @@ else
       bool '     QDI QD6580 support' CONFIG_BLK_DEV_QD6580
       bool '     UMC-8672 support' CONFIG_BLK_DEV_UMC8672
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+        if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
         bool '     PROMISE DC4030 support (EXPERIMENTAL)' CONFIG_BLK_DEV_PDC4030
+	 fi
       fi
     fi
   fi

@@ -51,7 +51,7 @@ int sysctl_overcommit_memory;
 /* Check that a process has enough memory to allocate a
  * new virtual mapping.
  */
-static inline int vm_enough_memory(long pages)
+int vm_enough_memory(long pages)
 {
 	/* Stupid algorithm to decide if we have enough memory: while
 	 * simple, it hopefully works in most obvious cases.. Easy to
@@ -318,27 +318,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {
 		mm->locked_vm += len >> PAGE_SHIFT;
-
-/*
- * This used to be just slightly broken, now it's just completely
- * buggered. We can't take a page fault here, because we already
- * hold the mm semaphore (as is proper). We should do this by hand
- * by calling the appropriate fault-in routine.
- *
- * That would also fix this routine wrt writes and PROT_NONE
- * areas, both of which can't be handled by the page fault
- * approach anyway.
- */
-#if 0
-		unsigned long start = addr;
-		do {
-			char c;
-			get_user(c,(char *) start);
-			len -= PAGE_SIZE;
-			start += PAGE_SIZE;
-			__asm__ __volatile__("": :"r" (c));
-		} while (len > 0);
-#endif
+		make_pages_present(addr, addr + len);
 	}
 	return addr;
 

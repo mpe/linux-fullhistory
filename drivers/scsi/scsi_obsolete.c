@@ -180,7 +180,8 @@ void scsi_old_times_out (Scsi_Cmnd * SCpnt)
         scsi_reset (SCpnt,
 		    SCSI_RESET_ASYNCHRONOUS | SCSI_RESET_SUGGEST_BUS_RESET);
         break;
-    case (IN_ABORT | IN_RESET | IN_RESET2):
+    case IN_RESET2:
+    case (IN_ABORT | IN_RESET2):
 	/* Obviously the bus reset didn't work.
 	 * Let's try even harder and call for an HBA reset.
          * Maybe the HBA itself crashed and this will shake it loose.

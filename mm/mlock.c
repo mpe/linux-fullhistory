@@ -126,26 +126,7 @@ static int mlock_fixup(struct vm_area_struct * vma,
 		if (!(newflags & VM_LOCKED))
 			pages = -pages;
 		vma->vm_mm->locked_vm += pages;
-
-#if 0
-/*
- * This is horribly broken. See the comment on the same
- * brokenness in mm/mmap.c (essentially, this doesn't
- * work anyway for PROT_NONE and writable pages, and now
- * that we properly get the mmap semaphore it would just
- * lock up on us).
- *
- * Fix the same way.
- */
-		if (newflags & VM_LOCKED) {
-			while (start < end) {
-				int c;
-				get_user(c,(int *) start);
-				__asm__ __volatile__("": :"r" (c));
-				start += PAGE_SIZE;
-			}
-		}
-#endif
+		make_pages_present(start, end);
 	}
 	return retval;
 }

@@ -3219,127 +3219,104 @@ CONFIG_SCSI_NCR53C7xx_DISCONNECT
 
 NCR53C8XX SCSI support
 CONFIG_SCSI_NCR53C8XX
-  This is the BSD ncr driver adapted to Linux for the NCR53C8XX family
+  This is the BSD ncr driver adapted to linux for the NCR53C8XX family
   of PCI-SCSI controllers. This driver supports parity checking,
-  tagged command queuing, Fast-20 data transfer up to 20 MB/s with
-  narrow SCSI devices and 40 MB/s with wide SCSI devices.
+  tagged command queuing and fast synchronous data transfers up to 80 MB/s 
+  with wide FAST-40 LVD devices and controllers.
+  The NCR53C860 and NCR53C875 support FAST-20 transfers. The NCR53C895 
+  supports FAST-40 transfers with Ultra2 LVD devices.
   Please read drivers/scsi/README.ncr53c8xx for more information.
-  Linux/i386, Linux/Alpha and Linux/PPC are supported by this driver.
+  Linux/i386 and Linux/Alpha are supported by this driver.
 
 synchronous data transfers frequency
 CONFIG_SCSI_NCR53C8XX_SYNC
-  SCSI-2 specifications allow SCSI devices to negotiate a synchronous 
-  transfer period of 25 nano-seconds or more.
-
-  The transfer period value is 4 times the agreed transfer period.
-  So, data can be transferred at a 10 MHz frequency, allowing 10
-  MB/second throughput with 8 bits SCSI-2 devices and 20 MB/second
-  with wide16 devices.  This frequency can be used safely with
-  differential devices but may cause problems with single-ended
-  devices.
-
-  Specify 0 if you want to only use asynchronous data transfers.
-  Otherwise, specify a value between 5 and 10.  Commercial O/Ses
-  generally use 5 Mhz frequency for synchronous transfers.  It is a
-  reasonable default value.
-
-  However, a flawless single-ended SCSI bus supports 10 MHz data
-  transfers.  Regardless of the value chosen in the Linux
-  configuration, the synchronous period can be changed after boot-up
-  through the /proc/scsi file system. The generic command is:
-
-      echo "setsync #target period" >/proc/scsi/ncr53c8xx/0
-
-  Use a 25 ns period for 10 Mhz synchronous data transfers.
-  If you don't know what to do now, go with the default.
+  The SCSI Parallel Interface-2 Standard defines 4 classes of transfer 
+  rates: FAST-5, FAST-10, FAST-20 and FAST-40. The numbers are respectively 
+  the maximum data transfer rates in mega-transfers per second for each 
+  class. For example, a FAST-20 Wide 16 device is able to transfer data 
+  at up to 40 MB/s. 
+  You may specify 0 if you want to only use asynchronous data transfers.
+  Otherwise, specify a value between 5 and 40, depending on the capability  
+  of your SCSI controller. Note that 40 should normally be ok since the 
+  driver narrows the value according to controllers capabilities.
+  This option has no effect for adapters with NVRAM, since the driver will 
+  get this information from the user set-up. It also can be overriden using 
+  a boot setup option, as follow (example):
+  'ncr53c8xx=sync:12' will allow the driver to negotiate for FAST-20  
+  synchronous data transfer (20 mega-transfers per second).
+  The normal answer therefore is not to go with the default but to select 
+  the maximum value 40 allowing the driver to use the maximum value 
+  supported by each controller.
+  There is no safe option other than using good cabling, right terminations 
+  and SCSI conformant devices.
 
 use normal IO
 CONFIG_SCSI_NCR53C8XX_IOMAPPED
   This option allows you to force the driver to use normal IO.
-  Memory mapped IO has less latency than normal IO and works for most 
-  Intel-based hardware.  Under Linux/Alpha and Linux/PPC only normal 
-  IO is currently supported by the driver and so, this option has no
-  effect. On Linux/PPC MMIO and normal IO are done the same (all IO
-  is memory mapped) so you lose nothing by using normal IO. The normal
-  answer therefore is N. Try Y only if you have problems.
+  Memory mapped IO has less latency than normal IO and works for most
+  Intel-based hardware.
+  Under Linux/Alpha only normal IO is currently supported by the
+  driver and so, this option has no effect.
+  The normal answer therefore is N.
 
 not allow targets to disconnect
 CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
-  This option is only provided for safety if you suspect some SCSI
+  This option is only provided for safety if you suspect some scsi
   device of yours to not support properly the target-disconnect
   feature. In that case, you would say Y here. In general however, to
   not allow targets to disconnect is not reasonable if there is more
-  than 1 device on a SCSI bus.  The normal answer therefore is N.
+  than 1 device on a scsi bus.  The normal answer therefore is N.
 
-detect and read serial NVRAMs
-CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
-  Enable support for reading the serial NVRAM data on Symbios and some
-  Symbios compatible cards, and Tekram DC390W/U/F cards. Useful for
-  systems with more than one Symbios compatible controller where at
-  least one has a serial NVRAM, or for a system with a mixture of
-  Symbios and Tekram cards. Enables setting the boot order of host
-  adaptors to something other than the default order or "reverse
-  probe" order.  Also enables Symbios and Tekram cards to be
-  distinguished so that the option "assume boards are SYMBIOS
-  compatible" (CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT) below may be set
-  in a system with a mixture of Symbios and Tekram cards so that the
-  Symbios cards can make use of the full range of Symbios features,
-  differential, led pin, without causing problems for the Tekram
-  card(s).  Also enables setting host and targets SCSI features as
-  defined in the user setup for each host using a serial NVRAM. Read
-  drivers/scsi/README.ncr53c8xx for more information. The default
-  answer is N, the normal answer should be Y.
-
-enable tagged command queuing
-CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
+default tagged command queue depth
+CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS
   This option allows you to enable tagged command queuing support at
-  Linux start-up.  Some SCSI devices do not properly support this
-  feature.  The suggested method is to say N here and to use the
-  "settags" control command after boot-up to enable this feature:
-
-      echo "settags 2 4" >/proc/scsi/ncr53c8xx/0
-
-  asks the driver to use up to 4 concurrent tagged commands for target
-  2 of controller 0.
-
-  See the file drivers/scsi/README.ncr53c8xx for more information.
-  WARNING! If you say Y here, then you have to say N to "not allow
-  targets to disconnect", above.
-
-  The safe answer therefore is N.
-  The normal answer therefore is Y.
+  linux start-up and to define the default value for the number of 
+  tags per device. If you donnot want tagged command queuing to be 
+  used by the driver you must enter either 0 or 1 for this option.
+  The default value is 8 and should be supported by most hard disks.
+  This option has no effect for adapters with NVRAM, since the driver 
+  will get this information from the user set-up. It also can be 
+  overriden using a boot setup option, as follow (example):
+  'ncr53c8xx=tags:4/t2t3q16/t0u2q10' will set default queue depth to 4, 
+  set queue depth to 16 for target 2 and target 3 on controller 0 and 
+  set queue depth to 10 for target 0 / lun 2 on controller 1.
+  The normal answer therefore is to go with the default 8 and to use 
+  a boot command line option for devices that need to use a different 
+  command queue depth.
+  There is no safe option other than using good scsi devices.
 
 maximum number of queued commands
 CONFIG_SCSI_NCR53C8XX_MAX_TAGS
   This option allows you to specify the maximum number of commands
-  that can be queued to a device, when tagged command queuing is
-  possible.  The default value is 4. Minimum is 2, maximum is 12.  The
-  normal answer therefore is the default one.
-
+  that can be queued to any device, when tagged command queuing is
+  possible.  The default value is 32. Minimum is 2, maximum is 64.
+  For value less than 32, this option only spares a fiew memory 
+  (8*7*(32-MAXTAGS) bytes), so using less than 32 is'nt worth it.
+  For value greater than 32, latency on reselection will be increased 
+  of 1 or 2 micro-seconds. So, the normal answer here is to go with the 
+  default value 32 unless you are using very large hard disks with 
+  large cache (>= 1MB) that are able to get advantage of more than 
+  32 tagged commands.
+  There is no safe option and the default answer is recommended.
+ 
 assume boards are SYMBIOS compatible
 CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
   This option allows you to enable some features depending on GPIO
   wiring.  These General Purpose Input/Output pins can be used for
   vendor specific features or implementation of the standard SYMBIOS
   features.  Genuine SYMBIOS boards use GPIO0 in output for controller
-  LED and GPIO3 bit as a flag indicating single-ended/differential
-  interface.
+  LED and GPIO3 bit as a flag indicating singled-ended/differential
+  interface. The Tekram DC-390U/F boards uses a different GPIO wiring.
+  This option is useless if all your boards have NVRAM, since the driver 
+  is able to detect the board type from the NVRAM format.
 
-  If all the boards of your system are genuine SYMBIOS boards or use
-  BIOS and drivers from SYMBIOS, you would want to say Y here.
-  The driver behaves correctly on my system with this option enabled.
-  (SDMS 4.0 + Promise SCSI ULTRA 875 rev 0x3 + ASUS SC200 810A rev
-  0x12).  This option must be set to N if your system has at least one
-  53C8XX based SCSI board with a vendor-specific BIOS (example: Tekram
-  DC-390/U/W/F). 
-
-  However, if all your non Symbios compatible boards have NVRAM,
-  saying Y to "detect and read serial NVRAMs"
-  (CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT) above allows the driver to
-  distinguish Symbios compatible boards from other ones; you can then
-  also answer Y here.
-
-  If unsure, say N.
+enable profiling statistics gathering
+CONFIG_SCSI_NCR53C8XX_PROFILE
+  This option allows you to enable profiling informations gathering.
+  This statististics are not very accurate due to the low frequency 
+  of the kernel clock (100 Hz on i386) and have performance impact 
+  on systems that use very fast devices.
+  The normal answer therefore is N.
 
 IBMMCA SCSI support
 CONFIG_SCSI_IBMMCA

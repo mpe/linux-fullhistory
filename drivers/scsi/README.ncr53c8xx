@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-2 January 1998
+27 June 1998
 ===============================================================================
 
 1.  Introduction
@@ -22,7 +22,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       8.5  Set debug mode
       8.6  Clear profile counters
       8.7  Set flag (no_sync)
-      8.8  Debug error recovery
+      8.8  Set verbose level
 9.  Configuration parameters
 10. Boot setup commands
       10.1 Syntax
@@ -33,9 +33,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       10.6 SCSI BUS checking boot option
 11. Some constants and flags of the ncr53c8xx.h header file
 12. Installation
-      12.1 Provided files
-      12.2 Installation procedure
-13. Control commands under linux-1.2.13
+13. Architecture dependant features
 14. Known problems
       14.1 Tagged commands with Iomega Jaz device
       14.2 Device names change when another controller is added
@@ -93,7 +91,7 @@ This driver has been tested OK with linux/i386, Linux/Alpha and Linux/PPC.
 
 Latest driver version and patches are available at:
 
-          ftp://linux.wauug.org/pub/roudier
+          ftp://ftp.tux.org/pub/people/gerard-roudier
 
 I am not a native speaker of English and there are probably lots of
 mistakes in this README file. Any help will be welcome.
@@ -112,19 +110,19 @@ The following features are supported for all chips:
 "Wide negotiation" is supported for chips that allow it.  The
 following table shows some characteristics of NCR 8xx family chips:
 
-       On board                        Supported by    Tested with
-Chip   SDMS BIOS   Wide   Ultra SCSI   the driver      the driver
-----   ---------   ----   ----------   ------------    -----------
-810        N         N        N            Y             Y
-810A       N         N        N            Y             Y
-815        Y         N        N            Y             Y
-825        Y         Y        N            Y             Y
-825A       Y         Y        N            Y             Y
-860        N         N        Y            Y             Y
-875        Y         Y        Y            Y             Y
-895        Y         Y        Y(1)         Y             not yet 
+       On board                                  Supported by 
+Chip   SDMS BIOS   Wide   SCSI std.   Max. sync   the driver
+----   ---------   ----   ---------   ----------  ------------
+810        N         N      FAST10    10 MB/s        Y
+810A       N         N      FAST10    10 MB/s        Y
+815        Y         N      FAST10    10 MB/s        Y
+825        Y         Y      FAST10    20 MB/s        Y
+825A       Y         Y      FAST10    20 MB/s        Y
+860        N         N      FAST20    20 MB/s        Y
+875        Y         Y      FAST20    40 MB/s        Y
+876        Y         Y      FAST20    40 MB/s        Y
+895        Y         Y      FAST40    80 MB/s        Y
 
-(1) The 895 chip is supported 'on paper'.
 
 3. Summary of other supported features.
 
@@ -152,49 +150,88 @@ driver to use normal I/O in all cases.
 
 5. Tagged command queueing
 
-Some SCSI devices do not properly support tagged command queuing.  A
-safe configuration is to not enable tagged command queuing support at
-boot-up, and to enable support of it with the control command
-"settags" described further in this text.
+Queuing more than 1 command at a time to a device allows it to perform 
+optimizations based on actual head positions and its mechanical 
+characteristics. This feature may also reduce average command latency.
+In order to really gain advantage of this feature, devices must have 
+a reasonnable cache size (No miracle is to be expected for a low-end 
+hard disk with 128 KB or less).
+Some kown SCSI devices do not properly support tagged command queuing.
+Generally, firmware revisions that fix this kind of problems are available 
+at respective vendor web/ftp sites.
+All I can say is that the hard disks I use on my machines behave well with 
+this driver with tagged command queuing enabled:
 
-Once you are sure that all your devices properly support tagged
-command queuing, you can enable it by default with the
-CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE configuration option.
+- IBM S12 0662
+- Conner 1080S
+- Quantum Atlas I
+- Quantum Atlas II
+
+If your controller has NVRAM, you can configure this feature per target 
+from the user setup tool. The Tekram Setup program allows to tune the 
+maximum number of queued commands up to 32. The Symbios Setup only allows 
+to enable or disable this feature.
 
 The maximum number of simultaneous tagged commands queued to a device
-is currently set to 4 by default. It is defined in the file
-ncr53c8xx.h by SCSI_NCR_MAX_TAGS. This value is suitable for most SCSI
-disks.  With large SCSI disks (> 2GB, cache > 512KB average seek time
-< 10 ms), 8 tagged commands may give better performance.
+is currently set to 8 by default.  This value is suitable for most SCSI
+disks.  With large SCSI disks (>= 2GB, cache >= 512KB, average seek time
+<= 10 ms), using a larger value may give better performances.
+The driver supports up to 64 commands per device, but using more than 
+32 is generally not worth it, unless you are using a very large disk 
+or disk array.
+
+If your controller does not have NVRAM or if it is managed by the SDMS 
+BIOS/SETUP, you can configure tagged queueing feature and device queue 
+depths from the boot command-line. For example:
+
+  ncr53c8xx=tags:4/t2t3q15-t4q7/t1u0q32
+
+will set tagged commands queue depths as follow:
+
+- target 2  all luns  on controller 0 --> 15
+- target 3  all luns  on controller 0 --> 15
+- target 4  all luns  on controller 0 -->  7
+- target 1  lun 0     on controller 1 --> 32
+- all other target/lun                -->  4
 
 In some special conditions, some SCSI disk firmwares may return a
 QUEUE FULL status for a SCSI command. This behaviour is managed by the
-driver by the following heuristic:
+driver using the following heuristic:
 
-- Each time a QUEUE FULL status is returned, tagged command queueing is 
-  temporarily disabled. 
+- Each time a QUEUE FULL status is returned, tagged queue depth is reduced 
+  to the actual number of disconnected commands. 
 
-- Every 100 successfully completed SCSI commands, if allowed by the
-  current limit, the maximum number of queueable commands is
-  incremented and tagged command queueing is reenabled.
+- Every 1000 successfully completed SCSI commands, if allowed by the
+  current limit, the maximum number of queueable commands is incremented.
 
+Since QUEUE FULL status reception and handling is resource wasting, the 
+driver notifies by default this problem to user by indicating the actual 
+number of commands used and their status, as well as its decision on the 
+device queue depth change.
+The heuristic used by the driver in handling QUEUE FULL ensures that the 
+impact on performances is not too bad. You can get rid of the messages by 
+setting verbose level to zero, as follow:
+
+1st method: boot your system using 'ncr53c8xx=verb:0' option.
+2nd method: apply "setverbose 0" control command to the proc fs entry 
+            corresponding to your controller after boot-up.
 
 6. Parity checking
 
 The driver supports SCSI parity checking and PCI bus master parity
 checking.  These features must be enabled in order to ensure safe data
 transfers.  However, some flawed devices or mother boards will have
-problems with parity. You can disable parity by choosing first
-"CONFIG_EXPERIMENTAL".  Then, "make config" will allow to set the
-following configuration options:
-
-   CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK  (disable SCSI parity checking)
-   CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK (disable master parity checking)
-
+problems with parity. You can disable either PCI parity or SCSI parity 
+checking by entering appropriate options from the boot command line.
+(See 10: Boot setup commands).
 
 7. Profiling information
 
 Profiling information is available through the proc SCSI file system.
+Since gathering profiling information may impact performances, this 
+feature is disabled by default and requires a compilation configuration 
+option to be set to Y.
+
 The device associated with a host has the following pathname:
 
           /proc/scsi/ncr53c8xx/N     (N=0,1,2 ....)
@@ -346,7 +383,7 @@ Available commands:
 
     target:    target number
     tags:      number of concurrent tagged commands
-               must not be greater than SCSI_NCR_MAX_TAGS (default: 4)
+               must not be greater than SCSI_NCR_MAX_TAGS (default: 8)
 
 8.4 Set order type for tagged command
 
@@ -404,26 +441,12 @@ Available commands:
       will allow disconnection for all devices on the SCSI bus.
 
 
-8.8 Debug error recovery
+8.8 Set verbose level
 
-    debug_error_recovery <error to trigger>
+    setverbose #level
 
-    Available error type to trigger:
-        sge:     SCSI gross error
-        abort:   abort command from the middle-level driver
-        reset:   reset command from the middle-level driver
-        parity:  scsi parity detected in DATA IN phase
-        none:    restore driver normal behaviour
-
-    The code corresponding to this feature is normally not compiled.
-    Its purpose is driver testing only. In order to compile the code 
-    that allows to trigger error recovery you must define at compile time 
-    SCSI_NCR_DEBUG_ERROR_RECOVERY.
-    If you have compiled the driver with this option, nothing will happen 
-    as long as you donnot use the control command 'debug_error_recovery' 
-    with sge, abort, reset or parity as argument.
-    If you select an error type, it will be triggered by the driver every 
-    30 seconds.
+    The driver default verbose level is 1. This command allows to change 
+    th driver verbose level after boot-up.
 
 9. Configuration parameters
 
@@ -433,6 +456,11 @@ if only one has a flaw for some SCSI feature, you can disable the
 support by the driver of this feature at linux start-up and enable
 this feature after boot-up only for devices that support it safely.
 
+CONFIG_SCSI_NCR53C8XX_PROFILE_SUPPORT  (default answer: n)
+    This option must be set for profiling information to be gathered 
+    and printed out through the proc file system. This features may 
+    impact performances.
+
 CONFIG_SCSI_NCR53C8XX_IOMAPPED       (default answer: n)
     Answer "y" if you suspect your mother board to not allow memory mapped I/O.
     May slow down performance a little.  This option is required by
@@ -440,13 +468,12 @@ CONFIG_SCSI_NCR53C8XX_IOMAPPED       (default answer: n)
     suffers no performance loss with this option since all IO is memory
     mapped anyway.
 
-CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE    (default answer: n)
-    Answer "y" if you are sure that all your SCSI devices that are able to 
-    accept tagged commands will proceed safely.
+CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS    (default answer: 8)
+    Default tagged command queue depth.
 
-CONFIG_SCSI_NCR53C8XX_MAX_TAGS         (default answer: 4)
+CONFIG_SCSI_NCR53C8XX_MAX_TAGS         (default answer: 8)
     This option allows you to specify the maximum number of tagged commands 
-    that can be queued to a device.
+    that can be queued to a device. The maximum supported value is 32.
 
 CONFIG_SCSI_NCR53C8XX_SYNC            (default answer: 5)
     This option allows you to specify the frequency in MHz the driver 
@@ -535,8 +562,8 @@ Scsi disconnections
       disc:n     disabled
  
 Special features
-   Only apply to 810A, 825A, 860 and 875 controllers.
-   Have no effect with normal 810 and 825.
+   Only apply to 810A, 825A, 860, 875 and 895 controllers.
+   Have no effect with other ones.
       specf:y    (or 1) enabled
       specf:n    (or 0) disabled
       specf:3           enabled except Memory Write And Invalidate
@@ -545,17 +572,25 @@ Special features
    Invalidate.
 
 Ultra SCSI support
-   Only apply to 860 and 875 controllers.
+   Only apply to 860, 875 and 895 controllers.
    Have no effect with other ones.
-      ultra:y    enabled
+      ultra:2    Ultra2 enabled
+      ultra:1    Ultra enabled
       ultra:n    disabled
 
-Number of tagged commands
+Default number of tagged commands
       tags:0     (or tags:1 ) tagged command queuing disabled
       tags:#tags (#tags  > 1) tagged command queuing enabled
   #tags will be truncated to the max queued commands configuration parameter.
-  If the driver is configured with a maximum of 4 queued commands, tags:4 is 
-  the right argument to specify.
+  This option also allows to specify a command queue depth for each device 
+  that support tagged command queueing.
+  Example:
+      ncr53c8xx=tags:10/t2t3q16-t5q24/t1u2q32
+               will set devices queue depth as follow:
+      - controller #0 target #2 and target #3                  -> 16 commands,
+      - controller #0 target #5                                -> 24 commands,
+      - controller #1 target #1 logical unit #2                -> 32 commands,
+      - all other logical units (all targets, all controllers) -> 10 commands.
 
 Default synchronous period factor
       sync:255     disabled (asynchronous transfer mode)
@@ -692,7 +727,7 @@ Boot fail safe
 If the driver has been configured with default options, the equivalent 
 boot setup is:
 
-   ncr53c8xx=mpar:y,spar:y,disc:y,specf:3,fsn:n,ultra:y,fsn:n,revprob:n,verb:1\
+   ncr53c8xx=mpar:y,spar:y,disc:y,specf:3,fsn:n,ultra:2,fsn:n,revprob:n,verb:1\
              tags:0,sync:50,debug:0,burst:7,led:0,wide:1,settle:2,diff:0,irqm:0
 
 For an installation diskette or a safe but not fast system,
@@ -705,8 +740,8 @@ boot setup can be:
 
 My personnal system works flawlessly with the following equivalent setup:
 
-   ncr53c8xx=mpar:y,spar:y,disc:y,specf:1,fsn:n,ultra:y,fsn:n,revprob:n,verb:1\
-             tags:8,sync:12,debug:0,burst:7,led:1,wide:1,settle:2,diff:0,irqm:0
+   ncr53c8xx=mpar:y,spar:y,disc:y,specf:1,fsn:n,ultra:2,fsn:n,revprob:n,verb:1\
+             tags:32,sync:12,debug:0,burst:7,led:1,wide:1,settle:2,diff:0,irqm:0
 
 The driver prints its actual setup when verbosity level is 2. You can try 
 "ncr53c8xx=verb:2" to get the "static" setup of the driver, or add "verb:2" 
@@ -723,8 +758,8 @@ Available option bits:
 
 Use 'pcifix:3' in order to allow the driver to fix both PCI features.
 
-These options only apply to new SYMBIOS chips 810A, 825A, 860 and 875 
-and are only supported for Pentium and 486 class processors.
+These options only apply to new SYMBIOS chips 810A, 825A, 860, 875 
+and 895 and are only supported for Pentium and 486 class processors.
 Recent SYMBIOS 53C8XX scsi processors are able to use PCI read multiple 
 and PCI write and invalidate commands. These features require the 
 cache line size register to be properly set in the PCI configuration 
@@ -737,7 +772,7 @@ invalidate bit in the PCI configuration space of 53C8XX chips.
 Optimized PCI accesses may be broken for some PCI/memory controllers or 
 make problems with some PCI boards.
 
-This fix-up works flawlessly on my system.
+This fix-up worked flawlessly on my previous system.
 (MB Triton HX / 53C875 / 53C810A)
 I use these options at my own risks as you will do if you decide to 
 use them too.
@@ -812,17 +847,12 @@ Some of these are defined from the configuration parameters.  To
 change other "defines", you must edit the header file.  Do that only
 if you know what you are doing.
 
-SCSI_NCR_SETUP_ULTRA_SUPPORT	(default: defined)
-	Ultra SCSI support.
-	Can be changed by the following boot setup command:
-		ncr53c8xx=ultra:n
-
 SCSI_NCR_SETUP_SPECIAL_FEATURES	(default: defined)
 	If defined, the driver will enable some special features according  
 	to chip and revision id.
-        For 810A, 860, 825A and 875 scsi chips, this option enables support 
-        of features that reduce load of PCI bus and memory accesses during  
-        scsi transfer processing: burst op-code fetch, read multiple, 
+        For 810A, 860, 825A, 875 and 895 scsi chips, this option enables 
+	support of features that reduce load of PCI bus and memory accesses 
+	during  scsi transfer processing: burst op-code fetch, read multiple, 
         read line, prefetch, cache line line, write and invalidate, 
         burst 128 (875 only), large dma fifo (875 only), offset 16 (875 only).
 	Can be changed by the following boot setup command:
@@ -834,7 +864,7 @@ SCSI_NCR_IOMAPPED		(default: not defined)
 SCSI_NCR_SHARE_IRQ		(default: defined)
 	If defined, request shared IRQ.
 	
-SCSI_NCR_MAX_TAGS		(default: 4)
+SCSI_NCR_MAX_TAGS		(default: 8)
 	Maximum number of simultaneous tagged commands to a device.
 	Can be changed by "settags <target> <maxtags>"
 
@@ -843,7 +873,7 @@ SCSI_NCR_SETUP_DEFAULT_SYNC     (default: 50)
 	negotiation. 0 means asynchronous.
 	Can be changed by "setsync <target> <period factor>"
 
-SCSI_NCR_SETUP_DEFAULT_TAGS     (default: 4)
+SCSI_NCR_SETUP_DEFAULT_TAGS     (default: 8)
 	Default number of simultaneous tagged commands to a device.
 	< 1 means tagged command queuing disabled at start-up.
 
@@ -864,7 +894,7 @@ SCSI_NCR_SETUP_MASTER_PARITY	(default: defined)
 SCSI_NCR_SETUP_MASTER_PARITY	(default: defined)
 	If defined, SCSI parity checking is enabled.
 
-SCSI_NCR_PROFILE		(default: defined)
+SCSI_NCR_PROFILE_SUPPORT	(default: not defined)
 	If defined, profiling information is gathered.
 
 SCSI_NCR_MAX_SCATTER		(default: 128)
@@ -899,67 +929,28 @@ SCSI_NCR_MAX_LUN	(default: 8)
 
 12. Installation
 
-12.1 Provided files
+This driver is part of the linux kernel distribution.
+Driver files are located in the sub-directory "drivers/scsi" of the 
+kernel source tree.
 
-Driver and common files:
+Driver files:
 
 	README.ncr53c8xx	: this file
 	ChangeLog.ncr53c8xx	: change log
-	ConfigHelp.ncr53c8xx	: Part of Configure.help about the driver
 	ncr53c8xx.h		: definitions
 	ncr53c8xx.c		: the driver code
-	scsitag.c		: command tool to enable tagged queue
-	conf.modules		: sample of /etc/conf.modules
 
-	Install.ncr53c8xx	: installation script
+New driver versions are made available separately in order to allow testing 
+changes and new features prior to including them into the linux kernel 
+distribution. The following URL provides informations on latest avalaible 
+patches: 
 
-	Patch-1.2.13.ncr53c8xx  : patch for linux-1.2.13
-	Patch-2.0.29.ncr53c8xx  : patch for linux-2.0.29
-
-You must untar the distribution with the following command:
-
-	tar zxvf ncrBsd2Linux-2.2b-src.tar.gz
-
-The sub-directory ncr53c8xx-2.2b will be created. Change to this directory.
+      ftp://ftp.tux.org/pub/people/gerard-roudier/README
 
 
-12.2 Installation procedure
+13. Architecture dependant features.
 
-This install script has been tested with linux-1.2.13 and 2.0.29.
-
-This procedure copies the new driver files to the kernel tree and
-applies a patch to some files of the kernel tree.
-
-	If your linux directory is at the standard location
-	"/usr/src/linux", just enter:
-		Install.ncr53c8xx
-
-	Else enter:
-		Install.ncr53c8xx <your_linux_directory>
-
-	Make the kernel:
-		Change to linux source directory
-		Configure with NCR53C7,8XX support = N
-		Configure with NCR53C8XX   support = Y (or m)
-		Make dependencies
-		Make the kernel (use make zdisk first)
-		Make and install modules if you have configured with 'm'
-
-
-13. Control commands under linux-1.2.13
-
-Profiling data and control commands using the proc SCSI file system
-are not available for linux-1.2.13.  The only control command
-available is "scsitag" which allows you to enable tagged command
-queuing support after linux boot-up.
-
-Tagged command queueing is disabled by default at system startup.
-
-You can enable tagged queue per device with the following command:
-
-	scsitag device_name (ex: scsitag /dev/sda)
-
-Use "cc -o scsitag scsitag.c" to create the "scsitag" executable.
+<Not yet written>
 
 
 14. Known problems
@@ -1079,7 +1070,7 @@ Try to enable one feature at a time with control commands.  For example:
   Will reset flags (no_sync) for target 3, and so will allow it to disconnect 
   the SCSI Bus.
 
-- echo "settags 3 4" >/proc/scsi/ncr53c8xx/0
+- echo "settags 3 8" >/proc/scsi/ncr53c8xx/0
   Will enable tagged command queuing for target 3 if that device supports it.
 
 Once you have found the device and the feature that cause problems, just 
@@ -1100,12 +1091,14 @@ Periods are in nano-seconds and speeds are in Mega-transfers per second.
 1 Mega-transfers/second means 1 MB/s with 8 bits SCSI and 2 MB/s with 
 Wide16 SCSI.
 
-16.1 Synchronous timings for 53C875 and 53C860 Ultra-SCSI controllers
+16.1 Synchronous timings for 53C895, 53C875 and 53C860 SCSI controllers
 
  ----------------------------------------------
  Negotiated                     NCR settings
  Factor   Period   Speed        Period   Speed
  ------   ------   ------       ------   ------
+ 10       25       40.000       25       40.000   (53C895 only)
+ 11       30.2     33.112       31.25    32.000   (53C895 only)
  12       50       20.000       50       20.000
  13       52       19.230       62       16.000
  14       56       17.857       62       16.000

@@ -68,12 +68,12 @@ fi
 if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
   dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
   if [ "$CONFIG_SCSI_NCR53C8XX" != "n" ]; then
-    bool '  detect and read serial NVRAMs' CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
-    bool '  enable tagged command queueing' CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
+    int  '  default tagged command queue depth' CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS 8
+    int  '  maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 32
+    int  '  synchronous transfers frequency in MHz' CONFIG_SCSI_NCR53C8XX_SYNC 20
+    bool '  enable profiling' CONFIG_SCSI_NCR53C8XX_PROFILE
     bool '  use normal IO' CONFIG_SCSI_NCR53C8XX_IOMAPPED
-    int  '  maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 4
-    int  '  synchronous transfers frequency in MHz' CONFIG_SCSI_NCR53C8XX_SYNC 5
-    if [ "$CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE" != "y" ]; then
+    if [ "$CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS" = "0" ]; then
       bool '  not allow targets to disconnect' CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
     fi
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

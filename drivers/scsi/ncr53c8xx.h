@@ -42,10 +42,18 @@
 #ifndef NCR53C8XX_H
 #define NCR53C8XX_H
 
+#if 0
+#define CONFIG_SCSI_NCR53C8XX_PROFILE
+#endif
+
+#ifndef CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
+#define CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
+#endif
+
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 2.5f"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 3.0e"
 
 /*
 **	Check supported Linux versions
@@ -56,51 +64,27 @@
 #endif
 #include <linux/config.h>
 
-/*
-**	During make dep of linux-1.2.13, LINUX_VERSION_CODE is undefined
-**	Under linux-1.3.X, all seems to be OK.
-**	So, we have only to define it under 1.2.13
-*/
-
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 
-#if !defined(LINUX_VERSION_CODE)
-#define LINUX_VERSION_CODE LinuxVersionCode(1,2,13)
-#endif
-
 /*
-**	Normal IO or memory mapped IO.
-**
-**	Memory mapped IO only works with linux-1.3.X
-**	If your motherboard does not work with memory mapped IO,
-**	define SCSI_NCR_IOMAPPED for PATCHLEVEL 3 too.
+**	These options are'nt tunable from 'make config'
 */
-
-#if	LINUX_VERSION_CODE < LinuxVersionCode(1,3,0)
-#	define	SCSI_NCR_IOMAPPED
-#endif
-
-#if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
-#	define	SCSI_NCR_PROC_INFO_SUPPORT
-#endif
-
-#if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,72)
-#	define SCSI_NCR_SHARE_IRQ
-#endif
+#define	SCSI_NCR_PROC_INFO_SUPPORT
+#define SCSI_NCR_SHARE_IRQ
 
 /*
 **	If you want a driver as small as possible, donnot define the 
 **	following options.
 */
-
 #define SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT
 #define SCSI_NCR_DEBUG_INFO_SUPPORT
 #define SCSI_NCR_PCI_FIX_UP_SUPPORT
 #ifdef	SCSI_NCR_PROC_INFO_SUPPORT
-#	define	SCSI_NCR_PROFILE_SUPPORT
+#	ifdef	CONFIG_SCSI_NCR53C8XX_PROFILE
+#		define	SCSI_NCR_PROFILE_SUPPORT
+#	endif
 #	define	SCSI_NCR_USER_COMMAND_SUPPORT
 #	define	SCSI_NCR_USER_INFO_SUPPORT
-/* #	define	SCSI_NCR_DEBUG_ERROR_RECOVERY_SUPPORT */
 #endif
 
 /*==========================================================
@@ -130,25 +114,27 @@
 #define SCSI_NCR_MAX_SYNC			(40)
 
 /*
- * Allow tags from 2 to 12, default 4
+ * Allow tags from 2 to 64, default 8
  */
 #ifdef	CONFIG_SCSI_NCR53C8XX_MAX_TAGS
 #if	CONFIG_SCSI_NCR53C8XX_MAX_TAGS < 2
 #define SCSI_NCR_MAX_TAGS	(2)
-#elif	CONFIG_SCSI_NCR53C8XX_MAX_TAGS > 12
-#define SCSI_NCR_MAX_TAGS	(12)
+#elif	CONFIG_SCSI_NCR53C8XX_MAX_TAGS > 64
+#define SCSI_NCR_MAX_TAGS	(64)
 #else
 #define	SCSI_NCR_MAX_TAGS	CONFIG_SCSI_NCR53C8XX_MAX_TAGS
 #endif
 #else
-#define SCSI_NCR_MAX_TAGS	(4)
+#define SCSI_NCR_MAX_TAGS	(8)
 #endif
 
 /*
  * Allow tagged command queuing support if configured with default number 
  * of tags set to max (see above).
  */
-#ifdef	CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
+#ifdef	CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS
+#define	SCSI_NCR_SETUP_DEFAULT_TAGS	CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS
+#elif	defined CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
 #define	SCSI_NCR_SETUP_DEFAULT_TAGS	SCSI_NCR_MAX_TAGS
 #else
 #define	SCSI_NCR_SETUP_DEFAULT_TAGS	(0)
@@ -167,12 +153,13 @@
 
 /*
  * Sync transfer frequency at startup.
- * Allow from 5Mhz to 40Mhz default 10 Mhz.
+ * Allow from 5Mhz to 40Mhz default 20 Mhz.
  */
 #ifndef	CONFIG_SCSI_NCR53C8XX_SYNC
-#define	CONFIG_SCSI_NCR53C8XX_SYNC	(5)
+#define	CONFIG_SCSI_NCR53C8XX_SYNC	(20)
 #elif	CONFIG_SCSI_NCR53C8XX_SYNC > SCSI_NCR_MAX_SYNC
-#define	SCSI_NCR_SETUP_DEFAULT_SYNC	SCSI_NCR_MAX_SYNC
+#undef	CONFIG_SCSI_NCR53C8XX_SYNC
+#define	CONFIG_SCSI_NCR53C8XX_SYNC	SCSI_NCR_MAX_SYNC
 #endif
 
 #if	CONFIG_SCSI_NCR53C8XX_SYNC == 0
@@ -247,14 +234,18 @@
 #define SCSI_NCR_ALWAYS_SIMPLE_TAG
 #define SCSI_NCR_MAX_SCATTER	(127)
 #define SCSI_NCR_MAX_TARGET	(16)
-#define SCSI_NCR_MAX_HOST	(2)
-#define SCSI_NCR_TIMEOUT_ALERT	(3*HZ)
 
+/* No need to use a too large adapter queue */
+#if SCSI_NCR_MAX_TAGS <= 32
 #define SCSI_NCR_CAN_QUEUE	(7*SCSI_NCR_MAX_TAGS)
+#else
+#define SCSI_NCR_CAN_QUEUE	(250)
+#endif
+
 #define SCSI_NCR_CMD_PER_LUN	(SCSI_NCR_MAX_TAGS)
 #define SCSI_NCR_SG_TABLESIZE	(SCSI_NCR_MAX_SCATTER)
 
-#define SCSI_NCR_TIMER_INTERVAL	((HZ+5-1)/5)
+#define SCSI_NCR_TIMER_INTERVAL	(HZ)
 
 #if 1 /* defined CONFIG_SCSI_MULTI_LUN */
 #define SCSI_NCR_MAX_LUN	(8)
@@ -270,21 +261,12 @@
 
 #if defined(HOSTS_C) || defined(MODULE)
 
-#if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,98)
 #include <scsi/scsicam.h>
-#else
-#include <linux/scsicam.h>
-#endif
 
 int ncr53c8xx_abort(Scsi_Cmnd *);
 int ncr53c8xx_detect(Scsi_Host_Template *tpnt);
 int ncr53c8xx_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-
-#if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,98)
 int ncr53c8xx_reset(Scsi_Cmnd *, unsigned int);
-#else
-int ncr53c8xx_reset(Scsi_Cmnd *);
-#endif
 
 #ifdef MODULE
 int ncr53c8xx_release(struct Scsi_Host *);
@@ -306,33 +288,21 @@ int ncr53c8xx_release(struct Scsi_Host *);
 			sg_tablesize:   SCSI_NCR_SG_TABLESIZE,	\
 			cmd_per_lun:    SCSI_NCR_CMD_PER_LUN,	\
 			use_clustering: DISABLE_CLUSTERING} 
-  
-#elif	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
-
-#define NCR53C8XX {	NULL, NULL, NULL, NULL,				\
-			SCSI_NCR_DRIVER_NAME,	ncr53c8xx_detect,	\
-    			ncr53c8xx_release,	NULL,	NULL,		\
-			ncr53c8xx_queue_command,ncr53c8xx_abort,	\
-			ncr53c8xx_reset, NULL,	scsicam_bios_param,	\
-			SCSI_NCR_CAN_QUEUE,	7,			\
-			SCSI_NCR_SG_TABLESIZE,	SCSI_NCR_CMD_PER_LUN,	\
-			0,	0,	DISABLE_CLUSTERING} 
 
 #else
 
-#define NCR53C8XX {	NULL, NULL,					\
+#define NCR53C8XX {	NULL, NULL, NULL, NULL,				\
 			SCSI_NCR_DRIVER_NAME,	ncr53c8xx_detect,	\
-			ncr53c8xx_release,	NULL, 	NULL, 		\
+			ncr53c8xx_release,	NULL,	NULL,		\
 			ncr53c8xx_queue_command,ncr53c8xx_abort,	\
 			ncr53c8xx_reset, NULL,	scsicam_bios_param,	\
 			SCSI_NCR_CAN_QUEUE,	7,			\
 			SCSI_NCR_SG_TABLESIZE,	SCSI_NCR_CMD_PER_LUN,	\
 			0,	0,	DISABLE_CLUSTERING} 
-
+ 
 #endif /* LINUX_VERSION_CODE */
 
 #endif /* defined(HOSTS_C) || defined(MODULE) */ 
-
 
 #ifndef HOSTS_C
 
@@ -589,94 +559,6 @@ typedef struct {
 	1					\
 }
 
-/*
-**	Define the table of target capabilities by host and target
-**
-**	If you have problems with a scsi device, note the host unit and the
-**	corresponding target number.
-**
-**	Edit the corresponding entry of the table below and try successively:
-**		NQ7_Questionnable
-**		NQ7_IdeLike
-**
-**	This bitmap is anded with the byte 7 of inquiry data on completion of
-**	INQUIRY command.
-**	The driver never see the zeroed bits and will ignore the corresponding
-**	capabilities of the target.
-*/
-
-#define INQ7_SftRe	1
-#define INQ7_CmdQueue	(1<<1)		/* Tagged Command */
-#define INQ7_Reserved	(1<<2)
-#define INQ7_Linked	(1<<3)
-#define INQ7_Sync	(1<<4)		/* Synchronous Negotiation */
-#define INQ7_WBus16	(1<<5)
-#define INQ7_WBus32	(1<<6)
-#define INQ7_RelAdr	(1<<7)
-
-#define INQ7_IdeLike		0
-#define INQ7_Scsi1Like		INQ7_IdeLike
-#define INQ7_Perfect		0xff
-#define INQ7_Questionnable	~(INQ7_CmdQueue|INQ7_Sync)
-#define INQ7_VeryQuestionnable	\
-			~(INQ7_CmdQueue|INQ7_Sync|INQ7_WBus16|INQ7_WBus32)
-
-#define INQ7_Default		INQ7_Perfect
-
-#define NCR53C8XX_TARGET_CAPABILITIES					\
-/* Host 0 */								\
-{									\
-	{								\
-	/* Target  0 */		INQ7_Default,				\
-	/* Target  1 */		INQ7_Default,				\
-	/* Target  2 */		INQ7_Default,				\
-	/* Target  3 */		INQ7_Default,				\
-	/* Target  4 */		INQ7_Default,				\
-	/* Target  5 */		INQ7_Default,				\
-	/* Target  6 */		INQ7_Default,				\
-	/* Target  7 */		INQ7_Default,				\
-	/* Target  8 */		INQ7_Default,				\
-	/* Target  9 */		INQ7_Default,				\
-	/* Target 10 */		INQ7_Default,				\
-	/* Target 11 */		INQ7_Default,				\
-	/* Target 12 */		INQ7_Default,				\
-	/* Target 13 */		INQ7_Default,				\
-	/* Target 14 */		INQ7_Default,				\
-	/* Target 15 */		INQ7_Default,				\
-	}								\
-},									\
-/* Host 1 */								\
-{									\
-	{								\
-	/* Target  0 */		INQ7_Default,				\
-	/* Target  1 */		INQ7_Default,				\
-	/* Target  2 */		INQ7_Default,				\
-	/* Target  3 */		INQ7_Default,				\
-	/* Target  4 */		INQ7_Default,				\
-	/* Target  5 */		INQ7_Default,				\
-	/* Target  6 */		INQ7_Default,				\
-	/* Target  7 */		INQ7_Default,				\
-	/* Target  8 */		INQ7_Default,				\
-	/* Target  9 */		INQ7_Default,				\
-	/* Target 10 */		INQ7_Default,				\
-	/* Target 11 */		INQ7_Default,				\
-	/* Target 12 */		INQ7_Default,				\
-	/* Target 13 */		INQ7_Default,				\
-	/* Target 14 */		INQ7_Default,				\
-	/* Target 15 */		INQ7_Default,				\
-	}								\
-}
-
-/*
-**	Replace the proc_dir_entry of the standard ncr driver.
-*/
-
-#if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
-#if	defined(CONFIG_SCSI_NCR53C7xx) || !defined(CONFIG_SCSI_NCR53C8XX)
-#define PROC_SCSI_NCR53C8XX	PROC_SCSI_NCR53C7xx
-#endif
-#endif
-
 /**************** ORIGINAL CONTENT of ncrreg.h from FreeBSD ******************/
 
 /*-----------------------------------------------------------------
@@ -801,7 +683,11 @@ struct ncr_reg {
 /*28*/  u_int32    nc_dnad;	/* ### Next command register        */
 /*2c*/  u_int32    nc_dsp;	/* --> Script Pointer               */
 /*30*/  u_int32    nc_dsps;	/* --> Script pointer save/opcode#2 */
-/*34*/  u_int32    nc_scratcha;  /* ??? Temporary register a         */
+
+/*34*/  u_char     nc_scratcha;  /* Temporary register a            */
+/*35*/  u_char     nc_scratcha1;
+/*36*/  u_char     nc_scratcha2;
+/*37*/  u_char     nc_scratcha3;
 
 /*38*/  u_char    nc_dmode;
 	#define   BL_2    0x80  /* mod: burst length shift value +2 */
@@ -1080,10 +966,10 @@ struct scr_tblsel {
 
 /*-----------------------------------------------------------
 **
-**	FROM_REG (reg)		  reg  = SFBR
+**	FROM_REG (reg)		  SFBR = reg
 **	<< 0 >>
 **
-**	TO_REG	 (reg)		  SFBR = reg
+**	TO_REG	 (reg)		  reg  = SFBR
 **	<< 0 >>
 **
 **	LOAD_REG (reg, data)	  reg  = <data>
@@ -1106,6 +992,42 @@ struct scr_tblsel {
 
 #define SCR_LOAD_SFBR(data) \
         (SCR_REG_SFBR (gpreg, SCR_LOAD, data))
+
+/*-----------------------------------------------------------
+**
+**	LOAD  from memory   to register.
+**	STORE from register to memory.
+**
+**-----------------------------------------------------------
+**
+**	LOAD_ABS (LEN)
+**	<<start address>>
+**
+**	LOAD_REL (LEN)        (DSA relative)
+**	<<dsa_offset>>
+**
+**-----------------------------------------------------------
+*/
+
+#define SCR_NO_FLUSH2	0x02000000
+#define SCR_DSA_REL2	0x10000000
+
+#define SCR_LOAD_R(reg, how, n) \
+        (0xe1000000 | how | (SCR_REG_OFS(REG(reg))) | (n))
+
+#define SCR_STORE_R(reg, how, n) \
+        (0xe0000000 | how | (SCR_REG_OFS(REG(reg))) | (n))
+
+#define SCR_LOAD_ABS(reg, n)	SCR_LOAD_R(reg, SCR_NO_FLUSH2, n)
+#define SCR_LOAD_REL(reg, n)	SCR_LOAD_R(reg, SCR_NO_FLUSH2|SCR_DSA_REL2, n)
+#define SCR_LOAD_ABS_F(reg, n)	SCR_LOAD_R(reg, 0, n)
+#define SCR_LOAD_REL_F(reg, n)	SCR_LOAD_R(reg, SCR_DSA_REL2, n)
+
+#define SCR_STORE_ABS(reg, n)	SCR_STORE_R(reg, SCR_NO_FLUSH2, n)
+#define SCR_STORE_REL(reg, n)	SCR_STORE_R(reg, SCR_NO_FLUSH2|SCR_DSA_REL2,n)
+#define SCR_STORE_ABS_F(reg, n)	SCR_STORE_R(reg, 0, n)
+#define SCR_STORE_REL_F(reg, n)	SCR_STORE_R(reg, SCR_DSA_REL2, n)
+
 
 /*-----------------------------------------------------------
 **
@@ -1143,7 +1065,7 @@ struct scr_tblsel {
 **-----------------------------------------------------------
 */
 
-#define SCR_NO_OP        0x80000000
+#define SCR_NO_OP       0x80000000
 #define SCR_JUMP        0x80080000
 #define SCR_JUMPR       0x80880000
 #define SCR_CALL        0x88080000

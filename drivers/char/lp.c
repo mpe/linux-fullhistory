@@ -74,9 +74,9 @@
  * BUSY   _________              _______
  *                 |____________|
  *
- * I discovered this using the printer scanner:
+ * I discovered this using the printer scanner that you can find at:
  *
- *	http://www.cs.unibo.it/~arcangel/pscan/pscan-0.4.tar.gz
+ *	ftp://e-mind.com/pub/linux/pscan/
  *
  *					11 May 98, Andrea Arcangeli
  */
@@ -326,8 +326,7 @@ static int lp_write_buf(unsigned int minor, const char *buf, int count)
 	lp_table[minor].irq_detected = 0;
 	lp_table[minor].irq_missed = 0;
 
-	if (!LP_POLLED(minor))
-		w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PINTEN);
+	w_ctr(minor, LP_PSELECP | LP_PINITP);
 
 	do {
 		bytes_written = 0;
@@ -335,7 +334,7 @@ static int lp_write_buf(unsigned int minor, const char *buf, int count)
 
 		if (copy_from_user(lp->lp_buffer, buf, copy_size))
 		{
-			w_ctr(minor, LP_PINITP);
+			w_ctr(minor, LP_PSELECP | LP_PINITP);
 			return -EFAULT;
 		}
 
@@ -357,7 +356,7 @@ static int lp_write_buf(unsigned int minor, const char *buf, int count)
 
 				if (signal_pending(current))
 				{
-					w_ctr(minor, LP_PINITP);
+					w_ctr(minor, LP_PSELECP | LP_PINITP);
 					if (total_bytes_written + bytes_written)
 						return total_bytes_written + bytes_written;
 					else
@@ -370,7 +369,7 @@ static int lp_write_buf(unsigned int minor, const char *buf, int count)
 
 				if (lp_check_status(minor))
 				{
-					w_ctr(minor, LP_PINITP);
+					w_ctr(minor, LP_PSELECP | LP_PINITP);
 					return rc ? rc : -EIO;
 				}
 
@@ -414,7 +413,7 @@ static int lp_write_buf(unsigned int minor, const char *buf, int count)
 
 	} while (count > 0);
 
-	w_ctr(minor, LP_PINITP);
+	w_ctr(minor, LP_PSELECP | LP_PINITP);
 	return total_bytes_written;
 }
 

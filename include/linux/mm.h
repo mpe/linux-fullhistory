@@ -281,7 +281,6 @@ extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
 extern void free_page_tables(struct mm_struct * mm);
 extern void clear_page_tables(struct task_struct * tsk);
 extern int new_page_tables(struct task_struct * tsk);
-extern int copy_page_tables(struct task_struct * to);
 
 extern void zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long size);
 extern int copy_page_range(struct mm_struct *dst, struct mm_struct *src, struct vm_area_struct *vma);
@@ -291,6 +290,7 @@ extern int zeromap_page_range(unsigned long from, unsigned long size, pgprot_t p
 extern void vmtruncate(struct inode * inode, unsigned long offset);
 extern void handle_mm_fault(struct task_struct *tsk,struct vm_area_struct *vma, unsigned long address, int write_access);
 extern void check_pgt_cache(void);
+extern void make_pages_present(unsigned long addr, unsigned long end);
 
 extern unsigned long paging_init(unsigned long start_mem, unsigned long end_mem);
 extern void mem_init(unsigned long start_mem, unsigned long end_mem);

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 6.13  March 29, 1998
+ *  linux/drivers/block/ide.c	Version 6.17  March 29, 1998
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -88,6 +88,7 @@
  * Version 6.14		fixed IRQ sharing among PCI devices
  * Version 6.15		added SMP awareness to IDE drivers
  * Version 6.16		fixed various bugs; even more SMP friendly
+ * Version 6.17		fix for newest EZ-Drive problem
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -2560,7 +2561,7 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 
 	printk("%s ", msg);
 
-	if (xparm == -1 && drive->bios_cyl < 1024)
+	if (xparm == -1 && (drive->bios_cyl * drive->bios_head * drive->bios_sect) < (1024 * 16 * 63))
 		return 0;		/* small disk: no translation needed */
 
 	if (drive->id) {

@@ -501,7 +501,7 @@ scsi_unregister(struct Scsi_Host * sh){
     /* If we are removing the last host registered, it is safe to reuse
      * its host number (this avoids "holes" at boot time) (DB) 
      */
-    if (max_scsi_hosts == next_scsi_host && !scsi_loadable_module_flag)
+    if (max_scsi_hosts == next_scsi_host)
 	max_scsi_hosts--;
     
     next_scsi_host--;

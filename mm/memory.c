@@ -918,6 +918,22 @@ no_memory:
 	oom(tsk);
 }
 
+/*
+ * Simplistic page force-in..
+ */
+void make_pages_present(unsigned long addr, unsigned long end)
+{
+	int write;
+	struct vm_area_struct * vma;
+
+	vma = find_vma(current->mm, addr);
+	write = (vma->vm_flags & VM_WRITE) != 0;
+	while (addr < end) {
+		handle_mm_fault(current, vma, addr, write);
+		addr += PAGE_SIZE;
+	}
+}
+
 /* Low and high watermarks for page table cache.
    The system should try to have pgt_water[0] <= cache elements <= pgt_water[1]
  */

@@ -62,7 +62,7 @@
  * 		ever possible.
  */
 
-#define SERIAL_PARANOIA_CHECK
+#undef SERIAL_PARANOIA_CHECK
 #define CONFIG_SERIAL_NOPAUSE_IO
 #define SERIAL_DO_RESTART
 
@@ -1661,10 +1661,14 @@ static int set_serial_info(struct async_struct * info,
 
 	if ((new_serial.irq >= NR_IRQS) || (new_serial.port > 0xffff) ||
 	    (new_serial.type < PORT_UNKNOWN) ||
-	    (new_serial.type > PORT_MAX) ||
-	    (new_serial.xmit_fifo_size == 0)) {
+	    (new_serial.type > PORT_MAX)) {
 		return -EINVAL;
 	}
+
+	if ((new_serial.type != state->type) ||
+	    (new_serial.xmit_fifo_size <= 0))
+		new_serial.xmit_fifo_size =
+			uart_config[state->type].dfl_xmit_fifo_size;
 
 	/* Make sure address is not already in use */
 	if (new_serial.type) {
@@ -1714,9 +1718,6 @@ static int set_serial_info(struct async_struct * info,
 check_and_exit:
 	if (!state->port || !state->type)
 		return 0;
-	if (state->type != old_state.type)
-		info->xmit_fifo_size = state->xmit_fifo_size =
-			uart_config[state->type].dfl_xmit_fifo_size;
 	if (state->flags & ASYNC_INITIALIZED) {
 		if (((old_state.flags & ASYNC_SPD_MASK) !=
 		     (state->flags & ASYNC_SPD_MASK)) ||
@@ -2566,12 +2567,15 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	int 			retval, line;
 	unsigned long		page;
 
+	MOD_INC_USE_COUNT;
 	line = MINOR(tty->device) - tty->driver.minor_start;
 	if ((line < 0) || (line >= NR_PORTS))
 		return -ENODEV;
 	retval = get_async_struct(line, &info);
 	if (retval)
 		return retval;
+	tty->driver_data = info;
+	info->tty = tty;
 	if (serial_paranoia_check(info, tty->device, "rs_open"))
 		return -ENODEV;
 
@@ -2579,8 +2583,6 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	printk("rs_open %s%d, count = %d\n", tty->driver.name, info->line,
 	       info->state->count);
 #endif
-	tty->driver_data = info;
-	info->tty = tty;
 	info->tty->low_latency = (info->flags & ASYNC_LOW_LATENCY) ? 1 : 0;
 
 	if (!tmp_buf) {
@@ -2615,7 +2617,6 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	if (retval)
 		return retval;
 
-	MOD_INC_USE_COUNT;
 	retval = block_til_ready(tty, filp, info);
 	if (retval) {
 #ifdef SERIAL_DEBUG_OPEN

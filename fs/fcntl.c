@@ -191,7 +191,7 @@ static void send_sigio(int pid, uid_t uid, uid_t euid)
 			match = -p->pgrp;
 		if (pid != match)
 			continue;
-		if (!euid &&
+		if ((euid != 0) &&
 		    (euid ^ p->suid) && (euid ^ p->uid) &&
 		    (uid ^ p->suid) && (uid ^ p->uid))
 			continue;

@@ -4,15 +4,6 @@
 #
 mainmenu_name "Kernel configuration of Linux for Alpha machines"
 
-# clear all implied options (don't want default values for those):
-unset CONFIG_CROSSCOMPILE CONFIG_NATIVE
-unset CONFIG_ALPHA_EV4 CONFIG_ALPHA_EV5 CONFIG_ALPHA_EV6
-unset CONFIG_PCI CONFIG_ALPHA_EISA
-unset CONFIG_ALPHA_LCA CONFIG_ALPHA_APECS CONFIG_ALPHA_CIA
-unset CONFIG_ALPHA_T2 CONFIG_ALPHA_PYXIS
-unset CONFIG_ALPHA_TSUNAMI CONFIG_ALPHA_MCPCIA
-unset CONFIG_ALPHA_NEED_ROUNDING_EMULATION
-
 mainmenu_option next_comment
 comment 'Code maturity level options'
 bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
@@ -30,6 +21,8 @@ endmenu
 
 mainmenu_option next_comment
 comment 'General setup'
+
+unset CONFIG_CROSSCOMPILE CONFIG_NATIVE
 
 if [ "`uname`" != "Linux" ]; then
   define_bool CONFIG_CROSSCOMPILE y
@@ -62,6 +55,14 @@ choice 'Alpha system type' \
 	 AlphaBook1	CONFIG_ALPHA_BOOK1		\
 	 Ruffian	CONFIG_ALPHA_RUFFIAN		\
 	 Platform2000	CONFIG_ALPHA_P2K" Cabriolet
+
+# clear all implied options (don't want default values for those):
+unset CONFIG_ALPHA_EV4 CONFIG_ALPHA_EV5 CONFIG_ALPHA_EV6
+unset CONFIG_PCI CONFIG_ALPHA_EISA
+unset CONFIG_ALPHA_LCA CONFIG_ALPHA_APECS CONFIG_ALPHA_CIA
+unset CONFIG_ALPHA_T2 CONFIG_ALPHA_PYXIS
+unset CONFIG_ALPHA_TSUNAMI CONFIG_ALPHA_MCPCIA
+unset CONFIG_ALPHA_NEED_ROUNDING_EMULATION
 
 if [ "$CONFIG_ALPHA_BOOK1" = "y" ]
 then

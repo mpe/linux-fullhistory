@@ -21,6 +21,8 @@
 #include <asm/system.h>
 #include <asm/pgtable.h>
 
+extern int vm_enough_memory(long pages);
+
 static inline pte_t *get_one_pte(struct mm_struct *mm, unsigned long addr)
 {
 	pgd_t * pgd;
@@ -179,7 +181,7 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	 * the unnecessary pages..
 	 */
 	ret = addr;
-	if (old_len > new_len) {
+	if (old_len >= new_len) {
 		do_munmap(addr+new_len, old_len - new_len);
 		goto out;
 	}
@@ -204,6 +206,11 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	ret = -ENOMEM;
 	if ((current->mm->total_vm << PAGE_SHIFT) + (new_len - old_len)
 	    > current->rlim[RLIMIT_AS].rlim_cur)
+		goto out;
+	/* Private writable mapping? Check memory availability.. */
+	if ((vma->vm_flags & (VM_SHARED | VM_WRITE)) == VM_WRITE &&
+	    !(flags & MAP_NORESERVE)				 &&
+	    !vm_enough_memory((new_len - old_len) >> PAGE_SHIFT))
 		goto out;
 
 	/* old_len exactly to the end of the area.. */

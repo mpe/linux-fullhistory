@@ -509,10 +509,8 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 SCSI SUBSYSTEM
-P:	Leonard N. Zubkoff
-M:	Leonard N. Zubkoff <lnz@dandelion.com>
 L:	linux-scsi@vger.rutgers.edu
-S:	Maintained
+S:	Unmaintained
 
 SCSI TAPE DRIVER
 P:	Kai Mdkisara

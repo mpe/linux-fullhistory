@@ -388,11 +388,11 @@ int get_cpuinfo(char *buffer)
 		     &systype_name, &sysvariation_name);
 
 	return sprintf(buffer,
-		       "CPU\t\t\t: Alpha\n"
-		       "CPU model\t\t: %s\n"
-		       "CPU variation\t\t: %ld\n"
-		       "CPU revision\t\t: %ld\n"
-		       "CPU serial number\t: %s\n"
+		       "cpu\t\t\t: Alpha\n"
+		       "cpu model\t\t: %s\n"
+		       "cpu variation\t\t: %ld\n"
+		       "cpu revision\t\t: %ld\n"
+		       "cpu serial number\t: %s\n"
 		       "system type\t\t: %s\n"
 		       "system variation\t: %s\n"
 		       "system revision\t\t: %ld\n"
