@@ -1080,11 +1080,9 @@ static int netlink_dump(struct sock *sk)
 	len = cb->dump(skb, cb);
 
 	if (len > 0) {
-		sock_hold(sk);
 		spin_unlock(&nlk->cb_lock);
 		skb_queue_tail(&sk->sk_receive_queue, skb);
 		sk->sk_data_ready(sk, len);
-		sock_put(sk);
 		return 0;
 	}
 
@@ -1099,7 +1097,7 @@ static int netlink_dump(struct sock *sk)
 	spin_unlock(&nlk->cb_lock);
 
 	netlink_destroy_callback(cb);
-	sock_put(sk);
+	__sock_put(sk);
 	return 0;
 }
 
@@ -1138,9 +1136,11 @@ int netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
 		return -EBUSY;
 	}
 	nlk->cb = cb;
+	sock_hold(sk);
 	spin_unlock(&nlk->cb_lock);
 
 	netlink_dump(sk);
+	sock_put(sk);
 	return 0;
 }
 
