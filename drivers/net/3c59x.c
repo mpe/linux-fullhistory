@@ -692,7 +692,7 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 			dev->tbusy = 0;
 		} else
 			/* Interrupt us when the FIFO has room for max-sized packet. */
-			outw(SetTxThreshold + 1536, ioaddr + EL3_CMD);
+			outw(SetTxThreshold + (1536>>2), ioaddr + EL3_CMD);
 	}
 #else
 	/* ... and the packet rounded to a doubleword. */
@@ -702,7 +702,7 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 		dev->tbusy = 0;
 	} else
 		/* Interrupt us when the FIFO has room for max-sized packet. */
-		outw(SetTxThreshold + 1536, ioaddr + EL3_CMD);
+		outw(SetTxThreshold + (1536>>2), ioaddr + EL3_CMD);
 #endif  /* bus master */
 
 	dev->trans_start = jiffies;

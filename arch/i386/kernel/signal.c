@@ -82,55 +82,98 @@ badframe:
  * Set up a signal frame... Make the stack look the way iBCS2 expects
  * it to look.
  */
-void setup_frame(struct sigaction * sa, unsigned long ** fp, unsigned long eip,
-	struct pt_regs * regs, int signr, unsigned long oldmask)
+static void setup_frame(struct sigaction * sa,
+	struct pt_regs * regs, int signr,
+	unsigned long oldmask)
 {
 	unsigned long * frame;
 
-#define __CODE ((unsigned long)(frame+24))
-#define CODE(x) ((unsigned long *) ((x)+__CODE))
-	frame = *fp;
+	frame = (unsigned long *) regs->esp;
 	if (regs->ss != USER_DS && sa->sa_restorer)
 		frame = (unsigned long *) sa->sa_restorer;
 	frame -= 32;
 	if (verify_area(VERIFY_WRITE,frame,32*4))
 		do_exit(SIGSEGV);
+
 /* set up the "normal" stack seen by the signal handler (iBCS2) */
-	put_fs_long(__CODE,frame);
+#define __CODE ((unsigned long)(frame+24))
+#define CODE(x) ((unsigned long *) ((x)+__CODE))
+	put_user(__CODE,frame);
 	if (current->exec_domain && current->exec_domain->signal_invmap)
-		put_fs_long(current->exec_domain->signal_invmap[signr], frame+1);
+		put_user(current->exec_domain->signal_invmap[signr], frame+1);
 	else
-		put_fs_long(signr, frame+1);
-	put_fs_long(regs->gs, frame+2);
-	put_fs_long(regs->fs, frame+3);
-	put_fs_long(regs->es, frame+4);
-	put_fs_long(regs->ds, frame+5);
-	put_fs_long(regs->edi, frame+6);
-	put_fs_long(regs->esi, frame+7);
-	put_fs_long(regs->ebp, frame+8);
-	put_fs_long((long)*fp, frame+9);
-	put_fs_long(regs->ebx, frame+10);
-	put_fs_long(regs->edx, frame+11);
-	put_fs_long(regs->ecx, frame+12);
-	put_fs_long(regs->eax, frame+13);
-	put_fs_long(current->tss.trap_no, frame+14);
-	put_fs_long(current->tss.error_code, frame+15);
-	put_fs_long(eip, frame+16);
-	put_fs_long(regs->cs, frame+17);
-	put_fs_long(regs->eflags, frame+18);
-	put_fs_long(regs->esp, frame+19);
-	put_fs_long(regs->ss, frame+20);
-	put_fs_long(0,frame+21);		/* 387 state pointer - not implemented*/
+		put_user(signr, frame+1);
+	put_user(regs->gs, frame+2);
+	put_user(regs->fs, frame+3);
+	put_user(regs->es, frame+4);
+	put_user(regs->ds, frame+5);
+	put_user(regs->edi, frame+6);
+	put_user(regs->esi, frame+7);
+	put_user(regs->ebp, frame+8);
+	put_user(regs->esp, frame+9);
+	put_user(regs->ebx, frame+10);
+	put_user(regs->edx, frame+11);
+	put_user(regs->ecx, frame+12);
+	put_user(regs->eax, frame+13);
+	put_user(current->tss.trap_no, frame+14);
+	put_user(current->tss.error_code, frame+15);
+	put_user(regs->eip, frame+16);
+	put_user(regs->cs, frame+17);
+	put_user(regs->eflags, frame+18);
+	put_user(regs->esp, frame+19);
+	put_user(regs->ss, frame+20);
+	put_user(NULL,frame+21);
 /* non-iBCS2 extensions.. */
-	put_fs_long(oldmask, frame+22);
-	put_fs_long(current->tss.cr2, frame+23);
+	put_user(oldmask, frame+22);
+	put_user(current->tss.cr2, frame+23);
 /* set up the return code... */
-	put_fs_long(0x0000b858, CODE(0));	/* popl %eax ; movl $,%eax */
-	put_fs_long(0x80cd0000, CODE(4));	/* int $0x80 */
-	put_fs_long(__NR_sigreturn, CODE(2));
-	*fp = frame;
+	put_user(0x0000b858, CODE(0));	/* popl %eax ; movl $,%eax */
+	put_user(0x80cd0000, CODE(4));	/* int $0x80 */
+	put_user(__NR_sigreturn, CODE(2));
 #undef __CODE
 #undef CODE
+
+	/* Set up registers for signal handler */
+	regs->esp = (unsigned long) frame;
+	regs->eip = (unsigned long) sa->sa_handler;
+	regs->cs = USER_CS; regs->ss = USER_DS;
+	regs->ds = USER_DS; regs->es = USER_DS;
+	regs->gs = USER_DS; regs->fs = USER_DS;
+	regs->eflags &= ~TF_MASK;
+}
+
+/*
+ * OK, we're invoking a handler
+ */	
+static void handle_signal(unsigned long signr, struct sigaction *sa,
+	unsigned long oldmask, struct pt_regs * regs)
+{
+	/* are we from a system call? */
+	if (regs->orig_eax >= 0) {
+		/* If so, check system call restarting.. */
+		switch (regs->eax) {
+			case -ERESTARTNOHAND:
+				regs->eax = -EINTR;
+				break;
+
+			case -ERESTARTSYS:
+				if (!(sa->sa_flags & SA_RESTART)) {
+					regs->eax = -EINTR;
+					break;
+				}
+			/* fallthrough */
+			case -ERESTARTNOINTR:
+				regs->eax = regs->orig_eax;
+				regs->eip -= 2;
+		}
+	}
+
+	/* set up the stack frame */
+	setup_frame(sa, regs, signr, oldmask);
+
+	if (sa->sa_flags & SA_ONESHOT)
+		sa->sa_handler = NULL;
+	current->blocked |= sa->sa_mask;
 }
 
 /*
@@ -145,9 +188,6 @@ void setup_frame(struct sigaction * sa, unsigned long ** fp, unsigned long eip,
 asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 {
 	unsigned long mask = ~current->blocked;
-	unsigned long handler_signal = 0;
-	unsigned long *frame = NULL;
-	unsigned long eip = 0;
 	unsigned long signr;
 	struct sigaction * sa;
 
@@ -219,48 +259,19 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 				do_exit(signr);
 			}
 		}
-		/*
-		 * OK, we're invoking a handler
-		 */
-		if (regs->orig_eax >= 0) {
-			if (regs->eax == -ERESTARTNOHAND ||
-			   (regs->eax == -ERESTARTSYS && !(sa->sa_flags & SA_RESTART)))
-				regs->eax = -EINTR;
+		handle_signal(signr, sa, oldmask, regs);
+		return 1;
+	}
+
+	/* Did we come from a system call? */
+	if (regs->orig_eax >= 0) {
+		/* Restart the system call - no handlers present */
+		if (regs->eax == -ERESTARTNOHAND ||
+		    regs->eax == -ERESTARTSYS ||
+		    regs->eax == -ERESTARTNOINTR) {
+			regs->eax = regs->orig_eax;
+			regs->eip -= 2;
 		}
-		handler_signal |= 1 << (signr-1);
-		mask &= ~sa->sa_mask;
 	}
-	if (regs->orig_eax >= 0 &&
-	    (regs->eax == -ERESTARTNOHAND ||
-	     regs->eax == -ERESTARTSYS ||
-	     regs->eax == -ERESTARTNOINTR)) {
-		regs->eax = regs->orig_eax;
-		regs->eip -= 2;
-	}
-	if (!handler_signal)		/* no handler will be called - return 0 */
-		return 0;
-	eip = regs->eip;
-	frame = (unsigned long *) regs->esp;
-	signr = 1;
-	sa = current->sig->action;
-	for (mask = 1 ; mask ; sa++,signr++,mask += mask) {
-		if (mask > handler_signal)
-			break;
-		if (!(mask & handler_signal))
-			continue;
-		setup_frame(sa,&frame,eip,regs,signr,oldmask);
-		eip = (unsigned long) sa->sa_handler;
-		if (sa->sa_flags & SA_ONESHOT)
-			sa->sa_handler = NULL;
-		regs->cs = USER_CS; regs->ss = USER_DS;
-		regs->ds = USER_DS; regs->es = USER_DS;
-		regs->gs = USER_DS; regs->fs = USER_DS;
-		current->blocked |= sa->sa_mask;
-		oldmask |= sa->sa_mask;
-	}
-	regs->esp = (unsigned long) frame;
-	regs->eip = eip;		/* "return" to the first handler */
-	regs->eflags &= ~TF_MASK;
-	current->tss.trap_no = current->tss.error_code = 0;
-	return 1;
+	return 0;
 }

@@ -521,7 +521,7 @@ static void parse_options(char *line)
 			int n;
 			line += 8;
 			ROOT_DEV = MKDEV(UNNAMED_MAJOR, 255);
-			if (line[0] == '/' || (line[0] >= '0' && line[0] <= '9')) {
+			if (line[0] == '/' || line[0] == ',' || (line[0] >= '0' && line[0] <= '9')) {
 				strncpy(nfs_root_name, line, sizeof(nfs_root_name));
 				nfs_root_name[sizeof(nfs_root_name)-1] = '\0';
 				continue;

@@ -569,7 +569,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 		return 0;
 	}
 	set_pte(pte, pte_mkwrite(pte_mkdirty(mk_pte(page, PAGE_COPY))));
-/* no need for invalidate */
+/* no need for flush_tlb */
 	return page;
 }
 

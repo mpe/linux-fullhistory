@@ -1534,7 +1534,7 @@ static void SK_rxintr(struct device *dev)
 	    if (rmdstat & RX_STP) 
 	    {
 		p->stats.rx_errors++;        /* bad packet received */
-		p->stats.rx_length_errors++; /* packet to long */
+		p->stats.rx_length_errors++; /* packet too long */
 
 		printk("%s: packet too long\n", dev->name);
 	    }

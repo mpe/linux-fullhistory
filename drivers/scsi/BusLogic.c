@@ -639,7 +639,7 @@ static void BusLogic_InitializeAddressProbeList(void)
 	  if (AutoSCSIByte45.ForceBusDeviceScanningOrder)
 	    {
 	      /*
-		Sort the I/O Addresses such that the corrseponding PCI devices
+		Sort the I/O Addresses such that the corresponding PCI devices
 		are in ascending order by Bus Number and Device Number.
 	      */
 	      int LastInterchange = DestinationIndex-1, Bound, j;

@@ -421,6 +421,7 @@ static int shm_map (struct vm_area_struct *shmd)
 	pmd_t *page_middle;
 	pte_t *page_table;
 	unsigned long tmp, shm_sgn;
+	int error;
 
 	/* clear old mappings */
 	do_munmap(shmd->vm_start, shmd->vm_end - shmd->vm_start);
@@ -431,6 +432,7 @@ static int shm_map (struct vm_area_struct *shmd)
 	merge_segments(current, shmd->vm_start, shmd->vm_end);
 
 	/* map page range */
+	error = 0;
 	shm_sgn = shmd->vm_pte +
 	  SWP_ENTRY(0, (shmd->vm_offset >> PAGE_SHIFT) << SHM_IDX_SHIFT);
 	flush_cache_range(shmd->vm_mm, shmd->vm_start, shmd->vm_end);
@@ -440,11 +442,15 @@ static int shm_map (struct vm_area_struct *shmd)
 	{
 		page_dir = pgd_offset(shmd->vm_mm,tmp);
 		page_middle = pmd_alloc(page_dir,tmp);
-		if (!page_middle)
-			return -ENOMEM;
+		if (!page_middle) {
+			error = -ENOMEM;
+			break;
+		}
 		page_table = pte_alloc(page_middle,tmp);
-		if (!page_table)
-			return -ENOMEM;
+		if (!page_table) {
+			error = -ENOMEM;
+			break;
+		}
 		set_pte(page_table, __pte(shm_sgn));
 	}
 	flush_tlb_range(shmd->vm_mm, shmd->vm_start, shmd->vm_end);
@@ -712,7 +718,7 @@ int shm_swap (int prio, int dma)
 	pte_val(page) = shp->shm_pages[idx];
 	if (!pte_present(page))
 		goto check_table;
-	if (dma && !PageDMA(MAP_NR(pte_page(page)) + mem_map))
+	if (dma && !PageDMA(&mem_map[MAP_NR(pte_page(page))]))
 		goto check_table;
 	swap_attempts++;
 

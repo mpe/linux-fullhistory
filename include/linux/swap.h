@@ -54,6 +54,7 @@ extern void rw_swap_page(int, unsigned long, char *, int);
 	rw_swap_page(READ,(nr),(buf),1)
 #define write_swap_page(nr,buf) \
 	rw_swap_page(WRITE,(nr),(buf),1)
+extern void swap_after_unlock_page (unsigned long entry);
 
 /* linux/mm/page_alloc.c */
 extern void swap_in(struct task_struct *, struct vm_area_struct *,

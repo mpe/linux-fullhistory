@@ -394,7 +394,7 @@ typedef struct scsi_cmnd {
       passes it to the driver's queue command function.  The serial_number
       is cleared when scsi_done is entered indicating that the command has
       been completed.  If a timeout occurs, the serial number at the moment
-      of timeout is copied into serial_number_at_timeout.  By subseuqently
+      of timeout is copied into serial_number_at_timeout.  By subsequently
       comparing the serial_number and serial_number_at_timeout fields
       during abort or reset processing, we can detect whether the command
       has already completed.  This also detects cases where the command has

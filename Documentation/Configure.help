@@ -1241,7 +1241,7 @@ EATA-PIO (old DPT PM2001, PM2012A) support
 CONFIG_SCSI_EATA_PIO
   This driver supports all EATA-PIO protocol compliant SCSI Host Adaptors
   like the DPT PM2001 and the PM2012A. EATA-DMA compliant HBAs can also use 
-  this driver but are discuraged from doing so, since this driver only 
+  this driver but are discouraged from doing so, since this driver only 
   supports harddisks and lacks numerous features.
   You might want to have a look at the SCSI-HOWTO, available via ftp 
   (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.  
@@ -1334,9 +1334,12 @@ CONFIG_SCSI_IN2000
   explained in section 3.6 of the SCSI-HOWTO, available via ftp (user:
   anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't
   work out of the box, you may have to change some settings in
-  drivers/scsi/inn2000.h.  If you want to compile this as a module ( =
-  code which can be inserted in and removed from the running kernel
-  whenever you want), say M here and read Documentation/modules.txt.
+  drivers/scsi/in2000.h.  You may also want to drop in a rewritten,
+  and probably more reliable, driver from John Shifflett, which you
+  can get from ftp://ftp.netcom.com/pub/js/jshiffle/in2000/ .  If you
+  want to compile this as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt.
 
 PAS16 SCSI support
 CONFIG_SCSI_PAS16
@@ -1357,7 +1360,7 @@ CONFIG_SCSI_QLOGIC
 
 Seagate ST-02 and Future Domain TMC-8xx SCSI support
 CONFIG_SCSI_SEAGATE
-  These are 8-bit SCSI controller; the ST-01 is also supported by this
+  These are 8-bit SCSI controllers; the ST-01 is also supported by this
   driver.  It is explained in section 3.9 of the SCSI-HOWTO, available
   via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the

@@ -246,7 +246,7 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 		    (current->egid == egid) ||
 		    (current->sgid == egid) ||
 		    suser())
-			current->egid = egid;
+			current->fsgid = current->egid = egid;
 		else {
 			current->gid = old_rgid;
 			return(-EPERM);
@@ -455,7 +455,7 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 		    (current->euid == euid) ||
 		    (current->suid == euid) ||
 		    suser())
-			current->euid = euid;
+			current->fsuid = current->euid = euid;
 		else {
 			current->uid = old_ruid;
 			return(-EPERM);

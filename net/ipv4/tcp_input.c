@@ -394,7 +394,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	skb_queue_head_init(&newsk->back_log);
 	newsk->rtt = 0;		/*TCP_CONNECT_TIME<<3*/
 	newsk->rto = TCP_TIMEOUT_INIT;
-	newsk->mdev = 0;
+	newsk->mdev = TCP_TIMEOUT_INIT<<1;
 	newsk->max_window = 0;
 	newsk->cong_window = 1;
 	newsk->cong_count = 0;
@@ -598,7 +598,6 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 *     in shutdown state
 	 * 2 - data from retransmit queue was acked and removed
 	 * 4 - window shrunk or data from retransmit queue was acked and removed
-	 * 8 - we want to do a fast retransmit. One packet only.
 	 */
 
 	if(sk->zapped)
@@ -709,18 +708,52 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 *	This will allow us to do fast retransmits.
 	 */
 
-	if (sk->rcv_ack_seq == ack && sk->window_seq == window_seq && !(flag&1))
+	/* We are looking for duplicate ACKs here.
+	 * An ACK is a duplicate if:
+	 * (1) it has the same sequence number as the largest number we've seen,
+	 * (2) it has the same window as the last ACK,
+	 * (3) we have outstanding data that has not been ACKed
+	 * (4) The packet was not carrying any data.
+	 * I've tried to order these in occurance of most likely to fail
+	 * to least likely to fail.
+	 * [These are the rules BSD stacks use to determine if an ACK is a
+	 *  duplicate.]
+	 */
+
+	if (sk->rcv_ack_seq == ack
+		&& sk->window_seq == window_seq
+		&& !(flag&1)
+		&& before(ack, sk->sent_seq))
 	{
-		/*
-		 * We only want to short cut this once, many
-		 * ACKs may still come, we'll do a normal transmit
-		 * for these ACKs.
+		/* See draft-stevens-tcpca-spec-01 for explanation
+		 * of what we are doing here.
 		 */
-		if (++sk->rcv_ack_cnt == MAX_DUP_ACKS+1)
-			flag |= 8;	/* flag for a fast retransmit */
+		sk->rcv_ack_cnt++;
+		if (sk->rcv_ack_cnt == MAX_DUP_ACKS+1) {
+			sk->ssthresh = max(sk->cong_window >> 1, 2);
+			sk->cong_window = sk->ssthresh+MAX_DUP_ACKS+1;
+			tcp_do_retransmit(sk,0);
+			/* reduce the count. We don't want to be
+			* seen to be in "retransmit" mode if we
+			* are doing a fast retransmit.
+			*/
+			sk->retransmits--;
+		} else if (sk->rcv_ack_cnt > MAX_DUP_ACKS+1) {
+			sk->cong_window++;
+			/*
+			* At this point we are suppose to transmit a NEW
+			* packet (not retransmit the missing packet,
+			* this would only get us into a retransmit war.)
+			* I think that having just adjusted cong_window
+			* we will transmit the new packet below.
+			*/
+		}
 	}
 	else
 	{
+		if (sk->rcv_ack_cnt > MAX_DUP_ACKS) {
+			sk->cong_window = sk->ssthresh;
+		}
 		sk->window_seq = window_seq;
 		sk->rcv_ack_seq = ack;
 		sk->rcv_ack_cnt = 1;
@@ -1046,8 +1079,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	
 	if (((!flag) || (flag&4)) && sk->send_head != NULL &&
 	       (((flag&2) && sk->retransmits) ||
-		(flag&8) ||
-	       (sk->send_head->when + sk->rto < jiffies))) 
+	       (sk->send_head->when + sk->rto < jiffies)))
 	{
 		if(sk->send_head->when + sk->rto < jiffies)
 			tcp_retransmit(sk,0);	

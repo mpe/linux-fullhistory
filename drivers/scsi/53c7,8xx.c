@@ -24,7 +24,7 @@
  * in the text.
  *
  *
- *   OPTION_NOASYNC
+ *   OPTION_NO_ASYNC
  *	Don't negotiate for asynchronous transfers on the first command 
  *	when OPTION_ALWAYS_SYNCHRONOUS is set.  Useful for dain bramaged
  *	devices which do something bad rather than sending a MESSAGE 

@@ -14,7 +14,7 @@
 
 static inline unsigned long page_address(struct page * page)
 {
-	return PAGE_OFFSET + PAGE_SIZE*(page - mem_map);
+	return PAGE_OFFSET + PAGE_SIZE * page->map_nr;
 }
 
 #define PAGE_HASH_BITS 10
@@ -22,7 +22,7 @@ static inline unsigned long page_address(struct page * page)
 
 #define PAGE_AGE_VALUE 16
 
-extern unsigned long page_cache_size;
+extern unsigned long page_cache_size; /* # of pages currently in the hash table */
 extern struct page * page_hash_table[PAGE_HASH_SIZE];
 
 /*
@@ -33,7 +33,7 @@ extern struct page * page_hash_table[PAGE_HASH_SIZE];
  */
 static inline unsigned long _page_hashfn(struct inode * inode, unsigned long offset)
 {
-#define i (((unsigned long) inode)/sizeof(unsigned long))
+#define i (((unsigned long) inode)/(sizeof(struct inode) & ~ (sizeof(struct inode) - 1)))
 #define o (offset >> PAGE_SHIFT)
 #define s(x) ((x)+((x)>>PAGE_HASH_BITS))
 	return s(i+o) & (PAGE_HASH_SIZE-1);

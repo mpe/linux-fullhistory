@@ -442,39 +442,6 @@ struct request *get_md_request (int max_req, kdev_t dev)
 
 #endif
 
-/*
- * Swap partitions are now read via brw_page.  ll_rw_page is an
- * asynchronous function now --- we must call wait_on_page afterwards
- * if synchronous IO is required.  
- */
-void ll_rw_page(int rw, kdev_t dev, unsigned long page, char * buffer)
-{
-	unsigned int major = MAJOR(dev);
-	int block = page;
-	
-	if (major >= MAX_BLKDEV || !(blk_dev[major].request_fn)) {
-		printk("Trying to read nonexistent block-device %s (%ld)\n",
-		       kdevname(dev), page);
-		return;
-	}
-	switch (rw) {
-		case READ:
-			break;
-		case WRITE:
-			if (is_read_only(dev)) {
-				printk("Can't page to read-only device %s\n",
-					kdevname(dev));
-				return;
-			}
-			break;
-		default:
-			panic("ll_rw_page: bad block dev cmd, must be R/W");
-	}
-	if (set_bit(PG_locked, &mem_map[MAP_NR(buffer)].flags))
-		panic ("ll_rw_page: page already locked");
-	brw_page(rw, (unsigned long) buffer, dev, &block, PAGE_SIZE, 0);
-}
-
 /* This function can be used to request a number of buffers from a block
    device. Currently the only restriction is that all buffers must belong to
    the same device */

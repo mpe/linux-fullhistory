@@ -464,7 +464,7 @@ if (count > 0) ccount += count;
  * Will try asynchronous read-ahead.
  * Double the max read ahead size each time.
  *   That heuristic avoid to do some large IO for files that are not really
- *   accessed sequentialy.
+ *   accessed sequentially.
  */
 	} else {
 		try_async = 1;

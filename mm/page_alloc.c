@@ -37,7 +37,7 @@ int nr_free_pages = 0;
 
 struct free_area_struct {
 	struct page list;
-	unsigned int *  map;
+	unsigned int * map;
 };
 
 static struct free_area_struct free_area[NR_MEM_LISTS];
@@ -143,7 +143,7 @@ do { struct free_area_struct * area = free_area+order; \
 	do { struct page *prev = &area->list, *ret; \
 		while (&area->list != (ret = prev->next)) { \
 			if (!dma || CAN_DMA(ret)) { \
-				unsigned long map_nr = ret - mem_map; \
+				unsigned long map_nr = ret->map_nr; \
 				(prev->next = ret->next)->prev = prev; \
 				MARK_USED(map_nr, new_order, area); \
 				nr_free_pages -= 1 << order; \
@@ -263,6 +263,7 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	do {
 		--p;
 		p->flags = (1 << PG_DMA) | (1 << PG_reserved);
+		p->map_nr = p - mem_map;
 	} while (p > mem_map);
 
 	for (i = 0 ; i < NR_MEM_LISTS ; i++) {
@@ -310,6 +311,7 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 	vma->vm_mm->rss++;
 	tsk->maj_flt++;
 	if (!write_access && add_to_swap_cache(MAP_NR(page), entry)) {
+		/* keep swap page allocated for the moment (swap cache) */
 		set_pte(page_table, mk_pte(page, vma->vm_page_prot));
 		return;
 	}

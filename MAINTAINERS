@@ -193,6 +193,12 @@ M:	longyear@netcom.com, Cc: longyear@sii.com
 L:	linux-ppp@vger.rutgers.edu
 S:	Maintained
 
+STARMODE RADIO IP (STRIP) PROTOCOL DRIVER
+P:     Stuart Cheshire
+M:     cheshire@cs.stanford.edu
+W:     http://mosquitonet.Stanford.EDU/strip.html
+S:     Maintained
+
 SMB FILESYSTEM:
 P:	Volker Lendecke
 M:	lendecke@namu01.gwdg.de

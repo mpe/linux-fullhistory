@@ -390,7 +390,7 @@ static int check_idq(struct dquot *dquot, short type, u_long short inodes)
 	   (dquot->dq_curinodes + inodes) > dquot->dq_isoftlimit &&
 	    dquot->dq_itime && CURRENT_TIME >= dquot->dq_itime && !fsuser()) {
                 if (need_print_warning(type, dquot)) {
-			sprintf(quotamessage, "%s: warning, %s file quota exceeded to long.\r\n",
+			sprintf(quotamessage, "%s: warning, %s file quota exceeded too long.\r\n",
 		        	dquot->dq_mnt->mnt_dirname, quotatypes[type]);
 			tty_write_message(current->tty, quotamessage);
 		}
@@ -428,7 +428,7 @@ static int check_bdq(struct dquot *dquot, short type, u_long blocks)
 	   (dquot->dq_curblocks + blocks) > dquot->dq_bsoftlimit &&
 	    dquot->dq_btime && CURRENT_TIME >= dquot->dq_btime && !fsuser()) {
                 if (need_print_warning(type, dquot)) {
-			sprintf(quotamessage, "%s: write failed, %s disk quota exceeded to long.\r\n",
+			sprintf(quotamessage, "%s: write failed, %s disk quota exceeded too long.\r\n",
 		        	dquot->dq_mnt->mnt_dirname, quotatypes[type]);
 			tty_write_message(current->tty, quotamessage);
 		}

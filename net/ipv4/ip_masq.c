@@ -636,46 +636,58 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 			      int length, int unused)
 {
-	off_t pos=0, begin=0;
+	off_t pos=0, begin;
 	struct ip_masq *ms;
 	unsigned long flags;
+	char temp[129];
         int idx = 0;
 	int len=0;
 	
-	len=sprintf(buffer,"Prc FromIP   FPrt ToIP     TPrt Masq Init-seq  Delta PDelta Expires (free=%d,%d)\n",
-                    ip_masq_free_ports[0], ip_masq_free_ports[1]); 
+	if (offset < 128) 
+	{
+		sprintf(temp,
+			"Prc FromIP   FPrt ToIP     TPrt Masq Init-seq  Delta PDelta Expires (free=%d,%d)",
+			ip_masq_free_ports[0], ip_masq_free_ports[1]); 
+		len = sprintf(buffer, "%-127s\n", temp);
+	}
+	pos = 128;
 	save_flags(flags);
 	cli();
         
         for(idx = 0; idx < IP_MASQ_TAB_SIZE; idx++)
         for(ms = ip_masq_m_tab[idx]; ms ; ms = ms->m_link)
 	{
-		int timer_active = del_timer(&ms->timer);
+		int timer_active;
+		pos += 128;
+		if (pos <= offset)
+			continue;
+
+		timer_active = del_timer(&ms->timer);
 		if (!timer_active)
 			ms->timer.expires = jiffies;
-		len+=sprintf(buffer+len,"%s %08lX:%04X %08lX:%04X %04X %08X %6d %6d %lu\n",
+		sprintf(temp,"%s %08lX:%04X %08lX:%04X %04X %08X %6d %6d %7lu",
 			masq_proto_name(ms->protocol),
-			ntohl(ms->saddr),ntohs(ms->sport),
-			ntohl(ms->daddr),ntohs(ms->dport),
+			ntohl(ms->saddr), ntohs(ms->sport),
+			ntohl(ms->daddr), ntohs(ms->dport),
 			ntohs(ms->mport),
-			ms->out_seq.init_seq,ms->out_seq.delta,ms->out_seq.previous_delta,ms->timer.expires-jiffies);
+			ms->out_seq.init_seq,
+			ms->out_seq.delta,
+			ms->out_seq.previous_delta,
+			ms->timer.expires-jiffies);
 		if (timer_active)
 			add_timer(&ms->timer);
+		len += sprintf(buffer+len, "%-127s\n", temp);
 
-		pos=begin+len;
-		if(pos<offset) 
-		{
- 			len=0;
-			begin=pos;
-		}
-		if(pos>offset+length)
-			break;
+		if(len >= length)
+			goto done;
         }
+done:
 	restore_flags(flags);
-	*start=buffer+(offset-begin);
-	len-=(offset-begin);
+	begin = len - (pos - offset);
+	*start = buffer + begin;
+	len -= begin;
 	if(len>length)
-		len=length;
+		len = length;
 	return len;
 }
 

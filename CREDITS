@@ -202,6 +202,14 @@ S: 14509 NE 39th Street #1096
 S: Bellevue, Washington 98007
 S: USA
 
+N: Stuart Cheshire
+E: cheshire@cs.stanford.edu
+D: Author of Starmode Radio IP (STRIP) driver
+D: Originator of design for new combined interrupt handlers
+S: William Gates Department
+S: Stanford University
+S: Stanford, California 94305, USA
+
 N: Juan Jose Ciarlante
 E: jjciarla@raiz.uncu.edu.ar
 D: Network driver alias support
@@ -264,10 +272,9 @@ E: davison@borland.com
 D: Second extended file system co-designer
 
 N: Terry Dawson
-E: terryd@extro.ucc.su.oz.au
-E: vk2ktj@gw.vk2ktj.ampr.org (Amateur Radio use only)
-D: NET-2-HOWTO author.
-D: RADIOLINUX Amateur Radio software for Linux list collator.
+E: terry@perf.no.itg.telecom.com.au
+E: terry@albert.vk2ktj.ampr.org (Amateur Radio use only)
+D: AX25-HOWTO, HAM-HOWTO, IPX-HOWTO, NET-2-HOWTO
 
 N: Todd J. Derr
 E: tjd@fore.com

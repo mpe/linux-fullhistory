@@ -117,30 +117,31 @@ struct vm_operations_struct {
  */
 typedef struct page {
 	atomic_t count;
+	unsigned dirty:16,
+		 age:8;
 	unsigned flags;	/* atomic flags, some possibly updated asynchronously */
 	struct wait_queue *wait;
 	struct page *next;
-
 	struct page *next_hash;
 	unsigned long offset;
 	struct inode *inode;
-	struct page *write_list;
-
 	struct page *prev;
 	struct page *prev_hash;
 	struct buffer_head * buffers;
-	unsigned dirty:16,
-		 age:8;
+	unsigned long swap_unlock_entry;
+	unsigned long map_nr;	/* page->map_nr == page - mem_map */
 } mem_map_t;
 
 /* Page flag bit values */
-#define PG_locked	 0
-#define PG_error	 1
-#define PG_referenced	 2
-#define PG_uptodate	 3
-#define PG_freeafter	 4
-#define PG_DMA		 5
-#define PG_reserved	31
+#define PG_locked		 0
+#define PG_error		 1
+#define PG_referenced		 2
+#define PG_uptodate		 3
+#define PG_free_after		 4
+#define PG_decr_after		 5
+#define PG_swap_unlock_after	 6
+#define PG_DMA			 7
+#define PG_reserved		31
 
 /* Make it prettier to test the above... */
 #define PageLocked(page)	(test_bit(PG_locked, &(page)->flags))
@@ -148,9 +149,78 @@ typedef struct page {
 #define PageReferenced(page)	(test_bit(PG_referenced, &(page)->flags))
 #define PageDirty(page)		(test_bit(PG_dirty, &(page)->flags))
 #define PageUptodate(page)	(test_bit(PG_uptodate, &(page)->flags))
-#define PageFreeafter(page)	(test_bit(PG_freeafter, &(page)->flags))
+#define PageFreeAfter(page)	(test_bit(PG_free_after, &(page)->flags))
+#define PageDecrAfter(page)	(test_bit(PG_decr_after, &(page)->flags))
+#define PageSwapUnlockAfter(page) (test_bit(PG_swap_unlock_after, &(page)->flags))
 #define PageDMA(page)		(test_bit(PG_DMA, &(page)->flags))
 #define PageReserved(page)	(test_bit(PG_reserved, &(page)->flags))
+
+/*
+ * page->reserved denotes a page which must never be accessed (which
+ * may not even be present).
+ *
+ * page->dma is set for those pages which lie in the range of
+ * physical addresses capable of carrying DMA transfers.
+ *
+ * Multiple processes may "see" the same page. E.g. for untouched
+ * mappings of /dev/null, all processes see the same page full of
+ * zeroes, and text pages of executables and shared libraries have
+ * only one copy in memory, at most, normally.
+ *
+ * For the non-reserved pages, page->count denotes a reference count.
+ *   page->count == 0 means the page is free.
+ *   page->count == 1 means the page is used for exactly one purpose
+ *   (e.g. a private data page of one process).
+ *
+ * A page may be used for kmalloc() or anyone else who does a
+ * get_free_page(). In this case the page->count is at least 1, and
+ * all other fields are unused but should be 0 or NULL. The
+ * managament of this page is the responsibility of the one who uses
+ * it.
+ *
+ * The other pages (we may call them "process pages") are completely
+ * managed by the Linux memory manager: I/O, buffers, swapping etc.
+ * The following discussion applies only to them.
+ *
+ * A page may belong to an inode's memory mapping. In this case,
+ * page->inode is the inode, and page->offset is the file offset
+ * of the page (not necessarily a multiple of PAGE_SIZE).
+ *
+ * A page may have buffers allocated to it. In this case,
+ * page->buffers is a circular list of these buffer heads. Else,
+ * page->buffers == NULL.
+ *
+ * For pages belonging to inodes, the page->count is the number of
+ * attaches, plus 1 if buffers are allocated to the page.
+ *
+ * All pages belonging to an inode make up a doubly linked list
+ * inode->i_pages, using the fields page->next and page->prev. (These
+ * fields are also used for freelist management when page->count==0.)
+ * There is also a hash table mapping (inode,offset) to the page
+ * in memory if present. The lists for this hash table use the fields
+ * page->next_hash and page->prev_hash.
+ *
+ * All process pages can do I/O:
+ * - inode pages may need to be read from disk,
+ * - inode pages which have been modified and are MAP_SHARED may need
+ *   to be written to disk,
+ * - private pages which have been modified may need to be swapped out
+ *   to swap space and (later) to be read back into memory.
+ * During disk I/O, page->locked is true. This bit is set before I/O
+ * and reset when I/O completes. page->wait is a wait queue of all
+ * tasks waiting for the I/O on this page to complete.
+ * page->uptodate tells whether the page's contents is valid.
+ * When a read completes, the page becomes uptodate, unless a disk I/O
+ * error happened.
+ * When a write completes, and page->free_after is true, the page is
+ * freed without any further delay.
+ *
+ * For choosing which pages to swap out, inode pages carry a
+ * page->referenced bit, which is set any time the system accesses
+ * that page through the (inode,offset) hash table.
+ * There is also the page->age counter, which implements a linear
+ * decay (why not an exponential decay?), see swapctl.h.
+ */
 
 extern mem_map_t * mem_map;
 

@@ -47,6 +47,10 @@
  *				from being used (thanks to Leo Spiekman)
  *	Andy Walker	:	Allow to specify the NFS server in nfs_root
  *				without giving a path name
+ *	Swen Th=FCmmler	:	Allow to specify the NFS options in nfs_root
+ *				without giving a path name. Fix BOOTP request
+ *				for domainname (domainname is NIS domain, not
+ *				DNS domain!). Skip dummy devices for BOOTP.
  *
  */
 
@@ -168,6 +172,7 @@ static int root_dev_open(void)
 		if (dev->type < ARPHRD_SLIP &&
 		    dev->family == AF_INET &&
 		    !(dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT)) &&
+		    (0 != strncmp(dev->name, "dummy", 5)) &&
 		    (!user_dev_name[0] || !strcmp(dev->name, user_dev_name))) {
 			/* First up the interface */
 			old_flags = dev->flags;
@@ -622,7 +627,7 @@ static void root_bootp_init_ext(u8 *e)
 	*e++ = 12;		/* Host name request */
 	*e++ = 32;
 	e += 32;
-	*e++ = 15;		/* Domain name request */
+	*e++ = 40;		/* NIS Domain name request */
 	*e++ = 32;
 	e += 32;
 	*e++ = 17;		/* Boot path */
@@ -756,7 +761,6 @@ static int root_bootp_string(char *dest, char *src, int len, int max)
 static void root_do_bootp_ext(u8 *ext)
 {
 	u8 *c;
-	static int got_bootp_domain = 0;
 
 #ifdef NFSROOT_BOOTP_DEBUG
 	printk("BOOTP: Got extension %02x",*ext);
@@ -775,20 +779,9 @@ static void root_do_bootp_ext(u8 *ext)
 				memcpy(&gateway.sin_addr.s_addr, ext+1, 4);
 			break;
 		case 12:	/* Host name */
-			if (root_bootp_string(system_utsname.nodename, ext+1, *ext, __NEW_UTS_LEN)) {
-				c = strchr(system_utsname.nodename, '.');
-				if (c) {
-					*c++ = 0;
-					if (!system_utsname.domainname[0]) {
-						strcpy(system_utsname.domainname, c);
-						got_bootp_domain = 1;
-					}
-				}
-			}
+			root_bootp_string(system_utsname.nodename, ext+1, *ext, __NEW_UTS_LEN);
 			break;
-		case 15:	/* Domain name */
-			if (got_bootp_domain && *ext && ext[1])
-				system_utsname.domainname[0] = '\0';
+		case 40:	/* NIS Domain name */
 			root_bootp_string(system_utsname.domainname, ext+1, *ext, __NEW_UTS_LEN);
 			break;
 		case 17:	/* Root path */
@@ -1094,7 +1087,9 @@ static int root_nfs_name(char *name)
 		printk(KERN_ERR "Root-NFS: Pathname for remote directory too long.\n");
 		return -1;
 	}
-	sprintf(nfs_path, buf, cp);
+	/* update nfs_path with path from nfsroot=... command line parameter */
+	if (*buf)
+		sprintf(nfs_path, buf, cp);
 
 	/* Set some default values */
 	nfs_port          = -1;

@@ -6,8 +6,6 @@
         (c) 1995,1996 Grant R. Guenther, grant@torque.net,
                       under the terms of the GNU Public License.
 
-        THIS IS BETA SOFTWARE - PLEASE TAKE ALL NECESSARY PRECAUTIONS
-
 */
 
 /*      This driver was developed without the benefit of any technical

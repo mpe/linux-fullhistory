@@ -626,7 +626,7 @@ int dlci_setup(void)
 }
 
 #ifdef MODULE
-static struct device dlci = {devname, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, dlci_init, };
+static struct device dlci = {"dlci", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, dlci_init, };
 
 int init_module(void)
 {

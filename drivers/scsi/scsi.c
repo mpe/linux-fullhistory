@@ -2207,7 +2207,7 @@ static int update_timeout(Scsi_Cmnd * SCset, int timeout)
      * called, and again when scsi_done completes the command.  To limit
      * the load this routine can cause, we shortcut processing if no clock
      * ticks have occurred since the last time it was called.  This may
-     * cause the computation of least below to be inaccurrate, but it will
+     * cause the computation of least below to be inaccurate, but it will
      * be corrected after the next clock tick.
      */
 

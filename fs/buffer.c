@@ -803,6 +803,10 @@ void set_writetime(struct buffer_head * buf, int flag)
 }
 
 
+/*
+ * A buffer may need to be moved from one buffer list to another
+ * (e.g. in case it is not shared any more). Handle this.
+ */
 void refile_buffer(struct buffer_head * buf)
 {
 	int dispose;
@@ -1088,6 +1092,46 @@ no_grow:
 	return NULL;
 }
 
+/* Run the hooks that have to be done when a page I/O has completed. */
+static inline void after_unlock_page (struct page * page)
+{
+	if (clear_bit(PG_decr_after, &page->flags))
+		nr_async_pages--;
+	if (clear_bit(PG_free_after, &page->flags))
+		free_page(page_address(page));
+	if (clear_bit(PG_swap_unlock_after, &page->flags))
+		swap_after_unlock_page(page->swap_unlock_entry);
+}
+
+/* Free all temporary buffers belonging to a page. */
+static inline void free_async_buffers (struct buffer_head * bh)
+{
+	struct buffer_head * tmp;
+	unsigned long flags;
+
+	tmp = bh;
+	save_flags(flags);
+	cli();
+	do {
+		if (!test_bit(BH_FreeOnIO, &tmp->b_state)) {
+			printk ("Whoops: unlock_buffer: "
+				"async IO mismatch on page.\n");
+			restore_flags(flags);
+			return;
+		}
+		tmp->b_next_free = reuse_list;
+		reuse_list = tmp;
+		clear_bit(BH_FreeOnIO, &tmp->b_state);
+		tmp = tmp->b_this_page;
+	} while (tmp != bh);
+	restore_flags(flags);
+}
+
+/*
+ * Start I/O on a page.
+ * This function expects the page to be locked and may return before I/O is complete.
+ * You then have to check page->locked, page->uptodate, and maybe wait on page->wait.
+ */
 int brw_page(int rw, unsigned long address, kdev_t dev, int b[], int size, int bmap)
 {
 	struct buffer_head *bh, *prev, *next, *arr[MAX_BUF_PER_PAGE];
@@ -1095,10 +1139,20 @@ int brw_page(int rw, unsigned long address, kdev_t dev, int b[], int size, int b
 	struct page *page;
 
 	page = mem_map + MAP_NR(address);
+	if (!PageLocked(page))
+		panic("brw_page: page not locked for I/O");
 	clear_bit(PG_uptodate, &page->flags);
+	/*
+	 * Allocate buffer heads pointing to this page, just for I/O.
+	 * They do _not_ show up in the buffer hash table!
+	 * They are _not_ registered in page->buffers either!
+	 */
 	bh = create_buffers(address, size);
-	if (!bh)
+	if (!bh) {
+		clear_bit(PG_locked, &page->flags);
+		wake_up(&page->wait);
 		return -ENOMEM;
+	}
 	nr = 0;
 	next = bh;
 	do {
@@ -1148,33 +1202,32 @@ int brw_page(int rw, unsigned long address, kdev_t dev, int b[], int size, int b
 	} while (prev = next, (next = next->b_this_page) != NULL);
 	prev->b_this_page = bh;
 	
-	if (nr)
+	if (nr) {
 		ll_rw_block(rw, nr, arr);
-	else {
-		unsigned long flags;
+		/* The rest of the work is done in mark_buffer_uptodate()
+		 * and unlock_buffer(). */
+	} else {
 		clear_bit(PG_locked, &page->flags);
 		set_bit(PG_uptodate, &page->flags);
 		wake_up(&page->wait);
-		next = bh;
-		save_flags(flags);
-		cli();
-		do {
-			next->b_next_free = reuse_list;
-			reuse_list = next;
-			next = next->b_this_page;
-		} while (next != bh);
-		restore_flags(flags);
+		free_async_buffers(bh);
+		after_unlock_page(page);
 	}
 	++current->maj_flt;
 	return 0;
 }
 
+/*
+ * This is called by end_request() when I/O has completed.
+ */
 void mark_buffer_uptodate(struct buffer_head * bh, int on)
 {
 	if (on) {
 		struct buffer_head *tmp = bh;
 		int page_uptodate = 1;
 		set_bit(BH_Uptodate, &bh->b_state);
+		/* If a page has buffers and all these buffers are uptodate,
+		 * then the page is uptodate. */
 		do {
 			if (!test_bit(BH_Uptodate, &tmp->b_state)) {
 				page_uptodate = 0;
@@ -1188,10 +1241,12 @@ void mark_buffer_uptodate(struct buffer_head * bh, int on)
 		clear_bit(BH_Uptodate, &bh->b_state);
 }
 
+/*
+ * This is called by end_request() when I/O has completed.
+ */
 void unlock_buffer(struct buffer_head * bh)
 {
 	struct buffer_head *tmp;
-	unsigned long flags;
 	struct page *page;
 
 	clear_bit(BH_Lock, &bh->b_state);
@@ -1199,6 +1254,7 @@ void unlock_buffer(struct buffer_head * bh)
 
 	if (!test_bit(BH_FreeOnIO, &bh->b_state))
 		return;
+	/* This is a temporary buffer used for page I/O. */
 	page = mem_map + MAP_NR(bh->b_data);
 	if (!PageLocked(page)) {
 		printk ("Whoops: unlock_buffer: "
@@ -1218,31 +1274,11 @@ void unlock_buffer(struct buffer_head * bh)
 		if (test_bit(BH_Lock, &tmp->b_state) || tmp->b_count)
 			return;
 	}
-
-	/* OK, go ahead and complete the async IO on this page. */
-	save_flags(flags);
+	/* OK, the async IO on this page is complete. */
 	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
-	cli();
-	tmp = bh;
-	do {
-		if (!test_bit(BH_FreeOnIO, &tmp->b_state)) {
-			printk ("Whoops: unlock_buffer: "
-				"async IO mismatch on page.\n");
-			restore_flags(flags);
-			return;
-		}
-		tmp->b_next_free = reuse_list;
-		reuse_list = tmp;
-		clear_bit(BH_FreeOnIO, &tmp->b_state);
-		tmp = tmp->b_this_page;
-	} while (tmp != bh);
-	restore_flags(flags);
-	if (clear_bit(PG_freeafter, &page->flags)) {
-		extern int nr_async_pages;
-		nr_async_pages--;
-		free_page(page_address(page));
-	}
+	free_async_buffers(bh);
+	after_unlock_page(page);
 	wake_up(&buffer_wait);
 }
 
@@ -1262,6 +1298,7 @@ int generic_readpage(struct inode * inode, struct page * page)
 	address = page_address(page);
 	page->count++;
 	set_bit(PG_locked, &page->flags);
+	set_bit(PG_free_after, &page->flags);
 	
 	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
 	block = page->offset >> inode->i_sb->s_blocksize_bits;
@@ -1275,7 +1312,6 @@ int generic_readpage(struct inode * inode, struct page * page)
 
 	/* IO start */
 	brw_page(READ, address, inode->i_dev, nr, inode->i_sb->s_blocksize, 1);
-	free_page(address);
 	return 0;
 }
 

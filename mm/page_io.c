@@ -5,6 +5,7 @@
  *
  *  Swap reorganised 29.12.95, 
  *  Asynchronous swapping added 30.12.95. Stephen Tweedie
+ *  Removed race in async swapping. 14.4.1996. Bruno Haible
  */
 
 #include <linux/mm.h>
@@ -28,6 +29,18 @@
 
 static struct wait_queue * lock_queue = NULL;
 
+/*
+ * Reads or writes a swap page.
+ * wait=1: start I/O and wait for completion. wait=0: start asynchronous I/O.
+ *
+ * Important prevention of race condition: The first thing we do is set a lock
+ * on this swap page, which lasts until I/O completes. This way a
+ * write_swap_page(entry) immediately followed by a read_swap_page(entry)
+ * on the same entry will first complete the write_swap_page(). Fortunately,
+ * not more than one write_swap_page() request can be pending per entry. So
+ * all races the caller must catch are: multiple read_swap_page() requests
+ * on the same entry.
+ */
 void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 {
 	unsigned long type, offset;
@@ -53,6 +66,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		printk("Trying to swap to unused swap-device\n");
 		return;
 	}
+	/* Make sure we are the only process doing I/O with this swap page. */
 	while (set_bit(offset,p->swap_lockmap))
 		sleep_on(&lock_queue);
 	if (rw == READ)
@@ -64,12 +78,16 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 	if (p->swap_device) {
 		if (!wait) {
 			page->count++;
-			set_bit(PG_freeafter, &page->flags);
+			set_bit(PG_free_after, &page->flags);
+			set_bit(PG_decr_after, &page->flags);
+			set_bit(PG_swap_unlock_after, &page->flags);
+			page->swap_unlock_entry = entry;
 			nr_async_pages++;
 		}
 		ll_rw_page(rw,p->swap_device,offset,buf);
-		if (wait)
-			wait_on_page(page);
+		if (!wait)
+			return;
+		wait_on_page(page);
 	} else if (p->swap_file) {
 		struct inode *swapf = p->swap_file;
 		unsigned int zones[PAGE_SIZE/512];
@@ -113,4 +131,53 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 	if (offset && !clear_bit(offset,p->swap_lockmap))
 		printk("rw_swap_page: lock already cleared\n");
 	wake_up(&lock_queue);
+}
+
+/* This is run when asynchronous page I/O has completed. */
+void swap_after_unlock_page (unsigned long entry)
+{
+	unsigned long type, offset;
+	struct swap_info_struct * p;
+
+	type = SWP_TYPE(entry);
+	if (type >= nr_swapfiles) {
+		printk("swap_after_unlock_page: bad swap-device\n");
+		return;
+	}
+	p = &swap_info[type];
+	offset = SWP_OFFSET(entry);
+	if (offset >= p->max) {
+		printk("swap_after_unlock_page: weirdness\n");
+		return;
+	}
+	if (!clear_bit(offset,p->swap_lockmap))
+		printk("swap_after_unlock_page: lock already cleared\n");
+	wake_up(&lock_queue);
+}
+
+/*
+ * Swap partitions are now read via brw_page.  ll_rw_page is an
+ * asynchronous function now --- we must call wait_on_page afterwards
+ * if synchronous IO is required.  
+ */
+void ll_rw_page(int rw, kdev_t dev, unsigned long page, char * buffer)
+{
+	int block = page;
+
+	switch (rw) {
+		case READ:
+			break;
+		case WRITE:
+			if (is_read_only(dev)) {
+				printk("Can't page to read-only device %s\n",
+					kdevname(dev));
+				return;
+			}
+			break;
+		default:
+			panic("ll_rw_page: bad block dev cmd, must be R/W");
+	}
+	if (set_bit(PG_locked, &mem_map[MAP_NR(buffer)].flags))
+		panic ("ll_rw_page: page already locked");
+	brw_page(rw, (unsigned long) buffer, dev, &block, PAGE_SIZE, 0);
 }
