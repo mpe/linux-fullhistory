@@ -703,11 +703,13 @@ static int msix_capability_init(struct pci_dev *dev,
  **/
 int pci_enable_msi(struct pci_dev* dev)
 {
-	int pos, temp = dev->irq, status = -EINVAL;
+	int pos, temp, status = -EINVAL;
 	u16 control;
 
 	if (!pci_msi_enable || !dev)
  		return status;
+
+	temp = dev->irq;
 
 	if ((status = msi_init()) < 0)
 		return status;
