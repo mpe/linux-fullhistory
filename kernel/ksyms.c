@@ -217,6 +217,11 @@ EXPORT_SYMBOL(shrink_dcache_parent);
 EXPORT_SYMBOL(find_inode_number);
 EXPORT_SYMBOL(is_subdir);
 EXPORT_SYMBOL(get_unused_fd);
+EXPORT_SYMBOL(vfs_create);
+EXPORT_SYMBOL(vfs_mkdir);
+EXPORT_SYMBOL(vfs_mknod);
+EXPORT_SYMBOL(vfs_symlink);
+EXPORT_SYMBOL(vfs_link);
 EXPORT_SYMBOL(vfs_rmdir);
 EXPORT_SYMBOL(vfs_unlink);
 EXPORT_SYMBOL(vfs_rename);
@@ -233,6 +238,7 @@ EXPORT_SYMBOL(page_readlink);
 EXPORT_SYMBOL(page_follow_link);
 EXPORT_SYMBOL(page_symlink_inode_operations);
 EXPORT_SYMBOL(block_symlink);
+EXPORT_SYMBOL(vfs_readdir);
 
 /* for stackable file systems (lofs, wrapfs, etc.) */
 EXPORT_SYMBOL(add_to_page_cache);
@@ -368,6 +374,7 @@ EXPORT_SYMBOL(enable_hlt);
 EXPORT_SYMBOL(request_resource);
 EXPORT_SYMBOL(release_resource);
 EXPORT_SYMBOL(allocate_resource);
+EXPORT_SYMBOL(check_resource);
 EXPORT_SYMBOL(__request_region);
 EXPORT_SYMBOL(__check_region);
 EXPORT_SYMBOL(__release_region);

@@ -161,7 +161,6 @@ pipe_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 	if (down_interruptible(PIPE_SEM(*inode)))
 		goto out_nolock;
 
-do_more_write:
 	/* No readers yields SIGPIPE.  */
 	if (!PIPE_READERS(*inode))
 		goto sigpipe;

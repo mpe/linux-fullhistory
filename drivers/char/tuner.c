@@ -12,6 +12,7 @@
 #include <linux/videodev.h>
 
 #include "tuner.h"
+#include "audiochip.h"
 
 /* Addresses to scan */
 static unsigned short normal_i2c[] = {I2C_CLIENT_END};
@@ -334,6 +335,9 @@ tuner_command(struct i2c_client *client, unsigned int cmd, void *arg)
                         t->type,tuners[t->type].name);
 		strncpy(client->name, tuners[t->type].name, sizeof(client->name));
 		break;
+	case AUDC_SET_RADIO:
+		t->radio = 1;
+		break;
 		
 	/* --- v4l ioctls --- */
 	/* take care: bttv does userspace copying, we'll get a
@@ -342,6 +346,7 @@ tuner_command(struct i2c_client *client, unsigned int cmd, void *arg)
 	{
 		struct video_channel *vc = arg;
 		
+		t->radio = 0;
 		if (t->type == TUNER_PHILIPS_SECAM) {
 			t->mode = (vc->norm == VIDEO_MODE_SECAM) ? 1 : 0;
 			set_tv_freq(client,t->freq);

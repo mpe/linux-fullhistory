@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.63 1999/11/19 05:52:49 davem Exp $
+/* $Id: head.S,v 1.64 2000/03/06 22:33:42 davem Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -262,7 +262,16 @@ sun4u_init:
 
 	/* Setup "Linux Current Register", thanks Sun 8-) */
 	wr	%g0, 0x1, %pcr
-	wr	%g6, 0x0, %pic
+
+	/* Blackbird errata workaround.  See commentary in
+	 * smp.c:smp_percpu_timer_interrupt() for more
+	 * information.
+	 */
+	ba,pt	%xcc, 99f
+	 nop
+	.align	64
+99:	wr	%g6, %g0, %pic
+	rd	%pic, %g0
 #endif
 
 	wr	%g0, ASI_P, %asi

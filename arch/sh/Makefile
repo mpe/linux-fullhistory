@@ -73,7 +73,7 @@ MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 vmlinux: arch/sh/vmlinux.lds
 
 arch/sh/vmlinux.lds: arch/sh/vmlinux.lds.S FORCE
-	gcc -E -C -P -I$(HPATH) -Ush arch/sh/vmlinux.lds.S >arch/sh/vmlinux.lds
+	$(CPP) -C -P -I$(HPATH) -Ush arch/sh/vmlinux.lds.S >arch/sh/vmlinux.lds
 
 FORCE: ;
 

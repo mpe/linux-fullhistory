@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.80 2000/02/09 11:16:41 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.81 2000/03/06 03:48:01 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -889,6 +889,12 @@ int ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 			iph->frag_off |= htons(IP_MF);
 		ptr += len;
 		offset += len;
+
+#ifdef CONFIG_NETFILTER
+		/* Connection association is same as pre-frag packet */
+		skb2->nfct = skb->nfct;
+		nf_conntrack_get(skb2->nfct);
+#endif
 
 		/*
 		 *	Put this fragment into the sending queue.

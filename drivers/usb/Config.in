@@ -9,11 +9,11 @@ if [ ! "$CONFIG_USB" = "n" ]; then
 
 comment 'USB Controllers'
    dep_tristate '  UHCI (Intel PIIX4, VIA, ...) support' CONFIG_USB_UHCI $CONFIG_USB
-   if [ "$CONFIG_USB_UHCI" != "n" ]; then
+   if [ "$CONFIG_USB_UHCI" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool '    USB-UHCI High Bandwidth (EXPERIMENTAL)' CONFIG_USB_UHCI_HIGH_BANDWIDTH
    fi
    dep_tristate '  UHCI Alternate Driver (JE) support' CONFIG_USB_UHCI_ALT $CONFIG_USB
-   if [ "$CONFIG_USB_UHCI_ALT" != "n" ]; then
+   if [ "$CONFIG_USB_UHCI_ALT" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool '    UHCI unlink optimizations (EXPERIMENTAL)' CONFIG_USB_UHCI_ALT_UNLINK_OPTIMIZE
    fi
    dep_tristate '  OHCI (Compaq, iMacs, OPTi, SiS, ALi, ...) support' CONFIG_USB_OHCI $CONFIG_USB
@@ -30,9 +30,11 @@ comment 'USB Devices'
    if [ "$CONFIG_USB_SERIAL" != "n" ]; then
       bool '    USB Generic Serial Driver' CONFIG_USB_SERIAL_GENERIC
       bool '    USB Handspring Visor Driver' CONFIG_USB_SERIAL_VISOR
-      bool '    USB ConnectTech WhiteHEAT Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_WHITEHEAT
-      bool '    USB FTDI Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_FTDI_SIO
-      bool '    USB Keyspan PDA Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_KEYSPAN_PDA
+      if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
+         bool '    USB ConnectTech WhiteHEAT Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_WHITEHEAT
+         bool '    USB FTDI Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_FTDI_SIO
+         bool '    USB Keyspan PDA Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_KEYSPAN_PDA
+      fi
    fi
    dep_tristate '  USB CPiA Camera support' CONFIG_USB_CPIA $CONFIG_USB
    dep_tristate '  USB IBM (Xirlink) C-it Camera support' CONFIG_USB_IBMCAM $CONFIG_USB

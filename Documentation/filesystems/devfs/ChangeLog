@@ -1463,3 +1463,20 @@ Work sponsored by SGI
 - Fixed arch/i386/kernel/mtrr.c if procfs and devfs not enabled
 
 - Fixed drivers/char/stallion.c
+===============================================================================
+Changes for patch v161
+
+Work sponsored by SGI
+
+- Remove /dev/ide when ide-mod is unloaded
+
+- Fixed bug in drivers/block/ide-probe.c when secondary but no primary
+
+- Added DEVFS_FL_NO_PERSISTENCE flag
+
+- Used new DEVFS_FL_NO_PERSISTENCE flag for Unix98 pty slaves
+
+- Removed unnecessary call to <update_devfs_inode_from_entry> in
+  <devfs_readdir>
+
+- Only set auto-ownership for /dev/pty/s*

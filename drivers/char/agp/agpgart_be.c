@@ -1449,6 +1449,9 @@ static int amd_irongate_configure(void)
 
 	/* Write the Sync register */
 	pci_write_config_byte(agp_bridge.dev, AMD_MODECNTL, 0x80);
+   
+   	/* Set indexing mode */
+   	pci_write_config_byte(agp_bridge.dev, AMD_MODECNTL2, 0x02);
 
 	/* Write the enable register */
 	enable_reg = INREG16(amd_irongate_private.registers, AMD_GARTENABLE);

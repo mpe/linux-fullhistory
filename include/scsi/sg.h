@@ -9,11 +9,15 @@
 Original driver (sg.h):
 *       Copyright (C) 1992 Lawrence Foard
 Version 2 and 3 extensions to driver:
-*       Copyright (C) 1998, 1999 Douglas Gilbert
+*       Copyright (C) 1998 - 2000 Douglas Gilbert
 
-    Version: 3.1.10 (20000123)
+    Version: 3.1.12 (20000222)
     This version is for 2.3/2.4 series kernels.
 
+    Changes since 3.1.10 (20000123)
+    	- make device allocation dynamic (get rid of SG_EXTRA_DEVS)
+	- move to sg0,sg1,sg2 rather than sga,sgb,sgc
+	- make sg_io_hdr_t safer across architectures
     Changes since 2.1.34 (990603) and 2.3.35 (990708)
 	- add new interface structure: sg_io_hdr_t
 	  - supports larger sense buffer, DMA residual count + direct IO
@@ -110,11 +114,11 @@ typedef struct sg_iovec /* same structure as used by readv() Linux system */
 
 typedef struct sg_io_hdr
 {
-    char interface_id;          /* [i] 'S' for SCSI generic (required) */
-    unsigned char cmd_len;      /* [i] SCSI command length ( <= 16 bytes) */
-    unsigned char iovec_count;  /* [i] 0 implies no scatter gather */
-    unsigned char mx_sb_len;    /* [i] max length to write to sbp */
+    int interface_id;           /* [i] 'S' for SCSI generic (required) */
     int dxfer_direction;        /* [i] data transfer direction  */
+    unsigned char cmd_len;      /* [i] SCSI command length ( <= 16 bytes) */
+    unsigned char mx_sb_len;    /* [i] max length to write to sbp */
+    unsigned short iovec_count; /* [i] 0 implies no scatter gather */
     unsigned int dxfer_len;     /* [i] byte count of data transfer */
     void * dxferp;              /* [i], [*io] points to data transfer memory
 					      or scatter gather list */
@@ -133,7 +137,7 @@ typedef struct sg_io_hdr
     int resid;                  /* [o] dxfer_len - actual_transferred */
     unsigned int duration;      /* [o] time taken by cmd (unit: millisec) */
     unsigned int info;          /* [o] auxiliary information */
-} sg_io_hdr_t;  /* 60 bytes long (on i386) */
+} sg_io_hdr_t;  /* 64 bytes long (on i386) */
 
 /* Use negative values to flag difference from original sg_header structure */
 #define SG_DXFER_NONE -1        /* e.g. a SCSI Test Unit Ready command */
@@ -223,9 +227,13 @@ typedef struct sg_req_info { /* used by SG_GET_REQUEST_TABLE ioctl() */
 
 #define SG_GET_VERSION_NUM 0x2282 /* Example: version 2.1.34 yields 20134 */
 
-/* Returns -EBUSY if occupied else takes as input: 0 -> do nothing,
-   1 -> device reset or  2 -> bus reset (may not be activated yet) */
+/* Returns -EBUSY if occupied. 3rd argument pointer to int (see next) */
 #define SG_SCSI_RESET 0x2284
+/* Associated values that can be given to SG_SCSI_RESET follow */
+#define		SG_SCSI_RESET_NOTHING	0
+#define		SG_SCSI_RESET_DEVICE	1
+#define		SG_SCSI_RESET_BUS	2
+#define		SG_SCSI_RESET_HOST	3
 
 /* synchronous SCSI command ioctl, (only in version 3 interface) */
 #define SG_IO 0x2285   /* similar effect as write() followed by read() */
@@ -291,7 +299,7 @@ struct sg_header
 
 
 /* IOCTLs: The following are not required (or ignored) when the sg_io_hdr_t
-	   interface is used. That are kept for backward compatibility with
+	   interface is used. They are kept for backward compatibility with
 	   the original and version 2 drivers. */
 
 #define SG_SET_TIMEOUT 0x2201  /* unit: jiffies (10ms on i386) */

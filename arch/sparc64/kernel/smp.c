@@ -312,6 +312,13 @@ static inline void xcall_deliver(u64 data0, u64 data1, u64 data2, u64 pstate, un
 	       smp_processor_id(), data0, data1, data2, target);
 #endif
 again:
+	/* Ok, this is the real Spitfire Errata #54.
+	 * One must read back from a UDB internal register
+	 * after writes to the UDB interrupt dispatch, but
+	 * before the membar Sync for that write.
+	 * So we use the high UDB control register (ASI 0x7f,
+	 * ADDR 0x20) for the dummy read. -DaveM
+	 */
 	tmp = 0x40;
 	__asm__ __volatile__("
 	wrpr	%1, %2, %%pstate
@@ -321,10 +328,13 @@ again:
 	stxa	%6, [%0+%8] %3
 	membar	#Sync
 	stxa	%%g0, [%7] %3
+	mov	0x20, %%g1
+	ldxa	[%%g1] 0x7f, %%g0
 	membar	#Sync"
 	: "=r" (tmp)
 	: "r" (pstate), "i" (PSTATE_IE), "i" (ASI_UDB_INTR_W),
-	  "r" (data0), "r" (data1), "r" (data2), "r" (target), "r" (0x10), "0" (tmp));
+	  "r" (data0), "r" (data1), "r" (data2), "r" (target), "r" (0x10), "0" (tmp)
+       : "g1");
 
 	/* NOTE: PSTATE_IE is still clear. */
 	stuck = 100000;

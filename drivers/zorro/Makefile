@@ -9,24 +9,17 @@
 # parent makefile.
 #
 
-SUB_DIRS     :=
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
-
 L_TARGET := zorro.a
 
-# Nasty trick as nobody references zorrosyms.o, but we still want it linked.
-ifeq ($(CONFIG_MODULES),y)
-O_TARGET = zorro_syms.o
-OX_OBJS  = zorrosyms.o
-O_OBJS   = zorro.o names.o
-L_OBJS   := zorro_syms.o
-else
-L_OBJS   := zorro.o names.o
-endif
+# Nasty trick as we need to link files with no references from the outside.
+O_TARGET := zorro_core.o
+L_OBJS   := zorro_core.o
+OX_OBJS   := zorro.o
 
 ifdef CONFIG_PROC_FS
-L_OBJS   += proc.o
+O_OBJS   += proc.o
 endif
+
+L_OBJS   += names.o
 
 include $(TOPDIR)/Rules.make

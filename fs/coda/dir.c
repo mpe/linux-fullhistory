@@ -57,10 +57,8 @@ int coda_hasmknod = 0;
 
 struct dentry_operations coda_dentry_operations =
 {
-	coda_dentry_revalidate, /* revalidate */
-	NULL, /* hash */
-	NULL, /* compare */
-	coda_dentry_delete /* delete */
+	d_revalidate:	coda_dentry_revalidate,
+	d_delete:	coda_dentry_delete,
 };
 
 struct inode_operations coda_dir_inode_operations =
@@ -541,9 +539,7 @@ int coda_readdir(struct file *file, void *dirent,  filldir_t filldir)
                 result = coda_venus_readdir(&open_file, dirent, filldir);
         } else {
                 /* potemkin case: we are handed a directory inode */
-		down(&cnp->c_ovp->i_sem);
-                result = open_file.f_op->readdir(&open_file, dirent, filldir);
-		up(&cnp->c_ovp->i_sem);
+                result = vfs_readdir(&open_file, filldir, dirent);
         }
 	coda_restore_codafile(inode, file, cnp->c_ovp, &open_file);
         EXIT;

@@ -165,8 +165,10 @@ static char *usb_dump_endpoint_descriptor(char *start, char *end, const struct u
 	if (start > end)
 		return start;
 	start += sprintf(start, format_endpt, desc->bEndpointAddress,
+			 (desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_CONTROL
+			 	? 'B' :			/* bidirectional */
 			 (desc->bEndpointAddress & USB_DIR_IN) ? 'I' : 'O',
-			 desc->bmAttributes, EndpointType[desc->bmAttributes & 3],
+			 desc->bmAttributes, EndpointType[desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK],
 			 desc->wMaxPacketSize, desc->bInterval);
 	return start;
 }

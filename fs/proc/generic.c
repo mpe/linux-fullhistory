@@ -226,10 +226,7 @@ proc_delete_dentry(struct dentry * dentry)
 
 static struct dentry_operations proc_dentry_operations =
 {
-	NULL,			/* revalidate */
-	NULL,			/* d_hash */
-	NULL,			/* d_compare */
-	proc_delete_dentry	/* d_delete(struct dentry *) */
+	d_delete:	proc_delete_dentry,
 };
 
 /*

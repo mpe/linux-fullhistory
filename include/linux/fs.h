@@ -630,6 +630,11 @@ struct super_block {
 /*
  * VFS helper functions..
  */
+extern int vfs_create(struct inode *, struct dentry *, int);
+extern int vfs_mkdir(struct inode *, struct dentry *, int);
+extern int vfs_mknod(struct inode *, struct dentry *, int, dev_t);
+extern int vfs_symlink(struct inode *, struct dentry *, const char *);
+extern int vfs_link(struct dentry *, struct inode *, struct dentry *);
 extern int vfs_rmdir(struct inode *, struct dentry *);
 extern int vfs_unlink(struct inode *, struct dentry *);
 extern int vfs_rename(struct inode *, struct dentry *, struct inode *, struct dentry *);
@@ -1027,6 +1032,8 @@ extern struct dentry *vfs_follow_link(struct dentry *, struct dentry *, unsigned
 extern int page_readlink(struct dentry *, char *, int);
 extern struct dentry *page_follow_link(struct dentry *, struct dentry *, unsigned);
 extern struct inode_operations page_symlink_inode_operations;
+
+extern int vfs_readdir(struct file *, filldir_t, void *);
 
 extern struct super_block *get_super(kdev_t);
 struct super_block *get_empty_super(void);

@@ -212,9 +212,7 @@ static int usbdevfs_revalidate(struct dentry *dentry, int flags)
 }
 
 static struct dentry_operations usbdevfs_dentry_operations = {
-        usbdevfs_revalidate,    /* d_revalidate */
-        NULL,                   /* d_hash */
-        NULL,                   /* d_compare */
+	d_revalidate:	usbdevfs_revalidate,
 };
 
 static struct dentry *usbdevfs_root_lookup(struct inode *dir, struct dentry *dentry)

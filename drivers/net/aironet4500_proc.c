@@ -10,6 +10,7 @@
  *
  */
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/config.h>
 #include <linux/kernel.h>
 
@@ -520,7 +521,7 @@ int awc_proc_unset_device(int device_number){
    return 0;
 };
 
-int init_module(void) {
+static int aironet_proc_init(void) {
 	int i=0;
 
 	AWC_ENTRY_EXIT_DEBUG("init_module");
@@ -539,7 +540,7 @@ int init_module(void) {
 
 };
 
-void cleanup_module(void){
+static void aironet_proc_exit(void){
 
 	int i=0;
 	AWC_ENTRY_EXIT_DEBUG("cleanup_module");
@@ -551,5 +552,8 @@ void cleanup_module(void){
 		unregister_sysctl_table(awc_driver_sysctl_header);
 	AWC_ENTRY_EXIT_DEBUG("exit");
 };
+
+module_init(aironet_proc_init);
+module_exit(aironet_proc_exit);
 
 #endif // whole proc system styff

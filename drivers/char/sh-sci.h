@@ -7,6 +7,7 @@
  *  Copyright (C) 2000  Greg Banks
  *
  */
+#include <linux/config.h>
 
 #if defined(CONFIG_SH_SCI_SERIAL)
 #if defined(__sh3__)

@@ -4,7 +4,7 @@
 
 		Richard Gooch <rgooch@atnf.csiro.au>
 
-			      11-NOV-1999
+			      3-MAR-2000
 
 
 Conventions used in this document                                     <section>
@@ -21,6 +21,9 @@ http://www.atnf.csiro.au/~rgooch/linux/docs/devfs.txt
 There is also an optional daemon that may be used with devfs. You can
 find out more about it at:
 http://www.atnf.csiro.au/~rgooch/linux/
+
+NEWFLASH: The official 2.3.46 kernel has included the devfs
+patch. Future patches will be released which build on this.
 
 
 What is it?                                                           <section>
@@ -128,14 +131,13 @@ slow things down a lot.
 There is an existing programme called scsidev which will automatically
 create device nodes for SCSI devices. It can do this by scanning files
 in /proc/scsi. Unfortunately, to extend this idea to other device
-nodes would require would require significant modifications to
-existing drivers (so they too would provide information in
-/proc). This is a non-trivial change (I should know: devfs has had to
-do something similar). Once you go to this much effort, you may as
-well use devfs itself (which also provides this information).
-Furthermore, such a system would likely be implemented in an ad-hoc
-fashion, as different drivers will provide their information in
-different ways.
+nodes would require significant modifications to existing drivers (so
+they too would provide information in /proc). This is a non-trivial
+change (I should know: devfs has had to do something similar). Once
+you go to this much effort, you may as well use devfs itself (which
+also provides this information).  Furthermore, such a system would
+likely be implemented in an ad-hoc fashion, as different drivers will
+provide their information in different ways.
 Devfs is much cleaner, because it (natually) has a uniform mechanism
 to provide this information: the device nodes themselves!
 
@@ -349,8 +351,8 @@ Who else does it?                                                     <section>
 
 FreeBSD-current now has a devfs implementation. Solaris 2 has a
 pseudo-devfs (something akin to scsidev but for all devices, with some
-unspecified kernel support). BeOS  and Plan9 also have it. SGI's IRIX
-6.4 and above also have a device filesystem.
+unspecified kernel support). BeOS, Plan9 and QNX also have it. SGI's
+IRIX 6.4 and above also have a device filesystem.
 
 While we shouldn't just automatically do something because others do
 it, we should not ignore the work of others either. FreeBSD has a lot
@@ -875,10 +877,7 @@ avoid any possible conflicts with existing official allocations.
 
 Please note that using dynamically allocated block device numbers may
 break the NFS daemons (both user and kernel mode), which expect dev_t
-for a given device to be constant over reboots. A simple reboot, with
-no change in your hardware layout, would result in the same device
-numbers being allocated, and hence will not cause a problem for NFS
-daemons.
+for a given device to be constant over the lifetime of remote mounts.
 
 A final note on this scheme: since it doesn't increase the size of
 device numbers, there are no compatibility issues with userspace.

@@ -4,7 +4,7 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
- *	Version:	$Id: skbuff.c,v 1.68 2000/02/18 16:47:18 davem Exp $
+ *	Version:	$Id: skbuff.c,v 1.69 2000/03/06 03:47:58 davem Exp $
  *
  *	Fixes:	
  *		Alan Cox	:	Fixed the worst of the load balancer bugs.
@@ -204,6 +204,7 @@ static inline void skb_headerinit(void *p, kmem_cache_t *cache,
 	skb->rx_dev = NULL;
 #ifdef CONFIG_NETFILTER
 	skb->nfmark = skb->nfreason = skb->nfcache = 0;
+	skb->nfct = NULL;
 #ifdef CONFIG_NETFILTER_DEBUG
 	skb->nf_debug = 0;
 #endif
@@ -246,6 +247,9 @@ void __kfree_skb(struct sk_buff *skb)
 		}
 		skb->destructor(skb);
 	}
+#ifdef CONFIG_NETFILTER
+	nf_conntrack_put(skb->nfct);
+#endif
 #ifdef CONFIG_NET		
 	if(skb->rx_dev)
 		dev_put(skb->rx_dev);
@@ -282,6 +286,9 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int gfp_mask)
 	n->is_clone = 1;
 	atomic_set(&n->users, 1);
 	n->destructor = NULL;
+#ifdef CONFIG_NETFILTER
+	nf_conntrack_get(skb->nfct);
+#endif
 	return n;
 }
 
@@ -314,6 +321,8 @@ static void copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	new->nfmark=old->nfmark;
 	new->nfreason=old->nfreason;
 	new->nfcache=old->nfcache;
+	new->nfct=old->nfct;
+	nf_conntrack_get(new->nfct);
 #ifdef CONFIG_NETFILTER_DEBUG
 	new->nf_debug=old->nf_debug;
 #endif

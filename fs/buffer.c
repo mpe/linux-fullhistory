@@ -2474,6 +2474,7 @@ asmlinkage long sys_bdflush(int func, long data)
  */
 int bdflush(void * unused) 
 {
+	struct task_struct *tsk = current;
 	int flushed;
 	/*
 	 *	We have a bare-bones task_struct, and really should fill
@@ -2481,17 +2482,17 @@ int bdflush(void * unused)
 	 *	display semi-sane things. Not real crucial though...  
 	 */
 
-	current->session = 1;
-	current->pgrp = 1;
-	sprintf(current->comm, "kflushd");
-	bdflush_tsk = current;
+	tsk->session = 1;
+	tsk->pgrp = 1;
+	strcpy(tsk->comm, "kflushd");
+	bdflush_tsk = tsk;
 
 	/* avoid getting signals */
-	spin_lock_irq(&current->sigmask_lock);
-	flush_signals(current);
-	sigfillset(&current->blocked);
-	recalc_sigpending(current);
-	spin_unlock_irq(&current->sigmask_lock);
+	spin_lock_irq(&tsk->sigmask_lock);
+	flush_signals(tsk);
+	sigfillset(&tsk->blocked);
+	recalc_sigpending(tsk);
+	spin_unlock_irq(&tsk->sigmask_lock);
 
 	for (;;) {
 		CHECK_EMERGENCY_SYNC

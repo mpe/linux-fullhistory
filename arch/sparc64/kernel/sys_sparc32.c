@@ -1257,10 +1257,8 @@ asmlinkage int old32_readdir(unsigned int fd, struct old_linux_dirent32 *dirent,
 {
 	int error = -EBADF;
 	struct file * file;
-	struct inode * inode;
 	struct readdir_callback32 buf;
 
-	lock_kernel();
 	file = fget(fd);
 	if (!file)
 		goto out;
@@ -1268,22 +1266,16 @@ asmlinkage int old32_readdir(unsigned int fd, struct old_linux_dirent32 *dirent,
 	buf.count = 0;
 	buf.dirent = dirent;
 
-	error = -ENOTDIR;
-	if (!file->f_op || !file->f_op->readdir)
-		goto out_putf;
-	
-	inode = file->f_dentry->d_inode;
-	down(&inode->i_sem);
-	error = file->f_op->readdir(file, &buf, fillonedir);
-	up(&inode->i_sem);
+	lock_kernel();
+	error = vfs_readdir(file, fillonedir, &buf);
 	if (error < 0)
 		goto out_putf;
 	error = buf.count;
 
 out_putf:
+	unlock_kernel();
 	fput(file);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -1328,12 +1320,10 @@ static int filldir(void * __buf, const char * name, int namlen, off_t offset, in
 asmlinkage int sys32_getdents(unsigned int fd, struct linux_dirent32 *dirent, unsigned int count)
 {
 	struct file * file;
-	struct inode * inode;
 	struct linux_dirent32 * lastdirent;
 	struct getdents_callback32 buf;
 	int error = -EBADF;
 
-	lock_kernel();
 	file = fget(fd);
 	if (!file)
 		goto out;
@@ -1343,14 +1333,8 @@ asmlinkage int sys32_getdents(unsigned int fd, struct linux_dirent32 *dirent, un
 	buf.count = count;
 	buf.error = 0;
 
-	error = -ENOTDIR;
-	if (!file->f_op || !file->f_op->readdir)
-		goto out_putf;
-
-	inode = file->f_dentry->d_inode;
-	down(&inode->i_sem);
-	error = file->f_op->readdir(file, &buf, filldir);
-	up(&inode->i_sem);
+	lock_kernel();
+	error = vfs_readdir(file, filldir, &buf);
 	if (error < 0)
 		goto out_putf;
 	lastdirent = buf.previous;
@@ -1360,9 +1344,9 @@ asmlinkage int sys32_getdents(unsigned int fd, struct linux_dirent32 *dirent, un
 		error = count - buf.count;
 	}
 out_putf:
+	unlock_kernel();
 	fput(file);
 out:
-	unlock_kernel();
 	return error;
 }
 

@@ -38,7 +38,7 @@ obj-y	 += tty_io.o n_tty.o tty_ioctl.o mem.o raw.o pty.o misc.o random.o
 
 export-objs     :=	busmouse.o console.o i2c-old.o keyboard.o sysrq.o \
 			misc.o pty.o random.o selection.o serial.o videodev.o \
-			tty_io.o
+			tty_io.o bttv.o
 
 KEYMAP   =defkeymap.o
 KEYBD    =pc_keyb.o
@@ -194,13 +194,11 @@ else
   endif
 endif
 
-obj-$(CONFIG_VIDEO_BT848) += bttv.o msp3400.o tda8425.o tda9855.o tea6300.o
+obj-$(CONFIG_VIDEO_BT848) += bttv.o msp3400.o tda8425.o tda985x.o tea6300.o
 ifeq ($(CONFIG_VIDEO_BT848),y)
-L_I2C=y
 L_TUNERS=y
 else
   ifeq ($(CONFIG_VIDEO_BT848),m)
-    L_I2C=m
     L_TUNERS=m
   endif
 endif

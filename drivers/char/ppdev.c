@@ -83,7 +83,7 @@ struct pp_struct {
 /* ROUND_UP macro from fs/select.c */
 #define ROUND_UP(x,y) (((x)+(y)-1)/(y))
 
-static inline void enable_irq (struct pp_struct *pp)
+static inline void pp_enable_irq (struct pp_struct *pp)
 {
 	struct parport *port = pp->pdev->port;
 	port->ops->enable_irq (port);
@@ -144,7 +144,7 @@ static ssize_t pp_read (struct file * file, char * buf, size_t count,
 	}
 
 	kfree (kbuffer);
-	enable_irq (pp);
+	pp_enable_irq (pp);
 	return bytes_read;
 }
 
@@ -197,7 +197,7 @@ static ssize_t pp_write (struct file * file, const char * buf, size_t count,
 	}
 
 	kfree (kbuffer);
-	enable_irq (pp);
+	pp_enable_irq (pp);
 	return bytes_written;
 }
 
@@ -292,7 +292,7 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 
 		/* For interrupt-reporting to work, we need to be
 		 * informed of each interrupt. */
-		enable_irq (pp);
+		pp_enable_irq (pp);
 
 		/* We may need to fix up the state machine. */
 		info = &pp->pdev->port->ieee1284;
@@ -441,7 +441,7 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 			ret = -ENXIO;
 			break;
 		}
-		enable_irq (pp);
+		pp_enable_irq (pp);
 		return ret;
 
 	case PPWCTLONIRQ:

@@ -47,6 +47,7 @@
 #include <linux/kdev_t.h>
 #include <linux/blk.h>
 #include <linux/timer.h>
+#include <linux/spinlock.h>
 #include <asm/dma.h>
 #include <asm/system.h>
 #include <asm/io.h>
@@ -55,12 +56,6 @@
 #include "pci2220i.h"
 #include "psi_dale.h"
 
-#if LINUX_VERSION_CODE >= LINUXVERSION(2,1,95)
-#include <asm/spinlock.h>
-#endif
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,93)
-#include <linux/bios32.h>
-#endif
 
 #define	PCI2220I_VERSION		"2.00"
 #define	READ_CMD				IDE_CMD_READ_MULTIPLE

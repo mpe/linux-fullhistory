@@ -47,6 +47,7 @@ if [ "$CONFIG_MK7" = "y" ]; then
    define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_GOOD_APIC y
    define_bool CONFIG_X86_USE_3DNOW y
+   define_bool CONFIG_X86_PGE y
 fi
 
 if [ "$CONFIG_DEVFS_FS" = "y" ]; then

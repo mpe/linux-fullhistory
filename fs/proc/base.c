@@ -631,26 +631,19 @@ static void pid_delete_dentry(struct dentry * dentry)
 
 static struct dentry_operations pid_fd_dentry_operations =
 {
-	pid_fd_revalidate,	/* revalidate */
-	NULL,			/* d_hash */
-	NULL,			/* d_compare */
-	pid_delete_dentry	/* d_delete(struct dentry *) */
+	d_revalidate:	pid_fd_revalidate,
+	d_delete:	pid_delete_dentry,
 };
 
 static struct dentry_operations pid_dentry_operations =
 {
-	NULL,			/* revalidate */
-	NULL,			/* d_hash */
-	NULL,			/* d_compare */
-	pid_delete_dentry	/* d_delete(struct dentry *) */
+	d_delete:	pid_delete_dentry,
 };
 
 static struct dentry_operations pid_base_dentry_operations =
 {
-	pid_base_revalidate,	/* revalidate */
-	NULL,			/* d_hash */
-	NULL,			/* d_compare */
-	pid_delete_dentry	/* d_delete(struct dentry *) */
+	d_revalidate:	pid_base_revalidate,
+	d_delete:	pid_delete_dentry,
 };
 
 /* Lookups */

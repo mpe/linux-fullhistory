@@ -21,12 +21,10 @@ OBJCOPY=$(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 LDFLAGS=-e stext
 LINKFLAGS =-T $(TOPDIR)/arch/i386/vmlinux.lds $(LDFLAGS)
 
-CFLAGS_PIPE := -pipe
+CFLAGS += -pipe
 
 # only work around strength reduction bug(s) on older gcc versions
-CFLAGS_NSR  := $(shell if $(CC) -march=i486 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo ""; else echo "-fno-strength-reduce"; fi)
-
-CFLAGS := $(CFLAGS) $(CFLAGS_PIPE) $(CFLAGS_NSR)
+CFLAGS += $(shell if ! $(CC) -march=i486 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strength-reduce"; fi)
 
 # prevent gcc from keeping the stack 16 byte aligned
 CFLAGS += $(shell if $(CC) -mpreferred-stack-boundary=2 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-mpreferred-stack-boundary=2"; fi)

@@ -46,10 +46,8 @@ static void umsdos_dentry_dput(struct dentry *dentry)
 
 struct dentry_operations umsdos_dentry_operations =
 {
-	umsdos_dentry_validate,	/* d_revalidate(struct dentry *, int) */
-	NULL,			/* d_hash */
-	NULL,			/* d_compare */
-	umsdos_dentry_dput	/* d_delete(struct dentry *) */
+	d_revalidate:	umsdos_dentry_validate,
+	d_delete:	umsdos_dentry_dput,
 };
 
 struct UMSDOS_DIR_ONCE {

@@ -88,7 +88,7 @@ MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 vmlinux: arch/$(ARCH)/vmlinux.lds
 
 arch/$(ARCH)/vmlinux.lds: arch/$(ARCH)/vmlinux.lds.S FORCE
-	gcc -D__ASSEMBLY__ -E -C -P -I$(HPATH) -I$(HPATH)/asm-$(ARCH) \
+	$(CPP) -D__ASSEMBLY__ -C -P -I$(HPATH) -I$(HPATH)/asm-$(ARCH) \
 		arch/$(ARCH)/vmlinux.lds.S > $@
 
 FORCE: ;

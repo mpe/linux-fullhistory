@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.55 1999/09/10 10:44:44 davem Exp $ */
+/* $Id: system.h,v 1.56 2000/03/06 22:33:45 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -116,7 +116,16 @@ extern void __global_restore_flags(unsigned long flags);
 #define read_pcr(__p)  __asm__ __volatile__("rd	%%pcr, %0" : "=r" (__p))
 #define write_pcr(__p) __asm__ __volatile__("wr	%0, 0x0, %%pcr" : : "r" (__p));
 #define read_pic(__p)  __asm__ __volatile__("rd %%pic, %0" : "=r" (__p))
-#define reset_pic()    __asm__ __volatile__("wr	%g0, 0x0, %pic");
+
+/* Blackbird errata workaround.  See commentary in
+ * arch/sparc64/kernel/smp.c:smp_percpu_timer_interrupt()
+ * for more information.
+ */
+#define reset_pic()    						\
+	__asm__ __volatile__("ba,pt	%xcc, 99f\n\t"		\
+			     ".align	64\n"			\
+			  "99:wr	%g0, 0x0, %pic\n\t"	\
+			     "rd	%pic, %g0")
 
 #ifndef __ASSEMBLY__
 

@@ -329,9 +329,10 @@ static int pty_open(struct tty_struct *tty, struct file * filp)
 	clear_bit(TTY_OTHER_CLOSED, &tty->link->flags);
 	wake_up_interruptible(&pty->open_wait);
 	set_bit(TTY_THROTTLED, &tty->flags);
-	/*  register a slave for the master  */
+	/*  Register a slave for the master  */
 	if (tty->driver.major == PTY_MASTER_MAJOR)
-		tty_register_devfs(&tty->link->driver, DEVFS_FL_WAIT,
+		tty_register_devfs(&tty->link->driver,
+				   DEVFS_FL_AUTO_OWNER | DEVFS_FL_WAIT,
 				   tty->link->driver.minor_start +
 				   MINOR(tty->device)-tty->driver.minor_start);
 	retval = 0;

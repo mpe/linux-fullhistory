@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.120 2000/02/16 07:34:54 davem Exp $
+/* $Id: pgtable.h,v 1.121 2000/03/02 20:37:41 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)

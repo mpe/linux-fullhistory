@@ -8565,9 +8565,9 @@ CONFIG_USB_ACM
 USB Serial converter support
 CONFIG_USB_SERIAL
   Say Y here if you want to connect a Connect Tech WhiteHEAT 
-  multi-port USB to serial converter; a Belkin, Peracom, or eTek
-  single port USB to serial converter; or a Handspring Visor.
-  Please read Documentation/usb/usb-serial.txt for more information.
+  multi-port USB to serial converter; a FTDI or Keyspan single port 
+  USB to serial converter; or a Handspring Visor. Please read 
+  Documentation/usb/usb-serial.txt for more information.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -8591,6 +8591,16 @@ CONFIG_USB_SERIAL_VISOR
   Say Y here if you want to connect to your HandSpring Visor through
   its USB docking station. See http://usbvisor.sourceforge.net for
   more information on using this driver.
+
+USB FTDI Single Port Serial Driver
+CONFIG_USB_SERIAL_FTDI_SIO
+  Say Y here if you want to use a FTDI SIO single port USB to serial
+  converter device.
+
+USB FTDI Single Port Serial Driver
+CONFIG_USB_SERIAL_KEYSPAN_PDA
+  Say Y here if you want to use a Keyspan PDA single port USB to serial
+  converter device.
 
 USB Printer support
 CONFIG_USB_PRINTER
@@ -8663,7 +8673,7 @@ CONFIG_USB_PEGASUS
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
-  The module will be called ov511.o. If you want to compile it as a
+  The module will be called pegasus.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
 USB Kodak DC-2xx Camera support

@@ -135,10 +135,8 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 {
 	int error;
 	struct file *file;
-	struct inode *inode;
 	struct osf_dirent_callback buf;
 
-	lock_kernel();
 	error = -EBADF;
 	file = fget(fd);
 	if (!file)
@@ -149,18 +147,8 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 	buf.count = count;
 	buf.error = 0;
 
-	error = -ENOTDIR;
-	if (!file->f_op || !file->f_op->readdir)
-		goto out_putf;
-
-	/*
-	 * Get the inode's semaphore to prevent changes
-	 * to the directory while we read it.
-	 */
-	inode = file->f_dentry->d_inode;
-	down(&inode->i_sem);
-	error = file->f_op->readdir(file, &buf, osf_filldir);
-	up(&inode->i_sem);
+	lock_kernel();
+	error = vfs_readdir(file, osf_filldir, &buf);
 	if (error < 0)
 		goto out_putf;
 
@@ -169,9 +157,9 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 		error = count - buf.count;
 
 out_putf:
+	unlock_kernel();
 	fput(file);
 out:
-	unlock_kernel();
 	return error;
 }
 

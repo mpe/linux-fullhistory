@@ -717,7 +717,6 @@ extern struct zorro_dev zorro_autocon[ZORRO_NUM_AUTO];
      */
 
 extern void zorro_init(void);
-extern void zorro_proc_init(void);
 
 extern struct zorro_dev *zorro_find_device(zorro_id id,
 					   struct zorro_dev *from);

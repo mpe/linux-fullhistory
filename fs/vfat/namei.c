@@ -59,28 +59,22 @@ static int vfat_revalidate(struct dentry *dentry, int);
 
 static struct dentry_operations vfat_dentry_ops[4] = {
 	{
-		NULL,			/* d_revalidate */
-		vfat_hashi,
-		vfat_cmpi,
-		NULL			/* d_delete */
+		d_hash:		vfat_hashi,
+		d_compare:	vfat_cmpi,
 	},
 	{
-		vfat_revalidate,
-		vfat_hashi,
-		vfat_cmpi,
-		NULL			/* d_delete */
+		d_revalidate:	vfat_revalidate,
+		d_hash:		vfat_hashi,
+		d_compare:	vfat_cmpi,
 	},
 	{
-		NULL, 			/* d_revalidate */
-		vfat_hash,
-		vfat_cmp,
-		NULL			/* d_delete */
+		d_hash:		vfat_hash,
+		d_compare:	vfat_cmp,
 	},
 	{
-		vfat_revalidate,
-		vfat_hash,
-		vfat_cmp,
-		NULL			/* d_delete */
+		d_revalidate:	vfat_revalidate,
+		d_hash:		vfat_hash,
+		d_compare:	vfat_cmp,
 	}
 };
 

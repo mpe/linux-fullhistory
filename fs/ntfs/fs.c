@@ -31,6 +31,7 @@
 
 /* Forward declarations */
 static struct inode_operations ntfs_dir_inode_operations;
+static struct file_operations ntfs_dir_operations;
 
 #define ITEM_SIZE 2040
 

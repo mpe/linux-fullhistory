@@ -1321,7 +1321,7 @@ retry_open:
 		set_bit(TTY_PTY_LOCK, &tty->flags); /* LOCK THE SLAVE */
 		minor -= driver->minor_start;
 		devpts_pty_new(driver->other->name_base + minor, MKDEV(driver->other->major, minor + driver->other->minor_start));
-		tty_register_devfs(&pts_driver[major], 0,
+		tty_register_devfs(&pts_driver[major], DEVFS_FL_NO_PERSISTENCE,
 				   pts_driver[major].minor_start + minor);
 		noctty = 1;
 		goto init_dev_done;
@@ -2003,7 +2003,6 @@ void tty_register_devfs (struct tty_driver *driver, unsigned int flags,
 	struct tty_struct tty;
 	char buf[32];
 
-	flags |= DEVFS_FL_DEFAULT;
 	tty.driver = *driver;
 	tty.device = MKDEV (driver->major, minor);
 	switch (tty.device) {
@@ -2012,28 +2011,22 @@ void tty_register_devfs (struct tty_driver *driver, unsigned int flags,
 			mode |= S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 			break;
 		default:
-			flags |= DEVFS_FL_AUTO_OWNER;
 			break;
 	}
-	if ((minor <  driver->minor_start) || 
-	    (minor >= driver->minor_start + driver->num)) {
+	if ( (minor <  driver->minor_start) || 
+	     (minor >= driver->minor_start + driver->num) ) {
 		printk(KERN_ERR "Attempt to register invalid minor number "
 		       "with devfs (%d:%d).\n", (int)driver->major,(int)minor);
 		return;
 	}
-	if (driver->type == TTY_DRIVER_TYPE_CONSOLE) {
-		flags |= DEVFS_FL_AOPEN_NOTIFY;
-		flags &= ~DEVFS_FL_AUTO_OWNER;
-	}
 #  ifdef CONFIG_UNIX98_PTYS
 	if ( (driver->major >= UNIX98_PTY_SLAVE_MAJOR) &&
 	     (driver->major < UNIX98_PTY_SLAVE_MAJOR + UNIX98_NR_MAJORS) ) {
-		flags &= ~DEVFS_FL_AUTO_OWNER;
 		uid = current->uid;
 		gid = current->gid;
 	}
 #  endif
-	devfs_register (NULL, tty_name (&tty, buf), 0, flags,
+	devfs_register (NULL, tty_name (&tty, buf), 0,flags | DEVFS_FL_DEFAULT,
 			driver->major, minor, mode, uid, gid,
 			&tty_fops, NULL);
 #endif /* CONFIG_DEVFS_FS */

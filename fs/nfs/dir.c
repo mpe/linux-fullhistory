@@ -654,12 +654,9 @@ static void nfs_dentry_release(struct dentry *dentry)
 }
 
 struct dentry_operations nfs_dentry_operations = {
-	nfs_lookup_revalidate,	/* d_revalidate(struct dentry *, int) */
-	NULL,			/* d_hash */
-	NULL,			/* d_compare */
-	nfs_dentry_delete,	/* d_delete(struct dentry *) */
-	nfs_dentry_release,	/* d_release(struct dentry *) */
-	NULL			/* d_iput */
+	d_revalidate:	nfs_lookup_revalidate,
+	d_delete:	nfs_dentry_delete,
+	d_release:	nfs_dentry_release,
 };
 
 #if 0 /* dead code */

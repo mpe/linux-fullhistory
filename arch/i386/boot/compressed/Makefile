@@ -33,6 +33,9 @@ bvmlinux: piggy.o $(OBJECTS)
 head.o: head.S
 	$(CC) $(AFLAGS) -traditional -c head.S
 
+misc.o: misc.c
+	$(CC) $(CFLAGS) -c misc.c
+
 piggy.o:	$(SYSTEM)
 	tmppiggy=_tmp_$$$$piggy; \
 	rm -f $$tmppiggy $$tmppiggy.gz $$tmppiggy.lnk; \

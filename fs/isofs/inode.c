@@ -84,29 +84,21 @@ static struct super_operations isofs_sops = {
 
 static struct dentry_operations isofs_dentry_ops[] = {
 	{
-		NULL,			/* d_revalidate */
-		isofs_hash,
-		isofs_cmp,
-		NULL			/* d_delete */
+		d_hash:		isofs_hash,
+		d_compare:	isofs_cmp,
 	},
 	{
-		NULL,			/* d_revalidate */
-		isofs_hashi,
-		isofs_cmpi,
-		NULL			/* d_delete */
+		d_hash:		isofs_hashi,
+		d_compare:	isofs_cmpi,
 	},
 #ifdef CONFIG_JOLIET
 	{
-		NULL,			/* d_revalidate */
-		isofs_hash_ms,
-		isofs_cmp_ms,
-		NULL			/* d_delete */
+		d_hash:		isofs_hash_ms,
+		d_compare:	isofs_cmp_ms,
 	},
 	{
-		NULL,			/* d_revalidate */
-		isofs_hashi_ms,
-		isofs_cmpi_ms,
-		NULL			/* d_delete */
+		d_hash:		isofs_hashi_ms,
+		d_compare:	isofs_cmpi_ms,
 	}
 #endif
 };

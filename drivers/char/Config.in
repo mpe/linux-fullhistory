@@ -197,7 +197,9 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
       hex '    ZOLTRIX I/O port (0x20c or 0x30c)' CONFIG_RADIO_ZOLTRIX_PORT 20c
    fi
    comment 'Video Adapters'
-   dep_tristate '  BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV $CONFIG_PCI
+   if [ "$CONFIG_I2C_ALGOBIT" = "y" -o "$CONFIG_I2C_ALGOBIT" = "m" ]; then
+      dep_tristate '  BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV $CONFIG_PCI $CONFIG_I2C_ALGOBIT
+   fi
    dep_tristate '  Mediavision Pro Movie Studio Video For Linux' CONFIG_VIDEO_PMS $CONFIG_VIDEO_DEV
    if [ "$CONFIG_PARPORT" != "n" ]; then
       dep_tristate '  Quickcam BW Video For Linux' CONFIG_VIDEO_BWQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT

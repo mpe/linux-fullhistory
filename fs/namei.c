@@ -403,10 +403,10 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 				if (IS_ERR(dentry))
 					break;
 			}
-		}
 
-		/* Check mountpoints.. */
-		dentry = follow_mount(dentry);
+			/* Check mountpoints.. */
+			dentry = follow_mount(dentry);
+		}
 
 		base = do_follow_link(base, dentry, flags);
 		if (IS_ERR(base))
@@ -577,6 +577,9 @@ int vfs_create(struct inode *dir, struct dentry *dentry, int mode)
 {
 	int error;
 
+	mode &= S_IALLUGO & ~current->fs->umask;
+	mode |= S_IFREG;
+
 	error = may_create(dir, dentry);
 	if (error)
 		goto exit_lock;
@@ -609,9 +612,6 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 	int acc_mode, error;
 	struct inode *inode;
 	struct dentry *dentry;
-
-	mode &= S_IALLUGO & ~current->fs->umask;
-	mode |= S_IFREG;
 
 	dentry = lookup_dentry(pathname, NULL, lookup_flags(flag));
 	if (IS_ERR(dentry))
@@ -739,14 +739,36 @@ exit:
 	return ERR_PTR(error);
 }
 
+int vfs_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t dev)
+{
+	int error = -EPERM;
+
+	mode &= ~current->fs->umask;
+
+	if (!S_ISFIFO(mode) && !capable(CAP_MKNOD))
+		goto exit_lock;
+
+	error = may_create(dir, dentry);
+	if (error)
+		goto exit_lock;
+
+	error = -EPERM;
+	if (!dir->i_op || !dir->i_op->mknod)
+		goto exit_lock;
+
+	DQUOT_INIT(dir);
+	error = dir->i_op->mknod(dir, dentry, mode, dev);
+exit_lock:
+	return error;
+}
+
 struct dentry * do_mknod(const char * filename, int mode, dev_t dev)
 {
 	int error;
 	struct dentry *dir;
 	struct dentry *dentry, *retval;
 
-	mode &= ~current->fs->umask;
-	dentry = lookup_dentry(filename, NULL, LOOKUP_FOLLOW);
+	dentry = lookup_dentry(filename, NULL, 0);
 	if (IS_ERR(dentry))
 		return dentry;
 
@@ -755,16 +777,8 @@ struct dentry * do_mknod(const char * filename, int mode, dev_t dev)
 	if (!check_parent(dir, dentry))
 		goto exit_lock;
 
-	error = may_create(dir->d_inode, dentry);
-	if (error)
-		goto exit_lock;
+	error = vfs_mknod(dir->d_inode, dentry, mode, dev);
 
-	error = -EPERM;
-	if (!dir->d_inode->i_op || !dir->d_inode->i_op->mknod)
-		goto exit_lock;
-
-	DQUOT_INIT(dir->d_inode);
-	error = dir->d_inode->i_op->mknod(dir->d_inode, dentry, mode, dev);
 exit_lock:
 	retval = ERR_PTR(error);
 	if (!error)
@@ -778,44 +792,63 @@ asmlinkage long sys_mknod(const char * filename, int mode, dev_t dev)
 {
 	int error;
 	char * tmp;
-	struct dentry * dentry;
+	struct dentry * dentry, *dir;
 
-	if (S_ISDIR(mode) || (!S_ISFIFO(mode) && !capable(CAP_MKNOD)))
+	if (S_ISDIR(mode))
 		return -EPERM;
 	tmp = getname(filename);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
 
-	error = -EINVAL;
 	lock_kernel();
+	dentry = lookup_dentry(tmp, NULL, 0);
+	error = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
+		goto out;
+	dir = lock_parent(dentry);
+	error = -ENOENT;
+	if (!check_parent(dir, dentry))
+		goto out_unlock;
 	switch (mode & S_IFMT) {
-	case 0:
-		mode |= S_IFREG;	/* fallthrough */
-	case S_IFREG:
-		mode &= ~current->fs->umask;
-		dentry = lookup_dentry(filename, NULL, LOOKUP_FOLLOW);
-		if (IS_ERR(dentry))
-			error = PTR_ERR(dentry);
-		else {
-			struct dentry *dir = lock_parent(dentry);
-			error = -ENOENT;
-			if (check_parent(dir, dentry))
-				error = vfs_create(dir->d_inode, dentry, mode);
-			dput(dentry);
-		}
+	case 0: case S_IFREG:
+		error = vfs_create(dir->d_inode, dentry, mode);
 		break;
 	case S_IFCHR: case S_IFBLK: case S_IFIFO: case S_IFSOCK:
-		dentry = do_mknod(tmp,mode,dev);
-		error = PTR_ERR(dentry);
-		if (!IS_ERR(dentry)) {
-			dput(dentry);
-			error = 0;
-		}
+		error = vfs_mknod(dir->d_inode, dentry, mode, dev);
 		break;
+	case S_IFDIR:
+		error = -EPERM;
+		break;
+	default:
+		error = -EINVAL;
 	}
+out_unlock:
+	unlock_dir(dir);
+	dput(dentry);
+out:
 	unlock_kernel();
 	putname(tmp);
 
+	return error;
+}
+
+int vfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
+{
+	int error;
+
+	error = may_create(dir, dentry);
+	if (error)
+		goto exit_lock;
+
+	error = -EPERM;
+	if (!dir->i_op || !dir->i_op->mkdir)
+		goto exit_lock;
+
+	DQUOT_INIT(dir);
+	mode &= (S_IRWXUGO|S_ISVTX) & ~current->fs->umask;
+	error = dir->i_op->mkdir(dir, dentry, mode);
+
+exit_lock:
 	return error;
 }
 
@@ -843,17 +876,7 @@ static inline int do_mkdir(const char * pathname, int mode)
 	if (!check_parent(dir, dentry))
 		goto exit_lock;
 
-	error = may_create(dir->d_inode, dentry);
-	if (error)
-		goto exit_lock;
-
-	error = -EPERM;
-	if (!dir->d_inode->i_op || !dir->d_inode->i_op->mkdir)
-		goto exit_lock;
-
-	DQUOT_INIT(dir->d_inode);
-	mode &= (S_IRWXUGO|S_ISVTX) & ~current->fs->umask;
-	error = dir->d_inode->i_op->mkdir(dir->d_inode, dentry, mode);
+	error = vfs_mkdir(dir->d_inode, dentry, mode);
 
 exit_lock:
 	unlock_dir(dir);
@@ -1027,6 +1050,25 @@ asmlinkage long sys_unlink(const char * pathname)
 	return error;
 }
 
+int vfs_symlink(struct inode *dir, struct dentry *dentry, const char *oldname)
+{
+	int error;
+
+	error = may_create(dir, dentry);
+	if (error)
+		goto exit_lock;
+
+	error = -EPERM;
+	if (!dir->i_op || !dir->i_op->symlink)
+		goto exit_lock;
+
+	DQUOT_INIT(dir);
+	error = dir->i_op->symlink(dir, dentry, oldname);
+
+exit_lock:
+	return error;
+}
+
 static inline int do_symlink(const char * oldname, const char * newname)
 {
 	int error;
@@ -1044,16 +1086,7 @@ static inline int do_symlink(const char * oldname, const char * newname)
 	if (!check_parent(dir, dentry))
 		goto exit_lock;
 
-	error = may_create(dir->d_inode, dentry);
-	if (error)
-		goto exit_lock;
-
-	error = -EPERM;
-	if (!dir->d_inode->i_op || !dir->d_inode->i_op->symlink)
-		goto exit_lock;
-
-	DQUOT_INIT(dir->d_inode);
-	error = dir->d_inode->i_op->symlink(dir->d_inode, dentry, oldname);
+	error = vfs_symlink(dir->d_inode, dentry, oldname);
 
 exit_lock:
 	unlock_dir(dir);
@@ -1083,10 +1116,43 @@ asmlinkage long sys_symlink(const char * oldname, const char * newname)
 	return error;
 }
 
+int vfs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *new_dentry)
+{
+	struct inode *inode;
+	int error;
+
+	error = -ENOENT;
+	inode = old_dentry->d_inode;
+	if (!inode)
+		goto exit_lock;
+
+	error = may_create(dir, new_dentry);
+	if (error)
+		goto exit_lock;
+
+	error = -EXDEV;
+	if (dir->i_dev != inode->i_dev)
+		goto exit_lock;
+
+	/*
+	 * A link to an append-only or immutable file cannot be created.
+	 */
+	error = -EPERM;
+	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
+		goto exit_lock;
+	if (!dir->i_op || !dir->i_op->link)
+		goto exit_lock;
+
+	DQUOT_INIT(dir);
+	error = dir->i_op->link(old_dentry, dir, new_dentry);
+
+exit_lock:
+	return error;
+}
+
 static inline int do_link(const char * oldname, const char * newname)
 {
 	struct dentry *old_dentry, *new_dentry, *dir;
-	struct inode *inode;
 	int error;
 
 	/*
@@ -1113,32 +1179,7 @@ static inline int do_link(const char * oldname, const char * newname)
 	if (!check_parent(dir, new_dentry))
 		goto exit_lock;
 
-	error = -ENOENT;
-	inode = old_dentry->d_inode;
-	if (!inode)
-		goto exit_lock;
-
-	error = may_create(dir->d_inode, new_dentry);
-	if (error)
-		goto exit_lock;
-
-	error = -EXDEV;
-	if (dir->d_inode->i_dev != inode->i_dev)
-		goto exit_lock;
-
-	/*
-	 * A link to an append-only or immutable file cannot be created.
-	 */
-	error = -EPERM;
-	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
-		goto exit_lock;
-
-	error = -EPERM;
-	if (!dir->d_inode->i_op || !dir->d_inode->i_op->link)
-		goto exit_lock;
-
-	DQUOT_INIT(dir->d_inode);
-	error = dir->d_inode->i_op->link(old_dentry, dir->d_inode, new_dentry);
+	error = vfs_link(old_dentry, dir->d_inode, new_dentry);
 
 exit_lock:
 	unlock_dir(dir);

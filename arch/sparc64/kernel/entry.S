@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.112 2000/01/14 07:12:31 davem Exp $
+/* $Id: entry.S,v 1.113 2000/03/06 22:33:42 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -927,7 +927,17 @@ ret_from_syscall:
 		 nop
 		ldx		[%g6 + AOFF_task_thread + AOFF_thread_pcr_reg], %o7
 		wr		%g0, %o7, %pcr
-		wr		%g0, %g0, %pic
+
+		/* Blackbird errata workaround.  See commentary in
+		 * smp.c:smp_percpu_timer_interrupt() for more
+		 * information.
+		 */
+		ba,pt		%xcc, 99f
+		 nop
+		.align		64
+99:		wr		%g0, %g0, %pic
+		rd		%pic, %g0
+
 1:		b,pt		%xcc, ret_sys_call
 		 ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0], %o0
 sparc_exit:	rdpr		%otherwin, %g1

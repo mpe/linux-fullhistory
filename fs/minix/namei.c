@@ -106,13 +106,9 @@ static int minix_hash(struct dentry *dentry, struct qstr *qstr)
 #endif
 
 struct dentry_operations minix_dentry_operations = {
-	0,		/* revalidate */
 #ifndef NO_TRUNCATE
-	minix_hash,
-#else
-	0,
+	d_hash:		minix_hash,
 #endif
-	0		/* compare */
 };
 
 static struct dentry *minix_lookup(struct inode * dir, struct dentry *dentry)

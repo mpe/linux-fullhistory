@@ -12,6 +12,13 @@ newer than 2.3.34 have this already included.  If you have a older
 kernel, download it from:
 	http://www2.lm-sensors.nu/~lm78/download.html
 
+You'll need at least these i2c config options for bttv:
+CONFIG_I2C=m
+CONFIG_I2C_ALGOBIT=m
+
+The latest bttv version is available here:
+	http://www.in-berlin.de/User/kraxel/v4l/
+
 You'll find Ralphs original (mostly outdated) documentation in the
 ralphs-doc subdirectory.
 

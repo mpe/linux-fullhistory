@@ -480,7 +480,7 @@ static void msp3400c_setstereo(struct i2c_client *client, int mode)
 		break;
 	case VIDEO_SOUND_MONO:
 		if (msp->mode == MSP_MODE_AM_NICAM) {
-			printk("msp3400: switching to AM mono\n");
+			dprintk("msp3400: switching to AM mono\n");
 			/* AM mono decoding is handled by tuner, not MSP chip */
 			/* so let's redirect sound from tuner via SCART */
 			/* volume prescale for SCART */
@@ -723,7 +723,7 @@ static int msp3400c_thread(void *data)
 
 		/* some time for the tuner to sync */
 		current->state   = TASK_INTERRUPTIBLE;
-		schedule_timeout(HZ/10);
+		schedule_timeout(HZ/5);
 		if (signal_pending(current))
 			goto done;
 		
@@ -750,13 +750,15 @@ static int msp3400c_thread(void *data)
 			msp3400c_setcarrier(client, cd[this].cdo,cd[this].cdo);
 
 			current->state   = TASK_INTERRUPTIBLE;
-			schedule_timeout(HZ/25);
+			schedule_timeout(HZ/10);
 			if (signal_pending(current))
 				goto done;
 			if (msp->restart)
 				msp->restart = 0;
 
 			val = msp3400c_read(client, I2C_MSP3400C_DFP, 0x1b);
+			if (val > 32768)
+				val -= 65536;
 			if (val1 < val)
 				val1 = val, max1 = this;
 			dprintk("msp3400: carrier1 val: %5d / %s\n", val,cd[this].name);
@@ -785,13 +787,15 @@ static int msp3400c_thread(void *data)
 			msp3400c_setcarrier(client, cd[this].cdo,cd[this].cdo);
 
 			current->state   = TASK_INTERRUPTIBLE;
-			schedule_timeout(HZ/25);
+			schedule_timeout(HZ/10);
 			if (signal_pending(current))
 				goto done;
 			if (msp->restart)
 				goto restart;
 
 			val = msp3400c_read(client, I2C_MSP3400C_DFP, 0x1b);
+			if (val > 32768)
+				val -= 65536;
 			if (val2 < val)
 				val2 = val, max2 = this;
 			dprintk("msp3400: carrier2 val: %5d / %s\n", val,cd[this].name);
@@ -974,7 +978,7 @@ static int msp3410d_thread(void *data)
 	
 		/* some time for the tuner to sync */
 		current->state   = TASK_INTERRUPTIBLE;
-		schedule_timeout(HZ/10);
+		schedule_timeout(HZ/5);
 		if (signal_pending(current))
 			goto done;
 
@@ -1041,10 +1045,9 @@ static int msp3410d_thread(void *data)
 		for (i = 0; modelist[i].name != NULL; i++)
 			 if (modelist[i].retval == val)
 				break;
-		if (debug)
-			printk("msp3410: current mode: %s (0x%04x)\n",
-				modelist[i].name ? modelist[i].name : "unknown",
-				val);
+		dprintk("msp3410: current mode: %s (0x%04x)\n",
+			modelist[i].name ? modelist[i].name : "unknown",
+			val);
 		msp->main   = modelist[i].main;
 		msp->second = modelist[i].second;
 
@@ -1242,6 +1245,7 @@ static int
 msp3400c_mixer_open(struct inode *inode, struct file *file)
 {
         int minor = MINOR(inode->i_rdev);
+	struct i2c_client *client;
 	struct msp3400c *msp;
 	int i;
 
@@ -1249,12 +1253,17 @@ msp3400c_mixer_open(struct inode *inode, struct file *file)
 	for (i = 0; i < MSP3400_MAX; i++) {
 		msp = msps[i]->data;
 		if (msp->mixer_num == minor) {
-			file->private_data = msps[i];
+			client = msps[i];
+			file->private_data = client;
 			break;
 		}
 	}
 	if (MSP3400_MAX == i)
 		return -ENODEV;
+
+	/* lock bttv in memory while the mixer is in use  */
+	if (client->adapter->inc_use)
+		client->adapter->inc_use(client->adapter);
 	
         MOD_INC_USE_COUNT;
         return 0;
@@ -1263,6 +1272,10 @@ msp3400c_mixer_open(struct inode *inode, struct file *file)
 static int
 msp3400c_mixer_release(struct inode *inode, struct file *file)
 {
+	struct i2c_client *client = file->private_data;
+
+	if (client->adapter->inc_use) 
+		client->adapter->inc_use(client->adapter);
         MOD_DEC_USE_COUNT;
         return 0;
 }
@@ -1274,10 +1287,10 @@ msp3400c_mixer_llseek(struct file *file, loff_t offset, int origin)
 }
 
 static struct file_operations msp3400c_mixer_fops = {
-	llseek:		msp3400c_mixer_llseek,
-	ioctl:		msp3400c_mixer_ioctl,
-	open:		msp3400c_mixer_open,
-	release:	msp3400c_mixer_release,
+	llseek:         msp3400c_mixer_llseek,
+	ioctl:          msp3400c_mixer_ioctl,
+	open:           msp3400c_mixer_open,
+	release:        msp3400c_mixer_release,
 };
 
 #endif

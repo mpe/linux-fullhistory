@@ -7,6 +7,8 @@
  *
  * History:
  *
+ * - Revision 0.1.4 (24 Jan 2000): fixed a bug in hga_card_detect() for 
+ *                                  HGA-only systems
  * - Revision 0.1.3 (22 Jan 2000): modified for the new fb_info structure
  *                                 screen is cleared after rmmod
  *                                 virtual resolutions
@@ -18,11 +20,10 @@
  * - First release  (25 Nov 1999)
  *
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of this archive
+ * License.  See the file COPYING in the main directory of this archive
  * for more details.
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -141,6 +142,8 @@ static struct display disp;
 
 /* Don't assume that tty1 will be the initial current console. */
 static int currcon = -1; 
+static int release_io_port = 0;
+static int release_io_ports = 0;
 
 #ifdef MODULE
 static char *font = NULL;
@@ -290,9 +293,10 @@ static int hga_card_detect(void)
 				hga_vram_base);
 		return 0;
 	}
-	if (!request_region(0x3b0, 16, "hgafb")) {
-		printk(KERN_ERR "hgafb: cannot reserve io ports\n");
-	}
+	if (request_region(0x3b0, 12, "hgafb"))
+		release_io_ports = 1;
+	if (request_region(0x3bf, 1, "hgafb"))
+		release_io_port = 1;
 
 	/* do a memory check */
 
@@ -717,7 +721,8 @@ static void hgafb_cleanup(struct fb_info *info)
 	hga_txt_mode();
 	hga_clear_screen();
 	unregister_framebuffer(info);
-	release_region(0x3b0, 16);
+	if (release_io_ports) release_region(0x3b0, 12);
+	if (release_io_port) release_region(0x3bf, 1);
 	release_mem_region(hga_vram_base, hga_vram_len);
 }
 #endif /* MODULE */

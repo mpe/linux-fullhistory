@@ -120,14 +120,18 @@ static int __init zorro_proc_attach_device(u_int slot)
 	return 0;
 }
 
-void __init zorro_proc_init(void)
+static int __init zorro_proc_init(void)
 {
 	u_int slot;
 
-	if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(ZORRO))
-		return;
-	proc_bus_zorro_dir = proc_mkdir("zorro", proc_bus);
-	create_proc_info_entry("devices", 0, proc_bus_zorro_dir, get_zorro_dev_info);
-	for (slot = 0; slot < zorro_num_autocon; slot++)
-	    zorro_proc_attach_device(slot);
+	if (MACH_IS_AMIGA && AMIGAHW_PRESENT(ZORRO)) {
+		proc_bus_zorro_dir = proc_mkdir("zorro", proc_bus);
+		create_proc_info_entry("devices", 0, proc_bus_zorro_dir,
+				       get_zorro_dev_info);
+		for (slot = 0; slot < zorro_num_autocon; slot++)
+			zorro_proc_attach_device(slot);
+	}
+	return 0;
 }
+
+__initcall(zorro_proc_init);

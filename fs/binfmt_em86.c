@@ -42,7 +42,9 @@ static int do_load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
 	}
 
 	bprm->sh_bang++;	/* Well, the bang-shell is implicit... */
+	lock_kernel();
 	dput(bprm->dentry);
+	unlock_kernel();
 	bprm->dentry = NULL;
 
 	/* Unlike in the script case, we don't have to do any hairy
@@ -78,7 +80,9 @@ static int do_load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
 	 * Note that we use open_namei() as the name is now in kernel
 	 * space, and we don't need to copy it.
 	 */
+	lock_kernel();
 	dentry = open_namei(interp, 0, 0);
+	unlock_kernel();
 	if (IS_ERR(dentry))
 		return PTR_ERR(dentry);
 

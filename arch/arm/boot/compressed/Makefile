@@ -73,7 +73,7 @@ endif
 all:		vmlinux
 
 vmlinux:	$(HEAD) $(OBJS) piggy.o vmlinux.lds
-		$(LD) $(ZLDFLAGS) $(HEAD) $(OBJS) piggy.o $(GCCLIB) -o vmlinux
+		$(LD) $(ZLDFLAGS) $(HEAD) $(OBJS) piggy.o $(LIBGCC) -o vmlinux
 
 $(HEAD): 	$(HEAD:.o=.S)
 		$(CC) $(AFLAGS) -traditional -c $(HEAD:.o=.S)

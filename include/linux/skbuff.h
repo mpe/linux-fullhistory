@@ -37,6 +37,17 @@
 #define NET_CALLER(arg) __builtin_return_address(0)
 #endif
 
+#ifdef CONFIG_NETFILTER
+struct nf_conntrack {
+	atomic_t use;
+	void (*destroy)(struct nf_conntrack *);
+};
+
+struct nf_ct_info {
+	struct nf_conntrack *master;
+};
+#endif
+
 struct sk_buff_head {
 	/* These two members must be first. */
 	struct sk_buff	* next;
@@ -115,6 +126,8 @@ struct sk_buff {
 	__u32		nfreason;
 	/* Cache info */
 	__u32		nfcache;
+	/* Associated connection, if any */
+	struct nf_ct_info *nfct;
 #ifdef CONFIG_NETFILTER_DEBUG
         unsigned int nf_debug;
 #endif
@@ -634,6 +647,21 @@ extern void			skb_free_datagram(struct sock * sk, struct sk_buff *skb);
 
 extern void skb_init(void);
 extern void skb_add_mtu(int mtu);
+
+#ifdef CONFIG_NETFILTER
+extern __inline__ void
+nf_conntrack_put(struct nf_ct_info *nfct)
+{
+	if (nfct && atomic_dec_and_test(&nfct->master->use))
+		nfct->master->destroy(nfct->master);
+}
+extern __inline__ void
+nf_conntrack_get(struct nf_ct_info *nfct)
+{
+	if (nfct)
+		atomic_inc(&nfct->master->use);
+}
+#endif
 
 #endif	/* __KERNEL__ */
 #endif	/* _LINUX_SKBUFF_H */

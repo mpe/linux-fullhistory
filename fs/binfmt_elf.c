@@ -707,7 +707,9 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		__MOD_INC_USE_COUNT(current->binfmt->module);
 
 #ifndef VM_STACK_FLAGS
+	lock_kernel();
 	current->executable = dget(bprm->dentry);
+	unlock_kernel();
 #endif
 	compute_creds(bprm);
 	current->flags &= ~PF_FORKNOEXEC;

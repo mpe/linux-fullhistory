@@ -94,6 +94,8 @@ static u8 vgacon_build_attr(struct vc_data *c, u8 color, u8 intensity, u8 blink,
 static void vgacon_invert_region(struct vc_data *c, u16 *p, int count);
 static unsigned long vgacon_uni_pagedir[2];
 
+void clear_status_line( void );
+
 
 /* Description of the hardware situation */
 static unsigned long   vga_vram_base;		/* Base of video memory */

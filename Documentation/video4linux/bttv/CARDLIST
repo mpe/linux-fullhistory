@@ -1,5 +1,5 @@
 bttv.o
-  card=0 - unknown
+  card=0 -  *** UNKNOWN *** 
   card=1 - MIRO PCTV
   card=2 - Hauppauge old
   card=3 - STB
@@ -33,6 +33,10 @@ bttv.o
   card=31 - iProTV
   card=32 - Intel Create and Share PCI
   card=33 - Terratec TerraTValue
+  card=34 - Leadtek WinFast 2000
+  card=35 - Chronos Video Shuttle II
+  card=36 - Typhoon TView TV/FM Tuner
+  card=37 - PixelView PlayTV pro
 
 tuner.o
   type=0 - Temic PAL

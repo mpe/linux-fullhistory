@@ -200,12 +200,8 @@ old_compare:
 
 
 static struct dentry_operations msdos_dentry_operations = {
-	NULL, 		/* d_revalidate */
-	msdos_hash,
-	msdos_cmp,
-	NULL,		/* d_delete */
-	NULL,
-	NULL
+	d_hash:		msdos_hash,
+	d_compare:	msdos_cmp,
 };
 
 /*

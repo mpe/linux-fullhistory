@@ -432,12 +432,10 @@ static int sunos_filldir(void * __buf, const char * name, int namlen,
 asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 {
 	struct file * file;
-	struct inode * inode;
 	struct sunos_dirent * lastdirent;
 	struct sunos_dirent_callback buf;
 	int error = -EBADF;
 
-	lock_kernel();
 	if (fd >= SUNOS_NR_OPEN)
 		goto out;
 
@@ -445,10 +443,7 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	if (!file)
 		goto out;
 
-	error = -ENOTDIR;
-	if (!file->f_op || !file->f_op->readdir)
-		goto out_putf;
-
+	lock_kernel();
 	error = -EINVAL;
 	if (cnt < (sizeof(struct sunos_dirent) + 255))
 		goto out_putf;
@@ -458,10 +453,7 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	buf.count = cnt;
 	buf.error = 0;
 
-	inode = file->f_dentry->d_inode;
-	down(&inode->i_sem);
-	error = file->f_op->readdir(file, &buf, sunos_filldir);
-	up(&inode->i_sem);
+	error = vfs_readdir(file, sunos_filldir, &buf);
 	if (error < 0)
 		goto out_putf;
 
@@ -473,9 +465,9 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	}
 
 out_putf:
+	unlock_kernel();
 	fput(file);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -521,12 +513,10 @@ static int sunos_filldirentry(void * __buf, const char * name, int namlen,
 asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsigned int *basep)
 {
 	struct file * file;
-	struct inode * inode;
 	struct sunos_direntry * lastdirent;
 	struct sunos_direntry_callback buf;
 	int error = -EBADF;
 
-	lock_kernel();
 	if (fd >= SUNOS_NR_OPEN)
 		goto out;
 
@@ -534,10 +524,7 @@ asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsi
 	if (!file)
 		goto out;
 
-	error = -ENOTDIR;
-	if (!file->f_op || !file->f_op->readdir)
-		goto out_putf;
-
+	lock_kernel();
 	error = -EINVAL;
 	if(cnt < (sizeof(struct sunos_direntry) + 255))
 		goto out_putf;
@@ -547,10 +534,7 @@ asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsi
 	buf.count = cnt;
 	buf.error = 0;
 
-	inode = file->f_dentry->d_inode;
-	down(&inode->i_sem);
-	error = file->f_op->readdir(file, &buf, sunos_filldirentry);
-	up(&inode->i_sem);
+	error = vfs_readdir(file, sunos_filldirentry, &buf);
 	if (error < 0)
 		goto out_putf;
 
@@ -562,9 +546,9 @@ asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsi
 	}
 
 out_putf:
+	unlock_kernel();
 	fput(file);
 out:
-	unlock_kernel();
 	return error;
 }
 

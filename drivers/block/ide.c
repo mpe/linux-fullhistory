@@ -143,6 +143,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/ide.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
@@ -3456,6 +3457,8 @@ EXPORT_SYMBOL(ide_spin_wait_hwgroup);
 /*
  * Probe module
  */
+devfs_handle_t ide_devfs_handle = NULL;
+
 EXPORT_SYMBOL(ide_probe);
 EXPORT_SYMBOL(drive_is_flashcard);
 EXPORT_SYMBOL(ide_timer_expiry);
@@ -3464,6 +3467,7 @@ EXPORT_SYMBOL(ide_fops);
 EXPORT_SYMBOL(ide_get_queue);
 EXPORT_SYMBOL(do_ide0_request);
 EXPORT_SYMBOL(ide_add_generic_settings);
+EXPORT_SYMBOL(ide_devfs_handle);
 #if MAX_HWIFS > 1
 EXPORT_SYMBOL(do_ide1_request);
 #endif /* MAX_HWIFS > 1 */
@@ -3545,6 +3549,7 @@ int __init ide_init (void)
 
 	if (!banner_printed) {
 		printk(KERN_INFO "Uniform Multi-Platform E-IDE driver " REVISION "\n");
+		ide_devfs_handle = devfs_mk_dir (NULL, "ide", 3, NULL);
 		banner_printed = 1;
 	}
 
@@ -3602,6 +3607,7 @@ void cleanup_module (void)
 #ifdef CONFIG_PROC_FS
 	proc_ide_destroy();
 #endif
+	devfs_unregister (ide_devfs_handle);
 }
 
 #else /* !MODULE */

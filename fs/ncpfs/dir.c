@@ -75,10 +75,10 @@ static void ncp_delete_dentry(struct dentry *);
 
 struct dentry_operations ncp_dentry_operations =
 {
-	ncp_lookup_validate,	/* d_revalidate(struct dentry *, int) */
-	ncp_hash_dentry,	/* d_hash */
-	ncp_compare_dentry,    	/* d_compare */
-	ncp_delete_dentry	/* d_delete(struct dentry *) */
+	d_revalidate:	ncp_lookup_validate,
+	d_hash:		ncp_hash_dentry,
+	d_compare:	ncp_compare_dentry,
+	d_delete:	ncp_delete_dentry,
 };
 
 

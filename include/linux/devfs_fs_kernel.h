@@ -16,22 +16,26 @@
       ) ? m : MINOR((inode)->r_dev); })
 
 
-#define DEVFS_FL_NONE         0x000  /* This helps making code more readable */
-#define DEVFS_FL_AUTO_OWNER   0x001  /* When a closed inode is opened the
-					ownerships are set to the opening
-					process and the protection is set to
-					that given in <<mode>>. When the inode
-					is closed, ownership reverts back to
-					<<uid>> and <<gid>> and the protection
-					is set to read-write for all         */
-#define DEVFS_FL_SHOW_UNREG   0x002  /* Show unregistered entries in
-					directory listings                   */
-#define DEVFS_FL_HIDE         0x004  /* Do not show entry in directory list  */
-#define DEVFS_FL_AUTO_DEVNUM  0x008  /* Automatically generate device number */
-#define DEVFS_FL_AOPEN_NOTIFY 0x010  /* Asynchronously notify devfsd on open */
-#define DEVFS_FL_REMOVABLE    0x020  /* This is a removable media device     */
-#define DEVFS_FL_WAIT         0x040  /* Wait for devfsd to finish            */
-#define DEVFS_FL_DEFAULT      DEVFS_FL_NONE
+#define DEVFS_FL_NONE           0x000 /* This helps to make code more readable
+				       */
+#define DEVFS_FL_AUTO_OWNER     0x001 /* When a closed inode is opened the
+					 ownerships are set to the opening
+					 process and the protection is set to
+					 that given in <<mode>>. When the inode
+					 is closed, ownership reverts back to
+					 <<uid>> and <<gid>> and the protection
+					 is set to read-write for all        */
+#define DEVFS_FL_SHOW_UNREG     0x002 /* Show unregistered entries in
+					 directory listings                  */
+#define DEVFS_FL_HIDE           0x004 /* Do not show entry in directory list */
+#define DEVFS_FL_AUTO_DEVNUM    0x008 /* Automatically generate device number
+				       */
+#define DEVFS_FL_AOPEN_NOTIFY   0x010 /* Asynchronously notify devfsd on open
+				       */
+#define DEVFS_FL_REMOVABLE      0x020 /* This is a removable media device    */
+#define DEVFS_FL_WAIT           0x040 /* Wait for devfsd to finish           */
+#define DEVFS_FL_NO_PERSISTENCE 0x080 /* Forget changes after unregister     */
+#define DEVFS_FL_DEFAULT        DEVFS_FL_NONE
 
 
 #define DEVFS_SPECIAL_CHR     0

@@ -801,7 +801,6 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 {
 	struct dentry	*dentry, *dchild;
 	struct inode	*dirp;
-	nfsd_dirop_t	opfunc = NULL;
 	int		err;
 
 	err = nfserr_perm;
@@ -856,45 +855,31 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		goto out; 
 	}
 
+	if (!(iap->ia_valid & ATTR_MODE))
+		iap->ia_mode = 0;
+	iap->ia_mode = (iap->ia_mode & S_IALLUGO) | type;
+
 	/*
 	 * Get the dir op function pointer.
 	 */
 	err = nfserr_perm;
 	switch (type) {
 	case S_IFREG:
-		opfunc = (nfsd_dirop_t) dirp->i_op->create;
+		err = vfs_create(dirp, dchild, iap->ia_mode);
 		break;
 	case S_IFDIR:
-		opfunc = (nfsd_dirop_t) dirp->i_op->mkdir;
+		err = vfs_mkdir(dirp, dchild, iap->ia_mode);
 		break;
 	case S_IFCHR:
 	case S_IFBLK:
-		/* The client is _NOT_ required to do security enforcement */
-		if(!capable(CAP_SYS_ADMIN))
-		{
-			err = -EPERM;
-			goto out;
-		}
 	case S_IFIFO:
 	case S_IFSOCK:
-		opfunc = dirp->i_op->mknod;
+		err = vfs_mknod(dirp, dchild, iap->ia_mode, rdev);
 		break;
 	default:
 	        printk("nfsd: bad file type %o in nfsd_create\n", type);
-		err = nfserr_inval;
+		err = -EINVAL;
 	}
-	if (!opfunc)
-		goto out;
-
-	if (!(iap->ia_valid & ATTR_MODE))
-		iap->ia_mode = 0;
-	iap->ia_mode = (iap->ia_mode & S_IALLUGO) | type;
-
-	/*
-	 * Call the dir op function to create the object.
-	 */
-	DQUOT_INIT(dirp);
-	err = opfunc(dirp, dchild, iap->ia_mode, rdev);
 	if (err < 0)
 		goto out_nfserr;
 
@@ -954,9 +939,6 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	err = nfserr_notdir;
 	if(!dirp->i_op || !dirp->i_op->lookup)
 		goto out;
-	err = nfserr_perm;
-	if(!dirp->i_op->create)
-		goto out;
 
 	/*
 	 * Compose the response file handle.
@@ -1003,7 +985,7 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		goto out;
 	}
 
-	err = dirp->i_op->create(dirp, dchild, iap->ia_mode);
+	err = vfs_create(dirp, dchild, iap->ia_mode);
 	if (err < 0)
 		goto out_nfserr;
 
@@ -1101,7 +1083,6 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				struct iattr *iap)
 {
 	struct dentry	*dentry, *dnew;
-	struct inode	*dirp;
 	int		err;
 
 	err = nfserr_noent;
@@ -1112,11 +1093,6 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (err)
 		goto out;
 	dentry = fhp->fh_dentry;
-
-	err = nfserr_perm;
-	dirp = dentry->d_inode;
-	if (!dirp->i_op	|| !dirp->i_op->symlink)
-		goto out;
 
 	dnew = lookup_dentry(fname, dget(dentry), 0);
 	err = PTR_ERR(dnew);
@@ -1130,27 +1106,23 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (err)
 		goto out_compose;
 
-	err = nfserr_exist;
-	if (!dnew->d_inode) {
-		DQUOT_INIT(dirp);
-		err = dirp->i_op->symlink(dirp, dnew, path);
-		if (!err) {
-			if (EX_ISSYNC(fhp->fh_export))
-				nfsd_sync_dir(dentry);
-			if (iap) {
-				iap->ia_valid &= ATTR_MODE /* ~(ATTR_MODE|ATTR_UID|ATTR_GID)*/;
-				if (iap->ia_valid) {
-					iap->ia_valid |= ATTR_CTIME;
-					iap->ia_mode = (iap->ia_mode&S_IALLUGO)
-						| S_IFLNK;
-					err = notify_change(dnew, iap);
-					if (!err && EX_ISSYNC(fhp->fh_export))
-						write_inode_now(dentry->d_inode);
-			       }
-			}
-		} else
-			err = nfserrno(-err);
-	}
+	err = vfs_symlink(dentry->d_inode, dnew, path);
+	if (!err) {
+		if (EX_ISSYNC(fhp->fh_export))
+			nfsd_sync_dir(dentry);
+		if (iap) {
+			iap->ia_valid &= ATTR_MODE /* ~(ATTR_MODE|ATTR_UID|ATTR_GID)*/;
+			if (iap->ia_valid) {
+				iap->ia_valid |= ATTR_CTIME;
+				iap->ia_mode = (iap->ia_mode&S_IALLUGO)
+					| S_IFLNK;
+				err = notify_change(dnew, iap);
+				if (!err && EX_ISSYNC(fhp->fh_export))
+					write_inode_now(dentry->d_inode);
+		       }
+		}
+	} else
+		err = nfserrno(-err);
 	fh_unlock(fhp);
 
 	/* Compose the fh so the dentry will be freed ... */
@@ -1201,34 +1173,22 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	if (err)
 		goto out_dput;
 
-	err = nfserr_exist;
-	if (dnew->d_inode)
-		goto out_unlock;
-
 	dold = tfhp->fh_dentry;
 	dest = dold->d_inode;
 
-	err = (rqstp->rq_vers == 2) ? nfserr_acces : nfserr_xdev;
-	if (dirp->i_dev != dest->i_dev)
-		goto out_unlock;
-
-	err = nfserr_perm;
-	if (IS_IMMUTABLE(dest) || IS_APPEND(dest))
-		goto out_unlock;
-	if (!dirp->i_op || !dirp->i_op->link)
-		goto out_unlock;
-
-	DQUOT_INIT(dirp);
-	err = dirp->i_op->link(dold, dirp, dnew);
+	err = vfs_link(dold, dirp, dnew);
 	if (!err) {
 		if (EX_ISSYNC(ffhp->fh_export)) {
 			nfsd_sync_dir(ddir);
 			write_inode_now(dest);
 		}
-	} else
-		err = nfserrno(-err);
+	} else {
+		if (err == -EXDEV && rqstp->rq_vers == 2)
+			err = nfserr_acces;
+		else
+			err = nfserrno(-err);
+	}
 
-out_unlock:
 	fh_unlock(ffhp);
 out_dput:
 	dput(dnew);

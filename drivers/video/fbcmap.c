@@ -16,22 +16,6 @@
 
 #include <asm/uaccess.h>
 
-
-static void memcpy_fs(int fsfromto, void *to, void *from, int len)
-{
-    switch (fsfromto) {
-    	case 0:
-    	    memcpy(to, from, len);
-    	    return;
-    	case 1:
-    	    copy_from_user(to, from, len);
-    	    return;
-    	case 2:
-    	    copy_to_user(to, from, len);
-    	    return;
-    }
-}
-
 static u16 red2[] = {
     0x0000, 0xaaaa
 };
@@ -148,11 +132,30 @@ void fb_copy_cmap(struct fb_cmap *from, struct fb_cmap *to, int fsfromto)
     if (size < 0)
 	return;
     size *= sizeof(u16);
-    memcpy_fs(fsfromto, to->red+tooff, from->red+fromoff, size);
-    memcpy_fs(fsfromto, to->green+tooff, from->green+fromoff, size);
-    memcpy_fs(fsfromto, to->blue+tooff, from->blue+fromoff, size);
-    if (from->transp && to->transp)
-	memcpy_fs(fsfromto, to->transp+tooff, from->transp+fromoff, size);
+    
+    switch (fsfromto) {
+    case 0:
+	memcpy(to->red+tooff, from->red+fromoff, size);
+	memcpy(to->green+tooff, from->green+fromoff, size);
+	memcpy(to->blue+tooff, from->blue+fromoff, size);
+	if (from->transp && to->transp)
+	    memcpy(to->transp+tooff, from->transp+fromoff, size);
+        break;
+    case 1:
+	copy_from_user(to->red+tooff, from->red+fromoff, size);
+	copy_from_user(to->green+tooff, from->green+fromoff, size);
+	copy_from_user(to->blue+tooff, from->blue+fromoff, size);
+	if (from->transp && to->transp)
+            copy_from_user(to->transp+tooff, from->transp+fromoff, size);
+	break;
+    case 2:
+	copy_to_user(to->red+tooff, from->red+fromoff, size);
+	copy_to_user(to->green+tooff, from->green+fromoff, size);
+	copy_to_user(to->blue+tooff, from->blue+fromoff, size);
+	if (from->transp && to->transp)
+	    copy_to_user(to->transp+tooff, from->transp+fromoff, size);
+	break;
+    }
 }
 
 

@@ -15,8 +15,7 @@ static const char *awc_version =
 
 
 #include <linux/module.h>
-//#include <pcmcia/config.h>
-
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/ptrace.h>
@@ -604,7 +603,7 @@ static int awc_event(event_t event, int priority,
 
 
         
-int init_module(void)
+static int aironet_cs_init(void)
 {
 	servinfo_t serv;
 
@@ -621,7 +620,7 @@ int init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+static void aironet_cs_exit(void)
 {
 	DEBUG(0, "awc_cs: unloading %c ",'\n');
 	unregister_pcmcia_driver(&dev_info);
@@ -636,4 +635,6 @@ void cleanup_module(void)
 //		awc_detach(dev_list);
 }
 
-        
+module_init(aironet_cs_init);
+module_exit(aironet_cs_init);
+

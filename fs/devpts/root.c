@@ -30,9 +30,7 @@ struct inode_operations devpts_root_inode_operations = {
 };
 
 static struct dentry_operations devpts_dentry_operations = {
-	devpts_revalidate,	/* d_revalidate */
-	NULL,			/* d_hash */
-	NULL,			/* d_compare */
+	d_revalidate:	devpts_revalidate,
 };
 
 /*

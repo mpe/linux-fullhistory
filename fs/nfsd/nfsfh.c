@@ -63,7 +63,10 @@ dprintk("filldir_one: seq=%d, ino=%ld, name=%s\n", buf->sequence, ino, name);
 }
 
 /*
- * Read a directory and return the name of the specified entry.  i_sem is already down().
+ * Read a directory and return the name of the specified entry.
+ * i_sem is already down().
+ * The whole thing is a total BS. It should not be done via readdir(), damnit!
+ * Oh, well, as soon as it will be in filesystems...
  */
 static int get_ino_name(struct dentry *dentry, struct qstr *name, unsigned long ino)
 {

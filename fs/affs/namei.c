@@ -44,10 +44,8 @@ affs_intl_toupper(unsigned int ch)
 static int	 affs_hash_dentry(struct dentry *, struct qstr *);
 static int       affs_compare_dentry(struct dentry *, struct qstr *, struct qstr *);
 struct dentry_operations affs_dentry_operations = {
-	NULL,			/* d_validate	*/
-	affs_hash_dentry,	/* d_hash	*/
-	affs_compare_dentry,	/* d_compare	*/
-	NULL			/* d_delete	*/
+	d_hash:		affs_hash_dentry,
+	d_compare:	affs_compare_dentry,
 };
 
 /*

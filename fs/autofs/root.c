@@ -174,9 +174,7 @@ static int autofs_revalidate(struct dentry * dentry, int flags)
 }
 
 static struct dentry_operations autofs_dentry_operations = {
-	autofs_revalidate,	/* d_revalidate */
-	NULL,			/* d_hash */
-	NULL,			/* d_compare */
+	d_revalidate:	autofs_revalidate,
 };
 
 static struct dentry *autofs_root_lookup(struct inode *dir, struct dentry *dentry)

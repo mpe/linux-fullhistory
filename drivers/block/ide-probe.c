@@ -686,6 +686,7 @@ static void init_gendisk (ide_hwif_t *hwif)
 	struct gendisk *gd, **gdp;
 	unsigned int unit, units, minors;
 	int *bs, *max_sect, *max_ra;
+	extern devfs_handle_t ide_devfs_handle;
 
 	/* figure out maximum drive number on the interface */
 	for (units = MAX_DRIVES; units > 0; --units) {
@@ -742,11 +743,11 @@ static void init_gendisk (ide_hwif_t *hwif)
 			char name[64];
 
 			ide_add_generic_settings(hwif->drives + unit);
-			sprintf (name, "ide/host%d/bus%d/target%d/lun%d",
-				 hwif->channel ? hwif->mate->index : hwif->index,
+			sprintf (name, "host%d/bus%d/target%d/lun%d",
+				 (hwif->channel && hwif->mate) ? hwif->mate->index : hwif->index,
 				 hwif->channel, unit, 0);
 			hwif->drives[unit].de =
-				devfs_mk_dir (NULL, name, 0, NULL);
+				devfs_mk_dir (ide_devfs_handle, name, 0, NULL);
 		}
 	}
 }

@@ -410,21 +410,27 @@ static void usb_find_drivers(struct usb_device *dev)
 {
 	unsigned ifnum;
 	unsigned rejected = 0;
+	unsigned claimed = 0;
 
 	for (ifnum = 0; ifnum < dev->actconfig->bNumInterfaces; ifnum++) {
 		/* if this interface hasn't already been claimed */
 		if (!usb_interface_claimed(dev->actconfig->interface + ifnum)) {
 			if (usb_find_interface_driver(dev, ifnum))
 				rejected++;
+			else
+				claimed++;
 		}
 	}
  
 	if (rejected)
 		dbg("unhandled interfaces on device");
 
+	if (!claimed) {
+		warn("This device is not recognized by any installed USB driver.");
 #ifdef DEBUG
-	usb_show_device(dev);
+		usb_show_device(dev);
 #endif
+	}
 }
 
 /*

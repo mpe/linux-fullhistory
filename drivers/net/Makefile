@@ -172,8 +172,10 @@ obj-$(CONFIG_ADAPTEC_STARFIRE) += starfire.o
 #
 
 obj-$(CONFIG_AIRONET4500) 	+= aironet4500_core.o
+obj-$(CONFIG_AIRONET4500_CS) 	+= aironet4500_core.o
 obj-$(CONFIG_AIRONET4500_NONCS)  += aironet4500_card.o
 obj-$(CONFIG_AIRONET4500_PROC)	+= aironet4500_proc.o
+obj-$(CONFIG_AIRONET4500_CS)	+= aironet4500_proc.o
 
 obj-$(CONFIG_NET) += Space.o setup.o net_init.o loopback.o
 obj-$(CONFIG_SEEQ8005) += seeq8005.o

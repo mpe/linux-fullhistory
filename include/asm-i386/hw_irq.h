@@ -179,6 +179,10 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	"jmp common_interrupt");
 
 extern unsigned long prof_cpu_mask;
+extern unsigned int * prof_buffer;
+extern unsigned long prof_len;
+extern unsigned long prof_shift;
+
 /*
  * x86 profiling function, SMP safe. We might want to do this in
  * assembly totally?

@@ -84,6 +84,7 @@ int open_dentry(struct dentry * dentry, int mode)
 	struct list_head * l = NULL;
 	int fd, error;
 
+	lock_kernel();
 	if (inode->i_sb)
 		l = &inode->i_sb->s_files;
 
@@ -111,6 +112,7 @@ int open_dentry(struct dentry * dentry, int mode)
 		fd_install(fd, f);
 		dget(dentry);
 	}
+	unlock_kernel();
 	return fd;
 
 out_filp:
@@ -120,6 +122,7 @@ out_filp:
 out_fd:
 	put_unused_fd(fd);
 out:
+	unlock_kernel();
 	return error;
 }
 

@@ -256,12 +256,8 @@ adfs_compare(struct dentry *parent, struct qstr *entry, struct qstr *name)
 }
 
 struct dentry_operations adfs_dentry_operations = {
-	NULL,		/* revalidate */
-	adfs_hash,
-	adfs_compare,
-	NULL,		/* delete  = called by dput */
-	NULL,		/* release - called by d_free */
-	NULL		/* iput    - called by dentry_iput */
+	d_hash:		adfs_hash,
+	d_compare:	adfs_compare,
 };
 
 struct dentry *adfs_lookup(struct inode *dir, struct dentry *dentry)

@@ -18,6 +18,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
@@ -2521,7 +2522,7 @@ static const char *aironet4500_core_version =
 
 struct net_device * aironet4500_devices[MAX_AWCS]  = {NULL,NULL,NULL,NULL};
 
-static int awc_debug = 0; //  0xffffff;
+int awc_debug = 0; //  0xffffff;
 static int p802_11_send  =  0; // 1
 
 static int awc_process_tx_results = 0;
@@ -3197,9 +3198,7 @@ int awc_unregister_proc(void){
 	return 0;
 };
 
-#ifdef MODULE
-        
-int init_module(void)
+static int aironet_core_init(void)
 {
 //	unsigned long flags;
 
@@ -3210,11 +3209,12 @@ int init_module(void)
 
 }
 
-void cleanup_module(void)
+static void aironet_core_exit(void)
 {
 	printk(KERN_INFO "aironet4500 unloading core module \n");
 
 }
-
-#endif
         
+module_init(aironet_core_init);
+module_exit(aironet_core_exit);
+

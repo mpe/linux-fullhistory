@@ -172,10 +172,10 @@ static void smb_delete_dentry(struct dentry *);
 
 static struct dentry_operations smbfs_dentry_operations =
 {
-	smb_lookup_validate,	/* d_revalidate(struct dentry *) */
-	smb_hash_dentry,	/* d_hash */
-	smb_compare_dentry,	/* d_compare */
-	smb_delete_dentry	/* d_delete(struct dentry *) */
+	d_revalidate:	smb_lookup_validate,
+	d_hash:		smb_hash_dentry,
+	d_compare:	smb_compare_dentry,
+	d_delete:	smb_delete_dentry,
 };
 
 /*

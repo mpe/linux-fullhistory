@@ -10,7 +10,7 @@
  *    for more details.
  */
 
-#include <linux/config.h>
+#include <linux/module.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -75,6 +75,8 @@ struct zorro_dev *zorro_find_device(zorro_id id, struct zorro_dev *from)
      *  Possible uses:
      *      - z2ram device
      *      - SCSI DMA bounce buffers
+     *
+     *  FIXME: use the normal resource management
      */
 
 u32 zorro_unused_z2ram[4] = { 0, 0, 0, 0 };
@@ -151,8 +153,8 @@ void __init zorro_init(void)
 	if (m68k_memory[i].addr < 16*1024*1024)
 	    mark_region(m68k_memory[i].addr,
 			m68k_memory[i].addr+m68k_memory[i].size, 0);
-
-#ifdef CONFIG_PROC_FS
-    zorro_proc_init();
-#endif
 }
+
+
+EXPORT_SYMBOL(zorro_find_device);
+EXPORT_SYMBOL(zorro_unused_z2ram);
