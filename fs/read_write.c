@@ -130,7 +130,7 @@ asmlinkage long sys_read(unsigned int fd, char * buf, unsigned long count)
 		goto bad_file;
 	dentry = file->f_dentry;
 	if (!dentry)
-		goto bad_file;
+		goto out;
 	inode = dentry->d_inode;
 	if (!inode)
 		goto out;

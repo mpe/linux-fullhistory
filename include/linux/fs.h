@@ -93,7 +93,7 @@ extern int max_files, nr_files;
 /*
  * Flags that can be altered by MS_REMOUNT
  */
-#define MS_RMT_MASK (MS_RDONLY|MS_MANDLOCK)
+#define MS_RMT_MASK (MS_RDONLY|MS_MANDLOCK|MS_NOATIME)
 
 /*
  * Magic mount flag number. Has to be or-ed to the flag values.

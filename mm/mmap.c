@@ -373,10 +373,12 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
  *    Unmapping between to intermediate points, making a hole.
  *
  * Case 4 involves the creation of 2 new areas, for each side of
- * the hole.
+ * the hole.  If possible, we reuse the existing area rather than
+ * allocate a new one, and the return indicates whether the old
+ * area was reused.
  */
-static void unmap_fixup(struct vm_area_struct *area,
-		 unsigned long addr, size_t len)
+static int unmap_fixup(struct vm_area_struct *area, unsigned long addr,
+			 size_t len, struct vm_area_struct **extra)
 {
 	struct vm_area_struct *mpnt;
 	unsigned long end = addr + len;
@@ -391,7 +393,7 @@ static void unmap_fixup(struct vm_area_struct *area,
 			area->vm_ops->close(area);
 		if (area->vm_dentry)
 			dput(area->vm_dentry);
-		return;
+		return 0;
 	}
 
 	/* Work out to one of the ends. */
@@ -403,17 +405,16 @@ static void unmap_fixup(struct vm_area_struct *area,
 	} else {
 	/* Unmapping a hole: area->vm_start < addr <= end < area->vm_end */
 		/* Add end mapping -- leave beginning for below */
-		mpnt = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
+		mpnt = *extra;
+		*extra = NULL;
 
-		if (!mpnt)
-			return;
 		mpnt->vm_mm = area->vm_mm;
 		mpnt->vm_start = end;
 		mpnt->vm_end = area->vm_end;
 		mpnt->vm_page_prot = area->vm_page_prot;
 		mpnt->vm_flags = area->vm_flags;
 		mpnt->vm_ops = area->vm_ops;
-		mpnt->vm_offset += (end - area->vm_start);
+		mpnt->vm_offset = area->vm_offset + (end - area->vm_start);
 		mpnt->vm_dentry = dget(area->vm_dentry);
 		if (mpnt->vm_ops && mpnt->vm_ops->open)
 			mpnt->vm_ops->open(mpnt);
@@ -421,18 +422,18 @@ static void unmap_fixup(struct vm_area_struct *area,
 		insert_vm_struct(current->mm, mpnt);
 	}
 
-	/* Construct whatever mapping is needed. */
-	mpnt = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
-	if (!mpnt)
-		return;
-	*mpnt = *area;
-	if (mpnt->vm_ops && mpnt->vm_ops->open)
-		mpnt->vm_ops->open(mpnt);
+	/* Close the current area ... */
 	if (area->vm_ops && area->vm_ops->close) {
+		end = area->vm_end; /* save new end */
 		area->vm_end = area->vm_start;
 		area->vm_ops->close(area);
+		area->vm_end = end;
 	}
-	insert_vm_struct(current->mm, mpnt);
+	/* ... then reopen and reinsert. */
+	if (area->vm_ops && area->vm_ops->open)
+		area->vm_ops->open(area);
+	insert_vm_struct(current->mm, area);
+	return 1;
 }
 
 asmlinkage int sys_munmap(unsigned long addr, size_t len)
@@ -452,7 +453,8 @@ asmlinkage int sys_munmap(unsigned long addr, size_t len)
  */
 int do_munmap(unsigned long addr, size_t len)
 {
-	struct vm_area_struct *mpnt, *next, *free;
+	struct vm_area_struct *mpnt, *next, *free, *extra;
+	int freed;
 
 	if ((addr & ~PAGE_MASK) || addr > TASK_SIZE || len > TASK_SIZE-addr)
 		return -EINVAL;
@@ -471,6 +473,14 @@ int do_munmap(unsigned long addr, size_t len)
 	if (!mpnt)
 		return 0;
 
+	/*
+	 * We may need one additional vma to fix up the mappings ... 
+	 * and this is the last chance for an easy error exit.
+	 */
+	extra = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
+	if (!extra)
+		return -ENOMEM;
+
 	next = mpnt->vm_next;
 
 	/* we have mpnt->vm_next = next and addr < mpnt->vm_end */
@@ -486,19 +496,18 @@ int do_munmap(unsigned long addr, size_t len)
 		free = mpnt;
 		mpnt = next;
 	}
-	if (free == NULL)
-		return 0;
 
 	/* Ok - we have the memory areas we should free on the 'free' list,
 	 * so release them, and unmap the page range..
 	 * If the one of the segments is only being partially unmapped,
 	 * it will put new vm_area_struct(s) into the address space.
 	 */
-	do {
+	freed = 0;
+	while ((mpnt = free) != NULL) {
 		unsigned long st, end, size;
 
-		mpnt = free;
 		free = free->vm_next;
+		freed = 1;
 
 		remove_shared_vm_struct(mpnt);
 
@@ -514,12 +523,19 @@ int do_munmap(unsigned long addr, size_t len)
 		zap_page_range(current->mm, st, size);
 		flush_tlb_range(current->mm, st, end);
 
-		unmap_fixup(mpnt, st, size);
+		/*
+		 * Fix the mapping, and free the old area if it wasn't reused.
+		 */
+		if (!unmap_fixup(mpnt, st, size, &extra))
+			kmem_cache_free(vm_area_cachep, mpnt);
+	}
 
-		kmem_cache_free(vm_area_cachep, mpnt);
-	} while (free);
+	/* Release the extra vma struct if it wasn't used */
+	if (extra)
+		kmem_cache_free(vm_area_cachep, extra);
 
-	current->mm->mmap_cache = NULL;		/* Kill the cache. */
+	if (freed)
+		current->mm->mmap_cache = NULL;	/* Kill the cache. */
 	return 0;
 }
 

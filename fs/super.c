@@ -811,14 +811,12 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 	if ((flags & MS_RDONLY) && !(sb->s_flags & MS_RDONLY))
 		if (!fs_may_remount_ro(sb))
 			return -EBUSY;
-	sb->s_flags = (flags & ~MS_RDONLY) | (sb->s_flags & MS_RDONLY);
 	if (sb->s_op && sb->s_op->remount_fs) {
 		retval = sb->s_op->remount_fs(sb, &flags, data);
 		if (retval)
 			return retval;
 	}
-	sb->s_flags = (sb->s_flags & ~MS_RMT_MASK) |
-		(flags & MS_RMT_MASK);
+	sb->s_flags = (sb->s_flags & ~MS_RMT_MASK) | (flags & MS_RMT_MASK);
 	vfsmnt = lookup_vfsmnt(sb->s_dev);
 	if (vfsmnt)
 		vfsmnt->mnt_flags = sb->s_flags;

@@ -137,6 +137,7 @@ fh_put(struct svc_fh *fhp)
 	if (fhp->fh_dverified) {
 		fh_unlock(fhp);
 		dput(fhp->fh_handle.fh_dentry);
+		fhp->fh_dverified = 0;
 	}
 }
 #else
@@ -159,6 +160,7 @@ __fh_put(struct svc_fh *fhp, char *file, int line)
 	} else {
 		fh_unlock(fhp);
 		dput(dentry);
+		fhp->fh_dverified = 0;
 	}
 }
 #endif

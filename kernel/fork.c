@@ -206,6 +206,7 @@ inside:
 static inline int dup_mmap(struct mm_struct * mm)
 {
 	struct vm_area_struct * mpnt, *tmp, **pprev;
+	int retval;
 
 	mm->mmap = mm->mmap_cache = NULL;
 	flush_cache_mm(current->mm);
@@ -213,19 +214,17 @@ static inline int dup_mmap(struct mm_struct * mm)
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		struct dentry *dentry;
 
+		retval = -ENOMEM;
 		tmp = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
-		if (!tmp) {
-			exit_mmap(mm);
-			flush_tlb_mm(current->mm);
-			return -ENOMEM;
-		}
+		if (!tmp)
+			goto fail_nomem;
 		*tmp = *mpnt;
 		tmp->vm_flags &= ~VM_LOCKED;
 		tmp->vm_mm = mm;
 		tmp->vm_next = NULL;
 		dentry = tmp->vm_dentry;
 		if (dentry) {
-			dentry->d_count++;
+			dget(dentry);
 			if (tmp->vm_flags & VM_DENYWRITE)
 				dentry->d_inode->i_writecount--;
       
@@ -236,60 +235,79 @@ static inline int dup_mmap(struct mm_struct * mm)
 			mpnt->vm_next_share = tmp;
 			tmp->vm_pprev_share = &mpnt->vm_next_share;
 		}
-		if (copy_page_range(mm, current->mm, tmp)) {
-			exit_mmap(mm);
-			flush_tlb_mm(current->mm);
-			return -ENOMEM;
-		}
-		if (tmp->vm_ops && tmp->vm_ops->open)
+
+		/* Copy the pages, but defer checking for errors */
+		retval = copy_page_range(mm, current->mm, tmp);
+		if (!retval && tmp->vm_ops && tmp->vm_ops->open)
 			tmp->vm_ops->open(tmp);
 
-		/* Ok, finally safe to link it in. */
+		/*
+		 * Link in the new vma even if an error occurred,
+		 * so that exit_mmap() can clean up the mess.
+		 */
 		if((tmp->vm_next = *pprev) != NULL)
 			(*pprev)->vm_pprev = &tmp->vm_next;
 		*pprev = tmp;
 		tmp->vm_pprev = pprev;
 
 		pprev = &tmp->vm_next;
+		if (retval)
+			goto fail_nomem;
 	}
 	flush_tlb_mm(current->mm);
 	return 0;
+
+fail_nomem:
+	exit_mmap(mm);
+	flush_tlb_mm(current->mm);
+	return retval;
 }
 
 static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 {
-	if (!(clone_flags & CLONE_VM)) {
-		struct mm_struct * mm = kmem_cache_alloc(mm_cachep, SLAB_KERNEL);
-		if (!mm)
-			return -1;
-		*mm = *current->mm;
-		init_new_context(mm);
-		mm->count = 1;
-		mm->def_flags = 0;
-		mm->mmap_sem = MUTEX;
+	struct mm_struct * mm;
+	int retval;
 
-		/* It has not run yet, so cannot be present in anyone's
-		 * cache or tlb.
-		 */
-		mm->cpu_vm_mask = 0;
-
-		tsk->mm = mm;
-		tsk->min_flt = tsk->maj_flt = 0;
-		tsk->cmin_flt = tsk->cmaj_flt = 0;
-		tsk->nswap = tsk->cnswap = 0;
-		if (new_page_tables(tsk))
-			goto free_mm;
-		if (dup_mmap(mm)) {
-			free_page_tables(mm);
-free_mm:
-			kmem_cache_free(mm_cachep, mm);
-			return -1;
-		}
+	if (clone_flags & CLONE_VM) {
+		current->mm->count++;
+		SET_PAGE_DIR(tsk, current->mm->pgd);
 		return 0;
 	}
-	current->mm->count++;
-	SET_PAGE_DIR(tsk, current->mm->pgd);
+
+	retval = -ENOMEM;
+	mm = kmem_cache_alloc(mm_cachep, SLAB_KERNEL);
+	if (!mm)
+		goto fail_nomem;
+	*mm = *current->mm;
+	init_new_context(mm);
+	mm->count = 1;
+	mm->def_flags = 0;
+	mm->mmap_sem = MUTEX;
+
+	/* It has not run yet, so cannot be present in anyone's
+	 * cache or tlb.
+	 */
+	mm->cpu_vm_mask = 0;
+
+	tsk->mm = mm;
+	tsk->min_flt = tsk->maj_flt = 0;
+	tsk->cmin_flt = tsk->cmaj_flt = 0;
+	tsk->nswap = tsk->cnswap = 0;
+	retval = new_page_tables(tsk);
+	if (retval)
+		goto free_mm;
+	retval = dup_mmap(mm);
+	if (retval)
+		goto free_pt;
 	return 0;
+
+free_pt:
+	free_page_tables(mm);
+free_mm:
+	tsk->mm = NULL;
+	kmem_cache_free(mm_cachep, mm);
+fail_nomem:
+	return retval;
 }
 
 static inline int copy_fs(unsigned long clone_flags, struct task_struct * tsk)
@@ -478,9 +496,9 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 bad_fork_cleanup_sighand:
 	exit_sighand(p);
 bad_fork_cleanup_fs:
-	exit_fs(p);
+	exit_fs(p); /* blocking */
 bad_fork_cleanup_files:
-	exit_files(p);
+	exit_files(p); /* blocking */
 bad_fork_cleanup:
 	charge_uid(current, -1);
 	if (p->exec_domain && p->exec_domain->module)

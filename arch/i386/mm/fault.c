@@ -186,16 +186,15 @@ bad_area:
  *
  * First we check if it was the bootup rw-test, though..
  */
-	if (wp_works_ok < 0 && address == 0xc0000000 && (error_code & 1)) {
+	if (wp_works_ok < 0 && address == TASK_SIZE && (error_code & 1)) {
 		wp_works_ok = 1;
-		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
+		pg0[0] = pte_val(mk_pte(TASK_SIZE, PAGE_SHARED));
 		flush_tlb();
 		goto out;
 	}
-	if (address < PAGE_SIZE) {
+	if (address < PAGE_SIZE)
 		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
-		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
-	} else
+	else
 		printk(KERN_ALERT "Unable to handle kernel paging request");
 	printk(" at virtual address %08lx\n",address);
 	__asm__("movl %%cr3,%0" : "=r" (page));

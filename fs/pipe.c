@@ -399,7 +399,7 @@ static struct inode * get_pipe_inode(void)
 			/*
 			 * Mark the inode dirty from the very beginning,
 			 * that way it will never be moved to the dirty
-			 * list because "make_inode_dirty()" will think
+			 * list because "mark_inode_dirty()" will think
 			 * that it already _is_ on the dirty list.
 			 */
 			inode->i_state = 1 << I_DIRTY;
@@ -439,7 +439,7 @@ int do_pipe(int *fd)
 	int error;
 	int i,j;
 
-	error = ENFILE;
+	error = -ENFILE;
 	f1 = get_empty_filp();
 	if (!f1)
 		goto no_files;
@@ -462,7 +462,10 @@ int do_pipe(int *fd)
 		goto close_f12_inode_i;
 	j = error;
 
+	error = -ENOMEM;
 	f1->f_dentry = f2->f_dentry = dget(d_alloc_root(inode, NULL));
+	if (!f1->f_dentry)
+		goto close_f12_inode_i_j;
 
 	/* read file */
 	f1->f_pos = f2->f_pos = 0;
@@ -480,6 +483,8 @@ int do_pipe(int *fd)
 	fd[1] = j;
 	return 0;
 
+close_f12_inode_i_j:
+	put_unused_fd(j);
 close_f12_inode_i:
 	put_unused_fd(i);
 close_f12_inode:

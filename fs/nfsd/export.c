@@ -248,7 +248,7 @@ exp_export(struct nfsctl_export *nxp)
 
 finish:
 	/* Release dentry */
-	if (err < 0 && dentry)
+	if (err < 0 && !IS_ERR(dentry))
 		dput(dentry);
 
 	/* Unlock hashtable */
