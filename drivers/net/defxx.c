@@ -194,6 +194,7 @@
  *		Mar 2000	AC		Did various cleanups for 2.3.x
  *		Jun 2000	jgarzik		PCI and resource alloc cleanups
  *		Jul 2000	tjeerd		Much cleanup and some bug fixes
+ *		Sep 2000	tjeerd		Fix leak on unload, cosmetic code cleanup
  */
 
 /* Include files */
@@ -224,7 +225,7 @@
 /* Version information string - should be updated prior to each new release!!! */
 
 static char version[] __devinitdata =
-	"defxx.c:v1.05c 2000/07/14  Lawrence V. Stefani and others\n";
+	"defxx.c:v1.05d 2000/09/05  Lawrence V. Stefani and others\n";
 
 #define DYNAMIC_BUFFERS 1
 
@@ -891,7 +892,7 @@ static int __devinit dfx_driver_init(struct net_device *dev)
 #endif
 					sizeof(PI_CONSUMER_BLOCK) +
 					(PI_ALIGN_K_DESC_BLK - 1);
-	top_v = (char *) kmalloc(alloc_size, GFP_KERNEL);
+	bp->kmalloced = top_v = (char *) kmalloc(alloc_size, GFP_KERNEL);
 	if (top_v == NULL)
 		{
 		printk("%s: Could not allocate memory for host buffers and structures!\n", dev->name);
@@ -957,7 +958,7 @@ static int __devinit dfx_driver_init(struct net_device *dev)
 	DBG_printk("%s: Command Request buffer virt = %0lX, phys = %0X\n",			dev->name, (long)bp->cmd_req_virt,		bp->cmd_req_phys);
 	DBG_printk("%s: Command Response buffer virt = %0lX, phys = %0X\n",			dev->name, (long)bp->cmd_rsp_virt,		bp->cmd_rsp_phys);
 	DBG_printk("%s: Receive buffer block virt = %0lX, phys = %0X\n",			dev->name, (long)bp->rcv_block_virt,	bp->rcv_block_phys);
-	DBG_printk("%s: Consumer block virt = %0lX, phys = %0X\n",					dev->name, (long)bp->cons_block_virt,	bp->cons_block_phys);
+	DBG_printk("%s: Consumer block virt = %0lX, phys = %0X\n",				dev->name, (long)bp->cons_block_virt,	bp->cons_block_phys);
 
 	return(DFX_K_SUCCESS);
 	}
@@ -3259,10 +3260,13 @@ static void dfx_xmt_flush( DFX_board_t *bp )
 	return;
 	}
 
-static void __devexit dfx_remove_device(struct pci_dev *pdev, struct net_device *dev)
+static void __devexit dfx_remove_one_pci_or_eisa(struct pci_dev *pdev, struct net_device *dev)
 {
+	DFX_board_t	  *bp = (DFX_board_t*)dev->priv;
+
 	unregister_netdev(dev);
 	release_region(dev->base_addr,  pdev ? PFI_K_CSR_IO_LEN : PI_ESIC_K_CSR_IO_LEN );
+	if (bp->kmalloced) kfree(bp->kmalloced);
 	kfree(dev);
 }
 
@@ -3270,7 +3274,7 @@ static void __devexit dfx_remove_one (struct pci_dev *pdev)
 {
 	struct net_device *dev = pdev->driver_data;
 
-	dfx_remove_device(pdev, dev);
+	dfx_remove_one_pci_or_eisa(pdev, dev);
 }
 
 static struct pci_device_id dfx_pci_tbl[] __devinitdata = {
@@ -3301,7 +3305,7 @@ static void __exit dfx_eisa_cleanup(void)
 
 		bp = (DFX_board_t*)dev->priv;
 		tmp = bp->next;
-		dfx_remove_device(NULL, dev);
+		dfx_remove_one_pci_or_eisa(NULL, dev);
 		dev = tmp;
 	}
 }

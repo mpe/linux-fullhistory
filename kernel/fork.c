@@ -502,7 +502,7 @@ static inline int copy_sighand(unsigned long clone_flags, struct task_struct * t
 {
 	struct signal_struct *sig;
 
-	if (clone_flags & CLONE_SIGNAL) {
+	if (clone_flags & CLONE_SIGHAND) {
 		atomic_inc(&current->sig->count);
 		return 0;
 	}
@@ -531,10 +531,15 @@ static inline void copy_flags(unsigned long clone_flags, struct task_struct *p)
 
 /*
  *  Ok, this is the main fork-routine. It copies the system process
- * information (task[nr]) and sets up the necessary registers. It
- * also copies the data segment in its entirety.
+ * information (task[nr]) and sets up the necessary registers. It also
+ * copies the data segment in its entirety.  The "stack_start" and
+ * "stack_top" arguments are simply passed along to the platform
+ * specific copy_thread() routine.  Most platforms ignore stack_top.
+ * For an example that's using stack_top, see
+ * arch/ia64/kernel/process.c.
  */
-int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
+int do_fork(unsigned long clone_flags, unsigned long stack_start,
+	    struct pt_regs *regs, unsigned long stack_top)
 {
 	int retval = -ENOMEM;
 	struct task_struct *p;
@@ -629,7 +634,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 		goto bad_fork_cleanup_fs;
 	if (copy_mm(clone_flags, p))
 		goto bad_fork_cleanup_sighand;
-	retval = copy_thread(0, clone_flags, usp, p, regs);
+	retval = copy_thread(0, clone_flags, stack_start, stack_top, p, regs);
 	if (retval)
 		goto bad_fork_cleanup_sighand;
 	p->semundo = NULL;
@@ -665,7 +670,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->tgid = retval;
 	INIT_LIST_HEAD(&p->thread_group);
 	write_lock_irq(&tasklist_lock);
-	if (clone_flags & CLONE_SIGNAL) {
+	if (clone_flags & CLONE_THREAD) {
 		p->tgid = current->tgid;
 		list_add(&p->thread_group, &current->thread_group);
 	}

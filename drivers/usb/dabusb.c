@@ -802,7 +802,7 @@ static struct usb_driver dabusb_driver =
 
 /* --------------------------------------------------------------------- */
 
-int __init dabusb_init (void)
+static int __init dabusb_init (void)
 {
 	unsigned u;
 
@@ -828,7 +828,7 @@ int __init dabusb_init (void)
 	return 0;
 }
 
-void __exit dabusb_cleanup (void)
+static void __exit dabusb_cleanup (void)
 {
 	dbg("dabusb_cleanup");
 
@@ -843,15 +843,9 @@ MODULE_DESCRIPTION ("DAB-USB Interface Driver for Linux (c)1999");
 MODULE_PARM (buffers, "i");
 MODULE_PARM_DESC (buffers, "Number of buffers (default=256)");
 
-int __init init_module (void)
-{
-	return dabusb_init ();
-}
+module_init (dabusb_init);
+module_exit (dabusb_cleanup);
 
-void __exit cleanup_module (void)
-{
-	dabusb_cleanup ();
-}
 
 #endif
 

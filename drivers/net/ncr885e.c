@@ -1367,13 +1367,7 @@ write_mii( unsigned long ioaddr, int reg, int data )
 
 #endif /* NCR885E_DEBUG_MII */
 
-int
-init_module(void)
-{
-	return ncr885e_probe();
-}
-
-static void __exit cleanup_module(void)
+static void __exit ncr885e_cleanup(void)
 {
 	if ( root_dev ) {
 		unregister_netdev( root_dev );

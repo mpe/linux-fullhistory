@@ -442,7 +442,6 @@ typedef struct	_SCSIInqData { /* INQUIRY */
 /*  see include/scsi/scsi.h for the rest */
 
 #define TYPE_PRINTER		 0x02	   /* Printer device		   */
-#define TYPE_COMM		 0x09	   /* Communications device	   */
 
 /*
 ** Inquiry flag definitions (Inq data byte 7)

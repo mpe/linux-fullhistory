@@ -321,7 +321,7 @@ static struct buffer_head * ufs_add_entry (struct inode * dir,
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
 			mark_inode_dirty(dir);
 			dir->i_version = ++event;
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 			*res_dir = de;
 			*err = 0;
 			
@@ -428,7 +428,7 @@ static int ufs_create (struct inode * dir, struct dentry * dentry, int mode)
 	de->d_ino = SWAB32(inode->i_ino);
 	ufs_set_de_type (de, inode->i_mode);
 	dir->i_version = ++event;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -467,7 +467,7 @@ static int ufs_mknod (struct inode * dir, struct dentry *dentry, int mode, int r
 	de->d_ino = SWAB32(inode->i_ino);
 	ufs_set_de_type (de, inode->i_mode);
 	dir->i_version = ++event;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -530,7 +530,7 @@ static int ufs_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	ufs_set_de_namlen(de,2);
 	strcpy (de->d_name, "..");
 	inode->i_nlink = 2;
-	mark_buffer_dirty(dir_block, 1);
+	mark_buffer_dirty(dir_block);
 	brelse (dir_block);
 	inode->i_mode = S_IFDIR | mode;
 	if (dir->i_mode & S_ISGID)
@@ -542,7 +542,7 @@ static int ufs_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	de->d_ino = SWAB32(inode->i_ino);
 	ufs_set_de_type (de, inode->i_mode);
 	dir->i_version = ++event;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -657,7 +657,7 @@ static int ufs_rmdir (struct inode * dir, struct dentry *dentry)
 	dir->i_version = ++event;
 	if (retval)
 		goto end_rmdir;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -718,7 +718,7 @@ static int ufs_unlink(struct inode * dir, struct dentry *dentry)
 	if (retval)
 		goto end_unlink;
 	dir->i_version = ++event;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -785,7 +785,7 @@ static int ufs_symlink (struct inode * dir, struct dentry * dentry,
 		goto out_no_entry;
 	de->d_ino = SWAB32(inode->i_ino);
 	dir->i_version = ++event;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -825,7 +825,7 @@ static int ufs_link (struct dentry * old_dentry, struct inode * dir,
 
 	de->d_ino = SWAB32(inode->i_ino);
 	dir->i_version = ++event;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -930,7 +930,7 @@ static int ufs_rename (struct inode * old_dir, struct dentry * old_dentry,
 	mark_inode_dirty(old_dir);
 	if (dir_bh) {
 		PARENT_INO(dir_bh->b_data) = SWAB32(new_dir->i_ino);
-		mark_buffer_dirty(dir_bh, 1);
+		mark_buffer_dirty(dir_bh);
 		old_dir->i_nlink--;
 		mark_inode_dirty(old_dir);
 		if (new_inode) {
@@ -941,13 +941,13 @@ static int ufs_rename (struct inode * old_dir, struct dentry * old_dentry,
 			mark_inode_dirty(new_dir);
 		}
 	}
-	mark_buffer_dirty(old_bh,  1);
+	mark_buffer_dirty(old_bh);
 	if (IS_SYNC(old_dir)) {
 		ll_rw_block (WRITE, 1, &old_bh);
 		wait_on_buffer (old_bh);
 	}
 	
-	mark_buffer_dirty(new_bh, 1);
+	mark_buffer_dirty(new_bh);
 	if (IS_SYNC(new_dir)) {
 		ll_rw_block (WRITE, 1, &new_bh);
 		wait_on_buffer (new_bh);

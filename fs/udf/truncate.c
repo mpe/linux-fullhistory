@@ -124,7 +124,7 @@ void udf_trunc(struct inode * inode)
 						aed->lengthAllocDescs = cpu_to_le32(lenalloc);
 						udf_update_tag(bh->b_data, lenalloc +
 							sizeof(struct AllocExtDesc));
-						mark_buffer_dirty(bh, 1);
+						mark_buffer_dirty(bh);
 					}
 				}
 
@@ -166,7 +166,7 @@ void udf_trunc(struct inode * inode)
 				aed->lengthAllocDescs = cpu_to_le32(lenalloc);
 				udf_update_tag(bh->b_data, lenalloc +
 					sizeof(struct AllocExtDesc));
-				mark_buffer_dirty(bh, 1);
+				mark_buffer_dirty(bh);
 			}
 		}
 	}

@@ -97,7 +97,7 @@ asmlinkage int sys_fork(struct pt_regs regs)
 	int res;
 
 	save_static(&regs);
-	res = do_fork(SIGCHLD, regs.regs[29], &regs);
+	res = do_fork(SIGCHLD, regs.regs[29], &regs, 0);
 	return res;
 }
 
@@ -112,7 +112,7 @@ asmlinkage int sys_clone(struct pt_regs regs)
 	newsp = regs.regs[5];
 	if (!newsp)
 		newsp = regs.regs[29];
-	res = do_fork(clone_flags, newsp, &regs);
+	res = do_fork(clone_flags, newsp, &regs, 0);
 	return res;
 }
 

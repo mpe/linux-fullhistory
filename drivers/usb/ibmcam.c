@@ -35,6 +35,7 @@
 #include <linux/vmalloc.h>
 #include <linux/wrapper.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/spinlock.h>
 #include <linux/usb.h>
 
@@ -3138,7 +3139,7 @@ static struct usb_driver ibmcam_driver = {
  * History:
  * 1/27/00  Reworked to use statically allocated usb_ibmcam structures.
  */
-int usb_ibmcam_init(void)
+static int __init usb_ibmcam_init(void)
 {
 	unsigned u;
 
@@ -3150,19 +3151,12 @@ int usb_ibmcam_init(void)
 	return usb_register(&ibmcam_driver);
 }
 
-void usb_ibmcam_cleanup(void)
+static void __exit usb_ibmcam_cleanup(void)
 {
 	usb_deregister(&ibmcam_driver);
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return usb_ibmcam_init();
-}
+module_init(usb_ibmcam_init);
+module_exit(usb_ibmcam_cleanup);
 
-void cleanup_module(void)
-{
-	usb_ibmcam_cleanup();
-}
-#endif
+

@@ -15,6 +15,11 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (08/28/2000) gkh
+ *	Added port_lock to port structure.
+ *	Added locks for SMP safeness to generic driver
+ *	Fixed the ability to open a generic device's port more than once.
+ *
  * (07/23/2000) gkh
  *	Added bulk_out_endpointAddress to port structure.
  *
@@ -264,6 +269,7 @@ static int  generic_write_room		(struct usb_serial_port *port);
 static int  generic_chars_in_buffer	(struct usb_serial_port *port);
 static void generic_read_bulk_callback	(struct urb *urb);
 static void generic_write_bulk_callback	(struct urb *urb);
+static void generic_shutdown		(struct usb_serial *serial);
 
 
 #ifdef CONFIG_USB_SERIAL_GENERIC
@@ -287,6 +293,7 @@ static struct usb_serial_device_type generic_device = {
 	num_bulk_in:		NUM_DONT_CARE,
 	num_bulk_out:		NUM_DONT_CARE,
 	num_ports:		1,
+	shutdown:		generic_shutdown,
 };
 #endif
 
@@ -319,21 +326,6 @@ static struct termios *		serial_termios_locked[SERIAL_TTY_MINORS];
 static struct usb_serial	*serial_table[SERIAL_TTY_MINORS] = {NULL, };
 
 LIST_HEAD(usb_serial_driver_list);
-
-
-static inline struct usb_serial* get_usb_serial (struct usb_serial_port *port, const char *function) 
-{ 
-	/* if no port was specified, or it fails a paranoia check */
-	if (!port || 
-		port_paranoia_check (port, function) ||
-		serial_paranoia_check (port->serial, function)) {
-		/* then say that we dont have a valid usb_serial thing, which will
-		 * end up genrating -ENODEV return values */ 
-		return NULL;
-	}
-
-	return port->serial;
-}
 
 
 static struct usb_serial *get_serial_by_minor (int minor)
@@ -697,47 +689,65 @@ static void serial_break (struct tty_struct *tty, int break_state)
 static int generic_open (struct usb_serial_port *port, struct file *filp)
 {
 	struct usb_serial *serial = port->serial;
+	unsigned long flags;
+
+	if (port_paranoia_check (port, __FUNCTION__))
+		return -ENODEV;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	if (port->active) {
-		dbg (__FUNCTION__ " - device already open");
-		return -EINVAL;
-	}
-	port->active = 1;
- 
-	/* if we have a bulk interrupt, start reading from it */
-	if (serial->num_bulk_in) {
-		/*Start reading from the device*/
-		if (usb_submit_urb(port->read_urb))
-			dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
-	}
+	spin_lock_irqsave (&port->port_lock, flags);
+	
+	++port->open_count;
+	MOD_INC_USE_COUNT;
+	
+	if (!port->active) {
+		port->active = 1;
 
-	return (0);
+		/* if we have a bulk interrupt, start reading from it */
+		if (serial->num_bulk_in) {
+			/*Start reading from the device*/
+			if (usb_submit_urb(port->read_urb))
+				dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
+		}
+	}
+	
+	spin_unlock_irqrestore (&port->port_lock, flags);
+	
+	return 0;
 }
 
 
 static void generic_close (struct usb_serial_port *port, struct file * filp)
 {
 	struct usb_serial *serial = port->serial;
+	unsigned long flags;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
-	
-	/* shutdown any bulk reads that might be going on */
-	if (serial->num_bulk_out) {
-		usb_unlink_urb (port->write_urb);
-	}
-	if (serial->num_bulk_in) {
-		usb_unlink_urb (port->read_urb);
+
+	spin_lock_irqsave (&port->port_lock, flags);
+
+	--port->open_count;
+
+	if (port->open_count <= 0) {
+		/* shutdown any bulk reads that might be going on */
+		if (serial->num_bulk_out)
+			usb_unlink_urb (port->write_urb);
+		if (serial->num_bulk_in)
+			usb_unlink_urb (port->read_urb);
+		
+		port->active = 0;
+		port->open_count = 0;
 	}
 
-	port->active = 0;
+	spin_unlock_irqrestore (&port->port_lock, flags);
 }
 
 
 static int generic_write (struct usb_serial_port *port, int from_user, const unsigned char *buf, int count)
 {
 	struct usb_serial *serial = port->serial;
+	unsigned long flags;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
@@ -753,6 +763,7 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 			return (0);
 		}
 
+		spin_lock_irqsave (&port->port_lock, flags);
 		count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
 
 #ifdef DEBUG
@@ -776,9 +787,13 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 		/* send the data out the bulk port */
 		port->write_urb->transfer_buffer_length = count;
 
-		if (usb_submit_urb(port->write_urb))
+		if (usb_submit_urb(port->write_urb)) {
 			dbg(__FUNCTION__ " - usb_submit_urb(write bulk) failed");
+			spin_unlock_irqrestore (&port->port_lock, flags);
+			return 0;
+		}
 
+		spin_unlock_irqrestore (&port->port_lock, flags);
 		return (count);
 	}
 	
@@ -886,6 +901,21 @@ static void generic_write_bulk_callback (struct urb *urb)
 	mark_bh(IMMEDIATE_BH);
 	
 	return;
+}
+
+
+static void generic_shutdown (struct usb_serial *serial)
+{
+	int i;
+
+	dbg (__FUNCTION__);
+
+	/* stop reads and writes on all ports */
+	for (i=0; i < serial->num_ports; ++i) {
+		while (serial->port[i].open_count > 0) {
+			generic_close (&serial->port[i], NULL);
+		}
+	}
 }
 
 
@@ -1127,6 +1157,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 		port->magic = USB_SERIAL_PORT_MAGIC;
 		port->tqueue.routine = port_softint;
 		port->tqueue.data = port;
+		spin_lock_init (&port->port_lock);
 	}
 	
 	/* initialize the devfs nodes for this device and let the user know what ports we are bound to */

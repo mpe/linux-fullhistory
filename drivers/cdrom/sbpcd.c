@@ -1,3 +1,5 @@
+
+
 /*
  *  sbpcd.c   CD-ROM device driver for the whole family of traditional,
  *            non-ATAPI IDE-style Matsushita/Panasonic CR-5xx drives.
@@ -13,7 +15,7 @@
  *             labelled E2550UA or MK4015 or 2800F).
  */
 
-#define VERSION "v4.61 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "v4.63 Andrew J. Kroll <ag784@freenet.buffalo.edu> Wed Jul 26 04:24:10 EDT 2000"
 
 /*   Copyright (C) 1993, 1994, 1995  Eberhard Moenkeberg <emoenke@gwdg.de>
  *
@@ -46,7 +48,7 @@
  *
  *  0.1  initial release, April/May 93, after mcd.c (Martin Harriss)
  *
- *  0.2  the "repeat:"-loop in do_sbpcd_request did not check for
+ *  0.2  thek "repeat:"-loop in do_sbpcd_request did not check for
  *       end-of-request_queue (resulting in kernel panic).
  *       Flow control seems stable, but throughput is not better.  
  *
@@ -312,9 +314,20 @@
  *	             module_init & module_exit.
  *	             Torben Mathiasen <tmm@image.dk>
  *
+ *  4.63 Bug fixes for audio annoyances, new legacy CDROM maintainer.
+ *		Annoying things fixed:
+ *		TOC reread on automated disk changes
+ *		TOC reread on manual cd changes
+ *		Play IOCTL tries to play CD before it's actually ready... sometimes.
+ *		CD_AUDIO_COMPLETED state so workman (and other playes) can repeat play.
+ *		Andrew J. Kroll <ag784@freenet.buffalo.edu> Wed Jul 26 04:24:10 EDT 2000
+ *
  *
  *  TODO
  *     implement "read all subchannel data" (96 bytes per frame)
+ *     remove alot of the virtual status bits and deal with hardware status
+ *     move the change of cd for audio to a better place
+ *     add debug levels to insmod parameters (trivial)
  *
  *     special thanks to Kai Makisara (kai.makisara@vtt.fi) for his fine
  *     elaborated speed-up experiments (and the fabulous results!), for
@@ -637,9 +650,9 @@ static u_int maxtim_data= 9000;
 static u_int maxtim_data= 3000;
 #endif LONG_TIMING
 #if DISTRIBUTION
-static int n_retries=3;
+static int n_retries=6;
 #else
-static int n_retries=1;
+static int n_retries=6;
 #endif
 /*==========================================================================*/
 
@@ -2046,7 +2059,9 @@ static int DriveReset(void)
 	do
 	{
 		i=GetStatus();
-		if ((i<0)&&(i!=-ERR_DISKCHANGE)) return (-2); /* from sta2err */
+		if ((i<0)&&(i!=-ERR_DISKCHANGE)) {
+			return (-2); /* from sta2err */
+		}
 		if (!st_caddy_in) break;
 		sbp_sleep(1);
 	}
@@ -2343,16 +2358,21 @@ static int cc_CloseTray(void)
 
 static int sbpcd_tray_move(struct cdrom_device_info *cdi, int position)
 {
-  int i;
-  i = MINOR(cdi->dev);
-
-  switch_drive(i);
-  if (position == 1) {
-    cc_SpinDown();
-  } else {
-    return cc_CloseTray();
-  }
-  return 0;
+	int i;
+	int retval=0;
+	i = MINOR(cdi->dev);
+	switch_drive(i);
+	/* DUH! --AJK */
+	if(D_S[d].CD_changed != 0xFF) {
+		D_S[d].CD_changed=0xFF;
+		D_S[d].diskstate_flags &= ~cd_size_bit;
+	}
+	if (position == 1) {
+		cc_SpinDown();
+	} else {
+		retval=cc_CloseTray();
+	}
+  return retval;
 }
 
 /*==========================================================================*/
@@ -4023,6 +4043,7 @@ static int sbpcd_drive_status(struct cdrom_device_info *cdi, int slot_nr)
 	msg(DBG_000,"Drive Status: disk_ok =%d.\n", st_diskok);
 	msg(DBG_000,"Drive Status: spinning =%d.\n", st_spinning);
 	msg(DBG_000,"Drive Status: busy =%d.\n", st_busy);
+
 #if 0
   if (!(D_S[MINOR(cdi->dev)].status_bits & p_door_closed)) return CDS_TRAY_OPEN;
   if (D_S[MINOR(cdi->dev)].status_bits & p_disk_ok) return CDS_DISC_OK;
@@ -4031,8 +4052,11 @@ static int sbpcd_drive_status(struct cdrom_device_info *cdi, int slot_nr)
   return CDS_NO_DISC;
 #else
   if (D_S[MINOR(cdi->dev)].status_bits & p_spinning) return CDS_DISC_OK;
-  return CDS_TRAY_OPEN;
+/*  return CDS_TRAY_OPEN; */
+  return CDS_NO_DISC;
+  
 #endif
+
 }
 
 
@@ -4500,7 +4524,7 @@ static int sbpcd_dev_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 static int sbpcd_audio_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 		       void * arg)
 {
-	int i, st;
+	int i, st, j;
 	
 	msg(DBG_IO2,"ioctl(%d, 0x%08lX, 0x%08p)\n",
 	    MINOR(cdi->dev), cmd, arg);
@@ -4696,18 +4720,67 @@ static int sbpcd_audio_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 
 	case CDROMSUBCHNL:   /* Get subchannel info */
 		msg(DBG_IOS,"ioctl: CDROMSUBCHNL entered.\n");
+		/* Bogus, I can do better than this! --AJK
 		if ((st_spinning)||(!subq_valid)) {
 			i=cc_ReadSubQ();
 			if (i<0) RETURN_UP(-EIO);
 		}
+		*/
+		i=cc_ReadSubQ();
+		if (i<0) {
+			j=cc_ReadError(); /* clear out error status from drive */
+			D_S[d].audio_state=CDROM_AUDIO_NO_STATUS;
+			/* get and set the disk state here, 
+			probably not the right place, but who cares!
+			It makes it work properly! --AJK */
+			if (D_S[d].CD_changed==0xFF) {
+				msg(DBG_000,"Disk changed detect\n");
+				D_S[d].diskstate_flags &= ~cd_size_bit;
+			}
+			RETURN_UP(-EIO);
+		}
+		if (D_S[d].CD_changed==0xFF) {
+			/* reread the TOC because the disk has changed! --AJK */
+			msg(DBG_000,"Disk changed STILL detected, rereading TOC!\n");
+			i=DiskInfo();
+			if(i==0) {
+				D_S[d].CD_changed=0x00; /* cd has changed, procede, */
+				RETURN_UP(-EIO); /* and get TOC, etc on next try! --AJK */
+			} else {
+				RETURN_UP(-EIO); /* we weren't ready yet! --AJK */
+			}
+		}
 		memcpy(&SC, (void *) arg, sizeof(struct cdrom_subchnl));
+		/* 
+			This virtual crap is very bogus! 
+			It doesn't detect when the cd is done playing audio!
+			Lets do this right with proper hardware register reading!
+		*/
+		cc_ReadStatus();
+		i=ResponseStatus();
+		msg(DBG_000,"Drive Status: door_locked =%d.\n", st_door_locked);
+		msg(DBG_000,"Drive Status: door_closed =%d.\n", st_door_closed);
+		msg(DBG_000,"Drive Status: caddy_in =%d.\n", st_caddy_in);
+		msg(DBG_000,"Drive Status: disk_ok =%d.\n", st_diskok);
+		msg(DBG_000,"Drive Status: spinning =%d.\n", st_spinning);
+		msg(DBG_000,"Drive Status: busy =%d.\n", st_busy);
+		/* st_busy indicates if it's _ACTUALLY_ playing audio */
 		switch (D_S[d].audio_state)
 		{
 		case audio_playing:
-			SC.cdsc_audiostatus=CDROM_AUDIO_PLAY;
+			if(st_busy==0) {
+				/* CD has stopped playing audio --AJK */
+				D_S[d].audio_state=audio_completed;
+				SC.cdsc_audiostatus=CDROM_AUDIO_COMPLETED;
+			} else {
+				SC.cdsc_audiostatus=CDROM_AUDIO_PLAY;
+			}
 			break;
 		case audio_pausing:
 			SC.cdsc_audiostatus=CDROM_AUDIO_PAUSED;
+			break;
+		case audio_completed:
+			SC.cdsc_audiostatus=CDROM_AUDIO_COMPLETED;
 			break;
 		default:
 			SC.cdsc_audiostatus=CDROM_AUDIO_NO_STATUS;
@@ -5883,6 +5956,14 @@ static int sbpcd_chk_disk_change(kdev_t full_dev)
         {
                 D_S[i].CD_changed=0;
                 msg(DBG_CHK,"medium changed (drive %d)\n", i);
+		/* BUG! Should invalidate buffers! --AJK */
+		invalidate_buffers(full_dev);
+		D_S[d].diskstate_flags &= ~toc_bit;
+		D_S[d].diskstate_flags &= ~cd_size_bit;
+#if SAFE_MIXED
+		D_S[d].has_data=0;
+#endif SAFE_MIXED
+
                 return (1);
         }
         else

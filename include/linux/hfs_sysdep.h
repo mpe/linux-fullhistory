@@ -150,7 +150,7 @@ extern inline void hfs_buffer_put(hfs_buffer buffer) {
 }
 
 extern inline void hfs_buffer_dirty(hfs_buffer buffer) {
-	mark_buffer_dirty(buffer, 1);
+	mark_buffer_dirty(buffer);
 }
 
 extern inline void hfs_buffer_sync(hfs_buffer buffer) {

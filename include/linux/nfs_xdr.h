@@ -334,6 +334,9 @@ struct nfs_rpc_ops {
 	int	(*create)  (struct dentry *, struct qstr *, struct iattr *,
 			    int, struct nfs_fh *, struct nfs_fattr *);
 	int	(*remove)  (struct dentry *, struct qstr *);
+	int	(*unlink_setup)  (struct rpc_message *,
+			    struct dentry *, struct qstr *);
+	void	(*unlink_done) (struct dentry *, struct rpc_message *);
 	int	(*rename)  (struct dentry *, struct qstr *,
 			    struct dentry *, struct qstr *);
 	int	(*link)    (struct dentry *, struct dentry *, struct qstr *);

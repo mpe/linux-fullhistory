@@ -62,7 +62,7 @@ void udf_free_inode(struct inode * inode)
 			UDF_SB_LVIDIU(sb)->numFiles =
 				cpu_to_le32(le32_to_cpu(UDF_SB_LVIDIU(sb)->numFiles) - 1);
 		
-		mark_buffer_dirty(UDF_SB_LVIDBH(sb), 1);
+		mark_buffer_dirty(UDF_SB_LVIDBH(sb));
 	}
 
 	unlock_super(sb);
@@ -112,7 +112,7 @@ struct inode * udf_new_inode (const struct inode *dir, int mode, int * err)
 		if (!(++uniqueID & 0x00000000FFFFFFFFUL))
 			uniqueID += 16;
 		lvhd->uniqueID = cpu_to_le64(uniqueID);
-		mark_buffer_dirty(UDF_SB_LVIDBH(sb), 1);
+		mark_buffer_dirty(UDF_SB_LVIDBH(sb));
 	}
 	inode->i_mode = mode;
 	inode->i_sb = sb;

@@ -50,7 +50,6 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/mm.h>

@@ -957,17 +957,23 @@ static int sd_init_onedisk(int i)
 		/* FLOPTICAL */
 
 		/*
-		 *    for removable scsi disk ( FLOPTICAL ) we have to recognise
-		 * the Write Protect Flag. This flag is kept in the Scsi_Disk struct
-		 * and tested at open !
+		 * For removable scsi disk ( FLOPTICAL ) we have to recognise
+		 * the Write Protect Flag. This flag is kept in the Scsi_Disk
+		 * struct and tested at open !
 		 * Daniel Roche ( dan@lectra.fr )
+		 *
+		 * Changed to get all pages (0x3f) rather than page 1 to
+		 * get around devices which do not have a page 1.  Since
+		 * we're only interested in the header anyway, this should
+		 * be fine.
+		 *   -- Matthew Dharm (mdharm-scsi@one-eyed-alien.net)
 		 */
 
 		memset((void *) &cmd[0], 0, 8);
 		cmd[0] = MODE_SENSE;
 		cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
-		cmd[2] = 1;	/* page code 1 ?? */
-		cmd[4] = 12;
+		cmd[2] = 0x3f;	/* Get all pages */
+		cmd[4] = 8;     /* But we only want the 8 byte header */
 		SRpnt->sr_cmd_len = 0;
 		SRpnt->sr_sense_buffer[0] = 0;
 		SRpnt->sr_sense_buffer[2] = 0;

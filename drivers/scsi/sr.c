@@ -28,6 +28,9 @@
  *       Modified by Jens Axboe <axboe@suse.de> - support DVD-RAM
  *	 transparently and loose the GHOST hack
  *
+ *	 Modified by Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+ *	 check resource allocation in sr_init and some cleanups
+ *
  */
 
 #include <linux/module.h>
@@ -82,11 +85,11 @@ struct Scsi_Device_Template sr_template =
 	init_command:sr_init_command
 };
 
-Scsi_CD *scsi_CDs = NULL;
-static int *sr_sizes = NULL;
+Scsi_CD *scsi_CDs;
+static int *sr_sizes;
 
-static int *sr_blocksizes = NULL;
-static int *sr_hardsizes = NULL;
+static int *sr_blocksizes;
+static int *sr_hardsizes;
 
 static int sr_open(struct cdrom_device_info *, int);
 void get_sectorsize(int);
@@ -710,30 +713,45 @@ static int sr_init()
 	}
 	if (scsi_CDs)
 		return 0;
-	sr_template.dev_max =
-	    sr_template.dev_noticed + SR_EXTRA_DEVS;
-	scsi_CDs = (Scsi_CD *) kmalloc(sr_template.dev_max * sizeof(Scsi_CD), GFP_ATOMIC);
+
+	sr_template.dev_max = sr_template.dev_noticed + SR_EXTRA_DEVS;
+	scsi_CDs = kmalloc(sr_template.dev_max * sizeof(Scsi_CD), GFP_ATOMIC);
+	if (!scsi_CDs)
+		goto cleanup_devfs;
 	memset(scsi_CDs, 0, sr_template.dev_max * sizeof(Scsi_CD));
 
-	sr_sizes = (int *) kmalloc(sr_template.dev_max * sizeof(int), GFP_ATOMIC);
+	sr_sizes = kmalloc(sr_template.dev_max * sizeof(int), GFP_ATOMIC);
+	if (!sr_sizes)
+		goto cleanup_cds;
 	memset(sr_sizes, 0, sr_template.dev_max * sizeof(int));
 
-	sr_blocksizes = (int *) kmalloc(sr_template.dev_max *
-					sizeof(int), GFP_ATOMIC);
+	sr_blocksizes = kmalloc(sr_template.dev_max * sizeof(int), GFP_ATOMIC);
+	if (!sr_blocksizes)
+		goto cleanup_sizes;
 
-	sr_hardsizes = (int *) kmalloc(sr_template.dev_max *
-				       sizeof(int), GFP_ATOMIC);
+	sr_hardsizes = kmalloc(sr_template.dev_max * sizeof(int), GFP_ATOMIC);
+	if (!sr_hardsizes)
+		goto cleanup_blocksizes;
 	/*
 	 * These are good guesses for the time being.
 	 */
-	for (i = 0; i < sr_template.dev_max; i++)
-        {
+	for (i = 0; i < sr_template.dev_max; i++) {
 		sr_blocksizes[i] = 2048;
 		sr_hardsizes[i] = 2048;
         }
 	blksize_size[MAJOR_NR] = sr_blocksizes;
         hardsect_size[MAJOR_NR] = sr_hardsizes;
 	return 0;
+cleanup_blocksizes:
+	kfree(sr_blocksizes);
+cleanup_sizes:
+	kfree(sr_sizes);
+cleanup_cds:
+	kfree(scsi_CDs);
+cleanup_devfs:
+	devfs_unregister_blkdev(MAJOR_NR, "sr");
+	sr_registered--;
+	return 1;
 }
 
 void sr_finish()
@@ -830,29 +848,26 @@ static void sr_detach(Scsi_Device * SDp)
 	return;
 }
 
-
-#ifdef MODULE
-
-int init_module(void)
+int init_sr(void)
 {
-	sr_template.module = &__this_module;
+	sr_template.module = THIS_MODULE;
 	return scsi_register_module(MODULE_SCSI_DEV, &sr_template);
 }
 
-void cleanup_module(void)
+void exit_sr(void)
 {
 	scsi_unregister_module(MODULE_SCSI_DEV, &sr_template);
 	devfs_unregister_blkdev(MAJOR_NR, "sr");
 	sr_registered--;
 	if (scsi_CDs != NULL) {
-		kfree((char *) scsi_CDs);
+		kfree(scsi_CDs);
 
-		kfree((char *) sr_sizes);
+		kfree(sr_sizes);
 		sr_sizes = NULL;
 
-		kfree((char *) sr_blocksizes);
+		kfree(sr_blocksizes);
 		sr_blocksizes = NULL;
-		kfree((char *) sr_hardsizes);
+		kfree(sr_hardsizes);
 		sr_hardsizes = NULL;
 	}
 	blksize_size[MAJOR_NR] = NULL;
@@ -863,23 +878,5 @@ void cleanup_module(void)
 	sr_template.dev_max = 0;
 }
 
-#endif				/* MODULE */
-
-/*
- * Overrides for Emacs so that we follow Linus's tabbing style.
- * Emacs will notice this stuff at the end of the file and automatically
- * adjust the settings for this buffer only.  This must remain at the end
- * of the file.
- * ---------------------------------------------------------------------------
- * Local variables:
- * c-indent-level: 4
- * c-brace-imaginary-offset: 0
- * c-brace-offset: -4
- * c-argdecl-indent: 4
- * c-label-offset: -4
- * c-continued-statement-offset: 4
- * c-continued-brace-offset: 0
- * indent-tabs-mode: nil
- * tab-width: 8
- * End:
- */
+module_init(init_sr);
+module_exit(exit_sr);

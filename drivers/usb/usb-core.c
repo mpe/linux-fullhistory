@@ -25,16 +25,6 @@ void usb_hub_cleanup(void);
 int usb_major_init(void);
 void usb_major_cleanup(void);
 
-/*
- * USB device drivers
- */
-
-int usb_cpia_init(void);
-int usb_audio_init(void);
-int usb_ibmcam_init(void);
-int dabusb_init(void);
-int plusb_init(void);
-int dsbr100_init(void);
 
 /*
  * HCI drivers
@@ -65,24 +55,6 @@ static int __init usb_init(void)
 	usb_hub_init();
 
 #ifndef CONFIG_USB_MODULE
-#ifdef CONFIG_VIDEO_CPIA_USB
-	usb_cpia_init();
-#endif
-#ifdef CONFIG_USB_AUDIO
-	usb_audio_init();
-#endif
-#ifdef CONFIG_USB_IBMCAM
-	usb_ibmcam_init();
-#endif
-#ifdef CONFIG_USB_DABUSB
-	dabusb_init();
-#endif
-#ifdef CONFIG_USB_DSBR
-	dsbr100_init();
-#endif
-#ifdef CONFIG_USB_PLUSB
-	plusb_init();
-#endif
 #ifdef CONFIG_USB_UHCI
 	uhci_init();
 #endif

@@ -203,7 +203,7 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
  */
 asmlinkage int sys_fork(struct pt_regs *regs)
 {
-	return do_fork(SIGCHLD, regs->ARM_sp, regs);
+	return do_fork(SIGCHLD, regs->ARM_sp, regs, 0);
 }
 
 /* Clone a task - this clones the calling program thread.
@@ -213,12 +213,12 @@ asmlinkage int sys_clone(unsigned long clone_flags, unsigned long newsp, struct 
 {
 	if (!newsp)
 		newsp = regs->ARM_sp;
-	return do_fork(clone_flags, newsp, regs);
+	return do_fork(clone_flags, newsp, regs, 0);
 }
 
 asmlinkage int sys_vfork(struct pt_regs *regs)
 {
-	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs->ARM_sp, regs);
+	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs->ARM_sp, regs, 0);
 }
 
 /* sys_execve() executes a new program.

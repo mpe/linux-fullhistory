@@ -973,7 +973,7 @@ static int vfat_add_entry(struct inode *dir,struct qstr* qname,
 			goto cleanup;
 		}
 		memcpy(*de, ps, sizeof(struct msdos_dir_slot));
-		fat_mark_buffer_dirty(sb, *bh, 1);
+		fat_mark_buffer_dirty(sb, *bh);
 	}
 
 	dir->i_ctime = dir->i_mtime = dir->i_atime = CURRENT_TIME;
@@ -990,7 +990,7 @@ static int vfat_add_entry(struct inode *dir,struct qstr* qname,
 	(*de)->lcase = CASE_LOWER_BASE | CASE_LOWER_EXT;
 
 
-	fat_mark_buffer_dirty(sb, *bh, 1);
+	fat_mark_buffer_dirty(sb, *bh);
 
 	/* slots can't be less than 1 */
 	sinfo_out->long_slots = slots - 1;
@@ -1106,7 +1106,7 @@ static void vfat_remove_entry(struct inode *dir,struct vfat_slot_info *sinfo,
 	dir->i_version = ++event;
 	mark_inode_dirty(dir);
 	de->name[0] = DELETED_FLAG;
-	fat_mark_buffer_dirty(sb, bh, 1);
+	fat_mark_buffer_dirty(sb, bh);
 	/* remove the longname */
 	offset = sinfo->longname_offset; de = NULL;
 	for (i = sinfo->long_slots; i > 0; --i) {
@@ -1114,7 +1114,7 @@ static void vfat_remove_entry(struct inode *dir,struct vfat_slot_info *sinfo,
 			continue;
 		de->name[0] = DELETED_FLAG;
 		de->attr = 0;
-		fat_mark_buffer_dirty(sb, bh, 1);
+		fat_mark_buffer_dirty(sb, bh);
 	}
 	if (bh) fat_brelse(sb, bh);
 }
@@ -1276,7 +1276,7 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 		int start = MSDOS_I(new_dir)->i_logstart;
 		dotdot_de->start = CT_LE_W(start);
 		dotdot_de->starthi = CT_LE_W(start>>16);
-		fat_mark_buffer_dirty(sb, dotdot_bh, 1);
+		fat_mark_buffer_dirty(sb, dotdot_bh);
 		old_dir->i_nlink--;
 		if (new_inode) {
 			new_inode->i_nlink--;

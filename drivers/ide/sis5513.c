@@ -320,36 +320,18 @@ static int config_chipset_for_pio (ide_drive_t *drive, byte pio)
 	}
 
 	config_art_rwp_pio(drive, pio);
+	drive->current_speed = speed;
 	err = ide_config_drive_speed(drive, speed);
 	return err;
 }
 
-#define SIS5513_TUNEPROC
-
-#ifdef SIS5513_TUNEPROC
-static void sis5513_tune_drive (ide_drive_t *drive, byte pio)
+static int sis5513_tune_chipset (ide_drive_t *drive, byte speed)
 {
-	(void) config_chipset_for_pio(drive, pio);
-}
-#endif /* SIS5513_TUNEPROC */
-
-#ifdef CONFIG_BLK_DEV_IDEDMA
-/*
- * ((id->hw_config & 0x4000|0x2000) && (HWIF(drive)->udma_four))
- */
-static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
-{
-	struct hd_driveid *id	= drive->id;
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
 
-	byte			drive_pci, test1, test2, mask;
-	int			err;
-
-	unsigned long dma_base	= hwif->dma_base;
-	byte unit		= (drive->select.b.unit & 0x01);
-	byte speed		= 0x00, unmask = 0xE0, four_two = 0x00;
-	byte udma_66		= eighty_ninty_three(drive);
+	byte			drive_pci, test1, test2;
+	byte			unmask, four_two, mask = 0;
 
 	if (host_dev) {
 		switch(host_dev->device) {
@@ -359,9 +341,15 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 			case PCI_DEVICE_ID_SI_630:
 				unmask   = 0xF0;
 				four_two = 0x01;
+				break;
 			default:
+				unmask   = 0xE0;
+				four_two = 0x00;
 				break;
 		}
+	} else {
+		unmask   = 0xE0;
+		four_two = 0x00;
 	}
 
 	switch(drive->dn) {
@@ -375,61 +363,103 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	pci_read_config_byte(dev, drive_pci, &test1);
 	pci_read_config_byte(dev, drive_pci|0x01, &test2);
 
-	if ((!ultra) && (test2 & 0x80)) {
+	if ((speed <= XFER_MW_DMA_2) && (test2 & 0x80)) {
 		pci_write_config_byte(dev, drive_pci|0x01, test2 & ~0x80);
 		pci_read_config_byte(dev, drive_pci|0x01, &test2);
+	} else {
+		pci_write_config_byte(dev, drive_pci|0x01, test2 & ~unmask);
 	}
 
-	if ((id->dma_ultra & 0x0010) && (ultra) && (udma_66) && (four_two)) {
-		if (!(test2 & 0x90)) {
-			pci_write_config_byte(dev, drive_pci|0x01, test2 & ~unmask);
-			pci_write_config_byte(dev, drive_pci|0x01, test2|0x90);
+	switch(speed) {
+#ifdef CONFIG_BLK_DEV_IDEDMA
+		case XFER_UDMA_5: /* can not do ultra mode 5 yet */
+		case XFER_UDMA_4: mask = 0x90; break;
+		case XFER_UDMA_3: mask = 0xA0; break;
+		case XFER_UDMA_2: mask = (four_two) ? 0xB0 : 0xA0; break;
+		case XFER_UDMA_1: mask = (four_two) ? 0xD0 : 0xC0; break;
+		case XFER_UDMA_0: mask = unmask; break;
+		case XFER_MW_DMA_2:
+		case XFER_MW_DMA_1:
+		case XFER_MW_DMA_0:
+		case XFER_SW_DMA_2:
+		case XFER_SW_DMA_1:
+		case XFER_SW_DMA_0: break;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+		case XFER_PIO_4: return((int) config_chipset_for_pio(drive, 4));
+		case XFER_PIO_3: return((int) config_chipset_for_pio(drive, 3));
+		case XFER_PIO_2: return((int) config_chipset_for_pio(drive, 2));
+		case XFER_PIO_1: return((int) config_chipset_for_pio(drive, 1));
+		case XFER_PIO_0:
+		default:	 return((int) config_chipset_for_pio(drive, 0));
+	}
+
+	if (speed > XFER_MW_DMA_2)
+		pci_write_config_byte(dev, drive_pci|0x01, test2|mask);
+
+	drive->current_speed = speed;
+	return ((int) ide_config_drive_speed(drive, speed));
+}
+
+static void sis5513_tune_drive (ide_drive_t *drive, byte pio)
+{
+	(void) config_chipset_for_pio(drive, pio);
+}
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
+/*
+ * ((id->hw_config & 0x4000|0x2000) && (HWIF(drive)->udma_four))
+ */
+static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
+{
+	struct hd_driveid *id	= drive->id;
+	ide_hwif_t *hwif	= HWIF(drive);
+
+	byte			four_two = 0, speed = 0;
+	int			err;
+
+	byte unit		= (drive->select.b.unit & 0x01);
+	byte udma_66		= eighty_ninty_three(drive);
+
+	if (host_dev) {
+		switch(host_dev->device) {
+			case PCI_DEVICE_ID_SI_530:
+			case PCI_DEVICE_ID_SI_540:
+			case PCI_DEVICE_ID_SI_620:
+			case PCI_DEVICE_ID_SI_630:
+				four_two = 0x01; break;
+			default:
+				four_two = 0x00; break;
 		}
+	}
+
+	if ((id->dma_ultra & 0x0010) && (ultra) && (udma_66) && (four_two))
 		speed = XFER_UDMA_4;
-	} else if ((id->dma_ultra & 0x0008) && (ultra) && (udma_66) && (four_two)) {
-		if (!(test2 & 0xA0)) {
-			pci_write_config_byte(dev, drive_pci|0x01, test2 & ~unmask);
-			pci_write_config_byte(dev, drive_pci|0x01, test2|0xA0);
-		}
+	else if ((id->dma_ultra & 0x0008) && (ultra) && (udma_66) && (four_two))
 		speed = XFER_UDMA_3;
-	} else if ((id->dma_ultra & 0x0004) && (ultra)) {
-		mask = (four_two) ? 0xB0 : 0xA0;
-		if (!(test2 & mask)) {
-			pci_write_config_byte(dev, drive_pci|0x01, test2 & ~unmask);
-			pci_write_config_byte(dev, drive_pci|0x01, test2|mask);
-		}
+	else if ((id->dma_ultra & 0x0004) && (ultra))
 		speed = XFER_UDMA_2;
-	} else if ((id->dma_ultra & 0x0002) && (ultra)) {
-		mask = (four_two) ? 0xD0 : 0xC0;
-		if (!(test2 & mask)) {
-			pci_write_config_byte(dev, drive_pci|0x01, test2 & ~unmask);
-			pci_write_config_byte(dev, drive_pci|0x01, test2|mask);
-		}
+	else if ((id->dma_ultra & 0x0002) && (ultra))
 		speed = XFER_UDMA_1;
-	} else if ((id->dma_ultra & 0x0001) && (ultra)) {
-		if (!(test2 & unmask)) {
-			pci_write_config_byte(dev, drive_pci|0x01, test2 & ~unmask);
-			pci_write_config_byte(dev, drive_pci|0x01, test2|unmask);
-		}
+	else if ((id->dma_ultra & 0x0001) && (ultra))
 		speed = XFER_UDMA_0;
-	} else if (id->dma_mword & 0x0004) {
+	else if (id->dma_mword & 0x0004)
 		speed = XFER_MW_DMA_2;
-	} else if (id->dma_mword & 0x0002) {
+	else if (id->dma_mword & 0x0002)
 		speed = XFER_MW_DMA_1;
-	} else if (id->dma_mword & 0x0001) {
+	else if (id->dma_mword & 0x0001)
 		speed = XFER_MW_DMA_0;
-	} else if (id->dma_1word & 0x0004) {
+	else if (id->dma_1word & 0x0004)
 		speed = XFER_SW_DMA_2;
-	} else if (id->dma_1word & 0x0002) {
+	else if (id->dma_1word & 0x0002)
 		speed = XFER_SW_DMA_1;
-	} else if (id->dma_1word & 0x0001) {
+	else if (id->dma_1word & 0x0001)
 		speed = XFER_SW_DMA_0;
-        } else {
+	else
 		return ((int) ide_dma_off_quietly);
-	}
 
-	outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
-	err = ide_config_drive_speed(drive, speed);
+	outb(inb(hwif->dma_base+2)|(1<<(5+unit)), hwif->dma_base+2);
+
+	err = sis5513_tune_chipset(drive, speed);
 
 #if SIS5513_DEBUG_DRIVE_INFO
 	printk("%s: %s drive%d\n", drive->name, ide_xfer_verbose(speed), drive->dn);
@@ -575,9 +605,8 @@ void __init ide_init_sis5513 (ide_hwif_t *hwif)
 
 	hwif->irq = hwif->channel ? 15 : 14;
 
-#ifdef SIS5513_TUNEPROC
 	hwif->tuneproc = &sis5513_tune_drive;
-#endif /* SIS5513_TUNEPROC */
+	hwif->speedproc = &sis5513_tune_chipset;
 
 	if (!(hwif->dma_base))
 		return;

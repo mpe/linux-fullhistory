@@ -110,8 +110,8 @@ void ufs_free_fragments (struct inode * inode, unsigned fragment, unsigned count
 		INC_SWAB32(ubh_cg_blktot (ucpi, cylno));
 	}
 	
-	ubh_mark_buffer_dirty (USPI_UBH, 1);
-	ubh_mark_buffer_dirty (UCPI_UBH, 1);
+	ubh_mark_buffer_dirty (USPI_UBH);
+	ubh_mark_buffer_dirty (UCPI_UBH);
 	if (sb->s_flags & MS_SYNCHRONOUS) {
 		ubh_ll_rw_block (WRITE, 1, (struct ufs_buffer_head **)&ucpi);
 		ubh_wait_on_buffer (UCPI_UBH);
@@ -196,8 +196,8 @@ do_more:
 		INC_SWAB32(ubh_cg_blktot(ucpi, cylno));
 	}
 
-	ubh_mark_buffer_dirty (USPI_UBH, 1);
-	ubh_mark_buffer_dirty (UCPI_UBH, 1);
+	ubh_mark_buffer_dirty (USPI_UBH);
+	ubh_mark_buffer_dirty (UCPI_UBH);
 	if (sb->s_flags & MS_SYNCHRONOUS) {
 		ubh_ll_rw_block (WRITE, 1, (struct ufs_buffer_head **)&ucpi);
 		ubh_wait_on_buffer (UCPI_UBH);
@@ -227,7 +227,7 @@ failed:
 		bh = getblk (sb->s_dev, result + i, sb->s_blocksize); \
 		memset (bh->b_data, 0, sb->s_blocksize); \
 		mark_buffer_uptodate(bh, 1); \
-		mark_buffer_dirty (bh, 1); \
+		mark_buffer_dirty (bh); \
 		if (IS_SYNC(inode)) { \
 			ll_rw_block (WRITE, 1, &bh); \
 			wait_on_buffer (bh); \
@@ -364,7 +364,7 @@ unsigned ufs_new_fragments (struct inode * inode, u32 * p, unsigned fragment,
 			{
 				mark_buffer_clean (bh);
 				bh->b_blocknr = result + i;
-				mark_buffer_dirty (bh, 0);
+				mark_buffer_dirty (bh);
 				if (IS_SYNC(inode)) {
 					ll_rw_block (WRITE, 1, &bh);
 					wait_on_buffer (bh);
@@ -458,8 +458,8 @@ unsigned ufs_add_fragments (struct inode * inode, unsigned fragment,
 	SUB_SWAB32(sb->fs_cs(cgno).cs_nffree, count);
 	SUB_SWAB32(usb1->fs_cstotal.cs_nffree, count);
 	
-	ubh_mark_buffer_dirty (USPI_UBH, 1);
-	ubh_mark_buffer_dirty (UCPI_UBH, 1);
+	ubh_mark_buffer_dirty (USPI_UBH);
+	ubh_mark_buffer_dirty (UCPI_UBH);
 	if (sb->s_flags & MS_SYNCHRONOUS) {
 		ubh_ll_rw_block (WRITE, 1, (struct ufs_buffer_head **)&ucpi);
 		ubh_wait_on_buffer (UCPI_UBH);
@@ -582,8 +582,8 @@ cg_found:
 		INC_SWAB32(ucg->cg_frsum[allocsize - count]);
 
 succed:
-	ubh_mark_buffer_dirty (USPI_UBH, 1);
-	ubh_mark_buffer_dirty (UCPI_UBH, 1);
+	ubh_mark_buffer_dirty (USPI_UBH);
+	ubh_mark_buffer_dirty (UCPI_UBH);
 	if (sb->s_flags & MS_SYNCHRONOUS) {
 		ubh_ll_rw_block (WRITE, 1, (struct ufs_buffer_head **)&ucpi);
 		ubh_wait_on_buffer (UCPI_UBH);

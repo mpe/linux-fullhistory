@@ -437,7 +437,7 @@ adfs_f_update(struct adfs_dir *dir, struct object_info *obj)
 	}
 #endif
 	for (i = dir->nr_buffers - 1; i >= 0; i--)
-		mark_buffer_dirty(dir->bh[i], 1);
+		mark_buffer_dirty(dir->bh[i]);
 
 	ret = 0;
 out:

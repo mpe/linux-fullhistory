@@ -139,6 +139,9 @@ static int __init ac_probe1(int ioaddr, struct net_device *dev)
 	if (dev == NULL) {
 		printk("ac3200.c: Passed a NULL device.\n");
 		dev = init_etherdev(0, 0);
+
+		if (!dev)
+			return -ENOMEM;
 	}
 
 	printk("AC3200 in EISA slot %d, node", ioaddr/0x1000);

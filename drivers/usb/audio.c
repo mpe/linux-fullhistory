@@ -3725,23 +3725,21 @@ static void usb_audio_disconnect(struct usb_device *dev, void *ptr)
 	wake_up(&open_wait);
 }
 
-int usb_audio_init(void)
+static int __init usb_audio_init(void)
 {
 	usb_register(&usb_audio_driver);
 	return 0;
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return usb_audio_init();
-}
 
-void cleanup_module(void)
+static void __exit usb_audio_cleanup(void)
 {
 	usb_deregister(&usb_audio_driver);
 }
 
+module_init(usb_audio_init);
+module_exit(usb_audio_cleanup);
+
 MODULE_AUTHOR("Alan Cox <alan@lxorguk.ukuu.org.uk>, Thomas Sailer (sailer@ife.ee.ethz.ch)");
 MODULE_DESCRIPTION("USB Audio Class driver");
-#endif
+

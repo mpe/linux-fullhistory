@@ -514,6 +514,14 @@ D: USB Bluetooth Driver
 S: University of Michigan
 S: Ann Arbor, MI
 
+N: Kees Cook
+E: cook@cpoint.net
+W: http://outflux.net/
+P: 1024D/17063E6D 9FA3 C49C 23C9 D1BC 2E30  1975 1FFF 4BA9 1706 3E6D
+D: Minor updates to SCSI code for the Communications type
+S: (ask for current address)
+S: USA
+
 N: Alan Cox
 W: http://roadrunner.swansea.linux.org.uk/alan.shtml
 E: alan@lxorguk.ukuu.org.uk
@@ -2084,7 +2092,7 @@ E: ken@halcyon.com
 D: CDROM driver "sonycd535" (Sony CDU-535/531)
 
 N: Frederic Potter 
-E: Frederic.Potter@masi.ibp.fr 
+E: fpotter@cirpack.com
 D: Some PCI kernel support
 
 N: Rui Prior

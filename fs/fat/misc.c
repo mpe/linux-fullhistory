@@ -129,7 +129,7 @@ void fat_clusters_flush(struct super_block *sb)
 		return;
 	}
 	fsinfo->free_clusters = CF_LE_L(MSDOS_SB(sb)->free_clusters);
-	fat_mark_buffer_dirty(sb, bh, 1);
+	fat_mark_buffer_dirty(sb, bh);
 	fat_brelse(sb, bh);
 }
 
@@ -291,7 +291,7 @@ if (last) printk("next set to %d\n",fat_access(sb,last,-1));
 		else {
 			memset(bh->b_data,0,SECTOR_SIZE);
 			fat_set_uptodate(sb, bh, 1);
-			fat_mark_buffer_dirty(sb, bh, 1);
+			fat_mark_buffer_dirty(sb, bh);
 			if (!res)
 				res=bh;
 			else

@@ -440,7 +440,7 @@ affs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 				symname++;
 	}
 	*p = 0;
-	mark_buffer_dirty(bh,1);
+	mark_buffer_dirty(bh);
 	affs_brelse(bh);
 	mark_inode_dirty(inode);
 
@@ -592,7 +592,7 @@ affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	retval             = 0;
 	mark_inode_dirty(new_dir);
 	mark_inode_dirty(old_dir);
-	mark_buffer_dirty(old_bh,1);
+	mark_buffer_dirty(old_bh);
 	
 end_rename:
 	affs_brelse(old_bh);

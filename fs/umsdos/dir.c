@@ -68,7 +68,8 @@ static int umsdos_dir_once (	void *buf,
 				const char *name,
 				int len,
 				off_t offset,
-				ino_t ino)
+				ino_t ino,
+				unsigned type)
 {
 	int ret = -EINVAL;
 	struct UMSDOS_DIR_ONCE *d = (struct UMSDOS_DIR_ONCE *) buf;

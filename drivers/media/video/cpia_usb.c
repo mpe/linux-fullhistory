@@ -23,6 +23,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/init.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/list.h>
@@ -594,14 +595,14 @@ static void cpia_disconnect(struct usb_device *udev, void *ptr)
 		kfree(ucpia);
 }
 
-int usb_cpia_init(void)
+static int __init usb_cpia_init(void)
 {
 	cam_list = NULL;
 
 	return usb_register(&cpia_driver);
 }
 
-void usb_cpia_cleanup(void)
+static void __exit usb_cpia_cleanup(void)
 {
 /*
 	struct cam_data *cam;
@@ -613,14 +614,7 @@ void usb_cpia_cleanup(void)
 	usb_deregister(&cpia_driver);
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return usb_cpia_init();
-}
 
-void cleanup_module(void)
-{
-	usb_cpia_cleanup();
-}
-#endif /* !MODULE */
+module_init (usb_cpia_init);
+module_exit (usb_cpia_cleanup);
+

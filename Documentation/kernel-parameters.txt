@@ -516,6 +516,8 @@ running once the system is up.
 
 	stram_swap=	[HW]
 
+	swiotlb=        [IA-64] Number of I/O TLB slabs.
+ 
 	switches=	[HW, M68K]
 
 	sym53c416=	[HW,SCSI]

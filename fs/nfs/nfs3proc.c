@@ -267,6 +267,34 @@ nfs3_proc_remove(struct dentry *dir, struct qstr *name)
 }
 
 static int
+nfs3_proc_unlink_setup(struct rpc_message *msg, struct dentry *dir, struct qstr *name)
+{
+	struct nfs3_diropargs	*arg;
+	struct nfs_fattr	*res;
+
+	arg = (struct nfs3_diropargs *)kmalloc(sizeof(*arg)+sizeof(*res), GFP_KERNEL);
+	if (!arg)
+		return -ENOMEM;
+	res = (struct nfs_fattr*)(arg + 1);
+	arg->fh = NFS_FH(dir);
+	arg->name = name->name;
+	arg->len = name->len;
+	msg->rpc_proc = NFS3PROC_REMOVE;
+	msg->rpc_argp = arg;
+	msg->rpc_resp = res;
+	return 0;
+}
+
+static void
+nfs3_proc_unlink_done(struct dentry *dir, struct rpc_message *msg)
+{
+	struct nfs_fattr	*dir_attr = (struct nfs_fattr*)msg->rpc_resp;
+
+	nfs_refresh_inode(dir->d_inode, dir_attr);
+	kfree(msg->rpc_argp);
+}
+
+static int
 nfs3_proc_rename(struct dentry *old_dir, struct qstr *old_name,
 		 struct dentry *new_dir, struct qstr *new_name)
 {
@@ -469,6 +497,8 @@ struct nfs_rpc_ops	nfs_v3_clientops = {
 	NULL,			/* commit */
 	nfs3_proc_create,
 	nfs3_proc_remove,
+	nfs3_proc_unlink_setup,
+	nfs3_proc_unlink_done,
 	nfs3_proc_rename,
 	nfs3_proc_link,
 	nfs3_proc_symlink,

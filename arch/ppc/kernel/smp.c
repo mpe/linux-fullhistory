@@ -347,7 +347,7 @@ void __init smp_boot_cpus(void)
 		/* create a process for the processor */
 		/* we don't care about the values in regs since we'll
 		   never reschedule the forked task. */
-		if (do_fork(CLONE_VM|CLONE_PID, 0, &regs) < 0)
+		if (do_fork(CLONE_VM|CLONE_PID, 0, &regs, 0) < 0)
 			panic("failed fork for CPU %d", i);
 		p = init_task.prev_task;
 		if (!p)

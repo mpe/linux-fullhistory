@@ -133,8 +133,8 @@ int udf_write_fi(struct FileIdentDesc *cfi, struct FileIdentDesc *sfi,
 	}
 
 	if (fibh->sbh != fibh->ebh)
-		mark_buffer_dirty(fibh->ebh, 1);
-	mark_buffer_dirty(fibh->sbh, 1);
+		mark_buffer_dirty(fibh->ebh);
+	mark_buffer_dirty(fibh->sbh);
 	return 0;
 }
 
@@ -1040,7 +1040,7 @@ static int udf_symlink(struct inode * dir, struct dentry * dentry, const char * 
 		if (!(++uniqueID & 0x00000000FFFFFFFFUL))
 			uniqueID += 16;
 		lvhd->uniqueID = cpu_to_le64(uniqueID);
-		mark_buffer_dirty(UDF_SB_LVIDBH(inode->i_sb), 1);
+		mark_buffer_dirty(UDF_SB_LVIDBH(inode->i_sb));
 	}
 	udf_write_fi(&cfi, fi, &fibh, NULL, NULL);
 	if (UDF_I_ALLOCTYPE(dir) == ICB_FLAG_AD_IN_ICB)
@@ -1093,7 +1093,7 @@ static int udf_link(struct dentry * old_dentry, struct inode * dir,
 		if (!(++uniqueID & 0x00000000FFFFFFFFUL))
 			uniqueID += 16;
 		lvhd->uniqueID = cpu_to_le64(uniqueID);
-		mark_buffer_dirty(UDF_SB_LVIDBH(inode->i_sb), 1);
+		mark_buffer_dirty(UDF_SB_LVIDBH(inode->i_sb));
 	}
 	udf_write_fi(&cfi, fi, &fibh, NULL, NULL);
 	if (UDF_I_ALLOCTYPE(dir) == ICB_FLAG_AD_IN_ICB)
@@ -1224,7 +1224,7 @@ static int udf_rename (struct inode * old_dir, struct dentry * old_dentry,
 			old_inode->i_version = ++event;
 		}
 		else
-			mark_buffer_dirty(dir_bh, 1);
+			mark_buffer_dirty(dir_bh);
 		old_dir->i_nlink --;
 		mark_inode_dirty(old_dir);
 		if (new_inode)

@@ -93,7 +93,7 @@ affs_free_block(struct super_block *sb, s32 block)
 	else {
 		sb->u.affs_sb.s_alloc[zone_no].az_free++;
 		((u32 *)bm->bm_bh->b_data)[0] = cpu_to_be32(be32_to_cpu(((u32 *)bm->bm_bh->b_data)[0]) - blk);
-		mark_buffer_dirty(bm->bm_bh,1);
+		mark_buffer_dirty(bm->bm_bh);
 		sb->s_dirt = 1;
 	}
 	if (--bm->bm_count == 0) {
@@ -176,7 +176,7 @@ found:
 	w     = ~w - be32_to_cpu(bm[i]);
 	bm[0] = cpu_to_be32(be32_to_cpu(bm[0]) + w);
 	unlock_super(sb);
-	mark_buffer_dirty(zone->z_bm->bm_bh,1);
+	mark_buffer_dirty(zone->z_bm->bm_bh);
 	sb->s_dirt = 1;
 	zone->z_lru_time = jiffies;
 

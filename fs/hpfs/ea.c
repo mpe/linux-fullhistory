@@ -277,7 +277,7 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, char *key, char *data
 		fnode->ea_size_s = 0;
 		fnode->ea_secno = n;
 		fnode->ea_anode = 0;
-		mark_buffer_dirty(bh, 1);
+		mark_buffer_dirty(bh);
 		brelse(bh);
 	}
 	pos = fnode->ea_size_l + 5 + strlen(key) + size;
@@ -307,7 +307,7 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, char *key, char *data
 				anode->u.external[0].disk_secno = fnode->ea_secno;
 				anode->u.external[0].file_secno = 0;
 				anode->u.external[0].length = len;
-				mark_buffer_dirty(bh, 1);
+				mark_buffer_dirty(bh);
 				brelse(bh);
 				fnode->ea_anode = 1;
 				fnode->ea_secno = a_s;*/
@@ -329,7 +329,7 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, char *key, char *data
 					}
 					memcpy(b2, b1, 512);
 					brelse(bh1);
-					mark_buffer_dirty(bh2, 1);
+					mark_buffer_dirty(bh2);
 					brelse(bh2);
 				}
 				hpfs_free_sectors(s, fnode->ea_secno, len);

@@ -177,7 +177,7 @@ int ntfs_getput_clusters(ntfs_volume *vol, int cluster,	ntfs_size_t start_offs,
 		else
 		{
 			buf->fn_get(bh->b_data+start_offs,buf,to_copy);
-			mark_buffer_dirty(bh,1);
+			mark_buffer_dirty(bh);
 		}
 		unlock_buffer(bh);
 		length-=to_copy;

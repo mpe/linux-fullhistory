@@ -260,6 +260,7 @@ void scsi_resize_dma_pool(void)
 					new_dma_sectors += (2048 >> 9) * SDpnt->queue_depth;
 			} else if (SDpnt->type == TYPE_SCANNER ||
 				   SDpnt->type == TYPE_PROCESSOR ||
+				   SDpnt->type == TYPE_COMM ||
 				   SDpnt->type == TYPE_MEDIUM_CHANGER ||
 				   SDpnt->type == TYPE_ENCLOSURE) {
 				new_dma_sectors += (4096 >> 9) * SDpnt->queue_depth;

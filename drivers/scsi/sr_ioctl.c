@@ -284,6 +284,8 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void *arg)
 	int result, target = MINOR(cdi->dev);
 	unsigned char buffer[32];
 
+	memset(sr_cmd, 0, sizeof(sr_cmd));
+
 	switch (cmd) {
 	case CDROMREADTOCHDR:
 		{
@@ -292,10 +294,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void *arg)
 			sr_cmd[0] = GPCMD_READ_TOC_PMA_ATIP;
 			sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5);
 			sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
-			sr_cmd[6] = 0;
-			sr_cmd[7] = 0;	/* MSB of length (12) */
 			sr_cmd[8] = 12;		/* LSB of length */
-			sr_cmd[9] = 0;
 
 			result = sr_do_ioctl(target, sr_cmd, buffer, 12, 1, SCSI_DATA_READ);
 
@@ -314,9 +313,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void *arg)
 			    (tocentry->cdte_format == CDROM_MSF ? 0x02 : 0);
 			sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
 			sr_cmd[6] = tocentry->cdte_track;
-			sr_cmd[7] = 0;	/* MSB of length (12)  */
 			sr_cmd[8] = 12;		/* LSB of length */
-			sr_cmd[9] = 0;
 
 			result = sr_do_ioctl(target, sr_cmd, buffer, 12, 0, SCSI_DATA_READ);
 
@@ -333,6 +330,20 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void *arg)
 
 			break;
 		}
+
+	case CDROMPLAYTRKIND: {
+		struct cdrom_ti* ti = (struct cdrom_ti*)arg;
+
+		sr_cmd[0] = GPCMD_PLAYAUDIO_TI;
+		sr_cmd[1] = scsi_CDs[target].device->lun << 5;
+		sr_cmd[4] = ti->cdti_trk0;
+		sr_cmd[5] = ti->cdti_ind0;
+		sr_cmd[7] = ti->cdti_trk1;
+		sr_cmd[8] = ti->cdti_ind1;
+
+		result = sr_do_ioctl(target, sr_cmd, NULL, 255, 0, SCSI_DATA_NONE);
+		break;
+	}
 
 	default:
 		return -EINVAL;

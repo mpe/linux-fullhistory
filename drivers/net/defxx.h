@@ -1469,9 +1469,9 @@ typedef union
 
 /* Define EISA controller register offsets */
 
-#define PI_ESIC_K_BURST_HOLDOFF			0x040
+#define PI_ESIC_K_BURST_HOLDOFF		0x040
 #define PI_ESIC_K_SLOT_ID            	0xC80
-#define PI_ESIC_K_SLOT_CNTRL			0xC84
+#define PI_ESIC_K_SLOT_CNTRL		0xC84
 #define PI_ESIC_K_MEM_ADD_CMP_0     	0xC85
 #define PI_ESIC_K_MEM_ADD_CMP_1     	0xC86
 #define PI_ESIC_K_MEM_ADD_CMP_2     	0xC87
@@ -1484,14 +1484,14 @@ typedef union
 #define PI_ESIC_K_MEM_ADD_LO_CMP_0  	0xC8E
 #define PI_ESIC_K_MEM_ADD_LO_CMP_1  	0xC8F
 #define PI_ESIC_K_MEM_ADD_LO_CMP_2  	0xC90
-#define PI_ESIC_K_IO_CMP_0_0			0xC91
-#define PI_ESIC_K_IO_CMP_0_1			0xC92
-#define PI_ESIC_K_IO_CMP_1_0			0xC93
-#define PI_ESIC_K_IO_CMP_1_1			0xC94
-#define PI_ESIC_K_IO_CMP_2_0			0xC95
-#define PI_ESIC_K_IO_CMP_2_1			0xC96
-#define PI_ESIC_K_IO_CMP_3_0			0xC97
-#define PI_ESIC_K_IO_CMP_3_1			0xC98
+#define PI_ESIC_K_IO_CMP_0_0		0xC91
+#define PI_ESIC_K_IO_CMP_0_1		0xC92
+#define PI_ESIC_K_IO_CMP_1_0		0xC93
+#define PI_ESIC_K_IO_CMP_1_1		0xC94
+#define PI_ESIC_K_IO_CMP_2_0		0xC95
+#define PI_ESIC_K_IO_CMP_2_1		0xC96
+#define PI_ESIC_K_IO_CMP_3_0		0xC97
+#define PI_ESIC_K_IO_CMP_3_1		0xC98
 #define PI_ESIC_K_IO_ADD_MASK_0_0    	0xC99
 #define PI_ESIC_K_IO_ADD_MASK_0_1    	0xC9A
 #define PI_ESIC_K_IO_ADD_MASK_1_0    	0xC9B
@@ -1500,21 +1500,21 @@ typedef union
 #define PI_ESIC_K_IO_ADD_MASK_2_1    	0xC9E
 #define PI_ESIC_K_IO_ADD_MASK_3_0    	0xC9F
 #define PI_ESIC_K_IO_ADD_MASK_3_1    	0xCA0
-#define PI_ESIC_K_MOD_CONFIG_1			0xCA1
-#define PI_ESIC_K_MOD_CONFIG_2			0xCA2
-#define PI_ESIC_K_MOD_CONFIG_3			0xCA3
-#define PI_ESIC_K_MOD_CONFIG_4			0xCA4
-#define PI_ESIC_K_MOD_CONFIG_5    		0xCA5
-#define PI_ESIC_K_MOD_CONFIG_6			0xCA6
-#define PI_ESIC_K_MOD_CONFIG_7			0xCA7
+#define PI_ESIC_K_MOD_CONFIG_1		0xCA1
+#define PI_ESIC_K_MOD_CONFIG_2		0xCA2
+#define PI_ESIC_K_MOD_CONFIG_3		0xCA3
+#define PI_ESIC_K_MOD_CONFIG_4		0xCA4
+#define PI_ESIC_K_MOD_CONFIG_5    	0xCA5
+#define PI_ESIC_K_MOD_CONFIG_6		0xCA6
+#define PI_ESIC_K_MOD_CONFIG_7		0xCA7
 #define PI_ESIC_K_DIP_SWITCH         	0xCA8
 #define PI_ESIC_K_IO_CONFIG_STAT_0   	0xCA9
 #define PI_ESIC_K_IO_CONFIG_STAT_1   	0xCAA
 #define PI_ESIC_K_DMA_CONFIG         	0xCAB
 #define PI_ESIC_K_INPUT_PORT         	0xCAC
 #define PI_ESIC_K_OUTPUT_PORT        	0xCAD
-#define PI_ESIC_K_FUNCTION_CNTRL		0xCAE
-#define PI_ESIC_K_CSR_IO_LEN			PI_ESIC_K_FUNCTION_CNTRL+1	/* always last reg + 1 */
+#define PI_ESIC_K_FUNCTION_CNTRL	0xCAE
+#define PI_ESIC_K_CSR_IO_LEN		PI_ESIC_K_FUNCTION_CNTRL+1	/* always last reg + 1 */
 
 /* Define the value all drivers must write to the function control register. */
 
@@ -1524,7 +1524,7 @@ typedef union
 
 #define PI_SLOT_CNTRL_M_RESET		0x04	/* Don't use.       */
 #define PI_SLOT_CNTRL_M_ERROR		0x02	/* Not implemented. */
-#define PI_SLOT_CNTRL_M_ENB			0x01	/* Must be set.     */
+#define PI_SLOT_CNTRL_M_ENB		0x01	/* Must be set.     */
 
 /* Define the bits in the burst holdoff register. */
 
@@ -1590,24 +1590,24 @@ typedef union
 
 #define PFI_K_REG_RESERVED_0		 0X00000038
 #define PFI_K_REG_RESERVED_1		 0X0000003C
-#define PFI_K_REG_MODE_CTRL			 0X00000040
-#define PFI_K_REG_STATUS			 0X00000044
+#define PFI_K_REG_MODE_CTRL		 0X00000040
+#define PFI_K_REG_STATUS		 0X00000044
 #define PFI_K_REG_FIFO_WRITE		 0X00000048
-#define PFI_K_REG_FIFO_READ			 0X0000004C
+#define PFI_K_REG_FIFO_READ		 0X0000004C
 
 /* PFI Mode Control Register Constants */
 
-#define PFI_MODE_M_RESERVED			 0XFFFFFFF0
+#define PFI_MODE_M_RESERVED		 0XFFFFFFF0
 #define PFI_MODE_M_TGT_ABORT_ENB	 0X00000008
 #define PFI_MODE_M_PDQ_INT_ENB		 0X00000004
 #define PFI_MODE_M_PFI_INT_ENB		 0X00000002
-#define PFI_MODE_M_DMA_ENB			 0X00000001
+#define PFI_MODE_M_DMA_ENB		 0X00000001
 
-#define PFI_MODE_V_RESERVED			 4
+#define PFI_MODE_V_RESERVED		 4
 #define PFI_MODE_V_TGT_ABORT_ENB	 3
 #define PFI_MODE_V_PDQ_INT_ENB		 2
 #define PFI_MODE_V_PFI_INT_ENB		 1
-#define PFI_MODE_V_DMA_ENB			 0
+#define PFI_MODE_V_DMA_ENB		 0
 
 #define PFI_MODE_K_ALL_DISABLE		 0X00000000
 
@@ -1619,10 +1619,10 @@ typedef union
 #define PFI_STATUS_M_PDQ_DMA_ABORT	 0X00000008
 #define PFI_STATUS_M_FIFO_FULL		 0X00000004
 #define PFI_STATUS_M_FIFO_EMPTY		 0X00000002
-#define PFI_STATUS_M_DMA_IN_PROGRESS 0X00000001
+#define PFI_STATUS_M_DMA_IN_PROGRESS	 0X00000001
 
 #define PFI_STATUS_V_RESERVED		 6
-#define PFI_STATUS_V_PFI_ERROR		 5				/* only valid in rev 1 or later PFI */
+#define PFI_STATUS_V_PFI_ERROR		 5			/* only valid in rev 1 or later PFI */
 #define PFI_STATUS_V_PDQ_INT		 4
 #define PFI_STATUS_V_PDQ_DMA_ABORT	 3
 #define PFI_STATUS_V_FIFO_FULL		 2
@@ -1635,7 +1635,7 @@ typedef union
 #define DFX_BUS_TYPE_PCI		0			/* type code for DEC FDDIcontroller/PCI */
 #define DFX_BUS_TYPE_EISA		1			/* type code for DEC FDDIcontroller/EISA */
 
-#define DFX_FC_PRH2_PRH1_PRH0	0x54003820	/* Packet Request Header bytes + FC */
+#define DFX_FC_PRH2_PRH1_PRH0		0x54003820	/* Packet Request Header bytes + FC */
 #define DFX_PRH0_BYTE			0x20		/* Packet Request Header byte 0 */
 #define DFX_PRH1_BYTE			0x38		/* Packet Request Header byte 1 */
 #define DFX_PRH2_BYTE			0x00		/* Packet Request Header byte 2 */
@@ -1691,7 +1691,7 @@ typedef union
 /* Define constants for masking/unmasking interrupts */
 
 #define DFX_MASK_INTERRUPTS		1
-#define DFX_UNMASK_INTERRUPTS	0
+#define DFX_UNMASK_INTERRUPTS		0
 
 /* Define structure for driver transmit descriptor block */
 
@@ -1704,16 +1704,17 @@ typedef struct DFX_board_tag
 	{
 	/* Keep virtual and physical pointers to locked, physically contiguous memory */
 
+	char				*kmalloced;					/* kfree this on unload */ 
 	PI_DESCR_BLOCK			*descr_block_virt;				/* PDQ descriptor block virt address */
-	u32						descr_block_phys;				/* PDQ descriptor block phys address */
+	u32				descr_block_phys;				/* PDQ descriptor block phys address */
 	PI_DMA_CMD_REQ			*cmd_req_virt;					/* Command request buffer virt address */
-	u32						cmd_req_phys;					/* Command request buffer phys address */
+	u32				cmd_req_phys;					/* Command request buffer phys address */
 	PI_DMA_CMD_RSP			*cmd_rsp_virt;					/* Command response buffer virt address */
-	u32						cmd_rsp_phys;					/* Command response buffer phys address */
-	char					*rcv_block_virt;				/* LLC host receive queue buf blk virt */
-	u32						rcv_block_phys;					/* LLC host receive queue buf blk phys */
+	u32				cmd_rsp_phys;					/* Command response buffer phys address */
+	char				*rcv_block_virt;				/* LLC host receive queue buf blk virt */
+	u32				rcv_block_phys;					/* LLC host receive queue buf blk phys */
 	PI_CONSUMER_BLOCK		*cons_block_virt;				/* PDQ consumer block virt address */
-	u32						cons_block_phys;				/* PDQ consumer block phys address */
+	u32				cons_block_phys;				/* PDQ consumer block phys address */
 
 	/* Keep local copies of Type 1 and Type 2 register data */
 
@@ -1723,27 +1724,27 @@ typedef struct DFX_board_tag
 
 	/* Storage for unicast and multicast address entries in adapter CAM */
 
-	u8						uc_table[1*FDDI_K_ALEN];
-	u32						uc_count;						/* number of unicast addresses */
-	u8						mc_table[PI_CMD_ADDR_FILTER_K_SIZE*FDDI_K_ALEN];
-	u32						mc_count;						/* number of multicast addresses */
+	u8				uc_table[1*FDDI_K_ALEN];
+	u32				uc_count;						/* number of unicast addresses */
+	u8				mc_table[PI_CMD_ADDR_FILTER_K_SIZE*FDDI_K_ALEN];
+	u32				mc_count;						/* number of multicast addresses */
 
 	/* Current packet filter settings */
 
-	u32						ind_group_prom;					/* LLC individual & group frame prom mode */
-	u32						group_prom;						/* LLC group (multicast) frame prom mode */
+	u32				ind_group_prom;					/* LLC individual & group frame prom mode */
+	u32				group_prom;					/* LLC group (multicast) frame prom mode */
 
 	/* Link available flag needed to determine whether to drop outgoing packet requests */
 
-	u32						link_available;					/* is link available? */
+	u32				link_available;					/* is link available? */
 
 	/* Resources to indicate reset type when resetting adapter */
 
-	u32						reset_type;						/* skip or rerun diagnostics */
+	u32				reset_type;					/* skip or rerun diagnostics */
 
 	/* Store pointers to receive buffers for queue processing code */
 
-	char					*p_rcv_buff_va[PI_RCV_DATA_K_NUM_ENTRIES];
+	char				*p_rcv_buff_va[PI_RCV_DATA_K_NUM_ENTRIES];
 
 	/* Store pointers to transmit buffers for transmit completion code */
 
@@ -1755,33 +1756,33 @@ typedef struct DFX_board_tag
 
 	/* Store device, bus-specific, and parameter information for this adapter */
 
-	struct net_device			*dev;							/* pointer to device structure */
-	struct net_device			*next;
-	u32						bus_type;						/* bus type (0 == PCI, 1 == EISA) */
-	u16						base_addr;						/* base I/O address (same as dev->base_addr) */
-	struct pci_dev *				pci_dev;
-	u32						full_duplex_enb;				/* FDDI Full Duplex enable (1 == on, 2 == off) */
-	u32						req_ttrt;						/* requested TTRT value (in 80ns units) */
-	u32						burst_size;						/* adapter burst size (enumerated) */
-	u32						rcv_bufs_to_post;				/* receive buffers to post for LLC host queue */
-	u8						factory_mac_addr[FDDI_K_ALEN];	/* factory (on-board) MAC address */
+	struct net_device		*dev;						/* pointer to device structure */
+	struct net_device		*next;
+	u32				bus_type;					/* bus type (0 == PCI, 1 == EISA) */
+	u16				base_addr;					/* base I/O address (same as dev->base_addr) */
+	struct pci_dev *		pci_dev;
+	u32				full_duplex_enb;				/* FDDI Full Duplex enable (1 == on, 2 == off) */
+	u32				req_ttrt;					/* requested TTRT value (in 80ns units) */
+	u32				burst_size;					/* adapter burst size (enumerated) */
+	u32				rcv_bufs_to_post;				/* receive buffers to post for LLC host queue */
+	u8				factory_mac_addr[FDDI_K_ALEN];			/* factory (on-board) MAC address */
 
 	/* Common FDDI statistics structure and private counters */
 
 	struct fddi_statistics	stats;
 
-	u32						rcv_discards;
-	u32						rcv_crc_errors;
-	u32						rcv_frame_status_errors;
-	u32						rcv_length_errors;
-	u32						rcv_total_frames;
-	u32						rcv_multicast_frames;
-	u32						rcv_total_bytes;
+	u32				rcv_discards;
+	u32				rcv_crc_errors;
+	u32				rcv_frame_status_errors;
+	u32				rcv_length_errors;
+	u32				rcv_total_frames;
+	u32				rcv_multicast_frames;
+	u32				rcv_total_bytes;
 
-	u32						xmt_discards;
-	u32						xmt_length_errors;
-	u32						xmt_total_frames;
-	u32						xmt_total_bytes;
+	u32				xmt_discards;
+	u32				xmt_length_errors;
+	u32				xmt_total_frames;
+	u32				xmt_total_bytes;
 	} DFX_board_t;
 
 #endif	/* #ifndef _DEFXX_H_ */

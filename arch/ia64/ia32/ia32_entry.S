@@ -91,8 +91,8 @@ GLOBAL_ENTRY(sys32_fork)
 	UNW(.body)
 
 	mov out1=0
-	mov out2=0
-	adds out3=IA64_SWITCH_STACK_SIZE+16,sp
+	mov out3=0
+	adds out2=IA64_SWITCH_STACK_SIZE+16,sp	// out2 = &regs
 	br.call.sptk.few rp=do_fork
 .ret3:	mov ar.pfs=loc1
 	UNW(.restore sp)

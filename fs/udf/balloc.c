@@ -268,7 +268,7 @@ do_more:
 			}
 		}
 	}
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (overflow)
 	{
 		block += count;
@@ -278,7 +278,7 @@ do_more:
 error_return:
 	sb->s_dirt = 1;
 	if (UDF_SB_LVIDBH(sb))
-		mark_buffer_dirty(UDF_SB_LVIDBH(sb), 1);
+		mark_buffer_dirty(UDF_SB_LVIDBH(sb));
 	unlock_super(sb);
 	return;
 }
@@ -334,7 +334,7 @@ repeat:
 		bit ++;
 		block ++;
 	}
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (block_count > 0)
 		goto repeat;
 out:
@@ -342,7 +342,7 @@ out:
 	{
 		UDF_SB_LVID(sb)->freeSpaceTable[partition] =
 			cpu_to_le32(le32_to_cpu(UDF_SB_LVID(sb)->freeSpaceTable[partition])-alloc_count);
-		mark_buffer_dirty(UDF_SB_LVIDBH(sb), 1);
+		mark_buffer_dirty(UDF_SB_LVIDBH(sb));
 	}
 	sb->s_dirt = 1;
 	unlock_super(sb);
@@ -478,13 +478,13 @@ got_block:
 		goto repeat;
 	}
 
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 
 	if (UDF_SB_LVIDBH(sb))
 	{
 		UDF_SB_LVID(sb)->freeSpaceTable[partition] =
 			cpu_to_le32(le32_to_cpu(UDF_SB_LVID(sb)->freeSpaceTable[partition])-1);
-		mark_buffer_dirty(UDF_SB_LVIDBH(sb), 1);
+		mark_buffer_dirty(UDF_SB_LVIDBH(sb));
 	}
 	sb->s_dirt = 1;
 	unlock_super(sb);

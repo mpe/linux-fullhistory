@@ -412,6 +412,7 @@
 /*
  * audio states:
  */
+#define audio_completed	3 /* Forgot this one! --AJK */
 #define audio_playing	2
 #define audio_pausing	1
 

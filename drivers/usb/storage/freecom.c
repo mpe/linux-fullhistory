@@ -28,7 +28,6 @@
  * (http://www.freecom.de/)
  */
 
-#include <linux/config.h>
 #include "transport.h"
 #include "protocol.h"
 #include "usb.h"

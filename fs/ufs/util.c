@@ -94,13 +94,13 @@ void ubh_brelse_uspi (struct ufs_sb_private_info * uspi)
 	}
 }
 
-void ubh_mark_buffer_dirty (struct ufs_buffer_head * ubh, int flag)
+void ubh_mark_buffer_dirty (struct ufs_buffer_head * ubh)
 {
 	unsigned i;
 	if (!ubh)
 		return;
 	for ( i = 0; i < ubh->count; i++ )
-		mark_buffer_dirty (ubh->bh[i], flag);
+		mark_buffer_dirty (ubh->bh[i]);
 }
 
 void ubh_mark_buffer_uptodate (struct ufs_buffer_head * ubh, int flag)

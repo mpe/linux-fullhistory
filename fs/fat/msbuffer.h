@@ -5,8 +5,7 @@ struct buffer_head *fat_bread (struct super_block *sb, int block);
 struct buffer_head *fat_getblk (struct super_block *sb, int block);
 void fat_brelse (struct super_block *sb, struct buffer_head *bh);
 void fat_mark_buffer_dirty (struct super_block *sb,
-	 struct buffer_head *bh,
-	 int dirty_val);
+	 struct buffer_head *bh);
 void fat_set_uptodate (struct super_block *sb,
 	 struct buffer_head *bh,
 	 int val);

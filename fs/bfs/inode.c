@@ -127,7 +127,7 @@ static void bfs_write_inode(struct inode * inode, int unused)
 	di->i_eblock = inode->iu_eblock;
 	di->i_eoffset = di->i_sblock * BFS_BSIZE + inode->i_size - 1;
 
-	mark_buffer_dirty(bh, 0);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 	unlock_kernel();
 }
@@ -169,7 +169,7 @@ static void bfs_delete_inode(struct inode * inode)
 	}
 	di->i_ino = 0;
 	di->i_sblock = 0;
-	mark_buffer_dirty(bh, 0);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 
 	/* if this was the last file, make the previous 
@@ -177,7 +177,7 @@ static void bfs_delete_inode(struct inode * inode)
 	   saves us 1 gap */
 	if (s->su_lf_eblk == inode->iu_eblock) {
 		s->su_lf_eblk = inode->iu_sblock - 1;
-		mark_buffer_dirty(s->su_sbh, 1);
+		mark_buffer_dirty(s->su_sbh);
 	}
 	unlock_kernel();
 	clear_inode(inode);
@@ -205,7 +205,7 @@ static int bfs_statfs(struct super_block *s, struct statfs *buf)
 static void bfs_write_super(struct super_block *s)
 {
 	if (!(s->s_flags & MS_RDONLY))
-		mark_buffer_dirty(s->su_sbh, 1);
+		mark_buffer_dirty(s->su_sbh);
 	s->s_dirt = 0;
 }
 
@@ -314,7 +314,7 @@ static struct super_block * bfs_read_super(struct super_block * s,
 		iput(inode);
 	}
 	if (!(s->s_flags & MS_RDONLY)) {
-		mark_buffer_dirty(bh, 1);
+		mark_buffer_dirty(bh);
 		s->s_dirt = 1;
 	} 
 	dump_imap("read_super", s);

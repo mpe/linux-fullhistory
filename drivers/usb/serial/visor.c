@@ -11,6 +11,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (08/28/2000) gkh
+ *	Added locks for SMP safeness.
+ *
  * (08/08/2000) gkh
  *	Fixed endian problem in visor_startup.
  *	Fixed MOD_INC and MOD_DEC logic and the ability to open a port more 
@@ -109,21 +112,23 @@ struct usb_serial_device_type handspring_device = {
 
 
 #define NUM_URBS	24
-static struct urb *write_urb_pool[NUM_URBS];
-
+static struct urb	*write_urb_pool[NUM_URBS];
+static spinlock_t	write_urb_pool_lock;
 
 /******************************************************************************
  * Handspring Visor specific driver functions
  ******************************************************************************/
 static int visor_open (struct usb_serial_port *port, struct file *filp)
 {
+	unsigned long flags;
+
+	if (port_paranoia_check (port, __FUNCTION__))
+		return -ENODEV;
+	
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	if (port->active) {
-		dbg (__FUNCTION__ " - device already open");
-		return -EINVAL;
-	}
-
+	spin_lock_irqsave (&port->port_lock, flags);
+	
 	++port->open_count;
 	MOD_INC_USE_COUNT;
 	
@@ -135,21 +140,34 @@ static int visor_open (struct usb_serial_port *port, struct file *filp)
 			dbg(__FUNCTION__  " - usb_submit_urb(read bulk) failed");
 	}
 	
+	spin_unlock_irqrestore (&port->port_lock, flags);
+	
 	return 0;
 }
 
 
 static void visor_close (struct usb_serial_port *port, struct file * filp)
 {
-	struct usb_serial *serial = port->serial;
-	unsigned char *transfer_buffer =  kmalloc (0x12, GFP_KERNEL);
+	struct usb_serial *serial;
+	unsigned char *transfer_buffer;
+	unsigned long flags;
+
+	if (port_paranoia_check (port, __FUNCTION__))
+		return;
 	
 	dbg(__FUNCTION__ " - port %d", port->number);
 			 
+	serial = get_usb_serial (port, __FUNCTION__);
+	if (!serial)
+		return;
+	
+	spin_lock_irqsave (&port->port_lock, flags);
+
 	--port->open_count;
 	MOD_DEC_USE_COUNT;
 
 	if (port->open_count <= 0) {
+		transfer_buffer =  kmalloc (0x12, GFP_KERNEL);
 		if (!transfer_buffer) {
 			err(__FUNCTION__ " - kmalloc(%d) failed.", 0x12);
 		} else {
@@ -164,6 +182,8 @@ static void visor_close (struct usb_serial_port *port, struct file * filp)
 		port->active = 0;
 		port->open_count = 0;
 	}
+
+	spin_unlock_irqrestore (&port->port_lock, flags);
 }
 
 
@@ -174,6 +194,7 @@ static int visor_write (struct usb_serial_port *port, int from_user, const unsig
 	unsigned char *buffer = NULL;
 	int status;
 	int i;
+	unsigned long flags;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
@@ -183,12 +204,14 @@ static int visor_write (struct usb_serial_port *port, int from_user, const unsig
 	}
 
 	/* try to find a free urb in our list of them */
+	spin_lock_irqsave (&write_urb_pool_lock, flags);
 	for (i = 0; i < NUM_URBS; ++i) {
 		if (write_urb_pool[i]->status != -EINPROGRESS) {
 			urb = write_urb_pool[i];
 			break;
 		}
 	}
+	spin_unlock_irqrestore (&write_urb_pool_lock, flags);
 	if (urb == NULL) {
 		dbg (__FUNCTION__ " - no free urbs");
 		return 0;
@@ -256,9 +279,15 @@ static void visor_write_bulk_callback (struct urb *urb)
 
 static void visor_throttle (struct usb_serial_port *port)
 {
+	unsigned long flags;
+
 	dbg(__FUNCTION__ " - port %d", port->number);
 
+	spin_lock_irqsave (&port->port_lock, flags);
+
 	usb_unlink_urb (port->read_urb);
+
+	spin_unlock_irqrestore (&port->port_lock, flags);
 
 	return;
 }
@@ -266,10 +295,16 @@ static void visor_throttle (struct usb_serial_port *port)
 
 static void visor_unthrottle (struct usb_serial_port *port)
 {
+	unsigned long flags;
+
 	dbg(__FUNCTION__ " - port %d", port->number);
+
+	spin_lock_irqsave (&port->port_lock, flags);
 
 	if (usb_submit_urb (port->read_urb))
 		dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
+
+	spin_unlock_irqrestore (&port->port_lock, flags);
 
 	return;
 }
@@ -429,13 +464,14 @@ static void visor_set_termios (struct usb_serial_port *port, struct termios *old
 }
 
 
-int visor_init (void)
+static int __init visor_init (void)
 {
 	int i;
 
 	usb_serial_register (&handspring_device);
 	
 	/* create our write urb pool */ 
+	spin_lock_init (&write_urb_pool_lock);
 	for (i = 0; i < NUM_URBS; ++i) {
 		struct urb  *urb = usb_alloc_urb(0);
 		if (urb == NULL) {
@@ -450,18 +486,23 @@ int visor_init (void)
 }
 
 
-void visor_exit (void)
+static void __exit visor_exit (void)
 {
 	int i;
+	unsigned long flags;
 
 	usb_serial_deregister (&handspring_device);
-	
+
+	spin_lock_irqsave (&write_urb_pool_lock, flags);
+
 	for (i = 0; i < NUM_URBS; ++i) {
 		usb_unlink_urb(write_urb_pool[i]);
 		if (write_urb_pool[i]->transfer_buffer)
 			kfree(write_urb_pool[i]->transfer_buffer);
 		usb_free_urb (write_urb_pool[i]);
 	}
+
+	spin_unlock_irqrestore (&write_urb_pool_lock, flags);
 }
 
 

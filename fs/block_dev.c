@@ -129,7 +129,7 @@ ssize_t block_write(struct file * filp, const char * buf,
 		p += chars;
 		buf += chars;
 		mark_buffer_uptodate(bh, 1);
-		mark_buffer_dirty(bh, 0);
+		mark_buffer_dirty(bh);
 		if (filp->f_flags & O_SYNC)
 			bufferlist[buffercount++] = bh;
 		else

@@ -892,7 +892,7 @@ void balance_dirty(kdev_t dev)
 	wakeup_bdflush(state);
 }
 
-static __inline__ void __mark_dirty(struct buffer_head *bh, int flag)
+static __inline__ void __mark_dirty(struct buffer_head *bh)
 {
 	bh->b_flushtime = jiffies + bdf_prm.b_un.age_buffer;
 	refile_buffer(bh);
@@ -900,15 +900,15 @@ static __inline__ void __mark_dirty(struct buffer_head *bh, int flag)
 
 /* atomic version, the user must call balance_dirty() by hand
    as soon as it become possible to block */
-void __mark_buffer_dirty(struct buffer_head *bh, int flag)
+void __mark_buffer_dirty(struct buffer_head *bh)
 {
 	if (!atomic_set_buffer_dirty(bh))
-		__mark_dirty(bh, flag);
+		__mark_dirty(bh);
 }
 
-void mark_buffer_dirty(struct buffer_head *bh, int flag)
+void mark_buffer_dirty(struct buffer_head *bh)
 {
-	__mark_buffer_dirty(bh, flag);
+	__mark_buffer_dirty(bh);
 	balance_dirty(bh->b_dev);
 }
 
@@ -1419,7 +1419,7 @@ static int __block_write_full_page(struct inode *inode, struct page *page, get_b
 		}
 		set_bit(BH_Uptodate, &bh->b_state);
 		if (!atomic_set_buffer_dirty(bh)) {
-			__mark_dirty(bh, 0);
+			__mark_dirty(bh);
 			need_balance_dirty = 1;
 		}
 
@@ -1514,16 +1514,16 @@ static int __block_commit_write(struct inode *inode, struct page *page,
 	    bh != head || !block_start;
 	    block_start=block_end, bh = bh->b_this_page) {
 		block_end = block_start + blocksize;
-	    	/* This can happen for the truncate case */
-	    	if (!buffer_mapped(bh))
-	    		continue;
 		if (block_end <= from || block_start >= to) {
 			if (!buffer_uptodate(bh))
 				partial = 1;
 		} else {
+		    	/* This can happen for the truncate case */
+		    	if (!buffer_mapped(bh))
+	    			continue;
 			set_bit(BH_Uptodate, &bh->b_state);
 			if (!atomic_set_buffer_dirty(bh)) {
-				__mark_dirty(bh, 0);
+				__mark_dirty(bh);
 				need_balance_dirty = 1;
 			}
 		}

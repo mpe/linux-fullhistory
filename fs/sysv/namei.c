@@ -179,7 +179,7 @@ static int sysv_add_entry(struct inode * dir,
 			mark_inode_dirty(dir);
 			for (i = 0; i < SYSV_NAMELEN ; i++)
 				de->name[i] = (i < namelen) ? name[i] : 0;
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 			*res_dir = de;
 			break;
 		}
@@ -217,7 +217,7 @@ static int sysv_create(struct inode * dir, struct dentry * dentry, int mode)
 		return error;
 	}
 	de->inode = inode->i_ino;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 	d_instantiate(dentry, inode);
 	return 0;
@@ -251,7 +251,7 @@ static int sysv_mknod(struct inode * dir, struct dentry * dentry, int mode, int 
 		return error;
 	}
 	de->inode = inode->i_ino;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 	d_instantiate(dentry, inode);
 	return 0;
@@ -292,7 +292,7 @@ static int sysv_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 	de->inode = dir->i_ino;
 	strcpy(de->name,".."); /* rest of de->name is zero, see sysv_new_block */
 	inode->i_nlink = 2;
-	mark_buffer_dirty(dir_block, 1);
+	mark_buffer_dirty(dir_block);
 	brelse(dir_block);
 	inode->i_mode = S_IFDIR | mode;
 	if (dir->i_mode & S_ISGID)
@@ -306,7 +306,7 @@ static int sysv_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 		return error;
 	}
 	de->inode = inode->i_ino;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	dir->i_nlink++;
 	mark_inode_dirty(dir);
 	brelse(bh);
@@ -392,7 +392,7 @@ static int sysv_rmdir(struct inode * dir, struct dentry * dentry)
 	if (inode->i_nlink != 2)
 		printk("empty directory has nlink!=2 (%d)\n", inode->i_nlink);
 	de->inode = 0;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	inode->i_nlink=0;
 	dir->i_nlink--;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
@@ -422,7 +422,7 @@ static int sysv_unlink(struct inode * dir, struct dentry * dentry)
 		inode->i_nlink=1;
 	}
 	de->inode = 0;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(dir);
 	inode->i_nlink--;
@@ -463,7 +463,7 @@ static int sysv_symlink(struct inode * dir, struct dentry * dentry,
 	if (err)
 		goto out_no_entry;
 	de->inode = inode->i_ino;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
         d_instantiate(dentry, inode);
 out:
@@ -502,7 +502,7 @@ static int sysv_link(struct dentry * old_dentry, struct inode * dir,
 		return error;
 	}
 	de->inode = oldinode->i_ino;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 	oldinode->i_nlink++;
 	oldinode->i_ctime = CURRENT_TIME;
@@ -578,11 +578,11 @@ static int sysv_rename(struct inode * old_dir, struct dentry * old_dentry,
 		new_inode->i_ctime = CURRENT_TIME;
 		mark_inode_dirty(new_inode);
 	}
-	mark_buffer_dirty(old_bh, 1);
-	mark_buffer_dirty(new_bh, 1);
+	mark_buffer_dirty(old_bh);
+	mark_buffer_dirty(new_bh);
 	if (dir_bh) {
 		PARENT_INO(dir_bh->b_data) = new_dir->i_ino;
-		mark_buffer_dirty(dir_bh, 1);
+		mark_buffer_dirty(dir_bh);
 		old_dir->i_nlink--;
 		mark_inode_dirty(old_dir);
 		if (new_inode) {

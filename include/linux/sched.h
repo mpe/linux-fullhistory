@@ -33,13 +33,14 @@ extern unsigned long event;
 #define CLONE_VM	0x00000100	/* set if VM shared between processes */
 #define CLONE_FS	0x00000200	/* set if fs info shared between processes */
 #define CLONE_FILES	0x00000400	/* set if open files shared between processes */
-#define CLONE_SIGNAL	0x00000800	/* set if signal handlers and blocked signals shared */
+#define CLONE_SIGHAND	0x00000800	/* set if signal handlers and blocked signals shared */
 #define CLONE_PID	0x00001000	/* set if pid shared */
 #define CLONE_PTRACE	0x00002000	/* set if we want to let tracing continue on the child too */
 #define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mm_release */
 #define CLONE_PARENT	0x00008000	/* set if we want to have the same parent as the cloner */
+#define CLONE_THREAD	0x00010000	/* Same thread group? */
 
-#define CLONE_SIGHAND	CLONE_SIGNAL	/* Old name */
+#define CLONE_SIGNAL	(CLONE_SIGHAND | CLONE_THREAD)
 
 /*
  * These are the constant used to fake the fixed-point load-average
@@ -717,7 +718,7 @@ extern fd_set *alloc_fdset(int);
 extern int expand_fdset(struct files_struct *, int nr);
 extern void free_fdset(fd_set *, int);
 
-extern int  copy_thread(int, unsigned long, unsigned long, struct task_struct *, struct pt_regs *);
+extern int  copy_thread(int, unsigned long, unsigned long, unsigned long, struct task_struct *, struct pt_regs *);
 extern void flush_thread(void);
 extern void exit_thread(void);
 
@@ -728,7 +729,7 @@ extern void exit_sighand(struct task_struct *);
 extern void daemonize(void);
 
 extern int do_execve(char *, char **, char **, struct pt_regs *);
-extern int do_fork(unsigned long, unsigned long, struct pt_regs *);
+extern int do_fork(unsigned long, unsigned long, struct pt_regs *, unsigned long);
 
 extern void FASTCALL(add_wait_queue(wait_queue_head_t *q, wait_queue_t * wait));
 extern void FASTCALL(add_wait_queue_exclusive(wait_queue_head_t *q, wait_queue_t * wait));

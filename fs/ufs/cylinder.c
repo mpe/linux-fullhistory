@@ -119,7 +119,7 @@ void ufs_put_cylinder (struct super_block * sb, unsigned bitmap_nr)
 	ucg->cg_rotor = SWAB32(ucpi->c_rotor);
 	ucg->cg_frotor = SWAB32(ucpi->c_frotor);
 	ucg->cg_irotor = SWAB32(ucpi->c_irotor);
-	ubh_mark_buffer_dirty (UCPI_UBH, 1);
+	ubh_mark_buffer_dirty (UCPI_UBH);
 	for (i = 1; i < UCPI_UBH->count; i++) {
 		brelse (UCPI_UBH->bh[i]);
 	}

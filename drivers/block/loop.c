@@ -357,7 +357,7 @@ repeat:
 
 		if (current_request->cmd == WRITE) {
 			mark_buffer_uptodate(bh, 1);
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 		}
 		brelse(bh);
 		dest_addr += size;

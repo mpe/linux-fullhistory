@@ -985,8 +985,8 @@ static inline void mark_buffer_protected(struct buffer_head * bh)
 		__mark_buffer_protected(bh);
 }
 
-extern void FASTCALL(__mark_buffer_dirty(struct buffer_head *bh, int flag));
-extern void FASTCALL(mark_buffer_dirty(struct buffer_head *bh, int flag));
+extern void FASTCALL(__mark_buffer_dirty(struct buffer_head *bh));
+extern void FASTCALL(mark_buffer_dirty(struct buffer_head *bh));
 
 #define atomic_set_buffer_dirty(bh) test_and_set_bit(BH_Dirty, &(bh)->b_state)
 

@@ -29,7 +29,8 @@ static int umsdos_ioctl_fill (
 				     const char *name,
 				     int name_len,
 				     off_t offset,
-				     ino_t ino)
+				     ino_t ino,
+				     unsigned type)
 {
 	int ret = -EINVAL;
 	struct UMSDOS_DIR_ONCE *d = (struct UMSDOS_DIR_ONCE *) buf;

@@ -2014,7 +2014,7 @@ opcode, line, status, val );
 }
 
 
-int digi_init (void)
+static int __init digi_init (void)
 {
 	usb_serial_register (&digi_acceleport_2_device);
 	usb_serial_register (&digi_acceleport_4_device);
@@ -2022,7 +2022,7 @@ int digi_init (void)
 }
 
 
-void digi_exit (void)
+static void __exit digi_exit (void)
 {
 	usb_serial_deregister (&digi_acceleport_2_device);
 	usb_serial_deregister (&digi_acceleport_4_device);

@@ -38,7 +38,7 @@ void ext2_error (struct super_block * sb, const char * function,
 		sb->u.ext2_sb.s_mount_state |= EXT2_ERROR_FS;
 		sb->u.ext2_sb.s_es->s_state =
 			cpu_to_le16(le16_to_cpu(sb->u.ext2_sb.s_es->s_state) | EXT2_ERROR_FS);
-		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+		mark_buffer_dirty(sb->u.ext2_sb.s_sbh);
 		sb->s_dirt = 1;
 	}
 	va_start (args, fmt);
@@ -68,7 +68,7 @@ NORET_TYPE void ext2_panic (struct super_block * sb, const char * function,
 		sb->u.ext2_sb.s_mount_state |= EXT2_ERROR_FS;
 		sb->u.ext2_sb.s_es->s_state =
 			cpu_to_le16(le16_to_cpu(sb->u.ext2_sb.s_es->s_state) | EXT2_ERROR_FS);
-		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+		mark_buffer_dirty(sb->u.ext2_sb.s_sbh);
 		sb->s_dirt = 1;
 	}
 	va_start (args, fmt);
@@ -101,7 +101,7 @@ void ext2_put_super (struct super_block * sb)
 
 	if (!(sb->s_flags & MS_RDONLY)) {
 		sb->u.ext2_sb.s_es->s_state = le16_to_cpu(sb->u.ext2_sb.s_mount_state);
-		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+		mark_buffer_dirty(sb->u.ext2_sb.s_sbh);
 	}
 	db_count = sb->u.ext2_sb.s_db_per_group;
 	for (i = 0; i < db_count; i++)
@@ -286,7 +286,7 @@ static int ext2_setup_super (struct super_block * sb,
 		es->s_max_mnt_count = (__s16) cpu_to_le16(EXT2_DFL_MAX_MNT_COUNT);
 	es->s_mnt_count=cpu_to_le16(le16_to_cpu(es->s_mnt_count) + 1);
 	es->s_mtime = cpu_to_le32(CURRENT_TIME);
-	mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+	mark_buffer_dirty(sb->u.ext2_sb.s_sbh);
 	sb->s_dirt = 1;
 	if (test_opt (sb, DEBUG))
 		printk ("[EXT II FS %s, %s, bs=%lu, fs=%lu, gc=%lu, "
@@ -612,7 +612,7 @@ static void ext2_commit_super (struct super_block * sb,
 			       struct ext2_super_block * es)
 {
 	es->s_wtime = cpu_to_le32(CURRENT_TIME);
-	mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+	mark_buffer_dirty(sb->u.ext2_sb.s_sbh);
 	sb->s_dirt = 0;
 }
 
@@ -677,7 +677,7 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 		 */
 		es->s_state = cpu_to_le16(sb->u.ext2_sb.s_mount_state);
 		es->s_mtime = cpu_to_le32(CURRENT_TIME);
-		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+		mark_buffer_dirty(sb->u.ext2_sb.s_sbh);
 		sb->s_dirt = 1;
 		ext2_commit_super (sb, es);
 	}

@@ -505,7 +505,7 @@ int umsdos_newentry (struct dentry *parent, struct umsdos_info *info)
 	struct dentry *demd = umsdos_get_emd_dentry(parent);
 
 	ret = PTR_ERR(demd);
-	if (IS_ERR(ret))
+	if (IS_ERR(demd))
 		goto out;
 	err = umsdos_find (demd, info);
 	if (err && err == -ENOENT) {
@@ -532,7 +532,7 @@ int umsdos_newhidden (struct dentry *parent, struct umsdos_info *info)
 	int ret;
 	struct dentry *demd = umsdos_get_emd_dentry(parent);
 	ret = PTR_ERR(demd);
-	if (IS_ERR(ret))
+	if (IS_ERR(demd))
 		goto out;
 
 	umsdos_parse ("..LINK", 6, info);
@@ -561,7 +561,7 @@ int umsdos_delentry (struct dentry *parent, struct umsdos_info *info, int isdir)
 	struct dentry *demd = umsdos_get_emd_dentry(parent);
 
 	ret = PTR_ERR(demd);
-	if (IS_ERR(ret))
+	if (IS_ERR(demd))
 		goto out;
 	ret = umsdos_find (demd, info);
 	if (ret)
@@ -642,7 +642,7 @@ int umsdos_findentry (struct dentry *parent, struct umsdos_info *info,
 	struct dentry *demd = umsdos_get_emd_dentry(parent);
 
 	ret = PTR_ERR(demd);
-	if (IS_ERR(ret))
+	if (IS_ERR(demd))
 		goto out;
 	ret = umsdos_find (demd, info);
 	if (ret)

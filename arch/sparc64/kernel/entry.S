@@ -911,7 +911,7 @@ sys_fork:	 clr		%o1
 		mov		SIGCHLD, %o0
 sys_clone:	flushw
 		movrz		%o1, %fp, %o1
-		nop
+		mov		0, %o3
 		ba,pt		%xcc, do_fork
 		 add		%sp, STACK_BIAS + REGWIN_SZ, %o2
 ret_from_syscall:

@@ -245,47 +245,17 @@ static inline Indirect *ext2_get_branch(struct inode *inode,
 	add_chain (chain, NULL, inode->u.ext2_i.i_data + *offsets);
 	if (!p->key)
 		goto no_block;
-	/*
-	 * switch below is merely an unrolled loop - body should be
-	 * repeated depth-1 times. Maybe loop would be actually better,
-	 * but that way we get straight execution path in normal cases.
-	 * Easy to change, anyway - all cases in switch are literally
-	 * identical.
-	 */
-	switch (depth) {
-		case 4:
-			bh = bread(dev, le32_to_cpu(p->key), size);
-			if (!bh)
-				goto failure;
-			/* Reader: pointers */
-			if (!verify_chain(chain, p))
-				goto changed;
-			add_chain(++p, bh, (u32*)bh->b_data + *++offsets);
-			/* Reader: end */
-			if (!p->key)
-				goto no_block;
-		case 3:
-			bh = bread(dev, le32_to_cpu(p->key), size);
-			if (!bh)
-				goto failure;
-			/* Reader: pointers */
-			if (!verify_chain(chain, p))
-				goto changed;
-			add_chain(++p, bh, (u32*)bh->b_data + *++offsets);
-			/* Reader: end */
-			if (!p->key)
-				goto no_block;
-		case 2:
-			bh = bread(dev, le32_to_cpu(p->key), size);
-			if (!bh)
-				goto failure;
-			/* Reader: pointers */
-			if (!verify_chain(chain, p))
-				goto changed;
-			add_chain(++p, bh, (u32*)bh->b_data + *++offsets);
-			/* Reader: end */
-			if (!p->key)
-				goto no_block;
+	while (--depth) {
+		bh = bread(dev, le32_to_cpu(p->key), size);
+		if (!bh)
+			goto failure;
+		/* Reader: pointers */
+		if (!verify_chain(chain, p))
+			goto changed;
+		add_chain(++p, bh, (u32*)bh->b_data + *++offsets);
+		/* Reader: end */
+		if (!p->key)
+			goto no_block;
 	}
 	return NULL;
 
@@ -433,7 +403,7 @@ static int ext2_alloc_branch(struct inode *inode,
 		branch[n].p = (u32*) bh->b_data + offsets[n];
 		*branch[n].p = branch[n].key;
 		mark_buffer_uptodate(bh, 1);
-		mark_buffer_dirty(bh, 1);
+		mark_buffer_dirty(bh);
 		if (IS_SYNC(inode) || inode->u.ext2_i.i_osync) {
 			ll_rw_block (WRITE, 1, &bh);
 			wait_on_buffer (bh);
@@ -498,7 +468,7 @@ static inline int ext2_splice_branch(struct inode *inode,
 
 	/* had we spliced it onto indirect block? */
 	if (where->bh) {
-		mark_buffer_dirty(where->bh, 1);
+		mark_buffer_dirty(where->bh);
 		if (IS_SYNC(inode) || inode->u.ext2_i.i_osync) {
 			ll_rw_block (WRITE, 1, &where->bh);
 			wait_on_buffer(where->bh);
@@ -620,7 +590,7 @@ struct buffer_head * ext2_getblk(struct inode * inode, long block, int create, i
 				wait_on_buffer(bh);
 			memset(bh->b_data, 0, inode->i_sb->s_blocksize);
 			mark_buffer_uptodate(bh, 1);
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 		}
 		return bh;
 	}
@@ -713,8 +683,8 @@ static inline int all_zeroes(u32 *p, u32 *q)
 {
 	while (p < q)
 		if (*p++)
-			return 1;
-	return 0;
+			return 0;
+	return 1;
 }
 
 /**
@@ -937,7 +907,7 @@ void ext2_truncate (struct inode * inode)
 		if (partial == chain)
 			mark_inode_dirty(inode);
 		else
-			mark_buffer_dirty(partial->bh, 1);
+			mark_buffer_dirty(partial->bh);
 		ext2_free_branches(inode, &nr, &nr+1, (chain+n-1) - partial);
 	}
 	/* Clear the ends of indirect blocks on the shared branch */
@@ -946,7 +916,7 @@ void ext2_truncate (struct inode * inode)
 				   partial->p + 1,
 				   (u32*)partial->bh->b_data + addr_per_block,
 				   (chain+n-1) - partial);
-		mark_buffer_dirty(partial->bh, 1);
+		mark_buffer_dirty(partial->bh);
 		if (IS_SYNC(inode)) {
 			ll_rw_block (WRITE, 1, &partial->bh);
 			wait_on_buffer (partial->bh);
@@ -1238,7 +1208,7 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 		raw_inode->i_block[0] = cpu_to_le32(kdev_t_to_nr(inode->i_rdev));
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)
 		raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (do_sync) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);

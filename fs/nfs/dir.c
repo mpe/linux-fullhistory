@@ -606,16 +606,8 @@ static void nfs_dentry_release(struct dentry *dentry)
 static void nfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 {
 	if (dentry->d_flags & DCACHE_NFSFS_RENAMED) {
-		struct dentry *dir = dentry->d_parent;
-		struct inode *dir_i = dir->d_inode;
-		int error;
-		
 		lock_kernel();
-		dir = dentry->d_parent;
-		dir_i = dir->d_inode;
-		nfs_zap_caches(dir_i);
-		NFS_CACHEINV(inode);
-		error = NFS_PROTO(dir_i)->remove(dir, &dentry->d_name);
+		nfs_complete_unlink(dentry);
 		unlock_kernel();
 	}
 	iput(inode);
@@ -868,7 +860,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	if (!error) {
 		nfs_renew_times(dentry);
 		d_move(dentry, sdentry);
-		dentry->d_flags |= DCACHE_NFSFS_RENAMED;
+		error = nfs_async_unlink(dentry);
  		/* If we return 0 we don't unlink */
 	}
 	dput(sdentry);

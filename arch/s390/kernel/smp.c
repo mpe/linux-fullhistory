@@ -528,7 +528,7 @@ static int __init fork_by_hand(void)
        /* don't care about the psw and regs settings since we'll never
           reschedule the forked task. */
        memset(&regs,sizeof(pt_regs),0);
-       return do_fork(CLONE_VM|CLONE_PID, 0, &regs);
+       return do_fork(CLONE_VM|CLONE_PID, 0, &regs, 0);
 }
 
 static void __init do_boot_cpu(int cpu)

@@ -321,7 +321,7 @@ static void usb_dsbr100_close(struct video_device *dev)
 	MOD_DEC_USE_COUNT;
 }
 
-int __init dsbr100_init(void)
+static int __init dsbr100_init(void)
 {
 	usb_dsbr100_radio.priv = NULL;
 	usb_register(&usb_dsbr100_driver);
@@ -332,12 +332,7 @@ int __init dsbr100_init(void)
 	return 0;
 }
 
-int __init init_module(void)
-{
-	return dsbr100_init();
-}
-
-void cleanup_module(void)
+static void __exit dsbr100_exit(void)
 {
 	usb_dsbr100 *radio=usb_dsbr100_radio.priv;
 
@@ -346,6 +341,9 @@ void cleanup_module(void)
 	video_unregister_device(&usb_dsbr100_radio);
 	usb_deregister(&usb_dsbr100_driver);
 }
+
+module_init (dsbr100_init);
+module_exit (dsbr100_exit);
 
 MODULE_AUTHOR("Markus Demleitner <msdemlei@tucana.harvard.edu>");
 MODULE_DESCRIPTION("D-Link DSB-R100 USB radio driver");

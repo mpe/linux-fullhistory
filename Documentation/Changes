@@ -25,7 +25,10 @@ document.
 Smotrite file <http://oblom.rnc.ru/linux/kernel/Changes.ru>, yavlyaushisya
 russkim perevodom dannogo documenta.
 
-Last updated: August 15, 2000
+Visite <http://www2.adi.uam.es/~ender/tecnico/> para obtener la traducción
+al español de este documento en varios formatos.
+
+Last updated: August 28, 2000
 
 Chris Ricker (kaboom@gatech.edu or chris.ricker@genetics.utah.edu).
 
@@ -44,10 +47,10 @@ with pcmcia-cs.
 
 o  Gnu C                  2.7.2.3                 # gcc --version
 o  Gnu make               3.77                    # make --version
-o  binutils               2.9.1.0.22              # ld -v
+o  binutils               2.9.1.0.25              # ld -v
 o  util-linux             2.10o                   # kbdrate -v
-o  modutils               2.3.13                  # insmod -V
-o  e2fsprogs              1.18                    # /sbin/tune2fs --version
+o  modutils               2.3.15                  # insmod -V
+o  e2fsprogs              1.18                    # tune2fs --version
 o  pcmcia-cs              3.1.19                  # cardmgr -V
 o  PPP                    2.4.0                   # pppd --version
 o  isdn4k-utils           3.1beta7                # isdnctrl 2>&1|grep version
@@ -257,16 +260,16 @@ Binutils
 ------------
 o  <ftp://ftp.valinux.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.tar.gz>
 
-2.9.5 series
+2.10 series
 ------------
-o  <ftp://ftp.valinux.com/pub/support/hjl/binutils/binutils-2.9.5.0.46.tar.bz2>
+o  <ftp://ftp.valinux.com/pub/support/hjl/binutils/binutils-2.10.0.24.tar.bz2>
 
 System utilities
 ****************
 
 Util-linux
 ----------
-o  <ftp://ftp.win.tue.nl/pub/linux-local/util-linux/util-linux-2.10o.tar.gz>
+o  <ftp://ftp.win.tue.nl/pub/linux-local/utils/util-linux/util-linux-2.10o.tar.gz>
 
 Ksymoops
 --------
@@ -274,7 +277,7 @@ o  <ftp://ftp.kernel.org/pub/linux/utils/kernel/ksymoops/v2.3>
 
 Modutils
 --------
-o  <ftp://ftp.kernel.org/pub/linux/utils/kernel/modutils/v2.3/modutils-2.3.13.tar.gz>
+o  <ftp://ftp.kernel.org/pub/linux/utils/kernel/modutils/v2.3/modutils-2.3.15.tar.gz>
 
 Mkinitrd
 --------
@@ -291,7 +294,7 @@ o  <http://linux.msede.com/lvm/>
 
 Pcmcia-cs
 ---------
-o  <ftp://projects.sourceforge.org/pub/pcmcia/pcmcia-cs-3.1.19.tar.gz>
+o  <ftp://pcmcia-cs.sourceforge.org/pub/pcmcia-cs/pcmcia-cs-3.1.19.tar.gz>
 
 Jade
 ----

@@ -71,7 +71,6 @@ if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
 	    dep_bool '    SiS5513 chipset support' CONFIG_BLK_DEV_SIS5513 $CONFIG_BLK_DEV_IDEDMA_PCI $CONFIG_X86
 	    dep_bool '    Tekram TRM290 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_TRM290 $CONFIG_BLK_DEV_IDEDMA_PCI
 	    dep_bool '    VIA82CXXX chipset support' CONFIG_BLK_DEV_VIA82CXXX $CONFIG_BLK_DEV_IDEDMA_PCI
-	    dep_mbool '      VIA82CXXX Tuning support (WIP)' CONFIG_VIA82CXXX_TUNING $CONFIG_BLK_DEV_VIA82CXXX $CONFIG_IDEDMA_PCI_WIP
          fi
 	 if [ "$CONFIG_PPC" = "y" -o "$CONFIG_ARM" = "y" ]; then
 	    bool '    Winbond SL82c105 support' CONFIG_BLK_DEV_SL82C105

@@ -153,9 +153,13 @@ flush_signal_handlers(struct task_struct *t)
 void
 block_all_signals(int (*notifier)(void *priv), void *priv, sigset_t *mask)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&current->sigmask_lock, flags);
 	current->notifier_mask = mask;
 	current->notifier_data = priv;
 	current->notifier = notifier;
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
 }
 
 /* Notify the system that blocking has ended. */
@@ -163,9 +167,13 @@ block_all_signals(int (*notifier)(void *priv), void *priv, sigset_t *mask)
 void
 unblock_all_signals(void)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&current->sigmask_lock, flags);
 	current->notifier = NULL;
 	current->notifier_data = NULL;
 	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
 }
 
 static int collect_signal(int sig, struct sigpending *list, siginfo_t *info)
@@ -234,15 +242,7 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 
 	sig = next_signal(current, mask);
 	if (current->notifier) {
-		sigset_t merged;
-		int i;
-		int altsig;
-
-		for (i = 0; i < _NSIG_WORDS; i++)
-			merged.sig[i] = mask->sig[i]
-			    | current->notifier_mask->sig[i];
-		altsig = next_signal(current, &merged);
-		if (sig != altsig) {
+		if (sigismember(current->notifier_mask, sig)) {
 			if (!(current->notifier)(current->notifier_data)) {
 				current->sigpending = 0;
 				return 0;

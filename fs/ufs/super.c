@@ -192,7 +192,7 @@ void ufs_error (struct super_block * sb, const char * function,
 	
 	if (!(sb->s_flags & MS_RDONLY)) {
 		usb1->fs_clean = UFS_FSBAD;
-		ubh_mark_buffer_dirty(USPI_UBH, 1);
+		ubh_mark_buffer_dirty(USPI_UBH);
 		sb->s_dirt = 1;
 		sb->s_flags |= MS_RDONLY;
 	}
@@ -224,7 +224,7 @@ void ufs_panic (struct super_block * sb, const char * function,
 	
 	if (!(sb->s_flags & MS_RDONLY)) {
 		usb1->fs_clean = UFS_FSBAD;
-		ubh_mark_buffer_dirty(USPI_UBH, 1);
+		ubh_mark_buffer_dirty(USPI_UBH);
 		sb->s_dirt = 1;
 	}
 	va_start (args, fmt);
@@ -422,7 +422,7 @@ void ufs_put_cylinder_structures (struct super_block * sb) {
 		ubh_memcpyubh (ubh, space, size);
 		space += size;
 		ubh_mark_buffer_uptodate (ubh, 1);
-		ubh_mark_buffer_dirty (ubh, 0);
+		ubh_mark_buffer_dirty (ubh);
 		ubh_brelse (ubh);
 	}
 	for (i = 0; i < sb->u.ufs_sb.s_cg_loaded; i++) {
@@ -845,7 +845,7 @@ void ufs_write_super (struct super_block * sb) {
 		if ((flags & UFS_ST_MASK) == UFS_ST_SUN 
 		  || (flags & UFS_ST_MASK) == UFS_ST_SUNx86)
 			ufs_set_fs_state(usb1, usb3, UFS_FSOK - SWAB32(usb1->fs_time));
-		ubh_mark_buffer_dirty (USPI_UBH, 1);
+		ubh_mark_buffer_dirty (USPI_UBH);
 	}
 	sb->s_dirt = 0;
 	UFSD(("EXIT\n"))
@@ -915,7 +915,7 @@ int ufs_remount (struct super_block * sb, int * mount_flags, char * data)
 		if ((flags & UFS_ST_MASK) == UFS_ST_SUN
 		  || (flags & UFS_ST_MASK) == UFS_ST_SUNx86) 
 			ufs_set_fs_state(usb1, usb3, UFS_FSOK - SWAB32(usb1->fs_time));
-		ubh_mark_buffer_dirty (USPI_UBH, 1);
+		ubh_mark_buffer_dirty (USPI_UBH);
 		sb->s_dirt = 0;
 		sb->s_flags |= MS_RDONLY;
 	}

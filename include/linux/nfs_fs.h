@@ -184,6 +184,12 @@ extern struct inode_operations nfs_symlink_inode_operations;
 extern int nfs_lock(struct file *, int, struct file_lock *);
 
 /*
+ * linux/fs/nfs/unlink.c
+ */
+extern int  nfs_async_unlink(struct dentry *);
+extern void nfs_complete_unlink(struct dentry *);
+
+/*
  * linux/fs/nfs/write.c
  */
 extern int  nfs_writepage(struct file *file, struct page *);

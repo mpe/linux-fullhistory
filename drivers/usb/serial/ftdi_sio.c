@@ -725,14 +725,14 @@ static int ftdi_sio_ioctl (struct usb_serial_port *port, struct file * file, uns
 } /* ftdi_sio_ioctl */
 
 
-int ftdi_sio_init (void)
+static int __init ftdi_sio_init (void)
 {
 	usb_serial_register (&ftdi_sio_device);
 	return 0;
 }
 
 
-void ftdi_sio_exit (void)
+static void __exit ftdi_sio_exit (void)
 {
 	usb_serial_deregister (&ftdi_sio_device);
 }

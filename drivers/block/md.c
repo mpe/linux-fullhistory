@@ -952,7 +952,7 @@ static int write_disk_sb(mdk_rdev_t * rdev)
 	memcpy(sb, rdev->sb, MD_SB_BYTES);
 
 	mark_buffer_uptodate(bh, 1);
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	ll_rw_block(WRITE, 1, &bh);
 	wait_on_buffer(bh);
 	brelse(bh);

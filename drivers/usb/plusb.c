@@ -557,7 +557,7 @@ static struct usb_driver plusb_driver =
 
 /* --------------------------------------------------------------------- */
 
-int __init plusb_init (void)
+static int __init plusb_init (void)
 {
 	unsigned u;
 	dbg("plusb_init");
@@ -583,7 +583,7 @@ int __init plusb_init (void)
 
 /* --------------------------------------------------------------------- */
 
-void __exit plusb_cleanup (void)
+static void __exit plusb_cleanup (void)
 {
 	unsigned u;
 
@@ -601,21 +601,11 @@ void __exit plusb_cleanup (void)
 
 /* --------------------------------------------------------------------- */
 
-#ifdef MODULE
 MODULE_AUTHOR ("Deti Fliegl, deti@fliegl.de");
 MODULE_DESCRIPTION ("PL-2302 USB Interface Driver for Linux (c)2000");
 
-/* --------------------------------------------------------------------- */
-int __init init_module (void)
-{
-	return plusb_init ();
-}
-/* --------------------------------------------------------------------- */
-void __exit cleanup_module (void)
-{
-	plusb_cleanup ();
-}
 
-#endif
+module_init (plusb_init);
+module_exit (plusb_cleanup);
 
 /* --------------------------------------------------------------------- */

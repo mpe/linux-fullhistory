@@ -532,7 +532,7 @@ static void sysv_write_super(struct super_block *sb)
 		if (sb->sv_convert)
 			time = to_coh_ulong(time);
 		*sb->sv_sb_time = time;
-		mark_buffer_dirty(sb->sv_bh2, 1);
+		mark_buffer_dirty(sb->sv_bh2);
 	}
 	sb->s_dirt = 0;
 }
@@ -769,7 +769,7 @@ repeat:
 		}
 		memset(result->b_data, 0, sb->sv_block_size);
 		mark_buffer_uptodate(result, 1);
-		mark_buffer_dirty(result, 1);
+		mark_buffer_dirty(result);
 	} else {
 		*phys = tmp;
 		*new = 1;
@@ -780,7 +780,7 @@ repeat:
 		goto repeat;
 	}
 	*p = (sb->sv_convert ? to_coh_ulong(block) : block);
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	*err = 0;
 out:
 	brelse(bh);
@@ -894,7 +894,7 @@ static struct buffer_head *sysv_getblk(struct inode *inode, unsigned int block, 
 		if (buffer_new(&dummy)) {
 			memset(bh->b_data, 0, inode->i_sb->sv_block_size);
 			mark_buffer_uptodate(bh, 1);
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 		}
 		return bh;
 	}
@@ -1126,7 +1126,7 @@ static struct buffer_head * sysv_update_inode(struct inode * inode)
 	else
 		for (block = 0; block < 10+1+1+1; block++)
 			write3byte(&raw_inode->i_a.i_addb[3*block],inode->u.sysv_i.i_data[block]);
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	return bh;
 }
 

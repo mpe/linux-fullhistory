@@ -1219,7 +1219,7 @@ static void udf_open_lvid(struct super_block *sb)
 				UDF_SB_LVID(sb)->descTag.tagChecksum +=
 					((Uint8 *)&(UDF_SB_LVID(sb)->descTag))[i];
 
-		mark_buffer_dirty(UDF_SB_LVIDBH(sb), 1);
+		mark_buffer_dirty(UDF_SB_LVIDBH(sb));
 		sb->s_dirt = 0;
 	}
 }
@@ -1254,7 +1254,7 @@ static void udf_close_lvid(struct super_block *sb)
 				UDF_SB_LVID(sb)->descTag.tagChecksum +=
 					((Uint8 *)&(UDF_SB_LVID(sb)->descTag))[i];
 
-		mark_buffer_dirty(UDF_SB_LVIDBH(sb), 1);
+		mark_buffer_dirty(UDF_SB_LVIDBH(sb));
 	}
 }
 

@@ -573,6 +573,7 @@ barf:
  *       do_fork().
  */
 int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
+		unsigned long unused,
 		struct task_struct *p, struct pt_regs *regs)
 {
 	struct thread_struct *t = &p->thread;

@@ -276,14 +276,14 @@ alpha_clone(unsigned long clone_flags, unsigned long usp,
 {
 	if (!usp)
 		usp = rdusp();
-	return do_fork(clone_flags, usp, (struct pt_regs *) (swstack+1));
+	return do_fork(clone_flags, usp, (struct pt_regs *) (swstack+1), 0);
 }
 
 int
 alpha_vfork(struct switch_stack * swstack)
 {
 	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, rdusp(),
-			(struct pt_regs *) (swstack+1));
+			(struct pt_regs *) (swstack+1), 0);
 }
 
 /*
@@ -299,6 +299,7 @@ alpha_vfork(struct switch_stack * swstack)
 
 int
 copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
+	    unsigned long unused,
 	    struct task_struct * p, struct pt_regs * regs)
 {
 	extern void ret_from_sys_call(void);

@@ -106,16 +106,16 @@ int default_fat_access(struct super_block *sb,int nr,int new_value)
 				*p_first = new_value & 0xff;
 				*p_last = (*p_last & 0xf0) | (new_value >> 8);
 			}
-			fat_mark_buffer_dirty(sb, bh2, 1);
+			fat_mark_buffer_dirty(sb, bh2);
 		}
-		fat_mark_buffer_dirty(sb, bh, 1);
+		fat_mark_buffer_dirty(sb, bh);
 		for (copy = 1; copy < MSDOS_SB(sb)->fats; copy++) {
 			b = MSDOS_SB(sb)->fat_start + (first >> SECTOR_BITS) +
 				MSDOS_SB(sb)->fat_length * copy;
 			if (!(c_bh = fat_bread(sb, b)))
 				break;
 			memcpy(c_bh->b_data,bh->b_data,SECTOR_SIZE);
-			fat_mark_buffer_dirty(sb, c_bh, 1);
+			fat_mark_buffer_dirty(sb, c_bh);
 			if (bh != bh2) {
 				if (!(c_bh2 = fat_bread(sb, b+1))) {
 					fat_brelse(sb, c_bh);

@@ -68,8 +68,8 @@ GLOBAL_ENTRY(sys_clone2)
 	mov loc1=r16				// save ar.pfs across do_fork
 	UNW(.body)
 	mov out1=in1
-	mov out2=in2
-	adds out3=IA64_SWITCH_STACK_SIZE+16,sp	// out3 = &regs
+	mov out3=in2
+	adds out2=IA64_SWITCH_STACK_SIZE+16,sp	// out2 = &regs
 	mov out0=in0				// out0 = clone_flags
 	br.call.sptk.few rp=do_fork
 .ret1:	UNW(.restore sp)
@@ -87,8 +87,8 @@ GLOBAL_ENTRY(sys_clone)
 	mov loc1=r16				// save ar.pfs across do_fork
 	UNW(.body)
 	mov out1=in1
-	mov out2=0
-	adds out3=IA64_SWITCH_STACK_SIZE+16,sp	// out3 = &regs
+	mov out3=0
+	adds out2=IA64_SWITCH_STACK_SIZE+16,sp	// out2 = &regs
 	mov out0=in0				// out0 = clone_flags
 	br.call.sptk.few rp=do_fork
 .ret2:	UNW(.restore sp)

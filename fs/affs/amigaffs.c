@@ -79,7 +79,7 @@ affs_insert_hash(unsigned long next, struct buffer_head *file, struct inode *ino
 	DIR_END(file->b_data,inode)->hash_chain = cpu_to_be32(next);
 	((s32 *)bh->b_data)[offset]             = cpu_to_be32(ino);
 	affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
-	mark_buffer_dirty(bh,1);
+	mark_buffer_dirty(bh);
 	affs_brelse(bh);
 
 	return 0;
@@ -130,7 +130,7 @@ affs_remove_hash(struct buffer_head *dbh, struct inode *inode)
 		if (ownkey == key) {
 			((s32 *)bh->b_data)[offset] = FILE_END(dbh->b_data,inode)->hash_chain;
 			affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
-			mark_buffer_dirty(bh,1);
+			mark_buffer_dirty(bh);
 			affs_brelse(bh);
 			retval = 0;
 			break;
@@ -178,7 +178,7 @@ affs_remove_link(struct buffer_head *dbh, struct inode *inode)
 			FILE_END(bh->b_data,inode)->link_chain =
 						FILE_END(dbh->b_data,inode)->link_chain;
 			affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
-			mark_buffer_dirty(bh,1);
+			mark_buffer_dirty(bh);
 			affs_brelse(bh);
 			retval = 0;
 			break;
@@ -261,7 +261,7 @@ affs_remove_header(struct buffer_head *bh, struct inode *inode)
 			return error;
 		}
 		affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
-		mark_buffer_dirty(bh,1);
+		mark_buffer_dirty(bh);
 		affs_brelse(link_bh);
 		affs_free_block(inode->i_sb,link_ino);
 		/* Mark the link's parent dir as changed, too. */

@@ -1391,6 +1391,7 @@ flush_patch_two:
 	mov	%fp, %o1			! arg1:	usp
 	std	%g4, [%curptr + AOFF_task_thread + AOFF_thread_fork_kpsr]
 	add	%sp, REGWIN_SZ, %o2		! arg2:	pt_regs ptr
+	mov	0, %o3
 	call	C_LABEL(do_fork)
 	 mov	%l5, %o7
 	
@@ -1413,6 +1414,7 @@ flush_patch_three:
 1:
 	std	%g4, [%curptr + AOFF_task_thread + AOFF_thread_fork_kpsr]
 	add	%sp, REGWIN_SZ, %o2		! arg2:	pt_regs ptr
+	mov	0, %o3
 	call	C_LABEL(do_fork)
 	 mov	%l5, %o7
 
@@ -1430,6 +1432,7 @@ flush_patch_four:
 	mov	%fp, %o1
 	or	%o0, %lo(0x4000 | 0x0100 | SIGCHLD), %o0
 	sethi	%hi(C_LABEL(do_fork)), %l1
+	mov	0, %o3
 	jmpl	%l1 + %lo(C_LABEL(do_fork)), %g0
 	 add	%sp, REGWIN_SZ, %o2
 

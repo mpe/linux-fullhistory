@@ -261,8 +261,8 @@ void hpfs_mark_4buffers_dirty(struct quad_buffer_head *qbh)
 	memcpy(qbh->bh[1]->b_data, qbh->data + 512, 512);
 	memcpy(qbh->bh[2]->b_data, qbh->data + 2 * 512, 512);
 	memcpy(qbh->bh[3]->b_data, qbh->data + 3 * 512, 512);
-	mark_buffer_dirty(qbh->bh[0],1);
-	mark_buffer_dirty(qbh->bh[1],1);
-	mark_buffer_dirty(qbh->bh[2],1);
-	mark_buffer_dirty(qbh->bh[3],1);
+	mark_buffer_dirty(qbh->bh[0]);
+	mark_buffer_dirty(qbh->bh[1]);
+	mark_buffer_dirty(qbh->bh[2]);
+	mark_buffer_dirty(qbh->bh[3]);
 }

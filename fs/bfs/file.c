@@ -33,7 +33,7 @@ static int bfs_move_block(unsigned long from, unsigned long to, kdev_t dev)
 		return -EIO;
 	new = getblk(dev, to, BFS_BSIZE);
 	memcpy(new->b_data, bh->b_data, bh->b_size);
-	mark_buffer_dirty(new, 0);
+	mark_buffer_dirty(new);
 	bforget(bh);
 	brelse(new);
 	return 0;
@@ -98,7 +98,7 @@ static int bfs_get_block(struct inode * inode, long block,
 		bh_result->b_state |= (1UL << BH_Mapped);
 		s->su_lf_eblk = inode->iu_eblock = inode->iu_sblock + block;
 		mark_inode_dirty(inode);
-		mark_buffer_dirty(s->su_sbh, 1);
+		mark_buffer_dirty(s->su_sbh);
 		err = 0;
 		goto out;
 	}
@@ -118,7 +118,7 @@ static int bfs_get_block(struct inode * inode, long block,
 	inode->iu_sblock = next_free_block;
 	s->su_lf_eblk = inode->iu_eblock = next_free_block + block;
 	mark_inode_dirty(inode);
-	mark_buffer_dirty(s->su_sbh, 1);
+	mark_buffer_dirty(s->su_sbh);
 	bh_result->b_dev = inode->i_dev;
 	bh_result->b_blocknr = inode->iu_sblock + block;
 	bh_result->b_state |= (1UL << BH_Mapped);

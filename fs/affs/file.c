@@ -447,12 +447,12 @@ static struct buffer_head * affs_getblock(struct inode *inode, s32 block)
 				DATA_FRONT(ebh)->header_key      = cpu_to_be32(inode->i_ino);
 				DATA_FRONT(ebh)->sequence_number = cpu_to_be32(inode->u.affs_i.i_lastblock + 1);
 				affs_fix_checksum(AFFS_I2BSIZE(inode), ebh->b_data, 5);
-				mark_buffer_dirty(ebh, 0);
+				mark_buffer_dirty(ebh);
 				if (pbh) {
 					DATA_FRONT(pbh)->data_size = cpu_to_be32(AFFS_I2BSIZE(inode) - 24);
 					DATA_FRONT(pbh)->next_data = cpu_to_be32(nkey);
 					affs_fix_checksum(AFFS_I2BSIZE(inode),pbh->b_data,5);
-					mark_buffer_dirty(pbh,0);
+					mark_buffer_dirty(pbh);
 					affs_brelse(pbh);
 				}
 				pbh = ebh;
@@ -466,7 +466,7 @@ static struct buffer_head * affs_getblock(struct inode *inode, s32 block)
 				fdp->first_data = AFFS_BLOCK(bh->b_data,inode,0);
 			fdp->block_count = cpu_to_be32(j);
 			affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
-			mark_buffer_dirty(bh,1);
+			mark_buffer_dirty(bh);
 		}
 
 		if (block < j) {
@@ -495,10 +495,10 @@ static struct buffer_head * affs_getblock(struct inode *inode, s32 block)
 			FILE_END(ebh->b_data,inode)->secondary_type      = cpu_to_be32(ST_FILE);
 			FILE_END(ebh->b_data,inode)->parent              = cpu_to_be32(inode->i_ino);
 			affs_fix_checksum(AFFS_I2BSIZE(inode),ebh->b_data,5);
-			mark_buffer_dirty(ebh, 1);
+			mark_buffer_dirty(ebh);
 			FILE_END(bh->b_data,inode)->extension = cpu_to_be32(key);
 			affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
-			mark_buffer_dirty(bh,1);
+			mark_buffer_dirty(bh);
 			affs_brelse(bh);
 			bh = ebh;
 		}
@@ -678,7 +678,7 @@ affs_truncate(struct inode *inode)
 			rem = do_div(tmp, net_blocksize);
 			DATA_FRONT(bh)->data_size = cpu_to_be32(rem ? rem : net_blocksize);
 			affs_fix_checksum(blocksize,bh->b_data,5);
-			mark_buffer_dirty(bh,0);
+			mark_buffer_dirty(bh);
 		}
 		goto out_truncate;
 	}
@@ -733,7 +733,7 @@ affs_truncate(struct inode *inode)
 			first = 0;
 			*keyp = 0;
 			affs_fix_checksum(blocksize,bh->b_data,5);
-			mark_buffer_dirty(bh,1);
+			mark_buffer_dirty(bh);
 		} else
 			first -= AFFS_I2HSIZE(inode);
 		affs_brelse(bh);
@@ -766,7 +766,7 @@ affs_truncate(struct inode *inode)
 				((struct data_front *)bh->b_data)->next_data = 0;
 				affs_fix_checksum(blocksize,bh->b_data,5);
 			}
-			mark_buffer_dirty(bh,1);
+			mark_buffer_dirty(bh);
 		} else 
 			affs_error(inode->i_sb,"truncate","Cannot read block %d",block);
 	}

@@ -315,6 +315,7 @@ release_thread(struct task_struct *t)
  */
 int
 copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
+	    unsigned long unused,
 	    struct task_struct * p, struct pt_regs * regs)
 {
 	unsigned long msr;
@@ -446,7 +447,7 @@ asmlinkage int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6,
 	unsigned long clone_flags = p1;
 	int res;
 	lock_kernel();
-	res = do_fork(clone_flags, regs->gpr[1], regs);
+	res = do_fork(clone_flags, regs->gpr[1], regs, 0);
 #ifdef CONFIG_SMP
 	/* When we clone the idle task we keep the same pid but
 	 * the return value of 0 for both causes problems.
@@ -465,7 +466,7 @@ asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6,
 
 	int res;
 	
-	res = do_fork(SIGCHLD, regs->gpr[1], regs);
+	res = do_fork(SIGCHLD, regs->gpr[1], regs, 0);
 #ifdef CONFIG_SMP
 	/* When we clone the idle task we keep the same pid but
 	 * the return value of 0 for both causes problems.
@@ -480,7 +481,7 @@ asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6,
 asmlinkage int sys_vfork(int p1, int p2, int p3, int p4, int p5, int p6,
 			 struct pt_regs *regs)
 {
-	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs->gpr[1], regs);
+	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs->gpr[1], regs, 0);
 }
 
 asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,

@@ -898,7 +898,7 @@ retry:
 		raw_entry->cdate = CT_LE_W(raw_entry->cdate);
 	}
 	spin_unlock(&fat_inode_lock);
-	fat_mark_buffer_dirty(sb, bh, 1);
+	fat_mark_buffer_dirty(sb, bh);
 	fat_brelse(sb, bh);
 	unlock_kernel();
 }

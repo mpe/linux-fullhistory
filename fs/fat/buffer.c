@@ -32,10 +32,9 @@ void fat_brelse (struct super_block *sb, struct buffer_head *bh)
 }
 void fat_mark_buffer_dirty (
 	struct super_block *sb,
-	struct buffer_head *bh,
-	int dirty)
+	struct buffer_head *bh)
 {
-	MSDOS_SB(sb)->cvf_format->cvf_mark_buffer_dirty(sb,bh,dirty);
+	MSDOS_SB(sb)->cvf_format->cvf_mark_buffer_dirty(sb,bh);
 }
 void fat_set_uptodate (
 	struct super_block *sb,
@@ -71,10 +70,9 @@ void default_fat_brelse(struct super_block *sb, struct buffer_head *bh)
 }
 void default_fat_mark_buffer_dirty (
 	struct super_block *sb,
-	struct buffer_head *bh,
-	int dirty)
+	struct buffer_head *bh)
 {
-	mark_buffer_dirty (bh,dirty);
+	mark_buffer_dirty (bh);
 }
 void default_fat_set_uptodate (
 	struct super_block *sb,
@@ -170,10 +168,9 @@ void bigblock_fat_brelse (
 
 void bigblock_fat_mark_buffer_dirty (
 	struct super_block *sb,
-	struct buffer_head *bh,
-	int dirty)
+	struct buffer_head *bh)
 {
-	mark_buffer_dirty (bh->b_next,dirty);
+	mark_buffer_dirty (bh->b_next);
 }
 
 void bigblock_fat_set_uptodate (

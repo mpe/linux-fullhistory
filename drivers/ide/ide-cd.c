@@ -542,11 +542,11 @@ static void cdrom_end_request (int uptodate, ide_drive_t *drive)
 
 /* Returns 0 if the request should be continued.
    Returns 1 if the request was ended. */
-static int cdrom_decode_status (ide_startstop_t *startstop, ide_drive_t *drive, int good_stat,
-				int *stat_ret)
+static int cdrom_decode_status (ide_startstop_t *startstop, ide_drive_t *drive,
+				int good_stat, int *stat_ret)
 {
 	struct request *rq = HWGROUP(drive)->rq;
-	int stat, cmd, err, sense_key;
+	int stat, err, sense_key;
 	struct packet_command *pc;
 	
 	/* Check for errors. */
@@ -560,103 +560,99 @@ static int cdrom_decode_status (ide_startstop_t *startstop, ide_drive_t *drive, 
 	err = GET_ERR();
 	sense_key = err >> 4;
 
-	if (rq == NULL)
-		printk ("%s: missing request in cdrom_decode_status\n",
-			drive->name);
-	else {
-		cmd = rq->cmd;
+	if (rq == NULL) {
+		printk("%s: missing rq in cdrom_decode_status\n", drive->name);
+		*startstop = ide_stopped;
+		return 1;
+	}
 
-		if (cmd == REQUEST_SENSE_COMMAND) {
-			/* We got an error trying to get sense info
-			   from the drive (probably while trying
-			   to recover from a former error).  Just give up. */
+	if (rq->cmd == REQUEST_SENSE_COMMAND) {
+		/* We got an error trying to get sense info
+		   from the drive (probably while trying
+		   to recover from a former error).  Just give up. */
 
-			pc = (struct packet_command *) rq->buffer;
-			pc->stat = 1;
-			cdrom_end_request (1, drive);
-			*startstop = ide_error (drive, "request sense failure", stat);
-			return 1;
+		pc = (struct packet_command *) rq->buffer;
+		pc->stat = 1;
+		cdrom_end_request (1, drive);
+		*startstop = ide_error (drive, "request sense failure", stat);
+		return 1;
 
-		} else if (cmd == PACKET_COMMAND) {
-			/* All other functions, except for READ. */
+	} else if (rq->cmd == PACKET_COMMAND) {
+		/* All other functions, except for READ. */
+		struct semaphore *sem = NULL;
+		pc = (struct packet_command *) rq->buffer;
 
-			struct semaphore *sem = NULL;
-			pc = (struct packet_command *) rq->buffer;
-
-			/* Check for tray open. */
-			if (sense_key == NOT_READY) {
-				cdrom_saw_media_change (drive);
-			} else if (sense_key == UNIT_ATTENTION) {
-				/* Check for media change. */
-				cdrom_saw_media_change (drive);
-				/*printk("%s: media changed\n",drive->name);*/
-				return 0;
-			} else {
-				/* Otherwise, print an error. */
-				ide_dump_status (drive, "packet command error",
-						 stat);
-			}
-			
-			/* Set the error flag and complete the request.
-			   Then, if we have a CHECK CONDITION status,
-			   queue a request sense command.  We must be careful,
-			   though: we don't want the thread in
-			   cdrom_queue_packet_command to wake up until
-			   the request sense has completed.  We do this
-			   by transferring the semaphore from the packet
-			   command request to the request sense request. */
-
-			if ((stat & ERR_STAT) != 0) {
-				sem = rq->sem;
-				rq->sem = NULL;
-			}
-
-			pc->stat = 1;
-			cdrom_end_request (1, drive);
-
-			if ((stat & ERR_STAT) != 0)
-				cdrom_queue_request_sense(drive, sem, pc->sense,
-							  pc);
+		/* Check for tray open. */
+		if (sense_key == NOT_READY) {
+			cdrom_saw_media_change (drive);
+		} else if (sense_key == UNIT_ATTENTION) {
+			/* Check for media change. */
+			cdrom_saw_media_change (drive);
+			/*printk("%s: media changed\n",drive->name);*/
+			return 0;
 		} else {
-			/* Handle errors from READ requests. */
-
-			if (sense_key == NOT_READY) {
-				/* Tray open. */
-				cdrom_saw_media_change (drive);
-
-				/* Fail the request. */
-				printk ("%s: tray open\n", drive->name);
-				cdrom_end_request (0, drive);
-			} else if (sense_key == UNIT_ATTENTION) {
-				/* Media change. */
-				cdrom_saw_media_change (drive);
-
-				/* Arrange to retry the request.
-				   But be sure to give up if we've retried
-				   too many times. */
-				if (++rq->errors > ERROR_MAX)
-					cdrom_end_request (0, drive);
-			} else if (sense_key == ILLEGAL_REQUEST ||
-				   sense_key == DATA_PROTECT) {
-				/* No point in retrying after an illegal
-				   request or data protect error.*/
-				ide_dump_status (drive, "command error", stat);
-				cdrom_end_request (0, drive);
-			} else if ((err & ~ABRT_ERR) != 0) {
-				/* Go to the default handler
-				   for other errors. */
-				*startstop = ide_error (drive, "cdrom_decode_status", stat);
-				return 1;
-			} else if ((++rq->errors > ERROR_MAX)) {
-				/* We've racked up too many retries.  Abort. */
-				cdrom_end_request (0, drive);
-			}
-
-			/* If we got a CHECK_CONDITION status,
-			   queue a request sense command. */
-			if ((stat & ERR_STAT) != 0)
-				cdrom_queue_request_sense(drive, NULL, NULL, NULL);
+			/* Otherwise, print an error. */
+			ide_dump_status(drive, "packet command error", stat);
 		}
+		
+		/* Set the error flag and complete the request.
+		   Then, if we have a CHECK CONDITION status,
+		   queue a request sense command.  We must be careful,
+		   though: we don't want the thread in
+		   cdrom_queue_packet_command to wake up until
+		   the request sense has completed.  We do this
+		   by transferring the semaphore from the packet
+		   command request to the request sense request. */
+
+		if ((stat & ERR_STAT) != 0) {
+			sem = rq->sem;
+			rq->sem = NULL;
+		}
+
+		pc->stat = 1;
+		cdrom_end_request (1, drive);
+
+		if ((stat & ERR_STAT) != 0)
+			cdrom_queue_request_sense(drive, sem, pc->sense, pc);
+	} else {
+		/* Handle errors from READ requests. */
+
+		if (sense_key == NOT_READY) {
+			/* Tray open. */
+			cdrom_saw_media_change (drive);
+
+			/* Fail the request. */
+			printk ("%s: tray open\n", drive->name);
+			cdrom_end_request (0, drive);
+		} else if (sense_key == UNIT_ATTENTION) {
+			/* Media change. */
+			cdrom_saw_media_change (drive);
+
+			/* Arrange to retry the request.
+			   But be sure to give up if we've retried
+			   too many times. */
+			if (++rq->errors > ERROR_MAX)
+				cdrom_end_request (0, drive);
+		} else if (sense_key == ILLEGAL_REQUEST ||
+			   sense_key == DATA_PROTECT) {
+			/* No point in retrying after an illegal
+			   request or data protect error.*/
+			ide_dump_status (drive, "command error", stat);
+			cdrom_end_request (0, drive);
+		} else if ((err & ~ABRT_ERR) != 0) {
+			/* Go to the default handler
+			   for other errors. */
+			*startstop = ide_error (drive, "cdrom_decode_status", stat);
+			return 1;
+		} else if ((++rq->errors > ERROR_MAX)) {
+			/* We've racked up too many retries.  Abort. */
+			cdrom_end_request (0, drive);
+		}
+
+		/* If we got a CHECK_CONDITION status,
+		   queue a request sense command. */
+		if ((stat & ERR_STAT) != 0)
+			cdrom_queue_request_sense(drive, NULL, NULL, NULL);
 	}
 
 	/* Retry, or handle the next request. */
@@ -686,8 +682,9 @@ static int cdrom_timer_expiry(ide_drive_t *drive)
    called when the interrupt from the drive arrives.  Otherwise, HANDLER
    will be called immediately after the drive is prepared for the transfer. */
 
-static ide_startstop_t cdrom_start_packet_command (ide_drive_t *drive, int xferlen,
-				       ide_handler_t *handler)
+static ide_startstop_t cdrom_start_packet_command(ide_drive_t *drive,
+						  int xferlen,
+						  ide_handler_t *handler)
 {
 	ide_startstop_t startstop;
 	struct cdrom_info *info = drive->driver_data;
@@ -783,7 +780,7 @@ static void cdrom_buffer_sectors (ide_drive_t *drive, unsigned long sector,
 
 	/* If we couldn't get a buffer, don't try to buffer anything... */
 	if (info->buffer == NULL)
-			sectors_to_buffer = 0;
+		sectors_to_buffer = 0;
 
 	/* If this is the first sector in the buffer, remember its number. */
 	if (info->nsectors_buffered == 0)
@@ -1657,10 +1654,10 @@ static int cdrom_read_toc(ide_drive_t *drive, struct request_sense *sense)
 
 	/* Check to see if the existing data is still valid.
 	   If it is, just return. */
-	if (CDROM_STATE_FLAGS (drive)->toc_valid)
-		(void) cdrom_check_status(drive, sense);
+	(void) cdrom_check_status(drive, sense);
 
-	if (CDROM_STATE_FLAGS (drive)->toc_valid) return 0;
+	if (CDROM_STATE_FLAGS(drive)->toc_valid)
+		return 0;
 
 	/* First read just the header, so we know how long the TOC is. */
 	stat = cdrom_read_tocentry(drive, 0, 1, 0, (char *) &toc->hdr,
@@ -1717,10 +1714,10 @@ static int cdrom_read_toc(ide_drive_t *drive, struct request_sense *sense)
 			toc->hdr.first_track = CDROM_LEADOUT;
 			toc->hdr.last_track = CDROM_LEADOUT;
 		}
-	} else if (stat) {
-		return stat;
 	}
-	if (stat) return stat;
+
+	if (stat)
+		return stat;
 
 	toc->hdr.toc_length = ntohs (toc->hdr.toc_length);
 
@@ -1836,6 +1833,20 @@ static int cdrom_select_speed(ide_drive_t *drive, int speed,
 	return cdrom_queue_packet_command(drive, &pc);
 }
 
+static int cdrom_play_audio(ide_drive_t *drive, int lba_start, int lba_end)
+{
+	struct request_sense sense;
+	struct packet_command pc;
+
+	memset(&pc, 0, sizeof (pc));
+	pc.sense = &sense;
+
+	pc.c[0] = GPCMD_PLAY_AUDIO_10;
+	put_unaligned(cpu_to_be32(lba_start), (unsigned int *) &pc.c[2]);
+	put_unaligned(cpu_to_be16(lba_end - lba_start), (unsigned int *) &pc.c[7]);
+
+	return cdrom_queue_packet_command(drive, &pc);
+}
 
 static int cdrom_get_toc_entry(ide_drive_t *drive, int track,
 				struct atapi_toc_entry **ent)
@@ -1843,6 +1854,12 @@ static int cdrom_get_toc_entry(ide_drive_t *drive, int track,
 	struct cdrom_info *info = drive->driver_data;
 	struct atapi_toc *toc = info->toc;
 	int ntracks;
+
+	/*
+	 * don't serve cached data, if the toc isn't valid
+	 */
+	if (!CDROM_STATE_FLAGS(drive)->toc_valid)
+		return -EINVAL;
 
 	/* Check validity of requested track number. */
 	ntracks = toc->hdr.last_track - toc->hdr.first_track + 1;
@@ -1941,6 +1958,34 @@ int ide_cdrom_audio_ioctl (struct cdrom_device_info *cdi,
 	struct cdrom_info *info = drive->driver_data;
 
 	switch (cmd) {
+	/*
+	 * emulate PLAY_AUDIO_TI command with PLAY_AUDIO_10, since
+	 * atapi doesn't support it
+	 */
+	case CDROMPLAYTRKIND: {
+		int stat, lba_start, lba_end;
+		struct cdrom_ti *ti = (struct cdrom_ti *)arg;
+		struct atapi_toc_entry *first_toc, *last_toc;
+
+		stat = cdrom_get_toc_entry(drive, ti->cdti_trk0, &first_toc);
+		if (stat)
+			return stat;
+
+		stat = cdrom_get_toc_entry(drive, ti->cdti_trk1, &last_toc);
+		if (stat)
+			return stat;
+
+		if (ti->cdti_trk1 != CDROM_LEADOUT)
+			++last_toc;
+		lba_start = first_toc->addr.lba;
+		lba_end   = last_toc->addr.lba;
+
+		if (lba_end <= lba_start)
+			return -EINVAL;
+
+		return cdrom_play_audio(drive, lba_start, lba_end);
+	}
+
 	case CDROMREADTOCHDR: {
 		int stat;
 		struct cdrom_tochdr *tochdr = (struct cdrom_tochdr *) arg;
@@ -2287,7 +2332,7 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		CDROM_CONFIG_FLAGS (drive)->dvd_r = 1;
 	if (cap.audio_play)
 		CDROM_CONFIG_FLAGS (drive)->audio_play = 1;
-	if (cap.mechtype == 0)
+	if (cap.mechtype == mechtype_caddy || cap.mechtype == mechtype_popup)
 		CDROM_CONFIG_FLAGS (drive)->close_tray = 0;
 
 #if ! STANDARD_ATAPI

@@ -232,7 +232,7 @@ affs_write_inode(struct inode *inode, int unused)
 		}
 	}
 	affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
-	mark_buffer_dirty(bh,1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 	unlock_kernel();
 }
@@ -392,7 +392,7 @@ affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
 		affs_fix_checksum(AFFS_I2BSIZE(link),link_bh->b_data,5);
 		link->i_version = ++event;
 		mark_inode_dirty(link);
-		mark_buffer_dirty(link_bh,1);
+		mark_buffer_dirty(link_bh);
 	}
 	affs_fix_checksum(AFFS_I2BSIZE(inode),inode_bh->b_data,5);
 	affs_fix_checksum(AFFS_I2BSIZE(dir),dir_bh->b_data,5);
@@ -402,8 +402,8 @@ affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
 
 	mark_inode_dirty(dir);
 	mark_inode_dirty(inode);
-	mark_buffer_dirty(dir_bh,1);
-	mark_buffer_dirty(inode_bh,1);
+	mark_buffer_dirty(dir_bh);
+	mark_buffer_dirty(inode_bh);
 
 addentry_done:
 	affs_brelse(dir_bh);

@@ -27,9 +27,9 @@ struct buffer_head *bigblock_fat_bread(struct super_block *, int);
 void default_fat_brelse(struct super_block *, struct buffer_head *);
 void bigblock_fat_brelse(struct super_block *, struct buffer_head *);
 void default_fat_mark_buffer_dirty (struct super_block *,
-	struct buffer_head *, int);
+	struct buffer_head *);
 void bigblock_fat_mark_buffer_dirty (struct super_block *,
-	struct buffer_head *, int);
+	struct buffer_head *);
 void default_fat_set_uptodate (struct super_block *, struct buffer_head *,int);
 void bigblock_fat_set_uptodate (struct super_block *, struct buffer_head *,int);
 int default_fat_is_uptodate(struct super_block *, struct buffer_head *);

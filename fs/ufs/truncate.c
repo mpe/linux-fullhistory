@@ -248,7 +248,7 @@ static int ufs_trunc_indirect (struct inode * inode, unsigned offset, u32 * p)
 			bforget (bh);
 		}	
 		*ind = SWAB32(0);
-		ubh_mark_buffer_dirty(ind_ubh, 1);
+		ubh_mark_buffer_dirty(ind_ubh);
 		if (free_count == 0) {
 			frag_to_free = tmp;
 			free_count = uspi->s_fpb;
@@ -334,7 +334,7 @@ static int ufs_trunc_dindirect (struct inode * inode, unsigned offset, u32 * p)
 		if (!tmp)
 			continue;
 		retry |= ufs_trunc_indirect (inode, offset + (i << uspi->s_apbshift), dind);
-		ubh_mark_buffer_dirty(dind_bh, 1);
+		ubh_mark_buffer_dirty(dind_bh);
 	}
 
 	for (i = 0; i < uspi->s_apb; i++)
@@ -400,7 +400,7 @@ static int ufs_trunc_tindirect (struct inode * inode)
 		tind = ubh_get_addr32 (tind_bh, i);
 		retry |= ufs_trunc_dindirect(inode, UFS_NDADDR + 
 			uspi->s_apb + ((i + 1) << uspi->s_2apbshift), tind);
-		ubh_mark_buffer_dirty(tind_bh, 1);
+		ubh_mark_buffer_dirty(tind_bh);
 	}
 	for (i = 0; i < uspi->s_apb; i++)
 		if (SWAB32(*ubh_get_addr32 (tind_bh, i)))
@@ -466,7 +466,7 @@ void ufs_truncate (struct inode * inode)
 		bh = ufs_bread (inode, inode->i_size >> uspi->s_fshift, 0, &err);
 		if (bh) {
 			memset (bh->b_data + offset, 0, uspi->s_fsize - offset);
-			mark_buffer_dirty (bh, 0);
+			mark_buffer_dirty (bh);
 			brelse (bh);
 		}
 	}

@@ -62,7 +62,7 @@ int hpfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	de->first = de->directory = 1;
 	/*de->hidden = de->system = 0;*/
 	de->fnode = fno;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 	hpfs_mark_4buffers_dirty(&qbh0);
 	hpfs_brelse4(&qbh0);
@@ -128,7 +128,7 @@ int hpfs_create(struct inode *dir, struct dentry *dentry, int mode)
 	fnode->len = len;
 	memcpy(fnode->name, name, len > 15 ? 15 : len);
 	fnode->up = dir->i_ino;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 	hpfs_lock_iget(dir->i_sb, 2);
 	if ((result = iget(dir->i_sb, fno))) {
@@ -196,7 +196,7 @@ int hpfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rdev)
 	fnode->len = len;
 	memcpy(fnode->name, name, len > 15 ? 15 : len);
 	fnode->up = dir->i_ino;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	hpfs_lock_iget(dir->i_sb, 2);
 	if ((result = iget(dir->i_sb, fno))) {
 		result->i_hpfs_parent_dir = dir->i_ino;
@@ -258,7 +258,7 @@ int hpfs_symlink(struct inode *dir, struct dentry *dentry, const char *symlink)
 	fnode->len = len;
 	memcpy(fnode->name, name, len > 15 ? 15 : len);
 	fnode->up = dir->i_ino;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 	hpfs_lock_iget(dir->i_sb, 2);
 	if ((result = iget(dir->i_sb, fno))) {
@@ -276,7 +276,7 @@ int hpfs_symlink(struct inode *dir, struct dentry *dentry, const char *symlink)
 		result->i_data.a_ops = &hpfs_symlink_aops;
 		if ((fnode = hpfs_map_fnode(dir->i_sb, fno, &bh))) {
 			hpfs_set_ea(result, fnode, "SYMLINK", (char *)symlink, strlen(symlink));
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 			brelse(bh);
 		}
 		hpfs_write_inode_nolock(result);
@@ -523,7 +523,7 @@ int hpfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		fnode->len = new_len;
 		memcpy(fnode->name, new_name, new_len>15?15:new_len);
 		if (new_len < 15) memset(&fnode->name[new_len], 0, 15 - new_len);
-		mark_buffer_dirty(bh, 1);
+		mark_buffer_dirty(bh);
 		brelse(bh);
 	}
 	i->i_hpfs_conv = i->i_sb->s_hpfs_conv;

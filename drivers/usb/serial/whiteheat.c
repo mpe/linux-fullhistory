@@ -531,7 +531,7 @@ static inline void set_break (struct usb_serial_port *port, unsigned char brk)
 }
 
 
-int whiteheat_init (void)
+static int __init whiteheat_init (void)
 {
 	usb_serial_register (&whiteheat_fake_device);
 	usb_serial_register (&whiteheat_device);
@@ -539,7 +539,7 @@ int whiteheat_init (void)
 }
 
 
-void whiteheat_exit (void)
+static void __exit whiteheat_exit (void)
 {
 	usb_serial_deregister (&whiteheat_fake_device);
 	usb_serial_deregister (&whiteheat_device);

@@ -84,7 +84,7 @@ secno hpfs_add_sector_to_btree(struct super_block *s, secno node, int fnod, unsi
 	if (btree->internal) {
 		a = btree->u.internal[n].down;
 		btree->u.internal[n].file_secno = -1;
-		mark_buffer_dirty(bh, 1);
+		mark_buffer_dirty(bh);
 		brelse(bh);
 		if (s->s_hpfs_chk)
 			if (hpfs_stop_cycles(s, a, &c1, &c2, "hpfs_add_sector_to_btree #1")) return -1;
@@ -102,7 +102,7 @@ secno hpfs_add_sector_to_btree(struct super_block *s, secno node, int fnod, unsi
 		}
 		if (hpfs_alloc_if_possible(s, se = btree->u.external[n].disk_secno + btree->u.external[n].length)) {
 			btree->u.external[n].length++;
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 			brelse(bh);
 			return se;
 		}
@@ -139,7 +139,7 @@ secno hpfs_add_sector_to_btree(struct super_block *s, secno node, int fnod, unsi
 			btree->first_free = (char *)&(btree->u.internal[1]) - (char *)btree;
 			btree->u.internal[0].file_secno = -1;
 			btree->u.internal[0].down = na;
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 		} else if (!(ranode = hpfs_alloc_anode(s, /*a*/0, &ra, &bh2))) {
 			brelse(bh);
 			brelse(bh1);
@@ -156,7 +156,7 @@ secno hpfs_add_sector_to_btree(struct super_block *s, secno node, int fnod, unsi
 	btree->u.external[n].disk_secno = se;
 	btree->u.external[n].file_secno = fs;
 	btree->u.external[n].length = 1;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 	if ((a == node && fnod) || na == -1) return se;
 	c2 = 0;
@@ -176,14 +176,14 @@ secno hpfs_add_sector_to_btree(struct super_block *s, secno node, int fnod, unsi
 			btree->u.internal[n].file_secno = -1;
 			btree->u.internal[n].down = na;
 			btree->u.internal[n-1].file_secno = fs;
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 			brelse(bh);
 			brelse(bh2);
 			hpfs_free_sectors(s, ra, 1);
 			if ((anode = hpfs_map_anode(s, na, &bh))) {
 				anode->up = up;
 				anode->btree.fnode_parent = up == node && fnod;
-				mark_buffer_dirty(bh, 1);
+				mark_buffer_dirty(bh);
 				brelse(bh);
 			}
 			return se;
@@ -191,7 +191,7 @@ secno hpfs_add_sector_to_btree(struct super_block *s, secno node, int fnod, unsi
 		up = up != node ? anode->up : -1;
 		btree->u.internal[btree->n_used_nodes - 1].file_secno = /*fs*/-1;
 		if (up == -1) anode->up = ra;
-		mark_buffer_dirty(bh, 1);
+		mark_buffer_dirty(bh);
 		brelse(bh);
 		a = na;
 		if ((anode = hpfs_alloc_anode(s, a, &na, &bh))) {
@@ -202,11 +202,11 @@ secno hpfs_add_sector_to_btree(struct super_block *s, secno node, int fnod, unsi
 			anode->btree.first_free = 16;
 			anode->btree.u.internal[0].down = a;
 			anode->btree.u.internal[0].file_secno = -1;
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 			brelse(bh);
 			if ((anode = hpfs_map_anode(s, a, &bh))) {
 				anode->up = na;
-				mark_buffer_dirty(bh, 1);
+				mark_buffer_dirty(bh);
 				brelse(bh);
 			}
 		} else na = a;
@@ -214,7 +214,7 @@ secno hpfs_add_sector_to_btree(struct super_block *s, secno node, int fnod, unsi
 	if ((anode = hpfs_map_anode(s, na, &bh))) {
 		anode->up = node;
 		if (fnod) anode->btree.fnode_parent = 1;
-		mark_buffer_dirty(bh, 1);
+		mark_buffer_dirty(bh);
 		brelse(bh);
 	}
 	if (!fnod) {
@@ -239,7 +239,7 @@ secno hpfs_add_sector_to_btree(struct super_block *s, secno node, int fnod, unsi
 		if ((unode = hpfs_map_anode(s, ranode->u.internal[n].down, &bh1))) {
 			unode->up = ra;
 			unode->btree.fnode_parent = 0;
-			mark_buffer_dirty(bh1, 1);
+			mark_buffer_dirty(bh1);
 			brelse(bh1);
 		}
 	}
@@ -251,9 +251,9 @@ secno hpfs_add_sector_to_btree(struct super_block *s, secno node, int fnod, unsi
 	btree->u.internal[0].down = ra;
 	btree->u.internal[1].file_secno = -1;
 	btree->u.internal[1].down = na;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
-	mark_buffer_dirty(bh2, 1);
+	mark_buffer_dirty(bh2);
 	brelse(bh2);
 	return se;
 }
@@ -367,7 +367,7 @@ int hpfs_ea_write(struct super_block *s, secno a, int ano, unsigned pos,
 			return -1;
 		l = 0x200 - (pos & 0x1ff); if (l > len) l = len;
 		memcpy(data + (pos & 0x1ff), buf, l);
-		mark_buffer_dirty(bh, 1);
+		mark_buffer_dirty(bh);
 		brelse(bh);
 		buf += l; pos += l; len -= l;
 	}
@@ -411,7 +411,7 @@ void hpfs_truncate_btree(struct super_block *s, secno f, int fno, unsigned secs)
 			btree->n_used_nodes = 0;
 			btree->first_free = 8;
 			btree->internal = 0;
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 		} else hpfs_free_sectors(s, f, 1);
 		brelse(bh);
 		return;
@@ -429,7 +429,7 @@ void hpfs_truncate_btree(struct super_block *s, secno f, int fno, unsigned secs)
 		btree->n_used_nodes = i + 1;
 		btree->n_free_nodes = nodes - btree->n_used_nodes;
 		btree->first_free = 8 + 8 * btree->n_used_nodes;
-		mark_buffer_dirty(bh, 1);
+		mark_buffer_dirty(bh);
 		if (btree->u.internal[i].file_secno == secs) {
 			brelse(bh);
 			return;
@@ -463,7 +463,7 @@ void hpfs_truncate_btree(struct super_block *s, secno f, int fno, unsigned secs)
 	btree->n_used_nodes = i + 1;
 	btree->n_free_nodes = nodes - btree->n_used_nodes;
 	btree->first_free = 8 + 12 * btree->n_used_nodes;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 }
 

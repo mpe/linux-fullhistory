@@ -360,7 +360,7 @@ repeat:
 		*new = 1;
 	}
 
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (IS_SYNC(inode)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -493,7 +493,7 @@ struct buffer_head *ufs_getfrag(struct inode *inode, unsigned int fragment,
 		if (buffer_new(&dummy)) {
 			memset(bh->b_data, 0, inode->i_sb->s_blocksize);
 			mark_buffer_uptodate(bh, 1);
-			mark_buffer_dirty(bh, 1);
+			mark_buffer_dirty(bh);
 		}
 		return bh;
 	}
@@ -711,7 +711,7 @@ static int ufs_update_inode(struct inode * inode, int do_sync)
 	if (!inode->i_nlink)
 		memset (ufs_inode, 0, sizeof(struct ufs_inode));
 		
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	if (do_sync) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);

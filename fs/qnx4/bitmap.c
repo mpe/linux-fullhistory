@@ -134,7 +134,7 @@ int qnx4_set_bitmap(struct super_block *sb, long block, int busy)
 	} else {
 		(*g) |= (1 << (block % 8));
 	}
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 
 	return 0;

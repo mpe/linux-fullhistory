@@ -438,7 +438,7 @@ int i810_version(struct inode *inode, struct file *filp, unsigned int cmd,
 	if (len > name##_len) len = name##_len;		     \
 	name##_len = strlen(value);			     \
 	if (len && name) {				     \
-		if (copy_to_user(name, value, len, -EFAULT)) \
+		if (copy_to_user(name, value, len))          \
 			return -EFAULT;			     \
 	}
 

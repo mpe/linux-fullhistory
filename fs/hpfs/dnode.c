@@ -337,7 +337,7 @@ int hpfs_add_to_dnode(struct inode *i, dnode_secno dno, unsigned char *name, uns
 		return 1;
 	}
 	fnode->u.external[0].disk_secno = rdno;
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 	d->up = ad->up = i->i_hpfs_dno = rdno;
 	d->root_dnode = ad->root_dnode = 0;
@@ -535,7 +535,7 @@ static void delete_empty_dnode(struct inode *i, dnode_secno dno)
 			}
 			if ((fnode = hpfs_map_fnode(i->i_sb, up, &bh))) {
 				fnode->u.external[0].disk_secno = down;
-				mark_buffer_dirty(bh, 1);
+				mark_buffer_dirty(bh);
 				brelse(bh);
 			}
 			i->i_hpfs_dno = down;

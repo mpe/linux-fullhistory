@@ -190,6 +190,9 @@ el2_probe1(struct net_device *dev, int ioaddr)
     if (dev == NULL) {
 	printk("3c503.c: Passed a NULL device.\n");
 	dev = init_etherdev(0, 0);
+
+	if (!dev)
+		return -ENOMEM;
     }
 
     if (ei_debug  &&  version_printed++ == 0)

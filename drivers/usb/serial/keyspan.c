@@ -687,7 +687,7 @@ static void keyspan_shutdown (struct usb_serial *serial)
 }
 
 
-int keyspan_init (void)
+static int __init keyspan_init (void)
 {
 	usb_serial_register (&keyspan_usa18x_pre_device);
 	usb_serial_register (&keyspan_usa19_pre_device);
@@ -703,7 +703,7 @@ int keyspan_init (void)
 }
 
 
-void keyspan_exit (void)
+static void __exit keyspan_exit (void)
 {
 	usb_serial_deregister (&keyspan_usa18x_pre_device);
 	usb_serial_deregister (&keyspan_usa19_pre_device);

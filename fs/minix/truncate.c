@@ -109,7 +109,7 @@ repeat:
 			continue;
 		}
 		*ind = 0;
-		mark_buffer_dirty(ind_bh, 1);
+		mark_buffer_dirty(ind_bh);
 		bforget(bh);
 		minix_free_block(inode,tmp);
 	}
@@ -156,7 +156,7 @@ repeat:
 			goto repeat;
 		dind = i+(unsigned short *) dind_bh->b_data;
 		retry |= V1_trunc_indirect(inode,offset+(i<<9),dind);
-		mark_buffer_dirty(dind_bh, 1);
+		mark_buffer_dirty(dind_bh);
 	}
 	dind = (unsigned short *) dind_bh->b_data;
 	for (i = 0; i < 512; i++)
@@ -270,7 +270,7 @@ repeat:
 			continue;
 		}
 		*ind = 0;
-		mark_buffer_dirty(ind_bh, 1);
+		mark_buffer_dirty(ind_bh);
 		bforget(bh);
 		minix_free_block(inode,tmp);
 	}
@@ -317,7 +317,7 @@ repeat:
 			goto repeat;
 		dind = i+(unsigned long *) dind_bh->b_data;
 		retry |= V2_trunc_indirect(inode,offset+(i<<8),dind);
-		mark_buffer_dirty(dind_bh, 1);
+		mark_buffer_dirty(dind_bh);
 	}
 	dind = (unsigned long *) dind_bh->b_data;
 	for (i = 0; i < 256; i++)
@@ -363,7 +363,7 @@ repeat:
                         goto repeat;
                 tind = i+(unsigned long *) tind_bh->b_data;
                 retry |= V2_trunc_dindirect(inode,offset+(i<<8),tind);
-                mark_buffer_dirty(tind_bh, 1);
+                mark_buffer_dirty(tind_bh);
 	}
         tind = (unsigned long *) tind_bh->b_data;
         for (i = 0; i < 256; i++)

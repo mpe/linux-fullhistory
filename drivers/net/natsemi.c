@@ -17,6 +17,14 @@
 
 	Support information and updates available at
 	http://www.scyld.com/network/netsemi.html
+
+
+	Linux kernel modifications:
+
+	Version 1.0.1:
+		- Spinlock fixes
+		- Bug fixes and better intr performance (Tjeerd)
+
 */
 
 /* These identify the driver base version and may not be removed. */
@@ -25,7 +33,7 @@ static const char version1[] =
 static const char version2[] =
 "  http://www.scyld.com/network/natsemi.html\n";
 static const char version3[] =
-"  (unofficial 2.4.x kernel port, version 1.0.0, August 10, 2000)\n";
+"  (unofficial 2.4.x kernel port, version 1.0.1, September 5, 2000 Jeff Garzik, Tjeerd Mulder)\n";
 /* Updated to recommendations in pci-skeleton v2.03. */
 
 /* Automatically extracted configuration info:
@@ -193,7 +201,8 @@ IVb. References
 
 http://www.scyld.com/expert/100mbps.html
 http://www.scyld.com/expert/NWay.html
-No NatSemi datasheet was publically available at the initial release date.
+Datasheet is available from:
+http://www.national.com/pf/DP/DP83815.html
 
 IVc. Errata
 
@@ -237,7 +246,7 @@ enum register_offsets {
 	ChipCmd=0x00, ChipConfig=0x04, EECtrl=0x08, PCIBusCfg=0x0C,
 	IntrStatus=0x10, IntrMask=0x14, IntrEnable=0x18,
 	TxRingPtr=0x20, TxConfig=0x24,
-	RxRingPtr=0x30, RxConfig=0x34,
+	RxRingPtr=0x30, RxConfig=0x34, ClkRun=0x3C,
 	WOLCmd=0x40, PauseCmd=0x44, RxFilterAddr=0x48, RxFilterData=0x4C,
 	BootRomAddr=0x50, BootRomData=0x54, StatsCtrl=0x5C, StatsData=0x60,
 	RxPktErrs=0x60, RxMissed=0x68, RxCRCErrs=0x64,
@@ -259,15 +268,19 @@ enum intr_status_bits {
 	WOLPkt=0x2000,
 	RxResetDone=0x1000000, TxResetDone=0x2000000,
 	IntrPCIErr=0x00f00000,
-	IntrNormalSummary=0x0251, IntrAbnormalSummary=0xCD20,
+	IntrAbnormalSummary=0xCD20,
 };
 
 /* Bits in the RxMode register. */
 enum rx_mode_bits {
-	AcceptErr=0x20, AcceptRunt=0x10,
-	AcceptBroadcast=0xC0000000,
-	AcceptMulticast=0x00200000, AcceptAllMulticast=0x20000000,
-	AcceptAllPhys=0x10000000, AcceptMyPhys=0x08000000,
+	EnableFilter		= 0x80000000,
+	AcceptBroadcast		= 0x40000000,
+	AcceptAllMulticast	= 0x20000000,
+	AcceptAllPhys		= 0x10000000,
+	AcceptMyPhys		= 0x08000000,
+	AcceptMulticast		= 0x00200000,
+	AcceptErr=0x20,	/* these 2 are in another register */
+	AcceptRunt=0x10,/* and are not used in this driver */
 };
 
 /* The Rx and Tx buffer descriptors. */
@@ -315,6 +328,8 @@ struct netdev_private {
 	u32 rx_filter[16];
 	/* FIFO and PCI burst thresholds. */
 	int tx_config, rx_config;
+	/* original contents of ClkRun register */
+	int SavedClkRun;
 	/* MII transceiver section. */
 	u16 advertising;					/* NWay media advertisement */
 	
@@ -349,7 +364,7 @@ static int __devinit natsemi_probe1 (struct pci_dev *pdev,
 	int i, option, irq = pdev->irq, chip_idx = ent->driver_data;
 	static int find_cnt = -1;
 	static int printed_version;
-	unsigned long ioaddr;
+	unsigned long ioaddr, iosize;
 	const int pcibar = 1; /* PCI base address register */
 
 	if ((debug <= 1) && !printed_version++)
@@ -359,6 +374,7 @@ static int __devinit natsemi_probe1 (struct pci_dev *pdev,
 	find_cnt++;
 	option = find_cnt < MAX_UNITS ? options[find_cnt] : 0;
 	ioaddr = pci_resource_start(pdev, pcibar);
+	iosize = pci_resource_len(pdev, pcibar);
 	
 	if (pci_enable_device(pdev))
 		return -EIO;
@@ -371,15 +387,14 @@ static int __devinit natsemi_probe1 (struct pci_dev *pdev,
 
 	{
 		void *mmio;
-		if (request_mem_region(ioaddr, pci_resource_len (pdev, pcibar),
-				       dev->name) == NULL) {
+		if (request_mem_region(ioaddr, iosize, dev->name) == NULL) {
 			unregister_netdev(dev);
 			kfree(dev);
 			return -EBUSY;
 		}
-		mmio = ioremap (ioaddr, pci_resource_len (pdev, pcibar));
+		mmio = ioremap (ioaddr, iosize);
 		if (!mmio) {
-			release_mem_region(ioaddr, pci_resource_len (pdev, pcibar));
+			release_mem_region(ioaddr, iosize);
 			unregister_netdev(dev);
 			kfree(dev);
 			return -ENOMEM;
@@ -390,9 +405,9 @@ static int __devinit natsemi_probe1 (struct pci_dev *pdev,
 	printk(KERN_INFO "%s: %s at 0x%lx, ",
 		   dev->name, natsemi_pci_info[chip_idx].name, ioaddr);
 
-	for (i = 0; i < 3; i++)
+	for (i = 0; i < ETH_ALEN/2; i++)
 		((u16 *)dev->dev_addr)[i] = be16_to_cpu(eeprom_read(ioaddr, i + 7));
-	for (i = 0; i < 5; i++)
+	for (i = 0; i < ETH_ALEN-1; i++)
 			printk("%2.2x:", dev->dev_addr[i]);
 	printk("%2.2x, IRQ %d.\n", dev->dev_addr[i], irq);
 
@@ -413,7 +428,8 @@ static int __devinit natsemi_probe1 (struct pci_dev *pdev,
 
 	np->pci_dev = pdev;
 	pdev->driver_data = dev;
-	np->iosize = pci_resource_len(pdev, pcibar);
+	np->iosize = iosize;
+	spin_lock_init(&np->lock);
 
 	if (dev->mem_start)
 		option = dev->mem_start;
@@ -551,7 +567,7 @@ static int netdev_open(struct net_device *dev)
 	writel(virt_to_bus(np->rx_ring), ioaddr + RxRingPtr);
 	writel(virt_to_bus(np->tx_ring), ioaddr + TxRingPtr);
 
-	for (i = 0; i < 6; i += 2) {
+	for (i = 0; i < ETH_ALEN; i += 2) {
 		writel(i, ioaddr + RxFilterAddr);
 		writew(dev->dev_addr[i] + (dev->dev_addr[i+1] << 8),
 			   ioaddr + RxFilterData);
@@ -560,21 +576,32 @@ static int netdev_open(struct net_device *dev)
 	/* Initialize other registers. */
 	/* Configure the PCI bus bursts and FIFO thresholds. */
 	/* Configure for standard, in-spec Ethernet. */
-	np->tx_config = 0x10800802;
+	np->tx_config = (1<<28) +	/* Automatic transmit padding */
+			(1<<23) +	/* Excessive collision retry */
+			(0x0<<20) +	/* Max DMA burst = 512 byte */
+			(8<<8) +	/* fill threshold = 256 byte */
+			2;		/* drain threshold = 64 byte */
 	writel(np->tx_config, ioaddr + TxConfig);
-	np->rx_config = 0x0020;
+	np->rx_config = (0x0<<20)	/* Max DMA burst = 512 byte */ +
+			(0x8<<1);	/* Drain Threshold = 64 byte */
 	writel(np->rx_config, ioaddr + RxConfig);
 
 	if (dev->if_port == 0)
 		dev->if_port = np->default_port;
+
+	/* Disable PME */
+	np->SavedClkRun = readl(ioaddr + ClkRun);
+	writel(np->SavedClkRun & ~0x100, ioaddr + ClkRun);
 
 	netif_start_queue(dev);
 
 	check_duplex(dev);
 	set_rx_mode(dev);
 
-	/* Enable interrupts by setting the interrupt mask. */
-	writel(IntrNormalSummary | IntrAbnormalSummary | 0x1f, ioaddr + IntrMask);
+	/* Enable interrupts by setting the interrupt mask.
+	 * We don't listen for TxDone interrupts and rely on TxIdle. */
+	writel(IntrAbnormalSummary | IntrTxIdle | IntrRxIdle | IntrRxDone,
+		ioaddr + IntrMask);
 	writel(1, ioaddr + IntrEnable);
 
 	writel(RxOn | TxOn, ioaddr + ChipCmd);
@@ -616,8 +643,8 @@ static void check_duplex(struct net_device *dev)
 			np->rx_config &= ~0x10000000;
 			np->tx_config &= ~0xC0000000;
 		}
-		writew(np->tx_config, ioaddr + TxConfig);
-		writew(np->rx_config, ioaddr + RxConfig);
+		writel(np->tx_config, ioaddr + TxConfig);
+		writel(np->rx_config, ioaddr + RxConfig);
 	}
 }
 
@@ -700,7 +727,7 @@ static void init_ring(struct net_device *dev)
 		skb->dev = dev;			/* Mark as being used by this device. */
 		np->rx_ring[i].addr = virt_to_le32desc(skb->tail);
 		np->rx_ring[i].cmd_status =
-			cpu_to_le32(DescIntr | np->rx_buf_sz);
+			cpu_to_le32(np->rx_buf_sz);
 	}
 	np->dirty_rx = (unsigned int)(i - RX_RING_SIZE);
 
@@ -727,7 +754,7 @@ static int start_tx(struct sk_buff *skb, struct net_device *dev)
 	np->tx_skbuff[entry] = skb;
 
 	np->tx_ring[entry].addr = virt_to_le32desc(skb->data);
-	np->tx_ring[entry].cmd_status = cpu_to_le32(DescOwn|DescIntr | skb->len);
+	np->tx_ring[entry].cmd_status = cpu_to_le32(DescOwn | skb->len);
 	np->cur_tx++;
 
 	/* StrongARM: Explicitly cache flush np->tx_ring and skb->data,skb->len. */
@@ -768,8 +795,7 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 	ioaddr = dev->base_addr;
 	np = (struct netdev_private *)dev->priv;
 
-	if (!spin_trylock(&np->lock))
-		return;
+	spin_lock(&np->lock);
 
 	do {
 		u32 intr_status = readl(ioaddr + IntrStatus);
@@ -784,7 +810,7 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 		if (intr_status == 0)
 			break;
 
-		if (intr_status & (IntrRxDone | IntrRxIntr))
+		if (intr_status & (IntrRxDone | IntrRxErr | IntrRxIdle | IntrRxOverrun))
 			netdev_rx(dev);
 
 		for (; np->cur_tx - np->dirty_tx > 0; np->dirty_tx++) {
@@ -805,7 +831,7 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 				np->stats.tx_errors++;
 			}
 			/* Free the original skb. */
-			dev_kfree_skb(np->tx_skbuff[entry]);
+			dev_kfree_skb_irq(np->tx_skbuff[entry]);
 			np->tx_skbuff[entry] = 0;
 		}
 		if (np->tx_full
@@ -862,6 +888,7 @@ static int netdev_rx(struct net_device *dev)
 				   entry, desc_status);
 		if (--boguscnt < 0)
 			break;
+
 		if ((desc_status & (DescMore|DescPktOK|RxTooLong)) != DescPktOK) {
 			if (desc_status & DescMore) {
 				printk(KERN_WARNING "%s: Oversized(?) Ethernet frame spanned "
@@ -947,7 +974,7 @@ static int netdev_rx(struct net_device *dev)
 			np->rx_ring[entry].addr = virt_to_le32desc(skb->tail);
 		}
 		np->rx_ring[entry].cmd_status =
-			cpu_to_le32(DescIntr | np->rx_buf_sz);
+			cpu_to_le32(np->rx_buf_sz);
 	}
 
 	/* Restart Rx engine if stopped. */
@@ -1045,13 +1072,13 @@ static void set_rx_mode(struct net_device *dev)
 			set_bit(ether_crc_le(ETH_ALEN, mclist->dmi_addr) & 0x1ff,
 					mc_filter);
 		}
-		rx_mode = AcceptBroadcast | AcceptMulticast | AcceptMyPhys;
 		for (i = 0; i < 32; i++) {
 			writew(0x200 + (i<<1), ioaddr + RxFilterAddr);
 			writew(cpu_to_be16(mc_filter[i]), ioaddr + RxFilterData);
 		}
+		rx_mode = AcceptBroadcast | AcceptMulticast | AcceptMyPhys;
 	}
-	writel(rx_mode, ioaddr + RxFilterAddr);
+	writel(rx_mode | EnableFilter, ioaddr + RxFilterAddr);
 	np->cur_rx_mode = rx_mode;
 }
 
@@ -1138,7 +1165,8 @@ static int netdev_close(struct net_device *dev)
 			dev_kfree_skb(np->tx_skbuff[i]);
 		np->tx_skbuff[i] = 0;
 	}
-
+	/* Restore PME enable bit */
+	writel(np->SavedClkRun, ioaddr + ClkRun);
 #if 0
 	writel(0x0200, ioaddr + ChipConfig); /* Power down Xcvr. */
 #endif
@@ -1153,9 +1181,10 @@ static void __devexit natsemi_remove1 (struct pci_dev *pdev)
 {
 	struct net_device *dev = pdev->driver_data;
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
+	const int pcibar = 1; /* PCI base address register */
 
 	unregister_netdev (dev);
-	release_mem_region(dev->base_addr, np->iosize);
+	release_mem_region(pci_resource_start(pdev, pcibar), np->iosize);
 	iounmap ((char *) dev->base_addr);
 	kfree (dev);
 }

@@ -497,7 +497,7 @@ static int __init fork_by_hand(void)
 	 * don't care about the eip and regs settings since
 	 * we'll never reschedule the forked task.
 	 */
-	return do_fork(CLONE_VM|CLONE_PID, 0, &regs);
+	return do_fork(CLONE_VM|CLONE_PID, 0, &regs, 0);
 }
 
 #if APIC_DEBUG

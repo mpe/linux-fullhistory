@@ -43,6 +43,7 @@
  * 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <linux/config.h>
 #include "usb.h"
 #include "scsiglue.h"
 #include "transport.h"
@@ -66,7 +67,6 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
-#include <linux/config.h>
 
 /* Some informational data */
 MODULE_AUTHOR("Matthew Dharm <mdharm-usb@one-eyed-alien.net>");

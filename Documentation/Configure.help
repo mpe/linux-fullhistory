@@ -7903,6 +7903,25 @@ CONFIG_COMX_HW_MIXCOM
   Documentation/modules.txt. The module will be called
   comx-hw-mixcom.o.
 
+i810 TCO support
+CONFIG_I810_TCO
+  Hardware driver for the TCO timer built into the Intel i810 and i815
+  chipset family. The TCO (Total Cost of Ownership) timer is a watchdog
+  timer that will reboot the machine after it's second expiration. The
+  expiration time can be configured by commandline argument
+  "i810_margin=<n>" where <n> is the counter initial value. It is
+  decremented every 0.6 secs, the default is 50 which gives a timeout
+  of 30 seconds and one minute until reset.
+
+  On some motherboards the driver may fail to reset the chipset's
+  NO_REBOOT flag which prevents the watchdog from rebooting the machine.
+  If this is the case you will get a kernel message like
+  "i810tco init: failed to reset NO_REBOOT flag".
+
+  If you want to compile this as a module, say M and read
+  Documentation/modules.txt. The module will be called
+  i810-tco.o.
+  
 MultiGate Cisco-HDLC and synchronous PPP protocol support
 CONFIG_COMX_PROTO_PPP
   Cisco-HDLC and synchronous PPP protocol driver for all MultiGate

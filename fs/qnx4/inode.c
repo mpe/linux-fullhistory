@@ -112,7 +112,7 @@ static void qnx4_write_inode(struct inode *inode, int unused)
 	raw_inode->di_atime = cpu_to_le32(inode->i_atime);
 	raw_inode->di_ctime = cpu_to_le32(inode->i_ctime);
 	raw_inode->di_first_xtnt.xtnt_size = cpu_to_le32(inode->i_blocks);
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	brelse(bh);
 	unlock_kernel();
 }
@@ -149,7 +149,7 @@ static int qnx4_remount(struct super_block *sb, int *flags, char *data)
 	if (*flags & MS_RDONLY) {
 		return 0;
 	}
-	mark_buffer_dirty(qs->sb_buf, 1);
+	mark_buffer_dirty(qs->sb_buf);
 
 	return 0;
 }

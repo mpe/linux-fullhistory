@@ -32,6 +32,42 @@ asmlinkage long sys_sysinfo(struct sysinfo *info)
 	si_meminfo(&val);
 	si_swapinfo(&val);
 
+	{
+		/* If the sum of all the available memory (i.e. ram + swap +
+		 * highmem) is less then can be stored in a 32 bit unsigned long
+		 * then we can be binary compatible with 2.2.x kernels.  If not,
+		 * well, who cares since in that case 2.2.x was broken anyways...
+		 *
+		 *  -Erik Andersen <andersee@debian.org> */
+
+		unsigned long mem_total = val.totalram + val.totalswap;
+		if ( !(mem_total < val.totalram || mem_total < val.totalswap)) {
+			unsigned long mem_total2 = mem_total + val.totalhigh; 
+			if (!(mem_total2 < mem_total || mem_total2 < val.totalhigh))
+			{
+				/* If mem_total did not overflow.  Divide all memory values by
+				 * mem_unit and set mem_unit=1.  This leaves things compatible with
+				 * 2.2.x, and also retains compatibility with earlier 2.4.x
+				 * kernels...  */
+
+				int bitcount = 0;
+				while (val.mem_unit > 1) 
+				{
+					bitcount++;
+					val.mem_unit >>= 1;
+				}
+				val.totalram <<= bitcount;
+				val.freeram <<= bitcount;
+				val.sharedram <<= bitcount;
+				val.bufferram <<= bitcount;
+				val.totalswap <<= bitcount;
+				val.freeswap <<= bitcount;
+				val.totalhigh <<= bitcount;
+				val.freehigh <<= bitcount;
+			}
+		}
+	}
+
 	if (copy_to_user(info, &val, sizeof(struct sysinfo)))
 		return -EFAULT;
 	return 0;

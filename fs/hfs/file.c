@@ -489,7 +489,7 @@ hfs_s32 hfs_do_write(struct inode *inode, struct hfs_fork * fork, hfs_u32 pos,
 		written += c;
 		buf += c;
 		mark_buffer_uptodate(bh, 1);
-		mark_buffer_dirty(bh, 0);
+		mark_buffer_dirty(bh);
 		brelse(bh);
 	}
 	if (written > 0) {

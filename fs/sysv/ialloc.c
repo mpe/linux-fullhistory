@@ -74,11 +74,11 @@ void sysv_free_inode(struct inode * inode)
 	if (*sb->sv_sb_fic_count < sb->sv_fic_size)
 		*sv_sb_fic_inode(sb,(*sb->sv_sb_fic_count)++) = ino;
 	(*sb->sv_sb_total_free_inodes)++;
-	mark_buffer_dirty(sb->sv_bh1, 1); /* super-block has been modified */
-	if (sb->sv_bh1 != sb->sv_bh2) mark_buffer_dirty(sb->sv_bh2, 1);
+	mark_buffer_dirty(sb->sv_bh1); /* super-block has been modified */
+	if (sb->sv_bh1 != sb->sv_bh2) mark_buffer_dirty(sb->sv_bh2);
 	sb->s_dirt = 1; /* and needs time stamp */
 	memset(raw_inode, 0, sizeof(struct sysv_inode));
-	mark_buffer_dirty(bh, 1);
+	mark_buffer_dirty(bh);
 	unlock_super(sb);
 	brelse(bh);
 }
@@ -128,8 +128,8 @@ struct inode * sysv_new_inode(const struct inode * dir)
 	}
 	/* Now *sb->sv_sb_fic_count > 0. */
 	ino = *sv_sb_fic_inode(sb,--(*sb->sv_sb_fic_count));
-	mark_buffer_dirty(sb->sv_bh1, 1); /* super-block has been modified */
-	if (sb->sv_bh1 != sb->sv_bh2) mark_buffer_dirty(sb->sv_bh2, 1);
+	mark_buffer_dirty(sb->sv_bh1); /* super-block has been modified */
+	if (sb->sv_bh1 != sb->sv_bh2) mark_buffer_dirty(sb->sv_bh2);
 	sb->s_dirt = 1; /* and needs time stamp */
 	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->fsuid;
@@ -147,7 +147,7 @@ struct inode * sysv_new_inode(const struct inode * dir)
 	mark_inode_dirty(inode);	/* cleared by sysv_write_inode() */
 	/* That's it. */
 	(*sb->sv_sb_total_free_inodes)--;
-	mark_buffer_dirty(sb->sv_bh2, 1); /* super-block has been modified again */
+	mark_buffer_dirty(sb->sv_bh2); /* super-block has been modified again */
 	sb->s_dirt = 1; /* and needs time stamp again */
 	unlock_super(sb);
 	return inode;
@@ -185,7 +185,7 @@ unsigned long sysv_count_free_inodes(struct super_block * sb)
 		printk("sysv_count_free_inodes: free inode count was %d, correcting to %d\n",(short)(*sb->sv_sb_total_free_inodes),count);
 		if (!(sb->s_flags & MS_RDONLY)) {
 			*sb->sv_sb_total_free_inodes = count;
-			mark_buffer_dirty(sb->sv_bh2, 1); /* super-block has been modified */
+			mark_buffer_dirty(sb->sv_bh2); /* super-block has been modified */
 			sb->s_dirt = 1; /* and needs time stamp */
 		}
 	}

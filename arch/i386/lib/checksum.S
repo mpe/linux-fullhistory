@@ -394,26 +394,32 @@ csum_partial_copy_generic:
 	movl ARGBASE+8(%esp),%edi	#dst	
 	movl ARGBASE+12(%esp),%ecx	#len
 	movl ARGBASE+16(%esp),%eax	#sum
-	movl %ecx, %edx  
+#	movl %ecx, %edx  
 	movl %ecx, %ebx  
+	movl %esi, %edx
 	shrl $6, %ecx     
 	andl $0x3c, %ebx  
 	negl %ebx
 	subl %ebx, %esi  
 	subl %ebx, %edi  
+	lea  -1(%esi),%edx
+	andl $-32,%edx
 	lea 3f(%ebx,%ebx), %ebx
 	testl %esi, %esi 
-	jmp *%ebx         
+	jmp *%ebx
 1:	addl $64,%esi
 	addl $64,%edi 
+	SRC(movb -32(%edx),%bl)	; SRC(movb (%edx),%bl)
 	ROUND1(-64) ROUND(-60) ROUND(-56) ROUND(-52)	
 	ROUND (-48) ROUND(-44) ROUND(-40) ROUND(-36)	
 	ROUND (-32) ROUND(-28) ROUND(-24) ROUND(-20)	
 	ROUND (-16) ROUND(-12) ROUND(-8)  ROUND(-4)	
 3:	adcl $0,%eax
+	addl $64, %edx
 	dec %ecx
 	jge 1b
-4:      andl $3, %edx
+4:	movl ARGBASE+12(%esp),%edx	#len
+	andl $3, %edx
 	jz 7f
 	cmpl $2, %edx
 	jb 5f

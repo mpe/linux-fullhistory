@@ -211,6 +211,7 @@ int dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpu)
 asmlinkage void ret_from_fork(void);
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
+		unsigned long unused,
 		struct task_struct *p, struct pt_regs *regs)
 {
 	struct pt_regs *childregs;
@@ -292,7 +293,7 @@ asmlinkage int sys_fork(unsigned long r4, unsigned long r5,
 			unsigned long r6, unsigned long r7,
 			struct pt_regs regs)
 {
-	return do_fork(SIGCHLD, regs.regs[15], &regs);
+	return do_fork(SIGCHLD, regs.regs[15], &regs, 0);
 }
 
 asmlinkage int sys_clone(unsigned long clone_flags, unsigned long newsp,
@@ -301,7 +302,7 @@ asmlinkage int sys_clone(unsigned long clone_flags, unsigned long newsp,
 {
 	if (!newsp)
 		newsp = regs.regs[15];
-	return do_fork(clone_flags, newsp, &regs);
+	return do_fork(clone_flags, newsp, &regs, 0);
 }
 
 /*
@@ -318,7 +319,7 @@ asmlinkage int sys_vfork(unsigned long r4, unsigned long r5,
 			 unsigned long r6, unsigned long r7,
 			 struct pt_regs regs)
 {
-	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.regs[15], &regs);
+	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.regs[15], &regs, 0);
 }
 
 /*

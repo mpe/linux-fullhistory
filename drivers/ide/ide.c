@@ -161,10 +161,6 @@
 #include <linux/kmod.h>
 #endif /* CONFIG_KMOD */
 
-#ifdef CONFIG_BLK_DEV_VIA82CXXX
-extern byte fifoconfig;		/* defined in via82cxxx.c used by ide_setup() */
-#endif /* CONFIG_BLK_DEV_VIA82CXXX */
-
 static const byte ide_hwif_to_major[] = { IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR, IDE4_MAJOR, IDE5_MAJOR, IDE6_MAJOR, IDE7_MAJOR, IDE8_MAJOR, IDE9_MAJOR };
 
 static int	idebus_parameter = 0; /* holds the "idebus=" parameter */
@@ -2851,21 +2847,6 @@ static int __init match_parm (char *s, const char *keywords[], int vals[], int m
  *				currently unknown.
  * "ide=reverse"	: Formerly called to pci sub-system, but now local.
  *
- * "splitfifo=betweenChan"
- *			: FIFO Configuration of VIA 82c586(<nothing>,"A"or"B").
- *                                 --see what follows...
- * "splitfifo=betweenChan,thresholdprim,thresholdsec"
- *			: FIFO Configuration of VIA 82c586(<nothing>,"A" or "B").
- *				betweenChan = 1(all FIFO's to primary channel)
- *                                          , 2(all FIFO's to secondary channel)
- *                                          , 3 or 4(evenly shared between them).
- *				note: without FIFO, a channel is (u)dma disabled!
- *				thresholdprim = 4, 3, 2 or 1
- *						(standing for 1, 3/4, 1/2, 1/4).
- *                                    Sets the threshold of FIFO to begin dma
- *                                    transfer on the primary channel.
- *				thresholdsec = cf upper, but for secondary channel.
- *
  * The following are valid ONLY on ide0, (except dc4030)
  * and the defaults for the base,ctl ports must not be altered.
  *
@@ -2894,9 +2875,6 @@ int __init ide_setup (char *s)
 
 	if (strncmp(s,"ide",3) &&
 	    strncmp(s,"idebus",6) &&
-#ifdef CONFIG_BLK_DEV_VIA82CXXX
-	    strncmp(s,"splitfifo",9) &&
-#endif /* CONFIG_BLK_DEV_VIA82CXXX */
 	    strncmp(s,"hd",2))		/* hdx= & hdxlun= */
 		return 0;
 
@@ -3012,58 +2990,6 @@ int __init ide_setup (char *s)
 				goto bad_option;
 		}
 	}
-
-#if defined(CONFIG_BLK_DEV_VIA82CXXX)
-	/*
-	 *  Look for drive option "splitfifo=..."
-	 */
-
-	if (s[0] == 's' && s[1] == 'p' && s[2] == 'l' &&
-	    s[3] == 'i' && s[4] == 't' && s[5] == 'f' &&
-	    s[6] == 'i' && s[7] == 'f' && s[8] == 'o') {
-		byte tmp = 0x3a;		/* default config byte */
-
-		i = match_parm(&s[9], NULL, vals, 3);
-		switch(i) {
-		case 3:	
-			tmp &= 0xf0;
-			if ((vals[1] > 0) && (vals[1] < 5)) {
-				/* sets threshold for primary Channel: */
-				byte x = 4 - vals[1];
-				tmp |= (x << 2);
-			}
-			else
-				goto bad_option;
-			if ((vals[2] > 0) && (vals[2] < 5)) {
-				/* sets threshold for secondary Channel: */
-				byte x = 4 - vals[2];
-				tmp |= x;
-			}
-			else
-				goto bad_option;
-		case 1:
-			/* set the FIFO config between channels to 0: */
-			tmp &= 0x9f;
-			/* set the needed FIFO config between channels: */
-			if (vals[0] == 1)	/* primary fifo only */
-				tmp |= 0x10;
-			else if (vals[0] == 2)	/* secondary fifo only */
-				tmp |= 0x70;
-			else if (vals[0] == 4)	/* other shared fifo config */
-				tmp |= 0x50;
-			else if (vals[0] == 3)	/* default config */
-				tmp |= 0x30;
-			else
-				goto bad_option;
-			break;
-		default:
-			goto bad_option;
-		}
-		/* set the found option in fifoconfig */
-		fifoconfig = tmp;		
-		goto done;
-	}
-#endif  /* defined(CONFIG_BLK_DEV_VIA82CXXX) */
 
 	if (s[0] != 'i' || s[1] != 'd' || s[2] != 'e')
 		goto bad_option;

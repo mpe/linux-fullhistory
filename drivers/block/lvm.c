@@ -299,6 +299,11 @@ static DECLARE_WAIT_QUEUE_HEAD(lvm_map_wait);
 
 static spinlock_t lvm_lock = SPIN_LOCK_UNLOCKED;
 
+static devfs_handle_t lvm_devfs_handle;
+static devfs_handle_t vg_devfs_handle[MAX_VG];
+static devfs_handle_t ch_devfs_handle[MAX_VG];
+static devfs_handle_t lv_devfs_handle[MAX_LV];
+
 static struct file_operations lvm_chr_fops =
 {
 	owner:		THIS_MODULE,
@@ -358,13 +363,18 @@ int __init lvm_init(void)
 		printk(KERN_ERR "%s -- register_chrdev failed\n", lvm_name);
 		return -EIO;
 	}
-	if (register_blkdev(MAJOR_NR, lvm_name, &lvm_blk_dops) < 0)
-	{
+	if (register_blkdev(MAJOR_NR, lvm_name, &lvm_blk_dops) < 0) {
 		printk("%s -- register_blkdev failed\n", lvm_name);
 		if (unregister_chrdev(LVM_CHAR_MAJOR, lvm_name) < 0)
 			printk(KERN_ERR "%s -- unregister_chrdev failed\n", lvm_name);
 		return -EIO;
 	}
+
+	lvm_devfs_handle = devfs_register(
+		0 , "lvm", 0, 0, LVM_CHAR_MAJOR,
+		S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP,
+		&lvm_chr_fops, NULL);
+
 #if defined CONFIG_LVM_PROC_FS && defined CONFIG_PROC_FS
 	create_proc_info_entry(LVM_NAME, S_IFREG | S_IRUGO,
 			       &proc_root, lvm_proc_get_info_ptr);
@@ -421,6 +431,8 @@ int __init lvm_init(void)
 void cleanup_module(void)
 {
 	struct gendisk *gendisk_ptr = NULL, *gendisk_ptr_prev = NULL;
+
+	devfs_unregister (lvm_devfs_handle);
 
 	if (unregister_chrdev(LVM_CHAR_MAJOR, lvm_name) < 0) {
 		printk(KERN_ERR "%s -- unregister_chrdev failed\n", lvm_name);
@@ -1625,6 +1637,14 @@ int lvm_do_vg_create(int minor, void *arg)
 		kfree(vg_ptr);
 		return -EFAULT;
 	}
+
+	vg_devfs_handle[vg_ptr->vg_number] = devfs_mk_dir(0, vg_ptr->vg_name, NULL);
+	ch_devfs_handle[vg_ptr->vg_number] = devfs_register(
+		vg_devfs_handle[vg_ptr->vg_number] , "group",
+		DEVFS_FL_DEFAULT, LVM_CHAR_MAJOR, vg_ptr->vg_number,
+		S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP,
+		&lvm_chr_fops, NULL);
+
 	/* we are not that active so far... */
 	vg_ptr->vg_status &= ~VG_ACTIVE;
 	vg[VG_CHR(minor)] = vg_ptr;
@@ -1852,6 +1872,9 @@ static int lvm_do_vg_remove(int minor)
 	/* let's go inactive */
 	vg_ptr->vg_status &= ~VG_ACTIVE;
 
+	devfs_unregister (ch_devfs_handle[vg_ptr->vg_number]);
+	devfs_unregister (vg_devfs_handle[vg_ptr->vg_number]);
+
 	/* free LVs */
 	/* first free snapshot logical volumes */
 	for (i = 0; i < vg_ptr->lv_max; i++) {
@@ -1907,6 +1930,7 @@ static int lvm_do_lv_create(int minor, char *lv_name, lv_t *lv)
 {
 	int l, le, l_new, p, size;
 	ulong lv_status_save;
+	char *lv_tmp, *lv_buf;
 	lv_block_exception_t *lvbe = lv->lv_block_exception;
 	vg_t *vg_ptr = vg[VG_CHR(minor)];
 	lv_t *lv_ptr = NULL;
@@ -2062,6 +2086,17 @@ static int lvm_do_lv_create(int minor, char *lv_name, lv_t *lv)
 	vg_ptr->lv_cur++;
 	lv_ptr->lv_status = lv_status_save;
 
+	strtok(lv->lv_name, "/");	/* /dev */
+
+	while((lv_tmp = strtok(NULL, "/")) != NULL)
+		lv_buf = lv_tmp;
+
+	lv_devfs_handle[lv->lv_number] = devfs_register(
+		vg_devfs_handle[vg_ptr->vg_number], lv_buf,
+		DEVFS_FL_DEFAULT, LVM_BLK_MAJOR, lv->lv_number,
+		S_IFBLK | S_IRUSR | S_IWUSR | S_IRGRP,
+		&lvm_blk_dops, NULL);
+
 	/* optionally add our new snapshot LV */
 	if (lv_ptr->lv_access & LV_SNAPSHOT) {
 		/* sync the original logical volume */
@@ -2153,6 +2188,8 @@ static int lvm_do_lv_remove(int minor, char *lv_name, int l)
 			lv_ptr->lv_snapshot_org->lv_access &= ~LV_SNAPSHOT_ORG;
 		lvm_snapshot_release(lv_ptr);
 	}
+
+	devfs_unregister(lv_devfs_handle[lv_ptr->lv_number]);
 
 #ifdef DEBUG_KFREE
 	printk(KERN_DEBUG "%s -- kfree %d\n", lvm_name, __LINE__);

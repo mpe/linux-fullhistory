@@ -462,6 +462,7 @@ extern void ret_from_syscall(void);
 #endif
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
+		unsigned long unused,
 		struct task_struct *p, struct pt_regs *regs)
 {
 	struct pt_regs *childregs;

@@ -12,6 +12,11 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (08/28/2000) gkh
+ *	Added locks for SMP safeness.
+ *	Fixed MOD_INC and MOD_DEC logic and the ability to open a port more 
+ *	than once.
+ * 
  * (07/20/2000) borchers
  *	- keyspan_pda_write no longer sleeps if it is called on interrupt time;
  *	  PPP and the line discipline with stty echo on can call write on
@@ -416,6 +421,7 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 	int request_unthrottle = 0;
 	int rc = 0;
 	struct keyspan_pda_private *priv;
+	unsigned long flags;
 
 	priv = (struct keyspan_pda_private *)(port->private);
 	/* guess how much room is left in the device's ring buffer, and if we
@@ -445,6 +451,7 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 	   finished).  Also, the tx process is not throttled. So we are
 	   ready to write. */
 
+	spin_lock_irqsave (&port->port_lock, flags);
 	count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
 
 	/* Check if we might overrun the Tx buffer.   If so, ask the
@@ -464,10 +471,12 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 				     2*HZ);
 		if (rc < 0) {
 			dbg(" roomquery failed");
+			spin_unlock_irqrestore (&port->port_lock, flags);
 			return rc; /* failed */
 		}
 		if (rc == 0) {
 			dbg(" roomquery returned 0 bytes");
+			spin_unlock_irqrestore (&port->port_lock, flags);
 			return -EIO; /* device didn't return any data */
 		}
 		dbg(" roomquery says %d", room);
@@ -484,8 +493,10 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 		/* now transfer data */
 		if (from_user) {
 			if( copy_from_user(port->write_urb->transfer_buffer,
-			buf, count) )
+			buf, count) ) {
+				spin_unlock_irqrestore (&port->port_lock, flags);
 				return( -EFAULT );
+			}
 		}
 		else {
 			memcpy (port->write_urb->transfer_buffer, buf, count);
@@ -495,8 +506,11 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 		
 		priv->tx_room -= count;
 
-		if (usb_submit_urb(port->write_urb))
+		if (usb_submit_urb(port->write_urb)) {
 			dbg(" usb_submit_urb(write bulk) failed");
+			spin_unlock_irqrestore (&port->port_lock, flags);
+			return (0);
+		}
 	}
 	else {
 		/* There wasn't any room left, so we are throttled until
@@ -509,6 +523,7 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 		queue_task( &priv->unthrottle_task, &tq_scheduler );
 	}
 
+	spin_unlock_irqrestore (&port->port_lock, flags);
 	return (count);
 }
 
@@ -568,61 +583,92 @@ static int keyspan_pda_open (struct usb_serial_port *port, struct file *filp)
 	unsigned char room;
 	int rc;
 	struct keyspan_pda_private *priv;
-	priv = (struct keyspan_pda_private *)(port->private);
+	unsigned long flags;
 
-	if (port->active) {
-		return -EINVAL;
-	}
-	port->active = 1;
+	spin_lock_irqsave (&port->port_lock, flags);
+
+	MOD_INC_USE_COUNT;
+	++port->open_count;
+
+	if (!port->active) {
+		port->active = 1;
  
-	/* find out how much room is in the Tx ring */
-	rc = usb_control_msg(serial->dev, usb_rcvctrlpipe(serial->dev, 0),
-			     6, /* write_room */
-			     USB_TYPE_VENDOR | USB_RECIP_INTERFACE
-			     | USB_DIR_IN,
-			     0, /* value */
-			     0, /* index */
-			     &room,
-			     1,
-			     2*HZ);
-	if (rc < 0) {
-		dbg(" roomquery failed");
-		return rc; /* failed */
-	}
-	if (rc == 0) {
-		dbg(" roomquery returned 0 bytes");
-		return -EIO; /* device didn't return any data */
-	}
-	priv->tx_room = room;
-	priv->tx_throttled = room ? 0 : 1;
+		/* find out how much room is in the Tx ring */
+		spin_unlock_irqrestore (&port->port_lock, flags);
+		rc = usb_control_msg(serial->dev, usb_rcvctrlpipe(serial->dev, 0),
+				     6, /* write_room */
+				     USB_TYPE_VENDOR | USB_RECIP_INTERFACE
+				     | USB_DIR_IN,
+				     0, /* value */
+				     0, /* index */
+				     &room,
+				     1,
+				     2*HZ);
+		spin_lock_irqsave (&port->port_lock, flags);
+		if (rc < 0) {
+			dbg(__FUNCTION__" - roomquery failed");
+			goto error;
+		}
+		if (rc == 0) {
+			dbg(__FUNCTION__" - roomquery returned 0 bytes");
+			rc = -EIO;
+			goto error;
+		}
+		priv = (struct keyspan_pda_private *)(port->private);
+		priv->tx_room = room;
+		priv->tx_throttled = room ? 0 : 1;
 
-	/* the normal serial device seems to always turn on DTR and RTS here,
-	   so do the same */
-	if (port->tty->termios->c_cflag & CBAUD)
-		keyspan_pda_set_modem_info(serial, (1<<7) | (1<<2) );
-	else
-		keyspan_pda_set_modem_info(serial, 0);
+		/* the normal serial device seems to always turn on DTR and RTS here,
+		   so do the same */
+		spin_unlock_irqrestore (&port->port_lock, flags);
+		if (port->tty->termios->c_cflag & CBAUD)
+			keyspan_pda_set_modem_info(serial, (1<<7) | (1<<2) );
+		else
+			keyspan_pda_set_modem_info(serial, 0);
 
-	/*Start reading from the device*/
-	if (usb_submit_urb(port->interrupt_in_urb))
-		dbg(" usb_submit_urb(read int) failed");
+		/*Start reading from the device*/
+		if (usb_submit_urb(port->interrupt_in_urb))
+			dbg(__FUNCTION__" - usb_submit_urb(read int) failed");
+	} else {
+		spin_unlock_irqrestore (&port->port_lock, flags);
+	}
+
 
 	return (0);
+error:
+	--port->open_count;
+	port->active = 0;
+	MOD_DEC_USE_COUNT;
+	spin_unlock_irqrestore (&port->port_lock, flags);
+	return rc;
 }
 
 
 static void keyspan_pda_close(struct usb_serial_port *port, struct file *filp)
 {
 	struct usb_serial *serial = port->serial;
+	unsigned long flags;
 
-	/* the normal serial device seems to always shut off DTR and RTS now */
-	if (port->tty->termios->c_cflag & HUPCL)
-		keyspan_pda_set_modem_info(serial, 0);
+	spin_lock_irqsave (&port->port_lock, flags);
 
-	/* shutdown our bulk reads and writes */
-	usb_unlink_urb (port->write_urb);
-	usb_unlink_urb (port->interrupt_in_urb);
-	port->active = 0;
+	--port->open_count;
+	MOD_DEC_USE_COUNT;
+
+	if (port->open_count <= 0) {
+		/* the normal serial device seems to always shut off DTR and RTS now */
+		spin_unlock_irqrestore (&port->port_lock, flags);
+		if (port->tty->termios->c_cflag & HUPCL)
+			keyspan_pda_set_modem_info(serial, 0);
+		spin_lock_irqsave (&port->port_lock, flags);
+
+		/* shutdown our bulk reads and writes */
+		usb_unlink_urb (port->write_urb);
+		usb_unlink_urb (port->interrupt_in_urb);
+		port->active = 0;
+		port->open_count = 0;
+	}
+
+	spin_unlock_irqrestore (&port->port_lock, flags);
 }
 
 
@@ -683,6 +729,11 @@ static int keyspan_pda_startup (struct usb_serial *serial)
 
 static void keyspan_pda_shutdown (struct usb_serial *serial)
 {
+	dbg (__FUNCTION__);
+	
+	while (serial->port[0].open_count > 0) {
+		keyspan_pda_close (&serial->port[0], NULL);
+	}
 	kfree(serial->port[0].private);
 }
 
@@ -728,7 +779,7 @@ struct usb_serial_device_type keyspan_pda_device = {
 };
 
 
-int keyspan_pda_init (void)
+static int __init keyspan_pda_init (void)
 {
 	usb_serial_register (&keyspan_pda_fake_device);
 	usb_serial_register (&keyspan_pda_device);
@@ -736,7 +787,7 @@ int keyspan_pda_init (void)
 }
 
 
-void keyspan_pda_exit (void)
+static void __exit keyspan_pda_exit (void)
 {
 	usb_serial_deregister (&keyspan_pda_fake_device);
 	usb_serial_deregister (&keyspan_pda_device);

@@ -52,7 +52,7 @@ affs_put_super(struct super_block *sb)
 		secs_to_datestamp(CURRENT_TIME,
 				  &ROOT_END_S(sb->u.affs_sb.s_root_bh->b_data,sb)->disk_altered);
 		affs_fix_checksum(sb->s_blocksize,sb->u.affs_sb.s_root_bh->b_data,5);
-		mark_buffer_dirty(sb->u.affs_sb.s_root_bh,1);
+		mark_buffer_dirty(sb->u.affs_sb.s_root_bh);
 	}
 
 	if (sb->u.affs_sb.s_prefix)
@@ -88,7 +88,7 @@ affs_write_super(struct super_block *sb)
 		secs_to_datestamp(CURRENT_TIME,
 				  &ROOT_END_S(sb->u.affs_sb.s_root_bh->b_data,sb)->disk_altered);
 		affs_fix_checksum(sb->s_blocksize,sb->u.affs_sb.s_root_bh->b_data,5);
-		mark_buffer_dirty(sb->u.affs_sb.s_root_bh,1);
+		mark_buffer_dirty(sb->u.affs_sb.s_root_bh);
 		sb->s_dirt = !clean;	/* redo until bitmap synced */
 	} else
 		sb->s_dirt = 0;
@@ -491,7 +491,7 @@ got_root:
 					chksum = cpu_to_be32(0x7FFFFFFF >> (31 - key));
 					((u32 *)bb->b_data)[ptype] &= chksum;
 					affs_fix_checksum(s->s_blocksize,bb->b_data,0);
-					mark_buffer_dirty(bb,1);
+					mark_buffer_dirty(bb);
 					bmalt = 1;
 				}
 				ptype = (size + 31) & ~0x1F;
@@ -553,7 +553,7 @@ nobitmap:
 			secs_to_datestamp(CURRENT_TIME,&ROOT_END(
 				s->u.affs_sb.s_root_bh->b_data,root_inode)->disk_altered);
 			affs_fix_checksum(s->s_blocksize,s->u.affs_sb.s_root_bh->b_data,5);
-			mark_buffer_dirty(s->u.affs_sb.s_root_bh,1);
+			mark_buffer_dirty(s->u.affs_sb.s_root_bh);
 		}
 		affs_make_zones(s);
 	}

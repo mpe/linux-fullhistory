@@ -679,7 +679,7 @@ int fat_new_dir(struct inode *dir, struct inode *parent, int is_vfat)
 	de[0].starthi = CT_LE_W(MSDOS_I(dir)->i_logstart>>16);
 	de[1].start = CT_LE_W(MSDOS_I(parent)->i_logstart);
 	de[1].starthi = CT_LE_W(MSDOS_I(parent)->i_logstart>>16);
-	fat_mark_buffer_dirty(sb, bh, 1);
+	fat_mark_buffer_dirty(sb, bh);
 	fat_brelse(sb, bh);
 	dir->i_atime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(dir);

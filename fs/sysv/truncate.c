@@ -124,7 +124,7 @@ repeat:
 			continue;
 		}
 		*ind = 0;
-		mark_buffer_dirty(indbh, 1);
+		mark_buffer_dirty(indbh);
 		brelse(bh);
 		sysv_free_block(sb,block);
 	}
@@ -183,7 +183,7 @@ static int trunc_dindirect(struct inode * inode, unsigned long offset, sysv_zone
 			continue;
 		retry |= trunc_indirect(inode,offset+(i<<sb->sv_ind_per_block_bits),ind,sb->sv_convert,&dirty);
 		if (dirty)
-			mark_buffer_dirty(indbh, 1);
+			mark_buffer_dirty(indbh);
 	}
 	for (i = 0; i < sb->sv_ind_per_block; i++)
 		if (((sysv_zone_t *) indbh->b_data)[i])
@@ -240,7 +240,7 @@ static int trunc_tindirect(struct inode * inode, unsigned long offset, sysv_zone
 			continue;
 		retry |= trunc_dindirect(inode,offset+(i<<sb->sv_ind_per_block_2_bits),ind,sb->sv_convert,&dirty);
 		if (dirty)
-			mark_buffer_dirty(indbh, 1);
+			mark_buffer_dirty(indbh);
 	}
 	for (i = 0; i < sb->sv_ind_per_block; i++)
 		if (((sysv_zone_t *) indbh->b_data)[i])

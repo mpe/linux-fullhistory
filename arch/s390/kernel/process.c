@@ -264,6 +264,7 @@ void release_thread(struct task_struct *dead_task)
 }
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long new_stackp,
+	unsigned long unused,
         struct task_struct * p, struct pt_regs * regs)
 {
         struct stack_frame
@@ -313,7 +314,7 @@ asmlinkage int sys_fork(struct pt_regs regs)
         int ret;
 
         lock_kernel();
-        ret = do_fork(SIGCHLD, regs.gprs[15], &regs);
+        ret = do_fork(SIGCHLD, regs.gprs[15], &regs, 0);
         unlock_kernel();
         return ret;
 }
@@ -329,7 +330,7 @@ asmlinkage int sys_clone(struct pt_regs regs)
         newsp = regs.gprs[2];
         if (!newsp)
                 newsp = regs.gprs[15];
-        ret = do_fork(clone_flags, newsp, &regs);
+        ret = do_fork(clone_flags, newsp, &regs, 0);
         unlock_kernel();
         return ret;
 }
@@ -347,7 +348,7 @@ asmlinkage int sys_clone(struct pt_regs regs)
 asmlinkage int sys_vfork(struct pt_regs regs)
 {
 	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD,
-                       regs.gprs[15], &regs);
+                       regs.gprs[15], &regs, 0);
 }
 
 /*
