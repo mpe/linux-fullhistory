@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Sep  2 20:22:08 1998
- * Modified at:   Tue Feb 16 17:36:04 1999
+ * Modified at:   Wed Apr  7 17:16:54 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -36,6 +36,7 @@
 #include <asm/segment.h>
 #include <asm/uaccess.h>
 #include <asm/dma.h>
+#include <asm/spinlock.h>
 
 #include <net/pkt_sched.h>
 
@@ -108,11 +109,11 @@ __initfunc(int irda_device_init( void))
 
 void irda_device_cleanup(void)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( irda_device != NULL, return;);
+	ASSERT(irda_device != NULL, return;);
 
-	hashbin_delete( irda_device, (FREE_FUNC) irda_device_close);
+	hashbin_delete(irda_device, (FREE_FUNC) irda_device_close);
 }
 
 /*
@@ -121,80 +122,83 @@ void irda_device_cleanup(void)
  *    Open a new IrDA port device
  *
  */
-int irda_device_open( struct irda_device *self, char *name, void *priv)
+int irda_device_open(struct irda_device *self, char *name, void *priv)
 {        
 	int result;
 	int i=0;
-	
-	/* Check that a minimum of allocation flags are specified */
-	ASSERT(( self->rx_buff.flags & (GFP_KERNEL|GFP_ATOMIC)) != 0, 
-	       return -1;);
-	ASSERT(( self->tx_buff.flags & (GFP_KERNEL|GFP_ATOMIC)) != 0, 
-	       return -1;);
 
-	ASSERT( self->tx_buff.truesize > 0, return -1;);
-	ASSERT( self->rx_buff.truesize > 0, return -1;);
+	/* Allocate memory if needed */
+	if (self->rx_buff.truesize > 0) {
+		self->rx_buff.data = ( __u8 *) kmalloc(self->rx_buff.truesize,
+						       self->rx_buff.flags);
+		if (self->rx_buff.data == NULL)
+			return -ENOMEM;
 
-	self->rx_buff.data = ( __u8 *) kmalloc( self->rx_buff.truesize, 
-						self->rx_buff.flags);
-	self->tx_buff.data = ( __u8 *) kmalloc( self->tx_buff.truesize, 
-						self->tx_buff.flags);
-
-	if ( self->rx_buff.data == NULL || self->tx_buff.data == NULL)   {
-		DEBUG( 0, "IrDA Self: no space for buffers!\n");
-		irda_device_close( self);
-		return -ENOMEM;
+		memset(self->rx_buff.data, 0, self->rx_buff.truesize);
 	}
+	if (self->tx_buff.truesize > 0) {
+		self->tx_buff.data = ( __u8 *) kmalloc(self->tx_buff.truesize, 
+						       self->tx_buff.flags);
+		if (self->tx_buff.data == NULL)
+			return -ENOMEM;
 
-	memset( self->rx_buff.data, 0, self->rx_buff.truesize);
-	memset( self->tx_buff.data, 0, self->tx_buff.truesize);
+		memset(self->tx_buff.data, 0, self->tx_buff.truesize);
+	}
 	
-	self->magic = IRDA_DEVICE_MAGIC;
+      	self->magic = IRDA_DEVICE_MAGIC;
 
 	self->rx_buff.in_frame = FALSE;
 	self->rx_buff.state = OUTSIDE_FRAME;
 
 	/* Initialize timers */
-	init_timer( &self->media_busy_timer);	
-
-	/* Open new IrLAP layer instance */
-	self->irlap = irlap_open( self);
+	init_timer(&self->media_busy_timer);	
 
 	/* A pointer to the low level implementation */
 	self->priv = priv;
 
 	/* Initialize IrDA net device */
 	do {
-		sprintf( self->name, "%s%d", "irda", i++);
-	} while ( dev_get( self->name) != NULL);
+		sprintf(self->name, "%s%d", "irda", i++);
+	} while (dev_get(self->name) != NULL);
 	
 	self->netdev.name = self->name;
 	self->netdev.priv = (void *) self;
 	self->netdev.next = NULL;
 
-	if (( result = register_netdev( &self->netdev)) != 0) {
-		DEBUG( 0, __FUNCTION__ "(), register_netdev() failed!\n");
+	if ((result = register_netdev(&self->netdev)) != 0) {
+		DEBUG(0, __FUNCTION__ "(), register_netdev() failed!\n");
 		return -1;
 	}
-
+	
 	/* 
 	 * Make the description for the device. self->netdev.name will get
 	 * a name like "irda0" and the self->descriptin will get a name
 	 * like "irda0 <-> irtty0" 
 	 */
-	strncpy( self->description, self->name, 5);
-	strcat( self->description, " <-> ");
-	strncat( self->description, name, 23);
-
-	hashbin_insert( irda_device, (QUEUE *) self, (int) self, NULL);
-
+	strncpy(self->description, self->name, 5);
+	strcat(self->description, " <-> ");
+	strncat(self->description, name, 23);
+	
+	hashbin_insert(irda_device, (QUEUE *) self, (int) self, NULL);
+	
 	/* Open network device */
-	dev_open( &self->netdev);
+	dev_open(&self->netdev);
 
-	printk( "IrDA device %s registered.\n", self->name);
+	printk("IrDA device %s registered.\n", self->name);
 
-	irda_device_set_media_busy( self, FALSE);
+	irda_device_set_media_busy(self, FALSE);
+
+	/* 
+	 * Open new IrLAP layer instance, now that everything should be
+	 * initialized properly 
+	 */
+	self->irlap = irlap_open(self);
         
+	/* It's now safe to initilize the saddr */
+	memcpy(self->netdev.dev_addr, &self->irlap->saddr, 4);
+
+	DEBUG(4, __FUNCTION__ "()->\n");
+
 	return 0;
 }
 
@@ -204,29 +208,29 @@ int irda_device_open( struct irda_device *self, char *name, void *priv)
  *    Close this instance of the irda_device, just deallocate buffers
  *
  */
-void __irda_device_close( struct irda_device *self)
+void __irda_device_close(struct irda_device *self)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return;);
 
-	dev_close( &self->netdev);
-
-	/* Remove netdevice */
-	unregister_netdev( &self->netdev);
+	/* We do this test to know if the device has been registered at all */
+	if (self->netdev.type == ARPHRD_IRDA) {
+		dev_close(&self->netdev);
+		
+		/* Remove netdevice */
+		unregister_netdev(&self->netdev);
+	}
 
 	/* Stop timers */
-	del_timer( &self->todo_timer);
-	del_timer( &self->media_busy_timer);
+	del_timer(&self->media_busy_timer);
 
-	if ( self->tx_buff.data) {
-		kfree( self->tx_buff.data);
-	}
+	if (self->tx_buff.data)
+		kfree(self->tx_buff.data);
 
-	if ( self->rx_buff.data) {
-		kfree( self->rx_buff.data);
-	}
+	if (self->rx_buff.data)
+		kfree(self->rx_buff.data);
 
 	self->magic = 0;
 }
@@ -237,20 +241,21 @@ void __irda_device_close( struct irda_device *self)
  *    
  *
  */
-void irda_device_close( struct irda_device *self)
+void irda_device_close(struct irda_device *self)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return;);
 
-	/* Stop IrLAP */
-	irlap_close( self->irlap);
+	/* Stop and remove instance of IrLAP */
+	if (self->irlap)
+		irlap_close(self->irlap);
 	self->irlap = NULL;
 
-	hashbin_remove( irda_device, (int) self, NULL);
+	hashbin_remove(irda_device, (int) self, NULL);
 
-	__irda_device_close( self);
+	__irda_device_close(self);
 }
 
 /*
@@ -259,20 +264,20 @@ void irda_device_close( struct irda_device *self)
  *    Called when we have detected that another station is transmiting
  *    in contention mode.
  */
-void irda_device_set_media_busy( struct irda_device *self, int status) 
+void irda_device_set_media_busy(struct irda_device *self, int status) 
 {
-	DEBUG( 4, __FUNCTION__ "(%s)\n", status ? "TRUE" : "FALSE");
+	DEBUG(4, __FUNCTION__ "(%s)\n", status ? "TRUE" : "FALSE");
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return;);
 
-	if ( status) {
+	if (status) {
 		self->media_busy = TRUE;
-		irda_device_start_mbusy_timer( self);
+		irda_device_start_mbusy_timer(self);
 		DEBUG( 4, "Media busy!\n");
 	} else {
 		self->media_busy = FALSE;
-		del_timer( &self->media_busy_timer);
+		del_timer(&self->media_busy_timer);
 	}
 }
 
@@ -282,30 +287,26 @@ void irda_device_set_media_busy( struct irda_device *self, int status)
  *    When this function is called, we will have a process context so its
  *    possible for us to sleep, wait or whatever :-)
  */
-static void __irda_device_change_speed( struct irda_device *self, int speed)
+static void __irda_device_change_speed(struct irda_device *self, int speed)
 {
-	DEBUG(4, __FUNCTION__ "(), <%ld>\n", jiffies);
-
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return;);
 	
 	/*
 	 *  Is is possible to change speed yet? Wait until the last byte 
 	 *  has been transmitted.
 	 */
-	if ( self->wait_until_sent) {
-		self->wait_until_sent( self);
-		
-		if ( self->change_speed) {
-			self->change_speed( self, speed);
-			
+	if (self->wait_until_sent) {
+		self->wait_until_sent(self);
+		if (self->change_speed) {
+			self->change_speed(self, speed);
+
 			/* Update the QoS value only */
 			self->qos.baud_rate.value = speed;
 		}
 	} else {
-		DEBUG(0, __FUNCTION__ "(), Warning, wait_until_sent() "
-		      "has not implemented by the device driver!\n");
-		
+		printk(KERN_WARNING "wait_until_sent() "
+		       "has not implemented by the IrDA device driver!\n");
 	}
 }
 
@@ -315,15 +316,16 @@ static void __irda_device_change_speed( struct irda_device *self, int speed)
  *    Change the speed of the currently used irda_device
  *
  */
-inline void irda_device_change_speed( struct irda_device *self, int speed)
+inline void irda_device_change_speed(struct irda_device *self, int speed)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return;);
 
-	irda_execute_as_process(
-		self, (TODO_CALLBACK) __irda_device_change_speed, speed);
+	irda_execute_as_process(self, 
+				(TODO_CALLBACK) __irda_device_change_speed, 
+				speed);
 }
 
 inline int irda_device_is_media_busy( struct irda_device *self)
@@ -353,19 +355,6 @@ inline struct qos_info *irda_device_get_qos( struct irda_device *self)
 	return &self->qos;
 }
 
-void irda_device_todo_expired( unsigned long data)
-{
-	struct irda_device *self = ( struct irda_device *) data;
-
-	DEBUG( 4, __FUNCTION__ "()\n");
-	
-	/* Check that we still exist */
-	if ( !self || self->magic != IRDA_DEVICE_MAGIC) {
-		return;
-	}
-	__irda_device_change_speed( self, self->new_speed);
-}
-
 static struct enet_statistics *irda_device_get_stats( struct device *dev)
 {
 	struct irda_device *priv = (struct irda_device *) dev->priv;
@@ -379,18 +368,18 @@ static struct enet_statistics *irda_device_get_stats( struct device *dev)
  *    This function should be used by low level device drivers in a similar way
  *    as ether_setup() is used by normal network device drivers
  */
-int irda_device_setup( struct device *dev) 
+int irda_device_setup(struct device *dev) 
 {
 	struct irda_device *self;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( dev != NULL, return -1;);
+	ASSERT(dev != NULL, return -1;);
 
 	self = (struct irda_device *) dev->priv;
 
-	ASSERT( self != NULL, return -1;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return -1;);	
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return -1;);	
 
 	dev->get_stats	     = irda_device_get_stats;
 	dev->rebuild_header  = irda_device_net_rebuild_header;
@@ -401,17 +390,16 @@ int irda_device_setup( struct device *dev)
         dev->addr_len        = 0;
 
         dev->type            = ARPHRD_IRDA;
-        dev->tx_queue_len    = 10;  /* Short queues in IrDA */
+        dev->tx_queue_len    = 8; /* Window size + 1 s-frame */
  
-	memcpy( dev->dev_addr, &self->irlap->saddr, 4);
-	memset( dev->broadcast, 0xff, 4);
+	memset(dev->broadcast, 0xff, 4);
 
 	dev->mtu = 2048;
 	dev->tbusy = 1;
 	
-	dev_init_buffers( dev);
+	dev_init_buffers(dev);
 
-	dev->flags = 0;
+	dev->flags = IFF_NOARP;
 	
 	return 0;
 }
@@ -460,16 +448,15 @@ static int irda_device_net_change_mtu( struct device *dev, int new_mtu)
  * Function irda_device_transmit_finished (void)
  *
  *    Check if there is still some frames in the transmit queue for this
- *    device
+ *    device. Maybe we should use: q->q.qlen == 0.
  *
  */
 int irda_device_txqueue_empty( struct irda_device *self)
 {
-	ASSERT( self != NULL, return -1;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return -1;);	
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return -1;);	
 
-	/* FIXME: check if this is the right way of doing it? */
-	if ( skb_queue_len( &self->netdev.qdisc->q))
+	if (skb_queue_len(&self->netdev.qdisc->q))
 		return FALSE;
 
 	return TRUE;
@@ -478,12 +465,21 @@ int irda_device_txqueue_empty( struct irda_device *self)
 /*
  * Function irda_get_mtt (skb)
  *
- *    Utility function for getting the 
- *
+ *    Utility function for getting the minimum turnaround time out of 
+ *    the skb, where it has been hidden in the cb field.
  */
-__inline__ int irda_get_mtt( struct sk_buff *skb)
+inline unsigned short irda_get_mtt(struct sk_buff *skb)
 {
-        return ((struct irlap_skb_cb *)(skb->cb))->mtt;
+	unsigned short mtt;
+
+	if (((struct irlap_skb_cb *)(skb->cb))->magic != LAP_MAGIC)
+		mtt = 10000;
+	else
+		mtt = ((struct irlap_skb_cb *)(skb->cb))->mtt;
+
+	ASSERT(mtt <= 10000, return 10000;);
+	
+	return mtt;
 }
 
 /*
@@ -492,21 +488,20 @@ __inline__ int irda_get_mtt( struct sk_buff *skb)
  *    Setup the DMA channel
  *
  */
-void setup_dma( int channel, char *buffer, int count, int mode)
+void setup_dma(int channel, char *buffer, int count, int mode)
 {
 	unsigned long flags;
+	
+	flags = claim_dma_lock();
+	
+	disable_dma(channel);
+	clear_dma_ff(channel);
+	set_dma_mode(channel, mode);
+	set_dma_addr(channel, virt_to_bus(buffer));
+	set_dma_count(channel, count);
+	enable_dma(channel);
 
-	save_flags(flags);
-	cli();
-
-	disable_dma( channel);
-	clear_dma_ff( channel);
-	set_dma_mode( channel, mode);
-	set_dma_addr( channel, virt_to_bus(buffer));
-	set_dma_count( channel, count);
-	enable_dma( channel);
-
-	restore_flags(flags);
+	release_dma_lock(flags);
 }
 
 #ifdef CONFIG_PROC_FS
@@ -532,6 +527,8 @@ int irda_device_print_flags(struct irda_device *idev, char *buf)
 		len += sprintf( buf+len, "PIO ");
 	if (idev->flags & IFF_DMA)
 		len += sprintf( buf+len, "DMA ");
+	if (idev->flags & IFF_SHM)
+		len += sprintf( buf+len, "SHM ");
 	if (idev->flags & IFF_DONGLE)
 		len += sprintf( buf+len, "DONGLE ");
 

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Jun  9 13:29:31 1998
- * Modified at:   Mon Feb  8 09:05:51 1999
+ * Modified at:   Thu Mar 11 13:27:04 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (C) 1998, Aage Kvalnes <aage@cs.uit.no>
@@ -45,9 +45,10 @@ static __u32 hash( char* name);
  *    Create hashbin!
  *
  */
-hashbin_t *hashbin_new( int type)
+hashbin_t *hashbin_new(int type)
 {
 	hashbin_t* hashbin;
+	int i;
 	
 	DEBUG( 4, __FUNCTION__ "()\n");
 	
@@ -61,9 +62,13 @@ hashbin_t *hashbin_new( int type)
 	/*
 	 * Initialize structure
 	 */
-	memset( hashbin, 0, sizeof(hashbin_t));
+	memset(hashbin, 0, sizeof(hashbin_t));
 	hashbin->hb_type = type;
 	hashbin->magic = HB_MAGIC;
+
+	/* Make sure all spinlock's are unlocked */
+	for (i=0;i<HASHBIN_SIZE;i++)
+		hashbin->hb_mutex[i] = SPIN_LOCK_UNLOCKED;
 	
 	return hashbin;
 }
@@ -161,10 +166,9 @@ void hashbin_lock( hashbin_t* hashbin, __u32 hashv, char* name,
 	bin = GET_HASHBIN( hashv);
 	
 	/* Synchronize */
-	if ( hashbin->hb_type & HB_GLOBAL ) {
-
+	if ( hashbin->hb_type & HB_GLOBAL )
 		spin_lock_irqsave( &hashbin->hb_mutex[ bin], flags);
-	} else {
+	else {
 		save_flags( flags);
 		cli();
 	}
@@ -176,27 +180,27 @@ void hashbin_lock( hashbin_t* hashbin, __u32 hashv, char* name,
  *    Unlock the hashbin
  *
  */
-void hashbin_unlock( hashbin_t* hashbin, __u32 hashv, char* name, 
-		     unsigned long flags)
+void hashbin_unlock(hashbin_t* hashbin, __u32 hashv, char* name, 
+		    unsigned long flags)
 {
 	int bin;
 
-	DEBUG( 0, "hashbin_unlock()\n");
+	DEBUG(0, "hashbin_unlock()\n");
 
-	ASSERT( hashbin != NULL, return;);
-	ASSERT( hashbin->magic == HB_MAGIC, return;);
+	ASSERT(hashbin != NULL, return;);
+	ASSERT(hashbin->magic == HB_MAGIC, return;);
 	
 	/*
 	 * Locate hashbin
 	 */
-	if ( name )
-		hashv = hash( name );
-	bin = GET_HASHBIN( hashv );
+	if (name )
+		hashv = hash(name);
+	bin = GET_HASHBIN(hashv);
 	
 	/* Release lock */
-	if ( hashbin->hb_type & HB_GLOBAL) {
+	if ( hashbin->hb_type & HB_GLOBAL)
 		spin_unlock_irq( &hashbin->hb_mutex[ bin]);
-	} else if ( hashbin->hb_type & HB_LOCAL) {
+	else if (hashbin->hb_type & HB_LOCAL) {
 		restore_flags( flags);
 	}
 }

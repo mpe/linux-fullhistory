@@ -195,8 +195,8 @@ static struct super_block *minix_read_super(struct super_block *s, void *data,
 	s->u.minix_sb.s_ms = ms;
 	s->u.minix_sb.s_sbh = bh;
 	s->u.minix_sb.s_mount_state = ms->s_state;
-	s->s_blocksize = 1024;
-	s->s_blocksize_bits = 10;
+	s->s_blocksize = BLOCK_SIZE;
+	s->s_blocksize_bits = BLOCK_SIZE_BITS;
 	s->u.minix_sb.s_ninodes = ms->s_ninodes;
 	s->u.minix_sb.s_nzones = ms->s_nzones;
 	s->u.minix_sb.s_imap_blocks = ms->s_imap_blocks;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Wed Feb  3 14:29:49 1999
+ * Modified at:   Thu Feb 25 21:05:53 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -33,7 +33,7 @@
 #include <net/irda/irlan_event.h>
 
 void irlan_client_start_kick_timer(struct irlan_cb *self, int timeout);
-void irlan_client_discovery_indication(DISCOVERY*);
+void irlan_client_discovery_indication(discovery_t *);
 void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr);
 
 void irlan_client_open_ctrl_tsap( struct irlan_cb *self);

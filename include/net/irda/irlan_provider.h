@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Sat Jan 30 16:22:24 1999
+ * Modified at:   Mon Mar  8 15:32:35 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -40,7 +40,8 @@ void irlan_provider_ctrl_data_indication(void *instance, void *sap,
 					 struct sk_buff *skb);
 
 void irlan_provider_connect_indication(void *instance, void *sap, 
-				       struct qos_info *qos, int max_sdu_size,
+				       struct qos_info *qos, 
+				       __u32 max_sdu_size,
 				       struct sk_buff *skb);
 void irlan_provider_connect_response(struct irlan_cb *, struct tsap_cb *);
 

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Thu Feb 11 00:41:02 1999
+ * Modified at:   Tue Apr  6 17:10:38 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -25,7 +25,8 @@
 #ifndef IRLAP_EVENT_H
 #define IRLAP_EVENT_H
 
-#include "irmod.h"
+#include <net/irda/irda.h>
+#include <net/irda/discovery.h>
 
 struct irlap_cb;
 
@@ -67,6 +68,7 @@ typedef enum {
 	RECV_DISCOVERY_XID_RSP,
 	RECV_SNRM_CMD,
 	RECV_TEST_CMD,
+	RECV_TEST_RSP,
 	RECV_UA_RSP,
 	RECV_DM_RSP,
 	RECV_I_CMD,
@@ -108,7 +110,7 @@ struct irlap_info {
 	int  slot;     /* Random chosen slot */
 	int  s;        /* Current slot */
 
-	DISCOVERY *discovery; /* Discovery information */
+	discovery_t *discovery; /* Discovery information */
 };
 
 extern const char *irlap_state[];

@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Dec 26 11:00:49 1998
- * Modified at:   Tue Jan 19 23:52:46 1999
+ * Modified at:   Thu Mar 11 01:37:20 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -77,6 +77,7 @@
 
 #define UIRCC_CR12          0x0c /* Timer counter initial value (low byte) */
 #define UIRCC_CR13          0x0d /* Timer counter initial value (high byte) */
+#define UIRCC_CR15          0x0f
 
 /* Status registers (read only) */
 #define UIRCC_SR0           0x00 /* Transmit/receive status register */
@@ -102,9 +103,10 @@
 #define UIRCC_SR9           0x09 /* System status 1 */
 
 #define UIRCC_SR10          0x0a /* Modem select status */
-
+#define UIRCC_SR11          0x0b
 #define UIRCC_SR12          0x0c /* Timer counter status (low byte) */
 #define UIRCC_SR13          0x0d /* Timer counter status (high byte) */
+#define UIRCC_SR15          0x0f
 
 /* Private data for each instance */
 struct uircc_cb {

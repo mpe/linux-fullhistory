@@ -129,7 +129,7 @@ static int WriteData (PADAPTER240I padapter)
 			outsw (pports[PORT_DATA], padapter->buffer, (USHORT)padapter->ide.ide.ide[2] * 256);
 			return 0;
 			}
-		}	while ( timer > jiffies );									// test for timeout
+		}	while ( time_after(timer, jiffies) );									// test for timeout
 
 	padapter->ide.ide.ides.cmd = 0;									// null out the command byte
 	return 1;
@@ -169,7 +169,7 @@ static UCHAR IdeCmd (PADAPTER240I padapter)
 
 			return 0;
 			}
-		}	while ( timer > jiffies );									// test for timeout
+		}	while ( time_after(timer, jiffies) );									// test for timeout
 
 	padapter->ide.ide.ides.cmd = 0;									// null out the command byte
 	return status;
@@ -264,7 +264,7 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 	UCHAR				status;
 	int					z;
 
-	DEB(printk ("\npsi240i recieved interrupt\n"));
+	DEB(printk ("\npsi240i received interrupt\n"));
 
 	shost = PsiHost[irq - 10];
 	if ( !shost )

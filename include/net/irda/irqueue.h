@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Jun  9 13:26:50 1998
- * Modified at:   Sun Oct 25 00:26:31 1998
+ * Modified at:   Thu Feb 25 20:34:21 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (C) 1998, Aage Kvalnes <aage@cs.uit.no>
@@ -30,7 +30,7 @@
 #include <linux/types.h>
 #include <asm/spinlock.h>
 
-#include <net/irda/irda.h>
+/* #include <net/irda/irda.h> */
 
 #ifndef QUEUE_H
 #define QUEUE_H
@@ -50,6 +50,10 @@
  */
 #define HASHBIN_SIZE   8
 #define HASHBIN_MASK   0x7
+
+#ifndef ALIGN 
+#define ALIGN __attribute__((aligned))
+#endif
 
 typedef void (*FREE_FUNC)( void *arg);
 

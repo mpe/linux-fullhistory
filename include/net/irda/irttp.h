@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Tue Feb  2 10:55:18 1999
+ * Modified at:   Mon Mar 22 13:17:30 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -27,8 +27,9 @@
 
 #include <linux/types.h>
 #include <linux/skbuff.h>
+#include <asm/spinlock.h>
 
-#include <net/irda/irmod.h>
+#include <net/irda/irda.h>
 #include <net/irda/irlmp.h>
 #include <net/irda/qos.h>
 #include <net/irda/irqueue.h>
@@ -50,6 +51,7 @@
 #define P_HIGH      1
 
 #define SAR_DISABLE 0
+#define SAR_UNBOUND 0xffffffff
 
 /*
  *  This structure contains all data assosiated with one instance of a TTP 
@@ -79,23 +81,22 @@ struct tsap_cb {
 	struct sk_buff_head rx_fragments;
 	int tx_queue_lock;
 	int rx_queue_lock;
+	spinlock_t lock;
 
 	struct notify_t notify;       /* Callbacks to client layer */
 
 	struct irda_statistics stats;
 	struct timer_list todo_timer; 
 	
-	int rx_sdu_busy;     /* RxSdu.busy */
-	int rx_sdu_size;     /* Current size of a partially received frame */
-	int rx_max_sdu_size; /* Max receive user data size */
+	int   rx_sdu_busy;     /* RxSdu.busy */
+	__u32 rx_sdu_size;     /* Current size of a partially received frame */
+	__u32 rx_max_sdu_size; /* Max receive user data size */
 
-	int tx_sdu_busy;     /* TxSdu.busy */
-	int tx_max_sdu_size; /* Max transmit user data size */
+	int tx_sdu_busy;       /* TxSdu.busy */
+	int tx_max_sdu_size;   /* Max transmit user data size */
 
-        int no_defrag;       /* Don't reassemble received fragments */
-
-	int close_pend;      /* Close, but disconnect_pend */
-	int disconnect_pend; /* Disconnect, but still data to send */
+	int close_pend;        /* Close, but disconnect_pend */
+	int disconnect_pend;   /* Disconnect, but still data to send */
 	struct sk_buff *disconnect_skb;
 };
 
@@ -115,23 +116,18 @@ int irttp_close_tsap(struct tsap_cb *self);
 int irttp_data_request(struct tsap_cb *self, struct sk_buff *skb);
 int irttp_udata_request(struct tsap_cb *self, struct sk_buff *skb);
 
-void irttp_connect_request(struct tsap_cb *self, __u8 dtsap_sel, 
-			   __u32 saddr, __u32 daddr,
-			   struct qos_info *qos, int max_sdu_size, 
-			   struct sk_buff *userdata);
+int irttp_connect_request(struct tsap_cb *self, __u8 dtsap_sel, 
+			  __u32 saddr, __u32 daddr,
+			  struct qos_info *qos, __u32 max_sdu_size, 
+			  struct sk_buff *userdata);
 void irttp_connect_confirm(void *instance, void *sap, struct qos_info *qos, 
-			   int max_sdu_size, struct sk_buff *skb);
-void irttp_connect_response(struct tsap_cb *self, int max_sdu_size, 
+			   __u32 max_sdu_size, struct sk_buff *skb);
+void irttp_connect_response(struct tsap_cb *self, __u32 max_sdu_size, 
 			    struct sk_buff *userdata);
-
+struct tsap_cb *irttp_dup(struct tsap_cb *self, void *instance);
 void irttp_disconnect_request(struct tsap_cb *self, struct sk_buff *skb,
 			      int priority);
 void irttp_flow_request(struct tsap_cb *self, LOCAL_FLOW flow);
-
-static __inline__ void irttp_no_reassemble(struct tsap_cb *self)
-{
-	self->no_defrag = TRUE;
-}
 
 static __inline __u32 irttp_get_saddr(struct tsap_cb *self)
 {

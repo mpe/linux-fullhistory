@@ -115,42 +115,43 @@ extern inline int down_interruptible(struct semaphore * sem)
 
 extern inline int down_trylock(struct semaphore * sem)
 {
-	long ret, tmp, tmp2;
+	long ret, tmp, tmp2, sub;
 
 	/* "Equivalent" C.  Note that we have to do this all without
 	   (taken) branches in order to be a valid ll/sc sequence.
 
 	   do {
 	       tmp = ldq_l;
-	       ret = 0;
-	       tmp -= 1;
-	       if ((int)tmp < 0)		// count
-	           break;
-	       if ((long)tmp < 0)		// waking
-	           break;
-	       tmp += 0xffffffff00000000;
-	       ret = 1;
+	       sub = 0x0000000100000000;
+	       ret = ((int)tmp <= 0);		// count <= 0 ?
+	       // If we're subtracting one from count, we don't need 
+	       // one from waking and vice versa.
+	       if ((int)tmp > 0) sub = 1;	// count > 0 ?
+	       if ((long)tmp >= 0) ret = 0;	// waking >= 0 ?
+	       if (ret) break;	
+	       tmp -= sub;
 	       tmp = stq_c = tmp;
 	   } while (tmp == 0);
 	*/
 
 	__asm__ __volatile__(
-		"1:	ldq_l	%1,%3\n"
-		"	lda	%0,0\n"
-		"	subl	%1,1,%2\n"
-		"	subq	%1,1,%1\n"
-		"	blt	%2,2f\n"
-		"	blt	%1,2f\n"
-		"	ldah	%1,-32768(%1)\n"
-		"	ldah	%1,-32768(%1)\n"
-		"	lda	%0,1\n"
-		"	stq_c	%1,%3\n"
+		"1:	ldq_l	%1,%4\n"
+		"	lda	%3,1\n"
+		"	addl	%1,0,%2\n"
+		"	sll	%3,32,%3\n"
+		"	cmple	%2,0,%0\n"
+		"	cmovgt	%2,1,%3\n"
+		"	cmovge	%1,0,%0\n"
+		"	bne	%0,2f\n"
+		"	subq	%1,%3,%1\n"
+		"	stq_c	%1,%4\n"
 		"	beq	%1,3f\n"
-		"2:	mb\n"
+		"	mb\n"
+		"2:\n"
 		".section .text2,\"ax\"\n"
 		"3:	br	1b\n"
 		".previous"
-		: "=&r"(ret), "=&r"(tmp), "=&r"(tmp2)
+		: "=&r"(ret), "=&r"(tmp), "=&r"(tmp2), "=&r"(sub)
 		: "m"(*sem)
 		: "memory");
 

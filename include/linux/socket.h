@@ -246,6 +246,7 @@ struct ucred {
 #define SOL_PACKET	263
 #define SOL_ATM		264	/* ATM layer (cell level) */
 #define SOL_AAL		265	/* ATM Adaption Layer (packet level) */
+#define SOL_IRDA        266
 
 /* IPX options */
 #define IPX_TYPE	1

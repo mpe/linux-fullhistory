@@ -151,10 +151,7 @@ irq_desc_t irq_desc[NR_IRQS] = { [0 ... NR_IRQS-1] = { 0, &no_irq_type, }};
  */
 static unsigned int cached_irq_mask = 0xffff;
 
-#define __byte(x,y) (((unsigned char *)&(y))[x])
-#define __word(x,y) (((unsigned short *)&(y))[x])
-#define __long(x,y) (((unsigned int *)&(y))[x])
-
+#define __byte(x,y) 	(((unsigned char *)&(y))[x])
 #define cached_21	(__byte(0,cached_irq_mask))
 #define cached_A1	(__byte(1,cached_irq_mask))
 
@@ -207,7 +204,7 @@ int i8259A_irq_pending(unsigned int irq)
 void make_8259A_irq(unsigned int irq)
 {
 	disable_irq(irq);
-	__long(0,io_apic_irqs) &= ~(1<<irq);
+	io_apic_irqs &= ~(1<<irq);
 	irq_desc[irq].handler = &i8259A_irq_type;
 	enable_irq(irq);
 }

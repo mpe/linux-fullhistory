@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Tue Feb 16 17:27:23 1999
+ * Modified at:   Fri Mar 26 21:52:53 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -60,10 +60,9 @@ int async_wrap_skb( struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 	fcs.value = INIT_FCS;
 	n = 0;
 
-	if ( skb->len > 2048) {
-		DEBUG( 0, __FUNCTION__ "Warning size=%d of sk_buff to big!\n", 
-		       (int) skb->len);
-
+	if (skb->len > 2048) {
+		DEBUG(0, __FUNCTION__ "Warning size=%d of sk_buff to big!\n", 
+		      (int) skb->len);
 		return 0;
 	}
 	
@@ -71,8 +70,13 @@ int async_wrap_skb( struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 	 *  Send  XBOF's for required min. turn time and for the negotiated
 	 *  additional XBOFS
 	 */
- 	xbofs = ((struct irlap_skb_cb *)(skb->cb))->xbofs;
-	for ( i=0; i<xbofs; i++) {
+	if (((struct irlap_skb_cb *)(skb->cb))->magic != LAP_MAGIC) {
+		DEBUG(1, __FUNCTION__ "(), wrong magic in skb!\n");
+		xbofs = 11;
+	} else
+		xbofs = ((struct irlap_skb_cb *)(skb->cb))->xbofs;
+
+	for (i=0; i<xbofs; i++) {
  		tx_buff[n++] = XBOF; 
  	}
 
@@ -80,7 +84,7 @@ int async_wrap_skb( struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 	tx_buff[n++] = BOF;
 
 	/* Insert frame and calc CRC */
-	for( i=0; i < skb->len; i++) {
+	for (i=0; i < skb->len; i++) {
 		byte = skb->data[i];
 		
 		/*
@@ -100,11 +104,11 @@ int async_wrap_skb( struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 	/* Insert CRC in little endian format (LSB first) */
 	fcs.value = ~fcs.value;
 #ifdef __LITTLE_ENDIAN
-	n += stuff_byte( fcs.bytes[0], tx_buff+n);
-	n += stuff_byte( fcs.bytes[1], tx_buff+n);
+	n += stuff_byte(fcs.bytes[0], tx_buff+n);
+	n += stuff_byte(fcs.bytes[1], tx_buff+n);
 #else ifdef __BIG_ENDIAN
-	n += stuff_byte( fcs.bytes[1], tx_buff+n);
-	n += stuff_byte( fcs.bytes[0], tx_buff+n);
+	n += stuff_byte(fcs.bytes[1], tx_buff+n);
+	n += stuff_byte(fcs.bytes[0], tx_buff+n);
 #endif
 	tx_buff[n++] = EOF;
 	
@@ -127,7 +131,7 @@ static inline void async_bump( struct irda_device *idev, __u8 *buf, int len)
 		return;
 	}
 
-	/*  Align to 20 bytes */
+	/*  Align IP header to 20 bytes */
 	skb_reserve( skb, 1);
 	
 	ASSERT( len-2 > 0, return;);

@@ -81,6 +81,10 @@
 #include <net/dn.h>
 #endif
 
+#if defined(CONFIG_IRDA) || defined(CONFIG_IRDA_MODULE)
+#include <net/irda/irda.h>
+#endif
+
 #ifdef CONFIG_FILTER
 #include <linux/filter.h>
 #endif
@@ -490,6 +494,9 @@ struct sock {
 #endif
 #if defined(CONFIG_ECONET) || defined(CONFIG_ECONET_MODULE)
 		struct econet_opt	*af_econet;
+#endif
+#if defined(CONFIG_IRDA) || defined(CONFIG_IRDA_MODULE)
+		struct irda_sock        *irda;
 #endif
 	} protinfo;  		
 

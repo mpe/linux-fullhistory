@@ -64,12 +64,13 @@
 /* Configuration section **************************************************** */
 
 /* Set the following macro to 1 to reload the ISP2100's firmware.  This is
-   version 1.13 of the firmware. */
+   version 1.15.19 of the firmware. */
 
 #define RELOAD_FIRMWARE		1
 
 #define USE_NVRAM_DEFAULTS      1
 
+#define ISP2100_PORTDB          1
 
 /* Set the following to 1 to include fabric support, fabric support is 
  * currently not as well tested as the other aspects of the driver */
@@ -316,16 +317,13 @@ struct Status_Entry {
 
 /* status entry completion status definitions */
 #define CS_COMPLETE			0x0000
-#define CS_INCOMPLETE			0x0001
 #define CS_DMA_ERROR			0x0002
-#define CS_TRANSPORT_ERROR		0x0003
 #define CS_RESET_OCCURRED		0x0004
 #define CS_ABORTED			0x0005
 #define CS_TIMEOUT			0x0006
 #define CS_DATA_OVERRUN			0x0007
-#define CS_ABORT_MSG_FAILED		0x000e
-#define CS_REJECT_MSG_FAILED		0x000f
 #define CS_DATA_UNDERRUN		0x0015
+#define CS_QUEUE_FULL			0x001c
 #define CS_PORT_UNAVAILABLE             0x0028
 #define CS_PORT_LOGGED_OUT              0x0029
 #define CS_PORT_CONFIG_CHANGED		0x002a
@@ -645,9 +643,7 @@ static u_short isp2100_read_nvram_word(struct Scsi_Host *, u_short);
 static void isp2100_print_scsi_cmd(Scsi_Cmnd *);
 #endif
 
-#if DEBUG_ISP2100_INTR
 static void isp2100_print_status_entry(struct Status_Entry *);
-#endif
 
 static struct proc_dir_entry proc_scsi_isp2100 =
 {
@@ -721,7 +717,7 @@ int isp2100_detect(Scsi_Host_Template * tmpt)
 			scsi_unregister(host);
 			continue;
 		}
-		host->this_id = tmpt->this_id;
+		host->this_id = 0;
 
 		if (request_irq(host->irq, do_isp2100_intr_handler, SA_INTERRUPT | SA_SHIRQ, "qlogicfc", host)) {
 			printk("qlogicfc : interrupt %d already in use\n",
@@ -743,7 +739,7 @@ int isp2100_detect(Scsi_Host_Template * tmpt)
 		outw(HCCR_CLEAR_RISC_INTR, host->io_port + HOST_HCCR);
 		isp2100_enable_irqs(host);
 		/* wait for the loop to come up */
-		for (wait_time = jiffies + 20 * HZ; wait_time > jiffies && hostdata->loop_up == 0;)
+		for (wait_time = jiffies + 10 * HZ; wait_time > jiffies && hostdata->loop_up == 0;)
 			barrier();
 
 		if (hostdata->loop_up == 0) {
@@ -805,13 +801,17 @@ static int isp2100_make_portdb(struct Scsi_Host *host)
 	isp2100_mbox_command(host, param);
 
 	if (param[0] == MBOX_COMMAND_COMPLETE) {
-		host->this_id = param[1];
 		hostdata->port_id = ((u_int) param[3]) << 16;
 		hostdata->port_id |= param[2];
+		temp[0].loop_id = param[1];
+		temp[0].wwn = hostdata->wwn;
+	}
+	else {
+	        printk("qlogicfc: error getting scsi id.\n");
 	}
 
-	for (i = 0, j = 0; i <= QLOGICFC_MAX_ID; i++) {
-	        temp[i].loop_id = host->this_id;
+	for (i = 1, j = 1; i <= QLOGICFC_MAX_ID; i++) {
+	        temp[i].loop_id = temp[0].loop_id;
 
 		param[0] = MBOX_GET_PORT_NAME;
 		param[1] = (i << 8) & 0xff00;
@@ -848,7 +848,7 @@ static int isp2100_make_portdb(struct Scsi_Host *host)
 				}
 			}
 			if (j == QLOGICFC_MAX_ID + 1)
-				hostdata->port_db[i].loop_id = host->this_id;
+				hostdata->port_db[i].loop_id = temp[0].loop_id;
 
 			for (j = 0; j <= QLOGICFC_MAX_ID; j++) {
 				if (hostdata->port_db[j].wwn == temp[i].wwn || !hostdata->port_db[j].wwn) {
@@ -1046,6 +1046,7 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 		host->max_id = 0;
 		return 0;
 	}
+
 	out_ptr = inw(host->io_port + MBOX4);
 	in_ptr = hostdata->req_in_ptr;
 
@@ -1099,10 +1100,13 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 	cmd->hdr.entry_type = ENTRY_COMMAND;
 	cmd->hdr.entry_cnt = 1;
 	cmd->target_lun = Cmnd->lun;
+#if ISP2100_PORTDB
 	cmd->target_id = hostdata->port_db[Cmnd->target].loop_id;
+#else
+	cmd->target_id = Cmnd->target;
+#endif
 	cmd->total_byte_cnt = (u_int) Cmnd->request_bufflen;
-	cmd->time_out = SCSI_TIMEOUT / HZ;
-
+	cmd->time_out = (SCSI_TIMEOUT / HZ) * 5;
 	memcpy(cmd->cdb, Cmnd->cmnd, Cmnd->cmd_len);
 
 	if (Cmnd->use_sg) {
@@ -1173,41 +1177,38 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 
 
 	if (Cmnd->device->tagged_supported) {
-		switch (Cmnd->tag) {
-		case SIMPLE_QUEUE_TAG:
-			cmd->control_flags |= CFLAG_SIMPLE_TAG;
-			break;
-		case HEAD_OF_QUEUE_TAG:
-			cmd->control_flags |= CFLAG_HEAD_TAG;
-			break;
-		case ORDERED_QUEUE_TAG:
+		if ((jiffies - hostdata->tag_ages[Cmnd->target]) > (2 * SCSI_TIMEOUT)) {
 			cmd->control_flags |= CFLAG_ORDERED_TAG;
-			break;
-		default:
-			if ((jiffies - hostdata->tag_ages[Cmnd->target]) > (5 * HZ)) {
+			hostdata->tag_ages[Cmnd->target] = jiffies;
+		} else
+			switch (Cmnd->tag) {
+			case HEAD_OF_QUEUE_TAG:
+				cmd->control_flags |= CFLAG_HEAD_TAG;
+				break;
+			case ORDERED_QUEUE_TAG:
 				cmd->control_flags |= CFLAG_ORDERED_TAG;
-				hostdata->tag_ages[Cmnd->target] = jiffies;
-			} else
+				break;
+			default:
 				cmd->control_flags |= CFLAG_SIMPLE_TAG;
+				break;
 		}
 	}
 	outw(in_ptr, host->io_port + MBOX4);
 	hostdata->req_in_ptr = in_ptr;
 
 	hostdata->queued++;
-
 	num_free = QLOGICFC_REQ_QUEUE_LEN - REQ_QUEUE_DEPTH(in_ptr, out_ptr);
-	num_free = num_free - 2;
+	num_free = (num_free > 2) ? num_free - 2 : 0;
 	host->can_queue = hostdata->queued + num_free;
 	if (host->can_queue > QLOGICFC_REQ_QUEUE_LEN)
 		host->can_queue = QLOGICFC_REQ_QUEUE_LEN;
 	host->sg_tablesize = QLOGICFC_MAX_SG(num_free);
 
 	/* this is really gross */
-	if (host->can_queue < host->host_busy){
+	if (host->can_queue <= host->host_busy){
 	        if (host->can_queue+2 < host->host_busy) 
-		  printk("qlogicfc.c crosses its fingers.\n");
-		host->can_queue = host->host_busy;
+			DEBUG(printk("qlogicfc.c crosses its fingers.\n"));
+		host->can_queue = host->host_busy + 1;
 	}
 
 	LEAVE("isp2100_queuecommand");
@@ -1310,22 +1311,20 @@ void isp2100_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 		while (out_ptr != in_ptr) {
 			sts = (struct Status_Entry *) &hostdata->res[out_ptr][0];
 			out_ptr = (out_ptr + 1) & RES_QUEUE_LEN;
-			Cmnd = hostdata->handle_ptrs[sts->handle];
-
-			hostdata->handle_ptrs[sts->handle] = NULL;
-
-			if (hostdata->handle_serials[sts->handle] != Cmnd->serial_number) {
-				hostdata->queued--;
-				hostdata->handle_serials[sts->handle] = 0;
-				outw(out_ptr, host->io_port + MBOX5);
-				continue;
-			}
-			hostdata->handle_serials[sts->handle] = 0;
-
+                 
 			TRACE("done", out_ptr, Cmnd);
 			DEBUG_INTR(isp2100_print_status_entry(sts));
 			if (sts->hdr.entry_type == ENTRY_STATUS) {
+				Cmnd = hostdata->handle_ptrs[sts->handle];
 				Cmnd->result = isp2100_return_status(sts);
+				hostdata->handle_ptrs[sts->handle] = NULL;
+				hostdata->queued--;
+				if (hostdata->handle_serials[sts->handle] != Cmnd->serial_number) {
+					hostdata->handle_serials[sts->handle] = 0;
+					outw(out_ptr, host->io_port + MBOX5);
+					continue;
+				}
+				hostdata->handle_serials[sts->handle] = 0;
 			} else {
 				outw(out_ptr, host->io_port + MBOX5);
 				continue;
@@ -1336,13 +1335,13 @@ void isp2100_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 			    || (sts->status_flags & STF_BUS_RESET))
 				hostdata->send_marker = 1;
 
+			memset(Cmnd->sense_buffer, 0, sizeof(Cmnd->sense_buffer));
 			if (sts->scsi_status & 0x0200)
 				memcpy(Cmnd->sense_buffer, sts->req_sense_data,
 				       sizeof(Cmnd->sense_buffer));
 
 			outw(out_ptr, host->io_port + MBOX5);
 
-			hostdata->queued--;
 			if (Cmnd->scsi_done != NULL) {
 				(*Cmnd->scsi_done) (Cmnd);
 			} else
@@ -1356,16 +1355,16 @@ void isp2100_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 	in_ptr = hostdata->req_in_ptr;
 
 	num_free = QLOGICFC_REQ_QUEUE_LEN - REQ_QUEUE_DEPTH(in_ptr, out_ptr);
-	num_free = num_free-2;
+	num_free = (num_free > 2) ? num_free - 2 : 0;
 	host->can_queue = hostdata->queued + num_free;
 	if (host->can_queue > QLOGICFC_REQ_QUEUE_LEN)
 		host->can_queue = QLOGICFC_REQ_QUEUE_LEN;
 	host->sg_tablesize = QLOGICFC_MAX_SG(num_free);
 
-	if (host->can_queue < host->host_busy){
+	if (host->can_queue <= host->host_busy){
 	        if (host->can_queue+2 < host->host_busy) 
 		        DEBUG(printk("qlogicfc crosses its fingers.\n"));
-		host->can_queue = host->host_busy;
+		host->can_queue = host->host_busy + 1;
 	}
 
 	outw(HCCR_CLEAR_RISC_INTR, host->io_port + HOST_HCCR);
@@ -1401,16 +1400,7 @@ static int isp2100_return_status(struct Status_Entry *sts)
 	case CS_COMPLETE:
 		host_status = DID_OK;
 		break;
-	case CS_INCOMPLETE:
-		if (!(sts->state_flags & SF_SENT_CDB))
-			host_status = DID_ERROR;
-		else if (!(sts->state_flags & SF_TRANSFERRED_DATA))
-			host_status = DID_ERROR;
-		else if (!(sts->state_flags & SF_GOT_STATUS))
-			host_status = DID_ERROR;
-		break;
 	case CS_DMA_ERROR:
-	case CS_TRANSPORT_ERROR:
 		host_status = DID_ERROR;
 		break;
 	case CS_RESET_OCCURRED:
@@ -1423,7 +1413,6 @@ static int isp2100_return_status(struct Status_Entry *sts)
 		host_status = DID_TIME_OUT;
 		break;
 	case CS_DATA_OVERRUN:
-	case CS_ABORT_MSG_FAILED:
 		host_status = DID_ERROR;
 		break;
 	case CS_DATA_UNDERRUN:
@@ -1433,6 +1422,9 @@ static int isp2100_return_status(struct Status_Entry *sts)
 	case CS_PORT_LOGGED_OUT:
 	case CS_PORT_CONFIG_CHANGED:
 		host_status = DID_BAD_TARGET;
+		break;
+	case CS_QUEUE_FULL:
+		host_status = DID_ERROR;
 		break;
 	default:
 		printk("qlogicfc : unknown completion status 0x%04x\n",
@@ -1539,8 +1531,6 @@ int isp2100_biosparam(Disk * disk, kdev_t n, int ip[])
 		ip[0] = 255;
 		ip[1] = 63;
 		ip[2] = size / (ip[0] * ip[1]);
-		if (ip[2] > 1023)
-			ip[2] = 1023;
 	}
 	LEAVE("isp2100_biosparam");
 
@@ -1678,9 +1668,6 @@ static int isp2100_get_nvram_defaults(struct Scsi_Host *host, struct init_cb *co
 	if (isp2100_read_nvram_word(host, 0) != 0x5349)
 		return 1;
 
-	control_block->max_frame_len = isp2100_read_nvram_word(host, 5);
-	control_block->max_iocb = isp2100_read_nvram_word(host, 6);
-	control_block->exec_throttle = isp2100_read_nvram_word(host, 7);
 	value = isp2100_read_nvram_word(host, 8);
 	control_block->node_name[0] = isp2100_read_nvram_word(host, 9);
 	control_block->node_name[1] = isp2100_read_nvram_word(host, 10);
@@ -1892,8 +1879,6 @@ static int isp2100_mbox_command(struct Scsi_Host *host, u_short param[])
 }
 
 
-#if DEBUG_ISP2100_INTR
-
 void isp2100_print_status_entry(struct Status_Entry *status)
 {
 	printk("qlogicfc : entry count = 0x%02x, type = 0x%02x, flags = 0x%02x\n",
@@ -1908,7 +1893,6 @@ void isp2100_print_status_entry(struct Status_Entry *status)
 
 }
 
-#endif				/* DEBUG_ISP2100_INTR */
 
 
 #if DEBUG_ISP2100

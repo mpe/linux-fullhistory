@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:55:39 1997
- * Modified at:   Thu Feb 18 08:51:50 1999
+ * Modified at:   Mon Mar 29 09:06:52 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli, All Rights Reserved.
@@ -62,7 +62,6 @@ extern void irda_proto_init(struct net_proto *pro);
 extern void irda_proto_cleanup(void);
 
 extern int irda_device_init(void);
-extern int irobex_init(void);
 extern int irlan_init(void);
 extern int irlan_client_init(void);
 extern int irlan_server_init(void);
@@ -70,6 +69,12 @@ extern int ircomm_init(void);
 extern int irvtd_init(void);
 extern int irlpt_client_init(void);
 extern int irlpt_server_init(void);
+
+#ifdef CONFIG_IRDA_COMPRESSION
+#ifdef CONFIG_IRDA_DEFLATE
+extern irda_deflate_init();
+#endif /* CONFIG_IRDA_DEFLATE */
+#endif /* CONFIG_IRDA_COMPRESSION */
 
 static int irda_open(struct inode * inode, struct file *file);
 static int irda_ioctl(struct inode *inode, struct file *filp, 
@@ -132,8 +137,12 @@ EXPORT_SYMBOL(irias_new_octseq_value);
 
 /* IrLMP */
 EXPORT_SYMBOL(irlmp_discovery_request);
-EXPORT_SYMBOL(irlmp_register_layer);
-EXPORT_SYMBOL(irlmp_unregister_layer);
+EXPORT_SYMBOL(irlmp_register_client);
+EXPORT_SYMBOL(irlmp_unregister_client);
+EXPORT_SYMBOL(irlmp_update_client);
+EXPORT_SYMBOL(irlmp_register_service);
+EXPORT_SYMBOL(irlmp_unregister_service);
+EXPORT_SYMBOL(irlmp_service_to_hint);
 EXPORT_SYMBOL(irlmp_data_request);
 EXPORT_SYMBOL(irlmp_open_lsap);
 EXPORT_SYMBOL(irlmp_close_lsap);
@@ -179,7 +188,7 @@ EXPORT_SYMBOL(irtty_unregister_dongle);
 
 __initfunc(int irda_init(void))
 {
-        printk(KERN_INFO "Linux-2.2 Support for the IrDA (tm) Protocols (Dag Brattli)\n");
+        printk(KERN_INFO "IrDA (tm) Protocols for Linux-2.2 (Dag Brattli)\n");
 
  	irlmp_init();
 	irlap_init();
@@ -209,9 +218,6 @@ __initfunc(int irda_init(void))
 #ifdef CONFIG_IRLAN
 	irlan_init();
 #endif
-#ifdef CONFIG_IROBEX
-	irobex_init();
-#endif
 #ifdef CONFIG_IRCOMM
 	ircomm_init();
 	irvtd_init();
@@ -234,12 +240,7 @@ __initfunc(int irda_init(void))
 	return 0;
 }
 
-/* 
- * FIXME:
- * This function should have been wrapped with #ifdef MODULE, but then
- * irda_proto_cleanup() must be moved from af_irda.c to this file since
- * that function must also be wrapped if this one is.
- */
+#ifdef MODULE
 void irda_cleanup(void)
 {
 	misc_deregister( &irda.dev);
@@ -263,6 +264,7 @@ void irda_cleanup(void)
 	/* Remove middle layer */
 	irlmp_cleanup();
 }
+#endif /* MODULE */
 
 /*
  * Function irda_lock (lock)
@@ -505,6 +507,20 @@ static u_int irda_poll( struct file *file, poll_table *wait)
 	return 0;
 }
 
+void irda_mod_inc_use_count(void)
+{
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
+}
+
+void irda_mod_dec_use_count(void)
+{
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
+}
+
 #ifdef MODULE
 #ifdef CONFIG_PROC_FS
 void irda_proc_modcount(struct inode *inode, int fill)
@@ -543,5 +559,4 @@ void cleanup_module(void)
 {
 	irda_proto_cleanup();
 }
-
-#endif
+#endif /* MODULE */

@@ -223,14 +223,11 @@ static int zol_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 	case VIDIOCGTUNER:
 		{
 			struct video_tuner v;
-/*
 			if (copy_from_user(&v, arg, sizeof(v)))
 				return -EFAULT;
 			if (v.tuner)	
 				return -EINVAL;
-*/
-			v.tuner = 0;
-			strcpy(v.name, "Zoltrix Radio");
+			strcpy(v.name, "FM");
 			v.rangelow = (int) (88.0 * 16000);
 			v.rangehigh = (int) (108.0 * 16000);
 			v.flags = zol_is_stereo(zol)

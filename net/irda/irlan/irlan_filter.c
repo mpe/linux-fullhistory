@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Jan 29 11:16:38 1999
- * Modified at:   Sun Feb  7 23:48:07 1999
+ * Modified at:   Thu Feb 25 15:10:54 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -138,8 +138,8 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
  *    Check parameters in request from peer device
  *
  */
-static void irlan_check_command_param(struct irlan_cb *self, char *param, 
-				      char *value)
+void irlan_check_command_param(struct irlan_cb *self, char *param, 
+			       char *value)
 {
 	__u8 *bytes;
 

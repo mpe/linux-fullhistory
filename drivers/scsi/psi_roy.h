@@ -1,29 +1,23 @@
-/*+M*************************************************************************
- * Perceptive Solutions, Inc. PCI-2000 device driver proc support for Linux.
+/****************************************************************************
+ * Perceptive Solutions, Inc. PCI-2000 device driver for Linux.
  *
- * Copyright (c) 1997 Perceptive Solutions, Inc.
+ * psi_roy.h - Linux Host Driver for PCI-2000 IntelliCache SCSI Adapters
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
+ * Copyright (c) 1997-1999 Perceptive Solutions, Inc.
+ * All Rights Reserved.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that redistributions of source
+ * code retain the above copyright notice and this comment without
+ * modification.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; see the file COPYING.  If not, write to
- * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Technical updates and product information at:
+ *  http://www.psidisk.com
  *
+ * Please send questions, comments, bug reports to:
+ *  tech@psidisk.com Technical Support
  *
- *	File Name:	psi_roy.h
- *
- *	Description:	This file contains the host interface command and
- *					error codes.
- *
- *-M*************************************************************************/
+ ****************************************************************************/
 
 #ifndef	ROY_HOST
 #define	ROY_HOST

@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irlmp.h
- * Version:       0.3
+ * Version:       0.9
  * Description:   IrDA Link Management Protocol (LMP) layer
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Thu Feb  4 11:06:24 1999
+ * Modified at:   Tue Apr  6 20:05:14 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -25,14 +25,17 @@
 #ifndef IRLMP_H
 #define IRLMP_H
 
+#include <asm/param.h>  /* for HZ */
+
 #include <linux/config.h>
 #include <linux/types.h>
 
-#include <net/irda/irmod.h>
+#include <net/irda/irda.h>
 #include <net/irda/qos.h>
 #include <net/irda/irlap.h>
 #include <net/irda/irlmp_event.h>
 #include <net/irda/irqueue.h>
+#include <net/irda/discovery.h>
 
 /* LSAP-SEL's */
 #define LSAP_MASK     0x7f
@@ -53,25 +56,7 @@
 
 #define LM_MAX_CONNECTIONS  10
 
-/* Hint bit positions for first hint byte */
-#define HINT_PNP         0x01
-#define HINT_PDA         0x02
-#define HINT_COMPUTER    0x04
-#define HINT_PRINTER     0x08
-#define HINT_MODEM       0x10
-#define HINT_FAX         0x20
-#define HINT_LAN         0x40
-#define HINT_EXTENSION   0x80
-
-/* Hint bit positions for second hint byte (first extension byte) */
-#define HINT_TELEPHONY   0x01
-#define HINT_FILE_SERVER 0x02
-#define HINT_COMM        0x04
-#define HINT_MESSAGE     0x08
-#define HINT_HTTP        0x10
-#define HINT_OBEX        0x20
-
-#define LM_IDLE_TIMEOUT  200 /* 2 seconds for now */
+#define LM_IDLE_TIMEOUT     2*HZ /* 2 seconds for now */
 
 typedef enum {
 	S_PNP,
@@ -84,23 +69,27 @@ typedef enum {
 	S_TELEPHONY,
 	S_COMM,
 	S_OBEX,
+	S_ANY,
+	S_END,
 } SERVICE;
 
-#define S_END 0xff
+typedef void (*DISCOVERY_CALLBACK1) (discovery_t *);
+typedef void (*DISCOVERY_CALLBACK2) (hashbin_t *);
 
-#define CLIENT 1
-#define SERVER 2
-
-typedef void (*DISCOVERY_CALLBACK) ( DISCOVERY*);
-
-struct irlmp_registration {
+typedef struct {
 	QUEUE queue; /* Must be first */
 
-	int service; /* LAN, OBEX, COMM etc. */
-	int type;    /* Client or server or both */
+	__u16 hints; /* Hint bits */
+} irlmp_service_t;
 
-	DISCOVERY_CALLBACK discovery_callback;
-};
+typedef struct {
+	QUEUE queue; /* Must be first */
+
+	__u16 hint_mask;
+
+	DISCOVERY_CALLBACK1 callback1;
+	DISCOVERY_CALLBACK2 callback2;
+} irlmp_client_t;
 
 struct lap_cb; /* Forward decl. */
 
@@ -142,17 +131,13 @@ struct lap_cb {
 
 	IRLMP_STATE lap_state;
 
-	struct irlap_cb *irlap; /* Instance of IrLAP layer */
-
+	struct irlap_cb *irlap;    /* Instance of IrLAP layer */
 	hashbin_t *lsaps;         /* LSAP associated with this link */
 
-	__u8  caddr;            /* Connection address */
-
+	__u8  caddr;  /* Connection address */
  	__u32 saddr;  /* Source device address */
  	__u32 daddr;  /* Destination device address */
 	
-	hashbin_t *cachelog;    /* Discovered devices for this link */
-
 	struct qos_info *qos;  /* LAP QoS for this session */
 	struct timer_list idle_timer;
 };
@@ -176,8 +161,8 @@ struct irlmp_cb {
 
 	__u8 conflict_flag;
 	
-	DISCOVERY  discovery_cmd; /* Discovery command to use by IrLAP */
-	DISCOVERY  discovery_rsp; /* Discovery response to use by IrLAP */
+	discovery_t discovery_cmd; /* Discovery command to use by IrLAP */
+	discovery_t discovery_rsp; /* Discovery response to use by IrLAP */
 
 	int free_lsap_sel;
 
@@ -188,25 +173,34 @@ struct irlmp_cb {
 
  	hashbin_t *links;         /* IrLAP connection table */
 	hashbin_t *unconnected_lsaps;
- 	hashbin_t *registry;
+ 	hashbin_t *clients;
+	hashbin_t *services;
 
-	__u8 hint[2]; /* Hint bits */
+	hashbin_t *cachelog;
+	int running;
+
+	spinlock_t lock;
+
+	__u16_host_order hints; /* Hint bits */
 };
 
 /* Prototype declarations */
 int  irlmp_init(void);
 void irlmp_cleanup(void);
-
 struct lsap_cb *irlmp_open_lsap( __u8 slsap, struct notify_t *notify);
 void irlmp_close_lsap( struct lsap_cb *self);
 
-void irlmp_register_layer( int service, int type, int do_discovery, 
-			      DISCOVERY_CALLBACK);
-void irlmp_unregister_layer( int service, int type);
+__u16 irlmp_service_to_hint(int service);
+__u32 irlmp_register_service(__u16 hints);
+int irlmp_unregister_service(__u32 handle);
+__u32 irlmp_register_client(__u16 hint_mask, DISCOVERY_CALLBACK1 callback1,
+			    DISCOVERY_CALLBACK2 callback2);
+int irlmp_unregister_client(__u32 handle);
+int irlmp_update_client(__u32 handle, __u16 hint_mask, 
+			DISCOVERY_CALLBACK1, DISCOVERY_CALLBACK2);
 
-void irlmp_register_irlap( struct irlap_cb *self, __u32 saddr, 
-			   struct notify_t *);
-void irlmp_unregister_irlap( __u32 saddr);
+void irlmp_register_link(struct irlap_cb *, __u32 saddr, struct notify_t *);
+void irlmp_unregister_link(__u32 saddr);
 
 int  irlmp_connect_request( struct lsap_cb *, __u8 dlsap_sel, 
 			    __u32 saddr, __u32 daddr,
@@ -214,16 +208,16 @@ int  irlmp_connect_request( struct lsap_cb *, __u8 dlsap_sel,
 void irlmp_connect_indication( struct lsap_cb *self, struct sk_buff *skb);
 void irlmp_connect_response( struct lsap_cb *, struct sk_buff *);
 void irlmp_connect_confirm( struct lsap_cb *, struct sk_buff *);
+struct lsap_cb *irlmp_dup(struct lsap_cb *self, void *instance);
 
+void irlmp_disconnect_indication(struct lsap_cb *self, LM_REASON reason, 
+				 struct sk_buff *userdata);
+void irlmp_disconnect_request(struct lsap_cb *, struct sk_buff *userdata);
 
-void irlmp_disconnect_indication( struct lsap_cb *self, LM_REASON reason, 
-				  struct sk_buff *userdata);
-void irlmp_disconnect_request( struct lsap_cb *, struct sk_buff *userdata);
-
-void irlmp_discovery_confirm( struct lap_cb *, hashbin_t *discovery_log);
-void irlmp_discovery_indication( struct lap_cb *, DISCOVERY *discovery);
-void irlmp_discovery_request( int nslots);
-DISCOVERY *irlmp_get_discovery_response(void);
+void irlmp_discovery_confirm(hashbin_t *discovery_log);
+void irlmp_discovery_request(int nslots);
+void irlmp_do_discovery(int nslots);
+discovery_t *irlmp_get_discovery_response(void);
 
 void irlmp_data_request( struct lsap_cb *, struct sk_buff *);
 void irlmp_udata_request( struct lsap_cb *, struct sk_buff *);
@@ -240,9 +234,11 @@ LM_REASON irlmp_convert_lap_reason( LAP_REASON);
 __u32 irlmp_get_saddr(struct lsap_cb *self);
 __u32 irlmp_get_daddr(struct lsap_cb *self);
 
-
 extern char *lmp_reasons[];
 extern int sysctl_discovery_slots;
+extern int sysctl_discovery;
 extern struct irlmp_cb *irlmp;
+
+static inline hashbin_t *irlmp_get_cachelog(void) { return irlmp->cachelog; }
 
 #endif

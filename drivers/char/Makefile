@@ -401,6 +401,14 @@ else
   endif
 endif                                             
 
+ifeq ($(CONFIG_RADIO_CADET),y)
+L_OBJS += radio-cadet.o
+else
+  ifeq ($(CONFIG_RADIO_CADET),m)
+  M_OBJS += radio-cadet.o
+  endif
+endif                                             
+
 ifeq ($(CONFIG_RADIO_MIROPCM20),y)
 L_OBJS += radio-miropcm20.o
 else
@@ -459,6 +467,7 @@ else
   ALL_SUB_DIRS += hfmodem
   MOD_SUB_DIRS += hfmodem
   endif
+
 endif
 
 include $(TOPDIR)/Rules.make

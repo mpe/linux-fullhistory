@@ -48,26 +48,24 @@ static int irlpt_server_proc_read(char *buf, char **start, off_t offset,
 #endif /* CONFIG_PROC_FS */
 
 int irlpt_server_init(void);
-static void irlpt_server_cleanup(void);
-static void irlpt_server_disconnect_indication( void *instance, 
-						void *sap, 
+static void irlpt_server_disconnect_indication(void *instance, void *sap, 
 						LM_REASON reason,
 						struct sk_buff *skb);
-static void irlpt_server_connect_confirm( void *instance, 
-					  void *sap, 
-					  struct qos_info *qos,  
-					  int max_seg_size,
-					  struct sk_buff *skb);
-static void irlpt_server_connect_indication( void *instance, 
-					     void *sap, 
-					     struct qos_info *qos, 
-					     int max_seg_size,
-					     struct sk_buff *skb);
-static void irlpt_server_data_indication( void *instance, 
-					  void *sap, 
-					  struct sk_buff *skb);
+static void irlpt_server_connect_confirm(void *instance, void *sap, 
+					 struct qos_info *qos,  
+					 __u32 max_seg_size,
+					 struct sk_buff *skb);
+static void irlpt_server_connect_indication(void *instance, 
+					    void *sap, 
+					    struct qos_info *qos, 
+					    __u32 max_seg_size,
+					    struct sk_buff *skb);
+static int irlpt_server_data_indication(void *instance, void *sap, 
+					struct sk_buff *skb);
 static void register_irlpt_server(void);
 static void deregister_irlpt_server(void);
+
+static __u32 skey; /* IrLMP service handle */
 
 int irlpt_server_lsap = LSAP_IRLPT;
 int irlpt_server_debug = 4;
@@ -183,6 +181,8 @@ struct proc_dir_entry proc_irlpt_server = {
 /*int irlpt_init( struct device *dev) {*/
 __initfunc(int irlpt_server_init(void))
 {
+	__u16 hints;
+
 	DEBUG( irlpt_server_debug, "--> " __FUNCTION__ "\n");
 
 	printk( KERN_INFO "%s\n", version);
@@ -195,7 +195,6 @@ __initfunc(int irlpt_server_init(void))
 			" irlpt_server control block!\n");
 		return -ENOMEM;
 	}
-
 	memset( irlpt_server, 0, sizeof(struct irlpt_cb));
 
 	sprintf(irlpt_server->ifname, "irlpt_server");
@@ -210,7 +209,8 @@ __initfunc(int irlpt_server_init(void))
 
 	skb_queue_head_init(&irlpt_server->rx_queue);
 
-	irlmp_register_layer( S_PRINTER, SERVER, FALSE, NULL);
+	hints = irlmp_service_to_hint(S_PRINTER);
+	skey = irlmp_register_service(hints);
 	
 	register_irlpt_server();
 
@@ -235,12 +235,11 @@ static void irlpt_server_cleanup(void)
 
 	DEBUG( irlpt_server_debug, "--> " __FUNCTION__ "\n");
 
+	irlmp_unregister_service(skey);
 	deregister_irlpt_server();
 
 	while (( skb = skb_dequeue(&irlpt_server->rx_queue)) != NULL) {
 		DEBUG(irlpt_server_debug, __FUNCTION__ ": freeing SKB\n");
-                IS_SKB( skb, return;);
-                FREE_SKB_MAGIC( skb);
                 dev_kfree_skb( skb);
 	}
 
@@ -307,11 +306,11 @@ static void irlpt_server_disconnect_indication( void *instance,
  *
  *    LSAP connection confirmed!
  */
-static void irlpt_server_connect_confirm( void *instance, 
-					  void *sap, 
-					  struct qos_info *qos,
-					  int max_seg_size,
-					  struct sk_buff *skb)
+static void irlpt_server_connect_confirm(void *instance, 
+					 void *sap, 
+					 struct qos_info *qos,
+					 __u32 max_seg_size,
+					 struct sk_buff *skb)
 {
 	struct irlpt_cb *self;
 
@@ -332,11 +331,11 @@ static void irlpt_server_connect_confirm( void *instance,
  * Function irlpt_connect_indication (handle)
  *
  */
-static void irlpt_server_connect_indication( void *instance, 
-					     void *sap, 
-					     struct qos_info *qos, 
-					     int max_seg_size,
-					     struct sk_buff *skb)
+static void irlpt_server_connect_indication(void *instance, 
+					    void *sap, 
+					    struct qos_info *qos, 
+					    __u32 max_seg_size,
+					    struct sk_buff *skb)
 {
 	struct irlpt_cb *self;
 	struct irlpt_info info;
@@ -368,21 +367,19 @@ static void irlpt_server_connect_indication( void *instance,
  *    This function gets the data that is received on the data channel
  *
  */
-static void irlpt_server_data_indication( void *instance, 
-					  void *sap, 
-					  struct sk_buff *skb) 
+static int irlpt_server_data_indication(void *instance, void *sap, 
+					struct sk_buff *skb) 
 {
-
 	struct irlpt_cb *self;
 
 	DEBUG( irlpt_server_debug, "--> " __FUNCTION__ "\n");
 
 	self = ( struct irlpt_cb *) instance;
 	     
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRLPT_MAGIC, return;);
+	ASSERT( self != NULL, return -1;);
+	ASSERT( self->magic == IRLPT_MAGIC, return -1;);
 
-	ASSERT( skb != NULL, return;);
+	ASSERT( skb != NULL, return -1;);
 
 	DEBUG( irlpt_server_debug, __FUNCTION__ ": len=%d\n", (int) skb->len);
 
@@ -394,6 +391,8 @@ static void irlpt_server_data_indication( void *instance,
         wake_up_interruptible(&self->read_wait);
 
 	DEBUG( irlpt_server_debug, __FUNCTION__ " -->\n");
+	
+	return 0;
 }
 
 /*
@@ -484,14 +483,15 @@ MODULE_PARM(irlpt_server_fsm_debug, "1i");
  */
 int init_module(void)
 {
+	int ret;
 
         DEBUG( irlpt_server_debug, "--> IrLPT server: init_module\n");
 
-        irlpt_server_init();
+        ret = irlpt_server_init();
 
         DEBUG( irlpt_server_debug, "IrLPT server: init_module -->\n");
 
-        return 0;
+        return ret;
 }
 
 /*

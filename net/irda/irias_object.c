@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct  1 22:50:04 1998
- * Modified at:   Tue Dec 15 09:19:43 1998
+ * Modified at:   Mon Mar 22 13:22:35 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -23,6 +23,8 @@
  ********************************************************************/
 
 #include <linux/string.h>
+#include <linux/socket.h>
+#include <linux/irda.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
@@ -227,7 +229,6 @@ void irias_add_attrib( struct ias_object *obj, struct ias_attrib *attrib)
  *
  *    Change the value of an objects attribute.
  *
- *    TODO: not tested yet!
  */
 int irias_object_change_attribute( char *obj_name, char *attrib_name, 
 				   struct ias_value *new_value) 

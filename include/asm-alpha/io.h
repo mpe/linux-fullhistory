@@ -287,7 +287,7 @@ static inline void iounmap(void *addr)
  * String version of IO memory access ops:
  */
 extern void _memcpy_fromio(void *, unsigned long, long);
-extern void _memcpy_toio(unsigned long, void *, long);
+extern void _memcpy_toio(unsigned long, const void *, long);
 extern void _memset_c_io(unsigned long, unsigned long, long);
 
 #define memcpy_fromio(to,from,len) \

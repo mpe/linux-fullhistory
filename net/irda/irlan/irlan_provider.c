@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Thu Feb  4 16:08:33 1999
+ * Modified at:   Tue Apr  6 19:08:20 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
@@ -56,8 +56,8 @@
  *    This function gets the data that is received on the control channel
  *
  */
-void irlan_provider_data_indication(void *instance, void *sap, 
-				    struct sk_buff *skb) 
+int irlan_provider_data_indication(void *instance, void *sap, 
+				   struct sk_buff *skb) 
 {
 	struct irlan_cb *self;
 	__u8 code;
@@ -66,10 +66,10 @@ void irlan_provider_data_indication(void *instance, void *sap,
 	
 	self = (struct irlan_cb *) instance;
 
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == IRLAN_MAGIC, return;);
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRLAN_MAGIC, return -1;);
 
-	ASSERT(skb != NULL, return;);
+	ASSERT(skb != NULL, return -1;);
 
 	code = skb->data[0];
 	switch(code) {
@@ -102,6 +102,7 @@ void irlan_provider_data_indication(void *instance, void *sap,
 		DEBUG(2, __FUNCTION__ "(), Unknown command!\n");
 		break;
 	}
+	return 0;
 }
 
 /*
@@ -111,8 +112,8 @@ void irlan_provider_data_indication(void *instance, void *sap,
  *
  */
 void irlan_provider_connect_indication(void *instance, void *sap, 
-				       struct qos_info *qos, int max_sdu_size,
-				       struct sk_buff *skb)
+				       struct qos_info *qos,
+				       __u32 max_sdu_size, struct sk_buff *skb)
 {
 	struct irlan_cb *self, *entry, *new;
 	struct tsap_cb *tsap;
@@ -248,7 +249,6 @@ int irlan_provider_extract_params(struct irlan_cb *self, int cmd,
 	__u8 *frame;
 	__u8 *ptr;
 	int count;
-	__u8 name_len;
 	__u16 val_len;
 	int i;
 	char *name;

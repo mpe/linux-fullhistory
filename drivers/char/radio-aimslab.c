@@ -235,6 +235,7 @@ static int rt_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.rangehigh=(108*16000);
 			v.flags=VIDEO_TUNER_LOW;
 			v.mode=VIDEO_MODE_AUTO;
+			strcpy(v.name, "FM");
 			v.signal=0xFFFF*rt_getsigstr(rt);
 			if(copy_to_user(arg,&v, sizeof(v)))
 				return -EFAULT;

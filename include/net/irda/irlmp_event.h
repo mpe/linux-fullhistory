@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Thu Feb 11 00:42:41 1999
+ * Modified at:   Thu Feb 25 20:49:16 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -92,7 +92,7 @@ struct irlmp_event {
 
 	int reason;
 
-	DISCOVERY *discovery;
+	discovery_t *discovery;
 };
 
 extern const char *irlmp_state[];

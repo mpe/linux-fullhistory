@@ -529,15 +529,6 @@ void clean_inode(struct inode *inode)
 }
 
 /*
- * This gets called with I_LOCK held: it needs
- * to read the inode and then unlock it
- */
-static inline void read_inode(struct inode *inode, struct super_block *sb)
-{
-	sb->s_op->read_inode(inode);
-}
-
-/*
  * This is called by things like the networking layer
  * etc that want to get an inode without any inode
  * number, or filesystems that allocate new inodes with
@@ -606,7 +597,7 @@ add_new_inode:
 		spin_unlock(&inode_lock);
 
 		clean_inode(inode);
-		read_inode(inode, sb);
+		sb->s_op->read_inode(inode);
 
 		/*
 		 * This is special!  We do not need the spinlock

@@ -15,7 +15,8 @@ OX_OBJS :=
 O_TARGET := irda.o
 O_OBJS	 := iriap.o iriap_event.o irlmp.o irlmp_event.o irlmp_frame.o \
             irlap.o irlap_event.o irlap_frame.o timer.o qos.o irqueue.o \
-            irttp.o irda_device.o irias_object.o crc.o wrapper.o af_irda.o
+            irttp.o irda_device.o irias_object.o crc.o wrapper.o af_irda.o \
+	    discovery.o
 OX_OBJS := irmod.o
 
 MOD_LIST_NAME := IRDA_MODULES
@@ -51,15 +52,6 @@ O_OBJS += irlpt/irlpt.o
 else
   ifeq ($(CONFIG_IRLPT),m)
   MOD_IN_SUB_DIRS += irlpt
-  endif
-endif
-
-ifeq ($(CONFIG_IROBEX),y)
-SUB_DIRS += irobex
-O_OBJS += irobex/irobex.o
-else
-  ifeq ($(CONFIG_IROBEX),m)
-  MOD_SUB_DIRS += irobex
   endif
 endif
 

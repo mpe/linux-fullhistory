@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct 15 08:37:58 1998
- * Modified at:   Wed Feb  3 19:58:28 1999
+ * Modified at:   Mon Mar 22 17:41:59 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
@@ -31,6 +31,7 @@
 #include <net/arp.h>
 
 #include <net/irda/irda.h>
+#include <net/irda/irmod.h>
 #include <net/irda/irlan_common.h>
 #include <net/irda/irlan_eth.h>
 
@@ -123,20 +124,20 @@ int irlan_eth_xmit(struct sk_buff *skb, struct device *dev)
  *    This function gets the data that is received on the data channel
  *
  */
-void irlan_eth_receive(void *instance, void *sap, struct sk_buff *skb)
+int irlan_eth_receive(void *instance, void *sap, struct sk_buff *skb)
 {
 	struct irlan_cb *self;
 
 	self = (struct irlan_cb *) instance;
 
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == IRLAN_MAGIC, return;);
+	ASSERT(self != NULL, return 0;);
+	ASSERT(self->magic == IRLAN_MAGIC, return 0;);
 
 	if (skb == NULL) {
 		++self->stats.rx_dropped; 
-		return;
+		return 0;
 	}
-	ASSERT(skb->len > 1, return;);
+	ASSERT(skb->len > 1, return 0;);
 		
 	/* 
 	 * Adopt this frame! Important to set all these fields since they 
@@ -151,7 +152,7 @@ void irlan_eth_receive(void *instance, void *sap, struct sk_buff *skb)
 	self->stats.rx_packets++;
 	self->stats.rx_bytes += skb->len; 
 
-/* 	net_bh(); */
+	return 0;
 }
 
 /*

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Wed Feb 17 23:29:34 1999
+ * Modified at:   Wed Apr  7 16:56:35 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane, <loz@holmes.demon.co.uk>
@@ -57,15 +57,12 @@
 static void irlan_client_ctrl_disconnect_indication(void *instance, void *sap, 
 						    LM_REASON reason, 
 						    struct sk_buff *);
-
-static void irlan_client_ctrl_data_indication(void *instance, void *sap, 
-					      struct sk_buff *skb);
-
+static int irlan_client_ctrl_data_indication(void *instance, void *sap, 
+					     struct sk_buff *skb);
 static void irlan_client_ctrl_connect_confirm(void *instance, void *sap, 
 					      struct qos_info *qos, 
-					      int max_sdu_size,
+					      __u32 max_sdu_size,
 					      struct sk_buff *);
-
 static void irlan_check_response_param(struct irlan_cb *self, char *param, 
 				       char *value, int val_len);
 
@@ -99,6 +96,12 @@ void irlan_client_start_kick_timer(struct irlan_cb *self, int timeout)
 			 irlan_client_kick_timer_expired);
 }
 
+/*
+ * Function irlan_client_wakeup (self, saddr, daddr)
+ *
+ *    Wake up client
+ *
+ */
 void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
 {
 	struct irmanager_event mgr_event;
@@ -108,52 +111,44 @@ void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
-	if (self->client.state == IRLAN_IDLE) {
-		/* saddr may have changed! */
-		self->saddr = saddr;
+	/* Check if we are already awake */
+	if (self->client.state != IRLAN_IDLE)
+		return;
+
+	/* saddr may have changed! */
+	self->saddr = saddr;
+	
+	/* Check if network device is up */
+	if (self->dev.start) {
+		/* Open TSAPs */
+		irlan_client_open_ctrl_tsap(self);
+		irlan_provider_open_ctrl_tsap(self);
+		irlan_open_data_tsap(self);
 		
-		/* Check if network device is up */
-		if (self->dev.start) {
-			/* Open TSAPs */
-			irlan_client_open_ctrl_tsap(self);
-			irlan_provider_open_ctrl_tsap(self);
-			irlan_open_data_tsap(self);
-			
-			irlan_do_client_event(self, IRLAN_DISCOVERY_INDICATION,
-					      NULL);
-		} else if (self->notify_irmanager) {
-			/* 
-			 * Tell irmanager that the device can now be 
-			 * configured but only if the device was not taken
-			 * down by the user
-			 */
-			mgr_event.event = EVENT_IRLAN_START;
-			sprintf(mgr_event.devname, "%s", self->ifname);
-			irmanager_notify(&mgr_event);
-
-			/* 
-			 * We set this so that we only notify once, since if 
-			 * configuration of the network device fails, the user
-			 * will have to sort it out first anyway. No need to 
-			 * try again.
-			 */
-			self->notify_irmanager = FALSE;
-		}
-		/* Restart watchdog timer */
-		irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
-
-		/* Start kick timer */
-		irlan_client_start_kick_timer(self, 200);
-	} else {
-		DEBUG(2, __FUNCTION__ "(), state=%s\n", 
-		      irlan_state[ self->client.state]);
-		/*  
-		 *  If we get here, it's obvious that the last 
-		 *  connection attempt has failed, so its best 
-		 *  to go back to idle!
+		irlan_do_client_event(self, IRLAN_DISCOVERY_INDICATION, NULL);
+	} else if (self->notify_irmanager) {
+		/* 
+		 * Tell irmanager that the device can now be 
+		 * configured but only if the device was not taken
+		 * down by the user
 		 */
-		irlan_do_client_event(self, IRLAN_LMP_DISCONNECT, NULL);
+		mgr_event.event = EVENT_IRLAN_START;
+		sprintf(mgr_event.devname, "%s", self->ifname);
+		irmanager_notify(&mgr_event);
+		
+		/* 
+		 * We set this so that we only notify once, since if 
+		 * configuration of the network device fails, the user
+		 * will have to sort it out first anyway. No need to 
+		 * try again.
+		 */
+		self->notify_irmanager = FALSE;
 	}
+	/* Restart watchdog timer */
+	irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
+	
+	/* Start kick timer */
+	irlan_client_start_kick_timer(self, 2*HZ);
 }
 
 /*
@@ -162,7 +157,7 @@ void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
  *    Remote device with IrLAN server support discovered
  *
  */
-void irlan_client_discovery_indication(DISCOVERY *discovery) 
+void irlan_client_discovery_indication(discovery_t *discovery) 
 {
 	struct irlan_cb *self, *entry;
 	__u32 saddr, daddr;
@@ -200,7 +195,7 @@ void irlan_client_discovery_indication(DISCOVERY *discovery)
 		 * Rehash instance, now we have a client (daddr) to serve.
 		 */
 		entry = hashbin_remove(irlan, self->daddr, NULL);
-		ASSERT( entry == self, return;);
+		ASSERT(entry == self, return;);
 
 		self->daddr = daddr;
 		self->saddr = saddr;
@@ -234,8 +229,8 @@ void irlan_client_discovery_indication(DISCOVERY *discovery)
  *    This function gets the data that is received on the control channel
  *
  */
-static void irlan_client_ctrl_data_indication(void *instance, void *sap, 
-					      struct sk_buff *skb)
+static int irlan_client_ctrl_data_indication(void *instance, void *sap, 
+					     struct sk_buff *skb)
 {
 	struct irlan_cb *self;
 	
@@ -243,11 +238,13 @@ static void irlan_client_ctrl_data_indication(void *instance, void *sap,
 	
 	self = (struct irlan_cb *) instance;
 	
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == IRLAN_MAGIC, return;);
-	ASSERT(skb != NULL, return;);
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRLAN_MAGIC, return -1;);
+	ASSERT(skb != NULL, return -1;);
 	
 	irlan_do_client_event(self, IRLAN_DATA_INDICATION, skb); 
+
+	return 0;
 }
 
 static void irlan_client_ctrl_disconnect_indication(void *instance, void *sap, 
@@ -317,7 +314,7 @@ void irlan_client_open_ctrl_tsap(struct irlan_cb *self)
  */
 static void irlan_client_ctrl_connect_confirm(void *instance, void *sap, 
 					      struct qos_info *qos, 
-					      int max_sdu_size,
+					      __u32 max_sdu_size,
 					      struct sk_buff *skb) 
 {
 	struct irlan_cb *self;
@@ -448,7 +445,10 @@ void irlan_client_extract_params(struct irlan_cb *self, struct sk_buff *skb)
 static void irlan_check_response_param(struct irlan_cb *self, char *param, 
 				       char *value, int val_len) 
 {
+#ifdef CONFIG_IRLAN_GRATUITOUS_ARP
 	struct in_device *in_dev;
+#endif
+	__u16 tmp_cpu; /* Temporary value in host order */
 	__u8 *bytes;
 	int i;
 
@@ -515,12 +515,16 @@ static void irlan_check_response_param(struct irlan_cb *self, char *param,
 		return;
 	}
 	if (strcmp(param, "CON_ARB") == 0) {
-		self->client.recv_arb_val = le16_to_cpup(value);
+		memcpy(&tmp_cpu, value, 2); /* Align value */
+		le16_to_cpus(&tmp_cpu);     /* Convert to host order */
+		self->client.recv_arb_val = tmp_cpu;
 		DEBUG(2, __FUNCTION__ "(), receive arb val=%d\n", 
 		      self->client.recv_arb_val);
 	}
 	if (strcmp(param, "MAX_FRAME") == 0) {
-		self->client.max_frame = le16_to_cpup(value);
+		memcpy(&tmp_cpu, value, 2); /* Align value */
+		le16_to_cpus(&tmp_cpu);     /* Convert to host order */
+		self->client.max_frame = tmp_cpu;
 		DEBUG(4, __FUNCTION__ "(), max frame=%d\n", 
 		      self->client.max_frame);
 	}

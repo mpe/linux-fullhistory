@@ -569,10 +569,6 @@ static __inline__ void run_main(void)
 	if (!main_running) {
 		main_running = 1;
 		NCR5380_main();
-		/* 
-		 * main_running is cleared in NCR5380_main once it can't do 
-		 * more work, and NCR5380_main exits with interrupts disabled.
-		 */
 	}
 	restore_flags(flags);
 }
@@ -702,7 +698,9 @@ void NCR5380_timer_fn(unsigned long surplus_to_requirements)
 	}
 	restore_flags(flags);
 
+	spin_lock_irqsave(&io_request_lock, flags);
 	run_main();
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 #endif				/* def USLEEP */
 
@@ -1266,6 +1264,7 @@ static void NCR5380_main(void) {
 	struct Scsi_Host *instance;
 	struct NCR5380_hostdata *hostdata;
 	int done;
+	unsigned long flags;
 
 	/*
 	 * We run (with interrupts disabled) until we're sure that none of 
@@ -1279,14 +1278,16 @@ static void NCR5380_main(void) {
 	 * this should prevent any race conditions.
 	 */
 
+	spin_unlock_irq(&io_request_lock);
+	
+	save_flags(flags);
+	
 	do {
 		cli();		/* Freeze request queues */
 		done = 1;
 		for (instance = first_instance; instance &&
 		     instance->hostt == the_template; instance = instance->next) {
-			unsigned long flags;
 			 hostdata = (struct NCR5380_hostdata *) instance->hostdata;
-			 save_flags(flags);
 			 cli();
 #ifdef USLEEP
 			if (!hostdata->connected && !hostdata->selecting) {
@@ -1365,8 +1366,6 @@ static void NCR5380_main(void) {
 							     TAG_NEXT)) {
 							break;
 						} else {
-							unsigned long flags;
-							save_flags(flags);
 							cli();
 							LIST(tmp, hostdata->issue_queue);
 							tmp->host_scribble = (unsigned char *)
@@ -1393,14 +1392,12 @@ static void NCR5380_main(void) {
 				}
 				else
 				{
-					unsigned long flags;
 					/* RvC: device failed, so we wait a long time
 					this is needed for Mustek scanners, that
 					do not respond to commands immediately
 					after a scan */
 					printk(KERN_DEBUG "scsi%d: device %d did not respond in time\n",
 						instance->host_no, tmp->target);
-					save_flags(flags);
 					cli();
 					LIST(tmp, hostdata->issue_queue);
 					tmp->host_scribble = (unsigned char *) hostdata->issue_queue;
@@ -1434,7 +1431,8 @@ static void NCR5380_main(void) {
 				break;
 		}		/* for instance */
 	} while (!done);
-	cli();
+	spin_lock_irq(&io_request_lock);
+  /* 	cli();*/
 	main_running = 0;
 }
 

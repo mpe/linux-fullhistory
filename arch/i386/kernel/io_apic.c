@@ -922,7 +922,7 @@ static void __init construct_default_ISA_mptable(void)
 
 		mp_irqs[pos].mpc_irqtype = mp_INT;
 		mp_irqs[pos].mpc_irqflag = 0;		/* default */
-		mp_irqs[pos].mpc_srcbus = bus_type;
+		mp_irqs[pos].mpc_srcbus = 0;
 		mp_irqs[pos].mpc_srcbusirq = i;
 		mp_irqs[pos].mpc_dstapic = 0;
 		mp_irqs[pos].mpc_dstirq = i;
@@ -1183,13 +1183,23 @@ static inline void init_IO_APIC_traps(void)
 			 */
 			if (i < 16)
 				disable_8259A_irq(i);
-		} else
+		} else {
+			if (!IO_APIC_IRQ(i))
+				continue;
+
 			/*
-			 * we have no business changing low ISA
-			 * IRQs.
+			 * Hmm.. We don't have an entry for this,
+			 * so default to an old-fashioned 8259
+			 * interrupt if we can..
 			 */
-			if (IO_APIC_IRQ(i))
-				irq_desc[i].handler = &no_irq_type;
+			if (i < 16) {
+				make_8259A_irq(i);
+				continue;
+			}
+
+			/* Strange. Oh, well.. */
+			irq_desc[i].handler = &no_irq_type;
+		}
 	}
 	init_IRQ_SMP();
 }

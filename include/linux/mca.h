@@ -39,27 +39,27 @@ things. */
 specify a starting slot beyond zero, to deal with detecting multiple
 devices.  Returns MCA_NOTFOUND if id not found.  Also checks the
 integrated adapters. */
-extern int mca_find_adapter( int id, int start );
-extern int mca_find_unused_adapter( int id, int start );
+extern int mca_find_adapter(int id, int start);
+extern int mca_find_unused_adapter(int id, int start);
 
 /* adapter state info - returns 0 if no */
-extern int mca_isadapter( int slot );
-extern int mca_isenabled( int slot );
+extern int mca_isadapter(int slot);
+extern int mca_isenabled(int slot);
 
-extern int mca_is_adapter_used( int slot );
-extern int mca_mark_as_used( int slot );
-extern void mca_mark_as_unused( int slot );
+extern int mca_is_adapter_used(int slot);
+extern int mca_mark_as_used(int slot);
+extern void mca_mark_as_unused(int slot);
 
 /* gets a byte out of POS register (stored in memory) */
-extern unsigned char mca_read_stored_pos( int slot, int reg );
+extern unsigned char mca_read_stored_pos(int slot, int reg);
 
 /*
 	This can be expanded later.  Right now, it gives us a way of
 	getting meaningful information into the MCA_info structure,
 	so we can have a more interesting /proc/mca.
 */
-extern void mca_set_adapter_name( int slot, char* name );
-extern char* mca_get_adapter_name( int slot );
+extern void mca_set_adapter_name(int slot, char* name);
+extern char* mca_get_adapter_name(int slot);
 
 /*
 	This sets up an information callback for /proc/mca/slot?.  The
@@ -73,8 +73,8 @@ extern char* mca_get_adapter_name( int slot );
 	unregisters, thus preventing kernel crashes and other such
 	nastiness.
 */
-typedef int (*MCA_ProcFn)( char* buf, int slot, void* dev );
-extern void mca_set_adapter_procfn( int slot, MCA_ProcFn, void* dev );
+typedef int (*MCA_ProcFn)(char* buf, int slot, void* dev);
+extern void mca_set_adapter_procfn(int slot, MCA_ProcFn, void* dev);
 
 /* These routines actually mess with the hardware POS registers.  They
 temporarily disable the device (and interrupts), so make sure you know
@@ -88,13 +88,13 @@ limits.
 */
 
 /* read a byte from the specified POS register. */
-extern unsigned char mca_read_pos( int slot, int reg );
+extern unsigned char mca_read_pos(int slot, int reg);
 
 /* write a byte to the specified POS register. */
-extern void mca_write_pos( int slot, int reg, unsigned char byte );
+extern void mca_write_pos(int slot, int reg, unsigned char byte);
 
 /* Should only be called by the NMI interrupt handler, this will do some
 fancy stuff to figure out what might have generated a NMI. */
-extern void mca_handle_nmi( void );
+extern void mca_handle_nmi(void);
 
 #endif /* _LINUX_MCA_H */

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct 15 08:36:58 1998
- * Modified at:   Fri Jan 29 15:20:45 1999
+ * Modified at:   Mon Mar 22 12:57:11 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -25,8 +25,8 @@
 #ifndef IRLAN_ETH_H
 #define IRLAN_ETH_H
 
-void irlan_eth_receive( void *instance, void *sap, struct sk_buff *skb);
-int  irlan_eth_xmit( struct sk_buff *skb, struct device *dev);
+int  irlan_eth_receive(void *instance, void *sap, struct sk_buff *skb);
+int  irlan_eth_xmit(struct sk_buff *skb, struct device *dev);
 
 void irlan_eth_flow_indication( void *instance, void *sap, LOCAL_FLOW flow);
 

@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irlap_frame.h
- * Version:       0.3
+ * Version:       0.9
  * Description:   Build and transmit IrLAP frames
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 10:27:26 1997
- * Modified at:   Mon Dec 14 14:22:23 1998
+ * Modified at:   Fri Mar 26 14:10:53 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -27,7 +27,7 @@
 
 #include <linux/skbuff.h>
 
-#include <net/irda/irmod.h>
+#include <net/irda/irda.h>
 #include <net/irda/irlap.h>
 #include <net/irda/qos.h>
 
@@ -59,70 +59,58 @@
 #define I_FRAME   0x00 /* Information Format */
 #define UI_FRAME  0x03 /* Unnumbered Information */
 
-#define CMD_FRAME  0x01
-#define RSP_FRAME  0x00
+#define CMD_FRAME 0x01
+#define RSP_FRAME 0x00
 
-#define PF_BIT 0x10 /* Poll/final bit */
-
-#define IR_S                  0x01    /* Supervisory frames */
-#define IR_RR                 0x01    /* Receiver ready */
-#define IR_RNR                0x05    /* Receiver not ready */
-#define IR_REJ                0x09    /* Reject */
-#define IR_U                  0x03    /* Unnumbered frames */
-#define IR_SNRM               0x2f    /* Set Asynchronous Balanced Mode */
-
-#define IR_DISC               0x43    /* Disconnect */
-#define IR_DM                 0x0f    /* Disconnected mode */
-#define IR_UA                 0x63    /* Unnumbered acknowledge */
-#define IR_FRMR               0x87    /* Frame reject */
-#define IR_UI                 0x03    /* Unnumbered information */
+#define PF_BIT    0x10 /* Poll/final bit */
 
 struct xid_frame {
-	__u8  caddr     __attribute__((packed)); /* Connection address */
-	__u8  control   __attribute__((packed));
-	__u8  ident     __attribute__((packed)); /* Should always be XID_FORMAT */ 
-	__u32 saddr     __attribute__((packed)); /* Source device address */
-	__u32 daddr     __attribute__((packed)); /* Destination device address */
-	__u8  flags     __attribute__((packed)); /* Discovery flags */
-	__u8  slotnr    __attribute__((packed));
-	__u8  version   __attribute__((packed));
-	__u8  discovery_info[0]  __attribute__((packed));
-};
+	__u8  caddr; /* Connection address */
+	__u8  control;
+	__u8  ident; /* Should always be XID_FORMAT */ 
+	__u32 saddr; /* Source device address */
+	__u32 daddr; /* Destination device address */
+	__u8  flags; /* Discovery flags */
+	__u8  slotnr;
+	__u8  version;
+	__u8  discovery_info[0];
+} PACK;
 
 struct test_frame {
 	__u8 caddr;          /* Connection address */
 	__u8 control;
-	__u8 saddr;          /* Source device address */
-	__u8 daddr;          /* Destination device address */
-	__u8 *info;          /* Information */
-};
+	__u32 saddr;         /* Source device address */
+	__u32 daddr;         /* Destination device address */
+	__u8 info[0];        /* Information */
+} PACK;
 
 struct ua_frame {
-	__u8 caddr   __attribute__((packed));
-	__u8 control __attribute__((packed));
+	__u8 caddr;
+	__u8 control;
 
-	__u32 saddr     __attribute__((packed)); /* Source device address */
-	__u32 daddr     __attribute__((packed)); /* Dest device address */
+	__u32 saddr; /* Source device address */
+	__u32 daddr; /* Dest device address */
 	__u8  params[0];
-};
+} PACK;
 	
 struct i_frame {
-	__u8 caddr   __attribute__((packed));
-	__u8 control __attribute__((packed));
-	__u8 data[0] __attribute__((packed));
-};
+	__u8 caddr;
+	__u8 control;
+	__u8 data[0];
+} PACK;
 
 struct snrm_frame {
-	__u8  caddr   __attribute__((packed));
-	__u8  control __attribute__((packed));
-	__u32 saddr   __attribute__((packed));
-	__u32 daddr   __attribute__((packed));
-	__u8  ncaddr  __attribute__((packed));
+	__u8  caddr;
+	__u8  control;
+	__u32 saddr;
+	__u32 daddr;
+	__u8  ncaddr;
 	__u8  params[0];
-};
+} PACK;
 
 /* Per-packet information we need to hide inside sk_buff */
 struct irlap_skb_cb {
+	int magic; /* Be sure that we can trust the information */
 	int mtt;   /* minimum turn around time */
 	int xbofs; /* number of xbofs required */
 	int vs;    /* next frame to send */
@@ -132,8 +120,10 @@ struct irlap_skb_cb {
 __inline__ void irlap_insert_mtt( struct irlap_cb *self, struct sk_buff *skb);
 
 void irlap_send_discovery_xid_frame( struct irlap_cb *, int S, __u8 s, 
-				     __u8 command, DISCOVERY *discovery);
+				     __u8 command, discovery_t *discovery);
 void irlap_send_snrm_frame( struct irlap_cb *, struct qos_info *);
+void irlap_send_test_frame(struct irlap_cb *self, __u32 daddr, 
+			   struct sk_buff *cmd);
 void irlap_send_ua_response_frame( struct irlap_cb *, struct qos_info *);
 void irlap_send_ui_frame( struct irlap_cb *self, struct sk_buff *skb,
 			  int command);
@@ -149,7 +139,5 @@ void irlap_resend_rejected_frames( struct irlap_cb *, int command);
 
 void irlap_send_i_frame( struct irlap_cb *, struct sk_buff *, int command);
 void irlap_send_ui_frame( struct irlap_cb *, struct sk_buff *, int command);
-
-/* void irlap_input( struct irlap_cb *self, struct sk_buff *skb); */
 
 #endif

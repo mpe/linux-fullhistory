@@ -43,19 +43,16 @@
 #include <linux/miscdevice.h>
 #include <linux/proc_fs.h>
 
-int  irlpt_client_init(void);
-static void irlpt_client_cleanup(void);
+int irlpt_client_init(void);
 static void irlpt_client_close(struct irlpt_cb *self);
 
-static void irlpt_client_discovery_indication( DISCOVERY *);
+static void irlpt_client_discovery_indication(discovery_t *);
 
-static void irlpt_client_connect_confirm( void *instance, 
-					  void *sap, 
-					  struct qos_info *qos, 
-					  int max_seg_size, 
-					  struct sk_buff *skb);
-static void irlpt_client_disconnect_indication( void *instance, 
-						void *sap, 
+static void irlpt_client_connect_confirm(void *instance, void *sap, 
+					 struct qos_info *qos, 
+					 __u32 max_seg_size, 
+					 struct sk_buff *skb);
+static void irlpt_client_disconnect_indication( void *instance, void *sap, 
 						LM_REASON reason,
 						struct sk_buff *userdata);
 static void irlpt_client_expired(unsigned long data);
@@ -64,6 +61,8 @@ static void irlpt_client_expired(unsigned long data);
 static char *rcsid = "$Id: irlpt_client.c,v 1.10 1998/11/10 22:50:57 dagb Exp $";
 #endif
 static char *version = "IrLPT client, v2 (Thomas Davis)";
+
+static __u32 ckey; /* IrLMP client handle */
 
 struct file_operations client_fops = {
 	irlpt_seek,    /* seek */
@@ -177,6 +176,8 @@ extern struct proc_dir_entry proc_irda;
  */
 __initfunc(int irlpt_client_init(void))
 {
+	__u16 hints;
+	
 	DEBUG( irlpt_client_debug, "--> "__FUNCTION__ "\n");
 
 	printk( KERN_INFO "%s\n", version);
@@ -187,9 +188,9 @@ __initfunc(int irlpt_client_init(void))
 			"IrLPT client: Can't allocate hashbin!\n");
 		return -ENOMEM;
 	}
-
-	irlmp_register_layer( S_PRINTER, CLIENT, TRUE, 
-			      irlpt_client_discovery_indication);
+	hints = irlmp_service_to_hint(S_PRINTER);
+	ckey = irlmp_register_client(hints, irlpt_client_discovery_indication,
+				     NULL);
 
 #ifdef CONFIG_PROC_FS
 	proc_register( &proc_irda, &proc_irlpt_client);
@@ -210,7 +211,7 @@ static void irlpt_client_cleanup(void)
 {
 	DEBUG( irlpt_client_debug, "--> "__FUNCTION__ "\n");
 
-	irlmp_unregister_layer( S_PRINTER, CLIENT);
+	irlmp_unregister_client(ckey);
 
 	/*
 	 *  Delete hashbin and close all irlpt client instances in it
@@ -232,6 +233,7 @@ static void irlpt_client_cleanup(void)
  */
 static struct irlpt_cb *irlpt_client_open( __u32 daddr)
 {
+	struct irmanager_event mgr_event;
 	struct irlpt_cb *self;
 
 	DEBUG( irlpt_client_debug, "--> "__FUNCTION__ "\n");
@@ -251,7 +253,6 @@ static struct irlpt_cb *irlpt_client_open( __u32 daddr)
 			hashbin_get_size(irlpt_clients));
 
 		hashbin_insert( irlpt_clients, (QUEUE *) self, daddr, NULL);
-
 	}
 
 	self->ir_dev.minor = MISC_DYNAMIC_MINOR;
@@ -270,6 +271,11 @@ static struct irlpt_cb *irlpt_client_open( __u32 daddr)
 
 	irlpt_client_next_state( self, IRLPT_CLIENT_IDLE);
 
+	/* Tell irmanager to create /dev/irlpt<X> */
+	mgr_event.event = EVENT_IRLPT_START;
+	sprintf(mgr_event.devname, "%s", self->ifname);
+	irmanager_notify(&mgr_event);
+
 	MOD_INC_USE_COUNT;
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
@@ -284,12 +290,18 @@ static struct irlpt_cb *irlpt_client_open( __u32 daddr)
  */
 static void irlpt_client_close( struct irlpt_cb *self)
 {
+	struct irmanager_event mgr_event;
 	struct sk_buff *skb;
 
 	DEBUG( irlpt_client_debug, "--> " __FUNCTION__ "\n");
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IRLPT_MAGIC, return;);
+
+	/* Tell irmanager to remove /dev/irlpt<X> */
+	mgr_event.event = EVENT_IRLPT_STOP;
+ 	sprintf(mgr_event.devname, "%s", self->ifname);
+ 	irmanager_notify(&mgr_event);
 
 	while (( skb = skb_dequeue(&self->rx_queue)) != NULL) {
 		DEBUG(irlpt_client_debug, 
@@ -312,7 +324,7 @@ static void irlpt_client_close( struct irlpt_cb *self)
  *    device it is, and which services it has.
  *
  */
-static void irlpt_client_discovery_indication( DISCOVERY *discovery)
+static void irlpt_client_discovery_indication(discovery_t *discovery)
 {
 	struct irlpt_info info;
 	struct irlpt_cb *self;
@@ -409,10 +421,10 @@ static void irlpt_client_disconnect_indication( void *instance,
  *
  *    LSAP connection confirmed!
  */
-static void irlpt_client_connect_confirm( void *instance, void *sap, 
-					  struct qos_info *qos, 
-					  int max_sdu_size,
-					  struct sk_buff *skb)
+static void irlpt_client_connect_confirm(void *instance, void *sap, 
+					 struct qos_info *qos, 
+					 __u32 max_sdu_size,
+					 struct sk_buff *skb)
 {
 	struct irlpt_info info;
 	struct irlpt_cb *self;
@@ -455,20 +467,20 @@ static void irlpt_client_connect_confirm( void *instance, void *sap,
  *    This function gets the data that is received on the data channel
  *
  */
-static void irlpt_client_data_indication( void *instance, void *sap, 
-					  struct sk_buff *skb) 
+static int irlpt_client_data_indication(void *instance, void *sap, 
+					struct sk_buff *skb) 
 {
 	struct irlpt_cb *self;
 
 	DEBUG( irlpt_client_debug, "--> " __FUNCTION__ "\n");
 
-	ASSERT( skb != NULL, return;);
+	ASSERT( skb != NULL, return -1;);
 	DEBUG( irlpt_client_debug, __FUNCTION__ ": len=%d\n", (int) skb->len);
 
 	self = ( struct irlpt_cb *) instance;
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRLPT_MAGIC, return;);
+	ASSERT( self != NULL, return -1;);
+	ASSERT( self->magic == IRLPT_MAGIC, return -1;);
 #if 1
 	{
 		int i;
@@ -496,6 +508,8 @@ static void irlpt_client_data_indication( void *instance, void *sap,
 /* 	} */
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
+
+	return 0;
 }
 
 /*

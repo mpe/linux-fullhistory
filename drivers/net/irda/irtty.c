@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:18:38 1997
- * Modified at:   Tue Feb  9 13:08:25 1999
+ * Modified at:   Tue Apr  6 21:35:25 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
@@ -33,7 +33,6 @@
 #include <linux/init.h>
 
 #include <net/irda/irda.h>
-#include <net/irda/irmod.h>
 #include <net/irda/irtty.h>
 #include <net/irda/wrapper.h>
 #include <net/irda/irlap.h>
@@ -191,7 +190,6 @@ static int irtty_open( struct tty_struct *tty)
 	/*
 	 *  Initialize driver
 	 */
-	/* self->idev.flags |= SIR_MODE | IO_PIO; */
 	self->idev.rx_buff.state = OUTSIDE_FRAME;
 
 	/* 
@@ -207,7 +205,7 @@ static int irtty_open( struct tty_struct *tty)
 		IR_115200;
 	self->idev.qos.min_turn_time.bits = 0x03;
 	self->idev.flags = IFF_SIR | IFF_PIO;
-	irda_qos_bits_to_value( &self->idev.qos);
+	irda_qos_bits_to_value(&self->idev.qos);
 
 	/* Specify which buffer allocation policy we need */
 	self->idev.rx_buff.flags = GFP_KERNEL;
@@ -230,7 +228,7 @@ static int irtty_open( struct tty_struct *tty)
 	self->idev.netdev.stop            = irtty_net_close;
 
 	/* Open the IrDA device */
-	irda_device_open( &self->idev, name, self);
+	irda_device_open(&self->idev, name, self);
 
 	MOD_INC_USE_COUNT;
 
@@ -244,20 +242,20 @@ static int irtty_open( struct tty_struct *tty)
  *    and then restoring the TTY line discipline to what it was before it got
  *    hooked to IrDA (which usually is TTY again).  
  */
-static void irtty_close( struct tty_struct *tty) 
+static void irtty_close(struct tty_struct *tty) 
 {
 	struct irtty_cb *self = (struct irtty_cb *) tty->disc_data;
 	
 	/* First make sure we're connected. */
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRTTY_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IRTTY_MAGIC, return;);
 
 	/* We are not using any dongle anymore! */
-	if ( self->dongle_q)
-		self->dongle_q->dongle->close( &self->idev);
+	if (self->dongle_q)
+		self->dongle_q->dongle->close(&self->idev);
 
 	/* Remove driver */
-	irda_device_close( &self->idev);
+	irda_device_close(&self->idev);
 
 	/* Stop tty */
 	tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
@@ -266,11 +264,10 @@ static void irtty_close( struct tty_struct *tty)
 	self->tty = NULL;
 	self->magic = 0;
 	
-	/* hashbin_remove( irtty, 0, self->name); */
-	self = hashbin_remove( irtty, (int) self, NULL);
+	self = hashbin_remove(irtty, (int) self, NULL);
 	
-	if ( self != NULL)
-		kfree( self);
+	if (self != NULL)
+		kfree(self);
 
  	MOD_DEC_USE_COUNT;
 }
@@ -579,7 +576,7 @@ static void irtty_write_wakeup( struct tty_struct *tty)
 		 *  Now serial buffer is almost free & we can start 
 		 *  transmission of another packet 
 		 */
-		DEBUG( 4, __FUNCTION__ "(), finished with frame!\n");
+		DEBUG(5, __FUNCTION__ "(), finished with frame!\n");
 
 		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 
@@ -649,8 +646,8 @@ int irtty_register_dongle( struct dongle *dongle)
 	memset( new, 0, sizeof( struct dongle_q));
         new->dongle = dongle;
 
-	/* Insert IrDA compressor into hashbin */
-	hashbin_insert( dongles, (QUEUE *) new, dongle->type, NULL);
+	/* Insert IrDA dongle into hashbin */
+	hashbin_insert(dongles, (QUEUE *) new, dongle->type, NULL);
 	
         return 0;
 }
@@ -668,11 +665,20 @@ void irtty_unregister_dongle( struct dongle *dongle)
 }
 
 
+/*
+ * Function irtty_set_dtr_rts (tty, dtr, rts)
+ *
+ *    This function can be used by dongles etc. to set or reset the status
+ *    of the dtr and rts lines
+ */
 void irtty_set_dtr_rts(struct tty_struct *tty, int dtr, int rts)
 {
 	mm_segment_t fs;
-	int arg = TIOCM_OUT2;
+	int arg = 0;
 
+#ifdef TIOCM_OUT2 /* Not defined for ARM */
+	arg = TIOCM_OUT2;
+#endif
 	if (rts)
 		arg |= TIOCM_RTS;
 	if (dtr)
@@ -747,8 +753,7 @@ MODULE_DESCRIPTION("IrDA TTY device driver");
  */
 int init_module(void)
 {
-	irtty_init();
-	return(0);
+	return irtty_init();
 }
 
 /*

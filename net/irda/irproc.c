@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irproc.c
- * Version:       
+ * Version:       1.0
  * Description:   Various entries in the /proc file system
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 21:33:24 1998
- * Modified at:   Thu Feb 11 15:23:23 1999
+ * Modified at:   Tue Apr  6 19:07:06 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998, Thomas Davis, <ratbert@radiks.net>, 
@@ -27,6 +27,7 @@
 #include <linux/miscdevice.h>
 #include <linux/proc_fs.h>
 
+#include <net/irda/irda.h>
 #include <net/irda/irmod.h>
 #include <net/irda/irlap.h>
 #include <net/irda/irlmp.h>
@@ -46,6 +47,8 @@ extern int irttp_proc_read(char *buf, char **start, off_t offset, int len,
 			   int unused);
 extern int irias_proc_read(char *buf, char **start, off_t offset, int len,
 			   int unused);
+extern int discovery_proc_read(char *buf, char **start, off_t offset, int len, 
+			       int unused);
 
 static int proc_discovery_read(char *buf, char **start, off_t offset, int len,
 			       int unused);
@@ -118,7 +121,7 @@ struct proc_dir_entry proc_discovery = {
 	0, 9, "discovery",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, NULL /* ops -- default to array */,
-	&proc_discovery_read /* get_info */,
+	&discovery_proc_read /* get_info */,
 };
 
 struct proc_dir_entry proc_irda_device = {
@@ -184,7 +187,9 @@ static struct dentry_operations proc_dentry_operations =
  */
 void irda_proc_register(void) {
 	proc_net_register(&proc_irda);
+#ifdef MODULE
 	proc_irda.fill_inode = &irda_proc_modcount;
+#endif /* MODULE */
 	proc_register(&proc_irda, &proc_lap);
 	proc_register(&proc_irda, &proc_lmp);
 	proc_register(&proc_irda, &proc_ttp);
@@ -311,73 +316,5 @@ static int proc_irda_readdir(struct file *filp, void *dirent,
 	return 1;
 }
 
-/*
- * Function proc_discovery_read (buf, start, offset, len, unused)
- *
- *    Print discovery information in /proc file system
- *
- */
-int proc_discovery_read(char *buf, char **start, off_t offset, int len, 
-			int unused)
-{
-	DISCOVERY *discovery;
-	struct lap_cb *lap;
-	unsigned long flags;
 
-	if ( !irlmp)
-		return len;
-
-	len = sprintf(buf, "IrLMP: Discovery log:\n\n");	
-
-	save_flags(flags);
-	cli();
-
-	lap = ( struct lap_cb *) hashbin_get_first( irlmp->links);
-	while( lap != NULL) {
-		ASSERT( lap->magic == LMP_LAP_MAGIC, return 0;);
-		
-		len += sprintf( buf+len, "Link saddr=0x%08x\n", lap->saddr);
-		discovery = ( DISCOVERY *) hashbin_get_first( lap->cachelog);
-		while ( discovery != NULL) {
-			len += sprintf( buf+len, "  name: %s,", 
-					discovery->info);
-			
-			len += sprintf( buf+len, " hint: ");
-			if ( discovery->hint[0] & HINT_PNP)
-				len += sprintf( buf+len, "PnP Compatible ");
-			if ( discovery->hint[0] & HINT_PDA)
-				len += sprintf( buf+len, "PDA/Palmtop ");
-			if ( discovery->hint[0] & HINT_COMPUTER)
-				len += sprintf( buf+len, "Computer ");
-			if ( discovery->hint[0] & HINT_PRINTER)
-				len += sprintf( buf+len, "Printer ");
-			if ( discovery->hint[0] & HINT_MODEM)
-				len += sprintf( buf+len, "Modem ");
-			if ( discovery->hint[0] & HINT_FAX)
-				len += sprintf( buf+len, "Fax ");
-			if ( discovery->hint[0] & HINT_LAN)
-				len += sprintf( buf+len, "LAN Access");
-			
-			if ( discovery->hint[1] & HINT_TELEPHONY)
-				len += sprintf( buf+len, "Telephony ");
-			if ( discovery->hint[1] & HINT_FILE_SERVER)
-				len += sprintf( buf+len, "File Server ");       
-			if ( discovery->hint[1] & HINT_COMM)
-				len += sprintf( buf+len, "IrCOMM ");
-			if ( discovery->hint[1] & HINT_OBEX)
-				len += sprintf( buf+len, "IrOBEX ");
-			
-			len += sprintf( buf+len, ", daddr: 0x%08x\n", 
-					discovery->daddr);
-			
-			len += sprintf( buf+len, "\n");
-			
-			discovery = ( DISCOVERY *) hashbin_get_next( lap->cachelog);
-		}
-		lap = ( struct lap_cb *) hashbin_get_next( irlmp->links);
-	}
-	restore_flags(flags);
-
-	return len;
-}
 

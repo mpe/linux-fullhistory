@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Wed Feb 17 23:28:53 1999
+ * Modified at:   Tue Apr  6 16:19:41 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -25,6 +25,8 @@
 #ifndef IRLAN_H
 #define IRLAN_H
 
+#include <asm/param.h>  /* for HZ */
+
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/skbuff.h>
@@ -34,7 +36,7 @@
 #include <net/irda/irttp.h>
 
 #define IRLAN_MTU        1518
-#define IRLAN_TIMEOUT    1000
+#define IRLAN_TIMEOUT    10*HZ /* 10 seconds */
 
 /* Command packet types */
 #define CMD_GET_PROVIDER_INFO   0

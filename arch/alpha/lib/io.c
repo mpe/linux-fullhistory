@@ -405,15 +405,16 @@ void _memcpy_fromio(void * to, unsigned long from, long count)
  * Copy data from "real" memory space to IO memory space.
  * This needs to be optimized.
  */
-void _memcpy_toio(unsigned long to, void * from, long count)
+void _memcpy_toio(unsigned long to, const void * from, long count)
 {
 	/* Optimize co-aligned transfers.  Everything else gets handled
 	   a byte at a time. */
+	/* FIXME -- align FROM.  */
 
 	if (count >= 8 && (to & 7) == ((long)from & 7)) {
 		count -= 8;
 		do {
-			writeq(*(u64 *)from, to);
+			writeq(*(const u64 *)from, to);
 			count -= 8;
 			to += 8;
 			from += 8;
@@ -424,7 +425,7 @@ void _memcpy_toio(unsigned long to, void * from, long count)
 	if (count >= 4 && (to & 3) == ((long)from & 3)) {
 		count -= 4;
 		do {
-			writel(*(u32 *)from, to);
+			writel(*(const u32 *)from, to);
 			count -= 4;
 			to += 4;
 			from += 4;
@@ -435,7 +436,7 @@ void _memcpy_toio(unsigned long to, void * from, long count)
 	if (count >= 2 && (to & 1) == ((long)from & 1)) {
 		count -= 2;
 		do {
-			writew(*(u16 *)from, to);
+			writew(*(const u16 *)from, to);
 			count -= 2;
 			to += 2;
 			from += 2;
@@ -444,7 +445,7 @@ void _memcpy_toio(unsigned long to, void * from, long count)
 	}
 
 	while (count > 0) {
-		writeb(*(u8 *) from, to);
+		writeb(*(const u8 *) from, to);
 		count--;
 		to++;
 		from++;

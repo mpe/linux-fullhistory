@@ -50,7 +50,7 @@ waking_non_zero(struct semaphore *sem)
  *	0	go to sleep
  *	-EINTR	interrupted
  *
- * We must undo the sem->count down_interruptible increment
+ * We must undo the sem->count down_interruptible decrement
  * simultaneously and atomicly with the sem->waking adjustment,
  * otherwise we can race with wake_one_more.
  *

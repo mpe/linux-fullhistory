@@ -64,13 +64,14 @@
 #include <net/irda/irport.h>
 
 #define IO_EXTENT 8
+#define CONFIG_HALF_DUPLEX
 
-static unsigned int io[]  = { 0x3e8, ~0, ~0, ~0 };
-static unsigned int irq[] = { 11, 0, 0, 0 };
+/* static unsigned int io[]  = { 0x3e8, ~0, ~0, ~0 }; */
+/* static unsigned int irq[] = { 11, 0, 0, 0 }; */
 
-static void irport_write_wakeup( struct irda_device *idev);
-static int  irport_write( int iobase, int fifo_size, __u8 *buf, int len);
-static void irport_receive( struct irda_device *idev);
+static void irport_write_wakeup(struct irda_device *idev);
+static int  irport_write(int iobase, int fifo_size, __u8 *buf, int len);
+static void irport_receive(struct irda_device *idev);
 
 __initfunc(int irport_init(void))
 {
@@ -115,15 +116,15 @@ static void irport_cleanup(void)
  */
 int irport_open( int iobase)
 {
-	DEBUG( 0, __FUNCTION__ "(), iobase=%#x\n", iobase);
+	DEBUG(4, __FUNCTION__ "(), iobase=%#x\n", iobase);
 
 	/* Initialize UART */
-	outb( UART_LCR_WLEN8, iobase+UART_LCR);  /* Reset DLAB */
-	outb(( UART_MCR_DTR | UART_MCR_RTS | UART_MCR_OUT2), iobase+UART_MCR);
+	outb(UART_LCR_WLEN8, iobase+UART_LCR);  /* Reset DLAB */
+	outb((UART_MCR_DTR | UART_MCR_RTS | UART_MCR_OUT2), iobase+UART_MCR);
 	
 	/* Turn on interrups */
-	outb(( UART_IER_THRI |UART_IER_RLSI | UART_IER_RDI), iobase+UART_IER); 
-	
+	outb((UART_IER_RLSI | UART_IER_RDI), iobase+UART_IER);
+
 	return 0;
 }
 
@@ -135,13 +136,13 @@ int irport_open( int iobase)
  */
 void irport_close( int iobase) 
 {
-	DEBUG( 0, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
 	/* Reset UART */
-	outb( 0, iobase+UART_MCR);
+	outb(0, iobase+UART_MCR);
 
 	/* Turn off interrupts */
-	outb( 0, iobase+UART_IER); 
+	outb(0, iobase+UART_IER); 
 }
 
 /*
@@ -158,10 +159,8 @@ void irport_change_speed( int iobase, int speed)
 
 	DEBUG( 0, __FUNCTION__ "(), Setting speed to: %d\n", speed);
 
-	DEBUG( 0, __FUNCTION__ "(), iobase=%#x\n", iobase);
-
 	/* Turn off interrupts */
-	outb( 0, iobase+UART_IER); 
+	outb(0, iobase+UART_IER); 
 
 	divisor = SPEED_MAX/speed;
 	
@@ -170,55 +169,14 @@ void irport_change_speed( int iobase, int speed)
 	/* IrDA ports use 8N1 */
 	lcr = UART_LCR_WLEN8;
 	
-	outb( UART_LCR_DLAB | lcr, iobase+UART_LCR); /* Set DLAB */
-	outb( divisor & 0xff,      iobase+UART_DLL); /* Set speed */
-	outb( divisor >> 8,	   iobase+UART_DLM);
-	outb( lcr,		   iobase+UART_LCR); /* Set 8N1	*/
-	outb( fcr,		   iobase+UART_FCR); /* Enable FIFO's */
+	outb(UART_LCR_DLAB | lcr, iobase+UART_LCR); /* Set DLAB */
+	outb(divisor & 0xff,      iobase+UART_DLL); /* Set speed */
+	outb(divisor >> 8,	  iobase+UART_DLM);
+	outb(lcr,		  iobase+UART_LCR); /* Set 8N1	*/
+	outb(fcr,		  iobase+UART_FCR); /* Enable FIFO's */
 
-	/* Turn on interrups */
-	outb( UART_IER_THRI|UART_IER_RLSI|UART_IER_RDI, iobase+UART_IER); 
-}
-
-/*
- * Function irport_interrupt (irq, dev_id, regs)
- *
- *    
- */
-void irport_interrupt( int irq, void *dev_id, struct pt_regs *regs) 
-{
-	struct irda_device *idev = (struct irda_device *) dev_id;
-
-	int iobase, status;
-	int iir;
-
-	DEBUG( 4, __FUNCTION__ "(), irq %d\n", irq);
-
-	if ( !idev) {
-		printk( KERN_WARNING __FUNCTION__ 
-			"() irq %d for unknown device.\n", irq);
-		return;
-	}
-
-	idev->netdev.interrupt = 1;
-
-	iobase = idev->io.iobase2;
-
-	iir = inb(iobase + UART_IIR);
-	do {
-		status = inb( iobase+UART_LSR);
-		
-		if (status & UART_LSR_DR) {
-	       		/* Receive interrupt */
-			irport_receive(idev);
-		}
-		if (status & UART_LSR_THRE) {
-	       		/* Transmitter ready for data */
-			irport_write_wakeup(idev);
-		}
-	} while (!(inb(iobase+UART_IIR) & UART_IIR_NO_INT));
-
-	idev->netdev.interrupt = 0;
+	/* Turn on receive interrups */
+	outb(UART_IER_RLSI|UART_IER_RDI, iobase+UART_IER); 
 }
 
 /*
@@ -231,34 +189,38 @@ void irport_interrupt( int irq, void *dev_id, struct pt_regs *regs)
 static void irport_write_wakeup( struct irda_device *idev)
 {
 	int actual = 0, count;
-	
-	DEBUG( 4, __FUNCTION__ "() <%ld>\n", jiffies);
-	
-	ASSERT( idev != NULL, return;);
-	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return;);
+	int iobase;
+
+	ASSERT(idev != NULL, return;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 
 	/* Finished with frame?  */
-	if ( idev->tx_buff.offset == idev->tx_buff.len)  {
-
+	if (idev->tx_buff.offset == idev->tx_buff.len)  {
+		iobase = idev->io.iobase2;
 		/* 
 		 *  Now serial buffer is almost free & we can start 
 		 *  transmission of another packet 
 		 */
-		DEBUG( 4, __FUNCTION__ "(), finished with frame!\n");
-
 		idev->netdev.tbusy = 0; /* Unlock */
 		idev->stats.tx_packets++;
 
 		/* Schedule network layer, so we can get some more frames */
-		mark_bh( NET_BH);
+		mark_bh(NET_BH);
+#ifdef CONFIG_HALF_DUPLEX
+		outb(UART_FCR_ENABLE_FIFO | 
+		     UART_FCR_TRIGGER_14  |
+		     UART_FCR_CLEAR_RCVR, iobase+UART_FCR); /* Enable FIFO's */
 
+		/* Turn on receive interrupts */
+		outb(UART_IER_RLSI|UART_IER_RDI, iobase+UART_IER); 
+#endif
 		return;
 	}
 
 	/* Write data left in transmit buffer */
 	count = idev->tx_buff.len - idev->tx_buff.offset;
-	actual = irport_write( idev->io.iobase2, idev->io.fifo_size, 
-			       idev->tx_buff.head, count);
+	actual = irport_write(idev->io.iobase2, idev->io.fifo_size, 
+			      idev->tx_buff.head, count);
 	idev->tx_buff.offset += actual;
 	idev->tx_buff.head += actual;
 }
@@ -269,12 +231,12 @@ static void irport_write_wakeup( struct irda_device *idev)
  *    
  *
  */
-static int irport_write( int iobase, int fifo_size, __u8 *buf, int len)
+static int irport_write(int iobase, int fifo_size, __u8 *buf, int len)
 {
 	int actual = 0;
 
 	/* Tx FIFO should be empty! */
-	if (!(inb( iobase+UART_LSR) & UART_LSR_THRE)) {
+	if (!(inb(iobase+UART_LSR) & UART_LSR_THRE)) {
 		DEBUG( 0, __FUNCTION__ "(), failed, fifo not empty!\n");
 		return -1;
 	}
@@ -287,8 +249,8 @@ static int irport_write( int iobase, int fifo_size, __u8 *buf, int len)
 		actual++;
 	}
         
-	DEBUG( 4, __FUNCTION__ "(), fifo_size %d ; %d sent of %d\n", 
-	       fifo_size, actual, len);
+	DEBUG(4, __FUNCTION__ "(), fifo_size %d ; %d sent of %d\n", 
+	      fifo_size, actual, len);
 
 	return actual;
 }
@@ -300,43 +262,44 @@ static int irport_write( int iobase, int fifo_size, __u8 *buf, int len)
  *    waits until the next transmitt interrupt, and continues until the
  *    frame is transmited.
  */
-int irport_hard_xmit( struct sk_buff *skb, struct device *dev)
+int irport_hard_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct irda_device *idev;
-	int actual;
+	int actual = 0;
+	int iobase;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(5, __FUNCTION__ "(), dev=%p\n", dev);
 
-	ASSERT( dev != NULL, return -1;);
-
-	if ( dev->tbusy) {
-		DEBUG( 4, __FUNCTION__ "(), tbusy==TRUE\n");
-		
-		return -EBUSY;
-	}
+	ASSERT(dev != NULL, return 0;);
 	
 	idev = (struct irda_device *) dev->priv;
 
-	ASSERT( idev != NULL, return -1;);
-	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return -1;);
+	ASSERT(idev != NULL, return 0;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return 0;);
+
+	iobase = idev->io.iobase2;
 
 	/* Lock transmit buffer */
-	if ( irda_lock( (void *) &dev->tbusy) == FALSE)
+	if (irda_lock((void *) &dev->tbusy) == FALSE)
 		return -EBUSY;
 	
         /*  
 	 *  Transfer skb to tx_buff while wrapping, stuffing and making CRC 
 	 */
-	idev->tx_buff.len = async_wrap_skb( skb, idev->tx_buff.data, 
-					    idev->tx_buff.truesize);
+	idev->tx_buff.len = async_wrap_skb(skb, idev->tx_buff.data, 
+					   idev->tx_buff.truesize);
 	
-	actual = irport_write( idev->io.iobase2, idev->io.fifo_size, 
-			       idev->tx_buff.data, idev->tx_buff.len);
+/* 	actual = irport_write(idev->io.iobase2, idev->io.fifo_size,  */
+/* 			      idev->tx_buff.data, idev->tx_buff.len); */
 	
 	idev->tx_buff.offset = actual;
 	idev->tx_buff.head = idev->tx_buff.data + actual;
-	
-	dev_kfree_skb( skb);
+
+#ifdef CONFIG_HALF_DUPLEX
+	/* Turn on transmit finished interrupt. Will fire immediately!  */
+	outb(UART_IER_THRI, iobase+UART_IER); 
+#endif
+	dev_kfree_skb(skb);
 	
 	return 0;
 }
@@ -347,18 +310,19 @@ int irport_hard_xmit( struct sk_buff *skb, struct device *dev)
  *    Receive one frame from the infrared port
  *
  */
-static void irport_receive( struct irda_device *idev) 
+static void irport_receive(struct irda_device *idev) 
 {
 	int iobase;
+	int boguscount = 0;
 
-	if ( !idev)
+	if (!idev)
 		return;
 
 	DEBUG( 4, __FUNCTION__ "()\n");
 
 	iobase = idev->io.iobase2;
 
-	if ( idev->rx_buff.len == 0)
+	if (idev->rx_buff.len == 0)
 		idev->rx_buff.head = idev->rx_buff.data;
 	
 	/*  
@@ -366,10 +330,70 @@ static void irport_receive( struct irda_device *idev)
          * async_unwrap_char will deliver all found frames  
 	 */
 	do {
-		async_unwrap_char( idev, inb( iobase+UART_RX));
-		
-	} while ( inb( iobase+UART_LSR) & UART_LSR_DR);	
+		async_unwrap_char(idev, inb( iobase+UART_RX));
+
+		/* Make sure we don't stay here to long */
+		if (boguscount++ > 32) {
+			DEBUG(0,__FUNCTION__ "(), breaking!\n");
+			break;
+		}
+
+	} while (inb(iobase+UART_LSR) & UART_LSR_DR);	
 }
+
+/*
+ * Function irport_interrupt (irq, dev_id, regs)
+ *
+ *    
+ */
+void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs) 
+{
+	struct irda_device *idev = (struct irda_device *) dev_id;
+
+	int iobase;
+	int iir, lsr;
+	int boguscount = 0;
+
+	DEBUG(5, __FUNCTION__ "(), irq %d\n", irq);
+	
+	if (!idev) {
+		printk(KERN_WARNING __FUNCTION__ 
+		       "() irq %d for unknown device.\n", irq);
+		return;
+	}
+
+	idev->netdev.interrupt = 1;
+
+	iobase = idev->io.iobase2;
+
+	iir = inb(iobase + UART_IIR) & UART_IIR_ID;
+	while (iir) {
+		DEBUG(4,__FUNCTION__ "(), iir=%#x\n", iir);
+
+		/* Clear interrupt */
+		lsr = inb(iobase+UART_LSR);
+
+		if ((iir & UART_IIR_THRI) && (lsr & UART_LSR_THRE)) {
+			/* Transmitter ready for data */
+			irport_write_wakeup(idev);
+		}
+#ifdef CONFIG_HALF_DUPLEX
+		else 
+#endif
+		if ((iir & UART_IIR_RDI) && (lsr & UART_LSR_DR)) {
+	       		/* Receive interrupt */
+			irport_receive(idev);
+		}
+		
+		/* Make sure we don't stay here to long */
+		if (boguscount++ > 32)
+			break;
+
+ 	        iir = inb(iobase + UART_IIR) & UART_IIR_ID;
+	}
+	idev->netdev.interrupt = 0;
+}
+
 
 #ifdef MODULE
 

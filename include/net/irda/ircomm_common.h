@@ -19,6 +19,9 @@
  *
  ********************************************************************/
 
+#ifndef IRCOMM_H
+#define IRCOMM_H
+
 /* #define DEBUG(n, args...) printk( KERN_DEBUG args) */ /* enable all debug message */
 
 #include <linux/types.h>
@@ -52,16 +55,23 @@ typedef enum {
 	IRCOMM_CONTROL_REQUEST,
 } IRCOMM_EVENT;
 
+typedef enum {
+	TX_READY,
+	TX_BUSY,
+
+	IAS_PARAM,
+	CONTROL_CHANNEL,
+} IRCOMM_CMD;
+
+
 
 #define IRCOMM_MAGIC            0x434f4d4d
 #define COMM_INIT_CTRL_PARAM    3          /* length of initial control parameters */
-#define COMM_CTRL_MIN           1          /* length of clen field */
-#define COMM_HEADER_SIZE        (LAP_HEADER+LMP_HEADER+TTP_HEADER+COMM_CTRL_MIN)
+#define COMM_HEADER             1          /* length of clen field */
+#define COMM_HEADER_SIZE        (LAP_HEADER+LMP_HEADER+TTP_HEADER+COMM_HEADER)
 #define COMM_DEFAULT_DATA_SIZE  64
-#define IRCOMM_MAX_CONNECTION   1          /* Don't change */
+#define IRCOMM_MAX_CONNECTION   1          /* Don't change for now */
 
-#define IAS_PARAM               1
-#define CONTROL_CHANNEL         2
 
 
 
@@ -78,7 +88,7 @@ typedef enum {
 
 
 #define SERVICETYPE 0x00
-#define PORT_TYPE 0x02
+#define PORT_TYPE 0x01
 #define PORT_NAME 0x02
 #define FIXED_PORT_NAME 0x82
 
@@ -100,10 +110,6 @@ typedef enum {
 #define IEEE1284_DEVICEID 0x33
 #define IEEE1284_MODE 0x34
 #define IEEE1284_ECP_EPP_DATA_TRANSFER 0x35
-
-#define TX_READY 0xFE  /* FIXME: this is not defined in IrCOMM spec */
-#define TX_BUSY  0XFF  /*         so we should find another way */
-
 
 /*  parameters of FLOW_CONTROL  */
 
@@ -131,6 +137,20 @@ typedef enum {
 
 /*  parameters of DATA_FORMAT */
 
+#define IRCOMM_WLEN5   0x00       /* word length is 5bit */
+#define IRCOMM_WLEN6   0x01       /* word length is 6bit */
+#define IRCOMM_WLEN7   0x02       /* word length is 7bit */
+#define IRCOMM_WLEN8   0x03       /* word length is 8bit */
+
+#define IRCOMM_STOP2   0x04       /* 2 stop bits mode */
+#define IRCOMM_PARENB  0x08       /* parity enable */
+#define IRCOMM_PARODD  0x00       /*  odd parity */
+#define IRCOMM_PAREVEN 0x10       /*  even parity */
+#define IRCOMM_PARMARK 0x20
+#define IRCOMM_PARSPC  0x30
+
+/*  parameters of LINE_STATUS */
+
 #define LSR_OE     0x02    /* Overrun error indicator */
 #define LSR_PE     0x04    /* Parity error indicator */
 #define LSR_FE     0x08    /* Frame error indicator */
@@ -146,31 +166,46 @@ struct ircomm_cb{
 	int in_use;
 	int null_modem_mode;     /* switch for null modem emulation */
 	int ttp_stop;
+
 	int max_txbuff_size;          
-	int maxsdusize;
+	__u32 maxsdusize;
+
  	__u32 daddr;        /* Device address of the peer device */ 
 	__u32 saddr;
-
-	void (*d_handler)(struct ircomm_cb *self);
+	int                 ias_type;
+	int disconnect_priority; /* P_NORMAL or P_HIGH. see irttp.h */
 	struct notify_t notify;     /* container of callbacks */
+	void (*d_handler)(struct ircomm_cb *self);
 
+	int control_ch_pending;
 	struct sk_buff *ctrl_skb;   /* queue of control channel */
-
-	struct tsap_cb *tsap;          /* IrTTP/LMP handle */
-	struct qos_info *qos;         /* Quality of Service */
-	
-	int reason;          /* I don't know about reason: 
-				see Irlmp.c or somewhere :p)*/ 
 
 	__u8 dlsap;          /* IrLMP dlsap */
 	__u8 lsap;           /* sap of local device */ 
+	struct tsap_cb *tsap;          /* IrTTP/LMP handle */
+	struct qos_info *qos;         /* Quality of Service */
+	int reason;          /* I don't know about reason: 
+				see Irlmp.c or somewhere :p)*/ 
+	int peer_cap;        /* capability of peer device */
+
+	struct wait_queue   *discovery_wait;
+	struct wait_queue   *ias_wait;
+
+	/* statistics */
+	int                 tx_packets;
+	int                 rx_packets;
+	int                 tx_controls;
+	int                 pending_control_tuples;
+	int                 ignored_control_tuples;
+
+
 
 	__u8 pi ;            /* instruction of control channel*/ 
+
 	__u8 port_type;
 	__u8 peer_port_type;
 
 	__u8 servicetype;    
-	__u8 peer_servicetype;
 	__u8 data_format;   
 	__u8 peer_data_format;   
 	__u8 flow_ctrl;
@@ -200,35 +235,26 @@ struct ircomm_cb{
 	
 	__u32 data_rate;
 	__u32 peer_data_rate;
-	char port_name[60];
-
+	char port_name[33];
+	int port_name_critical;
 };
 
 
 
-void ircomm_connect_request(struct ircomm_cb *self, int maxsdusize);
+int  ircomm_query_ias_and_connect(struct ircomm_cb *self, __u8 servicetype); 
+void ircomm_connect_request(struct ircomm_cb *self);
 void ircomm_connect_response(struct ircomm_cb *self, struct sk_buff *userdata,
-			     int maxsdusize);
+			     __u32 maxsdusize);
 void ircomm_disconnect_request(struct ircomm_cb *self,
-				      struct sk_buff *userdata);
-void ircomm_data_request(struct ircomm_cb *self,
-			 struct sk_buff *userdata);
-void ircomm_control_request(struct ircomm_cb *self);
-void ircomm_append_ctrl(struct ircomm_cb *self, __u8 instruction);
-struct ircomm_cb *ircomm_attach_cable( __u8 servicetype, struct notify_t notify, 
-			 void *handler);
-int ircomm_detach_cable(struct ircomm_cb *self);
+			       struct sk_buff *userdata, int priority);
+int ircomm_data_request(struct ircomm_cb *self,
+			struct sk_buff *userdata);
+void ircomm_control_request(struct ircomm_cb *self, __u8 instruction);
+
+void ircomm_parse_tuples(struct ircomm_cb *self, struct sk_buff *skb, int type);
+
+struct ircomm_cb *ircomm_open_instance(struct notify_t notify);
+int ircomm_close_instance(struct ircomm_cb *self);
 
 
-void ircomm_accept_data_indication(void *instance, void *sap, struct sk_buff *skb);
-void ircomm_accept_connect_confirm(void *instance, void *sap, struct qos_info *qos, 
-				   int maxsdusize, struct sk_buff *skb);
-void ircomm_accept_connect_indication(void *instance, void *sap,
-				      struct qos_info *qos, 
-				      int maxsdusize, struct sk_buff *skb);
-void ircomm_accept_disconnect_indication(void *instance, void *sap, LM_REASON reason,
-					 struct sk_buff *skb);
-void ircomm_accept_flow_indication(void *instance, void *sap, LOCAL_FLOW flow);
-void ircomm_next_state( struct ircomm_cb *self, IRCOMM_STATE state);
-
-
+#endif

@@ -3,10 +3,10 @@
  * Filename:      irlap.c
  * Version:       0.9
  * Description:   An IrDA LAP driver for Linux
- * Status:        Experimental.
+ * Status:        Stable.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Sat Feb 20 01:39:58 1999
+ * Modified at:   Tue Apr  6 21:07:08 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -30,6 +30,7 @@
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
 #include <linux/init.h>
+#include <linux/random.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irda_device.h>
@@ -127,11 +128,17 @@ struct irlap_cb *irlap_open( struct irda_device *irdev)
 	skb_queue_head_init( &self->tx_list);
 	skb_queue_head_init( &self->wx_list);
 
-	/* My unique IrLAP device address! :-) */
-	self->saddr = jiffies;
+	/* My unique IrLAP device address! */
+	get_random_bytes(&self->saddr, sizeof(self->saddr));
 
-	/*  Generate random connection address for this session */
-	self->caddr = jiffies & 0xfe;
+	/* 
+	 * Generate random connection address for this session, which must
+	 * be 7 bits wide and different from 0x00 and 0xfe 
+	 */
+	while ((self->caddr == 0x00) || (self->caddr == 0xfe)) {
+		get_random_bytes(&self->caddr, sizeof(self->caddr));
+		self->caddr &= 0xfe;
+	}
 
 	init_timer( &self->slot_timer);
 	init_timer( &self->query_timer);
@@ -147,7 +154,7 @@ struct irlap_cb *irlap_open( struct irda_device *irdev)
 
 	hashbin_insert( irlap, (QUEUE *) self, self->saddr, NULL);
 
-	irlmp_register_irlap( self, self->saddr, &self->notify);
+	irlmp_register_link( self, self->saddr, &self->notify);
 	
 	return self;
 }
@@ -181,9 +188,9 @@ static void __irlap_close( struct irlap_cb *self)
 }
 
 /*
- * Function irlap_close ()
+ * Function irlap_close (self)
  *
- *    
+ *    Remove IrLAP instance
  *
  */
 void irlap_close( struct irlap_cb *self) 
@@ -197,7 +204,7 @@ void irlap_close( struct irlap_cb *self)
 
 	irlap_disconnect_indication( self, LAP_DISC_INDICATION);
 
-	irlmp_unregister_irlap( self->saddr);
+	irlmp_unregister_link(self->saddr);
 	self->notify.instance = NULL;
 
 	/* Be sure that we manage to remove ourself from the hash */
@@ -210,7 +217,7 @@ void irlap_close( struct irlap_cb *self)
 }
 
 /*
- * Function irlap_connect_indication ()
+ * Function irlap_connect_indication (self, skb)
  *
  *    Another device is attempting to make a connection
  *
@@ -229,31 +236,32 @@ void irlap_connect_indication(struct irlap_cb *self, struct sk_buff *skb)
 }
 
 /*
- * Function irlap_connect_response (void)
+ * Function irlap_connect_response (self, skb)
  *
  *    Service user has accepted incomming connection
  *
  */
-void irlap_connect_response( struct irlap_cb *self, struct sk_buff *skb) 
+void irlap_connect_response(struct irlap_cb *self, struct sk_buff *skb) 
 {
 	DEBUG( 4, __FUNCTION__ "()\n");
 	
-	irlap_do_event( self, CONNECT_RESPONSE, skb, NULL);
+	irlap_do_event(self, CONNECT_RESPONSE, skb, NULL);
 }
 
 /*
- * Function irlap_connect_request (daddr, qos, sniff)
+ * Function irlap_connect_request (self, daddr, qos_user, sniff)
  *
  *    Request connection with another device, sniffing is not implemented 
  *    yet.
+ *
  */
-void irlap_connect_request( struct irlap_cb *self, __u32 daddr, 
-			    struct qos_info *qos_user, int sniff) 
+void irlap_connect_request(struct irlap_cb *self, __u32 daddr, 
+			   struct qos_info *qos_user, int sniff) 
 {
-	DEBUG( 4, __FUNCTION__ "()\n"); 
+	DEBUG(3, __FUNCTION__ "(), daddr=0x%08x\n", daddr);
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LAP_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LAP_MAGIC, return;);
 
  	self->daddr = daddr;
 	
@@ -261,32 +269,33 @@ void irlap_connect_request( struct irlap_cb *self, __u32 daddr,
 	 *  If the service user specifies QoS values for this connection, 
 	 *  then use them
 	 */
-	irlap_init_qos_capabilities( self, qos_user);
+	irlap_init_qos_capabilities(self, qos_user);
 	
-	if ( self->state == LAP_NDM)
-		irlap_do_event( self, CONNECT_REQUEST, NULL, NULL);
+	if ((self->state == LAP_NDM) && 
+	    !irda_device_is_media_busy(self->irdev))
+		irlap_do_event(self, CONNECT_REQUEST, NULL, NULL);
 	else
 		self->connect_pending = TRUE;
 }
 
 /*
- * Function irlap_connect_confirm (void)
+ * Function irlap_connect_confirm (self, skb)
  *
- *    Connection request is accepted
+ *    Connection request has been accepted
  *
  */
-void irlap_connect_confirm( struct irlap_cb *self, struct sk_buff *skb)
+void irlap_connect_confirm(struct irlap_cb *self, struct sk_buff *skb)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LAP_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LAP_MAGIC, return;);
 
-	irlmp_link_connect_confirm( self->notify.instance, &self->qos_tx, skb);
+	irlmp_link_connect_confirm(self->notify.instance, &self->qos_tx, skb);
 }
 
 /*
- * Function irlap_data_indication (skb)
+ * Function irlap_data_indication (self, skb)
  *
  *    Received data frames from IR-port, so we just pass them up to 
  *    IrLMP for further processing
@@ -451,7 +460,6 @@ void irlap_disconnect_indication( struct irlap_cb *self, LAP_REASON reason)
 #ifdef CONFIG_IRDA_COMPRESSION
 	irda_free_compression( self);
 #endif
-
 	/* Flush queues */
 	irlap_flush_all_queues( self);
 	
@@ -479,7 +487,7 @@ void irlap_disconnect_indication( struct irlap_cb *self, LAP_REASON reason)
  *    Start one single discovery operation.
  *
  */
-void irlap_discovery_request( struct irlap_cb *self, DISCOVERY *discovery) 
+void irlap_discovery_request(struct irlap_cb *self, discovery_t *discovery) 
 {
 	struct irlap_info info;
 	
@@ -568,7 +576,7 @@ void irlap_discovery_confirm( struct irlap_cb *self, hashbin_t *discovery_log)
  *    Somebody is trying to discover us!
  *
  */
-void irlap_discovery_indication( struct irlap_cb *self, DISCOVERY *discovery) 
+void irlap_discovery_indication(struct irlap_cb *self, discovery_t *discovery) 
 {
 	DEBUG( 4, __FUNCTION__ "()\n");
 
@@ -578,7 +586,7 @@ void irlap_discovery_indication( struct irlap_cb *self, DISCOVERY *discovery)
 
 	ASSERT( self->notify.instance != NULL, return;);
 	
-	irlmp_discovery_indication( self->notify.instance, discovery);
+	irlmp_link_discovery_indication(self->notify.instance, discovery);
 }
 
 /*
@@ -587,7 +595,7 @@ void irlap_discovery_indication( struct irlap_cb *self, DISCOVERY *discovery)
  *    
  *
  */
-void irlap_status_indication( int quality_of_link) 
+void irlap_status_indication(int quality_of_link) 
 {
 	switch( quality_of_link) {
 	case STATUS_NO_ACTIVITY:
@@ -599,7 +607,7 @@ void irlap_status_indication( int quality_of_link)
 	default:
 		break;
 	}
-	irlmp_status_indication( quality_of_link, NO_CHANGE);
+	irlmp_status_indication(quality_of_link, LOCK_NO_CHANGE);
 }
 
 /*
@@ -629,7 +637,7 @@ void irlap_reset_indication( struct irlap_cb *self)
  */
 void irlap_reset_confirm(void)
 {
-	DEBUG( 1, __FUNCTION__ "()\n");
+ 	DEBUG( 1, __FUNCTION__ "()\n");
 }
 
 /*
@@ -795,7 +803,7 @@ void irlap_initiate_connection_state( struct irlap_cb *self)
  *    frame in order to delay for the specified amount of time. This is
  *    done to avoid using timers, and the forbidden udelay!
  */
-void irlap_wait_min_turn_around( struct irlap_cb *self, struct qos_info *qos) 
+void irlap_wait_min_turn_around(struct irlap_cb *self, struct qos_info *qos) 
 {
 	int usecs;
 	int speed;

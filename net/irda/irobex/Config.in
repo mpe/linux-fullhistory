@@ -1,3 +1,0 @@
-
-dep_tristate 'IrOBEX protocol' CONFIG_IROBEX $CONFIG_IRDA
-

@@ -395,7 +395,7 @@ IRDA SUBSYSTEM
 P:      Dag Brattli
 M:      Dag Brattli <dagb@cs.uit.no>
 L:      linux-irda@list.uit.no
-W:      http://www.cs.uit.no/~dagb/irda/
+W:      http://www.cs.uit.no/linux-irda/
 S:      Maintained
 
 ISDN SUBSYSTEM

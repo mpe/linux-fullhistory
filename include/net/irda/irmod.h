@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:58:52 1997
- * Modified at:   Thu Feb 11 15:14:30 1999
+ * Modified at:   Tue Mar 16 22:27:41 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -29,7 +29,6 @@
 #include <linux/miscdevice.h>
 
 #include <net/irda/irqueue.h>
-#include <net/irda/qos.h>
 
 #define IRMGR_IOC_MAGIC 'm'
 #define IRMGR_IOCTNPC     _IO(IRMGR_IOC_MAGIC, 1)
@@ -45,7 +44,6 @@ typedef enum {
 	EVENT_IRLAN_STOP,
 	EVENT_IRLPT_START,
 	EVENT_IRLPT_STOP,
-/* 	EVENT_IROBEX_INIT, */
 	EVENT_IROBEX_START,
 	EVENT_IROBEX_STOP,
 	EVENT_IRDA_STOP,
@@ -100,165 +98,6 @@ struct irda_cb {
 	QUEUE *todo_queue;  /* Todo list */
 };
 
-typedef struct {
-        char irda_call[7];  /* 6 call + SSID (shifted ascii!) */
-} irda_address;
-
-struct sockaddr_irda {
-	short sirda_family;
-	irda_address sirda_call;
-        int sirda_ndigis;
-};
-
-/*
- *  This type is used by the protocols that transmit 16 bits words in 
- *  little endian format. A little endian machine stores MSB of word in
- *  byte[1] and LSB in byte[0]. A big endian machine stores MSB in byte[0] 
- *  and LSB in byte[1].
- */
-typedef union {
-	__u16 word;
-	__u8  byte[2];
-} __u16_host_order;
-
-/*
- *  Information monitored by some layers
- */
-struct irda_statistics
-{
-        int     rx_packets;             /* total packets received       */
-        int     tx_packets;             /* total packets transmitted    */
-        int     rx_errors;              /* bad packets received         */
-        int     tx_errors;              /* packet transmit problems     */
-        int     rx_dropped;             /* no space in linux buffers    */
-        int     tx_dropped;             /* no space available in linux  */
-	int     rx_compressed;
-	int     tx_compressed;
-	int     rx_bytes;               /* total bytes received         */
-	int     tx_bytes;               /* total bytes transmitted      */
-
-        int     multicast;              /* multicast packets received   */
-        int     collisions;
-	
-        /* detailed rx_errors: */
-        int     rx_length_errors;
-        int     rx_over_errors;         /* receiver ring buff overflow  */
-        int     rx_crc_errors;          /* recved pkt with crc error    */
-        int     rx_frame_errors;        /* recv'd frame alignment error */
-        int     rx_fifo_errors;         /* recv'r fifo overrun          */
-        int     rx_missed_errors;       /* receiver missed packet       */
-
-        /* detailed tx_errors */
-        int     tx_aborted_errors;
-        int     tx_carrier_errors;
-        int     tx_fifo_errors;
-        int     tx_heartbeat_errors;
-        int     tx_window_errors;
-};
-
-typedef enum {
-	NO_CHANGE,
-	LOCKED,
-	UNLOCKED,
-} LOCK_STATUS;
-
-/* Misc status information */
-typedef enum {
-	STATUS_OK,
-	STATUS_ABORTED,
-	STATUS_NO_ACTIVITY,
-	STATUS_NOISY,
-	STATUS_REMOTE,
-} LINK_STATUS;
-
-typedef enum { /* FIXME check the two first reason codes */
-	LAP_DISC_INDICATION=1, /* Received a disconnect request from peer */
-	LAP_NO_RESPONSE,       /* To many retransmits without response */
-	LAP_RESET_INDICATION,  /* To many retransmits, or invalid nr/ns */
-	LAP_FOUND_NONE,        /* No devices were discovered */
-	LAP_MEDIA_BUSY,
-	LAP_PRIMARY_CONFLICT,
-} LAP_REASON;
-
-/*  
- *  IrLMP disconnect reasons. The order is very important, since they 
- *  correspond to disconnect reasons sent in IrLMP disconnect frames, so
- *  please do not touch :-)
- */
-typedef enum {
-	LM_USER_REQUEST = 1,  /* User request */
-	LM_LAP_DISCONNECT,    /* Unexpected IrLAP disconnect */
-	LM_CONNECT_FAILURE,   /* Failed to establish IrLAP connection */
-	LM_LAP_RESET,         /* IrLAP reset */
-	LM_INIT_DISCONNECT,   /* Link Management initiated disconnect */
-	LM_LSAP_NOTCONN,      /* Data delivered on unconnected LSAP */
-	LM_NON_RESP_CLIENT,   /* Non responsive LM-MUX client */
-	LM_NO_AVAIL_CLIENT,   /* No available LM-MUX client */
-	LM_CONN_HALF_OPEN,    /* Connection is half open */
-	LM_BAD_SOURCE_ADDR,   /* Illegal source address (i.e 0x00) */
-} LM_REASON;
-#define LM_UNKNOWN 0xff       /* Unspecified disconnect reason */
-
-/*
- *  IrLMP character code values
- */
-#define CS_ASCII       0x00
-#define	CS_ISO_8859_1  0x01
-#define	CS_ISO_8859_2  0x02
-#define	CS_ISO_8859_3  0x03
-#define	CS_ISO_8859_4  0x04
-#define	CS_ISO_8859_5  0x05
-#define	CS_ISO_8859_6  0x06
-#define	CS_ISO_8859_7  0x07
-#define	CS_ISO_8859_8  0x08
-#define	CS_ISO_8859_9  0x09
-#define CS_UNICODE     0xff
-	
-/*
- * The DISCOVERY structure is used for both discovery requests and responses
- */
-#define DISCOVERY struct discovery_t
-struct discovery_t {
-	QUEUE queue;              /* Must be first! */
-
-	__u32      saddr;        /* Which link the device was discovered */
-	__u32      daddr;        /* Remote device address */
-	LAP_REASON condition;    /* More info about the discovery */
-
-	__u8       hint[2];      /* Discovery hint bits */
-	__u8       charset;
-	char       info[32];     /* Usually the name of the device */
-	__u8       info_len;     /* Length of device info field */
-
-	int        gen_addr_bit; /* Need to generate a new device address? */
-	int        nslots;       /* Number of slots to use when discovering */
-};
-
-typedef enum { FLOW_STOP, FLOW_START } LOCAL_FLOW;
-
-/*
- *  Notify structure used between transport and link management layers
- */
-struct notify_t {
-	void (*data_indication)( void *instance, void *sap, 
-				 struct sk_buff *skb);
-	void (*udata_indication)( void *instance, void *sap, 
-				  struct sk_buff *skb);
-	void (*connect_confirm)( void *instance, void *sap, 
-				 struct qos_info *qos, int max_sdu_size,
-				 struct sk_buff *skb);
-	void (*connect_indication)( void *instance, void *sap, 
-				    struct qos_info *qos, int max_sdu_size,
-				    struct sk_buff *skb);
-	void (*disconnect_indication)( void *instance, void *sap, 
-				       LM_REASON reason, struct sk_buff *);
-	void (*flow_indication)( void *instance, void *sap, LOCAL_FLOW flow);
-	void *instance; /* Layer instance pointer */
-	char name[16];  /* Name of layer */
-};
-
-#define NOTIFY_MAX_NAME 16
-
 int irmod_init_module(void);
 void irmod_cleanup_module(void);
 
@@ -271,5 +110,16 @@ void irda_execute_as_process(void *self, TODO_CALLBACK callback, __u32 param);
 void irmanager_notify(struct irmanager_event *event);
 
 extern void irda_proc_modcount(struct inode *, int);
+void irda_mod_inc_use_count(void);
+void irda_mod_dec_use_count(void);
 
-#endif
+#endif /* IRMOD_H */
+
+
+
+
+
+
+
+
+

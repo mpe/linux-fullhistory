@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Tue Feb  9 13:29:40 1999
+ * Modified at:   Sat Apr  3 15:54:47 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>
@@ -132,7 +132,7 @@ __initfunc(int pc87108_init(void))
 
 	for ( i=0; (io[i] < 2000) && (i < 4); i++) {
 		int ioaddr = io[i];
-		if (check_region(ioaddr, CHIP_IO_EXTENT))
+		if (check_region(ioaddr, CHIP_IO_EXTENT) < 0)
 			continue;
 		if (pc87108_open( i, io[i], io2[i], irq[i], dma[i]) == 0)
 			return 0;
@@ -151,11 +151,11 @@ static void pc87108_cleanup(void)
 {
 	int i;
 
-        DEBUG( 4, __FUNCTION__ "()\n");
+        DEBUG(4, __FUNCTION__ "()\n");
 
-	for ( i=0; i < 4; i++) {
-		if ( dev_self[i])
-			pc87108_close( &(dev_self[i]->idev));
+	for (i=0; i < 4; i++) {
+		if (dev_self[i])
+			pc87108_close(&(dev_self[i]->idev));
 	}
 }
 #endif /* MODULE */
@@ -233,7 +233,6 @@ static int pc87108_open( int i, unsigned int iobase, unsigned int board_addr,
 	idev->tx_buff.truesize = 4000;
 	
 	/* Initialize callbacks */
-	idev->hard_xmit       = pc87108_hard_xmit;
 	idev->change_speed    = pc87108_change_speed;
 	idev->wait_until_sent = pc87108_wait_until_sent;
 	idev->is_receiving    = pc87108_is_receiving;
@@ -671,7 +670,7 @@ static void pc87108_change_speed( struct irda_device *idev, int speed)
 
 	/* Set appropriate speed mode */
 	switch_bank(iobase, BANK0);
-	outb( mcr|MCR_TX_DFR, iobase+MCR);
+	outb(mcr | MCR_TX_DFR, iobase+MCR);
 
 	/* Give some hits to the transceiver */
 	pc87108_change_dongle_speed( iobase, speed, idev->io.dongle_id);
@@ -805,8 +804,8 @@ static void pc87108_dma_write( struct irda_device *idev, int iobase)
 	switch_bank(iobase, BANK0);
 	outb( inb( iobase+MCR) & ~MCR_DMA_EN, iobase+MCR);
 
-	setup_dma( idev->io.dma, idev->tx_buff.data, idev->tx_buff.len, 
-		   DMA_MODE_WRITE);
+	setup_dma(idev->io.dma, idev->tx_buff.data, idev->tx_buff.len, 
+		  DMA_MODE_WRITE);
 	
 	/* idev->media_busy = TRUE; */
 	idev->io.direction = IO_XMIT;
@@ -920,29 +919,29 @@ static void pc87108_dma_xmit_complete( struct irda_device *idev)
  *    if it starts to receive a frame.
  *
  */
-static int pc87108_dma_receive( struct irda_device *idev) 
+static int pc87108_dma_receive(struct irda_device *idev) 
 {
 	struct pc87108 *self;
 	int iobase;
 	__u8 bsr;
 
-	ASSERT( idev != NULL, return -1;);
-	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return -1;);
+	ASSERT(idev != NULL, return -1;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return -1;);
 
-	DEBUG( 4, __FUNCTION__ "\n");
+	DEBUG(4, __FUNCTION__ "\n");
 
 	self = idev->priv;
-	iobase= idev->io.iobase;
+	iobase = idev->io.iobase;
 
 	/* Save current bank */
-	bsr = inb( iobase+BSR);
+	bsr = inb(iobase+BSR);
 
 	/* Disable DMA */
-	switch_bank( iobase, BANK0);
-	outb( inb(iobase+MCR) & ~MCR_DMA_EN, iobase+MCR);
+	switch_bank(iobase, BANK0);
+	outb(inb(iobase+MCR) & ~MCR_DMA_EN, iobase+MCR);
 
-	setup_dma( idev->io.dma, idev->rx_buff.data, idev->rx_buff.truesize, 
-		   DMA_MODE_READ);
+	setup_dma(idev->io.dma, idev->rx_buff.data, 
+		  idev->rx_buff.truesize, DMA_MODE_READ);
 	
 	/* driver->media_busy = FALSE; */
 	idev->io.direction = IO_RECV;
@@ -950,22 +949,22 @@ static int pc87108_dma_receive( struct irda_device *idev)
 	idev->rx_buff.offset = 0;
 
 	/* Reset Rx FIFO. This will also flush the ST_FIFO */
-	outb( FCR_RXTH|FCR_TXTH|FCR_RXSR|FCR_FIFO_EN, iobase+FCR);
+	outb(FCR_RXTH|FCR_TXTH|FCR_RXSR|FCR_FIFO_EN, iobase+FCR);
 	self->st_fifo.len = self->st_fifo.tail = self->st_fifo.head = 0;
 
 	/* Choose DMA Rx, DMA Fairness, and Advanced mode */
 	switch_bank(iobase, BANK2);
-	outb(( inb( iobase+ECR1) & ~ECR1_DMASWP)|ECR1_DMANF|ECR1_EXT_SL, 
-	      iobase+ECR1);
+	outb((inb( iobase+ECR1) & ~ECR1_DMASWP)|ECR1_DMANF|ECR1_EXT_SL, 
+	     iobase+ECR1);
 	
 	/* enable DMA */
 	switch_bank(iobase, BANK0);
-	outb( inb( iobase+MCR)|MCR_DMA_EN, iobase+MCR);
+	outb(inb(iobase+MCR)|MCR_DMA_EN, iobase+MCR);
 
 	/* Restore bank register */
-	outb( bsr, iobase+BSR);
+	outb(bsr, iobase+BSR);
 	
-	DEBUG( 4, __FUNCTION__ "(), done!\n");	
+	DEBUG(4, __FUNCTION__ "(), done!\n");	
 	
 	return 0;
 }
@@ -1481,9 +1480,7 @@ static int pc87108_net_close(struct device *dev)
  */
 int init_module(void)
 {
-	pc87108_init();
-
-	return(0);
+	return pc87108_init();
 }
 
 /*
@@ -1496,6 +1493,5 @@ void cleanup_module(void)
 {
 	pc87108_cleanup();
 }
-
-#endif
+#endif /* MODULE */
 

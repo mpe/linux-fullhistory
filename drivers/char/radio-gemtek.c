@@ -160,6 +160,7 @@ static int gemtek_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.flags=VIDEO_TUNER_LOW;
 			v.mode=VIDEO_MODE_AUTO;
 			v.signal=0xFFFF*gemtek_getsigstr(rt);
+			strcpy(v.name, "FM");
 			if(copy_to_user(arg,&v, sizeof(v)))
 				return -EFAULT;
 			return 0;

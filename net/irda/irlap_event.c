@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Thu Feb 11 00:38:58 1999
+ * Modified at:   Fri Mar 26 14:24:09 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>,
@@ -84,6 +84,7 @@ static const char *irlap_event[] = {
 	"RECV_DISCOVERY_XID_RSP",
 	"RECV_SNRM_CMD",
 	"RECV_TEST_CMD",
+	"RECV_TEST_RSP",
 	"RECV_UA_RSP",
 	"RECV_DM_RSP",
 	"RECV_I_CMD",
@@ -206,13 +207,13 @@ void irlap_do_event( struct irlap_cb *self, IRLAP_EVENT event,
 {
 	int ret;
 	
-	if ( !self || self->magic != LAP_MAGIC)
+	if (!self || self->magic != LAP_MAGIC)
 		return;
 	
-  	DEBUG( 4, __FUNCTION__ "(), event = %s, state = %s\n", 
-	       irlap_event[ event], irlap_state[ self->state]); 
+  	DEBUG(4, __FUNCTION__ "(), event = %s, state = %s\n", 
+	      irlap_event[ event], irlap_state[ self->state]); 
 	
-	ret = (*state[ self->state]) ( self, event, skb, info);
+	ret = (*state[ self->state]) (self, event, skb, info);
 	
 	/* 
 	 *  Check if there are any pending events that needs to be executed
@@ -243,7 +244,9 @@ void irlap_do_event( struct irlap_cb *self, IRLAP_EVENT event,
 		break;
 	case LAP_NDM:
 		/* Check if we should try to connect */
-		if (self->connect_pending) {
+		if ((self->connect_pending) && 
+		    !irda_device_is_media_busy(self->irdev)) 
+		{
 			self->connect_pending = FALSE;
 			
 			ret = (*state[self->state])(self, CONNECT_REQUEST, 
@@ -292,7 +295,7 @@ void irlap_next_state( struct irlap_cb *self, IRLAP_STATE state)
 static int irlap_state_ndm( struct irlap_cb *self, IRLAP_EVENT event, 
 			    struct sk_buff *skb,  struct irlap_info *info) 
 {
-	DISCOVERY *discovery_rsp;
+	discovery_t *discovery_rsp;
 	int ret = 0;
 	
 	DEBUG( 4, __FUNCTION__ "()\n");
@@ -304,7 +307,7 @@ static int irlap_state_ndm( struct irlap_cb *self, IRLAP_EVENT event,
 	case CONNECT_REQUEST:
 		ASSERT( self->irdev != NULL, return -1;);
 
-		if ( irda_device_is_media_busy( self->irdev)) {
+		if (irda_device_is_media_busy(self->irdev)) {
 			DEBUG( 0, __FUNCTION__
 			      "(), CONNECT_REQUEST: media busy!\n");
 			
@@ -354,7 +357,7 @@ static int irlap_state_ndm( struct irlap_cb *self, IRLAP_EVENT event,
 		self->s++;
 
 		irlap_start_slot_timer( self, self->slot_timeout);
-		irlap_next_state( self, LAP_QUERY);
+		irlap_next_state(self, LAP_QUERY);
 		break;
 
 	case RECV_DISCOVERY_XID_CMD:
@@ -362,20 +365,20 @@ static int irlap_state_ndm( struct irlap_cb *self, IRLAP_EVENT event,
 
 		/* Assert that this is not the final slot */
 		if ( info->s <= info->S) {
-			self->daddr = info->daddr; 
-			self->slot = irlap_generate_rand_time_slot( info->S,
-								    info->s);
+			/* self->daddr = info->daddr;  */
+			self->slot = irlap_generate_rand_time_slot(info->S,
+								   info->s);
 			DEBUG( 4, "XID_CMD: S=%d, s=%d, slot %d\n", info->S, 
 			       info->s, self->slot);
 
 			if ( self->slot == info->s) {
 				discovery_rsp = irlmp_get_discovery_response();
-				
-				DEBUG( 4, "Sending XID rsp 1\n");
-				irlap_send_discovery_xid_frame( self, info->S, 
-								self->slot, 
-								FALSE,
-								discovery_rsp);
+				discovery_rsp->daddr = info->daddr;
+
+				irlap_send_discovery_xid_frame(self, info->S, 
+							       self->slot, 
+							       FALSE,
+							       discovery_rsp);
 				self->frame_sent = TRUE;
 			} else
 				self->frame_sent = FALSE;
@@ -384,11 +387,21 @@ static int irlap_state_ndm( struct irlap_cb *self, IRLAP_EVENT event,
 			irlap_next_state( self, LAP_REPLY);
 		}
 
-		dev_kfree_skb( skb);
+		dev_kfree_skb(skb);
 		break;
-		
+
+	case RECV_TEST_CMD:
+		skb_pull(skb, sizeof(struct test_frame));
+		irlap_send_test_frame(self, info->daddr, skb);
+		dev_kfree_skb(skb);
+		break;
+	case RECV_TEST_RSP:
+		DEBUG(0, __FUNCTION__ "() not implemented!\n");
+		dev_kfree_skb(skb);
+		break;
 	default:
-		/* 	DEBUG( 0, "irlap_state_ndm: Unknown event"); */
+		DEBUG(2, __FUNCTION__ "(), Unknown event %s", 
+		      irlap_event[event]);
 		ret = -1;
 		break;
 	}	
@@ -414,14 +427,14 @@ static int irlap_state_query( struct irlap_cb *self, IRLAP_EVENT event,
 		ASSERT( info != NULL, return -1;);
 		ASSERT( info->discovery != NULL, return -1;);
 
-		DEBUG( 4, __FUNCTION__ "(), daddr=%08x\n", 
-		       info->discovery->daddr);
+		DEBUG(4, __FUNCTION__ "(), daddr=%08x\n", 
+		      info->discovery->daddr);
 
 		hashbin_insert( self->discovery_log, 
 				(QUEUE *) info->discovery,
 				info->discovery->daddr, NULL);
 
-		dev_kfree_skb( skb);
+		dev_kfree_skb(skb);
 
 		/* Keep state */
 		irlap_next_state( self, LAP_QUERY); 
@@ -453,8 +466,8 @@ static int irlap_state_query( struct irlap_cb *self, IRLAP_EVENT event,
 		}
 		break;
 	default:
-		DEBUG( 4, __FUNCTION__ "(), Unknown event %d, %s\n", event, 
-		       irlap_event[event]);
+		DEBUG(2, __FUNCTION__ "(), Unknown event %d, %s\n", event, 
+		      irlap_event[event]);
 
 		if ( skb != NULL) {
 			dev_kfree_skb( skb);
@@ -475,7 +488,7 @@ static int irlap_state_query( struct irlap_cb *self, IRLAP_EVENT event,
 static int irlap_state_reply( struct irlap_cb *self, IRLAP_EVENT event, 
 			      struct sk_buff *skb, struct irlap_info *info) 
 {
-	DISCOVERY *discovery_rsp;
+	discovery_t *discovery_rsp;
 	int ret=0;
 
 	DEBUG( 4, __FUNCTION__ "()\n");
@@ -503,19 +516,18 @@ static int irlap_state_reply( struct irlap_cb *self, IRLAP_EVENT event,
 			irlap_next_state( self, LAP_NDM);
 
 			irlap_discovery_indication( self, info->discovery); 
-		} else if (( info->s >= self->slot) && 
-			   ( !self->frame_sent)) {
-			DEBUG( 4, "Sending XID rsp 2, s=%d\n", info->s); 
+		} else if ((info->s >= self->slot) && (!self->frame_sent)) {
 			discovery_rsp = irlmp_get_discovery_response();
+			discovery_rsp->daddr = info->daddr;
 
-			irlap_send_discovery_xid_frame( self, info->S, 
-							self->slot, FALSE,
-							discovery_rsp);
+			irlap_send_discovery_xid_frame(self, info->S,
+						       self->slot, FALSE,
+						       discovery_rsp);
 
 			self->frame_sent = TRUE;
-			irlap_next_state( self, LAP_REPLY);
+			irlap_next_state(self, LAP_REPLY);
 		}
-		dev_kfree_skb( skb);
+		dev_kfree_skb(skb);
 		break;
 	default:
 		DEBUG(1, __FUNCTION__ "(), Unknown event %d, %s\n", event,
@@ -1823,7 +1835,11 @@ static int irlap_state_nrm_s( struct irlap_cb *self, IRLAP_EVENT event,
 		irlap_next_state( self, LAP_NRM_S);
 #endif
 		break;
-
+	case RECV_TEST_CMD:
+		skb_pull(skb, sizeof(struct test_frame));
+		irlap_send_test_frame(self, info->daddr, skb);
+		dev_kfree_skb(skb);
+		break;
 	default:
 		DEBUG(1, __FUNCTION__ "(), Unknown event %d, (%s)\n", 
 		      event, irlap_event[event]);

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Tue Jan 26 11:50:33 1999
+ * Modified at:   Mon Mar 22 13:15:04 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -34,8 +34,8 @@
 #include <net/irda/irqueue.h>
 #include <net/irda/timer.h>
 
-#define LST 0x80
-#define ACK 0x40
+#define IAP_LST 0x80
+#define IAP_ACK 0x40
 
 #define IAS_SERVER 0
 #define IAS_CLIENT 1
@@ -91,13 +91,9 @@ void iriap_getvaluebyclass_request( char *name, char *attr,
 void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb);
 
 void iriap_send_ack( struct iriap_cb *self);
-void iriap_data_indication( void *instance, void *sap, struct sk_buff *skb);
-void iriap_connect_confirm( void *instance, void *sap, struct qos_info *qos, 
-			    int max_sdu_size, struct sk_buff *skb);
-void iriap_connect_indication( void *instance, void *sap, 
-			       struct qos_info *qos, int max_sdu_size,
-			       struct sk_buff *skb);
-void iriap_call_indication( struct iriap_cb *self, struct sk_buff *skb);
+void iriap_connect_confirm(void *instance, void *sap, struct qos_info *qos, 
+			   __u32 max_sdu_size, struct sk_buff *skb);
+void iriap_call_indication(struct iriap_cb *self, struct sk_buff *skb);
 
 void iriap_register_server(void);
 

@@ -1032,17 +1032,13 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry)
 	int error;
 
 	error = may_delete(dir, dentry, 0);
-	if (error)
-		goto exit_lock;
-
-	if (!dir->i_op || !dir->i_op->unlink)
-		goto exit_lock;
-
-	DQUOT_INIT(dir);
-
-	error = dir->i_op->unlink(dir, dentry);
-
-exit_lock:
+	if (!error) {
+		error = -EPERM;
+		if (dir->i_op && dir->i_op->unlink) {
+			DQUOT_INIT(dir);
+			error = dir->i_op->unlink(dir, dentry);
+		}
+	}
 	return error;
 }
 

@@ -25,7 +25,6 @@
 #include <linux/un.h>
 #include <linux/fcntl.h>
 #include <linux/termios.h>
-#include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/net.h>
 #include <linux/fs.h>

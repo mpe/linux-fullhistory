@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Jul  4 22:43:57 1998
- * Modified at:   Tue Jan 26 11:49:55 1999
+ * Modified at:   Thu Mar 11 16:11:54 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -69,6 +69,9 @@ struct irobex_cb {
 	__u32 saddr;        /* my local address */
 	__u32 daddr;        /* peer address */
 	unsigned long time_discovered;
+
+	__u32 ckey;           /* IrLMP client handle */
+	__u32 skey;           /* IrLMP service handle */
 
         char devname[9];    /* name of the registered device */
 	struct tsap_cb *tsap;

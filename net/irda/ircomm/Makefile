@@ -8,9 +8,9 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := ircomm_n_vtd.o
-O_OBJS	 := ircomm_common.o attach.o irvtd.o irvtd_driver.o
+O_OBJS	 := ircomm_common.o irvtd_driver.o
 M_OBJS   := ircomm.o ircomm_tty.o
-MI_OBJS  := ircomm_common.o attach.o irvtd.o irvtd_driver.o
+MI_OBJS  := ircomm_common.o irvtd_driver.o
 
 OX_OBJS  += 
 
@@ -18,10 +18,10 @@ OX_OBJS  +=
 
 ifeq ($(CONFIG_IRCOMM),m)
 ircomm.o:  $(MI_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ ircomm_common.o attach.o
+	$(LD) $(LD_RFLAG) -r -o $@ ircomm_common.o
 
 ircomm_tty.o: $(MI_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ irvtd.o irvtd_driver.o
+	$(LD) $(LD_RFLAG) -r -o $@ irvtd_driver.o
 endif
 
 include $(TOPDIR)/Rules.make

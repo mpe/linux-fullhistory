@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Mon Jan 25 13:58:59 1999
+ * Modified at:   Fri Mar 26 15:15:17 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -157,22 +157,18 @@ struct irlap_cb {
 
 	int discovery_count;
 	hashbin_t *discovery_log;
- 	DISCOVERY *discovery_cmd;
+ 	discovery_t *discovery_cmd;
 
 	struct qos_info qos_tx;    /* QoS requested by peer */
 	struct qos_info qos_rx;    /* QoS requested by self */
 
 	struct notify_t notify; /* Callbacks to IrLMP */
 
-	int     mtt_required;  /* Minumum turnaround time required */
-	int     xbofs_delay;   /* Nr of XBOF's used to MTT */
-	int     bofs_count;    /* Negotiated extra BOFs */
+	int    mtt_required;  /* Minumum turnaround time required */
+	int    xbofs_delay;   /* Nr of XBOF's used to MTT */
+	int    bofs_count;    /* Negotiated extra BOFs */
 
  	struct irda_statistics stats;
-
-#ifdef CONFIG_IRDA_RECYCLE_RR
-	struct sk_buff *recycle_rr_skb;
-#endif
 
 #ifdef CONFIG_IRDA_COMPRESSION
 	struct irda_compressor compressor;
@@ -210,9 +206,9 @@ void irlap_status_indication( int quality_of_link);
 
 void irlap_test_request( __u8 *info, int len);
 
-void irlap_discovery_request( struct irlap_cb *, DISCOVERY *discovery);
-void irlap_discovery_confirm( struct irlap_cb *, hashbin_t *discovery_log);
-void irlap_discovery_indication( struct irlap_cb *, DISCOVERY *discovery);
+void irlap_discovery_request(struct irlap_cb *, discovery_t *discovery);
+void irlap_discovery_confirm(struct irlap_cb *, hashbin_t *discovery_log);
+void irlap_discovery_indication(struct irlap_cb *, discovery_t *discovery);
 
 void irlap_reset_indication( struct irlap_cb *self);
 void irlap_reset_confirm(void);

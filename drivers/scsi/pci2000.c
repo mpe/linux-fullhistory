@@ -1,24 +1,22 @@
-/*+M*************************************************************************
- * Perceptive Solutions, Inc. PCI-2000 device driver proc support for Linux.
+/****************************************************************************
+ * Perceptive Solutions, Inc. PCI-2000 device driver for Linux.
  *
- * Copyright (c) 1999 Perceptive Solutions, Inc.
+ * pci2000.c - Linux Host Driver for PCI-2000 IntelliCache SCSI Adapters
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
+ * Copyright (c) 1997-1999 Perceptive Solutions, Inc.
+ * All Rights Reserved.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that redistributions of source
+ * code retain the above copyright notice and this comment without
+ * modification.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; see the file COPYING.  If not, write to
- * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+ * Technical updates and product information at:
+ *  http://www.psidisk.com
  *
+ * Please send questions, comments, bug reports to:
+ *  tech@psidisk.com Technical Support
  *
- *	File Name:		pci2000i.c
  *
  *	Revisions	1.10	Jan-21-1999
  *		- Fixed sign on message to reflect proper controller name.
@@ -28,16 +26,17 @@
  *		- Fixed control timeout to not lock up the entire system if
  *		  controller goes offline completely.
  *
- *-M*************************************************************************/
-#define PCI2000_VERSION		"1.11"
+ *	Revisions 1.12		Mar-26-1999
+ *		- Fixed spinlock and PCI configuration.
+ *
+ ****************************************************************************/
+#define PCI2000_VERSION		"1.12"
 
 #include <linux/module.h>
 
 #include <linux/kernel.h>
-#include <linux/head.h>
 #include <linux/types.h>
 #include <linux/string.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
@@ -49,11 +48,17 @@
 #include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
+#include <linux/stat.h>
 
 #include "pci2000.h"
 #include "psi_roy.h"
 
-#include<linux/stat.h>
+#if LINUX_VERSION_CODE >= LINUXVERSION(2,1,95)
+#include <asm/spinlock.h>
+#endif
+#if LINUX_VERSION_CODE < LINUXVERSION(2,1,93)
+#include <linux/bios32.h>
+#endif
 
 struct proc_dir_entry Proc_Scsi_Pci2000 =
 	{ PROC_SCSI_PCI2000, 7, "pci2000", S_IFDIR | S_IRUGO | S_IXUGO, 2 };
@@ -91,6 +96,7 @@ typedef struct
 	USHORT		 mb4;
 	USHORT		 cmd;
 	USHORT		 tag;
+	ULONG		 irqOwned;
 	DEV2000	 	 dev[MAX_BUS][MAX_UNITS];
 	}	ADAPTER2000, *PADAPTER2000;
 
@@ -234,6 +240,23 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 	int					pun;
 	int					bus;
 	int					z;
+#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
+    int					flags;
+#else /* version >= v2.1.95 */
+    unsigned long		flags;
+#endif /* version >= v2.1.95 */
+
+#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
+    /* Disable interrupts, if they aren't already disabled. */
+    save_flags (flags);
+    cli ();
+#else /* version >= v2.1.95 */
+    /*
+     * Disable interrupts, if they aren't already disabled and acquire
+     * the I/O spinlock.
+     */
+    spin_lock_irqsave (&io_request_lock, flags);
+#endif /* version >= v2.1.95 */
 
 	DEB(printk ("\npci2000 recieved interrupt "));
 	for ( z = 0; z < NumAdapters;  z++ )										// scan for interrupt to process
@@ -252,7 +275,7 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 	if ( !shost )
 		{
 		DEB (printk ("\npci2000: not my interrupt"));
-		return;
+		goto irq_return;
 		}
 
 	padapter = HOSTDATA(shost);
@@ -276,7 +299,7 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 
 	outb_p (0xFF, padapter->tag);												// clear the op interrupt
 	outb_p (CMD_DONE, padapter->cmd);											// complete the op
-	return;																		// done, but, with what?
+	goto irq_return;;																		// done, but, with what?
 
 irqProceed:;
 	if ( tag & ERR08_TAGGED )												// is there an error here?
@@ -284,7 +307,7 @@ irqProceed:;
 		if ( WaitReady (padapter) )
 			{
 			OpDone (SCpnt, DID_TIME_OUT << 16);
-			return;
+			goto irq_return;;
 			}
 
 		outb_p (tag0, padapter->mb0);										// get real error code
@@ -292,7 +315,7 @@ irqProceed:;
 		if ( WaitReady (padapter) )											// wait for controller to suck up the op
 			{
 			OpDone (SCpnt, DID_TIME_OUT << 16);
-			return;
+			goto irq_return;;
 			}
 
 		error = inl (padapter->mb0);										// get error data
@@ -305,24 +328,40 @@ irqProceed:;
 			if ( bus )														// are we doint SCSI commands?
 				{
 				OpDone (SCpnt, (DID_OK << 16) | 2);
-				return;
+				goto irq_return;;
 				}
 			if ( *SCpnt->cmnd == SCSIOP_TEST_UNIT_READY )
 				OpDone (SCpnt, (DRIVER_SENSE << 24) | (DID_OK << 16) | 2);	// test caller we have sense data too
 			else
 				OpDone (SCpnt, DID_ERROR << 16);
-			return;
+			goto irq_return;;
 			}
 		OpDone (SCpnt, DID_ERROR << 16);
-		return;
+		goto irq_return;;
 		}
 
 	outb_p (0xFF, padapter->tag);											// clear the op interrupt
 	outb_p (CMD_DONE, padapter->cmd);										// complete the op
 	OpDone (SCpnt, DID_OK << 16);
+
+irq_return:;
+#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
+    /*
+     * Restore the original flags which will enable interrupts
+     * if and only if they were enabled on entry.
+     */
+    restore_flags (flags);
+#else /* version >= v2.1.95 */
+    /*
+     * Release the I/O spinlock and restore the original flags
+     * which will enable interrupts if and only if they were
+     * enabled on entry.
+     */
+    spin_unlock_irqrestore (&io_request_lock, flags);
+#endif /* version >= v2.1.95 */
 	}
 /****************************************************************
- *	Name:	Pci2220i_QueueCommand
+ *	Name:	Pci2000_QueueCommand
  *
  *	Description:	Process a queued command from the SCSI manager.
  *
@@ -511,7 +550,7 @@ int Pci2000_QueueCommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 			if ( cmd )
 				break;
 		default:
-			DEB (printk ("pci2220i_queuecommand: Unsupported command %02X\n", *cdb));
+			DEB (printk ("pci2000_queuecommand: Unsupported command %02X\n", *cdb));
 			OpDone (SCpnt, DID_ERROR << 16);
 			return 0;
 		}
@@ -538,7 +577,7 @@ static void internal_done (Scsi_Cmnd * SCpnt)
 	SCpnt->SCp.Status++;
 	}
 /****************************************************************
- *	Name:	Pci2220i_Command
+ *	Name:	Pci2000_Command
  *
  *	Description:	Process a command from the SCSI manager.
  *
@@ -559,90 +598,121 @@ int Pci2000_Command (Scsi_Cmnd *SCpnt)
 	return SCpnt->result;
 	}
 /****************************************************************
- *	Name:	Pci2220i_Detect
+ *	Name:	Pci2000_Detect
  *
  *	Description:	Detect and initialize our boards.
  *
  *	Parameters:		tpnt - Pointer to SCSI host template structure.
  *
- *	Returns:		Number of adapters found.
+ *	Returns:		Number of adapters installed.
  *
  ****************************************************************/
 int Pci2000_Detect (Scsi_Host_Template *tpnt)
 	{
-	int					pci_index = 0;
+	int					found = 0;
+	int					installed = 0;
 	struct Scsi_Host   *pshost;
 	PADAPTER2000	    padapter;
 	int					z, zz;
 	int					setirq;
+#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
+	struct pci_dev	   *pdev = NULL;
+#else
+	UCHAR	pci_bus, pci_device_fn;
+#endif
 
-	if ( pcibios_present () )
+#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
+	if ( !pci_present () )
+#else
+	if ( !pcibios_present () )
+#endif
 		{
-		for ( pci_index = 0;  pci_index <= MAXADAPTER;  ++pci_index )
+		printk ("pci2000: PCI BIOS not present\n");
+		return 0;
+		}
+
+#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
+	while ( (pdev = pci_find_device (VENDOR_PSI, DEVICE_ROY_1, pdev)) != NULL )
+#else
+	while ( !pcibios_find_device (VENDOR_PSI, DEVICE_ROY_1, found, &pci_bus, &pci_device_fn) )
+#endif
+		{
+		pshost = scsi_register (tpnt, sizeof(ADAPTER2000));
+		padapter = HOSTDATA(pshost);
+
+#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
+		padapter->basePort = pdev->base_address[1] & 0xFFFE;
+#else
+		pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_1, &padapter->basePort);
+		padapter->basePort &= 0xFFFE;
+#endif
+		DEB (printk ("\nBase Regs = %#04X", padapter->basePort));			// get the base I/O port address
+		padapter->mb0	= padapter->basePort + RTR_MAILBOX;		   			// get the 32 bit mail boxes
+		padapter->mb1	= padapter->basePort + RTR_MAILBOX + 4;
+		padapter->mb2	= padapter->basePort + RTR_MAILBOX + 8;
+		padapter->mb3	= padapter->basePort + RTR_MAILBOX + 12;
+		padapter->mb4	= padapter->basePort + RTR_MAILBOX + 16;
+		padapter->cmd	= padapter->basePort + RTR_LOCAL_DOORBELL;			// command register
+		padapter->tag	= padapter->basePort + RTR_PCI_DOORBELL;			// tag/response register
+
+		if ( WaitReady (padapter) )
+			goto unregister;
+		outb_p (0x84, padapter->mb0);
+		outb_p (CMD_SPECIFY, padapter->cmd);
+		if ( WaitReady (padapter) )
+			goto unregister;
+
+#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
+		pshost->irq = pdev->irq;
+#else
+		pcibios_read_config_byte (pci_bus, pci_device_fn, PCI_INTERRUPT_LINE, &pshost->irq);
+#endif
+		setirq = 1;
+		padapter->irqOwned = 0;
+		for ( z = 0;  z < installed;  z++ )									// scan for shared interrupts
 			{
-			UCHAR	pci_bus, pci_device_fn;
-
-			if ( pcibios_find_device (VENDOR_PSI, DEVICE_ROY_1, pci_index, &pci_bus, &pci_device_fn) != 0 )
-				break;
-
-			pshost = scsi_register (tpnt, sizeof(ADAPTER2000));
-			padapter = HOSTDATA(pshost);
-
-			pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_1, &padapter->basePort);
-			padapter->basePort &= 0xFFFE;
-			DEB (printk ("\nBase Regs = %#04X", padapter->basePort));			// get the base I/O port address
-			padapter->mb0	= padapter->basePort + RTR_MAILBOX;		   			// get the 32 bit mail boxes
-			padapter->mb1	= padapter->basePort + RTR_MAILBOX + 4;
-			padapter->mb2	= padapter->basePort + RTR_MAILBOX + 8;
-			padapter->mb3	= padapter->basePort + RTR_MAILBOX + 12;
-			padapter->mb4	= padapter->basePort + RTR_MAILBOX + 16;
-			padapter->cmd	= padapter->basePort + RTR_LOCAL_DOORBELL;			// command register
-			padapter->tag	= padapter->basePort + RTR_PCI_DOORBELL;			// tag/response register
-
-			if ( WaitReady (padapter) )
-				goto unregister;
-			outb_p (0x84, padapter->mb0);
-			outb_p (CMD_SPECIFY, padapter->cmd);
-			if ( WaitReady (padapter) )
-				goto unregister;
-
-			pcibios_read_config_byte (pci_bus, pci_device_fn, PCI_INTERRUPT_LINE, &pshost->irq);
-			setirq = 1;
-			for ( z = 0;  z < pci_index;  z++ )									// scan for shared interrupts
+			if ( PsiHost[z]->irq == pshost->irq )							// if shared then, don't posses
+				setirq = 0;
+			}
+		if ( setirq )												// if not shared, posses
+			{
+			if ( request_irq (pshost->irq, Irq_Handler, SA_SHIRQ, "pci2000", padapter) < 0 )
 				{
-				if ( PsiHost[z]->irq == pshost->irq )							// if shared then, don't posses
-					setirq = 0;
-				}
-			if ( setirq )														// if not shared, posses
-				{
-				if ( request_irq (pshost->irq, Irq_Handler, 0, "pci2000", NULL) )
+				if ( request_irq (pshost->irq, Irq_Handler, SA_INTERRUPT | SA_SHIRQ, "pci2000", padapter) < 0 )
 					{
-					printk ("Unable to allocate IRQ for PSI-2000 controller.\n");
+					printk ("Unable to allocate IRQ for PCI-2000 controller.\n");
 					goto unregister;
 					}
 				}
-			PsiHost[pci_index]	= pshost;										// save SCSI_HOST pointer
-
-			pshost->unique_id	= padapter->basePort;
-			pshost->max_id		= 16;
-			pshost->max_channel	= 1;
-
-			for ( zz = 0;  zz < MAX_BUS;  zz++ )
-				for ( z = 0; z < MAX_UNITS;  z++ )
-					padapter->dev[zz][z].tag = 0;
-			
-			printk("\nPSI-2000 Intelligent Storage SCSI CONTROLLER: at I/O = %X  IRQ = %d\n", padapter->basePort, pshost->irq);
-			printk("Version %s, Compiled %s %s\n\n", PCI2000_VERSION,  __DATE__, __TIME__);
-			continue;
-unregister:;
-			scsi_unregister (pshost);
+			padapter->irqOwned = pshost->irq;						// set IRQ as owned
 			}
+		PsiHost[installed]	= pshost;										// save SCSI_HOST pointer
+
+		pshost->io_port		= padapter->basePort;
+		pshost->n_io_port	= 0xFF;
+		pshost->unique_id	= padapter->basePort;
+		pshost->max_id		= 16;
+		pshost->max_channel	= 1;
+
+		for ( zz = 0;  zz < MAX_BUS;  zz++ )
+			for ( z = 0; z < MAX_UNITS;  z++ )
+				padapter->dev[zz][z].tag = 0;
+			
+		printk("\nPSI-2000 Intelligent Storage SCSI CONTROLLER: at I/O = %X  IRQ = %d\n", padapter->basePort, pshost->irq);
+		printk("Version %s, Compiled %s %s\n\n", PCI2000_VERSION,  __DATE__, __TIME__);
+		found++;
+		if ( ++installed < MAXADAPTER )
+			continue;
+		break;
+unregister:;
+		scsi_unregister (pshost);
+		found++;
 		}
-	NumAdapters = pci_index;
-	return pci_index;
+	NumAdapters = installed;
+	return installed;
 	}
 /****************************************************************
- *	Name:	Pci2220i_Abort
+ *	Name:	Pci2000_Abort
  *
  *	Description:	Process the Abort command from the SCSI manager.
  *
@@ -657,7 +727,7 @@ int Pci2000_Abort (Scsi_Cmnd *SCpnt)
 	return SCSI_ABORT_SNOOZE;
 	}
 /****************************************************************
- *	Name:	Pci2220i_Reset
+ *	Name:	Pci2000_Reset
  *
  *	Description:	Process the Reset command from the SCSI manager.
  *
@@ -675,11 +745,34 @@ int Pci2000_Reset (Scsi_Cmnd *SCpnt, unsigned int reset_flags)
 	{
 	return SCSI_RESET_PUNT;
 	}
+/****************************************************************
+ *	Name:	Pci2000_Release
+ *
+ *	Description:	Release resources allocated for a single each adapter.
+ *
+ *	Parameters:		pshost - Pointer to SCSI command structure.
+ *
+ *	Returns:		zero.
+ *
+ ****************************************************************/
+int Pci2000_Release (struct Scsi_Host *pshost)
+	{
+    PADAPTER2000	padapter = HOSTDATA (pshost);
+
+	if ( padapter->irqOwned )
+#if LINUX_VERSION_CODE < LINUXVERSION(1,3,70)
+	    free_irq (pshost->irq);
+#else /* version >= v1.3.70 */
+		free_irq (pshost->irq, padapter);
+#endif /* version >= v1.3.70 */
+    release_region (pshost->io_port, pshost->n_io_port);
+    scsi_unregister(pshost);
+    return 0;
+	}
 
 #include "sd.h"
-
 /****************************************************************
- *	Name:	Pci2220i_BiosParam
+ *	Name:	Pci2000_BiosParam
  *
  *	Description:	Process the biosparam request from the SCSI manager to
  *					return C/H/S data.
@@ -713,7 +806,7 @@ int Pci2000_BiosParam (Scsi_Disk *disk, kdev_t dev, int geom[])
 
 #ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = PCI2220I;
+Scsi_Host_Template driver_template = PCI2000;
 
 #include "scsi_module.c"
 #endif

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Haris Zukanovic <haris@stud.cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Tue Feb  9 14:01:50 1999
+ * Modified at:   Wed Apr  7 17:17:16 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Haris Zukanovic, <haris@stud.cs.uit.no>
@@ -31,17 +31,20 @@
 #include <linux/tty.h>
 #include <linux/netdevice.h>
 
+#include <asm/spinlock.h>
+
 #include <net/irda/irda.h>
 #include <net/irda/qos.h>
 #include <net/irda/irqueue.h>
 
-/* Some non-standard interface flags (should not conflict with any in if.h */
+/* Some non-standard interface flags (should not conflict with any in if.h) */
 #define IFF_SIR 	0x01 /* Supports SIR speeds */
 #define IFF_MIR 	0x02 /* Supports MIR speeds */
 #define IFF_FIR 	0x04 /* Supports FIR speeds */
 #define IFF_PIO   	0x08 /* Supports PIO transfer of data */
 #define IFF_DMA		0x10 /* Supports DMA transfer of data */
-#define IFF_DONGLE      0x20 /* Interface has a dongle attached */
+#define IFF_SHM         0x20 /* Supports shared memory data transfers */
+#define IFF_DONGLE      0x40 /* Interface has a dongle attached */
 
 #define IO_XMIT 0x01
 #define IO_RECV 0x02
@@ -50,12 +53,13 @@
 struct chipio_t {
         int iobase, iobase2;  /* IO base */
         int io_ext, io_ext2;  /* Length of iobase */
+	int membase;          /* Shared memory base */
         int irq, irq2;        /* Interrupts used */
         int fifo_size;        /* FIFO size */
 
         int dma, dma2;        /* DMA channel used */
         int irqflags;         /* interrupt flags (ie, SA_SHIRQ|SA_INTERRUPT) */
-	int direction;        /* Used by some FIR drivers */
+	int direction;        /* Link direction, used by some FIR drivers */
 
 	int baudrate;         /* Currently used baudrate */
 	int dongle_id;        /* Dongle or transceiver currently used */
@@ -107,50 +111,40 @@ struct irda_device {
 
 	int xbofs;
 	int media_busy;
+	/* spinlock_t lock; */ /* For serializing operations */
 	
 	/* Media busy stuff */
 	struct timer_list media_busy_timer;
-	struct timer_list todo_timer;
 
-	int  (*hard_xmit)( struct sk_buff *skb, struct device *dev);
-        void (*change_speed)( struct irda_device *driver, int baud);
-
+	/* Driver specific implementation */
+        void (*change_speed)(struct irda_device *driver, int baud);
  	int (*is_receiving)(struct irda_device *);     /* receiving? */
 	/* int (*is_tbusy)(struct irda_device *); */   /* transmitting? */
 	void (*wait_until_sent)(struct irda_device *);
-
-	int new_speed; /* Will be removed in future */
 };
 
 extern hashbin_t *irda_device;
 
 /* Function prototypes */
-int  irda_device_init( void);
-void irda_device_cleanup( void);
+int  irda_device_init(void);
+void irda_device_cleanup(void);
 
-int  irda_device_open( struct irda_device *, char *name, void *priv);
-void irda_device_close( struct irda_device *);
+int  irda_device_open(struct irda_device *, char *name, void *priv);
+void irda_device_close(struct irda_device *);
 
 /* Interface to be uses by IrLAP */
-inline void irda_device_set_media_busy( struct irda_device *, int status);
-inline int  irda_device_is_media_busy( struct irda_device *);
-inline int  irda_device_is_receiving( struct irda_device *);
-inline void irda_device_change_speed( struct irda_device *, int);
+inline void irda_device_set_media_busy(struct irda_device *, int status);
+inline int  irda_device_is_media_busy(struct irda_device *);
+inline int  irda_device_is_receiving(struct irda_device *);
+inline void irda_device_change_speed(struct irda_device *, int);
 
-inline struct qos_info *irda_device_get_qos( struct irda_device *self);
-int irda_device_txqueue_empty( struct irda_device *self);
+inline struct qos_info *irda_device_get_qos(struct irda_device *self);
+int irda_device_txqueue_empty(struct irda_device *self);
 
-int irda_device_setup( struct device *dev);
+int irda_device_setup(struct device *dev);
 
-__inline__ int irda_get_mtt( struct sk_buff *skb);
+inline unsigned short irda_get_mtt(struct sk_buff *skb);
 
-void setup_dma( int channel, char *buffer, int count, int mode);
+void setup_dma(int channel, char *buffer, int count, int mode);
 
 #endif
-
-
-
-
-
-
-

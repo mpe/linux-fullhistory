@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Wed Feb 17 23:49:10 1999
+ * Modified at:   Wed Apr  7 17:03:21 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -55,6 +55,7 @@
  *  Master structure
  */
 hashbin_t *irlan = NULL;
+static __u32 ckey, skey;
 
 /* Module parameters */
 static int eth = 0; /* Use "eth" or "irlan" name for devices */
@@ -143,6 +144,12 @@ void irlan_start_watchdog_timer(struct irlan_cb *self, int timeout)
 			 irlan_watchdog_timer_expired);
 }
 
+/*
+ * Function irlan_eth_open (dev)
+ *
+ *    Network device has been opened by user
+ *
+ */
 static int irlan_eth_open(struct device *dev)
 {
 	struct irlan_cb *self;
@@ -161,6 +168,9 @@ static int irlan_eth_open(struct device *dev)
 	dev->start = 1;
 
 	self->notify_irmanager = TRUE;
+
+	/* We are now open, so time to do some work */
+	irlan_client_wakeup(self, self->saddr, self->daddr);
 
 	MOD_INC_USE_COUNT;
 	
@@ -196,7 +206,7 @@ static int irlan_eth_close(struct device *dev)
 	
 	irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
 
-	/* Device closed by user */
+	/* Device closed by user! */
 	if (self->notify_irmanager)
 		self->notify_irmanager = FALSE;
 	else
@@ -233,7 +243,7 @@ int irlan_eth_init(struct device *dev)
 	
 	dev->tx_queue_len = TTP_MAX_QUEUE;
 
-#ifdef 0
+#if 0
 	/*  
 	 *  OK, since we are emulating an IrLAN sever we will have to give
 	 *  ourself an ethernet address!
@@ -274,6 +284,7 @@ int irlan_eth_init(struct device *dev)
 __initfunc(int irlan_init(void))
 {
 	struct irlan_cb *new;
+	__u16 hints;
 
 	DEBUG(4, __FUNCTION__"()\n");
 
@@ -289,12 +300,14 @@ __initfunc(int irlan_init(void))
 
 	DEBUG(4, __FUNCTION__ "()\n");
 	
-	/* Register with IrLMP as a service user */
-	irlmp_register_layer(S_LAN, CLIENT, TRUE, 
-			     irlan_client_discovery_indication);
+	hints = irlmp_service_to_hint(S_LAN);
+
+	/* Register with IrLMP as a client */
+	ckey = irlmp_register_client(hints, irlan_client_discovery_indication,
+				     NULL);
 	
 	/* Register with IrLMP as a service */
- 	irlmp_register_layer(S_LAN, SERVER, FALSE, NULL);
+ 	skey = irlmp_register_service(hints);
 
 	/* Start the first IrLAN instance */
  	new = irlan_open(DEV_ADDR_ANY, DEV_ADDR_ANY, FALSE);
@@ -309,9 +322,9 @@ void irlan_cleanup(void)
 {
 	DEBUG(4, __FUNCTION__ "()\n");
 
-	irlmp_unregister_layer(S_LAN, SERVER);
+	irlmp_unregister_client(ckey);
 
-	irlmp_unregister_layer(S_LAN, CLIENT);
+	irlmp_unregister_service(skey);
 
 #ifdef CONFIG_PROC_FS
 	proc_unregister(&proc_irda, proc_irlan.low_ino);
@@ -344,8 +357,7 @@ int irlan_register_netdev(struct irlan_cb *self)
 	self->dev.name = self->ifname;
 	
 	if (register_netdev(&self->dev) != 0) {
-		DEBUG(2, __FUNCTION__ 
-		      "(), register_netdev() failed!\n");
+		DEBUG(2, __FUNCTION__ "(), register_netdev() failed!\n");
 		return -1;
 	}
 	self->netdev_registered = TRUE;
@@ -472,7 +484,7 @@ void irlan_close(struct irlan_cb *self)
 }
 
 void irlan_connect_indication(void *instance, void *sap, struct qos_info *qos,
-			      int max_sdu_size, struct sk_buff *skb)
+			      __u32 max_sdu_size, struct sk_buff *skb)
 {
 	struct irlan_cb *self;
 	struct tsap_cb *tsap;
@@ -505,7 +517,7 @@ void irlan_connect_indication(void *instance, void *sap, struct qos_info *qos,
 }
 
 void irlan_connect_confirm(void *instance, void *sap, struct qos_info *qos, 
-			   int max_sdu_size, struct sk_buff *skb) 
+			   __u32 max_sdu_size, struct sk_buff *skb) 
 {
 	struct irlan_cb *self;
 
@@ -1043,6 +1055,7 @@ static int __irlan_insert_param(struct sk_buff *skb, char *param, int type,
 {
 	__u8 *frame;
 	__u8 param_len;
+	__u16 tmp_le; /* Temporary value in little endian format */
 	int n=0;
 	
 	if (skb == NULL) {
@@ -1085,7 +1098,8 @@ static int __irlan_insert_param(struct sk_buff *skb, char *param, int type,
 	memcpy(frame+n, param, param_len); n += param_len;
 	
 	/* Insert value length (2 byte little endian format, LSB first) */
-	*((__u16 *) (frame+n)) = cpu_to_le16(value_len); n += 2;
+	tmp_le = cpu_to_le16(value_len);
+	memcpy(frame+n, &tmp_le, 2); n += 2; /* To avoid alignment problems */
 
 	/* Insert value */
 	switch (type) {
@@ -1093,7 +1107,8 @@ static int __irlan_insert_param(struct sk_buff *skb, char *param, int type,
 		frame[n++] = value_byte;
 		break;
 	case IRLAN_SHORT:
-		*((__u16 *) (frame+n)) = cpu_to_le16(value_short); n += 2;
+		tmp_le = cpu_to_le16(value_short);
+		memcpy(frame+n, &tmp_le, 2); n += 2;
 		break;
 	case IRLAN_ARRAY:
 		memcpy(frame+n, value_array, value_len); n+=value_len;
@@ -1137,7 +1152,8 @@ int irlan_get_param(__u8 *buf, char *name, char *value, __u16 *len)
 	 *  Get length of parameter value (2 bytes in little endian 
 	 *  format) 
 	 */
-	val_len = le16_to_cpup(buf+n); n+=2;
+	memcpy(&val_len, buf+n, 2); /* To avoid alignment problems */
+	le16_to_cpus(&val_len); n+=2;
 	
 	if (val_len > 1016) {
 		DEBUG(2, __FUNCTION__ "(), parameter length to long\n");
@@ -1277,9 +1293,7 @@ MODULE_PARM(timeout, "i");
  */
 int init_module(void) 
 {
-	irlan_init();
-
-	return 0;
+	return irlan_init();
 }
 
 /*

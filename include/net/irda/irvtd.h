@@ -17,12 +17,13 @@
  *
  ********************************************************************/
 
-#ifndef IRCOMM_H
-#define IRCOMM_H
+#ifndef IRVTD_H
+#define IRVTD_H
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
 #include <linux/tqueue.h>
+#include <linux/serial.h>
 
 #include <net/irda/irmod.h>
 #include <net/irda/qos.h>
@@ -34,18 +35,11 @@
 #define IRVTD_RX_QUEUE_HIGH 10
 #define IRVTD_RX_QUEUE_LOW  2
 
+#define IRCOMM_MAJOR  60;  /* Zero means automatic allocation
+                              60,61,62,and 63 is reserved for experiment */
+#define IRVTD_MINOR 64
 
-/*
- * Serial input interrupt line counters -- external structure
- * Four lines can interrupt: CTS, DSR, RI, DCD
- *
- * this structure must be compatible with serial_icounter_struct defined in
- * <linux/serial.h>.
- */
-struct icounter_struct {
-        int cts, dsr, rng, dcd;
-        int reserved[16];
-};
+
 
 struct irvtd_cb {
 
@@ -53,9 +47,10 @@ struct irvtd_cb {
 
 	/* if daddr is NULL, remote device have not been discovered yet */
 
+	int tx_disable;
 	int rx_disable;
-	struct sk_buff *txbuff;     /* buffer queue */
-	struct sk_buff_head rxbuff;     /* buffer queue */
+	struct sk_buff *txbuff;     
+	struct sk_buff_head rxbuff; 
 	struct ircomm_cb *comm;     /* ircomm instance */
 
 	/* 
@@ -63,7 +58,6 @@ struct irvtd_cb {
 	 * See linux/serial.h
 	 */
 
-	int baud_base;
 	int flags;
 	struct tty_struct *tty;
 
@@ -75,30 +69,24 @@ struct irvtd_cb {
 	struct wait_queue       *delta_msr_wait;
 	struct wait_queue       *tx_wait;
 
-	struct tq_struct        rx_tqueue;
+	struct timer_list       timer;
 
 	long pgrp;
 	long session;  
-	struct termios normal_termios;
-	struct termios callout_termios;
 	unsigned short  closing_wait;     /* time to wait before closing */
 	unsigned short  close_delay;
 	
+	int custom_divisor;
 	int mcr;
 	int msr;
 	int cts_stoptx;
 	int ttp_stoptx;
 	int ttp_stoprx;
-	struct icounter_struct icount;
+	int disconnect_pend;
+	struct serial_icounter_struct icount;
 	int read_status_mask;
 	int ignore_status_mask;
 };
-
-
-/* Debug function */
-
-/* #define CHECK_SKB(skb) check_skb((skb),  __LINE__,__FILE__) */
-
 
 
 #endif
