@@ -244,9 +244,12 @@ static void rw_intr(Scsi_Cmnd * SCpnt)
 
 static request_queue_t *sr_find_queue(kdev_t dev)
 {
-	if (MINOR(dev) >= sr_template.dev_max
-	    || !scsi_CDs[MINOR(dev)].device)
-		return NULL;	/* No such device */
+	/*
+	 * No such device
+	 */
+	if (MINOR(dev) >= sr_template.dev_max || !scsi_CDs[MINOR(dev)].device)
+		return NULL;
+
 	return &scsi_CDs[MINOR(dev)].device->request_queue;
 }
 
@@ -328,13 +331,13 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 			SCpnt = scsi_end_request(SCpnt, 0, SCpnt->request.nr_sectors);
 			return 0;
 		}
-		SCpnt->cmnd[0] = WRITE_6;
+		SCpnt->cmnd[0] = WRITE_10;
 		break;
 	case READ:
-		SCpnt->cmnd[0] = READ_6;
+		SCpnt->cmnd[0] = READ_10;
 		break;
 	default:
-		panic("Unknown sd command %d\n", SCpnt->request.cmd);
+		panic("Unknown sr command %d\n", SCpnt->request.cmd);
 	}
 
 	SCSI_LOG_HLQUEUE(2, printk("sr%d : %s %d/%ld 512 byte blocks.\n",
@@ -344,28 +347,16 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 
 	SCpnt->cmnd[1] = (SCpnt->lun << 5) & 0xe0;
 
-	if (((this_count > 0xff) || (block > 0x1fffff)) && SCpnt->device->ten) {
-		if (this_count > 0xffff)
-			this_count = 0xffff;
+	if (this_count > 0xffff)
+		this_count = 0xffff;
 
-		SCpnt->cmnd[0] += READ_10 - READ_6;
-		SCpnt->cmnd[2] = (unsigned char) (block >> 24) & 0xff;
-		SCpnt->cmnd[3] = (unsigned char) (block >> 16) & 0xff;
-		SCpnt->cmnd[4] = (unsigned char) (block >> 8) & 0xff;
-		SCpnt->cmnd[5] = (unsigned char) block & 0xff;
-		SCpnt->cmnd[6] = SCpnt->cmnd[9] = 0;
-		SCpnt->cmnd[7] = (unsigned char) (this_count >> 8) & 0xff;
-		SCpnt->cmnd[8] = (unsigned char) this_count & 0xff;
-	} else {
-		if (this_count > 0xff)
-			this_count = 0xff;
-
-		SCpnt->cmnd[1] |= (unsigned char) ((block >> 16) & 0x1f);
-		SCpnt->cmnd[2] = (unsigned char) ((block >> 8) & 0xff);
-		SCpnt->cmnd[3] = (unsigned char) block & 0xff;
-		SCpnt->cmnd[4] = (unsigned char) this_count;
-		SCpnt->cmnd[5] = 0;
-	}
+	SCpnt->cmnd[2] = (unsigned char) (block >> 24) & 0xff;
+	SCpnt->cmnd[3] = (unsigned char) (block >> 16) & 0xff;
+	SCpnt->cmnd[4] = (unsigned char) (block >> 8) & 0xff;
+	SCpnt->cmnd[5] = (unsigned char) block & 0xff;
+	SCpnt->cmnd[6] = SCpnt->cmnd[9] = 0;
+	SCpnt->cmnd[7] = (unsigned char) (this_count >> 8) & 0xff;
+	SCpnt->cmnd[8] = (unsigned char) this_count & 0xff;
 
 	/*
 	 * We shouldn't disconnect in the middle of a sector, so with a dumb
@@ -666,7 +657,6 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 	Scsi_Device *device = scsi_CDs[MINOR(cdi->dev)].device;
 	unsigned char *buffer = cgc->buffer;
 	int buflen;
-	int stat;
 
 	/* get the device */
 	SCpnt = scsi_allocate_device(device, 1);
@@ -695,7 +685,8 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 	scsi_wait_cmd(SCpnt, (void *) cgc->cmd, (void *) buffer, cgc->buflen,
 		      sr_init_done, SR_TIMEOUT, MAX_RETRIES);
 
-	stat = SCpnt->result;
+	if ((cgc->stat = SCpnt->result))
+		cgc->sense = (struct request_sense *) SCpnt->sense_buffer;
 
 	/* release */
 	SCpnt->request.rq_dev = MKDEV(0, 0);
@@ -707,7 +698,9 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 		memcpy(cgc->buffer, buffer, cgc->buflen);
 		scsi_free(buffer, buflen);
 	}
-	return stat;
+
+
+	return cgc->stat;
 }
 
 static int sr_registered = 0;

@@ -12,6 +12,7 @@
 #define	_LINUX_CDROM_H
 
 #include <linux/types.h>
+#include <asm/byteorder.h>
 
 /*******************************************************
  * As of Linux 2.1.x, all Linux CD-ROM application programs will use this 
@@ -269,11 +270,12 @@ struct cdrom_blk
 /* for CDROM_PACKET_COMMAND ioctl */
 struct cdrom_generic_command
 {
-	unsigned char 	cmd[CDROM_PACKET_SIZE];
-	unsigned char 	*buffer;
-	unsigned int 	buflen;
-	int		stat;
-	void		*reserved[4];
+	unsigned char 		cmd[CDROM_PACKET_SIZE];
+	unsigned char 		*buffer;
+	unsigned int 		buflen;
+	int			stat;
+	struct request_sense	*sense;
+	void			*reserved[3];
 };
 
 
@@ -646,6 +648,7 @@ struct dvd_lu_send_asf {
 };
 
 struct dvd_host_send_rpcstate {
+	__u8 type;
 	__u8 pdrc;
 };
 
@@ -670,6 +673,36 @@ typedef union {
 	struct dvd_host_send_rpcstate	hrpcs;
 	struct dvd_lu_send_rpcstate	lrpcs;
 } dvd_authinfo;
+
+struct request_sense {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 valid		: 1;
+	__u8 error_code		: 7;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 error_code		: 7;
+	__u8 valid		: 1;
+#endif
+	__u8 segment_number;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved1		: 2;
+	__u8 ili		: 1;
+	__u8 reserved2		: 1;
+	__u8 sense_key		: 4;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 sense_key		: 4;
+	__u8 reserved2		: 1;
+	__u8 ili		: 1;
+	__u8 reserved1		: 2;
+#endif
+	__u8 information[4];
+	__u8 add_sense_len;
+	__u8 command_info[4];
+	__u8 asc;
+	__u8 ascq;
+	__u8 fruc;
+	__u8 sks[3];
+	__u8 asb[46];
+};
 
 #ifdef __KERNEL__
 

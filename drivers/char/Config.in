@@ -214,7 +214,7 @@ if [ "$CONFIG_FTAPE" != "n" ]; then
 fi
 endmenu
 
-bool 'Direct Rendering Manager (XFree86 DRI support) (EXPERIMENTAL)' CONFIG_DRM
+bool 'Direct Rendering Manager (XFree86 DRI support)' CONFIG_DRM
 dep_tristate '  3dfx Banshee/Voodoo3' CONFIG_DRM_TDFX $CONFIG_DRM
 if [ "$CONFIG_DRM" = "y" ]; then
   dep_tristate '  3dlabs GMX 2000' CONFIG_DRM_GAMMA m

@@ -31,6 +31,13 @@
 	You should have received a copy of the GNU General Public License
 	along with this program; if not, write to the Free Software
 	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+	
+	--------------------------------------------------------------------
+	
+	9 November 1999 -- Make kernel-parameter implementation work with 2.3.x 
+	                   Removed init_module & cleanup_module in favor of 
+		   	   module_init & module_exit.
+			   Torben Mathiasen <tmm@image.dk>
 
 */
 
@@ -195,14 +202,24 @@ static int check_gscd_med_chg (kdev_t full_dev)
 }
 
 
-void __init gscd_setup (char *str, int *ints)
+#ifndef MODULE
+/* Using new interface for kernel-parameters */
+  
+static int __init gscd_setup (char *str)
 {
+  int ints[2];
+  (void)get_options(str, ARRAY_SIZE(ints), ints);
+  
   if (ints[0] > 0) 
   {
      gscd_port = ints[1];
   }
+ return 1;
 }
 
+__setup("gscd=", gscd_setup);
+
+#endif
 
 static int gscd_ioctl (struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg)
 {
@@ -963,9 +980,8 @@ unsigned int AX;
 }
 #endif
 
-#ifdef MODULE
 /* Init for the Module-Version */
-int init_module (void)
+int init_gscd(void)
 {
 long err;
 
@@ -984,7 +1000,7 @@ long err;
      }    
 }
 
-void cleanup_module (void)
+void __exit exit_gscd(void)
 {
 
    if ((unregister_blkdev(MAJOR_NR, "gscd" ) == -EINVAL))
@@ -996,7 +1012,11 @@ void cleanup_module (void)
    release_region (gscd_port,4);
    printk(KERN_INFO "GoldStar-module released.\n" );
 }
-#endif
+
+#ifdef MODULE
+module_init(init_gscd);
+#endif 
+module_exit(exit_gscd);
 
 
 /* Test for presence of drive and initialize it.  Called only at boot time. */

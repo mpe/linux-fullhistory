@@ -186,11 +186,15 @@
   -- Added setup of write mode for packet writing.
   -- Fixed CDDA ripping with cdda2wav - accept much larger requests of
   number of frames and split the reads in blocks of 8.
+
+  3.05 Dec 13, 1999 - Jens Axboe <axboe@image.dk>
+  -- Added support for changing the region of DVD drives.
+  -- Added sense data to generic command.
   
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 3.05"
-#define VERSION "Id: cdrom.c 3.05 1999/10/24"
+#define REVISION "Revision: 3.06"
+#define VERSION "Id: cdrom.c 3.06 1999/12/13"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -1909,7 +1913,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		cgc.cmd[5] = entry.cdte_addr.msf.frame;
 
 		entry.cdte_track = ti.cdti_trk1;
-		if (cdi->ops->audio_ioctl(cdi, CDROMREADTOCENTRY, &entry))
+		if (cdo->audio_ioctl(cdi, CDROMREADTOCENTRY, &entry))
 			return -EINVAL;
 
 		cgc.cmd[6] = entry.cdte_addr.msf.minute;
@@ -2053,6 +2057,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 
 	case CDROM_SEND_PACKET: {
 		__u8 *userbuf, copy = 0;
+		struct request_sense *sense;
 		if (!CDROM_CAN(CDC_GENERIC_PACKET))
 			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering CDROM_SEND_PACKET\n"); 
@@ -2060,6 +2065,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		copy = !!cgc.buflen;
 		userbuf = cgc.buffer;
 		cgc.buffer = NULL;
+		sense = cgc.sense;
 		if (userbuf != NULL && copy) {
 			/* usually commands just copy data one way, i.e.
 			 * we send a buffer to the drive and the command
@@ -2090,6 +2096,10 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		ret = cdo->generic_packet(cdi, &cgc);
 		if (copy && !ret)
 			__copy_to_user(userbuf, cgc.buffer, cgc.buflen);
+		/* copy back sense data */
+		if (ret && sense != NULL)
+			if (copy_to_user(sense, cgc.sense, sizeof(struct request_sense)))
+				ret = -EFAULT;
 		kfree(cgc.buffer);
 		return ret;
 		}

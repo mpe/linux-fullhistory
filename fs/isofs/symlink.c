@@ -17,70 +17,11 @@
 #include <linux/stat.h>
 #include <linux/malloc.h>
 
-#include <asm/uaccess.h>
-
-static int isofs_readlink(struct dentry *, char *, int);
-static struct dentry * isofs_follow_link(struct dentry *, struct dentry *, unsigned int);
-
 /*
  * symlinks can't do much...
  */
 struct inode_operations isofs_symlink_inode_operations = {
-	NULL,			/* no file-operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	isofs_readlink,		/* readlink */
-	isofs_follow_link,	/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
+	readlink:	page_readlink,
+	follow_link:	page_follow_link,
+	readpage:	rock_ridge_symlink_readpage
 };
-
-static int isofs_readlink(struct dentry * dentry, char * buffer, int buflen)
-{
-        char * pnt;
-	int i;
-
-	if (buflen > 1023)
-		buflen = 1023;
-	pnt = get_rock_ridge_symlink(dentry->d_inode);
-
-	if (!pnt)
-		return 0;
-
-	i = strlen(pnt);
-	if (i > buflen)
-		i = buflen; 
-	if (copy_to_user(buffer, pnt, i))
-		i = -EFAULT; 	
-	kfree(pnt);
-	return i;
-}
-
-static struct dentry * isofs_follow_link(struct dentry * dentry,
-					struct dentry *base,
-					unsigned int follow)
-{
-	char * pnt;
-
-	pnt = get_rock_ridge_symlink(dentry->d_inode);
-	if(!pnt) {
-		dput(base);
-		return ERR_PTR(-ELOOP);
-	}
-
-	base = lookup_dentry(pnt, base, follow);
-
-	kfree(pnt);
-	return base;
-}

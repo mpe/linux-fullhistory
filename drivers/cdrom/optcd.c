@@ -57,6 +57,11 @@
 				thanks to Luke McFarlane. Also tidied up some
 				printk behaviour. ISP16 initialization
 				is now handled by a separate driver.
+				
+	09-11-99 	  	Make kernel-parameter implementation work with 2.3.x 
+	                 	Removed init_module & cleanup_module in favor of 
+			 	module_init & module_exit.
+			 	Torben Mathiasen <tmm@image.dk>
 */
 
 /* Includes */
@@ -2020,13 +2025,22 @@ static struct file_operations opt_fops = {
 	NULL			/* revalidate */
 };
 
-
+#ifndef MODULE
 /* Get kernel parameter when used as a kernel driver */
-void __init optcd_setup(char *str, int *ints)
+static int optcd_setup(char *str)
 {
+	int ints[4];
+	(void)get_options(str, ARRAY_SIZE(ints), ints);
+	
 	if (ints[0] > 0)
 		optcd_port = ints[1];
+
+ 	return 1;
 }
+
+__setup("optcd=", optcd_setup);
+
+#endif MODULE
 
 /* Test for presence of drive and initialize it. Called at boot time
    or during module initialisation. */
@@ -2076,14 +2090,7 @@ int __init optcd_init(void)
 }
 
 
-#ifdef MODULE
-int init_module(void)
-{
-	return optcd_init();
-}
-
-
-void cleanup_module(void)
+void __exit optcd_exit(void)
 {
 	if (unregister_blkdev(MAJOR_NR, "optcd") == -EINVAL) {
 		printk(KERN_ERR "optcd: what's that: can't unregister\n");
@@ -2092,4 +2099,10 @@ void cleanup_module(void)
 	release_region(optcd_port, 4);
 	printk(KERN_INFO "optcd: module released.\n");
 }
-#endif MODULE
+
+#ifdef MODULE
+module_init(optcd_init);
+#endif
+module_exit(optcd_exit);
+
+

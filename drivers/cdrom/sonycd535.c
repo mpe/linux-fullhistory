@@ -31,6 +31,11 @@
  *  More changes to support CDU-510/515 series
  *      (Claudio Porfiri<C.Porfiri@nisms.tei.ericsson.se>)
  *
+ * November 1999 -- Make kernel-parameter implementation work with 2.3.x 
+ *	            Removed init_module & cleanup_module in favor of 
+ *	            module_init & module_exit.
+ *                  Torben Mathiasen <tmm@image.dk>
+ *
  * Things to do:
  *  - handle errors and status better, put everything into a single word
  *  - use interrupts (code mostly there, but a big hole still missing)
@@ -1648,6 +1653,7 @@ sony535_init(void)
 }
 
 #ifndef MODULE
+
 /*
  * accept "kernel command line" parameters
  * (added by emoenke@gwdg.de)
@@ -1657,9 +1663,11 @@ sony535_init(void)
  *
  * the address value has to be the existing CDROM port address.
  */
-void __init 
-sonycd535_setup(char *strings, int *ints)
+static int __init
+sonycd535_setup(char *strings)
 {
+	int ints[3];
+	(void)get_options(strings, ARRAY_SIZE(ints), ints);
 	/* if IRQ change and default io base desired,
 	 * then call with io base of 0
 	 */
@@ -1671,17 +1679,16 @@ sonycd535_setup(char *strings, int *ints)
 	if ((strings != NULL) && (*strings != '\0'))
 		printk(CDU535_MESSAGE_NAME
 				": Warning: Unknown interface type: %s\n", strings);
+				
+	return 1;
 }
 
-#else /* MODULE */
+__setup("sonycd535=", sonycd535_setup);
 
-int init_module(void)
-{
-	return sony535_init();
-}
+#endif /* MODULE */
 
-void
-cleanup_module(void)
+void __exit
+sony535_exit(void)
 {
 	int i;
 
@@ -1696,4 +1703,10 @@ cleanup_module(void)
 	else
 		printk(KERN_INFO CDU535_HANDLE " module released\n");
 }
-#endif	/* MODULE */
+
+#ifdef MODULE
+module_init(sony535_init);
+#endif
+module_exit(sony535_exit);
+
+

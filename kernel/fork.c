@@ -320,7 +320,6 @@ struct mm_struct * mm_alloc(void)
 			mmlist_modify_unlock();
 			return mm;
 		}
-		mmlist_modify_unlock();
 		kmem_cache_free(mm_cachep, mm);
 	}
 	return NULL;

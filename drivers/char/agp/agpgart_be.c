@@ -41,7 +41,6 @@
 #include <linux/miscdevice.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
-#include <asm/system.h>
 #include <asm/io.h>
 #include <asm/page.h>
 

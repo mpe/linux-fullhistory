@@ -88,6 +88,8 @@ extern inline void spin_unlock(spinlock_t *lock)
 #if SPINLOCK_DEBUG
 	if (lock->magic != SPINLOCK_MAGIC)
 		BUG();
+	if (!lock->lock)
+		BUG();
 #endif
 	__asm__ __volatile__(
 		spin_unlock_string

@@ -44,6 +44,10 @@
  *  Marcin Dalecki (improved performance, shortened code)
  *  ... somebody forgotten?
  *
+ *  9 November 1999 -- Make kernel-parameter implementation work with 2.3.x 
+ *	               Removed init_module & cleanup_module in favor of 
+ *		       module_init & module_exit.
+ *		       Torben Mathiasen <tmm@image.dk>
  */
 
 
@@ -210,8 +214,6 @@ struct s_drive_stuff {
 int mcdx_init(void);
 void do_mcdx_request(request_queue_t * q);
 
-/* already declared in init/main */
-void mcdx_setup(char *, int *);
 
 /*	Indirect exported functions. These functions are exported by their
 	addresses, such as mcdx_open and mcdx_close in the
@@ -770,11 +772,20 @@ static int mcdx_media_changed(struct cdrom_device_info * cdi, int disc_nr)
 	return 1;
 }
 
-void __init mcdx_setup(char *str, int *pi)
+#ifndef MODULE
+static int __init mcdx_setup(char *str)
 {
+	int pi[4];
+	(void)get_options(str, ARRAY_SIZE(pi), pi);
+	
 	if (pi[0] > 0) mcdx_drive_map[0][0] = pi[1];
 	if (pi[0] > 1) mcdx_drive_map[0][1] = pi[2];
+	return 1;
 }
+
+__setup("mcdx=", mcdx_setup);
+
+#endif
 
 /* DIRTY PART ******************************************************/
 
@@ -953,10 +964,10 @@ mcdx_talk (
 }
 
 /* MODULE STUFF ***********************************************************/
-#ifdef MODULE
+
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
+int __mcdx_init(void)
 {
 	int i;
 	int drives = 0;
@@ -976,7 +987,7 @@ int init_module(void)
     return 0;
 }
 
-void cleanup_module(void)
+void __exit mcdx_exit(void)
 {
     int i;
 
@@ -1009,7 +1020,11 @@ void cleanup_module(void)
 #endif
 }
 
-#endif MODULE
+#ifdef MODULE
+module_init(__mcdx_init);
+#endif
+module_exit(mcdx_exit);
+
 
 /* Support functions ************************************************/
 

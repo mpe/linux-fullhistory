@@ -96,7 +96,7 @@ static int hpfs_write_partial_page(struct file *file, struct page *page, unsigne
 	pgpos = ((inode->i_blocks - 1) * 512) >> PAGE_CACHE_SHIFT;
 	while (pgpos < page->index) {
 		status = -ENOMEM;
-		new_page = grab_page_cache(&inode->i_data, pgpos);
+		new_page = grab_cache_page(&inode->i_data, pgpos);
 		if (!new_page)
 			goto out;
 		status = block_write_cont_page(file, new_page, PAGE_SIZE, 0, NULL);

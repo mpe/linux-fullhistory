@@ -162,11 +162,12 @@ int do_check_pgt_cache(int low, int high)
 	int freed = 0;
 	if(pgtable_cache_size > high) {
 		do {
-			if(pgd_quicklist)
-				mmlist_modify_lock(),  \
-				free_pgd_slow(get_pgd_fast()), \
-				mmlist_modify_unlock(), \
+			if(pgd_quicklist) {
+				mmlist_modify_lock();
+				free_pgd_slow(get_pgd_fast());
+				mmlist_modify_unlock();
 				freed++;
+			}
 			if(pmd_quicklist)
 				free_pmd_slow(get_pmd_fast()), freed++;
 			if(pte_quicklist)

@@ -142,6 +142,11 @@
  *                   <kodis@jagunet.com>.  Work begun on fixing driver to
  *                   work under 2.1.X.  Added temporary extra printks
  *                   which seem to slow it down enough to work.
+ *
+ *  9 November 1999 -- Make kernel-parameter implementation work with 2.3.x 
+ *	               Removed init_module & cleanup_module in favor of 
+ *		       module_init & module_exit.
+ *		       Torben Mathiasen <tmm@image.dk>
 */
 
 #include <linux/major.h>
@@ -3317,11 +3322,15 @@ get_drive_configuration(unsigned short base_io,
 #ifndef MODULE
 /*
  * Set up base I/O and interrupts, called from main.c.
+ 
  */
-void __init 
-cdu31a_setup(char *strings,
-	     int  *ints)
+
+static int __init cdu31a_setup(char *strings)	     
 {
+    int ints[4];
+    
+    (void)get_options(strings, ARRAY_SIZE(ints), ints);
+
    if (ints[0] > 0)
    {
       cdu31a_port = ints[1];
@@ -3341,7 +3350,12 @@ cdu31a_setup(char *strings,
 	 printk("CDU31A: Unknown interface type: %s\n", strings);
       }
    }
+   
+   return 1;
 }
+
+__setup("cdu31a=", cdu31a_setup);
+
 #endif
 
 static int cdu31a_block_size;
@@ -3539,16 +3553,9 @@ errout3:
    return -EIO;
 }
 
-#ifdef MODULE
 
-int
-init_module(void)
-{
-	return cdu31a_init();
-}
-
-void
-cleanup_module(void)
+void __exit
+cdu31a_exit(void)
 {
    if (unregister_cdrom(&scd_info))    
    {
@@ -3567,4 +3574,9 @@ cleanup_module(void)
    release_region(cdu31a_port,4);
    printk(KERN_INFO "cdu31a module released.\n");
 }   
-#endif MODULE
+
+#ifdef MODULE
+module_init(cdu31a_init);
+#endif
+module_exit(cdu31a_exit);
+

@@ -313,8 +313,7 @@ static void cdrom_saw_media_change (ide_drive_t *drive)
 
 
 static
-void cdrom_analyze_sense_data (ide_drive_t *drive, 
-			       struct atapi_request_sense *reqbuf,
+void cdrom_analyze_sense_data (ide_drive_t *drive, struct request_sense *reqbuf,
 			       struct packet_command *failed_command)
 {
 	if (reqbuf->sense_key == NOT_READY ||
@@ -431,27 +430,21 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 		 * In the case of NOT_READY, if SKSV is set the drive can
 		 * give us nice ETA readings.
 		 */
-		if (reqbuf->sense_key == NOT_READY &&
-		    (reqbuf->sense_key_specific[0] & 0x80)) {
-			int progress = (reqbuf->sense_key_specific[1] << 8 |
-					reqbuf->sense_key_specific[2]) * 100;
+		if (reqbuf->sense_key == NOT_READY && (reqbuf->sks[0] & 0x80)) {
+			int progress = (reqbuf->sks[1] << 8 | reqbuf->sks[2]) * 100;
 			printk("  Command is %02d%% complete\n", progress / 0xffff);
 
 		}
 
 		if (reqbuf->sense_key == ILLEGAL_REQUEST &&
-		    (reqbuf->sense_key_specific[0] & 0x80) != 0) {
+		    (reqbuf->sks[0] & 0x80) != 0) {
 			printk ("  Error in %s byte %d",
-				(reqbuf->sense_key_specific[0] & 0x40) != 0
-				? "command packet"
-				: "command data",
-				(reqbuf->sense_key_specific[1] << 8) +
-				reqbuf->sense_key_specific[2]);
+				(reqbuf->sks[0] & 0x40) != 0 ?
+				"command packet" : "command data",
+				(reqbuf->sks[1] << 8) + reqbuf->sks[2]);
 
-			if ((reqbuf->sense_key_specific[0] & 0x40) != 0) {
-				printk (" bit %d",
-					reqbuf->sense_key_specific[0] & 0x07);
-			}
+			if ((reqbuf->sks[0] & 0x40) != 0)
+				printk (" bit %d", reqbuf->sks[0] & 0x07);
 
 			printk ("\n");
 		}
@@ -476,39 +469,25 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 
 static void cdrom_queue_request_sense (ide_drive_t *drive, 
 				       struct semaphore *sem,
-				       struct atapi_request_sense *reqbuf,
 				       struct packet_command *failed_command)
 {
 	struct cdrom_info *info = drive->driver_data;
 	struct request *rq;
 	struct packet_command *pc;
-	int len;
-
-	/* If the request didn't explicitly specify where
-	   to put the sense data, use the statically allocated structure. */
-	if (reqbuf == NULL)
-		reqbuf = &info->sense_data;
 
 	/* Make up a new request to retrieve sense information. */
-
 	pc = &info->request_sense_pc;
-	memset (pc, 0, sizeof (*pc));
-
-	/* The request_sense structure has an odd number of (16-bit) words,
-	   which won't work well with 32-bit transfers.  However, we don't care
-	   about the last two bytes, so just truncate the structure down
-	   to an even length. */
-	len = sizeof (*reqbuf) / 4;
-	len *= 4;
+	memset(pc, 0, sizeof (*pc));
 
 	pc->c[0] = GPCMD_REQUEST_SENSE;
-	pc->c[4] = (unsigned char) len;
-	pc->buffer = (char *)reqbuf;
-	pc->buflen = len;
-	pc->sense_data = (struct atapi_request_sense *)failed_command;
+
+	/* just get the first 18 bytes of the sense info, there might not
+	 * be more available */
+	pc->c[4] = pc->buflen = 18;
+	pc->buffer = (char *)&info->sense_data;
+	pc->sense_data = (struct request_sense *)failed_command;
 
 	/* stuff the sense request in front of our current request */
-
 	rq = &info->request_sense_request;
 	ide_init_drive_cmd (rq);
 	rq->cmd = REQUEST_SENSE_COMMAND;
@@ -526,7 +505,7 @@ static void cdrom_end_request (int uptodate, ide_drive_t *drive)
 		struct packet_command *pc = (struct packet_command *)
 			                      rq->buffer;
 		cdrom_analyze_sense_data (drive,
-			(struct atapi_request_sense *) (pc->buffer - pc->c[4]),
+			(struct request_sense *) (pc->buffer - pc->c[4]),
 			(struct packet_command *) pc->sense_data);
 	}
 	if (rq->cmd == READ && !rq->current_nr_sectors)
@@ -609,8 +588,7 @@ static int cdrom_decode_status (ide_startstop_t *startstop, ide_drive_t *drive, 
 			cdrom_end_request (1, drive);
 
 			if ((stat & ERR_STAT) != 0)
-				cdrom_queue_request_sense (drive, sem,
-							   pc->sense_data, pc);
+				cdrom_queue_request_sense(drive, sem, pc);
 		} else {
 			/* Handle errors from READ requests. */
 
@@ -649,8 +627,7 @@ static int cdrom_decode_status (ide_startstop_t *startstop, ide_drive_t *drive, 
 			/* If we got a CHECK_CONDITION status,
 			   queue a request sense command. */
 			if ((stat & ERR_STAT) != 0)
-				cdrom_queue_request_sense (drive,
-							   NULL, NULL, NULL);
+				cdrom_queue_request_sense(drive, NULL, NULL);
 		}
 	}
 
@@ -1200,9 +1177,7 @@ static ide_startstop_t cdrom_start_read (ide_drive_t *drive, unsigned int block)
  */
 
 /* Forward declarations. */
-static int
-cdrom_lockdoor (ide_drive_t *drive, int lockflag,
-		struct atapi_request_sense *reqbuf);
+static int cdrom_lockdoor(ide_drive_t *drive, int lockflag);
 
 /* Interrupt routine for packet command completion. */
 static ide_startstop_t cdrom_pc_intr (ide_drive_t *drive)
@@ -1210,7 +1185,10 @@ static ide_startstop_t cdrom_pc_intr (ide_drive_t *drive)
 	int ireason, len, stat, thislen;
 	struct request *rq = HWGROUP(drive)->rq;
 	struct packet_command *pc = (struct packet_command *)rq->buffer;
+	struct cdrom_info *info = drive->driver_data;
 	ide_startstop_t startstop;
+
+	pc->sense_data = &info->sense_data;
 
 	/* Check for errors. */
 	if (cdrom_decode_status (&startstop, drive, 0, &stat))
@@ -1339,17 +1317,10 @@ void cdrom_sleep (int time)
 }
 
 static
-int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
+int cdrom_queue_packet_command(ide_drive_t *drive, struct packet_command *pc)
 {
-	struct atapi_request_sense my_reqbuf;
 	int retries = 10;
 	struct request req;
-
-	/* If our caller has not provided a place to stick any sense data,
-	   use our own area. */
-	if (pc->sense_data == NULL)
-		pc->sense_data = &my_reqbuf;
-	pc->sense_data->sense_key = 0;
 
 	/* Start of retry loop. */
 	do {
@@ -1365,7 +1336,7 @@ int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
 			/* The request failed.  Retry if it was due to a unit
 			   attention status
 			   (usually means media was changed). */
-			struct atapi_request_sense *reqbuf = pc->sense_data;
+			struct request_sense *reqbuf = pc->sense_data;
 
 			if (reqbuf->sense_key == UNIT_ATTENTION)
 				cdrom_saw_media_change (drive);
@@ -1386,25 +1357,24 @@ int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
 	} while (pc->stat != 0 && retries >= 0);
 
 	/* Return an error if the command failed. */
-	if (pc->stat != 0)
+	if (pc->stat)
 		return -EIO;
-	else {
-		/* The command succeeded.  If it was anything other than
-		   a request sense, eject, or door lock command,
-		   and we think that the door is presently unlocked, lock it
-		   again. (The door was probably unlocked via an explicit
-		   CDROMEJECT ioctl.) */
-		if (CDROM_STATE_FLAGS (drive)->door_locked == 0 &&
-		    (pc->c[0] != GPCMD_TEST_UNIT_READY &&
-		     pc->c[0] != GPCMD_REQUEST_SENSE &&
-		     pc->c[0] != GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL &&
-		     pc->c[0] != GPCMD_START_STOP_UNIT &&
-		     pc->c[0] != GPCMD_MODE_SENSE_10 &&
-		     pc->c[0] != GPCMD_MODE_SELECT_10)) {
-			(void) cdrom_lockdoor (drive, 1, NULL);
-		}
-		return 0;
+
+	/* The command succeeded.  If it was anything other than
+	   a request sense, eject, or door lock command,
+	   and we think that the door is presently unlocked, lock it
+	   again. (The door was probably unlocked via an explicit
+	   CDROMEJECT ioctl.) */
+	if (CDROM_STATE_FLAGS (drive)->door_locked == 0 &&
+	    (pc->c[0] != GPCMD_TEST_UNIT_READY &&
+	     pc->c[0] != GPCMD_REQUEST_SENSE &&
+	     pc->c[0] != GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL &&
+	     pc->c[0] != GPCMD_START_STOP_UNIT &&
+	     pc->c[0] != GPCMD_MODE_SENSE_10 &&
+	     pc->c[0] != GPCMD_MODE_SELECT_10)) {
+		(void) cdrom_lockdoor (drive, 1);
 	}
+	return 0;
 }
 
 /****************************************************************************
@@ -1463,7 +1433,7 @@ ide_do_rw_cdrom (ide_drive_t *drive, struct request *rq, unsigned long block)
  * Ioctl handling.
  *
  * Routines which queue packet commands take as a final argument a pointer
- * to an atapi_request_sense struct.  If execution of the command results
+ * to a request_sense struct.  If execution of the command results
  * in an error with a CHECK CONDITION status, this structure will be filled
  * with the results of the subsequent request sense command.  The pointer
  * can also be NULL, in which case no sense information is returned.
@@ -1512,18 +1482,14 @@ int msf_to_lba (byte m, byte s, byte f)
 	return (((m * CD_SECS) + s) * CD_FRAMES + f) - CD_MSF_OFFSET;
 }
 
-
-static int
-cdrom_check_status (ide_drive_t  *drive,
-		    struct atapi_request_sense *reqbuf)
+static int cdrom_check_status (ide_drive_t  *drive)
 {
 	struct packet_command pc;
 	struct cdrom_info *info = drive->driver_data;
 	struct cdrom_device_info *cdi = &info->devinfo;
 
-	memset (&pc, 0, sizeof (pc));
+	memset(&pc, 0, sizeof(pc));
 
-	pc.sense_data = reqbuf;
 	pc.c[0] = GPCMD_TEST_UNIT_READY;
 
 #if ! STANDARD_ATAPI
@@ -1533,39 +1499,35 @@ cdrom_check_status (ide_drive_t  *drive,
         pc.c[7] = cdi->sanyo_slot % 3;
 #endif /* not STANDARD_ATAPI */
 
-	return cdrom_queue_packet_command (drive, &pc);
+	return cdrom_queue_packet_command(drive, &pc);
 }
 
 
 /* Lock the door if LOCKFLAG is nonzero; unlock it otherwise. */
 static int
-cdrom_lockdoor (ide_drive_t *drive, int lockflag,
-		struct atapi_request_sense *reqbuf)
+cdrom_lockdoor(ide_drive_t *drive, int lockflag)
 {
-	struct atapi_request_sense my_reqbuf;
-	int stat;
+	struct request_sense *sense;
 	struct packet_command pc;
-	
-	if (reqbuf == NULL)
-		reqbuf = &my_reqbuf;
+	int stat;
 
 	/* If the drive cannot lock the door, just pretend. */
 	if (CDROM_CONFIG_FLAGS (drive)->no_doorlock)
 		stat = 0;
 	else {
-		memset (&pc, 0, sizeof (pc));
-		pc.sense_data = reqbuf;
-
+		memset(&pc, 0, sizeof(pc));
 		pc.c[0] = GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL;
 		pc.c[4] = (lockflag != 0);
 		stat = cdrom_queue_packet_command (drive, &pc);
 	}
 
+	sense = pc.sense_data;
+
 	/* If we got an illegal field error, the drive
 	   probably cannot lock the door. */
 	if (stat != 0 &&
-	    reqbuf->sense_key == ILLEGAL_REQUEST &&
-	    (reqbuf->asc == 0x24 || reqbuf->asc == 0x20)) {
+	    sense->sense_key == ILLEGAL_REQUEST &&
+	    (sense->asc == 0x24 || sense->asc == 0x20)) {
 		printk ("%s: door locking not supported\n",
 			drive->name);
 		CDROM_CONFIG_FLAGS (drive)->no_doorlock = 1;
@@ -1573,7 +1535,7 @@ cdrom_lockdoor (ide_drive_t *drive, int lockflag,
 	}
 	
 	/* no medium, that's alright. */
-	if (stat != 0 && reqbuf->sense_key == NOT_READY && reqbuf->asc == 0x3a)
+	if (stat != 0 && sense->sense_key == NOT_READY && sense->asc == 0x3a)
 		stat = 0;
 
 	if (stat == 0)
@@ -1585,30 +1547,25 @@ cdrom_lockdoor (ide_drive_t *drive, int lockflag,
 
 /* Eject the disk if EJECTFLAG is 0.
    If EJECTFLAG is 1, try to reload the disk. */
-static int
-cdrom_eject (ide_drive_t *drive, int ejectflag,
-	     struct atapi_request_sense *reqbuf)
+static int cdrom_eject(ide_drive_t *drive, int ejectflag)
 {
 	struct packet_command pc;
 
-	if (CDROM_CONFIG_FLAGS (drive)->no_eject && !ejectflag)
+	if (CDROM_CONFIG_FLAGS(drive)->no_eject && !ejectflag)
 		return -EDRIVE_CANT_DO_THIS;
 	
 	/* reload fails on some drives, if the tray is locked */
-	if (CDROM_STATE_FLAGS (drive)->door_locked && ejectflag)
+	if (CDROM_STATE_FLAGS(drive)->door_locked && ejectflag)
 		return 0;
 
-	memset (&pc, 0, sizeof (pc));
-	pc.sense_data = reqbuf;
+	memset(&pc, 0, sizeof (pc));
 
 	pc.c[0] = GPCMD_START_STOP_UNIT;
 	pc.c[4] = 0x02 + (ejectflag != 0);
 	return cdrom_queue_packet_command (drive, &pc);
 }
 
-static int
-cdrom_read_capacity (ide_drive_t *drive, unsigned *capacity,
-		     struct atapi_request_sense *reqbuf)
+static int cdrom_read_capacity(ide_drive_t *drive, unsigned *capacity)
 {
 	struct {
 		__u32 lba;
@@ -1618,30 +1575,25 @@ cdrom_read_capacity (ide_drive_t *drive, unsigned *capacity,
 	int stat;
 	struct packet_command pc;
 
-	memset (&pc, 0, sizeof (pc));
-	pc.sense_data = reqbuf;
+	memset(&pc, 0, sizeof (pc));
 
 	pc.c[0] = GPCMD_READ_CDVD_CAPACITY;
 	pc.buffer = (char *)&capbuf;
-	pc.buflen = sizeof (capbuf);
+	pc.buflen = sizeof(capbuf);
 
-	stat = cdrom_queue_packet_command (drive, &pc);
+	stat = cdrom_queue_packet_command(drive, &pc);
 	if (stat == 0)
 		*capacity = be32_to_cpu(capbuf.lba);
 
 	return stat;
 }
 
-
-static int
-cdrom_read_tocentry (ide_drive_t *drive, int trackno, int msf_flag,
-                     int format, char *buf, int buflen,
-		     struct atapi_request_sense *reqbuf)
+static int cdrom_read_tocentry(ide_drive_t *drive, int trackno, int msf_flag,
+				int format, char *buf, int buflen)
 {
 	struct packet_command pc;
 
-	memset (&pc, 0, sizeof (pc));
-	pc.sense_data = reqbuf;
+	memset(&pc, 0, sizeof(pc));
 
 	pc.buffer =  buf;
 	pc.buflen = buflen;
@@ -1650,14 +1602,16 @@ cdrom_read_tocentry (ide_drive_t *drive, int trackno, int msf_flag,
 	pc.c[7] = (buflen >> 8);
 	pc.c[8] = (buflen & 0xff);
 	pc.c[9] = (format << 6);
-	if (msf_flag) pc.c[1] = 2;
+
+	if (msf_flag)
+		pc.c[1] = 2;
+
 	return cdrom_queue_packet_command (drive, &pc);
 }
 
 
 /* Try to read the entire TOC for the disk into our internal buffer. */
-static int
-cdrom_read_toc (ide_drive_t *drive, struct atapi_request_sense *reqbuf)
+static int cdrom_read_toc (ide_drive_t *drive)
 {
 	int stat, ntracks, i;
 	struct cdrom_info *info = drive->driver_data;
@@ -1682,13 +1636,13 @@ cdrom_read_toc (ide_drive_t *drive, struct atapi_request_sense *reqbuf)
 	/* Check to see if the existing data is still valid.
 	   If it is, just return. */
 	if (CDROM_STATE_FLAGS (drive)->toc_valid)
-		(void) cdrom_check_status (drive, NULL);
+		(void) cdrom_check_status(drive);
 
 	if (CDROM_STATE_FLAGS (drive)->toc_valid) return 0;
 
 	/* First read just the header, so we know how long the TOC is. */
 	stat = cdrom_read_tocentry (drive, 0, 1, 0, (char *)&toc->hdr,
-				    sizeof (struct atapi_toc_header), reqbuf);
+				    sizeof (struct atapi_toc_header));
 	if (stat) return stat;
 
 #if ! STANDARD_ATAPI
@@ -1706,7 +1660,7 @@ cdrom_read_toc (ide_drive_t *drive, struct atapi_request_sense *reqbuf)
 	stat = cdrom_read_tocentry (drive, toc->hdr.first_track, 1, 0, (char *)&toc->hdr,
 				    sizeof (struct atapi_toc_header) +
 				    (ntracks + 1) *
-				    sizeof (struct atapi_toc_entry), reqbuf);
+				    sizeof (struct atapi_toc_entry));
 
 	if (stat && toc->hdr.first_track > 1) {
 		/* Cds with CDI tracks only don't have any TOC entries,
@@ -1723,8 +1677,7 @@ cdrom_read_toc (ide_drive_t *drive, struct atapi_request_sense *reqbuf)
 					    0, (char *)&toc->hdr,
 					    sizeof (struct atapi_toc_header) +
 					   (ntracks+1) *
-					    sizeof (struct atapi_toc_entry),
-					    reqbuf);
+					    sizeof (struct atapi_toc_entry));
 		if (stat) {
 			return stat;
 		}
@@ -1769,8 +1722,7 @@ cdrom_read_toc (ide_drive_t *drive, struct atapi_request_sense *reqbuf)
 	if (toc->hdr.first_track != CDROM_LEADOUT) {
 		/* Read the multisession information. */
 		stat = cdrom_read_tocentry (drive, 0, 1, 1,
-					   (char *)&ms_tmp, sizeof (ms_tmp),
-					    reqbuf);
+					   (char *)&ms_tmp, sizeof (ms_tmp));
 		if (stat) return stat;
 	} else {
 		ms_tmp.ent.addr.msf.minute = 0;
@@ -1796,7 +1748,7 @@ cdrom_read_toc (ide_drive_t *drive, struct atapi_request_sense *reqbuf)
 				     (long *)&toc->capacity);
 	if (stat)
 #endif
-	stat = cdrom_read_capacity (drive, &toc->capacity, reqbuf);
+	stat = cdrom_read_capacity (drive, &toc->capacity);
 	if (stat) toc->capacity = 0x1fffff;
 
 	/* for general /dev/cdrom like mounting, one big disc */
@@ -1829,17 +1781,14 @@ cdrom_read_toc (ide_drive_t *drive, struct atapi_request_sense *reqbuf)
 }
 
 
-static int
-cdrom_read_subchannel (ide_drive_t *drive, int format,
-                       char *buf, int buflen,
-		       struct atapi_request_sense *reqbuf)
+static int cdrom_read_subchannel(ide_drive_t *drive, int format, char *buf,
+				 int buflen)
 {
 	struct packet_command pc;
 
-	memset (&pc, 0, sizeof (pc));
-	pc.sense_data = reqbuf;
+	memset(&pc, 0, sizeof(pc));
 
-	pc.buffer =  buf;
+	pc.buffer = buf;
 	pc.buflen = buflen;
 	pc.c[0] = GPCMD_READ_SUBCHANNEL;
 	pc.c[1] = 2;     /* MSF addressing */
@@ -1847,23 +1796,20 @@ cdrom_read_subchannel (ide_drive_t *drive, int format,
 	pc.c[3] = format;
 	pc.c[7] = (buflen >> 8);
 	pc.c[8] = (buflen & 0xff);
-	return cdrom_queue_packet_command (drive, &pc);
+	return cdrom_queue_packet_command(drive, &pc);
 }
 
 /* ATAPI cdrom drives are free to select the speed you request or any slower
    rate :-( Requesting too fast a speed will _not_ produce an error. */
-static int
-cdrom_select_speed (ide_drive_t *drive, int speed,
-                   struct atapi_request_sense *reqbuf)
+static int cdrom_select_speed (ide_drive_t *drive, int speed)
 {
 	struct packet_command pc;
-	memset (&pc, 0, sizeof (pc));
-	pc.sense_data = reqbuf;
+	memset(&pc, 0, sizeof(pc));
 
 	if (speed == 0)
-	    speed = 0xffff; /* set to max */
+		speed = 0xffff; /* set to max */
 	else
-	    speed *= 177;   /* Nx to kbytes/s */
+		speed *= 177;   /* Nx to kbytes/s */
 
 	pc.c[0] = GPCMD_SET_SPEED;
 	/* Read Drive speed in kbytes/second MSB */
@@ -1882,10 +1828,8 @@ cdrom_select_speed (ide_drive_t *drive, int speed,
 }
 
 
-static
-int cdrom_get_toc_entry (ide_drive_t *drive, int track,
-                         struct atapi_toc_entry **ent,
-			 struct atapi_request_sense *reqbuf)
+static int cdrom_get_toc_entry(ide_drive_t *drive, int track,
+				struct atapi_toc_entry **ent)
 {
 	struct cdrom_info *info = drive->driver_data;
 	struct atapi_toc *toc = info->toc;
@@ -1923,7 +1867,13 @@ static int ide_cdrom_packet(struct cdrom_device_info *cdi,
 	memcpy(pc.c, cgc->cmd, CDROM_PACKET_SIZE);
 	pc.buffer = cgc->buffer;
 	pc.buflen = cgc->buflen;
-	return cgc->stat = cdrom_queue_packet_command(drive, &pc);
+	cgc->stat = cdrom_queue_packet_command(drive, &pc);
+
+	/* There was an error, assign sense. */
+	if (cgc->stat)
+		cgc->sense = pc.sense_data;
+
+	return cgc->stat;
 }
 
 static
@@ -1987,7 +1937,7 @@ int ide_cdrom_audio_ioctl (struct cdrom_device_info *cdi,
 		struct atapi_toc *toc;
 
 		/* Make sure our saved TOC is valid. */
-		stat = cdrom_read_toc (drive, NULL);
+		stat = cdrom_read_toc(drive);
 		if (stat) return stat;
 
 		toc = info->toc;
@@ -2002,8 +1952,7 @@ int ide_cdrom_audio_ioctl (struct cdrom_device_info *cdi,
 		struct cdrom_tocentry *tocentry = (struct cdrom_tocentry*) arg;
 		struct atapi_toc_entry *toce;
 
-		stat = cdrom_get_toc_entry (drive, tocentry->cdte_track, &toce,
-					    NULL);
+		stat = cdrom_get_toc_entry (drive, tocentry->cdte_track, &toce);
 		if (stat) return stat;
 
 		tocentry->cdte_ctrl = toce->control;
@@ -2040,21 +1989,20 @@ static
 int ide_cdrom_tray_move (struct cdrom_device_info *cdi, int position)
 {
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
-	struct atapi_request_sense rq;
 
 	if (position) {
-		int stat = cdrom_lockdoor (drive, 0, &rq);
+		int stat = cdrom_lockdoor (drive, 0);
 		if (stat) return stat;
 	}
 
-	return cdrom_eject (drive, !position, NULL);
+	return cdrom_eject(drive, !position);
 }
 
 static
 int ide_cdrom_lock_door (struct cdrom_device_info *cdi, int lock)
 {
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
-	return cdrom_lockdoor (drive, lock, NULL);
+	return cdrom_lockdoor (drive, lock);
 }
 
 static
@@ -2062,14 +2010,13 @@ int ide_cdrom_select_speed (struct cdrom_device_info *cdi, int speed)
 {
         int stat, attempts = 3;
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
-	struct atapi_request_sense reqbuf;
 	struct cdrom_generic_command cgc;
 	struct {
 		char pad[8];
 		struct atapi_capabilities_page cap;
 	} buf;
-	stat=cdrom_select_speed (drive, speed, &reqbuf);
-	if (stat<0)
+
+	if ((stat = cdrom_select_speed (drive, speed)) < 0)
 		return stat;
 
 	init_cdrom_command(&cgc, &buf, sizeof(buf));
@@ -2100,19 +2047,19 @@ static
 int ide_cdrom_drive_status (struct cdrom_device_info *cdi, int slot_nr)
 {
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
+	struct cdrom_info *info = drive->driver_data;
 
 	if (slot_nr == CDSL_CURRENT) {
-
-		struct atapi_request_sense sense;
-		int stat = cdrom_check_status (drive, &sense);
-		if (stat == 0 || sense.sense_key == UNIT_ATTENTION)
+		struct request_sense *sense = &info->sense_data;
+		int stat = cdrom_check_status(drive);
+		if (stat == 0 || sense->sense_key == UNIT_ATTENTION)
 			return CDS_DISC_OK;
 
-		if (sense.sense_key == NOT_READY && sense.asc == 0x04 &&
-		    sense.ascq == 0x04)
+		if (sense->sense_key == NOT_READY && sense->asc == 0x04 &&
+		    sense->ascq == 0x04)
 			return CDS_DISC_OK;
 
-		if (sense.sense_key == NOT_READY) {
+		if (sense->sense_key == NOT_READY) {
 			/* ATAPI doesn't have anything that can help
 			   us decide whether the drive is really
 			   emtpy or the tray is just open. irk. */
@@ -2148,10 +2095,9 @@ int ide_cdrom_get_mcn (struct cdrom_device_info *cdi,
 	char mcnbuf[24];
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
 
-	stat = cdrom_read_subchannel (drive, 2, /* get MCN */
-				      mcnbuf, sizeof (mcnbuf),
-				      NULL);
-	if (stat) return stat;
+/* get MCN */
+	if ((stat = cdrom_read_subchannel(drive, 2, mcnbuf, sizeof (mcnbuf))))
+		return stat;
 
 	memcpy (mcn_info->medium_catalog_number, mcnbuf+9,
 		sizeof (mcn_info->medium_catalog_number)-1);
@@ -2174,7 +2120,7 @@ int ide_cdrom_check_media_change_real (struct cdrom_device_info *cdi,
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
 	
 	if (slot_nr == CDSL_CURRENT) {
-		(void) cdrom_check_status (drive, NULL);
+		(void) cdrom_check_status(drive);
 		CDROM_STATE_FLAGS (drive)->media_changed = 0;
 		return CDROM_STATE_FLAGS (drive)->media_changed;
 	} else {

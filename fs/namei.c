@@ -284,7 +284,7 @@ static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry
 
 	if ((follow & LOOKUP_FOLLOW)
 	    && inode && inode->i_op && inode->i_op->follow_link) {
-		if (current->link_count < 5) {
+		if (current->link_count < 32) {
 			struct dentry * result;
 
 			current->link_count++;
@@ -1437,9 +1437,9 @@ out:
 	return len;
 }
 
-struct dentry *
-vfs_follow_link(struct dentry *dentry, struct dentry *base,
-unsigned int follow, char *link)
+static inline struct dentry *
+__vfs_follow_link(struct dentry *dentry, struct dentry *base,
+		unsigned follow, char *link)
 {
 	struct dentry *result;
 	UPDATE_ATIME(dentry->d_inode);
@@ -1453,6 +1453,13 @@ unsigned int follow, char *link)
 fail:
 	dput(base);
 	return (struct dentry *)link;
+}
+
+struct dentry *
+vfs_follow_link(struct dentry *dentry, struct dentry *base,
+unsigned int follow, char *link)
+{
+	return __vfs_follow_link(dentry,base,follow,link);
 }
 
 /* get the link contents into pagecache */
@@ -1495,7 +1502,7 @@ page_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow
 {
 	struct page *page = NULL;
 	char *s = page_getlink(dentry, &page);
-	struct dentry *res = vfs_follow_link(dentry,base,follow,s);
+	struct dentry *res = __vfs_follow_link(dentry,base,follow,s);
 	if (page) {
 		kunmap(page);
 		page_cache_release(page);

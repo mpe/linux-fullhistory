@@ -396,54 +396,33 @@ int hpfs_rmdir(struct inode *dir, struct dentry *dentry)
 	return r == 2 ? -ENOSPC : r == 1 ? -EFSERROR : 0;
 }
 
-int hpfs_readlink(struct dentry *dentry, char *buf, int len)
+int hpfs_symlink_readpage(struct dentry *dentry, struct page *page)
 {
+	char *link = (char*)kmap(page);
 	struct inode *i = dentry->d_inode;
 	struct fnode *fnode;
 	struct buffer_head *bh;
-	char *symlink;
-	int slen;
-	if (!S_ISLNK(i->i_mode)) {
-		return -EINVAL;
-	}
-	if (!(fnode = hpfs_map_fnode(i->i_sb, i->i_ino, &bh))) {
-		return -EIO;
-	}
-	if (!(symlink = hpfs_get_ea(i->i_sb, fnode, "SYMLINK", &slen))) {
-		brelse(bh);
-		return -EFSERROR;
-	}
-	brelse(bh);
-	if (slen > len) slen = len;
-	memcpy_tofs(buf, symlink, slen);
-	kfree(symlink);
-	return slen;
-}
+	int err;
 
-struct dentry *hpfs_follow_link(struct dentry *dinode, struct dentry *ddir,
-				unsigned int follow)
-{
-	struct inode *inode = dinode->d_inode;
-	char *link;
-	unsigned len;
-	struct buffer_head *bh;
-	struct fnode *fnode;
-	if (!(fnode = hpfs_map_fnode(inode->i_sb, inode->i_ino, &bh))) {
-		dput(dinode);
-		return ERR_PTR(-EIO);
-	}
-	if (!(link = hpfs_get_ea(inode->i_sb, fnode, "SYMLINK", &len))) {
-		brelse(bh);
-		dput(dinode);
-		return ERR_PTR(-EIO);
-	}
+	err = -EIO;
+	if (!(fnode = hpfs_map_fnode(i->i_sb, i->i_ino, &bh)))
+		goto fail;
+	err = hpfs_read_ea(i->i_sb, fnode, "SYMLINK", link, PAGE_SIZE);
 	brelse(bh);
-	UPDATE_ATIME(inode);
-	ddir = lookup_dentry(link, ddir, follow);
-	kfree(link);
-	return ddir;
-}
+	if (err)
+		goto fail;
+	SetPageUptodate(page);
+	kunmap(page);
+	UnlockPage(page);
+	return 0;
 
+fail:
+	SetPageError(page);
+	kunmap(page);
+	UnlockPage(page);
+	return err;
+}
+	
 int hpfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		struct inode *new_dir, struct dentry *new_dentry)
 {

@@ -178,7 +178,7 @@ extern int iso_date(char *, int);
 extern int parse_rock_ridge_inode(struct iso_directory_record *, struct inode *);
 extern int get_rock_ridge_filename(struct iso_directory_record *, char *, struct inode *);
 
-extern char * get_rock_ridge_symlink(struct inode *);
+extern int rock_ridge_symlink_readpage(struct dentry *, struct page *);
 extern int find_rock_ridge_relocation(struct iso_directory_record *, struct inode *);
 
 int get_joliet_filename(struct iso_directory_record *, struct inode *, unsigned char *);

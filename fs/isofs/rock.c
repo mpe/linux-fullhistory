@@ -12,6 +12,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/pagemap.h>
 
 #include "rock.h"
 
@@ -387,142 +388,155 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
   return 0;
 }
 
-
-/* Returns the name of the file that this inode is symlinked to.  This is
-   in malloc'd memory, so it needs to be freed, once we are through with it */
-
-char * get_rock_ridge_symlink(struct inode * inode)
+static char *get_symlink_chunk(char *rpnt, struct rock_ridge *rr)
 {
-  unsigned long bufsize = ISOFS_BUFFER_SIZE(inode);
-  unsigned char bufbits = ISOFS_BUFFER_BITS(inode);
-  struct buffer_head * bh;
-  char * rpnt = NULL;
-  unsigned char * pnt;
-  struct iso_directory_record * raw_inode;
-  CONTINUE_DECLS;
-  int block;
-  int sig;
-  int rootflag;
-  int len;
-  unsigned char * chr;
-  struct rock_ridge * rr;
-  
-  if (!inode->i_sb->u.isofs_sb.s_rock)
-    panic("Cannot have symlink with high sierra variant of iso filesystem\n");
+	int slen;
+	int rootflag;
+	struct SL_component *oldslp;
+	struct SL_component *slp;
+	slen = rr->len - 5;
+	slp = &rr->u.SL.link;
+	while (slen > 1) {
+		rootflag = 0;
+		switch (slp->flags & ~1) {
+		case 0:
+			memcpy(rpnt, slp->text, slp->len);
+			rpnt+=slp->len;
+			break;
+		case 4:
+			*rpnt++='.';
+			/* fallthru */
+		case 2:
+			*rpnt++='.';
+			break;
+		case 8:
+			rootflag = 1;
+			*rpnt++='/';
+			break;
+		default:
+			printk("Symlink component flag not implemented (%d)\n",
+			     slp->flags);
+		}
+		slen -= slp->len + 2;
+		oldslp = slp;
+		slp = (struct SL_component *) ((char *) slp + slp->len + 2);
 
-  block = inode->i_ino >> bufbits;
-  bh = bread(inode->i_dev, block, bufsize);
-  if (!bh)
-	goto out_noread;
-  
-  pnt = ((unsigned char *) bh->b_data) + (inode->i_ino & (bufsize - 1));
-  
-  raw_inode = ((struct iso_directory_record *) pnt);
-  
-  /*
-   * If we go past the end of the buffer, there is some sort of error.
-   */
-  if ((inode->i_ino & (bufsize - 1)) + *pnt > bufsize)
-	goto out_bad_span;
-  
-  /* Now test for possible Rock Ridge extensions which will override some of
-     these numbers in the inode structure. */
-  
-  SETUP_ROCK_RIDGE(raw_inode, chr, len);
-  
- repeat:
-  while (len > 1){ /* There may be one byte for padding somewhere */
-    rr = (struct rock_ridge *) chr;
-    if (rr->len == 0) goto out; /* Something got screwed up here */
-    sig = (chr[0] << 8) + chr[1];
-    chr += rr->len; 
-    len -= rr->len;
-    
-    switch(sig){
-    case SIG('R','R'):
-      if((rr->u.RR.flags[0] & RR_SL) == 0) goto out;
-      break;
-    case SIG('S','P'):
-      CHECK_SP(goto out);
-      break;
-    case SIG('S','L'):
-      {int slen;
-       struct SL_component * oldslp;
-       struct SL_component * slp;
-       slen = rr->len - 5;
-       slp = &rr->u.SL.link;
-       while (slen > 1){
-	 if (!rpnt){
-	   rpnt = (char *) kmalloc (inode->i_size +1, GFP_KERNEL);
-	   if (!rpnt) goto out;
-	   *rpnt = 0;
-	 };
-	 rootflag = 0;
-	 switch(slp->flags &~1){
-	 case 0:
-	   strncat(rpnt,slp->text, slp->len);
-	   break;
-	 case 2:
-	   strcat(rpnt,".");
-	   break;
-	 case 4:
-	   strcat(rpnt,"..");
-	   break;
-	 case 8:
-	   rootflag = 1;
-	   strcat(rpnt,"/");
-	   break;
-	 default:
-	   printk("Symlink component flag not implemented (%d)\n",slen);
-	 };
-	 slen -= slp->len + 2;
-	 oldslp = slp;
-	 slp = (struct SL_component *) (((char *) slp) + slp->len + 2);
+		if (slen < 2) {
+			/*
+			 * If there is another SL record, and this component
+			 * record isn't continued, then add a slash.
+			 */
+			if ((rr->u.SL.flags & 1) && !(oldslp->flags & 1))
+				*rpnt++='/';
+			break;
+		}
 
-	 if(slen < 2) {
-	   /*
-	    * If there is another SL record, and this component record
-	    * isn't continued, then add a slash.
-	    */
-	   if(    ((rr->u.SL.flags & 1) != 0) 
-	       && ((oldslp->flags & 1) == 0) ) strcat(rpnt,"/");
-	   break;
-	 }
+		/*
+		 * If this component record isn't continued, then append a '/'.
+		 */
+		if (!rootflag && !(oldslp->flags & 1))
+			*rpnt++='/';
 
-	 /*
-	  * If this component record isn't continued, then append a '/'.
-	  */
-	 if(   (!rootflag)
-	    && ((oldslp->flags & 1) == 0) ) strcat(rpnt,"/");
-
-       };
-       break;
-     case SIG('C','E'):
-       CHECK_CE; /* This tells is if there is a continuation record */
-       break;
-     default:
-       break;
-     }
-    };
-  };
-  MAYBE_CONTINUE(repeat,inode);
-  
-out_freebh:
-	brelse(bh);
+	}
 	return rpnt;
+}
+
+
+/* readpage() for symlinks: reads symlink contents into the page and either
+   makes it uptodate and returns 0 or returns error (-EIO) */
+
+int rock_ridge_symlink_readpage(struct dentry *dentry, struct page *page)
+{
+	struct inode *inode = dentry->d_inode;
+	char *link = (char*)kmap(page);
+	unsigned long bufsize = ISOFS_BUFFER_SIZE(inode);
+	unsigned char bufbits = ISOFS_BUFFER_BITS(inode);
+	struct buffer_head *bh;
+	char *rpnt = link;
+	unsigned char *pnt;
+	struct iso_directory_record *raw_inode;
+	CONTINUE_DECLS;
+	int block;
+	int sig;
+	int len;
+	unsigned char *chr;
+	struct rock_ridge *rr;
+
+	if (!inode->i_sb->u.isofs_sb.s_rock)
+		panic ("Cannot have symlink with high sierra variant of iso filesystem\n");
+
+	block = inode->i_ino >> bufbits;
+	bh = bread(inode->i_dev, block, bufsize);
+	if (!bh)
+		goto out_noread;
+
+	pnt = (unsigned char *) bh->b_data + (inode->i_ino & (bufsize - 1));
+
+	raw_inode = (struct iso_directory_record *) pnt;
+
+	/*
+	 * If we go past the end of the buffer, there is some sort of error.
+	 */
+	if ((inode->i_ino & (bufsize - 1)) + *pnt > bufsize)
+		goto out_bad_span;
+
+	/* Now test for possible Rock Ridge extensions which will override
+	   some of these numbers in the inode structure. */
+
+	SETUP_ROCK_RIDGE(raw_inode, chr, len);
+
+      repeat:
+	while (len > 1) { /* There may be one byte for padding somewhere */
+		rr = (struct rock_ridge *) chr;
+		if (rr->len == 0)
+			goto out;	/* Something got screwed up here */
+		sig = (chr[0] << 8) + chr[1];
+		chr += rr->len;
+		len -= rr->len;
+
+		switch (sig) {
+		case SIG('R', 'R'):
+			if ((rr->u.RR.flags[0] & RR_SL) == 0)
+				goto out;
+			break;
+		case SIG('S', 'P'):
+			CHECK_SP(goto out);
+			break;
+		case SIG('S', 'L'):
+			rpnt = get_symlink_chunk(rpnt, rr);
+			break;
+		case SIG('C', 'E'):
+			/* This tells is if there is a continuation record */
+			CHECK_CE;
+		default:
+			break;
+		}
+	}
+	MAYBE_CONTINUE(repeat, inode);
+
+	if (rpnt == link)
+		goto fail;
+	brelse(bh);
+	*rpnt = '\0';
+	SetPageUptodate(page);
+	kunmap(page);
+	UnlockPage(page);
+	return 0;
 
 	/* error exit from macro */
-out:
-	if(buffer)
+      out:
+	if (buffer)
 		kfree(buffer);
-	if(rpnt)
-		kfree(rpnt);
-	rpnt = NULL;
-	goto out_freebh;
-out_noread:
+	goto fail;
+      out_noread:
 	printk("unable to read i-node block");
-	goto out_freebh;
-out_bad_span:
+	goto fail;
+      out_bad_span:
 	printk("symlink spans iso9660 blocks\n");
-	goto out_freebh;
+      fail:
+	brelse(bh);
+	SetPageError(page);
+	kunmap(page);
+	UnlockPage(page);
+	return -EIO;
 }

@@ -158,6 +158,11 @@
 	V2.60   Implemented Auto-Probing; made changes for kernel's 2.1.xx blocksize
                 Adaption to linux kernel > 2.1.0
 		Werner Zimmermann, Nov 29, 97
+		
+        November 1999 -- Make kernel-parameter implementation work with 2.3.x 
+	                 Removed init_module & cleanup_module in favor of 
+			 module_init & module_exit.
+			 Torben Mathiasen <tmm@image.dk>
 */
 
 #include <linux/version.h>
@@ -351,7 +356,6 @@ static int  aztGetDiskInfo(void);
 static int  aztGetToc(int multi);
 
 /* Kernel Interface Functions */
-void        aztcd_setup(char *str, int *ints);
 static int  check_aztcd_media_change(kdev_t full_dev);
 static int  aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg);
 static void azt_transfer(void);
@@ -365,11 +369,8 @@ static void aztcd_release(struct inode * inode, struct file * file);
 static int  aztcd_release(struct inode * inode, struct file * file);
 #endif
 
-int         aztcd_init(void);
-#ifdef MODULE
- int        init_module(void);
- void       cleanup_module(void);
-#endif MODULE
+int       aztcd_init(void);
+
 static struct file_operations azt_fops = {
 	NULL,                   /* lseek - default */
 	block_read,             /* read - general block-dev read */
@@ -1084,16 +1085,24 @@ static int aztGetToc(int multi)
   Kernel Interface Functions
   ##########################################################################
 */
-#ifdef AZT_KERNEL_PRIOR_2_1
-void aztcd_setup(char *str, int *ints)
-#else
-void __init aztcd_setup(char *str, int *ints)
-#endif
-{  if (ints[0] > 0)
-      azt_port = ints[1];
-   if (ints[0] > 1)
-      azt_cont = ints[2];
+
+#ifndef MODULE
+static int __init aztcd_setup(char *str)
+{
+    int ints[4];
+    
+    (void)get_options(str, ARRAY_SIZE(ints), ints);
+    
+    if (ints[0] > 0)
+        azt_port = ints[1];
+    if (ints[1] > 1)
+        azt_cont = ints[2];
+    return 1;
 }
+
+__setup("aztcd=", aztcd_setup);
+
+#endif /* !MODULE */
 
 /* 
  * Checking if the media has been changed
@@ -1614,11 +1623,7 @@ static int  aztcd_release(struct inode * inode, struct file * file)
  * Test for presence of drive and initialize it.  Called at boot time.
  */
 
-#ifdef AZT_KERNEL_PRIOR_2_1
-int aztcd_init(void)
-#else
 int __init aztcd_init(void)
-#endif
 {       long int count, max_count;
 	unsigned char result[50];
 	int st;
@@ -1815,14 +1820,7 @@ int __init aztcd_init(void)
         return (0);
 }
 
-#ifdef MODULE
-
-int init_module(void)
-{
-	return aztcd_init();
-}
-
-void cleanup_module(void)
+void __exit aztcd_exit(void)
 {
   if ((unregister_blkdev(MAJOR_NR, "aztcd") == -EINVAL))    
     { printk("What's that: can't unregister aztcd\n");
@@ -1836,8 +1834,11 @@ void cleanup_module(void)
       release_region(azt_port,4);  /*proprietary interface*/
   printk(KERN_INFO "aztcd module released.\n");
 }   
-#endif MODULE
 
+#ifdef MODULE
+module_init(aztcd_init);
+#endif
+module_exit(aztcd_exit);
 
 /*##########################################################################
   Aztcd State Machine: Controls Drive Operating State
@@ -2283,5 +2284,3 @@ static void azt_bin2bcd(unsigned char *p)
 static int azt_bcd2bin(unsigned char bcd)
 {       return (bcd >> 4) * 10 + (bcd & 0xF);
 }
-
-

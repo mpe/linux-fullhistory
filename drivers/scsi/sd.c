@@ -314,7 +314,7 @@ static int sd_init_command(Scsi_Cmnd * SCpnt)
 
 	SCpnt->cmnd[1] = (SCpnt->lun << 5) & 0xe0;
 
-	if (((this_count > 0xff) || (block > 0x1fffff)) && SCpnt->device->ten) {
+	if (((this_count > 0xff) || (block > 0x1fffff)) || SCpnt->device->ten) {
 		if (this_count > 0xffff)
 			this_count = 0xffff;
 
@@ -405,8 +405,9 @@ static int sd_open(struct inode *inode, struct file *filp)
 			return -EROFS;
 	}
 	/*
-	 * It is possible that the disk changing stuff resulted in the device being taken
-	 * offline.  If this is the case, report this to the user, and don't pretend that
+	 * It is possible that the disk changing stuff resulted in the device
+	 * being taken offline.  If this is the case, report this to the user,
+	 * and don't pretend that
 	 * the open actually succeeded.
 	 */
 	if (!rscsi_disks[target].device->online) {
@@ -529,41 +530,50 @@ static void rw_intr(Scsi_Cmnd * SCpnt)
 
 	/*
 	   Handle MEDIUM ERRORs that indicate partial success.  Since this is a
-	   relatively rare error condition, no care is taken to avoid unnecessary
-	   additional work such as memcpy's that could be avoided.
+	   relatively rare error condition, no care is taken to avoid
+	   unnecessary additional work such as memcpy's that could be avoided.
 	 */
 
-	if (driver_byte(result) != 0 &&		/* An error occurred */
-	    SCpnt->sense_buffer[0] == 0xF0 &&	/* Sense data is valid */
-	    SCpnt->sense_buffer[2] == MEDIUM_ERROR) {
-		long error_sector = (SCpnt->sense_buffer[3] << 24) |
-		(SCpnt->sense_buffer[4] << 16) |
-		(SCpnt->sense_buffer[5] << 8) |
-		SCpnt->sense_buffer[6];
-		if (SCpnt->request.bh != NULL)
-			block_sectors = SCpnt->request.bh->b_size >> 9;
-		switch (SCpnt->device->sector_size) {
-		case 1024:
-			error_sector <<= 1;
-			if (block_sectors < 2)
-				block_sectors = 2;
-			break;
-		case 2048:
-			error_sector <<= 2;
-			if (block_sectors < 4)
-				block_sectors = 4;
-			break;
-		case 256:
-			error_sector >>= 1;
-			break;
-		default:
-			break;
+	/* An error occurred */
+	if (driver_byte(result) != 0) {
+		/* Sense data is valid */
+		if (SCpnt->sense_buffer[0] == 0xF0 && SCpnt->sense_buffer[2] == MEDIUM_ERROR) {
+			long error_sector = (SCpnt->sense_buffer[3] << 24) |
+			(SCpnt->sense_buffer[4] << 16) |
+			(SCpnt->sense_buffer[5] << 8) |
+			SCpnt->sense_buffer[6];
+			if (SCpnt->request.bh != NULL)
+				block_sectors = SCpnt->request.bh->b_size >> 9;
+			switch (SCpnt->device->sector_size) {
+			case 1024:
+				error_sector <<= 1;
+				if (block_sectors < 2)
+					block_sectors = 2;
+				break;
+			case 2048:
+				error_sector <<= 2;
+				if (block_sectors < 4)
+					block_sectors = 4;
+				break;
+			case 256:
+				error_sector >>= 1;
+				break;
+			default:
+				break;
+			}
+			error_sector -= sd[MINOR(SCpnt->request.rq_dev)].start_sect;
+			error_sector &= ~(block_sectors - 1);
+			good_sectors = error_sector - SCpnt->request.sector;
+			if (good_sectors < 0 || good_sectors >= this_count)
+				good_sectors = 0;
 		}
-		error_sector -= sd[MINOR(SCpnt->request.rq_dev)].start_sect;
-		error_sector &= ~(block_sectors - 1);
-		good_sectors = error_sector - SCpnt->request.sector;
-		if (good_sectors < 0 || good_sectors >= this_count)
-			good_sectors = 0;
+		if (SCpnt->sense_buffer[2] == ILLEGAL_REQUEST) {
+			if (SCpnt->device->ten == 1) {
+				if (SCpnt->cmnd[0] == READ_10 ||
+				    SCpnt->cmnd[0] == WRITE_10)
+					SCpnt->device->ten = 0;
+			}
+		}
 	}
 	/*
 	 * This calls the generic completion function, now that we know
@@ -597,10 +607,10 @@ static int check_scsidisk_media_change(kdev_t full_dev)
 		return 0;
 
 	/*
-	 * If the device is offline, don't send any commands - just pretend as if
-	 * the command failed.  If the device ever comes back online, we can deal with
-	 * it then.  It is only because of unrecoverable errors that we would ever
-	 * take a device offline in the first place.
+	 * If the device is offline, don't send any commands - just pretend as
+	 * if the command failed.  If the device ever comes back online, we
+	 * can deal with it then.  It is only because of unrecoverable errors
+	 * that we would ever take a device offline in the first place.
 	 */
 	if (rscsi_disks[target].device->online == FALSE) {
 		rscsi_disks[target].ready = 0;
@@ -618,10 +628,11 @@ static int check_scsidisk_media_change(kdev_t full_dev)
 	 */
 	retval = sd_ioctl(&inode, NULL, SCSI_IOCTL_START_UNIT, 0);
 
-	if (retval) {		/* Unable to test, unit probably not ready.  This usually
-				 * means there is no disc in the drive.  Mark as changed,
-				 * and we will figure it out later once the drive is
-				 * available again.  */
+	if (retval) {		/* Unable to test, unit probably not ready.
+				 * This usually means there is no disc in the
+				 * drive.  Mark as changed, and we will figure
+				 * it out later once the drive is available
+				 * again.  */
 
 		rscsi_disks[target].ready = 0;
 		rscsi_disks[target].device->changed = 1;
@@ -744,8 +755,12 @@ static int sd_init_onedisk(int i)
 			}
 			spintime = 1;
 			spintime_value = jiffies;
-			time1 = jiffies + HZ;
-			while (time_before(jiffies, time1));	/* Wait 1 second for next try */
+			time1 = HZ;
+			/* Wait 1 second for next try */
+			do {
+				current->state = TASK_UNINTERRUPTIBLE;
+				time1 = schedule_timeout(time1);
+			} while(time1);
 			printk(".");
 		}
 	} while (the_result && spintime && time_after(spintime_value + 100 * HZ, jiffies));

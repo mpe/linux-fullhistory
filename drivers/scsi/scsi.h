@@ -619,9 +619,10 @@ struct scsi_cmnd {
 	struct request request;	/* A copy of the command we are
 				   working on */
 
-	unsigned char sense_buffer[64];		/* obtained by REQUEST SENSE when
-						   CHECK CONDITION is received on
-						   original command (auto-sense) */
+	unsigned char sense_buffer[64];		/* obtained by REQUEST SENSE
+						 * when CHECK CONDITION is
+						 * received on original command 
+						 * (auto-sense) */
 
 	unsigned flags;
 

@@ -121,7 +121,7 @@ ifdef CONFIG_DRM
 DRIVERS += drivers/char/drm/drm.o
 endif
 
-ifdef CONFIG_AGP
+ifeq ($(CONFIG_AGP),y)
 DRIVERS += drivers/char/agp/agp.o
 endif
 
@@ -206,7 +206,7 @@ DRIVERS := $(DRIVERS) drivers/sgi/sgi.a
 endif
 
 ifdef CONFIG_VT
-DRIVERS := $(DRIVERS) drivers/video/video.a
+DRIVERS := $(DRIVERS) drivers/video/video.o
 endif
 
 ifeq ($(CONFIG_PARIDE),y)

@@ -7,6 +7,12 @@ MOD_SUB_DIRS    :=
 MOD_IN_SUB_DIRS :=
 ALL_SUB_DIRS    :=
 
+O_TARGET := video.o
+O_OBJS   :=
+M_OBJS   :=
+# This is a nice idea but needs depmod altering
+# MOD_LIST_NAME := VIDEO_MODULES
+
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
@@ -96,26 +102,34 @@ obj-$(CONFIG_FBCON_MAC)           += fbcon-mac.o
 obj-$(CONFIG_FBCON_MFB)           += fbcon-mfb.o
 obj-$(CONFIG_FBCON_VGA)           += fbcon-vga.o
 
+# Extract lists of the multi-part drivers.
+# The 'int-*' lists are the intermediate files used to build the multi's.
+
+multi-y         := $(filter $(list-multi), $(obj-y))
+multi-m         := $(filter $(list-multi), $(obj-m))
+int-y           := $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
+int-m           := $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
+
 # Files that are both resident and modular: remove from modular.
 
 obj-m          := $(filter-out $(obj-y), $(obj-m))
+int-m          := $(filter-out $(int-y), $(int-m))
 
 # Take multi-part drivers out of obj-y and put components in.
 
-obj-y          := $(filter-out $(list-multi), $(obj-y))
+obj-y          := $(filter-out $(list-multi), $(obj-y)) $(int-y)
 
 # Translate to Rules.make lists.
 
-L_TARGET       := video.a
-# This is a nice idea but needs depmod altering
-#MOD_LIST_NAME := VIDEO_MODULES
-
-L_OBJS         := $(sort $(filter-out $(export-objs), $(obj-y)))
-LX_OBJS                := $(sort $(filter     $(export-objs), $(obj-y)))
+O_OBJS         := $(filter-out $(export-objs), $(obj-y))
+OX_OBJS        := $(filter     $(export-objs), $(obj-y))
 M_OBJS         := $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS                := $(sort $(filter     $(export-objs), $(obj-m)))
+MX_OBJS        := $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make
+
+clean:
+	rm -f core *.o *.a *.s
 
 promcon_tbl.c: prom.uni ../char/conmakehash
 	../char/conmakehash prom.uni | \

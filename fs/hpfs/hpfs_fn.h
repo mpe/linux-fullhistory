@@ -249,6 +249,7 @@ struct hpfs_dirent *map_fnode_dirent(struct super_block *, fnode_secno, struct f
 /* ea.c */
 
 void hpfs_ea_ext_remove(struct super_block *, secno, int, unsigned);
+int hpfs_read_ea(struct super_block *, struct fnode *, char *, char *, int);
 char *hpfs_get_ea(struct super_block *, struct fnode *, char *, int *);
 void hpfs_set_ea(struct inode *, struct fnode *, char *, char *, int);
 
@@ -283,10 +284,6 @@ struct anode *hpfs_map_anode(struct super_block *s, anode_secno, struct buffer_h
 struct dnode *hpfs_map_dnode(struct super_block *s, dnode_secno, struct quad_buffer_head *);
 dnode_secno hpfs_fnode_dno(struct super_block *s, ino_t ino);
 
-/* mmap.c */
-
-int hpfs_mmap(struct file *, struct vm_area_struct *);
-
 /* name.c */
 
 unsigned char hpfs_upcase(unsigned char *, unsigned char);
@@ -305,8 +302,7 @@ int hpfs_mknod(struct inode *, struct dentry *, int, int);
 int hpfs_symlink(struct inode *, struct dentry *, const char *);
 int hpfs_unlink(struct inode *, struct dentry *);
 int hpfs_rmdir(struct inode *, struct dentry *);
-int hpfs_readlink(struct dentry *, char *, int);
-struct dentry *hpfs_follow_link(struct dentry *, struct dentry *, unsigned int);
+int hpfs_symlink_readpage(struct dentry *, struct page *);
 int hpfs_rename(struct inode *, struct dentry *, struct inode *, struct dentry *);
 
 /* super.c */

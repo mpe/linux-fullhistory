@@ -62,6 +62,7 @@ extern int max_super_blocks, nr_super_blocks;
 #define READ 0
 #define WRITE 1
 #define READA 2		/* read-ahead  - don't block if no resources */
+#define SPECIAL 4	/* For non-blockdevice requests in request queue */
 
 #define WRITERAW 5	/* raw write - don't play with buffer lists */
 

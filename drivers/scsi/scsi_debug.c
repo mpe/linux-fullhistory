@@ -7,6 +7,7 @@
  *  anything out of the ordinary is seen.
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>

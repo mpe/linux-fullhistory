@@ -307,6 +307,11 @@
  *  4.62 Fix a bug where playing audio left the drive in an unusable state.
  *         Heiko Eissfeldt <heiko@colossus.escape.de>
  *
+ *  November 1999 -- Make kernel-parameter implementation work with 2.3.x 
+ *	             Removed init_module & cleanup_module in favor of 
+ *	             module_init & module_exit.
+ *	             Torben Mathiasen <tmm@image.dk>
+ *
  *
  *  TODO
  *     implement "read all subchannel data" (96 bytes per frame)
@@ -324,6 +329,7 @@
 
 #include <linux/module.h>
 
+#include <linux/version.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -5457,12 +5463,15 @@ static struct cdrom_device_info sbpcd_info = {
  * bytes above).
  *
  */
+
 #if (SBPCD_ISSUE-1)
-static void __init sbpcd_setup(const char *s, int *p)
+static int sbpcd_setup(char *s)
 #else
-void __init sbpcd_setup(const char *s, int *p)
+int sbpcd_setup(char *s)
 #endif
 {
+	int p[4];
+	(void)get_options(s, ARRAY_SIZE(p), p);
 	setup_done++;
 	msg(DBG_INI,"sbpcd_setup called with %04X,%s\n",p[1], s);
 	sbpro_type=0; /* default: "LaserMate" */
@@ -5494,7 +5503,13 @@ void __init sbpcd_setup(const char *s, int *p)
                 }
 	}
 	else CDi_data=sbpcd_ioaddr+2;
+
+	return 1;
 }
+
+__setup("sbpcd=", sbpcd_setup);
+
+
 /*==========================================================================*/
 /*
  * Sequoia S-1000 CD-ROM Interface Configuration
@@ -5569,7 +5584,7 @@ static int __init config_spea(void)
  *  Called once at boot or load time.
  */
 #ifdef MODULE
-int init_module(void)
+int __init __SBPCD_INIT(void)
 #else
 int __init SBPCD_INIT(void)
 #endif MODULE
@@ -5616,7 +5631,7 @@ int __init SBPCD_INIT(void)
 		else if (sbpcd[port_index+1]==1) type=str_sb;
 		else if (sbpcd[port_index+1]==3) type=str_t16;
 		else type=str_lm;
-		sbpcd_setup(type, addr);
+		sbpcd_setup((char *)type);
 #if DISTRIBUTION
 		msg(DBG_INF,"Scanning 0x%X (%s)...\n", CDo_command, type);
 #endif DISTRIBUTION
@@ -5808,7 +5823,7 @@ int __init SBPCD_INIT(void)
 }
 /*==========================================================================*/
 #ifdef MODULE
-void cleanup_module(void)
+void sbpcd_exit(void)
 {
 	int j;
 	
@@ -5833,6 +5848,14 @@ void cleanup_module(void)
 	}
 	msg(DBG_INF, "%s module released.\n", major_name);
 }
+
+
+#ifdef MODULE
+module_init(__SBPCD_INIT) /*HACK!*/;
+#endif
+module_exit(sbpcd_exit);
+
+
 #endif MODULE
 /*==========================================================================*/
 /*

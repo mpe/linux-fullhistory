@@ -7,6 +7,7 @@
  *  Copyright (C) 1998, 1999 Jens Axboe
  */
 
+#include <linux/cdrom.h>
 #include <asm/byteorder.h>
 
 /* Turn this on to have the driver print out the meanings of the
@@ -95,47 +96,14 @@ struct ide_cd_state_flags {
 	__u8 reserved      : 4;
 	byte current_speed;	/* Current speed of the drive */
 };
+
 #define CDROM_STATE_FLAGS(drive) (&(((struct cdrom_info *)(drive->driver_data))->state_flags))
-
-
-struct atapi_request_sense {
-#if defined(__BIG_ENDIAN_BITFIELD)
-	unsigned char valid      : 1;
-	unsigned char error_code : 7;
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
-	unsigned char error_code : 7;
-	unsigned char valid      : 1;
-#else
-#error "Please fix <asm/byteorder.h>"
-#endif
-	byte reserved1;
-#if defined(__BIG_ENDIAN_BITFIELD)
-	unsigned char reserved3  : 2;
-	unsigned char ili        : 1;
-	unsigned char reserved2  : 1;
-	unsigned char sense_key  : 4;
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
-	unsigned char sense_key  : 4;
-	unsigned char reserved2  : 1;
-	unsigned char ili        : 1;
-	unsigned char reserved3  : 2;
-#else
-#error "Please fix <asm/byteorder.h>"
-#endif
-	byte info[4];
-	byte sense_len;
-	byte command_info[4];
-	byte asc;
-	byte ascq;
-	byte fru;
-	byte sense_key_specific[3];
-};
 
 struct packet_command {
 	char *buffer;
 	int buflen;
 	int stat;
-	struct atapi_request_sense *sense_data;
+	struct request_sense *sense_data;
 	unsigned char c[12];
 };
 
@@ -502,7 +470,7 @@ struct cdrom_info {
 
 	/* The result of the last successful request sense command
 	   on this device. */
-	struct atapi_request_sense sense_data;
+	struct request_sense sense_data;
 
 	struct request request_sense_request;
 	struct packet_command request_sense_pc;

@@ -56,7 +56,6 @@ int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflen
 	Scsi_Cmnd *SCpnt;
 	Scsi_Device *SDev;
 	int result, err = 0, retries = 0;
-	unsigned long flags;
 	char *bounce_buffer;
 
 	SDev = scsi_CDs[target].device;

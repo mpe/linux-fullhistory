@@ -1821,11 +1821,14 @@ S: Rueting 4
 S: 23743 Groemitz
 S: Germany
 
-N: Paul Russell
-E: Paul.Russell@rustcorp.com.au
+N: Paul `Rusty' Russell
+E: rusty@linuxcare.com
 W: http://www.rustcorp.com
 D: Ruggedly handsome.
-D: Developed Generic IP Firewalling Chains with Michael Neuling.
+D: netfilter, ipchains with Michael Neuling.
+S: 301/222 City Walk
+S: Canberra ACT 2601
+S: Australia
 
 N: Thomas Sailer
 E: sailer@ife.ee.ethz.ch
