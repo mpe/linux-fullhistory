@@ -119,6 +119,8 @@ EXPORT_SYMBOL(do_mmap);
 EXPORT_SYMBOL(do_munmap);
 EXPORT_SYMBOL(exit_mm);
 EXPORT_SYMBOL(exit_files);
+EXPORT_SYMBOL(exit_fs);
+EXPORT_SYMBOL(exit_sighand);
 
 /* internal kernel memory management */
 EXPORT_SYMBOL(__get_free_pages);

@@ -163,7 +163,6 @@ struct msdos_dir_slot {
 
 struct vfat_slot_info {
 	int is_long;		       /* was the found entry long */
-	int is_alias;		       /* was the found entry an alias */
 	int long_slots;		       /* number of long slots in filename */
 	int total_slots;	       /* total slots (long and short) */
 	loff_t longname_offset;	       /* dir offset for longname start */
@@ -219,10 +218,10 @@ extern int fat_smap(struct inode *inode,int sector);
 extern int fat_free(struct inode *inode,int skip);
 void fat_cache_inval_inode(struct inode *inode);
 void fat_cache_inval_dev(kdev_t device);
-extern void cache_init(void);
-void cache_lookup(struct inode *inode,int cluster,int *f_clu,int *d_clu);
-void cache_add(struct inode *inode,int f_clu,int d_clu);
-int get_cluster(struct inode *inode,int cluster);
+extern void fat_cache_init(void);
+void fat_cache_lookup(struct inode *inode,int cluster,int *f_clu,int *d_clu);
+void fat_cache_add(struct inode *inode,int f_clu,int d_clu);
+int fat_get_cluster(struct inode *inode,int cluster);
 
 /* inode.c */
 extern int fat_bmap(struct inode *inode,int block);
@@ -256,7 +255,7 @@ extern void fat_truncate(struct inode *inode);
 
 /* mmap.c */
 extern int fat_mmap(struct file *, struct vm_area_struct *);
-extern int fat_readpage(struct inode *, struct page *);
+extern int fat_readpage(struct dentry *, struct page *);
 
 
 /* vfat.c */

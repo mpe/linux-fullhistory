@@ -122,7 +122,7 @@ int fat_access(struct super_block *sb,int nr,int new_value)
 }
 
 
-void cache_init(void)
+void fat_cache_init(void)
 {
 	static int initialized = 0;
 	int count;
@@ -138,7 +138,7 @@ void cache_init(void)
 }
 
 
-void cache_lookup(struct inode *inode,int cluster,int *f_clu,int *d_clu)
+void fat_cache_lookup(struct inode *inode,int cluster,int *f_clu,int *d_clu)
 {
 	struct fat_cache *walk;
 
@@ -179,7 +179,7 @@ static void list_cache(void)
 #endif
 
 
-void cache_add(struct inode *inode,int f_clu,int d_clu)
+void fat_cache_add(struct inode *inode,int f_clu,int d_clu)
 {
 	struct fat_cache *walk,*last;
 
@@ -252,12 +252,12 @@ int fat_get_cluster(struct inode *inode,int cluster)
 	if (!(nr = MSDOS_I(inode)->i_start)) return 0;
 	if (!cluster) return nr;
 	count = 0;
-	for (cache_lookup(inode,cluster,&count,&nr); count < cluster;
+	for (fat_cache_lookup(inode,cluster,&count,&nr); count < cluster;
 	    count++) {
 		if ((nr = fat_access(inode->i_sb,nr,-1)) == -1) return 0;
 		if (!nr) return 0;
 	}
-	cache_add(inode,cluster,nr);
+	fat_cache_add(inode,cluster,nr);
 	return nr;
 }
 

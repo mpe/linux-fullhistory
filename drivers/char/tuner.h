@@ -54,6 +54,7 @@ struct tunertype {
   unchar UHF;
   unchar config; 
   unchar I2C;
+  ushort IFPCoff;
 };
 #endif
 

@@ -67,6 +67,7 @@ static inline void dentry_iput(struct dentry * dentry)
 	struct inode *inode = dentry->d_inode;
 	if (inode) {
 		dentry->d_inode = NULL;
+		list_del(&dentry->d_alias);
 		if (dentry->d_op && dentry->d_op->d_iput)
 			dentry->d_op->d_iput(dentry, inode);
 		else
@@ -508,6 +509,7 @@ printk("d_alloc: %d unused, pruning dcache\n", dentry_stat.nr_unused);
 	INIT_LIST_HEAD(&dentry->d_hash);
 	INIT_LIST_HEAD(&dentry->d_lru);
 	INIT_LIST_HEAD(&dentry->d_subdirs);
+	INIT_LIST_HEAD(&dentry->d_alias);
 
 	dentry->d_name.name = str;
 	dentry->d_name.len = name->len;
@@ -529,6 +531,8 @@ printk("d_alloc: %d unused, pruning dcache\n", dentry_stat.nr_unused);
  */
 void d_instantiate(struct dentry *entry, struct inode * inode)
 {
+	if (inode)
+		list_add(&entry->d_alias, &inode->i_dentry);
 	entry->d_inode = inode;
 }
 

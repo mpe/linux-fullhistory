@@ -124,6 +124,8 @@ extern void __put_user_1(void);
 extern void __put_user_2(void);
 extern void __put_user_4(void);
 
+extern void __put_user_bad(void);
+
 #define __put_user_x(size,ret,x,ptr)					\
 	__asm__ __volatile__("call __put_user_" #size			\
 		:"=a" (ret)						\
@@ -141,8 +143,89 @@ extern void __put_user_4(void);
 	__ret_pu;							\
 })
 
-#define __get_user(x,ptr) get_user(x,ptr)
-#define __put_user(x,ptr) put_user(x,ptr)
+#define __get_user(x,ptr) \
+  __get_user_nocheck((x),(ptr),sizeof(*(ptr)))
+#define __put_user(x,ptr) \
+  __put_user_nocheck((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)))
+
+#define __put_user_nocheck(x,ptr,size)			\
+({							\
+	long __pu_err;					\
+	__put_user_size((x),(ptr),(size),__pu_err);	\
+	__pu_err;					\
+})
+
+#define __put_user_size(x,ptr,size,retval)				\
+do {									\
+	retval = 0;							\
+	switch (size) {							\
+	  case 1: __put_user_asm(x,ptr,retval,"b","b","iq"); break;	\
+	  case 2: __put_user_asm(x,ptr,retval,"w","w","ir"); break;	\
+	  case 4: __put_user_asm(x,ptr,retval,"l","","ir"); break;	\
+	  default: __put_user_bad();					\
+	}								\
+} while (0)
+
+struct __large_struct { unsigned long buf[100]; };
+#define __m(x) (*(struct __large_struct *)(x))
+
+/*
+ * Tell gcc we read from memory instead of writing: this is because
+ * we do not write to any memory gcc knows about, so there are no
+ * aliasing issues.
+ */
+#define __put_user_asm(x, addr, err, itype, rtype, ltype)	\
+	__asm__ __volatile__(					\
+		"1:	mov"itype" %"rtype"1,%2\n"		\
+		"2:\n"						\
+		".section .fixup,\"ax\"\n"			\
+		"3:	movl %3,%0\n"				\
+		"	jmp 2b\n"				\
+		".previous\n"					\
+		".section __ex_table,\"a\"\n"			\
+		"	.align 4\n"				\
+		"	.long 1b,3b\n"				\
+		".previous"					\
+		: "=r"(err)					\
+		: ltype (x), "m"(__m(addr)), "i"(-EFAULT), "0"(err))
+
+
+#define __get_user_nocheck(x,ptr,size)				\
+({								\
+	long __gu_err, __gu_val;				\
+	__get_user_size(__gu_val,(ptr),(size),__gu_err);	\
+	(x) = (__typeof__(*(ptr)))__gu_val;			\
+	__gu_err;						\
+})
+
+extern long __get_user_bad(void);
+
+#define __get_user_size(x,ptr,size,retval)				\
+do {									\
+	retval = 0;							\
+	switch (size) {							\
+	  case 1: __get_user_asm(x,ptr,retval,"b","b","=q"); break;	\
+	  case 2: __get_user_asm(x,ptr,retval,"w","w","=r"); break;	\
+	  case 4: __get_user_asm(x,ptr,retval,"l","","=r"); break;	\
+	  default: (x) = __get_user_bad();				\
+	}								\
+} while (0)
+
+#define __get_user_asm(x, addr, err, itype, rtype, ltype)	\
+	__asm__ __volatile__(					\
+		"1:	mov"itype" %2,%"rtype"1\n"		\
+		"2:\n"						\
+		".section .fixup,\"ax\"\n"			\
+		"3:	movl %3,%0\n"				\
+		"	xor"itype" %"rtype"1,%"rtype"1\n"	\
+		"	jmp 2b\n"				\
+		".previous\n"					\
+		".section __ex_table,\"a\"\n"			\
+		"	.align 4\n"				\
+		"	.long 1b,3b\n"				\
+		".previous"					\
+		: "=r"(err), ltype (x)				\
+		: "m"(__m(addr)), "i"(-EFAULT), "0"(err))
 
 /*
  * The "xxx_ret" versions return constant specified in third argument, if

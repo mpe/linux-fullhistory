@@ -237,6 +237,7 @@ int fat_readdirx(
 			char bufname[14];
 			char *ptname = bufname;
 			int dotoffset = 0;
+			int was_long = is_long;
 
 			if (is_long) {
 				unsigned char sum;
@@ -247,6 +248,7 @@ int fat_readdirx(
 				if (sum != alias_checksum) {
 					PRINTK(("Checksums don't match %d != %d\n", sum, alias_checksum));
 					is_long = 0;
+					long_slots = 0;
 				}
 				if (utf8) {
 					long_len = utf8_wcstombs(longname, (__u16 *) unicode, sizeof(longname));
@@ -290,7 +292,7 @@ int fat_readdirx(
 					if (both)
 						bufname[i+dotoffset] = '\0';
 					spos = oldpos;
-					if (is_long) {
+					if (was_long) {
 						spos = filp->f_pos - sizeof(struct msdos_dir_entry);
 					} else {
 						long_slots = 0;

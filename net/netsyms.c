@@ -121,6 +121,10 @@ EXPORT_SYMBOL(net_families);
 EXPORT_SYMBOL(sock_kmalloc);
 EXPORT_SYMBOL(sock_kfree_s);
 
+#ifdef CONFIG_FILTER
+EXPORT_SYMBOL(sk_run_filter);
+#endif
+
 EXPORT_SYMBOL(neigh_table_init);
 EXPORT_SYMBOL(neigh_table_clear);
 EXPORT_SYMBOL(__neigh_lookup);

@@ -43,11 +43,6 @@
 
 #include <asm/segment.h>
 
-/*
- * If NFS_DEBUG is defined, you can toggle NFS debugging by causing
- * a lookup of "__xyzzy__". Just cd to an NFS-mounted filesystem and type
- * 'ls __xyzzy__' to turn on debugging.
- */
 #ifdef NFS_DEBUG
 # define NFSDBG_FACILITY	NFSDBG_PROC
 #endif
@@ -90,10 +85,6 @@ nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir, const char *name,
 	int			status;
 
 	dprintk("NFS call  lookup %s\n", name);
-#ifdef RPC_DEBUG
-	if (!strcmp(name, "__xyzzy__"))
-		nfs_debug = ~nfs_debug;
-#endif
 	status = rpc_call(server->client, NFSPROC_LOOKUP, &arg, &res, 0);
 	dprintk("NFS reply lookup: %d\n", status);
 	return status;

@@ -56,7 +56,7 @@ first_rule: sub_dirs
 	    echo 'ifeq ($(strip $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@)),$$(strip $$(CFLAGS) $$(EXTRA_CFLAGS) $$(CFLAGS_$@)))' ; \
 	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
 	    echo 'endif' \
-	) > .$@.flags
+	) > $(dir $@)/.$(notdir $@).flags
 
 %.o: %.s
 	$(AS) $(ASFLAGS) $(EXTRA_CFLAGS) -o $@ $<
@@ -82,7 +82,7 @@ endif
 	    echo 'ifeq ($(strip $(EXTRA_LDFLAGS) $(ALL_O)),$$(strip $$(EXTRA_LDFLAGS) $$(ALL_O)))' ; \
 	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
 	    echo 'endif' \
-	) > .$@.flags
+	) > $(dir $@)/.$(notdir $@).flags
 endif # O_TARGET
 
 #
@@ -96,7 +96,7 @@ $(L_TARGET): $(LX_OBJS) $(L_OBJS)
 	    echo 'ifeq ($(strip $(EXTRA_ARFLAGS) $(LX_OBJS) $(L_OBJS)),$$(strip $$(EXTRA_ARFLAGS) $$(LX_OBJS) $$(L_OBJS)))' ; \
 	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
 	    echo 'endif' \
-	) > .$@.flags
+	) > $(dir $@)/.$(notdir $@).flags
 endif
 
 #
@@ -218,7 +218,7 @@ $(SYMTAB_OBJS): $(TOPDIR)/include/linux/modversions.h $(SYMTAB_OBJS:.o=.c)
 	    echo 'ifeq ($(strip $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -DEXPORT_SYMTAB),$$(strip $$(CFLAGS) $$(EXTRA_CFLAGS) $$(CFLAGS_$@) -DEXPORT_SYMTAB))' ; \
 	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \
 	    echo 'endif' \
-	) > .$@.flags
+	) > $(dir $@)/.$(notdir $@).flags
 endif
 
 endif # CONFIG_MODULES

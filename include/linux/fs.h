@@ -318,6 +318,7 @@ struct iattr {
 struct inode {
 	struct list_head	i_hash;
 	struct list_head	i_list;
+	struct list_head	i_dentry;
 
 	unsigned long		i_ino;
 	kdev_t			i_dev;

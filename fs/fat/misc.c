@@ -194,7 +194,7 @@ printk("set to %x\n",fat_access(sb,nr,-1));
 	*/
 	file_cluster = 0;
 	if ((curr = MSDOS_I(inode)->i_start) != 0) {
-		cache_lookup(inode,INT_MAX,&last,&curr);
+		fat_cache_lookup(inode,INT_MAX,&last,&curr);
 		file_cluster = last;
 		while (curr && curr != -1){
 			PRINTK (("."));
@@ -242,7 +242,7 @@ if (last) printk("next set to %d\n",fat_access(sb,last,-1));
 		printk ("file_cluster badly computed!!! %d <> %ld\n"
 			,file_cluster,inode->i_blocks/cluster_size);
 	}else{
-		cache_add(inode,file_cluster,nr);
+		fat_cache_add(inode,file_cluster,nr);
 	}
 	inode->i_blocks += cluster_size;
 	if (S_ISDIR(inode->i_mode)) {

@@ -123,6 +123,10 @@
 #include <net/icmp.h>
 #include <linux/ipsec.h>
 
+#ifdef CONFIG_FILTER
+#include <linux/filter.h>
+#endif
+
 #define min(a,b)	((a)<(b)?(a):(b))
 
 /* Run time adjustable parameters. */
@@ -148,6 +152,10 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	struct linger ling;
 	struct ifreq req;
 	int ret = 0;
+
+#ifdef CONFIG_FILTER
+	struct sock_fprog fprog;
+#endif
 	
 	/*
 	 *	Options without arguments

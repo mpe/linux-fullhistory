@@ -377,7 +377,7 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 	/* N.B. we should parse directly into the sb structure */
 	memcpy(&(MSDOS_SB(sb)->options), &opts, sizeof(struct fat_mount_options));
 
-	cache_init();
+	fat_cache_init();
 	lock_super(sb);
 	if( blksize > 1024 )
 	  {

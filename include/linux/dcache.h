@@ -61,6 +61,7 @@ struct dentry {
 	struct list_head d_lru;		/* d_count = 0 LRU list */
 	struct list_head d_child;	/* child of parent list */
 	struct list_head d_subdirs;	/* our children */
+	struct list_head d_alias;	/* inode alias list */
 	struct qstr d_name;
 	unsigned long d_time;		/* used by d_revalidate */
 	struct dentry_operations  *d_op;

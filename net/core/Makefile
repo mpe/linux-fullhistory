@@ -16,6 +16,10 @@ ifeq ($(CONFIG_SYSCTL),y)
 O_OBJS += sysctl_net_core.o
 endif
 
+ifdef CONFIG_FILTER
+O_OBJS += filter.o
+endif
+
 ifdef CONFIG_NET
 
 O_OBJS	+= dev.o dev_mcast.o
