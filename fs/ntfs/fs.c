@@ -590,7 +590,7 @@ static struct inode_operations ntfs_dir_inode_operations = {
 };
 
 /*
-static int ntfs_writepage(struct file *file, struct page *page)
+static int ntfs_writepage(struct page *page)
 {
 	return block_write_full_page(page,ntfs_get_block);
 }

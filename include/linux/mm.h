@@ -204,7 +204,7 @@ typedef struct page {
  */
 #define UnlockPage(page)	do { \
 					smp_mb__before_clear_bit(); \
-					clear_bit(PG_locked, &(page)->flags); \
+					if (!test_and_clear_bit(PG_locked, &(page)->flags)) BUG(); \
 					smp_mb__after_clear_bit(); \
 					if (waitqueue_active(&page->wait)) \
 						wake_up(&page->wait); \

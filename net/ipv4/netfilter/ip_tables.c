@@ -89,10 +89,8 @@ struct ipt_table_info
 	unsigned int hook_entry[NF_IP_NUMHOOKS];
 	unsigned int underflow[NF_IP_NUMHOOKS];
 
-	char padding[SMP_ALIGN((NF_IP_NUMHOOKS*2+2)*sizeof(unsigned int))];
-
 	/* ipt_entry tables: one per CPU */
-	char entries[0];
+	char entries[0] __attribute__((aligned(SMP_CACHE_BYTES)));
 };
 
 static LIST_HEAD(ipt_target);
@@ -101,7 +99,7 @@ static LIST_HEAD(ipt_tables);
 #define ADD_COUNTER(c,b,p) do { (c).bcnt += (b); (c).pcnt += (p); } while(0)
 
 #ifdef CONFIG_SMP
-#define TABLE_OFFSET(t,p) (SMP_ALIGN((t)->size)*cpu_number_map(p))
+#define TABLE_OFFSET(t,p) (SMP_ALIGN((t)->size)*(p))
 #else
 #define TABLE_OFFSET(t,p) 0
 #endif
@@ -283,7 +281,8 @@ ipt_do_table(struct sk_buff **pskb,
 	read_lock_bh(&table->lock);
 	IP_NF_ASSERT(table->valid_hooks & (1 << hook));
 	table_base = (void *)table->private->entries
-		+ TABLE_OFFSET(table->private, smp_processor_id());
+		+ TABLE_OFFSET(table->private,
+			       cpu_number_map(smp_processor_id()));
 	e = get_entry(table_base, table->private->hook_entry[hook]);
 
 #ifdef CONFIG_NETFILTER_DEBUG
@@ -860,7 +859,7 @@ translate_table(const char *name,
 
 	/* And one copy for every other CPU */
 	for (i = 1; i < smp_num_cpus; i++) {
-		memcpy(newinfo->entries + SMP_ALIGN(newinfo->size*i),
+		memcpy(newinfo->entries + SMP_ALIGN(newinfo->size)*i,
 		       newinfo->entries,
 		       SMP_ALIGN(newinfo->size));
 	}
@@ -1359,7 +1358,7 @@ int ipt_register_table(struct ipt_table *table)
 	int ret;
 	struct ipt_table_info *newinfo;
 	static struct ipt_table_info bootstrap
-		= { 0, 0, { 0 }, { 0 }, { }, { } };
+		= { 0, 0, { 0 }, { 0 }, { } };
 
 	MOD_INC_USE_COUNT;
 	newinfo = vmalloc(sizeof(struct ipt_table_info)

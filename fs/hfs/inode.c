@@ -220,7 +220,7 @@ int hfs_notify_change_hdr(struct dentry *dentry, struct iattr * attr)
 	return __hfs_notify_change(dentry, attr, HFS_HDR);
 }
 
-static int hfs_writepage(struct file *file, struct page *page)
+static int hfs_writepage(struct page *page)
 {
 	return block_write_full_page(page,hfs_get_block);
 }

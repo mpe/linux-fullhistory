@@ -250,20 +250,17 @@ nfs_writepage_async(struct file *file, struct inode *inode, struct page *page,
  * Write an mmapped page to the server.
  */
 int
-nfs_writepage(struct file *file, struct page *page)
+nfs_writepage(struct page *page)
 {
 	struct inode *inode;
 	unsigned long end_index;
 	unsigned offset = PAGE_CACHE_SIZE;
 	int err;
+	struct address_space *mapping = page->mapping;
 
-	if (!file) {
-		struct address_space *mapping = page->mapping;
-		if (!mapping)
-			BUG();
-		inode = (struct inode *)mapping->host;
-	} else
-		inode = file->f_dentry->d_inode;
+	if (!mapping)
+		BUG();
+	inode = (struct inode *)mapping->host;
 	if (!inode)
 		BUG();
 	end_index = inode->i_size >> PAGE_CACHE_SHIFT;
@@ -276,21 +273,25 @@ nfs_writepage(struct file *file, struct page *page)
 		goto do_it;
 	/* things got complicated... */
 	offset = inode->i_size & (PAGE_CACHE_SIZE-1);
+
 	/* OK, are we completely out? */
+	err = -EIO;
 	if (page->index >= end_index+1 || !offset)
-		return -EIO;
+		goto out;
 do_it:
 	if (!PageError(page) && NFS_SERVER(inode)->rsize >= PAGE_CACHE_SIZE) {
-		err = nfs_writepage_async(file, inode, page, 0, offset);
+		err = nfs_writepage_async(NULL, inode, page, 0, offset);
 		if (err >= 0)
 			goto out_ok;
 	}
-	err = nfs_writepage_sync(file, inode, page, 0, offset); 
-	if ( err == offset)
-		goto out_ok;
+	err = nfs_writepage_sync(NULL, inode, page, 0, offset); 
+	if ( err == offset) {
+out_ok:
+		err = 0;
+	}
+out:
+	UnlockPage(page);
 	return err; 
- out_ok:
-	return 0;
 }
 
 /*

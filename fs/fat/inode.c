@@ -735,7 +735,7 @@ static int is_exec(char *extension)
 	return 0;
 }
 
-static int fat_writepage(struct file *file, struct page *page)
+static int fat_writepage(struct page *page)
 {
 	return block_write_full_page(page,fat_get_block);
 }

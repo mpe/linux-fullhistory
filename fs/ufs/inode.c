@@ -518,7 +518,7 @@ struct buffer_head * ufs_bread (struct inode * inode, unsigned fragment,
 	return NULL;
 }
 
-static int ufs_writepage(struct file *file, struct page *page)
+static int ufs_writepage(struct page *page)
 {
 	return block_write_full_page(page,ufs_getfrag_block);
 }

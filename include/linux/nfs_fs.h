@@ -192,7 +192,7 @@ extern void nfs_complete_unlink(struct dentry *);
 /*
  * linux/fs/nfs/write.c
  */
-extern int  nfs_writepage(struct file *file, struct page *);
+extern int  nfs_writepage(struct page *);
 extern int  nfs_flush_incompatible(struct file *file, struct page *page);
 extern int  nfs_updatepage(struct file *, struct page *, unsigned int, unsigned int);
 /*

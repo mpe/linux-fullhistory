@@ -1469,15 +1469,15 @@ page_not_uptodate:
  * The "mapping" test takes care of somebody having truncated the
  * page and thus made this write-page a no-op..
  */
-static int filemap_write_page(struct file *file,
-			      struct page * page,
-			      int wait)
+static int filemap_write_page(struct page * page, int wait)
 {
 	struct address_space * mapping = page->mapping;
 	int error = 0;
 
-	if (mapping)
-		error = mapping->a_ops->writepage(file, page);
+	if (mapping && mapping->a_ops->writepage) {
+		ClearPageDirty(page);
+		error = mapping->a_ops->writepage(page);
+	}
 	return error;
 }
 
@@ -1490,11 +1490,8 @@ static int filemap_write_page(struct file *file,
 extern void wakeup_bdflush(int);
 int filemap_swapout(struct page * page, struct file *file)
 {
-	int error;
-
-	error = filemap_write_page(file, page, 0);
-	wakeup_bdflush(0);
-	return error;
+	SetPageDirty(page);
+	return 0;
 }
 
 /* Called with mm->page_table_lock held to protect against other
@@ -1503,56 +1500,26 @@ int filemap_swapout(struct page * page, struct file *file)
 static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 	unsigned long address, unsigned int flags)
 {
-	unsigned long pgoff;
 	pte_t pte;
 	struct page *page;
 	int error;
 
 	pte = *ptep;
 
-	if (!(flags & MS_INVALIDATE)) {
-		if (!pte_present(pte))
-			goto out;
-		if (!ptep_test_and_clear_dirty(ptep))
-			goto out;
-		flush_page_to_ram(pte_page(pte));
-		flush_cache_page(vma, address);
-		flush_tlb_page(vma, address);
-		page = pte_page(pte);
-		page_cache_get(page);
-	} else {
-		if (pte_none(pte))
-			goto out;
-		flush_cache_page(vma, address);
+	if (!pte_present(pte))
+		goto out;
+	if (!ptep_test_and_clear_dirty(ptep))
+		goto out;
 
-		pte = ptep_get_and_clear(ptep);
-		flush_tlb_page(vma, address);
-
-		if (!pte_present(pte)) {
-			spin_unlock(&vma->vm_mm->page_table_lock);
-			swap_free(pte_to_swp_entry(pte));
-			spin_lock(&vma->vm_mm->page_table_lock);
-			goto out;
-		}
-		page = pte_page(pte);
-		if (!pte_dirty(pte) || flags == MS_INVALIDATE) {
-			page_cache_free(page);
-			goto out;
-		}
-	}
-	pgoff = (address - vma->vm_start) >> PAGE_CACHE_SHIFT;
-	pgoff += vma->vm_pgoff;
-	if (page->index != pgoff) {
-		printk("weirdness: pgoff=%lu index=%lu address=%lu vm_start=%lu vm_pgoff=%lu\n",
-			pgoff, page->index, address, vma->vm_start, vma->vm_pgoff);
-	}
-
+	flush_page_to_ram(pte_page(pte));
+	flush_cache_page(vma, address);
+	flush_tlb_page(vma, address);
+	page = pte_page(pte);
+	page_cache_get(page);
 	spin_unlock(&vma->vm_mm->page_table_lock);
+
 	lock_page(page);
-
-	error = filemap_write_page(vma->vm_file, page, 1);
-
-	UnlockPage(page);
+	error = filemap_write_page(page, 1);
 	page_cache_free(page);
 
 	spin_lock(&vma->vm_mm->page_table_lock);
@@ -1651,20 +1618,11 @@ int filemap_sync(struct vm_area_struct * vma, unsigned long address,
 }
 
 /*
- * This handles (potentially partial) area unmaps..
- */
-static void filemap_unmap(struct vm_area_struct *vma, unsigned long start, size_t len)
-{
-	filemap_sync(vma, start, len, MS_ASYNC);
-}
-
-/*
  * Shared mappings need to be able to do the right thing at
  * close/unmap/sync. They will also use the private file as
  * backing-store for swapping..
  */
 static struct vm_operations_struct file_shared_mmap = {
-	unmap:		filemap_unmap,		/* unmap - we need to sync the pages */
 	sync:		filemap_sync,
 	nopage:		filemap_nopage,
 	swapout:	filemap_swapout,

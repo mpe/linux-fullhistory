@@ -78,7 +78,7 @@ static int ramfs_readpage(struct file *file, struct page * page)
  * Writing: just make sure the page gets marked dirty, so that
  * the page stealer won't grab it.
  */
-static int ramfs_writepage(struct file *file, struct page *page)
+static int ramfs_writepage(struct page *page)
 {
 	SetPageDirty(page);
 	return 0;

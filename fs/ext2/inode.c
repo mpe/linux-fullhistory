@@ -650,7 +650,7 @@ struct buffer_head * ext2_bread (struct inode * inode, int block,
 	return NULL;
 }
 
-static int ext2_writepage(struct file *file, struct page *page)
+static int ext2_writepage(struct page *page)
 {
 	return block_write_full_page(page,ext2_get_block);
 }
@@ -1208,7 +1208,7 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 		raw_inode->i_block[0] = cpu_to_le32(kdev_t_to_nr(inode->i_rdev));
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)
 		raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
-	mark_buffer_dirty_inode(bh, inode);
+	mark_buffer_dirty(bh);
 	if (do_sync) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);

@@ -916,7 +916,7 @@ struct buffer_head *sysv_file_bread(struct inode *inode, int block, int create)
 	return NULL;
 }
 
-static int sysv_writepage(struct file *file, struct page *page)
+static int sysv_writepage(struct page *page)
 {
 	return block_write_full_page(page,sysv_get_block);
 }

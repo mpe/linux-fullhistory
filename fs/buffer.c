@@ -1583,9 +1583,11 @@ static void unmap_underlying_metadata(struct buffer_head * bh)
  */
 static int __block_write_full_page(struct inode *inode, struct page *page, get_block_t *get_block)
 {
-	int err, i, need_balance_dirty = 0;
+	int err, i;
 	unsigned long block;
 	struct buffer_head *bh, *head;
+	struct buffer_head *arr[MAX_BUF_PER_PAGE];
+	int nr = 0;
 
 	if (!PageLocked(page))
 		BUG();
@@ -1607,7 +1609,6 @@ static int __block_write_full_page(struct inode *inode, struct page *page, get_b
 		 * Leave it to the low-level FS to make all those
 		 * decisions (block #0 may actually be a valid block)
 		 */
-		bh->b_end_io = end_buffer_io_sync;
 		if (!buffer_mapped(bh)) {
 			err = get_block(inode, block, bh, 1);
 			if (err)
@@ -1616,22 +1617,27 @@ static int __block_write_full_page(struct inode *inode, struct page *page, get_b
 				unmap_underlying_metadata(bh);
 		}
 		set_bit(BH_Uptodate, &bh->b_state);
-		if (!atomic_set_buffer_dirty(bh)) {
-			buffer_insert_inode_queue(bh, inode);
-			__mark_dirty(bh);
-			need_balance_dirty = 1;
-		}
-
+		set_bit(BH_Dirty, &bh->b_state);
+		bh->b_end_io = end_buffer_io_async;
+		atomic_inc(&bh->b_count);
+		arr[nr++] = bh;
 		bh = bh->b_this_page;
 		block++;
 	} while (bh != head);
 
-	if (need_balance_dirty)
-		balance_dirty(bh->b_dev);
-
+	if (nr) {
+		ll_rw_block(WRITE, nr, arr);
+	} else {
+		UnlockPage(page);
+	}
 	SetPageUptodate(page);
 	return 0;
 out:
+	if (nr) {
+		ll_rw_block(WRITE, nr, arr);
+	} else {
+		UnlockPage(page);
+	}
 	ClearPageUptodate(page);
 	return err;
 }
@@ -2021,8 +2027,11 @@ int block_write_full_page(struct page *page, get_block_t *get_block)
 	/* things got complicated... */
 	offset = inode->i_size & (PAGE_CACHE_SIZE-1);
 	/* OK, are we completely out? */
-	if (page->index >= end_index+1 || !offset)
+	if (page->index >= end_index+1 || !offset) {
+		UnlockPage(page);
 		return -EIO;
+	}
+
 	/* Sigh... will have to work, then... */
 	err = __block_prepare_write(inode, page, 0, offset, get_block);
 	if (!err) {
@@ -2031,6 +2040,7 @@ int block_write_full_page(struct page *page, get_block_t *get_block)
 		__block_commit_write(inode,page,0,offset);
 done:
 		kunmap(page);
+		UnlockPage(page);
 		return err;
 	}
 	ClearPageUptodate(page);

@@ -396,7 +396,7 @@ struct buffer_head * minix_bread(struct inode * inode, int block, int create)
 	return NULL;
 }
 
-static int minix_writepage(struct file *file, struct page *page)
+static int minix_writepage(struct page *page)
 {
 	return block_write_full_page(page,minix_get_block);
 }

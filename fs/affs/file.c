@@ -338,7 +338,7 @@ abort_negative:
 
 }
 		
-static int affs_writepage(struct file *file, struct page *page)
+static int affs_writepage(struct page *page)
 {
 	return block_write_full_page(page,affs_get_block);
 }

@@ -602,7 +602,7 @@ dirty_page_rescan:
 		 * last copy..
 		 */
 		if (PageDirty(page)) {
-			int (*writepage)(struct file *, struct page *) = page->mapping->a_ops->writepage;
+			int (*writepage)(struct page *) = page->mapping->a_ops->writepage;
 			if (!writepage)
 				goto page_active;
 
@@ -619,12 +619,12 @@ dirty_page_rescan:
 			page_cache_get(page);
 			spin_unlock(&pagemap_lru_lock);
 
-			writepage(NULL, page);
-			UnlockPage(page);
+			writepage(page);
 			page_cache_release(page);
 
 			/* And re-start the thing.. */
-			goto dirty_page_rescan;
+			spin_lock(&pagemap_lru_lock);
+			continue;
 		}
 
 		/*

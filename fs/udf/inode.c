@@ -125,7 +125,7 @@ void udf_discard_prealloc(struct inode * inode)
 		udf_trunc(inode);
 }
 
-static int udf_writepage(struct file *file, struct page *page)
+static int udf_writepage(struct page *page)
 {
 	return block_write_full_page(page, udf_get_block);
 }

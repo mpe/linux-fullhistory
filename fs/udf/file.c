@@ -67,7 +67,7 @@ static int udf_adinicb_readpage(struct file *file, struct page * page)
 	return 0;
 }
 
-static int udf_adinicb_writepage(struct file *file, struct page *page)
+static int udf_adinicb_writepage(struct page *page)
 {
 	struct inode *inode = (struct inode *)page->mapping->host;
 

@@ -17,7 +17,7 @@
 
 #include <asm/pgtable.h>
 
-static int swap_writepage(struct file *file, struct page *page)
+static int swap_writepage(struct page *page)
 {
 	rw_swap_page(WRITE, page, 0);
 	return 0;

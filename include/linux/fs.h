@@ -352,7 +352,7 @@ struct page;
 struct address_space;
 
 struct address_space_operations {
-	int (*writepage)(struct file *, struct page *);
+	int (*writepage)(struct page *);
 	int (*readpage)(struct file *, struct page *);
 	int (*sync_page)(struct page *);
 	int (*prepare_write)(struct file *, struct page *, unsigned, unsigned);
