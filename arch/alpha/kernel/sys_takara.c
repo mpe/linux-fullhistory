@@ -172,7 +172,7 @@ takara_init_irq(void)
 static int __init
 takara_map_irq_srm(struct pci_dev *dev, u8 slot, u8 pin)
 {
-	static char irq_tab[15][5] __initlocaldata = {
+	static char irq_tab[15][5] __initdata = {
 		{ 16+3, 16+3, 16+3, 16+3, 16+3},   /* slot  6 == device 3 */
 		{ 16+2, 16+2, 16+2, 16+2, 16+2},   /* slot  7 == device 2 */
 		{ 16+1, 16+1, 16+1, 16+1, 16+1},   /* slot  8 == device 1 */
@@ -203,7 +203,7 @@ takara_map_irq_srm(struct pci_dev *dev, u8 slot, u8 pin)
 static int __init
 takara_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
-	static char irq_tab[15][5] __initlocaldata = {
+	static char irq_tab[15][5] __initdata = {
 		{ 16+3, 16+3, 16+3, 16+3, 16+3},   /* slot  6 == device 3 */
 		{ 16+2, 16+2, 16+2, 16+2, 16+2},   /* slot  7 == device 2 */
 		{ 16+1, 16+1, 16+1, 16+1, 16+1},   /* slot  8 == device 1 */

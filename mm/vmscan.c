@@ -56,20 +56,7 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	onlist = PageActive(page);
 	/* Don't look at this pte if it's been accessed recently. */
 	if (ptep_test_and_clear_young(page_table)) {
-		if (onlist) {
-			/*
-			 * Transfer the "accessed" bit from the page
-			 * tables to the global page map. Page aging
-			 * will be done by refill_inactive_scan().
-			 */
-                	SetPageReferenced(page);
-		} else {
-			/*
-			 * The page is not on the active list, so
-			 * we have to do the page aging ourselves.
-			 */
-			age_page_up(page);
-		}
+		age_page_up(page);
 		goto out_failed;
 	}
 	if (!onlist)
@@ -797,7 +784,8 @@ int refill_inactive_scan(unsigned int priority, int oneshot)
 			 *
 			 * SUBTLE: we can have buffer pages with count 1.
 			 */
-			if (page_count(page) <= (page->buffers ? 2 : 1)) {
+			if (page->age == 0 && page_count(page) <=
+						(page->buffers ? 2 : 1)) {
 				deactivate_page_nolock(page);
 				page_active = 0;
 			} else {

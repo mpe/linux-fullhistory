@@ -76,7 +76,6 @@
  *    12.08.1999   0.18  module_init/__setup fixes
  *    24.08.1999   0.19  get rid of the dmaio kludge, replace with allocate_resource
  *    31.08.1999   0.20  add spin_lock_init
- *                       __initlocaldata to fix gcc 2.7.x problems
  *                       use new resource allocation to allocate DDMA IO space
  *                       replaced current->state = x with set_current_state(x)
  *    03.09.1999   0.21  change read semantics for MIDI to match
@@ -2451,7 +2450,7 @@ static struct initvol {
 
 static int __devinit sv_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
 {
-	static const char __initlocaldata sv_ddma_name[] = "S3 Inc. SonicVibes DDMA Controller";
+	static const char __initdata sv_ddma_name[] = "S3 Inc. SonicVibes DDMA Controller";
        	struct sv_state *s;
 	mm_segment_t fs;
 	int i, val;
@@ -2694,7 +2693,7 @@ module_exit(cleanup_sonicvibes);
 
 static int __init sonicvibes_setup(char *str)
 {
-	static unsigned __initlocaldata nr_dev = 0;
+	static unsigned __initdata nr_dev = 0;
 
 	if (nr_dev >= NR_DEVICE)
 		return 0;

@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.28 2000/10/03 01:06:07 mdharm Exp $
+ * $Id: transport.c,v 1.30 2000/10/24 02:01:18 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -412,6 +412,9 @@ int usb_stor_control_msg(struct us_data *us, unsigned int pipe,
 	FILL_CONTROL_URB(us->current_urb, us->pusb_dev, pipe, 
 			 (unsigned char*) dr, data, size, 
 			 usb_stor_blocking_completion, &wqh);
+	us->current_urb->actual_length = 0;
+	us->current_urb->error_count = 0;
+	us->current_urb->transfer_flags = USB_ASYNC_UNLINK;
 
 	/* submit the URB */
 	set_current_state(TASK_UNINTERRUPTIBLE);
@@ -426,7 +429,7 @@ int usb_stor_control_msg(struct us_data *us, unsigned int pipe,
 
 	/* wait for the completion of the URB */
 	up(&(us->current_urb_sem));
-	if (us->current_urb->status == -EINPROGRESS)
+	while (us->current_urb->status == -EINPROGRESS)
 		schedule();
 	down(&(us->current_urb_sem));
 
@@ -466,6 +469,9 @@ int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
 	/* fill the URB */
 	FILL_BULK_URB(us->current_urb, us->pusb_dev, pipe, data, len,
 		      usb_stor_blocking_completion, &wqh);
+	us->current_urb->actual_length = 0;
+	us->current_urb->error_count = 0;
+	us->current_urb->transfer_flags = USB_ASYNC_UNLINK;
 
 	/* submit the URB */
 	set_current_state(TASK_UNINTERRUPTIBLE);
@@ -479,7 +485,7 @@ int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
 
 	/* wait for the completion of the URB */
 	up(&(us->current_urb_sem));
-	if (us->current_urb->status == -EINPROGRESS)
+	while (us->current_urb->status == -EINPROGRESS)
 		schedule();
 	down(&(us->current_urb_sem));
 
@@ -825,8 +831,9 @@ void usb_stor_CBI_irq(struct urb *urb)
 
 
 		/* was this a wanted interrupt? */
-		if (us->ip_wanted) {
-			us->ip_wanted = 0;
+		if (atomic_read(us->ip_wanted)) {
+			atomic_set(us->ip_wanted, 0);
+			US_DEBUGP("-- Current value of ip_waitq is: %d\n", atomic_read(&us->ip_waitq.count));
 			up(&(us->ip_waitq));
 		} else
 			US_DEBUGP("ERROR: Unwanted interrupt received!\n");
@@ -839,7 +846,11 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 	int result;
 
 	/* Set up for status notification */
-	us->ip_wanted = 1;
+	atomic_set(us->ip_wanted, 1);
+
+	/* re-initialize the mutex so that we avoid any races with
+	 * early/late IRQs from previous commands */
+	init_MUTEX_LOCKED(&(us->ip_waitq));
 
 	/* COMMAND STAGE */
 	/* let's send the command via the control pipe */
@@ -852,7 +863,7 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 	US_DEBUGP("Call to usb_stor_control_msg() returned %d\n", result);
 	if (result < 0) {
 		/* Reset flag for status notification */
-		us->ip_wanted = 0;
+		atomic_set(us->ip_wanted, 0);
 
 		/* if the command was aborted, indicate that */
 		if (result == -ENOENT)
@@ -880,9 +891,6 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 		/* if it was aborted, we need to indicate that */
 		if (srb->result == USB_STOR_TRANSPORT_ABORTED) {
-			/* we need to reset the state of this semaphore */
-			down(&(us->ip_waitq));
-
 			return USB_STOR_TRANSPORT_ABORTED;
 		}
 	}
@@ -890,12 +898,13 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* STATUS STAGE */
 
 	/* go to sleep until we get this interrupt */
+	US_DEBUGP("Current value of ip_waitq is: %d\n", atomic_read(&us->ip_waitq.count));
 	down(&(us->ip_waitq));
 	
 	/* if we were woken up by an abort instead of the actual interrupt */
-	if (us->ip_wanted) {
+	if (atomic_read(us->ip_wanted)) {
 		US_DEBUGP("Did not get interrupt on CBI\n");
-		us->ip_wanted = 0;
+		atomic_set(us->ip_wanted, 0);
 		return USB_STOR_TRANSPORT_ABORTED;
 	}
 	
@@ -1040,6 +1049,10 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	int result;
 	int pipe;
 	int partial;
+
+	/* if the device was removed, then we're already reset */
+	if (!us->pusb_dev)
+		return SUCCESS;
 	
 	/* set up the command wrapper */
 	bcb.Signature = cpu_to_le32(US_BULK_CB_SIGN);
@@ -1183,6 +1196,10 @@ int usb_stor_CB_reset(struct us_data *us)
 
 	US_DEBUGP("CB_reset() called\n");
 
+	/* if the device was removed, then we're already reset */
+	if (!us->pusb_dev)
+		return SUCCESS;
+
 	memset(cmd, 0xFF, sizeof(cmd));
 	cmd[0] = SEND_DIAGNOSTIC;
 	cmd[1] = 4;
@@ -1220,6 +1237,10 @@ int usb_stor_Bulk_reset(struct us_data *us)
 	int result;
 
 	US_DEBUGP("Bulk reset requested\n");
+
+	/* if the device was removed, then we're already reset */
+	if (!us->pusb_dev)
+		return SUCCESS;
 
 	result = usb_control_msg(us->pusb_dev, 
 				 usb_sndctrlpipe(us->pusb_dev,0), 

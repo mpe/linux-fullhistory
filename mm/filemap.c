@@ -503,20 +503,46 @@ void ___wait_on_page(struct page *page)
 }
 
 /*
- * Get an exclusive lock on the page..
+ * Get a lock on the page, assuming we need to sleep
+ * to get it..
+ */
+static void __lock_page(struct page *page)
+{
+	struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+
+	add_wait_queue_exclusive(&page->wait, &wait);
+	for (;;) {
+		sync_page(page);
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+		if (PageLocked(page)) {
+			run_task_queue(&tq_disk);
+			schedule();
+			continue;
+		}
+		if (!TryLockPage(page))
+			break;
+	}
+	tsk->state = TASK_RUNNING;
+	remove_wait_queue(&page->wait, &wait);
+}
+	
+
+/*
+ * Get an exclusive lock on the page, optimistically
+ * assuming it's not locked..
  */
 void lock_page(struct page *page)
 {
-	while (TryLockPage(page))
-		___wait_on_page(page);
+	if (TryLockPage(page))
+		__lock_page(page);
 }
-
 
 /*
  * a rather lightweight function, finding and getting a reference to a
  * hashed page atomically, waiting for it if it's locked.
  */
-struct page * __find_get_page (struct address_space *mapping,
+static struct page * __find_get_page(struct address_space *mapping,
 				unsigned long offset, struct page **hash)
 {
 	struct page *page;
@@ -525,41 +551,11 @@ struct page * __find_get_page (struct address_space *mapping,
 	 * We scan the hash list read-only. Addition to and removal from
 	 * the hash-list needs a held write-lock.
 	 */
-repeat:
 	spin_lock(&pagecache_lock);
 	page = __find_page_nolock(mapping, offset, *hash);
 	if (page)
 		page_cache_get(page);
 	spin_unlock(&pagecache_lock);
-
-	/* Found the page, sleep if locked. */
-	if (page && PageLocked(page)) {
-		struct task_struct *tsk = current;
-		DECLARE_WAITQUEUE(wait, tsk);
-
-		sync_page(page);
-
-		__set_task_state(tsk, TASK_UNINTERRUPTIBLE);
-		add_wait_queue(&page->wait, &wait);
-
-		if (PageLocked(page))
-			schedule();
-		__set_task_state(tsk, TASK_RUNNING);
-		remove_wait_queue(&page->wait, &wait);
-
-		/*
-		 * The page might have been unhashed meanwhile. It's
-		 * not freed though because we hold a reference to it.
-		 * If this is the case then it will be freed _here_,
-		 * and we recheck the hash anyway.
-		 */
-		page_cache_release(page);
-		goto repeat;
-	}
-	/*
-	 * It's not locked so we can return the page and we hold
-	 * a reference to it.
-	 */
 	return page;
 }
 
@@ -578,39 +574,23 @@ struct page * __find_lock_page (struct address_space *mapping,
 repeat:
 	spin_lock(&pagecache_lock);
 	page = __find_page_nolock(mapping, offset, *hash);
-	if (page)
+	if (page) {
 		page_cache_get(page);
-	spin_unlock(&pagecache_lock);
+		spin_unlock(&pagecache_lock);
 
-	/* Found the page, sleep if locked. */
-	if (page && TryLockPage(page)) {
-		struct task_struct *tsk = current;
-		DECLARE_WAITQUEUE(wait, tsk);
+		lock_page(page);
 
-		sync_page(page);
+		/* Is the page still hashed? Ok, good.. */
+		if (page->mapping)
+			return page;
 
-		__set_task_state(tsk, TASK_UNINTERRUPTIBLE);
-		add_wait_queue(&page->wait, &wait);
-
-		if (PageLocked(page))
-			schedule();
-		__set_task_state(tsk, TASK_RUNNING);
-		remove_wait_queue(&page->wait, &wait);
-
-		/*
-		 * The page might have been unhashed meanwhile. It's
-		 * not freed though because we hold a reference to it.
-		 * If this is the case then it will be freed _here_,
-		 * and we recheck the hash anyway.
-		 */
+		/* Nope: we raced. Release and try again.. */
+		UnlockPage(page);
 		page_cache_release(page);
 		goto repeat;
 	}
-	/*
-	 * It's not locked so we can return the page and we hold
-	 * a reference to it.
-	 */
-	return page;
+	spin_unlock(&pagecache_lock);
+	return NULL;
 }
 
 #if 0
@@ -1035,6 +1015,15 @@ page_not_up_to_date:
 
 		/* Get exclusive access to the page ... */
 		lock_page(page);
+
+		/* Did it get unhashed before we got the lock? */
+		if (!page->mapping) {
+			UnlockPage(page);
+			page_cache_release(page);
+			continue;
+		}
+
+		/* Did somebody else fill it already? */
 		if (Page_Uptodate(page)) {
 			UnlockPage(page);
 			goto page_ok;
@@ -1331,16 +1320,16 @@ struct page * filemap_nopage(struct vm_area_struct * area,
 	struct inode *inode = file->f_dentry->d_inode;
 	struct address_space *mapping = inode->i_mapping;
 	struct page *page, **hash, *old_page;
-	unsigned long size = (inode->i_size + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	unsigned long size, pgoff;
 
-	unsigned long pgoff = ((address - area->vm_start) >> PAGE_CACHE_SHIFT) + area->vm_pgoff;
+	pgoff = ((address - area->vm_start) >> PAGE_CACHE_SHIFT) + area->vm_pgoff;
 
+retry_all:
 	/*
-	 * Semantics for shared and private memory areas are different
-	 * past the end of the file. A shared mapping past the last page
-	 * of the file is an error and results in a SIGBUS, while a
-	 * private mapping just maps in a zero page.
+	 * An external ptracer can access pages that normally aren't
+	 * accessible..
 	 */
+	size = (inode->i_size + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 	if ((pgoff >= size) && (area->vm_mm == current->mm))
 		return NULL;
 
@@ -1419,6 +1408,15 @@ no_cached_page:
 
 page_not_uptodate:
 	lock_page(page);
+
+	/* Did it get unhashed while we waited for it? */
+	if (!page->mapping) {
+		UnlockPage(page);
+		page_cache_release(page);
+		goto retry_all;
+	}
+
+	/* Did somebody else get it up-to-date? */
 	if (Page_Uptodate(page)) {
 		UnlockPage(page);
 		goto success;
@@ -1437,6 +1435,15 @@ page_not_uptodate:
 	 * and we need to check for errors.
 	 */
 	lock_page(page);
+
+	/* Somebody truncated the page on us? */
+	if (!page->mapping) {
+		UnlockPage(page);
+		page_cache_release(page);
+		goto retry_all;
+	}
+
+	/* Somebody else successfully read it in? */
 	if (Page_Uptodate(page)) {
 		UnlockPage(page);
 		goto success;
@@ -1535,7 +1542,12 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 
 	spin_unlock(&vma->vm_mm->page_table_lock);
 	lock_page(page);
-	error = filemap_write_page(vma->vm_file, page, 1);
+
+	error = 0;
+	/* Nothing to do if somebody truncated the page from under us.. */
+	if (page->mapping)
+		error = filemap_write_page(vma->vm_file, page, 1);
+
 	UnlockPage(page);
 	page_cache_free(page);
 

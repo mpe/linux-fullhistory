@@ -28,7 +28,6 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
-#include <net/divert.h>
 
 #include <asm/atomic.h>
 #include <asm/cache.h>
@@ -39,6 +38,8 @@
 #ifdef CONFIG_NET_PROFILE
 #include <net/profile.h>
 #endif
+
+struct divert_blk;
 
 #define NET_XMIT_SUCCESS	0
 #define NET_XMIT_DROP		1	/* skb dropped			*/

@@ -679,7 +679,7 @@ static int tsunami_indices[] = {0,1,2,3,4,5,6,7,8};
 static struct alpha_machine_vector * __init
 get_sysvec(long type, long variation, long cpu)
 {
-	static struct alpha_machine_vector *systype_vecs[] __initlocaldata =
+	static struct alpha_machine_vector *systype_vecs[] __initdata =
 	{
 		NULL,		/* 0 */
 		NULL,		/* ADU */
@@ -722,48 +722,48 @@ get_sysvec(long type, long variation, long cpu)
 		NULL,		/* Titan */
 	};
 
-	static struct alpha_machine_vector *unofficial_vecs[] __initlocaldata =
+	static struct alpha_machine_vector *unofficial_vecs[] __initdata =
 	{
 		NULL,		/* 100 */
 		&ruffian_mv,
 	};
 
-	static struct alpha_machine_vector *api_vecs[] __initlocaldata =
+	static struct alpha_machine_vector *api_vecs[] __initdata =
 	{
 		NULL,		/* 200 */
 		&nautilus_mv,
 	};
 
-	static struct alpha_machine_vector *alcor_vecs[] __initlocaldata = 
+	static struct alpha_machine_vector *alcor_vecs[] __initdata = 
 	{
 		&alcor_mv, &xlt_mv, &xlt_mv
 	};
 
-	static struct alpha_machine_vector *eb164_vecs[] __initlocaldata =
+	static struct alpha_machine_vector *eb164_vecs[] __initdata =
 	{
 		&eb164_mv, &pc164_mv, &lx164_mv, &sx164_mv, &rx164_mv
 	};
 
-	static struct alpha_machine_vector *eb64p_vecs[] __initlocaldata =
+	static struct alpha_machine_vector *eb64p_vecs[] __initdata =
 	{
 		&eb64p_mv,
 		&cabriolet_mv,
 		&cabriolet_mv		/* AlphaPCI64 */
 	};
 
-	static struct alpha_machine_vector *eb66_vecs[] __initlocaldata =
+	static struct alpha_machine_vector *eb66_vecs[] __initdata =
 	{
 		&eb66_mv,
 		&eb66p_mv
 	};
 
-	static struct alpha_machine_vector *titan_vecs[] __initlocaldata =
+	static struct alpha_machine_vector *titan_vecs[] __initdata =
 	{
 		NULL,
 		&privateer_mv,		/* privateer */
 	};
 
-	static struct alpha_machine_vector *tsunami_vecs[]  __initlocaldata =
+	static struct alpha_machine_vector *tsunami_vecs[]  __initdata =
 	{
 		NULL,
 		&dp264_mv,		/* dp264 */
@@ -856,7 +856,7 @@ get_sysvec(long type, long variation, long cpu)
 static struct alpha_machine_vector * __init
 get_sysvec_byname(const char *name)
 {
-	static struct alpha_machine_vector *all_vecs[] __initlocaldata =
+	static struct alpha_machine_vector *all_vecs[] __initdata =
 	{
 		&alcor_mv,
 		&alphabook1_mv,

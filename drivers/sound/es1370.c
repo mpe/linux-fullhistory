@@ -109,7 +109,6 @@
  *    12.08.1999   0.27  module_init/__setup fixes
  *    19.08.1999   0.28  SOUND_MIXER_IMIX fixes, reported by Gianluca <gialluca@mail.tiscalinet.it>
  *    31.08.1999   0.29  add spin_lock_init
- *                       __initlocaldata to fix gcc 2.7.x problems
  *                       replaced current->state = x with set_current_state(x)
  *    03.09.1999   0.30  change read semantics for MIDI to match
  *                       OSS more closely; remove possible wakeup race
@@ -2677,7 +2676,7 @@ module_exit(cleanup_es1370);
 
 static int __init es1370_setup(char *str)
 {
-	static unsigned __initlocaldata nr_dev = 0;
+	static unsigned __initdata nr_dev = 0;
 
 	if (nr_dev >= NR_DEVICE)
 		return 0;

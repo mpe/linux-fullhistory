@@ -3,7 +3,6 @@
 
 #include <linux/init.h>
 
-#if __GNUC__ > 2 || __GNUC_MINOR__ >= 90 /* egcs */
 #define __pmac __attribute__ ((__section__ (".text.pmac")))
 #define __pmacdata __attribute__ ((__section__ (".data.pmac")))
 #define __pmacfunc(__argpmac) \
@@ -35,24 +34,4 @@
 	__argopenfirmware __openfirmware; \
 	__argopenfirmware
 	
-#else /* not egcs */
-
-#define __pmac
-#define __pmacdata
-#define __pmacfunc(x) x
-	
-#define __prep
-#define __prepdata
-#define __prepfunc(x) x
-
-#define __apus
-#define __apusdata
-#define __apusfunc(x) x
-
-#define __openfirmware
-#define __openfirmwaredata
-#define __openfirmwarefunc(x) x
-
-#endif /* egcs */
-
 #endif /* _PPC_INIT_H */

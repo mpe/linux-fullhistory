@@ -38,7 +38,6 @@
  * this so lets disable it. - Anton
  */
 #if 0
-/* #if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8) */
 /* We need the mb()'s so we don't trigger a compiler bug - Anton */
 #define BUG() do { \
 	mb(); \

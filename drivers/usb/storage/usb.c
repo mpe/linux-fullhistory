@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: usb.c,v 1.46 2000/09/25 23:25:12 mdharm Exp $
+ * $Id: usb.c,v 1.51 2000/10/19 18:49:51 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -473,21 +473,27 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 
 	{ 0x0781, 0x0001, 0x0200, 0x0200, 
 		"Sandisk",
-		"ImageMate SDDR05a",
+		"ImageMate SDDR-05a",
 		US_SC_SCSI, US_PR_CB, NULL,
 		US_FL_SINGLE_LUN | US_FL_START_STOP},
+
+        { 0x0781, 0x0100, 0x0100, 0x0100,
+                "Sandisk",
+                "ImageMate SDDR-12",
+                US_SC_SCSI, US_PR_CB, NULL,
+                US_FL_SINGLE_LUN },
 
 #ifdef CONFIG_USB_STORAGE_SDDR09
 	{ 0x0781, 0x0200, 0x0100, 0x0100, 
 		"Sandisk",
-		"ImageMate SDDR09",
+		"ImageMate SDDR-09",
 		US_SC_SCSI, US_PR_EUSB_SDDR09, NULL,
 		US_FL_SINGLE_LUN | US_FL_START_STOP },
 #endif
 
 	{ 0x0781, 0x0002, 0x0009, 0x0009, 
 		"Sandisk",
-		"ImageMate SDDR31",
+		"ImageMate SDDR-31",
 		US_SC_SCSI, US_PR_BULK, NULL,
 		US_FL_IGNORE_SER},
 
@@ -696,19 +702,20 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 	US_DEBUGP("Endpoints: In: 0x%p Out: 0x%p Int: 0x%p (Period %d)\n",
 		  ep_in, ep_out, ep_int, ep_int ? ep_int->bInterval : 0);
 
-	/* set the interface -- STALL is an acceptable response here */
 #ifdef CONFIG_USB_STORAGE_SDDR09
-	if (protocol == US_PR_EUSB_SDDR09)
+	if (protocol == US_PR_EUSB_SDDR09 || protocol == US_PR_DPCM_USB) {
+		/* set the configuration -- STALL is an acceptable response here */
 		result = usb_set_configuration(dev, 1);
 
-	US_DEBUGP("Result from usb_set_configuration is %d\n", result);
-	if (result == -EPIPE) {
-		US_DEBUGP("-- clearing stall on control interface\n");
-		usb_clear_halt(dev, usb_sndctrlpipe(dev, 0));
-	} else if (result != 0) {
-		/* it's not a stall, but another error -- time to bail */
-		US_DEBUGP("-- Unknown error.  Rejecting device\n");
-		return NULL;
+		US_DEBUGP("Result from usb_set_configuration is %d\n", result);
+		if (result == -EPIPE) {
+			US_DEBUGP("-- clearing stall on control interface\n");
+			usb_clear_halt(dev, usb_sndctrlpipe(dev, 0));
+		} else if (result != 0) {
+			/* it's not a stall, but another error -- time to bail */
+			US_DEBUGP("-- Unknown error.  Rejecting device\n");
+			return NULL;
+		}
 	}
 #endif
 
@@ -759,6 +766,9 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		US_DEBUGP("Found existing GUID " GUID_FORMAT "\n",
 			  GUID_ARGS(guid));
 
+		/* lock the device pointers */
+		down(&(ss->dev_semaphore));
+
 		/* establish the connection to the new device upon reconnect */
 		ss->ifnum = ifnum;
 		ss->pusb_dev = dev;
@@ -773,19 +783,24 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		ss->ep_int = ep_int;
 
 		/* allocate an IRQ callback if one is needed */
-		if ((ss->protocol == US_PR_CBI) && usb_stor_allocate_irq(ss))
+		if ((ss->protocol == US_PR_CBI) && usb_stor_allocate_irq(ss)) {
+			usb_dec_dev_use(dev);
 			return NULL;
+		}
 
 		/* allocate the URB we're going to use */
 		ss->current_urb = usb_alloc_urb(0);
 		if (!ss->current_urb) {
-			kfree(ss);
+			usb_dec_dev_use(dev);
 			return NULL;
 		}
 
                 /* Re-Initialize the device if it needs it */
 		if (unusual_dev && unusual_dev->initFunction)
 			(unusual_dev->initFunction)(ss);
+
+		/* unlock the device pointers */
+		up(&(ss->dev_semaphore));
 
 	} else { 
 		/* New device -- allocate memory and initialize */
@@ -794,6 +809,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		if ((ss = (struct us_data *)kmalloc(sizeof(struct us_data), 
 						    GFP_KERNEL)) == NULL) {
 			printk(KERN_WARNING USB_STORAGE "Out of memory\n");
+			usb_dec_dev_use(dev);
 			return NULL;
 		}
 		memset(ss, 0, sizeof(struct us_data));
@@ -802,6 +818,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		ss->current_urb = usb_alloc_urb(0);
 		if (!ss->current_urb) {
 			kfree(ss);
+			usb_dec_dev_use(dev);
 			return NULL;
 		}
 
@@ -924,6 +941,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			ss->transport_name = "Unknown";
 			kfree(ss->current_urb);
 			kfree(ss);
+			usb_dec_dev_use(dev);
 			return NULL;
 			break;
 		}
@@ -977,8 +995,10 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		US_DEBUGP("Protocol: %s\n", ss->protocol_name);
 
 		/* allocate an IRQ callback if one is needed */
-		if ((ss->protocol == US_PR_CBI) && usb_stor_allocate_irq(ss))
+		if ((ss->protocol == US_PR_CBI) && usb_stor_allocate_irq(ss)) {
+			usb_dec_dev_use(dev);
 			return NULL;
+		}
 		
 		/*
 		 * Since this is a new device, we need to generate a scsi 
@@ -1011,6 +1031,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			       "Unable to start control thread\n");
 			kfree(ss->current_urb);
 			kfree(ss);
+			usb_dec_dev_use(dev);
 			return NULL;
 		}
 		

@@ -466,6 +466,10 @@ void usb_driver_release_interface(struct usb_driver *driver, struct usb_interfac
  * We now walk the list of registered USB drivers,
  * looking for one that will accept this interface.
  *
+ * "New Style" drivers use a table describing the devices and interfaces
+ * they handle.  Those tables are available to user mode tools deciding
+ * whether to load driver modules for a new device.
+ *
  * The probe return value is changed to be a private pointer.  This way
  * the drivers don't have to dig around in our structures to set the
  * private pointer if they only need one interface. 
@@ -494,7 +498,70 @@ static int usb_find_interface_driver(struct usb_device *dev, unsigned ifnum)
 			
 		tmp = tmp->next;
 		down(&driver->serialize);
-		private = driver->probe(dev, ifnum);
+
+		/* new style driver? */
+		if (driver->bind) {
+		    const struct usb_device_id	*id = driver->id_table;
+
+		    if (id) {
+			/* scan device ids for a match */
+			for (;; id++) {
+			    struct usb_interface_descriptor	*intf = 0;
+
+			    /* done? */
+			    if (!id->idVendor && !id->bDeviceClass && !id->bInterfaceClass) {
+				id = 0;
+				break;
+			    }
+
+			    /* Vendor match, possibly product-specific? */
+			    if (id->idVendor && id->idVendor == dev->descriptor.idVendor) {
+				if (id->idProduct && id->idProduct != dev->descriptor.idProduct)
+				    continue;
+				break;
+			    }
+
+			    /* Device class match? */
+			    if (id->bDeviceClass
+				    && id->bDeviceClass == dev->descriptor.bDeviceClass) {
+				if (id->bDeviceSubClass && id->bDeviceSubClass
+					!= dev->descriptor.bDeviceClass)
+				    continue;
+				if (id->bDeviceProtocol && id->bDeviceProtocol
+					!= dev->descriptor.bDeviceProtocol)
+				    continue;
+				break;
+			    }
+
+			    /* Interface class match? */
+			    if (!interface->altsetting || interface->num_altsetting < 1)
+				continue;
+			    intf = &interface->altsetting [0];
+			    if (id->bInterfaceClass
+				    && id->bInterfaceClass == intf->bInterfaceClass) {
+				if (id->bInterfaceSubClass && id->bInterfaceSubClass
+					!= intf->bInterfaceClass)
+				    continue;
+				if (id->bInterfaceProtocol && id->bInterfaceProtocol
+					!= intf->bInterfaceProtocol)
+				    continue;
+				break;
+			    }
+			} 
+			
+			/* is this driver interested in this interface? */
+			if (id)
+			    private = driver->bind(dev, ifnum, id);
+			else
+			    private = 0;
+		    } else {
+			/* "old style" driver, but using new interface */
+			private = driver->bind(dev, ifnum, 0);
+		    }
+
+		/* "old style" driver */
+		} else
+		    private = driver->probe(dev, ifnum);
 		up(&driver->serialize);
 		if (!private)
 			continue;
@@ -762,6 +829,7 @@ void usb_inc_dev_use(struct usb_device *dev)
 {
 	atomic_inc(&dev->refcnt);
 }
+
 /* ------------------------------------------------------------------------------------- 
  * New USB Core Functions
  * -------------------------------------------------------------------------------------*/
@@ -840,7 +908,6 @@ static int usb_start_wait_urb(urb_t *urb, int timeout, int* actual_length)
 	int status;
   
 	awd.wakeup = &wqh;
-	awd.handler = 0;
 	init_waitqueue_head(&wqh); 	
 	current->state = TASK_INTERRUPTIBLE;
 	add_wait_queue(&wqh, &wait);

@@ -31,7 +31,7 @@
 #include <linux/if_bridge.h>
 #include <linux/random.h>
 #ifdef CONFIG_NET_DIVERT
-#include <net/divert.h>
+#include <linux/divert.h>
 #endif /* CONFIG_NET_DIVERT */
 
 #ifdef CONFIG_NET

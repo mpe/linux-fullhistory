@@ -188,7 +188,7 @@ eb64p_init_irq(void)
 static int __init
 eb64p_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
-	static char irq_tab[5][5] __initlocaldata = {
+	static char irq_tab[5][5] __initdata = {
 		/*INT  INTA  INTB  INTC   INTD */
 		{16+7, 16+7, 16+7, 16+7,  16+7},  /* IdSel 5,  slot ?, ?? */
 		{16+0, 16+0, 16+2, 16+4,  16+9},  /* IdSel 6,  slot ?, ?? */

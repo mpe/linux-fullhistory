@@ -249,21 +249,11 @@ unsigned long get_wchan(struct task_struct *p);
  * Note that __builtin_return_address(x>=1) is forbidden because GCC
  * aborts compilation on some CPUs.  It's simply not possible to unwind
  * some CPU's stackframes.
- */
-#if (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))
-/*
+ *
  * __builtin_return_address works only for non-leaf functions.  We avoid the
  * overhead of a function call by forcing the compiler to save the return
  * address register on the stack.
  */
 #define return_address() ({__asm__ __volatile__("":::"$31");__builtin_return_address(0);})
-#else
-/*
- * __builtin_return_address is not implemented at all.  Calling it
- * will return senseless values.  Return NULL which at least is an obviously
- * senseless value.
- */
-#define return_address() NULL
-#endif
 
 #endif /* _ASM_PROCESSOR_H */

@@ -45,14 +45,14 @@
 #include <linux/usb.h>
 
 
-static const struct product {
-	char	*name;
-	u16	idVendor;
-	u16	idProduct;
-} products [] = {
-	{ "NetChip TurboCONNECT", 0x0525, 0x1080 },	// reference
+static const struct usb_device_id	products [] = {
+	{		// reference design
+	    idProduct:		0x1080,
+	    idVendor:		0x0525,
+	    driver_info:	"NetChip TurboCONNECT",
+	},
 	// Belkin, ...
-	{ 0, 0, 0 },			// END
+	{ },		// END
 };
 
 static u8	node_id [ETH_ALEN];
@@ -132,7 +132,7 @@ struct skb_data {	// skb->cb is one of these
 struct net1080 {
 	// housekeeping
 	struct usb_device	*udev;
-	const struct product	*prod_info;
+	const struct usb_device_id	*prod_info;
 	struct semaphore	mutex;
 	struct list_head	dev_list;
 	wait_queue_head_t	*wait;
@@ -422,7 +422,7 @@ static int net1080_reset (struct net1080 *dev)
 #endif
 
 	info ("%s: %s, port %c on USB %d dev %d, peer %sconnected",
-		dev->net.name, dev->prod_info->name,
+		dev->net.name, (char *) dev->prod_info->driver_info,
 		(status & STATUS_PORT_A) ? 'A' : 'B',
 		dev->udev->bus->busnum,
 		dev->udev->devnum,
@@ -952,7 +952,7 @@ static void net1080_disconnect (struct usb_device *udev, void *ptr)
 	info ("%s: USB %d dev %d, %s, disconnected",
 		dev->net.name,
 		udev->bus->busnum, udev->devnum,
-		dev->prod_info->name);
+		(char *) dev->prod_info->driver_info);
 	
 	unregister_netdev (&dev->net);
 
@@ -973,24 +973,14 @@ static void net1080_disconnect (struct usb_device *udev, void *ptr)
 
 // precondition: never called in_interrupt
 
-static void *net1080_probe (struct usb_device *udev, unsigned ifnum)
+static void *
+net1080_bind (struct usb_device *udev, unsigned ifnum, const struct usb_device_id *prod)
 {
-	int			i;
 	struct net1080		*dev;
 	struct net_device 	*net;
 	struct usb_interface_descriptor	*interface;
 	int			retval;
 
-	for (i = 0; products [i].idVendor != 0; i++) {
-		if (products [i].idVendor != udev->descriptor.idVendor)
-			continue;
-		if (products [i].idProduct != udev->descriptor.idProduct)
-			continue;
-		break;
-	}
-	if (products [i].idVendor == 0)
-		return 0;
-	
 	// sanity check; expect dedicated interface/devices for now.
 	interface = &udev->actconfig->interface [ifnum].altsetting[0];
 	if (udev->descriptor.bNumConfigurations != 1
@@ -1013,7 +1003,7 @@ static void *net1080_probe (struct usb_device *udev, unsigned ifnum)
 	init_MUTEX_LOCKED (&dev->mutex);
 	usb_inc_dev_use (udev);
 	dev->udev = udev;
-	dev->prod_info = &products [i];
+	dev->prod_info = prod;
 	INIT_LIST_HEAD (&dev->dev_list);
 	skb_queue_head_init (&dev->rxq);
 	skb_queue_head_init (&dev->txq);
@@ -1067,7 +1057,8 @@ static void *net1080_probe (struct usb_device *udev, unsigned ifnum)
 
 static struct usb_driver net1080_driver = {
 	name:		"net1080",
-	probe:		net1080_probe,
+	id_table:	products,
+	bind:		net1080_bind,
 	disconnect:	net1080_disconnect,
 };
 

@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI layer glue code
  *
- * $Id: scsiglue.c,v 1.13 2000/09/28 21:54:30 mdharm Exp $
+ * $Id: scsiglue.c,v 1.15 2000/10/19 18:44:11 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -168,33 +168,29 @@ static int queuecommand( Scsi_Cmnd *srb , void (*done)(Scsi_Cmnd *))
  * Error handling functions
  ***********************************************************************/
 
-/* Command abort
- *
- * Note that this is really only meaningful right now for CBI transport
- * devices which have failed to give us the command completion interrupt
- */
+/* Command abort */
 static int command_abort( Scsi_Cmnd *srb )
 {
 	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
-	wait_queue_head_t *wqh = (wait_queue_head_t *)us->current_urb->context;
 
 	US_DEBUGP("command_abort() called\n");
 
 	/* if we're stuck waiting for an IRQ, simulate it */
-	if (us->ip_wanted) {
+	if (atomic_read(us->ip_wanted)) {
 		US_DEBUGP("-- simulating missing IRQ\n");
 		up(&(us->ip_waitq));
+	}
+
+	/* if the device has been removed, this worked */
+	if (!us->pusb_dev) {
+		US_DEBUGP("-- device removed already\n");
 		return SUCCESS;
 	}
 
 	/* if we have an urb pending, let's wake the control thread up */
 	if (us->current_urb->status == -EINPROGRESS) {
-		/* cancel the URB */
+		/* cancel the URB -- this will automatically wake the thread */
 		usb_unlink_urb(us->current_urb);
-
-		/* wake the control thread up */
-		if (waitqueue_active(wqh))
-			wake_up(wqh);
 
 		/* wait for us to be done */
 		down(&(us->notify));
@@ -225,6 +221,12 @@ static int bus_reset( Scsi_Cmnd *srb )
 
 	/* we use the usb_reset_device() function to handle this for us */
 	US_DEBUGP("bus_reset() called\n");
+
+	/* if the device has been removed, this worked */
+	if (!us->pusb_dev) {
+		US_DEBUGP("-- device removed already\n");
+		return SUCCESS;
+	}
 
 	/* attempt to reset the port */
 	if (usb_reset_device(us->pusb_dev) < 0)

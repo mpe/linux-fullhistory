@@ -341,11 +341,6 @@ architecture-specific values.
 
 		# arch/i386/Makefile
 
-		# only work around strength reduction bug(s) on older gcc versions
-		CFLAGS += $(shell if ! $(CC) -march=i486 -S -o /dev/null \
-			  -xc /dev/null >/dev/null 2>&1; \
-			  then echo "-fno-strength-reduce"; fi)
-
 		# prevent gcc from keeping the stack 16 byte aligned
 		CFLAGS += $(shell if $(CC) -mpreferred-stack-boundary=2 \
 			  -S -o /dev/null -xc /dev/null >/dev/null 2>&1; \
@@ -356,21 +351,15 @@ architecture-specific values.
 		# arch/i386/Makefile
 
 		ifdef CONFIG_M386
-		CFLAGS += $(shell if $(CC) -march=i386 -S -o /dev/null \
-			  -xc /dev/null >/dev/null 2>&1; \
-			  then echo "-march=i386"; else echo "-m386"; fi)
+		CFLAGS += -march=i386
 		endif
 
 		ifdef CONFIG_M486
-		CFLAGS += $(shell if $(CC) -march=i486 -S -o /dev/null \
-			  -xc /dev/null >/dev/null 2>&1; \
-			  then echo "-march=i486"; else echo "-m486"; fi)
+		CFLAGS += -march=i486
 		endif
 
 		ifdef CONFIG_M586
-		CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null \
-			  -xc /dev/null >/dev/null 2>&1; \
-			  then echo "-march=i586"; fi)
+		CFLAGS += -march=i586
 		endif
 
 	Some arch Makefiles redefine the compilation commands in order

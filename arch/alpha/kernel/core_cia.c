@@ -399,7 +399,7 @@ verify_tb_operation(void)
 {
 	static int page[PAGE_SIZE/4]
 		__attribute__((aligned(PAGE_SIZE)))
-		__initlocaldata = { 0 };
+		__initdata = { 0 };
 
 	struct pci_iommu_arena *arena = pci_isa_hose->sg_isa;
 	int ctrl, addr0, tag0, pte0, data0;

@@ -303,6 +303,50 @@ struct usb_string_descriptor {
 
 struct usb_device;
 
+/*
+ * Device table entry for "new style" table-driven USB drivers.
+ * User mode code can read these tables to choose which modules to load.
+ * Declare the table as __devinitdata, and as a MODULE_DEVICE_TABLE.
+ *
+ * With a device table provide bind() instead of probe().  Then the
+ * third bind() parameter will point to a matching entry from this
+ * table.  (Null value reserved.)
+ * 
+ * Terminate the driver's table with an all-zeroes entry.
+ * Init the fields you care about; zeroes are not used in comparisons.
+ */
+struct usb_device_id {
+	/*
+	 * vendor/product codes are checked, if vendor is nonzero
+	 * Range is for device revision (bcdDevice), inclusive;
+	 * zero values here mean range isn't considered
+	 */
+	__u16		idVendor;
+	__u16		idProduct;
+	__u16		bcdDevice_lo, bcdDevice_hi;
+
+	/*
+	 * if device class != 0, these can be match criteria;
+	 * but only if this bDeviceClass value is nonzero
+	 */
+	__u8		bDeviceClass;
+	__u8		bDeviceSubClass;
+	__u8		bDeviceProtocol;
+
+	/*
+	 * if interface class != 0, these can be match criteria;
+	 * but only if this bInterfaceClass value is nonzero
+	 */
+	__u8		bInterfaceClass;
+	__u8		bInterfaceSubClass;
+	__u8		bInterfaceProtocol;
+
+	/*
+	 * for driver's use; not involved in driver matching.
+	 */
+	unsigned long	driver_info;
+};
+
 struct usb_driver {
 	const char *name;
 
@@ -316,27 +360,25 @@ struct usb_driver {
 
 	struct semaphore serialize;
 
+	/* ioctl -- userspace apps can talk to drivers through usbdevfs */
 	int (*ioctl)(struct usb_device *dev, unsigned int code, void *buf);
+
+	/* support for "new-style" USB hotplugging
+	 * binding policy can be driven from user mode too
+	 */
+	const struct usb_device_id *id_table;
+	void *(*bind)(
+	    struct usb_device *dev,		/* the device */
+	    unsigned intf,			/* what interface */
+	    const struct usb_device_id *id	/* from id_table */
+	    );
+
+	/* suspend before the bus suspends;
+	 * disconnect or resume when the bus resumes */
+	// void (*suspend)(struct usb_device *dev);
+	// void (*resume)(struct usb_device *dev);
 };
-
-/*
- * Pointer to a device endpoint interrupt function -greg
- *   Parameters:
- *     int status - This needs to be defined.  Right now each HCD
- *         passes different transfer status bits back.  Don't use it
- *         until we come up with a common meaning.
- *     void *buffer - This is a pointer to the data used in this
- *         USB transfer.
- *     int length - This is the number of bytes transferred in or out
- *         of the buffer by this transfer.  (-1 = unknown/unsupported)
- *     void *dev_id - This is a user defined pointer set when the IRQ
- *         is requested that is passed back.
- *
- *   Special Cases:
- *     if (status == USB_ST_REMOVED), don't trust buffer or len.
- */
-typedef int (*usb_device_irq)(int, void *, int, void *);
-
+	
 /*----------------------------------------------------------------------------* 
  * New USB Structures                                                         *
  *----------------------------------------------------------------------------*/
@@ -459,21 +501,16 @@ int usb_internal_control_msg(struct usb_device *usb_dev, unsigned int pipe, devr
 int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int *actual_length, int timeout);
 
 /*-------------------------------------------------------------------*
- *                         COMPATIBILITY STUFF                       *
+ *                         SYNCHRONOUS CALL SUPPORT                  *
  *-------------------------------------------------------------------*/
+
 typedef struct
 {
   wait_queue_head_t *wakeup;
 
-  usb_device_irq handler;
   void* stuff;
   /* more to follow */
 } api_wrapper_data;
-
-struct irq_wrapper_data {
-	void *context;
-	usb_device_irq handler;
-};
 
 /* -------------------------------------------------------------------------- */
 

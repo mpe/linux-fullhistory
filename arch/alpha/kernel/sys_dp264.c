@@ -393,7 +393,7 @@ clipper_init_irq(void)
 static int __init
 dp264_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
-	static char irq_tab[6][5] __initlocaldata = {
+	static char irq_tab[6][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{    -1,    -1,    -1,    -1,    -1}, /* IdSel 5 ISA Bridge */
 		{ 16+ 3, 16+ 3, 16+ 2, 16+ 2, 16+ 2}, /* IdSel 6 SCSI builtin*/
@@ -427,7 +427,7 @@ dp264_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 static int __init
 monet_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
-	static char irq_tab[13][5] __initlocaldata = {
+	static char irq_tab[13][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{    45,    45,    45,    45,    45}, /* IdSel 3 21143 PCI1 */
 		{    -1,    -1,    -1,    -1,    -1}, /* IdSel 4 unused */
@@ -488,7 +488,7 @@ monet_swizzle(struct pci_dev *dev, u8 *pinp)
 static int __init
 webbrick_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
-	static char irq_tab[13][5] __initlocaldata = {
+	static char irq_tab[13][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{    -1,    -1,    -1,    -1,    -1}, /* IdSel 7 ISA Bridge */
 		{    -1,    -1,    -1,    -1,    -1}, /* IdSel 8 unused */
@@ -509,7 +509,7 @@ webbrick_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 static int __init
 clipper_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
-	static char irq_tab[7][5] __initlocaldata = {
+	static char irq_tab[7][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{ 16+ 8, 16+ 8, 16+ 9, 16+10, 16+11}, /* IdSel 1 slot 1 */
 		{ 16+12, 16+12, 16+13, 16+14, 16+15}, /* IdSel 2 slot 2 */

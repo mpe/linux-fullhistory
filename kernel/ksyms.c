@@ -246,7 +246,6 @@ EXPORT_SYMBOL(generic_read_dir);
 EXPORT_SYMBOL(__pollwait);
 EXPORT_SYMBOL(poll_freewait);
 EXPORT_SYMBOL(ROOT_DEV);
-EXPORT_SYMBOL(__find_get_page);
 EXPORT_SYMBOL(__find_lock_page);
 EXPORT_SYMBOL(grab_cache_page);
 EXPORT_SYMBOL(read_cache_page);

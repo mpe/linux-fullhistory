@@ -33,7 +33,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/netlink.h>
-#include <net/divert.h>
+#include <linux/divert.h>
 
 #define	NEXT_DEV	NULL
 

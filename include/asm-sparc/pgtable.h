@@ -88,18 +88,9 @@ BTFIXUPDEF_SIMM13(user_ptrs_per_pgd)
 
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
 
-#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
 #define pte_ERROR(e)   __builtin_trap()
 #define pmd_ERROR(e)   __builtin_trap()
 #define pgd_ERROR(e)   __builtin_trap()
-#else
-#define pte_ERROR(e) \
-	printk("%s:%d: bad pte %08lx.\n", __FILE__, __LINE__, pte_val(e))
-#define pmd_ERROR(e) \
-	printk("%s:%d: bad pmd %08lx.\n", __FILE__, __LINE__, pmd_val(e))
-#define pgd_ERROR(e) \
-	printk("%s:%d: bad pgd %08lx.\n", __FILE__, __LINE__, pgd_val(e))
-#endif
 
 BTFIXUPDEF_INT(page_none)
 BTFIXUPDEF_INT(page_shared)

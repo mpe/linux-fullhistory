@@ -15,8 +15,6 @@
 	__arginit __init; \
 	__arginit
 
-#define __initlocaldata  __initdata
-
 /* For assembly routines */
 #define __INIT		.section	.text.init,"ax"
 #define __FINIT		.previous

@@ -23,62 +23,59 @@ LINKFLAGS =-T $(TOPDIR)/arch/i386/vmlinux.lds $(LDFLAGS)
 
 CFLAGS += -pipe
 
-# only work around strength reduction bug(s) on older gcc versions
-CFLAGS += $(shell if ! $(CC) -march=i486 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strength-reduce"; fi)
-
 # prevent gcc from keeping the stack 16 byte aligned
 CFLAGS += $(shell if $(CC) -mpreferred-stack-boundary=2 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-mpreferred-stack-boundary=2"; fi)
 
 ifdef CONFIG_M386
-CFLAGS += $(shell if $(CC) -march=i386 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i386"; else echo "-m386"; fi)
+CFLAGS += -march=i386
 endif
 
 ifdef CONFIG_M486
-CFLAGS += $(shell if $(CC) -march=i486 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i486"; else echo "-m486"; fi)
+CFLAGS += -march=i486
 endif
 
 ifdef CONFIG_M586
-CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i586"; fi)
+CFLAGS += -march=i586
 endif
 
 ifdef CONFIG_M586TSC
-CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i586"; fi)
+CFLAGS += -march=i586
 endif
 
 ifdef CONFIG_M586MMX
-CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i586"; fi)
+CFLAGS += -march=i586
 endif
 
 ifdef CONFIG_M686
-CFLAGS += $(shell if $(CC) -march=i686 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i686"; fi)
+CFLAGS += -march=i686
 endif
 
 ifdef CONFIG_M686FXSR
-CFLAGS += $(shell if $(CC) -march=i686 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i686"; fi)
+CFLAGS += -march=i686
 endif
 
 ifdef CONFIG_MK6
-CFLAGS += $(shell if $(CC) -march=k6 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=k6"; fi)
+CFLAGS += $(shell if $(CC) -march=k6 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=k6"; else echo "-march=i586"; fi)
 endif
 
 ifdef CONFIG_MK7
-CFLAGS += $(shell if $(CC) -march=athlon -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=athlon"; else  if $(CC) -march=i686 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i686 -malign-functions=4";  fi fi) 
+CFLAGS += $(shell if $(CC) -march=athlon -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=athlon"; else echo "-march=i686 -malign-functions=4"; fi) 
 endif
 
 ifdef CONFIG_MCRUSOE
-CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i586"; fi)
+CFLAGS += -march=i586
 endif
 
 ifdef CONFIG_MWINCHIPC6
-CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i586"; fi)
+CFLAGS += -march=i586
 endif
 
 ifdef CONFIG_MWINCHIP2
-CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i586"; fi)
+CFLAGS += -march=i586
 endif
 
 ifdef CONFIG_MWINCHIP3D
-CFLAGS += $(shell if $(CC) -march=i586 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i586"; fi)
+CFLAGS += -march=i586
 endif
 
 HEAD := arch/i386/kernel/head.o arch/i386/kernel/init_task.o

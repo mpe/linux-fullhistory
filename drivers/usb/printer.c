@@ -190,6 +190,8 @@ static int usblp_open(struct inode *inode, struct file *file)
 		retval = retval > 1 ? -EIO : -ENOSPC;
 		goto out;
 	}
+#else
+	retval = 0;	
 #endif
 
 	usblp->used = 1;
@@ -383,6 +385,7 @@ static ssize_t usblp_read(struct file *file, char *buffer, size_t count, loff_t 
 		return -EFAULT;
 
 	if ((usblp->readcount += count) == usblp->readurb.actual_length) {
+		usblp->readcount = 0;
 		usblp->readurb.dev = usblp->dev;
 		usb_submit_urb(&usblp->readurb);
 	}

@@ -35,7 +35,7 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/checksum.h>
-#include <net/divert.h>
+#include <linux/divert.h>
 #include <linux/sockios.h>
 
 const char sysctl_divert_version[32]="0.46";	/* Current version */

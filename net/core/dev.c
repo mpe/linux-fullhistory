@@ -87,7 +87,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/if_bridge.h>
-#include <net/divert.h>
+#include <linux/divert.h>
 #include <net/dst.h>
 #include <net/pkt_sched.h>
 #include <net/profile.h>
@@ -1158,14 +1158,16 @@ drop:
 /* Deliver skb to an old protocol, which is not threaded well
    or which do not understand shared skbs.
  */
-static void deliver_to_old_ones(struct packet_type *pt, struct sk_buff *skb, int last)
+static int deliver_to_old_ones(struct packet_type *pt, struct sk_buff *skb, int last)
 {
 	static spinlock_t net_bh_lock = SPIN_LOCK_UNLOCKED;
+	int ret = NET_RX_DROP;
+
 
 	if (!last) {
 		skb = skb_clone(skb, GFP_ATOMIC);
 		if (skb == NULL)
-			return;
+			return ret;
 	}
 
 	/* The assumption (correct one) is that old protocols
@@ -1178,10 +1180,11 @@ static void deliver_to_old_ones(struct packet_type *pt, struct sk_buff *skb, int
 	/* Disable timers and wait for all timers completion */
 	tasklet_disable(bh_task_vec+TIMER_BH);
 
-	pt->func(skb, skb->dev, pt);
+	ret = pt->func(skb, skb->dev, pt);
 
 	tasklet_enable(bh_task_vec+TIMER_BH);
 	spin_unlock(&net_bh_lock);
+	return ret;
 }
 
 /* Reparent skb to master device. This function is called
@@ -1264,19 +1267,22 @@ void net_call_rx_atomic(void (*fn)(void))
 void (*br_handle_frame_hook)(struct sk_buff *skb) = NULL;
 #endif
 
-static void __inline__ handle_bridge(struct sk_buff *skb,
+static int __inline__ handle_bridge(struct sk_buff *skb,
 				     struct packet_type *pt_prev)
 {
+	int ret = NET_RX_DROP;
+
 	if (pt_prev) {
 		if (!pt_prev->data)
-			deliver_to_old_ones(pt_prev, skb, 0);
+			ret = deliver_to_old_ones(pt_prev, skb, 0);
 		else {
 			atomic_inc(&skb->users);
-			pt_prev->func(skb, skb->dev, pt_prev);
+			ret = pt_prev->func(skb, skb->dev, pt_prev);
 		}
 	}
 
 	br_handle_frame_hook(skb);
+	return ret;
 }
 
 

@@ -31,10 +31,9 @@
  * static int init_variable __initdata = 0;
  * static char linux_logo[] __initdata = { 0x32, 0x36, ... };
  *
- * For initialized data not at file scope, i.e. within a function,
- * you should use __initlocaldata instead, due to a bug in GCC 2.7.
- * Don't forget to initialize the data, as gcc otherwise puts the
- * data into the bss section and not into the init section.
+ * Don't forget to initialize data not at file scope, i.e. within a function,
+ * as gcc otherwise puts the data into the bss section and not into the init
+ * section.
  */
 
 #ifndef MODULE
@@ -121,8 +120,6 @@ typedef void (*__cleanup_module_func_t)(void);
 #define __setup(str,func) /* nothing */
 
 #endif
-
-#define __initlocaldata  __initdata
 
 #ifdef CONFIG_HOTPLUG
 #define __devinit

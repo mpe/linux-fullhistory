@@ -141,7 +141,7 @@ For such memory, you can do things like
 	 * read first 32 bits from ISA memory at 0xC0000, aka
 	 * C000:0000 in DOS terms
 	 */
-	unsigned int signature = readl(0xC0000);
+	unsigned int signature = isa_readl(0xC0000);
 
  - remapping and writing:
 	/*

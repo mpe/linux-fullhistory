@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.49 2000/08/21 20:41:55 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.50 2000/10/24 22:54:26 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -341,7 +341,7 @@ static inline int ip_rcv_finish(struct sk_buff *skb)
 
 		skb = skb_cow(skb, skb_headroom(skb));
 		if (skb == NULL)
-			return 0;
+			return NET_RX_DROP;
 		iph = skb->nh.iph;
 
 		skb->ip_summed = 0;
@@ -372,7 +372,7 @@ inhdr_error:
 	IP_INC_STATS_BH(IpInHdrErrors);
 drop:
         kfree_skb(skb);
-        return(0);
+        return NET_RX_DROP;
 }
 
 /*
@@ -429,6 +429,6 @@ inhdr_error:
 drop:
         kfree_skb(skb);
 out:
-        return(0);
+        return NET_RX_DROP;
 }
 

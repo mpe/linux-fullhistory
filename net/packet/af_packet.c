@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.45 2000/10/19 01:05:35 davem Exp $
+ * Version:	$Id: af_packet.c,v 1.46 2000/10/24 21:26:19 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -69,7 +69,7 @@
 #include <linux/if_bridge.h>
 
 #ifdef CONFIG_NET_DIVERT
-#include <net/divert.h>
+#include <linux/divert.h>
 #endif /* CONFIG_NET_DIVERT */
 
 #ifdef CONFIG_INET

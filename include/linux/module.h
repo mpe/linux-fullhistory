@@ -207,6 +207,7 @@ __attribute__((section(".modinfo"))) =		\
  * and the C types which are to be passed as arg 2.
  * pci - struct pci_device_id - List of PCI ids supported by this module
  * isapnp - struct isapnp_device_id - List of ISA PnP ids supported by this module
+ * usb - struct usb_device_id - List of USB ids supported by this module
  */
 #define MODULE_GENERIC_TABLE(gtype,name)	\
 static const unsigned long __module_##gtype##_size \

@@ -119,7 +119,7 @@ ruffian_get_bank_size(unsigned long offset)
     
 	/* Check BANK_ENABLE */
 	if (bank & 0x01) {
-		static unsigned long size[] __initlocaldata = {
+		static unsigned long size[] __initdata = {
 			0x40000000UL, /* 0x00,   1G */ 
 			0x20000000UL, /* 0x02, 512M */
 			0x10000000UL, /* 0x04, 256M */

@@ -201,7 +201,7 @@ alcor_init_irq(void)
 static int __init
 alcor_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
-	static char irq_tab[7][5] __initlocaldata = {
+	static char irq_tab[7][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		/* note: IDSEL 17 is XLT only */
 		{16+13, 16+13, 16+13, 16+13, 16+13},	/* IdSel 17,  TULIP  */

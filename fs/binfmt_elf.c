@@ -33,6 +33,7 @@
 #include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
+#include <asm/param.h>
 #include <asm/pgalloc.h>
 
 #define DLINFO_ITEMS 13
@@ -159,23 +160,24 @@ create_elf_tables(char *p, int argc, int envc,
 		sp -= 2;
 		NEW_AUX_ENT(0, AT_PLATFORM, (elf_addr_t)(unsigned long) u_platform);
 	}
-	sp -= 2;
+	sp -= 3*2;
 	NEW_AUX_ENT(0, AT_HWCAP, hwcap);
+	NEW_AUX_ENT(1, AT_PAGESZ, ELF_EXEC_PAGESIZE);
+	NEW_AUX_ENT(2, AT_CLKTCK, CLOCKS_PER_SEC);
 
 	if (exec) {
-		sp -= 11*2;
+		sp -= 10*2;
 
 		NEW_AUX_ENT(0, AT_PHDR, load_addr + exec->e_phoff);
 		NEW_AUX_ENT(1, AT_PHENT, sizeof (struct elf_phdr));
 		NEW_AUX_ENT(2, AT_PHNUM, exec->e_phnum);
-		NEW_AUX_ENT(3, AT_PAGESZ, ELF_EXEC_PAGESIZE);
-		NEW_AUX_ENT(4, AT_BASE, interp_load_addr);
-		NEW_AUX_ENT(5, AT_FLAGS, 0);
-		NEW_AUX_ENT(6, AT_ENTRY, load_bias + exec->e_entry);
-		NEW_AUX_ENT(7, AT_UID, (elf_addr_t) current->uid);
-		NEW_AUX_ENT(8, AT_EUID, (elf_addr_t) current->euid);
-		NEW_AUX_ENT(9, AT_GID, (elf_addr_t) current->gid);
-		NEW_AUX_ENT(10, AT_EGID, (elf_addr_t) current->egid);
+		NEW_AUX_ENT(3, AT_BASE, interp_load_addr);
+		NEW_AUX_ENT(4, AT_FLAGS, 0);
+		NEW_AUX_ENT(5, AT_ENTRY, load_bias + exec->e_entry);
+		NEW_AUX_ENT(6, AT_UID, (elf_addr_t) current->uid);
+		NEW_AUX_ENT(7, AT_EUID, (elf_addr_t) current->euid);
+		NEW_AUX_ENT(8, AT_GID, (elf_addr_t) current->gid);
+		NEW_AUX_ENT(9, AT_EGID, (elf_addr_t) current->egid);
 	}
 #undef NEW_AUX_ENT
 

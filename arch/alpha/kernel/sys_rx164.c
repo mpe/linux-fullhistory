@@ -164,7 +164,7 @@ static int __init
 rx164_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 #if 0
-	static char irq_tab_pass1[6][5] __initlocaldata = {
+	static char irq_tab_pass1[6][5] __initdata = {
 	  /*INT   INTA  INTB  INTC   INTD */
 	  { 16+3, 16+3, 16+8, 16+13, 16+18},      /* IdSel 5,  slot 2 */
 	  { 16+5, 16+5, 16+10, 16+15, 16+20},     /* IdSel 6,  slot 0 */
@@ -174,7 +174,7 @@ rx164_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 	  { 16+1, 16+1, 16+6, 16+11, 16+16},      /* IdSel 10, slot 4 */
 	};
 #else
-	static char irq_tab[6][5] __initlocaldata = {
+	static char irq_tab[6][5] __initdata = {
 	  /*INT   INTA  INTB  INTC   INTD */
 	  { 16+0, 16+0, 16+6, 16+11, 16+16},      /* IdSel 5,  slot 0 */
 	  { 16+1, 16+1, 16+7, 16+12, 16+17},      /* IdSel 6,  slot 1 */

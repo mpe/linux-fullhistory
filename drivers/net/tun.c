@@ -12,7 +12,7 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
- *  $Id: tun.c,v 1.2 2000/09/22 12:40:31 maxk Exp $
+ *  $Id: tun.c,v 1.3 2000/10/23 10:01:25 maxk Exp $
  */
 
 /*
@@ -20,7 +20,7 @@
  *    Modifications for 2.3.99-pre5 kernel.
  */
 
-#define TUN_VER "1.2"
+#define TUN_VER "1.3"
 
 #include <linux/module.h>
 
@@ -46,7 +46,6 @@
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
-
 
 #ifdef TUN_DEBUG
 static int debug=0;
@@ -88,12 +87,6 @@ static int tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct tun_struct *tun = (struct tun_struct *)dev->priv;
 
 	DBG(KERN_INFO "%s: tun_net_xmit %d\n", tun->name, skb->len);
-
-
-	if (netif_queue_stopped(dev))
-		return 1;
-
-	tun->stats.tx_packets++;
 
 	/* Queue frame */
 	skb_queue_tail(&tun->txq, skb);
@@ -233,6 +226,8 @@ static __inline__ ssize_t tun_get_user(struct tun_struct *tun, const char *buf, 
 	netif_rx(skb);
    
 	tun->stats.rx_packets++;
+	tun->stats.rx_bytes += len;
+
 	return count;
 } 
 
@@ -280,6 +275,9 @@ static __inline__ ssize_t tun_put_user(struct tun_struct *tun,
 	len = MIN(skb->len, len); 
 	copy_to_user(ptr, skb->data, len); 
 	total += len;
+
+	tun->stats.tx_packets++;
+	tun->stats.tx_bytes += len;
 
 	return total;
 }

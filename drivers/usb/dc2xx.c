@@ -65,7 +65,7 @@
 
 
 /* current USB framework handles max of 16 USB devices per driver */
-#define	MAX_CAMERAS		8
+#define	MAX_CAMERAS		16
 
 /* USB char devs use USB_MAJOR and from USB_CAMERA_MINOR_BASE up */
 #define	USB_CAMERA_MINOR_BASE	80
@@ -82,38 +82,40 @@
 
 
 /* table of cameras that work through this driver */
-static const struct camera {
-	unsigned short	idVendor;
-	unsigned short	idProduct;
-	/* plus hooks for camera-specific info if needed */
-} cameras [] = {
+static __devinitdata struct usb_device_id camera_table [] = {
+
 	/* These have the same application level protocol */  
-    { 0x040a, 0x0120 },		// Kodak DC-240
-    { 0x040a, 0x0130 },		// Kodak DC-280
-    { 0x040a, 0x0132 },		// Kodak DC-3400
+    { idVendor: 0x040a, idProduct: 0x0120 },		// Kodak DC-240
+    { idVendor: 0x040a, idProduct: 0x0130 },		// Kodak DC-280
+    { idVendor: 0x040a, idProduct: 0x0132 },		// Kodak DC-3400
+    // { idVendor: 0x040a, idProduct: 0xXXXX },		// Kodak DC-5000
 
 	/* These have a different application level protocol which
 	 * is part of the Flashpoint "DigitaOS".  That supports some
 	 * non-camera devices, and some non-Kodak cameras.
 	 */  
-    { 0x040a, 0x0100 },		// Kodak DC-220
-    { 0x040a, 0x0110 },		// Kodak DC-260
-    { 0x040a, 0x0111 },		// Kodak DC-265
-    { 0x040a, 0x0112 },		// Kodak DC-290
-    { 0xf003, 0x6002 },		// HP PhotoSmart C500
+    { idVendor: 0x040a, idProduct: 0x0100 },		// Kodak DC-220
+    { idVendor: 0x040a, idProduct: 0x0110 },		// Kodak DC-260
+    { idVendor: 0x040a, idProduct: 0x0111 },		// Kodak DC-265
+    { idVendor: 0x040a, idProduct: 0x0112 },		// Kodak DC-290
+    { idVendor: 0xf003, idProduct: 0x6002 },		// HP PhotoSmart C500
 
 	/* Other USB devices may well work here too, so long as they
 	 * just stick to half duplex bulk packet exchanges.  That
 	 * means, among other things, no iso or interrupt endpoints.
 	 */
+
+    { }						// TERMINATING ENTRY
 };
+
+MODULE_DEVICE_TABLE (usb, camera_table);
 
 
 struct camera_state {
 	struct usb_device	*dev;		/* USB device handle */
 	int			inEP;		/* read endpoint */
 	int			outEP;		/* write endpoint */
-	const struct camera	*info;		/* DC-240, etc */
+	const struct usb_device_id	*info;		/* DC-240, etc */
 	int			subminor;	/* which minor dev #? */
 	struct semaphore	sem;		/* locks this struct */
 
@@ -343,26 +345,14 @@ static /* const */ struct file_operations usb_camera_fops = {
 
 
 
-static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
+static void * __devinit
+camera_bind (struct usb_device *dev, unsigned int ifnum, const struct usb_device_id *camera_info)
 {
 	int				i;
-	const struct camera		*camera_info = NULL;
 	struct usb_interface_descriptor	*interface;
 	struct usb_endpoint_descriptor	*endpoint;
 	int				direction, ep;
 	struct camera_state		*camera = NULL;
-
-	/* Is it a supported camera? */
-	for (i = 0; i < sizeof (cameras) / sizeof (struct camera); i++) {
-		if (cameras [i].idVendor != dev->descriptor.idVendor)
-			continue;
-		if (cameras [i].idProduct != dev->descriptor.idProduct)
-			continue;
-		camera_info = &cameras [i];
-		break;
-	}
-	if (camera_info == NULL)
-		return NULL;
 
 	/* these have one config, one interface */
 	if (dev->descriptor.bNumConfigurations != 1
@@ -437,7 +427,8 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 		goto error;
 	}
 
-	info ("USB Camera #%d connected", camera->subminor);
+	info ("USB Camera #%d connected, major/minor %d/%d", camera->subminor,
+		USB_MAJOR, USB_CAMERA_MINOR_BASE + camera->subminor);
 
 	camera->dev = dev;
 	usb_inc_dev_use (dev);
@@ -452,7 +443,7 @@ bye:
 	return camera;
 }
 
-static void camera_disconnect(struct usb_device *dev, void *ptr)
+static void __devexit camera_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct camera_state	*camera = (struct camera_state *) ptr;
 	int			subminor = camera->subminor;
@@ -477,12 +468,14 @@ static void camera_disconnect(struct usb_device *dev, void *ptr)
 }
 
 static /* const */ struct usb_driver camera_driver = {
-	"dc2xx",
-	camera_probe,
-	camera_disconnect,
-	{ NULL, NULL },
-	&usb_camera_fops,
-	USB_CAMERA_MINOR_BASE
+	name:		"dc2xx",
+
+	id_table:	camera_table,
+	bind:		camera_bind,
+	disconnect:	camera_disconnect,
+
+	fops:		&usb_camera_fops,
+	minor:		USB_CAMERA_MINOR_BASE
 };
 
 

@@ -1907,12 +1907,13 @@ static unsigned long fbcon_getxy(struct vc_data *conp, unsigned long pos, int *p
     	    y += softback_lines;
     	ret = pos + (conp->vc_cols - x) * 2;
     } else if (conp->vc_num == fg_console && softback_lines) {
-    	unsigned long offset = (pos - softback_curr) / 2;
+    	unsigned long offset = pos - softback_curr;
     	
+    	if (pos < softback_curr)
+    	    offset += softback_end - softback_buf;
+    	offset /= 2;
     	x = offset % conp->vc_cols;
     	y = offset / conp->vc_cols;
-    	if (pos < softback_curr)
-	    y += (softback_end - softback_buf) / conp->vc_size_row;
 	ret = pos + (conp->vc_cols - x) * 2;
 	if (ret == softback_end)
 	    ret = softback_buf;

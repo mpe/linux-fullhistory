@@ -205,7 +205,7 @@ noritake_init_irq(void)
 static int __init
 noritake_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
-	static char irq_tab[15][5] __initlocaldata = {
+	static char irq_tab[15][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		/* note: IDSELs 16, 17, and 25 are CORELLE only */
 		{ 16+1,  16+1,  16+1,  16+1,  16+1},  /* IdSel 16,  QLOGIC */

@@ -183,24 +183,24 @@ static struct ip_tunnel **ipip_bucket(struct ip_tunnel *t)
 
 static void ipip_tunnel_unlink(struct ip_tunnel *t)
 {
-	struct ip_tunnel **tp = ipip_bucket(t);
+	struct ip_tunnel **tp;
 
-	write_lock_bh(&ipip_lock);
-	for ( ; *tp; tp = &(*tp)->next) {
+	for (tp = ipip_bucket(t); *tp; tp = &(*tp)->next) {
 		if (t == *tp) {
+			write_lock_bh(&ipip_lock);
 			*tp = t->next;
+			write_unlock_bh(&ipip_lock);
 			break;
 		}
 	}
-	write_unlock_bh(&ipip_lock);
 }
 
 static void ipip_tunnel_link(struct ip_tunnel *t)
 {
 	struct ip_tunnel **tp = ipip_bucket(t);
 
-	write_lock_bh(&ipip_lock);
 	t->next = *tp;
+	write_lock_bh(&ipip_lock);
 	*tp = t;
 	write_unlock_bh(&ipip_lock);
 }

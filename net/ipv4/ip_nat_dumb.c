@@ -5,7 +5,7 @@
  *
  *		Dumb Network Address Translation.
  *
- * Version:	$Id: ip_nat_dumb.c,v 1.9 1999/08/20 11:05:46 davem Exp $
+ * Version:	$Id: ip_nat_dumb.c,v 1.10 2000/10/24 22:54:26 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -152,8 +152,9 @@ ip_do_nat(struct sk_buff *skb)
 			break;
 		}
 	}
-	return 0;
+	return NET_RX_SUCCESS;
 
 truncated:
+	/* should be return NET_RX_BAD; */
 	return -EINVAL;
 }

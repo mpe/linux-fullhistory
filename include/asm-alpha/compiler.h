@@ -9,11 +9,7 @@
  * these tests and macros.
  */
 
-/*
- * EGCS (of varying versions) does a good job of using insxl and extxl.
- */
-
-#if 0 && (__GNUC__ > 2 || __GNUC_MINOR__ >= 91)
+#if 0
 #define __kernel_insbl(val, shift) \
   (((unsigned long)(val) & 0xfful) << ((shift) * 8))
 #define __kernel_inswl(val, shift) \

@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.54 2000/10/18 18:04:23 davem Exp $
+ * Version:	$Id: raw.c,v 1.55 2000/10/24 22:54:26 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -227,11 +227,11 @@ static int raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
 	{
 		IP_INC_STATS(IpInDiscards);
 		kfree_skb(skb);
-		return -1;
+		return NET_RX_DROP;
 	}
 
 	IP_INC_STATS(IpInDelivers);
-	return 0;
+	return NET_RX_SUCCESS;
 }
 
 /*

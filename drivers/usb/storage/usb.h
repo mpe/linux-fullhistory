@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Main Header File
  *
- * $Id: usb.h,v 1.9 2000/09/25 23:25:12 mdharm Exp $
+ * $Id: usb.h,v 1.10 2000/10/19 18:44:11 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -160,7 +160,7 @@ struct us_data {
 
 	/* interrupt info for CBI devices -- only good if attached */
 	struct semaphore	ip_waitq;	 /* for CBI interrupts	 */
-	int			ip_wanted;	 /* is an IRQ expected?	 */
+	atomic_t		ip_wanted[1];	 /* is an IRQ expected?	 */
 
 	/* interrupt communications data */
 	struct semaphore	irq_urb_sem;	 /* to protect irq_urb	 */

@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.120 2000/10/22 16:06:56 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.121 2000/10/24 21:26:18 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -108,7 +108,7 @@
 #include <linux/kmod.h>
 #endif
 #ifdef CONFIG_NET_DIVERT
-#include <net/divert.h>
+#include <linux/divert.h>
 #endif /* CONFIG_NET_DIVERT */
 #if defined(CONFIG_NET_RADIO) || defined(CONFIG_NET_PCMCIA_RADIO)
 #include <linux/wireless.h>		/* Note : will define WIRELESS_EXT */

@@ -5,7 +5,7 @@
  *
  *		The IP forwarding functionality.
  *		
- * Version:	$Id: ip_forward.c,v 1.46 2000/01/09 02:19:37 davem Exp $
+ * Version:	$Id: ip_forward.c,v 1.47 2000/10/24 22:54:26 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -63,13 +63,11 @@ static inline int ip_forward_finish(struct sk_buff *skb)
 			dst_release(old_dst);
 		}
 #endif
-		ip_send(skb);
-		return 0;
+		return (ip_send(skb));
 	}
 
 	ip_forward_options(skb);
-	ip_send(skb);
-	return 0;
+	return (ip_send(skb));
 }
 
 int ip_forward(struct sk_buff *skb)
@@ -81,7 +79,7 @@ int ip_forward(struct sk_buff *skb)
 	unsigned short mtu;
 
 	if (IPCB(skb)->opt.router_alert && ip_call_ra_chain(skb))
-		return 0;
+		return NET_RX_SUCCESS;
 
 	if (skb->pkt_type != PACKET_HOST)
 		goto drop;
@@ -119,7 +117,7 @@ int ip_forward(struct sk_buff *skb)
 
 	/* We are about to mangle packet. Copy it! */
 	if ((skb = skb_cow(skb, dev2->hard_header_len)) == NULL)
-		return -1;
+		return NET_RX_DROP;
 	iph = skb->nh.iph;
 	opt = &(IPCB(skb)->opt);
 
@@ -138,7 +136,7 @@ int ip_forward(struct sk_buff *skb)
 	if (rt->rt_flags & RTCF_NAT) {
 		if (ip_do_nat(skb)) {
 			kfree_skb(skb);
-			return -1;
+			return NET_RX_BAD;
 		}
 	}
 #endif
@@ -163,5 +161,5 @@ too_many_hops:
         icmp_send(skb, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
 drop:
 	kfree_skb(skb);
-	return -1;
+	return NET_RX_DROP;
 }

@@ -47,7 +47,6 @@
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
-#include <linux/init.h>
 #include <linux/if_arp.h>
 #include <linux/net.h>
 #include <linux/irda.h>

@@ -87,7 +87,7 @@ export MODLIB
 
 CPPFLAGS := -D__KERNEL__ -I$(HPATH)
 
-CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
+CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strict-aliasing
 AFLAGS := -D__ASSEMBLY__ $(CPPFLAGS)
 
 #
@@ -181,9 +181,6 @@ DRIVERS-$(CONFIG_MD) += drivers/md/mddev.o
 DRIVERS += $(DRIVERS-y)
 
 include arch/$(ARCH)/Makefile
-
-# use '-fno-strict-aliasing', but only if the compiler can take it
-CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)
 
 export	CPPFLAGS CFLAGS AFLAGS
 
@@ -291,7 +288,7 @@ TAGS: dummy
 
 # Exuberant ctags works better with -I
 tags: dummy
-	CTAGSF=`ctags --version | grep -i exuberant >/dev/null && echo "-I __initdata,__initlocaldata,__exitdata,EXPORT_SYMBOL,EXPORT_SYMBOL_NOVERS"`; \
+	CTAGSF=`ctags --version | grep -i exuberant >/dev/null && echo "-I __initdata,__exitdata,EXPORT_SYMBOL,EXPORT_SYMBOL_NOVERS"`; \
 	ctags $$CTAGSF `find include/asm-$(ARCH) -name '*.h'` && \
 	find include -type d \( -name "asm-*" -o -name config \) -prune -o -name '*.h' -print | xargs ctags $$CTAGSF -a && \
 	find $(SUBDIRS) init -name '*.c' | xargs ctags $$CTAGSF -a

@@ -174,6 +174,7 @@ void deactivate_page_nolock(struct page * page)
 	 */
 	int maxcount = (page->buffers ? 3 : 2);
 	page->age = 0;
+	ClearPageReferenced(page);
 
 	/*
 	 * Don't touch it if it's not on the active list.

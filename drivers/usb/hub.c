@@ -142,6 +142,7 @@ static int usb_hub_configure(struct usb_hub *hub, struct usb_endpoint_descriptor
 		 * the hub can/will return fewer bytes here. */
 	if (ret < 0) {
 		err("Unable to get hub descriptor (err = %d)", ret);
+		kfree(hub->descriptor);
 		return -1;
 	}
 
@@ -191,6 +192,7 @@ static int usb_hub_configure(struct usb_hub *hub, struct usb_endpoint_descriptor
 	ret = usb_get_hub_status(dev, &hubstatus);
 	if (ret < 0) {
 		err("Unable to get hub status (err = %d)", ret);
+		kfree(hub->descriptor);
 		return -1;
 	}
 
@@ -212,6 +214,7 @@ static int usb_hub_configure(struct usb_hub *hub, struct usb_endpoint_descriptor
 	hub->urb = usb_alloc_urb(0);
 	if (!hub->urb) {
 		err("couldn't allocate interrupt urb");
+		kfree(hub->descriptor);
 		return -1;
 	}
 
@@ -220,6 +223,7 @@ static int usb_hub_configure(struct usb_hub *hub, struct usb_endpoint_descriptor
 	ret = usb_submit_urb(hub->urb);
 	if (ret) {
 		err("usb_submit_urb failed (%d)", ret);
+		kfree(hub->descriptor);
 		return -1;
 	}
 		
@@ -247,24 +251,32 @@ static void *hub_probe(struct usb_device *dev, unsigned int i)
 	/* Some hubs have a subclass of 1, which AFAICT according to the */
 	/*  specs is not defined, but it works */
 	if ((interface->bInterfaceSubClass != 0) &&
-	    (interface->bInterfaceSubClass != 1))
+	    (interface->bInterfaceSubClass != 1)) {
+		err("invalid subclass (%d) for USB hub device #%d",
+			interface->bInterfaceSubClass, dev->devnum);
 		return NULL;
+	}
 
 	/* Multiple endpoints? What kind of mutant ninja-hub is this? */
-	if (interface->bNumEndpoints != 1)
+	if (interface->bNumEndpoints != 1) {
+		err("invalid bNumEndpoints (%d) for USB hub device #%d",
+			interface->bNumEndpoints, dev->devnum);
 		return NULL;
+	}
 
 	endpoint = &interface->endpoint[0];
 
 	/* Output endpoint? Curiousier and curiousier.. */
 	if (!(endpoint->bEndpointAddress & USB_DIR_IN)) {
-		err("Device is hub class, but has output endpoint?");
+		err("Device #%d is hub class, but has output endpoint?",
+			dev->devnum);
 		return NULL;
 	}
 
 	/* If it's not an interrupt endpoint, we'd better punt! */
-	if ((endpoint->bmAttributes & 3) != 3) {
-		err("Device is hub class, but has endpoint other than interrupt?");
+	if ((endpoint->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) != USB_ENDPOINT_XFER_INT) {
+		err("Device #%d is hub class, but has endpoint other than interrupt?",
+			dev->devnum);
 		return NULL;
 	}
 
@@ -291,7 +303,7 @@ static void *hub_probe(struct usb_device *dev, unsigned int i)
 	if (usb_hub_configure(hub, endpoint) >= 0)
 		return hub;
 
-	err("hub configuration failed");
+	err("hub configuration failed for device #%d", dev->devnum);
 
 	/* free hub, but first clean up its list. */
 	spin_lock_irqsave(&hub_event_lock, flags);
@@ -788,6 +800,7 @@ int usb_hub_init(void)
 
 	/* Fall through if kernel_thread failed */
 	usb_deregister(&hub_driver);
+	err("failed to start usb_hub_thread");
 
 	return -1;
 }

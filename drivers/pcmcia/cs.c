@@ -1836,7 +1836,7 @@ int pcmcia_request_io(client_handle_t handle, io_req_t *req)
     
 ======================================================================*/
 
-static int cs_request_irq(client_handle_t handle, irq_req_t *req)
+int pcmcia_request_irq(client_handle_t handle, irq_req_t *req)
 {
     socket_info_t *s;
     config_t *c;
@@ -1902,7 +1902,7 @@ static int cs_request_irq(client_handle_t handle, irq_req_t *req)
     c->state |= CONFIG_IRQ_REQ;
     handle->state |= CLIENT_IRQ_REQ;
     return CS_SUCCESS;
-} /* cs_request_irq */
+} /* pcmcia_request_irq */
 
 /*======================================================================
 

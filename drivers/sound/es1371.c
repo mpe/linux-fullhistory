@@ -82,7 +82,6 @@
  *                       updated SRC and CODEC w/r functions to accomodate bugs
  *                       in some versions of the ES137x chips.
  *    31.08.1999   0.17  add spin_lock_init
- *                       __initlocaldata to fix gcc 2.7.x problems
  *                       replaced current->state = x with set_current_state(x)
  *    03.09.1999   0.18  change read semantics for MIDI to match
  *                       OSS more closely; remove possible wakeup race
@@ -2949,7 +2948,7 @@ module_exit(cleanup_es1371);
 
 static int __init es1371_setup(char *str)
 {
-	static unsigned __initlocaldata nr_dev = 0;
+	static unsigned __initdata nr_dev = 0;
 
 	if (nr_dev >= NR_DEVICE)
 		return 0;

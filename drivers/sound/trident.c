@@ -126,7 +126,6 @@
 #include <linux/pm.h>
 
 #define DRIVER_VERSION "0.14.6"
-//#define DEBUG
 
 /* magic numbers to protect our data structures */
 #define TRIDENT_CARD_MAGIC	0x5072696E /* "Prin" */
@@ -142,11 +141,6 @@
 
 /* minor number of /dev/swmodem (temporary, experimental) */
 #define SND_DEV_SWMODEM	7
-
-#define seek_offset(dma_ptr, buffer, dma_count, cnt, offset)	(dma_ptr) += (offset);	\
-								(buffer) += (offset);	\
-								(dma_count) += (offset);	\
-								(cnt) -= (offset);
 
 static const unsigned ali_multi_channels[] = { ALI_SURR_LEFT_CHANNEL, ALI_SURR_RIGHT_CHANNEL,ALI_CENTER_CHANNEL, ALI_LEF_CHANNEL/*, ALI_SURR_LEFT_CHANNEL, ALI_SURR_RIGHT_CHANNEL*/};
 
@@ -340,21 +334,23 @@ static loff_t trident_llseek(struct file *file, loff_t offset, int origin);
 
 static void ali_ac97_set(struct ac97_codec *codec, u8 reg, u16 val);
 static u16 ali_ac97_get(struct ac97_codec *codec, u8 reg);
-void ali_set_spdif_out_rate(struct trident_card *card, unsigned int rate);
-void ali_enable_special_channel(struct trident_state *stat);
+static void ali_set_spdif_out_rate(struct trident_card *card, unsigned int rate);
+static void ali_enable_special_channel(struct trident_state *stat);
 static struct trident_channel *ali_alloc_rec_pcm_channel(struct trident_card *card);
 static struct trident_channel *ali_alloc_pcm_channel(struct trident_card *card);
 static int ali_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data);
-void ali_restore_regs(struct trident_card *card);
-void ali_save_regs(struct trident_card *card);
+static void ali_restore_regs(struct trident_card *card);
+static void ali_save_regs(struct trident_card *card);
 static int ali_allocate_multi_channels(struct trident_state *state, int chan_nums);
 static void ali_free_pcm_channel(struct trident_card *card, unsigned int channel);
 static int ali_setup_multi_channels(struct trident_card *card, int chan_nums);
-unsigned int ali_get_spdif_in_rate(struct trident_card *card);
-void ali_setup_spdif_in(struct trident_card *card);
-void ali_disable_spdif_in(struct trident_card *card);
-void ali_disable_special_channel(struct trident_card *card, int ch);
-void ali_setup_spdif_out(struct trident_card *card, int flag);
+static unsigned int ali_get_spdif_in_rate(struct trident_card *card);
+static void ali_setup_spdif_in(struct trident_card *card);
+static void ali_disable_spdif_in(struct trident_card *card);
+static void ali_disable_special_channel(struct trident_card *card, int ch);
+static void ali_setup_spdif_out(struct trident_card *card, int flag);
+static unsigned int ali_write_5_1(struct trident_state *state, const char *buffer,int cnt_for_multi_channel);
+
 
 /* save registers for ALi Power Management */
 static struct ali_saved_registers {
@@ -363,10 +359,9 @@ static struct ali_saved_registers {
 	unsigned mixer_regs[ALI_MIXER_REGS];
 } ali_registers;
 
-#define seek_offset(dma_ptr, buffer, dma_count, cnt, offset)	(dma_ptr) += (offset);	\
-								(buffer) += (offset);	\
-								(dma_count) += (offset);	\
-								(cnt) -= (offset);
+#define seek_offset(dma_ptr, buffer, cnt, offset)	(dma_ptr) += (offset);	\
+							(buffer) += (offset);	\
+							(cnt) -= (offset);
 
 static int trident_enable_loop_interrupts(struct trident_card * card)
 {
@@ -482,7 +477,6 @@ static void trident_stop_voice(struct trident_card * card, unsigned int channel)
 
 #ifdef DEBUG
 	reg = inl(TRID_REG(card, T4D_STOP_B));
-	printk("ali:F0h=%lxh\n", inl(TRID_REG(card, 0xf0)));
 	printk("trident: stop voice on channel %d,  STOP_B  = 0x%08x\n",
 	       channel, reg);
 #endif
@@ -930,13 +924,9 @@ static void start_dac(struct trident_state *state)
 		trident_enable_voice_irq(card, chan_num);
 		trident_start_voice(card, chan_num);
 		if (state->chans_num == 6) {
-			trident_enable_voice_irq(card, state->other_states[0]->dmabuf.channel->num);
 			trident_start_voice(card, state->other_states[0]->dmabuf.channel->num);
-			trident_enable_voice_irq(card, state->other_states[1]->dmabuf.channel->num);
 			trident_start_voice(card, state->other_states[1]->dmabuf.channel->num);
-			trident_enable_voice_irq(card, state->other_states[2]->dmabuf.channel->num);
 			trident_start_voice(card, state->other_states[2]->dmabuf.channel->num);
-			trident_enable_voice_irq(card, state->other_states[3]->dmabuf.channel->num);
 			trident_start_voice(card, state->other_states[3]->dmabuf.channel->num);
 		}
 	}
@@ -1456,11 +1446,11 @@ static ssize_t trident_write(struct file *file, const char *buffer, size_t count
 {
 	struct trident_state *state = (struct trident_state *)file->private_data;
 	struct dmabuf *dmabuf = &state->dmabuf;
-	struct dmabuf *dmabuf_temp;
 	ssize_t ret;
 	unsigned long flags;
-	unsigned swptr, sample_s;
-	int cnt, i, other_dma_nums, loop, cnt_for_multi_channel;
+	unsigned swptr;
+	int cnt;
+	unsigned int state_cnt;
 
 #ifdef DEBUG
 	printk("trident: trident_write called, count = %d\n", count);
@@ -1476,12 +1466,6 @@ static ssize_t trident_write(struct file *file, const char *buffer, size_t count
 		return -EFAULT;
 	ret = 0;
 
-	if (state->chans_num == 6) {
-		outl(ALI_MULTI_CHANNELS_START_STOP,  TRID_REG(state->card, T4D_AINT_A));
-		other_dma_nums = 4;
-		sample_s = sample_size[state->dmabuf.fmt] >> 1;
-	}
-	
 	while (count > 0) {
 		spin_lock_irqsave(&state->card->lock, flags);
 		if (dmabuf->count < 0) {
@@ -1534,100 +1518,28 @@ static ssize_t trident_write(struct file *file, const char *buffer, size_t count
 			}
 			continue;
 		}
-		spin_lock_irqsave(&state->card->lock, flags);
+		
 		if (state->chans_num == 6) {
-			cnt_for_multi_channel = cnt;
-			if ((i = state->multi_channels_adjust_count) > 0) {
-				if (i == 1) {
-					copy_from_user(dmabuf->rawbuf + dmabuf->swptr, buffer, sample_s);
-					seek_offset(dmabuf->swptr, buffer, dmabuf->count, cnt_for_multi_channel, sample_s);
-					dmabuf->swptr = dmabuf->swptr % dmabuf->dmasize;
-					i--;
-					state->multi_channels_adjust_count++;
-				}
-				else	i = i - (state->chans_num - other_dma_nums);
-				for (; (i < other_dma_nums) && (cnt_for_multi_channel > 0); i++) {
-					dmabuf_temp = &state->other_states[i]->dmabuf;
-					copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-					seek_offset(dmabuf_temp->swptr, buffer, dmabuf_temp->count, cnt_for_multi_channel, sample_s);
-					dmabuf_temp->swptr = dmabuf_temp->swptr % dmabuf_temp->dmasize;
-				}
-				if (cnt_for_multi_channel == 0)
-					state->multi_channels_adjust_count += i;
-			}
-			if (cnt_for_multi_channel > 0) {
-				loop = cnt_for_multi_channel / (state->chans_num * sample_s);
-				for (i = 0; i < loop; i++) {
-					copy_from_user(dmabuf->rawbuf + dmabuf->swptr, buffer, sample_s * 2);
-					seek_offset(dmabuf->swptr, buffer, dmabuf->count, cnt_for_multi_channel, sample_s * 2);
-					dmabuf->swptr = dmabuf->swptr % dmabuf->dmasize;
-				
-					dmabuf_temp = &state->other_states[0]->dmabuf;
-					copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-					seek_offset(dmabuf_temp->swptr, buffer, dmabuf_temp->count, cnt_for_multi_channel, sample_s);
-					dmabuf_temp->swptr = dmabuf_temp->swptr % dmabuf_temp->dmasize;
-				
-					dmabuf_temp = &state->other_states[1]->dmabuf;
-					copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-
-					seek_offset(dmabuf_temp->swptr, buffer, dmabuf_temp->count, cnt_for_multi_channel, sample_s);
-					dmabuf_temp->swptr = dmabuf_temp->swptr % dmabuf_temp->dmasize;
-				
-					dmabuf_temp = &state->other_states[2]->dmabuf;
-					copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-
-					seek_offset(dmabuf_temp->swptr, buffer, dmabuf_temp->count, cnt_for_multi_channel, sample_s);
-					dmabuf_temp->swptr = dmabuf_temp->swptr % dmabuf_temp->dmasize;
-				
-					dmabuf_temp = &state->other_states[3]->dmabuf;
-					copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-
-					seek_offset(dmabuf_temp->swptr, buffer, dmabuf_temp->count, cnt_for_multi_channel, sample_s);
-					dmabuf_temp->swptr = dmabuf_temp->swptr % dmabuf_temp->dmasize;
-				}
-			
-				if (cnt_for_multi_channel > 0) {
-					state->multi_channels_adjust_count = cnt_for_multi_channel / sample_s;
-					
-					copy_from_user(dmabuf->rawbuf + dmabuf->swptr, buffer, sample_s);
-					seek_offset(dmabuf->swptr, buffer, dmabuf->count, cnt_for_multi_channel, sample_s);
-					dmabuf->swptr = dmabuf->swptr % dmabuf->dmasize;
-					
-					if (cnt_for_multi_channel > 0) {
-						copy_from_user(dmabuf->rawbuf + dmabuf->swptr, buffer, sample_s);
-						seek_offset(dmabuf->swptr, buffer, dmabuf->count, cnt_for_multi_channel, sample_s);
-						dmabuf->swptr = dmabuf->swptr % dmabuf->dmasize;
-					
-						if (cnt_for_multi_channel > 0) {
-							loop = state->multi_channels_adjust_count - (state->chans_num - other_dma_nums);
-							for (i = 0; i < loop; i++) {
-								dmabuf_temp = &state->other_states[i]->dmabuf;
-								copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
-								seek_offset(dmabuf_temp->swptr, buffer, dmabuf_temp->count, cnt_for_multi_channel, sample_s);
-								dmabuf_temp->swptr = dmabuf_temp->swptr % dmabuf_temp->dmasize;
-							}
-						}
-					}
-				}
-				else
-					state->multi_channels_adjust_count = 0;
-			}
+			state_cnt = ali_write_5_1(state, buffer, cnt);
 		}
 		else {
 			if (copy_from_user(dmabuf->rawbuf + swptr, buffer, cnt)) {
 				if (!ret) ret = -EFAULT;
 				return ret;
 			}
-			swptr = (swptr + cnt) % dmabuf->dmasize;
-			dmabuf->swptr = swptr;
-			dmabuf->count += cnt;
-			buffer += cnt;
+			state_cnt = cnt;
 		}
 		
+		swptr = (swptr + state_cnt) % dmabuf->dmasize;		
+		
+		spin_lock_irqsave(&state->card->lock, flags);
+		dmabuf->swptr = swptr;
+		dmabuf->count += state_cnt;
 		dmabuf->endcleared = 0;
 		spin_unlock_irqrestore(&state->card->lock, flags);
 
 		count -= cnt;
+		buffer += cnt;	
 		ret += cnt;
 		start_dac(state);
 	}
@@ -2412,7 +2324,7 @@ static u16 ali_ac97_get(struct ac97_codec *codec, u8 reg)
 	return 0;
 }
 
-void ali_enable_special_channel(struct trident_state *stat)
+static void ali_enable_special_channel(struct trident_state *stat)
 {
 	struct trident_card *card = stat->card;
 	unsigned long s_channels;
@@ -2426,7 +2338,7 @@ void ali_enable_special_channel(struct trident_state *stat)
 flag:	ALI_SPDIF_OUT_TO_SPDIF_OUT
 	ALI_PCM_TO_SPDIF_OUT
 */
-void ali_setup_spdif_out(struct trident_card *card, int flag)
+static void ali_setup_spdif_out(struct trident_card *card, int flag)
 {
 	unsigned long spdif;
 	unsigned char ch;
@@ -2454,7 +2366,7 @@ void ali_setup_spdif_out(struct trident_card *card, int flag)
    	}
 }
 
-void ali_disable_special_channel(struct trident_card *card, int ch)
+static void ali_disable_special_channel(struct trident_card *card, int ch)
 {
 	unsigned long sc;
 	
@@ -2463,7 +2375,7 @@ void ali_disable_special_channel(struct trident_card *card, int ch)
 	outl(sc, TRID_REG(card, ALI_GLOBAL_CONTROL));
 }
 
-void ali_disable_spdif_in(struct trident_card *card)
+static void ali_disable_spdif_in(struct trident_card *card)
 {
 	unsigned long spdif;
 	
@@ -2474,7 +2386,7 @@ void ali_disable_spdif_in(struct trident_card *card)
 	ali_disable_special_channel(card, ALI_SPDIF_IN_CHANNEL);	
 }
 
-void ali_setup_spdif_in(struct trident_card *card)
+static void ali_setup_spdif_in(struct trident_card *card)
 {	
 	unsigned long spdif;
 
@@ -2497,7 +2409,7 @@ void ali_setup_spdif_in(struct trident_card *card)
 	outb(spdif, TRID_REG(card, ALI_SPDIF_CTRL));
 }
 
-unsigned int ali_get_spdif_in_rate(struct trident_card *card)
+static unsigned int ali_get_spdif_in_rate(struct trident_card *card)
 {
 	unsigned long spdif, time1, time2;
 	unsigned count1, count2, count3;
@@ -2583,10 +2495,6 @@ unsigned int ali_get_spdif_in_rate(struct trident_card *card)
 static int ali_setup_multi_channels(struct trident_card *card, int chan_nums)
 {
 	unsigned long dwValue;
-	char temp;
-	unsigned short codec_value;
-	struct pci_dev *pci_dev = NULL;
-	
 	if (chan_nums == 6) {
 		dwValue = inl(TRID_REG(card, ALI_SCTRL)) | 0x000f0000;
 		outl(dwValue, TRID_REG(card, ALI_SCTRL));
@@ -2671,7 +2579,7 @@ static int ali_allocate_multi_channels(struct trident_state *state, int chan_num
 	return 0;
 }
 
-void ali_save_regs(struct trident_card *card)
+static void ali_save_regs(struct trident_card *card)
 {
 	unsigned long flags;
 	int i, j;
@@ -2709,7 +2617,7 @@ void ali_save_regs(struct trident_card *card)
 	restore_flags(flags);
 }
 
-void ali_restore_regs(struct trident_card *card)
+static void ali_restore_regs(struct trident_card *card)
 {
 	unsigned long flags;
 	int i, j;
@@ -2813,7 +2721,7 @@ static struct trident_channel *ali_alloc_rec_pcm_channel(struct trident_card *ca
 	return NULL;
 }
 
-void ali_set_spdif_out_rate(struct trident_card *card, unsigned int rate)
+static void ali_set_spdif_out_rate(struct trident_card *card, unsigned int rate)
 {
 	unsigned char ch_st_sel;
 	unsigned short status_rate;
@@ -2876,6 +2784,98 @@ static void ali_address_interrupt(struct trident_card *card)
 			}
 		}
 	}
+}
+
+/* Updating the values of counters of other_states' DMAs without lock 
+protection is no harm because all DMAs of multi-channels and interrupt
+depend on a master state's DMA, and changing the counters of the master
+state DMA is protected by a spinlock.
+*/
+static unsigned int ali_write_5_1(struct trident_state *state,  const char *buf, int cnt_for_multi_channel)
+{
+	
+	struct dmabuf *dmabuf = &state->dmabuf;
+	struct dmabuf *dmabuf_temp;
+	const char *buffer = buf;
+	unsigned swptr, other_dma_nums, sample_s;
+	unsigned int i, loop, state_cnt = 0;
+	
+	other_dma_nums = 4;
+	sample_s = sample_size[dmabuf->fmt] >> 1;
+	swptr = dmabuf->swptr;
+	
+	if ((i = state->multi_channels_adjust_count) > 0) {
+		if (i == 1) {
+			copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s);
+			seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s);
+			i--;
+			state_cnt += sample_s;
+			state->multi_channels_adjust_count++;
+		}
+		else	i = i - (state->chans_num - other_dma_nums);
+		for (; (i < other_dma_nums) && (cnt_for_multi_channel > 0); i++) {
+			dmabuf_temp = &state->other_states[i]->dmabuf;
+			copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
+			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+		}
+		if (cnt_for_multi_channel == 0)
+			state->multi_channels_adjust_count += i;
+	}
+	if (cnt_for_multi_channel > 0) {
+		loop = cnt_for_multi_channel / (state->chans_num * sample_s);
+		for (i = 0; i < loop; i++) {
+			copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s * 2);
+			seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s * 2);
+		
+			dmabuf_temp = &state->other_states[0]->dmabuf;
+			copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
+			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+		
+			dmabuf_temp = &state->other_states[1]->dmabuf;
+			copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
+			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+		
+			dmabuf_temp = &state->other_states[2]->dmabuf;
+			copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
+			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+				
+			dmabuf_temp = &state->other_states[3]->dmabuf;
+			copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
+			seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+		}
+		
+		state_cnt += (sample_s * 2 * loop);
+		
+		if (cnt_for_multi_channel > 0) {
+			state->multi_channels_adjust_count = cnt_for_multi_channel / sample_s;
+			
+			copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s);
+			seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s);			
+			state_cnt += sample_s;
+			
+			if (cnt_for_multi_channel > 0) {
+				copy_from_user(dmabuf->rawbuf + swptr, buffer, sample_s);
+				seek_offset(swptr, buffer, cnt_for_multi_channel, sample_s);
+				state_cnt += sample_s;
+			
+				if (cnt_for_multi_channel > 0) {
+					loop = state->multi_channels_adjust_count - (state->chans_num - other_dma_nums);
+					for (i = 0; i < loop; i++) {
+						dmabuf_temp = &state->other_states[i]->dmabuf;
+						copy_from_user(dmabuf_temp->rawbuf + dmabuf_temp->swptr, buffer, sample_s);
+						seek_offset(dmabuf_temp->swptr, buffer, cnt_for_multi_channel, sample_s);
+					}
+				}
+			}
+		}
+		else
+			state->multi_channels_adjust_count = 0;
+	}
+	for (i = 0; i < other_dma_nums; i++) {
+		dmabuf_temp = &state->other_states[i]->dmabuf;
+		dmabuf_temp->swptr = dmabuf_temp->swptr % dmabuf_temp->dmasize;
+	}
+	return state_cnt;
 }
 
 #ifdef CONFIG_PROC_FS

@@ -255,7 +255,7 @@ sable_init_irq(void)
 static int __init
 sable_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
-        static char irq_tab[9][5] __initlocaldata = {
+        static char irq_tab[9][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{ 32+0,  32+0,  32+0,  32+0,  32+0},  /* IdSel 0,  TULIP  */
 		{ 32+1,  32+1,  32+1,  32+1,  32+1},  /* IdSel 1,  SCSI   */
