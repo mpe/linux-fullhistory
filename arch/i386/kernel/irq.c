@@ -239,10 +239,9 @@ static void do_8259A_IRQ(unsigned int irq, struct pt_regs * regs)
 	{
 		unsigned int status;
 		mask_and_ack_8259A(irq);
-		status = desc->status & ~IRQ_REPLAY;
+		status = desc->status & ~(IRQ_REPLAY | IRQ_WAITING);
 		action = NULL;
-		if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS)))
-		{
+		if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
 			action = desc->action;
 			status |= IRQ_INPROGRESS;
 		}
@@ -770,7 +769,7 @@ void disable_irq(unsigned int irq)
 {
 	disable_irq_nosync(irq);
 
-	if (!local_irq_count[smp_processor_id()] && irq_desc[irq].action) {
+	if (!local_irq_count[smp_processor_id()]) {
 		do {
 			barrier();
 		} while (irq_desc[irq].status & IRQ_INPROGRESS);
@@ -879,7 +878,7 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 
 	if (!shared) {
 		irq_desc[irq].depth = 0;
-		irq_desc[irq].status &= ~(IRQ_DISABLED | IRQ_INPROGRESS);
+		irq_desc[irq].status &= ~IRQ_DISABLED;
 		irq_desc[irq].handler->startup(irq);
 	}
 	spin_unlock_irqrestore(&irq_controller_lock,flags);
@@ -951,7 +950,7 @@ out:
  *
  * This depends on the fact that any interrupt that
  * comes in on to an unassigned handler will get stuck
- * with "IRQ_INPROGRESS" asserted and the interrupt
+ * with "IRQ_WAITING" cleared and the interrupt
  * disabled.
  */
 unsigned long probe_irq_on(void)
@@ -965,8 +964,7 @@ unsigned long probe_irq_on(void)
 	spin_lock_irq(&irq_controller_lock);
 	for (i = NR_IRQS-1; i > 0; i--) {
 		if (!irq_desc[i].action) {
-			unsigned int status = irq_desc[i].status | IRQ_AUTODETECT;
-			irq_desc[i].status = status & ~(IRQ_INPROGRESS|IRQ_DISABLED);
+			irq_desc[i].status |= IRQ_AUTODETECT | IRQ_WAITING;
 			irq_desc[i].handler->startup(i);
 		}
 	}
@@ -989,8 +987,8 @@ unsigned long probe_irq_on(void)
 			continue;
 		
 		/* It triggered already - consider it spurious. */
-		if (status & IRQ_INPROGRESS) {
-			irq_desc[i].status = (status & ~(IRQ_INPROGRESS | IRQ_AUTODETECT)) | IRQ_DISABLED;
+		if (!(status & IRQ_WAITING)) {
+			irq_desc[i].status = status & ~IRQ_AUTODETECT;
 			irq_desc[i].handler->shutdown(i);
 		}
 	}
@@ -1015,12 +1013,12 @@ int probe_irq_off(unsigned long unused)
 		if (!(status & IRQ_AUTODETECT))
 			continue;
 
-		if (status & IRQ_INPROGRESS) {
+		if (!(status & IRQ_WAITING)) {
 			if (!nr_irqs)
 				irq_found = i;
 			nr_irqs++;
 		}
-		irq_desc[i].status = (status & ~(IRQ_AUTODETECT | IRQ_INPROGRESS)) | IRQ_DISABLED;
+		irq_desc[i].status = status & ~IRQ_AUTODETECT;
 		irq_desc[i].handler->shutdown(i);
 	}
 	spin_unlock_irq(&irq_controller_lock);

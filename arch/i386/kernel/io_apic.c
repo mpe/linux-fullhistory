@@ -1049,7 +1049,7 @@ static void do_edge_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 	 * and do not need to be masked.
 	 */
 	ack_APIC_irq();
-	status = desc->status & ~IRQ_REPLAY;
+	status = desc->status & ~(IRQ_REPLAY | IRQ_WAITING);
 	status |= IRQ_PENDING;
 
 	/*
@@ -1104,7 +1104,7 @@ static void do_level_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 	 * So this all has to be within the spinlock.
 	 */
 	mask_IO_APIC_irq(irq);
-	status = desc->status & ~IRQ_REPLAY;
+	status = desc->status & ~(IRQ_REPLAY | IRQ_WAITING);
 
 	/*
 	 * If the IRQ is disabled for whatever reason, we must

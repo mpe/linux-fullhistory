@@ -201,10 +201,9 @@ static void do_cobalt_IRQ(unsigned int irq, struct pt_regs * regs)
 	{
 		unsigned int status;
 		/* XXX APIC EOI? */
-		status = desc->status & ~IRQ_REPLAY;
+		status = desc->status & ~(IRQ_REPLAY | IRQ_WAITING);
 		action = NULL;
-		if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS)))
-		{
+		if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
 			action = desc->action;
 			status |= IRQ_INPROGRESS;
 		}

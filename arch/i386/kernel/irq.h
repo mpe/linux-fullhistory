@@ -26,6 +26,7 @@ extern struct hw_interrupt_type no_irq_type;
 #define IRQ_PENDING	4	/* IRQ pending - replay on enable */
 #define IRQ_REPLAY	8	/* IRQ has been replayed but not acked yet */
 #define IRQ_AUTODETECT	16	/* IRQ is being autodetected */
+#define IRQ_WAITING	32	/* IRQ not yet seen - for autodetection */
 
 /*
  * This is the "IRQ descriptor", which contains various information
