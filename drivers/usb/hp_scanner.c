@@ -59,8 +59,6 @@
  * stuff may be some kind of maps and stuff but that's kinda rare.  */
 #define OBUF_SIZE 128
 
-#define USB_SCANNER_MAJOR 16
-
 struct hpscan_usb_data {
 	struct usb_device 	*hpscan_dev;            /* init: probe_scanner */
 	__u8			isopen;			/* nz if open */
@@ -279,14 +277,6 @@ disconnect_scanner(struct usb_device *dev)
 }
 
 static struct
-usb_driver scanner_driver = {
-	"usbscanner",
-	probe_scanner,
-	disconnect_scanner,
-	{ NULL, NULL }
-};
-
-static struct
 file_operations usb_scanner_fops = {
 	NULL,		/* seek */
 	read_scanner,
@@ -302,15 +292,19 @@ file_operations usb_scanner_fops = {
 	NULL,         /* fasync */
 };
 
+static struct
+usb_driver scanner_driver = {
+	"usbscanner",
+	probe_scanner,
+	disconnect_scanner,
+	{ NULL, NULL },
+	&usb_scanner_fops,
+	48
+};
+
 int
 usb_hp_scanner_init(void)
 {
-	int result;
-	
-	if ((result = register_chrdev(USB_SCANNER_MAJOR, "usbscanner", &usb_scanner_fops)) < 0) {
-		printk(KERN_WARNING "hp_scanner: Cannot register device\n");
-		return result;
-	}
 	usb_register(&scanner_driver);
 	printk(KERN_DEBUG "USB Scanner support registered.\n");
 	return 0;
@@ -324,7 +318,6 @@ usb_hp_scanner_cleanup(void)
 
 	hps->present = 0;
 	usb_deregister(&scanner_driver);
-	unregister_chrdev(USB_SCANNER_MAJOR, "usbscanner");
 }
 
 #ifdef MODULE

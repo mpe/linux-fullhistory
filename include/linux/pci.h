@@ -553,5 +553,10 @@ extern struct pci_fixup pcibios_fixups[];
 
 void pci_fixup_device(int pass, struct pci_dev *dev);
 
+extern int pci_pci_problems;
+#define PCIPCI_FAIL		1
+#define PCIPCI_TRITON		2
+#define PCIPCI_NATOMA		4
+
 #endif /* __KERNEL__ */
 #endif /* LINUX_PCI_H */

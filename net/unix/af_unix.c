@@ -572,7 +572,7 @@ static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 
 		/* Do not believe to VFS, grab kernel lock */
 		lock_kernel();
-		dentry = open_namei(sunname->sun_path, 2, S_IFSOCK);
+		dentry = open_namei(sunname->sun_path, 2|O_NOFOLLOW, S_IFSOCK);
 		if (IS_ERR(dentry)) {
 			*error = PTR_ERR(dentry);
 			unlock_kernel();

@@ -225,13 +225,14 @@ struct uhci_device {
  * be scared, it kinda makes sense. Look at this wonderful picture care of
  * Linus:
  *
- *  generic-iso-QH  ->  dev1-iso-QH  ->  generic-irq-QH  ->  dev1-irq-QH  -> ...
- *       |                  |                  |                   |
- *      End             dev1-iso-TD1          End            dev1-irq-TD1
- *                          |
- *                      dev1-iso-TD2
- *                          |
- *                        ....
+ *  generic-  ->  dev1-  ->  generic-  ->  dev1-  ->  control-  ->  bulk- -> ...
+ *   iso-QH      iso-QH       irq-QH      irq-QH        QH           QH
+ *      |           |            |           |           |            |
+ *     End     dev1-iso-TD1     End     dev1-irq-TD1    ...          ... 
+ *                  |
+ *             dev1-iso-TD2
+ *                  |
+ *                ....
  *
  * This may vary a bit (the UHCI docs don't explicitly say you can put iso
  * transfers in QH's and all of their pictures don't have that either) but
@@ -242,20 +243,62 @@ struct uhci_device {
  * To keep with Linus' nomenclature, this is called the QH skeleton. These
  * labels (below) are only signficant to the root hub's QH's
  */
-#define UHCI_NUM_SKELQH		10
+#define UHCI_NUM_SKELQH		11
 
-#define skel_int2_qh		skelqh[0]
-#define skel_int4_qh		skelqh[1]
-#define skel_int8_qh		skelqh[2]
-#define skel_int16_qh		skelqh[3]
-#define skel_int32_qh		skelqh[4]
-#define skel_int64_qh		skelqh[5]
-#define skel_int128_qh		skelqh[6]
-#define skel_int256_qh		skelqh[7]
+#define skel_int1_qh		skelqh[0]
+#define skel_int2_qh		skelqh[1]
+#define skel_int4_qh		skelqh[2]
+#define skel_int8_qh		skelqh[3]
+#define skel_int16_qh		skelqh[4]
+#define skel_int32_qh		skelqh[5]
+#define skel_int64_qh		skelqh[6]
+#define skel_int128_qh		skelqh[7]
+#define skel_int256_qh		skelqh[8]
 
-#define skel_control_qh		skelqh[8]
+#define skel_control_qh		skelqh[9]
 
-#define skel_bulk_qh		skelqh[9]
+#define skel_bulk_qh		skelqh[10]
+
+/*
+ * Search tree for determining where <interval> fits in the
+ * skelqh[] skeleton.
+ *
+ * An interrupt request should be placed into the slowest skelqh[]
+ * which meets the interval/period/frequency requirement.
+ * An interrupt request is allowed to be faster than <interval> but not slower.
+ *
+ * For a given <interval>, this function returns the appropriate/matching
+ * skelqh[] index value.
+ *
+ * NOTE: For UHCI, we don't really need int256_qh since the maximum interval
+ * is 255 ms.  However, we do need an int1_qh since 1 is a valid interval
+ * and we should meet that frequency when requested to do so.
+ * This will require some change(s) to the UHCI skeleton.
+ */
+static inline int __interval_to_skel(interval)
+{
+	if (interval < 16) {
+		if (interval < 4) {
+			if (interval < 2) {
+				return 0;	/* int1 for 0-1 ms */
+			}
+			return 1;		/* int2 for 2-3 ms */
+		}
+		if (interval < 8) {
+			return 2;		/* int4 for 4-7 ms */
+		}
+		return 3;			/* int 8 for 8-15 ms */
+	}
+	if (interval < 64) {
+		if (interval < 32) {
+			return 4;		/* int16 for 16-31 ms */
+		}
+		return 5;			/* int32 for 32-63 ms */
+	}
+	if (interval < 128)
+		return 6;			/* int64 for 64-127 ms */
+	return 7;				/* int128 for 128-255 ms (Max.) */
+}
 
 /*
  * This describes the full uhci information.

@@ -643,27 +643,9 @@ static int i2ob_ioctl(struct inode *inode, struct file *file,
 
 	dev = &i2ob_dev[minor];
 	switch (cmd) {
-		case BLKRASET:
-			if(!capable(CAP_SYS_ADMIN))  return -EACCES;
-			if(arg > 0xff) return -EINVAL;
-			read_ahead[MAJOR(inode->i_rdev)] = arg;
-			return 0;
-
-		case BLKRAGET:
-			if (!arg)  return -EINVAL;
-			return put_user(read_ahead[MAJOR(inode->i_rdev)],
-					(long *) arg); 
 		case BLKGETSIZE:
 			return put_user(i2ob[minor].nr_sects, (long *) arg);
 
-		case BLKFLSBUF:
-			if(!capable(CAP_SYS_ADMIN))
-				return -EACCES;
-
-			fsync_dev(inode->i_rdev);
-			invalidate_buffers(inode->i_rdev);
-			return 0;
-			
 		case HDIO_GETGEO:
 		{
 			struct hd_geometry g;
@@ -679,8 +661,16 @@ static int i2ob_ioctl(struct inode *inode, struct file *file,
 				return -EACCES;
 			return do_i2ob_revalidate(inode->i_rdev,1);
 			
-		default:
+		case BLKFLSBUF:
+		case BLKROSET:
+		case BLKROGET:
+		case BLKRASET:
+		case BLKRAGET:
+		case BLKPG:
 			return blk_ioctl(inode->i_rdev, cmd, arg);
+			
+		default:
+			return -EINVAL;
 	}
 }
 

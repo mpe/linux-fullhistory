@@ -37,7 +37,6 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/socket.h>
-#include <linux/miscdevice.h>
 #include <linux/list.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
@@ -967,10 +966,6 @@ static struct file_operations ezusb_fops = {
 	NULL   /* lock */
 };
 
-static struct miscdevice ezusb_misc = {
-	192, "ezusb", &ezusb_fops
-};
-
 /* --------------------------------------------------------------------- */
 
 static int ezusb_probe(struct usb_device *usbdev)
@@ -1044,7 +1039,9 @@ static struct usb_driver ezusb_driver = {
         "ezusb",
         ezusb_probe,
         ezusb_disconnect,
-        { NULL, NULL }
+        { NULL, NULL },
+	&ezusb_fops,
+	32
 };
 
 /* --------------------------------------------------------------------- */
@@ -1062,11 +1059,6 @@ int ezusb_init(void)
 		init_waitqueue_head(&ezusb[u].wait);
 		spin_lock_init(&ezusb[u].lock);
 	}
-	/* register misc device */
-	if (misc_register(&ezusb_misc)) {
-		printk(KERN_WARNING "ezusb: cannot register minor %d\n", ezusb_misc.minor);
-		return -1;
-	}
 	usb_register(&ezusb_driver);
         printk(KERN_INFO "ezusb: Anchorchip firmware download driver registered\n");
 	return 0;
@@ -1075,7 +1067,6 @@ int ezusb_init(void)
 void ezusb_cleanup(void)
 {
 	usb_deregister(&ezusb_driver);
-	misc_deregister(&ezusb_misc);
 }
 
 /* --------------------------------------------------------------------- */

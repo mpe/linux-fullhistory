@@ -55,7 +55,6 @@ void pmac_nvram_init(void)
 	}
 }
 
-#ifdef CONFIG_NVRAM
 unsigned char nvram_read_byte(int addr)
 {
 	struct adb_request req;
@@ -101,4 +100,3 @@ void nvram_write_byte(unsigned char val, int addr)
 	}
 	eieio();
 }
-#endif /* CONFIG_NVRAM */

@@ -1207,7 +1207,7 @@ static int __maybe_init parport_ECP_supported(struct parport *pb)
 
 	outb (ECR_SPP << 5, ECONTROL (pb)); /* Reset FIFO */
 	outb (0xf4, ECONTROL (pb)); /* Configuration mode */
-	config = inb (FIFO (pb));
+	config = inb (CONFIGA (pb));
 	pword = (config >> 4) & 0x7;
 	switch (pword) {
 	case 0:
@@ -1230,10 +1230,10 @@ static int __maybe_init parport_ECP_supported(struct parport *pb)
 	priv->pword = pword;
 	printk (KERN_DEBUG "0x%lx: PWord is %d bits\n", pb->base, 8 * pword);
 
-	config = inb (CONFIGB (pb));
 	printk (KERN_DEBUG "0x%lx: Interrupts are ISA-%s\n", pb->base,
 		config & 0x80 ? "Level" : "Pulses");
 
+	config = inb (CONFIGB (pb));
 	if (!(config & 0x40)) {
 		printk (KERN_WARNING "0x%lx: IRQ conflict!\n", pb->base);
 		pb->irq = PARPORT_IRQ_NONE;

@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.77 1999/09/14 01:13:19 cort Exp $
+ * $Id: prom.c,v 1.79 1999/10/08 01:56:32 paulus Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -147,6 +147,7 @@ extern unsigned long reloc_offset(void);
 
 extern char cmd_line[512];	/* XXX */
 boot_infos_t *boot_infos = 0;	/* init it so it's in data segment not bss */
+unsigned long dev_tree_size;
 
 /*
  * prom_init() is called very early on, before the kernel text
@@ -557,7 +558,7 @@ prom_init(int r3, int r4, prom_entry pp)
 		else
 			prom_print(RELOC("...failed\n"));
 	}
-#endif	
+#endif
 }
 
 /*
@@ -754,8 +755,7 @@ finish_device_tree(void)
 	unsigned long mem = (unsigned long) klimit;
 
 	mem = finish_node(allnodes, mem, NULL);
-	printk(KERN_INFO "device tree used %lu bytes\n",
-	       mem - (unsigned long) allnodes);
+	dev_tree_size = mem - (unsigned long) allnodes;
 	klimit = (char *) mem;
 }
 
@@ -1494,6 +1494,7 @@ void
 drawchar(char c)
 {
 	unsigned long offset = reloc_offset();
+	int cline = 0, x;
 
 	switch (c) {
 	case '\b':
@@ -1509,6 +1510,7 @@ drawchar(char c)
 	case '\n':
 		RELOC(g_loc_X) = 0;
 		RELOC(g_loc_Y)++;
+		cline = 1;
 		break;
 	default:
 		draw_byte(c, RELOC(g_loc_X)++, RELOC(g_loc_Y));
@@ -1516,11 +1518,23 @@ drawchar(char c)
 	if (RELOC(g_loc_X) >= RELOC(g_max_loc_X)) {
 		RELOC(g_loc_X) = 0;
 		RELOC(g_loc_Y)++;
+		cline = 1;
 	}
+#if 0
 	while (RELOC(g_loc_Y) >= RELOC(g_max_loc_Y)) {
 		scrollscreen();
 		RELOC(g_loc_Y)--;
 	}
+#else
+	/* wrap around from bottom to top of screen so we don't
+	   waste time scrolling each line.  -- paulus. */
+	if (RELOC(g_loc_Y) >= RELOC(g_max_loc_Y))
+		RELOC(g_loc_Y) = 0;
+	if (cline) {
+		for (x = 0; x < RELOC(g_max_loc_X); ++x)
+			draw_byte(' ', x, RELOC(g_loc_Y));
+	}
+#endif
 }
 
 __pmac

@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.159 1999/09/18 18:40:38 dmalek Exp $
+ * $Id: setup.c,v 1.160 1999/10/08 01:56:38 paulus Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -489,6 +489,28 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
         m8xx_init(r3, r4, r5, r6, r7);
 #endif
 
+	/* Look for mem= option on command line */
+	if (strstr(cmd_line, "mem=")) {
+		char *p, *q;
+		unsigned long maxmem = 0;
+		extern unsigned long __max_memory;
+
+		for (q = cmd_line; (p = strstr(q, "mem=")) != 0; ) {
+			q = p + 4;
+			if (p > cmd_line && p[-1] != ' ')
+				continue;
+			maxmem = simple_strtoul(q, &q, 0);
+			if (*q == 'k' || *q == 'K') {
+				maxmem <<= 10;
+				++q;
+			} else if (*q == 'm' || *q == 'M') {
+				maxmem <<= 20;
+				++q;
+			}
+		}
+		__max_memory = maxmem;
+	}
+	
 	/* this is for modules since _machine can be a define -- Cort */
 	ppc_md.ppc_machine = _machine;
 
@@ -533,7 +555,7 @@ void __init setup_arch(char **cmdline_p,
 	if (strstr(cmd_line, "xmon"))
 		xmon(0);
 #endif /* CONFIG_XMON */
- 
+
 	/* reboot on panic */	
 	panic_timeout = 180;
 

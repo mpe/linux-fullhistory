@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/hashtable.S
  *
- *  $Id: hashtable.S,v 1.3 1999/09/05 11:56:27 paulus Exp $
+ *  $Id: hashtable.S,v 1.6 1999/10/08 01:56:15 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -35,7 +35,7 @@
  * _PAGE_RW (2) if a write.  r20 contains DSISR or SRR1,
  * so bit 1 (0x40000000) is set if the exception was due
  * to no matching PTE being found in the hash table.
- * r5 contains the physical address of the current task's thread.
+ * SPRG3 contains the physical address of the current task's thread.
  *
  * Returns to the caller if the access is illegal or there is no
  * mapping for the address.  Otherwise it places an appropriate PTE
@@ -53,12 +53,14 @@ Hash_msk = (((1 << Hash_bits) - 1) * 64)
 	.globl	hash_page
 hash_page:
 #ifdef __SMP__
+	SAVE_2GPRS(7,r21)
 	eieio
 	lis	r2,hash_table_lock@h
 	ori	r2,r2,hash_table_lock@l
  	tophys(r2,r2)
-	lis	r6,100000000@h
+	lis	r6,0x0fff0000@h
 	mtctr	r6
+	mfspr	r5,SPRG3
 	lwz	r0,PROCESSOR-THREAD(r5)
 	or	r0,r0,r6
 10:	lwarx	r6,0,r2
@@ -66,10 +68,18 @@ hash_page:
 	bne-	12f
 	stwcx.	r0,0,r2
 	beq+	11f
-12:	cmpw	r6,r0
+	/* spin here a bit */
+12:	mfctr	r7
+	li	r8,1000
+	mtctr	r8
+13:
+	bdnz	13b
+	mtctr	r7
+	cmpw	r6,r0
 	bdnzf	2,10b
 	tw	31,31,31
 11:	eieio
+	REST_2GPRS(7, r21)
 #endif
 	/* Get PTE (linux-style) and check access */
 	mfspr	r2,SPRG3		/* current task's THREAD (phys) */
@@ -182,7 +192,7 @@ hash_page_patch_B:
 10:	mtctr	r2
 	addi	r3,r4,-8		/* search primary PTEG */
 1:	lwzu	r0,8(r3)		/* get next PTE */
-	srwi.	r0,r0,31		/* only want to check valid bit */
+	rlwinm.	r0,r0,0,0,0		/* only want to check valid bit */
 	bdnzf	2,1b			/* loop while ctr != 0 && !cr0.eq */
 	beq+	found_empty
 
@@ -195,7 +205,7 @@ hash_page_patch_C:
 	addi	r3,r3,-8
 	mtctr	r2
 2:	lwzu	r0,8(r3)
-	srwi.	r0,r0,31		/* only want to check valid bit */
+	rlwinm.	r0,r0,0,0,0		/* only want to check valid bit */
 	bdnzf	2,2b
 	beq+	found_empty
 
@@ -209,19 +219,20 @@ hash_page_patch_C:
 	 * put the PTE in the primary PTEG.
 	 */
 	xori	r5,r5,0x40		/* clear H bit again */
-	lwz	r2,next_slot@l(0)
+	lis	r3,next_slot@ha
+	tophys(r3,r3)
+	lwz	r2,next_slot@l(r3)
 	addi	r2,r2,8
 	andi.	r2,r2,0x38
-	stw	r2,next_slot@l(0)
+	stw	r2,next_slot@l(r3)
 	add	r3,r4,r2
 11:		
 	/* update counter of evicted pages */
-	lis	r2,htab_evicts@h
-	ori	r2,r2,htab_evicts@l
+	lis	r2,htab_evicts@ha
 	tophys(r2,r2)
-	lwz	r4,0(r2)
+	lwz	r4,htab_evicts@l(r2)
 	addi	r4,r4,1
-	stw	r4,0(r2)
+	stw	r4,htab_evicts@l(r2)
 
 #ifndef __SMP__
 	/* Store PTE in PTEG */
@@ -271,12 +282,11 @@ found_slot:
  * update the htab misses count
  *   -- Cort
  */
-	lis	r2,htab_reloads@h
-	ori	r2,r2,htab_reloads@l
+	lis	r2,htab_reloads@ha
 	tophys(r2,r2)
-	lwz	r3,0(r2)
+	lwz	r3,htab_reloads@l(r2)
 	addi	r3,r3,1
-	stw	r3,0(r2)
+	stw	r3,htab_reloads@l(r2)
 
 #ifdef __SMP__
 	lis	r2,hash_table_lock@ha
@@ -322,13 +332,13 @@ hash_page_out:
 	.globl	hash_table_lock
 hash_table_lock:
 	.long	0
-	.text
 #endif /* __SMP__ */
 
-/* next_slot is assumed to be within the first 32kB of physical RAM */
+	.data
 next_slot:
 	.long	0
 
+	.text
 /*
  * Flush entries from the hash table with VSIDs in the range
  * given.

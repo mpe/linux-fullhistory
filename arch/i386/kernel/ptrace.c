@@ -71,8 +71,6 @@ static int putreg(struct task_struct *child,
 	unsigned long regno, unsigned long value)
 {
 	switch (regno >> 2) {
-		case ORIG_EAX:
-			return -EIO;
 		case FS:
 			if (value && (value & 3) != 3)
 				return -EIO;

@@ -1158,7 +1158,7 @@ no_grow:
 	goto try_again;
 }
 
-static int create_page_buffers(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
+static int create_page_buffers(int rw, struct page *page, kdev_t dev, int b[], int size)
 {
 	struct buffer_head *head, *bh, *tail;
 	int block;
@@ -1186,17 +1186,6 @@ static int create_page_buffers(int rw, struct page *page, kdev_t dev, int b[], i
 		bh->b_dev = dev;
 		bh->b_blocknr = block;
 
-		/*
-		 * When we use bmap, we define block zero to represent
-		 * a hole.  ll_rw_page, however, may legitimately
-		 * access block zero, and we need to distinguish the
-		 * two cases.
-		 */
-		if (bmap && !block) {
-			memset(bh->b_data, 0, size);
-			set_bit(BH_Uptodate, &bh->b_state);
-			continue;
-		}
 		set_bit(BH_Mapped, &bh->b_state);
 	}
 	tail->b_this_page = head;
@@ -1251,7 +1240,7 @@ int block_flushpage(struct inode *inode, struct page *page, unsigned long offset
 
 	/*
 	 * subtle. We release buffer-heads only if this is
-	 * the 'final' flushpage. We have invalidated the bmap
+	 * the 'final' flushpage. We have invalidated the get_block
 	 * cached value unconditionally, so real IO is not
 	 * possible anymore.
 	 *
@@ -1770,7 +1759,7 @@ static int do_kio(struct kiobuf *kiobuf,
  */
 
 int brw_kiovec(int rw, int nr, struct kiobuf *iovec[], 
-	       kdev_t dev, unsigned long b[], int size, int bmap)
+	       kdev_t dev, unsigned long b[], int size)
 {
 	int		err;
 	int		length;
@@ -1893,7 +1882,7 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 	return err;
 
  error:
-	/* We got an error allocation the bh'es.  Just free the current
+	/* We got an error allocating the bh'es.  Just free the current
            buffer_heads and exit. */
 	spin_lock(&unused_list_lock);
 	for (i = bhind; --i >= 0; ) {
@@ -1915,7 +1904,7 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
  * FIXME: we need a swapper_inode->get_block function to remove
  *        some of the bmap kludges and interface ugliness here.
  */
-int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
+int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size)
 {
 	struct buffer_head *head, *bh, *arr[MAX_BUF_PER_PAGE];
 	int nr, fresh /* temporary debugging flag */, block;
@@ -1929,7 +1918,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 	 */
 	fresh = 0;
 	if (!page->buffers) {
-		create_page_buffers(rw, page, dev, b, size, bmap);
+		create_page_buffers(rw, page, dev, b, size);
 		fresh = 1;
 	}
 	if (!page->buffers)
@@ -1947,16 +1936,9 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 		if (rw == READ) {
 			if (!fresh)
 				BUG();
-			if (bmap && !block) {
-				if (block)
-					BUG();
-			} else {
-				if (bmap && !block)
-					BUG();
-				if (!buffer_uptodate(bh)) {
-					arr[nr++] = bh;
-					atomic_inc(&bh->b_count);
-				}
+			if (!buffer_uptodate(bh)) {
+				arr[nr++] = bh;
+				atomic_inc(&bh->b_count);
 			}
 		} else { /* WRITE */
 			if (!bh->b_blocknr) {
@@ -1994,7 +1976,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 
 /*
  * Generic "read page" function for block devices that have the normal
- * bmap functionality. This is most of the block device filesystems.
+ * get_block functionality. This is most of the block device filesystems.
  * Reads the page asynchronously --- the unlock_buffer() and
  * mark_buffer_uptodate() functions propagate buffer state into the
  * page struct once IO has completed.

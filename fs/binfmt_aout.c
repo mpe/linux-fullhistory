@@ -270,6 +270,7 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	unsigned long fd_offset;
 	unsigned long rlim;
 	int retval;
+	static unsigned long error_time=0;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
@@ -283,7 +284,11 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 
 #ifdef __i386__
 	if (N_MAGIC(ex) == ZMAGIC && fd_offset != BLOCK_SIZE) {
-		printk(KERN_NOTICE "N_TXTOFF != BLOCK_SIZE. See a.out.h.\n");
+		if((jiffies-error_time) >5)
+		{
+			printk(KERN_NOTICE "N_TXTOFF != BLOCK_SIZE. See a.out.h.\n");
+			error_time=jiffies;
+		}
 		return -ENOEXEC;
 	}
 
@@ -291,7 +296,11 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	    bprm->dentry->d_inode->i_op &&
 	    bprm->dentry->d_inode->i_op->get_block &&
 	    (fd_offset < bprm->dentry->d_inode->i_sb->s_blocksize)) {
-		printk(KERN_NOTICE "N_TXTOFF < BLOCK_SIZE. Please convert binary.\n");
+		if((jiffies-error_time) >5)
+		{
+			printk(KERN_NOTICE "N_TXTOFF < BLOCK_SIZE. Please convert binary.\n");
+			error_time=jiffies;
+		}
 		return -ENOEXEC;
 	}
 #endif

@@ -453,7 +453,7 @@ bus_mouse_init(void)
 #ifdef CONFIG_SUN_MOUSE
 	sun_mouse_init();
 #endif
-#ifdef CONFIG_ADB_MOUSE
+#ifdef CONFIG_ADBMOUSE
 	adb_mouse_init();
 #endif
 #ifdef CONFIG_RPCMOUSE

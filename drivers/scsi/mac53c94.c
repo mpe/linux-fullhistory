@@ -85,7 +85,9 @@ mac53c94_detect(Scsi_Host_Template *tp)
 		if (host == 0)
 			panic("couldn't register 53c94 host");
 		host->unique_id = nfscs;
+#ifndef MODULE
 		note_scsi_host(node, host);
+#endif
 
 		state = (struct fsc_state *) host->hostdata;
 		if (state == 0)

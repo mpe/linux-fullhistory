@@ -150,7 +150,7 @@ extern int grackle_pcibios_write_config_word(unsigned char bus,
  * - the number of response bytes which the PMU will return, or
  *   -1 if it will send a length byte.
  */
-static s8 pmu_data_len[256][2] __openfirmwaredata = {
+static const s8 pmu_data_len[256][2] __openfirmwaredata = {
 /*	   0	   1	   2	   3	   4	   5	   6	   7  */
 /*00*/	{-1, 0},{-1, 0},{-1, 0},{-1, 0},{-1, 0},{-1, 0},{-1, 0},{-1, 0},
 /*08*/	{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},
@@ -263,6 +263,20 @@ pmu_init(void)
 {
 	if (vias == NULL)
 		return -ENXIO;
+	return 0;
+}
+
+/*
+ * We can't wait until pmu_init gets called, that happens too late.
+ * It happens after IDE and SCSI initialization, which can take a few
+ * seconds, and by that time the PMU could have given up on us and
+ * turned us off.
+ * This is called from arch/ppc/kernel/pmac_setup.c:pmac_init2().
+ */
+void via_pmu_start(void)
+{
+	if (vias == NULL)
+		return;
 
 	bright_req_1.complete = 1;
 	bright_req_2.complete = 1;
@@ -272,7 +286,7 @@ pmu_init(void)
 			(void *)0)) {
 		printk(KERN_ERR "VIA-PMU: can't get irq %d\n",
 		       vias->intrs[0].line);
-		return -ENXIO;
+		return;
 	}
 
 	/* Enable interrupts */
@@ -282,8 +296,6 @@ pmu_init(void)
 	
 	/* Enable backlight */
 	pmu_enable_backlight(1);
-
-	return 0;
 }
 
 static int __openfirmware

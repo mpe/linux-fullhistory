@@ -17,7 +17,6 @@
 #
 
 LD=$(CROSS_COMPILE)ld -m elf_i386
-CPP=$(CC) -E
 OBJCOPY=$(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 LDFLAGS=-e stext
 LINKFLAGS =-T $(TOPDIR)/arch/i386/vmlinux.lds $(LDFLAGS)
@@ -80,9 +79,12 @@ MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 vmlinux: arch/i386/vmlinux.lds
 
 arch/i386/vmlinux.lds: arch/i386/vmlinux.lds.S FORCE
-	gcc -E -C -P -I$(HPATH) -imacros $(HPATH)/asm-i386/page_offset.h -Ui386 arch/i386/vmlinux.lds.S >arch/i386/vmlinux.lds
+	$(CPP) -C -P -imacros $(HPATH)/asm-i386/page_offset.h -Ui386 arch/i386/vmlinux.lds.S >arch/i386/vmlinux.lds
 
 FORCE: ;
+
+.PHONY: zImage bzImge compressed zlilo bzlilo zdisk bzdisk install \
+		clean archclean archmrproper archdep
 
 zImage: vmlinux
 	@$(MAKEBOOT) zImage

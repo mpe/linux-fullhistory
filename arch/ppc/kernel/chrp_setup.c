@@ -498,7 +498,9 @@ void __init chrp_init_IRQ(void)
 void __init
 chrp_init2(void)
 {
+#ifdef CONFIG_NVRAM  
 	pmac_nvram_init();
+#endif
 }
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
@@ -599,12 +601,6 @@ chrp_ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_
 		hw->irq = chrp_ide_irq;
 }
 
-#if defined(CONFIG_BLK_DEV_IDE_MODULE)
-EXPORT_SYMBOL(chrp_ide_irq);
-EXPORT_SYMBOL(chrp_ide_ports_known);
-EXPORT_SYMBOL(chrp_ide_regbase);
-EXPORT_SYMBOL(chrp_ide_probe);
-#endif
 #endif
 
 void __init

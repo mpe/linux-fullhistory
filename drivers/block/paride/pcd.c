@@ -571,7 +571,7 @@ static int pcd_reset( int unit )
 	WR(0,6,0xa0 + 0x10*PCD.drive);
 	WR(0,7,8);
 
-	pcd_sleep(2);  		/* delay a bit */
+	pcd_sleep(20*HZ/1000);  		/* delay a bit */
 
 	k = 0;
 	while ((k++ < PCD_RESET_TMO) && (RR(1,6)&IDE_BUSY))
@@ -609,7 +609,7 @@ static int pcd_ready_wait( int unit, int tmo )
           if (!p) return 0;
 	  if (!(((p & 0xffff) == 0x0402)||((p & 0xff) == 6))) return p;
           k++;
-          pcd_sleep(100);
+          pcd_sleep(HZ);
         }
         return 0x000020;        /* timeout */
 }

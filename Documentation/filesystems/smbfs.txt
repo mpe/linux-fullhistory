@@ -2,47 +2,7 @@ Smbfs is a filesystem that implements the SMB protocol, which is the
 protocol used by Windows for Workgroups, Windows 95 and Windows NT.
 Smbfs was inspired by Samba, the program written by Andrew Tridgell
 that turns any Unix host into a file server for DOS or Windows clients.
-See ftp://nimbus.anu.edu.au/pub/tridge/samba/ for this interesting
-program suite and much more information on SMB, NetBIOS over TCP/IP,
-and explanations for concepts like netbios name or share.
 
-To use smbfs, you must first install the Samba package (Samba-1.9.18p1 or
-later). This package includes the special smbmount utility needed to mount
-smbfs volumes. Refer to the smbmount(8) and smbmnt(8) manpages for the
-details regarding smbfs mounts.
-
-The smbmount utility reads the Samba smb.conf config file for some of its
-options, and at least one of these is important for smbfs operation. You
-should enable the TCP_NODELAY socket option, or else directory listings
-will be dramatically slower (under Win NT at least).
-
-Mount-Time Options
-Windows 95 has several bugs that affect SMB operations, and smbfs includes
-work-arounds for all of the bugs found (so far, at least.) These can be
-enabled at compile-time with the CONFIG_SMB_WIN95 kernel option.
-
-Unfortunately, some of the Win 95 work-arounds interact with Win NT bugs,
-so if you're using several different types of servers on your network you
-probably want to enable the work-arounds at mount time. To do this, answer
-`N' to the CONFIG_SMB_WIN95 option, and add the needed options listed below
-to the file mode argument of the mount command for the Win 95 servers.
-
-Option                  Value  Effect
-Identify Win 95 Server    1    Enables bug fixes
-Use Core Attributes       2    Speeds up directory scans, only mtime
-Use Dir Attributes        4    Alternate way to get file attributes
-
-To apply the options, sum the values and prepend it to the file mode. For
-example, to use options 1 and 2 with file mode 755, you would specify 3755:
-
-	mount /mnt/tmp -f 3755
-
-Smbfs will print a message at mount time confirming the selected options.
-Note that _only_ Windows 95 servers require special treatment; using the
-"core attributes" option with Win NT will give trash timestamp values.
-
-To summarize, if your network includes both Win 95 and NT servers:
-(1) Do _not_ enable the CONFIG_SMB_WIN95 kernel option
-
-(2) Add the desired work-around options to the mount command for your
-    Win 95 server(s).
+Smbfs is a SMB client, but uses parts of samba for it's operation. For
+more info on samba, including documentation, please go to
+http://www.samba.org/ and then on to your nearest mirror.

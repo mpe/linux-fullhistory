@@ -305,6 +305,7 @@ typedef struct wanif_conf
 	char mc;			/* Multicast on or off */
 	char local_addr[WAN_ADDRESS_SZ+1];/* local media address, ASCIIZ */
 	unsigned char port;		/* board port */
+	unsigned char protocol;		/* prococol used in this channel (TCPOX25 or X25) */
 	int reserved[8];		/* reserved for future extensions */
 } wanif_conf_t;
 

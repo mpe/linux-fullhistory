@@ -137,6 +137,14 @@ nfsd_iscovered(struct dentry *dentry, struct svc_export *exp)
 /*
  * Look up one component of a pathname.
  * N.B. After this call _both_ fhp and resfh need an fh_put
+ *
+ * If the lookup would cross a mountpoint, and the mounted filesystem
+ * is exported to the client with NFSEXP_CROSSMNT, then the lookup is
+ * accepted as it stands and the mounted directory is
+ * returned. Otherwise the covered directory is returned.
+ * NOTE: this mountpoint crossing is not supported properly by all
+ *   clients and is explicitly disallowed for NFSv3
+ *      NeilBrown <neilb@cse.unsw.edu.au>
  */
 int
 nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
@@ -176,18 +184,27 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	 * check if we have crossed a mount point ...
 	 */
 	if (dchild->d_sb != dparent->d_sb) {
-		struct dentry *tdentry;
-		tdentry = dchild->d_covers;
-		if (tdentry == dchild)
-			goto out_dput;
-	        dput(dchild);
-		dchild = dget(tdentry);
-	        if (dchild->d_sb != dparent->d_sb) {
-printk("nfsd_lookup: %s/%s crossed mount point!\n", dparent->d_name.name, dchild->d_name.name);
-			goto out_dput;
+		struct svc_export *exp2 = NULL;
+		exp2 = exp_get(rqstp->rq_client,
+			       dchild->d_inode->i_dev,
+			       dchild->d_inode->i_ino);
+		if (exp2 && EX_CROSSMNT(exp2))
+			/* successfully crossed mount point */
+			exp = exp2;
+		else if (dchild->d_covers->d_sb == dparent->d_sb) {
+			/* stay in the original filesystem */
+			struct dentry *tdentry = dget(dchild->d_covers);
+			dput(dchild);
+			dchild = tdentry;
+		} else {
+			/* This cannot possibly happen */
+			printk("nfsd_lookup: %s/%s impossible mount point!\n", dparent->d_name.name, dchild->d_name.name);
+			dput(dchild);
+			err = nfserr_acces;
+			goto out;
+
 		}
 	}
-
 	/*
 	 * Note: we compose the file handle now, but as the
 	 * dentry may be negative, it may need to be updated.
@@ -201,10 +218,6 @@ out:
 
 out_nfserr:
 	err = nfserrno(-PTR_ERR(dchild));
-	goto out;
-out_dput:
-	dput(dchild);
-	err = nfserr_acces;
 	goto out;
 }
 

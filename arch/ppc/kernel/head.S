@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.147 1999/09/15 23:58:53 cort Exp $
+ *  $Id: head.S,v 1.154 1999/10/12 00:33:31 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -51,6 +51,10 @@
 	
 /* 601 only have IBAT; cr0.eq is set on 601 when using this macro */
 #define LOAD_BAT(n, reg, RA, RB)	\
+	/* see the comment for clear_bats() -- Cort */ \
+	li	RA,0;			\
+	mtspr	IBAT##n##U,RA;		\
+	mtspr	DBAT##n##U,RA;		\
 	lwz	RA,(n*16)+0(reg);	\
 	lwz	RB,(n*16)+4(reg);	\
 	mtspr	IBAT##n##U,RA;		\
@@ -150,7 +154,7 @@ __start:
  */
 	mr	r4,r30
 	bl	fix_mem_constants
-#endif
+#endif /* CONFIG_APUS */
 
 /*
  * Use the first pair of BAT registers to map the 1st 16MB
@@ -158,7 +162,7 @@ __start:
  * call OF any more.
  */
 	lis	r11,KERNELBASE@h
-#ifndef CONFIG_PPC64xxx
+#ifndef CONFIG_PPC64
 	mfspr	r9,PVR
 	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
 	cmpi	0,r9,1
@@ -173,10 +177,19 @@ __start:
 	mtspr	IBAT1L,r10
 	b	5f
 #endif /* CONFIG_PPC64 */
-4:
-	tophys(r8,r11)
+
+4:	tophys(r8,r11)
+#ifdef __SMP__
+	ori	r8,r8,0x12		/* R/W access, M=1 */
+#else
 	ori	r8,r8,2			/* R/W access */
+#endif /* __SMP__ */
+#ifdef CONFIG_APUS
+	ori	r11,r11,BL_8M<<2|0x2	/* set up 8MB BAT registers for 604 */
+#else
 	ori	r11,r11,BL_256M<<2|0x2	/* set up BAT registers for 604 */
+#endif /* CONFIG_APUS */
+	
 #ifdef CONFIG_PPC64
 	/* clear out the high 32 bits in the BAT */
 	clrldi	r11,r11,32
@@ -185,32 +198,14 @@ __start:
 	clrldi	r16,r16,63
 	mtsdr1	r16
 #else /* CONFIG_PPC64 */
-	/* 
-	 * allow secondary cpus to get at all of ram in early bootup
-	 * since their init_task may be up there -- Cort
+	/*
+	 * If the MMU is off clear the bats.  See clear_bat() -- Cort
 	 */
-#if 0
-	oris	r18,r8,0x10000000@h
-	oris	r21,r11,(KERNELBASE+0x10000000)@h
-#else
-	lis	r18,0x9000
-	ori	r18,r18,0x12
-	lis	r21,0x9000
-	ori	r21,r21,0x7fe
-#endif
-	mtspr	DBAT1L,r18		/* N.B. 6xx (not 601) have valid */
-	mtspr	DBAT1U,r21		/* bit in upper BAT register */
-	mtspr	IBAT1L,r18
-	mtspr	IBAT1U,r21
-
-#if 0	/* for now, otherwise we overflow the 0x100 bytes we have here */
-	oris	r18,r8,0x20000000@h
-	oris	r21,r11,(KERNELBASE+0x20000000)@h
-	mtspr	DBAT2L,r18		/* N.B. 6xx (not 601) have valid */
-	mtspr	DBAT2U,r21		/* bit in upper BAT register */
-	mtspr	IBAT2L,r18
-	mtspr	IBAT2U,r21
-#endif /* 0 */
+	mfmsr	r20
+	andi.	r20,r20,MSR_DR
+	bne	100f
+	bl	clear_bats
+100:
 #endif /* CONFIG_PPC64 */
 	mtspr	DBAT0L,r8		/* N.B. 6xx (not 601) have valid */
 	mtspr	DBAT0U,r11		/* bit in upper BAT register */
@@ -218,27 +213,7 @@ __start:
 	mtspr	IBAT0U,r11
 5:	isync
 
-#ifdef CONFIG_APUS
-	/* Unfortunately the APUS specific instructions bloat the
-	 * code so it cannot fit in the 0x100 bytes available. We have
-	 * to do it the crude way. */
-
-	/* Map 0xfff00000 so we can access VTOP/PTOV constant when
-	   MMU is enabled. */
-	lis	r8,0xfff0
-	ori	r11,r8,0x2		/* r/w */
-	ori	r8,r8,0x2		/* 128KB, supervisor */
-	mtspr	DBAT3U,r8
-	mtspr	DBAT3L,r11
-	
-	/* Copy exception code to exception vector base. */
-	lis	r3,KERNELBASE@h
-	tophys(r4,r3)
-	lis	r3,0xfff0		/* Copy to 0xfff00000 on APUS */
-	li	r5,0x4000		/* # bytes of memory to copy */
-	li	r6,0
-	bl	copy_and_flush		/* copy the first 0x4000 bytes */
-#else /* CONFIG_APUS */
+#ifndef CONFIG_APUS
 /*
  * We need to run with _start at physical address 0.
  * On CHRP, we are loaded at 0x10000 since OF on CHRP uses
@@ -267,7 +242,6 @@ __start:
  * this shouldn't bother the pmac since it just gets turned on again
  * as we jump to our code at KERNELBASE. -- Cort
  */
-
 turn_on_mmu:
 	mfmsr	r0
 	ori	r0,r0,MSR_DR|MSR_IR
@@ -335,7 +309,8 @@ label:						\
 /* System reset */
 #ifdef CONFIG_SMP /* MVME/MTX and gemini start the secondary here */
 #ifdef CONFIG_GEMINI
-	STD_EXCEPTION(0x100, Reset, __secondary_start_gemini)
+	. = 0x100
+	b	__secondary_start_gemini
 #else /* CONFIG_GEMINI */
 	STD_EXCEPTION(0x100, Reset, __secondary_start_psurge)
 #endif /* CONFIG_GEMINI */
@@ -356,7 +331,6 @@ DataAccess:
 	mfspr	r3,DAR			/* into the hash table */
 	rlwinm	r4,r23,32-13,30,30	/* MSR_PR -> _PAGE_USER */
 	rlwimi	r4,r20,32-23,29,29	/* DSISR_STORE -> _PAGE_RW */
-	mfspr	r5,SPRG3		/* phys addr of THREAD */
 	bl	hash_page
 1:	stw	r20,_DSISR(r21)
 	mr	r5,r20
@@ -378,7 +352,6 @@ InstructionAccess:
 	mr	r3,r22			/* into the hash table */
 	rlwinm	r4,r23,32-13,30,30	/* MSR_PR -> _PAGE_USER */
 	mr	r20,r23			/* SRR1 has reason bits */
-	mfspr	r5,SPRG3		/* phys addr of THREAD */
 	bl	hash_page
 1:	addi	r3,r1,STACK_FRAME_OVERHEAD
 	mr	r4,r22
@@ -392,35 +365,8 @@ InstructionAccess:
 /* External interrupt */
 	. = 0x500;
 HardwareInterrupt:
+#ifndef CONFIG_APUS
 	EXCEPTION_PROLOG;
-#ifdef CONFIG_APUS
-	/* This is horrible, but there's no way around it. Enable the
-	data cache so the IRQ hardware register can be accessed
-	without cache intervention. Then disable interrupts and get
-	the current emulated m68k IPL value. */
-	
-	mfmsr	20
-	xori	r20,r20,MSR_DR
-	sync
-	mtmsr	r20
-	sync
-
-	lis	r3,APUS_IPL_EMU@h
-
-	li	r20,(IPLEMU_SETRESET|IPLEMU_DISABLEINT)
-	stb	r20,APUS_IPL_EMU@l(r3)
-	eieio
-
-	lbz	r3,APUS_IPL_EMU@l(r3)
-
-	mfmsr	r20
-	xori	r20,r20,MSR_DR
-	sync
-	mtmsr	r20
-	sync
-
-	stw	r3,(_CCR+4)(r21);
-#endif
 	addi	r3,r1,STACK_FRAME_OVERHEAD
 	li	r20,MSR_KERNEL
 	li	r4,0
@@ -429,7 +375,12 @@ HardwareInterrupt:
 do_IRQ_intercept:
 	.long	do_IRQ;
 	.long	ret_from_except
-	
+#else
+ 	EXCEPTION_PROLOG;
+ 	addi	r3,r1,STACK_FRAME_OVERHEAD
+ 	li	r20,MSR_KERNEL
+	bl	apus_interrupt_entry
+#endif /* CONFIG_APUS */
 
 /* Alignment exception */
 	. = 0x600
@@ -723,8 +674,6 @@ DataStoreTLBMiss:
 	.globl	transfer_to_handler
 transfer_to_handler:
 	stw	r22,_NIP(r21)
-	lis	r22,MSR_POW@h
-	andc	r23,r23,r22
 	stw	r23,_MSR(r21)
 	SAVE_GPR(7, r21)
 	SAVE_4GPRS(8, r21)
@@ -974,6 +923,19 @@ fix_mem_constants:
 	cmpw	r12,r13
 	bne     1b
 
+/*
+ * Map the memory where the exception handlers will
+ * be copied to when hash constants have been patched.  
+ */
+#ifdef CONFIG_APUS_FAST_EXCEPT
+	lis	r8,0xfff0
+#else
+	lis	r8,0
+#endif
+	ori	r8,r8,0x2		/* 128KB, supervisor */
+	mtspr	DBAT3U,r8
+	mtspr	DBAT3L,r8
+
 	lis	r12,__ptov_table_begin@h
 	ori	r12,r12,__ptov_table_begin@l
 	add	r12,r12,r10	         /* table begin phys address */
@@ -1026,11 +988,9 @@ __secondary_hold:
 	mtlr	r5
 	mr	r24,r3			/* cpu # */
 	blr
-
+#ifdef CONFIG_GEMINI
 	.globl	__secondary_start_gemini
 __secondary_start_gemini:
-1011:	b	1011b
-	
         mfspr   r4,HID0
         ori     r4,r4,HID0_ICFI
         li      r3,0
@@ -1040,6 +1000,7 @@ __secondary_start_gemini:
         sync
         bl      prom_init
         b       __secondary_start
+#endif /* CONFIG_GEMINI */
 	
 	.globl	__secondary_start_psurge
 __secondary_start_psurge:
@@ -1281,3 +1242,44 @@ swapper_pg_dir:
 	.globl	cmd_line
 cmd_line:
 	.space	512
+	
+/* 
+ * An undocumented "feature" of 604e requires that the v bit
+ * be cleared before changing BAT values.
+ *
+ * Also, newer IBM firmware does not clear bat3 and 4 so
+ * this makes sure it's done.
+ *  -- Cort 
+ */
+clear_bats:
+	mfmsr	r20
+	andi.	r19,r20,MSR_DR
+	beqlr
+	
+	li	r20,0
+	
+	mtspr	DBAT0U,r20
+	mtspr	DBAT0L,r20
+	mtspr	IBAT0U,r20
+	mtspr	IBAT0L,r20
+	sync
+	isync
+	
+	mtspr	DBAT1U,r20
+	mtspr	DBAT1L,r20
+	mtspr	IBAT1U,r20
+	mtspr	IBAT1L,r20
+	sync
+	isync	
+
+	mtspr	DBAT2U,r20
+	mtspr	DBAT2L,r20
+	mtspr	IBAT2U,r20
+	mtspr	IBAT2L,r20
+	
+	mtspr	DBAT3U,r20
+	mtspr	DBAT3L,r20
+	mtspr	IBAT3U,r20
+	mtspr	IBAT3L,r20
+	
+	blr

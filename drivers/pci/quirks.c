@@ -56,6 +56,47 @@ static void __init quirk_isa_dma_hangs(struct pci_dev *dev)
 	}
 }
 
+int pci_pci_problems = 0;
+
+/*
+ *	Chipsets where PCI->PCI transfers vanish or hang
+ */
+
+static void __init quirk_nopcipci(struct pci_dev *dev)
+{
+	if((pci_pci_problems&PCIPCI_FAIL)==0)
+	{
+		printk(KERN_INFO "Disabling direct PCI/PCI transfers.\n");
+		pci_pci_problems|=PCIPCI_FAIL;
+	}
+}
+
+/*
+ *	Triton requires workarounds to be used by the drivers
+ */
+ 
+static void __init quirk_triton(struct pci_dev *dev)
+{
+	if((pci_pci_problems&PCIPCI_TRITON)==0)
+	{
+		printk(KERN_INFO "Limiting direct PCI/PCI transfers.\n");
+		pci_pci_problems|=PCIPCI_TRITON;
+	}
+}
+
+/*
+ *	Natoma has some interesting boundary conditions with Zoran stuff
+ *	at least
+ */
+ 
+static void __init quirk_natoma(struct pci_dev *dev)
+{
+	if((pci_pci_problems&PCIPCI_NATOMA)==0)
+	{
+		printk(KERN_INFO "Limiting direct PCI/PCI transfers.\n");
+		pci_pci_problems|=PCIPCI_NATOMA;
+	}
+}
 
 /*
  *  S3 868 and 968 chips report region size equal to 32M, but they decode 64M.
@@ -79,6 +120,7 @@ static void __init quirk_s3_64M(struct pci_dev *dev)
 
 static struct pci_fixup pci_fixups[] __initdata = {
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82441,	quirk_passive_release },
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82441,	quirk_passive_release },
 	/*
 	 * Its not totally clear which chipsets are the problematic ones
 	 * We know 82C586 and 82C596 variants are affected.
@@ -88,6 +130,18 @@ static struct pci_fixup pci_fixups[] __initdata = {
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C596,	quirk_isa_dma_hangs },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_868,		quirk_s3_64M },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_968,		quirk_s3_64M },
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82437, 	quirk_triton }, 
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82437VX, 	quirk_triton }, 
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82439, 	quirk_triton }, 
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82439TX, 	quirk_triton }, 
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82441, 	quirk_natoma }, 
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82443LX_0, 	quirk_natoma }, 
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82443LX_1, 	quirk_natoma }, 
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82443BX_0, 	quirk_natoma }, 
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82443BX_1, 	quirk_natoma }, 
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82443BX_2, 	quirk_natoma },
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_5597,		quirk_nopcipci },
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_496,		quirk_nopcipci },
 	{ 0 }
 };
 

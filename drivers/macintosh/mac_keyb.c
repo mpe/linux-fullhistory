@@ -240,7 +240,7 @@ static void init_trackball(int id);
 static void init_turbomouse(int id);
 static void init_microspeed(int id);
 
-#ifdef CONFIG_ADB_MOUSE
+#ifdef CONFIG_ADBMOUSE
 /* XXX: Hook for mouse driver */
 void (*adb_mouse_interrupt_hook)(unsigned char *, int);
 int adb_emulate_buttons = 0;
@@ -336,7 +336,7 @@ input_keycode(int keycode, int repeat)
 	if (!repeat)
 		del_timer(&repeat_timer);
 
-#ifdef CONFIG_ADB_MOUSE
+#ifdef CONFIG_ADBMOUSE
 	/*
 	 * XXX: Add mouse button 2+3 fake codes here if mouse open.
 	 *	Keep track of 'button' states here as we only send 
@@ -366,7 +366,7 @@ input_keycode(int keycode, int repeat)
 		}
 		return;
 	}
-#endif /* CONFIG_ADB_MOUSE */
+#endif /* CONFIG_ADBMOUSE */
 
 	if (kbd->kbdmode != VC_RAW) {
 		if (!up_flag && !dont_repeat[keycode]) {
@@ -422,7 +422,7 @@ static void mac_put_queue(int ch)
 	}
 }
 
-#ifdef CONFIG_ADB_MOUSE
+#ifdef CONFIG_ADBMOUSE
 static void
 mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 {
@@ -554,7 +554,7 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 		}
 	}
 }
-#endif /* CONFIG_ADB_MOUSE */
+#endif /* CONFIG_ADBMOUSE */
 
 /* XXX Needs to get rid of this, see comments in pmu.c */
 extern int backlight_level;
@@ -700,7 +700,7 @@ void __init mackbd_init_hw(void)
 	memcpy(key_maps[8], macalt_map, sizeof(plain_map));
 	memcpy(key_maps[12], macctrl_alt_map, sizeof(plain_map));
 
-#ifdef CONFIG_ADB_MOUSE
+#ifdef CONFIG_ADBMOUSE
 	/* initialize mouse interrupt hook */
 	adb_mouse_interrupt_hook = NULL;
 #endif
@@ -736,9 +736,9 @@ mackeyb_probe(void)
 	struct adb_request req;
 	int i;
 
-#ifdef CONFIG_ADB_MOUSE
+#ifdef CONFIG_ADBMOUSE
 	adb_register(ADB_MOUSE, 0, &mouse_ids, mouse_input);
-#endif /* CONFIG_ADB_MOUSE */
+#endif /* CONFIG_ADBMOUSE */
 
 	adb_register(ADB_KEYBOARD, 0, &keyboard_ids, keyboard_input);
 	adb_register(0x07, 0x1F, &buttons_ids, buttons_input);

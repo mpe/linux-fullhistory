@@ -871,6 +871,8 @@ static int open_aux(struct inode * inode, struct file * file)
 	aux_write_ack(AUX_ENABLE_DEV); /* Enable aux device */
 	kbd_write_cmd(AUX_INTS_ON); /* Enable controller ints */
 
+	send_data(KBD_CMD_ENABLE);	/* try to workaround toshiba4030cdt problem */
+
 	return 0;
 }
 

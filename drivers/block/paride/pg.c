@@ -463,7 +463,7 @@ static int pg_reset( int unit )
 	WR(0,6,DRIVE);
 	WR(0,7,8);
 
-	pg_sleep(2);
+	pg_sleep(20*HZ/1000);
 
 	k = 0;
 	while ((k++ < PG_RESET_TMO) && (RR(1,6)&STAT_BUSY))

@@ -237,8 +237,11 @@ tracesys:
 	movl $-ENOSYS,EAX(%esp)
 	call SYMBOL_NAME(syscall_trace)
 	movl ORIG_EAX(%esp),%eax
+	cmpl $(NR_syscalls),%eax
+	jae tracesys_exit
 	call *SYMBOL_NAME(sys_call_table)(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
+tracesys_exit:
 	call SYMBOL_NAME(syscall_trace)
 	jmp ret_from_sys_call
 badsys:

@@ -165,7 +165,7 @@ static void add_node(struct device_node *np, struct proc_dir_entry *de)
 		 * add a symlink with the name property as its name.
 		 */
 		for (sib = np->child; sib != child; sib = sib->sibling)
-			if (strcmp(sib->name, child->name) == 0)
+			if (sib->name && strcmp(sib->name, child->name) == 0)
 				break;
 		if (sib == child && strncmp(p, child->name, l) != 0) {
 			al = kmalloc(sizeof(struct proc_dir_entry),

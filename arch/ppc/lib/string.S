@@ -380,16 +380,26 @@ __strncpy_from_user:
 	.long	1b,99b
 .text
 
-	.globl	strlen_user
-strlen_user:
-	addi	r4,r3,-1
-1:	lbzu	r0,1(r4)
+/* r3 = str, r4 = len (> 0), r5 = top (highest addr) */
+	.globl	__strnlen_user
+__strnlen_user:
+	addi	r7,r3,-1
+	subf	r6,r7,r5	/* top+1 - str */
+	cmplw	0,r4,r6
+	bge	0f
+	mr	r6,r4
+0:	mtctr	r6		/* ctr = min(len, top - str) */
+1:	lbzu	r0,1(r7)	/* get next byte */
 	cmpwi	0,r0,0
-	bne	1b
-	subf	r3,r3,r4
-	addi	r3,r3,1
+	bdnzf	2,1b		/* loop if --ctr != 0 && byte != 0 */
+	addi	r7,r7,1
+	subf	r3,r3,r7	/* number of bytes we have looked at */
+	beqlr			/* return if we found a 0 byte */
+	cmpw	0,r3,r4		/* did we look at all len bytes? */
+	blt	99f		/* if not, must have hit top */
+	addi	r3,r4,1		/* return len + 1 to indicate no null found */
 	blr
-99:	li	r3,0
+99:	li	r3,0		/* bad address, return 0 */
 	blr
 .section __ex_table,"a"
 	.align	2

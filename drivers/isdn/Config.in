@@ -2,77 +2,76 @@
 # ISDN device configuration
 #
 if [ "$CONFIG_INET" != "n" ]; then
-  bool 'Support synchronous PPP' CONFIG_ISDN_PPP
-  if [ "$CONFIG_ISDN_PPP" != "n" ]; then
-    bool 'Use VJ-compression with synchronous PPP' CONFIG_ISDN_PPP_VJ
-    bool 'Support generic MP (RFC 1717)' CONFIG_ISDN_MPP
-  fi
+   bool '  Support synchronous PPP' CONFIG_ISDN_PPP
+   if [ "$CONFIG_ISDN_PPP" != "n" ]; then
+      bool '    Use VJ-compression with synchronous PPP' CONFIG_ISDN_PPP_VJ
+      bool '    Support generic MP (RFC 1717)' CONFIG_ISDN_MPP
+   fi
 fi
-bool 'Support audio via ISDN' CONFIG_ISDN_AUDIO
+bool '  Support audio via ISDN' CONFIG_ISDN_AUDIO
 if [ "$CONFIG_ISDN_AUDIO" != "n" ]; then
-  bool 'Support AT-Fax Class 2 commands' CONFIG_ISDN_TTY_FAX
+   bool '    Support AT-Fax Class 2 commands' CONFIG_ISDN_TTY_FAX
 fi
-bool 'Support isdn diversion services' CONFIG_ISDN_DIVERSION
-if [ "$CONFIG_X25" != "n" ]; then
-  bool 'X.25 PLP on top of ISDN (EXPERIMENTAL)' CONFIG_ISDN_X25
+bool '  Support isdn diversion services' CONFIG_ISDN_DIVERSION
+if [ "$CONFIG_X25" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   bool '    X.25 PLP on top of ISDN (EXPERIMENTAL)' CONFIG_ISDN_X25
 fi
-dep_tristate 'ICN 2B and 4B support' CONFIG_ISDN_DRV_ICN $CONFIG_ISDN
-dep_tristate 'isdnloop support' CONFIG_ISDN_DRV_LOOP $CONFIG_ISDN
-dep_tristate 'PCBIT-D support' CONFIG_ISDN_DRV_PCBIT $CONFIG_ISDN
-dep_tristate 'HiSax SiemensChipSet driver support' CONFIG_ISDN_DRV_HISAX $CONFIG_ISDN
+dep_tristate '  ICN 2B and 4B support' CONFIG_ISDN_DRV_ICN $CONFIG_ISDN
+dep_tristate '  isdnloop support' CONFIG_ISDN_DRV_LOOP $CONFIG_ISDN
+dep_tristate '  PCBIT-D support' CONFIG_ISDN_DRV_PCBIT $CONFIG_ISDN
+dep_tristate '  HiSax SiemensChipSet driver support' CONFIG_ISDN_DRV_HISAX $CONFIG_ISDN
 if [ "$CONFIG_ISDN_DRV_HISAX" != "n" ]; then
-    bool 'HiSax Support for EURO/DSS1' CONFIG_HISAX_EURO
-    if [ "$CONFIG_HISAX_EURO" != "n" ]; then
-	    bool 'Support for german chargeinfo' CONFIG_DE_AOC
-	    bool 'Disable sending complete' CONFIG_HISAX_NO_SENDCOMPLETE
-	    bool 'Disable sending low layer compatibility' CONFIG_HISAX_NO_LLC
-    fi
-    bool 'HiSax Support for german 1TR6' CONFIG_HISAX_1TR6
-    bool 'HiSax Support for Teles 16.0/8.0' CONFIG_HISAX_16_0
-    bool 'HiSax Support for Teles 16.3 or PNP or PCMCIA' CONFIG_HISAX_16_3
-    bool 'HiSax Support for Teles PCI' CONFIG_HISAX_TELESPCI 
-    bool 'HiSax Support for Teles S0Box' CONFIG_HISAX_S0BOX 
-    bool 'HiSax Support for AVM A1 (Fritz)' CONFIG_HISAX_AVM_A1
-    bool 'HiSax Support for AVM PnP/PCI (Fritz!PnP/PCI)' CONFIG_HISAX_FRITZPCI
-    bool 'HiSax Support for AVM A1 PCMCIA (Fritz)' CONFIG_HISAX_AVM_A1_PCMCIA
-    bool 'HiSax Support for Elsa cards' CONFIG_HISAX_ELSA
-    bool 'HiSax Support for ITK ix1-micro Revision 2' CONFIG_HISAX_IX1MICROR2
-    bool 'HiSax Support for Eicon.Diehl Diva cards' CONFIG_HISAX_DIEHLDIVA
-    bool 'HiSax Support for ASUSCOM cards' CONFIG_HISAX_ASUSCOM
-    bool 'HiSax Support for TELEINT cards' CONFIG_HISAX_TELEINT
-    bool 'HiSax Support for HFC-S based cards' CONFIG_HISAX_HFCS
-    bool 'HiSax Support for Sedlbauer cards' CONFIG_HISAX_SEDLBAUER
-    bool 'HiSax Support for USR Sportster internal TA' CONFIG_HISAX_SPORTSTER
-    bool 'HiSax Support for MIC card' CONFIG_HISAX_MIC
-    bool 'HiSax Support for NETjet card' CONFIG_HISAX_NETJET
-    bool 'HiSax Support for Niccy PnP/PCI card' CONFIG_HISAX_NICCY
-    bool 'HiSax Support for Siemens I-Surf card' CONFIG_HISAX_ISURF
-    bool 'HiSax Support for HST Saphir card' CONFIG_HISAX_HSTSAPHIR
-    bool 'HiSax Support for Telekom A4T card' CONFIG_HISAX_BKM_A4T
-    bool 'HiSax Support for Scitel Quadro card' CONFIG_HISAX_SCT_QUADRO
-    bool 'HiSax Support for Gazel cards' CONFIG_HISAX_GAZEL
-    bool 'HiSax Support for HFC PCI-Bus cards' CONFIG_HISAX_HFC_PCI
-    if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
-#	bool 'HiSax Support for TESTEMULATOR (EXPERIMENTAL)' CONFIG_HISAX_TESTEMU
-	if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
-		bool 'HiSax Support for Am7930' CONFIG_HISAX_AMD7930
-	fi
-    fi
+   bool '    HiSax Support for EURO/DSS1' CONFIG_HISAX_EURO
+   if [ "$CONFIG_HISAX_EURO" != "n" ]; then
+      bool '      Support for german chargeinfo' CONFIG_DE_AOC
+      bool '      Disable sending complete' CONFIG_HISAX_NO_SENDCOMPLETE
+      bool '      Disable sending low layer compatibility' CONFIG_HISAX_NO_LLC
+   fi
+   bool '    HiSax Support for german 1TR6' CONFIG_HISAX_1TR6
+   bool '    HiSax Support for Teles 16.0/8.0' CONFIG_HISAX_16_0
+   bool '    HiSax Support for Teles 16.3 or PNP or PCMCIA' CONFIG_HISAX_16_3
+   bool '    HiSax Support for Teles PCI' CONFIG_HISAX_TELESPCI 
+   bool '    HiSax Support for Teles S0Box' CONFIG_HISAX_S0BOX 
+   bool '    HiSax Support for AVM A1 (Fritz)' CONFIG_HISAX_AVM_A1
+   bool '    HiSax Support for AVM PnP/PCI (Fritz!PnP/PCI)' CONFIG_HISAX_FRITZPCI
+   bool '    HiSax Support for AVM A1 PCMCIA (Fritz)' CONFIG_HISAX_AVM_A1_PCMCIA
+   bool '    HiSax Support for Elsa cards' CONFIG_HISAX_ELSA
+   bool '    HiSax Support for ITK ix1-micro Revision 2' CONFIG_HISAX_IX1MICROR2
+   bool '    HiSax Support for Eicon.Diehl Diva cards' CONFIG_HISAX_DIEHLDIVA
+   bool '    HiSax Support for ASUSCOM cards' CONFIG_HISAX_ASUSCOM
+   bool '    HiSax Support for TELEINT cards' CONFIG_HISAX_TELEINT
+   bool '    HiSax Support for HFC-S based cards' CONFIG_HISAX_HFCS
+   bool '    HiSax Support for Sedlbauer cards' CONFIG_HISAX_SEDLBAUER
+   bool '    HiSax Support for USR Sportster internal TA' CONFIG_HISAX_SPORTSTER
+   bool '    HiSax Support for MIC card' CONFIG_HISAX_MIC
+   bool '    HiSax Support for NETjet card' CONFIG_HISAX_NETJET
+   bool '    HiSax Support for Niccy PnP/PCI card' CONFIG_HISAX_NICCY
+   bool '    HiSax Support for Siemens I-Surf card' CONFIG_HISAX_ISURF
+   bool '    HiSax Support for HST Saphir card' CONFIG_HISAX_HSTSAPHIR
+   bool '    HiSax Support for Telekom A4T card' CONFIG_HISAX_BKM_A4T
+   bool '    HiSax Support for Scitel Quadro card' CONFIG_HISAX_SCT_QUADRO
+   bool '    HiSax Support for Gazel cards' CONFIG_HISAX_GAZEL
+   bool '    HiSax Support for HFC PCI-Bus cards' CONFIG_HISAX_HFC_PCI
+   if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
+#      bool '    HiSax Support for TESTEMULATOR (EXPERIMENTAL)' CONFIG_HISAX_TESTEMU
+      if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
+	 bool '    HiSax Support for Am7930' CONFIG_HISAX_AMD7930
+      fi
+   fi
 fi
 if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
-	dep_tristate 'Spellcaster support (EXPERIMENTAL)' CONFIG_ISDN_DRV_SC $CONFIG_ISDN
-	dep_tristate 'IBM Active 2000 support (EXPERIMENTAL)' CONFIG_ISDN_DRV_ACT2000 $CONFIG_ISDN
+	dep_tristate '  Spellcaster support (EXPERIMENTAL)' CONFIG_ISDN_DRV_SC $CONFIG_ISDN
+	dep_tristate '  IBM Active 2000 support (EXPERIMENTAL)' CONFIG_ISDN_DRV_ACT2000 $CONFIG_ISDN
 fi
-dep_tristate 'Eicon.Diehl active card support' CONFIG_ISDN_DRV_EICON $CONFIG_ISDN
+dep_tristate '  Eicon.Diehl active card support' CONFIG_ISDN_DRV_EICON $CONFIG_ISDN
 if [ "$CONFIG_ISDN_DRV_EICON" != "n" ]; then
-    bool 'Eicon S,SX,SCOM,Quadro,S2M support' CONFIG_ISDN_DRV_EICON_ISA
+    bool '    Eicon S, SX, SCOM, Quadro, S2M support' CONFIG_ISDN_DRV_EICON_ISA
 fi
-dep_tristate 'AVM CAPI2.0 support' CONFIG_ISDN_DRV_AVMB1 $CONFIG_ISDN
+dep_tristate '  AVM CAPI2.0 support' CONFIG_ISDN_DRV_AVMB1 $CONFIG_ISDN
 if [ "$CONFIG_ISDN_DRV_AVMB1" != "n" ]; then
-    bool 'AVM B1 ISA support' CONFIG_ISDN_DRV_AVMB1_B1ISA
-    bool 'AVM B1 PCI support' CONFIG_ISDN_DRV_AVMB1_B1PCI
-    bool 'AVM T1/T1B ISA support' CONFIG_ISDN_DRV_AVMB1_T1ISA
-    bool 'AVM B1/M1/M2 PCMCIA support' CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
-    bool 'Verbose reason code reporting (kernel size +=7K)' CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON
+   bool '    AVM B1 ISA support' CONFIG_ISDN_DRV_AVMB1_B1ISA
+   bool '    AVM B1 PCI support' CONFIG_ISDN_DRV_AVMB1_B1PCI
+   bool '    AVM T1/T1B ISA support' CONFIG_ISDN_DRV_AVMB1_T1ISA
+   bool '    AVM B1/M1/M2 PCMCIA support' CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
+   bool '    Verbose reason code reporting (kernel size +=7K)' CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON
 fi
-

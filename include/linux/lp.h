@@ -5,6 +5,7 @@
  * usr/include/linux/lp.h c.1991-1992 James Wiegand
  * many modifications copyright (C) 1992 Michael K. Johnson
  * Interrupt support added 1993 Nigel Gamble
+ * Removed 8255 status defines from inside __KERNEL__ Marcelo Tosatti 
  */
 
 /*
@@ -27,6 +28,17 @@
 #define LP_DATA_AVAIL  0x0800 /* Data is available. */
 #define LP_HAVE_PORT_BIT   12 /* (0x1000) Port is claimed. */
 #define LP_PORT_BUSY   (1<<13) /* Reading or writing. */
+
+/* 
+ * bit defines for 8255 status port
+ * base + 1
+ * accessed with LP_S(minor), which gets the byte...
+ */
+#define LP_PBUSY	0x80  /* inverted input, active high */
+#define LP_PACK		0x40  /* unchanged input, active low */
+#define LP_POUTPA	0x20  /* unchanged input, active high */
+#define LP_PSELECD	0x10  /* unchanged input, active high */
+#define LP_PERRORP	0x08  /* unchanged input, active low */
 
 /* timeout for each character.  This is relative to bus cycles -- it
  * is the count in a busy loop.  THIS IS THE VALUE TO CHANGE if you
@@ -143,16 +155,6 @@ struct lp_struct {
  * gets inverted, but it is also active low.
  */
 
-/* 
- * bit defines for 8255 status port
- * base + 1
- * accessed with LP_S(minor), which gets the byte...
- */
-#define LP_PBUSY	0x80  /* inverted input, active high */
-#define LP_PACK		0x40  /* unchanged input, active low */
-#define LP_POUTPA	0x20  /* unchanged input, active high */
-#define LP_PSELECD	0x10  /* unchanged input, active high */
-#define LP_PERRORP	0x08  /* unchanged input, active low */
 
 /* 
  * defines for 8255 control port

@@ -498,7 +498,7 @@ static void pt_media_access_cmd( int unit, int tmo, char *cmd, char *fun)
 		return;
 	}
 	pi_disconnect(PI);
-	pt_poll_dsc(unit,100,tmo,fun);
+	pt_poll_dsc(unit,HZ,tmo,fun);
 }
 
 static void pt_rewind( int unit )
@@ -526,11 +526,11 @@ static int pt_reset( int unit )
 	WR(0,6,DRIVE);
 	WR(0,7,8);
 
-	pt_sleep(2);
+	pt_sleep(20*HZ/1000);
 
         k = 0;
         while ((k++ < PT_RESET_TMO) && (RR(1,6)&STAT_BUSY))
-                pt_sleep(10);
+                pt_sleep(HZ/10);
 
 	flg = 1;
 	for(i=0;i<5;i++) flg &= (RR(0,i+1) == expect[i]);
@@ -559,7 +559,7 @@ static int pt_ready_wait( int unit, int tmo )
 	  if (!p) return 0;
 	  if (!(((p & 0xffff) == 0x0402)||((p & 0xff) == 6))) return p;
 	  k++;
-          pt_sleep(100);
+          pt_sleep(HZ);
 	}
 	return 0x000020;	/* timeout */
 }
@@ -809,7 +809,7 @@ static ssize_t pt_read(struct file * filp, char * buf,
 
 	while (count > 0) {
 
-	    if (!pt_poll_dsc(unit,1,PT_TMO,"read")) return -EIO;
+	    if (!pt_poll_dsc(unit,HZ/100,PT_TMO,"read")) return -EIO;
 
 	    n = count;
 	    if (n > 32768) n = 32768;   /* max per command */
@@ -895,7 +895,7 @@ static ssize_t pt_write(struct file * filp, const char * buf,
 
 	while (count > 0) {
 
-	    if (!pt_poll_dsc(unit,1,PT_TMO,"write")) return -EIO;
+	    if (!pt_poll_dsc(unit,HZ/100,PT_TMO,"write")) return -EIO;
 
             n = count;
             if (n > 32768) n = 32768;	/* max per command */

@@ -92,7 +92,7 @@ static void __init pcibios_claim_resources(struct pci_bus *bus)
 				struct resource *pr;
 				if (!r->start)
 					continue;
-				pr = pci_find_parent_resource(dev, r, 0);
+				pr = pci_find_parent_resource(dev, r);
 				if (!pr || request_resource(pr, r) < 0)
 				{
 					printk(KERN_ERR "PCI: Address space collision on region %d of device %s\n", idx, dev->name);
@@ -141,3 +141,8 @@ void __init fix_intr(struct device_node *node, struct pci_dev *dev)
 	}
 }
 #endif
+
+int pcibios_assign_resource(struct pci_dev *pdev, int resource)
+{
+	return 0;
+}

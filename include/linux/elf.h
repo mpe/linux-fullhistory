@@ -29,6 +29,13 @@ typedef __u64	Elf64_Word;
 #define PT_PHDR    6
 #define PT_LOPROC  0x70000000
 #define PT_HIPROC  0x7fffffff
+#define PT_MIPS_REGINFO		0x70000000
+
+/* Flags in the e_flags field of the header */
+#define EF_MIPS_NOREORDER 0x00000001
+#define EF_MIPS_PIC       0x00000002
+#define EF_MIPS_CPIC      0x00000004
+#define EF_MIPS_ARCH      0xf0000000
 
 /* These constants define the different elf file types */
 #define ET_NONE   0
@@ -36,8 +43,8 @@ typedef __u64	Elf64_Word;
 #define ET_EXEC   2
 #define ET_DYN    3
 #define ET_CORE   4
-#define ET_LOPROC 5
-#define ET_HIPROC 6
+#define ET_LOPROC 0xff00
+#define ET_HIPROC 0xffff
 
 /* These constants define the various ELF target machines */
 #define EM_NONE  0
@@ -99,6 +106,25 @@ typedef __u64	Elf64_Word;
 #define DT_JMPREL	23
 #define DT_LOPROC	0x70000000
 #define DT_HIPROC	0x7fffffff
+#define DT_MIPS_RLD_VERSION	0x70000001
+#define DT_MIPS_TIME_STAMP	0x70000002
+#define DT_MIPS_ICHECKSUM	0x70000003
+#define DT_MIPS_IVERSION	0x70000004
+#define DT_MIPS_FLAGS		0x70000005
+  #define RHF_NONE		  0
+  #define RHF_HARDWAY		  1
+  #define RHF_NOTPOT		  2
+#define DT_MIPS_BASE_ADDRESS	0x70000006
+#define DT_MIPS_CONFLICT	0x70000008
+#define DT_MIPS_LIBLIST		0x70000009
+#define DT_MIPS_LOCAL_GOTNO	0x7000000a
+#define DT_MIPS_CONFLICTNO	0x7000000b
+#define DT_MIPS_LIBLISTNO	0x70000010
+#define DT_MIPS_SYMTABNO	0x70000011
+#define DT_MIPS_UNREFEXTNO	0x70000012
+#define DT_MIPS_GOTSYM		0x70000013
+#define DT_MIPS_HIPAGENO	0x70000014
+#define DT_MIPS_RLD_MAP		0x70000016
 
 /* This info is needed when parsing the symbol table */
 #define STB_LOCAL  0
@@ -166,6 +192,55 @@ typedef struct {
 #define R_386_GOTOFF	9
 #define R_386_GOTPC	10
 #define R_386_NUM	11
+
+#define R_MIPS_NONE		0
+#define R_MIPS_16		1
+#define R_MIPS_32		2
+#define R_MIPS_REL32		3
+#define R_MIPS_26		4
+#define R_MIPS_HI16		5
+#define R_MIPS_LO16		6
+#define R_MIPS_GPREL16		7
+#define R_MIPS_LITERAL		8
+#define R_MIPS_GOT16		9
+#define R_MIPS_PC16		10
+#define R_MIPS_CALL16		11
+#define R_MIPS_GPREL32		12
+/* The remaining relocs are defined on Irix, although they are not
+   in the MIPS ELF ABI.  */
+#define R_MIPS_UNUSED1		13
+#define R_MIPS_UNUSED2		14
+#define R_MIPS_UNUSED3		15
+#define R_MIPS_SHIFT5		16
+#define R_MIPS_SHIFT6		17
+#define R_MIPS_64		18
+#define R_MIPS_GOT_DISP		19
+#define R_MIPS_GOT_PAGE		20
+#define R_MIPS_GOT_OFST		21
+/*
+ * The following two relocation types are specified in the the MIPS ABI
+ * conformance guide version 1.2 but not yet in the psABI.
+ */
+#define R_MIPS_GOTHI16		22
+#define R_MIPS_GOTLO16		23
+#define R_MIPS_SUB		24
+#define R_MIPS_INSERT_A		25
+#define R_MIPS_INSERT_B		26
+#define R_MIPS_DELETE		27
+#define R_MIPS_HIGHER		28
+#define R_MIPS_HIGHEST		29
+/*
+ * The following two relocation types are specified in the the MIPS ABI
+ * conformance guide version 1.2 but not yet in the psABI.
+ */
+#define R_MIPS_CALLHI16		30
+#define R_MIPS_CALLLO16		31
+/*
+ * This range is reserved for vendor specific relocations.
+ */
+#define R_MIPS_LOVENDOR		100
+#define R_MIPS_HIVENDOR		127
+
 
 /*
  * Sparc ELF relocation types
@@ -404,12 +479,17 @@ typedef struct elf64_phdr {
 #define SHT_HIPROC	0x7fffffff
 #define SHT_LOUSER	0x80000000
 #define SHT_HIUSER	0xffffffff
+#define SHT_MIPS_LIST		0x70000000
+#define SHT_MIPS_CONFLICT	0x70000002
+#define SHT_MIPS_GPTAB		0x70000003
+#define SHT_MIPS_UCODE		0x70000004
 
 /* sh_flags */
 #define SHF_WRITE	0x1
 #define SHF_ALLOC	0x2
 #define SHF_EXECINSTR	0x4
 #define SHF_MASKPROC	0xf0000000
+#define SHF_MIPS_GPREL	0x10000000
 
 /* special section indexes */
 #define SHN_UNDEF	0
@@ -419,6 +499,7 @@ typedef struct elf64_phdr {
 #define SHN_ABS		0xfff1
 #define SHN_COMMON	0xfff2
 #define SHN_HIRESERVE	0xffff
+#define SHN_MIPS_ACCOMON	0xff00
  
 typedef struct {
   Elf32_Word	sh_name;

@@ -51,6 +51,7 @@ extern struct consw *conswitchp;
 extern struct consw dummy_con;	/* dummy console buffer */
 extern struct consw fb_con;	/* frame buffer based console */
 extern struct consw vga_con;	/* VGA text console */
+extern struct consw newport_con;	/* SGI Newport console  */
 extern struct consw prom_con;	/* SPARC PROM console */
 
 void take_over_console(struct consw *sw, int first, int last, int deflt);

@@ -33,6 +33,19 @@
 
 /* registers 0x0028 - 0x0058 are reserved */
 
+/* AC'97 2.0 */
+#define AC97_EXTENDED_ID	0x0028	/* Extended Audio ID */
+#define AC97_EXTENDED_STATUS	0x002A	/* Extended Audio Status */
+#define AC97_PCM_FRONT_DAC_RATE 0x002C  /* PCM Front DAC Rate */
+#define AC97_PCM_SURR_DAC_RATE  0x002E  /* PCM Surround DAC Rate */
+#define AC97_PCM_LFE_DAC_RATE   0x0030  /* PCM LFE DAC Rate */
+#define AC97_PCM_LR_DAC_RATE	0x0032	/* PCM LR DAC Rate */
+#define AC97_PCM_MIC_ADC_RATE   0x0034  /* PCM MIC ADC Rate */
+#define AC97_CENTER_LFE_MASTER  0x0036  /* Center + LFE Master Volume */
+#define AC97_SURROUND_MASTER    0x0038  /* Surround (Rear) Master Volume */
+#define AC97_RESERVED_3A	0x003A	/* Reserved */
+/* range 0x3c-0x58 - MODEM */
+
 /* registers 0x005a - 0x007a are vendor reserved */
 
 #define  AC97_VENDOR_ID1         0x007c

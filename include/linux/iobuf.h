@@ -75,6 +75,6 @@ void	kiobuf_wait_for_io(struct kiobuf *);
 /* fs/buffer.c */
 
 int	brw_kiovec(int rw, int nr, struct kiobuf *iovec[], 
-		   kdev_t dev, unsigned long b[], int size, int bmap);
+		   kdev_t dev, unsigned long b[], int size);
 
 #endif /* __LINUX_IOBUF_H */

@@ -371,11 +371,18 @@ int boot_target;
 int boot_part;
 kdev_t boot_dev;
 
+extern void via_pmu_start(void);
+
 void __init
 pmac_init2(void)
 {
+#ifdef CONFIG_ADB_PMU
+	via_pmu_start();
+#endif
+#ifdef CONFIG_NVRAM  
 	pmac_nvram_init();
-#ifdef CONFIG_PMAC_PBOOK	
+#endif	
+#ifdef CONFIG_PMAC_PBOOK
 	media_bay_init();
 #endif	
 }
@@ -411,7 +418,7 @@ note_scsi_host(struct device_node *node, void *host)
 }
 #endif
 
-#ifdef CONFIG_BLK_DEV_IDE_PMAC
+#if defined(CONFIG_BLK_DEV_IDE) && defined(CONFIG_BLK_DEV_IDE_PMAC)
 extern int pmac_ide_count;
 extern struct device_node *pmac_ide_node[];
 static int ide_majors[] = { 3, 22, 33, 34, 56, 57, 88, 89 };
@@ -441,7 +448,7 @@ kdev_t __init find_ide_boot(void)
 
 	return 0;
 }
-#endif /* CONFIG_BLK_DEV_IDE_PMAC */
+#endif /* CONFIG_BLK_DEV_IDE && CONFIG_BLK_DEV_IDE_PMAC */
 
 void __init find_boot_device(void)
 {
@@ -452,7 +459,7 @@ void __init find_boot_device(void)
 			return;
 	}
 #endif
-#ifdef CONFIG_BLK_DEV_IDE_PMAC
+#if defined(CONFIG_BLK_DEV_IDE) && defined(CONFIG_BLK_DEV_IDE_PMAC)
 	boot_dev = find_ide_boot();
 #endif
 }
@@ -564,7 +571,7 @@ pmac_ide_default_irq(ide_ioreg_t base)
 ide_ioreg_t
 pmac_ide_default_io_base(int index)
 {
-#if defined(CONFIG_BLK_DEV_IDE_PMAC)
+#if defined(CONFIG_BLK_DEV_IDE) && defined(CONFIG_BLK_DEV_IDE_PMAC)
         return pmac_ide_regbase[index];
 #else
 	return 0;
@@ -602,7 +609,7 @@ pmac_ide_fix_driveid(struct hd_driveid *id)
         ppc_generic_ide_fix_driveid(id);
 }
 
-#if defined(CONFIG_BLK_DEV_IDE_PMAC)
+#if defined(CONFIG_BLK_DEV_IDE) && defined(CONFIG_BLK_DEV_IDE_PMAC)
 /* This is declared in drivers/block/ide-pmac.c */
 void pmac_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq);
 #else
@@ -659,7 +666,7 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 #endif
 #endif
 
-#if defined(CONFIG_BLK_DEV_IDE_PMAC)
+#if defined(CONFIG_BLK_DEV_IDE) && defined(CONFIG_BLK_DEV_IDE_PMAC)
         ppc_ide_md.insw = pmac_ide_insw;
         ppc_ide_md.outsw = pmac_ide_outsw;
         ppc_ide_md.default_irq = pmac_ide_default_irq;

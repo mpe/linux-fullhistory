@@ -156,6 +156,7 @@ struct pt_regs * kbd_pt_regs;
 
 #ifdef CONFIG_MAGIC_SYSRQ
 static int sysrq_pressed;
+int sysrq_enabled = 1;
 #endif
 
 /*

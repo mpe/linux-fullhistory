@@ -5,7 +5,7 @@
  *
  * version 0.8: Fixed endianity bug, some cleanups. I really hate to have
  * half of driver in form if (...) { info("x"); return y; }
- * 						Pavel Machek <pavel@suse.de>
+ * 						Pavel Machek <pavel@suse.cz>
  *
  * version 0.7: Added usb flow control. Fixed bug in uhci.c (what idiot
  * wrote this code? ...Oops that was me). Fixed module cleanup. Did some
@@ -65,7 +65,7 @@
 #include "usb.h"
 
 #define NR_PORTS 3
-#define ACM_MAJOR 166
+#define ACM_MAJOR 166	/* Wow, major is now officially allocated */
 
 //#define info(message...); printk(message);
 #define info(message...);
@@ -425,7 +425,7 @@ static int acm_probe(struct usb_device *dev)
 		    interface->bNumEndpoints != 2)
 			continue;
 
-		endpoint = &interface->endpoint[0];
+		/* if ((endpoint->bEndpointAddress & 0x80) == 0x80) */
 		if ((endpoint->bEndpointAddress & 0x80) != 0x80)
 			swapped = 1;
 

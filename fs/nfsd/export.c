@@ -627,7 +627,7 @@ struct flags {
 	{ NFSEXP_UIDMAP, {"uidmap", ""}},
 	{ NFSEXP_KERBEROS, { "kerberos", ""}},
 	{ NFSEXP_SUNSECURE, { "sunsecure", ""}},
-	{ NFSEXP_CROSSMNT, {"crossmnt", ""}},
+	{ NFSEXP_CROSSMNT, {"nohide", ""}},
 	{ 0, {"", ""}}
 };
 

@@ -30,6 +30,7 @@
 
 int usb_init(void)
 {
+	usb_major_init();
 #ifdef CONFIG_USB_PROC
 	proc_usb_init ();
 #endif

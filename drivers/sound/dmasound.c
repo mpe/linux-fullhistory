@@ -89,6 +89,7 @@ History:
 #include <linux/malloc.h>
 #include <linux/sound.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #if defined(__mc68000__) || defined(CONFIG_APUS)
 #include <asm/setup.h>
@@ -239,7 +240,7 @@ static short beep_wform[256] = {
 	-269,	-245,	-218,	-187,	-153,	-117,	-79,	-40,
 };
 
-#define BEEP_SPEED	2	/* 22050 Hz sample rate */
+#define BEEP_SRATE	22050	/* 22050 Hz sample rate */
 #define BEEP_BUFLEN	512
 #define BEEP_VOLUME	15	/* 0 - 100 */
 
@@ -295,7 +296,7 @@ static int numReadBufs = 4, readbufSize = 32;
 MODULE_PARM(catchRadius, "i");
 MODULE_PARM(numBufs, "i");
 MODULE_PARM(bufSize, "i");
-MODULE_PARM(numreadBufs, "i");
+MODULE_PARM(numReadBufs, "i");
 MODULE_PARM(readbufSize, "i");
 
 #define arraysize(x)	(sizeof(x)/sizeof(*(x)))
@@ -3209,6 +3210,7 @@ static void PMacSilence(void)
 static int awacs_freqs[8] = {
 	44100, 29400, 22050, 17640, 14700, 11025, 8820, 7350
 };
+static int awacs_freqs_ok[8] = { 1, 1, 1, 1, 1, 1, 1, 1 };
 
 static void PMacInit(void)
 {
@@ -3232,10 +3234,13 @@ static void PMacInit(void)
 	 * Otherwise choose the next higher rate.
 	 * N.B.: burgundy awacs (iMac and later) only works at 44100 Hz.
 	 */
-	i = (awacs_revision >= AWACS_BURGUNDY)? 1: 8;
+	i = 8;
 	do {
 		tolerance = catchRadius * awacs_freqs[--i] / 100;
-	} while (sound.soft.speed > awacs_freqs[i] + tolerance && i > 0);
+		if (awacs_freqs_ok[i]
+		    && sound.soft.speed <= awacs_freqs[i] + tolerance)
+			break;
+	} while (i > 0);
 	if (sound.soft.speed >= awacs_freqs[i] - tolerance)
 		sound.trans = &transAwacsNormal;
 	else
@@ -3529,14 +3534,19 @@ static struct timer_list beep_timer = {
 static void awacs_mksound(unsigned int hz, unsigned int ticks)
 {
 	unsigned long flags;
-	int beep_speed = (awacs_revision < AWACS_BURGUNDY)? BEEP_SPEED: 0;
-	int srate = awacs_freqs[beep_speed];
+	int beep_speed = 0;
+	int srate;
 	int period, ncycles, nsamples;
 	int i, j, f;
 	short *p;
 	static int beep_hz_cache;
 	static int beep_nsamples_cache;
 	static int beep_volume_cache;
+
+	for (i = 0; i < 8 && awacs_freqs[i] >= BEEP_SRATE; ++i)
+		if (awacs_freqs_ok[i])
+			beep_speed = i;
+	srate = awacs_freqs[beep_speed];
 
 	if (hz <= srate / BEEP_BUFLEN || hz > srate / 2) {
 #if 1
@@ -3625,6 +3635,12 @@ static int awacs_sleep_notify(struct pmu_sleep_notifier *self, int when)
 		out_le32(&awacs->byteswap, sound.hard.format != AFMT_S16_BE);
 		enable_irq(awacs_irq);
 		enable_irq(awacs_tx_irq);
+		if (awacs_revision == 3) {
+			mdelay(100);
+			awacs_write(0x6000);
+			mdelay(2);
+			awacs_write(awacs_reg[1] | MASK_ADDR1);
+		}
 	}
 	return PBOOK_SLEEP_OK;
 }
@@ -3667,7 +3683,7 @@ static unsigned
 awacs_burgundy_rcw(unsigned addr)
 {
 	unsigned val = 0;
-	int flags;
+	unsigned long flags;
 
 	/* should have timeouts here */
 	save_flags(flags); cli();
@@ -3709,7 +3725,7 @@ static unsigned
 awacs_burgundy_rcb(unsigned addr)
 {
 	unsigned val = 0;
-	int flags;
+	unsigned long flags;
 
 	/* should have timeouts here */
 	save_flags(flags); cli();
@@ -5497,12 +5513,41 @@ void __init dmasound_init(void)
 		np = find_devices("davbus");
 		sound = find_devices("sound");
 		if (sound != 0 && sound->parent == np) {
-			int *sfprop;
-			sfprop = (int *) get_property(sound, "sub-frame", 0);
-			if (sfprop != 0 && *sfprop >= 0 && *sfprop < 16)
-				awacs_subframe = *sfprop;
+			unsigned int *prop, l, i;
+			prop = (unsigned int *)
+				get_property(sound, "sub-frame", 0);
+			if (prop != 0 && *prop >= 0 && *prop < 16)
+				awacs_subframe = *prop;
 			if (device_is_compatible(sound, "burgundy"))
 				awacs_revision = AWACS_BURGUNDY;
+
+			/* look for a property saying what sample rates
+			   are available */
+			for (i = 0; i < 8; ++i)
+				awacs_freqs_ok[i] = 0;
+			prop = (unsigned int *) get_property
+				(sound, "sample-rates", &l);
+			if (prop == 0)
+				prop = (unsigned int *) get_property
+					(sound, "output-frame-rates", &l);
+			if (prop != 0) {
+				for (l /= sizeof(int); l > 0; --l) {
+					/* sometimes the rate is in the
+					   high-order 16 bits (?) */
+					unsigned int r = *prop++;
+					if (r >= 0x10000)
+						r >>= 16;
+					for (i = 0; i < 8; ++i) {
+						if (r == awacs_freqs[i]) {
+							awacs_freqs_ok[i] = 1;
+							break;
+						}
+					}
+				}
+			} else {
+				/* assume just 44.1k is OK */
+				awacs_freqs_ok[0] = 1;
+			}
 		}
 	}
 	if (np != NULL && np->n_addrs >= 3 && np->n_intrs >= 3) {

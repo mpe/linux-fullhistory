@@ -11,6 +11,10 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 1999/10/09	acme		chan_disc renamed to chan_disconnect,
+* 				began adding support for X.25 sockets:
+* 				conf->protocol in new_if
+* 1999/10/05	acme		fixed return E... to return -E...
 * 1999/08/10	acme		serialized access to the card thru a spinlock
 *				in x25_exec
 * 1999/08/09	acme		removed per channel spinlocks
@@ -132,15 +136,18 @@ static int x25_configure (cycx_t *card, TX25Config *conf),
 	   x25_connect_response (cycx_t *card, x25_channel_t *chan),
 	   x25_disconnect_response (cycx_t *card, u8 link, u8 lcn);
 
-/* Miscellaneous functions */
-static int chan_connect (struct net_device *dev),
-	   chan_send (struct net_device *dev, struct sk_buff *skb);
+/* channel functions */
+int chan_connect (struct net_device *dev),
+    chan_send (struct net_device *dev, struct sk_buff *skb);
 
+static void chan_disconnect (struct net_device *dev);
+
+/* Miscellaneous functions */
 static void set_chan_state (struct net_device *dev, u8 state),
-	    nibble_to_byte (u8 *s, u8 *d, u8 len, u8 nibble),
-	    reset_timer (struct net_device *dev),
-	    chan_disc (struct net_device *dev),
 	    chan_timer (unsigned long d);
+
+static void nibble_to_byte (u8 *s, u8 *d, u8 len, u8 nibble),
+	    reset_timer (struct net_device *dev);
 
 static u8 bps_to_speed_code (u32 bps);
 static u8 log2 (u32 n);
@@ -334,7 +341,7 @@ static int new_if (wan_device_t *wandev, struct net_device *dev, wanif_conf_t *c
 	strcpy(chan->name, conf->name);
 	chan->card = card;
 	chan->link = conf->port;
-	chan->protocol = ETH_P_IP;
+	chan->protocol = conf->protocol ? ETH_P_X25 : ETH_P_IP;
 	chan->rx_skb = NULL;
 	/* only used in svc connected thru crossover cable */
 	chan->local_addr = NULL;
@@ -353,7 +360,7 @@ static int new_if (wan_device_t *wandev, struct net_device *dev, wanif_conf_t *c
 
 				if (!chan->local_addr) {
 					kfree(chan);
-					return ENOMEM;
+					return -ENOMEM;
 				}
 			}
 
@@ -505,7 +512,7 @@ static int if_close (struct net_device *dev)
 	dev->start = 0;
 
 	if (chan->state == WAN_CONNECTED || chan->state == WAN_CONNECTING)
-		chan_disc(dev);
+		chan_disconnect(dev);
 		
 	cyclomx_close(card);
 	return 0;
@@ -763,7 +770,7 @@ static void rx_intr (cycx_t *card, TX25Cmd *cmd)
 	dev->last_rx = jiffies;		/* timestamp */
 	chan->rx_skb = NULL;		/* dequeue packet */
 
-	skb->protocol = htons(ETH_P_IP);
+	skb->protocol = htons(chan->protocol);
 	skb->dev = dev;
 	skb->mac.raw = skb->data;
 	netif_rx(skb);
@@ -799,6 +806,7 @@ static void connect_intr (cycx_t *card, TX25Cmd *cmd)
 
 	dprintk(KERN_INFO "connect_intr:lcn=%d, local=%s, remote=%s\n",
 			  lcn, loc, rem);
+
 	if ((dev = get_dev_by_dte_addr(wandev, rem)) == NULL) {
 		/* Invalid channel, discard packet */
 		printk(KERN_INFO "%s: connect not expected: remote %s!\n",
@@ -824,6 +832,7 @@ static void connect_confirm_intr (cycx_t *card, TX25Cmd *cmd)
 	cycx_peek(&card->hw, cmd->buf + 1, &key, sizeof(key));
 	dprintk(KERN_INFO "%s: connect_confirm_intr:lcn=%d, key=%d\n",
 			  card->devname, lcn, key);
+
 	if ((dev = get_dev_by_lcn(wandev, -key)) == NULL) {
 		/* Invalid channel, discard packet */
 		clear_bit(--key, (void*)&card->u.x.connection_keys);
@@ -1139,10 +1148,8 @@ static int x25_place_call (cycx_t *card, x25_channel_t *chan)
 	if ((err = x25_exec(card, X25_CONNECT_REQUEST, chan->link,
 			    &d, 7 + len + 1, NULL, 0)) != 0)
 		clear_bit(--key, (void*)&card->u.x.connection_keys);
-	else {
+	else
                 chan->lcn = -key;
-                chan->protocol = ETH_P_IP;
-        }
 
         return err;
 }
@@ -1229,7 +1236,7 @@ static struct net_device *get_dev_by_dte_addr (wan_device_t *wandev, char *dte)
  * Return:	0	connected
  *		>0	connection in progress
  *		<0	failure */
-static int chan_connect (struct net_device *dev)
+int chan_connect (struct net_device *dev)
 {
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
@@ -1251,7 +1258,7 @@ static int chan_connect (struct net_device *dev)
 
 /* Disconnect logical channel.
  * o if SVC then clear X.25 call */
-static void chan_disc (struct net_device *dev)
+static void chan_disconnect (struct net_device *dev)
 {
 	x25_channel_t *chan = dev->priv;
 
@@ -1270,7 +1277,7 @@ static void chan_timer (unsigned long d)
 	
 	switch (chan->state) {
 		case WAN_CONNECTED:
-			chan_disc(dev);
+			chan_disconnect(dev);
 			break;
 		default:
 			printk (KERN_ERR "%s: chan_timer for svc (%s) not "
@@ -1345,7 +1352,7 @@ static void set_chan_state (struct net_device *dev, u8 state)
  *    the packet into 'complete sequence' using M-bit.
  * 2. When transmission is complete, an event notification should be issued
  *    to the router.  */
-static int chan_send (struct net_device *dev, struct sk_buff *skb)
+int chan_send (struct net_device *dev, struct sk_buff *skb)
 {
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
@@ -1473,14 +1480,15 @@ static void x25_dump_devs(wan_device_t *wandev)
 	struct net_device *dev = wandev->dev;
 
 	printk (KERN_INFO "x25 dev states\n");
-	printk (KERN_INFO "name: addr:           tbusy:\n");
-	printk (KERN_INFO "----------------------------\n");
+	printk (KERN_INFO "name: addr:           tbusy:  protocol:\n");
+	printk (KERN_INFO "---------------------------------------\n");
 
 	for (; dev; dev = dev->slave) {
 		x25_channel_t *chan = dev->priv;
 
-		printk (KERN_INFO "%-5.5s %-15.15s   %ld\n",
-				  chan->name, chan->addr, dev->tbusy);
+		printk (KERN_INFO "%-5.5s %-15.15s   %ld     ETH_P_%s\n",
+				  chan->name, chan->addr, dev->tbusy,
+				  chan->protocol == ETH_P_IP ? "IP" : "X25");
 	}
 }
 

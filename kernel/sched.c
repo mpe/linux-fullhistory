@@ -1181,7 +1181,7 @@ static void update_wall_time(unsigned long ticks)
 static inline void do_process_times(struct task_struct *p,
 	unsigned long user, unsigned long system)
 {
-	long psecs;
+	unsigned long psecs;
 
 	psecs = (p->times.tms_utime += user);
 	psecs += (p->times.tms_stime += system);
@@ -1806,6 +1806,35 @@ void show_state(void)
 	for_each_task(p)
 		show_task(p);
 	read_unlock(&tasklist_lock);
+}
+
+/*
+ *	Put all the gunge required to become a kernel thread without
+ *	attached user resources in one place where it belongs.
+ */
+
+void daemonize(void)
+{
+	struct fs_struct *fs;
+
+
+	/*
+	 * If we were started as result of loading a module, close all of the
+	 * user space pages.  We don't need them, and if we didn't close them
+	 * they would be locked into memory.
+	 */
+	exit_mm(current);
+
+	current->session = 1;
+	current->pgrp = 1;
+
+	/* Become as one with the init task */
+
+	exit_fs(current);	/* current->fs->count--; */
+	fs = init_task.fs;
+	current->fs = fs;
+	atomic_inc(&fs->count);
+
 }
 
 void __init init_idle(void)

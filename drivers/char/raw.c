@@ -369,7 +369,7 @@ ssize_t	rw_raw_dev(int rw, struct file *filp, char *buf,
 		for (i=0; i < blocks; i++) 
 			b[i] = blocknr++;
 		
-		err = brw_kiovec(rw, 1, &iobuf, dev, b, sector_size, 0);
+		err = brw_kiovec(rw, 1, &iobuf, dev, b, sector_size);
 
 		if (err >= 0) {
 			transferred += err;

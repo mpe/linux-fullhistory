@@ -351,6 +351,9 @@ struct usb_driver {
 	void (*disconnect)(struct usb_device *);
 
 	struct list_head driver_list;
+
+	struct file_operations *fops;
+	int minor;
 };
 
 /*

@@ -1,8 +1,10 @@
 
 /* Driver for USB Printers
  * 
- * (C) Michael Gee (michael@linuxspecific.com) 1999
- * 
+ * Copyright 1999 Michael Gee (michael@linuxspecific.com)
+ * Copyright 1999 Pavel Machek (pavel@suse.cz)
+ *
+ * Distribute under GPL version 2 or later.
  */
 
 #include <linux/module.h>
@@ -22,12 +24,6 @@
 
 #define NAK_TIMEOUT (HZ)				/* stall wait for printer */
 #define MAX_RETRY_COUNT ((60*60*HZ)/NAK_TIMEOUT)	/* should not take 1 minute a page! */
-
-#ifndef USB_PRINTER_MAJOR
-#define USB_PRINTER_MAJOR 63
-#endif
-
-static int mymajor = USB_PRINTER_MAJOR;
 
 #define MAX_PRINTERS	8
 
@@ -375,13 +371,6 @@ static void printer_disconnect(struct usb_device *dev)
 	dev->private = NULL;		/* just in case */
 }
 
-static struct usb_driver printer_driver = {
-	"printer",
-	printer_probe,
-	printer_disconnect,
-	{ NULL, NULL }
-};
-
 static struct file_operations usb_printer_fops = {
 	NULL,		/* seek */
 	read_printer,
@@ -397,17 +386,17 @@ static struct file_operations usb_printer_fops = {
 	NULL
 };
 
+static struct usb_driver printer_driver = {
+	"printer",
+	printer_probe,
+	printer_disconnect,
+	{ NULL, NULL },
+	&usb_printer_fops,
+	0
+};
+
 int usb_printer_init(void)
 {
-	int result;
-
-	if ((result = register_chrdev(USB_PRINTER_MAJOR, "usblp", &usb_printer_fops)) < 0) {
-		printk(KERN_WARNING "usbprinter: Cannot register device\n");
-		return result;
-	}
-	if (mymajor == 0) {
-		mymajor = result;
-	}
 	usb_register(&printer_driver);
 	printk(KERN_INFO "USB Printer support registered.\n");
 	return 0;
@@ -423,6 +412,5 @@ int init_module(void)
 void cleanup_module(void)
 {
 	usb_deregister(&printer_driver);
-	unregister_chrdev(mymajor, "usblp");
 }
 #endif

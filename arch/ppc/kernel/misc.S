@@ -53,13 +53,29 @@ _GLOBAL(__no_use_save_flags)
 
 /* void __no_use_restore_flags(unsigned long flags) */	
 _GLOBAL(__no_use_restore_flags)
-	andi.	r4,r3,MSR_EE
-	bne	10f
-	lis	r4,ppc_n_lost_interrupts@ha
-	lwz	r4,ppc_n_lost_interrupts@l(r4)
-	cmpi	0,r4,0		/* lost interrupts to process first? */
+/*
+ * Just set/clear the MSR_EE bit through restore/flags but do not
+ * change anything else.  This is needed by the RT system and makes
+ * sense anyway.
+ *    -- Cort
+ */
+	mfmsr 	r4
+	/* Copy all except the MSR_EE bit from r4 (current MSR value)
+	   to r3.  This is the sort of thing the rlwimi instruction is
+	   designed for.  -- paulus. */
+	rlwimi	r3,r4,0,17,15
+	 /* Check if things are setup the way we want _already_. */
+	cmpw	0,r3,r4
+	beqlr
+	/* are we enabling interrupts? */
+	rlwinm.	r0,r3,0,16,16
+	beq	1f
+	/* if so, check if there are any lost interrupts */
+	lis	r7,ppc_n_lost_interrupts@ha
+	lwz	r7,ppc_n_lost_interrupts@l(r7)
+	cmpi	0,r7,0		/* lost interrupts to process first? */
 	bne-	do_lost_interrupts
-10:	sync
+1:	sync
 	mtmsr	r3
 	isync
 	blr

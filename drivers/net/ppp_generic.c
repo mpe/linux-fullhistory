@@ -19,10 +19,10 @@
  * PPP driver, written by Michael Callahan and Al Longyear, and
  * subsequently hacked by Paul Mackerras.
  *
- * ==FILEVERSION 990806==
+ * ==FILEVERSION 990915==
  */
 
-/* $Id: ppp_generic.c,v 1.3 1999/09/02 05:30:12 paulus Exp $ */
+/* $Id: ppp_generic.c,v 1.5 1999/09/15 11:21:48 paulus Exp $ */
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -131,7 +131,7 @@ struct channel {
 #define PPP_MAX_RQLEN	32
 
 /* Prototypes. */
-static void ppp_xmit_unlock(struct ppp *ppp);
+static void ppp_xmit_unlock(struct ppp *ppp, int do_mark_bh);
 static void ppp_send_frame(struct ppp *ppp, struct sk_buff *skb);
 static void ppp_push(struct ppp *ppp);
 static void ppp_recv_unlock(struct ppp *ppp);
@@ -199,6 +199,13 @@ static const int npindex_to_ethertype[NUM_NP] = {
 /*
  * Routines for locking and unlocking the transmit and receive paths
  * of each unit.
+ *
+ * On the transmit side, we have threads of control coming into the
+ * driver from (at least) three places: the core net code, write calls
+ * on /dev/ppp from pppd, and wakeup calls from channels.  There is
+ * possible concurrency even on UP systems (between mainline and
+ * BH processing).  The XMIT_BUSY bit in ppp->busy serializes the
+ * transmit-side processing for each ppp unit.
  */
 static inline void
 lock_path(struct ppp *ppp, int bit)
@@ -329,16 +336,20 @@ static ssize_t ppp_write(struct file *file, const char *buf,
 	struct ppp *ppp = (struct ppp *) file->private_data;
 	struct sk_buff *skb;
 	ssize_t ret;
+	int extra;
 
 	ret = -ENXIO;
 	if (ppp == 0)
 		goto out;
 
 	ret = -ENOMEM;
-	skb = alloc_skb(count + 2, GFP_KERNEL);
+	extra = PPP_HDRLEN - 2;
+	if (ppp->dev && ppp->dev->hard_header_len > PPP_HDRLEN)
+		extra = ppp->dev->hard_header_len - 2;
+	skb = alloc_skb(count + extra, GFP_KERNEL);
 	if (skb == 0)
 		goto out;
-	skb_reserve(skb, 2);
+	skb_reserve(skb, extra);
 	ret = -EFAULT;
 	if (copy_from_user(skb_put(skb, count), buf, count)) {
 		kfree_skb(skb);
@@ -347,7 +358,7 @@ static ssize_t ppp_write(struct file *file, const char *buf,
 
 	skb_queue_tail(&ppp->xq, skb);
 	if (trylock_xmit_path(ppp))
-		ppp_xmit_unlock(ppp);
+		ppp_xmit_unlock(ppp, 1);
 
 	ret = count;
 
@@ -490,7 +501,7 @@ static int ppp_ioctl(struct inode *inode, struct file *file,
 			slhc_free(ppp->vj);
 		ppp->vj = slhc_init(val2+1, val+1);
 		ppp_recv_unlock(ppp);
-		ppp_xmit_unlock(ppp);
+		ppp_xmit_unlock(ppp, 1);
 		err = -ENOMEM;
 		if (ppp->vj == 0) {
 			printk(KERN_ERR "PPP: no memory (VJ compressor)\n");
@@ -580,10 +591,6 @@ ppp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	int npi, proto;
 	unsigned char *pp;
 
-	if (skb == 0)
-		return 0;
-	/* can skb->data ever be 0? */
-
 	npi = ethertype_to_npindex(ntohs(skb->protocol));
 	if (npi < 0)
 		goto outf;
@@ -601,30 +608,15 @@ ppp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		goto outf;
 	}
 
-	/* The transmit side of the ppp interface is serialized by
-	   the XMIT_BUSY bit in ppp->busy. */
-	if (!trylock_xmit_path(ppp)) {
-		dev->tbusy = 1;
-		return 1;
-	}
-	if (ppp->xmit_pending)
-		ppp_push(ppp);
-	if (ppp->xmit_pending) {
-		dev->tbusy = 1;
-		ppp_xmit_unlock(ppp);
-		return 1;
-	}
-	dev->tbusy = 0;
-
 	/* Put the 2-byte PPP protocol number on the front,
 	   making sure there is room for the address and control fields. */
 	if (skb_headroom(skb) < PPP_HDRLEN) {
 		struct sk_buff *ns;
 
-		ns = alloc_skb(skb->len + PPP_HDRLEN, GFP_ATOMIC);
+		ns = alloc_skb(skb->len + dev->hard_header_len, GFP_ATOMIC);
 		if (ns == 0)
-			goto outnbusy;
-		skb_reserve(ns, PPP_HDRLEN);
+			goto outf;
+		skb_reserve(ns, dev->hard_header_len);
 		memcpy(skb_put(ns, skb->len), skb->data, skb->len);
 		kfree_skb(skb);
 		skb = ns;
@@ -634,12 +626,15 @@ ppp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	pp[0] = proto >> 8;
 	pp[1] = proto;
 
-	ppp_send_frame(ppp, skb);
-	ppp_xmit_unlock(ppp);
+	/*
+	 * ppp->xq should only ever have more than 1 data packet on it
+	 * if the core net code calls us when dev->tbusy == 1.
+	 */
+	dev->tbusy = 1;
+	skb_queue_tail(&ppp->xq, skb);
+	if (trylock_xmit_path(ppp))
+		ppp_xmit_unlock(ppp, 0);
 	return 0;
-
- outnbusy:
-	ppp_xmit_unlock(ppp);
 
  outf:
 	kfree_skb(skb);
@@ -723,20 +718,34 @@ ppp_net_init(struct net_device *dev)
  * making sure that any work queued up gets done.
  */
 static void
-ppp_xmit_unlock(struct ppp *ppp)
+ppp_xmit_unlock(struct ppp *ppp, int do_mark_bh)
 {
 	struct sk_buff *skb;
 
 	for (;;) {
+		/* Do whatever work is waiting to be done. */
 		if (test_and_clear_bit(XMIT_WAKEUP, &ppp->busy))
 			ppp_push(ppp);
+		/* If there's no work left to do, tell the core net
+		   code that we can accept some more. */
 		while (ppp->xmit_pending == 0
 		       && (skb = skb_dequeue(&ppp->xq)) != 0)
 			ppp_send_frame(ppp, skb);
+		if (ppp->xmit_pending == 0 && skb_peek(&ppp->xq) == 0
+		    && ppp->dev->tbusy) {
+			ppp->dev->tbusy = 0;
+			if (do_mark_bh)
+				mark_bh(NET_BH);
+		}
+		/* Now unlock the transmit path, let others in. */
 		unlock_xmit_path(ppp);
+		/* Check whether any work was queued up
+		   between our last check and the unlock. */
 		if (!(test_bit(XMIT_WAKEUP, &ppp->busy)
 		      || (ppp->xmit_pending == 0 && skb_peek(&ppp->xq))))
 			break;
+		/* If so, lock again and do the work.  If we can't get
+		   the lock, someone else has it and they'll do the work. */
 		if (!trylock_xmit_path(ppp))
 			break;
 	}
@@ -763,12 +772,13 @@ ppp_send_frame(struct ppp *ppp, struct sk_buff *skb)
 		if (ppp->vj == 0 || (ppp->flags & SC_COMP_TCP) == 0)
 			break;
 		/* try to do VJ TCP header compression */
-		new_skb = alloc_skb(skb->len + 2, GFP_ATOMIC);
+		new_skb = alloc_skb(skb->len + ppp->dev->hard_header_len - 2,
+				    GFP_ATOMIC);
 		if (new_skb == 0) {
 			printk(KERN_ERR "PPP: no memory (VJ comp pkt)\n");
 			goto drop;
 		}
-		skb_reserve(new_skb, 2);
+		skb_reserve(new_skb, ppp->dev->hard_header_len - 2);
 		cp = skb->data + 2;
 		len = slhc_compress(ppp->vj, cp, skb->len - 2,
 				    new_skb->data + 2, &cp,
@@ -801,11 +811,15 @@ ppp_send_frame(struct ppp *ppp, struct sk_buff *skb)
 	/* try to do packet compression */
 	if ((ppp->xstate & SC_COMP_RUN) && ppp->xc_state != 0
 	    && proto != PPP_LCP && proto != PPP_CCP) {
-		new_skb = alloc_skb(ppp->dev->mtu + PPP_HDRLEN, GFP_ATOMIC);
+		new_skb = alloc_skb(ppp->dev->mtu + ppp->dev->hard_header_len,
+				    GFP_ATOMIC);
 		if (new_skb == 0) {
 			printk(KERN_ERR "PPP: no memory (comp pkt)\n");
 			goto drop;
 		}
+		if (ppp->dev->hard_header_len > PPP_HDRLEN)
+			skb_reserve(new_skb,
+				    ppp->dev->hard_header_len - PPP_HDRLEN);
 
 		/* compressor still expects A/C bytes in hdr */
 		len = ppp->xcomp->compress(ppp->xc_state, skb->data - 2,
@@ -1120,6 +1134,8 @@ ppp_register_channel(struct ppp_channel *chan, int unit)
 	list_add(&pch->list, &ppp->channels);
 	chan->ppp = pch;
 	++ppp->n_channels;
+	if (ppp->dev && chan->hdrlen + PPP_HDRLEN > ppp->dev->hard_header_len)
+		ppp->dev->hard_header_len = chan->hdrlen + PPP_HDRLEN;
 	ret = 0;
  out:
 	spin_unlock(&all_ppp_lock);
@@ -1160,11 +1176,7 @@ ppp_output_wakeup(struct ppp_channel *chan)
 	pch->blocked = 0;
 	set_bit(XMIT_WAKEUP, &ppp->busy);
 	if (trylock_xmit_path(ppp))
-		ppp_xmit_unlock(ppp);
-	if (ppp->xmit_pending == 0) {
-		ppp->dev->tbusy = 0;
-		mark_bh(NET_BH);
-	}
+		ppp_xmit_unlock(ppp, 1);
 }
 
 /*
@@ -1215,7 +1227,7 @@ ppp_set_compress(struct ppp *ppp, unsigned long arg)
 
 		ppp->xcomp = cp;
 		ppp->xc_state = cp->comp_alloc(ccp_option, data.length);
-		ppp_xmit_unlock(ppp);
+		ppp_xmit_unlock(ppp, 1);
 		if (ppp->xc_state == 0)
 			goto out;
 
@@ -1321,7 +1333,7 @@ ppp_ccp_closed(struct ppp *ppp)
 		ppp->xcomp->comp_free(ppp->xc_state);
 		ppp->xc_state = 0;
 	}
-	ppp_xmit_unlock(ppp);
+	ppp_xmit_unlock(ppp, 1);
 
 	lock_recv_path(ppp);
 	ppp->xstate &= ~SC_DECOMP_RUN;

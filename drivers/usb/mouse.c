@@ -34,7 +34,6 @@
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
-#include <linux/miscdevice.h>
 #include <linux/random.h>
 #include <linux/poll.h>
 #include <linux/init.h>
@@ -43,8 +42,6 @@
 #include <linux/spinlock.h>
 
 #include "usb.h"
-
-#define USB_MOUSE_MINOR 32
 
 struct mouse_state {
 	unsigned char buttons; /* current button state */
@@ -109,7 +106,7 @@ static int mouse_irq(int state, void *__buffer, int len, void *dev_id)
 
 	/* if the USB mouse sends an interrupt, then something noteworthy
 	   must have happened */
-	mouse->buttons = data[0] & 0x07;
+	mouse->buttons = data[0] & 0x0f;
 	mouse->dx += data[1]; /* data[] is signed, so this works */
 	mouse->dy -= data[2]; /* y-axis is reversed */
 	mouse->dz -= data[3];
@@ -319,10 +316,6 @@ struct file_operations usb_mouse_fops = {
 	fasync_mouse,
 };
 
-static struct miscdevice usb_mouse = {
-	USB_MOUSE_MINOR, "USB mouse", &usb_mouse_fops
-};
-
 static int mouse_probe(struct usb_device *dev)
 {
 	struct usb_interface_descriptor *interface;
@@ -416,7 +409,9 @@ static struct usb_driver mouse_driver = {
 	"mouse",
 	mouse_probe,
 	mouse_disconnect,
-	{ NULL, NULL }
+	{ NULL, NULL },
+	&usb_mouse_fops,
+	16
 };
 
 int usb_mouse_init(void)
@@ -427,8 +422,6 @@ int usb_mouse_init(void)
 	mouse->irq_handle = NULL;
 	init_waitqueue_head(&mouse->wait);
 	mouse->fasync = NULL;
-
-	misc_register(&usb_mouse);
 
 	usb_register(&mouse_driver);
 	printk(KERN_INFO "USB HID boot protocol mouse driver registered.\n");
@@ -449,7 +442,6 @@ void usb_mouse_cleanup(void)
 
 	/* this, too, probably needs work */
 	usb_deregister(&mouse_driver);
-	misc_deregister(&usb_mouse);
 }
 
 #ifdef MODULE

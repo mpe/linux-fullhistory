@@ -423,3 +423,5 @@ EXPORT_SYMBOL(get_fast_time);
 
 /* library functions */
 EXPORT_SYMBOL(strnicmp);
+
+EXPORT_SYMBOL(init_task_union);

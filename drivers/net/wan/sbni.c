@@ -1280,10 +1280,12 @@ static int sbni_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 				return -EPERM;
 			if(copy_from_user( tmpstr, ifr->ifr_data, 6))
 				return -EFAULT;
-			slave=dev_get(tmpstr);
+			slave = dev_get_by_name(tmpstr);
 			if(!(slave && slave->flags & IFF_UP && dev->flags & IFF_UP))
 			{
 				printk("%s: Both devices should be UP to enslave!\n",dev->name);
+				if (slave)
+					dev_put(slave);
 				return -EINVAL;
 			}
 		
@@ -1304,8 +1306,9 @@ static int sbni_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 				else
 				{
 					printk("%s: one of devices is already slave!\n",dev->name);
-					return -EBUSY;
+					error = -EBUSY;
 				}
+				dev_put(slave);
 			}
 			else
 			{
@@ -1359,7 +1362,7 @@ static int sbni_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 
 unsigned long calc_crc(char *mem, int len, unsigned initial)
 {
-   
+	unsigned crc, dummy_len;
 	__asm__ (
 		"xorl %%eax,%%eax\n\t"
 		"1:\n\t"
@@ -1367,13 +1370,12 @@ unsigned long calc_crc(char *mem, int len, unsigned initial)
 		"xorb %%dl,%%al\n\t"
 		"shrl $8,%%edx\n\t"
 		"xorl (%%edi,%%eax,4),%%edx\n\t"
-		"loop 1b\n\t"
-		"movl %%edx,%%eax"
-		: 
-		: "S" (mem), "D" (&crc32tab[0]), "c" (len), "d" (initial)
-		: "eax", "edx", "ecx"
+		"loop 1b"
+		: "=d" (crc), "=c" (dummy_len)
+		: "S" (mem), "D" (&crc32tab[0]), "1" (len), "0" (initial)
+		: "eax"
 	);
-	/* return crc; */
+	return crc;
 }
 
 #else

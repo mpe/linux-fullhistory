@@ -1,4 +1,4 @@
-/* $Id: sgiwd93.h,v 1.2 1998/05/04 09:18:49 ralf Exp $
+/* $Id: sgiwd93.h,v 1.5 1998/08/25 09:18:50 ralf Exp $
  * sgiwd93.h: SGI WD93 scsi definitions.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

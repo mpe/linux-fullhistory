@@ -114,6 +114,8 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 /* Do necessary setup to start up a newly executed thread.  */
 extern void start_thread(struct pt_regs *, unsigned long, unsigned long);
 
+struct task_struct;
+
 /* Free all resources held by a thread. */
 extern void release_thread(struct task_struct *);
 

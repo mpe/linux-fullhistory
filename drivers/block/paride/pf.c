@@ -666,11 +666,11 @@ static int pf_reset( int unit )
 	WR(0,6,DRIVE);
 	WR(0,7,8);
 
-	pf_sleep(2);
+	pf_sleep(20*HZ/1000);
 
         k = 0;
         while ((k++ < PF_RESET_TMO) && (RR(1,6)&STAT_BUSY))
-                pf_sleep(10);
+                pf_sleep(HZ/10);
 
 	flg = 1;
 	for(i=0;i<5;i++) flg &= (RR(0,i+1) == expect[i]);

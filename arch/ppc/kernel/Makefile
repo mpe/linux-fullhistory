@@ -14,7 +14,7 @@ O_TARGET := kernel.o
 OX_OBJS := ppc_ksyms.o setup.o
 KHEAD := head.o
 
-ifdef CONFIG_PPC_ALL
+ifdef CONFIG_ALL_PPC
 CONFIG_PMAC=y
 CONFIG_PREP=y
 CONFIG_CHRP=y
@@ -65,10 +65,13 @@ O_OBJS += apus_setup.o prom.o open_pic.o
 else
 ifneq ($(CONFIG_8xx),y)
 O_OBJS += chrp_setup.o chrp_pci.o chrp_time.o \
-	  pmac_time.o pmac_support.o pmac_pci.o pmac_setup.o \
+	  pmac_time.o pmac_pci.o pmac_setup.o \
 	  prom.o open_pic.o feature.o \
 	  i8259.o pmac_pic.o indirect_pci.o \
 	  gemini_pci.o gemini_prom.o gemini_setup.o
+ifeq ($(CONFIG_NVRAM),y)
+O_OBJS += pmac_support.o
+endif
 
 ifeq ($(CONFIG_PREP), y)
 O_OBJS += prep_pci.o prep_setup.o prep_nvram.o prep_time.o residual.o

@@ -106,13 +106,19 @@ ifeq ($(CONFIG_USB_SERIAL),m)
   MIX_OBJS += serial.o  
 endif
 
+ifneq ($(CONFIG_ADB_KEYBOARD),y)
+KEYMAP=keymap
+else
+KEYMAP=keymap-mac
+endif
+
 ifeq ($(CONFIG_USB_KBD),y)
-  L_OBJS += keyboard.o keymap.o
+  L_OBJS += keyboard.o $(KEYMAP).o
 endif
 
 ifeq ($(CONFIG_USB_KBD),m)
   M_OBJS += usb-keyboard.o
-  MIX_OBJS += keyboard.o keymap.o
+  MIX_OBJS += keyboard.o $(KEYMAP).o
 endif
 
 ifeq ($(CONFIG_USB_AUDIO),y)
@@ -177,13 +183,8 @@ keymap-mac.o: keymap-mac.c
 keymap-mac.c: maps/mac.map maps/usb.map
 	./mkmap.adb > $@
 
-ifneq ($(CONFIG_MAC_KEYBOARD),y)
-usb-keyboard.o: keymap.o keyboard.o
-	$(LD) $(LD_RFLAG) -r -o $@  keymap.o keyboard.o 
-else
-usb-keyboard.o: keymap-mac.o keyboard.o
-	$(LD) $(LD_RFLAG) -r -o $@  keymap-mac.o keyboard.o 
-endif
+usb-keyboard.o: $(KEYMAP).o keyboard.o
+	$(LD) $(LD_RFLAG) -r -o $@  $(KEYMAP).o keyboard.o 
 
 ifeq ($(CONFIG_USB_SCSI_DEBUG),y)
 usb-scsi.o: usb_scsi.o usb_scsi_debug.o

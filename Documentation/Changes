@@ -2,15 +2,15 @@ Intro
 =====
 
 This document is designed to provide a list of the minimum levels of
-software necessary to run the 2.2 kernels, as well as provide brief
+software necessary to run the 2.3 kernels, as well as provide brief
 instructions regarding any other "Gotchas" users may encounter when
-trying life on the Bleeding Edge.  If upgrading from a pre-2.0.x
-kernel, please consult the Changes file included with 2.0.x kernels for
+trying life on the Bleeding Edge.  If upgrading from a pre-2.2.x
+kernel, please consult the Changes file included with 2.2.x kernels for
 additional information; most of that information will not be repeated
 here.  Basically, this document assumes that your system is already
-functional and running at least 2.0.x kernels.
+functional and running at least 2.2.x kernels.
 
-   It is originally based on my "Changes" file for 2.0.x kernels and
+   It is originally based on my "Changes" file for 2.2.x kernels and
 therefore owes credit to the same people as that file (Jared Mauch,
 Axel Boldt, Alessandro Sigala, and countless other users all over the
 'net).  Please feel free to submit changes, corrections, gripes,
@@ -43,7 +43,7 @@ Current Minimal Requirements
 encountered a bug!  If you're unsure what version you're currently
 running, the suggested command should tell you.
 
-- Kernel modutils	 2.1.121                 ; insmod -V
+- Kernel modutils	 2.3.5                   ; insmod -V
 - Gnu C 		 2.7.2.3                 ; gcc --version
 - Binutils		 2.8.1.0.23              ; ld -v
 - Linux libc5 C Library	 5.4.46                  ; ls -l /lib/libc*
@@ -168,7 +168,7 @@ Modules
 =======
 
    You need to upgrade to the latest version of modutils for the Linux
-2.2 kernel.  This version will also work with your 2.0 kernel.
+2.3 kernel.  This version will also work with your 2.0 kernel.
 
    As of 2.1.90-pre1, kerneld has been replaced by a kernel thread,
 kmod.  See Documentation/kmod.txt for more information.  The main
@@ -567,8 +567,8 @@ ftp://metalab.unc.edu/pub/Linux/GCC/ld.so-1.9.9.tar.gz
 Modules utilities
 =================
 
-The 2.1.121 release:
-ftp://ftp.kernel.org/pub/linux/kernel/v2.1/modutils-2.1.121.tar.gz
+The 2.3.5 release:
+ftp://ftp.ocs.com.au/pub/modutils/v2.3/modutils-2.3.5.tar.gz
 
 Procps utilities
 ================

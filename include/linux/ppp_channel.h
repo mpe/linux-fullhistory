@@ -14,10 +14,10 @@
  *  as published by the Free Software Foundation; either version
  *  2 of the License, or (at your option) any later version.
  *
- * ==FILEVERSION 990717==
+ * ==FILEVERSION 990909==
  */
 
-/* $Id$ */
+/* $Id: ppp_channel.h,v 1.2 1999/09/15 11:21:53 paulus Exp $ */
 
 #include <linux/list.h>
 #include <linux/skbuff.h>
@@ -37,6 +37,7 @@ struct ppp_channel {
 	int		xmit_qlen;	/* length of transmit queue (bytes) */
 	int		speed;		/* transfer rate (bytes/second) */
 	int		latency;	/* overhead time in milliseconds */
+	int		hdrlen;		/* amount of headroom channel needs */
 	struct list_head list;		/* link in list of channels per unit */
 	void		*ppp;		/* opaque to channel */
 };

@@ -916,7 +916,7 @@ extern unsigned int get_hardblocksize(kdev_t);
 extern struct buffer_head * bread(kdev_t, int, int);
 extern struct buffer_head * breada(kdev_t, int, int, unsigned int, unsigned int);
 
-extern int brw_page(int, struct page *, kdev_t, int [], int, int);
+extern int brw_page(int, struct page *, kdev_t, int [], int);
 
 typedef int (*writepage_t)(struct file *, struct page *, unsigned long, unsigned long, const char *);
 

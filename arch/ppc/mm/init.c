@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.188 1999/09/18 18:40:44 dmalek Exp $
+ *  $Id: init.c,v 1.193 1999/10/11 18:50:35 geert Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -113,7 +113,9 @@ struct mem_pieces prom_mem;
 static void remove_mem_piece(struct mem_pieces *, unsigned, unsigned, int);
 void *find_mem_piece(unsigned, unsigned);
 static void print_mem_pieces(struct mem_pieces *);
+#if defined(CONFIG_PREP) || defined(CONFIG_APUS) || defined(CONFIG_ALL_PPC)
 static void append_mem_piece(struct mem_pieces *, unsigned, unsigned);
+#endif
 
 extern struct task_struct *current_set[NR_CPUS];
 
@@ -182,6 +184,8 @@ static inline unsigned long p_mapped_by_bats(unsigned long pa)
  */
 int __map_without_bats = 0;
 
+/* max amount of RAM to use */
+unsigned long __max_memory;
 
 void __bad_pte(pmd_t *pmd)
 {
@@ -677,6 +681,7 @@ static void __init print_mem_pieces(struct mem_pieces *mp)
 	printk("\n");
 }
 
+#if defined(CONFIG_PREP) || defined(CONFIG_APUS) || defined(CONFIG_PPC_ALL)
 /*
  * Add some memory to an array of pieces
  */
@@ -691,6 +696,7 @@ append_mem_piece(struct mem_pieces *mp, unsigned start, unsigned size)
 	rp->address = start;
 	rp->size = size;
 }
+#endif
 
 #ifndef CONFIG_8xx
 static void hash_init(void);
@@ -738,6 +744,7 @@ static void __init coalesce_mem_pieces(struct mem_pieces *mp)
 	mp->n_regions = d;
 }
 
+#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)
 /*
  * Read in a property describing some pieces of memory.
  */
@@ -760,6 +767,7 @@ static void __init get_mem_prop(char *name, struct mem_pieces *mp)
 	sort_mem_pieces(mp);
 	coalesce_mem_pieces(mp);
 }
+#endif /* CONFIG_PMAC || CONFIG_CHRP || CONFIG_ALL_PPC */
 
 /*
  * Set up one of the I/D BAT (block address translation) register pairs.
@@ -933,7 +941,7 @@ void __init free_initmem(void)
 	a = (unsigned long)(&START); \
 	for (; a < (unsigned long)(&END); a += PAGE_SIZE) { \
 	  	clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags); \
-		atomic_set(&mem_map[MAP_NR(a)].count, 1); \
+		set_page_count(mem_map+MAP_NR(a), 1); \
 		free_page(a); \
 		CNT++; \
 	} \
@@ -1005,8 +1013,10 @@ void __init MMU_init(void)
 	else if (_machine == _MACH_apus )
 		end_of_DRAM = apus_find_end_of_memory();
 #endif
+#ifdef CONFIG_GEMINI	
 	else if ( _machine == _MACH_gemini )
 		end_of_DRAM = gemini_find_end_of_memory();
+#endif /* CONFIG_GEMINI	*/
 	else /* prep */
 		end_of_DRAM = prep_find_end_of_memory();
 
@@ -1037,14 +1047,16 @@ void __init MMU_init(void)
 		setbat(3, 0x90000000, 0x90000000, 0x10000000, IO_PAGE);
 		break;
 	case _MACH_Pmac:
+#if 0
 		{
 			unsigned long base = 0xf3000000;
 			struct device_node *macio = find_devices("mac-io");
 			if (macio && macio->n_addrs)
 				base = macio->addrs[0].address;
 			setbat(0, base, base, 0x100000, IO_PAGE);
-			ioremap_base = 0xf0000000;
 		}
+#endif
+		ioremap_base = 0xf0000000;
 		break;
 	case _MACH_apus:
 		/* Map PPC exception vectors. */
@@ -1172,17 +1184,13 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 	remove_mem_piece(&phys_avail, __pa(avail_start),
 			 start_mem - avail_start, 1);
 
-	for (addr = PAGE_OFFSET; addr < end_mem; addr += PAGE_SIZE)
-		set_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
-
 	for (i = 0; i < phys_avail.n_regions; ++i) {
 		a = (unsigned long) __va(phys_avail.regions[i].address);
-		lim = a + phys_avail.regions[i].size;
+		lim = (a + phys_avail.regions[i].size) & PAGE_MASK;
 		a = PAGE_ALIGN(a);
 		for (; a < lim; a += PAGE_SIZE)
 			clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
 	}
-	phys_avail.n_regions = 0;
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* if we are booted from BootX with an initial ramdisk,
@@ -1196,7 +1204,7 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 	/* free the prom's memory - no-op on prep */
 	for (i = 0; i < prom_mem.n_regions; ++i) {
 		a = (unsigned long) __va(prom_mem.regions[i].address);
-		lim = a + prom_mem.regions[i].size;
+		lim = (a + prom_mem.regions[i].size) & PAGE_MASK;
 		a = PAGE_ALIGN(a);
 		for (; a < lim; a += PAGE_SIZE)
 			clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
@@ -1215,12 +1223,12 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 				datapages++;
 			continue;
 		}
-		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
+		set_page_count(mem_map + MAP_NR(addr), 1);
 #ifdef CONFIG_BLK_DEV_INITRD
 		if (!initrd_start ||
 		    addr < (initrd_start & PAGE_MASK) || addr >= initrd_end)
 #endif /* CONFIG_BLK_DEV_INITRD */
-#ifndef CONFIG_8xx		  
+#ifndef CONFIG_8xx
 			if ( !rtas_data ||
 			     addr < (rtas_data & PAGE_MASK) ||
 			     addr >= (rtas_data+rtas_size))
@@ -1238,7 +1246,7 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 }
 
 #ifndef CONFIG_8xx
-#if defined(CONFIG_PMAC) || defined(CONFIG_PPC_ALL)
+#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)
 /*
  * On systems with Open Firmware, collect information about
  * physical RAM and which pieces are already in use.
@@ -1286,8 +1294,12 @@ unsigned long __init *pmac_find_end_of_memory(void)
 	 * to our nearest IO area.
 	 * -- Cort
 	 */
-	if ( phys_mem.regions[0].size >= RAM_LIMIT )
-		phys_mem.regions[0].size = RAM_LIMIT;
+	if (__max_memory == 0 || __max_memory > RAM_LIMIT)
+		__max_memory = RAM_LIMIT;
+	if (phys_mem.regions[0].size >= __max_memory) {
+		phys_mem.regions[0].size = __max_memory;
+		phys_mem.n_regions = 1;
+	}
 	total = phys_mem.regions[0].size;
 	
 	if (phys_mem.n_regions > 1) {
@@ -1300,20 +1312,15 @@ unsigned long __init *pmac_find_end_of_memory(void)
 	if (boot_infos == 0) {
 		/* record which bits the prom is using */
 		get_mem_prop("available", &phys_avail);
+		prom_mem = phys_mem;
+		for (i = 0; i < phys_avail.n_regions; ++i)
+			remove_mem_piece(&prom_mem,
+					 phys_avail.regions[i].address,
+					 phys_avail.regions[i].size, 0);
 	} else {
 		/* booted from BootX - it's all available (after klimit) */
 		phys_avail = phys_mem;
-	}
-	prom_mem = phys_mem;
-	for (i = 0; i < phys_avail.n_regions; ++i)
-	{
-		if ( phys_avail.regions[i].address >= RAM_LIMIT )
-			continue;
-		if ( (phys_avail.regions[i].address+phys_avail.regions[i].size)
-		     >= RAM_LIMIT )
-			phys_avail.regions[i].size = RAM_LIMIT - phys_avail.regions[i].address;
-		remove_mem_piece(&prom_mem, phys_avail.regions[i].address,
-				 phys_avail.regions[i].size, 1);
+		prom_mem.n_regions = 0;
 	}
 
 	/*
@@ -1331,9 +1338,9 @@ unsigned long __init *pmac_find_end_of_memory(void)
 #undef RAM_LIMIT
 	return __va(total);
 }
-#endif /* defined(CONFIG_PMAC) || defined(CONFIG_PPC_ALL) */
+#endif /* CONFIG_PMAC || CONFIG_CHRP || CONFIG_ALL_PPC */
 
-#if defined(CONFIG_PREP) || defined(CONFIG_PPC_ALL)
+#if defined(CONFIG_PREP) || defined(CONFIG_ALL_PPC)
 /*
  * This finds the amount of physical ram and does necessary
  * setup for prep.  This is pretty architecture specific so
@@ -1365,10 +1372,10 @@ unsigned long __init *prep_find_end_of_memory(void)
 
 	return (__va(total));
 }
-#endif /* defined(CONFIG_PREP) || defined(CONFIG_PPC_ALL) */
+#endif /* defined(CONFIG_PREP) || defined(CONFIG_ALL_PPC) */
 
 
-#if defined(CONFIG_GEMINI) || defined(CONFIG_PPC_ALL)
+#if defined(CONFIG_GEMINI)
 unsigned long __init *gemini_find_end_of_memory(void)
 {
 	unsigned long total, kstart, ksize, *ret;
@@ -1389,7 +1396,7 @@ unsigned long __init *gemini_find_end_of_memory(void)
 	remove_mem_piece( &phys_avail, kstart, ksize, 0 );
 	return ret;
 }
-#endif /* defined(CONFIG_GEMINI) || defined(CONFIG_PPC_ALL) */
+#endif /* defined(CONFIG_GEMINI) || defined(CONFIG_ALL_PPC) */
 
 #ifdef CONFIG_APUS
 #define HARDWARE_MAPPED_SIZE (512*1024)

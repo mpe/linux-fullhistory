@@ -632,15 +632,14 @@ static void __init do_basic_setup(void)
 	/* Networking initialization needs a process context */ 
 	sock_init();
 
-	do_initcalls();
-
 #ifdef CONFIG_BLK_DEV_INITRD
-
 	real_root_dev = ROOT_DEV;
 	real_root_mountflags = root_mountflags;
 	if (initrd_start && mount_initrd) root_mountflags &= ~MS_RDONLY;
 	else mount_initrd =0;
 #endif
+
+	do_initcalls();
 
 	/* .. filesystems .. */
 	filesystem_setup();

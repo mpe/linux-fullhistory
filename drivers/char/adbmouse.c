@@ -158,6 +158,8 @@ int __init adb_mouse_init(void)
 	if (!MACH_IS_MAC)
 		return -ENODEV;
 #endif
+	/* all buttons up */
+	memset(adb_mouse_buttons, 7, sizeof(adb_mouse_buttons));
 
 	msedev = register_busmouse(&adb_mouse);
 	if (msedev < 0)

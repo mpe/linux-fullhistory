@@ -118,7 +118,7 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
  	}
 
  	/* block_size == PAGE_SIZE/zones_used */
- 	brw_page(rw, page, dev, zones, block_size, 0);
+ 	brw_page(rw, page, dev, zones, block_size);
 
  	/* Note! For consistency we do all of the logic,
  	 * decrementing the page count, and unlocking the page in the

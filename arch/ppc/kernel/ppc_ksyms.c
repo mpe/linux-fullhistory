@@ -34,6 +34,7 @@
 #ifdef __SMP__
 #include <asm/smplock.h>
 #endif /* __SMP__ */
+#include "time.h"
 
 /* Tell string.h we don't want memcpy etc. as cpp defines */
 #define EXPORT_SYMTAB_STROPS
@@ -134,7 +135,7 @@ EXPORT_SYMBOL(csum_tcpudp_magic);
 EXPORT_SYMBOL(__copy_tofrom_user);
 EXPORT_SYMBOL(__clear_user);
 EXPORT_SYMBOL(__strncpy_from_user);
-EXPORT_SYMBOL(strlen_user);
+EXPORT_SYMBOL(__strnlen_user);
 
 /*
 EXPORT_SYMBOL(inb);
@@ -162,6 +163,12 @@ EXPORT_SYMBOL(iounmap);
 EXPORT_SYMBOL(ide_insw);
 EXPORT_SYMBOL(ide_outsw);
 EXPORT_SYMBOL(ppc_ide_md);
+#ifdef CONFIG_BLK_DEV_IDE_MODULE
+EXPORT_SYMBOL(chrp_ide_irq);
+EXPORT_SYMBOL(chrp_ide_ports_known);
+EXPORT_SYMBOL(chrp_ide_regbase);
+EXPORT_SYMBOL(chrp_ide_probe);
+#endif
 
 EXPORT_SYMBOL(start_thread);
 EXPORT_SYMBOL(kernel_thread);
@@ -257,3 +264,6 @@ EXPORT_SYMBOL(timer_interrupt);
 extern unsigned long do_IRQ_intercept;
 EXPORT_SYMBOL(do_IRQ_intercept);
 EXPORT_SYMBOL(irq_desc);
+void ppc_irq_dispatch_handler(struct pt_regs *, int);
+EXPORT_SYMBOL(ppc_irq_dispatch_handler);
+EXPORT_SYMBOL(decrementer_count);

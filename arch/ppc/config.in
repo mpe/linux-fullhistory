@@ -82,6 +82,8 @@ define_bool CONFIG_BINFMT_ELF y
 define_bool CONFIG_KERNEL_ELF y
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
+source drivers/pcmcia/Config.in
+
 source drivers/parport/Config.in
 
 if [ "$CONFIG_8xx" != "y" ]; then

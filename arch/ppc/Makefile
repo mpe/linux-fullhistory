@@ -88,6 +88,7 @@ $(BOOT_TARGETS): $(CHECKS) vmlinux
 	@$(MAKECHRPBOOT) $@
 
 znetboot: $(CHECKS) vmlinux
+ifdef CONFIG_ALL_PPC
 ifdef CONFIG_SMP
 ifdef CONFIG_PPC64
 	cp -f vmlinux /tftpboot/vmlinux.smp.64
@@ -99,6 +100,7 @@ ifdef CONFIG_PPC64
 	cp -f vmlinux /tftpboot/vmlinux.64
 else
 	cp -f vmlinux /tftpboot/vmlinux
+endif
 endif
 endif
 	@$(MAKECOFFBOOT) $@

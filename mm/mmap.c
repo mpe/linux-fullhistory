@@ -66,7 +66,6 @@ int vm_enough_memory(long pages)
 	free += atomic_read(&page_cache_size);
 	free += nr_free_pages;
 	free += nr_swap_pages;
-	free -= (page_cache.min_percent + buffer_mem.min_percent + 2)*num_physpages/100; 
 	return free > pages;
 }
 

@@ -35,6 +35,12 @@ else
 TFTPIMAGE=/tftpboot/zImage.prep$(MSIZE)
 endif
 
+ifeq ($(CONFIG_SMP),y)
+TFTPSIMAGE=/tftpboot/sImage.smp
+else
+TFTPSIMAGE=/tftpboot/sImage
+endif
+
 ifeq ($(CONFIG_PPC64),y)
 MSIZE=.64
 else
@@ -121,7 +127,7 @@ ifdef CONFIG_PREP
 	cp zImage $(TFTPIMAGE)
 endif
 ifdef CONFIG_GEMINI
-	cp sImage /tftpboot/
+	cp sImage $(TFTPSIMAGE)
 endif
 
 znetboot.initrd : zImage.initrd
