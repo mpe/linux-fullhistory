@@ -68,7 +68,7 @@
     
     	The combination of slow receive restart and no real multicast
     filter makes the board unusable with a kernel compiled for IP
-    multicasting in a real multicast environment. Thats down to the board, 
+    multicasting in a real multicast environment. That's down to the board, 
     but even with no multicast programs running a multicast IP kernel is
     in group 224.0.0.1 and you will therefore be listening to all multicasts.
     One nv conference running over that ethernet and you can give up.

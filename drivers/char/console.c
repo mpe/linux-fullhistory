@@ -864,7 +864,7 @@ static void csi_m(int currcons)
 				toggle_meta = 0;
 				break;
 			case 11: /* ANSI X3.64-1979 (SCO-ish?)
-				  * Select first alternate font, let's
+				  * Select first alternate font, lets
 				  * chars < 32 be displayed as ROM chars.
 				  */
 				translate = set_translate(IBMPC_MAP);

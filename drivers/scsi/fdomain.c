@@ -594,7 +594,7 @@ static int fdomain_is_valid_port( int port )
 #else
 
 				/* That should have worked, but appears to
-				   have problems.  Lets assume it is an
+				   have problems.  Let's assume it is an
 				   18c30 if the RAM is disabled. */
 
       if (inb( port + Configuration2 ) & 0x02) {

@@ -93,7 +93,7 @@ good_area:
 bad_area:
 	if (user_mode(regs)) {
 		/* User memory access */
-		send_sig (SIGSEGV, current, 1);
+		force_sig (SIGSEGV, current);
 		return 1;
 	}
 

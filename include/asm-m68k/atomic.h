@@ -10,54 +10,32 @@
  * We do not have SMP m68k systems, so we don't have to deal with that.
  */
 
-/*
- * Make sure gcc doesn't try to be clever and move things around
- * on us. We need to use _exactly_ the address the user gave us,
- * not some alias that contains the same information.
- */
-#define __atomic_fool_gcc(x) (*(struct { int a[100]; } *)x)
-
 typedef int atomic_t;
 
 static __inline__ void atomic_add(atomic_t i, atomic_t *v)
 {
-	__asm__ __volatile__(
-		"addl %1,%0"
-		:"=m" (__atomic_fool_gcc(v))
-		:"ir" (i), "0" (__atomic_fool_gcc(v)));
+	__asm__ __volatile__("addl %1,%0" : : "m" (*v), "id" (i));
 }
 
 static __inline__ void atomic_sub(atomic_t i, atomic_t *v)
 {
-	__asm__ __volatile__(
-		"subl  %1,%0"
-		:"=m" (__atomic_fool_gcc(v))
-		:"ir" (i), "0" (__atomic_fool_gcc(v)));
+	__asm__ __volatile__("subl %1,%0" : : "m" (*v), "id" (i));
 }
 
 static __inline__ void atomic_inc(atomic_t *v)
 {
-	__asm__ __volatile__(
-		"addql #1,%0"
-		:"=m" (__atomic_fool_gcc(v))
-		:"0" (__atomic_fool_gcc(v)));
+	__asm__ __volatile__("addql #1,%0" : : "m" (*v));
 }
 
 static __inline__ void atomic_dec(atomic_t *v)
 {
-	__asm__ __volatile__(
-		"subql #1,%0"
-		:"=m" (__atomic_fool_gcc(v))
-		:"0" (__atomic_fool_gcc(v)));
+	__asm__ __volatile__("subql #1,%0" : : "m" (*v));
 }
 
 static __inline__ int atomic_dec_and_test(atomic_t *v)
 {
 	char c;
-	__asm__ __volatile__(
-		"subql #1,%0; seq %1"
-		:"=m" (__atomic_fool_gcc(v)), "=d" (c)
-		:"0" (__atomic_fool_gcc(v)));
+	__asm__ __volatile__("subql #1,%1; seq %0" : "=d" (c) : "m" (*v));
 	return c != 0;
 }
 

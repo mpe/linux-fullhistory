@@ -452,7 +452,7 @@ Lmustsched:
 	moveq	#-1,%d0
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | indicate stack frame not for syscall
 	bral	SYMBOL_NAME(ret_from_exception)	| deliver signals, reschedule etc..
-	
+
 
 |
 |	mem_write --- write to user or supervisor address space

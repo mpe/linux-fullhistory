@@ -112,7 +112,7 @@ struct igmpmsg
 };
 
 /*
- *	Thats all usermode folks
+ *	That's all usermode folks
  */
 
 #ifdef __KERNEL__

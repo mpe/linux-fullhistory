@@ -506,7 +506,7 @@ void cache_push_v (unsigned long vaddr, int len)
 		      : : "i" (FLUSH_I)
 		      : "d0");
 }
-
+#if 1
 void flush_cache_all(void)
 {
     if (m68k_is040or060 >= 4)
@@ -515,26 +515,53 @@ void flush_cache_all(void)
 	asm volatile ("movec %/cacr,%/d0\n\t"
 		      "oriw %0,%/d0\n\t"
 		      "movec %/d0,%/cacr"
-		      : : "i" (FLUSH_I)
+		      : : "i" (FLUSH_I_AND_D)
 		      : "d0");
 }
 
-void flush_page_to_ram (unsigned long addr)
-{
-    if (m68k_is040or060 == 4)
-        pushv040(addr);
+void flush_cache_mm(struct mm_struct *mm){
 
-    else if (m68k_is040or060 == 6)
-        push040(VTOP(addr)); /* someone mentioned that pushv060 doesn't work */
+    if (mm == current->mm)
+        flush_cache_all();
+}
+
+void flush_cache_range(struct mm_struct *mm, unsigned long start,
+		       unsigned long end){
+    if (mm == current->mm)
+        cache_push_v(start, end-start);
+}
+
+void flush_cache_page (struct vm_area_struct *vma, unsigned long vaddr)
+{
+    if (m68k_is040or060 >= 4)
+        pushv040(vaddr); /*
+			  * the 040 always invalidates the I-cache when
+			  * pushing its contents to ram.
+			  */
+
+    /* 68030/68020 have no writeback cache; still need to clear icache. */
+    else /* 68030 or 68020 */
+        asm volatile ("movec %/cacr,%/d0\n\t"
+		      "oriw %0,%/d0\n\t"
+		      "movec %/d0,%/cacr"
+		      : : "i" (FLUSH_I_AND_D)
+		      : "d0");
+}
+
+void flush_page_to_ram (unsigned long vaddr)
+{
+    if (m68k_is040or060 >= 4)
+        pushcl040(VTOP(vaddr));
 
     /* 68030/68020 have no writeback cache; still need to clear icache. */
     else /* 68030 or 68020 */
 	asm volatile ("movec %/cacr,%/d0\n\t"
 		      "oriw %0,%/d0\n\t"
 		      "movec %/d0,%/cacr"
-		      : : "i" (FLUSH_I)
+		      : : "i" (FLUSH_I_AND_D)
 		      : "d0");
 }
+#endif
 
 #undef clear040
 #undef push040

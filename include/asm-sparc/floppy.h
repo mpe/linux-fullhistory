@@ -290,7 +290,7 @@ static int sun_floppy_init(void)
 		/* We certainly don't have a floppy controller. */
 		goto no_sun_fdc;
 	}
-	/* Well, try and find one. */
+	/* Well, try to find one. */
 	tnode = prom_getchild(prom_root_node);
 	fd_node = prom_searchsiblings(tnode, "obio");
 	if(fd_node != 0) {

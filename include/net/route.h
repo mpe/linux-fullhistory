@@ -62,120 +62,16 @@
 #define RTF_LOCAL 0x8000
 #endif
 
-/*
- * Semaphores.
- */
-#if defined(__alpha__)
-
-static __inline__ void ATOMIC_INCR(unsigned int * addr)
-{
-	unsigned tmp;
-
-	__asm__ __volatile__(
-		"1:\n\
-		 ldl_l %1,%2\n\
-		 addl  %1,1,%1\n\
-		 stl_c %1,%0\n\
-		 beq   %1,1b\n"
-		: "m=" (*addr), "r=&" (tmp)
-		: "m"(*addr));
-}
-
-static __inline__ void ATOMIC_DECR(unsigned int * addr)
-{
-	unsigned tmp;
-
-	__asm__ __volatile__(
-		"1:\n\
-		 ldl_l %1,%2\n\
-		 subl  %1,1,%1\n\
-		 stl_c %1,%0\n\
-		 beq   %1,1b\n"
-		: "m=" (*addr), "r=&" (tmp)
-		: "m"(*addr));
-}
-
-static __inline__ int ATOMIC_DECR_AND_CHECK (unsigned int * addr)
-{
-	unsigned tmp;
-	int result;
-
-	__asm__ __volatile__(
-		"1:\n\
-		 ldl_l %1,%3\n\
-		 subl  %1,1,%1\n\
-		 mov   %1,%2\n\
-		 stl_c %1,%0\n\
-		 beq   %1,1b\n"
-		: "m=" (*addr), "r=&" (tmp), "r=&"(result)
-		: "m"(*addr));
-	return result;
-}
-
-#elif defined(__i386__)
-#include <asm/bitops.h>
-
-extern __inline__ void ATOMIC_INCR(void * addr)
-{
-	__asm__ __volatile__(
-		"incl %0"
-		:"=m" (ADDR));
-}
-
-extern __inline__ void ATOMIC_DECR(void * addr)
-{
-	__asm__ __volatile__(
-		"decl %0"
-		:"=m" (ADDR));
-}
-
-/*
- * It is DECR that is ATOMIC, not CHECK!
- * If you want to do atomic checks, use cli()/sti(). --ANK
- */
-
-extern __inline__ unsigned long ATOMIC_DECR_AND_CHECK(void * addr)
-{
-	unsigned long retval;
-	__asm__ __volatile__(
-		"decl %0\nmovl %0,%1"
-		: "=m" (ADDR), "=r"(retval));
-	return retval;
-}
-
-
-#else
-
-static __inline__ void ATOMIC_INCR(unsigned int * addr)
-{
-	(*(__volatile__ unsigned int*)addr)++;
-}
-
-static __inline__ void ATOMIC_DECR(unsigned int * addr)
-{
-	(*(__volatile__ unsigned int*)addr)--;
-}
-
-static __inline__ int ATOMIC_DECR_AND_CHECK (unsigned int * addr)
-{
-	ATOMIC_DECR(addr);
-	return *(volatile unsigned int*)addr;
-}
-
-#endif
-
-
-
 struct rtable 
 {
 	struct rtable		*rt_next;
 	__u32			rt_dst;
 	__u32			rt_src;
 	__u32			rt_gateway;
-	unsigned		rt_refcnt;
-	unsigned		rt_use;
+	atomic_t		rt_refcnt;
+	atomic_t		rt_use;
 	unsigned long		rt_window;
-	unsigned long		rt_lastuse;
+	atomic_t		rt_lastuse;
 	struct hh_cache		*rt_hh;
 	struct device		*rt_dev;
 	unsigned short		rt_flags;
@@ -185,6 +81,7 @@ struct rtable
 };
 
 extern void		ip_rt_flush(struct device *dev);
+extern void		ip_rt_update(int event, struct device *dev);
 extern void		ip_rt_redirect(__u32 src, __u32 dst, __u32 gw, struct device *dev);
 extern struct rtable	*ip_rt_slow_route(__u32 daddr, int local);
 extern int		rt_get_info(char * buffer, char **start, off_t offset, int length, int dummy);
@@ -196,23 +93,23 @@ extern void		ip_rt_check_expire(void);
 extern void		ip_rt_advice(struct rtable **rp, int advice);
 
 extern void		ip_rt_run_bh(void);
-extern int	    	ip_rt_lock;
+extern atomic_t	    	ip_rt_lock;
 extern unsigned		ip_rt_bh_mask;
 extern struct rtable 	*ip_rt_hash_table[RT_HASH_DIVISOR];
 
 extern __inline__ void ip_rt_fast_lock(void)
 {
-	ATOMIC_INCR(&ip_rt_lock);
+	atomic_inc(&ip_rt_lock);
 }
 
 extern __inline__ void ip_rt_fast_unlock(void)
 {
-	ATOMIC_DECR(&ip_rt_lock);
+	atomic_dec(&ip_rt_lock);
 }
 
 extern __inline__ void ip_rt_unlock(void)
 {
-	if (!ATOMIC_DECR_AND_CHECK(&ip_rt_lock) && ip_rt_bh_mask)
+	if (atomic_dec_and_test(&ip_rt_lock) && ip_rt_bh_mask)
 		ip_rt_run_bh();
 }
 
@@ -227,7 +124,7 @@ extern __inline__ void ip_rt_put(struct rtable * rt)
 #ifndef MODULE
 {
 	if (rt)
-		ATOMIC_DECR(&rt->rt_refcnt);
+		atomic_dec(&rt->rt_refcnt);
 }
 #else
 ;
@@ -248,8 +145,8 @@ extern __inline__ struct rtable * ip_rt_route(__u32 daddr, int local)
 		if (rth->rt_dst == daddr)
 		{
 			rth->rt_lastuse = jiffies;
-			ATOMIC_INCR(&rth->rt_use);
-			ATOMIC_INCR(&rth->rt_refcnt);
+			atomic_inc(&rth->rt_use);
+			atomic_inc(&rth->rt_refcnt);
 			ip_rt_unlock();
 			return rth;
 		}

@@ -333,7 +333,7 @@ int tok_probe(struct device *dev)
 	ti->mmio= t_mmio;
 
 	dev->priv = ti;     /* this seems like the logical use of the
-                         field ... lets try some empirical tests
+                         field ... let's try some empirical tests
                          using the token-info structure -- that
                          should fit with out future hope of multiple
                          adapter support as well /dwm   */

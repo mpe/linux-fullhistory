@@ -3,9 +3,9 @@
  |                                                                           |
  |  The error handling functions for wm-FPU-emu                              |
  |                                                                           |
- | Copyright (C) 1992,1993,1994                                              |
- |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ | Copyright (C) 1992,1993,1994,1996                                         |
+ |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
+ |                  E-mail   billm@jacobi.maths.monash.edu.au                |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -82,7 +82,7 @@ void FPU_illegal(void)
 
 
 
-void emu_printall()
+void emu_printall(void)
 {
   int i;
   static const char *tag_desc[] = { "Valid", "Zero", "ERROR", "ERROR",
@@ -166,7 +166,8 @@ printk(" CW: ic=%d rc=%ld%ld pc=%ld%ld iem=%d     ef=%d%d%d%d%d%d\n",
   for ( i = 0; i < 8; i++ )
     {
       FPU_REG *r = &st(i);
-      switch (r->tag)
+      char tagi = r->tag;
+      switch (tagi)
 	{
 	case TW_Empty:
 	  continue;
@@ -190,22 +191,13 @@ printk(" CW: ic=%d rc=%ld%ld pc=%ld%ld iem=%d     ef=%d%d%d%d%d%d\n",
 		 r->exp - EXP_BIAS + 1);
 	  break;
 	default:
-	  printk("Whoops! Error in errors.c      ");
+	  printk("Whoops! Error in errors.c: tag%d is %d ", i, tagi);
+	  continue;
 	  break;
 	}
-      printk("%s\n", tag_desc[(int) (unsigned) r->tag]);
+      printk("%s\n", tag_desc[(int) (unsigned) tagi]);
     }
 
-#ifdef OBSOLETE
-  printk("[data] %c .%04lx %04lx %04lx %04lx e%+-6ld ",
-	 FPU_loaded_data.sign ? '-' : '+',
-	 (long)(FPU_loaded_data.sigh >> 16),
-	 (long)(FPU_loaded_data.sigh & 0xFFFF),
-	 (long)(FPU_loaded_data.sigl >> 16),
-	 (long)(FPU_loaded_data.sigl & 0xFFFF),
-	 FPU_loaded_data.exp - EXP_BIAS + 1);
-  printk("%s\n", tag_desc[(int) (unsigned) FPU_loaded_data.tag]);
-#endif OBSOLETE
   RE_ENTRANT_CHECK_ON;
 
 }
@@ -365,12 +357,8 @@ void exception(int n)
       /*
        * The 80486 generates an interrupt on the next non-control FPU
        * instruction. So we need some means of flagging it.
-       * We use the ES (Error Summary) bit for this, assuming that
-       * this is the way a real FPU does it (until I can check it out),
-       * if not, then some method such as the following kludge might
-       * be needed.
+       * We use the ES (Error Summary) bit for this.
        */
-/*      regs[0].tag |= TW_FPU_Interrupt; */
     }
   RE_ENTRANT_CHECK_ON;
 
@@ -568,7 +556,7 @@ asmlinkage int arith_overflow(FPU_REG *dest)
       return !(control_word & CW_Precision);
     }
 
-  return !(control_word & CW_Overflow);
+  return 0;
 
 }
 
@@ -599,7 +587,7 @@ asmlinkage int arith_underflow(FPU_REG *dest)
       return !(control_word & CW_Precision);
     }
 
-  return !(control_word & CW_Underflow);
+  return 0;
 
 }
 

@@ -380,6 +380,7 @@ static int vfat_ioctl_fill(
 int fat_dir_ioctl(struct inode * inode, struct file * filp,
 		  unsigned int cmd, unsigned long arg)
 {
+	int err;
 	/*
 	 * We want to provide an interface for Samba to be able
 	 * to get the short filename for a given long filename.
@@ -389,6 +390,9 @@ int fat_dir_ioctl(struct inode * inode, struct file * filp,
 	switch (cmd) {
 	case VFAT_IOCTL_READDIR_BOTH: {
 		struct dirent *d1 = (struct dirent *)arg;
+		err = verify_area(VERIFY_WRITE, d1, sizeof (*d1));
+		if (err)
+			return err;
 		put_user(0, &d1->d_reclen);
 		return fat_readdirx(inode,filp,(void *)arg,
 				    vfat_ioctl_fill, NULL, 0, 1, 1);
@@ -396,6 +400,9 @@ int fat_dir_ioctl(struct inode * inode, struct file * filp,
 	case VFAT_IOCTL_READDIR_SHORT: {
 		struct dirent *d1 = (struct dirent *)arg;
 		put_user(0, &d1->d_reclen);
+		err = verify_area(VERIFY_WRITE, d1, sizeof (*d1));
+		if (err)
+			return err;
 		return fat_readdirx(inode,filp,(void *)arg,
 				    vfat_ioctl_fill, NULL, 1, 0, 1);
 	}

@@ -103,8 +103,8 @@
 #include <linux/net_alias.h>
 #endif
 #ifdef CONFIG_ARPD
-#include <linux/kerneld.h>
-#endif /* CONFIG_ARPD */
+#include <net/netlink.h>
+#endif
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -112,10 +112,107 @@
 #include <stdarg.h>
 
 /*
- *	This structure defines the ARP mapping cache. As long as we make changes
- *	in this structure, we keep interrupts off. But normally we can copy the
- *	hardware address and the device pointer in a local variable and then 
- *	make any "long calls" to send a packet out.
+ *	Configurable Parameters
+ */
+
+/*
+ *	After that time, an unused entry is deleted from the arp table.
+ *	RFC1122 recommends set it to 60*HZ, if your site uses proxy arp
+ *	and dynamic routing.
+ */
+
+#ifndef CONFIG_ARPD
+#define ARP_TIMEOUT		(600*HZ)
+#else
+#define ARP_TIMEOUT		(60*HZ)
+#define ARPD_TIMEOUT		(600*HZ)
+#endif
+
+/*
+ *	How often is ARP cache checked for expire.
+ *	It is useless to set ARP_CHECK_INTERVAL > ARP_TIMEOUT
+ */
+
+#define ARP_CHECK_INTERVAL	(60*HZ)
+
+/*
+ *	Soft limit on ARP cache size.
+ *	Note that this number should be greater, than
+ *	number of simultaneously opened sockets, else
+ *	hardware header cache will be not efficient.
+ */
+
+#if RT_CACHE_DEBUG >= 2
+#define ARP_MAXSIZE	4
+#else
+#ifdef CONFIG_ARPD
+#define ARP_MAXSIZE	64
+#else
+#define ARP_MAXSIZE	256
+#endif /* CONFIG_ARPD */
+#endif
+
+/*
+ *	If an arp request is send, ARP_RES_TIME is the timeout value until the
+ *	next request is send.
+ * 	RFC1122: OK.  Throttles ARPing, as per 2.3.2.1. (MUST)
+ *	The recommended minimum timeout is 1 second per destination.
+ *
+ */
+
+#define ARP_RES_TIME		(5*HZ)
+
+/*
+ *	The number of times an broadcast arp request is send, until
+ *	the host is considered temporarily unreachable.
+ */
+
+#define ARP_MAX_TRIES		3
+
+/*
+ *	The entry is reconfirmed by sending point-to-point ARP
+ *	request after ARP_CONFIRM_INTERVAL.
+ *	RFC1122 recommends 60*HZ.
+ *
+ *	Warning: there exist nodes, that answer only broadcast
+ *	ARP requests (Cisco-4000 in hot standby mode?)
+ *	Now arp code should work with such nodes, but
+ *	it still will generate redundant broadcast requests, so that
+ *	this interval should be enough long.
+ */
+
+#define ARP_CONFIRM_INTERVAL	(300*HZ)
+
+/*
+ *	We wait for answer to unicast request for ARP_CONFIRM_TIMEOUT.
+ */
+
+#define ARP_CONFIRM_TIMEOUT	ARP_RES_TIME
+
+/*
+ *	The number of times an unicast arp request is retried, until
+ *	the cache entry is considered suspicious.
+ *	Value 0 means that no unicast pings will be sent.
+ *	RFC1122 recommends 2.
+ */
+
+#define ARP_MAX_PINGS		1
+
+/*
+ *	When a host is dead, but someone tries to connect it,
+ *	we do not remove corresponding cache entry (it would
+ *	be useless, it will be created again immediately)
+ *	Instead we prolongate interval between broadcasts
+ *	to ARP_DEAD_RES_TIME.
+ *	This interval should be not very long.
+ *	(When the host will be up again, we will notice it only
+ *	when ARP_DEAD_RES_TIME expires, or when the host will arp us.
+ */
+
+#define ARP_DEAD_RES_TIME	(60*HZ)
+
+/*
+ *	This structure defines the ARP mapping cache.
  */
 
 struct arp_table
@@ -128,6 +225,7 @@ struct arp_table
 	u32				mask;			/* netmask - used for generalised proxy arps (tridge) 		*/
 	unsigned char			ha[MAX_ADDR_LEN];	/* Hardware address		*/
 	struct device			*dev;			/* Device the entry is tied to 	*/
+	struct hh_cache			*hh;			/* Hardware headers chain	*/
 
 	/*
 	 *	The following entries are only used for unresolved hw addresses.
@@ -136,73 +234,35 @@ struct arp_table
 	struct timer_list		timer;			/* expire timer 		*/
 	int				retries;		/* remaining retries	 	*/
 	struct sk_buff_head		skb;			/* list of queued packets 	*/
-	struct hh_cache			*hh;
 };
 
 
-/*
- *	Configurable Parameters (don't touch unless you know what you are doing
- */
+static atomic_t arp_size = 0;
 
-/*
- *	If an arp request is send, ARP_RES_TIME is the timeout value until the
- *	next request is send.
- * 	RFC1122: OK.  Throttles ARPing, as per 2.3.2.1. (MUST)
- *	The recommended minimum timeout is 1 second per destination.
- *	This timeout is prolongated to ARP_DEAD_RES_TIME, if
- *	destination does not respond.
- */
+#ifdef CONFIG_ARPD
+static int arpd_not_running;
+static int arpd_stamp;
+#endif
 
-#define ARP_RES_TIME		(5*HZ)
-#define ARP_DEAD_RES_TIME	(60*HZ)
-
-/*
- *	The number of times an arp request is send, until the host is
- *	considered temporarily unreachable.
- */
-
-#define ARP_MAX_TRIES		3
-
-/*
- *	After that time, an unused entry is deleted from the arp table.
- */
-
-#define ARP_TIMEOUT		(600*HZ)
-
-/*
- *	How often is the function 'arp_check_retries' called.
- *	An unused entry is invalidated in the time between ARP_TIMEOUT and
- *	(ARP_TIMEOUT+ARP_CHECK_INTERVAL).
- */
-
-#define ARP_CHECK_INTERVAL	(60*HZ)
-
-/*
- *	The entry is reconfirmed by sending point-to-point ARP
- *	request after ARP_CONFIRM_INTERVAL. If destinations does not respond
- *	for ARP_CONFIRM_TIMEOUT, normal broadcast resolution scheme is started.
- */
-
-#define ARP_CONFIRM_INTERVAL	(300*HZ)
-#define ARP_CONFIRM_TIMEOUT	ARP_RES_TIME
-
-static unsigned int arp_lock;
 static unsigned int arp_bh_mask;
 
 #define ARP_BH_BACKLOG	1
 
+/*
+ *	Backlog for ARP updates.
+ */
 static struct arp_table *arp_backlog;
 
-/* If we have arpd configured, assume that we will be running arpd and keep
-   the internal cache small */
-#ifdef CONFIG_ARPD
-#define ARP_MAXSIZE	256
-#endif /* CONFIG_ARPD */
+/*
+ *	Backlog for incomplete entries.
+ */
+static struct arp_table *arp_req_backlog;
 
-static unsigned int arp_size = 0;
 
 static void arp_run_bh(void);
 static void arp_check_expire (unsigned long);  
+static int  arp_update (u32 sip, char *sha, struct device * dev,
+	    struct arp_table *ientry, int grat);
 
 static struct timer_list arp_timer =
 	{ NULL, NULL, ARP_CHECK_INTERVAL, 0L, &arp_check_expire };
@@ -216,12 +276,10 @@ static struct timer_list arp_timer =
 
 /*
  * 	The size of the hash table. Must be a power of two.
- * 	Maybe we should remove hashing in the future for arp and concentrate
- * 	on Patrick Schaaf's Host-Cache-Lookup...
  */
 
-#define ARP_TABLE_SIZE  16
-#define FULL_ARP_TABLE_SIZE (ARP_TABLE_SIZE+1)
+#define ARP_TABLE_SIZE		16
+#define FULL_ARP_TABLE_SIZE	(ARP_TABLE_SIZE+1)
 
 struct arp_table *arp_tables[FULL_ARP_TABLE_SIZE] =
 {
@@ -238,22 +296,47 @@ struct arp_table *arp_tables[FULL_ARP_TABLE_SIZE] =
 #define HASH(paddr) 		(htonl(paddr) & (ARP_TABLE_SIZE - 1))
 
 /*
- * Lock/unlock arp_table chains.
+ *	ARP cache semaphore.
+ *
+ *	Every time when someone wants to traverse arp table,
+ *	he MUST call arp_fast_lock.
+ *	It will guarantee that arp cache list will not change
+ *	by interrupts and the entry that you found will not
+ *	disappear unexpectedly.
+ *	
+ *	If you want to modify arp cache lists, you MUST
+ *	call arp_fast_lock, and check that you are the only
+ *	owner of semaphore (arp_lock == 1). If it is not the case
+ *	you can defer your operation or forgot it,
+ *	but DO NOT TOUCH lists.
+ *
+ *	However, you are allowed to change arp entry contents.
+ *
+ *	Assumptions:
+ *	     -- interrupt code MUST have lock/unlock balanced,
+ *		you cannot lock cache on interrupt and defer unlocking
+ *		to callback.
+ *		In particular, it means that lock/unlock are allowed
+ *		to be non-atomic. They are made atomic, but it was not
+ *		necessary.
+ *	     -- nobody is allowed to sleep while
+ *		it keeps arp locked. (route cache has similar locking
+ *		scheme, but allows sleeping)
+ *		
  */
+
+static atomic_t arp_lock;
+
+#define ARP_LOCKED() (arp_lock != 1)
 
 static __inline__ void arp_fast_lock(void)
 {
-	ATOMIC_INCR(&arp_lock);
-}
-
-static __inline__ void arp_fast_unlock(void)
-{
-	ATOMIC_DECR(&arp_lock);
+	atomic_inc(&arp_lock);
 }
 
 static __inline__ void arp_unlock(void)
 {
-	if (!ATOMIC_DECR_AND_CHECK(&arp_lock) && arp_bh_mask)
+	if (atomic_dec_and_test(&arp_lock) && arp_bh_mask)
 		arp_run_bh();
 }
 
@@ -306,7 +389,7 @@ static struct arp_table * arp_dequeue(struct arp_table **q)
  * Purge all linked skb's of the entry.
  */
 
-static void arp_release_entry(struct arp_table *entry)
+static void arp_purge_send_q(struct arp_table *entry)
 {
 	struct sk_buff *skb;
 	unsigned long flags;
@@ -328,6 +411,7 @@ static void arp_release_entry(struct arp_table *entry)
 /*
  * 	Release the entry and all resources linked to it: skb's, hh's, timer
  * 	and certainly memory.
+ *	The entry should be already removed from lists.
  */
 
 static void arp_free_entry(struct arp_table *entry)
@@ -336,234 +420,53 @@ static void arp_free_entry(struct arp_table *entry)
 	struct hh_cache *hh, *next;
 
 	del_timer(&entry->timer);
+	arp_purge_send_q(entry);
 
 	save_flags(flags);
 	cli();
-	arp_release_entry(entry);
-
-	for (hh = entry->hh; hh; hh = next)
-	{
-		next = hh->hh_next;
-		hh->hh_arp = NULL;
-		hh->hh_uptodate = 0;
-		if (!--hh->hh_refcnt)
-			kfree_s(hh, sizeof(struct(struct hh_cache)));
-	}
+	hh = entry->hh;
+	entry->hh = NULL;
 	restore_flags(flags);
 
+	for ( ; hh; hh = next)
+	{
+		next = hh->hh_next;
+		hh->hh_uptodate = 0;
+		hh->hh_next = NULL;
+		hh->hh_arp = NULL;
+		if (atomic_dec_and_test(&hh->hh_refcnt))
+			kfree_s(hh, sizeof(struct(struct hh_cache)));
+	}
+
 	kfree_s(entry, sizeof(struct arp_table));
-	--arp_size;
+	atomic_dec(&arp_size);
 	return;
 }
 
 /*
- * How many users has this entry?
+ *	Hardware header cache.
+ *
+ *	BEWARE! Hardware header cache has no locking, so that
+ *	it requires especially careful handling.
+ *	It is the only part of arp+route, where a list
+ *	should be traversed with masked interrupts.
+ *	Luckily, this list contains one element 8), as rule.
+ */
+
+/*
+ *	How many users has this entry?
+ *	The answer is reliable only when interrupts are masked.
  */
 
 static __inline__ int arp_count_hhs(struct arp_table * entry)
 {
-	struct hh_cache *hh, **hhp;
+	struct hh_cache *hh;
 	int count = 0;
 
-	hhp = &entry->hh;
-	while ((hh=*hhp) != NULL)
-	{
-		if (hh->hh_refcnt == 1)
-		{
-			*hhp = hh->hh_next;
-			kfree_s(hh, sizeof(struct hh_cache));
-			continue;
-		}
+	for (hh = entry->hh; hh; hh = hh->hh_next)
 		count += hh->hh_refcnt-1;
-		hhp = &hh->hh_next;
-	}
 
 	return count;
-}
-
-
-/*
- *	Force the expiry of an entry in the internal cache so the memory
- *	can be used for a new request or for loading a query from arpd.
- *	I'm not really sure what the best algorithm should be, so I just
- *	search for the oldest.  NOTE:  make sure the cache is locked before
- *      jumping into this function!  If someone wants to do something
- *	other than searching the whole cache, by all means do so!
- */
-
-#ifdef CONFIG_ARPD
-static int arp_force_expire(void)
-{
-	int i;
-	struct arp_table *entry = NULL;
-	struct arp_table **pentry = NULL;
-	struct arp_table **oldest_entry = NULL, **last_resort = NULL;
-	unsigned long oldest_used = ~0;
-
-#if RT_CACHE_DEBUG >= 2
-	printk("Looking for something to force expire.\n");
-#endif
-	for (i = 0; i < ARP_TABLE_SIZE; i++)
-	{
-		pentry = &arp_tables[i];
-
-		while ((entry = *pentry) != NULL)
-		{
-			if (entry->last_used < oldest_used)
-			{
-				if (arp_count_hhs(entry) == 0)
-				{
-					oldest_entry = pentry;
-				}
-				last_resort = pentry;
-				oldest_used = entry->last_used;
-			}
-			pentry = &entry->next;	/* go to next entry */
-		}
-	}
-	if (oldest_entry == NULL)
-	{
-		if (last_resort == NULL)
-			return -1;
-		oldest_entry = last_resort;
-	}
-		
-	entry = *oldest_entry;
-	*oldest_entry = (*oldest_entry)->next;
-#if RT_CACHE_DEBUG >= 2
-	printk("Force expiring %08x\n", entry->ip);
-#endif
-	arp_free_entry(entry);
-	return 0;
-}
-#endif /* CONFIG_ARPD */
-
-
-static void arpd_update(struct arp_table * entry, int loc)
-{
-#ifdef CONFIG_ARPD
-	static struct arpd_request arpreq;
-
-	arpreq.req = ARPD_UPDATE;
-	arpreq.ip = entry->ip;
-	arpreq.mask = entry->mask;
-	memcpy (arpreq.ha, entry->ha, MAX_ADDR_LEN);
-	arpreq.loc = loc;
-	arpreq.last_used = entry->last_used;
-	arpreq.last_updated = entry->last_updated;
-	arpreq.flags = entry->flags;
-	arpreq.dev = entry->dev;
-
-	kerneld_send(KERNELD_ARP, 0, sizeof(arpreq),
-				(char *) &arpreq, NULL);
-#endif /* CONFIG_ARPD */
-}
-
-/* 
- * Allocate memory for a new entry.  If we are at the maximum limit
- * of the internal ARP cache, arp_force_expire() an entry.  NOTE:  
- * arp_force_expire() needs the cache to be locked, so therefore
- * arp_add_entry() should only be called with the cache locked too!
- */
-
-static struct arp_table * arp_add_entry(void)
-{
-	struct arp_table * entry;
-
-#ifdef CONFIG_ARPD
-	if (arp_size >= ARP_MAXSIZE)
-	{
-		if (arp_force_expire() < 0)
-			return NULL;
-	}
-#endif /* CONFIG_ARPD */
-
-	entry = (struct arp_table *)
-		kmalloc(sizeof(struct arp_table),GFP_ATOMIC);
-
-	if (entry != NULL)
-		++arp_size;
-	return entry;
-}
-
-
-/*
- * Lookup ARP entry by (addr, dev) pair in the arpd.
- */
-
-static struct arp_table * arpd_lookup(u32 addr, unsigned short flags, 
-						struct device * dev,
-						int loc)
-{
-#ifdef CONFIG_ARPD
-	static struct arpd_request arpreq, retreq;
-	struct arp_table * entry;
-	int rv, i;
-
-	arpreq.req = ARPD_LOOKUP;
-	arpreq.ip = addr;
-	arpreq.loc = loc;
-
-	rv = kerneld_send(KERNELD_ARP, 
-			sizeof(retreq) | KERNELD_WAIT,
-			sizeof(arpreq),
-			(char *) &arpreq,
-			(char *) &retreq);
-	/* don't worry about rv != 0 too much, it's probably
-	   because arpd isn't running or an entry couldn't
-	   be found */
-
-	if (rv != 0)
-		return NULL;
-	if (dev != retreq.dev)
-		return NULL;
-	if (! memcmp (retreq.ha, "\0\0\0\0\0\0", 6))
-		return NULL;
-
-	arp_fast_lock();
-	entry = arp_add_entry();
-	arp_unlock();
-
-	if (entry == NULL)
-		return NULL;
-
-	entry->next = NULL;
-	entry->last_used = retreq.last_used;
-	entry->last_updated = retreq.last_updated;
-	entry->flags = retreq.flags;
-	entry->ip = retreq.ip;
-	entry->mask = retreq.mask;
-	memcpy (entry->ha, retreq.ha, MAX_ADDR_LEN);
-	arpreq.dev = entry->dev;
-
-	skb_queue_head_init(&entry->skb);
-	entry->hh = NULL;
-	entry->retries = 0;
-
-#if RT_CACHE_DEBUG >= 2
-	printk("Inserting arpd entry %08x\n in local cache.", entry->ip);
-#endif
-	i = HASH(entry->ip);
-	arp_fast_lock();
-	entry->next = arp_tables[i]->next;
-	arp_tables[i]->next = entry;
-	arp_unlock();
-	return entry;
-#endif /* CONFIG_ARPD */
-	return NULL;
-}
-
-
-/*
- * Invalidate all hh's, so that higher level will not try to use it.
- */
-
-static __inline__ void arp_invalidate_hhs(struct arp_table * entry)
-{
-	struct hh_cache *hh;
-
-	for (hh=entry->hh; hh; hh=hh->hh_next)
-		hh->hh_uptodate = 0;
 }
 
 /*
@@ -579,10 +482,316 @@ static __inline__ void arp_update_hhs(struct arp_table * entry)
 }
 
 /*
+ *	Invalidate all hh's, so that higher level will not try to use it.
+ */
+
+static __inline__ void arp_invalidate_hhs(struct arp_table * entry)
+{
+	struct hh_cache *hh;
+
+	for (hh=entry->hh; hh; hh=hh->hh_next)
+		hh->hh_uptodate = 0;
+}
+
+/*
+ *	Atomic attaching new hh entry.
+ *	Return 1, if entry has been freed, rather than attached.
+ */
+
+static int arp_set_hh(struct hh_cache **hhp, struct hh_cache *hh)
+{
+	unsigned long flags;
+	struct hh_cache *hh1;
+	struct arp_table *entry;
+
+	atomic_inc(&hh->hh_refcnt);
+
+	save_flags(flags);
+	cli();
+	if ((hh1 = *hhp) == NULL)
+	{
+		*hhp = hh;
+		restore_flags(flags);
+		return 0;
+	}
+
+	entry = (struct arp_table*)hh->hh_arp;
+
+	/*
+	 *	An hh1 entry is already attached to this point.
+	 *	Is it not linked to arp entry? Link it!
+	 */
+	if (!hh1->hh_arp && entry)
+	{
+		atomic_inc(&hh1->hh_refcnt);
+		hh1->hh_next = entry->hh;
+		entry->hh = hh1;
+		hh1->hh_arp = (void*)entry;
+		restore_flags(flags);
+
+		if (entry->flags & ATF_COM)
+			entry->dev->header_cache_update(hh1, entry->dev, entry->ha);
+#if RT_CACHE_DEBUG >= 1
+		printk("arp_set_hh: %08x is reattached. Good!\n", entry->ip);
+#endif
+	}
+#if RT_CACHE_DEBUG >= 1
+	else if (entry)
+		printk("arp_set_hh: %08x rr1 ok!\n", entry->ip);
+#endif
+	restore_flags(flags);
+	if (atomic_dec_and_test(&hh->hh_refcnt))
+		kfree_s(hh, sizeof(struct hh_cache));
+	return 1;
+}
+
+static __inline__ struct hh_cache * arp_alloc_hh(int htype)
+{
+	struct hh_cache *hh;
+	hh = kmalloc(sizeof(struct hh_cache), GFP_ATOMIC);
+	if (hh)
+	{
+		memset(hh, 0, sizeof(struct hh_cache));
+		hh->hh_type = htype;
+	}
+	return hh;
+}
+
+/*
+ * Test if a hardware address is all zero
+ */
+
+static __inline__ int empty(unsigned char * addr, int len)
+{
+	while (len > 0)
+	{
+		if (*addr)
+			return 0;
+		len--;
+		addr++;
+	}
+	return 1;
+}
+
+
+#ifdef CONFIG_ARPD
+
+/*
+ *	Send ARPD message.
+ */
+static void arpd_send(int req, u32 addr, struct device * dev, char *ha,
+		      unsigned long updated)
+{
+	int retval;
+	struct sk_buff *skb;
+	struct arpd_request *arpreq;
+
+	if (arpd_not_running)
+		return;
+
+	skb = alloc_skb(sizeof(struct arpd_request), GFP_ATOMIC);
+	if (skb == NULL)
+		return;
+
+	skb->free=1;
+	arpreq=(struct arpd_request *)skb_put(skb, sizeof(struct arpd_request));
+	arpreq->req = req;
+	arpreq->ip  = addr;
+	arpreq->dev = (unsigned long)dev;
+	arpreq->stamp = arpd_stamp;
+	arpreq->updated = updated;
+	if (ha)
+		memcpy(arpreq->ha, ha, sizeof(arpreq->ha));
+
+	retval = netlink_post(NETLINK_ARPD, skb);
+	if (retval)
+	{
+		kfree_skb(skb, FREE_WRITE);
+		if (retval == -EUNATCH)
+			arpd_not_running = 1;
+	}
+}
+
+/*
+ *	Send ARPD update message.
+ */
+
+static __inline__ void arpd_update(struct arp_table * entry)
+{
+	if (arpd_not_running)
+		return;
+	arpd_send(ARPD_UPDATE, entry->ip, entry->dev, entry->ha,
+		  entry->last_updated);
+}
+
+/*
+ *	Send ARPD lookup request.
+ */
+
+static __inline__ void arpd_lookup(u32 addr, struct device * dev)
+{
+	if (arpd_not_running)
+		return;
+	arpd_send(ARPD_LOOKUP, addr, dev, NULL, 0);
+}
+
+/*
+ *	Send ARPD flush message.
+ */
+
+static __inline__ void arpd_flush(struct device * dev)
+{
+	if (arpd_not_running)
+		return;
+	arpd_send(ARPD_FLUSH, 0, dev, NULL, 0);
+}
+
+
+static int arpd_callback(struct sk_buff *skb)
+{
+	struct device * dev;
+	struct arpd_request *retreq;
+
+	arpd_not_running = 0;
+
+	if (skb->len != sizeof(struct arpd_request))
+	{
+		kfree_skb(skb, FREE_READ);
+		return -EINVAL;
+	}
+
+	retreq = (struct arpd_request *)skb->data;
+	dev = (struct device*)retreq->dev;
+
+	if (retreq->stamp != arpd_stamp || !dev)
+	{
+		kfree_skb(skb, FREE_READ);
+		return -EINVAL;
+	}
+
+	if (!retreq->updated || empty(retreq->ha, sizeof(retreq->ha)))
+	{
+/*
+ *	Invalid mapping: drop it and send ARP broadcast.
+ */
+		arp_send(ARPOP_REQUEST, ETH_P_ARP, retreq->ip, dev, dev->pa_addr, NULL, 
+			 dev->dev_addr, NULL);
+	}
+	else
+	{
+		arp_fast_lock();
+		arp_update(retreq->ip, retreq->ha, dev, NULL, 0);
+		arp_unlock();
+
+/*
+ *	Old mapping: we cannot trust it, send ARP broadcast to confirm it.
+ *	If it will answer, the entry will be updated,
+ *	if not ... we are lost. We will use it for ARP_CONFIRM_INTERVAL.
+ */
+		if (jiffies - retreq->updated < ARPD_TIMEOUT)
+			arp_send(ARPOP_REQUEST, ETH_P_ARP, retreq->ip, dev, dev->pa_addr, NULL, 
+				 dev->dev_addr, NULL);
+	}
+
+	kfree_skb(skb, FREE_READ);
+	return sizeof(struct arpd_request);
+}
+
+#else
+
+static __inline__ void arpd_update(struct arp_table * entry)
+{
+	return;
+}
+
+#endif /* CONFIG_ARPD */
+
+
+
+
+/*
+ *	ARP expiration routines.
+ */
+
+/*
+ *	Force the expiry of an entry in the internal cache so the memory
+ *	can be used for a new request.
+ */
+
+static int arp_force_expire(void)
+{
+	int i;
+	struct arp_table *entry, **pentry;
+	struct arp_table **oldest_entry = NULL;
+	unsigned long oldest_used = ~0;
+	unsigned long flags;
+	unsigned long now = jiffies;
+	int result = 0;
+
+	static last_index;
+
+	if (ARP_LOCKED())
+		return 0;
+
+	save_flags(flags);
+
+	if (last_index >= ARP_TABLE_SIZE)
+		last_index = 0;
+
+	for (i = 0; i < ARP_TABLE_SIZE; i++, last_index++)
+	{
+		pentry = &arp_tables[last_index & (ARP_TABLE_SIZE-1)];
+
+		while ((entry = *pentry) != NULL)
+		{
+			if (!(entry->flags & ATF_PERM))
+			{
+				int users;
+				cli();
+				users = arp_count_hhs(entry);
+
+				if (!users && now - entry->last_used > ARP_TIMEOUT)
+				{
+					*pentry = entry->next;
+					restore_flags(flags);
+#if RT_CACHE_DEBUG >= 2
+					printk("arp_force_expire: %08x expired\n", entry->ip);
+#endif
+					arp_free_entry(entry);
+					result++;
+					if (arp_size < ARP_MAXSIZE)
+						goto done;
+					continue;
+				}
+				restore_flags(flags);
+				if (!users && entry->last_used < oldest_used)
+				{
+					oldest_entry = pentry;
+					oldest_used = entry->last_used;
+				}
+			}
+			pentry = &entry->next;
+		}
+	}
+
+done:
+	if (result || !oldest_entry)
+		return result;
+
+	entry = *oldest_entry;
+	*oldest_entry = entry->next;
+#if RT_CACHE_DEBUG >= 2
+	printk("arp_force_expire: expiring %08x\n", entry->ip);
+#endif
+	arp_free_entry(entry);
+	return 1;
+}
+
+/*
  *	Check if there are too old entries and remove them. If the ATF_PERM
  *	flag is set, they are always left in the arp cache (permanent entry).
  *      If an entry was not be confirmed  for ARP_CONFIRM_INTERVAL,
- *	declare it invalid and send point-to-point ARP request.
+ *	send point-to-point ARP request.
  *	If it will not be confirmed for ARP_CONFIRM_TIMEOUT,
  *	give it to shred by arp_expire_entry.
  */
@@ -594,22 +803,33 @@ static void arp_check_expire(unsigned long dummy)
 
 	del_timer(&arp_timer);
 
-	if (!arp_lock)
+#ifdef CONFIG_ARPD
+	arpd_not_running = 0;
+#endif
+
+	ip_rt_check_expire();
+
+	arp_fast_lock();
+
+	if (!ARP_LOCKED())
 	{
-		arp_fast_lock();
 
 		for (i = 0; i < ARP_TABLE_SIZE; i++)
 		{
-			struct arp_table *entry;
-			struct arp_table **pentry;
+			struct arp_table *entry, **pentry;
 		
 			pentry = &arp_tables[i];
 
 			while ((entry = *pentry) != NULL)
 			{
+				if (entry->flags & ATF_PERM)
+				{
+					pentry = &entry->next;
+					continue;
+				}
+
 				cli();
 				if (now - entry->last_used > ARP_TIMEOUT
-				    && !(entry->flags & ATF_PERM)
 				    && !arp_count_hhs(entry))
 				{
 					*pentry = entry->next;
@@ -618,17 +838,15 @@ static void arp_check_expire(unsigned long dummy)
 					printk("arp_expire: %08x expired\n", entry->ip);
 #endif
 					arp_free_entry(entry);
+					continue;
 				}
-				else if (entry->last_updated
-					 && now - entry->last_updated > ARP_CONFIRM_INTERVAL
-					 && !(entry->flags & ATF_PERM))
+				sti();
+				if (entry->last_updated
+				    && now - entry->last_updated > ARP_CONFIRM_INTERVAL
+				    && !(entry->flags & ATF_PERM))
 				{
 					struct device * dev = entry->dev;
-					pentry = &entry->next;
-					entry->flags &= ~ATF_COM;
-					arp_invalidate_hhs(entry);
-					sti();
-					entry->retries = ARP_MAX_TRIES+1;
+					entry->retries = ARP_MAX_TRIES+ARP_MAX_PINGS;
 					del_timer(&entry->timer);
 					entry->timer.expires = jiffies + ARP_CONFIRM_TIMEOUT;
 					add_timer(&entry->timer);
@@ -639,14 +857,12 @@ static void arp_check_expire(unsigned long dummy)
 					printk("arp_expire: %08x requires confirmation\n", entry->ip);
 #endif
 				}
-				else
-					pentry = &entry->next;	/* go to next entry */
+				pentry = &entry->next;	/* go to next entry */
 			}
 		}
-		arp_unlock();
 	}
 
-	ip_rt_check_expire();
+	arp_unlock();
 
 	/*
 	 *	Set the timer again.
@@ -669,34 +885,46 @@ static void arp_expire_request (unsigned long arg)
 	unsigned long hash;
 	unsigned long flags;
 
+	arp_fast_lock();
+
 	save_flags(flags);
 	cli();
+	del_timer(&entry->timer);
+
+	/*
+	 *	If arp table is locked, defer expire processing.
+	 */
+	if (ARP_LOCKED())
+	{
+#if RT_CACHE_DEBUG >= 1
+		printk(KERN_DEBUG "arp_expire_request: %08x deferred\n", entry->ip);
+#endif
+		entry->timer.expires = jiffies + HZ/10;
+		add_timer(&entry->timer);
+		restore_flags(flags);
+		arp_unlock();
+		return;
+	}
 
 	/*
 	 *	Since all timeouts are handled with interrupts enabled, there is a
 	 *	small chance, that this entry has just been resolved by an incoming
 	 *	packet. This is the only race condition, but it is handled...
+	 *
+	 *	One exception: if entry is COMPLETE but old,
+	 *	it means that point-to-point ARP ping has been failed
+	 *	(It really occurs with Cisco 4000 routers)
+	 *	We should reconfirm it.
 	 */
 	
-	if (entry->flags & ATF_COM)
+	if ((entry->flags & ATF_COM) && entry->last_updated
+	    && jiffies - entry->last_updated <= ARP_CONFIRM_INTERVAL)
 	{
 		restore_flags(flags);
+		arp_unlock();
 		return;
 	}
 
-	if (arp_lock)
-	{
-#if RT_CACHE_DEBUG >= 1
-		printk("arp_expire_request: %08x postponed\n", entry->ip);
-#endif
-		del_timer(&entry->timer);
-		entry->timer.expires = jiffies + HZ/10;
-		add_timer(&entry->timer);
-		restore_flags(flags);
-		return;
-	}
-
-	arp_fast_lock();
 	restore_flags(flags);
 
 	if (entry->last_updated && --entry->retries > 0)
@@ -707,29 +935,47 @@ static void arp_expire_request (unsigned long arg)
 		printk("arp_expire_request: %08x timed out\n", entry->ip);
 #endif
 		/* Set new timer. */
-		del_timer(&entry->timer);
 		entry->timer.expires = jiffies + ARP_RES_TIME;
 		add_timer(&entry->timer);
-		arp_send(ARPOP_REQUEST, ETH_P_ARP, entry->ip, dev, dev->pa_addr, 
-			 NULL, dev->dev_addr, NULL);
+		arp_send(ARPOP_REQUEST, ETH_P_ARP, entry->ip, dev, dev->pa_addr,
+			 entry->retries > ARP_MAX_TRIES ? entry->ha : NULL,
+			 dev->dev_addr, NULL);
 		arp_unlock();
 		return;
 	}
 
-	arp_release_entry(entry);
+	/*
+	 *	The host is really dead.
+	 */
+
+	arp_purge_send_q(entry);
 
 	cli();
 	if (arp_count_hhs(entry))
 	{
+		/*
+		 *	The host is dead, but someone refers to it.
+		 *	It is useless to drop this entry just now,
+		 *	it will be born again, so that
+		 *	we keep it, but slow down retransmitting
+		 *	to ARP_DEAD_RES_TIME.
+		 */
+
 		struct device *dev = entry->dev;
 #if RT_CACHE_DEBUG >= 2
 		printk("arp_expire_request: %08x is dead\n", entry->ip);
 #endif
-		arp_release_entry(entry);
 		entry->retries = ARP_MAX_TRIES;
+		entry->flags &= ~ATF_COM;
+		arp_invalidate_hhs(entry);
 		restore_flags(flags);
+
+		/*
+		 *	Declare the entry dead.
+		 */
 		entry->last_updated = 0;
-		del_timer(&entry->timer);
+		arpd_update(entry);
+
 		entry->timer.expires = jiffies + ARP_DEAD_RES_TIME;
 		add_timer(&entry->timer);
 		arp_send(ARPOP_REQUEST, ETH_P_ARP, entry->ip, dev, dev->pa_addr, 
@@ -739,29 +985,64 @@ static void arp_expire_request (unsigned long arg)
 	}
 	restore_flags(flags);
 
+	entry->last_updated = 0;
+	arpd_update(entry);
+
 	hash = HASH(entry->ip);
 
 	pentry = &arp_tables[hash];
 
 	while (*pentry != NULL)
 	{
-		if (*pentry == entry)
+		if (*pentry != entry)
 		{
-			cli();
-			*pentry = entry->next;
-			restore_flags(flags);
-#if RT_CACHE_DEBUG >= 2
-			printk("arp_expire_request: %08x is killed\n", entry->ip);
-#endif
-			arp_free_entry(entry);
-			arp_unlock();
-			return;
+			pentry = &(*pentry)->next;
+			continue;
 		}
-		pentry = &(*pentry)->next;
+		*pentry = entry->next;
+#if RT_CACHE_DEBUG >= 2
+		printk("arp_expire_request: %08x is killed\n", entry->ip);
+#endif
+		arp_free_entry(entry);
 	}
-	printk("arp_expire_request: bug: ARP entry is lost!\n");
 	arp_unlock();
 }
+
+
+/* 
+ * Allocate memory for a new entry.  If we are at the maximum limit
+ * of the internal ARP cache, arp_force_expire() an entry.  NOTE:  
+ * arp_force_expire() needs the cache to be locked, so therefore
+ * arp_alloc_entry() should only be called with the cache locked too!
+ */
+
+static struct arp_table * arp_alloc_entry(void)
+{
+	struct arp_table * entry;
+
+
+	if (arp_size >= ARP_MAXSIZE)
+		arp_force_expire();
+
+	entry = (struct arp_table *)
+		kmalloc(sizeof(struct arp_table),GFP_ATOMIC);
+
+	if (entry != NULL)
+	{
+		atomic_inc(&arp_size);
+		memset(entry, 0, sizeof(struct arp_table));
+
+                entry->mask = DEF_ARP_NETMASK;
+		init_timer(&entry->timer);
+		entry->timer.function = arp_expire_request;
+		entry->timer.data = (unsigned long)entry;
+		entry->last_updated = entry->last_used = jiffies;
+		skb_queue_head_init(&entry->skb);
+	}
+	return entry;
+}
+
+
 
 /*
  *	Purge a device from the ARP queue
@@ -774,15 +1055,17 @@ int arp_device_event(struct notifier_block *this, unsigned long event, void *ptr
 	
 	if (event != NETDEV_DOWN)
 		return NOTIFY_DONE;
-	/*
-	 *	This is a bit OTT - maybe we need some arp semaphores instead.
-	 */
 
-#if RT_CACHE_DEBUG >= 1	 
-	if (arp_lock)
-		printk("arp_device_event: bug\n");
+#ifdef  CONFIG_ARPD
+	arpd_flush(dev);
+	arpd_stamp++;
 #endif
+
 	arp_fast_lock();
+#if RT_CACHE_DEBUG >= 1	 
+	if (ARP_LOCKED())
+		printk("arp_device_event: impossible\n");
+#endif
 
 	for (i = 0; i < FULL_ARP_TABLE_SIZE; i++)
 	{
@@ -804,6 +1087,559 @@ int arp_device_event(struct notifier_block *this, unsigned long event, void *ptr
 	return NOTIFY_DONE;
 }
 
+
+
+/*
+ *	This will try to retransmit everything on the queue.
+ */
+
+static void arp_send_q(struct arp_table *entry)
+{
+	struct sk_buff *skb;
+
+	unsigned long flags;
+
+	/*
+	 *	Empty the entire queue, building its data up ready to send
+	 */
+	
+	if(!(entry->flags&ATF_COM))
+	{
+		printk("arp_send_q: incomplete entry for %s\n",
+				in_ntoa(entry->ip));
+		/* Can't flush the skb, because RFC1122 says to hang on to */
+		/* at least one from any unresolved entry.  --MS */
+		/* What's happened is that someone has 'unresolved' the entry
+		   as we got to use it - this 'can't happen' -- AC */
+		return;
+	}
+
+	save_flags(flags);
+	
+	cli();
+	while((skb = skb_dequeue(&entry->skb)) != NULL)
+	{
+		IS_SKB(skb);
+		skb_device_lock(skb);
+		restore_flags(flags);
+		if(!skb->dev->rebuild_header(skb->data,skb->dev,skb->raddr,skb))
+		{
+			skb->arp  = 1;
+			if(skb->sk==NULL)
+				dev_queue_xmit(skb, skb->dev, 0);
+			else
+				dev_queue_xmit(skb,skb->dev,skb->sk->priority);
+		}
+	}
+	restore_flags(flags);
+}
+
+
+static int
+arp_update (u32 sip, char *sha, struct device * dev,
+	    struct arp_table *ientry, int grat)
+{
+	struct arp_table * entry;
+	unsigned long hash;
+
+	hash = HASH(sip);
+
+	for (entry=arp_tables[hash]; entry; entry = entry->next)
+		if (entry->ip == sip && entry->dev == dev)
+			break;
+
+	if (entry)
+	{
+/*
+ *	Entry found; update it only if it is not a permanent entry.
+ */
+		if (!(entry->flags & ATF_PERM)) 
+		{
+			del_timer(&entry->timer);
+			entry->last_updated = jiffies;
+			if (memcmp(entry->ha, sha, dev->addr_len)!=0)
+			{
+				memcpy(entry->ha, sha, dev->addr_len);
+				if (entry->flags & ATF_COM)
+					arp_update_hhs(entry);
+			}
+			arpd_update(entry);
+		}
+
+		if (!(entry->flags & ATF_COM))
+		{
+/*
+ *	This entry was incomplete.  Delete the retransmit timer
+ *	and switch to complete status.
+ */
+			entry->flags |= ATF_COM;
+			arp_update_hhs(entry);
+/* 
+ *	Send out waiting packets. We might have problems, if someone is 
+ *	manually removing entries right now -- entry might become invalid 
+ *	underneath us.
+ */
+			arp_send_q(entry);
+		}
+		return 1;
+	}
+
+/*
+ * 	No entry found.  Need to add a new entry to the arp table.
+ */
+	entry = ientry;
+
+	if (grat && !entry)
+		return 0;
+
+	if (!entry)
+	{
+		entry = arp_alloc_entry();
+		if (!entry)
+			return 0;
+
+		entry->ip = sip;
+		entry->flags = ATF_COM;
+		memcpy(entry->ha, sha, dev->addr_len);
+		entry->dev = dev;
+	}
+
+	entry->last_updated = entry->last_used = jiffies;
+	arpd_update(entry);
+
+	if (!ARP_LOCKED())
+	{
+		entry->next = arp_tables[hash];
+		arp_tables[hash] = entry;
+		return 0;
+	}
+#if RT_CACHE_DEBUG >= 2
+	printk("arp_update: %08x backlogged\n", entry->ip);
+#endif
+	arp_enqueue(&arp_backlog, entry);
+	arp_bh_mask |= ARP_BH_BACKLOG;
+	return 0;
+}
+
+
+
+static __inline__ struct arp_table *arp_lookup(u32 paddr, struct device * dev)
+{
+	struct arp_table *entry;
+
+	for (entry = arp_tables[HASH(paddr)]; entry != NULL; entry = entry->next)
+		if (entry->ip == paddr && (!dev || entry->dev == dev))
+			return entry;
+	return NULL;
+}
+
+/*
+ *	Find an arp mapping in the cache. If not found, return false.
+ */
+
+int arp_query(unsigned char *haddr, u32 paddr, struct device * dev)
+{
+	struct arp_table *entry;
+
+	arp_fast_lock();
+
+	entry = arp_lookup(paddr, dev);
+
+	if (entry != NULL)
+	{
+		entry->last_used = jiffies;
+		if (entry->flags & ATF_COM)
+		{
+			memcpy(haddr, entry->ha, dev->addr_len);
+			arp_unlock();
+			return 1;
+		}
+	}
+	arp_unlock();
+	return 0;
+}
+
+
+static int arp_set_predefined(int addr_hint, unsigned char * haddr, u32 paddr, struct device * dev)
+{
+	switch (addr_hint)
+	{
+		case IS_MYADDR:
+			printk(KERN_DEBUG "ARP: arp called for own IP address\n");
+			memcpy(haddr, dev->dev_addr, dev->addr_len);
+			return 1;
+#ifdef CONFIG_IP_MULTICAST
+		case IS_MULTICAST:
+			if(dev->type==ARPHRD_ETHER || dev->type==ARPHRD_IEEE802)
+			{
+				u32 taddr;
+				haddr[0]=0x01;
+				haddr[1]=0x00;
+				haddr[2]=0x5e;
+				taddr=ntohl(paddr);
+				haddr[5]=taddr&0xff;
+				taddr=taddr>>8;
+				haddr[4]=taddr&0xff;
+				taddr=taddr>>8;
+				haddr[3]=taddr&0x7f;
+				return 1;
+			}
+		/*
+		 *	If a device does not support multicast broadcast the stuff (eg AX.25 for now)
+		 */
+#endif
+		
+		case IS_BROADCAST:
+			memcpy(haddr, dev->broadcast, dev->addr_len);
+			return 1;
+	}
+	return 0;
+}
+
+/*
+ *	Create a new unresolved entry.
+ */
+
+struct arp_table * arp_new_entry(u32 paddr, struct device *dev, struct hh_cache *hh, struct sk_buff *skb)
+{
+	struct arp_table *entry;
+
+	entry = arp_alloc_entry();
+
+	if (entry != NULL)
+	{
+		entry->ip = paddr;
+		entry->dev = dev;
+		if (hh)
+		{
+			entry->hh = hh;
+			atomic_inc(&hh->hh_refcnt);
+			hh->hh_arp = (void*)entry;
+		}
+		entry->timer.expires = jiffies + ARP_RES_TIME;
+
+		if (skb != NULL)
+		{
+			skb_queue_tail(&entry->skb, skb);
+			skb_device_unlock(skb);
+		}
+
+		if (!ARP_LOCKED())
+		{
+			unsigned long hash = HASH(paddr);
+			entry->next = arp_tables[hash];
+			arp_tables[hash] = entry;
+			add_timer(&entry->timer);
+			entry->retries = ARP_MAX_TRIES;
+#ifdef CONFIG_ARPD
+			if (!arpd_not_running)
+				arpd_lookup(paddr, dev);
+			else
+#endif
+				arp_send(ARPOP_REQUEST, ETH_P_ARP, paddr, dev, dev->pa_addr, NULL, 
+					 dev->dev_addr, NULL);
+		}
+		else
+		{
+#if RT_CACHE_DEBUG >= 2
+			printk("arp_new_entry: %08x backlogged\n", entry->ip);
+#endif
+			arp_enqueue(&arp_req_backlog, entry);
+			arp_bh_mask |= ARP_BH_BACKLOG;
+		}
+	}
+	return entry;
+}
+
+
+/*
+ *	Find an arp mapping in the cache. If not found, post a request.
+ */
+
+int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
+	     u32 saddr, struct sk_buff *skb)
+{
+	struct arp_table *entry;
+	unsigned long hash;
+
+	if (arp_set_predefined(ip_chk_addr(paddr), haddr, paddr, dev))
+	{
+		if (skb)
+			skb->arp = 1;
+		return 0;
+	}
+
+	hash = HASH(paddr);
+	arp_fast_lock();
+
+	/*
+	 *	Find an entry
+	 */
+	entry = arp_lookup(paddr, dev);
+
+	if (entry != NULL) 	/* It exists */
+	{
+		if (entry->flags & ATF_COM)
+		{
+			entry->last_used = jiffies;
+			memcpy(haddr, entry->ha, dev->addr_len);
+			if (skb)
+				skb->arp = 1;
+			arp_unlock();
+			return 0;
+		}
+
+		/*
+		 *	A request was already send, but no reply yet. Thus
+		 *	queue the packet with the previous attempt
+		 */
+			
+		if (skb != NULL)
+		{
+			if (entry->last_updated)
+			{
+				skb_queue_tail(&entry->skb, skb);
+				skb_device_unlock(skb);
+			}
+			/*
+			 * If last_updated==0 host is dead, so
+			 * drop skb's and set socket error.
+			 */
+			else
+			{
+				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
+				dev_kfree_skb(skb, FREE_WRITE);
+			}
+		}
+		arp_unlock();
+		return 1;
+	}
+
+	entry = arp_new_entry(paddr, dev, NULL, skb);
+
+	if (skb != NULL && !entry)
+		dev_kfree_skb(skb, FREE_WRITE);
+
+	arp_unlock();
+	return 1;
+}
+
+/*
+ *	Binding hardware header cache entry.
+ *	It is the only really complicated part of arp code.
+ *	We have no locking for hh records, so that
+ *	all possible race conditions should be resolved by
+ *	cli()/sti() pairs.
+ *
+ *	Important note: hhs never disapear from lists, if ARP_LOCKED,
+ *	this fact allows to scan hh lists with enabled interrupts,
+ *	but results in generating duplicate hh entries.
+ *	It is harmless. (and I've never seen such event)
+ *
+ *	Returns 0, if hh has been just created, so that
+ *	caller should fill it.
+ */
+
+int arp_bind_cache(struct hh_cache ** hhp, struct device *dev, unsigned short htype, u32 paddr)
+{
+	struct arp_table *entry;
+	struct hh_cache *hh;
+	int addr_hint;
+	unsigned long flags;
+
+	save_flags(flags);
+
+	if ((addr_hint = ip_chk_addr(paddr)) != 0)
+	{
+		unsigned char haddr[MAX_ADDR_LEN];
+		if (*hhp)
+			return 1;
+		hh = arp_alloc_hh(htype);
+		if (!hh)
+			return 1;
+		arp_set_predefined(addr_hint, haddr, paddr, dev);
+		dev->header_cache_update(hh, dev, haddr);
+		return arp_set_hh(hhp, hh);
+	}
+
+	arp_fast_lock();
+
+	entry = arp_lookup(paddr, dev);
+
+	if (entry)
+	{
+		for (hh = entry->hh; hh; hh=hh->hh_next)
+			if (hh->hh_type == htype)
+				break;
+
+		if (hh)
+		{
+			arp_set_hh(hhp, hh);
+			arp_unlock();
+			return 1;
+		}
+	}
+
+	hh = arp_alloc_hh(htype);
+	if (!hh)
+	{
+		arp_unlock();
+		return 1;
+	}
+
+	if (entry)
+	{
+
+		cli();
+		hh->hh_arp = (void*)entry;
+		hh->hh_next = entry->hh;
+		entry->hh = hh;
+		atomic_inc(&hh->hh_refcnt);
+		restore_flags(flags);
+
+		if (entry->flags & ATF_COM)
+			dev->header_cache_update(hh, dev, entry->ha);
+
+		if (arp_set_hh(hhp, hh))
+		{
+			arp_unlock();
+			return 0;
+		}
+
+		entry->last_used = jiffies;
+		arp_unlock();
+		return 0;
+	}
+
+	entry = arp_new_entry(paddr, dev, hh, NULL);
+	if (entry == NULL)
+	{
+		kfree_s(hh, sizeof(struct hh_cache));
+		arp_unlock();
+		return 1;
+	}
+
+	if (!arp_set_hh(hhp, hh))
+	{
+		arp_unlock();
+		return 0;
+	}
+	arp_unlock();
+	return 1;
+}
+
+static void arp_run_bh()
+{
+	unsigned long flags;
+	struct arp_table *entry, *entry1;
+	struct device  * dev;
+	unsigned long hash;
+	struct hh_cache *hh;
+	u32 sip;
+
+	save_flags(flags);
+	cli();
+	arp_fast_lock();
+
+	while (arp_bh_mask)
+	{
+		arp_bh_mask  &= ~ARP_BH_BACKLOG;
+
+		while ((entry = arp_dequeue(&arp_backlog)) != NULL)
+		{
+			restore_flags(flags);
+			if (arp_update(entry->ip, entry->ha, entry->dev, entry, 0))
+				arp_free_entry(entry);
+			cli();
+		}
+
+		cli();
+		while ((entry = arp_dequeue(&arp_req_backlog)) != NULL)
+		{
+			restore_flags(flags);
+
+			dev = entry->dev;
+			sip = entry->ip;
+			hash = HASH(sip);
+
+			for (entry1 = arp_tables[hash]; entry1; entry1 = entry1->next)
+				if (entry1->ip == sip && entry1->dev == dev)
+					break;
+
+			if (!entry1)
+			{
+				cli();
+				entry->next = arp_tables[hash];
+				arp_tables[hash] = entry;
+				restore_flags(flags);
+				entry->timer.expires = jiffies + ARP_RES_TIME;
+				entry->retries = ARP_MAX_TRIES;
+				entry->last_used = jiffies;
+				if (!(entry->flags & ATF_COM))
+				{
+					add_timer(&entry->timer);
+#ifdef CONFIG_ARPD
+					if (!arpd_not_running)
+						arpd_lookup(sip, dev);
+					else
+#endif
+						arp_send(ARPOP_REQUEST, ETH_P_ARP, sip, dev, dev->pa_addr, NULL, dev->dev_addr, NULL);
+				}
+#if RT_CACHE_DEBUG >= 1
+				printk(KERN_DEBUG "arp_run_bh: %08x reinstalled\n", sip);
+#endif
+			}
+			else
+			{
+				struct sk_buff * skb;
+				struct hh_cache * next;
+
+				/* Discard entry, but preserve its hh's and
+				 * skb's.
+				 */
+				cli();
+				for (hh=entry->hh; hh; hh=next)
+				{
+					next = hh->hh_next;
+					hh->hh_next = entry1->hh;
+					entry1->hh = hh;
+					hh->hh_arp = (void*)entry1;
+				}
+				entry->hh = NULL;
+
+				/* Prune skb list from entry
+				 * and graft it to entry1.
+				 */
+				while ((skb = skb_dequeue(&entry->skb)) != NULL)
+				{
+					skb_device_lock(skb);
+					restore_flags(flags);
+					skb_queue_tail(&entry1->skb, skb);
+					skb_device_unlock(skb);
+					cli();
+				}
+				restore_flags(flags);
+				
+				arp_free_entry(entry);
+
+				if (entry1->flags & ATF_COM)
+				{
+					arp_update_hhs(entry1);
+					arp_send_q(entry1);
+				}
+			}
+			cli();
+		}
+		cli();
+	}
+	arp_unlock();
+	restore_flags(flags);
+}
+
+
+/*
+ *	Interface to link layer: send routine and receive handler.
+ */
 
 /*
  *	Create and send an arp packet. If (dest_hw == NULL), we create a broadcast
@@ -881,83 +1717,9 @@ void arp_send(int type, int ptype, u32 dest_ip,
 	dev_queue_xmit(skb, dev, 0);
 }
 
-/*
- *	This will try to retransmit everything on the queue.
- */
-
-static void arp_send_q(struct arp_table *entry)
-{
-	struct sk_buff *skb;
-
-	unsigned long flags;
-
-	/*
-	 *	Empty the entire queue, building its data up ready to send
-	 */
-	
-	if(!(entry->flags&ATF_COM))
-	{
-		printk("arp_send_q: incomplete entry for %s\n",
-				in_ntoa(entry->ip));
-		/* Can't flush the skb, because RFC1122 says to hang on to */
-		/* at least one from any unresolved entry.  --MS */
-		/* What's happened is that someone has 'unresolved' the entry
-		   as we got to use it - this 'can't happen' -- AC */
-		return;
-	}
-
-	save_flags(flags);
-	
-	cli();
-	while((skb = skb_dequeue(&entry->skb)) != NULL)
-	{
-		IS_SKB(skb);
-		skb_device_lock(skb);
-		restore_flags(flags);
-		if(!skb->dev->rebuild_header(skb->data,skb->dev,skb->raddr,skb))
-		{
-			skb->arp  = 1;
-			if(skb->sk==NULL)
-				dev_queue_xmit(skb, skb->dev, 0);
-			else
-				dev_queue_xmit(skb,skb->dev,skb->sk->priority);
-		}
-	}
-	restore_flags(flags);
-}
-
 
 /*
- *	Delete an ARP mapping entry in the cache.
- */
-
-static void arp_destroy(struct arp_table * entry)
-{
-	struct arp_table *entry1;
-	struct arp_table **pentry;
-
-	if (entry->flags & ATF_PUBL)
-		pentry = &arp_proxy_list;
-	else
-		pentry = &arp_tables[HASH(entry->ip)];
-
-	while ((entry1 = *pentry) != NULL)
-	{
-		if (entry1 == entry)
-		{
-			*pentry = entry1->next;
-			del_timer(&entry->timer);
-			arp_free_entry(entry);
-			return;
-		}
-		pentry = &entry1->next;
-	}
-}
-
-/*
- *	Receive an arp request by the device layer. Maybe I rewrite it, to
- *	use the incoming packet for the reply. The time for the current
- *	"overhead" isn't that high...
+ *	Receive an arp request by the device layer.
  */
 
 int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
@@ -968,10 +1730,6 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	
 	struct arphdr *arp = (struct arphdr *)skb->h.raw;
 	unsigned char *arp_ptr= (unsigned char *)(arp+1);
-	struct arp_table *entry;
-	struct arp_table *proxy_entry;
-	unsigned long hash, grat=0;
-	unsigned char ha[MAX_ADDR_LEN];	/* So we can enable ints again. */
 	unsigned char *sha,*tha;
 	u32 sip,tip;
 	
@@ -1106,423 +1864,406 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 	if (arp->ar_op == htons(ARPOP_REQUEST))
 	{ 
+
 /*
  * Only reply for the real device address or when it's in our proxy tables
  */
 		if (tip != dev->pa_addr)
 		{
+			struct arp_table *proxy_entry;
+
 /*
  * 	To get in here, it is a request for someone else.  We need to
  * 	check if that someone else is one of our proxies.  If it isn't,
  * 	we can toss it.
+ *
+ *	Make "longest match" lookup, a la routing.
  */
+
 			arp_fast_lock();
 
-			for (proxy_entry=arp_proxy_list;
-			     proxy_entry;
+			for (proxy_entry = arp_proxy_list; proxy_entry;
 			     proxy_entry = proxy_entry->next)
 			{
-				/* we will respond to a proxy arp request
-				   if the masked arp table ip matches the masked
-				   tip. This allows a single proxy arp table
-				   entry to be used on a gateway machine to handle
-				   all requests for a whole network, rather than
-				   having to use a huge number of proxy arp entries
-				   and having to keep them uptodate.
-				   */
 				if (proxy_entry->dev == dev &&
 				    !((proxy_entry->ip^tip)&proxy_entry->mask))
 					break;
-
 			}
-			if (proxy_entry)
+
+			if (proxy_entry && (proxy_entry->mask || ((dev->pa_addr^tip)&dev->pa_mask)))
 			{
+				char ha[MAX_ADDR_LEN];
+				struct rtable * rt;
+
+				/* Unlock arp tables to make life for
+				 * ip_rt_route easy. Note, that we are obliged
+				 * to make local copy of hardware address.
+				 */
+
 				memcpy(ha, proxy_entry->ha, dev->addr_len);
 				arp_unlock();
-				arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,ha, sha);
-				kfree_skb(skb, FREE_READ);
-				return 0;
+
+				rt = ip_rt_route(tip, 0);
+				if (rt  && rt->rt_dev != dev)
+					arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,ha,sha);
+				ip_rt_put(rt);
+
 			}
 			else
-			{
 				arp_unlock();
-			}
 		}
 		else
-		{
-/*
- * 	To get here, it must be an arp request for us.  We need to reply.
- */
 			arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr,sha);
-		}
-		grat = 1;
-		goto gratuitous;
+
+/*
+ *	Handle gratuitous arp.
+ */
+		arp_fast_lock();
+		arp_update(sip, sha, dev, NULL, 1);
+		arp_unlock();
+		kfree_skb(skb, FREE_READ);
+		return 0;
 	}
-/*
- *	It is now an arp reply.
- */
-	if(ip_chk_addr(tip)!=IS_MYADDR)
-	{
-/*
- *	Replies to other machines get tossed.
- */
- 		kfree_skb(skb, FREE_READ);
- 		return 0;
- 	}
-/*
- * Now all replies are handled.  Next, anything that falls through to here
- * needs to be added to the arp cache, or have its entry updated if it is 
- * there.
- */
- 
-gratuitous:
 
 	arp_fast_lock();
+	arp_update(sip, sha, dev, NULL, ip_chk_addr(tip) != IS_MYADDR);
+	arp_unlock();
+	kfree_skb(skb, FREE_READ);
+	return 0;
+}
 
 
-	hash = HASH(sip);
-	for (entry=arp_tables[hash]; entry; entry=entry->next)
-		if (entry->ip == sip && entry->dev == dev)
-			break;
 
-	if (entry)
+/*
+ *	User level interface (ioctl, /proc)
+ */
+
+/*
+ *	Set (create) an ARP cache entry.
+ */
+
+static int arp_req_set(struct arpreq *r, struct device * dev)
+{
+	struct arp_table *entry, **entryp;
+	struct sockaddr_in *si;
+	unsigned char *ha;
+	u32 ip;
+	u32 mask = DEF_ARP_NETMASK;
+	unsigned long flags;
+
+	/*
+	 *	Extract netmask (if supplied).
+	 */
+
+	if (r->arp_flags&ATF_NETMASK)
 	{
-/*
- *	Entry found; update it only if it is not a permanent entry.
- */
-		if (!(entry->flags & ATF_PERM)) 
-		{
-			if(memcmp(entry->ha, sha,dev->addr_len)!=0)
-			{
-				memcpy(entry->ha, sha, dev->addr_len);
-				if(entry->flags & ATF_COM)
-					arp_update_hhs(entry);
-			}
-			entry->last_updated = jiffies;
-			arpd_update(entry, __LINE__);
-		}
-		if (!(entry->flags & ATF_COM))
-		{
-/*
- *	This entry was incomplete.  Delete the retransmit timer
- *	and switch to complete status.
- */
-			del_timer(&entry->timer);
-			entry->flags |= ATF_COM;
-			arp_update_hhs(entry);
-/* 
- *	Send out waiting packets. We might have problems, if someone is 
- *	manually removing entries right now -- entry might become invalid 
- *	underneath us.
- */
-			arp_send_q(entry);
-		}
+		si = (struct sockaddr_in *) &r->arp_netmask;
+		mask = si->sin_addr.s_addr;
+	}
+
+	/*
+	 *	Extract destination.
+	 */
+	
+	si = (struct sockaddr_in *) &r->arp_pa;
+	ip = si->sin_addr.s_addr;
+
+
+	if (r->arp_flags&ATF_PUBL)
+	{
+		if (!mask && ip)
+			return -EINVAL;
+		if (!dev)
+			dev = dev_getbytype(r->arp_ha.sa_family);
 	}
 	else
 	{
-/*
- * 	No entry found.  Need to add a new entry to the arp table.
- */
+		if (ip_chk_addr(ip))
+			return -EINVAL;
+		if (!dev)
+		{
+			struct rtable * rt;
+			rt = ip_rt_route(ip, 0);
+			if (!rt)
+				return -ENETUNREACH;
+			dev = rt->rt_dev;
+			ip_rt_put(rt);
+		}
+	}
+	if (!dev || (dev->flags&(IFF_LOOPBACK|IFF_NOARP)))
+		return -ENODEV;
 
-		if (grat) 
-			goto end;
+	if (r->arp_ha.sa_family != dev->type)	
+		return -EINVAL;
+		
+	arp_fast_lock();
+#if RT_CACHE_DEBUG >= 1
+	if (ARP_LOCKED())
+		printk("arp_req_set: bug\n");
+#endif
 
-                entry = arp_add_entry();
-		if(entry == NULL)
+	if (!(r->arp_flags & ATF_PUBL))
+		entryp = &arp_tables[HASH(ip)];
+	else
+		entryp = &arp_proxy_list;
+
+	while ((entry = *entryp) != NULL)
+	{
+		if (entry->ip == ip && entry->mask == mask && entry->dev == dev)
+			break;
+		if ((entry->mask & mask) != mask)
+		{
+			entry = NULL;
+			break;
+		}
+		entryp = &entry->next;
+	}
+
+	/*
+	 *	Do we need to create a new entry?
+	 */
+	
+	if (entry == NULL)
+	{
+		entry = arp_alloc_entry();
+		if (entry == NULL)
 		{
 			arp_unlock();
-#if RT_CACHE_DEBUG >= 2
-			printk("ARP: no memory for new arp entry\n");
+			return -ENOMEM;
+		}
+		entry->ip = ip;
+		entry->dev = dev;
+		entry->mask = mask;
+		entry->flags = r->arp_flags;
+
+		entry->next = (*entryp)->next;
+		*entryp = entry;
+	}
+
+	ha = r->arp_ha.sa_data;
+	if (empty(ha, dev->addr_len))
+		ha = dev->dev_addr;
+
+	save_flags(flags);
+	cli();
+	memcpy(entry->ha, ha, dev->addr_len);
+	entry->last_updated = entry->last_used = jiffies;
+	entry->flags |= ATF_COM;
+	restore_flags(flags);
+	arpd_update(entry);
+	arp_update_hhs(entry);
+	arp_unlock();
+	return 0;
+}
+
+
+
+/*
+ *	Get an ARP cache entry.
+ */
+
+static int arp_req_get(struct arpreq *r, struct device *dev)
+{
+	struct arp_table *entry;
+	struct sockaddr_in *si;
+	u32 mask = DEF_ARP_NETMASK;
+
+	if (r->arp_flags&ATF_NETMASK)
+	{
+		si = (struct sockaddr_in *) &r->arp_netmask;
+		mask = si->sin_addr.s_addr;
+	}
+
+	si = (struct sockaddr_in *) &r->arp_pa;
+
+	arp_fast_lock();
+#if RT_CACHE_DEBUG >= 1
+	if (ARP_LOCKED())
+		printk("arp_req_set: impossible\n");
 #endif
-			kfree_skb(skb, FREE_READ);
+
+	if (!(r->arp_flags & ATF_PUBL))
+		entry = arp_tables[HASH(si->sin_addr.s_addr)];
+	else
+		entry = arp_proxy_list;
+
+	for ( ; entry ;entry = entry->next)
+	{
+		if (entry->ip == si->sin_addr.s_addr 
+		    && (!dev || entry->dev == dev)
+		    && (!(r->arp_flags&ATF_NETMASK) || entry->mask == mask))
+		{
+			memcpy(r->arp_ha.sa_data, entry->ha, entry->dev->addr_len);
+			r->arp_ha.sa_family = entry->dev->type;
+			r->arp_flags = entry->flags;
+			strncpy(r->arp_dev, entry->dev->name, sizeof(r->arp_dev));
+			arp_unlock();
 			return 0;
 		}
-
-                entry->mask = DEF_ARP_NETMASK;
-		entry->ip = sip;
-		entry->flags = ATF_COM;
-		entry->hh    = NULL;
-		init_timer(&entry->timer);
-		entry->timer.function = arp_expire_request;
-		entry->timer.data = (unsigned long)entry;
-		memcpy(entry->ha, sha, dev->addr_len);
-		entry->last_updated = entry->last_used = jiffies;
-		arpd_update(entry, __LINE__);
-/*
- *	make entry point to	'correct' device
- */
-
-#ifdef CONFIG_NET_ALIAS
-		entry->dev = dev;
-#else
-		entry->dev = skb->dev;
-#endif
-		skb_queue_head_init(&entry->skb);
-		if (arp_lock == 1)
-		{
-			entry->next = arp_tables[hash];
-			arp_tables[hash] = entry;
-		}
-		else
-		{
-#if RT_CACHE_DEBUG >= 2
-			printk("arp_rcv: %08x backlogged\n", entry->ip);
-#endif
-			arp_enqueue(&arp_backlog, entry);
-			arp_bh_mask |= ARP_BH_BACKLOG;
-		}
 	}
 
-/*
- *	Replies have been sent, and entries have been added.  All done.
- */
-
-end:
-	kfree_skb(skb, FREE_READ);
 	arp_unlock();
-	return 0;
+	return -ENXIO;
+}
+
+static int arp_req_delete(struct arpreq *r, struct device * dev)
+{
+	struct sockaddr_in	*si;
+	struct arp_table	*entry, **entryp;
+	int	retval = -ENXIO;
+	u32	mask = DEF_ARP_NETMASK;
+
+	if (r->arp_flags&ATF_NETMASK)
+	{
+		si = (struct sockaddr_in *) &r->arp_netmask;
+		mask = si->sin_addr.s_addr;
+	}
+
+	si = (struct sockaddr_in *) &r->arp_pa;
+
+	arp_fast_lock();
+#if RT_CACHE_DEBUG >= 1
+	if (ARP_LOCKED())
+		printk("arp_req_delete: impossible\n");
+#endif
+
+	if (!(r->arp_flags & ATF_PUBL))
+		entryp = &arp_tables[HASH(si->sin_addr.s_addr)];
+	else
+		entryp = &arp_proxy_list;
+
+	while ((entry = *entryp) != NULL)
+	{
+		if (entry->ip == si->sin_addr.s_addr 
+		    && (!dev || entry->dev == dev)
+		    && (!(r->arp_flags&ATF_NETMASK) || entry->mask == mask))
+		{
+			*entryp = entry->next;
+			arp_free_entry(entry);
+			retval = 0;
+			continue;
+		}
+		entryp = &entry->next;
+	}
+
+	arp_unlock();
+	return retval;
 }
 
 /*
- * Lookup ARP entry by (addr, dev) pair.
- * Flags: ATF_PUBL - search for proxy entries
- *	  ATF_NETMASK - search for proxy network entry.
- * NOTE:  should be called with locked ARP tables.
+ *	Handle an ARP layer I/O control request.
  */
 
-static struct arp_table *arp_lookup(u32 paddr, unsigned short flags, struct device * dev)
+int arp_ioctl(unsigned int cmd, void *arg)
 {
-	struct arp_table *entry;
+	int err;
+	struct arpreq r;
 
-	if (!(flags & ATF_PUBL))
+	struct device * dev = NULL;
+
+	switch(cmd)
 	{
-		for (entry = arp_tables[HASH(paddr)];
-		     entry != NULL; entry = entry->next)
-			if (entry->ip == paddr && (!dev || entry->dev == dev))
-				break;
-		return entry;
-	}
-
-	if (!(flags & ATF_NETMASK))
-	{
-		for (entry = arp_proxy_list;
-		     entry != NULL; entry = entry->next)
-			if (entry->ip == paddr && (!dev || entry->dev == dev))
-				break;
-		return entry;
-	}
-
-	for (entry=arp_proxy_list; entry != NULL; entry = entry->next)
-		if (!((entry->ip^paddr)&entry->mask) && 
-		                                  (!dev || entry->dev == dev))
+		case SIOCDARP:
+		case SIOCSARP:
+			if (!suser())
+				return -EPERM;
+		case SIOCGARP:
+			err = verify_area(VERIFY_READ, arg, sizeof(struct arpreq));
+			if (err)
+				return err;
+			memcpy_fromfs(&r, arg, sizeof(struct arpreq));
 			break;
-	return entry;
-}
-
-/*
- *	Find an arp mapping in the cache. If not found, return false.
- */
-
-int arp_query(unsigned char *haddr, u32 paddr, struct device * dev)
-{
-	struct arp_table *entry;
-
-	arp_fast_lock();
-
-	entry = arp_lookup(paddr, 0, dev);
-	if (entry == NULL)
-		entry = arpd_lookup(paddr, 0, dev, __LINE__);
-
-	if (entry != NULL)
-	{
-		entry->last_used = jiffies;
-		if (entry->flags & ATF_COM)
-		{
-			memcpy(haddr, entry->ha, dev->addr_len);
-			arpd_update(entry, __LINE__);
-			arp_unlock();
-			return 1;
-		}
-	}
-	arpd_update(entry, __LINE__);
-	arp_unlock();
-	return 0;
-}
-
-
-static int arp_set_predefined(int addr_hint, unsigned char * haddr, __u32 paddr, struct device * dev)
-{
-	switch (addr_hint)
-	{
-		case IS_MYADDR:
-			printk("ARP: arp called for own IP address\n");
-			memcpy(haddr, dev->dev_addr, dev->addr_len);
-			return 1;
-#ifdef CONFIG_IP_MULTICAST
-		case IS_MULTICAST:
-			if(dev->type==ARPHRD_ETHER || dev->type==ARPHRD_IEEE802)
-			{
-				u32 taddr;
-				haddr[0]=0x01;
-				haddr[1]=0x00;
-				haddr[2]=0x5e;
-				taddr=ntohl(paddr);
-				haddr[5]=taddr&0xff;
-				taddr=taddr>>8;
-				haddr[4]=taddr&0xff;
-				taddr=taddr>>8;
-				haddr[3]=taddr&0x7f;
-				return 1;
-			}
-		/*
-		 *	If a device does not support multicast broadcast the stuff (eg AX.25 for now)
-		 */
-#endif
-		
-		case IS_BROADCAST:
-			memcpy(haddr, dev->broadcast, dev->addr_len);
-			return 1;
-	}
-	return 0;
-}
-
-/*
- *	Find an arp mapping in the cache. If not found, post a request.
- */
-
-int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
-	     u32 saddr, struct sk_buff *skb)
-{
-	struct arp_table *entry;
-	unsigned long hash;
-
-	if (arp_set_predefined(ip_chk_addr(paddr), haddr, paddr, dev))
-	{
-		if (skb)
-			skb->arp = 1;
-		return 0;
+		case OLD_SIOCDARP:
+		case OLD_SIOCSARP:
+			if (!suser())
+				return -EPERM;
+		case OLD_SIOCGARP:
+			err = verify_area(VERIFY_READ, arg, sizeof(struct arpreq_old));
+			if (err)
+				return err;
+			memcpy_fromfs(&r, arg, sizeof(struct arpreq_old));
+			memset(&r.arp_dev, 0, sizeof(r.arp_dev));
+			break;
+		default:
+			return -EINVAL;
 	}
 
-	hash = HASH(paddr);
-	arp_fast_lock();
+	if (r.arp_pa.sa_family != AF_INET)
+		return -EPFNOSUPPORT;
 
-	/*
-	 *	Find an entry
-	 */
-	entry = arp_lookup(paddr, 0, dev);
-	if (entry == NULL)
-		entry = arpd_lookup(paddr, 0, dev, __LINE__);
+	if (!(r.arp_flags & ATF_PUBL))
+		r.arp_flags &= ~ATF_NETMASK;
+	if (!(r.arp_flags & ATF_NETMASK))
+		((struct sockaddr_in *)&r.arp_netmask)->sin_addr.s_addr=DEF_ARP_NETMASK;
 
-	if (entry != NULL) 	/* It exists */
+	if (r.arp_dev[0])
 	{
-		if (!(entry->flags & ATF_COM))
-		{
-			/*
-			 *	A request was already send, but no reply yet. Thus
-			 *	queue the packet with the previous attempt
+		if ((dev = dev_get(r.arp_dev)) == NULL)
+			return -ENODEV;
+
+		if (!r.arp_ha.sa_family)
+			r.arp_ha.sa_family = dev->type;
+		else if (r.arp_ha.sa_family != dev->type)
+			return -EINVAL;
+	}
+
+	switch(cmd)
+	{
+		case SIOCDARP:
+		        return arp_req_delete(&r, dev);
+		case SIOCSARP:
+			return arp_req_set(&r, dev);
+		case OLD_SIOCDARP:
+			/* old  SIOCDARP destroys both
+			 * normal and proxy mappings
 			 */
-			
-			if (skb != NULL)
-			{
-				if (entry->last_updated)
-				{
-					skb_queue_tail(&entry->skb, skb);
-					skb_device_unlock(skb);
-				}
-				/*
-				 * If last_updated==0 host is dead, so
-				 * drop skb's and set socket error.
-				 */
-				else
-				{
-#if 0				
-					/*
-					 * FIXME: ICMP HOST UNREACHABLE should be
-					 *	  sent in this situation. --ANK
-					 */
-					if (skb->sk)
-					{
-						skb->sk->err = EHOSTDOWN;
-						skb->sk->error_report(skb->sk);
-					}
-#else
-					icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
-#endif										
-					dev_kfree_skb(skb, FREE_WRITE);
-				}
+			r.arp_flags &= ~ATF_PUBL;
+			err = arp_req_delete(&r, dev);
+			r.arp_flags |= ATF_PUBL;
+			if (!err)
+				arp_req_delete(&r, dev);
+			else
+				err = arp_req_delete(&r, dev);
+			return err;
+		case OLD_SIOCSARP:
+			err = arp_req_set(&r, dev);
+			/* old SIOCSARP works so funny,
+			 * that its behaviour can be emulated
+			 * only approximately 8).
+			 * It should work. --ANK
+			 */
+			if (r.arp_flags & ATF_PUBL)
+			{	
+				r.arp_flags &= ~ATF_PUBL;
+				arp_req_delete(&r, dev);
 			}
-			arp_unlock();
-			return 1;
-		}
-
-		/*
-		 *	Update the record
-		 */
-		
-		entry->last_used = jiffies;
-		memcpy(haddr, entry->ha, dev->addr_len);
-		arpd_update(entry, __LINE__);
-		if (skb)
-			skb->arp = 1;
-		arp_unlock();
-		return 0;
+			return err;
+		case SIOCGARP:
+			err = verify_area(VERIFY_WRITE, arg, sizeof(struct arpreq));
+			if (err)
+				return err;
+			err = arp_req_get(&r, dev);
+			if (!err)
+				memcpy_tofs(arg, &r, sizeof(r));
+			return err;
+		case OLD_SIOCGARP:
+			err = verify_area(VERIFY_WRITE, arg, sizeof(struct arpreq_old));
+			if (err)
+				return err;
+			r.arp_flags &= ~ATF_PUBL;
+			err = arp_req_get(&r, dev);
+			if (err < 0)
+			{
+				r.arp_flags |= ATF_PUBL;
+				err = arp_req_get(&r, dev);
+			}
+			if (!err)
+				memcpy_tofs(arg, &r, sizeof(struct arpreq_old));
+			return err;
 	}
-
-	/*
-	 *	Create a new unresolved entry.
-	 */
-	
-	entry = arp_add_entry();
-	if (entry != NULL)
-	{
-		entry->last_updated = entry->last_used = jiffies;
-		entry->flags = 0;
-		entry->ip = paddr;
-		entry->mask = DEF_ARP_NETMASK;
-		memset(entry->ha, 0, dev->addr_len);
-		entry->dev = dev;
-		entry->hh    = NULL;
-		arpd_update(entry, __LINE__);
-		init_timer(&entry->timer);
-		entry->timer.function = arp_expire_request;
-		entry->timer.data = (unsigned long)entry;
-		entry->timer.expires = jiffies + ARP_RES_TIME;
-		skb_queue_head_init(&entry->skb);
-		if (skb != NULL)
-		{
-			skb_queue_tail(&entry->skb, skb);
-			skb_device_unlock(skb);
-		}
-		if (arp_lock == 1)
-		{
-			entry->next = arp_tables[hash];
-			arp_tables[hash] = entry;
-			add_timer(&entry->timer);
-			entry->retries = ARP_MAX_TRIES;
-		}
-		else
-		{
-#if RT_CACHE_DEBUG >= 2
-			printk("arp_find: %08x backlogged\n", entry->ip);
-#endif
-			arp_enqueue(&arp_backlog, entry);
-			arp_bh_mask |= ARP_BH_BACKLOG;
-		}
-	}
-	else if (skb != NULL)
-		dev_kfree_skb(skb, FREE_WRITE);
-	arp_unlock();
-
-	/*
-	 *	If we didn't find an entry, we will try to send an ARP packet.
-	 */
-	
-	arp_send(ARPOP_REQUEST, ETH_P_ARP, paddr, dev, saddr, NULL, 
-		 dev->dev_addr, NULL);
-
-	return 1;
+	/*NOTREACHED*/
+	return 0;
 }
-
 
 /*
  *	Write the contents of the ARP cache to a PROCfs file.
@@ -1590,7 +2331,7 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 				 "*" : in_ntoa(entry->mask), entry->dev->name);
 #else
 			size += sprintf(buffer+len+size,
-				 "     %-17s %s\t%ld\t%1d\n",
+				 "     %-17s %s\t%d\t%1d\n",
 				 entry->mask==DEF_ARP_NETMASK ?
 				 "*" : in_ntoa(entry->mask), entry->dev->name, 
 				 entry->hh ? entry->hh->hh_refcnt : -1,
@@ -1616,588 +2357,6 @@ done:
 	return len;
 }
 
-
-
-int arp_bind_cache(struct hh_cache ** hhp, struct device *dev, unsigned short htype, u32 paddr)
-{
-	struct arp_table *entry;
-	struct hh_cache *hh = *hhp;
-	int addr_hint;
-	unsigned long flags;
-
-	if (hh)
-		return 1;
-
-	if ((addr_hint = ip_chk_addr(paddr)) != 0)
-	{
-		unsigned char haddr[MAX_ADDR_LEN];
-		if (hh)
-			return 1;
-		hh = kmalloc(sizeof(struct hh_cache), GFP_ATOMIC);
-		if (!hh)
-			return 1;
-		arp_set_predefined(addr_hint, haddr, paddr, dev);
-		hh->hh_uptodate = 0;
-		hh->hh_refcnt = 1;
-		hh->hh_arp = NULL;
-		hh->hh_next = NULL;
-		hh->hh_type = htype;
-		*hhp = hh;
-		dev->header_cache_update(hh, dev, haddr);
-		return 0;
-	}
-
-	save_flags(flags);
-
-	arp_fast_lock();
-
-	entry = arp_lookup(paddr, 0, dev);
-	if (entry == NULL)
-		entry = arpd_lookup(paddr, 0, dev, __LINE__);
-
-	if (entry)
-	{
-		cli();
-		for (hh = entry->hh; hh; hh=hh->hh_next)
-			if (hh->hh_type == htype)
-				break;
-		if (hh)
-		{
-			hh->hh_refcnt++;
-			*hhp = hh;
-			restore_flags(flags);
-			arp_unlock();
-			return 1;
-		}
-		restore_flags(flags);
-	}
-
-	hh = kmalloc(sizeof(struct hh_cache), GFP_ATOMIC);
-	if (!hh)
-	{
-		arp_unlock();
-		return 1;
-	}
-
-	hh->hh_uptodate = 0;
-	hh->hh_refcnt = 1;
-	hh->hh_arp = NULL;
-	hh->hh_next = NULL;
-	hh->hh_type = htype;
-
-	if (entry)
-	{
-		dev->header_cache_update(hh, dev, entry->ha);
-		*hhp = hh;
-		cli();
-		hh->hh_arp = (void*)entry;
-		entry->hh = hh;
-		hh->hh_refcnt++;
-		restore_flags(flags);
-		entry->last_used = jiffies;
-		arpd_update(entry, __LINE__);
-		arp_unlock();
-		return 0;
-	}
-
-
-	/*
-	 *	Create a new unresolved entry.
-	 */
-	
-	entry = arp_add_entry();
-	if (entry == NULL)
-	{
-		kfree_s(hh, sizeof(struct hh_cache));
-		arp_unlock();
-		return 1;
-	}
-
-	entry->last_updated = entry->last_used = jiffies;
-	entry->flags = 0;
-	entry->ip = paddr;
-	entry->mask = DEF_ARP_NETMASK;
-	memset(entry->ha, 0, dev->addr_len);
-	entry->dev = dev;
-	entry->hh = hh;
-	arpd_update(entry, __LINE__);
-	ATOMIC_INCR(&hh->hh_refcnt);
-	init_timer(&entry->timer);
-	entry->timer.function = arp_expire_request;
-	entry->timer.data = (unsigned long)entry;
-	entry->timer.expires = jiffies + ARP_RES_TIME;
-	skb_queue_head_init(&entry->skb);
-
-	if (arp_lock == 1)
-	{
-		unsigned long hash = HASH(paddr);
-		cli();
-		entry->next = arp_tables[hash];
-		arp_tables[hash] = entry;
-		hh->hh_arp = (void*)entry;
-		entry->retries = ARP_MAX_TRIES;
-		restore_flags(flags);
-
-		add_timer(&entry->timer);
-		arp_send(ARPOP_REQUEST, ETH_P_ARP, paddr, dev, dev->pa_addr, NULL, dev->dev_addr, NULL);
-	}
-	else
-	{
-#if RT_CACHE_DEBUG >= 1
-		printk("arp_cache_bind: %08x backlogged\n", entry->ip);
-#endif
-		arp_enqueue(&arp_backlog, entry);
-		arp_bh_mask |= ARP_BH_BACKLOG;
-	}
-	*hhp = hh;
-	arp_unlock();
-	return 0;
-}
-
-static void arp_run_bh()
-{
-	unsigned long flags;
-	struct arp_table *entry, *entry1;
-	struct hh_cache *hh;
-	__u32 sip;
-
-	save_flags(flags);
-	cli();
-	if (!arp_lock)
-	{
-		arp_fast_lock();
-
-		while ((entry = arp_dequeue(&arp_backlog)) != NULL)
-		{
-			unsigned long hash;
-			sti();
-			sip = entry->ip;
-			hash = HASH(sip);
-
-			/* It's possible, that an entry with the same pair 
-			 * (addr,type) was already created. Our entry is older,
-			 * so it should be discarded.
-			 */
-			for (entry1=arp_tables[hash]; entry1; entry1=entry1->next)
-				if (entry1->ip==sip && entry1->dev == entry->dev)
-					break;
-
-			if (!entry1)
-			{
-				struct device  * dev = entry->dev;
-				cli();
-				entry->next = arp_tables[hash];
-				arp_tables[hash] = entry;
-				for (hh=entry->hh; hh; hh=hh->hh_next)
-					hh->hh_arp = (void*)entry;
-				sti();
-				del_timer(&entry->timer);
-				entry->timer.expires = jiffies + ARP_RES_TIME;
-				add_timer(&entry->timer);
-				entry->retries = ARP_MAX_TRIES;
-				arp_send(ARPOP_REQUEST, ETH_P_ARP, entry->ip, dev, dev->pa_addr, NULL, dev->dev_addr, NULL);
-#if RT_CACHE_DEBUG >= 1
-				printk("arp_run_bh: %08x reinstalled\n", sip);
-#endif
-			}
-			else
-			{
-				struct sk_buff * skb;
-				struct hh_cache * next;
-
-				/* Discard entry, but preserve its hh's and
-				 * skb's.
-				 */
-				cli();
-				for (hh=entry->hh; hh; hh=next)
-				{
-					next = hh->hh_next;
-					hh->hh_next = entry1->hh;
-					entry1->hh = hh;
-					hh->hh_arp = (void*)entry1;
-				}
-				entry->hh = NULL;
-
-				/* Prune skb list from entry
-				 * and graft it to entry1.
-				 */
-				while ((skb = skb_dequeue(&entry->skb)) != NULL)
-				{
-					skb_device_lock(skb);
-					sti();
-					skb_queue_tail(&entry1->skb, skb);
-					skb_device_unlock(skb);
-					cli();
-				}
-				sti();
-				
-#if RT_CACHE_DEBUG >= 1
-				printk("arp_run_bh: entry %08x was born dead\n", entry->ip);
-#endif
-				arp_free_entry(entry);
-
-				if (entry1->flags & ATF_COM)
-				{
-					arp_update_hhs(entry1);
-					arp_send_q(entry1);
-				}
-			}
-			cli();
-		}
-		arp_bh_mask  &= ~ARP_BH_BACKLOG;
-		arp_unlock();
-	}
-	restore_flags(flags);
-}
-
-/*
- * Test if a hardware address is all zero
- */
-
-static inline int empty(unsigned char * addr, int len)
-{
-	while (len > 0) {
-		if (*addr)
-			return 0;
-		len--;
-		addr++;
-	}
-	return 1;
-}
-
-/*
- *	Set (create) an ARP cache entry.
- */
-
-static int arp_req_set(struct arpreq *r, struct device * dev)
-{
-	struct arp_table *entry;
-	struct sockaddr_in *si;
-	struct rtable *rt;
-	struct device *dev1;
-	unsigned char *ha;
-	u32 ip;
-
-	/*
-	 *	Extract destination.
-	 */
-	
-	si = (struct sockaddr_in *) &r->arp_pa;
-	ip = si->sin_addr.s_addr;
-
-	/*
-	 *	Is it reachable ?
-	 */
-
-	if (ip_chk_addr(ip) == IS_MYADDR)
-		dev1 = dev_get("lo");
-	else {
-		rt = ip_rt_route(ip, 0);
-		if (!rt)
-			return -ENETUNREACH;
-		dev1 = rt->rt_dev;
-		ip_rt_put(rt);
-	}
-
-	/* good guess about the device if it isn't a ATF_PUBL entry */
-	if (!dev) {
-		if (dev1->flags&(IFF_LOOPBACK|IFF_NOARP))
-			return -ENODEV;
-		dev = dev1;
-	}
-
-	/* this needs to be checked only for dev=dev1 but it doesn't hurt */	
-	if (r->arp_ha.sa_family != dev->type)	
-		return -EINVAL;
-		
-	if (((r->arp_flags & ATF_PUBL) && dev == dev1) ||
-	    (!(r->arp_flags & ATF_PUBL) && dev != dev1))
-		return -EINVAL;
-
-#if RT_CACHE_DEBUG >= 1
-	if (arp_lock)
-		printk("arp_req_set: bug\n");
-#endif
-	arp_fast_lock();
-
-	/*
-	 *	Is there an existing entry for this address?
-	 */
-
-	/*
-	 *	Find the entry
-	 */
-	
-	entry = arp_lookup(ip, r->arp_flags & ~ATF_NETMASK, dev);
-	if (entry == NULL)
-		entry = arpd_lookup(ip, r->arp_flags & ~ATF_NETMASK, dev, __LINE__);
-
-	if (entry)
-	{
-		arp_destroy(entry);
-		entry = NULL;
-	}
-
-	/*
-	 *	Do we need to create a new entry
-	 */
-	
-	if (entry == NULL)
-	{
-		entry = arp_add_entry();
-		if (entry == NULL)
-		{
-			arp_unlock();
-			return -ENOMEM;
-		}
-		entry->ip = ip;
-		entry->hh = NULL;
-		init_timer(&entry->timer);
-		entry->timer.function = arp_expire_request;
-		entry->timer.data = (unsigned long)entry;
-
-		if (r->arp_flags & ATF_PUBL)
-		{
-			cli();
-			entry->next = arp_proxy_list;
-			arp_proxy_list = entry;
-			sti();
-		}
-		else
-		{
-			unsigned long hash = HASH(ip);
-			cli();
-			entry->next = arp_tables[hash];
-			arp_tables[hash] = entry;
-			sti();
-		}
-		skb_queue_head_init(&entry->skb);
-	}
-	/*
-	 *	We now have a pointer to an ARP entry.  Update it!
-	 */
-	ha = r->arp_ha.sa_data;
-	if ((r->arp_flags & ATF_COM) && empty(ha, dev->addr_len))
-		ha = dev->dev_addr;
-	memcpy(entry->ha, ha, dev->addr_len);
-	entry->last_updated = entry->last_used = jiffies;
-	arpd_update(entry, __LINE__);
-	entry->flags = r->arp_flags | ATF_COM;
-	if ((entry->flags & ATF_PUBL) && (entry->flags & ATF_NETMASK))
-	{
-		si = (struct sockaddr_in *) &r->arp_netmask;
-		entry->mask = si->sin_addr.s_addr;
-	}
-	else
-		entry->mask = DEF_ARP_NETMASK;
-	entry->dev = dev;
-	arp_update_hhs(entry);
-	arp_unlock();
-	return 0;
-}
-
-
-
-/*
- *	Get an ARP cache entry.
- */
-
-static int arp_req_get(struct arpreq *r, struct device *dev)
-{
-	struct arp_table *entry;
-	struct sockaddr_in *si;
-
-	si = (struct sockaddr_in *) &r->arp_pa;
-
-#if RT_CACHE_DEBUG >= 1
-	if (arp_lock)
-		printk("arp_req_set: bug\n");
-#endif
-	arp_fast_lock();
-
-	entry = arp_lookup(si->sin_addr.s_addr, r->arp_flags|ATF_NETMASK, dev);
-	if (entry == NULL)
-		entry = arpd_lookup(si->sin_addr.s_addr, 
-					r->arp_flags|ATF_NETMASK, dev, __LINE__);
-
-	if (entry == NULL)
-	{
-		arp_unlock();
-		return -ENXIO;
-	}
-
-	/*
-	 *	We found it; copy into structure.
-	 */
-	
-	memcpy(r->arp_ha.sa_data, &entry->ha, entry->dev->addr_len);
-	r->arp_ha.sa_family = entry->dev->type;
-	r->arp_flags = entry->flags;
-	strncpy(r->arp_dev, entry->dev->name, 16);
-	arp_unlock();
-	return 0;
-}
-
-static int arp_req_delete(struct arpreq *r, struct device * dev)
-{
-	struct arp_table *entry;
-	struct sockaddr_in *si;
-
-	si = (struct sockaddr_in *) &r->arp_pa;
-#if RT_CACHE_DEBUG >= 1
-	if (arp_lock)
-		printk("arp_req_delete: bug\n");
-#endif
-	arp_fast_lock();
-
-	if (!(r->arp_flags & ATF_PUBL))
-	{
-		for (entry = arp_tables[HASH(si->sin_addr.s_addr)];
-		     entry != NULL; entry = entry->next)
-			if (entry->ip == si->sin_addr.s_addr 
-			    && (!dev || entry->dev == dev))
-			{
-				arp_destroy(entry);
-				arp_unlock();
-				return 0;
-			}
-	}
-	else
-	{
-		for (entry = arp_proxy_list;
-		     entry != NULL; entry = entry->next)
-			if (entry->ip == si->sin_addr.s_addr 
-			    && (!dev || entry->dev == dev)) 
-			{
-				arp_destroy(entry);
-				arp_unlock();
-				return 0;
-			}
-	}
-
-	arp_unlock();
-	return -ENXIO;
-}
-
-/*
- *	Handle an ARP layer I/O control request.
- */
-
-int arp_ioctl(unsigned int cmd, void *arg)
-{
-	int err;
-	struct arpreq r;
-
-	struct device * dev = NULL;
-
-	switch(cmd)
-	{
-		case SIOCDARP:
-		case SIOCSARP:
-			if (!suser())
-				return -EPERM;
-		case SIOCGARP:
-			err = verify_area(VERIFY_READ, arg, sizeof(struct arpreq));
-			if (err)
-				return err;
-			memcpy_fromfs(&r, arg, sizeof(struct arpreq));
-			break;
-		case OLD_SIOCDARP:
-		case OLD_SIOCSARP:
-			if (!suser())
-				return -EPERM;
-		case OLD_SIOCGARP:
-			err = verify_area(VERIFY_READ, arg, sizeof(struct arpreq_old));
-			if (err)
-				return err;
-			memcpy_fromfs(&r, arg, sizeof(struct arpreq_old));
-			memset(&r.arp_dev, 0, sizeof(r.arp_dev));
-			break;
-		default:
-			return -EINVAL;
-	}
-
-	if (r.arp_pa.sa_family != AF_INET)
-		return -EPFNOSUPPORT;
-	if (((struct sockaddr_in *)&r.arp_pa)->sin_addr.s_addr == 0)
-		return -EINVAL;
-
-	if (r.arp_dev[0])
-	{
-		if ((dev = dev_get(r.arp_dev)) == NULL)
-			return -ENODEV;
-
-		if (!r.arp_ha.sa_family)
-			r.arp_ha.sa_family = dev->type;
-		else if (r.arp_ha.sa_family != dev->type)
-			return -EINVAL;
-	}
-	else
-	{
-		if ((r.arp_flags & ATF_PUBL) &&
-		    ((cmd == SIOCSARP) || (cmd == OLD_SIOCSARP))) {
-			if ((dev = dev_getbytype(r.arp_ha.sa_family)) == NULL)
-				return -ENODEV;
-		}
-	}		 
-
-	switch(cmd)
-	{
-		case SIOCDARP:
-		        return arp_req_delete(&r, dev);
-		case SIOCSARP:
-			return arp_req_set(&r, dev);
-		case OLD_SIOCDARP:
-			/* old  SIOCDARP destroys both
-			 * normal and proxy mappings
-			 */
-			r.arp_flags &= ~ATF_PUBL;
-			err = arp_req_delete(&r, dev);
-			r.arp_flags |= ATF_PUBL;
-			if (!err)
-				arp_req_delete(&r, dev);
-			else
-				err = arp_req_delete(&r, dev);
-			return err;
-		case OLD_SIOCSARP:
-			err = arp_req_set(&r, dev);
-			/* old SIOCSARP works so funny,
-			 * that its behaviour can be emulated
-			 * only approximately 8).
-			 * It should work. --ANK
-			 */
-			if (r.arp_flags & ATF_PUBL)
-			{	
-				r.arp_flags &= ~ATF_PUBL;
-				arp_req_delete(&r, dev);
-			}
-			return err;
-		case SIOCGARP:
-			err = verify_area(VERIFY_WRITE, arg, sizeof(struct arpreq));
-			if (err)
-				return err;
-			err = arp_req_get(&r, dev);
-			if (!err)
-				memcpy_tofs(arg, &r, sizeof(r));
-			return err;
-		case OLD_SIOCGARP:
-			err = verify_area(VERIFY_WRITE, arg, sizeof(struct arpreq_old));
-			if (err)
-				return err;
-			r.arp_flags &= ~ATF_PUBL;
-			err = arp_req_get(&r, dev);
-			if (err < 0)
-			{
-				r.arp_flags |= ATF_PUBL;
-				err = arp_req_get(&r, dev);
-			}
-			if (!err)
-				memcpy_tofs(arg, &r, sizeof(struct arpreq_old));
-			return err;
-	}
-	/*NOTREACHED*/
-	return 0;
-}
 
 
 /*
@@ -2237,5 +2396,8 @@ void arp_init (void)
 		arp_get_info
 	});
 #endif
-}
 
+#ifdef CONFIG_ARPD
+	netlink_attach(NETLINK_ARPD, arpd_callback);
+#endif
+}

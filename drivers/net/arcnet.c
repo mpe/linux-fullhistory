@@ -2678,7 +2678,7 @@ int arcnetA_rebuild_header(void *buff,struct device *dev,unsigned long dst,
 	}
 
 	/*
-	 * Try and get ARP to resolve the header.
+	 * Try to get ARP to resolve the header.
 	 */
 #ifdef CONFIG_INET	 
 	BUGMSG(D_DURING,"rebuild header from %d to %d; protocol %Xh\n",
@@ -3132,7 +3132,7 @@ int arcnetS_rebuild_header(void *buff,struct device *dev,unsigned long dst,
 	}
 
 	/*
-	 * Try and get ARP to resolve the header.
+	 * Try to get ARP to resolve the header.
 	 */
 #ifdef CONFIG_INET	 
 	return arp_find(&(head->daddr), dst, dev, dev->pa_addr, skb)? 1 : 0;

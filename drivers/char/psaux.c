@@ -315,13 +315,13 @@ static int open_aux(struct inode * inode, struct file * file)
 		aux_count--;
 		return -EBUSY;
 	}
+	MOD_INC_USE_COUNT;
 	poll_aux_status();
 	outb_p(AUX_ENABLE,AUX_COMMAND);		/* Enable Aux */
 	aux_write_dev(AUX_ENABLE_DEV);		/* enable aux device */
 	aux_write_cmd(AUX_INTS_ON);		/* enable controller ints */
 	poll_aux_status();
 	aux_ready = 0;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 

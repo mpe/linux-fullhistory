@@ -308,7 +308,7 @@ README for the ISDN-subsystem
      3.2.1 Teles driver.
 
        The module teles.o can be configured during "insmod'ing" it by
-       appending it's parameters to the insmod-commandline. The following
+       appending its parameters to the insmod-commandline. The following
        syntax is accepted:
 
        io=m0,i0,p0,d0[,m1,i1,p1,d1 ... ,mn,in,pn,dn] teles_id=idstring
@@ -323,7 +323,7 @@ README for the ISDN-subsystem
      3.2.2 ICN driver.
 
        The module icn.o can be configured during "insmod'ing" it by
-       appending it's parameters to the insmod-commandline. The following
+       appending its parameters to the insmod-commandline. The following
        syntax is accepted:
 
        portbase=p membase=m icn_id=idstring icn_id2=idstring2
@@ -347,7 +347,7 @@ README for the ISDN-subsystem
 
 4. Device-inodes
 
-   The major and minor-numbers and it's names are described in
+   The major and minor-numbers and its names are described in
    Documentation/devices.txt. The major-numbers are:
 
      43 for the ISDN-tty's.
@@ -494,7 +494,7 @@ README for the ISDN-subsystem
    cisco-h  A special-mode for communicating with a Cisco, which is configured
             to do "hdlc"
    ethernet No stripping. Packets are sent with full MAC-header.
-            The Ethernet-address of the interface is faked, from it's
+            The Ethernet-address of the interface is faked, from its
             IP-address: fc:fc:i1:i2:i3:i4, where i1-4 are the IP-addr.-values.
    syncppp  Synchronous PPP
 
@@ -553,7 +553,7 @@ README for the ISDN-subsystem
 
    "isdnctrl sdelay <InterfaceName> secs."
    This sets the minimum time an Interface has to be fully loaded, until
-   it sends an dial-request to it's slave.
+   it sends a dial-request to its slave.
 
    "isdnctrl dial <InterfaceName>"
    Forces an interface to start dialing even if no packets are to be

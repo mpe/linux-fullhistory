@@ -149,7 +149,7 @@ vcs_write(struct inode *inode, struct file *file, const char *buf, int count)
 		org = screen_pos(cons, p, viewed);
 		while (count-- > 0) {
 			scr_writew((scr_readw(org) & 0xff00) |
-				   get_user(buf++), org);
+				   get_user((const unsigned char*)buf++), org);
 			org++;
 		}
 	} else {
@@ -175,7 +175,7 @@ vcs_write(struct inode *inode, struct file *file, const char *buf, int count)
 		}
 		if (count > 0)
 			scr_writew((scr_readw(org) & 0xff00) |
-				   get_user(buf++), org);
+				   get_user((const unsigned char*)buf++), org);
 	}
 	written = buf - buf0;
 	file->f_pos += written;

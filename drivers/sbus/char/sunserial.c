@@ -467,7 +467,7 @@ static _INLINE_ void transmit_chars(struct sun_serial *info)
 	}
 
 	if((info->xmit_cnt <= 0) || info->tty->stopped) {
-		/* Thats peculiar... */
+		/* That's peculiar... */
 		info->zs_channel->control = RES_Tx_P;
 		udelay(5);
 		goto clear_and_return;

@@ -24,9 +24,9 @@ sometimes takes days or even weeks.
 
 WHAT IS LINUX?
 
-  Linux is a Unix clone for 386/486-based PCs written from scratch by
-  Linus Torvalds with assistance from a loosely-knit team of hackers
-  across the Net.  It aims towards POSIX compliance. 
+  Linux is a Unix clone written from scratch by Linus Torvalds with
+  assistance from a loosely-knit team of hackers across the Net.
+  It aims towards POSIX compliance. 
 
   It has all the features you would expect in a modern fully-fledged
   Unix, including true multitasking, virtual memory, shared libraries,
@@ -35,6 +35,12 @@ WHAT IS LINUX?
 
   It is distributed under the GNU General Public License - see the
   accompanying COPYING file for more details. 
+
+ON WHAT HARDWARE DOES IT RUN?
+
+  Linux was first developed for 386/486-based PCs.  These days it also
+  runs on DEC Alphas, SUN Sparcs, M68000 machines (like Atari and Amiga),
+  MIPS and PowerPC.
 
 DOCUMENTATION:
 

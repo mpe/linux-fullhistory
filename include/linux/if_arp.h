@@ -111,18 +111,16 @@ struct arphdr
 
 #define ARPD_UPDATE	0x01
 #define ARPD_LOOKUP	0x02
+#define ARPD_FLUSH	0x03
 
 struct arpd_request
 {
 	unsigned short	req;			/* request type */
 	__u32		ip;			/* ip address of entry */
-	__u32		mask;			/* netmask - used for proxy */
+	unsigned long	dev;			/* Device entry is tied to */
+	unsigned long	stamp;
+	unsigned long	updated;
 	unsigned char	ha[MAX_ADDR_LEN];	/* Hardware address */
-	unsigned long	last_used;		/* For expiry */
-	unsigned long	last_updated;		/* For expiry */
-	unsigned int	flags;			/* Control status */
-	struct device	*dev;			/* Device entry is tied to */
-	int		loc;			/* Debugging call location */
 };
 
 #endif	/* _LINUX_IF_ARP_H */

@@ -64,6 +64,7 @@ struct __xchg_dummy { unsigned long a[100]; };
 #endif /* machine compilation types */ 
 #define cli() __asm__ __volatile__ ("oriw  #0x0700,%/sr": : : "memory")
 #define nop() __asm__ __volatile__ ("nop"::)
+#define mb()  __asm__ __volatile__ (""   : : :"memory")
 
 #define save_flags(x) \
 __asm__ __volatile__("movew %/sr,%0":"=d" (x) : /* no input */ :"memory")

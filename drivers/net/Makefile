@@ -466,6 +466,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_HYDRA),y)
+L_OBJS += hydra.o
+else
+  ifeq ($(CONFIG_HYDRA),m)
+  M_OBJS += hydra.o
+  endif
+endif
+
 ifeq ($(CONFIG_SDLA),y)
 L_OBJS += sdla.o
 else

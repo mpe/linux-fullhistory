@@ -1110,7 +1110,7 @@ $DIALOG	--backtitle "$backtitle" \
 #
 # Check kernel version of previous menuconfig build.
 # If it's different then we should tell the sound driver
-# to rebuild it's Config.in file.
+# to rebuild its Config.in file.
 #
 rebuildsound=TRUE
 if [ -e .menuconfig ]

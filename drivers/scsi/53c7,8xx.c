@@ -345,7 +345,7 @@ static Scsi_Host_Template *the_template = NULL;
  * 001c46d4 : 0x001c5ea0 0x000011f8
  *
  *	Changed the print code in the phase_mismatch handler so
- *	that we call print_lots to try and diagnose this.
+ *	that we call print_lots to try to diagnose this.
  *
  */
 

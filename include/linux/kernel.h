@@ -57,8 +57,13 @@ extern int kill_sl(int sess, int sig, int priv);
 asmlinkage int printk(const char * fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
 
-#define pr_debug(show,fmt,arg...) \
-	do { if (show) printk(KERN_DEBUG fmt,##arg); } while (0)
+#if DEBUG
+#define pr_debug(fmt,arg...) \
+	printk(KERN_DEBUG fmt,##arg)
+#else
+#define pr_debug(fmt,arg...) \
+	do { } while (0)
+#endif
 
 #define pr_info(fmt,arg...) \
 	printk(KERN_INFO fmt,##arg)

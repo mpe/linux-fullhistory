@@ -88,15 +88,15 @@ static int parse_options(char *options, struct iso9660_options * popt)
 	        if (strncmp(this_char,"norock",6) == 0) {
 		  popt->rock = 'n';
 		  continue;
-		};
+		}
 	        if (strncmp(this_char,"unhide",6) == 0) {
 		  popt->unhide = 'y';
 		  continue;
-		};
+		}
 	        if (strncmp(this_char,"cruft",5) == 0) {
 		  popt->cruft = 'y';
 		  continue;
-		};
+		}
 		if ((value = strchr(this_char,'=')) != NULL)
 			*value++ = 0;
 		if (!strcmp(this_char,"map") && value) {
@@ -134,7 +134,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 		    if(*vpnt <  '0' || *vpnt > '9') break;
 		    ivalue = ivalue * 10 + (*vpnt - '0');
 		    vpnt++;
-		  };
+		  }
 		  if (*vpnt) return 0;
 		  switch(*this_char) {
 		  case 'b':
@@ -241,8 +241,8 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	  while (i != 1){
 	    blocksize_bits++;
 	    i >>=1;
-	  };
-	};
+	  }
+	}
 	set_blocksize(dev, opt.blocksize);
 
 	lock_super(s);
@@ -251,15 +251,15 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 
 	vol_desc_start = isofs_get_last_session(dev);
 	
-	for (iso_blknum = vol_desc_start+16; iso_blknum < vol_desc_start+100; iso_blknum++) {
-#if 0
-	        printk("isofs.inode: iso_blknum=%d\n", iso_blknum);
-#endif 0
-		if (!(bh = bread(dev, iso_blknum << (ISOFS_BLOCK_BITS-blocksize_bits), opt.blocksize))) {
+	for (iso_blknum = vol_desc_start+16;
+             iso_blknum < vol_desc_start+100; iso_blknum++) {
+                int b = iso_blknum << (ISOFS_BLOCK_BITS-blocksize_bits);
+
+		if (!(bh = bread(dev,b,opt.blocksize))) {
 			s->s_dev = 0;
 			printk("isofs_read_super: bread failed, dev "
-			       "%s iso_blknum %d\n",
-			       kdevname(dev), iso_blknum);
+			       "%s iso_blknum %d block %d\n",
+			       kdevname(dev), iso_blknum, b);
 			unlock_super(s);
 			MOD_DEC_USE_COUNT;
 			return NULL;
@@ -280,7 +280,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 		        opt.rock = 'n';
 		        h_pri = (struct hs_primary_descriptor *)vdp;
 			break;
-		};
+		}
 		
 		if (strncmp (vdp->id, ISO_STANDARD_ID, sizeof vdp->id) == 0) {
 		  if (isonum_711 (vdp->type) != ISO_VD_PRIMARY)
@@ -290,7 +290,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 		
 		        pri = (struct iso_primary_descriptor *)vdp;
 			break;
-	        };
+	        }
 
 		brelse(bh);
 	      }
@@ -301,8 +301,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 		unlock_super(s);
 		MOD_DEC_USE_COUNT;
 		return NULL;
-	};
-	
+	}
 	
 	if(high_sierra){
 	  rootp = (struct iso_directory_record *) h_pri->root_directory_record;
@@ -311,7 +310,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	    printk("Multi-volume disks not (yet) supported.\n");
 	    goto out;
 #endif
-	  };
+	  }
 	  s->u.isofs_sb.s_nzones = isonum_733 (h_pri->volume_space_size);
 	  s->u.isofs_sb.s_log_zone_size = isonum_723 (h_pri->logical_block_size);
 	  s->u.isofs_sb.s_max_size = isonum_733(h_pri->volume_space_size);
@@ -322,7 +321,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	    printk("Multi-volume disks not (yet) supported.\n");
 	    goto out;
 #endif
-	  };
+	  }
 	  s->u.isofs_sb.s_nzones = isonum_733 (pri->volume_space_size);
 	  s->u.isofs_sb.s_log_zone_size = isonum_723 (pri->logical_block_size);
 	  s->u.isofs_sb.s_max_size = isonum_733(pri->volume_space_size);
@@ -793,7 +792,7 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 			if(!(bh = bread(parent->i_dev,block,bufsize))) {
  			        kfree(cpnt);
 				return -1;
-			};
+			}
  			memcpy((char *)cpnt+frag1, bh->b_data, offset);
 		}
 		

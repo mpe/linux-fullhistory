@@ -235,7 +235,7 @@ static void nr_destroy_timer(unsigned long data)
  *	Once it is removed from the queue no interrupt or bottom half will
  *	touch it and we are (fairly 8-) ) safe.
  */
-void nr_destroy_socket(struct sock *sk)	/* Not static as its used by the timer */
+void nr_destroy_socket(struct sock *sk)	/* Not static as it's used by the timer */
 {
 	struct sk_buff *skb;
 	unsigned long flags;
@@ -954,7 +954,7 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	unsigned short frametype, window, timeout;
 	
 
-	skb->sk = NULL;		/* Initially we don't know who its for */
+	skb->sk = NULL;		/* Initially we don't know who it's for */
 
 	/*
 	 *	skb->data points to the netrom frame start
@@ -980,7 +980,7 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 #endif
 
 	/*
-	 * Find an existing socket connection, based on circuit ID, if its
+	 * Find an existing socket connection, based on circuit ID, if it's
 	 * a Connect Request base it on their circuit ID.
 	 */
 	if (((frametype & 0x0F) != NR_CONNREQ && (sk = nr_find_socket(circuit_index, circuit_id)) != NULL) ||

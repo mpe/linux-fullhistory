@@ -27,7 +27,7 @@
 #include <net/tcp.h>
 
 /*
- *	Policy code extracted so its now separate
+ *	Policy code extracted so it's now separate
  */
 
 /*
@@ -344,7 +344,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	 *	flurry of syns from eating up all our memory.
 	 *
 	 *	BSD does some funnies here and allows 3/2 times the
-	 *	set backlog as a fudge factor. Thats just too gross.
+	 *	set backlog as a fudge factor. That's just too gross.
 	 */
 
 	if (sk->ack_backlog >= sk->max_ack_backlog) 
@@ -502,7 +502,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	/*
 	 *	SKIP devices set their MTU to 65535. This is so they can take packets
 	 *	unfragmented to security process then fragment. They could lie to the
-	 *	TCP layer about a suitable MTU, but its easier to let skip sort it out
+	 *	TCP layer about a suitable MTU, but it's easier to let skip sort it out
 	 *	simply because the final package we want unfragmented is going to be
 	 *
 	 *	[IPHDR][IPSP][Security data][Modified TCP data][Security data]
@@ -607,7 +607,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 */
 
 	if(sk->zapped)
-		return(1);	/* Dead, cant ack any more so why bother */
+		return(1);	/* Dead, can't ack any more so why bother */
 
 	/*
 	 *	We have dropped back to keepalive timeouts. Thus we have
@@ -1736,7 +1736,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	
 		/* 
 		 *	Retransmitted SYN for our socket. This is uninteresting. If sk->state==TCP_LISTEN
-		 *	then its a new connection
+		 *	then it's a new connection
 		 */
 		 
 		if (sk->state == TCP_SYN_RECV && th->syn && skb->seq+1 == sk->acked_seq)
@@ -1759,7 +1759,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				/* We got an ack, but it's not a good ack */
 				if(!tcp_ack(sk,th,skb->ack_seq,len))
 				{
-					/* Reset the ack - its an ack from a 
+					/* Reset the ack - it's an ack from a 
 					   different connection  [ th->rst is checked in tcp_send_reset()] */
 					tcp_statistics.TcpAttemptFails++;
 					tcp_send_reset(daddr, saddr, th,

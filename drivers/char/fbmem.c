@@ -45,6 +45,10 @@ static inline int PROC_CONSOLE(void)
 	if (!current->tty)
 		return fg_console;
 
+	if (current->tty->driver.type != TTY_DRIVER_TYPE_CONSOLE)
+		/* XXX Should report error here? */
+		return fg_console;
+
 	if (MINOR(current->tty->device) < 1)
 		return fg_console;
 
@@ -180,6 +184,18 @@ fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			if (i) return i;
 		}
 		return (fb->fb_get_cmap(&cmap, 0, PROC_CONSOLE()));
+	case FBIOPAN_DISPLAY:
+		i = verify_area(VERIFY_WRITE, (void *) arg, 
+				sizeof(struct fb_var_screeninfo));
+		if (i) return i;
+		memcpy_fromfs(&var, (void *) arg, sizeof(var));
+		i=fb->fb_pan_display(&var, PROC_CONSOLE());
+		memcpy_tofs((void *) arg, &var, sizeof(var));
+		fbidx=GET_FB_IDX(inode->i_rdev);
+		vidx=GET_FB_VAR_IDX(inode->i_rdev);
+		if (! i && vidx)
+			registered_fb_var[fbidx][vidx-1]=var;
+		return i;
 	default:
 		return (fb->fb_ioctl(inode, file, cmd, arg, PROC_CONSOLE()));
 	}
@@ -199,8 +215,11 @@ fb_mmap(struct inode *inode, struct file *file, struct vm_area_struct * vma)
 	vma->vm_offset += fix.smem_start;
 	if (vma->vm_offset & ~PAGE_MASK)
 		return -ENXIO;
-	if (boot_info.cputype & CPU_68040)
+	if (m68k_is040or060) {
 		pgprot_val(vma->vm_page_prot) &= _CACHEMASK040;
+		/* Use write-through cache mode */
+		pgprot_val(vma->vm_page_prot) |= _PAGE_CACHE040W;
+	}
 	if (remap_page_range(vma->vm_start, vma->vm_offset,
 			     vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;

@@ -606,8 +606,8 @@ int _ftape_read(char *buff, int req_len)
 		 *  get more than 29 Kb from it (As it only contains this much).
 		 *  This works only for sequential access, so random access should
 		 *  stay away from this `last' segment.
-		 *  Note: ftape_seg_pos points to the next segment what will be
-		 *        read, so it's one too hight here!
+		 *  Note: ftape_seg_pos points to the next segment that will be
+		 *        read, so it's one too high here!
 		 */
 		if (!eof_mark && ftape_seg_pos - 1 >= ftape_last_segment.id) {
 			TRACEi(5, "remaining of last segment:", remaining);

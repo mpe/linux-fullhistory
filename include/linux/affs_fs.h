@@ -1,101 +1,104 @@
-
 #ifndef _AFFS_FS_H
 #define _AFFS_FS_H
-
-#include <linux/types.h>
 /*
  * The affs filesystem constants/structures
  */
 
-#define AFFS_BLOCK_BITS 9
-#define AFFS_BLOCK_SIZE 512
-
-#define AFFS_BUFFER_BITS 9
-#define AFFS_BUFFER_SIZE 512
-
-#define AFFS_BLOCK_NUMBER(X) (X<<1)
+#include <linux/types.h>
+#include <linux/amigaffs.h>
 
 #define AFFS_SUPER_MAGIC 0xadff
 
 /* Get the filesystem block size given an inode. */
-#define AFFS_I2BSIZE(inode) ((inode)->i_sb->u.affs_sb.s_block_size)
+#define AFFS_I2BSIZE(inode) ((inode)->i_sb->s_blocksize)
 
-/* Read the device block that contains filesystem block ("sector"). */
+/* Get the filesystem hash table size given an inode. */
+#define AFFS_I2HSIZE(inode) ((inode)->i_sb->u.affs_sb.s_hashsize)
 
-static inline struct buffer_head *affs_sread(int dev,int sector,void **start)
-{
- 	struct buffer_head *bh;
-	int mask;
+/* Get the block number bits given an inode */
+#define AFFS_I2BITS(inode) ((inode)->i_sb->s_blocksize_bits)
 
-	bh = bread (dev, sector >> (BLOCK_SIZE_BITS - AFFS_BLOCK_BITS), 1024);
-	if (!bh)
-		return NULL;
-	mask = (1 << (BLOCK_SIZE_BITS - AFFS_BLOCK_BITS)) - 1;
-    	*start = bh->b_data + ((sector & mask) << AFFS_BLOCK_BITS);
-	return bh;
-}
+/* Get the fs type given an inode */
+#define AFFS_I2FSTYPE(inode) ((inode)->i_sb->u.affs_sb.s_flags & SF_INTL)
 
-/* Use affs_sread() to read a "sector", but take the filesystems partition
-   offset into account. */
+/* --- Prototypes -----------------------------------------------------------------------------	*/
 
-static inline struct buffer_head *affs_pread(struct inode *inode,
-					     int sector, void **start)
-{
-	int offset = inode->i_sb->u.affs_sb.s_partition_offset;
-	return affs_sread (inode->i_dev, sector + offset, start);
-}
+/* amigaffs.c */
 
-/* amigaffs.c prototypes */
+extern int		   affs_get_key_entry(int bsize, void *data, int entry_pos);
+extern int		   affs_find_next_hash_entry(int bsize, void *dir_data, ULONG *hash_pos);
+extern int		   affs_get_file_name(int bsize, void *fh_data, char **name);
+extern ULONG		   affs_checksum_block(int bsize, void *data, LONG *ptype, LONG *stype);
+extern void		   affs_fix_checksum(int bsize, void *data, int cspos);
+extern void		   secs_to_datestamp(int secs, struct DateStamp *ds);
+extern int		   prot_to_mode(ULONG prot);
+extern ULONG		   mode_to_prot(int mode);
+extern int		   affs_fix_hash_pred(struct inode *startino, int startoffset,
+		 			      LONG key, LONG newkey);
+extern int		   affs_fix_link_pred(struct inode *startino, LONG key, LONG newkey);
 
-extern int affs_get_key_entry (int bsize, void *data, int entry_pos);
-extern int affs_find_next_hash_entry (int bsize, void *dir_data, int *hash_pos);
-extern int affs_get_fh_hash_link (int bsize, void *fh_data);
-extern int affs_get_file_name (int bsize, void *fh_data, char **name);
-extern int affs_get_extension (int bsize, void *fh_data);
-extern int affs_checksum_block (int bsize, void *data, int *ptype, int *stype);
+/* bitmap. c */
 
-/* The stuff that follows may be totally unneeded. I have not checked to see 
- which prototypes we are still using.  */
+extern int		   affs_count_free_blocks(struct super_block *s);
+extern int		   affs_count_free_bits(int blocksize, const UBYTE *data);
+extern void		   affs_free_block(struct super_block *sb, LONG block);
+extern LONG		   affs_new_header(struct inode *inode);
+extern LONG		   affs_new_data(struct inode *inode);
+extern void		   affs_make_zones(struct super_block *sb);
 
-extern int affs_open(struct inode * inode, struct file * filp);
-extern void affs_release(struct inode * inode, struct file * filp);
-extern int affs_lookup(struct inode * dir,const char * name, int len,
-	struct inode ** result);
-extern unsigned long affs_count_free_inodes(struct super_block *sb);
-extern int affs_new_block(int dev);
-extern int affs_free_block(int dev, int block);
-extern int affs_bmap(struct inode *,int);
+/* namei.c */
 
-extern void affs_put_super(struct super_block *);
-extern struct super_block *affs_read_super(struct super_block *,void *,int);
-extern void affs_read_inode(struct inode *);
-extern void affs_put_inode(struct inode *);
-extern void affs_statfs(struct super_block *, struct statfs *, int);
-extern int affs_parent_ino(struct inode *dir);
-extern int affs_lseek(struct inode *, struct file *, off_t, int);
-extern int affs_read(struct inode *, struct file *, char *, int);
-extern int affs_file_read(struct inode *, struct file *, char *, int);
+extern int		   affs_hash_name(const char *name, int len, int intl, int hashsize);
+extern int		   affs_lookup(struct inode *dir,const char *name, int len,
+				       struct inode **result);
+extern int		   affs_unlink(struct inode *dir, const char *name, int len);
+extern int		   affs_create(struct inode *dir, const char *name, int len, int mode,
+				       struct inode **result);
+extern int		   affs_mkdir(struct inode *dir, const char *name, int len, int mode);
+extern int		   affs_rmdir(struct inode *dir, const char *name, int len);
+extern int		   affs_link(struct inode *oldinode, struct inode *dir,
+				     const char *name, int len);
+extern int		   affs_symlink(struct inode *dir, const char *name, int len,
+				        const char *symname);
+extern int		   affs_fixup(struct buffer_head *bh, struct inode *inode);
+extern int		   affs_rename(struct inode *old_dir, const char *old_name, int old_len,
+				       struct inode *new_dir, const char *new_name, int new_len);
+
+/* inode.c */
+
+extern struct buffer_head *affs_bread(kdev_t dev, int block, int size);
+extern void		   affs_brelse(struct buffer_head *buf);
+extern void		   affs_put_super(struct super_block *);
+extern int		   affs_parent_ino(struct inode *dir);
+extern struct super_block *affs_read_super(struct super_block *,void *, int);
+extern void		   affs_statfs(struct super_block *, struct statfs *, int bufsiz);
+extern void		   affs_read_inode(struct inode *);
+extern void		   affs_write_inode(struct inode *);
+extern int		   affs_notify_change(struct inode *inode, struct iattr *attr);
+extern void		   affs_put_inode(struct inode *);
+extern struct inode	  *affs_new_inode(const struct inode *dir);
+extern int		   affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
+					  const char *name, int len, LONG type);
+
+/* file.c */
+
+extern int		   affs_bmap(struct inode *inode, int block);
+extern struct buffer_head *affs_getblock(struct inode *inode, int block);
+extern void		   affs_truncate(struct inode *);
+extern void		   affs_truncate_ofs(struct inode *);
+
+/* dir.c */
+
+extern void		   affs_dir_truncate(struct inode *);
+
+/* jump tables */
+
+extern struct inode_operations	 affs_file_inode_operations;
+extern struct inode_operations	 affs_file_inode_operations_ofs;
+extern struct inode_operations	 affs_dir_inode_operations;
+extern struct inode_operations	 affs_symlink_inode_operations;
+extern struct inode_operations	 affs_chrdev_inode_operations;
+extern struct inode_operations	 affs_blkdev_inode_operations;
+
 extern int init_affs_fs(void);
-
-extern struct inode_operations affs_file_inode_operations;
-extern struct inode_operations affs_dir_inode_operations;
-extern struct inode_operations affs_symlink_inode_operations;
-extern struct inode_operations affs_chrdev_inode_operations;
-extern struct inode_operations affs_blkdev_inode_operations;
-
-extern struct file_operations affs_file_operations;
-extern struct file_operations affs_dir_operations;
-
-/* The following macros are used to check for memory leaks. */
-#ifdef LEAK_CHECK
-#define free_s leak_check_free_s
-#define malloc leak_check_malloc
-#define bread leak_check_bread
-#define brelse leak_check_brelse
-extern void * leak_check_malloc(unsigned int size);
-extern void leak_check_free_s(void * obj, int size);
-extern struct buffer_head * leak_check_bread(int dev, int block, int size);
-extern void leak_check_brelse(struct buffer_head * bh);
-#endif /* LEAK_CHECK */
-
 #endif

@@ -143,6 +143,17 @@ fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari mouse support' CONFIG_ATARIMOUSE
 fi
+if [ "$CONFIG_ATARI" = y ]; then
+  tristate 'Atari MFP serial support' CONFIG_ATARI_MFPSER
+  tristate 'Atari SCC serial support' CONFIG_ATARI_SCC
+  tristate 'Atari MIDI serial support' CONFIG_ATARI_MIDI
+fi
+if [ "$CONFIG_AMIGA" = y ]; then
+  tristate 'Amiga builtin serial support' CONFIG_AMIGA_BUILTIN_SERIAL
+  bool 'GVP IO-Extender support' CONFIG_GVPIOEXT
+  tristate 'Multiface Card III serial support' CONFIG_MULTIFACE_III_TTY
+fi
+bool 'Support for user serial device modules' CONFIG_USERIAL
 bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
 if [ "$CONFIG_WATCHDOG" != "n" ]; then
   bool '   Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT

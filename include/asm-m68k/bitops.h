@@ -111,6 +111,54 @@ extern __inline__ unsigned long ffz(unsigned long word)
 	return res ^ 31;
 }
 
+extern __inline__ int find_first_one_bit(void * vaddr, unsigned size)
+{
+	unsigned long *p = vaddr, *addr = vaddr;
+	int res;
+	unsigned long num;
+
+	if (!size)
+		return 0;
+
+	while (!*p++)
+	{
+		if (size <= 32)
+			return (p - addr) << 5;
+		size -= 32;
+	}
+
+	num = *--p;
+	__asm__ __volatile__ ("bfffo %1{#0,#0},%0"
+			      : "=d" (res) : "d" (num & -num));
+	return ((p - addr) << 5) + (res ^ 31);
+}
+
+extern __inline__ int find_next_one_bit (void *vaddr, int size,
+				      int offset)
+{
+	unsigned long *addr = vaddr;
+	unsigned long *p = addr + (offset >> 5);
+	int set = 0, bit = offset & 31UL, res;
+
+	if (offset >= size)
+		return size;
+
+	if (bit) {
+		unsigned long num = *p & (~0UL << bit);
+
+		/* Look for one in first longword */
+		__asm__ __volatile__ ("bfffo %1{#0,#0},%0"
+				      : "=d" (res) : "d" (num & -num));
+		if (res < 32)
+			return (offset & ~31UL) + (res ^ 31);
+                set = 32 - bit;
+		p++;
+	}
+	/* No one yet, search remaining full bytes for a one */
+	res = find_first_one_bit (p, size - 32 * (p - addr));
+	return (offset + set + res);
+}
+
 /* Bitmap functions for the minix filesystem */
 
 extern __inline__ int

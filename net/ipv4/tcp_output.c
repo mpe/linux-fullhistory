@@ -26,6 +26,68 @@
 #include <linux/interrupt.h>
 
 /*
+ * RFC 1122 says:
+ *
+ * "the suggested [SWS] avoidance algorithm for the receiver is to keep
+ *  RECV.NEXT + RCV.WIN fixed until:
+ *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
+ *
+ * Experiments against BSD and Solaris machines show that following
+ * these rules results in the BSD and Solaris machines making very
+ * bad guesses about how much data they can have in flight.
+ *
+ * Instead we follow the BSD lead and offer a window that gives
+ * the size of the current free space, truncated to a multiple
+ * of 1024 bytes. If the window is smaller than
+ * 	min(sk->mss, MAX_WINDOW/2)
+ * then we advertise the window as having size 0, unless this
+ * would shrink the window we offered last time.
+ * This results in as much as double the throughput as the original
+ * implementation.
+ *
+ * We do BSD style SWS avoidance -- note that RFC1122 only says we
+ * must do silly window avoidance, it does not require that we use
+ * the suggested algorithm.
+ *
+ * The "rcvbuf" and "rmem_alloc" values are shifted by 1, because
+ * they also contain buffer handling overhead etc, so the window
+ * we actually use is essentially based on only half those values.
+ */
+int tcp_new_window(struct sock * sk)
+{
+	unsigned long window;
+	unsigned long minwin, maxwin;
+
+	/* Get minimum and maximum window values.. */
+	minwin = sk->mss;
+	if (!minwin)
+		minwin = sk->mtu;
+	maxwin = sk->window_clamp;
+	if (!maxwin)
+		maxwin = MAX_WINDOW;
+	if (minwin > maxwin/2)
+		minwin = maxwin/2;
+
+	/* Get current rcvbuf size.. */
+	window = sk->rcvbuf/2;
+	if (window < minwin) {
+		sk->rcvbuf = minwin*2;
+		window = minwin;
+	}
+
+	/* Check rcvbuf against used and minimum window */
+	window -= sk->rmem_alloc/2;
+	if ((long)(window - minwin) < 0)		/* SWS avoidance */
+		window = 0;
+
+	if (window > 1023)
+		window &= ~1023;
+	if (window > maxwin)
+		window = maxwin;
+	return window;
+}
+
+/*
  *	Get rid of any delayed acks, we sent one already..
  */
 static __inline__ void clear_delayed_acks(struct sock * sk)

@@ -303,7 +303,7 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 		}
 
       /* If the user specified the controller type from the command line,
-	 controller_type will be non-zero, so don't try and detect one */
+	 controller_type will be non-zero, so don't try to detect one */
 
 	if (!controller_type) {
 #ifdef OVERRIDE

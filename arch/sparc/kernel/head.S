@@ -497,7 +497,7 @@ copy_prom_lvl14:
 		std	%g4, [%g3 + 0x8]	! Copy proms handler
 
 /* Must determine whether we are on a sun4c MMU, SRMMU, or SUN4/400 MUTANT
- * MMU so we can remap ourselves properly.  DONT TOUCH %l0 thru %l5 in these
+ * MMU so we can remap ourselves properly.  DON'T TOUCH %l0 thru %l5 in these
  * remapping routines, we need their values afterwards!
  */
 		/* Now check whether we are already mapped, if we
@@ -571,7 +571,7 @@ srmmu_remap:
 		/* Grrr, why does it seem like every other load/store
 		 * on the sun4m is in some ASI space...
 		 * Fine with me, let's get the pointer to the level 1
-		 * page table directory and fetch it's entry.
+		 * page table directory and fetch its entry.
 		 */
 		lda	[%g4] ASI_M_BYPASS, %o1		! This is a level 1 ptr
 		srl	%o1, 0x4, %o1			! Clear low 4 bits

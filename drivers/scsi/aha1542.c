@@ -1214,7 +1214,7 @@ int aha1542_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	setup_mailboxes(SCpnt->host->io_port, SCpnt->host);
 
 	/*
-	 * Now try and pick up the pieces.  Restart all commands
+	 * Now try to pick up the pieces.  Restart all commands
 	 * that are currently active on the bus, and reset all of
 	 * the datastructures.  We have some time to kill while
 	 * things settle down, so print a nice message.

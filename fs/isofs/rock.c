@@ -319,7 +319,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	break;
       case SIG('T','F'):
 	/* Some RRIP writers incorrectly place ctime in the TF_CREATE field.
-	   Try and handle this correctly for either case. */
+	   Try to handle this correctly for either case. */
 	cnt = 0; /* Rock ridge never appears on a High Sierra disk */
 	if(rr->u.TF.flags & TF_CREATE) 
 	  inode->i_ctime = iso_date(rr->u.TF.times[cnt++].time, 0);

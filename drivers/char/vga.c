@@ -29,6 +29,10 @@
  * Colour palette handling, by Simon Tatham
  * 17-Jun-95 <sgt20@cam.ac.uk>
  *
+ * if 512 char mode is already enabled don't re-enable it,
+ * because it causes screen to flicker, by Mitja Horvat
+ * 5-May-96 <mitja.horvat@guest.arnes.si>
+ *
  */
 
 #include <linux/sched.h>
@@ -308,6 +312,7 @@ int
 set_get_font(char * arg, int set, int ch512)
 {
 #ifdef CAN_LOAD_EGA_FONTS
+	static int ch512enabled = 0;
 	int i;
 	char *charmap;
 	int beg;
@@ -432,8 +437,11 @@ set_get_font(char * arg, int set, int ch512)
 	outb_p( 0x10, gr_port_val );    /* enable even-odd addressing */
 	outb_p( 0x06, gr_port_reg );
 	outb_p( beg, gr_port_val );     /* map starts at b800:0 or b000:0 */
-	if (set)			/* attribute controller */
+
+	/* if 512 char mode is already enabled don't re-enable it. */
+	if ((set)&&(ch512!=ch512enabled))	/* attribute controller */
 	  {
+	    ch512enabled=ch512;
 	    /* 256-char: enable intensity bit
 	       512-char: disable intensity bit */
 	    inb_p( video_port_status );	/* clear address flip-flop */

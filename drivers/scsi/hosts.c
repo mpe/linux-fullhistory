@@ -332,7 +332,7 @@ scsi_unregister(struct Scsi_Host * sh){
 
 /* We call this when we come across a new host adapter. We only do this
  * once we are 100% sure that we want to use this host adapter -  it is a
- * pain to reverse this, so we try and avoid it 
+ * pain to reverse this, so we try to avoid it 
  */
 
 struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){

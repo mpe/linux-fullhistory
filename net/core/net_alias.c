@@ -1122,7 +1122,7 @@ net_alias_dev_rcv_sel(struct device *main_dev, struct sockaddr *sa_src, struct s
   if (main_dev == NULL) return NULL;
 
   /*
-   * if not aliased, dont bother any more
+   * if not aliased, don't bother any more
    */
 
   if ((alias_info = main_dev->alias_info) == NULL)
@@ -1194,7 +1194,7 @@ net_alias_dev_rcv_sel32(struct device *main_dev, int family, __u32 src, __u32 ds
   if (main_dev == NULL) return NULL;
 
   /*
-   * if not aliased, dont bother any more
+   * if not aliased, don't bother any more
    */
 
   if ((alias_info = main_dev->alias_info) == NULL)

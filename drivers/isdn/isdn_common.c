@@ -489,7 +489,7 @@ static int isdn_status_callback(isdn_ctrl * c)
                                 break;
 			if ((mi = dev->m_idx[i]) >= 0) {
 				/* Schedule CONNECT-Message to any tty, waiting for it and
-				 * set DCD-bit of it's modem-status.
+				 * set DCD-bit of its modem-status.
 				 */
 				if (dev->mdm.info[mi].flags &
 				    (ISDN_ASYNC_NORMAL_ACTIVE | ISDN_ASYNC_CALLOUT_ACTIVE)) {

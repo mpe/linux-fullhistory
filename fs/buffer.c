@@ -86,7 +86,7 @@ union bdflush_param{
 				activate bdflush */
 		int ndirty;  /* Maximum number of dirty blocks to write out per
 				wake-cycle */
-		int nrefill; /* Number of clean buffers to try and obtain
+		int nrefill; /* Number of clean buffers to try to obtain
 				each time we call refill */
 		int nref_dirt; /* Dirty buffer threshold for activating bdflush
 				  when trying to refill buffers. */
@@ -572,7 +572,7 @@ void refill_freelist(int size)
 	   now so as to ensure that there are still clean buffers available
 	   for user processes to use (and dirty) */
 	
-	/* We are going to try and locate this much memory */
+	/* We are going to try to locate this much memory */
 	needed =bdf_prm.b_un.nrefill * size;  
 
 	while (nr_free_pages > min_free_pages*2 && needed > 0 &&
@@ -592,7 +592,7 @@ void refill_freelist(int size)
 		 if(needed <= 0) return;
 	 };
 
-	/* OK, we cannot grow the buffer cache, now try and get some
+	/* OK, we cannot grow the buffer cache, now try to get some
 	   from the lru list */
 
 	/* First set the candidate pointers to usable buffers.  This
@@ -885,8 +885,7 @@ struct buffer_head * bread(kdev_t dev, int block, int size)
 	struct buffer_head * bh;
 
 	if (!(bh = getblk(dev, block, size))) {
-		printk("VFS: bread: READ error on device %s\n",
-			kdevname(dev));
+		printk("VFS: bread: impossible error\n");
 		return NULL;
 	}
 	if (buffer_uptodate(bh))
@@ -1867,7 +1866,7 @@ static void wakeup_bdflush(int wait)
 
 
 /* 
- * Here we attempt to write back old buffers.  We also try and flush inodes 
+ * Here we attempt to write back old buffers.  We also try to flush inodes 
  * and supers as well, since this function is essentially "update", and 
  * otherwise there would be no way of ensuring that these quantities ever 
  * get written back.  Ideally, we would have a timestamp on the inodes

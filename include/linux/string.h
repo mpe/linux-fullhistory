@@ -17,6 +17,7 @@ extern char * strncpy(char *,const char *,size_t);
 extern char * strcat(char *, const char *);
 extern char * strncat(char *, const char *, size_t);
 extern char * strchr(const char *,int);
+extern char * strrchr(const char *,int);
 extern char * strpbrk(const char *,const char *);
 extern char * strtok(char *,const char *);
 extern char * strstr(const char *,const char *);

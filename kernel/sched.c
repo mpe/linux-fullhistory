@@ -121,8 +121,7 @@ static inline void add_to_runqueue(struct task_struct * p)
 	init_task.prev_run = p;
 #ifdef __SMP__
 	/* this is safe only if called with cli()*/
-	while(set_bit(31,&smp_process_available));
-#if 0	
+	while(set_bit(31,&smp_process_available))
 	{
 		while(test_bit(31,&smp_process_available))
 		{
@@ -133,7 +132,6 @@ static inline void add_to_runqueue(struct task_struct * p)
 			}
 		}
 	}
-#endif	
 	smp_process_available++;
 	clear_bit(31,&smp_process_available);
 	if ((0!=p->pid) && smp_threads_ready)
@@ -242,6 +240,11 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 	/* We are not permitted to run a task someone else is running */
 	if (p->processor != NO_PROC_ID)
 		return -1000;
+#ifdef PAST_2_0		
+	/* This process is locked to a processor group */
+	if (p->processor_mask && !(p->processor_mask & (1<<this_cpu))
+		return -1000;
+#endif		
 #endif
 
 	/*
@@ -340,7 +343,7 @@ asmlinkage void schedule(void)
 	 *	This is safe as we do not permit re-entry of schedule()
 	 */
 	prev->processor = NO_PROC_ID;
-#define idle_task (task[this_cpu])
+#define idle_task (task[cpu_number_map[this_cpu]])
 #else
 #define idle_task (&init_task)
 #endif	

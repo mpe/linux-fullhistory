@@ -286,10 +286,6 @@ int dlci_add(struct dlci_add *new)
    int                 err, i;
    char                buf[10];
 
-   err = verify_area(VERIFY_READ, new, sizeof(*new));
-   if (err)
-      return(err);
-
    err = verify_area(VERIFY_WRITE, new, sizeof(*new));
    if (err)
       return(err);

@@ -112,7 +112,7 @@ static const char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
 
 /* 
  * In POS3 are bits A14-A19 of the address bus. These bits can be set
- * to choose the RAM address. Thats why we only can choose the RAM address
+ * to choose the RAM address. That's why we only can choose the RAM address
  * in 16KB steps.
  */
 
@@ -1441,7 +1441,7 @@ static void SK_txintr(struct device *dev)
         /* 
          * Here I have a problem.
          * I only know that there must be one or up to 15 collisions.
-         * Thats why TX_MORE is set, because after 16 attempts TX_RTRY
+         * That's why TX_MORE is set, because after 16 attempts TX_RTRY
          * will be set which means couldn't send packet aborted transfer.
          *
          * First I did not have this in but then I thought at minimum

@@ -83,7 +83,7 @@ prom_getproperty(int node, char *prop, char *buffer, int bufsize)
 	return prom_nodeops->no_getprop(node, prop, buffer);
 }
 
-/* Acquire an integer property and return it's value.  Returns -1
+/* Acquire an integer property and return its value.  Returns -1
  * on failure.
  */
 int

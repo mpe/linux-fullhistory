@@ -74,39 +74,15 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	skb->h.iph=(struct iphdr *)skb->data;
 	skb->ip_hdr=(struct iphdr *)skb->data;
 	memset(skb->proto_priv, 0, sizeof(struct options));
-	if (skb->ip_hdr->ihl > 5) 
-	{
-		if (ip_options_compile(NULL, skb))
-			return 0;
-	}
-	
-#ifdef CONFIG_FIREWALL
-	/*
-	 *	Check the firewall [well spotted Olaf]
-	 */
-	 
-	if((err=call_in_firewall(PF_INET, skb->dev, skb->ip_hdr))<FW_ACCEPT)
-	{
-		if(err==FW_REJECT)
-			icmp_send(skb,ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0 , dev);
-		kfree_skb(skb, FREE_READ);
-		return 0;
-	}	
-#endif
 
 	/*
 	 *	If you want to add LZ compressed IP or things like that here,
 	 *	and in drivers/net/tunnel.c are the places to add.
 	 */
 	
-	/* skb=lzw_uncompress(skb); */
-	
-	/*
-	 *	Feed to IP forward.
-	 */
-	 
-	if(ip_forward(skb, dev, 0, daddr))
-		kfree_skb(skb, FREE_READ);
+	skb->protocol = htons(ETH_P_IP);
+	skb->ip_summed = 0;
+	netif_rx(skb);
 	MOD_DEC_USE_COUNT;
 	return(0);
 }

@@ -92,9 +92,9 @@ struct vfsmount *add_vfsmnt(kdev_t dev, const char *dev_name, const char *dir_na
 	struct vfsmount *lptr;
 	char *tmp;
 
-	if ((lptr = (struct vfsmount *)
-	     kmalloc(sizeof(struct vfsmount), GFP_KERNEL)) == (struct vfsmount *)NULL)
-		return ((struct vfsmount *)NULL);
+	lptr = (struct vfsmount *)kmalloc(sizeof(struct vfsmount), GFP_KERNEL);
+        if (!lptr)
+		return NULL;
 	memset(lptr, 0, sizeof(struct vfsmount));
 
 	lptr->mnt_dev = dev;

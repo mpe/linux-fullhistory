@@ -14,7 +14,7 @@ o	Test for B stepping processors.
 o	Clean up processor specific/independent split.
 o	Document it all.	[PARTLY DONE]
 o	Halt other CPU's on reset/panic doesn't always work.
-o	Dont waste page at 4K - dont need it now.(watch the GDT code).
+o	Don't waste page at 4K - don't need it now.(watch the GDT code).
 o	Dump bootup pages once booted somehow.
 o	Clean up warnings/volatiles.
 o	Fix load_TR() for non contiguous processor ids

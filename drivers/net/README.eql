@@ -29,7 +29,7 @@
   my testing so far, the Livingston PortMaster 2e's load-balancing is a
   good 1 to 2 KB/s slower than the test machine working with a 28.8 Kbps
   and 14.4 Kbps connection.  However, I am not sure that it really is
-  the PortMaster, or if its Linux's TCP drivers. I'm told that Linux's
+  the PortMaster, or if it's Linux's TCP drivers. I'm told that Linux's
   TCP implementation is pretty fast though.--)
 
 

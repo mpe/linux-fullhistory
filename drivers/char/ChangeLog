@@ -1,6 +1,6 @@
 Wed Apr 24 14:02:04 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 
-	* random.c (add_timer_randomness): Use 2nd derivitive as well to
+	* random.c (add_timer_randomness): Use 2nd derivative as well to
 		better estimate entropy.
 
 		(rand_initialize): Explicitly initialize all the pointers

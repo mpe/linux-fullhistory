@@ -1945,4 +1945,12 @@ void cleanup_module (void)
 	timer_table[FLOPPY_TIMER].fn = 0;
 	kfree (DMABuffer);
 }
+#else
+/*
+ * This is just a dummy function to keep fs/super.c happy.
+ */
+void floppy_eject(void)
+{
+}
 #endif
+

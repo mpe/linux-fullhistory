@@ -721,7 +721,7 @@ fail:
  *
  * Not a great fan of assembler for the sake of it, but I think
  * that these routines are at least 10 times faster than their C
- * equivalents for large blits, and thats important to the lowest level of
+ * equivalents for large blits, and that's important to the lowest level of
  * a graphics driver. Question is whether some scheme with the blitter
  * would be faster. I suspect not for simple text system - not much
  * asynchrony.

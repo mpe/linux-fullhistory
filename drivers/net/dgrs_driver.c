@@ -193,7 +193,7 @@ check_board_dma(struct device *dev)
 	ulong	x;
 
 	/*
-	 *	If Space.c says not to use DMA, or if its not a PLX based
+	 *	If Space.c says not to use DMA, or if it's not a PLX based
 	 *	PCI board, or if the expansion ROM space is not PCI
 	 *	configured, then return false.
 	 */
@@ -250,10 +250,10 @@ check_board_dma(struct device *dev)
  *	Initiate DMA using PLX part on PCI board.  Spin the
  *	processor until completed.  All addresses are physical!
  *
- *	If pciaddr is NULL, then its a chaining DMA, and lcladdr is
+ *	If pciaddr is NULL, then it's a chaining DMA, and lcladdr is
  *	the address of the first DMA descriptor in the chain.
  *
- *	If pciaddr is not NULL, then its a single DMA.
+ *	If pciaddr is not NULL, then it's a single DMA.
  *
  *	In either case, "lcladdr" must have been fixed up to make
  *	sure the MSB isn't set using the S2DMA macro before passing
@@ -373,13 +373,13 @@ again:
 	/*
 	 *	There are three modes here for doing the packet copy.
 	 *	If we have DMA, and the packet is "long", we use the
-	 *	chaining mode of DMA.  If its shorter, we use single
+	 *	chaining mode of DMA.  If it's shorter, we use single
 	 *	DMA's.  Otherwise, we use memcpy().
 	 */
 	if (priv->use_dma && priv->dmadesc_h && len > 64)
 	{
 		/*
-		 *	If we can use DMA and its a long frame, copy it using
+		 *	If we can use DMA and it's a long frame, copy it using
 		 *	DMA chaining.
 		 */
 		DMACHAIN	*ddp_h;	/* Host virtual DMA desc. pointer */
@@ -451,7 +451,7 @@ again:
 	else if (priv->use_dma)
 	{
 		/*
-		 *	If we can use DMA and its a shorter frame, copy it
+		 *	If we can use DMA and it's a shorter frame, copy it
 		 *	using single DMA transfers.
 		 */
 		uchar		*phys_p;

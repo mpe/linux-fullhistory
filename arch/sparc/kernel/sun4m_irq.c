@@ -41,10 +41,10 @@ unsigned long *irq_rcvreg = &dummy;
 /* These tables only apply for interrupts greater than 15..
  * 
  * any intr value below 0x10 is considered to be a soft-int
- * this may be useful or it may not.. but thats how I've done it.
+ * this may be useful or it may not.. but that's how I've done it.
  * and it won't clash with what OBP is telling us about devices.
  *
- * take an encoded intr value and lookup if its valid
+ * take an encoded intr value and lookup if it's valid
  * then get the mask bits that match from irq_mask
  */
 static unsigned char irq_xlate[32] = {

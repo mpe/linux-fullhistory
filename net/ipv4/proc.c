@@ -68,11 +68,15 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 	unsigned short destp, srcp;
 	int len=0;
 	off_t pos=0;
-	off_t begin=0;
+	off_t begin;
+	char tmpbuf[129];
   
 	s_array = pro->sock_array;
-	len += sprintf(buffer, "sl  local_address rem_address   st tx_queue "
-	    "rx_queue tr tm->when uid inode\n");
+	if (offset < 128) 
+		len += sprintf(buffer, "%-127s\n",
+			       "  sl  local_address rem_address   st tx_queue "
+			       "rx_queue tr tm->when retrnsmt   uid  timeout inode");
+	pos = 128;
 /*
  *	This was very pretty but didn't work when a socket is destroyed
  *	at the wrong moment (eg a syn recv socket getting a reset), or
@@ -85,6 +89,12 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 		sp = s_array[i];
 		while(sp != NULL) 
 		{
+			pos += 128;
+			if (pos < offset)
+			{
+				sp = sp->next;
+				continue;
+			}
 			dest  = sp->daddr;
 			src   = sp->saddr;
 			destp = sp->dummy_th.dest;
@@ -109,8 +119,8 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 			    timer_active=timer_active2;
 			    timer_expires=sp->timer.expires;
 			}
-			len += sprintf(buffer+len, "%2d: %08lX:%04X %08lX:%04X"
-			    " %02X %08X:%08X %02X:%08lX %08X %d %d %ld\n",
+			sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
+				" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
 				i, src, srcp, dest, destp, sp->state, 
 				format==0?sp->write_seq-sp->rcv_ack_seq:sp->wmem_alloc, 
 				format==0?sp->acked_seq-sp->copied_seq:sp->rmem_alloc,
@@ -121,32 +131,28 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 				SOCK_INODE(sp->socket)->i_ino : 0);
 			if (timer_active1) add_timer(&sp->retransmit_timer);
 			if (timer_active2) add_timer(&sp->timer);
+			len += sprintf(buffer+len, "%-127s\n", tmpbuf);
 			/*
 			 * All sockets with (port mod SOCK_ARRAY_SIZE) = i
 			 * are kept in sock_array[i], so we must follow the
 			 * 'next' link to get them all.
 			 */
-			sp = sp->next;
-			pos=begin+len;
-			if(pos<offset)
-			{
-				len=0;
-				begin=pos;
-			}
-			if(pos>offset+length)
+			if(len >= length)
 				break;
+			sp = sp->next;
 		}
 		sti();	/* We only turn interrupts back on for a moment,
 			   but because the interrupt queues anything built
 			   up before this will clear before we jump back
 			   and cli(), so it's not as bad as it looks */
-		if(pos>offset+length)
+		if(len>= length)
 			break;
 	}
-	*start=buffer+(offset-begin);
-	len-=(offset-begin);
+	begin = len - (pos - offset);
+	*start = buffer + begin;
+	len -= begin;
 	if(len>length)
-	  	len=length;
+		len = length;
 	return len;
 } 
 

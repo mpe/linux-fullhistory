@@ -181,7 +181,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_TOS:		/* This sets both TOS and Precedence */
 			if (val<0 || val>63)	/* Reject setting of unused bits */
 				return -EINVAL;
-			if ((val&3) > 4 && !suser())	/* Only root can set Prec>4 */
+			if ((val&7) > 4 && !suser())	/* Only root can set Prec>4 */
 				return -EPERM;
 			sk->ip_tos=val;
 			switch (val & 0x38) {
@@ -297,7 +297,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				{
 					dev=rt->rt_dev;
 					route_src = rt->rt_src;
-					ATOMIC_DECR(&rt->rt_use);
+					atomic_dec(&rt->rt_use);
 					ip_rt_put(rt);
 				}
 			}
@@ -350,7 +350,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,0))!=NULL)
 			        {
 					dev=rt->rt_dev;
-					ATOMIC_DECR(&rt->rt_use);
+					atomic_dec(&rt->rt_use);
 					route_src = rt->rt_src;
 					ip_rt_put(rt);
 				}

@@ -611,7 +611,7 @@ static void
 set_multicast_list(struct device *dev)
 {
 /*
- * I _could_ do upto 6 addresses here, but wont (yet?)
+ * I _could_ do up to 6 addresses here, but won't (yet?)
  */
 
 #if 0

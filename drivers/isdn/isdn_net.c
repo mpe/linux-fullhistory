@@ -46,7 +46,7 @@
  * Correct ARP-handling for ETHERNET-encapsulation.
  *
  * Revision 1.2  1996/01/22 05:05:12  fritz
- * Changed returncode-logic for isdn_net_start_xmit() and it's
+ * Changed returncode-logic for isdn_net_start_xmit() and its
  * helper-functions.
  * Changed handling of buildheader for RAWIP and ETHERNET-encapsulation.
  *
@@ -195,7 +195,7 @@ isdn_net_autohup()
 /*
  * Handle status-messages from ISDN-interfacecard.
  * This function is called from within the main-status-dispatcher
- * isdn_status_callback, which itself is called from the lowlevel-driver.
+ * isdn_status_callback, which itself is called from the low-level driver.
  * Return: 1 = Event handled, 0 = not for us or unknown Event.
  */
 int
@@ -1200,7 +1200,7 @@ isdn_net_rebuild_header(void *buff, struct device *dev, ulong dst,
                         return 0;
                 }
                 /*
-                 *      Try and get ARP to resolve the header.
+                 *      Try to get ARP to resolve the header.
                  */
 #ifdef CONFIG_INET       
                 ret = arp_find((unsigned char *)&(eth->h_dest), dst, dev, dev->pa_addr,skb)? 1 : 0;
@@ -1775,7 +1775,7 @@ isdn_net_force_dial(char *name)
 }
 
 /*
- * Allocate a new network-interface and initialize it's data structures.
+ * Allocate a new network-interface and initialize its data structures.
  */
 char *
 isdn_net_new(char *name, struct device *master)

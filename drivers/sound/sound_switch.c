@@ -407,8 +407,6 @@ sound_write_sw (int dev, struct fileinfo *file, const char *buf, int count)
 int
 sound_open_sw (int dev, struct fileinfo *file)
 {
-  int             retval;
-
   DEB (printk ("sound_open_sw(dev=%d)\n", dev));
 
   if ((dev >= SND_NDEVS) || (dev < 0))
@@ -438,25 +436,37 @@ sound_open_sw (int dev, struct fileinfo *file)
 #ifdef CONFIG_SEQUENCER
     case SND_DEV_SEQ:
     case SND_DEV_SEQ2:
+    {
+      int retval;
+
       if ((retval = sequencer_open (dev, file)) < 0)
 	return retval;
       break;
+    }
 #endif
 
 #ifdef CONFIG_MIDI
     case SND_DEV_MIDIN:
+    {
+      int retval;
+
       if ((retval = MIDIbuf_open (dev, file)) < 0)
 	return retval;
       break;
+    }
 #endif
 
 #ifdef CONFIG_AUDIO
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
+    {
+      int retval;
+
       if ((retval = audio_open (dev, file)) < 0)
 	return retval;
       break;
+    }
 #endif
 
     default:

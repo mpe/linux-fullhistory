@@ -903,7 +903,7 @@ static unsigned short eexp_hw_lasttxstat(struct device *dev)
 
 /* 
  * This should never happen. It is called when some higher
- * routine detects the CU has stopped, to try and restart
+ * routine detects the CU has stopped, to try to restart
  * it from the last packet we knew we were working on,
  * or the idle loop if we had finished for the time.
  */

@@ -172,7 +172,7 @@
  *					ack if stat is TCP_CLOSED.
  *		Alan Cox	:	Look up device on a retransmit - routes may
  *					change. Doesn't yet cope with MSS shrink right
- *					but its a start!
+ *					but it's a start!
  *		Marc Tamsky	:	Closing in closing fixes.
  *		Mike Shaver	:	RFC1122 verifications.
  *		Alan Cox	:	rcv_saddr errors.
@@ -1962,7 +1962,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	/*
 	 *	SKIP devices set their MTU to 65535. This is so they can take packets
 	 *	unfragmented to security process then fragment. They could lie to the
-	 *	TCP layer about a suitable MTU, but its easier to let skip sort it out
+	 *	TCP layer about a suitable MTU, but it's easier to let skip sort it out
 	 *	simply because the final package we want unfragmented is going to be
 	 *
 	 *	[IPHDR][IPSP][Security data][Modified TCP data][Security data]

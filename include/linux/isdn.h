@@ -184,7 +184,7 @@ typedef struct {
 #ifdef CONFIG_ISDN_PPP
 
 #ifdef CONFIG_ISDN_PPP_VJ
-#  include "/usr/src/linux/drivers/net/slhc.h"
+#  include <net/slhc_vj.h>
 #endif
 
 #include <linux/ppp_defs.h>

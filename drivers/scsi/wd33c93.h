@@ -259,7 +259,7 @@ struct WD33C93_hostdata {
 /* defines for hostdata->level2 */
 /* NOTE: only the first 3 are implemented so far */
 
-/*  (The first 8 bits are reserved for compatibility. They function
+#define L2_NONE      1  /* no combination commands - we get lots of ints */
 #define L2_SELECT    2  /* start with SEL_ATN_XFER, but never resume it */
 #define L2_BASIC     3  /* resume after STATUS ints & RDP messages */
 #define L2_DATA      4  /* resume after DATA_IN/OUT ints */

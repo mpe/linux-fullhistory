@@ -22,7 +22,7 @@
 #endif
 
 /* These two have identical behaviour; use the second one if DOS fdisk gets
-   confused about extended/logical partitions starting past cylinder 1023. */	
+   confused about extended/logical partitions starting past cylinder 1023. */
 #define DOS_EXTENDED_PARTITION 5
 #define LINUX_EXTENDED_PARTITION 0x85
 

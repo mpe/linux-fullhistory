@@ -1569,12 +1569,26 @@ static struct file_system_type vfat_fs_type = {
 	vfat_read_super, "vfat", 1, NULL
 };
 
+static struct symbol_table vfat_syms = {
+#include <linux/symtab_begin.h>
+	X(vfat_create),
+	X(vfat_unlink),
+	X(vfat_mkdir),
+	X(vfat_rmdir),
+	X(vfat_rename),
+	X(vfat_put_super),
+	X(vfat_read_super),
+	X(vfat_read_inode),
+	X(vfat_lookup),
+#include <linux/symtab_end.h>
+};                                           
+
 int init_vfat_fs(void)
 {
 	int status;
 
 	if ((status = register_filesystem(&vfat_fs_type)) == 0)
-		status = register_symtab(0);
+		status = register_symtab(&vfat_syms);
 	return status;
 }
 

@@ -122,6 +122,14 @@ E: hennus@sky.ow.nl [My uucp-fed Linux box at home]
 D: Author and maintainer of the QIC-02 tape driver
 S: The Netherlands
 
+N: Thomas Bogendoerfer
+E: tsbogend@bigbug.franken.de
+D: Lance32 driver
+D: strace for Linux/Alpha
+S: Baumgartenweg 5
+S: 91452 Wilhermsdorf
+S: Germany
+
 N: Ross Biro
 E: bir7@leland.Stanford.Edu
 D: Original author of the Linux networking code
@@ -423,14 +431,6 @@ D: Iomega PPA / ZIP driver
 S: 906-1001 Bay St.
 S: Toronto, Ontario, M5S 3A6 
 S: Canada
-
-N: Miquel van Smoorenburg
-E: miquels@cistron.nl
-D: Kernel and net hacker. Sysvinit, minicom. doing Debian stuff.
-S: Cistron Internet Services
-S: PO-Box 297
-S: 2400 AG, Alphen aan den Rijn
-S: The Netherlands
 
 N: Danny ter Haar
 E: dth@cistron.nl
@@ -1085,6 +1085,14 @@ E: csmith@convex.com
 D: HPFS filesystem
 S: Richardson, Texas
 S: USA
+
+N: Miquel van Smoorenburg
+E: miquels@cistron.nl
+D: Kernel and net hacker. Sysvinit, minicom. doing Debian stuff.
+S: Cistron Internet Services
+S: PO-Box 297
+S: 2400 AG, Alphen aan den Rijn
+S: The Netherlands
 
 N: Scott Snyder
 E: snyder@fnald0.fnal.gov

@@ -215,7 +215,7 @@ extern __inline__ int random(void)
 }
 
 /*
- *	Inlined as its only called once.
+ *	Inlined as it's only called once.
  */
 
 static void igmp_start_timer(struct ip_mc_list *im,unsigned char max_resp_time)

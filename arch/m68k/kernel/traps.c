@@ -392,7 +392,7 @@ static inline void bus_error030 (struct frame *fp)
 			}
 			printk ("BAD KERNEL BUSERR\n");
 			die_if_kernel("Oops",&fp->ptregs,0);
-			send_sig(SIGSEGV, current, 1);
+			force_sig(SIGSEGV, current);
 			user_space_fault = 0;
 		}
 	} else {
@@ -447,7 +447,7 @@ static inline void bus_error030 (struct frame *fp)
 			    !(ssw & RW) ? "write" : "read", addr,
 			    fp->ptregs.pc);
 		    die_if_kernel("Oops",&fp->ptregs,mmusr);
-		    send_sig(SIGSEGV, current, 1);
+		    force_sig(SIGSEGV, current);
 		    return;
 	    } else {
 #ifdef DEBUG
@@ -478,7 +478,7 @@ static inline void bus_error030 (struct frame *fp)
 		    printk("Unknown SIGSEGV - 1\n");
 #endif
 		    die_if_kernel("Oops",&fp->ptregs,mmusr);
-		    send_sig(SIGSEGV, current, 1);
+		    force_sig(SIGSEGV, current);
 		    return;
 	    }
 
@@ -576,7 +576,7 @@ static inline void bus_error030 (struct frame *fp)
 		printk("Unknown SIGSEGV - 2\n");
 #endif
 		die_if_kernel("Oops",&fp->ptregs,mmusr);
-		send_sig(SIGSEGV, current, 1);
+		force_sig(SIGSEGV, current);
 		return;
 	} else {
 #ifdef DEBUG
@@ -609,7 +609,7 @@ static inline void bus_error030 (struct frame *fp)
 		printk("Unknown SIGSEGV - 3\n");
 #endif
 		die_if_kernel("Oops",&fp->ptregs,mmusr);
-		send_sig(SIGSEGV, current, 1);
+		force_sig(SIGSEGV, current);
 		return;
 	}
 
@@ -644,7 +644,7 @@ asmlinkage void buserr_c(struct frame *fp)
 #if DEBUG
 	  printk("Unknown SIGSEGV - 4\n");
 #endif
-	  send_sig(SIGSEGV, current, 1);
+	  force_sig(SIGSEGV, current);
 	}
 }
 
@@ -871,7 +871,7 @@ asmlinkage void trap_c(struct frame *fp)
 		break;
 	}
 
-	send_sig (sig, current, 1);
+	force_sig (sig, current);
 }
 
 asmlinkage void set_esp0 (unsigned long ssp)

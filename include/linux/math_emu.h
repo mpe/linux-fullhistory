@@ -1,6 +1,10 @@
 #ifndef _LINUX_MATH_EMU_H
 #define _LINUX_MATH_EMU_H
 
+
+void restore_i387_soft(struct _fpstate *buf);
+struct _fpstate * save_i387_soft(struct _fpstate * buf);
+
 struct fpu_reg {
 	char sign;
 	char tag;

@@ -955,7 +955,7 @@ static int sdla_close(struct device *dev)
    }
 
    memset(&intr, 0, sizeof(intr));
-   /* lets start up the reception */
+   /* let's start up the reception */
    switch(flp->type)
    {
       case SDLA_S502A:
@@ -1028,7 +1028,7 @@ static int sdla_open(struct device *dev)
 
    sdla_cmd(dev, SDLA_ENABLE_COMMUNICATIONS, 0, 0, NULL, 0, NULL, NULL);
 
-   /* lets start up the reception */
+   /* let's start up the reception */
    memset(&intr, 0, sizeof(intr));
    switch(flp->type)
    {

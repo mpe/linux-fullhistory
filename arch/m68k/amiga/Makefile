@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := amiga.o
-O_OBJS	 := config.o amikeyb.o amiints.o amipart.o \
+O_OBJS	 := config.o amikeyb.o amiints.o \
 	   chipram.o amisound.o amifb.o zorro.o
 OX_OBJS = ksyms.o
 

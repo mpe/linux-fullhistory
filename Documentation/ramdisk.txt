@@ -79,7 +79,7 @@ starting at an offset of 400kB, you would use "ramdisk_start=400".
 	load_ramdisk=N
 	==============
 
-This parameter tells the kernel whether it is to try and load a
+This parameter tells the kernel whether it is to try to load a
 ramdisk image or not. Specifying "load_ramdisk=1" will tell the
 kernel to load a floppy into the ramdisk. The default value is
 zero, meaning that the kernel should not try to load a ramdisk.
@@ -194,7 +194,7 @@ f) Put the ramdisk image onto the floppy, after the kernel. Use an offset
 	dd if=/tmp/ram_image.gz of=/dev/fd0 bs=1k seek=400
 
 g) Use "rdev" to set the boot device, ramdisk offset, prompt flag, etc.
-   For ramdisk_start=400, load_ramdisk=1, ramdisk_start=400, one would
+   For prompt_ramdisk=1, load_ramdisk=1, ramdisk_start=400, one would
    have 2^15 + 2^14 + 400 = 49552.
 
 	rdev /dev/fd0 /dev/fd0

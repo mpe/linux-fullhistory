@@ -639,7 +639,7 @@ static int flock_lock_file(struct file *filp, struct file_lock *caller,
 				locks_free_lock(new_fl);
 				return (-ERESTARTSYS);
 			}
-			/* Try to avoid deadlocks due to pathalogical programs that
+			/* Try to avoid deadlocks due to pathological programs that
 			 * mix calls to flock() and fcntl(). Return EAGAIN, because
 			 * EDEADLOCK isn't a documented return value for flock().
 			 */

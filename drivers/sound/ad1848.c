@@ -1187,7 +1187,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
      * Check that the I/O address is in use.
      *
      * The bit 0x80 of the base I/O port is known to be 0 after the
-     * chip has performed it's power on initialization. Just assume
+     * chip has performed its power-on initialization. Just assume
      * this has happened before the OS is starting.
      *
      * If the I/O address is unused, it typically returns 0xff.
@@ -1233,7 +1233,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
     }
 
   /*
-     * The indirect register I12 has some read only bits. Lets
+     * The indirect register I12 has some read only bits. Let's
      * try to change them.
    */
 

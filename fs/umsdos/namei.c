@@ -433,7 +433,7 @@ static int umsdos_symlink_x(
 		in unused entry of the EMD file. The other is to have a separate
 		file dedicated to hold all symbolic links data.
 
-		Lets go for simplicity...
+		Let's go for simplicity...
 	*/
 	struct inode *inode;
 	int ret;

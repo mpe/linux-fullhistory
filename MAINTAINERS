@@ -7,13 +7,13 @@ trivial patch so apply some common sense.
 1.	Always _test_ your changes, however small, on at least 4 or
 	5 people, preferably many more.
 
-2.	Try and release a few ALPHA test versions to the net. Announce
+2.	Try to release a few ALPHA test versions to the net. Announce
 	them onto the kernel channel and await results. This is especially
-	important for device drivers, because often thats the only way
+	important for device drivers, because often that's the only way
 	you will find things like the fact version 3 firmware needs
 	a magic fix you didn't know about, or some clown changed the
 	chips on a board and not its name.  (Don't laugh!  Look at the
-	SMC etherpower for that).
+	SMC etherpower for that.)
 
 3.	Make sure your changes compile correctly in multiple
 	configurations.
@@ -30,7 +30,7 @@ trivial patch so apply some common sense.
 	your driver to get around a problem actual needs to become a
 	generalised kernel feature ready for next time.
 
-	PLEASE try and include any credit lines you want added with the
+	PLEASE try to include any credit lines you want added with the
 	patch. It avoids people being missed off by mistake and makes
 	it easier to know who wants adding and who doesn't.
 
@@ -71,6 +71,12 @@ S: Status, one of the following:
 3C501 NETWORK DRIVER
 P:	Alan Cox
 M:	net-patches@lxorguk.ukuu.org.uk
+L:	linux-net@vger.rutgers.edu
+S:	Maintained
+
+8390 NETWORK DRIVERS [WD80x3/SMC-ELITE, SMC-ULTRA, NE2000, 3C503, etc.]
+P:	Paul Gortmaker
+M	gpg109@rsphy1.anu.edu.au
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
@@ -226,6 +232,12 @@ M:	longyear@netcom.com, Cc: longyear@sii.com
 L:	linux-ppp@vger.rutgers.edu
 S:	Maintained
 
+REAL TIME CLOCK DRIVER
+P:	Paul Gortmaker
+M	gpg109@rsphy1.anu.edu.au
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 STARMODE RADIO IP (STRIP) PROTOCOL DRIVER
 P:     Stuart Cheshire
 M:     cheshire@cs.stanford.edu
@@ -286,6 +298,12 @@ MENUCONFIG:
 P:	William Roadcap
 M:	roadcapw@cfw.com
 L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+LANCE AND LANCE32 NETWORK DRIVER
+P:	Thomas Bogendoerfer
+M:	tsbogend@bigbug.franken.de
+L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
 REST:

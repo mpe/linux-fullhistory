@@ -71,7 +71,7 @@ struct hh_cache
 					 * any address resolution module,
 					 * not only ARP.
 					 */
-	unsigned int	hh_refcnt;	/* number of users */
+	int		hh_refcnt;	/* number of users */
 	unsigned short  hh_type;	/* protocol identifier, f.e ETH_P_IP */
 	char		hh_uptodate;	/* hh_data is valid */
 	char		hh_data[16];    /* cached hardware header */
@@ -218,7 +218,7 @@ extern struct packet_type *ptype_base[16];
 
 extern int		ip_addr_match(unsigned long addr1, unsigned long addr2);
 extern int		ip_chk_addr(unsigned long addr);
-extern struct device	*ip_dev_check(unsigned long daddr);
+extern struct device	*ip_dev_bynet(unsigned long daddr, unsigned long mask);
 extern unsigned long	ip_my_addr(void);
 extern unsigned long	ip_get_mask(unsigned long addr);
 extern struct device 	*ip_dev_find(unsigned long addr);
@@ -246,7 +246,7 @@ extern void		dev_init(void);
 extern int		dev_lockct;
 
 /*
- *	These two dont currently need to be interrupt safe
+ *	These two don't currently need to be interrupt-safe
  *	but they may do soon. Do it properly anyway.
  */
 

@@ -495,7 +495,7 @@ void cleanup_module()
 /*
  *	Free up all allocated resources used by the ports. This includes
  *	memory and interrupts. As part of this process we will also do
- *	a hangup on every open port - to try and flush out any processes
+ *	a hangup on every open port - to try to flush out any processes
  *	hanging onto ports.
  */
 	i = tty_unregister_driver(&stl_serial);
@@ -2383,7 +2383,7 @@ static int stl_mapirq(int irq)
 /*****************************************************************************/
 
 /*
- *	Try and find and initialize all the ports on a panel. We don't care
+ *	Try to find and initialize all the ports on a panel. We don't care
  *	what sort of board these ports are on - since the port io registers
  *	are almost identical when dealing with ports.
  */
@@ -2861,7 +2861,7 @@ static int stl_initbrds()
 
 #ifdef CONFIG_PCI
 /*
- *	If the PCI BIOS support is compiled in then lets go looking for
+ *	If the PCI BIOS support is compiled in then let's go looking for
  *	ECH-PCI boards.
  */
 	stl_findpcibrds();

@@ -14,7 +14,6 @@ do { 	\
 		__asm__ __volatile__("pflusha\n"::); \
 } while (0)
 
-#if 1
 static inline void __flush_tlb_one(unsigned long addr)
 {
 	if (m68k_is040or060) {
@@ -24,9 +23,6 @@ static inline void __flush_tlb_one(unsigned long addr)
 	} else
 		__asm__ __volatile__("pflush #0,#0,(%0)" : : "a" (addr));
 }
-#else
-#define __flush_tlb_one(addr) __flush_tlb()
-#endif
 
 #define flush_tlb() __flush_tlb()
 #define flush_tlb_all() flush_tlb()
@@ -573,15 +569,14 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 
 /*
  * I don't know what is going on here, but since these were changed,
- * swapping haven't been working on the 68040.
+ * swapping hasn't been working on the 68040.
  */
 
-#if 0
 #define SWP_TYPE(entry)  (((entry) >> 2) & 0x7f)
+#if 0
 #define SWP_OFFSET(entry) ((entry) >> 9)
 #define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << 9))
 #else
-#define SWP_TYPE(entry)  (((entry) & 0x1fc) >> 2)
 #define SWP_OFFSET(entry) ((entry) >> PAGE_SHIFT)
 #define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << PAGE_SHIFT))
 #endif

@@ -13,7 +13,7 @@
  *		2 of the License, or (at your option) any later version.
  *
  *	History
- *	AX.25 006	Alan(GW4PTS)		Nearly died of shock - its working 8-)
+ *	AX.25 006	Alan(GW4PTS)		Nearly died of shock - it's working 8-)
  *	AX.25 007	Alan(GW4PTS)		Removed the silliest bugs
  *	AX.25 008	Alan(GW4PTS)		Cleaned up, fixed a few state machine problems, added callbacks
  *	AX.25 009	Alan(GW4PTS)		Emergency patch kit to fix memory corruption
@@ -25,7 +25,7 @@
  *						Correct receive on SOCK_DGRAM.
  *	AX.25 013	Alan(GW4PTS)		Send DM to all unknown frames, missing initialiser fixed
  *						Leave spare SSID bits set (DAMA etc) - thanks for bug report,
- *						removed device registration (its not used or needed). Clean up for
+ *						removed device registration (it's not used or needed). Clean up for
  *						gcc 2.5.8. PID to AX25_P_
  *	AX.25 014	Alan(GW4PTS)		Cleanup and NET3 merge
  *	AX.25 015	Alan(GW4PTS)		Internal test version.
@@ -409,7 +409,7 @@ static void ax25_destroy_timer(unsigned long data)
  *	Once it is removed from the queue no interrupt or bottom half will
  *	touch it and we are (fairly 8-) ) safe.
  */
-void ax25_destroy_socket(ax25_cb *ax25)	/* Not static as its used by the timer */
+void ax25_destroy_socket(ax25_cb *ax25)	/* Not static as it's used by the timer */
 {
 	struct sk_buff *skb;
 	unsigned long flags;
@@ -1893,7 +1893,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
  */
 static int kiss_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 {
-	skb->sk = NULL;		/* Initially we don't know who its for */
+	skb->sk = NULL;		/* Initially we don't know who it's for */
 
 	if ((*skb->data & 0x0F) != 0) {
 		kfree_skb(skb, FREE_READ);	/* Not a KISS data frame */
@@ -1914,7 +1914,7 @@ static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *
 	ax25_address *port_call;
 	int len;
 
-	skb->sk = NULL;		/* Initially we don't know who its for */
+	skb->sk = NULL;		/* Initially we don't know who it's for */
 
 	if ((port_call = ax25_bpq_get_addr(dev)) == NULL) {
 		kfree_skb(skb, FREE_READ);	/* We have no port callsign */
@@ -2546,7 +2546,7 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
 		if (mode == 'V' || mode == 'v' || (mode == ' ' && ax25_dev_get_value(dev, AX25_VALUES_IPDEFMODE) == 'V')) 
 		{
 			/*
-			 *	This is a workaround to try and keep the device locking
+			 *	This is a workaround to try to keep the device locking
 			 *	straight until skb->free=0 is abolished post 1.4.
 			 *
 			 *	We clone the buffer and release the original thereby

@@ -395,7 +395,7 @@ static int sock_write(struct inode *inode, struct file *file, const char *ubuf, 
 
 /*
  *	With an ioctl arg may well be a user mode pointer, but we don't know what to do
- *	with it - thats up to the protocol still.
+ *	with it - that's up to the protocol still.
  */
 
 int sock_ioctl(struct inode *inode, struct file *file, unsigned int cmd,

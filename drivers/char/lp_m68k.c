@@ -236,13 +236,13 @@ static int lp_write_interrupt(struct inode *inode, struct file *file,
 	   been printed at all. */
 	
 	if (lp_table[dev].lp_has_pout(dev)) {
-	  printk("lp%d: paper-out\n",dev);
+	  printk(KERN_NOTICE "lp%d: paper-out\n",dev);
 	  if (!rc) rc = -ENOSPC;
 	} else if (!lp_table[dev].lp_is_online(dev)) {
-	  printk("lp%d: off-line\n",dev);
+	  printk(KERN_NOTICE "lp%d: off-line\n",dev);
 	  if (!rc) rc = -EIO;
 	} else if (lp_table[dev].lp_is_busy(dev)) {
-	  printk("lp%d: on fire\n",dev);
+	  printk(KERN_NOTICE "lp%d: on fire\n",dev);
 	  if (!rc) rc = -EIO;
 	}
 	if (lp_table[dev].flags & LP_ABORT)
@@ -294,14 +294,14 @@ static int lp_write_polled(struct inode *inode, struct file *file,
 #endif
 		} else { /* if printer timed out */
 			if (lp_table[dev].lp_has_pout(dev)) {
-				printk("lp%d: out of paper\n",dev);
+				printk(KERN_NOTICE "lp%d: out of paper\n",dev);
 				if (lp_table[dev].flags & LP_ABORT)
 					return temp - buf ? temp-buf : -ENOSPC;
 				current->state = TASK_INTERRUPTIBLE;
 				current->timeout = jiffies + LP_TIMEOUT_POLLED;
 				schedule();
 			} else if (!lp_table[dev].lp_is_online(dev)) {
-				printk("lp%d: off-line\n",dev);
+				printk(KERN_NOTICE "lp%d: off-line\n",dev);
 				if (lp_table[dev].flags & LP_ABORT)
 					return temp - buf ? temp-buf : -EIO;
 				current->state = TASK_INTERRUPTIBLE;
@@ -310,7 +310,7 @@ static int lp_write_polled(struct inode *inode, struct file *file,
 			} else
 	                /* not offline or out of paper. on fire? */
 			if (lp_table[dev].lp_is_busy(dev)) {
-				printk("lp%d: on fire\n",dev);
+				printk(KERN_NOTICE "lp%d: on fire\n",dev);
 				if (lp_table[dev].flags & LP_ABORT)
 					return temp - buf ? temp-buf : -EFAULT;
 				current->state = TASK_INTERRUPTIBLE;
@@ -447,7 +447,7 @@ int lp_init(void)
 
 #if WHICH_DRIVER == FORCE_POLLING
 	lp_irq = 0;
-	printk("lp_init: lp using polling driver\n");
+	printk(KERN_INFO "lp_init: lp using polling driver\n");
 #else
 
 #ifdef CONFIG_AMIGA
@@ -462,13 +462,13 @@ int lp_init(void)
 #endif
 
 	if (lp_irq)
-		printk("lp_init: lp using interrupt\n");
+		printk(KERN_INFO "lp_init: lp using interrupt\n");
 	else
 
 #if WHICH_DRIVER == PREFER_INTERRUPT
-		printk("lp_init: lp using polling driver\n");
+		printk(KERN_INFO "lp_init: lp using polling driver\n");
 #else
-		printk("lp_init: cant get interrupt, and polling driver not configured\n");
+		printk(KERN_WARNING "lp_init: can't get interrupt, and polling driver not configured\n");
 #endif
 #endif
 

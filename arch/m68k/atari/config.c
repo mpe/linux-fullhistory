@@ -60,7 +60,6 @@ extern int atari_mste_hwclk (int, struct hwclk_time *);
 extern int atari_hwclk (int, struct hwclk_time *);
 extern int atari_mste_set_clock_mmss (unsigned long);
 extern int atari_set_clock_mmss (unsigned long);
-extern void atari_check_partition (struct gendisk *hd, unsigned int dev);
 extern void atari_mksound( unsigned int count, unsigned int ticks );
 extern void atari_reset( void );
 #ifdef CONFIG_BLK_DEV_FD
@@ -214,7 +213,6 @@ void config_atari(void)
     mach_disable_irq     = atari_disable_irq;
     mach_get_irq_list	 = atari_get_irq_list;
     mach_gettimeoffset   = atari_gettimeoffset;
-    mach_check_partition = atari_check_partition;
     mach_mksound         = atari_mksound;
     mach_reset           = atari_reset;
 #ifdef CONFIG_BLK_DEV_FD

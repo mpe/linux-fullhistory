@@ -22,7 +22,7 @@ if [ "$CONFIG_NET_ALIAS" = "y" ]; then
 	tristate 'IP: aliasing support' CONFIG_IP_ALIAS
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  if [ "$CONFIG_KERNELD" = "y" ]; then
+  if [ "$CONFIG_NETLINK" = "y" ]; then
     bool 'IP: ARP daemon support (EXPERIMENTAL)' CONFIG_ARPD
   fi
 fi

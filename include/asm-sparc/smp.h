@@ -26,7 +26,7 @@ extern struct prom_cpuinfo linux_cpus[NCPUS];
 /* Per processor Sparc parameters we need. */
 
 struct cpuinfo_sparc {
-	unsigned long udelay_val; /* thats it */
+	unsigned long udelay_val; /* that's it */
 };
 
 extern struct cpuinfo_sparc cpu_data[NR_CPUS];

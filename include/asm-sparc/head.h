@@ -90,7 +90,7 @@
 #define NMI_TRAP \
         rd %wim, %l3; b linux_trap_nmi_sun4c; mov %psr, %l0; nop;
 
-/* Window overflows/underflows are special and we need to try and be as
+/* Window overflows/underflows are special and we need to try to be as
  * efficient as possible here....
  */
 #define WINDOW_SPILL \

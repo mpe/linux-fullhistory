@@ -2049,7 +2049,7 @@ void console_print(const char * b)
    /* undraw cursor first */
    hide_cursor(currcons);
 
-   /* Contrived structure to try and emulate original need_wrap behaviour
+   /* Contrived structure to try to emulate original need_wrap behaviour
     * Problems caused when we have need_wrap set on '\n' character */
    
    while ((c = *(b++)) != 0) {

@@ -154,7 +154,7 @@ int eth_rebuild_header(void *buff, struct device *dev, unsigned long dst,
 	}
 
 	/*
-	 *	Try and get ARP to resolve the header.
+	 *	Try to get ARP to resolve the header.
 	 */
 #ifdef CONFIG_INET	 
 	return arp_find(eth->h_dest, dst, dev, dev->pa_addr, skb)? 1 : 0;

@@ -376,7 +376,7 @@ o	TCP socket cache gets things wrong very very occasionally under high
 	load.						[TRYING THINGS]
 o	AX.25/NetROM needs more locking.
 o	NFS flow control is needed with the new multirequest NFS support.
-o	Need to be able to turn off the intelligent arp refreshing as its not so
+o	Need to be able to turn off the intelligent arp refreshing as it's not so
 	hot over AX.25 and upsets some people with very dumb ISDN bridges.
 o	Matti Arnio's TCP problem.
 o	Should unix domain connect never block ?
@@ -435,7 +435,7 @@ working out how to do it so it runs like greased lightning. Quite a big
 problem. [See the LiS project]
 
 10.	Frame Relay/WAN/ISDN drivers [I'm working on the sonix EuroISDN board
-driver but thats for an internal project and its general release is still
+driver but that's for an internal project and its general release is still
 a maybe (so is finishing it ;))][Jim Freeman is working on Frame Relay as is
 Mike McLagan][Friz Elfert is doing the isdn4linux kit].
  

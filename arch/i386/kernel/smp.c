@@ -56,7 +56,7 @@ int smp_threads_ready=0;				/* Set when the idlers are all forked 			*/
 volatile int cpu_number_map[NR_CPUS];			/* which CPU maps to which logical number		*/
 volatile int cpu_logical_map[NR_CPUS];			/* which logical number maps to which CPU		*/
 volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};	/* We always use 0 the rest is ready for parallel delivery */
-volatile unsigned long smp_invalidate_needed;		/* Used for the invalidate map thats also checked in the spinlock */
+volatile unsigned long smp_invalidate_needed;		/* Used for the invalidate map that's also checked in the spinlock */
 struct cpuinfo_x86 cpu_data[NR_CPUS];			/* Per cpu bogomips and other parameters 		*/
 static unsigned int num_processors = 1;			/* Internal processor count				*/
 static unsigned long io_apic_addr = 0xFEC00000;		/* Address of the I/O apic (not yet used) 		*/
@@ -448,7 +448,7 @@ static unsigned char trampoline_data[]={
 /*
  *	Currently trivial. Write the real->protected mode
  *	bootstrap into the page concerned. The caller
- *	has made sure its suitably aligned.
+ *	has made sure it's suitably aligned.
  */
  
 static void install_trampoline(unsigned char *mp)
@@ -1094,7 +1094,7 @@ void smp_flush_tlb(void)
 /*	printk("SMI-");*/
 	
 	/*
-	 *	The assignment is safe because its volatile so the compiler cannot reorder it,
+	 *	The assignment is safe because it's volatile so the compiler cannot reorder it,
 	 *	because the i586 has strict memory ordering and because only the kernel lock holder
 	 *	may issue a tlb flush. If you break any one of those three change this to an atomic
 	 *	bus locked or.
@@ -1104,7 +1104,7 @@ void smp_flush_tlb(void)
 	
 	/*
 	 *	Processors spinning on the lock will see this IRQ late. The smp_invalidate_needed map will
-	 *	ensure they dont do a spurious flush tlb or miss one.
+	 *	ensure they don't do a spurious flush tlb or miss one.
 	 */
 	 
 	save_flags(flags);

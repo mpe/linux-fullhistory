@@ -198,7 +198,7 @@ static void raw_getrawfrag(const void *p, __u32 saddr, char *to, unsigned int of
 		if(!iph->saddr)
 			iph->saddr=saddr;
 		iph->check=0;
-		iph->tot_len=htons(fraglen);	/* This is right as you cant frag
+		iph->tot_len=htons(fraglen);	/* This is right as you can't frag
 					   RAW packets */
 		/*
 	 	 *	Deliberate breach of modularity to keep 

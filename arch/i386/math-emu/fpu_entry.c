@@ -1,11 +1,11 @@
 /*---------------------------------------------------------------------------+
  |  fpu_entry.c                                                              |
  |                                                                           |
- | The entry function for wm-FPU-emu                                         |
+ | The entry functions for wm-FPU-emu                                        |
  |                                                                           |
- | Copyright (C) 1992,1993,1994                                              |
- |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ | Copyright (C) 1992,1993,1994,1996                                         |
+ |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
+ |                  E-mail   billm@jacobi.maths.monash.edu.au                |
  |                                                                           |
  | See the files "README" and "COPYING" for further copyright and warranty   |
  | information.                                                              |
@@ -20,7 +20,8 @@
  +---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------+
- | math_emulate() is the sole entry point for wm-FPU-emu                     |
+ | math_emulate(), restore_i387_soft() and save_i387_soft() are the only     |
+ | entry points for wm-FPU-emu.                                              |
  +---------------------------------------------------------------------------*/
 
 #include <linux/signal.h>
@@ -159,8 +160,9 @@ asmlinkage void math_emulate(long arg)
 	{
 	  /* Make sure that the registers are compatible
 	     with the assumptions of the emulator. */
-	  regs[i].exp = 0;
-	  regs[i].sigh = 0x80000000;
+	  if ( !((regs[i].exp == EXP_UNDER) && (regs[i].sigh == 0)
+		 && (regs[i].sigl == 0)) )
+	    regs[i].sigh |= 0x80000000;
 	}
       finit();
       current->used_math = 1;
@@ -283,24 +285,8 @@ do_another_FPU_instruction:
 	  /*
 	   *  We need to simulate the action of the kernel to FPU
 	   *  interrupts here.
-	   *  Currently, the "real FPU" part of the kernel (0.99.10)
-	   *  clears the exception flags, sets the registers to empty,
-	   *  and passes information back to the interrupted process
-	   *  via the cs selector and operand selector, so we do the same.
 	   */
 	do_the_FPU_interrupt:
-	  instruction_address.selector = status_word();
-      	  operand_address.selector = tag_word();
-	  partial_status = 0;
-	  top = 0;
-	  {
-	    int r;
-	    for (r = 0; r < 8; r++)
-	      {
-		regs[r].tag = TW_Empty;
-	      }
-	  }
-
 	  FPU_EIP = FPU_ORIG_EIP;	/* Point to current FPU instruction. */
 
 	  RE_ENTRANT_CHECK_OFF;
@@ -687,4 +673,23 @@ void math_abort(struct info * info, unsigned int signal)
 #ifdef PARANOID
       printk("ERROR: wm-FPU-emu math_abort failed!\n");
 #endif PARANOID
+}
+
+
+
+void restore_i387_soft(struct _fpstate *buf)
+{
+  fpu_addr_modes addr_modes = {{ 0, 0, PREFIX_DEFAULT }, 0};
+
+  frstor(addr_modes, (char *)buf);
+}
+
+
+struct _fpstate * save_i387_soft(struct _fpstate * buf)
+{
+  fpu_addr_modes addr_modes = {{ 0, 0, PREFIX_DEFAULT }, 0};
+
+  fsave(addr_modes, (char *)buf);
+
+  return buf;
 }

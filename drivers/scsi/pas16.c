@@ -311,7 +311,7 @@ int     pas16_hw_detect( unsigned short  board_num )
 
     /* Mediavision has some new model boards that return ID bits
      * that indicate a SCSI interface, but they're not (LMS).  We'll
-     * put in an additional test to try and weed them out.
+     * put in an additional test to try to weed them out.
      */
 
     outb( 0x01, io_port + WAIT_STATE ); 	/* 1 Wait state */

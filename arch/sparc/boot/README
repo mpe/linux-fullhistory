@@ -4,7 +4,7 @@ is real ugly and it knows too much.  It must be able to not only boot
 off of the root partition but also be able to netboot.  This means
 that it knows about RPC and NFS (bleech, yuck, eeewwwww!!) so that it
 can remote mount the root directory to fetch the kernel.  Also it must
-be able to ARP for it's IP address and who it's boot server is.  I
+be able to ARP for its IP address and who its boot server is.  I
 think I'm getting sick.
 
 Regardless for now I will concentrate on the low-level stuff necessary

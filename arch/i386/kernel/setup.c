@@ -207,7 +207,8 @@ void setup_arch(char **cmdline_p,
 static const char * i486model(unsigned int nr)
 {
 	static const char *model[] = {
-		"0", "DX","SX","DX/2","4","SX/2","6","DX/2-WB","DX/4","DX/4-WB"
+		"0","DX","SX","DX/2","4","SX/2","6","DX/2-WB","DX/4","DX/4-WB",
+		"10","11","12","13","Am5x85-WT","Am5x86-WB"
 	};
 	if (nr < sizeof(model)/sizeof(char *))
 		return model[nr];
@@ -325,7 +326,7 @@ int get_cpuinfo(char * buffer)
                                 }
                         }
                         len += sprintf(buffer+len,
-                                       "\nbogomips:\t: %lu.%02lu\n",
+                                       "\nbogomips\t: %lu.%02lu\n",
                                        CD(loops_per_sec)/500000,
                                        (CD(loops_per_sec)/5000) % 100);
 #ifdef __SMP__

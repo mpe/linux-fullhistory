@@ -133,12 +133,12 @@ static void figure_loop_size(struct loop_device *lo)
 	int	size;
 
 	if (S_ISREG(lo->lo_inode->i_mode))
-		size = (lo->lo_inode->i_size - lo->lo_offset) / 1024;
+		size = (lo->lo_inode->i_size - lo->lo_offset) / BLOCK_SIZE;
 	else {
-		if (blk_size[MAJOR(lo->lo_device)])
-			size = ((blk_size[MAJOR(lo->lo_device)]
-				 [MINOR(lo->lo_device)]) -
-				(lo->lo_offset/1024));
+		kdev_t lodev = lo->lo_device;
+		if (blk_size[MAJOR(lodev)])
+			size = blk_size[MAJOR(lodev)][MINOR(lodev)] -
+                                lo->lo_offset / BLOCK_SIZE;
 		else
 			size = MAX_DISK_SIZE;
 	}
@@ -307,11 +307,15 @@ static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 static int loop_set_status(struct loop_device *lo, struct loop_info *arg)
 {
 	struct loop_info info;
+	int err;
 
 	if (!lo->lo_inode)
 		return -ENXIO;
 	if (!arg)
 		return -EINVAL;
+	err = verify_area(VERIFY_READ, arg, sizeof(info));
+	if (err)
+		return err;
 	memcpy_fromfs(&info, arg, sizeof(info));
 	if ((unsigned int) info.lo_encrypt_key_size > LO_KEY_SIZE)
 		return -EINVAL;
@@ -349,11 +353,15 @@ static int loop_set_status(struct loop_device *lo, struct loop_info *arg)
 static int loop_get_status(struct loop_device *lo, struct loop_info *arg)
 {
 	struct loop_info	info;
+	int err;
 	
 	if (!lo->lo_inode)
 		return -ENXIO;
 	if (!arg)
 		return -EINVAL;
+	err = verify_area(VERIFY_WRITE, arg, sizeof(info));
+	if (err)
+		return err;
 	memset(&info, 0, sizeof(info));
 	info.lo_number = lo->lo_number;
 	info.lo_device = kdev_t_to_nr(lo->lo_inode->i_dev);

@@ -150,7 +150,7 @@
                 Werner Zimmermann, April 29, 96
         V2.40   Reorganized the placement of functions in the source code file
                 to reflect the layered approach; did not actually change code
-                Werner Zimmermann, Mai 1, 96
+                Werner Zimmermann, May 1, 96
 */
 #include <linux/module.h>
 #include <linux/errno.h>

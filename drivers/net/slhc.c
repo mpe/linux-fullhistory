@@ -78,7 +78,7 @@
 #include <asm/segment.h>
 #include <linux/mm.h>
 #include <net/checksum.h>
-#include "slhc.h"
+#include <net/slhc_vj.h>
 
 #ifdef __alpha__
 # include <asm/unaligned.h>

@@ -13,7 +13,7 @@
  * 	This driver is for PCnet32 and PCnetPCI based ethercards
  */
 
-static const char *version = "lance32.c:v0.02 17.3.96 tsbogend@bigbug.franken.de\n";
+static const char *version = "lance32.c:v0.10 28.4.96 tsbogend@bigbug.franken.de\n";
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -55,6 +55,11 @@ int lance32_debug = 1;
  *         only tested on Alpha Noname Board
  * v0.02:  changed IRQ handling for new interrupt scheme (dev_id)
  *         tested on a ASUS SP3G
+ * v0.10:  fixed a odd problem with the 79C794 in a Compaq Deskpro XL
+ *         looks like the 974 doesn't like stopping and restarting in a
+ *         short period of time; now we do a reinit of the lance; the
+ *         bug was triggered by doing ifconfig eth0 <ip> broadcast <addr>
+ *         and hangs the machine (thanks to Klaus Liedl for debugging)
  */
 
 
@@ -320,7 +325,11 @@ lance32_open(struct device *dev)
 		           (u32) virt_to_bus(lp->rx_ring),
 			   (u32) virt_to_bus(&lp->init_block));
 
+	lp->init_block.mode = 0x0000;
+	lp->init_block.filter[0] = 0x00000000;
+	lp->init_block.filter[1] = 0x00000000;
 	lance32_init_ring(dev);
+    
 	/* Re-initialize the LANCE, and start it when done. */
 	outw(0x0001, ioaddr+LANCE_ADDR);
 	outw((short) (u32) virt_to_bus(&lp->init_block), ioaddr+LANCE_DATA);
@@ -404,12 +413,9 @@ lance32_init_ring(struct device *dev)
 	        lp->tx_ring[i].status = 0;
 	}
 
-	lp->init_block.mode = 0x0000;
         lp->init_block.tlen_rlen = TX_RING_LEN_BITS | RX_RING_LEN_BITS;
 	for (i = 0; i < 6; i++)
 		lp->init_block.phys_addr[i] = dev->dev_addr[i];
-	lp->init_block.filter[0] = 0x00000000;
-	lp->init_block.filter[1] = 0x00000000;
 	lp->init_block.rx_ring = (u32)virt_to_bus(lp->rx_ring);
 	lp->init_block.tx_ring = (u32)virt_to_bus(lp->tx_ring);
 }
@@ -417,11 +423,21 @@ lance32_init_ring(struct device *dev)
 static void
 lance32_restart(struct device *dev, unsigned int csr0_bits, int must_reinit)
 {
+        int i;
+	int ioaddr = dev->base_addr;
+    
 	lance32_purge_tx_ring(dev);
 	lance32_init_ring(dev);
     
-	outw(0x0000,    dev->base_addr + LANCE_ADDR);
-	outw(csr0_bits, dev->base_addr + LANCE_DATA);
+	outw(0x0000, ioaddr + LANCE_ADDR);
+        /* ReInit Ring */
+        outw(0x0001, ioaddr + LANCE_DATA);
+	i = 0;
+	while (i++ < 100)
+		if (inw(ioaddr+LANCE_DATA) & 0x0100)
+			break;
+
+	outw(csr0_bits, ioaddr + LANCE_DATA);
 }
 
 static int
@@ -459,7 +475,7 @@ lance32_start_xmit(struct sk_buff *skb, struct device *dev)
 			printk("\n");
 		}
 #endif
-		lance32_restart(dev, 0x0043, 1);
+		lance32_restart(dev, 0x0042, 1);
 
 		dev->tbusy=0;
 		dev->trans_start = jiffies;
@@ -794,32 +810,25 @@ lance32_get_stats(struct device *dev)
 static void lance32_set_multicast_list(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
-
-	outw(0, ioaddr+LANCE_ADDR);
-	outw(0x0004, ioaddr+LANCE_DATA); /* Temporarily stop the lance.	 */
+	struct lance32_private *lp = (struct lance32_private *)dev->priv;    
 
 	if (dev->flags&IFF_PROMISC) {
 		/* Log any net taps. */
 		printk("%s: Promiscuous mode enabled.\n", dev->name);
-		outw(15, ioaddr+LANCE_ADDR);
-		outw(0x8000, ioaddr+LANCE_DATA); /* Set promiscuous mode */
+	        lp->init_block.mode = 0x8000;
 	} else {
-		short multicast_table[4];
-		int i;
 		int num_addrs=dev->mc_count;
 		if(dev->flags&IFF_ALLMULTI)
 			num_addrs=1;
 		/* FIXIT: We don't use the multicast table, but rely on upper-layer filtering. */
-		memset(multicast_table, (num_addrs == 0) ? 0 : -1, sizeof(multicast_table));
-		for (i = 0; i < 4; i++) {
-			outw(8 + i, ioaddr+LANCE_ADDR);
-			outw(multicast_table[i], ioaddr+LANCE_DATA);
-		}
-		outw(15, ioaddr+LANCE_ADDR);
-		outw(0x0000, ioaddr+LANCE_DATA); /* Unset promiscuous mode */
+		memset(lp->init_block.filter , (num_addrs == 0) ? 0 : -1, sizeof(lp->init_block.filter));
+	        lp->init_block.mode = 0x0000;	        
 	}
+    
+	outw(0, ioaddr+LANCE_ADDR);
+	outw(0x0004, ioaddr+LANCE_DATA); /* Temporarily stop the lance.	 */
 
-	lance32_restart(dev, 0x0142, 0); /*  Resume normal operation */
+	lance32_restart(dev, 0x0042, 0); /*  Resume normal operation */
 
 }
 

@@ -21,7 +21,7 @@
  *  - added command line and machine based default for "silent" df0
  *
  *  december 1995 adapted for 1.2.13pl4 by Joerg Dorchain
- *  - works but I think its inefficient. (look in redo_fd_request)
+ *  - works but I think it's inefficient. (look in redo_fd_request)
  *    But the changes were very efficient. (only three and a half lines)
  *
  *  january 1995 added special ioctl for tracking down read/write problems
@@ -675,7 +675,7 @@ unsigned char track,   /* 0-80 */
               len_desc;/* 2 */
 unsigned short crc;     /* on 68000 we got an alignment problem, 
                            but this compiler solves it  by adding silently 
-                           adding a pad byte so data wont fit
+                           adding a pad byte so data won't fit
                            and this cost about 3h to discover.... */
 unsigned char gap1[22];     /* for longword-alignedness (0x4e) */
 };
@@ -1780,3 +1780,12 @@ int amiga_floppy_init(void)
 
   return 0;
 }
+
+#ifndef MODULE
+/*
+ * This is just a dummy function to keep fs/super.c happy.
+ */
+void floppy_eject(void)
+{
+}
+#endif

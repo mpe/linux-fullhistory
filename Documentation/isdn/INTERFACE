@@ -48,7 +48,7 @@ Description of the Interface between Linklevel and Hardwarelevel
 
     To be preset by the HL-driver, if it supports sk_buff's. The driver
     should put here the amount of additional space needed in sk-buff's for
-    it's internal purposes. Drivers not supporting sk_buff's should put
+    its internal purposes. Drivers not supporting sk_buff's should put
     initialize this field to 0.
 
   void (*rcvcallb)(int, int, u_char*, int);
@@ -68,7 +68,7 @@ Description of the Interface between Linklevel and Hardwarelevel
 
     This field will be set by LL. The HL-driver delivers received data-
     packets by calling this function. Upon calling, the HL-driver must
-    already have it's private data pulled off the head of the sk_buff.
+    already have its private data pulled off the head of the sk_buff.
 
     Parameter:
       int              driver-Id
@@ -83,8 +83,8 @@ Description of the Interface between Linklevel and Hardwarelevel
     Parameter:
       isdn_ctrl*
 
-      The struct isdn_ctrl also defined in isdn_if. The exact meaning of it's
-      fields is described together with the descriptions of the possible
+      The struct isdn_ctrl also defined in isdn_if. The exact meanings of its
+      fields are described together with the descriptions of the possible
       events. Here is only a short description of the fields:
 
         driver  = driver Id.
@@ -196,7 +196,7 @@ NOTE on writebuf and writebuf_skb:
   char id[20];
        ***CHANGE0.7: New since this version.
 
-   This string has to be preset by the HL-driver. It's purpose is for
+   This string has to be preset by the HL-driver. Its purpose is for
    identification of the driver by the user. Eg.: it is shown in the
    status-info of /dev/isdninfo. Furthermore it is used as Id for binding
    net-interfaces to a specific channel. If a string of length zero is

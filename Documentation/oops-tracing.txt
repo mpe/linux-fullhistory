@@ -19,7 +19,7 @@ happened in).
 Oh, it helps if the report happens on a kernel that is compiled with the 
 same compiler and similar setups.
 
-The other thing to do is disassemble the "Code:" part of the bugreprot: 
+The other thing to do is disassemble the "Code:" part of the bug report: 
 ksymoops will do this too with the correct tools (and new version of 
 ksymoops), but if you don't have the tools you can just do a silly 
 program:
@@ -30,7 +30,7 @@ program:
 and compile it with gcc -g and then do "disassemble str" (where the "XX" 
 stuff are the values reported by the Oops - you can just cut-and-paste 
 and do a replace of spaces to "\x" - that's what I do, as I'm too lazy 
-to write a prigram to automate this all).
+to write a program to automate this all).
 
 Finally, if you want to see where the code comes from, you can do
 

@@ -140,7 +140,7 @@ And now to the cabling.  What you can connect together:
 5. An active hub to passive hub.
 
 Remember, that you can not connect two passive hubs together.  The power loss
-implied by such connection is too high for the net to operate reliably.
+implied by such a connection is too high for the net to operate reliably.
 
 An example of a typical ARCnet network:
 
@@ -2256,9 +2256,9 @@ to be used. The first 6 switches set the address, the 7th doesn't have any
 function, and the 8th switch is used to select "compatible" or "enhanced".
 When I got my two cards, one of them had this switch set to "enhanced". That
 card didn't work at all, it wasn't even recognized by the driver. The other
-card had this switch set to "compatible" and it behaved absolutely normal. I
+card had this switch set to "compatible" and it behaved absolutely normally. I
 guess that the switch on one of the cards, must have been changed accidently
-when the card was taken out of it's former host. The question remains
+when the card was taken out of its former host. The question remains
 unanswered, what is the purpose of the "enhanced" position?
 
 [Avery's note: "enhanced" probably either disables shared memory (use IO

@@ -248,7 +248,7 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int poll_bit, int type)
 /*
  *	Send a 'DM' to an unknown connection attempt, or an invalid caller.
  *
- *	Note: src here is the sender, thus its the target of the DM
+ *	Note: src here is the sender, thus it's the target of the DM
  */
 void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, ax25_digi *digi)
 {

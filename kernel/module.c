@@ -46,12 +46,6 @@
 
 #ifdef CONFIG_MODULES		/* a *big* #ifdef block... */
 
-#ifdef DEBUG_MODULE
-#define PRINTK(a) printk a
-#else
-#define PRINTK(a) /* */
-#endif
-
 static struct module kernel_module;
 static struct module *module_list = &kernel_module;
 
@@ -127,8 +121,8 @@ sys_create_module(char *module_name, unsigned long size)
 	* (long *) addr = 0;	/* set use count to zero */
 	module_list = mp;	/* link it in */
 
-	PRINTK(("module `%s' (%lu pages @ 0x%08lx) created\n",
-		mp->name, (unsigned long) mp->size, (unsigned long) mp->addr));
+	pr_debug("module `%s' (%lu pages @ 0x%08lx) created\n",
+		mp->name, (unsigned long) mp->size, (unsigned long) mp->addr);
 	return (unsigned long) addr;
 }
 
@@ -167,8 +161,8 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 
 	if ((error = get_mod_name(module_name, name)) != 0)
 		return error;
-	PRINTK(("initializing module `%s', %d (0x%x) bytes\n",
-		name, codesize, codesize));
+	pr_debug("initializing module `%s', %d (0x%x) bytes\n",
+		name, codesize, codesize);
 	memcpy_fromfs(&rt, routines, sizeof rt);
 	if ((mp = find_module(name)) == NULL)
 		return -ENOENT;
@@ -185,8 +179,8 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 	memcpy_fromfs((char *)mp->addr + sizeof (long), code, codesize);
 	memset((char *)mp->addr + sizeof (long) + codesize, 0,
 		mp->size * PAGE_SIZE - (codesize + sizeof (long)));
-	PRINTK(( "module init entry = 0x%08lx, cleanup entry = 0x%08lx\n",
-		(unsigned long) rt.init, (unsigned long) rt.cleanup));
+	pr_debug("module init entry = 0x%08lx, cleanup entry = 0x%08lx\n",
+		(unsigned long) rt.init, (unsigned long) rt.cleanup);
 	mp->cleanup = rt.cleanup;
 
 	/* update kernel symbol table */

@@ -38,7 +38,7 @@
    19200 = 57600
    38400 = 115K
    The driver supports the native 57.6K and 115K Baudrates under Linux, but
-   some distributions like Slackware 3.0 dont like these high baudrates.
+   some distributions like Slackware 3.0 don't like these high baudrates.
 */
 
 #include <linux/mm.h>
@@ -1602,7 +1602,7 @@ static unsigned termios2digi_c(struct channel *ch, unsigned cflag)
 	{
 		ch->digiext.digi_flags |= DIGI_FAST;
 		res |= FEP_HUPCL;
-		/* This gets strange but if we dont do this we will get 78600
+		/* This gets strange but if we don't do this we will get 78600
 		 * instead of 115200. 57600 is mapped to 50 baud yielding 57600 in
 		 * FAST mode. 115200 is mapped to 75. We need to map it to 110 to
 		 * do 115K

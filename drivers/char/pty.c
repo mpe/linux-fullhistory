@@ -181,7 +181,9 @@ static void pty_flush_buffer(struct tty_struct *tty)
 
 int pty_open(struct tty_struct *tty, struct file * filp)
 {
+#if PTY_SLAVE_WAITS_ON_OPEN
 	struct wait_queue wait = { current, NULL };
+#endif
 	int	retval;
 	int	line;
 	struct	pty_struct *pty;

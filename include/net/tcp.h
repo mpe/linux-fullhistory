@@ -192,50 +192,7 @@ static __inline__ int tcp_old_window(struct sock * sk)
 	return sk->window - (sk->acked_seq - sk->lastwin_seq);
 }
 
-static __inline__ int tcp_new_window(struct sock * sk)
-{
-	int window = sock_rspace(sk);
-
-	if (window > 1024)
-		window &= ~0x3FF;	/* make free space a multiple of 1024 */
-
-	if (sk->window_clamp && sk->window_clamp < window)
-		window = sk->window_clamp;
-
-	/*
-	 * RFC 1122 says:
-	 *
-	 * "the suggested [SWS] avoidance algorithm for the receiver is to keep
-	 *  RECV.NEXT + RCV.WIN fixed until:
-	 *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
-	 *
-	 * Experiments against BSD and Solaris machines show that following
-	 * these rules results in the BSD and Solaris machines making very
-	 * bad guesses about how much data they can have in flight.
-	 *
-	 * Instead we follow the BSD lead and offer a window that gives
-	 * the size of the current free space, truncated to a multiple
-	 * of 1024 bytes. If the window is smaller than
-	 * 	min(sk->mss, MAX_WINDOW/2)
-	 * then we advertise the window as having size 0, unless this
-	 * would shrink the window we offered last time.
-	 * This results in as much as double the throughput as the original
-	 * implementation.
-	 */
-
-	if (sk->mss == 0)
-		sk->mss = sk->mtu;
-
-	/* BSD style SWS avoidance
-	 * Note that RFC1122 only says we must do silly window avoidance,
-	 * it does not require that we use the suggested algorithm.
-	 */
-
-	if (window < min(sk->mss, MAX_WINDOW/2))
-		window = 0;
-
-	return window;
-}
+extern int tcp_new_window(struct sock *);
 
 /*
  * Return true if we should raise the window when we
@@ -247,7 +204,8 @@ static __inline__ int tcp_new_window(struct sock * sk)
  */
 static __inline__ int tcp_raise_window(struct sock * sk)
 {
-	return tcp_new_window(sk) >= 2*tcp_old_window(sk);
+	int new = tcp_new_window(sk);
+	return new && (new >= 2*tcp_old_window(sk));
 }
 
 static __inline__ unsigned short tcp_select_window(struct sock *sk)

@@ -62,7 +62,6 @@ unsigned long (*mach_gettimeoffset) (void);
 void (*mach_gettod) (int*, int*, int*, int*, int*, int*);
 int (*mach_hwclk) (int, struct hwclk_time*) = NULL;
 int (*mach_set_clock_mmss) (unsigned long) = NULL;
-void (*mach_check_partition) (struct gendisk *, unsigned int);
 void (*mach_mksound)( unsigned int count, unsigned int ticks );
 void (*mach_reset)( void );
 void (*waitbut)(void) = dummy_waitbut;
@@ -296,10 +295,6 @@ int get_hardware_list(char *buffer)
 #endif
     } /* boot_info.machtype */
 
-#if 0 /* ++1.3++ */
-    len += get_serial_list (buffer + len);
-#endif /* ++1.3++ */
-
     return(len);
 }
 
@@ -322,21 +317,6 @@ void floppy_setup(char *str, int *ints)
 unsigned long arch_kbd_init(void)
 {
 	return mach_keyb_init();
-}
-
-int rs_init(void)
-{
-	return 0;
-}
-
-struct serial_struct;
-int register_serial(struct serial_struct *req)
-{
-    return -1;
-}
-
-void unregister_serial(int line)
-{
 }
 
 void arch_gettod(int *year, int *mon, int *day, int *hour,

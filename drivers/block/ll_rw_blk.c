@@ -206,18 +206,18 @@ void set_device_ro(kdev_t dev,int flag)
 	else ro_bits[major][minor >> 5] &= ~(1 << (minor & 31));
 }
 
-static inline void drive_stat_acct(int cmd, unsigned long nr_sectors, short disk_index)
+static inline void drive_stat_acct(int cmd, unsigned long nr_sectors,
+                                   short disk_index)
 {
 	kstat.dk_drive[disk_index]++;
 	if (cmd == READ) {
 		kstat.dk_drive_rio[disk_index]++;
 		kstat.dk_drive_rblk[disk_index] += nr_sectors;
-	}
-	else if (cmd == WRITE) {
+	} else if (cmd == WRITE) {
 		kstat.dk_drive_wio[disk_index]++;
 		kstat.dk_drive_wblk[disk_index] += nr_sectors;
 	} else
-		printk("drive_stat_acct: cmd not R/W?\n");
+		printk(KERN_ERR "drive_stat_acct: cmd not R/W?\n");
 }
 
 /*
@@ -289,9 +289,15 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	if (blk_size[major])
 		if (blk_size[major][MINOR(bh->b_rdev)] < (sector + count)>>1) {
 			bh->b_state = 0;
-			printk("attempt to access beyond end of device\n");
-			printk("%s: rw=%d, want=%d, limit=%d\n", kdevname(bh->b_rdev),
-			 rw, (sector + count)>>1, blk_size[major][MINOR(bh->b_rdev)]);
+                        /* This may well happen - the kernel calls bread()
+                           without checking the size of the device, e.g.,
+                           when mounting a device. */
+			printk(KERN_INFO
+                               "attempt to access beyond end of device\n");
+			printk(KERN_INFO "%s: rw=%d, want=%d, limit=%d\n",
+                               kdevname(bh->b_rdev), rw,
+                               (sector + count)>>1,
+                               blk_size[major][MINOR(bh->b_rdev)]);
 			return;
 		}
 	/* Uhhuh.. Nasty dead-lock possible here.. */
@@ -330,7 +336,8 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			max_req = (NR_REQUEST * 2) / 3;
 			break;
 		default:
-			printk("make_request: bad block dev cmd, must be R/W/RA/WA\n");
+			printk(KERN_ERR "make_request: bad block dev cmd,"
+                               " must be R/W/RA/WA\n");
 			unlock_buffer(bh);
 			return;
 	}
@@ -442,13 +449,13 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		bh++;
 		if (--nr <= 0)
 			return;
-	};
+	}
 
 	dev = NULL;
 	if ((major = MAJOR(bh[0]->b_dev)) < MAX_BLKDEV)
 		dev = blk_dev + major;
 	if (!dev || !dev->request_fn) {
-		printk(
+		printk(KERN_ERR
 	"ll_rw_block: Trying to read nonexistent block-device %s (%ld)\n",
 		kdevname(bh[0]->b_dev), bh[0]->b_blocknr);
 		goto sorry;
@@ -465,7 +472,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	/* Verify requested block sizes.  */
 	for (i = 0; i < nr; i++) {
 		if (bh[i] && bh[i]->b_size != correct_size) {
-			printk("ll_rw_block: device %s: "
+			printk(KERN_NOTICE "ll_rw_block: device %s: "
 			       "only %d-char blocks implemented (%lu)\n",
 			       kdevname(bh[0]->b_dev),
 			       correct_size, bh[i]->b_size);
@@ -484,7 +491,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	}
 
 	if ((rw == WRITE || rw == WRITEA) && is_read_only(bh[0]->b_dev)) {
-		printk("Can't write to read-only device %s\n",
+		printk(KERN_NOTICE "Can't write to read-only device %s\n",
 		       kdevname(bh[0]->b_dev));
 		goto sorry;
 	}
@@ -519,7 +526,8 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 	struct semaphore sem = MUTEX_LOCKED;
 
 	if (major >= MAX_BLKDEV || !(blk_dev[major].request_fn)) {
-		printk("ll_rw_swap_file: trying to swap nonexistent block-device\n");
+		printk(KERN_NOTICE "ll_rw_swap_file: trying to swap to"
+                                   " nonexistent block-device\n");
 		return;
 	}
 	switch (rw) {
@@ -527,7 +535,8 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 			break;
 		case WRITE:
 			if (is_read_only(dev)) {
-				printk("Can't swap to read-only device %s\n",
+				printk(KERN_NOTICE
+                                       "Can't swap to read-only device %s\n",
 					kdevname(dev));
 				return;
 			}
@@ -547,7 +556,8 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 			if (major==MD_MAJOR &&
 			    md_map (MINOR(dev), &rdev,
 				    &rsector, buffersize >> 9)) {
-			        printk ("Bad md_map in ll_rw_page_size\n");
+			        printk (KERN_ERR
+                                        "Bad md_map in ll_rw_page_size\n");
 				return;
 			}
 #endif

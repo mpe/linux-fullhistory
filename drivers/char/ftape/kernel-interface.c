@@ -45,7 +45,7 @@
 /*      Global vars.
  */
 
-/* Allocating a 96Kb DMAable buffer in one chunk wont work due to
+/* Allocating a 96Kb DMAable buffer in one chunk won't work due to
  * memory fragmentation.  To avoid this, it is broken up into
  * NR_BUFFERS chunks of 32Kbyte. --khp
  */

@@ -1,3 +1,109 @@
+Amiga filesystems Overview
+==========================
+
+Not all varieties of the Amiga filesystems are supported.  The Amiga
+currently knows 6 different filesystems:
+
+DOS\0		The old or original filesystem, not really suited for
+		hard disks and normally not used on them, either.
+		Not supported.
+
+DOS\1		The original Fast File System. Supported.
+
+DOS\2		The old "international" filesystem. International means that
+		a bug has been fixed so that accented ("international") letters
+		in file names are case-insensitive, as they ought to be.
+		Not supported.
+
+DOS\3		The "international" Fast File System.  Supported.
+
+DOS\4		The original filesystem with directory cache. The directory
+		cache speeds up directory accesses on floppies considerably,
+		but slowes down file creation/deletion. Doesn't make much
+		sense on hard disks. Not supported.
+
+DOS\5		The Fast File System with directory cache. Not supported.
+
+All of the above filesystems allow block sizes from 512 to 32K bytes.
+Supported block sizes are: 512, 1024, 2048 and 4096 bytes. Larger blocks
+speed up almost everything with the expense of wasted disk space. The speed
+gain above 4K seems not really worth the price, so you don't lose too
+much here, either.
+  
+Mount options for the AFFS
+==========================
+
+protect		If this option is set, the protection bits cannot be altered.
+
+uid[=uid]	This sets the uid of the root directory (i. e. the mount point
+		to uid or to the uid of the current user, if the =uid is
+		ommitted.
+
+gid[=gid]	Same as above, but for gid.
+
+setuid[=uid]	This sets the owner of all files and directories in the file
+		system to uid or the uid of the current user, respectively.
+
+setgid[=gid]	Same as above, but for gid.
+
+use_mp		The uid and gid are taken from the now covered mount point
+		instead of the current user or value defined.
+
+mode=mode	Sets the mode flags to the given (octal) value, regardles
+		of the original permissions. Directories will get an x
+		permission, if the corresponding r bit is set.
+		This is useful since most of the plain AmigaOS files
+		will map to 600.
+
+reserved=num	Sets the number of reserved blocks at the start of the
+		partition to num. Default is 2.
+
+root=block	Sets the block number of the root block. This schould never
+		be neccessary.
+
+bs=blksize	Sets the blocksize to blksize. Valid block sizes are 512,
+		1024, 2048 and 4096. Like the root option, this should
+		never be neccessary, as the affs can figure it out itself.
+
+quiet		The file system will not return an error for disallowed
+		mode changes.
+
+Handling of the Users/Groups and protection flags
+=================================================
+
+Amiga -> Linux:
+
+The Amiga protection flags RWEDRWEDHSPARWED are handled as follows:
+
+  - R maps to r for user, group and others. On directories, R implies x.
+
+  - If both W and D are allowed, w will be set.
+
+  - If both R and S are set, x will be set.
+
+  - H, P and E are always retained and ignored under Linux.
+
+  - A is always reset when written.
+
+User id and group id will be used unless set[gu]id are given as mount
+options. Since most of the Amiga file systems are single user systems
+they will be owned by root.
+
+Linux -> Amiga:
+
+The Linux rwxrwxrwx file mode is handled as follows:
+
+  - r permission will set R for user, group and others.
+
+  - w permission will set W and D for user, group and others.
+
+  - x permission of the user will set S for plain files.
+
+  - All other flags (suid, sgid, ...) are ignored and will
+    not be retained.
+    
+Newly created files and directories will get the user and group id
+of the current user and a mode according to the umask.
 Linux can read, but not write, Amiga FFS partitions.
 
 Mount options are

@@ -160,7 +160,7 @@ depend on what facilities are available:
 	The other two kernel command line parameters cannot be substi-
 	tuted with rdev. Therefore, using this method the kernel will
 	by default use RARP and/or BOOTP, and if it gets an answer via
-	RARP will mount the directory /tftpboot/<client-ip>/ as it's
+	RARP will mount the directory /tftpboot/<client-ip>/ as its
 	root. If it got a BOOTP answer the directory name in that answer
 	is used.
 
@@ -169,8 +169,8 @@ depend on what facilities are available:
 	When using LILO you can specify all necessary command line
 	parameters with the 'append=' command in the LILO configuration
 	file. However, to use the 'root=' command you also need to
-	setup a dummy device as described in 3.1 above. How to use
-	LILO and it's 'append=' command please refer to the LILO
+	set up a dummy device as described in 3.1 above. For how to use
+	LILO and its 'append=' command please refer to the LILO
 	documentation.
 
 3.3) Using loadlin
@@ -187,7 +187,7 @@ depend on what facilities are available:
 	protocol. As far as I know no commercial bootroms already
 	support booting Linux over the network, but there are two
 	free implementations of a bootrom available on sunsite.unc.edu
-	and it's mirrors. They are called 'netboot-nfs' and 'etherboot'.
+	and its mirrors. They are called 'netboot-nfs' and 'etherboot'.
 	Both contain everything you need to boot a diskless Linux client.
 
 

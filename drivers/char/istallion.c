@@ -3386,7 +3386,7 @@ static int stli_initecp(stlibrd_t *brdp)
 	}
 
 /*
- *	The per-board operations structure is all setup, so now lets go
+ *	The per-board operations structure is all set up, so now let's go
  *	and get the board operational. Firstly initialize board configuration
  *	registers. Then if we are using the higher 1Mb support then set up
  *	the memory mapping info so we can get at the boards shared memory.
@@ -3542,7 +3542,7 @@ static int stli_initonb(stlibrd_t *brdp)
 	}
 
 /*
- *	The per-board operations structure is all setup, so now lets go
+ *	The per-board operations structure is all set up, so now let's go
  *	and get the board operational. Firstly initialize board configuration
  *	registers. Then if we are using the higher 1Mb support then set up
  *	the memory mapping info so we can get at the boards shared memory.

@@ -267,7 +267,7 @@ static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
 	/* As we return to user mode fire off the other CPU schedulers.. this is 
 	   basically because we don't yet share IRQ's around. This message is
-	   rigged to be safe on the 386 - basically its a hack, so don't look
+	   rigged to be safe on the 386 - basically it's a hack, so don't look
 	   closely for now.. */
 	/*smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0); */
 	    

@@ -14,6 +14,8 @@
  *	Additional Authors:
  *		Alan Cox, <gw4pts@gw4pts.ampr.org>
  */
+
+#include <linux/config.h>	/* For CONFIG_IP_CLASSLESS */
  
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -76,7 +78,9 @@ unsigned long ip_get_mask(unsigned long addr)
 int ip_chk_addr(unsigned long addr)
 {
 	struct device *dev;
+#ifndef CONFIG_IP_CLASSLESS
 	unsigned long mask;
+#endif
 
 	/* 
 	 *	Accept both `all ones' and `all zeros' as BROADCAST. 
@@ -90,6 +94,7 @@ int ip_chk_addr(unsigned long addr)
 	    addr == htonl(0x7FFFFFFFL))
 		return IS_BROADCAST;
 
+#ifndef  CONFIG_IP_CLASSLESS
 	mask = ip_get_mask(addr);
 
 	/*
@@ -98,6 +103,10 @@ int ip_chk_addr(unsigned long addr)
 	 
 	if ((addr & mask) == htonl(0x7F000000L))
 		return IS_MYADDR;
+#else
+	if ((addr & htonl(0x7F000000L)) == htonl(0x7F000000L))
+		return IS_MYADDR;
+#endif
 
 	/*
 	 *	OK, now check the interface addresses. We could
@@ -139,6 +148,7 @@ int ip_chk_addr(unsigned long addr)
 				return IS_BROADCAST;
 		}
 		
+#ifndef CONFIG_IP_CLASSLESS
 		/*
 	 	 *	Nope. Check for Network broadcast. 
 	 	 */
@@ -150,6 +160,7 @@ int ip_chk_addr(unsigned long addr)
 			if ((addr & ~mask) == ~mask)
 				return IS_BROADCAST;
 		}
+#endif
 	}
 	if(IN_MULTICAST(ntohl(addr)))
 		return IS_MULTICAST;
@@ -181,36 +192,34 @@ unsigned long ip_my_addr(void)
 
 /*
  *	Find an interface that can handle addresses for a certain address. 
- *
- *	This needs optimising, since it's relatively trivial to collapse
- *	the two loops into one.
  */
- 
-struct device * ip_dev_check(unsigned long addr)
+
+struct device * ip_dev_bynet(unsigned long addr, unsigned long mask)
 {
 	struct device *dev;
+	struct device *best_dev = NULL;
+	__u32  best_mask = mask;
 
 	for (dev = dev_base; dev; dev = dev->next) 
 	{
 		if (!(dev->flags & IFF_UP))
 			continue;
-		if (!(dev->flags & IFF_POINTOPOINT))
-			continue;
-		if (addr != dev->pa_dstaddr)
-			continue;
-		return dev;
-	}
-	for (dev = dev_base; dev; dev = dev->next) 
-	{
-		if (!(dev->flags & IFF_UP))
-			continue;
 		if (dev->flags & IFF_POINTOPOINT)
+		{
+			if (addr == dev->pa_dstaddr)
+				return dev;
 			continue;
+		}
 		if (dev->pa_mask & (addr ^ dev->pa_addr))
 			continue;
-		return dev;
+		if (mask == dev->pa_mask)
+			return dev;
+		if (best_dev && (best_mask & dev->pa_mask) != best_mask)
+			continue;
+		best_dev = dev;
+		best_mask = dev->pa_mask;
 	}
-	return NULL;
+	return best_dev;
 }
 
 /*

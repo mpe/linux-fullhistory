@@ -65,7 +65,7 @@ const char *eata_pio_info(struct Scsi_Host *);
 int eata_pio_command(Scsi_Cmnd *);
 int eata_pio_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int eata_pio_abort(Scsi_Cmnd *);
-int eata_pio_reset(Scsi_Cmnd *);
+int eata_pio_reset(Scsi_Cmnd *, unsigned int);
 int eata_pio_proc_info(char *, char **, off_t, int, int, int);
 #ifdef MODULE
 int eata_pio_release(struct Scsi_Host *);

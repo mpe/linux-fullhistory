@@ -224,7 +224,7 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 		 * release route, so that...
 		 */
 		if (rt)
-			ATOMIC_INCR(&rt->rt_refcnt);
+			atomic_inc(&rt->rt_refcnt);
 	}
 	else
 		rt = ip_rt_route(daddr, skb->localroute);
@@ -1059,7 +1059,8 @@ void ip_netlink_msg(unsigned long msg, __u32 daddr, __u32 gw, __u32 mask, short 
 	nrt->rtmsg_flags=flags;
 	nrt->rtmsg_metric=metric;
 	strcpy(nrt->rtmsg_device,name);
-	netlink_post(NETLINK_ROUTE, skb);
+	if (netlink_post(NETLINK_ROUTE, skb))
+		kfree_skb(skb, FREE_WRITE);
 }	
 
 #endif
@@ -1085,6 +1086,7 @@ static int ip_rt_event(struct notifier_block *this, unsigned long event, void *p
 		ip_mc_allhost(dev);
 #endif		
 		ip_netlink_msg(RTMSG_NEWDEVICE, 0,0,0,0,0,dev->name);
+		ip_rt_update(NETDEV_UP, dev);
 	}
 	return NOTIFY_DONE;
 }

@@ -39,7 +39,7 @@
 #define SHMALL				/* max shm system wide (pages) */ \
 	(1<<(_SHM_IDX_BITS+_SHM_ID_BITS))
 /*
- * This constant is very large but the ABI in it's wisdom says ...
+ * This constant is very large but the ABI in its wisdom says ...
  */
 #define	SHMLBA 0x40000			/* attach addr a multiple of this */
 #define SHMSEG SHMMNI			/* max shared segs per process */

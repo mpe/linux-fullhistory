@@ -129,7 +129,7 @@ struct sockaddr_in {
 
 /*
  *	IPv6 definitions as we start to include them. This is just
- *	a beginning dont get excited 8)
+ *	a beginning -- don't get excited 8)
  */
  
 struct in_addr6

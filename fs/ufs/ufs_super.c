@@ -13,6 +13,9 @@
 /*
  * Kernel module support added on 96/04/26 by
  * Stefan Reinauer <stepan@home.culture.mipt.ru>
+ *
+ * Module usage counts added on 96/04/29 by
+ * Gertjan van Wingerde <gertjan@cs.vu.nl>
  */
 
 #include <linux/module.h>

@@ -169,7 +169,7 @@
  * 	fi
  *	dd if=/dev/urandom of=/etc/random-seed count=1
  *
- * and the following lines in an approproate script which is run as
+ * and the following lines in an appropriate script which is run as
  * the system is shutdown:
  * 
  *	# Carry a random seed from shut-down to start-up
@@ -574,7 +574,7 @@ void add_blkdev_randomness(int major)
 #define HASH_TRANSFORM SHATransform
 
 /*
- * SHA transform algorith, taken from code written by Peter Gutman,
+ * SHA transform algorithm, taken from code written by Peter Gutman,
  * and apparently in the public domain.
  */
 
@@ -615,7 +615,7 @@ void SHATransform(__u32 *digest, __u32 *data)
     E = digest[ 4 ];
     memcpy( eData, data, 16*sizeof(__u32));
 
-    /* Heavy mangling, in 4 sub-rounds of 20 interations each. */
+    /* Heavy mangling, in 4 sub-rounds of 20 iterations each. */
     subRound( A, B, C, D, E, f1, K1, eData[  0 ] );
     subRound( E, A, B, C, D, f1, K1, eData[  1 ] );
     subRound( D, E, A, B, C, f1, K1, eData[  2 ] );

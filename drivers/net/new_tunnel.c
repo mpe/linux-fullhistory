@@ -62,6 +62,7 @@
 */
 
 #include <linux/module.h>
+#include <linux/config.h>	/* for CONFIG_IP_FORWARD */
 
 /* Only two headers!! :-) */
 #include <net/ip.h>
@@ -172,7 +173,8 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		printk ( KERN_INFO "%s: Packet with no route!\n", dev->name);
 		dev->tbusy=0;
 		stats->tx_errors++;
-		return(1);
+		dev_kfree_skb(skb, FREE_WRITE);
+		return 0;
 	}
 
 	/*
@@ -191,7 +193,8 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		ip_rt_put(rt);
 		dev->tbusy=0;
 		stats->tx_errors++;
-		return(1);
+		dev_kfree_skb(skb, FREE_WRITE);
+		return 0;
 	}
 	ip_rt_put(rt);
 
@@ -203,7 +206,8 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		printk ( KERN_INFO "%s: Can't reach target gateway!\n", dev->name);
 		dev->tbusy=0;
 		stats->tx_errors++;
-		return(1);
+		dev_kfree_skb(skb, FREE_WRITE);
+		return 0;
 	}
 	tdev = rt->rt_dev;
 
@@ -214,7 +218,8 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		ip_rt_put(rt);
 		dev->tbusy=0;
 		stats->tx_errors++;
-		return(1);
+		dev_kfree_skb(skb, FREE_WRITE);
+		return 0;
 	}
 
 #ifdef TUNNEL_DEBUG
@@ -243,7 +248,8 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 			ip_rt_put(rt);
   			dev->tbusy = 0;
   			stats->tx_dropped++;
-			return(1);
+			dev_kfree_skb(skb, FREE_WRITE);
+			return 0;
 		}
 		new_skb->free = 1;
 
@@ -259,8 +265,7 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 		 */
 		new_skb->ip_hdr = (struct iphdr *) skb_put(new_skb, skb->len);
 		memcpy(new_skb->ip_hdr, skb->data, skb->len);
-		/* Is this necessary? */
-		memcpy(new_skb->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
+		memset(new_skb->proto_priv, 0, sizeof(skb->proto_priv));
 
 		/* Tack on our header */
 		new_skb->h.iph = (struct iphdr *) skb_push(new_skb, tunnel_hlen);
@@ -299,7 +304,9 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 	 *	If ip_forward() made a copy, it will return 1 so we can free.
 	 */
 
-	if (ip_forward(skb, dev, 0, target) == 1)
+#ifdef CONFIG_IP_FORWARD
+	if (ip_forward(skb, dev, 0, target))
+#endif
 		kfree_skb(skb, FREE_WRITE);
 
 	/*

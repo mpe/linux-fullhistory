@@ -370,7 +370,7 @@ asmlinkage void do_fast_IRQ(int irq)
 {
 	struct irqaction * action = *(irq + irq_action);
 #ifdef __SMP__
-	/* IRQ 13 is allowed - thats a flush tlb */
+	/* IRQ 13 is allowed - that's a flush tlb */
 	if(smp_threads_ready && active_kernel_processor!=smp_processor_id() && irq!=13)
 		panic("fast_IRQ %d: active processor set wrongly(%d not %d).\n", irq, active_kernel_processor, smp_processor_id());
 #endif

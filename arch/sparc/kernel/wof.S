@@ -130,7 +130,7 @@ spwin_exist_uwins:
 	/* Wow, user windows have to be dealt with, this is dirty
 	 * and messy as all hell.  And difficult to follow if you
 	 * are approaching the infamous register window trap handling
-	 * problem for the first time. DONT LOOK!
+	 * problem for the first time. DON'T LOOK!
 	 *
 	 * Note that how the execution path works out, the new %wim
 	 * will be left for us in the global temporary register,

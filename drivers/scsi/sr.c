@@ -603,11 +603,11 @@ static void do_sr_request (void)
 	restore_flags(flags);
 	
 	/* This is a performance enhancement.  We dig down into the request list and
-	 * try and find a queueable request (i.e. device not busy, and host able to
+	 * try to find a queueable request (i.e. device not busy, and host able to
 	 * accept another command.  If we find one, then we queue it. This can
 	 * make a big difference on systems with more than one disk drive.  We want
 	 * to have the interrupts off when monkeying with the request list, because
-	 * otherwise the kernel might try and slip in a request in between somewhere. */
+	 * otherwise the kernel might try to slip in a request in between somewhere. */
 	
 	if (!SCpnt && sr_template.nr_dev > 1){
 	    struct request *req1;
@@ -789,7 +789,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 		if (((long) sgpnt[count].address) + sgpnt[count].length > ISA_DMA_THRESHOLD &&
 		  SCpnt->host->unchecked_isa_dma) {
 		    sgpnt[count].alt_address = sgpnt[count].address;
-		    /* We try and avoid exhausting the DMA pool, since it is easier
+		    /* We try to avoid exhausting the DMA pool, since it is easier
 		     * to control usage here.  In other places we might have a more
 		     * pressing need, and we would be screwed if we ran out */
 		    if(dma_free_sectors < (sgpnt[count].length >> 9) + 5) {

@@ -1,10 +1,11 @@
 /********************************************************
 * Header file for eata_dma.c Linux EATA-DMA SCSI driver *
-* (c) 1993,94,95 Michael Neuffer                        *
+* (c) 1993-96 Michael Neuffer                           *
+*             mike@i-Connect.Net                        *
+*             neuffer@mail.uni-mainz.de                 *
 *********************************************************
-* last change: 95/07/18                                 *
+* last change: 96/05/05                                 *
 ********************************************************/
-
 
 #ifndef _EATA_DMA_H
 #define _EATA_DMA_H
@@ -16,7 +17,7 @@
 
 #define VER_MAJOR 2
 #define VER_MINOR 5
-#define VER_SUB   "8a"
+#define VER_SUB   "8d"
 
 
 /************************************************************************
@@ -47,6 +48,9 @@
 #define DBG_INTR        0       /* Trace interrupt service routine.     */
 #define DBG_INTR2       0       /* Trace interrupt service routine.     */
 #define DBG_INTR3       0       /* Trace get_board_data interrupts.     */
+#define DBG_REQSENSE    0       /* Trace request sense commands         */     
+#define DBG_RESET       0       /* Trace reset calls                    */     
+#define DBG_STATUS      0       /* Trace status generation              */
 #define DBG_PROC        0       /* Debug proc-fs related statistics     */
 #define DBG_PROC_WRITE  0
 #define DBG_REGISTER    0       /* */
@@ -65,7 +69,7 @@ const char *eata_info(struct Scsi_Host *);
 int eata_command(Scsi_Cmnd *);
 int eata_queue(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
 int eata_abort(Scsi_Cmnd *);
-int eata_reset(Scsi_Cmnd *);
+int eata_reset(Scsi_Cmnd *, unsigned int);
 int eata_proc_info(char *, char **, off_t, int, int, int);
 #ifdef MODULE
 int eata_release(struct Scsi_Host *);

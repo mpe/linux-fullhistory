@@ -119,7 +119,7 @@
 #define SEEQCFG2_NO_PREAM	(0x0080)	/* 1= user supplies Xmit preamble bytes */
 #define SEEQCFG2_ADDR_LEN	(0x0100)	/* 1= 2byte addresses */
 #define SEEQCFG2_REC_CRC	(0x0200)	/* 0= received packets will have CRC stripped from them */
-#define SEEQCFG2_XMIT_NO_CRC	(0x0400)	/* dont xmit CRC with each packet (user supplies it) */
+#define SEEQCFG2_XMIT_NO_CRC	(0x0400)	/* don't xmit CRC with each packet (user supplies it) */
 #define SEEQCFG2_LOOPBACK	(0x0800)
 #define SEEQCFG2_CTRLO		(0x1000)
 #define SEEQCFG2_RESET		(0x8000)	/* software Hard-reset bit */

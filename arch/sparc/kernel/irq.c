@@ -81,7 +81,7 @@ void (*set_irq_udt)(int);
  * equally sucky but at least we'll never try to free statically allocated
  * space or call kmalloc before kmalloc_init :(.
  * 
- * In fact its the timer10 that attaches first.. then timer14
+ * In fact it's the timer10 that attaches first.. then timer14
  * then kmalloc_init is called.. then the tty interrupts attach.
  * hmmm....
  *

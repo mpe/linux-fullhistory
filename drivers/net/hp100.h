@@ -128,7 +128,7 @@
 #define HP100_EE_EN		0x1000	/* 0:Disable,1:Enable EEPROM writing */
 #define HP100_BM_WRITE		0x0800	/* 0:Slave, 1:Bus Master for Tx data */
 #define HP100_BM_READ		0x0400	/* 0:Slave, 1:Bus Master for Rx data */
-#define HP100_TRI_INT		0x0200	/* 0:Dont, 1:Do tri-state the int */
+#define HP100_TRI_INT		0x0200	/* 0:Don't, 1:Do tri-state the int */
 #define HP100_MEM_EN		0x0040	/* Config program set this to */
                                         /*   0:Disable, 1:Enable mem map. */
                                         /*   See MMAP_DIS. */

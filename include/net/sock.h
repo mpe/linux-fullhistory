@@ -488,7 +488,7 @@ extern struct sk_buff 		*sock_alloc_send_skb(struct sock *skb,
  *	protocols can't normally use this as they need to fit buffers in
  *	and play with them.
  *
- * 	Inlined as its very short and called for pretty much every
+ * 	Inlined as it's very short and called for pretty much every
  *	packet ever received.
  */
 

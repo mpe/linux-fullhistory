@@ -779,7 +779,8 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 		free_page(page);
 		return new_page;
 	}
-	flush_page_to_ram(page);
+	if (page)
+		flush_page_to_ram(page);
 	return page;
 }
 

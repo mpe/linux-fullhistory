@@ -292,7 +292,7 @@ static int root_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet
 	unsigned long sip, tip;
 	unsigned char *sha, *tha;		/* s for "source", t for "target" */
 
-	/* If this test doesn't pass, its not IP, or we should ignore it anyway */
+	/* If this test doesn't pass, it's not IP, or we should ignore it anyway */
 	if (rarp->ar_hln != dev->addr_len || dev->type != ntohs(rarp->ar_hrd)) {
 		kfree_skb(skb, FREE_READ);
 		return 0;
@@ -763,9 +763,9 @@ static int root_bootp_string(char *dest, char *src, int len, int max)
  */
 static void root_do_bootp_ext(u8 *ext)
 {
+#ifdef NFSROOT_BOOTP_DEBUG
 	u8 *c;
 
-#ifdef NFSROOT_BOOTP_DEBUG
 	printk("BOOTP: Got extension %02x",*ext);
 	for(c=ext+2; c<ext+2+ext[1]; c++)
 		printk(" %02x", *c);

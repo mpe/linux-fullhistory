@@ -44,6 +44,14 @@
  *	Revision 0.34:	Module support. <Jim Freeman>
  *	Revision 0.35:  Checksum support. <Neil Turton>, hooked in by <Alan Cox>
  *
+ *	Protect the module by a MOD_INC_USE_COUNT/MOD_DEC_USE_COUNT
+ *	pair. Also, now usage count is managed this way
+ *	-Count one if the auto_interface mode is on
+ *      -Count one per configured interface
+ *
+ *	Jacques Gelinas (jacques@solucorp.qc.ca)
+ *
+ *
  * 	Portions Copyright (c) 1995 Caldera, Inc. <greg@caldera.com>
  *	Neither Greg Page nor Caldera, Inc. admit liability nor provide 
  *	warranty for any of this software. This material is provided 
@@ -105,7 +113,14 @@ static ipx_interface	*ipx_internal_net = NULL;
 static int
 ipxcfg_set_auto_create(char val)
 {
-	ipxcfg_auto_create_interfaces = val;
+	if (ipxcfg_auto_create_interfaces != val){
+		if (val){
+			MOD_INC_USE_COUNT;
+		}else{
+			MOD_DEC_USE_COUNT;
+		}
+		ipxcfg_auto_create_interfaces = val;
+	}
 	return 0;
 }
 		
@@ -336,6 +351,7 @@ ipxitf_down(ipx_interface *intrfc)
 	/* sockets still dangling
 	 * - must be closed from user space
 	 */
+	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -803,6 +819,7 @@ ipxitf_insert(ipx_interface *intrfc)
 
 	if (ipxcfg_auto_select_primary && (ipx_primary_net == NULL))
 		ipx_primary_net = intrfc;
+	MOD_INC_USE_COUNT;
 	return;
 }
 
@@ -1015,7 +1032,7 @@ ipxitf_auto_create(struct device *dev, unsigned short dlink_type)
 }
 
 static int 
-ipxitf_ioctl(unsigned int cmd, void *arg)
+ipxitf_ioctl_real(unsigned int cmd, void *arg)
 {
 	int err;
 	switch(cmd)
@@ -1080,6 +1097,15 @@ ipxitf_ioctl(unsigned int cmd, void *arg)
 	}
 }
 
+static int 
+ipxitf_ioctl(unsigned int cmd, void *arg)
+{
+	int ret;
+	MOD_INC_USE_COUNT;
+	ret = ipxitf_ioctl_real (cmd,arg);
+	MOD_DEC_USE_COUNT;
+	return ret;
+}
 /*******************************************************************************************************************\
 *													            *
 *	            			Routing tables for the IPX socket layer				            *
@@ -1312,7 +1338,7 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 	 *	Apply checksum. Not allowed on 802.3 links.
 	 */
 	 
-	if(sk->no_check || intrfc->if_dlink_type!=IPX_FRAME_8023)
+	if(sk->no_check || intrfc->if_dlink_type==IPX_FRAME_8023)
 		ipx->ipx_checksum=0xFFFF;
 	else
 		ipx->ipx_checksum=ipx_set_checksum(ipx, len+sizeof(ipx_packet));

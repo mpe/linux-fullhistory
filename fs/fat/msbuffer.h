@@ -17,8 +17,8 @@ void fat_ll_rw_block (struct super_block *sb, int opr,
 /* These macros exist to avoid modifying all the code */
 /* They should be removed one day I guess */
 
-/* The versioning mechanism of the modules system define those macros */
-/* This remove some warnings */
+/* The versioning mechanism of the modules system defines those macros */
+/* This removes some warnings */
 #ifdef brelse
 	#undef brelse
 #endif

@@ -1,6 +1,8 @@
 /* smc-ultra.c: A SMC Ultra ethernet driver for linux. */
 /*
-	Written 1993,1994,1995 by Donald Becker.
+	This is a driver for the SMC Ultra and SMC EtherEZ ISA ethercards.
+
+	Written 1993-1996 by Donald Becker.
 
 	Copyright 1993 United States Government as represented by the
 	Director, National Security Agency.
@@ -11,8 +13,6 @@
 	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
 	Center of Excellence in Space Data and Information Sciences
 		Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
-
-	This is a driver for the SMC Ultra and SMC EtherEZ ethercards.
 
 	This driver uses the cards in the 8390-compatible, shared memory mode.
 	Most of the run-time complexity is handled by the generic code in
@@ -32,17 +32,18 @@
 	transfers to avoid a bug in early version of the card that corrupted
 	data transferred by a AHA1542.
 
-	This driver does not support the programmed-I/O data transfer mode of
-	the EtherEZ.  That support (if available) is smc-ez.c.  Nor does it
-	use the non-8390-compatible "Altego" mode. (No support currently planned.)
+	This driver now supports the programmed-I/O (PIO) data transfer mode of
+	the EtherEZ. It does not use the non-8390-compatible "Altego" mode.
+	That support (if available) is smc-ez.c.
 
 	Changelog:
 
 	Paul Gortmaker	: multiple card support for module users.
+	Donald Becker	: 4/17/96 PIO support, minor potential problems avoided.
 */
 
 static const char *version =
-	"smc-ultra.c:v1.12 1/18/95 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
+	"smc-ultra.c:v1.99 4/17/96 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 
 #include <linux/module.h>
@@ -73,6 +74,12 @@ static void ultra_block_input(struct device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
 static void ultra_block_output(struct device *dev, int count,
 							const unsigned char *buf, const start_page);
+static void ultra_pio_get_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, 
+						int ring_page);
+static void ultra_pio_input(struct device *dev, int count,
+						  struct sk_buff *skb, int ring_offset);
+static void ultra_pio_output(struct device *dev, int count,
+							const unsigned char *buf, const start_page);
 static int ultra_close_card(struct device *dev);
 
 
@@ -81,8 +88,11 @@ static int ultra_close_card(struct device *dev);
 #define ULTRA_CMDREG	0		/* Offset to ASIC command register. */
 #define	 ULTRA_RESET	0x80	/* Board reset, in ULTRA_CMDREG. */
 #define	 ULTRA_MEMENB	0x40	/* Enable the shared memory. */
+#define IOPD	0x02			/* I/O Pipe Data (16 bits), PIO operation. */
+#define IOPA	0x07			/* I/O Pipe Address for PIO operation. */
 #define ULTRA_NIC_OFFSET  16	/* NIC register offset from the base_addr. */
 #define ULTRA_IO_EXTENT 32
+#define EN0_ERWCNT		0x08	/* Early receive warning count. */
 
 /*	Probe for the Ultra.  This looks like a 8013 with the station
 	address PROM at I/O ports <base>+8 to <base>+13, with a checksum
@@ -123,7 +133,7 @@ int ultra_probe1(struct device *dev, int ioaddr)
 	unsigned char eeprom_irq = 0;
 	static unsigned version_printed = 0;
 	/* Values from various config regs. */
-	unsigned char num_pages, irqreg, addr;
+	unsigned char num_pages, irqreg, addr, piomode;
 	unsigned char idreg = inb(ioaddr + 7);
 	unsigned char reg4 = inb(ioaddr + 4) & 0x7f;
 
@@ -162,8 +172,9 @@ int ultra_probe1(struct device *dev, int ioaddr)
 
 	/* Enabled FINE16 mode to avoid BIOS ROM width mismatches @ reboot. */
 	outb(0x80 | inb(ioaddr + 0x0c), ioaddr + 0x0c);
-	irqreg = inb(ioaddr + 0xd);
+	piomode = inb(ioaddr + 0x8);
 	addr = inb(ioaddr + 0xb);
+	irqreg = inb(ioaddr + 0xd);
 
 	/* Switch back to the station address register set so that the MS-DOS driver
 	   can find the card after a warm boot. */
@@ -214,13 +225,20 @@ int ultra_probe1(struct device *dev, int ioaddr)
 	dev->mem_end = dev->rmem_end
 		= dev->mem_start + (ei_status.stop_page - START_PG)*256;
 
-	printk(",%s IRQ %d memory %#lx-%#lx.\n", eeprom_irq ? "" : "assigned ",
-		   dev->irq, dev->mem_start, dev->mem_end-1);
-
+	if (piomode) {
+		printk(",%s IRQ %d programmed-I/O mode.\n",
+			   eeprom_irq ? "EEPROM" : "assigned ", dev->irq);
+		ei_status.block_input = &ultra_pio_input;
+		ei_status.block_output = &ultra_pio_output;
+		ei_status.get_8390_hdr = &ultra_pio_get_hdr;
+	} else {
+		printk(",%s IRQ %d memory %#lx-%#lx.\n", eeprom_irq ? "" : "assigned ",
+			   dev->irq, dev->mem_start, dev->mem_end-1);
+		ei_status.block_input = &ultra_block_input;
+		ei_status.block_output = &ultra_block_output;
+		ei_status.get_8390_hdr = &ultra_get_8390_hdr;
+	}
 	ei_status.reset_8390 = &ultra_reset_8390;
-	ei_status.block_input = &ultra_block_input;
-	ei_status.block_output = &ultra_block_output;
-	ei_status.get_8390_hdr = &ultra_get_8390_hdr;
 	dev->open = &ultra_open;
 	dev->stop = &ultra_close_card;
 	NS8390_init(dev, 0);
@@ -236,9 +254,16 @@ ultra_open(struct device *dev)
 	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name, NULL))
 		return -EAGAIN;
 
-	outb(ULTRA_MEMENB, ioaddr);	/* Enable memory, 16 bit mode. */
+	outb(0x00, ioaddr);	/* Disable shared memory for safety. */
 	outb(0x80, ioaddr + 5);
-	outb(0x01, ioaddr + 6);		/* Enable interrupts and memory. */
+	if (ei_status.block_input == &ultra_pio_input)
+		outb(0x11, ioaddr + 6);		/* Enable interrupts and PIO. */
+	else
+		outb(0x01, ioaddr + 6);		/* Enable interrupts and memory. */
+	/* Set the early receive warning level in window 0 high enough not
+	   to receive ERW interrupts. */
+	outb_p(E8390_NODMA+E8390_PAGE0, dev->base_addr);
+	outb(0xff, dev->base_addr + EN0_ERWCNT);
 	ei_open(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -253,7 +278,12 @@ ultra_reset_8390(struct device *dev)
 	if (ei_debug > 1) printk("resetting Ultra, t=%ld...", jiffies);
 	ei_status.txing = 0;
 
-	outb(ULTRA_MEMENB, cmd_port);
+	outb(0x00, cmd_port);	/* Disable shared memory for safety. */
+	outb(0x80, cmd_port + 5);
+	if (ei_status.block_input == &ultra_pio_input)
+		outb(0x11, cmd_port + 6);		/* Enable interrupts and PIO. */
+	else
+		outb(0x01, cmd_port + 6);		/* Enable interrupts and memory. */
 
 	if (ei_debug > 1) printk("reset done\n");
 	return;
@@ -266,7 +296,6 @@ ultra_reset_8390(struct device *dev)
 static void
 ultra_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
-
 	unsigned long hdr_start = dev->mem_start + ((ring_page - START_PG)<<8);
 
 	outb(ULTRA_MEMENB, dev->base_addr - ULTRA_NIC_OFFSET);	/* shmem on */
@@ -316,6 +345,49 @@ ultra_block_output(struct device *dev, int count, const unsigned char *buf,
 	memcpy_toio(shmem, buf, count);
 
 	outb(0x00, dev->base_addr - ULTRA_NIC_OFFSET); /* Disable memory. */
+}
+
+/* The identical operations for programmed I/O cards.
+   The PIO model is trivial to use: the 16 bit start address is written
+   byte-sequentially to IOPA, with no intervening I/O operations, and the
+   data is read or written to the IOPD data port.
+   The only potential complication is that the address register is shared
+   must be always be rewritten between each read/write direction change.
+   This is no problem for us, as the 8390 code ensures that we are single
+   threaded. */
+static void ultra_pio_get_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, 
+						int ring_page)
+{
+	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
+	outb(0x00, ioaddr + IOPA);	/* Set the address, LSB first. */
+	outb(ring_page, ioaddr + IOPA);
+	insw(ioaddr + IOPD, hdr, sizeof(struct e8390_pkt_hdr)>>1);
+}
+
+static void ultra_pio_input(struct device *dev, int count,
+						  struct sk_buff *skb, int ring_offset)
+{
+	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
+    char *buf = skb->data;
+
+	/* For now set the address again, although it should already be correct. */
+	outb(ring_offset, ioaddr + IOPA);	/* Set the address, LSB first. */
+	outb(ring_offset >> 8, ioaddr + IOPA);
+	insw(ioaddr + IOPD, buf, (count+1)>>1);
+#ifdef notdef
+	/* We don't need this -- skbuffs are padded to at least word alignment. */
+	if (count & 0x01) {
+		buf[count-1] = inb(ioaddr + IOPD);
+#endif
+}
+
+static void ultra_pio_output(struct device *dev, int count,
+							const unsigned char *buf, const start_page)
+{
+	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
+	outb(0x00, ioaddr + IOPA);	/* Set the address, LSB first. */
+	outb(start_page, ioaddr + IOPA);
+	outsw(ioaddr + IOPD, buf, (count+1)>>1);
 }
 
 static int

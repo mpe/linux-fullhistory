@@ -49,7 +49,6 @@ extern void a3000_gettod (int *, int *, int *, int *, int *, int *);
 extern void a2000_gettod (int *, int *, int *, int *, int *, int *);
 extern int amiga_hwclk (int, struct hwclk_time *);
 extern int amiga_set_clock_mmss (unsigned long);
-extern void amiga_check_partition (struct gendisk *hd, unsigned int dev);
 extern void amiga_mksound( unsigned int count, unsigned int ticks );
 #ifdef CONFIG_BLK_DEV_FD
 extern int amiga_floppy_init (void);
@@ -288,7 +287,6 @@ void config_amiga(void)
   }
   mach_hwclk           = amiga_hwclk;
   mach_set_clock_mmss  = amiga_set_clock_mmss;
-  mach_check_partition = amiga_check_partition;
   mach_mksound         = amiga_mksound;
 #ifdef CONFIG_BLK_DEV_FD
   mach_floppy_init     = amiga_floppy_init;

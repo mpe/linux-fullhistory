@@ -291,13 +291,7 @@ int dev_close(struct device *dev)
 	 *	Flush the multicast chain
 	 */
 	dev_mc_discard(dev);
-	/*
-	 *	Blank the IP addresses
-	 */
-	dev->pa_addr = 0;
-	dev->pa_dstaddr = 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask = 0;
+
 	/*
 	 *	Purge any queued packets when we down the link 
 	 */
@@ -1082,6 +1076,17 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			}
 			else
 			{
+				u32 new_pa_addr = (*(struct sockaddr_in *)
+					 &ifr.ifr_addr).sin_addr.s_addr;
+				u16 new_family = ifr.ifr_addr.sa_family;
+
+				if (new_family == dev->family &&
+				    new_pa_addr == dev->pa_addr) {
+					ret =0;
+					break;
+				}
+				if (dev->flags & IFF_UP)
+					notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev);
 
 				/*
 				 *	if dev is an alias, must rehash to update
@@ -1092,16 +1097,19 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			  	if (net_alias_is(dev))
 			    	net_alias_dev_rehash(dev ,&ifr.ifr_addr);
 #endif
-				dev->pa_addr = (*(struct sockaddr_in *)
-					 &ifr.ifr_addr).sin_addr.s_addr;
-				dev->family = ifr.ifr_addr.sa_family;
+				dev->pa_addr = new_pa_addr;
+				dev->family = new_family;
 			
 #ifdef CONFIG_INET	
 				/* This is naughty. When net-032e comes out It wants moving into the net032
 				   code not the kernel. Till then it can sit here (SIGH) */		
-				dev->pa_mask = ip_get_mask(dev->pa_addr);
+				if (!dev->pa_mask)
+					dev->pa_mask = ip_get_mask(dev->pa_addr);
 #endif			
-				dev->pa_brdaddr = dev->pa_addr | ~dev->pa_mask;
+				if (!dev->pa_brdaddr)
+					dev->pa_brdaddr = dev->pa_addr | ~dev->pa_mask;
+				if (dev->flags & IFF_UP)
+					notifier_call_chain(&netdev_chain, NETDEV_UP, dev);
 				ret = 0;
 			}
 			break;

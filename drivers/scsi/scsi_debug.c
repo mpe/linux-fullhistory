@@ -422,7 +422,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	    do_done[i] = done;
     }
     else
-	printk("scsi_debug_queuecommand: done cant be NULL\n");
+	printk("scsi_debug_queuecommand: done can't be NULL\n");
     
 #ifdef IMMEDIATE
     if( !scsi_debug_lockup )

@@ -321,42 +321,6 @@ static __inline__ struct device * get_gw_dev(__u32 gw)
 }
 
 /*
- *	Used by 'rt_add()' when we can't get the netmask any other way..
- *
- *	If the lower byte or two are zero, we guess the mask based on the
- *	number of zero 8-bit net numbers, otherwise we use the "default"
- *	masks judging by the destination address and our device netmask.
- */
- 
-static __u32 unsigned long default_mask(__u32 dst)
-{
-	dst = ntohl(dst);
-	if (IN_CLASSA(dst))
-		return htonl(IN_CLASSA_NET);
-	if (IN_CLASSB(dst))
-		return htonl(IN_CLASSB_NET);
-	return htonl(IN_CLASSC_NET);
-}
-
-
-/*
- *	If no mask is specified then generate a default entry.
- */
-
-static __u32 guess_mask(__u32 dst, struct device * dev)
-{
-	__u32 mask;
-
-	if (!dst)
-		return 0;
-	mask = default_mask(dst);
-	if ((dst ^ dev->pa_addr) & mask)
-		return mask;
-	return dev->pa_mask;
-}
-
-
-/*
  *	Check if a mask is acceptable.
  */
  
@@ -527,50 +491,6 @@ static __inline__ void fib_add_1(short flags, __u32 dst, __u32 mask,
 	struct fib_info * fi;
 	int logmask;
 
-	if (flags & RTF_HOST) 
-		mask = 0xffffffff;
-	/*
-	 * If mask is not specified, try to guess it.
-	 */
-	else if (!mask)
-	{
-		if (!((dst ^ dev->pa_addr) & dev->pa_mask)) 
-		{
-			mask = dev->pa_mask;
-			flags &= ~RTF_GATEWAY;
-			if (flags & RTF_DYNAMIC) 
-			{
-				printk("Dynamic route to my own net rejected\n");
-				return;
-			}
-		} 
-		else
-			mask = guess_mask(dst, dev);
-		dst &= mask;
-	}
-	
-	/*
-	 *	A gateway must be reachable and not a local address
-	 */
-	 
-	if (gw == dev->pa_addr)
-		flags &= ~RTF_GATEWAY;
-		
-	if (flags & RTF_GATEWAY) 
-	{
-		/*
-		 *	Don't try to add a gateway we can't reach.. 
-		 *	Tunnel devices are exempt from this rule.
-		 */
-		 
-		if ((dev != get_gw_dev(gw)) && dev->type!=ARPHRD_TUNNEL)
-			return;
-			
-		flags |= RTF_GATEWAY;
-	} 
-	else
-		gw = 0;
-		
 	/*
 	 *	Allocate an entry and fill it in.
 	 */
@@ -632,7 +552,7 @@ static __inline__ void fib_add_1(short flags, __u32 dst, __u32 mask,
 	if (fz->fz_nent >= RTZ_HASHING_LIMIT && !fz->fz_hash_table && logmask<32)
 	{
 		struct fib_node ** ht;
-#if RT_CACHE_DEBUG
+#if RT_CACHE_DEBUG >= 2
 		printk("fib_add_1: hashing for zone %d started\n", logmask);
 #endif
 		ht = kmalloc(RTZ_HASH_DIVISOR*sizeof(struct rtable*), GFP_KERNEL);
@@ -747,7 +667,12 @@ static int rt_flush_list(struct fib_node ** fp, struct device *dev)
 	struct fib_node *f;
 
 	while ((f = *fp) != NULL) {
-		if (f->fib_info->fib_dev != dev) {
+/*
+ *	"Magic" device route is allowed to point to loopback,
+ *	discard it too.
+ */
+		if (f->fib_info->fib_dev != dev &&
+		    (dev != &loopback_dev || f->fib_dst != dev->pa_addr)) {
 			fp = &f->fib_next;
 			continue;
 		}
@@ -797,7 +722,7 @@ static __inline__ void fib_flush_1(struct device *dev)
  *
  *	We preserve the old format but pad the buffers out. This means that
  *	we can spin over the other entries as we read them. Remember the
- *	gated BGP4 code could need to read 60,000+ routes on occasion (thats
+ *	gated BGP4 code could need to read 60,000+ routes on occasion (that's
  *	about 7Mb of data). To do that ok we will need to also cache the
  *	last route we got to (reads will generally be following on from
  *	one another without gaps).
@@ -961,12 +886,9 @@ static void rt_free(struct rtable * rt)
 	{
 		struct hh_cache * hh = rt->rt_hh;
 		rt->rt_hh = NULL;
-		if (hh && !--hh->hh_refcnt)
-		{
-			restore_flags(flags);
-			kfree_s(hh, sizeof(struct hh_cache));
-		}
 		restore_flags(flags);
+		if (hh && atomic_dec_and_test(&hh->hh_refcnt))
+			kfree_s(hh, sizeof(struct hh_cache));
 		kfree_s(rt, sizeof(struct rt_table));
 		return;
 	}
@@ -1000,12 +922,9 @@ static __inline__ void rt_kick_free_queue(void)
 #endif
 			*rtp = rt->rt_next;
 			rt->rt_hh = NULL;
-			if (hh && !--hh->hh_refcnt)
-			{
-				sti();
-				kfree_s(hh, sizeof(struct hh_cache));
-			}
 			sti();
+			if (hh && atomic_dec_and_test(&hh->hh_refcnt))
+				kfree_s(hh, sizeof(struct hh_cache));
 			kfree_s(rt, sizeof(struct rt_table));
 #if RT_CACHE_DEBUG >= 2
 			printk("rt_kick_free_queue: %08x is free\n", daddr);
@@ -1017,7 +936,8 @@ static __inline__ void rt_kick_free_queue(void)
 	}
 }
 
-void ip_rt_run_bh() {
+void ip_rt_run_bh()
+{
 	unsigned long flags;
 	save_flags(flags);
 	cli();
@@ -1409,7 +1329,7 @@ static void rt_cache_add(unsigned hash, struct rtable * rth)
 			else
 			{
 				if (rtg->rt_hh)
-					ATOMIC_INCR(&rtg->rt_hh->hh_refcnt);
+					atomic_inc(&rtg->rt_hh->hh_refcnt);
 				rth->rt_hh = rtg->rt_hh;
 				ip_rt_put(rtg);
 			}
@@ -1570,7 +1490,7 @@ struct rtable * ip_rt_slow_route (__u32 daddr, int local)
 	{
 		rt_free(rth);
 #if RT_CACHE_DEBUG >= 1
-		printk("rt_cache: route to %08x was born dead\n", daddr);
+		printk(KERN_DEBUG "rt_cache: route to %08x was born dead\n", daddr);
 #endif
 	}
 
@@ -1581,7 +1501,7 @@ struct rtable * ip_rt_slow_route (__u32 daddr, int local)
 void ip_rt_put(struct rtable * rt)
 {
 	if (rt)
-		ATOMIC_DECR(&rt->rt_refcnt);
+		atomic_dec(&rt->rt_refcnt);
 }
 
 struct rtable * ip_rt_route(__u32 daddr, int local)
@@ -1595,8 +1515,8 @@ struct rtable * ip_rt_route(__u32 daddr, int local)
 		if (rth->rt_dst == daddr)
 		{
 			rth->rt_lastuse = jiffies;
-			ATOMIC_INCR(&rth->rt_use);
-			ATOMIC_INCR(&rth->rt_refcnt);
+			atomic_inc(&rth->rt_use);
+			atomic_inc(&rth->rt_refcnt);
 			ip_rt_unlock();
 			return rth;
 		}
@@ -1671,42 +1591,49 @@ int ip_rt_new(struct rtentry *r)
 		}
 	}
 
-	/*
-	 *	Ignore faulty masks
-	 */
-	 
-	if (bad_mask(mask, daddr))
-		mask=0;
-
-	/*
-	 *	Set the mask to nothing for host routes.
-	 */
-	 
-	if (flags & RTF_HOST)
+	if (flags & RTF_HOST) 
 		mask = 0xffffffff;
 	else if (mask && r->rt_genmask.sa_family != AF_INET)
 		return -EAFNOSUPPORT;
 
-	/*
-	 *	You can only gateway IP via IP..
-	 */
-	 
 	if (flags & RTF_GATEWAY) 
 	{
 		if (r->rt_gateway.sa_family != AF_INET)
 			return -EAFNOSUPPORT;
+
+		/*
+		 *	Don't try to add a gateway we can't reach.. 
+		 *	Tunnel devices are exempt from this rule.
+		 */
+
 		if (!dev)
 			dev = get_gw_dev(gw);
+		else if (dev != get_gw_dev(gw) && dev->type != ARPHRD_TUNNEL)
+			return -EINVAL;
+		if (!dev)
+			return -ENETUNREACH;
 	} 
-	else if (!dev)
-		dev = ip_dev_check(daddr);
+	else
+	{
+		gw = 0;
+		if (!dev)
+			dev = ip_dev_bynet(daddr, mask);
+		if (!dev)
+			return -ENETUNREACH;
+		if (!mask)
+		{
+			if (((daddr ^ dev->pa_addr) & dev->pa_mask) == 0)
+				mask = dev->pa_mask;
+		}
+	}
 
-	/*
-	 *	Unknown device.
-	 */
-	 
-	if (dev == NULL)
-		return -ENETUNREACH;
+#ifndef CONFIG_IP_CLASSLESS
+	if (!mask)
+		mask = ip_get_mask(daddr);
+#endif
+	
+	if (bad_mask(mask, daddr))
+		return -EINVAL;
 
 	/*
 	 *	Add the route
@@ -1783,3 +1710,10 @@ void ip_rt_advice(struct rtable **rp, int advice)
 	return;
 }
 
+void ip_rt_update(int event, struct device *dev)
+{
+	if (event == NETDEV_UP)
+		rt_add(RTF_HOST|RTF_UP, dev->pa_addr, ~0, 0, dev, 0, 0, 0, 0);
+	else if (event == NETDEV_DOWN)
+		rt_del(dev->pa_addr, ~0, dev, 0, RTF_HOST|RTF_UP, 0);
+}

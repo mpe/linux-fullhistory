@@ -1233,7 +1233,7 @@ Thu Jul 14 10:51:42 1994  Eric Youngdale  (eric@esp22)
 	* scsi.c (scan_scsis): Add new devices to end of linked list, not
 	to the beginning.
 
-	* scsi.h (SCSI_SLEEP): Remove brain dead hack to try and save
+	* scsi.h (SCSI_SLEEP): Remove brain dead hack to try to save
 	the task state before sleeping.
 
 Sat Jul  9 15:01:03 1994  Eric Youngdale  (eric@esp22)
@@ -1724,7 +1724,7 @@ Thu Aug  5 11:59:18 1993
     * constants.c, constants.h: New files with ascii descriptions of
     various conditions.
 
-    * Makefile: Do not try and count the number of low-level drivers,
+    * Makefile: Do not try to count the number of low-level drivers,
     just generate the list of .o files.
 
     * aha1542.c: Replace 16 with sizeof(SCpnt->sense_buffer).  Add tests
@@ -1819,7 +1819,7 @@ Thu Jun  2 17:58:11 1993
 
     * sr.c: Increase timeout to 500 from 250.  Add entry for sync in
     dispatch table (supply NULL).  If we do not have a sectorsize,
-    try and get it in the sd_open function.  Add new function just to
+    try to get it in the sd_open function.  Add new function just to
     obtain sectorsize.
 
     * sr.h: Add needs_sector_size semaphore.

@@ -91,7 +91,7 @@ typedef struct sk_buff	     sk_buff;
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/if_arp.h>
-#include "slhc.h"
+#include <net/slhc_vj.h>
 
 #define fcstab	ppp_crc16_table		/* Name of the table in the kernel */
 #include <linux/ppp_defs.h>

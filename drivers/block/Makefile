@@ -99,6 +99,10 @@ endif
 
 ifeq ($(CONFIG_BLK_DEV_XD),y)
 L_OBJS += xd.o
+else
+  ifeq ($(CONFIG_BLK_DEV_XD),m)
+  M_OBJS += xd.o
+  endif
 endif
 
 ifeq ($(CONFIG_BLK_DEV_MD),y)

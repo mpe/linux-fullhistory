@@ -66,7 +66,7 @@ static const char *version =
  * printk's trimmed out.
  *
  * Revision 3.6  1995/01/19  21:49:56  guru
- * This is working pretty well. I gained 1 K/s in speed.. now its just
+ * This is working pretty well. I gained 1 K/s in speed.. now it's just
  * robustness and printk's to be diked out.
  *
  * Revision 3.5  1995/01/18  22:29:59  guru

@@ -225,9 +225,9 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	if (block + blocks > size)
 		blocks = size - block;
 
-	/* We do this in a two stage process.  We first try and request
+	/* We do this in a two stage process.  We first try to request
 	   as many blocks as we can, then we wait for the first one to
-	   complete, and then we try and wrap up as many as are actually
+	   complete, and then we try to wrap up as many as are actually
 	   done.  This routine is rather generic, in that it can be used
 	   in a filesystem by substituting the appropriate function in
 	   for getblk.

@@ -1,9 +1,11 @@
 /********************************************************
 * Header file for eata_dma.c and eata_pio.c		*
 * Linux EATA SCSI drivers				*
-* (c) 1993,94,95 Michael Neuffer			*
+* (c) 1993-96 Michael Neuffer                           *
+*             mike@i-Connect.Net                        *
+*             neuffer@mail.uni-mainz.de                 *
 *********************************************************
-* last change: 95/11/07					*
+* last change: 95/05/05                                 *
 ********************************************************/
 
 
@@ -56,35 +58,43 @@
 #define NEC_ID2         0xa3
 #define NEC_ID3         0x82
 
+ 
+#define EATA_CP_SIZE	 44
 
-#define EATA_CP_SIZE	44
+#define MAX_PCI_DEVICES  32	       /* Maximum # Of Devices Per Bus	 */
+#define MAX_METHOD_2	 16	       /* Max Devices For Method 2	 */
+#define MAX_PCI_BUS	 16	       /* Maximum # Of Busses Allowed	 */
 
-#define MAX_PCI_DEVICES 32	       /* Maximum # Of Devices Per Bus	 */
-#define MAX_METHOD_2	16	       /* Max Devices For Method 2	 */
-#define MAX_PCI_BUS	16	       /* Maximum # Of Busses Allowed	 */
-
-#define SG_SIZE		64 
-#define SG_SIZE_BIG	252	       /* max. 8096 elements, 64k */
+#define SG_SIZE		 64 
+#define SG_SIZE_BIG	 252	       /* max. 8096 elements, 64k */
 
 #define TYPE_DISK_QUEUE  16
 #define TYPE_TAPE_QUEUE  4
 #define TYPE_ROM_QUEUE   4
 #define TYPE_OTHER_QUEUE 2
 
-#define FREE	   0
-#define OK	   0
-#define NO_TIMEOUT 0
-#define USED	   1
-#define TIMEOUT	   2
-#define RESET	   4
-#define LOCKED	   8
+#define FREE	         0
+#define OK	         0
+#define NO_TIMEOUT       0
+#define USED	         1
+#define TIMEOUT	         2
+#define RESET	         4
+#define LOCKED	         8
+#define ABORTED          16
+
+#define READ             0
+#define WRITE            1
+#define OTHER            2
 
 #define HD(cmd)	 ((hostdata *)&(cmd->host->hostdata))
 #define CD(cmd)	 ((struct eata_ccb *)(cmd->host_scribble))
 #define SD(host) ((hostdata *)&(host->hostdata))
 
-#define DELAY(x) { __u32 i; i = jiffies + (x * HZ); while (jiffies < i) barrier(); }
-#define DEL2(x)	 { __u32 i; for (i = 0; i < 0xffff * x; i++); }
+#define DELAY(x) { __u32 i; ulong flags;          \
+                   save_flags(flags); sti();      \
+                   i = jiffies + (x * HZ);        \
+                   while (jiffies < i) barrier(); \
+                   restore_flags(flags); }
 
 /***********************************************
  *    EATA Command & Register definitions      *
@@ -122,13 +132,14 @@
 
 
 #define HA_WCOMMAND    0x07	   /* command register offset	*/
-#define HA_WCOMMAND2   0x06	   /* immediate command offset	*/
-#define HA_WSUBCODE    0x05 
-#define HA_WSUBLUN     0x04 
+#define HA_WIFC        0x06	   /* immediate command offset  */
+#define HA_WCODE       0x05 
+#define HA_WCODE2      0x04 
 #define HA_WDMAADDR    0x02	   /* DMA address LSB offset	*/  
 #define HA_RAUXSTAT    0x08	   /* aux status register offset*/
 #define HA_RSTATUS     0x07	   /* status register offset	*/
 #define HA_RDATA       0x00	   /* data register (16bit)	*/
+#define HA_WDATA       0x00	   /* data register (16bit)	*/
 
 #define HA_ABUSY       0x01	   /* aux busy bit		*/
 #define HA_AIRQ	       0x02	   /* aux IRQ pending bit	*/
@@ -149,7 +160,7 @@
 #define HA_NO_ERROR	 0x00	/* No Error				*/
 #define HA_ERR_SEL_TO	 0x01	/* Selection Timeout			*/
 #define HA_ERR_CMD_TO	 0x02	/* Command Timeout			*/
-#define HA_ERR_RESET	 0x03	/* SCSI Bus Reset Received		*/
+#define HA_BUS_RESET	 0x03	/* SCSI Bus Reset Received		*/
 #define HA_INIT_POWERUP	 0x04	/* Initial Controller Power-up		*/
 #define HA_UNX_BUSPHASE	 0x05	/* Unexpected Bus Phase			*/
 #define HA_UNX_BUS_FREE	 0x06	/* Unexpected Bus Free			*/
@@ -247,7 +258,8 @@ struct get_conf {	      /* Read Configuration Array		*/
 	 ID_qest:1,	      /* Raidnum ID is questionable		*/
 	  is_PCI:1,	      /* HBA is PCI				*/
 	 is_EISA:1;	      /* HBA is EISA				*/
-    __u8 unused[478]; 
+    __u8 RAIDNUM;             /* unique HBA identifier                  */
+    __u8 unused[474]; 
 };
 
 struct eata_sg_list
@@ -322,27 +334,34 @@ typedef struct hstd {
     __u8   name[18];
     __u8   revision[6];
     __u8   EATA_revision;
+    __u32  firmware_revision;
+    __u8   HBA_number;
     __u8   bustype;		 /* bustype of HBA	       */
     __u8   channel;		 /* # of avail. scsi channels  */
     __u8   state;		 /* state of HBA	       */
     __u8   primary;		 /* true if primary	       */
-    __u8   broken_INQUIRY:1;	 /* This is an EISA HBA with   *
+    __u8        more_support:1,  /* HBA supports MORE flag     */
+           immediate_support:1,  /* HBA supports IMMEDIATE CMDs*/
+              broken_INQUIRY:1;	 /* This is an EISA HBA with   *
 				  * broken INQUIRY	       */
     __u8   do_latency;		 /* Latency measurement flag   */
     __u32  reads[13];
     __u32  writes[13];
     __u32  reads_lat[12][4];
     __u32  writes_lat[12][4];
+    __u32  all_lat[4];
 				 /* state of Target (RESET,..) */
     __u8   t_state[MAXCHANNEL][MAXTARGET];   
 				 /* timeouts on target	       */
     __u32  t_timeout[MAXCHANNEL][MAXTARGET]; 
+    __u8   resetlevel[MAXCHANNEL]; 
     __u32  last_ccb;		 /* Last used ccb	       */
     __u32  cplen;		 /* size of CP in words	       */
     __u16  cppadlen;		 /* pad length of cp in words  */
-    int    queuesize;
+    __u16  queuesize;
+    __u16  sgsize;               /* # of entries in the SG list*/
+    __u16  devflags;		 /* bits set for detected devices */
     __u8   hostid;		 /* SCSI ID of HBA	       */
-    __u8   devflags;		 /* bits set for detected devices */
     __u8   moresupport;		 /* HBA supports MORE flag     */
     struct Scsi_Host *next;	    
     struct Scsi_Host *prev;

@@ -3,9 +3,9 @@
  |                                                                           |
  | All of the functions which transfer data between user memory and FPU_REGs.|
  |                                                                           |
- | Copyright (C) 1992,1993,1994                                              |
- |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ | Copyright (C) 1992,1993,1994,1996                                         |
+ |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
+ |                  E-mail   billm@jacobi.maths.monash.edu.au                |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -466,6 +466,7 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 
   if (st0_tag == TW_Valid)
     {
+      int precision_loss;
       int exp;
       FPU_REG tmp;
 
@@ -474,8 +475,6 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 
       if ( exp < DOUBLE_Emin )     /* It may be a denormal */
 	{
-	  int precision_loss;
-
 	  /* A denormal will always underflow. */
 #ifndef PECULIAR_486
 	  /* An 80486 is supposed to be able to generate
@@ -518,6 +517,7 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 	{
 	  if ( tmp.sigl & 0x000007ff )
 	    {
+	      precision_loss = 1;
 	      switch (control_word & CW_RC)
 		{
 		case RC_RND:
@@ -541,8 +541,6 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 	  
 	      if ( increment )
 		{
-		  set_precision_flag_up();
-
 		  if ( tmp.sigl >= 0xfffff800 )
 		    {
 		      /* the sigl part overflows */
@@ -566,9 +564,9 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 		      tmp.sigl += 0x00000800;
 		    }
 		}
-	      else
-		set_precision_flag_down();
 	    }
+	  else
+	    precision_loss = 0;
 	  
 	  l[0] = (tmp.sigl >> 11) | (tmp.sigh << 21);
 	  l[1] = ((tmp.sigh >> 11) & 0xfffff);
@@ -590,6 +588,13 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 	    }
 	  else
 	    {
+	      if ( precision_loss )
+		{
+		  if ( increment )
+		    set_precision_flag_up();
+		  else
+		    set_precision_flag_down();
+		}
 	      /* Add the exponent */
 	      l[1] |= (((exp+DOUBLE_Ebias) & 0x7ff) << 20);
 	    }
@@ -661,6 +666,7 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 
   if (st0_tag == TW_Valid)
     {
+      int precision_loss;
       int exp;
       FPU_REG tmp;
 
@@ -669,8 +675,6 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 
       if ( exp < SINGLE_Emin )
 	{
-	  int precision_loss;
-
 	  /* A denormal will always underflow. */
 #ifndef PECULIAR_486
 	  /* An 80486 is supposed to be able to generate
@@ -715,6 +719,7 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 	      unsigned long sigh = tmp.sigh;
 	      unsigned long sigl = tmp.sigl;
 	      
+	      precision_loss = 1;
 	      switch (control_word & CW_RC)
 		{
 		case RC_RND:
@@ -740,8 +745,6 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 	  
 	      if (increment)
 		{
-		  set_precision_flag_up();
-
 		  if ( sigh >= 0xffffff00 )
 		    {
 		      /* The sigh part overflows */
@@ -758,10 +761,11 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 		}
 	      else
 		{
-		  set_precision_flag_down();
 		  tmp.sigh &= 0xffffff00;  /* Finish the truncation */
 		}
 	    }
+	  else
+	    precision_loss = 0;
 
 	  templ = (tmp.sigh >> 8) & 0x007fffff;
 
@@ -780,7 +784,17 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 	      templ = 0x7f800000;
 	    }
 	  else
-	    templ |= ((exp+SINGLE_Ebias) & 0xff) << 23;
+	    {
+	      if ( precision_loss )
+		{
+		  if ( increment )
+		    set_precision_flag_up();
+		  else
+		    set_precision_flag_down();
+		}
+	      /* Add the exponent */
+	      templ |= ((exp+SINGLE_Ebias) & 0xff) << 23;
+	    }
 	}
     }
   else if (st0_tag == TW_Zero)

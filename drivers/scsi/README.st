@@ -274,7 +274,7 @@ MTIOCGET Returns some status information.
 The following ioctls use the structure mtlocation that contains both
 the block number and the partition number. These ioctls are available
 only for SCSI-2 tape drives and the block number is the
-device-indepent logical block number defined by the standard.
+device-independent logical block number defined by the standard.
 
 MTGETLOC Returns the current block and partition number.
 MTSETLOC Sets the tape to the block and partition specified by the

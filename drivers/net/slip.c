@@ -81,7 +81,7 @@
 #ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <linux/tcp.h>
-#include "slhc.h"
+#include <net/slhc_vj.h>
 #endif
 
 #ifdef MODULE

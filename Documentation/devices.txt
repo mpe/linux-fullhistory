@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		     Last revised: April 20, 1996
+		      Last revised: May 5, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -621,6 +621,8 @@ least not without contacting me first.
 		and "user level packet I/O."  This board is also
 		accessible as a standard networking "eth" device.
 
+    block	Reserved for Linux/AP+
+
  39 char	ML-16P experimental I/O board
 		  0 = /dev/ml16pa-a0	First card, first analog channel
 		  1 = /dev/ml16pa-a1	First card, second analog channel
@@ -643,7 +645,11 @@ least not without contacting me first.
 
  40 char	Matrox Meteor frame grabber
 		  0 = /dev/mmetfgrab	Matrox Meteor frame grabber
-    block	Reserved for Linux/AP+
+    block	Syquest EZ135 removable drive
+		  0 = /dev/eza		First EZ135 drive, whole disk
+
+		Partitions are handled in the same way as IDE disks
+		(see major number 3).
 
  41 char	Yet Another Micro Monitor
 		  0 = /dev/yamm		Yet Another Micro Monitor

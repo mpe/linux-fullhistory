@@ -159,7 +159,8 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
  * Take care of missing kerneld, especially in case of multiple daemons
  */
 #define KERNELD_TIMEOUT 1 * (HZ)
-#define DROP_TIMER if ((msgflg & IPC_KERNELD) && kd_timer.next && kd_timer.prev) del_timer(&kd_timer)
+#define DROP_TIMER del_timer(&kd_timer)
+/*#define DROP_TIMER if ((msgflg & IPC_KERNELD) && kd_timer.next && kd_timer.prev) del_timer(&kd_timer)*/
 
 static void kd_timeout(unsigned long msgid)
 {
@@ -185,7 +186,7 @@ static void kd_timeout(unsigned long msgid)
 
 static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgflg)
 {
-	struct timer_list kd_timer;
+	struct timer_list kd_timer = { NULL, NULL, 0, 0, 0};
 	struct msqid_ds *msq;
 	struct ipc_perm *ipcp;
 	struct msg *tmsg, *leastp = NULL;
@@ -229,16 +230,20 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 	 *  msgtyp < 0 => get message with least type must be < abs(msgtype).  
 	 */
 	while (!nmsg) {
-		if (msq->msg_perm.seq != (unsigned int) msqid / MSGMNI)
+		if (msq->msg_perm.seq != (unsigned int) msqid / MSGMNI) {
+			DROP_TIMER;
 			return -EIDRM;
+		}
 		if ((msgflg & IPC_KERNELD) == 0) {
 			/*
 			 * Non-root processes may receive from kerneld! 
 			 * i.e. no permission check if called from the kernel
 			 * otoh we don't want user level non-root snoopers...
 			 */
-			if (ipcperms (ipcp, S_IRUGO))
+			if (ipcperms (ipcp, S_IRUGO)) {
+				DROP_TIMER;
 				return -EACCES;
+			}
 		}
 		if (msgtyp == 0) 
 			nmsg = msq->msg_first;
@@ -267,8 +272,10 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 		
 		if (nmsg) { /* done finding a message */
 			DROP_TIMER;
-			if ((msgsz < nmsg->msg_ts) && !(msgflg & MSG_NOERROR))
+			if ((msgsz < nmsg->msg_ts) && !(msgflg & MSG_NOERROR)) {
+				DROP_TIMER;
 				return -E2BIG;
+			}
 			msgsz = (msgsz > nmsg->msg_ts)? nmsg->msg_ts : msgsz;
 			if (nmsg ==  msq->msg_first)
 				msq->msg_first = nmsg->msg_next;
@@ -315,6 +322,7 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 				memcpy_tofs (msgp->mtext, nmsg->msg_spot, msgsz);
 			}
 			kfree(nmsg);
+			DROP_TIMER;
 			return msgsz;
 		} else {  /* did not find a message */
 			if (msgflg & IPC_NOWAIT) {

@@ -90,6 +90,7 @@ dep:
 
 clean:
 	rm -f bootsect setup
+	rm -f bbootsect
 	rm -f zImage tools/build compressed/vmlinux.out
 	rm -f bzImage tools/bbuild compressed/bvmlinux.out
 	@$(MAKE) -C compressed clean

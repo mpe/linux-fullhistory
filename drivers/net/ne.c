@@ -23,6 +23,7 @@
     Paul Gortmaker	: new reset code, reset card after probe at boot.
     Paul Gortmaker	: multiple card support for module users.
     Paul Gortmaker	: Support for PCI ne2k clones, similar to lance.c
+    Paul Gortmaker	: Allow users with bad cards to avoid full probe.
 
 */
 
@@ -78,6 +79,7 @@ bad_clone_list[] = {
     {"NN1000", "NN2000",  {0x08, 0x03, 0x08}}, /* Outlaw no-name clone. */
     {"4-DIM8","4-DIM16", {0x00,0x00,0x4d,}},  /* Outlaw 4-Dimension cards. */
     {"Con-Intl_8", "Con-Intl_16", {0x00, 0x00, 0x24}}, /* Connect Int'nl */
+    {"ET-100","ET-200", {0x00, 0x45, 0x54}}, /* YANG and YA clone */
     {0,}
 };
 #endif
@@ -206,7 +208,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
     int wordlength = 2;
     const char *name = NULL;
     int start_page, stop_page;
-    int neX000, ctron;
+    int neX000, ctron, bad_card;
     int reg0 = inb_p(ioaddr);
     static unsigned version_printed = 0;
 
@@ -232,6 +234,14 @@ static int ne_probe1(struct device *dev, int ioaddr)
 
     printk("NE*000 ethercard probe at %#3x:", ioaddr);
 
+    /* A user with a poor card that fails to ack the reset, or that
+       does not have a valid 0x57,0x57 signature can still use this
+       without having to recompile. Specifying an i/o address along
+       with an otherwise unused dev->mem_end value of "0xBAD" will 
+       cause the driver to skip these parts of the probe. */
+
+    bad_card = ((dev->base_addr != 0) && (dev->mem_end == 0xbad));
+
     /* Reset card. Who knows what dain-bramaged state it was left in. */
     {	unsigned long reset_start_time = jiffies;
 
@@ -240,8 +250,13 @@ static int ne_probe1(struct device *dev, int ioaddr)
 
 	while ((inb_p(ioaddr + EN0_ISR) & ENISR_RESET) == 0)
 		if (jiffies - reset_start_time > 2*HZ/100) {
-			printk(" not found (no reset ack).\n");
-			return ENODEV;
+			if (bad_card) {
+				printk(" (warning: no reset ack)");
+				break;
+			} else {
+				printk(" not found (no reset ack).\n");
+				return ENODEV;
+			}
 		}
 
 	outb_p(0xff, ioaddr + EN0_ISR);		/* Ack all intr. */
@@ -297,7 +312,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
     ctron =  (SA_prom[0] == 0x00 && SA_prom[1] == 0x00 && SA_prom[2] == 0x1d);
 
     /* Set up the rest of the parameters. */
-    if (neX000) {
+    if (neX000 || bad_card) {
 	name = (wordlength == 2) ? "NE2000" : "NE1000";
     } else if (ctron) {
 	name = (wordlength == 2) ? "Ctron-8" : "Ctron-16";

@@ -128,7 +128,7 @@ static int sd_open(struct inode * inode, struct file * filp)
 
 	if(!rscsi_disks[target].device->access_count)
 	    sd_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
-    };
+    }
 
     /*
      * See if we are requesting a non-existent partition.  Do this
@@ -250,8 +250,8 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 			memcpy(sgpnt[i].alt_address, sgpnt[i].address, 
 			       sgpnt[i].length);
 		    scsi_free(sgpnt[i].address, sgpnt[i].length);
-		};
-	    };
+		}
+	    }
 
 	    /* Free list of scatter-gather pointers */
 	    scsi_free(SCpnt->buffer, SCpnt->sglist_len);  
@@ -265,8 +265,8 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 		    memcpy(SCpnt->request.buffer, SCpnt->buffer,
 			   SCpnt->bufflen);
 		scsi_free(SCpnt->buffer, SCpnt->bufflen);
-	    };
-	};
+	    }
+	}
 	/*
 	 * If multiple sectors are requested in one buffer, then
 	 * they will have been finished off by the first command.
@@ -307,8 +307,8 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 #endif
 	    if (sgpnt[i].alt_address) {
 		scsi_free(sgpnt[i].address, sgpnt[i].length);
-	    };
-	};
+	    }
+	}
 	scsi_free(SCpnt->buffer, SCpnt->sglist_len);  /* Free list of scatter-gather pointers */
     } else {
 #ifdef DEBUG
@@ -317,7 +317,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 #endif
 	if (SCpnt->buffer != SCpnt->request.buffer)
 	    scsi_free(SCpnt->buffer, SCpnt->bufflen);
-    };
+    }
     
     /*
      * Now, if we were good little boys and girls, Santa left us a request
@@ -417,7 +417,7 @@ static void do_sd_request (void)
 	if (CURRENT != NULL && CURRENT->rq_status == RQ_INACTIVE) {
 	    restore_flags(flags);
 	    return;
-	};
+	}
 	
 	INIT_SCSI_REQUEST;
         SDev = rscsi_disks[DEVICE_NR(CURRENT->rq_dev)].device;
@@ -468,11 +468,11 @@ static void do_sd_request (void)
 	restore_flags(flags);
 
 	/* This is a performance enhancement. We dig down into the request 
-	 * list and try and find a queueable request (i.e. device not busy, 
+	 * list and try to find a queueable request (i.e. device not busy, 
 	 * and host able to accept another command. If we find one, then we 
 	 * queue it. This can make a big difference on systems with more than 
 	 * one disk drive.  We want to have the interrupts off when monkeying 
-	 * with the request list, because otherwise the kernel might try and 
+	 * with the request list, because otherwise the kernel might try to 
 	 * slip in a request in between somewhere. 
 	 */
 
@@ -486,21 +486,21 @@ static void do_sd_request (void)
 		if(SCpnt) break;
 		req1 = req;
 		req = req->next;
-	    };
+	    }
 	    if (SCpnt && req->rq_status == RQ_INACTIVE) {
 		if (req == CURRENT) 
 		    CURRENT = CURRENT->next;
 		else
 		    req1->next = req->next;
-	    };
+	    }
 	    restore_flags(flags);
-	};
+	}
 	
 	if (!SCpnt) return; /* Could not find anything to do */
 	
 	/* Queue command */
 	requeue_sd_request(SCpnt);
-    };  /* While */
+    }  /* While */
 }    
 
 static void requeue_sd_request (Scsi_Cmnd * SCpnt)
@@ -610,7 +610,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	if(((long) SCpnt->request.bh->b_data) > ISA_DMA_THRESHOLD)
 	    bounce_buffer = (char *) scsi_malloc(bounce_size);
 	if(!bounce_buffer) contiguous = 0;
-    };
+    }
     
     if(contiguous && SCpnt->request.bh && SCpnt->request.bh->b_reqnext)
 	for(bh = SCpnt->request.bh, bhp = bh->b_reqnext; bhp; bh = bhp, 
@@ -620,7 +620,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		contiguous = 0;
 		break;
 	    } 
-	};
+	}
     if (!SCpnt->request.bh || contiguous) {
 	
 	/* case of page request (i.e. raw device), or unlinked buffer */
@@ -667,11 +667,11 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		((unsigned long) bh->b_data-1) == ISA_DMA_THRESHOLD)) {
 		if (count < SCpnt->host->sg_tablesize) count++;
 		else break;
-	    };
+	    }
 	    this_count += (bh->b_size >> 9);
 	    bhp = bh;
 	    bh = bh->b_reqnext;
-	};
+	}
 #if 0
 	if(SCpnt->host->unchecked_isa_dma &&
 	   ((unsigned int) SCpnt->request.bh->b_data-1) == ISA_DMA_THRESHOLD) count--;
@@ -710,7 +710,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		    ISA_DMA_THRESHOLD && (SCpnt->host->unchecked_isa_dma) &&
 		    !sgpnt[count].alt_address) {
 		    sgpnt[count].alt_address = sgpnt[count].address;
-		    /* We try and avoid exhausting the DMA pool, since it is 
+		    /* We try to avoid exhausting the DMA pool, since it is 
 		     * easier to control usage here. In other places we might 
 		     * have a more pressing need, and we would be screwed if 
 		     * we ran out */
@@ -719,7 +719,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		    } else {
 			sgpnt[count].address = 
 			    (char *) scsi_malloc(sgpnt[count].length);
-		    };
+		    }
 		    /* If we start running low on DMA buffers, we abort the 
 		     * scatter-gather operation, and free all of the memory 
 		     * we have allocated.  We want to ensure that all scsi 
@@ -733,7 +733,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 			    if(sgpnt[count].alt_address) 
 				scsi_free(sgpnt[count].address, 
 					  sgpnt[count].length);
-			};
+			}
 			this_count = SCpnt->request.current_nr_sectors;
 			buff = SCpnt->request.buffer;
 			SCpnt->use_sg = 0;
@@ -742,9 +742,8 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 			SCpnt->use_sg = count;
 			this_count = counted -= bh->b_size >> 9;
 			break;
-		    };
-		    
-		};
+		    }		    
+		}
 		
 		/* Only cluster buffers if we know that we can supply DMA 
 		 * buffers large enough to satisfy the request. Do not cluster
@@ -766,21 +765,21 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		    else {
 			tmp = NULL;
 			max_sg = SCpnt->use_sg;
-		    };
+		    }
 		    if(tmp){
 			scsi_free(sgpnt[count].address, sgpnt[count].length);
 			sgpnt[count].address = tmp;
 			count--;
 			continue;
-		    };
+		    }
 		    
 		    /* If we are allowed another sg chain, then increment 
 		     * counter so we can insert it.  Otherwise we will end 
 		     up truncating */
 		    
 		    if (SCpnt->use_sg < max_sg) SCpnt->use_sg++;
-		};  /* contiguous buffers */
-	    }; /* for loop */
+		}  /* contiguous buffers */
+	    } /* for loop */
 	    
 	    /* This is actually how many we are going to transfer */
 	    this_count = counted; 
@@ -795,7 +794,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		while(bh){
 		    printk("[%p %lx] ", bh->b_data, bh->b_size);
 		    bh = bh->b_reqnext;
-		};
+		}
 		if(SCpnt->use_sg < 16)
 		    for(count=0; count<SCpnt->use_sg; count++)
 			printk("{%d:%p %p %d}  ", count,
@@ -803,15 +802,15 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 			       sgpnt[count].alt_address,
 			       sgpnt[count].length);
 		panic("Ooops");
-	    };
+	    }
 	    
 	    if (SCpnt->request.cmd == WRITE)
 		for(count=0; count<SCpnt->use_sg; count++)
 		    if(sgpnt[count].alt_address)
 			memcpy(sgpnt[count].address, sgpnt[count].alt_address, 
 			       sgpnt[count].length);
-	};  /* Able to malloc sgpnt */
-    };  /* Host adapter capable of scatter-gather */
+	}  /* Able to malloc sgpnt */
+    }  /* Host adapter capable of scatter-gather */
     
     /* Now handle the possibility of DMA to addresses > 16Mb */
     
@@ -826,11 +825,11 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		this_count = SCpnt->request.current_nr_sectors;
 		buff = (char *) scsi_malloc(this_count << 9);
 		if(!buff) panic("Ran out of DMA buffers.");
-	    };
+	    }
 	    if (SCpnt->request.cmd == WRITE)
 		memcpy(buff, (char *)SCpnt->request.buffer, this_count << 9);
-	};
-    };
+	}
+    }
 #ifdef DEBUG
     printk("sd%c : %s %d/%d 512 byte blocks.\n", 
 	   'a' + devm,
@@ -845,12 +844,12 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	if(this_count & 1) panic("sd.c:Bad block number requested");
 	block = block >> 1;
 	this_count = this_count >> 1;
-    };
+    }
     
     if (rscsi_disks[dev].sector_size == 256){
 	block = block << 1;
 	this_count = this_count << 1;
-    };
+    }
     
     if (((this_count > 0xff) ||  (block > 0x1fffff)) && rscsi_disks[dev].ten)
     {
@@ -906,7 +905,7 @@ static int check_scsidisk_media_change(kdev_t full_dev){
 	!rscsi_disks[target].device) {
 	printk("SCSI disk request error: invalid device.\n");
 	return 0;
-    };
+    }
     
     if(!rscsi_disks[target].device->removable) return 0;
     
@@ -922,7 +921,7 @@ static int check_scsidisk_media_change(kdev_t full_dev){
 	rscsi_disks[target].device->changed = 1;
 	return 1; /* This will force a flush, if called from
 		   * check_disk_change */
-    };
+    }
     
     /* 
      * for removable scsi disk ( FLOPTICAL ) we have to recognise the
@@ -1033,7 +1032,7 @@ static int sd_init_onedisk(int i)
 		time1 = jiffies;
 		while(jiffies < time1 + HZ); /* Wait 1 second for next try */
 		printk( "." );
-	    };
+	    }
 	} while(the_result && spintime && spintime+100*HZ > jiffies);
 	if (spintime) {
 	    if (the_result)
@@ -1041,8 +1040,7 @@ static int sd_init_onedisk(int i)
 	    else
 		printk( "ready\n" );
 	}
-    };  /* !MODULE_FLAG */
-    
+    }  /* !MODULE_FLAG */
     
     retries = 3;
     do {
@@ -1153,7 +1151,7 @@ static int sd_init_onedisk(int i)
 		rscsi_disks[i].device = NULL;
 		sd_template.nr_dev--;
 		return i;
-	    };
+	    }
 	}
     {
 	/*
@@ -1399,7 +1397,7 @@ int revalidate_scsidisk(kdev_t dev, int maxusage){
 	restore_flags(flags);
 	printk("Device busy for revalidation (usage=%d)\n", USAGE);
 	return -EBUSY;
-    };
+    }
     DEVICE_BUSY = 1;
     restore_flags(flags);
     
@@ -1419,7 +1417,7 @@ int revalidate_scsidisk(kdev_t dev, int maxusage){
          * the partition table.
          */
         blksize_size[MAJOR_NR][minor] = 1024;
-    };
+    }
     
 #ifdef MAYBE_REINIT
     MAYBE_REINIT;
@@ -1461,7 +1459,7 @@ static void sd_detach(Scsi_Device * SDp)
 		sd_gendisk.part[minor].start_sect = 0;
 		sd_gendisk.part[minor].nr_sects = 0;
 		sd_sizes[minor] = 0;
-	    };
+	    }
 	    
 	    dpnt->has_part_table = 0;
 	    dpnt->device = NULL;

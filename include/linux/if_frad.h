@@ -3,7 +3,7 @@
  *		created for each DLCI associated with a FRAD.  The FRAD driver
  *		is not truly a network device, but the lower level device
  *		handler.  This allows other FRAD manufacturers to use the DLCI
- *		code, including it's RFC1490 encapsulation along side the current
+ *		code, including its RFC1490 encapsulation alongside the current
  *		implementation for the Sangoma cards.
  *
  * Version:	@(#)if_ifrad.h	0.15	31 Mar 96

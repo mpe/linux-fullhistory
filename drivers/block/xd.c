@@ -17,6 +17,9 @@
  *   interrupts enabled and Linus didn't want to enable them in that first
  *   phase. xd_geninit() is the place to do these kinds of things anyway,
  *   he says.
+ *
+ * Modularized: 04/10/96 by Todd Fries, tfries@umr.edu
+ *
  */
 
 
@@ -64,6 +67,7 @@ XD_INFO xd_info[XD_MAXDRIVES];
 
 static XD_SIGNATURE xd_sigs[] = {
 	{ 0x0000,"Override geometry handler",NULL,xd_override_init_drive,"n unknown" }, /* Pat Mackinlay, pat@it.com.au */
+	{ 0x000B,"CRD18A   Not an IBM rom. (C) Copyright Data Technology Corp. 05/31/88",xd_dtc_init_controller,xd_dtc_init_drive," DTC 5150X" }, /* Todd Fries, tfries@umr.edu */
 	{ 0x000B,"CXD23A Not an IBM ROM (C)Copyright Data Technology Corp 12/03/88",xd_dtc_init_controller,xd_dtc_init_drive," DTC 5150X" }, /* Pat Mackinlay, pat@it.com.au */
 	{ 0x0008,"07/15/86 (C) Copyright 1986 Western Digital Corp",xd_wd_init_controller,xd_wd_init_drive," Western Digital 1002AWX1" }, /* Ian Justman, citrus!ianj@csusac.ecs.csus.edu */
 	{ 0x0008,"06/24/88 (C) Copyright 1988 Western Digital Corp",xd_wd_init_controller,xd_wd_init_drive," Western Digital 1004A27X" }, /* Dave Thaler, thalerd@engin.umich.edu */
@@ -89,7 +93,11 @@ static struct gendisk xd_gendisk = {
 	6,		/* Bits to shift to get real from partition */
 	1 << 6,		/* Number of partitions per real */
 	XD_MAXDRIVES,	/* maximum number of real */
-	xd_geninit,	/* init function */
+#ifdef MODULE
+	NULL,		/* called from init_module */
+#else
+        xd_geninit,     /* init function */
+#endif
 	xd,		/* hd struct */
 	xd_sizes,	/* block sizes */
 	0,		/* number */
@@ -726,4 +734,24 @@ static void xd_setparam (u_char command,u_char drive,u_char heads,u_short cylind
 	if (xd_command(cmdblk,PIO_MODE,0,0,0,XD_TIMEOUT * 2))
 		printk("xd_setparam: error setting characteristics for drive %d\n",drive);
 }
+
+
+#ifdef MODULE
+int init_module(void)
+{
+	int error = xd_init();
+	if (!error)
+	{
+		printk(KERN_INFO "XD: Loaded as a module.\n");
+		xd_geninit(&(struct gendisk) { 0,0,0,0,0,0,0,0,0,0,0 });
+	}
+        
+	return error;
+}
+
+void cleanup_module(void)
+{
+	unregister_blkdev(MAJOR_NR, "xd");
+}
+#endif /* MODULE */
 

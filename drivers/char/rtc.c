@@ -30,7 +30,7 @@
  *
  */
 
-#define RTC_VERSION		"1.05"
+#define RTC_VERSION		"1.06"
 
 #define RTC_IRQ 	8	/* Can't see this changing soon.	*/
 #define RTC_IO_BASE	0x70	/* Or this...				*/
@@ -56,8 +56,6 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-#include <time.h>
-
 /*
  *	We sponge a minor off of the misc major. No need slurping
  *	up another valuable major dev number for this.
@@ -81,14 +79,14 @@ static int rtc_ioctl(struct inode *inode, struct file *file,
 static int rtc_select(struct inode *inode, struct file *file,
 			int sel_type, select_table *wait);
 
-void get_rtc_time (struct tm *rtc_tm);
-void get_rtc_alm_time (struct tm *alm_tm);
+void get_rtc_time (struct rtc_time *rtc_tm);
+void get_rtc_alm_time (struct rtc_time *alm_tm);
 void rtc_dropped_irq(unsigned long data);
 
-inline void set_rtc_irq_bit(unsigned char bit);
-inline void mask_rtc_irq_bit(unsigned char bit);
+void set_rtc_irq_bit(unsigned char bit);
+void mask_rtc_irq_bit(unsigned char bit);
 
-unsigned char rtc_is_updating(void);
+static inline unsigned char rtc_is_updating(void);
 
 /*
  *	Bits in rtc_status. (7 bits of room for future expansion)
@@ -221,10 +219,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			 * than 64Hz of interrupts on a multi-user machine.
 			 */
 			if ((rtc_freq > 64) && (!suser()))
-				return -EPERM;
-
-			if (rtc_freq == 0)
-				return -EINVAL;
+				return -EACCES;
 
 			if (!(rtc_status & RTC_TIMER_ON)) {
 				rtc_status |= RTC_TIMER_ON;
@@ -247,39 +242,39 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		case RTC_ALM_READ:	/* Read the present alarm time */
 		{
 			/*
-			 * This returns a struct tm. Reading >= 0xc0 means
-			 * "don't care" or "match all". Only the tm_hour,
+			 * This returns a struct rtc_time. Reading >= 0xc0
+			 * means "don't care" or "match all". Only the tm_hour,
 			 * tm_min, and tm_sec values are filled in.
 			 */
 			int retval;
-			struct tm alm_tm;
+			struct rtc_time alm_tm;
 
-			retval = verify_area(VERIFY_WRITE, (struct tm*)arg, sizeof(struct tm));
+			retval = verify_area(VERIFY_WRITE, (struct rtc_time*)arg, sizeof(struct rtc_time));
 			if (retval != 0 )
 				return retval;
 
 			get_rtc_alm_time(&alm_tm);
 
-			memcpy_tofs((struct tm*)arg, &alm_tm, sizeof(struct tm));
+			memcpy_tofs((struct rtc_time*)arg, &alm_tm, sizeof(struct rtc_time));
 			
 			return 0;
 		}
 		case RTC_ALM_SET:	/* Store a time into the alarm */
 		{
 			/*
-			 * This expects a struct tm. Writing 0xff means
+			 * This expects a struct rtc_time. Writing 0xff means
 			 * "don't care" or "match all". Only the tm_hour,
 			 * tm_min and tm_sec are used.
 			 */
 			int retval;
 			unsigned char hrs, min, sec;
-			struct tm alm_tm;
+			struct rtc_time alm_tm;
 
-			retval = verify_area(VERIFY_READ, (struct tm*)arg, sizeof(struct tm));
+			retval = verify_area(VERIFY_READ, (struct rtc_time*)arg, sizeof(struct rtc_time));
 			if (retval != 0 )
 				return retval;
 
-			memcpy_fromfs(&alm_tm, (struct tm*)arg, sizeof(struct tm));
+			memcpy_fromfs(&alm_tm, (struct rtc_time*)arg, sizeof(struct rtc_time));
 
 			hrs = alm_tm.tm_hour;
 			min = alm_tm.tm_min;
@@ -313,33 +308,33 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		case RTC_RD_TIME:	/* Read the time/date from RTC	*/
 		{
 			int retval;
-			struct tm rtc_tm;
+			struct rtc_time rtc_tm;
 			
-			retval = verify_area(VERIFY_WRITE, (struct tm*)arg, sizeof(struct tm));
+			retval = verify_area(VERIFY_WRITE, (struct rtc_time*)arg, sizeof(struct rtc_time));
 			if (retval !=0 )
 				return retval;
 
 			get_rtc_time(&rtc_tm);
-			memcpy_tofs((struct tm*)arg, &rtc_tm, sizeof(struct tm));
+			memcpy_tofs((struct rtc_time*)arg, &rtc_tm, sizeof(struct rtc_time));
 			return 0;
 		}
 		case RTC_SET_TIME:	/* Set the RTC */
 		{
 			int retval;
-			struct tm rtc_tm;
+			struct rtc_time rtc_tm;
 			unsigned char mon, day, hrs, min, sec, leap_yr;
 			unsigned char save_control, save_freq_select;
 			unsigned int yrs;
 			unsigned long flags;
 			
 			if (!suser())
-				return -EPERM;
+				return -EACCES;
 
-			retval = verify_area(VERIFY_READ, (struct tm*)arg, sizeof(struct tm));
+			retval = verify_area(VERIFY_READ, (struct rtc_time*)arg, sizeof(struct rtc_time));
 			if (retval !=0 )
 				return retval;
 
-			memcpy_fromfs(&rtc_tm, (struct tm*)arg, sizeof(struct tm));
+			memcpy_fromfs(&rtc_tm, (struct rtc_time*)arg, sizeof(struct rtc_time));
 
 			yrs = rtc_tm.tm_year + 1900;
 			mon = rtc_tm.tm_mon + 1;   /* tm_mon starts at zero */
@@ -424,7 +419,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			 * than 64Hz of interrupts on a multi-user machine.
 			 */
 			if ((arg > 64) && (!suser()))
-				return -EPERM;
+				return -EACCES;
 
 			while (arg > (1<<tmp))
 				tmp++;
@@ -432,7 +427,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			/*
 			 * Check that the input was really a power of 2.
 			 */
-			if ((arg != 0) && (arg != (1<<tmp)))
+			if (arg != (1<<tmp))
 				return -EINVAL;
 
 			rtc_freq = arg;
@@ -440,13 +435,6 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			save_flags(flags);
 			cli();
 			val = CMOS_READ(RTC_FREQ_SELECT) & 0xf0;
-
-			if (arg == 0) {
-				CMOS_WRITE(val, RTC_FREQ_SELECT);
-				restore_flags(flags);
-				return 0;
-			}
-
 			val |= (16 - tmp);
 			CMOS_WRITE(val, RTC_FREQ_SELECT);
 			restore_flags(flags);
@@ -557,9 +545,10 @@ int rtc_init(void)
 	rtc_wait = NULL;
 	save_flags(flags);
 	cli();
-	rtc_freq = CMOS_READ(RTC_FREQ_SELECT) & 0x0F;
+	/* Initialize periodic freq. to CMOS reset default, which is 1024Hz */
+	CMOS_WRITE(((CMOS_READ(RTC_FREQ_SELECT) & 0xF0) | 0x06), RTC_FREQ_SELECT);
 	restore_flags(flags);
-	rtc_freq = (rtc_freq ? (65536/(1<<rtc_freq)) : 0);
+	rtc_freq = 1024;
 	return 0;
 }
 
@@ -599,7 +588,7 @@ void rtc_dropped_irq(unsigned long data)
 int get_rtc_status(char *buf)
 {
 	char *p;
-	struct tm tm;
+	struct rtc_time tm;
 	unsigned char batt, ctrl;
 	unsigned long flags;
 
@@ -650,7 +639,7 @@ int get_rtc_status(char *buf)
 		"DST_enable\t: %s\n"
 		"BCD\t\t: %s\n"
 		"24hr\t\t: %s\n"
-		"sqare_wave\t: %s\n"
+		"square_wave\t: %s\n"
 		"alarm_IRQ\t: %s\n"
 		"update_IRQ\t: %s\n"
 		"periodic_IRQ\t: %s\n"
@@ -672,7 +661,7 @@ int get_rtc_status(char *buf)
 /*
  * Returns true if a clock update is in progress
  */
-inline unsigned char rtc_is_updating(void)
+static inline unsigned char rtc_is_updating(void)
 {
 	unsigned long flags;
 	unsigned char uip;
@@ -684,7 +673,7 @@ inline unsigned char rtc_is_updating(void)
 	return uip;
 }
 
-void get_rtc_time(struct tm *rtc_tm)
+void get_rtc_time(struct rtc_time *rtc_tm)
 {
 
 	unsigned long flags, uip_watchdog = jiffies;
@@ -733,7 +722,7 @@ void get_rtc_time(struct tm *rtc_tm)
 
 	/*
 	 * Account for differences between how the RTC uses the values
-	 * and how they are defined in a struct tm;
+	 * and how they are defined in a struct rtc_time;
 	 */
 	if (rtc_tm->tm_year <= 69)
 		rtc_tm->tm_year += 100;
@@ -741,7 +730,7 @@ void get_rtc_time(struct tm *rtc_tm)
 	rtc_tm->tm_mon--;
 }
 
-void get_rtc_alm_time(struct tm *alm_tm)
+void get_rtc_alm_time(struct rtc_time *alm_tm)
 {
 	unsigned long flags;
 	unsigned char ctrl;
@@ -775,7 +764,7 @@ void get_rtc_alm_time(struct tm *alm_tm)
  * We also clear out any old irq data after an ioctl() that
  * meddles the interrupt enable/disable bits.
  */
-inline void mask_rtc_irq_bit(unsigned char bit)
+void mask_rtc_irq_bit(unsigned char bit)
 {
 	unsigned char val;
 	unsigned long flags;
@@ -790,7 +779,7 @@ inline void mask_rtc_irq_bit(unsigned char bit)
 	rtc_irq_data = 0;
 }
 
-inline void set_rtc_irq_bit(unsigned char bit)
+void set_rtc_irq_bit(unsigned char bit)
 {
 	unsigned char val;
 	unsigned long flags;

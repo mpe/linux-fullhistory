@@ -9,7 +9,7 @@ clock that keeps the date and time while your computer is turned off.
 
 However it can also be used to generate signals from a slow 2Hz to a
 relatively fast 8192Hz, in increments of powers of two. These signals
-are reported by interrupt number 8. (Oh! So *thats* what IRQ 8 is
+are reported by interrupt number 8. (Oh! So *that* is what IRQ 8 is
 for...) It can also function as a 24hr alarm, raising IRQ 8 when the
 alarm goes off. The alarm can also be programmed to only check any
 subset of the three programmable values, meaning that it could be set to
@@ -88,13 +88,12 @@ that will be using this driver.
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
-#include <time.h>
 
 void main(void) {
 
 int i, fd, retval, irqcount = 0;
 unsigned long tmp, data;
-struct tm rtc_tm;
+struct rtc_time rtc_tm;
 
 fd = open ("/dev/rtc", O_RDONLY);
 

@@ -49,8 +49,8 @@
 		eret
 		/*
 		 * Workaround for R4000 bug.  For explanation see MIPS
-		 * docs.  Note that this that obscure that it wont almost
-		 * never happen.  Well, but Mips writes about it's bugs.
+		 * docs.  Note that this is so obscure that it will almost
+		 * never happen.  Well, but Mips writes about its bugs.
 		 */
 		nop
 		eret

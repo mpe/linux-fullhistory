@@ -273,7 +273,7 @@ keycode 0x7e =
 # keycode 0x7f is special and it means 'all keys released' and is
 # taken care of within the sun keyboard driver itself
 keycode 0x7f =
-# Thats all folks...
+# That's all folks...
 string F1 = "\033[[A"
 string F2 = "\033[[B"
 string F3 = "\033[[C"

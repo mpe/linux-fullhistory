@@ -449,7 +449,7 @@ void fix_conditionals(struct kconfig * scfg)
 	{
 	  /*
 	   * Now search the condition list for a known configuration variable
-	   * that has conditions of it's own.
+	   * that has conditions of its own.
 	   */
 	  if(cnd->op != op_kvariable) continue;
 	  if(cnd->variable.cfg->cond == NULL) continue;

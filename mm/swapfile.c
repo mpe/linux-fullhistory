@@ -187,6 +187,7 @@ static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
 		return 1;
 	}
 	set_pte(dir, pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot))));
+	flush_tlb_page(vma, address);
 	++vma->vm_mm->rss;
 	swap_free(pte_val(pte));
 	return 1;

@@ -24,7 +24,7 @@
 	misguided packets.
 
 			Nick Holloway, 27th May 1994
-	[I tweaked this explanation a little but thats all]
+	[I tweaked this explanation a little but that's all]
 			Alan Cox, 30th May 1994
 */
 

@@ -57,6 +57,7 @@
 
 #ifndef __ASSEMBLY__
 
+#include <asm/sigcontext.h>	/* for struct _fpstate */
 #include <linux/math_emu.h>
 #include <linux/linkage.h>
 

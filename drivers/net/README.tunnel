@@ -6,7 +6,7 @@ Protocol Tunneling:
 	A network tunneling driver encapsulates packets of one 
 protocol type within packets of another protocol type.  It sends
 them out over the network to a relay (or destination) where the
-packet is unwrapped and is forwarded to it's ultimate destination.
+packet is unwrapped and is forwarded to its ultimate destination.
 Packet tunneling is useful in situations where you want to route
 packets of a non-standard protocol type over the common network.
 A good example of this is 'IPX encapsulation', in which IPX packets
@@ -41,7 +41,7 @@ only support IP encapsulated in IP.
 based on the Linux loopback driver written (in part) by Ross Biro,
 Fred N. van Kempen, and Donald Becker.  After the driver is 
 loaded, it can be set up as any other network interface, using 
-ifconfig.  The tunnel device is given it's own IP address, which
+ifconfig.  The tunnel device is given its own IP address, which
 can match that of the machine, and also is given a pointopoint
 address.  This pointopoint address is the address of the machine
 providing the decapsulating endpoint for the IP tunnel.  After
@@ -54,7 +54,7 @@ network traffic from leaving the local endpoint.
 	The decapsulating endpoint must have loaded the ipip.o
 decapsulator module for it to understand IP-in-IP encapsulation.
 This module takes any IP-in-IP packet that is destined for the local
-machine, unwraps it, and sends it on it's way, using standard 
+machine, unwraps it, and sends it on its way, using standard 
 routing rules.  The current implementation of IP decapsulation does
 no checking on the packet, other than making sure wrapper is bound
 for the local machine.
@@ -106,11 +106,11 @@ tunnel interface is wrapped and sent to the pointopoint address
 and every incoming IP-in-IP packet bound for the local machine is
 unwrapped and re-routed normally.
 The only difference in the two machines setup shown above is that 
-machine A set it's tunnel address to one existing on machine B's
+machine A set its tunnel address to one existing on machine B's
 network, while B set a route to machine A's tunnel device address
 through the tunnel.  This is because machine A wants to have a new
 address on network B, and machine B is simply acting as a proxy 
-for machine A.  Machine A needs it's tunnel address to be on network 
+for machine A.  Machine A needs its tunnel address to be on network 
 B so that when packets from machine B are unwrapped, the Linux 
 routing system knows that the address is a local one.  Due to a 
 feature of Linux, any packets received locally, bound for another

@@ -802,10 +802,12 @@ int isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 	isdn_net_local *lp = nd->queue;
 	int proto = PPP_IP;	/* 0x21 */
 	struct ippp_struct *ipt = ippp_table[lp->ppp_minor];
+#if defined(CONFIG_ISDN_PPP_VJ) || defined(CONFIG_ISDN_MPP)
 	struct ippp_struct *ipts = ippp_table[lp->netdev->local.ppp_minor];
+#endif
 
         /* If packet is to be resent, it has already been processed and
-         * therefore it's first bytes are already initialized. In this case
+         * therefore its first bytes are already initialized. In this case
          * send it immediately ...
          */
         if (*((unsigned long *)skb->data) != 0)

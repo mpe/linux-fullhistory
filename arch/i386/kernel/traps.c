@@ -255,18 +255,11 @@ void math_error(void)
 	 */
 	__asm__ __volatile__("fnsave %0":"=m" (task->tss.i387.hard));
 	task->flags&=~PF_USEDFPU;
+	stts();
 
 	force_sig(SIGFPE, task);
 	task->tss.trap_no = 16;
 	task->tss.error_code = 0;
-
-	/*
-	 * Give the process a clean slate next time they use
-	 * the FPU (and if they haven't accepted the SIGFPE before
-	 * that, it's their problem..)
-	 */
-	stts();
-	task->used_math = 0;
 }
 
 asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)

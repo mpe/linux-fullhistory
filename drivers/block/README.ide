@@ -485,7 +485,7 @@ In <41ip85$gf9@park.uvsc.edu>, Terry Lambert <terry@cs.weber.edu> writes:
 I agreed that you might be able to concoct a benchmark that was affected,
 but it has had no real world effect for me or a lot of other people.  Disabling
 IDE prefetch has the effect of a small increase in PCI bus busy at a time
-when the CPU is giving all it's CPU cycles to the IDE driver (because the
+when the CPU is giving all its CPU cycles to the IDE driver (because the
 RZ1000 can't run DMA and the driver has to be in a PIO loop) and therefore
 the CPU can't do much of anything else anyway.
 

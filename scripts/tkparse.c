@@ -662,7 +662,7 @@ int main(int argc, char * argv[])
    * Input file is now parsed.  Next we need to go through and attach
    * the correct conditions to each of the actual menu items and kill
    * the if/else/endif tokens from the list.  We also flag the menu items
-   * that have other things that depend upon it's setting.
+   * that have other things that depend upon its setting.
    */
   fix_conditionals(config);
 

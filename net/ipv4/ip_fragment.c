@@ -754,7 +754,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 			ip_options_fragment(skb);
 
 		/*
-		 *	Added AC : If we are fragmenting a fragment thats not the
+		 *	Added AC : If we are fragmenting a fragment that's not the
 		 *		   last fragment then keep MF on each bit
 		 */
 		if (left > 0 || (is_frag & 1))

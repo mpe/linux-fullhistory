@@ -4483,12 +4483,12 @@ aic7xxx_abort_reset(Scsi_Cmnd *cmd, unsigned char errcode)
        * The target we select to send the message to may be entirely
        * different than the target pointed to by the scb that timed
        * out.  If the command is in the QINFIFO or the waiting for
-       * selection list, its not tying up the bus and isn't responsible
+       * selection list, it's not tying up the bus and isn't responsible
        * for the delay so we pick off the active command which should
-       * be the SCB selected by SCBPTR.  If its disconnected or active,
+       * be the SCB selected by SCBPTR.  If it's disconnected or active,
        * we device reset the target scbp points to.  Although it may
        * be that this target is not responsible for the delay, it may
-       * may also be that we're timing out on a command that just takes
+       * also be that we're timing out on a command that just takes
        * too much time, so we try the bus device reset there first.
        */
       active_scb = inb(SCBPTR + base);

@@ -14,6 +14,8 @@
 ** 94/11/14 Andreas Schwab: put kernel at PAGESIZE
 ** 94/11/18 Andreas Schwab: remove identity mapping of STRAM for Atari 
 ** ++ Bjoern & Roman: ATARI-68040 support for the Medusa
+** 96/04/26 G|nther Kelleter: fixed identity mapping for Falcon with
+**                            Magnum- and FX-alternate ram
 **
 ** This file is subject to the terms and conditions of the GNU General Public
 ** License.  See the file README.legal in the main directory of this archive
@@ -144,6 +146,16 @@ ENTRY(_start)
  */
 
 	movew	#0x2700,%sr
+
+/*
+ * Setup initial stack pointer
+ */
+	lea	%pc@(SYMBOL_NAME(_start)),%sp
+
+/* clear the fpu */
+	lea	%pc@(mmu),%a0
+	clrl	%a0@
+	frestore %a0@
 
 /*
  * Copy bootinfo from position after BSS to final resting place
@@ -651,8 +663,8 @@ Lamimmu68040:
 	
 	.word	0xf4d8		/* CINVA I/D */
 	.word	0xf518		/* pflusha	*/
-	.long	0x4e7bc807	/* movec a5,srp */
-	.long	0x4e7bc806	/* movec a5,urp */
+	.long	0x4e7bc807	/* movec a4,srp */
+	.long	0x4e7bc806	/* movec a4,urp */
 	movel	#(TC_ENABLE+TC_PAGE4K),%d0
 
 	/* setup registers for jumping MMU enabling code */
@@ -723,12 +735,36 @@ Lmapphysnotamiga:
 	/* cleanup is needed; note it */
 	moveq	#1,%d5
 
+	/* tt0 doesn't work if physical and virtual address of kernel is in
+	 * the same 16M area (Falcon with Magnum/FX, kernel in alternate ram)
+	 */
 	movel	%a0,%d2
 	andl	#0xff000000,%d2		/* logical address base */
+	jeq	1f
 	orw	#0x8143,%d2		/* add in magic bits */
 	lea	%pc@(mmu),%a0
 	movel	%d2,%a0@
 	pmove	%a0@,%tt0
+	jra	Lnophys2
+1:
+	/* Transparent translation through kernel pointer table
+	 * Requires that this code until after MMU enabling lies in
+	 * the 256K page around %a0
+	 */
+	movel	%a0,%d2
+	moveq	#ROOT_INDEX_SHIFT,%d1
+	lsrl	%d1,%d2
+	movel	%a4@(%d2:l:4),%d0
+	andw	#0xfff0,%d0
+	movel	%d0,%a1
+	movel	%a0,%d2
+	andl	#0x01ffffff,%d2
+	moveq	#(ROOT_INDEX_SHIFT-7),%d1
+	lsrl	%d1,%d2
+	movel	%a0,%d0
+	addql	#PAGEDESC,%d0
+	movel	%a1@(%d2:l:4),%a2	/* save old_entry */
+	movel	%d0,%a1@(%d2:l:4)
 
 Lnophys2:
 	/*
@@ -832,10 +868,27 @@ LdoneMMUenable:
 	cmpl	#MACH_ATARI,%d4
 	jne	Lnoclean
 
+	movel	%a3,%d2
+	andl	#0xff000000,%d2
+	jeq	1f
 	/* clear transparent translation register */
 	lea	%pc@(mmu),%a0
 	clrl	%a0@
 	pmove	%a0@,%tt0
+	jra	Lnoclean
+1:
+	movel	%a3,%d2
+	moveq	#ROOT_INDEX_SHIFT,%d1
+	lsrl	%d1,%d2
+	movel	%a4@(%d2:l:4),%d0
+	andw	#0xfff0,%d0
+	subl	%a3,%d0		/* to virtual address */
+	movel	%d0,%a0
+	movel	%a3,%d2
+	andl	#0x01ffffff,%d2
+	moveq	#(ROOT_INDEX_SHIFT-7),%d1
+	lsrl	%d1,%d2
+	movel	%a2,%a0@(%d2:l:4)	/* restore old entry */
 	jra	Lnoclean
 
 Lclean030:
@@ -1177,7 +1230,11 @@ showtest:
 	rts
 #endif
 
-	.align 512	/*
+#ifdef __ELF__
+	.align 512
+#else
+	.align 9
+#endif			/*
 			 * MMU root-pointers need to be 512-byte
 			 * aligned on the 680[46]0 - Jes
 			 */

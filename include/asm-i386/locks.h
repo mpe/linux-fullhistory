@@ -21,7 +21,7 @@ extern __inline__ void prim_spin_lock(struct spinlock *sp)
 	while(lock_set_bit(0,&sp->lock))
 	{
 		/*
-		 *	Failed, but thats cos we own it!
+		 *	Failed, but that's cos we own it!
 		 */
 		 
 		if(sp->cpu==processor)
@@ -45,7 +45,7 @@ extern __inline__ void prim_spin_lock(struct spinlock *sp)
 		}
 		/*
 		 *	Someone wrote the line, we go 'I' and get
-		 *	the cache entry. Now try and regrab
+		 *	the cache entry. Now try to regrab
 		 */
 	}
 	sp->users++;sp->cpu=processor;
@@ -117,7 +117,7 @@ extern __inline__ void spinunlock(struct spinlock *sp)
 extern __inline__ void spintestlock(struct spinlock *sp)
 {
 	/*
-	 *	We do no sanity checks, its legal to optimistically
+	 *	We do no sanity checks, it's legal to optimistically
 	 *	get a lower lock.
 	 */
 	prim_spin_lock_nb(sp);

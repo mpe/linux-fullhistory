@@ -8,7 +8,7 @@
 
 #define HD_IRQ 14		/* the standard disk interrupt */
 
-/* ide.c has it's own port definitions in "ide.h" */
+/* ide.c has its own port definitions in "ide.h" */
 
 /* Hd controller regs. Ref: IBM AT Bios-listing */
 #define HD_DATA		0x1f0	/* _CTL when writing */

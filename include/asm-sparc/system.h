@@ -40,7 +40,7 @@ extern struct linux_romvec *romvec;
 #define halt() romvec->pv_halt()
 
 /* When a context switch happens we must flush all user windows so that
- * the windows of the current process are flushed onto it's stack. This
+ * the windows of the current process are flushed onto its stack. This
  * way the windows are all clean for the next process and the stack
  * frames are up to date.
  */

@@ -359,7 +359,7 @@ gus_write_addr (int reg, unsigned long address, int is16bit)
 
   gus_write16 (reg, (unsigned short) ((address >> 7) & 0xffff));
   gus_write16 (reg + 1, (unsigned short) ((address << 9) & 0xffff));
-  /* Could writing twice fix problems with GUS_VOICE_POS() ? Lets try... */
+  /* Could writing twice fix problems with GUS_VOICE_POS() ? Let's try... */
   gus_delay ();
   gus_write16 (reg, (unsigned short) ((address >> 7) & 0xffff));
   gus_write16 (reg + 1, (unsigned short) ((address << 9) & 0xffff));
@@ -3128,7 +3128,7 @@ gus_wave_init (long mem_start, struct address_info *hw_config)
     sound_num_blocks++;;
   if (samples == NULL)
     {
-      printk ("GUS Error: Cant allocate memory for instrument tables\n");
+      printk ("GUS Error: Can't allocate memory for instrument tables\n");
       return mem_start;
     }
 

@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: April 20, 1996}
+\date{Last revised: May 5, 1996}
 \maketitle
 %
 \noindent
@@ -156,6 +156,7 @@ least not without contacting me first.
 \major{39}{}{char }{ML-16P experimental I/O board}
 \major{  }{}{block}{Reserved for Linux/AP+}
 \major{40}{}{char }{Matrox Meteor frame grabber}
+\major{  }{}{block}{Syquest EZ135 removable drive}
 \major{41}{}{char }{Yet Another Micro Monitor}
 \major{42}{}{}{Demo/sample use}
 \major{43}{}{char }{isdn4linux virtual modem}
@@ -165,7 +166,8 @@ least not without contacting me first.
 \major{47}{}{char }{Comtrol Rocketport serial card -- alternate devices}
 \major{48}{}{char }{SDL RISCom serial card}
 \major{49}{}{char }{SDL RISCom serial card -- alternate devices}
-\major{50}{--59}{}{Unallocated}
+\major{50}{}{char }{Reserved for GLINT}
+\major{51}{--59}{}{Unallocated}
 \major{60}{--63}{}{Local/experimental use}
 \major{64}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
@@ -942,7 +944,14 @@ networking device.
 \begin{devicelist}
 \major{40}{}{char }{Matrox Meteor frame grabber}
 	\minor{0}{/dev/mmetfgrab}{Matrox Meteor frame grabber}
+\\
+\major{  }{}{block}{Syquest EZ135 removable drive}
+	\minor{0}{/dev/eza}{First EZ135 drive whole disk}
 \end{devicelist}
+
+\noindent
+Partitions are handled the same way as for IDE disks (see major number
+3).
 
 \begin{devicelist}
 \major{41}{}{char }{Yet Another Micro Monitor}

@@ -15,8 +15,8 @@
  *		Alan Cox	:	Rejig for NET3.029 snap #3
  *		Alan Cox	: 	Fixed NET3.029 bugs and sped up
  *		Larry McVoy	:	Tiny tweak to double performance
- *		Alan Cox	:	Backed out LMV's tweak - the linux mm cant
- *					take it...
+ *		Alan Cox	:	Backed out LMV's tweak - the linux mm
+ *					can't take it...
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License

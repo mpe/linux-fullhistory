@@ -397,7 +397,7 @@ int ipmr_mfc_modify(int action, struct mfcctl *mfc)
 		return 0;
 	}
 	/*
-	 *	Unsolicited update - thats ok add anyway.
+	 *	Unsolicited update - that's ok, add anyway.
 	 */
 	 
 	
@@ -420,7 +420,7 @@ int ipmr_mfc_modify(int action, struct mfcctl *mfc)
 /*
  *	Socket options and virtual interface manipulation. The whole
  *	virtual interface system is a complete heap, but unfortunately
- *	thats how BSD mrouted happens to think. Maybe one day with a proper
+ *	that's how BSD mrouted happens to think. Maybe one day with a proper
  *	MOSPF/PIM router set up we can clean this up.
  */
  
@@ -487,7 +487,7 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 				{
 					if(dev->flags&IFF_MULTICAST)
 					{
-						/* Most ethernet cards dont know
+						/* Most ethernet cards don't know
 						   how to do this yet.. */
 						dev->flags|=IFF_ALLMULTI;
 						dev_mc_upload(dev);

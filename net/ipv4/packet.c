@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- *		Doesn't belong in IP but its currently too hooked into ip
+ *		Doesn't belong in IP but it's currently too hooked into ip
  *		to separate.
  *
  * Version:	@(#)packet.c	1.0.6	05/25/93
@@ -176,7 +176,7 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 
 	/*
 	 *	If the write buffer is full, then tough. At this level the user gets to
-	 *	deal with the problem - do your own algorithmic backoffs. Thats far
+	 *	deal with the problem - do your own algorithmic backoffs. That's far
 	 *	more flexible.
 	 */
 	 

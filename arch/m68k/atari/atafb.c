@@ -1399,7 +1399,7 @@ static int falcon_encode_var( struct fb_var_screeninfo *var,
 	if (hw->ste_mode || mon_type!=F_MON_VGA)
 		var->right_margin = prescale * (hw->hht + 2 - hw->hde) - hde_off;
 	else
-		/* cant use this in ste_mode, because hbb is +1 off */
+		/* can't use this in ste_mode, because hbb is +1 off */
 		var->right_margin = prescale * (hw->hht + 2 - hw->hbb);
 	var->hsync_len = prescale * (hw->hht + 2 - hw->hss);
 

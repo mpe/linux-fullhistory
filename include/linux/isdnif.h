@@ -2,7 +2,7 @@
  *
  * Linux ISDN subsystem
  *
- * Definition of the interface between the subsystem and it's lowlevel-drivers.
+ * Definition of the interface between the subsystem and its low-level drivers.
  *
  * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
  * Copyright 1995,96    Thinking Objects Software GmbH Wuerzburg
@@ -136,7 +136,7 @@ typedef struct {
  * The interface-struct itself (initialized at load-time of lowlevel-driver)
  *
  * See Documentation/isdn/INTERFACE for a description, how the communication
- * between the ISDN subsystem and it's drivers is done.
+ * between the ISDN subsystem and its drivers is done.
  *
  */
 typedef struct {

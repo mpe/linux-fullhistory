@@ -66,7 +66,7 @@ C_LABEL(sparc_switch_to):
 
 #ifdef __SMP__
 	/* Because of nasty register windows this is the only way
-	 * to start a processor into it's cpu_idle() thread.
+	 * to start a processor into its cpu_idle() thread.
 	 */
 
 	.globl	C_LABEL(sparc_cpusched)

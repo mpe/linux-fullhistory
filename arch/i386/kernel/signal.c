@@ -43,11 +43,6 @@ asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long 
 	}
 }
 
-/*
- * FIXME. We don't currently restore emulator state
- */
-#define restore_i387_soft(x) do { } while (0)
-
 static inline void restore_i387_hard(struct _fpstate *buf)
 {
 #ifdef __SMP__
@@ -121,11 +116,6 @@ if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; COPY(x);
 badframe:
 	do_exit(SIGSEGV);
 }
-
-/*
- * FIXME. We currently don't save 387 state if we use emulation
- */
-#define save_i387_soft(x) NULL
 
 static inline struct _fpstate * save_i387_hard(struct _fpstate * buf)
 {

@@ -442,7 +442,7 @@ unsigned long pcibios_init(unsigned long mem_start,
 }
 
 /*
- * The SRM console *disables* the IDE interface, this code ensures its
+ * The SRM console *disables* the IDE interface, this code ensures it's
  * enabled.
  *
  * This code bangs on a control register of the 87312 Super I/O chip
@@ -565,7 +565,7 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 						  PCI_INTERRUPT_LINE, dev->irq);
 #endif
 			/*
-			 * if its a VGA, enable its BIOS ROM at C0000
+			 * if it's a VGA, enable its BIOS ROM at C0000
 			 */
 			if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA) {
 			  pcibios_write_config_dword(dev->bus->number, dev->devfn,
@@ -799,7 +799,7 @@ static inline void sio_fixup(void)
 			  dev->bus->number, PCI_SLOT(dev->devfn), dev->vendor, dev->device,
 			  slot, pin, pirq));
 		/*
-		 * if its a VGA, enable its BIOS ROM at C0000
+		 * if it's a VGA, enable its BIOS ROM at C0000
 		 */
 		if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA) {
 			pcibios_write_config_dword(dev->bus->number, dev->devfn,

@@ -1834,7 +1834,7 @@ unsigned long srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 	}
 #endif
 	if(!num_contexts) {
-		prom_printf("Something wrong, cant find cpu node in paging_init.\n");
+		prom_printf("Something wrong, can't find cpu node in paging_init.\n");
 		prom_halt();
 	}
 		

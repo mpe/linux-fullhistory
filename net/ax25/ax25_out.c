@@ -389,7 +389,7 @@ void dama_enquiry_response(ax25_cb *ax25)
 
 	/* The FLEXNET DAMA master implementation refuses to send us ANY */
 	/* I frame for this connection if we send a REJ here, probably   */
-	/* due to it's frame collector scheme? A simple RR or  RNR will  */
+	/* due to its frame collector scheme? A simple RR or  RNR will   */
 	/* invoke the retransmission, and in fact REJs are superfluous   */
 	/* in DAMA mode anyway...					 */
 	

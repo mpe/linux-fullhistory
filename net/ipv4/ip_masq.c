@@ -539,7 +539,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 
  /*
   *	Check if it's an masqueraded port, look it up,
-  *	and send it on it's way...
+  *	and send it on its way...
   *
   *	Better not have many hosts using the designated portrange
   *	as 'normal' ports, or you'll be spending many time in
@@ -639,7 +639,6 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
                  */
                 if (iph->protocol==IPPROTO_UDP)
 		{
-			unsigned long 	timeout;
                         recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,size);
 			ip_masq_set_expire(ms, 0);
 			ip_masq_set_expire(ms, ip_masq_expire->udp_timeout);

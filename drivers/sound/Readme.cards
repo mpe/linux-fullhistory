@@ -893,10 +893,10 @@ Cards not supported yet
 Please check which version of sound driver you are using before 
 complaining that your card is not supported. It's possible that you are 
 using a driver version which was released months before your card was
-introduced. Driver's release date is listed after it's version number
+introduced. Driver's release date is listed after its version number
 in "cat /dev/sndstat" printout and in file linux/drivers/sound/soundvers.h.
 
-First of all. There is an easy way to make most soundcards to work
+First of all, there is an easy way to make most soundcards to work
 with Linux. Just use the DOS based driver to initialize the card
 to a _known_ state. Then use loadlin.exe to boot Linux. If Linux is configured
 to use the same I/O, IRQ and DMA numbers than DOS, the card could work.

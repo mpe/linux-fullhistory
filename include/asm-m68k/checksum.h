@@ -108,7 +108,6 @@ static inline unsigned int csum_fold(unsigned int sum)
  * in icmp.c
  */
 
-#if 1
 static inline unsigned short
 ip_compute_csum(unsigned char * buff, int len)
 {
@@ -124,52 +123,5 @@ ip_compute_csum(unsigned char * buff, int len)
 		: "0" (csum_partial(buff, len, 0)));
 	return ~sum;
 }
-#else
-static inline unsigned short
-ip_compute_csum(unsigned char * buff, int len)
-{
-	unsigned long sum = 0;
-
-  /* Do the first multiple of 4 bytes and convert to 16 bits. */
-  if (len > 3)
-    {
-      int dummy;
-      __asm__ ("subql #1,%2\n\t"
-	       "1:\t"
-	       "movel %1@+,%/d0\n\t"
-	       "addxl %/d0,%0\n\t"
-	       "dbra %2,1b\n\t"
-	       "movel %0,%/d0\n\t"
-	       "swap %/d0\n\t"
-	       "addxw %/d0,%0\n\t"
-	       "clrw %/d0\n\t"
-	       "addxw %/d0,%0"
-	       : "=d" (sum), "=a" (buff), "=d" (dummy)
-	       : "0" (sum), "1" (buff), "2" (len >> 2)
-	       : "d0");
-    }
-  if (len & 2)
-    {
-      __asm__ ("addw %1@+,%0\n\t"
-	       "addxw %2,%0"
-	       : "=d" (sum), "=a" (buff)
-	       : "d" (0), "0" (sum), "1" (buff));
-    }
-  if (len & 1)
-    {
-      __asm__ ("movew %1@,%/d0\n\t"
-	       "clrb %/d0\n\t"
-	       "addw %/d0,%0\n\t"
-	       "clrw %/d0\n\t"
-	       "addxw %/d0,%0"
-	       : "=d" (sum)
-	       : "a" (buff), "0" (sum)
-	       : "d0");
-    }
-
-	sum =~sum;
-	return(sum & 0xffff);
-}
-#endif
 
 #endif /* _M68K_CHECKSUM_H */

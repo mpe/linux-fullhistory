@@ -27,6 +27,7 @@
  *		Marty Leisner	:	Fixes to fd passing
  *		Nick Nevin	:	recvmsg bugfix.
  *		Alan Cox	:	Started proper garbage collector
+ *		Heiko EiBfeldt	:	Missing verify_area check
  *
  * Known differences from reference BSD that was tested:
  *
@@ -352,7 +353,7 @@ static int unix_release(struct socket *sock, struct socket *peer)
 	if(skpair!=NULL)
 		skpair->protinfo.af_unix.locks--;	/* It may now die */
 	sk->protinfo.af_unix.other=NULL;		/* No pair */
-	unix_destroy_socket(sk);			/* Try and flush out this socket. Throw our buffers at least */
+	unix_destroy_socket(sk);			/* Try to flush out this socket. Throw out buffers at least */
 	
 	/*
 	 *	FIXME: BSD difference: In BSD all sockets connected to use get ECONNRESET and we die on the spot. In
@@ -1222,6 +1223,8 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			if((skb=skb_peek(&sk->receive_queue))!=NULL)
 				amount=skb->len;
 			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(unsigned long));
+			if(err)
+				return err;
 			put_fs_long(amount,(unsigned long *)arg);
 			return 0;
 		}

@@ -45,7 +45,7 @@ CONFIG_EXPERIMENTAL
   internals are usually welcomed by the developers. Unless you intend
   to help test and develop a feature or driver that falls into this 
   category, you should probably say N here, which will cause this 
-  configure script to present you with less choices. If you say Y here,
+  configure script to present you with fewer choices. If you say Y here,
   you will be offered the choice of using features or drivers that are
   currently considered to be in the alpha-test phase.
 
@@ -1261,7 +1261,7 @@ CONFIG_SCSI_DTC3280
   kernel whenever you want). If you want to compile it as a module,
   say M here and read Documentation/modules.txt.
 
-EATA-DMA (DPT, NEC, ATT, Olivetti for ISA, EISA, PCI) support
+EATA-DMA (DPT, NEC, AT&T, SNI, AST, Olivetti, Alphatronix) support
 CONFIG_SCSI_EATA_DMA
   This is support for the EATA-DMA protocol compliant SCSI Host Adaptors
   like the SmartCache III/IV, SmartRAID controller families and the DPT 

@@ -26,7 +26,7 @@
 
 #ifndef __ASSEMBLY__
 /* The debug vector is passed in %o1 at boot time.  It is a pointer to
- * a structure in the debuggers address space.  Here is it's format.
+ * a structure in the debuggers address space.  Here is its format.
  */
 
 typedef unsigned int (*debugger_funct)(void);

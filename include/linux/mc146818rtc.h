@@ -124,4 +124,22 @@ outb_p((val),RTC_PORT(1)); \
 #define RTC_IRQP_READ	0x0b		/* Read periodic IRQ rate (Hz)	*/
 #define RTC_IRQP_SET	0x0c		/* Set periodic IRQ rate (Hz)	*/
 
+/*
+ * The struct used to pass data via the above ioctl. Similar to the
+ * struct tm in <time.h>, but it needs to be here so that the kernel 
+ * source is self contained, allowing cross-compiles, etc. etc.
+ */
+
+struct rtc_time {
+	int tm_sec;
+	int tm_min;
+	int tm_hour;
+	int tm_mday;
+	int tm_mon;
+	int tm_year;
+	int tm_wday;
+	int tm_yday;
+	int tm_isdst;
+};
+
 #endif /* _MC146818RTC_H */

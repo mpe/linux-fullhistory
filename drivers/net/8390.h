@@ -13,7 +13,15 @@
 
 #define TX_2X_PAGES 12
 #define TX_1X_PAGES 6
-#define TX_PAGES (ei_status.pingpong ? TX_2X_PAGES : TX_1X_PAGES)
+
+/* Should always use two Tx slots to get back-to-back transmits. */
+#define EI_PINGPONG
+
+#ifdef EI_PINGPONG
+#define TX_PAGES TX_2X_PAGES
+#else
+#define TX_PAGES TX_1X_PAGES
+#endif
 
 #define ETHER_ADDR_LEN 6
 
@@ -56,7 +64,6 @@ struct ei_device {
   unsigned txing:1;		/* Transmit Active */
   unsigned irqlock:1;		/* 8390's intrs disabled when '1'. */
   unsigned dmaing:1;		/* Remote DMA Active */
-  unsigned pingpong:1;		/* Using the ping-pong driver */
   unsigned char tx_start_page, rx_start_page, stop_page;
   unsigned char current_page;	/* Read pointer in buffer  */
   unsigned char interface_num;	/* Net port (AUI, 10bT.) to use. */

@@ -1,0 +1,98 @@
+Ioctl Numbers
+6 May 1996
+Michael Chastain
+<mec@duracef.shout.net>
+
+If you are adding new ioctl's to the kernel, you should use the _IO
+macros defined in <linux/ioctl.h>:
+
+    _IO    an ioctl with no parameters
+    _IOW   an ioctl with write parameters (from user's point of view)
+    _IOR   an ioctl with read parameters (from user's point of view)
+    _IOWR  an ioctl with both write and read parameters.
+
+'Write' and 'read' are from the user's point of view.  This is like the
+system calls 'write' and 'read'.  For example, a SET_FOO ioctl would be
+_IOW, although the kernel would actually read data from user space; a
+GET_FOO ioctl would be _IOR, although the kernel would actually write
+data to user space.
+
+The first argument to _IO, _IOW, _IOR, or _IOWR is an identifying letter
+or number from the table below.  If you are writing a driver for a new
+device and need a letter, pick an unused letter.  You can register the
+letter by patching this file and submitting the patch to Linus Torvalds.
+Or you can e-mail me at <mec@duracef.shout.net> and I'll register one
+for you.
+
+The second argument to _IO, _IOW, _IOR, or _IOWR is a sequence number
+to distinguish ioctls from each other.  The third argument is a size
+of the structure going into the kernel or coming out of the kernel.
+
+Some devices use their major number as the identifier; this is not
+recommended.  Some devices are even more irregular and don't follow
+the convention at all.
+
+Following the convention is good because:
+
+(1) Keeping the ioctl's globally unique helps error checking:
+    if a program calls an ioctl on the wrong device, it will get an
+    error rather than some unexpected behaviour.
+
+(2) The 'strace' build procedure automatically finds ioctl numbers
+    defined with _IO, _IOW, _IOR, or _IOWR.
+
+(3) 'strace' can decode numbers back into useful names when the
+    numbers are unique.
+
+(4) People looking for ioctls can grep for them more easily when
+    the convention is used to define the ioctl numbers.
+
+(5) When following the convention, the driver code can use generic
+    code to call verify_area to validate parameters.
+
+This table is current to Linux 1.3.98.
+
+Ioctl	Include File		Comments
+========================================================
+0x00	linux/fs.h		only FIBMAP, FIGETBSZ
+0x00	linux/random.h		codes in 0x010800NN
+0x00	linux/mc146818rtc.h	conflict!
+0x02	linux/fd.h
+0x03	linux/hdreg.h
+0x04	linux/umsdos_fs.h
+0x06	linux/lp.h
+0x09	linux/md.h
+0x12	linux/fs.h
+0x20	linux/cm206.h
+0x22	linux/scc.h		conflict!
+0x22	scsi/sg.h		conflict!
+'A'	linux/apm_bios.h
+'C'	linux/soundcard.h
+'F'	linux/fb.h
+'I'	linux/isdn.h
+'K'	linux/kd.h
+'L'	linux/loop.h
+'M'	linux/soundcard.h
+'P'	linux/soundcard.h
+'Q'	linux/soundcard.h
+'S'	linux/cdrom.h		conflict!
+'S'	scsi/scsi.h		conflict!
+'S'	scsi/scsi_ioctl.h	conflict!
+'T'	linux/soundcard.h	conflict!
+'T'	asm/ioctls.h		conflict!
+'V'	linux/vt.h
+'Y'	linux/cyclades.h	codes in 0x004359NN
+'a'	various, see http://lrcwww.epfl.ch/linux-atm/magic.html
+'c'	linux/comstats.h
+'f'	linux/ext2_fs.h
+'m'	linux/mtio.h		conflict!
+'m'	linux/soundcard.h	conflict!
+'n'	linux/ncp_fs.h
+'r'	linux/msdos_fs.h
+'s'	linux/cdk.h
+'t'	linux/if_ppp.h		no conflict
+'t'	linux/isdn_ppp.h	no conflict
+'u'	linux/smb_fs.h
+'v'	linux/ext2_fs.h
+0x89	asm/sockios.h		no conflict
+0x89	linux/sockios.h		no conflict
