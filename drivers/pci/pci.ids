@@ -6305,6 +6305,7 @@
 	7401  Four Port RS-232 Interface
 	7402  Four Port RS-422/485 Interface
 	7801  Eight Port RS-232 Interface
+	7804  Eight Port RS-232/422/485 Interface
 	8001  8001 Digital I/O Adapter
 135f  I-Data International A-S
 1360  Meinberg Funkuhren
