@@ -4687,6 +4687,8 @@ static int idetape_cleanup (ide_drive_t *drive)
 	DRIVER(drive)->busy = 0;
 	(void) ide_unregister_subdriver(drive);
 
+	ide_unregister_region(drive->disk);
+
 	ide_tape_put(tape);
 
 	return 0;
@@ -4878,6 +4880,7 @@ static int idetape_attach (ide_drive_t *drive)
 	g->number = devfs_register_tape(drive->devfs_name);
 	g->fops = &idetape_block_ops;
 	g->private_data = tape;
+	ide_register_region(g);
 
 	return 0;
 failed:

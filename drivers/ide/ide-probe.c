@@ -1214,8 +1214,6 @@ static int ata_lock(dev_t dev, void *data)
 	return 0;
 }
 
-extern ide_driver_t idedefault_driver;
-
 static struct kobject *ata_probe(dev_t dev, int *part, void *data)
 {
 	ide_hwif_t *hwif = data;
@@ -1223,23 +1221,52 @@ static struct kobject *ata_probe(dev_t dev, int *part, void *data)
 	ide_drive_t *drive = &hwif->drives[unit];
 	if (!drive->present)
 		return NULL;
-	if (drive->driver == &idedefault_driver) {
-		if (drive->media == ide_disk)
-			(void) request_module("ide-disk");
-		if (drive->scsi)
-			(void) request_module("ide-scsi");
-		if (drive->media == ide_cdrom || drive->media == ide_optical)
-			(void) request_module("ide-cd");
-		if (drive->media == ide_tape)
-			(void) request_module("ide-tape");
-		if (drive->media == ide_floppy)
-			(void) request_module("ide-floppy");
-	}
-	if (drive->driver == &idedefault_driver)
-		return NULL;
-	*part &= (1 << PARTN_BITS) - 1;
-	return get_disk(drive->disk);
+
+	if (drive->media == ide_disk)
+		request_module("ide-disk");
+	if (drive->scsi)
+		request_module("ide-scsi");
+	if (drive->media == ide_cdrom || drive->media == ide_optical)
+		request_module("ide-cd");
+	if (drive->media == ide_tape)
+		request_module("ide-tape");
+	if (drive->media == ide_floppy)
+		request_module("ide-floppy");
+
+	return NULL;
 }
+
+static struct kobject *exact_match(dev_t dev, int *part, void *data)
+{
+	struct gendisk *p = data;
+	*part &= (1 << PARTN_BITS) - 1;
+	return &p->kobj;
+}
+
+static int exact_lock(dev_t dev, void *data)
+{
+	struct gendisk *p = data;
+
+	if (!get_disk(p))
+		return -1;
+	return 0;
+}
+
+void ide_register_region(struct gendisk *disk)
+{
+	blk_register_region(MKDEV(disk->major, disk->first_minor),
+			    disk->minors, NULL, exact_match, exact_lock, disk);
+}
+
+EXPORT_SYMBOL_GPL(ide_register_region);
+
+void ide_unregister_region(struct gendisk *disk)
+{
+	blk_unregister_region(MKDEV(disk->major, disk->first_minor),
+			      disk->minors);
+}
+
+EXPORT_SYMBOL_GPL(ide_unregister_region);
 
 static int alloc_disks(ide_hwif_t *hwif)
 {

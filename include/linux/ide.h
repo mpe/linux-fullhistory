@@ -1442,6 +1442,9 @@ extern int ide_hwif_request_regions(ide_hwif_t *hwif);
 extern void ide_hwif_release_regions(ide_hwif_t* hwif);
 extern void ide_unregister (unsigned int index);
 
+void ide_register_region(struct gendisk *);
+void ide_unregister_region(struct gendisk *);
+
 void ide_undecoded_slave(ide_hwif_t *);
 
 int probe_hwif_init_with_fixup(ide_hwif_t *, void (*)(ide_hwif_t *));

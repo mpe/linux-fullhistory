@@ -723,6 +723,8 @@ static int idescsi_cleanup (ide_drive_t *drive)
 	if (ide_unregister_subdriver(drive))
 		return 1;
 
+	ide_unregister_region(g);
+
 	drive->driver_data = NULL;
 	g->private_data = NULL;
 	g->fops = ide_fops;
@@ -1120,12 +1122,14 @@ static int idescsi_attach(ide_drive_t *drive)
 		idescsi_setup (drive, idescsi);
 		g->fops = &idescsi_ops;
 		g->private_data = idescsi;
+		ide_register_region(g);
 		err = scsi_add_host(host, &drive->gendev);
 		if (!err) {
 			scsi_scan_host(host);
 			return 0;
 		}
 		/* fall through on error */
+		ide_unregister_region(g);
 		ide_unregister_subdriver(drive);
 	}
 
