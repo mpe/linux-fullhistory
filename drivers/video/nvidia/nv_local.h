@@ -87,9 +87,8 @@
 #endif
 
 #define WRITE_PUT(par, data) {                   \
-  volatile u8 scratch;                           \
   _NV_FENCE()                                    \
-  scratch = NV_RD08((par)->FbStart, 0);          \
+  NV_RD08((par)->FbStart, 0);                    \
   NV_WR32(&(par)->FIFO[0x0010], 0, (data) << 2); \
   mb();                                          \
 }

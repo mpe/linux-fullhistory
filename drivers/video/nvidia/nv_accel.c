@@ -359,10 +359,10 @@ static void nvidiafb_mono_color_expand(struct fb_info *info,
 	struct nvidia_par *par = info->par;
 	u32 fg, bg, mask = ~(~0 >> (32 - info->var.bits_per_pixel));
 	u32 dsize, width, *data = (u32 *) image->data, tmp;
-	int i, j, k = 0;
+	int j, k = 0;
 
 	width = (image->width + 31) & ~31;
-	dsize = width >> 5;
+	dsize = (width * image->height) >> 5;
 
 	if (info->var.bits_per_pixel == 8) {
 		fg = image->fg_color | mask;
@@ -382,8 +382,22 @@ static void nvidiafb_mono_color_expand(struct fb_info *info,
 	NVDmaNext(par, (image->height << 16) | width);
 	NVDmaNext(par, (image->dy << 16) | (image->dx & 0xffff));
 
-	for (i = image->height; i--;) {
+	while (dsize >= RECT_EXPAND_TWO_COLOR_DATA_MAX_DWORDS) {
+		NVDmaStart(par, RECT_EXPAND_TWO_COLOR_DATA(0),
+			   RECT_EXPAND_TWO_COLOR_DATA_MAX_DWORDS);
+
+		for (j = RECT_EXPAND_TWO_COLOR_DATA_MAX_DWORDS; j--;) {
+			tmp = data[k++];
+			reverse_order(&tmp);
+			NVDmaNext(par, tmp);
+		}
+
+		dsize -= RECT_EXPAND_TWO_COLOR_DATA_MAX_DWORDS;
+	}
+
+	if (dsize) {
 		NVDmaStart(par, RECT_EXPAND_TWO_COLOR_DATA(0), dsize);
+
 		for (j = dsize; j--;) {
 			tmp = data[k++];
 			reverse_order(&tmp);
