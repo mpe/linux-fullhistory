@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.80 1999/12/16 12:58:31 anton Exp $ */
+/* $Id: system.h,v 1.81 2000/02/28 04:00:44 anton Exp $ */
 #include <linux/config.h>
 
 #ifndef __SPARC_SYSTEM_H
@@ -251,16 +251,10 @@ extern __inline__ unsigned long read_psr_and_cli(void)
 
 #ifdef __SMP__
 
-/* This goes away after lockups have been found... */
-#ifndef DEBUG_IRQLOCK
-#define DEBUG_IRQLOCK
-#endif
-
 extern unsigned char global_irq_holder;
 
 #define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
 
-#ifdef DEBUG_IRQLOCK
 extern void __global_cli(void);
 extern void __global_sti(void);
 extern unsigned long __global_save_flags(void);
@@ -269,42 +263,6 @@ extern void __global_restore_flags(unsigned long flags);
 #define sti()			__global_sti()
 #define save_flags(flags)	((flags)=__global_save_flags())
 #define restore_flags(flags)	__global_restore_flags(flags)
-#else
-
-#error For combined sun4[md] smp, we need to get rid of the rdtbr.
-
-/* Visit arch/sparc/lib/irqlock.S for all the fun details... */
-#define cli()      __asm__ __volatile__("mov	%%o7, %%g4\n\t"			\
-					"call	___f_global_cli\n\t"		\
-					" rd	%%tbr, %%g7" : :		\
-					: "g1", "g2", "g3", "g4", "g5", "g7",	\
-					  "memory", "cc")
-
-#define sti()							\
-do {	register unsigned long bits asm("g7");			\
-	bits = 0;						\
-	__asm__ __volatile__("mov	%%o7, %%g4\n\t"		\
-			     "call	___f_global_sti\n\t"	\
-			     " rd	%%tbr, %%g2"		\
-			     : /* no outputs */			\
-			     : "r" (bits)			\
-			     : "g1", "g2", "g3", "g4", "g5",	\
-			       "memory", "cc");			\
-} while(0)
-
-#define restore_flags(flags)						\
-do {	register unsigned long bits asm("g7");				\
-	bits = flags;							\
-	__asm__ __volatile__("mov	%%o7, %%g4\n\t"			\
-			     "call	___f_global_restore_flags\n\t"	\
-			     " andcc	%%g7, 0x1, %%g0"		\
-			     : "=&r" (bits)				\
-			     : "0" (bits)				\
-			     : "g1", "g2", "g3", "g4", "g5",		\
-			       "memory", "cc");				\
-} while(0)
-
-#endif /* DEBUG_IRQLOCK */
 
 #else
 

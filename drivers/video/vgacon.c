@@ -94,8 +94,6 @@ static u8 vgacon_build_attr(struct vc_data *c, u8 color, u8 intensity, u8 blink,
 static void vgacon_invert_region(struct vc_data *c, u16 *p, int count);
 static unsigned long vgacon_uni_pagedir[2];
 
-void clear_status_line( void );
-
 
 /* Description of the hardware situation */
 static unsigned long   vga_vram_base;		/* Base of video memory */
@@ -351,7 +349,6 @@ static void vgacon_init(struct vc_data *c, int init)
 static inline void vga_set_mem_top(struct vc_data *c)
 {
 	write_vga(12, (c->vc_visible_origin-vga_vram_base)/2);
-	clear_status_line();
 }
 
 static void vgacon_deinit(struct vc_data *c)
@@ -1060,80 +1057,3 @@ struct consw vga_con = {
 	vgacon_build_attr,
 	vgacon_invert_region
 };
-
-
-int inited = 0;
-
-void
-clear_status_line( void )
-{
-#if CONFIG_COMMENT_INT==3
-        u16 *org;
-        int i;
-        int currcons = fg_console;
-	struct vc_data *c = vc_cons[fg_console].d;
-	if (!inited) return;
-        if (vga_is_gfx) return;
-	if (c->vc_origin != c->vc_visible_origin) return;
-        org = screen_pos( fg_console, video_num_lines*video_num_columns, 1 );
-        for (i=0; i<video_num_columns; i++)
-                scr_writew( (0x0f << 8) + ' ', org++ );
-#endif
-}
-
-#if CONFIG_COMMENT_INT==3
-void
-paint_status_line( int timer )
-{
-	u16 *org;
-	int i,j;
-	int currcons = fg_console;
-	struct vc_data *c = vc_cons[fg_console].d;
-
-	if (!inited) return;
-	if (vga_is_gfx)		/* We don't play origin tricks in graphic modes */
-		return;
-	if (c->vc_origin != c->vc_visible_origin) return;
-
-	org = screen_pos( fg_console, video_num_lines*video_num_columns, 1 );
-
-	/* Are we busy? */
-	{
-		i = current->pid;
-		j = 0;
-		if (i)
-			j = (i>16) ? ((current->priority < DEF_PRIORITY) ? 0xA0:0xE0) : 0xC0;
-		scr_writew( (j<<8) + ' ', org++ );
-
-#if 0
-		org++;
-
-#define DISP( x ) scr_writew(  (((i&x) ? 0x90:0) << 8) + ' ', org++ );
-		DISP( 0x80 );
-		DISP( 0x40 );
-		DISP( 0x20 );
-		DISP( 0x10 );
-		DISP( 0x08 );
-		DISP( 0x04 );
-		DISP( 0x02 );
-		DISP( 0x01 );
-#endif
-	}
-
-	if (!timer) return;
-
-	org++;
-	/* Serial? */
-	{
-		j = (ledflags & 0x10) ? 0x90 : 0x00;
-		scr_writew( (j<<8) + 'S', org++ );
-	}
-
-	org++;
-	/* NE2000? */
-	{
-		j = (ledflags & 0x20) ? 0x90 : 0x00;
-		scr_writew( (j<<8) + 'N', org++ );
-	}
-}
-#endif

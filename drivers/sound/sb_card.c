@@ -285,29 +285,8 @@ static struct pci_dev *sb_init_cmi(struct pci_bus *bus, struct pci_dev *card, st
 	if((sb_dev = isapnp_find_dev(bus,
 		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001), NULL)))
 	{
-#ifdef CMI8330_DMA0BAD
-		int dmahack = 0;
-#endif
 		sb_dev->prepare(sb_dev);
 		
-		/*  This device doesn't work with DMA 0, so we must allocate
-		 *  it to prevent PnP routines to assign it to the card.
-		 *
-		 *  I know i could have inlined the following lines, but it's cleaner
-		 *  this way.
-		 */
-	
-#ifdef CMI8330_DMA0BAD
-		if(sb_dev->dma_resource[0].start == 0)
-		{
-			if(!request_dma(0, "cmi8330 dma hack"))
-			{
-				/* DMA was free, we now have it */
-				dmahack = 1;
-			}
-		}
-#endif
-
 		if((sb_dev = activate_dev("CMI8330", "sb", sb_dev)))
 		{
 			hw_config->io_base 	= sb_dev->resource[0].start;
@@ -318,9 +297,6 @@ static struct pci_dev *sb_init_cmi(struct pci_bus *bus, struct pci_dev *card, st
 			show_base("CMI8330", "sb", &sb_dev->resource[0]);
 		}
 
-#ifdef CMI8330_DMA0BAD
-		if(dmahack) free_dma(0);
-#endif
 		if(!sb_dev) return(NULL);
 	}
 	else

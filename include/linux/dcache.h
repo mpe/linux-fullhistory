@@ -191,6 +191,11 @@ static __inline__ struct dentry * dget(struct dentry *dentry)
 	return dentry;
 }
 
+static __inline__ int d_unhashed(struct dentry *dentry)
+{
+	return list_empty(&dentry->d_hash);
+}
+
 extern void dput(struct dentry *);
 
 #endif /* __KERNEL__ */

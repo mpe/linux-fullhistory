@@ -1165,6 +1165,9 @@ static int udf_rename (struct inode * old_dir, struct dentry * old_dentry,
 
 		if (new_inode)
 		{
+			retval = -EBUSY;
+			if (!d_unhashed(new_dentry))
+				goto end_rename;
 			retval = -ENOTEMPTY;
 			if (!empty_dir(new_inode))
 				goto end_rename;

@@ -181,16 +181,14 @@ romfs_put_super(struct super_block *sb)
 /* That's simple too. */
 
 static int
-romfs_statfs(struct super_block *sb, struct statfs *buf, int bufsize)
+romfs_statfs(struct super_block *sb, struct statfs *buf)
 {
-	struct statfs tmp;
-
-	memset(&tmp, 0, sizeof(tmp));
-	tmp.f_type = ROMFS_MAGIC;
-	tmp.f_bsize = ROMBSIZE;
-	tmp.f_blocks = (sb->u.romfs_sb.s_maxsize+ROMBSIZE-1)>>ROMBSBITS;
-	tmp.f_namelen = ROMFS_MAXFN;
-	return copy_to_user(buf, &tmp, bufsize) ? -EFAULT : 0;
+	buf->f_type = ROMFS_MAGIC;
+	buf->f_bsize = ROMBSIZE;
+	buf->f_bfree = buf->f_bavail = buf->f_ffree;
+	buf->f_blocks = (sb->u.romfs_sb.s_maxsize+ROMBSIZE-1)>>ROMBSBITS;
+	buf->f_namelen = ROMFS_MAXFN;
+	return 0;
 }
 
 /* some helper routines */

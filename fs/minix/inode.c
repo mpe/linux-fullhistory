@@ -23,14 +23,13 @@
 #include <linux/highuid.h>
 
 #include <asm/system.h>
-#include <asm/uaccess.h>
 #include <asm/bitops.h>
 
 #include <linux/minix_fs.h>
 
 static void minix_read_inode(struct inode * inode);
 static void minix_write_inode(struct inode * inode);
-static int minix_statfs(struct super_block *sb, struct statfs *buf, int bufsiz);
+static int minix_statfs(struct super_block *sb, struct statfs *buf);
 static int minix_remount (struct super_block * sb, int * flags, char * data);
 
 static void minix_delete_inode(struct inode *inode)
@@ -345,19 +344,17 @@ out_bad_sb:
 	return NULL;
 }
 
-static int minix_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+static int minix_statfs(struct super_block *sb, struct statfs *buf)
 {
-	struct statfs tmp;
-
-	tmp.f_type = sb->s_magic;
-	tmp.f_bsize = sb->s_blocksize;
-	tmp.f_blocks = (sb->u.minix_sb.s_nzones - sb->u.minix_sb.s_firstdatazone) << sb->u.minix_sb.s_log_zone_size;
-	tmp.f_bfree = minix_count_free_blocks(sb);
-	tmp.f_bavail = tmp.f_bfree;
-	tmp.f_files = sb->u.minix_sb.s_ninodes;
-	tmp.f_ffree = minix_count_free_inodes(sb);
-	tmp.f_namelen = sb->u.minix_sb.s_namelen;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = sb->s_magic;
+	buf->f_bsize = sb->s_blocksize;
+	buf->f_blocks = (sb->u.minix_sb.s_nzones - sb->u.minix_sb.s_firstdatazone) << sb->u.minix_sb.s_log_zone_size;
+	buf->f_bfree = minix_count_free_blocks(sb);
+	buf->f_bavail = buf->f_bfree;
+	buf->f_files = sb->u.minix_sb.s_ninodes;
+	buf->f_ffree = minix_count_free_inodes(sb);
+	buf->f_namelen = sb->u.minix_sb.s_namelen;
+	return 0;
 }
 
 /*

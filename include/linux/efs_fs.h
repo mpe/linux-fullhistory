@@ -53,7 +53,7 @@ extern int init_module(void);
 extern void cleanup_module(void);
 extern struct super_block *efs_read_super(struct super_block *, void *, int);
 extern void efs_put_super(struct super_block *);
-extern int efs_statfs(struct super_block *, struct statfs *, int);
+extern int efs_statfs(struct super_block *, struct statfs *);
 
 extern void efs_read_inode(struct inode *);
 extern efs_block_t efs_map_block(struct inode *, efs_block_t);

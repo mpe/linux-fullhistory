@@ -27,11 +27,9 @@ ISZ = 0
 
 TFTPIMAGE=/tftpboot/zImage.mbx
 ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00100000
-GZIP_FLAGS = -v9
 
 OBJECTS := head.o misc.o ../coffboot/zlib.o m8xx_tty.o
 CFLAGS = $(CPPFLAGS) -O2 -DSTDC_HEADERS -fno-builtin -DCONFIG_8xx
-OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJCOPY_ARGS = -O elf32-powerpc
 
 ifeq ($(CONFIG_MBX),y)

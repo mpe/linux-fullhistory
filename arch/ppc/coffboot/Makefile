@@ -5,14 +5,10 @@
 
 HOSTCFLAGS = -O -I$(TOPDIR)/include
 
-CC	= $(CROSS_COMPILE)gcc
-LD	= $(CROSS_COMPILE)ld
 CFLAGS	= $(CPPFLAGS) -O -fno-builtin
-OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJCOPY_ARGS = -O aixcoff-rs6000 -R .stab -R .stabstr -R .comment
 COFF_LD_ARGS = -e _start -T ld.script -Ttext 500000 -Tdata 510000 -Bstatic
 CHRP_LD_ARGS = -Ttext 0x00400000
-GZ = gzip -9
 
 COFFOBJS = coffcrt0.o start.o coffmain.o misc.o string.o zlib.o image.o
 CHRPOBJS = crt0.o start.o chrpmain.o misc.o string.o zlib.o image.o

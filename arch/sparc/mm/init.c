@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.81 2000/02/26 11:59:31 anton Exp $
+/*  $Id: init.c,v 1.83 2000/03/07 23:12:35 anton Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -121,8 +121,8 @@ unsigned long __init bootmem_init(void)
 	int i;
 
 	/* Limit maximum memory until we implement highmem for sparc */
-	if (cmdline_memory_size > 0x9000000)
-		cmdline_memory_size = 0x9000000;
+	if (!cmdline_memory_size || cmdline_memory_size > 0x0d000000)
+		cmdline_memory_size = 0x0d000000;
 
 	/* XXX It is a bit ambiguous here, whether we should
 	 * XXX treat the user specified mem=xxx as total wanted
@@ -138,7 +138,7 @@ unsigned long __init bootmem_init(void)
 			sp_banks[i].num_bytes;
 		if (cmdline_memory_size) {
 			if (end_of_phys_memory > cmdline_memory_size) {
-				if (cmdline_memory_size > sp_banks[i].base_addr) {
+				if (cmdline_memory_size < sp_banks[i].base_addr) {
 					end_of_phys_memory =
 						sp_banks[i-1].base_addr +
 						sp_banks[i-1].num_bytes;

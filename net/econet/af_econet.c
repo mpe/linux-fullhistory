@@ -2,8 +2,6 @@
  *	An implementation of the Acorn Econet and AUN protocols.
  *	Philip Blundell <philb@gnu.org>
  *
- *	Fixes:
- *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
  *	as published by the Free Software Foundation; either version
@@ -14,9 +12,6 @@
 #include <linux/config.h>
 #include <linux/module.h>
 
-#include <asm/uaccess.h>
-#include <asm/system.h>
-#include <asm/bitops.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -43,16 +38,26 @@
 #include <linux/if_ec.h>
 #include <net/udp.h>
 #include <net/ip.h>
+#include <linux/inetdevice.h>
 #include <linux/spinlock.h>
+
+#include <asm/uaccess.h>
+#include <asm/system.h>
+#include <asm/bitops.h>
 
 static struct proto_ops econet_ops;
 static struct sock *econet_sklist;
 
-static spinlock_t aun_queue_lock;
+/* Since there are only 256 possible network numbers (or fewer, depends
+   how you count) it makes sense to use a simple lookup table. */
+static struct net_device *net2dev_map[256];
 
 #ifdef CONFIG_ECONET_AUNUDP
+static spinlock_t aun_queue_lock;
 static struct socket *udpsock;
 #define AUN_PORT	0x8000
+
+#define EC_PORT_IP	0xd2
 
 struct aunhdr
 {
@@ -86,48 +91,6 @@ struct ec_cb
 	void (*sent)(struct sk_buff *, int result);
 #endif
 };
-
-struct ec_device
-{
-	struct net_device *dev;		/* Real device structure */
-	unsigned char station, net;	/* Econet protocol address */
-	struct ec_device *prev, *next;	/* Linked list */
-};
-
-static struct ec_device *edevlist = NULL;
-
-static spinlock_t edevlist_lock;
-
-/*
- *	Faster version of edev_get - call with IRQs off
- */
-
-static __inline__ struct ec_device *__edev_get(struct net_device *dev)
-{
-	struct ec_device *edev;
-	for (edev = edevlist; edev; edev = edev->next)
-	{
-		if (edev->dev == dev)
-			break;
-	}
-	return edev;
-}
-
-/*
- *	Find an Econet device given its `dev' pointer.  This is IRQ safe.
- *
- *	Against what is it safe? --ANK
- */
-
-static struct ec_device *edev_get(struct net_device *dev)
-{
-	struct ec_device *edev;
-	unsigned long flags;
-	spin_lock_irqsave(&edevlist_lock, flags);
-	edev = __edev_get(dev);
-	spin_unlock_irqrestore(&edevlist_lock, flags);
-	return edev;
-}
 
 /*
  *	Pull a packet from our receive queue and hand it to the user.
@@ -274,7 +237,6 @@ static int econet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	struct sockaddr_ec *saddr=(struct sockaddr_ec *)msg->msg_name;
 	struct net_device *dev;
 	struct ec_addr addr;
-	struct ec_device *edev;
 	int err;
 	unsigned char port, cb;
 	struct sk_buff *skb;
@@ -318,14 +280,16 @@ static int econet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	}
 
 	/* Look for a device with the right network number. */
-	for (edev = edevlist; edev && (edev->net != addr.net); 
-	     edev = edev->next);
+	dev = net2dev_map[addr.net];
 
-	/* Bridge?  What's that? */
-	if (edev == NULL) 
-		return -ENETUNREACH;
-
-	dev = edev->dev;
+	/* If not directly reachable, use some default */
+	if (dev == NULL)
+	{
+		dev = net2dev_map[0];
+		/* No interfaces at all? */
+		if (dev == NULL)
+			return -ENETDOWN;
+	}
 
 	if (dev->type == ARPHRD_ECONET)
 	{
@@ -349,8 +313,15 @@ static int econet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 		if (dev->hard_header) {
 			int res;
+			struct ec_framehdr *fh;
 			err = -EINVAL;
-			res = dev->hard_header(skb, dev, ntohs(proto), &addr, NULL, len);
+			res = dev->hard_header(skb, dev, ntohs(proto), 
+					       &addr, NULL, len);
+			/* Poke in our control byte and
+			   port number.  Hack, hack.  */
+			fh = (struct ec_framehdr *)(skb->data);
+			fh->cb = cb;
+			fh->port = port;
 			if (sock->type != SOCK_DGRAM) {
 				skb->tail = skb->data;
 				skb->len = 0;
@@ -602,7 +573,6 @@ static int ec_dev_ioctl(struct socket *sock, unsigned int cmd, void *arg)
 	struct ifreq ifr;
 	struct ec_device *edev;
 	struct net_device *dev;
-	unsigned long flags;
 	struct sockaddr_ec *sec;
 
 	/*
@@ -620,43 +590,33 @@ static int ec_dev_ioctl(struct socket *sock, unsigned int cmd, void *arg)
 	switch (cmd)
 	{
 	case SIOCSIFADDR:
-		spin_lock_irqsave(&edevlist_lock, flags);
-		edev = __edev_get(dev);
+		edev = dev->ec_ptr;
 		if (edev == NULL)
 		{
 			/* Magic up a new one. */
-			printk("Get fascist grenade!!!\n");
-			*(int*)0 = 0;
-			/* Note to author: please, remove this spinlock.
-			   You do not change edevlist from interrupts,
-			   so that such aggressive protection is redundant.
-
-			   BTW not all scans of edev_list are protected.
-			 */
 			edev = kmalloc(GFP_KERNEL, sizeof(struct ec_device));
 			if (edev == NULL) {
 				printk("af_ec: memory squeeze.\n");
-				spin_unlock_irqrestore(&edevlist_lock, flags);
 				dev_put(dev);
 				return -ENOMEM;
 			}
 			memset(edev, 0, sizeof(struct ec_device));
-			edev->dev = dev;
-			edev->next = edevlist;
-			edevlist = edev;
+			dev->ec_ptr = edev;
 		}
+		else
+			net2dev_map[edev->net] = NULL;
 		edev->station = sec->addr.station;
 		edev->net = sec->addr.net;
-		spin_unlock_irqrestore(&edevlist_lock, flags);
+		net2dev_map[sec->addr.net] = dev;
+		if (!net2dev_map[0])
+			net2dev_map[0] = dev;
 		dev_put(dev);
 		return 0;
 
 	case SIOCGIFADDR:
-		spin_lock_irqsave(&edevlist_lock, flags);
-		edev = __edev_get(dev);
+		edev = dev->ec_ptr;
 		if (edev == NULL)
 		{
-			spin_unlock_irqrestore(&edevlist_lock, flags);
 			dev_put(dev);
 			return -ENODEV;
 		}
@@ -664,7 +624,6 @@ static int ec_dev_ioctl(struct socket *sock, unsigned int cmd, void *arg)
 		sec->addr.station = edev->station;
 		sec->addr.net = edev->net;
 		sec->sec_family = AF_ECONET;
-		spin_unlock_irqrestore(&edevlist_lock, flags);
 		dev_put(dev);
 		if (copy_to_user(arg, &ifr, sizeof(struct ifreq)))
 			return -EFAULT;
@@ -773,8 +732,8 @@ SOCKOPS_WRAP(econet, PF_ECONET);
  *	Find the listening socket, if any, for the given data.
  */
 
-static struct sock *ec_listening_socket(unsigned char port, unsigned char
-					station, unsigned char net)
+struct sock *ec_listening_socket(unsigned char port, unsigned char
+				 station, unsigned char net)
 {
 	struct sock *sk = econet_sklist;
 
@@ -835,23 +794,43 @@ static void aun_send_response(__u32 addr, unsigned long seq, int code, int cb)
 }
 
 /*
+ *	Queue a received packet for a socket.
+ */
+
+static int ec_queue_packet(struct sock *sk, struct sk_buff *skb,
+			   unsigned char stn, unsigned char net,
+			   unsigned char cb, unsigned char port)
+{
+	struct ec_cb *eb = (struct ec_cb *)&skb->cb;
+	struct sockaddr_ec *sec = (struct sockaddr_ec *)&eb->sec;
+
+	memset(sec, 0, sizeof(struct sockaddr_ec));
+	sec->sec_family = AF_ECONET;
+	sec->type = ECTYPE_PACKET_RECEIVED;
+	sec->port = port;
+	sec->cb = cb;
+	sec->addr.net = net;
+	sec->addr.station = stn;
+
+	return sock_queue_rcv_skb(sk, skb);
+}
+
+/*
  *	Handle incoming AUN packets.  Work out if anybody wants them,
  *	and send positive or negative acknowledgements as appropriate.
  */
 
 static void aun_incoming(struct sk_buff *skb, struct aunhdr *ah, size_t len)
 {
-	struct ec_device *edev = edev_get(skb->dev);
 	struct iphdr *ip = skb->nh.iph;
 	unsigned char stn = ntohl(ip->saddr) & 0xff;
 	struct sock *sk;
 	struct sk_buff *newskb;
-	struct ec_cb *eb;
-	struct sockaddr_ec *sec;
+	struct ec_device *edev = skb->dev->ec_ptr;
 
-	if (edev == NULL)
-		return;		/* Device not configured for AUN */
-	
+	if (! edev)
+		goto bad;
+
 	if ((sk = ec_listening_socket(ah->port, stn, edev->net)) == NULL)
 		goto bad;		/* Nobody wants it */
 
@@ -864,20 +843,10 @@ static void aun_incoming(struct sk_buff *skb, struct aunhdr *ah, size_t len)
 		goto bad;
 	}
 
-	eb = (struct ec_cb *)&newskb->cb;
-	sec = (struct sockaddr_ec *)&eb->sec;
-	memset(sec, 0, sizeof(struct sockaddr_ec));
-	sec->sec_family = AF_ECONET;
-	sec->type = ECTYPE_PACKET_RECEIVED;
-	sec->port = ah->port;
-	sec->cb = ah->cb;
-	sec->addr.net = edev->net;
-	sec->addr.station = stn;
-
 	memcpy(skb_put(newskb, len - sizeof(struct aunhdr)), (void *)(ah+1), 
 	       len - sizeof(struct aunhdr));
 
-	if (sock_queue_rcv_skb(sk, newskb) < 0)
+	if (ec_queue_packet(sk, newskb, stn, edev->net, ah->cb, ah->port))
 	{
 		/* Socket is bankrupt. */
 		kfree_skb(newskb);
@@ -923,6 +892,7 @@ foundit:
 	tx_result(skb->sk, eb->cookie, result);
 	skb_unlink(skb);
 	spin_unlock_irqrestore(&aun_queue_lock, flags);
+	kfree_skb(skb);
 }
 
 /*
@@ -983,7 +953,6 @@ static void aun_data_available(struct sock *sk, int slen)
  *	drop the packet.
  */
 
-
 static void ab_cleanup(unsigned long h)
 {
 	struct sk_buff *skb;
@@ -1000,6 +969,7 @@ static void ab_cleanup(unsigned long h)
 			tx_result(skb->sk, eb->cookie, 
 				  ECTYPE_TRANSMIT_NOT_PRESENT);
 			skb_unlink(skb);
+			kfree_skb(skb);
 		}
 		skb = newskb;
 	}
@@ -1054,31 +1024,85 @@ release:
 }
 #endif
 
+#ifdef CONFIG_ECONET_NATIVE
+
+/*
+ *	Receive an Econet frame from a device.
+ */
+
+static int econet_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+{
+	struct ec_framehdr *hdr = (struct ec_framehdr *)skb->data;
+	struct sock *sk;
+	struct ec_device *edev = dev->ec_ptr;
+
+	if (! edev)
+	{
+		kfree_skb(skb);
+		return 0;
+	}
+
+	if (skb->len < sizeof(struct ec_framehdr))
+	{
+		/* Frame is too small to be any use */
+		kfree_skb(skb);
+		return 0;
+	}
+
+	/* First check for encapsulated IP */
+	if (hdr->port == EC_PORT_IP)
+	{
+		skb->protocol = htons(ETH_P_IP);
+		skb_pull(skb, sizeof(struct ec_framehdr));
+		netif_rx(skb);
+		return 0;
+	}
+
+	sk = ec_listening_socket(hdr->port, hdr->src_stn, hdr->src_net);
+	if (!sk) 
+	{
+		kfree_skb(skb);
+		return 0;
+	}
+
+	return ec_queue_packet(sk, skb, edev->net, hdr->src_stn, hdr->cb, 
+			       hdr->port);
+}
+
+struct packet_type econet_packet_type=
+{
+	0,
+	NULL,
+	econet_rcv,
+	NULL,
+	NULL
+};
+
+static void econet_hw_initialise(void)
+{
+	econet_packet_type.type = htons(ETH_P_ECONET);
+	dev_add_pack(&econet_packet_type);
+}
+
+#endif
+
 static int econet_notifier(struct notifier_block *this, unsigned long msg, void *data)
 {
 	struct net_device *dev = (struct net_device *)data;
 	struct ec_device *edev;
-	unsigned long flags;
 
 	switch (msg) {
 	case NETDEV_UNREGISTER:
 		/* A device has gone down - kill any data we hold for it. */
-		spin_lock_irqsave(&edevlist_lock, flags);
-		for (edev = edevlist; edev; edev = edev->next)
+		edev = dev->ec_ptr;
+		if (edev)
 		{
-			if (edev->dev == dev)
-			{
-				if (edev->prev)
-					edev->prev->next = edev->next;
-				else
-					edevlist = edev->next;
-				if (edev->next)
-					edev->next->prev = edev->prev;
-				kfree(edev);
-				break;
-			}
+			if (net2dev_map[0] == dev)
+				net2dev_map[0] = 0;
+			net2dev_map[edev->net] = NULL;
+			kfree(edev);
+			dev->ec_ptr = NULL;
 		}
-		spin_unlock_irqrestore(&edevlist_lock, flags);
 		break;
 	}
 
@@ -1091,9 +1115,9 @@ struct notifier_block econet_netdev_notifier={
 	0
 };
 
-#ifdef MODULE
-void cleanup_module(void)
+void __exit econet_proto_exit(void)
 {
+	extern void econet_sysctl_unregister(void);
 #ifdef CONFIG_ECONET_AUNUDP
 	del_timer(&ab_cleanup_timer);
 	if (udpsock)
@@ -1101,25 +1125,30 @@ void cleanup_module(void)
 #endif
 	unregister_netdevice_notifier(&econet_netdev_notifier);
 	sock_unregister(econet_family_ops.family);
-	return;
+#ifdef CONFIG_SYSCTL
+	econet_sysctl_unregister();
+#endif
 }
 
-int init_module(void)
-#else
-void __init econet_proto_init(struct net_proto *pro)
-#endif
+int __init econet_proto_init(struct net_proto *pro)
 {
-	spin_lock_init(&edevlist_lock);
+	extern void econet_sysctl_register(void);
 	spin_lock_init(&aun_queue_lock);
-	/* Stop warnings from happening on UP systems. */
-	(void)edevlist_lock;
-	(void)aun_queue_lock;
 	sock_register(&econet_family_ops);
 #ifdef CONFIG_ECONET_AUNUDP
 	aun_udp_initialise();
 #endif
-	register_netdevice_notifier(&econet_netdev_notifier);
-#ifdef MODULE
-	return 0;
+#ifdef CONFIG_ECONET_NATIVE
+	econet_hw_initialise();
 #endif
+	register_netdevice_notifier(&econet_netdev_notifier);
+#ifdef CONFIG_SYSCTL
+	econet_sysctl_register();
+#endif
+	return 0;
 }
+
+#ifdef MODULE
+module_init(econet_proto_init);
+module_exit(econet_proto_exit);
+#endif

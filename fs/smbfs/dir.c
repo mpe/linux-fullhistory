@@ -443,7 +443,7 @@ smb_rmdir(struct inode *dir, struct dentry *dentry)
 	 * Check that nobody else is using the directory..
 	 */
 	error = -EBUSY;
-	if (!list_empty(&dentry->d_hash))
+	if (!d_unhashed(dentry))
 		goto out;
 
 	smb_invalid_dir_cache(dir);

@@ -239,14 +239,8 @@ extern const char *global_mode_option;
 static initcall_t pref_init_funcs[FB_MAX];
 static int num_pref_init_funcs __initdata = 0;
 
-
 struct fb_info *registered_fb[FB_MAX];
 int num_registered_fb = 0;
-extern int fbcon_softback_size; 
-
-static int first_fb_vc = 0;
-static int last_fb_vc = MAX_NR_CONSOLES-1;
-static int fbcon_is_default = 1;
 
 static int fbmem_read_proc(char *buf, char **start, off_t offset,
 			   int len, int *eof, void *private)
@@ -556,6 +550,8 @@ fb_open(struct inode *inode, struct file *file)
 #endif /* CONFIG_KMOD */
 	if (!(info = registered_fb[fbidx]))
 		return -ENODEV;
+	if (info->flags & FBINFO_FLAG_OPEN) return -EBUSY; 
+	info->flags |= FBINFO_FLAG_OPEN;		
 	return info->fbops->fb_open(info,1);
 }
 
@@ -566,6 +562,7 @@ fb_release(struct inode *inode, struct file *file)
 	struct fb_info *info = registered_fb[fbidx];
 
 	info->fbops->fb_release(info,1);
+        info->flags &= ~FBINFO_FLAG_OPEN;
 	return 0;
 }
 
@@ -583,10 +580,8 @@ static devfs_handle_t devfs_handle = NULL;
 int
 register_framebuffer(struct fb_info *fb_info)
 {
-	int i, j;
 	char name_buf[8];
-	static int fb_ever_opened[FB_MAX];
-	static int first = 1;
+ 	int i;
 
 	if (num_registered_fb == FB_MAX)
 		return -ENXIO;
@@ -595,22 +590,9 @@ register_framebuffer(struct fb_info *fb_info)
 		if (!registered_fb[i])
 			break;
 	fb_info->node = MKDEV(FB_MAJOR, i);
+	fb_info->flags &= ~FBINFO_FLAG_OPEN;
+	fb_info->count = 0;
 	registered_fb[i] = fb_info;
-	if (!fb_ever_opened[i]) {
-		/*
-		 *  We assume initial frame buffer devices can be opened this
-		 *  many times
-		 */
-		for (j = 0; j < MAX_NR_CONSOLES; j++)
-			if (con2fb_map[j] == i)
-				fb_info->fbops->fb_open(fb_info,0);
-		fb_ever_opened[i] = 1;
-	}
-
-	if (first) {
-		first = 0;
-		take_over_console(&fb_con, first_fb_vc, last_fb_vc, fbcon_is_default);
-	}
 	sprintf (name_buf, "%d", i);
 	fb_info->devfs_handle =
 	    devfs_register (devfs_handle, name_buf, 0, DEVFS_FL_NONE,
@@ -623,12 +605,12 @@ register_framebuffer(struct fb_info *fb_info)
 int
 unregister_framebuffer(struct fb_info *fb_info)
 {
-	int i, j;
+	int i;
 
 	i = GET_FB_IDX(fb_info->node);
-	for (j = 0; j < MAX_NR_CONSOLES; j++)
-		if (con2fb_map[j] == i)
-			return -EBUSY;
+	
+	if (fb_info->count || (fb_info->flags & FBINFO_FLAG_OPEN))
+		return -EBUSY;
 	if (!registered_fb[i])
 		return -EINVAL;
 	devfs_unregister (fb_info->devfs_handle);
@@ -672,43 +654,6 @@ int __init video_setup(char *options)
 
     if (!options || !*options)
 	    return 0;
-	    
-    if (!strncmp(options, "scrollback:", 11)) {
-	    options += 11;
-	    if (*options) {
-		fbcon_softback_size = simple_strtoul(options, &options, 0);
-		if (*options == 'k' || *options == 'K') {
-			fbcon_softback_size *= 1024;
-			options++;
-		}
-		if (*options != ',')
-			return 0;
-		options++;
-	    } else
-	        return 0;
-    }
-
-    if (!strncmp(options, "map:", 4)) {
-	    options += 4;
-	    if (*options)
-		    for (i = 0, j = 0; i < MAX_NR_CONSOLES; i++) {
-			    if (!options[j])
-				    j = 0;
-			    con2fb_map[i] = (options[j++]-'0') % FB_MAX;
-		    }
-	    return 0;
-    }
-    
-    if (!strncmp(options, "vc:", 3)) {
-	    options += 3;
-	    if (*options)
-		first_fb_vc = simple_strtoul(options, &options, 10) - 1;
-	    if (first_fb_vc < 0)
-		first_fb_vc = 0;
-	    if (*options++ == '-')
-		last_fb_vc = simple_strtoul(options, &options, 10) - 1;
-	    fbcon_is_default = 0;
-    }
 
     if (num_pref_init_funcs == FB_MAX)
 	    return 0;

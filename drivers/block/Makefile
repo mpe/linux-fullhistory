@@ -182,6 +182,10 @@ ifeq ($(CONFIG_BLK_DEV_IDEPCI),y)
 IDE_OBJS += ide-pci.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_ISAPNP),y)
+IDE_OBJS += ide-pnp.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_IDE_PMAC),y)
 IDE_OBJS += ide-pmac.o
 endif

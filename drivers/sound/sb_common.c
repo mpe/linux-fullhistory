@@ -21,9 +21,6 @@
  *
  */
 
-/* FIXME: *grr* why can't the f**in Makefile do this for me ? */
-#define EXPORT_SYMTAB
-
 #include <linux/config.h>
 #include <linux/init.h>
 #include <linux/module.h>

@@ -171,7 +171,7 @@ int qnx4_rmdir(struct inode *dir, struct dentry *dentry)
 		goto end_rmdir;
 	}
 #endif
-	if (!list_empty(&dentry->d_hash)) {
+	if (!d_unhashed(dentry)) {
 		retval = -EBUSY;
 		goto end_rmdir;
 	}

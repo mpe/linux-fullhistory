@@ -375,7 +375,7 @@ int hpfs_rmdir(struct inode *dir, struct dentry *dentry)
 		hpfs_unlock_2inodes(dir, inode);
 		return -ENOTDIR;
 	}
-	if (!list_empty(&dentry->d_hash)) {
+	if (!d_unhashed(dentry)) {
 		hpfs_brelse4(&qbh);
 		hpfs_unlock_2inodes(dir, inode);
 		return -EBUSY;

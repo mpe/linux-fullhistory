@@ -208,20 +208,15 @@ static void cramfs_put_super(struct super_block *sb)
 	return;
 }
 
-static int cramfs_statfs(struct super_block *sb, struct statfs *buf, int bufsize)
+static int cramfs_statfs(struct super_block *sb, struct statfs *buf)
 {
-	struct statfs tmp;
-
-	/* Unsupported fields set to -1 as per man page. */
-	memset(&tmp, 0xff, sizeof(tmp));
-
-	tmp.f_type = CRAMFS_MAGIC;
-	tmp.f_bsize = PAGE_CACHE_SIZE;
-	tmp.f_bfree = 0;
-	tmp.f_bavail = 0;
-	tmp.f_ffree = 0;
-	tmp.f_namelen = 255;
-	return copy_to_user(buf, &tmp, bufsize) ? -EFAULT : 0;
+	buf->f_type = CRAMFS_MAGIC;
+	buf->f_bsize = PAGE_CACHE_SIZE;
+	buf->f_bfree = 0;
+	buf->f_bavail = 0;
+	buf->f_ffree = 0;
+	buf->f_namelen = 255;
+	return 0;
 }
 
 /*

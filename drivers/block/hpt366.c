@@ -30,7 +30,7 @@
 
 #include "ide_modes.h"
 
-#define DISPLAY_HPT366_TIMINGS
+#undef DISPLAY_HPT366_TIMINGS
 
 #if defined(DISPLAY_HPT366_TIMINGS) && defined(CONFIG_PROC_FS)
 #include <linux/stat.h>
@@ -241,6 +241,11 @@ static int hpt366_tune_chipset (ide_drive_t *drive, byte speed)
 	/*
 	 * Disable on-chip PIO FIFO/buffer (to avoid problems handling I/O errors later)
 	 */
+	if (speed >= XFER_MW_DMA_0) {
+		reg2 = (reg2 & ~0xc0000000) | (reg1 & 0xc0000000);
+	} else {
+		reg2 = (reg2 & ~0x30070000) | (reg1 & 0x30070000);
+	}	
 	reg2 &= ~0x80000000;
 
 	pci_write_config_dword(HWIF(drive)->pci_dev, regtime, reg2);
@@ -270,7 +275,6 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 	struct hd_driveid *id	= drive->id;
 	byte speed		= 0x00;
 	byte reg51h		= 0;
-	unsigned int reg40	= 0;
 	int  rval;
 
 	if ((id->dma_ultra & 0x0010) &&
@@ -326,13 +330,6 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 	if (reg51h & 0x80)
 		pci_write_config_byte(HWIF(drive)->pci_dev, 0x51, reg51h & ~0x80);
 #endif /* CONFIG_HPT366_FIP */
-
-	/*
-	 * Preserve existing PIO settings:
-	 */
-	pci_read_config_dword(HWIF(drive)->pci_dev, 0x40, &reg40);
-	speed = (speed & ~0xc0000000) | (reg40 & 0xc0000000);
-
 #if HPT366_DEBUG_DRIVE_INFO
 	printk("%s: config_chipset_for_dma:  speed=0x%04x\n", drive->name, speed);
 #endif /* HPT366_DEBUG_DRIVE_INFO */
@@ -355,7 +352,6 @@ static void config_chipset_for_pio (ide_drive_t *drive)
 	unsigned short eide_pio_timing[6] = {960, 480, 240, 180, 120, 90};
 	unsigned short xfer_pio	= drive->id->eide_pio_modes;
 	byte			timing, speed, pio;
-	unsigned int reg40 = 0;
 
 #if HPT366_DEBUG_DRIVE_INFO
 	printk("%s: config_chipset_for_pio\n", drive->name);
@@ -389,11 +385,6 @@ static void config_chipset_for_pio (ide_drive_t *drive)
 			speed = (!drive->id->tPIO) ? XFER_PIO_0 : XFER_PIO_SLOW;
 			break;
 	}
-	/*
-	 * Preserve existing DMA settings:
-	 */
-	pci_read_config_dword(HWIF(drive)->pci_dev, 0x40, &reg40);
-	speed = (speed & ~0x30070000) | (reg40 & 0x30070000);
 #if HPT366_DEBUG_DRIVE_INFO
 	printk("%s: config_chipset_for_pio:  speed=0x%04x\n", drive->name, speed);
 #endif /* HPT366_DEBUG_DRIVE_INFO */

@@ -702,14 +702,14 @@ out_fail:
 	return NULL;
 }
 
-int fat_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
+int fat_statfs(struct super_block *sb,struct statfs *buf)
 {
 	int free,nr;
-	struct statfs tmp;
        
 	if (MSDOS_SB(sb)->cvf_format &&
 	    MSDOS_SB(sb)->cvf_format->cvf_statfs)
-		return MSDOS_SB(sb)->cvf_format->cvf_statfs(sb,buf,bufsiz);
+		return MSDOS_SB(sb)->cvf_format->cvf_statfs(sb,buf,
+						sizeof(struct statfs));
 	  
 	lock_fat(sb);
 	if (MSDOS_SB(sb)->free_clusters != -1)
@@ -721,15 +721,13 @@ int fat_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
 		MSDOS_SB(sb)->free_clusters = free;
 	}
 	unlock_fat(sb);
-	tmp.f_type = sb->s_magic;
-	tmp.f_bsize = MSDOS_SB(sb)->cluster_size*SECTOR_SIZE;
-	tmp.f_blocks = MSDOS_SB(sb)->clusters;
-	tmp.f_bfree = free;
-	tmp.f_bavail = free;
-	tmp.f_files = 0;
-	tmp.f_ffree = 0;
-	tmp.f_namelen = MSDOS_SB(sb)->options.isvfat ? 260 : 12;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = sb->s_magic;
+	buf->f_bsize = MSDOS_SB(sb)->cluster_size*SECTOR_SIZE;
+	buf->f_blocks = MSDOS_SB(sb)->clusters;
+	buf->f_bfree = free;
+	buf->f_bavail = free;
+	buf->f_namelen = MSDOS_SB(sb)->options.isvfat ? 260 : 12;
+	return 0;
 }
 
 static int is_exec(char *extension)

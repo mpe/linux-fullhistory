@@ -725,10 +725,9 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 	return 0;
 }
 
-int ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
+int ext2_statfs (struct super_block * sb, struct statfs * buf)
 {
 	unsigned long overhead;
-	struct statfs tmp;
 	int	ngroups, i;
 
 	if (test_opt (sb, MINIX_DF))
@@ -768,17 +767,17 @@ int ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 			     (2 + sb->u.ext2_sb.s_itb_per_group));
 	}
 
-	tmp.f_type = EXT2_SUPER_MAGIC;
-	tmp.f_bsize = sb->s_blocksize;
-	tmp.f_blocks = le32_to_cpu(sb->u.ext2_sb.s_es->s_blocks_count) - overhead;
-	tmp.f_bfree = ext2_count_free_blocks (sb);
-	tmp.f_bavail = tmp.f_bfree - le32_to_cpu(sb->u.ext2_sb.s_es->s_r_blocks_count);
-	if (tmp.f_bfree < le32_to_cpu(sb->u.ext2_sb.s_es->s_r_blocks_count))
-		tmp.f_bavail = 0;
-	tmp.f_files = le32_to_cpu(sb->u.ext2_sb.s_es->s_inodes_count);
-	tmp.f_ffree = ext2_count_free_inodes (sb);
-	tmp.f_namelen = EXT2_NAME_LEN;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = EXT2_SUPER_MAGIC;
+	buf->f_bsize = sb->s_blocksize;
+	buf->f_blocks = le32_to_cpu(sb->u.ext2_sb.s_es->s_blocks_count) - overhead;
+	buf->f_bfree = ext2_count_free_blocks (sb);
+	buf->f_bavail = buf->f_bfree - le32_to_cpu(sb->u.ext2_sb.s_es->s_r_blocks_count);
+	if (buf->f_bfree < le32_to_cpu(sb->u.ext2_sb.s_es->s_r_blocks_count))
+		buf->f_bavail = 0;
+	buf->f_files = le32_to_cpu(sb->u.ext2_sb.s_es->s_inodes_count);
+	buf->f_ffree = ext2_count_free_inodes (sb);
+	buf->f_namelen = EXT2_NAME_LEN;
+	return 0;
 }
 
 static struct file_system_type ext2_fs_type = {

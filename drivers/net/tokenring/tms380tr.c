@@ -72,7 +72,6 @@ static const char *version = "tms380tr.c: v1.07 21/01/2000 by Christoph Goos, Ad
 #endif
 
 #ifdef MODULE
-#define EXPORT_SYMTAB
 #include <linux/module.h>
 #include <linux/version.h>
 #endif

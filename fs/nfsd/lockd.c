@@ -39,11 +39,14 @@ nlm_fopen(struct svc_rqst *rqstp, struct knfs_fh *f, struct file *filp)
 	 *            1 = stale file handle
 	 *	      2 = other error
 	 */
-	if (nfserr == 0)
+	switch (nfserr) {
+	case nfs_ok:
 		return 0;
-	else if (nfserr == nfserr_stale)
+	case nfserr_stale:
 		return 1;
-	else return 2;
+	default:
+		return 2;
+	}
 }
 
 static void

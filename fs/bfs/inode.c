@@ -185,19 +185,17 @@ static void bfs_put_super(struct super_block *s)
 	MOD_DEC_USE_COUNT;
 }
 
-static int bfs_statfs(struct super_block *s, struct statfs *buf, int bufsiz)
+static int bfs_statfs(struct super_block *s, struct statfs *buf)
 {
-	struct statfs tmp;
-
-	tmp.f_type = BFS_MAGIC;
-	tmp.f_bsize = s->s_blocksize;
-	tmp.f_blocks = s->su_blocks;
-	tmp.f_bfree = tmp.f_bavail = s->su_freeb;
-	tmp.f_files = s->su_lasti + 1 - BFS_ROOT_INO;
-	tmp.f_ffree = s->su_freei;
-	tmp.f_fsid.val[0] = s->s_dev;
-	tmp.f_namelen = BFS_NAMELEN;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = BFS_MAGIC;
+	buf->f_bsize = s->s_blocksize;
+	buf->f_blocks = s->su_blocks;
+	buf->f_bfree = buf->f_bavail = s->su_freeb;
+	buf->f_files = s->su_lasti + 1 - BFS_ROOT_INO;
+	buf->f_ffree = s->su_freei;
+	buf->f_fsid.val[0] = s->s_dev;
+	buf->f_namelen = BFS_NAMELEN;
+	return 0;
 }
 
 static void bfs_write_super(struct super_block *s)

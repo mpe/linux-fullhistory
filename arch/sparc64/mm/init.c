@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.147 2000/03/03 23:48:44 davem Exp $
+/*  $Id: init.c,v 1.148 2000/03/07 07:08:31 anton Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -824,7 +824,7 @@ unsigned long __init bootmem_init(void)
 			sp_banks[i].num_bytes;
 		if (cmdline_memory_size) {
 			if (end_of_phys_memory > cmdline_memory_size) {
-				if (cmdline_memory_size > sp_banks[i].base_addr) {
+				if (cmdline_memory_size < sp_banks[i].base_addr) {
 					end_of_phys_memory =
 						sp_banks[i-1].base_addr +
 						sp_banks[i-1].num_bytes;

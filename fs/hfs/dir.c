@@ -311,7 +311,7 @@ int hfs_rmdir(struct inode * parent, struct dentry *dentry)
 		goto hfs_rmdir_put;
 
 	error = -EBUSY;
-	if (!list_empty(&dentry->d_hash))
+	if (!d_unhashed(dentry))
 		goto hfs_rmdir_put;
 
 	if (/* we only have to worry about 2 and 3 for mount points */

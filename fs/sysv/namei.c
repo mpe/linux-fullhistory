@@ -389,7 +389,7 @@ static int sysv_rmdir(struct inode * dir, struct dentry * dentry)
 		retval = -ENOTEMPTY;
 		goto end_rmdir;
 	}
-	if (!list_empty(&dentry->d_hash)) {
+	if (!d_unhashed(dentry)) {
 		retval = -EBUSY;
 		goto end_rmdir;
 	}
@@ -552,6 +552,9 @@ static int sysv_rename(struct inode * old_dir, struct dentry * old_dentry,
 	}
 	if (S_ISDIR(old_inode->i_mode)) {
 		if (new_inode) {
+			retval = -EBUSY;
+			if (!d_unhashed(new_dentry))
+				goto end_rename;
 			retval = -ENOTEMPTY;
 			if (!empty_dir(new_inode))
 				goto end_rename;

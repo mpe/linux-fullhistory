@@ -12,7 +12,6 @@
 #
 # Copyright (C) 1995-1999 by Russell King
 
-LD		:= $(CROSS_COMPILE)ld
 OBJCOPY		:= $(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 CPP		:= $(CC) -E
 PERL		:= perl

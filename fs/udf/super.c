@@ -93,7 +93,7 @@ static void udf_load_partdesc(struct super_block *, struct buffer_head *);
 static void udf_open_lvid(struct super_block *);
 static void udf_close_lvid(struct super_block *);
 static unsigned int udf_count_free(struct super_block *);
-static int udf_statfs(struct super_block *, struct statfs *, int);
+static int udf_statfs(struct super_block *, struct statfs *);
 
 /* UDF filesystem type */
 static struct file_system_type udf_fstype = {
@@ -1548,29 +1548,21 @@ udf_put_super(struct super_block *sb)
  *	Written, tested, and released.
  */
 static int
-udf_statfs(struct super_block *sb, struct statfs *buf, int bufsize)
+udf_statfs(struct super_block *sb, struct statfs *buf)
 {
-	int size;
-	struct statfs tmp;
-	int rc;
-
-	size = (bufsize < sizeof(tmp)) ? bufsize: sizeof(tmp);
-
-	memset(&tmp, 0, sizeof(tmp));
-	tmp.f_type = UDF_SUPER_MAGIC;
-	tmp.f_bsize = sb->s_blocksize;
-	tmp.f_blocks = UDF_SB_PARTLEN(sb, UDF_SB_PARTITION(sb));
-	tmp.f_bfree = udf_count_free(sb);
-	tmp.f_bavail = tmp.f_bfree;
-	tmp.f_files = (UDF_SB_LVIDBH(sb) ?
+	buf->f_type = UDF_SUPER_MAGIC;
+	buf->f_bsize = sb->s_blocksize;
+	buf->f_blocks = UDF_SB_PARTLEN(sb, UDF_SB_PARTITION(sb));
+	buf->f_bfree = udf_count_free(sb);
+	buf->f_bavail = buf->f_bfree;
+	buf->f_files = (UDF_SB_LVIDBH(sb) ?
 		(le32_to_cpu(UDF_SB_LVIDIU(sb)->numFiles) +
-		le32_to_cpu(UDF_SB_LVIDIU(sb)->numDirs)) : 0) + tmp.f_bfree;
-	tmp.f_ffree = tmp.f_bfree;
+		le32_to_cpu(UDF_SB_LVIDIU(sb)->numDirs)) : 0) + buf->f_bfree;
+	buf->f_ffree = buf->f_bfree;
 	/* __kernel_fsid_t f_fsid */
-	tmp.f_namelen = UDF_NAME_LEN;
+	buf->f_namelen = UDF_NAME_LEN;
 
-	rc= copy_to_user(buf, &tmp, size) ? -EFAULT: 0;
-	return rc;
+	return 0;
 }
 
 static unsigned char udf_bitmap_lookup[16] = {

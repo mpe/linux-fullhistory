@@ -36,7 +36,7 @@
 
 static void hfs_read_inode(struct inode *);
 static void hfs_put_super(struct super_block *);
-static int hfs_statfs(struct super_block *, struct statfs *, int);
+static int hfs_statfs(struct super_block *, struct statfs *);
 static void hfs_write_super(struct super_block *);
 
 /*================ Global variables ================*/
@@ -139,21 +139,20 @@ static void hfs_put_super(struct super_block *sb)
  *
  * changed f_files/f_ffree to reflect the fs_ablock/free_ablocks.
  */
-static int hfs_statfs(struct super_block *sb, struct statfs *buf, int len)
+static int hfs_statfs(struct super_block *sb, struct statfs *buf)
 {
 	struct hfs_mdb *mdb = HFS_SB(sb)->s_mdb;
-	struct statfs tmp;
 
-	tmp.f_type = HFS_SUPER_MAGIC;
-	tmp.f_bsize = HFS_SECTOR_SIZE;
-	tmp.f_blocks = mdb->alloc_blksz * mdb->fs_ablocks;
-	tmp.f_bfree = mdb->alloc_blksz * mdb->free_ablocks;
-	tmp.f_bavail = tmp.f_bfree;
-	tmp.f_files = mdb->fs_ablocks;  
-	tmp.f_ffree = mdb->free_ablocks;
-	tmp.f_namelen = HFS_NAMELEN;
+	buf->f_type = HFS_SUPER_MAGIC;
+	buf->f_bsize = HFS_SECTOR_SIZE;
+	buf->f_blocks = mdb->alloc_blksz * mdb->fs_ablocks;
+	buf->f_bfree = mdb->alloc_blksz * mdb->free_ablocks;
+	buf->f_bavail = buf->f_bfree;
+	buf->f_files = mdb->fs_ablocks;  
+	buf->f_ffree = mdb->free_ablocks;
+	buf->f_namelen = HFS_NAMELEN;
 
-	return copy_to_user(buf, &tmp, len) ? -EFAULT : 0;
+	return 0;
 }
 
 /*

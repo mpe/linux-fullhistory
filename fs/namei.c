@@ -580,6 +580,7 @@ int vfs_create(struct inode *dir, struct dentry *dentry, int mode)
 	mode &= S_IALLUGO & ~current->fs->umask;
 	mode |= S_IFREG;
 
+	down(&dir->i_zombie);
 	error = may_create(dir, dentry);
 	if (error)
 		goto exit_lock;
@@ -591,6 +592,7 @@ int vfs_create(struct inode *dir, struct dentry *dentry, int mode)
 	DQUOT_INIT(dir);
 	error = dir->i_op->create(dir, dentry, mode);
 exit_lock:
+	up(&dir->i_zombie);
 	return error;
 }
 
@@ -745,7 +747,8 @@ int vfs_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t dev)
 
 	mode &= ~current->fs->umask;
 
-	if (!S_ISFIFO(mode) && !capable(CAP_MKNOD))
+	down(&dir->i_zombie);
+	if ((S_ISCHR(mode) || S_ISBLK(mode)) && !capable(CAP_MKNOD))
 		goto exit_lock;
 
 	error = may_create(dir, dentry);
@@ -759,6 +762,7 @@ int vfs_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t dev)
 	DQUOT_INIT(dir);
 	error = dir->i_op->mknod(dir, dentry, mode, dev);
 exit_lock:
+	up(&dir->i_zombie);
 	return error;
 }
 
@@ -836,6 +840,7 @@ int vfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	int error;
 
+	down(&dir->i_zombie);
 	error = may_create(dir, dentry);
 	if (error)
 		goto exit_lock;
@@ -849,6 +854,7 @@ int vfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	error = dir->i_op->mkdir(dir, dentry, mode);
 
 exit_lock:
+	up(&dir->i_zombie);
 	return error;
 }
 
@@ -901,6 +907,34 @@ asmlinkage long sys_mkdir(const char * pathname, int mode)
 	return error;
 }
 
+/*
+ * We try to drop the dentry early: we should have
+ * a usage count of 2 if we're the only user of this
+ * dentry, and if that is true (possibly after pruning
+ * the dcache), then we drop the dentry now.
+ *
+ * A low-level filesystem can, if it choses, legally
+ * do a
+ *
+ *	if (!d_unhashed(dentry))
+ *		return -EBUSY;
+ *
+ * if it cannot handle the case of removing a directory
+ * that is still in use by something else..
+ */
+static void d_unhash(struct dentry *dentry)
+{
+	dget(dentry);
+	switch (dentry->d_count) {
+	default:
+		shrink_dcache_parent(dentry);
+		if (dentry->d_count != 2)
+			break;
+	case 2:
+		d_drop(dentry);
+	}
+}
+
 int vfs_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	int error;
@@ -914,31 +948,11 @@ int vfs_rmdir(struct inode *dir, struct dentry *dentry)
 
 	DQUOT_INIT(dir);
 
-	/*
-	 * We try to drop the dentry early: we should have
-	 * a usage count of 2 if we're the only user of this
-	 * dentry, and if that is true (possibly after pruning
-	 * the dcache), then we drop the dentry now.
-	 *
-	 * A low-level filesystem can, if it choses, legally
-	 * do a
-	 *
-	 *	if (!list_empty(&dentry->d_hash))
-	 *		return -EBUSY;
-	 *
-	 * if it cannot handle the case of removing a directory
-	 * that is still in use by something else..
-	 */
-	switch (dentry->d_count) {
-	default:
-		shrink_dcache_parent(dentry);
-		if (dentry->d_count != 2)
-			break;
-	case 2:
-		d_drop(dentry);
-	}
-
+	double_down(&dir->i_zombie, &dentry->d_inode->i_zombie);
+	d_unhash(dentry);
 	error = dir->i_op->rmdir(dir, dentry);
+	double_up(&dir->i_zombie, &dentry->d_inode->i_zombie);
+	dput(dentry);
 
 	return error;
 }
@@ -954,27 +968,11 @@ static inline int do_rmdir(const char * name)
 	if (IS_ERR(dentry))
 		goto exit;
 
-	error = -ENOENT;
-	if (!dentry->d_inode)
-		goto exit_dput;
-
-	dir = dget(dentry->d_parent);
-
-	/*
-	 * The dentry->d_count stuff confuses d_delete() enough to
-	 * not kill the inode from under us while it is locked. This
-	 * wouldn't be needed, except the dentry semaphore is really
-	 * in the inode, not in the dentry..
-	 */
-	dentry->d_count++;
-	double_lock(dir, dentry);
-
+	dir = lock_parent(dentry);
 	error = -ENOENT;
 	if (check_parent(dir, dentry))
 		error = vfs_rmdir(dir->d_inode, dentry);
-
-	double_unlock(dentry, dir);
-exit_dput:
+	unlock_dir(dir);
 	dput(dentry);
 exit:
 	return error;
@@ -1001,6 +999,7 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry)
 {
 	int error;
 
+	down(&dir->i_zombie);
 	error = may_delete(dir, dentry, 0);
 	if (!error) {
 		error = -EPERM;
@@ -1009,10 +1008,11 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry)
 			error = dir->i_op->unlink(dir, dentry);
 		}
 	}
+	up(&dir->i_zombie);
 	return error;
 }
 
-static inline int do_unlink(const char * name)
+int do_unlink(const char * name)
 {
 	int error;
 	struct dentry *dir;
@@ -1054,6 +1054,7 @@ int vfs_symlink(struct inode *dir, struct dentry *dentry, const char *oldname)
 {
 	int error;
 
+	down(&dir->i_zombie);
 	error = may_create(dir, dentry);
 	if (error)
 		goto exit_lock;
@@ -1066,6 +1067,7 @@ int vfs_symlink(struct inode *dir, struct dentry *dentry, const char *oldname)
 	error = dir->i_op->symlink(dir, dentry, oldname);
 
 exit_lock:
+	up(&dir->i_zombie);
 	return error;
 }
 
@@ -1121,6 +1123,7 @@ int vfs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *new_de
 	struct inode *inode;
 	int error;
 
+	down(&dir->i_zombie);
 	error = -ENOENT;
 	inode = old_dentry->d_inode;
 	if (!inode)
@@ -1147,6 +1150,7 @@ int vfs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *new_de
 	error = dir->i_op->link(old_dentry, dir, new_dentry);
 
 exit_lock:
+	up(&dir->i_zombie);
 	return error;
 }
 
@@ -1212,11 +1216,37 @@ asmlinkage long sys_link(const char * oldname, const char * newname)
 	return error;
 }
 
+/*
+ * The worst of all namespace operations - renaming directory. "Perverted"
+ * doesn't even start to describe it. Somebody in UCB had a heck of a trip...
+ * Problems:
+ *	a) we can get into loop creation. Check is done in is_subdir().
+ *	b) race potential - two innocent renames can create a loop together.
+ *	   That's where 4.4 screws up. Current fix: serialization on
+ *	   sb->s_vfs_rename_sem. We might be more accurate, but that's another
+ *	   story.
+ *	c) we have to lock _three_ objects - parents and victim (if it exists).
+ *	   And that - after we got ->i_sem on parents (until then we don't know
+ *	   whether the target exists at all, let alone whether it is a directory
+ *	   or not). Solution: ->i_zombie. Taken only after ->i_sem. Always taken
+ *	   on link creation/removal of any kind. And taken (without ->i_sem) on
+ *	   directory that will be removed (both in rmdir() and here).
+ *	d) some filesystems don't support opened-but-unlinked directories,
+ *	   either because of layout or because they are not ready to deal with
+ *	   all cases correctly. The latter will be fixed (taking this sort of
+ *	   stuff into VFS), but the former is not going away. Solution: the same
+ *	   trick as in rmdir().
+ *	e) conversion from fhandle to dentry may come in the wrong moment - when
+ *	   we are removing the target. Solution: we will have to grab ->i_zombie
+ *	   in the fhandle_to_dentry code. [FIXME - current nfsfh.c relies on
+ *	   ->i_sem on parents, which works but leads to some truely excessive
+ *	   locking].
+ */
 int vfs_rename_dir(struct inode *old_dir, struct dentry *old_dentry,
 	       struct inode *new_dir, struct dentry *new_dentry)
 {
 	int error;
-	int need_rehash = 0;
+	struct inode *target;
 
 	if (old_dentry->d_inode == new_dentry->d_inode)
 		return 0;
@@ -1254,15 +1284,26 @@ int vfs_rename_dir(struct inode *old_dir, struct dentry *old_dentry,
 	error = -EINVAL;
 	if (is_subdir(new_dentry, old_dentry))
 		goto out_unlock;
-	if (new_dentry->d_inode) {
-		error = -EBUSY;
-		if (d_invalidate(new_dentry)<0)
-			goto out_unlock;
-		need_rehash = 1;
-	}
+	target = new_dentry->d_inode;
+	if (target) { /* Hastur! Hastur! Hastur! */
+		triple_down(&old_dir->i_zombie,
+			    &new_dir->i_zombie,
+			    &target->i_zombie);
+		d_unhash(new_dentry);
+	} else
+		double_down(&old_dir->i_zombie,
+			    &new_dir->i_zombie);
 	error = old_dir->i_op->rename(old_dir, old_dentry, new_dir, new_dentry);
-	if (need_rehash)
+	if (target) {
+		triple_up(&old_dir->i_zombie,
+			  &new_dir->i_zombie,
+			  &target->i_zombie);
 		d_rehash(new_dentry);
+		dput(new_dentry);
+	} else
+		double_up(&old_dir->i_zombie,
+			  &new_dir->i_zombie);
+		
 	if (!error)
 		d_move(old_dentry,new_dentry);
 out_unlock:
@@ -1297,7 +1338,9 @@ int vfs_rename_other(struct inode *old_dir, struct dentry *old_dentry,
 
 	DQUOT_INIT(old_dir);
 	DQUOT_INIT(new_dir);
+	double_down(&old_dir->i_zombie, &new_dir->i_zombie);
 	error = old_dir->i_op->rename(old_dir, old_dentry, new_dir, new_dentry);
+	double_up(&old_dir->i_zombie, &new_dir->i_zombie);
 	if (error)
 		return error;
 	/* The following d_move() should become unconditional */

@@ -151,12 +151,13 @@ static inline char * task_state(struct task_struct *p, char *buffer)
 		"State:\t%s\n"
 		"Pid:\t%d\n"
 		"PPid:\t%d\n"
+		"TracerPid:\t%d\n"
 		"Uid:\t%d\t%d\t%d\t%d\n"
 		"Gid:\t%d\t%d\t%d\t%d\n"
 		"FDSize:\t%d\n"
 		"Groups:\t",
 		get_task_state(p),
-		p->pid, p->p_pptr->pid,
+		p->pid, p->p_opptr->pid, p->p_pptr->pid != p->p_opptr->pid ? p->p_opptr->pid : 0,
 		p->uid, p->euid, p->suid, p->fsuid,
 		p->gid, p->egid, p->sgid, p->fsgid,
 		p->files ? p->files->max_fds : 0);
@@ -327,7 +328,7 @@ int proc_pid_stat(struct task_struct *task, char * buffer)
 		task->pid,
 		task->comm,
 		state,
-		task->p_pptr->pid,
+		task->p_opptr->pid,
 		task->pgrp,
 		task->session,
 	        task->tty ? kdev_t_to_nr(task->tty->device) : 0,

@@ -677,7 +677,7 @@ static int irq_affinity_write_proc (struct file *file, const char *buffer,
 
 	err = parse_hex_value(buffer, count, &new_value);
 
-#if CONFIG_SMP
+#if 0/*CONFIG_SMP*/
 	/*
 	 * Do not allow disabling IRQs completely - it's a too easy
 	 * way to make the system unusable accidentally :-) At least

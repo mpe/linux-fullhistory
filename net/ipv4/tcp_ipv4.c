@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.200 2000/02/11 22:27:26 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.201 2000/03/08 19:36:42 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -231,14 +231,15 @@ static int tcp_v4_get_port(struct sock *sk, unsigned short snum)
 				break;
 	}
 	if (tb != NULL && tb->owners != NULL) {
-		if (tb->fastreuse != 0 && sk->reuse != 0) {
+		if (tb->fastreuse != 0 && sk->reuse != 0 && sk->state != TCP_LISTEN) {
 			goto success;
 		} else {
 			struct sock *sk2 = tb->owners;
 			int sk_reuse = sk->reuse;
 
 			for( ; sk2 != NULL; sk2 = sk2->bind_next) {
-				if (sk->bound_dev_if == sk2->bound_dev_if) {
+				if (sk != sk2 &&
+				    sk->bound_dev_if == sk2->bound_dev_if) {
 					if (!sk_reuse	||
 					    !sk2->reuse	||
 					    sk2->state == TCP_LISTEN) {
@@ -269,11 +270,15 @@ static int tcp_v4_get_port(struct sock *sk, unsigned short snum)
 		tb->fastreuse = 0;
 success:
 	sk->num = snum;
-	if ((sk->bind_next = tb->owners) != NULL)
-		tb->owners->bind_pprev = &sk->bind_next;
-	tb->owners = sk;
-	sk->bind_pprev = &tb->owners;
-	sk->prev = (struct sock *) tb;
+	if (sk->prev == NULL) {
+		if ((sk->bind_next = tb->owners) != NULL)
+			tb->owners->bind_pprev = &sk->bind_next;
+		tb->owners = sk;
+		sk->bind_pprev = &tb->owners;
+		sk->prev = (struct sock *) tb;
+	} else {
+		BUG_TRAP(sk->prev == (struct sock *) tb);
+	}
 	ret = 0;
 
 fail_unlock:

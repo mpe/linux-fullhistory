@@ -54,9 +54,9 @@
 
 #include "ide_modes.h"
 
-#define ACARD_DEBUG_DRIVE_INFO 1
+#define ACARD_DEBUG_DRIVE_INFO		0
 
-#define DISPLAY_AEC6210_TIMINGS
+#undef DISPLAY_AEC6210_TIMINGS
 
 #if defined(DISPLAY_AEC6210_TIMINGS) && defined(CONFIG_PROC_FS)
 #include <linux/stat.h>

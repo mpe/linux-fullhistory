@@ -46,9 +46,10 @@
 #define SPLIT_BYTE(B,H,L)	((H)=(B>>4), (L)=(B-((B>>4)<<4)))
 #endif
 
-#define HPT343_DEBUG_DRIVE_INFO		1
+#define HPT343_DEBUG_DRIVE_INFO		0
 
-#define DISPLAY_HPT34X_TIMINGS
+#undef DISPLAY_HPT34X_TIMINGS
+
 #if defined(DISPLAY_HPT34X_TIMINGS) && defined(CONFIG_PROC_FS)
 #include <linux/stat.h>
 #include <linux/proc_fs.h>

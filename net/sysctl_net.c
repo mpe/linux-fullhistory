@@ -42,6 +42,10 @@ extern ctl_table ipv6_table[];
 extern ctl_table tr_table[];
 #endif
 
+#ifdef CONFIG_ECONET
+extern ctl_table econet_table[];
+#endif
+
 ctl_table net_table[] = {
 	{NET_CORE,   "core",      NULL, 0, 0555, core_table},      
 #ifdef CONFIG_UNIX
@@ -62,6 +66,9 @@ ctl_table net_table[] = {
 #endif
 #ifdef CONFIG_TR
 	{NET_TR, "token-ring", NULL, 0, 0555, tr_table},
+#endif
+#ifdef CONFIG_ECONET
+	{NET_ECONET, "econet",    NULL, 0, 0555, econet_table},
 #endif
 	{0}
 };

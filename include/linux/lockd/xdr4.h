@@ -15,7 +15,12 @@
 #include <linux/lockd/xdr.h>
 
 /* error codes new to NLMv4 */
-extern u32	nlm4_deadlock, nlm4_rofs, nlm4_stale_fh, nlm4_fbig, nlm4_failed;
+#define	nlm4_deadlock		__constant_htonl(NLM_DEADLCK)
+#define	nlm4_rofs		__constant_htonl(NLM_ROFS)
+#define	nlm4_stale_fh		__constant_htonl(NLM_STALE_FH)
+#define	nlm4_fbig		__constant_htonl(NLM_FBIG)
+#define	nlm4_failed		__constant_htonl(NLM_FAILED)
+
 
 
 int	nlm4svc_decode_testargs(struct svc_rqst *, u32 *, struct nlm_args *);

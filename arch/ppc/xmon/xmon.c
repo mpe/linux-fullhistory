@@ -7,6 +7,7 @@
 #include <linux/sched.h>
 #include <asm/ptrace.h>
 #include <asm/string.h>
+#include <asm/prom.h>
 #include "nonstdio.h"
 #include "privinst.h"
 
@@ -81,7 +82,7 @@ static void insert_bpts(void);
 static struct bpt *at_breakpoint(unsigned pc);
 static void bpt_cmds(void);
 static void cacheflush(void);
-static char *pretty_lookup_name(unsigned long addr);
+static char *pretty_print_addr(unsigned long addr);
 static char *lookup_name(unsigned long addr);
 
 extern int print_insn_big_powerpc(FILE *, unsigned long, unsigned);
@@ -141,7 +142,7 @@ xmon(struct pt_regs *excp)
 	prom_drawstring(" msr="); prom_drawhex(excp->msr);
 	prom_drawstring(" trap="); prom_drawhex(excp->trap);
 	prom_drawstring(" sp="); prom_drawhex(excp->gpr[1]);
-	sp = &excp->gpr[0];
+	sp = (unsigned *)&excp->gpr[0];
 	for (i = 0; i < 32; ++i) {
 		if ((i & 7) == 0)
 			prom_drawstring("\n");
@@ -544,10 +545,10 @@ getsp()
 void
 excprint(struct pt_regs *fp)
 {
-	printf("vector: %x at pc = %x %s",
-	       fp->trap, fp->nip, pretty_lookup_name(fp->nip));
-	printf(", msr = %x, sp = %x [%x]\n",
-	       fp->msr, fp->gpr[1], fp);
+	printf("vector: %x at pc = %x",
+	       fp->trap, fp->nip);
+	printf(", lr = %x, msr = %x, sp = %x [%x]\n",
+	       fp->link, fp->msr, fp->gpr[1], fp);
 	if (fp->trap == 0x300 || fp->trap == 0x600)
 		printf("dar = %x, dsisr = %x\n", fp->dar, fp->dsisr);
 	if (current)
@@ -1385,24 +1386,13 @@ char *str;
 	lineptr = str;
 }
 
-/*
- * We use this array a lot here.  We assume we don't have multiple
- * instances of xmon running and that we don't use the return value of
- * any functions other than printing them.
- *  -- Cort
- */
-char last[64];
-static char *pretty_lookup_name(unsigned long addr)
+static char *pretty_print_addr(unsigned long addr)
 {
+	printf("%08x", addr);
 	if ( lookup_name(addr) )
-	{
-		sprintf(last, " (%s)", lookup_name(addr));
-		return last;
-	}
-	else
-		return NULL;
+		printf(" %s", lookup_name(addr) );
+	return NULL;
 }
-
 
 static char *lookup_name(unsigned long addr)
 {
@@ -1413,11 +1403,8 @@ static char *lookup_name(unsigned long addr)
 
 	if ( !sysmap || !sysmap_size )
 		return NULL;
-	
-	/* adjust if addr is relative to kernelbase */
-	if ( addr < PAGE_OFFSET )
-		addr += PAGE_OFFSET;
-
+return NULL;	
+#if 0
 	cmp = simple_strtoul(c, &c, 8);
 	strcpy( last, strsep( &c, "\n"));
 	while ( c < (sysmap+sysmap_size) )
@@ -1427,6 +1414,7 @@ static char *lookup_name(unsigned long addr)
 			break;
 		strcpy( last, strsep( &c, "\n"));
 	}
-	return last;
+	return NULLlast;
+#endif	
 }
 

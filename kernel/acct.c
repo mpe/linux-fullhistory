@@ -88,24 +88,16 @@ void acct_timeout(unsigned long unused)
  */
 static int check_free_space(struct file *file)
 {
-	mm_segment_t fs;
 	struct statfs sbuf;
-	struct super_block *sb;
 	int res = acct_active;
 	int act;
 
 	if (!file || !acct_needcheck)
 		return res;
 
-	sb = file->f_dentry->d_inode->i_sb;
-	if (!sb->s_op || !sb->s_op->statfs)
-		return res;
-
-	fs = get_fs();
-	set_fs(KERNEL_DS);
 	/* May block */
-	sb->s_op->statfs(sb, &sbuf, sizeof(struct statfs));
-	set_fs(fs);
+	if (vfs_statfs(file->f_dentry->d_inode->i_sb, &sbuf))
+		return res;
 
 	if (sbuf.f_bavail <= SUSPEND * sbuf.f_blocks / 100)
 		act = -1;

@@ -293,36 +293,6 @@ warm reboots since the last firmware load).
 The "available DRAM" line will vary depending on how much added RAM
 your card has. Mine has 8MB.
 
-Next, check /dev/sndstat, which on my machine says:
----------------------------------------------------------------------
-OSS/Free:3.8s2++-971130
-Load type: Driver loaded as a module
-Kernel: Linux bd 2.1.106 #12 SMP Fri Jul 3 00:37:34 EDT 1998 i486
-Config options: 0
-
-Installed drivers: 
-
-Card config: 
-
-Audio devices:
-0: Crystal audio controller (CS4232) (DUPLEX)
-
-Synth devices:
-0: Turtle Beach WaveFront
-1: Yamaha OPL-3
-
-Midi devices:
-0: WaveFront Internal MIDI
-1: WaveFront External MIDI
-
-Timers:
-0: System clock
-1: Crystal audio controller (CS4232)
-
-Mixers:
-0: Crystal audio controller (CS4232)
------------------------------------------------------------
-
 To check basically functionality, use play(1) or splay(1) to send a
 .WAV or other audio file through the audio portion. Then use playmidi
 to play a General MIDI file. Try the "-D 0" to hear the

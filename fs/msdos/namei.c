@@ -326,7 +326,7 @@ int msdos_rmdir(struct inode *dir, struct dentry *dentry)
 	 * whether it is empty.
 	 */
 	res = -EBUSY;
-	if (!list_empty(&dentry->d_hash))
+	if (!d_unhashed(dentry))
 		goto rmdir_done;
 	res = fat_dir_empty(inode);
 	if (res)
@@ -463,6 +463,9 @@ static int do_msdos_rename(struct inode *old_dir, char *old_name,
 		goto degenerate_case;
 	if (is_dir) {
 		if (new_inode) {
+			error = -EBUSY;
+			if (!d_unhashed(new_dentry))
+				goto out;
 			error = fat_dir_empty(new_inode);
 			if (error)
 				goto out;

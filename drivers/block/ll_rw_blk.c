@@ -212,15 +212,18 @@ static int ll_merge_requests_fn(request_queue_t *q, struct request *req,
 				struct request *next, int max_segments)
 {
 	int total_segments = req->nr_segments + next->nr_segments;
+       int same_segment;
 
+       same_segment = 0;
 	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data) {
 		total_segments--;
-		q->nr_segments--;
+               same_segment = 1;
 	}
     
 	if (total_segments > max_segments)
 		return 0;
 
+       q->nr_segments -= same_segment;
 	req->nr_segments = total_segments;
 	return 1;
 }
@@ -472,14 +475,8 @@ static inline void __elevator_merge(request_queue_t * q, struct request * req, i
 	int sequence = elevator_sequence(&q->elevator, latency);
 	if (after)
 		sequence -= req->nr_segments;
-	if (elevator_sequence_before(sequence, req->elevator_sequence)) {
-		if (!after)
-			printk(KERN_WARNING __FUNCTION__
-			       ": req latency %d req latency %d\n",
-			       req->elevator_sequence - q->elevator.sequence,
-			       sequence - q->elevator.sequence);
+	if (elevator_sequence_before(sequence, req->elevator_sequence))
 		req->elevator_sequence = sequence;
-	}
 }
 
 static inline void elevator_queue(request_queue_t * q,

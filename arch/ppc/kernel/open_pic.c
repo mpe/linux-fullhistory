@@ -97,7 +97,7 @@ struct hw_interrupt_type open_pic = {
 #define check_arg_cpu(cpu)	do {} while (0)
 #endif
 
-static void no_action(int ir1, void *dev, struct pt_regs *regs)
+void no_action(int ir1, void *dev, struct pt_regs *regs)
 {
 }
 
@@ -301,7 +301,7 @@ void find_ISUs(void)
 	NumSources = 0x10;
 #else
 	/* for non-distributed OpenPIC implementations it's in the IDU -- Cort */
-	ISU = OpenPIC->Source;
+	ISU = (OpenPIC_Source *)OpenPIC->Source;
 #endif
 }
 

@@ -50,7 +50,6 @@
  */
 extern unsigned long get_cmos_time(void);
 
-static int acpi_control_thread(void *context);
 static int acpi_do_ulong(ctl_table *ctl,
 			 int write,
 			 struct file *file,
@@ -71,8 +70,6 @@ static int acpi_do_sleep(ctl_table *ctl,
 			 struct file *file,
 			 void *buffer,
 			 size_t *len);
-
-DECLARE_WAIT_QUEUE_HEAD(acpi_control_wait);
 
 static struct ctl_table_header *acpi_sysctl = NULL;
 
@@ -105,7 +102,15 @@ static unsigned long acpi_p_blk = 0;
 static int acpi_p_lvl2_tested = 0;
 static int acpi_p_lvl3_tested = 0;
 
-static int acpi_disabled = 0;
+enum
+{
+	ACPI_ENABLED,
+	ACPI_TABLES_ONLY,
+	ACPI_CHIPSET_ONLY,
+	ACPI_DISABLED,
+};
+
+static int acpi_enabled = ACPI_ENABLED;
 
 // bits 8-15 are SLP_TYPa, bits 0-7 are SLP_TYPb
 static unsigned long acpi_slp_typ[] = 
@@ -1296,13 +1301,21 @@ static int acpi_do_sleep(ctl_table *ctl,
  */
 static int __init acpi_init(void)
 {
-	int pid;
-
-	if (acpi_disabled)
-		return -ENODEV;
-
-	if (acpi_find_tables() && acpi_find_chipset()) {
-		// no ACPI tables and not recognized chipset
+	switch(acpi_enabled)
+	{
+	case ACPI_ENABLED:
+		if (acpi_find_tables() && acpi_find_chipset())
+			return -ENODEV;
+		break;
+	case ACPI_TABLES_ONLY:
+		if (acpi_find_tables())
+			return -ENODEV;
+		break;
+	case ACPI_CHIPSET_ONLY:
+		if (acpi_find_chipset())
+			return -ENODEV;
+		break;
+	case ACPI_DISABLED:
 		return -ENODEV;
 	}
 
@@ -1342,10 +1355,6 @@ static int __init acpi_init(void)
 
 	acpi_sysctl = register_sysctl_table(acpi_dir_table, 1);
 
-	pid = kernel_thread(acpi_control_thread,
-			    NULL,
-			    CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
-
 	pm_power_off = acpi_power_off;
 
 	pm_active = 1;
@@ -1379,6 +1388,7 @@ err_out:
 static void __exit acpi_exit(void)
 {
 	pm_idle = NULL;
+	pm_active = 0;
 	pm_power_off = NULL;
 
 	unregister_sysctl_table(acpi_sysctl);
@@ -1400,10 +1410,14 @@ static void __exit acpi_exit(void)
 static int __init acpi_setup(char *str)
 {
 	while (str && *str) {
-		if (strncmp(str, "off", 3) == 0)
-			acpi_disabled = 1;
-		else if (strncmp(str, "on", 2) == 0)
-			acpi_disabled = 0;
+		if (strncmp(str, "on", 2) == 0)
+			acpi_enabled = ACPI_ENABLED;
+		else if (strncmp(str, "tables", 6) == 0)
+			acpi_enabled = ACPI_TABLES_ONLY;
+		else if (strncmp(str, "chipset", 7) == 0)
+			acpi_enabled = ACPI_CHIPSET_ONLY;
+		else if (strncmp(str, "off", 3) == 0)
+			acpi_enabled = ACPI_DISABLED;
 		str = strpbrk(str, ",");
 		if (str)
 			str += strspn(str, ",");
@@ -1413,24 +1427,5 @@ static int __init acpi_setup(char *str)
 
 __setup("acpi=", acpi_setup);
 
-/*
- * Manage idle devices
- */
-static int acpi_control_thread(void *context)
-{
-	exit_mm(current);
-	exit_files(current);
-	strcpy(current->comm, "acpi");
-	
-	for(;;) {
-		interruptible_sleep_on(&acpi_control_wait);
-		if (signal_pending(current))
-			break;
-
-		// find all idle devices and set idle timer
-	}
-
-	return 0;
-}
-
-__initcall(acpi_init);
+module_init(acpi_init);
+module_exit(acpi_exit);

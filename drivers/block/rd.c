@@ -99,6 +99,7 @@ static int rd_hardsec[NUM_RAMDISKS];		/* Size of real blocks in bytes */
 static int rd_blocksizes[NUM_RAMDISKS];		/* Size of 1024 byte blocks :)  */
 static int rd_kbsize[NUM_RAMDISKS];		/* Size in blocks of 1024 bytes */
 static devfs_handle_t devfs_handle = NULL;
+static struct inode *rd_inode[NUM_RAMDISKS];		/* Protected device inodes */
 
 /*
  * Parameters for the boot-loading of the RAM disk.  These are set by
@@ -169,11 +170,18 @@ static int __init ramdisk_size2(char *str)
 	return ramdisk_size(str);
 }
 
+static int __init ramdisk_blocksize(char *str)
+{
+	rd_blocksize = simple_strtol(str,NULL,0);
+	return 1;
+}
+
 __setup("ramdisk_start=", ramdisk_start_setup);
 __setup("load_ramdisk=", load_ramdisk);
 __setup("prompt_ramdisk=", prompt_ramdisk);
 __setup("ramdisk=", ramdisk_size);
 __setup("ramdisk_size=", ramdisk_size2);
+__setup("ramdisk_blocksize=", ramdisk_blocksize);
 
 #endif
 
@@ -216,67 +224,16 @@ repeat:
 		goto repeat;
 	}
 
-	/*
-	 * This has become somewhat more complicated with the addition of
-	 * the page cache.  The problem is that in some cases the furnished
-	 * buffer is "real", i.e., part of the existing ramdisk, while in
-	 * others it is "unreal", e.g., part of a page.  In the first case
-	 * not much needs to be done, while in the second, some kind of
-	 * transfer is needed.
- 	 *
-	 * The two cases are distinguished here by checking whether the
-	 * real buffer is already in the buffer cache, and whether it is
-	 * the same as the one supplied.
-	 *
-	 * There are three cases with read/write to consider:
-	 *
-	 * 1. Supplied buffer matched one in the buffer cache:
-	 *    Read - Clear the buffer, as it wasn't already valid.
-	 *    Write - Mark the buffer as "Protected".
-	 *
-	 * 2. Supplied buffer mismatched one in the buffer cache:
-	 *    Read - Copy the data from the buffer cache entry.
-	 *    Write - Copy the data to the buffer cache entry.
-	 *
-	 * 3  No buffer cache entry existed:
-	 *    Read - Clear the supplied buffer, but do not create a real
-	 *    one.
-	 *    Write - Create a real buffer, copy the data to it, and mark
-	 *    it as "Protected".
-	 *
-	 * NOTE: There seems to be some schizophrenia here - the logic
-	 * using "len" seems to assume arbitrary request lengths, while
-	 * the "protect" logic assumes a single buffer cache entry.
-	 * This seems to be left over from the ancient contiguous ramdisk
-	 * logic.
-	 */
-
 	sbh = CURRENT->bh;
-	rbh = get_hash_table(sbh->b_dev, sbh->b_blocknr, sbh->b_size);
-	if (sbh == rbh) {
-		if (CURRENT->cmd == READ) 
-			memset(CURRENT->buffer, 1, len);
-	} else if (rbh) {
-		if (CURRENT->cmd == READ)
+	rbh = getblk(sbh->b_dev, sbh->b_blocknr, sbh->b_size);
+	if (CURRENT->cmd == READ) {
+		if (sbh != rbh)
 			memcpy(CURRENT->buffer, rbh->b_data, rbh->b_size);
-		else
+	} else
+		if (sbh != rbh)
 			memcpy(rbh->b_data, CURRENT->buffer, rbh->b_size);
-	} else { /* !rbh */
-		if (CURRENT->cmd == READ)
-			memset(sbh->b_data, 2, len);
-		else {
-			rbh = getblk(sbh->b_dev, sbh->b_blocknr, sbh->b_size);
-			if (rbh)
-				memcpy(rbh->b_data, CURRENT->buffer,
-				    rbh->b_size);
-			else
-				BUG();	/* No buffer, what to do here? */
-		}
-	}
-	if (rbh) {
-		mark_buffer_protected(rbh);
-		brelse(rbh);
-	}
+	mark_buffer_protected(rbh);
+	brelse(rbh);
 
 	end_request(1);
 	goto repeat;
@@ -372,6 +329,14 @@ static int rd_open(struct inode * inode, struct file * filp)
 	if (DEVICE_NR(inode->i_rdev) >= NUM_RAMDISKS)
 		return -ENXIO;
 
+	/*
+	 * Immunize device against invalidate_buffers() and prune_icache().
+	 */
+	if (rd_inode[DEVICE_NR(inode->i_rdev)] == NULL) {
+		if((rd_inode[DEVICE_NR(inode->i_rdev)] = igrab(inode)) != NULL)
+			atomic_inc(&rd_inode[DEVICE_NR(inode->i_rdev)]->i_bdev->bd_openers);
+	}
+
 	MOD_INC_USE_COUNT;
 
 	return 0;
@@ -389,24 +354,31 @@ static struct block_device_operations fd_fops = {
 	ioctl:		rd_ioctl,
 };
 
+#ifdef MODULE
 /* Before freeing the module, invalidate all of the protected buffers! */
 static void __exit rd_cleanup (void)
 {
 	int i;
 
 	for (i = 0 ; i < NUM_RAMDISKS; i++) {
-		struct block_device *bdev;
-		bdev = bdget(kdev_t_to_nr(MKDEV(MAJOR_NR,i)));
-		atomic_dec(&bdev->bd_openers);
+		if (rd_inode[i]) {
+			/* withdraw invalidate_buffers() and prune_icache() immunity */
+			atomic_dec(&rd_inode[i]->i_bdev->bd_openers);
+			/* remove stale pointer to module address space */
+			rd_inode[i]->i_bdev->bd_op = NULL;
+			iput(rd_inode[i]);
+		}
 		destroy_buffers(MKDEV(MAJOR_NR, i));
 	}
 
 	devfs_unregister (devfs_handle);
 	unregister_blkdev( MAJOR_NR, "ramdisk" );
 	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
+	hardsect_size[MAJOR_NR] = NULL;
 	blksize_size[MAJOR_NR] = NULL;
 	blk_size[MAJOR_NR] = NULL;
 }
+#endif
 
 /* This is the registration and initialization section of the RAM disk driver */
 int __init rd_init (void)
@@ -441,21 +413,16 @@ int __init rd_init (void)
 			       S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
 			       &fd_fops, NULL);
 
-	hardsect_size[MAJOR_NR] = rd_hardsec;		/* Size of the RAM disk blocks */
-	blksize_size[MAJOR_NR] = rd_blocksizes;		/* Avoid set_blocksize() check */
-
-	for (i = 0; i < NUM_RAMDISKS; i++) {
-		struct block_device *bdev;
+	for (i = 0; i < NUM_RAMDISKS; i++)
 		register_disk(NULL, MKDEV(MAJOR_NR,i), 1, &fd_fops, rd_size<<1);
-		bdev = bdget(kdev_t_to_nr(MKDEV(MAJOR_NR,i)));
-		atomic_inc(&bdev->bd_openers);  /* avoid invalidate_buffers() */
-	}
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* We ought to separate initrd operations here */
 	register_disk(NULL, MKDEV(MAJOR_NR,INITRD_MINOR), 1, &fd_fops, rd_size<<1);
 #endif
 
+	hardsect_size[MAJOR_NR] = rd_hardsec;		/* Size of the RAM disk blocks */
+	blksize_size[MAJOR_NR] = rd_blocksizes;		/* Avoid set_blocksize() check */
 	blk_size[MAJOR_NR] = rd_kbsize;			/* Size of the RAM disk in kB  */
 
 		/* rd_size is given in kB */
@@ -468,8 +435,8 @@ int __init rd_init (void)
 
 #ifdef MODULE
 module_init(rd_init);
-#endif
 module_exit(rd_cleanup);
+#endif
 
 /* loadable module support */
 MODULE_PARM     (rd_size, "1i");

@@ -20,44 +20,7 @@
 #include <linux/lockd/sm_inter.h>
 
 #define NLMDBG_FACILITY		NLMDBG_XDR
-#define NLM_MAXSTRLEN		1024
 
-#define QUADLEN(len)		(((len) + 3) >> 2)
-
-
-u32	nlm_granted, nlm_lck_denied, nlm_lck_denied_nolocks,
-	nlm_lck_blocked, nlm_lck_denied_grace_period;
-
-
-typedef struct nlm_args	nlm_args;
-
-/*
- * Initialization of NFS status variables
- */
-void
-nlmxdr_init(void)
-{
-	static int	inited = 0;
-
-	if (inited)
-		return;
-
-	nlm_granted = htonl(NLM_LCK_GRANTED);
-	nlm_lck_denied = htonl(NLM_LCK_DENIED);
-	nlm_lck_denied_nolocks = htonl(NLM_LCK_DENIED_NOLOCKS);
-	nlm_lck_blocked = htonl(NLM_LCK_BLOCKED);
-	nlm_lck_denied_grace_period = htonl(NLM_LCK_DENIED_GRACE_PERIOD);
-
-#ifdef CONFIG_LOCKD_V4
-	nlm4_deadlock = htonl(NLM_DEADLCK);
-	nlm4_rofs = htonl(NLM_ROFS);
-	nlm4_stale_fh = htonl(NLM_STALE_FH);
-	nlm4_fbig = htonl(NLM_FBIG);
-	nlm4_failed = htonl(NLM_FAILED);
-#endif
-
-	inited = 1;
-}
 
 /*
  * XDR functions for basic NLM types

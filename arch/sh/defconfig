@@ -96,10 +96,6 @@ CONFIG_SERIAL_CONSOLE=y
 # CONFIG_UNIX98_PTYS is not set
 
 #
-# Misc devices
-#
-
-#
 # Filesystems
 #
 # CONFIG_QUOTA is not set

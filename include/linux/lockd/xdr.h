@@ -13,8 +13,15 @@
 #include <linux/nfs.h>
 #include <linux/sunrpc/xdr.h>
 
-extern u32	nlm_granted, nlm_lck_denied, nlm_lck_denied_nolocks,
-		nlm_lck_blocked, nlm_lck_denied_grace_period;
+#define NLM_MAXSTRLEN		1024
+
+#define QUADLEN(len)		(((len) + 3) >> 2)
+
+#define	nlm_granted		__constant_htonl(NLM_LCK_GRANTED)
+#define	nlm_lck_denied		__constant_htonl(NLM_LCK_DENIED)
+#define	nlm_lck_denied_nolocks	__constant_htonl(NLM_LCK_DENIED_NOLOCKS)
+#define	nlm_lck_blocked		__constant_htonl(NLM_LCK_BLOCKED)
+#define	nlm_lck_denied_grace_period	__constant_htonl(NLM_LCK_DENIED_GRACE_PERIOD)
 
 /* Lock info passed via NLM */
 struct nlm_lock {
@@ -48,6 +55,8 @@ struct nlm_args {
 	u32			fsm_access;
 	u32			fsm_mode;
 };
+
+typedef struct nlm_args nlm_args;
 
 /*
  * Generic lockd result

@@ -420,8 +420,6 @@ media_picked:
 	tp->timer.data = (unsigned long)dev;
 	tp->timer.function = tulip_tbl[tp->chip_id].media_timer;
 	add_timer(&tp->timer);
-
-	netif_device_attach(dev);
 }
 
 
@@ -438,6 +436,8 @@ tulip_open(struct net_device *dev)
 	tulip_init_ring (dev);
 	
 	tulip_up (dev);
+	
+	netif_start_queue (dev);
 	
 	return 0;
 }
@@ -652,8 +652,6 @@ static void tulip_down (struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *) dev->priv;
 	unsigned long flags;
 
-	netif_device_detach (dev);
-
 	del_timer (&tp->timer);
 
 	spin_lock_irqsave (&tp->lock, flags);
@@ -686,6 +684,8 @@ static int tulip_close (struct net_device *dev)
 	long ioaddr = dev->base_addr;
 	struct tulip_private *tp = (struct tulip_private *) dev->priv;
 	int i;
+	
+	netif_stop_queue (dev);
 
 	tulip_down (dev);
 
@@ -1338,8 +1338,10 @@ static void tulip_suspend (struct pci_dev *pdev)
 {
 	struct net_device *dev = pdev->driver_data;
 
-	if (dev && netif_device_present (dev))
+	if (dev && netif_device_present (dev)) {
+		netif_device_detach (dev);
 		tulip_down (dev);
+	}
 }
 
 
@@ -1347,8 +1349,10 @@ static void tulip_resume (struct pci_dev *pdev)
 {
 	struct net_device *dev = pdev->driver_data;
 
-	if (dev && !netif_device_present (dev))
+	if (dev && !netif_device_present (dev)) {
 		tulip_up (dev);
+		netif_device_attach (dev);
+	}
 }
 
 

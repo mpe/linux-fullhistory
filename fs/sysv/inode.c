@@ -68,7 +68,7 @@ static void sysv_delete_inode(struct inode *inode)
 static void sysv_put_super(struct super_block *);
 static void sysv_write_super(struct super_block *);
 static void sysv_read_inode(struct inode *);
-static int sysv_statfs(struct super_block *, struct statfs *, int);
+static int sysv_statfs(struct super_block *, struct statfs *);
 
 static struct super_operations sysv_sops = {
 	read_inode:	sysv_read_inode,
@@ -562,20 +562,18 @@ static void sysv_put_super(struct super_block *sb)
 	MOD_DEC_USE_COUNT;
 }
 
-static int sysv_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+static int sysv_statfs(struct super_block *sb, struct statfs *buf)
 {
-	struct statfs tmp;
-
-	tmp.f_type = sb->s_magic;			/* type of filesystem */
-	tmp.f_bsize = sb->sv_block_size;		/* block size */
-	tmp.f_blocks = sb->sv_ndatazones;		/* total data blocks in file system */
-	tmp.f_bfree = sysv_count_free_blocks(sb);	/* free blocks in fs */
-	tmp.f_bavail = tmp.f_bfree;			/* free blocks available to non-superuser */
-	tmp.f_files = sb->sv_ninodes;			/* total file nodes in file system */
-	tmp.f_ffree = sysv_count_free_inodes(sb);	/* free file nodes in fs */
-	tmp.f_namelen = SYSV_NAMELEN;
-	/* Don't know what value to put in tmp.f_fsid */ /* file system id */
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = sb->s_magic;			/* type of filesystem */
+	buf->f_bsize = sb->sv_block_size;		/* block size */
+	buf->f_blocks = sb->sv_ndatazones;		/* total data blocks in file system */
+	buf->f_bfree = sysv_count_free_blocks(sb);	/* free blocks in fs */
+	buf->f_bavail = buf->f_bfree;			/* free blocks available to non-superuser */
+	buf->f_files = sb->sv_ninodes;			/* total file nodes in file system */
+	buf->f_ffree = sysv_count_free_inodes(sb);	/* free file nodes in fs */
+	buf->f_namelen = SYSV_NAMELEN;
+	/* Don't know what value to put in buf->f_fsid */ /* file system id */
+	return 0;
 }
 
 

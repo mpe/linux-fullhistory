@@ -8,10 +8,6 @@ ifeq ($(CONFIG_DECNET_ROUTER),y)
 O_OBJS += dn_fib.o dn_rules.o dn_table.o
 endif
 
-ifeq ($(CONFIG_DECNET_RAW),y)
-O_OBJS += dn_raw.o
-endif
-
 ifeq ($(CONFIG_DECNET_FW),y)
 O_OBJS += dn_fw.o
 endif

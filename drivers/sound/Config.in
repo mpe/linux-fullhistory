@@ -86,6 +86,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
    fi
 
    dep_tristate '    Aztech Sound Galaxy (non-PnP) cards' CONFIG_SOUND_SGALAXY $CONFIG_SOUND_OSS
+   dep_tristate '    ACI mixer (miroPCM12)' CONFIG_SOUND_ACI_MIXER $CONFIG_SOUND_OSS
    dep_tristate '    Crystal CS4232 based (PnP) cards' CONFIG_SOUND_CS4232 $CONFIG_SOUND_OSS
    dep_tristate '    Ensoniq SoundScape support' CONFIG_SOUND_SSCAPE $CONFIG_SOUND_OSS
    dep_tristate '    Gravis Ultrasound support' CONFIG_SOUND_GUS $CONFIG_SOUND_OSS
@@ -115,10 +116,10 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
    dep_tristate '    PSS (AD1848, ADSP-2115, ESC614) support' CONFIG_SOUND_PSS $CONFIG_SOUND_OSS
    if [ "$CONFIG_SOUND_PSS" = "y" -o "$CONFIG_SOUND_PSS" = "m" ]; then
       bool '      Enable PSS mixer (Beethoven ADSP-16 and other compatibile)' CONFIG_PSS_MIXER
-   fi
-   bool '      Have DSPxxx.LD firmware file' CONFIG_PSS_HAVE_BOOT
-   if [ "$CONFIG_PSS_HAVE_BOOT" = "y" ]; then
-      string '  Full pathname of DSPxxx.LD firmware file' CONFIG_PSS_BOOT_FILE /etc/sound/dsp001.ld
+      bool '      Have DSPxxx.LD firmware file' CONFIG_PSS_HAVE_BOOT
+      if [ "$CONFIG_PSS_HAVE_BOOT" = "y" ]; then
+         string '        Full pathname of DSPxxx.LD firmware file' CONFIG_PSS_BOOT_FILE /etc/sound/dsp001.ld
+      fi
    fi
 
    dep_tristate '    SoftOSS software wave table engine' CONFIG_SOUND_SOFTOSS $CONFIG_SOUND_OSS
@@ -128,6 +129,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
    fi
   
    dep_tristate '    100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support' CONFIG_SOUND_SB $CONFIG_SOUND_OSS
+   dep_tristate '    AWE32 synth' CONFIG_SOUND_AWE32_SYNTH $CONFIG_SOUND_OSS
    dep_tristate '    Full support for Turtle Beach WaveFront (Tropez Plus, Tropez, Maui) synth/soundcards' CONFIG_SOUND_WAVEFRONT $CONFIG_SOUND_OSS m
    dep_tristate '    Limited support for Turtle Beach Wave Front (Maui, Tropez) synthesizers' CONFIG_SOUND_MAUI $CONFIG_SOUND_OSS
    if [ "$CONFIG_SOUND_MAUI" = "y" ]; then
@@ -143,20 +145,33 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
    dep_tristate '    Yamaha OPL3-SA2, SA3, and SAx based PnP cards' CONFIG_SOUND_OPL3SA2 $CONFIG_SOUND_OSS
    dep_tristate '    6850 UART support' CONFIG_SOUND_UART6850 $CONFIG_SOUND_OSS
   
+   dep_tristate '    Gallant Audio Cards (SC-6000 and SC-6600 based)' CONFIG_SOUND_AEDSP16 $CONFIG_SOUND_OSS
+   if [ "$CONFIG_SOUND_AEDSP16" = "y" -o "$CONFIG_SOUND_AEDSP16" = "m" ]; then
+      bool '      SC-6600 based audio cards (new Audio Excel DSP 16)' CONFIG_SC6600
+      if [ "$CONFIG_SC6600" = "y" ]; then
+         bool '        Activate SC-6600 Joystick Interface' CONFIG_SC6600_JOY
+         int '        SC-6600 CDROM Interface (4=None, 3=IDE, 1=Panasonic, 0=?Sony?)' CONFIG_SC6600_CDROM 4
+         hex '        SC-6600 CDROM Interface I/O Address' CONFIG_SC6600_CDROMBASE 0
+      fi
+      if [ "$CONFIG_SOUND_SB" = "y" -o "$CONFIG_SOUND_SB" = "m" ]; then
+         if [ "$CONFIG_AEDSP16_MSS" != "y" ]; then
+            bool '      Audio Excel DSP 16 (SBPro emulation)' CONFIG_AEDSP16_SBPRO
+         fi
+      fi
+      if [ "$CONFIG_SOUND_MSS" = "y" -o "$CONFIG_SOUND_MSS" = "m" ]; then
+         if [ "$CONFIG_AEDSP16_SBPRO" != "y" ]; then
+            bool '      Audio Excel DSP 16 (MSS emulation)' CONFIG_AEDSP16_MSS
+         fi
+      fi
+      if [ "$CONFIG_SOUND_MPU401" = "y" -o "$CONFIG_SOUND_MPU401" = "m" ]; then
+         bool '      Audio Excel DSP 16 (MPU401 emulation)' CONFIG_AEDSP16_MPU401
+      fi
+   fi
+	 
    if [ "$CONFIG_ARM" = "y" ]; then
       dep_tristate '    VIDC 16-bit sound' CONFIG_SOUND_VIDC $CONFIG_SOUND_OSS
       dep_tristate '    Netwinder WaveArtist' CONFIG_SOUND_WAVEARTIST $CONFIG_SOUND_OSS
    fi
-  
-  
-   # Additional low level drivers.
-  
-   mainmenu_option next_comment
-   comment 'Additional low level sound drivers'
-   bool 'Additional low level sound drivers' CONFIG_LOWLEVEL_SOUND $CONFIG_SOUND_OSS
-   if [ "$CONFIG_LOWLEVEL_SOUND" = "y" ]; then
-      source drivers/sound/lowlevel/Config.in
-   fi
-   endmenu
+
 fi
 

@@ -114,9 +114,6 @@ static struct device_node *allnodes = 0;
 static void clearscreen(void);
 static void flushscreen(void);
 
-void prom_drawchar(char c);
-void prom_drawstring(const char *c);
-void prom_drawhex(unsigned long v);
 static void scrollscreen(void);
 
 static void draw_byte(unsigned char c, long locX, long locY);

@@ -404,6 +404,7 @@ static int hwif_check_regions (ide_hwif_t *hwif)
 {
 	int region_errors = 0;
 
+	hwif->straight8 = 0;
 	region_errors  = ide_check_region(hwif->io_ports[IDE_DATA_OFFSET], 1);
 	region_errors += ide_check_region(hwif->io_ports[IDE_ERROR_OFFSET], 1);
 	region_errors += ide_check_region(hwif->io_ports[IDE_NSECTOR_OFFSET], 1);
@@ -412,16 +413,28 @@ static int hwif_check_regions (ide_hwif_t *hwif)
 	region_errors += ide_check_region(hwif->io_ports[IDE_HCYL_OFFSET], 1);
 	region_errors += ide_check_region(hwif->io_ports[IDE_SELECT_OFFSET], 1);
 	region_errors += ide_check_region(hwif->io_ports[IDE_STATUS_OFFSET], 1);
+
 	if (hwif->io_ports[IDE_CONTROL_OFFSET])
 		region_errors += ide_check_region(hwif->io_ports[IDE_CONTROL_OFFSET], 1);
+
 	if (hwif->io_ports[IDE_IRQ_OFFSET])
 		region_errors += ide_check_region(hwif->io_ports[IDE_IRQ_OFFSET], 1);
 
+	/*
+	 * If any errors are return, we drop the hwif interface.
+	 */
 	return(region_errors);
 }
 
 static void hwif_register (ide_hwif_t *hwif)
 {
+	if ((hwif->io_ports[IDE_DATA_OFFSET] | 7) ==
+	    (hwif->io_ports[IDE_STATUS_OFFSET])) {
+		ide_request_region(hwif->io_ports[IDE_DATA_OFFSET], 8, hwif->name);
+		hwif->straight8 = 1;
+		goto jump_straight8;
+	}
+
 	if (hwif->io_ports[IDE_DATA_OFFSET])
 		ide_request_region(hwif->io_ports[IDE_DATA_OFFSET], 1, hwif->name);
 	if (hwif->io_ports[IDE_ERROR_OFFSET])
@@ -438,6 +451,8 @@ static void hwif_register (ide_hwif_t *hwif)
 		ide_request_region(hwif->io_ports[IDE_SELECT_OFFSET], 1, hwif->name);
 	if (hwif->io_ports[IDE_STATUS_OFFSET])
 		ide_request_region(hwif->io_ports[IDE_STATUS_OFFSET], 1, hwif->name);
+
+jump_straight8:
 	if (hwif->io_ports[IDE_CONTROL_OFFSET])
 		ide_request_region(hwif->io_ports[IDE_CONTROL_OFFSET], 1, hwif->name);
 	if (hwif->io_ports[IDE_IRQ_OFFSET])

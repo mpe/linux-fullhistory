@@ -121,7 +121,6 @@ union nfsd_xdrstore {
 
 #define NFSSVC_XDRSIZE		sizeof(union nfsd_xdrstore)
 
-void nfsd_xdr_init(void);
 
 int nfssvc_decode_void(struct svc_rqst *, u32 *, void *);
 int nfssvc_decode_fhandle(struct svc_rqst *, u32 *, struct svc_fh *);

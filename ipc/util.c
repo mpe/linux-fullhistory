@@ -40,9 +40,6 @@ void __init ipc_init_ids(struct ipc_ids* ids, int size)
 	if(size > IPCMNI)
 		size = IPCMNI;
 	ids->size = size;
-	if(size == 0)
-		return;
-
 	ids->in_use = 0;
 	ids->max_id = -1;
 	ids->seq = 0;

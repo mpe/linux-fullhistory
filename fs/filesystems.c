@@ -89,10 +89,6 @@ void __init filesystem_setup(void)
 
 	init_devfs_fs();  /*  Header file may make this empty  */
 
-#ifdef CONFIG_LOCKD
-	nlmxdr_init();
-#endif
-
 #ifdef CONFIG_NFS_FS
 	init_nfs_fs();
 #endif

@@ -44,8 +44,8 @@ if [ "$CONFIG_DECSTATION" = "y" ]; then
    dep_tristate 'DEC SII Scsi Driver' CONFIG_SCSI_DECSII $CONFIG_SCSI
 fi
 
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   dep_tristate '3ware Hardware ATA-RAID support (EXPERIMENTAL)' CONFIG_BLK_DEV_3W_XXXX_RAID $CONFIG_SCSI
+if [ "$CONFIG_PCI" = "y" ]; then
+   dep_tristate '3ware Hardware ATA-RAID support' CONFIG_BLK_DEV_3W_XXXX_RAID $CONFIG_SCSI
 fi
 dep_tristate '7000FASST SCSI support' CONFIG_SCSI_7000FASST $CONFIG_SCSI
 dep_tristate 'ACARD SCSI support' CONFIG_SCSI_ACARD $CONFIG_SCSI

@@ -225,24 +225,23 @@ void efs_put_super(struct super_block *s) {
 	MOD_DEC_USE_COUNT;
 }
 
-int efs_statfs(struct super_block *s, struct statfs *buf, int bufsiz) {
-	struct statfs ret;
+int efs_statfs(struct super_block *s, struct statfs *buf) {
 	struct efs_sb_info *sb = SUPER_INFO(s);
 
-	ret.f_type    = EFS_SUPER_MAGIC;	/* efs magic number */
-	ret.f_bsize   = EFS_BLOCKSIZE;		/* blocksize */
-	ret.f_blocks  = sb->total_groups *	/* total data blocks */
+	buf->f_type    = EFS_SUPER_MAGIC;	/* efs magic number */
+	buf->f_bsize   = EFS_BLOCKSIZE;		/* blocksize */
+	buf->f_blocks  = sb->total_groups *	/* total data blocks */
 			(sb->group_size - sb->inode_blocks);
-	ret.f_bfree   = sb->data_free;		/* free data blocks */
-	ret.f_bavail  = sb->data_free;		/* free blocks for non-root */
-	ret.f_files   = sb->total_groups *	/* total inodes */
+	buf->f_bfree   = sb->data_free;		/* free data blocks */
+	buf->f_bavail  = sb->data_free;		/* free blocks for non-root */
+	buf->f_files   = sb->total_groups *	/* total inodes */
 			sb->inode_blocks *
 			(EFS_BLOCKSIZE / sizeof(struct efs_dinode));
-	ret.f_ffree   = sb->inode_free;	/* free inodes */
-	ret.f_fsid.val[0] = (sb->fs_magic >> 16) & 0xffff; /* fs ID */
-	ret.f_fsid.val[1] =  sb->fs_magic        & 0xffff; /* fs ID */
-	ret.f_namelen = EFS_MAXNAMELEN;		/* max filename length */
+	buf->f_ffree   = sb->inode_free;	/* free inodes */
+	buf->f_fsid.val[0] = (sb->fs_magic >> 16) & 0xffff; /* fs ID */
+	buf->f_fsid.val[1] =  sb->fs_magic        & 0xffff; /* fs ID */
+	buf->f_namelen = EFS_MAXNAMELEN;	/* max filename length */
 
-	return copy_to_user(buf, &ret, bufsiz) ? -EFAULT : 0;
+	return 0;
 }
 

@@ -303,18 +303,9 @@ static int linux_to_osf_statfs(struct statfs *linux_stat, struct osf_statfs *osf
 static int do_osf_statfs(struct dentry * dentry, struct osf_statfs *buffer, unsigned long bufsiz)
 {
 	struct statfs linux_stat;
-	struct inode * inode = dentry->d_inode;
-	struct super_block * sb = inode->i_sb;
-	int error;
-
-	error = -ENODEV;
-	if (sb && sb->s_op && sb->s_op->statfs) {
-		set_fs(KERNEL_DS);
-		error = sb->s_op->statfs(sb, &linux_stat, sizeof(linux_stat));
-		set_fs(USER_DS);
-		if (!error)
-			error = linux_to_osf_statfs(&linux_stat, buffer, bufsiz);
-	}
+	int error = vfs_statfs(dentry->d_inode->i_sb, &linux_stat);
+	if (!error)
+		error = linux_to_osf_statfs(&linux_stat, buffer, bufsiz);
 	return error;	
 }
 

@@ -14,7 +14,7 @@ obj-y   :=
 obj-n   :=
 obj-m   :=
 obj-    :=
-export-objs :=
+export-objs := tms380tr.o
 
 obj-$(CONFIG_IBMTR) 	+= ibmtr.o
 obj-$(CONFIG_IBMOL) 	+= olympic.o

@@ -70,7 +70,6 @@
 #include <net/dn_nsp.h>
 #include <net/dn_dev.h>
 #include <net/dn_route.h>
-#include <net/dn_raw.h>
 
 
 /*
@@ -320,7 +319,7 @@ static void dn_nsp_disc_conf(struct sock *sk, struct sk_buff *skb)
 	struct dn_scp *scp = &sk->protinfo.dn;
 	unsigned short reason;
 
-	if (skb->len < 2)
+	if (skb->len != 2)
 		goto out;
 
 	reason = dn_ntohs(*(__u16 *)skb->data);
@@ -551,10 +550,6 @@ static int dn_nsp_rx_packet(struct sk_buff *skb)
 
 	if (decnet_debug_level & 2)
 		printk(KERN_DEBUG "dn_nsp_rx: Message type 0x%02x\n", (int)cb->nsp_flags);
-
-#ifdef CONFIG_DECNET_RAW
-	dn_raw_rx_nsp(skb);
-#endif /* CONFIG_DECNET_RAW */
 
 	if (skb->len < 2) 
 		goto free_out;

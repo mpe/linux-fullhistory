@@ -985,19 +985,15 @@ static void openprom_put_super(struct super_block *sb)
 	MOD_DEC_USE_COUNT;
 }
 
-static int openprom_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+static int openprom_statfs(struct super_block *sb, struct statfs *buf)
 {
-	struct statfs tmp;
-
-	tmp.f_type = OPENPROM_SUPER_MAGIC;
-	tmp.f_bsize = PAGE_SIZE/sizeof(long);	/* ??? */
-	tmp.f_blocks = 0;
-	tmp.f_bfree = 0;
-	tmp.f_bavail = 0;
-	tmp.f_files = 0;
-	tmp.f_ffree = 0;
-	tmp.f_namelen = NAME_MAX;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = OPENPROM_SUPER_MAGIC;
+	buf->f_bsize = PAGE_SIZE/sizeof(long);	/* ??? */
+	buf->f_bfree = 0;
+	buf->f_bavail = 0;
+	buf->f_ffree = 0;
+	buf->f_namelen = NAME_MAX;
+	return 0;
 }
 
 static struct super_operations openprom_sops = { 

@@ -16,7 +16,11 @@
 #include <linux/config.h>
 
 #ifndef MAX_HWIFS
+# ifdef CONFIG_BLK_DEV_IDEPCI
 #define MAX_HWIFS	10
+# else
+#define MAX_HWIFS	6
+# endif
 #endif
 
 #define ide__sti()	__sti()

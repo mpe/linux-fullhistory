@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.163 2000/02/08 21:27:13 davem Exp $
+ * Version:	$Id: tcp.c,v 1.164 2000/03/08 19:36:40 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -624,28 +624,29 @@ int tcp_listen_start(struct sock *sk)
 	tp->listen_opt = lopt;
 	write_unlock_bh(&tp->syn_wait_lock);
 
+	/* There is race window here: we announce ourselves listening,
+	 * but this transition is still not validated by get_port().
+	 * It is OK, because this socket enters to hash table only
+	 * after validation is complete.
+	 */
 	sk->state = TCP_LISTEN;
-	if (sk->num == 0) {
-		if (sk->prot->get_port(sk, 0) != 0) {
-			sk->state = TCP_CLOSE;
-			write_lock_bh(&tp->syn_wait_lock);
-			tp->listen_opt = NULL;
-			write_unlock_bh(&tp->syn_wait_lock);
-			kfree(lopt);
-			return -EAGAIN;
-		}
+	if (sk->prot->get_port(sk, sk->num) == 0) {
 		sk->sport = htons(sk->num);
-	} else {
-		if (sk->prev)
-			((struct tcp_bind_bucket*)sk->prev)->fastreuse = 0;
+
+		sk->write_space = tcp_listen_write_space;
+		sk_dst_reset(sk);
+		sk->prot->hash(sk);
+		sk->socket->flags |= SO_ACCEPTCON;
+
+		return 0;
 	}
 
-	sk_dst_reset(sk);
-	sk->prot->hash(sk);
-	sk->socket->flags |= SO_ACCEPTCON;
-	sk->write_space = tcp_listen_write_space;
-
-	return 0;
+	sk->state = TCP_CLOSE;
+	write_lock_bh(&tp->syn_wait_lock);
+	tp->listen_opt = NULL;
+	write_unlock_bh(&tp->syn_wait_lock);
+	kfree(lopt);
+	return -EADDRINUSE;
 }
 
 /*

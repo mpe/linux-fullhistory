@@ -77,7 +77,6 @@
 #include <net/dn_route.h>
 #include <net/dn_neigh.h>
 #include <net/dn_fib.h>
-#include <net/dn_raw.h>
 
 struct dn_rt_hash_bucket
 {
@@ -426,10 +425,6 @@ int dn_route_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type
 			"dn_route_rcv: got 0x%02x from %s [%d %d %d]\n",
 			(int)flags, (dev) ? dev->name : "???", len, skb->len, 
 			padlen);
-
-#ifdef CONFIG_DECNET_RAW
-	dn_raw_rx_routing(skb);
-#endif /* CONFIG_DECNET_RAW */
 
         if (flags & DN_RT_PKT_CNTL) {
                 switch(flags & DN_RT_CNTL_MSK) {

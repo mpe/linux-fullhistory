@@ -10,13 +10,7 @@
 SUB_DIRS	:= 
 MOD_SUB_DIRS	:=
 MOD_IN_SUB_DIRS	:=
-ALL_SUB_DIRS	:= $(SUB_DIRS) lowlevel
-
-ifeq ($(CONFIG_LOWLEVEL_SOUND),y)
-    SUB_DIRS		+= lowlevel
-    MOD_IN_SUB_DIRS	+= lowlevel
-endif
-
+ALL_SUB_DIRS	:= $(SUB_DIRS)
 
 
 # All of the (potential) objects that export symbols.
@@ -47,6 +41,7 @@ obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o ad1848.o
 
 # Please leave it as is, cause the link order is significant !
 
+obj-$(CONFIG_SOUND_AEDSP16)	+= aedsp16.o
 obj-$(CONFIG_SOUND_PSS)		+= pss.o ad1848.o mpu401.o
 obj-$(CONFIG_SOUND_TRIX)	+= trix.o ad1848.o sb_lib.o uart401.o
 obj-$(CONFIG_SOUND_OPL3SA1)     += opl3sa.o ad1848.o uart401.o
@@ -69,6 +64,8 @@ obj-$(CONFIG_SOUND_VIDC)        += vidc_mod.o
 obj-$(CONFIG_SOUND_WAVEARTIST)  += waveartist.o
 obj-$(CONFIG_SOUND_SGALAXY)     += sgalaxy.o ad1848.o
 obj-$(CONFIG_SOUND_AD1816)      += ad1816.o
+obj-$(CONFIG_SOUND_ACI_MIXER)	+= aci.o
+obj-$(CONFIG_SOUND_AWE32_SYNTH)	+= awe_wave.o
 
 obj-$(CONFIG_SOUND_VIA82CXXX)	+= via82cxxx_audio.o sb_lib.o uart401.o ac97.o
 obj-$(CONFIG_SOUND_MSNDCLAS)	+= msnd.o msnd_classic.o
@@ -85,7 +82,7 @@ obj-$(CONFIG_SOUND_TRIDENT)	+= trident.o ac97_codec.o
 
 # Declare multi-part drivers.
 
-list-multi	:= sound.o gus.o pas2.o sb.o softoss2.o vidc_mod.o \
+list-multi	:= sound.o gus.o pas2.o sb.o sb_lib.o softoss2.o vidc_mod.o \
     soundcore.o wavefront.o
 
 sound-objs	:= 							\
@@ -137,8 +134,8 @@ O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
 OX_OBJS		:= $(filter     $(export-objs), $(obj-y))
 M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
 MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
-#MI_OBJS		:= $(sort $(filter-out $(export-objs), $(int-m)))
-#MIX_OBJS	:= $(sort $(filter     $(export-objs), $(int-m)))
+MI_OBJS		:= $(sort $(filter-out $(export-objs), $(int-m)))
+MIX_OBJS	:= $(sort $(filter     $(export-objs), $(int-m)))
 
 ifeq ($(CONFIG_LOWLEVEL_SOUND),y)
     O_OBJS	+= lowlevel/lowlevel.o

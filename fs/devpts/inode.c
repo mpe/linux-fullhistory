@@ -57,7 +57,7 @@ static void devpts_put_super(struct super_block *sb)
 #endif
 }
 
-static int devpts_statfs(struct super_block *sb, struct statfs *buf, int bufsiz);
+static int devpts_statfs(struct super_block *sb, struct statfs *buf);
 static void devpts_read_inode(struct inode *inode);
 static void devpts_write_inode(struct inode *inode);
 
@@ -238,19 +238,15 @@ fail_dec:
 	return NULL;
 }
 
-static int devpts_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+static int devpts_statfs(struct super_block *sb, struct statfs *buf)
 {
-	struct statfs tmp;
-
-	tmp.f_type = DEVPTS_SUPER_MAGIC;
-	tmp.f_bsize = 1024;
-	tmp.f_blocks = 0;
-	tmp.f_bfree = 0;
-	tmp.f_bavail = 0;
-	tmp.f_files = 0;
-	tmp.f_ffree = 0;
-	tmp.f_namelen = NAME_MAX;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = DEVPTS_SUPER_MAGIC;
+	buf->f_bsize = 1024;
+	buf->f_bfree = 0;
+	buf->f_bavail = 0;
+	buf->f_ffree = 0;
+	buf->f_namelen = NAME_MAX;
+	return 0;
 }
 
 static void devpts_read_inode(struct inode *inode)

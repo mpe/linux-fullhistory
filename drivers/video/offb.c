@@ -293,9 +293,6 @@ static int offb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 }
 
 
-#ifdef CONFIG_FB_ATY128
-extern void aty128fb_of_init(struct device_node *dp);
-#endif /* CONFIG_FB_ATY */
 #ifdef CONFIG_FB_S3TRIO
 extern void s3triofb_init_of(struct device_node *dp);
 #endif /* CONFIG_FB_S3TRIO */
@@ -423,12 +420,6 @@ int __init offb_init(void)
 
 static int __init offb_init_driver(struct device_node *dp)
 {
-#ifdef CONFIG_FB_ATY128
-    if (!strncmp(dp->name, "ATY,Rage128", 11)) {
-	aty128fb_of_init(dp);
-	return 1;
-    }
-#endif
 #ifdef CONFIG_FB_S3TRIO
     if (!strncmp(dp->name, "S3Trio", 6)) {
     	s3triofb_init_of(dp);

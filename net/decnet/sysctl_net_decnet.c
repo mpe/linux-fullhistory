@@ -29,9 +29,9 @@
 
 int decnet_debug_level = 0;
 int decnet_time_wait = 30;
-int decnet_dn_count = 3;
-int decnet_di_count = 5;
-int decnet_dr_count = 5;
+int decnet_dn_count = 1;
+int decnet_di_count = 3;
+int decnet_dr_count = 3;
 
 #ifdef CONFIG_SYSCTL
 extern int decnet_dst_gc_interval;

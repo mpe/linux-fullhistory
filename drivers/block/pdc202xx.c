@@ -100,7 +100,8 @@
 #define PDC202XX_DEBUG_DRIVE_INFO		0
 #define PDC202XX_DECODE_REGISTER_INFO		0
 
-#define DISPLAY_PDC202XX_TIMINGS
+#undef DISPLAY_PDC202XX_TIMINGS
+
 #if defined(DISPLAY_PDC202XX_TIMINGS) && defined(CONFIG_PROC_FS)
 #include <linux/stat.h>
 #include <linux/proc_fs.h>

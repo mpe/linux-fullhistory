@@ -19,6 +19,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/locks.h>
 #include <linux/smp_lock.h>
@@ -480,21 +481,15 @@ asmlinkage long sys_ustat(dev_t dev, struct ustat * ubuf)
         struct super_block *s;
         struct ustat tmp;
         struct statfs sbuf;
-        mm_segment_t old_fs;
 	int err = -EINVAL;
 
 	lock_kernel();
         s = get_super(to_kdev_t(dev));
         if (s == NULL)
                 goto out;
-	err = -ENOSYS;
-        if (!(s->s_op->statfs))
-                goto out;
-
-        old_fs = get_fs();
-        set_fs(get_ds());
-        s->s_op->statfs(s,&sbuf,sizeof(struct statfs));
-        set_fs(old_fs);
+	err = vfs_statfs(s, &sbuf);
+	if (err)
+		goto out;
 
         memset(&tmp,0,sizeof(struct ustat));
         tmp.f_tfree = sbuf.f_bfree;

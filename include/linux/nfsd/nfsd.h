@@ -100,7 +100,7 @@ void		nfsd_close(struct file *);
 int		nfsd_read(struct svc_rqst *, struct svc_fh *,
 				loff_t, char *, unsigned long *);
 int		nfsd_write(struct svc_rqst *, struct svc_fh *,
-				loff_t, char *, unsigned long, int);
+				loff_t, char *, unsigned long, int *);
 int		nfsd_readlink(struct svc_rqst *, struct svc_fh *,
 				char *, int *);
 int		nfsd_symlink(struct svc_rqst *, struct svc_fh *,
@@ -140,43 +140,38 @@ void		nfsd_lockd_shutdown(void);
 void		nfsd_lockd_unexport(struct svc_client *);
 
 
-#ifndef makedev
-#define makedev(maj, min)	(((maj) << 8) | (min))
-#endif
-
 /*
- * These variables contain pre-xdr'ed values for faster operation.
- * FIXME: should be replaced by macros for big-endian machines.
+ * These macros provide pre-xdr'ed values for faster operation.
  */
-extern u32	nfs_ok,
-		nfserr_perm,
-		nfserr_noent,
-		nfserr_io,
-		nfserr_nxio,
-		nfserr_acces,
-		nfserr_exist,
-		nfserr_xdev,
-		nfserr_nodev,
-		nfserr_notdir,
-		nfserr_isdir,
-		nfserr_inval,
-		nfserr_fbig,
-		nfserr_nospc,
-		nfserr_rofs,
-		nfserr_mlink,
-		nfserr_nametoolong,
-		nfserr_notempty,
-		nfserr_dquot,
-		nfserr_stale,
-		nfserr_remote,
-		nfserr_badhandle,
-		nfserr_notsync,
-		nfserr_badcookie,
-		nfserr_notsupp,
-		nfserr_toosmall,
-		nfserr_serverfault,
-		nfserr_badtype,
-		nfserr_jukebox;
+#define	nfs_ok			__constant_htonl(NFS_OK)
+#define	nfserr_perm		__constant_htonl(NFSERR_PERM)
+#define	nfserr_noent		__constant_htonl(NFSERR_NOENT)
+#define	nfserr_io		__constant_htonl(NFSERR_IO)
+#define	nfserr_nxio		__constant_htonl(NFSERR_NXIO)
+#define	nfserr_acces		__constant_htonl(NFSERR_ACCES)
+#define	nfserr_exist		__constant_htonl(NFSERR_EXIST)
+#define	nfserr_xdev		__constant_htonl(NFSERR_XDEV)
+#define	nfserr_nodev		__constant_htonl(NFSERR_NODEV)
+#define	nfserr_notdir		__constant_htonl(NFSERR_NOTDIR)
+#define	nfserr_isdir		__constant_htonl(NFSERR_ISDIR)
+#define	nfserr_inval		__constant_htonl(NFSERR_INVAL)
+#define	nfserr_fbig		__constant_htonl(NFSERR_FBIG)
+#define	nfserr_nospc		__constant_htonl(NFSERR_NOSPC)
+#define	nfserr_rofs		__constant_htonl(NFSERR_ROFS)
+#define	nfserr_mlink		__constant_htonl(NFSERR_MLINK)
+#define	nfserr_nametoolong	__constant_htonl(NFSERR_NAMETOOLONG)
+#define	nfserr_notempty		__constant_htonl(NFSERR_NOTEMPTY)
+#define	nfserr_dquot		__constant_htonl(NFSERR_DQUOT)
+#define	nfserr_stale		__constant_htonl(NFSERR_STALE)
+#define	nfserr_remote		__constant_htonl(NFSERR_REMOTE)
+#define	nfserr_badhandle	__constant_htonl(NFSERR_BADHANDLE)
+#define	nfserr_notsync		__constant_htonl(NFSERR_NOTSYNC)
+#define	nfserr_badcookie	__constant_htonl(NFSERR_BADCOOKIE)
+#define	nfserr_notsupp		__constant_htonl(NFSERR_NOTSUPP)
+#define	nfserr_toosmall		__constant_htonl(NFSERR_TOOSMALL)
+#define	nfserr_serverfault	__constant_htonl(NFSERR_SERVERFAULT)
+#define	nfserr_badtype		__constant_htonl(NFSERR_BADTYPE)
+#define	nfserr_jukebox		__constant_htonl(NFSERR_JUKEBOX)
 
 /*
  * Time of server startup

@@ -100,19 +100,15 @@ static void proc_read_inode(struct inode * inode)
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 }
 
-static int proc_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+static int proc_statfs(struct super_block *sb, struct statfs *buf)
 {
-	struct statfs tmp;
-
-	tmp.f_type = PROC_SUPER_MAGIC;
-	tmp.f_bsize = PAGE_SIZE/sizeof(long);
-	tmp.f_blocks = 0;
-	tmp.f_bfree = 0;
-	tmp.f_bavail = 0;
-	tmp.f_files = 0;
-	tmp.f_ffree = 0;
-	tmp.f_namelen = NAME_MAX;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = PROC_SUPER_MAGIC;
+	buf->f_bsize = PAGE_SIZE/sizeof(long);
+	buf->f_bfree = 0;
+	buf->f_bavail = 0;
+	buf->f_ffree = 0;
+	buf->f_namelen = NAME_MAX;
+	return 0;
 }
 
 static struct super_operations proc_sops = { 

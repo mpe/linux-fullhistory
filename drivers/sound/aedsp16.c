@@ -27,25 +27,14 @@
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/init.h>
-#include "../sound_config.h"
-#include "../soundmodule.h"
+#include "sound_config.h"
+#include "soundmodule.h"
 
 /*
  * Sanity checks
  */
 
-#if !defined(CONFIG_AEDSP16_BASE)
-# undef CONFIG_AEDSP16
-#else
-# if defined(MODULE) && defined(CONFIG_AEDSP16_MODULE)
-#  define CONFIG_AEDSP16 1
-# endif
-#endif
-
-
-#if defined(CONFIG_AEDSP16)
-
-#if defined(CONFIG_AEDSP16_SBPRO) && defined(CONFIG_AEDSP16_MSS)
+#if defined(CONFIG_SOUND_AEDSP16_SBPRO) && defined(CONFIG_SOUND_AEDSP16_MSS)
 #error You have to enable only one of the MSS and SBPRO emulations.
 #endif
 
@@ -1275,22 +1264,6 @@ int __init init_aedsp16(void)
 {
 	int initialized = FALSE;
 
-#if !defined(MODULE)
-	ae_config.base_io = CONFIG_AEDSP16_BASE;
-#if defined(CONFIG_AEDSP16_SBPRO)
-	ae_config.irq = CONFIG_AEDSP16_SB_IRQ;
-	ae_config.dma = CONFIG_AEDSP16_SB_DMA;
-#endif
-#if defined(CONFIG_AEDSP16_MSS)
-	ae_config.mss_base = CONFIG_MSS_BASE;
-	ae_config.irq = CONFIG_AEDSP16_MSS_IRQ;
-	ae_config.dma = CONFIG_AEDSP16_MSS_DMA;
-#endif
-#if defined(CONFIG_AEDSP16_MPU401)
-	ae_config.mpu_base = CONFIG_MPU_BASE;
-	ae_config.mpu_irq = CONFIG_AEDSP16_MPU_IRQ;
-#endif
-#endif /* !MODULE */
 	DBG(("Initializing BASE[0x%x] IRQ[%d] DMA[%d] MIRQ[%d]\n",
 	     ae_config.base_io,ae_config.irq,ae_config.dma,ae_config.mpu_irq));
 
@@ -1339,15 +1312,12 @@ void __init uninit_aedsp16(void)
 		uninit_aedsp16_mpu();
 }
 
-#if defined(MODULE)
-
-int io = -1;
-int irq = -1;
-int dma = -1;
-int mpu_irq = -1;
-int mss_base = -1;
-int mpu_base = -1;
-
+static int __initdata io = -1;
+static int __initdata irq = -1;
+static int __initdata dma = -1;
+static int __initdata mpu_irq = -1;
+static int __initdata mss_base = -1;
+static int __initdata mpu_base = -1;
 
 MODULE_PARM(io, "i");
 MODULE_PARM_DESC(io, "I/O base address (0x220 0x240)");
@@ -1364,7 +1334,7 @@ MODULE_PARM_DESC(mpu_base,"MPU-401 I/O base address (0x300 0x310 0x320 0x330)");
 MODULE_AUTHOR("Riccardo Facchetti <fizban@tin.it>");
 MODULE_DESCRIPTION("Audio Excel DSP 16 Driver Version " VERSION);
 
-int init_module(void) {
+static int __init do_init_aedsp16(void) {
 	printk("Audio Excel DSP 16 init driver Copyright (C) Riccardo Facchetti 1995-98\n");
 	if (io == -1 || dma == -1 || irq == -1) {
 		printk(KERN_INFO "aedsp16: I/O, IRQ and DMA are mandatory\n");
@@ -1391,10 +1361,29 @@ int init_module(void) {
 	return 0;
 }
 
-void cleanup_module(void) {
+static void __exit cleanup_aedsp16(void) {
 	uninit_aedsp16();
 	SOUND_LOCK_END;
 }
-#endif /* MODULE */
 
-#endif /* CONFIG_AEDSP16 */
+module_init(do_init_aedsp16);
+module_exit(cleanup_aedsp16);
+
+#ifndef MODULE
+static int __init setup_aedsp16(char *str)
+{
+	/* io, irq, dma, mss_io, mpu_io, mpu_irq */
+	int ints[7];
+	
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+
+	io	 = ints[1];
+	irq	 = ints[2];
+	dma	 = ints[3];
+	mss_base = ints[4];
+	mpu_base = ints[5];
+	mpu_irq	 = ints[6];
+}
+
+__setup("aedsp16=", setup_aedsp16);
+#endif

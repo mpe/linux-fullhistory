@@ -4,6 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/utime.h>
 #include <linux/file.h>
@@ -21,13 +22,10 @@ asmlinkage long sys_statfs(const char * path, struct statfs * buf)
 	dentry = namei(path);
 	error = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
-		struct inode * inode = dentry->d_inode;
-		struct super_block * sb = inode->i_sb;
-
-		error = -ENODEV;
-		if (sb && sb->s_op && sb->s_op->statfs)
-			error = sb->s_op->statfs(sb, buf, sizeof(struct statfs));
-
+		struct statfs tmp;
+		error = vfs_statfs(dentry->d_inode->i_sb, &tmp);
+		if (!error && copy_to_user(buf, &tmp, sizeof(struct statfs)))
+			error = -EFAULT;
 		dput(dentry);
 	}
 	unlock_kernel();
@@ -37,18 +35,17 @@ asmlinkage long sys_statfs(const char * path, struct statfs * buf)
 asmlinkage long sys_fstatfs(unsigned int fd, struct statfs * buf)
 {
 	struct file * file;
-	struct super_block * sb;
+	struct statfs tmp;
 	int error;
 
 	error = -EBADF;
 	file = fget(fd);
 	if (!file)
 		goto out;
-	error = -ENODEV;
-	sb = file->f_dentry->d_inode->i_sb;
 	lock_kernel();
-	if (sb && sb->s_op && sb->s_op->statfs)
-		error = sb->s_op->statfs(sb, buf, sizeof(struct statfs));
+	error = vfs_statfs(file->f_dentry->d_inode->i_sb, &tmp);
+	if (!error && copy_to_user(buf, &tmp, sizeof(struct statfs)))
+		error = -EFAULT;
 	unlock_kernel();
 	fput(file);
 out:

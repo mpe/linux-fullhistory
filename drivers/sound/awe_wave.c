@@ -21,23 +21,29 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-/* include initial header files and compatibility macros */
-#ifdef __FreeBSD__
-#  include <i386/isa/sound/awe_compat.h>
-#else
-#  include "awe_compat.h"
-#endif /* FreeBSD */
-#ifdef __linux__
-#  include <linux/config.h>
+#include <linux/awe_voice.h>
+#include <linux/config.h>
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/string.h>
+
+#include "sound_config.h"
+#include "soundmodule.h"
+
+#include "awe_wave.h"
+#include "awe_hw.h"
+
+#ifdef AWE_HAS_GUS_COMPATIBILITY
+#include "tuning.h"
+#include <linux/ultrasound.h>
 #endif
 
-/*----------------------------------------------------------------*/
-
-#if defined(CONFIG_AWE32_SYNTH) || defined(CONFIG_AWE32_SYNTH_MODULE)
-
-/*----------------------------------------------------------------
+/*
  * debug message
- *----------------------------------------------------------------*/
+ */
+
+/* do not allocate buffer at beginning */
+#define INIT_TABLE(buffer,index,nums,type) {buffer=NULL; index=0;}
 
 #ifdef AWE_DEBUG_ON
 #define DEBUG(LVL,XXX)	{if (ctrls[AWE_MD_DEBUG_MODE] > LVL) { XXX; }}
@@ -49,9 +55,9 @@
 #define FATALERR(XXX)	XXX
 #endif
 
-/*----------------------------------------------------------------
+/*
  * bank and voice record
- *----------------------------------------------------------------*/
+ */
 
 /* soundfont record */
 typedef struct _sf_list {
@@ -115,9 +121,9 @@ static awe_voice_list *infos = NULL;
 /* preset table index */
 static int preset_table[AWE_MAX_PRESETS];
 
-/*----------------------------------------------------------------
+/*
  * voice table
- *----------------------------------------------------------------*/
+ */
 
 /* effects table */
 typedef	struct FX_Rec { /* channel effects */
@@ -200,23 +206,18 @@ static awe_chan_info channels[AWE_MAX_CHANNELS];
 #define AWE_DEFAULT_MEM_SIZE	-1	/* autodetect */
 #endif
 
-/* set variables */
-#if defined(AWE_MODULE_SUPPORT) && defined(MODULE)
-/* replace awe_port variable with exported variable */
 #define awe_port	io
 #define awe_mem_size	memsize
 int io = AWE_DEFAULT_BASE_ADDR; /* Emu8000 base address */
 int memsize = AWE_DEFAULT_MEM_SIZE; /* memory size in Kbytes */
-#ifdef MODULE_PARM
+
+MODULE_AUTHOR("Takashi Iwai <iwai@ww.uni-erlangen.de>");
+MODULE_DESCRIPTION("SB AWE32/64 WaveTable driver");
 MODULE_PARM(io, "i");
 MODULE_PARM_DESC(io, "base i/o port of Emu8000");
 MODULE_PARM(memsize, "i");
 MODULE_PARM_DESC(memsize, "onboard DRAM size in Kbytes");
-#endif
-#else
-static int awe_port = AWE_DEFAULT_BASE_ADDR;
-static int awe_mem_size = AWE_DEFAULT_MEM_SIZE;
-#endif /* module */
+EXPORT_NO_SYMBOLS;
 
 /* DRAM start offset */
 static int awe_mem_start = AWE_DRAM_OFFSET;
@@ -261,15 +262,13 @@ static struct synth_info awe_info = {
 static struct voice_alloc_info *voice_alloc;	/* set at initialization */
 
 
-/*----------------------------------------------------------------
+/*
  * function prototypes
- *----------------------------------------------------------------*/
+ */
 
-#if defined(linux) && !defined(AWE_OBSOLETE_VOXWARE)
 static int awe_check_port(void);
 static void awe_request_region(void);
 static void awe_release_region(void);
-#endif /* linux & obsolete */
 
 static void awe_reset_samples(void);
 /* emu8000 chip i/o access */
@@ -346,9 +345,6 @@ static void awe_aftertouch(int dev, int voice, int pressure);
 static void awe_controller(int dev, int voice, int ctrl_num, int value);
 static void awe_panning(int dev, int voice, int value);
 static void awe_volume_method(int dev, int mode);
-#ifndef AWE_NO_PATCHMGR
-static int awe_patchmgr(int dev, struct patmgr_info *rec);
-#endif
 static void awe_bender(int dev, int voice, int value);
 static int awe_alloc(int dev, int chn, int note, struct voice_alloc_info *alloc);
 static void awe_setup_voice(int dev, int voice, int chn);
@@ -439,15 +435,9 @@ static void unload_midiemu(void);
 
 #define limitvalue(x, a, b) if ((x) < (a)) (x) = (a); else if ((x) > (b)) (x) = (b)
 
-#ifdef __FreeBSD__
-/* FIXME */
-#define MALLOC_LOOP_DATA
-#define WAIT_BY_LOOP
-#endif
-
-/*----------------------------------------------------------------
+/*
  * control parameters
- *----------------------------------------------------------------*/
+ */
 
 
 #ifdef AWE_USE_NEW_VOLUME_CALC
@@ -499,9 +489,7 @@ static int ctrls[AWE_MD_END];
 
 static struct synth_operations awe_operations =
 {
-#ifdef AWE_OSS38
 	"EMU8K",
-#endif
 	&awe_info,
 	0,
 	SYNTH_TYPE_SAMPLE,
@@ -519,9 +507,6 @@ static struct synth_operations awe_operations =
 	awe_controller,
 	awe_panning,
 	awe_volume_method,
-#ifndef AWE_NO_PATCHMGR
-	awe_patchmgr,
-#endif
 	awe_bender,
 	awe_alloc,
 	awe_setup_voice
@@ -543,12 +528,10 @@ static int _attach_awe(void)
 	}
 
 	/* check AWE32 ports are available */
-#if defined(linux) && !defined(AWE_OBSOLETE_VOXWARE)
 	if (awe_check_port()) {
 		printk(KERN_WARNING "AWE32: I/O area already used.\n");
 		return 0;
 	}
-#endif
 
 	/* set buffers to NULL */
 	sflists = NULL;
@@ -577,10 +560,8 @@ static int _attach_awe(void)
 	attach_midiemu();
 #endif
 
-#if defined(linux) && !defined(AWE_OBSOLETE_VOXWARE)
 	/* reserve I/O ports for awedrv */
 	awe_request_region();
-#endif
 
 	/* clear all samples */
 	awe_reset_samples();
@@ -594,25 +575,22 @@ static int _attach_awe(void)
 
 	awe_present = TRUE;
 
-#if defined(AWE_MODULE_SUPPORT) && defined(MODULE)
 	SOUND_LOCK;
-#endif
 
 	return 1;
 }
 
 
-#ifdef AWE_DYNAMIC_BUFFER
 static void free_tables(void)
 {
-	if (sflists)
-		my_free(sflists);
+	if(sflists)
+		vfree(sflists);
 	sflists = NULL; max_sfs = 0;
 	if (samples)
-		my_free(samples);
+		vfree(samples);
 	samples = NULL; max_samples = 0;
 	if (infos)
-		my_free(infos);
+		vfree(infos);
 	infos = NULL; max_infos = 0;
 }
 
@@ -621,21 +599,14 @@ static void *realloc_block(void *buf, int oldsize, int size)
 	void *ptr;
 	if (oldsize == size)
 		return buf;
-	if ((ptr = my_malloc(size)) == NULL)
+	if ((ptr = vmalloc(size)) == NULL)
 		return NULL;
 	if (oldsize && size)
-		MEMCPY(ptr, buf, ((oldsize < size) ? oldsize : size) );
+		memcpy(ptr, buf, ((oldsize < size) ? oldsize : size) );
 	if (buf)
-		my_free(buf);
+		vfree(buf);
 	return ptr;
 }
-
-
-#else /* dynamic buffer */
-
-#define free_buffers() /**/
-
-#endif /* dynamic_buffer */
 
 
 static void _unload_awe(void)
@@ -652,22 +623,13 @@ static void _unload_awe(void)
 #endif
 		sound_unload_synthdev(my_dev);
 		awe_present = FALSE;
-#if defined(AWE_MODULE_SUPPORT) && defined(MODULE)
 		SOUND_LOCK_END;
-#endif
 	}
 }
 
-
-/*================================================================
- * Linux interface
- *================================================================*/
-
-#ifdef linux
-
-/*----------------------------------------------------------------
+/*
  * Linux PnP driver support
- *----------------------------------------------------------------*/
+ */
 
 #ifdef CONFIG_PNP_DRV
 
@@ -756,118 +718,9 @@ static void awe_unload_pnp (void)
 }
 #endif /* PnP support */
 
-/*----------------------------------------------------------------
- * device / lowlevel (module) interface
- *----------------------------------------------------------------*/
-
-#ifdef AWE_OBSOLETEL_VOXWARE
-
-/* old type interface */
-int attach_awe_obsolete(int mem_start, struct address_info *hw_config)
-{
-	my_malloc_init(mem_start);
-	if (! _attach_awe())
-		return 0;
-	return my_malloc_memptr();
-}
-
-int probe_awe_obsolete(struct address_info *hw_config)
-{
-	return 1;
-	/*return awe_detect();*/
-}
-
-#else /* !obsolete */
-
-/* new type interface */
-int attach_awe(void)
-{
-#ifdef CONFIG_PNP_DRV
-	if (pnp) {
-		awe_initpnp();
-		if (awe_pnp_ok)
-			return 0;
-	}
-#endif /* pnp */
-	_attach_awe();
-	return 0;
-}
-
-void unload_awe(void)
-{
-#ifdef CONFIG_PNP_DRV
-	if (pnp)
-		awe_unload_pnp();
-#endif /* pnp */
-	_unload_awe();
-}
-
-/* module interface */
-
-#if defined(AWE_MODULE_SUPPORT) && defined(MODULE)
-int init_module(void)
-{
-	return attach_awe();
-}
-
-void cleanup_module(void)
-{
-	unload_awe();
-}
-
-#ifdef MODULE_PARM
-EXPORT_NO_SYMBOLS;
-MODULE_AUTHOR("Takashi Iwai <iwai@ww.uni-erlangen.de>");
-MODULE_DESCRIPTION("SB AWE32/64 WaveTable driver");
-MODULE_SUPPORTED_DEVICE("sound");
-#endif
-
-#endif /* module */
-
-#endif /* AWE_OBSOLETE_VOXWARE */
-
-#endif /* linux */
-
-
-/*================================================================
- * FreeBSD interface
- *================================================================*/
-
-#ifdef __FreeBSD__
-
-#ifdef AWE_OBSOLETE_VOXWARE
-long attach_awe_obsolete(long mem_start, struct address_info *hw_config)
-{
-	_attach_awe();
-	return 0;
-}
-
-int probe_awe_obsolete(struct address_info *hw_config)
-{
-	return 1;
-}
-
-#else /* !obsolete */
-
-/* new type interface */
-void attach_awe(struct address_info *hw_config)
-{
-	_attach_awe();
-}
-
-int probe_awe(struct address_info *hw_config)
-{
-	return 1;
-}
-
-#endif /* obsolete */
-
-#endif /* FreeBSD */
-
-
-/*================================================================
+/*
  * clear sample tables 
- *================================================================*/
+ */
 
 static void
 awe_reset_samples(void)
@@ -886,16 +739,16 @@ awe_reset_samples(void)
 }
 
 
-/*================================================================
+/*
  * EMU register access
- *================================================================*/
+ */
 
 /* select a given AWE32 pointer */
 static int awe_ports[5];
 static int port_setuped = FALSE;
 static int awe_cur_cmd = -1;
 #define awe_set_cmd(cmd) \
-if (awe_cur_cmd != cmd) { OUTW(cmd, awe_ports[Pointer]); awe_cur_cmd = cmd; }
+if (awe_cur_cmd != cmd) { outw(cmd, awe_ports[Pointer]); awe_cur_cmd = cmd; }
 
 /* store values to i/o port array */
 static void setup_ports(int port1, int port2, int port3)
@@ -914,25 +767,25 @@ static void setup_ports(int port1, int port2, int port3)
 }
 
 /* write 16bit data */
-INLINE static void
+static inline void
 awe_poke(unsigned short cmd, unsigned short port, unsigned short data)
 {
 	awe_set_cmd(cmd);
-	OUTW(data, awe_ports[port]);
+	outw(data, awe_ports[port]);
 }
 
 /* write 32bit data */
-INLINE static void
+static inline void
 awe_poke_dw(unsigned short cmd, unsigned short port, unsigned int data)
 {
 	unsigned short addr = awe_ports[port];
 	awe_set_cmd(cmd);
-	OUTW(data, addr);		/* write lower 16 bits */
-	OUTW(data >> 16, addr + 2);	/* write higher 16 bits */
+	outw(data, addr);		/* write lower 16 bits */
+	outw(data >> 16, addr + 2);	/* write higher 16 bits */
 }
 
 /* read 16bit data */
-INLINE static unsigned short
+static inline unsigned short
 awe_peek(unsigned short cmd, unsigned short port)
 {
 	unsigned short k;
@@ -942,7 +795,7 @@ awe_peek(unsigned short cmd, unsigned short port)
 }
 
 /* read 32bit data */
-INLINE static unsigned int
+static inline unsigned int
 awe_peek_dw(unsigned short cmd, unsigned short port)
 {
 	unsigned int k1, k2;
@@ -987,19 +840,17 @@ static void awe_wait(unsigned short delay)
 #endif /* wait by loop */
 
 /* write a word data */
-INLINE static void
+static inline void
 awe_write_dram(unsigned short c)
 {
 	awe_poke(AWE_SMLD, c);
 }
 
 
-#if defined(linux) && !defined(AWE_OBSOLETE_VOXWARE)
-
-/*================================================================
+/*
  * port check / request
  *  0x620-623, 0xA20-A23, 0xE20-E23
- *================================================================*/
+ */
 
 static int
 awe_check_port(void)
@@ -1028,12 +879,9 @@ awe_release_region(void)
 	release_region(awe_ports[3], 4);
 }
 
-#endif /* linux && !AWE_OBSOLETE_VOXWARE */
-
-
-/*================================================================
+/*
  * AWE32 initialization
- *================================================================*/
+ */
 static void
 awe_initialize(void)
 {
@@ -1079,9 +927,9 @@ awe_initialize(void)
 }
 
 
-/*================================================================
+/*
  * AWE32 voice parameters
- *================================================================*/
+ */
 
 /* initialize voice_info record */
 static void
@@ -1244,9 +1092,9 @@ calc_rate_offset(int Hz)
 }
 
 
-/*----------------------------------------------------------------
+/*
  * convert envelope time parameter to AWE32 raw parameter
- *----------------------------------------------------------------*/
+ */
 
 /* attack & decay/release time table (msec) */
 static short attack_time_tbl[128] = {
@@ -1314,9 +1162,9 @@ calc_parm_search(int msec, short *table)
 #endif /* AWE_HAS_GUS_COMPATIBILITY */
 
 
-/*================================================================
+/*
  * effects table
- *================================================================*/
+ */
 
 /* set an effect value */
 #define FX_FLAG_OFF	0
@@ -1466,9 +1314,9 @@ FX_OFFSET(FX_Rec *rec, FX_Rec *lay, int lo, int hi, int mode)
 }
 
 
-/*================================================================
+/*
  * turn on/off sample
- *================================================================*/
+ */
 
 /* table for volume target calculation */
 static unsigned short voltarget[16] = { 
@@ -1687,9 +1535,9 @@ awe_exclusive_off(int voice)
 }
 
 
-/*================================================================
+/*
  * change the parameters of an audible voice
- *================================================================*/
+ */
 
 /* change pitch */
 static void
@@ -2137,9 +1985,9 @@ static void awe_terminate_and_init(int voice, int forced)
 }
 
 
-/*================================================================
+/*
  * synth operation routines
- *================================================================*/
+ */
 
 #define AWE_VOICE_KEY(v)	(0x8000 | (v))
 #define AWE_CHAN_KEY(c,n)	(((c) << 8) | ((n) + 1))
@@ -2185,8 +2033,8 @@ awe_voice_init(int voice, int init_all)
 static void awe_fx_init(int ch)
 {
 	if (SINGLE_LAYER_MODE() && !ctrls[AWE_MD_KEEP_EFFECT]) {
-		BZERO(&channels[ch].fx, sizeof(channels[ch].fx));
-		BZERO(&channels[ch].fx_layer, sizeof(&channels[ch].fx_layer));
+		memset(&channels[ch].fx, 0, sizeof(channels[ch].fx));
+		memset(&channels[ch].fx_layer, 0, sizeof(&channels[ch].fx_layer));
 	}
 }
 
@@ -2216,8 +2064,8 @@ static void awe_channel_init(int ch, int init_all)
 	cp->sustained = 0;
 
 	if (! ctrls[AWE_MD_KEEP_EFFECT]) {
-		BZERO(&cp->fx, sizeof(cp->fx));
-		BZERO(&cp->fx_layer, sizeof(cp->fx_layer));
+		memset(&cp->fx, 0, sizeof(cp->fx));
+		memset(&cp->fx_layer, 0, sizeof(cp->fx_layer));
 	}
 }
 
@@ -2255,7 +2103,7 @@ static int
 awe_open(int dev, int mode)
 {
 	if (awe_busy)
-		return RET_ERROR(EBUSY);
+		return -EBUSY;
 
 	awe_busy = TRUE;
 
@@ -2310,7 +2158,7 @@ awe_ioctl(int dev, unsigned int cmd, caddr_t arg)
 			awe_info.nr_voices = awe_max_voices;
 		else
 			awe_info.nr_voices = AWE_MAX_CHANNELS;
-		IOCTL_TO_USER((char*)arg, 0, &awe_info, sizeof(awe_info));
+		memcpy((char*)arg, &awe_info + 0, sizeof(awe_info));
 		return 0;
 		break;
 
@@ -2330,7 +2178,7 @@ awe_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 	default:
 		printk("AWE32: unsupported ioctl %d\n", cmd);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 }
 
@@ -2379,7 +2227,7 @@ awe_kill_note(int dev, int voice, int note, int velocity)
 
 	DEBUG(2,printk("AWE32: [off(%d) nt=%d vl=%d]\n", voice, note, velocity));
 	if (! voice_in_range(voice))
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 
 	switch (playing_mode) {
 	case AWE_PLAY_DIRECT:
@@ -2392,7 +2240,7 @@ awe_kill_note(int dev, int voice, int note, int velocity)
 		voice_alloc->map[voice] = 0;
 		voice = v2;
 		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
-			return RET_ERROR(EINVAL);
+			return -EINVAL;
 		/* continue to below */
 	default:
 		key = AWE_CHAN_KEY(voice, note);
@@ -2438,7 +2286,7 @@ awe_start_note(int dev, int voice, int note, int velocity)
 
 	DEBUG(2,printk("AWE32: [on(%d) nt=%d vl=%d]\n", voice, note, velocity));
 	if (! voice_in_range(voice))
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	    
 	if (velocity == 0)
 		state = AWE_ST_STANDBY; /* stand by for playing */
@@ -2457,7 +2305,7 @@ awe_start_note(int dev, int voice, int note, int velocity)
 	case AWE_PLAY_MULTI2:
 		voice = voice_alloc->map[voice] >> 8;
 		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
-			return RET_ERROR(EINVAL);
+			return -EINVAL;
 		/* continue to below */
 	default:
 		if (note >= 128) { /* key volume mode */
@@ -2532,7 +2380,7 @@ awe_set_instr_2(int dev, int voice, int instr_no)
 	if (playing_mode == AWE_PLAY_MULTI2) {
 		voice = voice_alloc->map[voice] >> 8;
 		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
-			return RET_ERROR(EINVAL);
+			return -EINVAL;
 	}
 	return awe_set_instr(dev, voice, instr_no);
 }
@@ -2545,10 +2393,10 @@ awe_set_instr(int dev, int voice, int instr_no)
 	int def_bank;
 
 	if (! voice_in_range(voice))
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 
 	if (instr_no < 0 || instr_no >= AWE_MAX_PRESETS)
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 
 	cinfo = &channels[voice];
 
@@ -3049,17 +2897,6 @@ awe_volume_method(int dev, int mode)
 }
 
 
-#ifndef AWE_NO_PATCHMGR
-/* patch manager */
-static int
-awe_patchmgr(int dev, struct patmgr_info *rec)
-{
-	printk("AWE32 Warning: patch manager control not supported\n");
-	return 0;
-}
-#endif
-
-
 /* pitch wheel change: 0-16384 */
 static void
 awe_bender(int dev, int voice, int value)
@@ -3105,21 +2942,21 @@ awe_load_patch(int dev, int format, const char *addr,
 		return 0;
 	} else if (format != AWE_PATCH) {
 		printk("AWE32 Error: Invalid patch format (key) 0x%x\n", format);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 	
 	if (count < AWE_PATCH_INFO_SIZE) {
 		printk("AWE32 Error: Patch header too short\n");
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
-	COPY_FROM_USER(((char*)&patch) + offs, addr, offs, 
+	copy_from_user(((char*)&patch) + offs, addr + offs, 
 		       AWE_PATCH_INFO_SIZE - offs);
 
 	count -= AWE_PATCH_INFO_SIZE;
 	if (count < patch.len) {
 		printk("AWE32: sample: Patch record too short (%d<%d)\n",
 		       count, patch.len);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 	
 	switch (patch.type) {
@@ -3160,7 +2997,7 @@ awe_load_patch(int dev, int format, const char *addr,
 	default:
 		printk("AWE32 Error: unknown patch format type %d\n",
 		       patch.type);
-		rc = RET_ERROR(EINVAL);
+		rc = -EINVAL;
 	}
 
 	return rc;
@@ -3176,9 +3013,6 @@ awe_create_sf(int type, char *name)
 	/* terminate sounds */
 	awe_reset(0);
 	if (current_sf_id >= max_sfs) {
-#ifndef AWE_DYNAMIC_BUFFER
-		return 1;
-#else
 		int newsize = max_sfs + AWE_MAX_SF_LISTS;
 		sf_list *newlist = realloc_block(sflists, sizeof(sf_list)*max_sfs,
 						 sizeof(sf_list)*newsize);
@@ -3186,7 +3020,6 @@ awe_create_sf(int type, char *name)
 			return 1;
 		sflists = newlist;
 		max_sfs = newsize;
-#endif /* dynamic buffer */
 	}
 	rec = &sflists[current_sf_id];
 	rec->sf_id = current_sf_id + 1;
@@ -3238,7 +3071,7 @@ static int is_shared_sf(unsigned char *name)
 		AWE_MINOR_VERSION,
 		AWE_TINY_VERSION,
 	};
-	if (MEMCMP(name, id_head, 6) == 0)
+	if (memcmp(name, id_head, 6) == 0)
 		return TRUE;
 	return FALSE;
 }
@@ -3247,7 +3080,7 @@ static int is_shared_sf(unsigned char *name)
 static int is_identical_name(unsigned char *name, int sf) 
 {
 	char *id = sflists[sf-1].name;
-	if (is_shared_sf(id) && MEMCMP(id, name, AWE_PATCH_NAME_LEN) == 0)
+	if (is_shared_sf(id) && memcmp(id, name, AWE_PATCH_NAME_LEN) == 0)
 		return TRUE;
 	return FALSE;
 }
@@ -3285,7 +3118,7 @@ awe_open_patch(awe_patch_info *patch, const char *addr, int count)
 	awe_open_parm parm;
 	int shared;
 
-	COPY_FROM_USER(&parm, addr, AWE_PATCH_INFO_SIZE, sizeof(parm));
+	copy_from_user(&parm, addr + AWE_PATCH_INFO_SIZE, sizeof(parm));
 	shared = FALSE;
 
 #ifdef AWE_ALLOW_SAMPLE_SHARING
@@ -3303,7 +3136,7 @@ awe_open_patch(awe_patch_info *patch, const char *addr, int count)
 	if (! shared) {
 		if (awe_create_sf(parm.type, parm.name)) {
 			printk("AWE32: can't open: failed to alloc new list\n");
-			return RET_ERROR(ENOSPC);
+			return -ENOSPC;
 		}
 	}
 	patch_opened = TRUE;
@@ -3317,7 +3150,7 @@ check_patch_opened(int type, char *name)
 	if (! patch_opened) {
 		if (awe_create_sf(type, name)) {
 			printk("AWE32: failed to alloc new list\n");
-			return RET_ERROR(ENOSPC);
+			return -ENOSPC;
 		}
 		patch_opened = TRUE;
 		return current_sf_id;
@@ -3355,10 +3188,6 @@ static int alloc_new_info(int nvoices)
 	awe_voice_list *newlist;
 	free_info = awe_free_info();
 	if (free_info + nvoices >= max_infos) {
-#ifndef AWE_DYNAMIC_BUFFER
-		printk("AWE32: can't alloc info table\n");
-		return RET_ERROR(ENOSPC);
-#else
 		do {
 			newsize = max_infos + AWE_MAX_INFOS;
 		} while (free_info + nvoices >= newsize);
@@ -3366,11 +3195,10 @@ static int alloc_new_info(int nvoices)
 					sizeof(awe_voice_list)*newsize);
 		if (newlist == NULL) {
 			printk("AWE32: can't alloc info table\n");
-			return RET_ERROR(ENOSPC);
+			return -ENOSPC;
 		}
 		infos = newlist;
 		max_infos = newsize;
-#endif
 	}
 	return 0;
 }
@@ -3382,21 +3210,16 @@ static int alloc_new_sample(void)
 	awe_sample_list *newlist;
 	free_sample = awe_free_sample();
 	if (free_sample >= max_samples) {
-#ifndef AWE_DYNAMIC_BUFFER
-		printk("AWE32: can't alloc sample table\n");
-		return RET_ERROR(ENOSPC);
-#else
 		newsize = max_samples + AWE_MAX_SAMPLES;
 		newlist = realloc_block(samples,
 					sizeof(awe_sample_list)*max_samples,
 					sizeof(awe_sample_list)*newsize);
 		if (newlist == NULL) {
 			printk("AWE32: can't alloc sample table\n");
-			return RET_ERROR(ENOSPC);
+			return -ENOSPC;
 		}
 		samples = newlist;
 		max_samples = newsize;
-#endif
 	}
 	return 0;
 }
@@ -3412,9 +3235,9 @@ awe_load_map(awe_patch_info *patch, const char *addr, int count)
 	/* get the link info */
 	if (count < sizeof(map)) {
 		printk("AWE32 Error: invalid patch info length\n");
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
-	COPY_FROM_USER(&map, addr, AWE_PATCH_INFO_SIZE, sizeof(map));
+	copy_from_user(&map, addr + AWE_PATCH_INFO_SIZE, sizeof(map));
 	
 	/* check if the identical mapping already exists */
 	p = awe_search_instr(map.map_bank, map.map_instr);
@@ -3428,10 +3251,10 @@ awe_load_map(awe_patch_info *patch, const char *addr, int count)
 	}
 
 	if (check_patch_opened(AWE_PAT_TYPE_MAP, NULL) < 0)
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 
 	if (alloc_new_info(1) < 0)
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 
 	free_info = awe_free_info();
 	rec = &infos[free_info];
@@ -3464,14 +3287,14 @@ awe_probe_info(awe_patch_info *patch, const char *addr, int count)
 	int p;
 
 	if (! patch_opened)
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 
 	/* get the link info */
 	if (count < sizeof(map)) {
 		printk("AWE32 Error: invalid patch info length\n");
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
-	COPY_FROM_USER(&map, addr, AWE_PATCH_INFO_SIZE, sizeof(map));
+	copy_from_user(&map, addr + AWE_PATCH_INFO_SIZE, sizeof(map));
 	
 	/* check if the identical mapping already exists */
 	p = awe_search_instr(map.src_bank, map.src_instr);
@@ -3483,7 +3306,7 @@ awe_probe_info(awe_patch_info *patch, const char *addr, int count)
 			return 0; /* already present! */
 	}
 #endif /* allow sharing */
-	return RET_ERROR(EINVAL);
+	return -EINVAL;
 }
 #endif
 
@@ -3493,13 +3316,13 @@ awe_probe_data(awe_patch_info *patch, const char *addr, int count)
 {
 #ifdef AWE_ALLOW_SAMPLE_SHARING
 	if (! patch_opened)
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 
 	/* search the specified sample by optarg */
 	if (search_sample_index(current_sf_id, patch->optarg, 0) >= 0)
 		return 0;
 #endif /* allow sharing */
-	return RET_ERROR(EINVAL);
+	return -EINVAL;
 }
 
 /* load voice information data */
@@ -3513,26 +3336,26 @@ awe_load_info(awe_patch_info *patch, const char *addr, int count)
 
 	if (count < AWE_VOICE_REC_SIZE) {
 		printk("AWE32 Error: invalid patch info length\n");
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 
 	offset = AWE_PATCH_INFO_SIZE;
-	COPY_FROM_USER((char*)&hdr, addr, offset, AWE_VOICE_REC_SIZE);
+	copy_from_user((char*)&hdr, addr + offset, AWE_VOICE_REC_SIZE);
 	offset += AWE_VOICE_REC_SIZE;
 
 	if (hdr.nvoices <= 0 || hdr.nvoices >= 100) {
 		printk("AWE32 Error: Illegal voice number %d\n", hdr.nvoices);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 	total_size = AWE_VOICE_REC_SIZE + AWE_VOICE_INFO_SIZE * hdr.nvoices;
 	if (count < total_size) {
 		printk("AWE32 Error: patch length(%d) is smaller than nvoices(%d)\n",
 		       count, hdr.nvoices);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 
 	if (check_patch_opened(AWE_PAT_TYPE_MISC, NULL) < 0)
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 
 #if 0 /* it looks like not so useful.. */
 	/* check if the same preset already exists in the info list */
@@ -3552,7 +3375,7 @@ awe_load_info(awe_patch_info *patch, const char *addr, int count)
 #endif
 
 	if (alloc_new_info(hdr.nvoices) < 0)
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 
 	for (i = 0; i < hdr.nvoices; i++) {
 		int rec = awe_free_info();
@@ -3563,7 +3386,7 @@ awe_load_info(awe_patch_info *patch, const char *addr, int count)
 		infos[rec].disabled = FALSE;
 
 		/* copy awe_voice_info parameters */
-		COPY_FROM_USER(&infos[rec].v, addr, offset, AWE_VOICE_INFO_SIZE);
+		copy_from_user(&infos[rec].v, addr + offset, AWE_VOICE_INFO_SIZE);
 		offset += AWE_VOICE_INFO_SIZE;
 		infos[rec].v.sf_id = current_sf_id;
 #ifdef AWE_ALLOW_SAMPLE_SHARING
@@ -3592,16 +3415,16 @@ awe_load_data(awe_patch_info *patch, const char *addr, int count)
 	awe_sample_info tmprec, *rec;
 
 	if (check_patch_opened(AWE_PAT_TYPE_MISC, NULL) < 0)
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 
 	size = (count - AWE_SAMPLE_INFO_SIZE) / 2;
 	offset = AWE_PATCH_INFO_SIZE;
-	COPY_FROM_USER(&tmprec, addr, offset, AWE_SAMPLE_INFO_SIZE);
+	copy_from_user(&tmprec, addr + offset, AWE_SAMPLE_INFO_SIZE);
 	offset += AWE_SAMPLE_INFO_SIZE;
 	if (size != tmprec.size) {
 		printk("AWE32: load: sample size differed (%d != %d)\n",
 		       tmprec.size, size);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 
 	if (search_sample_index(current_sf_id, tmprec.sample, 0) >= 0) {
@@ -3611,11 +3434,11 @@ awe_load_data(awe_patch_info *patch, const char *addr, int count)
 			return 0;
 #endif /* allow sharing */
 		DEBUG(1,printk("AWE32: sample data %d already present\n", tmprec.sample));
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 
 	if (alloc_new_sample() < 0)
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 
 	free_sample = awe_free_sample();
 	rec = &samples[free_sample].v;
@@ -3646,22 +3469,22 @@ awe_replace_data(awe_patch_info *patch, const char *addr, int count)
 
 	if (! patch_opened) {
 		printk("AWE32: replace: patch not opened\n");
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 
 	size = (count - AWE_SAMPLE_INFO_SIZE) / 2;
 	offset = AWE_PATCH_INFO_SIZE;
-	COPY_FROM_USER(&cursmp, addr, offset, AWE_SAMPLE_INFO_SIZE);
+	copy_from_user(&cursmp, addr + offset, AWE_SAMPLE_INFO_SIZE);
 	offset += AWE_SAMPLE_INFO_SIZE;
 	if (cursmp.size == 0 || size != cursmp.size) {
 		printk("AWE32: replace: illegal sample size (%d!=%d)\n",
 		       cursmp.size, size);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 	channels = patch->optarg;
 	if (channels <= 0 || channels > AWE_NORMAL_VOICES) {
 		printk("AWE32: replace: illegal channels %d\n", channels);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 
 	for (i = sflists[current_sf_id-1].samples;
@@ -3672,18 +3495,18 @@ awe_replace_data(awe_patch_info *patch, const char *addr, int count)
 	if (i < 0) {
 		printk("AWE32: replace: cannot find existing sample data %d\n",
 		       cursmp.sample);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 		
 	if (samples[i].v.size != cursmp.size) {
 		printk("AWE32: replace: exiting size differed (%d!=%d)\n",
 		       samples[i].v.size, cursmp.size);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 
 	save_mem_ptr = awe_free_mem_ptr();
 	sflists[current_sf_id-1].mem_ptr = samples[i].v.start - awe_mem_start;
-	MEMCPY(&samples[i].v, &cursmp, sizeof(cursmp));
+	memcpy(&samples[i].v, &cursmp, sizeof(cursmp));
 	if ((rc = awe_write_wave_data(addr, offset, &samples[i].v, channels)) != 0)
 		return rc;
 	sflists[current_sf_id-1].mem_ptr = save_mem_ptr;
@@ -3713,10 +3536,10 @@ readbuf_init(const char *addr, int offset, awe_sample_info *sp)
 	readbuf_loopend = sp->loopend;
 	if (sp->mode_flags & (AWE_SAMPLE_BIDIR_LOOP|AWE_SAMPLE_REVERSE_LOOP)) {
 		int looplen = sp->loopend - sp->loopstart;
-		readbuf_loop = my_malloc(looplen * 2);
+		readbuf_loop = vmalloc(looplen * 2);
 		if (readbuf_loop == NULL) {
 			printk("AWE32: can't malloc temp buffer\n");
-			return RET_ERROR(ENOSPC);
+			return -ENOSPC;
 		}
 	}
 #endif
@@ -3734,10 +3557,10 @@ readbuf_word(int pos)
 	/* read from user buffer */
 	if (readbuf_flags & AWE_SAMPLE_8BITS) {
 		unsigned char cc;
-		GET_BYTE_FROM_USER(cc, readbuf_addr, readbuf_offs + pos);
+		get_user(cc, (unsigned char*)&(readbuf_addr)[readbuf_offs + pos]);
 		c = cc << 8; /* convert 8bit -> 16bit */
 	} else {
-		GET_SHORT_FROM_USER(c, readbuf_addr, readbuf_offs + pos * 2);
+		get_user(c, (unsigned short*)&(readbuf_addr)[readbuf_offs + pos * 2]);
 	}
 	if (readbuf_flags & AWE_SAMPLE_UNSIGNED)
 		c ^= 0x8000; /* unsigned -> signed */
@@ -3764,9 +3587,8 @@ readbuf_word_cache(int pos)
 static void
 readbuf_end(void)
 {
-	if (readbuf_loop) {
-		my_free(readbuf_loop);
-	}
+	if (readbuf_loop)
+		vfree(readbuf_loop);
 	readbuf_loop = NULL;
 }
 
@@ -3805,7 +3627,7 @@ awe_write_wave_data(const char *addr, int offset, awe_sample_info *sp, int chann
 		truesize += BLANK_LOOP_SIZE;
 	if (awe_free_mem_ptr() + truesize >= awe_mem_size/2) {
 		DEBUG(-1,printk("AWE32 Error: Sample memory full\n"));
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 	}
 
 	/* recalculate address offset */
@@ -3829,7 +3651,7 @@ awe_write_wave_data(const char *addr, int offset, awe_sample_info *sp, int chann
 		return rc;
 
 	if (readbuf_init(addr, offset, sp) < 0)
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 
 	for (i = 0; i < sp->size; i++) {
 		unsigned short c;
@@ -3913,21 +3735,21 @@ awe_load_guspatch(const char *addr, int offs, int size, int pmgr_flag)
 	sizeof_patch = (int)((long)&patch.data[0] - (long)&patch); /* header size */
 	if (size < sizeof_patch) {
 		printk("AWE32 Error: Patch header too short\n");
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
-	COPY_FROM_USER(((char*)&patch) + offs, addr, offs, sizeof_patch - offs);
+	copy_from_user(((char*)&patch) + offs, addr + offs, sizeof_patch - offs);
 	size -= sizeof_patch;
 	if (size < patch.len) {
 		printk("AWE32 Warning: Patch record too short (%d<%d)\n",
 		       size, patch.len);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 	if (check_patch_opened(AWE_PAT_TYPE_GUS, NULL) < 0)
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 	if (alloc_new_sample() < 0)
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 	if (alloc_new_info(1))
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 
 	free_sample = awe_free_sample();
 	smp = &samples[free_sample].v;
@@ -4055,9 +3877,9 @@ awe_load_guspatch(const char *addr, int offs, int size, int pmgr_flag)
 
 #endif  /* AWE_HAS_GUS_COMPATIBILITY */
 
-/*----------------------------------------------------------------
+/*
  * sample and voice list handlers
- *----------------------------------------------------------------*/
+ */
 
 /* append this to the sf list */
 static void add_sf_info(int rec)
@@ -4496,18 +4318,15 @@ awe_setup_voice(int dev, int voice, int chn)
 
 
 #ifdef CONFIG_AWE32_MIXER
-/*================================================================
+/*
  * AWE32 mixer device control
- *================================================================*/
+ */
 
 static int awe_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg);
 
 static int my_mixerdev = -1;
 
 static struct mixer_operations awe_mixer_operations = {
-#ifndef __FreeBSD__
-	"AWE32",
-#endif
 	"AWE32 Equalizer",
 	awe_mixer_ioctl,
 };
@@ -4531,13 +4350,13 @@ awe_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	int i, level, value;
 
 	if (((cmd >> 8) & 0xff) != 'M')
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 
-	level = (int)IOCTL_IN(arg);
+	level = (int) *(int *)arg;
 	level = ((level & 0xff) + (level >> 8)) / 2;
 	DEBUG(0,printk("AWEMix: cmd=%x val=%d\n", cmd & 0xff, level));
 
-	if (IO_WRITE_CHECK(cmd)) {
+	if (_SIOC_DIR(cmd) & _IOC_WRITE) {
 		switch (cmd & 0xff) {
 		case SOUND_MIXER_BASS:
 			value = level * 12 / 100;
@@ -4589,14 +4408,14 @@ awe_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 		level = 0;
 		break;
 	}
-	return IOCTL_OUT(arg, level);
+	return *(int *)arg = level;
 }
 #endif /* CONFIG_AWE32_MIXER */
 
 
-/*================================================================
+/*
  * initialization of AWE32
- *================================================================*/
+ */
 
 /* intiailize audio channels */
 static void
@@ -4912,7 +4731,7 @@ awe_open_dram_for_write(int offset, int channels)
 			awe_poke_dw(AWE_CCCA(vidx[i]), 0);
 			voices[vidx[i]].state = AWE_ST_OFF;
 		}
-		return RET_ERROR(ENOSPC);
+		return -ENOSPC;
 	}
 
 	/* set address to write */
@@ -5091,13 +4910,13 @@ awe_load_chorus_fx(awe_patch_info *patch, const char *addr, int count)
 {
 	if (patch->optarg < AWE_CHORUS_PREDEFINED || patch->optarg >= AWE_CHORUS_NUMBERS) {
 		printk("AWE32 Error: illegal chorus mode %d for uploading\n", patch->optarg);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 	if (count < sizeof(awe_chorus_fx_rec)) {
 		printk("AWE32 Error: too short chorus fx parameters\n");
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
-	COPY_FROM_USER(&chorus_parm[patch->optarg], addr, AWE_PATCH_INFO_SIZE,
+	copy_from_user(&chorus_parm[patch->optarg], addr + AWE_PATCH_INFO_SIZE,
 		       sizeof(awe_chorus_fx_rec));
 	chorus_defined[patch->optarg] = TRUE;
 	return 0;
@@ -5198,13 +5017,13 @@ awe_load_reverb_fx(awe_patch_info *patch, const char *addr, int count)
 {
 	if (patch->optarg < AWE_REVERB_PREDEFINED || patch->optarg >= AWE_REVERB_NUMBERS) {
 		printk("AWE32 Error: illegal reverb mode %d for uploading\n", patch->optarg);
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
 	if (count < sizeof(awe_reverb_fx_rec)) {
 		printk("AWE32 Error: too short reverb fx parameters\n");
-		return RET_ERROR(EINVAL);
+		return -EINVAL;
 	}
-	COPY_FROM_USER(&reverb_parm[patch->optarg], addr, AWE_PATCH_INFO_SIZE,
+	copy_from_user(&reverb_parm[patch->optarg], addr + AWE_PATCH_INFO_SIZE,
 		       sizeof(awe_reverb_fx_rec));
 	reverb_defined[patch->optarg] = TRUE;
 	return 0;
@@ -5400,9 +5219,9 @@ static void unload_midiemu(void)
 }
 
 
-/*================================================================
+/*
  * open/close midi device
- *================================================================*/
+ */
 
 static int midi_opened = FALSE;
 
@@ -5465,7 +5284,7 @@ awe_midi_open (int dev, int mode,
 	curst.read = 0;
 	curst.status = 0;
 	curst.chan = 0;
-	BZERO(curst.buf, sizeof(curst.buf));
+	memset(curst.buf, 0, sizeof(curst.buf));
 
 	init_midi_status(&curst);
 
@@ -5499,9 +5318,9 @@ awe_midi_outputc (int dev, unsigned char midi_byte)
 }
 
 
-/*================================================================
+/*
  * initialize
- *================================================================*/
+ */
 
 static void init_midi_status(MidiStatus *st)
 {
@@ -5511,9 +5330,9 @@ static void init_midi_status(MidiStatus *st)
 }
 
 
-/*================================================================
+/*
  * RPN & NRPN
- *================================================================*/
+ */
 
 #define MAX_MIDI_CHANNELS	16
 
@@ -5538,9 +5357,9 @@ static void clear_rpn(void)
 }
 
 
-/*================================================================
+/*
  * process midi queue
- *================================================================*/
+ */
 
 /* status event types */
 typedef void (*StatusEvent)(MidiStatus *st);
@@ -5649,9 +5468,9 @@ static void queue_read(MidiStatus *st, int c)
 }
 
 
-/*================================================================
+/*
  * status events
- *================================================================*/
+ */
 
 /* note on */
 static void midi_note_on(MidiStatus *st)
@@ -5907,14 +5726,14 @@ static void midi_system_exclusive(MidiStatus *st)
 #endif
 
 	/* GM on */
-	if (MEMCMP(st->buf, gm_on_macro, sizeof(gm_on_macro)) == 0) {
+	if (memcmp(st->buf, gm_on_macro, sizeof(gm_on_macro)) == 0) {
 		if (midi_mode != MODE_GS && midi_mode != MODE_XG)
 			midi_mode = MODE_GM;
 		init_midi_status(st);
 	}
 
 	/* GS macros */
-	else if (MEMCMP(st->buf, gs_pfx_macro, sizeof(gs_pfx_macro)) == 0) {
+	else if (memcmp(st->buf, gs_pfx_macro, sizeof(gs_pfx_macro)) == 0) {
 		if (midi_mode != MODE_GS && midi_mode != MODE_XG)
 			midi_mode = MODE_GS;
 
@@ -5957,7 +5776,7 @@ static void midi_system_exclusive(MidiStatus *st)
 	}
 
 	/* XG on */
-	else if (MEMCMP(st->buf, xg_on_macro, sizeof(xg_on_macro)) == 0) {
+	else if (memcmp(st->buf, xg_on_macro, sizeof(xg_on_macro)) == 0) {
 		midi_mode = MODE_XG;
 		xg_mapping = TRUE;
 		xg_bankmode = 0;
@@ -5965,9 +5784,9 @@ static void midi_system_exclusive(MidiStatus *st)
 }
 
 
-/*================================================================
+/*
  * convert NRPN/control values
- *================================================================*/
+ */
 
 static int send_converted_effect(ConvTable *table, int num_tables, MidiStatus *st, int type, int val)
 {
@@ -5996,9 +5815,9 @@ static int add_converted_effect(ConvTable *table, int num_tables, MidiStatus *st
 }
 
 
-/*----------------------------------------------------------------
+/*
  * AWE32 NRPN effects
- *----------------------------------------------------------------*/
+ */
 
 static unsigned short fx_delay(int val);
 static unsigned short fx_attack(int val);
@@ -6120,9 +5939,9 @@ static ConvTable awe_effects[] =
 static int num_awe_effects = numberof(awe_effects);
 
 
-/*----------------------------------------------------------------
+/*
  * GS(SC88) NRPN effects; still experimental
- *----------------------------------------------------------------*/
+ */
 
 /* cutoff: quarter semitone step, max=255 */
 static unsigned short gs_cutoff(int val)
@@ -6252,4 +6071,48 @@ static int xg_control_change(MidiStatus *st, int cmd, int val)
 
 #endif /* CONFIG_AWE32_MIDIEMU */
 
-#endif /* CONFIG_AWE32_SYNTH */
+/* new type interface */
+static int __init attach_awe(void)
+{
+#ifdef CONFIG_PNP_DRV
+	if (pnp) {
+		awe_initpnp();
+		if (awe_pnp_ok)
+			return 0;
+	}
+#endif /* pnp */
+	
+	_attach_awe();
+	
+	return 0;
+}									
+
+static void __exit unload_awe(void)								
+{
+#ifdef CONFIG_PNP_DRV
+	if (pnp)
+		awe_unload_pnp();
+#endif
+	
+	_unload_awe();
+}
+
+module_init(attach_awe);
+module_exit(unload_awe);
+
+#ifndef MODULE
+static int __init setup_awe(char *str)
+{
+	/* io, memsize */
+	int ints[3];
+
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+
+	io = ints[1];
+	memsize = ints[2];
+
+	return 1;
+}
+
+__setup("awe=", setup_awe);
+#endif

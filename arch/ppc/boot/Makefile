@@ -53,7 +53,6 @@ GZIP_FLAGS = -v9f
 
 OBJECTS := head.o misc.o ../coffboot/zlib.o
 CFLAGS = $(CPPFLAGS) -O2 -DSTDC_HEADERS -fno-builtin
-OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJCOPY_ARGS = -O elf32-powerpc
 
 OBJECTS += vreset.o kbd.o of1275.o

@@ -66,8 +66,6 @@ static int			want_lock = 0;
 static int			hash_count = 0;
 static DECLARE_WAIT_QUEUE_HEAD(	hash_wait );
 
-#define READLOCK		0
-#define WRITELOCK		1
 
 /*
  * Find a client's export for a device.

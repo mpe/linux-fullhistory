@@ -750,9 +750,8 @@ static void ntfs_put_super(struct super_block *sb)
 }
 
 /* Called by the kernel when asking for stats */
-static int ntfs_statfs(struct super_block *sb, struct statfs *sf, int bufsize)
+static int ntfs_statfs(struct super_block *sb, struct statfs *sf)
 {
-	struct statfs fs;
 	struct inode *mft;
 	ntfs_volume *vol;
 	ntfs_u64 size;
@@ -760,30 +759,26 @@ static int ntfs_statfs(struct super_block *sb, struct statfs *sf, int bufsize)
 
 	ntfs_debug(DEBUG_OTHER, "ntfs_statfs\n");
 	vol=NTFS_SB2VOL(sb);
-	memset(&fs,0,sizeof(fs));
-	fs.f_type=NTFS_SUPER_MAGIC;
-	fs.f_bsize=vol->clustersize;
+	sf->f_type=NTFS_SUPER_MAGIC;
+	sf->f_bsize=vol->clustersize;
 
 	error = ntfs_get_volumesize( NTFS_SB2VOL( sb ), &size );
 	if( error )
 		return -error;
-	fs.f_blocks = size;	/* volumesize is in clusters */
-	fs.f_bfree=ntfs_get_free_cluster_count(vol->bitmap);
-	fs.f_bavail=fs.f_bfree;
+	sf->f_blocks = size;	/* volumesize is in clusters */
+	sf->f_bfree=ntfs_get_free_cluster_count(vol->bitmap);
+	sf->f_bavail=sf->f_bfree;
 
-	/* Number of files is limited by free space only, so we lie here */
-	fs.f_ffree=0;
 	mft=iget(sb,FILE_MFT);
 	if (!mft)
 		return -EIO;
 	/* So ... we lie... thus this following cast of loff_t value
 	   is ok here.. */
-	fs.f_files = (unsigned long)mft->i_size / vol->mft_recordsize;
+	sf->f_files = (unsigned long)mft->i_size / vol->mft_recordsize;
 	iput(mft);
 
 	/* should be read from volume */
-	fs.f_namelen=255;
-	copy_to_user(sf,&fs,bufsize);
+	sf->f_namelen=255;
 	return 0;
 }
 

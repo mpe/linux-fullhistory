@@ -18,7 +18,6 @@
 
 CFLAGS	= $(CPPFLAGS) -O -fno-builtin -DSTDC_HEADERS
 LD_ARGS = -Ttext 0x00400000
-OBJCOPY = $(CROSS_COMPILE)objcopy
 
 OBJS = crt0.o start.o main.o misc.o ../coffboot/string.o ../coffboot/zlib.o image.o sysmap.o
 LIBS = $(TOPDIR)/lib/lib.a

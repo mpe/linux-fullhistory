@@ -35,7 +35,7 @@ extern struct timezone sys_tz;
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
-static int affs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz);
+static int affs_statfs(struct super_block *sb, struct statfs *buf);
 static int affs_remount (struct super_block *sb, int *flags, char *data);
 
 static void
@@ -661,23 +661,20 @@ affs_remount(struct super_block *sb, int *flags, char *data)
 }
 
 static int
-affs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+affs_statfs(struct super_block *sb, struct statfs *buf)
 {
 	int		 free;
-	struct statfs	 tmp;
 
 	pr_debug("AFFS: statfs() partsize=%d, reserved=%d\n",sb->u.affs_sb.s_partition_size,
 	     sb->u.affs_sb.s_reserved);
 
 	free          = affs_count_free_blocks(sb);
-	tmp.f_type    = AFFS_SUPER_MAGIC;
-	tmp.f_bsize   = sb->s_blocksize;
-	tmp.f_blocks  = sb->u.affs_sb.s_partition_size - sb->u.affs_sb.s_reserved;
-	tmp.f_bfree   = free;
-	tmp.f_bavail  = free;
-	tmp.f_files   = 0;
-	tmp.f_ffree   = 0;
-	return copy_to_user(buf,&tmp,bufsiz) ? -EFAULT : 0;
+	buf->f_type    = AFFS_SUPER_MAGIC;
+	buf->f_bsize   = sb->s_blocksize;
+	buf->f_blocks  = sb->u.affs_sb.s_partition_size - sb->u.affs_sb.s_reserved;
+	buf->f_bfree   = free;
+	buf->f_bavail  = free;
+	return 0;
 }
 
 static struct file_system_type affs_fs_type = {

@@ -197,6 +197,7 @@ CONFIG_SCSI_CONSTANTS=y
 #
 # SCSI low-level drivers
 #
+# CONFIG_BLK_DEV_3W_XXXX_RAID is not set
 # CONFIG_SCSI_7000FASST is not set
 # CONFIG_SCSI_ACARD is not set
 # CONFIG_SCSI_AHA152X is not set
@@ -402,7 +403,6 @@ CONFIG_PSMOUSE=y
 # CONFIG_WATCHDOG is not set
 # CONFIG_NVRAM is not set
 # CONFIG_RTC is not set
-# CONFIG_EFI_RTC is not set
 
 #
 # Video For Linux
@@ -431,10 +431,6 @@ CONFIG_PCMCIA_SERIAL=y
 # USB support
 #
 # CONFIG_USB is not set
-
-#
-# Misc devices
-#
 
 #
 # File systems

@@ -155,7 +155,7 @@ if [ "$CONFIG_HOTPLUG" = "y" -a "$CONFIG_PCMCIA" != "n" ]; then
    source drivers/char/pcmcia/Config.in
 fi
 
-source drivers/misc/Config.in
+#source drivers/misc/Config.in
 
 source fs/Config.in
 

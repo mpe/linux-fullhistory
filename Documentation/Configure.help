@@ -648,7 +648,7 @@ CONFIG_IDEDMA_PCI_WIP
 
   It is SAFEST to say N to this question.
 
-3ware Hardware ATA-RAID support (EXPERIMENTAL)
+3ware Hardware ATA-RAID support
 CONFIG_BLK_DEV_3W_XXXX_RAID
   3ware is the only hardware ATA-Raid product in Linux to date.
   This card is 2,4, or 8 channel master mode support only.
@@ -745,9 +745,13 @@ CONFIG_BLK_DEV_HPT366
   This is an Ultra DMA chipset for ATA-66.
   
   This driver adds up to 4 more EIDE devices sharing a single
-  interrupt. The HPT366 chipset in its current form is a non-bootable.
-  This driver requires dynamic tuning of the chipset during the
-  ide-probe at boot. It is reported to support DVD II drives, by the
+  interrupt. The HPT366 chipset in its current form is a non-bootable,
+  without special LILO commands for redirecting the reference to device 0x80.
+  The other solution is to include "CONFIG_BLK_DEV_OFFBOARD" unless your
+  mainboard has the chipset native mounted.  Regardless one should use the
+  fore mentioned option and call at LILO or include in your append-line:
+  "ide=reverse".  This driver requires dynamic tuning of the chipset during
+  the ide-probe at boot. It is reported to support DVD II drives, by the
   manufacturer.
 
   Please read the comments at the top of drivers/block/hpt366.c
@@ -2353,6 +2357,11 @@ CONFIG_FB_AMIGA
   This is the frame buffer device driver for the builtin graphics
   chipset found in Amigas.
 
+  The driver is also available as a module ( = code which can be
+  inserted and removed from the running kernel whenever you want). The
+  module will be called amifb.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
 Amiga OCS chipset support
 CONFIG_FB_AMIGA_OCS
   This enables support for the original Agnus and Denise video chips,
@@ -3480,15 +3489,13 @@ CONFIG_DECNET_ROUTER
    Add support for turning your DECnet Endnode into a level 1 or 2
    router. This is an unfinished option for developers only. If you do
    turn it on, then make sure that you also say Y to "Kernel/User
-   network link driver" and "Routing messages", since rtnetlink is the
-   only current method of configuration.
+   network link driver", "Routing messages" and "Network packet 
+   filtering". The first two are required to allow configuration via
+   rtnetlink (currently you need Alexey Kuznetsov's iproute2 package
+   from ftp.inr.ac.ru). The "Network packet filtering" option will
+   be required for the forthcoming routing daemon to work.
 
-DECnet Raw Socket Support
-CONFIG_DECNET_RAW
-   Add support for the SOCK_RAW type under DECnet. Used by userland
-   routing programs to receive routing messages from the kernel and
-   also as a general debugging aid to see what's going on "under the
-   hood".
+   See Documentation/networking/decnet.txt for more information.
 
 AppleTalk DDP
 CONFIG_ATALK
@@ -11779,7 +11786,7 @@ CONFIG_LOWLEVEL_SOUND
   to present you with more options. If unsure, say Y.
 
 ACI mixer (miroPCM12/PCM20)
-CONFIG_ACI_MIXER
+CONFIG_SOUND_ACI_MIXER
   ACI (Audio Command Interface) is a protocol used to communicate with
   the microcontroller on some sound cards produced by miro, e.g. the
   miroSOUND PCM12 and PCM20. The main function of the ACI is to
@@ -11791,7 +11798,7 @@ CONFIG_ACI_MIXER
   radio-miropcm20 driver.
 
 SB32/AWE support
-CONFIG_AWE32_SYNTH
+CONFIG_SOUND_AWE32_SYNTH
   Say Y here if you have a Sound Blaster SB32, AWE32-PnP, SB AWE64 or
   similar sound card. See Documentation/sound/README.awe,
   Documentation/sound/AWE32 and the Soundblaster-AWE mini-HOWTO,
@@ -11799,7 +11806,7 @@ CONFIG_AWE32_SYNTH
   info.
 
 Gallant's Audio Excel DSP 16 support (SC-6000 and SC-6600)
-CONFIG_AEDSP16
+CONFIG_SOUND_AEDSP16
   Answer Y if you have a Gallant's Audio Excel DSP 16 card. This
   driver supports Audio Excel DSP 16 but not the III nor PnP versions
   of this card.
@@ -11817,12 +11824,6 @@ CONFIG_AEDSP16
   Documentation/sound/AudioExcelDSP16 to get more information about
   this driver and its configuration.
 
-I/O base for Audio Excel DSP 16
-CONFIG_AEDSP16_BASE
-  This is the base I/O address of the Audio Excel DSP 16 card. It must
-  be 220 or 240. If you compiled aedsp16.o as a module you can specify
-  this parameter as 'io=0xNNN'.
-
 Audio Excel DSP 16 (SBPro emulation)
 CONFIG_AEDSP16_SBPRO
   Answer Y if you want your audio card to emulate Sound Blaster Pro.
@@ -11830,35 +11831,11 @@ CONFIG_AEDSP16_SBPRO
   (SB16/32/64, ESS, Jazz16) support" and N to "Audio Excel DSP 16 (MSS
   emulation)".
 
-Audio Excel DSP 16 IRQ
-CONFIG_AEDSP16_SB_IRQ
-  This is the IRQ of the Audio Excel DSP 16 card. It must be 5, 7, 9,
-  10 or 11. If you compiled aedsp16.o as a module you can specify
-  this parameter as 'irq=NN'.
-
-Audio Excel DSP 16 DMA
-CONFIG_AEDSP16_SB_DMA
-  This is the IRQ of the Audio Excel DSP 16 card. It must be 0, 1 or
-  3. If you compiled aedsp16.o as a module you can specify this
-  parameter as 'dma=NN'.
-
 Audio Excel DSP 16 (MSS emulation)
 CONFIG_AEDSP16_MSS
   Answer Y if you want your audio card to emulate Microsoft Sound
   System. You should then say Y to "Microsoft Sound System support"
   and say N to "Audio Excel DSP 16 (SBPro emulation)".
-
-Audio Excel DSP 16 IRQ
-CONFIG_AEDSP16_MSS_IRQ
-  This is the IRQ of the Audio Excel DSP 16 card. It must be 5, 7, 9,
-  10 or 11. If you compiled aedsp16.o as a module you can specify
-  this parameter as 'irq=NN'.
-
-Audio Excel DSP 16 DMA
-CONFIG_AEDSP16_MSS_DMA
-  This is the IRQ of the Audio Excel DSP 16 card. It must be 0, 1 
-  or 3. If you compiled aedsp16.o as a module you can specify this
-  parameter as 'dma=NN'.
 
 SC-6600 based audio cards (new Audio Excel DSP 16)
 CONFIG_SC6600
@@ -11886,13 +11863,6 @@ CONFIG_AEDSP16_MPU401
   you have selected for "MPU-401 support". If you are using this
   driver as a module you have to specify the MPU I/O base address with
   the parameter 'mpu_base=0xNNN'.
-
-MPU401 IRQ for Audio Excel DSP 16
-CONFIG_AEDSP16_MPU_IRQ
-  This is the IRQ of the MPU-401 emulation of your Audio Excel DSP 16
-  card. It must be 5, 7, 9, 10 or 0 (to disable MPU-401 interface). If
-  you compiled aedsp16.o as a module you can specify this parameter as
-  'mpu_irq=NN'.
 
 Ensoniq ES1370 based PCI sound cards
 CONFIG_SOUND_ES1370

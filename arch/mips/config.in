@@ -293,7 +293,7 @@ fi
 
 source drivers/usb/Config.in
 
-source drivers/misc/Config.in
+#source drivers/misc/Config.in
 
 source fs/Config.in
 

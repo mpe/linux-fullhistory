@@ -410,17 +410,10 @@ struct sol_statvfs64 {
 static int report_statvfs(struct inode *inode, u32 buf)
 {
 	struct statfs s;
-	mm_segment_t old_fs = get_fs();
 	int error;
 	struct sol_statvfs *ss = (struct sol_statvfs *)A(buf);
 
-	if (!inode->i_sb)
-		return -ENODEV;
-	if (!inode->i_sb->s_op->statfs)
-		return -ENOSYS;
-	set_fs (KERNEL_DS);
-	error = inode->i_sb->s_op->statfs(inode->i_sb, &s, sizeof(struct statfs));
-	set_fs (old_fs);
+	error = vfs_statfs(inode->i_sb, &s);
 	if (!error) {
 		const char *p = inode->i_sb->s_type->name;
 		int i = 0;
@@ -451,17 +444,10 @@ static int report_statvfs(struct inode *inode, u32 buf)
 static int report_statvfs64(struct inode *inode, u32 buf)
 {
 	struct statfs s;
-	mm_segment_t old_fs = get_fs();
 	int error;
 	struct sol_statvfs64 *ss = (struct sol_statvfs64 *)A(buf);
 			
-	if (!inode->i_sb)
-		return -ENODEV;
-	if (!inode->i_sb->s_op->statfs)
-		return -ENOSYS;
-	set_fs (KERNEL_DS);
-	error = inode->i_sb->s_op->statfs(inode->i_sb, &s, sizeof(struct statfs));
-	set_fs (old_fs);
+	error = vfs_statfs(inode->i_sb, &s);
 	if (!error) {
 		const char *p = inode->i_sb->s_type->name;
 		int i = 0;

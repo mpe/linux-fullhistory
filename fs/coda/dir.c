@@ -451,7 +451,7 @@ int coda_rmdir(struct inode *dir, struct dentry *de)
 
         dircnp = ITOC(dir);
 
-	if (!list_empty(&de->d_hash))
+	if (!d_unhashed(de))
 		return -EBUSY;
 	error = venus_rmdir(dir->i_sb, &(dircnp->c_fid), name, len);
 

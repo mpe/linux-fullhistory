@@ -672,7 +672,7 @@ static void show_dentry(struct list_head * dlist)
 		struct dentry * dentry = list_entry(tmp, struct dentry, d_alias);
 		const char * unhashed = "";
 
-		if (list_empty(&dentry->d_hash))
+		if (d_unhashed(dentry))
 			unhashed = "(unhashed)";
 
 		printk("show_dentry: %s/%s, d_count=%d%s\n",
@@ -1027,7 +1027,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 	/*
 	 * Unhash the dentry while we remove the file ...
 	 */
-	if (!list_empty(&dentry->d_hash)) {
+	if (!d_unhashed(dentry)) {
 		d_drop(dentry);
 		rehash = 1;
 	}
@@ -1194,11 +1194,13 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	 * For files, make a copy of the dentry and then do a 
 	 * silly-rename. If the silly-rename succeeds, the
 	 * copied dentry is hashed and becomes the new target.
-	 *
-	 * With directories check is done in VFS.
 	 */
+	if (!new_inode)
+		goto go_ahead;
 	error = -EBUSY;
-	if (new_dentry->d_count > 1 && new_inode) {
+	if (S_ISDIR(new_inode->i_mode))
+		goto out;
+	else if (new_dentry->d_count > 1) {
 		int err;
 		/* copy the target dentry's name */
 		dentry = d_alloc(new_dentry->d_parent,
@@ -1227,6 +1229,7 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		}
 	}
 
+go_ahead:
 	/*
 	 * ... prune child dentries and writebacks if needed.
 	 */
@@ -1235,21 +1238,11 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		shrink_dcache_parent(old_dentry);
 	}
 
-	if (new_dentry->d_count > 1 && new_inode) {
-#ifdef NFS_PARANOIA
-		printk("nfs_rename: new dentry %s/%s busy, d_count=%d\n",
-		       new_dentry->d_parent->d_name.name,
-		       new_dentry->d_name.name,
-		       new_dentry->d_count);
-#endif
-		goto out;
-	}
-
 	/*
 	 * To prevent any new references to the target during the rename,
 	 * we unhash the dentry and free the inode in advance.
 	 */
-	if (!list_empty(&new_dentry->d_hash)) {
+	if (!d_unhashed(new_dentry)) {
 		d_drop(new_dentry);
 		rehash = 1;
 	}

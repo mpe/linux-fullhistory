@@ -32,7 +32,7 @@
 static void smb_put_inode(struct inode *);
 static void smb_delete_inode(struct inode *);
 static void smb_put_super(struct super_block *);
-static int  smb_statfs(struct super_block *, struct statfs *, int);
+static int  smb_statfs(struct super_block *, struct statfs *);
 static void smb_set_inode_attr(struct inode *, struct smb_fattr *);
 
 static struct super_operations smb_sops =
@@ -415,19 +415,13 @@ out_fail:
 }
 
 static int
-smb_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+smb_statfs(struct super_block *sb, struct statfs *buf)
 {
-	struct statfs attr;
+	smb_proc_dskattr(sb, buf);
 
-	memset(&attr, 0, sizeof(attr));
-
-	smb_proc_dskattr(sb, &attr);
-
-	attr.f_type = SMB_SUPER_MAGIC;
-	attr.f_files = -1;
-	attr.f_ffree = -1;
-	attr.f_namelen = SMB_MAXPATHLEN;
-	return copy_to_user(buf, &attr, bufsiz) ? -EFAULT : 0;
+	buf->f_type = SMB_SUPER_MAGIC;
+	buf->f_namelen = SMB_MAXPATHLEN;
+	return 0;
 }
 
 int

@@ -328,6 +328,7 @@ again:
 	stxa	%6, [%0+%8] %3
 	membar	#Sync
 	stxa	%%g0, [%7] %3
+	membar	#Sync
 	mov	0x20, %%g1
 	ldxa	[%%g1] 0x7f, %%g0
 	membar	#Sync"

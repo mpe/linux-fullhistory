@@ -876,7 +876,7 @@ int UMSDOS_rmdir (struct inode *dir, struct dentry *dentry)
 		goto out;
 
 	ret = -EBUSY;
-	if (!list_empty(&dentry->d_hash))
+	if (!d_unhashed(dentry))
 		goto out;
 
 	/* check whether the EMD is empty */

@@ -110,7 +110,8 @@ enum
  	KERN_SPARC_STOP_A=44,	/* int: Sparc Stop-A enable */
  	KERN_SHMMNI=45,		/* int: shm array identifiers */
 	KERN_OVERFLOWUID=46,	/* int: overflow UID */
-	KERN_OVERFLOWGID=47	/* int: overflow GID */
+	KERN_OVERFLOWGID=47,	/* int: overflow GID */
+	KERN_SHMPATH=48,	/* string: path to shm fs */
 };
 
 

@@ -30,10 +30,10 @@ Be sure to turn on the following options:
 if you want to try out router support (not properly debugged yet)
 you'll need the following options as well...
 
-    CONFIG_DECNET_RAW (to receive routing packets)
     CONFIG_DECNET_ROUTER (to be able to add/delete routes)
     CONFIG_NETLINK (to allow rtnetlink)
     CONFIG_RTNETLINK (for communication with the kernel routing layer)
+    CONFIG_NETFILTER (will be required for the DECnet routing daemon)
 
 3) Command line options
 
@@ -93,7 +93,13 @@ a reduced functionality.
 If you want to configure a DECnet router you'll need the iproute2 package
 since its the _only_ way to add and delete routes currently. Eventually
 there will be a routing daemon to send and receive routing messages for
-each interface and update the kernel routing tables accordingly.
+each interface and update the kernel routing tables accordingly. The
+routing daemon will use netfilter to listen to routing packets, and
+rtnetlink to update the kernels routing tables. 
+
+The DECnet raw socket layer has been removed since it was there purely
+for use by the routing daemon which will now use netfilter (a much cleaner
+and more generic solution) instead.
 
 5) How can I tell if its working ?
 

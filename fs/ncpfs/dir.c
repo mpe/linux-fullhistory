@@ -929,7 +929,7 @@ static int ncp_rmdir(struct inode *dir, struct dentry *dentry)
 		goto out;
 
 	error = -EBUSY;
-	if (!list_empty(&dentry->d_hash))
+	if (!d_unhashed(dentry))
 		goto out;
 
 	error = ncp_io2vol(server, __name, &len, dentry->d_name.name,
@@ -1072,7 +1072,6 @@ static int ncp_rename(struct inode *old_dir, struct dentry *old_dentry,
 		case 0x00:
                	        DPRINTK("ncp renamed %s -> %s.\n",
                                 old_dentry->d_name.name,new_dentry->d_name.name);
-			/* d_move(old_dentry, new_dentry); */
 			break;
 		case 0x9E:
 			error = -ENAMETOOLONG;

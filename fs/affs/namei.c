@@ -368,7 +368,7 @@ affs_rmdir(struct inode *dir, struct dentry *dentry)
 	if (!empty_dir(bh,AFFS_I2HSIZE(inode)))
 		goto rmdir_done;
 	retval = -EBUSY;
-	if (!list_empty(&dentry->d_hash))
+	if (!d_unhashed(dentry))
 		goto rmdir_done;
 
 	if ((retval = affs_remove_header(bh,inode)) < 0)
@@ -557,6 +557,9 @@ affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	}
 	if (S_ISDIR(old_inode->i_mode)) {
 		if (new_inode) {
+			retval = -EBUSY;
+			if (!d_unhashed(new_dentry))
+				goto end_rename;
 			retval = -ENOTEMPTY;
 			if (!empty_dir(new_bh,AFFS_I2HSIZE(new_inode)))
 				goto end_rename;

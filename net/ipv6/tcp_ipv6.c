@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.120 2000/02/27 19:51:49 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.121 2000/03/08 19:36:47 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -132,7 +132,7 @@ static int tcp_v6_get_port(struct sock *sk, unsigned short snum)
 				break;
 	}
 	if (tb != NULL && tb->owners != NULL) {
-		if (tb->fastreuse != 0 && sk->reuse != 0) {
+		if (tb->fastreuse != 0 && sk->reuse != 0 && sk->state != TCP_LISTEN) {
 			goto success;
 		} else {
 			struct sock *sk2 = tb->owners;
@@ -141,7 +141,8 @@ static int tcp_v6_get_port(struct sock *sk, unsigned short snum)
 
 			/* We must walk the whole port owner list in this case. -DaveM */
 			for( ; sk2 != NULL; sk2 = sk2->bind_next) {
-				if (sk->bound_dev_if == sk2->bound_dev_if) {
+				if (sk != sk2 &&
+				    sk->bound_dev_if == sk2->bound_dev_if) {
 					if (!sk_reuse	||
 					    !sk2->reuse	||
 					    sk2->state == TCP_LISTEN) {
@@ -177,11 +178,15 @@ static int tcp_v6_get_port(struct sock *sk, unsigned short snum)
 
 success:
 	sk->num = snum;
-	if ((sk->bind_next = tb->owners) != NULL)
-		tb->owners->bind_pprev = &sk->bind_next;
-	tb->owners = sk;
-	sk->bind_pprev = &tb->owners;
-	sk->prev = (struct sock *) tb;
+	if (sk->prev == NULL) {
+		if ((sk->bind_next = tb->owners) != NULL)
+			tb->owners->bind_pprev = &sk->bind_next;
+		tb->owners = sk;
+		sk->bind_pprev = &tb->owners;
+		sk->prev = (struct sock *) tb;
+	} else {
+		BUG_TRAP(sk->prev == (struct sock *) tb);
+	}
 	ret = 0;
 
 fail_unlock:

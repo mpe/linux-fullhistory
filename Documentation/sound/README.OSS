@@ -147,24 +147,9 @@ If you get an error message when trying to use the driver, please look
 at /var/adm/messages for more verbose error message.
 
 
-In general the easiest way to diagnose problems is to do "cat /dev/sndstat".
-
-If you get an error message, there are some problems with the driver setup:
-
-	- "No such file or directory" tells that the device files for
-	the sound driver are missing. Use the script at the end of
-	linux/drivers/sound/Readme.linux to create them.
-
-	- "No such device" tells that the sound driver is not in the kernel.
-	You have to reconfigure and recompile the kernel to have the sound
-	driver. Compiling the driver doesn't help alone. You have to boot
-	with the newly compiled one before the driver becomes active.
-	The Linux-HOWTO should help in this step.
-
 The following errors are likely with /dev/dsp and /dev/audio.
 
-	- "No such device or address". This error message should not happen
-	with /dev/sndstat but it's possible with the other sound devices.
+	- "No such device or address".
 	This error indicates that there are no suitable hardware for the
 	device file or the sound driver has been compiled without support for
 	this particular device. For example /dev/audio and /dev/dsp will not
@@ -179,10 +164,6 @@ The following errors are likely with /dev/dsp and /dev/audio.
 	- "Invalid argument". The application is calling ioctl()
 	with impossible parameters. Check that the application is
 	for sound driver version 2.X or later.
-
-In general the printout of /dev/sndstat should tell what is the problem.
-It's possible that there are bugs in the sound driver but 99% of the problems
-reported to me are caused by somehow incorrect setup during "make config".
 
 Linux installation
 ==================
@@ -225,17 +206,6 @@ Readme of sound driver version 3.0.1 if you still want to use this method.
 
 Problems
 --------
-
-If you have any kind of problems, there is a debugging feature which
-could help you to solve the problem. To use it, just execute the
-command:
-
-	cat /dev/sndstat 
-
-and look at the output. It should display some useful info about the
-driver configuration. If there is no /dev/sndstat 
-(/dev/sndstat: No such file or directory), ensure that you have executed the
-soundinstall script (at the end of this file).
 
 Common error messages:
 
@@ -756,10 +726,6 @@ the kernel following instructions in the kernel README.
 
 The sound driver configuration dialog
 -------------------------------------
-
-If you already have the sound driver installed, consult a printout of
-"cat /dev/sndstat" when configuring the driver again. It gives the I/O,
-IRQ and DMA settings you used earlier.
 
 Sound configuration starts by making some yes/no questions. Be careful
 when answering to these questions since answering y to a question may
@@ -1417,8 +1383,7 @@ Cards not supported yet
 Please check the version of sound driver you are using before 
 complaining that your card is not supported. It's possible you are 
 using a driver version which was released months before your card was
-introduced.  The driver's release date is listed after its version number in a
-"cat /dev/sndstat" printout and in the file linux/drivers/sound/soundvers.h.
+introduced.
 
 First of all, there is an easy way to make most sound cards work with Linux.
 Just use the DOS based driver to initialize the card to a known state, then use

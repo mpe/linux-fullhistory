@@ -227,7 +227,7 @@ static struct dentry *autofs_root_lookup(struct inode *dir, struct dentry *dentr
 	 * doesn't do the right thing for all system calls, but it should
 	 * be OK for the operations we permit from an autofs.
 	 */
-	if ( dentry->d_inode && list_empty(&dentry->d_hash) )
+	if ( dentry->d_inode && d_unhashed(dentry) )
 		return ERR_PTR(-ENOENT);
 
 	return NULL;

@@ -43,6 +43,38 @@
  *  Note that by default (if no command line is provided) and if a channel
  *  has been disabled in Bios, all the fifo is given to the active channel,
  *  and its threshold is set to 3/4.
+ *
+ *  VT82c586B
+ *
+ *    Offset 4B-48 - Drive Timing Control
+ *             | pio0 | pio1 | pio2 | pio3 | pio4
+ *    25.0 MHz | 0xA8 | 0x65 | 0x65 | 0x31 | 0x20 
+ *    33.0 MHz | 0xA8 | 0x65 | 0x65 | 0x31 | 0x20
+ *    37.5 MHz | 0xA9 | 0x76 | 0x76 | 0x32 | 0x21
+ *
+ *    Offset 53-50 - UltraDMA Extended Timing Control
+ *      UDMA   |  NO  |   0  |   1  |   2
+ *             | 0x03 | 0x62 | 0x61 | 0x60
+ *
+ *  VT82c596B & VT82c686A
+ *
+ *    Offset 4B-48 - Drive Timing Control
+ *             | pio0 | pio1 | pio2 | pio3 | pio4
+ *    25.0 MHz | 0xA8 | 0x65 | 0x65 | 0x31 | 0x20
+ *    33.0 MHz | 0xA8 | 0x65 | 0x65 | 0x31 | 0x20
+ *    37.5 MHz | 0xDB | 0x87 | 0x87 | 0x42 | 0x31
+ *    41.5 MHz | 0xFE | 0xA8 | 0xA8 | 0x53 | 0x32
+ *
+ *    Offset 53-50 - UltraDMA Extended Timing Control
+ *      UDMA   |  NO  |   0  |   1  |   2
+ *    33.0 MHz | 0x03 | 0xE2 | 0xE1 | 0xE0
+ *    37.5 MHz | 0x03 | 0xE2 | 0xE2 | 0xE1   (1)
+ *
+ *    Offset 53-50 - UltraDMA Extended Timing Control
+ *      UDMA   |  NO  |   0  |   1  |   2  |   3  |   4
+ *    33.0 MHz |  (2) | 0xE6 | 0xE4 | 0xE2 | 0xE1 | 0xE0
+ *    37.5 MHz |  (2) | 0xE6 | 0xE6 | 0xE4 | 0xE2 | 0xE1   (1)
+ *
  */
 
 #include <linux/config.h>
@@ -76,6 +108,8 @@ static const struct {
 	{ "VT 82C691 Apollo Pro",	PCI_DEVICE_ID_VIA_82C691, },
 	{ "VT 82C693 Apollo Pro Plus",	PCI_DEVICE_ID_VIA_82C693, },
 	{ "Apollo MVP4",		PCI_DEVICE_ID_VIA_8501_0, },
+	{ "VT 8371",			PCI_DEVICE_ID_VIA_8371_0, },
+	{ "VT 8601",			PCI_DEVICE_ID_VIA_8601_0, },
 };
 
 #define NUM_APOLLO_ISA_CHIP_DEVICES	2
@@ -96,6 +130,8 @@ static const struct {
 	{ PCI_DEVICE_ID_VIA_82C691,	PCI_DEVICE_ID_VIA_82C596,	0 },
 	{ PCI_DEVICE_ID_VIA_82C693,	PCI_DEVICE_ID_VIA_82C596,	0 },
 	{ PCI_DEVICE_ID_VIA_8501_0,	PCI_DEVICE_ID_VIA_82C686,	VIA_FLAG_ATA_66 },
+	{ PCI_DEVICE_ID_VIA_8371_0,	PCI_DEVICE_ID_VIA_82C686,	VIA_FLAG_ATA_66 },
+	{ PCI_DEVICE_ID_VIA_8601_0,	PCI_DEVICE_ID_VIA_8231,		VIA_FLAG_ATA_66 },
 };
 
 #define arraysize(x)	(sizeof(x)/sizeof(*(x)))
@@ -477,6 +513,220 @@ static int via_set_fifoconfig(ide_hwif_t *hwif)
 	return 0;
 }
 
+#ifdef CONFIG_VIA82CXXX_TUNING
+
+static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
+{
+	struct hd_driveid *id	= drive->id;
+	ide_hwif_t *hwif	= HWIF(drive);
+	struct pci_dev *dev	= hwif->pci_dev;
+	unsigned long dma_base	= hwif->dma_base;
+	byte unit		= (drive->select.b.unit & 0x01);
+	int drive_number	= ((hwif->channel ? 2 : 0) + unit);
+
+	byte ata2_pci		= 0x00;
+	byte ata3_pci		= 0x00;
+	byte timing		= 0x00;
+	byte ultra		= 0x00;
+	int			err;
+
+	int bus_speed		= ide_system_bus_speed();
+
+	switch(drive_number) {
+		case 0: ata2_pci = 0x48; ata3_pci = 0x50; break;
+		case 1: ata2_pci = 0x49; ata3_pci = 0x51; break;
+		case 2: ata2_pci = 0x4a; ata3_pci = 0x52; break;
+		case 3: ata2_pci = 0x4b; ata3_pci = 0x53; break;
+		default:
+			return err;
+	}
+
+	pci_read_config_byte(dev, ata2_pci, &timing);
+	pci_read_config_byte(dev, ata3_pci, &ultra);
+
+	switch(speed) {
+		case XFER_UDMA_4:
+		case XFER_UDMA_3:
+		case XFER_UDMA_2:
+		case XFER_UDMA_1:
+		case XFER_UDMA_0:
+		case XFER_MW_DMA_2:
+		case XFER_MW_DMA_1:
+		case XFER_MW_DMA_0:
+		case XFER_SW_DMA_2:
+		case XFER_SW_DMA_1:
+		case XFER_SW_DMA_0:
+		case XFER_PIO_4:
+		case XFER_PIO_3:
+		case XFER_PIO_2:
+		case XFER_PIO_1:
+		case XFER_PIO_0:
+		case XFER_PIO_SLOW:
+		default:
+			break;
+	}
+
+	pci_write_config_byte(dev, ata2_pci, timing);
+	pci_write_config_byte(dev, ata3_pci, ultra);
+
+	err = ide_config_drive_speed(drive, speed);
+
+	return(err);
+}
+
+static int config_chipset_for_dma (ide_drive_t *drive)
+{
+	struct hd_driveid *id	= drive->id;
+	byte speed		= 0x00;
+	int  rval;
+
+	if ((id->dma_ultra & 0x0010) && (HWIF(drive)->udma_four)) {
+		speed = XFER_UDMA_4;
+	} else if ((id->dma_ultra & 0x0008) && (HWIF(drive)->udma_four)) {
+		speed = XFER_UDMA_3;
+	} else if (id->dma_ultra & 0x0004) {
+		speed = XFER_UDMA_2;
+	} else if (id->dma_ultra & 0x0002) {
+		speed = XFER_UDMA_1;
+	} else if (id->dma_ultra & 0x0001) {
+		speed = XFER_UDMA_0;
+	} else if (id->dma_mword & 0x0004) {
+		speed = XFER_MW_DMA_2;
+	} else if (id->dma_mword & 0x0002) {
+		speed = XFER_MW_DMA_1;
+	} else if (id->dma_mword & 0x0001) {
+		speed = XFER_MW_DMA_0;
+	} else if (id->dma_1word & 0x0004) {
+		speed = XFER_SW_DMA_2;
+	} else if (id->dma_1word & 0x0002) {
+		speed = XFER_SW_DMA_1;
+	} else if (id->dma_1word & 0x0001) {
+		speed = XFER_SW_DMA_0;
+	} else {
+		return ((int) ide_dma_off_quietly);
+	}
+
+	(void) via82cxxx_tune_chipset(drive, speed);
+
+	rval = (int)(	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
+			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
+			((id->dma_mword >> 8) & 7) ? ide_dma_on :
+			((id->dma_1word >> 8) & 7) ? ide_dma_on :
+						     ide_dma_off_quietly);
+	return rval;
+}
+
+static void config_chipset_for_pio (ide_drive_t *drive)
+{
+	unsigned short eide_pio_timing[6] = {960, 480, 240, 180, 120, 90};
+	unsigned short xfer_pio = drive->id->eide_pio_modes;
+	byte			timing, speed, pio;
+
+	pio = ide_get_best_pio_mode(drive, 255, 5, NULL);
+
+	if (xfer_pio> 4)
+		xfer_pio = 0;
+
+	if (drive->id->eide_pio_iordy > 0) {
+		for (xfer_pio = 5;
+			xfer_pio>0 &&
+			drive->id->eide_pio_iordy>eide_pio_timing[xfer_pio];
+			xfer_pio--);
+	} else {
+		xfer_pio = (drive->id->eide_pio_modes & 4) ? 0x05 :
+			   (drive->id->eide_pio_modes & 2) ? 0x04 :
+			   (drive->id->eide_pio_modes & 1) ? 0x03 :
+			   (drive->id->tPIO & 2) ? 0x02 :
+			   (drive->id->tPIO & 1) ? 0x01 : xfer_pio;
+	}
+
+	timing = (xfer_pio >= pio) ? xfer_pio : pio;
+
+	switch(timing) {
+		case 4: speed = XFER_PIO_4;break;
+		case 3: speed = XFER_PIO_3;break;
+		case 2: speed = XFER_PIO_2;break;
+		case 1: speed = XFER_PIO_1;break;
+		default:
+			speed = (!drive->id->tPIO) ? XFER_PIO_0 : XFER_PIO_SLOW;                        break;
+	}
+	(void) via82cxxx_tune_chipset(drive, speed);
+}
+
+static void via82cxxx_tune_drive (ide_drive_t *drive, byte pio)
+{
+	byte speed;
+	switch(pio) {
+		case 4:		speed = XFER_PIO_4;break;
+		case 3:		speed = XFER_PIO_3;break;
+		case 2:		speed = XFER_PIO_2;break;
+		case 1:		speed = XFER_PIO_1;break;
+		default:	speed = XFER_PIO_0;break;
+	}
+	(void) via82cxxx_tune_chipset(drive, speed);
+}
+
+static int config_drive_xfer_rate (ide_drive_t *drive)
+{
+	struct hd_driveid *id = drive->id;
+	ide_dma_action_t dma_func = ide_dma_on;
+
+	if (id && (id->capability & 1) && HWIF(drive)->autodma) {
+		/* Consult the list of known "bad" drives */
+		if (ide_dmaproc(ide_dma_bad_drive, drive)) {
+			dma_func = ide_dma_off;
+			goto fast_ata_pio;
+		}
+		dma_func = ide_dma_off_quietly;
+		if (id->field_valid & 4) {
+			if (id->dma_ultra & 0x001F) {
+				/* Force if Capable UltraDMA */
+				dma_func = config_chipset_for_dma(drive);
+				if ((id->field_valid & 2) &&
+				    (dma_func != ide_dma_on))
+					goto try_dma_modes;
+			}
+		} else if (id->field_valid & 2) {
+try_dma_modes:
+			if ((id->dma_mword & 0x0007) ||
+			    (id->dma_1word & 0x0007)) {
+				/* Force if Capable regular DMA modes */
+				dma_func = config_chipset_for_dma(drive);
+				if (dma_func != ide_dma_on)
+					goto no_dma_set;
+			}
+		} else if (ide_dmaproc(ide_dma_good_drive, drive)) {
+			if (id->eide_dma_time > 150) {
+				goto no_dma_set;
+			}
+			/* Consult the list of known "good" drives */
+			dma_func = config_chipset_for_dma(drive);
+			if (dma_func != ide_dma_on)
+				goto no_dma_set;
+		} else {
+			goto fast_ata_pio;
+		}
+	} else if ((id->capability & 8) || (id->field_valid & 2)) {
+fast_ata_pio:
+		dma_func = ide_dma_off_quietly;
+no_dma_set:
+		config_chipset_for_pio(drive);
+	}
+	return HWIF(drive)->dmaproc(dma_func, drive);
+}
+
+int via82cxxx_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
+{
+	switch (func) {
+		case ide_dma_check:
+			return config_drive_xfer_rate(drive);
+		default:
+			break;
+	}
+	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
+}
+#endif /* CONFIG_VIA82CXXX_TUNING */
+
 unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 {
 	struct pci_dev *host;
@@ -501,7 +751,7 @@ unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 				continue;
 
 			isa = pci_find_device (PCI_VENDOR_ID_VIA,
-					ApolloISAChipInfo[i].isa_id,
+					ApolloISAChipInfo[j].isa_id,
 					NULL);
 			if (!isa)
 				continue;
@@ -511,10 +761,10 @@ unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 			ata33 = 1;
 			ata66 = 0;
 
-			if (ApolloISAChipInfo[i].flags & VIA_FLAG_CHECK_REV) {
+			if (ApolloISAChipInfo[j].flags & VIA_FLAG_CHECK_REV) {
 				pci_read_config_byte(isa_dev, 0x0d, &revision);
 				ata33 = (revision >= 0x20) ? 1 : 0;
-			} else if (ApolloISAChipInfo[i].flags & VIA_FLAG_ATA_66) {
+			} else if (ApolloISAChipInfo[j].flags & VIA_FLAG_ATA_66) {
 				ata33 = 0;
 				ata66 = 1;
 			}
@@ -543,7 +793,8 @@ unsigned int __init ata66_via82cxxx (ide_hwif_t *hwif)
 void __init ide_init_via82cxxx (ide_hwif_t *hwif)
 {
 	set_via_timings(hwif);
-#if 0
+
+#ifdef CONFIG_VIA82CXXX_TUNING
 	hwif->tuneproc = &via82cxxx_tune_drive;
 	if (hwif->dma_base) {
 		hwif->dmaproc = &via82cxxx_dmaproc;
@@ -552,7 +803,7 @@ void __init ide_init_via82cxxx (ide_hwif_t *hwif)
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}
-#endif
+#endif /* CONFIG_VIA82CXXX_TUNING */
 }
 
 /*

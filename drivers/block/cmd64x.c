@@ -21,8 +21,11 @@
 #include <asm/io.h>
 #include "ide_modes.h"
 
+#ifndef SPLIT_BYTE
+#define SPLIT_BYTE(B,H,L)	((H)=(B>>4), (L)=(B-((B>>4)<<4)))
+#endif
+
 #define CMD_DEBUG 0
-#undef NO_WRITE
 
 #if CMD_DEBUG
 #define cmdprintk(x...)	printk(##x)
@@ -47,14 +50,25 @@
 #define ARTTIM23	0x57
 #define   ARTTIM23_DIS_RA2	0x04
 #define   ARTTIM23_DIS_RA3	0x08
+#define ARTTIM2		0x57
+#define ARTTIM3		0x57
 #define DRWTIM23	0x58
 #define DRWTIM2		0x58
 #define BRST		0x59
 #define DRWTIM3		0x5b
 
+#define BMIDECR0	0x70
 #define MRDMODE		0x71
+#define BMIDESR0	0x72
+#define UDIDETCR0	0x73
+#define DTPR0		0x74
+#define BMIDECR1	0x78
+#define BMIDECSR	0x79
+#define BMIDESR1	0x7A
+#define UDIDETCR1	0x7B
+#define DTPR1		0x7C
 
-#define DISPLAY_CMD64X_TIMINGS
+#undef DISPLAY_CMD64X_TIMINGS
 
 #if defined(DISPLAY_CMD64X_TIMINGS) && defined(CONFIG_PROC_FS)
 #include <linux/stat.h>
@@ -68,8 +82,11 @@ static struct pci_dev *bmide_dev;
 static int cmd64x_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	char *p = buffer;
-	u32 bibma = bmide_dev->resource[4].start;
-	u8  c0 = 0, c1 = 0;
+	u8 reg53 = 0, reg54 = 0, reg55 = 0, reg56 = 0;	/* primary */
+	u8 reg57 = 0, reg58 = 0, reg5b;			/* secondary */
+	u8 reg72 = 0, reg73 = 0;			/* primary */
+	u8 reg7a = 0, reg7b = 0;			/* secondary */
+	u8 hi_byte = 0, lo_byte = 0;
 
 	switch(bmide_dev->device) {
 		case PCI_DEVICE_ID_CMD_648:
@@ -85,25 +102,56 @@ static int cmd64x_get_info (char *buffer, char **addr, off_t offset, int count)
 			p += sprintf(p, "\n                                CMD64? Chipse.\n");
 			break;
 	}
+	(void) pci_read_config_byte(bmide_dev, ARTTIM0,   &reg53);
+	(void) pci_read_config_byte(bmide_dev, DRWTIM0,   &reg54);
+	(void) pci_read_config_byte(bmide_dev, ARTTIM1,   &reg55);
+	(void) pci_read_config_byte(bmide_dev, DRWTIM1,   &reg56);
+	(void) pci_read_config_byte(bmide_dev, ARTTIM2,   &reg57);
+	(void) pci_read_config_byte(bmide_dev, DRWTIM2,   &reg58);
+	(void) pci_read_config_byte(bmide_dev, DRWTIM3,   &reg5b);
+	(void) pci_read_config_byte(bmide_dev, BMIDESR0,  &reg72);
+	(void) pci_read_config_byte(bmide_dev, UDIDETCR0, &reg73);
+	(void) pci_read_config_byte(bmide_dev, BMIDESR1,  &reg7a);
+	(void) pci_read_config_byte(bmide_dev, UDIDETCR1, &reg7b);
 
-	/*
-	 * at that point bibma+0x2 et bibma+0xa are byte registers
-	 * to investigate:
-	 */
-	c0 = inb_p((unsigned short)bibma + 0x02);
-	c1 = inb_p((unsigned short)bibma + 0x0a);
 	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
 	p += sprintf(p, "                %sabled                         %sabled\n",
-			(c0&0x80) ? "dis" : " en",
-			(c1&0x80) ? "dis" : " en");
+			(reg72&0x80) ? "dis" : " en", (reg7a&0x80) ? "dis" : " en");
 	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
 	p += sprintf(p, "DMA enabled:    %s              %s             %s               %s\n",
-			(c0&0x20) ? "yes" : "no ", (c0&0x40) ? "yes" : "no ",
-			(c1&0x20) ? "yes" : "no ", (c1&0x40) ? "yes" : "no " );
-
-	p += sprintf(p, "UDMA\n");
-	p += sprintf(p, "DMA\n");
+			(reg72&0x20) ? "yes" : "no ", (reg72&0x40) ? "yes" : "no ", (reg7a&0x20) ? "yes" : "no ", (reg7a&0x40) ? "yes" : "no " );
+	p += sprintf(p, "UDMA enabled:   %s              %s             %s               %s\n",
+			(reg73&0x01) ? "yes" : "no ", (reg73&0x02) ? "yes" : "no ", (reg7b&0x01) ? "yes" : "no ", (reg7b&0x02) ? "yes" : "no " );
+	p += sprintf(p, "UDMA enabled:   %s                %s               %s                 %s\n",
+			(reg73&0x15) ? "4" : (reg73&0x25) ? "3" : (reg73&0x11) ? "2" : (reg73&0x21) ? "1" : (reg73&0x31) ? "0" : "X",
+			(reg73&0x4A) ? "4" : (reg73&0x8A) ? "3" : (reg73&0x42) ? "2" : (reg73&0x82) ? "1" : (reg73&0xC2) ? "0" : "X",
+			(reg7b&0x15) ? "4" : (reg7b&0x25) ? "3" : (reg7b&0x11) ? "2" : (reg7b&0x21) ? "1" : (reg7b&0x31) ? "0" : "X",
+			(reg7b&0x4A) ? "4" : (reg7b&0x8A) ? "3" : (reg7b&0x42) ? "2" : (reg7b&0x82) ? "1" : (reg7b&0xC2) ? "0" : "X" );
+	p += sprintf(p, "DMA enabled:    %s                %s               %s                 %s\n",
+			(reg73&0x10) ? "2" : (reg73&0x20) ? "1" : (reg73&0x30) ? "0" : "X",
+			(reg73&0x40) ? "2" : (reg73&0x80) ? "1" : (reg73&0xC0) ? "0" : "X",
+			(reg7b&0x10) ? "2" : (reg7b&0x20) ? "1" : (reg7b&0x30) ? "0" : "X",
+			(reg7b&0x40) ? "2" : (reg7b&0x80) ? "1" : (reg7b&0xC0) ? "0" : "X" );
 	p += sprintf(p, "PIO\n");
+
+	SPLIT_BYTE(reg53, hi_byte, lo_byte);
+	p += sprintf(p, "ARTTIM0   = 0x%02x, HI = 0x%02x, LOW = 0x%02x\n", reg53, hi_byte, lo_byte);
+	SPLIT_BYTE(reg54, hi_byte, lo_byte);
+	p += sprintf(p, "DRWTIM0   = 0x%02x, HI = 0x%02x, LOW = 0x%02x\n", reg54, hi_byte, lo_byte);
+	SPLIT_BYTE(reg55, hi_byte, lo_byte);
+	p += sprintf(p, "ARTTIM1   = 0x%02x, HI = 0x%02x, LOW = 0x%02x\n", reg55, hi_byte, lo_byte);
+	SPLIT_BYTE(reg56, hi_byte, lo_byte);
+	p += sprintf(p, "DRWTIM1   = 0x%02x, HI = 0x%02x, LOW = 0x%02x\n", reg56, hi_byte, lo_byte);
+	SPLIT_BYTE(reg57, hi_byte, lo_byte);
+	p += sprintf(p, "ARTTIM23  = 0x%02x, HI = 0x%02x, LOW = 0x%02x\n", reg57, hi_byte, lo_byte);
+	SPLIT_BYTE(reg58, hi_byte, lo_byte);
+	p += sprintf(p, "DRWTIM2   = 0x%02x, HI = 0x%02x, LOW = 0x%02x\n", reg58, hi_byte, lo_byte);
+	SPLIT_BYTE(reg5b, hi_byte, lo_byte);
+	p += sprintf(p, "DRWTIM3   = 0x%02x, HI = 0x%02x, LOW = 0x%02x\n", reg5b, hi_byte, lo_byte);
+	SPLIT_BYTE(reg73, hi_byte, lo_byte);
+	p += sprintf(p, "UDIDETCR0 = 0x%02x, HI = 0x%02x, LOW = 0x%02x\n", reg73, hi_byte, lo_byte);
+	SPLIT_BYTE(reg7b, hi_byte, lo_byte);
+	p += sprintf(p, "UDIDETCR1 = 0x%02x, HI = 0x%02x, LOW = 0x%02x\n", reg7b, hi_byte, lo_byte);
 
 	return p-buffer;	/* => must be less than 4k! */
 }
@@ -176,12 +224,10 @@ static void program_drive_counts (ide_drive_t *drive, int setup_count, int activ
 	 * and then the active/recovery counts into the DRWTIM reg
 	 */
 	(void) pci_read_config_byte(HWIF(drive)->pci_dev, arttim_regs[channel][slave], &temp_b);
-#ifndef NO_WRITE
 	(void) pci_write_config_byte(HWIF(drive)->pci_dev, arttim_regs[channel][slave],
 		((byte) setup_count) | (temp_b & 0x3f));
 	(void) pci_write_config_byte(HWIF(drive)->pci_dev, drwtim_regs[channel][slave],
 		(byte) ((active_count << 4) | recovery_count));
-#endif
 	cmdprintk ("Write %x to %x\n", ((byte) setup_count) | (temp_b & 0x3f), arttim_regs[channel][slave]);
 	cmdprintk ("Write %x to %x\n", (byte) ((active_count << 4) | recovery_count), drwtim_regs[channel][slave]);
 	__restore_flags(flags);
@@ -212,7 +258,7 @@ static void cmd64x_tuneproc (ide_drive_t *drive, byte mode_wanted)
 			return;
 	}
 
-	(void) ide_get_best_pio_mode (drive, mode_wanted, 5, &d);
+	mode_wanted = ide_get_best_pio_mode (drive, mode_wanted, 5, &d);
 	pio_mode = d.pio_mode;
 	cycle_time = d.cycle_time;
 
@@ -253,10 +299,82 @@ static void cmd64x_tuneproc (ide_drive_t *drive, byte mode_wanted)
 	 */
 	program_drive_counts (drive, setup_count, active_count, recovery_count);
 
-	printk ("%s: selected cmd646 PIO mode%d (%dns)%s, clocks=%d/%d/%d\n",
-		drive->name, pio_mode, cycle_time,
+	cmdprintk("%s: selected cmd646 PIO mode%d : %d (%dns)%s, clocks=%d/%d/%d\n",
+		drive->name, pio_mode, mode_wanted, cycle_time,
 		d.overridden ? " (overriding vendor mode)" : "",
 		setup_count, active_count, recovery_count);
+}
+
+static int tune_chipset_for_dma (ide_drive_t *drive, byte speed)
+{
+#if 0
+	struct hd_driveid *id	= drive->id;
+	ide_hwif_t *hwif	= HWIF(drive);
+	struct pci_dev *dev	= hwif->pci_dev;
+	unsigned long dma_base	= hwif->dma_base;
+	byte unit		= (drive->select.b.unit & 0x01);
+
+	u8 reg72 = 0, reg73 = 0;	/* primary */
+	u8 reg7a = 0, reg7b = 0;	/* secondary */
+	u8 pciU = (hwif->channel) ? UDIDETCR1 : UDIDETCR0;
+	u8 pciD = (hwif->channel) ? BMIDESR1 : BMIDESR0;
+	u8 regU = (hwif->channel) ? 2 : 0;
+	u8 regD = (hwif->channel) ? 2 : 0;
+
+	(void) pci_read_config_byte(dev, BMIDESR0,  &reg72);
+	(void) pci_read_config_byte(dev, UDIDETCR0, &reg73);
+	(void) pci_read_config_byte(dev, BMIDESR1,  &reg7a);
+	(void) pci_read_config_byte(dev, UDIDETCR1, &reg7b);
+
+	switch(speed) {
+		case XFER_UDMA_4:
+			pciU = unit ? 0x4A : 0x15;
+		case XFER_UDMA_3:
+			pciU = unit ? 0x8A : 0x25;
+		case XFER_UDMA_2:
+			pciU = unit ? 0x42 : 0x11;
+		case XFER_UDMA_1:
+			pciU = unit ? 0x82 : 0x21;
+		case XFER_UDMA_0:
+			pciU = unit ? 0xC2 : 0x31
+(reg73&0x15)?"4":(reg73&0x25)?"3":(reg73&0x11)?"2":(reg73&0x21)?"1":(reg73&0x31)?"0":"X",
+(reg73&0x4A)?"4":(reg73&0x8A)?"3":(reg73&0x42)?"2":(reg73&0x82)?"1":(reg73&0xC2)?"0":"X",
+(reg7b&0x15)?"4":(reg7b&0x25)?"3":(reg7b&0x11)?"2":(reg7b&0x21)?"1":(reg7b&0x31)?"0":"X",
+(reg7b&0x4A)?"4":(reg7b&0x8A)?"3":(reg7b&0x42)?"2":(reg7b&0x82)?"1":(reg7b&0xC2)?"0":"X",
+
+		case XFER_MW_DMA_2:
+			pciD = unit ? 0x40 : 0x10;
+		case XFER_MW_DMA_1:
+			pciD = unit ? 0x80 : 0x20;
+		case XFER_MW_DMA_0:
+			pciD = unit ? 0xC0 : 0x30;
+		case XFER_SW_DMA_2:
+		case XFER_SW_DMA_1:
+		case XFER_SW_DMA_0:
+(reg73&0x10)?"2":(reg73&0x20)?"1":(reg73&0x30)?"0":"X",
+(reg73&0x40)?"2":(reg73&0x80)?"1":(reg73&0xC0)?"0":"X",
+(reg7b&0x10)?"2":(reg7b&0x20)?"1":(reg7b&0x30)?"0":"X",
+(reg7b&0x40)?"2":(reg7b&0x80)?"1":(reg7b&0xC0)?"0":"X" );
+
+		default:
+			return 1;
+	}
+
+	(void) ide_config_drive_speed(drive, speed);
+	outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
+#endif
+	return 0;
+}
+
+static void config_chipset_for_pio (ide_drive_t *drive, byte set_speed)
+{
+	byte speed	= 0x00;
+	byte set_pio	= ide_get_best_pio_mode(drive, 4, 5, NULL);	
+
+	cmd64x_tuneproc(drive, set_pio);
+	speed = XFER_PIO_0 + set_pio;
+	if (set_speed)
+		(void) ide_config_drive_speed(drive, speed);
 }
 
 static int config_chipset_for_dma (ide_drive_t *drive, unsigned int rev, byte ultra_66)
@@ -268,6 +386,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, unsigned int rev, byte ul
 
  	byte unit		= (drive->select.b.unit & 0x01);
 	byte speed		= 0x00;
+	byte set_pio		= 0x00;
 	byte udma_timing_bits	= 0x00;
 	byte udma_33		= ((rev >= 0x05) || (ultra_66)) ? 1 : 0;
 	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
@@ -326,9 +445,19 @@ static int config_chipset_for_dma (ide_drive_t *drive, unsigned int rev, byte ul
 	} else if (id->dma_1word & 0x0001) {
 		speed = XFER_SW_DMA_0;
 	} else {
-		return ((int) ide_dma_off_quietly);
+		set_pio = 1;
 	}
 
+	config_chipset_for_pio(drive, set_pio);
+
+	if (set_pio)
+		return ((int) ide_dma_off_quietly);
+
+#if 1
+	/*
+	 * This the alternate access method. :-(
+	 * The correct method is to directly setup the pci-config space.
+	 */ 
 	(void) ide_config_drive_speed(drive, speed);
 	outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
 
@@ -343,6 +472,10 @@ static int config_chipset_for_dma (ide_drive_t *drive, unsigned int rev, byte ul
 		udma_ctrl |=  (udma_timing_bits << (unit * 2));
 		outb(udma_ctrl, dma_base+3);
 	}
+#endif
+
+	if (tune_chipset_for_dma(drive, speed))
+		return ((int) ide_dma_off);
 
 	rval = (int)(	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
 			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
@@ -351,11 +484,6 @@ static int config_chipset_for_dma (ide_drive_t *drive, unsigned int rev, byte ul
 						     ide_dma_off_quietly);
 
 	return rval;
-}
-
-static void config_chipset_for_pio (ide_drive_t *drive, unsigned int rev)
-{
-	cmd64x_tuneproc(drive, 5);
 }
 
 static int cmd64x_config_drive_for_dma (ide_drive_t *drive)
@@ -428,7 +556,7 @@ try_dma_modes:
 fast_ata_pio:
 		dma_func = ide_dma_off_quietly;
 no_dma_set:
-		config_chipset_for_pio(drive, class_rev);
+		config_chipset_for_pio(drive, 1);
 	}
 	return HWIF(drive)->dmaproc(dma_func, drive);
 }
@@ -476,6 +604,11 @@ unsigned int __init pci_init_cmd64x (struct pci_dev *dev, const char *name)
 	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
 	class_rev &= 0xff;
 
+#if 0
+	if (dev->resource[PCI_ROM_RESOURCE].start)
+		pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
+#endif
+
 	switch(dev->device) {
 		case PCI_DEVICE_ID_CMD_643:
 			break;
@@ -520,18 +653,19 @@ unsigned int __init pci_init_cmd64x (struct pci_dev *dev, const char *name)
 	 *       this point.
 	 */
 	(void) pci_write_config_byte(dev, MRDMODE, mrdmode | 0x02);
-#if 0
+
 	/* Set reasonable active/recovery/address-setup values. */
 	(void) pci_write_config_byte(dev, ARTTIM0,  0x40);
 	(void) pci_write_config_byte(dev, DRWTIM0,  0x3f);
 	(void) pci_write_config_byte(dev, ARTTIM1,  0x40);
 	(void) pci_write_config_byte(dev, DRWTIM1,  0x3f);
+#ifdef __i386__
+	(void) pci_write_config_byte(dev, ARTTIM23, 0x1c);
+#else
 	(void) pci_write_config_byte(dev, ARTTIM23, 0x5c);
+#endif
 	(void) pci_write_config_byte(dev, DRWTIM23, 0x3f);
 	(void) pci_write_config_byte(dev, DRWTIM3,  0x3f);
-#else
-	(void) pci_write_config_byte(dev, ARTTIM23, 0x1c);
-#endif
 
 #if defined(DISPLAY_CMD64X_TIMINGS) && defined(CONFIG_PROC_FS)
 	cmd64x_proc = 1;
@@ -547,7 +681,7 @@ unsigned int __init ata66_cmd64x (ide_hwif_t *hwif)
 	byte ata66 = 0;
 	byte mask = (hwif->channel) ? 0x02 : 0x01;
 
-	pci_read_config_byte(hwif->pci_dev, 0x79, &ata66);
+	pci_read_config_byte(hwif->pci_dev, BMIDECSR, &ata66);
 	return (ata66 & mask) ? 1 : 0;
 }
 
@@ -560,12 +694,11 @@ void __init ide_init_cmd64x (ide_hwif_t *hwif)
 	class_rev &= 0xff;
 
 	hwif->tuneproc = &cmd64x_tuneproc;
+	hwif->drives[0].autotune = 1;
+	hwif->drives[0].autotune = 1;
 
-	if (!hwif->dma_base) {
-		hwif->drives[0].autotune = 1;
-		hwif->drives[1].autotune = 1;
+	if (!hwif->dma_base)
 		return;
-	}
 
 	switch(dev->device) {
 		case PCI_DEVICE_ID_CMD_643:

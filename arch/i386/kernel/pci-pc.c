@@ -1044,17 +1044,17 @@ static void __init pcibios_irq_peer_trick(struct irq_routing_table *rt)
 			printk("PCI: Discovered primary peer bus %02x [IRQ]\n", i);
 }
 
-static void set_level_irq(unsigned irq)
+static void ali_set_level_irq(unsigned irq)
 {
 	unsigned char mask = 1 << (irq & 7);
 	unsigned int port = 0x4d0 + (irq >> 3);
 	unsigned char val = inb(port);
 
 	if (val & mask) {
-		printk("PCI irq %d was level\n", irq);
+		DBG("PCI irq %d was level\n", irq);
 		return;
 	}
-	printk("PCI irq %d was edge, turning into level-triggered\n", irq);
+	DBG("PCI irq %d was edge, turning into level-triggered\n", irq);
 	outb(val | mask, port);
 }
 
@@ -1070,18 +1070,17 @@ static int ali_set_irq(struct pci_dev *router, unsigned pirq, unsigned irq)
 			unsigned offset = 0x48 + (pirq >> 1);
 			unsigned shift = (pirq & 1) << 2;
 			pci_read_config_byte(router, offset, &byte);
-			printk("ALI: old %04x=%02x\n", offset, byte);
+			DBG("ALI: old %04x=%02x\n", offset, byte);
 			byte &= ~(0xf << shift);
 			byte |= val << shift;
-			printk("ALI: new %04x=%02x\n", offset, byte);
+			DBG("ALI: new %04x=%02x\n", offset, byte);
 			pci_write_config_byte(router, offset, byte);
-			set_level_irq(irq);
+			ali_set_level_irq(irq);
 			return irq;
 		}
 	}
 	return 0;
 }
-		
 
 /*
  *  In case BIOS forgets to tell us about IRQ, we try to look it up in the routing
@@ -1380,13 +1379,17 @@ int pcibios_enable_device(struct pci_dev *dev)
 
 	if ((err = pcibios_enable_resources(dev)) < 0)
 		return err;
-	if (!dev->irq && pirq_table) {
+	if (!dev->irq) {
 		u8 pin;
 		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
 		if (pin) {
-			char *msg = pcibios_lookup_irq(dev, pirq_table, pin, 1);
-			if (msg)
+			char *msg;
+			if (pirq_table && ((msg = pcibios_lookup_irq(dev, pirq_table, pin, 1))))
 				printk("PCI: Assigned IRQ %d to device %s [%s]\n", dev->irq, dev->slot_name, msg);
+			else
+				printk(KERN_WARNING "PCI: No IRQ known for interrupt pin %c of device %s.%s\n",
+				       'A' + pin - 1, dev->slot_name,
+				       (pci_probe & PCI_BIOS_IRQ_SCAN) ? "" : " Please try using pci=biosirq.");
 		}
 	}
 	return 0;

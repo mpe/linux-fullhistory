@@ -978,7 +978,7 @@ static struct dentry *find_alias(struct inode *inode)
 		tmp = next;
 		next = tmp->next;
 		alias = list_entry(tmp, struct dentry, d_alias);
-		if (!list_empty(&alias->d_hash))
+		if (!d_unhashed(alias))
 			return dget(alias);
 	}
 	return NULL;
@@ -1085,7 +1085,7 @@ int vfat_rmdir(struct inode *dir,struct dentry* dentry)
 	struct buffer_head *bh = NULL;
 	struct msdos_dir_entry *de;
 
-	if (!list_empty(&dentry->d_hash))
+	if (!d_unhashed(dentry))
 		return -EBUSY;
 
 	res = fat_dir_empty(dentry->d_inode);
@@ -1207,6 +1207,9 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 		}
 
 		if (is_dir) {
+			res =-EBUSY;
+			if (!d_unhashed(new_dentry))
+				goto rename_done;
 			res = fat_dir_empty(new_inode);
 			if (res)
 				goto rename_done;

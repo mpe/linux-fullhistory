@@ -40,7 +40,7 @@ if [ "$CONFIG_FB" = "y" ]; then
       define_bool CONFIG_FB_Q40 y
    fi
    if [ "$CONFIG_AMIGA" = "y" ]; then
-      bool '  Amiga native chipset support' CONFIG_FB_AMIGA
+      tristate '  Amiga native chipset support' CONFIG_FB_AMIGA
       if [ "$CONFIG_FB_AMIGA" != "n" ]; then
 	 bool '    Amiga OCS chipset support' CONFIG_FB_AMIGA_OCS
 	 bool '    Amiga ECS chipset support' CONFIG_FB_AMIGA_ECS

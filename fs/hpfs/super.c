@@ -132,22 +132,21 @@ static unsigned count_bitmaps(struct super_block *s)
 	return count;
 }
 
-int hpfs_statfs(struct super_block *s, struct statfs *buf, int bufsiz)
+int hpfs_statfs(struct super_block *s, struct statfs *buf)
 {
-	struct statfs tmp;
 	/*if (s->s_hpfs_n_free == -1) {*/
 		s->s_hpfs_n_free = count_bitmaps(s);
 		s->s_hpfs_n_free_dnodes = hpfs_count_one_bitmap(s, s->s_hpfs_dmap);
 	/*}*/
-	tmp.f_type = s->s_magic;
-	tmp.f_bsize = 512;
-	tmp.f_blocks = s->s_hpfs_fs_size;
-	tmp.f_bfree = s->s_hpfs_n_free;
-	tmp.f_bavail = s->s_hpfs_n_free;
-	tmp.f_files = s->s_hpfs_dirband_size / 4;
-	tmp.f_ffree = s->s_hpfs_n_free_dnodes;
-	tmp.f_namelen = 254;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = s->s_magic;
+	buf->f_bsize = 512;
+	buf->f_blocks = s->s_hpfs_fs_size;
+	buf->f_bfree = s->s_hpfs_n_free;
+	buf->f_bavail = s->s_hpfs_n_free;
+	buf->f_files = s->s_hpfs_dirband_size / 4;
+	buf->f_ffree = s->s_hpfs_n_free_dnodes;
+	buf->f_namelen = 254;
+	return 0;
 }
 
 /* Super operations */

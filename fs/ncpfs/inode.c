@@ -34,7 +34,7 @@
 static void ncp_put_inode(struct inode *);
 static void ncp_delete_inode(struct inode *);
 static void ncp_put_super(struct super_block *);
-static int  ncp_statfs(struct super_block *, struct statfs *, int);
+static int  ncp_statfs(struct super_block *, struct statfs *);
 
 static struct super_operations ncp_sops =
 {
@@ -527,25 +527,21 @@ static void ncp_put_super(struct super_block *sb)
 	MOD_DEC_USE_COUNT;
 }
 
-static int ncp_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+static int ncp_statfs(struct super_block *sb, struct statfs *buf)
 {
-	struct statfs tmp;
-
 	/* We cannot say how much disk space is left on a mounted
 	   NetWare Server, because free space is distributed over
 	   volumes, and the current user might have disk quotas. So
 	   free space is not that simple to determine. Our decision
 	   here is to err conservatively. */
 
-	tmp.f_type = NCP_SUPER_MAGIC;
-	tmp.f_bsize = NCP_BLOCK_SIZE;
-	tmp.f_blocks = 0;
-	tmp.f_bfree = 0;
-	tmp.f_bavail = 0;
-	tmp.f_files = -1;
-	tmp.f_ffree = -1;
-	tmp.f_namelen = 12;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = NCP_SUPER_MAGIC;
+	buf->f_bsize = NCP_BLOCK_SIZE;
+	buf->f_blocks = 0;
+	buf->f_bfree = 0;
+	buf->f_bavail = 0;
+	buf->f_namelen = 12;
+	return 0;
 }
 
 int ncp_notify_change(struct dentry *dentry, struct iattr *attr)

@@ -161,18 +161,14 @@
 extern byte fifoconfig;		/* defined in via82cxxx.c used by ide_setup() */
 #endif /* CONFIG_BLK_DEV_VIA82CXXX */
 
-static const byte	ide_hwif_to_major[] = { IDE0_MAJOR, IDE1_MAJOR,
-						IDE2_MAJOR, IDE3_MAJOR,
-						IDE4_MAJOR, IDE5_MAJOR,
-						IDE6_MAJOR, IDE7_MAJOR,
-						IDE8_MAJOR, IDE9_MAJOR };
+static const byte ide_hwif_to_major[] = { IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR, IDE4_MAJOR, IDE5_MAJOR, IDE6_MAJOR, IDE7_MAJOR, IDE8_MAJOR, IDE9_MAJOR };
 
-static int	idebus_parameter; /* holds the "idebus=" parameter */
-static int	system_bus_speed; /* holds what we think is VESA/PCI bus speed */
+static int	idebus_parameter = 0; /* holds the "idebus=" parameter */
+static int	system_bus_speed = 0; /* holds what we think is VESA/PCI bus speed */
 static int	initializing;     /* set while initializing built-in drivers */
 
 #ifdef CONFIG_BLK_DEV_IDEPCI
-static int ide_scan_direction = 0;	/* HELLO, comment me!! */
+static int	ide_scan_direction = 0;	/* THIS was formerly 2.2.x pci=reverse */
 #endif /* CONFIG_BLK_DEV_IDEPCI */
 
 #if defined(__mc68000__) || defined(CONFIG_APUS)
@@ -186,8 +182,8 @@ static int	ide_lock = 0;
 /*
  * ide_modules keeps track of the available IDE chipset/probe/driver modules.
  */
-ide_module_t *ide_modules = NULL;
-ide_module_t *ide_probe = NULL;
+ide_module_t *ide_modules	= NULL;
+ide_module_t *ide_probe		= NULL;
 
 /*
  * This is declared extern in ide.h, for access by other IDE modules:
@@ -1922,6 +1918,10 @@ ide_proc_entry_t generic_subdriver_entries[] = {
  */
 void hwif_unregister (ide_hwif_t *hwif)
 {
+	if (hwif->straight8) {
+		ide_release_region(hwif->io_ports[IDE_DATA_OFFSET], 8);
+		goto jump_eight;
+	}
 	if (hwif->io_ports[IDE_DATA_OFFSET])
 		ide_release_region(hwif->io_ports[IDE_DATA_OFFSET], 1);
 	if (hwif->io_ports[IDE_ERROR_OFFSET])
@@ -1938,6 +1938,7 @@ void hwif_unregister (ide_hwif_t *hwif)
 		ide_release_region(hwif->io_ports[IDE_SELECT_OFFSET], 1);
 	if (hwif->io_ports[IDE_STATUS_OFFSET])
 		ide_release_region(hwif->io_ports[IDE_STATUS_OFFSET], 1);
+jump_eight:
 	if (hwif->io_ports[IDE_CONTROL_OFFSET])
 		ide_release_region(hwif->io_ports[IDE_CONTROL_OFFSET], 1);
 	if (hwif->io_ports[IDE_IRQ_OFFSET])
@@ -2102,6 +2103,7 @@ void ide_unregister (unsigned int index)
 	hwif->pci_dev		= old_hwif.pci_dev;
 	hwif->pci_devid		= old_hwif.pci_devid;
 #endif /* CONFIG_BLK_DEV_IDEPCI */
+	hwif->straight8		= old_hwif.straight8;
 
 abort:
 	restore_flags(flags);	/* all CPUs */
@@ -2535,6 +2537,11 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			err = ide_wait_cmd(drive, args[0], args[1], args[2], args[3], argbuf);
 
 			if (!err && set_transfer(drive, args[0], args[1], args[2])) {
+#if 0
+				/* active-retuning-calls future */
+				if (HWIF(drive)->tune2proc)
+					HWIF(drive)->tune2proc(drive, args[1]);
+#endif
 				ide_driveid_update(drive);
 			}
 		abort:
@@ -2796,6 +2803,7 @@ int __init ide_setup (char *s)
 	const char max_hwif  = '0' + (MAX_HWIFS - 1);
 
 	printk("ide_setup: %s", s);
+	init_ide_data ();
 
 #ifdef CONFIG_BLK_DEV_IDEDOUBLER
 	if (!strcmp(s, "ide=doubler")) {
@@ -2813,10 +2821,6 @@ int __init ide_setup (char *s)
 		printk(" : Enabled support for IDE inverse scan order.\n");
 		return 0;
 	}
-#endif /* CONFIG_BLK_DEV_IDEPCI */
-
-#ifndef CONFIG_BLK_DEV_IDEPCI
-	init_ide_data ();
 #endif /* CONFIG_BLK_DEV_IDEPCI */
 
 	/*
@@ -2971,9 +2975,9 @@ int __init ide_setup (char *s)
 	if (s[3] == 'b' && s[4] == 'u' && s[5] == 's') {
 		if (match_parm(&s[6], NULL, vals, 1) != 1)
 			goto bad_option;
-		if (vals[0] >= 20 && vals[0] <= 66)
+		if (vals[0] >= 20 && vals[0] <= 66) {
 			idebus_parameter = vals[0];
-		else
+		} else
 			printk(" -- BAD BUS SPEED! Expected value from 20 to 66");
 		goto done;
 	}
@@ -3216,6 +3220,12 @@ static void __init probe_for_hwifs (void)
 		buddha_init();
 	}
 #endif /* CONFIG_BLK_DEV_BUDDHA */
+#if defined(CONFIG_BLK_DEV_ISAPNP) && defined(CONFIG_ISAPNP)
+	{
+		extern void pnpide_init(int enable);
+		pnpide_init(1);
+	}
+#endif /* CONFIG_BLK_DEV_ISAPNP */
 }
 
 void __init ide_init_builtin_drivers (void)
@@ -3407,6 +3417,9 @@ int ide_unregister_subdriver (ide_drive_t *drive)
 		restore_flags(flags);	/* all CPUs */
 		return 1;
 	}
+#if defined(CONFIG_BLK_DEV_ISAPNP) && defined(CONFIG_ISAPNP) && defined(MODULE)
+	pnpide_init(0);
+#endif /* CONFIG_BLK_DEV_ISAPNP */
 #ifdef CONFIG_PROC_FS
 	ide_remove_proc_entries(drive->proc, DRIVER(drive)->proc);
 	ide_remove_proc_entries(drive->proc, generic_subdriver_entries);
@@ -3550,6 +3563,7 @@ int __init ide_init (void)
 	if (!banner_printed) {
 		printk(KERN_INFO "Uniform Multi-Platform E-IDE driver " REVISION "\n");
 		ide_devfs_handle = devfs_mk_dir (NULL, "ide", 3, NULL);
+		(void) ide_system_bus_speed();
 		banner_printed = 1;
 	}
 
@@ -3578,6 +3592,7 @@ static void __init parse_options (char *line)
  		if ((next = strchr(line,' ')) != NULL)
 			*next++ = 0;
 		if (!strncmp(line,"ide",3) ||
+		    !strncmp(line,"idebus",6) ||
 #ifdef CONFIG_BLK_DEV_VIA82CXXX
 		    !strncmp(line,"splitfifo",9) ||
 #endif /* CONFIG_BLK_DEV_VIA82CXXX */

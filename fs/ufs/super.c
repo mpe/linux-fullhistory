@@ -924,28 +924,27 @@ int ufs_remount (struct super_block * sb, int * mount_flags, char * data)
 	return 0;
 }
 
-int ufs_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
+int ufs_statfs (struct super_block * sb, struct statfs * buf)
 {
 	struct ufs_sb_private_info * uspi;
 	struct ufs_super_block_first * usb1;
-	struct statfs tmp;
 	unsigned swab;
 
 	swab = sb->u.ufs_sb.s_swab;
 	uspi = sb->u.ufs_sb.s_uspi;
 	usb1 = ubh_get_usb_first (USPI_UBH);
 	
-	tmp.f_type = UFS_MAGIC;
-	tmp.f_bsize = sb->s_blocksize;
-	tmp.f_blocks = uspi->s_dsize;
-	tmp.f_bfree = ufs_blkstofrags(SWAB32(usb1->fs_cstotal.cs_nbfree)) +
+	buf->f_type = UFS_MAGIC;
+	buf->f_bsize = sb->s_blocksize;
+	buf->f_blocks = uspi->s_dsize;
+	buf->f_bfree = ufs_blkstofrags(SWAB32(usb1->fs_cstotal.cs_nbfree)) +
 		SWAB32(usb1->fs_cstotal.cs_nffree);
-	tmp.f_bavail = (tmp.f_bfree > ((tmp.f_blocks / 100) * uspi->s_minfree))
-		? (tmp.f_bfree - ((tmp.f_blocks / 100) * uspi->s_minfree)) : 0;
-	tmp.f_files = uspi->s_ncg * uspi->s_ipg;
-	tmp.f_ffree = SWAB32(usb1->fs_cstotal.cs_nifree);
-	tmp.f_namelen = UFS_MAXNAMLEN;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_bavail = (buf->f_bfree > ((buf->f_blocks / 100) * uspi->s_minfree))
+		? (buf->f_bfree - ((buf->f_blocks / 100) * uspi->s_minfree)) : 0;
+	buf->f_files = uspi->s_ncg * uspi->s_ipg;
+	buf->f_ffree = SWAB32(usb1->fs_cstotal.cs_nifree);
+	buf->f_namelen = UFS_MAXNAMLEN;
+	return 0;
 }
 
 static struct super_operations ufs_super_ops = {

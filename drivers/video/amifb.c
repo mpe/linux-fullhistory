@@ -53,6 +53,7 @@
 #include <linux/fb.h>
 #include <linux/init.h>
 #include <linux/console.h>
+#include <linux/ioport.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -1131,6 +1132,7 @@ static int amifb_set_cursorstate(struct fb_cursorstate *state, int con);
 	 */
 
 int amifb_init(void);
+static void amifb_deinit(void);
 static int amifbcon_switch(int con, struct fb_info *info);
 static int amifbcon_updatevar(int con, struct fb_info *info);
 static void amifbcon_blank(int blank, struct fb_info *info);
@@ -1143,6 +1145,7 @@ static void do_install_cmap(int con, struct fb_info *info);
 static int flash_cursor(void);
 static void amifb_interrupt(int irq, void *dev_id, struct pt_regs *fp);
 static u_long chipalloc(u_long size);
+static void chipfree(void);
 static char *strtoke(char *s,const char *ct);
 
 	/*
@@ -1179,13 +1182,6 @@ static void ami_init_copper(void);
 static void ami_reinit_copper(void);
 static void ami_build_copper(void);
 static void ami_rebuild_copper(void);
-
-
-	/*
-	 * External references
-	 */
-
-extern unsigned short ami_intena_vals[];
 
 
 static struct fb_ops amifb_ops = {
@@ -1599,12 +1595,35 @@ static int amifb_set_cursorstate(struct fb_cursorstate *state, int con)
 
 
 	/*
+	 * Allocate, Clear and Align a Block of Chip Memory
+	 */
+
+static u_long unaligned_chipptr = 0;
+
+static inline u_long __init chipalloc(u_long size)
+{
+	size += PAGE_SIZE-1;
+	if (!(unaligned_chipptr = (u_long)amiga_chip_alloc(size,
+							   "amifb [RAM]")))
+		panic("No Chip RAM for frame buffer");
+	memset((void *)unaligned_chipptr, 0, size);
+	return PAGE_ALIGN(unaligned_chipptr);
+}
+
+static inline void chipfree(void)
+{
+	if (unaligned_chipptr)
+		amiga_chip_free((void *)unaligned_chipptr);
+}
+
+
+	/*
 	 * Initialisation
 	 */
 
 int __init amifb_init(void)
 {
-	int tag, i;
+	int tag, i, err = 0;
 	u_long chipptr;
 	u_int defmode;
 	struct fb_var_screeninfo var;
@@ -1624,6 +1643,13 @@ int __init amifb_init(void)
 		return 0;
 	}
 #endif
+
+	/*
+	 * We request all registers starting from bplpt[0]
+	 */
+	if (!request_mem_region(CUSTOM_PHYSADDR+0xe0, 0x120,
+				"amifb [Denise/Lisa]"))
+		return -EBUSY;
 
 	custom.dmacon = DMAF_ALL | DMAF_MASTER;
 
@@ -1688,7 +1714,8 @@ default_chipset:
 			strcat(amifb_name, "Unknown");
 			goto default_chipset;
 #else /* CONFIG_FB_AMIGA_OCS */
-			return -ENXIO;
+			err = -ENXIO;
+			goto amifb_error;
 #endif /* CONFIG_FB_AMIGA_OCS */
 			break;
 	}
@@ -1738,9 +1765,37 @@ default_chipset:
 	fb_info.flags = FBINFO_FLAG_DEFAULT;
 	memset(&var, 0, sizeof(var));
 
+#ifdef MODULE
+	var.xres = ami_modedb[defmode].xres;
+	var.yres = ami_modedb[defmode].yres;
+	var.xres_virtual = ami_modedb[defmode].xres;
+	var.yres_virtual = ami_modedb[defmode].yres;
+	var.xoffset = 0;
+	var.yoffset = 0;
+	var.bits_per_pixel = 4;
+	var.activate |= FB_ACTIVATE_TEST;
+	var.pixclock = ami_modedb[defmode].pixclock;
+	var.left_margin = ami_modedb[defmode].left_margin;
+	var.right_margin = ami_modedb[defmode].right_margin;
+	var.upper_margin = ami_modedb[defmode].upper_margin;
+	var.lower_margin = ami_modedb[defmode].lower_margin;
+	var.hsync_len = ami_modedb[defmode].hsync_len;
+	var.vsync_len = ami_modedb[defmode].vsync_len;
+	var.sync = ami_modedb[defmode].sync;
+	var.vmode = ami_modedb[defmode].vmode;
+	err = fb_info.fbops->fb_set_var(&var, -1, &fb_info);
+	var.activate &= ~FB_ACTIVATE_TEST;
+	if (err) {
+		err = -EINVAL;
+		goto amifb_error;
+	}
+#else
 	if (!fb_find_mode(&var, &fb_info, mode_option, ami_modedb,
-			  NUM_TOTAL_MODES, &ami_modedb[defmode], 4))
-	    panic("Can't find any usable video mode");
+			  NUM_TOTAL_MODES, &ami_modedb[defmode], 4)) {
+		err = -EINVAL;
+		goto amifb_error;
+	}
+#endif
 
 	round_down_bpp = 0;
 	chipptr = chipalloc(videomemorysize+
@@ -1762,9 +1817,7 @@ default_chipset:
 	 * access the videomem with writethrough cache
 	 */
 	videomemory_phys = (u_long)ZTWO_PADDR(videomemory);
-#if 1
 	videomemory = (u_long)ioremap_writethrough(videomemory_phys, videomemorysize);
-#endif
 	if (!videomemory) {
 		printk("amifb: WARNING! unable to map videomem cached writethrough\n");
 		videomemory = ZTWO_VADDR(videomemory_phys);
@@ -1786,26 +1839,38 @@ default_chipset:
 	ami_init_copper();
 
 	if (request_irq(IRQ_AMIGA_AUTO_3, amifb_interrupt, 0,
-	                "fb vertb handler", NULL))
-		panic("Couldn't add vblank interrupt\n");
-	ami_intena_vals[IRQ_AMIGA_VERTB] = IF_COPER;
-	ami_intena_vals[IRQ_AMIGA_COPPER] = 0;
+	                "fb vertb handler", NULL)) {
+		err = -EBUSY;
+		goto amifb_error;
+	}
+	amiga_intena_vals[IRQ_AMIGA_VERTB] = IF_COPER;
+	amiga_intena_vals[IRQ_AMIGA_COPPER] = 0;
 	custom.intena = IF_VERTB;
 	custom.intena = IF_SETCLR | IF_COPER;
 
 	amifb_set_var(&var, -1, &fb_info);
 
-	if (register_framebuffer(&fb_info) < 0)
-		return -EINVAL;
+	if (register_framebuffer(&fb_info) < 0) {
+		err = -EINVAL;
+		goto amifb_error;
+	}
 
 	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename,
 	       videomemorysize>>10);
 
-	/* TODO: This driver cannot be unloaded yet */
-	MOD_INC_USE_COUNT;
-
 	return 0;
+	
+amifb_error:
+	amifb_deinit();
+	return err;
+}
+
+static void amifb_deinit(void)
+{
+	chipfree();    
+	release_mem_region(CUSTOM_PHYSADDR+0xe0, 0x120);
+	custom.dmacon = DMAF_ALL | DMAF_MASTER;
 }
 
 static int amifbcon_switch(int con, struct fb_info *info)
@@ -1928,23 +1993,6 @@ static void amifb_interrupt(int irq, void *dev_id, struct pt_regs *fp)
 		printk("%s: Warning: IF_VERTB was enabled\n", __FUNCTION__);
 		custom.intena = IF_VERTB;
 	}
-}
-
-	/*
-	 * Allocate, Clear and Align a Block of Chip Memory
-	 */
-
-static u_long __init chipalloc(u_long size)
-{
-	u_long ptr;
-
-	size += PAGE_SIZE-1;
-	if (!(ptr = (u_long)amiga_chip_alloc(size, "amifb")))
-		panic("No Chip RAM for frame buffer");
-	memset((void *)ptr, 0, size);
-	ptr = PAGE_ALIGN(ptr);
-
-	return ptr;
 }
 
 	/*
@@ -3373,9 +3421,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	/* Not reached because the usecount will never
-	   be decremented to zero */
 	unregister_framebuffer(&fb_info);
-	/* TODO: clean up ... */
+	amifb_deinit();
 }
 #endif /* MODULE */

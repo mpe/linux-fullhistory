@@ -550,7 +550,7 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 					!(exp->ex_flags & NFSEXP_NOSUBTREECHECK));
 
 		if (IS_ERR(dentry)) {
-			error = nfserrno(-PTR_ERR(dentry));
+			error = nfserrno(PTR_ERR(dentry));
 			goto out;
 		}
 #ifdef NFSD_PARANOIA

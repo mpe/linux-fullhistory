@@ -99,9 +99,7 @@ alias synth0 opl3
 
 When any sound device is opened the kernel requests auto-loading
 of char-major-14. There is a built-in alias that translates this
-request to loading the main sound module. The main sound module
-contains only common code which is needed by all the sound drivers,
-and the driver for /dev/sndstat.
+request to loading the main sound module.
 
 The sound module in its turn will request loading of a sub-driver
 for mixer, audio, midi or synthesizer device. The first 3 are

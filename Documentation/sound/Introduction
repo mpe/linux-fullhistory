@@ -160,8 +160,6 @@ Sound Status:
 =============
 
 The status of sound may be read/checked by:
-	cat /proc/sound
-	cat /dev/sndstat
         cat (anyfile).au >/dev/audio
 
 The status of the modules and which modules depend on 

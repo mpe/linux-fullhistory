@@ -20,16 +20,8 @@
 #include <linux/lockd/sm_inter.h>
 
 #define NLMDBG_FACILITY		NLMDBG_XDR
-#define NLM_MAXSTRLEN		1024
 #define OFFSET_MAX		((off_t)LONG_MAX)
 
-#define QUADLEN(len)		(((len) + 3) >> 2)
-
-u32     nlm4_deadlock, nlm4_rofs, nlm4_stale_fh, nlm4_fbig,
-	nlm4_failed;
-
-
-typedef struct nlm_args	nlm_args;
 
 static inline off_t
 size_to_off_t(__s64 size)

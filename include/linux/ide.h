@@ -414,6 +414,7 @@ typedef struct hwif_s {
 #if (DISK_RECOVERY_TIME > 0)
 	unsigned long	last_time;	/* time when previous rq was done */
 #endif
+	byte		straight8;	/* Alan's straight 8 check */
 } ide_hwif_t;
 
 /*

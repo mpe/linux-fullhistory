@@ -227,7 +227,7 @@ static void special_device_init(void)
 		extern int sb1000_probe(struct net_device *dev);
 		static struct net_device sb1000_dev = 
 		{
-			"cm0 __PAD3", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, sb1000_probe 
+			"cm0" __PAD3, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, sb1000_probe 
 		};
 		register_netdev(&sb1000_dev);
 	}

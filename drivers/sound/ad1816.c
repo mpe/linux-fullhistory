@@ -1386,7 +1386,7 @@ static int __init setup_ad1816(char *str)
 	io	= ints[1];
 	irq	= ints[2];
 	dma	= ints[3];
-	dma16	= ints[4];
+	dma2	= ints[4];
 
 	return 1;
 }

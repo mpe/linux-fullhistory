@@ -339,12 +339,14 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 
 #if HZ == 20
 # define TCP_TW_RECYCLE_TICK (5+2-TCP_TW_RECYCLE_SLOTS_LOG)
+#elif HZ == 64
+# define TCP_TW_RECYCLE_TICK (6+2-TCP_TW_RECYCLE_SLOTS_LOG)
 #elif HZ == 100 || HZ == 128
 # define TCP_TW_RECYCLE_TICK (7+2-TCP_TW_RECYCLE_SLOTS_LOG)
-#elif HZ == 1024
+#elif HZ == 1024 || HZ == 1000
 # define TCP_TW_RECYCLE_TICK (10+2-TCP_TW_RECYCLE_SLOTS_LOG)
 #else
-# error HZ != 20 &&  HZ != 100 && HZ != 1024.
+# error HZ != 20 && HZ != 64 && HZ != 100 && HZ != 1000 && HZ != 1024
 #endif
 
 /*

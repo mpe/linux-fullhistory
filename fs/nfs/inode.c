@@ -46,7 +46,7 @@ static void nfs_put_inode(struct inode *);
 static void nfs_delete_inode(struct inode *);
 static void nfs_put_super(struct super_block *);
 static void nfs_umount_begin(struct super_block *);
-static int  nfs_statfs(struct super_block *, struct statfs *, int);
+static int  nfs_statfs(struct super_block *, struct statfs *);
 
 static struct super_operations nfs_sops = { 
 	read_inode:	nfs_read_inode,
@@ -367,27 +367,24 @@ out_fail:
 }
 
 static int
-nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+nfs_statfs(struct super_block *sb, struct statfs *buf)
 {
 	int error;
 	struct nfs_fsinfo res;
-	struct statfs tmp;
 
 	error = nfs_proc_statfs(&sb->u.nfs_sb.s_server, &sb->u.nfs_sb.s_root,
 		&res);
 	if (error) {
 		printk("nfs_statfs: statfs error = %d\n", -error);
-		res.bsize = res.blocks = res.bfree = res.bavail = 0;
+		res.bsize = res.blocks = res.bfree = res.bavail = -1;
 	}
-	tmp.f_type = NFS_SUPER_MAGIC;
-	tmp.f_bsize = res.bsize;
-	tmp.f_blocks = res.blocks;
-	tmp.f_bfree = res.bfree;
-	tmp.f_bavail = res.bavail;
-	tmp.f_files = 0;
-	tmp.f_ffree = 0;
-	tmp.f_namelen = NAME_MAX;
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	buf->f_type = NFS_SUPER_MAGIC;
+	buf->f_bsize = res.bsize;
+	buf->f_blocks = res.blocks;
+	buf->f_bfree = res.bfree;
+	buf->f_bavail = res.bavail;
+	buf->f_namelen = NAME_MAX;
+	return 0;
 }
 
 /*
@@ -413,7 +410,7 @@ restart:
 		struct dentry *dentry = list_entry(tmp, struct dentry, d_alias);
 		dprintk("nfs_free_dentries: found %s/%s, d_count=%d, hashed=%d\n",
 			dentry->d_parent->d_name.name, dentry->d_name.name,
-			dentry->d_count, !list_empty(&dentry->d_hash));
+			dentry->d_count, !d_unhashed(dentry));
 		if (!list_empty(&dentry->d_subdirs))
 			shrink_dcache_parent(dentry);
 		if (!dentry->d_count) {
@@ -422,7 +419,7 @@ restart:
 			dput(dentry);
 			goto restart;
 		}
-		if (list_empty(&dentry->d_hash))
+		if (d_unhashed(dentry))
 			unhashed++;
 	}
 	return unhashed;

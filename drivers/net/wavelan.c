@@ -1805,6 +1805,7 @@ static int wavelan_ioctl(struct net_device *dev,	/* device on which the ioctl is
 	mm_t m;
 	unsigned long flags;
 	int ret = 0;
+	int err = 0;
 
 #ifdef DEBUG_IOCTL_TRACE
 	printk(KERN_DEBUG "%s: ->wavelan_ioctl(cmd=0x%X)\n", dev->name,
@@ -1813,8 +1814,6 @@ static int wavelan_ioctl(struct net_device *dev,	/* device on which the ioctl is
 
 	/* Disable interrupts and save flags. */
 	wv_splhi(lp, &flags);
-	/* FIXME: can't copy*user when cli this is broken! */
-	/* Note : is it still valid ? Jean II */
 	
 	/* Look what is the request */
 	switch (cmd) {
@@ -1945,10 +1944,12 @@ static int wavelan_ioctl(struct net_device *dev,	/* device on which the ioctl is
 			}
 
 			/* Copy the key in the driver */
-			if (copy_from_user
-			    (psa.psa_encryption_key,
-			     wrq->u.encoding.pointer,
-			     wrq->u.encoding.length)) {
+			wv_splx(lp, &flags);
+			err = copy_from_user(psa.psa_encryption_key,
+					     wrq->u.encoding.pointer,
+					     wrq->u.encoding.length);
+			wv_splhi(lp, &flags);
+			if (err) {
 				ret = -EFAULT;
 				break;
 			}
@@ -2018,9 +2019,11 @@ static int wavelan_ioctl(struct net_device *dev,	/* device on which the ioctl is
 
 			/* Copy the key to the user buffer */
 			wrq->u.encoding.length = 8;
-			if (copy_to_user
-			    (wrq->u.encoding.pointer,
-			     psa.psa_encryption_key, 8)) ret = -EFAULT;
+			wv_splx(lp, &flags);
+			if (copy_to_user(wrq->u.encoding.pointer,
+					 psa.psa_encryption_key, 8))
+				ret = -EFAULT;
+			wv_splhi(lp, &flags);
 		}
 		break;
 
@@ -2067,38 +2070,51 @@ static int wavelan_ioctl(struct net_device *dev,	/* device on which the ioctl is
 			}
 
 			/* Copy structure to the user buffer. */
-			if (copy_to_user
-			    (wrq->u.data.pointer, &range,
-			     sizeof(struct iw_range))) ret = -EFAULT;
+			wv_splx(lp, &flags);
+			if (copy_to_user(wrq->u.data.pointer,
+					 &range,
+					 sizeof(struct iw_range)))
+				ret = -EFAULT;
+			wv_splhi(lp, &flags);
 		}
 		break;
 
 	case SIOCGIWPRIV:
 		/* Basic checking */
 		if (wrq->u.data.pointer != (caddr_t) 0) {
-			struct iw_priv_args priv[] = {	/* cmd,         set_args,       get_args,       name */
-				
-				    {SIOCSIPQTHR,
-				 IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED |
-				     1, 0, "setqualthr"},
-				{SIOCGIPQTHR, 0,
-				 IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED |
-				 1, "getqualthr"},
-
-				
-				    {SIOCSIPHISTO, IW_PRIV_TYPE_BYTE | 16,
-				 0, "sethisto"},
-				{SIOCGIPHISTO, 0, IW_PRIV_TYPE_INT | 16,
-				 "gethisto"},
+			struct iw_priv_args priv[] = {
+				/* { cmd,
+				     set_args,
+				     get_args,
+				     name } */
+				{ SIOCSIPQTHR,
+				  IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED | 1,
+				  0,
+				  "setqualthr" },
+				{ SIOCGIPQTHR,
+				  0,
+				  IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED | 1,
+				  "getqualthr" },
+				{ SIOCSIPHISTO,
+				  IW_PRIV_TYPE_BYTE | 16,
+				  0,
+				  "sethisto" },
+				{ SIOCGIPHISTO,
+				  0,
+				  IW_PRIV_TYPE_INT | 16,
+				 "gethisto" },
 			};
 
 			/* Set the number of available ioctls. */
 			wrq->u.data.length = 4;
 
 			/* Copy structure to the user buffer. */
-			if (copy_to_user
-			    (wrq->u.data.pointer, (u8 *) priv,
-			     sizeof(priv))) ret = -EFAULT;
+			wv_splx(lp, &flags);
+			if (copy_to_user(wrq->u.data.pointer,
+					      (u8 *) priv,
+					      sizeof(priv)))
+				ret = -EFAULT;
+			wv_splhi(lp, &flags);
 		}
 		break;
 
@@ -2119,9 +2135,13 @@ static int wavelan_ioctl(struct net_device *dev,	/* device on which the ioctl is
 			int i;
 
 			/* Copy addresses to the driver. */
-			if (copy_from_user
-			    (address, wrq->u.data.pointer,
-			     sizeof(struct sockaddr) * lp->spy_number)) {
+			wv_splx(lp, &flags);
+			err = copy_from_user(address,
+					     wrq->u.data.pointer,
+					     sizeof(struct sockaddr)
+					     * lp->spy_number);
+			wv_splhi(lp, &flags);
+			if (err) {
 				ret = -EFAULT;
 				break;
 			}
@@ -2175,18 +2195,20 @@ static int wavelan_ioctl(struct net_device *dev,	/* device on which the ioctl is
 			}
 
 			/* Copy addresses to the user buffer. */
-			if (copy_to_user
-			    (wrq->u.data.pointer, address,
-			     sizeof(struct sockaddr) * lp->spy_number)) {
-				ret = -EFAULT;
-				break;
-			}
+			wv_splx(lp, &flags);
+			err = copy_to_user(wrq->u.data.pointer,
+					   address,
+					   sizeof(struct sockaddr)
+					   * lp->spy_number);
 
 			/* Copy stats to the user buffer (just after). */
-			if (copy_to_user(wrq->u.data.pointer +
-					 (sizeof(struct sockaddr) *
-					  lp->spy_number), lp->spy_stat,
-					 sizeof(iw_qual) * lp->spy_number)) {
+			err |= copy_to_user(wrq->u.data.pointer
+					    + (sizeof(struct sockaddr)
+					       * lp->spy_number),
+					    lp->spy_stat,
+					    sizeof(iw_qual) * lp->spy_number);
+			wv_splhi(lp, &flags);
+			if (err) {
 				ret = -EFAULT;
 				break;
 			}
@@ -2241,9 +2263,12 @@ static int wavelan_ioctl(struct net_device *dev,	/* device on which the ioctl is
 		/* Are there addresses to copy? */
 		if (lp->his_number > 0) {
 			/* Copy interval ranges to the driver */
-			if (copy_from_user
-			    (lp->his_range, wrq->u.data.pointer,
-			     sizeof(char) * lp->his_number)) {
+			wv_splx(lp, &flags);
+			err = copy_from_user(lp->his_range,
+					     wrq->u.data.pointer,
+					     sizeof(char) * lp->his_number);
+			wv_splhi(lp, &flags);
+			if (err) {
 				ret = -EFAULT;
 				break;
 			}
@@ -2261,10 +2286,12 @@ static int wavelan_ioctl(struct net_device *dev,	/* device on which the ioctl is
 		if ((lp->his_number > 0)
 		    && (wrq->u.data.pointer != (caddr_t) 0)) {
 			/* Copy data to the user buffer. */
-			if (copy_to_user
-			    (wrq->u.data.pointer, lp->his_sum,
-			     sizeof(long) * lp->his_number))
+			wv_splx(lp, &flags);
+			if (copy_to_user(wrq->u.data.pointer,
+					 lp->his_sum,
+					 sizeof(long) * lp->his_number);
 				ret = -EFAULT;
+			wv_splhi(lp, &flags);
 
 		}		/* if(pointer != NULL) */
 		break;
@@ -2274,7 +2301,7 @@ static int wavelan_ioctl(struct net_device *dev,	/* device on which the ioctl is
 
 	default:
 		ret = -EOPNOTSUPP;
-	}
+	}	/* switch (cmd) */
 
 	/* Enable interrupts and restore flags. */
 	wv_splx(lp, &flags);

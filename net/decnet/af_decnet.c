@@ -123,7 +123,6 @@ Version 0.0.6    2.1.110   07-aug-98   Eduardo Marcelo Serrat
 #include <net/dn_dev.h>
 #include <net/dn_route.h>
 #include <net/dn_fib.h>
-#include <net/dn_raw.h>
 #include <net/dn_neigh.h>
 
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -401,11 +400,6 @@ struct sock *dn_alloc_sock(struct socket *sock, int flags)
 		goto no_sock;
 
 	if (sock) {
-#ifdef CONFIG_DECNET_RAW
-		if (sock->type == SOCK_RAW)
-			sock->ops = &dn_raw_proto_ops;
-		else
-#endif /* CONFIG_DECNET_RAW */
 			sock->ops = &dn_proto_ops;
 	}
 	sock_init_data(sock,sk);
@@ -647,13 +641,6 @@ static int dn_create(struct socket *sock, int protocol)
 			break;
 		case SOCK_STREAM:
 			break;
-#ifdef CONFIG_DECNET_RAW
-		case SOCK_RAW:
-			if ((protocol != DNPROTO_NSP) &&
-					(protocol != DNPROTO_ROU))
-				return -EPROTONOSUPPORT;
-			break;
-#endif /* CONFIG_DECNET_RAW */
 		default:
 			return -ESOCKTNOSUPPORT;
 	}
@@ -1095,6 +1082,7 @@ static unsigned int dn_poll(struct file *file, struct socket *sock, poll_table  
 static int dn_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk = sock->sk;
+	struct dn_scp *scp = &sk->protinfo.dn;
 	int err = -EOPNOTSUPP;
 	unsigned long amount = 0;
 	struct sk_buff *skb;
@@ -1221,8 +1209,17 @@ static int dn_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 	case TIOCINQ:
 		lock_sock(sk);
-		if ((skb = skb_peek(&sk->receive_queue)) != NULL)
+		if ((skb = skb_peek(&scp->other_receive_queue)) != NULL) {
 			amount = skb->len;
+		} else {
+			struct sk_buff *skb = sk->receive_queue.next;
+			for(;;) {
+				if (skb == (struct sk_buff *)&sk->receive_queue)
+					break;
+				amount += skb->len;
+				skb = skb->next;
+			}
+		}
 		release_sock(sk);
 		err = put_user(amount, (int *)arg);
 		break;
@@ -2028,11 +2025,7 @@ static int dn_get_info(char *buffer, char **start, off_t offset, int length)
 	return len;
 }
 
-#ifdef CONFIG_DECNET_RAW
 
-extern int dn_raw_get_info(char *, char **, off_t, int);
-
-#endif /* CONFIG_DECNET_RAW */
 static struct net_proto_family	dn_family_ops = {
 	AF_DECnet,
 	dn_create
@@ -2066,16 +2059,14 @@ void dn_unregister_sysctl(void);
 
 void __init decnet_proto_init(struct net_proto *pro)
 {
-        printk(KERN_INFO "NET4: DECnet for Linux: V.2.3.38s (C) 1995-1999 Linux DECnet Project Team\n");
+        printk(KERN_INFO "NET4: DECnet for Linux: V.2.3.49s (C) 1995-2000 Linux DECnet Project Team\n");
 
 	sock_register(&dn_family_ops);
 	dev_add_pack(&dn_dix_packet_type);
 	register_netdevice_notifier(&dn_dev_notifier);
 
 	proc_net_create("decnet", 0, dn_get_info);
-#ifdef CONFIG_DECNET_RAW
-	proc_net_create("decnet_raw", 0, dn_raw_get_info);
-#endif
+
 	dn_neigh_init();
 	dn_dev_init();
 	dn_route_init();
@@ -2153,9 +2144,6 @@ void __exit cleanup_module(void)
 #endif /* CONFIG_DECNET_ROUTER */
 
 	proc_net_remove("decnet");
-#ifdef CONFIG_DECNET_RAW
-	proc_net_remove("decnet_raw");
-#endif
 
 	dev_remove_pack(&dn_dix_packet_type);
 	sock_unregister(AF_DECnet);

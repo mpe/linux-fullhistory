@@ -48,6 +48,25 @@ static void __init quirk_awe32_resources(struct pci_dev *dev)
 	printk(KERN_INFO "isapnp: AWE32 quirk - adding two ports\n");
 }
 
+static void __init quirk_cmi8330_resources(struct pci_dev *dev)
+{
+	struct isapnp_resources *res = dev->sysdata;
+
+	for ( ; res ; res = res->alt ) {
+
+		struct isapnp_irq *irq;
+		struct isapnp_dma *dma;
+	
+		for( irq = res->irq; irq; irq = irq->next )	// Valid irqs are 5, 7, 10
+			irq->map = 0x04A0;						// 0000 0100 1010 0000
+
+		for( dma = res->dma; dma; dma = dma->next ) // Valid 8bit dma channels are 1,3
+			if( ( dma->flags & IORESOURCE_DMA_TYPE_MASK ) == IORESOURCE_DMA_8BIT )
+				dma->map = 0x000A;
+	}
+	printk(KERN_INFO "isapnp: CMI8330 quirk - fixing interrupts and dma\n");
+}
+
 
 /*
  *  ISAPnP Quirks
@@ -61,6 +80,8 @@ static struct isapnp_fixup isapnp_fixups[] __initdata = {
 		quirk_awe32_resources },
 	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0023),
 		quirk_awe32_resources },
+	{ ISAPNP_VENDOR('@','X','@'), ISAPNP_DEVICE(0x0001), // CMI8330 
+		quirk_cmi8330_resources },
 	{ 0 }
 };
 

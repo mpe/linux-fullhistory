@@ -511,7 +511,7 @@ static __inline__ void dn_nsp_do_disc(struct sock *sk, unsigned char msgflg,
 			int ddl, unsigned char *dd, __u16 rem, __u16 loc)
 {
 	struct sk_buff *skb = NULL;
-	int size = 8 + ddl;
+	int size = 7 + ddl + ((msgflg == NSP_DISCINIT) ? 1 : 0);
 	unsigned char *msg;
 
 	if ((dst == NULL) || (rem == 0)) {
@@ -531,7 +531,8 @@ static __inline__ void dn_nsp_do_disc(struct sock *sk, unsigned char msgflg,
 	msg += 2;
 	*(__u16 *)msg = dn_htons(reason);
 	msg += 2;
-	*msg++ = ddl;
+	if (msgflg == NSP_DISCINIT)
+		*msg++ = ddl;
 
 	if (ddl) {
 		memcpy(msg, dd, ddl);

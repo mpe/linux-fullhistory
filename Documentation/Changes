@@ -72,6 +72,10 @@ Upgrade notes
 General Information
 ===================
 
+   To use System V shared memory, you have to mount the shm filesystem
+somewhere and put the mountpoint into /proc/sys/kernel/shmpath.
+Default is /var/shm.
+
    <CTRL><ALT><DEL> now performs a cold reboot instead of a warm reboot
 for increased hardware compatibility.  If you want a warm reboot and
 know it works on your hardware, add a "reboot=warm" command line option

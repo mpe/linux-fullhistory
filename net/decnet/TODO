@@ -4,8 +4,6 @@ Steve's quick list of things that need finishing off:
  o Proper timeouts on each neighbour (in routing mode) rather than
    just the 60 second On-Ethernet cache value.
 
- o Misc. get/set_sockopt() functions [done for the time being, more later]
-
  o Support for X.25 linklayer
 
  o Support for DDCMP link layer
@@ -13,10 +11,6 @@ Steve's quick list of things that need finishing off:
  o The DDCMP device itself
 
  o PPP support (rfc1762)
-
- o sendmsg() in the raw socket layer (yes, its for sending routing messages)
-
- o Fix /proc for raw sockets
 
  o Lots of testing with real applications
 

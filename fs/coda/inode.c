@@ -37,8 +37,7 @@ static void coda_read_inode(struct inode *);
 static void coda_put_inode(struct inode *);
 static void coda_delete_inode(struct inode *);
 static void coda_put_super(struct super_block *);
-static int coda_statfs(struct super_block *sb, struct statfs *buf, 
-		       int bufsiz);
+static int coda_statfs(struct super_block *sb, struct statfs *buf);
 
 /* exported operations */
 struct super_operations coda_super_operations =
@@ -235,31 +234,25 @@ int coda_notify_change(struct dentry *de, struct iattr *iattr)
         return error;
 }
 
-static int coda_statfs(struct super_block *sb, struct statfs *buf, 
-		       int bufsiz)
+static int coda_statfs(struct super_block *sb, struct statfs *buf)
 {
-	struct statfs tmp;
 	int error;
 
-	memset(&tmp, 0, sizeof(struct statfs));
-
-	error = venus_statfs(sb, &tmp);
+	error = venus_statfs(sb, buf);
 
 	if (error) {
 		/* fake something like AFS does */
-		tmp.f_blocks = 9000000;
-		tmp.f_bfree  = 9000000;
-		tmp.f_bavail = 9000000;
-		tmp.f_files  = 9000000;
-		tmp.f_ffree  = 9000000;
+		buf->f_blocks = 9000000;
+		buf->f_bfree  = 9000000;
+		buf->f_bavail = 9000000;
+		buf->f_files  = 9000000;
+		buf->f_ffree  = 9000000;
 	}
 
 	/* and fill in the rest */
-	tmp.f_type = CODA_SUPER_MAGIC;
-	tmp.f_bsize = 1024;
-	tmp.f_namelen = CODA_MAXNAMLEN;
-
-	copy_to_user(buf, &tmp, bufsiz);
+	buf->f_type = CODA_SUPER_MAGIC;
+	buf->f_bsize = 1024;
+	buf->f_namelen = CODA_MAXNAMLEN;
 
 	return 0; 
 }

@@ -1051,20 +1051,23 @@ static int DAC_merge_requests_fn(request_queue_t *q,
 	int max_segments;
 	DAC960_Controller_T * Controller = q->queuedata;
 	int total_segments = req->nr_segments + next->nr_segments;
+       int same_segment;
 
 	max_segments = Controller->MaxSegmentsPerRequest[MINOR(req->rq_dev)];
 	if (__max_segments < max_segments)
 		max_segments = __max_segments;
 
+       same_segment = 0;
 	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data)
 	{
 		total_segments--;
-		q->nr_segments--;
+               same_segment = 1;
 	}
     
 	if (total_segments > max_segments)
 		return 0;
 
+       q->nr_segments -= same_segment;
 	req->nr_segments = total_segments;
 	return 1;
 }

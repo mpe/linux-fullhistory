@@ -41,6 +41,7 @@
  */
 #include <linux/tty.h>
 #include <linux/fb.h>
+#include <linux/module.h>
 
 int fbmon_valid_timings(u_int pixclock, u_int htotal, u_int vtotal,
                         const struct fb_info *fb_info)
@@ -72,3 +73,5 @@ int fbmon_dpms(const struct fb_info *fb_info)
 {
   return fb_info->monspecs.dpms;
 }
+
+EXPORT_SYMBOL(fbmon_valid_timings);

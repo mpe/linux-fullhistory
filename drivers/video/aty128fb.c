@@ -1358,7 +1358,7 @@ aty128fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *fb)
     } 
 
 #ifdef CONFIG_FB_COMPAT_XPMAC
-    if (console_fb_info == &info->fb_info) {
+    if (!console_fb_info || console_fb_info == &info->fb_info) {
 	int vmode, cmode;
 
 	display_info.width = var->xres;
@@ -1429,13 +1429,8 @@ aty128_encode_fix(struct fb_fix_screeninfo *fix,
     
     strcpy(fix->id, aty128fb_name);
 
-#ifdef CONFIG_PPC /* why?  I don't know */
-    *fix->smem_start = (long)info->frame_buffer_phys;
-    *fix->mmio_start = (long)info->regbase_phys;
-#else
     fix->smem_start = (long)info->frame_buffer_phys;
     fix->mmio_start = (long)info->regbase_phys;
-#endif
 
     fix->smem_len = (u32)info->vram_size;
     fix->mmio_len = 0x1fff;
@@ -1676,7 +1671,7 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
     chip_rev = (aty_ld_le32(CONFIG_CNTL) >> 16) & 0x1F;
 
     /* put a name with the face */
-    while (info->pdev->device != aci->device) { aci++; }
+    while (aci->name && info->pdev->device != aci->device) { aci++; }
     video_card = (char *)aci->name;
 
     printk(KERN_INFO "aty128fb: %s [chip rev 0x%x] [card rev %x] ",
@@ -1723,7 +1718,10 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
     if (default_cmode == CMODE_NVRAM)
         default_cmode = nvram_read_byte(NV_CMODE);
 #endif
-    }
+    } else if (_machine == _MACH_Pmac)
+ 	if (mac_vmode_to_var(default_vmode, default_cmode, &var))
+	    var = default_var;
+
 #endif
 #endif /* MODULE */
 

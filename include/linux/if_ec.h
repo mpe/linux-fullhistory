@@ -34,6 +34,19 @@ struct sockaddr_ec
 
 #ifdef __KERNEL__
 
+#define EC_HLEN				6
+
+/* This is what an Econet frame looks like on the wire. */
+struct ec_framehdr 
+{
+  unsigned char dst_stn;
+  unsigned char dst_net;
+  unsigned char src_stn;
+  unsigned char src_net;
+  unsigned char cb;
+  unsigned char port;
+};
+
 struct econet_opt
 {
   unsigned char cb;
@@ -41,6 +54,14 @@ struct econet_opt
   unsigned char station;
   unsigned char net;
 };
+
+struct ec_device
+{
+  unsigned char station, net;		/* Econet protocol address */
+};
+
+extern struct sock *ec_listening_socket(unsigned char port, unsigned char
+				 station, unsigned char net);
 
 #endif
 

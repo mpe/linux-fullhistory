@@ -83,3 +83,6 @@ extern unsigned char *get_property(struct device_node *node, const char *name,
 extern void print_properties(struct device_node *node);
 extern int call_rtas(const char *service, int nargs, int nret,
 		     unsigned long *outputs, ...);
+extern void prom_drawstring(const char *c);
+extern void prom_drawhex(unsigned long v);
+extern void prom_drawchar(char c);

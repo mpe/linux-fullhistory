@@ -305,14 +305,14 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 			atomic_dec(&file->f_dentry->d_inode->i_writecount);
 			correct_wcount = 1;
 		}
+		vma->vm_file = file;
+		get_file(file);
 		error = file->f_op->mmap(file, vma);
 		/* Fix up the count if necessary, then check for an error */
 		if (correct_wcount)
 			atomic_inc(&file->f_dentry->d_inode->i_writecount);
 		if (error)
 			goto unmap_and_free_vma;
-		vma->vm_file = file;
-		get_file(file);
 	}
 
 	/*
@@ -334,6 +334,8 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 	return addr;
 
 unmap_and_free_vma:
+	vma->vm_file = NULL;
+	fput(file);
 	/* Undo any partial mapping done by a device driver. */
 	flush_cache_range(mm, vma->vm_start, vma->vm_end);
 	zap_page_range(mm, vma->vm_start, vma->vm_end - vma->vm_start);

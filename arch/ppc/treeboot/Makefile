@@ -10,11 +10,6 @@
 
 HOSTCFLAGS = -O -I$(TOPDIR)/include
 
-CC	= $(CROSS_COMPILE)gcc
-LD	= $(CROSS_COMPILE)ld
-OBJCOPY = $(CROSS_COMPILE)objcopy
-OBJDUMP	= $(CROSS_COMPILE)objdump
-
 GZIP	= gzip -vf9
 RM	= rm -f
 MKEVIMG	= mkevimg -l

@@ -213,21 +213,20 @@ static int adfs_remount(struct super_block *sb, int *flags, char *data)
 	return parse_options(sb, data);
 }
 
-static int adfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+static int adfs_statfs(struct super_block *sb, struct statfs *buf)
 {
 	struct adfs_sb_info *asb = &sb->u.adfs_sb;
-	struct statfs tmp;
 
-	tmp.f_type    = ADFS_SUPER_MAGIC;
-	tmp.f_namelen = asb->s_namelen;
-	tmp.f_bsize   = sb->s_blocksize;
-	tmp.f_blocks  = asb->s_size;
-	tmp.f_files   = asb->s_ids_per_zone * asb->s_map_size;
-	tmp.f_bavail  =
-	tmp.f_bfree   = adfs_map_free(sb);
-	tmp.f_ffree   = tmp.f_bfree * tmp.f_files / tmp.f_blocks;
+	buf->f_type    = ADFS_SUPER_MAGIC;
+	buf->f_namelen = asb->s_namelen;
+	buf->f_bsize   = sb->s_blocksize;
+	buf->f_blocks  = asb->s_size;
+	buf->f_files   = asb->s_ids_per_zone * asb->s_map_size;
+	buf->f_bavail  =
+	buf->f_bfree   = adfs_map_free(sb);
+	buf->f_ffree   = buf->f_bfree * buf->f_files / buf->f_blocks;
 
-	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+	return 0;
 }
 
 static struct super_operations adfs_sops = {

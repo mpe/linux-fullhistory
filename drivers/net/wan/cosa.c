@@ -1,4 +1,4 @@
-/* $Id: cosa.c,v 1.30 2000/02/21 15:19:49 kas Exp $ */
+/* $Id: cosa.c,v 1.31 2000/03/08 17:47:16 kas Exp $ */
 
 /*
  *  Copyright (C) 1995-1997  Jan "Yenya" Kasprzak <kas@fi.muni.cz>
@@ -373,7 +373,7 @@ static int __init cosa_init(void)
 {
 	int i;
 
-	printk(KERN_INFO "cosa v1.07 (c) 1997-2000 Jan Kasprzak <kas@fi.muni.cz>\n");
+	printk(KERN_INFO "cosa v1.08 (c) 1997-2000 Jan Kasprzak <kas@fi.muni.cz>\n");
 #ifdef __SMP__
 	printk(KERN_INFO "cosa: SMP found. Please mail any success/failure reports to the author.\n");
 #endif
@@ -584,6 +584,7 @@ static void sppp_channel_init(struct channel_data *chan)
 	struct net_device *d;
 	chan->if_ptr = &chan->pppdev;
 	chan->pppdev.dev = kmalloc(sizeof(struct net_device), GFP_KERNEL);
+	memset(chan->pppdev.dev, 0, sizeof(struct net_device));
 	sppp_attach(&chan->pppdev);
 	d=chan->pppdev.dev;
 	d->name = chan->name;
@@ -599,7 +600,6 @@ static void sppp_channel_init(struct channel_data *chan)
 	d->get_stats = cosa_net_stats;
 	d->tx_timeout = cosa_sppp_timeout;
 	d->watchdog_timeo = TX_TIMEOUT;
-	dev_init_buffers(d);
 	if (register_netdev(d) == -1) {
 		printk(KERN_WARNING "%s: register_netdev failed.\n", d->name);
 		sppp_detach(chan->pppdev.dev);
@@ -757,7 +757,7 @@ static int sppp_tx_done(struct channel_data *chan, int size)
 		chan->stats.tx_aborted_errors++;
 		return 1;
 	}
-	dev_kfree_skb(chan->tx_skb);
+	dev_kfree_skb_irq(chan->tx_skb);
 	chan->tx_skb = 0;
 	chan->stats.tx_packets++;
 	chan->stats.tx_bytes += size;

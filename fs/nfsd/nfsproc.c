@@ -30,7 +30,6 @@ typedef struct svc_buf	svc_buf;
 
 #define NFSDDBG_FACILITY		NFSDDBG_PROC
 
-#define RETURN(st)	return st
 
 static void
 svcbuf_reserve(struct svc_buf *buf, u32 **ptr, int *len, int nr)
@@ -42,7 +41,7 @@ svcbuf_reserve(struct svc_buf *buf, u32 **ptr, int *len, int nr)
 static int
 nfsd_proc_null(struct svc_rqst *rqstp, void *argp, void *resp)
 {
-	RETURN(nfs_ok);
+	return nfs_ok;
 }
 
 /*
@@ -57,7 +56,7 @@ nfsd_proc_getattr(struct svc_rqst *rqstp, struct nfsd_fhandle  *argp,
 		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh));
 
 	fh_copy(&resp->fh, &argp->fh);
-	RETURN(fh_verify(rqstp, &resp->fh, 0, MAY_NOP));
+	return fh_verify(rqstp, &resp->fh, 0, MAY_NOP);
 }
 
 /*
@@ -73,7 +72,7 @@ nfsd_proc_setattr(struct svc_rqst *rqstp, struct nfsd_sattrargs *argp,
 		argp->attrs.ia_valid, (long) argp->attrs.ia_size);
 
 	fh_copy(&resp->fh, &argp->fh);
-	RETURN(nfsd_setattr(rqstp, &resp->fh, &argp->attrs));
+	return nfsd_setattr(rqstp, &resp->fh, &argp->attrs);
 }
 
 /*
@@ -95,7 +94,7 @@ nfsd_proc_lookup(struct svc_rqst *rqstp, struct nfsd_diropargs *argp,
 				 &resp->fh);
 
 	fh_put(&argp->fh);
-	RETURN(nfserr);
+	return nfserr;
 }
 
 /*
@@ -118,7 +117,7 @@ nfsd_proc_readlink(struct svc_rqst *rqstp, struct nfsd_fhandle     *argp,
 	nfserr = nfsd_readlink(rqstp, &argp->fh, (char *) path, &resp->len);
 
 	fh_put(&argp->fh);
-	RETURN(nfserr);
+	return nfserr;
 }
 
 /*
@@ -156,7 +155,7 @@ nfsd_proc_read(struct svc_rqst *rqstp, struct nfsd_readargs *argp,
 				  (char *) buffer,
 				  &resp->count);
 
-	RETURN(nfserr);
+	return nfserr;
 }
 
 /*
@@ -168,6 +167,7 @@ nfsd_proc_write(struct svc_rqst *rqstp, struct nfsd_writeargs *argp,
 					struct nfsd_attrstat  *resp)
 {
 	int	nfserr;
+	int	stable = 1;
 
 	dprintk("nfsd: WRITE    %d/%d %d bytes at %d\n",
 		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh),
@@ -177,8 +177,8 @@ nfsd_proc_write(struct svc_rqst *rqstp, struct nfsd_writeargs *argp,
 				   argp->offset,
 				   argp->data,
 				   argp->len,
-				   0);
-	RETURN(nfserr);
+				   &stable);
+	return nfserr;
 }
 
 /*
@@ -321,7 +321,7 @@ out_unlock:
 
 done:
 	fh_put(dirfhp);
-	RETURN(nfserr);
+	return nfserr;
 }
 
 static int
@@ -335,7 +335,7 @@ nfsd_proc_remove(struct svc_rqst *rqstp, struct nfsd_diropargs *argp,
 	/* Unlink. -SIFDIR means file must not be a directory */
 	nfserr = nfsd_unlink(rqstp, &argp->fh, -S_IFDIR, argp->name, argp->len);
 	fh_put(&argp->fh);
-	RETURN(nfserr);
+	return nfserr;
 }
 
 static int
@@ -352,7 +352,7 @@ nfsd_proc_rename(struct svc_rqst *rqstp, struct nfsd_renameargs *argp,
 				    &argp->tfh, argp->tname, argp->tlen);
 	fh_put(&argp->ffh);
 	fh_put(&argp->tfh);
-	RETURN(nfserr);
+	return nfserr;
 }
 
 static int
@@ -370,7 +370,7 @@ nfsd_proc_link(struct svc_rqst *rqstp, struct nfsd_linkargs *argp,
 				  &argp->ffh);
 	fh_put(&argp->ffh);
 	fh_put(&argp->tfh);
-	RETURN(nfserr);
+	return nfserr;
 }
 
 static int
@@ -394,7 +394,7 @@ nfsd_proc_symlink(struct svc_rqst *rqstp, struct nfsd_symlinkargs *argp,
 
 	fh_put(&argp->ffh);
 	fh_put(&newfh);
-	RETURN(nfserr);
+	return nfserr;
 }
 
 /*
@@ -418,7 +418,7 @@ nfsd_proc_mkdir(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	nfserr = nfsd_create(rqstp, &argp->fh, argp->name, argp->len,
 				    &argp->attrs, S_IFDIR, 0, &resp->fh);
 	fh_put(&argp->fh);
-	RETURN(nfserr);
+	return nfserr;
 }
 
 /*
@@ -434,7 +434,7 @@ nfsd_proc_rmdir(struct svc_rqst *rqstp, struct nfsd_diropargs *argp,
 
 	nfserr = nfsd_unlink(rqstp, &argp->fh, S_IFDIR, argp->name, argp->len);
 	fh_put(&argp->fh);
-	RETURN(nfserr);
+	return nfserr;
 }
 
 /*
@@ -470,7 +470,7 @@ nfsd_proc_readdir(struct svc_rqst *rqstp, struct nfsd_readdirargs *argp,
 	resp->count = count;
 
 	fh_put(&argp->fh);
-	RETURN(nfserr);
+	return nfserr;
 }
 
 /*
@@ -486,7 +486,7 @@ nfsd_proc_statfs(struct svc_rqst * rqstp, struct nfsd_fhandle   *argp,
 
 	nfserr = nfsd_statfs(rqstp, &argp->fh, &resp->stats);
 	fh_put(&argp->fh);
-	RETURN(nfserr);
+	return nfserr;
 }
 
 /*
@@ -539,36 +539,36 @@ nfserrno (int errno)
 		int	nfserr;
 		int	syserr;
 	} nfs_errtbl[] = {
-		{ NFS_OK, 0 },
-		{ NFSERR_PERM, EPERM },
-		{ NFSERR_NOENT, ENOENT },
-		{ NFSERR_IO, EIO },
-		{ NFSERR_NXIO, ENXIO },
-		{ NFSERR_ACCES, EACCES },
-		{ NFSERR_EXIST, EEXIST },
-		{ NFSERR_XDEV, EXDEV },
-		{ NFSERR_MLINK, EMLINK },
-		{ NFSERR_NODEV, ENODEV },
-		{ NFSERR_NOTDIR, ENOTDIR },
-		{ NFSERR_ISDIR, EISDIR },
-		{ NFSERR_INVAL, EINVAL },
-		{ NFSERR_FBIG, EFBIG },
-		{ NFSERR_NOSPC, ENOSPC },
-		{ NFSERR_ROFS, EROFS },
-		{ NFSERR_MLINK, EMLINK },
-		{ NFSERR_NAMETOOLONG, ENAMETOOLONG },
-		{ NFSERR_NOTEMPTY, ENOTEMPTY },
+		{ nfs_ok, 0 },
+		{ nfserr_perm, -EPERM },
+		{ nfserr_noent, -ENOENT },
+		{ nfserr_io, -EIO },
+		{ nfserr_nxio, -ENXIO },
+		{ nfserr_acces, -EACCES },
+		{ nfserr_exist, -EEXIST },
+		{ nfserr_xdev, -EXDEV },
+		{ nfserr_mlink, -EMLINK },
+		{ nfserr_nodev, -ENODEV },
+		{ nfserr_notdir, -ENOTDIR },
+		{ nfserr_isdir, -EISDIR },
+		{ nfserr_inval, -EINVAL },
+		{ nfserr_fbig, -EFBIG },
+		{ nfserr_nospc, -ENOSPC },
+		{ nfserr_rofs, -EROFS },
+		{ nfserr_mlink, -EMLINK },
+		{ nfserr_nametoolong, -ENAMETOOLONG },
+		{ nfserr_notempty, -ENOTEMPTY },
 #ifdef EDQUOT
-		{ NFSERR_DQUOT, EDQUOT },
+		{ nfserr_dquot, -EDQUOT },
 #endif
-		{ NFSERR_STALE, ESTALE },
-		{ -1, EIO }
+		{ nfserr_stale, -ESTALE },
+		{ -1, -EIO }
 	};
 	int	i;
 
 	for (i = 0; nfs_errtbl[i].nfserr != -1; i++) {
 		if (nfs_errtbl[i].syserr == errno)
-			return htonl(nfs_errtbl[i].nfserr);
+			return nfs_errtbl[i].nfserr;
 	}
 	printk (KERN_INFO "nfsd: non-standard errno: %d\n", errno);
 	return nfserr_io;

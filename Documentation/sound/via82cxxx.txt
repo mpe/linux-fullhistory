@@ -122,25 +122,7 @@ Native MIDI driver, as described above
 Known bugs (patches/suggestions welcome)
 ------------------------------------------------------------------------
 1) Two MIDI devices are loaded by the sound driver.  Eliminate one of them. 
-Sample /proc/sound output:
-
-	Midi devices:
-	0: Sound Blaster
-	1: VIA 82Cxxx Audio driver 1.1.2
 
 2) Two mixer devices are loaded by the sound driver.  Eliminate one of
 them.  At least one bug report says that SB mixer does not work at all,
-only AC97 mixer.  Sample /proc/sound output:
-
-	Mixers:
-	0: via82cxxxAC97Mixer
-	1: Sound Blaster
-
-3) After unloading the driver, a SoundBlaster MIDI device is still 
-listed in /proc/sound.  Investigate what is not being unloaded,
-and fix it.  Sample /proc/sound output, after 'rmmod via82cxxx':
-
-	Midi devices:
-	0: Sound Blaster
-
-
+only AC97 mixer.

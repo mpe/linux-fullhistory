@@ -48,33 +48,5 @@ kernel.
 
 If you chose to build it as a module, just insmod the resulting softoss2.o
 
-A 'cat /dev/sndstat' with all the above options should look similar to this:
-
-  OSS/Free:3.8s2++-971130
-  Load type: Driver loaded as a module
-  Kernel: Linux iniquity 2.1.105 #145 Mon Jun 8 11:40:47 MST 1998 i586
-  Config options: 0
-
-  Installed drivers: 
-
-  Card config: 
-
-  Audio devices:
-  0: MSS audio codec (CS4231) (DUPLEX)
-
-  Synth devices:
-  0: Yamaha OPL-3
-  1: SoftOSS
-
-  Midi devices:
-  0: OPL3-SA (MPU401)
-
-  Timers:
-  0: System clock
-  1: MSS audio codec (CS4231)
-
-  Mixers:
-  0: MSS audio codec (CS4231)
-
 Questions? Comments?
 <stiker@northlink.com>

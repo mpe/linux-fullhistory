@@ -21,33 +21,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef AWE_CONFIG_H_DEF
-#define AWE_CONFIG_H_DEF
-
-/*----------------------------------------------------------------
- * system configuration
- *----------------------------------------------------------------*/
-
-/* if your kernel support module for each soundcard, define this.
- * NOTE: it will be automatically set on linux-2.1.x kernels.
- *       only define here if you have moduler sound system on
- *       2.0.x kernel (like RedHat).
- */
-#undef AWE_MODULE_SUPPORT
-
-
-/*----------------------------------------------------------------
+/*
  * chorus & reverb effects send for FM chip: from 0 to 0xff
  * larger numbers often cause weird sounds.
- *----------------------------------------------------------------*/
+ */
 
 #define DEF_FM_CHORUS_DEPTH	0x10
 #define DEF_FM_REVERB_DEPTH	0x10
 
 
-/*----------------------------------------------------------------*
+/*
  * other compile conditions
- *----------------------------------------------------------------*/
+ */
 
 /* initialize FM passthrough even without extended RAM */
 #undef AWE_ALWAYS_INIT_FM
@@ -73,30 +58,30 @@
 /* allow sample sharing */
 #define AWE_ALLOW_SAMPLE_SHARING
 
-/*================================================================
- * Usually, you don't have to touch the following options.
- *================================================================*/
-
-/*----------------------------------------------------------------
+/*
  * AWE32 card configuration:
  * uncomment the following lines *ONLY* when auto detection doesn't
  * work properly on your machine.
- *----------------------------------------------------------------*/
+ */
 
 /*#define AWE_DEFAULT_BASE_ADDR	0x620*/	/* base port address */
 /*#define AWE_DEFAULT_MEM_SIZE	512*/	/* kbytes */
 
-/*----------------------------------------------------------------
+/*
  * maximum size of soundfont list table
- *----------------------------------------------------------------*/
+ */
 
 #define AWE_MAX_SF_LISTS 16
 
-/*----------------------------------------------------------------
+/*
  * chunk size of sample and voice tables
- *----------------------------------------------------------------*/
+ */
 
 #define AWE_MAX_SAMPLES 400
 #define AWE_MAX_INFOS 800
 
-#endif  /* AWE_CONFIG_H_DEF */
+#define AWE_MAJOR_VERSION	0
+#define AWE_MINOR_VERSION	4
+#define AWE_TINY_VERSION	3
+#define AWE_VERSION_NUMBER	((AWE_MAJOR_VERSION<<16)|(AWE_MINOR_VERSION<<8)|AWE_TINY_VERSION)
+#define AWEDRV_VERSION		"0.4.3"

@@ -177,7 +177,6 @@ source drivers/char/Config.in
 
 source drivers/usb/Config.in
 
-# drivers/misc has currently only i386 specific devices.
 #source drivers/misc/Config.in
 
 source fs/Config.in

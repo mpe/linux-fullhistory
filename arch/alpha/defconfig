@@ -324,10 +324,6 @@ CONFIG_PSMOUSE=y
 # CONFIG_USB is not set
 
 #
-# Misc devices
-#
-
-#
 # Filesystems
 #
 # CONFIG_QUOTA is not set
