@@ -79,9 +79,6 @@ static int debug = -1;			/* The debug level */
 #include <linux/modversions.h>
 #endif
 
-#if LINUX_VERSION_CODE < 0x20200  &&  defined(MODVERSIONS)
-#include <linux/modversions.h>
-#endif
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/timer.h>

@@ -176,9 +176,9 @@ S: Poland
 
 N: Carlos Henrique Bauer
 E: chbauer@acm.org
-E: bauer@atlas.unisinos.tche.br
-D: A test for detection of EPP-1.7 and ECP/EPP parports.
+E: bauer@atlas.unisinos.br
 D: Some new sysctl entries for the parport driver.
+D: New sysctl function for handling unsigned longs
 S: Universidade do Vale do Rio dos Sinos - UNISINOS
 S: DSI/IDASI
 S: Av. Unisinos, 950
@@ -987,10 +987,6 @@ S: Na Orechovce 7
 S: 160 00 Praha 6
 S: Czech Republic
 
-N: Andreas S. Krebs
-E: akrebs@altavista.net
-D: CYPRESS CY82C693 chipset IDE, Digital's PC-Alpha 164SX boards
-
 N: Niels Kristian Bech Jensen
 E: nkbj@image.dk
 W: http://www.image.dk/~nkbj
@@ -1000,15 +996,6 @@ D: Danish HOWTO, Linux+FreeBSD mini-HOWTO.
 S: Dr. Holsts Vej 34, lejl. 164
 S: DK-8230 Åbyhøj
 S: Denmark
-
-N: Andrzej M. Krzysztofowicz
-E: ankry@mif.pg.gda.pl
-D: XT disk driver
-D: Aladdin 1533/1543(C) chipset IDE
-D: PIIX chipset IDE
-S: ul. Matemblewska 1B/10
-S: 80-283 Gdansk
-S: Poland
 
 N: Michael K. Johnson
 E: johnsonm@redhat.com
@@ -1023,6 +1010,29 @@ D: LP driver
 S: 201 Howell Street, Apartment 1C
 S: Chapel Hill, North Carolina 27514-4818
 S: USA
+
+N: Dave Jones
+E: dave@powertweak.com
+W: http://linux.powertweak.com
+D: Centaur/IDT Winchip/Winchip 2 tweaks
+D: Misc clean ups and other random hacking.
+S: 40, Heol Edward Lewis,
+S: Gelligaer, Hengoed,
+S: Mid Glamorgan, CF82 8EJ,
+S: Wales, United Kingdom
+
+N: Andreas S. Krebs
+E: akrebs@altavista.net
+D: CYPRESS CY82C693 chipset IDE, Digital's PC-Alpha 164SX boards
+
+N: Andrzej M. Krzysztofowicz
+E: ankry@mif.pg.gda.pl
+D: XT disk driver
+D: Aladdin 1533/1543(C) chipset IDE
+D: PIIX chipset IDE
+S: ul. Matemblewska 1B/10
+S: 80-283 Gdansk
+S: Poland
 
 N: Bernhard Kaindl
 E: bkaindl@netway.at
@@ -1293,7 +1303,7 @@ E: Kai.Makisara@metla.fi
 D: SCSI Tape Driver
 
 N: Hamish Macdonald
-E: hamish_macdonald@westendsys.com
+E: hamishm@lucent.com
 D: Linux/68k port
 S: 32 Clydesdale Avenue
 S: Kanata, Ontario

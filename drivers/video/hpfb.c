@@ -384,7 +384,7 @@ int __init hpfb_init_one(unsigned long base)
  * Initialise the framebuffer
  */
 
-unsigned long __init hpfb_init(unsigned long mem_start)
+int __init hpfb_init(void)
 {
 	unsigned int sid;
 
@@ -421,9 +421,10 @@ unsigned long __init hpfb_init(unsigned long mem_start)
 		}
 	}
 
-	return mem_start;
+	return 0;
 }
 
-void __init hpfb_setup(char *options, int *ints)
+int __init hpfb_setup(char *options)
 {
+	return 0;
 }

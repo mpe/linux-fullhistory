@@ -99,7 +99,7 @@ static int s3trio_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Interface to the low level console driver
      */
 
-void s3triofb_init(void);
+int s3triofb_init(void);
 static int s3triofbcon_switch(int con, struct fb_info *info);
 static int s3triofbcon_updatevar(int con, struct fb_info *info);
 static void s3triofbcon_blank(int blank, struct fb_info *info);
@@ -288,7 +288,7 @@ static int s3trio_ioctl(struct inode *inode, struct file *file, u_int cmd,
     return -EINVAL;
 }
 
-void __init s3triofb_init(void)
+int __init s3triofb_init(void)
 {
 #ifdef __powerpc__
     /* We don't want to be called like this. */
@@ -296,6 +296,7 @@ void __init s3triofb_init(void)
 #else /* !__powerpc__ */
     /* To be merged with cybervision */
 #endif /* !__powerpc__ */
+	return 0;
 }
 
 void __init s3trio_resetaccel(void){
@@ -721,9 +722,9 @@ static void do_install_cmap(int con, struct fb_info *info)
 		    s3trio_setcolreg, &fb_info);
 }
 
-void s3triofb_setup(char *options, int *ints) {
+int s3triofb_setup(char *options) {
 
-        return;
+        return 0;
 
 }
 

@@ -73,6 +73,8 @@ static struct fb_var_screeninfo default_var;
 static int currcon = 0;
 static int inverse = 0;
 
+int xxxfb_init(void);
+int xxxfb_setup(char*);
 
 /* ------------------- chipset specific functions -------------------------- */
 
@@ -297,7 +299,7 @@ struct fbgen_hwswitch xxx_switch = {
      *  Initialization
      */
 
-void __init xxxfb_init(void)
+int __init xxxfb_init(void)
 {
     fb_info.gen.fbhw = &xxx_switch;
     fb_info.gen.fbhw->detect();
@@ -316,12 +318,13 @@ void __init xxxfb_init(void)
     fbgen_set_disp(-1, &fb_info.gen);
     fbgen_install_cmap(0, &fb_info.gen);
     if (register_framebuffer(&fb_info.gen.info) < 0)
-	return;
-    printk("fb%d: %s frame buffer device\n", GET_FB_IDX(fb_info.gen.info.node),
+	return -EINVAL;
+    printk(KERN_INFO "fb%d: %s frame buffer device\n", GET_FB_IDX(fb_info.gen.info.node),
 	   fb_info.gen.info.modename);
 
     /* uncomment this if your driver cannot be unloaded */
     /* MOD_INC_USE_COUNT; */
+    return 0;
 }
 
 
@@ -345,7 +348,7 @@ void xxxfb_cleanup(struct fb_info *info)
      *  Setup
      */
 
-void __init xxxfb_setup(char *options, int *ints)
+int __init xxxfb_setup(char *options)
 {
     /* Parse user speficied options (`video=xxxfb:') */
 }
@@ -393,8 +396,7 @@ static struct fb_ops xxxfb_ops = {
 #ifdef MODULE
 int init_module(void)
 {
-    xxxfb_init();
-    return 0;
+    return xxxfb_init();
 }
 
 void cleanup_module(void)

@@ -106,6 +106,7 @@
  *    03.08.99   0.26  adapt to Linus' new __setup/__initcall
  *                     added kernel command line option "es1370=joystick[,lineout[,micbias]]"
  *                     removed CONFIG_SOUND_ES1370_JOYPORT_BOOT kludge
+ *    12.08.99   0.27  module_init/__setup fixes
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -1067,9 +1068,10 @@ static int drain_dac1(struct es1370_state *s, int nonblock)
                         current->state = TASK_RUNNING;
                         return -EBUSY;
                 }
-		tmo = (count * HZ) / dac1_samplerate[(s->ctrl & CTRL_WTSRSEL) >> CTRL_SH_WTSRSEL];
+		tmo = 3 * HZ * (count + s->dma_dac1.fragsize) / 2
+			/ dac1_samplerate[(s->ctrl & CTRL_WTSRSEL) >> CTRL_SH_WTSRSEL];
 		tmo >>= sample_shift[(s->sctrl & SCTRL_P1FMT) >> SCTRL_SH_P1FMT];
-		if (!schedule_timeout(tmo ? : 1) && tmo)
+		if (!schedule_timeout(tmo + 1))
 			DBG(printk(KERN_DEBUG "es1370: dma timed out??\n");)
         }
         remove_wait_queue(&s->dma_dac1.wait, &wait);
@@ -1102,9 +1104,10 @@ static int drain_dac2(struct es1370_state *s, int nonblock)
                         current->state = TASK_RUNNING;
                         return -EBUSY;
                 }
-		tmo = (count * HZ) / DAC2_DIVTOSR((s->ctrl & CTRL_PCLKDIV) >> CTRL_SH_PCLKDIV);
+		tmo = 3 * HZ * (count + s->dma_dac2.fragsize) / 2
+			/ DAC2_DIVTOSR((s->ctrl & CTRL_PCLKDIV) >> CTRL_SH_PCLKDIV);
 		tmo >>= sample_shift[(s->sctrl & SCTRL_P2FMT) >> SCTRL_SH_P2FMT];
-		if (!schedule_timeout(tmo ? : 1) && tmo)
+		if (!schedule_timeout(tmo + 1))
 			DBG(printk(KERN_DEBUG "es1370: dma timed out??\n");)
         }
         remove_wait_queue(&s->dma_dac2.wait, &wait);
@@ -2300,6 +2303,16 @@ static int joystick[NR_DEVICE] = { 0, };
 static int lineout[NR_DEVICE] = { 0, };
 static int micbias[NR_DEVICE] = { 0, };
 
+MODULE_PARM(joystick, "1-" __MODULE_STRING(NR_DEVICE) "i");
+MODULE_PARM_DESC(joystick, "if 1 enables joystick interface (still need separate driver)");
+MODULE_PARM(lineout, "1-" __MODULE_STRING(NR_DEVICE) "i");
+MODULE_PARM_DESC(lineout, "if 1 the LINE input is converted to LINE out");
+MODULE_PARM(micbias, "1-" __MODULE_STRING(NR_DEVICE) "i");
+MODULE_PARM_DESC(micbias, "sets the +5V bias for an electret microphone");
+
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
+MODULE_DESCRIPTION("ES1370 AudioPCI Driver");
+
 /* --------------------------------------------------------------------- */
 
 static struct initvol {
@@ -2318,10 +2331,7 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_OGAIN, 0x4040 }
 };
 
-#ifndef MODULE
-static
-#endif
-int __init init_module(void)
+static int __init init_es1370(void)
 {
 	struct es1370_state *s;
 	struct pci_dev *pcidev = NULL;
@@ -2330,7 +2340,7 @@ int __init init_module(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.26 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1370: version v0.27 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
 		if (pcidev->resource[0].flags == 0 || 
@@ -2438,21 +2448,7 @@ int __init init_module(void)
 	return 0;
 }
 
-/* --------------------------------------------------------------------- */
-
-#ifdef MODULE
-
-MODULE_PARM(joystick, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(joystick, "if 1 enables joystick interface (still need separate driver)");
-MODULE_PARM(lineout, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(lineout, "if 1 the LINE input is converted to LINE out");
-MODULE_PARM(micbias, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(micbias, "sets the +5V bias for an electret microphone");
-
-MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
-MODULE_DESCRIPTION("ES1370 AudioPCI Driver");
-
-void cleanup_module(void)
+static void __exit cleanup_es1370(void)
 {
 	struct es1370_state *s;
 
@@ -2472,7 +2468,12 @@ void cleanup_module(void)
 	printk(KERN_INFO "es1370: unloading\n");
 }
 
-#else /* MODULE */
+module_init(init_es1370);
+module_exit(cleanup_es1370);
+
+/* --------------------------------------------------------------------- */
+
+#ifndef MODULE
 
 /* format is: es1370=[joystick[,lineout[,micbias]]] */
 
@@ -2493,6 +2494,5 @@ static int __init es1370_setup(char *str)
 }
 
 __setup("es1370=", es1370_setup);
-__initcall(init_module);
 
 #endif /* MODULE */

@@ -16,8 +16,24 @@
  *
  */
 
-#define TSUNAMI_DMA_WIN_BASE_DEFAULT    (1024*1024*1024U)
-#define TSUNAMI_DMA_WIN_SIZE_DEFAULT    (1024*1024*1024U)
+/*
+ * We must actually use 2 windows to direct-map the 2GB space, because
+ * of an "idiot-syncracy" of the CYPRESS chip used on DS20 and others.
+ * It may respond to a PCI bus address in the last 1MB of the 4GB
+ * address range, and that is where real memory may appear.
+ *
+ * Sigh...
+ */
+#define TSUNAMI_DMA_WIN_BASE_DEFAULT	(1UL*1024*1024*1024)
+#define TSUNAMI_DMA_WIN_SIZE_DEFAULT	(2UL*1024*1024*1024)
+
+#define TSUNAMI_DMA_WIN0_BASE_DEFAULT	(1UL*1024*1024*1024)
+#define TSUNAMI_DMA_WIN0_SIZE_DEFAULT	(1UL*1024*1024*1024)
+#define TSUNAMI_DMA_WIN0_TRAN_DEFAULT	(0UL)
+
+#define TSUNAMI_DMA_WIN1_BASE_DEFAULT	(2UL*1024*1024*1024)
+#define TSUNAMI_DMA_WIN1_SIZE_DEFAULT	(1UL*1024*1024*1024)
+#define TSUNAMI_DMA_WIN1_TRAN_DEFAULT	(1UL*1024*1024*1024)
 
 #if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
 #define TSUNAMI_DMA_WIN_BASE		alpha_mv.dma_win_base

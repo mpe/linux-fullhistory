@@ -1,4 +1,4 @@
-/* $Id: teleint.c,v 1.7 1998/11/15 23:55:26 keil Exp $
+/* $Id: teleint.c,v 1.9 1999/07/12 21:05:30 keil Exp $
 
  * teleint.c     low level stuff for TeleInt isdn cards
  *
@@ -6,6 +6,13 @@
  *
  *
  * $Log: teleint.c,v $
+ * Revision 1.9  1999/07/12 21:05:30  keil
+ * fix race in IRQ handling
+ * added watchdog for lost IRQs
+ *
+ * Revision 1.8  1999/07/01 08:12:12  keil
+ * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
+ *
  * Revision 1.7  1998/11/15 23:55:26  keil
  * changes from 2.0
  *
@@ -38,7 +45,7 @@
 
 extern const char *CardType[];
 
-const char *TeleInt_revision = "$Revision: 1.7 $";
+const char *TeleInt_revision = "$Revision: 1.9 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -191,7 +198,7 @@ static void
 TeleInt_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *cs = dev_id;
-	u_char val, stat = 0;
+	u_char val;
 
 	if (!cs) {
 		printk(KERN_WARNING "TeleInt: Spurious interrupt!\n");
@@ -199,20 +206,16 @@ TeleInt_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	val = readreg(cs->hw.hfc.addr | 1, cs->hw.hfc.addr, ISAC_ISTA);
       Start_ISAC:
-	if (val) {
+	if (val)
 		isac_interrupt(cs, val);
-		stat |= 2;
-	}
 	val = readreg(cs->hw.hfc.addr | 1, cs->hw.hfc.addr, ISAC_ISTA);
 	if (val) {
 		if (cs->debug & L1_DEB_ISAC)
 			debugl1(cs, "ISAC IntStat after IntRoutine");
 		goto Start_ISAC;
 	}
-	if (stat & 2) {
-		writereg(cs->hw.hfc.addr | 1, cs->hw.hfc.addr, ISAC_MASK, 0xFF);
-		writereg(cs->hw.hfc.addr | 1, cs->hw.hfc.addr, ISAC_MASK, 0x0);
-	}
+	writereg(cs->hw.hfc.addr | 1, cs->hw.hfc.addr, ISAC_MASK, 0xFF);
+	writereg(cs->hw.hfc.addr | 1, cs->hw.hfc.addr, ISAC_MASK, 0x0);
 }
 
 static void
@@ -252,11 +255,11 @@ reset_TeleInt(struct IsdnCardState *cs)
 	save_flags(flags);
 	sti();
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(3);
+	schedule_timeout((30*HZ)/1000);
 	cs->hw.hfc.cirm &= ~HFC_RESET;
 	byteout(cs->hw.hfc.addr | 1, cs->hw.hfc.cirm);	/* Reset Off */
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(1);
+	schedule_timeout((10*HZ)/1000);
 	restore_flags(flags);
 }
 
@@ -270,9 +273,6 @@ TeleInt_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 		case CARD_RELEASE:
 			release_io_TeleInt(cs);
 			return(0);
-		case CARD_SETIRQ:
-			return(request_irq(cs->irq, &TeleInt_interrupt,
-					I4L_IRQ_FLAG, "HiSax", cs));
 		case CARD_INIT:
 			inithfc(cs);
 			clear_pending_isac_ints(cs);
@@ -289,8 +289,8 @@ TeleInt_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-int __init 
-setup_TeleInt(struct IsdnCard *card)
+__initfunc(int
+setup_TeleInt(struct IsdnCard *card))
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];
@@ -365,6 +365,7 @@ setup_TeleInt(struct IsdnCard *card)
 	cs->BC_Read_Reg = &ReadHFC;
 	cs->BC_Write_Reg = &WriteHFC;
 	cs->cardmsg = &TeleInt_card_msg;
+	cs->irq_func = &TeleInt_interrupt;
 	ISACVersion(cs, "TeleInt:");
 	return (1);
 }

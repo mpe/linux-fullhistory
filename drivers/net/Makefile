@@ -1136,6 +1136,15 @@ ifeq ($(CONFIG_CYCLADES_SYNC),y)
   endif
 endif
 
+ifeq ($(CONFIG_CYCLADES_SYNC),m)
+  MX_OBJS += cycx_drv.o
+  M_OBJS += cyclomx.o
+  CYCLOMX_OBJS = cycx_main.o
+  ifeq ($(CONFIG_CYCLOMX_X25),y)
+    CYCLOMX_OBJS += cycx_x25.o
+  endif
+endif
+
 ifeq ($(CONFIG_X25_ASY),y)
 L_OBJS += x25_asy.o
 else

@@ -39,13 +39,26 @@
  *    15.06.99   0.4   Fix bad allocation bug.
  *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
  *    28.06.99   0.5   Add pci_set_master
- *
+ *    12.08.99   0.6   Fix MIDI UART crashing the driver
+ *                     Changed mixer semantics from OSS documented
+ *                     behaviour to OSS "code behaviour".
+ *                     Recording might actually work now.
+ *                     The real DDMA controller address register is at PCI config
+ *                     0x60, while the register at 0x18 is used as a placeholder
+ *                     register for BIOS address allocation. This register
+ *                     is supposed to be copied into 0x60, according
+ *                     to the Solo1 datasheet. When I do that, I can access
+ *                     the DDMA registers except the mask bit, which
+ *                     is stuck at 1. When I copy the contents of 0x18 +0x10
+ *                     to the DDMA base register, everything seems to work.
+ *                     The fun part is that the Windows Solo1 driver doesn't
+ *                     seem to do these tricks.
+ *                     Bugs remaining: plops and clicks when starting/stopping playback
  *
  */
 
 /*****************************************************************************/
       
-#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/string.h>
@@ -69,6 +82,10 @@
 
 /* --------------------------------------------------------------------- */
 
+#undef OSS_DOCUMENTED_MIXER_SEMANTICS
+
+/* --------------------------------------------------------------------- */
+
 #ifndef PCI_VENDOR_ID_ESS
 #define PCI_VENDOR_ID_ESS         0x125d
 #endif
@@ -78,9 +95,12 @@
 
 #define SOLO1_MAGIC  ((PCI_VENDOR_ID_ESS<<16)|PCI_DEVICE_ID_ESS_SOLO1)
 
+#define DDMABASE_OFFSET           0x10    /* chip bug workaround kludge */
+#define DDMABASE_EXTENT           16
+
 #define IOBASE_EXTENT             16
 #define SBBASE_EXTENT             16
-#define VCBASE_EXTENT             16
+#define VCBASE_EXTENT             (DDMABASE_EXTENT+DDMABASE_OFFSET)
 #define MPUBASE_EXTENT            4
 #define GPBASE_EXTENT             4
 
@@ -98,16 +118,15 @@
 
 /* --------------------------------------------------------------------- */
 
-#define DEBUGREC
-
-/* --------------------------------------------------------------------- */
-
 struct solo1_state {
 	/* magic */
 	unsigned int magic;
 
-	/* we keep sb cards in a linked list */
+	/* we keep the cards in a linked list */
 	struct solo1_state *next;
+	
+	/* pcidev is needed to turn off the DDMA controller at driver shutdown */
+	struct pci_dev *pcidev;
 
 	/* soundcore stuff */
 	int dev_audio;
@@ -116,10 +135,10 @@ struct solo1_state {
 	int dev_dmfm;
 
 	/* hardware resources */
-	unsigned long iobase, sbbase, vcbase, mpubase, gpbase; /* long for SPARC */
+	unsigned long iobase, sbbase, vcbase, ddmabase, mpubase, gpbase; /* long for SPARC */
 	unsigned int irq;
 
-	/* mixer registers; there is no HW readback */
+	/* mixer registers */
 	struct {
 		unsigned short vol[10];
 		unsigned int recsrc;
@@ -302,6 +321,8 @@ static void start_dac(struct solo1_state *s)
 	spin_lock_irqsave(&s->lock, flags);
 	if (!(s->ena & FMODE_WRITE) && (s->dma_dac.mapped || s->dma_dac.count > 0) && s->dma_dac.ready) {
 		s->ena |= FMODE_WRITE;
+		write_mixer(s, 0x78, 0x12);
+		udelay(10);
 		write_mixer(s, 0x78, 0x13);
 	}
 	spin_unlock_irqrestore(&s->lock, flags);
@@ -326,47 +347,24 @@ static void start_adc(struct solo1_state *s)
 	    && s->dma_adc.ready) {
 		s->ena |= FMODE_READ;
 		write_ctrl(s, 0xb8, 0xf);
-#ifdef DEBUGREC
+#if 0
 		printk(KERN_DEBUG "solo1: DMAbuffer: 0x%08lx\n", (long)s->dma_adc.rawbuf);
 		printk(KERN_DEBUG "solo1: DMA: mask: 0x%02x cnt: 0x%04x addr: 0x%08x  stat: 0x%02x\n", 
-		       inb(s->vcbase+0xf), inw(s->vcbase+4), inl(s->vcbase), inb(s->vcbase+8));
+		       inb(s->ddmabase+0xf), inw(s->ddmabase+4), inl(s->ddmabase), inb(s->ddmabase+8));
 #endif
-                outb(0, s->vcbase+0xd); /* master reset */
-#ifdef DEBUGREC
-		printk(KERN_DEBUG "solo1: DMA: mask: 0x%02x cnt: 0x%04x addr: 0x%08x  stat: 0x%02x (a. clr)\n", 
-		       inb(s->vcbase+0xf), inw(s->vcbase+4), inl(s->vcbase), inb(s->vcbase+8));
-#endif
-		outb(1, s->vcbase+0xf);  /* mask */
-#ifdef DEBUGREC
-		printk(KERN_DEBUG "solo1: DMA: mask: 0x%02x cnt: 0x%04x addr: 0x%08x  stat: 0x%02x (a. mask)\n", 
-		       inb(s->vcbase+0xf), inw(s->vcbase+4), inl(s->vcbase), inb(s->vcbase+8));
-#endif
-		outb(0x54/*0x14*/, s->vcbase+0xb);  /* DMA_MODE_READ | DMA_MODE_AUTOINIT */
-#ifdef DEBUGREC
-		printk(KERN_DEBUG "solo1: DMA: mask: 0x%02x cnt: 0x%04x addr: 0x%08x  stat: 0x%02x (a. wrmode)\n", 
-		       inb(s->vcbase+0xf), inw(s->vcbase+4), inl(s->vcbase), inb(s->vcbase+8));
-#endif
-		outl(virt_to_bus(s->dma_adc.rawbuf), s->vcbase);
-#ifdef DEBUGREC
-		printk(KERN_DEBUG "solo1: DMA: mask: 0x%02x cnt: 0x%04x addr: 0x%08x  stat: 0x%02x (a. wrbase)\n", 
-		       inb(s->vcbase+0xf), inw(s->vcbase+4), inl(s->vcbase), inb(s->vcbase+8));
-#endif
-		outw(s->dma_adc.dmasize-1, s->vcbase+4);
-#ifdef DEBUGREC
-		printk(KERN_DEBUG "solo1: DMA: mask: 0x%02x cnt: 0x%04x addr: 0x%08x  stat: 0x%02x (a. wrcnt)\n", 
-		       inb(s->vcbase+0xf), inw(s->vcbase+4), inl(s->vcbase), inb(s->vcbase+8));
-#endif
-		outb(0, s->vcbase+0xf);
-#ifdef DEBUGREC
-		printk(KERN_DEBUG "solo1: DMA: mask: 0x%02x cnt: 0x%04x addr: 0x%08x  stat: 0x%02x (a. clrmask)\n", 
-		       inb(s->vcbase+0xf), inw(s->vcbase+4), inl(s->vcbase), inb(s->vcbase+8));
-#endif
+                outb(0, s->ddmabase+0xd); /* master reset */
+		outb(1, s->ddmabase+0xf);  /* mask */
+		outb(0x54/*0x14*/, s->ddmabase+0xb);  /* DMA_MODE_READ | DMA_MODE_AUTOINIT */
+		outl(virt_to_bus(s->dma_adc.rawbuf), s->ddmabase);
+		outw(s->dma_adc.dmasize-1, s->ddmabase+4);
+		outb(0, s->ddmabase+0xf);
 	}
 	spin_unlock_irqrestore(&s->lock, flags);
-#ifdef DEBUGREC
-	printk(KERN_DEBUG "solo1: start DMA: reg B8: 0x%02x  DMAstat: 0x%02x  DMAcnt: 0x%04x  DMAmask: 0x%02x  SBstat: 0x%02x\n", 
-	       read_ctrl(s, 0xb8), inb(s->vcbase+8), inw(s->vcbase+4), inb(s->vcbase+0xf), inb(s->sbbase+0xc));
-
+#if 0
+	printk(KERN_DEBUG "solo1: start DMA: reg B8: 0x%02x  SBstat: 0x%02x\n"
+	       KERN_DEBUG "solo1: DMA: stat: 0x%02x  cnt: 0x%04x  mask: 0x%02x\n", 
+	       read_ctrl(s, 0xb8), inb(s->sbbase+0xc), 
+	       inb(s->ddmabase+8), inw(s->ddmabase+4), inb(s->ddmabase+0xf));
 	printk(KERN_DEBUG "solo1: A1: 0x%02x  A2: 0x%02x  A4: 0x%02x  A5: 0x%02x  A8: 0x%02x\n"  
 	       KERN_DEBUG "solo1: B1: 0x%02x  B2: 0x%02x  B4: 0x%02x  B7: 0x%02x  B8: 0x%02x  B9: 0x%02x\n",
 	       read_ctrl(s, 0xa1), read_ctrl(s, 0xa2), read_ctrl(s, 0xa4), read_ctrl(s, 0xa5), read_ctrl(s, 0xa8), 
@@ -456,16 +454,16 @@ extern inline int prog_dmabuf_adc(struct solo1_state *s)
 	va = virt_to_bus(s->dma_adc.rawbuf);
 	if ((va & ~((1<<24)-1)))
 		panic("solo1: buffer above 16M boundary");
-	outb(0, s->vcbase+0xd);  /* clear */
-	outb(1, s->vcbase+0xf); /* mask */
-	//outb(0, s->vcbase+8);  /* enable (enable is active low!) */
-	outb(0x54, s->vcbase+0xb);  /* DMA_MODE_READ | DMA_MODE_AUTOINIT */
-	outl(va, s->vcbase);
-	outw(s->dma_adc.dmasize-1, s->vcbase+4);
+	outb(0, s->ddmabase+0xd);  /* clear */
+	outb(1, s->ddmabase+0xf); /* mask */
+	/*outb(0, s->ddmabase+8);*/  /* enable (enable is active low!) */
+	outb(0x54, s->ddmabase+0xb);  /* DMA_MODE_READ | DMA_MODE_AUTOINIT */
+	outl(va, s->ddmabase);
+	outw(s->dma_adc.dmasize-1, s->ddmabase+4);
 	c = - s->dma_adc.fragsamples;
 	write_ctrl(s, 0xa4, c);
 	write_ctrl(s, 0xa5, c >> 8);
-	outb(0, s->vcbase+0xf);
+	outb(0, s->ddmabase+0xf);
 	s->dma_adc.ready = 1;
 	return 0;
 }
@@ -513,12 +511,12 @@ static void solo1_update_ptr(struct solo1_state *s)
 
 	/* update ADC pointer */
 	if (s->ena & FMODE_READ) {
-		hwptr = (s->dma_adc.dmasize - 1 - inw(s->vcbase+4)) % s->dma_adc.dmasize;
+		hwptr = (s->dma_adc.dmasize - 1 - inw(s->ddmabase+4)) % s->dma_adc.dmasize;
                 diff = (s->dma_adc.dmasize + hwptr - s->dma_adc.hwptr) % s->dma_adc.dmasize;
                 s->dma_adc.hwptr = hwptr;
 		s->dma_adc.total_bytes += diff;
 		s->dma_adc.count += diff;
-#ifdef DEBUGREC
+#if 0
 		printk(KERN_DEBUG "solo1: rd: hwptr %u swptr %u dmasize %u count %u\n",
 		       s->dma_adc.hwptr, s->dma_adc.swptr, s->dma_adc.dmasize, s->dma_adc.count);
 #endif
@@ -633,30 +631,32 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 		SOUND_MASK_MIC, SOUND_MASK_MIC, SOUND_MASK_CD, SOUND_MASK_VOLUME,
 		SOUND_MASK_MIC, 0, SOUND_MASK_LINE, 0
 	};
-	static const unsigned char mixtable[SOUND_MIXER_NRDEVICES] = {
-		[SOUND_MIXER_PCM]    = 0x7c,   /* voice */
-		[SOUND_MIXER_SYNTH]  = 0x36,   /* FM */
-		[SOUND_MIXER_CD]     = 0x38,   /* CD */
-		[SOUND_MIXER_LINE]   = 0x3e,   /* Line */
-		[SOUND_MIXER_LINE1]  = 0x3a,   /* AUX */
-		[SOUND_MIXER_MIC]    = 0x1a,   /* Mic */
-		[SOUND_MIXER_LINE2]  = 0x6d    /* Mono in */
+	static const unsigned char mixtable1[SOUND_MIXER_NRDEVICES] = {
+		[SOUND_MIXER_PCM]     = 1,   /* voice */
+		[SOUND_MIXER_SYNTH]   = 2,   /* FM */
+		[SOUND_MIXER_CD]      = 3,   /* CD */
+		[SOUND_MIXER_LINE]    = 4,   /* Line */
+		[SOUND_MIXER_LINE1]   = 5,   /* AUX */
+		[SOUND_MIXER_MIC]     = 6,   /* Mic */
+		[SOUND_MIXER_LINE2]   = 7,   /* Mono in */
+		[SOUND_MIXER_SPEAKER] = 8,   /* Speaker */
+		[SOUND_MIXER_RECLEV]  = 9,   /* Recording level */
+		[SOUND_MIXER_VOLUME]  = 10   /* Master Volume */
 	};
-	unsigned char l, r, rl, rr;
+	static const unsigned char mixreg[] = {
+		0x7c,   /* voice */
+		0x36,   /* FM */
+		0x38,   /* CD */
+		0x3e,   /* Line */
+		0x3a,   /* AUX */
+		0x1a,   /* Mic */
+		0x6d    /* Mono in */
+	};
+	unsigned char l, r, rl, rr, vidx;
 	int i, val;
 
 	VALIDATE_STATE(s);
 
-	if (cmd == SOUND_MIXER_PRIVATE1) {
-		/* enable/disable/query mixer preamp */
-		get_user_ret(val, (int *)arg, -EFAULT);
-		if (val != -1) {
-			val = val ? 0xff : 0xf7;
-			write_mixer(s, 0x7d, (read_mixer(s, 0x7d) | 0x08) & val);
-		}
-		val = (read_mixer(s, 0x7d) & 0x08) ? 1 : 0;
-		return put_user(val, (int *)arg);
-	}
 	if (cmd == SOUND_MIXER_PRIVATE1) {
 		/* enable/disable/query mixer preamp */
 		get_user_ret(val, (int *)arg, -EFAULT);
@@ -720,36 +720,11 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
                 case SOUND_MIXER_CAPS:
 			return put_user(SOUND_CAP_EXCL_INPUT, (int *)arg);
 
-		case SOUND_MIXER_VOLUME:
-			rl = read_mixer(s, 0x60);
-			rr = read_mixer(s, 0x62);
-			l = (rl * 3 + 11) / 2;
-			if (rl & 0x40)
-				l = 0;
-			r = (rr * 3 + 11) / 2;
-			if (rr & 0x40)
-				r = 0;
-			return put_user((((unsigned int)r) << 8) | l, (int *)arg);
-
-		case SOUND_MIXER_SPEAKER:
-			rl = read_mixer(s, 0x3c);
-			l = (rl & 7) * 14 + 2;
-			return put_user(l * 0x101, (int *)arg);
-
-		case SOUND_MIXER_RECLEV:
-			rl = read_ctrl(s, 0xb4);
-			r = ((rl & 0xf) * 13 + 5) / 2;
-			l = (((rl >> 4) & 0xf) * 13 + 5) / 2;
-			return put_user((((unsigned int)r) << 8) | l, (int *)arg);
-
 		default:
 			i = _IOC_NR(cmd);
-                        if (i >= SOUND_MIXER_NRDEVICES || !mixtable[i])
+                        if (i >= SOUND_MIXER_NRDEVICES || !(vidx = mixtable1[i]))
                                 return -EINVAL;
-			rl = read_mixer(s, mixtable[i]);
-			r = ((rl & 0xf) * 13 + 5) / 2;
-			l = (((rl >> 4) & 0xf) * 13 + 5) / 2;
-			return put_user((((unsigned int)r) << 8) | l, (int *)arg);
+			return put_user(s->mix.vol[vidx-1], (int *)arg);
 		}
 	}
         if (_IOC_DIR(cmd) != (_IOC_READ|_IOC_WRITE)) 
@@ -757,21 +732,21 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 	s->mix.modcnt++;
 	switch (_IOC_NR(cmd)) {
 	case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
-
-	{
-		static const unsigned char regs[] = {
-			0x1c, 0x1a, 0x36, 0x38, 0x3a, 0x3c, 0x3e, 0x60, 0x62, 0x6d, 0x7c
-		};
-		int i;
-
-		for (i = 0; i < sizeof(regs); i++)
-			printk(KERN_DEBUG "solo1: mixer reg 0x%02x: 0x%02x\n",
-			       regs[i], read_mixer(s, regs[i]));
-		printk(KERN_DEBUG "solo1: ctrl reg 0x%02x: 0x%02x\n",
-		       0xb4, read_ctrl(s, 0xb4));
-	} 
-
-		get_user_ret(val, (int *)arg, -EFAULT);
+#if 0
+	        {
+			static const unsigned char regs[] = {
+				0x1c, 0x1a, 0x36, 0x38, 0x3a, 0x3c, 0x3e, 0x60, 0x62, 0x6d, 0x7c
+			};
+			int i;
+			
+			for (i = 0; i < sizeof(regs); i++)
+				printk(KERN_DEBUG "solo1: mixer reg 0x%02x: 0x%02x\n",
+				       regs[i], read_mixer(s, regs[i]));
+			printk(KERN_DEBUG "solo1: ctrl reg 0x%02x: 0x%02x\n",
+			       0xb4, read_ctrl(s, 0xb4));
+		}
+#endif
+	        get_user_ret(val, (int *)arg, -EFAULT);
                 i = hweight32(val);
                 if (i == 0)
                         return 0;
@@ -810,7 +785,12 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 		}
 		write_mixer(s, 0x60, rl);
 		write_mixer(s, 0x62, rr);
-		return put_user((((unsigned int)r) << 8) | l, (int *)arg);
+#ifdef OSS_DOCUMENTED_MIXER_SEMANTICS
+                s->mix.vol[9] = ((unsigned int)r << 8) | l;
+#else
+                s->mix.vol[9] = val;
+#endif
+		return put_user(s->mix.vol[9], (int *)arg);
 
 	case SOUND_MIXER_SPEAKER:
 		get_user_ret(val, (int *)arg, -EFAULT);
@@ -822,7 +802,12 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 		rl = (l - 2) / 14;
 		l = rl * 14 + 2;
 		write_mixer(s, 0x3c, rl);
-		return put_user(l * 0x101, (int *)arg);
+#ifdef OSS_DOCUMENTED_MIXER_SEMANTICS
+                s->mix.vol[7] = l * 0x101;
+#else
+                s->mix.vol[7] = val;
+#endif
+		return put_user(s->mix.vol[7], (int *)arg);
 
 	case SOUND_MIXER_RECLEV:
 		get_user_ret(val, (int *)arg, -EFAULT);
@@ -841,11 +826,16 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 		r = (rl * 13 + 5) / 2;
 		l = (rr * 13 + 5) / 2;
 		write_ctrl(s, 0xb4, (rl << 4) | rr);
-		return put_user((((unsigned int)r) << 8) | l, (int *)arg);
+#ifdef OSS_DOCUMENTED_MIXER_SEMANTICS
+                s->mix.vol[8] = ((unsigned int)r << 8) | l;
+#else
+                s->mix.vol[8] = val;
+#endif
+		return put_user(s->mix.vol[8], (int *)arg);
 
 	default:
 		i = _IOC_NR(cmd);
-		if (i >= SOUND_MIXER_NRDEVICES || !mixtable[i])
+		if (i >= SOUND_MIXER_NRDEVICES || !(vidx = mixtable1[i]))
 			return -EINVAL;
 		get_user_ret(val, (int *)arg, -EFAULT);
 		l = (val << 1) & 0x1fe;
@@ -862,8 +852,13 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 		rr = (r - 5) / 13;
 		r = (rl * 13 + 5) / 2;
 		l = (rr * 13 + 5) / 2;
-		write_mixer(s, mixtable[i], (rl << 4) | rr);
-		return put_user((((unsigned int)r) << 8) | l, (int *)arg);
+		write_mixer(s, mixreg[vidx-1], (rl << 4) | rr);
+#ifdef OSS_DOCUMENTED_MIXER_SEMANTICS
+                s->mix.vol[vidx-1] = ((unsigned int)r << 8) | l;
+#else
+                s->mix.vol[vidx-1] = val;
+#endif
+		return put_user(s->mix.vol[vidx-1], (int *)arg);
 	}
 }
 
@@ -919,10 +914,8 @@ static /*const*/ struct file_operations solo1_mixer_fops = {
 	NULL,  /* fsync */
 	NULL,  /* fasync */
 	NULL,  /* check_media_change */
-#if 0
 	NULL,  /* revalidate */
 	NULL,  /* lock */
-#endif
 };
 
 /* --------------------------------------------------------------------- */
@@ -931,7 +924,8 @@ static int drain_dac(struct solo1_state *s, int nonblock)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	unsigned long flags;
-	int count, tmo;
+	int count;
+	unsigned tmo;
 	
 	if (s->dma_dac.mapped)
 		return 0;
@@ -950,12 +944,12 @@ static int drain_dac(struct solo1_state *s, int nonblock)
                         current->state = TASK_RUNNING;
                         return -EBUSY;
                 }
-		tmo = (count * HZ) / s->rate;
+		tmo = 3 * HZ * (count + s->dma_dac.fragsize) / 2 / s->rate;
 		if (s->fmt & (AFMT_S16_LE | AFMT_U16_LE))
 			tmo >>= 1;
 		if (s->channels > 1)
 			tmo >>= 1;
-                if (!schedule_timeout(tmo ? : 1) && tmo)
+                if (!schedule_timeout(tmo + 1))
                         printk(KERN_DEBUG "solo1: dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac.wait, &wait);
@@ -996,7 +990,7 @@ static ssize_t solo1_read(struct file *file, char *buffer, size_t count, loff_t 
 			cnt = count;
 #ifdef DEBUGREC
 		printk(KERN_DEBUG "solo1_read: reg B8: 0x%02x  DMAstat: 0x%02x  DMAcnt: 0x%04x  SBstat: 0x%02x  cnt: %u\n", 
-		       read_ctrl(s, 0xb8), inb(s->vcbase+8), inw(s->vcbase+4), inb(s->sbbase+0xc), cnt);
+		       read_ctrl(s, 0xb8), inb(s->ddmabase+8), inw(s->ddmabase+4), inb(s->sbbase+0xc), cnt);
 #endif
 		if (cnt <= 0) {
 			start_adc(s);
@@ -1007,12 +1001,10 @@ static ssize_t solo1_read(struct file *file, char *buffer, size_t count, loff_t 
 			       KERN_DEBUG "solo1_read: SBstat: 0x%02x  cnt: %u\n",
 			       read_ctrl(s, 0xa1), read_ctrl(s, 0xa2), read_ctrl(s, 0xa4), read_ctrl(s, 0xa5), read_ctrl(s, 0xa8), 
 			       read_ctrl(s, 0xb1), read_ctrl(s, 0xb2), read_ctrl(s, 0xb7), read_ctrl(s, 0xb8), read_ctrl(s, 0xb9), 
-			       inl(s->vcbase), inw(s->vcbase+4), inb(s->vcbase+8), inb(s->vcbase+15), inb(s->sbbase+0xc), cnt);
+			       inl(s->ddmabase), inw(s->ddmabase+4), inb(s->ddmabase+8), inb(s->ddmabase+15), inb(s->sbbase+0xc), cnt);
 #endif
-			if (inb(s->vcbase+15) & 1) {
+			if (inb(s->ddmabase+15) & 1)
 				printk(KERN_ERR "solo1: cannot start recording, DDMA mask bit stuck at 1\n");
-				return -EIO;
-			}
 			if (file->f_flags & O_NONBLOCK)
 				return ret ? ret : -EAGAIN;
 			interruptible_sleep_on(&s->dma_adc.wait);
@@ -1023,7 +1015,7 @@ static ssize_t solo1_read(struct file *file, char *buffer, size_t count, loff_t 
 			       KERN_DEBUG "solo1_read: SBstat: 0x%02x  cnt: %u\n",
 			       read_ctrl(s, 0xa1), read_ctrl(s, 0xa2), read_ctrl(s, 0xa4), read_ctrl(s, 0xa5), read_ctrl(s, 0xa8), 
 			       read_ctrl(s, 0xb1), read_ctrl(s, 0xb2), read_ctrl(s, 0xb7), read_ctrl(s, 0xb8), read_ctrl(s, 0xb9), 
-			       inl(s->vcbase), inw(s->vcbase+4), inb(s->vcbase+8), inb(s->vcbase+15), inb(s->sbbase+0xc), cnt);
+			       inl(s->ddmabase), inw(s->ddmabase+4), inb(s->ddmabase+8), inb(s->ddmabase+15), inb(s->sbbase+0xc), cnt);
 #endif
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
@@ -1042,7 +1034,7 @@ static ssize_t solo1_read(struct file *file, char *buffer, size_t count, loff_t 
 		start_adc(s);
 #ifdef DEBUGREC
 		printk(KERN_DEBUG "solo1_read: reg B8: 0x%02x  DMAstat: 0x%02x  DMAcnt: 0x%04x  SBstat: 0x%02x\n", 
-		       read_ctrl(s, 0xb8), inb(s->vcbase+8), inw(s->vcbase+4), inb(s->sbbase+0xc));
+		       read_ctrl(s, 0xb8), inb(s->ddmabase+8), inw(s->ddmabase+4), inb(s->sbbase+0xc));
 #endif
 	}
 	return ret;
@@ -1304,7 +1296,7 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 				if (!s->dma_adc.ready && (ret = prog_dmabuf_adc(s)))
 					return ret;
 				start_adc(s);
-				if (inb(s->vcbase+15) & 1)
+				if (inb(s->ddmabase+15) & 1)
 					printk(KERN_ERR "solo1: cannot start recording, DDMA mask bit stuck at 1\n");
 			} else
 				stop_adc(s);
@@ -1466,8 +1458,8 @@ static int solo1_release(struct inode *inode, struct file *file)
 	}
 	if (file->f_mode & FMODE_READ) {
 		stop_adc(s);
-		outb(1, s->vcbase+0xf); /* mask DMA channel */
-		//outb(0, s->vcbase+0xd); /* DMA master clear */
+		outb(1, s->ddmabase+0xf); /* mask DMA channel */
+		outb(0, s->ddmabase+0xd); /* DMA master clear */
 		dealloc_dmabuf(&s->dma_adc);
 	}
 	s->open_mode &= ~(FMODE_READ | FMODE_WRITE);
@@ -1533,10 +1525,8 @@ static /*const*/ struct file_operations solo1_audio_fops = {
 	NULL,  /* fsync */
 	NULL,  /* fasync */
 	NULL,  /* check_media_change */
-#if 0
 	NULL,  /* revalidate */
 	NULL,  /* lock */
-#endif
 };
 
 /* --------------------------------------------------------------------- */
@@ -1550,7 +1540,7 @@ static void solo1_handle_midi(struct solo1_state *s)
 	if (!(s->mpubase))
 		return;
 	wake = 0;
-	while (inb(s->mpubase+1) & 0x80) {
+	while (!(inb(s->mpubase+1) & 0x80)) {
 		ch = inb(s->mpubase);
 		if (s->midi.icnt < MIDIINBUF) {
 			s->midi.ibuf[s->midi.iwr] = ch;
@@ -1562,7 +1552,7 @@ static void solo1_handle_midi(struct solo1_state *s)
 	if (wake)
 		wake_up(&s->midi.iwait);
 	wake = 0;
-	while ((inb(s->mpubase+1) & 0x40) && s->midi.ocnt > 0) {
+	while (!(inb(s->mpubase+1) & 0x40) && s->midi.ocnt > 0) {
 		outb(s->midi.obuf[s->midi.ord], s->mpubase);
 		s->midi.ord = (s->midi.ord + 1) % MIDIOUTBUF;
 		s->midi.ocnt--;
@@ -1577,22 +1567,12 @@ static void solo1_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
         struct solo1_state *s = (struct solo1_state *)dev_id;
 	unsigned int intsrc;
-
-	static unsigned lim = 0;
 	
 	/* fastpath out, to ease interrupt sharing */
 	intsrc = inb(s->iobase+7); /* get interrupt source(s) */
 	if (!intsrc)
 		return;
 	(void)inb(s->sbbase+0xe);  /* clear interrupt */
-#ifdef DEBUGREC
-	if (intsrc & 0x10 && lim < 20) {
-		lim++;
-		printk(KERN_DEBUG "solo1: audio1int reg B8: 0x%02x  DMAstat: 0x%02x  DMAcnt: 0x%04x  SBstat: 0x%02x\n", 
-		       read_ctrl(s, 0xb8), inb(s->vcbase+8), inw(s->vcbase+4), inb(s->sbbase+0xc));
-	}
-	//printk(KERN_DEBUG "solo1: interrupt 0x%02x\n", intsrc);
-#endif
 	spin_lock(&s->lock);
 	/* clear audio interrupts first */
 	if (intsrc & 0x20)
@@ -1849,10 +1829,8 @@ static /*const*/ struct file_operations solo1_midi_fops = {
 	NULL,  /* fsync */
 	NULL,  /* fasync */
 	NULL,  /* check_media_change */
-#if 0
 	NULL,  /* revalidate */
 	NULL,  /* lock */
-#endif
 };
 
 /* --------------------------------------------------------------------- */
@@ -2025,10 +2003,8 @@ static /*const*/ struct file_operations solo1_dmfm_fops = {
 	NULL,  /* fsync */
 	NULL,  /* fasync */
 	NULL,  /* check_media_change */
-#if 0
 	NULL,  /* revalidate */
 	NULL,  /* lock */
-#endif
 };
 
 /* --------------------------------------------------------------------- */
@@ -2060,11 +2036,10 @@ static int __init init_solo1(void)
 	struct pci_dev *pcidev = NULL;
 	mm_segment_t fs;
 	int i, val, index = 0;
-	u16 ddmabase;
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "solo1: version v0.5 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "solo1: version v0.6 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, pcidev))) {
 		if (pcidev->resource[0].start == 0 ||
@@ -2090,35 +2065,32 @@ static int __init init_solo1(void)
 		init_waitqueue_head(&s->midi.owait);
 		init_MUTEX(&s->open_sem);
 		s->magic = SOLO1_MAGIC;
+		s->pcidev = pcidev;
 		s->iobase = pcidev->resource[0].start;
 		s->sbbase = pcidev->resource[1].start;
 		s->vcbase = pcidev->resource[2].start;
+		s->ddmabase = s->vcbase + DDMABASE_OFFSET;
 		s->mpubase = pcidev->resource[3].start;
 		s->gpbase = pcidev->resource[4].start;
 		s->irq = pcidev->irq;
 		if (check_region(s->iobase, IOBASE_EXTENT) ||
 		    check_region(s->sbbase, SBBASE_EXTENT) ||
-		    check_region(s->vcbase, VCBASE_EXTENT) ||
+		    check_region(s->ddmabase, DDMABASE_EXTENT) ||
 		    check_region(s->mpubase, MPUBASE_EXTENT)) {
 			printk(KERN_ERR "solo1: io ports in use\n");
 			goto err_region;
 		}
 		request_region(s->iobase, IOBASE_EXTENT, "ESS Solo1");
 		request_region(s->sbbase, SBBASE_EXTENT, "ESS Solo1");
-		request_region(s->vcbase, VCBASE_EXTENT, "ESS Solo1");
+		request_region(s->ddmabase, DDMABASE_EXTENT, "ESS Solo1");
 		request_region(s->mpubase, MPUBASE_EXTENT, "ESS Solo1");
 		if (request_irq(s->irq, solo1_interrupt, SA_SHIRQ, "ESS Solo1", s)) {
 			printk(KERN_ERR "solo1: irq %u in use\n", s->irq);
 			goto err_irq;
 		}
 		/* initialize DDMA base address */
-		/* use PCI config reg, and not vcbase, we need the bus view */
-		pci_read_config_word(pcidev, 0x18, &ddmabase);
-		pci_write_config_word(pcidev, 0x60, (ddmabase & (~0xf)) | 1);
-#ifdef DEBUGREC
-		printk(KERN_DEBUG "solo1: DMA: mask: 0x%02x cnt: 0x%04x addr: 0x%08x  stat: 0x%02x\n", 
-		       inb(s->vcbase+0xf), inw(s->vcbase+4), inl(s->vcbase), inb(s->vcbase+8));
-#endif
+		printk(KERN_DEBUG "solo1: ddma base address: 0x%lx\n", s->ddmabase);
+		pci_write_config_word(pcidev, 0x60, (s->ddmabase & (~0xf)) | 1);
 		/* set DMA policy to DDMA, IRQ emulation off (CLKRUN disabled for now) */
 		pci_write_config_dword(pcidev, 0x50, 0);
 		/* disable legacy audio address decode */
@@ -2147,21 +2119,9 @@ static int __init init_solo1(void)
 		write_mixer(s, 0x52, 0);
 		write_mixer(s, 0x14, 0);  /* DAC1 minimum volume */
 		write_mixer(s, 0x71, 0x20); /* enable new 0xA1 reg format */
-#ifdef DEBUGREC
-		printk(KERN_DEBUG "solo1: DMA: mask: 0x%02x cnt: 0x%04x addr: 0x%08x  stat: 0x%02x\n", 
-		       inb(s->vcbase+0xf), inw(s->vcbase+4), inl(s->vcbase), inb(s->vcbase+8));
-#endif
-		outb(0, s->vcbase+0xd); /* DMA master clear */
-#ifdef DEBUGREC
-		printk(KERN_DEBUG "solo1: DMA: mask: 0x%02x cnt: 0x%04x addr: 0x%08x  stat: 0x%02x\n", 
-		       inb(s->vcbase+0xf), inw(s->vcbase+4), inl(s->vcbase), inb(s->vcbase+8));
-#endif
-		outb(1, s->vcbase+0xf); /* mask channel */
-#ifdef DEBUGREC
-		printk(KERN_DEBUG "solo1: DMA: mask: 0x%02x cnt: 0x%04x addr: 0x%08x  stat: 0x%02x\n", 
-		       inb(s->vcbase+0xf), inw(s->vcbase+4), inl(s->vcbase), inb(s->vcbase+8));
-#endif
-		//outb(0, s->vcbase+0x8); /* enable controller (enable is low active!!) */
+		outb(0, s->ddmabase+0xd); /* DMA master clear */
+		outb(1, s->ddmabase+0xf); /* mask channel */
+		/*outb(0, s->ddmabase+0x8);*/ /* enable controller (enable is low active!!) */
 
 		pci_set_master(pcidev);  /* enable bus mastering */
 		
@@ -2173,6 +2133,8 @@ static int __init init_solo1(void)
 			val = initvol[i].vol;
 			mixer_ioctl(s, initvol[i].mixch, (unsigned long)&val);
 		}
+		val = 1; /* enable mic preamp */
+		mixer_ioctl(s, SOUND_MIXER_PRIVATE1, (unsigned long)&val);
 		set_fs(fs);
 		/* queue it for later freeing */
 		s->next = devs;
@@ -2192,7 +2154,7 @@ static int __init init_solo1(void)
 	err_irq:
 		release_region(s->iobase, IOBASE_EXTENT);
 		release_region(s->sbbase, SBBASE_EXTENT);
-		release_region(s->vcbase, VCBASE_EXTENT);
+		release_region(s->ddmabase, DDMABASE_EXTENT);
 		release_region(s->mpubase, MPUBASE_EXTENT);
 	err_region:
 		kfree_s(s, sizeof(struct solo1_state));
@@ -2215,13 +2177,14 @@ static void __exit cleanup_solo1(void)
 		devs = devs->next;
 		/* stop DMA controller */
 		outb(0, s->iobase+6);
-		outb(0, s->vcbase+0xd); /* DMA master clear */
+		outb(0, s->ddmabase+0xd); /* DMA master clear */
 		outb(3, s->sbbase+6); /* reset sequencer and FIFO */
 		synchronize_irq();
+		pci_write_config_word(s->pcidev, 0x60, 0); /* turn off DDMA controller address space */
 		free_irq(s->irq, s);
 		release_region(s->iobase, IOBASE_EXTENT);
 		release_region(s->sbbase, SBBASE_EXTENT);
-		release_region(s->vcbase, VCBASE_EXTENT);
+		release_region(s->ddmabase, DDMABASE_EXTENT);
 		release_region(s->mpubase, MPUBASE_EXTENT);
 		unregister_sound_dsp(s->dev_audio);
 		unregister_sound_mixer(s->dev_mixer);

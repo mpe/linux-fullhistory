@@ -1984,7 +1984,7 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 	static unsigned long printing = 0;
 	const ushort *start;
 	ushort cnt = 0;
-	ushort myx = x;
+	ushort myx;
 
 	/* console busy or not yet initialized */
 	if (!printable || test_and_set_bit(0, &printing))
@@ -1992,6 +1992,10 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 
 	if (kmsg_redirect && vc_cons_allocated(kmsg_redirect - 1))
 		currcons = kmsg_redirect - 1;
+
+	/* read `x' only after setting currecons properly (otherwise
+	   the `x' macro will read the x of the foreground console). */
+	myx = x;
 
 	if (!vc_cons_allocated(currcons)) {
 		/* impossible */

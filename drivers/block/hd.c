@@ -27,7 +27,6 @@
 /* Uncomment the following if you want verbose error reports. */
 /* #define VERBOSE_ERRORS */
   
-#include <asm/irq.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -52,7 +51,9 @@
 
 #ifdef __arm__
 #undef  HD_IRQ
+#endif
 #include <asm/irq.h>
+#ifdef __arm__
 #define HD_IRQ IRQ_HARDDISK
 #endif
 

@@ -1,4 +1,4 @@
-/* $Id: eicon_dsp.h,v 1.2 1999/03/29 11:19:42 armin Exp $
+/* $Id: eicon_dsp.h,v 1.4 1999/07/25 15:12:02 armin Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  *        DSP definitions
@@ -21,6 +21,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: eicon_dsp.h,v $
+ * Revision 1.4  1999/07/25 15:12:02  armin
+ * fix of some debug logs.
+ * enabled ISA-cards option.
+ *
+ * Revision 1.3  1999/07/11 17:16:24  armin
+ * Bugfixes in queue handling.
+ * Added DSP-DTMF decoder functions.
+ * Reorganized ack_handler.
+ *
  * Revision 1.2  1999/03/29 11:19:42  armin
  * I/O stuff now in seperate file (eicon_io.c)
  * Old ISA type cards (S,SX,SCOM,Quadro,S2M) implemented.
@@ -31,7 +40,7 @@
  *
  */
 
-#ifndef DSP_H
+#ifndef DSP_H 
 #define DSP_H
 
 #define DSP_UDATA_REQUEST_RECONFIGURE           0
@@ -264,6 +273,10 @@ parameters:
   <word> tone duration (ms)
   <word> gap duration (ms)
 */
+typedef struct enable_dtmf_s {
+	__u16 tone;
+	__u16 gap;
+} enable_dtmf_s;
 
 #define DSP_UDATA_REQUEST_DISABLE_DTMF_RECEIVER 18
 /*
@@ -299,6 +312,108 @@ returns:
 returns:
   - none -
 */
+
+/* ============= FAX ================ */
+
+#define EICON_FAXID_LEN 20
+
+typedef struct eicon_t30_s {
+  __u8          code;
+  __u8          rate;
+  __u8          resolution;
+  __u8          format;
+  __u8          pages_low;
+  __u8          pages_high;
+  __u8          atf;
+  __u8          control_bits_low;
+  __u8          control_bits_high;
+  __u8          feature_bits_low;
+  __u8          feature_bits_high;
+  __u8          universal_5;
+  __u8          universal_6;
+  __u8          universal_7;
+  __u8          station_id_len;
+  __u8          head_line_len;
+  __u8          station_id[EICON_FAXID_LEN];
+/* __u8          head_line[]; */
+} eicon_t30_s;
+
+        /* EDATA transmit messages */
+#define EDATA_T30_DIS       0x01
+#define EDATA_T30_FTT       0x02
+#define EDATA_T30_MCF       0x03
+
+        /* EDATA receive messages */
+#define EDATA_T30_DCS       0x81
+#define EDATA_T30_TRAIN_OK  0x82
+#define EDATA_T30_EOP       0x83
+#define EDATA_T30_MPS       0x84
+#define EDATA_T30_EOM       0x85
+#define EDATA_T30_DTC       0x86
+
+#define T30_FORMAT_SFF            0
+#define T30_FORMAT_ASCII          1
+#define T30_FORMAT_COUNT          2
+
+#define T30_CONTROL_BIT_DISABLE_FINE      0x0001
+#define T30_CONTROL_BIT_ENABLE_ECM        0x0002
+#define T30_CONTROL_BIT_ECM_64_BYTES      0x0004
+#define T30_CONTROL_BIT_ENABLE_2D_CODING  0x0008
+#define T30_CONTROL_BIT_ENABLE_T6_CODING  0x0010
+#define T30_CONTROL_BIT_ENABLE_UNCOMPR    0x0020
+#define T30_CONTROL_BIT_ACCEPT_POLLING    0x0040
+#define T30_CONTROL_BIT_REQUEST_POLLING   0x0080
+#define T30_CONTROL_BIT_MORE_DOCUMENTS    0x0100
+
+#define T30_CONTROL_BIT_ALL_FEATURES\
+  (T30_CONTROL_BIT_ENABLE_ECM | T30_CONTROL_BIT_ENABLE_2D_CODING |\
+   T30_CONTROL_BIT_ENABLE_T6_CODING | T30_CONTROL_BIT_ENABLE_UNCOMPR)
+
+#define T30_FEATURE_BIT_FINE              0x0001
+#define T30_FEATURE_BIT_ECM               0x0002
+#define T30_FEATURE_BIT_ECM_64_BYTES      0x0004
+#define T30_FEATURE_BIT_2D_CODING         0x0008
+#define T30_FEATURE_BIT_T6_CODING         0x0010
+#define T30_FEATURE_BIT_UNCOMPR_ENABLED   0x0020
+#define T30_FEATURE_BIT_POLLING           0x0040
+
+#define FAX_OBJECT_DOCU		1
+#define FAX_OBJECT_PAGE		2
+#define FAX_OBJECT_LINE		3
+
+#define T4_EOL			0x800
+#define T4_EOL_BITSIZE		12
+#define T4_EOL_DWORD		(T4_EOL << (32 - T4_EOL_BITSIZE))
+#define T4_EOL_MASK_DWORD	((__u32) -1 << (32 - T4_EOL_BITSIZE))
+
+#define SFF_LEN_FLD_SIZE	3
+
+#define _DLE_	0x10
+#define _ETX_	0x03
+
+typedef struct eicon_sff_dochead {
+	__u32	id		__attribute__ ((packed));
+	__u8	version		__attribute__ ((packed));
+	__u8	reserved1	__attribute__ ((packed));
+	__u16	userinfo	__attribute__ ((packed));
+	__u16	pagecount	__attribute__ ((packed));
+	__u16	off1pagehead	__attribute__ ((packed));
+	__u32	offnpagehead	__attribute__ ((packed));
+	__u32	offdocend	__attribute__ ((packed));
+} eicon_sff_dochead;
+
+typedef struct eicon_sff_pagehead {
+	__u8	pageheadid	__attribute__ ((packed));
+	__u8	pageheadlen	__attribute__ ((packed));
+	__u8	resvert		__attribute__ ((packed));
+	__u8	reshoriz	__attribute__ ((packed));
+	__u8	coding		__attribute__ ((packed));
+	__u8	reserved2	__attribute__ ((packed));
+	__u16	linelength	__attribute__ ((packed));
+	__u16	pagelength	__attribute__ ((packed));
+	__u32	offprevpage	__attribute__ ((packed));
+	__u32	offnextpage	__attribute__ ((packed));
+} eicon_sff_pagehead;
 
 #endif	/* DSP_H */
 

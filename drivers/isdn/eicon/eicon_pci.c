@@ -1,4 +1,4 @@
-/* $Id: eicon_pci.c,v 1.6 1999/04/01 12:48:37 armin Exp $
+/* $Id: eicon_pci.c,v 1.9 1999/08/11 21:01:11 keil Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  * Hardware-specific code for PCI cards.
@@ -26,6 +26,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_pci.c,v $
+ * Revision 1.9  1999/08/11 21:01:11  keil
+ * new PCI codefix
+ *
+ * Revision 1.8  1999/08/10 16:02:20  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
+ * Revision 1.7  1999/06/09 19:31:29  armin
+ * Wrong PLX size for request_region() corrected.
+ * Added first MCA code from Erik Weber.
+ *
  * Revision 1.6  1999/04/01 12:48:37  armin
  * Changed some log outputs.
  *
@@ -54,14 +64,13 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/pci.h>
 
 #include "eicon.h"
 #include "eicon_pci.h"
 
 
-char *eicon_pci_revision = "$Revision: 1.6 $";
+char *eicon_pci_revision = "$Revision: 1.9 $";
 
 #if CONFIG_PCI	         /* intire stuff is only for PCI */
 
@@ -136,8 +145,8 @@ int eicon_pci_find_card(char *ID)
           aparms->type = EICON_CTYPE_MAESTRA;
 
           aparms->irq = pdev->irq;
-          preg = pdev->base_address[2] & 0xfffffffc;
-          pcfg = pdev->base_address[1] & 0xffffff80;
+          preg = get_pcibase(pdev, 2) & 0xfffffffc;
+          pcfg = get_pcibase(pdev, 1) & 0xffffff80;
 
 #ifdef EICON_PCI_DEBUG
           printk(KERN_DEBUG "eicon_pci: irq=%d\n", aparms->irq);
@@ -158,9 +167,9 @@ int eicon_pci_find_card(char *ID)
          printk(KERN_INFO "Eicon: DIVA Server PRI/PCI detected !\n");
           aparms->type = EICON_CTYPE_MAESTRAP; /*includes 9M,30M*/
           aparms->irq = pdev->irq;
-          pram = pdev->base_address[0] & 0xfffff000;
-          preg = pdev->base_address[2] & 0xfffff000;
-          pcfg = pdev->base_address[4] & 0xfffff000;
+          pram = get_pcibase(pdev, 0) & 0xfffff000;
+          preg = get_pcibase(pdev, 2) & 0xfffff000;
+          pcfg = get_pcibase(pdev, 4) & 0xfffff000;
 
 #ifdef EICON_PCI_DEBUG
           printk(KERN_DEBUG "eicon_pci: irq=%d\n", aparms->irq);
@@ -194,12 +203,13 @@ int eicon_pci_find_card(char *ID)
 			} else {
 				request_region(aparms->PCIreg, 0x20, "eicon reg");
 			}
-			if (check_region((aparms->PCIcfg), 0x100)) {
+			if (check_region((aparms->PCIcfg), 0x80)) {
 				printk(KERN_WARNING "eicon_pci: cfg port already in use !\n");
 				aparms->PCIcfg = 0;
+				release_region(aparms->PCIreg, 0x20);
 				break;	
 			} else {
-				request_region(aparms->PCIcfg, 0x100, "eicon cfg");
+				request_region(aparms->PCIcfg, 0x80, "eicon cfg");
 			}
 			break;
     		case PCI_MAESTRAQ:
@@ -327,7 +337,7 @@ eicon_pci_release_shmem(eicon_pci_card *card) {
 				outw(0, card->PCIreg + M_DATA);
 
 				release_region(card->PCIreg, 0x20);
-				release_region(card->PCIcfg, 0x100);
+				release_region(card->PCIcfg, 0x80);
 				break;
                 	case EICON_CTYPE_MAESTRAQ:
 	                case EICON_CTYPE_MAESTRAQ_U:

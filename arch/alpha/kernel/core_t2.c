@@ -33,35 +33,16 @@
  */
 
 /*
- * Machine check reasons.  Defined according to PALcode sources
- * (osf.h and platform.h).
- */
-#define MCHK_K_TPERR		0x0080
-#define MCHK_K_TCPERR		0x0082
-#define MCHK_K_HERR		0x0084
-#define MCHK_K_ECC_C		0x0086
-#define MCHK_K_ECC_NC		0x0088
-#define MCHK_K_OS_BUGCHECK	0x008A
-#define MCHK_K_PAL_BUGCHECK	0x0090
-
-/*
  * BIOS32-style PCI interface:
  */
 
-#ifdef DEBUG_CONF
+#define DEBUG_CONFIG 0
+
+#if DEBUG_CONFIG
 # define DBG(args)	printk args
 #else
 # define DBG(args)
 #endif
-
-#ifdef DEBUG_MCHECK
-# define DBGMC(args)	printk args
-#else
-# define DBGMC(args)
-#endif
-
-static volatile unsigned int T2_mcheck_expected[NR_CPUS];
-static volatile unsigned int T2_mcheck_taken[NR_CPUS];
 
 
 /*
@@ -173,8 +154,8 @@ conf_read(unsigned long addr, unsigned char type1)
 	mb();
 	draina();
 
-	T2_mcheck_expected[cpu] = 1;
-	T2_mcheck_taken[cpu] = 0;
+	mcheck_expected(cpu) = 1;
+	mcheck_taken(cpu) = 0;
 	mb();
 
 	/* Access configuration space. */
@@ -182,12 +163,12 @@ conf_read(unsigned long addr, unsigned char type1)
 	mb();
 	mb();  /* magic */
 
-	if (T2_mcheck_taken[cpu]) {
-		T2_mcheck_taken[cpu] = 0;
+	if (mcheck_taken(cpu)) {
+		mcheck_taken(cpu) = 0;
 		value = 0xffffffffU;
 		mb();
 	}
-	T2_mcheck_expected[cpu] = 0;
+	mcheck_expected(cpu) = 0;
 	mb();
 
 	/* If Type1 access, must reset T2 CFG so normal IO space ops work.  */
@@ -233,7 +214,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	mb();
 	draina();
 
-	T2_mcheck_expected[cpu] = 1;
+	mcheck_expected(cpu) = 1;
 	mb();
 
 	/* Access configuration space.  */
@@ -241,7 +222,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	mb();
 	mb();  /* magic */
 
-	T2_mcheck_expected[cpu] = 0;
+	mcheck_expected(cpu) = 0;
 	mb();
 
 	/* If Type1 access, must reset T2 CFG so normal IO space ops work.  */
@@ -355,8 +336,8 @@ t2_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	unsigned int i;
 
 	for (i = 0; i < NR_CPUS; i++) {
-		T2_mcheck_expected[i] = 0;
-		T2_mcheck_taken[i] = 0;
+		mcheck_expected(i) = 0;
+		mcheck_taken(i) = 0;
 	}
 
 #if 0
@@ -481,27 +462,22 @@ t2_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 
 #define SIC_SEIC (1UL << 33)    /* System Event Clear */
 
-static int
-t2_clear_errors(void)
+static void
+t2_clear_errors(int cpu)
 {
-	unsigned int cpu = smp_processor_id();
-	static struct sable_cpu_csr *cpu_regs = NULL;
+	struct sable_cpu_csr *cpu_regs;
 
-	switch (cpu)
-	{
-	case 0: cpu_regs = (struct sable_cpu_csr *)T2_CPU0_BASE; break;
-	case 1: cpu_regs = (struct sable_cpu_csr *)T2_CPU1_BASE; break;
-	case 2: cpu_regs = (struct sable_cpu_csr *)T2_CPU2_BASE; break;
-	case 3: cpu_regs = (struct sable_cpu_csr *)T2_CPU3_BASE; break;
-	}
-
-	DBGMC(("???????? t2_clear_errors\n"));
-
+	cpu_regs = (struct sable_cpu_csr *)T2_CPU0_BASE;
+	if (cpu == 1)
+		cpu_regs = (struct sable_cpu_csr *)T2_CPU1_BASE;
+	if (cpu == 2)
+		cpu_regs = (struct sable_cpu_csr *)T2_CPU2_BASE;
+	if (cpu == 3)
+		cpu_regs = (struct sable_cpu_csr *)T2_CPU3_BASE;
+		
 	cpu_regs->sic &= ~SIC_SEIC;
 
-	/* 
-	 * clear CPU errors
-	 */
+	/* Clear CPU errors.  */
 	cpu_regs->bcce |= cpu_regs->bcce;
 	cpu_regs->cbe  |= cpu_regs->cbe;
 	cpu_regs->bcue |= cpu_regs->bcue;
@@ -512,116 +488,21 @@ t2_clear_errors(void)
 
 	mb();
 	mb();  /* magic */
-	return 0;
 }
 
 void
 t2_machine_check(unsigned long vector, unsigned long la_ptr,
 		 struct pt_regs * regs)
 {
-	struct el_t2_logout_header *mchk_header;
-	struct el_t2_procdata_mcheck *mchk_procdata;
-	struct el_t2_sysdata_mcheck *mchk_sysdata;
-	unsigned long * ptr;
-	const char * reason;
-	char buf[128];
-	long i;
-	unsigned int cpu = smp_processor_id();
+	int cpu = smp_processor_id();
 
-	DBGMC(("t2_machine_check: vector=0x%lx la_ptr=0x%lx\n",
-	       vector, la_ptr));
-
-	mchk_header = (struct el_t2_logout_header *)la_ptr;
-
-	DBGMC(("t2_machine_check: susoffset=0x%lx procoffset=0x%lx\n",
-	       mchk_header->elfl_sysoffset, mchk_header->elfl_procoffset));
-
-	mchk_sysdata = (struct el_t2_sysdata_mcheck *)
-		(la_ptr + mchk_header->elfl_sysoffset);
-	mchk_procdata = (struct el_t2_procdata_mcheck *)
-		(la_ptr + mchk_header->elfl_procoffset - sizeof(unsigned long)*32);
-
-	DBGMC(("         pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
-	       regs->pc, mchk_header->elfl_size, mchk_header->elfl_procoffset,
-	       mchk_header->elfl_sysoffset));
-	DBGMC(("t2_machine_check: expected %d\n", T2_mcheck_expected[cpu]));
-
-#ifdef DEBUG_DUMP
-	{
-		unsigned long *ptr;
-		int i;
-
-		ptr = (unsigned long *)la_ptr;
-		for (i = 0; i < mchk_header->elfl_size/sizeof(long); i += 2) {
-			printk(" +%lx %lx %lx\n", i*sizeof(long),
-			       ptr[i], ptr[i+1]);
-		}
-	}
-#endif /* DEBUG_DUMP */
-
-	/*
-	 * Check if machine check is due to a badaddr() and if so,
-	 * ignore the machine check.
-	 */
+	/* Clear the error before any reporting.  */
 	mb();
 	mb();  /* magic */
-	if (T2_mcheck_expected[cpu]) {
-		DBGMC(("T2 machine check expected\n"));
-		T2_mcheck_taken[cpu] = 1;
-		t2_clear_errors();
-		T2_mcheck_expected[cpu] = 0;
-		mb();
-		mb();  /* magic */
-		wrmces(rdmces()|1);/* ??? */
-		draina();
-		return;
-	}
-
-	switch ((unsigned int) mchk_header->elfl_error_type) {
-	case MCHK_K_TPERR:	reason = "tag parity error"; break;
-	case MCHK_K_TCPERR:	reason = "tag control parity error"; break;
-	case MCHK_K_HERR:	reason = "generic hard error"; break;
-	case MCHK_K_ECC_C:	reason = "correctable ECC error"; break;
-	case MCHK_K_ECC_NC:	reason = "uncorrectable ECC error"; break;
-	case MCHK_K_OS_BUGCHECK: reason = "OS-specific PAL bugcheck"; break;
-	case MCHK_K_PAL_BUGCHECK: reason = "callsys in kernel mode"; break;
-	case 0x96: reason = "i-cache read retryable error"; break;
-	case 0x98: reason = "processor detected hard error"; break;
-
-		/* System specific (these are for Alcor, at least): */
-	case 0x203: reason = "system detected uncorrectable ECC error"; break;
-	case 0x205: reason = "parity error detected by T2"; break;
-	case 0x207: reason = "non-existent memory error"; break;
-	case 0x209: reason = "PCI SERR detected"; break;
-	case 0x20b: reason = "PCI data parity error detected"; break;
-	case 0x20d: reason = "PCI address parity error detected"; break;
-	case 0x20f: reason = "PCI master abort error"; break;
-	case 0x211: reason = "PCI target abort error"; break;
-	case 0x213: reason = "scatter/gather PTE invalid error"; break;
-	case 0x215: reason = "flash ROM write error"; break;
-	case 0x217: reason = "IOA timeout detected"; break;
-	case 0x219: reason = "IOCHK#, EISA add-in board parity or other catastrophic error"; break;
-	case 0x21b: reason = "EISA fail-safe timer timeout"; break;
-	case 0x21d: reason = "EISA bus time-out"; break;
-	case 0x21f: reason = "EISA software generated NMI"; break;
-	case 0x221: reason = "unexpected ev5 IRQ[3] interrupt"; break;
-	default:
-		sprintf(buf, "reason for machine-check unknown (0x%x)",
-			(unsigned int) mchk_header->elfl_error_type);
-		reason = buf;
-		break;
-	}
-	wrmces(rdmces()|1);	/* reset machine check pending flag */
+	draina();
+	t2_clear_errors(cpu);
+	wrmces(rdmces()|1);	/* ??? */
 	mb();
 
-	printk(KERN_CRIT "  T2 machine check: %s%s\n",
-	       reason, mchk_header->elfl_retry ? " (retryable)" : "");
-
-	/* Dump the logout area to give all info.  */
-
-	ptr = (unsigned long *)la_ptr;
-	for (i = 0; i < mchk_header->elfl_size / sizeof(long); i += 2) {
-		printk(KERN_CRIT " +%8lx %016lx %016lx\n",
-		       i*sizeof(long), ptr[i], ptr[i+1]);
-	}
+	process_mcheck_info(vector, la_ptr, regs, "T2", mcheck_expected(cpu));
 }

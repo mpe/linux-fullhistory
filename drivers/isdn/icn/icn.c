@@ -1,4 +1,4 @@
-/* $Id: icn.c,v 1.56 1999/04/12 13:15:07 fritz Exp $
+/* $Id: icn.c,v 1.57 1999/07/06 16:15:30 detabc Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.c,v $
+ * Revision 1.57  1999/07/06 16:15:30  detabc
+ * remove unused messages
+ *
  * Revision 1.56  1999/04/12 13:15:07  fritz
  * Fixed a cast.
  *
@@ -38,10 +41,6 @@
  *
  * Revision 1.51  1998/03/07 22:29:55  fritz
  * Adapted Detlef's chenges for 2.1.
- *
- * Revision 1.50  1998/03/07 17:41:54  detabc
- * add d-channel connect and disconnect support statcallback
- * from icn low-level to link->level
  *
  * Revision 1.49  1998/02/13 11:14:15  keil
  * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
@@ -233,7 +232,7 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.56 $";
+*revision = "$Revision: 1.57 $";
 
 static int icn_addcard(int, char *, char *);
 

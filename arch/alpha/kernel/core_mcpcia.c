@@ -37,26 +37,13 @@
  * BIOS32-style PCI interface:
  */
 
-#undef DEBUG_CFG
+#define DEBUG_CFG 0
 
-#ifdef DEBUG_CFG
+#if DEBUG_CFG
 # define DBG_CFG(args)	printk args
 #else
 # define DBG_CFG(args)
 #endif
-
-
-#define DEBUG_MCHECK
-
-#ifdef DEBUG_MCHECK
-# define DBG_MCK(args)	printk args
-#else
-# define DBG_MCK(args)
-#endif
-
-static volatile unsigned int MCPCIA_mcheck_expected[NR_CPUS];
-static volatile unsigned int MCPCIA_mcheck_taken[NR_CPUS];
-static unsigned int MCPCIA_jd[NR_CPUS];
 
 #define MCPCIA_MAX_HOSES 2
 
@@ -126,8 +113,9 @@ conf_read(unsigned long addr, unsigned char type1,
 
 	mb();
 	draina();
-	MCPCIA_mcheck_expected[cpu] = 1;
-	MCPCIA_mcheck_taken[cpu] = 0;
+	mcheck_expected(cpu) = 1;
+	mcheck_taken(cpu) = 0;
+	mcheck_hose(cpu) = hoseno;
 	mb();
 
 	/* Access configuration space.  */
@@ -135,12 +123,12 @@ conf_read(unsigned long addr, unsigned char type1,
 	mb();
 	mb();  /* magic */
 
-	if (MCPCIA_mcheck_taken[cpu]) {
-		MCPCIA_mcheck_taken[cpu] = 0;
+	if (mcheck_taken(cpu)) {
+		mcheck_taken(cpu) = 0;
 		value = 0xffffffffU;
 		mb();
 	}
-	MCPCIA_mcheck_expected[cpu] = 0;
+	mcheck_expected(cpu) = 0;
 	mb();
 
 	DBG_CFG(("conf_read(): finished\n"));
@@ -168,7 +156,8 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1,
 	DBG_CFG(("conf_write: MCPCIA CAP_ERR(%d) was 0x%x\n", hoseno, stat0));
 
 	draina();
-	MCPCIA_mcheck_expected[cpu] = 1;
+	mcheck_expected(cpu) = 1;
+	mcheck_hose(cpu) = hoseno;
 	mb();
 
 	/* Access configuration space.  */
@@ -176,7 +165,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1,
 	mb();
 	mb();  /* magic */
 	temp = *(vuip)MCPCIA_CAP_ERR(hoseno); /* read to force the write */
-	MCPCIA_mcheck_expected[cpu] = 0;
+	mcheck_expected(cpu) = 0;
 	mb();
 
 	DBG_CFG(("conf_write(): finished\n"));
@@ -328,8 +317,8 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 		mb();
 		mb();
 		draina();
-		MCPCIA_mcheck_expected[cpu] = 1;
-		MCPCIA_mcheck_taken[cpu]    = 0;
+		mcheck_expected(cpu) = 1;
+		mcheck_taken(cpu) = 0;
 		mb();
 
 		/* Access the bus revision word. */
@@ -337,12 +326,12 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 
 		mb();
 		mb();  /* magic */
-		if (MCPCIA_mcheck_taken[cpu]) {
-			MCPCIA_mcheck_taken[cpu] = 0;
+		if (mcheck_taken(cpu)) {
+			mcheck_taken(cpu) = 0;
 			pci_rev = 0xffffffff;
 			mb();
 		}
-		MCPCIA_mcheck_expected[cpu] = 0;
+		mcheck_expected(cpu) = 0;
 		mb();
 
 #if 0
@@ -554,19 +543,13 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	}
 }
 
-static int
-mcpcia_pci_clr_err(int h)
+static void
+mcpcia_pci_clr_err(int hose)
 {
-	unsigned int cpu = smp_processor_id();
-
-	MCPCIA_jd[cpu] = *(vuip)MCPCIA_CAP_ERR(h);
-#if 0
-	DBG_MCK(("MCPCIA_pci_clr_err: MCPCIA CAP_ERR(%d) after read 0x%x\n",
-		 h, MCPCIA_jd[cpu]));
-#endif
-	*(vuip)MCPCIA_CAP_ERR(h) = 0xffffffff; mb(); /* clear them all */
-	MCPCIA_jd[cpu] = *(vuip)MCPCIA_CAP_ERR(h);
-	return 0;
+	*(vuip)MCPCIA_CAP_ERR(hose);
+	*(vuip)MCPCIA_CAP_ERR(hose) = 0xffffffff;   /* Clear them all.  */
+	mb();
+	*(vuip)MCPCIA_CAP_ERR(hose);  /* Re-read for force write.  */
 }
 
 static void
@@ -642,70 +625,33 @@ mcpcia_print_uncorrectable(struct el_MCPCIA_uncorrected_frame_mcheck *logout)
 }
 
 void
-mcpcia_machine_check(unsigned long type, unsigned long la_ptr,
+mcpcia_machine_check(unsigned long vector, unsigned long la_ptr,
 		     struct pt_regs * regs)
 {
-#if 0
-        printk("mcpcia machine check ignored\n") ;
-#else
 	struct el_common *mchk_header;
 	struct el_MCPCIA_uncorrected_frame_mcheck *mchk_logout;
 	unsigned int cpu = smp_processor_id();
-	int h = 0;
 
 	mchk_header = (struct el_common *)la_ptr;
 	mchk_logout = (struct el_MCPCIA_uncorrected_frame_mcheck *)la_ptr;
 
-#if 0
-	DBG_MCK(("mcpcia_machine_check: type=0x%lx la_ptr=0x%lx\n",
-		 type, la_ptr));
-	DBG_MCK(("\t\t pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
-		 regs->pc, mchk_header->size, mchk_header->proc_offset,
-		 mchk_header->sys_offset));
-#endif
-	/*
-	 * Check if machine check is due to a badaddr() and if so,
-	 * ignore the machine check.
-	 */
 	mb();
 	mb();  /* magic */
-	if (MCPCIA_mcheck_expected[cpu]) {
-#if 0
-		DBG_MCK(("MCPCIA machine check expected\n"));
-#endif
-		MCPCIA_mcheck_expected[cpu] = 0;
-		MCPCIA_mcheck_taken[cpu] = 1;
-		mb();
-		mb();  /* magic */
-		draina();
-		mcpcia_pci_clr_err(h);
-		wrmces(0x7);
-		mb();
+	draina();
+	if (mcheck_expected(cpu)) {
+		mcpcia_pci_clr_err(mcheck_hose(cpu));
+	} else {
+		/* FIXME: how do we figure out which hose the error was on?  */	
+		mcpcia_pci_clr_err(0);
+		mcpcia_pci_clr_err(1);
 	}
-#if 1
-	else {
-		printk("MCPCIA machine check NOT expected on CPU %d\n", cpu);
-		DBG_MCK(("mcpcia_machine_check: type=0x%lx pc=0x%lx"
-			 " code=0x%lx\n",
-			 type, regs->pc, mchk_header->code));
+	wrmces(0x7);
+	mb();
 
-		MCPCIA_mcheck_expected[cpu] = 0;
-		MCPCIA_mcheck_taken[cpu] = 1;
-		mb();
-		mb();  /* magic */
-		draina();
-		mcpcia_pci_clr_err(h);
-		wrmces(0x7);
-		mb();
-#ifdef DEBUG_MCHECK_DUMP
-		if (type == 0x620)
-			printk("MCPCIA machine check: system CORRECTABLE!\n");
-		else if (type == 0x630)
-			printk("MCPCIA machine check: processor CORRECTABLE!\n");
-		else
-#endif /* DEBUG_MCHECK_DUMP */
-			mcpcia_print_uncorrectable(mchk_logout);
+	process_mcheck_info(vector, la_ptr, regs, "MCPCIA",
+		            mcheck_expected(cpu));
+
+	if (vector != 0x620 && vector != 0x630) {
+		mcpcia_print_uncorrectable(mchk_logout);
 	}
-#endif
-#endif
 }

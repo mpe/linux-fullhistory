@@ -26,23 +26,14 @@
  * BIOS32-style PCI interface:
  */
 
-#ifdef DEBUG_CONFIG
+#define DEBUG_CONFIG 0
+
+#if DEBUG_CONFIG
 # define DBG_CFG(args)	printk args
 #else
 # define DBG_CFG(args)
 #endif
 
-#define DEBUG_MCHECK
-#ifdef DEBUG_MCHECK
-# define DBG_MCK(args)	printk args
-/* #define DEBUG_MCHECK_DUMP */
-#else
-# define DBG_MCK(args)
-#endif
-
-static volatile unsigned int POLARIS_mcheck_expected = 0;
-static volatile unsigned int POLARIS_mcheck_taken = 0;
-static volatile unsigned short POLARIS_jd = 0;
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -195,81 +186,28 @@ polaris_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 #endif
 }
 
-int polaris_pci_clr_err(void)
+static inline void
+polaris_pci_clr_err(void)
 {
-	POLARIS_jd = *((vusp)POLARIS_W_STATUS);
-	DBG_MCK(("POLARIS_pci_clr_err: POLARIS_W_STATUS after read 0x%x\n",
-		 POLARIS_jd));
+	*(vusp)POLARIS_W_STATUS;
 	/* Write 1's to settable bits to clear errors */
-	*((vusp)POLARIS_W_STATUS) = 0x7800; mb();
-	POLARIS_jd = *((vusp)POLARIS_W_STATUS);
-	return 0;
+	*(vusp)POLARIS_W_STATUS = 0x7800;
+	mb();
+	*(vusp)POLARIS_W_STATUS;
 }
 
-void polaris_machine_check(unsigned long vector, unsigned long la_ptr,
-			 struct pt_regs * regs)
+void
+polaris_machine_check(unsigned long vector, unsigned long la_ptr,
+		      struct pt_regs * regs)
 {
-	struct el_common *mchk_header;
-	struct el_POLARIS_sysdata_mcheck *mchk_sysdata;
-
-	mchk_header = (struct el_common *)la_ptr;
-
-	mchk_sysdata = 
-	  (struct el_POLARIS_sysdata_mcheck *)(la_ptr+mchk_header->sys_offset);
-
-#if 0
-	DBG_MCK(("polaris_machine_check: vector=0x%lx la_ptr=0x%lx\n",
-	     vector, la_ptr));
-	DBG_MCK(("\t\t pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
-	     regs->pc, mchk_header->size, mchk_header->proc_offset,
-	     mchk_header->sys_offset));
-	DBG_MCK(("polaris_machine_check: expected %d status 0x%lx\n",
-	     POLARIS_mcheck_expected, mchk_sysdata->psc_status));
-#endif
-#ifdef DEBUG_MCHECK_DUMP
-	{
-	    unsigned long *ptr;
-	    int i;
-
-	    ptr = (unsigned long *)la_ptr;
-	    for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
-		printk(" +%lx %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
-	    }
-	}
-#endif /* DEBUG_MCHECK_DUMP */
-	/*
-	 * Check if machine check is due to a badaddr() and if so,
-	 * ignore the machine check.
-	 */
+	/* Clear the error before any reporting.  */
 	mb();
 	mb();
-	if (POLARIS_mcheck_expected) {
-		DBG_MCK(("POLARIS machine check expected\n"));
-		POLARIS_mcheck_expected = 0;
-		POLARIS_mcheck_taken = 1;
-		mb();
-		mb();
-		draina();
-		polaris_pci_clr_err();
-		wrmces(0x7);
-		mb();
-	}
-#if 1
-	else {
-		printk("POLARIS machine check NOT expected\n") ;
-	DBG_MCK(("polaris_machine_check: vector=0x%lx la_ptr=0x%lx\n",
-	     vector, la_ptr));
-	DBG_MCK(("\t\t pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
-	     regs->pc, mchk_header->size, mchk_header->proc_offset,
-	     mchk_header->sys_offset));
-		POLARIS_mcheck_expected = 0;
-		POLARIS_mcheck_taken = 1;
-		mb();
-		mb();
-		draina();
-		polaris_pci_clr_err();
-		wrmces(0x7);
-		mb();
-	}
-#endif
+	draina();
+	polaris_pci_clr_err();
+	wrmces(0x7);
+	mb();
+
+	process_mcheck_info(vector, la_ptr, regs, "POLARIS",
+			    mcheck_expected(0));
 }

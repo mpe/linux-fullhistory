@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.64 1999/04/18 14:57:14 fritz Exp $
+/* $Id: isdn.h,v 1.70 1999/07/31 12:59:58 armin Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,25 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.70  1999/07/31 12:59:58  armin
+ * Added tty fax capabilities.
+ *
+ * Revision 1.69  1999/07/13 20:47:53  werner
+ * added channel bit ISDN_USAGE_DISABLED for limiting b-channel access.
+ *
+ * Revision 1.68  1999/07/11 17:07:37  armin
+ * Added tty modem register S23.
+ * Added new layer 2 and 3 protocols for Fax and DSP functions.
+ *
+ * Revision 1.67  1999/07/07 10:17:24  detabc
+ * remove unused messages
+ *
+ * Revision 1.66  1999/07/01 08:35:37  keil
+ * compatibility to 2.3
+ *
+ * Revision 1.65  1999/06/10 11:51:27  paul
+ * fixed comment for NET_DV
+ *
  * Revision 1.64  1999/04/18 14:57:14  fritz
  * Removed TIMRU stuff
  *
@@ -66,26 +85,6 @@
  * brute force fix to avoid Ugh's in isdn_tty_write()
  * cleaned up some dead code
  *
- * Revision 1.52  1998/06/12 11:42:18  detabc
- * cleanup abc
- *
- * Revision 1.51  1998/06/02 12:10:30  detabc
- * wegen einer einstweiliger verfuegung gegen DW ist zur zeit
- * die abc-extension bis zur klaerung der rechtslage nicht verfuegbar
- *
- * Revision 1.50  1998/05/05 23:11:51  detabc
- * add Item to stop icmp-unreach (max. 6 times of dialwait delay)
- *
- * Revision 1.49  1998/05/03 17:45:00  detabc
- * Add Item to send icmp-host-unreach to all packets
- *
- * Revision 1.48  1998/04/26 19:58:14  detabc
- * include the new abc-extension-items from 2.0.xx kernels
- * remove some unused code
- *
- * Revision 1.47  1998/04/21 18:00:25  detabc
- * Add items for secure-callback (abc-extension only)
- *
  * Revision 1.46  1998/04/14 16:28:59  he
  * Fixed user space access with interrupts off and remaining
  * copy_{to,from}_user() -> -EFAULT return codes
@@ -100,12 +99,6 @@
  * Revision 1.43  1998/03/09 17:46:44  he
  * merged in 2.1.89 changes
  *
- * Revision 1.42  1998/03/08 13:53:46  detabc
- * add ABC-variables in structur isdn_devt
- *
- * Revision 1.41  1998/03/08 13:14:37  detabc
- * abc-extension support for kernels > 2.1.x
- * first try (sorry experimental)
  *
  * Revision 1.40  1998/03/08 01:08:29  fritz
  * Increased NET_DV because of TIMRU
@@ -254,6 +247,7 @@
 #ifndef isdn_h
 #define isdn_h
 
+#include <linux/isdn_compat.h>
 #include <linux/config.h>
 #include <linux/ioctl.h>
 
@@ -333,10 +327,11 @@
 #define ISDN_USAGE_VOICE      4
 #define ISDN_USAGE_FAX        5
 #define ISDN_USAGE_MASK       7 /* Mask to get plain usage */
+#define ISDN_USAGE_DISABLED  32 /* This bit is set, if channel is disabled */
 #define ISDN_USAGE_EXCLUSIVE 64 /* This bit is set, if channel is exclusive */
 #define ISDN_USAGE_OUTGOING 128 /* This bit is set, if channel is outgoing  */
 
-#define ISDN_MODEM_ANZREG    23        /* Number of Modem-Registers        */
+#define ISDN_MODEM_ANZREG    24        /* Number of Modem-Registers        */
 #define ISDN_MSNLEN          20
 #define ISDN_LMSNLEN         255 /* Length of tty's Listen-MSN string */
 #define ISDN_CMSGLEN	     50	 /* Length of CONNECT-Message to add for Modem */
@@ -358,9 +353,9 @@ typedef struct {
   int  outgoing;
 } isdn_net_ioctl_phone;
 
-#define NET_DV 0x05 /* Data version for net_cfg       */
-#define TTY_DV 0x05 /* Data version for iprofd etc.   */
-#define INF_DV 0x01 /* Data version for /dev/isdninfo */
+#define NET_DV 0x05  /* Data version for isdn_net_ioctl_cfg   */
+#define TTY_DV 0x05  /* Data version for iprofd etc.          */
+#define INF_DV 0x01  /* Data version for /dev/isdninfo        */
 
 typedef struct {
   char name[10];     /* Name of interface                     */
@@ -398,6 +393,9 @@ typedef struct {
 
 #ifdef __KERNEL__
 
+#ifndef STANDALONE
+#include <linux/config.h>
+#endif
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/major.h>
@@ -464,6 +462,7 @@ typedef struct {
 #define USG_MODEM(x)        ((x & ISDN_USAGE_MASK)==ISDN_USAGE_MODEM)
 #define USG_VOICE(x)        ((x & ISDN_USAGE_MASK)==ISDN_USAGE_VOICE)
 #define USG_NET(x)          ((x & ISDN_USAGE_MASK)==ISDN_USAGE_NET)
+#define USG_FAX(x)          ((x & ISDN_USAGE_MASK)==ISDN_USAGE_FAX)
 #define USG_OUTGOING(x)     ((x & ISDN_USAGE_OUTGOING)==ISDN_USAGE_OUTGOING)
 #define USG_MODEMORVOICE(x) (((x & ISDN_USAGE_MASK)==ISDN_USAGE_MODEM) || \
                              ((x & ISDN_USAGE_MASK)==ISDN_USAGE_VOICE)     )
@@ -736,15 +735,19 @@ typedef struct modem_info {
   void                  *dtmf_state;     /* state for dtmf decoder         */
   void                  *silence_state;  /* state for silence detection    */
 #endif
+#ifdef CONFIG_ISDN_TTY_FAX
+  struct T30_s		*fax;		 /* T30 Fax Group 3 data/interface */
+  int			faxonline;	 /* Fax-channel status             */
+#endif
   struct tty_struct 	*tty;            /* Pointer to corresponding tty   */
   atemu                 emu;             /* AT-emulator data               */
   struct termios	normal_termios;  /* For saving termios structs     */
   struct termios	callout_termios;
-#if LINUX_VERSION_CODE < 131841
+#ifdef COMPAT_HAS_NEW_WAITQ
+  wait_queue_head_t	open_wait, close_wait;
+#else
   struct wait_queue	*open_wait;
   struct wait_queue	*close_wait;
-#else
-  wait_queue_head_t	open_wait, close_wait;
 #endif
   struct semaphore      write_sem;
 } modem_info;
@@ -823,10 +826,10 @@ typedef struct {
 	ulong               flags;            /* Misc driver Flags                */
 	int                 locks;            /* Number of locks for this driver  */
 	int                 channels;         /* Number of channels               */
-#if LINUX_VERSION_CODE < 131841
-	struct wait_queue  *st_waitq;         /* Wait-Queue for status-read's     */
-#else
+#ifdef COMPAT_HAS_NEW_WAITQ
 	wait_queue_head_t   st_waitq;         /* Wait-Queue for status-read's     */
+#else
+	struct wait_queue  *st_waitq;         /* Wait-Queue for status-read's     */
 #endif
 	int                 maxbufsize;       /* Maximum Buffersize supported     */
 	unsigned long       pktcount;         /* Until now: unused                */
@@ -838,12 +841,12 @@ typedef struct {
 	unsigned long      DLEflag;           /* Flags: Insert DLE at next read   */
 #endif
 	struct sk_buff_head *rpqueue;         /* Pointers to start of Rcv-Queue   */
-#if LINUX_VERSION_CODE < 131841
-	struct wait_queue  **rcv_waitq;       /* Wait-Queues for B-Channel-Reads  */
-	struct wait_queue  **snd_waitq;       /* Wait-Queue for B-Channel-Send's  */
-#else
+#ifdef COMPAT_HAS_NEW_WAITQ
 	wait_queue_head_t  *rcv_waitq;       /* Wait-Queues for B-Channel-Reads  */
 	wait_queue_head_t  *snd_waitq;       /* Wait-Queue for B-Channel-Send's  */
+#else
+	struct wait_queue  **rcv_waitq;       /* Wait-Queues for B-Channel-Reads  */
+	struct wait_queue  **snd_waitq;       /* Wait-Queue for B-Channel-Send's  */
 #endif
 	char               msn2eaz[10][ISDN_MSNLEN];  /* Mapping-Table MSN->EAZ   */
 } driver;
@@ -860,10 +863,10 @@ typedef struct isdn_devt {
 	/*  see ISDN_TIMER_..defines  */
 	int               global_flags;
 	infostruct        *infochain;                /* List of open info-devs.    */
-#if LINUX_VERSION_CODE < 131841
-	struct wait_queue *info_waitq;               /* Wait-Queue for isdninfo    */
-#else
+#ifdef COMPAT_HAS_NEW_WAITQ
 	wait_queue_head_t info_waitq;               /* Wait-Queue for isdninfo    */
+#else
+	struct wait_queue *info_waitq;               /* Wait-Queue for isdninfo    */
 #endif
 	struct timer_list timer;		       /* Misc.-function Timer       */
 	int               chanmap[ISDN_MAX_CHANNELS];/* Map minor->device-channel  */

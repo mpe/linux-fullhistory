@@ -310,7 +310,7 @@ static void dnfb_set_disp(int con, struct fb_info *info)
 #endif
 }
   
-void dnfb_init(void)
+int dnfb_init(void)
 {
 	fb_info.changevar=NULL;
 	strcpy(&fb_info.modename[0],dnfb_name);
@@ -333,11 +333,14 @@ void dnfb_init(void)
         dnfb_get_var(&disp[0].var, 0, &fb_info);
 	dnfb_set_disp(-1, &fb_info);
 
-	if (register_framebuffer(&fb_info) < 0)
-		panic("unable to register apollo frame buffer\n");
+	if (register_framebuffer(&fb_info) < 0) {
+		printk(KERN_ERR "unable to register apollo frame buffer\n");
+		return -EINVAL;
+	}
  
         printk("fb%d: apollo frame buffer alive and kicking !\n",
 	       GET_FB_IDX(fb_info.node));
+	return 0;
 }	
 
 	

@@ -1304,7 +1304,6 @@ retry_find:
 	if (!page)
 		goto no_cached_page;
 
-found_page:
 	/*
 	 * Ok, found a page in the page cache, now we need to check
 	 * that it's up-to-date.  First check whether we'll need an
@@ -1316,12 +1315,8 @@ found_page:
 			goto failure;
 	}
 
-	if (!Page_Uptodate(page)) {
-		lock_page(page);
-		if (!Page_Uptodate(page))
-			goto page_not_uptodate;
-		UnlockPage(page);
-	}
+	if (!Page_Uptodate(page))
+		goto page_not_uptodate;
 
 success:
 	/*
@@ -1360,44 +1355,28 @@ no_cached_page:
 	for (i = 1 << page_cluster; i > 0; --i, reada += PAGE_CACHE_SIZE)
 		new_page = try_to_read_ahead(file, reada, new_page);
 
-	if (!new_page)
-		new_page = page_cache_alloc();
-	if (!new_page)
-		goto no_page;
-
 	/*
-	 * During getting the above page we might have slept,
-	 * so we need to re-check the situation with the page
-	 * cache.. The page we just got may be useful if we
-	 * can't share, so don't get rid of it here.
+	 * The page we want has now been added to the page cache.
+	 * In the unlikely event that someone removed it in the
+	 * meantime, we'll just come back here and read it again.
 	 */
-	page = __find_get_page(inode, offset, hash);
-	if (page)
-		goto found_page;
-
-	/*
-	 * Now, create a new page-cache page from the page we got
-	 */
-	page = page_cache_entry(new_page);
-	if (add_to_page_cache_unique(page, inode, offset, hash))
-		goto retry_find;
-
-	/*
-	 * Now it's ours and locked, we can do initial IO to it:
-	 */
-	new_page = 0;
+	goto retry_find;
 
 page_not_uptodate:
+	lock_page(page);
+	if (Page_Uptodate(page)) {
+		UnlockPage(page);
+		goto success;
+	}
+
 	error = inode->i_op->readpage(file, page);
 
 	if (!error) {
 		wait_on_page(page);
-		if (PageError(page))
-			goto page_read_error;
-		goto success;
+		if (Page_Uptodate(page))
+			goto success;
 	}
 
-page_read_error:
 	/*
 	 * Umm, take care of errors if the page isn't up-to-date.
 	 * Try to re-read it _once_. We do this synchronously,

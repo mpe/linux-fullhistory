@@ -112,7 +112,7 @@ static int g364fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 /*
  *  Interface to the low level console driver
  */
-void g364fb_init(void);
+int g364fb_init(void);
 static int g364fbcon_switch(int con, struct fb_info *info);
 static int g364fbcon_updatevar(int con, struct fb_info *info);
 static void g364fbcon_blank(int blank, struct fb_info *info);
@@ -297,7 +297,7 @@ static int g364fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 /*
  *  Initialisation
  */
-void __init g364fb_init(void)
+int __init g364fb_init(void)
 {
     int i,j;
     volatile unsigned int *pal_ptr = (volatile unsigned int *) CLR_PAL_REG;
@@ -413,10 +413,11 @@ void __init g364fb_init(void)
     g364fb_set_var(&fb_var, -1, &fb_info);
 
     if (register_framebuffer(&fb_info) < 0)
-	return;
+	return -EINVAL;
 
     printk("fb%d: %s frame buffer device\n", GET_FB_IDX(fb_info.node),
 	   fb_fix.id);
+    return 0;
 }
 
 

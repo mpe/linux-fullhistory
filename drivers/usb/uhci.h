@@ -77,6 +77,9 @@ struct uhci_framelist {
 	__u32 frame[1024];
 } __attribute__((aligned(4096)));
 
+/*
+ * for TD <status>:
+ */
 #define TD_CTRL_SPD		(1 << 29)	/* Short Packet Detect */
 #define TD_CTRL_LS		(1 << 26)	/* Low Speed Device */
 #define TD_CTRL_IOS		(1 << 25)	/* Isochronous Select */
@@ -91,7 +94,25 @@ struct uhci_framelist {
 
 #define uhci_ptr_to_virt(x)	bus_to_virt(x & ~UHCI_PTR_BITS)
 
+/*
+ * for TD <flags>:
+ */
 #define UHCI_TD_REMOVE		0x0001		/* Remove when done */
+
+/*
+ * for TD <info>: (a.k.a. Token)
+ */
+#define TD_TOKEN_TOGGLE		19
+
+#define uhci_maxlen(token)	((token) >> 21)
+#define uhci_toggle(token)	(((token) >> TD_TOKEN_TOGGLE) & 1)
+#define uhci_endpoint(token)	(((token) >> 15) & 0xf)
+#define uhci_devaddr(token)	(((token) >> 8) & 0x7f)
+#define uhci_devep(token)	(((token) >> 8) & 0x7ff)
+#define uhci_packetid(token)	((token) & 0xff)
+#define uhci_packetout(token)	(uhci_packetid(token) != USB_PID_IN)
+#define uhci_packetin(token)	(uhci_packetid(token) == USB_PID_IN)
+
 
 /*
  * The documentation says "4 words for hardware, 4 words for software".

@@ -297,7 +297,7 @@ static struct fb_var_screeninfo virgefb_default;
  *    Interface used by the world
  */
 
-void virgefb_setup(char *options, int *ints);
+int virgefb_setup(char*);
 
 static int virgefb_open(struct fb_info *info, int user);
 static int virgefb_release(struct fb_info *info, int user);
@@ -321,7 +321,7 @@ static int virgefb_ioctl(struct inode *inode, struct file *file, u_int cmd,
  *    Interface to the low level console driver
  */
 
-void virgefb_init(void);
+int virgefb_init(void);
 static int Cyberfb_switch(int con, struct fb_info *info);
 static int Cyberfb_updatevar(int con, struct fb_info *info);
 static void Cyberfb_blank(int blank, struct fb_info *info);
@@ -816,7 +816,7 @@ static void Cyber3D_RectFill(u_short x, u_short y, u_short width,
 #if 0
 static void Cyber_MoveCursor (u_short x, u_short y)
 {
-	printk("Yuck .... MoveCursor on a 3D\n");
+	printk(KERN_DEBUG "Yuck .... MoveCursor on a 3D\n");
 	return;
 }
 #endif
@@ -1128,14 +1128,14 @@ static struct fb_ops virgefb_ops = {
 };
 
 
-void __init virgefb_setup(char *options, int *ints)
+int __init virgefb_setup(char *options)
 {
 	char *this_opt;
 
 	fb_info.fontname[0] = '\0';
 
 	if (!options || !*options)
-		return;
+		return 0;
 
 	for (this_opt = strtok(options, ","); this_opt; this_opt = strtok(NULL, ","))
 		if (!strcmp(this_opt, "inverse")) {
@@ -1155,6 +1155,7 @@ void __init virgefb_setup(char *options, int *ints)
 	DPRINTK("default mode: xres=%d, yres=%d, bpp=%d\n",virgefb_default.xres,
                                                            virgefb_default.yres,
 		                                           virgefb_default.bits_per_pixel);
+	return 0;
 }
 
 
@@ -1169,7 +1170,7 @@ void __init virgefb_init(void)
 	const struct ConfigDev *cd;
 
 	if (!(CyberKey = zorro_find(ZORRO_PROD_PHASE5_CYBERVISION64_3D, 0, 0)))
-		return;
+		return -ENXIO;
 
 	cd = zorro_get_board (CyberKey);
 	zorro_config_board (CyberKey, 0);
@@ -1193,7 +1194,7 @@ void __init virgefb_init(void)
 		Cyber_vcode_switch_base = (unsigned long) \
 			ZTWO_VADDR(board_addr + 0x003a0000);
 		cv3d_on_zorro2 = 1;
-		printk("CV3D detected running in Z2 mode.\n");
+		printk(KERN_INFO "CV3D detected running in Z2 mode.\n");
 	}
 	else
 	{
@@ -1203,7 +1204,7 @@ void __init virgefb_init(void)
 		CyberRegs = ioremap(CyberRegs_phys, 0x00010000);
 		CyberMem = (unsigned long)ioremap(CyberMem_phys, 0x01000000);	/* was 0x00400000 */
 		cv3d_on_zorro2 = 0;
-		printk("CV3D detected running in Z3 mode\n");
+		printk(KERN_INFO "CV3D detected running in Z3 mode.\n");
 	}
 
 	fbhw = &Cyber_switch;
@@ -1228,15 +1229,16 @@ void __init virgefb_init(void)
 	do_install_cmap(0, &fb_info);
 
 	if (register_framebuffer(&fb_info) < 0) {
-		printk("virgefb.c: register_framebuffer failed\n");
-		return;
+		printk(KERN_ERR "virgefb.c: register_framebuffer failed\n");
+		return -EINVAL;
 	}
 
-	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
+	printk(KERN_INFO "fb%d: %s frame buffer device, using %ldK of video memory\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename, CyberSize>>10);
 
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
+	return 0;
 }
 
 
@@ -1425,8 +1427,7 @@ static struct display_switch fbcon_virge16 = {
 #ifdef MODULE
 int init_module(void)
 {
-	virgefb_init();
-	return 0;
+	return virgefb_init();
 }
 
 void cleanup_module(void)

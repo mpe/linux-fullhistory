@@ -1,4 +1,4 @@
-/* $Id: eicon_io.c,v 1.1 1999/03/29 11:19:45 armin Exp $
+/* $Id: eicon_io.c,v 1.2 1999/07/25 15:12:05 armin Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  * Code for communicating with hardware.
@@ -24,6 +24,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_io.c,v $
+ * Revision 1.2  1999/07/25 15:12:05  armin
+ * fix of some debug logs.
+ * enabled ISA-cards option.
+ *
  * Revision 1.1  1999/03/29 11:19:45  armin
  * I/O stuff now in seperate file (eicon_io.c)
  * Old ISA type cards (S,SX,SCOM,Quadro,S2M) implemented.
@@ -57,7 +61,7 @@ eicon_io_rcv_dispatch(eicon_card *ccard) {
 						break;
 					default: 
 						printk(KERN_ERR "idi: Indication for unknown channel Ind=%d Id=%d\n", ind->Ind, ind->IndId);
-						printk(KERN_DEBUG "idi_hdl: Ch??: Ind=%d Id=%d Ch=%d MInd=%d MLen=%d Len=%d\n",
+						printk(KERN_DEBUG "idi_hdl: Ch??: Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
 							ind->Ind,ind->IndId,ind->IndCh,ind->MInd,ind->MLength,ind->RBuffer.length);
 				}
 			}
@@ -303,6 +307,7 @@ eicon_io_transmit(eicon_card *ccard) {
         }
 
 	switch(ccard->type) {
+#ifdef CONFIG_ISDN_DRV_EICON_ISA
 		case EICON_CTYPE_S:
 		case EICON_CTYPE_SX:
 		case EICON_CTYPE_SCOM:
@@ -314,6 +319,7 @@ eicon_io_transmit(eicon_card *ccard) {
 			scom = 0;
 			prram = (eicon_pr_ram *)isa_card->shmem;
 			break;
+#endif
 		case EICON_CTYPE_MAESTRAP:
 			scom = 0;
         		ram = (char *)pci_card->PCIram;
@@ -434,7 +440,7 @@ eicon_io_transmit(eicon_card *ccard) {
 			chan->e.busy = 1; 
 			restore_flags(flags);
 			if (DebugVar & 32)
-	                	printk(KERN_DEBUG "eicon: Req=%x Id=%x Ch=%x Len=%x Ref=%d\n", 
+	                	printk(KERN_DEBUG "eicon: Req=%d Id=%x Ch=%d Len=%d Ref=%d\n", 
 							reqbuf->Req, 
 							ram_inb(ccard, &ReqOut->ReqId),
 							reqbuf->ReqCh, reqbuf->XBuffer.length,
@@ -510,6 +516,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 	isa_card = &ccard->hwif.isa;
 
 	switch(ccard->type) {
+#ifdef CONFIG_ISDN_DRV_EICON_ISA
 		case EICON_CTYPE_S:
 		case EICON_CTYPE_SX:
 		case EICON_CTYPE_SCOM:
@@ -523,6 +530,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 			prram = (eicon_pr_ram *)isa_card->shmem;
 			irqprobe = &isa_card->irqprobe;
 			break;
+#endif
 		case EICON_CTYPE_MAESTRAP:
 			scom = 0;
 			ram = (char *)pci_card->PCIram;
@@ -546,6 +554,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 
 	if (*irqprobe) {
 		switch(ccard->type) {
+#ifdef CONFIG_ISDN_DRV_EICON_ISA
 			case EICON_CTYPE_S:
 			case EICON_CTYPE_SX:
 			case EICON_CTYPE_SCOM:
@@ -563,6 +572,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 				}
 				(*irqprobe)++;
 				break;
+#endif
 			case EICON_CTYPE_MAESTRAP:
 	        		if (readb(&ram[0x3fe])) { 
         		               	writeb(0, &prram->RcOutput);
@@ -581,6 +591,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 	}
 
 	switch(ccard->type) {
+#ifdef CONFIG_ISDN_DRV_EICON_ISA
 		case EICON_CTYPE_S:
 		case EICON_CTYPE_SX:
 		case EICON_CTYPE_SCOM:
@@ -592,6 +603,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 				return;
 			} 
 			break;
+#endif
 		case EICON_CTYPE_MAESTRAP:
 			if (!(readb(&ram[0x3fe]))) { /* card did not interrupt */
 				if (DebugVar & 1)
@@ -629,7 +641,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 			ack->RcCh = ram_inb(ccard, &com->RcCh);
 			ack->Reference = ccard->ref_in++;
 			if (DebugVar & 64)
-                        	printk(KERN_INFO "eicon: IRQ Rc=%d Id=%d Ch=%d Ref=%d\n",
+                        	printk(KERN_INFO "eicon: IRQ Rc=%d Id=%x Ch=%d Ref=%d\n",
 					tmp,ack->RcId,ack->RcCh,ack->Reference);
 			skb_queue_tail(&ccard->rackq, skb);
 			eicon_schedule_ack(ccard);
@@ -652,7 +664,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 			ind->MLength = ram_inw(ccard, &com->MLength);
 			ind->RBuffer.length = len; 
 			if (DebugVar & 64)
-                        	printk(KERN_INFO "eicon: IRQ Ind=%d Id=%d Ch=%d MInd=%d MLen=%d Len=%d\n",
+                        	printk(KERN_INFO "eicon: IRQ Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
 				tmp,ind->IndId,ind->IndCh,ind->MInd,ind->MLength,len);
 			ram_copyfromcard(ccard, &ind->RBuffer.P, &com->RBuffer.P, len);
 			skb_queue_tail(&ccard->rcvq, skb);
@@ -679,7 +691,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 				ack->RcCh = ram_inb(ccard, &RcIn->RcCh);
 				ack->Reference = ram_inw(ccard, &RcIn->Reference);
 				if (DebugVar & 64)
-	                        	printk(KERN_INFO "eicon: IRQ Rc=%d Id=%d Ch=%d Ref=%d\n",
+	                        	printk(KERN_INFO "eicon: IRQ Rc=%d Id=%x Ch=%d Ref=%d\n",
 						Rc,ack->RcId,ack->RcCh,ack->Reference);
                         	ram_outb(ccard, &RcIn->Rc, 0);
 				 skb_queue_tail(&ccard->rackq, skb);
@@ -711,7 +723,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 				ind->MLength = ram_inw(ccard, &IndIn->MLength);
 				ind->RBuffer.length = len;
 				if (DebugVar & 64)
-	                        	printk(KERN_INFO "eicon: IRQ Ind=%d Id=%d Ch=%d MInd=%d MLen=%d Len=%d\n",
+	                        	printk(KERN_INFO "eicon: IRQ Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
 					Ind,ind->IndId,ind->IndCh,ind->MInd,ind->MLength,len);
                                 ram_copyfromcard(ccard, &ind->RBuffer.P, &IndIn->RBuffer.P, len);
 				skb_queue_tail(&ccard->rcvq, skb);
@@ -728,6 +740,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 
 	/* clear interrupt */
 	switch(ccard->type) {
+#ifdef CONFIG_ISDN_DRV_EICON_ISA
 		case EICON_CTYPE_QUADRO:
 			writeb(0, isa_card->intack);
 			writeb(0, &com[0x401]);
@@ -738,6 +751,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 		case EICON_CTYPE_S2M:
 			writeb(0, isa_card->intack);
 			break;
+#endif
 		case EICON_CTYPE_MAESTRAP:
 			writew(MP_IRQ_RESET_VAL, &cfg[MP_IRQ_RESET]);
 			writew(0, &cfg[MP_IRQ_RESET + 2]); 

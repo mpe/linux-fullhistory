@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.47 1999/04/18 14:06:59 fritz Exp $
+/* $Id: isdn_ppp.c,v 1.49 1999/07/06 07:47:11 calle Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.c,v $
+ * Revision 1.49  1999/07/06 07:47:11  calle
+ * bugfix: dev_alloc_skb only reserve 16 bytes. We need to look at the
+ *  	hdrlen the driver want. So I changed dev_alloc_skb calls
+ *         to alloc_skb and skb_reserve.
+ *
+ * Revision 1.48  1999/07/01 08:29:56  keil
+ * compatibility to 2.3 kernel
+ *
  * Revision 1.47  1999/04/18 14:06:59  fritz
  * Removed TIMRU stuff.
  *
@@ -261,7 +269,7 @@ static int isdn_ppp_fill_mpqueue(isdn_net_dev *, struct sk_buff **skb,
 static void isdn_ppp_free_mpqueue(isdn_net_dev *);
 #endif
 
-char *isdn_ppp_revision = "$Revision: 1.47 $";
+char *isdn_ppp_revision = "$Revision: 1.49 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
 static struct isdn_ppp_compressor *ipc_head = NULL;
@@ -430,7 +438,7 @@ isdn_ppp_wakeup_daemon(isdn_net_local * lp)
 
 	ippp_table[lp->ppp_slot]->state = IPPP_OPEN | IPPP_CONNECT | IPPP_NOBLOCK;
 
-#if LINUX_VERSION_CODE < 131841
+#ifndef COMPAT_HAS_NEW_WAITQ
 	if (ippp_table[lp->ppp_slot]->wq)
 #endif
 		wake_up_interruptible(&ippp_table[lp->ppp_slot]->wq);
@@ -450,10 +458,10 @@ isdn_ppp_closewait(int slot)
 		return 0;
 	is = ippp_table[slot];
 
-#if LINUX_VERSION_CODE < 131841
-	if (is->state && is->wq)
-#else
+#ifdef COMPAT_HAS_NEW_WAITQ
 	if (is->state)
+#else
+	if (is->state && is->wq)
 #endif
 		wake_up_interruptible(&is->wq);
 
@@ -519,10 +527,10 @@ isdn_ppp_open(int min, struct file *file)
 	is->mru = 1524;         /* MRU, default 1524 */
 	is->maxcid = 16;        /* VJ: maxcid */
 	is->tk = current;
-#if LINUX_VERSION_CODE < 131841
-	is->wq = NULL;          /* read() wait queue */
-#else
+#ifdef COMPAT_HAS_NEW_WAITQ
 	init_waitqueue_head(&is->wq);
+#else
+	is->wq = NULL;          /* read() wait queue */
 #endif
 	is->first = is->rq + NUM_RCV_BUFFS - 1;	/* receive queue */
 	is->last = is->rq;
@@ -891,7 +899,7 @@ isdn_ppp_fill_rq(unsigned char *buf, int len, int proto, int slot)
 	is->last = bl->next;
 	restore_flags(flags);
 
-#if LINUX_VERSION_CODE < 131841
+#ifndef COMPAT_HAS_NEW_WAITQ
 	if (is->wq)
 #endif
 		wake_up_interruptible(&is->wq);
@@ -983,13 +991,21 @@ isdn_ppp_write(int min, struct file *file, const char *buf, int count)
 		if ((dev->drv[lp->isdn_device]->flags & DRV_FLAG_RUNNING) &&
 			lp->dialstate == 0 &&
 		    (lp->flags & ISDN_NET_CONNECTED)) {
+			unsigned short hl;
 			int cnt;
 			struct sk_buff *skb;
-			skb = dev_alloc_skb(count);
+			/*
+			 * we need to reserve enought space in front of
+			 * sk_buff. old call to dev_alloc_skb only reserved
+			 * 16 bytes, now we are looking what the driver want
+			 */
+			hl = dev->drv[lp->isdn_device]->interface->hl_hdrlen;
+			skb = alloc_skb(hl+count, GFP_ATOMIC);
 			if (!skb) {
 				printk(KERN_WARNING "isdn_ppp_write: out of memory!\n");
 				return count;
 			}
+			skb_reserve(skb, hl);
 			if (copy_from_user(skb_put(skb, count), buf, count))
 				return -EFAULT;
 			if (is->debug & 0x40) {
@@ -1416,9 +1432,9 @@ static unsigned char *isdn_ppp_skb_push(struct sk_buff **skb_p,int len)
  */
 
 int
-isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
+isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 {
-	struct device *mdev = ((isdn_net_local *) (dev->priv))->master;	/* get master (for redundancy) */
+	struct device *mdev = ((isdn_net_local *) (netdev->priv))->master;	/* get master (for redundancy) */
 	isdn_net_local *lp,*mlp;
 	isdn_net_dev *nd;
 	unsigned int proto = PPP_IP;     /* 0x21 */
@@ -1427,8 +1443,8 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 	if (mdev)
 		mlp = (isdn_net_local *) (mdev->priv);
 	else {
-		mdev = dev;
-		mlp = (isdn_net_local *) (dev->priv);
+		mdev = netdev;
+		mlp = (isdn_net_local *) (netdev->priv);
 	}
 	nd = mlp->netdev;       /* get master lp */
 	ipts = ippp_table[mlp->ppp_slot];
@@ -1441,7 +1457,7 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 			ipts->old_pa_dstaddr = mdev->pa_dstaddr;
 #endif
 		if (ipts->debug & 0x1)
-			printk(KERN_INFO "%s: IP frame delayed.\n", dev->name);
+			printk(KERN_INFO "%s: IP frame delayed.\n", netdev->name);
 		return 1;
 	}
 
@@ -1506,12 +1522,19 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 #ifdef CONFIG_ISDN_PPP_VJ
 	if (proto == PPP_IP && ipts->pppcfg & SC_COMP_TCP) {	/* ipts here? probably yes, but check this again */
 		struct sk_buff *new_skb;
-
-		new_skb = dev_alloc_skb(skb->len);
+	        unsigned short hl;
+		/*
+		 * we need to reserve enought space in front of
+		 * sk_buff. old call to dev_alloc_skb only reserved
+		 * 16 bytes, now we are looking what the driver want.
+		 */
+		hl = dev->drv[lp->isdn_device]->interface->hl_hdrlen;
+		new_skb = alloc_skb(hl+skb->len, GFP_ATOMIC);
 		if (new_skb) {
 			u_char *buf;
 			int pktlen;
 
+			skb_reserve(new_skb, hl);
 			new_skb->dev = skb->dev;
 			skb_put(new_skb, skb->len);
 			buf = skb->data;
@@ -1611,9 +1634,9 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 		printk(KERN_DEBUG "skb xmit: len: %d\n", (int) skb->len);
 		isdn_ppp_frame_log("xmit", skb->data, skb->len, 32,ipt->unit,lp->ppp_slot);
 	}
-	if (isdn_net_send_skb(dev, lp, skb)) {
+	if (isdn_net_send_skb(netdev, lp, skb)) {
 		if (lp->sav_skb) {	/* whole sav_skb processing with disabled IRQs ?? */
-			printk(KERN_ERR "%s: whoops .. there is another stored skb!\n", dev->name);
+			printk(KERN_ERR "%s: whoops .. there is another stored skb!\n", netdev->name);
 			dev_kfree_skb(skb);
 		} else
 			lp->sav_skb = skb;

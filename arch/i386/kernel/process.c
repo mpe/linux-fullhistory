@@ -63,53 +63,10 @@ void enable_hlt(void)
 	hlt_counter--;
 }
 
-static void default_idle(void)
-{
-	while (1) {
-		while (!current->need_resched) {
-			if (!current_cpu_data.hlt_works_ok)
-				continue;
-			if (hlt_counter)
-				continue;
-			asm volatile("sti ; hlt" : : : "memory");
-		}
-		schedule();
-		check_pgt_cache();
-	}
-}	
-
-void (*idle)(void) = default_idle;
-
-#if 1
-
-#include <linux/pci.h>
-
-static int __init piix4_idle_init(void)
-{
-	/* This is the PIIX4 ACPI device */
-	struct pci_dev *dev = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_3, NULL);
-
-	if (dev) {
-		u32 base;
-
-		printk("Found PIIX4 ACPI device\n");
-		pci_read_config_dword(dev, 0x40, &base);
-		printk("  Base address %04x\n", base);
-#ifdef __SMP__
-		/*
-		 * We can't really do idle things with multiple CPU's, I'm
-		 * afraid.  We'd need a per-CPU ACPI device.
-		 */
-		if (smp_num_cpus > 1)
-			return 0;
-#endif
-	}
-	return 0;
-}
-
-__initcall(piix4_idle_init);
-
-#endif
+/*
+ * Powermanagement idle function, if any..
+ */
+void (*acpi_idle)(void) = NULL;
 
 /*
  * The idle thread. There's no useful work to be
@@ -123,7 +80,20 @@ void cpu_idle(void)
 	init_idle();
 	current->priority = 0;
 	current->counter = -100;
-	idle();
+
+	while (1) {
+		while (!current->need_resched) {
+			if (!current_cpu_data.hlt_works_ok)
+				continue;
+			if (hlt_counter)
+				continue;
+			asm volatile("sti ; hlt" : : : "memory");
+		}
+		schedule();
+		check_pgt_cache();
+		if (acpi_idle)
+			acpi_idle();
+	}
 }
 
 /*

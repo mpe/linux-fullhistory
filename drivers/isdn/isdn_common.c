@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.75 1999/04/18 14:06:47 fritz Exp $
+/* $Id: isdn_common.c,v 1.86 1999/07/31 12:59:42 armin Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -21,6 +21,51 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.c,v $
+ * Revision 1.86  1999/07/31 12:59:42  armin
+ * Added tty fax capabilities.
+ *
+ * Revision 1.85  1999/07/29 16:58:35  armin
+ * Bugfix: DLE handling in isdn_readbchan()
+ *
+ * Revision 1.84  1999/07/25 16:21:10  keil
+ * fix number matching
+ *
+ * Revision 1.83  1999/07/13 21:02:05  werner
+ * Added limit possibilty of driver b_channel resources (ISDN_STAT_DISCH)
+ *
+ * Revision 1.82  1999/07/12 21:06:50  werner
+ * Fixed problem when loading more than one driver temporary
+ *
+ * Revision 1.81  1999/07/11 17:14:09  armin
+ * Added new layer 2 and 3 protocols for Fax and DSP functions.
+ * Moved "Add CPN to RING message" to new register S23,
+ * "Display message" is now correct on register S13 bit 7.
+ * New audio command AT+VDD implemented (deactivate DTMF decoder and
+ * activate possible existing hardware/DSP decoder).
+ * Moved some tty defines to .h file.
+ * Made whitespace possible in AT command line.
+ * Some AT-emulator output bugfixes.
+ * First Fax G3 implementations.
+ *
+ * Revision 1.80  1999/07/07 10:14:00  detabc
+ * remove unused messages
+ *
+ * Revision 1.79  1999/07/05 23:51:30  werner
+ * Allow limiting of available HiSax B-chans per card. Controlled by hisaxctrl
+ * hisaxctrl id 10 <nr. of chans 0-2>
+ *
+ * Revision 1.78  1999/07/05 20:21:15  werner
+ * changes to use diversion sources for all kernel versions.
+ * removed static device, only proc filesystem used
+ *
+ * Revision 1.77  1999/07/01 08:29:50  keil
+ * compatibility to 2.3 kernel
+ *
+ * Revision 1.76  1999/06/29 16:16:44  calle
+ * Let ISDN_CMD_UNLOAD work with open isdn devices without crash again.
+ * Also right unlocking (ISDN_CMD_UNLOCK) is done now.
+ * isdnlog should check returncode of read(2) calls.
+ *
  * Revision 1.75  1999/04/18 14:06:47  fritz
  * Removed TIMRU stuff.
  *
@@ -65,16 +110,6 @@
  * brute force fix to avoid Ugh's in isdn_tty_write()
  * cleaned up some dead code
  *
- * Revision 1.65  1998/06/07 00:20:00  fritz
- * abc cleanup.
- *
- * Revision 1.64  1998/06/02 12:10:03  detabc
- * wegen einer einstweiliger verfuegung gegen DW ist zur zeit
- * die abc-extension bis zur klaerung der rechtslage nicht verfuegbar
- *
- * Revision 1.63  1998/05/03 17:40:38  detabc
- * Include abc-extension-support for >= 2.1.x Kernels in
- * isdn_net.c and isdn_common.c. alpha-test OK and running !
  *
  * Revision 1.62  1998/04/14 16:28:43  he
  * Fixed user space access with interrupts off and remaining
@@ -335,6 +370,9 @@
 #ifdef CONFIG_ISDN_AUDIO
 #include "isdn_audio.h"
 #endif
+#ifdef CONFIG_ISDN_DIVERSION
+#include <linux/isdn_divertif.h>
+#endif CONFIG_ISDN_DIVERSION
 #include "isdn_v110.h"
 #include "isdn_cards.h"
 
@@ -343,7 +381,7 @@
 
 isdn_dev *dev = (isdn_dev *) 0;
 
-static char *isdn_revision = "$Revision: 1.75 $";
+static char *isdn_revision = "$Revision: 1.86 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -358,6 +396,11 @@ extern char *isdn_audio_revision;
 static char *isdn_audio_revision = ": none $";
 #endif
 extern char *isdn_v110_revision;
+
+#ifdef CONFIG_ISDN_DIVERSION
+isdn_divert_if *divert_if = NULL; /* interface to diversion module */
+#endif CONFIG_ISDN_DIVERSION
+
 
 static int isdn_writebuf_stub(int, int, const u_char *, int, int);
 
@@ -449,6 +492,8 @@ isdn_wildmat(char *s, char *p)
 	register int reverse;
 	register int nostar = 1;
 
+	if (!(*s) && !(*p))
+		return(1);
 	for (; *p; s++, p++)
 		switch (*p) {
 			case '\\':
@@ -760,7 +805,7 @@ isdn_status_callback(isdn_ctrl * c)
 				return 0;
 			}
 			/* Try to find a network-interface which will accept incoming call */
-			r = isdn_net_find_icall(di, c->arg, i, c->parm.setup);
+			r = ((c->command == ISDN_STAT_ICALLW) ? 0 : isdn_net_find_icall(di, c->arg, i, c->parm.setup));
 			switch (r) {
 				case 0:
 					/* No network-device replies.
@@ -768,7 +813,13 @@ isdn_status_callback(isdn_ctrl * c)
 					 * These return 0 on no match, 1 on match and
 					 * 3 on eventually match, if CID is longer.
 					 */
-					retval = isdn_tty_find_icall(di, c->arg, c->parm.setup);
+                                        if (c->command == ISDN_STAT_ICALL)
+					  if ((retval = isdn_tty_find_icall(di, c->arg, c->parm.setup))) return(retval);
+#ifdef CONFIG_ISDN_DIVERSION 
+                                         if (divert_if)
+                 	                  if ((retval = divert_if->stat_callback(c))) 
+					    return(retval); /* processed */
+#endif CONFIG_ISDN_DIVERSION                        
 					if ((!retval) && (dev->drv[di]->flags & DRV_FLAG_REJBUS)) {
 						/* No tty responding */
 						cmd.driver = di;
@@ -831,6 +882,20 @@ isdn_status_callback(isdn_ctrl * c)
 			printk(KERN_INFO "isdn: %s,ch%ld cause: %s\n",
 			       dev->drvid[di], c->arg, c->parm.num);
 			isdn_tty_stat_callback(i, c);
+#ifdef CONFIG_ISDN_DIVERSION
+                        if (divert_if)
+                         divert_if->stat_callback(c); 
+#endif CONFIG_ISDN_DIVERSION
+			break;
+		case ISDN_STAT_DISPLAY:
+#ifdef ISDN_DEBUG_STATCALLB
+			printk(KERN_DEBUG "DISPLAY: %ld %s\n", c->arg, c->parm.display);
+#endif
+			isdn_tty_stat_callback(i, c);
+#ifdef CONFIG_ISDN_DIVERSION
+                        if (divert_if)
+                         divert_if->stat_callback(c); 
+#endif CONFIG_ISDN_DIVERSION
 			break;
 		case ISDN_STAT_DCONN:
 			if (i < 0)
@@ -869,6 +934,11 @@ isdn_status_callback(isdn_ctrl * c)
 			isdn_v110_stat_callback(i, c);
 			if (isdn_tty_stat_callback(i, c))
 				break;
+#ifdef CONFIG_ISDN_DIVERSION
+                        if (divert_if)
+                         divert_if->stat_callback(c); 
+#endif CONFIG_ISDN_DIVERSION
+			break;
 			break;
 		case ISDN_STAT_BCONN:
 			if (i < 0)
@@ -924,7 +994,34 @@ isdn_status_callback(isdn_ctrl * c)
 				return -1;
 			isdn_info_update();
 			break;
+		case ISDN_STAT_DISCH:
+			save_flags(flags);
+			cli();
+			for (i = 0; i < ISDN_MAX_CHANNELS; i++)
+				if ((dev->drvmap[i] == di) &&
+				    (dev->chanmap[i] == c->arg)) {
+				    if (c->parm.num[0])
+				      dev->usage[i] &= ~ISDN_USAGE_DISABLED;
+				    else
+				      if (USG_NONE(dev->usage[i])) {
+					dev->usage[i] |= ISDN_USAGE_DISABLED;
+				      }
+				      else 
+					retval = -1;
+				    break;
+				}
+			restore_flags(flags);
+			isdn_info_update();
+			break;
 		case ISDN_STAT_UNLOAD:
+			while (dev->drv[di]->locks > 0) {
+				isdn_ctrl cmd;
+				cmd.driver = di;
+				cmd.arg = 0;
+				cmd.command = ISDN_CMD_UNLOCK;
+				isdn_command(&cmd);
+				dev->drv[di]->locks--;
+			}
 			save_flags(flags);
 			cli();
 			isdn_tty_stat_callback(i, c);
@@ -932,6 +1029,7 @@ isdn_status_callback(isdn_ctrl * c)
 				if (dev->drvmap[i] == di) {
 					dev->drvmap[i] = -1;
 					dev->chanmap[i] = -1;
+					dev->usage[i] &= ~ISDN_USAGE_DISABLED;
 				}
 			dev->drivers--;
 			dev->channels -= dev->drv[di]->channels;
@@ -941,7 +1039,7 @@ isdn_status_callback(isdn_ctrl * c)
 				isdn_free_queue(&dev->drv[di]->rpqueue[i]);
 			kfree(dev->drv[di]->rpqueue);
 			kfree(dev->drv[di]->rcv_waitq);
-#if LINUX_VERSION_CODE < 131841
+#ifndef COMPAT_HAS_NEW_WAITQ
 			kfree(dev->drv[di]->snd_waitq);
 #endif
 			kfree(dev->drv[di]);
@@ -954,6 +1052,22 @@ isdn_status_callback(isdn_ctrl * c)
 			break;
 		case CAPI_PUT_MESSAGE:
 			return(isdn_capi_rec_hl_msg(&c->parm.cmsg));
+#ifdef CONFIG_ISDN_TTY_FAX
+		case ISDN_STAT_FAXIND:
+			isdn_tty_stat_callback(i, c);
+			break;
+#endif
+#ifdef CONFIG_ISDN_AUDIO
+		case ISDN_STAT_AUDIO:
+			isdn_tty_stat_callback(i, c);
+			break;
+#endif
+#ifdef CONFIG_ISDN_DIVERSION
+	        case ISDN_STAT_PROT:
+	        case ISDN_STAT_REDIR:
+                        if (divert_if)
+                          return(divert_if->stat_callback(c));
+#endif CONFIG_ISDN_DIVERSION
 		default:
 			return -1;
 	}
@@ -989,10 +1103,10 @@ isdn_getnum(char **p)
  * of the mapping (di,ch)<->minor, happen during the sleep? --he 
  */
 int
-#if LINUX_VERSION_CODE < 131841
-isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, struct wait_queue **sleep)
-#else
+#ifdef COMPAT_HAS_NEW_WAITQ
 isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, wait_queue_head_t *sleep)
+#else
+isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, struct wait_queue **sleep)
 #endif
 {
 	int left;
@@ -1021,7 +1135,7 @@ isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, wait_que
 		if (ISDN_AUDIO_SKB_LOCK(skb))
 			break;
 		ISDN_AUDIO_SKB_LOCK(skb) = 1;
-		if (ISDN_AUDIO_SKB_DLECOUNT(skb)) {
+		if ((ISDN_AUDIO_SKB_DLECOUNT(skb)) || (dev->drv[di]->DLEflag & (1 << channel))) {
 			char *p = skb->data;
 			unsigned long DLEmask = (1 << channel);
 
@@ -1320,11 +1434,11 @@ isdn_poll(struct file *file, poll_table * wait)
 		return mask;
 	}
 	if (minor >= ISDN_MINOR_CTRL && minor <= ISDN_MINOR_CTRLMAX) {
-		poll_wait(file, &(dev->drv[drvidx]->st_waitq), wait);
 		if (drvidx < 0) {
-			printk(KERN_ERR "isdn_common: isdn_poll 1 -> what the hell\n");
-			return POLLERR;
+			/* driver deregistered while file open */
+		        return POLLHUP;
 		}
+		poll_wait(file, &(dev->drv[drvidx]->st_waitq), wait);
 		mask = POLLOUT | POLLWRNORM;
 		if (dev->drv[drvidx]->stavail) {
 			mask |= POLLIN | POLLRDNORM;
@@ -1938,6 +2052,8 @@ isdn_get_free_channel(int usage, int l2_proto, int l3_proto, int pre_dev
 			if ((dev->usage[i] & ISDN_USAGE_EXCLUSIVE) &&
 			((pre_dev != d) || (pre_chan != dev->chanmap[i])))
 				continue;
+			if (dev->usage[i] & ISDN_USAGE_DISABLED)
+			        continue; /* usage not allowed */
 			if (dev->drv[d]->flags & DRV_FLAG_RUNNING) {
 				if (((dev->drv[d]->interface->features & features) == features) ||
 				    (((dev->drv[d]->interface->features & vfeatures) == vfeatures) &&
@@ -2132,13 +2248,12 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 	int j, k, m;
 	ulong flags;
 
-#if LINUX_VERSION_CODE >= 131841
+#ifdef COMPAT_HAS_NEW_WAITQ
 	init_waitqueue_head(&d->st_waitq);
 #endif
 	if (d->flags & DRV_FLAG_RUNNING)
 		return -1;
-	if (n < 1)
-		return 0;
+       	if (n < 1) return 0;
 
 	m = (adding) ? d->channels + n : n;
 
@@ -2185,13 +2300,13 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 
 	if ((adding) && (d->rcv_waitq))
 		kfree(d->rcv_waitq);
-#if LINUX_VERSION_CODE < 131841
-	if (!(d->rcv_waitq = (struct wait_queue **)
-	      kmalloc(sizeof(struct wait_queue *) * m, GFP_KERNEL))) {
-#else
+#ifdef COMPAT_HAS_NEW_WAITQ
 	d->rcv_waitq = (wait_queue_head_t *)
 		kmalloc(sizeof(wait_queue_head_t) * 2 * m, GFP_KERNEL);
 	if (!d->rcv_waitq) {
+#else
+	if (!(d->rcv_waitq = (struct wait_queue **)
+	      kmalloc(sizeof(struct wait_queue *) * m, GFP_KERNEL))) {
 #endif
 		printk(KERN_WARNING "register_isdn: Could not alloc rcv_waitq\n");
 		if (!adding) {
@@ -2201,7 +2316,13 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 		}
 		return -1;
 	}
-#if LINUX_VERSION_CODE < 131841
+#ifdef COMPAT_HAS_NEW_WAITQ
+	d->snd_waitq = d->rcv_waitq + m;
+	for (j = 0; j < m; j++) {
+		init_waitqueue_head(&d->rcv_waitq[m]);
+		init_waitqueue_head(&d->snd_waitq[m]);
+	}
+#else
 	memset((char *) d->rcv_waitq, 0, sizeof(struct wait_queue *) * m);
 
 	if ((adding) && (d->snd_waitq))
@@ -2218,12 +2339,6 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 		return -1;
 	}
 	memset((char *) d->snd_waitq, 0, sizeof(struct wait_queue *) * m);
-#else
-	d->snd_waitq = d->rcv_waitq + m;
-	for (j = 0; j < m; j++) {
-		init_waitqueue_head(&d->rcv_waitq[m]);
-		init_waitqueue_head(&d->snd_waitq[m]);
-	}
 #endif
 
 	dev->channels += n;
@@ -2244,6 +2359,60 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 /*
  * Low-level-driver registration
  */
+
+
+#ifdef CONFIG_ISDN_DIVERSION
+extern isdn_divert_if *divert_if;
+
+static char *map_drvname(int di)
+{
+  if ((di < 0) || (di >= ISDN_MAX_DRIVERS)) 
+    return(NULL);
+  return(dev->drvid[di]); /* driver name */
+} /* map_drvname */
+
+static int map_namedrv(char *id)
+{  int i;
+
+   for (i = 0; i < ISDN_MAX_DRIVERS; i++)
+    { if (!strcmp(dev->drvid[i],id)) 
+        return(i);
+    }
+   return(-1);
+} /* map_namedrv */
+
+int DIVERT_REG_NAME(isdn_divert_if *i_div)
+{
+  if (i_div->if_magic != DIVERT_IF_MAGIC) 
+    return(DIVERT_VER_ERR);
+  switch (i_div->cmd)
+    {
+      case DIVERT_CMD_REL:
+        if (divert_if != i_div) 
+          return(DIVERT_REL_ERR);
+        divert_if = NULL; /* free interface */
+        MOD_DEC_USE_COUNT;
+        return(DIVERT_NO_ERR);
+
+      case DIVERT_CMD_REG:
+        if (divert_if) 
+          return(DIVERT_REG_ERR);
+        i_div->ll_cmd = isdn_command; /* set command function */
+        i_div->drv_to_name = map_drvname; 
+        i_div->name_to_drv = map_namedrv; 
+        MOD_INC_USE_COUNT;
+        divert_if = i_div; /* remember interface */
+        return(DIVERT_NO_ERR);
+
+      default:
+        return(DIVERT_CMD_ERR);   
+    }
+} /* DIVERT_REG_NAME */
+
+EXPORT_SYMBOL(DIVERT_REG_NAME);
+
+#endif CONFIG_ISDN_DIVERSION
+
 
 EXPORT_SYMBOL(register_isdn);
 EXPORT_SYMBOL(register_isdn_module);
@@ -2352,18 +2521,18 @@ isdn_init(void)
 	memset((char *) dev, 0, sizeof(isdn_dev));
 	init_timer(&dev->timer);
 	dev->timer.function = isdn_timer_funct;
-#if LINUX_VERSION_CODE < 131841
-	dev->sem = MUTEX;
-#else
+#ifdef COMPAT_HAS_NEW_WAITQ
 	init_MUTEX(&dev->sem);
 	init_waitqueue_head(&dev->info_waitq);
+#else
+	dev->sem = MUTEX;
 #endif
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 		dev->drvmap[i] = -1;
 		dev->chanmap[i] = -1;
 		dev->m_idx[i] = -1;
 		strcpy(dev->num[i], "???");
-#if LINUX_VERSION_CODE >= 131841
+#ifdef COMPAT_HAS_NEW_WAITQ
 		init_waitqueue_head(&dev->mdm.info[i].open_wait);
 		init_waitqueue_head(&dev->mdm.info[i].close_wait);
 #endif
@@ -2452,6 +2621,9 @@ cleanup_module(void)
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 		isdn_tty_cleanup_xmit(&dev->mdm.info[i]);
 		kfree(dev->mdm.info[i].xmit_buf - 4);
+#ifdef CONFIG_ISDN_TTY_FAX
+		kfree(dev->mdm.info[i].fax);
+#endif
 	}
 	if (unregister_chrdev(ISDN_MAJOR, "isdn") != 0) {
 		printk(KERN_WARNING "isdn: controldevice busy, remove cancelled\n");

@@ -239,7 +239,7 @@ static int cyberfb_usermode __initdata = 0;
  *    Interface used by the world
  */
 
-void cyberfb_setup(char *options, int *ints);
+int cyberfb_setup(char *options);
 
 static int cyberfb_open(struct fb_info *info, int user);
 static int cyberfb_release(struct fb_info *info, int user);
@@ -262,7 +262,7 @@ static int cyberfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
  *    Interface to the low level console driver
  */
 
-void cyberfb_init(void);
+int cyberfb_init(void);
 static int Cyberfb_switch(int con, struct fb_info *info);
 static int Cyberfb_updatevar(int con, struct fb_info *info);
 static void Cyberfb_blank(int blank, struct fb_info *info);
@@ -1062,7 +1062,7 @@ static struct fb_ops cyberfb_ops = {
 };
 
 
-void __init cyberfb_setup(char *options, int *ints)
+int __init cyberfb_setup(char *options)
 {
 	char *this_opt;
 	DPRINTK("ENTER\n");
@@ -1071,7 +1071,7 @@ void __init cyberfb_setup(char *options, int *ints)
 
 	if (!options || !*options) {
 		DPRINTK("EXIT - no options\n");
-		return;
+		return 0;
 	}
 
 	for (this_opt = strtok(options, ","); this_opt;
@@ -1095,13 +1095,14 @@ void __init cyberfb_setup(char *options, int *ints)
 		cyberfb_default.yres,
 		cyberfb_default.bits_per_pixel);
 	DPRINTK("EXIT\n");
+	return 0;
 }
 
 /*
  *    Initialization
  */
 
-void __init cyberfb_init(void)
+int __init cyberfb_init(void)
 {
 	struct cyberfb_par par;
 	unsigned long board_addr;
@@ -1112,7 +1113,7 @@ void __init cyberfb_init(void)
 
 	if (!(CyberKey = zorro_find(ZORRO_PROD_PHASE5_CYBERVISION64, 0, 0))) {
 		DPRINTK("EXIT - zorro_find failed\n");
-		return;
+		return -ENXIO;
 	}
 
 	cd = zorro_get_board (CyberKey);
@@ -1163,7 +1164,7 @@ void __init cyberfb_init(void)
 
 	if (register_framebuffer(&fb_info) < 0) {
 		DPRINTK("EXIT - register_framebuffer failed\n");
-		return;
+		return -EINVAL;
 	}
 
 	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
@@ -1172,6 +1173,7 @@ void __init cyberfb_init(void)
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
 	DPRINTK("EXIT\n");
+	return 0;
 }
 
 
@@ -1299,8 +1301,7 @@ static struct display_switch fbcon_cyber8 = {
 #ifdef MODULE
 int init_module(void)
 {
-	cyberfb_init();
-	return 0;
+	return cyberfb_init();
 }
 
 void cleanup_module(void)

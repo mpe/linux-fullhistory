@@ -1,4 +1,4 @@
-/* $Id: arcofi.h,v 1.3 1998/05/25 12:57:39 keil Exp $
+/* $Id: arcofi.h,v 1.4 1999/07/01 08:11:18 keil Exp $
 
  * arcofi.h   Ansteuerung ARCOFI 2165
  *
@@ -7,6 +7,9 @@
  *
  *
  * $Log: arcofi.h,v $
+ * Revision 1.4  1999/07/01 08:11:18  keil
+ * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
+ *
  * Revision 1.3  1998/05/25 12:57:39  keil
  * HiSax golden code from certification, Don't use !!!
  * No leased lines, no X75, but many changes.
@@ -21,4 +24,16 @@
  
 #define ARCOFI_USE	1
 
-extern int send_arcofi(struct IsdnCardState *cs, const u_char *msg, int bc, int receive);
+/* states */
+#define ARCOFI_NOP	0
+#define ARCOFI_TRANSMIT	1
+#define ARCOFI_RECEIVE	2
+/* events */
+#define ARCOFI_START	1
+#define ARCOFI_TX_END	2
+#define ARCOFI_RX_END	3
+#define ARCOFI_TIMEOUT	4
+
+extern int arcofi_fsm(struct IsdnCardState *cs, int event, void *data);
+extern void init_arcofi(struct IsdnCardState *cs);
+extern void clear_arcofi(struct IsdnCardState *cs);

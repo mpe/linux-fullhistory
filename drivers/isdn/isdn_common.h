@@ -1,4 +1,4 @@
-/* $Id: isdn_common.h,v 1.15 1999/04/18 14:06:50 fritz Exp $
+/* $Id: isdn_common.h,v 1.16 1999/07/01 08:29:54 keil Exp $
 
  * header for Linux ISDN subsystem, common used functions and debugging-switches (linklevel).
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.h,v $
+ * Revision 1.16  1999/07/01 08:29:54  keil
+ * compatibility to 2.3 kernel
+ *
  * Revision 1.15  1999/04/18 14:06:50  fritz
  * Removed TIMRU stuff.
  *
@@ -115,10 +118,10 @@ extern char *isdn_map_eaz2msn(char *msn, int di);
 extern void isdn_timer_ctrl(int tf, int onoff);
 extern void isdn_unexclusive_channel(int di, int ch);
 extern int isdn_getnum(char **);
-#if LINUX_VERSION_CODE < 131841
-extern int isdn_readbchan(int, int, u_char *, u_char *, int, struct wait_queue**);
-#else
+#ifdef COMPAT_HAS_NEW_WAITQ
 extern int isdn_readbchan(int, int, u_char *, u_char *, int, wait_queue_head_t *);
+#else
+extern int isdn_readbchan(int, int, u_char *, u_char *, int, struct wait_queue**);
 #endif
 extern int isdn_get_free_channel(int, int, int, int, int);
 extern int isdn_writebuf_skb_stub(int, int, int, struct sk_buff *);

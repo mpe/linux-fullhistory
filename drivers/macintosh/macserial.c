@@ -39,7 +39,6 @@
 #ifdef CONFIG_KGDB
 #include <asm/kgdb.h>
 #endif
-#include <linux/init.h>
 
 #include "macserial.h"
 

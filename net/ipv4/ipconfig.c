@@ -12,6 +12,10 @@
  *  BOOTP rewritten to construct and analyse packets itself instead
  *  of misusing the IP layer. num_bugs_causing_wrong_arp_replies--;
  *					     -- MJ, December 1998
+ *  
+ *  Fixed ip_auto_config_setup calling at startup in the new "Linker Magic"
+ *  initialization scheme.
+ *	- Arnaldo Carvalho de Melo <acme@conectiva.com.br>, 08/11/1999
  */
 
 #include <linux/config.h>
@@ -912,7 +916,7 @@ static int __init ic_proto_name(char *name)
 	return 0;
 }
 
-void __init ip_auto_config_setup(char *addrs, int *ints)
+static int __init ip_auto_config_setup(char *addrs)
 {
 	char *cp, *ip, *dp;
 	int num = 0;
@@ -920,10 +924,10 @@ void __init ip_auto_config_setup(char *addrs, int *ints)
 	ic_set_manually = 1;
 	if (!strcmp(addrs, "off")) {
 		ic_enable = 0;
-		return;
+		return 1;
 	}
 	if (ic_proto_name(addrs))
-		return;
+		return 1;
 
 	/* Parse the whole string */
 	ip = addrs;
@@ -971,4 +975,14 @@ void __init ip_auto_config_setup(char *addrs, int *ints)
 		ip = cp;
 		num++;
 	}
+
+	return 0;
 }
+
+static int __init nfsaddrs_config_setup(char *addrs)
+{
+	return ip_auto_config_setup(addrs);
+}
+
+__setup("ip=", ip_auto_config_setup);
+__setup("nfsaddrs=", nfsaddrs_config_setup);

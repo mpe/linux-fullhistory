@@ -1,4 +1,4 @@
-/* $Id: cert.c,v 2.1 1998/11/15 23:51:15 keil Exp $
+/* $Id: cert.c,v 2.2 1999/08/07 17:35:05 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -7,6 +7,9 @@
  *		../../../Documentation/isdn/HiSax.cert
  *
  * $Log: cert.c,v $
+ * Revision 2.2  1999/08/07 17:35:05  keil
+ * approval for Eicon Technology Diva 2.01 PCI
+ *
  * Revision 2.1  1998/11/15 23:51:15  keil
  * certification stuff
  *
@@ -29,6 +32,7 @@ certification_check(int output) {
 		printk(KERN_INFO "HiSax: Approval registration numbers:\n");
 		printk(KERN_INFO "HiSax: German D133361J CETECOM ICT Services GmbH\n");
 		printk(KERN_INFO "HiSax: EU (D133362J) CETECOM ICT Services GmbH\n");
+		printk(KERN_INFO "HiSax: Approved with Eicon Technology Diva 2.01 PCI cards\n");
 	}
 	return(0);
 #endif

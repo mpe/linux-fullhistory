@@ -406,6 +406,11 @@ static void scan_scsis_done (Scsi_Cmnd * SCpnt)
 	up(SCpnt->request.sem);
 }
 
+MODULE_PARM(scsi_logging_level, "i");
+MODULE_PARM_DESC(scsi_logging_level, "SCSI logging level; should be zero or nonzero");
+
+#ifndef MODULE
+
 static int __init scsi_logging_setup (char *str)
 {
 	int tmp;
@@ -422,11 +427,18 @@ static int __init scsi_logging_setup (char *str)
 
 __setup("scsi_logging=", scsi_logging_setup);
 
+#endif
+
 #ifdef CONFIG_SCSI_MULTI_LUN
 static int max_scsi_luns = 8;
 #else
 static int max_scsi_luns = 1;
 #endif
+
+MODULE_PARM(max_scsi_luns, "i");
+MODULE_PARM_DESC(max_scsi_luns, "last scsi LUN (should be between 1 and 8)");
+
+#ifndef MODULE
 
 static int __init scsi_luns_setup (char *str)
 {
@@ -443,6 +455,9 @@ static int __init scsi_luns_setup (char *str)
 }
 
 __setup("max_scsi_luns=", scsi_luns_setup);
+
+#endif
+
 /*
  *  Detecting SCSI devices :
  *  We scan all present host adapter's busses,  from ID 0 to ID (max_id).

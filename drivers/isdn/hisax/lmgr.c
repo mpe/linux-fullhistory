@@ -1,4 +1,4 @@
-/* $Id: lmgr.c,v 1.5 1998/11/15 23:55:12 keil Exp $
+/* $Id: lmgr.c,v 1.6 1999/07/01 08:12:04 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -6,6 +6,9 @@
  *  Layermanagement module
  *
  * $Log: lmgr.c,v $
+ * Revision 1.6  1999/07/01 08:12:04  keil
+ * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
+ *
  * Revision 1.5  1998/11/15 23:55:12  keil
  * changes from 2.0
  *
@@ -50,7 +53,7 @@ hisax_manager(struct PStack *st, int pr, void *arg)
 		case (MDL_ERROR | INDICATION):
 			Code = (long) arg;
 			HiSax_putstatus(st->l1.hardware, "manager: MDL_ERROR",
-				"%c %s\n", (char)Code, 
+				" %c %s", (char)Code, 
 				test_bit(FLG_LAPD, &st->l2.flag) ?
 				"D-channel" : "B-channel");
 			if (test_bit(FLG_LAPD, &st->l2.flag))

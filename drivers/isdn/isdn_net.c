@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.84 1999/04/18 14:06:55 fritz Exp $
+/* $Id: isdn_net.c,v 1.88 1999/07/07 10:13:31 detabc Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,19 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.88  1999/07/07 10:13:31  detabc
+ * remove unused messages
+ *
+ * Revision 1.87  1999/07/06 07:53:53  calle
+ * calls to dev_alloc_skb waste 16 bytes of memory, if we calculate the
+ * right header space for the lowlevel driver. using alloc_skb instead.
+ *
+ * Revision 1.86  1999/06/09 10:12:05  paul
+ * thinko in previous patch
+ *
+ * Revision 1.85  1999/06/07 19:42:39  paul
+ * isdn_net_getpeer() fixed to return correct `outgoing' flag
+ *
  * Revision 1.84  1999/04/18 14:06:55  fritz
  * Removed TIMRU stuff.
  *
@@ -68,7 +81,7 @@
  * Added more locking stuff in tty_write.
  *
  * Revision 1.71  1998/06/18 22:43:08  fritz
- * Bugfix: Setting ndev->do_ioctl had beed accidetly removed at abc-cleanup.
+ * Bugfix: Setting ndev->do_ioctl had beed accidetly removed at cleanup.
  *
  * Revision 1.70  1998/06/17 19:50:49  he
  * merged with 2.1.10[34] (cosmetics and udelay() -> mdelay())
@@ -80,39 +93,12 @@
  * so autodial is suppressed for that device until it is switched on using
  * 'isdnctrl status dev-name on'.
  *
- * Revision 1.68  1998/06/07 00:20:05  fritz
- * abc cleanup.
  *
- * Revision 1.67  1998/06/02 12:10:08  detabc
- * wegen einer einstweiliger verfuegung gegen DW ist zur zeit
- * die abc-extension bis zur klaerung der rechtslage nicht verfuegbar
  *
  * Revision 1.66  1998/05/26 22:39:24  he
  * sync'ed with 2.1.102 where appropriate (CAPABILITY changes)
  * concap typo
  * cleared dev.tbusy in isdn_net BCONN status callback
- *
- * Revision 1.65  1998/05/22 10:01:11  detabc
- * in case of a icmp-unreach condition the tcp-keepalive-entrys
- * will be dropped from the internal double-link-list (only abc-extension).
- * send icmp unreach only if the skb->protocol == ETH_P_IP
- * speedup abc-no-dchan  redial
- *
- * Revision 1.64  1998/05/07 19:58:39  detabc
- * bugfix in abc_delayed_hangup
- * optimize keepalive-tests for abc_rawip
- *
- * Revision 1.63  1998/05/05 23:23:36  detabc
- * change ICMP_HOST_UNREACH to ICMP_NET_UNREACH (only abc-ext.)
- * set dev->tbusy to zero in isdn_net_unreachable() (only abc-ext.)
- * drop all new packets and send ICMP_NET_UNREACH for
- * min. dialwait to max. dialwait * 6 time. (only abc-ext.)
- * change random-deliver of packets (small first) from all emcapsulation
- * to only rawip with ABC-Router-Flag enabled.
- *
- * Revision 1.62  1998/05/03 17:40:42  detabc
- * Include abc-extension-support for >= 2.1.x Kernels in
- * isdn_net.c and isdn_common.c. alpha-test OK and running !
  *
  * Revision 1.61  1998/04/16 19:19:42  keil
  * Fix from vger (tx max qlength)
@@ -374,7 +360,7 @@ int isdn_net_force_dial_lp(isdn_net_local *);
 static int isdn_net_start_xmit(struct sk_buff *, struct device *);
 static int isdn_net_xmit(struct device *, isdn_net_local *, struct sk_buff *);
 
-char *isdn_net_revision = "$Revision: 1.84 $";
+char *isdn_net_revision = "$Revision: 1.88 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -1553,7 +1539,7 @@ static void
 isdn_net_slarp_send(isdn_net_local *lp, int is_reply)
 {
 	unsigned short hl = dev->drv[lp->isdn_device]->interface->hl_hdrlen;
-	struct sk_buff *skb = dev_alloc_skb(hl + sizeof(cisco_hdr) + sizeof(cisco_slarp));
+	struct sk_buff *skb = alloc_skb(hl + sizeof(cisco_hdr) + sizeof(cisco_slarp), GFP_ATOMIC);
 	unsigned long t = (jiffies / HZ * 1000000);
 	int len;
 	cisco_hdr *ch;
@@ -2928,7 +2914,7 @@ isdn_net_getpeer(isdn_net_ioctl_phone *phone, isdn_net_ioctl_phone *peer)
 	/* for pre-bound channels, we need this extra check */
 	if ( strncmp(dev->num[idx],"???",3) == 0 ) return -ENOTCONN;
 	strncpy(phone->phone,dev->num[idx],ISDN_MSNLEN);
-	phone->outgoing=USG_OUTGOING(idx);
+	phone->outgoing=USG_OUTGOING(dev->usage[idx]);
 	if ( copy_to_user(peer,phone,sizeof(*peer)) ) return -EFAULT;
 	return 0;
 }

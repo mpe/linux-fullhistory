@@ -1,4 +1,4 @@
-/* $Id: isdnif.h,v 1.25 1998/06/17 19:51:55 he Exp $
+/* $Id: isdnif.h,v 1.29 1999/07/31 13:00:02 armin Exp $
  *
  * Linux ISDN subsystem
  *
@@ -22,6 +22,19 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdnif.h,v $
+ * Revision 1.29  1999/07/31 13:00:02  armin
+ * Added tty fax capabilities.
+ *
+ * Revision 1.28  1999/07/13 20:57:48  werner
+ * added callback ISDN_STAT_DISCH for limiting b-channel resources.
+ *
+ * Revision 1.27  1999/07/11 17:07:39  armin
+ * Added tty modem register S23.
+ * Added new layer 2 and 3 protocols for Fax and DSP functions.
+ *
+ * Revision 1.26  1999/07/01 08:35:44  keil
+ * compatibility to 2.3
+ *
  * Revision 1.25  1998/06/17 19:51:55  he
  * merged with 2.1.10[34] (cosmetics and udelay() -> mdelay())
  * brute force fix to avoid Ugh's in isdn_tty_write()
@@ -121,6 +134,8 @@
 #ifndef isdnif_h
 #define isdnif_h
 
+#include <linux/isdn_compat.h>
+
 /*
  * Values for general protocol-selection
  */
@@ -145,17 +160,104 @@
 #define ISDN_PROTO_L2_V11019 8   /* V.110 bitrate adaption 19200 Baud */
 #define ISDN_PROTO_L2_V11038 9   /* V.110 bitrate adaption 38400 Baud */
 #define ISDN_PROTO_L2_MODEM  10  /* Analog Modem on Board */
+#define ISDN_PROTO_L2_FAX    11  /* Fax Group 2/3         */
 #define ISDN_PROTO_L2_MAX    15  /* Max. 16 Protocols                 */
 
 /*
  * Values for Layer-3-protocol-selection
  */
 #define ISDN_PROTO_L3_TRANS  0   /* Transparent                 */
+#define ISDN_PROTO_L3_TRANSDSP 1   /* Transparent with DSP    */
+#define ISDN_PROTO_L3_FAX    2   /* Fax Group 2/3             */
 #define ISDN_PROTO_L3_MAX    7   /* Max. 8 Protocols            */
 
 #ifdef __KERNEL__
 
 #include <linux/skbuff.h>
+
+/***************************************************************************/
+/* Extensions made by Werner Cornelius (werner@ikt.de)                     */
+/*                                                                         */ 
+/* The proceed command holds a incoming call in a state to leave processes */
+/* enough time to check whether ist should be accepted.                    */
+/* The PROT_IO Command extends the interface to make protocol dependant    */
+/* features available (call diversion, call waiting...).                   */
+/*                                                                         */ 
+/* The PROT_IO Command is executed with the desired driver id and the arg  */
+/* parameter coded as follows:                                             */
+/* The lower 8 bits of arg contain the desired protocol from ISDN_PTYPE    */
+/* definitions. The upper 24 bits represent the protocol specific cmd/stat.*/
+/* Any additional data is protocol and command specific.                   */
+/* This mechanism also applies to the statcallb callback STAT_PROT.        */    
+/*                                                                         */
+/* This suggested extension permits an easy expansion of protocol specific */
+/* handling. Extensions may be added at any time without changing the HL   */
+/* driver code and not getting conflicts without certifications.           */
+/* The well known CAPI 2.0 interface handles such extensions in a similar  */
+/* way. Perhaps a protocol specific module may be added and separately     */
+/* loaded and linked to the basic isdn module for handling.                */                    
+/***************************************************************************/
+
+/*****************/
+/* DSS1 commands */ 
+/*****************/
+#define DSS1_CMD_INVOKE       ((0x00 << 8) | ISDN_PTYPE_EURO)   /* invoke a supplementary service */
+#define DSS1_CMD_INVOKE_ABORT ((0x01 << 8) | ISDN_PTYPE_EURO)   /* abort a invoke cmd */
+
+/*******************************/
+/* DSS1 Status callback values */
+/*******************************/
+#define DSS1_STAT_INVOKE_RES  ((0x80 << 8) | ISDN_PTYPE_EURO)   /* Result for invocation */
+#define DSS1_STAT_INVOKE_ERR  ((0x81 << 8) | ISDN_PTYPE_EURO)   /* Error Return for invocation */
+#define DSS1_STAT_INVOKE_BRD  ((0x82 << 8) | ISDN_PTYPE_EURO)   /* Deliver invoke broadcast info */
+
+
+/*********************************************************************/
+/* structures for DSS1 commands and callback                         */
+/*                                                                   */
+/* An action is invoked by sending a DSS1_CMD_INVOKE. The ll_id, proc*/
+/* timeout, datalen and data fields must be set before calling.      */
+/*                                                                   */
+/* The return value is a positive hl_id value also delivered in the  */
+/* hl_id field. A value of zero signals no more left hl_id capacitys.*/
+/* A negative return value signals errors in LL. So if the return    */
+/* value is <= 0 no action in LL will be taken -> request ignored    */
+/*                                                                   */
+/* The timeout field must be filled with a positive value specifying */
+/* the amount of time the INVOKED process waits for a reaction from  */
+/* the network.                                                      */
+/* If a response (either error or result) is received during this    */
+/* intervall, a reporting callback is initiated and the process will */
+/* be deleted, the hl identifier will be freed.                      */
+/* If no response is received during the specified intervall, a error*/
+/* callback is initiated with timeout set to -1 and a datalen set    */
+/* to 0.                                                             */
+/* If timeout is set to a value <= 0 during INVOCATION the process is*/
+/* immediately deleted after sending the data. No callback occurs !  */
+/*                                                                   */
+/* A currently waiting process may be aborted with INVOKE_ABORT. No  */
+/* callback will occur when a process has been aborted.              */
+/*                                                                   */
+/* Broadcast invoke frames from the network are reported via the     */
+/* STAT_INVOKE_BRD callback. The ll_id is set to 0, the other fields */
+/* are supplied by the network and not by the HL.                    */   
+/*********************************************************************/
+typedef struct
+  { ulong ll_id; /* ID supplied by LL when executing    */
+		 /* a command and returned by HL for    */
+                 /* INVOKE_RES and INVOKE_ERR           */
+    int hl_id;   /* ID supplied by HL when called       */
+                 /* for executing a cmd and delivered   */
+                 /* for results and errors              */
+                 /* must be supplied by LL when aborting*/  
+    int proc;    /* invoke procedure used by CMD_INVOKE */
+                 /* returned by callback and broadcast  */ 
+    int timeout; /* timeout for INVOKE CMD in ms        */
+                 /* -1  in stat callback when timed out */
+                 /* error value when error callback     */
+    int datalen; /* length of cmd or stat data          */
+    u_char *data;/* pointer to data delivered or send   */
+  } dss1_cmd_stat;
 
 /*
  * Commands from linklevel to lowlevel
@@ -179,7 +281,13 @@
 #define ISDN_CMD_UNLOCK  15       /* Release usage-lock                    */
 #define ISDN_CMD_SUSPEND 16       /* Suspend connection                    */
 #define ISDN_CMD_RESUME  17       /* Resume connection                     */
-#define CAPI_PUT_MESSAGE 18       /* CAPI message send down or up          */
+#define ISDN_CMD_PROCEED 18       /* Proceed with call establishment       */
+#define ISDN_CMD_ALERT   19       /* Alert after Proceeding                */
+#define ISDN_CMD_REDIR   20       /* Redir a incoming call                 */
+#define ISDN_CMD_PROT_IO 21       /* Protocol specific commands            */
+#define CAPI_PUT_MESSAGE 22       /* CAPI message send down or up          */
+#define ISDN_CMD_FAXCMD  23       /* FAX commands to HL-driver             */
+#define ISDN_CMD_AUDIO   24       /* DSP, DTMF, ... settings               */
 
 /*
  * Status-Values delivered from lowlevel to linklevel via
@@ -201,7 +309,20 @@
 #define ISDN_STAT_NODCH   268    /* Signal no D-Channel                   */
 #define ISDN_STAT_ADDCH   269    /* Add more Channels                     */
 #define ISDN_STAT_CAUSE   270    /* Cause-Message                         */
-#define ISDN_STAT_L1ERR   271    /* Signal Layer-1 Error                  */
+#define ISDN_STAT_ICALLW  271    /* Incoming call without B-chan waiting  */
+#define ISDN_STAT_REDIR   272    /* Redir result                          */
+#define ISDN_STAT_PROT    273    /* protocol IO specific callback         */
+#define ISDN_STAT_DISPLAY 274    /* deliver a received display message    */
+#define ISDN_STAT_L1ERR   275    /* Signal Layer-1 Error                  */
+#define ISDN_STAT_FAXIND  276    /* FAX indications from HL-driver        */
+#define ISDN_STAT_AUDIO   277    /* DTMF, DSP indications                 */
+#define ISDN_STAT_DISCH   278    /* Disable/Enable channel usage          */
+
+/*
+ * Audio commands
+ */
+#define ISDN_AUDIO_SETDD	0	/* Set DTMF detection           */
+#define ISDN_AUDIO_DTMF		1	/* Rx/Tx DTMF                   */
 
 /*
  * Values for errcode field
@@ -224,12 +345,15 @@
 #define ISDN_FEATURE_L2_V11019  (0x0001 << ISDN_PROTO_L2_V11019)
 #define ISDN_FEATURE_L2_V11038  (0x0001 << ISDN_PROTO_L2_V11038)
 #define ISDN_FEATURE_L2_MODEM   (0x0001 << ISDN_PROTO_L2_MODEM)
+#define ISDN_FEATURE_L2_FAX	(0x0001 << ISDN_PROTO_L2_FAX)
 
 #define ISDN_FEATURE_L2_MASK    (0x0FFFF) /* Max. 16 protocols */
 #define ISDN_FEATURE_L2_SHIFT   (0)
 
 /* Layer 3 */
 #define ISDN_FEATURE_L3_TRANS   (0x10000 << ISDN_PROTO_L3_TRANS)
+#define ISDN_FEATURE_L3_TRANSDSP (0x10000 << ISDN_PROTO_L3_TRANSDSP)
+#define ISDN_FEATURE_L3_FAX	(0x10000 << ISDN_PROTO_L3_FAX)
 
 #define ISDN_FEATURE_L3_MASK    (0x0FF0000) /* Max. 8 Protocols */
 #define ISDN_FEATURE_L3_SHIFT   (16)
@@ -251,6 +375,84 @@ typedef struct setup_parm {
     unsigned char plan;     /* Numbering plan      */
     unsigned char screen;   /* Screening info      */
 } setup_parm;
+
+
+#ifdef CONFIG_ISDN_TTY_FAX
+/* T.30 Fax G3 */
+
+#define FAXIDLEN 21
+
+typedef struct T30_s {
+	/* session parameters */
+	__u8 resolution		__attribute__ ((packed));
+	__u8 rate		__attribute__ ((packed));
+	__u8 width		__attribute__ ((packed));
+	__u8 length		__attribute__ ((packed));
+	__u8 compression	__attribute__ ((packed));
+	__u8 ecm		__attribute__ ((packed));
+	__u8 binary		__attribute__ ((packed));
+	__u8 scantime		__attribute__ ((packed));
+	__u8 id[FAXIDLEN]	__attribute__ ((packed));
+	/* additional parameters */
+	__u8 phase		__attribute__ ((packed));
+	__u8 direction		__attribute__ ((packed));
+	__u8 code		__attribute__ ((packed));
+	__u8 badlin		__attribute__ ((packed));
+	__u8 badmul		__attribute__ ((packed));
+	__u8 bor		__attribute__ ((packed));
+	__u8 fet		__attribute__ ((packed));
+	__u8 pollid[FAXIDLEN]	__attribute__ ((packed));
+	__u8 cq			__attribute__ ((packed));
+	__u8 cr			__attribute__ ((packed));
+	__u8 ctcrty		__attribute__ ((packed));
+	__u8 minsp		__attribute__ ((packed));
+	__u8 phcto		__attribute__ ((packed));
+	__u8 rel		__attribute__ ((packed));
+	__u8 nbc		__attribute__ ((packed));
+	/* remote station parameters */
+	__u8 r_resolution	__attribute__ ((packed));
+	__u8 r_rate		__attribute__ ((packed));
+	__u8 r_width		__attribute__ ((packed));
+	__u8 r_length		__attribute__ ((packed));
+	__u8 r_compression	__attribute__ ((packed));
+	__u8 r_ecm		__attribute__ ((packed));
+	__u8 r_binary		__attribute__ ((packed));
+	__u8 r_scantime		__attribute__ ((packed));
+	__u8 r_id[FAXIDLEN]	__attribute__ ((packed));
+	__u8 r_code		__attribute__ ((packed));
+} T30_s;
+
+#define ISDN_TTY_FAX_CONN_IN	0
+#define ISDN_TTY_FAX_CONN_OUT	1
+
+#define ISDN_TTY_FAX_FCON	0
+#define ISDN_TTY_FAX_DIS 	1
+#define ISDN_TTY_FAX_FTT 	2
+#define ISDN_TTY_FAX_MCF 	3
+#define ISDN_TTY_FAX_DCS 	4
+#define ISDN_TTY_FAX_TRAIN_OK	5
+#define ISDN_TTY_FAX_EOP 	6
+#define ISDN_TTY_FAX_EOM 	7
+#define ISDN_TTY_FAX_MPS 	8
+#define ISDN_TTY_FAX_DTC 	9
+#define ISDN_TTY_FAX_RID 	10
+#define ISDN_TTY_FAX_HNG 	11
+#define ISDN_TTY_FAX_DT  	12
+#define ISDN_TTY_FAX_FCON_I	13
+#define ISDN_TTY_FAX_DR  	14
+#define ISDN_TTY_FAX_ET  	15
+#define ISDN_TTY_FAX_CFR 	16
+#define ISDN_TTY_FAX_PTS 	17
+#define ISDN_TTY_FAX_SENT	18
+
+#define ISDN_FAX_PHASE_IDLE	0
+#define ISDN_FAX_PHASE_A	1
+#define ISDN_FAX_PHASE_B   	2
+#define ISDN_FAX_PHASE_C   	3
+#define ISDN_FAX_PHASE_D   	4
+#define ISDN_FAX_PHASE_E   	5
+
+#endif /* TTY_FAX */
 
 /* CAPI structs */
 
@@ -274,22 +476,26 @@ typedef struct {
 	__u8 para[MAX_CAPI_PARA_LEN];
 } capi_msg;
 
-
 /*
  * Structure for exchanging above infos
  *
  */
 typedef struct {
-  int   driver;                  /* Lowlevel-Driver-ID                    */
-  int   command;                 /* Command or Status (see above)         */
-  ulong arg;                     /* Additional Data                       */
-  union {
-	ulong errcode;               /* Type of error with STAT_L1ERR         */
-	int   length;                /* Amount of bytes sent with STAT_BSENT  */
-	u_char	num[50];	/* Additional Data			*/
-	setup_parm 	setup;	/* For SETUP msg			*/
-	capi_msg  	cmsg;	/* For CAPI like messages		*/
-  } parm;
+	int   driver;		/* Lowlevel-Driver-ID            */
+	int   command;		/* Command or Status (see above) */
+	ulong arg;		/* Additional Data               */
+	union {
+		ulong errcode;	/* Type of error with STAT_L1ERR         */
+		int length;	/* Amount of bytes sent with STAT_BSENT  */
+		u_char num[50];/* Additional Data			*/
+		setup_parm setup;/* For SETUP msg			*/
+		capi_msg cmsg;	/* For CAPI like messages		*/
+		char display[85];/* display message data          */ 
+		dss1_cmd_stat dss1_io; /* DSS1 IO-parameter/result */
+#ifdef CONFIG_ISDN_TTY_FAX
+		T30_s	*fax;	/* Pointer to ttys fax struct		*/
+#endif
+	} parm;
 } isdn_ctrl;
 
 /*
@@ -410,10 +616,6 @@ typedef struct {
  *
  */
 extern int register_isdn(isdn_if*);
-
-#ifndef LINUX_VERSION_CODE
-#include <linux/version.h>
-#endif
 #include <asm/uaccess.h>
 
 #endif /* __KERNEL__ */

@@ -29,12 +29,12 @@
  *                  usb_request_irq crashes somewhere within ohci.c
  *                  for no apparent reason (that is for me, anyway)
  *                  ECP currently untested
+ *   0.3  10.08.99  fixing merge errors
  *
  */
 
 /*****************************************************************************/
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/socket.h>
 #include <linux/parport.h>
@@ -186,10 +186,6 @@ static int clear_epp_timeout(struct parport *pp)
 /*
  * Access functions.
  */
-
-static void parport_uss720_interrupt(int irq, void *dev_id, struct pt_regs *regs)
-{
-}
 
 static int uss720_irq(int usbstatus, void *buffer, int len, void *dev_id)
 {
@@ -653,16 +649,13 @@ static struct usb_driver uss720_driver = {
 
 /* --------------------------------------------------------------------- */
 
-#define __exit
-#define module_exit(x) void cleanup_module(void) { x(); }
-#define module_init(x) int init_module(void) { return x(); }
-
-/* --------------------------------------------------------------------- */
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch");
+MODULE_DESCRIPTION("USB Parport Cable driver for Cables using the Lucent Technologies USS720 Chip");
 
 static int __init uss720_init(void)
 {
 	usb_register(&uss720_driver);
-        printk(KERN_INFO "uss720: USB<->IEEE1284 cable driver v0.2 registered.\n"
+        printk(KERN_INFO "uss720: USB<->IEEE1284 cable driver v0.3 registered.\n"
 	       KERN_INFO "uss720: (C) 1999 by Thomas Sailer, <sailer@ife.ee.ethz.ch>\n");
 	return 0;
 }

@@ -15,6 +15,7 @@ ALL_SUB_DIRS := $(SUB_DIRS)
 L_TARGET := usb.a
 M_OBJS   :=
 L_OBJS   :=
+MOD_LIST_NAME := USB_MODULES
 
 ifeq ($(CONFIG_USB),y)
   L_OBJS +=usbcore.o

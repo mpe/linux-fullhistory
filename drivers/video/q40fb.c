@@ -236,7 +236,7 @@ static int q40fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			     cmap, kspc ? 0 : 2);
 	return 0;
 #else
-	printk("get cmap not supported\n");
+	printk(KERN_ERR "get cmap not supported\n");
 
 	return -EINVAL;
 #endif
@@ -260,7 +260,7 @@ static int q40fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	return 0;
 #else
-	printk("set cmap not supported\n");
+	printk(KERN_ERR "set cmap not supported\n");
 
 	return -EINVAL;
 #endif
@@ -269,7 +269,7 @@ static int q40fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 static int q40fb_pan_display(struct fb_var_screeninfo *var, int con,
 			    struct fb_info *info)
 {
-	printk("panning not supported\n");
+	printk(KERN_ERR "panning not supported\n");
 
 	return -EINVAL;
 
@@ -337,11 +337,11 @@ static void q40fb_set_disp(int con, struct fb_info *info)
 #endif
 }
   
-void q40fb_init(void)
+int q40fb_init(void)
 {
 
         if ( !MACH_IS_Q40)
-	  return;
+	  return -ENXIO;
 #if 0
         q40_screen_addr = kernel_map(Q40_PHYS_SCREEN_ADDR, 1024*1024,
 					   KERNELMAP_NO_COPYBACK, NULL);
@@ -365,12 +365,14 @@ void q40fb_init(void)
         q40fb_get_var(&disp[0].var, 0, &fb_info);
 	q40fb_set_disp(-1, &fb_info);
 
-	if (register_framebuffer(&fb_info) < 0)
-		panic("unable to register Q40 frame buffer\n");
- 
+	if (register_framebuffer(&fb_info) < 0) {
+		printk(KERN_ERR "unable to register Q40 frame buffer\n");
+		return -EINVAL;
+	}
 
-        printk("fb%d: Q40 frame buffer alive and kicking !\n",
+        printk(KERN_INFO "fb%d: Q40 frame buffer alive and kicking !\n",
 	       GET_FB_IDX(fb_info.node));
+	return 0;
 }	
 
 	

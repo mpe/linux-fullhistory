@@ -113,9 +113,9 @@ struct fb_info_valkyrie {
 /*
  * Exported functions
  */
-void valkyriefb_init(void);
+int valkyriefb_init(void);
 void valkyrie_of_init(struct device_node *dp);
-void valkyriefb_setup(char *options, int *ints);
+int valkyriefb_setup(char*);
 
 static int valkyrie_open(struct fb_info *info, int user);
 static int valkyrie_release(struct fb_info *info, int user);
@@ -218,7 +218,7 @@ static int valkyrie_set_var(struct fb_var_screeninfo *var, int con,
 	}
 	
 	if ((var->activate & FB_ACTIVATE_MASK) != FB_ACTIVATE_NOW) {
-		/* printk("Not activating, in valkyrie_set_var.\n"); */
+		/* printk(KERN_ERR "Not activating, in valkyrie_set_var.\n"); */
 		valkyrie_par_to_var(&par, var);
 		return 0;
 	}
@@ -478,7 +478,7 @@ static void __init init_valkyrie(struct fb_info_valkyrie *p)
 	int j, k;
 
 	p->sense = read_valkyrie_sense(p);
-	printk("Monitor sense value = 0x%x, ", p->sense);
+	printk(KERN_INFO "Monitor sense value = 0x%x, ", p->sense);
 
 	/* Try to pick a video mode out of NVRAM if we have one. */
 	if (default_vmode == VMODE_NVRAM) {
@@ -504,7 +504,7 @@ static void __init init_valkyrie(struct fb_info_valkyrie *p)
 	 || valkyrie_vram_reqd(default_vmode, default_cmode) > p->total_vram)
 		default_cmode = CMODE_8;
 	
-	printk("using video mode %d and color mode %d.\n", default_vmode, default_cmode);
+	printk(KERN_INFO "using video mode %d and color mode %d.\n", default_vmode, default_cmode);
 
 	mac_vmode_to_var(default_vmode, default_cmode, &var);
 	if (valkyrie_var_to_par(&var, par, &p->info)) {
@@ -534,7 +534,7 @@ static void __init init_valkyrie(struct fb_info_valkyrie *p)
 		return;
 	}
 	
-	printk("fb%d: valkyrie frame buffer device\n", GET_FB_IDX(p->info.node));	
+	printk(KERN_INFO "fb%d: valkyrie frame buffer device\n", GET_FB_IDX(p->info.node));	
 }
 
 static void valkyrie_set_par(const struct fb_par_valkyrie *par,
@@ -584,7 +584,7 @@ static void valkyrie_set_par(const struct fb_par_valkyrie *par,
 #endif /* CONFIG_FB_COMPAT_XPMAC */
 }
 
-void __init valkyriefb_init(void)
+int __init valkyriefb_init(void)
 {
 #ifndef CONFIG_FB_OF
 	struct device_node *dp;
@@ -593,6 +593,7 @@ void __init valkyriefb_init(void)
 	if (dp != 0)
 		valkyrie_of_init(dp);
 #endif /* CONFIG_FB_OF */
+	return 0;
 }
 
 void __init valkyrie_of_init(struct device_node *dp)
@@ -600,8 +601,10 @@ void __init valkyrie_of_init(struct device_node *dp)
 	struct fb_info_valkyrie	*p;
 	unsigned long addr, size;
 	
-	if(dp->n_addrs != 1)
-		panic("expecting 1 address for valkyrie (got %d)", dp->n_addrs);
+	if(dp->n_addrs != 1) {
+		printk(KERN_ERR "expecting 1 address for valkyrie (got %d)", dp->n_addrs);
+		return;
+	}	
 
 	p = kmalloc(sizeof(*p), GFP_ATOMIC);
 	if (p == 0)
@@ -848,12 +851,12 @@ static void __init valkyrie_init_info(struct fb_info *info, struct fb_info_valky
 /*
  * Parse user speficied options (`video=valkyriefb:')
  */
-void __init valkyriefb_setup(char *options, int *ints)
+int __init valkyriefb_setup(char *options)
 {
 	char *this_opt;
 
 	if (!options || !*options)
-		return;
+		return 0;
 
 	for (this_opt = strtok(options, ","); this_opt;
 	     this_opt = strtok(NULL, ",")) {
@@ -893,4 +896,5 @@ void __init valkyriefb_setup(char *options, int *ints)
 			can_soft_blank = 1;
 		}
 	}
+	return 0;
 }

@@ -32,18 +32,12 @@
  * One-way data transfer functions. *
  *                                ***/
 
-static inline
-int polling (struct pardevice *dev)
-{
-	return dev->port->irq == PARPORT_IRQ_NONE;
-}
-
 /* Compatibility mode. */
 size_t parport_ieee1284_write_compat (struct parport *port,
 				      const void *buffer, size_t len,
 				      int flags)
 {
-	int no_irq;
+	int no_irq = 1;
 	ssize_t count = 0;
 	const unsigned char *addr = buffer;
 	unsigned char byte;
@@ -51,11 +45,15 @@ size_t parport_ieee1284_write_compat (struct parport *port,
 	unsigned char ctl = (PARPORT_CONTROL_SELECT
 			     | PARPORT_CONTROL_INIT);
 
-	if (port->irq != PARPORT_IRQ_NONE)
+	if (port->irq != PARPORT_IRQ_NONE) {
 		parport_enable_irq (port);
+		no_irq = 0;
+
+		/* Clear out previous irqs. */
+		while (!down_trylock (&port->physport->ieee1284.irq));
+	}
 
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_DATA;
-	no_irq = polling (dev);
 	while (count < len) {
 		long expire = jiffies + dev->timeout;
 		long wait = (HZ + 99) / 100;
@@ -63,12 +61,6 @@ size_t parport_ieee1284_write_compat (struct parport *port,
 				      | PARPORT_STATUS_BUSY);
 		unsigned char val = (PARPORT_STATUS_ERROR
 				     | PARPORT_STATUS_BUSY);
-		int i;
-
-		/* Write the character to the data lines. */
-		byte = *addr++;
-		parport_write_data (port, byte);
-		udelay (1);
 
 		/* Wait until the peripheral's ready */
 		do {
@@ -111,18 +103,23 @@ size_t parport_ieee1284_write_compat (struct parport *port,
 
 			/* Is there a signal pending? */
 			if (signal_pending (current))
-				goto stop;
+				break;
 
 			/* Wait longer next time. */
 			wait *= 2;
 		} while (time_before (jiffies, expire));
 
+		if (signal_pending (current))
+			break;
+
 		DPRINTK (KERN_DEBUG "%s: Timed out\n", port->name);
 		break;
 
 	ready:
-		/* Clear out previous irqs. */
-		while (!down_trylock (&port->physport->ieee1284.irq));
+		/* Write the character to the data lines. */
+		byte = *addr++;
+		parport_write_data (port, byte);
+		udelay (1);
 
 		/* Pulse strobe. */
 		parport_write_control (port, ctl | PARPORT_CONTROL_STROBE);
@@ -131,30 +128,7 @@ size_t parport_ieee1284_write_compat (struct parport *port,
 		parport_write_control (port, ctl);
 		udelay (1); /* hold */
 
-		if (no_irq)
-			/* Assume the peripheral received it. */
-			goto done;
-
-		/* Wait until it's received, up to 500us (this ought to be
-		 * tuneable). */
-		for (i = 500; i; i--) {
-			if (!down_trylock (&port->physport->ieee1284.irq) ||
-			    !(parport_read_status (port) & PARPORT_STATUS_ACK))
-				goto done;
-			udelay (1);
-		}
-
-		/* Two choices:
-		 * 1. Assume that the peripheral got the data and just
-		 *    hasn't acknowledged it yet.
-		 * 2. Assume that the peripheral never saw the strobe pulse.
-		 *
-		 * We can't know for sure, so let's be conservative.
-		 */
-		DPRINTK (KERN_DEBUG "%s: no ack", port->name);
-		break;
-
-	done:
+		/* Assume the peripheral received it. */
 		count++;
 
                 /* Let another process run if it needs to. */
@@ -547,7 +521,7 @@ size_t parport_ieee1284_ecp_read_data (struct parport *port,
 				goto out;
 
 			/* Yield the port for a while. */
-			if (count && polling (dev)) {
+			if (count && dev->port->irq != PARPORT_IRQ_NONE) {
 				parport_release (dev);
 				current->state = TASK_INTERRUPTIBLE;
 				schedule_timeout ((HZ + 99) / 25);

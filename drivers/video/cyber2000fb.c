@@ -1018,8 +1018,9 @@ static void cyber2000fb_blank(int blank, struct fb_info *fb_info)
 	}
 }
 
-void __init cyber2000fb_setup(char *options, int *ints)
+int __init cyber2000fb_setup(char *options)
 {
+	return 0;
 }
 
 static struct fb_ops cyber2000fb_ops =
@@ -1138,14 +1139,14 @@ cyber2000fb_init_fbinfo(void)
 /*
  *    Initialization
  */
-void __init cyber2000fb_init(void)
+int __init cyber2000fb_init(void)
 {
 	struct pci_dev *dev;
 	u_int h_sync, v_sync;
 
 	dev = pci_find_device(PCI_VENDOR_ID_INTERG, 0x2000, NULL);
 	if (!dev)
-		return;
+		return -ENXIO;
 
 	CyberRegs = bus_to_virt(dev->base_address[0]) + 0x00800000;/*FIXME*/
 
@@ -1156,10 +1157,13 @@ void __init cyber2000fb_init(void)
 	cyber2000fb_init_fbinfo();
 
 	current_par.currcon		= -1;
-	current_par.screen_base_p	= 0x80000000 + dev->base_address[0];
-	current_par.screen_base		= (u_int)bus_to_virt(dev->base_address[0]);
+	/* this should be done by PCI generic code */
+	current_par.screen_base_p	= 0x80000000 + dev->resource[0].start;
+	/* and this by ioremap... But I have no such device here to test */
+	/* current_par.screen_base = ioremap(dev->resource[0].start, dev->resource[0].end - dev->resource[0].start + 1); */
+	current_par.screen_base		= (u_int)bus_to_virt(dev->resource[0].start);
 	current_par.screen_size		= 0x00200000;
-	current_par.regs_base_p		= 0x80800000 + dev->base_address[0];
+	current_par.regs_base_p		= 0x80800000 + dev->resource[0].start;
 
 	cyber2000fb_set_var(&init_var, -1, &fb_info);
 
@@ -1175,18 +1179,18 @@ void __init cyber2000fb_init(void)
 		h_sync / 1000, h_sync % 1000, v_sync);
 
 	if (register_framebuffer(&fb_info) < 0)
-		return;
+		return -EINVAL;
 
 	MOD_INC_USE_COUNT;	/* TODO: This driver cannot be unloaded yet */
+	return 0;
 }
 
 
 
 #ifdef MODULE
-int init_module(void)
+int __init init_module(void)
 {
-	cyber2000fb_init();
-	return 0;
+	return cyber2000fb_init();
 }
 
 void cleanup_module(void)

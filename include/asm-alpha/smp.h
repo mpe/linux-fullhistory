@@ -16,6 +16,9 @@ struct cpuinfo_alpha {
 	unsigned long prof_multiplier;
 	unsigned long prof_counter;
 	int irq_count, bh_count;
+	unsigned char mcheck_expected;
+	unsigned char mcheck_taken;
+	unsigned char mcheck_hose;
 } __attribute__((aligned(64)));
 
 extern struct cpuinfo_alpha cpu_data[NR_CPUS];
@@ -30,9 +33,15 @@ extern int cpu_number_map[NR_CPUS];
 extern int __cpu_logical_map[NR_CPUS];
 #define cpu_logical_map(cpu)  __cpu_logical_map[cpu]
 
+#define hard_smp_processor_id()	__hard_smp_processor_id()
+#define smp_processor_id()	(current->processor)
+
+#endif /* __SMP__ */
+
 /* HACK: Cabrio WHAMI return value is bogus if more than 8 bits used.. :-( */
 
-static __inline__ unsigned char hard_smp_processor_id(void)
+static __inline__ unsigned char
+__hard_smp_processor_id(void)
 {
 	register unsigned char __r0 __asm__("$0");
 	__asm__ __volatile__(
@@ -42,10 +51,6 @@ static __inline__ unsigned char hard_smp_processor_id(void)
 		: "$1", "$22", "$23", "$24", "$25");
 	return __r0;
 }
-
-#define smp_processor_id()	(current->processor)
-
-#endif /* __SMP__ */
 
 #define NO_PROC_ID	(-1)
 

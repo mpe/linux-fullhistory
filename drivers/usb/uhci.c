@@ -117,7 +117,8 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 					(unsigned int)tmp, rval ? *rval : 0);
 			}
 			usb_settoggle(dev->usb, usb_pipeendpoint(tmp->info),
-				usb_pipeout(tmp->info), (tmp->info >> 19) & 1);
+				usb_pipeout(tmp->info) ^ 1,
+				(tmp->info >> 19) & 1);
 			break;
 		} else {
 		    if (rval)
@@ -153,7 +154,8 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 
 	if (status & 0x40) {
 		/* endpoint has stalled - mark it halted */
-		usb_endpoint_halt(dev->usb, usb_pipeendpoint(tmp->info));
+		usb_endpoint_halt(dev->usb, usb_pipeendpoint(tmp->info),
+	    			usb_pipeout(tmp->info) ^ 1);
 		return USB_ST_STALL;
 	}
 
@@ -162,7 +164,7 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 		if (!rval)
 			return USB_ST_DATAUNDERRUN;
 	}
-	return uhci_map_status(status, usb_pipeout(tmp->info));		
+	return uhci_map_status(status, usb_pipeout(tmp->info) ^ 1);
 }
 
 /*
@@ -431,9 +433,8 @@ static void *uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb
 
 	td->link = UHCI_PTR_TERM;		/* Terminate */
 	td->status = status;			/* In */
-	td->info = destination | ((usb_maxpacket(usb_dev, pipe) - 1) << 21) |
-		(usb_gettoggle(usb_dev, usb_pipeendpoint(pipe),
-		usb_pipeout(pipe)) << 19);
+	td->info = destination | ((usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe)) - 1) << 21) |
+  		(usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << 19);
 	td->buffer = virt_to_bus(dev->data);
 	td->qh = qh;
 	td->dev = dev;
@@ -782,7 +783,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devre
 	struct uhci_td *first, *td, *prevtd;
 	unsigned long destination, status;
 	int ret, count;
-	int maxsze = usb_maxpacket(usb_dev, pipe);
+	int maxsze = usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe));
 	__u32 nextlink;
 
 	first = td = uhci_td_alloc(dev);
@@ -962,9 +963,9 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	struct uhci_td *first, *td, *prevtd;
 	unsigned long destination, status;
 	int ret;
-	int maxsze = usb_maxpacket(usb_dev, pipe);
+	int maxsze = usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe));
 
-	if (usb_endpoint_halted(usb_dev, usb_pipeendpoint(pipe)) &&
+	if (usb_endpoint_halted(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) &&
 	    usb_clear_halt(usb_dev, usb_pipeendpoint(pipe) | (pipe & 0x80)))
 		return USB_ST_STALL;
 
@@ -991,7 +992,8 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 
 		td->status = status;					/* Status */
 		td->info = destination | ((pktsze-1) << 21) |
-			 (usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << 19); /* pktsze bytes of data */
+			(usb_gettoggle(usb_dev, usb_pipeendpoint(pipe),
+				usb_pipeout(pipe)) << 19); /* pktsze bytes of data */
 		td->buffer = virt_to_bus(data);
 		td->backptr = &prevtd->link;
 
@@ -1049,10 +1051,10 @@ static void * uhci_request_bulk(struct usb_device *usb_dev, unsigned int pipe, u
 	struct uhci_td *first, *td, *prevtd;
 	struct uhci_qh *bulk_qh = uhci_qh_alloc(dev);
 	unsigned long destination, status;
-	int maxsze = usb_maxpacket(usb_dev, pipe);
+	int maxsze = usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe));
 
 	/* The "pipe" thing contains the destination in bits 8--18, 0x69 is IN */
-	destination = (pipe & 0x0007ff00) | usb_packetid(pipe);
+	destination = (pipe & PIPE_DEVEP_MASK) | usb_packetid(pipe);
 
 	/* Infinite errors is 0 */
 	status = (pipe & TD_CTRL_LS) | TD_CTRL_ACTIVE | TD_CTRL_SPD;
@@ -1336,7 +1338,7 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 		list_del(&td->irq_list);
 		INIT_LIST_HEAD(&td->irq_list);
 
-		if (td->completed(uhci_map_status(status, 0),
+		if (td->completed(uhci_map_status(status, usb_pipeout(td->info) ^ 1),
 		    bus_to_virt(td->buffer), -1, td->dev_id)) {
 			list_add(&td->irq_list, &uhci->interrupt_list);
 
@@ -1344,11 +1346,12 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 			if (!(td->status & TD_CTRL_IOS)) {
 				struct usb_device *usb_dev = td->dev->usb;
 
-				usb_dotoggle(usb_dev, usb_pipeendpoint(td->info), usb_pipeout(td->info));
+				usb_dotoggle(usb_dev, usb_pipeendpoint(td->info), usb_pipeout(td->info) ^ 1);
 				td->info &= ~(1 << 19); /* clear data toggle */
-				td->info |= usb_gettoggle(usb_dev, usb_pipeendpoint(td->info), usb_pipeout(td->info)) << 19; /* toggle between data0 and data1 */
+				td->info |= usb_gettoggle(usb_dev, usb_pipeendpoint(td->info),
+					usb_pipeout(td->info) ^ 1) << 19; /* toggle between data0 and data1 */
 				td->status = (td->status & 0x2F000000) | TD_CTRL_ACTIVE | TD_CTRL_IOC;
-				/* The HC removes it, so readd it */
+				/* The HC removes it, so re-add it */
 				uhci_insert_td_in_qh(td->qh, td);
 			}
 		} else if (td->flags & UHCI_TD_REMOVE) {
@@ -1356,7 +1359,7 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 
 			/* marked for removal */
 			td->flags &= ~UHCI_TD_REMOVE;
-			usb_dotoggle(usb_dev, usb_pipeendpoint(td->info), usb_pipeout(td->info));
+			usb_dotoggle(usb_dev, usb_pipeendpoint(td->info), usb_pipeout(td->info) ^ 1);
 			uhci_remove_qh(td->qh->skel, td->qh);
 			uhci_qh_free(td->qh);
 			uhci_td_free(td);
@@ -1433,7 +1436,7 @@ static void uhci_init_ticktd(struct uhci *uhci)
 	/* Don't clobber the frame */
 	td->link = uhci->fl->frame[0];
 	td->status = TD_CTRL_IOC;
-	td->info = (15 << 21) | 0x7f69;				/* (ignored) input packet, 16 bytes, device 127 */
+	td->info = (15 << 21) | 0x7f69;		/* (ignored) input packet, 16 bytes, device 127 */
 	td->buffer = 0;
 	td->qh = NULL;
 

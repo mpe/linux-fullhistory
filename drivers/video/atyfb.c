@@ -386,11 +386,11 @@ static int read_aty_sense(const struct fb_info_aty *info);
      *  Interface used by the world
      */
 
-void atyfb_init(void);
+int atyfb_init(void);
 #ifdef CONFIG_FB_OF
 void atyfb_of_init(struct device_node *dp);
 #endif
-void atyfb_setup(char *options, int *ints);
+int atyfb_setup(char*);
 
 static int currcon = 0;
 
@@ -479,10 +479,10 @@ static inline u32 aty_ld_le32(unsigned int regindex,
 
 #if defined(__powerpc__)
     temp = info->ati_regbase;
-    asm("lwbrx %0,%1,%2" : "=r"(val) : "b" (regindex), "r" (temp));
+    asm volatile("lwbrx %0,%1,%2" : "=r"(val) : "b" (regindex), "r" (temp));
 #elif defined(__sparc_v9__)
     temp = info->ati_regbase + regindex;
-    asm("lduwa [%1] %2, %0" : "=r" (val) : "r" (temp), "i" (ASI_PL));
+    asm volatile("lduwa [%1] %2, %0" : "=r" (val) : "r" (temp), "i" (ASI_PL));
 #else
     temp = info->ati_regbase+regindex;
     val = le32_to_cpu(*((volatile u32 *)(temp)));
@@ -497,11 +497,11 @@ static inline void aty_st_le32(unsigned int regindex, u32 val,
 
 #if defined(__powerpc__)
     temp = info->ati_regbase;
-    asm("stwbrx %0,%1,%2" : : "r" (val), "b" (regindex), "r" (temp) :
+    asm volatile("stwbrx %0,%1,%2" : : "r" (val), "b" (regindex), "r" (temp) :
 	"memory");
 #elif defined(__sparc_v9__)
     temp = info->ati_regbase + regindex;
-    asm("stwa %0, [%1] %2" : : "r" (val), "r" (temp), "i" (ASI_PL) : "memory");
+    asm volatile("stwa %0, [%1] %2" : : "r" (val), "r" (temp), "i" (ASI_PL) : "memory");
 #else
     temp = info->ati_regbase+regindex;
     *((volatile u32 *)(temp)) = cpu_to_le32(val);
@@ -2821,7 +2821,7 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     return 1;
 }
 
-void __init atyfb_init(void)
+int __init atyfb_init(void)
 {
 #if defined(CONFIG_FB_OF)
     /* We don't want to be called like this. */
@@ -2841,7 +2841,7 @@ void __init atyfb_init(void)
 
     /* Do not attach when we have a serial console. */
     if (!con_is_present())
-	return;
+	return -ENXIO;
 #else
     u16 tmp;
 #endif
@@ -2854,7 +2854,7 @@ void __init atyfb_init(void)
 	    info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
 	    if (!info) {
 		printk("atyfb_init: can't alloc fb_info_aty\n");
-		return;
+		return -ENXIO;
 	    }
 	    memset(info, 0, sizeof(struct fb_info_aty));
 
@@ -2890,7 +2890,7 @@ void __init atyfb_init(void)
 	    if (!info->mmap_map) {
 		printk("atyfb_init: can't alloc mmap_map\n");
 		kfree(info);
-		return;
+		return -ENXIO;
 	    }
 	    memset(info->mmap_map, 0, j * sizeof(*info->mmap_map));
 
@@ -2904,14 +2904,12 @@ void __init atyfb_init(void)
 
 		io = (rp->flags & IORESOURCE_IOPORT);
 
+		size = rp->end - base + 1;
+		
 		pci_read_config_dword(pdev, breg, &pbase);
-		pci_write_config_dword(pdev, breg, 0xffffffff);
-		pci_read_config_dword(pdev, breg, &size);
-		pci_write_config_dword(pdev, breg, pbase);
 
 		if (io)
 			size &= ~1;
-		size = ~(size) + 1;
 
 		/*
 		 * Map the framebuffer a second time, this time without
@@ -3071,7 +3069,7 @@ void __init atyfb_init(void)
 
 	    if(!info->ati_regbase) {
 		    kfree(info);
-		    return;
+		    return -ENOMEM;
 	    }
 
 	    info->ati_regbase_phys += 0xc00;
@@ -3098,7 +3096,7 @@ void __init atyfb_init(void)
 
 	    if(!info->frame_buffer) {
 		    kfree(info);
-		    return;
+		    return -ENXIO;
 	    }
 
 #endif /* __sparc__ */
@@ -3107,7 +3105,7 @@ void __init atyfb_init(void)
 		if (info->mmap_map)
 		    kfree(info->mmap_map);
 		kfree(info);
-		return;
+		return -ENXIO;
 	    }
 
 #ifdef __sparc__
@@ -3145,7 +3143,7 @@ void __init atyfb_init(void)
 	info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
 	if (!info) {
 	    printk("atyfb_init: can't alloc fb_info_aty\n");
-	    return;
+	    return -ENOMEM;
 	}
 	memset(info, 0, sizeof(struct fb_info_aty));
 
@@ -3161,10 +3159,11 @@ void __init atyfb_init(void)
 	if (!aty_init(info, "ISA bus")) {
 	    kfree(info);
 	    /* This is insufficient! kernel_map has added two large chunks!! */
-	    return;
+	    return -ENXIO;
 	}
     }
 #endif
+    return 0;
 }
 
 #ifdef CONFIG_FB_OF
@@ -3252,12 +3251,12 @@ void __init atyfb_of_init(struct device_node *dp)
 #endif /* CONFIG_FB_OF */
 
 
-void __init atyfb_setup(char *options, int *ints)
+int __init atyfb_setup(char *options)
 {
     char *this_opt;
 
     if (!options || !*options)
-	return;
+	return 0;
 
     for (this_opt = strtok(options, ","); this_opt;
 	 this_opt = strtok(NULL, ",")) {
@@ -3320,6 +3319,7 @@ void __init atyfb_setup(char *options, int *ints)
 	}
 #endif
     }
+    return 0;
 }
 
 #ifdef CONFIG_ATARI

@@ -5152,9 +5152,10 @@ static unsigned int fv = 0;		/* "matrox:fv:xxxxx" */
 static unsigned int fh = 0;		/* "matrox:fh:xxxxxk" */
 static unsigned int maxclk = 0;		/* "matrox:maxclk:xxxxM" */
 static char fontname[64];		/* "matrox:font:xxxxx" */
+static char videomode[64];		/* "matrox:mode:xxxxx" or "matrox:xxxxx" */
 
 #ifndef MODULE
-void __init matroxfb_setup(char *options, int *ints){
+int __init matroxfb_setup(char *options) {
 	char *this_opt;
 	
 	DBG("matroxfb_setup")
@@ -6088,7 +6089,7 @@ leave:;
 #ifndef MODULE
 static int __init initialized = 0;
 
-void __init matroxfb_init(void)
+int __init matroxfb_init(void)
 {
 	DBG("matroxfb_init")
 	

@@ -520,6 +520,10 @@ extern int proc_dointvec_minmax(ctl_table *, int, struct file *,
 				void *, size_t *);
 extern int proc_dointvec_jiffies(ctl_table *, int, struct file *,
 				 void *, size_t *);
+extern int proc_doulongvec_minmax(ctl_table *, int, struct file *,
+				  void *, size_t *);
+extern int proc_doulongvec_ms_jiffies_minmax(ctl_table *table, int,
+				      struct file *, void *, size_t *);
 
 extern int do_sysctl (int *name, int nlen,
 		      void *oldval, size_t *oldlenp,

@@ -112,7 +112,7 @@ static struct notifier_block chips_sleep_notifier = {
 /*
  * Exported functions
  */
-void chips_init(void);
+int chips_init(void);
 void chips_of_init(struct device_node *dp);
 
 static int chips_open(struct fb_info *info, int user);
@@ -645,7 +645,7 @@ static void __init init_chips(struct fb_info_chips *p)
 	all_chips = p;
 }
 
-void __init chips_init(void)
+int __init chips_init(void)
 {
 #ifndef CONFIG_FB_OF
 	struct device_node *dp;
@@ -654,6 +654,7 @@ void __init chips_init(void)
 	if (dp != 0)
 		chips_of_init(dp);
 #endif /* CONFIG_FB_OF */
+	return 0;
 }
 
 void __init chips_of_init(struct device_node *dp)

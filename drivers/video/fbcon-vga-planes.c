@@ -44,7 +44,8 @@
    OR. */
 static inline void rmw(volatile char *p)
 {
-	*p |= 1;
+	readb(p);
+	writeb(1, p);
 }
 
 /* Set the Graphics Mode Register.  Bits 0-1 are write mode, bit 3 is
@@ -122,8 +123,12 @@ void fbcon_vga_planes_bmove(struct display *p, int sy, int sx, int dy, int dx,
 		dest = p->screen_base + dx + dy * p->line_length;
 		src = p->screen_base + sx + sy * p->line_length;
 		while (height--) {
-			for (x = 0; x < width; x++) 
-				*dest++ = *src++;
+			for (x = 0; x < width; x++) {
+				readb(src);
+				writeb(0, dest);
+				dest++;
+				src++;
+			}
 			src += line_ofs;
 			dest += line_ofs;
 		}
@@ -132,8 +137,12 @@ void fbcon_vga_planes_bmove(struct display *p, int sy, int sx, int dy, int dx,
 		dest = p->screen_base + dx + width + (dy + height - 1) * p->line_length;
 		src = p->screen_base + sx + width + (sy + height - 1) * p->line_length;
 		while (height--) {
-			for (x = 0; x < width; x++)
-				*--dest = *--src;
+			for (x = 0; x < width; x++) {
+				dest--;
+				src--;
+				readb(src);
+				writeb(0, dest);
+			}
 			src -= line_ofs;
 			dest -= line_ofs;
 		}
@@ -160,8 +169,10 @@ void fbcon_vga_planes_clear(struct vc_data *conp, struct display *p, int sy, int
 
 	where = p->screen_base + sx + sy * p->line_length;
 	while (height--) {
-		for (x = 0; x < width; x++)
-			*where++ = 0;
+		for (x = 0; x < width; x++) {
+			writeb(0, where);
+			where++;
+		}
 		where += line_ofs;
 	}
 }
@@ -211,13 +222,13 @@ void fbcon_vga_planes_putc(struct vc_data *conp, struct display *p, int c, int y
 	selectmask();
 
 	setmask(0xff);
-	*where = bg;
+	writeb(bg, where);
 	rmb();
-	*(volatile char*)where; /* fill latches */
+	readb(where); /* fill latches */
 	setmode(3);
 	wmb();
 	for (y = 0; y < fontheight(p); y++, where += p->line_length) 
-		*where = cdat[y];
+		writeb(cdat[y], where);
 	wmb();
 }
 
@@ -237,9 +248,9 @@ void fbcon_ega_planes_putcs(struct vc_data *conp, struct display *p, const unsig
 
 	setmask(0xff);
 	where = p->screen_base + xx + yy * p->line_length * fontheight(p);
-	*where = bg;
+	writeb(bg, where);
 	rmb();
-	*(volatile char*)where;
+	readb(where); /* fill latches */
 	wmb();
 	selectmask();
 	for (n = 0; n < count; n++) {
@@ -250,7 +261,7 @@ void fbcon_ega_planes_putcs(struct vc_data *conp, struct display *p, const unsig
 		while (cdat < end) {
 			outb(*cdat++, GRAPHICS_DATA_REG);	
 			wmb();
-			*where = fg;
+			writeb(fg, where);
 			where += p->line_length;
 		}
 		where += 1 - p->line_length * fontheight(p);
@@ -277,9 +288,9 @@ void fbcon_vga_planes_putcs(struct vc_data *conp, struct display *p, const unsig
 
 	setmask(0xff);
 	where = p->screen_base + xx + yy * p->line_length * fontheight(p);
-	*where = bg;
+	writeb(bg, where);
 	rmb();
-	*(volatile char*)where; /* fill latches with background */
+	readb(where); /* fill latches */
 	setmode(3);	
 	wmb();
 	for (n = 0; n < count; n++) {
@@ -288,7 +299,7 @@ void fbcon_vga_planes_putcs(struct vc_data *conp, struct display *p, const unsig
 		u8 *cdat = p->fontdata + (c & p->charmask) * fontheight(p);
 
 		for (y = 0; y < fontheight(p); y++, cdat++) {
-			*where = *cdat;
+			writeb (*cdat, where);
 			where += p->line_length;
 		}
 		where += 1 - p->line_length * fontheight(p);

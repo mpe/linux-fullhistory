@@ -170,7 +170,6 @@ struct usb_devmap {
 #define USB_MAXALTSETTING       5
 #define USB_MAXINTERFACES	32
 #define USB_MAXENDPOINTS	32
-#define USB_MAXSTRINGS		32
 
 struct usb_device_descriptor {
 	__u8  bLength;
@@ -319,16 +318,18 @@ struct usb_device {
 	int slow;			/* Slow device? */
 	int maxpacketsize;		/* Maximum packet size; encoded as 0,1,2,3 = 8,16,32,64 */
 	unsigned int toggle[2];		/* one bit for each endpoint ([0] = IN, [1] = OUT) */
-	unsigned int halted;		/* endpoint halts */
+	unsigned int halted[2];		/* endpoint halts; one bit per endpoint # & direction; */
+					/* [0] = IN, [1] = OUT */
 	struct usb_config_descriptor *actconfig;/* the active configuration */
-	int epmaxpacket[16];		/* endpoint specific maximums */
+	int epmaxpacketin[16];		/* INput endpoint specific maximums */
+	int epmaxpacketout[16];		/* OUTput endpoint specific maximums */
 	int ifnum;			/* active interface number */
-	struct usb_bus *bus;		/* Bus we're apart of */
+	struct usb_bus *bus;		/* Bus we're part of */
 	struct usb_driver *driver;	/* Driver */
 	struct usb_device_descriptor descriptor;/* Descriptor */
 	struct usb_config_descriptor *config;	/* All of the configs */
 	struct usb_device *parent;
-	char *stringindex[USB_MAXSTRINGS];	/* pointers to strings */
+	char *string;			/* pointer to the last string read from the device */
 	int string_langid;		/* language ID for strings */
   
 	/*
@@ -410,7 +411,9 @@ extern int usb_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
  * appropriately.
  */
 
-#define usb_maxpacket(dev,pipe)	((dev)->epmaxpacket[usb_pipeendpoint(pipe)])
+#define usb_maxpacket(dev, pipe, out)	(out \
+				? (dev)->epmaxpacketout[usb_pipeendpoint(pipe)] \
+				: (dev)->epmaxpacketin [usb_pipeendpoint(pipe)] )
 #define usb_packetid(pipe)	(((pipe) & 0x80) ? 0x69 : 0xE1)
 
 #define usb_pipeout(pipe)	((((pipe) >> 7) & 1) ^ 1)
@@ -433,10 +436,11 @@ extern int usb_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
 #define	usb_dotoggle(dev, ep, out)  ((dev)->toggle[out] ^= (1 << ep))
 #define usb_settoggle(dev, ep, out, bit) ((dev)->toggle[out] = ((dev)->toggle[out] & ~(1 << ep)) | ((bit) << ep))
 
-/* Endpoint halt */
-#define usb_endpoint_halt(dev, ep) ((dev)->halted |= (1 << (ep)))
-#define usb_endpoint_running(dev, ep) ((dev)->halted &= ~(1 << (ep)))
-#define usb_endpoint_halted(dev, ep) ((dev)->halted & (1 << (ep)))
+/* Endpoint halt control/status */
+#define usb_endpoint_out(ep_dir)	(((ep_dir >> 7) & 1) ^ 1)
+#define usb_endpoint_halt(dev, ep, out) ((dev)->halted[out] |= (1 << (ep)))
+#define usb_endpoint_running(dev, ep, out) ((dev)->halted[out] &= ~(1 << (ep)))
+#define usb_endpoint_halted(dev, ep, out) ((dev)->halted[out] & (1 << (ep)))
 
 static inline unsigned int __create_pipe(struct usb_device *dev, unsigned int endpoint)
 {

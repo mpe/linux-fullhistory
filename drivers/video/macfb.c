@@ -459,14 +459,14 @@ static struct fb_ops macfb_ops = {
 	macfb_ioctl
 };
 
-void macfb_setup(char *options, int *ints)
+int __init macfb_setup(char *options)
 {
     char *this_opt;
 
     fb_info.fontname[0] = '\0';
 
     if (!options || !*options)
-		return;
+		return 0;
      
     for(this_opt=strtok(options,","); this_opt; this_opt=strtok(NULL,",")) {
 	if (!*this_opt) continue;
@@ -478,6 +478,7 @@ void macfb_setup(char *options, int *ints)
 	   printk("macfb_setup: option %s\n", this_opt);
 	}
     }
+    return 0;
 }
 
 static int macfb_switch(int con, struct fb_info *info)
@@ -512,12 +513,12 @@ static struct nubus_device_specifier nb_video={
 	NULL
 };
 
-void __init macfb_init(void)
+int __init macfb_init(void)
 {
 	/* nubus_remap the video .. */
 
 	if (!MACH_IS_MAC) 
-		return;
+		return -ENXIO;
 
 	mac_xres=mac_bi_data.dimensions&0xFFFF;
 	mac_yres=(mac_bi_data.dimensions&0xFFFF0000)>>16;
@@ -572,11 +573,12 @@ void __init macfb_init(void)
 
 	if (register_framebuffer(&fb_info) < 0)
 	{
-		return;
+		return -EINVAL;
 	}
 
 	printk("fb%d: %s frame buffer device using %ldK of video memory\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename, mac_videosize>>10);
+	return 0;
 }
 
 #if 0

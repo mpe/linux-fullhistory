@@ -17,6 +17,7 @@
 
 #include <asm/system.h>
 #include <asm/ptrace.h>
+#include <asm/smp.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
@@ -35,18 +36,15 @@
  * BIOS32-style PCI interface:
  */
 
-#ifdef DEBUG
-# define DBG(args)	printk args
+#define DEBUG_CONFIG 0
+
+#if DEBUG_CONFIG
+# define DBGC(args)	printk args
 #else
-# define DBG(args)
+# define DBGC(args)
 #endif
 
 #define vuip	volatile unsigned int  *
-
-volatile unsigned int apecs_mcheck_expected = 0;
-volatile unsigned int apecs_mcheck_taken = 0;
-static unsigned int apecs_jd, apecs_jd1, apecs_jd2;
-
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -96,9 +94,9 @@ mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr,
 {
 	unsigned long addr;
 
-	DBG(("mk_conf_addr(bus=%d ,device_fn=0x%x, where=0x%x,"
-	     " pci_addr=0x%p, type1=0x%p)\n",
-	     bus, device_fn, where, pci_addr, type1));
+	DBGC(("mk_conf_addr(bus=%d ,device_fn=0x%x, where=0x%x,"
+	      " pci_addr=0x%p, type1=0x%p)\n",
+	      bus, device_fn, where, pci_addr, type1));
 
 	if (bus == 0) {
 		int device = device_fn >> 3;
@@ -106,8 +104,8 @@ mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr,
 		/* type 0 configuration cycle: */
 
 		if (device > 20) {
-			DBG(("mk_conf_addr: device (%d) > 20, returning -1\n",
-			     device));
+			DBGC(("mk_conf_addr: device (%d) > 20, returning -1\n",
+			      device));
 			return -1;
 		}
 
@@ -119,7 +117,7 @@ mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr,
 		addr = (bus << 16) | (device_fn << 8) | (where);
 	}
 	*pci_addr = addr;
-	DBG(("mk_conf_addr: returning pci_addr 0x%lx\n", addr));
+	DBGC(("mk_conf_addr: returning pci_addr 0x%lx\n", addr));
 	return 0;
 }
 
@@ -132,25 +130,25 @@ conf_read(unsigned long addr, unsigned char type1)
 
 	__save_and_cli(flags);	/* avoid getting hit by machine check */
 
-	DBG(("conf_read(addr=0x%lx, type1=%d)\n", addr, type1));
+	DBGC(("conf_read(addr=0x%lx, type1=%d)\n", addr, type1));
 
 	/* Reset status register to avoid losing errors.  */
 	stat0 = *(vuip)APECS_IOC_DCSR;
 	*(vuip)APECS_IOC_DCSR = stat0;
 	mb();
-	DBG(("conf_read: APECS DCSR was 0x%x\n", stat0));
+	DBGC(("conf_read: APECS DCSR was 0x%x\n", stat0));
 
 	/* If Type1 access, must set HAE #2. */
 	if (type1) {
 		haxr2 = *(vuip)APECS_IOC_HAXR2;
 		mb();
 		*(vuip)APECS_IOC_HAXR2 = haxr2 | 1;
-		DBG(("conf_read: TYPE1 access\n"));
+		DBGC(("conf_read: TYPE1 access\n"));
 	}
 
 	draina();
-	apecs_mcheck_expected = 1;
-	apecs_mcheck_taken = 0;
+	mcheck_expected(0) = 1;
+	mcheck_taken(0) = 0;
 	mb();
 
 	/* Access configuration space.  */
@@ -159,12 +157,12 @@ conf_read(unsigned long addr, unsigned char type1)
 	asm volatile("ldl %0,%1; mb; mb" : "=r"(value) : "m"(*(vuip)addr)
 		     : "$9", "$10", "$11", "$12", "$13", "$14", "memory");
 
-	if (apecs_mcheck_taken) {
-		apecs_mcheck_taken = 0;
+	if (mcheck_taken(0)) {
+		mcheck_taken(0) = 0;
 		value = 0xffffffffU;
 		mb();
 	}
-	apecs_mcheck_expected = 0;
+	mcheck_expected(0) = 0;
 	mb();
 
 #if 1
@@ -178,7 +176,7 @@ conf_read(unsigned long addr, unsigned char type1)
 
 	/* Now look for any errors.  */
 	stat0 = *(vuip)APECS_IOC_DCSR;
-	DBG(("conf_read: APECS DCSR after read 0x%x\n", stat0));
+	DBGC(("conf_read: APECS DCSR after read 0x%x\n", stat0));
 
 	/* Is any error bit set? */
 	if (stat0 & 0xffe0U) {
@@ -228,14 +226,14 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	}
 
 	draina();
-	apecs_mcheck_expected = 1;
+	mcheck_expected(0) = 1;
 	mb();
 
 	/* Access configuration space.  */
 	*(vuip)addr = value;
 	mb();
 	mb();  /* magic */
-	apecs_mcheck_expected = 0;
+	mcheck_expected(0) = 0;
 	mb();
 
 #if 1
@@ -438,20 +436,21 @@ apecs_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	*(vuip)APECS_IOC_HAXR2 = 0; mb();
 }
 
-int
+void
 apecs_pci_clr_err(void)
 {
-	apecs_jd = *(vuip)APECS_IOC_DCSR;
-	if (apecs_jd & 0xffe0L) {
-		apecs_jd1 = *(vuip)APECS_IOC_SEAR;
-		*(vuip)APECS_IOC_DCSR = apecs_jd | 0xffe1L;
-		apecs_jd = *(vuip)APECS_IOC_DCSR;
+	unsigned int jd;
+
+	jd = *(vuip)APECS_IOC_DCSR;
+	if (jd & 0xffe0L) {
+		*(vuip)APECS_IOC_SEAR;
+		*(vuip)APECS_IOC_DCSR = jd | 0xffe1L;
 		mb();
+		*(vuip)APECS_IOC_DCSR;
 	}
 	*(vuip)APECS_IOC_TBIA = (unsigned int)APECS_IOC_TBIA;
-	apecs_jd2 = *(vuip)APECS_IOC_TBIA;
 	mb();
-	return 0;
+	*(vuip)APECS_IOC_TBIA;
 }
 
 void
@@ -461,8 +460,6 @@ apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 	struct el_common *mchk_header;
 	struct el_apecs_procdata *mchk_procdata;
 	struct el_apecs_sysdata_mcheck *mchk_sysdata;
-	unsigned long *ptr;
-	int i;
 
 	mchk_header = (struct el_common *)la_ptr;
 
@@ -473,66 +470,16 @@ apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 	mchk_sysdata = (struct el_apecs_sysdata_mcheck *)
 		(la_ptr + mchk_header->sys_offset);
 
-#ifdef DEBUG
-	printk("apecs_machine_check: vector=0x%lx la_ptr=0x%lx\n",
-	       vector, la_ptr);
-	printk("        pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
-	       regs->pc, mchk_header->size, mchk_header->proc_offset,
-	       mchk_header->sys_offset);
-	printk("apecs_machine_check: expected %d DCSR 0x%lx PEAR 0x%lx\n",
-	       apecs_mcheck_expected, mchk_sysdata->epic_dcsr,
-	       mchk_sysdata->epic_pear);
-	ptr = (unsigned long *)la_ptr;
-	for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
-		printk(" +%lx %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
-	}
-#endif
 
-	/*
-	 * Check if machine check is due to a badaddr() and if so,
-	 * ignore the machine check.
-	 */
+	/* Clear the error before any reporting.  */
+	mb();
+	mb(); /* magic */
+	draina();
+	apecs_pci_clr_err();
+	wrmces(0x7);		/* reset machine check pending flag */
+	mb();
 
-	if (apecs_mcheck_expected
-	    && (mchk_sysdata->epic_dcsr & 0x0c00UL)) {
-		apecs_mcheck_expected = 0;
-		apecs_mcheck_taken = 1;
-		mb();
-		mb(); /* magic */
-		apecs_pci_clr_err();
-		wrmces(0x7);
-		mb();
-		draina();
-		DBG(("apecs_machine_check: EXPECTED\n"));
-	}
-	else if (vector == 0x620 || vector == 0x630) {
-		/* Disable correctable from now on.  */
-		wrmces(0x1f);
-		mb();
-		draina();
-		printk("apecs_machine_check: HW correctable (0x%lx)\n",
-		       vector);
-	}
-	else {
-		printk(KERN_CRIT "APECS machine check:\n");
-		printk(KERN_CRIT "  vector=0x%lx la_ptr=0x%lx\n",
-		       vector, la_ptr);
-		printk(KERN_CRIT
-		       "  pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
-		       regs->pc, mchk_header->size, mchk_header->proc_offset,
-		       mchk_header->sys_offset);
-		printk(KERN_CRIT "  expected %d DCSR 0x%lx PEAR 0x%lx\n",
-		       apecs_mcheck_expected, mchk_sysdata->epic_dcsr,
-		       mchk_sysdata->epic_pear);
-
-		ptr = (unsigned long *)la_ptr;
-		for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
-			printk(KERN_CRIT " +%lx %lx %lx\n",
-			       i*sizeof(long), ptr[i], ptr[i+1]);
-		}
-#if 0
-		/* doesn't work with MILO */
-		show_regs(regs);
-#endif
-	}
+	process_mcheck_info(vector, la_ptr, regs, "APECS",
+			    (mcheck_expected(0)
+			     && (mchk_sysdata->epic_dcsr & 0x0c00UL)));
 }

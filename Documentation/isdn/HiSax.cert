@@ -14,7 +14,8 @@ First:
 
 However, if you wish to modify the HiSax sources, please note the following:
 
-HiSax has passed the ITU approval test suite with ELSA Quickstep ISDN cards.
+HiSax has passed the ITU approval test suite with ELSA Quickstep ISDN cards
+and Eicon Technology Diva 2.01 PCI card.
 The certification is only valid for the combination of the tested software
 version and the tested hardware. Any changes to the HiSax source code may
 therefore affect the certification.
@@ -48,13 +49,14 @@ drivers/isdn/hisax/l3dss1.c
 drivers/isdn/hisax/l3_1tr6.c
 drivers/isdn/hisax/cert.c
 drivers/isdn/hisax/elsa.c
+drivers/isdn/hisax/diva.c
 
 Please send any changes, bugfixes and patches to me rather than implementing
 them directly into the HiSax sources.
 
 This does not reduce your rights granted by the GNU General Public License.
 If you wish to change the sources, go ahead; but note that then the
-certification is invalid even if you use ELSA Quickstep cards.
+certification is invalid even if you use one of the approved cards.
 
 Here are the certification registration numbers for ELSA Quickstep cards:
 German   D133361J CETECOM ICT Services GmbH 0682
@@ -68,9 +70,9 @@ keil@isdn4linux.de
 Version: 2.6.3i
 Charset: noconv
 
-iQCVAwUBNj5OKDpxHvX/mS9tAQFHuQP/WeImlqCcDZ2d132yAvRBWFULlJoSf1P/
-c1lVTeaWvsSaY5Cu9hrKhXXhPzeEaitUbcUBPXdpzFWCA5CE902lnz7AhgRC+HF1
-0qiKgkZZyc/5HKasFymR1+IWSLw30GesP3Di/ZMR3NJi8SlY9PIjx7hnEMunGSRO
-1ufPvfWWuu8=
-=nGJk
+iQCVAwUBN6xoKTpxHvX/mS9tAQF4DAP/efRWym6jvNOND1O9eaEFdP5fd2xKB3XD
+Ifh6Iv0DvARcIuxXtEjT+z3FjjQk35eo/wX4C4tpRhYQYdgCxl+iv+5DzhVDpB95
+3QS9E5m0E1eIK3t8XiQTRgb+1JPCMYUThCrakYsX25o3ndGKyDipsCTfkyR38XwC
+bUyTfcOYKAk=
+=VKyL
 -----END PGP SIGNATURE-----

@@ -1162,7 +1162,7 @@ static u_short sprfetchmode[3] = {
 	 * Interface used by the world
 	 */
 
-void amifb_setup(char *options, int *ints);
+int amifb_setup(char*);
 
 static int amifb_open(struct fb_info *info, int user);
 static int amifb_release(struct fb_info *info, int user);
@@ -1193,7 +1193,7 @@ static int amifb_set_cursorstate(struct fb_cursorstate *state, int con);
 	 * Interface to the low level console driver
 	 */
 
-void amifb_init(void);
+int amifb_init(void);
 static int amifbcon_switch(int con, struct fb_info *info);
 static int amifbcon_updatevar(int con, struct fb_info *info);
 static void amifbcon_blank(int blank, struct fb_info *info);
@@ -1259,7 +1259,7 @@ static struct fb_ops amifb_ops = {
 	amifb_pan_display, amifb_ioctl
 };
 
-void __init amifb_setup(char *options, int *ints)
+int __init amifb_setup(char *options)
 {
 	char *this_opt;
 	char mcap_spec[80];
@@ -1268,7 +1268,7 @@ void __init amifb_setup(char *options, int *ints)
 	fb_info.fontname[0] = '\0';
 
 	if (!options || !*options)
-		return;
+		return 0;
 
 	for (this_opt = strtok(options, ","); this_opt; this_opt = strtok(NULL, ",")) {
 		char *p;
@@ -1374,6 +1374,7 @@ void __init amifb_setup(char *options, int *ints)
 cap_invalid:
 		;
 	}
+	return 0;
 }
 
 	/*
@@ -1714,13 +1715,13 @@ static int amifb_set_cursorstate(struct fb_cursorstate *state, int con)
 	 * Initialisation
 	 */
 
-void __init amifb_init(void)
+int __init amifb_init(void)
 {
 	int tag, i;
 	u_long chipptr;
 
 	if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(AMI_VIDEO))
-		return;
+		return -ENXIO;
 
 	/*
 	 * TODO: where should we put this? The DMI Resolver doesn't have a
@@ -1731,7 +1732,7 @@ void __init amifb_init(void)
 	if (amifb_resolver){
 		custom.dmacon = DMAF_MASTER | DMAF_RASTER | DMAF_COPPER |
 				DMAF_BLITTER | DMAF_SPRITE;
-		return;
+		return 0;
 	}
 #endif
 
@@ -1802,7 +1803,7 @@ default_chipset:
 			strcat(amifb_name, "Unknown");
 			goto default_chipset;
 #else /* CONFIG_FB_AMIGA_OCS */
-			return;
+			return -ENXIO;
 #endif /* CONFIG_FB_AMIGA_OCS */
 			break;
 	}
@@ -1916,7 +1917,7 @@ default_chipset:
 	amifb_set_var(&amifb_default, -1, &fb_info);
 
 	if (register_framebuffer(&fb_info) < 0)
-		return;
+		return -EINVAL;
 
 	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename,
@@ -1924,6 +1925,8 @@ default_chipset:
 
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
+
+	return 0;
 }
 
 static int amifbcon_switch(int con, struct fb_info *info)
@@ -3519,8 +3522,7 @@ static void ami_rebuild_copper(void)
 #ifdef MODULE
 int init_module(void)
 {
-	amifb_init();
-	return 0;
+	return amifb_init();
 }
 
 void cleanup_module(void)

@@ -799,14 +799,14 @@ static struct fb_ops vga16fb_ops = {
 	vga16fb_ioctl
 };
 
-void vga16fb_setup(char *options, int *ints)
+int vga16fb_setup(char *options)
 {
 	char *this_opt;
 	
 	vga16fb.fb_info.fontname[0] = '\0';
 	
 	if (!options || !*options)
-		return;
+		return 0;
 	
 	for(this_opt=strtok(options,","); this_opt; this_opt=strtok(NULL,",")) {
 		if (!*this_opt) continue;
@@ -814,6 +814,7 @@ void vga16fb_setup(char *options, int *ints)
 		if (!strncmp(this_opt, "font:", 5))
 			strcpy(vga16fb.fb_info.fontname, this_opt+5);
 	}
+	return 0;
 }
 
 static int vga16fb_switch(int con, struct fb_info *fb)
@@ -1003,14 +1004,14 @@ static void vga16fb_blank(int blank, struct fb_info *fb_info)
 	}
 }
 
-void __init vga16_init(void)
+int __init vga16_init(void)
 {
 	int i,j;
 
-	printk("vga16fb: initializing\n");
+	printk(KERN_DEBUG "vga16fb: initializing\n");
 
         vga16fb.video_vbase = ioremap((unsigned long)0xa0000, 65536);
-	printk("vga16fb: mapped to 0x%p\n", vga16fb.video_vbase);
+	printk(KERN_INFO "vga16fb: mapped to 0x%p\n", vga16fb.video_vbase);
 
 	vga16fb.isVGA = ORIG_VIDEO_ISVGA;
 	vga16fb.palette_blanked = 0;
@@ -1049,21 +1050,21 @@ void __init vga16_init(void)
 	if (register_framebuffer(&vga16fb.fb_info)<0)
 		return -EINVAL;
 
-	printk("fb%d: %s frame buffer device\n",
+	printk(KERN_INFO "fb%d: %s frame buffer device\n",
 	       GET_FB_IDX(vga16fb.fb_info.node), vga16fb.fb_info.modename);
 
 	return 0;
 }
 
 #ifndef MODULE
-__initfunc(void vga16fb_init(void))
+int __init vga16fb_init(void)
 {
-    vga16_init();
+    return vga16_init();
 }
 
 #else /* MODULE */
 
-__initfunc(int init_module(void))
+int init_module(void)
 {
     return vga16_init();
 }

@@ -17,6 +17,7 @@
 #include <asm/ptrace.h>
 #include <asm/system.h>
 #include <asm/pci.h>
+#include <asm/smp.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
@@ -25,6 +26,8 @@
 
 #include "proto.h"
 #include "bios32.h"
+
+int TSUNAMI_bootcpu;
 
 /*
  * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
@@ -36,24 +39,15 @@
  * BIOS32-style PCI interface:
  */
 
-#ifdef DEBUG_CONFIG
+#define DEBUG_MCHECK 0		/* 0 = minimal, 1 = debug, 2 = debug+dump.  */
+#define DEBUG_CONFIG 0
+
+#if DEBUG_CONFIG
 # define DBG_CFG(args)	printk args
 #else
 # define DBG_CFG(args)
 #endif
 
-#define DEBUG_MCHECK
-#ifdef DEBUG_MCHECK
-# define DBG_MCK(args)	printk args
-#define DEBUG_MCHECK_DUMP
-#else
-# define DBG_MCK(args)
-#endif
-
-static volatile unsigned int TSUNAMI_mcheck_expected[NR_CPUS];
-static volatile unsigned int TSUNAMI_mcheck_taken[NR_CPUS];
-static unsigned int TSUNAMI_jd[NR_CPUS];
-int TSUNAMI_bootcpu;
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -207,13 +201,14 @@ tsunami_probe_read(volatile unsigned long *vaddr)
 	int cpu = smp_processor_id();
 	int s = swpipl(6);	/* Block everything but machine checks. */
 
-	TSUNAMI_mcheck_taken[cpu] = 0;
-	TSUNAMI_mcheck_expected[cpu] = 1;
+	mcheck_taken(cpu) = 0;
+	mcheck_expected(cpu) = 1;
+	mb();
 	dont_care = *vaddr;
 	draina();
-	TSUNAMI_mcheck_expected[cpu] = 0;
-	probe_result = !TSUNAMI_mcheck_taken[cpu];
-	TSUNAMI_mcheck_taken[cpu] = 0;
+	mcheck_expected(cpu) = 0;
+	probe_result = !mcheck_taken(cpu);
+	mcheck_taken(cpu) = 0;
 	setipl(s);
 
 	printk("dont_care == 0x%lx\n", dont_care);
@@ -302,20 +297,18 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index,
 		 * we may want to use them to do scatter/gather DMA. 
 		 *
 		 * Window 0 goes at 1 GB and is 1 GB large, mapping to 0.
+		 * Window 1 goes at 2 GB and is 1 GB large, mapping to 1GB.
 		 */
 
-		pchip->wsba[0].csr = 1L | (TSUNAMI_DMA_WIN_BASE_DEFAULT & 0xfff00000U);
-		pchip->wsm[0].csr = (TSUNAMI_DMA_WIN_SIZE_DEFAULT - 1) & 0xfff00000UL;
-		pchip->tba[0].csr = 0;
-
-#if 0
-		pchip->wsba[1].csr = 0;
-#else
-		/* make the second window at 2Gb for 1Gb mapping to 1Gb */
-		pchip->wsba[1].csr = 1L | ((0x80000000U) & 0xfff00000U);
-		pchip->wsm[1].csr = (0x40000000UL - 1) & 0xfff00000UL;
-		pchip->tba[1].csr = 0x40000000;
-#endif
+		pchip->wsba[0].csr = TSUNAMI_DMA_WIN0_BASE_DEFAULT | 1UL;
+		pchip->wsm[0].csr  = (TSUNAMI_DMA_WIN0_SIZE_DEFAULT - 1) &
+				     0xfff00000UL;
+		pchip->tba[0].csr  = TSUNAMI_DMA_WIN0_TRAN_DEFAULT;
+		
+		pchip->wsba[1].csr = TSUNAMI_DMA_WIN1_BASE_DEFAULT | 1UL;
+		pchip->wsm[1].csr  = (TSUNAMI_DMA_WIN1_SIZE_DEFAULT - 1) &
+				     0xfff00000UL;
+		pchip->tba[1].csr  = TSUNAMI_DMA_WIN1_TRAN_DEFAULT;
 
 		pchip->wsba[2].csr = 0;
 		pchip->wsba[3].csr = 0;
@@ -364,107 +357,48 @@ tsunami_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	/* Align memory to cache line; we'll be allocating from it.  */
 	*mem_start = (*mem_start | 31) + 1;
 
-	/* Find how many hoses we have, and initialize them.  */
+	TSUNAMI_bootcpu = __hard_smp_processor_id();
+
+	/* Find how many hoses we have, and initialize them.  TSUNAMI
+	   and TYPHOON can have 2, but might only have 1 (DS10).  */
 	tsunami_init_one_pchip(TSUNAMI_pchip0, 0, mem_start);
-	/* must change this for TYPHOON which may have 4 */
 	if (TSUNAMI_cchip->csc.csr & 1L<<14)
 	    tsunami_init_one_pchip(TSUNAMI_pchip1, 1, mem_start);
 }
 
 static inline void
-tsunami_pci_clr_err_1(tsunami_pchip *pchip, int cpu)
+tsunami_pci_clr_err_1(tsunami_pchip *pchip)
 {
-	TSUNAMI_jd[cpu] = pchip->perror.csr;
-	DBG_MCK(("TSUNAMI_pci_clr_err: PERROR after read 0x%x\n",
-		 TSUNAMI_jd[cpu]));
+	unsigned int jd;
+
+	jd = pchip->perror.csr;
 	pchip->perror.csr = 0x040;
 	mb();
-	TSUNAMI_jd[cpu] = pchip->perror.csr;
+	jd = pchip->perror.csr;
 }
 
-static int
+static inline void
 tsunami_pci_clr_err(void)
 {
-	int cpu = smp_processor_id();
-	tsunami_pci_clr_err_1(TSUNAMI_pchip0, cpu);
-	/* must change this for TYPHOON which may have 4 */
+	tsunami_pci_clr_err_1(TSUNAMI_pchip0);
+
+	/* TSUNAMI and TYPHOON can have 2, but might only have 1 (DS10) */
 	if (TSUNAMI_cchip->csc.csr & 1L<<14)
-	    tsunami_pci_clr_err_1(TSUNAMI_pchip1, cpu);
-	return 0;
+	    tsunami_pci_clr_err_1(TSUNAMI_pchip1);
 }
 
 void
 tsunami_machine_check(unsigned long vector, unsigned long la_ptr,
 		      struct pt_regs * regs)
 {
-#if 0
-        printk("TSUNAMI machine check ignored\n") ;
-#else
-	struct el_common *mchk_header;
-	struct el_TSUNAMI_sysdata_mcheck *mchk_sysdata;
-	unsigned int cpu = smp_processor_id();
-
-	mb();
-	mchk_header = (struct el_common *)la_ptr;
-
-	mchk_sysdata = (struct el_TSUNAMI_sysdata_mcheck *)
-		(la_ptr + mchk_header->sys_offset);
-
-#if 0
-	DBG_MCK(("tsunami_machine_check: vector=0x%lx la_ptr=0x%lx\n",
-		 vector, la_ptr));
-	DBG_MCK(("\t\t pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
-		 regs->pc, mchk_header->size, mchk_header->proc_offset,
-		 mchk_header->sys_offset));
-	DBG_MCK(("tsunami_machine_check: expected %d DCSR 0x%lx PEAR 0x%lx\n",
-		 TSUNAMI_mcheck_expected[cpu], mchk_sysdata->epic_dcsr,
-		 mchk_sysdata->epic_pear));
-#endif
-#ifdef DEBUG_MCHECK_DUMP
-	{
-		unsigned long *ptr;
-		int i;
-
-		ptr = (unsigned long *)la_ptr;
-		for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
-			printk(" +%lx %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
-		}
-	}
-#endif /* DEBUG_MCHECK_DUMP */
-	/*
-	 * Check if machine check is due to a badaddr() and if so,
-	 * ignore the machine check.
-	 */
+	/* Clear error before any reporting.  */
 	mb();
 	mb();  /* magic */
-	if (TSUNAMI_mcheck_expected[cpu]) {
-		DBG_MCK(("TSUNAMI machine check expected\n"));
-		TSUNAMI_mcheck_expected[cpu] = 0;
-		TSUNAMI_mcheck_taken[cpu] = 1;
-		mb();
-		mb();  /* magic */
-		draina();
-		tsunami_pci_clr_err();
-		wrmces(0x7);
-		mb();
-	}
-#if 1
-	else {
-		printk("TSUNAMI machine check NOT expected\n") ;
-		DBG_MCK(("tsunami_machine_check: vector=0x%lx la_ptr=0x%lx\n",
-			 vector, la_ptr));
-		DBG_MCK(("\t\t pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
-			 regs->pc, mchk_header->size, mchk_header->proc_offset,
-			 mchk_header->sys_offset));
-		TSUNAMI_mcheck_expected[cpu] = 0;
-		TSUNAMI_mcheck_taken[cpu] = 1;
-		mb();
-		mb();  /* magic */
-		draina();
-		tsunami_pci_clr_err();
-		wrmces(0x7);
-		mb();
-	}
-#endif
-#endif
+	draina();
+	tsunami_pci_clr_err();
+	wrmces(0x7);
+	mb();
+
+	process_mcheck_info(vector, la_ptr, regs, "TSUNAMI",
+			    mcheck_expected(smp_processor_id()));
 }

@@ -141,19 +141,19 @@ obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
 
 # Translate to Rules.make lists.
 
-L_TARGET	:= sound.a
+O_TARGET	:= sounddrivers.o
 # This is a nice idea but needs depmod altering
 #MOD_LIST_NAME	:= SOUND_MODULES
 
-L_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-y)))
-LX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-y)))
+O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
+OX_OBJS		:= $(filter     $(export-objs), $(obj-y))
 M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
 MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
 MI_OBJS		:= $(sort $(filter-out $(export-objs), $(int-m)))
 MIX_OBJS	:= $(sort $(filter     $(export-objs), $(int-m)))
 
 ifeq ($(CONFIG_LOWLEVEL_SOUND),y)
-    L_OBJS	+= lowlevel/lowlevel.o
+    O_OBJS	+= lowlevel/lowlevel.o
 endif
 
 include $(TOPDIR)/Rules.make

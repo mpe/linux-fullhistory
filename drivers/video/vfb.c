@@ -78,7 +78,7 @@ static int vfb_enable = 0;	/* disabled by default */
      *  Interface used by the world
      */
 
-void vfb_setup(char *options, int *ints);
+int vfb_setup(char*);
 
 static int vfb_open(struct fb_info *info, int user);
 static int vfb_release(struct fb_info *info, int user);
@@ -102,7 +102,7 @@ static int vfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Interface to the low level console driver
      */
 
-void vfb_init(void);
+int vfb_init(void);
 static int vfbcon_switch(int con, struct fb_info *info);
 static int vfbcon_updatevar(int con, struct fb_info *info);
 static void vfbcon_blank(int blank, struct fb_info *info);
@@ -406,7 +406,7 @@ static int vfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 }
 
 
-void __init vfb_setup(char *options, int *ints)
+int __init vfb_setup(char *options)
 {
     char *this_opt;
 
@@ -415,13 +415,14 @@ void __init vfb_setup(char *options, int *ints)
     vfb_enable = 1;
 
     if (!options || !*options)
-	return;
+	return 0;
 
     for (this_opt = strtok(options, ","); this_opt;
 	 this_opt = strtok(NULL, ",")) {
 	if (!strncmp(this_opt, "font:", 5))
 	    strcpy(fb_info.fontname, this_opt+5);
     }
+    return 0;
 }
 
 
@@ -429,13 +430,13 @@ void __init vfb_setup(char *options, int *ints)
      *  Initialisation
      */
 
-void __init vfb_init(void)
+int __init vfb_init(void)
 {
     if (!vfb_enable)
-	return;
+	return -ENXIO;
 
     if (!(videomemory = (u_long)vmalloc(videomemorysize)))
-	return;
+	return -ENOMEM;
 
     strcpy(fb_info.modename, vfb_name);
     fb_info.changevar = NULL;
@@ -451,11 +452,12 @@ void __init vfb_init(void)
 
     if (register_framebuffer(&fb_info) < 0) {
 	vfree((void *)videomemory);
-	return;
+	return -EINVAL;
     }
 
-    printk("fb%d: Virtual frame buffer device, using %ldK of video memory\n",
+    printk(KERN_INFO "fb%d: Virtual frame buffer device, using %ldK of video memory\n",
 	   GET_FB_IDX(fb_info.node), videomemorysize>>10);
+    return 0;
 }
 
 
@@ -636,8 +638,7 @@ static void do_install_cmap(int con, struct fb_info *info)
 #ifdef MODULE
 int init_module(void)
 {
-    vfb_init();
-    return 0;
+    return vfb_init();
 }
 
 void cleanup_module(void)

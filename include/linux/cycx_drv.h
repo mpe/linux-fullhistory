@@ -54,13 +54,11 @@ typedef struct cycxhw {
 } cycxhw_t;
 
 /* Function Prototypes */
-extern int cycx_setup  (cycxhw_t* hw, void* sfm, u32 len);
-extern int cycx_down   (cycxhw_t* hw);
-extern int cycx_inten  (cycxhw_t* hw);
-extern int cycx_intde  (cycxhw_t* hw);
-extern int cycx_intack (cycxhw_t* hw);
-extern int cycx_intr   (cycxhw_t* hw);
-extern int cycx_peek   (cycxhw_t* hw, u32 addr, void* buf, u32 len);
-extern int cycx_poke   (cycxhw_t* hw, u32 addr, void* buf, u32 len);
-extern int cycx_exec   (u32 addr);
+extern int cycx_setup (cycxhw_t *hw, void *sfm, u32 len);
+extern int cycx_down (cycxhw_t *hw);
+extern int cycx_inten (cycxhw_t *hw);
+extern int cycx_intr (cycxhw_t *hw);
+extern int cycx_peek (cycxhw_t *hw, u32 addr, void *buf, u32 len);
+extern int cycx_poke (cycxhw_t *hw, u32 addr, void *buf, u32 len);
+extern int cycx_exec (u32 addr);
 #endif	/* _CYCX_DRV_H */

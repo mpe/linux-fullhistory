@@ -1,4 +1,4 @@
-/* NCR53C9x.h:  Defines and structures for the NCR53C9x generic driver.
+/* NCR53C9x.c:  Defines and structures for the NCR53C9x generic driver.
  *
  * Originaly esp.h:  Defines and structures for the Sparc ESP 
  *                   (Enhanced SCSI Processor) driver under Linux.
@@ -15,10 +15,32 @@
 
 #include <linux/config.h>
 
+/* djweis for mac driver */
+#if defined(CONFIG_MAC)
+#define PAD_SIZE 15
+#else
+#define PAD_SIZE 3
+#endif
+
+/* Handle multiple hostadapters on Amiga
+ * generally PAD_SIZE = 3
+ * but there is one exception: Oktagon (PAD_SIZE = 1) */
+#if defined(CONFIG_OKTAGON_SCSI) || defined(CONFIG_OKTAGON_SCSI_MODULE)
+#undef PAD_SIZE
+#if defined(CONFIG_BLZ1230_SCSI) || defined(CONFIG_BLZ1230_SCSI_MODULE) || \
+    defined(CONFIG_BLZ2060_SCSI) || defined(CONFIG_BLZ2060_SCSI_MODULE) || \
+    defined(CONFIG_CYBERSTORM_SCSI) || defined(CONFIG_CYBERSTORM_SCSI_MODULE) || \
+    defined(CONFIG_CYBERSTORMII_SCSI) || defined(CONFIG_CYBERSTORMII_SCSI_MODULE) || \
+    defined(CONFIG_FASTLANE_SCSI) || defined(CONFIG_FASTLANE_SCSI_MODULE)
+#define MULTIPLE_PAD_SIZES
+#else
+#define PAD_SIZE 1
+#endif
+#endif
+
 /* Macros for debugging messages */
 
-/* #define DEBUG_ESP */
-/* #define DEBUG_ESP_HME */
+#define DEBUG_ESP
 /* #define DEBUG_ESP_DATA */
 /* #define DEBUG_ESP_QUEUE */
 /* #define DEBUG_ESP_DISCONNECT */
@@ -42,12 +64,6 @@
 #else
 #define ESPLOG(foo)
 #endif /* (DEBUG_ESP) */
-
-#if defined(DEBUG_ESP_HME)
-#define ESPHME(foo)  printk foo
-#else
-#define ESPHME(foo)
-#endif
 
 #if defined(DEBUG_ESP_DATA)
 #define ESPDATA(foo)  printk foo
@@ -103,21 +119,15 @@
 #define ESPMISC(foo)
 #endif
 
-#define INTERNAL_ESP_ERROR \
-        (panic ("Internal ESP driver error in file %s, line %d\n", \
-		__FILE__, __LINE__))
-
-#define INTERNAL_ESP_ERROR_NOPANIC \
-        (printk ("Internal ESP driver error in file %s, line %d\n", \
-		 __FILE__, __LINE__))
-
 /*
  * padding for register structure
  */
 #ifdef CONFIG_JAZZ_ESP
 #define EREGS_PAD(n)
 #else
-#define EREGS_PAD(n)    unchar n[3];
+#ifndef MULTIPLE_PAD_SIZES
+#define EREGS_PAD(n)    unchar n[PAD_SIZE];
+#endif
 #endif
 
 /* The ESP SCSI controllers have their register sets in three
@@ -130,18 +140,12 @@
  * Yet, they all live within the same IO space.
  */
 
-/* All the ESP registers are one byte each and are accessed longwords
- * apart with a big-endian ordering to the bytes.
- */
- 
-/*
- * On intel, we must use inb() and outb() for register access, and the registers
- *  are consecutive; no padding.
- */ 
-
 #ifndef __i386__
-#define SETREG(reg, val) (reg = val)
-#define GETREG(reg)      (reg)
+
+#ifndef MULTIPLE_PAD_SIZES
+
+#define esp_write(__reg, __val) ((__reg) = (__val))
+#define esp_read(__reg) (__reg)
 
 struct ESP_regs {
                                 /* Access    Description              Offset */
@@ -151,7 +155,7 @@ struct ESP_regs {
                                 EREGS_PAD(fdpad);
     volatile unchar esp_fdata;  /* rw  FIFO data bits                 0x08   */
                                 EREGS_PAD(cbpad);
-    volatile unchar esp_cmnd;    /* rw  SCSI command bits              0x0c   */
+    volatile unchar esp_cmnd;   /* rw  SCSI command bits              0x0c   */
                                 EREGS_PAD(stpad);
     volatile unchar esp_status; /* ro  ESP status register            0x10   */
 #define esp_busid   esp_status  /* wo  Bus ID for select/reselect     0x10   */
@@ -168,7 +172,6 @@ struct ESP_regs {
     volatile unchar esp_cfg1;   /* rw  First configuration register   0x20   */
                                 EREGS_PAD(cfpad);
     volatile unchar esp_cfact;  /* wo  Clock conversion factor        0x24   */
-#define esp_status2 esp_cfact   /* ro  HME status2 register           0x24   */
                                 EREGS_PAD(ctpad);
     volatile unchar esp_ctest;  /* wo  Chip test register             0x28   */
                                 EREGS_PAD(cf2pd);
@@ -177,63 +180,89 @@ struct ESP_regs {
 
     /* The following is only found on the 53C9X series SCSI chips */
     volatile unchar esp_cfg3;   /* rw  Third configuration register   0x30  */
-                                EREGS_PAD(holep);
-    volatile unchar esp_hole;   /* hole in register map               0x34  */
-                                EREGS_PAD(thpd);    
+                                EREGS_PAD(cf4pd);
+    volatile unchar esp_cfg4;   /* rw  Fourth configuration register  0x34  */
+                                EREGS_PAD(thpd);
     /* The following is found on all chips except the NCR53C90 (ESP100) */
     volatile unchar esp_tchi;   /* rw  High bits of transfer count    0x38  */
 #define esp_uid     esp_tchi    /* ro  Unique ID code                 0x38  */
-#define fas_rlo     esp_tchi    /* rw  HME extended counter           0x38  */
                                 EREGS_PAD(fgpad);    
     volatile unchar esp_fgrnd;  /* rw  Data base for fifo             0x3c  */
-#define fas_rhi     esp_fgrnd   /* rw  HME extended counter           0x3c  */
 };
 
-#else
-#define SETREG(reg, val) outb(val, reg)
-#define GETREG(reg)      inb(reg)
+#else /* MULTIPLE_PAD_SIZES */
+
+#define esp_write(__reg, __val) (*(__reg) = (__val))
+#define esp_read(__reg) (*(__reg))
 
 struct ESP_regs {
-#ifdef CONFIG_MCA
-    unsigned int slot;
+    unsigned char io_addr[64]; /* dummy */
+                                                 /* Access    Description              Offset */
+#define esp_tclow   io_addr                      /* rw  Low bits of the transfer count 0x00   */
+#define esp_tcmed   io_addr + (1<<(esp->shift))  /* rw  Mid bits of the transfer count 0x04   */
+#define esp_fdata   io_addr + (2<<(esp->shift))  /* rw  FIFO data bits                 0x08   */
+#define esp_cmnd    io_addr + (3<<(esp->shift))  /* rw  SCSI command bits              0x0c   */
+#define esp_status  io_addr + (4<<(esp->shift))  /* ro  ESP status register            0x10   */
+#define esp_busid   esp_status                   /* wo  Bus ID for select/reselect     0x10   */
+#define esp_intrpt  io_addr + (5<<(esp->shift))  /* ro  Kind of interrupt              0x14   */
+#define esp_timeo   esp_intrpt                   /* wo  Timeout value for select/resel 0x14   */
+#define esp_sstep   io_addr + (6<<(esp->shift))  /* ro  Sequence step register         0x18   */
+#define esp_stp     esp_sstep                    /* wo  Transfer period per sync       0x18   */
+#define esp_fflags  io_addr + (7<<(esp->shift))  /* ro  Bits of current FIFO info      0x1c   */
+#define esp_soff    esp_fflags                   /* wo  Sync offset                    0x1c   */
+#define esp_cfg1    io_addr + (8<<(esp->shift))  /* rw  First configuration register   0x20   */
+#define esp_cfact   io_addr + (9<<(esp->shift))  /* wo  Clock conversion factor        0x24   */
+#define esp_ctest   io_addr + (10<<(esp->shift)) /* wo  Chip test register             0x28   */
+#define esp_cfg2    io_addr + (11<<(esp->shift)) /* rw  Second configuration register  0x2c   */
+
+    /* The following is only found on the 53C9X series SCSI chips */
+#define esp_cfg3    io_addr + (12<<(esp->shift)) /* rw  Third configuration register   0x30  */
+#define esp_cfg4    io_addr + (13<<(esp->shift)) /* rw  Fourth configuration register  0x34  */
+
+    /* The following is found on all chips except the NCR53C90 (ESP100) */
+#define esp_tchi    io_addr + (14<<(esp->shift)) /* rw  High bits of transfer count    0x38  */
+#define esp_uid     esp_tchi                     /* ro  Unique ID code                 0x38  */
+#define esp_fgrnd   io_addr + (15<<(esp->shift)) /* rw  Data base for fifo             0x3c  */
+};
+
 #endif
+
+#else /* !defined __i386__ */
+
+#define esp_write(__reg, __val) outb((__val), (__reg))
+#define esp_read(__reg) inb((__reg))
+
+struct ESP_regs {
     unsigned int io_addr;
-                                  /* Access    Description              Offset */
+                                 /* Access    Description              Offset */
 #define esp_tclow   io_addr      /* rw  Low bits of the transfer count 0x00   */
 #define esp_tcmed   io_addr + 1  /* rw  Mid bits of the transfer count 0x04   */
 #define esp_fdata   io_addr + 2  /* rw  FIFO data bits                 0x08   */
-#define esp_cmnd     io_addr + 3  /* rw  SCSI command bits              0x0c   */
+#define esp_cmnd    io_addr + 3  /* rw  SCSI command bits              0x0c   */
 #define esp_status  io_addr + 4  /* ro  ESP status register            0x10   */
-#define esp_busid    esp_status   /* wo  Bus ID for select/reselect     0x10   */
+#define esp_busid   esp_status   /* wo  Bus ID for select/reselect     0x10   */
 #define esp_intrpt  io_addr + 5  /* ro  Kind of interrupt              0x14   */
-#define esp_timeo    esp_intrpt   /* wo  Timeout value for select/resel 0x14   */
+#define esp_timeo   esp_intrpt   /* wo  Timeout value for select/resel 0x14   */
 #define esp_sstep   io_addr + 6  /* ro  Sequence step register         0x18   */
-#define esp_stp      esp_sstep    /* wo  Transfer period per sync       0x18   */
+#define esp_stp     esp_sstep    /* wo  Transfer period per sync       0x18   */
 #define esp_fflags  io_addr + 7  /* ro  Bits of current FIFO info      0x1c   */
-#define esp_soff     esp_fflags   /* wo  Sync offset                    0x1c   */
+#define esp_soff    esp_fflags   /* wo  Sync offset                    0x1c   */
 #define esp_cfg1    io_addr + 8  /* rw  First configuration register   0x20   */
 #define esp_cfact   io_addr + 9  /* wo  Clock conversion factor        0x24   */
-#define esp_status2  esp_cfact    /* ro  HME status2 register           0x24   */
 #define esp_ctest   io_addr + 10 /* wo  Chip test register             0x28   */
 #define esp_cfg2    io_addr + 11 /* rw  Second configuration register  0x2c   */
 
     /* The following is only found on the 53C9X series SCSI chips */
 #define esp_cfg3    io_addr + 12 /* rw  Third configuration register   0x30  */
-#define esp_hole    io_addr + 13 /* hole in register map               0x34  */
+#define esp_cfg4    io_addr + 13 /* rw  Fourth configuration register  0x34  */
 
     /* The following is found on all chips except the NCR53C90 (ESP100) */
 #define esp_tchi    io_addr + 14 /* rw  High bits of transfer count    0x38  */
-#define esp_uid      esp_tchi     /* ro  Unique ID code                 0x38  */
-#define fas_rlo      esp_tchi     /* rw  HME extended counter           0x38  */
+#define esp_uid     esp_tchi     /* ro  Unique ID code                 0x38  */
 #define esp_fgrnd   io_addr + 15 /* rw  Data base for fifo             0x3c  */
-#define fas_rhi      esp_fgrnd    /* rw  HME extended counter           0x3c  */
 };
 
-#ifndef save_and_cli
-#define save_and_cli(flags)  save_flags(flags); cli();
-#endif
-
-#endif
+#endif /* !defined(__i386__) */
 
 /* Various revisions of the ESP board. */
 enum esp_rev {
@@ -243,26 +272,21 @@ enum esp_rev {
   fas236     = 0x03,
   fas100a    = 0x04,
   fast       = 0x05,
-  fashme     = 0x06,
-  fas216     = 0x07,    
-  espunknown = 0x08
+  fas366     = 0x06,
+  fas216     = 0x07,
+  fsc        = 0x08,  /* SYM53C94-2 */
+  espunknown = 0x09
 };
 
 /* We get one of these for each ESP probed. */
 struct NCR_ESP {
   struct NCR_ESP *next;                   /* Next ESP on probed or NULL */
   struct ESP_regs *eregs;	          /* All esp registers */
-#ifndef __i386__
-  struct Linux_DMA *dma;                  /* Who I do transfers with. */
-#else
-  int dma;
-#endif
+  int dma;                                /* Who I do transfers with. */
   void *dregs;		  		  /* And his registers. */
   struct Scsi_Host *ehost;                /* Backpointer to SCSI Host */
 
   void *edev;        		          /* Pointer to controller base/SBus */
-  char prom_name[64];                     /* Name of ESP device from prom */
-  int prom_node;                          /* Prom node where ESP found */
   int esp_id;                             /* Unique per-ESP ID number */
 
   /* ESP Configuration Registers */
@@ -292,11 +316,29 @@ struct NCR_ESP {
   unchar ireg;                            /* Copy of ESP interrupt register */
   unchar sreg;                            /* Same for ESP status register */
   unchar seqreg;                          /* The ESP sequence register */
-  unchar sreg2;                           /* Copy of HME status2 register */
 
-  /* The HME is the biggest piece of shit I have ever seen. */
-  unchar hme_fifo_workaround_buffer[16 * 2]; /* 16-bit/entry fifo for wide scsi */
-  unchar hme_fifo_workaround_count;
+  /* The following is set when a premature interrupt condition is detected
+   * in some FAS revisions.
+   */
+  unchar fas_premature_intr_workaround;
+
+  /* To save register writes to the ESP, which can be expensive, we
+   * keep track of the previous value that various registers had for
+   * the last target we connected to.  If they are the same for the
+   * current target, we skip the register writes as they are not needed.
+   */
+  unchar prev_soff, prev_stp, prev_cfg3;
+
+  /* For each target we keep track of save/restore data
+   * pointer information.  This needs to be updated majorly
+   * when we add support for tagged queueing.  -DaveM
+   */
+  struct esp_pointers {
+	  char *saved_ptr;
+	  struct scatterlist *saved_buffer;
+	  int saved_this_residual;
+	  int saved_buffers_residual;
+  } data_pointers[16] /*XXX [MAX_TAGS_PER_TARGET]*/;
 
   /* Clock periods, frequencies, synchronization, etc. */
   unsigned int cfreq;                    /* Clock frequency in HZ */
@@ -308,7 +350,6 @@ struct NCR_ESP {
   unsigned int sync_defp;                /* Default sync transfer period */
   unsigned int max_period;               /* longest our period can be */
   unsigned int min_period;               /* shortest period we can withstand */
-  unsigned char ccf;			 /* Clock conversion factor */
   /* For slow to medium speed input clock rates we shoot for 5mb/s,
    * but for high input clock rates we try to do 10mb/s although I
    * don't think a transfer can even run that fast with an ESP even
@@ -328,15 +369,11 @@ struct NCR_ESP {
 
   /* Misc. info about this ESP */
   enum esp_rev erev;                      /* ESP revision */
-  int irq;                                /* SBus IRQ for this ESP */
+  int irq;                                /* IRQ for this ESP */
   int scsi_id;                            /* Who am I as initiator? */
   int scsi_id_mask;                       /* Bitmask of 'me'. */
   int diff;                               /* Differential SCSI bus? */
-  int bursts;                             /* Burst sizes our DVMA supports */
-
-#ifdef CONFIG_MCA
-  int slot;				  /* MCA slot the adapter occupies */
-#endif
+  int slot;                               /* Slot the adapter occupies */
 
   /* Our command queues, only one cmd lives in the current_SC queue. */
   Scsi_Cmnd *issue_SC;           /* Commands to be issued */
@@ -356,6 +393,9 @@ struct NCR_ESP {
   unchar resetting_bus;
 
   unchar do_pio_cmds;		/* Do command transfer with pio */
+
+  /* How much bits do we have to shift the registers */
+  unsigned char shift;
 
   /* Functions handling DMA
    */ 
@@ -400,38 +440,38 @@ struct NCR_ESP {
 #define ESP_CONFIG1_SRRDISAB  0x40             /* Disable SCSI reset reports */
 #define ESP_CONFIG1_SLCABLE   0x80             /* Enable slow cable mode */
 
-/* ESP config reg 2, read-write, found only on esp100a+esp200+esp236 chips */
-#define ESP_CONFIG2_DMAPARITY 0x01             /* enable DMA Parity (200,236) */
-#define ESP_CONFIG2_REGPARITY 0x02             /* enable reg Parity (200,236) */
+/* ESP config reg 2, read-write, found only on esp100a+esp200+esp236+fsc chips */
+#define ESP_CONFIG2_DMAPARITY 0x01             /* enable DMA Parity (200,236,fsc) */
+#define ESP_CONFIG2_REGPARITY 0x02             /* enable reg Parity (200,236,fsc) */
 #define ESP_CONFIG2_BADPARITY 0x04             /* Bad parity target abort  */
 #define ESP_CONFIG2_SCSI2ENAB 0x08             /* Enable SCSI-2 features (tmode only) */
 #define ESP_CONFIG2_HI        0x10             /* High Impedance DREQ ???  */
 #define ESP_CONFIG2_HMEFENAB  0x10             /* HME features enable */
-#define ESP_CONFIG2_BCM       0x20             /* Enable byte-ctrl (236)   */
-#define ESP_CONFIG2_DISPINT   0x20             /* Disable pause irq (hme) */
-#define ESP_CONFIG2_FENAB     0x40             /* Enable features (fas100,esp216)      */
+#define ESP_CONFIG2_BCM       0x20             /* Enable byte-ctrl (236,fsc)   */
+#define ESP_CONFIG2_FENAB     0x40             /* Enable features (fas100,esp216,fsc)      */
 #define ESP_CONFIG2_SPL       0x40             /* Enable status-phase latch (esp236)   */
-#define ESP_CONFIG2_MKDONE    0x40             /* HME magic feature */
-#define ESP_CONFIG2_HME32     0x80             /* HME 32 extended */
+#define ESP_CONFIG2_RFB       0x80             /* Reserve FIFO byte (fsc) */
 #define ESP_CONFIG2_MAGIC     0xe0             /* Invalid bits... */
 
-/* ESP config register 3 read-write, found only esp236+fas236+fas100a+hme chips */
-#define ESP_CONFIG3_FCLOCK    0x01             /* FAST SCSI clock rate (esp100a/hme) */
-#define ESP_CONFIG3_TEM       0x01             /* Enable thresh-8 mode (esp/fas236)  */
-#define ESP_CONFIG3_FAST      0x02             /* Enable FAST SCSI     (esp100a/hme) */
-#define ESP_CONFIG3_ADMA      0x02             /* Enable alternate-dma (esp/fas236)  */
-#define ESP_CONFIG3_TENB      0x04             /* group2 SCSI2 support (esp100a/hme) */
-#define ESP_CONFIG3_SRB       0x04             /* Save residual byte   (esp/fas236)  */
-#define ESP_CONFIG3_TMS       0x08             /* Three-byte msg's ok  (esp100a/hme) */
-#define ESP_CONFIG3_FCLK      0x08             /* Fast SCSI clock rate (esp/fas236)  */
-#define ESP_CONFIG3_IDMSG     0x10             /* ID message checking  (esp100a/hme) */
-#define ESP_CONFIG3_FSCSI     0x10             /* Enable FAST SCSI     (esp/fas236)  */
-#define ESP_CONFIG3_GTM       0x20             /* group2 SCSI2 support (esp/fas236)  */
-#define ESP_CONFIG3_BIGID     0x20             /* SCSI-ID's are 4bits  (hme)         */
-#define ESP_CONFIG3_TBMS      0x40             /* Three-byte msg's ok  (esp/fas236)  */
-#define ESP_CONFIG3_EWIDE     0x40             /* Enable Wide-SCSI     (hme)         */
-#define ESP_CONFIG3_IMS       0x80             /* ID msg chk'ng        (esp/fas236)  */
-#define ESP_CONFIG3_OBPUSH    0x80             /* Push odd-byte to dma (hme)         */
+/* ESP config register 3 read-write, found only esp236+fas236+fas100a+fsc chips */
+#define ESP_CONFIG3_FCLOCK    0x01             /* FAST SCSI clock rate (esp100a/fas366) */
+#define ESP_CONFIG3_TEM       0x01             /* Enable thresh-8 mode (esp/fas236/fsc)  */
+#define ESP_CONFIG3_FAST      0x02             /* Enable FAST SCSI     (esp100a) */
+#define ESP_CONFIG3_ADMA      0x02             /* Enable alternate-dma (esp/fas236/fsc)  */
+#define ESP_CONFIG3_TENB      0x04             /* group2 SCSI2 support (esp100a) */
+#define ESP_CONFIG3_SRB       0x04             /* Save residual byte   (esp/fas236/fsc)  */
+#define ESP_CONFIG3_TMS       0x08             /* Three-byte msg's ok  (esp100a) */
+#define ESP_CONFIG3_FCLK      0x08             /* Fast SCSI clock rate (esp/fas236/fsc)  */
+#define ESP_CONFIG3_IDMSG     0x10             /* ID message checking  (esp100a) */
+#define ESP_CONFIG3_FSCSI     0x10             /* Enable FAST SCSI     (esp/fas236/fsc)  */
+#define ESP_CONFIG3_GTM       0x20             /* group2 SCSI2 support (esp/fas236/fsc)  */
+#define ESP_CONFIG3_TBMS      0x40             /* Three-byte msg's ok  (esp/fas236/fsc)  */
+#define ESP_CONFIG3_IMS       0x80             /* ID msg chk'ng        (esp/fas236/fsc)  */
+
+/* ESP config register 4 read-write, found only on fsc chips */
+#define ESP_CONFIG4_BBTE      0x01             /* Back-to-Back transfer enable */
+#define ESP_CONFIG4_TEST      0x02             /* Transfer counter test mode */
+#define ESP_CONFIG4_EAN       0x04             /* Enable Active Negotiation */
 
 /* ESP command register read-write */
 /* Group 1 commands:  These may be sent at any point in time to the ESP
@@ -482,9 +522,8 @@ struct NCR_ESP {
 #define ESP_CMD_SA3           0x46             /* Select w/ATN3 */
 #define ESP_CMD_RSEL3         0x47             /* Reselect3 */
 
-/* This bit enables the ESP's DMA on the SBus */
+/* This bit enables the ESP's DMA */
 #define ESP_CMD_DMA           0x80             /* Do DMA? */
-
 
 /* ESP status register read-only */
 #define ESP_STAT_PIO          0x01             /* IO phase bit */
@@ -495,20 +534,10 @@ struct NCR_ESP {
 #define ESP_STAT_TCNT         0x10             /* Transfer Counter Is Zero */
 #define ESP_STAT_PERR         0x20             /* Parity error */
 #define ESP_STAT_SPAM         0x40             /* Real bad error */
-/* This indicates the 'interrupt pending' condition on esp236, it is a reserved
- * bit on other revs of the ESP.
+/* This indicates the 'interrupt pending' condition, it is a reserved
+ * bit on old revs of the ESP (ESP100, ESP100A, FAS100A).
  */
 #define ESP_STAT_INTR         0x80             /* Interrupt */
-
-/* HME only: status 2 register */
-#define ESP_STAT2_SCHBIT      0x01 /* Upper bits 3-7 of sstep enabled */
-#define ESP_STAT2_FFLAGS      0x02 /* The fifo flags are now latched */
-#define ESP_STAT2_XCNT        0x04 /* The transfer counter is latched */
-#define ESP_STAT2_CREGA       0x08 /* The command reg is active now */
-#define ESP_STAT2_WIDE        0x10 /* Interface on this adapter is wide */
-#define ESP_STAT2_F1BYTE      0x20 /* There is one byte at top of fifo */
-#define ESP_STAT2_FMSB        0x40 /* Next byte in fifo is most significant */
-#define ESP_STAT2_FEMPTY      0x80 /* FIFO is empty */
 
 /* The status register can be masked with ESP_STAT_PMASK and compared
  * with the following values to determine the current phase the ESP
@@ -555,22 +584,24 @@ struct NCR_ESP {
 #define ESP_STEP_FINI5        0x05
 #define ESP_STEP_FINI6        0x06
 #define ESP_STEP_FINI7        0x07
+#define ESP_STEP_SOM          0x08             /* Synchronous Offset Max */
 
 /* ESP chip-test register read-write */
 #define ESP_TEST_TARG         0x01             /* Target test mode */
 #define ESP_TEST_INI          0x02             /* Initiator test mode */
 #define ESP_TEST_TS           0x04             /* Tristate test mode */
 
-/* ESP unique ID register read-only, found on fas236+fas100a only */
-#define ESP_UID_F100A         0x00             /* ESP FAS100A  */
-#define ESP_UID_F236          0x02             /* ESP FAS236   */
+/* ESP unique ID register read-only, found on fas236+fas100a+fsc only */
+#define ESP_UID_F100A         0x00             /* FAS100A  */
+#define ESP_UID_F236          0x02             /* FAS236   */
+#define ESP_UID_FSC           0xa2             /* NCR53CF9x-2  */
 #define ESP_UID_REV           0x07             /* ESP revision */
 #define ESP_UID_FAM           0xf8             /* ESP family   */
 
 /* ESP fifo flags register read-only */
 /* Note that the following implies a 16 byte FIFO on the ESP. */
 #define ESP_FF_FBYTES         0x1f             /* Num bytes in FIFO */
-#define ESP_FF_ONOTZERO       0x20             /* offset ctr not zero (esp100) */
+#define ESP_FF_ONOTZERO       0x20             /* offset ctr not zero (esp100,fsc) */
 #define ESP_FF_SSTEP          0xe0             /* Sequence step */
 
 /* ESP clock conversion factor register write-only */
@@ -583,14 +614,13 @@ struct NCR_ESP {
 #define ESP_CCF_F6            0x06             /* 25.01MHz - 30MHz */
 #define ESP_CCF_F7            0x07             /* 30.01MHz - 35MHz */
 
-/* HME only... */
-#define ESP_BUSID_RESELID     0x10
-#define ESP_BUSID_CTR32BIT    0x40
-
 #define ESP_BUS_TIMEOUT        275             /* In milli-seconds */
 #define ESP_TIMEO_CONST       8192
+#define FSC_TIMEO_CONST       7668
 #define ESP_NEG_DEFP(mhz, cfact) \
         ((ESP_BUS_TIMEOUT * ((mhz) / 1000)) / (8192 * (cfact)))
+#define FSC_NEG_DEFP(mhz, cfact) \
+        ((ESP_BUS_TIMEOUT * ((mhz) / 1000)) / (7668 * (cfact)))
 #define ESP_MHZ_TO_CYCLE(mhertz)  ((1000000000) / ((mhertz) / 1000))
 #define ESP_TICK(ccf, cycle)  ((7682 * (ccf) * (cycle) / 1000))
 
@@ -609,6 +639,8 @@ extern int nesps, esps_in_use, esps_running;
 extern inline void esp_cmd(struct NCR_ESP *esp, struct ESP_regs *eregs,
 			   unchar cmd);
 extern struct NCR_ESP *esp_allocate(Scsi_Host_Template *, void *);
+extern void esp_deallocate(struct NCR_ESP *);
+extern void esp_release(void);
 extern void esp_initialize(struct NCR_ESP *);
 extern void esp_intr(int, void *, struct pt_regs *);
 #endif /* !(NCR53C9X_H) */

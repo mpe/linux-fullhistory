@@ -13,12 +13,15 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 1999/08/09	acme		removed references to enable_tx_int
+*				use spinlocks instead of cli/sti in
+*				cyclomx_set_state
 * 1999/05/19	acme		works directly linked into the kernel
 *				init_waitqueue_head for 2.3.* kernel
 * 1999/05/18	acme		major cleanup (polling not needed), etc
-* Aug 28, 1998	Arnaldo		minor cleanup (ioctls for firmware deleted)
+* 1998/08/28	acme		minor cleanup (ioctls for firmware deleted)
 *				queue_task activated
-* Aug 08, 1998	Arnaldo		Initial version.
+* 1998/08/08	acme		Initial version.
 */
 
 #include <linux/config.h>	/* OS configuration options */
@@ -43,7 +46,7 @@ MODULE_DESCRIPTION("Cyclades Sync Cards Driver.");
 /* Defines & Macros */
 
 #define	DRV_VERSION	0		/* version number */
-#define	DRV_RELEASE	3		/* release (minor version) number */
+#define	DRV_RELEASE	4		/* release (minor version) number */
 #define	MAX_CARDS	1		/* max number of adapters */
 
 #ifndef	CONFIG_CYCLOMX_CARDS		/* configurable option */
@@ -118,7 +121,6 @@ __initfunc(int cyclomx_init (void))
 		wandev->magic    = ROUTER_MAGIC;
 		wandev->name     = card->devname;
 		wandev->private  = card;
-		wandev->enable_tx_int = 0;
 		wandev->setup    = &setup;
 		wandev->shutdown = &shutdown;
 		wandev->ioctl    = &ioctl;
@@ -239,7 +241,7 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 
 	/* Protocol-specific initialization */
 	switch (card->hw.fwid) {
-#ifdef	CONFIG_CYCLOMX_X25
+#ifdef CONFIG_CYCLOMX_X25
 		case CFID_X25_2X: err = cyx_init(card, conf); break;
 #endif
 		default:
@@ -254,7 +256,6 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 		return err;
 	}
 
-	wandev->critical = 0;
 	return 0;
 }
 
@@ -280,7 +281,6 @@ static int shutdown (wan_device_t *wandev)
 	cycx_down(&card->hw);
 	printk(KERN_INFO "%s: irq %d being freed!\n", wandev->name,wandev->irq);
 	free_irq(wandev->irq, card);
-	wandev->critical = 0;
 	return 0;
 }
 
@@ -306,7 +306,8 @@ static int ioctl (wan_device_t *wandev, unsigned cmd, unsigned long arg)
 static void cycx_isr (int irq, void *dev_id, struct pt_regs *regs)
 {
 #define	card	((cycx_t*)dev_id)
-	if (!card || card->wandev.state == WAN_UNCONFIGURED) return;
+	if (!card || card->wandev.state == WAN_UNCONFIGURED)
+		return;
 
 	if (card->in_isr) {
 		printk(KERN_WARNING "%s: interrupt re-entrancy on IRQ %d!\n",
@@ -314,7 +315,8 @@ static void cycx_isr (int irq, void *dev_id, struct pt_regs *regs)
 		return;
 	}
 
-	if (card->isr) card->isr(card);
+	if (card->isr)
+		card->isr(card);
 #undef	card
 }
 
@@ -345,9 +347,9 @@ void cyclomx_close (cycx_t *card)
 /* Set WAN device state.  */
 void cyclomx_set_state (cycx_t *card, int state)
 {
-	unsigned long flags;
+	unsigned long host_cpu_flags;
 
-	save_flags(flags); cli();
+	spin_lock_irqsave(&card->lock, host_cpu_flags);
 
 	if (card->wandev.state != state) {
 		switch (state) {
@@ -371,7 +373,7 @@ void cyclomx_set_state (cycx_t *card, int state)
 	}
 
 	card->state_tick = jiffies;
-	restore_flags(flags);
+	spin_unlock_irqrestore(&card->lock, host_cpu_flags);
 }
 
 /* End */

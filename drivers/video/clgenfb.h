@@ -1,31 +1,36 @@
+/*
+ * drivers/video/clgenfb.h - Cirrus Logic chipset constants
+ *
+ * Copyright 1999 Jeff Garzik <jgarzik@pobox.com>
+ *
+ * Original clgenfb author:  Frank Neumann
+ *
+ * Based on retz3fb.c and clgen.c:
+ *      Copyright (C) 1997 Jes Sorensen
+ *      Copyright (C) 1996 Frank Neumann
+ *
+ ***************************************************************
+ *
+ * Format this code with GNU indent '-kr -i8 -pcs' options.
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file COPYING in the main directory of this archive
+ * for more details.
+ *
+ */
 
-/* definitions for Piccolo/SD64 VGA controller chip   */
-/* these definitions might most of the time also work */
-/* for other CL-GD542x/543x based boards..            */
+
+/* OLD COMMENT: definitions for Piccolo/SD64 VGA controller chip   */
+/* OLD COMMENT: these definitions might most of the time also work */
+/* OLD COMMENT: for other CL-GD542x/543x based boards..            */
 
 /*** External/General Registers ***/
 #define POS102	0x102  	/* POS102 register */
 #define VSSM	0x46e8 	/* Adapter Sleep */
 #define VSSM2	0x3c3	/* Motherboard Sleep */
-#define MISC_W	0x3c2	/* Miscellaneous Output register, write */
-#define MISC_R	0x3cc	/* Miscellaneous Output register, read */
-#define FC_W	0x3da	/* Feature Control Register, write (color) */
-#define FC_R	0x3ca	/* Feature Control Register, read */
-#define FEAT	0x3c2	/* Input Status Register 0 */
-#define STAT	0x3da	/* Input Status Register 1, read-only */
-#define M_3C6	0x3c6	/* Pixel Mask */
-#define M_3C7_W	0x3c7   /* Pixel Address Read Mode (write) */
-#define M_3C7_R	0x3c7	/* DAC State (read-only */
-#define M_3C8	0x3c8	/* Pixel Address Write Mode */
-#define M_3C9	0x3c9	/* Pixel Data */
 
 /*** VGA Sequencer Registers ***/
-#define SEQRX	0x3c4	/* Sequencer Index */
 #define SEQR0	0x0	/* Reset */
-#define SEQR1     0x1	/* Clocking Mode */
-#define SEQR2	0x2	/* Plane Mask / Write Pixel Extension */
-#define SEQR3	0x3	/* Character Map Select */
-#define SEQR4	0x4	/* Memory Mode */
 /* the following are from the "extension registers" group */
 #define SEQR6	0x6	/* Unlock ALL Extensions */
 #define SEQR7	0x7	/* Extended Sequencer Mode */
@@ -55,32 +60,6 @@
 #define SEQR1F	0x1f	/* BIOS ROM write enable and MCLK Select */
 
 /*** CRT Controller Registers ***/
-#define CRTX	0x3d4	/* CRTC Index */
-#define	CRT0	0x0	/* Horizontal Total */
-#define CRT1	0x1	/* Horizontal Display End */
-#define CRT2	0x2	/* Horizontal Blanking Start */
-#define CRT3	0x3	/* Horizontal Blabking End */
-#define CRT4	0x4	/* Horizontal Sync Start */
-#define CRT5	0x5	/* Horizontal Sync End */
-#define CRT6 	0x6	/* Vertical Total */
-#define CRT7	0x7	/* Overflow */
-#define CRT8	0x8	/* Screen A Preset Row Scan */
-#define CRT9	0x9	/* Character Cell Height */
-#define CRTA	0xa	/* Text Cursor Start */
-#define CRTB	0xb	/* Text Cursor End */
-#define CRTC	0xc	/* Screen Start Address High */
-#define CRTD	0xd	/* Screen Start Address Low */
-#define CRTE	0xe	/* Text Cursor Location High */
-#define CRTF	0xf	/* Text Cursor Location Low */
-#define CRT10	0x10	/* Vertical Sync Start */
-#define CRT11	0x11	/* Vertical Sync End */
-#define CRT12	0x12	/* Vertical Display End */
-#define CRT13	0x13	/* Offset */
-#define CRT14	0x14	/* Underline Row Scan */
-#define CRT15  	0x15	/* Vertical Blanking Start */
-#define CRT16	0x16	/* Vertical Blanking End */
-#define CRT17	0x17	/* Mode Control */
-#define CRT18	0x18	/* Line Compare */
 #define CRT22	0x22	/* Graphics Data Latches ReadBack */
 #define CRT24	0x24	/* Attribute Controller Toggle ReadBack */
 #define CRT26	0x26	/* Attribute Controller Index ReadBack */
@@ -95,16 +74,6 @@
 #define CRT51	0x51	/* P4 disable "flicker fixer" */
 
 /*** Graphics Controller Registers ***/
-#define GRX	0x3ce	/* Graphics Controller Index */
-#define GR0	0x0	/* Set/Reset, Write Mode 5 Background Extension */
-#define GR1	0x1	/* Set/Reset Enable, Write Mode 4, 5 Foreground Ext. */
-#define GR2	0x2	/* Color Compare */
-#define GR3	0x3	/* Data Rotate */
-#define GR4	0x4	/* Read Map Select */
-#define GR5	0x5	/* Mode */
-#define GR6	0x6	/* Miscellaneous */
-#define GR7	0x7     /* Color Don't Care */
-#define GR8	0x8	/* Bit Mask */
 /* the following are from the "extension registers" group */
 #define GR9	0x9	/* Offset Register 0 */
 #define GRA	0xa	/* Offset Register 1 */
@@ -145,31 +114,16 @@
 #define GR39	0x39	/* Source Transparent Color Mask High */
 
 /*** Attribute Controller Registers ***/
-#define ARX	0x3c0	/* Attribute Controller Index */
-#define AR0     0x0	/* Attribute Controller Palette Register 0 */
-#define AR1     0x1	/* Attribute Controller Palette Register 1 */
-#define AR2     0x2	/* Attribute Controller Palette Register 2 */
-#define AR3     0x3	/* Attribute Controller Palette Register 3 */
-#define AR4     0x4	/* Attribute Controller Palette Register 4 */
-#define AR5     0x5	/* Attribute Controller Palette Register 5 */
-#define AR6     0x6	/* Attribute Controller Palette Register 6 */
-#define AR7     0x7	/* Attribute Controller Palette Register 7 */
-#define AR8     0x8	/* Attribute Controller Palette Register 8 */
-#define AR9     0x9	/* Attribute Controller Palette Register 9 */
-#define ARA     0xa	/* Attribute Controller Palette Register 10 */
-#define ARB     0xb	/* Attribute Controller Palette Register 11 */
-#define ARC     0xc	/* Attribute Controller Palette Register 12 */
-#define ARD     0xd	/* Attribute Controller Palette Register 13 */
-#define ARE     0xe	/* Attribute Controller Palette Register 14 */
-#define ARF     0xf	/* Attribute Controller Palette Register 15 */
-#define AR10	0x10	/* Attribute Controller Mode Register */
-#define AR11	0x11	/* Overscan (Border) Color Register */
-#define AR12	0x12    /* Color Plane Enable Register */
-#define AR13	0x13	/* Pixel Panning Register */
-#define AR14	0x14	/* Color Select Register */
 #define AR33	0x33	/* The "real" Pixel Panning register (?) */
 #define AR34	0x34	/* *TEST* */
 
-/*** Extension Registers ***/
-#define HDR	0x3c6	/* Hidden DAC Register (Not CL-GD5420) */
+/* board types */
+#define BT_NONE     0
+#define BT_SD64     1
+#define BT_PICCOLO  2
+#define BT_PICASSO  3
+#define BT_SPECTRUM 4
+#define BT_PICASSO4 5
+#define BT_GD543X    6		/* Alpine family */
+#define BT_GD5480    7
 

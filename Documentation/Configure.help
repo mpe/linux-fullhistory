@@ -2311,7 +2311,7 @@ CONFIG_FBCON_MAC
 VGA characters/attributes support
 CONFIG_FBCON_VGA
   This is the low level frame buffer console driver for VGA text mode;
-  it is used if you said Y to "VGA chipset support (text only)" above.
+  it is used by frame buffer device drivers that support VGA text mode.
 
 Parallel-port support
 CONFIG_PARPORT
@@ -10262,6 +10262,20 @@ CONFIG_ISDN_X25
   connections. See Documentation/isdn/README.x25 for more information
   if you are thinking about using this.
 
+ISDN diversion services support
+CONFIG_ISDN_DIVERSION
+  This option allows you to use some supplementary diversion
+  services in conjunction with the HiSax driver on an EURO/DSS1
+  line. Supported options are CD (call deflection), CFU (Call 
+  forward unconditional), CFB (Call forward when busy) and CFNR 
+  (call forward not reachable).
+  Additionally the actual CFU, CFB and CFNR state may be 
+  interrogated. The use of CFU, CFB, CFNR and interrogation may
+  be limited to some countries. The keypad protocol is still not
+  implemented.
+  CD should work in all countries if this service has been sub-
+  scribed.
+
 ICN 2B and 4B support
 CONFIG_ISDN_DRV_ICN
   This enables support for two kinds of ISDN-cards made by a German
@@ -10487,6 +10501,30 @@ CONFIG_ISDN_DRV_SC
   http://www.spellcast.com for more information (to browse the WWW,
   you need to have access to a machine on the Internet that has a
   program like lynx or netscape).
+
+Eicon.Diehl active card support
+CONFIG_ISDN_DRV_EICON
+  Say Y here if you have an Eicon active ISDN card. In order to use
+  this card, additional firmware is necessary, which has to be loaded
+  into the card using the eiconctrl utility which is part of the latest
+  isdn4k-utils package. Please read the file
+  Documentation/isdn/README.eicon for more information.
+  
+Eicon old-type card support
+CONFIG_ISDN_DRV_EICON_ISA
+  Say Y here if you have an old-type Eicon active ISDN card. In order to
+  use this card, additional firmware is necessary, which has to be loaded
+  into the card using the eiconctrl utility which is part of the latest
+  isdn4k-utils package. Please read the file
+  Documentation/isdn/README.eicon for more information.
+
+Support AT-Fax Class 2 commands
+CONFIG_ISDN_TTY_FAX
+  If you say Y here, the modem-emulator will support a subset of the
+  Fax Class 2 commands. Using a getty with fax-support
+  (mgetty+sendfax, hylafax), you will be able to use your Linux box 
+  as an ISDN-fax-machine. This must be supported by the lowlevel driver
+  also. See Documentation/isdn/README.fax for more information.
 
 AVM-B1 with CAPI2.0 support
 CONFIG_ISDN_DRV_AVMB1
@@ -11968,10 +12006,29 @@ CONFIG_USB_ACM
   mknod /dev/ttyACM2 c 166 2
   mknod /dev/ttyACM3 c 166 3
 
+USB Printer Device Class support (Preliminary)
+CONFIG_USB_PRINTER
+  This is a generic driver for USB printers.
+
 USS720 parport driver
 CONFIG_USB_USS720
-  This driver is for USB parallel port adapters that use the USS-720
-  chip.
+  This driver is for USB parallel port adapters that use the 
+  Lucent Technologies USS-720 chip.
+  
+  The chip has two modes: automatic mode and manual mode.
+  In automatic mode, it looks like a standard USB printer. Only
+  Printers may be connected to the USS-720 in this mode.
+  The generic USB printer driver (CONFIG_USB_PRINTER, above)
+  may be used in that mode.
+
+  Manual mode is not limited to printers, any parallel port
+  device should work. This driver utilizes manual mode.
+  Note however that some operations are three orders of a magnitude
+  slower than on a PCI/ISA Parallel Port, so timing critical
+  applications might not work.
+
+  Say Y or M if you own an USS-720 USB->Parport cable and
+  intend to connect anything other than a printer to it. 
 
 USB /proc filesystem entry support (Preliminary)
 CONFIG_USB_PROC

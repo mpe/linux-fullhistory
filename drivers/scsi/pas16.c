@@ -73,7 +73,6 @@
  *     software after reset using the default_irq for the
  *     current board number.
  *
- *
  * 2.  With command line overrides - pas16=port,irq may be 
  *     used on the LILO command line to override the defaults.
  *
@@ -83,6 +82,11 @@
  *     -DPAS16_OVERRIDE={{0x388, 10}}
  *     NOTE:  Untested.
  *	
+ * 4.  When included as a module, with arguments passed on the command line:
+ *         pas16_irq=xx		the interrupt
+ *         pas16_addr=xx	the port
+ *     e.g. "modprobe pas16 pas16_addr=0x388 pas16_irq=5"
+ *
  *     Note that if the override methods are used, place holders must
  *     be specified for other boards in the system.
  *
@@ -99,7 +103,11 @@
  *   interrupts.  Ie, for a board at the default 0x388 base port,
  *   boot: linux pas16=0x388,255
  *
- *     (255 is the IRQ_NONE constant in NCR5380.h)
+ *   IRQ_NONE (255) should be specified for no interrupt,
+ *   IRQ_AUTO (254) to autoprobe for an IRQ line if overridden
+ *   on the command line.
+ *
+ *   (IRQ_AUTO == 254, IRQ_NONE == 255 in NCR5380.h)
  */
  
 #ifdef MODULE
@@ -129,6 +137,8 @@ struct proc_dir_entry proc_scsi_pas16 = {
 };
 static int pas_maxi = 0;
 static int pas_wmaxi = 0;
+static unsigned short pas16_addr = 0;
+static int pas16_irq = 0;
  
 
 int scsi_irq_translate[] =
@@ -385,6 +395,22 @@ int __init pas16_detect(Scsi_Host_Template * tpnt)
     tpnt->proc_dir = &proc_scsi_pas16;
     tpnt->proc_info = &pas16_proc_info;
 
+    if (pas16_addr != 0) {
+	overrides[0].io_port = pas16_addr;
+	/*
+	*  This is how we avoid seeing more than
+	*  one host adapter at the same I/O port.
+	*  Cribbed shamelessly from pas16_setup().
+	*/
+	for (count = 0; count < NO_BASES; ++count)
+	    if (bases[count].io_port == pas16_addr) {
+ 		    bases[count].noauto = 1;
+		    break;
+	}
+    }
+    if (pas16_irq != 0)
+	overrides[0].irq = pas16_irq;
+
     for (count = 0; current_override < NO_OVERRIDES; ++current_override) {
 	io_port = 0;
 
@@ -580,4 +606,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
 Scsi_Host_Template driver_template = MV_PAS16;
 
 #include "scsi_module.c"
+
+MODULE_PARM(pas16_addr, "h");
+MODULE_PARM(pas16_irq, "i");
 #endif

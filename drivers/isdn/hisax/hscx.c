@@ -1,4 +1,4 @@
-/* $Id: hscx.c,v 1.16 1998/11/15 23:54:48 keil Exp $
+/* $Id: hscx.c,v 1.17 1999/07/01 08:11:41 keil Exp $
 
  * hscx.c   HSCX specific routines
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: hscx.c,v $
+ * Revision 1.17  1999/07/01 08:11:41  keil
+ * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
+ *
  * Revision 1.16  1998/11/15 23:54:48  keil
  * changes from 2.0
  *
@@ -110,12 +113,12 @@ modehscx(struct BCState *bcs, int mode, int bc)
 
 	if (bc == 0) {
 		cs->BC_Write_Reg(cs, hscx, HSCX_TSAX,
-			      test_bit(HW_IOM1, &cs->HW_Flags) ? 0x7 : 0x2f);
+			      test_bit(HW_IOM1, &cs->HW_Flags) ? 0x7 : bcs->hw.hscx.tsaxr0);
 		cs->BC_Write_Reg(cs, hscx, HSCX_TSAR,
-			      test_bit(HW_IOM1, &cs->HW_Flags) ? 0x7 : 0x2f);
+			      test_bit(HW_IOM1, &cs->HW_Flags) ? 0x7 : bcs->hw.hscx.tsaxr0);
 	} else {
-		cs->BC_Write_Reg(cs, hscx, HSCX_TSAX, 0x3);
-		cs->BC_Write_Reg(cs, hscx, HSCX_TSAR, 0x3);
+		cs->BC_Write_Reg(cs, hscx, HSCX_TSAX, bcs->hw.hscx.tsaxr1);
+		cs->BC_Write_Reg(cs, hscx, HSCX_TSAR, bcs->hw.hscx.tsaxr1);
 	}
 	switch (mode) {
 		case (L1_MODE_NULL):
@@ -216,7 +219,7 @@ close_hscxstate(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}
@@ -301,6 +304,10 @@ inithscx(struct IsdnCardState *cs))
 	cs->bcs[1].BC_Close = close_hscxstate;
 	cs->bcs[0].hw.hscx.hscx = 0;
 	cs->bcs[1].hw.hscx.hscx = 1;
+	cs->bcs[0].hw.hscx.tsaxr0 = 0x2f;
+	cs->bcs[0].hw.hscx.tsaxr1 = 3;
+	cs->bcs[1].hw.hscx.tsaxr0 = 0x2f;
+	cs->bcs[1].hw.hscx.tsaxr1 = 3;
 	modehscx(cs->bcs, 0, 0);
 	modehscx(cs->bcs + 1, 0, 0);
 }

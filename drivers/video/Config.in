@@ -6,6 +6,7 @@ if [ "$CONFIG_FB" = "y" ]; then
   define_bool CONFIG_DUMMY_CONSOLE y
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_PCI" = "y" ]; then
+      tristate 'Cirrus Logic suport' CONFIG_FB_CLGEN
       bool 'Permedia2 support (experimental)' CONFIG_FB_PM2
       if [ "$CONFIG_FB_PM2" = "y" ]; then
         if [ "$CONFIG_PCI" = "y" ]; then
@@ -43,7 +44,6 @@ if [ "$CONFIG_FB" = "y" ]; then
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool 'Amiga CyberVision3D support (experimental)' CONFIG_FB_VIRGE
       tristate 'Amiga RetinaZ3 support' CONFIG_FB_RETINAZ3
-      tristate 'Amiga CLgen driver' CONFIG_FB_CLGEN
       bool 'Amiga FrameMaster II/Rainbow II support (experimental)' CONFIG_FB_FM2
     fi
   fi

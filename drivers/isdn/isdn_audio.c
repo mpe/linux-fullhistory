@@ -1,4 +1,4 @@
-/* $Id: isdn_audio.c,v 1.13 1999/04/12 12:33:09 fritz Exp $
+/* $Id: isdn_audio.c,v 1.16 1999/08/06 12:47:35 calle Exp $
 
  * Linux ISDN subsystem, audio conversion and compression (linklevel).
  *
@@ -21,6 +21,27 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_audio.c,v $
+ * Revision 1.16  1999/08/06 12:47:35  calle
+ * Using __GNUC__ == 2 && __GNUC_MINOR__ < 95 how to define
+ *   ISDN_AUDIO_OPTIMIZE_ON_X386_WITH_ASM_IF_GCC_ALLOW_IT
+ *
+ * Revision 1.15  1999/08/06 12:02:52  calle
+ * egcs 2.95 complain about invalid asm statement:
+ *    "fixed or forbidden register 2 (cx) was spilled for class CREG."
+ * Using ISDN_AUDIO_OPTIMIZE_ON_X386_WITH_ASM_IF_GCC_ALLOW_IT and not
+ * define it at the moment.
+ *
+ * Revision 1.14  1999/07/11 17:14:06  armin
+ * Added new layer 2 and 3 protocols for Fax and DSP functions.
+ * Moved "Add CPN to RING message" to new register S23,
+ * "Display message" is now correct on register S13 bit 7.
+ * New audio command AT+VDD implemented (deactivate DTMF decoder and
+ * activate possible existing hardware/DSP decoder).
+ * Moved some tty defines to .h file.
+ * Made whitespace possible in AT command line.
+ * Some AT-emulator output bugfixes.
+ * First Fax G3 implementations.
+ *
  * Revision 1.13  1999/04/12 12:33:09  fritz
  * Changes from 2.0 tree.
  *
@@ -71,7 +92,7 @@
 #include "isdn_audio.h"
 #include "isdn_common.h"
 
-char *isdn_audio_revision = "$Revision: 1.13 $";
+char *isdn_audio_revision = "$Revision: 1.16 $";
 
 /*
  * Misc. lookup-tables.
@@ -268,7 +289,18 @@ static char dtmf_matrix[4][4] =
 	{'*', '0', '#', 'D'}
 };
 
-#if ((CPU == 386) || (CPU == 486) || (CPU == 586))
+
+/*
+ * egcs 2.95 complain about invalid asm statement:
+ * "fixed or forbidden register 2 (cx) was spilled for class CREG."
+ */
+#if ((CPU == 386) || (CPU == 486) || (CPU == 586)) || defined(__GNUC__)
+#if __GNUC__ == 2 && __GNUC_MINOR__ < 95
+#define ISDN_AUDIO_OPTIMIZE_ON_X386_WITH_ASM_IF_GCC_ALLOW_IT
+#endif
+#endif
+
+#ifdef ISDN_AUDIO_OPTIMIZE_ON_X386_WITH_ASM_IF_GCC_ALLOW_IT
 static inline void
 isdn_audio_tlookup(const void *table, void *buff, unsigned long n)
 {
@@ -711,15 +743,50 @@ isdn_audio_calc_silence(modem_info * info, unsigned char *buf, int len, int fmt)
 }
 
 void
-isdn_audio_eval_silence(modem_info * info)
+isdn_audio_put_dle_code(modem_info * info, u_char code)
 {
-	silence_state *s = info->silence_state;
 	struct sk_buff *skb;
 	unsigned long flags;
 	int di;
 	int ch;
-	char what;
 	char *p;
+
+	skb = dev_alloc_skb(2);
+	if (!skb) {
+		printk(KERN_WARNING
+		  "isdn_audio: Could not alloc skb for ttyI%d\n",
+		       info->line);
+		return;
+	}
+	p = (char *) skb_put(skb, 2);
+	p[0] = 0x10;
+	p[1] = code;
+	if (skb_headroom(skb) < sizeof(isdn_audio_skb)) {
+		printk(KERN_WARNING
+		       "isdn_audio: insufficient skb_headroom, dropping\n");
+		kfree_skb(skb);
+		return;
+	}
+	ISDN_AUDIO_SKB_DLECOUNT(skb) = 0;
+	ISDN_AUDIO_SKB_LOCK(skb) = 0;
+	save_flags(flags);
+	cli();
+	di = info->isdn_driver;
+	ch = info->isdn_channel;
+	__skb_queue_tail(&dev->drv[di]->rpqueue[ch], skb);
+	dev->drv[di]->rcvcount[ch] += 2;
+	restore_flags(flags);
+	/* Schedule dequeuing */
+	if ((dev->modempoll) && (info->rcvsched))
+		isdn_timer_ctrl(ISDN_TIMER_MODEMREAD, 1);
+	wake_up_interruptible(&dev->drv[di]->rcv_waitq[ch]);
+}
+
+void
+isdn_audio_eval_silence(modem_info * info)
+{
+	silence_state *s = info->silence_state;
+	char what;
 
 	what = ' ';
 
@@ -734,28 +801,6 @@ isdn_audio_eval_silence(modem_info * info)
 		if ((what == 's') || (what == 'q')) {
 			printk(KERN_DEBUG "ttyI%d: %s\n", info->line,
 				(what=='s') ? "silence":"quiet");
-			skb = dev_alloc_skb(2);
-			p = (char *) skb_put(skb, 2);
-			p[0] = 0x10;
-			p[1] = what;
-			if (skb_headroom(skb) < sizeof(isdn_audio_skb)) {
-				printk(KERN_WARNING
-				       "isdn_audio: insufficient skb_headroom, dropping\n");
-				kfree_skb(skb);
-				return;
-			}
-			ISDN_AUDIO_SKB_DLECOUNT(skb) = 0;
-			ISDN_AUDIO_SKB_LOCK(skb) = 0;
-			save_flags(flags);
-			cli();
-			di = info->isdn_driver;
-			ch = info->isdn_channel;
-			__skb_queue_tail(&dev->drv[di]->rpqueue[ch], skb);
-			dev->drv[di]->rcvcount[ch] += 2;
-			restore_flags(flags);
-			/* Schedule dequeuing */
-			if ((dev->modempoll) && (info->rcvsched))
-				isdn_timer_ctrl(ISDN_TIMER_MODEMREAD, 1);
-			wake_up_interruptible(&dev->drv[di]->rcv_waitq[ch]);
+			isdn_audio_put_dle_code(info, what);
 		} 
 }

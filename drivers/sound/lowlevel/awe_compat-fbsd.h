@@ -49,9 +49,9 @@
 
 /* reading configuration of sound driver */
 
+#include <i386/isa/sound/sound_config.h>
 #ifdef AWE_OBSOLETE_VOXWARE
 
-#include <i386/isa/sound/sound_config.h>
 #if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_AWE32)
 #define CONFIG_AWE32_SYNTH
 #endif
@@ -62,7 +62,6 @@
 #include "lowlevel.h"
 #endif
 
-#include <i386/isa/sound/sound_config.h>
 #if defined(CONFIGURE_SOUNDCARD) && defined(CONFIG_AWE32)
 #  define CONFIG_AWE32_SYNTH
 #endif

@@ -2745,14 +2745,14 @@ atafb_blank(int blank, struct fb_info *info)
 		do_install_cmap(currcon, info);
 }
 
-void __init atafb_init(void)
+int __init atafb_init(void)
 {
 	int pad;
 	int detected_mode;
 	unsigned long mem_req;
 
 	if (!MACH_IS_ATARI)
-	        return;
+	        return -ENXIO;
 
 	do {
 #ifdef ATAFB_EXT
@@ -2858,7 +2858,7 @@ void __init atafb_init(void)
 	do_install_cmap(0, &fb_info);
 
 	if (register_framebuffer(&fb_info) < 0)
-		return;
+		return -EINVAL;
 
 	printk("Determined %dx%d, depth %d\n",
 	       disp.var.xres, disp.var.yres, disp.var.bits_per_pixel);
@@ -2871,6 +2871,8 @@ void __init atafb_init(void)
 
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
+
+	return 0;
 }
 
 /* a strtok which returns empty strings, too */
@@ -2895,7 +2897,7 @@ static char * strtoke(char * s,const char * ct)
   return sbegin;
 }
 
-void __init atafb_setup( char *options, int *ints )
+int __init atafb_setup( char *options )
 {
     char *this_opt;
     int temp;
@@ -2910,7 +2912,7 @@ void __init atafb_setup( char *options, int *ints )
 	fb_info.fontname[0] = '\0';
 
     if (!options || !*options)
-		return;
+		return 0;
      
     for(this_opt=strtok(options,","); this_opt; this_opt=strtok(NULL,",")) {
 	if (!*this_opt) continue;
@@ -3146,13 +3148,13 @@ void __init atafb_setup( char *options, int *ints )
 	  user_invalid:
 		;
 	}
+	return 0;
 }
 
 #ifdef MODULE
 int init_module(void)
 {
-	atafb_init();
-	return 0;
+	return atafb_init();
 }
 
 void cleanup_module(void)

@@ -44,65 +44,65 @@
      *  Frame buffer device initialization and setup routines
      */
 
-extern void acornfb_init(void);
-extern void acornfb_setup(char *options, int *ints);
-extern void amifb_init(void);
-extern void amifb_setup(char *options, int *ints);
-extern void atafb_init(void);
-extern void atafb_setup(char *options, int *ints);
-extern void macfb_init(void);
-extern void macfb_setup(char *options, int *ints);
-extern void cyberfb_init(void);
-extern void cyberfb_setup(char *options, int *ints);
-extern void pm2fb_init(void);
-extern void pm2fb_setup(char *options, int *ints);
-extern void cyber2000fb_init(void);
-extern void cyber2000fb_setup(char *options, int *ints);
-extern void retz3fb_init(void);
-extern void retz3fb_setup(char *options, int *ints);
-extern void clgenfb_init(void);
-extern void clgenfb_setup(char *options, int *ints);
-extern void vfb_init(void);
-extern void vfb_setup(char *options, int *ints);
-extern void offb_init(void);
-extern void offb_setup(char *options, int *ints);
-extern void atyfb_init(void);
-extern void atyfb_setup(char *options, int *ints);
-extern void igafb_init(void);
-extern void igafb_setup(char *options, int *ints);
-extern void imsttfb_init(void);
-extern void imsttfb_setup(char *options, int *ints);
-extern void dnfb_init(void);
-extern void tgafb_init(void);
-extern void tgafb_setup(char *options, int *ints);
-extern void virgefb_init(void);
-extern void virgefb_setup(char *options, int *ints);
-extern void resolver_video_setup(char *options, int *ints);
-extern void s3triofb_init(void);
-extern void s3triofb_setup(char *options, int *ints);
-extern void vesafb_init(void);
-extern void vesafb_setup(char *options, int *ints);
-extern void vga16fb_init(void);
-extern void vga16fb_setup(char *options, int *ints);
-extern void matroxfb_init(void);
-extern void matroxfb_setup(char* options, int *ints);
-extern void hpfb_init(void);
-extern void hpfb_setup(char *options, int *ints);
-extern void sbusfb_init(void);
-extern void sbusfb_setup(char *options, int *ints);
-extern void valkyriefb_init(void);
-extern void valkyriefb_setup(char *options, int *ints);
-extern void g364fb_init(void);
-extern void fm2fb_init(void);
-extern void fm2fb_setup(char *options, int *ints);
-extern void q40fb_init(void);
-extern void sgivwfb_init(void);
-extern void sgivwfb_setup(char* options, int *ints);
+extern int acornfb_init(void);
+extern int acornfb_setup(char*);
+extern int amifb_init(void);
+extern int amifb_setup(char*);
+extern int atafb_init(void);
+extern int atafb_setup(char*);
+extern int macfb_init(void);
+extern int macfb_setup(char*);
+extern int cyberfb_init(void);
+extern int cyberfb_setup(char*);
+extern int pm2fb_init(void);
+extern int pm2fb_setup(char*);
+extern int cyber2000fb_init(void);
+extern int cyber2000fb_setup(char*);
+extern int retz3fb_init(void);
+extern int retz3fb_setup(char*);
+extern int clgenfb_init(void);
+extern int clgenfb_setup(char*);
+extern int vfb_init(void);
+extern int vfb_setup(char*);
+extern int offb_init(void);
+extern int offb_setup(char*);
+extern int atyfb_init(void);
+extern int atyfb_setup(char*);
+extern int igafb_init(void);
+extern int igafb_setup(char*);
+extern int imsttfb_init(void);
+extern int imsttfb_setup(char*);
+extern int dnfb_init(void);
+extern int tgafb_init(void);
+extern int tgafb_setup(char*);
+extern int virgefb_init(void);
+extern int virgefb_setup(char*);
+extern int resolver_video_setup(char*);
+extern int s3triofb_init(void);
+extern int s3triofb_setup(char*);
+extern int vesafb_init(void);
+extern int vesafb_setup(char*);
+extern int vga16fb_init(void);
+extern int vga16fb_setup(char*);
+extern int matroxfb_init(void);
+extern int matroxfb_setup(char*);
+extern int hpfb_init(void);
+extern int hpfb_setup(char*);
+extern int sbusfb_init(void);
+extern int sbusfb_setup(char*);
+extern int valkyriefb_init(void);
+extern int valkyriefb_setup(char*);
+extern int g364fb_init(void);
+extern int fm2fb_init(void);
+extern int fm2fb_setup(char*);
+extern int q40fb_init(void);
+extern int sgivwfb_init(void);
+extern int sgivwfb_setup(char*);
 
 static struct {
 	const char *name;
-	void (*init)(void);
-	void (*setup)(char *options, int *ints);
+	int (*init)(void);
+	int (*setup)(char*);
 } fb_drivers[] __initdata = {
 #ifdef CONFIG_FB_SGIVW
 	{ "sgivw", sgivwfb_init, sgivwfb_setup },
@@ -197,7 +197,7 @@ static struct {
 
 #define NUM_FB_DRIVERS	(sizeof(fb_drivers)/sizeof(*fb_drivers))
 
-static void (*pref_init_funcs[FB_MAX])(void);
+static initcall_t pref_init_funcs[FB_MAX];
 static int num_pref_init_funcs __initdata = 0;
 
 
@@ -214,7 +214,7 @@ static int first_fb_vc = 0;
 static int last_fb_vc = MAX_NR_CONSOLES-1;
 static int fbcon_is_default = 1;
 
-static int PROC_CONSOLE(struct fb_info *info)
+static int PROC_CONSOLE(const struct fb_info *info)
 {
 	int fgc;
 	
@@ -679,12 +679,12 @@ int fbmon_dpms(const struct fb_info *fb_info)
      *  Command line options
      */
 
-void __init video_setup(char *options, int *ints)
+int __init video_setup(char *options)
 {
     int i, j;
 
     if (!options || !*options)
-	    return;
+	    return 0;
 	    
     if (!strncmp(options, "scrollback:", 11)) {
 	    options += 11;
@@ -695,10 +695,10 @@ void __init video_setup(char *options, int *ints)
 			options++;
 		}
 		if (*options != ',')
-			return;
+			return 0;
 		options++;
 	    } else
-	        return;
+	        return 0;
     }
 
     if (!strncmp(options, "map:", 4)) {
@@ -709,7 +709,7 @@ void __init video_setup(char *options, int *ints)
 				    j = 0;
 			    con2fb_map[i] = (options[j++]-'0') % FB_MAX;
 		    }
-	    return;
+	    return 0;
     }
     
     if (!strncmp(options, "vc:", 3)) {
@@ -724,7 +724,7 @@ void __init video_setup(char *options, int *ints)
     }
 
     if (num_pref_init_funcs == FB_MAX)
-	    return;
+	    return 0;
 
     for (i = 0; i < NUM_FB_DRIVERS; i++) {
 	    j = strlen(fb_drivers[i].name);
@@ -739,9 +739,9 @@ void __init video_setup(char *options, int *ints)
 				    fb_drivers[i].init = NULL;
 			    }
 			    if (fb_drivers[i].setup)
-				    fb_drivers[i].setup(options+j+1, ints);
+				    fb_drivers[i].setup(options+j+1);
 		    }
-		    return;
+		    return 0;
 	    }
     }
     /*
@@ -755,12 +755,14 @@ void __init video_setup(char *options, int *ints)
 			    fb_drivers[i].init;
 		    fb_drivers[i].init = NULL;
 
-		    fb_drivers[i].setup(options, ints);
-		    return;
+		    fb_drivers[i].setup(options);
+		    return 0;
 	    }
     }
+    return 0;
 }
 
+__setup("video=", video_setup);
 
     /*
      *  Visible symbols for modules

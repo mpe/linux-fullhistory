@@ -266,7 +266,7 @@ struct ohci_ed *ohci_get_periodic_ed(struct ohci_device *dev, int period,
 	int_ed = &root_hub->ed[ms_to_ed_int(period)];
 
 	/* decide on what the status field should look like */
-	req_status = ed_set_maxpacket(usb_maxpacket(ohci_to_usb(dev), pipe))
+	req_status = ed_set_maxpacket(usb_maxpacket(ohci_to_usb(dev), pipe, usb_pipeout(pipe)))
 		| ed_set_speed(usb_pipeslow(pipe))
 		| (usb_pipe_endpdev(pipe) & 0x7ff)
 		| ed_set_type_isoc(isoc);
@@ -943,7 +943,7 @@ static void* ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	struct ohci_device *dev = usb_to_ohci(usb);
 	struct ohci_td *td;
 	struct ohci_ed *interrupt_ed;	/* endpoint descriptor for this irq */
-	int maxps = usb_maxpacket(usb, pipe);
+	int maxps = usb_maxpacket(usb, pipe, usb_pipeout(pipe));
 	unsigned long flags;
 
 	/* Get an ED and TD */
@@ -1120,8 +1120,8 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
 	 * device number (function address), and type of TD.
 	 *
 	 */
-	ohci_fill_ed(dev, control_ed, usb_maxpacket(usb,pipe), usb_pipeslow(pipe),
-		usb_pipe_endpdev(pipe), 0 /* normal TDs */);
+	ohci_fill_ed(dev, control_ed, usb_maxpacket(usb, pipe, usb_pipeout(pipe)),
+		usb_pipeslow(pipe), usb_pipe_endpdev(pipe), 0 /* normal TDs */);
 
 	/*
 	 * Build the control TD
@@ -1398,7 +1398,7 @@ static struct ohci_ed* ohci_request_bulk(struct ohci_bulk_request_state *bulk_re
 	/* Set the max packet size, device speed, endpoint number, usb
 	 * device number (function address), and type of TD. */
 	ohci_fill_ed(dev, bulk_ed,
-		usb_maxpacket(usb_dev, pipe),
+		usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe)),
 		usb_pipeslow(pipe),
 		usb_pipe_endpdev(pipe), 0 /* bulk uses normal TDs */);
 
@@ -1480,7 +1480,7 @@ static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	if (bytes_transferred_p)
 		*bytes_transferred_p = 0;
 
-	if (usb_endpoint_halted(usb_dev, usb_pipeendpoint(pipe))
+	if (usb_endpoint_halted(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe))
 	    && usb_clear_halt(usb_dev, usb_pipeendpoint(pipe) | (pipe & 0x80)))
 		return USB_ST_STALL;
 
@@ -1979,6 +1979,23 @@ static struct ohci_td * ohci_reverse_donelist(struct ohci * ohci)
 	return td_list;
 } /* ohci_reverse_donelist() */
 
+/*
+ * Look at the ed (and td if necessary)
+ * and return its direction as 0 = IN, 1 = OUT.
+ */
+int ed_get_dir (struct ohci_ed *ed, struct ohci_td *td)
+{
+	__u32 status;
+	
+	status = le32_to_cpu(ed->status) & OHCI_ED_D; /* keep only the Direction bits */	
+	if (status == OHCI_ED_D_IN) return 0;
+	if (status == OHCI_ED_D_OUT) return 1;
+	
+	/* but if status == 0 or 3, look at the td for the Direction */
+	status = le32_to_cpu(td->info) & OHCI_TD_D; /* keep only the Direction bits */
+	if (status == OHCI_TD_D_IN) return 0;
+	return 1;
+}
 
 /*
  * Collect this interrupt's goodies off of the list of finished TDs
@@ -2017,7 +2034,7 @@ static void ohci_reap_donelist(struct ohci *ohci)
 
 		if (cc == USB_ST_STALL) {
 			/* mark endpoint as halted */
-			usb_endpoint_halt(ed->ohci_dev->usb, ed_get_en(ed));
+			usb_endpoint_halt(ed->ohci_dev->usb, ed_get_en(ed), ed_get_dir(ed, td));
 		}
 
 		if (cc != 0 && ohci_ed_halted(ed) && !td_endofchain(*td)) {

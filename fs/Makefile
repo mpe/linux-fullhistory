@@ -18,7 +18,9 @@ O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
 		hpfs sysv smbfs ncpfs ufs efs affs romfs autofs hfs lockd \
-		nfsd nls devpts adfs qnx4
+		nfsd nls devpts adfs partitions qnx4
+
+SUB_DIRS := partitions
 
 ifeq ($(CONFIG_QUOTA),y)
 O_OBJS += dquot.o

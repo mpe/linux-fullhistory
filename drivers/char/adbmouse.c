@@ -40,7 +40,7 @@
 #ifdef __powerpc__
 #include <asm/processor.h>
 #endif
-#ifdef __mc68000__
+#if defined(__mc68000__) || defined(MODULE)
 #include <asm/setup.h>
 #endif
 
@@ -186,8 +186,6 @@ __initfunc(void adb_mouse_setup(char *str, int *ints))
 }
 
 #ifdef MODULE
-#include <asm/setup.h>
-
 int init_module(void)
 {
 	return adb_mouse_init();

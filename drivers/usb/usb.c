@@ -510,18 +510,10 @@ void usb_destroy_configuration(struct usb_device *dev)
 	}
 	kfree(dev->config);
 
-	for (i = 1; i < USB_MAXSTRINGS; ++i) {
-		if (dev->stringindex[i]) {
-			kfree(dev->stringindex[i]);
-			dev->stringindex[i] = 0;
-		}
-	}
-#if 0
-	if (dev->stringindex)
-		kfree(dev->stringindex);
-	if (dev->stringtable)
-		kfree(dev->stringtable);
-#endif
+	if (dev->string) {
+		kfree(dev->string);
+		dev->string = 0;
+ 	}
 }
 			
 void usb_init_root_hub(struct usb_device *dev)
@@ -718,19 +710,27 @@ static void usb_set_maxpacket(struct usb_device *dev)
 		int e;
 
 		for (e=0; e<ip->bNumEndpoints; e++) {
-			dev->epmaxpacket[ep[e].bEndpointAddress & 0x0f] =
-				ep[e].wMaxPacketSize;
+			if (usb_endpoint_out(ep[e].bEndpointAddress))
+				dev->epmaxpacketout[ep[e].bEndpointAddress & 0x0f] =
+					ep[e].wMaxPacketSize;
+			else
+				dev->epmaxpacketin [ep[e].bEndpointAddress & 0x0f] =
+					ep[e].wMaxPacketSize;
 		}
 	}
 }
 
+/*
+ * endp: endpoint number in bits 0-3;
+ *	direction flag in bit 7 (1 = IN, 0 = OUT)
+ */
 int usb_clear_halt(struct usb_device *dev, int endp)
 {
 	devrequest dr;
 	int result;
 	__u16 status;
 
-    	//if (!usb_endpoint_halted(dev, endp))
+    	//if (!usb_endpoint_halted(dev, endp & 0x0f, usb_endpoint_out(endp)))
 	//	return 0;
 
 	dr.requesttype = USB_RT_ENDPOINT;
@@ -741,11 +741,11 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 
 	result = dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev,0), &dr, NULL, 0);
 
-	/* dont clear if failed */
+	/* don't clear if failed */
 	if (result)
 	    return result;
 
-#if 1	/* lets be really tough */
+#if 1	/* let's be really tough */
 	dr.requesttype = 0x80 | USB_RT_ENDPOINT;
 	dr.request = USB_REQ_GET_STATUS;
 	dr.length = 2;
@@ -758,11 +758,11 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 	if (status & 1)
 	    return 1;		/* still halted */
 #endif
-	usb_endpoint_running(dev, endp & 0x0f);
+	usb_endpoint_running(dev, endp & 0x0f, usb_endpoint_out(endp));
 
 	/* toggle is reset on clear */
 
-	usb_settoggle(dev, endp & 0x0f, ((endp >> 7) & 1) ^ 1, 0);
+	usb_settoggle(dev, endp & 0x0f, usb_endpoint_out(endp), 0);
 
 	return 0;
 }
@@ -874,62 +874,6 @@ int usb_get_configuration(struct usb_device *dev)
 	return parse;
 }
 
-#if 0
-int usb_get_stringtable(struct usb_device *dev)
-{
-	int i;
-	int maxindex;
-	int langid;
-	unsigned char buffer[256];
-	int totalchars;
-	struct usb_string_descriptor *sd = (struct usb_string_descriptor *)buffer;
-	char *string;
-	__u8 bLengths[USB_MAXSTRINGS+1];
-	int j;
-
-	dev->maxstring = 0;
-	if(usb_get_string(dev, 0, 0, buffer, 2) ||
-	   usb_get_string(dev, 0, 0, buffer, sd->bLength))
-		return -1;
-	/* we are going to assume that the first ID is good */
-	langid = le16_to_cpup(&sd->wData[0]);
-
-	/* whip through and find total length and max index */
-	for (maxindex = 1, totalchars = 0; maxindex<=USB_MAXSTRINGS; maxindex++) {
-		if(usb_get_string(dev, langid, maxindex, buffer, 2))
-			break;
-		totalchars += (sd->bLength - 2)/2 + 1;
-		bLengths[maxindex] = sd->bLength;
-	}
-	if (--maxindex <= 0)
-		return -1;
-
-	/* get space for strings and index */
-	dev->stringindex = kmalloc(sizeof(char *) * (maxindex+1), GFP_KERNEL);
-	if (!dev->stringindex)
-		return -1;
-	dev->stringtable = kmalloc(totalchars, GFP_KERNEL);
-	if (!dev->stringtable) {
-		kfree(dev->stringindex);
-		dev->stringindex = NULL;
-		return -1;
-	}
-
-	/* fill them in */
-	memset(dev->stringindex, 0, sizeof(char *) * (maxindex+1));
-	for (i=1, string = dev->stringtable; i <= maxindex; i++) {
-		if (usb_get_string(dev, langid, i, buffer, bLengths[i]))
-			continue;
-		dev->stringindex[i] = string;
-		for (j=0; j < (bLengths[i] - 2)/2; j++) {
-			*string++ = le16_to_cpup(&sd->wData[j]);
-		}
-		*string++ = '\0';
-	}
-	dev->maxstring = maxindex;
-	return 0;
-}
-#endif
 
 char *usb_string(struct usb_device *dev, int index)
 {
@@ -940,10 +884,10 @@ char *usb_string(struct usb_device *dev, int index)
 		struct usb_string_descriptor desc;
 	} u;
 
-	if (index <= 0 || index >= USB_MAXSTRINGS)
+	if (index <= 0)
 		return 0;
-	if (dev->stringindex[index] != 0)
-		return dev->stringindex[index];
+	if (dev->string)
+		kfree (dev->string);
 
 	if (dev->string_langid == 0) {
 		/* read string descriptor 0 */
@@ -968,7 +912,7 @@ char *usb_string(struct usb_device *dev, int index)
 		ptr[i] = le16_to_cpup(&u.desc.wData[i]);
 	ptr[i] = 0;
 
-	dev->stringindex[index] = ptr;
+	dev->string = ptr;
 	return ptr;
 }
 
@@ -985,7 +929,8 @@ int usb_new_device(struct usb_device *dev)
 		dev->devnum);
 
 	dev->maxpacketsize = 0;		/* Default to 8 byte max packet size */
-        dev->epmaxpacket[0] = 8;
+	dev->epmaxpacketin [0] = 8;
+	dev->epmaxpacketout[0] = 8;
 
 	/* We still haven't set the Address yet */
 	addr = dev->devnum;
@@ -998,7 +943,8 @@ int usb_new_device(struct usb_device *dev)
 		return 1;
 	}
 
-	dev->epmaxpacket[0] = dev->descriptor.bMaxPacketSize0;
+	dev->epmaxpacketin [0] = dev->descriptor.bMaxPacketSize0;
+	dev->epmaxpacketout[0] = dev->descriptor.bMaxPacketSize0;
 	switch (dev->descriptor.bMaxPacketSize0) {
 		case 8: dev->maxpacketsize = 0; break;
 		case 16: dev->maxpacketsize = 1; break;

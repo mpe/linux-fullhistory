@@ -1,4 +1,4 @@
-/* $Id: avm_a1.c,v 2.10 1998/11/15 23:54:21 keil Exp $
+/* $Id: avm_a1.c,v 2.11 1999/07/12 21:04:54 keil Exp $
 
  * avm_a1.c     low level stuff for AVM A1 (Fritz) isdn cards
  *
@@ -6,6 +6,10 @@
  *
  *
  * $Log: avm_a1.c,v $
+ * Revision 2.11  1999/07/12 21:04:54  keil
+ * fix race in IRQ handling
+ * added watchdog for lost IRQs
+ *
  * Revision 2.10  1998/11/15 23:54:21  keil
  * changes from 2.0
  *
@@ -66,7 +70,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-static const char *avm_revision = "$Revision: 2.10 $";
+static const char *avm_revision = "$Revision: 2.11 $";
 
 #define	 AVM_A1_STAT_ISAC	0x01
 #define	 AVM_A1_STAT_HSCX	0x02
@@ -153,7 +157,7 @@ static void
 avm_a1_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *cs = dev_id;
-	u_char val, sval, stat = 0;
+	u_char val, sval;
 
 	if (!cs) {
 		printk(KERN_WARNING "AVM A1: Spurious interrupt!\n");
@@ -167,29 +171,21 @@ avm_a1_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			debugl1(cs, "avm IntStatus %x", sval);
 		if (!(sval & AVM_A1_STAT_HSCX)) {
 			val = readreg(cs->hw.avm.hscx[1], HSCX_ISTA);
-			if (val) {
+			if (val)
 				hscx_int_main(cs, val);
-				stat |= 1;
-			}
 		}
 		if (!(sval & AVM_A1_STAT_ISAC)) {
 			val = readreg(cs->hw.avm.isac, ISAC_ISTA);
-			if (val) {
+			if (val)
 				isac_interrupt(cs, val);
-				stat |= 2;
-			}
 		}
 	}
-	if (stat & 1) {
-		writereg(cs->hw.avm.hscx[0], HSCX_MASK, 0xFF);
-		writereg(cs->hw.avm.hscx[1], HSCX_MASK, 0xFF);
-		writereg(cs->hw.avm.hscx[0], HSCX_MASK, 0x0);
-		writereg(cs->hw.avm.hscx[1], HSCX_MASK, 0x0);
-	}
-	if (stat & 2) {
-		writereg(cs->hw.avm.isac, ISAC_MASK, 0xFF);
-		writereg(cs->hw.avm.isac, ISAC_MASK, 0x0);
-	}
+	writereg(cs->hw.avm.hscx[0], HSCX_MASK, 0xFF);
+	writereg(cs->hw.avm.hscx[1], HSCX_MASK, 0xFF);
+	writereg(cs->hw.avm.isac, ISAC_MASK, 0xFF);
+	writereg(cs->hw.avm.isac, ISAC_MASK, 0x0);
+	writereg(cs->hw.avm.hscx[0], HSCX_MASK, 0x0);
+	writereg(cs->hw.avm.hscx[1], HSCX_MASK, 0x0);
 }
 
 inline static void
@@ -219,9 +215,6 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 		case CARD_RELEASE:
 			release_ioregs(cs, 0x3f);
 			return(0);
-		case CARD_SETIRQ:
-			return(request_irq(cs->irq, &avm_a1_interrupt,
-					I4L_IRQ_FLAG, "HiSax", cs));
 		case CARD_INIT:
 			inithscxisac(cs, 1);
 			byteout(cs->hw.avm.cfg_reg, 0x16);
@@ -234,8 +227,8 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-int __init 
-setup_avm_a1(struct IsdnCard *card)
+__initfunc(int
+setup_avm_a1(struct IsdnCard *card))
 {
 	u_char val;
 	struct IsdnCardState *cs = card->cs;
@@ -378,6 +371,7 @@ setup_avm_a1(struct IsdnCard *card)
 	cs->BC_Write_Reg = &WriteHSCX;
 	cs->BC_Send_Data = &hscx_fill_fifo;
 	cs->cardmsg = &AVM_card_msg;
+	cs->irq_func = &avm_a1_interrupt;
 	ISACVersion(cs, "AVM A1:");
 	if (HscxVersion(cs, "AVM A1:")) {
 		printk(KERN_WARNING

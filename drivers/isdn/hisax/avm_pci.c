@@ -1,4 +1,4 @@
-/* $Id: avm_pci.c,v 1.7 1999/02/22 18:26:30 keil Exp $
+/* $Id: avm_pci.c,v 1.11 1999/08/11 21:01:18 keil Exp $
 
  * avm_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -7,6 +7,19 @@
  *
  *
  * $Log: avm_pci.c,v $
+ * Revision 1.11  1999/08/11 21:01:18  keil
+ * new PCI codefix
+ *
+ * Revision 1.10  1999/08/10 16:01:44  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
+ * Revision 1.9  1999/07/12 21:04:57  keil
+ * fix race in IRQ handling
+ * added watchdog for lost IRQs
+ *
+ * Revision 1.8  1999/07/01 08:11:19  keil
+ * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
+ *
  * Revision 1.7  1999/02/22 18:26:30  keil
  * Argh ! ISAC address was only set with PCI
  *
@@ -37,10 +50,13 @@
 #include "isac.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
+#ifndef COMPAT_HAS_NEW_PCI
+#include <linux/bios32.h>
+#endif
 #include <linux/interrupt.h>
 
 extern const char *CardType[];
-static const char *avm_pci_rev = "$Revision: 1.7 $";
+static const char *avm_pci_rev = "$Revision: 1.11 $";
 
 #define  AVM_FRITZ_PCI		1
 #define  AVM_FRITZ_PNP		2
@@ -466,7 +482,7 @@ HDLC_irq(struct BCState *bcs, u_int stat) {
 				if (bcs->st->lli.l1writewakeup &&
 					(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->hw.hdlc.count);
-				dev_kfree_skb(bcs->tx_skb);
+				idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
 				bcs->hw.hdlc.count = 0;
 				bcs->tx_skb = NULL;
 			}
@@ -593,7 +609,7 @@ close_hdlcstate(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}
@@ -687,7 +703,7 @@ static void
 avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *cs = dev_id;
-	u_char val, stat = 0;
+	u_char val;
 	u_char sval;
 
 	if (!cs) {
@@ -701,15 +717,12 @@ avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (!(sval & AVM_STATUS0_IRQ_ISAC)) {
 		val = ReadISAC(cs, ISAC_ISTA);
 		isac_interrupt(cs, val);
-		stat |= 2;
 	}
 	if (!(sval & AVM_STATUS0_IRQ_HDLC)) {
 		HDLC_irq_main(cs);
 	}
-	if (stat & 2) {
-		WriteISAC(cs, ISAC_MASK, 0xFF);
-		WriteISAC(cs, ISAC_MASK, 0x0);
-	}
+	WriteISAC(cs, ISAC_MASK, 0xFF);
+	WriteISAC(cs, ISAC_MASK, 0x0);
 }
 
 static void
@@ -733,8 +746,6 @@ reset_avmpcipnp(struct IsdnCardState *cs)
 static int
 AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 {
-	u_int irq_flag;
-
 	switch (mt) {
 		case CARD_RESET:
 			reset_avmpcipnp(cs);
@@ -743,13 +754,6 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			outb(0, cs->hw.avm.cfg_reg + 2);
 			release_region(cs->hw.avm.cfg_reg, 32);
 			return(0);
-		case CARD_SETIRQ:
-			if (cs->subtyp == AVM_FRITZ_PCI)
-				irq_flag = I4L_IRQ_FLAG | SA_SHIRQ;
-			else
-				irq_flag = I4L_IRQ_FLAG;
-			return(request_irq(cs->irq, &avm_pcipnp_interrupt,
-					irq_flag, "HiSax", cs));
 		case CARD_INIT:
 			clear_pending_isac_ints(cs);
 			initisac(cs);
@@ -769,7 +773,11 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
+#ifdef COMPAT_HAS_NEW_PCI
 static 	struct pci_dev *dev_avm __initdata = NULL;
+#else
+static  int pci_index __initdata = 0;
+#endif
 
 __initfunc(int
 setup_avm_pcipnp(struct IsdnCard *card))
@@ -788,6 +796,7 @@ setup_avm_pcipnp(struct IsdnCard *card))
 		cs->subtyp = AVM_FRITZ_PNP;
 	} else {
 #if CONFIG_PCI
+#ifdef COMPAT_HAS_NEW_PCI
 		if (!pci_present()) {
 			printk(KERN_ERR "FritzPCI: no PCI bus present\n");
 			return(0);
@@ -799,7 +808,7 @@ setup_avm_pcipnp(struct IsdnCard *card))
 				printk(KERN_WARNING "FritzPCI: No IRQ for PCI card found\n");
 				return(0);
 			}
-			cs->hw.avm.cfg_reg = dev_avm->base_address[1] &
+			cs->hw.avm.cfg_reg = get_pcibase(dev_avm, 1) &
 				PCI_BASE_ADDRESS_IO_MASK; 
 			if (!cs->hw.avm.cfg_reg) {
 				printk(KERN_WARNING "FritzPCI: No IO-Adr for PCI card found\n");
@@ -810,6 +819,37 @@ setup_avm_pcipnp(struct IsdnCard *card))
 			printk(KERN_WARNING "FritzPCI: No PCI card found\n");
 			return(0);
 		}
+#else
+		for (; pci_index < 255; pci_index++) {
+			unsigned char pci_bus, pci_device_fn;
+			unsigned int ioaddr;
+			unsigned char irq;
+
+			if (pcibios_find_device (PCI_VENDOR_AVM,
+				PCI_FRITZPCI_ID, pci_index,
+				&pci_bus, &pci_device_fn) != 0) {
+				continue;
+			}
+			pcibios_read_config_byte(pci_bus, pci_device_fn,
+				PCI_INTERRUPT_LINE, &irq);
+			pcibios_read_config_dword(pci_bus, pci_device_fn,
+				PCI_BASE_ADDRESS_1, &ioaddr);
+			cs->irq = irq;
+			cs->hw.avm.cfg_reg = ioaddr & PCI_BASE_ADDRESS_IO_MASK;
+			if (!cs->hw.avm.cfg_reg) {
+				printk(KERN_WARNING "FritzPCI: No IO-Adr for PCI card found\n");
+				return(0);
+			}
+			cs->subtyp = AVM_FRITZ_PCI;
+			break;
+		}
+		if (pci_index == 255) {
+			printk(KERN_WARNING "FritzPCI: No PCI card found\n");
+			return(0);
+		}
+		pci_index++;
+#endif /* COMPAT_HAS_NEW_PCI */
+		cs->irq_flags |= SA_SHIRQ;
 #else
 		printk(KERN_WARNING "FritzPCI: NO_PCI_BIOS\n");
 		return (0);
@@ -846,8 +886,6 @@ setup_avm_pcipnp(struct IsdnCard *card))
 		break;
 	  default:
 	  	printk(KERN_WARNING "AVM unknown subtype %d\n", cs->subtyp);
-		outb(0, cs->hw.avm.cfg_reg + 2);
-		release_region(cs->hw.avm.cfg_reg, 32);
 	  	return(0);
 	}
 	printk(KERN_INFO "HiSax: %s config irq:%d base:0x%X\n",
@@ -860,6 +898,7 @@ setup_avm_pcipnp(struct IsdnCard *card))
 	cs->writeisacfifo = &WriteISACfifo;
 	cs->BC_Send_Data = &fill_hdlc;
 	cs->cardmsg = &AVM_card_msg;
+	cs->irq_func = &avm_pcipnp_interrupt;
 	ISACVersion(cs, (cs->subtyp == AVM_FRITZ_PCI) ? "AVM PCI:" : "AVM PnP:");
 	return (1);
 }

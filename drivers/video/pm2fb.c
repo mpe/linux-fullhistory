@@ -50,7 +50,7 @@
 
 #define PM2FB_MASTER_DEBUG
 #ifdef PM2FB_MASTER_DEBUG
-#define DPRINTK(a,b...)	printk("pm2fb: %s: " a, __FUNCTION__ , ## b)
+#define DPRINTK(a,b...)	printk(KERN_DEBUG "pm2fb: %s: " a, __FUNCTION__ , ## b)
 #else
 #define DPRINTK(a,b...)
 #endif 
@@ -852,27 +852,27 @@ static int pm2pci_detect(struct pm2fb_info* p) {
 		return 0;
 	}
 	DPRINTK("PCI board @%08lx %08lx %08lx rom %08lx\n",
-			pci->dev->base_address[0],
-			pci->dev->base_address[1],
-			pci->dev->base_address[2],
+			pci->dev->resource[0].start,
+			pci->dev->resource[1].start,
+			pci->dev->resource[2].start,
 			pci->dev->rom_address);
 #ifdef __sparc__
 	p->regions.rg_base=(unsigned char* )
-		__pa(pci->dev->base_address[0] & PCI_BASE_ADDRESS_MEM_MASK);
+		__pa(pci->dev->resource[0].start);
 	p->regions.fb_base=(unsigned char* )
-		__pa(pci->dev->base_address[1] & PCI_BASE_ADDRESS_MEM_MASK);
+		__pa(pci->dev->resource[1].start);
 #else
 	if (pm2fb_options.flags & OPTF_VIRTUAL) {
 		p->regions.rg_base=(unsigned char* )
-			__pa(pci->dev->base_address[0] & PCI_BASE_ADDRESS_MEM_MASK);
+			__pa(pci->dev->resource[0].start);
 		p->regions.fb_base=(unsigned char* )
-			__pa(pci->dev->base_address[1] & PCI_BASE_ADDRESS_MEM_MASK);
+			__pa(pci->dev->resource[1].start);
 	}
 	else {
 		p->regions.rg_base=(unsigned char* )
-			(pci->dev->base_address[0] & PCI_BASE_ADDRESS_MEM_MASK);
+			(pci->dev->resource[0].start);
 		p->regions.fb_base=(unsigned char* )
-			(pci->dev->base_address[1] & PCI_BASE_ADDRESS_MEM_MASK);
+			(pci->dev->resource[0].start);
 	}
 #endif
 #ifdef __BIG_ENDIAN
@@ -1591,11 +1591,11 @@ void pm2fb_cleanup(struct fb_info* info) {
 		board_table[i->board].cleanup(i);
 }
 
-void __init pm2fb_init(void){
+int __init pm2fb_init(void){
 
 	memset(&fb_info, 0, sizeof(fb_info));
 	if (!pm2fb_conf(&fb_info))
-		return;
+		return -ENXIO;
 	pm2fb_reset(&fb_info);
 	fb_info.disp.scrollmode=SCROLL_YNOMOVE;
 	fb_info.gen.parsize=sizeof(struct pm2fb_par);
@@ -1613,15 +1613,16 @@ void __init pm2fb_init(void){
 	fbgen_set_disp(-1, &fb_info.gen);
 	fbgen_install_cmap(0, &fb_info.gen);
 	if (register_framebuffer(&fb_info.gen.info)<0) {
-		printk("pm2fb: unable to register.\n");
-		return;
+		printk(KERN_ERR "pm2fb: unable to register.\n");
+		return -EINVAL;
 	}
-	printk("fb%d: %s (%s), using %uK of video memory.\n",
+	printk(KERN_INFO "fb%d: %s (%s), using %uK of video memory.\n",
 				GET_FB_IDX(fb_info.gen.info.node),
 				board_table[fb_info.board].name,
 				permedia2_name,
 				(u32 )(fb_info.regions.fb_size>>10));
 	MOD_INC_USE_COUNT;
+	return 0;
 }
 
 void __init pm2fb_mode_setup(char* options){
@@ -1640,7 +1641,7 @@ void __init pm2fb_font_setup(char* options){
 	pm2fb_options.font[sizeof(pm2fb_options.font)-1]='\0';
 }
 
-void __init pm2fb_setup(char* options, int* ints){
+int __init pm2fb_setup(char* options){
 	char* next;
 
 	while (options) {
@@ -1658,6 +1659,7 @@ void __init pm2fb_setup(char* options, int* ints){
 			pm2fb_options.flags |= OPTF_VIRTUAL;
 		options=next;
 	}
+	return 0;
 }
 
 /***************************************************************************
@@ -1665,9 +1667,9 @@ void __init pm2fb_setup(char* options, int* ints){
  ***************************************************************************/
 
 #ifdef MODULE
-int init_module(void) {
+int __init init_module(void) {
 
-	pm2fb_init();
+	return pm2fb_init();
 }
 
 void cleanup_module(void) {

@@ -1728,14 +1728,14 @@ static struct options {
 	{ NULL, NULL }
 };
 
-void __init 
-acornfb_setup(char *options, int *ints)
+int __init 
+acornfb_setup(char *options)
 {
 	struct options *optp;
 	char *opt;
 
 	if (!options || !*options)
-		return;
+		return 0;
 
 	acornfb_init_fbinfo();
 
@@ -1759,6 +1759,7 @@ acornfb_setup(char *options, int *ints)
 			printk(KERN_ERR "acornfb: unknown parameter: %s\n",
 			       opt);
 	}
+	return 0;
 }
 
 /*
@@ -1802,7 +1803,7 @@ free_unused_pages(unsigned int virtual_start, unsigned int virtual_end)
 	printk("acornfb: freed %dK memory\n", mb_freed);
 }
 
-void __init 
+int __init 
 acornfb_init(void)
 {
 	unsigned long size;
@@ -1904,5 +1905,7 @@ acornfb_init(void)
 		VIDC_NAME, init_var.xres, init_var.yres,
 		h_sync / 1000, h_sync % 1000, v_sync);
 
-	register_framebuffer(&fb_info);
+	if (register_framebuffer(&fb_info) < 0)
+		return -EINVAL;
+	return 0;
 }

@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 3
-SUBLEVEL = 13
+SUBLEVEL = 14
 EXTRAVERSION =
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -111,6 +111,7 @@ FILESYSTEMS	=fs/filesystems.a
 NETWORKS	=net/network.a
 DRIVERS		=drivers/block/block.a \
 		 drivers/char/char.o \
+		 drivers/misc/misc.o \
 	         drivers/parport/parport.a
 LIBS		=$(TOPDIR)/lib/lib.a
 SUBDIRS		=kernel drivers mm fs net ipc lib
@@ -134,7 +135,7 @@ DRIVERS := $(DRIVERS) drivers/cdrom/cdrom.a
 endif
 
 ifeq ($(CONFIG_SOUND),y)
-DRIVERS := $(DRIVERS) drivers/sound/sound.a
+DRIVERS := $(DRIVERS) drivers/sound/sounddrivers.o
 endif
 
 ifdef CONFIG_PCI
@@ -178,7 +179,7 @@ DRIVERS := $(DRIVERS) drivers/block/paride/paride.a
 endif
 
 ifdef CONFIG_HAMRADIO
-DRIVERS := $(DRIVERS) drivers/net/hamradio/hamradio.a
+DRIVERS := $(DRIVERS) drivers/net/hamradio/hamradio.o
 endif
 
 ifeq ($(CONFIG_TC),y)
@@ -333,6 +334,7 @@ modules_install:
 	if [ -f VIDEO_MODULES ]; then inst_mod VIDEO_MODULES video; fi; \
 	if [ -f FC4_MODULES   ]; then inst_mod FC4_MODULES   fc4;   fi; \
 	if [ -f IRDA_MODULES  ]; then inst_mod IRDA_MODULES  net;   fi; \
+	if [ -f USB_MODULES   ]; then inst_mod USB_MODULES   usb;   fi; \
 	\
 	ls *.o > $$MODLIB/.allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 $$MODLIB/.allmods - > $$MODLIB/.misc; \

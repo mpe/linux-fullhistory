@@ -73,6 +73,7 @@
  *    28.06.99   0.16  Add pci_set_master
  *    03.08.99   0.17  adapt to Linus' new __setup/__initcall
  *                     added kernel command line options "sonicvibes=reverb" and "sonicvibesdmaio=dmaioaddr"
+ *    12.08.99   0.18  module_init/__setup fixes
  *
  */
 
@@ -1268,9 +1269,9 @@ static int drain_dac(struct sv_state *s, int nonblock)
                         current->state = TASK_RUNNING;
                         return -EBUSY;
                 }
-		tmo = (count * HZ) / s->ratedac;
+		tmo = 3 * HZ * (count + s->dma_dac.fragsize) / 2 / s->ratedac;
 		tmo >>= sample_shift[(s->fmt >> SV_CFMT_ASHIFT) & SV_CFMT_MASK];
-		if (!schedule_timeout(tmo ? : 1) && tmo)
+		if (!schedule_timeout(tmo + 1))
 			printk(KERN_DEBUG "sv: dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac.wait, &wait);
@@ -2297,6 +2298,19 @@ static int wavetable[NR_DEVICE] = { 0, };
 
 static unsigned dmaio = 0xac00;
 
+MODULE_PARM(reverb, "1-" __MODULE_STRING(NR_DEVICE) "i");
+MODULE_PARM_DESC(reverb, "if 1 enables the reverb circuitry. NOTE: your card must have the reverb RAM");
+#if 0
+MODULE_PARM(wavetable, "1-" __MODULE_STRING(NR_DEVICE) "i");
+MODULE_PARM_DESC(wavetable, "if 1 the wavetable synth is enabled");
+#endif
+
+MODULE_PARM(dmaio, "i");
+MODULE_PARM_DESC(dmaio, "if the motherboard BIOS did not allocate DDMA io, allocate them starting at this address");
+
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
+MODULE_DESCRIPTION("S3 SonicVibes Driver");
+
 /* --------------------------------------------------------------------- */
 
 static struct initvol {
@@ -2314,10 +2328,7 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_PCM, 0x4040 }
 };
 
-#ifndef MODULE
-static
-#endif
-int __init init_module(void)
+static int __init init_sonicvibes(void)
 {
 	struct sv_state *s;
 	struct pci_dev *pcidev = NULL;
@@ -2326,7 +2337,7 @@ int __init init_module(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.17 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.18 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
@@ -2499,24 +2510,7 @@ int __init init_module(void)
 	return 0;
 }
 
-/* --------------------------------------------------------------------- */
-
-#ifdef MODULE
-
-MODULE_PARM(reverb, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(reverb, "if 1 enables the reverb circuitry. NOTE: your card must have the reverb RAM");
-#if 0
-MODULE_PARM(wavetable, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(wavetable, "if 1 the wavetable synth is enabled");
-#endif
-
-MODULE_PARM(dmaio, "i");
-MODULE_PARM_DESC(dmaio, "if the motherboard BIOS did not allocate DDMA io, allocate them starting at this address");
-
-MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
-MODULE_DESCRIPTION("S3 SonicVibes Driver");
-
-void cleanup_module(void)
+static void __exit cleanup_sonicvibes(void)
 {
 	struct sv_state *s;
 
@@ -2545,7 +2539,12 @@ void cleanup_module(void)
 	printk(KERN_INFO "sv: unloading\n");
 }
 
-#else /* MODULE */
+module_init(init_sonicvibes);
+module_exit(cleanup_sonicvibes);
+
+/* --------------------------------------------------------------------- */
+
+#ifndef MODULE
 
 /* format is: sonicvibes=[reverb] sonicvibesdmaio=dmaioaddr */
 
@@ -2555,12 +2554,12 @@ static int __init sonicvibes_setup(char *str)
 
 	if (nr_dev >= NR_DEVICE)
 		return 0;
-
-	(   (get_option(&str, &reverb   [nr_dev]) == 2)
 #if 0
-	 &&  get_option(&str, &wavetable[nr_dev])
+	if (get_option(&str, &reverb[nr_dev]) == 2)
+		get_option(&str, &wavetable[nr_dev]);
+#else
+	get_option(&str, &reverb[nr_dev]);
 #endif
-	};
 
 	nr_dev++;
 	return 1;
@@ -2568,16 +2567,14 @@ static int __init sonicvibes_setup(char *str)
 
 static int __init sonicvibesdmaio_setup(char *str)
 {
-        int ints[11];
+        int io;
 
-        get_options(str, ints);
-	if (ints[0] >= 1)
-		dmaio = ints[1];
+	if (get_option(&str, &io))
+		dmaio = io;
 	return 1;
 }
 
 __setup("sonicvibes=", sonicvibes_setup);
 __setup("sonicvibesdmaio=", sonicvibesdmaio_setup);
-__initcall(init_module);
 
 #endif /* MODULE */

@@ -811,6 +811,7 @@ int do_coredump(long signr, struct pt_regs * regs)
 	if (!binfmt || !binfmt->core_dump)
 		goto fail;
 	if (!current->dumpable || atomic_read(&current->mm->mm_users) != 1)
+		goto fail;
 	current->dumpable = 0;
 	if (current->rlim[RLIMIT_CORE].rlim_cur < binfmt->min_coredump)
 		goto fail;

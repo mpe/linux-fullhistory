@@ -1,4 +1,3 @@
-#include <linux/config.h>
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
 
@@ -298,7 +297,7 @@ modem_fill(struct BCState *bcs) {
 				(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st,
 						bcs->hw.hscx.count);
-			dev_kfree_skb(bcs->tx_skb);
+			idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
 			bcs->tx_skb = NULL;
 		}
 	}
@@ -510,13 +509,13 @@ close_elsastate(struct BCState *bcs)
 			bcs->hw.hscx.rcvbuf = NULL;
 		}
 		while ((skb = skb_dequeue(&bcs->rqueue))) {
-			dev_kfree_skb(skb);
+			idev_kfree_skb(skb, FREE_READ);
 		}
 		while ((skb = skb_dequeue(&bcs->squeue))) {
-			dev_kfree_skb(skb);
+			idev_kfree_skb(skb, FREE_WRITE);
 		}
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}
@@ -664,7 +663,9 @@ modem_l2l1(struct PStack *st, int pr, void *arg)
 		st->l1.bcs->cs->hw.elsa.MFlag=2;
 	} else if (pr == (PH_DEACTIVATE | REQUEST)) {
 		test_and_clear_bit(BC_FLG_ACTIV, &st->l1.bcs->Flag);
-		send_arcofi(st->l1.bcs->cs, ARCOFI_XOP_0, st->l1.bc, 0);
+		st->l1.bcs->cs->dc.isac.arcofi_bc = st->l1.bc;
+		arcofi_fsm(st->l1.bcs->cs, ARCOFI_START, &ARCOFI_XOP_0);
+		interruptible_sleep_on(&st->l1.bcs->cs->dc.isac.arcofi_wait);
 		st->l1.bcs->cs->hw.elsa.MFlag=1;
 	} else {
 		printk(KERN_WARNING"ElsaSer: unknown pr %x\n", pr);

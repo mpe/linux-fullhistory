@@ -465,17 +465,12 @@ static int open_port(struct inode * inode, struct file * filp)
 	return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
 }
 
-static int open_mem(struct inode * inode, struct file * filp)
-{
-	return (capable(CAP_SYS_RAWIO)
-		|| !(filp->f_mode & FMODE_WRITE)) ? 0 : -EPERM;
-}
-
 #define mmap_kmem	mmap_mem
 #define zero_lseek	null_lseek
 #define full_lseek      null_lseek
 #define write_zero	write_null
 #define read_full       read_zero
+#define open_mem	open_port
 #define open_kmem	open_mem
 
 static struct file_operations mem_fops = {

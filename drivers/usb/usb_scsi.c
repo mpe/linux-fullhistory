@@ -130,7 +130,7 @@ static struct usb_driver scsi_driver = {
 
 static int us_one_transfer(struct us_data *us, int pipe, char *buf, int length)
 {
-    int max_size = usb_maxpacket(us->pusb_dev, pipe) * 16;
+    int max_size = usb_maxpacket(us->pusb_dev, pipe, usb_pipeout(pipe)) * 16;
     int this_xfer;
     int result;
     unsigned long partial;

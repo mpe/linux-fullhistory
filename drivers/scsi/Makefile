@@ -18,7 +18,7 @@ CFLAGS_gdth.o    = # -DDEBUG_GDTH=2 -D__SERIAL__ -D__COM2__ -DGDTH_STATISTICS
 CFLAGS_seagate.o =   -DARBITRATE -DPARITY -DSEAGATE_USE_ASM
 
 .SUFFIXES:
-.SUFFIXES: .c .o .h .a
+.SUFFIXES: .c .o .h .a .S
 
 ifeq (${CFLAGS},)
 CFLAGS = -D__KERNEL__=1 \
@@ -238,6 +238,14 @@ L_OBJS += NCR53C9x.o fastlane.o
 else
   ifeq ($(CONFIG_FASTLANE_SCSI),m)
   M_OBJS += NCR53C9x.o fastlane.o
+  endif
+endif
+
+ifeq ($(CONFIG_OKTAGON_SCSI),y)
+L_OBJS += NCR53C9x.o oktagon_esp.o oktagon_io.o
+else
+  ifeq ($(CONFIG_OKTAGON_SCSI),m)
+  M_OBJS += NCR53C9x.o oktagon_esp.o oktagon_io.o
   endif
 endif
 
@@ -621,6 +629,10 @@ endif
 
 ifeq ($(CONFIG_JAZZ_ESP),y)
 L_OBJS += NCR53C9x.o jazz_esp.o
+endif
+
+ifeq ($(CONFIG_SUN3X_ESP),y)
+L_OBJS += NCR53C9x.o sun3x_esp.o
 endif
 
 include $(TOPDIR)/Rules.make

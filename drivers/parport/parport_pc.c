@@ -76,7 +76,7 @@ static void frob_econtrol (struct parport *pb, unsigned char m,
 	outb ((inb (ECONTROL (pb)) & ~m) ^ v, ECONTROL (pb));
 }
 
-#if defined(CONFIG_PARPORT_1284) || defined(CONFIG_PARPORT_PC_FIFO)
+#ifdef CONFIG_PARPORT_PC_FIFO
 /* Safely change the mode bits in the ECR */
 static int change_mode(struct parport *p, int m)
 {
@@ -134,6 +134,7 @@ static int change_mode(struct parport *p, int m)
 	return 0;
 }
 
+#ifdef CONFIG_PARPORT_1284
 /* Find FIFO lossage; FIFO is reset */
 static int get_fifo_residue (struct parport *p)
 {
@@ -180,8 +181,8 @@ static int get_fifo_residue (struct parport *p)
 
 	return residue;
 }
-
-#endif /* IEEE 1284 support or FIFO support */
+#endif /* IEEE 1284 support */
+#endif /* FIFO support */
 
 /*
  * Clear TIMEOUT BIT in EPP MODE
@@ -1879,7 +1880,7 @@ void cleanup_module(void)
 			if (p->irq != PARPORT_IRQ_NONE)
 				free_irq(p->irq, p);
 			release_region(p->base, 3);
-			if (p->size > 3);
+			if (p->size > 3)
 				release_region(p->base + 3, p->size - 3);
 			if (p->modes & PARPORT_MODE_ECP)
 				release_region(p->base_hi, 3);

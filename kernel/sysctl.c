@@ -8,7 +8,10 @@
  * Added kernel/java-{interpreter,appletviewer}, 96/5/10, Mike Shaver.
  * Dynamic registration fixes, Stephen Tweedie.
  * Added kswapd-interval, ctrl-alt-del, printk stuff, 1/8/97, Chris Horn.
- * Made sysctl support optional via CONFIG_SYSCTL, 1/10/97, Chris Horn.
+ * Made sysctl support optional via CONFIG_SYSCTL, 1/10/97, Chris
+ *  Horn.
+ * Added proc_doulongvec_ms_jiffies_minmax, 09/08/99, Carlos H. Bauer.
+ * Added proc_doulongvec_minmax, 09/08/99, Carlos H. Bauer.
  */
 
 #include <linux/config.h>
@@ -912,6 +915,131 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 	return 0;
 }
 
+
+/*
+ * an unsigned long function version
+ */
+
+static int do_proc_doulongvec_minmax(ctl_table *table, int write,
+				     struct file *filp,
+				     void *buffer, size_t *lenp,
+				     unsigned long convmul,
+				     unsigned long convdiv)
+{
+#define TMPBUFLEN 20
+	unsigned long *i, *min, *max, val;
+	int vleft, first=1, len, left, neg;
+	char buf[TMPBUFLEN], *p;
+	
+	if (!table->data || !table->maxlen || !*lenp ||
+	    (filp->f_pos && !write)) {
+		*lenp = 0;
+		return 0;
+	}
+	
+	i = (unsigned long *) table->data;
+	min = (unsigned long *) table->extra1;
+	max = (unsigned long *) table->extra2;
+	vleft = table->maxlen / sizeof(unsigned long);
+	left = *lenp;
+	
+	for (; left && vleft--; i++, first=0) {
+		if (write) {
+			while (left) {
+				char c;
+				if(get_user(c, (char *) buffer))
+					return -EFAULT;
+				if (!isspace(c))
+					break;
+				left--;
+				((char *) buffer)++;
+			}
+			if (!left)
+				break;
+			neg = 0;
+			len = left;
+			if (len > TMPBUFLEN-1)
+				len = TMPBUFLEN-1;
+			if(copy_from_user(buf, buffer, len))
+				return -EFAULT;
+			buf[len] = 0;
+			p = buf;
+			if (*p == '-' && left > 1) {
+				neg = 1;
+				left--, p++;
+			}
+			if (*p < '0' || *p > '9')
+				break;
+			val = simple_strtoul(p, &p, 0) * convmul / convdiv ;
+			len = p-buf;
+			if ((len < left) && *p && !isspace(*p))
+				break;
+			if (neg)
+				val = -val;
+			buffer += len;
+			left -= len;
+
+			if(neg)
+				continue;
+			if (min && val < *min++)
+				continue;
+			if (max && val > *max++)
+				continue;
+			*i = val;
+		} else {
+			p = buf;
+			if (!first)
+				*p++ = '\t';
+			sprintf(p, "%lu", convdiv * (*i) / convmul);
+			len = strlen(buf);
+			if (len > left)
+				len = left;
+			if(copy_to_user(buffer, buf, len))
+				return -EFAULT;
+			left -= len;
+			buffer += len;
+		}
+	}
+
+	if (!write && !first && left) {
+		if(put_user('\n', (char *) buffer))
+			return -EFAULT;
+		left--, buffer++;
+	}
+	if (write) {
+		p = (char *) buffer;
+		while (left) {
+			char c;
+			if(get_user(c, p++))
+				return -EFAULT;
+			if (!isspace(c))
+				break;
+			left--;
+		}
+	}
+	if (write && first)
+		return -EINVAL;
+	*lenp -= left;
+	filp->f_pos += *lenp;
+	return 0;
+#undef TMPBUFLEN
+}
+
+int proc_doulongvec_minmax(ctl_table *table, int write, struct file *filp,
+			   void *buffer, size_t *lenp)
+{
+    return do_proc_doulongvec_minmax(table, write, filp, buffer, lenp, 1l, 1l);
+}
+
+int proc_doulongvec_ms_jiffies_minmax(ctl_table *table, int write,
+				      struct file *filp,
+				      void *buffer, size_t *lenp)
+{
+    return do_proc_doulongvec_minmax(table, write, filp, buffer,
+				     lenp, HZ, 1000l);
+}
+
+
 /* Like proc_dointvec, but converts seconds to jiffies */
 int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
 			  void *buffer, size_t *lenp)
@@ -950,6 +1078,20 @@ int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
 {
 	return -ENOSYS;
 }
+
+int proc_doulongvec_minmax(ctl_table *table, int write, struct file *filp,
+		    void *buffer, size_t *lenp)
+{
+	return -ENOSYS;
+}
+
+int proc_doulongvec_ms_jiffies_minmax(ctl_table *table, int write,
+				      struct file *filp,
+				      void *buffer, size_t *lenp)
+{
+    return -ENOSYS;
+}
+
 
 #endif /* CONFIG_PROC_FS */
 
@@ -1149,9 +1291,22 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 }
 
 int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
+			  void *buffer, size_t *lenp)
+{
+	return -ENOSYS;
+}
+
+int proc_doulongvec_minmax(ctl_table *table, int write, struct file *filp,
 		    void *buffer, size_t *lenp)
 {
 	return -ENOSYS;
+}
+
+int proc_doulongvec_ms_jiffies_minmax(ctl_table *table, int write,
+				      struct file *filp,
+				      void *buffer, size_t *lenp)
+{
+    return -ENOSYS;
 }
 
 struct ctl_table_header * register_sysctl_table(ctl_table * table, 

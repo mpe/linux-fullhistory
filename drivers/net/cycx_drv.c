@@ -57,7 +57,7 @@
 #include <asm/io.h>		/* for inb(), outb(), etc. */
 
 #define	MOD_VERSION	0
-#define	MOD_RELEASE	1
+#define	MOD_RELEASE	2
 
 #ifdef MODULE
 MODULE_AUTHOR("Arnaldo Carvalho de Melo");
@@ -122,7 +122,6 @@ int init_module (void)
 {
 	printk(KERN_INFO "%s v%u.%u %s\n",
 		fullname, MOD_VERSION, MOD_RELEASE, copyright);
-	printk(KERN_INFO "version=0x%X\n", LINUX_VERSION_CODE);
 	return 0;
 }
 /* Module 'remove' entry point.

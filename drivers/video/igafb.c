@@ -624,7 +624,7 @@ static int __init iga_init(struct fb_info_iga *info)
 }	
 
 
-void __init igafb_init(void)
+int __init igafb_init(void)
 {
         struct pci_dev *pdev;
         struct fb_info_iga *info;
@@ -634,7 +634,7 @@ void __init igafb_init(void)
 
         /* Do not attach when we have a serial console. */
         if (!con_is_present())
-                return;
+                return -ENXIO;
 
         pdev = pci_find_device(PCI_VENDOR_ID_INTERG, 
                                PCI_DEVICE_ID_INTERG_1682, 0);
@@ -642,28 +642,28 @@ void __init igafb_init(void)
         	pdev = pci_find_device(PCI_VENDOR_ID_INTERG, 
                                0x2000, 0);
         	if(pdev == NULL)
-        	        return;
+        	        return -ENXIO;
 		iga2000 = 1;
 	}
 
         info = kmalloc(sizeof(struct fb_info_iga), GFP_ATOMIC);
         if (!info) {
                 printk("igafb_init: can't alloc fb_info_iga\n");
-                return;
+                return -ENOMEM;
         }
         memset(info, 0, sizeof(struct fb_info_iga));
 
-	info->frame_buffer = pdev->base_address[0];
+	info->frame_buffer = pdev->resource[0].start;
 	if (!info->frame_buffer) {
 		kfree(info);
-		return;
+		return -ENXIO;
 	}
 
         pcibios_read_config_dword(0, pdev->devfn,
                                   PCI_BASE_ADDRESS_0, 
                                   (unsigned int*)&addr);
 	if (!addr)
-		return;
+		return -ENXIO;
 	info->frame_buffer_phys = addr & PCI_BASE_ADDRESS_MEM_MASK;
 
 #ifdef __sparc__
@@ -684,7 +684,7 @@ void __init igafb_init(void)
 	}
 	if (!info->io_base) {
                 kfree(info);
-		return;
+		return -ENXIO;
 	}
 
 	/*
@@ -700,7 +700,7 @@ void __init igafb_init(void)
                 printk("igafb_init: can't alloc mmap_map\n");
 		/* XXX Here we left I/O allocated */
                 kfree(info);
-		return;
+		return -ENOMEM;
 	}
 
 	memset(info->mmap_map, 0, 4 * sizeof(*info->mmap_map));
@@ -775,14 +775,16 @@ void __init igafb_init(void)
 	    info->mmap_map[1].prot_mask = SRMMU_CACHE;
 	    info->mmap_map[1].prot_flag = SRMMU_WRITE;
 #endif /* __sparc__ */
+
+	return 0;
 }
 
-void __init igafb_setup(char *options, int *ints)
+int __init igafb_setup(char *options)
 {
     char *this_opt;
 
     if (!options || !*options)
-        return;
+        return 0;
 
     for (this_opt = strtok(options, ","); this_opt;
          this_opt = strtok(NULL, ",")) {
@@ -798,4 +800,5 @@ void __init igafb_setup(char *options, int *ints)
                 fontname[i] = 0;
         }
     }
+    return 0;
 }

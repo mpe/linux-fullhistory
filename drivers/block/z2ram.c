@@ -27,7 +27,6 @@
 
 #define MAJOR_NR    Z2RAM_MAJOR
 
-#include <linux/config.h>
 #include <linux/major.h>
 #include <linux/malloc.h>
 #include <linux/blk.h>

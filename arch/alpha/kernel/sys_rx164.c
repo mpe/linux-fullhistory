@@ -45,10 +45,10 @@ rx164_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 		outb(mask, 0x21);	/* ISA PIC1 */
 }
 
+#if 0
 static void
 rx164_srm_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 {
-#if 0
 	if (irq >= 16) {
 		if (unmask_p)
 			cserve_ena(irq - 16);
@@ -59,8 +59,8 @@ rx164_srm_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
 	else
 		outb(mask, 0x21);	/* ISA PIC1 */
-#endif
 }
+#endif
 
 static void
 rx164_isa_device_interrupt(unsigned long vector, struct pt_regs * regs)
@@ -107,7 +107,8 @@ rx164_device_interrupt(unsigned long vector, struct pt_regs *regs)
         printk("PLD 0x%lx\n", pld);
 #endif
 
-        if (pld & 0xffffffff00000000UL) pld &= 0x00000000ffffffffUL;
+        if (pld & 0xffffffff00000000UL)
+		pld &= 0x00000000ffffffffUL;
 
         /*
          * Now for every possible bit set, work through them and call

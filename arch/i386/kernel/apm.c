@@ -288,7 +288,7 @@ extern void	apm_unregister_callback(int (*)(apm_event_t));
 /*
  * Local variables
  */
-static asmlinkage struct {
+static struct {
 	unsigned long	offset;
 	unsigned short	segment;
 }				apm_bios_entry;

@@ -1,4 +1,4 @@
-/* $Id: teles0.c,v 2.8 1998/04/15 16:44:28 keil Exp $
+/* $Id: teles0.c,v 2.9 1999/07/12 21:05:31 keil Exp $
 
  * teles0.c     low level stuff for Teles Memory IO isdn cards
  *              based on the teles driver from Jan den Ouden
@@ -10,6 +10,10 @@
  *              Beat Doebeli
  *
  * $Log: teles0.c,v $
+ * Revision 2.9  1999/07/12 21:05:31  keil
+ * fix race in IRQ handling
+ * added watchdog for lost IRQs
+ *
  * Revision 2.8  1998/04/15 16:44:28  keil
  * new init code
  *
@@ -54,7 +58,7 @@
 
 extern const char *CardType[];
 
-const char *teles0_revision = "$Revision: 2.8 $";
+const char *teles0_revision = "$Revision: 2.9 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -177,7 +181,7 @@ static void
 teles0_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *cs = dev_id;
-	u_char val, stat = 0;
+	u_char val;
 	int count = 0;
 
 	if (!cs) {
@@ -186,39 +190,31 @@ teles0_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	val = readhscx(cs->hw.teles0.membase, 1, HSCX_ISTA);
       Start_HSCX:
-	if (val) {
+	if (val)
 		hscx_int_main(cs, val);
-		stat |= 1;
-	}
 	val = readisac(cs->hw.teles0.membase, ISAC_ISTA);
       Start_ISAC:
-	if (val) {
+	if (val)
 		isac_interrupt(cs, val);
-		stat |= 2;
-	}
 	count++;
 	val = readhscx(cs->hw.teles0.membase, 1, HSCX_ISTA);
-	if (val && count < 20) {
+	if (val && count < 5) {
 		if (cs->debug & L1_DEB_HSCX)
 			debugl1(cs, "HSCX IntStat after IntRoutine");
 		goto Start_HSCX;
 	}
 	val = readisac(cs->hw.teles0.membase, ISAC_ISTA);
-	if (val && count < 20) {
+	if (val && count < 5) {
 		if (cs->debug & L1_DEB_ISAC)
 			debugl1(cs, "ISAC IntStat after IntRoutine");
 		goto Start_ISAC;
 	}
-	if (stat & 1) {
-		writehscx(cs->hw.teles0.membase, 0, HSCX_MASK, 0xFF);
-		writehscx(cs->hw.teles0.membase, 1, HSCX_MASK, 0xFF);
-		writehscx(cs->hw.teles0.membase, 0, HSCX_MASK, 0x0);
-		writehscx(cs->hw.teles0.membase, 1, HSCX_MASK, 0x0);
-	}
-	if (stat & 2) {
-		writeisac(cs->hw.teles0.membase, ISAC_MASK, 0xFF);
-		writeisac(cs->hw.teles0.membase, ISAC_MASK, 0x0);
-	}
+	writehscx(cs->hw.teles0.membase, 0, HSCX_MASK, 0xFF);
+	writehscx(cs->hw.teles0.membase, 1, HSCX_MASK, 0xFF);
+	writeisac(cs->hw.teles0.membase, ISAC_MASK, 0xFF);
+	writeisac(cs->hw.teles0.membase, ISAC_MASK, 0x0);
+	writehscx(cs->hw.teles0.membase, 0, HSCX_MASK, 0x0);
+	writehscx(cs->hw.teles0.membase, 1, HSCX_MASK, 0x0);
 }
 
 void
@@ -290,9 +286,6 @@ Teles_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 		case CARD_RELEASE:
 			release_io_teles0(cs);
 			return(0);
-		case CARD_SETIRQ:
-			return(request_irq(cs->irq, &teles0_interrupt,
-					I4L_IRQ_FLAG, "HiSax", cs));
 		case CARD_INIT:
 			inithscxisac(cs, 3);
 			return(0);
@@ -302,8 +295,8 @@ Teles_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-int __init 
-setup_teles0(struct IsdnCard *card)
+__initfunc(int
+setup_teles0(struct IsdnCard *card))
 {
 	u_char val;
 	struct IsdnCardState *cs = card->cs;
@@ -382,6 +375,7 @@ setup_teles0(struct IsdnCard *card)
 	cs->BC_Write_Reg = &WriteHSCX;
 	cs->BC_Send_Data = &hscx_fill_fifo;
 	cs->cardmsg = &Teles_card_msg;
+	cs->irq_func = &teles0_interrupt;
 	ISACVersion(cs, "Teles0:");
 	if (HscxVersion(cs, "Teles0:")) {
 		printk(KERN_WARNING

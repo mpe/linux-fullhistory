@@ -1,4 +1,4 @@
-$Id: README.eicon,v 1.3 1999/03/29 11:10:04 armin Exp $
+$Id: README.eicon,v 1.4 1999/07/11 17:17:30 armin Exp $
 
 (c) 1999 Cytronics & Melware
 
@@ -21,11 +21,7 @@ It is meant to be used with isdn4linux, an ISDN link-level module for Linux.
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
-NOTE : Since the eicon driver is still experimental, this README file
-       may be incomplete and not up to date.
 
-
-However, the driver should work under following conditions :
 
 Supported Cards
 ---------------

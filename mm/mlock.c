@@ -130,7 +130,7 @@ static int do_mlock(unsigned long start, size_t len, int on)
 	struct vm_area_struct * vma, * next;
 	int error;
 
-	if (!capable(CAP_IPC_LOCK))
+	if (on && !capable(CAP_IPC_LOCK))
 		return -EPERM;
 	len = (len + ~PAGE_MASK) & PAGE_MASK;
 	end = start + len;

@@ -1,6 +1,12 @@
-/* $Id: isdnl3.h,v 2.3 1998/11/15 23:55:06 keil Exp $
+/* $Id: isdnl3.h,v 2.5 1999/07/25 16:18:32 keil Exp $
 
  * $Log: isdnl3.h,v $
+ * Revision 2.5  1999/07/25 16:18:32  keil
+ * Fix Suspend/Resume
+ *
+ * Revision 2.4  1999/07/01 08:11:54  keil
+ * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
+ *
  * Revision 2.3  1998/11/15 23:55:06  keil
  * changes from 2.0
  *
@@ -31,14 +37,16 @@
  */
 
 #define SBIT(state) (1<<state)
-#define ALL_STATES  0x00ffffff
+#define ALL_STATES  0x03ffffff
 
-#define	PROTO_DIS_EURO	0x08
+#define PROTO_DIS_EURO	0x08
 
 #define L3_DEB_WARN	0x01
-#define	L3_DEB_PROTERR	0x02
-#define	L3_DEB_STATE	0x04
-#define	L3_DEB_CHARGE	0x08
+#define L3_DEB_PROTERR	0x02
+#define L3_DEB_STATE	0x04
+#define L3_DEB_CHARGE	0x08
+#define L3_DEB_CHECK	0x10
+#define L3_DEB_SI	0x20
 
 struct stateentry {
 	int state;

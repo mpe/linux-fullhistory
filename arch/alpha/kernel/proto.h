@@ -25,7 +25,7 @@ extern void apecs_init_arch(unsigned long *, unsigned long *);
 
 extern volatile unsigned int apecs_mcheck_expected;
 extern volatile unsigned int apecs_mcheck_taken;
-extern int apecs_pci_clr_err(void);
+extern void apecs_pci_clr_err(void);
 extern void apecs_machine_check(u64, u64, struct pt_regs *);
 
 /* core_cia.c */
@@ -202,3 +202,28 @@ extern int ptrace_cancel_bpt (struct task_struct *child);
 
 /* ../mm/init.c */
 void srm_paging_stop(void);
+
+/* irq.h */
+
+#ifdef __SMP__
+#define mcheck_expected(cpu)	(cpu_data[cpu].mcheck_expected)
+#define mcheck_taken(cpu)	(cpu_data[cpu].mcheck_taken)
+#define mcheck_hose(cpu)	(cpu_data[cpu].mcheck_hose)
+#else
+extern struct mcheck_info
+{
+	unsigned char expected __attribute__((aligned(8)));
+	unsigned char taken;
+	unsigned char hose;
+} __mcheck_info;
+
+#define mcheck_expected(cpu)	(__mcheck_info.expected)
+#define mcheck_taken(cpu)	(__mcheck_info.taken)
+#define mcheck_hose(cpu)	(__mcheck_info.hose)
+#endif
+
+#define DEBUG_MCHECK 0          /* 0 = minimal, 1 = debug, 2 = debug+dump.  */
+
+extern void process_mcheck_info(unsigned long vector, unsigned long la_ptr,
+				struct pt_regs *regs, const char *machine,
+				int expected);

@@ -1,0 +1,12 @@
+#
+# Misc strange devices
+#
+mainmenu_option next_comment
+comment 'Misc devices'
+
+# PIIX4 ACPI requires PCI for setup and a hardcoded TSC for timing
+if [ "$CONFIG_PCI" = "y" -a "$CONFIG_X86_TSC" = "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool 'PIIX4 ACPI support' CONFIG_PIIX4_ACPI
+fi
+
+endmenu

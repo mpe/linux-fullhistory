@@ -1,4 +1,4 @@
-/* $Id: hscx_irq.c,v 1.11 1998/11/15 23:54:49 keil Exp $
+/* $Id: hscx_irq.c,v 1.12 1999/07/01 08:11:42 keil Exp $
 
  * hscx_irq.c     low level b-channel stuff for Siemens HSCX
  *
@@ -7,6 +7,9 @@
  * This is an include file for fast inline IRQ stuff
  *
  * $Log: hscx_irq.c,v $
+ * Revision 1.12  1999/07/01 08:11:42  keil
+ * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
+ *
  * Revision 1.11  1998/11/15 23:54:49  keil
  * changes from 2.0
  *
@@ -41,8 +44,6 @@
  *
  *
  */
-
-#include <linux/string.h>
 
 
 static inline void
@@ -203,6 +204,7 @@ hscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 				if (!(skb = dev_alloc_skb(count)))
 					printk(KERN_WARNING "HSCX: receive out of memory\n");
 				else {
+					SET_SKB_FREE(skb);
 					memcpy(skb_put(skb, count), bcs->hw.hscx.rcvbuf, count);
 					skb_queue_tail(&bcs->rqueue, skb);
 				}
@@ -218,6 +220,7 @@ hscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 			if (!(skb = dev_alloc_skb(fifo_size)))
 				printk(KERN_WARNING "HiSax: receive out of memory\n");
 			else {
+				SET_SKB_FREE(skb);
 				memcpy(skb_put(skb, fifo_size), bcs->hw.hscx.rcvbuf, fifo_size);
 				skb_queue_tail(&bcs->rqueue, skb);
 			}
@@ -234,7 +237,7 @@ hscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 				if (bcs->st->lli.l1writewakeup &&
 					(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->hw.hscx.count);
-				dev_kfree_skb(bcs->tx_skb);
+				idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
 				bcs->hw.hscx.count = 0; 
 				bcs->tx_skb = NULL;
 			}

@@ -22,6 +22,7 @@
 #include <linux/mman.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/interrupt.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>

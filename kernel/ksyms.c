@@ -277,6 +277,8 @@ EXPORT_SYMBOL(proc_dostring);
 EXPORT_SYMBOL(proc_dointvec);
 EXPORT_SYMBOL(proc_dointvec_jiffies);
 EXPORT_SYMBOL(proc_dointvec_minmax);
+EXPORT_SYMBOL(proc_doulongvec_ms_jiffies_minmax);
+EXPORT_SYMBOL(proc_doulongvec_minmax);
 
 /* interrupt handling */
 EXPORT_SYMBOL(request_irq);

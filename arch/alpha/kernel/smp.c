@@ -7,7 +7,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/interrupt.h>

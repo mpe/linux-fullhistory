@@ -1,4 +1,4 @@
-/* $Id: sportster.c,v 1.7 1998/11/15 23:55:22 keil Exp $
+/* $Id: sportster.c,v 1.9 1999/07/12 21:05:29 keil Exp $
 
  * sportster.c     low level stuff for USR Sportster internal TA
  *
@@ -7,6 +7,13 @@
  * Thanks to Christian "naddy" Weisgerber (3Com, US Robotics) for documentation
  *
  * $Log: sportster.c,v $
+ * Revision 1.9  1999/07/12 21:05:29  keil
+ * fix race in IRQ handling
+ * added watchdog for lost IRQs
+ *
+ * Revision 1.8  1999/07/01 08:12:10  keil
+ * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
+ *
  * Revision 1.7  1998/11/15 23:55:22  keil
  * changes from 2.0
  *
@@ -36,7 +43,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *sportster_revision = "$Revision: 1.7 $";
+const char *sportster_revision = "$Revision: 1.9 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -171,11 +178,11 @@ reset_sportster(struct IsdnCardState *cs)
 	save_flags(flags);
 	sti();
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(1);
+	schedule_timeout((10*HZ)/1000);
 	cs->hw.spt.res_irq &= ~SPORTSTER_RESET; /* Reset Off */
 	byteout(cs->hw.spt.cfg_reg + SPORTSTER_RES_IRQ, cs->hw.spt.res_irq);
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(1);
+	schedule_timeout((10*HZ)/1000);
 	restore_flags(flags);
 }
 
@@ -189,9 +196,6 @@ Sportster_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 		case CARD_RELEASE:
 			release_io_sportster(cs);
 			return(0);
-		case CARD_SETIRQ:
-			return(request_irq(cs->irq, &sportster_interrupt,
-					I4L_IRQ_FLAG, "HiSax", cs));
 		case CARD_INIT:
 			inithscxisac(cs, 1);
 			cs->hw.spt.res_irq |= SPORTSTER_INTE; /* IRQ On */
@@ -204,8 +208,8 @@ Sportster_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-int __init 
-get_io_range(struct IsdnCardState *cs)
+__initfunc(int
+get_io_range(struct IsdnCardState *cs))
 {
 	int i, j, adr;
 	
@@ -230,8 +234,8 @@ get_io_range(struct IsdnCardState *cs)
 	}
 }
 
-int __init 
-setup_sportster(struct IsdnCard *card)
+__initfunc(int
+setup_sportster(struct IsdnCard *card))
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];
@@ -282,6 +286,7 @@ setup_sportster(struct IsdnCard *card)
 	cs->BC_Write_Reg = &WriteHSCX;
 	cs->BC_Send_Data = &hscx_fill_fifo;
 	cs->cardmsg = &Sportster_card_msg;
+	cs->irq_func = &sportster_interrupt;
 	ISACVersion(cs, "Sportster:");
 	if (HscxVersion(cs, "Sportster:")) {
 		printk(KERN_WARNING

@@ -1,4 +1,4 @@
-/* $Id: isdnl1.c,v 2.31 1998/11/15 23:54:56 keil Exp $
+/* $Id: isdnl1.c,v 2.34 1999/07/09 13:50:15 keil Exp $
 
  * isdnl1.c     common low level stuff for Siemens Chipsetbased isdn cards
  *              based on the teles driver from Jan den Ouden
@@ -15,6 +15,15 @@
  *
  *
  * $Log: isdnl1.c,v $
+ * Revision 2.34  1999/07/09 13:50:15  keil
+ * remove unused variable
+ *
+ * Revision 2.33  1999/07/09 13:34:33  keil
+ * remove debug code
+ *
+ * Revision 2.32  1999/07/01 08:11:47  keil
+ * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
+ *
  * Revision 2.31  1998/11/15 23:54:56  keil
  * changes from 2.0
  *
@@ -120,9 +129,10 @@
  *
  */
 
-const char *l1_revision = "$Revision: 2.31 $";
+const char *l1_revision = "$Revision: 2.34 $";
 
 #define __NO_VERSION__
+#include <linux/config.h>
 #include "hisax.h"
 #include "isdnl1.h"
 
@@ -298,9 +308,18 @@ DChannel_proc_rcv(struct IsdnCardState *cs)
 			Logl2Frame(cs, skb, "PH_DATA", 1);
 #endif
 		stptr = cs->stlist;
+		if (skb->len<3) {
+			debugl1(cs, "D-channel frame too short(%d)",skb->len);
+			idev_kfree_skb(skb, FREE_READ);
+			return;
+		}
+		if ((skb->data[0] & 1) || !(skb->data[1] &1)) {
+			debugl1(cs, "D-channel frame wrong EA0/EA1");
+			idev_kfree_skb(skb, FREE_READ);
+			return;
+		}
 		sapi = skb->data[0] >> 2;
 		tei = skb->data[1] >> 1;
-
 		if (cs->debug & DEB_DLOG_HEX)
 			LogFrame(cs, skb->data, skb->len);
 		if (cs->debug & DEB_DLOG_VERBOSE)
@@ -323,7 +342,7 @@ DChannel_proc_rcv(struct IsdnCardState *cs)
 					stptr = stptr->next;
 				}
 			}
-			dev_kfree_skb(skb);
+			idev_kfree_skb(skb, FREE_READ);
 		} else if (sapi == CTRL_SAPI) { /* sapi 0 */
 			found = 0;
 			while (stptr != NULL)
@@ -334,7 +353,7 @@ DChannel_proc_rcv(struct IsdnCardState *cs)
 				} else
 					stptr = stptr->next;
 			if (!found)
-				dev_kfree_skb(skb);
+				idev_kfree_skb(skb, FREE_READ);
 		}
 	}
 }

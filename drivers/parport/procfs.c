@@ -23,8 +23,12 @@
 
 #include <asm/uaccess.h>
 
-#ifdef CONFIG_SYSCTL
+#if defined(CONFIG_SYSCTL) && defined(CONFIG_PROC_FS)
 
+#define PARPORT_MIN_TIMESLICE_VALUE 1ul 
+#define PARPORT_MAX_TIMESLICE_VALUE ((unsigned long) HZ)
+#define PARPORT_MIN_SPINTIME_VALUE 1
+#define PARPORT_MAX_SPINTIME_VALUE 1000
 
 static int do_active_device(ctl_table *table, int write, struct file *filp,
 		      void *result, size_t *lenp)
@@ -167,6 +171,18 @@ static int do_hardware(ctl_table *table, int write, struct file *filp,
 #define PARPORT_DEVICES_ROOT_DIR  { DEV_PARPORT_DEVICES, "devices", \
                                     NULL, 0, 0555, NULL }
 
+static const unsigned long parport_min_timeslice_value =
+PARPORT_MIN_TIMESLICE_VALUE;
+
+static const unsigned long parport_max_timeslice_value =
+PARPORT_MAX_TIMESLICE_VALUE;
+
+static const  int parport_min_spintime_value =
+PARPORT_MIN_SPINTIME_VALUE;
+
+static const int parport_max_spintime_value =
+PARPORT_MAX_SPINTIME_VALUE;
+
 
 struct parport_sysctl_table {
 	struct ctl_table_header *sysctl_header;
@@ -182,7 +198,9 @@ static const struct parport_sysctl_table parport_sysctl_template = {
         {
 		{ DEV_PARPORT_SPINTIME, "spintime",
 		  NULL, sizeof(int), 0644, NULL,
-		  &proc_dointvec },
+		  &proc_dointvec_minmax, NULL, NULL,
+		  (void*) &parport_min_spintime_value,
+		  (void*) &parport_max_spintime_value },
 		{ DEV_PARPORT_HARDWARE, "hardware",
 		  NULL, 0, 0444, NULL,
 		  &do_hardware },
@@ -230,7 +248,9 @@ parport_device_sysctl_template = {
 	{
 		{ DEV_PARPORT_DEVICE_TIMESLICE, "timeslice",
 		  NULL, sizeof(int), 0644, NULL,
-		  &proc_dointvec },
+		  &proc_doulongvec_ms_jiffies_minmax, NULL, NULL,
+		  (void*) &parport_min_timeslice_value,
+		  (void*) &parport_max_timeslice_value },
 	},
 	{ {0, NULL, NULL, 0, 0555, NULL}, {0}},
 	{ PARPORT_DEVICES_ROOT_DIR, {0}},
@@ -258,11 +278,15 @@ parport_default_sysctl_table = {
 		{ DEV_PARPORT_DEFAULT_TIMESLICE, "timeslice",
 		  &parport_default_timeslice,
 		  sizeof(parport_default_timeslice), 0644, NULL,
-		  &proc_dointvec },
+		  &proc_doulongvec_ms_jiffies_minmax, NULL, NULL,
+		  (void*) &parport_min_timeslice_value,
+		  (void*) &parport_max_timeslice_value },
 		{ DEV_PARPORT_DEFAULT_SPINTIME, "spintime",
 		  &parport_default_spintime,
-		  sizeof(parport_default_timeslice), 0644, NULL,
-		  &proc_dointvec },
+		  sizeof(parport_default_spintime), 0644, NULL,
+		  &proc_dointvec_minmax, NULL, NULL,
+		  (void*) &parport_min_spintime_value,
+		  (void*) &parport_max_spintime_value },
 		{0}
 	},
 	{ { DEV_PARPORT_DEFAULT, "default", NULL, 0, 0555,
@@ -395,7 +419,7 @@ int parport_default_proc_unregister(void)
 	return 0;
 }
 
-#else /* no sysctl */
+#else /* no sysctl or no procfs*/
 
 int parport_proc_register(struct parport *pp)
 {

@@ -53,8 +53,8 @@
      *  Interface used by the world
      */
 
-void sbusfb_init(void);
-void sbusfb_setup(char *options, int *ints);
+int sbusfb_init(void);
+int sbusfb_setup(char*);
 
 static int currcon;
 static int defx_margin = -1, defy_margin = -1;
@@ -743,7 +743,7 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Setup: parse used options
      */
 
-void __init sbusfb_setup(char *options, int *ints)
+int __init sbusfb_setup(char *options)
 {
 	char *p;
 	
@@ -775,6 +775,7 @@ void __init sbusfb_setup(char *options, int *ints)
 		if (*p != ',') break;
 		p++;
 	}
+	return 0;
 }
 
 static int sbusfbcon_switch(int con, struct fb_info *info)
@@ -1128,7 +1129,7 @@ sizechange:
 		kfree(fb);
 		return;
 	}
-	printk("fb%d: %s\n", GET_FB_IDX(fb->info.node), p);
+	printk(KERN_INFO "fb%d: %s\n", GET_FB_IDX(fb->info.node), p);
 }
 
 static inline int known_card(char *name)
@@ -1151,7 +1152,7 @@ static inline int known_card(char *name)
 	return FBTYPE_NOTYPE;
 }
 
-void __init sbusfb_init(void)
+int __init sbusfb_init(void)
 {
 	int type;
 	struct linux_sbus_device *sbdp;
@@ -1159,7 +1160,7 @@ void __init sbusfb_init(void)
 	char prom_name[40];
 	extern int con_is_present(void);
 	
-	if (!con_is_present()) return;
+	if (!con_is_present()) return -ENXIO;
 	
 #ifdef CONFIG_FB_CREATOR
 	{
@@ -1199,4 +1200,5 @@ void __init sbusfb_init(void)
 				       sbdp->num_registers, sbdp);
 		sbusfb_init_fb(sbdp->prom_node, sbdp->my_bus->prom_node, type, sbdp);
 	}
+	return 0;
 }	

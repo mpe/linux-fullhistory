@@ -159,7 +159,7 @@ void raid1_end_request (struct buffer_head *bh, int uptodate)
 	}
 
 	/*
-	 * WRITE or WRITEA.
+	 * WRITE.
 	 */
 	PRINTK(("raid1_end_request(), write branch.\n"));
 
@@ -215,15 +215,14 @@ raid1_make_request (struct md_dev *mddev, int rw, struct buffer_head * bh)
 	memset (r1_bh, 0, sizeof (struct raid1_bh));
 
 /*
- * make_request() can abort the operation when READA or WRITEA are being
+ * make_request() can abort the operation when READA is being
  * used and no empty request is available.
  *
  * Currently, just replace the command with READ/WRITE.
  */
 	if (rw == READA) rw = READ;
-	if (rw == WRITEA) rw = WRITE;
 
-	if (rw == WRITE || rw == WRITEA)
+	if (rw == WRITE)
 		mark_buffer_clean(bh);		/* Too early ? */
 
 /*
@@ -269,7 +268,7 @@ raid1_make_request (struct md_dev *mddev, int rw, struct buffer_head * bh)
 	}
 
 	/*
-	 * WRITE or WRITEA.
+	 * WRITE.
 	 */
 	PRINTK(("raid1_make_request(n=%d), write branch.\n",n));
 

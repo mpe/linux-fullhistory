@@ -224,9 +224,15 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	alpha_using_srm = strncmp((const char *)hwrpb->ssn, "MILO", 4) != 0;
 #endif
 
-	printk("Booting on %s%s%s using machine vector %s\n",
+	printk("Booting "
+#ifdef CONFIG_ALPHA_GENERIC
+	       "GENERIC "
+#endif
+	       "on %s%s%s using machine vector %s from %s\n",
 	       type_name, (*var_name ? " variation " : ""),
-	       var_name, alpha_mv.vector_name);
+	       var_name, alpha_mv.vector_name,
+	       (alpha_using_srm ? "SRM" : "MILO"));
+
 	printk("Command line: %s\n", command_line);
 
 	/* 

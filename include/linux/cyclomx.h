@@ -21,7 +21,6 @@
 #ifndef	_CYCLOMX_H
 #define	_CYCLOMX_H
 
-#include <linux/config.h>
 #include <linux/wanrouter.h>
 #include <asm/spinlock.h>
 
@@ -56,8 +55,7 @@ typedef struct cycx {
 	spinlock_t lock;
 	char in_isr;			/* interrupt-in-service flag */
 	char buff_int_mode_unbusy;      /* flag for carrying out dev_tint */
-	u16 irq_dis_if_send_count;	/* Disabling irqs in if_send*/
-#if LINUX_VERSION_CODE >= 0x020300
+#if (LINUX_VERSION_CODE >= 0x20300)
 	wait_queue_head_t wait_stats;  /* to wait for the STATS indication */
 #else
 	struct wait_queue* wait_stats;  /* to wait for the STATS indication */
@@ -73,7 +71,7 @@ typedef struct cycx {
 			u32 lo_svc;
 			u32 hi_svc;
 			TX25Stats stats;
-			unsigned critical;	/* critical section flag */
+			spinlock_t lock;
 			u32 connection_keys;
 		} x;
 #endif
@@ -81,12 +79,12 @@ typedef struct cycx {
 } cycx_t;
 
 /* Public Functions */
-void cyclomx_open      (cycx_t* card);			/* cycx_main.c */
-void cyclomx_close     (cycx_t* card);			/* cycx_main.c */
-void cyclomx_set_state (cycx_t* card, int state);	/* cycx_main.c */
+void cyclomx_open      (cycx_t *card);			/* cycx_main.c */
+void cyclomx_close     (cycx_t *card);			/* cycx_main.c */
+void cyclomx_set_state (cycx_t *card, int state);	/* cycx_main.c */
 
 #ifdef CONFIG_CYCLOMX_X25
-int cyx_init (cycx_t* card, wandev_conf_t* conf);	/* cycx_x25.c */
+int cyx_init (cycx_t *card, wandev_conf_t *conf);	/* cycx_x25.c */
 #endif
 #endif	/* __KERNEL__ */
 #endif	/* _CYCLOMX_H */

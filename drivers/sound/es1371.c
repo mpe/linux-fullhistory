@@ -3,7 +3,7 @@
 /*
  *      es1371.c  --  Creative Ensoniq ES1371.
  *
- *      Copyright (C) 1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *      Copyright (C) 1998-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
@@ -71,6 +71,9 @@
  *    03.08.99   0.14  adapt to Linus' new __setup/__initcall
  *                     added kernel command line option "es1371=joystickaddr"
  *                     removed CONFIG_SOUND_ES1371_JOYPORT_BOOT kludge
+ *    10.08.99   0.15  (Re)added S/PDIF module option for cards revision >= 4.
+ *                     Initial version by Dave Platt <dplatt@snulbug.mtview.ca.us>.
+ *                     module_init/__setup fixes
  *
  */
 
@@ -145,6 +148,7 @@
 static const unsigned sample_size[] = { 1, 2, 2, 4 };
 static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 
+#define CTRL_SPDIFEN_B  0x04000000
 #define CTRL_JOY_SHIFT  24
 #define CTRL_JOY_MASK   3
 #define CTRL_JOY_200    0x00000000  /* joystick base address */
@@ -180,6 +184,9 @@ static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 
 
 #define STAT_INTR       0x80000000  /* wired or of all interrupt bits */
+#define STAT_EN_SPDIF   0x00040000  /* enable S/PDIF circuitry */
+#define STAT_TS_SPDIF   0x00020000  /* test S/PDIF circuitry */
+#define STAT_TESTMODE   0x00010000  /* test ASIC */
 #define STAT_SYNC_ERR   0x00000100  /* 1 = codec sync error */
 #define STAT_VC         0x000000c0  /* CCB int source, 0=DAC1, 1=DAC2, 2=ADC, 3=undef */
 #define STAT_SH_VC      6
@@ -1481,9 +1488,9 @@ static int drain_dac1(struct es1371_state *s, int nonblock)
                         current->state = TASK_RUNNING;
                         return -EBUSY;
                 }
-		tmo = (count * HZ) / s->dac1rate;
+		tmo = 3 * HZ * (count + s->dma_dac1.fragsize) / 2 / s->dac1rate;
 		tmo >>= sample_shift[(s->sctrl & SCTRL_P1FMT) >> SCTRL_SH_P1FMT];
-		if (!schedule_timeout(tmo ? : 1) && tmo)
+		if (!schedule_timeout(tmo + 1))
 			printk(KERN_DEBUG "es1371: dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac1.wait, &wait);
@@ -1516,9 +1523,9 @@ static int drain_dac2(struct es1371_state *s, int nonblock)
                         current->state = TASK_RUNNING;
                         return -EBUSY;
                 }
-		tmo = (count * HZ) / s->dac2rate;
+		tmo = 3 * HZ * (count + s->dma_dac2.fragsize) / 2 / s->dac2rate;
 		tmo >>= sample_shift[(s->sctrl & SCTRL_P2FMT) >> SCTRL_SH_P2FMT];
-		if (!schedule_timeout(tmo ? : 1) && tmo)
+		if (!schedule_timeout(tmo + 1))
 			printk(KERN_DEBUG "es1371: dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac2.wait, &wait);
@@ -2697,6 +2704,15 @@ static /*const*/ struct file_operations es1371_midi_fops = {
 #define NR_DEVICE 5
 
 static int joystick[NR_DEVICE] = { 0, };
+static int spdif[NR_DEVICE] = { 0, };
+
+MODULE_PARM(joystick, "1-" __MODULE_STRING(NR_DEVICE) "i");
+MODULE_PARM_DESC(joystick, "sets address and enables joystick interface (still need separate driver)");
+MODULE_PARM(spdif, "1-" __MODULE_STRING(NR_DEVICE) "i");
+MODULE_PARM_DESC(spdif, "if 1 the output is in S/PDIF digital mode");
+
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
+MODULE_DESCRIPTION("ES1371 AudioPCI97 Driver");
 
 /* --------------------------------------------------------------------- */
 
@@ -2719,19 +2735,18 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_IGAIN, 0x4040 }
 };
 
-#ifndef MODULE
-static
-#endif
-int __init init_module(void)
+static int __init init_es1371(void)
 {
 	struct es1371_state *s;
 	struct pci_dev *pcidev = NULL;
 	mm_segment_t fs;
 	int i, val, val2, index = 0;
+	u8 revision;
+	unsigned cssr;
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.14 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1371: version v0.15 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1371, pcidev))) {
 		if (pcidev->resource[0].flags == 0 || 
@@ -2784,6 +2799,18 @@ int __init init_module(void)
 			}
 		}
 		s->sctrl = 0;
+		cssr = 0;
+		/* check to see if s/pdif mode is being requested */
+		pci_read_config_byte(pcidev, PCI_REVISION_ID, &revision);
+		if (spdif[index]) {
+			if (revision >= 4) {
+				printk(KERN_INFO "es1371: enabling S/PDIF output\n");
+				cssr |= STAT_EN_SPDIF;
+				s->ctrl |= CTRL_SPDIFEN_B;
+			} else {
+				printk(KERN_ERR "es1371: revision %d does not support S/PDIF\n", revision);
+			}
+		}
 		/* initialize the chips */
 		outl(s->ctrl, s->io+ES1371_REG_CONTROL);
 		outl(s->sctrl, s->io+ES1371_REG_SERIAL_CONTROL);
@@ -2858,6 +2885,8 @@ int __init init_module(void)
 			mixer_ioctl(s, initvol[i].mixch, (unsigned long)&val);
 		}
 		set_fs(fs);
+		/* turn on S/PDIF output driver if requested */
+		outl(cssr, s->io+ES1371_REG_STATUS);
 		/* queue it for later freeing */
 		s->next = devs;
 		devs = s;
@@ -2883,17 +2912,7 @@ int __init init_module(void)
 	return 0;
 }
 
-/* --------------------------------------------------------------------- */
-
-#ifdef MODULE
-
-MODULE_PARM(joystick, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(joystick, "sets address and enables joystick interface (still need separate driver)");
-
-MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
-MODULE_DESCRIPTION("ES1371 AudioPCI97 Driver");
-
-void cleanup_module(void)
+static void __exit cleanup_es1371(void)
 {
 	struct es1371_state *s;
 
@@ -2913,23 +2932,27 @@ void cleanup_module(void)
 	printk(KERN_INFO "es1371: unloading\n");
 }
 
-#else /* MODULE */
+module_init(init_es1371);
+module_exit(cleanup_es1371);
+
+/* --------------------------------------------------------------------- */
+
+#ifndef MODULE
 
 /* format is: es1371=[joystick] */
 
 static int __init es1371_setup(char *str)
 {
 	static unsigned __initdata nr_dev = 0;
-        int ints[11];
 
 	if (nr_dev >= NR_DEVICE)
 		return 0;
-	get_option(&str, &joystick[nr_dev]);
+	if (get_option(&str, &joystick[nr_dev]) == 2)
+		get_option(&str, &spdif[nr_dev]);
 	nr_dev++;
 	return 1;
 }
 
 __setup("es1371=", es1371_setup);
-__initcall(init_module);
 
 #endif /* MODULE */

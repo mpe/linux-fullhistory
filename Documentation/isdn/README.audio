@@ -1,4 +1,4 @@
-$Id: README.audio,v 1.7 1998/07/26 18:45:34 armin Exp $
+$Id: README.audio,v 1.8 1999/07/11 17:17:29 armin Exp $
 
 ISDN subsystem for Linux.
   Description of audio mode.
@@ -57,6 +57,17 @@ The following commands are supported:
                                          of 0.1 second. (default 70)
         AT+VSD=?         Report possible parameters.
         AT+VSD?          Show current parameters.
+
+        AT+VDD=x,y       Set DTMF-detection parameters.
+                         Only possible if online and during this connection.
+                         Possible parameters:
+                           x = 0 ... 15  sensitivity threshold level.
+                                         (default 0 , I4L soft-decode)
+                                         (1-15 soft-decode off, hardware on)
+                           y = 0 ... 255 tone duration in units of 5ms.
+                                         Not for I4L soft decode (default 8, 40ms)
+        AT+VDD=?         Report possible parameters.
+        AT+VDD?          Show current parameters.
 
         AT+VSM=x         Select audio data format.
                          Possible parameters:

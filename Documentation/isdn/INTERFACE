@@ -1,4 +1,4 @@
-$Id: INTERFACE,v 1.11 1999/03/02 12:14:51 armin Exp $
+$Id: INTERFACE,v 1.13 1999/08/11 20:30:26 armin Exp $
 
 Description of the Interface between Linklevel and Hardwarelevel
   of isdn4linux:
@@ -216,7 +216,7 @@ Description of the Interface between Linklevel and Hardwarelevel
 
    Until now, the following commands are defined:
 
-***CHANGEI1.34: The parameter "num" has been replaced by a union "para" containing
+***CHANGEI1.34: The parameter "num" has been replaced by a union "parm" containing
                 the old "num" and a new setup_type struct used for ISDN_CMD_DIAL
                 and ISDN_STAT_ICALL callback.
 
@@ -235,7 +235,7 @@ Description of the Interface between Linklevel and Hardwarelevel
        driver   = driver-Id.
        command  = ISDN_CMD_IOCTL
        arg      = Original ioctl-cmd - IIOCDRVCTL
-       para.num = first bytes filled with (unsigned long)arg
+       parm.num = first bytes filled with (unsigned long)arg
    
      Returnvalue:
        Depending on driver.
@@ -251,10 +251,10 @@ Description of the Interface between Linklevel and Hardwarelevel
       command     = ISDN_CMD_DIAL
       arg         = channel-number locally to the driver. (starting with 0)
       
-      para.setup.phone  = An ASCII-String containing the number to dial.
-      para.setup.eazmsn = An ASCII-Sting containing the own EAZ or MSN.
-      para.setup.si1    = The Service-Indicator.
-      para.setup.si2    = Additional Service-Indicator.
+      parm.setup.phone  = An ASCII-String containing the number to dial.
+      parm.setup.eazmsn = An ASCII-Sting containing the own EAZ or MSN.
+      parm.setup.si1    = The Service-Indicator.
+      parm.setup.si2    = Additional Service-Indicator.
 
                     If the Line has been designed as SPV (a special german
                     feature, meaning semi-leased-line) the phone has to
@@ -272,7 +272,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_ACCEPTD
       arg         = channel-number locally to the driver. (starting with 0)
-      para        = unused.
+      parm        = unused.
 
   ISDN_CMD_ACCEPTB:
 
@@ -283,7 +283,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_ACCEPTB
       arg         = channel-number locally to the driver. (starting with 0)
-      para        = unused.
+      parm        = unused.
 
   ISDN_CMD_HANGUP:
 
@@ -295,7 +295,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_HANGUP
       arg         = channel-number locally to the driver. (starting with 0)
-      para        = unused.
+      parm        = unused.
 
   ISDN_CMD_CLREAZ:
 
@@ -306,7 +306,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_CLREAZ
       arg         = channel-number locally to the driver. (starting with 0)
-      para        = unused.
+      parm        = unused.
 
   ISDN_CMD_SETEAZ:
 
@@ -317,7 +317,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_SETEAZ
       arg         = channel-number locally to the driver. (starting with 0)
-      para.num    = ASCII-String, containing the desired EAZ's/MSN's
+      parm.num    = ASCII-String, containing the desired EAZ's/MSN's
                     (comma-separated). If an empty String is given, the
                     HL-driver should respond to ALL incoming calls,
                     regardless of the destination-address.
@@ -332,7 +332,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_GETEAZ
       arg         = channel-number locally to the driver. (starting with 0)
-      para.num    = ASCII-String, containing the current EAZ's/MSN's
+      parm.num    = ASCII-String, containing the current EAZ's/MSN's
 
   ISDN_CMD_SETSIL: (currently unused)
 
@@ -343,7 +343,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_SETSIL
       arg         = channel-number locally to the driver. (starting with 0)
-      para.num    = ASCII-String, containing the desired Service-Indicators.
+      parm.num    = ASCII-String, containing the desired Service-Indicators.
 
   ISDN_CMD_GETSIL: (currently unused)
 
@@ -354,7 +354,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_SETSIL
       arg         = channel-number locally to the driver. (starting with 0)
-      para.num    = ASCII-String, containing the current Service-Indicators.
+      parm.num    = ASCII-String, containing the current Service-Indicators.
 
   ISDN_CMD_SETL2:
 
@@ -369,7 +369,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       arg         = channel-number locally to the driver. (starting with 0)
                     logical or'ed with (protocol-Id << 8)
                     protocol-Id is one of the constants ISDN_PROTO_L2...
-      para        = unused.
+      parm        = unused.
 
   ISDN_CMD_GETL2: (currently unused)
 
@@ -380,7 +380,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_GETL2
       arg         = channel-number locally to the driver. (starting with 0)
-      para        = unused.
+      parm        = unused.
     Returnvalue:
       current protocol-Id (one of the constants ISDN_L2_PROTO)
 
@@ -397,7 +397,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       arg         = channel-number locally to the driver. (starting with 0)
                     logical or'ed with (protocol-Id << 8)
                     protocol-Id is one of the constants ISDN_PROTO_L3...
-      para        = unused.
+      parm.fax    = Pointer to T30_s fax struct. (fax usage only)
 
   ISDN_CMD_GETL2: (currently unused)
 
@@ -408,7 +408,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_GETL3
       arg         = channel-number locally to the driver. (starting with 0)
-      para        = unused.
+      parm        = unused.
     Returnvalue:
       current protocol-Id (one of the constants ISDN_L3_PROTO)
 
@@ -422,7 +422,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_LOCK
       arg         = unused.
-      para        = unused.
+      parm        = unused.
 
   ISDN_CMD_UNLOCK:
 
@@ -434,7 +434,19 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id.
       command     = ISDN_CMD_UNLOCK
       arg         = unused.
-      para        = unused.
+      parm        = unused.
+
+  ISDN_CMD_FAXCMD:
+
+    With this command the HL-driver receives a fax sub-command.
+    For details refer to INTERFACE.fax
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_FAXCMD
+      arg         = channel-number locally to the driver. (starting with 0)
+      parm        = unused.
+
 
 3. Description of the events to be signaled by the HL-driver to the LL.
 
@@ -456,7 +468,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_STAVAIL
       arg         = length of available data.
-      para        = unused.
+      parm        = unused.
 
   ISDN_STAT_ICALL:
 
@@ -466,12 +478,12 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver            = driver-Id
       command           = ISDN_STAT_ICALL
       arg               = channel-number, locally to the driver. (starting with 0)
-      para.setup.phone  = Callernumber.
-      para.setup.eazmsn = CalledNumber.
-      para.setup.si1    = Service Indicator.
-      para.setup.si2    = Additional Service Indicator.
-      para.setup.plan   = octet 3 from Calling party number Information Element.
-      para.setup.screen = octet 3a from Calling party number Information Element.
+      parm.setup.phone  = Callernumber.
+      parm.setup.eazmsn = CalledNumber.
+      parm.setup.si1    = Service Indicator.
+      parm.setup.si2    = Additional Service Indicator.
+      parm.setup.plan   = octet 3 from Calling party number Information Element.
+      parm.setup.screen = octet 3a from Calling party number Information Element.
 
     Return:
       0           = No device matching this call.
@@ -497,7 +509,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_RUN
       arg         = unused.
-      para        = unused.
+      parm        = unused.
 
   ISDN_STAT_STOP:
 
@@ -508,7 +520,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_STOP
       arg         = unused.
-      para        = unused.
+      parm        = unused.
 
   ISDN_STAT_DCONN:
 
@@ -519,7 +531,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_DCONN
       arg         = channel-number, locally to the driver. (starting with 0)
-      para        = unused.
+      parm        = unused.
 
   ISDN_STAT_BCONN:
 
@@ -534,7 +546,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_BCONN
       arg         = channel-number, locally to the driver. (starting with 0)
-      para.num    = ASCII-String, containing type of connection (for analog
+      parm.num    = ASCII-String, containing type of connection (for analog
 		    modem only). This will be appended to the CONNECT message
 		    e.g. 14400/V.32bis
 
@@ -549,7 +561,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_DHUP
       arg         = channel-number, locally to the driver. (starting with 0)
-      para        = unused.
+      parm        = unused.
 
   ISDN_STAT_BHUP:
 
@@ -564,7 +576,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_BHUP
       arg         = channel-number, locally to the driver. (starting with 0)
-      para        = unused.
+      parm        = unused.
 
   ISDN_STAT_CINF:
 
@@ -575,7 +587,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_CINF
       arg         = channel-number, locally to the driver. (starting with 0)
-      para.num    = ASCII string containing charge-units (digits only).
+      parm.num    = ASCII string containing charge-units (digits only).
 
   ISDN_STAT_LOAD: (currently unused)
 
@@ -588,7 +600,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_UNLOAD
       arg         = unused.
-      para        = unused.
+      parm        = unused.
 
   ISDN_STAT_BSENT:
 
@@ -600,7 +612,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_BSENT
       arg         = channel-number, locally to the driver. (starting with 0)
-      para.length = ***CHANGEI.1.21: New field.
+      parm.length = ***CHANGEI.1.21: New field.
 		    the driver has to set this to the original length
 		    of the skb at the time of receiving it from the linklevel.
 
@@ -613,21 +625,21 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_NODCH
       arg         = channel-number, locally to the driver. (starting with 0)
-      para        = unused.
+      parm        = unused.
 
-  ISDN_STAT_ADDCH: (currently unused)
+  ISDN_STAT_ADDCH: 
 
-    This call is planned for HL-drivers, which are unable to check card-type
+    This call is for HL-drivers, which are unable to check card-type
     or numbers of supported channels before they have loaded any firmware
-    using ioctl. Those HL-driver simply set the channel-parameter to zero
-    or a minimum channel-number when registering, and later if they know
+    using ioctl. Those HL-driver simply set the channel-parameter to a
+    minimum channel-number when registering, and later if they know
     the real amount, perform this call, allocating additional channels.
 
     Parameter:
       driver      = driver-Id
       command     = ISDN_STAT_ADDCH
-      arg         = to be defined.
-      para        = to be defined.
+      arg         = number of channels to be added.
+      parm        = unused.
 
   ISDN_STAT_CAUSE:
 
@@ -640,7 +652,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_NODCH
       arg         = channel-number, locally to the driver. (starting with 0)
-      para.num    = ASCII string containing CAUSE-message.
+      parm.num    = ASCII string containing CAUSE-message.
 
   ISDN_STAT_L1ERR:
 
@@ -653,5 +665,33 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_L1ERR
       arg         = channel-number, locally to the driver. (starting with 0)
-      para.errcode= ISDN_STAT_L1ERR_SEND:     Packet lost while sending.
+      parm.errcode= ISDN_STAT_L1ERR_SEND:     Packet lost while sending.
 		    ISDN_STAT_L1ERR_RECV:     Packet lost while receiving.
+  ISDN_STAT_DISCH:
+
+    With this call, the HL-driver signals the LL to disable or enable the
+    use of supplied channel and driver.
+    The call may be used to reduce the available number of B-channels after
+    loading the driver. The LL has to ignore a disabled channel when searching
+    for free channels. The HL driver itself never delivers STAT callbacks for
+    disabled channels. 	    
+    The LL returns a nonzero code if the operation was not successfull or the
+    selected channel is actually regarded as busy.
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_DISCH
+      arg         = channel-number, locally to the driver. (starting with 0)
+      parm.num[0] = 0 if channel shall be disabled, else enabled.
+    
+  ISDN_STAT_FAXIND:
+
+    With this call the HL-driver signals a fax sub-command to the LL.
+    For details refer to INTERFACE.fax
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_STAT_FAXIND
+      arg         = channel-number, locally to the driver. (starting with 0)
+      parm        = unused.
+

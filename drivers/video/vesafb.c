@@ -264,7 +264,7 @@ static int vesafb_set_var(struct fb_var_screeninfo *var, int con,
 	    var->bits_per_pixel != vesafb_defined.bits_per_pixel ||
 	    var->nonstd) {
 		if (first) {
-			printk("Vesafb does not support changing the video mode\n");
+			printk(KERN_ERR "Vesafb does not support changing the video mode\n");
 			first = 0;
 		}
 		return -EINVAL;
@@ -470,14 +470,14 @@ static struct fb_ops vesafb_ops = {
 	vesafb_ioctl
 };
 
-void vesafb_setup(char *options, int *ints)
+int vesafb_setup(char *options)
 {
 	char *this_opt;
 	
 	fb_info.fontname[0] = '\0';
 	
 	if (!options || !*options)
-		return;
+		return 0;
 	
 	for(this_opt=strtok(options,","); this_opt; this_opt=strtok(NULL,",")) {
 		if (!*this_opt) continue;
@@ -499,6 +499,7 @@ void vesafb_setup(char *options, int *ints)
 		else if (!strncmp(this_opt, "font:", 5))
 			strcpy(fb_info.fontname, this_opt+5);
 	}
+	return 0;
 }
 
 static int vesafb_switch(int con, struct fb_info *info)
@@ -522,12 +523,12 @@ static void vesafb_blank(int blank, struct fb_info *info)
 	/* Not supported */
 }
 
-void __init vesafb_init(void)
+int __init vesafb_init(void)
 {
 	int i,j;
 
 	if (screen_info.orig_video_isVGA != VIDEO_TYPE_VLFB)
-		return;
+		return -ENXIO;
 
 	video_base          = (char*)screen_info.lfb_base;
 	video_bpp           = screen_info.lfb_depth;
@@ -539,13 +540,13 @@ void __init vesafb_init(void)
 		FB_VISUAL_PSEUDOCOLOR : FB_VISUAL_TRUECOLOR;
         video_vbase = ioremap((unsigned long)video_base, video_size);
 
-	printk("vesafb: framebuffer at 0x%p, mapped to 0x%p, size %dk\n",
+	printk(KERN_INFO "vesafb: framebuffer at 0x%p, mapped to 0x%p, size %dk\n",
 	       video_base, video_vbase, video_size/1024);
-	printk("vesafb: mode is %dx%dx%d, linelength=%d, pages=%d\n",
+	printk(KERN_INFO "vesafb: mode is %dx%dx%d, linelength=%d, pages=%d\n",
 	       video_width, video_height, video_bpp, video_linelength, screen_info.pages);
 
 	if (screen_info.vesapm_seg) {
-		printk("vesafb: protected mode interface info at %04x:%04x\n",
+		printk(KERN_INFO "vesafb: protected mode interface info at %04x:%04x\n",
 		       screen_info.vesapm_seg,screen_info.vesapm_off);
 	}
 
@@ -553,12 +554,12 @@ void __init vesafb_init(void)
 		ypan = pmi_setpal = 0; /* not available or some DOS TSR ... */
 
 	if (ypan || pmi_setpal) {
-		pmi_base  = (unsigned short*)(__PAGE_OFFSET+((unsigned long)screen_info.vesapm_seg << 4) + screen_info.vesapm_off);
+		pmi_base  = (unsigned short*)bus_to_virt(((unsigned long)screen_info.vesapm_seg << 4) + screen_info.vesapm_off);
 		pmi_start = (void*)((char*)pmi_base + pmi_base[1]);
 		pmi_pal   = (void*)((char*)pmi_base + pmi_base[2]);
-		printk("vesafb: pmi: set display start = %p, set palette = %p\n",pmi_start,pmi_pal);
+		printk(KERN_INFO "vesafb: pmi: set display start = %p, set palette = %p\n",pmi_start,pmi_pal);
 		if (pmi_base[3]) {
-			printk("vesafb: pmi: ports = ");
+			printk(KERN_INFO "vesafb: pmi: ports = ");
 				for (i = pmi_base[3]/2; pmi_base[i] != 0xffff; i++)
 					printk("%x ",pmi_base[i]);
 			printk("\n");
@@ -569,7 +570,7 @@ void __init vesafb_init(void)
 				 * Rules are: we have to set up a descriptor for the requested
 				 * memory area and pass it in the ES register to the BIOS function.
 				 */
-				printk("vesafb: can't handle memory requests, pmi disabled\n");
+				printk(KERN_INFO "vesafb: can't handle memory requests, pmi disabled\n");
 				ypan = pmi_setpal = 0;
 			}
 		}
@@ -582,10 +583,10 @@ void __init vesafb_init(void)
 	vesafb_defined.bits_per_pixel=video_bpp;
 
 	if (ypan && vesafb_defined.yres_virtual > video_height) {
-		printk("vesafb: scrolling: %s using protected mode interface, yres_virtual=%d\n",
+		printk(KERN_INFO "vesafb: scrolling: %s using protected mode interface, yres_virtual=%d\n",
 		       (ypan > 1) ? "ywrap" : "ypan",vesafb_defined.yres_virtual);
 	} else {
-		printk("vesafb: scrolling: redraw\n");
+		printk(KERN_INFO "vesafb: scrolling: redraw\n");
 		vesafb_defined.yres_virtual = video_height;
 		ypan = 0;
 	}
@@ -609,7 +610,7 @@ void __init vesafb_init(void)
 		vesafb_defined.blue.length   = screen_info.blue_size;
 		vesafb_defined.transp.offset = screen_info.rsvd_pos;
 		vesafb_defined.transp.length = screen_info.rsvd_size;
-		printk("vesafb: directcolor: "
+		printk(KERN_INFO "vesafb: directcolor: "
 		       "size=%d:%d:%d:%d, shift=%d:%d:%d:%d\n",
 		       screen_info.rsvd_size,
 		       screen_info.red_size,
@@ -648,10 +649,11 @@ void __init vesafb_init(void)
 	vesafb_set_disp(-1);
 
 	if (register_framebuffer(&fb_info)<0)
-		return;
+		return -EINVAL;
 
-	printk("fb%d: %s frame buffer device\n",
+	printk(KERN_INFO "fb%d: %s frame buffer device\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename);
+	return 0;
 }
 
 /*

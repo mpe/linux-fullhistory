@@ -35,8 +35,8 @@ AFLAGS := $(AFLAGS) -DCPU=386
 endif
 
 ifdef CONFIG_M486
-CFLAGS := $(CFLAGS) -m486 -DCPU=486
-CFLAGS += $(shell if $(CC) -march=i486 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i486"; fi)
+CFLAGS := $(CFLAGS) -DCPU=486
+CFLAGS += $(shell if $(CC) -march=i486 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i486"; else echo "-m486"; fi)
 AFLAGS := $(AFLAGS) -DCPU=486
 endif
 
@@ -111,6 +111,7 @@ archclean:
 	@$(MAKEBOOT) clean
 
 archmrproper:
+	rm -f arch/i386/vmlinux.lds
 
 archdep:
 	@$(MAKEBOOT) dep

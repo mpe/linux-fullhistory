@@ -31,30 +31,12 @@
  */
 
 /*
- * Machine check reasons.  Defined according to PALcode sources
- * (osf.h and platform.h).
- */
-#define MCHK_K_TPERR		0x0080
-#define MCHK_K_TCPERR		0x0082
-#define MCHK_K_HERR		0x0084
-#define MCHK_K_ECC_C		0x0086
-#define MCHK_K_ECC_NC		0x0088
-#define MCHK_K_OS_BUGCHECK	0x008A
-#define MCHK_K_PAL_BUGCHECK	0x0090
-
-/*
  * BIOS32-style PCI interface:
  */
 
-#define DEBUG_MCHECK 0
 #define DEBUG_CONFIG 0
-/* #define DEBUG_DUMP_REGS */
+#define DEBUG_DUMP_REGS 0
 
-#if DEBUG_MCHECK
-# define DBGM(args)	printk args
-#else
-# define DBGM(args)
-#endif
 #if DEBUG_CONFIG
 # define DBGC(args)	printk args
 #else
@@ -62,11 +44,6 @@
 #endif
 
 #define vuip	volatile unsigned int  *
-
-static volatile unsigned int CIA_mcheck_expected = 0;
-static volatile unsigned int CIA_mcheck_taken = 0;
-static unsigned int CIA_jd;
-
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -173,20 +150,20 @@ conf_read(unsigned long addr, unsigned char type1)
 
 	mb();
 	draina();
-	CIA_mcheck_expected = 1;
-	CIA_mcheck_taken = 0;
+	mcheck_expected(0) = 1;
+	mcheck_taken(0) = 0;
 	mb();
 
 	/* Access configuration space.  */
 	value = *(vuip)addr;
 	mb();
 	mb();  /* magic */
-	if (CIA_mcheck_taken) {
-		CIA_mcheck_taken = 0;
+	if (mcheck_taken(0)) {
+		mcheck_taken(0) = 0;
 		value = 0xffffffffU;
 		mb();
 	}
-	CIA_mcheck_expected = 0;
+	mcheck_expected(0) = 0;
 	mb();
 
 #if 0
@@ -249,7 +226,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	}
 
 	draina();
-	CIA_mcheck_expected = 1;
+	mcheck_expected(0) = 1;
 	mb();
 
 	/* Access configuration space.  */
@@ -257,7 +234,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	mb();
 	mb();  /* magic */
 
-	CIA_mcheck_expected = 0;
+	mcheck_expected(0) = 0;
 	mb();
 
 #if 0
@@ -395,7 +372,7 @@ cia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
         unsigned int cia_tmp;
 
-#ifdef DEBUG_DUMP_REGS
+#if DEBUG_DUMP_REGS
 	{
 		unsigned int temp;
 		temp = *(vuip)CIA_IOC_CIA_REV; mb();
@@ -533,19 +510,26 @@ cia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	case 0:
 		/*
 		 * Set up the PCI->physical memory translation windows.
-		 * For now, windows 1,2 and 3 are disabled.  In the future,
+		 * For now, windows 2 and 3 are disabled.  In the future,
 		 * we may want to use them to do scatter/gather DMA. 
 		 *
 		 * Window 0 goes at 1 GB and is 1 GB large.
+		 * Window 1 goes at 2 GB and is 1 GB large.
 		 */
 
-		*(vuip)CIA_IOC_PCI_W0_BASE = 1U | (CIA_DMA_WIN_BASE_DEFAULT & 0xfff00000U);
-		*(vuip)CIA_IOC_PCI_W0_MASK = (CIA_DMA_WIN_SIZE_DEFAULT - 1) & 0xfff00000U;
-		*(vuip)CIA_IOC_PCI_T0_BASE = 0;
+		*(vuip)CIA_IOC_PCI_W0_BASE = CIA_DMA_WIN0_BASE_DEFAULT | 1U;
+		*(vuip)CIA_IOC_PCI_W0_MASK = (CIA_DMA_WIN0_SIZE_DEFAULT - 1) &
+					     0xfff00000U;
+		*(vuip)CIA_IOC_PCI_T0_BASE = CIA_DMA_WIN0_TRAN_DEFAULT >> 2;
+		
+		*(vuip)CIA_IOC_PCI_W1_BASE = CIA_DMA_WIN1_BASE_DEFAULT | 1U;
+		*(vuip)CIA_IOC_PCI_W1_MASK = (CIA_DMA_WIN1_SIZE_DEFAULT - 1) &
+					     0xfff00000U;
+		*(vuip)CIA_IOC_PCI_T1_BASE = CIA_DMA_WIN1_TRAN_DEFAULT >> 2;
 
-		*(vuip)CIA_IOC_PCI_W1_BASE = 0x0;
 		*(vuip)CIA_IOC_PCI_W2_BASE = 0x0;
 		*(vuip)CIA_IOC_PCI_W3_BASE = 0x0;
+		mb();
 		break;
 	}
 
@@ -593,128 +577,28 @@ cia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
         }
 }
 
-static int
+static inline void
 cia_pci_clr_err(void)
 {
-	CIA_jd = *(vuip)CIA_IOC_CIA_ERR;
-	DBGM(("CIA_pci_clr_err: CIA ERR after read 0x%x\n", CIA_jd));
-	*(vuip)CIA_IOC_CIA_ERR = CIA_jd;
+	unsigned int jd;
+
+	jd = *(vuip)CIA_IOC_CIA_ERR;
+	*(vuip)CIA_IOC_CIA_ERR = jd;
 	mb();
-	return 0;
+	*(vuip)CIA_IOC_CIA_ERR;		/* re-read to force write.  */
 }
 
 void
 cia_machine_check(unsigned long vector, unsigned long la_ptr,
 		  struct pt_regs * regs)
 {
-	struct el_common *mchk_header;
-	struct el_CIA_procdata *mchk_procdata;
-	struct el_CIA_sysdata_mcheck *mchk_sysdata;
-	unsigned long * ptr;
-	const char * reason;
-	char buf[128];
-	long i;
-
-	mchk_header = (struct el_common *)la_ptr;
-
-	mchk_procdata = (struct el_CIA_procdata *)
-		(la_ptr + mchk_header->proc_offset);
-
-	mchk_sysdata = (struct el_CIA_sysdata_mcheck *)
-		(la_ptr + mchk_header->sys_offset);
-
-	DBGM(("cia_machine_check: vector=0x%lx la_ptr=0x%lx\n",
-	      vector, la_ptr));
-	DBGM(("                     pc=0x%lx size=0x%x procoffset=0x%x "
-	      "sysoffset 0x%x\n", regs->pc, mchk_header->size,
-	      mchk_header->proc_offset, mchk_header->sys_offset));
-	DBGM(("cia_machine_check: expected %d DCSR 0x%lx PEAR 0x%lx\n",
-	      CIA_mcheck_expected, mchk_sysdata->epic_dcsr,
-	      mchk_sysdata->epic_pear));
-
-#if DEBUG_MCHECK
-	{
-		unsigned long *ptr;
-		int i;
-
-		ptr = (unsigned long *)la_ptr;
-		for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
-			printk(" +%lx %lx %lx\n", i*sizeof(long),
-			       ptr[i], ptr[i+1]);
-		}
-	}
-#endif
-
-	/*
-	 * Check if machine check is due to a badaddr() and if so,
-	 * ignore the machine check.
-	 */
-	mb();
-	mb();  /* magic */
-	if (CIA_mcheck_expected) {
-		DBGM(("CIA machine check expected\n"));
-		CIA_mcheck_expected = 0;
-		CIA_mcheck_taken = 1;
-		mb();
-		mb();  /* magic */
-		draina();
-		cia_pci_clr_err();
-		wrmces(0x7);
-		mb();
-		return;
-	}
-
-	switch ((unsigned int) mchk_header->code) {
-	case MCHK_K_TPERR:	reason = "tag parity error"; break;
-	case MCHK_K_TCPERR:	reason = "tag control parity error"; break;
-	case MCHK_K_HERR:	reason = "generic hard error"; break;
-	case MCHK_K_ECC_C:	reason = "correctable ECC error"; break;
-	case MCHK_K_ECC_NC:	reason = "uncorrectable ECC error"; break;
-	case MCHK_K_OS_BUGCHECK:	reason = "OS-specific PAL bugcheck"; break;
-	case MCHK_K_PAL_BUGCHECK:	reason = "callsys in kernel mode"; break;
-	case 0x96: reason = "i-cache read retryable error"; break;
-	case 0x98: reason = "processor detected hard error"; break;
-
-		/* System specific (these are for Alcor, at least): */
-	case 0x203: reason = "system detected uncorrectable ECC error"; break;
-	case 0x205: reason = "parity error detected by CIA"; break;
-	case 0x207: reason = "non-existent memory error"; break;
-	case 0x209: reason = "PCI SERR detected"; break;
-	case 0x20b: reason = "PCI data parity error detected"; break;
-	case 0x20d: reason = "PCI address parity error detected"; break;
-	case 0x20f: reason = "PCI master abort error"; break;
-	case 0x211: reason = "PCI target abort error"; break;
-	case 0x213: reason = "scatter/gather PTE invalid error"; break;
-	case 0x215: reason = "flash ROM write error"; break;
-	case 0x217: reason = "IOA timeout detected"; break;
-	case 0x219: reason = "IOCHK#, EISA add-in board parity or other catastrophic error"; break;
-	case 0x21b: reason = "EISA fail-safe timer timeout"; break;
-	case 0x21d: reason = "EISA bus time-out"; break;
-	case 0x21f: reason = "EISA software generated NMI"; break;
-	case 0x221: reason = "unexpected ev5 IRQ[3] interrupt"; break;
-	default:
-		sprintf(buf, "reason for machine-check unknown (0x%x)",
-			(unsigned int) mchk_header->code);
-		reason = buf;
-		break;
-	}
+	/* Clear the error before any reporting.  */
 	mb();
 	mb();  /* magic */
 	draina();
 	cia_pci_clr_err();
-	wrmces(rdmces());	/* reset machine check pending flag */
+	wrmces(rdmces());	/* reset machine check pending flag.  */
 	mb();
 
-	printk(KERN_CRIT "CIA machine check: %s%s\n",
-	       reason, mchk_header->retry ? " (retryable)" : "");
-	printk(KERN_CRIT "   vector=0x%lx la_ptr=0x%lx pc=0x%lx\n",
-	       vector, la_ptr, regs->pc);
-
-	/* Dump the logout area to give all info.  */
-
-	ptr = (unsigned long *)la_ptr;
-	for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
-		printk(KERN_CRIT "   +%8lx %016lx %016lx\n",
-		       i*sizeof(long), ptr[i], ptr[i+1]);
-	}
+	process_mcheck_info(vector, la_ptr, regs, "CIA", mcheck_expected(0));
 }

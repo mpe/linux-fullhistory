@@ -271,6 +271,17 @@ miata_pci_fixup(void)
 	es1888_init();
 }
 
+static void
+miata_kill_arch (int mode, char *reboot_cmd)
+{
+	/* Who said DEC engineers have no sense of humor? ;-)  */
+	if (alpha_using_srm) {
+		*(vuip) PYXIS_RESET = 0x0000dead;
+		mb();
+	}
+	generic_kill_arch(mode, reboot_cmd);
+}
+
 
 /*
  * The System Vector
@@ -295,6 +306,6 @@ struct alpha_machine_vector miata_mv __initmv = {
 	init_irq:		miata_init_irq,
 	init_pit:		generic_init_pit,
 	pci_fixup:		miata_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	kill_arch:		miata_kill_arch,
 };
 ALIAS_MV(miata)

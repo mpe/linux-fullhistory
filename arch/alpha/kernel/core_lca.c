@@ -430,18 +430,18 @@ ioc_error (__u32 stat0, __u32 stat1)
 }
 
 void
-lca_machine_check (unsigned long vector, unsigned long la,
+lca_machine_check (unsigned long vector, unsigned long la_ptr,
 		   struct pt_regs *regs)
 {
-	unsigned long * ptr;
 	const char * reason;
 	union el_lca el;
-	char buf[128];
-	long i;
 
-	printk(KERN_CRIT "lca: machine check (la=0x%lx,pc=0x%lx)\n",
-	       la, regs->pc);
-	el.c = (struct el_common *) la;
+	el.c = (struct el_common *) la_ptr;
+
+	wrmces(rdmces());	/* reset machine check pending flag */
+
+	printk(KERN_CRIT "LCA machine check: vector=%#lx pc=%#lx code=%#x\n",
+	       vector, regs->pc, (unsigned int) el.c->code);
 
 	/*
 	 * The first quadword after the common header always seems to
@@ -450,13 +450,13 @@ lca_machine_check (unsigned long vector, unsigned long la,
 	 * logout frame, the upper 32 bits is the machine check
 	 * revision level, which we ignore for now.
 	 */
-	switch (el.c->code & 0xffffffff) {
+	switch ((unsigned int) el.c->code) {
 	case MCHK_K_TPERR:	reason = "tag parity error"; break;
 	case MCHK_K_TCPERR:	reason = "tag control parity error"; break;
 	case MCHK_K_HERR:	reason = "access to non-existent memory"; break;
 	case MCHK_K_ECC_C:	reason = "correctable ECC error"; break;
 	case MCHK_K_ECC_NC:	reason = "non-correctable ECC error"; break;
-	case MCHK_K_CACKSOFT:	reason = "MCHK_K_CACKSOFT"; break; /* what's this? */
+	case MCHK_K_CACKSOFT:	reason = "MCHK_K_CACKSOFT"; break;
 	case MCHK_K_BUGCHECK:	reason = "illegal exception in PAL mode"; break;
 	case MCHK_K_OS_BUGCHECK: reason = "callsys in kernel mode"; break;
 	case MCHK_K_DCPERR:	reason = "d-cache parity error"; break;
@@ -465,19 +465,13 @@ lca_machine_check (unsigned long vector, unsigned long la,
 	case MCHK_K_SIO_IOCHK:	reason = "SIO IOCHK occurred on ISA bus"; break;
 	case MCHK_K_DCSR:	reason = "MCHK_K_DCSR"; break;
 	case MCHK_K_UNKNOWN:
-	default:
-		sprintf(buf, "reason for machine-check unknown (0x%lx)",
-			el.c->code & 0xffffffff);
-		reason = buf;
-		break;
+	default:		reason = "unknown"; break;
 	}
-
-	wrmces(rdmces());	/* reset machine check pending flag */
 
 	switch (el.c->size) {
 	case sizeof(struct el_lca_mcheck_short):
 		printk(KERN_CRIT
-		       "  Reason: %s (short frame%s, dc_stat=%lx):\n",
+		       "  Reason: %s (short frame%s, dc_stat=%#lx):\n",
 		       reason, el.c->retry ? ", retryable" : "",
 		       el.s->dc_stat);
 		if (el.s->esr & ESR_EAV) {
@@ -492,9 +486,9 @@ lca_machine_check (unsigned long vector, unsigned long la,
 		printk(KERN_CRIT "  Reason: %s (long frame%s):\n",
 		       reason, el.c->retry ? ", retryable" : "");
 		printk(KERN_CRIT
-		       "    reason: %lx  exc_addr: %lx  dc_stat: %lx\n", 
+		       "    reason: %#lx  exc_addr: %#lx  dc_stat: %#lx\n", 
 		       el.l->pt[0], el.l->exc_addr, el.l->dc_stat);
-		printk(KERN_CRIT "    car: %lx\n", el.l->car);
+		printk(KERN_CRIT "    car: %#lx\n", el.l->car);
 		if (el.l->esr & ESR_EAV) {
 			mem_error(el.l->esr, el.l->ear);
 		}
@@ -508,12 +502,16 @@ lca_machine_check (unsigned long vector, unsigned long la,
 	}
 
 	/* Dump the logout area to give all info.  */
-
-	ptr = (unsigned long *) la;
-	for (i = 0; i < el.c->size / sizeof(long); i += 2) {
-		printk(KERN_CRIT " +%8lx %016lx %016lx\n",
-		       i*sizeof(long), ptr[i], ptr[i+1]);
+#if DEBUG_MCHECK > 1
+	{
+		unsigned long * ptr = (unsigned long *) la_ptr;
+		long i;
+		for (i = 0; i < el.c->size / sizeof(long); i += 2) {
+			printk(KERN_CRIT " +%8lx %016lx %016lx\n",
+			       i*sizeof(long), ptr[i], ptr[i+1]);
+		}
 	}
+#endif
 }
 
 /*

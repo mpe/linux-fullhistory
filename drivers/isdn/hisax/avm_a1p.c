@@ -1,4 +1,4 @@
-/* $Id: avm_a1p.c,v 2.3 1998/11/15 23:54:22 keil Exp $
+/* $Id: avm_a1p.c,v 2.4 1999/07/12 21:04:55 keil Exp $
  *
  * avm_a1p.c    low level stuff for the following AVM cards:
  *              A1 PCMCIA
@@ -8,6 +8,10 @@
  * Author       Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: avm_a1p.c,v $
+ * Revision 2.4  1999/07/12 21:04:55  keil
+ * fix race in IRQ handling
+ * added watchdog for lost IRQs
+ *
  * Revision 2.3  1998/11/15 23:54:22  keil
  * changes from 2.0
  *
@@ -67,7 +71,7 @@
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
 
-static const char *avm_revision = "$Revision: 2.3 $";
+static const char *avm_revision = "$Revision: 2.4 $";
 
 static inline u_char
 ReadISAC(struct IsdnCardState *cs, u_char offset)
@@ -195,7 +199,7 @@ static void
 avm_a1p_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *cs = dev_id;
-	u_char val, sval, stat = 0;
+	u_char val, sval;
 
 	if (!cs) {
 		printk(KERN_WARNING "AVM A1 PCMCIA: Spurious interrupt!\n");
@@ -206,35 +210,26 @@ avm_a1p_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			debugl1(cs, "avm IntStatus %x", sval);
 		if (sval & ASL0_R_HSCX) {
                         val = ReadHSCX(cs, 1, HSCX_ISTA);
-			if (val) {
+			if (val)
 				hscx_int_main(cs, val);
-				stat |= 1;
-			}
 		}
 		if (sval & ASL0_R_ISAC) {
 			val = ReadISAC(cs, ISAC_ISTA);
-			if (val) {
+			if (val)
 				isac_interrupt(cs, val);
-				stat |= 2;
-			}
 		}
 	}
-	if (stat & 1) {
-		WriteHSCX(cs, 0, HSCX_MASK, 0xff);
-		WriteHSCX(cs, 1, HSCX_MASK, 0xff);
-		WriteHSCX(cs, 0, HSCX_MASK, 0x00);
-		WriteHSCX(cs, 1, HSCX_MASK, 0x00);
-	}
-	if (stat & 2) {
-		WriteISAC(cs, ISAC_MASK, 0xff);
-		WriteISAC(cs, ISAC_MASK, 0x00);
-	}
+	WriteHSCX(cs, 0, HSCX_MASK, 0xff);
+	WriteHSCX(cs, 1, HSCX_MASK, 0xff);
+	WriteISAC(cs, ISAC_MASK, 0xff);
+	WriteISAC(cs, ISAC_MASK, 0x00);
+	WriteHSCX(cs, 0, HSCX_MASK, 0x00);
+	WriteHSCX(cs, 1, HSCX_MASK, 0x00);
 }
 
 static int
 AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 {
-	int ret;
 	switch (mt) {
 		case CARD_RESET:
 			byteout(cs->hw.avm.cfg_reg+ASL0_OFFSET,0x00);
@@ -248,15 +243,6 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			/* free_irq is done in HiSax_closecard(). */
 		        /* free_irq(cs->irq, cs); */
 			return 0;
-
-		case CARD_SETIRQ:
-			ret = request_irq(cs->irq, &avm_a1p_interrupt,
-					I4L_IRQ_FLAG, "HiSax", cs);
-			if (ret)
-				return ret;
-			byteout(cs->hw.avm.cfg_reg+ASL0_OFFSET,
-				ASL0_W_TDISABLE|ASL0_W_TRESET|ASL0_W_IRQENABLE);
-                        return 0;
 
 		case CARD_INIT:
 			clear_pending_isac_ints(cs);
@@ -323,6 +309,7 @@ setup_avm_a1_pcmcia(struct IsdnCard *card))
 	cs->BC_Write_Reg = &WriteHSCX;
 	cs->BC_Send_Data = &hscx_fill_fifo;
 	cs->cardmsg = &AVM_card_msg;
+	cs->irq_func = &avm_a1p_interrupt;
 
 	ISACVersion(cs, "AVM A1 PCMCIA:");
 	if (HscxVersion(cs, "AVM A1 PCMCIA:")) {

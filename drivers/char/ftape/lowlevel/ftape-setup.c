@@ -60,12 +60,15 @@ static struct param_table {
 	{ "mach2",     &ft_mach2,          CONFIG_FT_MACH2,          0,     1}
 };
 
-void __init ftape_setup(char *str, int *ints)
+static int __init ftape_setup(char *str)
 {
 	int i;
 	int param;
+	int ints[2];
+
 	TRACE_FUN(ft_t_flow);
 
+	str = get_options(str, ARRAY_SIZE(ints), ints);
 	if (str) {
 		for (i=0; i < NR_ITEMS(config_params); i++) {
 			if (strcmp(str,config_params[i].name) == 0){
@@ -81,13 +84,13 @@ void __init ftape_setup(char *str, int *ints)
 					      config_params[i].name,
 					      config_params[i].min,
 					      config_params[i].max);
-					TRACE_EXIT;
+					goto out;
 				}
 				if(config_params[i].var) {
 					TRACE(ft_t_info, "%s=%d", str, param);
 					*config_params[i].var = param;
 				}
-				TRACE_EXIT;
+				goto out;
 			}
 		}
 	}
@@ -101,5 +104,8 @@ void __init ftape_setup(char *str, int *ints)
 	} else {
 		TRACE(ft_t_err, "botched ftape option");
 	}
-	TRACE_EXIT;
+ out:
+	TRACE_EXIT 1;
 }
+
+__setup("ftape=", ftape_setup);

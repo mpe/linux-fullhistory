@@ -522,7 +522,6 @@ layout_dev(struct pci_dev *dev)
 			   Cypress.  */
 			if (dev->vendor == PCI_VENDOR_ID_CONTAQ
 			    && dev->device == PCI_DEVICE_ID_CONTAQ_82C693
-			    && dev->class >> 8 == PCI_CLASS_BRIDGE_ISA
 			    && idx < 2) {
 				continue;
 			}

@@ -72,8 +72,8 @@ static int ofonly = 0;
      *  Interface used by the world
      */
 
-void offb_init(void);
-void offb_setup(char *options, int *ints);
+int offb_init(void);
+int offb_setup(char*);
 
 static int offb_open(struct fb_info *info, int user);
 static int offb_release(struct fb_info *info, int user);
@@ -314,13 +314,16 @@ extern void valkyrie_of_init(struct device_node *dp);
 #ifdef CONFIG_FB_PLATINUM
 extern void platinum_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_PLATINUM */
+#ifdef CONFIG_FB_CLGEN
+extern void clgen_of_init(struct device_node *dp);
+#endif /* CONFIG_FB_CLGEN */
 
 
     /*
      *  Initialisation
      */
 
-void __init offb_init(void)
+int __init offb_init(void)
 {
     struct device_node *dp;
     unsigned int dpy;
@@ -389,6 +392,7 @@ void __init offb_init(void)
 		offb_init_driver(dp);
 	}
     }
+    return 0;
 }
 
 static int __init offb_init_driver(struct device_node *dp)
@@ -441,6 +445,13 @@ static int __init offb_init_driver(struct device_node *dp)
 	return 1;
     }
 #endif /* CONFIG_FB_PLATINUM */
+#ifdef CONFIG_FB_CLGEN
+    if ((!strncmp(dp->name, "MacPicasso",10) ||
+        (!strncmp(dp->name, "54m30",10)) {
+       clgen_of_init(dp);
+       return 1;
+    }
+#endif /* CONFIG_FB_CLGEN */
     return 0;
 }
 
@@ -473,7 +484,7 @@ static void __init offb_init_nodriver(struct device_node *dp)
 	    if (dp->addrs[i].size >= len)
 		break;
 	if (i >= dp->n_addrs) {
-	    printk("no framebuffer address found for %s\n", dp->full_name);
+	    printk(KERN_ERR "no framebuffer address found for %s\n", dp->full_name);
 	    return;
 	}
 
@@ -501,7 +512,7 @@ static void offb_init_fb(const char *name, const char *full_name,
     printk(KERN_INFO "Using unsupported %dx%d %s at %lx, depth=%d, pitch=%d\n",
 	   width, height, name, address, depth, pitch);
     if (depth != 8 && depth != 16 && depth != 32) {
-	printk("%s: can't use depth = %d\n", full_name, depth);
+	printk(KERN_ERR "%s: can't use depth = %d\n", full_name, depth);
 	return;
     }
 
@@ -674,7 +685,7 @@ static void offb_init_fb(const char *name, const char *full_name,
 	return;
     }
 
-    printk("fb%d: Open Firmware frame buffer device on %s\n",
+    printk(KERN_INFO "fb%d: Open Firmware frame buffer device on %s\n",
 	   GET_FB_IDX(info->info.node), full_name);
 
 #ifdef CONFIG_FB_COMPAT_XPMAC
@@ -706,13 +717,14 @@ static void offb_init_fb(const char *name, const char *full_name,
      *  Setup: parse used options
      */
 
-void offb_setup(char *options, int *ints)
+int offb_setup(char *options)
 {
     if (!options || !*options)
-	return;
+	return 0;
 
     if (!strcmp(options, "ofonly"))
 	ofonly = 1;
+    return 0;
 }
 
 

@@ -1,4 +1,4 @@
-/* $Id: eicon_isa.c,v 1.5 1999/04/01 12:48:33 armin Exp $
+/* $Id: eicon_isa.c,v 1.6 1999/07/25 15:12:06 armin Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  * Hardware-specific code for old ISA cards.
@@ -22,6 +22,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_isa.c,v $
+ * Revision 1.6  1999/07/25 15:12:06  armin
+ * fix of some debug logs.
+ * enabled ISA-cards option.
+ *
  * Revision 1.5  1999/04/01 12:48:33  armin
  * Changed some log outputs.
  *
@@ -53,7 +57,9 @@
 #define release_shmem release_region
 #define request_shmem request_region
 
-char *eicon_isa_revision = "$Revision: 1.5 $";
+char *eicon_isa_revision = "$Revision: 1.6 $";
+
+#ifdef CONFIG_ISDN_DRV_EICON_ISA
 
 /* Mask for detecting invalid IRQ parameter */
 static int eicon_isa_valid_irq[] = {
@@ -430,3 +436,5 @@ eicon_isa_load(eicon_isa_card *card, eicon_isa_codebuf *cb) {
 	card->irqprobe = 0;
 	return 0;
 }
+
+#endif /* CONFIG_ISDN_DRV_EICON_ISA */

@@ -18,7 +18,7 @@ OX_OBJS  = pcisyms.o
 O_OBJS   = pci.o names.o
 L_OBJS   := pci_syms.o
 else
-L_OBJS   := pci.o
+L_OBJS   := pci.o names.o
 endif
 
 ifdef CONFIG_PROC_FS

@@ -149,6 +149,8 @@ README for the ISDN-subsystem
                AT&X0    BTX-mode and T.70-mode off (default)
                AT&X1    BTX-mode on. (S13.1=1, S13.5=0 S14=0, S16=7, S18=7, S19=0)
                AT&X2    T.70-mode on. (S13.1=1, S13.5=1, S14=0, S16=7, S18=7, S19=0)
+               AT+Rx    Resume a suspended call with CallID x (x = 1,2,3...)
+               AT+Sx    Suspend a call with CallID x (x = 1,2,3...)
 
            For voice-mode commands refer to README.audio
 
@@ -215,6 +217,9 @@ README for the ISDN-subsystem
                                           an incoming call happened (RING) and
                                           the remote party hung up before any
                                           local ATA was given.
+			    Bit 7:    0 = Don't show display messages from net
+                                      1 = Show display messages from net
+				          (S12 Bit 1 must be 0 too)      
              14   0         Layer-2 protocol:
                                       0 = X75/LAPB with I-frames
                                       1 = X75/LAPB with UI-frames
@@ -225,8 +230,11 @@ README for the ISDN-subsystem
                                       8 = V.110, 19200 baud
                                       9 = V.110, 38400 baud
                                      10 = Analog Modem (only if hardware supports this)
-             15   0         Layer-3 protocol: (at the moment always 0)
+                                     11 = Fax G3 (only if hardware supports this)
+             15   0         Layer-3 protocol:
                                       0 = transparent
+                                      1 = transparent with audio features (e.g. DSP)
+                                      2 = Fax G3 (S14 has to be set to 11)
              16   250       Send-Packet-size/16
              17   8         Window-size (not yet implemented)
              18   4         Bit coded register, Service-Octet-1 to accept,
@@ -255,6 +263,9 @@ README for the ISDN-subsystem
                             Set on incoming call (during RING) to
                             octet 3a of calling party number IE (Screening info)
                             See section 4.5.10 of ITU Q.931
+             23   0         Bit coded register:
+                            Bit 0:    0 = Add CPN to RING message off
+                                      1 = Add CPN to RING message on
 
   Last but not least a (at the moment fairly primitive) device to request
   the line-status (/dev/isdninfo) is made available.

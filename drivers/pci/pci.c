@@ -27,6 +27,8 @@
 #define DBG(x...)
 #endif
 
+extern void pci_namedevice(struct pci_dev *);
+
 struct pci_bus pci_root;
 struct pci_dev *pci_devices = NULL;
 int pci_reverse __initdata = 0;

@@ -1,4 +1,4 @@
-/* $Id: teles3.c,v 2.10 1999/02/15 14:37:15 cpetig Exp $
+/* $Id: teles3.c,v 2.12 1999/07/12 21:05:32 keil Exp $
 
  * teles3.c     low level stuff for Teles 16.3 & PNP isdn cards
  *
@@ -11,6 +11,13 @@
  *              Beat Doebeli
  *
  * $Log: teles3.c,v $
+ * Revision 2.12  1999/07/12 21:05:32  keil
+ * fix race in IRQ handling
+ * added watchdog for lost IRQs
+ *
+ * Revision 2.11  1999/07/01 08:12:14  keil
+ * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
+ *
  * Revision 2.10  1999/02/15 14:37:15  cpetig
  * oops, missed something in last commit
  *
@@ -78,7 +85,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *teles3_revision = "$Revision: 2.10 $";
+const char *teles3_revision = "$Revision: 2.12 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -160,9 +167,9 @@ WriteHSCX(struct IsdnCardState *cs, int hscx, u_char offset, u_char value)
 static void
 teles3_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
-#define MAXCOUNT 20
+#define MAXCOUNT 5
 	struct IsdnCardState *cs = dev_id;
-	u_char val, stat = 0;
+	u_char val;
 	int count = 0;
 
 	if (!cs) {
@@ -171,16 +178,12 @@ teles3_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	val = readreg(cs->hw.teles3.hscx[1], HSCX_ISTA);
       Start_HSCX:
-	if (val) {
+	if (val)
 		hscx_int_main(cs, val);
-		stat |= 1;
-	}
 	val = readreg(cs->hw.teles3.isac, ISAC_ISTA);
       Start_ISAC:
-	if (val) {
+	if (val)
 		isac_interrupt(cs, val);
-		stat |= 2;
-	}
 	count++;
 	val = readreg(cs->hw.teles3.hscx[1], HSCX_ISTA);
 	if (val && count < MAXCOUNT) {
@@ -196,16 +199,12 @@ teles3_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	if (count >= MAXCOUNT)
 		printk(KERN_WARNING "Teles3: more than %d loops in teles3_interrupt\n", count);
-	if (stat & 1) {
-		writereg(cs->hw.teles3.hscx[0], HSCX_MASK, 0xFF);
-		writereg(cs->hw.teles3.hscx[1], HSCX_MASK, 0xFF);
-		writereg(cs->hw.teles3.hscx[0], HSCX_MASK, 0x0);
-		writereg(cs->hw.teles3.hscx[1], HSCX_MASK, 0x0);
-	}
-	if (stat & 2) {
-		writereg(cs->hw.teles3.isac, ISAC_MASK, 0xFF);
-		writereg(cs->hw.teles3.isac, ISAC_MASK, 0x0);
-	}
+	writereg(cs->hw.teles3.hscx[0], HSCX_MASK, 0xFF);
+	writereg(cs->hw.teles3.hscx[1], HSCX_MASK, 0xFF);
+	writereg(cs->hw.teles3.isac, ISAC_MASK, 0xFF);
+	writereg(cs->hw.teles3.isac, ISAC_MASK, 0x0);
+	writereg(cs->hw.teles3.hscx[0], HSCX_MASK, 0x0);
+	writereg(cs->hw.teles3.hscx[1], HSCX_MASK, 0x0);
 }
 
 inline static void
@@ -222,15 +221,16 @@ release_ioregs(struct IsdnCardState *cs, int mask)
 void
 release_io_teles3(struct IsdnCardState *cs)
 {
-	if (cs->typ == ISDN_CTYPE_TELESPCMCIA)
+	if (cs->typ == ISDN_CTYPE_TELESPCMCIA) {
 		release_region(cs->hw.teles3.hscx[0], 97);
-	else {
-		if (cs->hw.teles3.cfg_reg)
+	} else {
+		if (cs->hw.teles3.cfg_reg) {
 			if (cs->typ == ISDN_CTYPE_COMPAQ_ISA) {
 				release_region(cs->hw.teles3.cfg_reg, 1);
 			} else {
 				release_region(cs->hw.teles3.cfg_reg, 8);
 			}
+		}
 		release_ioregs(cs, 0x7);
 	}
 }
@@ -309,9 +309,6 @@ Teles_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 		case CARD_RELEASE:
 			release_io_teles3(cs);
 			return(0);
-		case CARD_SETIRQ:
-			return(request_irq(cs->irq, &teles3_interrupt,
-					I4L_IRQ_FLAG, "HiSax", cs));
 		case CARD_INIT:
 			inithscxisac(cs, 3);
 			return(0);
@@ -321,8 +318,8 @@ Teles_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-int __init 
-setup_teles3(struct IsdnCard *card)
+__initfunc(int
+setup_teles3(struct IsdnCard *card))
 {
 	u_char val;
 	struct IsdnCardState *cs = card->cs;
@@ -405,12 +402,13 @@ setup_teles3(struct IsdnCard *card)
 			       CardType[cs->typ],
 			       cs->hw.teles3.isac + 32,
 			       cs->hw.teles3.isac + 64);
-			if (cs->hw.teles3.cfg_reg)
+			if (cs->hw.teles3.cfg_reg) {
 				if (cs->typ == ISDN_CTYPE_COMPAQ_ISA) {
 					release_region(cs->hw.teles3.cfg_reg, 1);
 				} else {
 					release_region(cs->hw.teles3.cfg_reg, 8);
 				}
+			}
 			return (0);
 		} else
 			request_region(cs->hw.teles3.isac + 32, 32, "HiSax isac");
@@ -420,12 +418,13 @@ setup_teles3(struct IsdnCard *card)
 			       CardType[cs->typ],
 			       cs->hw.teles3.hscx[0] + 32,
 			       cs->hw.teles3.hscx[0] + 64);
-			if (cs->hw.teles3.cfg_reg)
+			if (cs->hw.teles3.cfg_reg) {
 				if (cs->typ == ISDN_CTYPE_COMPAQ_ISA) {
 					release_region(cs->hw.teles3.cfg_reg, 1);
 				} else {
 					release_region(cs->hw.teles3.cfg_reg, 8);
 				}
+			}
 			release_ioregs(cs, 1);
 			return (0);
 		} else
@@ -436,12 +435,13 @@ setup_teles3(struct IsdnCard *card)
 			       CardType[cs->typ],
 			       cs->hw.teles3.hscx[1] + 32,
 			       cs->hw.teles3.hscx[1] + 64);
-			if (cs->hw.teles3.cfg_reg)
+			if (cs->hw.teles3.cfg_reg) {
 				if (cs->typ == ISDN_CTYPE_COMPAQ_ISA) {
 					release_region(cs->hw.teles3.cfg_reg, 1);
 				} else {
 					release_region(cs->hw.teles3.cfg_reg, 8);
 				}
+			}
 			release_ioregs(cs, 3);
 			return (0);
 		} else
@@ -494,6 +494,7 @@ setup_teles3(struct IsdnCard *card)
 	cs->BC_Write_Reg = &WriteHSCX;
 	cs->BC_Send_Data = &hscx_fill_fifo;
 	cs->cardmsg = &Teles_card_msg;
+	cs->irq_func = &teles3_interrupt;
 	ISACVersion(cs, "Teles3:");
 	if (HscxVersion(cs, "Teles3:")) {
 		printk(KERN_WARNING

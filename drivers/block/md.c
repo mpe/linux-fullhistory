@@ -740,7 +740,7 @@ int md_make_request (int minor, int rw, struct buffer_head * bh)
 		if (buffer_locked(bh))
 			return 0;
 		set_bit(BH_Lock, &bh->b_state);
-		if (rw == WRITE || rw == WRITEA) {
+		if (rw == WRITE) {
 			if (!buffer_dirty(bh)) {
 				bh->b_end_io(bh, test_bit(BH_Uptodate, &bh->b_state));
 				return 0;

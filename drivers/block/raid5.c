@@ -1206,7 +1206,6 @@ static int raid5_make_request (struct md_dev *mddev, int rw, struct buffer_head 
 	struct stripe_head *sh;
 
 	if (rw == READA) rw = READ;
-	if (rw == WRITEA) rw = WRITE;
 
 	new_sector = raid5_compute_sector(bh->b_rsector, raid_disks, data_disks,
 						&dd_idx, &pd_idx, raid_conf);

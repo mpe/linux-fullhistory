@@ -1,11 +1,43 @@
 /*
- * $Id: capi.c,v 1.13 1998/08/28 04:32:25 calle Exp $
+ * $Id: capi.c,v 1.19 1999/07/09 15:05:42 keil Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.19  1999/07/09 15:05:42  keil
+ * compat.h is now isdn_compat.h
+ *
+ * Revision 1.18  1999/07/06 07:42:01  calle
+ * - changes in /proc interface
+ * - check and changed calls to [dev_]kfree_skb and [dev_]alloc_skb.
+ *
+ * Revision 1.17  1999/07/01 15:26:30  calle
+ * complete new version (I love it):
+ * + new hardware independed "capi_driver" interface that will make it easy to:
+ *   - support other controllers with CAPI-2.0 (i.e. USB Controller)
+ *   - write a CAPI-2.0 for the passive cards
+ *   - support serial link CAPI-2.0 boxes.
+ * + wrote "capi_driver" for all supported cards.
+ * + "capi_driver" (supported cards) now have to be configured with
+ *   make menuconfig, in the past all supported cards where included
+ *   at once.
+ * + new and better informations in /proc/capi/
+ * + new ioctl to switch trace of capi messages per controller
+ *   using "avmcapictrl trace [contr] on|off|...."
+ * + complete testcircle with all supported cards and also the
+ *   PCMCIA cards (now patch for pcmcia-cs-3.0.13 needed) done.
+ *
+ * Revision 1.16  1999/07/01 08:22:57  keil
+ * compatibility macros now in <linux/isdn_compat.h>
+ *
+ * Revision 1.15  1999/06/21 15:24:11  calle
+ * extend information in /proc.
+ *
+ * Revision 1.14  1999/06/10 16:51:03  calle
+ * Bugfix: open/release of control device was not handled correct.
+ *
  * Revision 1.13  1998/08/28 04:32:25  calle
  * Added patch send by Michael.Mueller4@post.rwth-aachen.de, to get AVM B1
  * driver running with 2.1.118.
@@ -80,11 +112,12 @@
 #include <linux/timer.h>
 #include <linux/wait.h>
 #include <linux/skbuff.h>
+#include <linux/proc_fs.h>
 #include <linux/poll.h>
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
 
-#include "compat.h"
+#include <linux/isdn_compat.h>
 #include "capiutil.h"
 #include "capicmd.h"
 #include "capidev.h"
@@ -178,7 +211,10 @@ static ssize_t capi_read(struct file *file, char *buf,
 	}
 	copied = skb->len;
 
-
+	if (CAPIMSG_COMMAND(skb->data) == CAPI_DATA_B3
+	    && CAPIMSG_SUBCOMMAND(skb->data) == CAPI_IND)
+		cdev->nrecvdatapkt++;
+        else cdev->nrecvctlpkt++;
 	kfree_skb(skb);
 
 	return copied;
@@ -207,7 +243,7 @@ static ssize_t capi_write(struct file *file, const char *buf,
 	skb = alloc_skb(count, GFP_USER);
 
 	if ((retval = copy_from_user(skb_put(skb, count), buf, count))) {
-		dev_kfree_skb(skb);
+		kfree_skb(skb);
 		return retval;
 	}
 	cmd = CAPIMSG_COMMAND(skb->data);
@@ -216,11 +252,11 @@ static ssize_t capi_write(struct file *file, const char *buf,
 	if (cmd == CAPI_DATA_B3 && subcmd == CAPI_REQ) {
 		__u16 dlen = CAPIMSG_DATALEN(skb->data);
 		if (mlen + dlen != count) {
-			dev_kfree_skb(skb);
+			kfree_skb(skb);
 			return -EINVAL;
 		}
 	} else if (mlen != count) {
-		dev_kfree_skb(skb);
+		kfree_skb(skb);
 		return -EINVAL;
 	}
 	CAPIMSG_SETAPPID(skb->data, cdev->applid);
@@ -228,9 +264,12 @@ static ssize_t capi_write(struct file *file, const char *buf,
 	cdev->errcode = (*capifuncs->capi_put_message) (cdev->applid, skb);
 
 	if (cdev->errcode) {
-		dev_kfree_skb(skb);
+		kfree_skb(skb);
 		return -EIO;
 	}
+	if (cmd == CAPI_DATA_B3 && subcmd == CAPI_REQ)
+		cdev->nsentdatapkt++;
+	else cdev->nsentctlpkt++;
 	return count;
 }
 
@@ -426,15 +465,12 @@ static int capi_open(struct inode *inode, struct file *file)
 		capidevs[minor].is_open = 1;
 		skb_queue_head_init(&capidevs[minor].recv_queue);
 		MOD_INC_USE_COUNT;
+		capidevs[minor].nopen++;
 
 	} else {
-
-		if (!capidevs[minor].is_open) {
-			capidevs[minor].is_open = 1;
-			MOD_INC_USE_COUNT;
-		}
+		capidevs[minor].is_open++;
+		MOD_INC_USE_COUNT;
 	}
-
 
 	return 0;
 }
@@ -460,10 +496,13 @@ capi_release(struct inode *inode, struct file *file)
 		cdev->is_registered = 0;
 		cdev->applid = 0;
 
-		while ((skb = skb_dequeue(&cdev->recv_queue)) != 0)
+		while ((skb = skb_dequeue(&cdev->recv_queue)) != 0) {
 			kfree_skb(skb);
+		}
+		cdev->is_open = 0;
+	} else {
+		cdev->is_open--;
 	}
-	cdev->is_open = 0;
 
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -487,7 +526,82 @@ static struct file_operations capi_fops =
 	NULL,			/* capi_fasync */
 };
 
+/* -------- /proc functions ----------------------------------- */
 
+/*
+ * /proc/capi/capi20:
+ *  minor opencount nrecvctlpkt nrecvdatapkt nsendctlpkt nsenddatapkt
+ */
+static int proc_capidev_read_proc(char *page, char **start, off_t off,
+                                       int count, int *eof, void *data)
+{
+        struct capidev *cp;
+	int i;
+	int len = 0;
+	off_t begin = 0;
+
+	for (i=0; i < CAPI_MAXMINOR; i++) {
+		cp = &capidevs[i+1];
+		if (cp->nopen == 0) continue;
+		len += sprintf(page+len, "%d %lu %lu %lu %lu %lu\n",
+			i+1,
+			cp->nopen,
+			cp->nrecvctlpkt,
+			cp->nrecvdatapkt,
+			cp->nsentctlpkt,
+			cp->nsentdatapkt);
+		if (len+begin > off+count)
+			goto endloop;
+		if (len+begin < off) {
+			begin += len;
+			len = 0;
+		}
+	}
+endloop:
+	if (i >= CAPI_MAXMINOR)
+		*eof = 1;
+	if (off >= len+begin)
+		return 0;
+	*start = page + (begin-off);
+	return ((count < begin+len-off) ? count : begin+len-off);
+}
+
+static struct procfsentries {
+  char *name;
+  mode_t mode;
+  int (*read_proc)(char *page, char **start, off_t off,
+                                       int count, int *eof, void *data);
+  struct proc_dir_entry *procent;
+} procfsentries[] = {
+   /* { "capi",		  S_IFDIR, 0 }, */
+   { "capi/capi20", 	  0	 , proc_capidev_read_proc },
+};
+
+static void proc_init(void)
+{
+    int nelem = sizeof(procfsentries)/sizeof(procfsentries[0]);
+    int i;
+
+    for (i=0; i < nelem; i++) {
+        struct procfsentries *p = procfsentries + i;
+	p->procent = create_proc_entry(p->name, p->mode, 0);
+	if (p->procent) p->procent->read_proc = p->read_proc;
+    }
+}
+
+static void proc_exit(void)
+{
+    int nelem = sizeof(procfsentries)/sizeof(procfsentries[0]);
+    int i;
+
+    for (i=nelem-1; i >= 0; i--) {
+        struct procfsentries *p = procfsentries + i;
+	if (p->procent) {
+	   remove_proc_entry(p->name, 0);
+	   p->procent = 0;
+	}
+    }
+}
 /* -------- init function and module interface ---------------------- */
 
 #ifdef MODULE
@@ -501,12 +615,12 @@ static struct capi_interface_user cuser = {
 
 int capi_init(void)
 {
-#if LINUX_VERSION_CODE >= 131841
+#ifdef COMPAT_HAS_NEW_WAITQ
 	int j;
 #endif
 	
 	memset(capidevs, 0, sizeof(capidevs));
-#if LINUX_VERSION_CODE >= 131841
+#ifdef COMPAT_HAS_NEW_WAITQ
 	for ( j = 0; j < CAPI_MAXMINOR+1; j++ ) {
 		init_waitqueue_head(&capidevs[j].recv_wait);
 	}
@@ -522,13 +636,14 @@ int capi_init(void)
 		unregister_chrdev(capi_major, "capi20");
 		return -EIO;
 	}
-	
+	(void)proc_init();
 	return 0;
 }
 
 #ifdef MODULE
 void cleanup_module(void)
 {
+	(void)proc_exit();
 	unregister_chrdev(capi_major, "capi20");
 	(void) detach_capi_interface(&cuser);
 }

@@ -156,11 +156,11 @@ static void do_install_cmap(int con, struct fb_info *info);
  * Interface used by the world
  */
 
-void platinum_init(void);
+int platinum_init(void);
 #ifdef CONFIG_FB_OF
 void platinum_of_init(struct device_node *dp);
 #endif
-void platinum_setup(char *options, int *ints);
+int platinum_setup(char*);
 
 
 static struct fb_ops platinumfb_ops = {
@@ -651,7 +651,7 @@ static int __init init_platinum(struct fb_info_platinum *info)
 	return 1;
 }
 
-void __init platinum_init(void)
+int __init platinum_init(void)
 {
 #ifndef CONFIG_FB_OF
 	struct device_node *dp;
@@ -660,6 +660,7 @@ void __init platinum_init(void)
 	if (dp != 0)
 		platinum_of_init(dp);
 #endif /* CONFIG_FB_OF */
+	return 0;
 }
 
 #ifdef __powerpc__
@@ -676,8 +677,10 @@ void __init platinum_of_init(struct device_node *dp)
 	unsigned long		addr, size;
 	int			i, bank0, bank1, bank2, bank3;
 
-	if(dp->n_addrs != 2)
-		panic("expecting 2 address for platinum (got %d)", dp->n_addrs);
+	if(dp->n_addrs != 2) {
+		printk(KERN_ERR "expecting 2 address for platinum (got %d)", dp->n_addrs);
+		return;
+	}
 
 	info = kmalloc(sizeof(*info), GFP_ATOMIC);
 	if (info == 0)
@@ -854,12 +857,12 @@ static int platinum_encode_fix(struct fb_fix_screeninfo *fix,
 /* 
  * Parse user speficied options (`video=platinumfb:')
  */
-void __init platinum_setup(char *options, int *ints)
+int __init platinum_setup(char *options)
 {
 	char *this_opt;
 
 	if (!options || !*options)
-		return;
+		return 0;
 
 	for (this_opt = strtok(options, ","); this_opt;
 	     this_opt = strtok(NULL, ",")) {
@@ -895,4 +898,5 @@ void __init platinum_setup(char *options, int *ints)
 			}
 		}
 	}
+	return 0;
 }

@@ -42,6 +42,7 @@ ELSA Quickstep 3000PCI
 ELSA PCMCIA
 ITK ix1-micro Rev.2
 Eicon.Diehl Diva 2.0 ISA and PCI (S0 and U interface, no PRO version)
+Eicon.Diehl Diva 2.01 ISA and PCI
 Eicon.Diehl Diva Piccola
 ASUSCOM NETWORK INC. ISDNLink 128K PC adapter (order code I-IN100-ST-D)
 Dynalink IS64PH (OEM version of ASUSCOM NETWORK INC. ISDNLink 128K adapter)
@@ -54,6 +55,13 @@ USR Sportster internal TA (compatible Stollmann tina-pp V3)
 ith Kommunikationstechnik GmbH MIC 16 ISA card
 Traverse Technologie NETjet PCI S0 card
 Dr. Neuhaus Niccy PnP/PCI
+Siemens I-Surf
+ACER P10
+HST Saphir
+Berkom Telekom A4T
+Scitel Quadro
+Gazel ISDN cards
+HFC-PCI based cards
 
 Note: PCF, PCF-Pro: up to now, only the ISDN part is supported
       PCC-8: not tested yet
@@ -165,6 +173,14 @@ Card types:
    27   AVM PnP (Fritz!PnP)      irq, io  (from isapnp setup)
    27   AVM PCI (Fritz!PCI)      no parameter
    28   Sedlbauer Speed Fax+     irq, io (from isapnp setup)
+   29	Siemens I-Surf           irq, io, memory (from isapnp setup)   
+   30	ACER P10                 irq, io (from isapnp setup)   
+   31	HST Saphir               irq, io
+   32	Telekom A4T              none
+   33	Scitel Quadro		 subcontroller (4*S0, subctrl 1...4)
+   34	Gazel ISDN cards (ISA)   irq,io
+   34	Gazel ISDN cards (PCI)   none
+   35	HFC 2BDS0 PCI            none
 
 
 At the moment IRQ sharing is only possible with PCI cards. Please make sure
@@ -255,12 +271,19 @@ type
    22   Sedlbauer Speed Star (PCMCIA)  pa=irq, pb=io  (set with card manager)
    24   Dr. Neuhaus Niccy PnP   ONLY WORKS AS A MODULE !
    24   Dr. Neuhaus Niccy PCI   no parameter
-   25   Teles S0Box             irq, io (of the used lpt port)
-   26   AVM A1 PCMCIA (Fritz!)  irq, io (set with card manager)
+   25   Teles S0Box             pa=irq, pb=io (of the used lpt port)
+   26   AVM A1 PCMCIA (Fritz!)  pa=irq, pb=io (set with card manager)
    27   AVM PnP (Fritz!PnP)     ONLY WORKS AS A MODULE !
    27   AVM PCI (Fritz!PCI)     no parameter
    28   Sedlbauer Speed Fax+    ONLY WORKS AS A MODULE !
-
+   29	Siemens I-Surf          ONLY WORKS AS A MODULE !
+   30	ACER P10                ONLY WORKS AS A MODULE !
+   31	HST Saphir              pa=irq, pb=io
+   32	Telekom A4T             no parameter
+   33	Scitel Quadro		subcontroller (4*S0, subctrl 1...4)
+   34	Gazel ISDN cards (ISA)  pa=irq, pb=io
+   34	Gazel ISDN cards (PCI)  no parameter
+   35	HFC 2BDS0 PCI           no parameter
 
 Running the driver
 ------------------
@@ -515,8 +538,7 @@ to e.g. the Internet:
       /sbin/hisaxctrl HiSax 5 1
 
 Remarks:
-a) If you have a CISCO don't forget to switch off the KEEP ALIVE option!
-b) Use state of the art isdn4k-utils
+a) Use state of the art isdn4k-utils
 
 Here an example script:
 #!/bin/sh
@@ -568,7 +590,7 @@ case "$1" in
 			/sbin/isdnctrl encap isdn0s cisco-h
 		fi
 	fi
-	/sbin/isdnctrl dialmode isdn0 auto
+	/sbin/isdnctrl dialmode isdn0 manual
 	# configure tcp/ip
 	/sbin/ifconfig isdn0 ${LOCAL_IP} pointopoint ${REMOTE_IP}
 	/sbin/route add -host ${REMOTE_IP} isdn0
@@ -578,6 +600,7 @@ case "$1" in
 	/sbin/hisaxctrl HiSax 5 1
         if [ ${I4L_LEASED_128K} = "yes" ]; then
 		# B-CHANNEL 2
+		sleep 10; /* Wait for master */
 		/sbin/hisaxctrl HiSax 5 2
 	fi
 	;;
@@ -599,4 +622,3 @@ case "$1" in
 	exit 1
 esac
 exit 0
-
