@@ -10,12 +10,21 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/sched.h>
-#include <linux/ext2_fs.h>
-#include <linux/tty.h>
-#include <linux/stat.h>
-#include <linux/fcntl.h>
 #include <linux/errno.h>
+#include <linux/fs.h>
+#include <linux/ext2_fs.h>
+#include <linux/fcntl.h>
+#include <linux/sched.h>
+#include <linux/stat.h>
+#include <linux/locks.h>
+
+#define clear_block(addr,size,value) \
+	__asm__("cld\n\t" \
+		"rep\n\t" \
+		"stosl" \
+		: \
+		:"a" (value), "c" (size / 4), "D" ((long) (addr)) \
+		:"cx", "di")
 
 /*
  * Truncate has the most races in the whole filesystem: coding it is
@@ -47,7 +56,12 @@ repeat:
 		tmp = *p;
 		if (!tmp)
 			continue;
-		bh = get_hash_table (inode->i_dev, tmp, inode->i_sb->s_blocksize);
+		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL)
+			bh = getblk (inode->i_dev, tmp,
+				     inode->i_sb->s_blocksize);
+		else
+			bh = get_hash_table (inode->i_dev, tmp,
+					     inode->i_sb->s_blocksize);
 		if (i < direct_block) {
 			brelse (bh);
 			goto repeat;
@@ -60,6 +74,11 @@ repeat:
 		*p = 0;
 		inode->i_blocks -= blocks;
 		inode->i_dirt = 1;
+		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL) {
+			clear_block (bh->b_data, inode->i_sb->s_blocksize,
+				     CURRENT_TIME);
+			bh->b_dirt = 1;
+		}
 		brelse (bh);
 		ext2_free_block (inode->i_sb, tmp);
 	}
@@ -100,8 +119,12 @@ repeat:
 		tmp = *ind;
 		if (!tmp)
 			continue;
-		bh = get_hash_table (inode->i_dev, tmp,
+		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL)
+			bh = getblk (inode->i_dev, tmp,
 				     inode->i_sb->s_blocksize);
+		else
+			bh = get_hash_table (inode->i_dev, tmp,
+					     inode->i_sb->s_blocksize);
 		if (i < indirect_block) {
 			brelse (bh);
 			goto repeat;
@@ -113,6 +136,11 @@ repeat:
 		}
 		*ind = 0;
 		ind_bh->b_dirt = 1;
+		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL) {
+			clear_block (bh->b_data, inode->i_sb->s_blocksize,
+				     CURRENT_TIME);
+			bh->b_dirt = 1;
+		}
 		brelse (bh);
 		ext2_free_block (inode->i_sb, tmp);
 		inode->i_blocks -= blocks;
@@ -132,10 +160,14 @@ repeat:
 			inode->i_dirt = 1;
 			ext2_free_block (inode->i_sb, tmp);
 		}
+	if (IS_SYNC(inode) && ind_bh->b_dirt) {
+		ll_rw_block (WRITE, 1, &ind_bh);
+		wait_on_buffer (ind_bh);
+	}
 	brelse (ind_bh);
 	return retry;
 }
-		
+
 static int trunc_dindirect (struct inode * inode, int offset,
 			    unsigned long * p)
 {
@@ -188,6 +220,10 @@ repeat:
 			inode->i_dirt = 1;
 			ext2_free_block (inode->i_sb, tmp);
 		}
+	if (IS_SYNC(inode) && dind_bh->b_dirt) {
+		ll_rw_block (WRITE, 1, &dind_bh);
+		wait_on_buffer (dind_bh);
+	}
 	brelse (dind_bh);
 	return retry;
 }
@@ -225,8 +261,6 @@ repeat:
 			goto repeat;
 		tind = i + (unsigned long *) tind_bh->b_data;
 		retry |= trunc_dindirect(inode, EXT2_NDIR_BLOCKS +
-/*			addr_per_block + addr_per_block * addr_per_block +
-			(i * (addr_per_block * addr_per_block)), tind); */
 			addr_per_block + (i + 1) * addr_per_block * addr_per_block,
 			tind);
 		tind_bh->b_dirt = 1;
@@ -245,6 +279,10 @@ repeat:
 			inode->i_dirt = 1;
 			ext2_free_block (inode->i_sb, tmp);
 		}
+	if (IS_SYNC(inode) && tind_bh->b_dirt) {
+		ll_rw_block (WRITE, 1, &tind_bh);
+		wait_on_buffer (tind_bh);
+	}
 	brelse (tind_bh);
 	return retry;
 }
@@ -266,6 +304,8 @@ void ext2_truncate (struct inode * inode)
 		retry |= trunc_tindirect (inode);
 		if (!retry)
 			break;
+		if (IS_SYNC(inode) && inode->i_dirt)
+			ext2_sync_inode (inode);
 		current->counter = 0;
 		schedule ();
 	}

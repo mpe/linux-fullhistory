@@ -114,6 +114,7 @@ extern void si_meminfo(struct sysinfo * val);
 
 extern void * vmalloc(unsigned long size);
 extern void vfree(void * addr);
+extern int vread(char *buf, char *addr, int count);
 
 /* swap.c */
 

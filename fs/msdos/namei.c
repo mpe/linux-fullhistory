@@ -171,10 +171,15 @@ static int msdos_create_entry(struct inode *dir,char *name,int is_dir,
 		if ((res = msdos_add_cluster(dir)) < 0) return res;
 		if ((res = msdos_scan(dir,NULL,&bh,&de,&ino)) < 0) return res;
 	}
+	/*
+	 * XXX all times should be set by caller upon successful completion.
+	 */
+	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	dir->i_dirt = 1;
 	memcpy(de->name,name,MSDOS_NAME);
 	de->attr = is_dir ? ATTR_DIR : ATTR_ARCH;
 	de->start = 0;
-	date_unix2dos(CURRENT_TIME,&de->time,&de->date);
+	date_unix2dos(dir->i_mtime,&de->time,&de->date);
 	de->size = 0;
 	bh->b_dirt = 1;
 	if ((*result = iget(dir->i_sb,ino)) != NULL)
@@ -341,7 +346,7 @@ int msdos_rmdir(struct inode *dir,const char *name,int len)
 	if (res)
 		goto rmdir_done;
 	inode->i_nlink = 0;
-	dir->i_mtime = CURRENT_TIME;
+	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_nlink--;
 	inode->i_dirt = dir->i_dirt = 1;
 	de->name[0] = DELETED_FLAG;
@@ -375,8 +380,9 @@ int msdos_unlink(struct inode *dir,const char *name,int len)
 		goto unlink_done;
 	}
 	inode->i_nlink = 0;
+	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	MSDOS_I(inode)->i_busy = 1;
-	inode->i_dirt = 1;
+	inode->i_dirt = dir->i_dirt = 1;
 	de->name[0] = DELETED_FLAG;
 	bh->b_dirt = 1;
 unlink_done:

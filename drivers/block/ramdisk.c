@@ -17,12 +17,10 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 
-#define MAJOR_RAMDISK	1		/* should be in <linux/major.h>	*/
-#define MAJOR_FLOPPY	2		/* should be in <linux/major.h>	*/
-#define MINOR_RAMDISK	1
-
-#define MAJOR_NR	MAJOR_RAMDISK	/* weird hack- FvK */
+#define MAJOR_NR  MEM_MAJOR
 #include "blk.h"
+
+#define RAMDISK_MINOR	1
 
 
 char	*rd_start;
@@ -39,7 +37,7 @@ repeat:
 	addr = rd_start + (CURRENT->sector << 9);
 	len = CURRENT->current_nr_sectors << 9;
 
-	if ((MINOR(CURRENT->dev) != MINOR_RAMDISK) ||
+	if ((MINOR(CURRENT->dev) != RAMDISK_MINOR) ||
 	    (addr+len > rd_start+rd_length)) {
 		end_request(0);
 		goto repeat;
@@ -79,11 +77,11 @@ long rd_init(long mem_start, int length)
 	int	i;
 	char	*cp;
 
-	if (register_blkdev(MAJOR_RAMDISK,"rd",&rd_fops)) {
-		printk("RAMDISK: Unable to get major %d.\n", MAJOR_RAMDISK);
+	if (register_blkdev(MEM_MAJOR,"rd",&rd_fops)) {
+		printk("RAMDISK: Unable to get major %d.\n", MEM_MAJOR);
 		return 0;
 	}
-	blk_dev[MAJOR_RAMDISK].request_fn = DEVICE_REQUEST;
+	blk_dev[MEM_MAJOR].request_fn = DEVICE_REQUEST;
 	rd_start = (char *) mem_start;
 	rd_length = length;
 	cp = rd_start;
@@ -116,7 +114,7 @@ void rd_load(void)
 					rd_length, (int) rd_start);
 
 	/* If we are doing a diskette boot, we might have to pre-load it. */
-	if (MAJOR(ROOT_DEV) != MAJOR_FLOPPY) return;
+	if (MAJOR(ROOT_DEV) != FLOPPY_MAJOR) return;
 
 	/*
 	 * Check for a super block on the diskette.
@@ -174,7 +172,7 @@ void rd_load(void)
 		printk("\ndone\n");
 
 		/* We loaded the file system image.  Prepare for mounting it. */
-		ROOT_DEV = ((MAJOR_RAMDISK << 8) | MINOR_RAMDISK);
+		ROOT_DEV = ((MEM_MAJOR << 8) | RAMDISK_MINOR);
 		return;
 	}
 }

@@ -74,7 +74,7 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 
 /*
  * This routine gets called when tty_write has put something into
- * the write_queue. It copies the input to the output-queue of it's
+ * the write_queue. It copies the input to the output-queue of its
  * slave.
  */
 static void pty_write(struct tty_struct * tty)

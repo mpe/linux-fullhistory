@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -17,7 +17,7 @@
 
 
 #define	HIPOWER	13
-static unsigned short	lterms[HIPOWER][4] =
+static unsigned short const	lterms[HIPOWER][4] =
 	{
 	{ 0x79b5, 0xd1cf, 0x17f7, 0xb172 },
 	{ 0x1b56, 0x058b, 0x7bff, 0x3d7f },
@@ -38,7 +38,7 @@ static unsigned short	lterms[HIPOWER][4] =
 /*--- poly_2xm1() -----------------------------------------------------------+
  | Requires a positive argument which is TW_Valid and < 1.                   |
  +---------------------------------------------------------------------------*/
-int	poly_2xm1(FPU_REG *arg, FPU_REG *result)
+int	poly_2xm1(FPU_REG const *arg, FPU_REG *result)
 {
   short		exponent;
   long long     Xll;

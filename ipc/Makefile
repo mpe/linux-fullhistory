@@ -25,9 +25,6 @@ endif
 ipc.o: $(OBJS) 
 	$(LD) -r -o ipc.o $(OBJS) 
 
-clean:
-	rm -f core *.o *.a *.s
-
 dep:
 	$(CPP) -M $(SRCS) > .depend
 

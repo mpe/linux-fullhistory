@@ -7,28 +7,38 @@
  *		Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *
+ * Fixes:
+ *		Anonymous	:	NOTSOCK/BADF cleanup. Error fix in
+ *					shutdown()
+ *		Alan Cox	:	verify_area() fixes
+ *
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  */
-#include <asm/system.h>
-#include <asm/segment.h>
+
 #include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/major.h>
 #include <linux/stat.h>
 #include <linux/socket.h>
 #include <linux/fcntl.h>
 #include <linux/termios.h>
 #include <linux/net.h>
 #include <linux/ddi.h>
-#include <stdarg.h>
+
+#include <asm/system.h>
+#include <asm/segment.h>
 
 #undef SOCK_DEBUG
+
 #ifdef SOCK_DEBUG
+#include <stdarg.h>
 #define DPRINTF(x) dprintf x
 #else
 #define DPRINTF(x) /**/
@@ -464,6 +474,7 @@ sock_socketpair(int family, int type, int protocol, unsigned long usockvec[2])
 {
   int fd1, fd2, i;
   struct socket *sock1, *sock2;
+  int er;
 
   DPRINTF((net_debug,
 	"NET: sock_socketpair: family = %d, type = %d, protocol = %d\n",
@@ -496,7 +507,9 @@ sock_socketpair(int family, int type, int protocol, unsigned long usockvec[2])
   sock1->state = SS_CONNECTED;
   sock2->state = SS_CONNECTED;
 
-  verify_area(VERIFY_WRITE, usockvec, 2 * sizeof(int));
+  er=verify_area(VERIFY_WRITE, usockvec, 2 * sizeof(int));
+  if(er)
+  	return er;
   put_fs_long(fd1, &usockvec[0]);
   put_fs_long(fd2, &usockvec[1]);
 
@@ -515,7 +528,9 @@ sock_bind(int fd, struct sockaddr *umyaddr, int addrlen)
   int i;
 
   DPRINTF((net_debug, "NET: sock_bind: fd = %d\n", fd));
-  if (!(sock = sockfd_lookup(fd, NULL))) return(-EBADF);
+  if (fd < 0 || fd >= NR_OPEN || current->filp[fd] == NULL)
+								return(-EBADF);
+  if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
   if ((i = sock->ops->bind(sock, umyaddr, addrlen)) < 0) {
 	DPRINTF((net_debug, "NET: sock_bind: bind failed\n"));
 	return(i);
@@ -535,7 +550,9 @@ sock_listen(int fd, int backlog)
   struct socket *sock;
 
   DPRINTF((net_debug, "NET: sock_listen: fd = %d\n", fd));
-  if (!(sock = sockfd_lookup(fd, NULL))) return(-EBADF);
+  if (fd < 0 || fd >= NR_OPEN || current->filp[fd] == NULL)
+								return(-EBADF);
+  if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
   if (sock->state != SS_UNCONNECTED) {
 	DPRINTF((net_debug, "NET: sock_listen: socket isn't unconnected\n"));
 	return(-EINVAL);
@@ -559,7 +576,10 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
   int i;
 
   DPRINTF((net_debug, "NET: sock_accept: fd = %d\n", fd));
-  if (!(sock = sockfd_lookup(fd, &file))) return(-EBADF);
+  if (fd < 0 || fd >= NR_OPEN || ((file = current->filp[fd]) == NULL))
+								return(-EBADF);
+  
+  if (!(sock = sockfd_lookup(fd, &file))) return(-ENOTSOCK);
   if (sock->state != SS_UNCONNECTED) {
 	DPRINTF((net_debug, "NET: sock_accept: socket isn't unconnected\n"));
 	return(-EINVAL);
@@ -611,7 +631,10 @@ sock_connect(int fd, struct sockaddr *uservaddr, int addrlen)
   int i;
 
   DPRINTF((net_debug, "NET: sock_connect: fd = %d\n", fd));
-  if (!(sock = sockfd_lookup(fd, &file))) return(-EBADF);
+  if (fd < 0 || fd >= NR_OPEN || (file=current->filp[fd]) == NULL)
+								return(-EBADF);
+  
+  if (!(sock = sockfd_lookup(fd, &file))) return(-ENOTSOCK);
   switch(sock->state) {
 	case SS_UNCONNECTED:
 		/* This is ok... continue with connect */
@@ -643,7 +666,9 @@ sock_getsockname(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
   struct socket *sock;
 
   DPRINTF((net_debug, "NET: sock_getsockname: fd = %d\n", fd));
-  if (!(sock = sockfd_lookup(fd, NULL))) return(-EBADF);
+  if (fd < 0 || fd >= NR_OPEN || current->filp[fd] == NULL)
+								return(-EBADF);
+  if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
   return(sock->ops->getname(sock, usockaddr, usockaddr_len, 0));
 }
 
@@ -654,7 +679,9 @@ sock_getpeername(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
   struct socket *sock;
 
   DPRINTF((net_debug, "NET: sock_getpeername: fd = %d\n", fd));
-  if (!(sock = sockfd_lookup(fd, NULL))) return(-EBADF);
+  if (fd < 0 || fd >= NR_OPEN || current->filp[fd] == NULL)
+			return(-EBADF);
+  if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
   return(sock->ops->getname(sock, usockaddr, usockaddr_len, 1));
 }
 
@@ -782,8 +809,9 @@ sock_shutdown(int fd, int how)
 
   DPRINTF((net_debug, "NET: sock_shutdown(fd = %d, how = %d)\n", fd, how));
 
-  file = current->filp[fd];
-  if (fd < 0 || fd >= NR_OPEN || file == NULL) return(-EBADF);
+  if (fd < 0 || fd >= NR_OPEN || ((file = current->filp[fd]) == NULL))
+								return(-EBADF);
+
   if (!(sock = sockfd_lookup(fd, NULL))) return(-ENOTSOCK);
 
   return(sock->ops->shutdown(sock, how));
@@ -810,55 +838,76 @@ sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
 asmlinkage int
 sys_socketcall(int call, unsigned long *args)
 {
+  int er;
   switch(call) {
 	case SYS_SOCKET:
-		verify_area(VERIFY_WRITE, args, 3 * sizeof(long));
+		er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
+		if(er)
+			return er;
 		return(sock_socket(get_fs_long(args+0),
 				   get_fs_long(args+1),
 				   get_fs_long(args+2)));
 	case SYS_BIND:
-		verify_area(VERIFY_WRITE, args, 3 * sizeof(long));
+		er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
+		if(er)
+			return er;
 		return(sock_bind(get_fs_long(args+0),
 				 (struct sockaddr *)get_fs_long(args+1),
 				 get_fs_long(args+2)));
 	case SYS_CONNECT:
-		verify_area(VERIFY_WRITE, args, 3 * sizeof(long));
+		er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
+		if(er)
+			return er;
 		return(sock_connect(get_fs_long(args+0),
 				    (struct sockaddr *)get_fs_long(args+1),
 				    get_fs_long(args+2)));
 	case SYS_LISTEN:
-		verify_area(VERIFY_WRITE, args, 2 * sizeof(long));
+		er=verify_area(VERIFY_READ, args, 2 * sizeof(long));
+		if(er)
+			return er;
 		return(sock_listen(get_fs_long(args+0),
 				   get_fs_long(args+1)));
 	case SYS_ACCEPT:
-		verify_area(VERIFY_WRITE, args, 3 * sizeof(long));
+		er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
+		if(er)
+			return er;
 		return(sock_accept(get_fs_long(args+0),
 				   (struct sockaddr *)get_fs_long(args+1),
 				   (int *)get_fs_long(args+2)));
 	case SYS_GETSOCKNAME:
-		verify_area(VERIFY_WRITE, args, 3 * sizeof(long));
+		er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
+		if(er)
+			return er;
 		return(sock_getsockname(get_fs_long(args+0),
 					(struct sockaddr *)get_fs_long(args+1),
 					(int *)get_fs_long(args+2)));
 	case SYS_GETPEERNAME:
-		verify_area(VERIFY_WRITE, args, 3 * sizeof(long));
+		er=verify_area(VERIFY_READ, args, 3 * sizeof(long));
+		if(er)
+			return er;
 		return(sock_getpeername(get_fs_long(args+0),
 					(struct sockaddr *)get_fs_long(args+1),
 					(int *)get_fs_long(args+2)));
 	case SYS_SOCKETPAIR:
-		verify_area(VERIFY_WRITE, args, 4 * sizeof(long));
+		er=verify_area(VERIFY_READ, args, 4 * sizeof(long));
+		if(er)
+			return er;
 		return(sock_socketpair(get_fs_long(args+0),
 				       get_fs_long(args+1),
 				       get_fs_long(args+2),
 				       (unsigned long *)get_fs_long(args+3)));
 	case SYS_SEND:
-		verify_area(VERIFY_WRITE, args, 4 * sizeof(unsigned long));
+		er=verify_area(VERIFY_READ, args, 4 * sizeof(unsigned long));
+		if(er)
+			return er;
 		return(sock_send(get_fs_long(args+0),
 				 (void *)get_fs_long(args+1),
 				 get_fs_long(args+2),
 				 get_fs_long(args+3)));
 	case SYS_SENDTO:
-		verify_area(VERIFY_WRITE, args, 6 * sizeof(unsigned long));
+		er=verify_area(VERIFY_READ, args, 6 * sizeof(unsigned long));
+		if(er)
+			return er;
 		return(sock_sendto(get_fs_long(args+0),
 				   (void *)get_fs_long(args+1),
 				   get_fs_long(args+2),
@@ -866,13 +915,17 @@ sys_socketcall(int call, unsigned long *args)
 				   (struct sockaddr *)get_fs_long(args+4),
 				   get_fs_long(args+5)));
 	case SYS_RECV:
-		verify_area(VERIFY_WRITE, args, 4 * sizeof(unsigned long));
+		er=verify_area(VERIFY_READ, args, 4 * sizeof(unsigned long));
+		if(er)
+			return er;
 		return(sock_recv(get_fs_long(args+0),
 				 (void *)get_fs_long(args+1),
 				 get_fs_long(args+2),
 				 get_fs_long(args+3)));
 	case SYS_RECVFROM:
-		verify_area(VERIFY_WRITE, args, 6 * sizeof(unsigned long));
+		er=verify_area(VERIFY_READ, args, 6 * sizeof(unsigned long));
+		if(er)
+			return er;
 		return(sock_recvfrom(get_fs_long(args+0),
 				     (void *)get_fs_long(args+1),
 				     get_fs_long(args+2),
@@ -880,18 +933,24 @@ sys_socketcall(int call, unsigned long *args)
 				     (struct sockaddr *)get_fs_long(args+4),
 				     (int *)get_fs_long(args+5)));
 	case SYS_SHUTDOWN:
-		verify_area(VERIFY_WRITE, args, 2* sizeof(unsigned long));
+		er=verify_area(VERIFY_READ, args, 2* sizeof(unsigned long));
+		if(er)
+			return er;
 		return(sock_shutdown(get_fs_long(args+0),
 				     get_fs_long(args+1)));
 	case SYS_SETSOCKOPT:
-		verify_area(VERIFY_WRITE, args, 5*sizeof(unsigned long));
+		er=verify_area(VERIFY_READ, args, 5*sizeof(unsigned long));
+		if(er)
+			return er;
 		return(sock_setsockopt(get_fs_long(args+0),
 				       get_fs_long(args+1),
 				       get_fs_long(args+2),
 				       (char *)get_fs_long(args+3),
 				       get_fs_long(args+4)));
 	case SYS_GETSOCKOPT:
-		verify_area(VERIFY_WRITE, args, 5*sizeof(unsigned long));
+		er=verify_area(VERIFY_READ, args, 5*sizeof(unsigned long));
+		if(er)
+			return er;
 		return(sock_getsockopt(get_fs_long(args+0),
 				       get_fs_long(args+1),
 				       get_fs_long(args+2),
@@ -906,10 +965,13 @@ sys_socketcall(int call, unsigned long *args)
 static int
 net_ioctl(unsigned int cmd, unsigned long arg)
 {
+  int er;
   switch(cmd) {
 	case DDIOCSDBG:
-		verify_area(VERIFY_WRITE, (void *)arg, sizeof(int));
-		net_debug = get_fs_long((int *)arg);
+		er=verify_area(VERIFY_READ, (void *)arg, sizeof(long));
+		if(er)
+			return er;
+		net_debug = get_fs_long((long *)arg);
 		if (net_debug != 0 && net_debug != 1) {
 			net_debug = 0;
 			return(-EINVAL);

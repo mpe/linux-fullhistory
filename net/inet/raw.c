@@ -17,6 +17,7 @@
  *		Alan Cox	: 	Now uses generic datagrams and shared skbuff
  *					library. No more peek crashes, no more backlogs
  *		Alan Cox	:	Checks sk->broadcast.
+ *		Alan Cox	:	Uses skb_free_datagram/skb_copy_datagram
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -238,7 +239,7 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
 
   skb->len = tmp + len;
   
-  if(dev!=NULL && skb->len > dev->mtu)
+  if(dev!=NULL && skb->len > 4095)
   {
   	kfree_skb(skb, FREE_WRITE);
   	release_sock(sk);
@@ -337,7 +338,8 @@ raw_recvfrom(struct sock *sk, unsigned char *to, int len,
   	return err;
 
   copied = min(len, skb->len);
-  memcpy_tofs(to, skb->h.raw,  copied);
+  
+  skb_copy_datagram(skb, 0, to, copied);
 
   /* Copy the address. */
   if (sin) {
@@ -349,7 +351,7 @@ raw_recvfrom(struct sock *sk, unsigned char *to, int len,
 	memcpy_tofs(sin, &addr, sizeof(*sin));
   }
 
-  kfree_skb(skb, FREE_READ);
+  skb_free_datagram(skb);
   release_sock(sk);
   return (copied);
 }

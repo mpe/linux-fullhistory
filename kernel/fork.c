@@ -117,7 +117,7 @@ int dup_mmap(struct task_struct * tsk)
 /*
  *  Ok, this is the main fork-routine. It copies the system process
  * information (task[nr]) and sets up the necessary registers. It
- * also copies the data segment in it's entirety.
+ * also copies the data segment in its entirety.
  */
 asmlinkage int sys_fork(struct pt_regs regs)
 {

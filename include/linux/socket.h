@@ -9,6 +9,11 @@ struct sockaddr {
   char			sa_data[14];	/* 14 bytes of protocol address	*/
 };
 
+struct linger {
+  int 			l_onoff;	/* Linger active		*/
+  int			l_linger;	/* How long to linger for	*/
+};
+
 /* Socket types. */
 #define SOCK_STREAM	1		/* stream (connection) socket	*/
 #define SOCK_DGRAM	2		/* datagram (conn.less) socket	*/

@@ -8,6 +8,7 @@
  *
  * Fixes:
  *		Alan Cox	: 	Added slip mtu field.
+ *		Matt Dillon	:	Printable slip (borrowed from net2e)
  *
  * Author:	Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  */
@@ -56,10 +57,25 @@ struct slip {
   unsigned long		errors;		/* error count			*/
   
   int			mtu;		/* Our mtu (to spot changes!)   */
+  unsigned char		flags;		/* Flag values/ mode etc	*/
+#define SLF_ESCAPE	2
+#define SLF_ERROR	4
+#define SLF_COMP	16
+#define SLF_EXPN	32
+  unsigned char		mode;		/* SLIP mode			*/
+#define SL_MODE_SLIP	0
+#define SL_MODE_CSLIP	1
+#define SL_MODE_SLIP6	2		/* Matt Dillon's printable slip */
+#define SL_MODE_CSLIP6	(SL_MODE_SLIP|SL_MODE_CSLIP)
+  int			xdata,xbits;	/* 6 bit slip controls 		*/
 };
 
 
 extern int	slip_init(struct device *dev);
+extern int	slip_esc(unsigned char *s, unsigned char *d, int len);
+extern int	slip_esc6(unsigned char *s, unsigned char *d, int len);
+extern void	slip_unesc(struct slip *sl, unsigned char *s, int count, int error);
+extern void 	slip_unesc6(struct slip *sl, unsigned char *s, int count, int error);
 
 
 #endif	/* _LINUX_SLIP.H */

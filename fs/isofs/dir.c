@@ -202,15 +202,12 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 		printk("Nchar: %d\n",i);
 #endif
 
-		if (i) {
-		        while (cache.lock);
-		        cache.lock = 1;
+		if (i && i+1 < sizeof(cache.filename)) {
 			cache.ino = inode_number;
 			cache.dir = inode->i_ino;
 			cache.dev = inode->i_dev;
 			strncpy(cache.filename, dpnt, i);
 			cache.dlen = dlen;
-			cache.lock = 0;
 		      };
 
 		if (rrflag) kfree(dpnt);

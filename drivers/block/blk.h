@@ -1,6 +1,7 @@
 #ifndef _BLK_H
 #define _BLK_H
 
+#include <linux/major.h>
 #include <linux/sched.h>
 #include <linux/locks.h>
 #include <linux/genhd.h>
@@ -15,7 +16,7 @@
  * buffers when they are in the queue. 64 seems to be too many (easily
  * long pauses in reading when heavy writing/syncing is going on)
  */
-#define NR_REQUEST	32
+#define NR_REQUEST	64
 
 /*
  * Ok, this is an expanded form so that we can use the same
@@ -71,7 +72,6 @@ struct sec_size {
 
 extern struct sec_size * blk_sec[MAX_BLKDEV];
 extern struct blk_dev_struct blk_dev[MAX_BLKDEV];
-extern struct request request[NR_REQUEST];
 extern struct wait_queue * wait_for_request;
 extern void resetup_one_dev(struct gendisk *dev, int drive);
 
@@ -104,7 +104,8 @@ extern unsigned long xd_init(unsigned long mem_start, unsigned long mem_end);
  * supported are hard-disks and floppies.
  */
 
-#if (MAJOR_NR == 1)
+#if (MAJOR_NR == MEM_MAJOR)
+
 /* ram disk */
 #define DEVICE_NAME "ramdisk"
 #define DEVICE_REQUEST do_rd_request
@@ -112,8 +113,8 @@ extern unsigned long xd_init(unsigned long mem_start, unsigned long mem_end);
 #define DEVICE_ON(device) 
 #define DEVICE_OFF(device)
 
-#elif (MAJOR_NR == 2)
-/* floppy */
+#elif (MAJOR_NR == FLOPPY_MAJOR)
+
 static void floppy_on(unsigned int nr);
 static void floppy_off(unsigned int nr);
 
@@ -124,7 +125,8 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device) floppy_on(DEVICE_NR(device))
 #define DEVICE_OFF(device) floppy_off(DEVICE_NR(device))
 
-#elif (MAJOR_NR == 3)
+#elif (MAJOR_NR == HD_MAJOR)
+
 /* harddisk: timeout is 6 seconds.. */
 #define DEVICE_NAME "harddisk"
 #define DEVICE_INTR do_hd
@@ -135,8 +137,8 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
-#elif (MAJOR_NR == 8)
-/* scsi disk */
+#elif (MAJOR_NR == SCSI_DISK_MAJOR)
+
 #define DEVICE_NAME "scsidisk"
 #define DEVICE_INTR do_sd  
 #define TIMEOUT_VALUE 200
@@ -145,17 +147,16 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
-#elif (MAJOR_NR == 9)
-/* scsi tape */
+#elif (MAJOR_NR == SCSI_TAPE_MAJOR)
+
 #define DEVICE_NAME "scsitape"
 #define DEVICE_INTR do_st  
-#define DEVICE_REQUEST do_st_request
 #define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
-#elif (MAJOR_NR == 11)
-/* scsi CD-ROM */
+#elif (MAJOR_NR == SCSI_CDROM_MAJOR)
+
 #define DEVICE_NAME "CD-ROM"
 #define DEVICE_INTR do_sr
 #define DEVICE_REQUEST do_sr_request
@@ -163,24 +164,24 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
-#elif (MAJOR_NR == 13)
-/* xt hard disk */
+#elif (MAJOR_NR == XT_DISK_MAJOR)
+
 #define DEVICE_NAME "xt disk"
 #define DEVICE_REQUEST do_xd_request
 #define DEVICE_NR(device) (MINOR(device) >> 6)
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
-#elif (MAJOR_NR == 15)
-/* CDU31A CD-ROM */
+#elif (MAJOR_NR == CDU31A_CDROM_MAJOR)
+
 #define DEVICE_NAME "CDU31A"
 #define DEVICE_REQUEST do_cdu31a_request
 #define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
-#elif (MAJOR_NR == 23)
-/* MITSUMI CD-ROM */
+#elif (MAJOR_NR == MITSUMI_CDROM_MAJOR)
+
 #define DEVICE_NAME "Mitsumi CD-ROM"
 /* #define DEVICE_INTR do_mcd */
 #define DEVICE_REQUEST do_mcd_request
@@ -189,12 +190,12 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_OFF(device)
 
 #else
-/* unknown blk device */
+
 #error "unknown blk device"
 
 #endif
 
-#if (MAJOR_NR != 9)
+#if (MAJOR_NR != SCSI_TAPE_MAJOR)
 
 #ifndef CURRENT
 #define CURRENT (blk_dev[MAJOR_NR].current_request)
@@ -227,8 +228,10 @@ else \
 #endif
 static void (DEVICE_REQUEST)(void);
 
-/* SCSI devices have their own version */
-#if (MAJOR_NR != 8 && MAJOR_NR != 9 && MAJOR_NR != 11)
+/* end_request() - SCSI devices have their own version */
+
+#if ! SCSI_MAJOR(MAJOR_NR)
+
 static void end_request(int uptodate)
 {
 	struct request * req;
@@ -239,7 +242,8 @@ static void end_request(int uptodate)
 	req->errors = 0;
 	if (!uptodate) {
 		printk(DEVICE_NAME " I/O error\n");
-		printk("dev %04x, sector %d\n",req->dev,req->sector);
+		printk("dev %04lX, sector %lu\n",
+		       (unsigned long)req->dev, req->sector);
 		req->nr_sectors--;
 		req->nr_sectors &= ~SECTOR_MASK;
 		req->sector += (BLOCK_SIZE / 512);

@@ -25,7 +25,8 @@
 #define CL_OFFSET	0x90022
 
 /*
- * swapper_pg_dir is the main page directory, address 0x00001000
+ * swapper_pg_dir is the main page directory, address 0x00001000 (or at
+ * address 0x00101000 for a compressed boot).
  */
 startup_32:
 	cld
@@ -237,6 +238,12 @@ setup_paging:
 /*
  * page 0 is made non-existent, so that kernel NULL pointer references get
  * caught. Thus the swapper page directory has been moved to 0x1000
+ *
+ * XXX Actually, the swapper page directory is at 0x1000 plus 1 megabyte,
+ * with the introduction of the compressed boot code.  Theoretically,
+ * the original design of overlaying the startup code with the swapper
+ * page directory is still possible --- it would reduce the size of the kernel
+ * by 2-3k.  This would be a good thing to do at some point.....
  */
 .org 0x1000
 _swapper_pg_dir:

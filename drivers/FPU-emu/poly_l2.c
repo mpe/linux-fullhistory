@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -19,7 +19,7 @@
 
 
 #define	HIPOWER	9
-static unsigned short	lterms[HIPOWER][4] =
+static unsigned short const	lterms[HIPOWER][4] =
 	{
 	/* Ideal computation with these coeffs gives about
 	   64.6 bit rel accuracy. */
@@ -40,7 +40,7 @@ static unsigned short	lterms[HIPOWER][4] =
 /*--- poly_l2() -------------------------------------------------------------+
  |   Base 2 logarithm by a polynomial approximation.                         |
  +---------------------------------------------------------------------------*/
-void	poly_l2(FPU_REG *arg, FPU_REG *result)
+void	poly_l2(FPU_REG const *arg, FPU_REG *result)
 {
   short		  exponent;
   char		  zero;		/* flag for an Xx == 0 */
@@ -224,7 +224,7 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
  |   Base 2 logarithm by a polynomial approximation.                         |
  |   log2(x+1)                                                               |
  +---------------------------------------------------------------------------*/
-int	poly_l2p1(FPU_REG *arg, FPU_REG *result)
+int	poly_l2p1(FPU_REG const *arg, FPU_REG *result)
 {
   char		sign = 0;
   unsigned long long     Xsq;

@@ -5,11 +5,11 @@
 *
 * General setup
 *
-bool 'Kernel math emulation' CONFIG_MATH_EMULATION n
+bool 'Kernel math emulation' CONFIG_MATH_EMULATION y
 bool 'Normal harddisk support' CONFIG_BLK_DEV_HD y
 bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
 bool 'TCP/IP networking' CONFIG_INET y
-bool 'Limit memory to low 16MB' CONFIG_MAX_16M y
+bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
 bool 'System V IPC' CONFIG_SYSVIPC y
 bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
 *
@@ -49,30 +49,39 @@ fi
 *
 * Network device support
 *
-bool 'Network device support?' CONFIG_ETHERCARDS n
+bool 'Network device support?' CONFIG_ETHERCARDS y
 if [ "$CONFIG_ETHERCARDS" = "n" ]
 :
 : Skipping ethercard configuration options...
 :
 else
 bool 'SLIP (serial line) support' CONFIG_SLIP n
+if [ "$CONFIG_SLIP" = "y" ]
+  bool ' CSLIP compressed headers' SL_COMPRESSED y
+  bool ' SLIP debugging on' SL_DUMP y
+fi
+#bool 'PPP (point-to-point) support' CONFIG_PPP n
 bool 'PLIP (parallel port) support' CONFIG_PLIP n
 bool 'NE2000/NE1000 support' CONFIG_NE2000 n
 bool 'WD80*3 support' CONFIG_WD80x3 y
 bool 'SMC Ultra support' CONFIG_ULTRA n
 bool '3c501 support' CONFIG_EL1 n
 bool '3c503 support' CONFIG_EL2 n
+#bool '3c505 support' CONFIG_ELPLUS n
 #bool '3c507 support' CONFIG_EL16 n
-bool '3c509 support' CONFIG_EL3 n
+bool '3c509/3c579 support' CONFIG_EL3 n
 bool 'HP PCLAN support' CONFIG_HPLAN n
-bool 'AT1500 and NE2100 support' CONFIG_AT1500 n
-bool 'D-Link DE600 pocket adaptor support' CONFIG_DE600 n
+bool 'AT1500 and NE2100 (LANCE and PCnet-ISA) support' CONFIG_LANCE n
+bool 'AT1700 support' CONFIG_AT1700 n
 #bool 'Zenith Z-Note support' CONFIG_ZNET n
 #bool 'EtherExpress support' CONFIG_EEXPRESS n
 #bool 'DEPCA support' CONFIG_DEPCA n
 #bool 'NI52** support' CONFIG_NI52 n
 #bool 'NI65** support' CONFIG_NI65 n
-#bool 'AT-LAN-TEC pocket adaptor support' CONFIG_ATP n
+#bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
+#bool 'Cabletron E21xx support (not recommended)' CONFIG_E21 n
+bool 'D-Link DE600 pocket adaptor support' CONFIG_DE600 n
+#bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP n
 fi
 *
 bool 'Sony CDU31A CDROM driver support' CONFIG_CDU31A n
@@ -88,16 +97,17 @@ bool 'msdos fs support' CONFIG_MSDOS_FS y
 bool '/proc filesystem support' CONFIG_PROC_FS y
 bool 'NFS filesystem support' CONFIG_NFS_FS y
 bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS n
+bool 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS n
 *
 *  character devices
 *
 bool 'Keyboard meta-key sends ESC-prefix' CONFIG_KBD_META y
-bool 'Keyboard Num Lock on by default' CONFIG_KBD_NUML n
+bool 'Keyboard Num Lock on by default' CONFIG_KBD_NUML y
 bool 'Parallel printer support' CONFIG_PRINTER y
 bool 'Logitech busmouse support' CONFIG_BUSMOUSE n
-bool 'QuickPort mouse support' CONFIG_QUICKPORT_MOUSE n
-if [ "$CONFIG_QUICKPORT_MOUSE" = "n" ]
 bool 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE y
+if [ "$CONFIG_PSMOUSE" = "y" ]
+bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE y
 fi
 bool 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
 bool 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
@@ -106,12 +116,17 @@ bool 'QIC-02 tape support' CONFIG_TAPE_QIC02 n
 *
 * Sound
 *
-bool 'Sound card support (distributed separately)' CONFIG_SOUND n
+bool 'Sound card support' CONFIG_SOUND n
 *
 * Kernel hacking
 *
-bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC n
+#bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC n
 bool 'Kernel profiling support' CONFIG_PROFILE n
 if [ "$CONFIG_SCSI" = "y" ]
 bool 'Verbose scsi error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS y
+fi
+if [ "$CONFIG_SOUND" = "y" ]
+  exec touch .makesound
+else
+  exec rm -f .makesound
 fi

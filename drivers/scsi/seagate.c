@@ -34,7 +34,7 @@
  *
  * -DARBITRATE will cause the host adapter to arbitrate for the 
  *	bus for better SCSI-II compatability, rather than just 
- *	waiting for BUS FREE and then doing it's thing.  Should
+ *	waiting for BUS FREE and then doing its thing.  Should
  *	let us do one command per Lun when I integrate my 
  *	reorganization changes into the distribution sources.
  *
@@ -884,7 +884,7 @@ connect_loop :
 			if (STATUS & STAT_BSY) {
 				printk("scsi%d : BST asserted after we've been aborted.\n",
 					hostno);
-				seagate_st0x_reset();
+				seagate_st0x_reset(NULL);
 				return retcode(DID_RESET);
 			}
 			return retcode(st0x_aborted);
@@ -1478,7 +1478,7 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 #ifdef notyet
 	if (st0x_aborted) {
 		if (STATUS & STAT_BSY) {	
-			seagate_st0x_reset();
+			seagate_st0x_reset(NULL);
 			st0x_aborted = DID_RESET;
 		} 
 		abort_confirm = 1;
@@ -1560,7 +1560,7 @@ int seagate_st0x_abort (Scsi_Cmnd * SCpnt, int code)
 	the seagate_st0x_reset function resets the SCSI bus
 */
 	
-int seagate_st0x_reset (void)
+int seagate_st0x_reset (Scsi_Cmnd * SCpnt)
 	{
 	unsigned clock;
 	/*
@@ -1590,6 +1590,7 @@ int seagate_st0x_reset (void)
 #ifdef DEBUG
 	printk("SCSI bus reset.\n");
 #endif
+	if(SCpnt) SCpnt->flags |= NEEDS_JUMPSTART;
 	return 0;
 	}
 

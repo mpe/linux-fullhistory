@@ -24,8 +24,6 @@
 #include "scsi_ioctl.h"
 #include "sg.h"
 
-#define MAJOR_NR 21
-
 int NR_SG=0;
 int MAX_SG=0;
 
@@ -296,9 +294,10 @@ static struct file_operations sg_fops = {
 /* Driver initialization */
 unsigned long sg_init(unsigned long mem_start, unsigned long mem_end)
  {
-  if (register_chrdev(MAJOR_NR,"sg",&sg_fops)) 
+  if (register_chrdev(SCSI_GENERIC_MAJOR,"sg",&sg_fops)) 
    {
-    printk("Unable to get major %d for Generic SCSI device\n",MAJOR_NR);
+    printk("Unable to get major %d for generic SCSI device\n",
+	   SCSI_GENERIC_MAJOR);
     return mem_start;
    }
   if (NR_SG == 0) return mem_start;

@@ -21,7 +21,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 	int offset;
 	int chars;
 	int written = 0;
-	int size;
+	unsigned int size;
 	unsigned int dev;
 	struct buffer_head * bh;
 	register char * p;
@@ -81,7 +81,8 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	unsigned int offset;
 	int blocksize;
 	int blocksize_bits, i;
-	int blocks, left;
+	unsigned int left;
+	int blocks;
 	int bhrequest, uptodate;
 	struct buffer_head ** bhb, ** bhe;
 	struct buffer_head * buflist[NBUF];

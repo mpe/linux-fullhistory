@@ -242,6 +242,7 @@ struct tty_struct {
 	struct tty_queue write_q;
 	struct tty_queue secondary;
 	struct wait_queue * except_q;
+	void *disc_data;
 };
 
 struct tty_ldisc {
@@ -368,8 +369,6 @@ extern int tty_ioctl(struct inode *, struct file *, unsigned int, unsigned long)
 extern int is_orphaned_pgrp(int pgrp);
 extern int is_ignored(int sig);
 extern int tty_signal(int sig, struct tty_struct *tty);
-extern int kill_pg(int pgrp, int sig, int priv);
-extern int kill_sl(int sess, int sig, int priv);
 extern void tty_hangup(struct tty_struct * tty);
 extern void tty_vhangup(struct tty_struct * tty);
 extern void tty_unhangup(struct file *filp);

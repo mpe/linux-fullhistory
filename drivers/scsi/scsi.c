@@ -85,6 +85,7 @@ static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};
 #define WAS_SENSE	0x04
 #define IS_RESETTING	0x08
 #define ASKED_FOR_SENSE 0x10
+/* #define NEEDS_JUMPSTART 0x20  defined in hosts.h */
 
 /*
  *	This is the number  of clock ticks we should wait before we time out 
@@ -698,6 +699,9 @@ inline void internal_cmnd (Scsi_Cmnd * SCpnt)
 	int clock;
 #endif
 
+	if ((unsigned long) &SCpnt < current->kernel_stack_page)
+	  panic("Kernel stack overflow.");
+
 	host = SCpnt->host;
 
 /*
@@ -881,13 +885,14 @@ static void reset (Scsi_Cmnd * SCpnt)
 	SCpnt->flags |= (WAS_RESET | IS_RESETTING);
 	scsi_reset(SCpnt);
 	
-#if 0
 #ifdef DEBUG
 	printk("performing request sense\n");
 #endif
 	
-	scsi_request_sense (SCpnt);
-#endif
+	if(SCpnt->flags & NEEDS_JUMPSTART) {
+	  SCpnt->flags &= ~NEEDS_JUMPSTART;
+	  scsi_request_sense (SCpnt);
+	};
 }
 	
 	
@@ -1344,14 +1349,14 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
 				  SCpnt1 = SCpnt1->next;
 				};
 
-				temp = host->hostt->reset();			
+				temp = host->hostt->reset(SCpnt);	
 				}				
 			else
 				{
 				host->host_busy++;
 	
 				sti();
-				temp = host->hostt->reset();
+				temp = host->hostt->reset(SCpnt);
 				host->last_reset = jiffies;
 				host->host_busy--;
 				}

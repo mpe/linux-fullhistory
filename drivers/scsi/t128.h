@@ -96,7 +96,7 @@ int t128_biosparam(int, int, int*);
 int t128_detect(int);
 const char *t128_info(void);
 int t128_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int t128_reset(void);
+int t128_reset(Scsi_Cmnd *);
 
 #ifndef NULL
 #define NULL 0

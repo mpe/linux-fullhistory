@@ -65,15 +65,19 @@ static inline pid_t wait(int * wait_stat)
 
 static char printbuf[1024];
 
+extern int console_loglevel;
+
 extern char empty_zero_page[PAGE_SIZE];
 extern int vsprintf(char *,const char *,va_list);
 extern void init(void);
 extern void init_IRQ(void);
+extern long kmalloc_init (long,long);
 extern long blk_dev_init(long,long);
 extern long chr_dev_init(long,long);
 extern void floppy_init(void);
 extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
+unsigned long net_dev_init(unsigned long, unsigned long);
 extern unsigned long simple_strtoul(const char *,char **,unsigned int);
 
 extern void hd_setup(char *str, int *ints);
@@ -223,7 +227,7 @@ static void calibrate_delay(void)
 				 "r" (ticks),
 				 "0" (loops_per_sec)
 				:"dx");
-			printk("ok - %d.%02d BogoMips (tm)\n",
+			printk("ok - %lu.%02lu BogoMips (tm)\n",
 				loops_per_sec/500000,
 				(loops_per_sec/5000) % 100);
 			return;
@@ -281,6 +285,8 @@ static void parse_options(char *line)
 			root_mountflags |= MS_RDONLY;
 		else if (!strcmp(line,"rw"))
 			root_mountflags &= ~MS_RDONLY;
+		else if (!strcmp(line,"debug"))
+			console_loglevel = 10;
 		else if (!strcmp(line,"no387")) {
 			hard_math = 0;
 			__asm__("movl %%cr0,%%eax\n\t"
@@ -357,8 +363,12 @@ asmlinkage void start_kernel(void)
 	prof_len >>= 2;
 	memory_start += prof_len * sizeof(unsigned long);
 #endif
+	memory_start = kmalloc_init(memory_start,memory_end);
 	memory_start = chr_dev_init(memory_start,memory_end);
 	memory_start = blk_dev_init(memory_start,memory_end);
+#ifdef CONFIG_INET
+	memory_start = net_dev_init(memory_start,memory_end);
+#endif
 	sti();
 	calibrate_delay();
 #ifdef CONFIG_SCSI

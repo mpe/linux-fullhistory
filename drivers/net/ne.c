@@ -17,7 +17,7 @@
 /* Routines for the NatSemi-based designs (NE[12]000). */
 
 static char *version =
-    "ne.c:v0.99-13 8/30/93 Donald Becker (becker@super.org)\n";
+    "ne.c:v0.99-13s 11/17/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -132,7 +132,7 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
        We can't reliably read the SAPROM address without this.
        (I learned the hard way!). */
     {
-	struct {char value, offset; } program_seq[] = {
+	struct {unsigned char value, offset; } program_seq[] = {
 	    {E8390_NODMA+E8390_PAGE0+E8390_STOP, E8390_CMD}, /* Select page 0*/
 	    {0x48,	EN0_DCFG},	/* Set byte-wide (0x48) access. */
 	    {0x00,	EN0_RCNTLO},	/* Clear the count regs. */
@@ -141,7 +141,7 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
 	    {0xFF,	EN0_ISR},
 	    {E8390_RXOFF, EN0_RXCR},	/* 0x20  Set to monitor */
 	    {E8390_TXOFF, EN0_TXCR},	/* 0x02  and loopback mode. */
-    	    {32,		EN0_RCNTLO},
+	    {32,	EN0_RCNTLO},
 	    {0x00,	EN0_RCNTHI},
 	    {0x00,	EN0_RSARLO},	/* DMA starting at 0x0000. */
 	    {0x00,	EN0_RSARHI},
@@ -190,7 +190,7 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
 	    start_page = NESM_START_PG;
 	    stop_page = NESM_STOP_PG;
 	} else {
-	    name = dlink ? "DE100" : "D-Link";
+	    name = dlink ? "DE100" : "NE1000";
 	    start_page = NE1SM_START_PG;
 	    stop_page = NE1SM_STOP_PG;
 	}

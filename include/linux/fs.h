@@ -32,37 +32,6 @@
 #define NR_FILE_LOCKS 64
 #define BLOCK_SIZE 1024
 #define BLOCK_SIZE_BITS 10
-#define MAX_CHRDEV 32
-#define MAX_BLKDEV 32
-
-/* devices are as follows: (same as minix, so we can use the minix
- * file system. These are major numbers.)
- *
- *  0 - unnamed (minor 0 = true nodev)
- *  1 - /dev/mem
- *  2 - /dev/fd
- *  3 - /dev/hd
- *  4 - /dev/ttyx
- *  5 - /dev/tty
- *  6 - /dev/lp
- *  7 -
- *  8 - /dev/sd
- *  9 - /dev/st
- * 10 - mice
- * 11 - scsi cdrom
- * 12 -
- * 13 -
- * 14 - sound card (?)
- * 15 -
- * 16 - 
- * 17 - 
- * 18 - 
- * 19 - 
- * 20 - 
- * 21 - /dev/sg
- */
-
-#define UNNAMED_MAJOR 0
 
 #define MAY_EXEC 1
 #define MAY_WRITE 2
@@ -77,8 +46,8 @@ extern void buffer_init(void);
 extern unsigned long inode_init(unsigned long start, unsigned long end);
 extern unsigned long file_table_init(unsigned long start, unsigned long end);
 
-#define MAJOR(a) (((unsigned)(a))>>8)
-#define MINOR(a) ((a)&0xff)
+#define MAJOR(a) (int)((unsigned short)(a) >> 8)
+#define MINOR(a) (int)((unsigned short)(a) & 0xFF)
 
 #ifndef NULL
 #define NULL ((void *) 0)
@@ -179,6 +148,7 @@ struct buffer_head {
 #include <linux/minix_fs_i.h>
 #include <linux/ext_fs_i.h>
 #include <linux/ext2_fs_i.h>
+#include <linux/hpfs_fs_i.h>
 #include <linux/msdos_fs_i.h>
 #include <linux/iso_fs_i.h>
 #include <linux/nfs_fs_i.h>
@@ -206,12 +176,12 @@ struct inode {
 	struct inode * i_next, * i_prev;
 	struct inode * i_hash_next, * i_hash_prev;
 	struct inode * i_bound_to, * i_bound_by;
+	struct inode * i_mount;
 	unsigned short i_count;
 	unsigned short i_flags;
 	unsigned char i_lock;
 	unsigned char i_dirt;
 	unsigned char i_pipe;
-	unsigned char i_mount;
 	unsigned char i_seek;
 	unsigned char i_update;
 	union {
@@ -219,6 +189,7 @@ struct inode {
 		struct minix_inode_info minix_i;
 		struct ext_inode_info ext_i;
 		struct ext2_inode_info ext2_i;
+		struct hpfs_inode_info hpfs_i;
 		struct msdos_inode_info msdos_i;
 		struct iso_inode_info isofs_i;
 		struct nfs_inode_info nfs_i;
@@ -252,6 +223,7 @@ struct file_lock {
 #include <linux/minix_fs_sb.h>
 #include <linux/ext_fs_sb.h>
 #include <linux/ext2_fs_sb.h>
+#include <linux/hpfs_fs_sb.h>
 #include <linux/msdos_fs_sb.h>
 #include <linux/iso_fs_sb.h>
 #include <linux/nfs_fs_sb.h>
@@ -275,6 +247,7 @@ struct super_block {
 		struct minix_sb_info minix_sb;
 		struct ext_sb_info ext_sb;
 		struct ext2_sb_info ext2_sb;
+		struct hpfs_sb_info hpfs_sb;
 		struct msdos_sb_info msdos_sb;
 		struct isofs_sb_info isofs_sb;
 		struct nfs_sb_info nfs_sb;

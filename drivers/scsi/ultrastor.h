@@ -17,7 +17,7 @@ int ultrastor_detect(int);
 const char *ultrastor_info(void);
 int ultrastor_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int ultrastor_abort(Scsi_Cmnd *, int);
-int ultrastor_reset(void);
+int ultrastor_reset(Scsi_Cmnd *);
 int ultrastor_biosparam(int, int, int *);
 
 #define ULTRASTOR_14F_MAX_SG 16

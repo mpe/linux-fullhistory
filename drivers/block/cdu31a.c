@@ -68,6 +68,7 @@
 #include <linux/kernel.h>
 #include <linux/hdreg.h>
 #include <linux/genhd.h>
+#include <linux/ioport.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -76,7 +77,7 @@
 #include <linux/cdrom.h>
 #include <linux/cdu31a.h>
 
-#define MAJOR_NR 15
+#define MAJOR_NR CDU31A_CDROM_MAJOR
 #include "blk.h"
 
 
@@ -616,6 +617,9 @@ get_data_end:
        && (num_retries < MAX_CDU31A_RETRIES))
    {
       num_retries++;
+      current->state = TASK_INTERRUPTIBLE;
+      current->timeout = jiffies + 10; /* Wait .1 seconds on retries */
+      schedule();
       goto retry_data_operation;
    }
 
@@ -693,6 +697,9 @@ do_cmd_end:
        && (num_retries < MAX_CDU31A_RETRIES))
    {
       num_retries++;
+      current->state = TASK_INTERRUPTIBLE;
+      current->timeout = jiffies + 10; /* Wait .1 seconds on retries */
+      schedule();
       goto retry_cd_operation;
    }
 
@@ -1129,8 +1136,8 @@ sony_get_subchnl_info(long arg)
 static int
 scd_ioctl(struct inode *inode,
           struct file  *file,
-          unsigned int cmd,
-          unsigned int arg)
+          unsigned int  cmd,
+          unsigned long arg)
 {
    unsigned int dev;
    unsigned char res_reg[2];
@@ -1449,10 +1456,14 @@ scd_open(struct inode *inode,
 {
    unsigned char res_reg[2];
    unsigned int res_size;
+   int num_spin_ups;
 
 
    if (!sony_spun_up)
    {
+      num_spin_ups = 0;
+
+respinup_on_open:
       do_sony_cd_cmd(SONY_SPIN_UP_CMD, NULL, 0, res_reg, &res_size);
 
       /* The drive sometimes returns error 0.  I don't know why, but ignore
@@ -1473,6 +1484,15 @@ scd_open(struct inode *inode,
          if ((res_reg[1] == SONY_AUDIO_PLAYING_ERR) || (res_reg[1] == 0))
          {
             goto drive_spinning;
+         }
+
+         /* If the drive says it is not spun up (even though we just did it!)
+            then retry the operation at least a few times. */
+         if (   (res_reg[1] == SONY_NOT_SPIN_ERR)
+             && (num_spin_ups < MAX_CDU31A_RETRIES))
+         {
+            num_spin_ups++;
+            goto respinup_on_open;
          }
 
          printk("Sony CDROM error 0x%2.2x (scd_open, read toc)\n", res_reg[1]);
@@ -1539,7 +1559,8 @@ static struct file_operations scd_fops = {
    scd_ioctl,              /* ioctl */
    NULL,                   /* mmap */
    scd_open,               /* open */
-   scd_release             /* release */
+   scd_release,            /* release */
+   NULL                    /* fsync */
 };
 
 
@@ -1641,12 +1662,17 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
    while (   (cdu31a_addresses[i] != 0)
           && (!drive_found))
    {
+      if (check_region(cdu31a_addresses[i], 4)) {
+	  i++;
+	  continue;
+      }
       get_drive_configuration(cdu31a_addresses[i],
                                drive_config.exec_status,
                                &res_size);
       if ((res_size > 2) && ((drive_config.exec_status[0] & 0x20) == 0x00))
       {
          drive_found = 1;
+	 snarf_region(cdu31a_addresses[i], 4);
 
          if (register_blkdev(MAJOR_NR,"cdu31a",&scd_fops))
          {

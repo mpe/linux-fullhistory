@@ -41,7 +41,7 @@
  *		Enables automatic IRQ detection.  I've put in some
  * 		fixes to this which should make this work much more
  * 		cleanly than it used to in 0.98pl2-6.  It should be
- * 		much less vulnerable to false IRQ's now.
+ * 		much less vulnerable to false IRQs now.
  * 
  * CONFIG_AST_FOURPORT
  *		Enables support for the AST Fourport serial port.

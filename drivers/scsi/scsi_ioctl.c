@@ -177,8 +177,7 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	
 	SCpnt = allocate_device(NULL, dev->index, 1);
 
-	scsi_do_cmd(SCpnt,  cmd,  buf,  ((outlen > MAX_BUF) ? 
-			MAX_BUF : outlen),  scsi_ioctl_done,  MAX_TIMEOUT, 
+	scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,  MAX_TIMEOUT, 
 			MAX_RETRIES);
 
 	if (SCpnt->request.dev != 0xfffe){
@@ -187,10 +186,20 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	  while (SCpnt->request.dev != 0xfffe) schedule();
 	};
 
-	result = verify_area(VERIFY_WRITE, cmd_in, (outlen > MAX_BUF) ? MAX_BUF  : outlen);
-	if (result)
-		return result;
-	memcpy_tofs ((void *) cmd_in,  buf,  (outlen > MAX_BUF) ? MAX_BUF  : outlen);
+
+	/* If there was an error condition, pass the info back to the user. */
+	if(SCpnt->result) {
+	  result = verify_area(VERIFY_WRITE, cmd_in, sizeof(SCpnt->sense_buffer));
+	  if (result)
+	    return result;
+	  memcpy_tofs((void *) cmd_in,  SCpnt->sense_buffer, sizeof(SCpnt->sense_buffer));
+	} else {
+
+	  result = verify_area(VERIFY_WRITE, cmd_in, (outlen > MAX_BUF) ? MAX_BUF  : outlen);
+	  if (result)
+	    return result;
+	  memcpy_tofs ((void *) cmd_in,  buf,  (outlen > MAX_BUF) ? MAX_BUF  : outlen);
+	};
 	result = SCpnt->result;
 	SCpnt->request.dev = -1;  /* Mark as not busy */
 	if (buf) scsi_free(buf, needed);
@@ -249,6 +258,7 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 		case SCSI_IOCTL_PROBE_HOST:
 			return ioctl_probe(dev->host, arg);
 		case SCSI_IOCTL_SEND_COMMAND:
+			if(!suser())  return -EACCES;
 			return ioctl_command((Scsi_Device *) dev, arg);
 		case SCSI_IOCTL_DOORLOCK:
 			if (!dev->removable || !dev->lockable) return 0;

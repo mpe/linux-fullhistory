@@ -6,7 +6,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -26,12 +26,21 @@
 #include "control_w.h"
 
 
+
+#ifdef REENTRANT_FPU
+/*  Local storage on the stack: */
+#define FPU_accum_0	-4(%ebp)	/* ms word */
+#define FPU_accum_1	-8(%ebp)
+
+#else
+/*  Local storage in a static area: */
 .data
-	.align 2,0
-accum_0:
+	.align 4,0
+FPU_accum_0:
 	.long	0
-accum_1:
+FPU_accum_1:
 	.long	0
+#endif REENTRANT_FPU
 
 
 .text
@@ -41,6 +50,10 @@ accum_1:
 _reg_u_mul:
 	pushl	%ebp
 	movl	%esp,%ebp
+#ifdef REENTRANT_FPU
+	subl	$8,%esp
+#endif REENTRANT_FPU
+
 	pushl	%esi
 	pushl	%edi
 	pushl	%ebx
@@ -62,7 +75,7 @@ _reg_u_mul:
 
 	call	_denormal_operand
 	orl	%eax,%eax
-	jnz	FPU_Arith_exit
+	jnz	fpu_Arith_exit
 
 xOp1_not_denorm:
 	movl	EXP(%edi),%eax
@@ -71,7 +84,7 @@ xOp1_not_denorm:
 
 	call	_denormal_operand
 	orl	%eax,%eax
-	jnz	FPU_Arith_exit
+	jnz	fpu_Arith_exit
 
 xOp2_not_denorm:
 #endif DENORM_OPERAND
@@ -81,18 +94,18 @@ xOp2_not_denorm:
 
 	movl	SIGL(%esi),%eax
 	mull	SIGL(%edi)
-	movl	%eax,accum_0
-	movl	%edx,accum_1
+	movl	%eax,FPU_accum_0
+	movl	%edx,FPU_accum_1
 
 	movl	SIGL(%esi),%eax
 	mull	SIGH(%edi)
-	addl	%eax,accum_1
+	addl	%eax,FPU_accum_1
 	adcl	%edx,%ebx
 /*	adcl	$0,%ecx		// overflow here is not possible */
 
 	movl	SIGH(%esi),%eax
 	mull	SIGL(%edi)
-	addl	%eax,accum_1
+	addl	%eax,FPU_accum_1
 	adcl	%edx,%ebx
 	adcl	$0,%ecx
 
@@ -104,6 +117,7 @@ xOp2_not_denorm:
 	movl	EXP(%esi),%eax	/* Compute the exponent */
 	addl	EXP(%edi),%eax
 	subl	EXP_BIAS-1,%eax
+
 /*  Have now finished with the sources */
 	movl	PARAM3,%edi	/* Point to the destination */
 	movl	%eax,EXP(%edi)
@@ -113,15 +127,15 @@ xOp2_not_denorm:
 	jnz	LResult_Normalised
 
 	/* Normalize by shifting left one bit */
-	shll	$1,accum_0
-	rcll	$1,accum_1
+	shll	$1,FPU_accum_0
+	rcll	$1,FPU_accum_1
 	rcll	$1,%ebx
 	rcll	$1,%ecx
 	decl	EXP(%edi)
 
 LResult_Normalised:
-	movl	accum_0,%eax
-	movl	accum_1,%edx
+	movl	FPU_accum_0,%eax
+	movl	FPU_accum_1,%edx
 	orl	%eax,%eax
 	jz	L_extent_zero
 
@@ -129,7 +143,7 @@ LResult_Normalised:
 
 L_extent_zero:
 	movl	%ecx,%eax
-	jmp	FPU_round
+	jmp	fpu_reg_round
 
 
 #ifdef PARANOID

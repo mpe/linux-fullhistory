@@ -6,7 +6,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
  |   void reg_div(FPU_REG *a, FPU_REG *b, FPU_REG *dest,                     |
@@ -17,6 +17,7 @@
 #include "exception.h"
 #include "fpu_asm.h"
 
+
 .text
 	.align 2
 
@@ -24,6 +25,9 @@
 _reg_div:
 	pushl	%ebp
 	movl	%esp,%ebp
+#ifdef REENTRANT_FPU
+	subl	$28,%esp	/* Needed by divide_kernel */
+#endif REENTRANT_FPU
 
 	pushl	%esi
 	pushl	%edi
@@ -45,7 +49,7 @@ _reg_div:
 
 	call	_denormal_operand
 	orl	%eax,%eax
-	jnz	FPU_Arith_exit
+	jnz	fpu_Arith_exit
 
 xL_arg1_not_denormal:
 	cmpl	EXP_UNDER,EXP(%ebx)
@@ -53,7 +57,7 @@ xL_arg1_not_denormal:
 
 	call	_denormal_operand
 	orl	%eax,%eax
-	jnz	FPU_Arith_exit
+	jnz	fpu_Arith_exit
 
 xL_arg2_not_denormal:
 #endif DENORM_OPERAND
@@ -86,7 +90,6 @@ L_div_special:
 L_arg1_NaN:
 L_arg2_NaN:
 	pushl	%edi			/* Destination */
-/*	pushl	%ebx */
 	pushl	%esi
 	pushl	%ebx			/* Ordering is important here */
 	call	_real_2op_NaN
@@ -125,7 +128,7 @@ L_inf_valid:
 
 	call	_denormal_operand
 	orl	%eax,%eax
-	jnz	FPU_Arith_exit
+	jnz	fpu_Arith_exit
 #endif DENORM_OPERAND
 
 	jmp	L_copy_arg1		/* Answer is Inf */
@@ -164,7 +167,7 @@ L_arg2_not_zero:
 
 	call	_denormal_operand
 	orl	%eax,%eax
-	jnz	FPU_Arith_exit
+	jnz	fpu_Arith_exit
 #endif DENORM_OPERAND
 
 	jmp	L_return_zero		/* Answer is zero */
@@ -184,7 +187,7 @@ L_arg2_not_inf:
 
 	call	_denormal_operand
 	orl	%eax,%eax
-	jnz	FPU_Arith_exit
+	jnz	fpu_Arith_exit
 #endif DENORM_OPERAND
 
 L_copy_arg1:
@@ -211,7 +214,11 @@ LDiv_negative_result:
 	xorl	%eax,%eax		/* Valid result */
 
 LDiv_exit:
+#ifdef REENTRANT_FPU
+	leal	-40(%ebp),%esp
+#else
 	leal	-12(%ebp),%esp
+#endif REENTRANT_FPU
 
 	popl	%ebx
 	popl	%edi

@@ -4,13 +4,14 @@
 
 #DEBUG	= -DDEBUGGING
 DEBUG	=
+REENTRANT	= -DREENTRANT_FPU
 CFLAGS	:= $(CFLAGS) -DPARANOID $(DEBUG) -fno-builtin
 
 .c.o:
 	$(CC) $(CFLAGS) $(MATH_EMULATION) -c $<
 
 .S.o:
-	$(CC) -D__ASSEMBLER__ -c $<
+	$(CC) -D__ASSEMBLER__ $(REENTRANT) -c $<
 
 .s.o:
 	$(CC) -c $<
@@ -30,9 +31,6 @@ math.a: $(OBJS)
 	rm -f math.a
 	$(AR) rcs math.a $(OBJS)
 	sync
-
-clean:
-	rm -f core *.o *.a *.s
 
 dep:
 	$(CPP) -M *.c > .depend

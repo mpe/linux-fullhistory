@@ -17,8 +17,8 @@
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
-#include <linux/stat.h>
 #include <linux/sched.h>
+#include <linux/stat.h>
 
 #if 0
 static int ext2_dir_read (struct inode * inode, struct file * filp,
@@ -67,7 +67,7 @@ struct inode_operations ext2_dir_inode_operations = {
 
 int ext2_check_dir_entry (char * function, struct inode * dir,
 			  struct ext2_dir_entry * de, struct buffer_head * bh,
-			  unsigned int offset)
+			  unsigned long offset)
 {
 	char * error_msg = NULL;
 
@@ -81,19 +81,19 @@ int ext2_check_dir_entry (char * function, struct inode * dir,
 		 dir->i_sb->s_blocksize)
 		error_msg = "directory entry across blocks";
 
-	if (error_msg != NULL) {
-		printk ("%s: bad directory entry (dev %04x, dir %d): %s\n",
-			function, dir ? dir->i_dev : 0, dir->i_ino, error_msg);
-		printk ("offset=%d, inode=%d, rec_len=%d, name_len=%d\n",
-			offset, de->inode, de->rec_len,	de->name_len);
-	}
+	if (error_msg != NULL)
+		ext2_error (dir->i_sb, function, "bad directory entry: %s\n"
+			    "offset=%lu, inode=%lu, rec_len=%d, name_len=%d",
+			    error_msg, offset, de->inode, de->rec_len,
+			    de->name_len);
 	return error_msg == NULL ? 1 : 0;
 }
 
 static int ext2_readdir (struct inode * inode, struct file * filp,
 			 struct dirent * dirent, int count)
 {
-	unsigned int offset, i;
+	unsigned long offset;
+	int i;
 	struct buffer_head * bh;
 	struct ext2_dir_entry * de;
 	struct super_block * sb;

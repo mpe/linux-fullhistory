@@ -20,6 +20,7 @@
  *		C.E.Hawkins:	IFF_PROMISC support
  *		Alan Cox:	Supports Donald Beckers new hardware 
  *				multicast layer, but not yet multicast lists.
+ *		Alan Cox:	ip_addr_match problems with class A/B nets.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -111,19 +112,19 @@ int
 ip_addr_match(unsigned long me, unsigned long him)
 {
   int i;
-
+  unsigned long mask=0xFFFFFFFF;
   DPRINTF((DBG_DEV, "ip_addr_match(%s, ", in_ntoa(me)));
   DPRINTF((DBG_DEV, "%s)\n", in_ntoa(him)));
 
   if (me == him) 
   	return(1);
-  for (i = 0; i < 4; i++, me >>= 8, him >>= 8) {
+  for (i = 0; i < 4; i++, me >>= 8, him >>= 8, mask >>= 8) {
 	if ((me & 0xFF) != (him & 0xFF)) {
 		/*
 		 * The only way this could be a match is for
 		 * the rest of addr1 to be 0 or 255.
 		 */
-		if (me != 0 && me != 255) return(0);
+		if (me != 0 && me != mask) return(0);
 		return(1);
 	}
   }
@@ -190,7 +191,7 @@ chk_addr(unsigned long addr)
 
   DPRINTF((DBG_DEV, "NONE\n"));
   
-  if(addr & 0xFF)
+  if ((addr & 0xFF) == 0xFF)
   {
   	/* Wrong subnetted IS_BROADCAST */
   	return(IS_INVBCAST);
@@ -531,6 +532,8 @@ inet_bh(void *tmp)
   /* Any data left to process? */
   while((skb=skb_dequeue(&backlog))!=NULL)
   {
+	flag=0;
+	sti();
        /*
 	* Bump the pointer to the next structure.
 	* This assumes that the basic 'skb' pointer points to
@@ -606,6 +609,7 @@ inet_bh(void *tmp)
   }
   in_bh = 0;
   sti();
+  dev_transmit();
 }
 
 
@@ -901,12 +905,12 @@ dev_ioctl(unsigned int cmd, void *arg)
 	  if ((dev->flags & IFF_UP) == 0
 	      && (retval = dev_open(dev)) != 0)
 	      return retval;
-	  printk("%s: adding HOST route of %8.8x.\n", dev->name,
+	  printk("%s: adding HOST route of %8.8lx.\n", dev->name,
 		 htonl(ipc.paddr));
 	  rt_add(RTF_HOST, ipc.paddr, 0, dev);
 	  if (ipc.router != 0 && ipc.router != -1) {
 	      rt_add(RTF_GATEWAY, ipc.paddr, ipc.router, dev);
-	      printk("%s: adding GATEWAY route of %8.8x.\n",
+	      printk("%s: adding GATEWAY route of %8.8lx.\n",
 		     dev->name, htonl(ipc.paddr));
 
 	  }

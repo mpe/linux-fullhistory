@@ -10,6 +10,7 @@
  *
  *	Fixes:
  *		Alan Cox	:	NULL return from skb_peek_copy() understood
+ *		Alan Cox	:	Rewrote skb_read_datagram to avoid the skb_peek_copy stuff.
  */
 
 #include <linux/config.h>
@@ -47,7 +48,8 @@ struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, 
 	struct sk_buff *skb;
 	
 	/* Socket is inuse - so the timer doesn't attack it */
-  	sk->inuse = 1;
+restart:
+	sk->inuse = 1;
   	while(sk->rqueue == NULL) 	/* No data */
   	{
   		/* If we are shutdown then no more data is going to appear. We are done */
@@ -96,17 +98,50 @@ struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, 
 	  /* Again only user level code calls this function, so nothing interrupt level
 	     will suddenely eat the rqueue */
 	  if (!(flags & MSG_PEEK)) 
+	  {
 	  	skb=skb_dequeue(&sk->rqueue);
+	  	if(skb!=NULL)
+		  	skb->users++;
+		else
+			goto restart;	/* Avoid race if someone beats us to the data */
+	  }
 	  else
 	  {
-	  	skb=skb_peek_copy(&sk->rqueue);	/* We make a copy with interrupts off. Its the only
-	  					   way to be safe as this code is re-entrant */
+	  	cli();
+	  	skb=skb_peek(&sk->rqueue);
+	  	if(skb!=NULL)
+	  		skb->users++;
+	  	sti();
 	  	if(skb==NULL)	/* shouldn't happen but .. */
-	  		*err=-ENOMEM;
+	  		*err=-EAGAIN;
 	  }
 	  return skb;
 }	
 
+void skb_free_datagram(struct sk_buff *skb)
+{
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	skb->users--;
+	if(skb->users>0)
+	{
+		restore_flags(flags);
+		return;
+	}
+	/* See if it needs destroying */
+	if(skb->list == NULL)	/* Been dequeued by someone - ie its read */
+		kfree_skb(skb,FREE_READ);
+	restore_flags(flags);
+}
+
+void skb_copy_datagram(struct sk_buff *skb, int offset, char *to, int size)
+{
+	/* We will know all about the fraglist options to allow >4K receives 
+	   but not this release */
+	memcpy_tofs(to,skb->h.raw+offset,size);
+}
 
 /*
  *	Datagram select: Again totally generic. Moved from udp.c

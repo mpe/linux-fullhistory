@@ -14,6 +14,7 @@
 #include <linux/sched.h>
 #include <linux/config.h>
 #include <linux/kernel.h>
+#include <linux/major.h>
 #include <linux/tty.h>
 #include <linux/fcntl.h>
 
@@ -419,8 +420,8 @@ int tty_ioctl(struct inode * inode, struct file * file,
 	int termios_dev;
 	int retval;
 
-	if (MAJOR(file->f_rdev) != 4) {
-		printk("tty_ioctl: tty pseudo-major != 4\n");
+	if (MAJOR(file->f_rdev) != TTY_MAJOR) {
+		printk("tty_ioctl: tty pseudo-major != TTY_MAJOR\n");
 		return -EINVAL;
 	}
 	dev = MINOR(file->f_rdev);

@@ -111,11 +111,15 @@ repeat:
  * tables. NOTE! You should check that the long isn't on a page boundary,
  * and that it is in the task area before calling this: this routine does
  * no checking.
+ *
+ * Now keeps R/W state of page so that a text page stays readonly
+ * even if a debugger scribbles breakpoints into it.  -M.U-
  */
 static void put_long(struct task_struct * tsk, unsigned long addr,
 	unsigned long data)
 {
-	unsigned long page, pte;
+	unsigned long page, pte = 0;
+	int readonly = 0;
 
 repeat:
 	page = *PAGE_DIR_OFFSET(tsk->tss.cr3,addr);
@@ -126,10 +130,12 @@ repeat:
 		page = *((unsigned long *) page);
 	}
 	if (!(page & PAGE_PRESENT)) {
-		do_no_page(PAGE_RW,addr,tsk,0);
+		do_no_page(0 /* PAGE_RW */ ,addr,tsk,0);
 		goto repeat;
 	}
 	if (!(page & PAGE_RW)) {
+		if(!(page & PAGE_COW))
+			readonly = 1;
 		do_wp_page(PAGE_RW | PAGE_PRESENT,addr,tsk,0);
 		goto repeat;
 	}
@@ -138,6 +144,10 @@ repeat:
 	page &= PAGE_MASK;
 	page += addr & ~PAGE_MASK;
 	*(unsigned long *) page = data;
+	if(readonly) {
+		*(unsigned long *) pte &=~ (PAGE_RW|PAGE_COW);
+		invalidate();
+	} 
 }
 
 /*
@@ -258,8 +268,10 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	}
 	if (!(child->flags & PF_PTRACED))
 		return -ESRCH;
-	if (child->state != TASK_STOPPED && request != PTRACE_DETACH)
-		return -ESRCH;
+	if (child->state != TASK_STOPPED) {
+		if (request != PTRACE_KILL && request != PTRACE_DETACH)
+			return -ESRCH;
+	}
 	if (child->p_pptr != current)
 		return -ESRCH;
 

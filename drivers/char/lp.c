@@ -8,6 +8,7 @@
 
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/major.h>
 #include <linux/sched.h>
 #include <linux/lp.h>
 #include <linux/malloc.h>
@@ -432,8 +433,8 @@ long lp_init(long kmem_start)
 	unsigned int testvalue = 0;
 	int count = 0;
 
-	if (register_chrdev(6,"lp",&lp_fops)) {
-		printk("unable to get major 6 for line printer\n");
+	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
+		printk("unable to get major %d for line printer\n", LP_MAJOR);
 		return kmem_start;
 	}
 	/* take on all known port values */

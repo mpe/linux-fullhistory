@@ -659,10 +659,12 @@ asmlinkage int sys_link(const char * oldname, const char * newname)
 	if (error)
 		return error;
 	error = getname(newname,&to);
-	if (!error) {
-		error = do_link(oldinode,to);
-		putname(to);
+	if (error) {
+		iput(oldinode);
+		return error;
 	}
+	error = do_link(oldinode,to);
+	putname(to);
 	return error;
 }
 

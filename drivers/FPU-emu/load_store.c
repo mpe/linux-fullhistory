@@ -6,7 +6,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -35,7 +35,7 @@
 #define pop_0()	{ pop_ptr->tag = TW_Empty; top++; }
 
 
-static unsigned char type_table[32] = {
+static unsigned char const type_table[32] = {
   _PUSH_, _PUSH_, _PUSH_, _PUSH_,
   _null_, _null_, _null_, _null_,
   _REG0_, _REG0_, _REG0_, _REG0_,

@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -17,7 +17,7 @@
 
 
 #define	HIPOWERop	3	/* odd poly, positive terms */
-static unsigned short	oddplterms[HIPOWERop][4] =
+static unsigned short const	oddplterms[HIPOWERop][4] =
 	{
 	{ 0x846a, 0x42d1, 0xb544, 0x921f},
 	{ 0x6fb2, 0x0215, 0x95c0, 0x099c},
@@ -25,21 +25,21 @@ static unsigned short	oddplterms[HIPOWERop][4] =
 	};
 
 #define	HIPOWERon	2	/* odd poly, negative terms */
-static unsigned short	oddnegterms[HIPOWERon][4] =
+static unsigned short const	oddnegterms[HIPOWERon][4] =
 	{
 	{ 0x6906, 0xe205, 0x25c8, 0x8838},
 	{ 0x1dd7, 0x3fe3, 0x944e, 0x002c}
 	};
 
 #define	HIPOWERep	2	/* even poly, positive terms */
-static unsigned short	evenplterms[HIPOWERep][4] =
+static unsigned short const	evenplterms[HIPOWERep][4] =
 	{
 	{ 0xdb8f, 0x3761, 0x1432, 0x2acf},
 	{ 0x16eb, 0x13c1, 0x3099, 0x0003}
 	};
 
 #define	HIPOWERen	2	/* even poly, negative terms */
-static unsigned short	evennegterms[HIPOWERen][4] =
+static unsigned short const	evennegterms[HIPOWERen][4] =
 	{
 	{ 0x3a7c, 0xe4c5, 0x7f87, 0x2945},
 	{ 0x572b, 0x664c, 0xc543, 0x018c}
@@ -49,7 +49,7 @@ static unsigned short	evennegterms[HIPOWERen][4] =
 /*--- poly_tan() ------------------------------------------------------------+
  |                                                                           |
  +---------------------------------------------------------------------------*/
-void	poly_tan(FPU_REG *arg, FPU_REG *y_reg, int invert)
+void	poly_tan(FPU_REG const *arg, FPU_REG *result, int invert)
 {
   short		exponent;
   FPU_REG       odd_poly, even_poly, pos_poly, neg_poly;
@@ -61,7 +61,7 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg, int invert)
 
 #ifdef PARANOID
   if ( arg->sign != 0 )	/* Can't hack a number < 0.0 */
-    { arith_invalid(y_reg); return; }  /* Need a positive number */
+    { arith_invalid(result); return; }  /* Need a positive number */
 #endif PARANOID
 
   arg_signif = significand(arg);
@@ -142,8 +142,8 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg, int invert)
 
   /* Now ready to copy the results */
   if ( invert )
-    { reg_div(&even_poly, &odd_poly, y_reg, FULL_PRECISION); }
+    { reg_div(&even_poly, &odd_poly, result, FULL_PRECISION); }
   else
-    { reg_div(&odd_poly, &even_poly, y_reg, FULL_PRECISION); }
+    { reg_div(&odd_poly, &even_poly, result, FULL_PRECISION); }
 
 }

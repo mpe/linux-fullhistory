@@ -212,7 +212,11 @@ static struct buffer_head * xiafs_add_entry(struct inode * dir,
 		}
 	    }
 	    if (!de->d_ino && RNDUP4(namelen)+8 <= de->d_rec_len) {
-	        dir->i_atime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+		/*
+		 * XXX all times should be set by caller upon successful
+		 * completion.
+		 */
+	        dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 		dir->i_dirt = 1;
 		memcpy(de->d_name, name, namelen);
 		de->d_name[namelen]=0;
@@ -518,7 +522,7 @@ int xiafs_rmdir(struct inode * dir, const char * name, int len)
     inode->i_nlink=0;
     inode->i_dirt=1;
     dir->i_nlink--;
-    dir->i_atime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+    inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
     dir->i_dirt=1;
     retval = 0;
 end_rmdir:
@@ -563,7 +567,7 @@ repeat:
     }
     xiafs_rm_entry(de, de_pre);
     bh->b_dirt = 1;
-    dir->i_atime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+    inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
     dir->i_dirt = 1;
     inode->i_nlink--;
     inode->i_dirt = 1;
@@ -661,7 +665,7 @@ int xiafs_link(struct inode * oldinode, struct inode * dir,
     brelse(bh);
     iput(dir);
     oldinode->i_nlink++;
-    oldinode->i_atime = oldinode->i_ctime = CURRENT_TIME;
+    oldinode->i_ctime = CURRENT_TIME;
     oldinode->i_dirt = 1;
     iput(oldinode);
     return 0;
@@ -841,8 +845,3 @@ int xiafs_rename(struct inode * old_dir, const char * old_name, int old_len,
     wake_up(&wait);
     return result;
 }
-
-
-
-
-

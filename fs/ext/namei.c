@@ -246,7 +246,9 @@ printk ("ext_add_entry: skipping to next block\n");
 					offset += de->rec_len;
 					dir->i_size += de->rec_len;
 					dir->i_dirt = 1;
+#if 0
 					dir->i_ctime = CURRENT_TIME;
+#endif
 					bh->b_dirt = 1;
 				}
 				brelse (bh);
@@ -264,7 +266,9 @@ printk ("ext_add_entry : creating next block\n");
 			de->rec_len = rec_len;
 			dir->i_size += de->rec_len;
 			dir->i_dirt = 1;
+#if 0
 			dir->i_ctime = CURRENT_TIME;
+#endif
 		}
 		if (de->rec_len < 8 || de->rec_len % 4 != 0 ||
 		    de->rec_len < de->name_len + 8 ||
@@ -288,7 +292,7 @@ printk ("ext_add_entry : creating next block\n");
 				de1->name_len = 0;
 				de->rec_len = rec_len;
 			}
-			dir->i_mtime = CURRENT_TIME;
+			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
 			de->name_len = namelen;
 			for (i=0; i < namelen ; i++)
 				de->name[i] = name[i];
@@ -376,7 +380,9 @@ int ext_mknod(struct inode * dir, const char * name, int len, int mode, int rdev
 		init_fifo(inode);
 	if (S_ISBLK(mode) || S_ISCHR(mode))
 		inode->i_rdev = rdev;
+#if 0
 	inode->i_mtime = inode->i_atime = CURRENT_TIME;
+#endif
 	inode->i_dirt = 1;
 	bh = ext_add_entry(dir,name,len,&de);
 	if (!bh) {
@@ -417,7 +423,9 @@ int ext_mkdir(struct inode * dir, const char * name, int len, int mode)
 					- 2 bytes for the record length
 					- 2 bytes for the name length
 					- 8 bytes for the name */
+#if 0
 	inode->i_mtime = inode->i_atime = CURRENT_TIME;
+#endif
 	dir_block = ext_bread(inode,0,1);
 	if (!dir_block) {
 		iput(dir);
@@ -563,7 +571,7 @@ int ext_rmdir(struct inode * dir, const char * name, int len)
 	inode->i_nlink=0;
 	inode->i_dirt=1;
 	dir->i_nlink--;
-	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_dirt=1;
 	retval = 0;
 end_rmdir:
@@ -606,7 +614,7 @@ int ext_unlink(struct inode * dir, const char * name, int len)
 	inode->i_nlink--;
 	inode->i_dirt = 1;
 	inode->i_ctime = CURRENT_TIME;
-	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	dir->i_ctime = dir->i_mtime = inode->i_ctime;
 	dir->i_dirt = 1;
 	retval = 0;
 end_unlink:

@@ -348,7 +348,7 @@ static void forget_original_parent(struct task_struct * father)
 	}
 }
 
-volatile void do_exit(long code)
+NORET_TYPE void do_exit(long code)
 {
 	struct task_struct *p;
 	int i;

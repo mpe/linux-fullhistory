@@ -32,6 +32,9 @@
  *		Alan Cox	:	arp_send memory leak removed
  *		Alan Cox	:	generic skbuff code fixes.
  *		Alan Cox	:	'Bad Packet' only reported on debugging
+ *		Alan Cox	:	Proxy arp.
+ *		Alan Cox	:	skb->link3 maintained by letting the other xmit queue kill the packet.
+ *
  * To Fix:
  *				:	arp response allocates an skbuff to send. However there is a perfectly
  *					good spare skbuff the right size about to be freed (the query). Use the
@@ -109,8 +112,14 @@ struct arp_table *arp_tables[ARP_TABLE_SIZE] = {
   NULL,
 };
 
+static int arp_proxies=0;	/* So we can avoid the proxy arp 
+				   overhead with the usual case of
+				   no proxy arps */
+
 struct sk_buff * volatile arp_q = NULL;
 
+static struct arp_table *arp_lookup(unsigned long addr);
+static struct arp_table *arp_lookup_proxy(unsigned long addr);
 
 /* Dump the ADDRESS bytes of an unknown hardware type. */
 static char *
@@ -214,8 +223,10 @@ arp_send_q(void)
 		 * this packet from the queue.  (grinnik) -FvK
 		 */
 		skb->sk = NULL;
-		kfree_skb(skb, FREE_WRITE);
-
+		if(skb->free)
+			kfree_skb(skb, FREE_WRITE);
+			/* If free was 0, magic is now 0, next is 0 and 
+			   the write queue will notice and kill */
 		sti();
 		continue;
 	}
@@ -236,13 +247,26 @@ arp_send_q(void)
 
 /* Create and send our response to an ARP request. */
 static int
-arp_response(struct arphdr *arp1, struct device *dev)
+arp_response(struct arphdr *arp1, struct device *dev,  int addrtype)
 {
   struct arphdr *arp2;
   struct sk_buff *skb;
   unsigned long src, dst;
   unsigned char *ptr1, *ptr2;
   int hlen;
+  struct arp_table *apt = NULL;/* =NULL otherwise the compiler gives warnings */
+
+  /* Decode the source (REQUEST) message. */
+  ptr1 = ((unsigned char *) &arp1->ar_op) + sizeof(u_short);
+  src = *((unsigned long *) (ptr1 + arp1->ar_hln));
+  dst = *((unsigned long *) (ptr1 + (arp1->ar_hln * 2) + arp1->ar_pln));
+  
+  if(addrtype!=IS_MYADDR)
+  {
+  	apt=arp_lookup_proxy(dst);
+  	if(apt==NULL)
+  		return(1);
+  }
 
   /* Get some mem and initialize it for the return trip. */
   skb = alloc_skb(sizeof(struct sk_buff) +
@@ -253,11 +277,6 @@ arp_response(struct arphdr *arp1, struct device *dev)
 	printk("ARP: no memory available for ARP REPLY!\n");
 	return(1);
   }
-
-  /* Decode the source (REQUEST) message. */
-  ptr1 = ((unsigned char *) &arp1->ar_op) + sizeof(u_short);
-  src = *((unsigned long *) (ptr1 + arp1->ar_hln));
-  dst = *((unsigned long *) (ptr1 + (arp1->ar_hln * 2) + arp1->ar_pln));
 
   skb->mem_addr = skb;
   skb->len      = sizeof(struct arphdr) + (2 * arp1->ar_hln) + 
@@ -283,7 +302,10 @@ arp_response(struct arphdr *arp1, struct device *dev)
   arp2->ar_hln = arp1->ar_hln;
   arp2->ar_pln = arp1->ar_pln;
   arp2->ar_op = htons(ARPOP_REPLY);
-  memcpy(ptr2, dev->dev_addr, arp2->ar_hln);
+  if(addrtype==IS_MYADDR)
+	  memcpy(ptr2, dev->dev_addr, arp2->ar_hln);
+  else		/* Proxy arp, so pull from the table */
+  	  memcpy(ptr2, apt->ha, arp2->ar_hln);
   ptr2 += arp2->ar_hln;
   memcpy(ptr2, ptr1 + (arp1->ar_hln * 2) + arp1->ar_pln, arp2->ar_pln);
   ptr2 += arp2->ar_pln;
@@ -336,6 +358,30 @@ arp_lookup(unsigned long paddr)
 }
 
 
+/* This will find a proxy in the ARP table by looking at the IP address. */
+static struct arp_table *arp_lookup_proxy(unsigned long paddr)
+{
+  struct arp_table *apt;
+  unsigned long hash;
+
+  DPRINTF((DBG_ARP, "ARP: lookup proxy(%s)\n", in_ntoa(paddr)));
+
+  /* Loop through the table for the desired address. */
+  hash = htonl(paddr) & (ARP_TABLE_SIZE - 1);
+  cli();
+  apt = arp_tables[hash];
+  while(apt != NULL) {
+	if (apt->ip == paddr && (apt->flags & ATF_PUBL) ) {
+		sti();
+		return(apt);
+	}
+	apt = apt->next;
+  }
+  sti();
+  return(NULL);
+}
+
+
 /* Delete an ARP mapping entry in the cache. */
 void
 arp_destroy(unsigned long paddr)
@@ -359,6 +405,8 @@ arp_destroy(unsigned long paddr)
   while ((apt = *lapt) != NULL) {
 	if (apt->ip == paddr) {
 		*lapt = apt->next;
+		if(apt->flags&ATF_PUBL)
+			arp_proxies--;			
 		kfree_s(apt, sizeof(struct arp_table));
 		sti();
 		return;
@@ -391,7 +439,7 @@ arp_create(unsigned long paddr, unsigned char *addr, int hlen, int htype)
   apt->ip = paddr;
   apt->hlen = hlen;
   apt->htype = htype;
-  apt->flags = (ATF_INUSE | ATF_COM);	/* USED and COMPLETED entry */
+  apt->flags = (ATF_INUSE | ATF_COM);		/* USED and COMPLETED entry */
   memcpy(apt->ha, addr, hlen);
   apt->last_used = jiffies;
   cli();
@@ -419,6 +467,7 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   unsigned long src, dst;
   unsigned char *ptr;
   int ret;
+  int addr_hint;
 
   DPRINTF((DBG_ARP, "<<\n"));
   arp = skb->h.arp;
@@ -496,7 +545,7 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   }
 
   memcpy(&dst, ptr + (arp->ar_hln * 2) + arp->ar_pln, arp->ar_pln);
-  if (chk_addr(dst) != IS_MYADDR) {
+  if ((addr_hint=chk_addr(dst)) != IS_MYADDR && arp_proxies==0) {
 	DPRINTF((DBG_ARP, "ARP: request was not for me!\n"));
 	kfree_skb(skb, FREE_READ);
 	return(0);
@@ -506,7 +555,7 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
    * Yes, it is for us.
    * Allocate, fill in and send an ARP REPLY packet.
    */
-  ret = arp_response(arp, dev);
+  ret = arp_response(arp, dev, addr_hint);
   kfree_skb(skb, FREE_READ);
   return(ret);
 }
@@ -679,20 +728,7 @@ arp_queue(struct sk_buff *skb)
 	printk("ARP: arp_queue skb already on queue magic=%X.\n", skb->magic);
 	return;
   }
-#ifdef OLDWAY
-  if (arp_q == NULL) {
-	arp_q = skb;
-	skb->next = skb;
-	skb->prev = skb;
-  } else {
-	skb->next = arp_q;
-	skb->prev = arp_q->prev;
-	skb->next->prev = skb;
-	skb->prev->next = skb;
-  }
-#else
   skb_queue_tail(&arp_q,skb);
-#endif
   skb->magic = ARP_QUEUE_MAGIC;
   sti();
 }
@@ -793,6 +829,8 @@ arp_req_set(struct arpreq *req)
   memcpy((char *) &apt->ha, (char *) &r.arp_ha.sa_data, hlen);
   apt->last_used = jiffies;
   apt->flags = r.arp_flags;
+  if(apt->flags&ATF_PUBL)
+  	arp_proxies++;		/* Count proxy arps so we know if to use it */
 
   return(0);
 }

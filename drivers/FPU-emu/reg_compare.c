@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -21,7 +21,7 @@
 #include "status_w.h"
 
 
-int compare(FPU_REG *b)
+int compare(FPU_REG const *b)
 {
   int diff;
 

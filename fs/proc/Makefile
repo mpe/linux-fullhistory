@@ -19,9 +19,6 @@ OBJS=	inode.o root.o base.o mem.o link.o fd.o array.o kmsg.o net.o
 proc.o: $(OBJS)
 	$(LD) -r -o proc.o $(OBJS)
 
-clean:
-	rm -f core *.o *.a *.s
-
 dep:
 	$(CPP) -M *.c > .depend
 

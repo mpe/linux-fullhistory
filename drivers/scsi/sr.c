@@ -20,8 +20,7 @@
 #include <linux/errno.h>
 #include <asm/system.h>
 
-#define MAJOR_NR 11
-
+#define MAJOR_NR SCSI_CDROM_MAJOR
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
@@ -127,7 +126,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 			int offset;
 			offset = (SCpnt->request.sector % 4) << 9;
 			memcpy((char *)SCpnt->request.buffer, 
-			       SCpnt->buffer + offset, 
+			       (char *)SCpnt->buffer + offset, 
 			       this_count << 9);
 			/* Even though we are not using scatter-gather, we look
 			   ahead and see if there is a linked request for the
@@ -139,7 +138,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 			   SCpnt->request.bh->b_reqnext &&
 			   SCpnt->request.bh->b_reqnext->b_size == 1024) {
 			  memcpy((char *)SCpnt->request.bh->b_reqnext->b_data, 
-				 SCpnt->buffer + 1024, 
+				 (char *)SCpnt->buffer + 1024, 
 				 1024);
 			  this_count += 2;
 			};
@@ -173,11 +172,8 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 			{	 
 			SCpnt->request.errors = 0;
 			if (!SCpnt->request.bh)
-			  {
-			    printk("sr.c: linked page request. (%x %x)",
+			    panic("sr.c: linked page request (%lx %x)",
 				  SCpnt->request.sector, this_count);
-			    panic("Aiiiiiiiiiiiieeeeeeeee");
-			  }
 			}
 
 		  end_scsi_request(SCpnt, 1, this_count);  /* All done */

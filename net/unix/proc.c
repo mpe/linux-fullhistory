@@ -15,6 +15,9 @@
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
  *		Fred Baumgarten, <dc6iq@insu1.etec.uni-kalrsruhe.de>
  *
+ * Fixes:
+ *		Andriews Brouwer	:	Comment errors
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -42,7 +45,7 @@ int unix_get_info(char *buffer)
 
   for(i = 0; i < NSOCKETS; i++) {
 	if (unix_datas[i].refcnt) {
-		pos += sprintf(pos, "%2d: %08X %08X %08X %04X %02X", i,
+		pos += sprintf(pos, "%2d: %08X %08X %08lX %04X %02X", i,
 			unix_datas[i].refcnt,
 			unix_datas[i].protocol,
 			unix_datas[i].socket->flags,
@@ -61,9 +64,9 @@ int unix_get_info(char *buffer)
 		}
 
 		/*
-		 * Check wether buffer _may_ overflow in the next loop.
+		 * Check whether buffer _may_ overflow in the next loop.
 		 * Since sockets may have very very long paths, we make
-		 * PATH_MAX+100 the minimum space left for a new line.
+		 * PATH_MAX+80 the minimum space left for a new line.
 		 */
 		if (pos > buffer+PAGE_SIZE-80-PATH_MAX) {
 			printk("UNIX: netinfo: oops, too many sockets.\n");

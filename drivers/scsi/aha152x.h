@@ -15,7 +15,7 @@ const char *aha152x_info(void);
 int        aha152x_command(Scsi_Cmnd *);
 int        aha152x_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int        aha152x_abort(Scsi_Cmnd *, int);
-int        aha152x_reset(void);
+int        aha152x_reset(Scsi_Cmnd *);
 int        aha152x_biosparam(int, int, int*);
 
 /* number of queueable commands

@@ -92,7 +92,7 @@ static int get_uptime(char * buffer)
 
 	uptime = jiffies;
 	idle = task[0]->utime + task[0]->stime;
-	return sprintf(buffer,"%d.%02d %d.%02d\n",
+	return sprintf(buffer,"%lu.%02lu %lu.%02lu\n",
 		uptime / HZ,
 		uptime % HZ,
 		idle / HZ,
@@ -106,8 +106,8 @@ static int get_meminfo(char * buffer)
 	si_meminfo(&i);
 	si_swapinfo(&i);
 	return sprintf(buffer, "        total:   used:    free:   shared:  buffers:\n"
-		"Mem:  %8d %8d %8d %8d %8d\n"
-		"Swap: %8d %8d %8d\n",
+		"Mem:  %8lu %8lu %8lu %8lu %8lu\n"
+		"Swap: %8lu %8lu %8lu\n",
 		i.totalram, i.totalram-i.freeram, i.freeram, i.sharedram, i.bufferram,
 		i.totalswap, i.totalswap-i.freeswap, i.freeswap);
 }
@@ -260,9 +260,9 @@ static int get_stat(int pid, char * buffer)
 		tty_pgrp = tty_table[tty_pgrp]->pgrp;
 	else
 		tty_pgrp = -1;
-	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %u %u \
-%u %u %u %d %d %d %d %d %d %u %u %d %u %u %u %u %u %u %u %u %d \
-%d %d %d %u\n",
+	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
+%lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %u %u %lu %lu %lu %lu %lu %lu \
+%lu %lu %lu %lu\n",
 		pid,
 		(*p)->comm,
 		state,
@@ -401,7 +401,7 @@ static int get_maps(int pid, char *buf)
 			ino = 0;
 		}
 
-		sz += sprintf(buf+sz, "%08x-%08x %s %08x %02x:%02x %d\n",
+		sz += sprintf(buf+sz, "%08lx-%08lx %s %08lx %02x:%02x %lu\n",
 			      map->vm_start, map->vm_end, str, map->vm_offset,
 			      MAJOR(dev),MINOR(dev), ino);
 		if (sz > end) {

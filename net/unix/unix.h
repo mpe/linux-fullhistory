@@ -22,9 +22,6 @@
  */
 
 
-#define AF_UNIX_MAJOR	17		/* UNIX VFS major number	*/
-
-
 #ifdef _LINUX_UN_H
 
 

@@ -113,7 +113,7 @@ static inline int *xdr_decode_data(int *p, char *data, int *lenp, int maxlen)
 
 static int *xdr_decode_fattr(int *p, struct nfs_fattr *fattr)
 {
-	fattr->type = ntohl(*p++);
+	fattr->type = (enum nfs_stat) ntohl(*p++);
 	fattr->mode = ntohl(*p++);
 	fattr->nlink = ntohl(*p++);
 	fattr->uid = ntohl(*p++);
@@ -676,7 +676,7 @@ static int *nfs_rpc_verify(int *p)
 #endif
 
 static struct {
-	enum nfs_stat stat;
+	int stat;
 	int errno;
 } nfs_errtbl[] = {
 	{ NFS_OK,		0		},

@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Sun Oct 10 20:15:47 1993 by faith@cs.unc.edu
+ * Revised: Sun Oct 31 19:53:49 1993 by faith@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.3 1993/10/11 00:16:12 root Exp $
+ * $Id: fdomain.c,v 5.6 1993/11/01 02:40:32 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -144,7 +144,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 
-#define VERSION          "$Revision: 5.3 $"
+#define VERSION          "$Revision: 5.6 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -412,13 +412,12 @@ static int fdomain_is_valid_port( int port )
       if (inb( port + MSB_ID_Code ) != 0x60) return 0;
       chip = tmc18c50;
    }
-   
+
    /* We have a valid MCA ID for a TMC-1660/TMC-1680 Future Domain board.
-      Now, check to be sure the bios_base matches these ports.
-      If someone was unlucky enough to have purchased more than one
-      Future Domain board, then they will have to modify this code, as
-      we only detect one board here.  [The one with the lowest bios_base.]
-    */
+      Now, check to be sure the bios_base matches these ports.  If someone
+      was unlucky enough to have purchased more than one Future Domain
+      board, then they will have to modify this code, as we only detect one
+      board here.  [The one with the lowest bios_base.]  */
 
    options = inb( port + Configuration1 );
 
@@ -426,7 +425,9 @@ static int fdomain_is_valid_port( int port )
    printk( " Options = %x\n", options );
 #endif
 
-   if (addresses[ (options & 0xc0) >> 6 ] != bios_base) return 0;
+				/* Check for board with lowest bios_base. */
+   if (addresses[ (options & 0xc0) >> 6 ] != bios_base)
+	 return 0;
    interrupt_level = ints[ (options & 0x0e) >> 1 ];
 
    return 1;
@@ -440,7 +441,8 @@ static int fdomain_test_loopback( void )
    for (i = 0; i < 255; i++) {
       outb( i, port_base + Write_Loopback );
       result = inb( port_base + Read_Loopback );
-      if (i != result) return 1;
+      if (i != result)
+	    return 1;
    }
    return 0;
 }
@@ -503,7 +505,8 @@ int fdomain_16x0_detect( int hostnum )
 #endif
 
       for (flag = 0, i = 0; !flag && i < PORT_COUNT; i++) {
-	 if (port_base == ports[i]) ++flag;
+	 if (port_base == ports[i])
+	       ++flag;
       }
 
       if (flag)
@@ -571,7 +574,7 @@ int fdomain_16x0_detect( int hostnum )
    Write_FIFO_port       = port_base + Write_FIFO;
    Write_SCSI_Data_port  = port_base + Write_SCSI_Data;
 
-   fdomain_16x0_reset();
+   fdomain_16x0_reset( NULL );
 
    if (fdomain_test_loopback()) {
 #if DEBUG_DETECT
@@ -633,8 +636,7 @@ int fdomain_16x0_detect( int hostnum )
       higher level SCSI routines when I first wrote this driver.  Now,
       however, correct scan routines are part of scsi.c and these routines
       are no longer needed.  However, this code is still good for
-      debugging.
-    */
+      debugging.  */
 
    SCinit.request_buffer  = SCinit.buffer = buf;
    SCinit.request_bufflen = SCinit.bufflen = sizeof(buf)-1;
@@ -644,7 +646,8 @@ int fdomain_16x0_detect( int hostnum )
    printk( "Future Domain detection routine scanning for devices:\n" );
    for (i = 0; i < 8; i++) {
       SCinit.target = i;
-      if (i == 6) continue;	/* The host adapter is at SCSI ID 6 */
+      if (i == scsi_hosts[this_host].this_id) /* Skip host adapter */
+	    continue;
       memcpy(SCinit.cmnd, do_request_sense, sizeof(do_request_sense));
       retcode = fdomain_16x0_command(&SCinit);
       if (!retcode) {
@@ -721,7 +724,8 @@ static int fdomain_arbitrate( void )
    timeout = jiffies + 50;	              /* 500 mS */
    while (jiffies < timeout) {
       status = inb( TMC_Status_port );        /* Read adapter status */
-      if (status & 0x02) return 0;	      /* Arbitration complete */
+      if (status & 0x02)		      /* Arbitration complete */
+	    return 0;	
    }
 
    /* Make bus idle */
@@ -731,8 +735,7 @@ static int fdomain_arbitrate( void )
    printk( "Arbitration failed, status = %x\n", status );
 #endif
 #if ERRORS_ONLY
-   printk( "Future Domain: Arbitration failed, status = %x",
-	   status );
+   printk( "Future Domain: Arbitration failed, status = %x", status );
 #endif
    return 1;
 }
@@ -777,7 +780,8 @@ void my_done( int error )
       outb( 0x00, Interrupt_Cntl_port );
       fdomain_make_bus_idle();
       current_SC->result = error;
-      if (current_SC->scsi_done) current_SC->scsi_done( current_SC );
+      if (current_SC->scsi_done)
+	    current_SC->scsi_done( current_SC );
       else panic( "Future Domain: current_SC->scsi_done() == NULL" );
    } else {
       panic( "Future Domain: my_done() called outside of command\n" );
@@ -805,30 +809,19 @@ void fdomain_16x0_intr( int unused )
 #endif
       return;
    }
+
+   /* Abort calls my_done, so we do nothing here. */
+   if (current_SC->SCp.phase & aborted) {
+#if DEBUG_ABORT
+      printk( "Interrupt after abort, ignoring\n" );
+#endif
+      /*
+      return; */
+   }
+
 #if DEBUG_RACE
    ++in_interrupt_flag;
 #endif
-
-   if (current_SC->SCp.phase & aborted) {
-#if EVERY_ACCESS
-      if (current_SC->SCp.phase & (in_other | disconnect))
-	    printk( "aborted (%s) = %d, ",
-		    current_SC->SCp.phase & in_other
-		    ? "in_other" : "disconnect",
-		    current_SC->result );
-      else
-	    printk( "aborted = %d, ",
-		    current_SC->result );
-#endif
-      /* Force retry for timeouts after selection complete */
-      if (current_SC->SCp.phase & (in_other | disconnect)) {
-	 fdomain_16x0_reset();
-	 my_done( DID_RESET << 16 );
-      } else {
-	 my_done( current_SC->result << 16 );
-      }
-      return;
-   }
 
    if (current_SC->SCp.phase & in_arbitration) {
       status = inb( TMC_Status_port );        /* Read adapter status */
@@ -888,27 +881,11 @@ void fdomain_16x0_intr( int unused )
       switch (status & 0x0e) {
        
       case 0x08:		/* COMMAND OUT */
-#if 0
-	 if (!current_SC->SCp.sent_command) {
-	    int i;
-	    
-	    current_SC->SCp.sent_command = COMMAND_SIZE( current_SC->cmnd[0] );
-	    
-	    for (i = 0; i < COMMAND_SIZE( current_SC->cmnd[0] ); i++) {
-	       outb( current_SC->cmnd[i], Write_SCSI_Data_port );
-#if EVERY_ACCESS
-	       printk( "CMD = %x,", current_SC->cmnd[i] );
-#endif
-	    }
-	 }
-#else
 	 outb( current_SC->cmnd[current_SC->SCp.sent_command++],
 	       Write_SCSI_Data_port );
 #if EVERY_ACCESS
 	 printk( "CMD = %x,",
 		 current_SC->cmnd[ current_SC->SCp.sent_command - 1] );
-#endif
-	 
 #endif
 	 break;
       case 0x00:		/* DATA OUT -- tmc18c50 only */
@@ -1203,6 +1180,9 @@ void fdomain_16x0_intr( int unused )
 					  + 13));
 
 	    if (!(key == UNIT_ATTENTION && (code == 0x29 || !code))
+		&& !(key == NOT_READY
+		     && code == 0x04
+		     && (!qualifier || qualifier == 0x02 || qualifier == 0x01))
 		&& !(key == ILLEGAL_REQUEST && (code == 0x25
 						|| code == 0x24
 						|| !code)))
@@ -1349,7 +1329,8 @@ void print_info( Scsi_Cmnd *SCpnt )
    isr = inb( 0xa0 ) << 8;
    outb( 0x0b, 0x20 );
    isr += inb( 0x20 );
-   
+
+				/* Print out interesting information */
    printk( "IMR = 0x%04x", imr );
    if (imr & (1 << interrupt_level))
 	 printk( " (masked)" );
@@ -1357,10 +1338,12 @@ void print_info( Scsi_Cmnd *SCpnt )
 
    printk( "SCSI Status      = 0x%02x\n", inb( SCSI_Status_port ) );
    printk( "TMC Status       = 0x%02x", inb( TMC_Status_port ) );
-   if (inb( TMC_Status_port & 1)) printk( " (interrupt)" );
+   if (inb( TMC_Status_port & 1))
+	 printk( " (interrupt)" );
    printk( "\n" );
    printk( "Interrupt Status = 0x%02x", inb( Interrupt_Status_port ) );
-   if (inb( Interrupt_Status_port ) & 0x08) printk( " (enabled)" );
+   if (inb( Interrupt_Status_port ) & 0x08)
+	 printk( " (enabled)" );
    printk( "\n" );
    if (chip == tmc18c50) {
       printk( "FIFO Status      = 0x%02x\n", inb( port_base + FIFO_Status ) );
@@ -1411,7 +1394,7 @@ int fdomain_16x0_abort( Scsi_Cmnd *SCpnt, int code )
    return 0;
 }
 
-int fdomain_16x0_reset( void )
+int fdomain_16x0_reset( Scsi_Cmnd *SCpnt )
 {
 #if DEBUG_RESET
    static int called_once = 0;
@@ -1432,6 +1415,14 @@ int fdomain_16x0_reset( void )
    do_pause( 115 );
    outb( 0, SCSI_Mode_Cntl_port );
    outb( PARITY_MASK, TMC_Cntl_port );
+
+   /* Unless this is the very first call (i.e., SCPnt == NULL), everything
+      is probably hosed at this point.  We will, however, try to keep
+      things going by informing the high-level code that we need help. */
+
+   if (SCpnt)
+	 SCpnt->flags |= NEEDS_JUMPSTART;
+   
    return 0;
 }
 

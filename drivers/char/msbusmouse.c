@@ -62,7 +62,7 @@ static void ms_mouse_interrupt(int unused)
 	outb(MS_MSE_COMMAND_MODE, MS_MSE_CONTROL_PORT);
 	outb((inb(MS_MSE_DATA_PORT) & 0xdf), MS_MSE_DATA_PORT);
 
-	if (dx != 0 || dy != 0 || buttons != mouse.buttons) {
+	if (dx != 0 || dy != 0 || buttons != mouse.buttons || ((~buttons) & 0x07)) {
 		mouse.buttons = buttons;
 		mouse.dx += dx;
 		mouse.dy += dy;

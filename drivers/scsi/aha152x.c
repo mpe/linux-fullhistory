@@ -20,10 +20,17 @@
  * General Public License for more details.
  
  *
- * $Id: aha152x.c,v 0.97 1993/10/09 18:53:53 root Exp $
+ * $Id: aha152x.c,v 0.99 1993/10/24 16:19:59 root Exp root $
  *
 
  * $Log: aha152x.c,v $
+ * Revision 0.99  1993/10/24  16:19:59  root
+ * - fixed DATA IN (rare read errors gone)
+ *
+ * Revision 0.98  1993/10/17  12:54:44  root
+ * - fixed some recent fixes (shame on me)
+ * - moved initialization of scratch area to aha152x_queue
+ *
  * Revision 0.97  1993/10/09  18:53:53  root
  * - DATA IN fixed. Rarely left data in the fifo.
  *
@@ -204,13 +211,16 @@
 
 #endif
 
-#define DEBUG_BIOSPARAM         /* warn when biosparam is invoked */
 #define DEBUG_RESET             /* resets should be rare */
 #define DEBUG_ABORT             /* aborts too */
 
 /* END OF DEFINES */
 
-char *aha152x_id = "Adaptec 152x SCSI driver; $Revision: 0.97 $\n";
+/* some additional "phases" for getphase() */
+#define P_BUSFREE  1
+#define P_PARITY   2
+
+char *aha152x_id = "Adaptec 152x SCSI driver; $Revision: 0.99 $\n";
 
 static int port_base      = 0;
 static int this_host      = 0;
@@ -401,9 +411,8 @@ static void make_acklow(void)
  * return value is a valid phase or an error code.
  *
  * errorcodes:
- *   1 BUS FREE phase detected
- *   2 RESET IN detected
- *   3 parity error in DATA phase
+ *   P_BUSFREE   BUS FREE phase detected
+ *   P_PARITY    parity error in DATA phase
  */
 static int getphase(void)
 {
@@ -416,7 +425,7 @@ static int getphase(void)
           while( !( ( sstat1 = GETPORT( SSTAT1 ) ) & (BUSFREE|SCSIRSTI|REQINIT ) ) )
             ;
           if( sstat1 & BUSFREE )
-            return 1;
+            return P_BUSFREE;
           if( sstat1 & SCSIRSTI )
             {
               /* IBM drive responds with RSTI to RSTO */
@@ -433,18 +442,12 @@ static int getphase(void)
       if( TESTHI( SSTAT1, SCSIPERR ) )
         {
           if( (phase & (CDO|MSGO))==0 )                         /* DATA phase */
-            {
-              return 3;
-            }
+            return P_PARITY;
 
-          SETPORT( SCSISIG, phase );
           make_acklow();
         }
       else
-        {
-          SETPORT( SCSISIG, phase );
-          return phase;
-        }
+        return phase;
     }
 }
 
@@ -660,7 +663,7 @@ int aha152x_detect(int hostno)
   do_pause(5);
   CLRBITS(SCSISEQ, SCSIRSTO );
 
-  aha152x_reset();
+  aha152x_reset(NULL);
 
   printk("aha152x: vital data: PORTBASE=0x%03x, IRQ=%d, SCSI ID=%d, reconnect=%s, parity=enabled\n",
          port_base, interrupt_level, this_host, can_disconnect ? "enabled" : "disabled" );
@@ -719,14 +722,40 @@ int aha152x_queue( Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
   disp_ports();
 #endif
 
+  SCpnt->scsi_done =       done;
+
+  /* setup scratch area
+     SCp.ptr              : buffer pointer
+     SCp.this_residual    : buffer length
+     SCp.buffer           : next buffer
+     SCp.buffers_residual : left buffers in list
+     SCp.phase            : current state of the command */
+  SCpnt->SCp.phase = not_issued;
+  if (SCpnt->use_sg)
+    {
+      SCpnt->SCp.buffer           = (struct scatterlist *)SCpnt->request_buffer;
+      SCpnt->SCp.ptr              = SCpnt->SCp.buffer->address;
+      SCpnt->SCp.this_residual    = SCpnt->SCp.buffer->length;
+      SCpnt->SCp.buffers_residual = SCpnt->use_sg - 1;
+    }
+  else
+    {
+      SCpnt->SCp.ptr              = (char *)SCpnt->request_buffer;
+      SCpnt->SCp.this_residual    = SCpnt->request_bufflen;
+      SCpnt->SCp.buffer           = NULL;
+      SCpnt->SCp.buffers_residual = 0;
+    }
+          
+  SCpnt->SCp.Status              = CHECK_CONDITION;
+  SCpnt->SCp.Message             = 0;
+  SCpnt->SCp.have_data_in        = 0;
+  SCpnt->SCp.sent_command        = 0;
+
   /* Turn led on, when this is the first command. */
   cli();
   commands++;
   if(commands==1)
     SETPORT( PORTA, 1 );
-
-  SCpnt->scsi_done =       done;
-  SCpnt->SCp.phase = not_issued;
 
 #if defined(DEBUG_QUEUES)
   printk("i+ (%d), ", commands );
@@ -868,7 +897,7 @@ static void aha152x_reset_ports(void)
 
   SETPORT(BRSTCNTRL, 0xf1);
 
-  /* clear channel 0 and transfer count */
+  /* clear SCSI fifo and transfer count */
   SETPORT(SXFRCTL0, CH1|CLRCH1|CLRSTCNT);
   SETPORT(SXFRCTL0, CH1);
 
@@ -881,7 +910,7 @@ static void aha152x_reset_ports(void)
  *  Reset registers, reset a hanging bus and
  *  kill active and disconnected commands
  */
-int aha152x_reset(void)
+int aha152x_reset(Scsi_Cmnd * __unused)
 {
   Scsi_Cmnd *ptr;
 
@@ -1111,7 +1140,7 @@ void aha152x_intr( int irqno )
 
       SETPORT( SXFRCTL0, CH1);
 
-      identify_msg = GETPORT(SCSIBUS);
+      identify_msg = GETPORT(SCSIDAT);
 
       if(!(identify_msg & IDENTIFY_BASE))
         {
@@ -1122,8 +1151,6 @@ void aha152x_intr( int irqno )
 
       make_acklow();
       getphase();
-
-      SETPORT(SCSISIG, P_MSGI);
 
 #if defined(DEBUG_QUEUES)
       printk("identify=%02x, lun=%d, ", identify_msg, identify_msg & 0x3f );
@@ -1169,35 +1196,9 @@ void aha152x_intr( int irqno )
           sti();
 
 #if defined(DEBUG_INTR) || defined(DEBUG_SELECTION) || defined(DEBUG_PHASES)
-          printk("issuing command, ");
+          printk("issueing command, ");
 #endif
-
-          /* setup SCSI pointers
-             SCp.ptr              : buffer pointer
-             SCp.this_residual    : buffer length
-             SCp.buffer           : next buffer
-             SCp.buffers_residual : left buffers in list */
-          if (current_SC->use_sg)
-            {
-              current_SC->SCp.buffer =
-                (struct scatterlist *)current_SC->request_buffer;
-              current_SC->SCp.ptr              = current_SC->SCp.buffer->address;
-              current_SC->SCp.this_residual    = current_SC->SCp.buffer->length;
-              current_SC->SCp.buffers_residual = current_SC->use_sg - 1;
-            }
-          else
-            {
-              current_SC->SCp.ptr              = (char *)current_SC->request_buffer;
-              current_SC->SCp.this_residual    = current_SC->request_bufflen;
-              current_SC->SCp.buffer           = NULL;
-              current_SC->SCp.buffers_residual = 0;
-            }
-          
-          current_SC->SCp.Status              = CHECK_CONDITION;
-          current_SC->SCp.Message             = 0;
-          current_SC->SCp.have_data_in        = 0;
-          current_SC->SCp.sent_command        = 0;
-          current_SC->SCp.phase               = in_selection;
+          current_SC->SCp.phase = in_selection;
 
   #if defined(DEBUG_INTR) || defined(DEBUG_SELECTION) || defined(DEBUG_PHASES)
           printk("selecting %d, ", current_SC->target); 
@@ -1331,6 +1332,8 @@ void aha152x_intr( int irqno )
 
   /* enable interrupt, when target leaves current phase */
   phase = getphase();
+  if(!(phase & ~P_MASK))                                      /* "real" phase */
+    SETPORT(SCSISIG, phase);
   SETPORT(SSTAT1, CLRPHASECHG);
   current_SC->SCp.phase =
     (current_SC->SCp.phase & ~((P_MASK|1)<<16)) | (phase << 16 );
@@ -1355,7 +1358,8 @@ void aha152x_intr( int irqno )
           }
         else
           /* If we didn't identify yet, do it. Otherwise there's nothing to do,
-             but reject (perhaps one could do as NOP as well) */
+             but reject (probably we got an message before, that we have to
+             reject (SDTR, WDTR, etc.) */
           if( !(current_SC->SCp.phase & sent_ident))
             {
               message=IDENTIFY(can_disconnect,current_SC->lun);
@@ -1372,23 +1376,25 @@ void aha152x_intr( int irqno )
 #endif
             }
           
-        CLRSETBITS( SXFRCTL0, ENDMA, SPIOEN);
+        CLRBITS( SXFRCTL0, ENDMA);
 
-        SETPORT( SIMODE0, ENSPIORDY );
-        SETPORT( SIMODE1, ENPHASEMIS );
+        SETPORT( SIMODE0, 0 );
+        SETPORT( SIMODE1, ENPHASEMIS|ENREQINIT );
 
         /* wait for data latch to become ready or a phase change */
         while( TESTLO( DMASTAT, INTSTAT ) )
           ;
 
-        if( TESTLO( SSTAT0, SPIORDY ) )
-          aha152x_panic("couldn't send message");
+        if( TESTHI( SSTAT1, PHASEMIS ) )
+          aha152x_panic("unable to send message");
 
         /* Leave MESSAGE OUT after transfer */
         SETPORT( SSTAT1, CLRATNO);
 
         SETPORT( SCSIDAT, message );
-        CLRBITS( SXFRCTL0, SPIOEN);
+
+        make_acklow();
+        getphase();
 
         if(message==IDENTIFY(can_disconnect,current_SC->lun))
           current_SC->SCp.phase |= sent_ident;
@@ -1418,27 +1424,19 @@ void aha152x_intr( int irqno )
 #endif
       if( !(current_SC->SCp.sent_command) )
         {
-          if(GETPORT(FIFOSTAT))
-            {
-              int i;
+          if(GETPORT(FIFOSTAT) || GETPORT(SSTAT2) & (SFULL|SFCNT))
+            printk("aha152x: P_CMD: %d(%d) bytes left in FIFO, resetting\n",
+                   GETPORT(FIFOSTAT), GETPORT(SSTAT2) & (SFULL|SFCNT));
 
-              printk("aha152x: %d bytes left in FIFO, resetting\n",
-                     GETPORT(FIFOSTAT));
-              disp_ports();
-              printk("contents ( ");
-              SETPORT( SXFRCTL0, CH1|SPIOEN );
-              for(i=0; i<GETPORT(FIFOSTAT); i++)
-                printk("%02x ", GETPORT(SCSIDAT));
-              SETPORT( SXFRCTL0, CH1 );
-              printk(")\n");
-            }
-
+          /* reset fifo and enable writes */
           SETPORT(DMACNTRL0, WRITE_READ|RSTFIFO);
           SETPORT(DMACNTRL0, ENDMA|WRITE_READ);
 
+          /* clear transfer count and scsi fifo */
           SETPORT(SXFRCTL0, CH1|CLRSTCNT|CLRCH1 );
           SETPORT(SXFRCTL0, SCSIEN|DMAEN|CH1);
-   
+  
+          /* missing phase raises INTSTAT */
           SETPORT( SIMODE0, 0 );
           SETPORT( SIMODE1, ENPHASEMIS );
   
@@ -1497,10 +1495,10 @@ void aha152x_intr( int irqno )
 
       SETPORT( SIMODE0, 0);
       SETPORT( SIMODE1, ENBUSFREE);
-
+  
       while( phase == P_MSGI ) 
         {
-          current_SC->SCp.Message = GETPORT( SCSIBUS );
+          current_SC->SCp.Message = GETPORT( SCSIDAT );
           switch(current_SC->SCp.Message)
             {
             case DISCONNECT:
@@ -1512,7 +1510,7 @@ void aha152x_intr( int irqno )
               if(!can_disconnect)
                 aha152x_panic("target was not allowed to disconnect");
               break;
-            
+        
             case COMMAND_COMPLETE:
 #if defined(DEBUG_MSGI) || defined(DEBUG_PHASES)
               printk("inbound message ( COMMAND COMPLETE ), ");
@@ -1521,7 +1519,7 @@ void aha152x_intr( int irqno )
               break;
 
             case MESSAGE_REJECT:
-#if defined(DEBUG_MSGI)
+#if defined(DEBUG_MSGI) || defined(DEBUG_TIMING)
               printk("inbound message ( MESSAGE REJECT ), ");
 #endif
               break;
@@ -1532,8 +1530,6 @@ void aha152x_intr( int irqno )
 #endif
               break;
 
-/* my IBM drive responds to the first command with an extended message.
-   I just ignore it... */
             case EXTENDED_MESSAGE:
               { 
                 int           i, code;
@@ -1544,48 +1540,61 @@ void aha152x_intr( int irqno )
                 make_acklow();
                 if(getphase()!=P_MSGI)
                   break;
-
+  
                 i=GETPORT(SCSIDAT);
 
 #if defined(DEBUG_MSGI)
                 printk("length (%d), ", i);
 #endif
 
-                make_acklow();
-                if(getphase()!=P_MSGI)
-                  break;
-
 #if defined(DEBUG_MSGI)
                 printk("code ( ");
 #endif
 
+                make_acklow();
+                if(getphase()!=P_MSGI)
+                  break;
+
                 code = GETPORT(SCSIDAT);
 
-#if defined(DEBUG_MSGI)
                 switch( code )
                   {
                   case 0x00:
+#if defined(DEBUG_MSGI)
                     printk("MODIFY DATA POINTER ");
+#endif
+                    SETPORT(SCSISIG, P_MSGI|ATNO);
                     break;
                   case 0x01:
+#if defined(DEBUG_MSGI)
                     printk("SYNCHRONOUS DATA TRANSFER REQUEST ");
+#endif
+                    SETPORT(SCSISIG, P_MSGI|ATNO);
                     break;
                   case 0x02:
+#if defined(DEBUG_MSGI)
                     printk("EXTENDED IDENTIFY ");
+#endif
                     break;
                   case 0x03:
+#if defined(DEBUG_MSGI)
                     printk("WIDE DATA TRANSFER REQUEST ");
+#endif
+                    SETPORT(SCSISIG, P_MSGI|ATNO);
                     break;
                   default:
+#if defined(DEBUG_MSGI)
                     if( code & 0x80 )
                       printk("reserved (%d) ", code );
                     else
                       printk("vendor specific (%d) ", code);
+#endif
+                    SETPORT(SCSISIG, P_MSGI|ATNO);
                     break;
                   }
+#if defined(DEBUG_MSGI)
                 printk(" ), data ( ");
 #endif
-
                 while( --i && (make_acklow(), getphase()==P_MSGI))
                   {
 #if defined(DEBUG_MSGI)
@@ -1597,20 +1606,27 @@ void aha152x_intr( int irqno )
 #if defined(DEBUG_MSGI)
                 printk(" ), ");
 #endif
+                /* We reject all extended messages. To do this
+                   we just enter MSGO by asserting ATN. Since
+                   we have already identified a REJECT message
+                   will be sent. */
+                SETPORT(SCSISIG, P_MSGI|ATNO);
               }
               break;
        
             default:
               printk("unsupported inbound message %x, ", current_SC->SCp.Message);
               break;
- 
+
             }
 
           make_acklow();
           phase=getphase();
         } 
 
-      SETPORT( SCSISIG, P_MSGI );
+      /* clear SCSI fifo on BUSFREE */
+      if(phase==P_BUSFREE)
+        SETPORT(SXFRCTL0, CH1|CLRCH1);
 
       if(current_SC->SCp.phase & disconnected)
         {
@@ -1630,17 +1646,16 @@ void aha152x_intr( int irqno )
           SETBITS( DMACNTRL0, INTEN );
           return;
         }
-
       break;
 
     case P_STATUS:                                         /* STATUS IN phase */
 #if defined(DEBUG_STATUS) || defined(DEBUG_INTR) || defined(DEBUG_PHASES)
       printk("STATUS, ");
 #endif
-      SETPORT( SXFRCTL0, CH1|SPIOEN);
+      SETPORT( SXFRCTL0, CH1);
 
-      SETPORT( SIMODE0, ENSPIORDY );
-      SETPORT( SIMODE1, ENPHASEMIS );
+      SETPORT( SIMODE0, 0 );
+      SETPORT( SIMODE1, ENPHASEMIS|ENREQINIT );
 
       SETBITS( SXFRCTL0, SCSIEN );
 #if defined(DEBUG_STATUS)
@@ -1652,10 +1667,15 @@ void aha152x_intr( int irqno )
       while( TESTLO( DMASTAT, INTSTAT ) )
         ;
 
+#if 0
       if(TESTLO( SSTAT0, SPIORDY ) )
         aha152x_panic("passing STATUS phase");
+#endif
 
       current_SC->SCp.Status = GETPORT( SCSIDAT );
+      make_acklow();
+      getphase();
+
 #if defined(DEBUG_STATUS)
       printk("inbound status ");
       print_status( current_SC->SCp.Status );
@@ -1665,7 +1685,9 @@ void aha152x_intr( int irqno )
       while( TESTHI( SXFRCTL0, SCSIEN ) )
         ;
         
+#if 0
       CLRBITS( SXFRCTL0, SPIOEN);
+#endif
       break;
 
     case P_DATAI:                                            /* DATA IN phase */
@@ -1676,15 +1698,18 @@ void aha152x_intr( int irqno )
         printk("DATA IN, ");
 #endif
 
+        if(GETPORT(FIFOSTAT) || GETPORT(SSTAT2) & (SFULL|SFCNT))
+          printk("aha152x: P_DATAI: %d(%d) bytes left in FIFO, resetting\n",
+                 GETPORT(FIFOSTAT), GETPORT(SSTAT2) & (SFULL|SFCNT));
+
+        /* reset host fifo */
+        SETPORT(DMACNTRL0, RSTFIFO);
+        SETPORT(DMACNTRL0, RSTFIFO|ENDMA);
+
+        SETPORT(SXFRCTL0, CH1|SCSIEN|DMAEN );
+
         SETPORT( SIMODE0, 0 );
         SETPORT( SIMODE1, ENPHASEMIS|ENBUSFREE );
-
-        SETPORT(SXFRCTL0, CH1|CLRSTCNT|CLRCH1 );
-        CLRSETBITS(SXFRCTL0, CLRSTCNT, SCSIEN|DMAEN|CH1);
-
-        SETBITS(DMACNTRL0, RSTFIFO);
-        CLRSETBITS(DMACNTRL0, WRITE_READ, ENDMA);
-
 
         /* done is set when the FIFO is empty after the target left DATA IN */
         done=0;
@@ -1718,19 +1743,6 @@ void aha152x_intr( int irqno )
 #if defined(DEBUG_DATAI)
             printk("fifodata=%d, ", fifodata);
 #endif
-
-            /* I don't know yet why, but rarely I get empty
-               buffers here, so I've to advance to the next buffer
-               before I enter the loop */
-            if(!current_SC->SCp.this_residual &&
-                current_SC->SCp.buffers_residual)
-              {
-                /* advance to next buffer */
-                current_SC->SCp.buffers_residual--;
-                current_SC->SCp.buffer++;
-                current_SC->SCp.ptr           = current_SC->SCp.buffer->address;
-                current_SC->SCp.this_residual = current_SC->SCp.buffer->length;
-              }
 
             while( fifodata && current_SC->SCp.this_residual )
               {
@@ -1795,8 +1807,10 @@ void aha152x_intr( int irqno )
                messages) get transfered in the data phase, so I assume 1
                additional byte is ok */
             if(fifodata>1)
-              printk("aha152x: more data than expected (%d bytes)\n",
-                     GETPORT(FIFOSTAT));
+              {
+                printk("aha152x: more data than expected (%d bytes)\n",
+                       GETPORT(FIFOSTAT));
+              }
 
 #if defined(DEBUG_DATAI)
             if(!fifodata)
@@ -1812,7 +1826,6 @@ void aha152x_intr( int irqno )
                  current_SC->SCp.buffers_residual, 
                  current_SC->SCp.this_residual);
 #endif
-
         /* transfer can be considered ended, when SCSIEN reads back zero */
         CLRBITS(SXFRCTL0, SCSIEN|DMAEN);
         while( TESTHI( SXFRCTL0, SCSIEN ) )
@@ -1840,9 +1853,9 @@ void aha152x_intr( int irqno )
                current_SC->SCp.buffers_residual );
 #endif
 
-        if(GETPORT(FIFOSTAT))
+        if(GETPORT(FIFOSTAT) || GETPORT(SSTAT2) & (SFULL|SFCNT) )
           {
-            printk("%d left in FIFO, ", GETPORT(FIFOSTAT));
+            printk("%d(%d) left in FIFO, ", GETPORT(FIFOSTAT), GETPORT(SSTAT2) & (SFULL|SFCNT) );
             aha152x_panic("FIFO should be empty");
           }
 
@@ -1921,16 +1934,7 @@ void aha152x_intr( int irqno )
                (perhaps disconnect) */
 
             /* data in fifos has to be resend */
-            data_count = GETPORT(SSTAT2);
-            if( (data_count & SFCNT) == 0)
-              data_count = (data_count & SEMPTY) ? 0 : 8 ;
-            else
-              data_count &= SFCNT;
-
-#if defined(DEBUG_DATAO)
-            printk("\ntarget left DATA OUT, fifo=%d, scsififo=%d, ",
-                   GETPORT(FIFOSTAT), data_count ) ;
-#endif
+            data_count = GETPORT(SSTAT2) & (SFULL|SFCNT);
 
             data_count += GETPORT(FIFOSTAT) ;
             current_SC->SCp.ptr           -= data_count;
@@ -1942,7 +1946,7 @@ void aha152x_intr( int irqno )
                    data_count );
 #endif
             SETPORT(DMACNTRL0, WRITE_READ|RSTFIFO);
-            CLRBITS(SXFRCTL0, SCSIEN|DMAEN);
+            CLRBITS(SXFRCTL0, SCSIEN|DMAEN );
             CLRBITS(DMACNTRL0, ENDMA);
           }
         else
@@ -1977,7 +1981,7 @@ void aha152x_intr( int irqno )
       }
       break;
 
-    case 1:                                                        /* BUSFREE */
+    case P_BUSFREE:                                                /* BUSFREE */
 #if defined(DEBUG_RACE)
       leave_driver("(BUSFREE) intr");
 #endif
@@ -1990,7 +1994,7 @@ void aha152x_intr( int irqno )
       return;
       break;
 
-    case 3:                                     /* parity error in DATA phase */
+    case P_PARITY:                              /* parity error in DATA phase */
 #if defined(DEBUG_RACE)
       leave_driver("(DID_PARITY) intr");
 #endif
@@ -2004,9 +2008,7 @@ void aha152x_intr( int irqno )
       break;
 
     default:
-#if defined(DEBUG_INTR)
-      printk("unexpected phase, ");
-#endif
+      printk("aha152x: unexpected phase\n");
       break;
     }
 
@@ -2192,14 +2194,7 @@ static void disp_ports(void)
   if( s & SOFFSET)  printk("SOFFSET ");
   if( s & SEMPTY)   printk("SEMPTY ");
   if( s & SFULL)    printk("SFULL ");
-  printk("); ");
-
-
-  if(s & SFCNT)
-    s &= SFCNT;
-  else
-    s = (s & SEMPTY) ? 0 : 8;
-  printk("SFCNT ( %d ); ", s );
+  printk("); SFCNT ( %d ); ", s & (SFULL|SFCNT) );
 
 #if 0
   printk("SSTAT4 ( ");

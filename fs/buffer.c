@@ -22,6 +22,7 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/major.h>
 #include <linux/string.h>
 #include <linux/locks.h>
 #include <linux/errno.h>
@@ -222,7 +223,7 @@ void check_disk_change(dev_t dev)
 	struct buffer_head * bh;
 
 	switch(MAJOR(dev)){
-	case 2: /* floppy disc */
+	case FLOPPY_MAJOR:
 		if (!(bh = getblk(dev,0,1024)))
 			return;
 		i = floppy_change(bh);
@@ -230,25 +231,25 @@ void check_disk_change(dev_t dev)
 		break;
 
 #if defined(CONFIG_BLK_DEV_SD) && defined(CONFIG_SCSI)
-         case 8: /* Removable scsi disk */
+         case SCSI_DISK_MAJOR:
 		i = check_scsidisk_media_change(dev, 0);
 		break;
 #endif
 
 #if defined(CONFIG_BLK_DEV_SR) && defined(CONFIG_SCSI)
-         case 11: /* CDROM */
+	 case SCSI_CDROM_MAJOR:
 		i = check_cdrom_media_change(dev, 0);
 		break;
 #endif
 
 #if defined(CONFIG_CDU31A)
-         case 15: /* Sony CDROM */
+         case CDU31A_CDROM_MAJOR:
 		i = check_cdu31a_media_change(dev, 0);
 		break;
 #endif
 
 #if defined(CONFIG_MCD)
-         case 23: /* Sony CDROM */
+         case MITSUMI_CDROM_MAJOR:
 		i = check_mcd_media_change(dev, 0);
 		break;
 #endif
@@ -270,7 +271,7 @@ void check_disk_change(dev_t dev)
 #if defined(CONFIG_BLK_DEV_SD) && defined(CONFIG_SCSI)
 /* This is trickier for a removable hardisk, because we have to invalidate
    all of the partitions that lie on the disk. */
-	if (MAJOR(dev) == 8)
+	if (MAJOR(dev) == SCSI_DISK_MAJOR)
 		revalidate_scsidisk(dev, 0);
 #endif
 }
@@ -505,7 +506,7 @@ repeat:
 /* already have added "this" block to the cache. check it */
 	if (find_buffer(dev,block,size))
 		goto repeat;
-/* OK, FINALLY we know that this buffer is the only one of it's kind, */
+/* OK, FINALLY we know that this buffer is the only one of its kind, */
 /* and that it's unused (b_count=0), unlocked (b_lock=0), and clean */
 	bh->b_count=1;
 	bh->b_dirt=0;
@@ -848,7 +849,7 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
 		if (b[i])
 			bh[i] = getblk(dev, b[i], size);
 	}
-	read_buffers(bh,4);
+	read_buffers(bh,i);
 	where = address;
  	for (i=0, j=0; j<PAGE_SIZE ; i++, j += size,address += size) {
 		if (bh[i]) {

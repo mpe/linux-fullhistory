@@ -224,8 +224,6 @@ int isofs_lookup(struct inode * dir,const char * name, int len,
 	}
 
 	ino = 0;
-	while(cache.lock);
-	cache.lock = 1;
 	if (dir->i_dev == cache.dev && 
 	    dir->i_ino == cache.dir &&
 	    len == cache.dlen && 
@@ -239,7 +237,6 @@ int isofs_lookup(struct inode * dir,const char * name, int len,
 	    if (cache.dlen == 2 && cache.filename[0] == '.' && 
 		cache.filename[1] == '.') ino = 0;
 	  };
-	cache.lock = 0;
 
 	if (!ino) {
 	  if (!(bh = isofs_find_entry(dir,name,len, &ino, &ino_back))) {

@@ -29,6 +29,7 @@
  *		Alan Cox	:	Using generic datagram code. Even smaller and the PEEK
  *					bug no longer crashes it.
  *		Fred Van Kempen	: 	Net2e support for sk->broadcast.
+ *		Alan Cox	:	Uses skb_free_datagram
  *
  * To Do:
  *		Verify all the error codes from UDP operations match the
@@ -261,13 +262,17 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
 
   skb->len = tmp + sizeof(struct udphdr) + len;	/* len + UDP + IP + MAC */
   skb->dev = dev;
-
+#ifdef OLD
   /*
    * This code used to hack in some form of fragmentation.
    * I removed that, since it didn't work anyway, and it made the
    * code a bad thing to read and understand. -FvK
    */
   if (len > dev->mtu) {
+#else
+  if (skb->len > 4095)
+  {
+#endif    
 	printk("UDP: send: length %d > mtu %d (ignored)\n", len, dev->mtu);
 	sk->prot->wfree(sk, skb->mem_addr, skb->mem_len);
 	return(-EMSGSIZE);
@@ -471,8 +476,9 @@ udp_recvfrom(struct sock *sk, unsigned char *to, int len,
   if(skb==NULL)
   	return er;
   copied = min(len, skb->len);
+
   /* FIXME : should use udp header size info value */
-  memcpy_tofs(to, skb->h.raw + sizeof(struct udphdr), copied);
+  skb_copy_datagram(skb,sizeof(struct udphdr),to,copied);
 
   /* Copy the address. */
   if (sin) {
@@ -483,8 +489,8 @@ udp_recvfrom(struct sock *sk, unsigned char *to, int len,
 	addr.sin_addr.s_addr = skb->daddr;
 	memcpy_tofs(sin, &addr, sizeof(*sin));
   }
-
-  kfree_skb(skb, FREE_READ);
+  
+  skb_free_datagram(skb);
   release_sock(sk);
   return(copied);
 }
@@ -546,7 +552,8 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
   uh = (struct udphdr *) skb->h.uh;
   sk = get_sock(&udp_prot, uh->dest, saddr, uh->source, daddr);
-  if (sk == NULL) {
+  if (sk == NULL) 
+  {
 	if (chk_addr(daddr) == IS_MYADDR) 
 	{
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, dev);
@@ -561,26 +568,25 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	return(0);
   }
 
-  if (!redo) {
-	if (uh->check && udp_check(uh, len, saddr, daddr)) {
-		DPRINTF((DBG_UDP, "UDP: bad checksum\n"));
-		skb->sk = NULL;
-		kfree_skb(skb, FREE_WRITE);
-		return(0);
-	}
-
-	skb->sk = sk;
-	skb->dev = dev;
-	skb->len = len;
-
-	/* These are supposed to be switched. */
-	skb->daddr = saddr;
-	skb->saddr = daddr;
-
+  if (uh->check && udp_check(uh, len, saddr, daddr)) {
+	DPRINTF((DBG_UDP, "UDP: bad checksum\n"));
+	skb->sk = NULL;
+	kfree_skb(skb, FREE_WRITE);
+	return(0);
   }
 
+  skb->sk = sk;
+  skb->dev = dev;
+  skb->len = len;
+
+/* These are supposed to be switched. */
+  skb->daddr = saddr;
+  skb->saddr = daddr;
+
+
   /* Charge it to the socket. */
-  if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) {
+  if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) 
+  {
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_WRITE);
 	release_sock(sk);

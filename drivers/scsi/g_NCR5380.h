@@ -37,7 +37,7 @@ int generic_NCR5380_abort(Scsi_Cmnd *, int);
 int generic_NCR5380_detect(int);
 const char *generic_NCR5380_info(void);
 int generic_NCR5380_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int generic_NCR5380_reset(void);
+int generic_NCR5380_reset(Scsi_Cmnd *);
 
 
 #ifndef NULL

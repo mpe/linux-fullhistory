@@ -19,7 +19,7 @@
 */
 
 static char *version =
-	"eexpress.c:v0.04 10/18/93 Donald Becker (becker@super.org)\n";
+	"eexpress.c:v0.06 10/27/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 
@@ -42,7 +42,6 @@ static char *version =
 #include <linux/ptrace.h>
 #include <linux/ioport.h>
 #include <linux/in.h>
-#include <linux/malloc.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -58,7 +57,9 @@ static char *version =
 
 #ifndef HAVE_ALLOC_SKB
 #define alloc_skb(size, priority) (struct sk_buff *) kmalloc(size,priority)
-#define kfree_skbmem(buff, size) kfree_s(buff,size)
+#else
+/* This isn't quite right, but it's the best version define I can find right now. */
+#include <linux/malloc.h>
 #endif
 
 /* use 0 for production, 1 for verification, 2..7 for debug */
@@ -233,7 +234,7 @@ struct net_local {
 
   */
 
-short init_words[] = {
+static short init_words[] = {
 	0x0000,					/* Set bus size to 16 bits. */
 	0x0000,0x0000,			/* Set control mailbox (SCB) addr. */
 	0,0,					/* pad to 0x000000. */
@@ -311,7 +312,7 @@ int
 express_probe(struct device *dev)
 {
 	/* Don't probe all settable addresses, 0x[23][0-7]0, just common ones. */
-	int *port, ports[] = {0x300, 0x320, 0x340, 0x280, 0};
+	int *port, ports[] = {0x300, 0x270, 0x320, 0x340, 0};
 	int base_addr = dev->base_addr;
 
 	if (base_addr > 0x1ff)	/* Check a single specified location. */
@@ -364,8 +365,6 @@ int eexp_probe1(struct device *dev, short ioaddr)
 	snarf_region(ioaddr, 16);
 	dev->base_addr = ioaddr;
 
-	outb(ASIC_RESET, ioaddr + EEPROM_Ctrl);
-
 	for (i = 0; i < 6; i++) {
 		dev->dev_addr[i] = ((unsigned char*)station_addr)[5-i];
 		printk(" %02x", dev->dev_addr[i]);
@@ -387,6 +386,9 @@ int eexp_probe1(struct device *dev, short ioaddr)
 		   ethercard. */
 		outb(0x00, ioaddr + SET_IRQ);
 	}
+
+	/* It's now OK to leave the board in reset, pending the open(). */
+	outb(ASIC_RESET, ioaddr + EEPROM_Ctrl);
 
 	if ((dev->mem_start & 0xf) > 0)
 		net_debug = dev->mem_start & 7;
@@ -447,11 +449,13 @@ eexp_open(struct device *dev)
 
 	if (dev->irq == 0  ||  irqrmap[dev->irq] == 0)
 		return -ENXIO;
-	if (request_irq(dev->irq, &eexp_interrupt)) {
+
+	if (irq2dev_map[dev->irq] != 0
+		/* This is always true, but avoid the false IRQ. */
+		|| (irq2dev_map[dev->irq] = dev) == 0
+		|| request_irq(dev->irq, &eexp_interrupt)) {
 		return -EAGAIN;
 	}
-
-	irq2dev_map[dev->irq] = dev;
 
 	/* Initialize the 82586 memory and start it. */
 	init_82586_mem(dev);
@@ -964,7 +968,7 @@ eexp_rx(struct device *dev)
 #else
 			skb->lock = 0;
 			if (dev_rint((unsigned char*)skb, pkt_len, IN_SKBUFF, dev) != 0) {
-				kfree_skbmem(skb, sksize);
+				kfree_s(skb, sksize);
 				lp->stats.rx_dropped++;
 				break;
 			}

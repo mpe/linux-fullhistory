@@ -4,7 +4,7 @@
  | Multiply two 64 bit integers.                                             |
  |                                                                           |
  | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
  |   void mul64(long long *a, long long *b, long long *result)               |

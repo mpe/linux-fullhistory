@@ -18,6 +18,7 @@
 
 #include <asm/system.h>
 #include <asm/io.h>
+
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
@@ -25,8 +26,7 @@
 /* Number of real scsi disks that will be detected ahead of time */
 static int NR_REAL=-1;
 
-#define NR_BLK_DEV	12
-#define MAJOR_NR 8
+#define MAJOR_NR SCSI_DISK_MAJOR
 #define START_PARTITION 4
 #define SCSI_DEBUG_TIMER 20
 /* Number of jiffies to wait before completing a command */
@@ -487,7 +487,7 @@ int scsi_debug_biosparam(int size, int* info){
   return 0;
 }
 
-int scsi_debug_reset(void)
+int scsi_debug_reset(Scsi_Cmnd * SCpnt)
 {
     int i;
     void (*my_done)(Scsi_Cmnd *);

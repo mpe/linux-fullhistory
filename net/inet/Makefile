@@ -31,13 +31,6 @@ inet.o:
 
 endif
 
-subdirs:	dummy
-		for i in $(SUBDIRS); do (cd $$i; $(MAKE)); done
-
-
-clean:
-		rm -f core *.o *.a *.s
-
 dep:
 		$(CPP) -M *.c > .depend
 

@@ -265,7 +265,21 @@ unsigned long * create_tables(char * p,int argc,int envc)
 {
 	unsigned long *argv,*envp;
 	unsigned long * sp;
+	struct vm_area_struct *mpnt;
 
+	mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
+	if (mpnt) {
+		mpnt->vm_task = current;
+		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
+		mpnt->vm_end = TASK_SIZE;
+		mpnt->vm_page_prot = PAGE_PRIVATE|PAGE_DIRTY;
+		mpnt->vm_share = NULL;
+		mpnt->vm_inode = NULL;
+		mpnt->vm_offset = 0;
+		mpnt->vm_ops = NULL;
+		insert_vm_struct(current, mpnt);
+		current->stk_vma = mpnt;
+	}
 	sp = (unsigned long *) (0xfffffffc & (unsigned long) p);
 	sp -= envc+1;
 	envp = sp;
@@ -422,8 +436,11 @@ int read_exec(struct inode *inode, unsigned long offset,
  			goto close_readexec;
 	} else
 		file.f_pos = offset;
-	if (get_fs() == USER_DS)
-		verify_area(VERIFY_WRITE, addr, count);
+	if (get_fs() == USER_DS) {
+		result = verify_area(VERIFY_WRITE, addr, count);
+		if (result)
+			goto close_readexec;
+	}
 	result = file.f_op->read(inode, &file, addr, count);
 close_readexec:
 	if (file.f_op->release)
@@ -815,22 +832,6 @@ beyond_if:
 	current->start_stack = p;
 	regs->eip = ex.a_entry;		/* eip, magic happens :-) */
 	regs->esp = p;			/* stack pointer */
-	{
-		struct vm_area_struct *mpnt;
-
-		mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
-		
-		mpnt->vm_task = current;
-		mpnt->vm_start = p & PAGE_MASK;
-		mpnt->vm_end = TASK_SIZE;
-		mpnt->vm_page_prot = PAGE_PRIVATE|PAGE_DIRTY;
-		mpnt->vm_share = NULL;
-		mpnt->vm_inode = NULL;
-		mpnt->vm_offset = 0;
-		mpnt->vm_ops = NULL;
-		insert_vm_struct(current, mpnt);
-		current->stk_vma = mpnt;
-	}
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 	return 0;

@@ -81,7 +81,7 @@
 #include <asm/io.h>
 #include <asm/segment.h>
 
-#define MAJOR_NR 2
+#define MAJOR_NR FLOPPY_MAJOR
 #include "blk.h"
 
 static unsigned int changed_floppies = 0, fake_change = 0;
@@ -393,17 +393,19 @@ int floppy_change(struct buffer_head * bh)
 {
 	unsigned int mask = 1 << (bh->b_dev & 0x03);
 
-	if (MAJOR(bh->b_dev) != 2) {
+	if (MAJOR(bh->b_dev) != MAJOR_NR) {
 		printk("floppy_changed: not a floppy\n");
 		return 0;
 	}
 	if (fake_change & mask) {
+		buffer_track = -1;
 		fake_change &= ~mask;
 /* omitting the next line breaks formatting in a horrible way ... */
 		changed_floppies &= ~mask;
 		return 1;
 	}
 	if (changed_floppies & mask) {
+		buffer_track = -1;
 		changed_floppies &= ~mask;
 		recalibrate = 1;
 		return 1;
@@ -453,7 +455,7 @@ static void setup_DMA(void)
 	if (read_track) {
 /* mark buffer-track bad, in case all this fails.. */
 		buffer_drive = buffer_track = -1;
-		count = floppy->sect*2*512;
+		count = floppy->sect*floppy->head*512;
 		addr = (long) floppy_track_buffer;
 	} else if (addr >= LAST_DMA_ADDR) {
 		addr = (long) tmp_floppy_area;
@@ -1166,6 +1168,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			sti();
 			okay = format_status == FORMAT_OKAY;
 			format_status = FORMAT_NONE;
+			floppy_off(drive & 3);
 			wake_up(&format_done);
 			return okay ? 0 : -EIO;
 		case FDFLUSH:

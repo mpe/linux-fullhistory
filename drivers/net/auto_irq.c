@@ -73,13 +73,15 @@ int autoirq_setup(int waittime)
     irqs_used |= ~irq_handled;
 
     /* Hang out at least <waittime> jiffies waiting for bogus IRQ hits. */
-    while (timeout >= jiffies)
+    while (timeout > jiffies)
 	;
 
     for (i = 0, mask = 0x01; i < 16; i++, mask <<= 1) {
 	if (irq_bitmap & irq_handled & mask) {
 	    irq_handled &= ~mask;
+#ifdef notdef
 	    printk(" Spurious interrupt on IRQ %d\n", i);
+#endif
 	    free_irq(i);
 	}
     }
@@ -92,7 +94,7 @@ int autoirq_report(int waittime)
     int timeout = jiffies+waittime;
 
     /* Hang out at least <waittime> jiffies waiting for the IRQ. */
-    while (timeout >= jiffies)
+    while (timeout > jiffies)
 	if (irq_number)
 	    break;
 

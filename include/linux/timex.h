@@ -25,7 +25,6 @@
 #ifndef _LINUX_TIMEX_H
 #define _LINUX_TIMEX_H
 
-#include <sys/syscall.h>
 #include <linux/unistd.h>
 
 /*
@@ -95,12 +94,13 @@ struct timex {
 /*
  * Mode codes (timex.mode) 
  */
-#define ADJ_OFFSET	0x0001	/* time offset */
-#define ADJ_FREQUENCY	0x0002	/* frequency offset */
-#define ADJ_MAXERROR	0x0004	/* maximum time error */
-#define ADJ_ESTERROR	0x0008	/* estimated time error */
-#define ADJ_STATUS	0x0010	/* clock status */
-#define ADJ_TIMECONST	0x0020	/* pll time constant */
+#define ADJ_OFFSET		0x0001	/* time offset */
+#define ADJ_FREQUENCY		0x0002	/* frequency offset */
+#define ADJ_MAXERROR		0x0004	/* maximum time error */
+#define ADJ_ESTERROR		0x0008	/* estimated time error */
+#define ADJ_STATUS		0x0010	/* clock status */
+#define ADJ_TIMECONST		0x0020	/* pll time constant */
+#define ADJ_OFFSET_SINGLESHOT	0x8001	/* old-fashioned adjtime */
 
 /*
  * Clock command/status codes (timex.status)
@@ -111,55 +111,7 @@ struct timex {
 #define TIME_OOP	3	/* leap second in progress */
 #define TIME_BAD	4	/* clock not synchronized */
 
-#ifndef __KERNEL__
-/* This is used only by one or two programs so it isn't worth putting it into
- * a library; the functions are small enough to be substituted inline.
- */
-inline static 
-_syscall1(int, adjtimex, struct timex *, ntx);
-
-inline static int
-adjtime(struct timeval * itv, struct timeval * otv)
-{
-  struct timex tntx;
-  int result;
-
-  tntx.mode = 0;
-  if (itv)
-    {
-      tntx.offset = itv->tv_usec;
-      tntx.mode = ADJ_OFFSET;
-    }
-  result = adjtimex(&tntx);
-  if (result > 0) result = 0;
-
-  if (otv)
-    {
-      otv->tv_usec = tntx.offset;
-      otv->tv_sec = 0;
-    }
-  return result;
-}
-
-struct ntptimeval {
-	struct timeval time;	/* current time */
-	long maxerror;		/* maximum error (usec) */
-	long esterror;		/* estimated error (usec) */
-};
-
-inline static int
-ntp_gettime(struct ntptimeval * ntv)
-{
-  struct timex tntx;
-  int result;
-  result = adjtimex(&tntx);
-  ntv->time = tntx.time;
-  ntv->maxerror = tntx.maxerror;
-  ntv->esterror = tntx.esterror;
-  return result;
-}
-
-#else
+#ifdef __KERNEL__
 /*
  * kernel variables
  */
@@ -184,4 +136,5 @@ extern long time_reftime;	/* time at last adjustment (s) */
 
 extern long time_adjust;	/* The amount of adjtime left */
 #endif /* KERNEL */
+
 #endif /* LINUX_TIMEX_H */

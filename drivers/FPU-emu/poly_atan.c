@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -17,7 +17,7 @@
 
 
 #define	HIPOWERon	6	/* odd poly, negative terms */
-static unsigned oddnegterms[HIPOWERon][2] =
+static unsigned const oddnegterms[HIPOWERon][2] =
 {
   { 0x00000000, 0x00000000 }, /* for + 1.0 */
   { 0x763b6f3d, 0x1adc4428 },
@@ -28,7 +28,7 @@ static unsigned oddnegterms[HIPOWERon][2] =
 } ;
 
 #define	HIPOWERop	6	/* odd poly, positive terms */
-static unsigned	oddplterms[HIPOWERop][2] =
+static unsigned const	oddplterms[HIPOWERop][2] =
 {
   { 0xa6f67cb8, 0x94d910bd },
   { 0xa02ffab4, 0x0a43cb45 },
@@ -38,7 +38,7 @@ static unsigned	oddplterms[HIPOWERop][2] =
   { 0xf1dd2dbf, 0x000a530a }
 };
 
-static unsigned long long denomterm = 0xea2e6612fc4bd208LL;
+static unsigned long long const denomterm = 0xea2e6612fc4bd208LL;
 
 
 /*--- poly_atan() -----------------------------------------------------------+

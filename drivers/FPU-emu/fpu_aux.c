@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -47,7 +47,7 @@ void finit()
   FPU_entry_eip = ip_offset = 0;
 }
 
-static FUNC finit_table[] = {
+static FUNC const finit_table[] = {
   Un_impl, Un_impl, fclex, finit, Un_impl, Un_impl, Un_impl, Un_impl
 };
 
@@ -63,7 +63,7 @@ static void fstsw_ax(void)
   NO_NET_INSTR_EFFECT;
 }
 
-static FUNC fstsw_table[] = {
+static FUNC const fstsw_table[] = {
   fstsw_ax, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl
 };
 
@@ -78,7 +78,7 @@ static void fnop(void)
 {
 }
 
-FUNC fp_nop_table[] = {
+static FUNC const fp_nop_table[] = {
   fnop, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl, Un_impl
 };
 

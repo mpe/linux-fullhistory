@@ -33,14 +33,10 @@ endif
 all: driversubdirs
 
 driversubdirs: dummy
-	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
-
-clean:
-	rm -f core *.o *.a *.s
-	for i in $(SUBDIRS); do (cd $$i && $(MAKE) clean); done
+	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
 
 dep:
-	for i in $(SUBDIRS); do (cd $$i && $(MAKE) dep) || exit; done
+	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
 
 dummy:
 

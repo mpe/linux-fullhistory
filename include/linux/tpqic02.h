@@ -48,15 +48,13 @@
  *
  * Make sure you have the I/O ports/DMA channels 
  * and IRQ stuff configured properly!
- * NOTE: There may be other device drivers using the same major
- *       number. This must be avoided. Check for timer.h conflicts too.
+ * NOTE: Check for conflicts with TAPE_QIC02_TIMER in timer.h.
  */
 
 #define TAPE_QIC02_DRIVE	MT_ISQIC02_ALL_FEATURES	/* drive type */
 /* #define TAPE_QIC02_DRIVE	MT_ISWT5150 */
 #define TAPE_QIC02_IFC		WANGTEK		/* interface card type */
 /* #define TAPE_QIC02_IFC		ARCHIVE */
-#define TAPE_QIC02_MAJOR	12	/* major device number. /dev/loop seems to use 12 as well :-( */
 #define TAPE_QIC02_PORT 	0x300	/* controller port adress */
 #define TAPE_QIC02_IRQ		5	/* Muhammad, please don't use 2 here. -- Hennus */
 #define TAPE_QIC02_DMA		1	/* either 1 or 3, because 2 is used by the floppy */

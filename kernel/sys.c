@@ -27,7 +27,6 @@
  */
 static int C_A_D = 1;
 
-extern int session_of_pgrp(int pgrp);
 extern void adjust_clock(void);
 
 #define	PZERO	15
@@ -477,6 +476,7 @@ asmlinkage int sys_setpgid(pid_t pid, pid_t pgid)
 	for (i=0 ; i<NR_TASKS ; i++)
 		if (task[i] && (task[i]->pid == pid) &&
 		    ((task[i]->p_pptr == current) || 
+		     (task[i]->p_opptr == current) || 
 		     (task[i] == current))) {
 			if (task[i]->leader)
 				return -EPERM;

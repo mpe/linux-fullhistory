@@ -6,7 +6,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
  |   void wm_sqrt(FPU_REG *n, unsigned int control_word)                     |
@@ -29,19 +29,12 @@
 #include "fpu_asm.h"
 
 
-.data
-/*
-	Local storage:
- */
-	.align 4,0
-accum_3:
-	.long	0		/* ms word */
-accum_2:
-	.long	0
-accum_1:
-	.long	0
-accum_0:
-	.long	0
+#ifdef REENTRANT_FPU
+/*	Local storage on the stack: */
+#define FPU_accum_3	-4(%ebp)	/* ms word */
+#define FPU_accum_2	-8(%ebp)
+#define FPU_accum_1	-12(%ebp)
+#define FPU_accum_0	-16(%ebp)
 
 /*
  * The de-normalised argument:
@@ -49,21 +42,47 @@ accum_0:
  *        b b b b b b b ... b b b   b b b .... b b b   b 0 0 0 ... 0
  *           ^ binary point here
  */
-fsqrt_arg_2:
+#define FPU_fsqrt_arg_2	-20(%ebp)	/* ms word */
+#define FPU_fsqrt_arg_1	-24(%ebp)
+#define FPU_fsqrt_arg_0	-28(%ebp)	/* ls word, at most the ms bit is set */
+
+#else
+/*	Local storage in a static area: */
+.data
+	.align 4,0
+FPU_accum_3:
 	.long	0		/* ms word */
-fsqrt_arg_1:
+FPU_accum_2:
 	.long	0
-fsqrt_arg_0:
+FPU_accum_1:
+	.long	0
+FPU_accum_0:
+	.long	0
+
+/* The de-normalised argument:
+                    sq_2                  sq_1              sq_0
+          b b b b b b b ... b b b   b b b .... b b b   b 0 0 0 ... 0
+             ^ binary point here
+ */
+FPU_fsqrt_arg_2:
+	.long	0		/* ms word */
+FPU_fsqrt_arg_1:
+	.long	0
+FPU_fsqrt_arg_0:
 	.long	0		/* ls word, at most the ms bit is set */
+#endif REENTRANT_FPU
+
 
 .text
 	.align 2,144
 
 .globl _wm_sqrt
-
 _wm_sqrt:
 	pushl	%ebp
 	movl	%esp,%ebp
+#ifdef REENTRANT_FPU
+	subl	$28,%esp
+#endif REENTRANT_FPU
 	pushl	%esi
 	pushl	%edi
 	pushl	%ebx
@@ -84,12 +103,12 @@ _wm_sqrt:
 	rcrl	$1,%edx
 
 sqrt_arg_ge_2:
-/* From here on, n is never accessed directly again until it is */
-/* replaced by the answer. */
+/* From here on, n is never accessed directly again until it is
+   replaced by the answer. */
 
-	movl	%eax,fsqrt_arg_2		/* ms word of n */
-	movl	%ecx,fsqrt_arg_1
-	movl	%edx,fsqrt_arg_0
+	movl	%eax,FPU_fsqrt_arg_2		/* ms word of n */
+	movl	%ecx,FPU_fsqrt_arg_1
+	movl	%edx,FPU_fsqrt_arg_0
 
 /* Make a linear first estimate */
 	shrl	$1,%eax
@@ -108,7 +127,7 @@ sqrt_prelim_no_adjust:
 /* We have now computed (approx)   (2 + x) / 3, which forms the basis
    for a few iterations of Newton's method */
 
-	movl	fsqrt_arg_2,%ecx	/* ms word */
+	movl	FPU_fsqrt_arg_2,%ecx	/* ms word */
 
 /*
  * From our initial estimate, three iterations are enough to get us
@@ -148,14 +167,14 @@ sqrt_prelim_no_adjust:
 	mull	%esi
 /* guess^2 now in %edx:%eax */
 
-	movl	fsqrt_arg_1,%ecx
+	movl	FPU_fsqrt_arg_1,%ecx
 	subl	%ecx,%eax
-	movl	fsqrt_arg_2,%ecx	/* ms word of normalized n */
+	movl	FPU_fsqrt_arg_2,%ecx	/* ms word of normalized n */
 	sbbl	%ecx,%edx
 	jnc	sqrt_stage_2_positive
 
-/* subtraction gives a negative result */
-/* negate the result before division */
+/* Subtraction gives a negative result,
+   negate the result before division. */
 	notl	%edx
 	notl	%eax
 	addl	$1,%eax
@@ -192,7 +211,7 @@ sqrt_stage_2_finish:
 
 #ifdef PARANOID
 /* It should be possible to get here only if the arg is ffff....ffff */
-	cmp	$0xffffffff,fsqrt_arg_1
+	cmp	$0xffffffff,FPU_fsqrt_arg_1
 	jnz	sqrt_stage_2_error
 #endif PARANOID
 
@@ -212,50 +231,50 @@ sqrt_stage_2_error:
 
 sqrt_stage_2_done:
 
-/* Now the square root has been computed to better than 60 bits */
+/* Now the square root has been computed to better than 60 bits. */
 
-/* Find the square of the guess */
+/* Find the square of the guess. */
 	movl	%edi,%eax		/* ls word of guess */
 	mull	%edi
-	movl	%edx,accum_1
+	movl	%edx,FPU_accum_1
 
 	movl	%esi,%eax
 	mull	%esi
-	movl	%edx,accum_3
-	movl	%eax,accum_2
+	movl	%edx,FPU_accum_3
+	movl	%eax,FPU_accum_2
 
 	movl	%edi,%eax
 	mull	%esi
-	addl	%eax,accum_1
-	adcl	%edx,accum_2
-	adcl	$0,accum_3
+	addl	%eax,FPU_accum_1
+	adcl	%edx,FPU_accum_2
+	adcl	$0,FPU_accum_3
 
 /*	movl	%esi,%eax */
 /*	mull	%edi */
-	addl	%eax,accum_1
-	adcl	%edx,accum_2
-	adcl	$0,accum_3
+	addl	%eax,FPU_accum_1
+	adcl	%edx,FPU_accum_2
+	adcl	$0,FPU_accum_3
 
-/* guess^2 now in accum_3:accum_2:accum_1 */
+/* guess^2 now in FPU_accum_3:FPU_accum_2:FPU_accum_1 */
 
-	movl	fsqrt_arg_0,%eax		/* get normalized n */
-	subl	%eax,accum_1
-	movl	fsqrt_arg_1,%eax
-	sbbl	%eax,accum_2
-	movl	fsqrt_arg_2,%eax		/* ms word of normalized n */
-	sbbl	%eax,accum_3
+	movl	FPU_fsqrt_arg_0,%eax		/* get normalized n */
+	subl	%eax,FPU_accum_1
+	movl	FPU_fsqrt_arg_1,%eax
+	sbbl	%eax,FPU_accum_2
+	movl	FPU_fsqrt_arg_2,%eax		/* ms word of normalized n */
+	sbbl	%eax,FPU_accum_3
 	jnc	sqrt_stage_3_positive
 
-/* subtraction gives a negative result */
-/* negate the result before division */
-	notl	accum_1
-	notl	accum_2
-	notl	accum_3
-	addl	$1,accum_1
-	adcl	$0,accum_2
+/* Subtraction gives a negative result,
+   negate the result before division */
+	notl	FPU_accum_1
+	notl	FPU_accum_2
+	notl	FPU_accum_3
+	addl	$1,FPU_accum_1
+	adcl	$0,FPU_accum_2
 
 #ifdef PARANOID
-	adcl	$0,accum_3	/* This must be zero */
+	adcl	$0,FPU_accum_3	/* This must be zero */
 	jz	sqrt_stage_3_no_error
 
 sqrt_stage_3_error:
@@ -265,8 +284,8 @@ sqrt_stage_3_error:
 sqrt_stage_3_no_error:
 #endif PARANOID
 
-	movl	accum_2,%edx
-	movl	accum_1,%eax
+	movl	FPU_accum_2,%edx
+	movl	FPU_accum_1,%eax
 	divl	%esi
 	movl	%eax,%ecx
 
@@ -284,8 +303,8 @@ sqrt_stage_3_no_error:
 	jmp	sqrt_stage_3_finished
 
 sqrt_stage_3_positive:
-	movl	accum_2,%edx
-	movl	accum_1,%eax
+	movl	FPU_accum_2,%edx
+	movl	FPU_accum_1,%eax
 	divl	%esi
 	movl	%eax,%ecx
 
@@ -333,7 +352,7 @@ sqrt_round_result:
 	movl	PARAM1,%edi
 	movl	EXP_BIAS,EXP(%edi)	/* Result is in  [1.0 .. 2.0) */
 	movl	PARAM2,%ecx
-	jmp	FPU_round_sqrt
+	jmp	fpu_reg_round_sqrt
 
 
 sqrt_near_exact_x:
@@ -398,8 +417,8 @@ sqrt_near_exact_large:
 
 
 sqrt_get_more_precision:
-/* This case is almost the same as the above, except we start */
-/* with an extra bit of precision in the estimate. */
+/* This case is almost the same as the above, except we start
+   with an extra bit of precision in the estimate. */
 	stc			/* The extra bit. */
 	rcll	$1,%edi		/* Shift the estimate left one bit */
 	rcll	$1,%esi

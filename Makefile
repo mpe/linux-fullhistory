@@ -1,6 +1,6 @@
 VERSION = 0.99
-PATCHLEVEL = 13
-ALPHA = k
+PATCHLEVEL = 14
+ALPHA =
 
 all:	Version zImage
 
@@ -44,8 +44,7 @@ ROOT_DEV = CURRENT
 # The number is the same as you would ordinarily press at bootup.
 #
 
-# SVGA_MODE=	-DSVGA_MODE=3
-SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
+SVGA_MODE=	-DSVGA_MODE=3
 
 # Special options.
 #OPTS	= -pro
@@ -58,6 +57,8 @@ CFLAGS = -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer -pipe # -x c++
 
 ifdef CONFIG_M486
 CFLAGS := $(CFLAGS) -m486
+else
+CFLAGS := $(CFLAGS) -m386
 endif
 
 #
@@ -114,14 +115,13 @@ Version: dummy
 
 config:
 	$(CONFIG_SHELL) Configure $(OPTS) < config.in
+	@if grep -s '^CONFIG_SOUND' .config~ ; then \
+		$(MAKE) -C drivers/sound config; \
+		else : ; fi
 	mv .config~ .config
-	$(MAKE) soundconf
-
-soundconf:
-	cd drivers/sound;$(MAKE) config
 
 linuxsubdirs: dummy
-	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
+	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
 
 tools/./version.h: tools/version.h
 
@@ -149,7 +149,7 @@ init/main.o: $(CONFIGURE) init/main.c
 	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
 
 tools/system:	boot/head.o init/main.o tools/version.o linuxsubdirs
-	$(LD) $(LDFLAGS) -M boot/head.o init/main.o tools/version.o \
+	$(LD) $(LDFLAGS) -T 1000 -M boot/head.o init/main.o tools/version.o \
 		$(ARCHIVES) \
 		$(FILESYSTEMS) \
 		$(DRIVERS) \
@@ -171,7 +171,7 @@ boot/bootsect:	boot/bootsect.s
 	$(LD86) -s -o boot/bootsect boot/bootsect.o
 
 zBoot/zSystem: zBoot/*.c zBoot/*.S tools/zSystem
-	cd zBoot;$(MAKE)
+	$(MAKE) -C zBoot
 
 zImage: $(CONFIGURE) boot/bootsect boot/setup zBoot/zSystem tools/build
 	tools/build boot/bootsect boot/setup zBoot/zSystem $(ROOT_DEV) > zImage
@@ -209,16 +209,21 @@ kernel: dummy
 drivers: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=drivers
 
+net: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=net
+
 clean:
 	rm -f core `find . -name '*.[oas]' -print`
+	rm -f core `find . -name 'core' -print`
 	rm -f zImage zSystem.map tools/zSystem tools/system
-	rm -f Image System.map boot/bootsect boot/setup \
-		boot/bootsect.s boot/setup.s boot/head.s init/main.s
+	rm -f Image System.map boot/bootsect boot/setup
+	rm -f zBoot/zSystem zBoot/xtract zBoot/piggyback
+	rm -f drivers/sound/configure
 	rm -f init/*.o tools/build boot/*.o tools/*.o
-	for i in zBoot $(SUBDIRS); do (cd $$i && $(MAKE) clean); done
 
 mrproper: clean
 	rm -f include/linux/autoconf.h tools/version.h
+	rm -f drivers/sound/local.h
 	rm -f .version .config* config.old
 	rm -f .depend `find . -name .depend -print`
 
@@ -232,7 +237,7 @@ depend dep:
 	touch tools/version.h
 	for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done > .depend~
 	for i in tools/*.c;do echo -n "tools/";$(CPP) -M $$i;done >> .depend~
-	for i in $(SUBDIRS); do (cd $$i && $(MAKE) dep) || exit; done
+	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
 	rm -f tools/version.h
 	mv .depend~ .depend
 

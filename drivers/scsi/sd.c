@@ -17,9 +17,7 @@
 #include <linux/errno.h>
 #include <asm/system.h>
 
-
-#define MAJOR_NR 8
-
+#define MAJOR_NR SCSI_DISK_MAJOR
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
@@ -204,9 +202,8 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
   The SCpnt->request.nr_sectors field is always done in 512 byte sectors,
   even if this really isn't the case.
 */
-	    printk("sd.c: linked page request. (%x %x)",
+	    panic("sd.c: linked page request (%lx %x)",
 		  SCpnt->request.sector, this_count);
-	    panic("Aiiiiiiiiiiiieeeeeeeee");
 	  }
       }
     end_scsi_request(SCpnt, 1, this_count);
@@ -262,13 +259,15 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 
 	  if ((SCpnt->sense_buffer[0] & 0x7f) == 0x70) {
 	    if ((SCpnt->sense_buffer[2] & 0xf) == UNIT_ATTENTION) {
+	      if(rscsi_disks[DEVICE_NR(SCpnt->request.dev)].device->removable) {
 	      /* detected disc change.  set a bit and quietly refuse	*/
 	      /* further access.					*/
 	      
-	      rscsi_disks[DEVICE_NR(SCpnt->request.dev)].device->changed = 1;
-	      end_scsi_request(SCpnt, 0, this_count);
-	      requeue_sd_request(SCpnt);
-	      return;
+		rscsi_disks[DEVICE_NR(SCpnt->request.dev)].device->changed = 1;
+		end_scsi_request(SCpnt, 0, this_count);
+		requeue_sd_request(SCpnt);
+		return;
+	      }
 	    }
 	  }
 	  
@@ -705,6 +704,7 @@ static int sd_init_onedisk(int i)
 	 SCpnt->sense_buffer[2] == NOT_READY) {
 	int time1;
 	if(!spintime){
+	  printk( "sd%d: Spinning up disk...", i );
 	  cmd[0] = START_STOP;
 	  cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
 	  cmd[1] |= 1;  /* Return immediately */
@@ -726,8 +726,15 @@ static int sd_init_onedisk(int i)
 
 	time1 = jiffies;
 	while(jiffies < time1 + 100); /* Wait 1 second for next try */
+	printk( "." );
       };
-    } while(the_result && spintime && spintime+1500 < jiffies);
+    } while(the_result && spintime && spintime+5000 > jiffies);
+    if (spintime) {
+       if (the_result)
+           printk( "not responding...\n" );
+       else
+           printk( "ready\n" );
+    }
   };  /* current == task[0] */
 
 

@@ -7,7 +7,7 @@ extern void stack_underflow_i(int i);
 extern void stack_underflow_pop(int i);
 extern int set_precision_flag(int flags);
 asmlinkage void exception(int n);
-asmlinkage int real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest);
+asmlinkage int real_2op_NaN(FPU_REG const *a, FPU_REG const *b, FPU_REG *dest);
 asmlinkage int arith_invalid(FPU_REG *dest);
 asmlinkage int divide_by_zero(int sign, FPU_REG *dest);
 asmlinkage void set_precision_flag_up(void);
@@ -57,7 +57,7 @@ extern void __math_abort(struct info *info, unsigned int signal);
 extern void fp_etc(void);
 
 /* fpu_trig.c */
-extern void convert_l2reg(long *arg, FPU_REG *dest);
+extern void convert_l2reg(long const *arg, FPU_REG *dest);
 extern void trig_a(void);
 extern void trig_b(void);
 
@@ -68,28 +68,30 @@ extern void get_address(unsigned char FPU_modrm);
 extern void load_store_instr(char type);
 
 /* poly_2xm1.c */
-extern int poly_2xm1(FPU_REG *arg, FPU_REG *result);
+extern int poly_2xm1(FPU_REG const *arg, FPU_REG *result);
 
 /* poly_atan.c */
 extern void poly_atan(FPU_REG *arg);
 extern void poly_add_1(FPU_REG *src);
 
 /* poly_l2.c */
-extern void poly_l2(FPU_REG *arg, FPU_REG *result);
-extern int poly_l2p1(FPU_REG *arg, FPU_REG *result);
+extern void poly_l2(FPU_REG const *arg, FPU_REG *result);
+extern int poly_l2p1(FPU_REG const *arg, FPU_REG *result);
 
 /* poly_sin.c */
-extern void poly_sine(FPU_REG *arg, FPU_REG *result);
+extern void poly_sine(FPU_REG const *arg, FPU_REG *result);
 
 /* poly_tan.c */
-extern void poly_tan(FPU_REG *arg, FPU_REG *y_reg, int invert);
+extern void poly_tan(FPU_REG const *arg, FPU_REG *result, int invert);
 
 /* reg_add_sub.c */
-extern int reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w);
-extern int reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w);
+extern int reg_add(FPU_REG const *a, FPU_REG const *b,
+		   FPU_REG *dest, int control_w);
+extern int reg_sub(FPU_REG const *a, FPU_REG const *b,
+		   FPU_REG *dest, int control_w);
 
 /* reg_compare.c */
-extern int compare(FPU_REG *b);
+extern int compare(FPU_REG const *b);
 extern int compare_st_data(void);
 extern void fcom_st(void);
 extern void fcompst(void);
@@ -124,4 +126,5 @@ extern char *fstenv(void);
 extern void fsave(void);
 
 /* reg_mul.c */
-extern int reg_mul(FPU_REG *a, FPU_REG *b, FPU_REG *dest, unsigned int control_w);
+extern int reg_mul(FPU_REG const *a, FPU_REG const *b,
+		   FPU_REG *dest, unsigned int control_w);

@@ -157,7 +157,7 @@ int aha1740_command(Scsi_Cmnd *);
 int aha1740_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha1740_abort(Scsi_Cmnd *, int);
 const char *aha1740_info(void);
-int aha1740_reset(void);
+int aha1740_reset(Scsi_Cmnd *);
 int aha1740_biosparam(int, int, int*);
 
 #define AHA1740_ECBS 32

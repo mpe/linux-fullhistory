@@ -23,6 +23,7 @@
 #include <linux/ptrace.h>
 #include <linux/segment.h>
 #include <linux/delay.h>
+#include <linux/interrupt.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -125,7 +126,7 @@ sys_syslog, sys_setitimer, sys_getitimer, sys_newstat, sys_newlstat,
 sys_newfstat, sys_uname, sys_iopl, sys_vhangup, sys_idle, sys_vm86,
 sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync, sys_sigreturn,
 sys_clone, sys_setdomainname, sys_newuname, sys_modify_ldt,
-sys_adjtimex};
+sys_adjtimex, sys_mprotect, sys_sigprocmask };
 
 /* So we don't have to do any more manual updating.... */
 int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);
@@ -206,7 +207,7 @@ asmlinkage void schedule(void)
 			p->state = TASK_RUNNING;
 			continue;
 		}
-		if (p->timeout && p->timeout < jiffies) {
+		if (p->timeout && p->timeout <= jiffies) {
 			p->timeout = 0;
 			p->state = TASK_RUNNING;
 		}
@@ -280,7 +281,7 @@ void wake_up(struct wait_queue **q)
 			}
 		}
 		if (!tmp->next) {
-			printk("wait_queue is bad (eip = %08x)\n",((unsigned long *) q)[-1]);
+			printk("wait_queue is bad (eip = %08lx)\n",((unsigned long *) q)[-1]);
 			printk("        q = %p\n",q);
 			printk("       *q = %p\n",*q);
 			printk("      tmp = %p\n",tmp);
@@ -306,7 +307,7 @@ void wake_up_interruptible(struct wait_queue **q)
 			}
 		}
 		if (!tmp->next) {
-			printk("wait_queue is bad (eip = %08x)\n",((unsigned long *) q)[-1]);
+			printk("wait_queue is bad (eip = %08lx)\n",((unsigned long *) q)[-1]);
 			printk("        q = %p\n",q);
 			printk("       *q = %p\n",*q);
 			printk("      tmp = %p\n",tmp);
@@ -414,7 +415,9 @@ static unsigned long count_active_tasks(void)
 	unsigned long nr = 0;
 
 	for(p = &LAST_TASK; p > &FIRST_TASK; --p)
-		if (*p && (*p)->state == TASK_RUNNING)
+		if (*p && ((*p)->state == TASK_RUNNING ||
+			   (*p)->state == TASK_UNINTERRUPTIBLE ||
+			   (*p)->state == TASK_SWAPPING))
 			nr += FIXED_1;
 	return nr;
 }
@@ -445,31 +448,31 @@ static inline void calc_load(void)
  */
 static void second_overflow(void)
 {
-        long ltemp;
+	long ltemp;
 	/* last time the cmos clock got updated */
 	static long last_rtc_update=0;
 	extern int set_rtc_mmss(unsigned long);
 
 	/* Bump the maxerror field */
-        time_maxerror = (0x70000000-time_maxerror < time_tolerance) ?
+	time_maxerror = (0x70000000-time_maxerror < time_tolerance) ?
 	  0x70000000 : (time_maxerror + time_tolerance);
 
 	/* Run the PLL */
-        if (time_offset < 0) {
-                ltemp = (-(time_offset+1) >> (SHIFT_KG + time_constant)) + 1;
-                time_adj = ltemp << (SHIFT_SCALE - SHIFT_HZ - SHIFT_UPDATE);
+	if (time_offset < 0) {
+		ltemp = (-(time_offset+1) >> (SHIFT_KG + time_constant)) + 1;
+		time_adj = ltemp << (SHIFT_SCALE - SHIFT_HZ - SHIFT_UPDATE);
 		time_offset += (time_adj * HZ) >> (SHIFT_SCALE - SHIFT_UPDATE);
 		time_adj = - time_adj;
-        } else if (time_offset > 0) {
-                ltemp = ((time_offset-1) >> (SHIFT_KG + time_constant)) + 1;
-                time_adj = ltemp << (SHIFT_SCALE - SHIFT_HZ - SHIFT_UPDATE);
+	} else if (time_offset > 0) {
+		ltemp = ((time_offset-1) >> (SHIFT_KG + time_constant)) + 1;
+		time_adj = ltemp << (SHIFT_SCALE - SHIFT_HZ - SHIFT_UPDATE);
 		time_offset -= (time_adj * HZ) >> (SHIFT_SCALE - SHIFT_UPDATE);
-        } else {
+	} else {
 		time_adj = 0;
 	}
 
-        time_adj += (time_freq >> (SHIFT_KF + SHIFT_HZ - SHIFT_SCALE))
-            + FINETUNE;
+	time_adj += (time_freq >> (SHIFT_KF + SHIFT_HZ - SHIFT_SCALE))
+	    + FINETUNE;
 
 	/* Handle the leap second stuff */
 	switch (time_status) {
@@ -500,6 +503,25 @@ static void second_overflow(void)
 	    last_rtc_update = xtime.tv_sec;
 }
 
+static int lost_ticks = 0;
+
+/*
+ * disregard lost ticks for now.. We don't care enough.
+ */
+static void timer_bh(void * unused)
+{
+	cli();
+	while (next_timer && next_timer->expires == 0) {
+		void (*fn)(unsigned long) = next_timer->function;
+		unsigned long data = next_timer->data;
+		next_timer = next_timer->next;
+		sti();
+		fn(data);
+		cli();
+	}
+	sti();
+}
+
 /*
  * The int argument is really a (struct pt_regs *), in case the
  * interrupt wants to know from where it was called. The timer
@@ -512,23 +534,23 @@ static void do_timer(struct pt_regs * regs)
 	struct timer_struct *tp = timer_table+0;
 	struct task_struct * task_p;
 
-        long ltemp;
+	long ltemp;
 
-        /* Advance the phase, once it gets to one microsecond, then
-         * advance the tick more.
-         */
-        time_phase += time_adj;
-        if (time_phase < -FINEUSEC) {
-                ltemp = -time_phase >> SHIFT_SCALE;
-                time_phase += ltemp << SHIFT_SCALE;
-                xtime.tv_usec += tick - ltemp;
-        }
-        else if (time_phase > FINEUSEC) {
-                ltemp = time_phase >> SHIFT_SCALE;
-                time_phase -= ltemp << SHIFT_SCALE;
-                xtime.tv_usec += tick + ltemp;
-        } else
-                xtime.tv_usec += tick;
+	/* Advance the phase, once it gets to one microsecond, then
+	 * advance the tick more.
+	 */
+	time_phase += time_adj;
+	if (time_phase < -FINEUSEC) {
+		ltemp = -time_phase >> SHIFT_SCALE;
+		time_phase += ltemp << SHIFT_SCALE;
+		xtime.tv_usec += tick - ltemp;
+	}
+	else if (time_phase > FINEUSEC) {
+		ltemp = time_phase >> SHIFT_SCALE;
+		time_phase -= ltemp << SHIFT_SCALE;
+		xtime.tv_usec += tick + ltemp;
+	} else
+		xtime.tv_usec += tick;
 
 	if (time_adjust)
 	{
@@ -614,16 +636,16 @@ static void do_timer(struct pt_regs * regs)
 		sti();
 	}
 	cli();
-	while (next_timer && next_timer->expires == 0) {
-		void (*fn)(unsigned long) = next_timer->function;
-		unsigned long data = next_timer->data;
-		next_timer = next_timer->next;
-		sti();
-		fn(data);
-		cli();
+	if (next_timer) {
+		if (next_timer->expires) {
+			next_timer->expires--;
+			if (!next_timer->expires)
+				mark_bh(TIMER_BH);
+		} else {
+			lost_ticks++;
+			mark_bh(TIMER_BH);
+		}
 	}
-	if (next_timer)
-		next_timer->expires--;
 	sti();
 }
 
@@ -645,7 +667,7 @@ asmlinkage int sys_getpid(void)
 
 asmlinkage int sys_getppid(void)
 {
-	return current->p_pptr->pid;
+	return current->p_opptr->pid;
 }
 
 asmlinkage int sys_getuid(void)
@@ -685,25 +707,27 @@ asmlinkage int sys_nice(long increment)
 
 static void show_task(int nr,struct task_struct * p)
 {
-	int i, j;
-	unsigned char * stack;
+	static char * stat_nam[] = { "R", "S", "D", "Z", "T", "W" };
 
-	printk("%d: pid=%d, state=%d, father=%d, child=%d, ",(p == current)?-nr:nr,p->pid,
-		p->state, p->p_pptr->pid, p->p_cptr ? p->p_cptr->pid : -1);
-	i = 0;
-	j = PAGE_SIZE;
-	if (!(stack = (unsigned char *) p->kernel_stack_page)) {
-		stack = (unsigned char *) init_kernel_stack;
-		j = sizeof(init_kernel_stack);
-	}
-	while (i<j && !*(stack++))
-		i++;
-	printk("%d/%d chars free in kstack\n",i,j);
-	printk("   PC=%08X.", *(1019 + (unsigned long *) p));
-	if (p->p_ysptr || p->p_osptr) 
-		printk("   Younger sib=%d, older sib=%d\n", 
-			p->p_ysptr ? p->p_ysptr->pid : -1,
-			p->p_osptr ? p->p_osptr->pid : -1);
+	printk("%-8s %3d ", p->comm, (p == current) ? -nr : nr);
+	if (((unsigned) p->state) < sizeof(stat_nam)/sizeof(char *))
+		printk(stat_nam[p->state]);
+	else
+		printk(" ");
+	/* this prints bogus values for the current process */
+	printk(" %08lX ", ((unsigned long *)p->tss.esp)[2]);
+	printk("%5lu %5d %6d ",
+		p->tss.esp - p->kernel_stack_page, p->pid, p->p_pptr->pid);
+	if (p->p_cptr)
+		printk("%5d ", p->p_cptr->pid);
+	else
+		printk("      ");
+	if (p->p_ysptr)
+		printk("%7d", p->p_ysptr->pid);
+	else
+		printk("       ");
+	if (p->p_osptr)
+		printk(" %5d\n", p->p_osptr->pid);
 	else
 		printk("\n");
 }
@@ -712,7 +736,8 @@ void show_state(void)
 {
 	int i;
 
-	printk("Task-info:\n");
+	printk("                         free                        sibling\n");
+	printk("  task             PC    stack   pid father child younger older\n");
 	for (i=0 ; i<NR_TASKS ; i++)
 		if (task[i])
 			show_task(i,task[i]);
@@ -723,6 +748,7 @@ void sched_init(void)
 	int i;
 	struct desc_struct * p;
 
+	bh_base[TIMER_BH].routine = timer_bh;
 	if (sizeof(struct sigaction) != 16)
 		panic("Struct sigaction MUST be 16 bytes");
 	set_tss_desc(gdt+FIRST_TSS_ENTRY,&init_task.tss);

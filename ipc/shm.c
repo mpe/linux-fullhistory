@@ -682,17 +682,17 @@ int shm_swap (int prio)
 	for (shmd = shp->attaches; shmd; shmd = shmd->seg_next) {
 		unsigned long tmp, *pte;
 		if ((shmd->shm_sgn >> SHM_ID_SHIFT & SHM_ID_MASK) != id) {
-			printk ("shm_swap: id=%d does not match shmd\n", id);
+			printk ("shm_swap: id=%ld does not match shmd\n", id);
 			continue;
 		}
 		tmp = shmd->start + (idx << PAGE_SHIFT);
 		if (tmp >= shmd->end) {
-			printk ("shm_swap: too large idx=%d id=%d PANIC\n",idx, id);
+			printk ("shm_swap: too large idx=%ld id=%ld PANIC\n",idx, id);
 			continue;
 		}
 		pte = PAGE_DIR_OFFSET(shmd->task->tss.cr3,tmp);
 		if (!(*pte & 1)) { 
-			printk("shm_swap: bad pgtbl! id=%d start=%x idx=%d\n", 
+			printk("shm_swap: bad pgtbl! id=%ld start=%lx idx=%ld\n", 
 					id, shmd->start, idx);
 			*pte = 0;
 			continue;

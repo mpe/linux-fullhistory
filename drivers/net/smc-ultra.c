@@ -14,18 +14,24 @@
 */
 
 static char *version =
-    "smc-ultra.c:v0.02 10/8/93 Donald Becker (becker@super.org)\n";
+    "smc-ultra.c:v0.03 11/21/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
+#include <linux/string.h>
 #include <asm/io.h>
 #include <asm/system.h>
-#include <memory.h>
 
 #include "dev.h"
 #include "8390.h"
+
+/* Compatibility definitions for earlier kernel versions. */
+#ifndef HAVE_PORTRESERVE
+#define check_region(ioaddr, size)              0
+#define snarf_region(ioaddr, size);             do ; while (0)
+#endif
 
 int ultraprobe(int ioaddr, struct device *dev);
 int ultraprobe1(int ioaddr, struct device *dev);
@@ -53,19 +59,17 @@ static int ultra_close_card(struct device *dev);
 
 int ultra_probe(struct device *dev)
 {
-    int *port, ports[] = {0x300, 0x280, 0x380, 0x240, 0};
-    short ioaddr = dev->base_addr;
+    int *port, ports[] = {0x200, 0x220, 0x240, 0x280, 0x300, 0x380, 0};
+    unsigned short ioaddr = dev->base_addr;
 
-    if (ioaddr < 0)
-	return ENXIO;		/* Don't probe at all. */
-    if (ioaddr > 0x100)
+    if (ioaddr > 0x1ff)
 	return ! ultraprobe1(ioaddr, dev);
+    else if (ioaddr > 0)
+	return ENXIO;		/* Don't probe at all. */
 
     for (port = &ports[0]; *port; port++) {
-#ifdef HAVE_PORTRESERVE
 	if (check_region(*port, 32))
 	    continue;
-#endif
 	if ((inb(*port + 7) & 0xF0) == 0x20
 	    && ultraprobe1(*port, dev) == 0)
 	    return 0;
@@ -81,7 +85,14 @@ int ultraprobe1(int ioaddr, struct device *dev)
   int checksum = 0;
   char *model_name;
   int num_pages;
+  unsigned char reg1, eeprom_irq = 0;
 
+  /* Second probe check: at most one bit can be set in register 1. */
+  reg1 = inb(ioaddr + 1);
+  if (reg1 & (reg1 - 1))
+      return ENODEV;
+
+  /* Select the station address register set. */
   outb(0x7f & inb(ioaddr + 4), ioaddr + 4);
 
   for (i = 0; i < 8; i++)
@@ -93,37 +104,30 @@ int ultraprobe1(int ioaddr, struct device *dev)
   for (i = 0; i < 6; i++)
       printk(" %2.2X", station_addr[i] = inb(ioaddr + 8 + i));
 
+  /* Switch from the station address to the alternate register set. */
   outb(0x80 | inb(ioaddr + 4), ioaddr + 4);
 
   model_name = "SMC Ultra";
 
   if (dev->irq < 2) {
+      unsigned char irqmap[] = {0, 9, 3, 5, 7, 10, 11, 15};
+      int irqreg = inb(ioaddr + 0xd);
       int irq;
-      /* Datasheet doesn't specify the IRQ line mapping -> always autoIRQ. */
 
-      outb(0x05, ioaddr + 6);
-      autoirq_setup(0);
+      /* The IRQ bits are split. */
+      irq = irqmap[((irqreg & 0x40) >> 4) + ((irqreg & 0x0c) >> 2)];
 
-      /* Trigger an interrupt, then release. */
-      outb_p(0x09, ioaddr + 6);
-      outb(0x00, ioaddr + 6);
-
-      irq = autoirq_report(1);
-      if (irq)
-	  printk(", using IRQ %d", irq);
-      else {
+      if (irq == 0) {
 	  printk(", failed to detect IRQ line.\n");
 	  return -EAGAIN;
       }
       dev->irq = irq;
-  } else
-      printk(" assigned IRQ %d.\n", dev->irq);
+      eeprom_irq = 1;
+  }
 
 
   /* OK, were are certain this is going to work.  Setup the device. */
-#ifdef HAVE_PORTRESERVE
   snarf_region(ioaddr, 32);
-#endif
 
   /* The 8390 isn't at the base address, so fake the offset */
   dev->base_addr = ioaddr+ULTRA_NIC_OFFSET;
@@ -149,7 +153,8 @@ int ultraprobe1(int ioaddr, struct device *dev)
   dev->mem_end = dev->rmem_end
       = dev->mem_start + (ei_status.stop_page - START_PG)*256;
 
-  printk(", shared memory at %#x-%#x.\n", dev->mem_start, dev->mem_end-1);
+  printk(",%s IRQ %d memory %#x-%#x.\n", eeprom_irq ? "" : "assigned ",
+	 dev->irq, dev->mem_start, dev->mem_end-1);
   if (ei_debug > 0)
       printk(version);
 

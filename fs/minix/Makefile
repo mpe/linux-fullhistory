@@ -20,9 +20,6 @@ OBJS=	bitmap.o truncate.o namei.o inode.o \
 minix.o: $(OBJS)
 	$(LD) -r -o minix.o $(OBJS)
 
-clean:
-	rm -f core *.o *.a *.s
-
 dep:
 	$(CPP) -M *.c > .depend
 

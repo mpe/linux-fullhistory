@@ -20,9 +20,6 @@ OBJS=	freelists.o truncate.o namei.o inode.o \
 ext.o: $(OBJS)
 	$(LD) -r -o ext.o $(OBJS)
 
-clean:
-	rm -f core *.s *.o *.a
-
 dep:
 	$(CPP) -M *.c > .depend
 

@@ -115,6 +115,10 @@ static int msdos_file_read(struct inode *inode,struct file *filp,char *buf,
 					else {
 						filp->f_pos = inode->i_size;
 						brelse(bh);
+						if (start != buf
+						    && !IS_RDONLY(inode))
+							inode->i_atime
+							    = CURRENT_TIME;
 						return buf-start;
 					}
 				}
@@ -122,6 +126,8 @@ static int msdos_file_read(struct inode *inode,struct file *filp,char *buf,
 		brelse(bh);
 	}
 	if (start == buf) return -EIO;
+	if (!IS_RDONLY(inode))
+		inode->i_atime = CURRENT_TIME;
 	return buf-start;
 }
 
@@ -197,10 +203,12 @@ static int msdos_file_write(struct inode *inode,struct file *filp,char *buf,
 		bh->b_dirt = 1;
 		brelse(bh);
 	}
+	if (start == buf)
+		return error;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	MSDOS_I(inode)->i_attrs |= ATTR_ARCH;
 	inode->i_dirt = 1;
-	return start == buf ? error : buf-start;
+	return buf-start;
 }
 
 

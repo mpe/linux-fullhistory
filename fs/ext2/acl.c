@@ -9,9 +9,11 @@
  * second extended file system.
  */
 
-#include <linux/sched.h>
-#include <linux/ext2_fs.h>
 #include <linux/errno.h>
+#include <linux/fs.h>
+#include <linux/ext2_fs.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/stat.h>
 
 /*
@@ -21,7 +23,7 @@
  */
 int ext2_permission (struct inode * inode, int mask)
 {
-	int mode = inode->i_mode;
+	unsigned short mode = inode->i_mode;
 
 	/* Special case, access is always granted for root */
 	if (suser ())

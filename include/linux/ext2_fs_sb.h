@@ -1,5 +1,17 @@
-#ifndef _EXT2_FS_SB
-#define _EXT2_FS_SB
+/*
+ *  linux/include/linux/ext2_fs_sb.h
+ *
+ *  Copyright (C) 1992, 1993  Remy Card (card@masi.ibp.fr)
+ *
+ *  from
+ *
+ *  linux/include/linux/minix_fs_sb.h
+ *
+ *  Copyright (C) 1991, 1992  Linus Torvalds
+ */
+
+#ifndef _LINUX_EXT2_FS_SB
+#define _LINUX_EXT2_FS_SB
 
 #define EXT2_MAX_GROUP_DESC	8
 #define EXT2_MAX_GROUP_LOADED	8
@@ -26,8 +38,9 @@ struct ext2_sb_info {
 	unsigned long s_block_bitmap_number[EXT2_MAX_GROUP_LOADED];
 	struct buffer_head * s_block_bitmap[EXT2_MAX_GROUP_LOADED];
 	int s_rename_lock;
-	int s_was_mounted_valid;
 	struct wait_queue * s_rename_wait;
+	unsigned long  s_mount_opt;
+	unsigned short s_mount_state;
 };
 
-#endif
+#endif	/* _LINUX_EXT2_FS_SB */

@@ -243,13 +243,9 @@ xiafs_file_write(struct inode * inode, struct file * filp, char * buf, int count
 	bh->b_dirt = 1;
 	brelse(bh);
     }
-    inode->i_atime = inode->i_ctime = inode->i_mtime = CURRENT_TIME;
+    inode->i_mtime = inode->i_ctime = CURRENT_TIME;
     filp->f_pos = pos;
     inode->i_dirt = 1;
 
     return written;
 }
-
-
-
-

@@ -14,14 +14,12 @@
 #include <asm/system.h>
 
 #include <linux/errno.h>
-#include <linux/sched.h>
-#include <linux/tty.h>
-#include <linux/stat.h>
-#include <linux/fcntl.h>
-#include <linux/locks.h>
-
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
+#include <linux/fcntl.h>
+#include <linux/sched.h>
+#include <linux/stat.h>
+#include <linux/locks.h>
 
 
 #define blocksize (EXT2_BLOCK_SIZE(inode->i_sb))

@@ -174,7 +174,7 @@ void minix_free_inode(struct inode * inode)
 	}
 	clear_inode(inode);
 	if (!clear_bit(ino & 8191, bh->b_data))
-		printk("free_inode: bit %d already cleared.\n",ino);
+		printk("free_inode: bit %lu already cleared.\n",ino);
 	bh->b_dirt = 1;
 }
 

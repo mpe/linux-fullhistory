@@ -490,8 +490,8 @@ int xiafs_sync_inode (struct inode *inode)
     	wait_on_buffer(bh);
     	if (bh->b_req && !bh->b_uptodate)
     	{
-    	    printk ("IO error syncing xiafs inode [%04x:%08x]\n",
-    	    	inode->i_dev, inode->i_ino);
+    	    printk ("IO error syncing xiafs inode [%04X:%lu]\n",
+		    inode->i_dev, inode->i_ino);
     	    err = -1;
     	}
     }

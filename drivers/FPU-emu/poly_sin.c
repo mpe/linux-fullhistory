@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -18,7 +18,7 @@
 
 
 #define	HIPOWER	5
-static unsigned short	lterms[HIPOWER][4] =
+static unsigned short const	lterms[HIPOWER][4] =
 	{
 	{ 0x846a, 0x42d1, 0xb544, 0x921f},
 	{ 0xe110, 0x75aa, 0xbc67, 0x1466},
@@ -27,7 +27,7 @@ static unsigned short	lterms[HIPOWER][4] =
 	{ 0xda03, 0x06aa, 0x0000, 0x0000},
 	};
 
-static unsigned short	negterms[HIPOWER][4] =
+static unsigned short const	negterms[HIPOWER][4] =
 	{
 	{ 0x95ed, 0x2df2, 0xe731, 0xa55d},
 	{ 0xd159, 0xe62b, 0xd2cc, 0x0132},
@@ -40,7 +40,7 @@ static unsigned short	negterms[HIPOWER][4] =
 /*--- poly_sine() -----------------------------------------------------------+
  |                                                                           |
  +---------------------------------------------------------------------------*/
-void	poly_sine(FPU_REG *arg, FPU_REG *result)
+void	poly_sine(FPU_REG const *arg, FPU_REG *result)
 {
   short	exponent;
   FPU_REG	fixed_arg, arg_sqrd, arg_to_4, accum, negaccum;

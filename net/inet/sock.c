@@ -44,6 +44,8 @@
  *		Rick Sladkey	:	Relaxed UDP rules for matching packets.
  *		C.E.Hawkins	:	IFF_PROMISC/SIOCGHWADDR support
  *	Pauline Middelink	:	Pidentd support
+ *		Alan Cox	:	Fixed connect() taking signals I think.
+ *		Alan Cox	:	SO_LINGER supported
  *
  * To Fix:
  *
@@ -53,17 +55,26 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  */
+
 #include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/kernel.h>
+#include <linux/major.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/string.h>
 #include <linux/sockios.h>
 #include <linux/net.h>
+#include <linux/fcntl.h>
+#include <linux/mm.h>
+#include <linux/interrupt.h>
+
+#include <asm/segment.h>
+#include <asm/system.h>
+
 #include "inet.h"
 #include "dev.h"
 #include "ip.h"
@@ -74,11 +85,6 @@
 #include "udp.h"
 #include "skbuff.h"
 #include "sock.h"
-#include <asm/segment.h>
-#include <asm/system.h>
-#include <linux/fcntl.h>
-#include <linux/mm.h>
-#include <linux/interrupt.h>
 #include "raw.h"
 #include "icmp.h"
 
@@ -98,24 +104,24 @@ print_sk(struct sock *sk)
 	printk("  print_sk(NULL)\n");
 	return;
   }
-  printk("  wmem_alloc = %d\n", sk->wmem_alloc);
-  printk("  rmem_alloc = %d\n", sk->rmem_alloc);
+  printk("  wmem_alloc = %lu\n", sk->wmem_alloc);
+  printk("  rmem_alloc = %lu\n", sk->rmem_alloc);
   printk("  send_head = %p\n", sk->send_head);
   printk("  state = %d\n",sk->state);
   printk("  wback = %p, rqueue = %p\n", sk->wback, sk->rqueue);
   printk("  wfront = %p\n", sk->wfront);
-  printk("  daddr = %X, saddr = %X\n", sk->daddr,sk->saddr);
+  printk("  daddr = %lX, saddr = %lX\n", sk->daddr,sk->saddr);
   printk("  num = %d", sk->num);
   printk(" next = %p\n", sk->next);
-  printk("  send_seq = %d, acked_seq = %d, copied_seq = %d\n",
+  printk("  send_seq = %ld, acked_seq = %ld, copied_seq = %ld\n",
 	  sk->send_seq, sk->acked_seq, sk->copied_seq);
-  printk("  rcv_ack_seq = %d, window_seq = %d, fin_seq = %d\n",
+  printk("  rcv_ack_seq = %ld, window_seq = %ld, fin_seq = %ld\n",
 	  sk->rcv_ack_seq, sk->window_seq, sk->fin_seq);
   printk("  prot = %p\n", sk->prot);
   printk("  pair = %p, back_log = %p\n", sk->pair,sk->back_log);
   printk("  inuse = %d , blog = %d\n", sk->inuse, sk->blog);
   printk("  dead = %d delay_acks=%d\n", sk->dead, sk->delay_acks);
-  printk("  retransmits = %d, timeout = %d\n", sk->retransmits, sk->timeout);
+  printk("  retransmits = %ld, timeout = %d\n", sk->retransmits, sk->timeout);
   printk("  cong_window = %d, packets_out = %d\n", sk->cong_window,
 	  sk->packets_out);
   printk("  urg = %d shutdown=%d\n", sk->urg, sk->shutdown);
@@ -131,7 +137,7 @@ print_skb(struct sk_buff *skb)
   }
   printk("  prev = %p, next = %p\n", skb->prev, skb->next);
   printk("  sk = %p link3 = %p\n", skb->sk, skb->link3);
-  printk("  mem_addr = %p, mem_len = %d\n", skb->mem_addr, skb->mem_len);
+  printk("  mem_addr = %p, mem_len = %lu\n", skb->mem_addr, skb->mem_len);
   printk("  used = %d free = %d\n", skb->used,skb->free);
 }
 
@@ -471,6 +477,7 @@ inet_setsockopt(struct socket *sock, int level, int optname,
   struct sock *sk;
   int val;
   int err;
+  struct linger ling;
   
   /* This should really pass things on to the other levels. */
   if (level != SOL_SOCKET) return(-EOPNOTSUPP);
@@ -505,6 +512,19 @@ inet_setsockopt(struct socket *sock, int level, int optname,
 		if(val<256)
 			val=256;
 		sk->sndbuf=val;
+		return 0;
+	case SO_LINGER:
+		err=verify_area(VERIFY_READ,optval,sizeof(ling));
+		if(err)
+			return err;
+		memcpy_fromfs(&ling,optval,sizeof(ling));
+		if(ling.l_onoff==0)
+			sk->linger=0;
+		else
+		{
+			sk->lingertime=ling.l_linger;
+			sk->linger=1;
+		}
 		return 0;
 	case SO_RCVBUF:
 		if(val>32767)
@@ -555,7 +575,8 @@ inet_getsockopt(struct socket *sock, int level, int optname,
   struct sock *sk;
   int val;
   int err;
-
+  struct linger ling;
+  
   /* This should really pass things on to the other levels. */
   if (level != SOL_SOCKET) return(-EOPNOTSUPP);
 
@@ -566,8 +587,8 @@ inet_getsockopt(struct socket *sock, int level, int optname,
   }
 
   switch(optname) {
-	case SO_DEBUG:		/* not implemented. */
-		val = sk->debug;	/* No per socket debugging _YET_ */
+	case SO_DEBUG:		
+		val = sk->debug;
 		break;
 		
 	case SO_DONTROUTE:	/* One last option to implement */
@@ -577,6 +598,20 @@ inet_getsockopt(struct socket *sock, int level, int optname,
 	case SO_BROADCAST:
 		val= sk->broadcast;
 		break;
+		
+	case SO_LINGER:
+		
+		err=verify_area(VERIFY_WRITE,optval,sizeof(ling));
+		if(err)
+			return err;
+		err=verify_area(VERIFY_WRITE,optlen,sizeof(int));
+		if(err)
+			return err;
+		put_fs_long(sizeof(ling),(unsigned long *)optlen);
+		ling.l_onoff=sk->linger;
+		ling.l_linger=sk->lingertime;
+		memcpy_tofs(optval,&ling,sizeof(ling));
+		return 0;
 		
 	case SO_SNDBUF:
 		val=sk->sndbuf;
@@ -774,6 +809,7 @@ inet_create(struct socket *sock, int protocol)
   sk->ack_timed = 0;
   sk->send_tmp = NULL;
   sk->mss = 0; /* we will try not to send any packets smaller than this. */
+  sk->debug = 0;
 
   /* this is how many unacked bytes we will accept for this socket.  */
   sk->max_unacked = 2048; /* needs to be at most 2 full packets. */
@@ -870,13 +906,17 @@ inet_release(struct socket *sock, struct socket *peer)
 	DPRINTF((DBG_INET, "sk->linger set.\n"));
 	sk->prot->close(sk, 0);
 	cli();
-	while(sk->state != TCP_CLOSE) {
+	if (sk->lingertime)
+		current->timeout = jiffies + HZ*sk->lingertime;
+	while(sk->state != TCP_CLOSE && current->timeout>0) {
 		interruptible_sleep_on(sk->sleep);
 		if (current->signal & ~current->blocked) {
 			sti();
+			current->timeout=0;
 			return(-ERESTARTSYS);
 		}
 	}
+	current->timeout=0;
 	sti();
 	sk->dead = 1;
   }
@@ -990,7 +1030,15 @@ inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	return(0);
   }
 
-  if (sock->state == SS_CONNECTING && sk->protocol == IPPROTO_TCP)
+  if (sock->state == SS_CONNECTING && sk->state == TCP_ESTABLISHED)
+  {
+	sock->state = SS_CONNECTED;
+  /* Connection completing after a connect/EINPROGRESS/select/connect */
+	return 0;	/* Rock and roll */
+  }
+
+  if (sock->state == SS_CONNECTING && sk->protocol == IPPROTO_TCP &&
+  	(flags & O_NONBLOCK))
   	return -EALREADY;	/* Connecting is currently in progress */
   	
   if (sock->state != SS_CONNECTING) {
@@ -1027,7 +1075,6 @@ inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	   icmp error packets wanting to close a tcp or udp socket. */
 	if(sk->err && sk->protocol == IPPROTO_TCP)
 	{
-		sk->inuse=1;	/* keep the socket safe for us to use */
 		sti();
 		sock->state = SS_UNCONNECTED;
 		return -sk->err; /* set by tcp_err() */
@@ -1603,7 +1650,7 @@ void release_sock(struct sock *sk)
 	return;
   }
   if (!sk->prot) {
-	printk("sock.c: release_sock sk->prot == NULL\n");
+/*	printk("sock.c: release_sock sk->prot == NULL\n"); */
 	return;
   }
 
@@ -1726,7 +1773,7 @@ void inet_proto_init(struct ddi_proto *pro)
   struct inet_protocol *p;
   int i;
 
-  printk("Swansea University Computer Society Net2Debugged [1.22]\n");
+  printk("Swansea University Computer Society Net2Debugged [1.24]\n");
   /* Set up our UNIX VFS major device. */
   if (register_chrdev(AF_INET_MAJOR, "af_inet", &inet_fops) < 0) {
 	printk("%s: cannot register major device %d!\n",
@@ -1751,7 +1798,7 @@ void inet_proto_init(struct ddi_proto *pro)
 
 	tmp = (struct inet_protocol *) p->next;
 	inet_add_protocol(p);
-	printk("%s%s ",p->name,tmp?",":"\n");
+	printk("%s%s",p->name,tmp?", ":"\n");
 	p = tmp;
   }
 

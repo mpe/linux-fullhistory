@@ -1,7 +1,7 @@
 !
 ! SYS_SIZE is the number of clicks (16 bytes) to be loaded.
-! 0x3000 is 0x30000 bytes = 196kB, more than enough for current
-! versions of linux
+! 0x7F00 is 0x7F000 bytes = 508kB, more than enough for current
+! versions of linux which compress the kernel
 !
 #include <linux/config.h>
 SYSSIZE = DEF_SYSSIZE
@@ -19,10 +19,11 @@ SYSSIZE = DEF_SYSSIZE
 ! It then loads 'setup' directly after itself (0x90200), and the system
 ! at 0x10000, using BIOS interrupts. 
 !
-! NOTE! currently system is at most 8*65536 bytes long. This should be no
-! problem, even in the future. I want to keep it simple. This 512 kB
+! NOTE! currently system is at most (8*65536-4096) bytes long. This should 
+! be no problem, even in the future. I want to keep it simple. This 508 kB
 ! kernel size should be enough, especially as this doesn't contain the
-! buffer cache as in minix
+! buffer cache as in minix (and especially now that the kernel is 
+! compressed :-)
 !
 ! The loader has been made as simple as possible, and continuos
 ! read errors will result in a unbreakable loop. Reboot by hand. It

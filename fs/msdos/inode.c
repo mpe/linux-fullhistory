@@ -224,7 +224,7 @@ struct super_block *msdos_read_super(struct super_block *s,void *data,
 		    conversion,uid,gid,umask,MSDOS_CAN_BMAP(MSDOS_SB(s)) ?
 		    ",bmap" : "");
 		printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,"
-		    "se=%d,ts=%d,ls=%d]\n",b->media,MSDOS_SB(s)->cluster_size,
+		    "se=%d,ts=%ld,ls=%d]\n",b->media,MSDOS_SB(s)->cluster_size,
 		    MSDOS_SB(s)->fats,MSDOS_SB(s)->fat_start,MSDOS_SB(s)->
 		    fat_length,MSDOS_SB(s)->dir_start,MSDOS_SB(s)->dir_entries,
 		    MSDOS_SB(s)->data_start,CF_LE_W(*(unsigned short *) &b->
@@ -333,7 +333,7 @@ void msdos_read_inode(struct inode *inode)
 	}
 	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS,
 	    BLOCK_SIZE))) {
-		printk("dev = 0x%04X, ino = %d\n",inode->i_dev,inode->i_ino);
+		printk("dev = 0x%04X, ino = %ld\n",inode->i_dev,inode->i_ino);
 		panic("msdos_read_inode: unable to read i-node block");
 	}
 	raw_entry = &((struct msdos_dir_entry *) (bh->b_data))
@@ -356,9 +356,11 @@ void msdos_read_inode(struct inode *inode)
 			while (nr != -1) {
 				inode->i_size += SECTOR_SIZE*MSDOS_SB(inode->
 				    i_sb)->cluster_size;
-				if (!(nr = fat_access(inode->i_sb,nr,-1)))
-					printk("Directory %d: bad FAT\n",
+				if (!(nr = fat_access(inode->i_sb,nr,-1))) {
+					printk("Directory %ld: bad FAT\n",
 					    inode->i_ino);
+					break;
+				}
 			}
 	}
 	else {
@@ -394,7 +396,7 @@ void msdos_write_inode(struct inode *inode)
 	if (inode->i_ino == MSDOS_ROOT_INO || !inode->i_nlink) return;
 	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS,
 	    BLOCK_SIZE))) {
-		printk("dev = 0x%04X, ino = %d\n",inode->i_dev,inode->i_ino);
+		printk("dev = 0x%04X, ino = %ld\n",inode->i_dev,inode->i_ino);
 		panic("msdos_write_inode: unable to read i-node block");
 	}
 	raw_entry = &((struct msdos_dir_entry *) (bh->b_data))

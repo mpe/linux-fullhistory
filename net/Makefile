@@ -10,8 +10,9 @@
 # only these two lines should need to be changed to remove inet sockets.
 # (and the inet/tcpip.o in net.o)
 
-DRIVERS     =
 SUBDIRS     := unix inet
+
+SUBOBJS     := $(foreach f,$(SUBDIRS),$f/$f.o)
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<
@@ -22,23 +23,22 @@ SUBDIRS     := unix inet
 
 OBJS	=  Space.o ddi.o socket.o
 
-all:		net.o
+all:		subdirs net.o
 
-net.o:		$(OBJS) subdirs
+net.o:		$(OBJS) network.a
 		$(LD) -r -o net.o $(OBJS) network.a
 
-subdirs:	dummy
-		@rm -f network.a
-		@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE) && ar rcs ../network.a $$i.o) || exit; done
-		@ranlib network.a
+network.a:	$(SUBOBJS)
+		rm -f $@
+		ar rc $@ $(SUBOBJS)
+		ranlib $@
 
-clean:
-		rm -f core *.o *.a *.s
-		@for i in $(DRIVERS) $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE) clean) || exit; done
+subdirs:	dummy
+		set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
 
 dep:
 		$(CPP) -M *.c > .depend
-		@for i in $(DRIVERS) $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE) dep) || exit; done
+		set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
 
 dummy:
 

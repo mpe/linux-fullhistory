@@ -128,10 +128,6 @@ dep:
 endif
 
 
-clean:
-	rm -f core *.o *.a *.s
-
-
 #
 # include a dependency file if one exists
 #

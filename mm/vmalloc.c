@@ -14,6 +14,7 @@
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/malloc.h>
+#include <asm/segment.h>
 
 struct vm_struct {
 	unsigned long flags;
@@ -109,6 +110,7 @@ static int do_area(void * addr, unsigned long size,
 			return -1;
 		nr -= i;
 		index = 0;
+		dindex++;
 	}
 	return 0;
 }
@@ -161,4 +163,30 @@ void * vmalloc(unsigned long size)
 		return NULL;
 	}
 	return addr;
+}
+
+int vread(char *buf, char *addr, int count)
+{
+	struct vm_struct **p, *tmp;
+	char *vaddr, *buf_start = buf;
+	int n;
+
+	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
+		vaddr = (char *) tmp->addr;
+		while (addr < vaddr) {
+			if (count == 0)
+				goto finished;
+			put_fs_byte('\0', buf++), addr++, count--;
+		}
+		n = tmp->size - PAGE_SIZE;
+		if (addr > vaddr)
+			n -= addr - vaddr;
+		while (--n >= 0) {
+			if (count == 0)
+				goto finished;
+			put_fs_byte(*addr++, buf++), count--;
+		}
+	}
+finished:
+	return buf - buf_start;
 }

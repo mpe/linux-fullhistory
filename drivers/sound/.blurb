@@ -1,0 +1,8 @@
+NOTE!	This driver version is not compatible with the version 1.0c.
+	This means you have to use the latest version of the snd-util
+	package. The earlier ones (from 1.0) will not work. If you have
+	other programs using ioctl calls of the driver, they must be
+	recompiled. Most of them will not work without some source
+	modifications.
+
+		Hannu

@@ -326,27 +326,10 @@ int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 	regs->eip = elf_entry;		/* eip, magic happens :-) */
 	regs->esp = bprm->p;			/* stack pointer */
-	{
-		struct vm_area_struct *mpnt;
-
-		mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
-		
-		mpnt->vm_task = current;
-		mpnt->vm_start = bprm->p & PAGE_MASK;
-		mpnt->vm_end = TASK_SIZE;
-		mpnt->vm_page_prot = PAGE_PRIVATE|PAGE_DIRTY;
-		mpnt->vm_share = NULL;
-		mpnt->vm_inode = NULL;
-		mpnt->vm_offset = 0;
-		mpnt->vm_ops = NULL;
-		insert_vm_struct(current, mpnt);
-		current->stk_vma = mpnt;
-	}
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 	return 0;
 }
-
 
 /* This is really simpleminded and specialized - we are loading an a.out library that is given
    an ELF header */

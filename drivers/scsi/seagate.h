@@ -18,7 +18,7 @@ int seagate_st0x_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 
 int seagate_st0x_abort(Scsi_Cmnd *, int);
 const char *seagate_st0x_info(void);
-int seagate_st0x_reset(void); 
+int seagate_st0x_reset(Scsi_Cmnd *); 
 
 #ifndef NULL
 	#define NULL 0

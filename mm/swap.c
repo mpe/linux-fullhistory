@@ -138,7 +138,7 @@ unsigned long swap_duplicate(unsigned long entry)
 	}
 	p = type + swap_info;
 	if (offset >= p->max) {
-		printk("swap_free: weirness\n");
+		printk("swap_free: weirdness\n");
 		return 0;
 	}
 	if (!p->swap_map[offset]) {
@@ -166,7 +166,7 @@ void swap_free(unsigned long entry)
 	p = & swap_info[type];
 	offset = SWP_OFFSET(entry);
 	if (offset >= p->max) {
-		printk("swap_free: weirness\n");
+		printk("swap_free: weirdness\n");
 		return;
 	}
 	if (!(p->flags & SWP_USED)) {
@@ -180,7 +180,7 @@ void swap_free(unsigned long entry)
 	if (offset > p->highest_bit)
 		p->highest_bit = offset;
 	if (!p->swap_map[offset])
-		printk("swap_free: swap-space map bad (entry %08x)\n",entry);
+		printk("swap_free: swap-space map bad (entry %08lx)\n",entry);
 	else
 		if (!--p->swap_map[offset])
 			nr_swap_pages++;
@@ -356,7 +356,7 @@ static int swap_out(unsigned int priority)
 	    if(mem_map[MAP_NR(pg_table)] & MAP_PAGE_RESERVED)
 		    continue;
 	    if(!(PAGE_PRESENT & pg_table)) {
-		    printk("swap_out: bad page-table at pg_dir[%d]: %08x\n",
+		    printk("swap_out: bad page-table at pg_dir[%d]: %08lx\n",
 			    table, pg_table);
 		    ((unsigned long *) p->tss.cr3)[table] = 0;
 		    continue;
@@ -529,8 +529,8 @@ void free_page(unsigned long addr)
 			}
 			return;
 		}
-		printk("Trying to free free memory (%08x): memory probabably corrupted\n",addr);
-		printk("PC = %08x\n",*(((unsigned long *)&addr)-1));
+		printk("Trying to free free memory (%08lx): memory probabably corrupted\n",addr);
+		printk("PC = %08lx\n",*(((unsigned long *)&addr)-1));
 		return;
 	}
 }
@@ -557,10 +557,10 @@ last_free_pages[index = (index + 1) & (NR_LAST_FREE_PAGES - 1)] = result; \
 				restore_flags(flag); \
 				return result; \
 			} \
-			printk("Free page %08x has mem_map = %d\n", \
+			printk("Free page %08lx has mem_map = %d\n", \
 				result,mem_map[MAP_NR(result)]); \
 		} else \
-			printk("Result = 0x%08x - memory map destroyed\n", result); \
+			printk("Result = 0x%08lx - memory map destroyed\n", result); \
 		queue = 0; \
 		nr = 0; \
 	} else if (nr) { \
@@ -792,7 +792,7 @@ asmlinkage int sys_swapon(const char * specialfile)
 		error = -EINVAL;
 		goto bad_swap;
 	}
-	p->swap_map = vmalloc(p->max);
+	p->swap_map = (unsigned char *) vmalloc(p->max);
 	if (!p->swap_map) {
 		error = -ENOMEM;
 		goto bad_swap;

@@ -44,8 +44,9 @@
 #include <asm/io.h>
 #include <asm/segment.h>
 
-#define MAJOR_NR 23
+#define MAJOR_NR MITSUMI_CDROM_MAJOR
 #include "blk.h"
+
 #include <linux/mcd.h>
 
 #if 0

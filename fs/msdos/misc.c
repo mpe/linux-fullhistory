@@ -33,7 +33,7 @@ void fs_panic(struct super_block *s,char *msg)
 
 	not_ro = !(s->s_flags & MS_RDONLY);
 	if (not_ro) s->s_flags |= MS_RDONLY;
-	printk("Filesystem panic (dev 0x%04X, mounted on 0x%04X:%d)\n  %s\n",
+	printk("Filesystem panic (dev 0x%04X, mounted on 0x%04X:%ld)\n  %s\n",
 	    s->s_dev,s->s_covered->i_dev,s->s_covered->i_ino,msg);
 	if (not_ro)
 		printk("  File system has been set read-only\n");

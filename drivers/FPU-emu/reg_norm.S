@@ -3,7 +3,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Normalize the value in a FPU_REG.                                         |
  |                                                                           |
@@ -39,7 +39,6 @@ _normalize:
 	orl	%eax,%eax
 	jz	L_zero		/* The contents are zero */
 
-/* L_shift_32: */
 	movl	%eax,%edx
 	xorl	%eax,%eax
 	subl	$32,EXP(%ebx)	/* This can cause an underflow */
@@ -109,7 +108,6 @@ _normalize_nuo:
 	orl	%eax,%eax
 	jz	L_zero		/* The contents are zero */
 
-/* L_nuo_shift_32: */
 	movl	%eax,%edx
 	xorl	%eax,%eax
 	subl	$32,EXP(%ebx)	/* This can cause an underflow */

@@ -6,11 +6,11 @@
  |                                                                           |
  | Copyright (C) 1993                                                        |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | This code has four possible entry points.                                 |
  | The following must be entered by a jmp intruction:                        |
- |   FPU_round, FPU_round_sqrt, and FPU_Arith_exit.                          |
+ |   fpu_reg_round, fpu_reg_round_sqrt, and fpu_Arith_exit.                  |
  |                                                                           |
  | The _round_reg entry point is intended to be used by C code.              |
  | From C, call as:                                                          |
@@ -24,14 +24,14 @@
 /*---------------------------------------------------------------------------+
  | Four entry points.                                                        |
  |                                                                           |
- | Needed by both the FPU_round and FPU_round_sqrt entry points:             |
+ | Needed by both the fpu_reg_round and fpu_reg_round_sqrt entry points:     |
  |  %eax:%ebx  64 bit significand                                            |
  |  %edx       32 bit extension of the significand                           |
  |  %edi       pointer to an FPU_REG for the result to be stored             |
  |  stack      calling function must have set up a C stack frame and         |
  |             pushed %esi, %edi, and %ebx                                   |
  |                                                                           |
- | Needed just for the FPU_round_sqrt entry point:                           |
+ | Needed just for the fpu_reg_round_sqrt entry point:                       |
  |  %cx  A control word in the same format as the FPU control word.          |
  | Otherwise, PARAM4 must give such a value.                                 |
  |                                                                           |
@@ -81,18 +81,30 @@
 #define	DENORMAL	$1
 #define	UNMASKED_UNDERFLOW $2
 
+
+#ifdef REENTRANT_FPU
+/*	Make the code re-entrant by putting
+	local storage on the stack: */
+#define FPU_bits_lost	(%esp)
+#define FPU_denormal	1(%esp)
+
+#else
+/*	Not re-entrant, so we can gain speed by putting
+	local storage in a static area: */
 .data
 	.align 2,0
 FPU_bits_lost:
 	.byte	0
 FPU_denormal:
 	.byte	0
+#endif REENTRANT_FPU
+
 
 .text
 	.align 2,144
-.globl FPU_round
-.globl FPU_round_sqrt
-.globl FPU_Arith_exit
+.globl fpu_reg_round
+.globl fpu_reg_round_sqrt
+.globl fpu_Arith_exit
 .globl _round_reg
 
 /* Entry point when called from C */
@@ -108,19 +120,21 @@ _round_reg:
 	movl	SIGL(%edi),%ebx
 	movl	PARAM2,%edx
 	movl	PARAM3,%ecx
-	jmp	FPU_round_sqrt
+	jmp	fpu_reg_round_sqrt
 
-FPU_round:		/* Normal entry point */
+fpu_reg_round:			/* Normal entry point */
 	movl	PARAM4,%ecx
 
-FPU_round_sqrt:		/* Entry point from wm_sqrt.S */
+fpu_reg_round_sqrt:		/* Entry point from wm_sqrt.S */
+
+#ifdef REENTRANT_FPU
+	pushl	%ebx		/* adjust the stack pointer */
+#endif REENTRANT_FPU
 
 #ifdef PARANOID
-/*
- * Cannot use this here yet
- *	orl	%eax,%eax
- *	jns	L_entry_bugged
- */
+/* Cannot use this here yet */
+/*	orl	%eax,%eax */
+/*	jns	L_entry_bugged */
 #endif PARANOID
 
 	cmpl	EXP_UNDER,EXP(%edi)
@@ -218,7 +232,7 @@ LCheck_truncate_24:
 	andl	$0x000000ff,%ecx
 	orl	%ebx,%ecx
 	orl	%edx,%ecx
-	jz	LRe_normalise			/* No truncation needed */
+	jz	LRe_normalise		/* No truncation needed */
 
 LDo_truncate_24:
 	andl	$0xffffff00,%eax	/* Truncate to 24 bits */
@@ -392,7 +406,12 @@ xL_Store_significand:
 	cmpl	EXP_OVER,EXP(%edi)
 	jge	L_overflow
 
-FPU_Arith_exit:
+fpu_reg_round_exit:
+#ifdef REENTRANT_FPU
+	popl	%ebx		/* adjust the stack pointer */
+#endif REENTRANT_FPU
+
+fpu_Arith_exit:
 	popl	%ebx
 	popl	%edi
 	popl	%esi
@@ -427,8 +446,8 @@ xL_precision_lost_down:
  * have to be undone later...
  */
 xMake_denorm:
-	/* The action to be taken depends upon whether the underflow */
-	/* exception is masked */
+	/* The action to be taken depends upon whether the underflow
+	   exception is masked */
 	testb	CW_Underflow,%cl		/* Underflow mask. */
 	jz	xUnmasked_underflow		/* Do not make a denormal. */
 
@@ -601,7 +620,7 @@ L_overflow:
 	push	%edi
 	call	_arith_overflow
 	pop	%edi
-	jmp	FPU_Arith_exit
+	jmp	fpu_reg_round_exit
 
 
 xSignal_underflow:
@@ -643,5 +662,5 @@ L_entry_bugged:
 	popl	%ebx
 L_exception_exit:
 	mov	$1,%eax
-	jmp	FPU_Arith_exit
+	jmp	fpu_reg_round_exit
 #endif PARANOID

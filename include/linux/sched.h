@@ -83,8 +83,6 @@ extern unsigned long avenrun[];		/* Load averages */
 extern void sched_init(void);
 extern void show_state(void);
 extern void trap_init(void);
-extern volatile void panic(const char * fmt, ...)
-	__attribute__ ((format (printf, 1, 2)));
 
 asmlinkage void schedule(void);
 
@@ -172,7 +170,7 @@ struct task_struct {
 	int swappable:1;
 	unsigned long start_code,end_code,end_data,start_brk,brk,start_stack,start_mmap;
 	unsigned long arg_start, arg_end, env_start, env_end;
-	long pid,pgrp,session,leader;
+	int pid,pgrp,session,leader;
 	int	groups[NGROUPS];
 	/* 
 	 * pointers to (original) parent process, youngest child, younger sibling,
@@ -183,7 +181,7 @@ struct task_struct {
 	struct wait_queue *wait_chldexit;	/* for wait4() */
 	/*
 	 * For ease of programming... Normal sleeps don't need to
-	 * keep track of a wait-queue: every task has an entry of it's own
+	 * keep track of a wait-queue: every task has an entry of its own
 	 */
 	unsigned short uid,euid,suid;
 	unsigned short gid,egid,sgid;
@@ -249,7 +247,7 @@ struct task_struct {
 /* debugregs */ { 0, },            \
 /* schedlink */	&init_task,&init_task, \
 /* signals */	{{ 0, },}, \
-/* stack */	0,0, \
+/* stack */	0,(unsigned long) &init_kernel_stack, \
 /* ec,brk... */	0,0,0,0,0,0,0,0,0,0,0,0, \
 /* argv.. */	0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \

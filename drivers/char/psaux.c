@@ -14,6 +14,11 @@
  *
  * Modified by Johan Myreen (jem@cs.hut.fi) 04Aug93
  *   to include support for QuickPort mouse.
+ *
+ * Changed references to "QuickPort" with "82C710" since "QuickPort"
+ * is not what this driver is all about -- QuickPort is just a
+ * connector type, and this driver is for the mouse port on the Chips
+ * & Technologies 82C710 interface chip. 15Nov93 jem@cs.hut.fi
  */
 
 /* Uncomment the following line if your mouse needs initialization. */
@@ -67,7 +72,7 @@
 #define AUX_IRQ		12
 #define AUX_BUF_SIZE	2048
 
-/* QuickPort definitions */
+/* 82C710 definitions */
 
 #define QP_DATA         0x310		/* Data Port I/O Address */
 #define QP_STATUS       0x311		/* Status Port I/O Address */
@@ -99,7 +104,7 @@ static int aux_busy = 0;
 static int aux_present = 0;
 static int poll_aux_status(void);
 
-#ifdef CONFIG_QUICKPORT_MOUSE
+#ifdef CONFIG_82C710_MOUSE
 static int qp_present = 0;
 static int qp_busy = 0;
 static int qp_data = QP_DATA;
@@ -203,11 +208,11 @@ static void aux_interrupt(int cpl)
 }
 
 /*
- * Interrupt handler for the QuickPort. A character
+ * Interrupt handler for the 82C710 mouse port. A character
  * is waiting in the 82C710.
  */
 
-#ifdef CONFIG_QUICKPORT_MOUSE
+#ifdef CONFIG_82C710_MOUSE
 static void qp_interrupt(int cpl)
 {
 	int head = queue->head;
@@ -236,17 +241,17 @@ static void release_aux(struct inode * inode, struct file * file)
 	aux_busy = 0;
 }
 
-#ifdef CONFIG_QUICKPORT_MOUSE
+#ifdef CONFIG_82C710_MOUSE
 static void release_qp(struct inode * inode, struct file * file)
 {
 	unsigned char status;
 
 	if (!poll_qp_status())
-	        printk("Warning: QuickPort device busy in release_qp()\n");
+	        printk("Warning: Mouse device busy in release_qp()\n");
 	status = inb_p(qp_status);
 	outb_p(status & ~(QP_ENABLE|QP_INTS_ON), qp_status);
 	if (!poll_qp_status())
-	        printk("Warning: QuickPort device busy in release_qp()\n");
+	        printk("Warning: Mouse device busy in release_qp()\n");
 	free_irq(QP_IRQ);
 	qp_busy = 0;
 }
@@ -280,7 +285,7 @@ static int open_aux(struct inode * inode, struct file * file)
 	return 0;
 }
 
-#ifdef CONFIG_QUICKPORT_MOUSE
+#ifdef CONFIG_82C710_MOUSE
 /*
  * Install interrupt handler.
  * Enable the device, enable interrupts. Set qp_busy
@@ -313,7 +318,7 @@ static int open_qp(struct inode * inode, struct file * file)
 	outb_p(status, qp_status);              /* Enable interrupts */
 
 	while (!poll_qp_status()) {
-	        printk("Error: QuickPort device busy in open_qp()\n");
+	        printk("Error: Mouse device busy in open_qp()\n");
 		return -EBUSY;
         }
 
@@ -344,9 +349,9 @@ static int write_aux(struct inode * inode, struct file * file, char * buffer, in
 }
 
 
-#ifdef CONFIG_QUICKPORT_MOUSE
+#ifdef CONFIG_82C710_MOUSE
 /*
- * Write to the QuickPort device.
+ * Write to the 82C710 mouse device.
  */
 
 static int write_qp(struct inode * inode, struct file * file, char * buffer, int count)
@@ -428,19 +433,19 @@ struct file_operations psaux_fops = {
 
 
 /*
- * Initialize driver. First check for QuickPort device; if found
- * forget about the Aux port and use the QuickPort functions.
+ * Initialize driver. First check for a 82C710 chip; if found
+ * forget about the Aux port and use the *_qp functions.
  */
 
 unsigned long psaux_init(unsigned long kmem_start)
 {
         int qp_found = 0;
 
-#ifdef CONFIG_QUICKPORT_MOUSE
-	printk("Probing QuickPort device.\n");
-        if (qp_found = probe_qp()) {
-	        printk("QuickPort pointing device detected -- driver installed.\n");
-/*		printk("QuickPort address = %x (should be 0x310)\n", qp_data); */
+#ifdef CONFIG_82C710_MOUSE
+	printk("Probing 82C710 mouse port device.\n");
+        if ((qp_found = probe_qp())) {
+	        printk("82C710 type pointing device detected -- driver installed.\n");
+/*		printk("82C710 address = %x (should be 0x310)\n", qp_data); */
 		qp_present = 1;
 		psaux_fops.write = write_qp;
 		psaux_fops.open = open_qp;
@@ -492,7 +497,7 @@ static int poll_aux_status(void)
 	return !(retries==MAX_RETRIES);
 }
 
-#ifdef CONFIG_QUICKPORT_MOUSE
+#ifdef CONFIG_82C710_MOUSE
 /*
  * Wait for device to send output char and flush any input char.
  */
@@ -526,7 +531,7 @@ static inline unsigned char read_710(unsigned char index)
 }
 
 /*
- * See if we can find a QuickPort device. Read mouse address.
+ * See if we can find a 82C710 device. Read mouse address.
  */
 
 static int probe_qp(void)

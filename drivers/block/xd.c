@@ -23,7 +23,7 @@
 #include <asm/segment.h>
 #include <asm/dma.h>
 
-#define MAJOR_NR 13
+#define MAJOR_NR XT_DISK_MAJOR
 #include "blk.h"
 
 XD_INFO xd_info[XD_MAXDRIVES];

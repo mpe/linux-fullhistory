@@ -173,6 +173,7 @@ static int makecode(unsigned hosterr, unsigned scsierr)
 
 static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
 {
+    int i;
     volatile int debug = 0;
     
     /* Quick and dirty test for presence of the card. */
@@ -183,6 +184,9 @@ static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
     /*  DEB(printk("aha1542_test_port called \n")); */
     
     outb(SRST|IRST/*|SCRST*/, CONTROL(bse));
+
+    i = jiffies + 2;
+    while (i>jiffies); /* Wait a little bit for things to settle down. */
     
     debug = 1;
     /* Expect INIT and IDLE, any of the others are bad */
@@ -294,7 +298,10 @@ static void aha1542_intr_handle(int foo)
 	sti();
 	/* Hmm, no mail.  Must have read it the last time around */
 	if (number_serviced) return;
-	printk("aha1542.c: interrupt received, but no mail.\n");
+	/* Virtually all of the time, this turns out to be the problem */
+	printk("aha1542.c: Unsupported BIOS options enabled."
+		"  Please turn off.\n");
+/*	printk("aha1542.c: interrupt received, but no mail.\n"); */
 	return;
       };
 
@@ -486,7 +493,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	   (((int)sgpnt[i].address) & 1) || (sgpnt[i].length & 1)){
 	  unsigned char * ptr;
 	  printk("Bad segment list supplied to aha1542.c (%d, %d)\n",SCpnt->use_sg,i);
-	  for(i=0;i<SCpnt->use_sg++;i++){
+	  for(i=0;i<SCpnt->use_sg;i++){
 	    printk("%d: %x %x %d\n",i,(unsigned int) sgpnt[i].address, (unsigned int) sgpnt[i].alt_address,
 		   sgpnt[i].length);
 	  };
@@ -735,7 +742,7 @@ int aha1542_detect(int hostnum)
 		    DEB(aha1542_stat());
 		    
 		    DEB(printk("aha1542_detect: enable interrupt channel %d\n", irq_level));
-		    
+		    cli();
 		    if (request_irq(irq_level,aha1542_intr_handle)) {
 			    printk("Unable to allocate IRQ for adaptec controller.\n");
 			    goto unregister;
@@ -753,7 +760,6 @@ int aha1542_detect(int hostnum)
 				    outb(dma_chan - 4, DMA_MASK_REG);
 			    }
 		    }
-		    
 		    aha_host[irq_level - 9] = shpnt;
 		    shpnt->io_port = base_io;
 		    shpnt->dma_channel = dma_chan;
@@ -761,6 +767,7 @@ int aha1542_detect(int hostnum)
 		    HOSTDATA(shpnt)->aha1542_last_mbi_used  = (2*AHA1542_MAILBOXES - 1);
 		    HOSTDATA(shpnt)->aha1542_last_mbo_used  = (AHA1542_MAILBOXES - 1);
 		    memset(HOSTDATA(shpnt)->SCint, 0, sizeof(HOSTDATA(shpnt)->SCint));
+		    sti();
 #if 0
 		    DEB(printk(" *** READ CAPACITY ***\n"));
 		    
@@ -829,9 +836,14 @@ int aha1542_abort(Scsi_Cmnd * SCpnt, int i)
     return 0;
 }
 
-int aha1542_reset(void)
+/* We do not implement a reset function here, but the upper level code assumes
+   that it will get some kind of response for the command in SCpnt.  We must
+   oblige, or the command will hang the scsi system */
+
+int aha1542_reset(Scsi_Cmnd * SCpnt)
 {
     DEB(printk("aha1542_reset called\n"));
+    if(SCpnt) SCpnt->flags |= NEEDS_JUMPSTART;
     return 0;
 }
 

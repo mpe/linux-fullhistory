@@ -84,7 +84,7 @@ asmlinkage int sys_truncate(const char * path, unsigned int length)
 	inode->i_size = length;
 	if (inode->i_op && inode->i_op->truncate)
 		inode->i_op->truncate(inode);
-	inode->i_atime = inode->i_mtime = CURRENT_TIME;
+	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	inode->i_dirt = 1;
 	error = notify_change(NOTIFY_SIZE, inode);
 	iput(inode);
@@ -105,7 +105,7 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned int length)
 	inode->i_size = length;
 	if (inode->i_op && inode->i_op->truncate)
 		inode->i_op->truncate(inode);
-	inode->i_atime = inode->i_mtime = CURRENT_TIME;
+	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	inode->i_dirt = 1;
 	return notify_change(NOTIFY_SIZE, inode);
 }

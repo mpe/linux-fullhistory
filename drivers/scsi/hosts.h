@@ -21,6 +21,14 @@
 */
 
 
+/* A jumpstart is often required when the reset() function is called -
+   many host adapters cannot do this cleanly, so they do nothing at all.
+   To get the command going again, these routines set this bit in the flags
+   so that a scsi_request_sense() is executed, and the command starts running
+   again */
+
+#define NEEDS_JUMPSTART 0x20
+
 #define SG_NONE 0
 #define SG_ALL 0xff
 
@@ -114,9 +122,15 @@ typedef struct
 	/*
 		The reset function will reset the SCSI bus.  Any executing 
 		commands should fail with a DID_RESET in the host byte.
+		The Scsi_Cmnd  is passed so that the reset routine can figure
+		out which host adapter should be reset, and also which command
+		within the command block was responsible for the reset in
+		the first place.  Some hosts do not implement a reset function,
+		and these hosts must call scsi_request_sense(SCpnt) to keep
+		the command alive.
 	*/ 
 
-	int (* reset)(void);
+	int (* reset)(Scsi_Cmnd *);
 	/*
 		This function is used to select synchronous communications,
 		which will result in a higher data throughput.  Not implemented

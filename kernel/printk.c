@@ -27,15 +27,17 @@ static char buf[1024];
 extern int vsprintf(char * buf, const char * fmt, va_list args);
 extern void console_print(const char *);
 
-#define DEFAULT_LOGLEVEL 7 /* anything more serious than KERN_DEBUG */
+#define DEFAULT_MESSAGE_LOGLEVEL 7 /* KERN_DEBUG */
+#define DEFAULT_CONSOLE_LOGLEVEL 7 /* anything more serious than KERN_DEBUG */
+
+unsigned long log_size = 0;
+struct wait_queue * log_wait = NULL;
+int console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;
 
 static void (*console_print_proc)(const char *) = 0;
 static char log_buf[LOG_BUF_LEN];
 static unsigned long log_start = 0;
 static unsigned long logged_chars = 0;
-static int console_loglevel = DEFAULT_LOGLEVEL;
-unsigned long log_size = 0;
-struct wait_queue * log_wait = NULL;
 
 /*
  * Commands to sys_syslog:
@@ -55,6 +57,7 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 	unsigned long i, j, count;
 	int do_clear = 0;
 	char c;
+	int error;
 
 	if ((type != 3) && !suser())
 		return -EPERM;
@@ -68,38 +71,40 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 				return -EINVAL;
 			if (!len)
 				return 0;
-			verify_area(VERIFY_WRITE,buf,len);
+			error = verify_area(VERIFY_WRITE,buf,len);
+			if (error)
+				return error;
+			cli();
 			while (!log_size) {
-				if (current->signal & ~current->blocked)
+				if (current->signal & ~current->blocked) {
+					sti();
 					return -ERESTARTSYS;
-				cli();
-				if (!log_size)
+				}
 					interruptible_sleep_on(&log_wait);
-				sti();
 			}
 			i = 0;
-			cli();
 			while (log_size && i < len) {
-				cli();
 				c = *((char *) log_buf+log_start);
 				log_start++;
 				log_size--;
 				log_start &= LOG_BUF_LEN-1;
-				sti();
 				put_fs_byte(c,buf);
 				buf++;
 				i++;
 			}
 			sti();
 			return i;
-		case 4:		/* Read/clear last 4k of kernel messages */
+		case 4:		/* Read/clear last kernel messages */
 			do_clear = 1; 
-		case 3:		/* Read last 4k of kernel messages */
+			/* FALL THRU */
+		case 3:		/* Read last kernel messages */
 			if (!buf || len < 0)
 				return -EINVAL;
 			if (!len)
 				return 0;
-			verify_area(VERIFY_WRITE,buf,len);
+			error = verify_area(VERIFY_WRITE,buf,len);
+			if (error)
+				return error;
 			count = len;
 			if (count > LOG_BUF_LEN)
 				count = LOG_BUF_LEN;
@@ -120,7 +125,7 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 			console_loglevel = 1; /* only panic messages shown */
 			return 0;
 		case 7:		/* Enable logging to console */
-			console_loglevel = DEFAULT_LOGLEVEL;
+			console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;
 			return 0;
 		case 8:
 			if (len < 0 || len > 8)
@@ -138,7 +143,10 @@ asmlinkage int printk(const char *fmt, ...)
 	int i;
 	char *msg, *p, *buf_end;
 	static char msg_level = -1;
+	long flags;
 
+	save_flags(flags);
+	cli();
 	va_start(args, fmt);
 	i = vsprintf(buf + 3, fmt, args); /* hopefully i < sizeof(buf)-4 */
 	buf_end = buf + 3 + i;
@@ -154,7 +162,7 @@ asmlinkage int printk(const char *fmt, ...)
 			) {
 				p -= 3;
 				p[0] = '<';
-				p[1] = DEFAULT_LOGLEVEL - 1 + '0';
+				p[1] = DEFAULT_MESSAGE_LOGLEVEL - 1 + '0';
 				p[2] = '>';
 			} else
 				msg += 3;
@@ -179,6 +187,7 @@ asmlinkage int printk(const char *fmt, ...)
 		if (*p == '\n')
 			msg_level = -1;
 	}
+	restore_flags(flags);
 	wake_up_interruptible(&log_wait);
 	return i;
 }

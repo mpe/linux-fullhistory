@@ -52,9 +52,6 @@
 #include <linux/ddi.h>
 
 
-#define AF_INET_MAJOR	18		/* UNIX VFS major number	*/
-
-
 #define NET16(x)	((((x) >> 8) & 0x00FF) | (((x) << 8) & 0xFF00))
 
 

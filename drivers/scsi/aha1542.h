@@ -130,11 +130,12 @@ int aha1542_command(Scsi_Cmnd *);
 int aha1542_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha1542_abort(Scsi_Cmnd *, int);
 const char *aha1542_info(void);
-int aha1542_reset(void);
+int aha1542_reset(Scsi_Cmnd *);
 int aha1542_biosparam(int, int, int*);
 
 #define AHA1542_MAILBOXES 8
 #define AHA1542_SCATTER 16
+#define AHA1542_CMDLUN 1
 
 #ifndef NULL
 	#define NULL 0
@@ -147,6 +148,7 @@ int aha1542_biosparam(int, int, int*);
 		aha1542_reset,				\
 	        NULL,		                        \
 		aha1542_biosparam,                      \
-		AHA1542_MAILBOXES, 7, AHA1542_SCATTER, 1, 0, 1}
+		AHA1542_MAILBOXES, 7, AHA1542_SCATTER, AHA1542_CMDLUN \
+		  , 0, 1}
 
 #endif

@@ -242,7 +242,9 @@ void xiafs_free_zone(struct super_block * sb, int d_addr)
 	return;
     offset = bit & (XIAFS_BITS_PER_Z(sb) -1);
     if (clear_bit(offset, bh->b_data))
-        printk("XIA-FS: bit %d (0x%x) already cleared (%s %d)\n", bit, bit, WHERE_ERR);
+        printk("XIA-FS: dev %04x"
+	       " block bit %u (0x%x) already cleared (%s %d)\n",
+	       sb->s_dev, bit, bit, WHERE_ERR);
     bh->b_dirt = 1;
     xiafs_unlock_super(sb, sb->u.xiafs_sb.s_zmap_cached);
 }
@@ -300,8 +302,9 @@ void xiafs_free_inode(struct inode * inode)
 	return;
     clear_inode(inode);
     if (clear_bit(ino & (XIAFS_BITS_PER_Z(sb)-1), bh->b_data))
-        printk("XIA-FS: bit %d (0x%x) already cleared (%s %d)\n",
-		ino, ino, WHERE_ERR);
+        printk("XIA-FS: dev %04x"
+	       "inode bit %ld (0x%lx) already cleared (%s %d)\n",
+	       inode->i_dev, ino, ino, WHERE_ERR);
     bh->b_dirt = 1;
     xiafs_unlock_super(sb, sb->u.xiafs_sb.s_imap_cached);
 }

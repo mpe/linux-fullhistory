@@ -7,6 +7,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/major.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/ext_fs.h>
@@ -15,21 +16,41 @@
 #include <linux/fcntl.h>
 #include <linux/errno.h>
 
-struct file_operations * chrdev_fops[MAX_CHRDEV] = {
-	NULL,
+struct device_struct {
+	const char * name;
+	struct file_operations * fops;
 };
 
-struct file_operations * blkdev_fops[MAX_BLKDEV] = {
-	NULL,
+static struct device_struct chrdevs[MAX_CHRDEV] = {
+	{ NULL, NULL },
 };
+
+static struct device_struct blkdevs[MAX_BLKDEV] = {
+	{ NULL, NULL },
+};
+
+struct file_operations * get_blkfops(unsigned int major)
+{
+	if (major >= MAX_BLKDEV)
+		return NULL;
+	return blkdevs[major].fops;
+}
+
+struct file_operations * get_chrfops(unsigned int major)
+{
+	if (major >= MAX_CHRDEV)
+		return NULL;
+	return chrdevs[major].fops;
+}
 
 int register_chrdev(unsigned int major, const char * name, struct file_operations *fops)
 {
 	if (major >= MAX_CHRDEV)
 		return -EINVAL;
-	if (chrdev_fops[major])
+	if (chrdevs[major].fops)
 		return -EBUSY;
-	chrdev_fops[major] = fops;
+	chrdevs[major].name = name;
+	chrdevs[major].fops = fops;
 	return 0;
 }
 
@@ -37,9 +58,36 @@ int register_blkdev(unsigned int major, const char * name, struct file_operation
 {
 	if (major >= MAX_BLKDEV)
 		return -EINVAL;
-	if (blkdev_fops[major])
+	if (blkdevs[major].fops)
 		return -EBUSY;
-	blkdev_fops[major] = fops;
+	blkdevs[major].name = name;
+	blkdevs[major].fops = fops;
+	return 0;
+}
+
+int unregister_chrdev(unsigned int major, const char * name)
+{
+	if (major >= MAX_CHRDEV)
+		return -EINVAL;
+	if (!chrdevs[major].fops)
+		return -EINVAL;
+	if (strcmp(chrdevs[major].name, name))
+		return -EINVAL;
+	chrdevs[major].name = NULL;
+	chrdevs[major].fops = NULL;
+	return 0;
+}
+
+int unregister_blkdev(unsigned int major, const char * name)
+{
+	if (major >= MAX_BLKDEV)
+		return -EINVAL;
+	if (!blkdevs[major].fops)
+		return -EINVAL;
+	if (strcmp(blkdevs[major].name, name))
+		return -EINVAL;
+	blkdevs[major].name = NULL;
+	blkdevs[major].fops = NULL;
 	return 0;
 }
 
@@ -51,9 +99,9 @@ int blkdev_open(struct inode * inode, struct file * filp)
 	int i;
 
 	i = MAJOR(inode->i_rdev);
-	if (i >= MAX_BLKDEV || !blkdev_fops[i])
+	if (i >= MAX_BLKDEV || !blkdevs[i].fops)
 		return -ENODEV;
-	filp->f_op = blkdev_fops[i];
+	filp->f_op = blkdevs[i].fops;
 	if (filp->f_op->open)
 		return filp->f_op->open(inode,filp);
 	return 0;
@@ -102,9 +150,9 @@ int chrdev_open(struct inode * inode, struct file * filp)
 	int i;
 
 	i = MAJOR(inode->i_rdev);
-	if (i >= MAX_CHRDEV || !chrdev_fops[i])
+	if (i >= MAX_CHRDEV || !chrdevs[i].fops)
 		return -ENODEV;
-	filp->f_op = chrdev_fops[i];
+	filp->f_op = chrdevs[i].fops;
 	if (filp->f_op->open)
 		return filp->f_op->open(inode,filp);
 	return 0;

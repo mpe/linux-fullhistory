@@ -119,7 +119,7 @@ int pas16_biosparam(int, int, int*);
 int pas16_detect(int);
 const char *pas16_info(void);
 int pas16_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int pas16_reset(void);
+int pas16_reset(Scsi_Cmnd *);
 
 #ifndef NULL
 #define NULL 0

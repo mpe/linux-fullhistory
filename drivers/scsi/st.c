@@ -47,7 +47,7 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-#define MAJOR_NR 9
+#define MAJOR_NR SCSI_TAPE_MAJOR
 #include "../block/blk.h"
 #include "scsi.h"
 #include "scsi_ioctl.h"

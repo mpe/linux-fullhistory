@@ -4,7 +4,7 @@
 	Copyright 1993 United States Government as represented by the Director,
 	National Security Agency.  This software may only be used and distributed
 	according to the terms of the GNU Public License as modified by SRC,
-	incorported herein by reference.
+	incorporated herein by reference.
 
 	The author may be reached as becker@super.org or
 	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
@@ -19,7 +19,7 @@
 */
 
 static char *version =
-	"skeleton.c:v0.04 10/17/93 Donald Becker (becker@super.org)\n";
+	"skeleton.c:v0.05 11/16/93 Donald Becker (becker@super.org)\n";
 
 /* Always include 'config.h' first in case the user wants to turn on
    or override something. */
@@ -49,12 +49,12 @@ static char *version =
 #include <linux/ioport.h>
 #include <linux/in.h>
 #include <linux/malloc.h>
+#include <linux/string.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <errno.h>
-#include <memory.h>
 
 #include "dev.h"
 #include "iow.h"
@@ -73,7 +73,12 @@ extern struct device *irq2dev_map[16];
 
 #ifndef HAVE_ALLOC_SKB
 #define alloc_skb(size, priority) (struct sk_buff *) kmalloc(size,priority)
-#define kfree_skbmem(buff, size) kfree_s(buff, size);
+#define kfree_skbmem(addr, size) kfree_s(addr,size);
+#endif
+
+#ifndef HAVE_PORTRESERVE
+#define check_region(ioaddr, size) 		0
+#define	snarf_region(ioaddr, size);		do ; while (0)
 #endif
 
 /* use 0 for production, 1 for verification, >2 for debug */
@@ -87,6 +92,14 @@ struct net_local {
 	struct enet_statistics stats;
 	long open_time;				/* Useless example local info. */
 };
+
+/* The number of low I/O ports used by the ethercard. */
+#define ETHERCARD_TOTAL_SIZE	16
+
+/* The station (ethernet) address prefix, used for IDing the board. */
+#define SA_ADDR0 0x00
+#define SA_ADDR1 0x42
+#define SA_ADDR2 0x65
 
 /* Index to functions, as function prototypes. */
 
@@ -128,10 +141,8 @@ netcard_probe(struct device *dev)
 
 	for (port = &ports[0]; *port; port++) {
 		int ioaddr = *port;
-#ifdef HAVE_PORTRESERVE
-		if (check_region(ioaddr, 1 /* ETHERCARD_TOTAL_SIZE */))
+		if (check_region(ioaddr, ETHERCARD_TOTAL_SIZE))
 			continue;
-#endif
 		if (inb(ioaddr) != 0x57)
 			continue;
 		dev->base_addr = ioaddr;
@@ -140,7 +151,7 @@ netcard_probe(struct device *dev)
 	}
 
 	dev->base_addr = base_addr;
-	return ENODEV;			/* ENODEV would be more accurate. */
+	return ENODEV;
 }
 
 int netcard_probe1(struct device *dev, short ioaddr)
@@ -153,7 +164,8 @@ int netcard_probe1(struct device *dev, short ioaddr)
 		station_addr[i] = inb(ioaddr + i);
 	}
 	/* Check the first three octets of the S.A. for the manufactor's code. */ 
-	if (station_addr[0] != 0x42	 ||	 station_addr[1] != 0x42 || station_addr[2] != 0x42) {
+	if (station_addr[0] != SA_ADDR0
+		||	 station_addr[1] != SA_ADDR1 || station_addr[2] != SA_ADDR2) {
 		return ENODEV;
 	}
 
@@ -188,10 +200,8 @@ int netcard_probe1(struct device *dev, short ioaddr)
 	 }
 #endif	/* jumpered interrupt */
 
-#ifdef HAVE_PORTRESERVE
 	/* Grab the region so we can find another board if autoIRQ fails. */
-	snarf_region(ioaddr, 16);
-#endif
+	snarf_region(ioaddr, ETHERCARD_TOTAL_SIZE);
 
 	if (net_debug)
 		printk(version);
@@ -219,21 +229,21 @@ int netcard_probe1(struct device *dev, short ioaddr)
 	dev->rebuild_header	= eth_rebuild_header;
 	dev->type_trans		= eth_type_trans;
 
-	dev->type		= ARPHRD_ETHER;
+	dev->type			= ARPHRD_ETHER;
 	dev->hard_header_len = ETH_HLEN;
-	dev->mtu		= 1500; /* eth_mtu */
-	dev->addr_len	= ETH_ALEN;
+	dev->mtu			= 1500; /* eth_mtu */
+	dev->addr_len		= ETH_ALEN;
 	for (i = 0; i < ETH_ALEN; i++) {
 		dev->broadcast[i]=0xff;
 	}
 
 	/* New-style flags. */
-	dev->flags		= IFF_BROADCAST;
-	dev->family		= AF_INET;
-	dev->pa_addr	= 0;
-	dev->pa_brdaddr	= 0;
-	dev->pa_mask	= 0;
-	dev->pa_alen	= sizeof(unsigned long);
+	dev->flags			= IFF_BROADCAST;
+	dev->family			= AF_INET;
+	dev->pa_addr		= 0;
+	dev->pa_brdaddr		= 0;
+	dev->pa_mask		= 0;
+	dev->pa_alen		= sizeof(unsigned long);
 
 	return 0;
 }
@@ -422,7 +432,7 @@ net_rx(struct device *dev)
 #else
 			skb->lock = 0;
 			if (dev_rint((unsigned char*)skb, pkt_len, IN_SKBUFF, dev) != 0) {
-				kfree_skbmem(skb, sksize);
+				kfree_s(skb, sksize);
 				lp->stats.rx_dropped++;
 				break;
 			}

@@ -47,6 +47,39 @@ struct sigcontext_struct {
 	unsigned long cr2;
 };
 
+asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
+{
+	sigset_t new_set, old_set = current->blocked;
+	int error;
+
+	if (set) {
+		error = verify_area(VERIFY_READ, set, sizeof(sigset_t));
+		if (error)
+			return error;
+		new_set = get_fs_long((unsigned long *) set) & _BLOCKABLE;
+		switch (how) {
+		case SIG_BLOCK:
+			current->blocked |= new_set;
+			break;
+		case SIG_UNBLOCK:
+			current->blocked &= ~new_set;
+			break;
+		case SIG_SETMASK:
+			current->blocked = new_set;
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+	if (oset) {
+		error = verify_area(VERIFY_WRITE, oset, sizeof(sigset_t));
+		if (error)
+			return error;
+		put_fs_long(old_set, (unsigned long *) oset);
+	}
+	return 0;
+}
+
 asmlinkage int sys_sgetmask(void)
 {
 	return current->blocked;
@@ -245,7 +278,7 @@ static void setup_frame(struct sigaction * sa, unsigned long ** fp, unsigned lon
 	put_fs_long(0,frame+21);		/* 387 state pointer - not implemented*/
 /* non-iBCS2 extensions.. */
 	put_fs_long(oldmask, frame+22);
-	put_fs_long(0, frame+23);		/* cr2 - not implemented */
+	put_fs_long(current->tss.cr2, frame+23);
 /* set up the return code... */
 	put_fs_long(0x0000b858, CODE(0));	/* popl %eax ; movl $,%eax */
 	put_fs_long(0x80cd0000, CODE(4));	/* int $0x80 */
@@ -312,6 +345,8 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 				continue;
 
 			case SIGSTOP: case SIGTSTP: case SIGTTIN: case SIGTTOU:
+				if (current->flags & PF_PTRACED)
+					continue;
 				current->state = TASK_STOPPED;
 				current->exit_code = signr;
 				if (!(current->p_pptr->sigaction[SIGCHLD-1].sa_flags & 

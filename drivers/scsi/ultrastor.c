@@ -926,7 +926,7 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt, int code)
 
 }
 
-int ultrastor_reset(void)
+int ultrastor_reset(Scsi_Cmnd * SCpnt)
 {
     int flags;
     register int i;
@@ -934,7 +934,11 @@ int ultrastor_reset(void)
     printk("US14F: reset: called\n");
 #endif
 
-    if(config.slot) return 0;  /* Do not attempt a reset for the 24f */
+    if(config.slot) {
+      if (SCpnt) SCpnt->flags |= NEEDS_JUMPSTART;
+      return 0;  /* Do not attempt a reset for the 24f */
+    };
+
     save_flags(flags);
     cli();
 
@@ -1011,7 +1015,7 @@ static void ultrastor_interrupt(int cpl)
 	printk("Ux4F interrupt: bad MSCP address %x\n", (unsigned int) mscp);
 	/* A command has been lost.  Reset and report an error
 	   for all commands.  */
-	ultrastor_reset();
+	ultrastor_reset(NULL);
 	return;
     }
 #endif

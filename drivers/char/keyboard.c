@@ -7,8 +7,8 @@
  * the assembly version by Linus (with diacriticals added)
  *
  * Some additional features added by Christoph Niemann (ChN), March 1993
+ *
  * Loadable keymaps by Risto Kankkunen, May 1993
- * Diacriticals redone & other small changes, aeb@cwi.nl, June 1993
  */
 
 #define KEYBOARD_IRQ 1
@@ -24,8 +24,6 @@
 #include <linux/string.h>
 
 #include <asm/bitops.h>
-
-#define SIZE(x) (sizeof(x)/sizeof((x)[0]))
 
 #ifndef KBD_DEFFLAGS
 
@@ -66,11 +64,8 @@ __asm__ __volatile__("int $0x21")
 
 unsigned char kbd_read_mask = 0x01;	/* modified by psaux.c */
 
-/*
- * global state includes the following, and various static variables
- * in this module: prev_scancode, shift_state, diacr, npadch,
- *   dead_key_next, last_console
- */
+unsigned long kbd_dead_keys = 0;
+unsigned long kbd_prev_dead_keys = 0;
 
 /* shift state counters.. */
 static unsigned char k_down[NR_SHIFT] = {0, };
@@ -79,10 +74,6 @@ static unsigned long key_down[8] = { 0, };
 
 static int want_console = -1;
 static int last_console = 0;		/* last used VC */
-static int dead_key_next = 0;
-static int shift_state = 0;
-static int npadch = -1;		        /* -1 or number assembled on pad */
-static unsigned char diacr = 0;
 static char rep = 0;			/* flag telling character repeat */
 struct kbd_struct kbd_table[NR_CONSOLES];
 static struct kbd_struct * kbd = kbd_table;
@@ -112,16 +103,24 @@ static k_hand key_handler[] = {
 
 /* maximum values each key_handler can handle */
 const int max_vals[] = {
-	255, NR_FUNC - 1, 14, 17, 4, 255, 3, NR_SHIFT,
+	255, NR_FUNC - 1, 13, 16, 4, 255, 3, NR_SHIFT,
 	255, 9, 3
 };
 
-const int NR_TYPES = SIZE(max_vals);
+const int NR_TYPES = (sizeof(max_vals) / sizeof(int));
+
+#define E0_BASE 96
+
+static int shift_state = 0;
+static int diacr = -1;
+static int npadch = 0;
 
 static void put_queue(int);
-static unsigned char handle_diacr(unsigned char);
+static unsigned int handle_diacr(unsigned int);
 
 static struct pt_regs * pt_regs;
+
+static inline void translate(unsigned char scancode);
 
 static inline void kb_wait(void)
 {
@@ -132,65 +131,22 @@ static inline void kb_wait(void)
 			break;
 }
 
-/*
- * Translation of escaped scancodes to keysyms.
- * This should be user-settable.
- */
-#define E0_BASE 96
-
-#define E0_KPENTER (E0_BASE+0)
-#define E0_RCTRL   (E0_BASE+1)
-#define E0_KPSLASH (E0_BASE+2)
-#define E0_PRSCR   (E0_BASE+3)
-#define E0_RALT    (E0_BASE+4)
-#define E0_BREAK   (E0_BASE+5)  /* (control-pause) */
-#define E0_HOME    (E0_BASE+6)
-#define E0_UP      (E0_BASE+7)
-#define E0_PGUP    (E0_BASE+8)
-#define E0_LEFT    (E0_BASE+9)
-#define E0_RIGHT   (E0_BASE+10)
-#define E0_END     (E0_BASE+11)
-#define E0_DOWN    (E0_BASE+12)
-#define E0_PGDN    (E0_BASE+13)
-#define E0_INS     (E0_BASE+14)
-#define E0_DEL     (E0_BASE+15)
-/* BTC */
-#define E0_MACRO   (E0_BASE+16)
-/* LK450 */
-#define E0_F13     (E0_BASE+17)
-#define E0_F14     (E0_BASE+18)
-#define E0_HELP    (E0_BASE+19)
-#define E0_DO      (E0_BASE+20)
-#define E0_F17     (E0_BASE+21)
-#define E0_KPMINPLUS (E0_BASE+22)
-
-static unsigned char e0_keys[128] = {
-  0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x00-0x07 */
-  0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x08-0x0f */
-  0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x10-0x17 */
-  0, 0, 0, 0, E0_KPENTER, E0_RCTRL, 0, 0,	      /* 0x18-0x1f */
-  0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x20-0x27 */
-  0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x28-0x2f */
-  0, 0, 0, 0, 0, E0_KPSLASH, 0, E0_PRSCR,	      /* 0x30-0x37 */
-  E0_RALT, 0, 0, 0, 0, E0_F13, E0_F14, E0_HELP,	      /* 0x38-0x3f */
-  E0_DO, E0_F17, 0, 0, 0, 0, E0_BREAK, E0_HOME,	      /* 0x40-0x47 */
-  E0_UP, E0_PGUP, 0, E0_LEFT, 0, E0_RIGHT, E0_KPMINPLUS, E0_END,  /* 0x48-0x4f */
-  E0_DOWN, E0_PGDN, E0_INS, E0_DEL, 0, 0, 0, 0,	      /* 0x50-0x57 */
-  0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x58-0x5f */
-  0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x60-0x67 */
-  0, 0, 0, 0, 0, 0, 0, E0_MACRO,		      /* 0x68-0x6f */
-  0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x70-0x77 */
-  0, 0, 0, 0, 0, 0, 0, 0			      /* 0x78-0x7f */
-};
+static inline void send_cmd(unsigned char c)
+{
+	kb_wait();
+	outb(c,0x64);
+}
 
 static void keyboard_interrupt(int int_pt_regs)
 {
 	unsigned char scancode;
-	static unsigned char prev_scancode = 0; /* remember E0, E1 */
-	char up_flag;
-	char raw_mode;
 
 	pt_regs = (struct pt_regs *) int_pt_regs;
+	kbd_prev_dead_keys |= kbd_dead_keys;
+	if (!kbd_dead_keys)
+		kbd_prev_dead_keys = 0;
+	kbd_dead_keys = 0;
+	send_cmd(0xAD);		/* disable keyboard */
 	kb_wait();
 	if ((inb_p(0x64) & kbd_read_mask) != 0x01)
 		goto end_kbd_intr;
@@ -205,83 +161,107 @@ static void keyboard_interrupt(int int_pt_regs)
 	}
 	tty = TTY_TABLE(0);
 	kbd = kbd_table + fg_console;
-	if ((raw_mode = vc_kbd_flag(kbd,VC_RAW))) {
+	if (vc_kbd_flag(kbd,VC_RAW)) {
+		memset(k_down, 0, sizeof(k_down));
+		memset(key_down, 0, sizeof(key_down));
+		shift_state = 0;
 		put_queue(scancode);
-		/* we do not return yet, because we want to maintain
-		   the key_down array, so that we have the correct
-		   values when finishing RAW mode or when changing VT's */
-	}
-	if (scancode == 0xe0 || scancode == 0xe1) {
-		prev_scancode = scancode;
 		goto end_kbd_intr;
-	}
+	} else
+		translate(scancode);
+end_kbd_intr:
+	send_cmd(0xAE);		/* enable keyboard */
+	return;
+}
 
+static inline void translate(unsigned char scancode)
+{
+	char break_flag;
+     	static unsigned char e0_keys[] = {
+		0x1c,	/* keypad enter */
+		0x1d,	/* right control */
+		0x35,	/* keypad slash */
+		0x37,	/* print screen */
+		0x38,	/* right alt */
+		0x46,	/* break (control-pause) */
+		0x47,	/* editpad home */
+		0x48,	/* editpad up */
+		0x49,	/* editpad pgup */
+		0x4b,	/* editpad left */
+		0x4d,	/* editpad right */
+		0x4f,	/* editpad end */
+		0x50,	/* editpad dn */
+		0x51,	/* editpad pgdn */
+		0x52,	/* editpad ins */
+		0x53,	/* editpad del */
+#ifdef LK450
+		0x3d,	/* f13 */
+		0x3e,	/* f14 */
+		0x3f,	/* help */
+		0x40,	/* do */
+		0x41,	/* f17 */
+		0x4e	/* keypad minus/plus */
+#endif
+#ifdef BTC
+		0x6f    /* macro */
+#endif
+	};
+
+	if (scancode == 0xe0) {
+		set_kbd_dead(KGD_E0);
+		return;
+	}
+	if (scancode == 0xe1) {
+		set_kbd_dead(KGD_E1);
+		return;
+	}
 	/*
-	 *  Convert scancode to keysym, using prev_scancode.
+	 *  The keyboard maintains its own internal caps lock and num lock
+	 *  statuses. In caps lock mode E0 AA precedes make code and E0 2A
+	 *  follows break code. In num lock mode, E0 2A precedes make
+	 *  code and E0 AA follows break code. We do our own book-keeping,
+	 *  so we will just ignore these.
 	 */
-	up_flag = scancode > 0x7f;
+	if (kbd_dead(KGD_E0) && (scancode == 0x2a || scancode == 0xaa ||
+				 scancode == 0x36 || scancode == 0xb6))
+		return;
+
+	/* map two byte scancodes into one byte id's */
+
+	break_flag = scancode > 0x7f;
 	scancode &= 0x7f;
 
-	if (prev_scancode == 0xe0) {
-	  prev_scancode = 0;
-  	  /*
-	   *  The keyboard maintains its own internal caps lock and num lock
-	   *  statuses. In caps lock mode E0 AA precedes make code and E0 2A
-	   *  follows break code. In num lock mode, E0 2A precedes make
-	   *  code and E0 AA follows break code. We do our own book-keeping,
-	   *  so we will just ignore these.
-	   */
-	  /*
-	   *  For my keyboard there is no caps lock mode, but there are
-	   *  both Shift-L and Shift-R modes. The former mode generates
-	   *  E0 2A / E0 AA pairs, the latter E0 B6 / E0 36 pairs.
-	   *  So, we should also ignore the latter. - aeb@cwi.nl
-	   */
-	  if (scancode == 0x2a || scancode == 0x36)
-	    goto end_kbd_intr;
-
-	  if (e0_keys[scancode])
-	    scancode = e0_keys[scancode];
-	  else if (!raw_mode) {
-	    printk("keyboard: unknown scancode e0 %02x\n", scancode);
-	    goto end_kbd_intr;
-	  }
-	} else if (scancode >= E0_BASE && !raw_mode) {
-	  printk("keyboard: scancode (%02x) not in range 00 - %2x\n",
-		 scancode, E0_BASE - 1);
-	  goto end_kbd_intr;
+	if (kbd_dead(KGD_E0)) {
+		int i;
+		for (i = 0; i < sizeof(e0_keys); i++)
+			if (scancode == e0_keys[i]) {
+				scancode = E0_BASE + i;
+				i = -1;
+				break;
+			}
+		if (i != -1) {
+#if 0
+			printk("keyboard: unknown scancode e0 %02x\n", scancode);
+#endif
+			return;
+		}
+	} else if (scancode >= E0_BASE) {
+#if 0
+		printk("keyboard: scancode (%02x) not in range 00 - %2x\n", scancode, E0_BASE - 1);
+#endif
+		return;
 	}
 
-	/*
-	 * At this point the variable `scancode' contains the keysym.
-	 * We keep track of the up/down status of the key, and
-	 * return the keysym if in MEDIUMRAW mode.
-	 * Note that the present code requires the application to keep
-	 * track of the up/down status as well - it would probably be
-	 * better to   put_queue(scancode + (up_flag ? 0200 : 0))  .
-	 */
-
-	if (up_flag) {
+	rep = 0;
+	if (break_flag)
 		clear_bit(scancode, key_down);
-		rep = 0;
-	} else
+	else
 		rep = set_bit(scancode, key_down);
-
-	if (raw_mode)
-	        goto end_kbd_intr;
 
 	if (vc_kbd_flag(kbd, VC_MEDIUMRAW)) {
 		put_queue(scancode);
-		goto end_kbd_intr;
+		return;
 	}
-
-	/*
-	 * Small change in philosophy: earlier we defined repetition by
-	 *	 rep = scancode == prev_keysym;
-	 *	 prev_keysym = scancode;
-	 * but now by the fact that the depressed key was down already.
-	 * Does this ever make a difference?
-	 */
 
 	/*
 	 *  Repeat a key only if the input buffers are empty or the
@@ -295,10 +275,8 @@ static void keyboard_interrupt(int int_pt_regs)
 		u_short key_code;
 
 		key_code = key_map[shift_state][scancode];
-		(*key_handler[key_code >> 8])(key_code & 0xff, up_flag);
+		(*key_handler[key_code >> 8])(key_code & 0xff, break_flag);
 	}
-
-end_kbd_intr:
 }
 
 static void put_queue(int ch)
@@ -372,13 +350,13 @@ static void show_ptregs(void)
 	if (!pt_regs)
 		return;
 	printk("\n");
-	printk("EIP: %04x:%08x",0xffff & pt_regs->cs,pt_regs->eip);
+	printk("EIP: %04x:%08lx",0xffff & pt_regs->cs,pt_regs->eip);
 	if (pt_regs->cs & 3)
-		printk(" ESP: %04x:%08x",0xffff & pt_regs->ss,pt_regs->esp);
-	printk(" EFLAGS: %08x\n",pt_regs->eflags);
-	printk("EAX: %08x EBX: %08x ECX: %08x EDX: %08x\n",
+		printk(" ESP: %04x:%08lx",0xffff & pt_regs->ss,pt_regs->esp);
+	printk(" EFLAGS: %08lx\n",pt_regs->eflags);
+	printk("EAX: %08lx EBX: %08lx ECX: %08lx EDX: %08lx\n",
 		pt_regs->orig_eax,pt_regs->ebx,pt_regs->ecx,pt_regs->edx);
-	printk("ESI: %08x EDI: %08x EBP: %08x",
+	printk("ESI: %08lx EDI: %08lx EBP: %08lx",
 		pt_regs->esi, pt_regs->edi, pt_regs->ebp);
 	printk(" DS: %04x ES: %04x FS: %04x GS: %04x\n",
 		0xffff & pt_regs->ds,0xffff & pt_regs->es,
@@ -393,7 +371,7 @@ static void hold(void)
 		/* pressing srcoll lock 2nd time sends ^Q, ChN */
 		put_queue(START_CHAR(tty));
 	else
-		/* pressing scroll lock 1st time sends ^S, ChN */
+		/* pressing srcoll lock 1st time sends ^S, ChN */
 		put_queue(STOP_CHAR(tty));
 	chg_vc_kbd_flag(kbd,VC_SCROLLOCK);
 }
@@ -442,10 +420,6 @@ static void boot_it(void)
 	ctrl_alt_del();
 }
 
-static void dead_next(void)
-{
-        dead_key_next = 1;
-}
 
 static void do_spec(unsigned char value, char up_flag)
 {
@@ -454,12 +428,12 @@ static void do_spec(unsigned char value, char up_flag)
 		NULL,		enter,		show_ptregs,	show_mem,
 		show_state,	send_intr,	lastcons, 	caps_toggle,
 		num,		hold,		scrll_forw,	scrll_back,
-		boot_it,	caps_on,        dead_next
+		boot_it,	caps_on
 	};
 
-	if (up_flag)
+	if (value >= sizeof(fn_table)/sizeof(fnp))
 		return;
-	if (value >= SIZE(fn_table))
+	if (up_flag)
 		return;
 	if (!fn_table[value])
 		return;
@@ -471,14 +445,7 @@ static void do_self(unsigned char value, char up_flag)
 	if (up_flag)
 		return;		/* no action, if this is a key release */
 
-        if (diacr)
-                value = handle_diacr(value);
-
-        if (dead_key_next) {
-                dead_key_next = 0;
-                diacr = value;
-                return;
-        }
+	value = handle_diacr(value);
 
 	/* kludge... but works for ISO 8859-1 */
 	if (vc_kbd_flag(kbd,VC_CAPSLOCK))
@@ -490,13 +457,8 @@ static void do_self(unsigned char value, char up_flag)
 	put_queue(value);
 }
 
-#define A_GRAVE  '`'
-#define A_ACUTE  '\''
-#define A_CFLEX  '^'
-#define A_TILDE  '~'
-#define A_DIAER  '"'
 static unsigned char ret_diacr[] =
-        {A_GRAVE, A_ACUTE, A_CFLEX, A_TILDE, A_DIAER };
+	{'`', '\'', '^', '~', '"' };		/* Must not end with 0 */
 
 /* If a dead key pressed twice, output a character corresponding to it,	*/
 /* otherwise just remember the dead key.				*/
@@ -506,12 +468,11 @@ static void do_dead(unsigned char value, char up_flag)
 	if (up_flag)
 		return;
 
-        value = ret_diacr[value];
-        if (diacr == value) {   /* pressed twice */
-                diacr = 0;
-                put_queue(value);
-                return;
-        }
+	if (diacr == value) {	/* pressed twice */
+		diacr = -1;
+		put_queue(ret_diacr[value]);
+		return;
+	}
 	diacr = value;
 }
 
@@ -519,59 +480,40 @@ static void do_dead(unsigned char value, char up_flag)
 /* if space if pressed, return a character corresponding the pending	*/
 /* dead key, otherwise try to combine the two.				*/
 
-unsigned char handle_diacr(unsigned char ch)
+unsigned int handle_diacr(unsigned int ch)
 {
-        static struct {
-          unsigned char diacr, base, result;
-        } accent_table[] = {
-          {A_GRAVE, 'A', '\300'},       {A_GRAVE, 'a', '\340'},
-          {A_ACUTE, 'A', '\301'},       {A_ACUTE, 'a', '\341'},
-          {A_CFLEX, 'A', '\302'},       {A_CFLEX, 'a', '\342'},
-          {A_TILDE, 'A', '\303'},       {A_TILDE, 'a', '\343'},
-          {A_DIAER, 'A', '\304'},       {A_DIAER, 'a', '\344'},
-          {'O',     'A', '\305'},       {'o',     'a', '\345'},
-          {'0',     'A', '\305'},       {'0',     'a', '\345'},
-          {'A',     'A', '\305'},       {'a',     'a', '\345'},
-          {'A',     'E', '\306'},       {'a',     'e', '\346'},
-          {',',     'C', '\307'},       {',',     'c', '\347'},
-          {A_GRAVE, 'E', '\310'},       {A_GRAVE, 'e', '\350'},
-          {A_ACUTE, 'E', '\311'},       {A_ACUTE, 'e', '\351'},
-          {A_CFLEX, 'E', '\312'},       {A_CFLEX, 'e', '\352'},
-          {A_DIAER, 'E', '\313'},       {A_DIAER, 'e', '\353'},
-          {A_GRAVE, 'I', '\314'},       {A_GRAVE, 'i', '\354'},
-          {A_ACUTE, 'I', '\315'},       {A_ACUTE, 'i', '\355'},
-          {A_CFLEX, 'I', '\316'},       {A_CFLEX, 'i', '\356'},
-          {A_DIAER, 'I', '\317'},       {A_DIAER, 'i', '\357'},
-          {'-',     'D', '\320'},       {'-',     'd', '\360'}, /* eth */
-          {A_TILDE, 'N', '\321'},       {A_TILDE, 'n', '\361'},
-          {A_GRAVE, 'O', '\322'},       {A_GRAVE, 'o', '\362'},
-          {A_ACUTE, 'O', '\323'},       {A_ACUTE, 'o', '\363'},
-          {A_CFLEX, 'O', '\324'},       {A_CFLEX, 'o', '\364'},
-          {A_TILDE, 'O', '\325'},       {A_TILDE, 'o', '\365'},
-          {A_DIAER, 'O', '\326'},       {A_DIAER, 'o', '\366'},
-          {'/',     'O', '\330'},       {'/',     'o', '\370'},
-          {A_GRAVE, 'U', '\331'},       {A_GRAVE, 'u', '\371'},
-          {A_ACUTE, 'U', '\332'},       {A_ACUTE, 'u', '\372'},
-          {A_CFLEX, 'U', '\333'},       {A_CFLEX, 'u', '\373'},
-          {A_DIAER, 'U', '\334'},       {A_DIAER, 'u', '\374'},
-          {A_ACUTE, 'Y', '\335'},       {A_ACUTE, 'y', '\375'},
-          {'T',     'H', '\336'},       {'t',     'h', '\376'}, /* thorn */
-          {'s',     's', '\337'},       {A_DIAER, 'y', '\377'},
-          {'s',     'z', '\337'},       {'i',     'j', '\377'}
-        };
-        int d = diacr;
-        int i;
+	static unsigned char accent_table[5][64] = {
+	" \300BCD\310FGH\314JKLMN\322PQRST\331VWXYZ[\\]^_"
+	"`\340bcd\350fgh\354jklmn\362pqrst\371vwxyz{|}~",   /* accent grave */
 
-        diacr = 0;
-        if (ch == ' ')
-                return d;
+	" \301BCD\311FGH\315JKLMN\323PQRST\332VWX\335Z[\\]^_"
+	"`\341bcd\351fgh\355jklmn\363pqrst\372vwx\375z{|}~", /* accent acute */
 
-        for (i = 0; i < SIZE(accent_table); i++)
-          if(accent_table[i].diacr == d && accent_table[i].base == ch)
-            return accent_table[i].result;
+	" \302BCD\312FGH\316JKLMN\324PQRST\333VWXYZ[\\]^_"
+	"`\342bcd\352fgh\356jklmn\364pqrst\373vwxyz{|}~",   /* circumflex */
 
-        put_queue(d);
-        return ch;
+	" \303BCDEFGHIJKLM\321\325PQRSTUVWXYZ[\\]^_"
+	"`\343bcdefghijklm\361\365pqrstuvwxyz{|}~",	    /* tilde */
+
+	" \304BCD\313FGH\317JKLMN\326PQRST\334VWXYZ[\\]^_"
+	"`\344bcd\353fgh\357jklmn\366pqrst\374vwx\377z{|}~" /* dieresis */
+	};
+	int d = diacr, e;
+
+	if (diacr == -1)
+		return ch;
+
+	diacr = -1;
+	if (ch == ' ')
+		return ret_diacr[d];
+
+	if (ch >= 64 && ch <= 122) {
+		e = accent_table[d][ch - 64];
+		if (e != ch)
+			return e;
+	}
+	put_queue(ret_diacr[d]);
+	return ch;
 }
 
 static void do_cons(unsigned char value, char up_flag)
@@ -585,16 +527,13 @@ static void do_fn(unsigned char value, char up_flag)
 {
 	if (up_flag)
 		return;
-	if (value < SIZE(func_table))
-	        puts_queue(func_table[value]);
-	else
-	        printk("do_fn called with value=%d\n", value);
+	puts_queue(func_table[value]);
 }
 
 static void do_pad(unsigned char value, char up_flag)
 {
-	static char *pad_chars = "0123456789+-*/\015,.?";
-	static char *app_map = "pqrstuvwxylSRQMnn?";
+	static char *pad_chars = "0123456789+-*/\015,.";
+	static char *app_map = "pqrstuvwxylSRQMnn";
 
 	if (up_flag)
 		return;		/* no action, if this is a key release */
@@ -671,8 +610,6 @@ static void do_shift(unsigned char value, char up_flag)
 	}
 
 	if (up_flag) {
-	        /* handle the case that two shift or control
-		   keys are depressed simultaneously */
 		if (k_down[value])
 			k_down[value]--;
 	} else
@@ -684,35 +621,10 @@ static void do_shift(unsigned char value, char up_flag)
 		shift_state &= ~ (1 << value);
 
 	/* kludge */
-	if (up_flag && shift_state != old_state && npadch != -1) {
+	if (up_flag && shift_state != old_state && npadch != 0) {
 		put_queue(npadch);
-		npadch = -1;
+		npadch = 0;
 	}
-}
-
-/* called after returning from RAW mode or when changing consoles -
-   recompute k_down[] and shift_state from key_down[] */
-void compute_shiftstate(void)
-{
-        int i, j, k, sym, val;
-
-        shift_state = 0;
-	for(i=0; i < SIZE(k_down); i++)
-	  k_down[i] = 0;
-
-	for(i=0; i < SIZE(key_down); i++)
-	  if(key_down[i]) {	/* skip this word if not a single bit on */
-	    k = (i<<5);
-	    for(j=0; j<32; j++,k++)
-	      if(test_bit(k, key_down)) {
-		sym = key_map[0][k];
-		if(KTYP(sym) == KT_SHIFT) {
-		  val = KVAL(sym);
-		  k_down[val]++;
-		  shift_state |= (1<<val);
-	        }
-	      }
-	  }
 }
 
 static void do_meta(unsigned char value, char up_flag)
@@ -732,10 +644,7 @@ static void do_ascii(unsigned char value, char up_flag)
 	if (up_flag)
 		return;
 
-	if (npadch == -1)
-	        npadch = value;
-	else
-	        npadch = (npadch * 10 + value) % 1000;
+	npadch = (npadch * 10 + value) % 1000;
 }
 
 /* done stupidly to avoid coding in any dependencies of

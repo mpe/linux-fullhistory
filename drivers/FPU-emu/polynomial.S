@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
  |   void polynomial(unsigned accum[], unsigned x[], unsigned terms[][2],    |
@@ -22,7 +22,7 @@
 #include "fpu_asm.h"
 
 
-/*	#define	EXTRA_PRECISE	Do not use: not complete */
+/*	#define	EXTRA_PRECISE	// Do not use: not complete */
 
 #define	TERM_SIZE	$8
 #define	SUM_MS		-20(%ebp)	/* sum ms long */
@@ -70,7 +70,7 @@ L_accum_loop:
 
 	movl	SUM_MIDDLE,%eax
 	mull	(%esi)			/* x ls long */
-/*	movl	%eax,-16(%ebp)		Not needed */
+/*	movl	%eax,-16(%ebp)		// Not needed */
 	movl	%edx,ACCUM_LS
 
 	movl	SUM_MIDDLE,%eax
@@ -119,7 +119,7 @@ L_no_poly_round:
 
 L_accum_done:
 #ifdef EXTRA_PRECISE
-/* And round the result */
+/* Round the result */
 	testb	$128,SUM_LS_HI
 	je	L_poly_done
 

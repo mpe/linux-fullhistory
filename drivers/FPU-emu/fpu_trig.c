@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -122,7 +122,7 @@ static int trig_arg(FPU_REG *X, int even)
 
 
 /* Convert a long to register */
-void convert_l2reg(long *arg, FPU_REG *dest)
+void convert_l2reg(long const *arg, FPU_REG *dest)
 {
   long num = *arg;
 
@@ -1696,7 +1696,7 @@ static void fscale(void)
 
 /*---------------------------------------------------------------------------*/
 
-static FUNC trig_table_a[] = {
+static FUNC const trig_table_a[] = {
   f2xm1, fyl2x, fptan, fpatan, fxtract, fprem1, fdecstp, fincstp
 };
 
@@ -1706,7 +1706,7 @@ void trig_a(void)
 }
 
 
-static FUNC trig_table_b[] =
+static FUNC const trig_table_b[] =
   {
     fprem, fyl2xp1, fsqrt_, fsincos, frndint_, fscale, fsin, fcos
   };

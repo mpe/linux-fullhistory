@@ -19,9 +19,6 @@ OBJS=	namei.o inode.o file.o dir.o misc.o fat.o
 msdos.o: $(OBJS)
 	$(LD) -r -o msdos.o $(OBJS)
 
-clean:
-	rm -f core *.o *.a *.s
-
 dep:
 	$(CPP) -M *.c > .depend
 

@@ -415,7 +415,7 @@ int aha1740_command(Scsi_Cmnd * SCpnt)
     return internal_done_errcode;
 }
 
-/* Query the board for it's irq_level.  Nothing else matters
+/* Query the board for its irq_level.  Nothing else matters
    in enhanced mode on an EISA bus. */
 
 void aha1740_getconfig(void)
@@ -467,10 +467,10 @@ int aha1740_detect(int hostnum)
 }
 
 /* Note:  They following two functions do not apply very well to the Adaptec,
-which basically manages it's own affairs quite well without our interference,
+which basically manages its own affairs quite well without our interference,
 so I haven't put anything into them.  I can faintly imagine someone with a
 *very* badly behaved SCSI target (perhaps an old tape?) wanting the abort(),
-but it hasn't happened yet, and doing aborts brings the Adaptec to it's
+but it hasn't happened yet, and doing aborts brings the Adaptec to its
 knees.  I cannot (at this moment in time) think of any reason to reset the
 card once it's running.  So there. */
 
@@ -480,9 +480,14 @@ int aha1740_abort(Scsi_Cmnd * SCpnt, int i)
     return 0;
 }
 
-int aha1740_reset(void)
+/* We do not implement a reset function here, but the upper level code assumes
+   that it will get some kind of response for the command in SCpnt.  We must
+   oblige, or the command will hang the scsi system */
+
+int aha1740_reset(Scsi_Cmnd * SCpnt)
 {
     DEB(printk("aha1740_reset called\n"));
+    if (SCpnt) SCpnt->flags |= NEEDS_JUMPSTART;
     return 0;
 }
 

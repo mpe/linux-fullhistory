@@ -1,4 +1,4 @@
-/* el2.c: A shared-memory NS8390 ethernet driver for linux. */
+/* 3c503.c: A shared-memory NS8390 ethernet driver for linux. */
 /*
     Written 1992,1993 by Donald Becker.
 
@@ -16,7 +16,7 @@
 */
 
 static char *version =
-    "el2.c:v0.99.13 8/30/93 Donald Becker (becker@super.org)\n";
+    "3c503.c:v0.99.13 8/30/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>

@@ -24,7 +24,6 @@
 
 #define NSOCKETS	128		/* should be dynamic, later...	*/
 #define NPROTO		16		/* should be enough for now..	*/
-#define SOCKET_MAJOR	16		/* Linux VFS major dev number	*/
 
 
 #define SYS_SOCKET	1		/* sys_socket(2)		*/

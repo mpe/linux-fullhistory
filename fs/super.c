@@ -10,6 +10,7 @@
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/major.h>
 #include <linux/stat.h>
 #include <linux/errno.h>
 #include <linux/string.h>
@@ -25,7 +26,8 @@
  */
 
 extern struct file_system_type file_systems[];
-extern struct file_operations * blkdev_fops[];
+extern struct file_operations * get_blkfops(unsigned int);
+extern struct file_operations * get_chrfops(unsigned int);
 
 extern void wait_for_keypress(void);
 extern void fcntl_init_locks(void);
@@ -217,11 +219,11 @@ static int do_umount(dev_t dev)
 	if (!(sb=get_super(dev)) || !(sb->s_covered))
 		return -ENOENT;
 	if (!sb->s_covered->i_mount)
-		printk("VFS: umount(%d/%d): mounted inode has i_mount=0\n",
+		printk("VFS: umount(%d/%d): mounted inode has i_mount=NULL\n",
 							MAJOR(dev), MINOR(dev));
 	if (!fs_may_umount(dev, sb->s_mounted))
 		return -EBUSY;
-	sb->s_covered->i_mount=0;
+	sb->s_covered->i_mount = NULL;
 	iput(sb->s_covered);
 	sb->s_covered = NULL;
 	iput(sb->s_mounted);
@@ -281,7 +283,7 @@ asmlinkage int sys_umount(char * name)
 		return -ENXIO;
 	}
 	if (!(retval = do_umount(dev)) && dev != ROOT_DEV) {
-		fops = blkdev_fops[MAJOR(dev)];
+		fops = get_blkfops(MAJOR(dev));
 		if (fops && fops->release)
 			fops->release(inode,NULL);
 		if (MAJOR(dev) == UNNAMED_MAJOR)
@@ -331,7 +333,7 @@ static int do_mount(dev_t dev, const char * dir, char * type, int flags, void * 
 		return -EBUSY;
 	}
 	sb->s_covered = dir_i;
-	dir_i->i_mount = 1;
+	dir_i->i_mount = sb->s_mounted;
 	return 0;		/* we don't iput(dir_i) - see umount */
 }
 
@@ -443,7 +445,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 			return -EMFILE;
 		inode = NULL;
 	}
-	fops = blkdev_fops[MAJOR(dev)];
+	fops = get_blkfops(MAJOR(dev));
 	if (fops && fops->open) {
 		retval = fops->open(inode,NULL);
 		if (retval) {
@@ -454,17 +456,24 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	if ((new_flags & MS_MGC_MSK) == MS_MGC_VAL) {
 		flags = new_flags & ~MS_MGC_MSK;
 		if (data) {
-			if ((unsigned long) data >= TASK_SIZE) {
-				iput(inode);
-				return -EFAULT;
+			struct vm_area_struct * vma;
+
+			for (vma = current->mmap ; ; ) {
+				if (!vma || (unsigned long) data < vma->vm_start) {
+					iput(inode);
+					return -EFAULT;
+				}
+				if ((unsigned long) data < vma->vm_end)
+					break;
+				vma = vma->vm_next;
 			}
+			i = vma->vm_end - (unsigned long) data;
+			if (PAGE_SIZE <= (unsigned long) i)
+				i = PAGE_SIZE-1;
 			if (!(page = __get_free_page(GFP_KERNEL))) {
 				iput(inode);
 				return -ENOMEM;
 			}
-			i = TASK_SIZE - (unsigned long) data;
-			if ((unsigned long) i >= PAGE_SIZE)
-				i = PAGE_SIZE-1;
 			memcpy_fromfs((void *) page,data,i);
 		}
 	}
@@ -484,8 +493,8 @@ void mount_root(void)
 
 	memset(super_blocks, 0, sizeof(super_blocks));
 	fcntl_init_locks();
-	if (MAJOR(ROOT_DEV) == 2) {
-		printk("VFS: Insert root floppy and press ENTER\n");
+	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
+		printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");
 		wait_for_keypress();
 	}
 	for (fs_type = file_systems; fs_type->read_super; fs_type++) {

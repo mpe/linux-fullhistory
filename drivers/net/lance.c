@@ -14,7 +14,7 @@
     C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
 */
 
-static char *version = "lance.c:v0.13f 10/18/93 becker@super.org\n";
+static char *version = "lance.c:v0.13s 11/15/93 becker@super.org\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -24,6 +24,7 @@ static char *version = "lance.c:v0.13f 10/18/93 becker@super.org\n";
 #include <linux/errno.h>
 #include <linux/ioport.h>
 #include <linux/malloc.h>
+#include <linux/interrupt.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -33,6 +34,19 @@ static char *version = "lance.c:v0.13f 10/18/93 becker@super.org\n";
 #include "eth.h"
 #include "skbuff.h"
 #include "arp.h"
+
+#ifndef HAVE_PORTRESERVE
+#define check_region(addr, size)	0
+#define snarf_region(addr, size)	do ; while(0)
+#endif
+
+#ifndef HAVE_ALLOC_SKB
+#define alloc_skb(size, priority) (struct sk_buff *) kmalloc(size,priority)
+#define kfree_skbmem(buff, size) kfree_s(buff,size)
+#endif
+
+struct device *init_etherdev(struct device *dev, int sizeof_private,
+			     unsigned long *mem_startp);
 
 #ifdef LANCE_DEBUG
 int lance_debug = LANCE_DEBUG;
@@ -44,21 +58,106 @@ int lance_debug = 1;
 #define LANCE_DMA	5
 #endif
 
-/* Set the number of Tx and Rx buffers. */
-#ifndef LANCE_BUFFER_LOG_SZ
-#define RING_SIZE	16
-#define RING_MOD_MASK	0x0f
-#define RING_LEN_BITS	0x80000000
-#else
-#define RING_SIZE	(1 << (LANCE_BUFFERS_LOG_SZ))
-#define RING_MOD_MASK	(RING_SIZE - 1)
-#define RING_LEN_BITS	(LANCE_BUFFER_LOG_SZ << 13)
+/*
+  		Theory of Operation
+
+I. Board Compatibility
+
+This device driver is designed for the AMD 79C960, the "PCnet-ISA
+single-chip ethernet controller for ISA".  This chip is used in a wide
+variety of boards from vendors such as Allied Telesis, HP, Kingston,
+and Boca.  This driver is also intended to work with older AMD 7990
+designs, such as the NE1500 and NE2100.  For convenience, I use the name
+LANCE to refer to either AMD chip.
+
+II. Board-specific settings
+
+The driver is designed to work the boards that use the faster
+bus-master mode, rather than in shared memory mode.  (Only older designs
+have on-board buffer memory needed to support the slower shared memory mode.)
+
+Most boards have jumpered settings for the I/O base, IRQ line, and DMA channel.
+This driver probes the likely base addresses, {0x300, 0x320, 0x340, 0x360}.
+After the board is found it generates an DMA-timeout interrupt and uses
+autoIRQ to find the IRQ line.  The DMA channel defaults to LANCE_DMA, or it
+can be set with the low bits of the otherwise-unused dev->mem_start value.
+
+The HP-J2405A board is an exception: with this board it's easy to read the
+EEPROM-set values for the base, IRQ, and DMA.  Of course you must already
+_know_ the base address, but that entry is for changing the EEPROM.
+
+III. Driver operation
+
+IIIa. Ring buffers
+The LANCE uses ring buffers of Tx and Rx descriptors.  Each entry describes
+the base and length of the data buffer, along with status bits.  The length
+of these buffers is set by LANCE_LOG_{RX,TX}_BUFFERS, which is log_2() of
+the buffer length (rather than being directly the buffer length) for
+implementation ease.  The current values are 2 (Tx) and 4 (Rx), which leads to
+ring sizes of 4 (Tx) and 16 (Rx).  Increasing the number of ring entries
+needlessly uses extra space and reduces the chance that an upper layer will
+be able to reorder queued Tx packets based on priority.  Decreasing the number
+of entries makes it more difficult to achieve back-to-back packet transmission
+and increases the chance that Rx ring will overflow.  (Consider the worst case
+of receiving back-to-back minimum-sized packets.)
+
+The LANCE has the capability to "chain" both Rx and Tx buffers, but this driver
+statically allocates full-sized (slightly oversized -- PKT_BUF_SZ) buffers to
+avoid the administrative overhead. For the Rx side this avoids dynamically
+allocating full-sized buffers "just in case", at the expense of a
+memory-to-memory data copy for each packet received.  For most systems this
+is an good tradeoff: the Rx buffer will always be in low memory, the copy
+is inexpensive, and it primes the cache for later packet processing.  For Tx
+the buffers are only used when needed as low-memory bounce buffers.
+
+IIIB. 16M memory limitations.
+For the ISA bus master mode all structures used directly by the LANCE,
+the initialization block, Rx and Tx rings, and data buffers, must be
+accessable from the ISA bus, i.e. in the lower 16M of real memory.
+This is a problem for current Linux kernels on >16M machines. The network
+devices are initialized after memory initialization, and the kernel doles out
+memory from the top of memory downward.  The current solution is to have a
+special network initialization routine that's called before memory
+initialization; this will eventually be generalized for all network devices.
+As mentioned before, low-memory "bounce-buffers" are used when needed.
+
+IIIC. Synchronization
+The driver runs as two independent, single-threaded flows of control.  One
+is the send-packet routine, which enforces single-threaded use by the
+dev->tbusy flag.  The other thread is the interrupt handler, which is single
+threaded by the hardware and other software.
+
+The send packet thread has partial control over the Tx ring and 'dev->tbusy'
+flag.  It sets the tbusy flag whenever it's queuing a Tx packet. If the next
+queue slot is empty, it clears the tbusy flag when finished otherwise it sets
+the 'lp->tx_full' flag.
+
+The interrupt handler has exclusive control over the Rx ring and records stats
+from the Tx ring.  (The Tx-done interrupt can't be selectively turned off, so
+we can't avoid the interrupt overhead by having the Tx routine reap the Tx
+stats.)  After reaping the stats, it marks the queue entry as empty by setting
+the 'base' to zero.  Iff the 'lp->tx_full' flag is set, it clears both the
+tx_full and tbusy flags.
+
+*/
+
+/* Set the number of Tx and Rx buffers, using Log_2(# buffers).
+   Reasonable default values are 4 Tx buffers, and 16 Rx buffers.
+   That translates to 2 (4 == 2^^2) and 4 (16 == 2^^4). */
+#ifndef LANCE_LOG_TX_BUFFERS
+#define LANCE_LOG_TX_BUFFERS 2
+#define LANCE_LOG_RX_BUFFERS 4
 #endif
 
-#ifndef HAVE_ALLOC_SKB
-#define alloc_skb(size, priority) (struct sk_buff *) kmalloc(size,priority)
-#define kfree_skbmem(buff, size) kfree_s(buff,size)
-#endif
+#define TX_RING_SIZE		(1 << (LANCE_LOG_TX_BUFFERS))
+#define TX_RING_MOD_MASK	(TX_RING_SIZE - 1)
+#define TX_RING_LEN_BITS	((LANCE_LOG_TX_BUFFERS) << 29)
+
+#define RX_RING_SIZE		(1 << (LANCE_LOG_RX_BUFFERS))
+#define RX_RING_MOD_MASK	(RX_RING_SIZE - 1)
+#define RX_RING_LEN_BITS	((LANCE_LOG_RX_BUFFERS) << 29)
+
+#define PKT_BUF_SZ	1544
 
 /* Offsets from base I/O address. */
 #define LANCE_DATA 0x10
@@ -81,7 +180,7 @@ struct lance_tx_head {
 };
 
 /* The LANCE initialization block, described in databook. */
-struct lance_init {
+struct lance_init_block {
     unsigned short mode;	/* Pre-set mode (reg. 15) */
     unsigned char phys_addr[6];	/* Physical ethernet address */
     unsigned filter[2];		/* Multicast filter (unused). */
@@ -93,10 +192,12 @@ struct lance_init {
 struct lance_private {
     char devname[8];
     /* These must aligned on 8-byte boundaries. */
-    struct lance_rx_head rx_ring[RING_SIZE];
-    struct lance_tx_head tx_ring[RING_SIZE];
-    struct lance_init	init_block;
-    long dma_buffs;		/* Address of Rx and Tx buffers. */
+    struct lance_rx_head rx_ring[RX_RING_SIZE];
+    struct lance_tx_head tx_ring[TX_RING_SIZE];
+    struct lance_init_block	init_block;
+    long rx_buffs;		/* Address of Rx and Tx buffers. */
+    /* Tx low-memory "bounce buffer" address. */
+    char (*tx_bounce_buffs)[PKT_BUF_SZ];
     int	cur_rx, cur_tx;		/* The next free ring entry */
     int dirty_rx, dirty_tx;	/* The ring entries to be free()ed. */
     int dma;
@@ -105,18 +206,7 @@ struct lance_private {
     int pad0, pad1;		/* Used for alignment */
 };
 
-/* We need a ethercard low-memory allocation scheme for for bus-master or
-   DMA ethercards if they are to work >16M memory systems. This is a
-   temporary solution to the lack of one, but it limits us to a single
-   AT1500 and <16M. Bummer. */
-
-#define PKT_BUF_SZ	1544
-
-#ifndef MEM_START_ALLOC
-static char rx_buffs[PKT_BUF_SZ][RING_SIZE];
-#endif
-
-static int lance_probe1(struct device *dev, short ioaddr);
+static unsigned long lance_probe1(short ioaddr, unsigned long mem_start);
 static int lance_open(struct device *dev);
 static void lance_init_ring(struct device *dev);
 static int lance_start_xmit(struct sk_buff *skb, struct device *dev);
@@ -130,41 +220,27 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 
 
 
-int at1500_probe(struct device *dev)
+unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 {
     int *port, ports[] = {0x300, 0x320, 0x340, 0x360, 0};
-    int base_addr = dev->base_addr;
 
-    if (base_addr > 0x1ff)		/* Check a single specified location. */
-		return lance_probe1(dev, base_addr);
-    else if (base_addr > 0)		/* Don't probe at all. */
-		return ENXIO;
-
-    /* First probe for the ethercard ID, 0x57, and then look for a LANCE
-       chip. */
-    
+    printk("lance_init(%#x, %#x).\n", mem_start, mem_end);
     for (port = &ports[0]; *port; port++) {
 	int ioaddr = *port;
 
-#ifdef HAVE_PORTRESERVE
-	if (check_region(ioaddr, LANCE_TOTAL_SIZE))
-	    continue;
-#endif
-	if (inb(ioaddr + 14) != 0x57
-	    || inb(ioaddr + 15) != 0x57)
-	    continue;
-
-	if (lance_probe1(dev, ioaddr) == 0)
-	    return 0;
+	if (   check_region(ioaddr, LANCE_TOTAL_SIZE) == 0
+	    && inb(ioaddr + 14) == 0x57
+	    && inb(ioaddr + 15) == 0x57) {
+	    mem_start = lance_probe1(ioaddr, mem_start);
+	}
     }
 
-    dev->base_addr = base_addr;
-    return ENODEV;			/* ENODEV would be more accurate. */
+    return mem_start;
 }
 
-static int
-lance_probe1(struct device *dev, short ioaddr)
+static unsigned long lance_probe1(short ioaddr, unsigned long mem_start)
 {
+    struct device *dev;
     struct lance_private *lp;
     int hpJ2405A = 0;
     int i, reset_val;
@@ -182,7 +258,11 @@ lance_probe1(struct device *dev, short ioaddr)
 
     outw(0x0000, ioaddr+LANCE_ADDR); /* Switch to window 0 */
     if (inw(ioaddr+LANCE_DATA) != 0x0004)
-	return ENXIO;
+	return mem_start;
+
+    dev = init_etherdev(0, sizeof(struct lance_private)
+			+ PKT_BUF_SZ*(RX_RING_SIZE + TX_RING_SIZE),
+			&mem_start);
 
     printk("%s: LANCE at %#3x,", dev->name, ioaddr);
 
@@ -192,43 +272,27 @@ lance_probe1(struct device *dev, short ioaddr)
 	printk(" %2.2x", dev->dev_addr[i] = inb(ioaddr + i));
 
     dev->base_addr = ioaddr;
-#ifdef HAVE_PORTRESERVE
     snarf_region(ioaddr, LANCE_TOTAL_SIZE);
-#endif
 
-    /* Make up a LANCE-specific-data structure. */
-#ifdef MEM_START_ALLOC
-    dev->priv = (void *)((mem_start + 7) & ~7);
-    mem_start += (long)dev->priv + sizeof(struct lance_private);
+    /* Make certain the data structures used by the LANCE are aligned. */
+    dev->priv = (void *)(((int)dev->priv + 7) & ~7);
     lp = (struct lance_private *)dev->priv;
-    lp->dma_buffs = mem_start;
-    mem_start += PKT_BUF_SZ * RING_SIZE;
-#else    
-    dev->priv = kmalloc(sizeof(struct lance_private), GFP_KERNEL);
-    /* Align on 8-byte boundary. */
-    dev->priv = (void *)(((int)dev->priv + 7) & ~0x07);
-
-    if ((int)dev->priv & 0xff000000  ||  (int) rx_buffs & 0xff000000) {
-	printk(" disabled (buff %#x > 16M).\n", (int)rx_buffs);
-	return -ENOMEM;
-    }
-    memset(dev->priv, 0, sizeof(struct lance_private));
-    lp = (struct lance_private *)dev->priv;
-    lp->dma_buffs = (long)rx_buffs;
-#endif
+    lp->rx_buffs = (long)dev->priv + sizeof(struct lance_private);
+    lp->tx_bounce_buffs = (char (*)[PKT_BUF_SZ])
+			   (lp->rx_buffs + PKT_BUF_SZ*RX_RING_SIZE);
 
 #ifndef final_version
     /* This should never happen. */
     if ((int)(lp->rx_ring) & 0x07) {
 	printk(" **ERROR** LANCE Rx and Tx rings not on even boundary.\n");
-	return -ENXIO;
+	return mem_start;
     }
 #endif
 
     outw(88, ioaddr+LANCE_ADDR);
     lp->old_lance = (inw(ioaddr+LANCE_DATA) != 0x3003);
 
-#ifdef notdef
+#if defined(notdef)
     printk(lp->old_lance ? " original LANCE (%04x)" : " PCnet-ISA LANCE (%04x)",
 	   inw(ioaddr+LANCE_DATA));
 #endif
@@ -238,8 +302,8 @@ lance_probe1(struct device *dev, short ioaddr)
 	lp->init_block.phys_addr[i] = dev->dev_addr[i];
     lp->init_block.filter[0] = 0x00000000;
     lp->init_block.filter[1] = 0x00000000;
-    lp->init_block.rx_ring = (int)lp->rx_ring | RING_LEN_BITS;
-    lp->init_block.tx_ring = (int)lp->tx_ring | RING_LEN_BITS;
+    lp->init_block.rx_ring = (int)lp->rx_ring | RX_RING_LEN_BITS;
+    lp->init_block.tx_ring = (int)lp->tx_ring | TX_RING_LEN_BITS;
 
     outw(0x0001, ioaddr+LANCE_ADDR);
     outw((short) (int) &lp->init_block, ioaddr+LANCE_DATA);
@@ -256,11 +320,15 @@ lance_probe1(struct device *dev, short ioaddr)
 	printk(" HP J2405A IRQ %d DMA %d.\n", dev->irq, dev->dma);
     } else {
 	/* The DMA channel may be passed in on this parameter. */
-	dev->dma = dev->mem_start & 0x07;
+	if (dev->mem_start & 0x07)
+	    dev->dma = dev->mem_start & 0x07;
+	else if (dev->dma == 0)
+	    dev->dma = LANCE_DMA;
 
 	/* To auto-IRQ we enable the initialization-done and DMA err,
 	   interrupts. For now we will always get a DMA error. */
 	if (dev->irq < 2) {
+
 	    autoirq_setup(0);
 
 	    /* Trigger an initialization just for the interrupt. */
@@ -271,7 +339,7 @@ lance_probe1(struct device *dev, short ioaddr)
 		printk(", probed IRQ %d, fixed at DMA %d.\n", dev->irq, dev->dma);
 	    else {
 		printk(", failed to detect IRQ line.\n");
-		return -EAGAIN;
+		return mem_start;
 	    }
 	} else
 	    printk(" assigned IRQ %d DMA %d.\n", dev->irq, dev->dma);
@@ -296,35 +364,7 @@ lance_probe1(struct device *dev, short ioaddr)
     dev->set_multicast_list = &set_multicast_list;
 #endif
 
-    dev->mem_start = 0;
-
-    /* Fill in the generic field of the device structure. */
-    for (i = 0; i < DEV_NUMBUFFS; i++)
-	dev->buffs[i] = NULL;
-
-    dev->hard_header	= eth_header;
-    dev->add_arp	= eth_add_arp;
-    dev->queue_xmit	= dev_queue_xmit;
-    dev->rebuild_header	= eth_rebuild_header;
-    dev->type_trans	= eth_type_trans;
-
-    dev->type		= ARPHRD_ETHER;
-    dev->hard_header_len = ETH_HLEN;
-    dev->mtu		= 1500; /* eth_mtu */
-    dev->addr_len	= ETH_ALEN;
-    for (i = 0; i < dev->addr_len; i++) {
-	dev->broadcast[i]=0xff;
-    }
-
-    /* New-style flags. */
-    dev->flags		= IFF_BROADCAST;
-    dev->family		= AF_INET;
-    dev->pa_addr	= 0;
-    dev->pa_brdaddr	= 0;
-    dev->pa_mask	= 0;
-    dev->pa_alen	= sizeof(unsigned long);
-
-    return 0;
+    return mem_start;
 }
 
 
@@ -339,9 +379,7 @@ lance_open(struct device *dev)
 	return -EAGAIN;
     }
 
-    lp->dma = dev->dma ? dev->dma : LANCE_DMA;
-
-    if (request_dma(lp->dma)) {
+    if (request_dma(dev->dma)) {
 	free_irq(dev->irq);
 	return -EAGAIN;
     }
@@ -351,8 +389,8 @@ lance_open(struct device *dev)
     inw(ioaddr+LANCE_RESET);
 
     /* The DMA controller is used as a no-operation slave, "cascade mode". */
-    enable_dma(lp->dma);
-    set_dma_mode(lp->dma, DMA_MODE_CASCADE);
+    enable_dma(dev->dma);
+    set_dma_mode(dev->dma, DMA_MODE_CASCADE);
 
     /* Un-Reset the LANCE, needed only for the NE2100. */
     if (lp->old_lance)
@@ -366,7 +404,7 @@ lance_open(struct device *dev)
 
     if (lance_debug > 1)
 	printk("%s: lance_open() irq %d dma %d tx/rx rings %#x/%#x init %#x.\n",
-	       dev->name, dev->irq, lp->dma, (int) lp->tx_ring, (int) lp->rx_ring,
+	       dev->name, dev->irq, dev->dma, (int) lp->tx_ring, (int) lp->rx_ring,
 	       (int) &lp->init_block);
 
     lance_init_ring(dev);
@@ -408,9 +446,13 @@ lance_init_ring(struct device *dev)
     lp->cur_rx = lp->cur_tx = 0;
     lp->dirty_rx = lp->dirty_tx = 0;
 
-    for (i = 0; i < RING_SIZE; i++) {
-	lp->rx_ring[i].base = (lp->dma_buffs + i*PKT_BUF_SZ) | 0x80000000;
+    for (i = 0; i < RX_RING_SIZE; i++) {
+	lp->rx_ring[i].base = (lp->rx_buffs + i*PKT_BUF_SZ) | 0x80000000;
 	lp->rx_ring[i].buf_length = -PKT_BUF_SZ;
+    }
+    /* The Tx buffer address is filled in as needed, but we do need to clear
+       the upper ownership bit. */
+    for (i = 0; i < TX_RING_SIZE; i++) {
 	lp->tx_ring[i].base = 0;
     }
 
@@ -419,8 +461,8 @@ lance_init_ring(struct device *dev)
 	lp->init_block.phys_addr[i] = dev->dev_addr[i];
     lp->init_block.filter[0] = 0x00000000;
     lp->init_block.filter[1] = 0x00000000;
-    lp->init_block.rx_ring = (int)lp->rx_ring | RING_LEN_BITS;
-    lp->init_block.tx_ring = (int)lp->tx_ring | RING_LEN_BITS;
+    lp->init_block.rx_ring = (int)lp->rx_ring | RX_RING_LEN_BITS;
+    lp->init_block.tx_ring = (int)lp->tx_ring | TX_RING_LEN_BITS;
 }
 
 static int
@@ -428,18 +470,36 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 {
     struct lance_private *lp = (struct lance_private *)dev->priv;
     int ioaddr = dev->base_addr;
+    int entry;
 
     /* Transmitter timeout, serious problems. */
     if (dev->tbusy) {
 	int tickssofar = jiffies - dev->trans_start;
-	if (tickssofar < 5)
+	if (tickssofar < 10)
 	    return 1;
 	outw(0, ioaddr+LANCE_ADDR);
 	printk("%s: transmit timed out, status %4.4x, resetting.\n",
 	       dev->name, inw(ioaddr+LANCE_DATA));
-
+	outw(0x0001, ioaddr+LANCE_DATA);
+	lp->stats.tx_errors++;
+#ifndef final_version
+	{
+	    int i;
+	    printk(" Ring data dump: dirty_tx %d cur_tx %d cur_rx %d.",
+		   lp->dirty_tx, lp->cur_tx, lp->cur_rx);
+	    for (i = 0 ; i < RX_RING_SIZE; i++)
+		printk("%s %08x %04x %04x", i & 0x3 ? "" : "\n ",
+		       lp->rx_ring[i].base, -lp->rx_ring[i].buf_length,
+		       lp->rx_ring[i].msg_length);
+	    for (i = 0 ; i < TX_RING_SIZE; i++)
+		printk(" %s%08x %04x %04x", i & 0x3 ? "" : "\n ",
+		       lp->tx_ring[i].base, -lp->tx_ring[i].length,
+		       lp->tx_ring[i].misc);
+	    printk("\n");
+	}
+#endif
 	lance_init_ring(dev);
-	outw(0x43, ioaddr+LANCE_DATA);
+	outw(0x0043, ioaddr+LANCE_DATA);
 
 	dev->tbusy=0;
 	dev->trans_start = jiffies;
@@ -475,49 +535,47 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
     if (set_bit(0, (void*)&dev->tbusy) != 0)
 	printk("%s: Transmitter access conflict.\n", dev->name);
 
-    /* This code is broken for >16M RAM systems.
-       There are two ways to fix it:
-           Keep around several static low-memory buffers, and deal with
-	   the book-keeping (bad for small systems).
-	   Make static Tx buffers that are optionally used.
-	   (Even worse.)
-     */
-    {				/* Fill in a Tx ring entry */
-	int entry = lp->cur_tx++;
+    /* Fill in a Tx ring entry */
 
-	entry &= RING_MOD_MASK;		/* Ring buffer. */
-	/* Caution: the write order is important here. */
-	lp->tx_ring[entry].length = -skb->len;
+    /* Mask to ring buffer boundary. */
+    entry = lp->cur_tx & TX_RING_MOD_MASK;
 
-	/* This shouldn't be necessary... */
+    /* Caution: the write order is important here, set the base address
+       with the "ownership" bits last. */
+
+    /* The old LANCE chips doesn't automatically pad buffers to min. size. */
+    if (lp->old_lance) {
 	lp->tx_ring[entry].length =
 	    -(ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN);
+    } else
+	lp->tx_ring[entry].length = -skb->len;
 
-	lp->tx_ring[entry].misc = 0x0000;
+    lp->tx_ring[entry].misc = 0x0000;
+
+    /* If any part of this buffer is >16M we must copy it to a low-memory
+       buffer. */
+    if ((int)(skb+1) + skb->len > 0x01000000) {
+	if (lance_debug > 5)
+	    printk("%s: bouncing a high-memory packet (%#x).\n",
+		   dev->name, (int)(skb+1));
+	memcpy(&lp->tx_bounce_buffs[entry], skb+1, skb->len);
+	lp->tx_ring[entry].base =
+	    (int)(lp->tx_bounce_buffs + entry) | 0x83000000;
+	if (skb->free)
+	    kfree_skb (skb, FREE_WRITE);
+    } else
 	lp->tx_ring[entry].base = (int)(skb+1) | 0x83000000;
 
-	/* Trigger an immediate send poll. */
-	outw(0x0000, ioaddr+LANCE_ADDR);
-	outw(0x0048, ioaddr+LANCE_DATA);
+    lp->cur_tx++;
 
-	if (lance_debug > 4) {
-	    unsigned char *pkt =
-		(unsigned char *)(lp->tx_ring[entry].base & 0x00ffffff);
+    /* Trigger an immediate send poll. */
+    outw(0x0000, ioaddr+LANCE_ADDR);
+    outw(0x0048, ioaddr+LANCE_DATA);
 
-	    printk("%s: tx ring[%d], %#x, sk_buf %#x len %d.\n",
-		   dev->name, entry, (int) &lp->tx_ring[entry],
-		   lp->tx_ring[entry].base, -lp->tx_ring[entry].length);
-	    printk("%s:  Tx %2.2x %2.2x %2.2x ... %2.2x  %2.2x %2.2x %2.2x...%2.2x len %2.2x %2.2x  %2.2x %2.2x.\n",
-		   dev->name, pkt[0], pkt[1], pkt[2], pkt[5], pkt[6],
-		   pkt[7], pkt[8], pkt[11], pkt[12], pkt[13],
-		   pkt[14], pkt[15]);
-	}
+    dev->trans_start = jiffies;
 
-	dev->trans_start = jiffies;
-
-	if (lp->tx_ring[(entry+1) & RING_MOD_MASK].base >= 0)
-	    dev->tbusy=0;
-    }
+    if (lp->tx_ring[(entry+1) & TX_RING_MOD_MASK].base == 0)
+	dev->tbusy=0;
 
     return 0;
 }
@@ -557,41 +615,65 @@ lance_interrupt(int reg_ptr)
 	lance_rx(dev);
 
     if (csr0 & 0x0200) {	/* Tx-done interrupt */
-	int dirty_tx = lp->dirty_tx & RING_MOD_MASK;
+	int dirty_tx = lp->dirty_tx;
 
-	if (lance_debug > 5)
-	    printk("%s: Cleaning tx ring, dirty %d clean %d.\n",
-		   dev->name, dirty_tx, (lp->cur_tx & RING_MOD_MASK));
+	if (dirty_tx == lp->cur_tx - TX_RING_SIZE
+	    && dev->tbusy) {
+	    /* The ring is full, clear tbusy. */
+	    dev->tbusy = 0;
+	    mark_bh(INET_BH);
+	}
 
-	/* This code is broken for >16M RAM systems. */
-	while (dirty_tx != (lp->cur_tx & RING_MOD_MASK)
-	       && lp->tx_ring[dirty_tx].base > 0) {
-	    struct sk_buff *skb =
-		(struct sk_buff *)(lp->tx_ring[dirty_tx].base & 0x00ffffff);
-	    unsigned short *tmdp = (unsigned short *)(&lp->tx_ring[dirty_tx]);
-	    int status = lp->tx_ring[dirty_tx].base >> 24;
+	while (dirty_tx < lp->cur_tx) {
+	    int entry = dirty_tx & TX_RING_MOD_MASK;
+	    int status = lp->tx_ring[entry].base;
+	    void *databuff;
+	    
+	    if (status < 0)
+		break;		/* It still hasn't been Txed */
 
-	    if (status & 0x40) { /* There was an major error, log it. */
-		int err_status = lp->tx_ring[dirty_tx].misc;
+	    lp->tx_ring[entry].base = 0;
+	    databuff = (void*)(status & 0x00ffffff);
+
+	    if (status & 0x40000000) { /* There was an major error, log it. */
+		int err_status = lp->tx_ring[entry].misc;
 		lp->stats.tx_errors++;
 		if (err_status & 0x0400) lp->stats.tx_aborted_errors++;
 		if (err_status & 0x0800) lp->stats.tx_carrier_errors++;
 		if (err_status & 0x1000) lp->stats.tx_window_errors++;
 		if (err_status & 0x4000) lp->stats.tx_fifo_errors++;
 		/* We should re-init() after the FIFO error. */
-	    } else if (status & 0x18)
+	    } else if (status & 0x18000000)
 		lp->stats.collisions++;
 	    else
 		lp->stats.tx_packets++;
-	    if (lance_debug > 5)
-		printk("%s: Tx done entry %d, %4.4x %4.4x %4.4x %4.4x.\n",
-		       dev->name, dirty_tx,
-		       tmdp[0], tmdp[1], tmdp[2], tmdp[3]);
-	    if ((skb-1)->free)
-		kfree_skb (skb-1, FREE_WRITE);
-	    dirty_tx = ++lp->dirty_tx & RING_MOD_MASK;
+
+	    /* We don't free the skb if it's a data-only copy in the bounce
+	       buffer.  The address checks here are sorted -- the first test
+	       should always works.  */
+	    if (databuff >= (void*)(&lp->tx_bounce_buffs[TX_RING_SIZE])
+		|| databuff < (void*)(lp->tx_bounce_buffs)) {
+		struct sk_buff *skb = ((struct sk_buff *)databuff) - 1;
+		if (skb->free)
+		    kfree_skb(skb, FREE_WRITE);
+	    }
+	    dirty_tx++;
 	}
-	/* mark_bh(INET_BH); */
+
+	lp->dirty_tx = dirty_tx;
+
+#ifndef final_version
+	if (lp->cur_tx - dirty_tx >= TX_RING_SIZE) {
+	    printk("out-of-sync dirty pointer, %d vs. %d.\n",
+		   dirty_tx, lp->cur_tx);
+	    lp->dirty_tx += TX_RING_SIZE;
+	}
+#endif
+    }
+
+    if (csr0 & 0x8000) {
+	if (csr0 & 0x4000) lp->stats.tx_errors++;
+	if (csr0 & 0x1000) lp->stats.rx_errors++;
     }
 
     /* Clear the interrupts we've handled. */
@@ -611,7 +693,7 @@ static int
 lance_rx(struct device *dev)
 {
     struct lance_private *lp = (struct lance_private *)dev->priv;
-    int entry = lp->cur_rx & RING_MOD_MASK;
+    int entry = lp->cur_rx & RX_RING_MOD_MASK;
 	
     /* If we own the next entry, it's a new packet. Send it up. */
     while (lp->rx_ring[entry].base >= 0) {
@@ -656,13 +738,11 @@ lance_rx(struct device *dev)
 	}
 
 	lp->rx_ring[entry].base |= 0x80000000;
-	entry = (entry+1) & RING_MOD_MASK;
+	entry = (++lp->cur_rx) & RX_RING_MOD_MASK;
     }
 
     /* We should check that at least two ring entries are free.  If not,
        we should free one and mark stats->rx_dropped++. */
-
-    lp->cur_rx = entry;
 
     return 0;
 }
@@ -689,10 +769,10 @@ lance_close(struct device *dev)
        memory if we don't. */
     outw(0x0004, ioaddr+LANCE_DATA);
 
-    disable_dma(lp->dma);
+    disable_dma(dev->dma);
 
     free_irq(dev->irq);
-    free_dma(lp->dma);
+    free_dma(dev->dma);
 
     irq2dev_map[dev->irq] = 0;
 

@@ -6,7 +6,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -29,27 +29,43 @@
 /* #define	dSIGH(x)	4(x) */
 
 
+#ifdef REENTRANT_FPU
+/*
+	Local storage on the stack:
+	Result:		FPU_accum_3:FPU_accum_2:FPU_accum_1:FPU_accum_0
+	Overflow flag:	ovfl_flag
+ */
+#define FPU_accum_3	-4(%ebp)
+#define FPU_accum_2	-8(%ebp)
+#define FPU_accum_1	-12(%ebp)
+#define FPU_accum_0	-16(%ebp)
+#define FPU_result_1	-20(%ebp)
+#define FPU_result_2	-24(%ebp)
+#define FPU_ovfl_flag	-28(%ebp)
+
+#else
 .data
 /*
-	Local storage:
-	Result:		accum_3:accum_2:accum_1:accum_0
+	Local storage in a static area:
+	Result:		FPU_accum_3:FPU_accum_2:FPU_accum_1:FPU_accum_0
 	Overflow flag:	ovfl_flag
  */
 	.align 2,0
-accum_3:
+FPU_accum_3:
 	.long	0
-accum_2:
+FPU_accum_2:
 	.long	0
-accum_1:
+FPU_accum_1:
 	.long	0
-accum_0:
+FPU_accum_0:
 	.long	0
-result_1:
+FPU_result_1:
 	.long	0
-result_2:
+FPU_result_2:
 	.long	0
-ovfl_flag:
+FPU_ovfl_flag:
 	.byte	0
+#endif REENTRANT_FPU
 
 
 .text
@@ -62,6 +78,9 @@ ovfl_flag:
 _reg_u_div:
 	pushl	%ebp
 	movl	%esp,%ebp
+#ifdef REENTRANT_FPU
+	subl	$28,%esp
+#endif REENTRANT_FPU
 
 	pushl	%esi
 	pushl	%edi
@@ -78,7 +97,7 @@ _reg_u_div:
 
 	call	_denormal_operand
 	orl	%eax,%eax
-	jnz	FPU_Arith_exit
+	jnz	fpu_Arith_exit
 
 xOp1_not_denorm:
 	movl	EXP(%ebx),%eax
@@ -87,7 +106,7 @@ xOp1_not_denorm:
 
 	call	_denormal_operand
 	orl	%eax,%eax
-	jnz	FPU_Arith_exit
+	jnz	fpu_Arith_exit
 
 xOp2_not_denorm:
 #endif DENORM_OPERAND
@@ -110,7 +129,7 @@ _divide_kernel:
 	movl	SIGL(%esi),%eax	/* Dividend */
 
 	cmpl	%ecx,%edx
-	setaeb	ovfl_flag	/* Keep a record */
+	setaeb	FPU_ovfl_flag	/* Keep a record */
 	jb	L_no_adjust
 
 	subl	%ecx,%edx	/* Prevent the overflow */
@@ -118,18 +137,18 @@ _divide_kernel:
 L_no_adjust:
 	/* Divide the 64 bit number by the 32 bit denominator */
 	divl	%ecx
-	movl	%eax,result_2
+	movl	%eax,FPU_result_2
 
 	/* Work on the remainder of the first division */
 	xorl	%eax,%eax
 	divl	%ecx
-	movl	%eax,result_1
+	movl	%eax,FPU_result_1
 
 	/* Work on the remainder of the 64 bit division */
 	xorl	%eax,%eax
 	divl	%ecx
 
-	testb	$255,ovfl_flag	/* was the num > denom ? */
+	testb	$255,FPU_ovfl_flag	/* was the num > denom ? */
 	je	L_no_overflow
 
 	/* Do the shifting here */
@@ -138,8 +157,8 @@ L_no_adjust:
 
 	/* shift the mantissa right one bit */
 	stc			/* To set the ms bit */
-	rcrl	result_2
-	rcrl	result_1
+	rcrl	FPU_result_2
+	rcrl	FPU_result_1
 	rcrl	%eax
 
 L_no_overflow:
@@ -167,21 +186,21 @@ L_no_overflow:
 L_Full_Division:
 	/* Save extended dividend in local register */
 	movl	SIGL(%esi),%eax
-	movl	%eax,accum_2
+	movl	%eax,FPU_accum_2
 	movl	SIGH(%esi),%eax
-	movl	%eax,accum_3
+	movl	%eax,FPU_accum_3
 	xorl	%eax,%eax
-	movl	%eax,accum_1	/* zero the extension */
-	movl	%eax,accum_0	/* zero the extension */
+	movl	%eax,FPU_accum_1	/* zero the extension */
+	movl	%eax,FPU_accum_0	/* zero the extension */
 
 	movl	SIGL(%esi),%eax	/* Get the current num */
 	movl	SIGH(%esi),%edx
 
 /*----------------------------------------------------------------------*/
-/* Initialization done */
-/* Do the first 32 bits */
+/* Initialization done.
+   Do the first 32 bits. */
 
-	movb	$0,ovfl_flag
+	movb	$0,FPU_ovfl_flag
 	cmpl	SIGH(%ebx),%edx	/* Test for imminent overflow */
 	jb	LLess_than_1
 	ja	LGreater_than_1
@@ -191,16 +210,16 @@ L_Full_Division:
 
 LGreater_than_1:
 /* The dividend is greater or equal, would cause overflow */
-	setaeb	ovfl_flag		/* Keep a record */
+	setaeb	FPU_ovfl_flag		/* Keep a record */
 
 	subl	SIGL(%ebx),%eax
 	sbbl	SIGH(%ebx),%edx	/* Prevent the overflow */
-	movl	%eax,accum_2
-	movl	%edx,accum_3
+	movl	%eax,FPU_accum_2
+	movl	%edx,FPU_accum_3
 
 LLess_than_1:
 /* At this point, we have a dividend < divisor, with a record of
-   adjustment in ovfl_flag */
+   adjustment in FPU_ovfl_flag */
 
 	/* We will divide by a number which is too large */
 	movl	SIGH(%ebx),%ecx
@@ -217,19 +236,19 @@ LFirst_div_not_1:
 				   denom ms dw */
 
 LFirst_div_done:
-	movl	%eax,result_2	/* Put the result in the answer */
+	movl	%eax,FPU_result_2	/* Put the result in the answer */
 
 	mull	SIGH(%ebx)	/* mul by the ms dw of the denom */
 
-	subl	%eax,accum_2	/* Subtract from the num local reg */
-	sbbl	%edx,accum_3
+	subl	%eax,FPU_accum_2	/* Subtract from the num local reg */
+	sbbl	%edx,FPU_accum_3
 
-	movl	result_2,%eax	/* Get the result back */
+	movl	FPU_result_2,%eax	/* Get the result back */
 	mull	SIGL(%ebx)	/* now mul the ls dw of the denom */
 
-	subl	%eax,accum_1	/* Subtract from the num local reg */
-	sbbl	%edx,accum_2
-	sbbl	$0,accum_3
+	subl	%eax,FPU_accum_1	/* Subtract from the num local reg */
+	sbbl	%edx,FPU_accum_2
+	sbbl	$0,FPU_accum_3
 	je	LDo_2nd_32_bits		/* Must check for non-zero result here */
 
 #ifdef PARANOID
@@ -237,25 +256,25 @@ LFirst_div_done:
 #endif PARANOID
 
 	/* need to subtract another once of the denom */
-	incl	result_2	/* Correct the answer */
+	incl	FPU_result_2	/* Correct the answer */
 
 	movl	SIGL(%ebx),%eax
 	movl	SIGH(%ebx),%edx
-	subl	%eax,accum_1	/* Subtract from the num local reg */
-	sbbl	%edx,accum_2
+	subl	%eax,FPU_accum_1	/* Subtract from the num local reg */
+	sbbl	%edx,FPU_accum_2
 
 #ifdef PARANOID
-	sbbl	$0,accum_3
+	sbbl	$0,FPU_accum_3
 	jne	L_bugged_1	/* Must check for non-zero result here */
 #endif PARANOID
 
 /*----------------------------------------------------------------------*/
 /* Half of the main problem is done, there is just a reduced numerator
-   to handle now */
-/* Work with the second 32 bits, accum_0 not used from now on */
+   to handle now.
+   Work with the second 32 bits, FPU_accum_0 not used from now on */
 LDo_2nd_32_bits:
-	movl	accum_2,%edx	/* get the reduced num */
-	movl	accum_1,%eax
+	movl	FPU_accum_2,%edx	/* get the reduced num */
+	movl	FPU_accum_1,%eax
 
 	/* need to check for possible subsequent overflow */
 	cmpl	SIGH(%ebx),%edx
@@ -270,10 +289,10 @@ LPrevent_2nd_overflow:
 	/* prevent overflow */
 	subl	SIGL(%ebx),%eax
 	sbbl	SIGH(%ebx),%edx
-	movl	%edx,accum_2
-	movl	%eax,accum_1
+	movl	%edx,FPU_accum_2
+	movl	%eax,FPU_accum_1
 
-	incl	result_2	/* Reflect the subtraction in the answer */
+	incl	FPU_result_2	/* Reflect the subtraction in the answer */
 
 #ifdef PARANOID
 	je	L_bugged_2	/* Can't bump the result to 1.0 */
@@ -291,23 +310,23 @@ LSecond_div_not_1:
 	divl	%ecx		/* Divide the numerator by the denom ms dw */
 
 LSecond_div_done:
-	movl	%eax,result_1	/* Put the result in the answer */
+	movl	%eax,FPU_result_1	/* Put the result in the answer */
 
 	mull	SIGH(%ebx)	/* mul by the ms dw of the denom */
 
-	subl	%eax,accum_1	/* Subtract from the num local reg */
-	sbbl	%edx,accum_2
+	subl	%eax,FPU_accum_1	/* Subtract from the num local reg */
+	sbbl	%edx,FPU_accum_2
 
 #ifdef PARANOID
 	jc	L_bugged_2
 #endif PARANOID
 
-	movl	result_1,%eax	/* Get the result back */
+	movl	FPU_result_1,%eax	/* Get the result back */
 	mull	SIGL(%ebx)	/* now mul the ls dw of the denom */
 
-	subl	%eax,accum_0	/* Subtract from the num local reg */
-	sbbl	%edx,accum_1	/* Subtract from the num local reg */
-	sbbl	$0,accum_2
+	subl	%eax,FPU_accum_0	/* Subtract from the num local reg */
+	sbbl	%edx,FPU_accum_1	/* Subtract from the num local reg */
+	sbbl	$0,FPU_accum_2
 
 #ifdef PARANOID
 	jc	L_bugged_2
@@ -316,24 +335,24 @@ LSecond_div_done:
 	jz	LDo_3rd_32_bits
 
 #ifdef PARANOID
-	cmpl	$1,accum_2
+	cmpl	$1,FPU_accum_2
 	jne	L_bugged_2
 #endif PARANOID
 
 	/* need to subtract another once of the denom */
 	movl	SIGL(%ebx),%eax
 	movl	SIGH(%ebx),%edx
-	subl	%eax,accum_0	/* Subtract from the num local reg */
-	sbbl	%edx,accum_1
-	sbbl	$0,accum_2
+	subl	%eax,FPU_accum_0	/* Subtract from the num local reg */
+	sbbl	%edx,FPU_accum_1
+	sbbl	$0,FPU_accum_2
 
 #ifdef PARANOID
 	jc	L_bugged_2
 	jne	L_bugged_2
 #endif PARANOID
 
-	addl	$1,result_1	/* Correct the answer */
-	adcl	$0,result_2
+	addl	$1,FPU_result_1	/* Correct the answer */
+	adcl	$0,FPU_result_2
 
 #ifdef PARANOID
 	jc	L_bugged_2	/* Must check for non-zero result here */
@@ -341,11 +360,11 @@ LSecond_div_done:
 
 /*----------------------------------------------------------------------*/
 /* The division is essentially finished here, we just need to perform
-   tidying operations. */
-/* deal with the 3rd 32 bits */
+   tidying operations.
+   Deal with the 3rd 32 bits */
 LDo_3rd_32_bits:
-	movl	accum_1,%edx		/* get the reduced num */
-	movl	accum_0,%eax
+	movl	FPU_accum_1,%edx		/* get the reduced num */
+	movl	FPU_accum_0,%eax
 
 	/* need to check for possible subsequent overflow */
 	cmpl	SIGH(%ebx),%edx	/* denom */
@@ -359,16 +378,16 @@ LPrevent_3rd_overflow:
 	/* prevent overflow */
 	subl	SIGL(%ebx),%eax
 	sbbl	SIGH(%ebx),%edx
-	movl	%edx,accum_1
-	movl	%eax,accum_0
+	movl	%edx,FPU_accum_1
+	movl	%eax,FPU_accum_0
 
-	addl	$1,result_1	/* Reflect the subtraction in the answer */
-	adcl	$0,result_2
+	addl	$1,FPU_result_1	/* Reflect the subtraction in the answer */
+	adcl	$0,FPU_result_2
 	jne	LRound_prep
 	jnc	LRound_prep
 
 	/* This is a tricky spot, there is an overflow of the answer */
-	movb	$255,ovfl_flag		/* Overflow -> 1.000 */
+	movb	$255,FPU_ovfl_flag		/* Overflow -> 1.000 */
 
 LRound_prep:
 /*
@@ -376,8 +395,8 @@ LRound_prep:
  * To test for rounding, we just need to compare 2*accum with the
  * denom.
  */
-	movl	accum_0,%ecx
-	movl	accum_1,%edx
+	movl	FPU_accum_0,%ecx
+	movl	FPU_accum_1,%edx
 	movl	%ecx,%eax
 	orl	%edx,%eax
 	jz	LRound_ovfl		/* The accumulator contains zero. */
@@ -407,15 +426,15 @@ LRound_large:
 LRound_ovfl:
 /* We are now ready to deal with rounding, but first we must get
    the bits properly aligned */
-	testb	$255,ovfl_flag	/* was the num > denom ? */
+	testb	$255,FPU_ovfl_flag	/* was the num > denom ? */
 	je	LRound_precision
 
 	incl	EXP(%edi)
 
 	/* shift the mantissa right one bit */
 	stc			/* Will set the ms bit */
-	rcrl	result_2
-	rcrl	result_1
+	rcrl	FPU_result_2
+	rcrl	FPU_result_1
 	rcrl	%eax
 
 /* Round the result as required */
@@ -423,9 +442,9 @@ LRound_precision:
 	decl	EXP(%edi)	/* binary point between 1st & 2nd bits */
 
 	movl	%eax,%edx
-	movl	result_1,%ebx
-	movl	result_2,%eax
-	jmp	FPU_round
+	movl	FPU_result_1,%ebx
+	movl	FPU_result_2,%eax
+	jmp	fpu_reg_round
 
 
 #ifdef PARANOID

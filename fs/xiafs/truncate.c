@@ -193,9 +193,6 @@ void xiafs_truncate(struct inode * inode)
 	current->counter = 0;
 	schedule();
     }
-    inode->i_atime = inode->i_ctime = inode->i_mtime = CURRENT_TIME;
+    inode->i_ctime = inode->i_mtime = CURRENT_TIME;
     inode->i_dirt = 1;
 }
-
-
-

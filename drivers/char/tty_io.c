@@ -35,6 +35,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/major.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/fcntl.h>
@@ -996,7 +997,7 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 	struct tty_struct * tty;
 
 	dev = file->f_rdev;
-	if (MAJOR(dev) != 4) {
+	if (MAJOR(dev) != TTY_MAJOR) {
 		printk("tty_read: bad pseudo-major nr #%d\n", MAJOR(dev));
 		return -EINVAL;
 	}
@@ -1030,8 +1031,8 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
 
 	dev = file->f_rdev;
 	is_console = (inode->i_rdev == 0x0400);
-	if (MAJOR(dev) != 4) {
-		printk("tty_write: pseudo-major != 4\n");
+	if (MAJOR(dev) != TTY_MAJOR) {
+		printk("tty_write: pseudo-major != TTY_MAJOR\n");
 		return -EINVAL;
 	}
 	dev = MINOR(dev);
@@ -1292,13 +1293,13 @@ static int tty_open(struct inode * inode, struct file * filp)
 	minor = MINOR(inode->i_rdev);
 	major = MAJOR(inode->i_rdev);
 	noctty = filp->f_flags & O_NOCTTY;
-	if (major == 5) {
+	if (major == TTYAUX_MAJOR) {
 		if (!minor) {
-			major = 4;
+			major = TTY_MAJOR;
 			minor = current->tty;
 		}
 		noctty = 1;
-	} else if (major == 4) {
+	} else if (major == TTY_MAJOR) {
 		if (!minor) {
 			minor = fg_console + 1;
 			noctty = 1;
@@ -1361,8 +1362,8 @@ static void tty_release(struct inode * inode, struct file * filp)
 	int dev;
 
 	dev = filp->f_rdev;
-	if (MAJOR(dev) != 4) {
-		printk("tty_release: tty pseudo-major != 4\n");
+	if (MAJOR(dev) != TTY_MAJOR) {
+		printk("tty_release: tty pseudo-major != TTY_MAJOR\n");
 		return;
 	}
 	dev = MINOR(filp->f_rdev);
@@ -1379,8 +1380,8 @@ static int tty_select(struct inode * inode, struct file * filp, int sel_type, se
 	struct tty_struct * tty;
 
 	dev = filp->f_rdev;
-	if (MAJOR(dev) != 4) {
-		printk("tty_select: tty pseudo-major != 4\n");
+	if (MAJOR(dev) != TTY_MAJOR) {
+		printk("tty_select: tty pseudo-major != TTY_MAJOR\n");
 		return 0;
 	}
 	dev = MINOR(filp->f_rdev);
@@ -1646,10 +1647,10 @@ long tty_init(long kmem_start)
 
 	if (sizeof(struct tty_struct) > PAGE_SIZE)
 		panic("size of tty structure > PAGE_SIZE!");
-	if (register_chrdev(4,"tty",&tty_fops))
-		panic("unable to get major 4 for tty device");
-	if (register_chrdev(5,"tty",&tty_fops))
-		panic("unable to get major 5 for tty device");
+	if (register_chrdev(TTY_MAJOR,"tty",&tty_fops))
+		panic("unable to get major %d for tty device", TTY_MAJOR);
+	if (register_chrdev(TTYAUX_MAJOR,"tty",&tty_fops))
+		panic("unable to get major %d for tty device", TTYAUX_MAJOR);
 	for (i=0 ; i< MAX_TTYS ; i++) {
 		tty_table[i] =  0;
 		tty_termios[i] = 0;

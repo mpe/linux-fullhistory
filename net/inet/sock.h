@@ -76,6 +76,7 @@ struct sock {
 				exp_growth,
 				zapped,	/* In ipx means not linked */
 				broadcast;
+  unsigned long		        lingertime;
   int				proc;
   struct sock			*next;
   struct sock			*pair;

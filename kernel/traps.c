@@ -67,11 +67,11 @@ asmlinkage void alignment_check(void);
 	if ((regs->eflags & VM_MASK) || (3 & regs->cs) == 3)
 		return;
 
-	printk("%s: %04x\n", str, err & 0xffff);
-	printk("EIP:    %04x:%08x\nEFLAGS: %08x\n", 0xffff & regs->cs,regs->eip,regs->eflags);
-	printk("eax: %08x   ebx: %08x   ecx: %08x   edx: %08x\n",
+	printk("%s: %04lx\n", str, err & 0xffff);
+	printk("EIP:    %04x:%08lx\nEFLAGS: %08lx\n", 0xffff & regs->cs,regs->eip,regs->eflags);
+	printk("eax: %08lx   ebx: %08lx   ecx: %08lx   edx: %08lx\n",
 		regs->eax, regs->ebx, regs->ecx, regs->edx);
-	printk("esi: %08x   edi: %08x   ebp: %08x\n",
+	printk("esi: %08lx   edi: %08lx   ebp: %08lx\n",
 		regs->esi, regs->edi, regs->ebp);
 	printk("ds: %04x   es: %04x   fs: %04x   gs: %04x\n",
 		regs->ds, regs->es, regs->fs, regs->gs);

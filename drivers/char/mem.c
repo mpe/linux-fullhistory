@@ -9,6 +9,7 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/major.h>
 #include <linux/tty.h>
 #include <linux/mouse.h>
 #include <linux/tpqic02.h>
@@ -108,6 +109,20 @@ static int mmap_mem(struct inode * inode, struct file * file,
 	insert_vm_struct(current, mpnt);
 	merge_segments(current->mmap, NULL, NULL);
 	return 0;
+}
+
+static int read_kmem(struct inode *inode, struct file *file, char *buf, int count)
+{
+	int read1, read2;
+
+	read1 = read_mem(inode, file, buf, count);
+	if (read1 < 0)
+		return read1;
+	read2 = vread(buf + read1, (char *) file->f_pos, count - read1);
+	if (read2 < 0)
+		return read2;
+	file->f_pos += read2;
+	return read1 + read2;
 }
 
 static int read_port(struct inode * inode,struct file * file,char * buf, int count)
@@ -224,7 +239,6 @@ static int memory_lseek(struct inode * inode, struct file * file, off_t offset, 
 	return file->f_pos;
 }
 
-#define read_kmem	read_mem
 #define write_kmem	write_mem
 #define mmap_kmem	mmap_mem
 #define zero_lseek	null_lseek
@@ -351,13 +365,13 @@ static struct file_operations memory_fops = {
 
 long chr_dev_init(long mem_start, long mem_end)
 {
-	if (register_chrdev(1,"mem",&memory_fops))
-		printk("unable to get major 1 for memory devs\n");
+	if (register_chrdev(MEM_MAJOR,"mem",&memory_fops))
+		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
 	mem_start = tty_init(mem_start);
 #ifdef CONFIG_PRINTER
 	mem_start = lp_init(mem_start);
 #endif
-#if defined (CONFIG_BUSMOUSE) || defined (CONFIG_QUICKPORT_MOUSE) || \
+#if defined (CONFIG_BUSMOUSE) || defined (CONFIG_82C710_MOUSE) || \
     defined (CONFIG_PSMOUSE) || defined (CONFIG_MS_BUSMOUSE) || \
     defined (CONFIG_ATIXL_BUSMOUSE)
 	mem_start = mouse_init(mem_start);

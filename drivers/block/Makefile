@@ -51,10 +51,6 @@ block.a: $(OBJS)
 	$(AR) rcs block.a $(OBJS)
 	sync
 
-clean: 
-	rm -f core *.o *.a *.s
-	for i in $(ALL_SUBDIRS); do (cd $$i && $(MAKE) clean); done
-
 dep:
 	$(CPP) -M $(SRCS) > .depend
 

@@ -34,9 +34,6 @@ sys_call.o: sys_call.s
 sched.o: sched.c
 	$(CC) $(CFLAGS) $(PROFILING) -fno-omit-frame-pointer -c $<
 
-clean:
-	rm -f core *.o *.a *.s
-
 dep:
 	$(CPP) -M *.c > .depend
 

@@ -33,11 +33,10 @@
  * to the current console is done by the main ioctl code.
  */
 
-struct vt_cons vt_cons[NR_CONSOLES];
+struct vt_struct vt_cons[NR_CONSOLES];
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on);
 
-extern void compute_shiftstate(void);
 extern void change_console(unsigned int new_console);
 extern void complete_change_console(unsigned int new_console);
 extern int vt_waitactive(void);
@@ -213,7 +212,6 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		} else if (arg == K_XLATE) {
 			clr_vc_kbd_flag(kbd, VC_RAW);
 			clr_vc_kbd_flag(kbd, VC_MEDIUMRAW);
-			compute_shiftstate();
 		} else if (arg == K_MEDIUMRAW) {
 			clr_vc_kbd_flag(kbd, VC_RAW);
 			set_vc_kbd_flag(kbd, VC_MEDIUMRAW);
@@ -273,7 +271,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 
 	case KDGKBSENT:
 	{
-		const struct kbsentry *a = (struct kbsentry *)arg;
+		struct kbsentry *a = (struct kbsentry *)arg;
 		char *p;
 		u_char *q;
 

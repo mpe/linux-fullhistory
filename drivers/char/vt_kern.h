@@ -8,7 +8,7 @@
 
 #include <linux/vt.h>
 
-extern struct vt_cons {
+extern struct vt_struct {
 	unsigned char	vc_mode;		/* KD_TEXT, ... */
 	unsigned char	vc_kbdraw;
 	unsigned char	vc_kbde0;

@@ -154,25 +154,26 @@
 
 #define REALLY_SLOW_IO		/* it sure is ... */
 
-#include <asm/dma.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
-#include <asm/system.h>
-#include <asm/io.h>
-#include <asm/segment.h>
-
+#include <linux/major.h>
 #include <linux/errno.h>
 #include <linux/mtio.h>
 #include <linux/fcntl.h>
 #include <linux/delay.h>
-
 #include <linux/tpqic02.h>
 
+#include <asm/dma.h>
+#include <asm/system.h>
+#include <asm/io.h>
+#include <asm/segment.h>
+
 /* check existence of required configuration parameters */
-#if !defined(TAPE_QIC02_MAJOR) || !defined(TAPE_QIC02_PORT) || \
-    !defined(TAPE_QIC02_IRQ) || !defined(TAPE_QIC02_DMA)
+#if !defined(TAPE_QIC02_PORT) || \
+    !defined(TAPE_QIC02_IRQ) || \
+    !defined(TAPE_QIC02_DMA)
 #error tape_qic02 configuration error
 #endif
 
@@ -220,7 +221,7 @@ static volatile unsigned long dma_bytes_done;
 static volatile unsigned dma_mode = 0;		/* !=0 also means DMA in use */
 static 		flag need_rewind = YES;
 
-static dev_t current_tape_dev = (TAPE_QIC02_MAJOR)<<8;
+static dev_t current_tape_dev = QIC02_TAPE_MAJOR << 8;
 static int extra_blocks_left = BLOCKS_BEYOND_EW;
 
 
@@ -560,7 +561,9 @@ static int tape_reset(int verbose)
 	ioctl_status.mt_fileno = ioctl_status.mt_blkno = 0;
 
 	outb_p(ctlbits & ~QIC_CTL_RESET, QIC_CTL_PORT);	/* de-assert reset */
-	status_dead = ((inb_p(QIC_STAT_PORT) & QIC_STAT_RESETMASK) != QIC_STAT_RESETVAL);
+	/* KLUDGE FOR G++ BUG */
+	{ int stat = inb_p(QIC_STAT_PORT);
+	  status_dead = ((stat & QIC_STAT_RESETMASK) != QIC_STAT_RESETVAL); }
 	/* if successful, inb(STAT) returned RESETVAL */
 	if (status_dead)
 		printk(TPQIC_NAME ": reset failed!\n");
@@ -2341,7 +2344,7 @@ static int tape_qic02_ioctl(struct inode * inode, struct file * filp,
 
 	/* check iocmd first */
 
-	if (dev_maj != TAPE_QIC02_MAJOR) {
+	if (dev_maj != QIC02_TAPE_MAJOR) {
 		printk(TPQIC_NAME ": Oops! Wrong device?\n");
 		/* A panic() would be appropriate here */
 		return -ENODEV;
@@ -2582,8 +2585,9 @@ long tape_qic02_init(long kmem_start)
 #endif
 
 	/* If we got this far, install driver functions */
-	if (register_chrdev(TAPE_QIC02_MAJOR, TPQIC_NAME, &tape_qic02_fops)) {
-		printk(TPQIC_NAME ": Unable to get chrdev major %d\n", TAPE_QIC02_MAJOR);
+	if (register_chrdev(QIC02_TAPE_MAJOR, TPQIC_NAME, &tape_qic02_fops)) {
+		printk(TPQIC_NAME ": Unable to get chrdev major %d\n",
+		       QIC02_TAPE_MAJOR);
 		return kmem_start;
 	}
 

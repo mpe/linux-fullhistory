@@ -14,6 +14,9 @@
  * Fixes:
  *		Alan Cox		: 	Volatiles (this makes me unhappy - we want proper asm linked list stuff)
  *		Alan Cox		:	Declaration for new primitives
+ *		Alan Cox		:	Fraglist support (idea by Donald Becker)
+ *		Alan Cox		:	'users' counter. Combines with datagram changes to avoid skb_peek_copy
+ *						being used.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -23,6 +26,11 @@
 #ifndef _SKBUFF_H
 #define _SKBUFF_H
 #include <linux/malloc.h>
+
+#ifdef CONFIG_IPX
+#include "ipx.h"
+#endif
+
 #define HAVE_ALLOC_SKB		/* For the drivers to know */
 
 
@@ -48,9 +56,14 @@ struct sk_buff {
 	struct arphdr	*arp;
 	unsigned char	*raw;
 	unsigned long	seq;
+#ifdef CONFIG_IPX	
+	ipx_packet	*ipx;
+#endif	
   } h;
   unsigned long			mem_len;
   unsigned long 		len;
+  unsigned long			fraglen;
+  struct sk_buff		*fraglist;	/* Fragment list */
   unsigned long			truesize;
   unsigned long 		saddr;
   unsigned long 		daddr;
@@ -61,6 +74,7 @@ struct sk_buff {
 				arp,
 				urg_used;
   unsigned char			tries,lock;	/* Lock is now unused */
+  unsigned short		users;		/* User count - see datagram.c (and soon seqpacket.c/stream.c) */
 };
 
 #define SK_WMEM_MAX	8192
@@ -74,8 +88,8 @@ extern void			kfree_skb(struct sk_buff *skb, int rw);
 extern void			skb_queue_head(struct sk_buff * volatile *list,struct sk_buff *buf);
 extern void			skb_queue_tail(struct sk_buff * volatile *list,struct sk_buff *buf);
 extern struct sk_buff *		skb_dequeue(struct sk_buff * volatile *list);
-extern void 			skb_insert(struct sk_buff *old,struct sk_buff *new);
-extern void			skb_append(struct sk_buff *old,struct sk_buff *new);
+extern void 			skb_insert(struct sk_buff *old,struct sk_buff *newsk);
+extern void			skb_append(struct sk_buff *old,struct sk_buff *newsk);
 extern void			skb_unlink(struct sk_buff *buf);
 extern void 			skb_new_list_head(struct sk_buff *volatile* list);
 extern struct sk_buff *		skb_peek(struct sk_buff * volatile *list);
@@ -88,4 +102,6 @@ extern void 			skb_check(struct sk_buff *skb,int, char *);
 
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);
 extern int			datagram_select(struct sock *sk, int sel_type, select_table *wait);
+extern void			skb_copy_datagram(struct sk_buff *from, int offset, char *to,int size);
+extern void			skb_free_datagram(struct sk_buff *skb);
 #endif	/* _SKBUFF_H */

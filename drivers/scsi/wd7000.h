@@ -172,7 +172,7 @@ int wd7000_command(Scsi_Cmnd *);
 int wd7000_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int wd7000_abort(Scsi_Cmnd *, int);
 const char *wd7000_info(void);
-int wd7000_reset(void);
+int wd7000_reset(Scsi_Cmnd *);
 int wd7000_biosparam(int, int, int*);
 
 #ifndef NULL

@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -117,7 +117,7 @@ static void fxam(void)
   setcc(c);
 }
 
-static FUNC fp_etc_table[] = {
+static FUNC const fp_etc_table[] = {
   fchs, fabs, Un_impl, Un_impl, ftst_, fxam, Un_impl, Un_impl
 };
 

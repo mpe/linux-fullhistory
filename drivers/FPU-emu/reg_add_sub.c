@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -22,7 +22,7 @@
 #include "fpu_system.h"
 
 
-int reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w)
+int reg_add(FPU_REG const *a, FPU_REG const *b, FPU_REG *dest, int control_w)
 {
   char saved_sign = dest->sign;
   int diff;
@@ -162,7 +162,7 @@ int reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w)
 
 
 /* Subtract b from a.  (a-b) -> dest */
-int reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w)
+int reg_sub(FPU_REG const *a, FPU_REG const *b, FPU_REG *dest, int control_w)
 {
   char saved_sign = dest->sign;
   int diff;

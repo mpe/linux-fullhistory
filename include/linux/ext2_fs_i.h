@@ -1,5 +1,17 @@
-#ifndef _EXT2_FS_I
-#define _EXT2_FS_I
+/*
+ *  linux/include/linux/ext2_fs_i.h
+ *
+ *  Copyright (C) 1992, 1993  Remy Card (card@masi.ibp.fr)
+ *
+ *  from
+ *
+ *  linux/include/linux/minix_fs_i.h
+ *
+ *  Copyright (C) 1991, 1992  Linus Torvalds
+ */
+
+#ifndef _LINUX_EXT2_FS_I
+#define _LINUX_EXT2_FS_I
 
 /*
  * second extended file system inode data in memory
@@ -20,4 +32,4 @@ struct ext2_inode_info {
 	unsigned long  i_next_alloc_goal;
 };
 
-#endif
+#endif	/* _LINUX_EXT2_FS_I */

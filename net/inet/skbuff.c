@@ -58,19 +58,19 @@ void skb_check(struct sk_buff *skb, int line, char *file)
 	{
 		printk("File: %s Line %d, found a freed skb lurking in the undergrowth!\n",
 			file,line);
-		printk("skb=%p, real size=%ld, claimed size=%ld, magic=%ld, list=%p, free=%d\n",
+		printk("skb=%p, real size=%ld, claimed size=%ld, magic=%d, list=%p, free=%d\n",
 			skb,skb->truesize,skb->mem_len,skb->magic,skb->list,skb->free);
 	}
 	if(skb->magic_debug_cookie!=SK_GOOD_SKB)
 	{
 		printk("File: %s Line %d, passed a non skb!\n", file,line);
-		printk("skb=%p, real size=%ld, claimed size=%ld, magic=%ld, list=%p, free=%d\n",
+		printk("skb=%p, real size=%ld, claimed size=%ld, magic=%d, list=%p, free=%d\n",
 			skb,skb->truesize,skb->mem_len,skb->magic,skb->list,skb->free);
 	}
 	if(skb->mem_len!=skb->truesize)
 	{
 		printk("File: %s Line %d, Dubious size setting!\n",file,line);
-		printk("skb=%p, real size=%ld, claimed size=%ld, magic=%ld, list=%p\n",
+		printk("skb=%p, real size=%ld, claimed size=%ld, magic=%d, list=%p\n",
 			skb,skb->truesize,skb->mem_len,skb->magic,skb->list);
 	}
 	/* Guess it might be acceptable then */
@@ -80,28 +80,28 @@ void skb_check(struct sk_buff *skb, int line, char *file)
  *	Insert an sk_buff at the start of a list.
  */
     
-void skb_queue_head(struct sk_buff *volatile* list,struct sk_buff *new)
+void skb_queue_head(struct sk_buff *volatile* list,struct sk_buff *newsk)
 {
 	unsigned long flags;
 	
-	IS_SKB(new);	
-	if(new->list)
+	IS_SKB(newsk);	
+	if(newsk->list)
 		printk("Suspicious queue head: sk_buff on list!\n");
 	save_flags(flags);
 	cli();
-	new->list=list;
+	newsk->list=list;
 	
-	new->next=*list;
+	newsk->next=*list;
 	
 	if(*list)
-		new->prev=(*list)->prev;
+		newsk->prev=(*list)->prev;
 	else
-		new->prev=new;
-	new->prev->next=new;
-	new->next->prev=new;
-	IS_SKB(new->prev);
-	IS_SKB(new->next);
-	*list=new;
+		newsk->prev=newsk;
+	newsk->prev->next=newsk;
+	newsk->next->prev=newsk;
+	IS_SKB(newsk->prev);
+	IS_SKB(newsk->next);
+	*list=newsk;
 	restore_flags(flags);
 }
 
@@ -109,33 +109,33 @@ void skb_queue_head(struct sk_buff *volatile* list,struct sk_buff *new)
  *	Insert an sk_buff at the end of a list.
  */
  
-void skb_queue_tail(struct sk_buff *volatile* list, struct sk_buff *new)
+void skb_queue_tail(struct sk_buff *volatile* list, struct sk_buff *newsk)
 {
 	unsigned long flags;
 	
-	if(new->list)
+	if(newsk->list)
 		printk("Suspicious queue tail: sk_buff on list!\n");
 	
-	IS_SKB(new);
+	IS_SKB(newsk);
 	save_flags(flags);
 	cli();
 
-	new->list=list;
+	newsk->list=list;
 	if(*list)
 	{
-		(*list)->prev->next=new;
-		(*list)->prev=new;
-		new->next=*list;
-		new->prev=(*list)->prev;
+		(*list)->prev->next=newsk;
+		newsk->prev=(*list)->prev;
+		newsk->next=*list;
+		(*list)->prev=newsk;
 	}
 	else
 	{
-		new->next=new;
-		new->prev=new;
-		*list=new;
+		newsk->next=newsk;
+		newsk->prev=newsk;
+		*list=newsk;
 	}
-	IS_SKB(new->prev);
-	IS_SKB(new->next);		
+	IS_SKB(newsk->prev);
+	IS_SKB(newsk->next);		
 	restore_flags(flags);
 
 }
@@ -185,25 +185,25 @@ struct sk_buff *skb_dequeue(struct sk_buff *volatile* list)
  *	Insert a packet before another one in a list.
  */
  
-void skb_insert(struct sk_buff *old, struct sk_buff *new)
+void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
 	IS_SKB(old);
-	IS_SKB(new);
+	IS_SKB(newsk);
 		
 	if(!old->list)
 		printk("insert before unlisted item!\n");
-	if(new->list)
+	if(newsk->list)
 		printk("inserted item is already on a list.\n");
 		
 	save_flags(flags);
 	cli();
-	new->list=old->list;
-	new->next=old;
-	new->prev=old->prev;
-	new->next->prev=new;
-	new->prev->next=new;
+	newsk->list=old->list;
+	newsk->next=old;
+	newsk->prev=old->prev;
+	newsk->next->prev=newsk;
+	newsk->prev->next=newsk;
 	
 	restore_flags(flags);
 }
@@ -212,25 +212,25 @@ void skb_insert(struct sk_buff *old, struct sk_buff *new)
  *	Place a packet after a given packet in a list.
  */
  
-void skb_append(struct sk_buff *old, struct sk_buff *new)
+void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 	
 	IS_SKB(old);
-	IS_SKB(new);
+	IS_SKB(newsk);
 
 	if(!old->list)
 		printk("append before unlisted item!\n");
-	if(new->list)
+	if(newsk->list)
 		printk("append item is already on a list.\n");
 		
 	save_flags(flags);
 	cli();
-	new->list=old->list;
-	new->prev=old;
-	new->next=old->next;
-	new->next->prev=new;
-	new->prev->next=new;
+	newsk->list=old->list;
+	newsk->prev=old;
+	newsk->next=old->next;
+	newsk->next->prev=newsk;
+	newsk->prev->next=newsk;
 	
 	restore_flags(flags);
 }
@@ -311,7 +311,7 @@ struct sk_buff *skb_peek(struct sk_buff *volatile* list)
  
 struct sk_buff *skb_peek_copy(struct sk_buff *volatile* list)
 {
-	struct sk_buff *orig,*new;
+	struct sk_buff *orig,*newsk;
 	unsigned long flags;
 	unsigned int len;
 	/* Now for some games to avoid races */
@@ -330,41 +330,41 @@ struct sk_buff *skb_peek_copy(struct sk_buff *volatile* list)
 		len=orig->truesize;
 		restore_flags(flags);
 
-		new=alloc_skb(len,GFP_KERNEL);	/* May sleep */
+		newsk=alloc_skb(len,GFP_KERNEL);	/* May sleep */
 
-		if(new==NULL)		/* Oh dear... not to worry */
+		if(newsk==NULL)		/* Oh dear... not to worry */
 			return NULL;
 	
 		save_flags(flags);
 		cli();
 		if(skb_peek(list)!=orig)	/* List changed go around another time */
 		{
-			restore_flags(list);
-			new->sk=NULL;
-			new->free=1;
-			new->mem_addr=new;
-			new->mem_len=len;
-			kfree_skb(new, FREE_WRITE);
+			restore_flags(flags);
+			newsk->sk=NULL;
+			newsk->free=1;
+			newsk->mem_addr=newsk;
+			newsk->mem_len=len;
+			kfree_skb(newsk, FREE_WRITE);
 			continue;
 		}
 		
 		IS_SKB(orig);
-		IS_SKB(new);
-		memcpy(new,orig,len);
-		new->list=NULL;
-		new->magic=0;
-		new->next=NULL;
-		new->prev=NULL;
-		new->mem_addr=new;
-		new->h.raw+=((char *)new-(char *)orig);
-		new->link3=NULL;
-		new->sk=NULL;
-		new->free=1;
+		IS_SKB(newsk);
+		memcpy(newsk,orig,len);
+		newsk->list=NULL;
+		newsk->magic=0;
+		newsk->next=NULL;
+		newsk->prev=NULL;
+		newsk->mem_addr=newsk;
+		newsk->h.raw+=((char *)newsk-(char *)orig);
+		newsk->link3=NULL;
+		newsk->sk=NULL;
+		newsk->free=1;
 	}
 	while(0);
 	
 	restore_flags(flags);
-	return(new);
+	return(newsk);
 }	
 	
 /*
@@ -410,9 +410,11 @@ void kfree_skb(struct sk_buff *skb, int rw)
  	skb->truesize=size;
  	skb->mem_len=size;
  	skb->mem_addr=skb;
+ 	skb->fraglist=NULL;
  	net_memory+=size;
  	net_skbcount++;
  	skb->magic_debug_cookie=SK_GOOD_SKB;
+ 	skb->users=0;
  	return skb;
  }
 

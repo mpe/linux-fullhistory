@@ -62,7 +62,7 @@ int paste_selection(struct tty_struct *tty);
 static void clear_selection(void);
 
 /* Variables for selection control. */
-#define SEL_BUFFER_SIZE 2048
+#define SEL_BUFFER_SIZE TTY_BUF_SIZE
 static int sel_cons;
 static int sel_start = -1;
 static int sel_end;
@@ -73,7 +73,6 @@ static char sel_buffer[SEL_BUFFER_SIZE] = { '\0' };
 
 extern void vt_init(void);
 extern void register_console(void (*proc)(const char *));
-extern void compute_shiftstate(void);
 
 unsigned long	video_num_columns;		/* Number of text columns	*/
 unsigned long	video_num_lines;		/* Number of test lines		*/
@@ -225,9 +224,9 @@ static unsigned char * translations[] = {
 	"\040\255\233\234\376\235\174\025\376\376\246\256\252\055\376\376"
 	"\370\361\375\376\376\346\024\371\376\376\247\257\254\253\376\250"
 	"\376\376\376\376\216\217\222\200\376\220\376\376\376\376\376\376"
-	"\376\245\376\376\376\376\231\376\350\376\376\376\232\376\376\341"
+	"\376\245\376\376\376\376\231\376\235\376\376\376\232\376\376\341"
 	"\205\240\203\376\204\206\221\207\212\202\210\211\215\241\214\213"
-	"\376\244\225\242\223\376\224\366\355\227\243\226\201\376\376\230",
+	"\376\244\225\242\223\376\224\366\233\227\243\226\201\376\376\230",
 /* vt100 graphics */
 (unsigned char *)
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
@@ -244,9 +243,9 @@ static unsigned char * translations[] = {
 	"\376\245\376\376\376\376\231\376\376\376\376\376\232\376\376\341"
 	"\205\240\203\376\204\206\221\207\212\202\210\211\215\241\214\213"
 	"\376\244\225\242\223\376\224\366\376\227\243\226\201\376\376\230",
-/* IBM graphics: minimal translations (CR, LF, LL, SO, SI and ESC) */
+/* IBM graphics: minimal translations (BS, CR, LF, LL, SO, SI and ESC) */
 (unsigned char *)
-	"\000\001\002\003\004\005\006\007\010\011\000\013\000\000\000\000"
+	"\000\001\002\003\004\005\006\007\000\011\000\013\000\000\000\000"
 	"\020\021\022\023\024\025\026\027\030\031\032\000\034\035\036\037"
 	"\040\041\042\043\044\045\046\047\050\051\052\053\054\055\056\057"
 	"\060\061\062\063\064\065\066\067\070\071\072\073\074\075\076\077"
@@ -311,16 +310,17 @@ static unsigned short __origin;
 
 static inline void __set_origin(unsigned short offset)
 {
+	unsigned long flags;
 #ifdef CONFIG_SELECTION
 	clear_selection();
 #endif /* CONFIG_SELECTION */
-	cli();
+	save_flags(flags); cli();
 	__origin = offset;
 	outb_p(12, video_port_reg);
 	outb_p(offset >> 8, video_port_val);
 	outb_p(13, video_port_reg);
 	outb_p(offset, video_port_val);
-	sti();
+	restore_flags(flags);
 }
 
 void scrollback(int lines)
@@ -365,11 +365,13 @@ static inline void hide_cursor(int currcons)
 
 static inline void set_cursor(int currcons)
 {
+	unsigned long flags;
+
 	if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
 		return;
 	if (__real_origin != __origin)
 		set_origin(__real_origin);
-	cli();
+	save_flags(flags); cli();
 	if (deccm) {
 		outb_p(14, video_port_reg);
 		outb_p(0xff&((pos-video_mem_base)>>9), video_port_val);
@@ -377,7 +379,7 @@ static inline void set_cursor(int currcons)
 		outb_p(0xff&((pos-video_mem_base)>>1), video_port_val);
 	} else
 		hide_cursor(currcons);
-	sti();
+	restore_flags(flags);
 }
 
 static void scrup(int currcons, unsigned int t, unsigned int b)
@@ -597,7 +599,8 @@ static void update_attr(int currcons)
 		video_erase_char = (color << 8) | ' ';
 }
 
-static void default_attr(int currcons) {
+static void default_attr(int currcons)
+{
 	intensity = 1;
 	underline = 0;
 	reverse = 0;
@@ -1436,7 +1439,7 @@ long con_init(long kmem_start)
 	gotoxy(currcons,orig_x,orig_y);
 	update_screen(fg_console);
 	printable = 1;
-	printk("Console: %s %s %dx%d, %d virtual consoles\n",
+	printk("Console: %s %s %ldx%ld, %d virtual consoles\n",
 		can_do_color?"colour":"mono",
 		display_desc,
 		video_num_columns,video_num_lines,
@@ -1512,7 +1515,6 @@ void update_screen(int new_console)
 	set_origin(fg_console);
 	set_cursor(new_console);
 	set_leds();
-	compute_shiftstate();
 	lock = 0;
 }
 
@@ -1553,7 +1555,7 @@ int con_open(struct tty_struct *tty, struct file * filp)
 
 #ifdef CONFIG_SELECTION
 /* correction factor for when screen is hardware-scrolled */
-#define	hwscroll_offset ((__real_origin - __origin) << 1)
+#define	hwscroll_offset (currcons == fg_console ? ((__real_origin - __origin) << 1) : 0)
 
 /* set reverse video on characters s-e of console with selection. */
 static void highlight(const int currcons, const int s, const int e)

@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -21,7 +21,8 @@
 
 
 /* This routine must be called with non-empty source registers */
-int reg_mul(FPU_REG *a, FPU_REG *b, FPU_REG *dest, unsigned int control_w)
+int reg_mul(FPU_REG const *a, FPU_REG const *b,
+	    FPU_REG *dest, unsigned int control_w)
 {
   char saved_sign = dest->sign;
   char sign = (a->sign ^ b->sign);

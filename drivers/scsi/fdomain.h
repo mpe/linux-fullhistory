@@ -4,7 +4,7 @@
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993 Rickard E. Faith
  *
- * $Id: fdomain.h,v 5.1 1993/10/10 13:33:11 root Exp $
+ * $Id: fdomain.h,v 5.2 1993/10/24 16:40:41 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -25,7 +25,7 @@ int        fdomain_16x0_detect( int );
 int        fdomain_16x0_command( Scsi_Cmnd * );
 int        fdomain_16x0_abort( Scsi_Cmnd *, int );
 const char *fdomain_16x0_info( void );
-int        fdomain_16x0_reset( void ); 
+int        fdomain_16x0_reset( Scsi_Cmnd * ); 
 int        fdomain_16x0_queue( Scsi_Cmnd *, void (*done)(Scsi_Cmnd *) );
 int        fdomain_16x0_biosparam( int, int, int * );
 

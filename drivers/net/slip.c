@@ -14,6 +14,9 @@
  *		Alan Cox	: 	Found cause of overrun. ifconfig sl0 mtu upwards.
  *					Driver now spots this and grows/shrinks its buffers(hack!).
  *					Memory leak if you run out of memory setting up a slip driver fixed.
+ *		Matt Dillon	:	Printable slip (borrowed from NET2E)
+ *	Pauline Middelink	:	Slip driver fixes.
+ *		Alan Cox	:	Honours the old SL_COMPRESSED flag
  */
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -77,7 +80,7 @@ ip_dump(unsigned char *ptr, int len)
 
   ip = (struct iphdr *) ptr;
   th = (struct tcphdr *) (ptr + ip->ihl * 4);
-  printk("\r%s -> %s seq %x ack %x len %d\n",
+  printk("\r%s -> %s seq %lx ack %lx len %d\n",
 	 in_ntoa(ip->saddr), in_ntoa(ip->daddr), 
 	 ntohl(th->seq), ntohl(th->ack_seq), ntohs(ip->tot_len));
   return;
@@ -125,6 +128,12 @@ sl_initialize(struct slip *sl, struct device *dev)
   sl->inuse		= 0;
   sl->sending		= 0;
   sl->escape		= 0;
+  sl->flags		= 0;
+#ifdef SL_COMPRESSED
+  sl->mode		= SL_MODE_CSLIP;	/* Default */
+#else
+  sl->mode		= SL_MODE_SLIP;		/* Default for non compressors */
+#endif  
 
   sl->line		= dev->base_addr;
   sl->tty		= NULL;
@@ -180,6 +189,7 @@ sl_alloc(void)
 		return(sl);
 	}
   }
+  restore_flags(flags);
   return(NULL);
 }
 
@@ -335,7 +345,7 @@ sl_bump(struct slip *sl)
   int count;
 
   count = sl->rcount;
-  if (1) {
+  if (sl->mode & SL_MODE_CSLIP) {
     if ((c = sl->rbuff[0]) & SL_TYPE_COMPRESSED_TCP) {
       /* make sure we've reserved enough space for uncompress to use */
       save_flags(flags);
@@ -397,7 +407,6 @@ static void
 sl_encaps(struct slip *sl, unsigned char *icp, int len)
 {
   unsigned char *bp, *p;
-  unsigned char c;
   int count;
 
   DPRINTF((DBG_SLIP, "SLIP: sl_encaps(0x%X, %d) called\n", icp, len));
@@ -408,17 +417,17 @@ sl_encaps(struct slip *sl, unsigned char *icp, int len)
   if(sl->mtu != sl->dev->mtu)	/* Someone has been ifconfigging */
   	sl_changedmtu(sl);
   
-  if(len>=sl->mtu)		/* Sigh, shouldn't occur BUT ... */
+  if(len>sl->mtu)		/* Sigh, shouldn't occur BUT ... */
   {
-  	len=sl->mtu-1;
+  	len=sl->mtu;
   	printk("slip: truncating oversized transmit packet!\n");
   }
 
   p = icp;
-#ifdef SL_COMPRESSED
-  len = slhc_compress(sl->slcomp, p, len, sl->cbuff, &p, 1);
-#endif
-  
+  if(sl->mode & SL_MODE_CSLIP)
+	  len = slhc_compress(sl->slcomp, p, len, sl->cbuff, &p, 1);
+
+#ifdef OLD  
   /*
    * Send an initial END character to flush out any
    * data that may have accumulated in the receiver
@@ -450,8 +459,14 @@ sl_encaps(struct slip *sl, unsigned char *icp, int len)
 			count++;
 	}
   }
-  *bp++ = END;
+  *bp++ = END;  
   count++;
+#else
+  if(sl->mode & SL_MODE_SLIP6)
+  	count=slip_esc6(p, (unsigned char *)sl->xbuff,len);
+  else
+  	count=slip_esc(p, (unsigned char *)sl->xbuff,len);
+#endif  	  
   sl->spacket++;
   bp = sl->xbuff;
 
@@ -640,10 +655,10 @@ static void
 slip_recv(struct tty_struct *tty)
 {
   unsigned char buff[128];
-  unsigned char *p, c;
+  unsigned char *p;
   struct slip *sl;
-  int count;
-
+  int count, error=0;
+  
   DPRINTF((DBG_SLIP, "SLIP: slip_recv(%d) called\n", tty->line));
   if ((sl = sl_find(tty)) == NULL) return;	/* not connected */
 
@@ -653,9 +668,15 @@ slip_recv(struct tty_struct *tty)
   /* Suck the bytes out of the TTY queues. */
   do {
 	count = tty_read_raw_data(tty, buff, 128);
-	if (count <= 0) break;
-
+	if (count <= 0)
+	{
+		count= - count;
+		if(count)
+			error=1;
+		break;
+	}
 	p = buff;
+#ifdef OLD	
 	while (count--) {
 		c = *p++;
 		if (sl->escape) {
@@ -676,7 +697,14 @@ slip_recv(struct tty_struct *tty)
 			} else	sl_enqueue(sl, c);
 		}
 	}
+#else
+	if(sl->mode & SL_MODE_SLIP6)
+		slip_unesc6(sl,buff,count,error);
+	else
+		slip_unesc(sl,buff,count,error);
+#endif		
   } while(1);
+  
 }
 
 
@@ -741,12 +769,181 @@ slip_close(struct tty_struct *tty)
 					tty->line, sl->dev->name));
 }
 
+ 
+ /************************************************************************
+  *			STANDARD SLIP ENCAPSULATION			*
+  ************************************************************************
+  *
+  */
+ 
+ int
+ slip_esc(unsigned char *s, unsigned char *d, int len)
+ {
+     int count = 0;
+ 
+     /*
+      * Send an initial END character to flush out any
+      * data that may have accumulated in the receiver
+      * due to line noise.
+      */
+ 
+     d[count++] = END;
+ 
+     /*
+      * For each byte in the packet, send the appropriate
+      * character sequence, according to the SLIP protocol.
+      */
+ 
+     while(len-- > 0) {
+     	switch(*s) {
+     	case END:
+     	    d[count++] = ESC;
+     	    d[count++] = ESC_END;
+ 	    break;
+ 	case ESC:
+     	    d[count++] = ESC;
+     	    d[count++] = ESC_ESC;
+ 	    break;
+ 	default:
+ 	    d[count++] = *s;
+ 	}
+ 	++s;
+     }
+     d[count++] = END;
+     return(count);
+ }
+ 
+ void
+ slip_unesc(struct slip *sl, unsigned char *s, int count, int error)
+ {
+     int i;
+ 
+     for (i = 0; i < count; ++i, ++s) {
+ 	switch(*s) {
+ 	case ESC:
+ 	    sl->flags |= SLF_ESCAPE;
+ 	    break;
+ 	case ESC_ESC:
+ 	    if (sl->flags & SLF_ESCAPE)
+ 	    	sl_enqueue(sl, ESC);
+ 	    else
+ 	        sl_enqueue(sl, *s);
+	    sl->flags &= ~SLF_ESCAPE;
+ 	    break;
+	case ESC_END:
+ 	    if (sl->flags & SLF_ESCAPE)
+	    	sl_enqueue(sl, END);
+	    else
+ 	        sl_enqueue(sl, *s);
+	    sl->flags &= ~SLF_ESCAPE;
+	    break;
+	case END:
+ 	    if (sl->rcount > 2) 
+ 	    	sl_bump(sl);
+ 	    sl_dequeue(sl, sl->rcount);
+ 	    sl->rcount = 0;
+ 	    sl->flags &= ~(SLF_ESCAPE | SLF_ERROR);
+ 	    break;
+ 	default:
+ 	    sl_enqueue(sl, *s);
+ 	    sl->flags &= ~SLF_ESCAPE;
+ 	}
+     }
+     if (error)
+     	sl->flags |= SLF_ERROR;
+ }
+ 
+ /************************************************************************
+  *			 6 BIT SLIP ENCAPSULATION			*
+  ************************************************************************
+  *
+  */
+ 
+ int
+ slip_esc6(unsigned char *s, unsigned char *d, int len)
+ {
+     int count = 0;
+     int i;
+     unsigned short v = 0;
+     short bits = 0;
+ 
+     /*
+      * Send an initial END character to flush out any
+      * data that may have accumulated in the receiver
+      * due to line noise.
+      */
+ 
+     d[count++] = 0x70;
+ 
+     /*
+      * Encode the packet into printable ascii characters
+      */
+ 
+     for (i = 0; i < len; ++i) {
+     	v = (v << 8) | s[i];
+     	bits += 8;
+     	while (bits >= 6) {
+     	    unsigned char c;
+ 
+     	    bits -= 6;
+     	    c = 0x30 + ((v >> bits) & 0x3F);
+     	    d[count++] = c;
+ 	}
+     }
+     if (bits) {
+     	unsigned char c;
+ 
+     	c = 0x30 + ((v << (6 - bits)) & 0x3F);
+     	d[count++] = c;
+     }
+     d[count++] = 0x70;
+     return(count);
+ }
+ 
+ void
+ slip_unesc6(struct slip *sl, unsigned char *s, int count, int error)
+ {
+     int i;
+     unsigned char c;
+ 
+     for (i = 0; i < count; ++i, ++s) {
+     	if (*s == 0x70) {
+ 	    if (sl->rcount > 8) {	/* XXX must be 2 for compressed slip */
+ #ifdef NOTDEF
+ 	        printk("rbuff %02x %02x %02x %02x\n",
+ 	            sl->rbuff[0],
+ 	            sl->rbuff[1],
+ 	            sl->rbuff[2],
+ 	            sl->rbuff[3]
+ 	        );
+ #endif
+ 	    	sl_bump(sl);
+ 	    }
+ 	    sl_dequeue(sl, sl->rcount);
+ 	    sl->rcount = 0;
+ 	    sl->flags &= ~(SLF_ESCAPE | SLF_ERROR); /* SLF_ESCAPE not used */
+ 	    sl->xbits = 0;
+ 	} else if (*s >= 0x30 && *s < 0x70) {
+ 	    sl->xdata = (sl->xdata << 6) | ((*s - 0x30) & 0x3F);
+ 	    sl->xbits += 6;
+ 	    if (sl->xbits >= 8) {
+ 	    	sl->xbits -= 8;
+ 	    	c = (unsigned char)(sl->xdata >> sl->xbits);
+ 		sl_enqueue(sl, c);
+ 	    }
+ 
+ 	}
+     }
+     if (error)
+     	sl->flags |= SLF_ERROR;
+ }
 
 /* Perform I/O control on an active SLIP channel. */
 static int
 slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 {
   struct slip *sl;
+  int err;
 
   /* First make sure we're connected. */
   if ((sl = sl_find(tty)) == NULL) {
@@ -757,8 +954,18 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
   DPRINTF((DBG_SLIP, "SLIP: ioctl(%d, 0x%X, 0x%X)\n", tty->line, cmd, arg));
   switch(cmd) {
 	case SIOCGIFNAME:
-		verify_area(VERIFY_WRITE, arg, 16);
+		err=verify_area(VERIFY_WRITE, arg, 16);
+		if(err)
+			return -err;
 		memcpy_tofs(arg, sl->dev->name, strlen(sl->dev->name) + 1);
+		return(0);
+	case SIOCGIFENCAP:
+		err=verify_area(VERIFY_WRITE,arg,sizeof(long));
+		put_fs_long(sl->mode,(long *)arg);
+		return(0);
+	case SIOCSIFENCAP:
+		err=verify_area(VERIFY_READ,arg,sizeof(long));
+		sl->mode=get_fs_long((long *)arg);
 		return(0);
 	default:
 		return(-EINVAL);

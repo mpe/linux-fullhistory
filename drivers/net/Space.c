@@ -45,10 +45,18 @@ extern int hp_probe(struct device *dev);
 extern int znet_probe(struct device *);
 extern int express_probe(struct device *);
 extern int el3_probe(struct device *);
-extern int atp_probe(struct device *);
 extern int at1500_probe(struct device *);
+extern int at1700_probe(struct device *);
 extern int depca_probe(struct device *);
 extern int el1_probe(struct device *);
+extern int el16_probe(struct device *);
+extern int elplus_probe(struct device *);
+extern int ac3200_probe(struct device *);
+extern int e2100_probe(struct device *);
+
+/* Detachable devices ("pocket adaptors" and special PCMCIA drivers). */
+extern int atp_init(struct device *);
+extern int d_link_init(struct device *);
 
 static int
 ethif_probe(struct device *dev)
@@ -65,7 +73,7 @@ ethif_probe(struct device *dev)
 #if defined(CONFIG_WD80x3) || defined(WD80x3)
 	&& wd_probe(dev)
 #endif
-#if defined(CONFIG_EL2) || defined(EL2)
+#if defined(CONFIG_EL2) || defined(EL2)	/* 3c503 */
 	&& el2_probe(dev)
 #endif
 #if defined(CONFIG_NE2000) || defined(NE2000)
@@ -77,23 +85,35 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_AT1500
 	&& at1500_probe(dev)
 #endif
-#ifdef CONFIG_EL3
+#ifdef CONFIG_AT1700
+	&& at1700_probe(dev)
+#endif
+#ifdef CONFIG_EL3		/* 3c509 */
 	&& el3_probe(dev)
 #endif
-#ifdef CONFIG_ZNET
+#ifdef CONFIG_ZNET		/* Zenith Z-Note and some IBM Thinkpads. */
 	&& znet_probe(dev)
 #endif
-#ifdef CONFIG_EEXPRESS
+#ifdef CONFIG_EEXPRESS		/* Intel EtherExpress */
 	&& express_probe(dev)
 #endif
-#ifdef CONFIG_ATP		/* AT-LAN-TEC (RealTek) pocket adaptor. */
-	&& atp_probe(dev)
-#endif
-#ifdef CONFIG_DEPCA
+#ifdef CONFIG_DEPCA		/* DEC DEPCA */
 	&& depca_probe(dev)
 #endif
-#ifdef CONFIG_EL1
+#ifdef CONFIG_EL1		/* 3c501 */
 	&& el1_probe(dev)
+#endif
+#ifdef CONFIG_EL16		/* 3c507 */
+	&& el16_probe(dev)
+#endif
+#ifdef CONFIG_ELPLUS		/* 3c505 */
+	&& elplus_probe(dev)
+#endif
+#ifdef CONFIG_AC3200		/* Ansel Communications EISA 3200. */
+	&& ac3200_probe(dev)
+#endif
+#ifdef CONFIG_E2100		/* Cabletron E21xx series. */
+	&& e2100_probe(dev)
 #endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
@@ -102,24 +122,20 @@ ethif_probe(struct device *dev)
 }
 
 
-/* This remains seperate because it requires the addr and IRQ to be
-   set. */
+/* This remains seperate because it requires the addr and IRQ to be set. */
 #if defined(D_LINK) || defined(CONFIG_DE600)
-    extern int d_link_init(struct device *);
-    static struct device d_link_dev = {
-	"dl0",
-	0,
-	0,
-	0,
-	0,
-	D_LINK_IO,
-	D_LINK_IRQ,
-	0, 0, 0,
-	NEXT_DEV,
-	d_link_init
-    };
+static struct device d_link_dev = {
+    "dl0", 0, 0, 0, 0, D_LINK_IO, D_LINK_IRQ, 0, 0, 0, NEXT_DEV, d_link_init };
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&d_link_dev)
+#endif
+
+/* Run-time ATtachable (Pocket) devices have a different (not "eth#") name. */
+#ifdef CONFIG_ATP		/* AT-LAN-TEC (RealTek) pocket adaptor. */
+static struct device atp_dev = {
+    "atp0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, atp_init, /* ... */ };
+#   undef NEXT_DEV
+#   define NEXT_DEV	(&atp_dev)
 #endif
 
 /* The first device defaults to I/O base '0', which means autoprobe. */
@@ -214,7 +230,20 @@ static struct device eth0_dev = {
 #   undef	NEXT_DEV
 #   define	NEXT_DEV	(&slip0_dev)
 #endif	/* SLIP */
-
+  
+#if defined(CONFIG_PPP)
+extern int ppp_init(struct device *);
+static struct device ppp3_dev = {
+    "ppp3", 0x0, 0x0, 0x0, 0x0, 3, 0, 0, 0, 0, NEXT_DEV,  ppp_init, };
+static struct device ppp2_dev = {
+    "ppp2", 0x0, 0x0, 0x0, 0x0, 2, 0, 0, 0, 0, &ppp3_dev, ppp_init, };
+static struct device ppp1_dev = {
+    "ppp1", 0x0, 0x0, 0x0, 0x0, 1, 0, 0, 0, 0, &ppp2_dev, ppp_init, };
+static struct device ppp0_dev = {
+    "ppp0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, &ppp1_dev, ppp_init, };
+#undef NEXT_DEV
+#define NEXT_DEV (&ppp0_dev)
+#endif   /* PPP */
 
 #ifdef LOOPBACK
     extern int loopback_init(struct device *dev);

@@ -17,6 +17,7 @@
  *		Alan Cox	:	Now uses generic datagram routines I
  *					added. Also fixed the peek/read crash
  *					from all old Linux datagram code.
+ *		Alan Cox	:	Uses the improved datagram code.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -212,7 +213,7 @@ packet_recvfrom(struct sock *sk, unsigned char *to, int len,
   	return err;
   copied = min(len, skb->len);
 
-  memcpy_tofs(to, skb+1, copied);
+  memcpy_tofs(to, skb+1, copied);	/* Don't use skb_copy_datagram here: We can't get frag chains */
 
   /* Copy the address. */
   if (saddr) {
@@ -224,7 +225,7 @@ packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	memcpy_tofs(saddr, &addr, sizeof(*saddr));
   }
 
-  kfree_skb(skb, FREE_READ);	/* Its either been used up, or its a peek_copy anyway */
+  skb_free_datagram(skb);		/* Its either been used up, or its a peek_copy anyway */
 
   release_sock(sk);
   return(copied);

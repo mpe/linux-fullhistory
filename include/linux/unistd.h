@@ -123,7 +123,7 @@
 #define __NR_wait4		114
 #define __NR_swapoff		115
 #define __NR_sysinfo		116
-#define __NR_ipc		117	/* not implemented yet */
+#define __NR_ipc		117
 #define __NR_fsync		118
 #define __NR_sigreturn		119
 #define __NR_clone		120
@@ -132,6 +132,7 @@
 #define __NR_modify_ldt		123
 #define __NR_adjtimex		124
 #define __NR_mprotect		125
+#define __NR_sigprocmask	126
 
 extern int errno;
 

@@ -80,11 +80,11 @@ get__netinfo(struct proto *pro, char *buffer, int format)
 		timer_active = del_timer(&sp->timer);
 		if (!timer_active)
 			sp->timer.expires = 0;
-		pos+=sprintf(pos, "%2d: %08X:%04X %08X:%04X %02X %08X:%08X %02X:%08X %08X %d\n",
+		pos+=sprintf(pos, "%2d: %08lX:%04X %08lX:%04X %02X %08lX:%08lX %02X:%08lX %08X %d\n",
 			i, src, srcp, dest, destp, sp->state, 
 			format==0?sp->send_seq-sp->rcv_ack_seq:sp->rmem_alloc, 
 			format==0?sp->acked_seq-sp->copied_seq:sp->wmem_alloc,
-			timer_active, sp->timer.expires, sp->retransmits,
+			timer_active, sp->timer.expires, (unsigned) sp->retransmits,
 			SOCK_INODE(sp->socket)->i_uid);
 		if (timer_active)
 			add_timer(&sp->timer);

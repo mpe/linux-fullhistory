@@ -20,9 +20,6 @@ OBJS=	proc.o sock.o inode.o file.o dir.o \
 nfs.o: $(OBJS)
 	$(LD) -r -o nfs.o $(OBJS)
 
-clean:
-	rm -f core *.o *.a *.s
-
 dep:
 	$(CPP) -M *.c > .depend
 

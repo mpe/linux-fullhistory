@@ -303,7 +303,7 @@ void iput(struct inode * inode)
 	wait_on_inode(inode);
 	if (!inode->i_count) {
 		printk("VFS: iput: trying to free free inode\n");
-		printk("VFS: device %d/%d, inode %d, mode=0%07o\n",
+		printk("VFS: device %d/%d, inode %lu, mode=0%07o\n",
 			MAJOR(inode->i_rdev), MINOR(inode->i_rdev),
 					inode->i_ino, inode->i_mode);
 		return;
@@ -441,27 +441,13 @@ repeat:
 			nr_free_inodes--;
 		inode->i_count++;
 		if (crossmntp && inode->i_mount) {
-			int i;
-
-			for (i = 0 ; i<NR_SUPER ; i++)
-				if (super_blocks[i].s_covered==inode)
-					break;
-			if (i >= NR_SUPER) {
-				printk("VFS: Mounted inode hasn't got sb\n");
-				if (empty)
-					iput(empty);
-				return inode;
-			}
+			struct inode * tmp = inode->i_mount;
 			iput(inode);
-			if (!(inode = super_blocks[i].s_mounted))
-				printk("VFS: Mounted device %d/%d has no rootinode\n",
-					MAJOR(inode->i_dev), MINOR(inode->i_dev));
-			else {
-				if (!inode->i_count)
-					nr_free_inodes--;
-				inode->i_count++;
-				wait_on_inode(inode);
-			}
+			inode = tmp;
+			if (!inode->i_count)
+				nr_free_inodes--;
+			inode->i_count++;
+			wait_on_inode(inode);
 		}
 		if (empty)
 			iput(empty);

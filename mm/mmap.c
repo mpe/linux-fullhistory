@@ -182,14 +182,13 @@ void unmap_fixup(struct vm_area_struct *area,
 	    end <= area->vm_start || end > area->vm_end ||
 	    end < addr)
 	{
-		printk("unmap_fixup: area=%x-%x, unmap %x-%x!!\n",
+		printk("unmap_fixup: area=%lx-%lx, unmap %lx-%lx!!\n",
 		       area->vm_start, area->vm_end, addr, end);
 		return;
 	}
 
 	/* Unmapping the whole area */
-	if (addr == area->vm_start && end == area->vm_end)
-	{
+	if (addr == area->vm_start && end == area->vm_end) {
 		if (area->vm_ops && area->vm_ops->close)
 			area->vm_ops->close(area);
 		return;
@@ -198,8 +197,10 @@ void unmap_fixup(struct vm_area_struct *area,
 	/* Work out to one of the ends */
 	if (addr >= area->vm_start && end == area->vm_end)
 		area->vm_end = addr;
-	if (addr == area->vm_start && end <= area->vm_end)
+	if (addr == area->vm_start && end <= area->vm_end) {
+		area->vm_offset += (end - area->vm_start);
 		area->vm_start = end;
+	}
 
 	/* Unmapping a hole */
 	if (addr > area->vm_start && end < area->vm_end)
@@ -208,6 +209,7 @@ void unmap_fixup(struct vm_area_struct *area,
 		mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
 
 		*mpnt = *area;
+		mpnt->vm_offset += (end - area->vm_start);
 		mpnt->vm_start = end;
 		if (mpnt->vm_inode)
 			mpnt->vm_inode->i_count++;
@@ -368,7 +370,7 @@ void insert_vm_struct(struct task_struct *t, struct vm_area_struct *vmp)
 		     vmp->vm_start < mpnt->vm_end) ||
 		    (vmp->vm_end >= mpnt->vm_start &&
 		     vmp->vm_end < mpnt->vm_end))
-			printk("insert_vm_struct: ins area %x-%x in area %x-%x\n",
+			printk("insert_vm_struct: ins area %lx-%lx in area %lx-%lx\n",
 			       vmp->vm_start, vmp->vm_end,
 			       mpnt->vm_start, vmp->vm_end);
 	}

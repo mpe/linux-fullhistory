@@ -2117,29 +2117,28 @@ int NCR5380_abort (Scsi_Cmnd *cmd, int code) {
 
 
 /* 
- * Function : int NCR5380_reset (void)
+ * Function : int NCR5380_reset (struct Scsi_Cmnd *)
  * 
  * Purpose : reset the SCSI bus.
  *
  * Returns : 0
- *
- * XXX we really need to add some sort of a per instance field here so that 
- * we only do a SCSI bus reset on the host adapter for which the reset command
- * was called.
  */ 
 
 #ifndef NCR5380_reset
 static
 #endif
-int NCR5380_reset (void) {
+int NCR5380_reset (Scsi_Cmnd * SCpnt) {
     NCR5380_local_declare();
     struct Scsi_Host *instance;
     cli();
-    for (instance = first_instance; instance; instance = instance->next) {
-	NCR5380_setup(instance);
-	NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE | ICR_ASSERT_RST);
-	udelay(1);
-	NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE);
-    }
+
+    instance = SCpnt->host;
+    NCR5380_setup(instance);
+    NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE | ICR_ASSERT_RST);
+    udelay(1);
+    NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE);
+
+    sti();
+    if (SCpnt) SCpnt->flags |= NEEDS_JUMPSTART;
     return 0;
 }

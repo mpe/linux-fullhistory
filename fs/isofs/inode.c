@@ -5,19 +5,21 @@
  *
  *  (C) 1991  Linus Torvalds - minix filesystem
  */
+
 #include <linux/config.h>
 #include <linux/stat.h>
 #include <linux/sched.h>
 #include <linux/iso_fs.h>
 #include <linux/kernel.h>
+#include <linux/major.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/locks.h>
 #include <linux/malloc.h>
+#include <linux/errno.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
-#include <linux/errno.h>
 
 #if defined(CONFIG_BLK_DEV_SR)
 extern int check_cdrom_media_change(int, int);
@@ -239,9 +241,11 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	
 	brelse(bh);
 	
-	printk("Max size:%d   Log zone size:%d\n",s->u.isofs_sb.s_max_size, 
+	printk("Max size:%ld   Log zone size:%ld\n",
+	       s->u.isofs_sb.s_max_size, 
 	       s->u.isofs_sb.s_log_zone_size);
-	printk("First datazone:%d   Root inode number %d\n",s->u.isofs_sb.s_firstdatazone,
+	printk("First datazone:%ld   Root inode number %d\n",
+	       s->u.isofs_sb.s_firstdatazone,
 	       isonum_733 (rootp->extent) << ISOFS_BLOCK_BITS);
 	if(high_sierra) printk("Disc in High Sierra format.\n");
 	unlock_super(s);
@@ -263,26 +267,26 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 		printk("get root inode failed\n");
 		return NULL;
 	}
-#if defined(CONFIG_BLK_DEV_SR)
-	if(MAJOR(s->s_dev) == 11) {
+#if defined(CONFIG_BLK_DEV_SR) && defined(CONFIG_SCSI)
+	if (MAJOR(s->s_dev) == SCSI_CDROM_MAJOR) {
 		/* Check this one more time. */
 		if(check_cdrom_media_change(s->s_dev, 0))
 		  goto out;
-	};
+	}
 #endif
 #if defined(CONFIG_CDU31A)
-	if(MAJOR(s->s_dev) == 15) {
+	if (MAJOR(s->s_dev) == CDU31A_CDROM_MAJOR) {
 		/* Check this one more time. */
 		if(check_cdu31a_media_change(s->s_dev, 0))
 		  goto out;
-	};
+	}
 #endif
 #if defined(CONFIG_MCD)
-	if(MAJOR(s->s_dev) == 23) {
+	if (MAJOR(s->s_dev) == MITSUMI_CDROM_MAJOR) {
 		/* Check this one more time. */
 		if(check_mcd_media_change(s->s_dev, 0))
 		  goto out;
-	};
+	}
 #endif
 	return s;
  out: /* Kick out for various error conditions */
@@ -400,7 +404,7 @@ void isofs_read_inode(struct inode * inode)
 	/* I have no idea what extended attributes are used for, so
 	   we will flag it for now */
 	if(raw_inode->ext_attr_length[0] != 0){
-		printk("Extended attributes present for ISO file (%d).\n",
+		printk("Extended attributes present for ISO file (%ld).\n",
 		       inode->i_ino);
 	}
 #endif
@@ -408,13 +412,13 @@ void isofs_read_inode(struct inode * inode)
 	/* I have no idea what file_unit_size is used for, so
 	   we will flag it for now */
 	if(raw_inode->file_unit_size[0] != 0){
-		printk("File unit size != 0 for ISO file.(%d)\n",inode->i_ino);
+		printk("File unit size != 0 for ISO file (%ld).\n",inode->i_ino);
 	}
 
 	/* I have no idea what other flag bits are used for, so
 	   we will flag it for now */
 	if((raw_inode->flags[-high_sierra] & ~2)!= 0){
-		printk("Unusual flag settings for ISO file.(%d %x)\n",
+		printk("Unusual flag settings for ISO file (%ld %x).\n",
 		       inode->i_ino, raw_inode->flags[-high_sierra]);
 	}
 

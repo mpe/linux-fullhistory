@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | See the files "README" and "COPYING" for further copyright and warranty   |
  | information.                                                              |
@@ -63,7 +63,7 @@
 #define _df_d0_ fstp_i    /* unofficial code (17) */
 #define _df_d8_ fstp_i    /* unofficial code (1f) */
 
-static FUNC st_instr_table[64] = {
+static FUNC const st_instr_table[64] = {
   fadd__,   fld_i_,  __BAD__, __BAD__, fadd_i,  ffree_,  faddp_,  _df_c0_,
   fmul__,   fxch_i,  __BAD__, __BAD__, fmul_i,  _dd_c8_, fmulp_,  _df_c8_,
   fcom_st,  fp_nop,  __BAD__, __BAD__, _dc_d0_, fst_i_,  _de_d0_, _df_d0_,
@@ -76,7 +76,7 @@ static FUNC st_instr_table[64] = {
 
 #else     /* Support only documented FPU op-codes */
 
-static FUNC st_instr_table[64] = {
+static FUNC const st_instr_table[64] = {
   fadd__,   fld_i_,  __BAD__, __BAD__, fadd_i,  ffree_,  faddp_,  __BAD__,
   fmul__,   fxch_i,  __BAD__, __BAD__, fmul_i,  __BAD__, fmulp_,  __BAD__,
   fcom_st,  fp_nop,  __BAD__, __BAD__, __BAD__, fst_i_,  __BAD__, __BAD__,
@@ -105,7 +105,7 @@ static FUNC st_instr_table[64] = {
 
 /* Un-documented FPU op-codes supported by default. (see above) */
 
-static unsigned char type_table[64] = {
+static unsigned char const type_table[64] = {
   _REGI_, _NONE_, _null_, _null_, _REGIi, _REGi_, _REGIp, _REGi_,
   _REGI_, _REGIn, _null_, _null_, _REGIi, _REGI_, _REGIp, _REGI_,
   _REGIc, _NONE_, _null_, _null_, _REGIc, _REG0_, _REGIc, _REG0_,
@@ -118,7 +118,7 @@ static unsigned char type_table[64] = {
 
 #else     /* Support only documented FPU op-codes */
 
-static unsigned char type_table[64] = {
+static unsigned char const type_table[64] = {
   _REGI_, _NONE_, _null_, _null_, _REGIi, _REGi_, _REGIp, _null_,
   _REGI_, _REGIn, _null_, _null_, _REGIi, _null_, _REGIp, _null_,
   _REGIc, _NONE_, _null_, _null_, _null_, _REG0_, _null_, _null_,
@@ -189,10 +189,17 @@ asmlinkage void math_emulate(long arg)
     }
 
   /* user code space? */
-  if (FPU_CS != USER_CS)
+  if (FPU_CS == KERNEL_CS)
     {
-      printk("math_emulate: %04x:%08x\n",FPU_CS,FPU_EIP);
+      printk("math_emulate: %04x:%08lx\n",FPU_CS,FPU_EIP);
       panic("Math emulation needed in kernel");
+    }
+
+  /* We cannot handle multiple segments yet */
+  if (FPU_CS != USER_CS || FPU_DS != USER_DS)
+    {
+      FPU_ORIG_EIP = FPU_EIP;
+      math_abort(FPU_info,SIGILL);
     }
 
   FPU_lookahead = 1;
@@ -522,6 +529,14 @@ do_another_FPU_instruction:
     }
 
 FPU_instruction_done:
+
+#ifdef DEBUG
+  { /* !!!!!!!!!!! */
+    static unsigned int count = 0;
+    if ( (++count % 10000) == 0 )
+	printk("%d FP instr., current=0x%04x\n", count, code);
+  } /* !!!!!!!!!!! */
+#endif DEBUG
 
   ip_offset = FPU_entry_eip;
   cs_selector = FPU_entry_op_cs;

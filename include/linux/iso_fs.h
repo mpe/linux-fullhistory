@@ -191,7 +191,6 @@ extern struct inode_operations isofs_blkdev_inode_operations;
 extern struct inode_operations isofs_fifo_inode_operations;
 
 struct lookup_cache{
-  char lock;
   unsigned long dir; /* If this matches... */
   dev_t dev;  /* And this matches */
   unsigned short dlen; /* and this matches... */

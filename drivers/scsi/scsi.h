@@ -446,7 +446,7 @@ extern unsigned long sg_init(unsigned long, unsigned long);
 extern unsigned long sg_init1(unsigned long, unsigned long);
 extern void sg_attach(Scsi_Device *);
 
-#if defined(MAJOR_NR) && (MAJOR_NR != 9)
+#if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
 static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 {
 	struct request * req;
@@ -456,8 +456,8 @@ static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 	req = &SCpnt->request;
 	req->errors = 0;
 	if (!uptodate) {
-		printk(DEVICE_NAME " I/O error\n");
-		printk("dev %04x, sector %d\n",req->dev,req->sector);
+		printk(DEVICE_NAME " I/O error: dev %04x, sector %lu\n",
+		       req->dev,req->sector);
 	}
 
 	do {

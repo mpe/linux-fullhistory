@@ -592,11 +592,16 @@ int wd7000_abort(Scsi_Cmnd * SCpnt, int i)
 }
 
 
-int wd7000_reset(void)
+/* We do not implement a reset function here, but the upper level code assumes
+   that it will get some kind of response for the command in SCpnt.  We must
+   oblige, or the command will hang the scsi system */
+
+int wd7000_reset(Scsi_Cmnd * SCpnt)
 {
 #ifdef DEBUG
     printk("wd7000_reset\n");
 #endif
+    if (SCpnt) SCpnt->flags |= NEEDS_JUMPSTART;
     return 0;
 }
 

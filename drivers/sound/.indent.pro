@@ -1,0 +1,11 @@
+-bad 
+-bap 
+-fca
+-fc1 
+-cdb 
+-sc 
+-bl 
+-psl 
+-di16
+-lp
+-ip5

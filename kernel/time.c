@@ -348,27 +348,32 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 		time_constant = txc.time_constant;
 
 	    if (txc.mode & ADJ_OFFSET)
-	    {
-		time_offset = txc.offset << SHIFT_UPDATE;
-		mtemp = xtime.tv_sec - time_reftime;
-		time_reftime = xtime.tv_sec;
-		if (mtemp > (MAXSEC+2) || mtemp < 0)
+	      if (txc.mode == ADJ_OFFSET_SINGLESHOT)
+		{
+		  time_adjust = txc.offset;
+		}
+	      else /* XXX should give an error if other bits set */
+		{
+		  time_offset = txc.offset << SHIFT_UPDATE;
+		  mtemp = xtime.tv_sec - time_reftime;
+		  time_reftime = xtime.tv_sec;
+		  if (mtemp > (MAXSEC+2) || mtemp < 0)
 		    mtemp = 0;
 
-		if (txc.offset < 0)
+		  if (txc.offset < 0)
 		    time_freq -= (-txc.offset * mtemp) >>
-			(time_constant + time_constant);
-		else
+		      (time_constant + time_constant);
+		  else
 		    time_freq += (txc.offset * mtemp) >>
-			(time_constant + time_constant);
+		      (time_constant + time_constant);
 
-		ltemp = time_tolerance << SHIFT_KF;
+		  ltemp = time_tolerance << SHIFT_KF;
 
-		if (time_freq > ltemp)
+		  if (time_freq > ltemp)
 		    time_freq = ltemp;
-		else if (time_freq < -ltemp)
+		  else if (time_freq < -ltemp)
 		    time_freq = -ltemp;
-	    }
+		}
 	}
 	txc.offset	   = save_adjust;
 	txc.frequency	   = time_freq;

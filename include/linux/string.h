@@ -366,7 +366,9 @@ __asm__("std\n\t"
 	"movsb\n\t"
 	"cld"
 	: /* no output */
-	:"c" (n),"S" (src+n-1),"D" (dest+n-1)
+	:"c" (n),
+	 "S" (n-1+(const char *)src),
+	 "D" (n-1+(char *)dest)
 	:"cx","si","di","memory");
 return dest;
 }

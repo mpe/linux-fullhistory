@@ -21,13 +21,6 @@ OBJS	= sock.o proc.o
 unix.o: $(OBJS)
 	$(LD) -r -o unix.o $(OBJS)
 
-subdirs: dummy
-	for i in $(SUBDIRS); do (cd $$i; $(MAKE)); done
-
-
-clean:
-	rm -f core *.o *.a *.s
-
 dep:
 	$(CPP) -M *.c > .depend
 

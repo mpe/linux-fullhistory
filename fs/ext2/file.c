@@ -15,11 +15,12 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-#include <linux/sched.h>
-#include <linux/ext2_fs.h>
-#include <linux/kernel.h>
 #include <linux/errno.h>
+#include <linux/fs.h>
+#include <linux/ext2_fs.h>
 #include <linux/fcntl.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
 
@@ -88,7 +89,8 @@ struct inode_operations ext2_file_inode_operations = {
 	}
 	sb = inode->i_sb;
 	if (!S_ISREG(inode->i_mode) && !S_ISDIR(inode->i_mode)) {
-		printk ("ext2_file_read: mode = %07o\n", inode->i_mode);
+		ext2_warning (sb, "ext2_file_read", "mode = %07o",
+			      inode->i_mode);
 		return -EINVAL;
 	}
 	offset = filp->f_pos;
@@ -216,7 +218,8 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 	}
 	sb = inode->i_sb;
 	if (!S_ISREG(inode->i_mode)) {
-		printk ("ext2_file_write: mode = %07o\n", inode->i_mode);
+		ext2_warning (sb, "ext2_file_write", "mode = %07o\n",
+			      inode->i_mode);
 		return -EINVAL;
 	}
 /*

@@ -20,12 +20,6 @@ OBJS=	bitmap.o truncate.o namei.o inode.o \
 xiafs.o: $(OBJS)
 	$(LD) -r -o xiafs.o $(OBJS)
 
-clean:
-	rm -f core *.o *.a *.s
-
-veryclean:
-	rm -f core *.o *.a *.s *~ .depend tags
-
 dep:
 	$(CPP) -M *.c > .depend
 

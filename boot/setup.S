@@ -152,19 +152,21 @@ no_psmouse:
 	mov	al,#0x80	! disable NMI for the bootup sequence
 	out	#0x70,al
 
-! first we move the system to it's rightful place
+! first we move the system to its rightful place
 
-	xor	ax,ax		! clear ax
+	mov	ax,#0x100	! start of destination segment
+	mov	bx,#0x1000	! start of source segment
 	cld			! 'direction'=0, movs moves forward
 do_move:
 	mov	es,ax		! destination segment
-	add	ax,#0x1000
+	add	ax,#0x100
 	cmp	ax,#0x9000
 	jz	end_move
-	mov	ds,ax		! source segment
+	mov	ds,bx		! source segment
+	add	bx,#0x100
 	sub	di,di
 	sub	si,si
-	mov 	cx,#0x8000
+	mov 	cx,#0x800
 	rep
 	movsw
 	jmp	do_move
@@ -248,7 +250,7 @@ end_move:
 	lmsw	ax		! This is it!
 	jmp	flush_instr
 flush_instr:
-	jmpi	0,KERNEL_CS	! jmp offset 0 of segment 0x10 (cs)
+	jmpi	0x1000,KERNEL_CS	! jmp offset 1000 of segment 0x10 (cs)
 
 ! This routine checks that the keyboard command queue is empty
 ! (after emptying the output buffers)
@@ -392,7 +394,17 @@ vga28:
 	mov	ax,#0x501c	! return 80x28
 	ret
 /* svga modes */
-svga:	cld	
+svga:   cld
+        lea     si,id9GXE	! Check for the #9GXE (jyanowit@orixa.mtholyoke.edu,thanks dlm40629@uxa.cso.uiuc.edu)
+        mov     di,#0x49	! id string is at c000:049
+        mov     cx,#0x11	! length of "Graphics Power By"
+        repe
+        cmpsb
+        jne     of1280
+is9GXE:	lea 	si,dsc9GXE	! table of descriptions of video modes for BIOS
+	lea	di,mo9GXE	! table of sizes of video modes for my BIOS
+	br	selmod		! go ask for video mode
+of1280:	cld	
 	lea	si,idf1280	! Check for Orchid F1280 (dingbat@diku.dk)
 	mov	di,#0x10a	! id string is at c000:010a
 	mov	cx,#0x21	! length
@@ -806,6 +818,7 @@ idgenoa:	.byte	0x77, 0x00, 0x99, 0x66
 idparadise:	.ascii	"VGA="
 idoakvga:	.ascii  "OAK VGA "
 idf1280:	.ascii	"Orchid Technology Fahrenheit 1280"
+id9GXE:		.ascii  "Graphics Power By"
 idVRAM:		.ascii	"Stealth VRAM"
 
 ! Manufacturer:	  Numofmodes+2:	Mode:
@@ -823,6 +836,7 @@ motrident:	.byte	0x09,	0x50, 0x51, 0x52, 0x57, 0x58, 0x59, 0x5a
 motseng:	.byte	0x07,	0x26, 0x2a, 0x23, 0x24, 0x22
 movideo7:	.byte	0x08,	0x40, 0x43, 0x44, 0x41, 0x42, 0x45
 mooakvga:	.byte   0x08,   0x00, 0x07, 0x4e, 0x4f, 0x50, 0x51
+mo9GXE:		.byte	0x04,	0x54, 0x55
 mof1280:	.byte	0x04,	0x54, 0x55
 mounknown:	.byte	0x02
 
@@ -842,6 +856,7 @@ dsctseng:	.word	0x5032, 0x501c, 0x503c, 0x6428, 0x8419, 0x841c, 0x842c
 dscvideo7:	.word	0x5032, 0x501c, 0x502b, 0x503c, 0x643c, 0x8419, 0x842c, 0x841c
 dscoakvga:	.word   0x5032, 0x501c, 0x2819, 0x5019, 0x503c, 0x843c, 0x8419, 0x842b
 dscf1280:	.word	0x5032, 0x501c, 0x842b, 0x8419
+dsc9GXE:	.word	0x5032, 0x501c, 0x842b, 0x8419
 dsunknown:	.word	0x5032, 0x501c
 modesave:	.word	SVGA_MODE
 

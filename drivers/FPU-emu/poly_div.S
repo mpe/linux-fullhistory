@@ -5,7 +5,7 @@
  | A set of functions to divide 64 bit integers by fixed numbers.            |
  |                                                                           |
  | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
  |   void poly_div2(unsigned long long *x)                                   |

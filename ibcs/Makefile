@@ -24,13 +24,9 @@ ibcs.o: $(OBJS)
 	$(LD) -r -o ibcs.o $(OBJS)
 	sync
 
-clean:
-	rm -f core *.o *.a *.s
-	for i in $(SUBDIRS); do (cd $$i && $(MAKE) clean); done
-
 dep:
 	$(CPP) -M *.c > .depend
-	for i in $(SUBDIRS); do (cd $$i && $(MAKE) dep) || exit; done
+	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
 
 dummy:
 

@@ -122,6 +122,7 @@
 #define	ENAVAIL		119	/* No XENIX semaphores available */
 #define	EISNAM		120	/* Is a named type file */
 #define	EREMOTEIO	121	/* Remote I/O error */
+#define	EDQUOT		122	/* Quota exceeded */
 
 /* Should never be seen by user programs */
 #define ERESTARTSYS	512

@@ -72,14 +72,7 @@ all: char.a
 
 char.a: $(OBJS)
 	$(AR) rcs char.a $(OBJS)
-	sync
-
-defkeymap.c: defkeymap.map
-	./loadkeys defkeymap.map
-	./mktable	> defkeymap.c
-
-clean: 
-	rm -f core *.o *.a *.s
+	sync	
 
 dep:
 	$(CPP) -M $(SRCS) > .depend

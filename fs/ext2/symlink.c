@@ -15,9 +15,9 @@
 #include <asm/segment.h>
 
 #include <linux/errno.h>
-#include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
+#include <linux/sched.h>
 #include <linux/stat.h>
 
 static int ext2_readlink (struct inode *, char *, int);

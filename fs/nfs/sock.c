@@ -138,6 +138,12 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 #endif
 				goto re_select;
 			}
+			if (result == -ECONNREFUSED) {
+#if 0
+				printk("nfs_rpc_call: server playing coy\n");
+#endif
+				goto re_select;
+			}
 			if (result != -ERESTARTSYS) {
 				printk("nfs_rpc_call: recv error = %d\n",
 					-result);

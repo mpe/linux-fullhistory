@@ -8,7 +8,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int scsi_debug_abort(Scsi_Cmnd *, int);
 int scsi_debug_biosparam(int, int*);
 char *scsi_debug_info(void);
-int scsi_debug_reset(void);
+int scsi_debug_reset(Scsi_Cmnd *);
 
 #ifndef NULL
 	#define NULL 0

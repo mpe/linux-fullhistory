@@ -17,8 +17,6 @@
  */
 
 
-#define HD_IRQ 14
-
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -34,8 +32,10 @@
 #include <asm/io.h>
 #include <asm/segment.h>
 
-#define MAJOR_NR 3
+#define MAJOR_NR HD_MAJOR
 #include "blk.h"
+
+#define HD_IRQ 14
 
 static int revalidate_hddisk(int, int);
 
@@ -121,6 +121,7 @@ void hd_setup(char *str, int *ints)
 	hd_info[hdind].wpcom = 0;
 	hd_info[hdind].lzone = ints[1];
 	hd_info[hdind].ctl = (ints[2] > 8 ? 8 : 0);
+	NR_HD = hdind+1;
 }
 
 static int win_result(void)
@@ -642,20 +643,20 @@ static struct sigaction hd_sigaction = {
 static void hd_geninit(void)
 {
 	int drive, i;
-#ifndef HD_TYPE
 	extern struct drive_info drive_info;
-	void *BIOS = (void *) &drive_info;
+	unsigned char *BIOS = (unsigned char *) &drive_info;
 	int cmos_disks;
-	   
-	for (drive=0 ; drive<2 ; drive++) {
-		hd_info[drive].cyl = *(unsigned short *) BIOS;
-		hd_info[drive].head = *(unsigned char *) (2+BIOS);
-		hd_info[drive].wpcom = *(unsigned short *) (5+BIOS);
-		hd_info[drive].ctl = *(unsigned char *) (8+BIOS);
-		hd_info[drive].lzone = *(unsigned short *) (12+BIOS);
-		hd_info[drive].sect = *(unsigned char *) (14+BIOS);
-		BIOS += 16;
-	}
+
+	if (!NR_HD) {	   
+		for (drive=0 ; drive<2 ; drive++) {
+			hd_info[drive].cyl = *(unsigned short *) BIOS;
+			hd_info[drive].head = *(2+BIOS);
+			hd_info[drive].wpcom = *(unsigned short *) (5+BIOS);
+			hd_info[drive].ctl = *(8+BIOS);
+			hd_info[drive].lzone = *(unsigned short *) (12+BIOS);
+			hd_info[drive].sect = *(14+BIOS);
+			BIOS += 16;
+		}
 
 	/*
 		We querry CMOS about hard disks : it could be that 
@@ -679,14 +680,12 @@ static void hd_geninit(void)
 		
 	*/
 
-	if ((cmos_disks = CMOS_READ(0x12)) & 0xf0)
-		if (cmos_disks & 0x0f)
-			NR_HD = 2;
-		else
-			NR_HD = 1;
-	else
-		NR_HD = 0;
-#endif
+		if ((cmos_disks = CMOS_READ(0x12)) & 0xf0)
+			if (cmos_disks & 0x0f)
+				NR_HD = 2;
+			else
+				NR_HD = 1;
+	}
 	i = NR_HD;
 	while (i-- > 0) {
 		hd[i<<6].nr_sects = 0;

@@ -7,7 +7,7 @@
  * to guarantee better timings even on fast machines.
  *
  * On the other hand, I'd like to be sure of a non-existent port:
- * I feel a bit unsafe abou using 0x80.
+ * I feel a bit unsafe about using 0x80.
  *
  *		Linus
  */
@@ -94,7 +94,7 @@ __asm__ __volatile__ ("inb %1,%b0"
 
 /*
  * Note that due to the way __builtin_constant_p() works, you
- *  - can't use it inside a inlien function (it will never be true)
+ *  - can't use it inside a inline function (it will never be true)
  *  - you don't have to worry about side effects within the __builtin..
  */
 #define outb(val,port) \

@@ -6,7 +6,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
  |   void reg_u_sub(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,             |
@@ -48,7 +48,7 @@ _reg_u_sub:
 
 	call	_denormal_operand
 	orl	%eax,%eax
-	jnz	FPU_Arith_exit
+	jnz	fpu_Arith_exit
 
 xOp1_not_denorm:
 	cmpl	EXP_UNDER,EXP(%edi)
@@ -56,7 +56,7 @@ xOp1_not_denorm:
 
 	call	_denormal_operand
 	orl	%eax,%eax
-	jnz	FPU_Arith_exit
+	jnz	fpu_Arith_exit
 
 xOp2_not_denorm:
 #endif DENORM_OPERAND
@@ -85,8 +85,8 @@ xOp2_not_denorm:
 	movl	PARAM3,%edi	/* destination */
 	movl	EXP(%esi),%edx
 	movl	%edx,EXP(%edi)	/* Copy exponent to destination */
-/*	movb	SIGN(%esi),%dl */
-/*	movb	%dl,SIGN(%edi)	*/ /* Copy the sign from the first arg */
+/*	movb	SIGN(%esi),%dl
+	movb	%dl,SIGN(%edi) */	/* Copy the sign from the first arg */
 
 	xorl	%edx,%edx	/* register extension */
 
@@ -214,7 +214,7 @@ L_subtr:
 	/* Shift left 64 bits */
 	subl	$64,EXP(%edi)
 	xchg	%edx,%eax
-	jmp	FPU_round
+	jmp	fpu_reg_round
 
 L_must_be_zero:
 #ifdef PARANOID
@@ -246,7 +246,7 @@ L_shift_1:
 	subl	%ecx,EXP(%edi)	/* Can get underflow here */
 
 L_round:
-	jmp	FPU_round	/* Round the result */
+	jmp	fpu_reg_round	/* Round the result */
 
 
 #ifdef PARANOID

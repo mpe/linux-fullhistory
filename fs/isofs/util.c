@@ -5,7 +5,7 @@
  *  of the iso 9660 standard in which they are described.  isonum_733 will
  *  convert numbers according to section 7.3.3, etc.
  *
- *  isofs special functions.  This file was lifted in it's entirety from
+ *  isofs special functions.  This file was lifted in its entirety from
  * the bsd386 iso9660 filesystem, by Pace Williamson.
  */
 

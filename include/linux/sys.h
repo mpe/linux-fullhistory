@@ -133,6 +133,8 @@ extern int sys_olduname();
 extern int sys_old_syscall();
 extern int sys_modify_ldt();
 extern int sys_adjtimex();
+extern int sys_mprotect();
+extern int sys_sigprocmask();
 
 /*
  * These are system calls that will be removed at some time
@@ -141,10 +143,13 @@ extern int sys_adjtimex();
 #ifdef notdef
 #define sys_waitpid	sys_old_syscall	/* sys_wait4	*/
 #define sys_olduname	sys_old_syscall /* sys_newuname	*/
+#define sys_uname	sys_old_syscall /* sys_newuname	*/
 #define sys_stat	sys_old_syscall /* sys_newstat	*/
 #define sys_fstat	sys_old_syscall	/* sys_newfstat	*/
 #define sys_lstat	sys_old_syscall /* sys_newlstat	*/
 #define sys_signal	sys_old_syscall	/* sys_sigaction */
+#define sys_sgetmask	sys_old_syscall /* sys_sigprocmask */
+#define sys_ssetmask	sys_old_syscall /* sig_sigprocmask */
 #endif
 
 typedef int (*fn_ptr)();

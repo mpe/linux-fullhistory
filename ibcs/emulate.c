@@ -22,5 +22,5 @@
 
 asmlinkage void iABI_emulate(struct pt_regs * regs)
 {
-	printk("lcall 7,xxx: eax = %08x\n",regs->eax);
+	printk("lcall 7,xxx: eax = %08lx\n",regs->eax);
 }

@@ -14,13 +14,10 @@
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 
-OBJS	= memory.o swap.o mmap.o vmalloc.o
+OBJS	= memory.o swap.o mmap.o kmalloc.o vmalloc.o
 
 mm.o: $(OBJS)
 	$(LD) -r -o mm.o $(OBJS)
-
-clean:
-	rm -f core *.o *.a *.s
 
 dep:
 	$(CPP) -M *.c > .depend

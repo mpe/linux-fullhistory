@@ -22,7 +22,7 @@
  * The request-struct contains all necessary data
  * to load a nr of sectors into memory
  */
-struct request request[NR_REQUEST];
+static struct request all_requests[NR_REQUEST];
 
 /*
  * used to wait on when there are no free requests
@@ -68,6 +68,51 @@ int * blk_size[MAX_BLKDEV] = { NULL, NULL, };
  * if (!blksize_size[MAJOR]) then 1024 bytes is assumed.
  */
 int * blksize_size[MAX_BLKDEV] = { NULL, NULL, };
+
+/*
+ * look for a free request in the first N entries.
+ * NOTE: interrupts must be disabled on the way in, and will still
+ *       be disabled on the way out.
+ */
+static inline struct request * get_request(int n, int dev)
+{
+	static struct request *prev_found = NULL, *prev_limit = NULL;
+	register struct request *req, *limit;
+
+	if (n <= 0)
+		panic("get_request(%d): impossible!\n", n);
+
+	limit = all_requests + n;
+	if (limit != prev_limit) {
+		prev_limit = limit;
+		prev_found = all_requests;
+	}
+	req = prev_found;
+	for (;;) {
+		req = ((req > all_requests) ? req : limit) - 1;
+		if (req->dev < 0)
+			break;
+		if (req == prev_found)
+			return NULL;
+	}
+	prev_found = req;
+	req->dev = dev;
+	return req;
+}
+
+/*
+ * wait until a free request in the first N entries is available.
+ * NOTE: interrupts must be disabled on the way in, and will still
+ *       be disabled on the way out.
+ */
+static inline struct request * get_request_wait(int n, int dev)
+{
+	register struct request *req;
+
+	while ((req = get_request(n, dev)) == NULL)
+		sleep_on(&wait_for_request);
+	return req;
+}
 
 /* RO fail safe mechanism */
 
@@ -122,11 +167,9 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 	req->next = tmp->next;
 	tmp->next = req;
 
-/* Scsi devices are treated differently */
-	if(MAJOR(req->dev) == 8 || 
-	   MAJOR(req->dev) == 9 ||
-	   MAJOR(req->dev) == 11)
-	  (dev->request_fn)();
+/* for SCSI devices, call request_fn unconditionally */
+	if (scsi_major(MAJOR(req->dev)))
+		(dev->request_fn)();
 
 	sti();
 }
@@ -135,7 +178,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 {
 	unsigned int sector, count;
 	struct request * req;
-	int rw_ahead;
+	int rw_ahead, max_req;
 
 /* WRITEA/READA is special case - it is not really needed, so if the */
 /* buffer is locked, we just forget about it, else it's a normal read */
@@ -164,33 +207,50 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 		unlock_buffer(bh);
 		return;
 	}
-/* The scsi disk drivers completely remove the request from the queue when
-   they start processing an entry.  For this reason it is safe to continue
-   to add links to the top entry for scsi devices */
+
+/* we don't allow the write-requests to fill up the queue completely:
+ * we want some room for reads: they take precedence. The last third
+ * of the requests are only for reads.
+ */
+	max_req = (rw == READ) ? NR_REQUEST : ((NR_REQUEST*2)/3);
+
+/* big loop: look for a free request. */
 
 repeat:
 	cli();
-	if ((major == 3 ||  major == 8 || major == 11)&& (req = blk_dev[major].current_request)) {
-	        if(major == 3) req = req->next;
+
+/* The scsi disk drivers completely remove the request from the queue when
+ * they start processing an entry.  For this reason it is safe to continue
+ * to add links to the top entry for scsi devices.
+ */
+	if ((major == HD_MAJOR
+	     || major == SCSI_DISK_MAJOR
+	     || major == SCSI_CDROM_MAJOR)
+	    && (req = blk_dev[major].current_request))
+	{
+	        if (major == HD_MAJOR)
+			req = req->next;
 		while (req) {
 			if (req->dev == bh->b_dev &&
 			    !req->waiting &&
 			    req->cmd == rw &&
 			    req->sector + req->nr_sectors == sector &&
-			    req->nr_sectors < 254) {
+			    req->nr_sectors < 254)
+			{
 				req->bhtail->b_reqnext = bh;
 				req->bhtail = bh;
 				req->nr_sectors += count;
 				bh->b_dirt = 0;
 				sti();
 				return;
-			      }
-			else if ( req->dev == bh->b_dev &&
+			}
+
+			if (req->dev == bh->b_dev &&
 			    !req->waiting &&
 			    req->cmd == rw &&
 			    req->sector - count == sector &&
 			    req->nr_sectors < 254)
-			    	{
+			{
 			    	req->nr_sectors += count;
 			    	bh->b_reqnext = req->bh;
 			    	req->buffer = bh->b_data;
@@ -200,36 +260,31 @@ repeat:
 			    	req->bh = bh;
 			    	sti();
 			    	return;
-			    }    
-			req = req->next;
-		      }
-	      }
-/* we don't allow the write-requests to fill up the queue completely:
- * we want some room for reads: they take precedence. The last third
- * of the requests are only for reads.
- */
-	if (rw == READ)
-		req = request+NR_REQUEST;
-	else
-		req = request+(NR_REQUEST/2);
-/* find an empty request */
-	while (--req >= request)
-		if (req->dev < 0)
-			goto found;
-/* if none found, sleep on new requests: check for rw_ahead */
-	if (rw_ahead) {
-		sti();
-		unlock_buffer(bh);
-		return;
-	}
-	sleep_on(&wait_for_request);
-	sti();
-	goto repeat;
+			}    
 
-found:
-/* fill up the request-info, and add it to the queue */
-	req->dev = bh->b_dev;
+			req = req->next;
+		}
+	}
+
+/* find an unused request. */
+	req = get_request(max_req, bh->b_dev);
+
+/* if no request available: if rw_ahead, forget it; otherwise try again. */
+	if (! req) {
+		if (rw_ahead) {
+			sti();
+			unlock_buffer(bh);
+			return;
+		}
+		sleep_on(&wait_for_request);
+		sti();
+		goto repeat;
+	}
+
+/* we found a request. */
 	sti();
+
+/* fill up the request-info, and add it to the queue */
 	req->cmd = rw;
 	req->errors = 0;
 	req->sector = sector;
@@ -258,19 +313,10 @@ void ll_rw_page(int rw, int dev, int page, char * buffer)
 		printk("Can't page to read-only device 0x%X\n",dev);
 		return;
 	}
-repeat:
 	cli();
-	req = request+NR_REQUEST;
-	while (--req >= request)
-		if (req->dev<0)
-			break;
-	if (req < request) {
-		sleep_on(&wait_for_request);
-		goto repeat;
-	}
-/* fill up the request-info, and add it to the queue */
-	req->dev = dev;
+	req = get_request_wait(NR_REQUEST, dev);
 	sti();
+/* fill up the request-info, and add it to the queue */
 	req->cmd = rw;
 	req->errors = 0;
 	req->sector = page<<3;
@@ -292,77 +338,86 @@ repeat:
 void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 {
 	unsigned int major;
-
 	struct request plug;
 	int plugged;
 	int correct_size;
 	struct blk_dev_struct * dev;
-	int i, j;
+	int i;
 
 	/* Make sure that the first block contains something reasonable */
-	while(!bh[0]){
-	  bh++;
-	  nr--;
-	  if (nr <= 0) return;
+	while (!*bh) {
+		bh++;
+		if (--nr <= 0)
+			return;
 	};
 
-	if ((major=MAJOR(bh[0]->b_dev)) >= MAX_BLKDEV ||
-	!(blk_dev[major].request_fn)) {
-		printk("ll_rw_block: Trying to read nonexistent block-device %04x (%d)\n",bh[0]->b_dev,bh[0]->b_blocknr);
-		for (i=0;i<nr; i++)
-		  if (bh[i]) bh[i]->b_dirt = bh[i]->b_uptodate = 0;
-		return;
+	dev = NULL;
+	if ((major = MAJOR(bh[0]->b_dev)) < MAX_BLKDEV)
+		dev = blk_dev + major;
+	if (!dev || !dev->request_fn) {
+		printk(
+	"ll_rw_block: Trying to read nonexistent block-device %04lX (%ld)\n",
+		       (unsigned long) bh[0]->b_dev, bh[0]->b_blocknr);
+		goto sorry;
 	}
 
-	for(j=0;j<nr; j++){
-	  if(!bh[j]) continue;
-	  /* Determine correct block size for this device */
-	  correct_size = BLOCK_SIZE;
-	  if(blksize_size[major] && blksize_size[major][MINOR(bh[j]->b_dev)])
-	    correct_size = blksize_size[major][MINOR(bh[j]->b_dev)];
-	  
-	  if(bh[j]->b_size != correct_size) {
-	    
-	    printk("ll_rw_block: only %d-char blocks implemented (%d)\n",
-		   correct_size, bh[j]->b_size);
-	    
-	    for (i=0;i<nr; i++)
-	      if (bh[i]) bh[i]->b_dirt = bh[i]->b_uptodate = 0;
-	    return;
-	  }
-	};
+	/* Determine correct block size for this device.  */
+	correct_size = BLOCK_SIZE;
+	if (blksize_size[major]) {
+		i = blksize_size[major][MINOR(bh[0]->b_dev)];
+		if (i)
+			correct_size = i;
+	}
+
+	/* Verify requested block sizees.  */
+	for (i = 0; i < nr; i++) {
+		if (bh[i] && bh[i]->b_size != correct_size) {
+			printk(
+			"ll_rw_block: only %d-char blocks implemented (%lu)\n",
+			       correct_size, bh[i]->b_size);
+			goto sorry;
+		}
+	}
 
 	if ((rw == WRITE || rw == WRITEA) && is_read_only(bh[0]->b_dev)) {
 		printk("Can't write to read-only device 0x%X\n",bh[0]->b_dev);
-		for (i=0;i<nr; i++)
-		  if (bh[i]) bh[i]->b_dirt = bh[i]->b_uptodate = 0;
-		return;
+		goto sorry;
 	}
-/* If there are no pending requests for this device, then we insert a dummy
-   request for that device.  This will prevent the request from starting until
-   we have shoved all of the blocks into the queue, and then we let it rip */
+
+	/* If there are no pending requests for this device, then we insert
+	   a dummy request for that device.  This will prevent the request
+	   from starting until we have shoved all of the blocks into the
+	   queue, and then we let it rip.  */
 
 	plugged = 0;
 	cli();
-	if (!blk_dev[major].current_request && nr > 1) {
-	  blk_dev[major].current_request = &plug;
-	  plug.dev = -1;
-	  plug.next = NULL;
-	  plugged = 1;
-	};
-	sti();
-	for (i=0;i<nr; i++)
-	  if (bh[i]) {
-	    bh[i]->b_req = 1;
-	    make_request(major, rw, bh[i]);
+	if (!dev->current_request && nr > 1) {
+		dev->current_request = &plug;
+		plug.dev = -1;
+		plug.next = NULL;
+		plugged = 1;
 	}
-	if(plugged){
-	  cli();
-	  blk_dev[major].current_request = plug.next;
-	  dev = major+blk_dev;
-	  (dev->request_fn)();
-	  sti();
-	};
+	sti();
+	for (i = 0; i < nr; i++) {
+		if (bh[i]) {
+			bh[i]->b_req = 1;
+			make_request(major, rw, bh[i]);
+		}
+	}
+	if (plugged) {
+		cli();
+		dev->current_request = plug.next;
+		(dev->request_fn)();
+		sti();
+	}
+	return;
+
+      sorry:
+	for (i = 0; i < nr; i++) {
+		if (bh[i])
+			bh[i]->b_dirt = bh[i]->b_uptodate = 0;
+	}
+	return;
 }
 
 void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
@@ -390,17 +445,8 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 
 	for (i=0; i<nb; i++, buf += buffersize)
 	{
-repeat:
 		cli();
-		req = request+NR_REQUEST;
-		while (--req >= request)
-			if (req->dev<0)
-				break;
-		if (req < request) {
-			sleep_on(&wait_for_request);
-			goto repeat;
-		}
-		req->dev = dev;
+		req = get_request_wait(NR_REQUEST, dev);
 		sti();
 		req->cmd = rw;
 		req->errors = 0;
@@ -419,11 +465,12 @@ repeat:
 
 long blk_dev_init(long mem_start, long mem_end)
 {
-	int i;
+	struct request * req;
 
-	for (i=0 ; i<NR_REQUEST ; i++) {
-		request[i].dev = -1;
-		request[i].next = NULL;
+	req = all_requests + NR_REQUEST;
+	while (--req >= all_requests) {
+		req->dev = -1;
+		req->next = NULL;
 	}
 	memset(ro_bits,0,sizeof(ro_bits));
 #ifdef CONFIG_BLK_DEV_HD

@@ -5,7 +5,7 @@
  |                                                                           |
  | Copyright (C) 1992,1993                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -42,8 +42,8 @@ void Un_impl(void)
   byte1 = get_fs_byte((unsigned char *) FPU_ORIG_EIP);
   FPU_modrm = get_fs_byte(1 + (unsigned char *) FPU_ORIG_EIP);
 
-  printk("Unimplemented FPU Opcode at eip=%08x : %02x ",
-	 FPU_ORIG_EIP, byte1);
+  printk("Unimplemented FPU Opcode at eip=%p : %02x ",
+	 (void *) FPU_ORIG_EIP, byte1);
 
   if (FPU_modrm >= 0300)
     printk("%02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
@@ -86,14 +86,14 @@ if ( partial_status & SW_Denorm_Op )   printk("SW: denormalized operand\n");
 if ( partial_status & SW_Invalid )     printk("SW: invalid operation\n");
 #endif DEBUGGING
 
-  printk("At %08x: %02x ", FPU_ORIG_EIP, byte1);
+  printk("At %p: %02x ", (void *) FPU_ORIG_EIP, byte1);
   if (FPU_modrm >= 0300)
     printk("%02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
   else
     printk("/%d, mod=%d rm=%d\n",
 	   (FPU_modrm >> 3) & 7, (FPU_modrm >> 6) & 3, FPU_modrm & 7);
 
-  printk(" SW: b=%d st=%d es=%d sf=%d cc=%d%d%d%d ef=%d%d%d%d%d%d\n",
+  printk(" SW: b=%d st=%ld es=%d sf=%d cc=%d%d%d%d ef=%d%d%d%d%d%d\n",
 	 partial_status & 0x8000 ? 1 : 0,   /* busy */
 	 (partial_status & 0x3800) >> 11,   /* stack top pointer */
 	 partial_status & 0x80 ? 1 : 0,     /* Error summary status */
@@ -104,7 +104,7 @@ if ( partial_status & SW_Invalid )     printk("SW: invalid operation\n");
 	 partial_status & SW_Overflow?1:0, partial_status & SW_Zero_Div?1:0,
 	 partial_status & SW_Denorm_Op?1:0, partial_status & SW_Invalid?1:0);
   
-printk(" CW: ic=%d rc=%d%d pc=%d%d iem=%d     ef=%d%d%d%d%d%d\n",
+printk(" CW: ic=%d rc=%ld%ld pc=%ld%ld iem=%d     ef=%d%d%d%d%d%d\n",
 	 control_word & 0x1000 ? 1 : 0,
 	 (control_word & 0x800) >> 11, (control_word & 0x400) >> 10,
 	 (control_word & 0x200) >> 9, (control_word & 0x100) >> 8,
@@ -131,7 +131,7 @@ printk(" CW: ic=%d rc=%d%d pc=%d%d iem=%d     ef=%d%d%d%d%d%d\n",
 	case TW_NaN:
 /*	case TW_Denormal: */
 	case TW_Infinity:
-	  printk("st(%d)  %c .%04x %04x %04x %04x e%+-6d ", i,
+	  printk("st(%d)  %c .%04lx %04lx %04lx %04lx e%+-6ld ", i,
 		 r->sign ? '-' : '+',
 		 (long)(r->sigh >> 16),
 		 (long)(r->sigh & 0xFFFF),
@@ -146,7 +146,7 @@ printk(" CW: ic=%d rc=%d%d pc=%d%d iem=%d     ef=%d%d%d%d%d%d\n",
       printk("%s\n", tag_desc[(int) (unsigned) r->tag]);
     }
 
-  printk("[data] %c .%04x %04x %04x %04x e%+-6d ",
+  printk("[data] %c .%04lx %04lx %04lx %04lx e%+-6ld ",
 	 FPU_loaded_data.sign ? '-' : '+',
 	 (long)(FPU_loaded_data.sigh >> 16),
 	 (long)(FPU_loaded_data.sigh & 0xFFFF),
@@ -312,9 +312,9 @@ void exception(int n)
 
 /* Real operation attempted on two operands, one a NaN. */
 /* Returns nz if the exception is unmasked */
-asmlinkage int real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
+asmlinkage int real_2op_NaN(FPU_REG const *a, FPU_REG const *b, FPU_REG *dest)
 {
-  FPU_REG *x;
+  FPU_REG const *x;
   int signalling;
 
   /* The default result for the case of two "equal" NaNs (signs may

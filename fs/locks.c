@@ -179,7 +179,7 @@ void fcntl_remove_locks(struct task_struct *task, struct file *filp,
 	/* Find first lock owned by caller ... */
 
 	before = &filp->f_inode->i_flock;
-	while ((fl = *before) && task != fl->fl_owner && fd != fl->fl_fd)
+	while ((fl = *before) && (task != fl->fl_owner || fd != fl->fl_fd))
 		before = &fl->fl_next;
 
 	/* The list is sorted by owner and fd ... */
@@ -282,9 +282,9 @@ static int lock_it(struct file *filp, struct file_lock *caller, unsigned int fd)
 	 */
 
 	before = &filp->f_inode->i_flock;
-	while (   (fl = *before)
-               && caller->fl_owner != fl->fl_owner
-               && caller->fl_fd != fl->fl_fd)
+	while ((fl = *before) &&
+	    (caller->fl_owner != fl->fl_owner ||
+	     caller->fl_fd != fl->fl_fd))
 		before = &fl->fl_next;
 
 	/*
@@ -366,7 +366,6 @@ static int lock_it(struct file *filp, struct file_lock *caller, unsigned int fd)
 			fl->fl_start = caller->fl_start;
 			fl->fl_end   = caller->fl_end;
 			fl->fl_type  = caller->fl_type;
-			fl->fl_wait  = 0;
 			caller = fl;
 			added = 1;
 		}

@@ -17,7 +17,7 @@ asmlinkage void sys_sync(void);	/* it's really int */
 
 extern int vsprintf(char * buf, const char * fmt, va_list args);
 
-volatile void panic(const char * fmt, ...)
+NORET_TYPE void panic(const char * fmt, ...)
 {
 	static char buf[1024];
 	va_list args;
