@@ -589,7 +589,8 @@ setup_gazelpci(struct IsdnCardState *cs)
 	seekcard = GAZEL_R685;
 	for (nbseek = 0; nbseek < 3; nbseek++) {
 		if ((dev_tel = pci_find_device(GAZEL_MANUFACTURER, seekcard, dev_tel))) {
-
+			if (pci_enable_device(dev_tel))
+				return 1;
 			pci_irq = dev_tel->irq;
 			pci_ioaddr0 = dev_tel->resource[ 1].start;
 			pci_ioaddr1 = dev_tel->resource[ 2].start;

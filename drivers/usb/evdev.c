@@ -1,7 +1,7 @@
 /*
- *  evdev.c  Version 0.1
+ * $Id: evdev.c,v 1.8 2000/05/29 09:01:52 vojtech Exp $
  *
- *  Copyright (c) 1999 Vojtech Pavlik
+ *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
  *  Event char devices, giving access to raw input device events.
  *
@@ -72,8 +72,7 @@ static void evdev_event(struct input_handle *handle, unsigned int type, unsigned
 		list->buffer[list->head].value = value;
 		list->head = (list->head + 1) & (EVDEV_BUFFER_SIZE - 1);
 		
-		if (list->fasync)
-			kill_fasync(list->fasync, SIGIO, POLL_IN);
+		kill_fasync(&list->fasync, SIGIO, POLL_IN);
 
 		list = list->next;
 	}
@@ -111,7 +110,6 @@ static int evdev_release(struct inode * inode, struct file * file)
 
 	kfree(list);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -123,10 +121,7 @@ static int evdev_open(struct inode * inode, struct file * file)
 	if (i > EVDEV_MINORS || !evdev_table[i])
 		return -ENODEV;
 
-	MOD_INC_USE_COUNT;
-
 	if (!(list = kmalloc(sizeof(struct evdev_list), GFP_KERNEL))) {
-		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	memset(list, 0, sizeof(struct evdev_list));
@@ -207,14 +202,20 @@ static int evdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	struct evdev_list *list = file->private_data;
 	struct evdev *evdev = list->evdev;
 	struct input_dev *dev = evdev->handle.dev;
+	int retval;
 
 	switch (cmd) {
 
 		case EVIOCGVERSION:
-			return put_user(EV_VERSION, (__u32 *) arg);
+			return put_user(EV_VERSION, (int *) arg);
+
 		case EVIOCGID:
-			return copy_to_user(&dev->id, (void *) arg,
-						sizeof(struct input_id)) ? -EFAULT : 0;
+			if ((retval = put_user(dev->idbus,     ((short *) arg) + 0))) return retval;
+			if ((retval = put_user(dev->idvendor,  ((short *) arg) + 1))) return retval;
+			if ((retval = put_user(dev->idproduct, ((short *) arg) + 2))) return retval;
+			if ((retval = put_user(dev->idversion, ((short *) arg) + 3))) return retval;
+			return 0;
+
 		default:
 
 			if (_IOC_TYPE(cmd) != 'E' || _IOC_DIR(cmd) != _IOC_READ)
@@ -222,8 +223,8 @@ static int evdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 
 			if ((_IOC_NR(cmd) & ~EV_MAX) == _IOC_NR(EVIOCGBIT(0,0))) {
 
-				long *bits = NULL;
-				int len = 0;
+				long *bits;
+				int len;
 
 				switch (_IOC_NR(cmd) & EV_MAX) {
 					case      0: bits = dev->evbit;  len = EV_MAX;  break;
@@ -235,20 +236,40 @@ static int evdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 					default: return -EINVAL;
 				}
 				len = NBITS(len) * sizeof(long);
-				if (len > _IOC_SIZE(cmd)) len = _IOC_SIZE(cmd);
-				return copy_to_user((void *) arg, bits, len) ? -EFAULT : len;
+				if (len > _IOC_SIZE(cmd)) {
+					printk(KERN_WARNING "evdev.c: Truncating bitfield length from %d to %d\n",
+						len, _IOC_SIZE(cmd));
+					len = _IOC_SIZE(cmd);
+				}
+				return copy_to_user((char *) arg, bits, len) ? -EFAULT : len;
 			}
 
 			if (_IOC_NR(cmd) == _IOC_NR(EVIOCGNAME(0))) {
-				int len = strlen(dev->name) + 1;
+				int len;
+				if (!dev->name) return 0;
+				len = strlen(dev->name) + 1;
 				if (len > _IOC_SIZE(cmd)) len = _IOC_SIZE(cmd);
 				return copy_to_user((char *) arg, dev->name, len) ? -EFAULT : len;
+			}
+
+			if ((_IOC_NR(cmd) & ~ABS_MAX) == _IOC_NR(EVIOCGABS(0))) {
+
+				int t = _IOC_NR(cmd) & ABS_MAX;
+
+				if ((retval = put_user(dev->abs[t],     ((int *) arg) + 0))) return retval;
+				if ((retval = put_user(dev->absmin[t],  ((int *) arg) + 1))) return retval;
+				if ((retval = put_user(dev->absmax[t],  ((int *) arg) + 2))) return retval;
+				if ((retval = put_user(dev->absfuzz[t], ((int *) arg) + 3))) return retval;
+				if ((retval = put_user(dev->absflat[t], ((int *) arg) + 4))) return retval;
+
+				return 0;
 			}
 	}
 	return -EINVAL;
 }
 
 static struct file_operations evdev_fops = {
+	owner:		THIS_MODULE,
 	read:		evdev_read,
 	write:		evdev_write,
 	poll:		evdev_poll,
@@ -286,7 +307,7 @@ static struct input_handle *evdev_connect(struct input_handler *handler, struct 
 
 	evdev->devfs = input_register_minor("event%d", minor, EVDEV_MINOR_BASE);
 
-	printk("event%d: Event device for input%d\n", minor, dev->number);
+	printk(KERN_INFO "event%d: Event device for input%d\n", minor, dev->number);
 
 	return &evdev->handle;
 }

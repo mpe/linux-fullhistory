@@ -1,5 +1,5 @@
 /*
- *  wmforce.c  Version 0.1
+ * $Id: wmforce.c,v 1.6 2000/05/29 09:01:52 vojtech Exp $
  *
  *  Copyright (c) 2000 Vojtech Pavlik
  *
@@ -44,12 +44,15 @@ struct wmforce {
 	signed char data[8];
 	struct input_dev dev;
 	struct urb irq;
+	int open;
 };
 
 static struct {
         __s32 x;
         __s32 y;
 } wmforce_hat_to_axis[16] = {{ 0,-1}, { 1,-1}, { 1, 0}, { 1, 1}, { 0, 1}, {-1, 1}, {-1, 0}, {-1,-1}};
+
+static char *wmforce_name = "Logitech WingMan Force";
 
 static void wmforce_irq(struct urb *urb)
 {
@@ -71,15 +74,36 @@ static void wmforce_irq(struct urb *urb)
 	input_report_abs(dev, ABS_HAT0X, wmforce_hat_to_axis[data[7] >> 4].x);
 	input_report_abs(dev, ABS_HAT0Y, wmforce_hat_to_axis[data[7] >> 4].y);
 
-	input_report_key(dev, BTN_TRIGGER, !!(data[6] & 0x01));
-	input_report_key(dev, BTN_TOP,     !!(data[6] & 0x02));
-	input_report_key(dev, BTN_THUMB,   !!(data[6] & 0x04));
-	input_report_key(dev, BTN_TOP2,    !!(data[6] & 0x08));
-	input_report_key(dev, BTN_BASE,    !!(data[6] & 0x10));
-	input_report_key(dev, BTN_BASE2,   !!(data[6] & 0x20));
-	input_report_key(dev, BTN_BASE3,   !!(data[6] & 0x40));
-	input_report_key(dev, BTN_BASE4,   !!(data[6] & 0x80));
-	input_report_key(dev, BTN_BASE5,   !!(data[7] & 0x01));
+	input_report_key(dev, BTN_TRIGGER, data[6] & 0x01);
+	input_report_key(dev, BTN_TOP,     data[6] & 0x02);
+	input_report_key(dev, BTN_THUMB,   data[6] & 0x04);
+	input_report_key(dev, BTN_TOP2,    data[6] & 0x08);
+	input_report_key(dev, BTN_BASE,    data[6] & 0x10);
+	input_report_key(dev, BTN_BASE2,   data[6] & 0x20);
+	input_report_key(dev, BTN_BASE3,   data[6] & 0x40);
+	input_report_key(dev, BTN_BASE4,   data[6] & 0x80);
+	input_report_key(dev, BTN_BASE5,   data[7] & 0x01);
+}
+
+static int wmforce_open(struct input_dev *dev)
+{
+	struct wmforce *wmforce = dev->private;
+
+	if (wmforce->open++)
+		return 0;
+
+	if (usb_submit_urb(&wmforce->irq))
+		return -EIO;
+
+	return 0;
+}
+
+static void wmforce_close(struct input_dev *dev)
+{
+	struct wmforce *wmforce = dev->private;
+
+	if (!--wmforce->open)
+		usb_unlink_urb(&wmforce->irq);
 }
 
 static void *wmforce_probe(struct usb_device *dev, unsigned int ifnum)
@@ -105,33 +129,34 @@ static void *wmforce_probe(struct usb_device *dev, unsigned int ifnum)
 	for (i = ABS_X; i <= ABS_Y; i++) {
 		wmforce->dev.absmax[i] =  1920;
 		wmforce->dev.absmin[i] = -1920;
-		wmforce->dev.absfuzz[i] = 0;
 		wmforce->dev.absflat[i] = 128;
 	}
 
-	wmforce->dev.absmax[ABS_THROTTLE] = 0;
-	wmforce->dev.absmin[ABS_THROTTLE] = 255;
-	wmforce->dev.absfuzz[ABS_THROTTLE] = 0;
-	wmforce->dev.absflat[ABS_THROTTLE] = 0;
+	wmforce->dev.absmax[ABS_THROTTLE] = 255;
+	wmforce->dev.absmin[ABS_THROTTLE] = 0;
 
 	for (i = ABS_HAT0X; i <= ABS_HAT0Y; i++) {
 		wmforce->dev.absmax[i] =  1;
 		wmforce->dev.absmin[i] = -1;
-		wmforce->dev.absfuzz[i] = 0;
-		wmforce->dev.absflat[i] = 0;
 	}
+
+	wmforce->dev.private = wmforce;
+	wmforce->dev.open = wmforce_open;
+	wmforce->dev.close = wmforce_close;
+
+	wmforce->dev.name = wmforce_name;
+	wmforce->dev.idbus = BUS_USB;
+	wmforce->dev.idvendor = dev->descriptor.idVendor;
+	wmforce->dev.idproduct = dev->descriptor.idProduct;
+	wmforce->dev.idversion = dev->descriptor.bcdDevice;
 
 	FILL_INT_URB(&wmforce->irq, dev, usb_rcvintpipe(dev, endpoint->bEndpointAddress),
 			wmforce->data, 8, wmforce_irq, wmforce, endpoint->bInterval);
 
-	if (usb_submit_urb(&wmforce->irq)) {
-		kfree(wmforce);
-		return NULL;
-	}
-
 	input_register_device(&wmforce->dev);
 
-	printk(KERN_INFO "input%d: Logitech WingMan Force USB\n", wmforce->dev.number);
+	printk(KERN_INFO "input%d: %s on usb%d:%d.%d\n",
+		 wmforce->dev.number, wmforce_name, dev->bus->busnum, dev->devnum, ifnum);
 
 	return wmforce;
 }

@@ -53,24 +53,49 @@ extern unsigned long autoirq_report(int waittime);
 #if defined(LOAD_8390_BY_KMOD) && defined(MODULE) && !defined(NS8390_CORE)
 
 /* Function pointers to be mapped onto the 8390 core support */
-static int (*S_ethdev_init)(struct net_device *dev);
-static void (*S_NS8390_init)(struct net_device *dev, int startp);
-static int (*S_ei_open)(struct net_device *dev);
-static int (*S_ei_close)(struct net_device *dev);
-static void (*S_ei_interrupt)(int irq, void *dev_id, struct pt_regs *regs);
+static int (*S_ethdev_init)(struct net_device *dev) = NULL;
+static void (*S_NS8390_init)(struct net_device *dev, int startp) = NULL;
+static int (*S_ei_open)(struct net_device *dev) = NULL;
+static int (*S_ei_close)(struct net_device *dev) = NULL;
+static void (*S_ei_interrupt)(int irq, void *dev_id, struct pt_regs *regs) = NULL;
 
-
-#define NS8390_KSYSMS_PRESENT	(			\
-	get_module_symbol(NULL, "ethdev_init") != 0 &&	\
-	get_module_symbol(NULL, "NS8390_init") != 0 &&	\
-	get_module_symbol(NULL, "ei_open") != 0 &&	\
-	get_module_symbol(NULL, "ei_close") != 0 &&	\
-	get_module_symbol(NULL, "ei_interrupt") != 0)
+extern __inline__ void unload_8390_module(void)
+{
+	if (S_ethdev_init) {
+		put_module_symbol((unsigned long)S_ethdev_init);
+		S_ethdev_init = NULL;
+	}
+	if (S_NS8390_init) {
+		put_module_symbol((unsigned long)S_NS8390_init);
+		S_NS8390_init = NULL;
+	}
+	if (S_ei_open) {
+		put_module_symbol((unsigned long)S_ei_open);
+		S_ei_open = NULL;
+	}
+	if (S_ei_close) {
+		put_module_symbol((unsigned long)S_ei_close);
+		S_ei_close = NULL;
+	}
+	if (S_ei_interrupt) {
+		put_module_symbol((unsigned long)S_ei_interrupt);
+		S_ei_interrupt = NULL;
+	}
+}
 
 extern __inline__ int load_8390_module(const char *driver)
 {
+	/* Do we actually need to handle this case? */
+	if (S_ethdev_init) {
+		printk(KERN_DEBUG "%s: load_8390_module called when pointers already present\n", driver);
+		return 0;
+	}
+	
+	/* Attempt to get the first symbol */
+	S_ethdev_init = (void *)get_module_symbol(NULL, "ethdev_init");
 
-	if (! NS8390_KSYSMS_PRESENT) {
+	if (!S_ethdev_init) {
+		/* It failed. See if we have request_module() */
 		int (*request_mod)(const char *module_name);
 
 		if (get_module_symbol("", "request_module") == 0) {
@@ -80,52 +105,34 @@ extern __inline__ int load_8390_module(const char *driver)
 			return -ENOSYS;
 		}
 
+		/* OK - we have request_module() - try it */
 		request_mod = (void*)get_module_symbol("", "request_module");
 		if (request_mod("8390")) {
 			printk("%s: request to load the 8390 module failed.\n", driver);
 			return -ENOSYS;
 		}
 
-		/* Check if module really loaded and is valid */
-		if (! NS8390_KSYSMS_PRESENT) {
-			printk("%s: 8390.o not found/invalid or failed to load.\n", driver);
-			return -ENOSYS;
-		}
-
 		printk(KERN_INFO "%s: auto-loaded 8390 module.\n", driver);
+		
+		/* Retry getting ethdev_init */
+		S_ethdev_init = (void *)get_module_symbol(NULL, "ethdev_init");
 	}
 
-	/* Map the functions into place */
-	S_ethdev_init = (void*)get_module_symbol(0, "ethdev_init");
+	/* Get addresses for the other functions */
 	S_NS8390_init = (void*)get_module_symbol(0, "NS8390_init");
 	S_ei_open = (void*)get_module_symbol(0, "ei_open");
 	S_ei_close = (void*)get_module_symbol(0, "ei_close");
 	S_ei_interrupt = (void*)get_module_symbol(0, "ei_interrupt");
 
-	return 0;
-}
-
-/*
- * Since a kmod aware driver won't explicitly show a dependence on the
- * exported 8390 functions (due to the mapping above), the 8390 module
- * (if present, and not in-kernel) needs to be protected from garbage
- * collection.  NS8390_module is only defined for a modular 8390 core.
- */
-
-extern __inline__  void lock_8390_module(void)
-{
-	struct module **mod = (struct module**)get_module_symbol(0, "NS8390_module");
-
-	if (mod != NULL && *mod != NULL)
-		__MOD_INC_USE_COUNT(*mod);
+	/* Check if module really loaded and is valid */
+	if (!S_ethdev_init || !S_NS8390_init || !S_ei_open || !S_ei_close
+	    || !S_ei_interrupt) {
+		unload_8390_module();
+		printk("%s: 8390.o not found/invalid or failed to load.\n", driver);
+		return -ENOSYS;
 }
 	
-extern __inline__  void unlock_8390_module(void)
-{
-	struct module **mod = (struct module**)get_module_symbol(0, "NS8390_module");
-
-	if (mod != NULL && *mod != NULL)
-		__MOD_DEC_USE_COUNT(*mod);
+	return 0;
 }
 	
 /*
@@ -141,8 +148,7 @@ extern __inline__  void unlock_8390_module(void)
 #else	/* not a module or kmod support not wanted */
 
 #define load_8390_module(driver)	0
-#define lock_8390_module()		do { } while (0)
-#define unlock_8390_module()		do { } while (0)
+#define unload_8390_module()		do { } while (0)
 extern int ethdev_init(struct net_device *dev);
 extern void NS8390_init(struct net_device *dev, int startp);
 extern int ei_open(struct net_device *dev);

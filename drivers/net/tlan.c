@@ -72,6 +72,31 @@
  *			     - TODO: Port completely to new PCI/DMA API
  *			     	     Auto-Neg fallback.
  *
+ * 	v1.6 April 04, 2000  - Fixed driver support for kernel-parameters. Haven't
+ * 			       tested it though, as the kernel support is currently 
+ * 			       broken (2.3.99p4p3).
+ * 			     - Updated tlan.txt accordingly.
+ * 			     - Adjusted minimum/maximum frame length.
+ * 			     - There is now a TLAN website up at 
+ * 			       http://tlan.kernel.dk
+ *
+ * 	v1.7 April 07, 2000  - Started to implement custom ioctls. Driver now
+ * 			       reports PHY information when used with Donald
+ * 			       Beckers userspace MII diagnostics utility.
+ *
+ * 	v1.8 April 23, 2000  - Fixed support for forced speed/duplex settings.
+ * 			     - Added link information to Auto-Neg and forced
+ * 			       modes. When NIC operates with auto-neg the driver
+ * 			       will report Link speed & duplex modes as well as
+ * 			       link partner abilities. When forced link is used,
+ * 			       the driver will report status of the established
+ * 			       link.
+ * 			       Please read tlan.txt for additional information. 
+ * 			     - Removed call to check_region(), and used 
+ * 			       return value of request_region() instead.
+ *	
+ *	v1.8a May 28, 2000   - Minor updates.
+ *
  *******************************************************************************/
 
 
@@ -99,6 +124,8 @@ static	int		aui = 0;
 static	int		duplex = 0; 
 static	int		speed = 0;
 
+MODULE_AUTHOR("Maintainer: Torben Mathiasen <torben.mathiasen@compaq.com>");
+MODULE_DESCRIPTION("Driver for TI ThunderLAN based ethernet PCI adapters");
 MODULE_PARM(aui, "i");
 MODULE_PARM(duplex, "i");
 MODULE_PARM(speed, "i");
@@ -111,9 +138,14 @@ static  int		debug = 0;
 static	int		bbuf = 0;
 static	u8		*TLanPadBuffer;
 static	char		TLanSignature[] = "TLAN";
-static	int		TLanVersionMajor = 1;
-static	int		TLanVersionMinor = 5;
+static const char *tlan_banner = "ThunderLAN driver v1.8a\n";
 
+const char *media[] = {
+	"10BaseT-HD ", "10BaseT-FD ","100baseTx-HD ", 
+	"100baseTx-FD", "100baseT4", 0
+};
+
+int media_map[] = { 0x0020, 0x0040, 0x0080, 0x0100, 0x0200,};
 
 static TLanAdapterEntry TLanAdapterList[] __initdata = {
 	{ PCI_VENDOR_ID_COMPAQ, 
@@ -211,6 +243,7 @@ static void	TLan_HandleInterrupt(int, void *, struct pt_regs *);
 static int	TLan_Close(struct net_device *);
 static struct	net_device_stats *TLan_GetStats( struct net_device * );
 static void	TLan_SetMulticastList( struct net_device * );
+static int	TLan_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 
 static u32	TLan_HandleInvalid( struct net_device *, u16 );
 static u32	TLan_HandleTxEOF( struct net_device *, u16 );
@@ -371,9 +404,7 @@ static int __init tlan_probe(void)
 	u32		   io_base, index;
 	int 		   found;
 	
-	printk(KERN_INFO "ThunderLAN driver v%d.%d\n", 
-					TLanVersionMajor,
-					TLanVersionMinor);
+	printk(KERN_INFO "%s", tlan_banner); 
 
 	TLanPadBuffer = (u8 *) kmalloc(TLAN_MIN_FRAME_SIZE, 
 					(GFP_KERNEL | GFP_DMA));
@@ -404,17 +435,36 @@ static int __init tlan_probe(void)
 		dev->irq = irq;
 		priv->adapter = &TLanAdapterList[index];
 		priv->adapterRev = rev;
-		priv->aui = 	   aui;
 		
-		if ( ( duplex != 1 ) && ( duplex != 2 ) ) 
-			duplex = 0;
-		priv->duplex = duplex;
+		
+		/* Kernel parameters */
+		if (dev->mem_start) {
+			priv->aui    = dev->mem_start & 0x01;
+			priv->duplex = ((dev->mem_start & 0x06) == 0x06) ? 0 : (dev->mem_start & 0x06) >> 1;
+			priv->speed  = ((dev->mem_start & 0x18) == 0x18) ? 0 : (dev->mem_start & 0x18) >> 3;
+		
+			if (priv->speed == 0x1) {
+				priv->speed = TLAN_SPEED_10;
+			} else if (priv->speed == 0x2) {
+				priv->speed = TLAN_SPEED_100;
+			}
+			debug = priv->debug = dev->mem_end;
+		} else {
 
-		if ( ( speed != 10 ) && ( speed != 100 ) )
-			speed = 0;
+			if ( ( duplex != 1 ) && ( duplex != 2 ) ) 
+				duplex = 0;
+			
+			priv->duplex = duplex;
 
-		priv->speed = speed;
-		priv->debug = debug;
+			if ( ( speed != 10 ) && ( speed != 100 ) )
+				speed = 0;
+			
+			priv->aui   = aui;
+			priv->speed = speed;
+			priv->debug = debug;
+			
+		}
+		
 		spin_lock_init(&priv->lock);
 		
 		if (TLan_Init(dev)) {
@@ -495,8 +545,11 @@ static int __init TLan_PciProbe(u8 *pci_dfn, u8 *pci_irq, u8 *pci_rev, u32 *pci_
 				TLanAdapterList[dl_index].deviceId
 			);
 
+			if (pci_enable_device(pdev))
+				continue;
+			
 			*pci_irq = pdev->irq;
-			*pci_io_base = pdev->resource[0].start;
+			*pci_io_base = pci_resource_start (pdev, 0);
 			*pci_dfn = pdev->devfn;
 			pci_read_config_byte ( pdev, PCI_REVISION_ID, pci_rev);
 			pci_read_config_word ( pdev,  PCI_COMMAND, &pci_command);
@@ -554,13 +607,13 @@ static int __init TLan_PciProbe(u8 *pci_dfn, u8 *pci_irq, u8 *pci_rev, u32 *pci_
 static int TLan_Init( struct net_device *dev )
 {
 	int		dma_size;
-	int		err;
+	int 		err;
 	int		i;
 	TLanPrivateInfo	*priv;
 
 	priv = (TLanPrivateInfo *) dev->priv;
-	err = check_region( dev->base_addr, 0x10 );
-	if ( err ) {
+	
+	if (!request_region( dev->base_addr, 0x10, TLanSignature )) {
 		printk(KERN_ERR "TLAN: %s: Io port region 0x%lx size 0x%x in use.\n",
 			dev->name,
 			dev->base_addr,
@@ -568,7 +621,6 @@ static int TLan_Init( struct net_device *dev )
 		return -EIO;
 	}
 	
-	request_region( dev->base_addr, 0x10, TLanSignature );
 	
 	if ( bbuf ) {
 		dma_size = ( TLAN_NUM_RX_LISTS + TLAN_NUM_TX_LISTS )
@@ -611,7 +663,7 @@ static int TLan_Init( struct net_device *dev )
 	dev->stop = &TLan_Close;
 	dev->get_stats = &TLan_GetStats;
 	dev->set_multicast_list = &TLan_SetMulticastList;
-
+	dev->do_ioctl = &TLan_ioctl;
 
 	return 0;
 
@@ -667,6 +719,49 @@ static int TLan_Open( struct net_device *dev )
 
 } /* TLan_Open */
 
+
+
+	/**************************************************************
+	 *	TLan_ioctl
+	 *	
+	 *	Returns:
+	 *		0 on success, error code otherwise
+	 *	Params:
+	 *		dev	structure of device to receive ioctl.
+	 *		
+	 *		rq	ifreq structure to hold userspace data.
+	 *
+	 *		cmd	ioctl command.
+	 *
+	 *
+	 *************************************************************/
+
+static int TLan_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
+{
+	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
+	u16 *data = (u16 *)&rq->ifr_data;
+	u32 phy   = priv->phy[priv->phyNum];
+	
+	if (!priv->phyOnline)
+		return -EAGAIN;
+
+	switch(cmd) {
+		case SIOCDEVPRIVATE:
+			data[0] = phy;
+
+		case SIOCDEVPRIVATE+1: /* Read MII register */
+			TLan_MiiReadReg(dev, data[0], data[1], &data[3]);
+			return 0;
+		
+		case SIOCDEVPRIVATE+2: /* Write MII register */
+			if (!capable(CAP_NET_ADMIN))
+				return -EPERM;
+			TLan_MiiWriteReg(dev, data[0], data[1], data[2]);
+			return 0;
+		default:
+			return -EOPNOTSUPP;
+	}
+} /* tlan_ioctl */
 
 
 
@@ -1898,7 +1993,10 @@ TLan_FinishReset( struct net_device *dev )
 	u32		phy;
 	u8		sio;
 	u16		status;
+	u16		partner;
 	u16		tlphy_ctl;
+	u16 		tlphy_par;
+	int 		i;
 
 	phy = priv->phy[priv->phyNum];
 
@@ -1922,7 +2020,26 @@ TLan_FinishReset( struct net_device *dev )
 		udelay( 1000 );
 		TLan_MiiReadReg( dev, phy, MII_GEN_STS, &status );
 		if ( status & MII_GS_LINK ) {
-			printk( "TLAN: %s: Link active.\n", dev->name );
+			TLan_MiiReadReg( dev, phy, MII_AN_LPA, &partner );
+			TLan_MiiReadReg( dev, phy, TLAN_TLPHY_PAR, &tlphy_par );
+			
+			printk( "TLAN: %s: Link active with ", dev->name );
+			if (!(tlphy_par & TLAN_PHY_AN_EN_STAT)) {
+			      	 printk( "forced 10%sMbps %s-Duplex\n", 
+						tlphy_par & TLAN_PHY_SPEED_100 ? "" : "0",
+						tlphy_par & TLAN_PHY_DUPLEX_FULL ? "Full" : "Half");
+			} else {
+				printk( "AutoNegotiation enabled, at 10%sMbps %s-Duplex\n",
+						tlphy_par & TLAN_PHY_SPEED_100 ? "" : "0",
+						tlphy_par & TLAN_PHY_DUPLEX_FULL ? "Full" : "Half");
+
+				printk("TLAN: Partner capability: ");
+					for (i = 5; i <= 10; i++)
+						if (partner & (1<<i))
+							printk("%s", media[i-5]);
+							printk("\n");
+			}
+
 			TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK );
 		}
 	}
@@ -1946,7 +2063,7 @@ TLan_FinishReset( struct net_device *dev )
 		outl( virt_to_bus( priv->rxList ), dev->base_addr + TLAN_CH_PARM );
 		outl( TLAN_HC_GO | TLAN_HC_RT, dev->base_addr + TLAN_HOST_CMD );
 	} else {
-		printk( "TLAN:  %s: Link inactive, will retry in 10 secs...\n", dev->name );
+		printk( "TLAN: %s: Link inactive, will retry in 10 secs...\n", dev->name );
 		TLan_SetTimer( dev, (10*HZ), TLAN_TIMER_FINISH_RESET );
 		return;
 	}
@@ -2149,10 +2266,10 @@ void TLan_PhyPowerUp( struct net_device *dev )
 	TLan_MiiSync( dev->base_addr );
 	value = MII_GC_LOOPBK;
 	TLan_MiiWriteReg( dev, priv->phy[priv->phyNum], MII_GEN_CTL, value );
-
+	TLan_MiiSync(dev->base_addr);
 	/* Wait for 500 ms and reset the
 	 * tranceiver.  The TLAN docs say both 50 ms and
-	 * 500 ms, so do the longer, just in case
+	 * 500 ms, so do the longer, just in case.
 	 */
 	TLan_SetTimer( dev, (HZ/2), TLAN_TIMER_PHY_RESET );
 
@@ -2177,12 +2294,12 @@ void TLan_PhyReset( struct net_device *dev )
 	while ( value & MII_GC_RESET ) {
 		TLan_MiiReadReg( dev, phy, MII_GEN_CTL, &value );
 	}
-	TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0 );
 
 	/* Wait for 500 ms and initialize.
 	 * I don't remember why I wait this long.
+	 * I've changed this to 50ms, as it seems long enough.
 	 */
-	TLan_SetTimer( dev, (HZ/2), TLAN_TIMER_PHY_START_LINK );
+	TLan_SetTimer( dev, (HZ/20), TLAN_TIMER_PHY_START_LINK );
 
 } /* TLan_PhyReset */
 
@@ -2200,52 +2317,56 @@ void TLan_PhyStartLink( struct net_device *dev )
 	u16		tctl;
 
 	phy = priv->phy[priv->phyNum];
-
 	TLAN_DBG( TLAN_DEBUG_GNRL, "%s: Trying to activate link.\n", dev->name );
 	TLan_MiiReadReg( dev, phy, MII_GEN_STS, &status );
+	TLan_MiiReadReg( dev, phy, MII_GEN_STS, &ability );
 	if ( ( status & MII_GS_AUTONEG ) && 
-	     ( priv->duplex == TLAN_DUPLEX_DEFAULT ) && 
-	     ( priv->speed == TLAN_SPEED_DEFAULT ) &&
 	     ( ! priv->aui ) ) {
+
 		ability = status >> 11;
-
-		if ( priv->speed == TLAN_SPEED_10 ) {
-			ability &= 0x0003;
-		} else if ( priv->speed == TLAN_SPEED_100 ) {
-			ability &= 0x001C;
+		if ( priv->speed  == TLAN_SPEED_10 && 
+		     priv->duplex == TLAN_DUPLEX_HALF) {
+			TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x0000);
+		} else if ( priv->speed == TLAN_SPEED_10 &&
+			    priv->duplex == TLAN_DUPLEX_FULL) {
+			    TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x0100);
+		} else if ( priv->speed == TLAN_SPEED_100 &&
+			    priv->duplex == TLAN_DUPLEX_HALF) {
+			    TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x2000);
+		} else if ( priv->speed == TLAN_SPEED_100 &&
+			    priv->duplex == TLAN_DUPLEX_FULL) {
+			    TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x2100);
+		} else {
+	
+			/* Set Auto-Neg advertisement */
+			TLan_MiiWriteReg( dev, phy, MII_AN_ADV, (ability << 5) | 1);
+			/* Enablee Auto-Neg */
+			TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x1000 );
+			/* Restart Auto-Neg */
+			TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x1200 );
+			/* Wait for 4 sec for autonegotiation
+		 	* to complete.  The max spec time is less than this
+		 	* but the card need additional time to start AN.
+		 	* .5 sec should be plenty extra.
+		 	*/
+			printk( "TLAN: %s: Starting autonegotiation.\n", dev->name );
+			TLan_SetTimer( dev, (4*HZ), TLAN_TIMER_PHY_FINISH_AN );
+			return;
 		}
-
-		if ( priv->duplex == TLAN_DUPLEX_FULL ) {
-			ability &= 0x000A;
-		} else if ( priv->duplex == TLAN_DUPLEX_HALF ) {
-			ability &= 0x0005;
-		}
-
-		TLan_MiiWriteReg( dev, phy, MII_AN_ADV, ( ability << 5 ) | 1 );
-       		TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x1000 );
-		TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x1200 );
-
-		/* Wait for 4 sec for autonegotiation
-		 * to complete.  The max spec time is less than this
-		 * but the card need additional time to start AN.
-		 * .5 sec should be plenty extra.
-		 */
-		printk( "TLAN: %s: Starting autonegotiation.\n", dev->name );
-		TLan_SetTimer( dev, (4*HZ), TLAN_TIMER_PHY_FINISH_AN );
-		return;
-	}
-
+		
+	}	
+	
 	if ( ( priv->aui ) && ( priv->phyNum != 0 ) ) {
 		priv->phyNum = 0;
 		data = TLAN_NET_CFG_1FRAG | TLAN_NET_CFG_1CHAN | TLAN_NET_CFG_PHY_EN;
 		TLan_DioWrite16( dev->base_addr, TLAN_NET_CONFIG, data );
-		TLan_SetTimer( dev, (4*(HZ/1000)), TLAN_TIMER_PHY_PDOWN );
+		TLan_SetTimer( dev, (40*HZ/1000), TLAN_TIMER_PHY_PDOWN );
 		return;
-	} else if ( priv->phyNum == 0 ) {
+	}  else if ( priv->phyNum == 0 ) {
         	TLan_MiiReadReg( dev, phy, TLAN_TLPHY_CTL, &tctl );
 		if ( priv->aui ) {
                 	tctl |= TLAN_TC_AUISEL;
-		} else {
+		} else { 
                 	tctl &= ~TLAN_TC_AUISEL;
 			control = 0;
 			if ( priv->duplex == TLAN_DUPLEX_FULL ) {
@@ -2260,10 +2381,10 @@ void TLan_PhyStartLink( struct net_device *dev )
         	TLan_MiiWriteReg( dev, phy, TLAN_TLPHY_CTL, tctl );
 	}
 
-	/* Wait for 1 sec to give the tranceiver time
+	/* Wait for 2 sec to give the tranceiver time
 	 * to establish link.
 	 */
-	TLan_SetTimer( dev, HZ, TLAN_TIMER_FINISH_RESET );
+	TLan_SetTimer( dev, (2*HZ), TLAN_TIMER_FINISH_RESET );
 
 } /* TLan_PhyStartLink */
 
@@ -2306,14 +2427,14 @@ void TLan_PhyFinishAutoNeg( struct net_device *dev )
 		priv->phyNum = 0;
 		data = TLAN_NET_CFG_1FRAG | TLAN_NET_CFG_1CHAN | TLAN_NET_CFG_PHY_EN;
 		TLan_DioWrite16( dev->base_addr, TLAN_NET_CONFIG, data );
-		TLan_SetTimer( dev, (400*(HZ/1000)), TLAN_TIMER_PHY_PDOWN );
+		TLan_SetTimer( dev, (400*HZ/1000), TLAN_TIMER_PHY_PDOWN );
 		return;
 	}
 
 	if ( priv->phyNum == 0 ) {
 		if ( ( priv->duplex == TLAN_DUPLEX_FULL ) || ( an_adv & an_lpa & 0x0040 ) ) {
 			TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, MII_GC_AUTOENB | MII_GC_DUPLEX );
-			printk( "TLAN:  Starting internal PHY with DUPLEX\n" );
+			printk( "TLAN:  Starting internal PHY with FULL-DUPLEX\n" );
 		} else {
 			TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, MII_GC_AUTOENB );
 			printk( "TLAN:  Starting internal PHY with HALF-DUPLEX\n" );

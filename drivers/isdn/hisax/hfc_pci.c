@@ -1738,7 +1738,9 @@ __initfunc(int
 						     dev_hfcpci);
 			i++;
 			if (tmp_hfcpci) {
-				if ((card->para[0]) && (card->para[0] != (tmp_hfcpci->resource[ 0].start & PCI_BASE_ADDRESS_IO_MASK)))
+				if (pci_enable_device(tmp_hfcpci))
+					continue;
+				if ((card->para[0]) && (card->para[0] != pci_resource_start(tmp_hfcpci, 0)))
 					continue;
 				else
 					break;

@@ -1,7 +1,7 @@
 /*
- *  input.c  Version 0.1
+ * $Id: input.c,v 1.7 2000/05/28 17:31:36 vojtech Exp $
  *
- *  Copyright (c) 1999 Vojtech Pavlik
+ *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
  *  The input layer module itself
  *
@@ -91,11 +91,27 @@ void input_event(struct input_dev *dev, unsigned int type, unsigned int code, in
 		
 		case EV_ABS:
 
-			if (code > ABS_MAX || !test_bit(code, dev->absbit) || (value == dev->abs[code]))
+			if (code > ABS_MAX || !test_bit(code, dev->absbit))
+				return;
+
+			if (dev->absfuzz[code]) {
+				if ((value > dev->abs[code] - (dev->absfuzz[code] >> 1)) &&
+				    (value < dev->abs[code] + (dev->absfuzz[code] >> 1)))
+					return;
+
+				if ((value > dev->abs[code] - dev->absfuzz[code]) &&
+				    (value < dev->abs[code] + dev->absfuzz[code]))
+					value = (dev->abs[code] * 3 + value) >> 2;
+
+				if ((value > dev->abs[code] - (dev->absfuzz[code] << 1)) &&
+				    (value < dev->abs[code] + (dev->absfuzz[code] << 1)))
+					value = (dev->abs[code] + value) >> 1;
+			}
+
+			if (dev->abs[code] == value)
 				return;
 
 			dev->abs[code] = value;
-
 			break;
 
 		case EV_REL:
@@ -344,16 +360,25 @@ void input_unregister_handler(struct input_handler *handler)
 static int input_open_file(struct inode *inode, struct file *file)
 {
 	struct input_handler *handler = input_table[MINOR(inode->i_rdev) >> 5];
+	struct file_operations *old_fops;
+	int err;
 
 	if (!handler || !handler->fops || !handler->fops->open)
 		return -ENODEV;
 
-	file->f_op = handler->fops;
-
-	return handler->fops->open(inode, file);
+	old_fops = file->f_op;
+	file->f_op = fops_get(handler->fops);
+	err = handler->fops->open(inode, file);
+	if (err) {
+		fops_put(file->f_op);
+		file->f_op = fops_get(old_fops);
+	}
+	fops_put(old_fops);
+	return err;
 }
 
 static struct file_operations input_fops = {
+	owner: THIS_MODULE,
 	open: input_open_file,
 };
 

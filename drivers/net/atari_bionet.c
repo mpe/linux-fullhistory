@@ -332,7 +332,7 @@ bionet_probe(struct net_device *dev){
 	int i;
 
 	if (!MACH_IS_ATARI || no_more_found)
-		return ENODEV;
+		return -ENODEV;
 
 	printk("Probing for BioNet 100 Adapter...\n");
 
@@ -350,12 +350,12 @@ bionet_probe(struct net_device *dev){
 	||  station_addr[2] != 'O' ) {
 		no_more_found = 1;
 		printk( "No BioNet 100 found.\n" );
-		return ENODEV;
+		return -ENODEV;
 	}
 
 
 	if (dev == NULL)
-		return ENODEV;
+		return -ENODEV;
 	if (bionet_debug > 0 && version_printed++ == 0)
 		printk(version);
 

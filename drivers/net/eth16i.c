@@ -448,7 +448,7 @@ int __init eth16i_probe(struct net_device *dev)
 	if(base_addr > 0x1ff)           /* Check only single location */
 		return eth16i_probe1(dev, base_addr);
 	else if(base_addr != 0)         /* Don't probe at all */
-		return ENXIO;
+		return -ENXIO;
 
 	/* Seek card from the ISA io address space */
 	for(i = 0; (ioaddr = eth16i_portlist[i]) ; i++) {
@@ -466,7 +466,7 @@ int __init eth16i_probe(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 
 static int __init eth16i_probe1(struct net_device *dev, int ioaddr)

@@ -618,6 +618,8 @@ int mxser_init(void)
 					       mxser_pcibrds[b].device_id, pdev);
 			if (!pdev)
 				break;
+			if (pci_enable_device(pdev))
+				continue;
 			b++;
 			hwconf.pdev = pdev;
 			printk("Found MOXA %s board(BusNo=%d,DevNo=%d)\n",

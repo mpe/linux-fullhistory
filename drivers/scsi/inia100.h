@@ -71,6 +71,7 @@
 #include "sd.h"
 
 extern int inia100_detect(Scsi_Host_Template *);
+extern int inia100_release(struct Scsi_Host *);
 extern int inia100_command(Scsi_Cmnd *);
 extern int inia100_queue(Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
 extern int inia100_abort(Scsi_Cmnd *);
@@ -87,7 +88,7 @@ extern int inia100_biosparam(Scsi_Disk *, kdev_t, int *);	/*for linux v2.0 */
 	proc_info:	NULL,				\
 	name:		inia100_REVID, \
 	detect:		inia100_detect, \
-	release:	NULL, \
+	release:	inia100_release, \
 	info:		NULL,					\
 	command:	inia100_command, \
 	queuecommand:	inia100_queue, \

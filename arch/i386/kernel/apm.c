@@ -135,6 +135,13 @@
  *         Fix the Thinkpad (again) :-( (CONFIG_APM_IGNORE_MULTIPLE_SUSPENDS
  *         is now the way life works).
  *         Fix thinko in suspend() (wrong return).
+ *         Notify drivers on critical suspend.
+ *         Make kapmd absorb more idle time (Pavel Machek <pavel@suse.cz>
+ *         modified by sfr).
+ *         Disable interrupts while we are suspended (Andy Henroid
+ *         <andy_henroid@yahoo.com> fixed by sfr).
+ *         Make power off work on SMP again (Tony Hoyle
+ *         <tmh@magenta-logic.com> and <zlatko@iskon.hr>) modified by sfr.
  *
  * APM 1.1 Reference:
  *
@@ -864,19 +871,51 @@ static void reinit_timer(void)
 #endif
 }
 
+static int send_event(apm_event_t event)
+{
+	switch (event) {
+	case APM_SYS_SUSPEND:
+	case APM_CRITICAL_SUSPEND:
+	case APM_USER_SUSPEND:
+		/* map all suspends to ACPI D3 */
+		if (pm_send_all(PM_SUSPEND, (void *)3)) {
+			if (event == APM_CRITICAL_SUSPEND) {
+				printk(KERN_CRIT "apm: Critical suspend was vetoed, expect armageddon\n" );
+				return 0;
+			}
+			if (apm_bios_info.version > 0x100)
+				apm_set_power_state(APM_STATE_REJECT);
+			return 0;
+		}
+		break;
+	case APM_NORMAL_RESUME:
+	case APM_CRITICAL_RESUME:
+		/* map all resumes to ACPI D0 */
+		(void) pm_send_all(PM_RESUME, (void *)0);
+		break;
+	}
+
+	return 1;
+}
+
 static int suspend(void)
 {
 	int		err;
 	struct apm_user	*as;
 
 	get_time_diff();
+	cli();
 	err = apm_set_power_state(APM_STATE_SUSPEND);
 	reinit_timer();
 	set_time();
 	if (err == APM_NO_ERROR)
 		err = APM_SUCCESS;
-	if (err != APM_SUCCESS)
+	if (err != APM_SUCCESS) {
 		apm_error("suspend", err);
+		send_event(APM_NORMAL_RESUME);
+		sti();
+		queue_event(APM_NORMAL_RESUME, NULL);
+	}
 	for (as = user_list; as != NULL; as = as->next) {
 		as->suspend_wait = 0;
 		as->suspend_result = ((err == APM_SUCCESS) ? 0 : -EIO);
@@ -914,33 +953,6 @@ static apm_event_t get_event(void)
 	return 0;
 }
 
-static int send_event(apm_event_t event, struct apm_user *sender)
-{
-	switch (event) {
-	case APM_SYS_SUSPEND:
-	case APM_CRITICAL_SUSPEND:
-	case APM_USER_SUSPEND:
-		/* map all suspends to ACPI D3 */
-		if (pm_send_all(PM_SUSPEND, (void *)3)) {
-			if (event == APM_CRITICAL_SUSPEND) {
-				printk(KERN_CRIT "apm: Critical suspend was vetoed, expect armagedon\n" );
-				return 0;
-			}
-			if (apm_bios_info.version > 0x100)
-				apm_set_power_state(APM_STATE_REJECT);
-			return 0;
-		}
-		break;
-	case APM_NORMAL_RESUME:
-	case APM_CRITICAL_RESUME:
-		/* map all resumes to ACPI D0 */
-		(void) pm_send_all(PM_RESUME, (void *)0);
-		break;
-	}
-
-	return 1;
-}
-
 static void check_events(void)
 {
 	apm_event_t		event;
@@ -966,7 +978,7 @@ static void check_events(void)
 		switch (event) {
 		case APM_SYS_STANDBY:
 		case APM_USER_STANDBY:
-			if (send_event(event, NULL)) {
+			if (send_event(event)) {
 				queue_event(event, NULL);
 				if (standbys_pending <= 0)
 					standby();
@@ -984,17 +996,17 @@ static void check_events(void)
 			if (ignore_bounce)
 				break;
 #endif
- 			/*
- 			 * If we are already processing a SUSPEND,
- 			 * then further SUSPEND events from the BIOS
- 			 * will be ignored.  We also return here to
- 			 * cope with the fact that the Thinkpads keep
- 			 * sending a SUSPEND event until something else
- 			 * happens!
- 			 */
+			/*
+			 * If we are already processing a SUSPEND,
+			 * then further SUSPEND events from the BIOS
+			 * will be ignored.  We also return here to
+			 * cope with the fact that the Thinkpads keep
+			 * sending a SUSPEND event until something else
+			 * happens!
+			 */
 			if (waiting_for_resume)
- 				return;
-			if (send_event(event, NULL)) {
+				return;
+			if (send_event(event)) {
 				queue_event(event, NULL);
 				waiting_for_resume = 1;
 				if (suspends_pending <= 0)
@@ -1011,14 +1023,16 @@ static void check_events(void)
 			ignore_bounce = 1;
 #endif
 			set_time();
-			send_event(event, NULL);
+			send_event(event);
+			sti();
 			queue_event(event, NULL);
 			break;
 
 		case APM_CAPABILITY_CHANGE:
 		case APM_LOW_BATTERY:
 		case APM_POWER_STATUS_CHANGE:
-			send_event(event, NULL);
+			send_event(event);
+			queue_event(event, NULL);
 			break;
 
 		case APM_UPDATE_TIME:
@@ -1026,7 +1040,11 @@ static void check_events(void)
 			break;
 
 		case APM_CRITICAL_SUSPEND:
-			send_event(event, NULL);	/* We can only hope it worked; critical suspend may not fail */
+			send_event(event);
+			/*
+			 * We can only hope it worked - we are not allowed
+			 * to reject a critical suspend.
+			 */
 			(void) suspend();
 			break;
 		}
@@ -1066,11 +1084,8 @@ static void apm_mainloop(void)
 	int timeout = HZ;
 	DECLARE_WAITQUEUE(wait, current);
 
-	if (smp_num_cpus > 1)
-		return;
-
 	add_wait_queue(&apm_waitqueue, &wait);
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	for (;;) {
 		/* Nothing to do, just sleep for the timeout */
 		timeout = 2*timeout;
@@ -1084,7 +1099,7 @@ static void apm_mainloop(void)
 		 * Ok, check all events, check for idle (and mark us sleeping
 		 * so as not to count towards the load average)..
 		 */
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		apm_event_handler();
 #ifdef CONFIG_APM_CPU_IDLE
 		if (!system_idle())
@@ -1093,7 +1108,7 @@ static void apm_mainloop(void)
 			unsigned long start = jiffies;
 			while ((!exit_kapmd) && system_idle()) {
 				apm_do_idle();
-				if (jiffies - start > (5*APM_CHECK_TIMEOUT)) {
+				if ((jiffies - start) > APM_CHECK_TIMEOUT) {
 					apm_event_handler();
 					start = jiffies;
 				}
@@ -1137,7 +1152,7 @@ repeat:
 			schedule();
 			goto repeat;
 		}
-		current->state = TASK_RUNNING;
+		set_current_state(TASK_RUNNING);
 		remove_wait_queue(&apm_waitqueue, &wait);
 	}
 	i = count;
@@ -1199,8 +1214,10 @@ static int do_ioctl(struct inode * inode, struct file *filp,
 			as->standbys_read--;
 			as->standbys_pending--;
 			standbys_pending--;
-		} else if (!send_event(APM_USER_STANDBY, as))
+		} else if (!send_event(APM_USER_STANDBY))
 			return -EAGAIN;
+		else
+			queue_event(APM_USER_STANDBY, as);
 		if (standbys_pending <= 0)
 			standby();
 		break;
@@ -1209,8 +1226,10 @@ static int do_ioctl(struct inode * inode, struct file *filp,
 			as->suspends_read--;
 			as->suspends_pending--;
 			suspends_pending--;
-		} else if (!send_event(APM_USER_SUSPEND, as))
+		} else if (!send_event(APM_USER_SUSPEND))
 			return -EAGAIN;
+		else
+			queue_event(APM_USER_SUSPEND, as);
 		if (suspends_pending <= 0) {
 			if (suspend() != APM_SUCCESS)
 				return -EIO;
@@ -1224,7 +1243,7 @@ static int do_ioctl(struct inode * inode, struct file *filp,
 					break;
 				schedule();
 			}
-			current->state = TASK_RUNNING;
+			set_current_state(TASK_RUNNING);
 			remove_wait_queue(&apm_suspend_waitqueue, &wait);
 			return as->suspend_result;
 		}
@@ -1268,7 +1287,6 @@ static int do_release(struct inode * inode, struct file * filp)
 			as1->next = as->next;
 	}
 	kfree_s(as, sizeof(*as));
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1276,13 +1294,10 @@ static int do_open(struct inode * inode, struct file * filp)
 {
 	struct apm_user *	as;
 
-	MOD_INC_USE_COUNT;
-
 	as = (struct apm_user *)kmalloc(sizeof(*as), GFP_KERNEL);
 	if (as == NULL) {
 		printk(KERN_ERR "apm: cannot allocate struct of size %d bytes\n",
 		       sizeof(*as));
-		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	as->magic = APM_BIOS_MAGIC;
@@ -1403,6 +1418,7 @@ static int apm(void *unused)
 
 	strcpy(current->comm, "kapmd");
 	sigfillset(&current->blocked);
+	current->tty = NULL;	/* get rid of controlling tty */
 
 	if (apm_bios_info.version > 0x100) {
 		/*
@@ -1487,27 +1503,15 @@ static int apm(void *unused)
 #ifdef CONFIG_MAGIC_SYSRQ
 	sysrq_power_off = apm_power_off;
 #endif
+	if (smp_num_cpus == 1) {
 #if defined(CONFIG_APM_DISPLAY_BLANK) && defined(CONFIG_VT)
-	if (smp_num_cpus == 1)
 		console_blank_hook = apm_console_blank;
 #endif
-
-	pm_active = 1;
-
-	apm_mainloop();
-
-	pm_active = 0;
-
+		apm_mainloop();
 #if defined(CONFIG_APM_DISPLAY_BLANK) && defined(CONFIG_VT)
-	if (smp_num_cpus == 1)
 		console_blank_hook = NULL;
 #endif
-#ifdef CONFIG_MAGIC_SYSRQ
-	sysrq_power_off = NULL;
-#endif
-	if (power_off)
-		pm_power_off = NULL;
-
+	}
 	kapmd_running = 0;
 
 	return 0;
@@ -1540,6 +1544,7 @@ static int __init apm_setup(char *str)
 __setup("apm=", apm_setup);
 
 static struct file_operations apm_bios_fops = {
+	owner:		THIS_MODULE,
 	read:		do_read,
 	poll:		do_poll,
 	ioctl:		do_ioctl,
@@ -1618,6 +1623,7 @@ static int __init apm_init(void)
 		printk(KERN_NOTICE "apm: overridden by ACPI.\n");
 		APM_INIT_ERROR_RETURN;
 	}
+	pm_active = 1;
 
 	/*
 	 * Set up a segment that references the real mode segment 0x40
@@ -1676,9 +1682,15 @@ static void __exit apm_exit(void)
 {
 	misc_deregister(&apm_device);
 	remove_proc_entry("apm", NULL);
+#ifdef CONFIG_MAGIC_SYSRQ
+	sysrq_power_off = NULL;
+#endif
+	if (power_off)
+		pm_power_off = NULL;
 	exit_kapmd = 1;
 	while (kapmd_running)
 		schedule();
+	pm_active = 0;
 }
 
 module_init(apm_init);

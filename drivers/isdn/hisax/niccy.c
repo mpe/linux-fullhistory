@@ -313,6 +313,8 @@ setup_niccy(struct IsdnCard *card))
 		cs->subtyp = 0;
 		if ((niccy_dev = pci_find_device(PCI_VENDOR_DR_NEUHAUS,
 			   PCI_NICCY_ID, niccy_dev))) {
+			if (pci_enable_device(niccy_dev))
+				return (0);
 			/* get IRQ */
 			if (!niccy_dev->irq) {
 				printk(KERN_WARNING "Niccy: No IRQ for PCI card found\n");
@@ -323,12 +325,12 @@ setup_niccy(struct IsdnCard *card))
 				printk(KERN_WARNING "Niccy: No IO-Adr for PCI cfg found\n");
 				return(0);
 			}
-			cs->hw.niccy.cfg_reg = niccy_dev->resource[ 0].start & PCI_BASE_ADDRESS_IO_MASK;
+			cs->hw.niccy.cfg_reg = pci_resource_start(niccy_dev, 0);
 			if (!niccy_dev->resource[ 1].start) {
 				printk(KERN_WARNING "Niccy: No IO-Adr for PCI card found\n");
 				return(0);
 			}
-			pci_ioaddr = niccy_dev->resource[ 1].start & PCI_BASE_ADDRESS_IO_MASK;
+			pci_ioaddr = pci_resource_start(niccy_dev, 1);
 			cs->subtyp = NICCY_PCI;
 		} else {
 			printk(KERN_WARNING "Niccy: No PCI card found\n");

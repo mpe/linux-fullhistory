@@ -8,7 +8,7 @@
 ** Extended for new busmaster capable chipsets by 
 ** Siegfried "Frieder" Loeffler (dg1sek) <floeff@mathematik.uni-stuttgart.de>
 **
-** Maintained by: Jaroslav Kysela <perex@jcu.cz>
+** Maintained by: Jaroslav Kysela <perex@suse.cz>
 ** 
 ** This driver has only been tested with
 ** -- HP J2585B 10/100 Mbit/s PCI Busmaster
@@ -109,16 +109,9 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 
-#if LINUX_VERSION_CODE >= 0x020100
 #define LINUX_2_1
 typedef struct net_device_stats hp100_stats_t;
 EXPORT_NO_SYMBOLS;
-#else
-#include <linux/bios32.h>
-#define ioremap vremap
-#define iounmap vfree
-typedef struct enet_statistics hp100_stats_t;
-#endif
 
 #include "hp100.h"
 
@@ -187,12 +180,7 @@ struct hp100_private {
   u_short priority_tx;    /* != 0 - priority tx */
   u_short mode;           /* PIO, Shared Mem or Busmaster */
   u_char bus;
-#ifndef LINUX_2_1
-  u_char pci_bus;
-  u_char pci_device_fn;
-#else
   struct pci_dev *pci_dev;
-#endif
   short mem_mapped;	  /* memory mapped access */
   void *mem_ptr_virt;    /* virtual memory mapped area, maybe NULL */
   unsigned long mem_ptr_phys;	  /* physical memory mapped area */
@@ -287,21 +275,15 @@ static int hp100_rx_ratio = HP100_DEFAULT_RX_RATIO;
 static int hp100_priority_tx = HP100_DEFAULT_PRIORITY_TX;
 static int hp100_mode = 1;
 
-#ifdef LINUX_2_1
 MODULE_PARM( hp100_rx_ratio, "1i" );
 MODULE_PARM( hp100_priority_tx, "1i" );
 MODULE_PARM( hp100_mode, "1i" );
-#endif
 
 /*
  *  prototypes
  */
 
-#ifdef LINUX_2_1
 static int  hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, struct pci_dev *pci_dev );
-#else
-static int  hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, u_char pci_bus, u_char pci_device_fn );
-#endif
 static int  hp100_open( struct net_device *dev );
 static int  hp100_close( struct net_device *dev );
 static int  hp100_start_xmit( struct sk_buff *skb, struct net_device *dev );
@@ -361,24 +343,11 @@ int __init hp100_probe( struct net_device *dev )
     {
       if ( check_region( base_addr, HP100_REGION_SIZE ) ) return -EINVAL;
       if ( base_addr < 0x400 )
-#ifdef LINUX_2_1
         return hp100_probe1( dev, base_addr, HP100_BUS_ISA, NULL );
-#else
-        return hp100_probe1( dev, base_addr, HP100_BUS_ISA, 0, 0 );
-#endif
       if ( EISA_bus && base_addr >= 0x1c38 && ( (base_addr - 0x1c38) & 0x3ff ) == 0 )
-#ifdef LINUX_2_1
         return hp100_probe1( dev, base_addr, HP100_BUS_EISA, NULL );
-#else
-        return hp100_probe1( dev, base_addr, HP100_BUS_EISA, 0, 0 );
-#endif
 #ifdef CONFIG_PCI
-#ifdef LINUX_2_1
       printk( "hp100: %s: You must specify card # in i/o address parameter for PCI bus...", dev->name );
-#else
-      printk( "hp100: %s: You may specify card # in i/o address parameter for PCI bus...", dev->name );
-      return hp100_probe1( dev, base_addr, HP100_BUS_PCI, 0, 0 );
-#endif
 #else
       return -ENODEV;
 #endif
@@ -397,16 +366,13 @@ int __init hp100_probe( struct net_device *dev )
   if ( pcibios_present() )
     {
       int pci_index;
-#ifdef LINUX_2_1
       struct pci_dev *pci_dev = NULL;
       int pci_id_index;
       u_short pci_command;
-#endif
 
 #ifdef HP100_DEBUG_PCI
       printk( "hp100: %s: PCI BIOS is present, checking for devices..\n", dev->name );
 #endif
-#ifdef LINUX_2_1
       pci_index = 0;
       for ( pci_id_index = 0; pci_id_index < HP100_PCI_IDS_SIZE; pci_id_index++ ) {
         while ( (pci_dev = pci_find_device( hp100_pci_ids[ pci_id_index ].vendor,
@@ -416,8 +382,10 @@ int __init hp100_probe( struct net_device *dev )
             pci_index++;
             continue;
           }
+	  if (pci_enable_device(pci_dev))
+	  	continue;
           /* found... */
-          ioaddr = pci_dev ->resource[ 0 ].start;
+          ioaddr = pci_resource_start (pci_dev, 0);
           if ( check_region( ioaddr, HP100_REGION_SIZE ) ) continue;
           pci_read_config_word( pci_dev, PCI_COMMAND, &pci_command );
           if ( !( pci_command & PCI_COMMAND_IO ) ) {
@@ -441,55 +409,6 @@ int __init hp100_probe( struct net_device *dev )
 	    return 0;
         }
       }      
-#else /* old PCI interface */
-      for ( pci_index = pci_start_index & 7; pci_index < 8; pci_index++ )
-        {
-          u_char pci_bus, pci_device_fn;
-          u_short pci_command;
-          int pci_id_index;
-
-	  for ( pci_id_index = 0; pci_id_index < HP100_PCI_IDS_SIZE; pci_id_index++ )
-            if ( pcibios_find_device( hp100_pci_ids[ pci_id_index ].vendor,
-            			      hp100_pci_ids[ pci_id_index ].device,
-                                      pci_index, &pci_bus,
-                                      &pci_device_fn ) == 0 ) goto __pci_found;
-          break;
-
-	  __pci_found:
-          pcibios_read_config_dword( pci_bus, pci_device_fn,
-                                     PCI_BASE_ADDRESS_0, &ioaddr );
-
-          ioaddr &= ~3;    /* remove I/O space marker in bit 0. */
-
-          if ( check_region( ioaddr, HP100_REGION_SIZE ) ) continue;
-
-          pcibios_read_config_word( pci_bus, pci_device_fn,
-                                    PCI_COMMAND, &pci_command );
-          if ( !( pci_command & PCI_COMMAND_IO ) )
-            {
-#ifdef HP100_DEBUG
-              printk( "hp100: %s: PCI I/O Bit has not been set. Setting...\n", dev->name );
-#endif
-              pci_command |= PCI_COMMAND_IO;
-              pcibios_write_config_word( pci_bus, pci_device_fn,
-                                         PCI_COMMAND, pci_command );
-            }
-          if ( !( pci_command & PCI_COMMAND_MASTER ) )
-            {
-#ifdef HP100_DEBUG
-              printk( "hp100: %s: PCI Master Bit has not been set. Setting...\n", dev->name );
-#endif
-              pci_command |= PCI_COMMAND_MASTER;
-              pcibios_write_config_word( pci_bus, pci_device_fn,
-                                         PCI_COMMAND, pci_command );
-            }
-#ifdef HP100_DEBUG
-          printk( "hp100: %s: PCI adapter found at 0x%x\n", dev->name, ioaddr );
-#endif
-	  if ( hp100_probe1( dev, ioaddr, HP100_BUS_PCI, pci_bus, pci_device_fn ) == 0 )
-	    return 0;
-        }
-#endif
     }
   if ( pci_start_index > 0 ) return -ENODEV;
 #endif /* CONFIG_PCI */
@@ -498,33 +417,21 @@ int __init hp100_probe( struct net_device *dev )
   for ( ioaddr = 0x1c38; EISA_bus && ioaddr < 0x10000; ioaddr += 0x400 )
     {
       if ( check_region( ioaddr, HP100_REGION_SIZE ) ) continue;
-#ifdef LINUX_2_1
       if ( hp100_probe1( dev, ioaddr, HP100_BUS_EISA, NULL ) == 0 ) return 0;
-#else
-      if ( hp100_probe1( dev, ioaddr, HP100_BUS_EISA, 0, 0 ) == 0 ) return 0;
-#endif
     }
 
   /* Third Probe all ISA possible port regions */
   for ( ioaddr = 0x100; ioaddr < 0x400; ioaddr += 0x20 )
     {
       if ( check_region( ioaddr, HP100_REGION_SIZE ) ) continue;
-#ifdef LINUX_2_1
       if ( hp100_probe1( dev, ioaddr, HP100_BUS_ISA, NULL ) == 0 ) return 0;
-#else
-      if ( hp100_probe1( dev, ioaddr, HP100_BUS_ISA, 0, 0 ) == 0 ) return 0;
-#endif
     }
 
   return -ENODEV;
 }
 
 
-#ifdef LINUX_2_1
 static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, struct pci_dev *pci_dev )
-#else
-static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, u_char pci_bus, u_char pci_device_fn )
-#endif
 {
   int i;
 
@@ -549,7 +456,7 @@ static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, 
 #ifdef HP100_DEBUG
       printk( "hp100_probe1: %s: dev == NULL ?\n", dev->name );
 #endif
-      return EIO;
+      return -EIO;
     }
   
   if ( hp100_inw( HW_ID ) != HP100_HW_ID_CASCADE ) 
@@ -799,12 +706,7 @@ static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, 
   lp->chip = chip;
   lp->mode = local_mode;
   lp->bus = bus;
-#ifdef LINUX_2_1
   lp->pci_dev = pci_dev;
-#else
-  lp->pci_bus = pci_bus;
-  lp->pci_device_fn = pci_device_fn;
-#endif
   lp->priority_tx = hp100_priority_tx;
   lp->rx_ratio = hp100_rx_ratio;
   lp->mem_ptr_phys = mem_ptr_phys;
@@ -836,18 +738,14 @@ static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, 
   dev->set_multicast_list = &hp100_set_multicast_list;
 
   /* Ask the card for which IRQ line it is configured */
-#ifdef LINUX_2_1
   if ( bus == HP100_BUS_PCI ) {
     dev->irq = pci_dev->irq;
   } else {
-#endif
     hp100_page( HW_MAP );
     dev->irq = hp100_inb( IRQ_CHANNEL ) & HP100_IRQMASK;
     if ( dev->irq == 2 )
       dev->irq = 9;
-#ifdef LINUX_2_1
   }
-#endif
 
   if(lp->mode==1) /* busmaster */
     dev->dma=4; 
@@ -1648,9 +1546,6 @@ static int hp100_start_xmit_bm( struct sk_buff *skb, struct net_device *dev )
 
   if ( skb==NULL )
     {
-#ifndef LINUX_2_1
-      dev_tint( dev );
-#endif
       return 0;
     }
 	
@@ -1754,9 +1649,7 @@ static int hp100_start_xmit_bm( struct sk_buff *skb, struct net_device *dev )
 	
   /* Update statistics */	
   lp->stats.tx_packets++;
-#ifdef LINUX_2_1
   lp->stats.tx_bytes += skb->len;
-#endif
   dev->trans_start = jiffies;
 	
   return 0;
@@ -1799,11 +1692,7 @@ static void hp100_clean_txring( struct net_device *dev )
 	     hp100_inb(TX_PDL),
 	     donecount);
 #endif
-#ifdef LINUX_2_1
       dev_kfree_skb_any( lp->txrhead->skb );
-#else
-      dev_kfree_skb_any( lp->txrhead->skb, FREE_WRITE );
-#endif
       lp->txrhead->skb=(void *)NULL;
       lp->txrhead=lp->txrhead->next;
       lp->txrcommit--;
@@ -1826,9 +1715,6 @@ static int hp100_start_xmit( struct sk_buff *skb, struct net_device *dev )
 
   if ( skb==NULL )
     {
-#ifndef LINUX_2_1
-      dev_tint( dev );
-#endif
       return 0;
     }
 	
@@ -1953,17 +1839,11 @@ static int hp100_start_xmit( struct sk_buff *skb, struct net_device *dev )
   hp100_outb( HP100_TX_CMD | HP100_SET_LB, OPTION_MSW ); /* send packet */
 	
   lp->stats.tx_packets++;
-#ifdef LINUX_2_1
   lp->stats.tx_bytes += skb->len;
-#endif
   dev->trans_start=jiffies;
   hp100_ints_on();
 	
-#ifdef LINUX_2_1
   dev_kfree_skb_any( skb );
-#else
-  dev_kfree_skb_any( skb, FREE_WRITE );
-#endif
 	
 #ifdef HP100_DEBUG_TX
   printk( "hp100: %s: start_xmit: end\n", dev->name );
@@ -2071,9 +1951,7 @@ static void hp100_rx( struct net_device *dev )
 
 	  netif_rx( skb );
 	  lp->stats.rx_packets++;
-#ifdef LINUX_2_1
 	  lp->stats.rx_bytes += skb->len;
-#endif
       
 #ifdef HP100_DEBUG_RX
 	  printk( "hp100: %s: rx: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
@@ -2180,9 +2058,7 @@ static void hp100_rx_bm( struct net_device *dev )
 	      netif_rx( ptr->skb );              /* Up and away... */
 
 	      lp->stats.rx_packets++;
-#ifdef LINUX_2_1
 	      lp->stats.rx_bytes += ptr->skb->len;
-#endif
 	    }
 
           switch ( header & 0x00070000 ) {
@@ -2197,11 +2073,7 @@ static void hp100_rx_bm( struct net_device *dev )
           printk("hp100: %s: rx_bm: Received bad packet (length=%d)\n",dev->name,pkt_len);
 #endif
 	  if(ptr->skb!=NULL)
-#ifdef LINUX_2_1
 	    dev_kfree_skb_any( ptr->skb );
-#else
-	    dev_kfree_skb_any( ptr->skb, FREE_READ );					
-#endif
           lp->stats.rx_errors++;
         }
 						
@@ -3119,16 +2991,12 @@ void hp100_RegisterDump( struct net_device *dev )
 
 /* Parameters set by insmod */
 int hp100_port[5] = { 0, -1, -1, -1, -1 };
-#ifdef LINUX_2_1
 MODULE_PARM(hp100_port, "1-5i");
-#endif
 
 /* Allocate 5 string of length IFNAMSIZ, one string for each device */
 char hp100_name[5][IFNAMSIZ] = { "", "", "", "", "" };
-#ifdef LINUX_2_1
 /* Allow insmod to write those 5 strings individually */
 MODULE_PARM(hp100_name, "1-5c" __MODULE_STRING(IFNAMSIZ));
-#endif
 
 /* List of devices */
 static struct net_device *hp100_devlist[5] = { NULL, NULL, NULL, NULL, NULL };

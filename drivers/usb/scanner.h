@@ -1,5 +1,5 @@
 /*
- * Driver for USB Scanners (linux-2.3.99-pre6-3)
+ * Driver for USB Scanners (linux-2.4.0test1-ac7)
  *
  * Copyright (C) 1999, 2000 David E. Nelson
  *
@@ -118,7 +118,7 @@ static const struct scanner_device {
 		{ 0x03f0, 0x0205 },	/* 3300C */
 		{ 0x03f0, 0x0101 },	/* 4100C */
 		{ 0x03f0, 0x0105 },	/* 4200C */
-		{ 0x03f0, 0x0202 },	/* PhotoSmart S20 */
+		{ 0x03f0, 0x0102 },	/* PhotoSmart S20 */
 		{ 0x03f0, 0x0401 },	/* 5200C */
 		{ 0x03f0, 0x0201 },	/* 6200C */
 		{ 0x03f0, 0x0601 },	/* 6300C */

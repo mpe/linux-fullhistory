@@ -18,6 +18,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/pm.h>
+#include <linux/delay.h>
 #include "sound_config.h"
 #include "soundmodule.h"
 #include "nm256.h"

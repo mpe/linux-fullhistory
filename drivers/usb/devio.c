@@ -187,26 +187,60 @@ static ssize_t usbdev_read(struct file *file, char * buf, size_t nbytes, loff_t 
 	ssize_t ret = 0;
 	unsigned len;
 	loff_t pos;
+	int i;
 
 	pos = *ppos;
 	down_read(&ps->devsem);
-	if (!ps->dev)
+	if (!ps->dev) {
 		ret = -ENODEV;
-	else if (pos < 0)
+		goto err;
+	} else if (pos < 0) {
 		ret = -EINVAL;
-	else if (pos < sizeof(struct usb_device_descriptor)) {
+		goto err;
+	}
+
+	if (pos < sizeof(struct usb_device_descriptor)) {
 		len = sizeof(struct usb_device_descriptor) - pos;
 		if (len > nbytes)
 			len = nbytes;
-		if (copy_to_user(buf, ((char *)&ps->dev->descriptor) + pos, len))
+		if (copy_to_user(buf, ((char *)&ps->dev->descriptor) + pos, len)) {
 			ret = -EFAULT;
-		else {
+			goto err;
+		}
+
+		*ppos += len;
+		buf += len;
+		nbytes -= len;
+		ret += len;
+	}
+
+	pos = sizeof(struct usb_device_descriptor);
+	for (i = 0; nbytes && i < ps->dev->descriptor.bNumConfigurations; i++) {
+		struct usb_config_descriptor *config =
+			(struct usb_config_descriptor *)ps->dev->rawdescriptors[i];
+		unsigned int length = le16_to_cpu(config->wTotalLength);
+
+		if (*ppos < pos + length) {
+			len = length - (*ppos - pos);
+			if (len > nbytes)
+				len = nbytes;
+
+			if (copy_to_user(buf,
+			    ps->dev->rawdescriptors[i] + (*ppos - pos), len)) {
+				ret = -EFAULT;
+				goto err;
+			}
+
 			*ppos += len;
 			buf += len;
 			nbytes -= len;
 			ret += len;
 		}
+
+		pos += length;
 	}
+
+err:
 	up_read(&ps->devsem);
 	return ret;
 }
@@ -376,12 +410,9 @@ static void driver_disconnect(struct usb_device *dev, void *context)
 }
 
 struct usb_driver usbdevfs_driver = {
-	"usbdevfs",
-	driver_probe,
-	driver_disconnect,
-	LIST_HEAD_INIT(usbdevfs_driver.driver_list),
-	NULL,
-	0
+	name:		"usbdevfs",
+	probe:		driver_probe,
+	disconnect:	driver_disconnect,
 };
 
 static int claimintf(struct dev_state *ps, unsigned int intf)
@@ -479,6 +510,28 @@ static int findintfif(struct usb_device *dev, unsigned int ifn)
 		}
 	}
 	return -ENOENT; 
+}
+
+extern struct list_head usb_driver_list;
+
+static int finddriver(struct usb_driver **driver, char *name)
+{
+	struct list_head *tmp;
+
+	tmp = usb_driver_list.next;
+	while (tmp != &usb_driver_list) {
+		struct usb_driver *d = list_entry(tmp, struct usb_driver,
+							driver_list);
+
+		if (!strcmp(d->name, name)) {
+			*driver = d;
+			return 0;
+		}
+
+		tmp = tmp->next;
+	}
+
+	return -EINVAL;
 }
 
 /*
@@ -662,16 +715,77 @@ static int proc_resetep(struct dev_state *ps, void *arg)
 	return 0;
 }
 
+static int proc_getdriver(struct dev_state *ps, void *arg)
+{
+	struct usbdevfs_getdriver gd;
+	struct usb_interface *interface;
+	int ret;
+
+	copy_from_user_ret(&gd, arg, sizeof(gd), -EFAULT);
+	if ((ret = findintfif(ps->dev, gd.interface)) < 0)
+		return ret;
+	interface = usb_ifnum_to_if(ps->dev, gd.interface);
+	if (!interface)
+		return -EINVAL;
+	if (!interface->driver)
+		return -ENODATA;
+	strcpy(gd.driver, interface->driver->name);
+	copy_to_user_ret(arg, &gd, sizeof(gd), -EFAULT);
+	return 0;
+}
+
+static int proc_connectinfo(struct dev_state *ps, void *arg)
+{
+	struct usbdevfs_connectinfo ci;
+
+	ci.devnum = ps->dev->devnum;
+	ci.slow = ps->dev->slow;
+	copy_to_user_ret(arg, &ci, sizeof(ci), -EFAULT);
+	return 0;
+}
+
+static int proc_resetdevice(struct dev_state *ps)
+{
+	int i, ret;
+
+	ret = usb_reset_device(ps->dev);
+	if (ret < 0)
+		return ret;
+
+	for (i = 0; i < ps->dev->actconfig->bNumInterfaces; i++) {
+		struct usb_interface *intf = &ps->dev->actconfig->interface[i];
+
+		/* Don't simulate interfaces we've claimed */
+		if (test_bit(i, &ps->ifclaimed))
+			continue;
+
+		if (intf->driver) {
+			down(&intf->driver->serialize);
+			intf->driver->disconnect(ps->dev, intf->private_data);
+			intf->driver->probe(ps->dev, i);
+			up(&intf->driver->serialize);
+		}
+	}
+
+	return 0;
+}
+
 static int proc_setintf(struct dev_state *ps, void *arg)
 {
 	struct usbdevfs_setinterface setintf;
+	struct usb_interface *interface;
 	int ret;
 
 	copy_from_user_ret(&setintf, arg, sizeof(setintf), -EFAULT);
 	if ((ret = findintfif(ps->dev, setintf.interface)) < 0)
 		return ret;
-	if ((ret = checkintf(ps, ret)))
-		return ret;
+	interface = usb_ifnum_to_if(ps->dev, setintf.interface);
+	if (!interface)
+		return -EINVAL;
+	if (interface->driver) {
+		if ((ret = checkintf(ps, ret)))
+			return ret;
+	}
 	if (usb_set_interface(ps->dev, setintf.interface, setintf.altsetting))
 		return -EINVAL;
 	return 0;
@@ -913,6 +1027,65 @@ static int proc_releaseinterface(struct dev_state *ps, void *arg)
 	return releaseintf(ps, intf);
 }
 
+static int proc_ioctl (struct dev_state *ps, void *arg)
+{
+	struct usbdevfs_ioctl	ctrl;
+	int			size;
+	void			*buf = 0;
+	int			retval = 0;
+
+	/* get input parameters and alloc buffer */
+	copy_from_user_ret (&ctrl, (void *) arg, sizeof (ctrl), -EFAULT);
+	if ((size = _IOC_SIZE (ctrl.ioctl_code)) > 0) {
+		if ((buf = kmalloc (size, GFP_KERNEL)) == 0)
+			return -ENOMEM;
+		if ((_IOC_DIR (ctrl.ioctl_code) & _IOC_WRITE) != 0
+				&& copy_from_user (buf, ctrl.data, size) != 0) {
+			kfree (buf);
+			return -EFAULT;
+		} else
+			memset (arg, size, 0);
+	}
+
+	/* ioctl to device */
+	if (ctrl.ifno < 0) {
+		switch (ctrl.ioctl_code) {
+		/* access/release token for issuing control messages
+		 * ask a particular driver to bind/unbind, ... etc
+		 */
+		}
+		retval = -ENOSYS;
+
+	/* ioctl to the driver which has claimed a given interface */
+	} else {
+		struct usb_interface	*ifp = 0;
+		if (!ps->dev)
+			retval = -ENODEV;
+		else if (ctrl.ifno >= ps->dev->actconfig->bNumInterfaces)
+			retval = -EINVAL;
+		else {
+			if (!(ifp = usb_ifnum_to_if (ps->dev, ctrl.ifno)))
+				retval = -EINVAL;
+			else if (ifp->driver == 0 || ifp->driver->ioctl == 0)
+				retval = -ENOSYS;
+		}
+		if (retval == 0)
+			/* ifno might usefully be passed ... */
+			retval = ifp->driver->ioctl (ps->dev, ctrl.ioctl_code, buf);
+			/* size = min (size, retval)? */
+	}
+
+	/* cleanup and return */
+	if (retval >= 0
+			&& (_IOC_DIR (ctrl.ioctl_code) & _IOC_READ) != 0
+			&& size > 0
+			&& copy_to_user (ctrl.data, buf, size) != 0)
+		retval = -EFAULT;
+	if (buf != 0)
+		kfree (buf);
+	return retval;
+}
+
 static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct dev_state *ps = (struct dev_state *)file->private_data;
@@ -942,6 +1115,18 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		ret = proc_resetep(ps, (void *)arg);
 		if (ret >= 0)
 			inode->i_mtime = CURRENT_TIME;
+		break;
+
+	case USBDEVFS_RESET:
+		ret = proc_resetdevice(ps);
+		break;
+
+	case USBDEVFS_GETDRIVER:
+		ret = proc_getdriver(ps, (void *)arg);
+		break;
+
+	case USBDEVFS_CONNECTINFO:
+		ret = proc_connectinfo(ps, (void *)arg);
 		break;
 
 	case USBDEVFS_SETINTERFACE:
@@ -982,6 +1167,9 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		ret = proc_releaseinterface(ps, (void *)arg);
 		break;
 
+	case USBDEVFS_IOCTL:
+		ret = proc_ioctl(ps, (void *) arg);
+		break;
 	}
 	up_read(&ps->devsem);
 	if (ret >= 0)

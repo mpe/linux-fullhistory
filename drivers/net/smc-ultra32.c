@@ -108,7 +108,7 @@ int __init ultra32_probe(struct net_device *dev)
 	const char *ifmap[] = {"UTP No Link", "", "UTP/AUI", "UTP/BNC"};
 	int ioaddr, edge, media;
 
-	if (!EISA_bus) return ENODEV;
+	if (!EISA_bus) return -ENODEV;
 
 	/* EISA spec allows for up to 16 slots, but 8 is typical. */
 	for (ioaddr = 0x1000 + ULTRA32_BASE; ioaddr < 0x9000; ioaddr += 0x1000)
@@ -123,7 +123,7 @@ int __init ultra32_probe(struct net_device *dev)
 		if (ultra32_probe1(dev, ioaddr) == 0)
 		  return 0;
 	}
-	return ENODEV;
+	return -ENODEV;
 }
 
 int __init ultra32_probe1(struct net_device *dev, int ioaddr)
@@ -138,7 +138,7 @@ int __init ultra32_probe1(struct net_device *dev, int ioaddr)
 
 	/* Check the ID nibble. */
 	if ((idreg & 0xf0) != 0x20) 			/* SMC Ultra */
-		return ENODEV;
+		return -ENODEV;
 
 	/* Select the station address register set. */
 	outb(reg4, ioaddr + 4);
@@ -146,10 +146,7 @@ int __init ultra32_probe1(struct net_device *dev, int ioaddr)
 	for (i = 0; i < 8; i++)
 		checksum += inb(ioaddr + 8 + i);
 	if ((checksum & 0xff) != 0xff)
-		return ENODEV;
-
-	if (load_8390_module("smc-ultra32.c"))
-		return -ENOSYS;
+		return -ENODEV;
 
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) {
@@ -184,7 +181,7 @@ int __init ultra32_probe1(struct net_device *dev, int ioaddr)
 	if ((inb(ioaddr + ULTRA32_CFG5) & 0x40) == 0) {
 		printk("\nsmc-ultra32: Card RAM is disabled!  "
 		       "Run EISA config utility.\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 	if ((inb(ioaddr + ULTRA32_CFG2) & 0x04) == 0)
 		printk("\nsmc-ultra32: Ignoring Bus-Master enable bit.  "
@@ -381,20 +378,22 @@ int init_module(void)
 {
 	int this_dev, found = 0;
 
+	if (load_8390_module("smc-ultra32.c"))
+		return -ENOSYS;
+
 	for (this_dev = 0; this_dev < MAX_ULTRA32_CARDS; this_dev++) {
 		struct net_device *dev = &dev_ultra[this_dev];
 		dev->init = ultra32_probe;
 		if (register_netdev(dev) != 0) {
 			if (found > 0) { /* Got at least one. */
-				lock_8390_module();
 				return 0;
 			}
+			unload_8390_module();
 			printk(KERN_WARNING "smc-ultra32.c: No SMC Ultra32 found.\n");
 			return -ENXIO;
 		}
 		found++;
 	}
-	lock_8390_module();
 	return 0;
 }
 
@@ -413,6 +412,6 @@ void cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unlock_8390_module();
+	unload_8390_module();
 }
 #endif /* MODULE */

@@ -146,6 +146,9 @@ int __init rr_hippi_probe (struct net_device *dev)
 				      PCI_DEVICE_ID_ESSENTIAL_ROADRUNNER,
 				      pdev)))
 	{
+		if (pci_enable_device(pdev))
+			continue;
+
 		if (pdev == opdev)
 			return 0;
 

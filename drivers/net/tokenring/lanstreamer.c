@@ -207,12 +207,14 @@ static int __init streamer_scan(struct net_device *dev)
 	{
 		while ((pci_device = pci_find_device(PCI_VENDOR_ID_IBM,	PCI_DEVICE_ID_IBM_TR, pci_device))) 
 		{
+			if (pci_enable_device(pci_device))
+				continue;
 			pci_set_master(pci_device);
 
 			/* Check to see if io has been allocated, if so, we've already done this card,
 			   so continue on the card discovery loop  */
 
-			if (check_region(pci_device->resource[0].start & (~3), STREAMER_IO_SPACE)) 
+			if (check_region(pci_resource_start(pci_device,0), STREAMER_IO_SPACE)) 
 			{
 				card_no++;
 				continue;
@@ -242,10 +244,11 @@ static int __init streamer_scan(struct net_device *dev)
 			       pci_device, dev, dev->priv);
 #endif
 			dev->irq = pci_device->irq;
-			dev->base_addr = pci_device->resource[0].start & (~3);
+			dev->base_addr = pci_resource_start(pci_device, 0);
 			dev->init = &streamer_init;
 			streamer_priv->streamer_card_name = (char *)pci_device->resource[0].name;
-			streamer_priv->streamer_mmio = ioremap(pci_device->resource[1].start, 256);
+			streamer_priv->streamer_mmio = 
+				ioremap(pci_resource_start(pci_device, 1), 256);
 
 			if ((pkt_buf_sz[card_no] < 100) || (pkt_buf_sz[card_no] > 18000))
 				streamer_priv->pkt_buf_sz = PKT_BUF_SZ;

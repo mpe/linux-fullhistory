@@ -678,6 +678,9 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 
 	while ((pdev = pci_find_device(PCI_VENDOR_ID_QLOGIC, PCI_DEVICE_ID_QLOGIC_ISP1020, pdev)))
 	{
+		if (pci_enable_device(pdev))
+			continue;
+
 		host = scsi_register(tmpt, sizeof(struct isp1020_hostdata));
 		hostdata = (struct isp1020_hostdata *) host->hostdata;
 
@@ -1371,10 +1374,10 @@ static int isp1020_init(struct Scsi_Host *sh)
 		return 1;
 	}
 
-	io_base = pdev->resource[0].start;
-	mem_base = pdev->resource[1].start;
-	io_flags = pdev->resource[0].flags;
-	mem_flags = pdev->resource[1].flags;
+	io_base = pci_resource_start(pdev, 0);
+	mem_base = pci_resource_start(pdev, 1);
+	io_flags = pci_resource_flags(pdev, 0);
+	mem_flags = pci_resource_flags(pdev, 1);
 	irq = pdev->irq;
 
 	if (pdev->vendor != PCI_VENDOR_ID_QLOGIC) {

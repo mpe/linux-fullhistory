@@ -62,7 +62,7 @@ struct vt_struct *vt_cons[MAX_NR_CONSOLES];
  */
 unsigned char keyboard_type = KB_101;
 
-#if !defined(__alpha__) && !defined(__mips__) && !defined(__arm__)
+#if !defined(__alpha__) && !defined(__mips__) && !defined(__arm__) && !defined(__sh__)
 asmlinkage long sys_ioperm(unsigned long from, unsigned long num, int on);
 #endif
 
@@ -472,7 +472,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		ucval = keyboard_type;
 		goto setchar;
 
-#if !defined(__alpha__) && !defined(__mips__) && !defined(__arm__)
+#if !defined(__alpha__) && !defined(__mips__) && !defined(__arm__) && !defined(__sh__)
 		/*
 		 * These cannot be implemented on any machine that implements
 		 * ioperm() in user level (such as Alpha PCs).
@@ -592,6 +592,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 
 	case KDGETKEYCODE:
 	case KDSETKEYCODE:
+		if(!capable(CAP_SYS_ADMIN))
+			perm=0;
 		return do_kbkeycode_ioctl(cmd, (struct kbkeycode *)arg, perm);
 
 	case KDGKBENT:

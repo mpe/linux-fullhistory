@@ -242,11 +242,6 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 		outb(0xff, ioaddr + EN0_ISR);		/* Ack all intr. */
 	}
 
-	if (load_8390_module("ne2k-pci.c")) {
-		printk (KERN_ERR "ne2k-pci: cannot load 8390 module\n");
-		goto err_out_free_netdev;
-	}
-
 	/* Read the 16 bytes of station address PROM.
 	   We must first initialize registers, similar to NS8390_init(eifdev, 0).
 	   We can't reliably read the SAPROM address without this.
@@ -565,13 +560,18 @@ static int __init ne2k_pci_init(void)
 {
 	int rc;
 	
-	lock_8390_module();
+	if (load_8390_module("ne2k-pci.c"))
+		return -ENOSYS;
 	
 	rc = pci_module_init (&ne2k_driver);
 	
 	/* XXX should this test CONFIG_HOTPLUG like pci_module_init? */
+
+	/* YYY No. If we're returning non-zero, we're being unloaded
+	 * 	   immediately. dwmw2 
+	 */
 	if (rc <= 0)
-		unlock_8390_module();
+		unload_8390_module();
 
 	return rc;
 }
@@ -580,7 +580,7 @@ static int __init ne2k_pci_init(void)
 static void __exit ne2k_pci_cleanup(void)
 {
 	pci_unregister_driver (&ne2k_driver);
-	unlock_8390_module();
+	unload_8390_module();
 }
 
 module_init(ne2k_pci_init);

@@ -36,8 +36,8 @@
 #define FALSE			0
 #define TRUE			1
 
-#define TLAN_MIN_FRAME_SIZE	64
-#define TLAN_MAX_FRAME_SIZE	1600
+#define TLAN_MIN_FRAME_SIZE	60
+#define TLAN_MAX_FRAME_SIZE	1536
 
 #define TLAN_NUM_RX_LISTS	4
 #define TLAN_NUM_TX_LISTS	8
@@ -404,7 +404,11 @@ typedef struct tlan_private_tag {
 #define		TLAN_TS_POLOK		0x2000
 #define		TLAN_TS_TPENERGY	0x1000
 #define		TLAN_TS_RESERVED	0x0FFF
-
+#define TLAN_TLPHY_PAR			0x19
+#define		TLAN_PHY_CIM_STAT	0x0020
+#define		TLAN_PHY_SPEED_100	0x0040
+#define		TLAN_PHY_DUPLEX_FULL	0x0080
+#define		TLAN_PHY_AN_EN_STAT     0x0400
 
 #define CIRC_INC( a, b ) if ( ++a >= b ) a = 0
 

@@ -113,9 +113,6 @@ static int __init ariadne2_init(struct net_device *dev, unsigned long board)
     };
     unsigned long ioaddr = board+ARIADNE2_BASE*2;
 
-    if (load_8390_module("ariadne2.c"))
-	return -ENOSYS;
-
     /* We should have a "dev" from Space.c or the static module table. */
     if (dev == NULL) {
 	printk(KERN_ERR "ariadne2.c: Passed a NULL device.\n");
@@ -273,8 +270,8 @@ static void ariadne2_get_8390_hdr(struct net_device *dev,
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_get_8390_hdr "
-	   "[DMAstat:%d][irqlock:%d][intr:%ld].\n", dev->name, ei_status.dmaing,
-	   ei_status.irqlock, dev->interrupt);
+	   "[DMAstat:%d][irqlock:%d].\n", dev->name, ei_status.dmaing,
+	   ei_status.irqlock);
 	return;
     }
 
@@ -314,9 +311,8 @@ static void ariadne2_block_input(struct net_device *dev, int count,
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_block_input "
-	   "[DMAstat:%d][irqlock:%d][intr:%ld].\n",
-	   dev->name, ei_status.dmaing, ei_status.irqlock,
-	   dev->interrupt);
+	   "[DMAstat:%d][irqlock:%d].\n",
+	   dev->name, ei_status.dmaing, ei_status.irqlock);
 	return;
     }
     ei_status.dmaing |= 0x01;
@@ -355,8 +351,8 @@ static void ariadne2_block_output(struct net_device *dev, int count,
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_block_output."
-	   "[DMAstat:%d][irqlock:%d][intr:%ld]\n", dev->name, ei_status.dmaing,
-	   ei_status.irqlock, dev->interrupt);
+	   "[DMAstat:%d][irqlock:%d]\n", dev->name, ei_status.dmaing,
+	   ei_status.irqlock);
 	return;
     }
     ei_status.dmaing |= 0x01;
@@ -405,12 +401,16 @@ static struct net_device ariadne2_dev =
 int init_module(void)
 {
     int err;
+
+    if (load_8390_module("ariadne2.c"))
+	return -ENOSYS;
+
     if ((err = register_netdev(&ariadne2_dev))) {
 	if (err == -EIO)
 	    printk("No AriadNE2 ethernet card found.\n");
+	unload_8390_module();
 	return err;
     }
-    lock_8390_module();
     return 0;
 }
 
@@ -419,7 +419,7 @@ void cleanup_module(void)
     free_irq(IRQ_AMIGA_PORTS, &ariadne2_dev);
     release_mem_region(ZTWO_PADDR(ariadne2_dev.base_addr), NE_IO_EXTENT*2);
     unregister_netdev(&ariadne2_dev);
-    unlock_8390_module();
+    unload_8390_module();
 }
 
 #endif	/* MODULE */

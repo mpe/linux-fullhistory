@@ -746,6 +746,8 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
 
 	for (i=0; i<2; i++){
 	        while ((pdev = pci_find_device(PCI_VENDOR_ID_QLOGIC, device_ids[i], pdev))) {
+			if (pci_enable_device(pdev))
+				continue;
 
 		        host = scsi_register(tmpt, sizeof(struct isp2x00_hostdata));
 			host->max_id = QLOGICFC_MAX_ID + 1;
@@ -2004,7 +2006,7 @@ static int isp2x00_init(struct Scsi_Host *sh)
 		printk("qlogicfc%d : error reading PCI configuration\n", hostdata->host_id);
 		return 1;
 	}
-	io_base = pdev->resource[0].start;
+	io_base = pci_resource_start(pdev, 0);
 	irq = pdev->irq;
 
 

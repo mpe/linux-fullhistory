@@ -338,6 +338,15 @@ static int sd_init_command(Scsi_Cmnd * SCpnt)
 			this_count = this_count >> 2;
 		}
 	}
+	if (dpnt->device->sector_size == 4096) {
+		if ((block & 7) || (SCpnt->request.nr_sectors & 7)) {
+			printk("sd.c:Bad block number requested");
+			return 0;
+		} else {
+			block = block >> 3;
+			this_count = this_count >> 3;
+		}
+	}
 	switch (SCpnt->request.cmd) {
 	case WRITE:
 		if (!dpnt->device->writeable) {
@@ -587,6 +596,11 @@ static void rw_intr(Scsi_Cmnd * SCpnt)
 				error_sector <<= 2;
 				if (block_sectors < 4)
 					block_sectors = 4;
+				break;
+			case 4096:
+				error_sector <<=3;
+				if (block_sectors < 8)
+					block_sectors = 8;
 				break;
 			case 256:
 				error_sector >>= 1;
@@ -889,7 +903,7 @@ static int sd_init_onedisk(int i)
 			 */
 			rscsi_disks[i].capacity = 0;
 		}
-		if (sector_size == 2048) {
+		if (sector_size > 1024) {
 			int m;
 
 			/*
@@ -899,7 +913,7 @@ static int sd_init_onedisk(int i)
 			 * of partial sectors.
 			 */
 			for (m = i << 4; m < ((i + 1) << 4); m++) {
-				sd_blocksizes[m] = 2048;
+				sd_blocksizes[m] = sector_size;
 			}
 		} {
 			/*

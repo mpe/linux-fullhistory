@@ -700,7 +700,7 @@ static int __init acpi_init_piix4(struct pci_dev *dev)
 	if (!(pmregmisc & ACPI_PIIX4_PMIOSE))
 		return -ENODEV;
 	
-	base = dev->resource[PCI_BRIDGE_RESOURCES].start & PCI_BASE_ADDRESS_IO_MASK;
+	base = pci_resource_start (dev, PCI_BRIDGE_RESOURCES);
 	if (!base)
 		return -ENODEV;
 
@@ -759,7 +759,6 @@ static int __init acpi_init_via(struct pci_dev *dev)
 		if (!base)
 			return -ENODEV;
 	}
-	base &= PCI_BASE_ADDRESS_IO_MASK;
 
 	pci_read_config_byte(dev, 0x42, &irq);
 
@@ -824,7 +823,7 @@ const static struct
 	{acpi_init_via},
 };
 	
-const static struct pci_device_id acpi_pci_tbl[] =
+static struct pci_device_id acpi_pci_tbl[] __initdata =
 {
 	{0x8086, 0x7113, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_INTEL_PIIX4},
 	{0x1106, 0x3040, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_VIA_586},
@@ -1169,6 +1168,8 @@ static int acpi_enter_sx(acpi_sstate_t state)
 
 	acpi_sleep_start = get_cmos_time();
 	acpi_enter_dx(ACPI_D3);
+	// disable interrupts globally while suspended
+	cli();
 	acpi_sleep_state = state;
 
 	facp = (struct acpi_facp*) acpi_facp.table;
@@ -1191,6 +1192,8 @@ static int acpi_enter_sx(acpi_sstate_t state)
 	// finished sleeping, update system time
 	acpi_update_clock();
 	acpi_enter_dx(ACPI_D0);
+	// reenable interrupts globally after resume
+	sti();
 	acpi_sleep_state = ACPI_S0;
 	
 	return 0;

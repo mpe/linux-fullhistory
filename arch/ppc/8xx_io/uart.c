@@ -101,11 +101,15 @@ static int serial_console_setup(struct console *co, char *options);
  */
 #define smc_scc_num	hub6
 
+#ifdef CONFIG_8xxSMC2
 /* SMC2 is sometimes used for low performance TDM interfaces.  Define
  * this as 1 if you want SMC2 as a serial port UART managed by this driver.
  * Define this as 0 if you wish to use SMC2 for something else.
  */
 #define USE_SMC2 1
+#else
+#define USE_SMC2 0
+#endif
 
 /* Define SCC to ttySx mapping.
 */
@@ -130,7 +134,7 @@ static struct serial_state rs_table[] = {
 #if USE_SMC2
 	{ 0,     0, PROFF_SMC2, CPMVEC_SMC2,   0,    1 },    /* SMC2 ttyS1 */
 #endif
-#if defined(CONFIG_MPC860) || defined(CONFIG_MPC860T)
+#ifdef CONFIG_8xxSCC
 	{ 0,     0, PROFF_SCC2, CPMVEC_SCC2,   0, SCC_NUM_BASE},    /* SCC2 ttyS2 */
 	{ 0,     0, PROFF_SCC3, CPMVEC_SCC3,   0, SCC_NUM_BASE + 1},    /* SCC3 ttyS3 */
 #endif
@@ -2583,6 +2587,8 @@ int __init rs_8xx_init(void)
 		if (info) {
 			/*memset(info, 0, sizeof(ser_info_t));*/
 			__clear_user(info,sizeof(ser_info_t));
+			init_waitqueue_head(&info->open_wait);
+			init_waitqueue_head(&info->close_wait);
 			info->magic = SERIAL_MAGIC;
 			info->flags = state->flags;
 			info->tqueue.routine = do_softint;

@@ -102,10 +102,10 @@ int __init ac3200_probe(struct net_device *dev)
 	if (ioaddr > 0x1ff)		/* Check a single specified location. */
 		return ac_probe1(ioaddr, dev);
 	else if (ioaddr > 0)		/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	if ( ! EISA_bus)
-		return ENXIO;
+		return -ENXIO;
 
 	for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000) {
 		if (check_region(ioaddr, AC_IO_EXTENT))
@@ -114,7 +114,7 @@ int __init ac3200_probe(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 
 static int __init ac_probe1(int ioaddr, struct net_device *dev)
@@ -151,7 +151,7 @@ static int __init ac_probe1(int ioaddr, struct net_device *dev)
 		|| inb(ioaddr + AC_SA_PROM + 1) != AC_ADDR1
 		|| inb(ioaddr + AC_SA_PROM + 2) != AC_ADDR2 ) {
 		printk(", not found (invalid prefix).\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 #endif
 
@@ -174,7 +174,7 @@ static int __init ac_probe1(int ioaddr, struct net_device *dev)
 		printk (" nothing! Unable to get IRQ %d.\n", dev->irq);
 		kfree(dev->priv);
 		dev->priv = NULL;
-		return EAGAIN;
+		return -EAGAIN;
 	}
 
 	printk(" IRQ %d, %s port\n", dev->irq, port_name[dev->if_port]);
@@ -213,7 +213,7 @@ static int __init ac_probe1(int ioaddr, struct net_device *dev)
 			free_irq(dev->irq, dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
-			return EINVAL;
+			return -EINVAL;
 		}
 		dev->mem_start = (unsigned long)ioremap(dev->mem_start, AC_STOP_PG*0x100);
 		if (dev->mem_start == 0) {
@@ -223,7 +223,7 @@ static int __init ac_probe1(int ioaddr, struct net_device *dev)
 			free_irq(dev->irq, dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
-			return EAGAIN;
+			return -EAGAIN;
 		}
 		ei_status.reg0 = 1;	/* Use as remap flag */
 		printk("ac3200.c: remapped %dkB card memory to virtual address %#lx\n",
@@ -365,6 +365,9 @@ init_module(void)
 {
 	int this_dev, found = 0;
 
+	if (load_8390_module("ac3200.c"))
+			return -ENOSYS;
+
 	for (this_dev = 0; this_dev < MAX_AC32_CARDS; this_dev++) {
 		struct net_device *dev = &dev_ac32[this_dev];
 		dev->irq = irq[this_dev];
@@ -376,14 +379,13 @@ init_module(void)
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "ac3200.c: No ac3200 card found (i/o = 0x%x).\n", io[this_dev]);
 			if (found != 0) {	/* Got at least one. */
-				lock_8390_module();
 				return 0;
 			}
+			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
 	}
-	lock_8390_module();
 	return 0;
 }
 
@@ -405,7 +407,7 @@ cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unlock_8390_module();
+	unload_8390_module();
 }
 #endif /* MODULE */
 

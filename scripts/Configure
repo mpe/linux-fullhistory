@@ -539,7 +539,7 @@ if [ -f $DEFAULTS ]; then
   echo "# Using defaults found in" $DEFAULTS
   echo "#"
   . $DEFAULTS
-  sed -e 's/# \(.*\) is not.*/\1=n/' < $DEFAULTS > .config-is-not.$$
+  sed -e 's/# \(CONFIG_[^ ]*\) is not.*/\1=n/' <$DEFAULTS >.config-is-not.$$
   . .config-is-not.$$
   rm .config-is-not.$$
 else

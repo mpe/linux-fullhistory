@@ -12,7 +12,7 @@
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Randy Dunlap
  *
- * $Id: usb-uhci.c,v 1.231 2000/05/13 15:34:17 acher Exp $
+ * $Id: usb-uhci.c,v 1.232 2000/06/11 13:18:30 acher Exp $
  */
 
 #include <linux/config.h>
@@ -48,7 +48,7 @@
 /* This enables an extra UHCI slab for memory debugging */
 #define DEBUG_SLAB
 
-#define VERSTR "$Revision: 1.231 $ time " __TIME__ " " __DATE__
+#define VERSTR "$Revision: 1.232 $ time " __TIME__ " " __DATE__
 
 #include <linux/usb.h>
 #include "usb-uhci.h"
@@ -2600,7 +2600,7 @@ _static void start_hc (uhci_t *s)
 	s->running = 1;
 }
 
-_static void __exit uhci_cleanup_dev(uhci_t *s)
+_static void uhci_cleanup_dev(uhci_t *s)
 {
 	struct usb_device *root_hub = s->bus->root_hub;
 

@@ -3252,7 +3252,7 @@ remove_info(sf_list *sf, int bank, int instr)
 	int removed = 0;
 
 	prev = NULL;
-	for (p = sf->infos; p; prev = p, p = next) {
+	for (p = sf->infos; p; p = next) {
 		next = p->next;
 		if (p->type == V_ST_NORMAL &&
 		    p->bank == bank && p->instr == instr) {
@@ -3266,8 +3266,11 @@ remove_info(sf_list *sf, int bank, int instr)
 			sf->num_info--;
 			removed++;
 			kfree(p);
-		}
+		} else
+			prev = p;
 	}
+	if (removed)
+		rebuild_preset_list();
 	return removed;
 }
 
@@ -3318,7 +3321,7 @@ awe_load_info(awe_patch_info *patch, const char *addr, int count)
 		}
 		break;
 	case AWE_WR_REPLACE:
-		/* replace mode - remoe the instrument if it already exists */
+		/* replace mode - remove the instrument if it already exists */
 		remove_info(sf, hdr.bank, hdr.instr);
 		break;
 	}

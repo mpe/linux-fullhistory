@@ -84,7 +84,8 @@ search_cards(void)
 	card_last = NULL;
 	while ((akt_pcidev = pci_find_device(PCI_VENDOR_ID_HYPERCOPE, PCI_DEVICE_ID_PLX,
 					     akt_pcidev)) != NULL) {
-
+		if (pci_enable_device(akt_pcidev))
+			continue;
 		if (!(card = kmalloc(sizeof(hysdn_card), GFP_KERNEL))) {
 			printk(KERN_ERR "HYSDN: unable to alloc device mem \n");
 			return;
@@ -93,12 +94,11 @@ search_cards(void)
 		card->myid = cardmax;	/* set own id */
 		card->bus = akt_pcidev->bus->number;
 		card->devfn = akt_pcidev->devfn;	/* slot + function */
-		pcibios_read_config_word(card->bus, card->devfn, PCI_SUBSYSTEM_ID, &card->subsysid);
-		pcibios_read_config_byte(card->bus, card->devfn, PCI_INTERRUPT_LINE, &irq);
-		card->irq = irq;
-		card->iobase = akt_pcidev->resource[ PCI_REG_PLX_IO_BASE].start & PCI_BASE_ADDRESS_IO_MASK;
-		card->plxbase = akt_pcidev->resource[ PCI_REG_PLX_MEM_BASE].start;
-		card->membase = akt_pcidev->resource[ PCI_REG_MEMORY_BASE].start;
+		card->subsysid = akt_pcidev->subsystem_device;
+		card->irq = akt_pcidev->irq;
+		card->iobase = pci_resource_start(akt_pcidev, PCI_REG_PLX_IO_BASE);
+		card->plxbase = pci_resource_start(akt_pcidev, PCI_REG_PLX_MEM_BASE);
+		card->membase = pci_resource_start(akt_pcidev, PCI_REG_MEMORY_BASE);
 		card->brdtype = BD_NONE;	/* unknown */
 		card->debug_flags = DEF_DEB_FLAGS;	/* set default debug */
 		card->faxchans = 0;	/* default no fax channels */

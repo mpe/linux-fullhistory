@@ -83,16 +83,8 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_ISDN),y)
-  ifeq ($(CONFIG_ISDN_PPP),y)
-    obj-y += slhc.o ppp_deflate.o
-  endif
-else
-  ifeq ($(CONFIG_ISDN),m)
-    ifeq ($(CONFIG_ISDN_PPP),y)
-      obj-m += slhc.o ppp_deflate.o
-    endif
-  endif
+ifeq ($(CONFIG_ISDN_PPP),y)
+  obj-$(CONFIG_ISDN) += slhc.o
 endif
 
 ifeq ($(CONFIG_ARCNET),y)
@@ -240,6 +232,7 @@ obj-$(CONFIG_EL1) += 3c501.o
 obj-$(CONFIG_EL16) += 3c507.o
 obj-$(CONFIG_ELMC) += 3c523.o
 obj-$(CONFIG_SKMC) += sk_mca.o
+obj-$(CONFIG_IBMLANA) += ibmlana.o
 obj-$(CONFIG_ELMC_II) += 3c527.o
 obj-$(CONFIG_EL3) += 3c509.o
 obj-$(CONFIG_3C515) += 3c515.o

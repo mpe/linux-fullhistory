@@ -1301,10 +1301,11 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 
 			printk(KERN_ERR "aha152x%d: IRQ %d possibly wrong.  Please verify.\n", HOSTNO, shpnt->irq);
 
-			scsi_unregister(shpnt);
 			registered_count--;
 			release_region(shpnt->io_port, IO_RANGE);
-			shpnt = aha152x_host[shpnt->irq - IRQ_MIN] = 0;
+			aha152x_host[shpnt->irq - IRQ_MIN] = 0;
+			scsi_unregister(shpnt);
+			shpnt=NULL;
 			continue;
 		}
 		printk("ok.\n");

@@ -118,7 +118,7 @@
 #define DMFE_AUTO       8
 
 #define DMFE_TIMER_WUT  jiffies+(HZ*2)/2	/* timer wakeup time : 1 second */
-#define DMFE_TX_TIMEOUT HZ*1.5	/* tx packet time-out time 1.5 s" */
+#define DMFE_TX_TIMEOUT ((HZ*3)/2)	/* tx packet time-out time 1.5 s" */
 
 #define DMFE_DBUG(dbug_now, msg, vaule) if (dmfe_debug || dbug_now) printk("DBUG: %s %x\n", msg, vaule)
 
@@ -359,15 +359,16 @@ static int __init dmfe_probe(void)
 		if (pci_read_config_dword(net_dev, PCI_VENDOR_ID, &pci_id) != DMFE_SUCC)
 			continue;
 
-		if ((pci_id != PCI_DM9102_ID) && (pci_id != PCI_DM9132_ID))
+		if ((net_dev->device != PCI_DM9102_ID) && (net_dev->device != PCI_DM9132_ID))
 			continue;
 
-		pci_iobase = net_dev->resource[0].start;
+		pci_iobase = pci_resource_start (net_dev, 0);
 		pci_irqline = net_dev->irq;
 				
 		/* Enable Master/IO access, Disable memory access */
 		
-		pci_enable_device (net_dev); /* XXX check return val */
+		if (pci_enable_device(net_dev))
+			continue;
 		pci_set_master(net_dev);
 		
 		/* Set Latency Timer 80h */
@@ -382,7 +383,6 @@ static int __init dmfe_probe(void)
 		
 		/* IO range check */
 		if (check_region(pci_iobase, CHK_IO_SIZE(pci_id, dev_rev))) {
-			printk(KERN_ERR "dmfe: I/O conflict : IO=%lx Range=%x\n", pci_iobase, CHK_IO_SIZE(pci_id, dev_rev));
   			continue;
 		}
 		/* Interrupt check */

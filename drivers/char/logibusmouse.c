@@ -107,7 +107,6 @@ static int close_mouse(struct inode * inode, struct file * file)
 {
 	MSE_INT_OFF();
 	free_irq(mouse_irq, NULL);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -119,13 +118,12 @@ static int open_mouse(struct inode * inode, struct file * file)
 {
 	if (request_irq(mouse_irq, mouse_interrupt, 0, "busmouse", NULL))
 		return -EBUSY;
-	MOD_INC_USE_COUNT;
 	MSE_INT_ON();
 	return 0;
 }
 
 static struct busmouse busmouse = {
-	LOGITECH_BUSMOUSE, "busmouse", open_mouse, close_mouse, 7
+	LOGITECH_BUSMOUSE, "busmouse", THIS_MODULE, open_mouse, close_mouse, 7
 };
 
 static int __init logi_busmouse_init(void)

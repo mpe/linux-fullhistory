@@ -109,38 +109,106 @@ static int do_autoprobe(ctl_table *table, int write, struct file *filp,
 }
 #endif /* IEEE1284.3 support. */
 
-static int do_hardware(ctl_table *table, int write, struct file *filp,
-		       void *result, size_t *lenp)
+static int do_hardware_base_addr (ctl_table *table, int write,
+				  struct file *filp, void *result,
+				  size_t *lenp)
 {
 	struct parport *port = (struct parport *)table->extra1;
-	char buffer[256];
+	char buffer[20];
 	int len = 0;
 
 	if (filp->f_pos) {
 		*lenp = 0;
 		return 0;
 	}
-	
-	if (write)		/* can't happen anyway */
-		return -EACCES;
-	
-	len += sprintf(buffer+len, "base:\t0x%lx", port->base);
-	if (port->base_hi)
-		len += sprintf(buffer+len, " (0x%lx)", port->base_hi);
-	buffer[len++] = '\n';
 
-	if (port->irq == PARPORT_IRQ_NONE) {
-		len += sprintf(buffer+len, "irq:\tnone\n");
-	} else {
-		len += sprintf(buffer+len, "irq:\t%d\n", port->irq);
+	if (write) /* permissions prevent this anyway */
+		return -EACCES;
+
+	len += sprintf (buffer, "%lu\t%lu\n", port->base, port->base_hi);
+
+	if (len > *lenp)
+		len = *lenp;
+	else
+		*lenp = len;
+
+	filp->f_pos += len;
+
+	return copy_to_user(result, buffer, len) ? -EFAULT : 0;
+}
+
+static int do_hardware_irq (ctl_table *table, int write,
+			    struct file *filp, void *result,
+			    size_t *lenp)
+{
+	struct parport *port = (struct parport *)table->extra1;
+	char buffer[20];
+	int len = 0;
+
+	if (filp->f_pos) {
+		*lenp = 0;
+		return 0;
 	}
 
-	if (port->dma == PARPORT_DMA_NONE)
-		len += sprintf(buffer+len, "dma:\tnone\n");
-	else
-		len += sprintf(buffer+len, "dma:\t%d\n", port->dma);
+	if (write) /* permissions prevent this anyway */
+		return -EACCES;
 
-	len += sprintf(buffer+len, "modes:\t");
+	len += sprintf (buffer, "%d\n", port->irq);
+
+	if (len > *lenp)
+		len = *lenp;
+	else
+		*lenp = len;
+
+	filp->f_pos += len;
+
+	return copy_to_user(result, buffer, len) ? -EFAULT : 0;
+}
+
+static int do_hardware_dma (ctl_table *table, int write,
+			    struct file *filp, void *result,
+			    size_t *lenp)
+{
+	struct parport *port = (struct parport *)table->extra1;
+	char buffer[20];
+	int len = 0;
+
+	if (filp->f_pos) {
+		*lenp = 0;
+		return 0;
+	}
+
+	if (write) /* permissions prevent this anyway */
+		return -EACCES;
+
+	len += sprintf (buffer, "%d\n", port->dma);
+
+	if (len > *lenp)
+		len = *lenp;
+	else
+		*lenp = len;
+
+	filp->f_pos += len;
+
+	return copy_to_user(result, buffer, len) ? -EFAULT : 0;
+}
+
+static int do_hardware_modes (ctl_table *table, int write,
+			      struct file *filp, void *result,
+			      size_t *lenp)
+{
+	struct parport *port = (struct parport *)table->extra1;
+	char buffer[20];
+	int len = 0;
+
+	if (filp->f_pos) {
+		*lenp = 0;
+		return 0;
+	}
+
+	if (write) /* permissions prevent this anyway */
+		return -EACCES;
+
 	{
 #define printmode(x) {if(port->modes&PARPORT_MODE_##x){len+=sprintf(buffer+len,"%s%s",f?",":"",#x);f++;}}
 		int f = 0;
@@ -186,7 +254,7 @@ PARPORT_MAX_SPINTIME_VALUE;
 
 struct parport_sysctl_table {
 	struct ctl_table_header *sysctl_header;
-	ctl_table vars[9];
+	ctl_table vars[12];
 	ctl_table device_dir[2];
 	ctl_table port_dir[2];
 	ctl_table parport_dir[2];
@@ -201,9 +269,18 @@ static const struct parport_sysctl_table parport_sysctl_template = {
 		  &proc_dointvec_minmax, NULL, NULL,
 		  (void*) &parport_min_spintime_value,
 		  (void*) &parport_max_spintime_value },
-		{ DEV_PARPORT_HARDWARE, "hardware",
+		{ DEV_PARPORT_BASE_ADDR, "base-addr",
 		  NULL, 0, 0444, NULL,
-		  &do_hardware },
+		  &do_hardware_base_addr },
+		{ DEV_PARPORT_IRQ, "irq",
+		  NULL, 0, 0444, NULL,
+		  &do_hardware_irq },
+		{ DEV_PARPORT_DMA, "dma",
+		  NULL, 0, 0444, NULL,
+		  &do_hardware_dma },
+		{ DEV_PARPORT_MODES, "modes",
+		  NULL, 0, 0444, NULL,
+		  &do_hardware_modes },
 		PARPORT_DEVICES_ROOT_DIR,
 #ifdef CONFIG_PARPORT_1284
 		{ DEV_PARPORT_AUTOPROBE, "autoprobe",
@@ -314,10 +391,10 @@ int parport_proc_register(struct parport *port)
 		t->vars[i].extra1 = port;
 
 	t->vars[0].data = &port->spintime;
-	t->vars[2].child = t->device_dir;
+	t->vars[5].child = t->device_dir;
 	
 	for (i = 0; i < 5; i++)
-		t->vars[3 + i].extra2 = &port->probe_info[i];
+		t->vars[6 + i].extra2 = &port->probe_info[i];
 
 	t->port_dir[0].procname = port->name;
 	t->port_dir[0].ctl_name = port->number + 1; /* nb 0 isn't legal here */

@@ -162,7 +162,7 @@ int __init atp_init(struct net_device *dev)
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return atp_probe1(dev, base_addr);
 	else if (base_addr == 1)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	for (port = ports; *port; port++) {
 		int ioaddr = *port;
@@ -173,7 +173,7 @@ int __init atp_init(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 
 static int __init atp_probe1(struct net_device *dev, short ioaddr)

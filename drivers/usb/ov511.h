@@ -339,16 +339,11 @@ struct palette_list {
 struct mode_list {
 	int width;
 	int height;
-	int mode;
-	u8 pxcnt;
-	u8 lncnt;
-	u8 pxdv;
-	u8 lndv;
-	u8 s_pxcnt;
-	u8 s_lncnt;
-	u8 s_pxdv;
-	u8 s_lndv;
-	u8 clock;
+	int color;		/* 0=grayscale, 1=color */
+	u8 pxcnt;		/* pixel counter */
+	u8 lncnt;		/* line counter */
+	u8 pxdv;		/* pixel divisor */
+	u8 lndv;		/* line divisor */
 	u8 m420;
 	u8 common_A;
 	u8 common_C;

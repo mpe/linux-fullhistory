@@ -44,8 +44,7 @@ void pnic_do_nway(struct net_device *dev)
 		if (tp->csr6 != new_csr6) {
 			tp->csr6 = new_csr6;
 			/* Restart Tx */
-			tulip_outl_CSR6(tp, tp->csr6 | 0x0002);
-			tulip_outl_CSR6(tp, tp->csr6 | 0x2002);
+			tulip_restart_rxtx(tp, tp->csr6);
 			dev->trans_start = jiffies;
 		}
 	}
@@ -65,7 +64,7 @@ void pnic_lnk_change(struct net_device *dev, int csr5)
 		outl((inl(ioaddr + CSR7) & ~TPLnkFail) | TPLnkPass, ioaddr + CSR7);
 		if (! tp->nwayset  ||  jiffies - dev->trans_start > 1*HZ) {
 			tp->csr6 = 0x00420000 | (tp->csr6 & 0x0000fdff);
-			tulip_outl_CSR6(tp, tp->csr6);
+			tulip_outl_csr(tp, tp->csr6, CSR6);
 			outl(0x30, ioaddr + CSR12);
 			outl(0x0201F078, ioaddr + 0xB8); /* Turn on autonegotiation. */
 			dev->trans_start = jiffies;
@@ -128,8 +127,7 @@ void pnic_timer(unsigned long data)
 			if (tp->csr6 != new_csr6) {
 				tp->csr6 = new_csr6;
 				/* Restart Tx */
-				tulip_outl_CSR6(tp, tp->csr6 | 0x0002);
-				tulip_outl_CSR6(tp, tp->csr6 | 0x2002);
+				tulip_restart_rxtx(tp, tp->csr6);
 				dev->trans_start = jiffies;
 				if (tulip_debug > 1)
 					printk(KERN_INFO "%s: Changing PNIC configuration to %s "

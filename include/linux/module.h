@@ -144,6 +144,7 @@ struct module_info
 
 /* Find a symbol exported by the kernel or another module */
 extern unsigned long get_module_symbol(char *, char *);
+extern void put_module_symbol(unsigned long);
 
 extern int try_inc_mod_count(struct module *mod);
 

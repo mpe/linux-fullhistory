@@ -224,6 +224,7 @@ static int dma=0;
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/dma.h>
+#include <asm/io.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 

@@ -178,7 +178,7 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	int maxtx = TX_RING_SIZE;
 	int maxoi = TX_RING_SIZE;
 	int work_count = tulip_max_interrupt_work;
-
+	
 	tp->nir++;
 
 	do {
@@ -236,13 +236,7 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					if (status & 0x0002) tp->stats.tx_fifo_errors++;
 					if ((status & 0x0080) && tp->full_duplex == 0)
 						tp->stats.tx_heartbeat_errors++;
-#ifdef ETHER_STATS
-					if (status & 0x0100) tp->stats.collisions16++;
-#endif
 				} else {
-#ifdef ETHER_STATS
-					if (status & 0x0001) tp->stats.tx_deferred++;
-#endif
 					tp->stats.tx_bytes +=
 						tp->tx_buffers[entry].skb->len;
 					tp->stats.collisions += (status >> 3) & 15;
@@ -280,8 +274,7 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					printk(KERN_WARNING "%s: The transmitter stopped."
 						   "  CSR5 is %x, CSR6 %x, new CSR6 %x.\n",
 						   dev->name, csr5, inl(ioaddr + CSR6), tp->csr6);
-				tulip_outl_CSR6(tp, tp->csr6 | 0x0002);
-				tulip_outl_CSR6(tp, tp->csr6 | 0x2002);
+				tulip_restart_rxtx(tp, tp->csr6);
 			}
 			spin_unlock(&tp->lock);
 		}
@@ -297,14 +290,13 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				else
 					tp->csr6 |= 0x00200000;  /* Store-n-forward. */
 				/* Restart the transmit process. */
-				tulip_outl_CSR6(tp, tp->csr6 | 0x0002);
-				tulip_outl_CSR6(tp, tp->csr6 | 0x2002);
+				tulip_restart_rxtx(tp, tp->csr6);
 				outl(0, ioaddr + CSR1);
 			}
 			if (csr5 & RxDied) {		/* Missed a Rx frame. */
 				tp->stats.rx_errors++;
 				tp->stats.rx_missed_errors += inl(ioaddr + CSR8) & 0xffff;
-				tulip_outl_CSR6(tp, tp->csr6 | 0x2002);
+				tulip_outl_csr(tp, tp->csr6 | csr6_st | csr6_sr, CSR6);
 			}
 			if (csr5 & (TPLnkPass | TPLnkFail | 0x08000000)) {
 				if (tp->link_change)

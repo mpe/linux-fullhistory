@@ -173,10 +173,10 @@ typedef struct _awe_voice_info {
 
 	short root;			/* midi root key */
 	short tune;			/* pitch tuning (in cents) */
-	char low, high;			/* key note range */
-	char vellow, velhigh;		/* velocity range */
-	char fixkey, fixvel;		/* fixed key, velocity */
-	char pan, fixpan;		/* panning, fixed panning */
+	signed char low, high;		/* key note range */
+	signed char vellow, velhigh;	/* velocity range */
+	signed char fixkey, fixvel;	/* fixed key, velocity */
+	signed char pan, fixpan;	/* panning, fixed panning */
 	short exclusiveClass;		/* exclusive class (0 = none) */
 	unsigned char amplitude;	/* sample volume (127 max) */
 	unsigned char attenuation;	/* attenuation (0.375dB) */

@@ -546,13 +546,13 @@ static void * uss720_probe(struct usb_device *usbdev, unsigned int ifnum)
 	struct parport *pp;
 	int i;
 
-	printk(KERN_DEBUG "uss720: probe: vendor id 0x%x, device id 0x%x\n",
-	       usbdev->descriptor.idVendor, usbdev->descriptor.idProduct);
-
 	if ((usbdev->descriptor.idVendor != 0x047e || usbdev->descriptor.idProduct != 0x1001) &&
 	    (usbdev->descriptor.idVendor != 0x0557 || usbdev->descriptor.idProduct != 0x2001) &&
 	    (usbdev->descriptor.idVendor != 0x0729 || usbdev->descriptor.idProduct != 0x1284))
 		return NULL;
+
+	printk(KERN_DEBUG "uss720: probe: vendor id 0x%x, device id 0x%x\n",
+	       usbdev->descriptor.idVendor, usbdev->descriptor.idProduct);
 
 	/* our known interfaces have 3 alternate settings */
 	if (usbdev->actconfig->interface[ifnum].num_altsetting != 3)

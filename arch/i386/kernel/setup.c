@@ -528,6 +528,7 @@ static inline void parse_mem_cmdline (char ** cmdline_p)
 				else {
 					start_at = HIGH_MEMORY;
 					mem_size -= HIGH_MEMORY;
+					usermem=0;
 				}
 				add_memory_region(start_at, mem_size, E820_RAM);
 			}
@@ -801,7 +802,7 @@ void __init setup_arch(char **cmdline_p)
 	conswitchp = &dummy_con;
 #endif
 #endif
-#ifdef CONFIG_X86_FX
+#ifdef CONFIG_X86_FXSR
 	if (boot_cpu_data.x86_capability & X86_FEATURE_FXSR)
 	{
 		printk("Enabling extended fast FPU save and restore ... ");
@@ -921,8 +922,8 @@ static int __init amd_model(struct cpuinfo_x86 *c)
 	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
 	if (n >= 0x80000005) {
 		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
-		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
-			ecx>>24, edx>>24);
+		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK (%d bytes/line)\n",
+			edx>>24, ecx>>24, edx&0xFF);
 		c->x86_cache_size=(ecx>>24)+(edx>>24);	
 	}
 	if (n >= 0x80000006) {
@@ -1155,6 +1156,8 @@ static void __init centaur_model(struct cpuinfo_x86 *c)
 		name="C6";
 		fcr_set=ECX8|DSMC|EDCTLB|EMMX|ERETSTK;
 		fcr_clr=DPDC;
+		printk("Disabling bugged TSC.\n");
+		c->x86_capability &= ~X86_FEATURE_TSC;
 		break;
 	case 8:
 		switch(c->x86_mask) {
@@ -1337,8 +1340,8 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	{ X86_VENDOR_INTEL,	6,
 	  { "Pentium Pro A-step", "Pentium Pro", NULL, "Pentium II (Klamath)", 
 	    NULL, "Pentium II (Deschutes)", "Mobile Pentium II",
-	    "Pentium III (Katmai)", "Pentium III (Coppermine)", NULL, NULL, 
-	    NULL, NULL, NULL, NULL }},
+	    "Pentium III (Katmai)", "Pentium III (Coppermine)", NULL,
+	    "Pentium III (Cascades)", NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_AMD,	4,
 	  { NULL, NULL, NULL, "486 DX/2", NULL, NULL, NULL, "486 DX/2-WB",
 	    "486 DX/4", "486 DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT",
@@ -1350,7 +1353,7 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	    "K6-3", NULL, NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_AMD,	6,
 	  { "Athlon", "Athlon",
-	    NULL, NULL, NULL, NULL,
+	    "Athlon", NULL, "Athlon", NULL,
 	    NULL, NULL, NULL,
 	    NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_UMC,	4,
@@ -1367,6 +1370,40 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
 };
 
+/*
+ *	Detect a NexGen CPU running without BIOS hypercode new enough
+ *	to have CPUID. (Thanks to Herbert Oppmann)
+ */
+ 
+static int deep_magic_nexgen_probe(void)
+{
+	int ret;
+	
+	__asm__ __volatile__ (
+		"	movw	$0x5555, %%ax\n"
+		"	xorw	%%dx,%%dx\n"
+		"	movw	$2, %%cx\n"
+		"	divw	%%cx\n"
+		"	movl	$0, %%eax\n"
+		"	jnz	1f\n"
+		"	movl	$1, %%eax\n"
+		"1:\n" 
+		: "=a" (ret) : : "cx", "dx" );
+	return  ret;
+}
+
+static void squash_the_stupid_serial_number(struct cpuinfo_x86 *c)
+{
+	if(c->x86_capability&(1<<18)) {
+		/* Disable processor serial number */
+		unsigned long lo,hi;
+		rdmsr(0x119,lo,hi);
+		lo |= 0x200000;
+		wrmsr(0x119,lo,hi);
+		printk(KERN_INFO "CPU serial number disabled.\n");
+	}
+}
+
 void __init identify_cpu(struct cpuinfo_x86 *c)
 {
 	int i=0;
@@ -1377,21 +1414,20 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 
 	get_cpu_vendor(c);
 
-	/* It should be possible for the user to override this. */
-	if(c->x86_capability&(1<<18)) {
-		/* Disable processor serial number */
-		unsigned long lo,hi;
-		rdmsr(0x119,lo,hi);
-		lo |= 0x200000;
-		wrmsr(0x119,lo,hi);
-		printk(KERN_INFO "CPU serial number disabled.\n");
-	}
 
 	switch (c->x86_vendor) {
 
 		case X86_VENDOR_UNKNOWN:
 			if (c->cpuid_level < 0)
+			{
+				/* It may be a nexgen with cpuid disabled.. */
+				if(deep_magic_nexgen_probe())
+				{
+					strcpy(c->x86_model_id, "Nx586");
+					c->x86_vendor = X86_VENDOR_NEXGEN;
+				}
 				return;
+			}
 			break;
 
 		case X86_VENDOR_CYRIX:
@@ -1408,6 +1444,9 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 			return;
 
 		case X86_VENDOR_INTEL:
+			
+			squash_the_stupid_serial_number(c);
+			
 			if (c->cpuid_level > 1) {
 				/* supports eax=2  call */
 				int edx, dummy;
@@ -1422,24 +1461,26 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 					c->x86_cache_size = 0;
 					break;
 
-				case 0x41:
+				case 0x41: /* 4-way 128 */
 					c->x86_cache_size = 128;
 					break;
 
-				case 0x42:
-				case 0x82: /*Detect 256-Kbyte cache on Coppermine*/
+				case 0x42: /* 4-way 256 */
+				case 0x82: /* 8-way 256 */
 					c->x86_cache_size = 256;
 					break;
 
-				case 0x43:
+				case 0x43: /* 4-way 512 */
 					c->x86_cache_size = 512;
 					break;
 
-				case 0x44:
+				case 0x44: /* 4-way 1024 */
+				case 0x84: /* 8-way 1024 */
 					c->x86_cache_size = 1024;
 					break;
 
-				case 0x45:
+				case 0x45: /* 4-way 2048 */
+				case 0x85: /* 8-way 2048 */
 					c->x86_cache_size = 2048;
 					break;
 
@@ -1479,9 +1520,14 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 
 		case X86_VENDOR_TRANSMETA:
 			transmeta_model(c);
+			squash_the_stupid_serial_number(c);
 			return;
 	}
 	
+	/* may be changed in the switch so needs to be after */
+	
+	if(c->x86_vendor == X86_VENDOR_NEXGEN)
+		c->x86_cache_size = 256;	/* A few had 1Mb.. */
 	
 	for (i = 0; i < sizeof(cpu_models)/sizeof(struct cpu_model_info); i++) {
 		if (cpu_models[i].vendor == c->x86_vendor &&
@@ -1614,7 +1660,9 @@ int get_cpuinfo(char * buffer)
 					x86_cap_flags[10] = "sep";
 				if (c->x86 < 6)
 					x86_cap_flags[16] = "fcmov";
+				x86_cap_flags[16] = "pat";
 				x86_cap_flags[22] = "mmxext";
+				x86_cap_flags[24] = "fxsr";
 				x86_cap_flags[30] = "3dnowext";
 				x86_cap_flags[31] = "3dnow";
 				break;
@@ -1674,6 +1722,18 @@ int get_cpuinfo(char * buffer)
 	return p - buffer;
 }
 
+#ifndef CONFIG_X86_TSC
+static int tsc_disable __initdata = 0;
+
+static int __init tsc_setup(char *str)
+{
+	tsc_disable = 1;
+	return 1;
+}
+
+__setup("notsc", tsc_setup);
+#endif
+
 static unsigned long cpu_initialized __initdata = 0;
 
 /*
@@ -1695,6 +1755,13 @@ void __init cpu_init (void)
 
 	if (cpu_has_vme || cpu_has_tsc || cpu_has_de)
 		clear_in_cr4(X86_CR4_VME|X86_CR4_PVI|X86_CR4_TSD|X86_CR4_DE);
+#ifndef CONFIG_X86_TSC
+	if (tsc_disable && cpu_has_tsc) {
+		printk("Disabling TSC...\n");
+		boot_cpu_data.x86_capability &= ~X86_FEATURE_TSC;
+		set_in_cr4(X86_CR4_TSD);
+	}
+#endif
 
 	__asm__ __volatile__("lgdt %0": "=m" (gdt_descr));
 	__asm__ __volatile__("lidt %0": "=m" (idt_descr));

@@ -311,6 +311,8 @@ static const Signature __initdata signatures[] =
   {"FUTURE DOMAIN CORP. (C) 1992 V8.00.004/02/92", 5, 44, FD},
   {"IBM F1 BIOS V1.1004/30/92", 5, 25, FD},
   {"FUTURE DOMAIN TMC-950", 5, 21, FD},
+  /* Added for 2.2.16 by Matthias_Heidbrink@b.maus.de */
+  {"IBM F1 V1.2009/22/93", 5, 25, FD},
 };
 
 #define NUM_SIGNATURES (sizeof(signatures) / sizeof(Signature))

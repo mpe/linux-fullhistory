@@ -1009,8 +1009,11 @@ __initfunc(int setup_w6692(struct IsdnCard *card))
 		dev_w6692 = pci_find_device(id_list[id_idx].vendor_id,
 					    id_list[id_idx].device_id,
 					    dev_w6692);
-		if (dev_w6692)
+		if (dev_w6692) {
+			if (pci_enable_device(dev_w6692))
+				continue;
 			break;
+		}
 		id_idx++;
 	}
 	if (dev_w6692) {
@@ -1018,7 +1021,7 @@ __initfunc(int setup_w6692(struct IsdnCard *card))
 		pci_irq = dev_w6692->irq;
 		/* I think address 0 is allways the configuration area */
 		/* and address 1 is the real IO space KKe 03.09.99 */
-		pci_ioaddr = dev_w6692->resource[ 1].start;
+		pci_ioaddr = pci_resource_start(dev_w6692, 1);
 	}
 	if (!found) {
 		printk(KERN_WARNING "W6692: No PCI card found\n");
@@ -1029,7 +1032,6 @@ __initfunc(int setup_w6692(struct IsdnCard *card))
 		printk(KERN_WARNING "W6692: No IRQ for PCI card found\n");
 		return (0);
 	}
-	pci_ioaddr &= PCI_BASE_ADDRESS_IO_MASK;
 	if (!pci_ioaddr) {
 		printk(KERN_WARNING "W6692: NO I/O Base Address found\n");
 		return (0);

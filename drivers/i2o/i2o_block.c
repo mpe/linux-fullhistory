@@ -1575,7 +1575,7 @@ static struct block_device_operations i2ob_fops =
 static struct gendisk i2ob_gendisk = 
 {
 	MAJOR_NR,
-	"i2ohd",
+	"i2o/hd",
 	4,
 	1<<4,
 	i2ob,

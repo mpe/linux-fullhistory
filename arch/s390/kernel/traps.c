@@ -62,9 +62,6 @@ asmlinkage void name(struct pt_regs * regs, long error_code) \
         force_sig(signr, tsk); \
 }
 
-
-void page_exception(void);
-
 /* TODO: define these as 'pgm_check_handler_t xxx;'
 asmlinkage void divide_error(void);
 asmlinkage void debug(void);

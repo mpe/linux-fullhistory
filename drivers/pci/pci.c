@@ -18,6 +18,7 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/ioport.h>
+#include <linux/spinlock.h>
 #include <linux/pm.h>
 
 #include <asm/page.h>

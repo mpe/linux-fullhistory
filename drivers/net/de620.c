@@ -834,13 +834,13 @@ int __init de620_probe(struct net_device *dev)
 
 	if ((checkbyte != 0xa5) || (read_eeprom(dev) != 0)) {
 		printk(" not identified in the printer port\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 
 #if 0 /* Not yet */
 	if (check_region(dev->base_addr, 3)) {
 		printk(", port 0x%x busy\n", dev->base_addr);
-		return EBUSY;
+		return -EBUSY;
 	}
 #endif
 	request_region(dev->base_addr, 3, "de620");

@@ -361,7 +361,6 @@ int lance_probe(struct net_device *dev)
 		lance_need_isa_bounce_buffers = 0;
 
 #if defined(CONFIG_PCI)
-	if (pci_present()) 
 	{
 		struct pci_dev *pdev = NULL;
 		if (lance_debug > 1)
@@ -369,20 +368,12 @@ int lance_probe(struct net_device *dev)
 
 		while ((pdev = pci_find_device(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, pdev))) {
 			unsigned int pci_ioaddr;
-			unsigned short pci_command;
 
+			if (pci_enable_device(pdev))
+				continue;
+			pci_set_master(pdev);
 			pci_irq_line = pdev->irq;
-			pci_ioaddr = pdev->resource[0].start;
-			/* PCI Spec 2.1 states that it is either the driver or PCI card's
-	 		 * responsibility to set the PCI Master Enable Bit if needed.
-			 *	(From Mark Stockton <marks@schooner.sys.hou.compaq.com>)
-			 */
-			pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
-			if ( ! (pci_command & PCI_COMMAND_MASTER)) {
-				printk("PCI Master Bit has not been set. Setting...\n");
-				pci_command |= PCI_COMMAND_MASTER;
-				pci_write_config_word(pdev, PCI_COMMAND, pci_command);
-			}
+			pci_ioaddr = pci_resource_start (pdev, 0);
 			printk("Found PCnet/PCI at %#x, irq %d.\n",
 				   pci_ioaddr, pci_irq_line);
 			result = lance_probe1(dev, pci_ioaddr, pci_irq_line, 0);

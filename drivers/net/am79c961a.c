@@ -39,8 +39,6 @@
 #include "am79c961a.h"
 
 static void am79c961_interrupt (int irq, void *dev_id, struct pt_regs *regs);
-static void am79c961_rx (struct net_device *dev, struct dev_priv *priv);
-static void am79c961_tx (struct net_device *dev, struct dev_priv *priv);
 
 static unsigned int net_debug = NET_DEBUG;
 
@@ -57,11 +55,21 @@ write_rreg (unsigned long base, unsigned int reg, unsigned short val)
 		" : : "r" (val), "r" (reg), "r" (0xf0000464));
 }
 
+static inline unsigned short
+read_rreg (unsigned int base_addr, unsigned int reg)
+{
+	unsigned short v;
+	__asm__("str%?h	%1, [%2]	@ NET_RAP
+		ldr%?h	%0, [%2, #-4]	@ NET_RDP
+		" : "=r" (v): "r" (reg), "r" (0xf0000464));
+	return v;
+}
+
 static inline void
 write_ireg (unsigned long base, unsigned int reg, unsigned short val)
 {
 	__asm__("str%?h	%1, [%2]	@ NET_RAP
-		str%?h	%0, [%2, #8]	@ NET_RDP
+		str%?h	%0, [%2, #8]	@ NET_IDP
 		" : : "r" (val), "r" (reg), "r" (0xf0000464));
 }
 
@@ -70,7 +78,7 @@ write_ireg (unsigned long base, unsigned int reg, unsigned short val)
 		"r" ((val) & 0xffff), "r" (0xe0000000 + ((off) << 1)));
 
 static inline void
-am_writebuffer(struct net_device *dev, unsigned int offset, unsigned char *buf, unsigned int length)
+am_writebuffer(struct net_device *dev, u_int offset, unsigned char *buf, unsigned int length)
 {
 	offset = 0xe0000000 + (offset << 1);
 	length = (length + 1) & ~1;
@@ -102,18 +110,11 @@ am_writebuffer(struct net_device *dev, unsigned int offset, unsigned char *buf, 
 	}
 }
 
-static inline unsigned short
-read_rreg (unsigned int base_addr, unsigned int reg)
-{
-	unsigned short v;
-	__asm__("str%?h	%1, [%2]	@ NET_RAP
-		ldr%?h	%0, [%2, #-4]	@ NET_IDP
-		" : "=r" (v): "r" (reg), "r" (0xf0000464));
-	return v;
-}
-
-static inline unsigned short
-am_readword (struct net_device *dev, unsigned long off)
+/*
+ * This reads a 16-bit quantity in little-endian
+ * mode from the am79c961 buffer.
+ */
+static inline unsigned short am_readword(struct net_device *dev, u_int off)
 {
 	unsigned long address = 0xe0000000 + (off << 1);
 	unsigned short val;
@@ -123,7 +124,7 @@ am_readword (struct net_device *dev, unsigned long off)
 }
 
 static inline void
-am_readbuffer(struct net_device *dev, unsigned int offset, unsigned char *buf, unsigned int length)
+am_readbuffer(struct net_device *dev, u_int offset, unsigned char *buf, unsigned int length)
 {
 	offset = 0xe0000000 + (offset << 1);
 	length = (length + 1) & ~1;
@@ -198,17 +199,34 @@ static void
 am79c961_init_for_open(struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
-	unsigned long hdr_addr, first_free_addr;
 	unsigned long flags;
 	unsigned char *p;
+	u_int hdr_addr, first_free_addr;
 	int i;
 
 	save_flags_cli (flags);
-
-	write_ireg (dev->base_addr, 2, 0x4000); /* autoselect media */
 	write_rreg (dev->base_addr, CSR0, CSR0_BABL|CSR0_CERR|CSR0_MISS|CSR0_MERR|CSR0_TINT|CSR0_RINT|CSR0_STOP);
-
 	restore_flags (flags);
+
+	write_ireg (dev->base_addr, 5, 0x00a0); /* Receive address LED */
+	write_ireg (dev->base_addr, 6, 0x0081); /* Collision LED */
+	write_ireg (dev->base_addr, 7, 0x0090); /* XMIT LED */
+	write_ireg (dev->base_addr, 2, 0x0000); /* MODE register selects media */
+
+	for (i = LADRL; i <= LADRH; i++)
+		write_rreg (dev->base_addr, i, 0);
+
+	for (i = PADRL, p = dev->dev_addr; i <= PADRH; i++, p += 2)
+		write_rreg (dev->base_addr, i, p[0] | (p[1] << 8));
+
+	i = MODE_PORT_10BT;
+	if (dev->flags & IFF_PROMISC)
+		i |= MODE_PROMISC;
+
+	write_rreg (dev->base_addr, MODE, i);
+	write_rreg (dev->base_addr, POLLINT, 0);
+	write_rreg (dev->base_addr, SIZERXR, -RX_BUFFERS);
+	write_rreg (dev->base_addr, SIZETXR, -TX_BUFFERS);
 
 	first_free_addr = RX_BUFFERS * 8 + TX_BUFFERS * 8 + 16;
 	hdr_addr = 0;
@@ -232,31 +250,17 @@ am79c961_init_for_open(struct net_device *dev)
 	for (i = 0; i < TX_BUFFERS; i++) {
 		priv->txbuffer[i] = first_free_addr;
 		am_writeword (dev, hdr_addr, first_free_addr);
-		am_writeword (dev, hdr_addr + 2, 0);
-		am_writeword (dev, hdr_addr + 4, 0);
+		am_writeword (dev, hdr_addr + 2, TMD_STP|TMD_ENP);
+		am_writeword (dev, hdr_addr + 4, 0xf000);
 		am_writeword (dev, hdr_addr + 6, 0);
 		first_free_addr += 1600;
 		hdr_addr += 8;
 	}
 
-	for (i = LADRL; i <= LADRH; i++)
-		write_rreg (dev->base_addr, i, 0);
-
-	for (i = PADRL, p = dev->dev_addr; i <= PADRH; i++, p += 2)
-		write_rreg (dev->base_addr, i, p[0] | (p[1] << 8));
-
-	i = MODE_PORT0;
-	if (dev->flags & IFF_PROMISC)
-		i |= MODE_PROMISC;
-
-	write_rreg (dev->base_addr, MODE, i);
 	write_rreg (dev->base_addr, BASERXL, priv->rxhdr);
 	write_rreg (dev->base_addr, BASERXH, 0);
 	write_rreg (dev->base_addr, BASETXL, priv->txhdr);
 	write_rreg (dev->base_addr, BASERXH, 0);
-	write_rreg (dev->base_addr, POLLINT, 0);
-	write_rreg (dev->base_addr, SIZERXR, -RX_BUFFERS);
-	write_rreg (dev->base_addr, SIZETXR, -TX_BUFFERS);
 	write_rreg (dev->base_addr, CSR0, CSR0_STOP);
 	write_rreg (dev->base_addr, CSR3, CSR3_IDONM|CSR3_BABLM|CSR3_DXSUFLO);
 	write_rreg (dev->base_addr, CSR0, CSR0_IENA|CSR0_STRT);
@@ -303,7 +307,6 @@ am79c961_close(struct net_device *dev)
 
 	save_flags_cli (flags);
 
-	write_ireg (dev->base_addr, 2, 0x4000); /* autoselect media */
 	write_rreg (dev->base_addr, CSR0, CSR0_STOP);
 	write_rreg (dev->base_addr, CSR3, CSR3_MASKALL);
 
@@ -369,7 +372,7 @@ static void am79c961_setmulticastlist (struct net_device *dev)
 	unsigned short multi_hash[4], mode;
 	int i, stopped;
 
-	mode = MODE_PORT0;
+	mode = MODE_PORT_10BT;
 
 	if (dev->flags & IFF_PROMISC) {
 		mode |= MODE_PROMISC;
@@ -466,40 +469,19 @@ am79c961_sendpacket(struct sk_buff *skb, struct net_device *dev)
 	dev->trans_start = jiffies;
 	restore_flags (flags);
 
-	if (!(am_readword (dev, priv->txhdr + (priv->txhead << 3) + 2) & TMD_OWN))
+	/*
+	 * If the next packet is owned by the ethernet device,
+	 * then the tx ring is full and we can't add another
+	 * packet.
+	 */
+	if (am_readword(dev, priv->txhdr + (priv->txhead << 3) + 2) & TMD_OWN) {
+		printk(KERN_DEBUG"tx ring full, stopping queue\n");
 		netif_stop_queue(dev);
+	}
 
 	dev_kfree_skb(skb);
 
 	return 0;
-}
-
-static void
-am79c961_interrupt(int irq, void *dev_id, struct pt_regs *regs)
-{
-	struct net_device *dev = (struct net_device *)dev_id;
-	struct dev_priv *priv = (struct dev_priv *)dev->priv;
-	unsigned int status;
-
-#if NET_DEBUG > 1
-	if(net_debug & DEBUG_INT)
-		printk(KERN_DEBUG "am79c961irq: %d ", irq);
-#endif
-
-	status = read_rreg (dev->base_addr, CSR0);
-	write_rreg (dev->base_addr, CSR0, status & (CSR0_TINT|CSR0_RINT|CSR0_MISS|CSR0_IENA));
-
-	if (status & CSR0_RINT) /* Got a packet(s). */
-		am79c961_rx (dev, priv);
-	if (status & CSR0_TINT) /* Packets transmitted */
-		am79c961_tx (dev, priv);
-	if (status & CSR0_MISS)
-		priv->stats.rx_dropped ++;
-
-#if NET_DEBUG > 1
-	if(net_debug & DEBUG_INT)
-		printk("done\n");
-#endif
 }
 
 /*
@@ -508,12 +490,11 @@ am79c961_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 static void
 am79c961_rx(struct net_device *dev, struct dev_priv *priv)
 {
-	unsigned long hdraddr;
-	unsigned long pktaddr;
-
 	do {
-		unsigned long status;
 		struct sk_buff *skb;
+		u_int hdraddr;
+		u_int pktaddr;
+		u_int status;
 		int len;
 
 		hdraddr = priv->rxhdr + (priv->rxtail << 3);
@@ -540,20 +521,19 @@ am79c961_rx(struct net_device *dev, struct dev_priv *priv)
 			continue;
 		}
 
-		len = am_readword (dev, hdraddr + 6);
-		skb = dev_alloc_skb (len + 2);
+		len = am_readword(dev, hdraddr + 6);
+		skb = dev_alloc_skb(len + 2);
 
 		if (skb) {
-			unsigned char *buf;
-
 			skb->dev = dev;
-			skb_reserve (skb, 2);
-			buf = skb_put (skb, len);
+			skb_reserve(skb, 2);
 
-			am_readbuffer (dev, pktaddr, buf, len);
-			am_writeword (dev, hdraddr + 2, RMD_OWN);
+			am_readbuffer(dev, pktaddr, skb_put(skb, len), len);
+			am_writeword(dev, hdraddr + 2, RMD_OWN);
 			skb->protocol = eth_type_trans(skb, dev);
-			netif_rx (skb);
+			netif_rx(skb);
+			dev->last_rx = jiffies;
+			priv->stats.rx_bytes += len;
 			priv->stats.rx_packets ++;
 		} else {
 			am_writeword (dev, hdraddr + 2, RMD_OWN);
@@ -571,9 +551,11 @@ static void
 am79c961_tx(struct net_device *dev, struct dev_priv *priv)
 {
 	do {
-		unsigned long hdraddr;
-		unsigned long status;
+		u_int hdraddr;
+		u_int status;
+int bufnum;
 
+bufnum = priv->txtail;
 		hdraddr = priv->txhdr + (priv->txtail << 3);
 		status = am_readword (dev, hdraddr + 2);
 		if (status & TMD_OWN)
@@ -584,11 +566,15 @@ am79c961_tx(struct net_device *dev, struct dev_priv *priv)
 			priv->txtail = 0;
 
 		if (status & TMD_ERR) {
-			unsigned long status2;
+			u_int status2;
 
 			priv->stats.tx_errors ++;
 
 			status2 = am_readword (dev, hdraddr + 6);
+
+			/*
+			 * Clear the error byte
+			 */
 			am_writeword (dev, hdraddr + 6, 0);
 
 			if (status2 & TST_RTRY)
@@ -607,6 +593,24 @@ am79c961_tx(struct net_device *dev, struct dev_priv *priv)
 	netif_wake_queue(dev);
 }
 
+static void
+am79c961_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+	struct net_device *dev = (struct net_device *)dev_id;
+	struct dev_priv *priv = (struct dev_priv *)dev->priv;
+	u_int status;
+
+	status = read_rreg(dev->base_addr, CSR0);
+	write_rreg(dev->base_addr, CSR0, status & (CSR0_TINT|CSR0_RINT|CSR0_MISS|CSR0_IENA));
+
+	if (status & CSR0_RINT)
+		am79c961_rx(dev, priv);
+	if (status & CSR0_TINT)
+		am79c961_tx(dev, priv);
+	if (status & CSR0_MISS)
+		priv->stats.rx_dropped ++;
+}
+
 static int
 am79c961_hw_init(struct net_device *dev)
 {
@@ -617,7 +621,6 @@ am79c961_hw_init(struct net_device *dev)
 
 	save_flags_cli (flags);
 
-	write_ireg (dev->base_addr, 2, 0x4000); /* autoselect media */
 	write_rreg (dev->base_addr, CSR0, CSR0_STOP);
 	write_rreg (dev->base_addr, CSR3, CSR3_MASKALL);
 

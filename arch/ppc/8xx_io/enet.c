@@ -263,8 +263,10 @@ scc_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	else
 		bdp++;
 
-	if (bdp->cbd_sc & BD_ENET_TX_READY)
+	if (bdp->cbd_sc & BD_ENET_TX_READY) {
 		netif_stop_queue(dev);
+		cep->tx_full = 1;
+	}
 
 	cep->cur_tx = (cbd_t *)bdp;
 
@@ -402,6 +404,7 @@ scc_enet_interrupt(void *dev_id)
 		 * full.
 		 */
 		if (cep->tx_full) {
+			cep->tx_full = 0;
 			if (netif_queue_stopped(dev))
 				netif_wake_queue(dev);
 		}
@@ -835,7 +838,7 @@ int __init scc_enet_init(void)
 
 		/* Make it uncached.
 		*/
-		pte = find_pte(&init_mm, mem_addr);
+		pte = va_to_pte(mem_addr);
 		pte_val(*pte) |= _PAGE_NO_CACHE;
 		flush_tlb_page(init_mm.mmap, mem_addr);
 

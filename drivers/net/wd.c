@@ -94,7 +94,7 @@ int __init wd_probe(struct net_device *dev)
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return wd_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	for (i = 0; wd_portlist[i]; i++) {
 		int ioaddr = wd_portlist[i];
@@ -104,7 +104,7 @@ int __init wd_probe(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 #endif
 
@@ -122,11 +122,7 @@ int __init wd_probe1(struct net_device *dev, int ioaddr)
 	if (inb(ioaddr + 8) == 0xff 	/* Extra check to avoid soundcard. */
 		|| inb(ioaddr + 9) == 0xff
 		|| (checksum & 0xff) != 0xFF)
-		return ENODEV;
-
-	/* Looks like we have a card. Make sure 8390 support is available. */
-        if (load_8390_module("wd.c"))
-                return -ENOSYS;
+		return -ENODEV;
 
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) {
@@ -268,7 +264,7 @@ int __init wd_probe1(struct net_device *dev, int ioaddr)
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		kfree(dev->priv);
 		dev->priv = NULL;
-		return EAGAIN;
+		return -EAGAIN;
 	}
 
 	/* OK, were are certain this is going to work.  Setup the device. */
@@ -468,6 +464,9 @@ init_module(void)
 {
 	int this_dev, found = 0;
 
+	if (load_8390_module("wd.c"))
+                return -ENOSYS;
+
 	for (this_dev = 0; this_dev < MAX_WD_CARDS; this_dev++) {
 		struct net_device *dev = &dev_wd[this_dev];
 		dev->irq = irq[this_dev];
@@ -482,14 +481,13 @@ init_module(void)
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "wd.c: No wd80x3 card found (i/o = 0x%x).\n", io[this_dev]);
 			if (found != 0) {	/* Got at least one. */
-				lock_8390_module();
 				return 0;
 			}
+			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
 	}
-	lock_8390_module();
 	return 0;
 }
 
@@ -507,9 +505,9 @@ cleanup_module(void)
 			release_region(ioaddr, WD_IO_EXTENT);
 			unregister_netdev(dev);
 			kfree(priv);
-			unlock_8390_module();
 		}
 	}
+	unload_8390_module();
 }
 #endif /* MODULE */
 

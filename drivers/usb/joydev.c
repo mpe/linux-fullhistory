@@ -1,7 +1,7 @@
 /*
- *  joydev.c  Version 0.1
+ * $Id: joydev.c,v 1.7 2000/05/29 09:01:52 vojtech Exp $
  *
- *  Copyright (c) 1999 Vojtech Pavlik                                       
+ *  Copyright (c) 1999-2000 Vojtech Pavlik
  *  Copyright (c) 1999 Colin Van Dyke 
  *
  *  Joystick device driver for the input driver suite.
@@ -53,7 +53,6 @@ struct joydev {
 	int used;
 	int open;
 	int minor;
-	char name[32];
 	struct input_handle handle;
 	wait_queue_head_t wait;
 	devfs_handle_t devfs;
@@ -139,8 +138,7 @@ static void joydev_event(struct input_handle *handle, unsigned int type, unsigne
 			if (list->tail == (list->head = (list->head + 1) & (JOYDEV_BUFFER_SIZE - 1)))
 				list->startup = 0;
 
-		if (list->fasync)
-			kill_fasync(list->fasync, SIGIO, POLL_IN);
+		kill_fasync(&list->fasync, SIGIO, POLL_IN);
 
 		list = list->next;
 	}
@@ -178,7 +176,6 @@ static int joydev_release(struct inode * inode, struct file * file)
 
 	kfree(list);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -190,10 +187,7 @@ static int joydev_open(struct inode *inode, struct file *file)
 	if (i > JOYDEV_MINORS || !joydev_table[i])
 		return -ENODEV;
 
-	MOD_INC_USE_COUNT;
-
 	if (!(list = kmalloc(sizeof(struct joydev_list), GFP_KERNEL))) {
-		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	memset(list, 0, sizeof(struct joydev_list));
@@ -322,6 +316,8 @@ static int joydev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 {
 	struct joydev_list *list = file->private_data;
 	struct joydev *joydev = list->joydev;
+	struct input_dev *dev = joydev->handle.dev;
+
 
 	switch (cmd) {
 
@@ -360,9 +356,11 @@ static int joydev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 						sizeof(struct js_corr) * joydev->nabs) ? -EFAULT : 0;
 		default:
 			if ((cmd & ~(_IOC_SIZEMASK << _IOC_SIZESHIFT)) == JSIOCGNAME(0)) {
-				int len = strlen(joydev->name) + 1;
+				int len;
+				if (!dev->name) return 0;
+				len = strlen(dev->name) + 1;
 				if (len > _IOC_SIZE(cmd)) len = _IOC_SIZE(cmd);
-				if (copy_to_user((char *) arg, joydev->name, len)) return -EFAULT;
+				if (copy_to_user((char *) arg, dev->name, len)) return -EFAULT;
 				return len;
 			}
 	}
@@ -370,6 +368,7 @@ static int joydev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 }
 
 static struct file_operations joydev_fops = {
+	owner:		THIS_MODULE,
 	read:		joydev_read,
 	write:		joydev_write,
 	poll:		joydev_poll,
@@ -400,8 +399,6 @@ static struct input_handle *joydev_connect(struct input_handler *handler, struct
 	memset(joydev, 0, sizeof(struct joydev));
 
 	init_waitqueue_head(&joydev->wait);
-
-	sprintf(joydev->name, "joydev%d", joydev->minor);
 
 	joydev->minor = minor;
 	joydev_table[minor] = joydev;
@@ -449,7 +446,7 @@ static struct input_handle *joydev_connect(struct input_handler *handler, struct
 
 	joydev->devfs = input_register_minor("js%d", minor, JOYDEV_MINOR_BASE);
 
-	printk("js%d: Joystick device for input%d\n", minor, dev->number);
+	printk(KERN_INFO "js%d: Joystick device for input%d\n", minor, dev->number);
 
 	return &joydev->handle;
 }

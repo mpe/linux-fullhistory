@@ -86,8 +86,6 @@ extern int smc_init( struct net_device * );
 extern int sgiseeq_probe(struct net_device *);
 extern int atarilance_probe(struct net_device *);
 extern int sun3lance_probe(struct net_device *);
-extern int a2065_probe(struct net_device *);
-extern int ariadne_probe(struct net_device *);
 extern int ariadne2_probe(struct net_device *);
 extern int hydra_probe(struct net_device *);
 extern int apne_probe(struct net_device *);
@@ -330,12 +328,6 @@ struct devprobe m68k_probes[] __initdata = {
 #endif
 #ifdef CONFIG_SUN3LANCE         /* sun3 onboard Lance chip */
 	{sun3lance_probe, 0},
-#endif
-#ifdef CONFIG_A2065		/* Commodore/Ameristar A2065 Ethernet Board */
-	{a2065_probe, 0},
-#endif
-#ifdef CONFIG_ARIADNE		/* Village Tronic Ariadne Ethernet Board */
-	{ariadne_probe, 0},
 #endif
 #ifdef CONFIG_ARIADNE2		/* Village Tronic Ariadne II Ethernet Board */
 	{ariadne2_probe, 0},

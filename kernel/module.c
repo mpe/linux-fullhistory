@@ -973,7 +973,9 @@ leave_the_loop:
  * Gets the address for a symbol in the given module.  If modname is
  * NULL, it looks for the name in any registered symbol table.  If the
  * modname is an empty string, it looks for the symbol in kernel exported
- * symbol tables.
+ * symbol tables. Increase the usage count of the module in which the
+ * symbol was found - it's the only way we can guarantee that it's still
+ * there by the time our caller actually uses it.
  */
 unsigned long
 get_module_symbol(char *modname, char *symname)
@@ -982,6 +984,7 @@ get_module_symbol(char *modname, char *symname)
 	struct module_symbol *sym;
 	int i;
 
+	spin_lock(&unload_lock);
 	for (mp = module_list; mp; mp = mp->next) {
 		if (((modname == NULL) || (strcmp(mp->name, modname) == 0)) &&
 			MOD_CAN_QUERY(mp) &&
@@ -990,12 +993,32 @@ get_module_symbol(char *modname, char *symname)
 				i > 0; --i, ++sym) {
 
 				if (strcmp(sym->name, symname) == 0) {
+					__MOD_INC_USE_COUNT(mp);
+					spin_unlock(&unload_lock);
 					return sym->value;
 				}
 			}
 		}
 	}
+	spin_unlock(&unload_lock);
 	return 0;
+}
+
+/* Decrease the use count of the module containing a symbol with the 
+ * address passed.
+ */
+void put_module_symbol(unsigned long addr)
+{
+	struct module *mp;
+
+	for (mp = module_list; mp; mp = mp->next) {
+		if (MOD_CAN_QUERY(mp) &&
+		    addr >= (unsigned long)mp &&
+		    addr < (unsigned long)mp + mp->size) {
+			__MOD_DEC_USE_COUNT(mp);
+			return;
+		}
+	}
 }
 
 #else		/* CONFIG_MODULES */

@@ -139,7 +139,7 @@
  * add_interrupt_randomness() uses the inter-interrupt timing as random
  * inputs to the entropy pool.  Note that not all interrupts are good
  * sources of randomness!  For example, the timer interrupts is not a
- * good choice, because the periodicity of the interrupts is to
+ * good choice, because the periodicity of the interrupts is too
  * regular, and hence predictable to an attacker.  Disk interrupts are
  * a better measure, since the timing of the disk interrupts are more
  * unpredictable.

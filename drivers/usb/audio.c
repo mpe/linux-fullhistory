@@ -1788,7 +1788,7 @@ static int get_rec_src(struct usb_mixerdev *ms)
 			       dev->devnum, ms->iface, ms->ch[i].slctunitid & 0xff);
 			continue;
 		}
-		for (j = i; j < ms->numch; i++) {
+		for (j = i; j < ms->numch; j++) {
 			if ((ms->ch[i].slctunitid ^ ms->ch[j].slctunitid) & 0xff)
 				continue;
 			mask |= 1 << j;
@@ -1821,7 +1821,7 @@ static int set_rec_src(struct usb_mixerdev *ms, int srcmask)
 		}
 		/* first generate smask */
 		smask = bmask = 0;
-		for (j = i; j < ms->numch; i++) {
+		for (j = i; j < ms->numch; j++) {
 			if ((ms->ch[i].slctunitid ^ ms->ch[j].slctunitid) & 0xff)
 				continue;
 			smask |= 1 << ms->ch[j].osschannel;
@@ -1835,7 +1835,7 @@ static int set_rec_src(struct usb_mixerdev *ms, int srcmask)
 			continue;
 		if (j > 1)
 			srcmask &= ~bmask;
-		for (j = i; j < ms->numch; i++) {
+		for (j = i; j < ms->numch; j++) {
 			if ((ms->ch[i].slctunitid ^ ms->ch[j].slctunitid) & 0xff)
 				continue;
 			if (!(srcmask & (1 << ms->ch[j].osschannel)))
@@ -1937,7 +1937,6 @@ static int usb_audio_open_mixdev(struct inode *inode, struct file *file)
 	file->private_data = ms;
 	s->count++;
 
-	MOD_INC_USE_COUNT;
 	up(&open_sem);
 	return 0;
 }
@@ -1949,7 +1948,6 @@ static int usb_audio_release_mixdev(struct inode *inode, struct file *file)
 
 	down(&open_sem);
 	release(s);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -2045,6 +2043,7 @@ static int usb_audio_ioctl_mixdev(struct inode *inode, struct file *file, unsign
 }
 
 static /*const*/ struct file_operations usb_mixer_fops = {
+	owner:		THIS_MODULE,
 	llseek:		usb_audio_llseek,
 	ioctl:		usb_audio_ioctl_mixdev,
 	open:		usb_audio_open_mixdev,
@@ -2609,7 +2608,6 @@ static int usb_audio_open(struct inode *inode, struct file *file)
 	file->private_data = as;
 	as->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	s->count++;
-	MOD_INC_USE_COUNT;
 	up(&open_sem);
 	return 0;
 }
@@ -2645,11 +2643,11 @@ static int usb_audio_release(struct inode *inode, struct file *file)
 	as->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 	release(s);
 	wake_up(&open_wait);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations usb_audio_fops = {
+	owner:		THIS_MODULE,
 	llseek:		usb_audio_llseek,
 	read:		usb_audio_read,
 	write:		usb_audio_write,
@@ -3193,6 +3191,16 @@ static void usb_audio_mixerunit(struct consmixstate *state, unsigned char *mixer
 	state->termtype = 0;
 }
 
+static struct mixerchannel *slctsrc_findunit(struct consmixstate *state, __u8 unitid)
+{
+	unsigned int i;
+	
+	for (i = 0; i < state->nrmixch; i++)
+		if (state->mixch[i].unitid == unitid)
+			return &state->mixch[i];
+	return NULL;
+}
+
 static void usb_audio_selectorunit(struct consmixstate *state, unsigned char *selector)
 {
 	unsigned int chnum, i, mixch;
@@ -3206,7 +3214,9 @@ static void usb_audio_selectorunit(struct consmixstate *state, unsigned char *se
 	usb_audio_recurseunit(state, selector[5]);
 	if (state->nrmixch != mixch) {
 		mch = &state->mixch[state->nrmixch-1];
-		mch->slctunitid = selector[5] | (1 << 8);
+		mch->slctunitid = selector[3] | (1 << 8);
+	} else if ((mch = slctsrc_findunit(state, selector[5]))) {
+		mch->slctunitid = selector[3] | (1 << 8);
 	} else {
 		printk(KERN_INFO "usbaudio: selector unit %u: ignoring channel 1\n", selector[3]);
 	}
@@ -3223,7 +3233,9 @@ static void usb_audio_selectorunit(struct consmixstate *state, unsigned char *se
 		}
 		if (state->nrmixch != mixch) {
 			mch = &state->mixch[state->nrmixch-1];
-			mch->slctunitid = selector[5] | ((i + 1) << 8);
+			mch->slctunitid = selector[3] | ((i + 1) << 8);
+		} else if ((mch = slctsrc_findunit(state, selector[5+i]))) {
+			mch->slctunitid = selector[3] | ((i + 1) << 8);
 		} else {
 			printk(KERN_INFO "usbaudio: selector unit %u: ignoring channel %u\n", selector[3], i+1);
 		}
@@ -3604,8 +3616,10 @@ static void *usb_audio_probe(struct usb_device *dev, unsigned int ifnum)
 #endif
 	if (config->interface[ifnum].altsetting[0].bInterfaceClass != USB_CLASS_AUDIO ||
 	    config->interface[ifnum].altsetting[0].bInterfaceSubClass != 1) {
+#if 0
 		printk(KERN_DEBUG "usbaudio: vendor id 0x%04x, product id 0x%04x contains no AudioControl interface\n",
 		       dev->descriptor.idVendor, dev->descriptor.idProduct);
+#endif
 		return NULL;
 	}
 	/*

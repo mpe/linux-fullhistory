@@ -113,6 +113,8 @@ struct irq_server {
 extern void amiga_do_irq(int irq, struct pt_regs *fp);
 extern void amiga_do_irq_list(int irq, struct pt_regs *fp, struct irq_server *server);
 
+extern unsigned short amiga_intena_vals[];
+
 /* CIA interrupt control register bits */
 
 #define CIA_ICR_TA	0x01

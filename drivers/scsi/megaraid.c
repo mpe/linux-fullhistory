@@ -1478,6 +1478,8 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
   struct pci_dev *pdev = NULL;
   
   while ((pdev = pci_find_device (pciVendor, pciDev, pdev))) {
+    if (pci_enable_device(pdev))
+    	continue;
     if ((flag & BOARD_QUARTZ) && (skip_id == -1)) {
       u16 magic;
       pci_read_config_word(pdev, PCI_CONF_AMISIG, &magic);
@@ -1505,18 +1507,13 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
     }		
 
     /* Read the base port and IRQ from PCI */
-    megaBase = pdev->resource[0].start;
+    megaBase = pci_resource_start (pdev, 0);
     megaIrq  = pdev->irq;
 
-    if (flag & BOARD_QUARTZ) {
-
-      megaBase &= PCI_BASE_ADDRESS_MEM_MASK;
+    if (flag & BOARD_QUARTZ)
       megaBase = (long) ioremap (megaBase, 128);
-    }
-    else {
-      megaBase &= PCI_BASE_ADDRESS_IO_MASK;
+    else
       megaBase += 0x10;
-    }
 
     /* Initialize SCSI Host structure */
     host = scsi_register (pHostTmpl, sizeof (mega_host_config));
@@ -1589,7 +1586,7 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
 "megaraid: to protect your data, please upgrade your firmware to version\n"
 "megaraid: 3.10 or later, available from the Dell Technical Support web\n"
 "megaraid: site at\n"
-"http://support.dell.com/us/en/filelib/download/index.asp?fileid=2489\n");
+"http://support.dell.com/us/en/filelib/download/index.asp?fileid=2940\n");
 	megaraid_release (host);
 #ifdef MODULE	
 	continue;

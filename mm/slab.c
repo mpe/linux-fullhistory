@@ -666,9 +666,33 @@ kmem_cache_cal_waste(unsigned long gfporder, size_t size, size_t extra,
 	return (wastage + gfporder + (extra * *num));
 }
 
-/* Create a cache:
+/**
+ * kmem_cache_create - Create a cache.
+ * @name: A string which is used in /proc/slabinfo to identify this cache.
+ * @size: The size of objects to be created in this cache.
+ * @offset: The offset to use within the page.  
+ * @flags: SLAB flags
+ * @ctor: A constructor for the objects.
+ * @dtor: A destructor for the objects.
+ *
  * Returns a ptr to the cache on success, NULL on failure.
  * Cannot be called within a int, but can be interrupted.
+ * The @ctor is run when new pages are allocated by the cache
+ * and the @dtor is run before the pages are handed back.
+ * The flags are
+ *
+ * %SLAB_POISON - Poison the slab with a known test pattern (a5a5a5a5)
+ * to catch references to uninitialised memory.
+ *
+ * %SLAB_RED_ZONE - Insert `Red' zones around the allocated memory to check
+ * for buffer overruns.
+ *
+ * %SLAB_NO_REAP - Don't automatically reap this cache when we're under
+ * memory pressure.
+ *
+ * %SLAB_HWCACHE_ALIGN - Align the objects in this cache to a hardware
+ * cacheline.  This can be beneficial if you're counting cycles as closely
+ * as davem.
  */
 kmem_cache_t *
 kmem_cache_create(const char *name, size_t size, size_t offset,
@@ -1044,7 +1068,11 @@ static int __kmem_cache_shrink(kmem_cache_t *cachep)
 	return ret;
 }
 
-/* Shrink a cache.  Releases as many slabs as possible for a cache.
+/**
+ * kmem_cache_shrink - Shrink a cache.
+ * @cachep: The cache to shrink.
+ *
+ * Releases as many slabs as possible for a cache.
  * To help debugging, a zero exit status indicates all slabs were released.
  */
 int
@@ -1060,9 +1088,12 @@ kmem_cache_shrink(kmem_cache_t *cachep)
 	return __kmem_cache_shrink(cachep);
 }
 
-/*
- * Remove a kmem_cache_t object from the slab cache. When returns 0 it
- * completed succesfully. -arca
+/**
+ * kmem_cache_destroy - delete a cache
+ * @cachep: the cache to destroy
+ *
+ * Remove a kmem_cache_t object from the slab cache.
+ * Returns 0 on success.
  *
  * It is expected this function will be called by a module when it is
  * unloaded.  This will remove the cache completely, and avoid a duplicate
@@ -1670,18 +1701,55 @@ null_addr:
 	return;
 }
 
+/**
+ * kmem_cache_alloc - Allocate an object
+ * @cachep: The cache to allocate from.
+ * @flags: See kmalloc().
+ *
+ * Allocate an object from this cache.  The flags are only relevant
+ * if the cache has no available objects.
+ */
 void *
 kmem_cache_alloc(kmem_cache_t *cachep, int flags)
 {
 	return __kmem_cache_alloc(cachep, flags);
 }
 
+/**
+ * kmem_cache_free - Deallocate an object
+ * @cachep: The cache the allocation was from.
+ * @objp: The previously allocated object.
+ *
+ * Free an object which was previously allocated from this
+ * cache.
+ */
 void
 kmem_cache_free(kmem_cache_t *cachep, void *objp)
 {
 	__kmem_cache_free(cachep, objp);
 }
 
+/**
+ * kmalloc - allocate memory
+ * @size: how many bytes of memory are required.
+ * @flags: the type of memory to allocate.
+ *
+ * kmalloc is the normal method of allocating memory
+ * in the kernel.  The @flags argument may be one of:
+ * 
+ * %GFP_BUFFER - XXX
+ *
+ * %GFP_ATOMIC - allocation will not sleep.  Use inside interrupt handlers.
+ *
+ * %GFP_USER - allocate memory on behalf of user.  May sleep.
+ *
+ * %GFP_KERNEL - allocate normal kernel ram.  May sleep.
+ *
+ * %GFP_NFS - has a slightly lower probability of sleeping than %GFP_KERNEL.
+ * Don't use unless you're in the NFS code.
+ *
+ * %GFP_KSWAPD - Don't use unless you're modifying kswapd.
+ */
 void *
 kmalloc(size_t size, int flags)
 {
@@ -1696,6 +1764,13 @@ kmalloc(size_t size, int flags)
 	return NULL;
 }
 
+/**
+ * kfree - free previously allocated memory
+ * @objp: pointer returned by kmalloc.
+ *
+ * Don't free memory not originally allocated by kmalloc()
+ * or you will run into trouble.
+ */
 void
 kfree(const void *objp)
 {
@@ -1741,6 +1816,17 @@ null_ptr:
 	return;
 }
 
+/**
+ * kfree_s - free previously allocated memory
+ * @objp: pointer returned by kmalloc.
+ * @size: size of object which is being freed.
+ *
+ * This function performs the same task as kfree() except
+ * that it can use the extra information to speed up deallocation
+ * or perform additional tests.
+ * Don't free memory not originally allocated by kmalloc()
+ * or allocated with a different size, or you will run into trouble.
+ */
 void
 kfree_s(const void *objp, size_t size)
 {
@@ -1788,7 +1874,11 @@ kmem_find_general_cachep(size_t size)
 }
 
 
-/* Called from try_to_free_page().
+/**
+ * kmem_cache_reap - Reclaim memory from caches.
+ * @gfp_mask: the type of memory required.
+ *
+ * Called from try_to_free_page().
  * This function _cannot_ be called within a int, but it
  * can be interrupted.
  */
@@ -1951,8 +2041,17 @@ kmem_self_test(void)
 #endif	/* SLAB_SELFTEST */
 
 #if	defined(CONFIG_PROC_FS)
-/* /proc/slabinfo
- * cache-name num-active-objs total-objs num-active-slabs total-slabs num-pages-per-slab
+/**
+ * get_slabinfo - generates /proc/slabinfo
+ * @buf: the buffer to write it into
+ *
+ * The contents of the buffer are
+ * cache-name
+ * num-active-objs
+ * total-objs
+ * num-active-slabs
+ * total-slabs
+ * num-pages-per-slab
  */
 int
 get_slabinfo(char *buf)

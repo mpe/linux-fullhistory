@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br.c,v 1.42 2000/04/14 10:10:34 davem Exp $
+ *	$Id: br.c,v 1.43 2000/05/25 02:21:36 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -38,7 +38,7 @@ void br_inc_use_count()
 	MOD_INC_USE_COUNT;
 }
 
-static int __init br_init(void)
+int __init br_init(void)
 {
 	printk(KERN_INFO "NET4: Ethernet Bridge 008 for NET4.0\n");
 

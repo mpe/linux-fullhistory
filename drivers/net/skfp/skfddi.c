@@ -305,6 +305,8 @@ int skfp_probe(struct net_device *dev)
 			pdev)) == 0) {
 			break;
 		}
+		if (pci_enable_device(pdev))
+			continue;
 
 #ifndef MEM_MAPPED_IO
 		/* Verify that I/O enable bit is set (PCI slot is enabled) */
@@ -352,7 +354,7 @@ int skfp_probe(struct net_device *dev)
 		command &= ~PCI_COMMAND_IO;
 		pci_write_config_word(pdev, PCI_COMMAND, command);
 
-		port = pdev->resource[0].start;
+		port = pci_resource_start(pdev, 0);
 
 		port = (unsigned long)ioremap(port, 0x4000);
 		if (!port){

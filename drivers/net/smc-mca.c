@@ -118,7 +118,7 @@ int __init ultramca_probe(struct net_device *dev)
 	int irq = dev ? dev->irq : 0;
 
 	if (!MCA_bus) {
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	if (base_addr || irq) {
@@ -251,9 +251,6 @@ int __init ultramca_probe(struct net_device *dev)
 
 	reg4 = inb(ioaddr + 4) & 0x7f;
 	outb(reg4, ioaddr + 4);
-
-	if (load_8390_module("wd.c"))
-		return -ENOSYS;
 
 	printk(KERN_INFO "%s: Parameters: %#3x,", dev->name, ioaddr);
 
@@ -458,6 +455,9 @@ int init_module(void)
 {
 	int this_dev, found = 0;
 
+	if (load_8390_module("wd.c"))
+		return -ENOSYS;
+
 	for (this_dev = 0; this_dev < MAX_ULTRAMCA_CARDS; this_dev++) {
 		struct net_device *dev = &dev_ultra[this_dev];
 		dev->irq = irq[this_dev];
@@ -466,15 +466,14 @@ int init_module(void)
 
 		if (register_netdev(dev) != 0) {
 			if (found != 0) {	/* Got at least one. */
-				lock_8390_module();
 				return 0;
 			}
+			unload_8390_module();
 			printk(KERN_NOTICE "smc-mca.c: No SMC Ultra card found (i/o = 0x%x).\n", io[this_dev]);
 			return -ENXIO;
 		}
 		found++;
 	}
-	lock_8390_module();
 	return 0;
 }
 
@@ -494,7 +493,7 @@ void cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unlock_8390_module();
+	unload_8390_module();
 }
 #endif /* MODULE */
 

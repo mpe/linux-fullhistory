@@ -32,7 +32,7 @@ struct elevator_s
 							\
 	128,			/* read_latency */	\
 	8192,			/* write_latency */	\
-	4,			/* max_bomb_segments */	\
+	32,			/* max_bomb_segments */	\
 							\
 	0,			/* nr_segments */	\
 	0,			/* read_pendings */	\

@@ -2,8 +2,8 @@
  * OmniVision OV511 Camera-to-USB Bridge Driver
  *
  * Copyright (c) 1999-2000 Mark W. McClelland
- * Many improvements by Bret Wallach
- * Color fixes by by Orion Sky Lawlor, olawlor@acm.org, 2/26/2000
+ * Many improvements by Bret Wallach <bwallac1@san.rr.com>
+ * Color fixes by by Orion Sky Lawlor <olawlor@acm.org> (2/26/2000)
  * Snapshot code by Kevin Moore
  * OV7620 fixes by Charl P. Botha <cpbotha@ieee.org>
  * Changes by Claudio Matsuoka <claudio@conectiva.com>
@@ -30,7 +30,7 @@
  * Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-static const char version[] = "1.15";
+static const char version[] = "1.17";
 
 #define __NO_VERSION__
 
@@ -55,6 +55,8 @@ static const char version[] = "1.15";
 
 #include "ov511.h"
 
+#undef OV511_GBR422		/* Experimental -- sets the 7610 to GBR422 */
+
 #define OV511_I2C_RETRIES 3
 
 /* Video Size 640 x 480 x 3 bytes for RGB */
@@ -64,8 +66,8 @@ static const char version[] = "1.15";
 #define DEFAULT_WIDTH 640
 #define DEFAULT_HEIGHT 480
 
-#define GET_SEGSIZE(p) ((p) == VIDEO_PALETTE_RGB24 ? 384 : 256)
-#define GET_DEPTH(p) ((p) == VIDEO_PALETTE_RGB24 ? 24 : 8)
+#define GET_SEGSIZE(p) ((p) == VIDEO_PALETTE_GREY ? 256 : 384)
+#define GET_DEPTH(p) ((p) == VIDEO_PALETTE_GREY ? 8 : 24)
 
 /* PARAMETER VARIABLES: */
 static int autoadjust = 1;    /* CCD dynamically changes exposure, etc... */
@@ -280,6 +282,7 @@ static int ov511_read_proc(char *page, char **start, off_t off,
 	/* IMPORTANT: This output MUST be kept under PAGE_SIZE
 	 *            or we need to get more sophisticated. */
 
+	out += sprintf (out, "driver_version  : %s\n", version);
 	out += sprintf (out, "custom_id       : %d\n", ov511->customid);
 	out += sprintf (out, "model           : %s\n", ov511->desc ?
 		clist[ov511->desc].description : "unknown");
@@ -300,10 +303,6 @@ static int ov511_read_proc(char *page, char **start, off_t off,
 			ov511->frame[i].depth);
 		out += sprintf (out, "  size          : %d %d\n",
 			ov511->frame[i].width, ov511->frame[i].height);
-#if 0
-		out += sprintf (out, "  hdr_size      : %d %d\n",
-			ov511->frame[i].hdrwidth, ov511->frame[i].hdrheight);
-#endif
 		out += sprintf (out, "  format        : ");
 		for (j = 0; plist[j].num >= 0; j++) {
 			if (plist[j].num == ov511->frame[i].format) {
@@ -317,10 +316,6 @@ static int ov511_read_proc(char *page, char **start, off_t off,
 			ov511->frame[i].segsize);
 		out += sprintf (out, "  data_buffer   : 0x%p\n",
 			ov511->frame[i].data);
-#if 0
-		out += sprintf (out, "  bytesread     : %ld\n",
-			ov511->frame[i].bytes_read);
-#endif
 	}
 	out += sprintf (out, "snap_enabled    : %s\n", YES_NO (ov511->snap_enabled));
 	out += sprintf (out, "bridge          : %s\n",
@@ -846,28 +841,20 @@ ov7610_get_picture(struct usb_ov511 *ov511, struct video_picture *p)
 	return 0;
 }
 
-/* FIXME: add 400x300, 176x144, 160x140 */
+/* FIXME: 176x144, 160x140 */
+/* LNCNT values fixed by Lawrence Glaister <lg@jfm.bc.ca> */
 static struct mode_list mlist[] = {
-	{ 640, 480, VIDEO_PALETTE_GREY, 0x4f, 0x3d, 0x00, 0x00,
-	  0x4f, 0x3d, 0x00, 0x00, 0x04, 0x03, 0x24, 0x04, 0x9e },
-	{ 640, 480, VIDEO_PALETTE_RGB24,0x4f, 0x3d, 0x00, 0x00,
-	  0x4f, 0x3d, 0x00, 0x00, 0x06, 0x03, 0x24, 0x04, 0x9e },
-	{ 320, 240, VIDEO_PALETTE_GREY, 0x27, 0x1f, 0x00, 0x00,
-	  0x27, 0x1f, 0x00, 0x00, 0x01, 0x03, 0x04, 0x24, 0x1e },
-	{ 320, 240, VIDEO_PALETTE_RGB24,0x27, 0x1f, 0x00, 0x00,
-	  0x27, 0x1f, 0x00, 0x00, 0x01, 0x03, 0x04, 0x24, 0x1e },
-	{ 352, 288, VIDEO_PALETTE_GREY, 0x2b, 0x25, 0x00, 0x00,
-	  0x2b, 0x25, 0x00, 0x00, 0x01, 0x03, 0x04, 0x04, 0x1e },
-	{ 352, 288, VIDEO_PALETTE_RGB24,0x2b, 0x25, 0x00, 0x00,
-	  0x2b, 0x25, 0x00, 0x00, 0x01, 0x03, 0x04, 0x04, 0x1e },
-	{ 384, 288, VIDEO_PALETTE_GREY, 0x2f, 0x25, 0x00, 0x00,
-	  0x2f, 0x25, 0x00, 0x00, 0x01, 0x03, 0x04, 0x04, 0x1e },
-	{ 384, 288, VIDEO_PALETTE_RGB24,0x2f, 0x25, 0x00, 0x00,
-	  0x2f, 0x25, 0x00, 0x00, 0x01, 0x03, 0x04, 0x04, 0x1e },
-	{ 448, 336, VIDEO_PALETTE_GREY, 0x37, 0x29, 0x00, 0x00,
-	  0x37, 0x29, 0x00, 0x00, 0x01, 0x03, 0x04, 0x04, 0x1e },
-	{ 448, 336, VIDEO_PALETTE_RGB24,0x37, 0x29, 0x00, 0x00,
-	  0x37, 0x29, 0x00, 0x00, 0x01, 0x03, 0x04, 0x04, 0x1e },
+	/* W    H   C  PXCNT LNCNT PXDIV LNDIV M420  COMA  COMC  COML */
+	{ 640, 480, 0, 0x4f, 0x3b, 0x00, 0x00, 0x03, 0x24, 0x04, 0x9e },
+	{ 640, 480, 1, 0x4f, 0x3b, 0x00, 0x00, 0x03, 0x24, 0x04, 0x9e },
+	{ 320, 240, 0, 0x27, 0x1d, 0x00, 0x00, 0x03, 0x04, 0x24, 0x1e },
+	{ 320, 240, 1, 0x27, 0x1d, 0x00, 0x00, 0x03, 0x04, 0x24, 0x1e },
+	{ 352, 288, 0, 0x2b, 0x25, 0x00, 0x00, 0x03, 0x04, 0x04, 0x1e },
+	{ 352, 288, 1, 0x2b, 0x25, 0x00, 0x00, 0x03, 0x04, 0x04, 0x1e },
+	{ 384, 288, 0, 0x2f, 0x25, 0x00, 0x00, 0x03, 0x04, 0x04, 0x1e },
+	{ 384, 288, 1, 0x2f, 0x25, 0x00, 0x00, 0x03, 0x04, 0x04, 0x1e },
+	{ 448, 336, 0, 0x37, 0x29, 0x00, 0x00, 0x03, 0x04, 0x04, 0x1e },
+	{ 448, 336, 1 ,0x37, 0x29, 0x00, 0x00, 0x03, 0x04, 0x04, 0x1e },
 	{ 0, 0 }
 };
 
@@ -875,11 +862,9 @@ static int
 ov511_mode_init_regs(struct usb_ov511 *ov511,
 		     int width, int height, int mode, int sub_flag)
 {
-	int rc = 0;
-	struct usb_device *dev = ov511->dev;
-	int hwsbase = 0;
-	int hwebase = 0;
 	int i;
+	struct usb_device *dev = ov511->dev;
+	int hwsbase = 0, hwebase = 0;
 
 	PDEBUG(3, "width:%d, height:%d, mode:%d, sub:%d",
 	       width, height, mode, sub_flag);
@@ -930,87 +915,55 @@ ov511_mode_init_regs(struct usb_ov511 *ov511,
 		break;
 	}
 
-#if 0
-	/* FIXME: subwindow support is currently broken! 
-	 */
-	if (width == 640 && height == 480) {
-		if (sub_flag) {
-			/* horizontal window start */
-			ov511_i2c_write(dev, 0x17, hwsbase+(ov511->subx>>2));
-			/* horizontal window end */
-			ov511_i2c_write(dev, 0x18,
-				hwebase+((ov511->subx+ov511->subw)>>2));
-			/* vertical window start */
-			ov511_i2c_write(dev, 0x19, 0x5+(ov511->suby>>1));
-			/* vertical window end */
-			ov511_i2c_write(dev, 0x1a,
-				0x5+((ov511->suby+ov511->subh)>>1));
-			ov511_reg_write(dev, 0x12, (ov511->subw>>3)-1);
-			ov511_reg_write(dev, 0x13, (ov511->subh>>3)-1);
-			/* clock rate control */
-			ov511_i2c_write(dev, 0x11, 0x01);
-
-			/* Snapshot additions */
-			ov511_reg_write(dev, 0x1a, (ov511->subw>>3)-1);
-			ov511_reg_write(dev, 0x1b, (ov511->subh>>3)-1);
-			ov511_reg_write(dev, 0x1c, 0x00);
-			ov511_reg_write(dev, 0x1d, 0x00);
-		} else {
-			ov511_i2c_write(dev, 0x17, hwsbase);
-			ov511_i2c_write(dev, 0x18, hwebase + (640>>2));
-			ov511_i2c_write(dev, 0x19, 0x5);
-			ov511_i2c_write(dev, 0x1a, 5 + (480>>1));
-			ov511_reg_write(dev, 0x12, 0x4f);
-			ov511_reg_write(dev, 0x13, 0x3d);
-
-			/* Snapshot additions */
-			ov511_reg_write(dev, 0x1a, 0x4f);
-			ov511_reg_write(dev, 0x1b, 0x3d);
-			ov511_reg_write(dev, 0x1c, 0x00);
-			ov511_reg_write(dev, 0x1d, 0x00);
-
-			if (mode == VIDEO_PALETTE_GREY) {
-				ov511_i2c_write(dev, 0x11, 4); /* check */
-			} else {
-				ov511_i2c_write(dev, 0x11, 6); /* check */
-			}
-		}
-
-		ov511_reg_write(dev, 0x14, 0x00);	/* Pixel divisor */
-		ov511_reg_write(dev, 0x15, 0x00);	/* Line divisor */
-
-		/* FIXME?? Shouldn't below be true only for YUV420? */
-		ov511_reg_write(dev, 0x18, 0x03);	/* YUV420/422, YFIR */
-
-		ov511_i2c_write(dev, 0x12, 0x24);	/* Common A */
-		ov511_i2c_write(dev, 0x14, 0x04);	/* Common C */
-
-		/* 7620 doesn't have register 0x35, so play it safe */
-		if (ov511->sensor != SEN_OV7620)
-			ov511_i2c_write(dev, 0x35, 0x9e);
-#endif
+	if (sub_flag) {
+		ov511_i2c_write(dev, 0x17, hwsbase+(ov511->subx>>2));
+		ov511_i2c_write(dev, 0x18, hwebase+((ov511->subx+ov511->subw)>>2));
+		ov511_i2c_write(dev, 0x19, 0x5+(ov511->suby>>1));
+		ov511_i2c_write(dev, 0x1a, 0x5+((ov511->suby+ov511->subh)>>1));
+	} else {
+		ov511_i2c_write(dev, 0x17, hwsbase);
+		ov511_i2c_write(dev, 0x18, hwebase + (640>>2));
+		ov511_i2c_write(dev, 0x19, 0x5);
+		ov511_i2c_write(dev, 0x1a, 5 + (480>>1));
+	}
 
 	for (i = 0; mlist[i].width; i++) {
-		if (width != mlist[i].width ||
-		    height != mlist[i].height ||
-		    mode != mlist[i].mode)
+		int lncnt, pxcnt, clock;
+
+		if (width != mlist[i].width || height != mlist[i].height)
 			continue;
 
-		ov511_reg_write(dev, 0x12, mlist[i].pxcnt);
-		ov511_reg_write(dev, 0x13, mlist[i].lncnt);
+		if (!mlist[i].color && mode != VIDEO_PALETTE_GREY)
+			continue;
+
+		/* Here I'm assuming that snapshot size == image size.
+		 * I hope that's always true. --claudio
+		 */
+		pxcnt = sub_flag ? (ov511->subw >> 3) - 1 : mlist[i].pxcnt;
+		lncnt = sub_flag ? (ov511->subh >> 3) - 1 : mlist[i].lncnt;
+
+		ov511_reg_write(dev, 0x12, pxcnt);
+		ov511_reg_write(dev, 0x13, lncnt);
 		ov511_reg_write(dev, 0x14, mlist[i].pxdv);
 		ov511_reg_write(dev, 0x15, mlist[i].lndv);
 		ov511_reg_write(dev, 0x18, mlist[i].m420);
 
 		/* Snapshot additions */
-		ov511_reg_write(dev, 0x1a, mlist[i].s_pxcnt);
-		ov511_reg_write(dev, 0x1b, mlist[i].s_lncnt);
-                ov511_reg_write(dev, 0x1c, mlist[i].s_pxdv);
-                ov511_reg_write(dev, 0x1d, mlist[i].s_lndv);
+		ov511_reg_write(dev, 0x1a, pxcnt);
+		ov511_reg_write(dev, 0x1b, lncnt);
+                ov511_reg_write(dev, 0x1c, mlist[i].pxdv);
+                ov511_reg_write(dev, 0x1d, mlist[i].lndv);
 
-		ov511_i2c_write(dev, 0x11, mlist[i].clock); /* check */
+		/* Calculate and set the clock divisor */
+		clock = ((sub_flag ? ov511->subw * ov511->subh : width * height)
+			* (mlist[i].color ? 3 : 2) / 2) / 66000;
+		ov511_i2c_write(dev, 0x11, clock);
 
+#ifdef OV511_GBR422
+		ov511_i2c_write(dev, 0x12, mlist[i].common_A | 0x08);
+#else
 		ov511_i2c_write(dev, 0x12, mlist[i].common_A);
+#endif
 		ov511_i2c_write(dev, 0x14, mlist[i].common_C);
 
 		/* 7620 doesn't have register 0x35, so play it safe */
@@ -1020,20 +973,20 @@ ov511_mode_init_regs(struct usb_ov511 *ov511,
 		break;
 	}
 
-	if (mlist[i].width == 0) {
-		err("Unknown mode (%d, %d): %d", width, height, mode);
-		rc = -EINVAL;
-	}
-
 	if (ov511_restart(ov511->dev) < 0)
 		return -EIO;
+
+	if (mlist[i].width == 0) {
+		err("Unknown mode (%d, %d): %d", width, height, mode);
+		return -EINVAL;
+	}
 
 #ifdef OV511_DEBUG
 	if (debug >= 5)
 		ov511_dump_i2c_regs(dev);
 #endif
 
-	return rc;
+	return 0;
 }
 
 /**********************************************************************
@@ -1115,7 +1068,7 @@ ov511_move_420_block(int yTL, int yTR, int yBL, int yBR, int u, int v,
  *      0  1 ...  7    64  65 ...  71   ...  192 193 ... 199
  *      8  9 ... 15    72  73 ...  79        200 201 ... 207
  *           ...              ...                    ...
- *     56 57 ... 63   120 121     127        248 249 ... 255
+ *     56 57 ... 63   120 121 ... 127   ...  248 249 ... 255
  *
  * Note that the U and V data in one segment represents a 16 x 16 pixel
  * area, but the Y data represents a 32 x 8 pixel area.
@@ -1131,6 +1084,57 @@ ov511_move_420_block(int yTL, int yTR, int yBL, int yBR, int u, int v,
 #define WDIV (256/HDIV)
 
 #undef OV511_DUMPPIX
+
+#ifdef OV511_GBR422
+static void
+ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
+		       int iOutY, int iOutUV, int iHalf, int iWidth)    			    
+{
+	int k, l, m;
+	unsigned char *pIn;
+	unsigned char *pOut, *pOut1;
+
+	pIn = pIn0;
+	pOut = pOut0 + iOutUV + (force_rgb ? 2 : 0);
+		
+	for (k = 0; k < 8; k++) {
+		pOut1 = pOut;
+		for (l = 0; l < 8; l++) {
+			*pOut1 = *(pOut1 + 3) = *(pOut1 + iWidth*3) =
+				*(pOut1 + iWidth*3 + 3) = *pIn++;
+			pOut1 += 6;
+		}
+		pOut += iWidth*3*2;
+	}
+
+	pIn = pIn0 + 64;
+	pOut = pOut0 + iOutUV + (force_rgb ? 0 : 2);
+	for (k = 0; k < 8; k++) {
+		pOut1 = pOut;
+		for (l = 0; l < 8; l++) {
+			*pOut1 = *(pOut1 + 3) = *(pOut1 + iWidth*3) =
+				*(pOut1 + iWidth*3 + 3) = *pIn++;
+			pOut1 += 6;
+		}
+		pOut += iWidth*3*2;
+	}
+
+	pIn = pIn0 + 128;
+	pOut = pOut0 + iOutY + 1;
+	for (k = 0; k < 4; k++) {
+		pOut1 = pOut;
+		for (l = 0; l < 8; l++) {
+			for (m = 0; m < 8; m++) {
+				*pOut1 = *pIn++;
+				pOut1 += 3;
+			}
+			pOut1 += (iWidth - 8) * 3;
+		}
+		pOut += 8 * 3;
+	}
+}
+
+#else
 
 static void
 ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
@@ -1225,6 +1229,7 @@ ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
 	}
 #endif
 }
+#endif
 
 /*
  * For 640x480 RAW BW images, data shows up in 1200 256 byte segments.
@@ -1252,7 +1257,7 @@ ov511_parse_data_grey(unsigned char *pIn0, unsigned char *pOut0,
 			for (m = 0; m < 8; m++) {
 				*pOut1++ = *pIn++;
 			}
-			pOut1 += iWidth - WDIV;
+			pOut1 += iWidth - 8;
 		}
 		pOut += 8;
 	}
@@ -1350,12 +1355,10 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 
 		/* Frame end */
 		if (cdata[8] & 0x80) {
-#if 0
 			struct timeval *ts;
 
 			ts = (struct timeval *)(frame->data + MAX_FRAME_SIZE);
-		 	do_gettimeofday (ts);
-#endif
+			do_gettimeofday (ts);
 
 		 	PDEBUG(4, "Frame end, curframe = %d, packnum=%d, hw=%d, vw=%d",
 				ov511->curframe, (int)(cdata[ov511->packet_size - 1]),
@@ -1456,9 +1459,9 @@ check_middle:
 			}
 
 			/* 
-			 * iY counts segment lines
-			 * jY counts segment columns
-			 * iOutY is the offset (in bytes) of the segment upper left corner
+			 * i counts segment lines
+			 * j counts segment columns
+			 * iOut is the offset (in bytes) of the upper left corner
 			 */
 			iY = iSegY / (frame->width / WDIV);
 			jY = iSegY - iY * (frame->width / WDIV);
@@ -1467,11 +1470,15 @@ check_middle:
 			jUV = iSegUV - iUV * (frame->width / WDIV * 2);
 			iOutUV = (iUV*HDIV*2*frame->width + jUV*WDIV/2) * (frame->depth >> 3);
 
-			if (frame->format == VIDEO_PALETTE_GREY)
+			switch (frame->format) {
+			case VIDEO_PALETTE_GREY:
 				ov511_parse_data_grey (pData, pOut, iOutY, frame->width);
-			else if (frame->format == VIDEO_PALETTE_RGB24)
+				break;
+			case VIDEO_PALETTE_RGB24:
 				ov511_parse_data_rgb24 (pData, pOut, iOutY, iOutUV,
 					iY & 1, frame->width);
+				break;
+			}
 
 			pData = &cdata[iPix];
 		}
@@ -1480,8 +1487,7 @@ check_middle:
 		if (frame->segment < frame->width * frame->height / 256) {
 			ov511->scratchlen = (ov511->packet_size - 1) - iPix;
 			if (ov511->scratchlen < frame->segsize)
-				memmove(ov511->scratch, pData,
-					ov511->scratchlen);
+				memmove(ov511->scratch, pData, ov511->scratchlen);
 			else
 				ov511->scratchlen = 0;
 		}
@@ -1677,25 +1683,23 @@ static int ov511_new_frame(struct usb_ov511 *ov511, int framenum)
 
 static int ov511_open(struct video_device *dev, int flags)
 {
-	int err = -EBUSY;
 	struct usb_ov511 *ov511 = (struct usb_ov511 *)dev;
-	int i;
+	int i, err = 0;
 
+	MOD_INC_USE_COUNT;
 	PDEBUG(4, "opening");
-
 	down(&ov511->lock);
 
-	if (ov511->user) {
-		up(&ov511->lock);
-		return -EBUSY;
-	}
+	err = -EBUSY;
+	if (ov511->user) 
+		goto out;
 
 	err = -ENOMEM;
 
 	/* Allocate memory for the frame buffers */
 	ov511->fbuf = rvmalloc(OV511_NUMFRAMES * MAX_DATA_SIZE);
 	if (!ov511->fbuf)
-		return err;
+		goto out;
 
 	ov511->sub_flag = 0;
 
@@ -1710,7 +1714,7 @@ static int ov511_open(struct video_device *dev, int flags)
 open_free_ret:
 			while (--i) kfree(ov511->sbuf[i].data);
 			rvfree(ov511->fbuf, 2 * MAX_DATA_SIZE);
-			return err;
+			goto out;
 		}	
 		PDEBUG(4, "sbuf[%d] @ %p", i, ov511->sbuf[i].data);
 	}
@@ -1720,11 +1724,14 @@ open_free_ret:
 		goto open_free_ret;
 
 	ov511->user++;
+
+out:
 	up(&ov511->lock);
 
-	MOD_INC_USE_COUNT;
+	if (err)
+		MOD_DEC_USE_COUNT;
 
-	return 0;
+	return err;
 }
 
 static void ov511_close(struct video_device *dev)
@@ -1736,8 +1743,6 @@ static void ov511_close(struct video_device *dev)
 	
 	down(&ov511->lock);	
 	ov511->user--;
-
-	MOD_DEC_USE_COUNT;
 
 	ov511_stop_isoc(ov511);
 
@@ -1751,6 +1756,9 @@ static void ov511_close(struct video_device *dev)
 		video_unregister_device(&ov511->vdev);
 		kfree(ov511);
 	}
+
+	MOD_DEC_USE_COUNT;
+
 }
 
 static int ov511_init_done(struct video_device *dev)
@@ -1887,18 +1895,11 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 			return -EINVAL;
 		if (vc.decimation)
 			return -EINVAL;
-#if 0
-		vc.x /= 4;
-		vc.x *= 4;
-		vc.y /= 2;
-		vc.y *= 2;
-		vc.width /= 32;
-		vc.width *= 32;
-#else
+
 		vc.x &= ~3L;
 		vc.y &= ~1L;
 		vc.y &= ~31L;
-#endif
+
 		if (vc.width == 0)
 			vc.width = 32;
 
@@ -1989,6 +1990,7 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 	case VIDIOCMCAPTURE:
 	{
 		struct video_mmap vm;
+		int ret;
 
 		if (copy_from_user((void *)&vm, (void *)arg, sizeof(vm)))
 			return -EFAULT;
@@ -2017,8 +2019,12 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 			   before changing modes */
 			interruptible_sleep_on(&ov511->wq);
 			if (signal_pending(current)) return -EINTR;
-			ov511_mode_init_regs(ov511, vm.width, vm.height,
+			ret = ov511_mode_init_regs(ov511, vm.width, vm.height,
 				vm.format, ov511->sub_flag);
+#if 0
+			if (ret < 0)
+				return ret;
+#endif
 		}
 
 		ov511->frame[vm.frame].width = vm.width;
@@ -2290,6 +2296,17 @@ static int ov76xx_configure(struct usb_ov511 *ov511)
 	int i, success;
 	int rc;
 
+	/* Lawrence Glaister <lg@jfm.bc.ca> reports:
+	 *
+	 * Register 0x0f in the 7610 has the following effects:
+	 *
+	 * 0x85 (AEC method 1): Best overall, good contrast range
+	 * 0x45 (AEC method 2): Very overexposed
+	 * 0xa5 (spec sheet default): Ok, but the black level is
+	 *	shifted resulting in loss of contrast
+	 * 0x05 (old driver setting): very overexposed, too much
+	 *	contrast
+	 */
 	static struct ov511_regvals aRegvalsNorm7610[] = {
 		{ OV511_I2C_BUS, 0x10, 0xff },
 		{ OV511_I2C_BUS, 0x16, 0x06 },
@@ -2299,16 +2316,16 @@ static int ov76xx_configure(struct usb_ov511 *ov511)
 		{ OV511_I2C_BUS, 0x06, 0x00 },
 		{ OV511_I2C_BUS, 0x12, 0x00 },
 		{ OV511_I2C_BUS, 0x38, 0x81 },
-		{ OV511_I2C_BUS, 0x28, 0x24 }, /* 0c */
+		{ OV511_I2C_BUS, 0x28, 0x24 },	/* 0c */
 		{ OV511_I2C_BUS, 0x05, 0x00 },
-		{ OV511_I2C_BUS, 0x0f, 0x05 },
+		{ OV511_I2C_BUS, 0x0f, 0x85 },	/* lg's setting */
 		{ OV511_I2C_BUS, 0x15, 0x01 },
 		{ OV511_I2C_BUS, 0x20, 0x1c },
 		{ OV511_I2C_BUS, 0x23, 0x2a },
 		{ OV511_I2C_BUS, 0x24, 0x10 },
 		{ OV511_I2C_BUS, 0x25, 0x8a },
 		{ OV511_I2C_BUS, 0x27, 0xc2 },
-		{ OV511_I2C_BUS, 0x29, 0x03 }, /* 91 */
+		{ OV511_I2C_BUS, 0x29, 0x03 },	/* 91 */
 		{ OV511_I2C_BUS, 0x2a, 0x04 },
 		{ OV511_I2C_BUS, 0x2c, 0xfe },
 		{ OV511_I2C_BUS, 0x30, 0x71 },
@@ -2331,7 +2348,7 @@ static int ov76xx_configure(struct usb_ov511 *ov511)
 		{ OV511_I2C_BUS, 0x12, 0x00 },
 		{ OV511_I2C_BUS, 0x28, 0x24 },
 		{ OV511_I2C_BUS, 0x05, 0x00 },
-		{ OV511_I2C_BUS, 0x0f, 0x05 },
+		{ OV511_I2C_BUS, 0x0f, 0x85 },	/* lg's setting */
 		{ OV511_I2C_BUS, 0x15, 0x01 },
 		{ OV511_I2C_BUS, 0x23, 0x00 },
 		{ OV511_I2C_BUS, 0x24, 0x10 },
@@ -2530,9 +2547,6 @@ error:
 	usb_driver_release_interface(&ov511_driver,
 		&dev->actconfig->interface[ov511->iface]);
 
-	kfree(ov511);
-	ov511 = NULL;
-
 	return -EBUSY;	
 }
 
@@ -2570,9 +2584,12 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 	if (interface->bInterfaceSubClass != 0x00)
 		return NULL;
 
+	/* Since code below may sleep, we use this as a lock */
+	MOD_INC_USE_COUNT;
+
 	if ((ov511 = kmalloc(sizeof(*ov511), GFP_KERNEL)) == NULL) {
 		err("couldn't kmalloc ov511 struct");
-		return NULL;
+		goto error;
 	}
 
 	memset(ov511, 0, sizeof(*ov511));
@@ -2610,7 +2627,7 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 	/* Lifeview USB Life TV not supported */
 	if (clist[i].id == 38) {
 		err("This device is not supported yet.");
-		return NULL;
+		goto error;
 	}
 
 	if (clist[i].id == -1) {
@@ -2627,12 +2644,12 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 	if (!ov511_configure(ov511)) {
 		ov511->user = 0;
 		init_MUTEX(&ov511->lock);	/* to 1 == available */
-		return ov511;
 	} else {
 		err("Failed to configure camera");
 		goto error;
 	}
 
+	MOD_DEC_USE_COUNT;
      	return ov511;
 
 error:
@@ -2641,6 +2658,7 @@ error:
 		ov511 = NULL;
 	}
 
+	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -2649,7 +2667,7 @@ static void ov511_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct usb_ov511 *ov511 = (struct usb_ov511 *) ptr;
 
-//	video_unregister_device(&ov511->vdev);
+	MOD_INC_USE_COUNT;
 
 	/* We don't want people trying to open up the device */
 	if (!ov511->user)
@@ -2692,10 +2710,12 @@ static void ov511_disconnect(struct usb_device *dev, void *ptr)
 #endif
 
 	/* Free the memory */
-	if (!ov511->user) {
+	if (ov511 && !ov511->user) {
 		kfree(ov511);
 		ov511 = NULL;
 	}
+
+	MOD_DEC_USE_COUNT;
 }
 
 static struct usb_driver ov511_driver = {

@@ -828,6 +828,7 @@ static int fdomain_pci_bios_detect( int *irq, int *iobase )
 			       PCI_DEVICE_ID_FD_36C70,
 			       pdev)) == NULL)
      return 0;
+   if (pci_enable_device(pdev)) return 0;
        
 #if DEBUG_DETECT
    printk( "scsi: <fdomain> TMC-3260 detect:"
@@ -840,7 +841,7 @@ static int fdomain_pci_bios_detect( int *irq, int *iobase )
    /* We now have the appropriate device function for the FD board so we
       just read the PCI config info from the registers.  */
 
-   pci_base = pdev->resource[0].start;
+   pci_base = pci_resource_start(pdev, 0);
    pci_irq = pdev->irq;
 
    /* Now we have the I/O base address and interrupt from the PCI

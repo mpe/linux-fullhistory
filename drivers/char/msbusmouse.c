@@ -108,7 +108,6 @@ static int release_mouse(struct inode * inode, struct file * file)
 {
 	MS_MSE_INT_OFF();
 	free_irq(mouse_irq, NULL);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -118,13 +117,12 @@ static int open_mouse(struct inode * inode, struct file * file)
 		return -EBUSY;
 
 	outb(MS_MSE_START, MS_MSE_CONTROL_PORT);
-	MOD_INC_USE_COUNT;
 	MS_MSE_INT_ON();	
 	return 0;
 }
 
 static struct busmouse msbusmouse = {
-	MICROSOFT_BUSMOUSE, "msbusmouse", open_mouse, release_mouse, 0
+	MICROSOFT_BUSMOUSE, "msbusmouse", THIS_MODULE, open_mouse, release_mouse, 0
 };
 
 static int __init ms_bus_mouse_init(void)

@@ -381,8 +381,14 @@ static int isdn_tty_countDLE(unsigned char *, int);
 #define MODEM_PARANOIA_CHECK
 #define MODEM_DO_RESTART
 
+#ifdef CONFIG_DEVFS_FS
+static char *isdn_ttyname_ttyI = "isdn/ttyI%d";
+static char *isdn_ttyname_cui = "isdn/cui%d";
+#else
 static char *isdn_ttyname_ttyI = "ttyI";
 static char *isdn_ttyname_cui = "cui";
+#endif
+
 static int bit2si[8] =
 {1, 5, 7, 7, 7, 7, 7, 7};
 static int si2bit[8] =

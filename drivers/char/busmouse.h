@@ -11,6 +11,7 @@
 struct busmouse {
 	int minor;
 	const char *name;
+	struct module *owner;
 	int (*open)(struct inode * inode, struct file * file);
 	int (*release)(struct inode * inode, struct file * file);
 	int init_button_state;

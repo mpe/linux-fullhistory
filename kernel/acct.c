@@ -37,6 +37,10 @@
  *  one race (and leak) in BSD implementation.
  *  OK, that's better. ANOTHER race and leak in BSD variant. There always
  *  is one more bug... 10/11/98, AV.
+ *
+ *	Oh, fsck... Oopsable SMP race in do_process_acct() - we must hold
+ * ->mmap_sem to walk the vma list of current->mm. Nasty, since it leaks
+ * a struct file opened for write. Fixed. 2/6/2000, AV.
  */
 
 #include <linux/config.h>
@@ -66,7 +70,6 @@ int acct_parm[3] = {4, 2, 30};
 /*
  * External references and all of the globals.
  */
-void acct_timeout(unsigned long);
 
 static volatile int acct_active;
 static volatile int acct_needcheck;
@@ -77,7 +80,7 @@ static int do_acct_process(long, struct file *);
 /*
  * Called whenever the timer says to check the free space.
  */
-void acct_timeout(unsigned long unused)
+static void acct_timeout(unsigned long unused)
 {
 	acct_needcheck = 1;
 }
@@ -303,11 +306,14 @@ static int do_acct_process(long exitcode, struct file *file)
 
 	vsize = 0;
 	if (current->mm) {
-		struct vm_area_struct *vma = current->mm->mmap;
+		struct vm_area_struct *vma;
+		down(&current->mm->mmap_sem);
+		vma = current->mm->mmap;
 		while (vma) {
 			vsize += vma->vm_end - vma->vm_start;
 			vma = vma->vm_next;
 		}
+		up(&current->mm->mmap_sem);
 	}
 	vsize = vsize / 1024;
 	ac.ac_mem = encode_comp_t(vsize);

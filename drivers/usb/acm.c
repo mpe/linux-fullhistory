@@ -329,6 +329,7 @@ static int acm_tty_write(struct tty_struct *tty, int from_user, const unsigned c
 
 	if (!ACM_READY(acm)) return -EINVAL;
 	if (acm->writeurb.status == -EINPROGRESS) return 0;
+	if (!count) return 0;
 
 	count = (count > acm->writesize) ? acm->writesize : count;
 

@@ -94,9 +94,9 @@ m8xx_cpm_reset(uint host_page_addr)
 	*/
 	host_buffer = host_page_addr;	/* Host virtual page address */
 	host_end = host_page_addr + PAGE_SIZE;
-	pte = find_pte(&init_mm, host_page_addr);
+	pte = va_to_pte(host_page_addr);
 	pte_val(*pte) |= _PAGE_NO_CACHE;
-	flush_tlb_page(current->mm->mmap, host_buffer);
+	flush_tlb_page(init_mm.mmap, host_buffer);
 
 	/* Tell everyone where the comm processor resides.
 	*/

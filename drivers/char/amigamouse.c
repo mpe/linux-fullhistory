@@ -151,7 +151,6 @@ static int release_mouse(struct inode * inode, struct file * file)
 #if AMIGA_OLD_INT
 	AMI_MSE_INT_OFF();
 #endif
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -162,10 +161,6 @@ static int release_mouse(struct inode * inode, struct file * file)
 
 static int open_mouse(struct inode * inode, struct file * file)
 {
-	/* Lock module first - request_irq might sleep */
-	
-	MOD_INC_USE_COUNT;
-	
 	/*
 	 *  use VBL to poll mouse deltas
 	 */
@@ -173,7 +168,6 @@ static int open_mouse(struct inode * inode, struct file * file)
 	if(request_irq(IRQ_AMIGA_VERTB, mouse_interrupt, 0,
 	               "Amiga mouse", mouse_interrupt)) {
 		printk(KERN_INFO "Installing Amiga mouse failed.\n");
-		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -184,7 +178,7 @@ static int open_mouse(struct inode * inode, struct file * file)
 }
 
 static struct busmouse amigamouse = {
-	AMIGAMOUSE_MINOR, "amigamouse", open_mouse, release_mouse, 7
+	AMIGAMOUSE_MINOR, "amigamouse", THIS_MODULE, open_mouse, release_mouse, 7
 };
 
 static int __init amiga_mouse_init(void)

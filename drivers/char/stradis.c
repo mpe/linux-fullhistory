@@ -2055,10 +2055,13 @@ static int configure_saa7146(struct pci_dev *dev, int num)
 	saa->id = dev->device;
 	saa->irq = dev->irq;
 	saa->video_dev.minor = -1;
-	saa->saa7146_adr = dev->resource[0].start;
+	saa->saa7146_adr = pci_resource_start(dev, 0);
 	pci_read_config_byte(dev, PCI_CLASS_REVISION, &saa->revision);
-	saa->saa7146_mem = ioremap(((saa->saa7146_adr) &
-		PCI_BASE_ADDRESS_MEM_MASK), 0x200);
+
+	saa->saa7146_mem = ioremap(saa->saa7146_adr, 0x200);
+	if (!saa->saa7146_mem)
+		return -EIO;
+
 	memcpy(&(saa->i2c), &saa7146_i2c_bus_template, sizeof(struct i2c_bus));
 	memcpy(&saa->video_dev, &saa_template, sizeof(saa_template));
 	sprintf(saa->i2c.name, "stradis%d", num);

@@ -311,21 +311,6 @@ struct pcnet32_pci_id_info {
     int (*probe1) (unsigned long, unsigned char, int, int, struct pci_dev *);
 };
 
-static struct pcnet32_pci_id_info pcnet32_tbl[] = {
-    { "AMD PCnetPCI series",
-      PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, 0, 0,
-      PCI_USES_IO|PCI_USES_MASTER, PCNET32_TOTAL_SIZE,
-      pcnet32_probe1},
-    { "AMD PCnetPCI series (IBM)",
-      PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, 0x1014, 0x2000,
-      PCI_USES_IO|PCI_USES_MASTER, PCNET32_TOTAL_SIZE,
-      pcnet32_probe1},
-    { "AMD PCnetHome series",
-      PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_PCNETHOME, 0, 0,
-      PCI_USES_IO|PCI_USES_MASTER, PCNET32_TOTAL_SIZE,
-      pcnet32_probe1},
-    {0,}
-};
 
 /*
  * PCI device identifiers for "new style" Linux PCI Device Drivers
@@ -751,7 +736,7 @@ pcnet32_probe1(unsigned long ioaddr, unsigned char irq_line, int shared, int car
     }
 
     if (pcnet32_debug > 0)
-	printk(KERN_INFO, version);
+	printk(KERN_INFO "%s", version);
     
     /* The PCNET32-specific entries in the device structure. */
     dev->open = &pcnet32_open;
@@ -1257,8 +1242,7 @@ pcnet32_rx(struct net_device *dev)
 		lp->stats.rx_errors++;
 	    } else {
 		int rx_in_place = 0;
-                dma_addr_t rx_dma_addr = lp->rx_dma_addr[entry];
-			    
+
 		if (pkt_len > rx_copybreak) {
 		    struct sk_buff *newskb;
 				
@@ -1524,7 +1508,7 @@ static int __init pcnet32_init_module(void)
     /* find the PCI devices */
 #define USE_PCI_REGISTER_DRIVER
 #ifdef USE_PCI_REGISTER_DRIVER
-    if (err = pci_module_init(&pcnet32_driver) < 0 )
+    if ((err = pci_module_init(&pcnet32_driver)) < 0 )
        return err;
 #else
     {

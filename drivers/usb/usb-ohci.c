@@ -527,12 +527,12 @@ static int sohci_unlink_urb (urb_t * urb)
 #ifdef DEBUG
 	urb_print (urb, "UNLINK", 1);
 #endif		  
-
-	usb_dec_dev_use (urb->dev);	
 	
-	if (usb_pipedevice (urb->pipe) == ohci->rh.devnum) 
+	if (usb_pipedevice (urb->pipe) == ohci->rh.devnum) {
+		usb_dec_dev_use(urb->dev);
 		return rh_unlink_urb (urb); /* a request to the virtual root hub */
-	
+	}
+
 	if (urb->hcpriv) { 
 		/* URB active? */
 		if (urb->status == USB_ST_URB_PENDING && !ohci->disabled) {
@@ -548,15 +548,19 @@ static int sohci_unlink_urb (urb_t * urb)
 			urb_priv->ed->state |= ED_URB_DEL;
 			spin_unlock_irqrestore (&usb_ed_lock, flags);
 			if (!(urb->transfer_flags & USB_ASYNC_UNLINK)) {
+				usb_dec_dev_use (urb->dev);	
 				add_wait_queue (&op_wakeup, &wait);
 				current->state = TASK_UNINTERRUPTIBLE;
 				if (!schedule_timeout (HZ / 10)) /* wait until all TDs are deleted */
 					err("unlink URB timeout!");
 				remove_wait_queue (&op_wakeup, &wait); 
 				urb->status = -ENOENT;
-			} else
+			} else {
+				/* usb_dec_dev_use done in dl_del_list() */
 				urb->status = -EINPROGRESS;
+			}
 		} else {
+			usb_dec_dev_use (urb->dev);	
 			urb_rm_priv (urb);
 			if (urb->complete && (urb->transfer_flags & USB_ASYNC_UNLINK)) {
 				urb->complete (urb); 
@@ -1974,7 +1978,7 @@ static int hc_start_ohci (struct pci_dev * dev)
 		return -ENODEV;
 	
 	pci_set_master (dev);
-	mem_base = dev->resource[0].start;
+	mem_base = pci_resource_start(dev, 0);
 	mem_base = (unsigned long) ioremap_nocache (mem_base, 4096);
 
 	if (!mem_base) {

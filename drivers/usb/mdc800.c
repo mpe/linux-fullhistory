@@ -539,17 +539,13 @@ static int mdc800_device_open (struct inode* inode, struct file *file)
 {
 	int retval=0;
 	
-	MOD_INC_USE_COUNT;
-	
 	if (mdc800->state == NOT_CONNECTED)
 	{
-		MOD_DEC_USE_COUNT;
 		return -EBUSY;
 	}
 
 	if (mdc800->open)
 	{
-		MOD_DEC_USE_COUNT;
 		return -EBUSY;
 	}
 
@@ -568,7 +564,6 @@ static int mdc800_device_open (struct inode* inode, struct file *file)
 	if (usb_submit_urb (mdc800->irq_urb))
 	{
 		err ("request USB irq fails (submit_retval=%i urb_status=%i).",retval, mdc800->irq_urb->status);
-		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -598,8 +593,6 @@ static int mdc800_device_release (struct inode* inode, struct file *file)
 	{
 		retval=-EIO;
 	}
-
-	MOD_DEC_USE_COUNT;
 
 	return retval;
 }
@@ -833,6 +826,7 @@ static ssize_t mdc800_device_write (struct file *file, const char *buf, size_t l
 /* File Operations of this drivers */
 static struct file_operations mdc800_device_ops =
 {
+	owner:		THIS_MODULE,
 	read:		mdc800_device_read,
 	write:		mdc800_device_write,
 	open:		mdc800_device_open,

@@ -1957,7 +1957,10 @@ int __init register_PCI(int i, unsigned int bus, unsigned int device_fn)
 	if (!dev)
 		return 0;
 
-	rcktpt_io_addr[i] = dev->resource[0].start;
+	if (pci_enable_device(dev))
+		return 0;
+
+	rcktpt_io_addr[i] = pci_resource_start (dev, 0);
 	switch(dev->device) {
 	case PCI_DEVICE_ID_RP4QUAD:
 		str = "Quadcable";

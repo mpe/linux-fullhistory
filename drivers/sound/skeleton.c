@@ -78,9 +78,9 @@ static int mycard_install(struct pci_dev *pcidev)
 	 *	For the example we will only initialise the MSS
 	 */
 	 	
-	iobase = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
-	mssbase = pcidev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
-	mpubase = pcidev->base_address[2] & PCI_BASE_ADDRESS_IO_MASK;
+	iobase = pci_resource_start(pcidev, 0);
+	mssbase = pci_resource_start(pcidev, 1);
+	mpubase = pci_resource_start(pcidev, 2);
 	
 	/*
 	 *	Reset the board
@@ -160,6 +160,8 @@ int init_mycard(void)
 		
 	while((pcidev = pci_find_device(PCI_VENDOR_MYIDENT, PCI_DEVICE_ID_MYIDENT_MYCARD1, pcidev))!=NULL)
 	{
+		if (pci_enable_device(pcidev))
+			continue;
 		count+=mycard_install(pcidev);
 		if(count)
 			return 0;

@@ -1,4 +1,4 @@
-/* $Id: sunbmac.c,v 1.18 2000/02/18 13:49:21 davem Exp $
+/* $Id: sunbmac.c,v 1.19 2000/06/19 06:24:46 davem Exp $
  * sunbmac.c: Driver for Sparc BigMAC 100baseT ethernet adapters.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -1262,7 +1262,7 @@ static int __init bigmac_probe(void)
 #endif
 
 	if (called)
-		return ENODEV;
+		return -ENODEV;
 	called++;
 
 	for_each_sbus(sbus) {
@@ -1278,7 +1278,7 @@ static int __init bigmac_probe(void)
 		}
 	}
 	if (!cards)
-		return ENODEV;
+		return -ENODEV;
 	return 0;
 }
 

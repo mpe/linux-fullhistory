@@ -1,7 +1,7 @@
 /*
  *   	i2o_lan.h			I2O LAN Class definitions
  *
- *      I2O LAN CLASS OSM       	April 3rd 2000
+ *      I2O LAN CLASS OSM       	May 26th 2000
  *
  *      (C) Copyright 1999, 2000	University of Helsinki,
  *					Department of Computer Science
@@ -23,7 +23,7 @@
 #define I2O_LAN_RX_COPYBREAK	200
 #define I2O_LAN_TX_TIMEOUT 	(1*HZ)
 #define I2O_LAN_TX_BATCH_MODE	2	/* 2=automatic, 1=on, 0=off */
-#define I2O_LAN_EVENT_MASK	0;	/* 0=None, 0xFFC00002=All */
+#define I2O_LAN_EVENT_MASK	0	/* 0=None, 0xFFC00002=All */
 
 /* LAN types */
 #define I2O_LAN_ETHERNET	0x0030
@@ -100,7 +100,7 @@
 #define I2O_LAN_DSC_DEST_ADDRESS_DETECTED	0x0E
 #define I2O_LAN_DSC_DEST_ADDRESS_OMITTED	0x0F
 #define I2O_LAN_DSC_PARTIAL_PACKET_RETURNED	0x10
-#define I2O_LAN_DSC_TEMP_SUSPENDED_STATE	0x11
+#define I2O_LAN_DSC_SUSPENDED			0x11
 
 struct i2o_packet_info {
 	u32 offset : 24;
@@ -143,6 +143,8 @@ struct i2o_lan_local {
 	spinlock_t fbl_lock;
 
 	spinlock_t tx_lock;
+
+	u32 max_size_mc_table;		/* max number of multicast addresses */
 
 	/* LAN OSM configurable parameters are here: */
 

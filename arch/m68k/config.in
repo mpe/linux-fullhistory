@@ -1,6 +1,6 @@
 #
 # For a description of the syntax of this configuration file,
-# see the Configure script.
+# see Documentation/kbuild/config-language.txt.
 #
 
 define_bool CONFIG_UID16 y

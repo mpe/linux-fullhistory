@@ -32,11 +32,11 @@ if { [file readable .config] == 1} then {
 update_define 1 $total_menus 0
 update_mainmenu
 
-button .f0.right.save -anchor w -text "Save and Exit" \
+button .f0.right.save -anchor w -text "Save and Exit" -underline 0\
     -command { catch {exec cp -f .config .config.old}; \
 		writeconfig .config include/linux/autoconf.h; wrapup .wrap }
 
-button .f0.right.quit -anchor w -text "Quit Without Saving" \
+button .f0.right.quit -anchor w -text "Quit Without Saving" -underline 0\
     -command { maybe_exit .maybe }
 
 button .f0.right.load -anchor w -text "Load Configuration from File" \

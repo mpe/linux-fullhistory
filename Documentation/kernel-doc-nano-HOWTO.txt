@@ -57,7 +57,7 @@ format of your choice (for example, 'db2html ...').
 If you want to see man pages instead, you can do this:
 
 $ cd linux
-$ scripts/kernel-doc -man $(find -name '*.c') | split-man.pl /tmp/man
+$ scripts/kernel-doc -man $(find -name '*.c' '*.h') | split-man.pl /tmp/man
 
 Here is split-man.pl:
 
@@ -122,6 +122,25 @@ patterns, which are highlighted appropriately.
 '%CONST' - name of a constant.
 
 Take a look around the source tree for examples.
+
+
+How to make new SGML template files
+-----------------------------------
+
+SGML template files (*.tmpl) are like normal SGML files, except that
+they can contain escape sequences where extracted documentation should
+be inserted.
+
+!E<filename> is replaced by the documentation, in <filename>, for
+functions that are exported using EXPORT_SYMBOL: the function list is
+collected from files listed in Documentation/DocBook/Makefile.
+
+!I<filename> is replaced by the documentation for functions that are
+_not_ exported using EXPORT_SYMBOL.
+
+!F<filename> <function [functions...]> is replaced by the
+documentation, in <filename>, for the functions listed.
+
 
 Tim.
 */ <twaugh@redhat.com>

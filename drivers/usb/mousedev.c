@@ -1,7 +1,7 @@
 /*
- *  mousedev.c  Version 0.1
+ * $Id: mousedev.c,v 1.8 2000/05/28 17:31:36 vojtech Exp $
  *
- *  Copyright (c) 1999 Vojtech Pavlik
+ *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
  *  Input driver to PS/2 or ImPS/2 device driver module.
  *
@@ -138,8 +138,7 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 					
 			list->ready = 1;
 
-			if (list->fasync)
-				kill_fasync(list->fasync, SIGIO, POLL_IN);
+			kill_fasync(&list->fasync, SIGIO, POLL_IN);
 
 			list = list->next;
 		}
@@ -191,7 +190,6 @@ static int mousedev_release(struct inode * inode, struct file * file)
 
 	kfree(list);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -203,12 +201,8 @@ static int mousedev_open(struct inode * inode, struct file * file)
 	if (i > MOUSEDEV_MINORS || !mousedev_table[i])
 		return -ENODEV;
 
-	MOD_INC_USE_COUNT;
-
-	if (!(list = kmalloc(sizeof(struct mousedev_list), GFP_KERNEL))) {
-		MOD_DEC_USE_COUNT;
+	if (!(list = kmalloc(sizeof(struct mousedev_list), GFP_KERNEL)))
 		return -ENOMEM;
-	}
 	memset(list, 0, sizeof(struct mousedev_list));
 
 	list->mousedev = mousedev_table[i];
@@ -311,8 +305,7 @@ static ssize_t mousedev_write(struct file * file, const char * buffer, size_t co
 		list->buffer = list->bufsiz;
 	}
 
-	if (list->fasync)
-		kill_fasync(list->fasync, SIGIO, POLL_IN);
+	kill_fasync(&list->fasync, SIGIO, POLL_IN);
 
 	wake_up_interruptible(&list->mousedev->wait);
 		
@@ -376,6 +369,7 @@ static unsigned int mousedev_poll(struct file *file, poll_table *wait)
 }
 
 struct file_operations mousedev_fops = {
+	owner:		THIS_MODULE,
 	read:		mousedev_read,
 	write:		mousedev_write,
 	poll:		mousedev_poll,
@@ -421,7 +415,7 @@ static struct input_handle *mousedev_connect(struct input_handler *handler, stru
 	if (mousedev_mix.open)
 		input_open_device(&mousedev->handle);
 
-	printk("mouse%d: PS/2 mouse device for input%d\n", minor, dev->number);
+	printk(KERN_INFO "mouse%d: PS/2 mouse device for input%d\n", minor, dev->number);
 
 	return &mousedev->handle;
 }
@@ -459,7 +453,7 @@ static int __init mousedev_init(void)
 	mousedev_mix.minor = MOUSEDEV_MIX;
 	mousedev_mix.devfs = input_register_minor("mice", MOUSEDEV_MIX, MOUSEDEV_MINOR_BASE);
 
-	printk("mice: PS/2 mouse device common for all mice\n");
+	printk(KERN_INFO "mice: PS/2 mouse device common for all mice\n");
 
 	return 0;
 }

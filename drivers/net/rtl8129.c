@@ -353,8 +353,12 @@ static int __init rtl8129_probe(void)
 			continue;
 
 		pdev = pci_find_slot(pci_bus, pci_device_fn);
-		ioaddr = pdev->resource[0].start;
+
+		ioaddr = pci_resource_start(pdev, 0);
 		irq = pdev->irq;
+
+		if (pci_enable_device(pdev))
+			continue;
 
 		if ((pci_tbl[chip_idx].flags & PCI_USES_IO) &&
 			check_region(ioaddr, pci_tbl[chip_idx].io_size))

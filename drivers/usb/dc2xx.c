@@ -82,8 +82,8 @@
 
 /* table of cameras that work through this driver */
 static const struct camera {
-	short		idVendor;
-	short		idProduct;
+	unsigned short	idVendor;
+	unsigned short	idProduct;
 	/* plus hooks for camera-specific info if needed */
 } cameras [] = {
 	/* These have the same application level protocol */  
@@ -98,7 +98,7 @@ static const struct camera {
     { 0x040a, 0x0110 },		// Kodak DC-260
     { 0x040a, 0x0111 },		// Kodak DC-265
     { 0x040a, 0x0112 },		// Kodak DC-290
-//  { 0x03f0, 0xffff },		// HP PhotoSmart C500
+    { 0xf003, 0x6002 },		// HP PhotoSmart C500
 
 	/* Other USB devices may well work here too, so long as they
 	 * just stick to half duplex bulk packet exchanges.  That
@@ -284,9 +284,6 @@ static int camera_open (struct inode *inode, struct file *file)
 	}
 
 	dbg ("open"); 
-	
-	/* Keep driver from being unloaded while it's in use */
-	MOD_INC_USE_COUNT;
 
 	camera->isActive = 0;
 	file->private_data = camera;
@@ -306,8 +303,6 @@ static int camera_release (struct inode *inode, struct file *file)
 		kfree (camera);
 	}
 
-	MOD_DEC_USE_COUNT;
-
 	dbg ("close"); 
 
 	return 0;
@@ -319,6 +314,7 @@ static int camera_release (struct inode *inode, struct file *file)
 	 */
 static /* const */ struct file_operations usb_camera_fops = {
 	    /* Uses GCC initializer extension; simpler to maintain */
+	owner:		THIS_MODULE,
 	read:		camera_read,
 	write:		camera_write,
 	open:		camera_open,

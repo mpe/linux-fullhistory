@@ -92,7 +92,6 @@ o	Find the right way to associate drives/luns/busses
 Lan:	
 o	Performance tuning
 o	Test Fibre Channel code
-o	Fix lan_set_mc_list()
 
 Tape:
 o	Anyone seen anything implementing this ?

@@ -181,9 +181,6 @@ int __init es_probe1(struct net_device *dev, int ioaddr)
 		return ENODEV;
 	}
 
-	if (load_8390_module("es3210.c"))
-		return -ENOSYS;
-
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) {
 		printk("es3210.c: Passed a NULL device.\n");
@@ -404,6 +401,9 @@ init_module(void)
 {
 	int this_dev, found = 0;
 
+	if (load_8390_module("es3210.c"))
+		return -ENOSYS;
+
 	for (this_dev = 0; this_dev < MAX_ES_CARDS; this_dev++) {
 		struct net_device *dev = &dev_es3210[this_dev];
 		dev->irq = irq[this_dev];
@@ -415,14 +415,13 @@ init_module(void)
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "es3210.c: No es3210 card found (i/o = 0x%x).\n", io[this_dev]);
 			if (found != 0) {	/* Got at least one. */
-				lock_8390_module();
 				return 0;
 			}
+			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
 	}
-	lock_8390_module();
 	return 0;
 }
 
@@ -441,6 +440,6 @@ cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unlock_8390_module();
+	unload_8390_module();
 }
 #endif /* MODULE */

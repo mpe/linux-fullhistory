@@ -1,5 +1,6 @@
 Currently known (or at least suspected) bugs in parport:
 
-o lp doesn't allow you to read status while printing is in progress.
+o lp doesn't allow you to read status while printing is in progress (is
+  this still true?).
 
-See <URL:http://www.cyberelk.demon.co.uk/parport.html>.
+See <URL:http://people.redhat.com/twaugh/parport/>.

@@ -42,6 +42,9 @@
  *
  * 06-05-2000 added another card. Daniel M. Newman <dmnewman@pobox.com>
  *
+ * 25-05-2000 Added Creative SB AWE64 Gold (CTL00B2). 
+ * 	Pål-Kristian Engstad <engstad@att.net>
+ * 
  */
 
 #include <linux/config.h>
@@ -265,6 +268,11 @@ static struct {
 		0,0,0,0,
 		0,1,1,-1},
 	{"Sound Blaster 16", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0028), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,0,0,
+		0,1,1,-1},
+	{"Sound Blaster 16", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0029), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
 		0,0,0,0,
@@ -341,6 +349,11 @@ static struct {
 		0,1,1,-1},
 	{"Sound Blaster AWE 64 Gold",
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x009E), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0044),
+		0,0,0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 64 Gold",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00B2),
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0044),
 		0,0,0,0,
 		0,1,1,-1},

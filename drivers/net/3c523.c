@@ -417,7 +417,7 @@ int __init elmc_probe(struct net_device *dev)
 	unsigned int size = 0;
 
 	if (MCA_bus == 0) {
-		return ENODEV;
+		return -ENODEV;
 	}
 	/* search through the slots for the 3c523. */
 	slot = mca_find_adapter(ELMC_MCA_ID, 0);
@@ -519,7 +519,7 @@ int __init elmc_probe(struct net_device *dev)
 		printk(KERN_ERR "%s: memprobe, Can't find memory at 0x%lx!\n", dev->name,
 		       dev->mem_start);
 		release_region(dev->base_addr, ELMC_IO_EXTENT);
-		return ENODEV;
+		return -ENODEV;
 	}
 	dev->mem_end = dev->mem_start + size;	/* set mem_end showed by 'ifconfig' */
 

@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_stp.c,v 1.3 2000/05/05 02:17:17 davem Exp $
+ *	$Id: br_stp.c,v 1.4 2000/06/19 10:13:35 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -292,18 +292,19 @@ static void br_topology_change_acknowledged(struct net_bridge *br)
 /* called under bridge lock */
 void br_topology_change_detection(struct net_bridge *br)
 {
-	printk(KERN_INFO "%s: topology change detected, ", br->dev.name);
+	printk(KERN_INFO "%s: topology change detected", br->dev.name);
 
 	if (br_is_root_bridge(br)) {
-		printk("propagating\n");
+		printk(", propagating");
 		br->topology_change = 1;
 		br_timer_set(&br->topology_change_timer, jiffies);
 	} else if (!br->topology_change_detected) {
-		printk("sending tcn bpdu\n");
+		printk(", sending tcn bpdu");
 		br_transmit_tcn(br);
 		br_timer_set(&br->tcn_timer, jiffies);
 	}
 
+	printk("\n");
 	br->topology_change_detected = 1;
 }
 

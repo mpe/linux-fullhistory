@@ -448,7 +448,7 @@ static int corkscrew_scan(struct net_device *dev)
 		goto no_pnp;
 	for(i=0; corkscrew_isapnp_adapters[i].vendor != 0; i++) {
 		struct pci_dev *idev = NULL;
-		int irq, j;
+		int irq;
 		while((idev = isapnp_find_dev(NULL,
 						corkscrew_isapnp_adapters[i].vendor,
 						corkscrew_isapnp_adapters[i].function,
@@ -1427,7 +1427,7 @@ static int boomerang_rx(struct net_device *dev)
 		entry = (++vp->cur_rx) % RX_RING_SIZE;
 	}
 	/* Refill the Rx ring buffers. */
-	for (; vp->dirty_rx < vp->cur_rx; vp->dirty_rx++) {
+	for (; vp->cur_rx - vp->dirty_rx > 0; vp->dirty_rx++) {
 		struct sk_buff *skb;
 		entry = vp->dirty_rx % RX_RING_SIZE;
 		if (vp->rx_skbuff[entry] == NULL) {

@@ -367,7 +367,7 @@ int __init ni52_probe(struct net_device *dev)
 				(inb(base_addr+NI52_MAGIC2) == NI52_MAGICVAL2))
 			return ni52_probe1(dev, base_addr);
 	} else if (base_addr > 0)		/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 #ifdef MODULE
 	printk("%s: no autoprobing allowed for modules.\n",dev->name);
@@ -402,7 +402,7 @@ int __init ni52_probe(struct net_device *dev)
 #endif
 
 	dev->base_addr = base_addr;
-	return ENODEV;
+	return -ENODEV;
 }
 
 static int __init ni52_probe1(struct net_device *dev,int ioaddr)
@@ -414,7 +414,7 @@ static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 
 	if(dev->dev_addr[0] != NI52_ADDR0 || dev->dev_addr[1] != NI52_ADDR1
 		 || dev->dev_addr[2] != NI52_ADDR2)
-		return ENODEV;
+		return -ENODEV;
 
 	printk("%s: NI5210 found at %#3lx, ",dev->name,dev->base_addr);
 
@@ -428,12 +428,12 @@ static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 	if(size != 0x2000 && size != 0x4000)
 	{
 		printk("\n%s: Illegal memory size %d. Allowed is 0x2000 or 0x4000 bytes.\n",dev->name,size);
-		return ENODEV;
+		return -ENODEV;
 	}
 	if(!check586(dev,(char *) dev->mem_start,size))
 	{
 		printk("?memcheck, Can't find memory at 0x%lx with size %d!\n",dev->mem_start,size);
-		return ENODEV;
+		return -ENODEV;
 	}
 #else
 	if(dev->mem_start != 0) /* no auto-mem-probe */
@@ -443,7 +443,7 @@ static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 			size = 0x2000; /* check for 8K mem */
 			if(!check586(dev,(char *) dev->mem_start,size)) {
 				printk("?memprobe, Can't find memory at 0x%lx!\n",dev->mem_start);
-				return ENODEV;
+				return -ENODEV;
 			}
 		}
 	}
@@ -455,7 +455,7 @@ static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 		{
 			if(!memaddrs[i]) {
 				printk("?memprobe, Can't find io-memory!\n");
-				return ENODEV;
+				return -ENODEV;
 			}
 			dev->mem_start = memaddrs[i];
 			size = 0x2000; /* check for 8K mem */

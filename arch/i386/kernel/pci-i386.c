@@ -106,6 +106,7 @@ pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 		reg = PCI_BASE_ADDRESS_0 + 4*resource;
 	} else if (resource == PCI_ROM_RESOURCE) {
 		res->flags |= PCI_ROM_ADDRESS_ENABLE;
+		new |= PCI_ROM_ADDRESS_ENABLE;
 		reg = dev->rom_base_reg;
 	} else {
 		/* Somebody might have asked allocation of a non-standard resource */

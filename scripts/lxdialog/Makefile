@@ -1,20 +1,16 @@
-CC = $(HOSTCC)
-CPP = $(HOSTCC) -E
-
-CFLAGS = $(HOSTCFLAGS) -DLOCALE 
-LDFLAGS = -s -L .
-LDLIBS = -lncurses
+HOSTCFLAGS += -DLOCALE 
+LIBS = -lncurses
 
 ifeq (/usr/include/ncurses/ncurses.h, $(wildcard /usr/include/ncurses/ncurses.h))
-        CFLAGS += -I/usr/include/ncurses -DCURSES_LOC="<ncurses.h>"
+        HOSTCFLAGS += -I/usr/include/ncurses -DCURSES_LOC="<ncurses.h>"
 else
 ifeq (/usr/include/ncurses/curses.h, $(wildcard /usr/include/ncurses/curses.h))
-        CFLAGS += -I/usr/include/ncurses -DCURSES_LOC="<ncurses/curses.h>"
+        HOSTCFLAGS += -I/usr/include/ncurses -DCURSES_LOC="<ncurses/curses.h>"
 else
 ifeq (/usr/include/ncurses.h, $(wildcard /usr/include/ncurses.h))
-        CFLAGS += -DCURSES_LOC="<ncurses.h>"
+        HOSTCFLAGS += -DCURSES_LOC="<ncurses.h>"
 else
-	CFLAGS += -DCURSES_LOC="<curses.h>"
+	HOSTCFLAGS += -DCURSES_LOC="<curses.h>"
 endif
 endif
 endif
@@ -22,16 +18,18 @@ endif
 
 OBJS = checklist.o menubox.o textbox.o yesno.o inputbox.o \
        util.o lxdialog.o msgbox.o
-SRCS = $(OBJS:.o=.c)
 
+%.o: %.c
+	$(HOSTCC) $(HOSTCFLAGS) -c -o $@ $<
 
 all: ncurses lxdialog
 
 lxdialog: $(OBJS)
+	$(HOSTCC) -o lxdialog $(OBJS) $(LIBS)
 
 ncurses:
 	@echo "main() {}" > lxtemp.c
-	@if $(CC) -lncurses lxtemp.c ; then \
+	@if $(HOSTCC) -lncurses lxtemp.c ; then \
 		rm -f lxtemp.c a.out; \
 	else \
 		rm -f lxtemp.c; \

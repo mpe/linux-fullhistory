@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.100 2000/02/27 09:38:12 anton Exp $
+/* $Id: sunlance.c,v 1.101 2000/06/19 06:24:46 davem Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -1502,7 +1502,7 @@ no_link_test:
 fail:
 	if (lp != NULL)
 		lance_free_hwresources(lp);
-	return ENODEV;
+	return -ENODEV;
 }
 
 /* On 4m, find the associated dma for the lance chip */
@@ -1532,7 +1532,7 @@ static int __init sparc_lance_probe(void)
 #endif
 
 	if (called)
-		return ENODEV;
+		return -ENODEV;
 	called++;
 
 	if ((idprom->id_machtype == (SM_SUN4|SM_4_330)) ||
@@ -1542,7 +1542,7 @@ static int __init sparc_lance_probe(void)
 		sdev.irqs[0] = 6;
 		return sparc_lance_init(NULL, &sdev, 0, 0);
 	}
-	return ENODEV;
+	return -ENODEV;
 }
 
 #else /* !CONFIG_SUN4 */
@@ -1562,7 +1562,7 @@ static int __init sparc_lance_probe(void)
 #endif
 
 	if (called)
-		return ENODEV;
+		return -ENODEV;
 	called++;
 
 	for_each_sbus (bus) {
@@ -1593,7 +1593,7 @@ static int __init sparc_lance_probe(void)
 		} /* for each sbusdev */
 	} /* for each sbus */
 	if (!cards)
-		return ENODEV;
+		return -ENODEV;
 	return 0;
 }
 #endif /* !CONFIG_SUN4 */

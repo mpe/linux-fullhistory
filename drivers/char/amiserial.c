@@ -2104,6 +2104,13 @@ int __init rs_init(void)
 	if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(AMI_SERIAL))
 		return -ENODEV;
 
+	/*
+	 *  We request SERDAT and SERPER only, because the serial registers are
+	 *  too spreaded over the custom register space
+	 */
+	if (!request_mem_region(CUSTOM_PHYSADDR+0x30, 4, "amiserial [Paula]"))
+		return -EBUSY;
+
 	init_bh(SERIAL_BH, do_serial_bh);
 
 	IRQ_ports = NULL;
@@ -2254,6 +2261,7 @@ void cleanup_module(void)
 		free_page((unsigned long) tmp_buf);
 		tmp_buf = NULL;
 	}
+	release_mem_region(CUSTOM_PHYSADDR+0x30, 4);
 }
 #endif /* MODULE */
 

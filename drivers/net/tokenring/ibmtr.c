@@ -781,6 +781,9 @@ static int __init trdev_init(struct net_device *dev)
 {
 	struct tok_info *ti=(struct tok_info *)dev->priv;
 
+	/* init the spinlock */
+	spin_lock_init(&ti->lock);
+
 	SET_PAGE(ti->srb_page);
 	ti->open_status		= CLOSED;
 
@@ -845,9 +848,6 @@ static void tok_set_multicast_list(struct net_device *dev)
 static int tok_open(struct net_device *dev)
 {
 	struct tok_info *ti=(struct tok_info *)dev->priv;
-
-	/* init the spinlock */
-	spin_lock_init(&ti->lock);
 
 	if (ti->open_status==CLOSED) tok_init_card(dev);
 
@@ -1750,9 +1750,9 @@ static void tr_rx(struct net_device *dev)
 	/* Copy the payload... */
 	for (;;) {
 		if (IPv4_p)
-			chksum = csum_partial_copy_generic(bus_to_virt(rbufdata), data,
+			chksum = csum_partial_copy_nocheck(bus_to_virt(rbufdata), data,
 						   length < rbuffer_len ? length : rbuffer_len,
-						   chksum, NULL, NULL);
+						   chksum);
 		else
 			isa_memcpy_fromio(data, rbufdata, rbuffer_len);
 		rbuffer = ntohs(isa_readw(rbuffer));

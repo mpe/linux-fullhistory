@@ -173,6 +173,28 @@ static const char * get_qstring( const char * pnt, char ** label )
 
 
 /*
+ * Get a quoted or unquoted string. It is recognized by the first 
+ * non-white character. '"' and '"' are not allowed inside the string.
+ */
+static const char * get_qnqstring( const char * pnt, char ** label )
+{
+    char quote_char;
+
+    while ( *pnt == ' ' || *pnt == '\t' )
+	pnt++;
+
+    if ( *pnt == '\0' )
+	return pnt;
+    quote_char = *pnt;
+    if ( quote_char == '"' || quote_char == '\'' )
+	return get_qstring( pnt, label );
+    else
+	return get_string( pnt, label );
+}
+
+
+
+/*
  * Tokenize an 'if' statement condition.
  */
 static struct condition * tokenize_if( const char * pnt )
@@ -505,6 +527,8 @@ static void tokenize_line( const char * pnt )
 	if ( last_menuoption != NULL )
 	{
 	    pnt = get_qstring(pnt, &cfg->label);
+	    if (cfg->label == NULL)
+		syntax_error( "missing comment text" );
 	    last_menuoption->label = cfg->label;
 	    last_menuoption = NULL;
 	}
@@ -546,7 +570,9 @@ static void tokenize_line( const char * pnt )
     case token_define_string:
 	pnt = get_string( pnt, &buffer );
 	cfg->nameindex = get_varnum( buffer );
-	pnt = get_qstring( pnt, &cfg->value );
+	pnt = get_qnqstring( pnt, &cfg->value );
+	if (cfg->value == NULL)
+	    syntax_error( "missing value" );
 	break;
 
     case token_dep_bool:
@@ -659,7 +685,9 @@ static void tokenize_line( const char * pnt )
 	pnt = get_qstring ( pnt, &cfg->label );
 	pnt = get_string  ( pnt, &buffer );
 	cfg->nameindex = get_varnum( buffer );
-	pnt = get_qstring  ( pnt, &cfg->value );
+	pnt = get_qnqstring  ( pnt, &cfg->value );
+	if (cfg->value == NULL)
+	    syntax_error( "missing initial value" );
 	break;
 
     case token_if:

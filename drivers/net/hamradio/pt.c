@@ -833,7 +833,7 @@ static int pt_probe(struct net_device *dev)
             if (irqval) {
                 printk(KERN_ERR "PT: ERROR: Unable to get IRQ %d (irqval = %d).\n",
                     dev->irq, irqval);
-                return EAGAIN;
+                return -EAGAIN;
             }
         }
 

@@ -33,6 +33,9 @@
 
  History:
 
+ Version 0.23:
+ 	Markus: Sign extension bug fixed by declaring transfer_buffer unsigned
+
  Version 0.22:
  	Markus: Some (brown bag) cleanup in what VIDIOCSTUNER returns, 
 	thanks to Mike Cox for pointing the problem out.
@@ -74,7 +77,7 @@ static void usb_dsbr100_close(struct video_device *dev);
 typedef struct
 {	struct urb readurb,writeurb;
 	struct usb_device *dev;
-	char transfer_buffer[TB_LEN];
+	unsigned char transfer_buffer[TB_LEN];
 	int curfreq;
 	int stereo;
 	int ifnum;

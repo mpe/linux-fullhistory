@@ -93,7 +93,7 @@ int __init hplance_probe(struct net_device *dev)
         }
         /* OK, return success, or ENODEV if we didn't find any cards */
         if (!cards)
-                return ENODEV;
+                return -ENODEV;
         return 0;
 }
 

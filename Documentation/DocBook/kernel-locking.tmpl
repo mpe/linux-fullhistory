@@ -208,7 +208,12 @@
      your task will put itself on the queue, and be woken up when the
      semaphore is released.  This means the CPU will do something
      else while you are waiting, but there are many cases when you
-     simply can't sleep, and so have to use a spinlock instead.
+     simply can't sleep (see <xref linkend="sleeping-things">), and so
+     have to use a spinlock instead.
+   </para>
+   <para>
+     Neither type of lock is recursive: see
+     <xref linkend="techniques-deadlocks">.
    </para>
  
    <sect1 id="uniprocessor">
@@ -430,7 +435,7 @@
 
    <para>
      Hardware interrupts usually communicate with a bottom half,
-     tasklet or softirq.  Frequently this involved putting work in a
+     tasklet or softirq.  Frequently this involves putting work in a
      queue, which the BH/softirq will take out.
    </para>
 
@@ -522,8 +527,8 @@
     <para>
       There is a coding bug where a piece of code tries to grab a
       spinlock twice: it will spin forever, waiting for the lock to
-      be released (spinlocks and writelocks are not re-entrant in
-      Linux).  This is trivial to diagnose: not a
+      be released (spinlocks, rwlocks and semaphores are not
+      recursive in Linux).  This is trivial to diagnose: not a
       stay-up-five-nights-talk-to-fluffy-code-bunnies kind of
       problem.
     </para>
@@ -754,37 +759,15 @@
     </para>
 
     <para>
-      Dropping or gaining a spinlock, and any atomic operation are
-      all defined to act as memory barriers (ie. as per the 
-      <function>mb()</function> macro).
-    </para>
-
-    <para>
-      There is a similar, but unrelated, problem with code like the
-      following:
-    </para>
-
-    <programlisting>
-        if (!(ctrack-&gt;status &amp; IPS_CONFIRMED)) {
-                spin_lock_bh(&amp;ip_conntrack_lock);
-                if (!(ctrack-&gt;status &amp; IPS_CONFIRMED)) {
-                        clean_from_lists(h-&gt;ctrack);
-                        h-&gt;ctrack-&gt;status |= IPS_CONFIRMED;
-                }
-                spin_unlock_bh(&amp;ip_conntrack_lock);
-        }
-    </programlisting>
-
-    <para>
-      In this case, the author has tried to be tricky: knowing that
-      the CONFIRMED bit is set and never reset in the status word,
-      you can test it outside the lock, and frequently avoid
-      grabbing the lock at all.  However, the compiler could cache
-      the value in a register, rather than rereading it once the
-      lock is obtained, creating a subtle race.  The way to get
-      around this is to declare the status field `volatile', or use
-      a temporary volatile pointer to achieve the same effect in
-      this one place.
+      Any atomic operation is defined to act as a memory barrier
+      (ie. as per the <function>mb()</function> macro).  Also,
+      spinlock operations act as partial barriers: operations after
+      gaining a spinlock will never be moved to precede the
+      <function>spin_lock()</function> call, and operations before
+      releasing a spinlock will never be moved after the
+      <function>spin_unlock()</function> call.
+      <!-- Manfred Spraul <manfreds@colorfullife.com>
+           24 May 2000 2.3.99-pre9 -->
     </para>
    </sect1>
 
@@ -911,7 +894,8 @@
 
     <para>
       You can never call the following routines while holding a
-      spinlock, as they may sleep:
+      spinlock, as they may sleep.  This also means you need to be in
+      user context.
     </para>
 
     <itemizedlist>
@@ -952,11 +936,19 @@
 
      <listitem>
       <para>
-        <function>printk()</function>, which can be called from
-        user context, interestingly enough.
+      <function>down_interruptible()</function> and
+      <function>down()</function>
+      </para>
+      <para>
+       There is a <function>down_trylock()</function> which can be
+       used inside interrupt context, as it will not sleep.
+       <function>up()</function> will also never sleep.
       </para>
      </listitem>
     </itemizedlist>
+
+    <function>printk()</function> can be called in
+    <emphasis>any</emphasis> context, interestingly enough.
    </sect1>
 
    <sect1 id="sparc">
@@ -1047,9 +1039,11 @@
       Another common problem is deleting timers which restart
       themselves (by calling <function>add_timer()</function> at the end 
       of their timer function).  Because this is a fairly common case 
-      which is prone to races, the function <function>del_timer_sync()</function> 
-      (<filename class=headerfile>include/linux/timer.h</filename>) is
-      provided to handle this case.  It returns the number of times the timer 
+      which is prone to races, you can put a call to
+      <function>timer_exit()</function> at the very end of your timer function,
+      and user <function>del_timer_sync()</function> 
+      (<filename class=headerfile>include/linux/timer.h</filename>)
+      to handle this case.  It returns the number of times the timer 
       had to be deleted before we finally stopped it from adding itself back 
       in.
     </para>
@@ -1093,8 +1087,8 @@
 
     <para>
       Thanks to Martin Pool, Philipp Rumpf, Stephen Rothwell, Paul
-      Mackerras, Ruedi Aschwanden, Alan Cox for proofreading,
-      correcting, flaming, commenting.
+      Mackerras, Ruedi Aschwanden, Alan Cox, Manfred Spraul and Tim
+      Waugh for proofreading, correcting, flaming, commenting.
     </para>
 
     <para>

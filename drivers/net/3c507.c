@@ -315,7 +315,7 @@ int __init el16_probe(struct net_device *dev)
 	if (base_addr > 0x1ff)	/* Check a single specified location. */
 		return el16_probe1(dev, base_addr);
 	else if (base_addr != 0)
-		return ENXIO;		/* Don't probe at all. */
+		return -ENXIO;		/* Don't probe at all. */
 
 	for (i = 0; netcard_portlist[i]; i++) {
 		int ioaddr = netcard_portlist[i];
@@ -325,7 +325,7 @@ int __init el16_probe(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 
 static int __init el16_probe1(struct net_device *dev, int ioaddr)
@@ -351,7 +351,7 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 		&& inb(ioaddr+2) == 'C' && inb(ioaddr+3) == 'O')
 		;
 	else
-		return ENODEV;
+		return -ENODEV;
 
 	/* Allocate a new 'dev' if needed. */
 	if (dev == NULL)
@@ -370,7 +370,7 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 	irqval = request_irq(irq, &el16_interrupt, 0, "3c507", dev);
 	if (irqval) {
 		printk ("unable to get IRQ %d (irqval=%d).\n", irq, irqval);
-		return EAGAIN;
+		return -EAGAIN;
 	}
 
 	/* We've committed to using the board, and can start filling in *dev. */

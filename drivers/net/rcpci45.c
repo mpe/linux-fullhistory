@@ -205,7 +205,7 @@ static int RCscan(void)
 	    !((pdev = pci_find_slot(pci_bus, pci_device_fn))))
             break;
 	pci_irq_line = pdev->irq;
-	pci_ioaddr = pdev->resource[0].start;
+	pci_ioaddr = pci_resource_start (pdev, 0);
 
 #ifdef RCDEBUG
         printk("rc: Found RedCreek PCI adapter\n");
@@ -214,6 +214,8 @@ static int RCscan(void)
         printk("rc: pci_ioaddr = 0x%x\n", pci_ioaddr);
 #endif
 
+	if (pci_enable_device(pdev))
+		break;
 	pci_set_master(pdev);
 
         if (!RCfound_device(pci_ioaddr, pci_irq_line,

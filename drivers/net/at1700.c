@@ -206,7 +206,7 @@ int at1700_probe(struct net_device *dev)
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return at1700_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	for (i = 0; at1700_probe_list[i]; i++) {
 		int ioaddr = at1700_probe_list[i];
@@ -215,7 +215,7 @@ int at1700_probe(struct net_device *dev)
 		if (at1700_probe1(dev, ioaddr) == 0)
 			return 0;
 	}
-	return ENODEV;
+	return -ENODEV;
 }
 #endif
 

@@ -573,10 +573,9 @@ static int dabusb_open (struct inode *inode, struct file *file)
 	int devnum = MINOR (inode->i_rdev);
 	pdabusb_t s;
 
-	if (devnum < DABUSB_MINOR || devnum > (DABUSB_MINOR + NRDABUSB))
+	if (devnum < DABUSB_MINOR || devnum >= (DABUSB_MINOR + NRDABUSB))
 		return -EIO;
 
-	MOD_INC_USE_COUNT;
 	s = &dabusb[devnum - DABUSB_MINOR];
 
 	dbg("dabusb_open");
@@ -586,20 +585,17 @@ static int dabusb_open (struct inode *inode, struct file *file)
 		up (&s->mutex);
 
 		if (file->f_flags & O_NONBLOCK) {
-			MOD_DEC_USE_COUNT;
 			return -EBUSY;
 		}
 		schedule_timeout (HZ / 2);
 
 		if (signal_pending (current)) {
-			MOD_DEC_USE_COUNT;
 			return -EAGAIN;
 		}
 		down (&s->mutex);
 	}
 	if (usb_set_interface (s->usbdev, _DABUSB_IF, 1) < 0) {
 		err("set_interface failed");
-		MOD_DEC_USE_COUNT;
 		return -EINVAL;
 	}
 	s->opened = 1;
@@ -629,7 +625,6 @@ static int dabusb_release (struct inode *inode, struct file *file)
 	else
 		wake_up (&s->remove_ok);
 
-	MOD_DEC_USE_COUNT;
 	s->opened = 0;
 	return 0;
 }
@@ -692,6 +687,7 @@ static int dabusb_ioctl (struct inode *inode, struct file *file, unsigned int cm
 
 static struct file_operations dabusb_fops =
 {
+	owner:		THIS_MODULE,
 	llseek:		dabusb_llseek,
 	read:		dabusb_read,
 	ioctl:		dabusb_ioctl,

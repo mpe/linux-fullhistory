@@ -149,18 +149,10 @@ static void start_proc( char * label, int menu_num, int toplevel )
     printf( "\tpack $w.m -pady 10 -side top -padx 10\n" );
     printf( "\twm title $w \"%s\" \n\n", label );
 
-    /*
-     * Attach the "Prev", "Next" and "OK" buttons at the end of the window.
-     */
-    printf( "\tframe $w.f\n" );
-    if ( toplevel )
-	printf( "\tbutton $w.f.back -text \"Main Menu\" \\\n" );
-    else
-	printf( "\tbutton $w.f.back -text \"OK\" \\\n" );
-    printf( "\t\t-width 15 -command \"catch {focus $oldFocus}; destroy $w; unregister_active %d\"\n",
-	menu_num );
-    printf( "\tbutton $w.f.next -text \"Next\" \\\n" );
-    printf( "\t\t-width 15 -command \"catch {focus $oldFocus}; " );
+    printf( "\tbind $w <Escape> \"catch {focus $oldFocus}; destroy $w; unregister_active %d; break\"\n", menu_num);
+
+    printf("\tset nextscript ");
+    printf("\"catch {focus $oldFocus}; " );
     /* 
      * We are checking which windows should be destroyed and which are 
      * common parrents with the next one. Remember that menu_num field
@@ -182,13 +174,48 @@ static void start_proc( char * label, int menu_num, int toplevel )
     }
     printf( "menu%d .menu%d \\\"$title\\\"\"\n",
 	menu_num+1, menu_num+1 );
-    if ( menu_num == tot_menu_num )
-	printf( "\t$w.f.next configure -state disabled\n" );
-    printf( "\tbutton $w.f.prev -text \"Prev\" \\\n" );
+
+    /*
+     * Attach the "Prev", "Next" and "OK" buttons at the end of the window.
+     */
+    printf( "\tframe $w.f\n" );
+    if ( toplevel )
+	printf( "\tbutton $w.f.back -text \"Main Menu\" \\\n" );
+    else
+	printf( "\tbutton $w.f.back -text \"OK\" \\\n" );
+    printf( "\t\t-width 15 -command \"catch {focus $oldFocus}; destroy $w; unregister_active %d\"\n",
+	menu_num );
+    printf( "\tbutton $w.f.next -text \"Next\" -underline 0\\\n" );
+    printf( "\t\t-width 15 -command $nextscript\n");
+
+    if ( menu_num == tot_menu_num ) {
+      printf( "\t$w.f.next configure -state disabled\n" );
+        /* 
+         *  this is a bit hackish but Alt-n must be rebound
+         *  otherwise if the user press Alt-n on the last menu
+         *  it will give him/her the next menu of one of the 
+         *  previous options
+         */
+        printf( "\tbind all <Alt-n> \"puts \\\"no more menus\\\" \"\n");
+    }
+    else
+    {
+        /*
+         * I should be binding to $w not all - but if I do nehat I get the error "unknown path"
+         */
+        printf( "\tbind all <Alt-n> $nextscript\n");
+    }
+    printf( "\tbutton $w.f.prev -text \"Prev\" -underline 0\\\n" );
     printf( "\t\t-width 15 -command \"catch {focus $oldFocus}; destroy $w; unregister_active %d; menu%d .menu%d \\\"$title\\\"\"\n",
 	menu_num, menu_num-1, menu_num-1 );
-    if ( menu_num == 1 )
+    if ( menu_num == 1 ) {
 	printf( "\t$w.f.prev configure -state disabled\n" );
+    }
+    else
+    {
+        printf( "\tbind $w <Alt-p> \"catch {focus $oldFocus}; destroy $w; unregister_active %d; menu%d .menu%d \\\"$title\\\";break\"\n",
+            menu_num, menu_num-1, menu_num-1 );
+    }  
     printf( "\tpack $w.f.back $w.f.next $w.f.prev -side left -expand on\n" );
     printf( "\tpack $w.f -pady 10 -side bottom -anchor w -fill x\n" );
 
@@ -215,6 +242,12 @@ static void start_proc( char * label, int menu_num, int toplevel )
     printf( "\t\t-relief flat -borderwidth 0 -yscrollcommand \"$w.config.vscroll set\" \\\n" );
     printf( "\t\t-width [expr [winfo screenwidth .] * 1 / 2] \n" );
     printf( "\tframe $w.config.f\n" );
+    printf( "\tbind $w <Key-Down> \"$w.config.canvas yview scroll  1 unit;break;\"\n");
+    printf( "\tbind $w <Key-Up> \"$w.config.canvas yview scroll  -1 unit;break;\"\n");
+    printf( "\tbind $w <Key-Next> \"$w.config.canvas yview scroll  1 page;break;\"\n");
+    printf( "\tbind $w <Key-Prior> \"$w.config.canvas yview scroll  -1 page;break;\"\n");
+    printf( "\tbind $w <Key-Home> \"$w.config.canvas yview moveto 0;break;\"\n");
+    printf( "\tbind $w <Key-End> \"$w.config.canvas yview moveto 1 ;break;\"\n");
     printf( "\tpack $w.config.canvas -side right -fill y\n" );
     printf("\n\n");
 }
@@ -974,7 +1007,7 @@ static void end_proc( struct kconfig * scfg, int menu_num )
     }
     else
 	printf( "\tset winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]\n" );
-    printf( "\twm geometry $w +$winx+$winy\n" );
+    printf( "\tif {[winfo exists $w]} then {wm geometry $w +$winx+$winy}\n" );
 
     /*
      * Now that the whole window is in place, we need to wait for an "update"
@@ -987,7 +1020,7 @@ static void end_proc( struct kconfig * scfg, int menu_num )
      * around frames.  Sigh.
      */
     printf( "\tupdate idletasks\n" );
-    printf( "\t$w.config.canvas create window 0 0 -anchor nw -window $w.config.f\n\n" );
+    printf( "\tif {[winfo exists $w]} then  {$w.config.canvas create window 0 0 -anchor nw -window $w.config.f\n\n" );
     printf( "\t$w.config.canvas configure \\\n" );
     printf( "\t\t-width [expr [winfo reqwidth $w.config.f] + 1]\\\n" );
     printf( "\t\t-scrollregion \"-1 -1 [expr [winfo reqwidth $w.config.f] + 1] \\\n" );
@@ -1005,17 +1038,17 @@ static void end_proc( struct kconfig * scfg, int menu_num )
     printf( "\t\t$w.config.canvas configure -height $canvtotal\n" );
     printf( "\t} else {\n" );
     printf( "\t\t$w.config.canvas configure -height [expr $scry - $winy]\n" );
-    printf( "\t}\n" );
+    printf( "\t\t}\n\t}\n" );
 
     /*
      * Limit the min/max window size.  Height can vary, but not width,
      * because of the limitations of canvas and our laziness.
      */
     printf( "\tupdate idletasks\n" );
-    printf( "\twm maxsize $w [winfo width $w] [winfo screenheight $w]\n" );
+    printf( "\tif {[winfo exists $w]} then {\n\twm maxsize $w [winfo width $w] [winfo screenheight $w]\n" );
     printf( "\twm minsize $w [winfo width $w] 100\n\n" );
     printf( "\twm deiconify $w\n" );
-    printf( "}\n\n\n" );
+    printf( "}\n}\n\n" );
 
     /*
      * Now we generate the companion procedure for the menu we just
@@ -1248,7 +1281,7 @@ void dump_tk_script( struct kconfig * scfg )
 		printf( "\tminimenu $w.config.f %d %d \"%s\" tmpvar_%d %s\n",
 		    cfg->menu_number, cfg->menu_line, cfg->label,
 		    -(cfg->nameindex), vartable[cfg->next->nameindex].name );
-		printf( "\tmenu $w.config.f.x%d.x.menu -title \"%s\"\n",
+		printf( "\tmenu $w.config.f.x%d.x.menu -tearoffcommand \"menutitle \\\"%s\\\"\"\n",
 		    cfg->menu_line, cfg->label );
 		cfg1 = cfg;
 		opt_count = 0;

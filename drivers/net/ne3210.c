@@ -102,13 +102,13 @@ int __init ne3210_probe(struct net_device *dev)
 	if (ioaddr > 0x1ff)		/* Check a single specified location. */
 		return ne3210_probe1(dev, ioaddr);
 	else if (ioaddr > 0)		/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	if (!EISA_bus) {
 #if NE3210_DEBUG & NE3210_D_PROBE
 		printk("ne3210-debug: Not an EISA bus. Not probing high ports.\n");
 #endif
-		return ENXIO;
+		return -ENXIO;
 	}
 
 	/* EISA spec allows for up to 16 slots, but 8 is typical. */
@@ -119,7 +119,7 @@ int __init ne3210_probe(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 
 int __init ne3210_probe1(struct net_device *dev, int ioaddr)
@@ -140,7 +140,7 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 /*	Check the EISA ID of the card. */
 	eisa_id = inl(ioaddr + NE3210_ID_PORT);
 	if (eisa_id != NE3210_ID) {
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	
@@ -153,12 +153,9 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 		for(i = 0; i < ETHER_ADDR_LEN; i++)
 			printk(" %02x", inb(ioaddr + NE3210_SA_PROM + i));
 		printk(" (invalid prefix).\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 #endif
-
-	if (load_8390_module("ne3210.c"))
-		return -ENOSYS;
 
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) {
@@ -194,7 +191,7 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		kfree(dev->priv);
 		dev->priv = NULL;
-		return EAGAIN;
+		return -EAGAIN;
 	}
 
 	if (dev->mem_start == 0) {
@@ -223,7 +220,7 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 			free_irq(dev->irq, dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
-			return EINVAL;
+			return -EINVAL;
 		}
 		dev->mem_start = (unsigned long)ioremap(dev->mem_start, NE3210_STOP_PG*0x100);
 		if (dev->mem_start == 0) {
@@ -233,7 +230,7 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 			free_irq(dev->irq, dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
-			return EAGAIN;
+			return -EAGAIN;
 		}
 		ei_status.reg0 = 1;	/* Use as remap flag */
 		printk("ne3210.c: remapped %dkB card memory to virtual address %#lx\n",
@@ -384,6 +381,9 @@ int init_module(void)
 {
 	int this_dev, found = 0;
 
+	if (load_8390_module("ne3210.c"))
+		return -ENOSYS;
+
 	for (this_dev = 0; this_dev < MAX_NE3210_CARDS; this_dev++) {
 		struct net_device *dev = &dev_ne3210[this_dev];
 		dev->irq = irq[this_dev];
@@ -395,14 +395,13 @@ int init_module(void)
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "ne3210.c: No NE3210 card found (i/o = 0x%x).\n", io[this_dev]);
 			if (found != 0) {	/* Got at least one. */
-				lock_8390_module();
 				return 0;
 			}
+			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
 	}
-	lock_8390_module();
 	return 0;
 }
 
@@ -422,7 +421,7 @@ void cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unlock_8390_module();
+	unload_8390_module();
 }
 #endif /* MODULE */
 

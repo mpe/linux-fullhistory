@@ -97,7 +97,7 @@ an MMIO register read.
 #include <asm/io.h>
 
 
-#define RTL8139_VERSION "0.9.5"
+#define RTL8139_VERSION "0.9.7"
 #define RTL8139_MODULE_NAME "8139too"
 #define RTL8139_DRIVER_NAME   RTL8139_MODULE_NAME " Fast Ethernet driver " RTL8139_VERSION
 #define PFX RTL8139_MODULE_NAME ": "
@@ -232,6 +232,7 @@ enum RTL8139_registers {
 	IntrMask = 0x3C,
 	IntrStatus = 0x3E,
 	TxConfig = 0x40,
+	ChipVersion = 0x43,
 	RxConfig = 0x44,
 	Timer = 0x48,		/* A general-purpose counter. */
 	RxMissed = 0x4C,	/* 24 bits valid, write clears. */
@@ -392,8 +393,8 @@ struct ring_info {
 
 typedef enum {
 	CH_8139 = 0,
+	CH_8139_K,
 	CH_8139A,
-	CH_8139A_G,
 	CH_8139B,
 	CH_8130,
 	CH_8139C,
@@ -403,36 +404,36 @@ typedef enum {
 /* directly indexed by chip_t, above */
 const static struct {
 	const char *name;
-	u32 version; /* from RTL8139C docs */
+	u8 version; /* from RTL8139C docs */
 	u32 RxConfigMask; /* should clear the bits supported by this chip */
 } rtl_chip_info[] = {
 	{ "RTL-8139",
-	  0x60000000,
+	  0x40,
+	  0xf0fe0040, /* XXX copied from RTL8139A, verify */
+	},
+	
+	{ "RTL-8139 rev K",
+	  0x60,
 	  0xf0fe0040, /* XXX copied from RTL8139A, verify */
 	},
 	
 	{ "RTL-8139A",
-	  0x70000000,
-	  0xf0fe0040,
-	},
-	
-	{ "RTL-8139A rev. G",
-	  0x70800000,
+	  0x70,
 	  0xf0fe0040,
 	},
 	
 	{ "RTL-8139B",
-	  0x78000000,
+	  0x78,
 	  0xf0fc0040
 	},
 
 	{ "RTL-8130",
-	  0x7C000000,
+	  0x7C,
 	  0xf0fe0040, /* XXX copied from RTL8139A, verify */
 	},
 
 	{ "RTL-8139C",
-	  0x74000000,
+	  0x74,
 	  0xf0fc0040, /* XXX copied from RTL8139B, verify */
 	},
 
@@ -672,7 +673,7 @@ static int __devinit rtl8139_init_board (struct pci_dev *pdev,
 	}
 	
 	/* identify chip attached to board */
-	tmp = RTL_R32 (TxConfig) & TxVersionMask;
+	tmp = RTL_R8 (ChipVersion);
 	for (i = arraysize (rtl_chip_info) - 1; i >= 0; i--)
 		if (tmp == rtl_chip_info[i].version) {
 			tp->chipset = i;
@@ -686,10 +687,8 @@ static int __devinit rtl8139_init_board (struct pci_dev *pdev,
 	tp->chipset = 0;
 
 match:
-	DPRINTK ("chipset id (%d/%d/%d) == %d, '%s'\n",
-		CH_8139,
-		CH_8139A,
-		CH_8139B,
+	DPRINTK ("chipset id (%d) == index %d, '%s'\n",
+		tmp,
 		tp->chipset,
 		rtl_chip_info[tp->chipset].name);
 	
@@ -1144,19 +1143,6 @@ static void rtl8139_hw_start (struct net_device *dev)
 	RTL_W32_F (MAC0 + 0, cpu_to_le32 (*(u32 *) (dev->dev_addr + 0)));
 	RTL_W32_F (MAC0 + 4, cpu_to_le32 (*(u32 *) (dev->dev_addr + 4)));
 
-	/* unlock Config[01234] and BMCR register writes */
-	RTL_W8_F (Cfg9346, Cfg9346_Unlock);
-	udelay (100);
-
-	tp->cur_rx = 0;
-
-	/* init Rx ring buffer DMA address */
-	RTL_W32_F (RxBuf, tp->rx_ring_dma);
-
-	/* init Tx buffer DMA addresses */
-	for (i = 0; i < NUM_TX_DESC; i++)
-		RTL_W32_F (TxAddr0 + (i * 4), tp->tx_bufs_dma + (tp->tx_buf[i] - tp->tx_bufs));
-
 	/* Must enable Tx/Rx before setting transfer thresholds! */
 	RTL_W8_F (ChipCmd, (RTL_R8 (ChipCmd) & ChipCmdClear) |
 			   CmdRxEnb | CmdTxEnb);
@@ -1168,47 +1154,43 @@ static void rtl8139_hw_start (struct net_device *dev)
 	/* Check this value: the documentation for IFG contradicts ifself. */
 	RTL_W32 (TxConfig, (TX_DMA_BURST << 8));
 
-#if 0
-	/* if link status not ok... */
-	if ((RTL_R16 (BasicModeStatus) & (1<<2)) == 0) {
-		printk (KERN_INFO "%s: no link, starting NWay\n", dev->name);
+	/* unlock Config[01234] and BMCR register writes */
+	RTL_W8_F (Cfg9346, Cfg9346_Unlock);
+	udelay (10);
 
-		/* Reset N-Way to chipset defaults */
-		RTL_W16 (BasicModeCtrl, RTL_R16 (BasicModeCtrl) | (1<<15));
-		for (i = 1000; i > 0; i--)
-			if ((RTL_R8 (BasicModeCtrl) & (1<<15)) == 0)
-				break;
-	
-		/* Set N-Way to sane defaults */
-		RTL_W16_F (FIFOTMS, RTL_R16 (FIFOTMS) & ~(1<<7));
-		RTL_W16_F (NWayAdvert, RTL_R16 (NWayAdvert) |
-			  (1<<13)|(1<<8)|(1<<7)|(1<<6)|(1<<5)|(1<<0));
-		RTL_W16_F (BasicModeCtrl, RTL_R16 (BasicModeCtrl) |
-			(1<<13)|(1<<12)|(1<<9)|(1<<8));
-		RTL_W8_F (MediaStatus, RTL_R8 (MediaStatus) | (1<<7) | (1<<6));
-	
-		/* check_duplex() here. */
-		/* XXX writing Config1 here is flat out wrong */
-		/* RTL_W8 (Config1, tp->full_duplex ? 0x60 : 0x20); */
-	}
-#endif
+	tp->cur_rx = 0;
 
-	if (tp->chipset > CH_8139) {
+	if (tp->chipset >= CH_8139A) {
 		tmp = RTL_R8 (Config1) & Config1Clear;
+		tmp |= Cfg1_Driver_Load;
 		tmp |= (tp->chipset == CH_8139B) ? 3 : 1; /* Enable PM/VPD */
 		RTL_W8_F (Config1, tmp);
+	} else {
+		u8 foo = RTL_R8 (Config1) & Config1Clear;
+		RTL_W8 (Config1, tp->full_duplex ? (foo|0x60) : (foo|0x20));
 	}
 
-	if (tp->chipset == CH_8139B) {
+	if (tp->chipset >= CH_8139B) {
 		tmp = RTL_R8 (Config4) & ~(1<<2);
 		/* chip will clear Rx FIFO overflow automatically */
 		tmp |= (1<<7);  
 		RTL_W8 (Config4, tmp);
-	}
 	
-	/* disable magic packet scanning, which is enabled
-	 * when PM is enabled above (Config1) */
-	RTL_W8 (Config3, RTL_R8 (Config3) & ~(1<<5));
+		/* disable magic packet scanning, which is enabled
+		 * when PM is enabled above (Config1) */
+		RTL_W8 (Config3, RTL_R8 (Config3) & ~(1<<5));
+	}
+
+	/* Lock Config[01234] and BMCR register writes */
+	RTL_W8_F (Cfg9346, Cfg9346_Lock);
+	udelay (10);
+
+	/* init Rx ring buffer DMA address */
+	RTL_W32_F (RxBuf, tp->rx_ring_dma);
+
+	/* init Tx buffer DMA addresses */
+	for (i = 0; i < NUM_TX_DESC; i++)
+		RTL_W32_F (TxAddr0 + (i * 4), tp->tx_bufs_dma + (tp->tx_buf[i] - tp->tx_bufs));
 
 	RTL_W32_F (RxMissed, 0);
 
@@ -1216,6 +1198,10 @@ static void rtl8139_hw_start (struct net_device *dev)
 
 	/* no early-rx interrupts */
 	RTL_W16 (MultiIntr, RTL_R16 (MultiIntr) & MultiIntrClear);
+
+	/* make sure RxTx has started */
+	RTL_W8_F (ChipCmd, (RTL_R8 (ChipCmd) & ChipCmdClear) |
+			   CmdRxEnb | CmdTxEnb);
 
 	/* Enable all known interrupts by setting the interrupt mask. */
 	RTL_W16_F (IntrMask, rtl8139_intr_mask);
@@ -1354,6 +1340,7 @@ static void rtl8139_timer (unsigned long data)
 
 	mii_reg5 = mdio_read (dev, tp->phys[0], 5);
 
+#if 0
 	if (!tp->duplex_lock && mii_reg5 != 0xffff) {
 		int duplex = (mii_reg5 & 0x0100)
 		    || (mii_reg5 & 0x01C0) == 0x0040;
@@ -1366,8 +1353,10 @@ static void rtl8139_timer (unsigned long data)
 				tp->phys[0], mii_reg5);
 			RTL_W8 (Cfg9346, Cfg9346_Unlock);
 			RTL_W8 (Config1, tp->full_duplex ? 0x60 : 0x20);
+			RTL_W8 (Cfg9346, Cfg9346_Lock);
 		}
 	}
+#endif
 
 	rtl8139_tune_twister (dev, tp);
 
@@ -1703,8 +1692,8 @@ static void rtl8139_rx_interrupt (struct net_device *dev,
 			} else {
 				eth_copy_and_sum (skb,
 						  &rx_ring[ring_offset + 4],
-						  rx_size, 0);
-				skb_put (skb, rx_size);
+						  rx_size - 4, 0);
+				skb_put (skb, rx_size - 4);
 			}
 			skb->protocol = eth_type_trans (skb, dev);
 			netif_rx (skb);

@@ -325,6 +325,8 @@ setup_telespci(struct IsdnCard *card))
 		return(0);
 	}
 	if ((dev_tel = pci_find_device (0x11DE, 0x6120, dev_tel))) {
+		if (pci_enable_device(dev_tel))
+			return (0);
 		cs->irq = dev_tel->irq;
 		if (!cs->irq) {
 			printk(KERN_WARNING "Teles: No IRQ for PCI card found\n");

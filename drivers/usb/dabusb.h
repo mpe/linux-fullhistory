@@ -49,7 +49,7 @@ typedef struct
 
 
 #define _DABUSB_IF 2
-#define _DABUSB_ISOPIPE 0x89
+#define _DABUSB_ISOPIPE 0x09
 #define _ISOPIPESIZE	16384
 
 #define _BULK_DATA_LEN 64

@@ -1,3 +1,27 @@
+2000-06-13  Tim Waugh  <twaugh@redhat.com>
+
+	* procfs.c: Break 'hardware' out into separate files.
+
+2000-05-28  Gunther Mayer  <gunther.mayer@braunschweig.okersurf.de>
+
+	* Fix PCI ID printk for non-superio PCI cards.
+
+2000-05-28  Tim Waugh  <twaugh@redhat.com>
+
+	* share.c (call_driver_chain): Get the driverlist_lock.
+	(parport_register_device): Make sure that port->devices always
+	looks consistent.
+	(parport_register_driver): Ensure that parport drivers are given
+	parameters that are valid for the duration of the callback by
+	locking the portlist against changes.
+	(parport_unregister_driver): Likewise.
+	(parport_claim): Don't overwrite flags.
+
+2000-05-28  Tim Waugh  <twaugh@redhat.com>
+
+	* daisy.c (assign_addrs): Avoid double-probing daisy-chain devices
+	if the first probe succeeds.
+
 2000-05-16  Tim Waugh  <twaugh@redhat.com>
 
 	* share.c (parport_claim): Fix SMP race.

@@ -556,11 +556,11 @@ int __init SK_init(struct net_device *dev)
 		return SK_probe(dev, base_addr);  
 	    }
 
-	    return ENODEV;            /* Sorry, but on specified address NO SK_G16 */
+	    return -ENODEV;            /* Sorry, but on specified address NO SK_G16 */
 	}
 	else if (base_addr > 0)       /* Don't probe at all */
 	{
-		return ENXIO;
+		return -ENXIO;
 	}
 
 	/* Autoprobe base_addr */
@@ -594,7 +594,7 @@ int __init SK_init(struct net_device *dev)
 
 	dev->base_addr = base_addr;   /* Write back original base_addr */
 
-	return ENODEV;                /* Failed to find or init driver */
+	return -ENODEV;                /* Failed to find or init driver */
 
 } /* End of SK_init */
 
@@ -752,7 +752,7 @@ int __init SK_probe(struct net_device *dev, short ioaddr)
     {
         PRINTK(("## %s: We did not find SK_G16 at RAM location.\n",
                 SK_NAME)); 
-	return ENODEV;                     /* NO SK_G16 found */
+	return -ENODEV;                     /* NO SK_G16 found */
     }
 
     printk("%s: %s found at %#3x, HW addr: %#04x:%02x:%02x:%02x:%02x:%02x\n",

@@ -144,16 +144,6 @@ static int __init oaknet_init(void)
 	}
 
 	/*
-	 * We're dependent on the 8390 generic driver module, make
-	 * sure its symbols are loaded.
-	 */
-
-	if (load_8390_module("oaknet.c")) {
-		release_region(dev->base_addr, OAKNET_IO_SIZE);
-		return (-ENOSYS);
-	}
-
-	/*
 	 * We're not using the old-style probing API, so we have to allocate
 	 * our own device structure.
 	 */
@@ -676,13 +666,21 @@ static int __init oaknet_init_module (void)
 {
 	int status;
 
+	/*
+	 * We're dependent on the 8390 generic driver module, make
+	 * sure its symbols are loaded.
+	 */
+
+	if (load_8390_module("oaknet.c"))
+		return (-ENOSYS);
+
 	if (oaknet_devs != NULL)
 		return (-EBUSY);
 
 	status = oaknet_init()
 
-	if (status == 0)
-		lock_8390_module();
+	if (status != 0)
+		unload_8390_module();
 
 	return (status);
 }
@@ -706,7 +704,7 @@ static void __exit oaknet_cleanup_module (void)
 
 	oaknet_devs = NULL;
 
-	unlock_8390_module();
+	unload_8390_module();
 }
 
 module_init(oaknet_init_module);

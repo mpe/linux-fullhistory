@@ -98,6 +98,8 @@ int awc4500_pci_probe(struct net_device *dev)
 		pdev = pci_find_slot(awc_pci_bus, awc_pci_dev);
 		if (!pdev)
 			continue;
+		if (pci_enable_device(pdev))
+			continue;
 		vendor = pdev->vendor;
 		device = pdev->device;
 	        pci_irq_line = pdev->irq;

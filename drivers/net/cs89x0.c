@@ -238,7 +238,7 @@ int __init cs89x0_probe(struct net_device *dev)
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return cs89x0_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	for (i = 0; netcard_portlist[i]; i++) {
 		int ioaddr = netcard_portlist[i];
@@ -248,7 +248,7 @@ int __init cs89x0_probe(struct net_device *dev)
 			return 0;
 	}
 	printk(KERN_WARNING "cs89x0: no cs8900 or cs8920 detected.  Be sure to disable PnP with SETUP\n");
-	return ENODEV;
+	return -ENODEV;
 }
 
 extern int inline
@@ -366,7 +366,7 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
 	if (ioaddr & 1) {
 		ioaddr &= ~1;
 		if ((inw(ioaddr + ADD_PORT) & ADD_MASK) != ADD_SIG)
-			return ENODEV;
+			return -ENODEV;
 		outw(PP_ChipID, ioaddr + ADD_PORT);
 	}
 

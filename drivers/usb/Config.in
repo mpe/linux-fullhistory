@@ -10,6 +10,11 @@ if [ ! "$CONFIG_USB" = "n" ]; then
 
 comment 'Miscellaneous USB options'
    bool '  Preliminary USB device filesystem' CONFIG_USB_DEVICEFS
+   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      bool '  Enforce USB bandwidth allocation (EXPERIMENTAL)' CONFIG_USB_BANDWIDTH
+   else
+      define_bool CONFIG_USB_BANDWIDTH n
+   fi
 
 comment 'USB Controllers'
    if [ "$CONFIG_USB_UHCI_ALT" != "y" ]; then
@@ -55,6 +60,7 @@ comment 'USB Devices'
       dep_tristate '  USB ADMtek Pegasus-based device support (EXPERIMENTAL)' CONFIG_USB_PEGASUS $CONFIG_USB $CONFIG_NET
       dep_tristate '  USB Diamond Rio500 support (EXPERIMENTAL)' CONFIG_USB_RIO500 $CONFIG_USB
       dep_tristate '  D-Link USB FM radio support (EXPERIMENTAL)' CONFIG_USB_DSBR $CONFIG_USB $CONFIG_VIDEO_DEV
+      dep_tristate '  Microtek X6USB scanner support (EXPERIMENTAL)' CONFIG_USB_MICROTEK $CONFIG_SCSI
    fi
 
 comment 'USB HID'

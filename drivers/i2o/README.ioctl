@@ -25,10 +25,10 @@ deepak@csociety.purdue.edu
 II. IOP Access
 
 Access to the I2O subsystem is provided through the device file named 
-/dev/i2octl.  This file is a character file with major number 10 and minor
+/dev/i2o/ctl.  This file is a character file with major number 10 and minor
 number 166.  It can be created through the following command:
 
-   mknod /dev/i2octl c 10 166
+   mknod /dev/i2o/ctl c 10 166
 
 III. Determining the IOP Count
 
@@ -373,7 +373,7 @@ XII. Events
 
     In the process of determining this.  Current idea is to have use
     the select() interface to allow user apps to periodically poll
-    the /dev/i2octl device for events.  When select() notifies the user
+    the /dev/i2o/ctl device for events.  When select() notifies the user
     that an event is available, the user would call read() to retrieve
     a list of all the events that are pending for the specific device.
 

@@ -65,7 +65,7 @@ int usb_init(void)
 #endif
 {
 	usb_major_init();
-        usbdevfs_init();
+	usbdevfs_init();
 	usb_hub_init();
 
 #ifndef CONFIG_USB_MODULE

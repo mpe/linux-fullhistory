@@ -38,10 +38,11 @@ S: University of Limerick
 S: Ireland
 
 N: Tigran A. Aivazian
-E: tigran@ocston.org
+E: tigran@veritas.com
 W: http://www.ocston.org/~tigran
 D: BFS filesystem
 D: Intel P6 CPU microcode update support
+D: Various kernel patches
 S: United Kingdom
 
 N: Werner Almesberger
@@ -291,8 +292,9 @@ D: Device driver hacker (eexpress, 3c505, c-qcam, ...)
 D: m68k port to HP9000/300
 D: AUN network protocols
 D: Co-architect of the parallel port sharing system
-S: Nexus Electronics Ltd
-S: 10 St Barnabas Road, Cambridge CB1 2BY
+D: IPv6 netfilter
+S: FutureTV Labs Ltd
+S: Brunswick House, 61-69 Newmarket Rd, Cambridge CB5 8EG
 S: United Kingdom
 
 N: Thomas Bogendörfer
@@ -407,8 +409,8 @@ S: USA
 N: Lennert Buytenhek
 E: buytenh@gnu.org
 D: Rewrite of the ethernet bridging code
-S: Handelstraat 35
-S: 3131 EK Vlaardingen
+S: Ravenhorst 58B
+S: 2317 AK Leiden
 S: The Netherlands
 
 N: Michael Callahan
@@ -970,7 +972,8 @@ W: http://www.linux-ide.org/
 D: Random SMP kernel hacker...
 D: Uniform Multi-Platform E-IDE driver
 D: Active-ATA-Chipset maddness..........
-D: Ultra DMA 66/33
+D: Ultra DMA 100/66/33
+D: ATA-Disconnect
 D: ATA-Smart Kernel Daemon
 S: Linux ATA Development (LAD)
 S: Concord, CA
@@ -1108,6 +1111,14 @@ D: md boot support
 S: Alleenstrasse 27
 S: D-71679 Asperg
 S: Germany
+
+N: Gareth Hughes
+E: gareth@valinux.com
+E: gareth@precisioninsight.com
+D: Pentium III FXSR, SSE support
+S: 11/187 West Street
+S: Crows Nest NSW 2065
+S: Australia
 
 N: Kenn Humborg
 E: kenn@wombat.ie
@@ -2102,6 +2113,15 @@ S: IJsselstraat 23a
 S: 9725 GA  Groningen
 S: The Netherlands
 
+N: Pekka Riikonen
+E: priikone@poseidon.pspt.fi
+E: priikone@ssh.com
+D: Random kernel hacking and bug fixes
+D: International kernel patch project
+S: Kasarmikatu 11 A4
+S: 70110 Kuopio
+S: Finland
+
 N: William E. Roadcap
 E: roadcapw@cfw.com
 W: http://www.cfw.com/~roadcapw
@@ -2155,6 +2175,14 @@ S: Research School of Information Science and Engineering
 S: The Australian National University, ACT 0200
 S: Australia
 
+N: Aristeu Sergio Rozanski Filho
+E: aris@conectiva.com.br
+D: Support for EtherExpress 10 ISA (i82595) in eepro driver
+S: Conectiva S.A.
+S: R. Tocantins, 89 - Cristo Rei
+S: 80050-430 - Curitiba - Paraná
+S: Brazil
+
 N: Alessandro Rubini
 E: rubini@ipvvis.unipv.it
 D: the gpm mouse server and kernel support for it
@@ -2168,7 +2196,7 @@ S: Germany
 
 N: Paul `Rusty' Russell
 E: rusty@linuxcare.com
-W: http://www.rustcorp.com
+W: http://www.samba.org/netfilter
 D: Ruggedly handsome.
 D: netfilter, ipchains with Michael Neuling.
 S: 301/222 City Walk
@@ -2779,15 +2807,15 @@ S: 2612 XV Delft
 S: The Netherlands
 
 N: David Woodhouse
-E: David.Woodhouse@mvhi.com
-E: Dave@imladris.demon.co.uk
-D: Extensive ARCnet rewrite
-D: ARCnet COM20020, COM90xx IO-MAP drivers
-D: SO_BINDTODEVICE in 2.1.x (from Elliot Poger's code in 2.0.31)
-D: Contributed to NCPFS rewrite for 2.1.x dcache
-D: Alpha platforms: SX164, LX164 and Ruffian ported to 2.1.x
-S: 29, David Bull Way
-S: Milton, Cambridge. CB4 6DP
+E: dwmw2@infradead.org
+E: dwmw2@redhat.com
+D: ARCnet stuff, Applicom board driver, SO_BINDTODEVICE,
+D: some Alpha platform porting from 2.0, Memory Technology Devices,
+D: Acquire watchdog timer, PC speaker driver maintenance,
+D: various other stuff that annoyed me by not working.
+S: c/o Red Hat UK Limited
+S: 35-36 Cambridge Place
+S: Cambridge. CB2 1NS
 S: England
 
 N: Frank Xia

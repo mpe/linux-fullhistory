@@ -2430,8 +2430,9 @@ static int __devinit parport_pc_pci_probe (struct pci_dev *dev,
                                         def.) */
 		/* TODO: test if sharing interrupts works */
 		printk (KERN_DEBUG "PCI parallel port detected: %04x:%04x, "
-			"I/O at %#lx(%#lx)\n", parport_pc_pci_tbl[i].vendor,
-			parport_pc_pci_tbl[i].device, io_lo, io_hi);
+			"I/O at %#lx(%#lx)\n",
+			parport_pc_pci_tbl[i + last_sio].vendor,
+			parport_pc_pci_tbl[i + last_sio].device, io_lo, io_hi);
 		if (parport_pc_probe_port (io_lo, io_hi, PARPORT_IRQ_NONE,
 					   PARPORT_DMA_NONE, dev))
 			count++;

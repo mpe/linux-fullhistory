@@ -307,8 +307,10 @@ isdn_audio_tlookup(const void *table, void *buff, unsigned long n)
 	:	"0"((long) table), "1"(n), "2"((long) buff), "3"((long) buff)
 	:	"memory", "ax");
 #else
+	unsigned char* b = (unsigned char*) buff;
+	unsigned char* t = (unsigned char*) table;
 	while (n--)
-		*buff++ = table[*(unsigned char *)buff];
+		*b++ = t[*b];
 #endif
 }
 

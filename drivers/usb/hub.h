@@ -72,6 +72,8 @@ struct usb_hub_status {
 #define HUB_CHANGE_LOCAL_POWER	0x0001
 #define HUB_CHANGE_OVERCURRENT	0x0002
 
+#define HUB_DESCRIPTOR_MAX_SIZE	39	/* enough for 127 ports on a hub */
+
 /* Hub descriptor */
 struct usb_hub_descriptor {
 	__u8  bLength;

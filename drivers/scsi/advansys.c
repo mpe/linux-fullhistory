@@ -4699,7 +4699,8 @@ advansys_detect(Scsi_Host_Template *tpnt)
                             NULL) {
                             pci_device_id_cnt++;
                         } else {
-                            pci_devicep[pci_card_cnt_max++] = pci_devp;
+			    if (pci_enable_device(pci_devp) == 0)
+                            	pci_devicep[pci_card_cnt_max++] = pci_devp;
                         }
                     }
 
@@ -4739,7 +4740,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,3,13)
                     iop = pci_devp->base_address[0] & PCI_IOADDRESS_MASK;
 #else /* version >= v2.3.13 */ 
-                    iop = pci_devp->resource[0].start & PCI_IOADDRESS_MASK;
+                    iop = pci_resource_start(pci_devp, 0);
 #endif /* version >= v2.3.13 */ 
                     ASC_DBG2(1,
                         "advansys_detect: vendorID %X, deviceID %X\n",
@@ -4900,7 +4901,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,3,13)
                 pci_memory_address = pci_devp->base_address[1];
 #else /* version >= v2.3.13 */ 
-                pci_memory_address = pci_devp->resource[1].start;
+                pci_memory_address = pci_resource_start(pci_devp, 1);
 #endif /* version >= v2.3.13 */ 
                 ASC_DBG1(1, "advansys_detect: pci_memory_address: %x\n",
                     pci_memory_address);

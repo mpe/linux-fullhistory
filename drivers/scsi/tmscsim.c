@@ -319,7 +319,7 @@
 # define PCI_PRESENT pci_present ()
 # define PCI_SET_MASTER pci_set_master (pdev)
 # define PCI_FIND_DEVICE(vend, id) (pdev = pci_find_device (vend, id, pdev))
-# define PCI_GET_IO_AND_IRQ io_port = pdev->resource[0].start; irq = pdev->irq
+# define PCI_GET_IO_AND_IRQ io_port = pci_resource_start(pdev, 0); irq = pdev->irq;
 #else
 # include <linux/bios32.h>
 # define PDEV pbus, pdevfn
@@ -2002,6 +2002,8 @@ int __init DC390_detect (Scsi_Host_Template *psht)
     if ( PCI_PRESENT )
 	while (PCI_FIND_DEVICE (PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD53C974))
 	{
+		if (pci_enable_device(pdev))
+			continue;
 	    DC390_LOCK_IO;		/* Remove this when going to new eh */
 	    PCI_GET_IO_AND_IRQ;
 	    DEBUG0(printk(KERN_INFO "DC390(%i): IO_PORT=%04x,IRQ=%x\n", dc390_adapterCnt, (UINT) io_port, irq);)

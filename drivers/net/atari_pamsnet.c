@@ -574,7 +574,7 @@ pamsnet_probe (dev)
 	static int no_more_found = 0;
 
 	if (no_more_found)
-		return ENODEV;
+		return -ENODEV;
 
 	no_more_found = 1;
 
@@ -619,7 +619,7 @@ pamsnet_probe (dev)
 		printk("No PAM's Net/GK found.\n");
 
 	if ((dev == NULL) || (lance_target < 0))
-		return ENODEV;
+		return -ENODEV;
 	if (pamsnet_debug > 0 && version_printed++ == 0)
 		printk(version);
 

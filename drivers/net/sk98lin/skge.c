@@ -369,23 +369,17 @@ static int __init skge_probe (void)
 	if (!pci_present())		/* is PCI support present? */
 		return -ENODEV;
 
-	while((pdev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, pdev)))
-	{
-		dev = NULL;
-
-		if (pdev->vendor != PCI_VENDOR_ID_SYSKONNECT || 
-			pdev->device != PCI_DEVICE_ID_SYSKONNECT_GE) {
+	while((pdev = pci_find_device(PCI_VENDOR_ID_SYSKONNECT,
+				      PCI_DEVICE_ID_SYSKONNECT_GE, pdev)) != NULL) {
+		if (pci_enable_device(pdev))
 			continue;
-		}
 		dev = init_etherdev(dev, sizeof(SK_AC));
 
-		if (dev == NULL || dev->priv == NULL){
+		if (dev == NULL) {
 			printk(KERN_ERR "Unable to allocate etherdev "
 			       "structure!\n");
 			break;
 		}
-
-		memset(dev->priv, 0, sizeof(SK_AC));
 
 		pAC = dev->priv;
 		pAC->PciDev = *pdev;
@@ -412,7 +406,7 @@ static int __init skge_probe (void)
 
 		pci_set_master(pdev);
 
-		base_address = pdev->resource[0].start;
+		base_address = pci_resource_start (pdev, 0);
 
 #ifdef SK_BIG_ENDIAN
 		/*

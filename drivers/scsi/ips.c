@@ -325,12 +325,13 @@ ips_detect(Scsi_Host_Template *SHT) {
 
       if (!(dev = pci_find_device(IPS_VENDORID, IPS_DEVICEID, dev)))
          break;
-
+      if (pci_enable_device(dev))
+      	 break;
       /* stuff that we get in dev */
       irq = dev->irq;
       bus = dev->bus->number;
       func = dev->devfn;
-      io_addr = dev->resource[0].start;
+      io_addr = pci_resource_start(dev, 0);
 
       /* get planer status */
       if (pci_read_config_word(dev, 0x04, &planer)) {
@@ -341,7 +342,7 @@ ips_detect(Scsi_Host_Template *SHT) {
       }
 
       /* check I/O address */
-      if ((dev->resource[0].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
+      if (pci_resource_flags(dev, 0) & IORESOURCE_MEM)
          continue;
 
       /* check to see if an onboard planer controller is disabled */

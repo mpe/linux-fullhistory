@@ -1,4 +1,4 @@
-/* $Id: sunhme.c,v 1.95 2000/03/25 05:18:15 davem Exp $
+/* $Id: sunhme.c,v 1.96 2000/06/09 07:35:27 davem Exp $
  * sunhme.c: Sparc HME/BigMac 10/100baseT half/full duplex auto switching,
  *           auto carrier detecting ethernet driver.  Also known as the
  *           "Happy Meal Ethernet" found on SunSwift SBUS cards.
@@ -2519,12 +2519,12 @@ static int __init happy_meal_sbus_init(struct net_device *dev,
 	if (is_qfe) {
 		qp = quattro_sbus_find(sdev);
 		if (qp == NULL)
-			return ENODEV;
+			return -ENODEV;
 		for (qfe_slot = 0; qfe_slot < 4; qfe_slot++)
 			if (qp->happy_meals[qfe_slot] == NULL)
 				break;
 		if (qfe_slot == 4)
-			return ENODEV;
+			return -ENODEV;
 	}
 	if (dev == NULL) {
 		dev = init_etherdev(0, sizeof(struct happy_meal));
@@ -2564,7 +2564,7 @@ static int __init happy_meal_sbus_init(struct net_device *dev,
 		printk(KERN_ERR "happymeal: Device does not have 5 regs, it has %d.\n",
 		       sdev->num_registers);
 		printk(KERN_ERR "happymeal: Would you like that for here or to go?\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	if (qp != NULL) {
@@ -2578,35 +2578,35 @@ static int __init happy_meal_sbus_init(struct net_device *dev,
 				 GREG_REG_SIZE, "HME Global Regs");
 	if (!hp->gregs) {
 		printk(KERN_ERR "happymeal: Cannot map Happy Meal global registers.\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	hp->etxregs = sbus_ioremap(&sdev->resource[1], 0,
 				   ETX_REG_SIZE, "HME TX Regs");
 	if (!hp->etxregs) {
 		printk(KERN_ERR "happymeal: Cannot map Happy Meal MAC Transmit registers.\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	hp->erxregs = sbus_ioremap(&sdev->resource[2], 0,
 				   ERX_REG_SIZE, "HME RX Regs");
 	if (!hp->erxregs) {
 		printk(KERN_ERR "happymeal: Cannot map Happy Meal MAC Receive registers.\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	hp->bigmacregs = sbus_ioremap(&sdev->resource[3], 0,
 				      BMAC_REG_SIZE, "HME BIGMAC Regs");
 	if (!hp->bigmacregs) {
 		printk(KERN_ERR "happymeal: Cannot map Happy Meal BIGMAC registers.\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	hp->tcvregs = sbus_ioremap(&sdev->resource[4], 0,
 				   TCVR_REG_SIZE, "HME Tranceiver Regs");
 	if (!hp->tcvregs) {
 		printk(KERN_ERR "happymeal: Cannot map Happy Meal Tranceiver registers.\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	hp->hm_revision = prom_getintdefault(sdev->prom_node, "hm-rev", 0xff);
@@ -2695,7 +2695,7 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 	pcp = pdev->sysdata;
 	if (pcp == NULL || pcp->prom_node == -1) {
 		printk(KERN_ERR "happymeal(PCI): Some PCI device info missing\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 	node = pcp->prom_node;
 	
@@ -2703,12 +2703,12 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 	if (!strcmp(prom_name, "SUNW,qfe") || !strcmp(prom_name, "qfe")) {
 		qp = quattro_pci_find(pdev);
 		if (qp == NULL)
-			return ENODEV;
+			return -ENODEV;
 		for (qfe_slot = 0; qfe_slot < 4; qfe_slot++)
 			if (qp->happy_meals[qfe_slot] == NULL)
 				break;
 		if (qfe_slot == 4)
-			return ENODEV;
+			return -ENODEV;
 	}
 	if (dev == NULL) {
 		dev = init_etherdev(0, sizeof(struct happy_meal));
@@ -2758,12 +2758,11 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 		qp->happy_meals[qfe_slot] = dev;
 	}		
 
-	hpreg_base = pdev->resource[0].start;
+	hpreg_base = pci_resource_start(pdev, 0);
 	if ((pdev->resource[0].flags & IORESOURCE_IO) != 0) {
 		printk(KERN_ERR "happymeal(PCI): Cannot find proper PCI device base address.\n");
-		return ENODEV;
+		return -ENODEV;
 	}
-	hpreg_base &= PCI_BASE_ADDRESS_MEM_MASK;
 	hpreg_base = (unsigned long) ioremap(hpreg_base, 0x8000);
 
 	if (qfe_slot != -1 && prom_getproplen(node, "local-mac-address") == 6)
@@ -2806,7 +2805,7 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 
 	if (!hp->happy_block) {
 		printk(KERN_ERR "happymeal(PCI): Cannot get hme init block.\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	hp->linkcheck = 0;
@@ -2920,7 +2919,7 @@ static int __init happy_meal_probe(void)
 #endif
 
 	if (called)
-		return ENODEV;
+		return -ENODEV;
 	called++;
 
 	cards = 0;
@@ -2933,7 +2932,7 @@ static int __init happy_meal_probe(void)
 	cards += happy_meal_pci_probe(dev);
 #endif
 	if (!cards)
-		return ENODEV;
+		return -ENODEV;
 	return 0;
 }
 

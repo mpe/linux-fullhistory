@@ -171,7 +171,7 @@ int __init ne2_probe(struct net_device *dev)
 			return ne2_probe1(dev, current_mca_slot);
 		}
 	}
-	return ENODEV;
+	return -ENODEV;
 }
 
 
@@ -222,7 +222,7 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 	POS = mca_read_stored_pos(slot, 2);
 	if(!(POS % 2)) {
 		printk(" disabled.\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	i = (POS & 0xE)>>1;
@@ -245,7 +245,7 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 	outb(0x21, base_addr + NE_CMD);
 	if (inb(base_addr + NE_CMD) != 0x21) {
 		printk("NE/2 adapter not responding\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	/* In the crynwr sources they do a RAM-test here. I skip it. I suppose
@@ -266,7 +266,7 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 		while ((inb_p(base_addr + EN0_ISR) & ENISR_RESET) == 0)
 			if (jiffies - reset_start_time > 2*HZ/100) {
 				printk(" not found (no reset ack).\n");
-				return ENODEV;
+				return -ENODEV;
 			}
 
 		outb_p(0xff, base_addr + EN0_ISR);         /* Ack all intr. */
@@ -321,7 +321,7 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 		if (irqval) {
 			printk (" unable to get IRQ %d (irqval=%d).\n", 
 					dev->irq, +irqval);
-			return EAGAIN;
+			return -EAGAIN;
 		}
 	}
 

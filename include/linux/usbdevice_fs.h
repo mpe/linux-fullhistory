@@ -66,6 +66,18 @@ struct usbdevfs_disconnectsignal {
 	void *context;
 };
 
+#define USBDEVFS_MAXDRIVERNAME 255
+
+struct usbdevfs_getdriver {
+	unsigned int interface;
+	char driver[USBDEVFS_MAXDRIVERNAME + 1];
+};
+
+struct usbdevfs_connectinfo {
+	unsigned int devnum;
+	unsigned char slow;
+};
+
 #define USBDEVFS_URB_DISABLE_SPD           1
 #define USBDEVFS_URB_ISO_ASAP              2
 
@@ -96,11 +108,27 @@ struct usbdevfs_urb {
 	struct usbdevfs_iso_packet_desc iso_frame_desc[0];
 };
 
+/* ioctls for talking to drivers in the usbcore module: */
+struct usbdevfs_ioctl {
+	int	ifno;		/* interface 0..N ; negative numbers reserved */
+	int	ioctl_code;	/* MUST encode size + direction of data so the
+				 * macros in <asm/ioctl.h> give correct values */
+	void	*data;		/* param buffer (in, or out) */
+};
+
+/* You can do most things with hubs just through control messages,
+ * except find out what device connects to what port. */
+struct usbdevfs_hub_portinfo {
+	char nports;		/* number of downstream ports in this hub */
+	char port [127];	/* e.g. port 3 connects to device 27 */
+};
+
 #define USBDEVFS_CONTROL           _IOWR('U', 0, struct usbdevfs_ctrltransfer)
 #define USBDEVFS_BULK              _IOWR('U', 2, struct usbdevfs_bulktransfer)
 #define USBDEVFS_RESETEP           _IOR('U', 3, unsigned int)
 #define USBDEVFS_SETINTERFACE      _IOR('U', 4, struct usbdevfs_setinterface)
 #define USBDEVFS_SETCONFIGURATION  _IOR('U', 5, unsigned int)
+#define USBDEVFS_GETDRIVER         _IOW('U', 8, struct usbdevfs_getdriver)
 #define USBDEVFS_SUBMITURB         _IOR('U', 10, struct usbdevfs_urb)
 #define USBDEVFS_DISCARDURB        _IO('U', 11)
 #define USBDEVFS_REAPURB           _IOW('U', 12, void *)
@@ -108,6 +136,10 @@ struct usbdevfs_urb {
 #define USBDEVFS_DISCSIGNAL        _IOR('U', 14, struct usbdevfs_disconnectsignal)
 #define USBDEVFS_CLAIMINTERFACE    _IOR('U', 15, unsigned int)
 #define USBDEVFS_RELEASEINTERFACE  _IOR('U', 16, unsigned int)
+#define USBDEVFS_CONNECTINFO       _IOW('U', 17, struct usbdevfs_connectinfo)
+#define USBDEVFS_IOCTL             _IOWR('U', 18, struct usbdevfs_ioctl)
+#define USBDEVFS_HUB_PORTINFO      _IOR('U', 19, struct usbdevfs_hub_portinfo)
+#define USBDEVFS_RESET             _IO('U', 20)
 
 /* --------------------------------------------------------------------- */
 
@@ -164,7 +196,6 @@ extern struct inode_operations usbdevfs_device_inode_operations;
 extern struct inode_operations usbdevfs_bus_inode_operations;
 extern struct file_operations usbdevfs_bus_file_operations;
 extern void usbdevfs_conn_disc_event(void);
-
 
 #endif /* __KERNEL__ */
 

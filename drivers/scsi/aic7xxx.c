@@ -9551,14 +9551,15 @@ aic7xxx_detect(Scsi_Host_Template *template)
       pdev = NULL;
       while ((pdev = pci_find_device(aic_pdevs[i].vendor_id,
                                      aic_pdevs[i].device_id,
-                                     pdev)))
+                                     pdev))) {
+	if (pci_enable_device(pdev))
+		continue;
 #else
       index = 0;
       while (!(pcibios_find_device(aic_pdevs[i].vendor_id,
                                    aic_pdevs[i].device_id,
-                                   index++, &pci_bus, &pci_devfn)) )
+                                   index++, &pci_bus, &pci_devfn)) ) {
 #endif
-      {
         if ( i == 0 ) /* We found one, but it's the 7810 RAID cont. */
         {
           if (aic7xxx_verbose & (VERBOSE_PROBE|VERBOSE_PROBE2))
@@ -9587,8 +9588,8 @@ aic7xxx_detect(Scsi_Host_Template *template)
           temp_p->pdev = pdev;
           temp_p->pci_bus = pdev->bus->number;
           temp_p->pci_device_fn = pdev->devfn;
-          temp_p->base = pdev->resource[0].start;
-          temp_p->mbase = pdev->resource[1].start;
+          temp_p->base = pci_resource_start(pdev, 0);
+          temp_p->mbase = pci_resource_start(pdev, 1);
           current_p = list_p;
 	  while(current_p && temp_p)
 	  {

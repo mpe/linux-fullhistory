@@ -1152,17 +1152,13 @@ EXPORT_SYMBOL(ei_interrupt);
 EXPORT_SYMBOL(ethdev_init);
 EXPORT_SYMBOL(NS8390_init);
 
-struct module *NS8390_module = NULL;
-
 int init_module(void)
 {
-	NS8390_module = &__this_module;
 	return 0;
 }
 
 void cleanup_module(void)
 {
-	NS8390_module = NULL;
 }
 
 #endif /* MODULE */

@@ -3,6 +3,8 @@
 
 #include <linux/linkage.h>
 
+#ifdef __KERNEL__
+
 /*
  * SMP- and interrupt-safe semaphores..
  *
@@ -372,4 +374,5 @@ extern inline void up_write(struct rw_semaphore *sem)
 	__up_write(sem);
 }
 
+#endif
 #endif

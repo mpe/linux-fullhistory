@@ -175,7 +175,7 @@ stnic_reset (struct net_device *dev)
   *(vhalf *) PA_83902_RST = 0;
   udelay (5);
   if (ei_debug > 1)
-    printk("8390 reset done (%ld).", jiffies);
+    printk("8390 reset done (%ld).\n", jiffies);
   *(vhalf *) PA_83902_RST = ~0;
   udelay (5);
 }
@@ -253,9 +253,17 @@ static void
 stnic_block_output (struct net_device *dev, int length,
 		    const unsigned char *buf, int output_page)
 {
-
+#if 0
   STNIC_WRITE (PG0_RBCR0, 1);
   STNIC_WRITE (STNIC_CR, CR_RRD | CR_PG0 | CR_STA);
+#else  /* XXX: I don't know why but this works.  -- gniibe  */
+  STNIC_WRITE (PG0_RBCR0, 0x42);
+  STNIC_WRITE (PG0_RBCR1, 0x00);
+  STNIC_WRITE (PG0_RBCR0, 0x42);
+  STNIC_WRITE (PG0_RBCR1, 0x00);
+  STNIC_WRITE (STNIC_CR, CR_RRD | CR_PG0 | CR_STA);
+  STNIC_DELAY ();
+#endif
 
   STNIC_WRITE (PG0_RSAR0, 0);
   STNIC_WRITE (PG0_RSAR1, output_page);
@@ -300,3 +308,6 @@ do_stnic_intr (int irq, void *dev_id, struct pt_regs *regs)
 }
 
 module_init(stnic_probe);
+/* No cleanup routine - if there were one, it should do a:
+   unload_8390_module()
+*/

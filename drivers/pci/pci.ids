@@ -238,11 +238,12 @@
 100a  Phoenix Technologies
 100b  National Semiconductor Corporation
 	0001  DP83810
-	0002  87415
+	0002  87415/87560 IDE
+	000e  87560 Legacy I/O
 	000f  OHCI Compliant FireWire Controller
 	0011  National PCI System I/O
 	0012  USB Controller
-	d001  87410
+	d001  87410 IDE
 100c  Tseng Labs Inc
 	3202  ET4000/W32p rev A
 	3205  ET4000/W32p rev B
@@ -976,6 +977,7 @@
 1058  Electronics & Telecommunications RSH
 1059  Teknor Industrial Computers Inc
 105a  Promise Technology, Inc.
+	4d30  20267
 	4d33  20246
 	4d38  20262
 	5300  DC5300
@@ -1228,6 +1230,7 @@
 	0646  PCI0646
 	0647  PCI0647
 	0648  PCI0648
+	0649  PCI0649
 	0650  PBC0650A
 	0670  USB0670
 	0673  USB0673
@@ -1458,6 +1461,8 @@
 	5055  3c555 Laptop Hurricane
 	5057  3c575 [Megahertz] 10/100 LAN CardBus
 		10b7 5a57  3C575 Megahertz 10/100 LAN Cardbus PC Card
+	5b57  3c575 [Megahertz] 10/100 LAN CardBus
+		10b7 5a57  3C575 Megahertz 10/100 LAN Cardbus
 	5157  3c575 [Megahertz] 10/100 LAN CardBus
 		10b7 5b57  3C575 Megahertz 10/100 LAN Cardbus PC Card
 	5257  3CCFE575CT Cyclone CardBus
@@ -1469,6 +1474,7 @@
 	5970  3c597 EISA Fast Demon/Vortex
 	6560  3CCFE656 Cyclone CardBus
 	6562  3CCFEM656 Cyclone CardBus
+	6564  3CCFEM656 Cyclone CardBus (0x6564)
 	7646  3cSOHO100-TX Hurricane
 	8811  Token ring
 	9000  3c900 10BaseT [Boomerang]
@@ -1509,6 +1515,8 @@
 		10b7 1000  3C905C-TX Fast Etherlink for PC Management NIC
 	9800  3c980-TX [Fast Etherlink XL Server Adapter]
 		10b7 9800  3c980-TX Fast Etherlink XL Server Adapter
+	9805  3c980-TX [10/100 Base-TX NIC(Python-T)]
+		10b7 9805  3c980 10/100 Base-TX NIC(Python-T)
 10b8  Standard Microsystems Corp [SMC]
 	0005  83C170QF
 		1055 e000  LANEPIC
@@ -4517,6 +4525,13 @@
 		11d4 0048  SoundMAX Integrated Digital Audio
 	2426  82801AB 82810 AC'97 Modem
 	2428  82801AB 82810 PCI Bridge
+	2440  82820 820 (Camino 2) Chipset ISA Bridge (ICH2)
+	2442  82820 820 (Camino 2) Chipset USB (Hub A)
+	2443  82820 820 (Camino 2) Chipset SMBus
+	2444  82820 820 (Camino 2) Chipset USB (Hub B)
+	2449  82820 820 (Camino 2) Chipset Ethernet
+	244b  82820 820 (Camino 2) Chipset IDE U100
+	244e  82820 820 (Camino 2) Chipset PCI
 	2500  82820 820 (Camino) Chipset Host Bridge (MCH)
 		1043 801c  P3C-2000 system chipset
 	2501  82820 820 (Camino) Chipset Host Bridge (MCH)

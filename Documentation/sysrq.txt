@@ -25,6 +25,10 @@ On x86   - You press the key combo 'ALT-SysRQ-<command key>'. Note - Some
 
 On SPARC - You press 'ALT-STOP-<command key>', I believe.
 
+On the serial console (PC style standard serial ports only) -
+           You send a BREAK, then within 5 seconds a command key. Sending
+           BREAK twice is interpreted as a normal BREAK.
+
 On other - If you know of the key combos for other architectures, please
            let me know so I can add them to this section. 
 

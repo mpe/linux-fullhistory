@@ -428,6 +428,7 @@ static int assign_addrs (struct parport *port)
 	unsigned char s, last_dev;
 	unsigned char daisy;
 	int thisdev = numdevs;
+	int detected;
 	char *deviceid;
 
 	parport_data_forward (port);
@@ -484,8 +485,9 @@ static int assign_addrs (struct parport *port)
 	}
 
 	parport_write_data (port, 0xff); udelay (2);
+	detected = numdevs - thisdev;
 	DPRINTK (KERN_DEBUG "%s: Found %d daisy-chained devices\n", port->name,
-		numdevs - thisdev);
+		 detected);
 
 	/* Ask the new devices to introduce themselves. */
 	deviceid = kmalloc (1000, GFP_KERNEL);
@@ -495,7 +497,7 @@ static int assign_addrs (struct parport *port)
 		parport_device_id (thisdev, deviceid, 1000);
 
 	kfree (deviceid);
-	return numdevs - thisdev;
+	return detected;
 }
 
 /* Find a device with a particular manufacturer and model string,

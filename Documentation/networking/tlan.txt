@@ -2,7 +2,10 @@
 (C) 1998 James Banks
 (C) 1999-2000 Torben Mathiasen <tmm@image.dk, torben.mathiasen@compaq.com>
 
-TLAN driver for Linux, version 1.5
+For driver information/updates visit http://tlan.kernel.dk
+
+
+TLAN driver for Linux, version 1.8a
 README
 
 
@@ -65,11 +68,14 @@ II.   Driver Options
 	   if a card which only supports 10Mbs is forced into 100Mbs
 	   mode.)
 
-	5. If the driver is built into the kernel, you can use the 3rd
+	5. You have to use speed=X duplex=Y together now. If you just
+	   do "insmod tlan.o speed=100" the driver will do Auto-Neg.
+	   To force a 10Mbps Half-Duplex link do "insmod tlan.o speed=10 
+	   duplex=1".
+
+	6. If the driver is built into the kernel, you can use the 3rd
 	   and 4th parameters to set aui and debug respectively.  For
 	   example:
-
-/* kernel-parameters are currently not supported. I will fix this asap. */
 
 	   ether=0,0,0x1,0x7,eth0
 
@@ -79,11 +85,14 @@ II.   Driver Options
 	   The bits in the third byte are assigned as follows:
 
 		0x01 = aui
-		0x04 = use half duplex
-		0x08 = use full duplex
-		0x10 = use 10BaseT
-		0x20 = use 100BaseTx
+		0x02 = use half duplex
+		0x04 = use full duplex
+		0x08 = use 10BaseT
+		0x10 = use 100BaseTx
 
+	   You also need to set both speed and duplex settings when forcing
+	   speeds with kernel-parameters. 
+	   ether=0,0,0x12,0,eth0 will force link to 100Mbps Half-Duplex.
 
 III.  Things to try if you have problems.
 	1. Make sure your card's PCI id is among those listed in
@@ -94,5 +103,5 @@ III.  Things to try if you have problems.
 
 There is also a tlan mailing list which you can join by sending "subscribe tlan"
 in the body of an email to majordomo@vuser.vu.union.edu.
-
+There is also a tlan website at http://tlan.kernel.dk
 

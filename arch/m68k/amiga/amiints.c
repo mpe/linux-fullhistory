@@ -58,7 +58,7 @@ extern int cia_get_irq_list(struct ciabase *base, char *buf);
 /* irq node variables for amiga interrupt sources */
 static irq_node_t *ami_irq_list[AMI_STD_IRQS];
 
-unsigned short ami_intena_vals[AMI_STD_IRQS] = {
+unsigned short amiga_intena_vals[AMI_STD_IRQS] = {
 	IF_VERTB, IF_COPER, IF_AUD0, IF_AUD1, IF_AUD2, IF_AUD3, IF_BLIT,
 	IF_DSKSYN, IF_DSKBLK, IF_RBF, IF_TBE, IF_SOFT, IF_PORTS, IF_EXTER
 };
@@ -230,7 +230,7 @@ int amiga_request_irq(unsigned int irq,
 
 	/* enable the interrupt */
 	if (irq < IRQ_AMIGA_PORTS && !ami_ablecount[irq])
-		custom.intena = IF_SETCLR | ami_intena_vals[irq];
+		custom.intena = IF_SETCLR | amiga_intena_vals[irq];
 
 	return error;
 }
@@ -259,7 +259,7 @@ void amiga_free_irq(unsigned int irq, void *dev_id)
 		amiga_delete_irq(&ami_irq_list[irq], dev_id);
 		/* if server list empty, disable the interrupt */
 		if (!ami_irq_list[irq] && irq < IRQ_AMIGA_PORTS)
-			custom.intena = ami_intena_vals[irq];
+			custom.intena = amiga_intena_vals[irq];
 	} else {
 		if (ami_irq_list[irq]->dev_id != dev_id)
 			printk("%s: removing probably wrong IRQ %d from %s\n",
@@ -268,7 +268,7 @@ void amiga_free_irq(unsigned int irq, void *dev_id)
 		ami_irq_list[irq]->flags   = 0;
 		ami_irq_list[irq]->dev_id  = NULL;
 		ami_irq_list[irq]->devname = NULL;
-		custom.intena = ami_intena_vals[irq];
+		custom.intena = amiga_intena_vals[irq];
 	}
 }
 
@@ -312,7 +312,7 @@ void amiga_enable_irq(unsigned int irq)
 	}
 
 	/* enable the interrupt */
-	custom.intena = IF_SETCLR | ami_intena_vals[irq];
+	custom.intena = IF_SETCLR | amiga_intena_vals[irq];
 }
 
 void amiga_disable_irq(unsigned int irq)
@@ -343,7 +343,7 @@ void amiga_disable_irq(unsigned int irq)
 	}
 
 	/* disable the interrupt */
-	custom.intena = ami_intena_vals[irq];
+	custom.intena = amiga_intena_vals[irq];
 }
 
 inline void amiga_do_irq(int irq, struct pt_regs *fp)
@@ -361,7 +361,7 @@ void amiga_do_irq_list(int irq, struct pt_regs *fp, struct irq_server *server)
 	if (server->count++)
 		server->reentrance = 1;
 
-	intena = ami_intena_vals[irq];
+	intena = amiga_intena_vals[irq];
 	custom.intreq = intena;
 
 	/* serve fast handler if present - there can only be one of these */

@@ -178,9 +178,6 @@ static int __init apne_probe1(struct net_device *dev, int ioaddr)
                 8,   9+GAYLE_ODD, 0xa, 0xb+GAYLE_ODD,
               0xc, 0xd+GAYLE_ODD, 0xe, 0xf+GAYLE_ODD };
 
-    if (load_8390_module("apne.c"))
-        return -ENOSYS;
-
     /* We should have a "dev" from Space.c or the static module table. */
     if (dev == NULL) {
 	printk(KERN_ERR "apne.c: Passed a NULL device.\n");
@@ -271,7 +268,7 @@ static int __init apne_probe1(struct net_device *dev, int ioaddr)
 	stop_page = (wordlength == 2) ? 0x40 : 0x20;
     } else {
 	printk(" not found.\n");
-	return ENXIO;
+	return -ENXIO;
 
     }
 
@@ -572,12 +569,16 @@ static struct net_device apne_dev =
 int init_module(void)
 {
 	int err;
+
+	if (load_8390_module("apne.c"))
+		return -ENOSYS;
+
 	if ((err = register_netdev(&apne_dev))) {
 		if (err == -EIO)
 			printk("No PCMCIA NEx000 ethernet card found.\n");
+		unload_8390_module();
 		return (err);
 	}
-	lock_8390_module();
 	return (0);
 }
 
@@ -591,7 +592,7 @@ void cleanup_module(void)
 
 	pcmcia_reset();
 
-	unlock_8390_module();
+	unload_8390_module();
 
 	apne_owned = 0;
 }

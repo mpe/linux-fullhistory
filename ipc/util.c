@@ -24,6 +24,13 @@
 
 #include "util.h"
 
+/**
+ *	ipc_init	-	initialise IPC subsystem
+ *
+ *	The various system5 IPC resources (semaphores, messages and shared
+ *	memory are initialised
+ */
+ 
 void __init ipc_init (void)
 {
 	sem_init();
@@ -32,6 +39,16 @@ void __init ipc_init (void)
 	return;
 }
 
+/**
+ *	ipc_init_ids		-	initialise IPC identifiers
+ *	@ids: Identifier set
+ *	@size: Number of identifiers
+ *
+ *	Given a size for the ipc identifier range (limited below IPCMNI)
+ *	set up the sequence range to use then allocate and initialise the
+ *	array itself. 
+ */
+ 
 void __init ipc_init_ids(struct ipc_ids* ids, int size)
 {
 	int i;
@@ -62,6 +79,14 @@ void __init ipc_init_ids(struct ipc_ids* ids, int size)
 		ids->entries[i].p = NULL;
 }
 
+/**
+ *	ipc_findkey	-	find a key in an ipc identifier set	
+ *	@ids: Identifier set
+ *	@key: The key to find
+ *
+ *	Returns the identifier if found or -1 if not.
+ */
+ 
 int ipc_findkey(struct ipc_ids* ids, key_t key)
 {
 	int id;
@@ -106,6 +131,18 @@ static int grow_ary(struct ipc_ids* ids, int newsize)
 	return ids->size;
 }
 
+/**
+ *	ipc_addid 	-	add an IPC identifier
+ *	@ids: IPC identifier set
+ *	@new: new IPC permission set
+ *	@size: new size limit for the id array
+ *
+ *	Add an entry 'new' to the IPC arrays. The permissions object is
+ *	initialised and the first free entry is set up and the id assigned
+ *	is returned. The list is returned in a locked state on success.
+ *	On failure the list is not locked and -1 is returned.
+ */
+ 
 int ipc_addid(struct ipc_ids* ids, struct kern_ipc_perm* new, int size)
 {
 	int id;
@@ -133,6 +170,17 @@ found:
 	return id;
 }
 
+/**
+ *	ipc_rmid	-	remove an IPC identifier
+ *	@ids: identifier set
+ *	@id: Identifier to remove
+ *
+ *	The identifier must be valid, and in use. The kernel will panic if
+ *	fed an invalid identifier. The entry is removed and internal
+ *	variables recomputed. The object associated with the identifier
+ *	is returned.
+ */
+ 
 struct kern_ipc_perm* ipc_rmid(struct ipc_ids* ids, int id)
 {
 	struct kern_ipc_perm* p;
@@ -156,6 +204,14 @@ struct kern_ipc_perm* ipc_rmid(struct ipc_ids* ids, int id)
 	return p;
 }
 
+/**
+ *	ipc_alloc	-	allocate ipc space
+ *	@size: size desired
+ *
+ *	Allocate memory from the appropriate pools and return a pointer to it.
+ *	NULL is returned if the allocation fails
+ */
+ 
 void* ipc_alloc(int size)
 {
 	void* out;
@@ -166,6 +222,15 @@ void* ipc_alloc(int size)
 	return out;
 }
 
+/**
+ *	ipc_free	-	free ipc space
+ *	@ptr: pointer returned by ipc_alloc
+ *	@size: size of block
+ *
+ *	Free a block created with ipc_alloc. The caller must know the size
+ *	used in the allocation call.
+ */
+ 
 void ipc_free(void* ptr, int size)
 {
 	if(size > PAGE_SIZE)
@@ -174,10 +239,15 @@ void ipc_free(void* ptr, int size)
 		kfree(ptr);
 }
 
-/* 
- * Check user, group, other permissions for access
- * to ipc resources. return 0 if allowed
+/**
+ *	ipcperms	-	check IPC permissions
+ *	@ipcp: IPC permission set
+ *	@flag: desired permission set.
+ *
+ *	Check user, group, other permissions for access
+ *	to ipc resources. return 0 if allowed
  */
+ 
 int ipcperms (struct kern_ipc_perm *ipcp, short flag)
 {	/* flag will most probably be 0 or S_...UGO from <linux/stat.h> */
 	int requested_mode, granted_mode;
@@ -201,6 +271,16 @@ int ipcperms (struct kern_ipc_perm *ipcp, short flag)
  * old/new ipc_perm structures
  */
 
+/**
+ *	kernel_to_ipc64_perm	-	convert kernel ipc permissions to user
+ *	@in: kernel permissions
+ *	@out: new style IPC permissions
+ *
+ *	Turn the kernel object 'in' into a set of permissions descriptions
+ *	for returning to userspace (out).
+ */
+ 
+
 void kernel_to_ipc64_perm (struct kern_ipc_perm *in, struct ipc64_perm *out)
 {
 	out->key	= in->key;
@@ -212,6 +292,15 @@ void kernel_to_ipc64_perm (struct kern_ipc_perm *in, struct ipc64_perm *out)
 	out->seq	= in->seq;
 }
 
+/**
+ *	ipc64_perm_to_ipc_perm	-	convert old ipc permissions to new
+ *	@in: new style IPC permissions
+ *	@out: old style IPC permissions
+ *
+ *	Turn the new style permissions object in into a compatibility
+ *	object and store it into the 'out' pointer.
+ */
+ 
 void ipc64_perm_to_ipc_perm (struct ipc64_perm *in, struct ipc_perm *out)
 {
 	out->key	= in->key;
@@ -223,6 +312,15 @@ void ipc64_perm_to_ipc_perm (struct ipc64_perm *in, struct ipc_perm *out)
 	out->seq	= in->seq;
 }
 
+/**
+ *	ipc_parse_version	-	IPC call version
+ *	@cmd: pointer to command
+ *
+ *	Return IPC_64 for new style IPC and IPC_OLD for old style IPC. 
+ *	The cmd value is turned from an encoding command and version into
+ *	just the command code.
+ */
+ 
 int ipc_parse_version (int *cmd)
 {
 	if (*cmd & IPC_64) {

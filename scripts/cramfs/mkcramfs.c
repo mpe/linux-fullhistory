@@ -93,7 +93,7 @@ static int find_identical_file(struct entry *orig,struct entry *newfile)
         if(!orig) return 0;
         if(orig->size==newfile->size && orig->uncompressed && !memcmp(orig->uncompressed,newfile->uncompressed,orig->size)) {
                 newfile->same=orig;
-                return 0;
+                return 1;
         }
         return find_identical_file(orig->child,newfile) ||
                    find_identical_file(orig->next,newfile);
@@ -441,9 +441,9 @@ static unsigned int do_compress(char *base, unsigned int offset, char const *nam
 		size -= input;
 		if (!is_zero (uncompressed, input)) {
 			compress(base + curr, &len, uncompressed, input);
-			uncompressed += input;
 			curr += len;
 		}
+		uncompressed += input;
 
 		if (len > blksize*2) {
 			/* (I don't think this can happen with zlib.) */

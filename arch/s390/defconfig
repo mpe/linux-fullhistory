@@ -174,5 +174,4 @@ CONFIG_IBM_PARTITION=y
 #
 # Kernel hacking
 #
-# CONFIG_PROFILE is not set
 # CONFIG_REMOTE_DEBUG is not set

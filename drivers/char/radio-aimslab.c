@@ -355,7 +355,7 @@ static int __init rtrack_init(void)
 		return -EINVAL;
 		
 	request_region(io, 2, "rtrack");
-	printk(KERN_INFO "AIMSlab Radiotrack/radioreveal card driver.\n");
+	printk(KERN_INFO "AIMSlab RadioTrack/RadioReveal card driver.\n");
 
 	/* Set up the I/O locking */
 	

@@ -396,7 +396,7 @@ int __init express_probe(struct net_device *dev)
 	if (ioaddr&0xfe00)
 		return eexp_hw_probe(dev,ioaddr);
 	else if (ioaddr)
-		return ENXIO;
+		return -ENXIO;
 
 	for (port=&ports[0] ; *port ; port++ )
 	{
@@ -1081,7 +1081,7 @@ static int __init eexp_hw_probe(struct net_device *dev, unsigned short ioaddr)
 
 	dev->priv = lp = kmalloc(sizeof(struct net_local), GFP_KERNEL);
 	if (!dev->priv)
-		return ENOMEM;
+		return -ENOMEM;
 
 	memset(dev->priv, 0, sizeof(struct net_local));
 
@@ -1127,7 +1127,7 @@ static int __init eexp_hw_probe(struct net_device *dev, unsigned short ioaddr)
 	default:
 		printk(") bad memory size (%dk).\n", memory_size);
 		kfree(dev->priv);
-		return ENODEV;
+		return -ENODEV;
 		break;
 	}
 

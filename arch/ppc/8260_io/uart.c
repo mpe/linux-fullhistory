@@ -2461,6 +2461,8 @@ int __init rs_8xx_init(void)
 		if (info) {
 			/*memset(info, 0, sizeof(ser_info_t));*/
 			__clear_user(info,sizeof(ser_info_t));
+			init_waitqueue_head(&info->open_wait);
+			init_waitqueue_head(&info->close_wait);
 			info->magic = SERIAL_MAGIC;
 			info->flags = state->flags;
 			info->tqueue.routine = do_softint;

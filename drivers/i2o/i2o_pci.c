@@ -132,9 +132,9 @@ int __init i2o_pci_install(struct pci_dev *dev)
 	for(i=0; i<6; i++)
 	{
 		/* Skip I/O spaces */
-		if(!(dev->resource[i].flags&PCI_BASE_ADDRESS_SPACE))
+		if(!(pci_resource_flags(dev, i) & IORESOURCE_IO))
 		{
-			memptr=dev->resource[i].start;
+			memptr = pci_resource_start(dev, i);
 			break;
 		}
 	}
@@ -256,6 +256,8 @@ int __init i2o_pci_scan(void)
 			printk(KERN_INFO "i2o: I2O Controller found but does not support I2O 1.5 (skipping).\n");
 			continue;
 		}
+		if (pci_enable_device(dev))
+			continue;
 		printk(KERN_INFO "i2o: I2O controller on bus %d at %d.\n",
 			dev->bus->number, dev->devfn);
 		pci_set_master(dev);

@@ -2,7 +2,7 @@
 #define __HID_H
 
 /*
- *  drivers/usb/hid.h  Version 0.8
+ * $Id: hid.h,v 1.4 2000/05/29 09:01:52 vojtech Exp $
  *
  *  Copyright (c) 1999 Andreas Gal
  *  Copyright (c) 2000 Vojtech Pavlik
@@ -292,7 +292,9 @@ struct hid_device {							/* device report descriptor */
 	struct urb urb;							/* USB URB structure */
 	struct urb urbout;						/* Output URB */
 	struct input_dev input;						/* input device structure */
+	int open;							/* is the device open by input? */
 	int quirks;							/* Various nasty tricks the device can pull on us */
+	char name[128];							/* Device name */
 };
 
 #define HID_GLOBAL_STACK_SIZE 4

@@ -533,6 +533,8 @@ static int __init gdth_search_pci(gdth_pci_str *pcistr)
         pdev = NULL;
         while ((pdev = pci_find_device(PCI_VENDOR_ID_VORTEX,device_id,pdev)) 
                != NULL) {
+	    if (pci_enable_device(pdev))
+	    	continue;
             if (cnt >= MAXHA)
                 return cnt;
             /* GDT PCI controller found, resources are already in pdev */

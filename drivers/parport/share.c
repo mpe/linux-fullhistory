@@ -87,12 +87,14 @@ static void call_driver_chain(int attach, struct parport *port)
 {
 	struct parport_driver *drv;
 
+	spin_lock (&driverlist_lock);
 	for (drv = driver_chain; drv; drv = drv->next) {
 		if (attach)
 			drv->attach (port);
 		else
 			drv->detach (port);
 	}
+	spin_unlock (&driverlist_lock);
 }
 
 /* Ask kmod for some lowlevel drivers. */
@@ -126,8 +128,12 @@ int parport_register_driver (struct parport_driver *drv)
 	driver_chain = drv;
 	spin_unlock (&driverlist_lock);
 
+	/* We have to take the portlist lock for this to be sure
+	 * that port is valid for the duration of the callback. */
+	spin_lock (&parportlist_lock);
 	for (port = portlist; port; port = port->next)
 		drv->attach (port);
+	spin_unlock (&parportlist_lock);
 
 	if (!portlist)
 		get_lowlevel_driver ();
@@ -171,8 +177,10 @@ void parport_unregister_driver (struct parport_driver *arg)
 			/* Call the driver's detach routine for each
 			 * port to clean up any resources that the
 			 * attach routine acquired. */
+			spin_lock (&parportlist_lock);
 			for (port = portlist; port; port = port->next)
 				drv->detach (port);
+			spin_unlock (&parportlist_lock);
 
 			return;
 		}
@@ -195,6 +203,8 @@ void parport_unregister_driver (struct parport_driver *arg)
 
 struct parport *parport_enumerate(void)
 {
+	/* Don't use this: use parport_register_driver instead. */
+
 	if (!portlist)
 		get_lowlevel_driver ();
 
@@ -297,7 +307,18 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	 * This function must not run from an irq handler so we don' t need
 	 * to clear irq on the local CPU. -arca
 	 */
+
 	spin_lock(&parportlist_lock);
+
+	/* We are locked against anyone else performing alterations, but
+	 * because of parport_enumerate people can still _read_ the list
+	 * while we are changing it; so be careful..
+	 *
+	 * It's okay to have portlist_tail a little bit out of sync
+	 * since it's only used for changing the list, not for reading
+	 * from it.
+	 */
+
 	if (portlist_tail)
 		portlist_tail->next = tmp;
 	portlist_tail = tmp;
@@ -403,6 +424,10 @@ void parport_unregister_port(struct parport *port)
 #endif
 
 	spin_lock(&parportlist_lock);
+
+	/* We are protected from other people changing the list, but
+	 * they can see see it (using parport_enumerate).  So be
+	 * careful about the order of writes.. */
 	if (portlist == port) {
 		if ((portlist = port->next) == NULL)
 			portlist_tail = NULL;
@@ -418,6 +443,7 @@ void parport_unregister_port(struct parport *port)
 	}
 	spin_unlock(&parportlist_lock);
 
+	/* Yes, parport_enumerate _is_ unsafe.  Don't use it. */
 	if (!port->devices)
 		free_port (port);
 }
@@ -565,6 +591,9 @@ parport_register_device(struct parport *port, const char *name,
 	}
 
 	tmp->next = port->physport->devices;
+	wmb(); /* Make sure that tmp->next is written before it's
+                  added to the list; see comments marked 'no locking
+                  required' */
 	if (port->physport->devices)
 		port->physport->devices->prev = tmp;
 	port->physport->devices = tmp;
@@ -647,6 +676,11 @@ void parport_unregister_device(struct pardevice *dev)
 	 * free up the resources. */
 	if (port->ops == &dead_ops && !port->devices)
 		free_port (port);
+
+	/* Yes, that's right, someone _could_ still have a pointer to
+	 * port, if they used parport_enumerate.  That's why they
+	 * shouldn't use it (and use parport_register_driver instead)..
+	 */
 }
 
 /**
@@ -702,7 +736,7 @@ int parport_claim(struct pardevice *dev)
 		dev->waiting = 0;
 
 		/* Take ourselves out of the wait list again.  */
-		spin_lock_irqsave (&port->waitlist_lock, flags);
+		spin_lock_irq (&port->waitlist_lock);
 		if (dev->waitprev)
 			dev->waitprev->waitnext = dev->waitnext;
 		else
@@ -711,7 +745,7 @@ int parport_claim(struct pardevice *dev)
 			dev->waitnext->waitprev = dev->waitprev;
 		else
 			port->waittail = dev->waitprev;
-		spin_unlock_irqrestore (&port->waitlist_lock, flags);
+		spin_unlock_irq (&port->waitlist_lock);
 		dev->waitprev = dev->waitnext = NULL;
 	}
 
@@ -878,7 +912,7 @@ void parport_release(struct pardevice *dev)
 	}
 
 	/* Nobody was waiting, so walk the list to see if anyone is
-	   interested in being woken up.  */
+	   interested in being woken up. (Note: no locking required) */
 	for (pd = port->devices; (port->cad == NULL) && pd; pd = pd->next) {
 		if (pd->wakeup && pd != dev)
 			pd->wakeup(pd->private);

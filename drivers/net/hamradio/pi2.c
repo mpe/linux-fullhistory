@@ -1378,7 +1378,7 @@ static int pi_probe(struct net_device *dev, int card_type)
 	    if (irqval) {
 		printk(KERN_ERR "PI: unable to get IRQ %d (irqval=%d).\n",
 		       dev->irq, irqval);
-		return EAGAIN;
+		return -EAGAIN;
 	    }
 	}
 

@@ -471,7 +471,7 @@ void copy_segments(struct task_struct *p, struct mm_struct *new_mm)
 	return;
 }
 
-#ifdef CONFIG_X86_FX
+#ifdef CONFIG_X86_FXSR
 
 int i387_hard_to_user ( struct _fpstate * user,
 			struct i387_hard_struct * hard)

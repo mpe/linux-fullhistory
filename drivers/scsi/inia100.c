@@ -247,6 +247,8 @@ int orc_ReturnNumberOfAdapters(void)
 					inia100_pci_devices[i].device_id,
 						       pdev)))
 			{
+				if (pci_enable_device(pdev))
+					continue;
 				if (iAdapters >= MAX_SUPPORTED_ADAPTERS)
 					break;	/* Never greater than maximum   */
 
@@ -261,23 +263,22 @@ int orc_ReturnNumberOfAdapters(void)
 					 */
 					bPCIBusNum = pdev->bus->number;
 					bPCIDeviceNum = pdev->devfn;
-					dRegValue = pdev->resource[0].start;
+					dRegValue = pci_resource_start(pdev, 0);
 					if (dRegValue == -1) {	/* Check return code            */
 						printk("\n\rinia100: orchid read configuration error.\n");
 						return (0);	/* Read configuration space error  */
 					}
+
 					/* <02> read from base address + 0x50 offset to get the wBIOS balue. */
 					wBASE = (WORD) dRegValue;
 
-					/* Now read the interrupt line  */
+					/* Now read the interrupt line value */
 					dRegValue = pdev->irq;
-					bInterrupt = dRegValue & 0xFF;	/* Assign interrupt line      */
-					pci_read_config_word(pdev, PCI_COMMAND, &command);
-					pci_write_config_word(pdev, PCI_COMMAND,
-							      command | PCI_COMMAND_MASTER | PCI_COMMAND_IO);
+					bInterrupt = dRegValue;		/* Assign interrupt line      */
 
-					wBASE &= PCI_BASE_ADDRESS_IO_MASK;
 					wBIOS = ORC_RDWORD(wBASE, 0x50);
+
+					pci_set_master(pdev);
 
 #ifdef MMAPIO
 					base = wBASE & PAGE_MASK;
@@ -370,7 +371,6 @@ int inia100_detect(Scsi_Host_Template * tpnt)
 		memset((unsigned char *) pHCB->HCS_virEscbArray, 0, sz);
 		pHCB->HCS_physEscbArray = (U32) VIRT_TO_BUS(pHCB->HCS_virEscbArray);
 
-		request_region(pHCB->HCS_Base, 0x100, "inia100");	/* Register */
 		get_orcPCIConfig(pHCB, i);
 
 		dBiosAdr = pHCB->HCS_BIOS;
@@ -382,6 +382,8 @@ int inia100_detect(Scsi_Host_Template * tpnt)
 			printk("inia100: initial orchid fail!!\n");
 			return (0);
 		}
+		request_region(pHCB->HCS_Base, 256, "inia100");	/* Register */
+
 		hreg = scsi_register(tpnt, sizeof(ORC_HCS));
 		if (hreg == NULL) {
 			printk("Invalid scsi_register pointer.\n");
@@ -411,28 +413,28 @@ int inia100_detect(Scsi_Host_Template * tpnt)
 		/* Initial orc chip           */
 		switch (i) {
 		case 0:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr0, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr0, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 1:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr1, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr1, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 2:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr2, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr2, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 3:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr3, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr3, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 4:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr4, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr4, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 5:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr5, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr5, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 6:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr6, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr6, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 7:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr7, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr7, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		default:
 			inia100_panic("inia100: Too many host adapters\n");
@@ -784,5 +786,15 @@ static void inia100_panic(char *msg)
 	printk("\ninia100_panic: %s\n", msg);
 	panic("inia100 panic");
 }
+
+/*
+ * Release ressources
+ */
+int inia100_release(struct Scsi_Host *hreg)
+{
+        free_irq(hreg->irq, hreg);
+        release_region(hreg->io_port, 256);
+        return 0;
+} 
 
 /*#include "inia100scsi.c" */

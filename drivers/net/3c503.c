@@ -99,7 +99,7 @@ el2_probe(struct net_device *dev)
     if (base_addr > 0x1ff)	/* Check a single specified location. */
 	return el2_probe1(dev, base_addr);
     else if (base_addr != 0)		/* Don't probe at all. */
-	return ENXIO;
+	return -ENXIO;
 
     for (addr = addrs; *addr; addr++) {
 	int i;
@@ -118,7 +118,7 @@ el2_probe(struct net_device *dev)
 #if ! defined(no_probe_nonshared_memory) && ! defined (HAVE_DEVLIST)
     return el2_pio_probe(dev);
 #else
-    return ENODEV;
+    return -ENODEV;
 #endif
 }
 
@@ -134,7 +134,7 @@ el2_pio_probe(struct net_device *dev)
     if (base_addr > 0x1ff)	/* Check a single specified location. */
 	return el2_probe1(dev, base_addr);
     else if (base_addr != 0)	/* Don't probe at all. */
-	return ENXIO;
+	return -ENXIO;
 
     for (i = 0; netcard_portlist[i]; i++) {
 	int ioaddr = netcard_portlist[i];
@@ -144,7 +144,7 @@ el2_pio_probe(struct net_device *dev)
 	    return 0;
     }
 
-    return ENODEV;
+    return -ENODEV;
 }
 #endif
 
@@ -161,7 +161,7 @@ el2_probe1(struct net_device *dev, int ioaddr)
     /* Reset and/or avoid any lurking NE2000 */
     if (inb(ioaddr + 0x408) == 0xff) {
     	mdelay(1);
-	return ENODEV;
+	return -ENODEV;
     }
 
     /* We verify that it's a 3C503 board by checking the first three octets
@@ -171,7 +171,7 @@ el2_probe1(struct net_device *dev, int ioaddr)
     /* ASIC location registers should be 0 or have only a single bit set. */
     if (   (iobase_reg  & (iobase_reg - 1))
 	|| (membase_reg & (membase_reg - 1))) {
-	return ENODEV;
+	return -ENODEV;
     }
     saved_406 = inb_p(ioaddr + 0x406);
     outb_p(ECNTRL_RESET|ECNTRL_THIN, ioaddr + 0x406); /* Reset it... */
@@ -183,11 +183,8 @@ el2_probe1(struct net_device *dev, int ioaddr)
     if ((vendor_id != OLD_3COM_ID) && (vendor_id != NEW_3COM_ID)) {
 	/* Restore the register we frobbed. */
 	outb(saved_406, ioaddr + 0x406);
-	return ENODEV;
+	return -ENODEV;
     }
-
-    if (load_8390_module("3c503.c"))
-	return -ENOSYS;
 
     /* We should have a "dev" from Space.c or the static module table. */
     if (dev == NULL) {
@@ -645,6 +642,9 @@ init_module(void)
 {
 	int this_dev, found = 0;
 
+	if (load_8390_module("3c503.c"))
+		return -ENOSYS;
+
 	for (this_dev = 0; this_dev < MAX_EL2_CARDS; this_dev++) {
 		struct net_device *dev = &dev_el2[this_dev];
 		dev->irq = irq[this_dev];
@@ -658,14 +658,13 @@ init_module(void)
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "3c503.c: No 3c503 card found (i/o = 0x%x).\n", io[this_dev]);
 			if (found != 0) {	/* Got at least one. */
-				lock_8390_module();
 				return 0;
 			}
+			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
 	}
-	lock_8390_module();
 	return 0;
 }
 
@@ -684,7 +683,7 @@ cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unlock_8390_module();
+	unload_8390_module();
 }
 #endif /* MODULE */
 

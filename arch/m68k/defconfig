@@ -67,10 +67,6 @@ CONFIG_AMIGA_FLOPPY=y
 # CONFIG_AMIGA_Z2RAM is not set
 # CONFIG_BLK_DEV_XD is not set
 # CONFIG_PARIDE is not set
-
-#
-# Additional Block Devices
-#
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_MD is not set

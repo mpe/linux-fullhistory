@@ -384,6 +384,8 @@ static int __devinit epic_init_one (struct pci_dev *pdev,
 			duplex = full_duplex[card_idx];
 	}
 
+        pdev->driver_data = dev;
+
 	dev->base_addr = ioaddr;
 	dev->irq = pdev->irq;
 	printk(KERN_INFO "%s: %s at %#lx, IRQ %d, ",
@@ -1054,7 +1056,7 @@ static int epic_rx(struct net_device *dev)
 		printk(KERN_DEBUG " In epic_rx(), entry %d %8.8x.\n", entry,
 			   ep->rx_ring[entry].rxstatus);
 	/* If we own the next entry, it's a new packet. Send it up. */
-	while ( ! le32_to_cpu(ep->rx_ring[entry].rxstatus) & DescOwn) {
+	while (!(le32_to_cpu(ep->rx_ring[entry].rxstatus) & DescOwn)) { 
 		int status = le32_to_cpu(ep->rx_ring[entry].rxstatus);
 
 		if (debug > 4)
@@ -1295,9 +1297,6 @@ static void __devexit epic_remove_one (struct pci_dev *pdev)
 {
 	struct net_device *dev = pdev->driver_data;
 	
-	if (!dev)
-		BUG();
-
 	unregister_netdev(dev);
 #ifndef USE_IO_OPS
 	iounmap ((void*) dev->base_addr);
@@ -1315,9 +1314,6 @@ static void epic_suspend (struct pci_dev *pdev)
 	struct net_device *dev = pdev->driver_data;
 	long ioaddr = dev->base_addr;
 
-	if (!dev)
-		BUG();
-
 	epic_pause(dev);
 	/* Put the chip into low-power mode. */
 	outl(0x0008, ioaddr + GENCTL);
@@ -1327,9 +1323,6 @@ static void epic_suspend (struct pci_dev *pdev)
 static void epic_resume (struct pci_dev *pdev)
 {
 	struct net_device *dev = pdev->driver_data;
-
-	if (!dev)
-		BUG();
 
 	epic_restart (dev);
 }

@@ -111,6 +111,7 @@ long m68k_serial_console_init(void);
 #endif
 #ifdef CONFIG_HEARTBEAT
 void (*mach_heartbeat) (int) = NULL;
+EXPORT_SYMBOL(mach_heartbeat);
 #endif
 #ifdef CONFIG_M68K_L2_CACHE
 void (*mach_l2_flush) (int) = NULL;

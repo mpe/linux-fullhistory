@@ -218,7 +218,7 @@ int __init znet_probe(struct net_device *dev)
 	if (p >= (char *)phys_to_virt(0x100000)) {
 		if (znet_debug > 1)
 			printk(KERN_INFO "No Z-Note ethernet adaptor found.\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 	netinfo = (struct netidblk *)p;
 	dev->base_addr = netinfo->iobase1;
@@ -256,7 +256,7 @@ int __init znet_probe(struct net_device *dev)
 		|| request_dma(zn.rx_dma,"ZNet rx")
 		|| request_dma(zn.tx_dma,"ZNet tx")) {
 		printk(KERN_WARNING "%s: Not opened -- resource busy?!?\n", dev->name);
-		return EBUSY;
+		return -EBUSY;
 	}
 
 	/* Allocate buffer memory.	We can cross a 128K boundary, so we

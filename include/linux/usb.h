@@ -307,6 +307,10 @@ struct usb_driver {
 
 	struct file_operations *fops;
 	int minor;
+
+	struct semaphore serialize;
+
+	int (*ioctl)(struct usb_device *dev, unsigned int code, void *buf);
 };
 
 /*
@@ -331,6 +335,9 @@ typedef int (*usb_device_irq)(int, void *, int, void *);
  * New USB Structures                                                         *
  *----------------------------------------------------------------------------*/
 
+/*
+ * urb->transfer_flags:
+ */
 #define USB_DISABLE_SPD         0x0001
 #define USB_ISO_ASAP            0x0002
 #define USB_URB_EARLY_COMPLETE  0x0004
@@ -362,10 +369,11 @@ typedef struct urb
 	void *transfer_buffer;		// associated data buffer
 	int transfer_buffer_length;	// data buffer length
 	int actual_length;              // actual data buffer length	
+	int bandwidth;			// bandwidth for this transfer request (INT or ISO)
 	unsigned char *setup_packet;	// setup packet (control only)
 	//
 	int start_frame;		// start frame (iso/irq only)
-	int number_of_packets;		// number of packets in this request (iso/irq only)
+	int number_of_packets;		// number of packets in this request (iso)
 	int interval;                   // polling interval (irq only)
 	int error_count;		// number of errors in this transfer (iso only)
 	int timeout;			// timeout (in jiffies)
@@ -483,7 +491,7 @@ struct usb_bus {
 	struct list_head bus_list;
 	void *hcpriv;                   /* Host Controller private data */
 
-	unsigned int bandwidth_allocated; /* on this Host Controller; */
+	int bandwidth_allocated;	/* on this Host Controller; */
 					  /* applies to Int. and Isoc. pipes; */
 					  /* measured in microseconds/frame; */
 					  /* range is 0..900, where 900 = */
@@ -492,7 +500,7 @@ struct usb_bus {
 	int bandwidth_isoc_reqs;	/* number of Isoc. requesters */
 
 	/* usbdevfs inode list */
-        struct list_head inodes;
+	struct list_head inodes;
 };
 
 #define USB_MAXCHILDREN (8)	/* This is arbitrary */
@@ -506,7 +514,6 @@ struct usb_device {
 	unsigned int toggle[2];		/* one bit for each endpoint ([0] = IN, [1] = OUT) */
 	unsigned int halted[2];		/* endpoint halts; one bit per endpoint # & direction; */
 					/* [0] = IN, [1] = OUT */
-	struct usb_config_descriptor *actconfig;/* the active configuration */
 	int epmaxpacketin[16];		/* INput endpoint specific maximums */
 	int epmaxpacketout[16];		/* OUTput endpoint specific maximums */
 
@@ -515,6 +522,9 @@ struct usb_device {
 
 	struct usb_device_descriptor descriptor;/* Descriptor */
 	struct usb_config_descriptor *config;	/* All of the configs */
+	struct usb_config_descriptor *actconfig;/* the active configuration */
+
+	char **rawdescriptors;		/* Raw descriptors for each config */
 
 	int have_langid;		/* whether string_langid is valid yet */
 	int string_langid;		/* language ID for strings */
@@ -522,8 +532,8 @@ struct usb_device {
 	void *hcpriv;			/* Host Controller private data */
 	
         /* usbdevfs inode list */
-        struct list_head inodes;
-        struct list_head filelist;
+	struct list_head inodes;
+	struct list_head filelist;
 
 	/*
 	 * Child devices - these can be either new devices
@@ -536,6 +546,8 @@ struct usb_device {
 	int maxchild;			/* Number of ports if hub */
 	struct usb_device *children[USB_MAXCHILDREN];
 };
+
+extern struct usb_interface *usb_ifnum_to_if(struct usb_device *dev, unsigned ifnum);
 
 extern int usb_register(struct usb_driver *);
 extern void usb_deregister(struct usb_driver *);
@@ -554,7 +566,10 @@ extern struct usb_device *usb_alloc_dev(struct usb_device *parent, struct usb_bu
 extern void usb_free_dev(struct usb_device *);
 extern void usb_inc_dev_use(struct usb_device *);
 #define usb_dec_dev_use usb_free_dev
-extern void usb_release_bandwidth(struct usb_device *, int);
+
+extern int usb_check_bandwidth (struct usb_device *dev, struct urb *urb);
+extern void usb_claim_bandwidth (struct usb_device *dev, struct urb *urb, int bustime, int isoc);
+extern void usb_release_bandwidth(struct usb_device *dev, struct urb *urb, int isoc);
 
 extern int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size, int timeout);
 
@@ -671,6 +686,7 @@ int usb_get_class_descriptor(struct usb_device *dev, int ifnum, unsigned char de
 int usb_get_device_descriptor(struct usb_device *dev);
 int __usb_get_extra_descriptor(char *buffer, unsigned size, unsigned char type, void **ptr);
 int usb_get_status(struct usb_device *dev, int type, int target, void *data);
+int usb_get_configuration(struct usb_device *dev);
 int usb_get_protocol(struct usb_device *dev, int ifnum);
 int usb_set_protocol(struct usb_device *dev, int ifnum, int protocol);
 int usb_set_interface(struct usb_device *dev, int ifnum, int alternate);
@@ -682,6 +698,7 @@ int usb_set_report(struct usb_device *dev, int ifnum, unsigned char type,
 	unsigned char id, void *buf, int size);
 int usb_string(struct usb_device *dev, int index, char *buf, size_t size);
 int usb_clear_halt(struct usb_device *dev, int pipe);
+void usb_set_maxpacket(struct usb_device *dev);
 
 #define usb_get_extra_descriptor(ifpoint,type,ptr)\
 	__usb_get_extra_descriptor((ifpoint)->extra,(ifpoint)->extralen,type,(void**)ptr)

@@ -125,7 +125,7 @@ int  __init e2100_probe(struct net_device *dev)
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return e21_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	for (port = e21_probe_list; *port; port++) {
 		if (check_region(*port, E21_IO_EXTENT))
@@ -134,7 +134,7 @@ int  __init e2100_probe(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 
 int __init e21_probe1(struct net_device *dev, int ioaddr)
@@ -147,14 +147,14 @@ int __init e21_probe1(struct net_device *dev, int ioaddr)
 	if (inb(ioaddr + E21_SAPROM + 0) != 0x00
 		|| inb(ioaddr + E21_SAPROM + 1) != 0x00
 		|| inb(ioaddr + E21_SAPROM + 2) != 0x1d)
-		return ENODEV;
+		return -ENODEV;
 
 	/* Verify by making certain that there is a 8390 at there. */
 	outb(E8390_NODMA + E8390_STOP, ioaddr);
 	udelay(1);	/* we want to delay one I/O cycle - which is 2MHz */
 	status = inb(ioaddr);
 	if (status != 0x21 && status != 0x23)
-		return ENODEV;
+		return -ENODEV;
 
 	/* Read the station address PROM.  */
 	for (i = 0; i < 6; i++)
@@ -162,9 +162,6 @@ int __init e21_probe1(struct net_device *dev, int ioaddr)
 
 	inb(ioaddr + E21_MEDIA); 		/* Point to media selection. */
 	outb(0, ioaddr + E21_ASIC); 	/* and disable the secondary interface. */
-
-	if (load_8390_module("e2100.c"))
-		return -ENOSYS;
 
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -194,7 +191,7 @@ int __init e21_probe1(struct net_device *dev, int ioaddr)
 			}
 		if (i >= 8) {
 			printk(" unable to get IRQ %d.\n", dev->irq);
-			return EAGAIN;
+			return -EAGAIN;
 		}
 	} else if (dev->irq == 2)	/* Fixup luser bogosity: IRQ2 is really IRQ9 */
 		dev->irq = 9;
@@ -259,7 +256,7 @@ e21_open(struct net_device *dev)
 	short ioaddr = dev->base_addr;
 
 	if (request_irq(dev->irq, ei_interrupt, 0, "e2100", dev)) {
-		return EBUSY;
+		return -EBUSY;
 	}
 
 	/* Set the interrupt line and memory base on the hardware. */
@@ -410,6 +407,9 @@ init_module(void)
 {
 	int this_dev, found = 0;
 
+	if (load_8390_module("e2100.c"))
+		return -ENOSYS;
+
 	for (this_dev = 0; this_dev < MAX_E21_CARDS; this_dev++) {
 		struct net_device *dev = &dev_e21[this_dev];
 		dev->irq = irq[this_dev];
@@ -424,14 +424,13 @@ init_module(void)
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "e2100.c: No E2100 card found (i/o = 0x%x).\n", io[this_dev]);
 			if (found != 0) {	/* Got at least one. */
-				lock_8390_module();
 				return 0;
 			}
+			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
 	}
-	lock_8390_module();
 	return 0;
 }
 
@@ -450,7 +449,7 @@ cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unlock_8390_module();
+	unload_8390_module();
 }
 #endif /* MODULE */
 

@@ -244,7 +244,7 @@ extern unsigned int mca_pentium_flag;
 #define IO_BITMAP_OFFSET offsetof(struct tss_struct,io_bitmap)
 #define INVALID_IO_BITMAP_OFFSET 0x8000
 
-#ifndef CONFIG_X86_FX
+#ifndef CONFIG_X86_FXSR
 
 #define i387_save_hard(x) \
 	__asm__("fnsave %0\n\tfwait": :"m" (x))

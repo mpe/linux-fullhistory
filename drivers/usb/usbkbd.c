@@ -1,7 +1,7 @@
 /*
- *  usbkbd.c  Version 0.1
+ * $Id: usbkbd.c,v 1.11 2000/05/29 09:01:52 vojtech Exp $
  *
- *  Copyright (c) 1999 Vojtech Pavlik
+ *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
  *  USB HIDBP Keyboard support
  *
@@ -63,6 +63,8 @@ struct usb_kbd {
 	struct urb irq, led;
 	devrequest dr;
 	unsigned char leds;
+	char name[128];
+	int open;
 };
 
 static void usb_kbd_irq(struct urb *urb)
@@ -125,12 +127,34 @@ static void usb_kbd_led(struct urb *urb)
 		warn("led urb status %d received", urb->status);
 }
 
+static int usb_kbd_open(struct input_dev *dev)
+{
+	struct usb_kbd *kbd = dev->private;
+
+	if (kbd->open++)
+		return 0;
+
+	if (usb_submit_urb(&kbd->irq))
+		return -EIO;
+
+	return 0;
+}
+
+static void usb_kbd_close(struct input_dev *dev)
+{
+	struct usb_kbd *kbd = dev->private;
+
+	if (!--kbd->open)
+		usb_unlink_urb(&kbd->irq);
+}
+
 static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_kbd *kbd;
-	int i;
+	int i, pipe, maxp;
+	char *buf;
 
 	if (dev->descriptor.bNumConfigurations != 1) return NULL;
 	interface = dev->config[0].interface[ifnum].altsetting + 0;
@@ -143,6 +167,9 @@ static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum)
 	endpoint = interface->endpoint + 0;
 	if (!(endpoint->bEndpointAddress & 0x80)) return NULL;
 	if ((endpoint->bmAttributes & 3) != 3) return NULL;
+
+	pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
+	maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
 
 	usb_set_protocol(dev, interface->bInterfaceNumber, 0);
 	usb_set_idle(dev, interface->bInterfaceNumber, 0, 0);
@@ -159,14 +186,11 @@ static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum)
 	
 	kbd->dev.private = kbd;
 	kbd->dev.event = usb_kbd_event;
+	kbd->dev.open = usb_kbd_open;
+	kbd->dev.close = usb_kbd_close;
 
-	{
-		int pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
-		int maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
-
-		FILL_INT_URB(&kbd->irq, dev, pipe, kbd->new, maxp > 8 ? 8 : maxp,
-			usb_kbd_irq, kbd, endpoint->bInterval);
-	}
+	FILL_INT_URB(&kbd->irq, dev, pipe, kbd->new, maxp > 8 ? 8 : maxp,
+		usb_kbd_irq, kbd, endpoint->bInterval);
 
 	kbd->dr.requesttype = USB_TYPE_CLASS | USB_RECIP_INTERFACE;
 	kbd->dr.request = USB_REQ_SET_REPORT;
@@ -174,18 +198,37 @@ static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum)
 	kbd->dr.index = interface->bInterfaceNumber;
 	kbd->dr.length = 1;
 
-	FILL_CONTROL_URB(&kbd->led, dev, usb_sndctrlpipe(dev, 0),
-		(void*) &kbd->dr, &kbd->leds, 1, usb_kbd_led, kbd);
-			
-	if (usb_submit_urb(&kbd->irq)) {
+	kbd->dev.name = kbd->name;
+	kbd->dev.idbus = BUS_USB;
+	kbd->dev.idvendor = dev->descriptor.idVendor;
+	kbd->dev.idproduct = dev->descriptor.idProduct;
+	kbd->dev.idversion = dev->descriptor.bcdDevice;
+
+	if (!(buf = kmalloc(63, GFP_KERNEL))) {
 		kfree(kbd);
 		return NULL;
 	}
 
+	if (dev->descriptor.iManufacturer &&
+		usb_string(dev, dev->descriptor.iManufacturer, buf, 63) > 0)
+			strcat(kbd->name, buf);
+	if (dev->descriptor.iProduct &&
+		usb_string(dev, dev->descriptor.iProduct, buf, 63) > 0)
+			sprintf(kbd->name, "%s %s", kbd->name, buf);
+
+	if (!strlen(kbd->name))
+		sprintf(kbd->name, "USB HIDBP Keyboard %04x:%04x",
+			kbd->dev.idvendor, kbd->dev.idproduct);
+
+	kfree(buf);
+
+	FILL_CONTROL_URB(&kbd->led, dev, usb_sndctrlpipe(dev, 0),
+		(void*) &kbd->dr, &kbd->leds, 1, usb_kbd_led, kbd);
+			
 	input_register_device(&kbd->dev);
 
-	printk(KERN_INFO "input%d: USB HIDBP keyboard\n", kbd->dev.number);
-
+	printk(KERN_INFO "input%d: %s on on usb%d:%d.%d\n",
+		 kbd->dev.number, kbd->name, dev->bus->busnum, dev->devnum, ifnum);
 
 	return kbd;
 }

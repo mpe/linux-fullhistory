@@ -650,7 +650,7 @@ de600_probe(struct net_device *dev)
 	de600_put_command(STOP_RESET);
 	if (de600_read_status(dev) & 0xf0) {
 		printk(": not at I/O %#3x.\n", DATA_PORT);
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	/*
@@ -675,13 +675,13 @@ de600_probe(struct net_device *dev)
 		dev->dev_addr[3] |= 0x70;
 	} else {
 		printk(" not identified in the printer port\n");
-		return ENODEV;
+		return -ENODEV;
 	}
 
 #if 0 /* Not yet */
 	if (check_region(DE600_IO, 3)) {
 		printk(", port 0x%x busy\n", DE600_IO);
-		return EBUSY;
+		return -EBUSY;
 	}
 #endif
 	request_region(DE600_IO, 3, "de600");

@@ -633,6 +633,7 @@ int __init ns8390_probe1(struct net_device *dev, int word16, char *model_name,
 
 static int ns8390_open(struct net_device *dev)
 {
+	MOD_INC_USE_COUNT;
 	ei_open(dev);
 
 	/* At least on my card (a Focus Enhancements PDS card) I start */
@@ -644,10 +645,9 @@ static int ns8390_open(struct net_device *dev)
 	if (request_irq(dev->irq, ei_interrupt, 0, "8390 Ethernet", dev)) 
 	{
 		printk ("%s: unable to get IRQ %d.\n", dev->name, dev->irq);
-		return EAGAIN;
+		MOD_DEC_USE_COUNT;
+		return -EAGAIN;
 	}
-	
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 

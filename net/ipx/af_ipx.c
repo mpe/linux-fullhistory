@@ -600,8 +600,7 @@ static struct sk_buff *ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buf
 		memcpy(skb2->h.raw, skb->h.raw, skb->len);
 	}
 	kfree_skb(skb);
-
-	return (NULL);
+	return (skb2);
 }
 
 static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)

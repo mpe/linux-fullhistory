@@ -207,6 +207,8 @@
 
 /* Olympic data structures */
 
+/* xxxx These structures are all little endian in hardware. */
+
 struct olympic_tx_desc {
 	__u32 buffer;
 	__u32 status_length;
@@ -218,13 +220,15 @@ struct olympic_tx_status {
 
 struct olympic_rx_desc {
 	__u32 buffer;
-	__u32 res_length ; 
+	__u32 res_length; 
 };
 
 struct olympic_rx_status {
 	__u32 fragmentcnt_framelen;
 	__u32 status_buffercnt;
 };
+/* xxxx END These structures are all little endian in hardware. */
+/* xxxx There may be more, but I'm pretty sure about these */
 
 struct mac_receive_buffer {
 	__u16 next ; 
@@ -236,10 +240,10 @@ struct mac_receive_buffer {
 
 struct olympic_private {
 	
-	__u16 srb;
-	__u16 trb;
-	__u16 arb;
-	__u16 asb;
+	__u16 srb;      /* be16 */
+	__u16 trb;      /* be16 */
+	__u16 arb;      /* be16 */
+	__u16 asb;      /* be16 */
 
 	__u8 *olympic_mmio;
 	__u8 *olympic_lap;

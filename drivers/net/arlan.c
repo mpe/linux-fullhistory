@@ -1091,14 +1091,14 @@ int __init arlan_probe_everywhere(struct net_device *dev)
 	{
 		if (lastFoundAt == 0xbe000)
 			printk(KERN_ERR "arlan: No Arlan devices found \n");
-		return ENODEV;
+		return -ENODEV;
 	}
 	else
 		return 0;
 
 	ARLAN_DEBUG_EXIT("arlan_probe_everywhere");
 
-	return ENODEV;
+	return -ENODEV;
 }
 
 int __init arlan_find_devices(void)
@@ -1975,7 +1975,7 @@ int __init arlan_probe(struct net_device *dev)
 	printk("Arlan driver %s\n", arlan_version);
 
 	if (arlan_probe_everywhere(dev))
-		return ENODEV;
+		return -ENODEV;
 
 	arlans_found++;
 

@@ -346,6 +346,11 @@ static int __init init_cs4232(void)
 	if(synthio != -1)
 		printk(KERN_WARNING "cs4232: wavefront support not enabled in this driver.\n");
 #endif
+	if(io==-1||irq==-1||dma==-1)
+	{
+		printk(KERN_ERR "cs4232: Must set io, irq and dma.\n");
+		return -ENODEV;
+	}
 
 	cfg.io_base = io;
 	cfg.irq = irq;

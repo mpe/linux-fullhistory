@@ -679,10 +679,12 @@ int Pci2000_Detect (Scsi_Host_Template *tpnt)
 
 	while ( (pdev = pci_find_device (VENDOR_PSI, DEVICE_ROY_1, pdev)) != NULL )
 		{
+		if (pci_enable_device(pdev))
+			continue;
 		pshost = scsi_register (tpnt, sizeof(ADAPTER2000));
 		padapter = HOSTDATA(pshost);
 
-		padapter->basePort = pdev->resource[1].start & PCI_BASE_ADDRESS_IO_MASK;
+		padapter->basePort = pci_resource_start (pdev, 1);
 		DEB (printk ("\nBase Regs = %#04X", padapter->basePort));			// get the base I/O port address
 		padapter->mb0	= padapter->basePort + RTR_MAILBOX;		   			// get the 32 bit mail boxes
 		padapter->mb1	= padapter->basePort + RTR_MAILBOX + 4;

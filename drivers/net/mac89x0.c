@@ -180,14 +180,14 @@ int __init mac89x0_probe(struct net_device *dev)
 	unsigned short sig;
 
 	if (once_is_enough)
-		return ENODEV;
+		return -ENODEV;
 	once_is_enough = 1;
 
 	/* We might have to parameterize this later */
 	slot = 0xE;
 	/* Get out now if there's a real NuBus card in slot E */
 	if (nubus_find_slot(slot, NULL) != NULL)
-		return ENODEV;	
+		return -ENODEV;	
 
 	/* The pseudo-ISA bits always live at offset 0x300 (gee,
            wonder why...) */
@@ -204,13 +204,13 @@ int __init mac89x0_probe(struct net_device *dev)
 		restore_flags(flags);
 
 		if (!card_present)
-			return ENODEV;
+			return -ENODEV;
 	}
 
 	writew(0, ioaddr + ADD_PORT);
 	sig = readw(ioaddr + DATA_PORT);
 	if (sig != swab16(CHIP_EISA_ID_SIG))
-		return ENODEV;
+		return -ENODEV;
 
 	/* Initialize the net_device structure. */
 	if (dev->priv == NULL) {
@@ -254,7 +254,7 @@ int __init mac89x0_probe(struct net_device *dev)
 	/* Try to read the MAC address */
 	if ((readreg(dev, PP_SelfST) & (EEPROM_PRESENT | EEPROM_OK)) == 0) {
 		printk("\nmac89x0: No EEPROM, giving up now.\n");
-		return ENODEV;
+		return -ENODEV;
         } else {
                 for (i = 0; i < ETH_ALEN; i += 2) {
 			/* Big-endian (why??!) */

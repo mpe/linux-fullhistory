@@ -1,7 +1,7 @@
 /*
- *  keybdev.c  Version 0.1
+ * $Id: keybdev.c,v 1.3 2000/05/28 17:31:36 vojtech Exp $
  *
- *  Copyright (c) 1999 Vojtech Pavlik
+ *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
  *  Input driver to keyboard driver binding.
  *
@@ -162,14 +162,14 @@ static struct input_handle *keybdev_connect(struct input_handler *handler, struc
 
 	input_open_device(handle);
 
-	printk("keybdev.c: Adding keyboard: input%d\n", dev->number);
+	printk(KERN_INFO "keybdev.c: Adding keyboard: input%d\n", dev->number);
 
 	return handle;
 }
 
 static void keybdev_disconnect(struct input_handle *handle)
 {
-	printk("keybdev.c: Removing keyboard: input%d\n", handle->dev->number);
+	printk(KERN_INFO "keybdev.c: Removing keyboard: input%d\n", handle->dev->number);
 	input_close_device(handle);
 	kfree(handle);
 }

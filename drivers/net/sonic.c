@@ -44,7 +44,7 @@ static int sonic_open(struct net_device *dev)
 //    if (sonic_request_irq(dev->irq, &sonic_interrupt, 0, "sonic", dev)) {
     if (sonic_request_irq(dev->irq, &sonic_interrupt, SA_INTERRUPT, "sonic", dev)) {
 	printk ("\n%s: unable to get IRQ %d .\n", dev->name, dev->irq);
-	return EAGAIN;
+	return -EAGAIN;
     }
 
     /*

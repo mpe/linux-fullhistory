@@ -161,8 +161,7 @@ static void i2o_cfg_reply(struct i2o_handler *h, struct i2o_controller *c, struc
 //		printk(KERN_INFO "File %p w/id %d has %d events\n",
 //			inf->fp, inf->q_id, inf->q_len);	
 
-		if(inf->fasync)
-			kill_fasync(inf->fasync, SIGIO, POLL_IN);
+		kill_fasync(&inf->fasync, SIGIO, POLL_IN);
 	}
 
 	return;
@@ -840,7 +839,6 @@ static int cfg_open(struct inode *inode, struct file *file)
 	open_files = tmp;
 	spin_unlock_irqrestore(&i2o_config_lock, flags);
 	
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -873,7 +871,6 @@ static int cfg_release(struct inode *inode, struct file *file)
 	}
 	spin_unlock_irqrestore(&i2o_config_lock, flags);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -894,6 +891,7 @@ static int cfg_fasync(int fd, struct file *fp, int on)
 
 static struct file_operations config_fops =
 {
+	owner:		THIS_MODULE,
 	llseek:		cfg_llseek,
 	read:		cfg_read,
 	write:		cfg_write,

@@ -829,7 +829,9 @@ static inline void tune_pci_port(unsigned long port_base) {
 
       if (!(dev = pci_find_class(PCI_CLASS_STORAGE_SCSI << 8, dev))) break;
 
-      if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &addr)) continue;
+      addr = pci_resource_start (dev, 0);
+
+      pci_enable_device (dev); /* XXX handle error */
 
 #if defined(DEBUG_PCI_DETECT)
       printk("%s: tune_pci_port, bus %d, devfn 0x%x, addr 0x%x.\n",

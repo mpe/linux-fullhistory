@@ -92,7 +92,7 @@ int __init hp_probe(struct net_device *dev)
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return hp_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	for (i = 0; hppclan_portlist[i]; i++) {
 		int ioaddr = hppclan_portlist[i];
@@ -102,7 +102,7 @@ int __init hp_probe(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 #endif
 
@@ -119,7 +119,7 @@ int __init hp_probe1(struct net_device *dev, int ioaddr)
 		|| inb(ioaddr+1) != 0x00
 		|| inb(ioaddr+2) != 0x09
 		|| inb(ioaddr+14) == 0x57)
-		return ENODEV;
+		return -ENODEV;
 
 	/* Set up the parameters based on the board ID.
 	   If you have additional mappings, please mail them to me -djb. */
@@ -130,9 +130,6 @@ int __init hp_probe1(struct net_device *dev, int ioaddr)
 		name = "HP27250";
 		wordmode = 0;
 	}
-
-	if (load_8390_module("hp.c"))
-		return -ENOSYS;
 
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) {
@@ -178,7 +175,7 @@ int __init hp_probe1(struct net_device *dev, int ioaddr)
 			printk(" no free IRQ lines.\n");
 			kfree(dev->priv);
 			dev->priv = NULL;
-			return EBUSY;
+			return -EBUSY;
 		}
 	} else {
 		if (dev->irq == 2)
@@ -187,7 +184,7 @@ int __init hp_probe1(struct net_device *dev, int ioaddr)
 			printk (" unable to get IRQ %d.\n", dev->irq);
 			kfree(dev->priv);
 			dev->priv = NULL;
-			return EBUSY;
+			return -EBUSY;
 		}
 	}
 
@@ -407,6 +404,9 @@ init_module(void)
 {
 	int this_dev, found = 0;
 
+	if (load_8390_module("hp.c"))
+		return -ENOSYS;
+
 	for (this_dev = 0; this_dev < MAX_HP_CARDS; this_dev++) {
 		struct net_device *dev = &dev_hp[this_dev];
 		dev->irq = irq[this_dev];
@@ -419,14 +419,13 @@ init_module(void)
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "hp.c: No HP card found (i/o = 0x%x).\n", io[this_dev]);
 			if (found != 0) {	/* Got at least one. */
-				lock_8390_module();
 				return 0;
 			}
+			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
 	}
-	lock_8390_module();
 	return 0;
 }
 
@@ -446,7 +445,7 @@ cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unlock_8390_module();
+	unload_8390_module();
 }
 #endif /* MODULE */
 

@@ -1,7 +1,7 @@
 /*
- *  usbmouse.c  Version 0.1
+ * $Id: usbmouse.c,v 1.5 2000/05/29 09:01:52 vojtech Exp $
  *
- *  Copyright (c) 1999 Vojtech Pavlik
+ *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
  *  USB HIDBP Mouse support
  *
@@ -37,12 +37,12 @@
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 
-#define USBMOUSE_EXTRA
-
 struct usb_mouse {
 	signed char data[8];
+	char name[128];
 	struct input_dev dev;
 	struct urb irq;
+	int open;
 };
 
 static void usb_mouse_irq(struct urb *urb)
@@ -53,16 +53,36 @@ static void usb_mouse_irq(struct urb *urb)
 
 	if (urb->status) return;
 
-	input_report_key(dev, BTN_LEFT, !!(data[0] & 0x01));
-	input_report_key(dev, BTN_RIGHT, !!(data[0] & 0x02));
-	input_report_key(dev, BTN_MIDDLE, !!(data[0] & 0x04));
-	input_report_rel(dev, REL_X, data[1]);
-	input_report_rel(dev, REL_Y, data[2]);
-#ifdef USBMOUSE_EXTRA
-	input_report_key(dev, BTN_SIDE, !!(data[0] & 0x08));
-	input_report_key(dev, BTN_EXTRA, !!(data[0] & 0x10));
+	input_report_key(dev, BTN_LEFT,   data[0] & 0x01);
+	input_report_key(dev, BTN_RIGHT,  data[0] & 0x02);
+	input_report_key(dev, BTN_MIDDLE, data[0] & 0x04);
+	input_report_key(dev, BTN_SIDE,   data[0] & 0x08);
+	input_report_key(dev, BTN_EXTRA,  data[0] & 0x10);
+
+	input_report_rel(dev, REL_X,     data[1]);
+	input_report_rel(dev, REL_Y,     data[2]);
 	input_report_rel(dev, REL_WHEEL, data[3]);
-#endif
+}
+
+static int usb_mouse_open(struct input_dev *dev)
+{
+	struct usb_mouse *mouse = dev->private;
+
+	if (mouse->open++)
+		return 0;
+
+	if (usb_submit_urb(&mouse->irq))
+		return -EIO;
+
+	return 0;
+}
+
+static void usb_mouse_close(struct input_dev *dev)
+{
+	struct usb_mouse *mouse = dev->private;
+
+	if (!--mouse->open)
+		usb_unlink_urb(&mouse->irq);
 }
 
 static void *usb_mouse_probe(struct usb_device *dev, unsigned int ifnum)
@@ -70,6 +90,8 @@ static void *usb_mouse_probe(struct usb_device *dev, unsigned int ifnum)
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_mouse *mouse;
+	int pipe, maxp;
+	char *buf;
 
 	if (dev->descriptor.bNumConfigurations != 1) return NULL;
 	interface = dev->config[0].interface[ifnum].altsetting + 0;
@@ -83,9 +105,9 @@ static void *usb_mouse_probe(struct usb_device *dev, unsigned int ifnum)
 	if (!(endpoint->bEndpointAddress & 0x80)) return NULL;
 	if ((endpoint->bmAttributes & 3) != 3) return NULL;
 
-#ifndef USBMOUSE_EXTRA
-	usb_set_protocol(dev, interface->bInterfaceNumber, 0);
-#endif
+	pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
+	maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
+
 	usb_set_idle(dev, interface->bInterfaceNumber, 0, 0);
 
 	if (!(mouse = kmalloc(sizeof(struct usb_mouse), GFP_KERNEL))) return NULL;
@@ -94,27 +116,44 @@ static void *usb_mouse_probe(struct usb_device *dev, unsigned int ifnum)
 	mouse->dev.evbit[0] = BIT(EV_KEY) | BIT(EV_REL);
 	mouse->dev.keybit[LONG(BTN_MOUSE)] = BIT(BTN_LEFT) | BIT(BTN_RIGHT) | BIT(BTN_MIDDLE);
 	mouse->dev.relbit[0] = BIT(REL_X) | BIT(REL_Y);
-#ifdef USBMOUSE_EXTRA
 	mouse->dev.keybit[LONG(BTN_MOUSE)] |= BIT(BTN_SIDE) | BIT(BTN_EXTRA);
 	mouse->dev.relbit[0] |= BIT(REL_WHEEL);
-#endif
 
-	{
-		int pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
-		int maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
+	mouse->dev.private = mouse;
+	mouse->dev.open = usb_mouse_open;
+	mouse->dev.close = usb_mouse_close;
 
-		FILL_INT_URB(&mouse->irq, dev, pipe, mouse->data, maxp > 8 ? 8 : maxp,
-			usb_mouse_irq, mouse, endpoint->bInterval);
-	}
+	mouse->dev.name = mouse->name;
+	mouse->dev.idbus = BUS_USB;
+	mouse->dev.idvendor = dev->descriptor.idVendor;
+	mouse->dev.idproduct = dev->descriptor.idProduct;
+	mouse->dev.idversion = dev->descriptor.bcdDevice;
 
-	if (usb_submit_urb(&mouse->irq)) {
+	if (!(buf = kmalloc(63, GFP_KERNEL))) {
 		kfree(mouse);
 		return NULL;
 	}
 
+	if (dev->descriptor.iManufacturer &&
+		usb_string(dev, dev->descriptor.iManufacturer, buf, 63) > 0)
+			strcat(mouse->name, buf);
+	if (dev->descriptor.iProduct &&
+		usb_string(dev, dev->descriptor.iProduct, buf, 63) > 0)
+			sprintf(mouse->name, "%s %s", mouse->name, buf);
+
+	if (!strlen(mouse->name))
+		sprintf(mouse->name, "USB HIDBP Mouse %04x:%04x",
+			mouse->dev.idvendor, mouse->dev.idproduct);
+
+	kfree(buf);
+
+	FILL_INT_URB(&mouse->irq, dev, pipe, mouse->data, maxp > 8 ? 8 : maxp,
+		usb_mouse_irq, mouse, endpoint->bInterval);
+
 	input_register_device(&mouse->dev);
 
-	printk(KERN_INFO "input%d: USB HIDBP mouse\n", mouse->dev.number);
+	printk(KERN_INFO "input%d: %s on usb%d:%d.%d\n",
+		 mouse->dev.number, mouse->name, dev->bus->busnum, dev->devnum, ifnum);
 
 	return mouse;
 }

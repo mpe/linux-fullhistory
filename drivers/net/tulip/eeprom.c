@@ -162,6 +162,13 @@ subsequent_board:
 		if (tp->flags & CSR12_IN_SROM)
 			csr12dir = *p++;
 		count = *p++;
+
+	        /* there is no phy information, don't even try to build mtable */
+	        if (count == 0) {
+			DPRINTK("no phy info, aborting mtable build\n");
+		        return;
+		}
+
 		mtable = (struct mediatable *)
 			kmalloc(sizeof(struct mediatable) + count*sizeof(struct medialeaf),
 					GFP_KERNEL);

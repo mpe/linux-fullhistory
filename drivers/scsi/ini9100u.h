@@ -78,6 +78,7 @@
 #include "sd.h"
 
 extern int i91u_detect(Scsi_Host_Template *);
+extern int i91u_release(struct Scsi_Host *);
 extern int i91u_command(Scsi_Cmnd *);
 extern int i91u_queue(Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
 extern int i91u_abort(Scsi_Cmnd *);
@@ -93,7 +94,7 @@ extern int i91u_biosparam(Scsi_Disk *, kdev_t, int *);	/*for linux v2.0 */
 	proc_info:	NULL,				\
 	name:		i91u_REVID, \
 	detect:		i91u_detect, \
-	release:	NULL, \
+	release:	i91u_release, \
 	info:		NULL,					\
 	command:	i91u_command, \
 	queuecommand:	i91u_queue, \

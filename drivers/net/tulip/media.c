@@ -388,8 +388,7 @@ int tulip_check_duplex(struct net_device *dev)
 			tp->csr6 &= ~0x00400000;
 		if (tp->full_duplex) tp->csr6 |= 0x0200;
 		else				 tp->csr6 &= ~0x0200;
-		tulip_outl_CSR6(tp, tp->csr6 | 0x0002);
-		tulip_outl_CSR6(tp, tp->csr6 | 0x2002);
+		tulip_restart_rxtx(tp, tp->csr6);
 		if (tulip_debug > 0)
 			printk(KERN_INFO "%s: Setting %s-duplex based on MII"
 				   "#%d link partner capability of %4.4x.\n",

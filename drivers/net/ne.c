@@ -195,7 +195,7 @@ int __init ne_probe(struct net_device *dev)
 	if (base_addr > 0x1ff)	/* Check a single specified location. */
 		return ne_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 #ifdef CONFIG_PCI
 	/* Then look for any installed PCI clones */
@@ -218,7 +218,7 @@ int __init ne_probe(struct net_device *dev)
 	}
 #endif
 
-	return ENODEV;
+	return -ENODEV;
 }
 #endif
 
@@ -232,7 +232,9 @@ static int __init ne_probe_pci(struct net_device *dev)
 		unsigned int pci_ioaddr;
 
 		while ((pdev = pci_find_device(pci_clone_list[i].vendor, pci_clone_list[i].dev_id, pdev))) {
-			pci_ioaddr = pdev->resource[0].start;
+			if (pci_enable_device(pdev))
+				continue;
+			pci_ioaddr = pci_resource_start (pdev, 0);
 			/* Avoid already found cards from previous calls */
 			if (check_region(pci_ioaddr, NE_IO_EXTENT))
 				continue;
@@ -309,7 +311,7 @@ static int __init ne_probe1(struct net_device *dev, int ioaddr)
 	static unsigned version_printed = 0;
 
 	if (reg0 == 0xFF)
-		return ENODEV;
+		return -ENODEV;
 
 	/* Do a preliminary verification that we have a 8390. */
 	{
@@ -322,12 +324,9 @@ static int __init ne_probe1(struct net_device *dev, int ioaddr)
 		if (inb_p(ioaddr + EN0_COUNTER0) != 0) {
 			outb_p(reg0, ioaddr);
 			outb_p(regd, ioaddr + 0x0d);	/* Restore the old values. */
-			return ENODEV;
+			return -ENODEV;
 		}
 	}
-
-	if (load_8390_module("ne.c"))
-		return -ENOSYS;
 
 	/* We should have a "dev" from Space.c or the static module table. */
 	if (dev == NULL) 
@@ -364,7 +363,7 @@ static int __init ne_probe1(struct net_device *dev, int ioaddr)
 				break;
 			} else {
 				printk(" not found (no reset ack).\n");
-				return ENODEV;
+				return -ENODEV;
 			}
 		}
 	
@@ -466,11 +465,11 @@ static int __init ne_probe1(struct net_device *dev, int ioaddr)
 		{
 			printk(" not found (invalid signature %2.2x %2.2x).\n",
 				SA_prom[14], SA_prom[15]);
-			return ENXIO;
+			return -ENXIO;
 		}
 #else
 		printk(" not found.\n");
-		return ENXIO;
+		return -ENXIO;
 #endif
 	}
 
@@ -496,7 +495,7 @@ static int __init ne_probe1(struct net_device *dev, int ioaddr)
 
 	if (! dev->irq) {
 		printk(" failed to detect IRQ line.\n");
-		return EAGAIN;
+		return -EAGAIN;
 	}
 
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
@@ -516,7 +515,7 @@ static int __init ne_probe1(struct net_device *dev, int ioaddr)
 			printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
 			kfree(dev->priv);
 			dev->priv = NULL;
-			return EAGAIN;
+			return -EAGAIN;
 		}
 	}
 	dev->base_addr = ioaddr;
@@ -837,6 +836,9 @@ int init_module(void)
 {
 	int this_dev, found = 0;
 
+	if (load_8390_module("ne.c"))
+		return -ENOSYS;
+
 	for (this_dev = 0; this_dev < MAX_NE_CARDS; this_dev++) {
 		struct net_device *dev = &dev_ne[this_dev];
 		dev->irq = irq[this_dev];
@@ -848,16 +850,15 @@ int init_module(void)
 			continue;
 		}
 		if (found != 0) { 	/* Got at least one. */
-			lock_8390_module();
 			return 0;
 		}
 		if (io[this_dev] != 0)
 			printk(KERN_WARNING "ne.c: No NE*000 card found at i/o = %#x\n", io[this_dev]);
 		else
 			printk(KERN_NOTICE "ne.c: No PCI cards found. Use \"io=0xNNN\" value(s) for ISA cards.\n");
+		unload_8390_module();
 		return -ENXIO;
 	}
-	lock_8390_module();
 	return 0;
 }
 
@@ -878,7 +879,7 @@ void cleanup_module(void)
 			kfree(priv);
 		}
 	}
-	unlock_8390_module();
+	unload_8390_module();
 }
 #endif /* MODULE */
 

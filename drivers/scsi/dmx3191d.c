@@ -68,11 +68,10 @@ int __init dmx3191d_detect(Scsi_Host_Template *tmpl) {
 	while ((pdev = pci_find_device(PCI_VENDOR_ID_DOMEX,
 			PCI_DEVICE_ID_DOMEX_DMX3191D, pdev))) {
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,13)
-		unsigned long port = pdev->base_address[0] & PCI_IOADDRESS_MASK;
-#else
-		unsigned long port = pdev->resource[0].start;
-#endif	/* LINUX_VERSION_CODE < KERNEL_VERSION(2,3,13) */
+		unsigned long port = pci_resource_start (pdev, 0);
+
+		if (pci_enable_device(pdev))
+			continue;
 
 		if (check_region(port, DMX3191D_REGION)) {
 			dmx3191d_printk("region 0x%lx-0x%lx already reserved\n",

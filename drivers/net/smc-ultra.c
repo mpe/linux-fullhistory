@@ -114,7 +114,7 @@ int __init ultra_probe(struct net_device *dev)
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return ultra_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	for (i = 0; ultra_portlist[i]; i++) {
 		int ioaddr = ultra_portlist[i];
@@ -124,7 +124,7 @@ int __init ultra_probe(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 #endif
 
@@ -143,7 +143,7 @@ int __init ultra_probe1(struct net_device *dev, int ioaddr)
 	/* Check the ID nibble. */
 	if ((idreg & 0xF0) != 0x20 			/* SMC Ultra */
 		&& (idreg & 0xF0) != 0x40) 		/* SMC EtherEZ */
-		return ENODEV;
+		return -ENODEV;
 
 	/* Select the station address register set. */
 	outb(reg4, ioaddr + 4);
@@ -151,10 +151,7 @@ int __init ultra_probe1(struct net_device *dev, int ioaddr)
 	for (i = 0; i < 8; i++)
 		checksum += inb(ioaddr + 8 + i);
 	if ((checksum & 0xff) != 0xFF)
-		return ENODEV;
-
-	if (load_8390_module("smc-ultra.c"))
-		return -ENOSYS;
+		return -ENODEV;
 
 	if (dev == NULL)
 		dev = init_etherdev(0, 0);
@@ -448,6 +445,9 @@ init_module(void)
 {
 	int this_dev, found = 0;
 
+	if (load_8390_module("smc-ultra.c"))
+		return -ENOSYS;
+
 	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++) {
 		struct net_device *dev = &dev_ultra[this_dev];
 		dev->irq = irq[this_dev];
@@ -460,6 +460,7 @@ init_module(void)
 		if (register_netdev(dev) != 0) {
 			printk(KERN_WARNING "smc-ultra.c: No SMC Ultra card found (i/o = 0x%x).\n", io[this_dev]);
 			if (found != 0) return 0;	/* Got at least one. */
+			unload_8390_module();
 			return -ENXIO;
 		}
 		found++;
@@ -483,7 +484,7 @@ cleanup_module(void)
 			kfree(dev->priv);
 		}
 	}
-	unlock_8390_module();
+	unload_8390_module();
 }
 #endif /* MODULE */
 

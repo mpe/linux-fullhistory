@@ -1,6 +1,6 @@
 /* sis900.c: A SiS 900/7016 PCI Fast Ethernet driver for Linux.
    Copyright 1999 Silicon Integrated System Corporation 
-   Revision:	1.06.04	Feb 11 2000
+   Revision:	1.07	Mar. 07 2000
    
    Modified from the driver which is originally written by Donald Becker. 
    
@@ -18,6 +18,7 @@
    preliminary Rev. 1.0 Jan. 18, 1998
    http://www.sis.com.tw/support/databook.htm
 
+   Rev 1.07 Mar. 07 2000 Ollie Lho bug fix in Rx buffer ring
    Rev 1.06.04 Feb. 11 2000 Jeff Garzik <jgarzik@mandrakesoft.com> softnet and init for kernel 2.4
    Rev 1.06.03 Dec. 23 1999 Ollie Lho Third release
    Rev 1.06.02 Nov. 23 1999 Ollie Lho bug in mac probing fixed 
@@ -69,17 +70,17 @@ static struct net_device * sis900_mac_probe (struct pci_dev * pci_dev,
 					     char *card_name);
 enum {
 	SIS_900 = 0,
-	SIS_7018
+	SIS_7016
 };
 static char * card_names[] = {
 	"SiS 900 PCI Fast Ethernet",
 	"SiS 7016 PCI Fast Ethernet"
 };
-static struct pci_device_id sis900_pci_tbl [] __initdata = {
+static struct pci_device_id sis900_pci_tbl [] __devinitdata = {
 	{PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_900,
 	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, SIS_900},
 	{PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_7016,
-	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, SIS_7018},
+	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, SIS_7016},
 	{0,}
 };
 MODULE_DEVICE_TABLE (pci, sis900_pci_tbl);
@@ -123,6 +124,7 @@ struct sis900_private {
 	unsigned int cur_phy;
 
 	struct timer_list timer;        		/* Link status detection timer. */
+
 	unsigned int cur_rx, dirty_rx;
 	unsigned int cur_tx, dirty_tx;
 
@@ -131,8 +133,8 @@ struct sis900_private {
 	struct sk_buff *rx_skbuff[NUM_RX_DESC];
 	BufferDesc tx_ring[NUM_TX_DESC];
 	BufferDesc rx_ring[NUM_RX_DESC];
-	unsigned int tx_full;			/* The Tx queue is full.    */
 
+	unsigned int tx_full;			/* The Tx queue is full.    */
 	int LinkOn;
 };
 
@@ -175,7 +177,7 @@ static int __init sis900_probe (struct pci_dev *pci_dev, const struct pci_device
 		return -ENODEV;
 	}
 
-	pci_io_base = pci_dev->resource[0].start;
+	pci_io_base = pci_resource_start(pci_dev, 0);
 	if (check_region(pci_io_base, SIS900_TOTAL_SIZE)) {
 		printk(KERN_ERR "sis900.c: can't allocate I/O space at 0x%08x\n",
 		       pci_io_base);
@@ -189,7 +191,7 @@ static int __init sis900_probe (struct pci_dev *pci_dev, const struct pci_device
 
 	/* do the real low level jobs */
 	if (sis900_mac_probe(pci_dev, card_names[pci_id->driver_data]) == NULL)
-		return -1;
+		return -ENODEV;
 
 	return 0;
 }
@@ -197,7 +199,7 @@ static int __init sis900_probe (struct pci_dev *pci_dev, const struct pci_device
 static struct net_device * __init sis900_mac_probe (struct pci_dev * pci_dev, char * card_name)
 {
 	struct sis900_private *sis_priv;
-	long ioaddr = pci_dev->resource[0].start; 
+	long ioaddr = pci_resource_start(pci_dev, 0);
 	struct net_device *net_dev = NULL;
 	int irq = pci_dev->irq;
 	u16 signature;
@@ -472,14 +474,15 @@ sis900_open(struct net_device *net_dev)
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
 	long ioaddr = net_dev->base_addr;
 
+	MOD_INC_USE_COUNT;
+
 	/* Soft reset the chip. */
 	sis900_reset(net_dev);
 
 	if (request_irq(net_dev->irq, &sis900_interrupt, SA_SHIRQ, net_dev->name, net_dev)) {
+		MOD_DEC_USE_COUNT;
 		return -EAGAIN;
 	}
-
-	MOD_INC_USE_COUNT;
 
 	sis900_init_rxfilter(net_dev);
 
@@ -1256,8 +1259,7 @@ static void __exit sis900_remove(struct pci_dev *pci_dev)
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
 		
 	unregister_netdev(net_dev);
-	release_region(net_dev->base_addr,
-		       SIS900_TOTAL_SIZE);
+	release_region(net_dev->base_addr, SIS900_TOTAL_SIZE);
 
 	kfree(sis_priv);
 	kfree(net_dev);

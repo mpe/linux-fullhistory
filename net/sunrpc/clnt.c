@@ -22,7 +22,6 @@
  */
 
 #include <asm/system.h>
-#include <asm/segment.h>
 
 #include <linux/types.h>
 #include <linux/mm.h>

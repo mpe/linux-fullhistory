@@ -76,7 +76,7 @@ struct cmsghdr {
  */
  
 #ifdef __KERNEL__
-#define __KINLINE extern __inline__
+#define __KINLINE static inline
 #elif  defined(__GNUC__) 
 #define __KINLINE static __inline__
 #elif defined(__cplusplus)

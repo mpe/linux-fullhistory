@@ -198,6 +198,17 @@ static union {
 					   the AF_UNIX size (see net/unix/af_unix.c
 					   :unix_mkname()).  
 					 */
+					 
+/**
+ *	move_addr_to_kernel	-	copy a socket address into kernel space
+ *	@uaddr: Address in user space
+ *	@kaddr: Address in kernel space
+ *	@ulen: Length in user space
+ *
+ *	The address is copied into kernel space. If the provided address is
+ *	too long an error code of -EINVAL is returned. If the copy gives
+ *	invalid addresses -EFAULT is returned. On a success 0 is returned.
+ */
 
 int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr)
 {
@@ -210,6 +221,23 @@ int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr)
 	return 0;
 }
 
+/**
+ *	move_addr_to_user	-	copy an address to user space
+ *	@kaddr: kernel space address
+ *	@klen: length of address in kernel
+ *	@uaddr: user space address
+ *	@ulen: pointer to user length field
+ *
+ *	The value pointed to by ulen on entry is the buffer length available.
+ *	This is overwritten with the buffer space used. -EINVAL is returned
+ *	if an overlong buffer is specified or a negative buffer size. -EFAULT
+ *	is returned if either the buffer or the length field are not
+ *	accessible.
+ *	After copying the data up to the limit the user specifies, the true
+ *	length of the data is written over the length limit the user
+ *	specified. Zero is returned for a success.
+ */
+ 
 int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 {
 	int err;
@@ -295,11 +323,20 @@ extern __inline__ struct socket *socki_lookup(struct inode *inode)
 	return &inode->u.socket_i;
 }
 
-/*
- *	Go from a file number to its socket slot.
+/**
+ *	sockfd_lookup	- 	Go from a file number to its socket slot
+ *	@fd: file handle
+ *	@err: pointer to an error code return
+ *
+ *	The file handle passed in is locked and the socket it is bound
+ *	too is returned. If an error occurs the err pointer is overwritten
+ *	with a negative errno code and NULL is returned. The function checks
+ *	for both invalid handles and passing a handle which is not a socket.
+ *
+ *	On a success the socket object pointer is returned.
  */
 
-extern struct socket *sockfd_lookup(int fd, int *err)
+struct socket *sockfd_lookup(int fd, int *err)
 {
 	struct file *file;
 	struct inode *inode;
@@ -331,8 +368,12 @@ extern __inline__ void sockfd_put(struct socket *sock)
 	fput(sock->file);
 }
 
-/*
- *	Allocate a socket.
+/**
+ *	sock_alloc	-	allocate a socket
+ *	
+ *	Allocate a new inode and socket object. The two are bound together
+ *	and initialised. The socket is then returned. If we are out of inodes
+ *	NULL is returned.
  */
 
 struct socket *sock_alloc(void)
@@ -375,6 +416,15 @@ static int sock_no_open(struct inode *irrelevant, struct file *dontcare)
 	return -ENXIO;
 }
 
+/**
+ *	sock_release	-	close a socket
+ *	@sock: socket to close
+ *
+ *	The socket is released from the protocol stack if it has a release
+ *	callback, and the inode is then released if the socket is bound to
+ *	an inode not a file. 
+ */
+ 
 void sock_release(struct socket *sock)
 {
 	if (sock->ops) 
@@ -1548,6 +1598,11 @@ void __init proto_init(void)
 }
 
 extern void sk_init(void);
+
+#ifdef CONFIG_BRIDGE
+extern int br_init(void);
+#endif
+
 #ifdef CONFIG_WAN_ROUTER
 extern void wanrouter_init(void);
 #endif
@@ -1579,6 +1634,13 @@ void __init sock_init(void)
 	skb_init();
 #endif
 
+	/*
+	 *	Ethernet bridge layer.
+	 */
+
+#ifdef CONFIG_BRIDGE
+	br_init();
+#endif
 
 	/*
 	 *	Wan router layer. 

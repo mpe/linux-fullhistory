@@ -137,7 +137,7 @@ int __init fmv18x_probe(struct net_device *dev)
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return fmv18x_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	for (i = 0; fmv18x_probe_list[i]; i++) {
 		int ioaddr = fmv18x_probe_list[i];
@@ -147,7 +147,7 @@ int __init fmv18x_probe(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 
 /* The Fujitsu datasheet suggests that the NIC be probed for by checking its
@@ -194,7 +194,7 @@ int __init fmv18x_probe1(struct net_device *dev, short ioaddr)
 	if (request_irq(irq, &net_interrupt, 0, "fmv18x", dev)) {
 		printk ("FMV-18x found at %#3x, but it's unusable due to a conflict on"
 				"IRQ %d.\n", ioaddr, irq);
-		return EAGAIN;
+		return -EAGAIN;
 	}
 
 	/* Allocate a new 'dev' if needed. */

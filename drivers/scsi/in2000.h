@@ -34,8 +34,10 @@
 #define DEBUGGING_ON       /* enable command-line debugging bitmask */
 #define DEBUG_DEFAULTS 0   /* default bitmask - change from command-line */
 
+#ifdef __i386__
 #define FAST_READ_IO       /* No problems with these on my machine */
 #define FAST_WRITE_IO
+#endif
 
 #ifdef DEBUGGING_ON
 #define DB(f,a) if (hostdata->args & (f)) a;
@@ -52,6 +54,7 @@
 #define write1_io(b,a)  (outb((b),hostdata->io_base+(a)))
 #define write2_io(w,a)  (outw((w),hostdata->io_base+(a)))
 
+#ifdef __i386__
 /* These inline assembly defines are derived from a patch
  * sent to me by Bill Earnest. He's done a lot of very
  * valuable thinking, testing, and coding during his effort
@@ -90,6 +93,7 @@ int __dummy_1,__dummy_2; \
    : "2" (f), "0" (sp), "1" (i)  /* input */    \
    );       /* trashed */ \
 })
+#endif
 
 /* IN2000 io_port offsets */
 #define IO_WD_ASR       0x00     /* R - 3393 auxstat reg */

@@ -42,16 +42,26 @@ static __inline__ void __list_add(struct list_head * new,
 	prev->next = new;
 }
 
-/*
- * Insert a new entry after the specified head..
+/**
+ * list_add - add a new entry
+ * @new: new entry to be added
+ * @head: list head to add it after
+ *
+ * Insert a new entry after the specified head.
+ * This is good for implementing stacks.
  */
 static __inline__ void list_add(struct list_head *new, struct list_head *head)
 {
 	__list_add(new, head, head->next);
 }
 
-/*
- * Insert a new entry before the specified head..
+/**
+ * list_add_tail - add a new entry
+ * @new: new entry to be added
+ * @head: list head to add it before
+ *
+ * Insert a new entry before the specified head.
+ * This is useful for implementing queues.
  */
 static __inline__ void list_add_tail(struct list_head *new, struct list_head *head)
 {
@@ -72,18 +82,28 @@ static __inline__ void __list_del(struct list_head * prev,
 	prev->next = next;
 }
 
+/**
+ * list_del - deletes entry from list.
+ * @entry: the element to delete from the list.
+ */
 static __inline__ void list_del(struct list_head *entry)
 {
 	__list_del(entry->prev, entry->next);
 }
 
+/**
+ * list_empty - tests whether a list is empty
+ * @head: the list to test.
+ */
 static __inline__ int list_empty(struct list_head *head)
 {
 	return head->next == head;
 }
 
-/*
- * Splice in "list" into "head"
+/**
+ * list_splice - join two lists
+ * @list: the new list to add.
+ * @head: the place to add it in the first list.
  */
 static __inline__ void list_splice(struct list_head *list, struct list_head *head)
 {
@@ -101,9 +121,20 @@ static __inline__ void list_splice(struct list_head *list, struct list_head *hea
 	}
 }
 
+/**
+ * list_entry - get the struct for this entry
+ * @ptr:	the &struct list_head pointer.
+ * @type:	the type of the struct this is embedded in.
+ * @member:	the name of the list_struct within the struct.
+ */
 #define list_entry(ptr, type, member) \
 	((type *)((char *)(ptr)-(unsigned long)(&((type *)0)->member)))
 
+/**
+ * list_for_each	-	iterate over a list
+ * @pos:	the &struct list_head to use as a loop counter.
+ * @head:	the head for your list.
+ */
 #define list_for_each(pos, head) \
 	for (pos = (head)->next; pos != (head); pos = pos->next)
 

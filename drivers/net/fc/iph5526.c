@@ -3771,7 +3771,9 @@ struct pci_dev *pdev = NULL;
 
 	for (i = 0; i < clone_list[i].vendor_id != 0; i++)
 	while ((pdev = pci_find_device(clone_list[i].vendor_id, clone_list[i].device_id, pdev))) {
-	unsigned short pci_command;
+		unsigned short pci_command;
+		if (pci_enable_device(pdev))
+			continue;
 		if (count < MAX_FC_CARDS) {
 			fc[count] = kmalloc(sizeof(struct fc_info), GFP_ATOMIC);
 			if (fc[count] == NULL) {
@@ -3800,8 +3802,8 @@ struct pci_dev *pdev = NULL;
 		host->hostt->use_new_eh_code = 1;
 		host->this_id = tmpt->this_id;
 
-		pci_maddr = pdev->resource[0].start;
-		if ( (pdev->resource[0].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_MEMORY) {
+		pci_maddr = pci_resource_start(pdev, 0);
+		if (pci_resource_flags(pdev, 0) & IORESOURCE_IO) {
 			printk("iph5526.c : Cannot find proper PCI device base address.\n");
 			scsi_unregister(host);
 			kfree(fc[count]);

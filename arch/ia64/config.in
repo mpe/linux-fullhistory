@@ -1,3 +1,6 @@
+# For a description of the syntax of this configuration file,
+# see Documentation/kbuild/config-language.txt.
+#
 mainmenu_name "Kernel configuration of Linux for IA-64 machines"
 
 mainmenu_option next_comment

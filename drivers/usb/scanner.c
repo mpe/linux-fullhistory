@@ -1,7 +1,7 @@
 /* -*- linux-c -*- */
 
 /* 
- * Driver for USB Scanners (linux-2.3.99-pre6-3)
+ * Driver for USB Scanners (linux-2.4.0test1-ac7)
  *
  * Copyright (C) 1999, 2000 David E. Nelson
  *
@@ -192,6 +192,12 @@
  *      scanner lookup/ident table. Thanks Randy.
  *    - Documentation updates.
  *    - Added wait queues to read_scanner().
+ *
+ *
+ * 0.4.3.1
+ *
+ *    - Fixed HP S20 ID's...again..sigh.  Thanks to Ruud
+ *      Linders <rlinders@xs4all.nl>.
  *
  *
  *  TODO

@@ -186,8 +186,8 @@ static void amikeyb_rep(unsigned long ignore)
 
     kbd_pt_regs = NULL;
 
+    init_timer(&amikeyb_rep_timer);
     amikeyb_rep_timer.expires = jiffies + key_repeat_rate;
-    amikeyb_rep_timer.prev = amikeyb_rep_timer.next = NULL;
     add_timer(&amikeyb_rep_timer);
     handle_scancode(rep_scancode, 1);
 
@@ -254,8 +254,8 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 	} else {
 	    del_timer(&amikeyb_rep_timer);
 	    rep_scancode = keycode;
+	    init_timer(&amikeyb_rep_timer);
 	    amikeyb_rep_timer.expires = jiffies + key_repeat_delay;
-	    amikeyb_rep_timer.prev = amikeyb_rep_timer.next = NULL;
 	    add_timer(&amikeyb_rep_timer);
 	}
 	handle_scancode(keycode, !break_flag);

@@ -169,31 +169,54 @@ enum t21143_csr6_bits {
 	csr6_ra = (1<<30),
 	csr6_ign_dest_msb = (1<<26),
 	csr6_mbo = (1<<25),
-	csr6_scr = (1<<24),
-	csr6_pcs = (1<<23),
-	csr6_ttm = (1<<22),
-	csr6_sf = (1<<21),
-	csr6_hbd = (1<<19),
-	csr6_ps = (1<<18),
-	csr6_ca = (1<<17),
-	csr6_st = (1<<13),
-	csr6_fc = (1<<12),
-	csr6_om_int_loop = (1<<10),
-	csr6_om_ext_loop = (1<<11),
-	csr6_fd = (1<<9),
-	csr6_pm = (1<<7),
-	csr6_pr = (1<<6),
-	csr6_sb = (1<<5),
-	csr6_if = (1<<4),
-	csr6_pb = (1<<3),
-	csr6_ho = (1<<2),
-	csr6_sr = (1<<1),
-	csr6_hp = (1<<0),
+	csr6_scr = (1<<24),  /* scramble mode flag: can't be set */
+	csr6_pcs = (1<<23),  /* Enables PCS functions (symbol mode requires csr6_ps be set) default is set */
+	csr6_ttm = (1<<22),  /* Transmit Threshold Mode, set for 10baseT, 0 for 100BaseTX */
+	csr6_sf = (1<<21),   /* Store and forward. If set ignores TR bits */
+	csr6_hbd = (1<<19),  /* Heart beat disable. Disables SQE function in 10baseT */
+	csr6_ps = (1<<18),   /* Port Select. 0 (defualt) = 10baseT, 1 = 100baseTX: can't be set */
+	csr6_ca = (1<<17),   /* Collision Offset Enable. If set uses special algorithm in low collision situations */
+	csr6_trh = (1<<15),  /* Transmit Threshold high bit */
+	csr6_trl = (1<<14),  /* Transmit Threshold low bit */
+
+	/***************************************************************
+	 * This table shows transmit threshold values based on media   *
+	 * and these two registers (from PNIC1 & 2 docs) Note: this is *
+	 * all meaningless if sf is set.                               *
+	 ***************************************************************/
+
+	/***********************************
+	 * (trh,trl) * 100BaseTX * 10BaseT *
+	 ***********************************
+	 *   (0,0)   *     128   *    72   *
+	 *   (0,1)   *     256   *    96   *
+	 *   (1,0)   *     512   *   128   *
+	 *   (1,1)   *    1024   *   160   *
+	 ***********************************/
+
+	csr6_st = (1<<13),   /* Transmit conrol: 1 = transmit, 0 = stop */
+	csr6_fc = (1<<12),   /* Forces a collision in next transmission (for testing in loopback mode) */
+	csr6_om_int_loop = (1<<10), /* internal (FIFO) loopback flag */
+	csr6_om_ext_loop = (1<<11), /* external (PMD) loopback flag */
+	/* set both and you get (PHY) loopback */
+	csr6_fd = (1<<9),    /* Full duplex mode, disables hearbeat, no loopback */
+	csr6_pm = (1<<7),    /* Pass All Multicast */
+	csr6_pr = (1<<6),    /* Promiscuous mode */
+	csr6_sb = (1<<5),    /* Start(1)/Stop(0) backoff counter */
+	csr6_if = (1<<4),    /* Inverse Filtering, rejects only addresses in address table: can't be set */
+	csr6_pb = (1<<3),    /* Pass Bad Frames, (1) causes even bad frames to be passed on */
+	csr6_ho = (1<<2),    /* Hash-only filtering mode: can't be set */
+	csr6_sr = (1<<1),    /* Start(1)/Stop(0) Receive */
+	csr6_hp = (1<<0),    /* Hash/Perfect Receive Filtering Mode: can't be set */
 	
 	csr6_mask_capture = (csr6_sc | csr6_ca),
 	csr6_mask_defstate = (csr6_mask_capture | csr6_mbo),
-	csr6_mask_fullcap = (csr6_mask_defstate | csr6_hbd |
-			     csr6_ps | (3<<14) | csr6_fd),
+	csr6_mask_hdcap = (csr6_mask_defstate | csr6_hbd | csr6_ps),
+	csr6_mask_hdcaptt = (csr6_mask_hdcap  | csr6_trh | csr6_trl),
+	csr6_mask_fullcap = (csr6_mask_hdcaptt | csr6_fd),
+	csr6_mask_fullpromisc = (csr6_pr | csr6_pm),
+	csr6_mask_filters = (csr6_hp | csr6_ho | csr6_if),
+	csr6_mask_100bt = (csr6_scr | csr6_pcs | csr6_hbd),
 };
 
 
@@ -397,11 +420,20 @@ extern u16 t21041_csr14[];
 extern u16 t21041_csr15[];
 
 
-extern inline void tulip_outl_CSR6 (struct tulip_private *tp, u32 newcsr6)
+static inline void tulip_outl_csr (struct tulip_private *tp, u32 newValue, enum tulip_offsets offset)
 {
-	long ioaddr = tp->base_addr;
+	outl (newValue, tp->base_addr + offset);
+}
 
-	outl (newcsr6, ioaddr + CSR6);
+static inline void tulip_stop_rxtx(struct tulip_private *tp, u32 csr6mask)
+{
+	tulip_outl_csr(tp, csr6mask & ~(csr6_st | csr6_sr), CSR6);
+}
+
+static inline void tulip_restart_rxtx(struct tulip_private *tp, u32 csr6mask)
+{
+	tulip_outl_csr(tp, csr6mask | csr6_sr, CSR6);
+	tulip_outl_csr(tp, csr6mask | csr6_st | csr6_sr, CSR6);
 }
 
 

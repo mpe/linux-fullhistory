@@ -86,25 +86,19 @@ static int release_mouse(struct inode * inode, struct file * file)
 {
 	ATIXL_MSE_INT_OFF(); /* Interrupts are really shut down here */
 	free_irq(ATIXL_MOUSE_IRQ, NULL);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static int open_mouse(struct inode * inode, struct file * file)
 {
-	/* Lock module as request_irq may sleep */
-	MOD_INC_USE_COUNT;
 	if (request_irq(ATIXL_MOUSE_IRQ, mouse_interrupt, 0, "ATIXL mouse", NULL))
-	{
-		MOD_DEC_USE_COUNT;
 		return -EBUSY;
-	}
 	ATIXL_MSE_INT_ON(); /* Interrupts are really enabled here */
 	return 0;
 }
 
 static struct busmouse atixlmouse = {
-	ATIXL_BUSMOUSE, "atixl", open_mouse, release_mouse, 0
+	ATIXL_BUSMOUSE, "atixl", THIS_MODULE, open_mouse, release_mouse, 0
 };
 
 static int __init atixl_busmouse_init(void)

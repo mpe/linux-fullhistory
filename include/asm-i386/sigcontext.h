@@ -25,7 +25,7 @@ struct _fpstate {
 			datasel;
 	struct _fpreg	_st[8];
 	unsigned long	status;
-#ifdef CONFIG_X86_FX
+#ifdef CONFIG_X86_FXSR
 	unsigned long	mxcsr;
 	unsigned long   _xmm[4*22];
 #endif

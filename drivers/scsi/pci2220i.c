@@ -2386,8 +2386,8 @@ static USHORT GetRegs (struct Scsi_Host *pshost, BOOL bigd, struct pci_dev *pcid
 	memset (&DaleSetup, 0, sizeof (DaleSetup));
 	memset (DiskMirror, 0, sizeof (DiskMirror));
 
-	zr = pcidev->resource[1].start & PCI_BASE_ADDRESS_IO_MASK;
-	zl = pcidev->resource[2].start & PCI_BASE_ADDRESS_IO_MASK;
+	zr = pci_resource_start (pcidev, 1);
+	zl = pci_resource_start (pcidev, 2);
 
 	padapter->basePort = zr;
 	padapter->regRemap		= zr + RTR_LOCAL_REMAP;					// 32 bit local space remap
@@ -2542,6 +2542,8 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 
 	while ( (pcidev = pci_find_device (VENDOR_PSI, DEVICE_DALE_1, pcidev)) != NULL )
 		{
+		if (pci_enable_device(pcidev))
+			continue;
 		pshost = scsi_register (tpnt, sizeof(ADAPTER2220I));
 		padapter = HOSTDATA(pshost);
 

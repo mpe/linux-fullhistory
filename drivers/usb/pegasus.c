@@ -16,7 +16,7 @@
 #include <linux/usb.h>
 
 
-static const char *version = __FILE__ ": v0.3.12 2000/05/22 (C) 1999-2000 Petko Manolov (petkan@spct.net)\n";
+static const char *version = __FILE__ ": v0.3.14 2000/06/09 (C) 1999-2000 Petko Manolov (petkan@spct.net)\n";
 
 
 #define	PEGASUS_MTU		1500
@@ -64,8 +64,11 @@ static struct usb_eth_dev usb_dev_id[] = {
 	{"D-Link DSB-650TX", 0x2001, 0x4001, NULL},
 	{"D-Link DSB-650TX", 0x2001, 0x4002, NULL},
 	{"D-Link DSB-650TX(PNA)", 0x2001, 0x4003, NULL},
+	{"D-Link DU-10", 0x07b8, 0xabc1, NULL},
+	{"D-Link DU-E100", 0x07b8, 0x4002, NULL},
 	{"Linksys USB100TX", 0x066b, 0x2203, NULL},
 	{"Linksys USB100TX", 0x066b, 0x2204, NULL},
+	{"Linksys USB Ethernet Adapter", 0x066b, 0x2206, NULL},
 	{"SMC 202 USB Ethernet", 0x0707, 0x0200, NULL},
 	{"ADMtek AN986 \"Pegasus\" USB Ethernet (eval board)", 0x07a6, 0x0986, NULL},
 	{"Accton USB 10/100 Ethernet Adapter", 0x083a, 0x1046, NULL},
@@ -80,8 +83,8 @@ static struct usb_eth_dev usb_dev_id[] = {
 #define pegasus_set_registers(dev, indx, size, data)\
 	usb_control_msg(dev, usb_sndctrlpipe(dev,0), 0xf1, 0x40, 0, indx, data, size, HZ);
 #define pegasus_set_register(dev, indx, value)	\
-	{ __u8	data = value;			\
-	usb_control_msg(dev, usb_sndctrlpipe(dev,0), 0xf1, 0x40, data, indx, &data, 1, HZ);}
+	{ __u8	__data = value;			\
+	usb_control_msg(dev, usb_sndctrlpipe(dev,0), 0xf1, 0x40, __data, indx, &__data, 1, HZ);}
 
 
 static int pegasus_read_phy_word(struct usb_device *dev, __u8 index, __u16 *regdata)
@@ -223,7 +226,7 @@ static void pegasus_read_bulk(struct urb *urb)
 	__u16 pkt_len;
 
 	if (urb->status) {
-		info("%s: RX status %d", net->name, urb->status);
+		dbg("%s: RX status %d", net->name, urb->status);
 		goto goon;
 	}
 
@@ -369,9 +372,12 @@ static int pegasus_close(struct net_device *net)
 
 	netif_stop_queue(net);
 
-	usb_unlink_urb(&pegasus->rx_urb);
-	usb_unlink_urb(&pegasus->tx_urb);
-	usb_unlink_urb(&pegasus->intr_urb);
+	if ( pegasus->rx_urb.status == -EINPROGRESS )
+		usb_unlink_urb(&pegasus->rx_urb);
+	if ( pegasus->tx_urb.status == -EINPROGRESS )	
+		usb_unlink_urb(&pegasus->tx_urb);
+	if ( pegasus->intr_urb.status == -EINPROGRESS )
+		usb_unlink_urb(&pegasus->intr_urb);
 
 	MOD_DEC_USE_COUNT;
 
@@ -510,9 +516,12 @@ static void pegasus_disconnect(struct usb_device *dev, void *ptr)
 
 	unregister_netdev(pegasus->net);
 
-	usb_unlink_urb(&pegasus->rx_urb);
-	usb_unlink_urb(&pegasus->tx_urb);
-	usb_unlink_urb(&pegasus->intr_urb);
+	if ( pegasus->rx_urb.status == -EINPROGRESS )
+		usb_unlink_urb(&pegasus->rx_urb);
+	if ( pegasus->tx_urb.status == -EINPROGRESS )
+		usb_unlink_urb(&pegasus->tx_urb);
+	if ( pegasus->intr_urb.status == -EINPROGRESS )
+		usb_unlink_urb(&pegasus->intr_urb);
 
 	kfree(pegasus);
 }

@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/parport.h>
+#include <linux/ioport.h>
 #include <asm/setup.h>
 #include <asm/amigahw.h>
 #include <asm/irq.h>
@@ -239,14 +240,19 @@ int __init parport_amiga_init(void)
 	struct parport *p;
 
 	if (MACH_IS_AMIGA && AMIGAHW_PRESENT(AMI_PARALLEL)) {
+		if (!request_mem_region(CIAA_PHYSADDR+0x100, 1, "parallel"))
+			return 0;
 		ciaa.ddrb = 0xff;
 		ciab.ddra &= 0xf8;
 		if (!(p = parport_register_port((unsigned long)&ciaa.prb,
 					IRQ_AMIGA_CIAA_FLG, PARPORT_DMA_NONE,
-					&pp_amiga_ops)))
+					&pp_amiga_ops))) {
+			release_mem_region(CIAA_PHYSADDR+0x100, 1);
 			return 0;
+		}
 		if (!request_irq(IRQ_AMIGA_CIAA_FLG, amiga_interrupt, 0, p->name, p)) {
 			parport_unregister_port (p);
+			release_mem_region(CIAA_PHYSADDR+0x100, 1);
 			return 0;
 		}
 
@@ -277,9 +283,10 @@ int init_module(void)
 void cleanup_module(void)
 {
 	if (this_port->irq != PARPORT_IRQ_NONE)
-		free_irq(IRQ_MFP_BUSY, this_port);
+		free_irq(IRQ_AMIGA_CIAA_FLG, this_port);
 	parport_proc_unregister(this_port);
 	parport_unregister_port(this_port);
+	release_mem_region(CIAA_PHYSADDR+0x100, 1);
 }
 #endif
 

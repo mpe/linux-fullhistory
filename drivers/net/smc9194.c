@@ -45,10 +45,12 @@
  .				 Fixed bug reported by Gardner Buchanan in
  .				   smc_enable, with outw instead of outb
  .	03/06/96  Erik Stahlman  Added hardware multicast from Peter Cammaert
+ .	04/14/00  Heiko Pruessing (SMA Regelsysteme)  Fixed bug in chip memory
+ .				 allocation
  ----------------------------------------------------------------------------*/
 
 static const char *version =
-	"smc9194.c:v0.12 03/06/96 by Erik Stahlman (erik@vt.edu)\n";
+	"smc9194.c:v0.13 04/14/00 by Erik Stahlman (erik@vt.edu)\n";
 
 #include <linux/module.h>
 #include <linux/version.h>
@@ -517,11 +519,15 @@ static int smc_wait_to_send_packet( struct sk_buff * skb, struct net_device * de
 
 	length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 
+		
 	/*
-	. the MMU wants the number of pages to be the number of 256 bytes
-    	. 'pages', minus 1 ( since a packet can't ever have 0 pages :) )
+	** The MMU wants the number of pages to be the number of 256 bytes
+	** 'pages', minus 1 ( since a packet can't ever have 0 pages :) )
+	**
+	** Pkt size for allocating is data length +6 (for additional status words,
+	** length and ctl!) If odd size last byte is included in this header.
 	*/
-	numPages = length / 256;
+	numPages =  ((length & 0xfffe) + 6) / 256;
 
 	if (numPages > 7 ) {
 		printk(CARDNAME": Far too big packet error. \n");

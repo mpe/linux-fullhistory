@@ -500,6 +500,9 @@ int __init dfx_probe(void)
 				printk(version);				/* we only display this string ONCE */
 			}
 
+			if (pci_enable_device(pdev))
+				continue;
+
 			/* Verify that I/O enable bit is set (PCI slot is enabled) */
 
 			pci_read_config_word(pdev, PCI_COMMAND, &command);
@@ -515,7 +518,7 @@ int __init dfx_probe(void)
 
 				/* Get I/O base address from PCI Configuration Space */
 
-				port = pdev->resource[1].start;
+				port = pci_resource_start (pdev, 1);
 
 				/* Verify port address range is not already being used */
 

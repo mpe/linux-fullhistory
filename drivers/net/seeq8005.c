@@ -119,7 +119,7 @@ seeq8005_probe(struct net_device *dev)
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return seeq8005_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	for (i = 0; seeq8005_portlist[i]; i++) {
 		int ioaddr = seeq8005_portlist[i];
@@ -129,7 +129,7 @@ seeq8005_probe(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 #endif
 
@@ -153,27 +153,27 @@ static int __init seeq8005_probe1(struct net_device *dev, int ioaddr)
 
 	old_stat = inw(SEEQ_STATUS);					/* read status register */
 	if (old_stat == 0xffff)
-		return ENODEV;						/* assume that 0xffff == no device */
+		return -ENODEV;						/* assume that 0xffff == no device */
 	if ( (old_stat & 0x1800) != 0x1800 ) {				/* assume that unused bits are 1, as my manual says */
 		if (net_debug>1) {
 			printk("seeq8005: reserved stat bits != 0x1800\n");
 			printk("          == 0x%04x\n",old_stat);
 		}
-	 	return ENODEV;
+	 	return -ENODEV;
 	}
 
 	old_rear = inw(SEEQ_REA);
 	if (old_rear == 0xffff) {
 		outw(0,SEEQ_REA);
 		if (inw(SEEQ_REA) == 0xffff) {				/* assume that 0xffff == no device */
-			return ENODEV;
+			return -ENODEV;
 		}
 	} else if ((old_rear & 0xff00) != 0xff00) {			/* assume that unused bits are 1 */
 		if (net_debug>1) {
 			printk("seeq8005: unused rear bits != 0xff00\n");
 			printk("          == 0x%04x\n",old_rear);
 		}
-		return ENODEV;
+		return -ENODEV;
 	}
 	
 	old_cfg2 = inw(SEEQ_CFG2);					/* read CFG2 register */
@@ -207,7 +207,7 @@ static int __init seeq8005_probe1(struct net_device *dev, int ioaddr)
 		outw( old_stat, SEEQ_STATUS);
 		outw( old_dmaar, SEEQ_DMAAR);
 		outw( old_cfg1, SEEQ_CFG1);
-		return ENODEV;
+		return -ENODEV;
 	}
 #endif
 
@@ -309,7 +309,7 @@ static int __init seeq8005_probe1(struct net_device *dev, int ioaddr)
 		 if (irqval) {
 			 printk ("%s: unable to get IRQ %d (irqval=%d).\n", dev->name,
 					 dev->irq, irqval);
-			 return EAGAIN;
+			 return -EAGAIN;
 		 }
 	}
 #endif
@@ -356,7 +356,7 @@ static int seeq8005_open(struct net_device *dev)
 		 if (irqval) {
 			 printk ("%s: unable to get IRQ %d (irqval=%d).\n", dev->name,
 					 dev->irq, irqval);
-			 return EAGAIN;
+			 return -EAGAIN;
 		 }
 	}
 

@@ -178,7 +178,7 @@ S:	Maintained
 
 BFS FILE SYSTEM
 P:	Tigran A. Aivazian
-M:	tigran@ocston.org
+M:	tigran@veritas.com
 L:	linux-kernel@vger.rutgers.edu
 W:	http://www.ocston.org/~tigran/patches/bfs
 S:	Maintained
@@ -232,6 +232,11 @@ COSA/SRP SYNC SERIAL DRIVER
 P:	Jan "Yenya" Kasprzak
 M:	kas@fi.muni.cz
 W:	http://www.fi.muni.cz/~kas/cosa/
+S:	Maintained
+
+CPUID/MSR DRIVER
+P:	H. Peter Anvin
+M:	hpa@zytor.com
 S:	Maintained
 
 CREDITS FILE
@@ -300,10 +305,18 @@ S:      Maintained
 
 DIGI RIGHTSWITCH NETWORK DRIVER
 P:	Rick Richardson
-M:	rick@dgii.com
+M:	rick@remotepoint.com
 L:	linux-net@vger.rutgers.edu
 W:	http://www.dgii.com/linux/
 S:	Maintained
+
+DISK GEOMETRY AND PARTITION HANDLING
+P:     Andries Brouwer
+M:     aeb@veritas.com
+W:     http://www.win.tue.nl/~aeb/linux/Large-Disk.html
+W:     http://www.win.tue.nl/~aeb/linux/zip/zip-1.html
+W:     http://www.win.tue.nl/~aeb/partitions/partition_types-1.html
+S:     Maintained
 
 DISKQUOTA:
 P:	Marco van Wieringen
@@ -476,7 +489,7 @@ S:	Maintained
 IBM ServeRAID RAID DRIVER
 P:      Keith Mitchell
 M:      ipslinux@us.ibm.com
-W:      http://www.developer.ibm.com/welcome/netfinity/serveraid_beta.html
+W:      http://www.developer.ibm.com/welcome/netfinity/serveraid.html
 S:      Supported 
 
 IDE DRIVER [GENERAL]
@@ -540,7 +553,7 @@ S:	Maintained
 
 INTEL P6 MICROCODE UPDATE SUPPORT
 P:	Tigran Aivazian
-M:	tigran@sco.com
+M:	tigran@veritas.com
 S:	Maintained
 
 IP MASQUERADING:
@@ -578,6 +591,13 @@ P:	Karsten Keil
 M:	kkeil@suse.de
 L:	isdn4linux@listserv.isdn4linux.de
 W:	http://www.isdn4linux.de
+S:	Maintained
+
+ISDN SUBSYSTEM (Eicon active card driver)
+P:	Armin Schindler
+M:	mac@melware.de
+L:	isdn4linux@listserv.isdn4linux.de
+W:	http://www.melware.de
 S:	Maintained
 
 JOYSTICK DRIVER
@@ -659,7 +679,8 @@ S:	Maintained
 
 MISCELLANEOUS MCA-SUPPORT
 P:	David Weinehall
-M:	tao@acc.umu.se (personal)
+M:	Project MCA Team <mcalinux@acc.umu.se>
+M:	David Weinehall <tao@acc.umu.se>
 W:	http://www.acc.umu.se/~tao/
 W:	http://www.acc.umu.se/~mcalinux/
 L:	linux-kernel@vger.rutgers.edu
@@ -699,12 +720,12 @@ S:	Maintained
 
 NETFILTER
 P:	Rusty Russell
-M:	Rusty.Russell@rustcorp.com.au
+M:	rusty@linuxcare.com
 P:	Marc Boucher
 M:	marc@mbsi.ca
 W:	http://www.samba.org/netfilter/
 W:	http://netfilter.kernelnotes.org
-W:	http://antarctica.penguincomputing.com/~netfilter/
+W:	http://netfilter.filewatcher.org
 L:	netfilter@lists.samba.org
 S:	Supported
 
@@ -744,8 +765,8 @@ S:      Maintained
 
 NI5010 NETWORK DRIVER
 P:     Jan-Pascal van Best and Andreas Mohr
-M:     jvbest@qv3pluto.leidenuniv.nl (Best)
-M:     100.30936@germany.net (Mohr)
+M:     Jan-Pascal van Best <jvbest@qv3pluto.leidenuniv.nl>
+M:     Andreas Mohr <100.30936@germany.net>
 L:     linux-net@vger.rutgers.edu
 S:     Maintained
 
@@ -793,12 +814,12 @@ M:	campbell@torque.net
 P:	Andrea Arcangeli
 M:	andrea@e-mind.com
 L:	linux-parport@torque.net
-W:	http://www.cyberelk.demon.co.uk/parport.html
+W:	http://people.redhat.com/twaugh/parport/
 S:	Maintained
 
 PARIDE DRIVERS FOR PARALLEL PORT IDE DEVICES
-P:	Grant Guenther
-M:	grant@torque.net
+P:	Tim Waugh
+M:	tim@cyberelk.demon.co.uk
 L:	linux-parport@torque.net
 W:	http://www.torque.net/linux-pp.html
 S:	Maintained
@@ -1051,6 +1072,8 @@ P:	Torben Mathiasen
 M:	torben.mathiasen@compaq.com
 M:	tmm@image.dk
 L:	tlan@vuser.vu.union.edu
+L:	linux-net@vger.rutgers.edu
+W:	http://tlan.kernel.dk
 S:	Maintained
 
 TOKEN-RING NETWORK DRIVER

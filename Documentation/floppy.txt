@@ -201,11 +201,10 @@ It also contains additional documentation about the floppy driver.
 The latest version can be found at fdutils homepage:
  http://fdutils.linux.lu
 
-The fdutils-5.3 release can be found at:
- http://fdutils.linux.lu/fdutils-5.3.src.tar.gz
- http://www.tux.org/pub/knaff/fdutils/fdutils-5.3.src.tar.gz
- ftp://tsx-11.mit.edu/pub/linux/sources/sbin/fdutils-5.3.src.tar.gz
- ftp://metalab.unc.edu/pub/Linux/utils/disk-management/fdutils-5.3.src.tar.gz
+The fdutils-5.4 release can be found at:
+ http://fdutils.linux.lu/fdutils-5.4.src.tar.gz
+ http://www.tux.org/pub/knaff/fdutils/fdutils-5.4.src.tar.gz
+ ftp://metalab.unc.edu/pub/Linux/utils/disk-management/fdutils-5.4.src.tar.gz
 
 Reporting problems about the floppy driver
 ==========================================

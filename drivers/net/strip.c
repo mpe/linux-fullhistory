@@ -2870,7 +2870,7 @@ int strip_init_ctrl_dev(struct net_device *dummy)
     /* Return "not found", so that dev_init() will unlink
      * the placeholder device entry for us.
      */
-    return ENODEV;
+    return -ENODEV;
 #endif
 }
 

@@ -641,23 +641,22 @@ setup_sedlbauer(struct IsdnCard *card))
 		}
 		if ((dev_sedl = pci_find_device(PCI_VENDOR_SEDLBAUER,
 				PCI_SPEEDPCI_ID, dev_sedl))) {
+			if (pci_enable_device(dev_sedl))
+				return (0);
 			cs->irq = dev_sedl->irq;
 			if (!cs->irq) {
 				printk(KERN_WARNING "Sedlbauer: No IRQ for PCI card found\n");
 				return(0);
 			}
-			cs->hw.sedl.cfg_reg = dev_sedl->resource[ 0].start &
-				PCI_BASE_ADDRESS_IO_MASK; 
+			cs->hw.sedl.cfg_reg = pci_resource_start(dev_sedl, 0);
 		} else {
 			printk(KERN_WARNING "Sedlbauer: No PCI card found\n");
 			return(0);
 		}
 		cs->irq_flags |= SA_SHIRQ;
 		cs->hw.sedl.bus = SEDL_BUS_PCI;
-		pci_read_config_word(dev_sedl, PCI_SUBSYSTEM_VENDOR_ID,
-			&sub_vendor_id);
-		pci_read_config_word(dev_sedl, PCI_SUBSYSTEM_ID,
-			&sub_id);
+		sub_vendor_id = dev_sedl->subsystem_vendor;
+		sub_id = dev_sedl->subsystem_device;
 		printk(KERN_INFO "Sedlbauer: PCI subvendor:%x subid %x\n",
 			sub_vendor_id, sub_id);
 		printk(KERN_INFO "Sedlbauer: PCI base adr %#x\n",

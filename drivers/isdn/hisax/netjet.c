@@ -1130,13 +1130,14 @@ setup_netjet(struct IsdnCard *card))
 	}
 	if ((dev_netjet = pci_find_device(PCI_VENDOR_TRAVERSE_TECH,
 		PCI_NETJET_ID,  dev_netjet))) {
+		if (pci_enable_device(dev_netjet))
+			return (0);
 		cs->irq = dev_netjet->irq;
 		if (!cs->irq) {
 			printk(KERN_WARNING "NETjet: No IRQ for PCI card found\n");
 			return(0);
 		}
-		cs->hw.njet.base = dev_netjet->resource[ 0].start
-			& PCI_BASE_ADDRESS_IO_MASK; 
+		cs->hw.njet.base = pci_resource_start(dev_netjet, 0);
 		if (!cs->hw.njet.base) {
 			printk(KERN_WARNING "NETjet: No IO-Adr for PCI card found\n");
 			return(0);

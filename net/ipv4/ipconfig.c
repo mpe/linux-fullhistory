@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.31 2000/05/03 06:37:06 davem Exp $
+ *  $Id: ipconfig.c,v 1.32 2000/06/19 06:24:59 davem Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -40,7 +40,6 @@
 #include <net/ip.h>
 #include <net/ipconfig.h>
 
-#include <asm/segment.h>
 #include <asm/uaccess.h>
 #include <asm/checksum.h>
 

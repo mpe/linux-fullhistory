@@ -6,7 +6,7 @@ Driver Status and Availability
 ------------------------------
 
 The most recent version of this driver will hopefully always be available at
-	http://people.redhat.com/zab/maestro/
+	http://www.zabbo.net/maestro/
 
 I will try and maintain the most recent stable version of the driver
 in both the stable and development kernel lines.

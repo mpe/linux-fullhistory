@@ -42,7 +42,7 @@ void __init amiga_chip_init (void)
   if (!AMIGAHW_PRESENT(CHIP_RAM))
     return;
 
-  chipram.end = amiga_chip_size;
+  chipram.end = amiga_chip_size-1;
   request_resource(&iomem_resource, &chipram);
 
   /* initialize start boundary */
