@@ -1,6 +1,6 @@
 /************************************************************************
  * s2io.c: A Linux PCI-X Ethernet driver for S2IO 10GbE Server NIC
- * Copyright(c) 2002-2005 S2IO Technologies
+ * Copyright(c) 2002-2005 Neterion Inc.
 
  * This software may be used and distributed according to the terms of
  * the GNU General Public License (GPL), incorporated herein by reference.
@@ -66,7 +66,7 @@
 
 /* S2io Driver name & version. */
 static char s2io_driver_name[] = "s2io";
-static char s2io_driver_version[] = "Version 1.7.5.1";
+static char s2io_driver_version[] = "Version 1.7.7.1";
 
 /* 
  * Cards with following subsystem_id have a link state indication
@@ -244,6 +244,10 @@ static struct pci_device_id s2io_tbl[] __devinitdata = {
 	{PCI_VENDOR_ID_S2IO, PCI_DEVICE_ID_S2IO_WIN,
 	 PCI_ANY_ID, PCI_ANY_ID},
 	{PCI_VENDOR_ID_S2IO, PCI_DEVICE_ID_S2IO_UNI,
+	 PCI_ANY_ID, PCI_ANY_ID},
+	{PCI_VENDOR_ID_S2IO, PCI_DEVICE_ID_HERC_WIN,
+	 PCI_ANY_ID, PCI_ANY_ID},
+	{PCI_VENDOR_ID_S2IO, PCI_DEVICE_ID_HERC_UNI,
 	 PCI_ANY_ID, PCI_ANY_ID},
 	{0,}
 };
@@ -4534,7 +4538,7 @@ static void s2io_init_pci(nic_t * sp)
 			     &(sp->pcix_cmd));
 }
 
-MODULE_AUTHOR("Raghavendra Koushik <raghavendra.koushik@s2io.com>");
+MODULE_AUTHOR("Raghavendra Koushik <raghavendra.koushik@neterion.com>");
 MODULE_LICENSE("GPL");
 module_param(tx_fifo_num, int, 0);
 module_param_array(tx_fifo_len, int, NULL, 0);
