@@ -18,7 +18,7 @@
 
 SUBDIRS	= chr_drv blk_drv math
 
-OBJS  = sched.o sys_call.o traps.o asm.o fork.o \
+OBJS  = sched.o sys_call.o traps.o irq.o fork.o \
 	panic.o printk.o vsprintf.o sys.o exit.o \
 	signal.o mktime.o ptrace.o ioport.o itimer.o
 
@@ -73,6 +73,13 @@ ioport.o : ioport.c /usr/src/linux/include/linux/sched.h /usr/src/linux/include/
   /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/signal.h \
   /usr/src/linux/include/sys/param.h /usr/src/linux/include/sys/time.h /usr/src/linux/include/time.h \
   /usr/src/linux/include/sys/resource.h /usr/src/linux/include/errno.h 
+irq.o : irq.c /usr/src/linux/include/signal.h /usr/src/linux/include/sys/types.h \
+  /usr/src/linux/include/stddef.h /usr/src/linux/include/errno.h /usr/src/linux/include/sys/ptrace.h \
+  /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h \
+  /usr/src/linux/include/sys/dirent.h /usr/src/linux/include/limits.h /usr/src/linux/include/sys/vfs.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/sys/param.h \
+  /usr/src/linux/include/sys/time.h /usr/src/linux/include/time.h /usr/src/linux/include/sys/resource.h \
+  /usr/src/linux/include/asm/system.h /usr/src/linux/include/asm/io.h /usr/src/linux/include/asm/irq.h 
 itimer.o : itimer.c /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h \
   /usr/src/linux/include/linux/fs.h /usr/src/linux/include/sys/types.h /usr/src/linux/include/stddef.h \
   /usr/src/linux/include/sys/dirent.h /usr/src/linux/include/limits.h /usr/src/linux/include/sys/vfs.h \

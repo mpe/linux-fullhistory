@@ -53,6 +53,7 @@ static char printbuf[1024];
 
 extern int vsprintf();
 extern void init(void);
+extern void init_IRQ(void);
 extern long blk_dev_init(long,long);
 extern long chr_dev_init(long,long);
 extern void hd_init(void);
@@ -164,6 +165,7 @@ void start_kernel(void)
 		buffer_memory_end = 1*1024*1024;
 	main_memory_start = buffer_memory_end;
 	trap_init();
+	init_IRQ();
 	sched_init();
 	main_memory_start = chr_dev_init(main_memory_start,memory_end);
 	main_memory_start = blk_dev_init(main_memory_start,memory_end);
@@ -183,14 +185,16 @@ void start_kernel(void)
 		init();
 	}
 /*
- *   NOTE!!   For any other task 'pause()' would mean we have to get a
- * signal to awaken, but task0 is the sole exception (see 'schedule()')
- * as task 0 gets activated at every idle moment (when no other tasks
- * can run). For task0 'pause()' just means we go check if some other
- * task can run, and if not we return here.
+ * task[0] is meant to be used as an "idle" task: it may not sleep, but
+ * it might do some general things like count free pages or it could be
+ * used to implement a reasonable LRU algorithm for the paging routines:
+ * anything that can be useful, but shouldn't take time from the real
+ * processes.
+ *
+ * Right now task[0] just does a infinite loop in user mode.
  */
 	for(;;)
-		__asm__("int $0x80"::"a" (__NR_pause):"ax");
+		/* nothing */ ;
 }
 
 static int printf(const char *fmt, ...)

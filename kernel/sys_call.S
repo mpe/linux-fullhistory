@@ -81,15 +81,14 @@ ENOSYS = 38
  * Ok, I get parallel printer interrupts while using the floppy for some
  * strange reason. Urgel. Now I just ignore them.
  */
-.globl _system_call,_timer_interrupt,_sys_execve
+.globl _system_call,_sys_execve
 .globl _device_not_available, _coprocessor_error
 .globl _divide_error,_debug,_nmi,_int3,_overflow,_bounds,_invalid_op
 .globl _double_fault,_coprocessor_segment_overrun
 .globl _invalid_TSS,_segment_not_present,_stack_segment
 .globl _general_protection,_irq13,_reserved
 .globl _alignment_check,_page_fault
-.globl _keyboard_interrupt,_hd_interrupt
-.globl _IRQ3_interrupt,_IRQ4_interrupt,_IRQ5_interrupt,_IRQ9_interrupt
+.globl ret_from_sys_call
 
 #define SAVE_ALL \
 	cld; \
@@ -170,15 +169,17 @@ ret_from_sys_call:
 	jne 2f
 	cmpw $0x17,OLDSS(%esp)		# was stack segment = 0x17 ?
 	jne 2f
-1:	movl _current,%eax
-	cmpl _task,%eax			# task[0] cannot have signals
-	je 2f
-	cmpl $0,_need_resched
+1:	cmpl $0,_need_resched
 	jne reschedule
+	movl _current,%eax
 	cmpl $0,state(%eax)		# state
 	jne reschedule
 	cmpl $0,counter(%eax)		# counter
 	je reschedule
+	movl $1,_need_resched
+	cmpl _task,%eax			# task[0] cannot have signals
+	je 2f
+	movl $0,_need_resched
 	movl signal(%eax),%ebx
 	movl blocked(%eax),%ecx
 	notl %ecx
@@ -240,101 +241,6 @@ _device_not_available:
 	call _math_emulate
 	addl $4,%esp
 	ret
-
-.align 2
-_keyboard_interrupt:
-	pushl $-1
-	SAVE_ALL
-	ACK_FIRST(0x02)
-	sti
-	call _do_keyboard
-	cli
-	UNBLK_FIRST(0x02)
-	jmp ret_from_sys_call
-
-.align 2
-_IRQ3_interrupt:
-	pushl $-1
-	SAVE_ALL
-	ACK_FIRST(0x08)
-	sti
-	pushl $3
-	call _do_IRQ
-	addl $4,%esp
-	cli
-	UNBLK_FIRST(0x08)
-	jmp ret_from_sys_call
-
-.align 2
-_IRQ4_interrupt:
-	pushl $-1
-	SAVE_ALL
-	ACK_FIRST(0x10)
-	sti
-	pushl $4
-	call _do_IRQ
-	addl $4,%esp
-	cli
-	UNBLK_FIRST(0x10)
-	jmp ret_from_sys_call
-
-.align 2
-_IRQ5_interrupt:
-	pushl $-1
-	SAVE_ALL
-	ACK_FIRST(0x20)
-	sti
-	pushl $5
-	call _do_IRQ
-	addl $4,%esp
-	cli
-	UNBLK_FIRST(0x20)
-	jmp ret_from_sys_call
-
-.align 2
-_IRQ9_interrupt:
-	pushl $-1
-	SAVE_ALL
-	ACK_SECOND(0x02)
-	sti
-	pushl $9
-	call _do_IRQ
-	addl $4,%esp
-	cli
-	UNBLK_SECOND(0x02)
-	jmp ret_from_sys_call
-
-.align 2
-_timer_interrupt:
-	pushl $-1		# mark this as an int
-	SAVE_ALL
-	ACK_FIRST(0x01)
-	sti
-	incl _jiffies
-	movl CS(%esp),%eax
-	andl $3,%eax		# %eax is CPL (0 or 3, 0=supervisor)
-	pushl %eax
-	call _do_timer		# 'do_timer(long CPL)' does everything from
-	addl $4,%esp		# task switching to accounting ...
-	cli
-	UNBLK_FIRST(0x01)
-	jmp ret_from_sys_call
-
-.align 2
-_hd_interrupt:
-	pushl $-1
-	SAVE_ALL
-	ACK_SECOND(0x40)
-	andl $0xfffeffff,_timer_active
-	xorl %edx,%edx
-	xchgl _do_hd,%edx
-	testl %edx,%edx
-	jne 1f
-	movl $_unexpected_hd_interrupt,%edx
-1:	call *%edx		# "interesting" way of handling intr.
-	cli
-	UNBLK_SECOND(0x40)
-	jmp ret_from_sys_call
 
 .align 2
 _sys_execve:

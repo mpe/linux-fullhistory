@@ -54,6 +54,14 @@ extern struct task_struct * wait_for_request;
 
 extern int * blk_size[NR_BLK_DEV];
 
+extern int is_read_only(int dev);
+extern void set_device_ro(int dev,int flag);
+
+#define RO_IOCTLS(dev,where) \
+  case BLKROSET: if (!suser()) return -EPERM; \
+		 set_device_ro((dev),get_fs_long((long *) (where))); return 0; \
+  case BLKROGET: put_fs_long(is_read_only(dev),(long *) (where)); return 0;
+		 
 #ifdef MAJOR_NR
 
 /*

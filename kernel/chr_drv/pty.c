@@ -31,10 +31,6 @@ int pty_open(unsigned int dev, struct file * filp)
 	wake_up(&tty->read_q->proc_list);
 	if (filp->f_flags & O_NDELAY)
 		return 0;
-	if (IS_A_PTY_MASTER(dev)) {
-		tty->link->count++;
-		return 0;
-	}
 	while (!tty->link->count && !(current->signal & ~current->blocked))
 		interruptible_sleep_on(&tty->link->read_q->proc_list);
 	if (!tty->link->count)
@@ -48,8 +44,8 @@ void pty_close(unsigned int dev, struct file * filp)
 
 	tty = tty_table + dev;
 	wake_up(&tty->read_q->proc_list);
+	wake_up(&tty->link->write_q->proc_list);
 	if (IS_A_PTY_MASTER(dev)) {
-		tty->link->count--;
 		if (tty->link->pgrp > 0)
 			kill_pg(tty->link->pgrp,SIGHUP,1);
 	}
@@ -66,8 +62,8 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 			TTY_READ_FLUSH(to);
 			continue;
 		}
-		c = GETCH(from->write_q);
-		PUTCH(c,to->read_q);
+		c = get_tty_queue(from->write_q);
+		put_tty_queue(c,to->read_q);
 		if (current->signal & ~current->blocked)
 			break;
 	}

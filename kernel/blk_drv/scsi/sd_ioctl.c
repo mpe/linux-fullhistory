@@ -3,6 +3,9 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
+#include <asm/segment.h>
+#include "../blk.h"
+#include <errno.h>
 #include "scsi.h"
 #include "sd.h"
 
@@ -13,6 +16,7 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned long cmd, unsign
 	int dev = inode->i_rdev;
 	
 	switch (cmd) {
+		RO_IOCTLS(dev,arg);
 		default:
 			return scsi_ioctl(rscsi_disks[MINOR(dev) >> 4].device,cmd,(void *) arg);
 	}

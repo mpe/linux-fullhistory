@@ -69,8 +69,6 @@ struct serial_struct {
 extern void put_tty_queue(char c, struct tty_queue * queue);
 extern int get_tty_queue(struct tty_queue * queue);
 
-#define PUTCH(c,queue) put_tty_queue((c),(queue))
-#define GETCH(queue) get_tty_queue(queue)
 #define INTR_CHAR(tty) ((tty)->termios.c_cc[VINTR])
 #define QUIT_CHAR(tty) ((tty)->termios.c_cc[VQUIT])
 #define ERASE_CHAR(tty) ((tty)->termios.c_cc[VERASE])
@@ -166,6 +164,7 @@ extern long tty_init(long);
 
 extern void flush_input(struct tty_struct * tty);
 extern void flush_output(struct tty_struct * tty);
+extern void wait_until_sent(struct tty_struct * tty);
 extern void copy_to_cooked(struct tty_struct * tty);
 
 extern int tty_ioctl(struct inode *, struct file *, unsigned int, unsigned int);

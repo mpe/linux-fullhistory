@@ -156,7 +156,7 @@ static const unsigned short ultrastor_ports[] = {
 };
 #endif
 
-void ultrastor_interrupt(void);
+void ultrastor_interrupt(int cpl);
 
 static void (*ultrastor_done)(int, int) = 0;
 
@@ -293,11 +293,17 @@ int ultrastor_14f_detect(int hostnum)
     host_number = hostnum;
     scsi_hosts[hostnum].this_id = config.ha_scsi_id;
 #if USE_QUEUECOMMAND
-    set_intr_gate(0x20 + config.interrupt, ultrastor_interrupt);
-    /* gate to PIC 2 */
-    outb_p(inb_p(0x21) & ~BIT(2), 0x21);
-    /* enable the interrupt */
-    outb(inb_p(0xA1) & ~BIT(config.interrupt - 8), 0xA1);
+    {
+   	struct sigaction sa;
+   	sa.sa_handler = ultrastor_interrupt;
+   	sa.sa_flags = SA_INTERRUPT;
+   	sa.sa_mask = 0;
+   	sa.sa_restorer = NULL;
+   	if (irqaction(config.interrupt,&sa)) {
+   		printk("unable to get IRQ%d for ultrastor controller\n",config.interrupt);
+   		return FALSE;
+   	}
+    }
 #endif
     return TRUE;
 }
@@ -421,7 +427,7 @@ int ultrastor_14f_reset(void)
 }
 
 #if USE_QUEUECOMMAND
-void ultrastor_interrupt_service(void)
+void ultrastor_interrupt(int cpl)
 {
     if (ultrastor_done == 0) {
 	printk("US14F: unexpected ultrastor interrupt\n\r");
@@ -434,37 +440,6 @@ void ultrastor_interrupt_service(void)
 		   (mscp.adapter_status << 16) | mscp.target_status);
     ultrastor_done = 0;
 }
-
-__asm__("
-_ultrastor_interrupt:
-	cld
-	pushl %eax
-	pushl %ecx
-	pushl %edx
-	push %ds
-	push %es
-	push %fs
-	movl $0x10,%eax
-	mov %ax,%ds
-	mov %ax,%es
-	movl $0x17,%eax
-	mov %ax,%fs
-	movb $0x20,%al
-	outb %al,$0xA0		# EOI to interrupt controller #1
-	outb %al,$0x80		# give port chance to breathe
-	outb %al,$0x80
-	outb %al,$0x80
-	outb %al,$0x80
-	outb %al,$0x20
-	call _ultrastor_interrupt_service
-	pop %fs
-	pop %es
-	pop %ds
-	popl %edx
-	popl %ecx
-	popl %eax
-	iret
-");
 #endif
 
 #endif

@@ -70,12 +70,14 @@ int ext_free_block(int dev, int block)
 		if (bh->b_count)
 			brelse(bh);
 	}
-	efb = (struct ext_free_block *) sb->s_zmap[1]->b_data;
-	if (efb->count == 254) {
+	if (sb->s_zmap[1])
+		efb = (struct ext_free_block *) sb->s_zmap[1]->b_data;
+	if (!sb->s_zmap[1] || efb->count == 254) {
 #ifdef EXTFS_DEBUG
 printk("ext_free_block: block full, skipping to %d\n", block);
 #endif
-		brelse (sb->s_zmap[1]);
+		if (sb->s_zmap[1])
+			brelse (sb->s_zmap[1]);
 		if (!(sb->s_zmap[1] = bread (dev, block)))
 			panic ("ext_free_block: unable to read block to free\n");
 		efb = (struct ext_free_block *) sb->s_zmap[1]->b_data;
@@ -209,13 +211,15 @@ void ext_free_inode(struct inode * inode)
 		free_super (inode->i_sb);
 		return;
 	}
-	efi = ((struct ext_free_inode *) inode->i_sb->s_imap[1]->b_data) +
-		(((unsigned long) inode->i_sb->s_imap[0])-1)%EXT_INODES_PER_BLOCK;
-	if (efi->count == 14) {
+	if (inode->i_sb->s_imap[1])
+		efi = ((struct ext_free_inode *) inode->i_sb->s_imap[1]->b_data) +
+			(((unsigned long) inode->i_sb->s_imap[0])-1)%EXT_INODES_PER_BLOCK;
+	if (!inode->i_sb->s_imap[1] || efi->count == 14) {
 #ifdef EXTFS_DEBUG
 printk("ext_free_inode: inode full, skipping to %d\n", inode->i_ino);
 #endif
-		brelse (inode->i_sb->s_imap[1]);
+		if (inode->i_sb->s_imap[1])
+			brelse (inode->i_sb->s_imap[1]);
 		block = 2 + (inode->i_ino - 1) / EXT_INODES_PER_BLOCK;
 		if (!(bh = bread(inode->i_dev, block)))
 			panic("ext_free_inode: unable to read inode block\n");
@@ -249,6 +253,7 @@ struct inode * ext_new_inode(int dev)
 		iput(inode);
 		return NULL;
 	}
+	inode->i_flags = inode->i_sb->s_flags;
 	if (!inode->i_sb->s_imap[1])
 		return 0;
 	lock_super (inode->i_sb);

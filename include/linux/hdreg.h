@@ -69,5 +69,6 @@ struct hd_geometry {
       unsigned char heads;
       unsigned char sectors;
       unsigned short cylinders;
+      unsigned long start;
 };
 #endif

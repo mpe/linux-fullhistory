@@ -89,7 +89,7 @@ subdirs: dummy
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.96c-`cat .version`\" > include/linux/config_rel.h
+	@echo \#define UTS_RELEASE \"0.96c.pl1-`cat .version`\" > include/linux/config_rel.h
 	@echo \#define UTS_VERSION \"`date +%D`\" > include/linux/config_ver.h
 	touch include/linux/config.h
 

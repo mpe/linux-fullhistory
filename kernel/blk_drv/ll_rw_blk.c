@@ -8,6 +8,7 @@
  * This handles all read/write requests to block devices
  */
 #include <errno.h>
+#include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <asm/system.h>
@@ -68,6 +69,31 @@ static inline void unlock_buffer(struct buffer_head * bh)
 		printk("ll_rw_block.c: buffer not locked\n\r");
 	bh->b_lock = 0;
 	wake_up(&bh->b_wait);
+}
+
+/* RO fail safe mechanism */
+
+static long ro_bits[NR_BLK_DEV][8];
+
+int is_read_only(int dev)
+{
+	int minor,major;
+
+	major = MAJOR(dev);
+	minor = MINOR(dev);
+	if (major < 0 || major >= NR_BLK_DEV) return 0;
+	return ro_bits[major][minor >> 5] & (1 << (minor & 31));
+}
+
+void set_device_ro(int dev,int flag)
+{
+	int minor,major;
+
+	major = MAJOR(dev);
+	minor = MINOR(dev);
+	if (major < 0 || major >= NR_BLK_DEV) return;
+	if (flag) ro_bits[major][minor >> 5] |= 1 << (minor & 31);
+	else ro_bits[major][minor >> 5] &= ~(1 << (minor & 31));
 }
 
 /*
@@ -203,6 +229,10 @@ void ll_rw_page(int rw, int dev, int page, char * buffer)
 	}
 	if (rw!=READ && rw!=WRITE)
 		panic("Bad block dev command, must be R/W");
+	if (rw == WRITE && is_read_only(dev)) {
+		printk("Can't page to read-only device 0x%X\n\r",dev);
+		return;
+	}
 	cli();
 repeat:
 	req = request+NR_REQUEST;
@@ -238,6 +268,12 @@ void ll_rw_block(int rw, struct buffer_head * bh)
 	if ((major=MAJOR(bh->b_dev)) >= NR_BLK_DEV ||
 	!(blk_dev[major].request_fn)) {
 		printk("ll_rw_block: Trying to read nonexistent block-device\n\r");
+		bh->b_dirt = bh->b_uptodate = 0;
+		return;
+	}
+	if ((rw == WRITE || rw == WRITEA) && is_read_only(bh->b_dev)) {
+		printk("Can't write to read-only device 0x%X\n\r",bh->b_dev);
+		bh->b_dirt = bh->b_uptodate = 0;
 		return;
 	}
 	make_request(major,rw,bh);
@@ -251,6 +287,7 @@ long blk_dev_init(long mem_start, long mem_end)
 		request[i].dev = -1;
 		request[i].next = NULL;
 	}
+	memset(ro_bits,0,sizeof(ro_bits));
 #ifdef RAMDISK
 	mem_start += rd_init(mem_start, RAMDISK*1024);
 #endif
@@ -270,6 +307,10 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 
 	if (rw!=READ && rw!=WRITE) {
 		printk("ll_rw_swap: bad block dev command, must be R/W");
+		return;
+	}
+	if (rw == WRITE && is_read_only(dev)) {
+		printk("Can't swap to read-only device 0x%X\n\r",dev);
 		return;
 	}
 	

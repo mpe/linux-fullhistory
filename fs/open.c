@@ -73,6 +73,10 @@ int sys_truncate(const char * path, unsigned int length)
 		iput(inode);
 		return -EACCES;
 	}
+	if (IS_RDONLY(inode)) {
+		iput(inode);
+		return -EROFS;
+	}
 	inode->i_size = length;
 	if (inode->i_op && inode->i_op->truncate)
 		inode->i_op->truncate(inode);
@@ -91,7 +95,7 @@ int sys_ftruncate(unsigned int fd, unsigned int length)
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
-	if (S_ISDIR(inode->i_mode) || !(file->f_flags & 2))
+	if (S_ISDIR(inode->i_mode) || !(file->f_mode & 2))
 		return -EACCES;
 	inode->i_size = length;
 	if (inode->i_op && inode->i_op->truncate)
@@ -112,6 +116,10 @@ int sys_utime(char * filename, struct utimbuf * times)
 
 	if (!(inode=namei(filename)))
 		return -ENOENT;
+	if (IS_RDONLY(inode)) {
+		iput(inode);
+		return -EROFS;
+	}
 	if (times) {
 		if ((current->euid != inode->i_uid) && !suser()) {
 			iput(inode);
@@ -215,6 +223,8 @@ int sys_fchmod(unsigned int fd, mode_t mode)
 		return -ENOENT;
 	if ((current->euid != inode->i_uid) && !suser())
 		return -EPERM;
+	if (IS_RDONLY(inode))
+		return -EROFS;
 	inode->i_mode = (mode & 07777) | (inode->i_mode & ~07777);
 	inode->i_dirt = 1;
 	return 0;
@@ -229,6 +239,10 @@ int sys_chmod(const char * filename, mode_t mode)
 	if ((current->euid != inode->i_uid) && !suser()) {
 		iput(inode);
 		return -EPERM;
+	}
+	if (IS_RDONLY(inode)) {
+		iput(inode);
+		return -EROFS;
 	}
 	inode->i_mode = (mode & 07777) | (inode->i_mode & ~07777);
 	inode->i_dirt = 1;
@@ -245,6 +259,8 @@ int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
+	if (IS_RDONLY(inode))
+		return -EROFS;
 	if ((current->euid == inode->i_uid && user == inode->i_uid &&
 	     (in_group_p(group) || group == inode->i_gid)) ||
 	    suser()) {
@@ -262,6 +278,10 @@ int sys_chown(const char * filename, uid_t user, gid_t group)
 
 	if (!(inode = lnamei(filename)))
 		return -ENOENT;
+	if (IS_RDONLY(inode)) {
+		iput(inode);
+		return -EROFS;
+	}
 	if ((current->euid == inode->i_uid && user == inode->i_uid &&
 	     (in_group_p(group) || group == inode->i_gid)) ||
 	    suser()) {
@@ -325,6 +345,7 @@ int sys_creat(const char * pathname, int mode)
 int sys_close(unsigned int fd)
 {	
 	struct file * filp;
+	struct inode * inode;
 
 	if (fd >= NR_OPEN)
 		return -EINVAL;
@@ -340,9 +361,10 @@ int sys_close(unsigned int fd)
 		filp->f_count--;
 		return 0;
 	}
+	inode = filp->f_inode;
 	if (filp->f_op && filp->f_op->release)
-		filp->f_op->release(filp->f_inode,filp);
-	iput(filp->f_inode);
+		filp->f_op->release(inode,filp);
 	filp->f_count--;
+	iput(inode);
 	return 0;
 }

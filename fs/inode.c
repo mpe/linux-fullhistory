@@ -252,6 +252,7 @@ struct inode * iget(int dev,int nr)
 	}
 	inode->i_dev = dev;
 	inode->i_ino = nr;
+	inode->i_flags = inode->i_sb->s_flags;
 	read_inode(inode);
 	return inode;
 }

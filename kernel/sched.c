@@ -10,6 +10,9 @@
  * call functions (type getpid(), which just extracts a field from
  * current-task
  */
+
+#define TIMER_IRQ 0
+
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/kernel.h>
@@ -369,25 +372,26 @@ void update_avg(void)
 unsigned long timer_active = 0;
 struct timer_struct timer_table[32];
 
-void do_timer(long cpl)
+static void do_timer(int cpl)
 {
 	unsigned long mask;
 	struct timer_struct *tp = timer_table+0;
 	struct task_struct ** task_p;
 	static int avg_cnt = 0;
 
-	for (mask = 1 ; mask ; tp++,mask += mask) {
-		if (mask > timer_active)
-			break;
-		if (!(mask & timer_active))
-			continue;
-		if (tp->expires > jiffies)
-			continue;
-		timer_active &= ~mask;
-		tp->fn();
-		sti();
+	jiffies++;
+	if (!cpl)
+		current->stime++;
+	else
+		current->utime++;
+	if (--avg_cnt < 0) {
+		avg_cnt = 500;
+		update_avg();
 	}
-
+	if ((--current->counter)<=0) {
+		current->counter=0;
+		need_resched = 1;
+	}
 	/* Update ITIMER_REAL for every task */
 	for (task_p = &LAST_TASK; task_p >= &FIRST_TASK; task_p--)
 		if (*task_p && (*task_p)->it_real_value
@@ -402,16 +406,21 @@ void do_timer(long cpl)
 		send_sig(SIGPROF,current,1);
 	}
 	/* Update ITIMER_VIRT for current task if not in a system call */
-	if (cpl && current->it_virt_value && !(--current->it_virt_value)) {
+	if (current->it_virt_value && !(--current->it_virt_value)) {
 		current->it_virt_value = current->it_virt_incr;
 		send_sig(SIGVTALRM,current,1);
 	}
-
-	if (cpl)
-		current->utime++;
-	else
-		current->stime++;
-
+	for (mask = 1 ; mask ; tp++,mask += mask) {
+		if (mask > timer_active)
+			break;
+		if (!(mask & timer_active))
+			continue;
+		if (tp->expires > jiffies)
+			continue;
+		timer_active &= ~mask;
+		tp->fn();
+		sti();
+	}
 	if (next_timer) {
 		next_timer->jiffies--;
 		while (next_timer && next_timer->jiffies <= 0) {
@@ -425,14 +434,6 @@ void do_timer(long cpl)
 	}
 	if (current_DOR & 0xf0)
 		do_floppy_timer();
-	if (--avg_cnt < 0) {
-		avg_cnt = 500;
-		update_avg();
-	}
-	if ((--current->counter)<=0) {
-		current->counter=0;
-		need_resched = 1;
-	}
 }
 
 int sys_alarm(long seconds)
@@ -496,6 +497,7 @@ void sched_init(void)
 		panic("Struct sigaction MUST be 16 bytes");
 	set_tss_desc(gdt+FIRST_TSS_ENTRY,&(init_task.task.tss));
 	set_ldt_desc(gdt+FIRST_LDT_ENTRY,&(init_task.task.ldt));
+	set_system_gate(0x80,&system_call);
 	p = gdt+2+FIRST_TSS_ENTRY;
 	for(i=1 ; i<NR_TASKS ; i++) {
 		task[i] = NULL;
@@ -511,7 +513,5 @@ void sched_init(void)
 	outb_p(0x36,0x43);		/* binary, mode 3, LSB/MSB, ch 0 */
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */
-	set_intr_gate(0x20,&timer_interrupt);
-	outb(inb_p(0x21)&~0x01,0x21);
-	set_system_gate(0x80,&system_call);
+	request_irq(TIMER_IRQ,do_timer);
 }

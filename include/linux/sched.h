@@ -228,6 +228,10 @@ extern void interruptible_sleep_on(struct task_struct ** p);
 extern void wake_up(struct task_struct ** p);
 extern int in_group_p(gid_t grp);
 
+extern int request_irq(unsigned int irq,void (*handler)(int));
+extern void free_irq(unsigned int irq);
+extern int irqaction(unsigned int irq,struct sigaction * new);
+
 /*
  * Entry into gdt where to find first TSS. 0-nul, 1-cs, 2-ds, 3-syscall
  * 4-TSS0, 5-LDT0, 6-TSS1 etc ...

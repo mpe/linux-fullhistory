@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/head.h>
 #include <linux/string.h>
+#include <linux/sched.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <sys/types.h>
@@ -34,7 +35,6 @@ static struct ccb ccb;
 long WAITtimeout, WAITnexttimeout = 3000000;
 
 void (*do_done)() = NULL;
-extern void aha1542_interrupt();
 
 #define aha1542_intr_reset()  outb(IRST, CONTROL)
 #define aha1542_enable_intr() outb(inb_p(0xA1) & ~8, 0xA1)
@@ -192,7 +192,7 @@ char *aha1542_info(void)
 }
 
 /* A "high" level interrupt handler */
-void aha1542_intr_handle(void)
+static void aha1542_interrupt(int cpl)
 {
     int flag = inb(INTRFLAGS);
     void (*my_done)() = do_done;
@@ -200,7 +200,7 @@ void aha1542_intr_handle(void)
 
     do_done = NULL;
 #ifdef DEBUG
-    printk("aha1542_intr_handle: ");
+    printk("aha1542_interrupt: ");
     if (!(flag&ANYINTR)) printk("no interrupt?");
     if (flag&MBIF) printk("MBIF ");
     if (flag&MBOA) printk("MBOF ");
@@ -212,14 +212,14 @@ void aha1542_intr_handle(void)
 #endif
     aha1542_intr_reset();
     if (!my_done) {
-	printk("aha1542_intr_handle: Unexpected interrupt\n");
+	printk("aha1542_interrupt: Unexpected interrupt\n");
 	return;
     }
 
     /* is there mail :-) */
 	
     if (!mb[1].status) {
-	DEB(printk("aha1542_intr_handle: strange: mbif but no mail!\n"));
+	DEB(printk("aha1542_interrupt: strange: mbif but no mail!\n"));
 	my_done(DID_TIME_OUT << 16);
 	return;
     }
@@ -235,18 +235,18 @@ void aha1542_intr_handle(void)
 
     if (ccb.tarstat == 2) {
 	int i;
-	DEB(printk("aha1542_intr_handle: sense:"));
+	DEB(printk("aha1542_interrupt: sense:"));
 	for (i = 0; i < 12; i++)
 	  printk("%02x ", ccb.cdb[ccb.cdblen+i]);
 	printk("\n");
 /*
-	DEB(printk("aha1542_intr_handle: buf:"));
+	DEB(printk("aha1542_interrupt: buf:"));
 	for (i = 0; i < bufflen; i++)
 	  printk("%02x ", ((unchar *)buff)[i]);
 	printk("\n");
 */
     }
-    DEB(if (errstatus) printk("aha1542_intr_handle: returning %6x\n", errstatus));
+    DEB(if (errstatus) printk("aha1542_interrupt: returning %6x\n", errstatus));
     my_done(errstatus);
     return;
 }
@@ -355,7 +355,14 @@ static void setup_mailboxes()
 
 void call_buh()
 {
-    set_intr_gate(0x2b,&aha1542_interrupt);
+	struct sigaction sa;
+
+	sa.sa_handler = aha1542_interrupt;
+	sa.sa_flags = SA_INTERRUPT;
+	sa.sa_mask = 0;
+	sa.sa_restorer = NULL;
+	if (irqaction(intr_chan,&sa))
+		printk("Unable to allocate IRQ%d for aha controller\n", intr_chan);
 }
 
 /* return non-zero on detection */
@@ -448,35 +455,3 @@ int aha1542_reset(void)
     DEB(printk("aha1542_reset called\n"));
     return 0;
 }
-
-__asm__("
-_aha1542_interrupt:
-	cld
-	pushl %eax
-	pushl %ecx
-	pushl %edx
-	push %ds
-	push %es
-	push %fs
-	movl $0x10,%eax
-	mov %ax,%ds
-	mov %ax,%es
-	movl $0x17,%eax
-	mov %ax,%fs
-	movb $0x20,%al
-	outb %al,$0xA0		# EOI to interrupt controller #1
-	jmp 1f			# give port chance to breathe
-1:	jmp 1f
-1:	outb %al,$0x20
-# Please, someone, change this to use the timer
-#	andl $0xfffeffff,_timer_active
-	movl $_aha1542_intr_handle,%edx
-	call *%edx		# ``interesting'' way of handling intr.
-	pop %fs
-	pop %es
-	pop %ds
-	popl %edx
-	popl %ecx
-	popl %eax
-	iret
-");

@@ -26,7 +26,7 @@
 #define DEF_INITSEG	0x9000
 #define DEF_SYSSEG	0x1000
 #define DEF_SETUPSEG	0x9020
-#define DEF_SYSSIZE	0x4000
+#define DEF_SYSSIZE	0x5000
 
 /*
  * The root-device is no longer hard-coded. You can change the default

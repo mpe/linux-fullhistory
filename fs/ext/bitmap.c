@@ -203,6 +203,7 @@ struct inode * ext_new_inode(int dev)
 		iput(inode);
 		return NULL;
 	}
+	inode->i_flags = inode->i_sb->s_flags;
 	j = 8192;
 	for (i=0 ; i<8 ; i++)
 		if (bh=inode->i_sb->s_imap[i])

@@ -39,7 +39,7 @@ static inline struct task_struct * get_task(int pid)
 {
 	int i;
 
-	for (i = 0; i < NR_TASKS; i++) {
+	for (i = 1; i < NR_TASKS; i++) {
 		if (task[i] != NULL && (task[i]->pid == pid))
 			return task[i];
 	}
@@ -238,6 +238,8 @@ int sys_ptrace(long request, long pid, long addr, long data)
 	if (request == PTRACE_ATTACH) {
 		long tmp;
 
+		if (child == current)
+			return -EPERM;
 		if ((!current->dumpable || (current->uid != child->euid) ||
 	 	    (current->gid != child->egid)) && !suser())
 			return -EPERM;

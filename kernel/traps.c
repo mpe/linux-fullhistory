@@ -57,7 +57,6 @@ void general_protection(void);
 void page_fault(void);
 void coprocessor_error(void);
 void reserved(void);
-void parallel_interrupt(void);
 void irq13(void);
 void alignment_check(void);
 
@@ -116,7 +115,7 @@ void do_int3(long esp, long error_code)
 
 void do_nmi(long esp, long error_code)
 {
-	die("nmi",esp,error_code);
+	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
 }
 
 void do_debug(long esp, long error_code)
@@ -201,7 +200,4 @@ void trap_init(void)
 	for (i=18;i<48;i++)
 		set_trap_gate(i,&reserved);
 	set_trap_gate(45,&irq13);
-	outb_p(inb_p(0x21)&0xfb,0x21);
-	outb(inb_p(0xA1)&0xdf,0xA1);
-	set_trap_gate(39,&parallel_interrupt);
 }

@@ -26,16 +26,6 @@
 
 #define WAKEUP_CHARS (3*TTY_BUF_SIZE/4)
 
-/*
- * note that IRQ9 is what many docs call IRQ2 - on the AT hardware
- * the old IRQ2 line has been changed to IRQ9. The serial_table
- * structure considers IRQ2 to be the same as IRQ9.
- */
-extern void IRQ9_interrupt(void);
-extern void IRQ3_interrupt(void);
-extern void IRQ4_interrupt(void);
-extern void IRQ5_interrupt(void);
-
 struct serial_struct serial_table[NR_SERIALS] = {
 	{ PORT_UNKNOWN, 0, 0x3F8, 4, NULL},
 	{ PORT_UNKNOWN, 1, 0x2F8, 3, NULL},
@@ -43,20 +33,20 @@ struct serial_struct serial_table[NR_SERIALS] = {
 	{ PORT_UNKNOWN, 3, 0x2E8, 3, NULL},
 };
 
-static struct serial_struct * irq_info[16] = { NULL, };
-
 static void modem_status_intr(struct serial_struct * info)
 {
 	unsigned char status = inb(info->port+6);
 
-	if ((status & 0x88) == 0x08 && info->tty->pgrp > 0)
-		kill_pg(info->tty->pgrp,SIGHUP,1);
+	if (!(info->tty->termios.c_cflag & CLOCAL)) {
+		if ((status & 0x88) == 0x08 && info->tty->pgrp > 0)
+			kill_pg(info->tty->pgrp,SIGHUP,1);
 #if 0
-	if ((status & 0x10) == 0x10)
-		info->tty->stopped = 0;
-	else
-		info->tty->stopped = 1;
+		if ((status & 0x10) == 0x10)
+			info->tty->stopped = 0;
+		else
+			info->tty->stopped = 1;
 #endif
+	}
 }
 
 void send_break(unsigned int line)
@@ -94,15 +84,19 @@ static void send_intr(struct serial_struct * info)
 	int c, i = 0;
 
 	timer_active &= ~(1 << timer);
-	do {
-		if ((c = GETCH(queue)) < 0)
-			return;
+	while (inb_p(info->port+5) & 0x20) {
+		if (queue->tail == queue->head)
+			goto end_send;
+		c = queue->buf[queue->tail];
+		queue->tail++;
+		queue->tail &= TTY_BUF_SIZE-1;
 		outb(c,port);
-		i++;
-	} while (info->type == PORT_16550A &&
-		  i < 14 && !EMPTY(queue));
+		if ((info->type != PORT_16550A) || (++i >= 14))
+			break;
+	}
 	timer_table[timer].expires = jiffies + 10;
 	timer_active |= 1 << timer;
+end_send:
 	if (LEFT(queue) > WAKEUP_CHARS)
 		wake_up(&queue->proc_list);
 }
@@ -111,10 +105,18 @@ static void receive_intr(struct serial_struct * info)
 {
 	unsigned short port = info->port;
 	struct tty_queue * queue = info->tty->read_q;
+	int head = queue->head;
+	int maxhead = (queue->tail-1) & (TTY_BUF_SIZE-1);
 
+	timer_active &= ~((1<<SER1_TIMER)<<info->line);
 	do {
-		PUTCH(inb(port),queue);
+		queue->buf[head] = inb(port);
+		if (head != maxhead) {
+			head++;
+			head &= TTY_BUF_SIZE-1;
+		}
 	} while (inb(port+5) & 1);
+	queue->head = head;
 	timer_active |= (1<<SER1_TIMER)<<info->line;
 }
 
@@ -149,11 +151,47 @@ static void check_tty(struct serial_struct * info)
 	}
 }
 
-void do_IRQ(int irq)
+/*
+ * Again, we disable interrupts to be sure there aren't any races:
+ * see send_intr for details.
+ */
+static inline void do_rs_write(struct serial_struct * info)
 {
-	check_tty(irq_info[irq]);
+	if (!info->tty || !info->port)
+		return;
+	if (!info->tty->write_q || EMPTY(info->tty->write_q))
+		return;
+	cli();
+	send_intr(info);
+	sti();
 }
 
+/*
+ * IRQ routines: one per line
+ */
+static void com1_IRQ(int cpl)
+{
+	check_tty(serial_table+0);
+}
+
+static void com2_IRQ(int cpl)
+{
+	check_tty(serial_table+1);
+}
+
+static void com3_IRQ(int cpl)
+{
+	check_tty(serial_table+2);
+}
+
+static void com4_IRQ(int cpl)
+{
+	check_tty(serial_table+3);
+}
+
+/*
+ * Receive timer routines: one per line
+ */
 static void com1_timer(void)
 {
 	TTY_READ_FLUSH(tty_table+64);
@@ -175,27 +213,8 @@ static void com4_timer(void)
 }
 
 /*
- * Again, we disable interrupts to be sure there aren't any races:
- * see send_intr for details.
+ * Send timeout routines: one per line
  */
-static inline void do_rs_write(struct serial_struct * info)
-{
-	if (!info->tty || !info->port)
-		return;
-	if (!info->tty->write_q || EMPTY(info->tty->write_q))
-		return;
-	cli();
-	if (inb_p(info->port+5) & 0x20)
-		send_intr(info);
-	else {
-		unsigned int timer = SER1_TIMEOUT+info->line;
-
-		timer_table[timer].expires = jiffies + 10;
-		timer_active |= 1 << timer;
-	}
-	sti();
-}
-
 static void com1_timeout(void)
 {
 	do_rs_write(serial_table);
@@ -276,13 +295,7 @@ void serial_close(unsigned line, struct file * filp)
 	irq = info->irq;
 	if (irq == 2)
 		irq = 9;
-	if (irq_info[irq] == info) {
-		irq_info[irq] = NULL;
-		if (irq < 8)
-			outb(inb_p(0x21) | (1<<irq),0x21);
-		else
-			outb(inb_p(0xA1) | (1<<(irq-8)),0xA1);
-	}
+	free_irq(irq);
 }
 
 static void startup(unsigned short port)
@@ -300,7 +313,7 @@ void change_speed(unsigned int line)
 {
 	struct serial_struct * info;
 	unsigned short port,quot;
-	unsigned cflag;
+	unsigned cflag,cval;
 	static unsigned short quotient[] = {
 		0, 2304, 1536, 1047, 857,
 		768, 576, 384, 192, 96,
@@ -318,21 +331,24 @@ void change_speed(unsigned int line)
 		outb(0x00,port+4);
 	else if (!inb(port+4))
 		startup(port);
+/* byte size and parity */
+	cval = cflag & (CSIZE | CSTOPB);
+	cval >>= 4;
+	if (cflag & PARENB)
+		cval |= 8;
+	if (!(cflag & PARODD))
+		cval |= 16;
 	cli();
-	outb_p(0x80,port+3);		/* set DLAB */
+	outb_p(cval | 0x80,port+3);	/* set DLAB */
 	outb_p(quot & 0xff,port);	/* LS of divisor */
 	outb_p(quot >> 8,port+1);	/* MS of divisor */
-	outb(0x03,port+3);		/* reset DLAB */
+	outb(cval,port+3);		/* reset DLAB */
 	sti();
-/* set byte size and parity */
-	quot = cflag & (CSIZE | CSTOPB);
-	quot >>= 4;
-	if (cflag & PARENB)
-		quot |= 8;
-	if (!(cflag & PARODD))
-		quot |= 16;
-	outb(quot,port+3);
 }
+
+static void (*serial_handler[NR_SERIALS])(int) = {
+	com1_IRQ,com2_IRQ,com3_IRQ,com4_IRQ
+};
 
 /*
  * this routine enables interrupts on 'line', and disables them for any
@@ -341,8 +357,9 @@ void change_speed(unsigned int line)
 int serial_open(unsigned line, struct file * filp)
 {
 	struct serial_struct * info;
-	int irq;
+	int irq,retval;
 	unsigned short port;
+	void (*handler)(int) = serial_handler[line];
 
 	if (line >= NR_SERIALS)
 		return -ENODEV;
@@ -352,16 +369,9 @@ int serial_open(unsigned line, struct file * filp)
 	irq = info->irq;
 	if (irq == 2)
 		irq = 9;
-	if (irq_info[irq] && irq_info[irq] != info)
-		return -EBUSY;
-	cli();
+	if (retval = request_irq(irq,handler))
+		return retval;
 	startup(port);
-	irq_info[irq] = info;
-	if (irq < 8)
-		outb(inb_p(0x21) & ~(1<<irq),0x21);
-	else
-		outb(inb_p(0xA1) & ~(1<<(irq-8)),0xA1);
-	sti();
 	return 0;
 }
 
@@ -380,6 +390,8 @@ int set_serial_info(unsigned int line, struct serial_struct * info)
 	struct serial_struct tmp;
 	unsigned new_port;
 	unsigned irq,new_irq;
+	int retval;
+	void (*handler)(int) = serial_handler[line];
 
 	if (!suser())
 		return -EPERM;
@@ -401,20 +413,10 @@ int set_serial_info(unsigned int line, struct serial_struct * info)
 	if (irq == 2)
 		irq = 9;
 	if (irq != new_irq) {
-		if (irq_info[new_irq])
-			return -EBUSY;
-		cli();
-		irq_info[new_irq] = irq_info[irq];
-		irq_info[irq] = NULL;
-		info->irq = new_irq;
-		if (irq < 8)
-			outb(inb_p(0x21) | (1<<irq),0x21);
-		else
-			outb(inb_p(0xA1) | (1<<(irq-8)),0xA1);
-		if (new_irq < 8)
-			outb(inb_p(0x21) & ~(1<<new_irq),0x21);
-		else
-			outb(inb_p(0xA1) & ~(1<<(new_irq-8)),0xA1);
+		retval = request_irq(new_irq,handler);
+		if (retval)
+			return retval;
+		free_irq(irq);
 	}
 	cli();
 	if (new_port != info->port) {
@@ -450,10 +452,6 @@ long rs_init(long kmem_start)
 	timer_table[SER3_TIMEOUT].expires = 0;
 	timer_table[SER4_TIMEOUT].fn = com4_timeout;
 	timer_table[SER4_TIMEOUT].expires = 0;
-	set_intr_gate(0x23,IRQ3_interrupt);
-	set_intr_gate(0x24,IRQ4_interrupt);
-	set_intr_gate(0x25,IRQ5_interrupt);
-	set_intr_gate(0x29,IRQ9_interrupt);
 	for (i = 0, info = serial_table; i < NR_SERIALS; i++,info++) {
 		info->tty = (tty_table+64) + i;
 		init(info);

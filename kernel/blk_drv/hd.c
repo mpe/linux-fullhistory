@@ -16,7 +16,10 @@
  *  in the early extended-partition checks and added DM partitions
  */
 
+#define HD_IRQ 14
+
 #include <errno.h>
+#include <signal.h>
 
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -82,7 +85,6 @@ __asm__("cld;rep;insw"::"d" (port),"D" (buf),"c" (nr):"cx","di")
 #define port_write(port,buf,nr) \
 __asm__("cld;rep;outsw"::"d" (port),"S" (buf),"c" (nr):"cx","si")
 
-extern void hd_interrupt(void);
 extern void rd_load(void);
 
 static unsigned int current_minor;
@@ -279,7 +281,9 @@ int sys_setup(void * BIOS)
 	blk_size[MAJOR_NR] = hd_sizes;
 	if (NR_HD)
 		printk("Partition table%s ok.\n\r",(NR_HD>1)?"s":"");
+#ifdef RAMDISK
 	rd_load();
+#endif
 	mount_root();
 	return (0);
 }
@@ -517,7 +521,7 @@ static void recal_intr(void)
  */
 static void hd_times_out(void)
 {	
-	do_hd = NULL;
+	DEVICE_INTR = NULL;
 	reset = 1;
 	if (!CURRENT)
 		return;
@@ -601,7 +605,10 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 				(char *) &loc->sectors);
 			put_fs_word(hd_info[dev].cyl,
 				(short *) &loc->cylinders);
+			put_fs_long(hd[MINOR(inode->i_rdev)].start_sect,
+				(long *) &loc->start);
 			return 0;
+		RO_IOCTLS(inode->i_rdev,arg);
 		default:
 			return -EINVAL;
 	}
@@ -627,12 +634,35 @@ static struct file_operations hd_fops = {
 	hd_release		/* release */
 };
 
+static void hd_interrupt(int cpl)
+{
+	void (*handler)(void) = DEVICE_INTR;
+
+	DEVICE_INTR = NULL;
+	timer_active &= ~(1<<HD_TIMER);
+	if (!handler)
+		handler = unexpected_hd_interrupt;
+	handler();
+}
+
+/*
+ * This is the harddisk IRQ descruption. The SA_INTERRUPT in sa_flags
+ * means we run the IRQ-handler with interrupts disabled: this is bad for
+ * interrupt latency, but anything else has led to problems on some
+ * machines...
+ */
+static struct sigaction hd_sigaction = {
+	hd_interrupt,
+	0,
+	SA_INTERRUPT,
+	NULL
+};
+
 void hd_init(void)
 {
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	blkdev_fops[MAJOR_NR] = &hd_fops;
-	set_intr_gate(0x2E,&hd_interrupt);
-	outb_p(inb_p(0x21)&0xfb,0x21);
-	outb(inb_p(0xA1)&0xbf,0xA1);
+	if (irqaction(HD_IRQ,&hd_sigaction))
+		printk("Unable to get IRQ%d for the harddisk driver\n",HD_IRQ);
 	timer_table[HD_TIMER].fn = hd_times_out;
 }

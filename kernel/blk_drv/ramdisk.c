@@ -84,7 +84,7 @@ long rd_init(long mem_start, int length)
 void rd_load(void)
 {
 	struct buffer_head *bh;
-	struct super_block	s;
+	struct minix_super_block s;
 	int		block = 256;	/* Start at block 256 */
 	int		i = 1;
 	int		nblocks;

@@ -153,8 +153,10 @@ int minix_file_read(struct inode * inode, struct file * filp, char * buf, int co
 	} while (left > 0);
 	if (!read)
 		return -EIO;
-	inode->i_atime = CURRENT_TIME;
-	inode->i_dirt = 1;
+	if (!IS_RDONLY(inode)) {
+		inode->i_atime = CURRENT_TIME;
+		inode->i_dirt = 1;
+	}
 	return read;
 }
 

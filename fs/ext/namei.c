@@ -808,6 +808,10 @@ start_up:
 		retval = 0;
 		goto end_rename;
 	}
+	if (S_ISDIR(new_inode->i_mode)) {
+		retval = -EEXIST;
+		goto end_rename;
+	}
 	if (S_ISDIR(old_inode->i_mode)) {
 		retval = -EEXIST;
 		if (new_bh)

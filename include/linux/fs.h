@@ -43,7 +43,7 @@ void buffer_init(long buffer_end);
 
 #define NR_OPEN 32
 #define NR_INODE 128
-#define NR_FILE 64
+#define NR_FILE 128
 #define NR_SUPER 8
 #define NR_HASH 307
 #define NR_BUFFERS nr_buffers
@@ -70,6 +70,33 @@ void buffer_init(long buffer_end);
 #define SEL_IN		1
 #define SEL_OUT		2
 #define SEL_EX		4
+
+/*
+ * These are the fs-independent mount-flags: up to 16 flags are supported
+ */
+#define MS_RDONLY    1 /* mount read-only */
+#define MS_NOSUID    2 /* ignore suid and sgid bits */
+#define MS_NODEV     4 /* disallow access to device special files */
+#define MS_NOEXEC    8 /* disallow program execution */
+
+/*
+ * Note that read-only etc flags are inode-specific: setting some file-system
+ * flags just means all the inodes inherit those flags by default. It might be
+ * possible to overrride it sevelctively if you really wanted to with some
+ * ioctl() that is not currently implemented.
+ */
+#define IS_RDONLY(inode) ((inode)->i_flags & MS_RDONLY)
+#define IS_NOSUID(inode) ((inode)->i_flags & MS_NOSUID)
+#define IS_NODEV(inode) ((inode)->i_flags & MS_NODEV)
+#define IS_NOEXEC(inode) ((inode)->i_flags & MS_NOEXEC)
+
+/* the read-only stuff doesn't really belong here, but any other place is
+   probably as bad and I don't want to create yet another include file. */
+
+#define BLKROSET 4701 /* set device read-only (0 = read-write) */
+#define BLKROGET 4702 /* get read-only status (0 = read_write) */
+
+#define BMAP_IOCTL 1
 
 typedef char buffer_block[BLOCK_SIZE];
 
@@ -107,6 +134,7 @@ struct inode {
 	struct task_struct * i_wait;
 	struct task_struct * i_wait2;	/* for pipes */
 	unsigned short i_count;
+	unsigned short i_flags;
 	unsigned char i_lock;
 	unsigned char i_dirt;
 	unsigned char i_pipe;
@@ -120,6 +148,7 @@ struct file {
 	unsigned short f_flags;
 	unsigned short f_count;
 	unsigned short f_reada;
+	unsigned short f_rdev;		/* needed for /dev/tty */
 	struct inode * f_inode;
 	struct file_operations * f_op;
 	off_t f_pos;
@@ -159,6 +188,7 @@ struct super_block {
 	unsigned char s_dirt;
 	/* TUBE */
 	struct super_operations *s_op;
+	int s_flags;
 };
 
 struct file_operations {

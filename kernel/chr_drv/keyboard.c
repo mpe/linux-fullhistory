@@ -58,7 +58,7 @@ static void cur(int);
 static void kb_wait(void), kb_ack(void);
 static unsigned int handle_diacr(unsigned int);
 
-void do_keyboard(void)
+void keyboard_interrupt(int cpl)
 {
 	static unsigned char rep = 0xff, repke0 = 0;
 	unsigned char scancode, x;
@@ -874,7 +874,7 @@ unsigned int handle_diacr(unsigned int ch)
 }
 		
 
-#if defined KBD_FR || defined KBD_US
+#if defined KBD_FR || defined KBD_US || defined KBD_UK
 static unsigned char num_table[] = "789-456+1230.";
 #else
 static unsigned char num_table[] = "789-456+1230,";

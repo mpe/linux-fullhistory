@@ -14,7 +14,7 @@
 	$(CC) $(CFLAGS) -c $<
 
 OBJS  = ctype.o _exit.o open.o close.o errno.o write.o dup.o setsid.o \
-	execve.o wait.o string.o malloc.o itimer.o
+	execve.o wait.o string.o malloc.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)
@@ -36,8 +36,6 @@ ctype.o : ctype.c /usr/src/linux/include/linux/ctype.h
 dup.o : dup.c /usr/src/linux/include/linux/unistd.h 
 errno.o : errno.c 
 execve.o : execve.c /usr/src/linux/include/linux/unistd.h 
-itimer.o : itimer.c /usr/src/linux/include/linux/unistd.h /usr/src/linux/include/sys/time.h \
-  /usr/src/linux/include/time.h /usr/src/linux/include/sys/types.h /usr/src/linux/include/stddef.h 
 malloc.o : malloc.c /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/mm.h \
   /usr/src/linux/include/linux/fs.h /usr/src/linux/include/sys/types.h /usr/src/linux/include/stddef.h \
   /usr/src/linux/include/sys/dirent.h /usr/src/linux/include/limits.h /usr/src/linux/include/sys/vfs.h \

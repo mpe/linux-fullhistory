@@ -38,6 +38,8 @@
  * the floppy-change signal detection.
  */
 
+#define FLOPPY_IRQ 6
+
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -205,7 +207,6 @@ static struct format_descr format_req;
  * and ND is set means no DMA. Hardcoded to 6 (HLD=6ms, use DMA).
  */
 
-extern void floppy_interrupt(void);
 extern char tmp_floppy_area[1024];
 extern char floppy_track_buffer[512*2*MAX_BUFFER_SECTORS];
 
@@ -560,7 +561,7 @@ static void recal_interrupt(void)
 	else redo_fd_request();
 }
 
-void unexpected_floppy_interrupt(void)
+static void unexpected_floppy_interrupt(void)
 {
 	current_track = NO_TRACK;
 	output_byte(FD_SENSEI);
@@ -831,6 +832,9 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 	int drive,cnt,okay;
 	struct floppy_struct *this;
 
+	switch (cmd) {
+		RO_IOCTLS(inode->i_rdev,param);
+	}
 	if (!suser()) return -EPERM;
 	drive = MINOR(inode->i_rdev);
 	switch (cmd) {
@@ -975,6 +979,28 @@ static struct file_operations floppy_fops = {
 	floppy_release		/* release */
 };
 
+static void floppy_interrupt(int cpl)
+{
+	void (*handler)(void) = DEVICE_INTR;
+
+	DEVICE_INTR = NULL;
+	if (!handler)
+		handler = unexpected_floppy_interrupt;
+	handler();
+}
+
+/*
+ * This is the harddisk IRQ descruption. The SA_INTERRUPT in sa_flags
+ * means we run the IRQ-handler with interrupts disabled: this is bad for
+ * interrupt latency, but may be safer...
+ */
+static struct sigaction floppy_sigaction = {
+	floppy_interrupt,
+	0,
+	SA_INTERRUPT,
+	NULL
+};
+
 void floppy_init(void)
 {
 	outb(current_DOR,FD_DOR);
@@ -984,6 +1010,6 @@ void floppy_init(void)
 	timer_table[FLOPPY_TIMER].fn = floppy_shutdown;
 	timer_active &= ~(1 << FLOPPY_TIMER);
 	config_types();
-	set_intr_gate(0x26,&floppy_interrupt);
-	outb(inb_p(0x21)&~0x40,0x21);
+	if (irqaction(FLOPPY_IRQ,&floppy_sigaction))
+		printk("Unable to grab IRQ%d for the floppy driver\n",FLOPPY_IRQ);
 }

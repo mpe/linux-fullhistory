@@ -229,6 +229,10 @@ int open_namei(const char * pathname, int flag, int mode,
 			iput(dir);
 			return -EACCES;
 		}
+		if (IS_RDONLY(dir)) {
+			iput(dir);
+			return -EROFS;
+		}
 		return dir->i_op->create(dir,basename,namelen,mode,res_inode);
 	}
 	if (flag & O_EXCL) {
@@ -238,17 +242,31 @@ int open_namei(const char * pathname, int flag, int mode,
 	}
 	if (!(inode = follow_link(dir,inode)))
 		return -ELOOP;
+	if (S_ISBLK(inode->i_mode) || S_ISCHR(inode->i_mode)) {
+		if (IS_NODEV(inode)) {
+			iput(inode);
+			return -EACCES;
+		}
+	} else {
+		if (IS_RDONLY(inode) && (flag & (O_TRUNC | O_ACCMODE))) {
+			iput(inode);
+			return -EROFS;
+		}
+	}
 	if ((S_ISDIR(inode->i_mode) && (flag & O_ACCMODE)) ||
 	    !permission(inode,ACC_MODE(flag))) {
 		iput(inode);
 		return -EPERM;
 	}
-	inode->i_atime = CURRENT_TIME;
 	if (flag & O_TRUNC)
 		if (inode->i_op && inode->i_op->truncate) {
 			inode->i_size = 0;
 			inode->i_op->truncate(inode);
 		}
+	if (!IS_RDONLY(inode)) {
+		inode->i_atime = CURRENT_TIME;
+		inode->i_dirt = 1;
+	}
 	*res_inode = inode;
 	return 0;
 }
@@ -264,6 +282,10 @@ int do_mknod(const char * filename, int mode, int dev)
 	if (!namelen) {
 		iput(dir);
 		return -ENOENT;
+	}
+	if (IS_RDONLY(dir)) {
+		iput(dir);
+		return -EROFS;
 	}
 	if (!permission(dir,MAY_WRITE)) {
 		iput(dir);
@@ -295,6 +317,10 @@ int sys_mkdir(const char * pathname, int mode)
 		iput(dir);
 		return -ENOENT;
 	}
+	if (IS_RDONLY(dir)) {
+		iput(dir);
+		return -EROFS;
+	}
 	if (!permission(dir,MAY_WRITE)) {
 		iput(dir);
 		return -EACCES;
@@ -317,6 +343,10 @@ int sys_rmdir(const char * name)
 	if (!namelen) {
 		iput(dir);
 		return -ENOENT;
+	}
+	if (IS_RDONLY(dir)) {
+		iput(dir);
+		return -EROFS;
 	}
 	if (!permission(dir,MAY_WRITE)) {
 		iput(dir);
@@ -341,6 +371,10 @@ int sys_unlink(const char * name)
 		iput(dir);
 		return -EPERM;
 	}
+	if (IS_RDONLY(dir)) {
+		iput(dir);
+		return -EROFS;
+	}
 	if (!permission(dir,MAY_WRITE)) {
 		iput(dir);
 		return -EACCES;
@@ -364,6 +398,10 @@ int sys_symlink(const char * oldname, const char * newname)
 	if (!namelen) {
 		iput(dir);
 		return -ENOENT;
+	}
+	if (IS_RDONLY(dir)) {
+		iput(dir);
+		return -EROFS;
 	}
 	if (!permission(dir,MAY_WRITE)) {
 		iput(dir);
@@ -394,6 +432,11 @@ int sys_link(const char * oldname, const char * newname)
 		iput(oldinode);
 		iput(dir);
 		return -EPERM;
+	}
+	if (IS_RDONLY(dir)) {
+		iput(oldinode);
+		iput(dir);
+		return -EROFS;
 	}
 	if (dir->i_dev != oldinode->i_dev) {
 		iput(dir);
@@ -453,6 +496,11 @@ int sys_rename(const char * oldname, const char * newname)
 		iput(old_dir);
 		iput(new_dir);
 		return -EXDEV;
+	}
+	if (IS_RDONLY(new_dir) || IS_RDONLY(old_dir)) {
+		iput(old_dir);
+		iput(new_dir);
+		return -EROFS;
 	}
 	if (!old_dir->i_op || !old_dir->i_op->rename) {
 		iput(old_dir);

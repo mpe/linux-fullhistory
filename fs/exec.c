@@ -183,7 +183,7 @@ int sys_uselib(const char * library)
 		iput(inode);
 		return -EACCES;
 	}
-	if (!(bh = bread(inode->i_dev,inode->i_data[0]))) {
+	if (!(bh = bread(inode->i_dev,bmap(inode,0)))) {
 		iput(inode);
 		return -EACCES;
 	}
@@ -406,7 +406,17 @@ restart_interp:
 		retval = -EACCES;
 		goto exec_error2;
 	}
+	if (IS_NOEXEC(inode)) { /* FS mustn't be mounted noexec */
+		retval = -EPERM;
+		goto exec_error2;
+	}
 	i = inode->i_mode;
+	if (IS_NOSUID(inode) && (((i & S_ISUID) && inode->i_uid != current->
+	    euid) || ((i & S_ISGID) && inode->i_gid != current->egid)) &&
+	    !suser()) {
+		retval = -EPERM;
+		goto exec_error2;
+	}
 	/* make sure we don't let suid, sgid files be ptraced. */
 	if (current->flags & PF_PTRACED) {
 		e_uid = current->euid;
@@ -424,7 +434,7 @@ restart_interp:
 		retval = -EACCES;
 		goto exec_error2;
 	}
-	if (!(bh = bread(inode->i_dev,inode->i_data[0]))) {
+	if (!(bh = bread(inode->i_dev,bmap(inode,0)))) {
 		retval = -EACCES;
 		goto exec_error2;
 	}

@@ -30,6 +30,8 @@
  * <g-hunt@ee.utah.edu>
  */
 
+#define KEYBOARD_IRQ 1
+
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/tty.h>
@@ -68,7 +70,7 @@
 #define NPAR 16
 
 extern void vt_init(void);
-extern void keyboard_interrupt(void);
+extern void keyboard_interrupt(int cpl);
 extern void set_leds(void);
 extern unsigned char kapplic;
 extern unsigned char ckmode;
@@ -241,8 +243,8 @@ static char * translations[] = {
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 	" !\"#$%&'()*+,-./0123456789:;<=>?"
 	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^ "
-	"\004\261\007\007\007\007\370\361\007\007\275\267\326\323\327\304"
-	"\304\304\304\304\307\266\320\322\272\363\362\343\007\234\007\0"
+	"\004\261\007\007\007\007\370\361\040\007\331\277\332\300\305\007"
+	"\007\304\007\007\303\264\301\302\263\007\007\007\007\007\234\0"
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 	"\040\255\233\234\376\235\174\025\376\376\246\256\252\055\376\376"
@@ -250,11 +252,29 @@ static char * translations[] = {
 	"\376\376\376\376\216\217\222\200\376\220\376\376\376\376\376\376"
 	"\376\245\376\376\376\376\231\376\376\376\376\376\232\376\376\341"
 	"\205\240\203\376\204\206\221\207\212\202\210\211\215\241\214\213"
-	"\376\244\225\242\223\376\224\366\376\227\243\226\201\376\376\230"
+	"\376\244\225\242\223\376\224\366\376\227\243\226\201\376\376\230",
+/* IBM grapgics: minimal translations (CR, LF, LL and ESC) */
+	"\000\001\002\003\004\005\006\007\010\011\000\013\000\000\016\017"
+	"\020\021\022\023\024\025\026\027\030\031\032\000\034\035\036\037"
+	"\040\041\042\043\044\045\046\047\050\051\052\053\054\055\056\057"
+	"\060\061\062\063\064\065\066\067\070\071\072\073\074\075\076\077"
+	"\100\101\102\103\104\105\106\107\110\111\112\113\114\115\116\117"
+	"\120\121\122\123\124\125\126\127\130\131\132\133\134\135\136\137"
+	"\140\141\142\143\144\145\146\147\150\151\152\153\154\155\156\157"
+	"\160\161\162\163\164\165\166\167\170\171\172\173\174\175\176\177"
+	"\200\201\202\203\204\205\206\207\210\211\212\213\214\215\216\217"
+	"\220\221\222\223\224\225\226\227\230\231\232\233\234\235\236\237"
+	"\240\241\242\243\244\245\246\247\250\251\252\253\254\255\256\257"
+	"\260\261\262\263\264\265\266\267\270\271\272\273\274\275\276\277"
+	"\300\301\302\303\304\305\306\307\310\311\312\313\314\315\316\317"
+	"\320\321\322\323\324\325\326\327\330\331\332\333\334\335\336\337"
+	"\340\341\342\343\344\345\346\347\350\351\352\353\354\355\356\357"
+	"\360\361\362\363\364\365\366\367\370\371\372\373\374\375\376\377"
 };
 
 #define NORM_TRANS (translations[0])
 #define GRAF_TRANS (translations[1])
+#define NULL_TRANS (translations[2])
 
 static unsigned char color_table[] = { 0, 4, 2, 6, 1, 5, 3, 7,
 				       8,12,10,14, 9,13,11,15 };
@@ -605,7 +625,7 @@ static inline void set_cursor(int currcons)
 static void respond_string(char * p, int currcons, struct tty_struct * tty)
 {
 	while (*p) {
-		PUTCH(*p,tty->read_q);
+		put_tty_queue(*p,tty->read_q);
 		p++;
 	}
 	TTY_READ_FLUSH(tty);
@@ -621,19 +641,19 @@ static void respond_num(unsigned int n, int currcons, struct tty_struct * tty)
 		n /= 10;
 	} while(n && i < 3);	/* We'll take no chances */
 	while (i--) {
-		PUTCH(buff[i],tty->read_q);
+		put_tty_queue(buff[i],tty->read_q);
 	}
 	/* caller must flush */
 }
 
 static void cursor_report(int currcons, struct tty_struct * tty)
 {
-	PUTCH('\033', tty->read_q);
-	PUTCH('[', tty->read_q);
+	put_tty_queue('\033', tty->read_q);
+	put_tty_queue('[', tty->read_q);
 	respond_num(y + (decom ? top+1 : 1), currcons, tty);
-	PUTCH(';', tty->read_q);
+	put_tty_queue(';', tty->read_q);
 	respond_num(x+1, currcons, tty);
-	PUTCH('R', tty->read_q);
+	put_tty_queue('R', tty->read_q);
 	TTY_READ_FLUSH(tty);
 }
 
@@ -905,7 +925,7 @@ void con_write(struct tty_struct * tty)
 		printk("con_write: illegal tty\n\r");
 		return;
 	}
-	while (!tty->stopped &&	(c = GETCH(tty->write_q)) >= 0) {
+	while (!tty->stopped &&	(c = get_tty_queue(tty->write_q)) >= 0) {
 		if (state == ESnormal && translate[c]) {
 			if (need_wrap) {
 				cr(currcons);
@@ -1176,6 +1196,8 @@ void con_write(struct tty_struct * tty)
 					G0_charset = GRAF_TRANS;
 				else if (c == 'B')
 					G0_charset = NORM_TRANS;
+				else if (c == 'U')
+					G0_charset = NULL_TRANS;
 				if (charset == 0)
 					translate = G0_charset;
 				state = ESnormal;
@@ -1185,6 +1207,8 @@ void con_write(struct tty_struct * tty)
 					G1_charset = GRAF_TRANS;
 				else if (c == 'B')
 					G1_charset = NORM_TRANS;
+				else if (c == 'U')
+					G1_charset = NULL_TRANS;
 				if (charset == 1)
 					translate = G1_charset;
 				state = ESnormal;
@@ -1338,8 +1362,8 @@ long con_init(long kmem_start)
 	gotoxy(currcons,orig_x,orig_y);
 	update_screen(fg_console);
 
-	set_trap_gate(0x21,&keyboard_interrupt);
-	outb_p(inb_p(0x21)&0xfd,0x21);
+	if (request_irq(KEYBOARD_IRQ,keyboard_interrupt))
+		printk("Unable to get IRQ%d for keyboard driver\n",KEYBOARD_IRQ);
 	a=inb_p(0x61);
 	outb_p(a|0x80,0x61);
 	outb_p(a,0x61);
