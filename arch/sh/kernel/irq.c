@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.4 1999/10/11 13:12:14 gniibe Exp $
+/* $Id: irq.c,v 1.11 2000/02/29 11:03:40 gniibe Exp $
  *
  * linux/arch/sh/kernel/irq.c
  *
@@ -31,7 +31,7 @@
 #include <asm/io.h>
 #include <asm/bitops.h>
 #include <asm/smp.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/delay.h>
 #include <asm/irq.h>
 #include <linux/irq.h>
@@ -49,7 +49,8 @@ spinlock_t irq_controller_lock = SPIN_LOCK_UNLOCKED;
 /*
  * Controller mappings for all interrupt sources:
  */
-irq_desc_t irq_desc[NR_IRQS] __cacheline_aligned = { [0 ... NR_IRQS-1] = { 0, &no_irq_type, }};
+irq_desc_t irq_desc[NR_IRQS] __cacheline_aligned =
+				{ [0 ... NR_IRQS-1] = { 0, &no_irq_type, }};
 
 /*
  * Special irq handlers.
@@ -112,9 +113,8 @@ int get_irq_list(char *buf)
 		p += sprintf(p, " %14s", irq_desc[i].handler->typename);
 		p += sprintf(p, "  %s", action->name);
 
-		for (action=action->next; action; action = action->next) {
+		for (action=action->next; action; action = action->next)
 			p += sprintf(p, ", %s", action->name);
-		}
 		*p++ = '\n';
 	}
 	return p - buf;
@@ -248,7 +248,7 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 	kstat.irqs[cpu][irq]++;
 	desc = irq_desc + irq;
 	spin_lock(&irq_controller_lock);
-	irq_desc[irq].handler->ack(irq);
+	desc->handler->ack(irq);
 	/*
 	   REPLAY is when Linux resends an IRQ that was dropped earlier
 	   WAITING is used by probe to mark irqs that are being tested
@@ -298,21 +298,15 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 		spin_unlock(&irq_controller_lock);
 	}
 	desc->status &= ~IRQ_INPROGRESS;
-	if (!(desc->status & IRQ_DISABLED)){
-		irq_desc[irq].handler->end(irq);
-	}
+	if (!(desc->status & IRQ_DISABLED))
+		desc->handler->end(irq);
 	spin_unlock(&irq_controller_lock);
 
-	/*
-	 * This should be conditional: we should really get
-	 * a return code from the irq handler to tell us
-	 * whether the handler wants us to do software bottom
-	 * half handling or not..
-	 */
-	if (1) {
-		if (bh_active & bh_mask)
-			do_bottom_half();
-	}
+#if 1
+	__sti();
+#endif
+	if (softirq_state[cpu].active&softirq_state[cpu].mask)
+		do_softirq();
 	return 1;
 }
 
@@ -347,7 +341,7 @@ int request_irq(unsigned int irq,
 		kfree(action);
 	return retval;
 }
-		
+
 void free_irq(unsigned int irq, void *dev_id)
 {
 	struct irqaction **p;
@@ -373,10 +367,6 @@ void free_irq(unsigned int irq, void *dev_id)
 				irq_desc[irq].handler->shutdown(irq);
 			}
 			spin_unlock_irqrestore(&irq_controller_lock,flags);
-
-			/* Wait to make sure it's not being used on another CPU */
-			while (irq_desc[irq].status & IRQ_INPROGRESS)
-				barrier();
 			kfree(action);
 			return;
 		}
@@ -398,6 +388,7 @@ unsigned long probe_irq_on(void)
 {
 	unsigned int i;
 	unsigned long delay;
+	unsigned long val;
 
 	/*
 	 * first, enable any unassigned irqs
@@ -421,6 +412,7 @@ unsigned long probe_irq_on(void)
 	/*
 	 * Now filter out any obviously spurious interrupts
 	 */
+	val = 0;
 	spin_lock_irq(&irq_controller_lock);
 	for (i=0; i<NR_IRQS; i++) {
 		unsigned int status = irq_desc[i].status;
@@ -433,18 +425,18 @@ unsigned long probe_irq_on(void)
 			irq_desc[i].status = status & ~IRQ_AUTODETECT;
 			irq_desc[i].handler->shutdown(i);
 		}
+
+		if (i < 32)
+			val |= 1 << i;
 	}
 	spin_unlock_irq(&irq_controller_lock);
 
-	return 0x12345678;
+	return val;
 }
 
-int probe_irq_off(unsigned long unused)
+int probe_irq_off(unsigned long val)
 {
 	int i, irq_found, nr_irqs;
-
-	if (unused != 0x12345678)
-		printk("Bad IRQ probe from %lx\n", (&unused)[-1]);
 
 	nr_irqs = 0;
 	irq_found = 0;

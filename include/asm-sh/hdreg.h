@@ -7,6 +7,6 @@
 #ifndef __ASM_SH_HDREG_H
 #define __ASM_SH_HDREG_H
 
-typedef unsigned short ide_ioreg_t;
+typedef unsigned int ide_ioreg_t;
 
 #endif /* __ASM_SH_HDREG_H */

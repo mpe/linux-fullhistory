@@ -69,6 +69,7 @@
 #define I2C_DRIVERID_MGATVO	23	/* Matrox TVOut			*/
 #define I2C_DRIVERID_SAA5249	24	/* SAA5249 and compatibles	*/
 #define I2C_DRIVERID_PCF8583	25	/* real time clock		*/
+#define I2C_DRIVERID_SAB3036	26	/* SAB3036 tuner		*/
 
 #define I2C_DRIVERID_EXP0	0xF0	/* experimental use id's	*/
 #define I2C_DRIVERID_EXP1	0xF1

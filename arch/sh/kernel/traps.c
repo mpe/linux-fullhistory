@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.3 1999/09/21 14:37:19 gniibe Exp $
+/* $Id: traps.c,v 1.5 2000/02/27 08:27:55 gniibe Exp $
  *
  *  linux/arch/sh/traps.c
  *
@@ -26,6 +26,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/atomic.h>
+#include <asm/processor.h>
 
 static inline void console_verbose(void)
 {
@@ -40,7 +41,7 @@ asmlinkage void do_##name(unsigned long r4, unsigned long r5, \
 { \
 	unsigned long error_code; \
  \
-	asm volatile("stc	r2_bank,%0": "=r" (error_code)); \
+	asm volatile("stc	$r2_bank, %0": "=r" (error_code)); \
 	sti(); \
 	regs.syscall_nr = -1; \
 	tsk->thread.error_code = error_code; \
@@ -99,7 +100,7 @@ asmlinkage void do_exception_error (unsigned long r4, unsigned long r5,
 				    struct pt_regs regs)
 {
 	long ex;
-	asm volatile("stc	r2_bank,%0" : "=r" (ex));
+	asm volatile("stc	$r2_bank, %0" : "=r" (ex));
 	die_if_kernel("exception", &regs, ex);
 }
 
@@ -117,8 +118,22 @@ void __init trap_init(void)
 	   (or P2, virtural "fixed" address space).
 	   It's definitely should not in physical address.  */
 
-	asm volatile("ldc	%0,vbr"
+	asm volatile("ldc	%0, $vbr"
 		     : /* no output */
 		     : "r" (&vbr_base)
 		     : "memory");
+}
+
+void dump_stack(void)
+{
+	unsigned long *start;
+	unsigned long *end;
+	unsigned long *p;
+
+	asm("mov	$r15, %0" : "=r" (start));
+	asm("stc	$r4_bank, %0" : "=r" (end));
+
+	printk("%08lx:%08lx\n", (unsigned long)start, (unsigned long)end);
+	for (p=start; p < end; p++)
+		printk("%08lx\n", *p);
 }

@@ -85,6 +85,7 @@ if [ "$CONFIG_FB" = "y" ]; then
    if [ "$ARCH" = "i386" ]; then
       bool '  VESA VGA graphics console' CONFIG_FB_VESA
       tristate '  VGA 16-color graphics console' CONFIG_FB_VGA16
+      tristate '  Hercules mono graphics console (EXPERIMENTAL)' CONFIG_FB_HGA
       define_bool CONFIG_VIDEO_SELECT y
    fi
    if [ "$CONFIG_VISWS" = "y" ]; then
@@ -329,6 +330,13 @@ if [ "$CONFIG_FB" = "y" ]; then
       else
 	 if [ "$CONFIG_FB_VGA16" = "m" ]; then
 	    define_tristate CONFIG_FBCON_VGA_PLANES m
+	 fi
+      fi
+      if [ "$CONFIG_FB_HGA" = "y" ]; then
+	 define_tristate CONFIG_FBCON_HGA y
+      else
+	 if [ "$CONFIG_FB_HGA" = "m" ]; then
+	    define_tristate CONFIG_FBCON_HGA m
 	 fi
       fi
    fi

@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.7 1999/10/23 01:34:50 gniibe Exp gniibe $
+/* $Id: setup.c,v 1.20 2000/03/05 02:44:41 gniibe Exp $
  *
  *  linux/arch/sh/kernel/setup.c
  *
@@ -51,6 +51,7 @@ extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
 #endif
 
+extern void fpu_init(void);
 extern int root_mountflags;
 extern int _text, _etext, _edata, _end;
 
@@ -196,82 +197,82 @@ void __init setup_arch(char **cmdline_p)
 #define PFN_PHYS(x)	((x) << PAGE_SHIFT)
 
 	/*
-	 * partially used pages are not usable - thus
-	 * we are rounding upwards:
-	 */
-	start_pfn = PFN_UP(__pa(&_end)-__MEMORY_START);
-
-	/*
 	 * Find the highest page frame number we have available
 	 */
-	max_pfn = PFN_DOWN(__pa(memory_end)-__MEMORY_START);
+	max_pfn = PFN_DOWN(__pa(memory_end));
 
 	/*
 	 * Determine low and high memory ranges:
 	 */
 	max_low_pfn = max_pfn;
 
+ 	/*
+	 * Partially used pages are not usable - thus
+	 * we are rounding upwards:
+ 	 */
+	start_pfn = PFN_UP(__pa(&_end));
 	/*
-	 * Initialize the boot-time allocator (with low memory only):
+	 * Find a proper area for the bootmem bitmap. After this
+	 * bootstrap step all allocations (until the page allocator
+	 * is intact) must be done via bootmem_alloc().
 	 */
-	bootmap_size = init_bootmem(start_pfn, max_low_pfn, __MEMORY_START);
-
-	/*
-	 * FIXME: what about high memory?
-	 */
-	ram_resources[1].end = PFN_PHYS(max_low_pfn) + __MEMORY_START;
+	bootmap_size = init_bootmem_node(0, start_pfn,
+					 __MEMORY_START>>PAGE_SHIFT, 
+					 max_low_pfn);
 
 	/*
 	 * Register fully available low RAM pages with the bootmem allocator.
 	 */
 	{
-		unsigned long curr_pfn, last_pfn, size;
+		unsigned long curr_pfn, last_pfn, pages;
 
 		/*
 		 * We are rounding up the start address of usable memory:
 		 */
-		curr_pfn = PFN_UP(0);
+		curr_pfn = PFN_UP(__MEMORY_START);
 		/*
 		 * ... and at the end of the usable range downwards:
 		 */
-		last_pfn = PFN_DOWN(memory_end-__MEMORY_START);
+		last_pfn = PFN_DOWN(__pa(memory_end));
 
 		if (last_pfn > max_low_pfn)
 			last_pfn = max_low_pfn;
 
-		size = last_pfn - curr_pfn;
-		free_bootmem(PFN_PHYS(curr_pfn), PFN_PHYS(size));
+		pages = last_pfn - curr_pfn;
+		free_bootmem(PFN_PHYS(curr_pfn), PFN_PHYS(pages));
 	}
+
 	/*
 	 * Reserve the kernel text and
-	 * Reserve the bootmem bitmap itself as well. We do this in two
-	 * steps (first step was init_bootmem()) because this catches
-	 * the (very unlikely) case of us accidentally initializing the
-	 * bootmem allocator with an invalid RAM area.
+	 * Reserve the bootmem bitmap.We do this in two steps (first step
+	 * was init_bootmem()), because this catches the (definitely buggy)
+	 * case of us accidentally initializing the bootmem allocator with
+	 * an invalid RAM area.
 	 */
-	reserve_bootmem(PAGE_SIZE, PFN_PHYS(start_pfn) + bootmap_size);
+	reserve_bootmem(__MEMORY_START+PAGE_SIZE, (PFN_PHYS(start_pfn) + 
+			bootmap_size + PAGE_SIZE-1) - __MEMORY_START);
 
 	/*
 	 * reserve physical page 0 - it's a special BIOS page on many boxes,
 	 * enabling clean reboots, SMP operation, laptop functions.
 	 */
-	reserve_bootmem(0, PAGE_SIZE);
+	reserve_bootmem(__MEMORY_START, PAGE_SIZE);
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (LOADER_TYPE) {
+	if (LOADER_TYPE && INITRD_START) {
 		if (INITRD_START + INITRD_SIZE <= (max_low_pfn << PAGE_SHIFT)) {
-			reserve_bootmem(INITRD_START, INITRD_SIZE);
-			initrd_start =
-				INITRD_START ? INITRD_START + PAGE_OFFSET + __MEMORY_START : 0;
-			initrd_end = initrd_start+INITRD_SIZE;
+			reserve_bootmem(INITRD_START+__MEMORY_START, INITRD_SIZE);
+ 			initrd_start =
+ 				INITRD_START ? INITRD_START + PAGE_OFFSET + __MEMORY_START : 0;
+			initrd_end = initrd_start + INITRD_SIZE;
 		} else {
-			printk("initrd extends beyond end of memory "
-			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-			    INITRD_START + INITRD_SIZE,
-			    max_low_pfn << PAGE_SHIFT);
-			initrd_start = 0;
-		}
-	}
+ 			printk("initrd extends beyond end of memory "
+ 			    "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
+				    INITRD_START + INITRD_SIZE,
+				    max_low_pfn << PAGE_SHIFT);
+ 			initrd_start = 0;
+ 		}
+ 	}
 #endif
 
 #if 0
@@ -298,6 +299,14 @@ void __init setup_arch(char **cmdline_p)
 	conswitchp = &dummy_con;
 #endif
 #endif
+
+#if defined(__SH4__)
+	init_task.used_math = 1;
+	init_task.flags |= PF_USEDFPU;
+	grab_fpu();
+	fpu_init();
+#endif
+	paging_init();
 }
 
 /*

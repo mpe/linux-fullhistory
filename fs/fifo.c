@@ -41,6 +41,7 @@ static int fifo_open(struct inode *inode, struct file *filp)
 		PIPE_BASE(*inode) = (char *) page;
 		PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
 		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
+		PIPE_WAITING_WRITERS(*inode) = PIPE_WAITING_READERS(*inode) = 0;
 	}
 
 	switch (filp->f_mode) {

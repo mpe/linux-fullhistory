@@ -15,24 +15,12 @@
 #define asmlinkage CPP_ASMLINKAGE
 #endif
 
-#ifdef __sh__
-#define STRINGIFY(X) #X
-#define SYMBOL_NAME_STR(X) STRINGIFY(SYMBOL_NAME(X))
-#ifdef __STDC__
-#define SYMBOL_NAME(X) _##X
-#define SYMBOL_NAME_LABEL(X) _##X##:
-#else
-#define SYMBOL_NAME(X) _/**/X
-#define SYMBOL_NAME_LABEL(X) _/**/X/**/:
-#endif
-#else
 #define SYMBOL_NAME_STR(X) #X
 #define SYMBOL_NAME(X) X
 #ifdef __STDC__
 #define SYMBOL_NAME_LABEL(X) X##:
 #else
 #define SYMBOL_NAME_LABEL(X) X/**/:
-#endif
 #endif
 
 #ifdef __arm__

@@ -61,6 +61,20 @@ ifeq ($(ARCH),arm)
   SERIAL   =
 endif
 
+ifeq ($(ARCH),sh)
+  KEYMAP   =
+  KEYBD    =
+  CONSOLE  =
+  SERIAL =
+  ifeq ($(CONFIG_SERIAL),y)
+  SERIAL = generic_serial.o sh-sci.o
+  else
+    ifeq ($(CONFIG_SERIAL),m)
+    SERIAL = sh-sci.o
+    endif
+  endif
+endif
+
 ifeq ($(CONFIG_DECSTATION),y)
   KEYBD    =
   SERIAL   =

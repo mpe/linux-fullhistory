@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.1 1999/09/18 16:55:51 gniibe Exp gniibe $
+# $Id: Makefile,v 1.2 1999/12/23 12:13:53 gniibe Exp gniibe $
 #
 # This file is subject to the terms and conditions of the GNU General Public
 # License.  See the file "COPYING" in the main directory of this archive
@@ -15,21 +15,21 @@
 #
 # Select the object file format to substitute into the linker script.
 #
-tool-prefix	= sh-elf
+tool-prefix	= sh-linux-gnu-
 
 ifdef CONFIG_LITTLE_ENDIAN
 CFLAGS		+= -ml
 AFLAGS		+= -ml
 # LINKFLAGS	+= -EL
 LDFLAGS		:= -EL
+endif
+
+# ifdef CONFIG_CROSSCOMPILE
+CROSS_COMPILE  = $(tool-prefix)
+# endif
 
 LD	=$(CROSS_COMPILE)ld $(LDFLAGS)
-
-endif
-
-ifdef CONFIG_CROSSCOMPILE
-CROSS_COMPILE  = $(tool-prefix)
-endif
+OBJCOPY=$(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 
 MODFLAGS	+=
 
@@ -51,7 +51,7 @@ endif
 # none has been choosen above.
 #
 LINKSCRIPT    = arch/sh/vmlinux.lds
-LINKFLAGS     += -T $(word 1,$(LINKSCRIPT)) -e __stext
+LINKFLAGS     += -T $(word 1,$(LINKSCRIPT)) -e _stext
 
 ifdef LOADADDR
 LINKFLAGS     += -Ttext $(word 1,$(LOADADDR))

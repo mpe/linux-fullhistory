@@ -1,8 +1,8 @@
-/* $Id: head.S,v 1.7 1999/10/27 09:41:42 gniibe Exp gniibe $
+/* $Id: head.S,v 1.16 2000/03/02 00:01:15 gniibe Exp $
  *
  *  arch/sh/kernel/head.S
  *
- *  Copyright (C) 1999  Niibe Yutaka & Kaz Kojima
+ *  Copyright (C) 1999, 2000  Niibe Yutaka & Kaz Kojima
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -34,49 +34,37 @@ ENTRY(empty_zero_page)
  *   Cache may or may not be initialized.
  *   Hardware (including on-chip modules) may or may not be initialized. 
  *
- *   The register R4&R5 holds the address of the parameter block, which has
- *   command-line data, etc.
- *
  */
 ENTRY(_stext)
-#if defined(__SH4__)
-	!			Initialize FPSCR	
-	/* GCC (as of 2.95.1) assumes FPU with double precision mode. */
-	mov.l	7f,r0
-	lds	r0,fpscr
-#endif
 	!			Initialize Status Register
-	mov.l	1f,r0		! MD=1, RB=0, BL=1
-	ldc	r0,sr
+	mov.l	1f, $r0		! MD=1, RB=0, BL=1
+	ldc	$r0, $sr
 	!
-	mov.l	2f,r0
-	mov	r0,r15		! Set initial r15 (stack pointer)
-	ldc	r0,r4_bank	!   and stack base
+	mov.l	2f, $r0
+	mov	$r0, $r15	! Set initial r15 (stack pointer)
+	ldc	$r0, $r4_bank	!   and stack base
 	!
 	!			Enable cache
-	mov.l	6f,r0
-	jsr	@r0
+	mov.l	6f, $r0
+	jsr	@$r0
 	 nop
 	!			Clear BSS area
-	mov.l	3f,r1
-	add	#4,r1
-	mov.l	4f,r2
-	mov	#0,r0
-9:	cmp/hs	r2,r1
+	mov.l	3f, $r1
+	add	#4, $r1
+	mov.l	4f, $r2
+	mov	#0, $r0
+9:	cmp/hs	$r2, $r1
 	bf/s	9b		! while (r1 < r2)
-	 mov.l	r0,@-r2
+	 mov.l	$r0,@-$r2
 	!			Start kernel
-	mov.l	5f,r0
-	jmp	@r0
+	mov.l	5f, $r0
+	jmp	@$r0
 	 nop
 
 	.balign 4
-1:	.long	0x50000000		! MD=1, RB=0, BL=1
+1:	.long	0x50000000		! MD=1, RB=0, BL=1, FD=0
 2:	.long	SYMBOL_NAME(stack)
 3:	.long	SYMBOL_NAME(__bss_start)
 4:	.long	SYMBOL_NAME(_end)
 5:	.long	SYMBOL_NAME(start_kernel)
 6:	.long	SYMBOL_NAME(cache_init)
-#if defined(__SH4__)
-7:	.long   0x00080000
-#endif

@@ -14,32 +14,38 @@
 
 #include <asm/cache.h>
 
+#define inb_p	inb
+#define outb_p	outb
+
+#define inw_p	inw
+#define outw_p	outw
+
 #define virt_to_bus virt_to_phys
 #define bus_to_virt phys_to_virt
 
 extern __inline__ unsigned long readb(unsigned long addr)
 {
-       return *(volatile unsigned char*)addr;
+	return *(volatile unsigned char*)addr;
 }
 
 extern __inline__ unsigned long readw(unsigned long addr)
 {
-       return *(volatile unsigned short*)addr;
+	return *(volatile unsigned short*)addr;
 }
 
 extern __inline__ unsigned long readl(unsigned long addr)
 {
-       return *(volatile unsigned long*)addr;
+	return *(volatile unsigned long*)addr;
 }
 
 extern __inline__ void writeb(unsigned char b, unsigned long addr)
 {
-       *(volatile unsigned char*)addr = b;
+	*(volatile unsigned char*)addr = b;
 }
 
 extern __inline__ void writew(unsigned short b, unsigned long addr)
 {
-       *(volatile unsigned short*)addr = b;
+	*(volatile unsigned short*)addr = b;
 }
 
 extern __inline__ void writel(unsigned int b, unsigned long addr)
@@ -49,27 +55,27 @@ extern __inline__ void writel(unsigned int b, unsigned long addr)
 
 extern __inline__ unsigned long inb_local(unsigned long addr)
 {
-       return readb(addr);
+	return readb(addr);
 }
 
 extern __inline__ void outb_local(unsigned char b, unsigned long addr)
 {
-       return writeb(b,addr);
+	return writeb(b,addr);
 }
 
 extern __inline__ unsigned long inb(unsigned long addr)
 {
-       return readb(addr);
+	return readb(addr);
 }
 
 extern __inline__ unsigned long inw(unsigned long addr)
 {
-       return readw(addr);
+	return readw(addr);
 }
 
 extern __inline__ unsigned long inl(unsigned long addr)
 {
-       return readl(addr);
+	return readl(addr);
 }
 
 extern __inline__ void insb(unsigned long addr, void *buffer, int count)
@@ -123,6 +129,9 @@ extern __inline__ void outsl(unsigned long addr, const void *buffer, int count)
 	while(count--) outl(*buf++, addr);
 }
 
+#define ctrl_in(addr)		*(addr)
+#define ctrl_out(data,addr)	*(addr) = (data)
+
 extern __inline__ unsigned long ctrl_inb(unsigned long addr)
 {
        return *(volatile unsigned char*)addr;
@@ -145,7 +154,7 @@ extern __inline__ void ctrl_outb(unsigned char b, unsigned long addr)
 
 extern __inline__ void ctrl_outw(unsigned short b, unsigned long addr)
 {
-       *(volatile unsigned short*)addr = b;
+	*(volatile unsigned short*)addr = b;
 }
 
 extern __inline__ void ctrl_outl(unsigned int b, unsigned long addr)
@@ -153,12 +162,9 @@ extern __inline__ void ctrl_outl(unsigned int b, unsigned long addr)
         *(volatile unsigned long*)addr = b;
 }
 
-#define inb_p inb
-#define outb_p outb
-
 #ifdef __KERNEL__
 
-#define IO_SPACE_LIMIT 0xffff
+#define IO_SPACE_LIMIT 0xffffffff
 
 #include <asm/addrspace.h>
 

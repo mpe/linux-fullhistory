@@ -2301,7 +2301,7 @@ static int __init fbcon_show_logo( void )
 	}
 #endif
 #if defined(CONFIG_FBCON_MFB) || defined(CONFIG_FBCON_AFB) || \
-    defined(CONFIG_FBCON_ILBM)
+    defined(CONFIG_FBCON_ILBM) || defined(CONFIG_FBCON_HGA)
 
 	if (depth == 1 && (p->type == FB_TYPE_PACKED_PIXELS ||
 			   p->type == FB_TYPE_PLANES ||
@@ -2311,10 +2311,14 @@ static int __init fbcon_show_logo( void )
 	    unsigned char inverse = p->inverse || p->visual == FB_VISUAL_MONO01
 		? 0x00 : 0xff;
 
+	    int is_hga = !strncmp(p->fb_info->modename, "HGA", 3);
 	    /* can't use simply memcpy because need to apply inverse */
 	    for( y1 = 0; y1 < LOGO_H; y1++ ) {
 		src = logo + y1*LOGO_LINE;
-		dst = fb + y1*line + x/8;
+		if (is_hga)
+		    dst = fb + (y1%4)*8192 + (y1>>2)*line + x/8;
+		else
+		    dst = fb + y1*line + x/8;
 		for( x1 = 0; x1 < LOGO_LINE; ++x1 )
 		    fb_writeb(fb_readb(src++) ^ inverse, dst++);
 	    }

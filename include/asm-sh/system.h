@@ -2,7 +2,7 @@
 #define __ASM_SH_SYSTEM_H
 
 /*
- * Copyright (C) 1999  Niibe Yutaka
+ * Copyright (C) 1999, 2000  Niibe Yutaka
  */
 
 /*
@@ -19,44 +19,44 @@ typedef struct {
 #define prepare_to_switch()	do { } while(0)
 #define switch_to(prev,next,last) do { \
  register struct task_struct *__last; \
- register unsigned long *__ts1 __asm__ ("r1") = &prev->thread.sp; \
- register unsigned long *__ts2 __asm__ ("r2") = &prev->thread.pc; \
- register unsigned long *__ts4 __asm__ ("r4") = (unsigned long *)prev; \
- register unsigned long *__ts5 __asm__ ("r5") = (unsigned long *)next; \
- register unsigned long *__ts6 __asm__ ("r6") = &next->thread.sp; \
- register unsigned long __ts7 __asm__ ("r7") = next->thread.pc; \
+ register unsigned long *__ts1 __asm__ ("$r1") = &prev->thread.sp; \
+ register unsigned long *__ts2 __asm__ ("$r2") = &prev->thread.pc; \
+ register unsigned long *__ts4 __asm__ ("$r4") = (unsigned long *)prev; \
+ register unsigned long *__ts5 __asm__ ("$r5") = (unsigned long *)next; \
+ register unsigned long *__ts6 __asm__ ("$r6") = &next->thread.sp; \
+ register unsigned long __ts7 __asm__ ("$r7") = next->thread.pc; \
  __asm__ __volatile__ (".balign 4\n\t" \
-		       "stc.l	gbr,@-r15\n\t" \
-		       "sts.l	pr,@-r15\n\t" \
-		       "mov.l	r8,@-r15\n\t" \
-		       "mov.l	r9,@-r15\n\t" \
-		       "mov.l	r10,@-r15\n\t" \
-		       "mov.l	r11,@-r15\n\t" \
-		       "mov.l	r12,@-r15\n\t" \
-		       "mov.l	r13,@-r15\n\t" \
-		       "mov.l	r14,@-r15\n\t" \
-		       "mov.l	r15,@r1		! save SP\n\t" \
-		       "mov.l	@r6,r15		! change to new stack\n\t" \
-		       "mov.l	%0,@-r15	! push R0 onto new stack\n\t" \
-		       "mova	1f,%0\n\t" \
-		       "mov.l	%0,@r2		! save PC\n\t" \
-		       "mov.l	2f,%0\n\t" \
+		       "stc.l	$gbr, @-$r15\n\t" \
+		       "sts.l	$pr, @-$r15\n\t" \
+		       "mov.l	$r8, @-$r15\n\t" \
+		       "mov.l	$r9, @-$r15\n\t" \
+		       "mov.l	$r10, @-$r15\n\t" \
+		       "mov.l	$r11, @-$r15\n\t" \
+		       "mov.l	$r12, @-$r15\n\t" \
+		       "mov.l	$r13, @-$r15\n\t" \
+		       "mov.l	$r14, @-$r15\n\t" \
+		       "mov.l	$r15, @$r1	! save SP\n\t" \
+		       "mov.l	@$r6, $r15	! change to new stack\n\t" \
+		       "mov.l	%0, @-$r15	! push R0 onto new stack\n\t" \
+		       "mova	1f, %0\n\t" \
+		       "mov.l	%0, @$r2	! save PC\n\t" \
+		       "mov.l	2f, %0\n\t" \
 		       "jmp	@%0		! call __switch_to\n\t" \
-		       " lds	r7,pr		!  with return to new PC\n\t" \
+		       " lds	$r7, $pr	!  with return to new PC\n\t" \
 		       ".balign	4\n"	\
 		       "2:\n\t" \
-		       ".long	" "_" "__switch_to\n" \
+		       ".long	" "__switch_to\n" \
 		       "1:\n\t" \
-		       "mov.l	@r15+,%0	! pop R0 from new stack\n\t" \
-		       "mov.l	@r15+,r14\n\t" \
-		       "mov.l	@r15+,r13\n\t" \
-		       "mov.l	@r15+,r12\n\t" \
-		       "mov.l	@r15+,r11\n\t" \
-		       "mov.l	@r15+,r10\n\t" \
-		       "mov.l	@r15+,r9\n\t" \
-		       "mov.l	@r15+,r8\n\t" \
-		       "lds.l	@r15+,pr\n\t" \
-		       "ldc.l	@r15+,gbr\n\t" \
+		       "mov.l	@$r15+, %0	! pop R0 from new stack\n\t" \
+		       "mov.l	@$r15+, $r14\n\t" \
+		       "mov.l	@$r15+, $r13\n\t" \
+		       "mov.l	@$r15+, $r12\n\t" \
+		       "mov.l	@$r15+, $r11\n\t" \
+		       "mov.l	@$r15+, $r10\n\t" \
+		       "mov.l	@$r15+, $r9\n\t" \
+		       "mov.l	@$r15+, $r8\n\t" \
+		       "lds.l	@$r15+, $pr\n\t" \
+		       "ldc.l	@$r15+, $gbr\n\t" \
 		       :"=&z" (__last) \
 		       :"0" (prev), \
 			"r" (__ts1), "r" (__ts2), \
@@ -95,9 +95,9 @@ extern __inline__ void __sti(void)
 {
 	unsigned long __dummy;
 
-	__asm__ __volatile__("stc	sr,%0\n\t"
-			     "and	%1,%0\n\t"
-			     "ldc	%0,sr"
+	__asm__ __volatile__("stc	$sr, %0\n\t"
+			     "and	%1, %0\n\t"
+			     "ldc	%0, $sr"
 			     : "=&r" (__dummy)
 			     : "r" (0xefffffff)
 			     : "memory");
@@ -106,30 +106,46 @@ extern __inline__ void __sti(void)
 extern __inline__ void __cli(void)
 {
 	unsigned long __dummy;
-	__asm__ __volatile__("stc	sr,%0\n\t"
-			     "or	%1,%0\n\t"
-			     "ldc	%0,sr"
+	__asm__ __volatile__("stc	$sr, %0\n\t"
+			     "or	%1, %0\n\t"
+			     "ldc	%0, $sr"
 			     : "=&r" (__dummy)
 			     : "r" (0x10000000)
 			     : "memory");
 }
 
-#define __save_flags(x) \
-__asm__ __volatile__("stc	sr,%0":"=r" (x): /* no inputs */ :"memory")
+#define __save_flags(x) 			\
+x = (__extension__ ({	unsigned long __sr;	\
+	__asm__ __volatile__(			\
+		"stc	$sr, %0"		\
+		: "=r" (__sr)			\
+		: /* no inputs */		\
+		: "memory");			\
+	 (__sr & 0xffff7f0f);}))
 
 #define __save_and_cli(x)    				\
 x = (__extension__ ({	unsigned long __dummy,__sr;	\
 	__asm__ __volatile__(                   	\
-		"stc	sr,%1\n\t" 			\
-		"or	%0,%1\n\t" 			\
-		"stc	sr,%0\n\t" 			\
-		"ldc	%1,sr"     			\
+		"stc	$sr, %1\n\t" 			\
+		"or	%0, %1\n\t" 			\
+		"stc	$sr, %0\n\t" 			\
+		"ldc	%1, $sr"     			\
 		: "=r" (__sr), "=&r" (__dummy) 		\
 		: "0" (0x10000000) 			\
-		: "memory"); __sr; }))
+		: "memory"); (__sr & 0xffff7f0f); }))
 
-#define __restore_flags(x) \
-__asm__ __volatile__("ldc	%0,sr": /* no output */: "r" (x):"memory")
+#define __restore_flags(x) do { 			\
+	unsigned long __dummy;				\
+	__asm__ __volatile__(				\
+		"stc	$sr, %0\n\t"			\
+		"and	%1, %0\n\t"			\
+		"or	%2, %0\n\t"			\
+		"ldc	%0, $sr"			\
+		: "=&r" (__dummy)			\
+		: "r" (0x000080f0), /* IMASK+FD */	\
+		  "r" (x)		 		\
+		: "memory"); 				\
+} while (0)
 
 /* For spinlocks etc */
 #define local_irq_save(x)	__save_and_cli(x)
@@ -169,11 +185,25 @@ extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 	return retval;
 }
 
+extern __inline__ unsigned long xchg_u8(volatile unsigned char * m, unsigned long val)
+{
+	unsigned long flags, retval;
+
+	save_and_cli(flags);
+	retval = *m;
+	*m = val & 0xff;
+	restore_flags(flags);
+	return retval;
+}
+
 static __inline__ unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
 {
 	switch (size) {
 	case 4:
 		return xchg_u32(ptr, x);
+		break;
+	case 1:
+		return xchg_u8(ptr, x);
 		break;
 	}
 	__xchg_called_with_bad_pointer();

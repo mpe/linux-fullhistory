@@ -16,7 +16,7 @@
  */
 static __inline__ void wake_one_more(struct semaphore * sem)
 {
-	atomic_inc((atomic_t *)&sem->waking);
+	atomic_inc((atomic_t *)&sem->sleepers);
 }
 
 static __inline__ int waking_non_zero(struct semaphore *sem)
@@ -25,8 +25,8 @@ static __inline__ int waking_non_zero(struct semaphore *sem)
 	int ret = 0;
 
 	spin_lock_irqsave(&semaphore_wake_lock, flags);
-	if (sem->waking > 0) {
-		sem->waking--;
+	if (sem->sleepers > 0) {
+		sem->sleepers--;
 		ret = 1;
 	}
 	spin_unlock_irqrestore(&semaphore_wake_lock, flags);
@@ -50,8 +50,8 @@ static __inline__ int waking_non_zero_interruptible(struct semaphore *sem,
 	int ret = 0;
 
 	spin_lock_irqsave(&semaphore_wake_lock, flags);
-	if (sem->waking > 0) {
-		sem->waking--;
+	if (sem->sleepers > 0) {
+		sem->sleepers--;
 		ret = 1;
 	} else if (signal_pending(tsk)) {
 		atomic_inc(&sem->count);
@@ -76,10 +76,10 @@ static __inline__ int waking_non_zero_trylock(struct semaphore *sem)
 	int ret = 1;
 
 	spin_lock_irqsave(&semaphore_wake_lock, flags);
-	if (sem->waking <= 0)
+	if (sem->sleepers <= 0)
 		atomic_inc(&sem->count);
 	else {
-		sem->waking--;
+		sem->sleepers--;
 		ret = 0;
 	}
 	spin_unlock_irqrestore(&semaphore_wake_lock, flags);

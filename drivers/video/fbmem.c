@@ -85,6 +85,8 @@ extern int vesafb_init(void);
 extern int vesafb_setup(char*);
 extern int vga16fb_init(void);
 extern int vga16fb_setup(char*);
+extern int hgafb_init(void);
+extern int hgafb_setup(char*);
 extern int matroxfb_init(void);
 extern int matroxfb_setup(char*);
 extern int hpfb_init(void);
@@ -195,6 +197,9 @@ static struct {
 #endif 
 #ifdef CONFIG_FB_VGA16
 	{ "vga16", vga16fb_init, vga16fb_setup },
+#endif 
+#ifdef CONFIG_FB_HGA
+	{ "hga", hgafb_init, hgafb_setup },
 #endif 
 #ifdef CONFIG_FB_MATROX
 	{ "matrox", matroxfb_init, matroxfb_setup },

@@ -1,4 +1,4 @@
-/* $Id: irq_onchip.c,v 1.5 1999/10/28 02:18:33 gniibe Exp $
+/* $Id: irq_onchip.c,v 1.7 2000-01-09 15:55:55+09 gniibe Exp $
  *
  * linux/arch/sh/kernel/irq_onchip.c
  *
@@ -143,7 +143,18 @@ static void end_onChip_irq(unsigned int irq)
  */
 
 #define INTC_IRR0	0xa4000004UL
-#define INTC_IPRC	0xa4000016UL
+#define INTC_IRR1	0xa4000006UL
+#define INTC_IRR2	0xa4000008UL
+
+#define INTC_ICR0  	0xfffffee0
+#define INTC_ICR1  	0xa4000010
+#define INTC_ICR2  	0xa4000012
+#define INTC_INTER 	0xa4000014
+#define INTC_IPRA  	0xfffffee2
+#define INTC_IPRB  	0xfffffee4
+#define INTC_IPRC  	0xa4000016
+#define INTC_IPRD  	0xa4000018
+#define INTC_IPRE  	0xa400001a
 
 #define IRQ0_IRQ	32
 #define IRQ1_IRQ	33
@@ -248,6 +259,26 @@ void __init init_IRQ(void)
 	}
 
 #ifdef CONFIG_CPU_SUBTYPE_SH7709
+
+	/*
+	 * Initialize the Interrupt Controller (INTC)
+	 * registers to their power on values
+	 */ 
+
+	ctrl_outb(0, INTC_IRR0);
+	ctrl_outb(0, INTC_IRR1);
+	ctrl_outb(0, INTC_IRR2);
+
+	ctrl_outw(0, INTC_ICR0);
+	ctrl_outw(0, INTC_ICR1);
+	ctrl_outw(0, INTC_ICR2);
+	ctrl_outw(0, INTC_INTER);
+	ctrl_outw(0, INTC_IPRA);
+	ctrl_outw(0, INTC_IPRB);
+	ctrl_outw(0, INTC_IPRC);
+	ctrl_outw(0, INTC_IPRD);
+	ctrl_outw(0, INTC_IPRE);
+
 	for (i = IRQ0_IRQ; i < NR_IRQS; i++) {
 		irq_desc[i].handler = &onChip2_irq_type;
 	}
@@ -263,8 +294,5 @@ void __init init_IRQ(void)
 	set_ipr_data(IRQ3_IRQ, IRQ3_IRP_OFFSET, IRQ3_PRIORITY);
 	set_ipr_data(IRQ4_IRQ, IRQ4_IRP_OFFSET, IRQ4_PRIORITY);
 	set_ipr_data(IRQ5_IRQ, IRQ5_IRP_OFFSET, IRQ5_PRIORITY);
-
-	ctrl_inb(INTC_IRR0);
-	ctrl_outb(0, INTC_IRR0);
 #endif /* CONFIG_CPU_SUBTYPE_SH7709 */
 }

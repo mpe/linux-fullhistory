@@ -14,10 +14,7 @@ typedef unsigned long elf_greg_t;
 #define ELF_NGREG (sizeof (struct pt_regs) / sizeof(elf_greg_t))
 typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 
-/* Though SH-3 has no floating point regs.. */
-#define ELF_NFPREG 34
-typedef double elf_fpreg_t;
-typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
+typedef struct user_fpu_struct elf_fpregset_t;
 
 /*
  * This is used to ensure we don't load something for the wrong architecture.

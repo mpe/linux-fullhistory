@@ -24,6 +24,13 @@ typedef long		__kernel_suseconds_t;
 typedef long		__kernel_clock_t;
 typedef int		__kernel_daddr_t;
 typedef char *		__kernel_caddr_t;
+typedef unsigned short	__kernel_uid16_t;
+typedef unsigned short	__kernel_gid16_t;
+typedef unsigned int	__kernel_uid32_t;
+typedef unsigned int	__kernel_gid32_t;
+
+typedef unsigned short	__kernel_old_uid_t;
+typedef unsigned short	__kernel_old_gid_t;
 
 #ifdef __GNUC__
 typedef long long	__kernel_loff_t;
@@ -38,6 +45,7 @@ typedef struct {
 } __kernel_fsid_t;
 
 #if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2)
+
 #undef	__FD_SET
 static __inline__ void __FD_SET(unsigned long __fd, __kernel_fd_set *__fdsetp)
 {

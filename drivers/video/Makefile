@@ -21,7 +21,7 @@ export-objs    := fbmem.o fbcmap.o fbcon.o fbcon-afb.o fbcon-ilbm.o \
 		  fbcon-iplan2p8.o fbcon-vga-planes.o fbcon-cfb16.o \
 		  fbcon-cfb2.o fbcon-cfb24.o fbcon-cfb32.o fbcon-cfb4.o \
 		  fbcon-cfb8.o fbcon-mac.o fbcon-mfb.o fbcon-vga8-planes.o \
-		  matrox/matroxfb.o cyber2000fb.o
+		  matrox/matroxfb.o cyber2000fb.o fbcon-hga.o
 
 # Object file lists.
 obj-y          :=
@@ -85,9 +85,6 @@ obj-$(CONFIG_FB_TCX)              += tcxfb.o sbusfb.o
 obj-$(CONFIG_FB_CGFOURTEEN)       += cgfourteenfb.o sbusfb.o
 obj-$(CONFIG_FB_P9100)            += p9100fb.o sbusfb.o
 obj-$(CONFIG_FB_LEO)              += leofb.o sbusfb.o
-obj-$(CONFIG_FB_SUN3)             += sun3fb.o
-obj-$(CONFIG_FB_BWTWO)            += bwtwofb.o
-obj-$(CONFIG_FB_VIRTUAL)          += vfb.o  
 
 ifeq ($(CONFIG_FB_MATROX),y)
 SUB_DIRS			  += matrox
@@ -109,6 +106,11 @@ else
   endif
 endif
 
+obj-$(CONFIG_FB_SUN3)             += sun3fb.o
+obj-$(CONFIG_FB_BWTWO)            += bwtwofb.o
+obj-$(CONFIG_FB_HGA)              += hgafb.o  
+obj-$(CONFIG_FB_VIRTUAL)          += vfb.o  
+
 # Generic Low Level Drivers
 
 obj-$(CONFIG_FBCON_AFB)           += fbcon-afb.o
@@ -126,6 +128,7 @@ obj-$(CONFIG_FBCON_IPLAN2P16)     += fbcon-iplan2p16.o
 obj-$(CONFIG_FBCON_MAC)           += fbcon-mac.o
 obj-$(CONFIG_FBCON_MFB)           += fbcon-mfb.o
 obj-$(CONFIG_FBCON_VGA)           += fbcon-vga.o
+obj-$(CONFIG_FBCON_HGA)           += fbcon-hga.o
 
 # Extract lists of the multi-part drivers.
 # The 'int-*' lists are the intermediate files used to build the multi's.

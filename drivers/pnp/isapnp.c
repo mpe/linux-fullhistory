@@ -2040,7 +2040,7 @@ static int __init isapnp_do_reserve_irq(int irq)
 		if (isapnp_reserve_irq[i] < 0) {
 			isapnp_reserve_irq[i] = irq;
 #ifdef ISAPNP_DEBUG
-			printk("IRQ %i is reserved now.\n", irq);
+			printk("isapnp: IRQ %i is reserved now.\n", irq);
 #endif
 			return 0;
 		}
@@ -2056,7 +2056,7 @@ static void __init isapnp_pci_init(void)
 
 	pci_for_each_dev(dev) {
 #ifdef ISAPNP_DEBUG
-		printk("PCI: reserved IRQ: %i\n", dev->irq);
+		printk("isapnp: PCI: reserved IRQ: %i\n", dev->irq);
 #endif
 		if (dev->irq > 0)
 			isapnp_do_reserve_irq(dev->irq);

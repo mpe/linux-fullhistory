@@ -4,6 +4,10 @@
 #
 mainmenu_name "Linux/SuperH Kernel Configuration"
 
+define_bool CONFIG_SUPERH y
+
+define_bool CONFIG_UID16 y
+
 mainmenu_option next_comment
 comment 'Code maturity level options'
 bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
@@ -29,7 +33,6 @@ if [ "$CONFIG_CPU_SUBTYPE_SH7750" = "y" ]; then
 fi
 bool 'Little Endian' CONFIG_LITTLE_ENDIAN
 hex 'Physical memory start address' CONFIG_MEMORY_START 08000000
-bool 'Use SH CPU internal real time clock' CONFIG_SH_CPU_RTC
 endmenu
 
 mainmenu_option next_comment
@@ -43,63 +46,139 @@ endmenu
 
 mainmenu_option next_comment
 comment 'General setup'
+
 bool 'Networking support' CONFIG_NET
+
+bool 'Directy Connected Compact Flash support' CONFIG_CF_ENABLER
+
+bool 'PCI support' CONFIG_PCI
+if [ "$CONFIG_PCI" = "y" ]; then
+   choice '  PCI access mode' \
+	"BIOS		CONFIG_PCI_GOBIOS	\
+	 Direct		CONFIG_PCI_GODIRECT	\
+	 Any		CONFIG_PCI_GOANY"	Any
+   if [ "$CONFIG_PCI_GOBIOS" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
+      define_bool CONFIG_PCI_BIOS y
+   fi
+   if [ "$CONFIG_PCI_GODIRECT" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
+      define_bool CONFIG_PCI_DIRECT y
+   fi
+fi
+
+source drivers/pci/Config.in
+
+bool 'Support for hot-pluggable devices' CONFIG_HOTPLUG
+
+if [ "$CONFIG_HOTPLUG" = "y" ] ; then
+   source drivers/pcmcia/Config.in
+fi
+
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
-
 if [ "$CONFIG_PROC_FS" = "y" ]; then
    choice 'Kernel core (/proc/kcore) format' \
 	"ELF		CONFIG_KCORE_ELF	\
 	 A.OUT		CONFIG_KCORE_AOUT" ELF
 fi
-
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+
+source drivers/parport/Config.in
+
 endmenu
 
-mainmenu_option next_comment
-comment 'Character devices'
-define_bool CONFIG_SERIAL n
-define_bool CONFIG_SERIAL_CONSOLE y
-bool 'SuperH SCI support' CONFIG_SH_SCI_SERIAL
-bool 'SuperH SCIF support' CONFIG_SH_SCIF_SERIAL
-endmenu
-
-mainmenu_option next_comment
-comment 'Floppy, IDE, and other block devices'
-
-tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
-if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
-   bool '  Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
-fi
-
-tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
-tristate 'Network block device support' CONFIG_BLK_DEV_NBD
-endmenu
+source drivers/block/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
    source net/Config.in
+fi
+
+mainmenu_option next_comment
+comment 'SCSI support'
+
+tristate 'SCSI support' CONFIG_SCSI
+
+if [ "$CONFIG_SCSI" != "n" ]; then
+   source drivers/scsi/Config.in
+fi
+endmenu
+
+source drivers/ieee1394/Config.in
+
+if [ "$CONFIG_NET" = "y" ]; then
    mainmenu_option next_comment
-   comment 'Network device drivers'
+   comment 'Network device support'
+
+   bool 'Network device support' CONFIG_NETDEVICES
+   if [ "$CONFIG_NETDEVICES" = "y" ]; then
       source drivers/net/Config.in
+      if [ "$CONFIG_ATM" = "y" ]; then
+         source drivers/atm/Config.in
+      fi
+   fi
    endmenu
 fi
 
 mainmenu_option next_comment
+comment 'Character devices'
+
+bool 'Virtual terminal' CONFIG_VT
+if [ "$CONFIG_VT" = "y" ]; then
+   bool '  Support for console on virtual terminal' CONFIG_VT_CONSOLE
+fi
+
+tristate 'Serial support' CONFIG_SERIAL
+if [ "$CONFIG_SERIAL" = "y" -o "$CONFIG_SERIAL" = "m" ]; then
+   choice 'Serial interface type' \
+      "SCI  CONFIG_SH_SCI_SERIAL \
+       SCIF CONFIG_SH_SCIF_SERIAL"
+fi
+if [ "$CONFIG_SERIAL" = "y" ]; then
+   bool '  Support for console on serial port' CONFIG_SERIAL_CONSOLE
+fi
 comment 'Unix 98 PTY support'
 bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
    int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
 fi
+if [ "$CONFIG_PARPORT" != "n" ]; then
+   dep_tristate 'Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
+   if [ "$CONFIG_PRINTER" != "n" ]; then
+      bool '  Support for console on line printer' CONFIG_LP_CONSOLE
+   fi
+   dep_tristate 'Support for user-space parallel port device drivers' CONFIG_PPDEV $CONFIG_PARPORT
+fi
 endmenu
+
+if [ "$CONFIG_HOTPLUG" = "y" -a "$CONFIG_PCMCIA" != "n" ]; then
+   source drivers/char/pcmcia/Config.in
+fi
+
+source drivers/misc/Config.in
 
 source fs/Config.in
 
-mainmenu_option next_comment
-comment 'Watchdog'
+if [ "$CONFIG_VT" = "y" ]; then
+   mainmenu_option next_comment
+   comment 'Console drivers'
+   bool 'VGA text console' CONFIG_VGA_CONSOLE
+   bool 'Video mode selection support' CONFIG_VIDEO_SELECT
+   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'MDA text console (dual-headed) (EXPERIMENTAL)' CONFIG_MDA_CONSOLE
+      source drivers/video/Config.in
+   fi
+   endmenu
+fi
 
-tristate 'Software watchdog' CONFIG_SOFT_WATCHDOG
+
+mainmenu_option next_comment
+comment 'Sound'
+
+tristate 'Sound card support' CONFIG_SOUND
+if [ "$CONFIG_SOUND" != "n" ]; then
+   source drivers/sound/Config.in
+fi
 endmenu
 
 mainmenu_option next_comment

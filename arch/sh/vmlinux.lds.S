@@ -1,4 +1,4 @@
-/* $Id: vmlinux.lds.S,v 1.3 1999/10/05 12:33:48 gniibe Exp $
+/* $Id: vmlinux.lds.S,v 1.4 1999/12/23 11:37:45 gniibe Exp $
  * ld script to make SuperH Linux kernel
  * Written by Niibe Yutaka
  */
@@ -13,8 +13,8 @@ ENTRY(_start)
 SECTIONS
 {
   . = 0x80000000 + CONFIG_MEMORY_START + 0x1000;
-  __text = .;			/* Text and read-only data */
   _text = .;			/* Text and read-only data */
+  text = .;			/* Text and read-only data */
   .text : {
 	*(.empty_zero_page)
 	*(.text)
@@ -26,41 +26,41 @@ SECTIONS
   .kstrtab : { *(.kstrtab) }
 
   . = ALIGN(16);		/* Exception table */
-  ___start___ex_table = .;
-  ___ex_table : { *(__ex_table) }
-  ___stop___ex_table = .;
+  __start___ex_table = .;
+  __ex_table : { *(__ex_table) }
+  __stop___ex_table = .;
 
-  ___start___ksymtab = .;	/* Kernel symbol table */
-  ___ksymtab : { *(__ksymtab) }
-  ___stop___ksymtab = .;
+  __start___ksymtab = .;	/* Kernel symbol table */
+  __ksymtab : { *(__ksymtab) }
+  __stop___ksymtab = .;
 
-  __etext = .;			/* End of text section */
+  _etext = .;			/* End of text section */
 
   .data : {			/* Data */
 	*(.data)
 	CONSTRUCTORS
 	}
 
-  __edata = .;			/* End of data section */
+  _edata = .;			/* End of data section */
 
   . = ALIGN(8192);		/* init_task */
   .data.init_task : { *(.data.init_task) }
   /* stack */
-  .stack : { _stack = .;  __stack = .; }
+  .stack : { stack = .;  _stack = .; }
 
   . = ALIGN(4096);		/* Init code and data */
-  ___init_begin = .;
+  __init_begin = .;
   .text.init : { *(.text.init) }
   .data.init : { *(.data.init) }
   . = ALIGN(16);
-  ___setup_start = .;
+  __setup_start = .;
   .setup.init : { *(.setup.init) }
-  ___setup_end = .;
-  ___initcall_start = .;
+  __setup_end = .;
+  __initcall_start = .;
   .initcall.init : { *(.initcall.init) }
-  ___initcall_end = .;
+  __initcall_end = .;
   . = ALIGN(4096);
-  ___init_end = .;
+  __init_end = .;
 
   . = ALIGN(4096);
   .data.page_aligned : { *(.data.idt) }
@@ -69,12 +69,12 @@ SECTIONS
   .data.cacheline_aligned : { *(.data.cacheline_aligned) }
 
   . = ALIGN(4);
-  ___bss_start = .;		/* BSS */
+  __bss_start = .;		/* BSS */
   .bss : {
 	*(.bss)
 	}
   . = ALIGN(4);
-  __end = . ;
+  _end = . ;
 
   /* Stabs debugging sections.  */
   .stab 0 : { *(.stab) }

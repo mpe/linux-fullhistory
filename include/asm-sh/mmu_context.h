@@ -11,9 +11,6 @@
      (b) ASID (Address Space IDentifier)
  */
 
-static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
-{
-}
 /*
  * Cache of MMU context last used.
  */
@@ -26,6 +23,11 @@ extern unsigned long mmu_context_cache;
 
 /* ASID is 8-bit value, so it can't be 0x100 */
 #define MMU_NO_ASID			0x100
+
+/*
+ * Virtual Page Number mask
+ */
+#define MMU_VPN_MASK	0xfffff000
 
 extern __inline__ void
 get_new_mmu_context(struct mm_struct *mm)
@@ -114,16 +116,22 @@ extern __inline__ void destroy_context(struct mm_struct *mm)
 
 extern __inline__ void set_asid(unsigned long asid)
 {
-	__asm__ __volatile__ ("mov.l	%0,%1"
-			      : /* no output */
-			      : "r" (asid), "m" (__m(MMU_PTEH)));
+	unsigned long __dummy;
+
+	__asm__ __volatile__ ("mov.l	%2, %0\n\t"
+			      "and	%3, %0\n\t"
+			      "or	%1, %0\n\t"
+			      "mov.l	%0, %2"
+			      : "=&r" (__dummy)
+			      : "r" (asid), "m" (__m(MMU_PTEH)),
+			        "r" (0xffffff00));
 }
 
 extern __inline__ unsigned long get_asid(void)
 {
 	unsigned long asid;
 
-	__asm__ __volatile__ ("mov.l	%1,%0"
+	__asm__ __volatile__ ("mov.l	%1, %0"
 			      : "=r" (asid)
 			      : "m" (__m(MMU_PTEH)));
 	asid &= MMU_CONTEXT_ASID_MASK;
@@ -146,19 +154,23 @@ extern __inline__ void switch_mm(struct mm_struct *prev,
 				 struct mm_struct *next,
 				 struct task_struct *tsk, unsigned int cpu)
 {
+	set_bit(cpu, &next->cpu_vm_mask);
 	if (prev != next) {
 		unsigned long __pgdir = (unsigned long)next->pgd;
 
-		__asm__ __volatile__("mov.l	%0,%1"
+		__asm__ __volatile__("mov.l	%0, %1"
 				     : /* no output */
 				     : "r" (__pgdir), "m" (__m(MMU_TTB)));
 		activate_context(next);
 		clear_bit(cpu, &prev->cpu_vm_mask);
 	}
-	set_bit(cpu, &next->cpu_vm_mask);
 }
 
 #define activate_mm(prev, next) \
 	switch_mm((prev),(next),NULL,smp_processor_id())
 
+extern __inline__ void
+enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+}
 #endif /* __ASM_SH_MMU_CONTEXT_H */

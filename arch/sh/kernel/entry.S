@@ -1,8 +1,8 @@
-/* $Id: entry.S,v 1.19 1999/10/31 13:19:35 gniibe Exp gniibe $
+/* $Id: entry.S,v 1.55 2000/03/05 01:48:58 gniibe Exp $
  *
  *  linux/arch/sh/entry.S
  *
- *  Copyright (C) 1999  Niibe Yutaka
+ *  Copyright (C) 1999, 2000  Niibe Yutaka
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -54,7 +54,8 @@ sigpending	=  8
 addr_limit	= 12
 need_resched	= 20
 
-PF_TRACESYS  = 0x20
+PF_TRACESYS  = 0x00000020
+PF_USEDFPU   = 0x00100000
 
 ENOSYS = 38
 
@@ -207,36 +208,9 @@ error:
 1:	.long	SYMBOL_NAME(do_exception_error)
 2:	.long	0xefffffff	! BL=0
 
-reschedule:
-	mova	SYMBOL_NAME(ret_from_syscall),r0
-	mov.l	1f,r1
-	jmp	@r1
-	 lds	r0,pr
-	.balign	4
-1:	.long	SYMBOL_NAME(schedule)
-
 badsys:	mov	#-ENOSYS,r0
 	rts			! go to ret_from_syscall..
 	 mov.l	r0,@(R0,r15)
-
-signal_return:
-	! We can reach here from an interrupt handler,
-	! so, we need to unblock interrupt.
-	/*  STI */
-	mov.l	1f,r1
-	stc	sr,r0
-	and	r1,r0
-	ldc	r0,sr
-	!
-	mov	r15,r4
-	mov	#0,r5
-	mov.l	2f,r1
-	mova	restore_all,r0
-	jmp	@r1
-	 lds	r0,pr
-	.balign	4
-1:	.long	0xefffffff		! BL=0
-2:	.long	SYMBOL_NAME(do_signal)
 
 !
 !
@@ -274,7 +248,7 @@ system_call:
 	ldc	r2,sr
 	!
 	mov.l	__n_sys,r1
-	cmp/ge	r1,r0
+	cmp/hs	r1,r0
 	bt/s	badsys
 	 mov	r0,r2
 	!
@@ -329,6 +303,9 @@ system_call:
 3:	.long	SYMBOL_NAME(syscall_trace)
 2:	.long	0xefffffff	! BL=0
 1:	.long	TRA
+__n_sys:	.long	NR_syscalls
+__sct:		.long	SYMBOL_NAME(sys_call_table)
+__tsk_flags:	.long	flags-8192	! offset from stackbase to tsk->flags
 led:	.long	0xa8000000	! For my board -- gN
 
 	.section	.fixup,"ax"
@@ -343,30 +320,57 @@ fixup_syscall_argerr:
 	.long	8b,fixup_syscall_argerr
 .previous
 
+reschedule:
+	mova	SYMBOL_NAME(ret_from_syscall),r0
+	mov.l	1f,r1
+	jmp	@r1
+	 lds	r0,pr
+	.balign	4
+1:	.long	SYMBOL_NAME(schedule)
 
 ENTRY(ret_from_irq)
-	mov.l	@(SR,r15),r0	! get original stack
+	mov.l	@(SR,r15),r0	! get status register
 	shll	r0
 	shll	r0		! kernel space?
 	bt	restore_all	! Yes, it's from kernel, go back soon
-	! XXX: Is it better to run through bottom half?
-	! In such a case, we should go "ret_from_syscall" instead
+	! STI
+	mov.l	1f, $r1
+	stc	$sr, $r2
+	and	$r1, $r2
+	ldc	$r2, $sr
+	!
 	bra	ret_with_reschedule
 	 nop
 
+ENTRY(ret_from_exception)
+	mov.l	@(SR,r15),r0	! get status register
+	shll	r0
+	shll	r0		! kernel space?
+	bt	restore_all	! Yes, it's from kernel, go back soon
+	! STI
+	mov.l	1f, $r1
+	stc	$sr, $r2
+	and	$r1, $r2
+	ldc	$r2, $sr
+	!
+	bra	ret_from_syscall
+	 nop
+	.balign	4
+1:	.long	0xefffffff	! BL=0
+
+	.balign 4
 ret:	add	r8,r15		! pop off the arguments
 	mov.l	r0,@(R0,r15)	! save the return value
 	/* fall through */
 
 ENTRY(ret_from_syscall)
-	mov.l	__bh_mask,r0
+	mov.l	__softirq_state,r0
 	mov.l	@r0,r1
-	mov.l	__bh_active,r0
-	mov.l	@r0,r2
+	mov.l	@(4,r0),r2
 	tst	r2,r1
 	bt	ret_with_reschedule
-handle_bottom_half:
-	mov.l	__dbh,r0
+handle_softirq:
+	mov.l	__do_softirq,r0
 	jsr	@r0
 	 nop
 ret_with_reschedule:
@@ -378,11 +382,44 @@ ret_with_reschedule:
 	bf	reschedule
 	mov.l	@(sigpending,r1),r0
 	tst	#0xff,r0
-	bf	signal_return
-	!
+	bt	restore_all
+signal_return:
+	mov	r15,r4
+	mov	#0,r5
+	mov.l	__do_signal,r1
+	mova	restore_all,r0
+	jmp	@r1
+	 lds	r0,pr
+	.balign	4
+__do_signal:
+	.long	SYMBOL_NAME(do_signal)
+__softirq_state:
+	.long	SYMBOL_NAME(softirq_state)
+__do_softirq:
+	.long	SYMBOL_NAME(do_softirq)
+__minus8192:
+	.long	-8192		! offset from stackbase to tsk
+
+	.balign 4
 restore_all:
-	add	#4,r15		! skip syscall number
-	mov.l	@r15+,r11	! SSR
+#if defined(__SH4__)
+	mov.l	__fpu_prepare_fd, $r1
+	jsr	@$r1
+	 stc	$sr, $r4
+#endif
+	add	#4,r15		! Skip syscall number
+	mov.l	@r15+,r11	! Got SSR into R11
+#if defined(__SH4__)
+	mov	$r11, $r12
+#endif
+	!
+	mov.l	1f,r1
+	stc	sr,r0
+	and	r1,r0		! Get IMASK+FD
+	mov.l	2f,r1
+	and	r1,r11
+	or	r0,r11		! Inherit the IMASK+FD value of SR
+	!
 	mov.l	@r15+,r10	! original stack
 	mov.l	@r15+,r0
 	mov.l	@r15+,r1
@@ -398,6 +435,9 @@ restore_all:
 	ldc	r14,sr			! here, change the register bank
 	mov	r10,k0
 	mov	r11,k1
+#if defined(__SH4__)
+	mov	$r12, $k2
+#endif
 	mov.l	@r15+,r8
 	mov.l	@r15+,r9
 	mov.l	@r15+,r10
@@ -410,21 +450,69 @@ restore_all:
 	lds.l	@r15+,macl
 	lds.l	@r15+,pr
 	ldc.l	@r15+,spc
-	mov	k0,r15
 	ldc	k1,ssr
+#if defined(__SH4__)
+	shll	$k1
+	shll	$k1
+	bf	9f		! user mode
+	/* Kernel to kernel transition */
+	mov.l	3f, $k1
+	tst	$k1, $k2
+	bf	9f		! it hadn't FPU
+	! Kernel to kernel and FPU was used
+	! There's the case we don't get FPU now
+	stc	$sr, $k2
+	tst	$k1, $k2
+	bt	7f
+	! We need to grab FPU here
+	xor	$k1, $k2
+	ldc	$k2, $sr		! Grab FPU
+	mov.l	__init_task_flags, $k1
+	mov.l	@$k1, $k2
+	mov.l	__PF_USEDFPU, $k1
+	or	$k1, $k2
+	mov.l	__init_task_flags, $k1
+	mov.l	$k2, @$k1		! Set init_task.flags |= PF_USEDFPU
+	!
+	! Restoring FPU...
+	!
+7:	fmov.s	@$r15+, $fr0
+	fmov.s	@$r15+, $fr1
+	fmov.s	@$r15+, $fr2
+	fmov.s	@$r15+, $fr3
+	fmov.s	@$r15+, $fr4
+	fmov.s	@$r15+, $fr5
+	fmov.s	@$r15+, $fr6
+	fmov.s	@$r15+, $fr7
+	fmov.s	@$r15+, $fr8
+	fmov.s	@$r15+, $fr9
+	fmov.s	@$r15+, $fr10
+	fmov.s	@$r15+, $fr11
+	fmov.s	@$r15+, $fr12
+	fmov.s	@$r15+, $fr13
+	fmov.s	@$r15+, $fr14
+	fmov.s	@$r15+, $fr15
+	lds.l	@$r15+, $fpscr
+	lds.l	@$r15+, $fpul
+9:
+#endif
+	mov	k0,r15
 	rte
 	 nop
 
 	.balign	4
-__n_sys:	.long	NR_syscalls
-__sct:		.long	SYMBOL_NAME(sys_call_table)
-__bh_mask:	.long	SYMBOL_NAME(bh_mask)
-__bh_active:	.long	SYMBOL_NAME(bh_active)
-__dbh:		.long	SYMBOL_NAME(do_bottom_half)
 __blrb_flags:	.long	0x30000000
-__minus8192:	.long	-8192		! offset from stackbase to tsk
-__tsk_flags:	.long	flags-8192	! offset from stackbase to tsk->flags
-
+#if defined(__SH4__)
+__fpu_prepare_fd:
+	.long	SYMBOL_NAME(fpu_prepare_fd)
+__init_task_flags:
+	.long	SYMBOL_NAME(init_task_union)+4
+__PF_USEDFPU:
+	.long	PF_USEDFPU
+#endif
+1:	.long	0x000080f0	! IMASK+FD
+2:	.long	0xffff7f0f	! ~(IMASK+FD)
+3:	.long	0x00008000	! FD=1
 
 ! Exception Vector Base
 !
@@ -441,43 +529,81 @@ general_exception:
 	bra	handle_exception
 	 mov.l	@k2,k2
 	.balign	4
-2:	.long	SYMBOL_NAME(ret_from_syscall)
+2:	.long	SYMBOL_NAME(ret_from_exception)
 1:	.long	EXPEVT
 !
 !
 	.balign 	1024,0,1024
 tlb_miss:
 	mov.l	1f,k2
-	mov.l	3f,k3
+	mov.l	4f,k3
 	bra	handle_exception
 	 mov.l	@k2,k2
 !
 	.balign 	512,0,512
 interrupt:
 	mov.l	2f,k2
-	mov.l	4f,k3
+	mov.l	3f,k3
 	bra	handle_exception
 	 mov.l	@k2,k2
 
 	.balign	4
 1:	.long	EXPEVT
 2:	.long	INTEVT
-3:	.long	SYMBOL_NAME(ret_from_syscall)
-4:	.long	SYMBOL_NAME(ret_from_irq)
+3:	.long	SYMBOL_NAME(ret_from_irq)
+4:	.long	SYMBOL_NAME(ret_from_exception)
 
 !
 !
 handle_exception:
-	! Using k0, k1 for scratch registers (r0_bank1, and r1_bank1),
+	! Using k0, k1 for scratch registers (r0_bank1, r1_bank),
 	! save all registers onto stack.
 	!
 	stc	ssr,k0		! from kernel space?
 	shll	k0		! Check MD bit (bit30)
 	shll	k0
-	bt/s	1f		! it's from kernel to kernel transition
+#if defined(__SH4__)
+	bf/s	8f		! it's from user to kernel transition
+	 mov	$r15, $k0	! save original stack to k0
+	/* Kernel to kernel transition */
+	mov.l	2f, $k1
+	stc	$ssr, $k0
+	tst	$k1, $k0
+	bf/s	9f		! FPU is not used
+	 mov	$r15, $k0	! save original stack to k0
+	! FPU is used, save FPU
+	! /* XXX: Need to save another bank of FPU if all FPU feature is used */
+	! /* Currently it's not the case for GCC (only udivsi3_i4, divsi3_i4) */
+	sts.l	$fpul,  @-$r15
+	sts.l	$fpscr, @-$r15
+	fmov.s	$fr15, @-$r15
+	fmov.s	$fr14, @-$r15
+	fmov.s	$fr13, @-$r15
+	fmov.s	$fr12, @-$r15
+	fmov.s	$fr11, @-$r15
+	fmov.s	$fr10, @-$r15
+	fmov.s	$fr9, @-$r15
+	fmov.s	$fr8, @-$r15
+	fmov.s	$fr7, @-$r15
+	fmov.s	$fr6, @-$r15
+	fmov.s	$fr5, @-$r15
+	fmov.s	$fr4, @-$r15
+	fmov.s	$fr3, @-$r15
+	fmov.s	$fr2, @-$r15
+	fmov.s	$fr1, @-$r15
+	fmov.s	$fr0, @-$r15
+	bra 9f
+	 mov	#0, $k1
+#else
+	bt/s	9f		! it's from kernel to kernel transition
 	 mov	r15,k0		! save original stack to k0 anyway
-	mov	kernel_sp,r15	! change to kernel stack
-1:	stc.l	spc,@-r15
+#endif
+8:	/* User space to kernel */
+	mov	kernel_sp, $r15	! change to kernel stack
+#if defined(__SH4__)
+	mov.l	2f, $k1		! let kernel release FPU
+#endif
+9:	stc.l	spc,@-r15
 	sts.l	pr,@-r15
 	!
 	lds	k3,pr		! Set the return address to pr
@@ -487,9 +613,12 @@ handle_exception:
 	stc.l	gbr,@-r15
 	mov.l	r14,@-r15
 	!
-	mov.l	2f,k1
-	stc	sr,r14		! back to normal register bank, and
-	and	k1,r14		! ..
+	stc	sr,r14		! Back to normal register bank, and
+#if defined(__SH4__)
+	or	$k1, $r14	! may release FPU
+#endif
+	mov.l	3f,k1
+	and	k1,r14		! ...
 	ldc	r14,sr		! ...changed here.
 	!
 	mov.l	r13,@-r15
@@ -520,7 +649,8 @@ handle_exception:
 	 mov.l	@r15,r0		! recovering r0..
 	.balign	4
 1:	.long	SYMBOL_NAME(exception_handling_table)
-2:	.long	0xdfffffff	! RB=0, BL=1
+2:	.long	0x00008000	! FD=1
+3:	.long	0xdfffffff	! RB=0, leave BL=1
 
 none:
 	rts
@@ -537,7 +667,11 @@ ENTRY(exception_handling_table)
 	.long	tlb_protection_violation_store
 	.long	error	! address_error_load        (filled by trap_init)
 	.long	error	! address_error_store       (filled by trap_init)
+#if defined(__SH4__)
+	.long	SYMBOL_NAME(do_fpu_error)
+#else
 	.long	error	! fpu_exception
+#endif
 	.long	error
 	.long	system_call			! Unconditional Trap
 	.long	error	! reserved_instruction      (filled by trap_init)
@@ -628,8 +762,8 @@ ENTRY(interrupt_table)
 	.long	error
 	.long	error
 	.long	error
-	.long	error ! fpu
-	.long	error ! fpu
+	.long	SYMBOL_NAME(do_fpu_state_restore)
+	.long	SYMBOL_NAME(do_fpu_state_restore)
 #endif
 
 ENTRY(sys_call_table)
@@ -649,15 +783,15 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_time)
 	.long SYMBOL_NAME(sys_mknod)
 	.long SYMBOL_NAME(sys_chmod)		/* 15 */
-	.long SYMBOL_NAME(sys_lchown)
+	.long SYMBOL_NAME(sys_lchown16)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* old break syscall holder */
 	.long SYMBOL_NAME(sys_stat)
 	.long SYMBOL_NAME(sys_lseek)
 	.long SYMBOL_NAME(sys_getpid)		/* 20 */
 	.long SYMBOL_NAME(sys_mount)
 	.long SYMBOL_NAME(sys_oldumount)
-	.long SYMBOL_NAME(sys_setuid)
-	.long SYMBOL_NAME(sys_getuid)
+	.long SYMBOL_NAME(sys_setuid16)
+	.long SYMBOL_NAME(sys_getuid16)
 	.long SYMBOL_NAME(sys_stime)		/* 25 */
 	.long SYMBOL_NAME(sys_ptrace)
 	.long SYMBOL_NAME(sys_alarm)
@@ -679,13 +813,13 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_times)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* old prof syscall holder */
 	.long SYMBOL_NAME(sys_brk)		/* 45 */
-	.long SYMBOL_NAME(sys_setgid)
-	.long SYMBOL_NAME(sys_getgid)
+	.long SYMBOL_NAME(sys_setgid16)
+	.long SYMBOL_NAME(sys_getgid16)
 	.long SYMBOL_NAME(sys_signal)
-	.long SYMBOL_NAME(sys_geteuid)
-	.long SYMBOL_NAME(sys_getegid)		/* 50 */
+	.long SYMBOL_NAME(sys_geteuid16)
+	.long SYMBOL_NAME(sys_getegid16)	/* 50 */
 	.long SYMBOL_NAME(sys_acct)
-	.long SYMBOL_NAME(sys_umount)					/* recycled never used phys() */
+	.long SYMBOL_NAME(sys_umount)		/* recycled never used phys() */
 	.long SYMBOL_NAME(sys_ni_syscall)	/* old lock syscall holder */
 	.long SYMBOL_NAME(sys_ioctl)
 	.long SYMBOL_NAME(sys_fcntl)		/* 55 */
@@ -703,19 +837,19 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_sigaction)
 	.long SYMBOL_NAME(sys_sgetmask)
 	.long SYMBOL_NAME(sys_ssetmask)
-	.long SYMBOL_NAME(sys_setreuid)		/* 70 */
-	.long SYMBOL_NAME(sys_setregid)
+	.long SYMBOL_NAME(sys_setreuid16)	/* 70 */
+	.long SYMBOL_NAME(sys_setregid16)
 	.long SYMBOL_NAME(sys_sigsuspend)
 	.long SYMBOL_NAME(sys_sigpending)
 	.long SYMBOL_NAME(sys_sethostname)
 	.long SYMBOL_NAME(sys_setrlimit)	/* 75 */
-	.long SYMBOL_NAME(sys_getrlimit)
+	.long SYMBOL_NAME(sys_old_getrlimit)
 	.long SYMBOL_NAME(sys_getrusage)
 	.long SYMBOL_NAME(sys_gettimeofday)
 	.long SYMBOL_NAME(sys_settimeofday)
-	.long SYMBOL_NAME(sys_getgroups)	/* 80 */
-	.long SYMBOL_NAME(sys_setgroups)
-	.long SYMBOL_NAME(sys_ni_syscall)	/* old_select */
+	.long SYMBOL_NAME(sys_getgroups16)	/* 80 */
+	.long SYMBOL_NAME(sys_setgroups16)
+	.long SYMBOL_NAME(sys_ni_syscall)	/* sys_oldselect */
 	.long SYMBOL_NAME(sys_symlink)
 	.long SYMBOL_NAME(sys_lstat)
 	.long SYMBOL_NAME(sys_readlink)		/* 85 */
@@ -723,18 +857,18 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_swapon)
 	.long SYMBOL_NAME(sys_reboot)
 	.long SYMBOL_NAME(old_readdir)
-	.long SYMBOL_NAME(sys_mmap)		/* 90 */
+	.long SYMBOL_NAME(old_mmap)		/* 90 */
 	.long SYMBOL_NAME(sys_munmap)
 	.long SYMBOL_NAME(sys_truncate)
 	.long SYMBOL_NAME(sys_ftruncate)
 	.long SYMBOL_NAME(sys_fchmod)
-	.long SYMBOL_NAME(sys_fchown)		/* 95 */
+	.long SYMBOL_NAME(sys_fchown16)		/* 95 */
 	.long SYMBOL_NAME(sys_getpriority)
 	.long SYMBOL_NAME(sys_setpriority)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* old profil syscall holder */
 	.long SYMBOL_NAME(sys_statfs)
 	.long SYMBOL_NAME(sys_fstatfs)		/* 100 */
-	.long SYMBOL_NAME(sys_ni_syscall)		/* ioperm */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* ioperm */
 	.long SYMBOL_NAME(sys_socketcall)
 	.long SYMBOL_NAME(sys_syslog)
 	.long SYMBOL_NAME(sys_setitimer)
@@ -771,8 +905,8 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_sysfs)		/* 135 */
 	.long SYMBOL_NAME(sys_personality)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* for afs_syscall */
-	.long SYMBOL_NAME(sys_setfsuid)
-	.long SYMBOL_NAME(sys_setfsgid)
+	.long SYMBOL_NAME(sys_setfsuid16)
+	.long SYMBOL_NAME(sys_setfsgid16)
 	.long SYMBOL_NAME(sys_llseek)		/* 140 */
 	.long SYMBOL_NAME(sys_getdents)
 	.long SYMBOL_NAME(sys_select)
@@ -797,14 +931,14 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_sched_rr_get_interval)
 	.long SYMBOL_NAME(sys_nanosleep)
 	.long SYMBOL_NAME(sys_mremap)
-	.long SYMBOL_NAME(sys_setresuid)
-	.long SYMBOL_NAME(sys_getresuid)	/* 165 */
-	.long SYMBOL_NAME(sys_ni_syscall)		/* vm86 */
+	.long SYMBOL_NAME(sys_setresuid16)
+	.long SYMBOL_NAME(sys_getresuid16)	/* 165 */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* vm86 */
 	.long SYMBOL_NAME(sys_query_module)
 	.long SYMBOL_NAME(sys_poll)
 	.long SYMBOL_NAME(sys_nfsservctl)
-	.long SYMBOL_NAME(sys_setresgid)	/* 170 */
-	.long SYMBOL_NAME(sys_getresgid)
+	.long SYMBOL_NAME(sys_setresgid16)	/* 170 */
+	.long SYMBOL_NAME(sys_getresgid16)
 	.long SYMBOL_NAME(sys_prctl)
 	.long SYMBOL_NAME(sys_rt_sigreturn)
 	.long SYMBOL_NAME(sys_rt_sigaction)
@@ -815,15 +949,42 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_rt_sigsuspend)
 	.long SYMBOL_NAME(sys_pread)		/* 180 */
 	.long SYMBOL_NAME(sys_pwrite)
-	.long SYMBOL_NAME(sys_chown)
+	.long SYMBOL_NAME(sys_chown16)
 	.long SYMBOL_NAME(sys_getcwd)
 	.long SYMBOL_NAME(sys_capget)
 	.long SYMBOL_NAME(sys_capset)           /* 185 */
 	.long SYMBOL_NAME(sys_sigaltstack)
 	.long SYMBOL_NAME(sys_sendfile)
-	.long SYMBOL_NAME(sys_ni_syscall)		/* streams1 */
-	.long SYMBOL_NAME(sys_ni_syscall)		/* streams2 */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* streams1 */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* streams2 */
 	.long SYMBOL_NAME(sys_vfork)            /* 190 */
+	.long SYMBOL_NAME(sys_getrlimit)
+	.long SYMBOL_NAME(sys_mmap2)
+	.long SYMBOL_NAME(sys_truncate64)
+	.long SYMBOL_NAME(sys_ftruncate64)
+	.long SYMBOL_NAME(sys_stat64)		/* 195 */
+	.long SYMBOL_NAME(sys_lstat64)
+	.long SYMBOL_NAME(sys_fstat64)
+	.long SYMBOL_NAME(sys_lchown)
+	.long SYMBOL_NAME(sys_getuid)
+	.long SYMBOL_NAME(sys_getgid)		/* 200 */
+	.long SYMBOL_NAME(sys_geteuid)
+	.long SYMBOL_NAME(sys_getegid)
+	.long SYMBOL_NAME(sys_setreuid)
+	.long SYMBOL_NAME(sys_setregid)
+	.long SYMBOL_NAME(sys_getgroups)	/* 205 */
+	.long SYMBOL_NAME(sys_setgroups)
+	.long SYMBOL_NAME(sys_fchown)
+	.long SYMBOL_NAME(sys_setresuid)
+	.long SYMBOL_NAME(sys_getresuid)
+	.long SYMBOL_NAME(sys_setresgid)	/* 210 */
+	.long SYMBOL_NAME(sys_getresgid)
+	.long SYMBOL_NAME(sys_chown)
+	.long SYMBOL_NAME(sys_setuid)
+	.long SYMBOL_NAME(sys_setgid)
+	.long SYMBOL_NAME(sys_setfsuid)		/* 215 */
+	.long SYMBOL_NAME(sys_setfsgid)
+	.long SYMBOL_NAME(sys_pivot_root)
 
 	/*
 	 * NOTE!! This doesn't have to be exact - we just have
@@ -831,7 +992,7 @@ ENTRY(sys_call_table)
 	 * entries. Don't panic if you notice that this hasn't
 	 * been shrunk every time we add a new system call.
 	 */
-	.rept NR_syscalls-190
+	.rept NR_syscalls-217
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr
 

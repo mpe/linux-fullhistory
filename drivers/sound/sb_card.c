@@ -394,6 +394,97 @@ static struct pci_dev *sb_init_cmi(struct pci_bus *bus, struct pci_dev *card, st
 	return(sb_dev);
 }
 
+static struct pci_dev *sb_init_diamond(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
+{
+	/* 
+	 * Diamonds DT0197H
+	 * very similar to the CMI8330 above
+	 */
+
+	/*  @@@0001:Soundblaster.
+	 */
+
+	if((sb_dev = isapnp_find_dev(bus,
+				ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001), NULL)))
+	{
+		sb_dev->prepare(sb_dev);
+		
+		if((sb_dev = activate_dev("DT0197H", "sb", sb_dev)))
+		{
+			hw_config->io_base 	= sb_dev->resource[0].start;
+			hw_config->irq 		= sb_dev->irq_resource[0].start;
+			hw_config->dma 		= sb_dev->dma_resource[0].start;
+			hw_config->dma2 	= -1;
+
+			show_base("DT0197H", "sb", &sb_dev->resource[0]);
+		}
+
+		if(!sb_dev) return(NULL);
+
+	}
+	else
+		printk(KERN_ERR "sb: DT0197H panic: sb base not found\n");
+
+	/*  @X@0001:mpu
+	 */
+
+#ifdef CONFIG_MIDI
+	if((mpu_dev = isapnp_find_dev(bus,
+				ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001), NULL)))
+	{
+		mpu_dev->prepare(mpu_dev);
+
+		if((mpu_dev = activate_dev("DT0197H", "mpu", mpu_dev)))
+		{
+			show_base("DT0197H", "mpu", &mpu_dev->resource[0]);
+			mpu_config->io_base = mpu_dev->resource[0].start;
+		}
+	}
+	else
+		printk(KERN_ERR "sb: DT0197H panic: mpu not found\n");
+#endif
+
+
+	/*  @P@:Gameport
+	 */
+
+	if((jp_dev = isapnp_find_dev(bus,
+				ISAPNP_VENDOR('@','P','@'), ISAPNP_FUNCTION(0x0001), NULL)))
+	{
+		jp_dev->prepare(jp_dev);
+
+		if((jp_dev = activate_dev("DT0197H", "gameport", jp_dev)))
+			show_base("DT0197H", "gameport", &jp_dev->resource[0]);
+	}
+	else
+		printk(KERN_ERR "sb: DT0197H panic: gameport not found\n");
+
+	/*  @H@0001:OPL3 
+	 */
+
+#if defined(CONFIG_SOUND_YM3812) || defined(CONFIG_SOUND_YM3812_MODULE)
+	if((wss_dev = isapnp_find_dev(bus,
+				ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001), NULL)))
+	{
+		wss_dev->prepare(wss_dev);
+
+		/* Let's disable IRQ and DMA for WSS device */
+
+		wss_dev->irq_resource[0].flags = 0;
+		wss_dev->dma_resource[0].flags = 0;
+
+		if((wss_dev = activate_dev("DT0197H", "opl3", wss_dev)))
+			show_base("DT0197H", "opl3", &wss_dev->resource[0]);
+	}
+	else
+		printk(KERN_ERR "sb: DT0197H panic: opl3 not found\n");
+#endif
+
+	printk(KERN_INFO "sb: DT0197H mail reports to Torsten Werner <twerner@intercomm.de>\n");
+
+	return(sb_dev);
+}
+
 /* Specific support for awe will be dropped when:
  * a) The new awe_wawe driver with PnP support will be introduced in the kernel
  * b) The joystick driver will support PnP - a little patch is available from me....hint, hint :-)
@@ -491,12 +582,14 @@ isapnp_sb_list[] __initdata = {
 	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x009D), 0,	&sb_init_awe,		"Sound Blaster AWE 64" },
 	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x00C5), 0,	&sb_init_awe,		"Sound Blaster AWE 64" },
 	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x00E4), 0,	&sb_init_awe,		"Sound Blaster AWE 64" },
+	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x0968), SBF_DEV,	&sb_init_ess,		"ESS 1688" },
 	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1868), SBF_DEV,	&sb_init_ess,		"ESS 1868" },
 	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x8611), SBF_DEV,	&sb_init_ess,		"ESS 1868" },
 	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1869), SBF_DEV,	&sb_init_ess,		"ESS 1869" },
 	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1878), SBF_DEV,	&sb_init_ess,		"ESS 1878" },
 	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1879), SBF_DEV,	&sb_init_ess,		"ESS 1879" },
 	{ISAPNP_VENDOR('C','M','I'), ISAPNP_FUNCTION(0x0001), 0,	&sb_init_cmi,		"CMI 8330 SoundPRO" },
+	{ISAPNP_VENDOR('R','W','B'), ISAPNP_FUNCTION(0x1688), 0,	&sb_init_diamond,	"Diamond DT0197H" },
 	{0}
 };
 

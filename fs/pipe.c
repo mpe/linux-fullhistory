@@ -41,6 +41,7 @@ static void pipe_wait(struct inode * inode)
 	schedule();
 	remove_wait_queue(PIPE_WAIT(*inode), &wait);
 	current->state = TASK_RUNNING;
+	down(PIPE_SEM(*inode));
 }
 
 static ssize_t
@@ -81,9 +82,7 @@ do_more_read:
 			PIPE_WAITING_READERS(*inode)--;
 			ret = -ERESTARTSYS;
 			if (signal_pending(current))
-				goto out_nolock;
-			if (down_interruptible(PIPE_SEM(*inode)))
-				goto out_nolock;
+				goto out;
 			ret = 0;
 			if (!PIPE_EMPTY(*inode))
 				break;
@@ -182,9 +181,7 @@ do_more_write:
 			PIPE_WAITING_WRITERS(*inode)--;
 			ret = -ERESTARTSYS;
 			if (signal_pending(current))
-				goto out_nolock;
-			if (down_interruptible(PIPE_SEM(*inode)))
-				goto out_nolock;
+				goto out;
 
 			if (!PIPE_READERS(*inode))
 				goto sigpipe;
@@ -230,20 +227,13 @@ do_more_write:
 			pipe_wait(inode);
 			PIPE_WAITING_WRITERS(*inode)--;
 			if (signal_pending(current))
-				goto out_nolock;
-			if (down_interruptible(PIPE_SEM(*inode)))
-				goto out_nolock;
+				goto out;
 			if (!PIPE_READERS(*inode))
 				goto sigpipe;
 		} while (!PIPE_FREE(*inode));
 		ret = -EFAULT;
 	}
 
-	if (count && PIPE_WAITING_READERS(*inode) &&
-			!(filp->f_flags & O_NONBLOCK)) {
-		wake_up_interruptible_sync(PIPE_WAIT(*inode));
-		goto do_more_write;
-	}
 	/* Signal readers asynchronously that there is more data.  */
 	wake_up_interruptible(PIPE_WAIT(*inode));
 

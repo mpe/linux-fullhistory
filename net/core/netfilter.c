@@ -479,6 +479,7 @@ void nf_reinject(struct sk_buff *skb, struct nf_info *info,
 				     info->indev, info->outdev, &elem,
 				     info->okfn);
 	}
+	br_read_unlock_bh(BR_NETPROTO_LOCK);
 
 	switch (verdict) {
 	case NF_ACCEPT:

@@ -204,6 +204,7 @@ void tasklet_kill(struct tasklet_struct *t)
 		schedule();
 	}
 	tasklet_unlock_wait(t);
+	clear_bit(TASKLET_STATE_SCHED, &t->state);
 }
 
 

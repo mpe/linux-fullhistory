@@ -28,7 +28,9 @@
  * sys_pipe() is the normal C calling standard for creating
  * a pipe. It's not the way Unix traditionally does this, though.
  */
-asmlinkage int sys_pipe(unsigned long * fildes)
+asmlinkage int sys_pipe(unsigned long r4, unsigned long r5,
+	unsigned long r6, unsigned long r7,
+	struct pt_regs regs)
 {
 	int fd[2];
 	int error;
@@ -37,37 +39,53 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 	error = do_pipe(fd);
 	unlock_kernel();
 	if (!error) {
-		if (copy_to_user(fildes, fd, 2*sizeof(int)))
-			error = -EFAULT;
+		regs.regs[1] = fd[1];
+		return fd[0];
 	}
 	return error;
 }
 
-asmlinkage unsigned long
-sys_mmap(unsigned long addr, unsigned long len, unsigned long prot, 
-	 unsigned long flags, int fd, unsigned long off)
+static inline long
+do_mmap2(unsigned long addr, unsigned long len, unsigned long prot, 
+	 unsigned long flags, int fd, unsigned long pgoff)
 {
-	int error = -EFAULT;
+	int error = -EBADF;
 	struct file *file = NULL;
 
-	down(&current->mm->mmap_sem);
-	lock_kernel();
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	if (!(flags & MAP_ANONYMOUS)) {
-		error = -EBADF;
 		file = fget(fd);
 		if (!file)
 			goto out;
 	}
-	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 
-	error = do_mmap(file, addr, len, prot, flags, off);
-	if (file)
-		fput(file);
-out:
+	down(&current->mm->mmap_sem);
+	lock_kernel();
+
+	error = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
 	unlock_kernel();
 	up(&current->mm->mmap_sem);
 
+	if (file)
+		fput(file);
+out:
 	return error;
+}
+
+asmlinkage int old_mmap(unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags,
+	int fd, unsigned long off)
+{
+	if (off & ~PAGE_MASK)
+		return -EINVAL;
+	return do_mmap2(addr, len, prot, flags, fd, off>>PAGE_SHIFT);
+}
+
+asmlinkage long sys_mmap2(unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags,
+	unsigned long fd, unsigned long pgoff)
+{
+	return do_mmap2(addr, len, prot, flags, fd, pgoff);
 }
 
 /*
@@ -75,8 +93,8 @@ out:
  *
  * This is really horribly ugly.
  */
-asmlinkage int sys_ipc (uint call, int first, int second,
-			int third, void *ptr, long fifth)
+asmlinkage int sys_ipc(uint call, int first, int second,
+		       int third, void *ptr, long fifth)
 {
 	int version, ret;
 

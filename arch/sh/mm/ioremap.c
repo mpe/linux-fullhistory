@@ -1,4 +1,4 @@
-/* $Id: ioremap.c,v 1.1 1999/09/18 16:57:48 gniibe Exp $
+/* $Id: ioremap.c,v 1.2 1999/11/25 14:00:28 gniibe Exp $
  *
  * arch/sh/mm/ioremap.c
  *
@@ -11,6 +11,7 @@
 
 #include <linux/vmalloc.h>
 #include <asm/io.h>
+#include <asm/pgalloc.h>
 
 static inline void remap_area_pte(pte_t * pte, unsigned long address, unsigned long size,
 	unsigned long phys_addr, unsigned long flags)

@@ -1,4 +1,4 @@
-/* $Id: cache.c,v 1.7 1999/09/23 11:43:07 gniibe Exp $
+/* $Id: cache.c,v 1.9 2000/02/14 12:45:26 gniibe Exp $
  *
  *  linux/arch/sh/mm/cache.c
  *
@@ -283,7 +283,30 @@ void __init cache_init(void)
 }
 
 #if defined(__SH4__)
-/* Write back data caches, and invalidates instructiin caches */
+void flush_icache_page(struct vm_area_struct *vma, struct page *pg)
+{
+	unsigned long flags, __dummy;
+	unsigned long addr, data, v;
+
+	save_and_cli(flags);
+	jump_to_p2(__dummy);
+
+	v = page_address(pg);
+
+	/* Write back O Cache */
+	asm volatile("ocbwb	%0"
+		     : /* no output */
+		     : "m" (__m(v)));
+	/* Invalidate I Cache */
+	addr = CACHE_IC_ADDRESS_ARRAY |
+		(v&CACHE_IC_ENTRY_MASK) | 0x8 /* A-bit */;
+	data = (v&0xfffffc00); /* Valid=0 */
+	ctrl_outl(data,addr);
+
+	back_to_p1(__dummy);
+	restore_flags(flags);
+}
+
 void flush_icache_range(unsigned long start, unsigned long end)
 {
 	unsigned long flags, __dummy;
@@ -358,7 +381,7 @@ void flush_cache_page(struct vm_area_struct *vma, unsigned long addr)
 	flush_cache_range(vma->vm_mm, addr, addr+PAGE_SIZE);
 }
 
-void flush_page_to_ram(unsigned long page)
+void __flush_page_to_ram(unsigned long page)
 {				/* Page is in physical address */
 	/* XXX: for the time being... */
 	flush_cache_all();

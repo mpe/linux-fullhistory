@@ -1,4 +1,4 @@
-/* $Id: signal.c,v 1.10 1999/09/27 23:25:44 gniibe Exp $
+/* $Id: signal.c,v 1.16 2000/01/29 11:31:31 gniibe Exp gniibe $
  *
  *  linux/arch/sh/kernel/signal.c
  *
@@ -54,7 +54,7 @@ sys_sigsuspend(old_sigset_t mask,
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
-		if (do_signal(&regs,&saveset))
+		if (do_signal(&regs, &saveset))
 			return -EINTR;
 	}
 }
@@ -73,7 +73,6 @@ sys_rt_sigsuspend(sigset_t *unewset, size_t sigsetsize,
 	if (copy_from_user(&newset, unewset, sizeof(newset)))
 		return -EFAULT;
 	sigdelsetmask(&newset, ~_BLOCKABLE);
-
 	spin_lock_irq(&current->sigmask_lock);
 	saveset = current->blocked;
 	current->blocked = newset;
@@ -188,6 +187,7 @@ asmlinkage int sys_sigreturn(unsigned long r4, unsigned long r5,
 
 	if (verify_area(VERIFY_READ, frame, sizeof(*frame)))
 		goto badframe;
+
 	if (__get_user(set.sig[0], &frame->sc.oldmask)
 	    || (_NSIG_WORDS > 1
 		&& __copy_from_user(&set.sig[1], &frame->extramask,
@@ -195,6 +195,7 @@ asmlinkage int sys_sigreturn(unsigned long r4, unsigned long r5,
 		goto badframe;
 
 	sigdelsetmask(&set, ~_BLOCKABLE);
+
 	spin_lock_irq(&current->sigmask_lock);
 	current->blocked = set;
 	recalc_sigpending(current);
@@ -220,6 +221,7 @@ asmlinkage int sys_rt_sigreturn(unsigned long r4, unsigned long r5,
 
 	if (verify_area(VERIFY_READ, frame, sizeof(*frame)))
 		goto badframe;
+
 	if (__copy_from_user(&set, &frame->uc.uc_sigmask, sizeof(set)))
 		goto badframe;
 
@@ -228,7 +230,7 @@ asmlinkage int sys_rt_sigreturn(unsigned long r4, unsigned long r5,
 	current->blocked = set;
 	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
-	
+
 	if (restore_sigcontext(&regs, &frame->uc.uc_mcontext, &r0))
 		goto badframe;
 
@@ -317,7 +319,7 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 	if (ka->sa.sa_flags & SA_RESTORER) {
 		regs->pr = (unsigned long) ka->sa.sa_restorer;
 	} else {
-		/* This is ; mov  #__NR_sigreturn,r0 ; trapa #0 */
+		/* This is : mov  #__NR_sigreturn,r0 ; trapa #0 */
 #ifdef __LITTLE_ENDIAN__
 		unsigned long code = 0xc300e000 | (__NR_sigreturn);
 #else
@@ -390,11 +392,11 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	if (ka->sa.sa_flags & SA_RESTORER) {
 		regs->pr = (unsigned long) ka->sa.sa_restorer;
 	} else {
-		/* This is ; mov  #__NR_sigreturn,r0 ; trapa #0 */
+		/* This is : mov  #__NR_rt_sigreturn,r0 ; trapa #0 */
 #ifdef __LITTLE_ENDIAN__
-		unsigned long code = 0xc300e000 | (__NR_sigreturn);
+		unsigned long code = 0xc300e000 | (__NR_rt_sigreturn);
 #else
-		unsigned long code = 0xe000c300 | (__NR_sigreturn << 16);
+		unsigned long code = 0xe000c300 | (__NR_rt_sigreturn << 16);
 #endif
 
 		regs->pr = (unsigned long) frame->retcode;
@@ -484,6 +486,15 @@ int do_signal(struct pt_regs *regs, sigset_t *oldset)
 {
 	siginfo_t info;
 	struct k_sigaction *ka;
+
+	/*
+	 * We want the common case to go fast, which
+	 * is why we may in certain cases get here from
+	 * kernel mode. Just return without doing anything
+	 * if so.
+	 */
+	if (!user_mode(regs))
+		return 1;
 
 	if (!oldset)
 		oldset = &current->blocked;
@@ -580,6 +591,7 @@ int do_signal(struct pt_regs *regs, sigset_t *oldset)
 				/* NOTREACHED */
 			}
 		}
+
 		/* Whee!  Actually deliver the signal.  */
 		handle_signal(signr, ka, &info, oldset, regs);
 		return 1;

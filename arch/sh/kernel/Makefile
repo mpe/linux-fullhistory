@@ -11,9 +11,18 @@
 
 O_TARGET := kernel.o
 O_OBJS   := process.o signal.o entry.o traps.o irq.o irq_onchip.o \
-            ptrace.o setup.o time.o sys_sh.o semaphore.o
+            ptrace.o setup.o time.o sys_sh.o semaphore.o pci-sh.o \
+	    irq_imask.o
 OX_OBJS  := sh_ksyms.o
 MX_OBJS  :=
+
+ifdef CONFIG_CF_ENABLER
+O_OBJS += cf-enabler.o
+endif
+
+ifdef CONFIG_CPU_SH4
+O_OBJS += fpu.o
+endif
 
 all: kernel.o head.o init_task.o
 

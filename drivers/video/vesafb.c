@@ -648,8 +648,12 @@ int __init vesafb_init(void)
 	 * region already (FIXME) */
 	request_region(0x3c0, 32, "vesafb");
 
-	if (mtrr)
-		mtrr_add(video_base, video_size, MTRR_TYPE_WRCOMB, 1);
+	if (mtrr) {
+		int temp_size = video_size;
+		while (mtrr_add(video_base, temp_size, MTRR_TYPE_WRCOMB, 1)==-EINVAL) {
+			temp_size >>= 1;
+		}
+	}
 	
 	strcpy(fb_info.modename, "VESA VGA");
 	fb_info.changevar = NULL;

@@ -1,7 +1,7 @@
 /*
  * include/asm-sh/processor.h
  *
- * Copyright (C) 1999 Niibe Yutaka
+ * Copyright (C) 1999, 2000  Niibe Yutaka
  */
 
 #ifndef __ASM_SH_PROCESSOR_H
@@ -15,7 +15,7 @@
  * Default implementation of macro that returns current
  * instruction pointer ("program counter").
  */
-#define current_text_addr() ({ void *pc; __asm__("mova	1f,%0\n1:":"=z" (pc)); pc; })
+#define current_text_addr() ({ void *pc; __asm__("mova	1f, %0\n1:":"=z" (pc)); pc; })
 
 /*
  *  CPU type and hardware bug flags. Kept separately for each CPU.
@@ -53,6 +53,15 @@ extern struct sh_cpuinfo boot_cpu_data;
  */
 #define TASK_UNMAPPED_BASE	(TASK_SIZE / 3)
 
+/*
+ * FPU structure and data
+ */
+/* FD-bit of SR register.
+ * When it's set, it means the processor doesn't have right to use FPU,
+ * and it results exception when the floating operation is executed.
+ */
+#define SR_FD	0x00008000
+
 #define NUM_FPU_REGS	16
 
 struct sh_fpu_hard_struct {
@@ -67,9 +76,9 @@ struct sh_fpu_hard_struct {
 /* Dummy fpu emulator  */
 struct sh_fpu_soft_struct {
 	unsigned long fp_regs[NUM_FPU_REGS];
-	unsigned long xf_regs[NUM_FPU_REGS];
 	unsigned long fpscr;
 	unsigned long fpul;
+	unsigned long xf_regs[NUM_FPU_REGS];
 
 	unsigned char	lookahead;
 	unsigned long	entry_pc;
@@ -98,9 +107,9 @@ struct thread_struct {
 #define INIT_THREAD  {						\
 	sizeof(init_stack) + (long) &init_stack, /* sp */	\
 	0,					 /* pc */	\
-	0, 0, \
-	0, \
-	{{{0,}},} \
+	0, 0, 							\
+	0, 							\
+	{{{0,}},} 				/* fpu state */	\
 }
 
 /*
@@ -139,20 +148,19 @@ extern int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 #define forget_segments()	do { } while (0)
 
 /*
- * FPU lazy state save handling..
+ * FPU lazy state save handling.
  */
-#define SR_FD	0x00008000
 
 extern __inline__ void release_fpu(void)
 {
 	unsigned long __dummy;
 
 	/* Set FD flag in SR */
-	__asm__ __volatile__ ("stc	sr,%0\n\t"
-			      "or	%1,%0\n\t"
-			      "ldc	%0,sr"
-			      : "=&r" (__dummy)
-			      : "r" (SR_FD));
+	__asm__ __volatile__("stc	$sr, %0\n\t"
+			     "or	%1, %0\n\t"
+			     "ldc	%0, $sr"
+			     : "=&r" (__dummy)
+			     : "r" (SR_FD));
 }
 
 extern __inline__ void grab_fpu(void)
@@ -160,25 +168,25 @@ extern __inline__ void grab_fpu(void)
 	unsigned long __dummy;
 
 	/* Clear out FD flag in SR */
-	__asm__ __volatile__ ("stc	sr,%0\n\t"
-			      "and	%1,%0\n\t"
-			      "ldc	%0,sr"
-			      : "=&r" (__dummy)
-			      : "r" (~SR_FD));
+	__asm__ __volatile__("stc	$sr, %0\n\t"
+			     "and	%1, %0\n\t"
+			     "ldc	%0, $sr"
+			     : "=&r" (__dummy)
+			     : "r" (~SR_FD));
 }
 
 extern void save_fpu(struct task_struct *__tsk);
 
-#define unlazy_fpu(tsk) do { \
-	if (tsk->flags & PF_USEDFPU) \
-		save_fpu(tsk); \
+#define unlazy_fpu(tsk) do { 			\
+	if ((tsk)->flags & PF_USEDFPU) {	\
+		grab_fpu();			\
+		save_fpu(tsk); 			\
+	}					\
 } while (0)
 
-#define clear_fpu(tsk) do { \
-	if (tsk->flags & PF_USEDFPU) { \
-		tsk->flags &= ~PF_USEDFPU; \
-		release_fpu(); \
-	} \
+#define clear_fpu(tsk) do { 			\
+	if ((tsk)->flags & PF_USEDFPU)	 	\
+		(tsk)->flags &= ~PF_USEDFPU; 	\
 } while (0)
 
 /*
@@ -189,13 +197,7 @@ extern __inline__ unsigned long thread_saved_pc(struct thread_struct *t)
 	return t->pc;
 }
 
-static inline unsigned long get_wchan(struct task_struct *p)
-{
-	if (!p || p == current || p->state == TASK_RUNNING)
-		return 0;
-	/* FIXME: here the actual wchan calculation should sit */
-	return 0;
-}
+extern unsigned long get_wchan(struct task_struct *p);
 
 #define KSTK_EIP(tsk)  ((tsk)->thread.pc)
 #define KSTK_ESP(tsk)  ((tsk)->thread.sp)
@@ -203,6 +205,7 @@ static inline unsigned long get_wchan(struct task_struct *p)
 #define THREAD_SIZE (2*PAGE_SIZE)
 extern struct task_struct * alloc_task_struct(void);
 extern void free_task_struct(struct task_struct *);
+#define get_task_struct(tsk)      atomic_inc(&mem_map[MAP_NR(tsk)].count)
 
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)

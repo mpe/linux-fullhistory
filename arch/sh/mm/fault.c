@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.5 1999/10/31 13:17:31 gniibe Exp $
+/* $Id: fault.c,v 1.12 2000/03/01 11:15:27 gniibe Exp $
  *
  *  linux/arch/sh/mm/fault.c
  *  Copyright (C) 1999  Niibe Yutaka
@@ -23,7 +23,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/hardirq.h>
 #include <asm/mmu_context.h>
 
@@ -211,10 +211,12 @@ no_context:
 		printk(KERN_ALERT "Unable to handle kernel paging request");
 	printk(" at virtual address %08lx\n",address);
 	printk(KERN_ALERT "pc = %08lx\n", regs->pc);
-	page = (unsigned long)mm->pgd;
-	page = ((unsigned long *) __va(page))[address >> 22];
+	asm volatile("mov.l	%1,%0"
+		     : "=r" (page)
+		     : "m" (__m(MMU_TTB)));
+	page = ((unsigned long *) page)[address >> 22];
 	printk(KERN_ALERT "*pde = %08lx\n", page);
-	if (page & 1) {
+	if (page & _PAGE_PRESENT) {
 		page &= PAGE_MASK;
 		address &= 0x003ff000;
 		page = ((unsigned long *) __va(page))[address >> PAGE_SHIFT];
@@ -256,6 +258,7 @@ void update_mmu_cache(struct vm_area_struct * vma,
 {
 	unsigned long flags;
 	unsigned long pteval;
+	unsigned long pteaddr;
 
 	save_and_cli(flags);
 	/*
@@ -267,6 +270,9 @@ void update_mmu_cache(struct vm_area_struct * vma,
 	pteval |= _PAGE_FLAGS_HARDWARE_DEFAULT; /* add default flags */
 	/* Set PTEL register */
 	ctrl_outl(pteval, MMU_PTEL);
+	/* Set PTEH register */
+	pteaddr = (address & MMU_VPN_MASK) | (vma->vm_mm->context & MMU_CONTEXT_ASID_MASK);
+	ctrl_outl(pteaddr, MMU_PTEH);
 
 	/* Load the TLB */
 	asm volatile("ldtlb": /* no output */ : /* no input */ : "memory");
@@ -277,6 +283,9 @@ static void __flush_tlb_page(struct mm_struct *mm, unsigned long page)
 {
 	unsigned long addr, data, asid;
 	unsigned long saved_asid = MMU_NO_ASID;
+#if defined(__SH4__)
+	int i;
+#endif
 
 	if (mm->context == NO_CONTEXT)
 		return;
@@ -296,8 +305,6 @@ static void __flush_tlb_page(struct mm_struct *mm, unsigned long page)
 	data = (page & 0xfffe0000) | asid; /* VALID bit is off */
 	ctrl_outl(data, addr);
 #elif defined(__SH4__)
-	int i;
-
 	addr = MMU_UTLB_ADDRESS_ARRAY | MMU_PAGE_ASSOC_BIT;
 	data = page | asid; /* VALID bit is off */
 	ctrl_outl(data, addr);
@@ -305,7 +312,7 @@ static void __flush_tlb_page(struct mm_struct *mm, unsigned long page)
 	for (i=0; i<4; i++) {
 		addr = MMU_ITLB_ADDRESS_ARRAY | (i<<8);
 		data = ctrl_inl(addr);
-		data &= ~0x30;
+		data &= ~0x300;
 		if (data == (page | asid)) {
 			ctrl_outl(data, addr);
 			break;

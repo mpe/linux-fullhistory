@@ -644,7 +644,7 @@ CONFIG_IDEDMA_PCI_AUTO
 Various ATA, Work(s) In Progress (EXPERIMENTAL)
 CONFIG_IDEDMA_PCI_WIP
   If you enable this you will be capable of using and testing
-  highly developmentail projects.
+  highly developmental projects.
 
   It is SAFEST to say N to this question.
 

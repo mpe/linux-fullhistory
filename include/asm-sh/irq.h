@@ -12,8 +12,8 @@
 #include <linux/config.h>
 
 #define TIMER_IRQ		16	/* Hard-wired */
-#define TIMER_IRP_OFFSET	12
-#define TIMER_PRIORITY		 1
+#define TIMER_IPR_OFFSET	12
+#define TIMER_PRIORITY		 2
 
 #if defined(__SH4__)
 /*
@@ -39,5 +39,6 @@ extern void enable_irq(unsigned int);
  */
 extern void set_ipr_data(unsigned int irq, int offset, int priority);
 extern void make_onChip_irq(unsigned int irq);
+extern void make_imask_irq(unsigned int irq);
 
 #endif /* __ASM_SH_IRQ_H */

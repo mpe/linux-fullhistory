@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.7 1999/11/06 02:00:37 gniibe Exp $
+/* $Id: time.c,v 1.20 2000/02/28 12:42:51 gniibe Exp $
  *
  *  linux/arch/sh/kernel/time.c
  *
@@ -7,8 +7,6 @@
  *  Some code taken from i386 version.
  *    Copyright (C) 1991, 1992, 1995  Linus Torvalds
  */
-
-#include <linux/config.h>
 
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -43,10 +41,10 @@
 #define TMU0_TCNT	0xfffffe98	/* Long access */
 #define TMU0_TCR	0xfffffe9c	/* Word access */
 
-#define INTERVAL	37500 /* (1000000*CLOCK_MHZ/HZ/2) ??? for CqREEK */
-#if 0 /* Takeshi's board */
-#define INTERVAL	83333
-#endif
+#define FRQCR		0xffffff80
+
+#define RTC_IRQ         22
+#define RTC_IPR_OFFSET  0
 
 /* SH-3 RTC */
 #define R64CNT  	0xfffffec0
@@ -74,7 +72,10 @@
 #define TMU0_TCNT	0xffd8000c	/* Long access */
 #define TMU0_TCR	0xffd80010	/* Word access */
 
-#define INTERVAL	83333
+#define FRQCR		0xffc00000
+
+#define RTC_IRQ		22
+#define RTC_IPR_OFFSET	0
 
 /* SH-4 RTC */
 #define R64CNT  	0xffc80000
@@ -145,11 +146,10 @@ void do_settimeofday(struct timeval *tv)
 
 static int set_rtc_time(unsigned long nowtime)
 {
-#ifdef CONFIG_SH_CPU_RTC
 	int retval = 0;
 	int real_seconds, real_minutes, cmos_minutes;
 
-	ctrl_outb(2, RCR2);  /* reset pre-scaler & stop RTC */
+	ctrl_outb(0x02, RCR2);  /* reset pre-scaler & stop RTC */
 
 	cmos_minutes = ctrl_inb(RMINCNT);
 	BCD_TO_BIN(cmos_minutes);
@@ -178,13 +178,9 @@ static int set_rtc_time(unsigned long nowtime)
 		retval = -1;
 	}
 
-	ctrl_outb(2, RCR2);  /* start RTC */
+	ctrl_outb(0x01, RCR2);  /* start RTC */
 
 	return retval;
-#else
-	/* XXX should support other clock devices? */
-	return -1;
-#endif
 }
 
 /* last time the RTC clock got updated */
@@ -197,7 +193,6 @@ static long last_rtc_update = 0;
 static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	do_timer(regs);
-
 #ifdef TAKESHI
 	{
 		unsigned long what_is_this=0xa4000124;
@@ -248,9 +243,7 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 * locally disabled. -arca
 	 */
 	write_lock(&xtime_lock);
-
 	do_timer_interrupt(irq, NULL, regs);
-
 	write_unlock(&xtime_lock);
 }
 
@@ -287,11 +280,10 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 
 static unsigned long get_rtc_time(void)
 {
-#ifdef CONFIG_SH_CPU_RTC
 	unsigned int sec, min, hr, wk, day, mon, yr, yr100;
 
  again:
-	ctrl_outb(1, RCR1);  /* clear CF bit */
+	ctrl_outb(0x01, RCR1);  /* clear CF bit */
 	do {
 		sec = ctrl_inb(RSECCNT);
 		min = ctrl_inb(RMINCNT);
@@ -321,7 +313,7 @@ static unsigned long get_rtc_time(void)
 	    hr > 23 || min > 59 || sec > 59) {
 		printk(KERN_ERR
 		       "SH RTC: invalid value, resetting to 1 Jan 2000\n");
-		ctrl_outb(2, RCR2);  /* reset, stop */
+		ctrl_outb(0x02, RCR2);  /* reset, stop */
 		ctrl_outb(0, RSECCNT);
 		ctrl_outb(0, RMINCNT);
 		ctrl_outb(0, RHRCNT);
@@ -333,36 +325,114 @@ static unsigned long get_rtc_time(void)
 #else
 		ctrl_outb(0, RYRCNT);
 #endif
-		ctrl_outb(1, RCR2);  /* start */
+		ctrl_outb(0x01, RCR2);  /* start */
 		goto again;
 	}
 
 	return mktime(yr100 * 100 + yr, mon, day, hr, min, sec);
+}
+
+static __init unsigned int get_cpu_mhz(void)
+{
+	unsigned int count;
+	unsigned long __dummy;
+
+	sti();
+	do {} while (ctrl_inb(R64CNT) != 0);
+	ctrl_outb(0x11, RCR1);
+	asm volatile(
+		"1:\t"
+		"tst	%1,%1\n\t"
+		"bt/s	1b\n\t"
+		" add	#1,%0"
+		: "=&r"(count), "=&z" (__dummy)
+		: "0" (0), "1" (0));
+	cli();
+	/*
+	 * SH-3:
+	 * CPU clock = 4 stages * loop
+	 * tst    rm,rm      if id ex
+	 * bt/s   1b            if id ex
+	 * add    #1,rd            if id ex
+         *                            (if) pipe line stole
+	 * tst    rm,rm                  if id ex
+         * ....
+	 *
+	 *
+	 * SH-4:
+	 * CPU clock = 6 stages * loop
+	 * I don't know why.
+         * ....
+	 */
+#if defined(__SH4__)
+	return count*6;
 #else
-	/* XXX should support other clock devices? */
-	return 0;
+	return count*4;
 #endif
 }
 
+static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+	ctrl_outb(0x01, RCR1);
+	regs->regs[0] = 1;
+}
+
 static struct irqaction irq0  = { timer_interrupt, SA_INTERRUPT, 0, "timer", NULL, NULL};
+static struct irqaction irq1  = { rtc_interrupt, SA_INTERRUPT, 0, "rtc", NULL, NULL};
 
 void __init time_init(void)
 {
+	unsigned int cpu_clock, master_clock, module_clock;
+	unsigned short ifc, pfc;
+	unsigned long interval;
+#if defined(__sh3__)
+	static int ifc_table[] = { 1, 2, 4, 1, 3, 1, 1, 1 };
+	static int pfc_table[] = { 1, 2, 4, 1, 3, 6, 1, 1 };
+#elif defined(__SH4__)
+	static int ifc_table[] = { 1, 2, 3, 4, 6, 8, 1, 1 };
+	static int pfc_table[] = { 2, 3, 4, 6, 8, 2, 2, 2 };
+#endif
+
 	xtime.tv_sec = get_rtc_time();
 	xtime.tv_usec = 0;
 
-	set_ipr_data(TIMER_IRQ, TIMER_IRP_OFFSET, TIMER_PRIORITY);
+	set_ipr_data(TIMER_IRQ, TIMER_IPR_OFFSET, TIMER_PRIORITY);
 	setup_irq(TIMER_IRQ, &irq0);
+	set_ipr_data(RTC_IRQ, RTC_IPR_OFFSET, TIMER_PRIORITY);
+	setup_irq(RTC_IRQ, &irq1);
+
+	/* Check how fast it is.. */
+	cpu_clock = get_cpu_mhz();
+	disable_irq(RTC_IRQ);
+
+	printk("CPU clock: %d.%02dMHz\n",
+	       (cpu_clock / 1000000), (cpu_clock % 1000000)/10000);
+#if defined(__sh3__)
+	{
+		unsigned short tmp;
+		tmp  = (ctrl_inw(FRQCR) & 0x000c) >> 2;
+		tmp |= (ctrl_inw(FRQCR) & 0x4000) >> 12;
+		ifc  = ifc_table[tmp & 0x0007];
+		tmp  = ctrl_inw(FRQCR) & 0x0003;
+		tmp |= (ctrl_inw(FRQCR) & 0x2000) >> 11;
+		pfc = pfc_table[ctrl_inw(FRQCR) & 0x0007];
+	}
+#elif defined(__SH4__)
+	ifc  = ifc_table[(ctrl_inw(FRQCR)>> 6) & 0x0007];
+	pfc = pfc_table[ctrl_inw(FRQCR) & 0x0007];
+#endif
+	master_clock = cpu_clock * ifc;
+	module_clock = master_clock/pfc;
+	printk("Module clock: %d.%02dMHz\n",
+	       (module_clock/1000000), (module_clock % 1000000)/10000);
+	interval = (module_clock/400);
+
+	printk("Interval = %ld\n", interval);
 
 	/* Start TMU0 */
-	ctrl_outb(TMU_TOCR_INIT,TMU_TOCR);
-	ctrl_outw(TMU0_TCR_INIT,TMU0_TCR);
-	ctrl_outl(INTERVAL,TMU0_TCOR);
-	ctrl_outl(INTERVAL,TMU0_TCNT);
-	ctrl_outb(TMU_TSTR_INIT,TMU_TSTR);
-
-#if 0
-	/* Start RTC */
-	asm volatile("");
-#endif
+	ctrl_outb(TMU_TOCR_INIT, TMU_TOCR);
+	ctrl_outw(TMU0_TCR_INIT, TMU0_TCR);
+	ctrl_outl(interval, TMU0_TCOR);
+	ctrl_outl(interval, TMU0_TCNT);
+	ctrl_outb(TMU_TSTR_INIT, TMU_TSTR);
 }
