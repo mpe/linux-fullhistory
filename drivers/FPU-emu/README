@@ -47,7 +47,7 @@ Please report bugs, etc to me at:
 
 
 --Bill Metzenthen
-  Jan 1994
+  Feb 1994
 
 
 ----------------------- Internals of wm-FPU-emu -----------------------
@@ -92,21 +92,12 @@ is confined to five files:
 ----------------------- Limitations of wm-FPU-emu -----------------------
 
 There are a number of differences between the current wm-FPU-emu
-(version beta 1.5) and the 80486 FPU (apart from bugs). Some of the
+(version beta 1.10) and the 80486 FPU (apart from bugs). Some of the
 more important differences are listed below:
 
-Segment overrides don't do anything yet.
-
-All internal computations are performed at 64 bit or higher precision
-and the results rounded etc as required by the PC bits of the FPU
-control word.  Under the crt0 version for Linux current at June 1993,
-the FPU PC bits specify 64 bits precision.
-
-The precision flag (PE of the FPU status word) and the Roundup flag
-(C1 of the status word) are now implemented. Does anyone write code
-which uses these features? The Roundup flag does not have much meaning
-for the transcendental functions and its 80486 value with these
-functions is likely to differ from its emulator value.
+The Roundup flag does not have much meaning for the transcendental
+functions and its 80486 value with these functions is likely to differ
+from its emulator value.
 
 In a few rare cases the Underflow flag obtained with the emulator will
 be different from that obtained with an 80486. This occurs when the
@@ -139,6 +130,19 @@ Neither the emulator nor an 80486 produces one of these numbers as the
 result of any arithmetic operation. An 80486 can keep one of these
 numbers in an FPU register with its identity as a PseudoDenormal, but
 the emulator will not; they are always converted to a valid number.
+
+Self modifying code can cause the emulator to fail. An example of such
+code is:
+          movl %esp,[%ebx]
+	  fld1
+The FPU instruction may be (usually will be) loaded into the pre-fetch
+queue of the cpu before the mov instruction is executed. If the
+destination of the 'movl' overlaps the FPU instruction then the bytes
+in the prefetch queue and memory will be inconsistent when the FPU
+instruction is executed. The emulator will be invoked but will not be
+able to find the instruction which caused the device-not-present
+exception. For this case, the emulator cannot emulate the behaviour of
+an 80486DX.
 
 ----------------------- Performance of wm-FPU-emu -----------------------
 

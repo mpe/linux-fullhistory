@@ -81,7 +81,7 @@ extern unsigned long free_page_list;
 extern int nr_secondary_pages;
 extern unsigned long secondary_page_list;
 
-#define MAX_SECONDARY_PAGES 10
+#define MAX_SECONDARY_PAGES 20
 
 /*
  * This is timing-critical - most of the time in getting a new page

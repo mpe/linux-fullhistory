@@ -85,13 +85,15 @@ void emu_printall()
   RE_ENTRANT_CHECK_OFF;
   /* No need to verify_area(), we have previously fetched these bytes. */
   printk("At %p: ", (void *) address);
-  while ( 1 )
+#define MAX_PRINTED_BYTES 20
+  for ( i = 0; i < MAX_PRINTED_BYTES; i++ )
     {
       byte1 = get_fs_byte((unsigned char *) address);
       if ( (byte1 & 0xf8) == 0xd8 ) break;
       printk("[%02x]", byte1);
       address++;
     }
+  if ( i == MAX_PRINTED_BYTES ) printk("[more..]");
   printk("%02x ", byte1);
   FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
   partial_status = status_word();
@@ -234,6 +236,7 @@ static struct {
 	      0x126  in fpu_entry.c
 	      0x127  in poly_2xm1.c
 	      0x128  in fpu_entry.c
+	      0x130  in get_address.c
        0x2nn  in an *.S file:
               0x201  in reg_u_add.S
               0x202  in reg_u_div.S
@@ -310,11 +313,11 @@ void exception(int n)
 #endif PRINT_MESSAGES
 	}
       else
-	printk("FP emulator: Unknown Exception: 0x%04x!\n", n);
+	printk("FPU emulator: Unknown Exception: 0x%04x!\n", n);
       
       if ( n == EX_INTERNAL )
 	{
-	  printk("FP emulator: Internal error type 0x%04x\n", int_type);
+	  printk("FPU emulator: Internal error type 0x%04x\n", int_type);
 	  emu_printall();
 	}
 #ifdef PRINT_MESSAGES

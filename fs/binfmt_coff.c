@@ -7,43 +7,12 @@
  * This file is based upon code written by Eric Youndale for the ELF object
  * file format.
  *
- * Revision information:
- *    28 August 1993
- *       Al Longyear (longyear@sii.com)
- *       initial release to alpha level testing. This version does not load
- *       shared libraries, but will identify them and log the file names.
+ * Author: Al Longyear (longyear@sii.com)
  *
- *     4 September 1993
- *       Al Longyear (longyear@sii.com)
- *       Added support for shared libraries.
- *
- *     9 September 1993
- *       Al Longyear (longyear@sii.com)
- *       Load the FS register with the proper value prior to the call to
- *       sys_uselib().
- *
- *       Built the parameter and envionment strings before destroying the
- *       current executable.
- *
- *    10 September 1993
- *       Al Longyear (longyear@sii.com)
- *       Added new parameter to the create_tables() function to allow the
- *       proper creation of the IBCS environment stack when the process is
- *       started.
- *
- *       Added code to create_tables() which I mistakenly deleted in the
- *       last patch.
- *
- *    13 September 1993
- *       Al Longyear (longyear@sii.com)
- *       Removed erroneous code which mistakenly folded .data with .bss for
- *       a shared library. 
- *
- *     8 Janurary 1994
- *       Al Longyear (longyear@sii.com)
- *       Corrected problem with read of library section returning the byte
- *       count rather than zero. This was a change between the pl12 and
- *       pl14 kernels which slipped by me.
+ * Latest Revision:
+ *    3 Feburary 1994
+ *      Al Longyear (longyear@sii.com)
+ *      Cleared first page of bss section using put_fs_byte.
  */
 
 #include <linux/fs.h>
@@ -102,6 +71,37 @@ is_properly_aligned (COFF_SCNHDR *sect)
 	printk ("bad alignment in %s\n", sect->s_name);
 #endif
     return ((((vaddr - scnptr) & ~PAGE_MASK) != 0) ? -ENOEXEC : 0);
+}
+
+/*
+ *    Clear the bytes in the last page of data.
+ */
+
+static
+int clear_memory (unsigned long addr, unsigned long size)
+{
+    int status;
+
+    size = (PAGE_SIZE - (addr & ~PAGE_MASK)) & ~PAGE_MASK;
+    if (size == 0)
+        status = 0;
+    else {
+      
+#ifdef COFF_DEBUG
+        printk ("un-initialized storage in last page %d\n", size);
+#endif
+
+	status = verify_area (VERIFY_WRITE,
+			      (void *) addr, size);
+#ifdef COFF_DEBUG
+	printk ("result from verify_area = %d\n", status);
+#endif
+
+	if (status >= 0)
+	    while (size-- != 0)
+	        put_fs_byte (0, addr++);
+    }
+    return status;
 }
 
 /*
@@ -521,11 +521,13 @@ load_object (struct linux_binprm * bprm, struct pt_regs *regs, int lib_ok)
 	    zeromap_page_range (PAGE_ALIGN (bss_vaddr),
 				PAGE_ALIGN (bss_size),
 				PAGE_COPY);
+
+	    status = clear_memory (bss_vaddr, bss_size);
 	}
 /*
  *  Load any shared library for the executable.
  */
-	if (lib_ok && lib_count != 0) {
+	if (status >= 0 && lib_ok && lib_count != 0) {
 	    int nIndex;
 	    COFF_SCNHDR *sect_ptr = sect_bufr;
 /*

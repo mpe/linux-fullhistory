@@ -46,7 +46,7 @@ static unsigned char const type_table[32] = {
   _NONE_, _REG0_, _NONE_, _REG0_
   };
 
-void load_store_instr(char type, overrides override)
+void load_store_instr(char type, fpu_addr_modes addr_modes)
 {
   FPU_REG *pop_ptr;  /* We need a version of FPU_st0_ptr which won't
 			change if the emulator is re-entered. */
@@ -85,7 +85,7 @@ switch ( type )
   {
   case 000:       /* fld m32real */
     clear_C1();
-    reg_load_single(override);
+    reg_load_single();
     if ( (FPU_loaded_data.tag == TW_NaN) &&
 	real_2op_NaN(&FPU_loaded_data, &FPU_loaded_data, &FPU_loaded_data) )
       {
@@ -96,12 +96,12 @@ switch ( type )
     break;
   case 001:      /* fild m32int */
     clear_C1();
-    reg_load_int32(override);
+    reg_load_int32();
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 002:      /* fld m64real */
     clear_C1();
-    reg_load_double(override);
+    reg_load_double();
     if ( (FPU_loaded_data.tag == TW_NaN) &&
 	real_2op_NaN(&FPU_loaded_data, &FPU_loaded_data, &FPU_loaded_data) )
       {
@@ -112,58 +112,58 @@ switch ( type )
     break;
   case 003:      /* fild m16int */
     clear_C1();
-    reg_load_int16(override);
+    reg_load_int16();
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 010:      /* fst m32real */
     clear_C1();
-    reg_store_single(override);
+    reg_store_single();
     break;
   case 011:      /* fist m32int */
     clear_C1();
-    reg_store_int32(override);
+    reg_store_int32();
     break;
   case 012:     /* fst m64real */
     clear_C1();
-    reg_store_double(override);
+    reg_store_double();
     break;
   case 013:     /* fist m16int */
     clear_C1();
-    reg_store_int16(override);
+    reg_store_int16();
     break;
   case 014:     /* fstp m32real */
     clear_C1();
-    if ( reg_store_single(override) )
+    if ( reg_store_single() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
     break;
   case 015:     /* fistp m32int */
     clear_C1();
-    if ( reg_store_int32(override) )
+    if ( reg_store_int32() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
     break;
   case 016:     /* fstp m64real */
     clear_C1();
-    if ( reg_store_double(override) )
+    if ( reg_store_double() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
     break;
   case 017:     /* fistp m16int */
     clear_C1();
-    if ( reg_store_int16(override) )
+    if ( reg_store_int16() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
     break;
   case 020:     /* fldenv  m14/28byte */
-    fldenv();
+    fldenv(addr_modes);
     break;
   case 022:     /* frstor m94/108byte */
-    frstor();
+    frstor(addr_modes);
     break;
   case 023:     /* fbld m80dec */
     clear_C1();
-    reg_load_bcd(override);
+    reg_load_bcd();
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 024:     /* fldcw */
@@ -183,25 +183,25 @@ switch ( type )
     break;
   case 025:      /* fld m80real */
     clear_C1();
-    reg_load_extended(override);
+    reg_load_extended();
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 027:      /* fild m64int */
     clear_C1();
-    reg_load_int64(override);
+    reg_load_int64();
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 030:     /* fstenv  m14/28byte */
-    fstenv();
+    fstenv(addr_modes);
     NO_NET_DATA_EFFECT;
     break;
   case 032:      /* fsave */
-    fsave();
+    fsave(addr_modes);
     NO_NET_DATA_EFFECT;
     break;
   case 033:      /* fbstp m80dec */
     clear_C1();
-    if ( reg_store_bcd(override) )
+    if ( reg_store_bcd() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
     break;
@@ -215,7 +215,7 @@ switch ( type )
     break;
   case 035:      /* fstp m80real */
     clear_C1();
-    if ( reg_store_extended(override) )
+    if ( reg_store_extended() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
     break;
@@ -229,7 +229,7 @@ switch ( type )
     break;
   case 037:      /* fistp m64int */
     clear_C1();
-    if ( reg_store_int64(override) )
+    if ( reg_store_int64() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
     break;

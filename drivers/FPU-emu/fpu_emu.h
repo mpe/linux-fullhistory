@@ -94,7 +94,11 @@ extern char emulating;
 
 typedef void (*FUNC)(void);
 typedef struct fpu_reg FPU_REG;
-typedef struct { unsigned char address_size, segment; } overrides;
+typedef struct { unsigned char address_size, operand_size, segment; }
+        overrides;
+/* This structure is 32 bits: */
+typedef struct { overrides override;
+		 unsigned char vm86; } fpu_addr_modes;
 
 #define	st(x)	( regs[((top+x) &7 )] )
 

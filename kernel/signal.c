@@ -183,6 +183,9 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 		return -EINVAL;
 	p = signum - 1 + current->sigaction;
 	if (action) {
+		int err = verify_area(VERIFY_READ, action, sizeof(*action));
+		if (err)
+			return err;
 		memcpy_fromfs(&new_sa, action, sizeof(struct sigaction));
 		if (new_sa.sa_flags & SA_NOMASK)
 			new_sa.sa_mask = 0;
@@ -194,8 +197,10 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 			return -EFAULT;
 	}
 	if (oldaction) {
-		if (!verify_area(VERIFY_WRITE,oldaction, sizeof(struct sigaction)))
-			memcpy_tofs(oldaction, p, sizeof(struct sigaction));
+		int err = verify_area(VERIFY_WRITE, oldaction, sizeof(*oldaction));
+		if (err)
+			return err;
+		memcpy_tofs(oldaction, p, sizeof(struct sigaction));
 	}
 	if (action) {
 		*p = new_sa;

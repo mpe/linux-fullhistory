@@ -276,9 +276,12 @@ static int rt_new(struct rtentry *r)
 	mask = ((struct sockaddr_in *) &r->rt_genmask)->sin_addr.s_addr;
 	gw = ((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr;
 
+	if (bad_mask(mask, daddr))
+		mask = 0;
+
 	if (flags & RTF_HOST)
 		mask = 0xffffffff;
-	else if (r->rt_genmask.sa_family != AF_INET)
+	else if (mask && r->rt_genmask.sa_family != AF_INET)
 		return -EAFNOSUPPORT;
 
 	if (flags & RTF_GATEWAY) {
@@ -291,9 +294,6 @@ static int rt_new(struct rtentry *r)
 
 	if (dev == NULL)
 		return -ENETUNREACH;
-
-	if (bad_mask(mask, daddr))
-		mask = 0;
 
 	rt_add(flags, daddr, mask, gw, dev);
 	return 0;
