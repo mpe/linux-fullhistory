@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.60 1996/04/04 16:30:28 tridge Exp $
+/*  $Id: setup.c,v 1.62 1996/04/25 09:11:33 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -212,20 +212,11 @@ static struct pt_regs fake_swapper_regs = { 0, 0, 0, 0, { 0, } };
 void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
-	int total, i, panic_stuff[2], packed;
+	int total, i, packed;
 
 #if CONFIG_AP1000
         register_console(prom_printf);
 	((char *)(&cputypval))[4] = 'm'; /* ugly :-( */
-#endif
-
-#if 0
-	/* Always reboot on panic, but give 5 seconds to hit L1-A
-	 * and look at debugging info if desired.
-	 */
-	panic_stuff[0] = 1;
-	panic_stuff[1] = 5;
-	panic_setup(0, panic_stuff);
 #endif
 
 	sparc_ttable = (struct tt_entry *) &start;

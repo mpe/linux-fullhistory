@@ -5,7 +5,7 @@
 NOTE: English is not my native language. 
       I'm sorry for any mistakes in this text.
 
-Misc. notes for RISCom/8 serial driver, in no particule order :)
+Misc. notes for RISCom/8 serial driver, in no particular order :)
 
 1) This driver can support up to 4 boards at time.
    Use string "riscom8=0xXXX,0xXXX,0xXXX,0xXXX" at LILO prompt, for

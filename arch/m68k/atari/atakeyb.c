@@ -302,7 +302,7 @@ static void atakeyb_rep( unsigned long ignore )
  * it's really hard to decide whether they're mouse or keyboard bytes. Since
  * overruns usually occur when moving the Atari mouse rapidly, they're seen as
  * mouse bytes here. If this is wrong, only a make code of the keyboard gets
- * lost, which isn't too bad. Loosing a break code would be desasterous,
+ * lost, which isn't too bad. Loosing a break code would be disastrous,
  * because then the keyboard repeat strikes...
  */
 
@@ -541,7 +541,7 @@ void ikbd_reset(void)
     
     ikbd_write(cmd, 2);
 
-    /* if allswell code 0xF1 is returned, else the break codes of
+    /* if all's well code 0xF1 is returned, else the break codes of
        all keys making contact */
 }
 

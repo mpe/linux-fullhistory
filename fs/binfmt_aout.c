@@ -227,7 +227,7 @@ static unsigned long * create_aout_tables(char * p, struct linux_binprm * bprm)
 	envp = sp;
 	sp -= argc+1;
 	argv = sp;
-#ifdef __i386__
+#if defined(__i386__) || defined(__mc68000__)
 	put_user(envp,--sp);
 	put_user(argv,--sp);
 #endif

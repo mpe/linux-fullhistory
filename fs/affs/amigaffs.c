@@ -1,9 +1,14 @@
 /*
  *  linux/fs/affs/amigaffs.c
  *
+ *  (C) 1996  Stefan Reinauer - Modified to compile as Module
+ *
  *  (C) 1993  Ray Burr - Amiga FFS filesystem.
  *
  */
+
+
+#include <linux/module.h>
 
 #include <linux/fs.h>
 #include <linux/affs_fs.h>
@@ -91,7 +96,7 @@ int affs_get_file_name (int bsize, void *fh_data, char **name)
         return file_end->file_name[0];
 }
 
-/* Get the key number of the first extention block for the file
+/* Get the key number of the first extension block for the file
    header pointed to by FH_DATA. */
 
 int affs_get_extension (int bsize, void *fh_data)
@@ -127,4 +132,21 @@ int init_affs_fs(void)
 {
         return register_filesystem(&affs_fs_type);
 }
+
+#ifdef MODULE
+int init_module(void)
+{
+	int status;
+
+	if ((status = init_affs_fs()) == 0)
+	        register_symtab(0);
+	return status;
+}
+
+void cleanup_module(void)
+{
+	unregister_filesystem(&affs_fs_type);
+}
+
+#endif
 

@@ -614,7 +614,7 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 	  		break;
 
 	  	case AX25_T3:
-	  		if (ax25_ctl.arg < 1) 
+	  		if (ax25_ctl.arg < 0) 
 	  			return -EINVAL;
 	  		save_flags(flags); cli();
 	  		ax25->t3 = ax25_ctl.arg * PR_SLOWHZ;
@@ -624,10 +624,8 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 	  		break;
 
 	  	case AX25_IDLE:
-	  		if (ax25_ctl.arg < 1) 
+	  		if (ax25_ctl.arg < 0) 
 	  			return -EINVAL;
-	  		if (ax25->idle == 0)
-	  			return 0;
 			save_flags(flags); cli();
 	  		ax25->idle = ax25_ctl.arg * PR_SLOWHZ * 60;
 	  		if (ax25->idletimer != 0)
@@ -682,7 +680,7 @@ static ax25_cb *ax25_create_cb(void)
 	ax25->n2      = AX25_DEF_N2;
 	ax25->paclen  = AX25_DEF_PACLEN;
 	ax25->maxqueue= AX25_DEF_IPMAXQUEUE;
-	ax25->idle    = 0;
+	ax25->idle    = AX25_DEF_IDLE;
 
 	ax25->modulus   = AX25_DEF_AXDEFMODE;
 	ax25->fragno    = 0;
@@ -753,9 +751,9 @@ static void ax25_fillin_cb(ax25_cb *ax25, struct device *dev)
 	ax25->n2       = ax25_dev_get_value(dev, AX25_VALUES_N2);
 	ax25->paclen   = ax25_dev_get_value(dev, AX25_VALUES_PACLEN);
 	ax25->maxqueue = ax25_dev_get_value(dev, AX25_VALUES_IPMAXQUEUE);
+	ax25->idle     = ax25_dev_get_value(dev, AX25_VALUES_IDLE);
 
 	ax25->dama_slave = 0;
-	ax25->idle = 0;
 
 	ax25->modulus = ax25_dev_get_value(dev, AX25_VALUES_AXDEFMODE);
 
@@ -819,7 +817,7 @@ int ax25_send_frame(struct sk_buff *skb, ax25_address *src, ax25_address *dest,
 
 	/* idle timeouts only for mode vc connections */
 
-	ax25->idletimer = ax25->idle = ax25_dev_get_value(ax25->device, AX25_VALUES_IDLE);
+	ax25->idletimer = ax25->idle;
 		
 	ax25_insert_socket(ax25);
 
@@ -1196,7 +1194,8 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	ax25->idle    = osk->ax25->idle;
 	ax25->paclen  = osk->ax25->paclen;
 
-	ax25->window  = osk->ax25->window;
+	ax25->window   = osk->ax25->window;
+	ax25->maxqueue = osk->ax25->maxqueue;
 
 	ax25->source_addr = osk->ax25->source_addr;
 	
@@ -1823,7 +1822,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		}
 
 		ax25_fillin_cb(ax25, dev);
-		ax25->idletimer = ax25->idle = ax25_dev_get_value(ax25->device, AX25_VALUES_IDLE);
+		ax25->idletimer = ax25->idle;
 #else
 		if (mine) {
 			ax25_rt_rx_frame(&src, dev, &dp);
@@ -2272,7 +2271,6 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 	int len = 0;
 	off_t pos = 0;
 	off_t begin = 0;
-	int idletimer;
 
 	cli();
 
@@ -2283,9 +2281,6 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 			devname = "???";
 		else
 			devname = dev->name;
-			
-		idletimer = ax25->idletimer / (PR_SLOWHZ * 60);
-		idletimer += (ax25->idletimer && ax25->idletimer < ax25->idle)? 1:0;
 
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&ax25->dest_addr));
@@ -2299,8 +2294,8 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 			ax25->t2      / PR_SLOWHZ,
 			ax25->t3timer / PR_SLOWHZ,
 			ax25->t3      / PR_SLOWHZ,
-			idletimer,
-			ax25->idle      / (PR_SLOWHZ*60),
+			ax25->idletimer / (PR_SLOWHZ * 60),
+			ax25->idle      / (PR_SLOWHZ * 60),
 			ax25->n2count, ax25->n2,
 			ax25->rtt     / PR_SLOWHZ,
 			ax25->window,

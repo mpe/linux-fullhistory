@@ -3,11 +3,6 @@
 
 /* Definitions of frame buffers						*/
 
-#ifdef __KERNEL__
-#include <linux/config.h>
-#include <linux/fs.h>
-#endif
-
 /* ioctls
    0x46 is 'F'								*/
 #define FBIOGET_VSCREENINFO 	0x4600
@@ -39,7 +34,8 @@ struct fb_fix_screeninfo {
 	u_short xpanstep;               /* zero if no hardware panning  */
         u_short ypanstep;               /* zero if no hardware panning  */
         u_short ywrapstep;              /* zero if no hardware ywrap    */
-        short reserved[11];             /* Reserved for future compatibility */
+        u_long line_length;             /* length of a line in bytes    */
+        short reserved[9];              /* Reserved for future compatibility */
 };
 
 struct fb_bitfield {
@@ -78,6 +74,8 @@ struct fb_bitfield {
 #define FB_VMODE_MASK		255
 
 #define FB_VMODE_YWRAP		256	/* ywrap instead of panning     */
+#define FB_VMODE_SMOOTH_XPAN	512	/* smooth xpan possible (internally used) */
+#define FB_VMODE_CONUPDATE	512	/* don't update x/yoffset	*/
 
 struct fb_var_screeninfo {
 	int xres;			/* visible resolution		*/
@@ -128,12 +126,14 @@ struct fb_cmap {
 
 #ifdef __KERNEL__
 
+#include <linux/fs.h>
+
 struct fb_ops {
-	/* get non setable parameters	*/
+	/* get non settable parameters	*/
 	int (*fb_get_fix) (struct fb_fix_screeninfo *, int); 
-	/* get setable parameters	*/
+	/* get settable parameters	*/
 	int (*fb_get_var) (struct fb_var_screeninfo *, int);		
-	/* set setable parameters	*/
+	/* set settable parameters	*/
 	int (*fb_set_var) (struct fb_var_screeninfo *, int);		
 	/* get colormap			*/
 	int (*fb_get_cmap) (struct fb_cmap *, int, int);
@@ -156,43 +156,6 @@ int unregister_framebuffer(int);
     */
 
 struct display {
-/*
- * As long as the old Amiga screen driver is being used, we have to
- * include these old parameters.
- */
-#if defined(CONFIG_AMIGA)
-  ushort scr_max_height;	/* screen dimensions */
-  ushort scr_max_width;
-  ushort scr_height;
-  ushort scr_width;
-  ushort scr_depth;
-  int bytes_per_row;		/* offset to one line below */
-  
-  ulong crsrcol;
-
-  ushort scroll_latch;		/* Vblank support for hardware scroll */
-  ushort y_wrap;
-  ushort cursor_latch;		/* Hardware cursor */
-  ushort *cursor, *dummy;
-  ushort cursor_flash;
-  ushort cursor_visible;
-
-  /* Some chipreg values we need to rebuild copper lists */
-  ushort diwstrt_v, diwstrt_h;	/* display window control */
-  ushort diwstop_v, diwstop_h;
-  ushort bplcon0;		/* display mode */
-  ushort htotal;
-
-  u_char *bitplane[8];		/* pointers to display bitplanes */
-  ulong plane_size;
-
-  ushort *coplist1hdr;		/* List 1 static  component */
-  ushort *coplist1dyn;		/* List 1 dynamic component */
-  ushort *coplist2hdr;		/* List 2 static  component */
-  ushort *coplist2dyn;		/* List 2 dynamic component */
-
-#endif
-
    /* Filled in by the frame buffer device */
 
    struct fb_var_screeninfo var;    /* variable infos. yoffset and vmode */
@@ -204,6 +167,7 @@ struct display {
    int type_aux;                    /* Interleave for interleaved Planes */
    u_short ypanstep;                /* zero if no hardware ypan */
    u_short ywrapstep;               /* zero if no hardware ywrap */
+   u_long line_length;              /* length of a line in bytes */
    u_short can_soft_blank;          /* zero if no hardware blanking */
    u_short inverse;                 /* != 0 text black on white as default */
 
@@ -216,6 +180,7 @@ struct display {
    /* Filled in by the low-level console driver */
 
    struct vc_data *conp;            /* pointer to console data */
+   int vrows;                       /* number of virtual rows */
    int cursor_x;                    /* current cursor position */
    int cursor_y;
    int fgcol;                       /* text colors */
@@ -225,6 +190,7 @@ struct display {
    u_char *fontdata;                /* Font associated to this display */
    int fontheight;
    int fontwidth;
+   int userfont;                    /* != 0 if fontdata kmalloc()ed */
    struct display_switch *dispsw;   /* low level operations */
    u_short scrollmode;              /* Scroll Method */
    short yscroll;                   /* Hardware scrolling */
@@ -274,7 +240,11 @@ struct fb_fix_cursorinfo {
 };
 
 struct fb_var_cursorinfo {
-	u_long data[256];	       /* max. 64x64 (ilbm, 2 planes)	*/
+        u_short width;
+        u_short height;
+        u_short xspot;
+        u_short yspot;
+        u_char data[1];                 /* field with [height][width]        */
 };
 
 struct fb_cursorstate {
@@ -286,6 +256,31 @@ struct fb_cursorstate {
 #define FB_CURSOR_OFF		0
 #define FB_CURSOR_ON		1
 #define FB_CURSOR_FLASH		2
+
+#define FBCMD_DRAWLINE		0x4621
+#define FBCMD_MOVE		0x4622
+
+#define FB_LINE_XOR	1
+#define FB_LINE_BOX	2
+#define FB_LINE_FILLED	4
+
+struct fb_line {
+	int start_x;
+	int start_y;
+	int end_x;
+	int end_y;
+	int color;
+	int option;
+};
+
+struct fb_move {
+	int src_x;
+	int src_y;
+	int dest_x;
+	int dest_y;
+	int height;
+	int width;
+};
 
 #endif /* Preliminary */
 

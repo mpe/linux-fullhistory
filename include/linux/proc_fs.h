@@ -131,6 +131,10 @@ enum scsi_directory_inos {
 	PROC_SCSI_NCR53C406A,
 	PROC_SCSI_PPA,
 	PROC_SCSI_ESP,
+	PROC_SCSI_A3000,
+	PROC_SCSI_A2091,
+	PROC_SCSI_GVP11,
+	PROC_SCSI_ATARI,
 	PROC_SCSI_SCSI_DEBUG,	
 	PROC_SCSI_NOT_PRESENT,
 	PROC_SCSI_FILE,                        /* I'm assuming here that we */

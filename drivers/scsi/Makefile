@@ -84,6 +84,38 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_A3000_SCSI),y)
+L_OBJS += a3000.o wd33c93.o
+else
+  ifeq ($(CONFIG_A3000_SCSI),m)
+  M_OBJS += a3000.o wd33c93.o
+  endif
+endif
+
+ifeq ($(CONFIG_A2091_SCSI),y)
+L_OBJS += a2091.o wd33c93.o
+else
+  ifeq ($(CONFIG_A2091_SCSI),m)
+  M_OBJS += a2091.o wd33c93.o
+  endif
+endif
+
+ifeq ($(CONFIG_GVP11_SCSI),y)
+L_OBJS += gvp11.o wd33c93.o
+else
+  ifeq ($(CONFIG_GVP11_SCSI),m)
+  M_OBJS += gvp11.o wd33c93.o
+  endif
+endif
+
+ifeq ($(CONFIG_ATARI_SCSI),y)
+L_OBJS += atari_scsi.o
+else
+  ifeq ($(CONFIG_ATARI_SCSI),m)
+  M_OBJS += atari_scsi.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_PPA),y)
 L_OBJS += ppa.o
 else
@@ -165,6 +197,14 @@ L_OBJS += u14-34f.o
 else
   ifeq ($(CONFIG_SCSI_U14_34F),m)
   M_OBJS += u14-34f.o
+  endif
+endif
+
+ifeq ($(CONFIG_SCSI_SUNESP),y)
+L_OBJS += esp.o
+else
+  ifeq ($(CONFIG_SCSI_SUNESP),m)
+  M_OBJS += esp.o
   endif
 endif
 

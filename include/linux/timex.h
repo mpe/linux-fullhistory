@@ -17,12 +17,27 @@
 /*
  * Modification history timex.h
  *
+ * 26 Sep 94	David L. Mills
+ *	Added defines for hybrid phase/frequency-lock loop.
+ *
+ * 19 Mar 94	David L. Mills
+ *	Moved defines from kernel routines to header file and added new
+ *	defines for PPS phase-lock loop.
+ *
+ * 20 Feb 94	David L. Mills
+ *	Revised status codes and structures for external clock and PPS
+ *	signal discipline.
+ *
+ * 28 Nov 93	David L. Mills
+ *	Adjusted parameters to improve stability and increase poll
+ *	interval.
+ *
  * 17 Sep 93    David L. Mills
  *      Created file $NTP/include/sys/timex.h
  * 07 Oct 93    Torsten Duwe
  *      Derived linux/timex.h
  * 1995-08-13    Torsten Duwe
- *      kernel PLL updated to 1994-12-13 specs (rfc-1489)
+ *      kernel PLL updated to 1994-12-13 specs (rfc-1589)
  */
 #ifndef _LINUX_TIMEX_H
 #define _LINUX_TIMEX_H
@@ -67,14 +82,16 @@
  * SHIFT_USEC defines the scaling (shift) of the time_freq and
  * time_tolerance variables, which represent the current frequency
  * offset and maximum frequency tolerance.
+ *
+ * FINEUSEC is 1 us in SHIFT_UPDATE units of the time_phase variable.
  */
-#define SHIFT_SCALE 22		/* shift for phase scale factor */
-#define SHIFT_UPDATE (SHIFT_KG + MAXTC) /* shift for offset scale factor */
+#define SHIFT_SCALE 22		/* phase scale (shift) */
+#define SHIFT_UPDATE (SHIFT_KG + MAXTC) /* time offset scale (shift) */
 #define SHIFT_USEC 16		/* frequency offset scale (shift) */
 #define FINEUSEC (1L << SHIFT_SCALE) /* 1 us in phase units */
 
 #define MAXPHASE 512000L        /* max phase error (us) */
-#define MAXFREQ (100L << SHIFT_USEC)  /* max frequency error (ppm) */
+#define MAXFREQ (512L << SHIFT_USEC)  /* max frequency error (ppm) */
 #define MAXTIME (200L << PPS_AVG) /* max PPS error (jitter) (200 us) */
 #define MINSEC 16L              /* min interval between updates (s) */
 #define MAXSEC 1200L            /* max interval between updates (s) */
@@ -171,6 +188,9 @@ struct timex {
 #define MOD_ESTERROR	ADJ_ESTERROR
 #define MOD_STATUS	ADJ_STATUS
 #define MOD_TIMECONST	ADJ_TIMECONST
+#define MOD_CLKB	ADJ_TICK
+#define MOD_CLKA	ADJ_OFFSET_SINGLESHOT /* 0x8000 in original */
+
 
 /*
  * Status codes (timex.status)
@@ -198,17 +218,19 @@ struct timex {
 /*
  * Clock states (time_state)
  */
-#define TIME_OK		0	/* clock synchronized */
+#define TIME_OK		0	/* clock synchronized, no leap second */
 #define TIME_INS	1	/* insert leap second */
 #define TIME_DEL	2	/* delete leap second */
 #define TIME_OOP	3	/* leap second in progress */
-#define TIME_WAIT	4	/* leap second has occurred */
+#define TIME_WAIT	4	/* leap second has occured */
 #define TIME_ERROR	5	/* clock not synchronized */
 #define TIME_BAD	TIME_ERROR /* bw compat */
 
 #ifdef __KERNEL__
 /*
  * kernel variables
+ * Note: maximum error = NTP synch distance = dispersion + delay / 2;
+ * estimated error = NTP dispersion.
  */
 extern long tick;                      /* timer interrupt period */
 extern int tickadj;			/* amount of adjustment per tick */

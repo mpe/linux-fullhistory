@@ -46,12 +46,7 @@ extern __inline__ int change_bit(int nr, void * vaddr)
 
 extern __inline__ int test_bit(int nr, const void * vaddr)
 {
-	char retval;
-
-	__asm__ __volatile__ ("bftst %2@{%1:#1}; sne %0"
-	     : "=d" (retval) : "d" (nr^31), "a" (vaddr));
-
-	return retval;
+	return ((1UL << (nr & 31)) & (((const unsigned int *) vaddr)[nr >> 5])) != 0;
 }
 
 extern __inline__ int find_first_zero_bit(void * vaddr, unsigned size)
@@ -166,12 +161,7 @@ minix_clear_bit (int nr, void *vaddr)
 extern __inline__ int
 minix_test_bit (int nr, const void *vaddr)
 {
-	char retval;
-
-	__asm__ __volatile__ ("bftst %2{%1:#1}; sne %0"
-	     : "=d" (retval) : "d" (nr^15), "m" (*(const char *) vaddr));
-
-	return retval;
+	return ((1U << (nr & 15)) & (((const unsigned short *) vaddr)[nr >> 4])) != 0;
 }
 
 /* Bitmap functions for the ext2 filesystem. */
@@ -201,12 +191,7 @@ ext2_clear_bit (int nr, void *vaddr)
 extern __inline__ int
 ext2_test_bit (int nr, const void *vaddr)
 {
-	char retval;
-
-	__asm__ __volatile__ ("bftst %2{%1,#1}; sne %0"
-	     : "=d" (retval) : "d" (nr^7), "m" (*(const char *) vaddr));
-
-	return retval;
+	return ((1U << (nr & 7)) & (((const unsigned char *) vaddr)[nr >> 3])) != 0;
 }
 
 extern __inline__ int

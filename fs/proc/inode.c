@@ -74,7 +74,7 @@ static int parse_options(char *options,uid_t *uid,gid_t *gid)
 struct inode * proc_get_inode(struct super_block * s, int ino, struct proc_dir_entry * de)
 {
 	struct inode * inode = iget(s, ino);
-	if (inode) {
+	if (inode && inode->i_sb == s) {
 		inode->u.generic_ip = (void *) de;
 		if (de) {
 			if (de->mode) {

@@ -70,7 +70,7 @@
 |		in INEX2.
 |
 |	A10.	Or in INEX.
-|		If INEX is set, round error occured.  This is
+|		If INEX is set, round error occurred.  This is
 |		compensated for by 'or-ing' in the INEX2 flag to
 |		the lsb of Y.
 |
@@ -518,7 +518,7 @@ A9_con:
 
 
 | A10. Or in INEX.
-|      If INEX is set, round error occured.  This is compensated
+|      If INEX is set, round error occurred.  This is compensated
 |      for by 'or-ing' in the INEX2 flag to the lsb of Y.
 |
 | Register usage:

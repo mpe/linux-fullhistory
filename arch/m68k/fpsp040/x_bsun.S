@@ -3,7 +3,7 @@
 |
 |	fpsp_bsun --- FPSP handler for branch/set on unordered exception
 |
-|	Copy the PC to FPIAR to maintain 881/882 compatability
+|	Copy the PC to FPIAR to maintain 881/882 compatibility
 |
 |	The real_bsun handler will need to perform further corrective
 |	measures as outlined in the 040 User's Manual on pages

@@ -931,7 +931,7 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	 */
 	page = vma->vm_ops->nopage(vma, address, write_access && !(vma->vm_flags & VM_SHARED));
 	if (!page) {
-		send_sig(SIGBUS, current, 1);
+		force_sig(SIGBUS, current);
 		flush_cache_page(vma, address);
 		put_page(page_table, BAD_PAGE);
 		flush_tlb_page(vma, address);

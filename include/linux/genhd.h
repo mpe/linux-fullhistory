@@ -9,13 +9,15 @@
  *		<drew@colorado.edu>
  */
 
+#include <linux/config.h>
+
 #define CONFIG_MSDOS_PARTITION 1
 
 #ifdef __alpha__
 #define CONFIG_OSF_PARTITION 1
 #endif
 
-#ifdef __sparc__
+#if defined(__sparc__) || defined(CONFIG_SMD_DISKLABEL)
 #define CONFIG_SUN_PARTITION 1
 #endif
 
@@ -63,6 +65,61 @@ struct gendisk {
 	void *real_devices;		/* internal use */
 	struct gendisk *next;
 };
+
+#ifdef CONFIG_BSD_DISKLABEL
+/*
+ * BSD disklabel support by Yossi Gottlieb <yogo@math.tau.ac.il>
+ */
+
+#define BSD_PARTITION		0xa5	/* Partition ID */
+
+#define BSD_DISKMAGIC	(0x82564557UL)	/* The disk magic number */
+#define BSD_MAXPARTITIONS	8
+#define BSD_FS_UNUSED		0	/* disklabel unused partition entry ID */
+struct bsd_disklabel {
+	__u32	d_magic;		/* the magic number */
+	__s16	d_type;			/* drive type */
+	__s16	d_subtype;		/* controller/d_type specific */
+	char	d_typename[16];		/* type name, e.g. "eagle" */
+	char	d_packname[16];			/* pack identifier */ 
+	__u32	d_secsize;		/* # of bytes per sector */
+	__u32	d_nsectors;		/* # of data sectors per track */
+	__u32	d_ntracks;		/* # of tracks per cylinder */
+	__u32	d_ncylinders;		/* # of data cylinders per unit */
+	__u32	d_secpercyl;		/* # of data sectors per cylinder */
+	__u32	d_secperunit;		/* # of data sectors per unit */
+	__u16	d_sparespertrack;	/* # of spare sectors per track */
+	__u16	d_sparespercyl;		/* # of spare sectors per cylinder */
+	__u32	d_acylinders;		/* # of alt. cylinders per unit */
+	__u16	d_rpm;			/* rotational speed */
+	__u16	d_interleave;		/* hardware sector interleave */
+	__u16	d_trackskew;		/* sector 0 skew, per track */
+	__u16	d_cylskew;		/* sector 0 skew, per cylinder */
+	__u32	d_headswitch;		/* head switch time, usec */
+	__u32	d_trkseek;		/* track-to-track seek, usec */
+	__u32	d_flags;		/* generic flags */
+#define NDDATA 5
+	__u32	d_drivedata[NDDATA];	/* drive-type specific information */
+#define NSPARE 5
+	__u32	d_spare[NSPARE];	/* reserved for future use */
+	__u32	d_magic2;		/* the magic number (again) */
+	__u16	d_checksum;		/* xor of data incl. partitions */
+
+			/* filesystem and partition information: */
+	__u16	d_npartitions;		/* number of partitions in following */
+	__u32	d_bbsize;		/* size of boot area at sn0, bytes */
+	__u32	d_sbsize;		/* max size of fs superblock, bytes */
+	struct	bsd_partition {		/* the partition table */
+		__u32	p_size;		/* number of sectors in partition */
+		__u32	p_offset;	/* starting sector */
+		__u32	p_fsize;	/* filesystem basic fragment size */
+		__u8	p_fstype;	/* filesystem type, see below */
+		__u8	p_frag;		/* filesystem fragments per block */
+		__u16	p_cpg;		/* filesystem cylinders per group */
+	} d_partitions[BSD_MAXPARTITIONS];	/* actually may be more */
+};
+
+#endif	/* CONFIG_BSD_DISKLABEL */
 
 extern struct gendisk *gendisk_head;	/* linked list of disks */
 

@@ -7,7 +7,7 @@
  *      Linus Torvalds, Theodore T'so and others. The RISCom/8 card 
  *      programming info was obtained from various drivers for other OSes 
  *	(FreeBSD, ISC, etc), but no source code from those drivers were 
- *	directly included in this drvier.
+ *	directly included in this driver.
  *
  *
  *      This program is free software; you can redistribute it and/or modify

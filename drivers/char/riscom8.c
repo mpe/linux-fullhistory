@@ -7,7 +7,7 @@
  *      Linus Torvalds, Theodore T'so and others. The RISCom/8 card 
  *      programming info was obtained from various drivers for other OSes 
  *	(FreeBSD, ISC, etc), but no source code from those drivers were 
- *	directly included in this drvier.
+ *	directly included in this driver.
  *
  *
  *      This program is free software; you can redistribute it and/or modify
@@ -173,7 +173,7 @@ extern inline void rc_out(struct riscom_board const * bp, unsigned short reg,
 	outb(val, bp->base + RC_TO_ISA(reg));
 }
 
-/* Wait for Chanel Command Register ready */
+/* Wait for Channel Command Register ready */
 extern inline void rc_wait_CCR(struct riscom_board const * bp)
 {
 	unsigned long delay;
@@ -196,7 +196,7 @@ extern inline int rc_check_io_range(struct riscom_board * const bp)
 	
 	for (i = 0; i < RC_NIOPORT; i++)  
 		if (check_region(RC_TO_ISA(rc_ioport[i]) + bp->base, 1))  {
-			printk("rc%d: Skipping probe at 0x%03x. I/O adress in use.\n",
+			printk("rc%d: Skipping probe at 0x%03x. I/O address in use.\n",
 			       board_No(bp), bp->base);
 			return 1;
 		}
@@ -319,7 +319,7 @@ static int rc_probe(struct riscom_board *bp)
 
 /* 
  * 
- *  Inerrupt processing routines.
+ *  Interrupt processing routines.
  * 
  */
 
@@ -328,7 +328,7 @@ extern inline void rc_mark_event(struct riscom_port * port, int event)
 	/* 
          * I'm not quite happy with current scheme all serial
 	 * drivers use their own BH routine.
-         * It seem's this easily can be done with one BH routine
+         * It seems this easily can be done with one BH routine
 	 * serving for all serial drivers.
 	 * For now I must introduce another one - RISCOM8_BH.
 	 * Still hope this will be changed in near future.
@@ -673,7 +673,7 @@ extern inline void rc_shutdown_board(struct riscom_board *bp)
 
 /*
  * Setting up port characteristics. 
- * Must be called with disabled interupts
+ * Must be called with disabled interrupts
  */
 static void rc_change_speed(struct riscom_board *bp, struct riscom_port *port)
 {
@@ -785,7 +785,7 @@ static void rc_change_speed(struct riscom_board *bp, struct riscom_port *port)
 			/* Real raw mode. Ignore all */
 			port->mark_mask &= ~RCSR_OE;
 	}
-	/* Enable Hardware FLow Control */
+	/* Enable Hardware Flow Control */
 	if (C_CRTSCTS(tty))  {
 #ifdef RISCOM_BRAIN_DAMAGED_CTS
 		port->IER |= IER_DSR | IER_CTS;
@@ -831,12 +831,12 @@ static void rc_change_speed(struct riscom_board *bp, struct riscom_port *port)
 	/* Setting up modem option registers */
 	rc_out(bp, CD180_MCOR1, mcor1);
 	rc_out(bp, CD180_MCOR2, mcor2);
-	/* Enable CD180 trasmitter & receiver */
+	/* Enable CD180 transmitter & receiver */
 	rc_wait_CCR(bp);
 	rc_out(bp, CD180_CCR, CCR_TXEN | CCR_RXEN);
 	/* Enable interrupts */
 	rc_out(bp, CD180_IER, port->IER);
-	/* And finaly set RTS on */
+	/* And finally set RTS on */
 	rc_out(bp, CD180_MSVR, port->MSVR);
 }
 
@@ -927,7 +927,7 @@ static void rc_shutdown_port(struct riscom_board *bp, struct riscom_port *port)
 	port->flags &= ~ASYNC_INITIALIZED;
 	
 	if (--bp->count < 0)  {
-		printk("rc%d: rc_shutdow_port: bad board count: %d\n",
+		printk("rc%d: rc_shutdown_port: bad board count: %d\n",
 		       board_No(bp), bp->count);
 		bp->count = 0;
 	}
@@ -1812,7 +1812,7 @@ static void rc_release_drivers(void)
  * 
  * You can specify IO base for up to RC_NBOARD cards,
  * using line "riscom8=0xiobase1,0xiobase2,.." at LILO prompt.
- * Note that there wiil be no probing at default
+ * Note that there will be no probing at default
  * addresses in this case.
  *
  */ 
@@ -1862,7 +1862,7 @@ int iobase3 = 0;
 
 /*
  * You can setup up to 4 boards (current value of RC_NBOARD)
- * by specifying "iobase=0xXXX iobase1=0xXXX ..." as isnmod parametr.
+ * by specifying "iobase=0xXXX iobase1=0xXXX ..." as insmod parameter.
  *
  */
 int init_module(void) 

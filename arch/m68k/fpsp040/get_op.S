@@ -14,7 +14,7 @@
 | UNIMPLEMENTED instructions (exception vector 11) the following
 | applies:
 |
-| - For unnormormalized numbers (opclass 0, 2, or 3) the
+| - For unnormalized numbers (opclass 0, 2, or 3) the
 | number(s) is normalized and the operand type tag is updated.
 |		
 | - For a packed number (opclass 2) the number is unpacked and the
@@ -48,7 +48,7 @@
 | detects this and tags the number as a denorm.  The routine
 | res_func sees the denorm tag and converts the denorm to a
 | norm.  The instruction is then restored back into the '040
-| which re_executess the instruction.
+| which re_executes the instruction.
 |
 |
 |		Copyright (C) Motorola, Inc. 1990
@@ -354,7 +354,7 @@ end_getop:
 
 |
 | Sets the DY_MO_FLG correctly. This is used only on if it is an
-| unuspported data type exception.  Set if dyadic.
+| unsupported data type exception.  Set if dyadic.
 |
 chk_dy_mo:
 	movew	CMDREG1B(%a6),%d0	

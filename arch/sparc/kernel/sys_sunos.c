@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.37 1996/04/19 16:52:38 miguel Exp $
+/* $Id: sys_sunos.c,v 1.40 1996/04/25 09:11:36 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -35,6 +35,8 @@
 #include <linux/swap.h>
 #include <linux/fs.h>
 #include <linux/resource.h>
+#include <linux/ipc.h>
+#include <linux/shm.h>
 #include <linux/signal.h>
 #include <linux/uio.h>
 #include <linux/utsname.h>
@@ -565,7 +567,7 @@ asmlinkage int sunos_fpathconf(int fd, int name)
 	case _PCONF_NOTRUNC:
 		return 0; /* XXX Investigate XXX */
 	case _PCONF_VDISABLE:
-		return 30; /* XXX Investigate XXX */
+		return 0;
 	default:
 		return -EINVAL;
 	}
@@ -1011,3 +1013,34 @@ repeat:
 	return fdcount;
 }
 
+extern asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr);
+extern asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
+extern asmlinkage int sys_shmdt (char *shmaddr);
+extern asmlinkage int sys_shmget (key_t key, int size, int shmflg);
+
+asmlinkage int sunos_shmsys(int op, unsigned long arg1, unsigned long arg2,
+			    unsigned long arg3)
+{
+	unsigned long raddr;
+	int rval;
+
+	switch(op) {
+	case 0:
+		/* sys_shmat(): attach a shared memory area */
+		rval = sys_shmat((int)arg1,(char *)arg2,(int)arg3,&raddr);
+		if(rval != 0)
+			return rval;
+		return (int) raddr;
+	case 1:
+		/* sys_shmctl(): modify shared memory area attr. */
+		return sys_shmctl((int)arg1,(int)arg2,(struct shmid_ds *)arg3);
+	case 2:
+		/* sys_shmdt(): detach a shared memory area */
+		return sys_shmdt((char *)arg1);
+	case 3:
+		/* sys_shmget(): get a shared memory area */
+		return sys_shmget((key_t)arg1,(int)arg2,(int)arg3);
+	default:
+		return -EINVAL;
+	}
+}

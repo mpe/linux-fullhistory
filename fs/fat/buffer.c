@@ -16,9 +16,11 @@ struct buffer_head *fat_bread (
 {
 	struct buffer_head *ret = NULL;
 	if (sb->s_blocksize == 512){
-		ret = bread (sb->s_dev,block,512);
+/*		ret = bread (sb->s_dev,block,512); */
+		ret = breada (sb->s_dev,block,512,0,18*1024); 
 	}else{
-		struct buffer_head *real = bread (sb->s_dev,block>>1,1024);
+/*		struct buffer_head *real = bread (sb->s_dev,block>>1,1024); */
+		struct buffer_head *real = breada (sb->s_dev,block>>1,1024,0,18*1024); 
 		if (real != NULL){
 			ret = (struct buffer_head *)kmalloc (sizeof(struct buffer_head)
 				,GFP_KERNEL);

@@ -28,10 +28,15 @@ is no longer used, new command line parameters exist, and the behavior
 of the "rdev -r" or "ramsize" (usually a symbolic link to "rdev")
 command has changed.
 
-The old "ramdisk=<ram_size>" is now obsolete. The kernel will ignore
-such old commands, and thus they will be passed on through to the init
-program, which will then complain. You should remove any of these old
-style commands from config files such as "/etc/lilo.config".
+Also, the new ramdisk supports up to 16 ramdisks out of the box, and can
+be reconfigured in rd.c to support up to 255 ramdisks.  To use multiple
+ramdisk support with your system, run 'mknod /dev/ramX b 1 X' and chmod
+(to change it's permissions) it to your liking.  The default /dev/ram(disk)
+uses minor #1, so start with ram2 and go from there.
+
+The old "ramdisk=<ram_size>" has been changed to "ramdisk_size=<ram_size>"
+to make it clearer.  The original "ramdisk=<ram_size>" has been kept around
+for compatiblity reasons, but it will probably be removed in 2.1.x.
 
 The new ramdisk also has the ability to load compressed ramdisk images,
 allowing one to squeeze more programs onto an average installation or 
@@ -92,6 +97,11 @@ two floppy configuration, you will need the chance to switch disks,
 and thus "prompt_ramdisk=1" can be used. Since this is the default 
 value, it doesn't really need to be specified.
 
+	ramdisk_size=N
+	==============
+
+This parameter tells the ramdisk driver to set up ramdisks of Nk size.  The
+default is 4096 (4MB). 
 
 3) Using "rdev -r" With New Kernels
 -----------------------------------

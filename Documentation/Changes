@@ -2,9 +2,9 @@ This document contains a list of the latest releases of the most
 important packages for Linux as well as instructions for newcomers to
 the 1.3.x series of kernels.
 
-Last updated: Apr 17, 1996.
-Authors: Alessandro Sigala (ssigala@globalnet.it) and Chris Ricker
-(gt1355b@prism.gatech.edu).
+Last updated: Apr 27, 1996.
+Author: Chris Ricker (gt1355b@prism.gatech.edu), based on the original by
+Alessandro Sigala (ssigala@globalnet.it.
 
 Note:  Due to time constraints, Alessandro is getting out of the Changes
 business and I'll be picking up the job.  Be gentle while I get my feet
@@ -14,11 +14,11 @@ Current Releases
 ****************
 
 - Kernel modules	 Stable: 1.3.57, Exp: 1.3.69f
-- PPP daemon		 Stable: 2.2.0e, Exp: 2.2.0f-BETA6
+- PPP daemon		 Stable: 2.2.0f
 - Dynamic linker (ld.so) 1.7.14
 - GNU CC		 2.7.2
 - Binutils		 2.6.0.12
-- Linux C Library	 Stable:  5.2.18, Exp:  5.3.9, Alpha:  5.3.11
+- Linux C Library	 Stable:  5.2.18, Exp:  5.3.9, Alpha:  5.3.12
 - Linux C++ Library	 2.7.1.4
 - Termcap		 2.0.8
 - Procps		 0.99a
@@ -45,13 +45,17 @@ PPP daemon and utilities
 ========================
 
    To use the PPP protocol with the 1.3.x linux kernel, you need to
-upgrade the PPP package to version 2.2.0e or the experimental 2.2.0f.
+upgrade the PPP package to version 2.2.0f.
 
 Procps utilities
 ================
 
    In the latest 1.3.x kernel releases the /proc filesystem structure
-was changed, so you need to upgrade the Procps package to version 0.99a.
+was changed, so you need to upgrade the Procps package to version
+0.99a.  In the very latest kernels, /proc has changed again.  There's
+not yet an officially updated version of procps, so make due with
+0.99a; you might want to look for one of the patches floating around to
+update 0.99a for use with 1.3.94 and later kernels.
 
 Installation notes
 ******************
@@ -82,6 +86,27 @@ this bug.  GNU make 3.xx is one of them.  To fix that you need to patch
 and recompile those programs (a patch for make is included in the file
 `release.libc-.5.3.9', and the address to obtain a precompiled binary
 is at the end of this file).
+
+   Also, the libc-5.3.x line has a known security hole relating to
+rlogin.  Unless you really need to upgrade for some reason, just stick
+with 5.2.18 for now.
+
+   If you're getting an error message that is something to the effect of
+
+   `fcntl_setlk() called by process 123 with broken flock() emulation'
+
+   then you need to upgrade to libc-5.2.18 as well.  A proper (in other
+words, BSD-style ;-) flock system call was added in 1.3.x, and older
+libc's will now give this error.  It doesn't *really* matter, so you
+can just ignore it.  If it really annoys you, upgrade libc (and
+recompile any static binaries you might have that are linked against
+the old libc).  If you're feeling lazy, just comment out
+
+   `                printk(KERN_WARNING
+"fcntl_setlk() called by process %d with broken flock()
+  emulation\n",                        current->pid);'
+
+   in linux/fs/locks.c and recompile.
 
 The Termcap Library
 ===================
@@ -152,9 +177,8 @@ PPP driver
 ==========
 
    You need to be running a pppd from ppp-2.2.0.tar.gz or greater.  The
-latest stable release is 2.2.0e and is available at
-ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/ppp-2.2.0e.tar.gz,
-along with a patch necessary to make it compile.
+latest stable release is 2.2.0f and is available at
+ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/ppp/ppp-2.2.0f.tar.gz.
 
 Named pipes
 ===========
@@ -167,6 +191,16 @@ your computer shuts down fine but "INIT: error reading initrequest" or
 words to that effect scroll across your screen hundreds of times.  To
 fix, upgrade to
 ftp://ftp.cistron.nl/pub/people/miquels/debian/sysvinit-2.60.tar.gz.
+
+   If you're trying to run NCSA httpd, you have to set pre-spawning of
+daemons to zero, as it incorrectly assumes SunOS behavior.  Some people
+have said that the Apache httpd has problems with the new named pipes,
+but I've never noticed any.
+
+   The new named pipe behavior also causes problems with Hylafax.  If
+you're running the hylafax daemon, it will just keep eating up CPU time
+until you have no idle time free.  I'm not currently aware of any
+patches that eliminate this behavior.
 
 Uugetty
 =======
@@ -283,6 +317,25 @@ ftp://ftp.funet.fi/pub/Linux/PEOPLE/Linus/subsystems/quota/all.tar.gz.
 This will compile just fine after you copy its mntent.h over to
 /usr/include/mntent.h.
 
+APM support
+===========
+
+   Advanced Power Management (APM) support has been added to the kernel
+as well.  APM, which is primarily of use in laptops, provides access to
+battery status information and may help to conserve battery power.  The
+support files can be found in
+ftp://tsx-11.mit.edu/pub/linux/packages/laptops/apm/apmd-2.2.tar.gz
+
+iBCS and Dosemu
+===============
+
+   For a version of iBCS that works with 1.3.x kernels, grab
+ftp://tsx-11.mit.edu/pub/linux/BETA/ibcs2/ibcs-1.3-960404-ALPHA.tar.gz
+
+   For a version of Dosemu that works (well, at least as well as DOS
+ever works ;-), get
+ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/Development/dosemu-0.63.1.8.tgz.
+
 Please send info about any other packages that 1.3.x "broke" or about
 any new features of 1.3.x that require extra packages for use to Chris
 Ricker (gt1355b@prism.gatech.edu).
@@ -333,7 +386,7 @@ ftp://sunsite.unc.edu/pub/Linux/devel/make/make-3.74.patched.tar.gz
 Patched make binary:
 ftp://sunsite.unc.edu/pub/Linux/devel/make/make-3.74-direntfix-elf.tgz
 
-The 5.2.18 release:
+The stable 5.2.18 release:
 ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.2.18.bin.tar.gz
 Installation notes:
 ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.2.18
@@ -367,9 +420,7 @@ PPP Daemon and utilities
 ========================
 
 The latest public release:
-ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/ppp-2.2.0e.tar.gz
-The latest experimental release:
-ftp://ftp.sii.com/pub/linux/ppp-2.2/ppp-2.2.0f.BETA6.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/ppp/ppp-2.2.0f.tar.gz
 
 Procps utilities
 ================
@@ -386,8 +437,6 @@ SysVinit utilities
 ==================
 
 At the time of writing:
-ftp://sunsite.unc.edu/pub/Linux/Incoming/sysvinit-2.60.tar.gz
-Next location:
 ftp://sunsite.unc.edu/pub/Linux/system/Daemons/init/sysvinit-2.60.tar.gz
 
 Util-linux

@@ -269,6 +269,7 @@ struct task_struct {
 #define PF_EXITING	0x00000200	/* getting shut down */
 
 #define PF_USEDFPU	0x00100000	/* Process used the FPU this quantum (SMP only) */
+#define PF_DTRACE	0x00200000	/* delayed trace (used on m68k) */
 
 /*
  * Limit the stack by to some sane default: root can always
@@ -344,6 +345,7 @@ extern void wake_up_interruptible(struct wait_queue ** p);
 extern void wake_up_process(struct task_struct * tsk);
 
 extern void notify_parent(struct task_struct * tsk);
+extern void force_sig(unsigned long sig,struct task_struct * p);
 extern int send_sig(unsigned long sig,struct task_struct * p,int priv);
 extern int in_group_p(gid_t grp);
 
@@ -373,6 +375,7 @@ extern void copy_thread(int, unsigned long, unsigned long, struct task_struct *,
 extern void flush_thread(void);
 extern void exit_thread(void);
 
+extern void exit_mm(struct task_struct *);
 extern void exit_fs(struct task_struct *);
 extern void exit_files(struct task_struct *);
 extern void exit_sighand(struct task_struct *);

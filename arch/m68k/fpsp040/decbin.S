@@ -63,7 +63,7 @@
 |	in an inex2 exception.  If so, set inex1 in the fpsr and 
 |	check if the inex1 exception is enabled.  If so, set d7 upper
 |	word to $0100.  This will signal unimp.sa that an enabled inex1
-|	exception occured.  Unimp will fix the stack.
+|	exception occurred.  Unimp will fix the stack.
 |	
 
 |		Copyright (C) Motorola, Inc. 1990
@@ -204,7 +204,7 @@ calc_m:
 |  Get the rest of the mantissa.
 |
 loadlw:
-	movel	(%a0,%d1.L*4),%d4	|load mantissa lonqword into d4
+	movel	(%a0,%d1.L*4),%d4	|load mantissa longword into d4
 	moveql	#FSTRT,%d3	|counter to pick up digits
 	moveql	#FNIBS,%d2	|reset number of digits per a0 ptr
 md2b:
@@ -245,21 +245,21 @@ m_sign:
 |
 |  1. Branch on the sign of the adjusted exponent.
 |  2p.(positive exp)
-|   2. Check M16 and the digits in lwords 2 and 3 in decending order.
+|   2. Check M16 and the digits in lwords 2 and 3 in descending order.
 |   3. Add one for each zero encountered until a non-zero digit.
 |   4. Subtract the count from the exp.
 |   5. Check if the exp has crossed zero in #3 above; make the exp abs
 |	   and set SE.
 |	6. Multiply the mantissa by 10**count.
 |  2n.(negative exp)
-|   2. Check the digits in lwords 3 and 2 in decending order.
+|   2. Check the digits in lwords 3 and 2 in descending order.
 |   3. Add one for each zero encountered until a non-zero digit.
 |   4. Add the count to the exp.
 |   5. Check if the exp has crossed zero in #3 above; clear SE.
 |   6. Divide the mantissa by 10**count.
 |
 |  *Why 27?  If the adjusted exponent is within -28 < expA < 28, than
-|   any adjustment due to append/strip zeros will drive the resultane
+|   any adjustment due to append/strip zeros will drive the resultant
 |   exponent towards zero.  Since all pwrten constants with a power
 |   of 27 or less are exact, there is no need to use this routine to
 |   attempt to lessen the resultant exponent.

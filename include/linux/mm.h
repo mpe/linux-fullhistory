@@ -4,14 +4,15 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+
+#ifdef __KERNEL__
+
 #include <linux/string.h>
 
 extern unsigned long high_memory;
 
 #include <asm/page.h>
 #include <asm/atomic.h>
-
-#ifdef __KERNEL__
 
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1

@@ -32,6 +32,9 @@
  * 	Default ramdisk size changed to 2.88MB
  *
  *  Added initrd: Werner Almesberger & Hans Lermen, Feb '96
+ *
+ * 4/25/96 : Made ramdisk size a parameter (default is now 4MB) 
+ *		- Chad Page
  */
 
 #include <linux/config.h>
@@ -60,9 +63,8 @@ extern void wait_for_keypress(void);
 #define MAJOR_NR RAMDISK_MAJOR
 #include <linux/blk.h>
 
-/* These *should* be defined as parameters */
-#define NUM_RAMDISKS 8
-#define RD_DEFAULTSIZE	2880	/* 2.88 MB */
+/* The ramdisk size is now a parameter */
+#define NUM_RAMDISKS 16		/* This cannot be overridden (yet) */ 
 
 #ifndef MODULE
 /* We don't have to load ramdisks or gunzip them in a module... */
@@ -92,6 +94,7 @@ static int rd_blocksizes[NUM_RAMDISKS];
 int rd_doload = 0;		/* 1 = load ramdisk, 0 = don't load */
 int rd_prompt = 1;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 int rd_image_start = 0;		/* starting block # of image */
+int rd_size = 4096;		/* Size of the ramdisks */
 #ifdef CONFIG_BLK_DEV_INITRD
 unsigned long initrd_start,initrd_end;
 int mount_initrd = 1;		/* zero if initrd should not be mounted */
@@ -272,11 +275,14 @@ int rd_init(void)
 	blk_dev[MAJOR_NR].request_fn = &rd_request;
 
 	for (i = 0; i < NUM_RAMDISKS; i++) {
-		rd_length[i] = (RD_DEFAULTSIZE * 1024);
+		rd_length[i] = (rd_size * 1024);
 		rd_blocksizes[i] = 1024;
 	}
 
 	blksize_size[MAJOR_NR] = rd_blocksizes;
+
+	printk("Ramdisk driver initialized : %d ramdisks of %dK size\n",
+							NUM_RAMDISKS, rd_size);
 
 	return 0;
 }

@@ -1,6 +1,6 @@
 #ifndef A2091_H
 
-/* $Id: a2091.h,v 1.3 1996/03/12 20:41:46 root Exp root $
+/* $Id: a2091.h,v 1.4 1996/04/25 20:57:48 root Exp root $
  *
  * Header file for the Commodore A2091 Zorro II SCSI controller for Linux
  *
@@ -14,7 +14,7 @@ int a2091_detect(Scsi_Host_Template *);
 const char *wd33c93_info(void);
 int wd33c93_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int wd33c93_abort(Scsi_Cmnd *);
-int wd33c93_reset(Scsi_Cmnd *);
+int wd33c93_reset(Scsi_Cmnd *, unsigned int);
 
 #ifndef NULL
 #define NULL 0

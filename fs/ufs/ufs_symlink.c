@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_symlink.c,v 1.1 1996/04/21 14:41:23 davem Exp $
+ * $Id: ufs_symlink.c,v 1.3 1996/04/25 09:12:11 davem Exp $
  *
  */
 
@@ -15,13 +15,15 @@
 
 #include <asm/segment.h>
 
+extern int ufs_bmap (struct inode *, int);
+
 static int
 ufs_readlink(struct inode * inode, char * buffer, int buflen)
 {
 	unsigned long int block;
 	struct buffer_head * bh = NULL;
 	char * link;
-	int i, err;
+	int i;
 	char c;
 
 	if (inode->i_sb->u.ufs_sb.s_flags & (UFS_DEBUG|UFS_DEBUG_LINKS)) {
@@ -64,8 +66,6 @@ ufs_readlink(struct inode * inode, char * buffer, int buflen)
 	if (bh)
 		brelse (bh);
 	return i;
-
-	return(0);
 }
 
 /*

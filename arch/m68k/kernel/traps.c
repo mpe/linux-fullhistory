@@ -261,7 +261,7 @@ static void do_040writeback (unsigned short ssw,
 	/*
 	 * No special handling for the second writeback anymore.
 	 * It misinterpreted the misaligned status sometimes.
-	 * This way an extra pgae-fault may be caused (Martin Apel).
+	 * This way an extra page-fault may be caused (Martin Apel).
 	 */
 
 	mmusr = probe040 (1, wbs & WBTM_040,  wba);

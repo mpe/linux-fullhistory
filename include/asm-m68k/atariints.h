@@ -4,7 +4,7 @@
 ** Copyright 1994 by Bj”rn Brauel
 **
 ** 5/2/94 Roman Hodek:
-**   TT interupt definitions added.
+**   TT interrupt definitions added.
 **
 ** 12/02/96: (Roman)
 **   Adapted to new int handling scheme (see ataints.c); revised numbering
@@ -45,7 +45,7 @@
 #define IRQ_TYPE_FAST     1
 #define IRQ_TYPE_PRIO     2
 
-#define	IRQ_SUPRIOUS      (IRQ_MACHSPEC | 0)
+#define	IRQ_SPURIOUS      (IRQ_MACHSPEC | 0)
 
 /* auto-vector interrupts */
 #define IRQ_AUTO_1        (IRQ_MACHSPEC | 1)

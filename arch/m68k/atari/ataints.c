@@ -5,7 +5,7 @@
  *  Added support for TT interrupts; setup for TT SCU (may someone has
  *  twiddled there and we won't get the right interrupts :-()
  *
- *  Major change: The device-independant code in m68k/ints.c didn't know
+ *  Major change: The device-independent code in m68k/ints.c didn't know
  *  about non-autovec ints yet. It hardcoded the number of possible ints to
  *  7 (IRQ1...IRQ7). But the Atari has lots of non-autovec ints! I made the
  *  number of possible ints a constant defined in interrupt.h, which is
@@ -321,7 +321,7 @@ SYMBOL_NAME_STR(falcon_hblhandler) ":
 	movel	%sp@+,%d0
 	rte");
 
-/* Defined in entry.S; only increments 'num_suprious' */
+/* Defined in entry.S; only increments 'num_spurious' */
 asmlinkage void bad_interrupt(void);
 
 extern void atari_microwire_cmd( int cmd );

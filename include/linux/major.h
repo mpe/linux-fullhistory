@@ -33,6 +33,7 @@
 #define XT_DISK_MAJOR	13
 #define SOUND_MAJOR	14
 #define CDU31A_CDROM_MAJOR 15
+#define JOYSTICK_MAJOR	15
 #define GOLDSTAR_CDROM_MAJOR 16
 #define OPTICS_CDROM_MAJOR 17
 #define SANYO_CDROM_MAJOR 18
@@ -54,17 +55,20 @@
 #define MATSUSHITA_CDROM3_MAJOR 27
 #define MATSUSHITA_CDROM4_MAJOR 28
 #define STL_SIOMEMMAJOR 28
+#define ACSI_MAJOR	28
 #define AZTECH_CDROM_MAJOR 29
-#define GRAPHDEV_MAJOR 29	/* SparcLinux /dev/fb */
+#define GRAPHDEV_MAJOR	29	/* SparcLinux & Linux/68k /dev/fb */
 #define CM206_CDROM_MAJOR 32
 #define IDE2_MAJOR	33
 #define IDE3_MAJOR	34
 #define NETLINK_MAJOR	36
 #define IDETAPE_MAJOR	37
+#define Z2RAM_MAJOR	37
 #define RISCOM8_NORMAL_MAJOR 48
 #define RISCOM8_CALLOUT_MAJOR 49
 #define APBLOCK_MAJOR   60   /* AP1000 Block device */
 #define DDV_MAJOR       61   /* AP1000 DDV block device */
+
 /*
  * Tests for SCSI devices.
  */

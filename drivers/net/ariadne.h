@@ -122,8 +122,8 @@ struct Am79C960 {
 #define CSR61		0x3d00	/*   Previous Transmit Descriptor Address */
 #define CSR62		0x3e00	/*   Previous Transmit Status and Byte Count */
 #define CSR63		0x3f00	/*   Previous Transmit Status and Byte Count */
-#define CSR64		0x4000	/*   Next Transmit Buffer Addres */
-#define CSR65		0x4100	/*   Next Transmit Buffer Addres */
+#define CSR64		0x4000	/*   Next Transmit Buffer Address */
+#define CSR65		0x4100	/*   Next Transmit Buffer Address */
 #define CSR66		0x4200	/*   Next Transmit Status and Byte Count */
 #define CSR67		0x4300	/*   Next Transmit Status and Byte Count */
 #define CSR68		0x4400	/*   Transmit Status Temporary Storage */

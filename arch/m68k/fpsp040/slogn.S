@@ -383,7 +383,7 @@ LP1CONT1:
 	fmulx	LOGOF2,%fp1	| ...GET K*LOG2 WHILE FP0 IS NOT READY
 	fmovex	%fp0,%fp2
 	fmulx	%fp2,%fp2		| ...FP2 IS V=U*U
-	fmovex	%fp1,KLOG2(%a6)	| ...PUT K*LOG2 IN MEMEORY, FREE FP1
+	fmovex	%fp1,KLOG2(%a6)	| ...PUT K*LOG2 IN MEMORY, FREE FP1
 
 |--LOG(1+U) IS APPROXIMATED BY
 |--U + V*(A1+U*(A2+U*(A3+U*(A4+U*(A5+U*A6))))) WHICH IS

@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.2 1995/11/25 02:31:40 davem Exp $ */
+/* $Id: elf.h,v 1.3 1996/04/22 15:48:48 miguel Exp $ */
 #ifndef __ASMSPARC_ELF_H
 #define __ASMSPARC_ELF_H
 
@@ -15,4 +15,6 @@ typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 
 typedef unsigned long elf_fpregset_t;
 
+#define elf_check_arch(x) ((x) == EM_SPARC)
+#define ELF_ARCH EM_SPARC
 #endif

@@ -180,7 +180,7 @@ struct hardlink_front
   LONG primary_type;
   ULONG own_key;
   LONG unused[3];
-  ULONG checkksum;
+  ULONG checksum;
 };
 
 struct hardlink_end

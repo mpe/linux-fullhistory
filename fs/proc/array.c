@@ -470,6 +470,11 @@ static unsigned long get_wchan(struct task_struct *p)
 				 + (long)&((struct pt_regs *)0)->reg)
 # define KSTK_EIP(tsk)	(*(unsigned long *)(tsk->kernel_stack_page + PT_REG(pc)))
 # define KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->tss.usp)
+#elif defined(__sparc__)
+# define PT_REG(reg)            (PAGE_SIZE - sizeof(struct pt_regs)     \
+                                 + (long)&((struct pt_regs *)0)->reg)
+# define KSTK_EIP(tsk)  (*(unsigned long *)(tsk->kernel_stack_page + PT_REG(pc)))
+# define KSTK_ESP(tsk)  (*(unsigned long *)(tsk->kernel_stack_page + PT_REG(u_regs[UREG_FP])))
 #endif
 
 /* Gcc optimizes away "strlen(x)" for constant x */
@@ -607,7 +612,7 @@ static inline char * task_sig(struct task_struct *p, char *buffer)
 			bit <<= 1;
 			action++;
 		}
-		
+
 		buffer += sprintf(buffer,
 			"SigIgn:\t%08lx\n"
 			"SigCgt:\t%08lx\n",

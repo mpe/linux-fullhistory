@@ -3,7 +3,7 @@
 |
 | Modified:
 |	8/16/90	chinds	The table was constructed to use only one level
-|			of indirection in do_func for monoadic
+|			of indirection in do_func for monadic
 |			functions.  Dyadic functions require two
 |			levels, and the tables are still contained
 |			in do_func.  The table is arranged for 

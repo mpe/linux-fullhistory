@@ -41,6 +41,22 @@
 
 #include "hosts.h"
 
+#ifdef CONFIG_A3000_SCSI
+#include "a3000.h"
+#endif
+
+#ifdef CONFIG_A2091_SCSI
+#include "a2091.h"
+#endif
+
+#ifdef CONFIG_GVP11_SCSI
+#include "gvp11.h"
+#endif
+
+#ifdef CONFIG_ATARI_SCSI
+#include "atari_scsi.h"
+#endif
+
 #ifdef CONFIG_SCSI_ADVANSYS
 #include "advansys.h"
 #endif
@@ -147,7 +163,7 @@
 
 
 /*
-static const char RCSid[] = "$Header: /vger/u4/cvs/linux/drivers/scsi/hosts.c,v 1.10 1996/04/16 08:09:36 davem Exp $";
+static const char RCSid[] = "$Header: /usr/src/linux-1.3.95/drivers/scsi/RCS/hosts.c,v 1.7 1996/04/25 22:21:56 root Exp root $";
 */
 
 /*
@@ -179,6 +195,24 @@ Scsi_Host_Template * scsi_hosts = NULL;
 
 static Scsi_Host_Template builtin_scsi_hosts[] =
 {
+#ifdef CONFIG_AMIGA
+#ifdef CONFIG_A3000_SCSI
+	A3000_SCSI,
+#endif
+#ifdef CONFIG_A2091_SCSI
+	A2091_SCSI,
+#endif
+#ifdef CONFIG_GVP11_SCSI
+	GVP11_SCSI,
+#endif
+#endif
+
+#ifdef CONFIG_ATARI
+#ifdef CONFIG_ATARI_SCSI
+	ATARI_SCSI,
+#endif
+#endif
+
 #ifdef CONFIG_SCSI_ADVANSYS
 	ADVANSYS,
 #endif

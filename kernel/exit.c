@@ -49,6 +49,26 @@ static inline void generate(unsigned long sig, struct task_struct * p)
 		wake_up_process(p);
 }
 
+/*
+ * Force a signal that the process can't ignore: if necessary
+ * we unblock the signal and change any SIG_IGN to SIG_DFL.
+ */
+void force_sig(unsigned long sig, struct task_struct * p)
+{
+	sig--;
+	if (p->sig) {
+		unsigned long mask = 1UL << sig;
+		struct sigaction *sa = p->sig->action + sig;
+		p->signal |= mask;
+		p->blocked &= ~mask;
+		if (sa->sa_handler == SIG_IGN)
+			sa->sa_handler = SIG_DFL;
+		if (p->state == TASK_INTERRUPTIBLE)
+			wake_up_process(p);
+	}
+}
+		
+
 int send_sig(unsigned long sig,struct task_struct * p,int priv)
 {
 	if (!p || sig > 32)
@@ -428,17 +448,17 @@ void exit_sighand(struct task_struct *tsk)
 	__exit_sighand(tsk);
 }
 
-static inline void exit_mm(void)
+static inline void __exit_mm(struct task_struct * tsk)
 {
-	struct mm_struct * mm = current->mm;
+	struct mm_struct * mm = tsk->mm;
 
 	/* Set us up to use the kernel mm state */
 	if (mm != &init_mm) {
 		flush_cache_mm(mm);
 		flush_tlb_mm(mm);
-		current->mm = &init_mm;
-		current->swappable = 0;
-		SET_PAGE_DIR(current, swapper_pg_dir);
+		tsk->mm = &init_mm;
+		tsk->swappable = 0;
+		SET_PAGE_DIR(tsk, swapper_pg_dir);
 
 		/* free the old state - not used any more */
 		if (!--mm->count) {
@@ -447,6 +467,11 @@ static inline void exit_mm(void)
 			kfree(mm);
 		}
 	}
+}
+
+void exit_mm(struct task_struct *tsk)
+{
+	__exit_mm(tsk);
 }
 
 /* 
@@ -528,7 +553,7 @@ fake_volatile:
 	del_timer(&current->real_timer);
 	sem_exit();
 	kerneld_exit();
-	exit_mm();
+	__exit_mm(current);
 	__exit_files(current);
 	__exit_fs(current);
 	__exit_sighand(current);

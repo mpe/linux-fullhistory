@@ -1,4 +1,4 @@
-/* $Id: memory.c,v 1.6 1996/04/08 09:02:27 davem Exp $
+/* $Id: memory.c,v 1.7 1996/04/25 06:09:46 davem Exp $
  * memory.c: Prom routine for acquiring various bits of information
  *           about RAM on the machine, both virtual and physical.
  *

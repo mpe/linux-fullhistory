@@ -1,9 +1,8 @@
-#ifndef WD33C93_H
-#define WD33C93_H
-
 /*
  *    wd33c93.h -  Linux device driver definitions for the
  *                 Commodore Amiga A2091/590 SCSI controller card
+ *
+ *    IMPORTANT: This file is for version 1.21 - 20/Mar/1996
  *
  * Copyright (c) 1996 John Shifflett, GeoLog Consulting
  *    john@geolog.com
@@ -21,6 +20,8 @@
  *
  */
 
+#ifndef WD33C93_H
+#define WD33C93_H
 
 
 #define uchar unsigned char
@@ -151,7 +152,7 @@
 #define CTRL_DMA     0x80
 
    /* Timeout Period register */
-#define TIMEOUT_PERIOD_VALUE  20    /* results in 200 ms. */
+#define TIMEOUT_PERIOD_VALUE  20    /* 20 = 200 ms */
 
    /* Synchronous Transfer Register */
 #define STR_FSS      0x80
@@ -193,18 +194,23 @@ struct sx_period {
    uchar          reg_value;
    };
 
+/* FEF: defines for hostdata->dma_buffer_pool */
+
+#define BUF_CHIP_ALLOCED 0
+#define BUF_SCSI_ALLOCED 1
 
 struct WD33C93_hostdata {
     struct Scsi_Host *next;
     wd33c93_regs     *regp;
     uchar            clock_freq;
     uchar            chip;             /* what kind of wd33c93? */
-    uchar            microcode;        /* microcode rev if 'B' */
+    uchar            microcode;        /* microcode rev */
     int              dma_dir;          /* data transfer dir. */
     dma_setup_t      dma_setup;
     dma_stop_t       dma_stop;
     uchar            *dma_bounce_buffer;
     unsigned int     dma_bounce_len;
+    uchar            dma_buffer_pool;  /* FEF: buffer from chip_ram? */
     volatile uchar   busy[8];          /* index = target, bit = lun */
     volatile Scsi_Cmnd *input_Q;       /* commands waiting to be started */
     volatile Scsi_Cmnd *selecting;     /* trying to select this command */
@@ -213,13 +219,19 @@ struct WD33C93_hostdata {
     uchar            state;            /* what we are currently doing */
     uchar            dma;              /* current state of DMA (on/off) */
     uchar            level2;           /* extent to which Level-2 commands are used */
+    uchar            disconnect;       /* disconnect/reselect policy */
     unsigned int     args;             /* set from command-line argument */
     uchar            incoming_msg[8];  /* filled during message_in phase */
     int              incoming_ptr;     /* mainly used with EXTENDED messages */
     uchar            outgoing_msg[8];  /* send this during next message_out */
     int              outgoing_len;     /* length of outgoing message */
+    unsigned int     default_sx_per;   /* default transfer period for SCSI bus */
     uchar            sync_xfer[8];     /* sync_xfer reg settings per target */
     uchar            sync_stat[8];     /* status of sync negotiation per target */
+    uchar            no_sync;          /* bitmask: don't do sync on these targets */
+#if 0
+    uchar            proc;             /* bitmask: what's in proc output */
+#endif
     };
 
 
@@ -245,34 +257,31 @@ struct WD33C93_hostdata {
 #define D_DMA_RUNNING      1
 
 /* defines for hostdata->level2 */
-/* NOTE: only the first 3 are implemented so far - having trouble
- * when more than 1 device is reading/writing at the same time...
- */
+/* NOTE: only the first 3 are implemented so far */
 
-#define L2_NONE      1  /* no combination commands - we get lots of ints */
+/*  (The first 8 bits are reserved for compatibility. They function
 #define L2_SELECT    2  /* start with SEL_ATN_XFER, but never resume it */
 #define L2_BASIC     3  /* resume after STATUS ints & RDP messages */
 #define L2_DATA      4  /* resume after DATA_IN/OUT ints */
 #define L2_MOST      5  /* resume after anything except a RESELECT int */
 #define L2_RESELECT  6  /* resume after everything, including RESELECT ints */
 #define L2_ALL       7  /* always resume */
-#define L2_DEFAULT   L2_BASIC
+
+/* defines for hostdata->disconnect */
+
+#define DIS_NEVER    0
+#define DIS_ADAPTIVE 1
+#define DIS_ALWAYS   2
 
 /* defines for hostdata->args */
-/*  (The first 8 bits are reserved for compatability. They function
- *   as they did in the old driver - note that turning off sync_xfer
- *   on a target affects all LUNs at that SCSI id.)
- */
 
-#define A_LEVEL2_0            1<<8
-#define A_LEVEL2_1            1<<9
-#define A_LEVEL2_2            1<<10
-#define A_NO_DISCONNECT       1<<11
-
-#define DB_QUEUE_COMMAND      1<<12
-#define DB_EXECUTE            1<<13
-#define DB_INTR               1<<14
-#define DB_TRANSFER_DATA      1<<15
+#define DB_TEST1              1<<0
+#define DB_TEST2              1<<1
+#define DB_QUEUE_COMMAND      1<<2
+#define DB_EXECUTE            1<<3
+#define DB_INTR               1<<4
+#define DB_TRANSFER           1<<5
+#define DB_MASK               0x3f
 
 /* defines for hostdata->sync_stat[] */
 
@@ -281,12 +290,33 @@ struct WD33C93_hostdata {
 #define SS_WAITING   2
 #define SS_SET       3
 
+/* defines for hostdata->proc */
+
+#define PR_VERSION   1<<0
+#define PR_INFO      1<<1
+#define PR_TOTALS    1<<2
+#define PR_CONNECTED 1<<3
+#define PR_INPUTQ    1<<4
+#define PR_DISCQ     1<<5
+#define PR_TEST      1<<6
+#define PR_STOP      1<<7
+
 
 void wd33c93_init (struct Scsi_Host *instance, wd33c93_regs *regs,
          dma_setup_t setup, dma_stop_t stop, int clock_freq);
 int wd33c93_abort (Scsi_Cmnd *cmd);
-int wd33c93_reset (Scsi_Cmnd *);
 int wd33c93_queuecommand (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *));
 void wd33c93_intr (struct Scsi_Host *instance);
+int wd33c93_proc_info(char *, char **, off_t, int, int, int);
+
+#if LINUX_VERSION_CODE >= 0x010300
+int wd33c93_reset (Scsi_Cmnd *, unsigned int);
+#else
+int wd33c93_reset (Scsi_Cmnd *);
+#endif
+
+#if 0
+struct proc_dir_entry proc_scsi_wd33c93;
+#endif
 
 #endif /* WD33C93_H */

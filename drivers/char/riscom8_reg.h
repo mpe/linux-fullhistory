@@ -109,7 +109,7 @@
 /* Channel Address Register (R/W) */
 
 #define CAR_CHAN        0x07    /* Channel Number Mask                     */
-#define CAR_A7          0x08    /* A7 Address Extention (unused)           */
+#define CAR_A7          0x08    /* A7 Address Extension (unused)           */
 
 
 /* Receive Character Status Register (R/O) */

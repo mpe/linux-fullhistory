@@ -9,7 +9,7 @@
 |	Input: Double-extended number X in location pointed to
 |		by address register a0.
 |
-|	Output: The funtion value sin(X) or cos(X) returned in Fp0 if SIN or
+|	Output: The function value sin(X) or cos(X) returned in Fp0 if SIN or
 |		COS is requested. Otherwise, for SINCOS, sin(X) is returned
 |		in Fp0, and cos(X) is returned in Fp1.
 |
@@ -32,7 +32,7 @@
 |	2. If |X| >= 15Pi or |X| < 2**(-40), go to 7.
 |
 |	3. Decompose X as X = N(Pi/2) + r where |r| <= Pi/4. Let
-|		k = N mod 4, so in particular, k = 0,1,2,or 3. Overwirte
+|		k = N mod 4, so in particular, k = 0,1,2,or 3. Overwrite
 |		k by k := k + AdjN.
 |
 |	4. If k is even, go to 6.
@@ -409,7 +409,7 @@ red_neg:
 
 |--ON ENTRY, FP0 IS X, ON RETURN, FP0 IS X REM PI/2, |X| <= PI/4.
 |--integer quotient will be stored in N
-|--Intermeditate remainder is 66-bit long; (R,r) in (FP0,FP1)
+|--Intermediate remainder is 66-bit long; (R,r) in (FP0,FP1)
 
 LOOP:
 	fmovex		%fp0,INARG(%a6)	| ...+-2**K * F, 1 <= F < 2

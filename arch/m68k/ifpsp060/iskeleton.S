@@ -71,7 +71,7 @@ _060_isp_done:
 | This is an alternate exit point for the Unimplemented Integer
 | Instruction exception handler. If the instruction was a "chk2"
 | and the operand was out of bounds, then _isp_unimp() creates
-| a CHK exception stack frame from the Unimplemented Integer Instrcution
+| a CHK exception stack frame from the Unimplemented Integer Instruction
 | stack frame and branches to this routine.
 |
 	.global		_060_real_chk

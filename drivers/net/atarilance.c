@@ -219,7 +219,7 @@ struct lance_private {
 	struct lance_ioreg	*iobase;
 	struct lance_memory	*mem;
 	int					cur_rx, cur_tx;	/* The next free ring entry */
-	int					dirty_tx;		/* Ring entries to be freeed. */
+	int					dirty_tx;		/* Ring entries to be freed. */
 						/* copy function */
 	void				*(*memcpy_f)( void *, const void *, size_t );
 	struct enet_statistics stats;
@@ -303,7 +303,7 @@ struct lance_addr {
 #define CSR2	2		/* init block addr (high) */
 #define CSR3	3		/* misc */
 #define CSR8	8	  	/* address filter */
-#define CSR15	15		/* promiscous mode */
+#define CSR15	15		/* promiscuous mode */
 
 /* CSR0 */
 /* (R=readable, W=writeable, S=set on write, C=clear on write) */

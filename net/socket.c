@@ -1137,8 +1137,9 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if(msg_sys.msg_iovlen>MAX_IOVEC)
 		return -EINVAL;
 
-	err=verify_iovec(&msg_sys,iov,address, VERIFY_READ);
-	if(err<0)
+	/* This will also move the address data into kernel space */
+	err = verify_iovec(&msg_sys, iov, address, VERIFY_READ);
+	if (err < 0)
 		return err;
 	total_len=err;
 
@@ -1153,13 +1154,19 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 {
 	struct socket *sock;
 	struct file *file;
-	char address[MAX_SOCK_ADDR];
 	struct iovec iov[MAX_IOVEC];
 	struct msghdr msg_sys;
 	int err;
 	int total_len;
-	int addr_len;
 	int len;
+
+	/* kernel mode address */
+	char addr[MAX_SOCK_ADDR];
+	int addr_len;
+
+	/* user mode address pointers */
+	struct sockaddr *uaddr;
+	int *uaddr_len;
 	
 	if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 		return(-EBADF);
@@ -1172,9 +1179,17 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	memcpy_fromfs(&msg_sys,msg,sizeof(struct msghdr));
 	if(msg_sys.msg_iovlen>MAX_IOVEC)
 		return -EINVAL;
-	err=verify_iovec(&msg_sys,iov,address, VERIFY_WRITE);
+
+	/*
+	 * save the user-mode address (verify_iovec will change the
+	 * kernel msghdr to use the kernel address space)
+	 */
+	uaddr = msg_sys.msg_name;
+	uaddr_len = &msg->msg_namelen;
+	err=verify_iovec(&msg_sys,iov,addr, VERIFY_WRITE);
 	if(err<0)
 		return err;
+
 	total_len=err;
 	
 	if(sock->ops->recvmsg==NULL)
@@ -1182,11 +1197,12 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	len=sock->ops->recvmsg(sock, &msg_sys, total_len, (file->f_flags&O_NONBLOCK), flags, &addr_len);
 	if(len<0)
 		return len;
-	/*
-	 *	Fixme: writing actual length into original msghdr.
-	 */
-	if(msg_sys.msg_name!=NULL && (err=move_addr_to_user(address,addr_len, msg_sys.msg_name, &msg_sys.msg_namelen))<0)
-		return err;
+
+	if (uaddr != NULL) {
+		err = move_addr_to_user(addr, addr_len, uaddr, uaddr_len);
+		if (err)
+			return err;
+	}
 	return len;
 }
 

@@ -294,7 +294,7 @@ void affs_read_inode(struct inode * inode)
 		}
 
 		file_front = (struct file_front *) fh_data;
-		file_end = GET_END_PTR (struct file_end, fh_data, /* coincidendly the same as  dir_end */
+		file_end = GET_END_PTR (struct file_end, fh_data, /* coincidently the same as  dir_end */
 					AFFS_I2BSIZE (inode));
 
 		/* don't use bitmap data for mode, uid & gid of the rootblock */
@@ -305,7 +305,7 @@ void affs_read_inode(struct inode * inode)
 			inode->i_mode = S_IRWXUGO | S_IFDIR | S_ISVTX ;  /* drwxrwxrwt */
 			inode->i_nlink = 2; /* at least ..... */
 
-			inode->i_size = 0;  /* some differrent idea ? */
+			inode->i_size = 0;  /* some different idea ? */
 
 			inode->i_uid = 0;
 			inode->i_gid = 0;
@@ -340,7 +340,7 @@ void affs_read_inode(struct inode * inode)
 				     probably spend some time on this */
 					link_end = (struct hardlink_end *)file_end;
 					inode->i_ino = link_end->original;
-					inode->i_nlink += 2; /* It's hard to say whats correct */
+					inode->i_nlink += 2; /* It's hard to say what's correct */
 					brelse(bh);
 					link = 1;
 				break;

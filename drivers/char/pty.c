@@ -216,8 +216,9 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 	 */
 	if (tty->driver.subtype == PTY_TYPE_MASTER)
 		return 0;
-	add_wait_queue(&pty->open_wait, &wait);
 	retval = 0;
+#if PTY_SLAVE_WAITS_ON_OPEN
+	add_wait_queue(&pty->open_wait, &wait);
 	while (1) {
 		if (current->signal & ~current->blocked) {
 			retval = -ERESTARTSYS;
@@ -226,6 +227,7 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 		/*
 		 * Block until the master is open...
 		 */
+		current->state = TASK_INTERRUPTIBLE;
 		if (tty->link->count &&
 		    !test_bit(TTY_OTHER_CLOSED, &tty->flags))
 			break;
@@ -233,6 +235,10 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 	}
 	current->state = TASK_RUNNING;
 	remove_wait_queue(&pty->open_wait, &wait);
+#else
+	if (!tty->link->count || test_bit(TTY_OTHER_CLOSED, &tty->flags))
+		retval = -EPERM;
+#endif
 	return retval;
 }
 

@@ -347,8 +347,8 @@ first_alpha(const char *string, const char *exempt)
 	for (i = 0; i < strlen(string); i++) {
 		c = tolower(string[i]);
 
-		if (c == '(') ++in_paren;
-		if (c == ')') --in_paren;
+		if (strchr("<[(", c)) ++in_paren;
+		if (strchr(">])", c)) --in_paren;
 
 		if ((! in_paren) && isalpha(c) && 
 		     strchr(exempt, c) == 0)

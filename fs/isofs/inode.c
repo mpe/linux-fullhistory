@@ -25,6 +25,7 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 
+#define MULTI_VOLUME
 #ifdef LEAK_CHECK
 static int check_malloc = 0;
 static int check_bread = 0;
@@ -306,8 +307,10 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	if(high_sierra){
 	  rootp = (struct iso_directory_record *) h_pri->root_directory_record;
 	  if (isonum_723 (h_pri->volume_set_size) != 1) {
+#ifndef  MULTI_VOLUME 
 	    printk("Multi-volume disks not (yet) supported.\n");
 	    goto out;
+#endif
 	  };
 	  s->u.isofs_sb.s_nzones = isonum_733 (h_pri->volume_space_size);
 	  s->u.isofs_sb.s_log_zone_size = isonum_723 (h_pri->logical_block_size);
@@ -315,8 +318,10 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	} else {
 	  rootp = (struct iso_directory_record *) pri->root_directory_record;
 	  if (isonum_723 (pri->volume_set_size) != 1) {
+#ifndef MULTI_VOLUME
 	    printk("Multi-volume disks not (yet) supported.\n");
 	    goto out;
+#endif
 	  };
 	  s->u.isofs_sb.s_nzones = isonum_733 (pri->volume_space_size);
 	  s->u.isofs_sb.s_log_zone_size = isonum_723 (pri->logical_block_size);
@@ -614,10 +619,13 @@ void isofs_read_inode(struct inode * inode)
 	  inode->i_sb->u.isofs_sb.s_cruft = 'y';
 	}
 
+#ifndef MULTI_VOLUME
 	if (inode->i_sb->u.isofs_sb.s_cruft != 'y' && 
 	    (volume_seq_no != 0) && (volume_seq_no != 1)) {
 		printk("Multi volume CD somehow got mounted.\n");
-	} else {
+	} else
+#endif	
+	{
 	  if (S_ISREG(inode->i_mode))
 	    inode->i_op = &isofs_file_inode_operations;
 	  else if (S_ISDIR(inode->i_mode))

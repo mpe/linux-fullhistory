@@ -25,7 +25,7 @@
  *   renamed mouse_fops => bus_mouse_fops, made bus_mouse_fops public.
  *   renamed this file mouse.c => busmouse.c
  *
- * Modfied for use in the 1.3 kernels by Jes Sorensen.
+ * Modified for use in the 1.3 kernels by Jes Sorensen.
  */
 
 #include <linux/module.h>

@@ -74,6 +74,9 @@ extern int tc59x_probe(struct device *);
 extern int dgrs_probe(struct device *);
 extern int smc_init( struct device * );
 extern int sparc_lance_probe(struct device *);
+extern int atarilance_probe(struct device *);
+extern int a2065_probe(struct device *);
+extern int ariadne_probe(struct device *);
 
 /* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
@@ -190,6 +193,15 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_NI52
 	&& ni52_probe(dev)
+#endif
+#ifdef CONFIG_ATARILANCE	/* Lance-based Atari ethernet boards */
+	&& atarilance_probe(dev)
+#endif
+#ifdef CONFIG_A2065		/* Commodore/Ameristar A2065 Ethernet Board */
+	&& a2065_probe(dev)
+#endif
+#ifdef CONFIG_ARIADNE		/* Village Tronic Ariadne Ethernet Board */
+	&& ariadne_probe(dev)
 #endif
 #ifdef CONFIG_SUNLANCE
 	&& sparc_lance_probe(dev)

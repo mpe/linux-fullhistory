@@ -290,7 +290,7 @@ int main(int argc, char *argv[])
 			}
 
 		/* if we suspect that Kickstart is zkicked,
-		   modify the entry to show 512K more at the botton of RAM */
+		   modify the entry to show 512K more at the bottom of RAM */
 		if (mh.mh_Lower == (void *)0x00280020) {
 		    mh.mh_Lower =  (void *)0x00200000;
 		    printf("ZKick detected.\n");

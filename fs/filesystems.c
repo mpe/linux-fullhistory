@@ -22,6 +22,7 @@
 #include <linux/hpfs_fs.h>
 #include <linux/smb_fs.h>
 #include <linux/ncp_fs.h>
+#include <linux/affs_fs.h>
 #include <linux/ufs_fs.h>
 #include <linux/major.h>
 
@@ -99,6 +100,10 @@ asmlinkage int sys_setup(void)
 
 #ifdef CONFIG_HPFS_FS
 	init_hpfs_fs();
+#endif
+
+#ifdef CONFIG_AFFS_FS
+	init_affs_fs();
 #endif
 
 #ifdef CONFIG_UFS_FS

@@ -101,6 +101,8 @@ struct consw {
     int    (*con_bmove)(struct vc_data *, int, int, int, int, int, int);
     int    (*con_switch)(struct vc_data *);
     int    (*con_blank)(int);
+    int    (*con_get_font)(struct vc_data *, int *, int *, char *);
+    int    (*con_set_font)(struct vc_data *, int, int, char *);
 };
 
 extern struct consw *conswitchp;

@@ -24,7 +24,7 @@ static __inline__ void atomic_add(atomic_t i, atomic_t *v)
 	__asm__ __volatile__(
 		"addl %1,%0"
 		:"=m" (__atomic_fool_gcc(v))
-		:"ir" (i), "m" (__atomic_fool_gcc(v)));
+		:"ir" (i), "0" (__atomic_fool_gcc(v)));
 }
 
 static __inline__ void atomic_sub(atomic_t i, atomic_t *v)
@@ -32,7 +32,7 @@ static __inline__ void atomic_sub(atomic_t i, atomic_t *v)
 	__asm__ __volatile__(
 		"subl  %1,%0"
 		:"=m" (__atomic_fool_gcc(v))
-		:"ir" (i), "m" (__atomic_fool_gcc(v)));
+		:"ir" (i), "0" (__atomic_fool_gcc(v)));
 }
 
 static __inline__ void atomic_inc(atomic_t *v)
@@ -40,7 +40,7 @@ static __inline__ void atomic_inc(atomic_t *v)
 	__asm__ __volatile__(
 		"addql #1,%0"
 		:"=m" (__atomic_fool_gcc(v))
-		:"m" (__atomic_fool_gcc(v)));
+		:"0" (__atomic_fool_gcc(v)));
 }
 
 static __inline__ void atomic_dec(atomic_t *v)
@@ -48,16 +48,17 @@ static __inline__ void atomic_dec(atomic_t *v)
 	__asm__ __volatile__(
 		"subql #1,%0"
 		:"=m" (__atomic_fool_gcc(v))
-		:"m" (__atomic_fool_gcc(v)));
+		:"0" (__atomic_fool_gcc(v)));
 }
 
 static __inline__ int atomic_dec_and_test(atomic_t *v)
 {
+	char c;
 	__asm__ __volatile__(
-		"subql #1,%0"
-		:"=m" (__atomic_fool_gcc(v))
-		:"m" (__atomic_fool_gcc(v)));
-	return (*v <= 0);
+		"subql #1,%0; seq %1"
+		:"=m" (__atomic_fool_gcc(v)), "=d" (c)
+		:"0" (__atomic_fool_gcc(v)));
+	return c != 0;
 }
 
 #endif /* __ARCH_M68K_ATOMIC __ */

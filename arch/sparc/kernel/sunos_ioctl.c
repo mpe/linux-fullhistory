@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl.c,v 1.18 1996/04/04 12:41:38 davem Exp $
+/* $Id: sunos_ioctl.c,v 1.20 1996/04/25 06:09:08 davem Exp $
  * sunos_ioctl.c: The Linux Operating system: SunOS ioctl compatibility.
  * 
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -139,8 +139,43 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 		 */
 		return 0;
 	/* Non posix grp */
-	case _IOR('t', 119, int):
-		return -EIO;
+	case _IOW('t', 118, int): {
+		int oldval, *ptr;
+
+		cmd = TIOCSPGRP;
+		ptr = (int *) arg;
+		oldval = verify_area(VERIFY_WRITE, ptr, sizeof(int));
+		if(oldval)
+			return oldval;
+		oldval = *ptr;
+		foo = sys_ioctl(fd, cmd, arg);
+		if(*ptr == -1) {
+			*ptr = oldval;
+			foo = -EIO;
+		}
+		if(foo == -ENOTTY)
+			foo = -EIO;
+		return foo;
+	}
+
+	case _IOR('t', 119, int): {
+		int oldval, *ptr;
+
+		cmd = TIOCGPGRP;
+		ptr = (int *) arg;
+		oldval = verify_area(VERIFY_WRITE, ptr, sizeof(int));
+		if(oldval)
+			return oldval;
+		oldval = *ptr;
+		foo = sys_ioctl(fd, cmd, arg);
+		if(*ptr == -1) {
+			*ptr = oldval;
+			foo = -EIO;
+		}
+		if(foo == -ENOTTY)
+			foo = -EIO;
+		return foo;
+	}
 	}
 
 #if 0

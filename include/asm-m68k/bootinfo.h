@@ -10,7 +10,7 @@
 ** Created 09/29/92 by Greg Harp
 **
 ** 5/2/94 Roman Hodek:
-**   Added bi_atari part of the machine dependant union bi_un; for now it
+**   Added bi_atari part of the machine dependent union bi_un; for now it
 **	 contains just a model field to distinguish between TT and Falcon.
 */
 
@@ -98,7 +98,7 @@ struct bi_Atari {
   struct {
     /* video hardware */
     ATARIHW_DECLARE(STND_SHIFTER);	/* ST-Shifter - no base low ! */
-    ATARIHW_DECLARE(EXTD_SHIFTER);	/* STe-Shifter - 24 bit adress */
+    ATARIHW_DECLARE(EXTD_SHIFTER);	/* STe-Shifter - 24 bit address */
     ATARIHW_DECLARE(TT_SHIFTER);	/* TT-Shifter */
     ATARIHW_DECLARE(VIDEL_SHIFTER);	/* Falcon-Shifter */
     /* sound hardware */

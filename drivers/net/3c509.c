@@ -221,7 +221,6 @@ int el3_probe(struct device *dev)
 		lrs_state = lrs_state & 0x100 ? lrs_state ^ 0xcf : lrs_state;
 	}
 
-	current_tag = dev->name[3]-'0';
 	/* For the first probe, clear all board's tag registers. */
 	if (current_tag == 0)
 		outb(0xd0, id_port);
@@ -266,10 +265,6 @@ int el3_probe(struct device *dev)
 
 	/* Free the interrupt so that some other card can use it. */
 	outw(0x0f00, ioaddr + WN0_IRQ);
-
-	if( check_region(ioaddr, EL3_IO_EXTENT) )
-		return -ENODEV;
-
  found:
 	dev->base_addr = ioaddr;
 	dev->irq = irq;

@@ -9,6 +9,9 @@
  *
  * Fixes:
  *		Many		:	Split from ip.c , see ip.c for history.
+ *		Martin Mares	:	TOS setting fixed.
+ *		Alan Cox	:	Fixed a couple of oopses in Martins 
+ *					TOS tweaks.
  */
 
 #include <linux/config.h>
@@ -89,8 +92,6 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length, int dum
  *	an IP socket.
  *
  *	We implement IP_TOS (type of service), IP_TTL (time to live).
- *
- *	Next release we will sort out IP_OPTIONS since for some people are kind of important.
  */
 
 static struct device *ip_mc_find_devfor(unsigned long addr)
@@ -177,14 +178,23 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			  	kfree_s(old_opt, sizeof(struct optlen) + old_opt->optlen);
 			  return 0;
 		  }
-		case IP_TOS:
-			if(val<0||val>255)
+		case IP_TOS:		/* This sets both TOS and Precedence */
+			if (val<0 || val>63)	/* Reject setting of unused bits */
 				return -EINVAL;
+			if ((val&3) > 4 && !suser())	/* Only root can set Prec>4 */
+				return -EPERM;
 			sk->ip_tos=val;
-			if(val==IPTOS_LOWDELAY)
-				sk->priority=SOPRI_INTERACTIVE;
-			if(val==IPTOS_THROUGHPUT)
-				sk->priority=SOPRI_BACKGROUND;
+			switch (val & 0x38) {
+				case IPTOS_LOWDELAY:
+					sk->priority=SOPRI_INTERACTIVE;
+					break;
+				case IPTOS_THROUGHPUT:
+					sk->priority=SOPRI_BACKGROUND;
+					break;
+				default:
+					sk->priority=SOPRI_NORMAL;
+					break;
+			}
 			return 0;
 		case IP_TTL:
 			if(val<1||val>255)

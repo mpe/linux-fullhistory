@@ -9,7 +9,7 @@
 | by taking the intermediate result (which is always normalized) and 
 | shifting the mantissa right while incrementing the exponent until 
 | it is equal to the denormalized exponent for the destination 
-| format.  After denormalizatoin, the result is rounded to the 
+| format.  After denormalization, the result is rounded to the 
 | destination format.
 |		
 | Trap enabled results
@@ -80,7 +80,7 @@ no_e3_1:
 |
 | It is possible to have either inex2 or inex1 exceptions with the
 | unfl.  If the inex enable bit is set in the FPCR, and either
-| inex2 or inex1 occured, we must clean up and branch to the
+| inex2 or inex1 occurred, we must clean up and branch to the
 | real inex handler.
 |
 ck_inex:

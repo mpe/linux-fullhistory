@@ -248,7 +248,6 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct devi
 	{
 		NETDEBUG(printk("IP: create: no memory left !\n"));
 		return(NULL);
-		skb->dev = qp->dev;
 	}
 	memset(qp, 0, sizeof(struct ipq));
 

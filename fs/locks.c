@@ -273,9 +273,18 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		break;
 	case F_SHLCK :
 	case F_EXLCK :
+#if 1
+/* warn a bit for now, but don't overdo it */
+{
+	static int count = 0;
+	if (count < 5) {
+		count++;
 		printk(KERN_WARNING
 		       "fcntl_setlk() called by process %d with broken flock() emulation\n",
 		       current->pid);
+	}
+}
+#endif
 		if (!(filp->f_mode & 3))
 			return (-EBADF);
 		break;

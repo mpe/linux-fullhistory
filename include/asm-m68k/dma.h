@@ -2,7 +2,7 @@
 #define _M68K_DMA_H 1
 
 /* Don't define MAX_DMA_ADDRESS; it's useless on the m68k and any
-   occurence should be flagged as an error.  */
+   occurrence should be flagged as an error.  */
 
 #define MAX_DMA_CHANNELS 8
 

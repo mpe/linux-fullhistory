@@ -97,7 +97,7 @@ bad_area:
 		printk("%s: memory violation at pc=%08lx rp=%08lx (bad address = %08lx)\n",
 			current->comm, regs.pc, regs.r26, address);
 		die_if_kernel("oops", &regs, cause);
-		send_sig(SIGSEGV, current, 1);
+		force_sig(SIGSEGV, current);
 		return;
 	}
 /*

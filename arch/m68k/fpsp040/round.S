@@ -212,7 +212,7 @@ sgl_done:
 add_ext:
 	addql  #1,LOCAL_LO(%a0)		|add 1 to l-bit
 	bccs	xcc_clr			|test for carry out
-	addql  #1,LOCAL_HI(%a0)		|propogate carry
+	addql  #1,LOCAL_HI(%a0)		|propagate carry
 	bccs	xcc_clr
 	roxrw  LOCAL_HI(%a0)		|mant is 0 so restore v-bit
 	roxrw  LOCAL_HI+2(%a0)		|mant is 0 so restore v-bit
@@ -231,7 +231,7 @@ add_ext_done:
 add_dbl:
 	addl	#ad_1_dbl,LOCAL_LO(%a0)
 	bccs	dcc_clr
-	addql	#1,LOCAL_HI(%a0)		|propogate carry
+	addql	#1,LOCAL_HI(%a0)		|propagate carry
 	bccs	dcc_clr
 	roxrw	LOCAL_HI(%a0)		|mant is 0 so restore v-bit
 	roxrw	LOCAL_HI+2(%a0)		|mant is 0 so restore v-bit
@@ -483,7 +483,7 @@ no_inex:
 	rts
 
 |
-|	dnrm_lp --- normalize exponent/mantissa to specified threshhold
+|	dnrm_lp --- normalize exponent/mantissa to specified threshold
 |
 | Input:
 |	a0		points to the operand to be denormalized
@@ -506,7 +506,7 @@ dnrm_lp:
 	beqs	not_E3			|not type E3 exception
 	bfextu	WBTEMP_GRS(%a6){#6:#3},%d2	|extract guard,round, sticky  bit
 	movel	#29,%d0
-	lsll	%d0,%d2			|shift g,r,s to their postions
+	lsll	%d0,%d2			|shift g,r,s to their positions
 	movel	%d2,%d0
 not_E3:
 	movel	(%sp)+,%d2		|restore d2

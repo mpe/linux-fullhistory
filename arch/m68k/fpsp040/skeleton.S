@@ -107,7 +107,7 @@ real_dz:
 |	necessary for E1 exceptions.
 |
 | Code following the 'inex' label is to handle bug #1232.  In this
-| bug, if an E1 snan, ovfl, or unfl occured, and the process was
+| bug, if an E1 snan, ovfl, or unfl occurred, and the process was
 | swapped out before taking the exception, the exception taken on
 | return was inex, rather than the correct exception.  The snan, ovfl,
 | and unfl exception to be taken must not have been enabled.  The

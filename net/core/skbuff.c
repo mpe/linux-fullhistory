@@ -36,22 +36,24 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
-#include <asm/segment.h>
-#include <asm/system.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/in.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <linux/malloc.h>
+#include <linux/string.h>
+#include <linux/skbuff.h>
+
 #include <net/ip.h>
 #include <net/protocol.h>
-#include <linux/string.h>
 #include <net/route.h>
 #include <net/tcp.h>
 #include <net/udp.h>
-#include <linux/skbuff.h>
 #include <net/sock.h>
 
+#include <asm/segment.h>
+#include <asm/system.h>
 
 /*
  *	Resource tracking variables

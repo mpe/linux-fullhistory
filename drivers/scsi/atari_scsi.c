@@ -1,5 +1,5 @@
 /*
- * atari_scsi.c -- Device dependant functions for the Atari generic SCSI port
+ * atari_scsi.c -- Device dependent functions for the Atari generic SCSI port
  *
  * Copyright 1994 Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de>
  *
@@ -40,19 +40,19 @@
 /* totally empty if there is a lot of disk traffic.                       */
 /*                                                                        */
 /* For this reasons I decided to employ a more elaborate scheme:          */
-/*  - First, we give up the lock everytime we can (for fairness), this    */
+/*  - First, we give up the lock every time we can (for fairness), this    */
 /*    means every time a command finishes and there are no other commands */
 /*    on the disconnected queue.                                          */
 /*  - If there are others waiting to lock the DMA chip, we stop           */
-/*    issueing commands, i.e. moving them onto the issue queue.           */
+/*    issuing commands, i.e. moving them onto the issue queue.           */
 /*    Because of that, the disconnected queue will run empty in a         */
 /*    while. Instead we go to sleep on a 'fairness_queue'.                */
 /*  - If the lock is released, all processes waiting on the fairness      */
-/*    queue will be woken. The first of them trys to re-lock the DMA,     */
+/*    queue will be woken. The first of them tries to re-lock the DMA,     */
 /*    the others wait for the first to finish this task. After that,      */
 /*    they can all run on and do their commands...                        */
 /* This sounds complicated (and it is it :-(), but it seems to be a       */
-/* good compromise between fairness and performance: As long as noone     */
+/* good compromise between fairness and performance: As long as no one     */
 /* else wants to work with the ST-DMA chip, SCSI can go along as          */
 /* usual. If now someone else comes, this behaviour is changed to a       */
 /* "fairness mode": just already initiated commands are finished and      */
@@ -324,7 +324,7 @@ static void scsi_tt_intr (int irq, struct pt_regs *fp, void *dummy)
 #endif
 
 	/* Look if it was the DMA that has interrupted: First possibility
-	 * is that a bus error occured...
+	 * is that a bus error occurred...
 	 */
 	if (dma_stat & 0x80) {
 		if (!scsi_dma_is_ignored_buserr( dma_stat )) {
@@ -335,7 +335,7 @@ static void scsi_tt_intr (int irq, struct pt_regs *fp, void *dummy)
 	}
 
 	/* If the DMA is active but not finished, we have the the case
-	 * that some other 5380 interrupt occured within the DMA transfer.
+	 * that some other 5380 interrupt occurred within the DMA transfer.
 	 * This means we have residual bytes, if the desired end address
 	 * is not yet reached. Maybe we have to fetch some bytes from the
 	 * rest data register, too. The residual must be calculated from
@@ -537,7 +537,7 @@ falcon_release_lock_if_possible( struct NCR5380_hostdata * hostdata )
 }
 
 /* This function manages the locking of the ST-DMA.
- * If the DMA isn't locked already for SCSI, it trys to lock it by
+ * If the DMA isn't locked already for SCSI, it tries to lock it by
  * calling stdma_lock(). But if the DMA is locked by the SCSI code and
  * there are other drivers waiting for the chip, we do not issue the
  * command immediately but wait on 'falcon_fairness_queue'. We will be
@@ -585,7 +585,7 @@ static void falcon_get_lock( void )
 
 
 /* This is the wrapper function for NCR5380_queue_command(). It just
- * trys to get the lock on the ST-DMA (see above) and then calls the
+ * tries to get the lock on the ST-DMA (see above) and then calls the
  * original function.
  */
 
@@ -772,7 +772,7 @@ int atari_scsi_release (struct Scsi_Host *sh)
 		remove_isr (IRQ_TT_MFP_SCSIDMA, scsi_dma_buserr);
 #endif
 	}
-	if (atari_dma_bufffer)
+	if (atari_dma_buffer)
 		scsi_init_free (atari_dma_buffer, STRAM_BUFFER_SIZE);
 	return 1;
 }
@@ -840,7 +840,7 @@ void atari_scsi_setup( char *str, int *ints )
 #endif
 }
 
-int atari_scsi_reset( Scsi_Cmnd *cmd )
+int atari_scsi_reset( Scsi_Cmnd *cmd, unsigned int reset_flags)
 {
 	int		rv;
 	struct NCR5380_hostdata *hostdata =
@@ -866,7 +866,7 @@ int atari_scsi_reset( Scsi_Cmnd *cmd )
 #endif /* REAL_DMA */
 	}
 
-	rv = NCR5380_reset( cmd );
+	rv = NCR5380_reset(cmd, reset_flags);
 
 	/* Re-enable ints */
 	if (IS_A_TT()) {
@@ -955,7 +955,7 @@ unsigned long atari_scsi_dma_setup( struct Scsi_Host *instance, void *data,
 	 * ++roman: For the Medusa, there's no need at all for that cache stuff,
 	 * because the hardware does bus snooping (fine!).
 	 */
-	dma_cache_maintainance( addr, count, dir );
+	dma_cache_maintenance( addr, count, dir );
 
 	if (count == 0)
 		printk("SCSI warning: DMA programmed for 0 bytes !\n");

@@ -256,7 +256,7 @@ SGL_RN:
 	bsetb	#inf_bit,FPSR_CC(%a6)
 	bras	set_sign
 SGL_RZ:
-	leal	SGL_PLRG,%a1	|anwer is +/- large number
+	leal	SGL_PLRG,%a1	|answer is +/- large number
 	bras	set_sign
 SGL_RM:
 	tstb	LOCAL_SGN(%a0)	|if negative overflow
@@ -276,7 +276,7 @@ s_rp_neg:
 	bsetb	#neg_bit,FPSR_CC(%a6)
 	bras	end_ovfr
 s_rp_pos:
-	leal	EXT_PINF,%a1	|answer is postive infinity
+	leal	EXT_PINF,%a1	|answer is positive infinity
 	bsetb	#inf_bit,FPSR_CC(%a6)
 	bras	end_ovfr
 

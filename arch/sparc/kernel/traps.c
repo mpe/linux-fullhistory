@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.42 1996/04/16 08:24:44 davem Exp $
+/* $Id: traps.c,v 1.43 1996/04/24 09:09:42 davem Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -21,6 +21,7 @@
 #include <asm/pgtable.h>
 #include <asm/kdebug.h>
 #include <asm/unistd.h>
+#include <asm/traps.h>
 #include <asm/smp.h>
 
 /* #define TRAP_DEBUG */
@@ -95,6 +96,10 @@ void do_hw_interrupt(unsigned long type, unsigned long psr, unsigned long pc)
 		printk("Unimplemented Sparc TRAP, type = %02lx\n", type);
 		die_if_kernel("Whee... Hello Mr. Penguin", current->tss.kregs);
 	}	
+	if(type == SP_TRAP_SBPT) {
+		send_sig(SIGTRAP, current, 1);
+		return;
+	}
 	current->tss.sig_desc = SUBSIG_BADTRAP(type - 0x80);
 	current->tss.sig_address = pc;
 	send_sig(SIGILL, current, 1);

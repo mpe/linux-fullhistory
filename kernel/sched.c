@@ -2,6 +2,8 @@
  *  linux/kernel/sched.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
+ *
+ *  1996-04-21	Modified by Ulrich Windl to make NTP work
  */
 
 /*
@@ -52,14 +54,15 @@ DECLARE_TASK_QUEUE(tq_scheduler);
 /*
  * phase-lock loop variables
  */
-int time_state = TIME_BAD;	/* clock synchronization status */
-int time_status = STA_UNSYNC | STA_PLL;	/* clock status bits */
+/* TIME_ERROR prevents overwriting the CMOS clock */
+int time_state = TIME_ERROR;	/* clock synchronization status */
+int time_status = STA_UNSYNC;	/* clock status bits */
 long time_offset = 0;		/* time adjustment (us) */
 long time_constant = 2;		/* pll time constant */
 long time_tolerance = MAXFREQ;	/* frequency tolerance (ppm) */
 long time_precision = 1;	/* clock precision (us) */
-long time_maxerror = 0x70000000;/* maximum error */
-long time_esterror = 0x70000000;/* estimated error */
+long time_maxerror = MAXPHASE;	/* maximum error (us) */
+long time_esterror = MAXPHASE;	/* estimated error (us) */
 long time_phase = 0;		/* phase offset (scaled us) */
 long time_freq = 0;		/* frequency offset (scaled ppm) */
 long time_adj = 0;		/* tick adjust (scaled 1 / HZ) */
@@ -396,7 +399,8 @@ asmlinkage void schedule(void)
 	return;
 
 scheduling_in_interrupt:
-	printk("Aiee: scheduling in interrupt\n");
+	printk("Aiee: scheduling in interrupt %p\n",
+		__builtin_return_address(0));
 }
 
 #ifndef __alpha__
@@ -665,9 +669,9 @@ static void second_overflow(void)
     long ltemp;
 
     /* Bump the maxerror field */
-    time_maxerror = (0x70000000-time_maxerror <
-		     time_tolerance >> SHIFT_USEC) ?
-	0x70000000 : (time_maxerror + (time_tolerance >> SHIFT_USEC));
+    time_maxerror += time_tolerance >> SHIFT_USEC;
+    if ( time_maxerror > MAXPHASE )
+        time_maxerror = MAXPHASE;
 
     /*
      * Leap second processing. If in leap-insert state at
@@ -704,7 +708,6 @@ static void second_overflow(void)
 	break;
 
     case TIME_OOP:
-
 	time_state = TIME_WAIT;
 	break;
 
@@ -727,21 +730,17 @@ static void second_overflow(void)
 	if (!(time_status & STA_FLL))
 	    ltemp >>= SHIFT_KG + time_constant;
 	if (ltemp > (MAXPHASE / MINSEC) << SHIFT_UPDATE)
-	    ltemp = (MAXPHASE / MINSEC) <<
-		SHIFT_UPDATE;
+	    ltemp = (MAXPHASE / MINSEC) << SHIFT_UPDATE;
 	time_offset += ltemp;
-	time_adj = -ltemp << (SHIFT_SCALE - SHIFT_HZ -
-			      SHIFT_UPDATE);
+	time_adj = -ltemp << (SHIFT_SCALE - SHIFT_HZ - SHIFT_UPDATE);
     } else {
 	ltemp = time_offset;
 	if (!(time_status & STA_FLL))
 	    ltemp >>= SHIFT_KG + time_constant;
 	if (ltemp > (MAXPHASE / MINSEC) << SHIFT_UPDATE)
-	    ltemp = (MAXPHASE / MINSEC) <<
-		SHIFT_UPDATE;
+	    ltemp = (MAXPHASE / MINSEC) << SHIFT_UPDATE;
 	time_offset -= ltemp;
-	time_adj = ltemp << (SHIFT_SCALE - SHIFT_HZ -
-			     SHIFT_UPDATE);
+	time_adj = ltemp << (SHIFT_SCALE - SHIFT_HZ - SHIFT_UPDATE);
     }
 
     /*
@@ -775,6 +774,7 @@ static void second_overflow(void)
 #endif
 }
 
+/* in the NTP reference this is called "hardclock()" */
 static void update_wall_time_one_tick(void)
 {
 	/*

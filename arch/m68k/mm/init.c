@@ -448,7 +448,6 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 void mem_init(unsigned long start_mem, unsigned long end_mem)
 {
 	int codepages = 0;
-	int reservedpages = 0;
 	int datapages = 0;
 	unsigned long tmp;
 	extern int _etext;
@@ -514,11 +513,10 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 			free_page(tmp);
 	}
 	tmp = nr_free_pages << PAGE_SHIFT;
-	printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data)\n",
+	printk("Memory: %luk/%luk available (%dk kernel code, %dk data)\n",
 	       tmp >> 10,
 	       high_memory >> 10,
 	       codepages << (PAGE_SHIFT-10),
-	       reservedpages << (PAGE_SHIFT-10),
 	       datapages << (PAGE_SHIFT-10));
 }
 

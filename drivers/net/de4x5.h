@@ -671,9 +671,6 @@
 #define EXT_SIA_SUSPECT 0x0805     /* Suspect the EXT SIA port is down */
 #define BNC_SUSPECT     0x0806     /* Suspect the BNC port is down */
 #define AUI_SUSPECT     0x0807     /* Suspect the AUI port is down */
-#define _10Mb_SUSPECT   0x0808     /* Suspect 10Mb/s is down */
-#define _100Mb_SUSPECT  0x0809     /* Suspect 100Mb/s is down */
-#define LINK_RESET      0x080a     /* Reset the PHY and re-init auto sense */
 
 #define AUTO            0x4000     /* Auto sense the media or speed */
 #define TIMER_CB        0x80000000 /* Timer callback detection */
@@ -743,13 +740,15 @@
 */
 #define SET_10Mb {\
   if (lp->phy[lp->active].id) {\
-    mii_wr(MII_CR_10|MII_CR_ASSE,MII_CR,lp->phy[lp->active].addr,DE4X5_MII);\
-    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR);\
-    omr |= (de4x5_full_duplex ? OMR_FD : 0) | OMR_TTM;\
+    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD);\
+    if ((lp->tmp != MII_SR_ASSC) || (lp->autosense != AUTO)) {\
+      mii_wr(MII_CR_10|(de4x5_full_duplex?MII_CR_FDM:0), MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
+    }\
+    omr |= ((de4x5_full_duplex ? OMR_FD : 0) | OMR_TTM);\
     outl(omr, DE4X5_OMR);\
     outl(0, DE4X5_GEP);\
   } else {\
-    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR));\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
     omr |= (de4x5_full_duplex ? OMR_FD : 0);\
     outl(omr | OMR_TTM, DE4X5_OMR);\
     outl((de4x5_full_duplex ? 0 : GEP_FDXD), DE4X5_GEP);\
@@ -758,18 +757,37 @@
 
 #define SET_100Mb {\
   if (lp->phy[lp->active].id) {\
-    mii_wr(MII_CR_100|MII_CR_ASSE, MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
-    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR);\
+    int fdx=0;\
+    if (lp->phy[lp->active].id == NATIONAL_TX) {\
+        mii_wr(mii_rd(0x18, lp->phy[lp->active].addr, DE4X5_MII) & ~0x2000,\
+                      0x18, lp->phy[lp->active].addr, DE4X5_MII);\
+    }\
+    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD);\
     sr = mii_rd(MII_SR, lp->phy[lp->active].addr, DE4X5_MII);\
-    if (!(sr & MII_ANA_T4AM) && de4x5_full_duplex) omr |= OMR_FD;\
+    if (!(sr & MII_ANA_T4AM) && de4x5_full_duplex) fdx=1;\
+    if ((lp->tmp != MII_SR_ASSC) || (lp->autosense != AUTO)) {\
+      mii_wr(MII_CR_100|(fdx?MII_CR_FDM:0), MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
+    }\
+    if (fdx) omr |= OMR_FD;\
     outl(omr, DE4X5_OMR);\
-    outl(((!(sr & MII_ANA_T4AM) && de4x5_full_duplex) ? 0:GEP_FDXD)|GEP_MODE,\
-	                                                          DE4X5_GEP);\
   } else {\
-    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR));\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
     omr |= (de4x5_full_duplex ? OMR_FD : 0);\
     outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
     outl((de4x5_full_duplex ? 0 : GEP_FDXD) | GEP_MODE, DE4X5_GEP);\
+  }\
+}
+
+/* FIX ME so I don't jam 10Mb networks */
+#define SET_100Mb_PDET {\
+  if (lp->phy[lp->active].id) {\
+    mii_wr(MII_CR_100|MII_CR_ASSE, MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
+    omr = (inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
+    outl(omr, DE4X5_OMR);\
+  } else {\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
+    outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
+    outl(GEP_FDXD | GEP_MODE, DE4X5_GEP);\
   }\
 }
 

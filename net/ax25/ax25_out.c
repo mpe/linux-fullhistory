@@ -77,21 +77,12 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 	mtu = ax25->paclen;
 	
 	if ((skb->len - 1) > mtu) {
-		switch (*skb->data) {
-			case AX25_P_SEGMENT:
-				/* this is an error, but... */
-				printk("ax25_output(): woops, fragmentation of fragment?!\n");
-				/* okay, let's fragment it further (tss, tss...) */
-			case AX25_P_NETROM:	/* err, is this a good idea? */
-			case AX25_P_IP:
-				mtu -= 2;	/* Allow for fragment control info */
-				ka9qfrag = 1;
-				break;
-			default:
-				ka9qfrag = 0;
-				skb_pull(skb, 1); /* skip PID */
-				break;
-
+		if (*skb->data == AX25_P_TEXT) {
+			skb_pull(skb, 1); /* skip PID */
+			ka9qfrag = 0;
+		} else {
+			mtu -= 2;	/* Allow for fragment control info */
+			ka9qfrag = 1;
 		}
 		
 		fragno = skb->len / mtu;
@@ -105,11 +96,10 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 			/* 
 			 * do _not_ use sock_alloc_send_skb, our socket may have
 			 * sk->shutdown set...
-			 *
 			 */
 			if ((skbn = alloc_skb(mtu + 2 + frontlen, GFP_ATOMIC)) == NULL) {
 				restore_flags(flags);
-				printk("ax25_output(): alloc_skb returned NULL\n");
+				printk("ax25_output: alloc_skb returned NULL\n");
 				if (skb_device_locked(skb))
 					skb_device_unlock(skb);
 				return;

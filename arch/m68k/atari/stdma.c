@@ -59,13 +59,13 @@ static void stdma_int (int irq, struct pt_regs *fp, void *dummy);
 /*
  * Function: void stdma_lock( isrfunc isr, void *data )
  *
- * Purpose: Trys to get a lock on the ST-DMA chip that is used by more
+ * Purpose: Tries to get a lock on the ST-DMA chip that is used by more
  *   then one device driver. Waits on stdma_wait until lock is free.
  *   stdma_lock() may not be called from an interrupt! You have to
  *   get the lock in your main routine and release it when your
  *   request is finished.
  *
- * Inputs: A interupt function that is called until the lock is
+ * Inputs: A interrupt function that is called until the lock is
  *   released.
  *
  * Returns: nothing
@@ -126,7 +126,7 @@ void stdma_release(void)
  *
  * Inputs: none
  *
- * Returns: 0 if noone is waiting, != 0 otherwise
+ * Returns: 0 if no one is waiting, != 0 otherwise
  *
  */
 
@@ -182,7 +182,7 @@ void stdma_init(void)
 /*
  * Function: void stdma_int()
  *
- * Purpose: The interupt routine for the ST-DMA. It calls the isr
+ * Purpose: The interrupt routine for the ST-DMA. It calls the isr
  *   registered by stdma_lock().
  *
  */

@@ -15,7 +15,7 @@
 **		    (Andreas)
 **      14 Nov 1994 YANML (Yet Another New Memory Layout :-) kernel
 **		    start address is KSTART_ADDR + PAGE_SIZE, this
-**		    does not need the ugly klugde with
+**		    does not need the ugly kludge with
 **		    -fwritable-strings (++andreas)
 **      09 Sep 1994 Adapted to the new memory layout: All the boot_info entry
 **                  mentions all ST-Ram and the mover is located somewhere
@@ -684,7 +684,7 @@ int main(int argc, char *argv[])
 	    && memcmp (&kexec_elf.e_ident[EI_MAG0], ELFMAG, SELFMAG) == 0)
 	  {
 	    elf_kernel = 1;
-	    /* A few plausability checks */
+	    /* A few plausibility checks */
 	    if (kexec_elf.e_type != ET_EXEC || kexec_elf.e_machine != EM_68K
 		|| kexec_elf.e_version != EV_CURRENT)
 	      {
@@ -703,7 +703,7 @@ int main(int argc, char *argv[])
 		      kexec_elf.e_phnum * sizeof (*kernel_phdrs))
 		!= kexec_elf.e_phnum * sizeof (*kernel_phdrs))
 	      {
-		fprintf (stderr, "Unable to read programm headers from %s\n",
+		fprintf (stderr, "Unable to read program headers from %s\n",
 			 kernel_name);
 		boot_exit (EXIT_FAILURE);
 	      }

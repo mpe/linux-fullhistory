@@ -1,0 +1,23 @@
+Linux can read, but not write, Amiga FFS partitions.
+
+Mount options are
+    size	has the size in 512 byte blocks of the mounted medium. 
+
+Case is significant in filename matching, different to real AFFS.
+
+
+Command line example
+    mount  Archive/Amiga/Workbench3.1.adf /mnt -t affs -o loop,size=1760
+    mount  /dev/sda3 /Amiga -t affs
+
+/etc/fstab example
+    /dev/sdb5	/d/f    affs    ro
+
+This file system will probably be writeable in future releases.
+
+It's not possible to read floppy disks with a normal PC or workstation
+due to an incompatibility to the Amiga floppy controller.
+
+If you are interested in an Amiga Emulator for Linux, look at
+
+http://www-users.informatik.rwth-aachen.de/~crux/uae.html

@@ -211,7 +211,7 @@ static int sync_buffers(kdev_t dev, int wait)
 				 printk("[%d %s %ld] ", nlist,
 					kdevname(bh->b_dev), bh->b_blocknr);
 				 ncount++;
-			 };
+			 }
 			 bh->b_count--;
 			 retry = 1;
 		 }
@@ -373,7 +373,7 @@ static inline void remove_from_queues(struct buffer_head * bh)
 		remove_from_free_list(bh); /* Free list entries should not be
 					      in the hash queue */
 		return;
-	};
+	}
 	nr_buffers_type[bh->b_list]--;
 	nr_buffers_st[BUFSIZE_INDEX(bh->b_size)][bh->b_list]--;
 	remove_from_hash_queue(bh);
@@ -420,7 +420,7 @@ static inline void put_last_free(struct buffer_head * bh)
 	if(!free_list[isize]) {
 		free_list[isize] = bh;
 		bh->b_prev_free = bh;
-	};
+	}
 
 	nr_free[isize]++;
 	bh->b_next_free = free_list[isize];
@@ -919,15 +919,19 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 	index = BUFSIZE_INDEX(bh->b_size);
 
 	if (buffer_uptodate(bh))
-		return bh;
+	        return(bh);   
+	else ll_rw_block(READ, 1, &bh);
 
-	blocks = ((filesize & (bufsize - 1)) - (pos & (bufsize - 1))) >> (9+index);
+	blocks = (filesize - pos) >> (9+index);
 
-	if (blocks > (read_ahead[MAJOR(dev)] >> index))
+	if (blocks < (read_ahead[MAJOR(dev)] >> index))
 		blocks = read_ahead[MAJOR(dev)] >> index;
-	if (blocks > NBUF)
+	if (blocks > NBUF) 
 		blocks = NBUF;
-	
+
+/*	if (blocks) printk("breada (new) %d blocks\n",blocks); */
+
+
 	bhlist[0] = bh;
 	j = 1;
 	for(i=1; i<blocks; i++) {
@@ -936,14 +940,14 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 			brelse(bh);
 			break;
 		}
-		bhlist[j++] = bh;
+		else bhlist[j++] = bh;
 	}
 
 	/* Request the read for these buffers, and then release them */
-	ll_rw_block(READ, j, bhlist);
-
+	if (j>1)  
+		ll_rw_block(READA, (j-1), bhlist+1); 
 	for(i=1; i<j; i++)
-		brelse(bhlist[i]);
+	        brelse(bhlist[i]);
 
 	/* Wait for this buffer, and then continue on */
 	bh = bhlist[0];
@@ -1928,7 +1932,7 @@ asmlinkage int sync_old_buffers(void)
 	for(isize = 0; isize<NR_SIZES; isize++){
 		CALC_LOAD(buffers_lav[isize], bdf_prm.b_un.lav_const, buffer_usage[isize]);
 		buffer_usage[isize] = 0;
-	};
+	}
 	return 0;
 }
 
@@ -1964,7 +1968,7 @@ asmlinkage int sys_bdflush(int func, long data)
 			return -EINVAL;
 		bdf_prm.data[i] = data;
 		return 0;
-	}
+	};
 
 	/* Having func 0 used to launch the actual bdflush and then never
 	return (unless explicitly killed). We return zero here to 

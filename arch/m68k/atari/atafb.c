@@ -118,7 +118,7 @@ static struct atari_fb_par {
 	} hw;
 } current_par;
 
-/* Don't calculate an own resoltion, and thus don't change the one found when
+/* Don't calculate an own resolution, and thus don't change the one found when
  * booting (currently used for the Falcon to keep settings for internal video
  * hardware extensions (e.g. ScreenBlaster)  */
 static int DontCalcRes = 0; 
@@ -786,7 +786,7 @@ static struct pixel_clock {
 	short right, hsync, left;	/* standard timing in clock cycles, not pixel */
 		/* hsync initialized in falcon_detect() */
 	short sync_mask;	/* or-mask for hw.falcon.sync to set this clock */
-	short control_mask; /* dito, for hw.falcon.vid_control */
+	short control_mask; /* ditto, for hw.falcon.vid_control */
 }
 f25  = {25175000, 39722, 18, 0, 42, 0x0, VCO_CLOCK25},
 f32  = {32000000, 31250, 18, 0, 42, 0x0, 0},
@@ -1683,7 +1683,7 @@ static int falcon_detect( void )
 	falcon_get_par(&par);
 	falcon_encode_var(&atari_fb_predefined[0], &par);
 
-	/* Detectet mode is always the "autodetect" slot */
+	/* Detected mode is always the "autodetect" slot */
 	return 1;
 }
 
@@ -2303,7 +2303,7 @@ static void atari_fb_set_par( struct atari_fb_par *par )
 
 
 /* =========================================================== */
-/* ============== Hardware Independant Functions ============= */
+/* ============== Hardware Independent Functions ============= */
 /* =========================================================== */
 
 
@@ -2992,7 +2992,7 @@ void atari_video_setup( char *options, int *ints )
     }
 
     if (*int_str) {
-	/* Format to config extendet internal video hardware like OverScan:
+	/* Format to config extended internal video hardware like OverScan:
 	"<switch-type>,internal:<xres>;<yres>;<xres_max>;<yres_max>;<offset>"
 	Explanation:
 	<switch-type> type to switch on higher resolution

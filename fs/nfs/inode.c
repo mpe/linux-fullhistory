@@ -340,6 +340,7 @@ static int run_nfsiod(void *dummy)
 #endif
 
 	MOD_INC_USE_COUNT;
+	exit_mm(current);
 	current->session = 1;
 	current->pgrp = 1;
 	sprintf(current->comm, "nfsiod");

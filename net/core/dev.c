@@ -605,9 +605,21 @@ void net_bh(void)
 		 
 		if (br_stats.flags & BR_UP)
 		{
+			/*
+			 *	We pass the bridge a complete frame. This means
+			 *	recovering the MAC header first.
+			 */
+			 
+			int offset=skb->data-skb->mac.raw;
 			cli();
+			skb_push(skb,offset);	/* Put header back on for bridge */
 			if(br_receive_frame(skb))
 				continue;
+			/*
+			 *	Pull the MAC header off for the copy going to
+			 *	the upper layers.
+			 */
+			skb_pull(skb,offset);
 			sti();
 		}
 #endif
@@ -621,9 +633,9 @@ void net_bh(void)
 
 		skb->h.raw = skb->data;
 
-	       /*
-		* 	Fetch the packet protocol ID. 
-		*/
+		/*
+		 * 	Fetch the packet protocol ID. 
+		 */
 		
 		type = skb->protocol;
 

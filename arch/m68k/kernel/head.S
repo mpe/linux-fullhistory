@@ -313,7 +313,7 @@ ENTRY(_start)
 	 * on the 68040, pages used to hold mmu tables should
 	 * be initialized as noncachable; the '060 allows write-through.
 	 * Do this for the root table page (which also contains
-	 * all pointer tables utilitized thus far) and the
+	 * all pointer tables utilized thus far) and the
 	 * kernel page table.
 	 */
 	lea	%pc@(SYMBOL_NAME(_stext)-PAGESIZE:w),%a0
@@ -469,9 +469,9 @@ Lnotami:	/* other machines specific mappings go here! */
    is done by writing to the byte at phys. 0x0. This should result
    in a bus error on all other machines.
 
-   ...should, but doesn't. The Atferburner040 for the Falcon has the
+   ...should, but doesn't. The Afterburner040 for the Falcon has the
    same behaviour (0x0..0x7 are no ROM shadow). So we have to do
-   another test to distinuish Medusa and AB040. This is a
+   another test to distinguish Medusa and AB040. This is a
    read attempt for 0x00ff82fe phys. that should bus error on a Falcon
    (+AB040), but is in the range where the Medusa always asserts DTACK.
 */

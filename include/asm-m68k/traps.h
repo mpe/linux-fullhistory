@@ -148,7 +148,7 @@ extern e_vector vectors[];
 #define	MMU060_SIZ	(0x00600000)	/* transfer size */
 #define	MMU060_TT	(0x00180000)	/* transfer type (TT) bits */
 #define	MMU060_TM	(0x00070000)	/* transfer modifier (TM) bits */
-#define	MMU060_IO	(0x00008000)	/* intruction or operand */
+#define	MMU060_IO	(0x00008000)	/* instruction or operand */
 #define	MMU060_PBE	(0x00004000)	/* push buffer bus error */
 #define	MMU060_SBE	(0x00002000)	/* store buffer bus error */
 #define	MMU060_PTA	(0x00001000)	/* pointer A fault */

@@ -45,7 +45,7 @@ converted to other assembly syntaxes by using any word processor
 with a global search and replace function.
 
 To assist in assembling and linking these modules with other modules,
-the instaler should add symbolic labels to the top of the files.
+the installer should add symbolic labels to the top of the files.
 This will allow the calling routines to access the entry points
 of these packages.
 
@@ -159,7 +159,7 @@ FP unimplemented: tests FP unimplemented exception. this one is
 FP enabled: tests enabled snan/operr/ovfl/unfl/dz/inex.
 	    basically, it enables each of these exceptions and forces
 	    each using an implemented FP instruction. this process
-	    exercizes _fpsp_{snan,operr,ovfl,unfl,dz,inex}() and
+	    exercises _fpsp_{snan,operr,ovfl,unfl,dz,inex}() and
 	    _real_{snan,operr,ovfl,unfl,dz,inex}(). the test expects
 	    _real_XXXX() to do nothing except clear the exception
 	    and "rte". if a system's _real_XXXX() handler creates an

@@ -18,16 +18,23 @@
  *		Alan Cox	:	Multicast ping reply as self.
  *		Alan Cox	:	Fix atomicity lockup in ip_build_xmit call
  *		Alan Cox	:	Added 216,128 byte paths to the MTU code.
+ *		Martin Mares	:	RFC1812 checks.
+ *		Martin Mares	:	Can be configured to follow redirects if acting
+ *					as a router _without_ a routing protocol (RFC 1812).
+ *		Martin Mares	:	Echo requests may be configured to be ignored (RFC 1812).
+ *		Martin Mares	:	Limitation of ICMP error message transmit rate (RFC 1812).
+ *		Martin Mares	:	TOS and Precedence set correctly (RFC 1812).
  *
  *
  *
- * RFC1122 Status: (boy, are there a lot of rules for ICMP)
+ * RFC1122 (Host Requirements -- Comm. Layer) Status:
+ * (boy, are there a lot of rules for ICMP)
  *  3.2.2 (Generic ICMP stuff)
  *   MUST discard messages of unknown type. (OK)
  *   MUST copy at least the first 8 bytes from the offending packet
- *     when sending ICMP errors. (OK)
+ *     when sending ICMP errors. (OBSOLETE -- see RFC1812)
  *   MUST pass received ICMP errors up to protocol level. (OK)
- *   SHOULD send ICMP errors with TOS == 0. (OK)
+ *   SHOULD send ICMP errors with TOS == 0. (OBSOLETE -- see RFC1812)
  *   MUST NOT send ICMP errors in reply to:
  *     ICMP errors (OK)
  *     Broadcast/multicast datagrams (OK)
@@ -38,8 +45,8 @@
  *   All the rules govern the IP layer, and are dealt with in ip.c, not here.
  *  3.2.2.2 (Redirect)
  *   Host SHOULD NOT send ICMP_REDIRECTs.  (OK)
- *   MUST update routing table in response to host or network redirects. 
- *     (host OK, network NOT YET) [Intentionally -- AC]
+ *   MUST update routing table in response to host or network redirects.
+ *     (host OK, network OBSOLETE)
  *   SHOULD drop redirects if they're not from directly connected gateway
  *     (OK -- we drop it if it's not from our old gateway, which is close
  *      enough)
@@ -50,7 +57,7 @@
  *   MUST pass TIME_EXCEEDED to transport layer (OK)
  *   Other requirements dealt with at IP (generating TIME_EXCEEDED).
  * 3.2.2.5 (Parameter Problem)
- *   SHOULD generate these, but it doesn't say for what.  So we're OK. =)
+ *   SHOULD generate these (OK)
  *   MUST pass received PARAMPROBLEM to transport layer (NOT YET)
  *   	[Solaris 2.X seems to assert EPROTO when this occurs] -- AC
  * 3.2.2.6 (Echo Request/Reply)
@@ -60,7 +67,7 @@
  *     We're OK for unicast ECHOs, and it doesn't say anything about
  *     how to handle broadcast ones, since it's optional.
  *   MUST copy data from REQUEST to REPLY (OK)
- *     unless it would require illegal fragmentation (N/A)
+ *     unless it would require illegal fragmentation (OK)
  *   MUST pass REPLYs to transport/user layer (OK)
  *   MUST use any provided source route (reversed) for REPLY. (NOT YET)
  * 3.2.2.7 (Information Request/Reply)
@@ -81,6 +88,130 @@
  *   MUST discard received REPLYs if not using this system (OK)
  *   MUST NOT send replies unless specifically made agent for this sort
  *     of thing. (OK)
+ *
+ *
+ * RFC 1812 (IPv4 Router Requirements) Status (even longer):
+ *  4.3.2.1 (Unknown Message Types)
+ *   MUST pass messages of unknown type to ICMP user iface or silently discard
+ *     them (OK)
+ *  4.3.2.2 (ICMP Message TTL)
+ *   MUST initialize TTL when originating an ICMP message (OK)
+ *  4.3.2.3 (Original Message Header)
+ *   SHOULD copy as much data from the offending packet as possible without
+ *     the length of the ICMP datagram exceeding 576 bytes (NOT YET)
+ *   MUST leave original IP header of the offending packet, but we're not
+ *     required to undo modifications made (OK)
+ *  4.3.2.4 (Original Message Source Address)
+ *   MUST use one of addresses for the interface the orig. packet arrived as
+ *     source address (OK)
+ *  4.3.2.5 (TOS and Precedence)
+ *   SHOULD leave TOS set to the same value unless the packet would be discarded
+ *     for that reason (OK)
+ *   MUST use TOS=0 if not possible to leave original value (OK)
+ *   MUST leave IP Precedence for Source Quench messages (OK -- not sent at all)
+ *   SHOULD use IP Precedence = 6 (Internetwork Control) or 7 (Network Control)
+ *     for all other error messages (OK, we use 6)
+ *   MAY allow configuration of IP Precedence (OK -- not done)
+ *   MUST leave IP Precedence and TOS for reply messages (OK)
+ *  4.3.2.6 (Source Route)
+ *   SHOULD use reverse source route UNLESS sending Parameter Problem on source
+ *     routing and UNLESS the packet would be immediately discarded (NOT YET)
+ *  4.3.2.7 (When Not to Send ICMP Errors)
+ *   MUST NOT send ICMP errors in reply to:
+ *     ICMP errors (OK)
+ *     Packets failing IP header validation tests unless otherwise noted (OK)
+ *     Broadcast/multicast datagrams (OK)
+ *     MAC broadcasts (OK)
+ *     Non-initial fragments (OK)
+ *     Datagram with a source address that isn't a single host. (OK)
+ *  4.3.2.8 (Rate Limiting)
+ *   SHOULD be able to limit error message rate (OK)
+ *   SHOULD allow setting of rate limits (OK, in the source)
+ *  4.3.3.1 (Destination Unreachable)
+ *   All the rules govern the IP layer, and are dealt with in ip.c, not here.
+ *  4.3.3.2 (Redirect)
+ *   MAY ignore ICMP Redirects if running a routing protocol or if forwarding
+ *     is enabled on the interface (OK -- ignores)
+ *  4.3.3.3 (Source Quench)
+ *   SHOULD NOT originate SQ messages (OK)
+ *   MUST be able to limit SQ rate if originates them (OK as we don't send them)
+ *   MAY ignore SQ messages it receives (OK -- we don't)
+ *  4.3.3.4 (Time Exceeded)
+ *   Requirements dealt with at IP (generating TIME_EXCEEDED).
+ *  4.3.3.5 (Parameter Problem)
+ *   MUST generate these for all errors not covered by other messages (OK)
+ *   MUST include original value of the value pointed by (OK)
+ *  4.3.3.6 (Echo Request)
+ *   MUST implement echo server function (OK)
+ *   MUST process at ER of at least max(576, MTU) (OK)
+ *   MAY reject broadcast/multicast ER's (We don't, but that's OK)
+ *   SHOULD have a config option for silently ignoring ER's (OK)
+ *   MUST have a default value for the above switch = NO (OK)
+ *   MUST have application layer interface for Echo Request/Reply (OK)
+ *   MUST reply using same source address as the request was sent to.
+ *     We're OK for unicast ECHOs, and it doesn't say anything about
+ *     how to handle broadcast ones, since it's optional.
+ *   MUST copy data from Request to Reply (OK)
+ *   SHOULD update Record Route / Timestamp options (??)
+ *   MUST use reversed Source Route for Reply if possible (NOT YET)
+ *  4.3.3.7 (Information Request/Reply)
+ *   SHOULD NOT originate or respond to these (OK)
+ *  4.3.3.8 (Timestamp / Timestamp Reply)
+ *   MAY implement (OK)
+ *   MUST reply to every Timestamp message received (OK)
+ *   MAY discard broadcast REQUESTs.  (OK, but see source for inconsistency)
+ *   MUST reply using same source address as the request was sent to. (OK)
+ *   MUST use reversed Source Route if possible (NOT YET)
+ *   SHOULD update Record Route / Timestamp options (??)
+ *   MUST pass REPLYs to transport/user layer (requires RAW, just like ECHO) (OK)
+ *   MUST update clock for timestamp at least 16 times/sec (OK)
+ *   MUST be "correct within a few minutes" (OK)
+ * 4.3.3.9 (Address Mask Request/Reply)
+ *   MUST have support for receiving AMRq and responding with AMRe (OK, but only as a
+ *     compile-time option)
+ *   SHOULD have option for each interface for AMRe's, MUST default to NO (NOT YET)
+ *   MUST NOT reply to AMRq before knows the correct AM (OK)
+ *   MUST NOT respond to AMRq with source address 0.0.0.0 and the AM's for
+ *     logical i-faces for the physical i-face are not the same (NOT YET)
+ *   SHOULD examine all AMRe's it receives and check them (NOT YET)
+ *   SHOULD log invalid AMRe's (AM+sender) (NOT YET)
+ *   MUST NOT use contents of AMRe to determine correct AM (OK)
+ *   MAY broadcast AMRe's after having configured address masks (OK -- doesn't)
+ *   MUST NOT do broadcast AMRe's if not set by extra option (OK, no option)
+ *   MUST use the { <NetPrefix>, -1 } form of broadcast addresses (OK)
+ * 4.3.3.10 (Router Advertisement and Solicitations)
+ *   MUST support router part of Router Discovery Protocol on all networks we
+ *     support broadcast or multicast addressing. (OK -- done by gated)
+ *   MUST have all config parameters with the respective defaults (OK)
+ * 5.2.7.1 (Destination Unreachable)
+ *   MUST generate DU's (OK)
+ *   SHOULD choose a best-match response code (OK)
+ *   SHOULD NOT generate Host Isolated codes (OK)
+ *   SHOULD use Communication Administratively Prohibited when administratively
+ *     filtering packets (NOT YET)
+ *   MAY include config option for not generating the above and silently discard
+ *     the packets instead (OK)
+ *   MAY include config option for not generating Precedence Violation and
+ *     Precedence Cutoff messages (OK as we don't generate them at all)
+ *   MUST use Host Unreachable or Dest. Host Unknown codes whenever other hosts
+ *     on the same network might be reachable (OK -- no net unreach's at all)
+ *   MUST use new form of Fragmentation Needed and DF Set messages (OK)
+ * 5.2.7.2 (Redirect)
+ *   MUST NOT generate network redirects (OK)
+ *   MUST be able to generate host redirects (OK)
+ *   SHOULD be able to generate Host+TOS redirects (NO as we don't use TOS)
+ *   MUST have an option to use Host redirects instead of Host+TOS ones (OK as
+ *     no Host+TOS Redirects are used)
+ *   MUST NOT generate redirects unless forwarding to the same i-face and the
+ *     dest. address is on the same subnet as the src. address and no source
+ *     routing is in use. (OK)
+ *   MUST NOT follow redirects when using a routing protocol (OK)
+ *   MAY use redirects if not using a routing protocol (OK, compile-time option)
+ *   MUST comply to Host Requirements when not acting as a router (OK)
+ *  5.2.7.3 (Time Exceeded)
+ *   MUST generate Time Exceeded Code 0 when discarding packet due to TTL=0 (OK)
+ *   MAY have a per-interface option to disable origination of TE messages, but
+ *     it MUST default to "originate" (OK -- we don't support it)
  */
 
 #include <linux/config.h>
@@ -142,6 +273,34 @@ struct icmp_err icmp_err_convert[] = {
 unsigned long dummy;
 
 /*
+ *	ICMP transmit rate limit control structures. We use a relatively simple
+ *	approach to the problem: For each type of ICMP message with rate limit
+ *	we count the number of messages sent during some time quantum. If this
+ *	count exceeds given maximal value, we ignore all messages not separated
+ *	from the last message sent at least by specified time.
+ */
+
+#define XRLIM_CACHE_SIZE 16		/* How many destination hosts do we cache */
+
+struct icmp_xrl_cache			/* One entry of the ICMP rate cache */
+{
+	__u32 daddr;			/* Destination address */
+	unsigned long counter;		/* Message counter */
+	unsigned long next_reset;	/* Time of next reset of the counter */
+	unsigned long last_access;	/* Time of last access to this entry (LRU) */
+	unsigned int restricted;	/* Set if we're in restricted mode */
+	unsigned long next_packet;	/* When we'll allow a next packet if restricted */
+};
+
+struct icmp_xrlim
+{
+	unsigned long timeout;		/* Time quantum for rate measuring */
+	unsigned long limit;		/* Maximal number of messages per time quantum allowed */
+	unsigned long delay;		/* How long we wait between packets when restricting */
+	struct icmp_xrl_cache cache[XRLIM_CACHE_SIZE];	/* Rate cache */
+};
+
+/*
  *	ICMP control array. This specifies what to do with each ICMP.
  */
  
@@ -150,7 +309,8 @@ struct icmp_control
 	unsigned long *output;		/* Address to increment on output */
 	unsigned long *input;		/* Address to increment on input */
 	void (*handler)(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev, __u32 saddr, __u32 daddr, int len);
-	unsigned long error;		/* This ICMP is classed as an error message */	
+	unsigned long error;		/* This ICMP is classed as an error message */
+	struct icmp_xrlim *xrlim;	/* Transmit rate limit control structure or NULL for no limits */
 };
 
 static struct icmp_control icmp_pointers[19];
@@ -181,6 +341,97 @@ struct socket icmp_socket;
  *	Send an ICMP frame.
  */
  
+
+/*
+ *	Initialize the transmit rate limitation mechanism.
+ */
+
+#ifndef CONFIG_NO_ICMP_LIMIT
+
+static void xrlim_init(void)
+{
+	int type, entry;
+	struct icmp_xrlim *xr;
+
+	for (type=0; type<=18; type++) {
+		xr = icmp_pointers[type].xrlim;
+		if (xr) {
+			for (entry=0; entry<XRLIM_CACHE_SIZE; entry++)
+				xr->cache[entry].daddr = INADDR_NONE;
+		}
+	}
+}
+
+/*
+ *	Check transmit rate limitation for given message.
+ *
+ *	RFC 1812: 4.3.2.8 SHOULD be able to limit error message rate
+ *			  SHOULD allow setting of rate limits (we allow in the source)
+ */
+
+static int xrlim_allow(int type, __u32 addr)
+{
+	struct icmp_xrlim *r;
+	struct icmp_xrl_cache *c;
+	unsigned long now;
+
+	if (type > 18)			/* No time limit present */
+		return 1;
+	r = icmp_pointers[type].xrlim;
+	if (!r)
+		return 1;
+
+	for (c = r->cache; c < &r->cache[XRLIM_CACHE_SIZE]; c++)	/* Cache lookup */
+		if (c->daddr == addr)
+			break;
+
+	now = jiffies;		/* Cache current time (saves accesses to volatile variable) */
+
+	if (c == &r->cache[XRLIM_CACHE_SIZE]) {		/* Cache miss */
+		unsigned long oldest = now;		/* Find the oldest entry to replace */
+		struct icmp_xrl_cache *d;
+		c = r->cache;
+		for (d = r->cache; d < &r->cache[XRLIM_CACHE_SIZE]; d++)
+			if (!d->daddr) {		/* Unused entry */
+				c = d;
+				break;
+			} else if (d->last_access < oldest) {
+				oldest = d->last_access;
+				c = d;
+			}
+		c->last_access = now;			/* Fill the entry with new data */
+		c->daddr = addr;
+		c->counter = 1;
+		c->next_reset = now + r->timeout;
+		c->restricted = 0;
+		return 1;
+	}
+
+	c->last_access = now;
+	if (c->next_reset > now) {			/* Let's increment the counter */
+		c->counter++;
+		if (c->counter == r->limit) {		/* Limit exceeded, start restrictions */
+			c->restricted = 1;
+			c->next_packet = now + r->delay;
+			return 0;
+		}
+		if (c->restricted) {			/* Any restrictions pending? */
+			if (c->next_packet > now)
+				return 0;
+			c->next_packet = now + r->delay;
+			return 1;
+		}
+	} else {					/* Reset the counter */
+		if (c->counter < r->limit)		/* Switch off all restrictions */
+			c->restricted = 0;
+		c->next_reset = now + r->timeout;
+		c->counter = 0;
+	}
+
+	return 1;					/* Send the packet */
+}
+
+#endif /* CONFIG_NO_ICMP_LIMIT */
 
 /*
  *	Maintain the counters used in the SNMP statistics for outgoing ICMP
@@ -229,12 +480,13 @@ static void icmp_glue_bits(const void *p, __u32 saddr, char *to, unsigned int of
  *	Driving logic for building and sending ICMP messages.
  */
 
-static void icmp_build_xmit(struct icmp_bxm *icmp_param, __u32 saddr, __u32 daddr)
+static void icmp_build_xmit(struct icmp_bxm *icmp_param, __u32 saddr, __u32 daddr, __u8 tos)
 {
 	struct sock *sk=icmp_socket.data;
 	icmp_param->icmph.checksum=0;
 	icmp_param->csum=0;
 	icmp_out_count(icmp_param->icmph.type);
+	sk->ip_tos = tos;
 	ip_build_xmit(sk, icmp_glue_bits, icmp_param, 
 		icmp_param->data_len+sizeof(struct icmphdr),
 		daddr, saddr, &icmp_param->replyopts, 0, IPPROTO_ICMP, 1);
@@ -309,7 +561,16 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 				return;
 		}
 	}
-	
+
+	/*
+	 *	Check the rate limit
+	 */
+
+#ifndef CONFIG_NO_ICMP_LIMIT
+	if (!xrlim_allow(type, iph->saddr))
+		return;
+#endif	
+
 	/*
 	 *	Tell our driver what to send
 	 */
@@ -329,7 +590,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 	 */
 
 	if (ip_options_echo(&icmp_param.replyopts, NULL, saddr, iph->saddr, skb_in) == 0)
-	  icmp_build_xmit(&icmp_param, saddr, iph->saddr);
+	  icmp_build_xmit(&icmp_param, saddr, iph->saddr, ((iph->tos & 0x38) | 6));
 }
 
 
@@ -491,10 +752,12 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 	iph = (struct iphdr *) (icmph + 1);
 	ip = iph->daddr;
 
-#ifdef CONFIG_IP_FORWARD
 	/*
-	 *	We are a router. Routers should not respond to ICMP_REDIRECT messages.
+	 *	If we are a router and we run a routing protocol, we MUST NOT follow redirects.
+	 *	When using no routing protocol, we MAY follow redirects. (RFC 1812, 5.2.7.2)
 	 */
+
+#if defined(CONFIG_IP_FORWARD) && !defined(CONFIG_IP_DUMB_ROUTER)
 	printk(KERN_INFO "icmp: ICMP redirect ignored. dest = %s, "
 	       "orig gw = %s, \"new\" gw = %s, device = %s.\n", in_ntoa(ip),
 		in_ntoa(source), in_ntoa(icmph->un.gateway), dev->name);
@@ -505,7 +768,8 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 			/*
 			 *	This causes a problem with subnetted networks. What we should do
 			 *	is use ICMP_ADDRESS to get the subnet mask of the problem route
-			 *	and set both. But we don't..
+			 *	and set both. But we don't.. [RFC1812 says routers MUST NOT
+			 *	generate Network Redirects]
 			 */
 #ifdef not_a_good_idea
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_GATEWAY),
@@ -548,18 +812,21 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
  *
  *	RFC 1122: 3.2.2.6 MUST have an echo server that answers ICMP echo requests.
  *	RFC 1122: 3.2.2.6 Data received in the ICMP_ECHO request MUST be included in the reply.
+ *	RFC 1812: 4.3.3.6 SHOULD have a config option for silently ignoring echo requests, MUST have default=NOT.
  *	See also WRT handling of options once they are done and working.
  */
  
 static void icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev, __u32 saddr, __u32 daddr, int len)
 {
+#ifndef CONFIG_IP_IGNORE_ECHO_REQUESTS
 	struct icmp_bxm icmp_param;
 	icmp_param.icmph=*icmph;
 	icmp_param.icmph.type=ICMP_ECHOREPLY;
 	icmp_param.data_ptr=(icmph+1);
 	icmp_param.data_len=len;
 	if (ip_options_echo(&icmp_param.replyopts, NULL, daddr, saddr, skb)==0)
-		icmp_build_xmit(&icmp_param, daddr, saddr);
+		icmp_build_xmit(&icmp_param, daddr, saddr, skb->ip_hdr->tos);
+#endif
 	kfree_skb(skb, FREE_READ);
 }
 
@@ -604,7 +871,7 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	icmp_param.data_ptr=&times;
 	icmp_param.data_len=12;
 	if (ip_options_echo(&icmp_param.replyopts, NULL, daddr, saddr, skb)==0)
-		icmp_build_xmit(&icmp_param, daddr, saddr);
+		icmp_build_xmit(&icmp_param, daddr, saddr, skb->ip_hdr->tos);
 	kfree_skb(skb,FREE_READ);
 }
 
@@ -623,8 +890,7 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
  
 static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev, __u32 saddr, __u32 daddr, int len)
 {
-#ifdef CONFIG_IP_ADDR_AGENT
-	__u32 answer;
+#ifdef CONFIG_IP_ADDR_AGENT	/* Don't use, broken */
 	struct icmp_bxm icmp_param;
 	icmp_param.icmph.type=ICMP_ADDRESSREPLY;
 	icmp_param.icmph.code=0;
@@ -633,7 +899,7 @@ static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 	icmp_param.data_ptr=&dev->pa_mask;
 	icmp_param.data_len=4;
 	if (ip_options_echo(&icmp_param.replyopts, NULL, daddr, saddr, skb)==0)
-		icmp_build_xmit(&icmp_param, daddr, saddr);
+		icmp_build_xmit(&icmp_param, daddr, saddr, skb->iph->tos);
 #endif	
 	kfree_skb(skb, FREE_READ);	
 }
@@ -668,7 +934,7 @@ int icmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	}
 	
 	/*
-	 *	18 is the highest 'known' icmp type. Anything else is a mystery
+	 *	18 is the highest 'known' ICMP type. Anything else is a mystery
 	 *
 	 *	RFC 1122: 3.2.2  Unknown ICMP messages types MUST be silently discarded.
 	 */
@@ -712,43 +978,52 @@ int icmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 }
 
 /*
+ *	This table defined limits of ICMP sending rate for various ICMP messages.
+ */
+
+static struct icmp_xrlim
+	xrl_unreach = { 4*HZ, 80, HZ/4 },		/* Host Unreachable */
+	xrl_redirect = { 2*HZ, 10, HZ/2 },		/* Redirect */
+	xrl_generic = { 3*HZ, 30, HZ/4 };		/* All other errors */
+
+/*
  *	This table is the definition of how we handle ICMP.
  */
  
 static struct icmp_control icmp_pointers[19] = {
 /* ECHO REPLY (0) */
- { &icmp_statistics.IcmpOutEchoReps, &icmp_statistics.IcmpInEchoReps, icmp_discard, 0 },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1 },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1 },
+ { &icmp_statistics.IcmpOutEchoReps, &icmp_statistics.IcmpInEchoReps, icmp_discard, 0, NULL },
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
 /* DEST UNREACH (3) */
- { &icmp_statistics.IcmpOutDestUnreachs, &icmp_statistics.IcmpInDestUnreachs, icmp_unreach, 1 },
+ { &icmp_statistics.IcmpOutDestUnreachs, &icmp_statistics.IcmpInDestUnreachs, icmp_unreach, 1, &xrl_unreach },
 /* SOURCE QUENCH (4) */
- { &icmp_statistics.IcmpOutSrcQuenchs, &icmp_statistics.IcmpInSrcQuenchs, icmp_unreach, 1 },
+ { &icmp_statistics.IcmpOutSrcQuenchs, &icmp_statistics.IcmpInSrcQuenchs, icmp_unreach, 1, NULL },
 /* REDIRECT (5) */
- { &icmp_statistics.IcmpOutRedirects, &icmp_statistics.IcmpInRedirects, icmp_redirect, 1 },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1 },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1 },
+ { &icmp_statistics.IcmpOutRedirects, &icmp_statistics.IcmpInRedirects, icmp_redirect, 1, &xrl_redirect },
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
 /* ECHO (8) */
- { &icmp_statistics.IcmpOutEchos, &icmp_statistics.IcmpInEchos, icmp_echo, 0 },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1 },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1 },
+ { &icmp_statistics.IcmpOutEchos, &icmp_statistics.IcmpInEchos, icmp_echo, 0, NULL },
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
 /* TIME EXCEEDED (11) */
- { &icmp_statistics.IcmpOutTimeExcds, &icmp_statistics.IcmpInTimeExcds, icmp_unreach, 1 },
+ { &icmp_statistics.IcmpOutTimeExcds, &icmp_statistics.IcmpInTimeExcds, icmp_unreach, 1, &xrl_generic },
 /* PARAMETER PROBLEM (12) */
 /* FIXME: RFC1122 3.2.2.5 - MUST pass PARAM_PROB messages to transport layer */
- { &icmp_statistics.IcmpOutParmProbs, &icmp_statistics.IcmpInParmProbs, icmp_discard, 1 },
+ { &icmp_statistics.IcmpOutParmProbs, &icmp_statistics.IcmpInParmProbs, icmp_discard, 1, &xrl_generic },
 /* TIMESTAMP (13) */
- { &icmp_statistics.IcmpOutTimestamps, &icmp_statistics.IcmpInTimestamps, icmp_timestamp, 0 },
+ { &icmp_statistics.IcmpOutTimestamps, &icmp_statistics.IcmpInTimestamps, icmp_timestamp, 0, NULL },
 /* TIMESTAMP REPLY (14) */
- { &icmp_statistics.IcmpOutTimestampReps, &icmp_statistics.IcmpInTimestampReps, icmp_discard, 0 },
+ { &icmp_statistics.IcmpOutTimestampReps, &icmp_statistics.IcmpInTimestampReps, icmp_discard, 0, NULL },
 /* INFO (15) */
- { &dummy, &dummy, icmp_discard, 0 },
+ { &dummy, &dummy, icmp_discard, 0, NULL },
 /* INFO REPLY (16) */
- { &dummy, &dummy, icmp_discard, 0 },
+ { &dummy, &dummy, icmp_discard, 0, NULL },
 /* ADDR MASK (17) */
- { &icmp_statistics.IcmpOutAddrMasks, &icmp_statistics.IcmpInAddrMasks, icmp_address, 0 },
+ { &icmp_statistics.IcmpOutAddrMasks, &icmp_statistics.IcmpInAddrMasks, icmp_address, 0, NULL },
 /* ADDR MASK REPLY (18) */
- { &icmp_statistics.IcmpOutAddrMaskReps, &icmp_statistics.IcmpInAddrMaskReps, icmp_discard, 0 }
+ { &icmp_statistics.IcmpOutAddrMaskReps, &icmp_statistics.IcmpInAddrMaskReps, icmp_discard, 0, NULL }
 };
 
 void icmp_init(struct proto_ops *ops)
@@ -762,5 +1037,8 @@ void icmp_init(struct proto_ops *ops)
 	sk=icmp_socket.data;
 	sk->allocation=GFP_ATOMIC;
 	sk->num = 256;			/* Don't receive any data */
+#ifndef CONFIG_NO_ICMP_LIMIT
+	xrlim_init();
+#endif
 }
 

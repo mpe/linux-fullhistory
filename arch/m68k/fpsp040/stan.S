@@ -299,7 +299,7 @@ TANSM:
 
 	fmovex		%fp0,-(%sp)
 	fmovel		%d1,%fpcr		 |restore users exceptions
-	fmovex		(%sp)+,%fp0	|last inst - posibble exception set
+	fmovex		(%sp)+,%fp0	|last inst - possible exception set
 
 	bra		t_frcinx
 
@@ -340,7 +340,7 @@ red_neg:
 
 |--ON ENTRY, FP0 IS X, ON RETURN, FP0 IS X REM PI/2, |X| <= PI/4.
 |--integer quotient will be stored in N
-|--Intermeditate remainder is 66-bit long; (R,r) in (FP0,FP1)
+|--Intermediate remainder is 66-bit long; (R,r) in (FP0,FP1)
 
 LOOP:
 	fmovex		%fp0,INARG(%a6)	| ...+-2**K * F, 1 <= F < 2

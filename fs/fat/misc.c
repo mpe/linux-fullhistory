@@ -298,7 +298,7 @@ int fat_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
 		if (*bh)
 			brelse(*bh);
 		PRINTK (("get_entry sector apres brelse\n"));
-		if (!(*bh = bread(dir->i_dev,sector,SECTOR_SIZE))) {
+		if (!(*bh = breada(dir->i_dev,sector,SECTOR_SIZE,0,FAT_READAHEAD))) {
 			printk("Directory sread (sector %d) failed\n",sector);
 			continue;
 		}
@@ -372,7 +372,7 @@ static int raw_scan_sector(struct super_block *sb,int sector,const char *name,
 	struct inode *inode;
 	int entry,start,done;
 
-	if (!(bh = bread(sb->s_dev,sector,SECTOR_SIZE))) return -EIO;
+	if (!(bh = breada(sb->s_dev,sector,SECTOR_SIZE,0,FAT_READAHEAD))) return -EIO;
 	data = (struct msdos_dir_entry *) bh->b_data;
 	for (entry = 0; entry < MSDOS_DPS; entry++) {
 /* RSS_COUNT:  if (data[entry].name == name) done=true else done=false. */

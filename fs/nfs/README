@@ -13,7 +13,7 @@
     HOW TO USE
 
     This stuff compiles as a loadable module (I developed it on 1.3.77).
-    Simply type mkmodule, and insmod nfs.o. This will start for nfsiod's
+    Simply type mkmodule, and insmod nfs.o. This will start four nfsiod's
     at the same time (which will show up under the pseudonym of insmod in
     ps-style listings).
 

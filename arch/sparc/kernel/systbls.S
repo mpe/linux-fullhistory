@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.38 1996/04/20 08:43:26 davem Exp $
+/* $Id: systbls.S,v 1.41 1996/04/25 09:11:39 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -147,7 +147,7 @@ C_LABEL(sunos_sys_table):
 	.long C_LABEL(sys_chmod), C_LABEL(sys_chown), C_LABEL(sunos_brk)
 	.long C_LABEL(sunos_nosys), C_LABEL(sys_lseek), C_LABEL(sunos_getpid)
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.long C_LABEL(sunos_getuid), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
+	.long C_LABEL(sunos_getuid), C_LABEL(sunos_nosys), C_LABEL(sys_ptrace)
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 	.long C_LABEL(sys_access), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
@@ -197,7 +197,7 @@ C_LABEL(sunos_sys_table):
 	.long C_LABEL(sunos_getdomainname), C_LABEL(sys_setdomainname)
 	.long C_LABEL(sunos_nosys), C_LABEL(sys_quotactl), C_LABEL(sunos_nosys)
 	.long C_LABEL(sunos_mount), C_LABEL(sys_ustat), C_LABEL(sunos_nosys)
-	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_audit)
+	.long C_LABEL(sunos_nosys), C_LABEL(sunos_shmsys), C_LABEL(sunos_audit)
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_getdents), C_LABEL(sys_setsid)
 	.long C_LABEL(sys_fchdir), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)

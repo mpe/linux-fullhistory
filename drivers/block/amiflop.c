@@ -677,7 +677,7 @@ unsigned short crc;     /* on 68000 we got an alignment problem,
                            but this compiler solves it  by adding silently 
                            adding a pad byte so data wont fit
                            and this cost about 3h to discover.... */
-unsigned char gap1[22];     /* for longword-aligndness (0x4e) */
+unsigned char gap1[22];     /* for longword-alignedness (0x4e) */
 };
 
 /* crc routines are borrowed from the messydos-handler  */
@@ -702,7 +702,7 @@ return dos_crc(data, 0xe2, 0x95 ,511); /* precomputed magic */
 ; How CRCs "really" work:
 ;
 ; First, you should regard a bitstring as a series of coefficients of
-; polymomials. We calculate with these polynomials in modulo-2
+; polynomials. We calculate with these polynomials in modulo-2
 ; arithmetic, in which both add and subtract are done the same as
 ; exclusive-or. Now, we modify our data (a very long polynomial) in
 ; such a way that it becomes divisible by the CCITT-standard 16-bit
@@ -1637,7 +1637,7 @@ static int floppy_open(struct inode *inode, struct file *filp)
   unit[drive].blocks=unit[drive].type->heads*unit[drive].type->tracks*
         unit[drive].sects;
 
-printk("fd%d: accesing %s-disk with %s-layout\n",drive,unit[drive].type->name,
+printk("fd%d: accessing %s-disk with %s-layout\n",drive,unit[drive].type->name,
   data_types[system].name);
 
   return 0;

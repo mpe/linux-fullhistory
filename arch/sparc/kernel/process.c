@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.49 1996/04/20 07:37:20 davem Exp $
+/*  $Id: process.c,v 1.51 1996/04/25 06:08:49 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -78,12 +78,9 @@ int cpu_idle(void *unused)
 	volatile int *spap = &smp_process_available;
 	volatile int cval;
 
-	current->priority = -50;
 	while(1) {
                 if(0==read_smp_counter(spap))
                 	continue;
-		while(*spap == -1)
-			;
 		cli();
 		/* Acquire exclusive access. */
 		while((cval = smp_swap(spap, -1)) == -1)

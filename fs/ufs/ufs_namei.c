@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_namei.c,v 1.1 1996/04/21 14:41:15 davem Exp $
+ * $Id: ufs_namei.c,v 1.3 1996/04/25 09:12:07 davem Exp $
  *
  */
 
@@ -103,7 +103,7 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 	        }
 	        bh = bread(dir->i_dev, fragno, dir->i_sb->s_blocksize);
 	        if (bh == NULL) {
-	                printk("ufs_lookup: bread failed: ino %lu, lfragno %u",
+	                printk("ufs_lookup: bread failed: ino %lu, lfragno %lu",
 	                       dir->i_ino, lfragno);
 	                return(-EIO);
 	        }
@@ -119,7 +119,7 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 	                        break;
 	                }
 	                if (dir->i_sb->u.ufs_sb.s_flags & UFS_DEBUG) {
-	                        printk("lfragno 0x%x  direct d 0x%x  d_ino %u  d_reclen %u  d_namlen %u  d_name `%s'\n",
+	                        printk("lfragno 0x%lx  direct d 0x%x  d_ino %u  d_reclen %u  d_namlen %u  d_name `%s'\n",
 	                               lfragno, (unsigned int)d, d->d_ino, d->d_reclen, d->d_namlen, d->d_name);
 	                }
 	                if ((d->d_namlen == len) &&

@@ -294,7 +294,7 @@ static inline int DRIVE(kdev_t x) {
 /*
  * globals used by 'result()'
  */
-#define MAX_REPLIES 17
+#define MAX_REPLIES 16
 static unsigned char reply_buffer[MAX_REPLIES];
 static int inr; /* size of reply buffer, when called from interrupt */
 #define ST0 (reply_buffer[0])

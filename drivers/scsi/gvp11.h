@@ -1,6 +1,6 @@
 #ifndef GVP11_H
 
-/* $Id: gvp11.h,v 1.4 1996/03/12 20:42:40 root Exp root $
+/* $Id: gvp11.h,v 1.5 1996/04/25 20:58:31 root Exp root $
  *
  * Header file for the GVP Series II SCSI controller for Linux
  *
@@ -15,7 +15,7 @@ int gvp11_detect(Scsi_Host_Template *);
 const char *wd33c93_info(void);
 int wd33c93_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int wd33c93_abort(Scsi_Cmnd *);
-int wd33c93_reset(Scsi_Cmnd *);
+int wd33c93_reset(Scsi_Cmnd *, unsigned int);
 
 #ifndef NULL
 #define NULL 0

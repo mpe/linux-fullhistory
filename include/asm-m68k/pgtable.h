@@ -141,7 +141,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #define __S110	PAGE_SHARED
 #define __S111	PAGE_SHARED
 
-/* zero page used for unitialized stuff */
+/* zero page used for uninitialized stuff */
 extern unsigned long empty_zero_page;
 
 /*
@@ -525,22 +525,14 @@ extern void cache_push (unsigned long paddr, int len);
  */
 extern void cache_push_v (unsigned long vaddr, int len);
 
-#if 0
-#define flush_cache_all()		    do { \
-                   if (m68k_is040or060 >= 4) \
-                     __asm__ __volatile__ (".word 0xf478\n" ::); \
-                                            } while (0)
+/*
+ * Could someone take a look at these?
+ */
+extern void flush_cache_all(void);
 #define flush_cache_mm(mm)		   flush_cache_all()
 #define flush_cache_range(mm, start, end)  flush_cache_all()
-#define flush_cache_page(vma, vmaddr)	   flush_cache_all()
-#define flush_page_to_ram(page)		   flush_cache_all()
-#else
-#define flush_cache_all()			do { } while (0)
-#define flush_cache_mm(mm)			do { } while (0)
-#define flush_cache_range(mm, start, end)	do { } while (0)
-#define flush_cache_page(vma, vmaddr)		do { } while (0)
-#define flush_page_to_ram(page)			do { } while (0)
-#endif
+#define flush_cache_page(vma, addr)	   flush_cache_all()
+extern void flush_page_to_ram(unsigned long addr);
 
 /* cache code */
 #define FLUSH_I_AND_D	(0x00000808)
@@ -579,8 +571,19 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 {
 }
 
+/*
+ * I don't know what is going on here, but since these were changed,
+ * swapping haven't been working on the 68040.
+ */
+
+#if 0
 #define SWP_TYPE(entry)  (((entry) >> 2) & 0x7f)
 #define SWP_OFFSET(entry) ((entry) >> 9)
 #define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << 9))
+#else
+#define SWP_TYPE(entry)  (((entry) & 0x1fc) >> 2)
+#define SWP_OFFSET(entry) ((entry) >> PAGE_SHIFT)
+#define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << PAGE_SHIFT))
+#endif
 
 #endif /* _M68K_PGTABLE_H */

@@ -25,7 +25,7 @@
 |
 |			where exp = (true exp) - 1
 |
-|  So, wbtemp and fptemp will contain the following on erroneoulsy
+|  So, wbtemp and fptemp will contain the following on erroneously
 |	  signalled operr:
 |			fpts = 1
 |			fpte = $4000  (15 bit externally)
@@ -321,7 +321,7 @@ not_enabled:
 |
 | It is possible to have either inex2 or inex1 exceptions with the
 | operr.  If the inex enable bit is set in the FPCR, and either
-| inex2 or inex1 occured, we must clean up and branch to the
+| inex2 or inex1 occurred, we must clean up and branch to the
 | real inex handler.
 |
 ck_inex:

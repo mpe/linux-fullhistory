@@ -22,6 +22,7 @@
 #ifndef _LINUX_IF_ARP_H
 #define _LINUX_IF_ARP_H
 
+
 /* ARP protocol HARDWARE identifiers. */
 #define ARPHRD_NETROM	0		/* from KA9Q: NET/ROM pseudo	*/
 #define ARPHRD_ETHER 	1		/* Ethernet 10Mbps		*/

@@ -38,7 +38,7 @@
  *  - for medusa, the step rate is always 3ms
  *  - on medusa, use only cache_push()
  * Roman:
- *  - Make disk format numbering independant from minors
+ *  - Make disk format numbering independent from minors
  *  - Let user set max. supported drive type (speeds up format
  *    detection, saves buffer space)
  *
@@ -244,7 +244,7 @@ static struct atari_floppy_struct {
 /* Buffering variables:
  * First, there is a DMA buffer in ST-RAM that is used for floppy DMA
  * operations. Second, a track buffer is used to cache a whole track
- * of the disk to save read operations. These are two seperate buffers
+ * of the disk to save read operations. These are two separate buffers
  * because that allows write operations without clearing the track buffer.
  */
 
@@ -299,7 +299,7 @@ static unsigned int changed_floppies = 0xff, fake_change = 0;
 #define	FD_MOTOR_OFF_MAXTRY	(10*20)
 
 #define FLOPPY_TIMEOUT		(6*HZ)
-#define RECALIBRATE_ERRORS	4	/* Atfer this many errors the drive
+#define RECALIBRATE_ERRORS	4	/* After this many errors the drive
 					 * will be recalibrated. */
 #define MAX_ERRORS		8	/* After this many errors the driver
 					 * will give up. */
@@ -338,7 +338,7 @@ static unsigned int changed_floppies = 0xff, fake_change = 0;
  */
 static int Probing = 0;
 
-/* This flag is set when a dummy seek is necesary to make the WP
+/* This flag is set when a dummy seek is necessary to make the WP
  * status bit accessible.
  */
 static int NeedSeek = 0;
@@ -550,7 +550,7 @@ static void check_change( void )
 
  
 /* Handling of the Head Settling Flag: This flag should be set after each
- * seek operation, because we dont't use seeks with verify.
+ * seek operation, because we don't use seeks with verify.
  */
 
 static __inline__ void set_head_settle_flag( void )
@@ -880,7 +880,7 @@ static void fd_rwsec( void )
 			copy_buffer( ReqData, DMABuffer );
 			paddr = PhysDMABuffer;
 		}
-		dma_cache_maintainance( paddr, 512, 1 );
+		dma_cache_maintenance( paddr, 512, 1 );
 		rwflag = 0x100;
 	}
 	else {
@@ -949,7 +949,7 @@ static void fd_rwsec( void )
 	if (read_track) {
 		/* If reading a whole track, wait about one disk rotation and
 		 * then check if all sectors are read. The FDC will even
-		 * search for the first non-existant sector and need 1 sec to
+		 * search for the first non-existent sector and need 1 sec to
 		 * recognise that it isn't present :-(
 		 */
 		readtrack_timer.expires =
@@ -1061,7 +1061,7 @@ static void fd_rwsec_done( int status )
 	}	
 	if ((status & FDCSTAT_RECNF) &&
 	    /* RECNF is no error after a multiple read when the FDC
-	       searched for a non-existant sector! */
+	       searched for a non-existent sector! */
 	    !(read_track && FDC_READ(FDCREG_SECTOR) > SUDT->spt)) {
 		if (Probing) {
 			if (SUDT > disk_type) {
@@ -1115,11 +1115,11 @@ static void fd_rwsec_done( int status )
 		if (!read_track) {
 			void *addr;
 			addr = ATARIHW_PRESENT( EXTD_DMA ) ? ReqData : DMABuffer;
-			dma_cache_maintainance( VTOP(addr), 512, 0 );
+			dma_cache_maintenance( VTOP(addr), 512, 0 );
 			if (!ATARIHW_PRESENT( EXTD_DMA ))
 				copy_buffer (addr, ReqData);
 		} else {
-			dma_cache_maintainance( PhysTrackBuffer, MAX_SECTORS * 512, 0 );
+			dma_cache_maintenance( PhysTrackBuffer, MAX_SECTORS * 512, 0 );
 			BufferDrive = SelectedDrive;
 			BufferSide  = ReqSide;
 			BufferTrack = ReqTrack;
@@ -1155,7 +1155,7 @@ static void fd_writetrack( void )
 	DPRINT(("fd_writetrack() Tr=%d Si=%d\n", ReqTrack, ReqSide ));
 
 	paddr = PhysTrackBuffer;
-	dma_cache_maintainance( paddr, BUFFER_SIZE, 1 );
+	dma_cache_maintenance( paddr, BUFFER_SIZE, 1 );
 
 	fd_select_side( ReqSide );
   
@@ -1233,11 +1233,11 @@ static void fd_writetrack_done( int status )
 static void fd_times_out( unsigned long dummy )
 {
 	atari_disable_irq( IRQ_MFP_FDC );
-	if (!FloppyIRQHandler) goto end; /* int occured after timer was fired, but
+	if (!FloppyIRQHandler) goto end; /* int occurred after timer was fired, but
 					  * before we came here... */
 
 	SET_IRQ_HANDLER( NULL );
-	/* If the timeout occured while the readtrack_check timer was
+	/* If the timeout occurred while the readtrack_check timer was
 	 * active, we need to cancel it, else bad things will happen */
 	if (UseTrackbuffer)
 		del_timer( &readtrack_timer );
@@ -1271,7 +1271,7 @@ static void finish_fdc( void )
 		MotorOn = 1;
 		START_TIMEOUT();
 		/* we must wait for the IRQ here, because the ST-DMA
-		   is released immediatly afterwards and the interrupt
+		   is released immediately afterwards and the interrupt
 		   may be delivered to the wrong driver. */
 	  }
 }
@@ -1333,7 +1333,7 @@ static void floppy_off( unsigned int nr) {}
  * looking at the serial number in block 0. This isn't possible for
  * Linux, since the floppy driver can't make assumptions about the
  * filesystem used on the disk and thus the contents of block 0. I've
- * choosen the method to always say "The disk was changed" if it is
+ * chosen the method to always say "The disk was changed" if it is
  * unsure whether it was. This implies that every open or mount
  * invalidates the disk buffers if you work with write protected
  * disks. But at least this is better than working with incorrect data

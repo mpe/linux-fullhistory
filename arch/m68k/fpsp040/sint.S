@@ -77,7 +77,7 @@
 	.global	sint
 sint:
 	bfextu	FPCR_MODE(%a6){#2:#2},%d1	|use user's mode for rounding
-|					;implicity has extend precision
+|					;implicitly has extend precision
 |					;in upper word. 
 	movel	%d1,L_SCR1(%a6)		|save mode bits
 	bras	sintexc			
@@ -114,7 +114,7 @@ sintmz:
 	.global	sintrz
 sintrz:
 	movel	#1,L_SCR1(%a6)		|use rz mode for rounding
-|					;implicity has extend precision
+|					;implicitly has extend precision
 |					;in upper word. 
 	bras	sintexc			
 |
@@ -123,7 +123,7 @@ sintrz:
 |	Input:	a0 points to an IEEE extended format operand
 | 	Output:	fp0 has the result 
 |
-| Exeptions:
+| Exceptions:
 |
 | If the subroutine results in an inexact operation, the inx2 and
 | ainx bits in the USER_FPSR are set.

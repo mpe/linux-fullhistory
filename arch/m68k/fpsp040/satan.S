@@ -1,7 +1,7 @@
 |
 |	satan.sa 3.3 12/19/90
 |
-|	The entry point satan computes the arctagent of an
+|	The entry point satan computes the arctangent of an
 |	input value. satand does the same except the input value is a
 |	denormalized number.
 |

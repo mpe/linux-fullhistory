@@ -20,25 +20,19 @@
 
 #include <asm/segment.h>	/* for fs functions */
 
-static int nfs_dir_read(struct inode *, struct file *filp, char *buf,
-			int count);
+static int nfs_dir_open(struct inode * inode, struct file * file);
+static int nfs_dir_read(struct inode *, struct file *, char *, int);
 static int nfs_readdir(struct inode *, struct file *, void *, filldir_t);
-static int nfs_lookup(struct inode *dir, const char *name, int len,
-		      struct inode **result);
-static int nfs_create(struct inode *dir, const char *name, int len, int mode,
-		      struct inode **result);
-static int nfs_mkdir(struct inode *dir, const char *name, int len, int mode);
-static int nfs_rmdir(struct inode *dir, const char *name, int len);
-static int nfs_unlink(struct inode *dir, const char *name, int len);
-static int nfs_symlink(struct inode *inode, const char *name, int len,
-		       const char *symname);
-static int nfs_link(struct inode *oldinode, struct inode *dir,
-		    const char *name, int len);
-static int nfs_mknod(struct inode *dir, const char *name, int len, int mode,
-		     int rdev);
-static int nfs_rename(struct inode *old_dir, const char *old_name,
-		      int old_len, struct inode *new_dir, const char *new_name,
-		      int new_len);
+static int nfs_lookup(struct inode *, const char *, int, struct inode **);
+static int nfs_create(struct inode *, const char *, int, int, struct inode **);
+static int nfs_mkdir(struct inode *, const char *, int, int);
+static int nfs_rmdir(struct inode *, const char *, int);
+static int nfs_unlink(struct inode *, const char *, int);
+static int nfs_symlink(struct inode *, const char *, int, const char *);
+static int nfs_link(struct inode *, struct inode *, const char *, int);
+static int nfs_mknod(struct inode *, const char *, int, int, int);
+static int nfs_rename(struct inode *, const char *, int,
+		      struct inode *, const char *, int);
 
 static struct file_operations nfs_dir_operations = {
 	NULL,			/* lseek - default */
@@ -48,7 +42,7 @@ static struct file_operations nfs_dir_operations = {
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
-	NULL,			/* no special open code */
+	nfs_dir_open,		/* open - revalidate */
 	NULL,			/* no special release code */
 	NULL			/* fsync */
 };
@@ -72,6 +66,29 @@ struct inode_operations nfs_dir_inode_operations = {
 	NULL,			/* truncate */
 	NULL			/* permission */
 };
+
+static inline void revalidate_dir(struct nfs_server * server, struct inode * dir)
+{
+	struct nfs_fattr fattr;
+
+	if (jiffies - NFS_READTIME(dir) < server->acdirmax)
+		return;
+
+	NFS_READTIME(dir) = jiffies;
+	if (nfs_proc_getattr(server, NFS_FH(dir), &fattr) == 0) {
+		nfs_refresh_inode(dir, &fattr);
+		if (fattr.mtime.seconds == NFS_OLDMTIME(dir))
+			return;
+		NFS_OLDMTIME(dir) = fattr.mtime.seconds;
+	}
+	/* invalidate directory cache here when we _really_ start caching */
+}
+
+static int nfs_dir_open(struct inode * dir, struct file * file)
+{
+	revalidate_dir(NFS_SERVER(dir), dir);
+	return 0;
+}
 
 static int nfs_dir_read(struct inode *inode, struct file *filp, char *buf,
 			int count)
@@ -104,6 +121,8 @@ static int nfs_readdir(struct inode *inode, struct file *filp,
 		printk("nfs_readdir: inode is NULL or not a directory\n");
 		return -EBADF;
 	}
+
+	revalidate_dir(NFS_SERVER(inode), inode);
 
 	/* initialize cache memory if it hasn't been used before */
 
@@ -190,7 +209,7 @@ static int nfs_readdir(struct inode *inode, struct file *filp,
 
 void nfs_kfree_cache(void)
 {
-        int i;
+	int i;
 
 	if (c_entry == NULL)
 		return;

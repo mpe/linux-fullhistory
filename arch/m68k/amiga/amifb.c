@@ -184,7 +184,7 @@
    -------------------------------------------
 
    Since there are much more parameters for the Amiga display than for the
-   frame buffer interface, there must be some depencies among the Amiga display
+   frame buffer interface, there must be some dependencies among the Amiga display
    parameters. Here's what I found out:
 
       - ddfstrt and ddfstop are best aligned to 64 pixels.
@@ -1138,13 +1138,13 @@ static void check_default_mode(void);
  *
  * History:
  *   - 03 Jan 95: Original version my Martin Schaller: The TT driver and
- *                all the device independant stuff
+ *                all the device independent stuff
  *   - 09 Jan 95: Roman: I've added the hardware abstraction (hw_switch)
  *                and wrote the Falcon, ST(E), and External drivers
  *                based on the original TT driver.
  *   - 26 Jan 95: Geert: Amiga version
  *   - 19 Feb 95: Hamish: added Jes Sorensen's ECS patches to the Amiga
- *		  frame buffer device.  This provdes ECS support and the
+ *		  frame buffer device.  This provides ECS support and the
  *		  following screen-modes: multiscan, multiscan-lace,
  * 		  super72, super72-lace, dblntsc, dblpal & euro72.
  *		  He suggests that we remove the old AGA screenmodes,
@@ -1255,7 +1255,7 @@ static __inline__ void mono_init_vblank(void)
  * bplcon0, diwstrt, diwstop, ddfstrt, ddfstop registers (a few others could
  * be used as well). -wjr
  *
- * The code now supports ECS aswell, except for FMODE all control registers
+ * The code now supports ECS as well, except for FMODE all control registers
  * are the same under ECS. A special color-table has to be generated though.
  * -Jes
  */
@@ -1782,7 +1782,7 @@ static void mono_video_setup (char *options, int *ints)
  *    0x02c -> 0x12c. NTSC overscan uses values > 256 too. However counter
  *    is 8 bit, will wrap. RKM 1.1 suggests use of a WAIT(0x00,0xff),
  *    WAIT(x,y-0x100) pair to handle this case. This is WRONG - must use
- *    WAIT(0xe2,0xff) to ensure that wrap occures by next copper
+ *    WAIT(0xe2,0xff) to ensure that wrap occurred by next copper
  *    instruction. Argghh!
  *
  * 4. RKM 1.1 suggests Copper-wait x positions are in range [0,0xe2].
@@ -2392,7 +2392,7 @@ static void mono_amifb_interrupt(int irq, struct pt_regs *fp, void *data)
 	static ushort cursorstate = 0;
 
 	/* I *think* that you should only change display lists on long frame.
-	 * At least it goes awfully perculiar on my A500 without the following
+	 * At least it goes awfully peculiar on my A500 without the following
 	 * test. Not really in a position to test this hypothesis, so sorry
 	 * for the slow scrolling, all you flicker-fixed souls
 	 */
@@ -2490,6 +2490,7 @@ static int mono_amiga_fb_get_fix(struct fb_fix_screeninfo *fix, int con)
 	fix->ypanstep = 0;
 	fix->ywrapstep = 1;
 
+	fix->line_length = 0;
 	for (i = 0; i < arraysize(fix->reserved); i++)
 		fix->reserved[i] = 0;
 	return(0);
@@ -2567,6 +2568,7 @@ static void mono_amiga_fb_set_disp(int con)
 	disp[con].type_aux = fix.type_aux;
 	disp[con].ypanstep = fix.ypanstep;
 	disp[con].ywrapstep = fix.ywrapstep;
+	disp[con].line_length = fix.line_length;
 	disp[con].can_soft_blank = 1;
 	disp[con].inverse = mono_amifb_inverse;
 }
@@ -3164,6 +3166,7 @@ static int aga_encode_fix(struct fb_fix_screeninfo *fix,
    else
       fix->ywrapstep = 0;
 
+   fix->line_length = 0;
    for (i = 0; i < arraysize(fix->reserved); i++)
       fix->reserved[i] = 0;
 
@@ -4460,6 +4463,7 @@ static void amiga_fb_set_disp(int con)
    disp[con].type_aux = fix.type_aux;
    disp[con].ypanstep = fix.ypanstep;
    disp[con].ywrapstep = fix.ywrapstep;
+   disp[con].line_length = fix.line_length;
    disp[con].can_soft_blank = 1;
    disp[con].inverse = amifb_inverse;
 }

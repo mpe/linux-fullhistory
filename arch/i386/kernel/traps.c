@@ -40,9 +40,7 @@ asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 { \
 	tsk->tss.error_code = error_code; \
 	tsk->tss.trap_no = trapnr; \
-	if (signr == SIGTRAP && current->flags & PF_PTRACED) \
-		current->blocked &= ~(1 << (SIGTRAP-1)); \
-	send_sig(signr, tsk, 1); \
+	force_sig(signr, tsk); \
 	die_if_kernel(str,regs,error_code); \
 }
 
@@ -187,7 +185,7 @@ asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 	die_if_kernel("general protection",regs,error_code);
 	current->tss.error_code = error_code;
 	current->tss.trap_no = 13;
-	send_sig(SIGSEGV, current, 1);	
+	force_sig(SIGSEGV, current);	
 }
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
@@ -209,9 +207,7 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 		handle_vm86_debug((struct vm86_regs *) regs, error_code);
 		return;
 	}
-	if (current->flags & PF_PTRACED)
-		current->blocked &= ~(1 << (SIGTRAP-1));
-	send_sig(SIGTRAP, current, 1);
+	force_sig(SIGTRAP, current);
 	current->tss.trap_no = 1;
 	current->tss.error_code = error_code;
 	if ((regs->cs & 3) == 0) {
@@ -260,7 +256,7 @@ void math_error(void)
 	__asm__ __volatile__("fnsave %0":"=m" (task->tss.i387.hard));
 	task->flags&=~PF_USEDFPU;
 
-	send_sig(SIGFPE, task, 1);
+	force_sig(SIGFPE, task);
 	task->tss.trap_no = 16;
 	task->tss.error_code = 0;
 
@@ -327,7 +323,7 @@ asmlinkage void math_emulate(long arg)
 {
   printk("math-emulation not enabled and no coprocessor found.\n");
   printk("killing %s.\n",current->comm);
-  send_sig(SIGFPE,current,1);
+  force_sig(SIGFPE,current);
   schedule();
 }
 

@@ -65,14 +65,9 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 		return -EINVAL;
 	pid = inode->i_ino;
 	pid >>= 16;
-	tsk = NULL;
-	for (i = 1 ; i < NR_TASKS ; i++)
-		if (task[i] && task[i]->pid == pid) {
-			tsk = task[i];
-			break;
-		}
-	if (!tsk)
+	if (pid != current->pid)
 		return -EACCES;
+	tsk = current;
 	addr = file->f_pos;
 	count = check_range(tsk, addr, count);
 	if (count < 0)
@@ -131,14 +126,9 @@ static int mem_write(struct inode * inode, struct file * file,char * buf, int co
 	addr = file->f_pos;
 	pid = inode->i_ino;
 	pid >>= 16;
-	tsk = NULL;
-	for (i = 1 ; i < NR_TASKS ; i++)
-		if (task[i] && task[i]->pid == pid) {
-			tsk = task[i];
-			break;
-		}
-	if (!tsk)
+	if (pid != current->pid)
 		return -EACCES;
+	tsk = current;
 	tmp = buf;
 	while (count > 0) {
 		if (current->signal & ~current->blocked)

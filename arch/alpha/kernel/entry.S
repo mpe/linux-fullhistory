@@ -541,7 +541,7 @@ strace:
 	jsr     $26,($27),syscall_trace
 	bsr	$1,undo_switch_stack
 
-	/* get the system call number and the argments back.. */
+	/* get the system call number and the arguments back.. */
 	ldq     $0,0($30)
 	ldq     $16,SP_OFF+24($30)
 	ldq     $17,SP_OFF+32($30)
@@ -574,9 +574,9 @@ strace_success:
 
 	.align  3
 strace_error:
-	ldq	$9,0($30)	/* old syscall nr (zero if success) */
-	beq	$9,strace_success
-	ldq	$10,72($30)	/* .. and this a3 */
+	ldq	$19,0($30)	/* old syscall nr (zero if success) */
+	beq	$19,strace_success
+	ldq	$20,72($30)	/* .. and this a3 */
 
 	subq	$31,$0,$0	/* with error in v0 */
 	addq	$31,1,$1	/* set a3 for errno return */
@@ -584,13 +584,15 @@ strace_error:
 	stq	$1,72($30)	/* a3 for return */
 
 	bsr	$1,do_switch_stack
+	bis	$19,$19,$9	/* save old syscall number */
+	bis	$20,$20,$10	/* save old a3 */
 	lda     $27,syscall_trace
 	jsr     $26,($27),syscall_trace
+	bis	$9,$9,$19
+	bis	$10,$10,$20	
 	bsr	$1,undo_switch_stack
 
 	bis	$31,$31,$26	/* tell "ret_from_sys_call" that we can restart */
-	bis	$9,$9,$19	/*  .. old syscall nr */
-	bis	$10,$10,$20	/*  .. old a3 */
 	br	$31,ret_from_sys_call
 
 	.align 3

@@ -1,4 +1,4 @@
-/* $Id: vaddrs.h,v 1.19 1996/03/26 06:51:58 miguel Exp $ */
+/* $Id: vaddrs.h,v 1.20 1996/04/25 06:13:40 davem Exp $ */
 #ifndef _SPARC_VADDRS_H
 #define _SPARC_VADDRS_H
 

@@ -12,6 +12,7 @@
 
 #include "msbuffer.h"
 
+
 static struct fat_cache *fat_cache,cache[FAT_CACHE];
 
 /* Returns the this'th FAT entry, -1 if it is an end-of-file entry. If
@@ -29,18 +30,18 @@ int fat_access(struct super_block *sb,int nr,int new_value)
 		first = nr*3/2;
 		last = first+1;
 	}
-	if (!(bh = bread(sb->s_dev,MSDOS_SB(sb)->fat_start+(first >>
-	    SECTOR_BITS),SECTOR_SIZE))) {
-		printk("bread in fat_access failed\n");
+	if (!(bh = breada(sb->s_dev,MSDOS_SB(sb)->fat_start+(first >>
+	    SECTOR_BITS),SECTOR_SIZE,0,FAT_READAHEAD))) {
+		printk("breada in fat_access failed\n");
 		return 0;
 	}
 	if ((first >> SECTOR_BITS) == (last >> SECTOR_BITS))
 		bh2 = bh;
 	else {
-		if (!(bh2 = bread(sb->s_dev,MSDOS_SB(sb)->fat_start+(last
-		    >> SECTOR_BITS),SECTOR_SIZE))) {
+		if (!(bh2 = breada(sb->s_dev,MSDOS_SB(sb)->fat_start+(last
+		    >> SECTOR_BITS),SECTOR_SIZE,0,FAT_READAHEAD))) {
 			brelse(bh);
-			printk("bread in fat_access failed\n");
+			printk("breada in fat_access failed\n");
 			return 0;
 		}
 	}
@@ -75,16 +76,16 @@ int fat_access(struct super_block *sb,int nr,int new_value)
 		}
 		mark_buffer_dirty(bh, 1);
 		for (copy = 1; copy < MSDOS_SB(sb)->fats; copy++) {
-			if (!(c_bh = bread(sb->s_dev,MSDOS_SB(sb)->
+			if (!(c_bh = breada(sb->s_dev,MSDOS_SB(sb)->
 			    fat_start+(first >> SECTOR_BITS)+MSDOS_SB(sb)->
-			    fat_length*copy,SECTOR_SIZE))) break;
+			    fat_length*copy,SECTOR_SIZE,0,FAT_READAHEAD))) break;
 			memcpy(c_bh->b_data,bh->b_data,SECTOR_SIZE);
 			mark_buffer_dirty(c_bh, 1);
 			if (bh != bh2) {
-				if (!(c_bh2 = bread(sb->s_dev,
+				if (!(c_bh2 = breada(sb->s_dev,
 				    MSDOS_SB(sb)->fat_start+(first >>
 				    SECTOR_BITS)+MSDOS_SB(sb)->fat_length*copy
-				    +1,SECTOR_SIZE))) {
+				    +1,SECTOR_SIZE,0,FAT_READAHEAD))) {
 					brelse(c_bh);
 					break;
 				}

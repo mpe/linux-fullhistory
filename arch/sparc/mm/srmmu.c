@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.59 1996/04/21 10:32:21 davem Exp $
+/* $Id: srmmu.c,v 1.62 1996/04/25 09:11:47 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -604,11 +604,14 @@ static void tsunami_flush_cache_page_to_uncache(unsigned long page)
 /* Tsunami does not have a Copy-back style virtual cache. */
 static void tsunami_flush_page_to_ram(unsigned long page)
 {
+	tsunami_flush_icache();
+	tsunami_flush_dcache();
 }
 
 /* However, Tsunami is not IO coherent. */
 static void tsunami_flush_page_for_dma(unsigned long page)
 {
+	tsunami_flush_icache();
 	tsunami_flush_dcache();
 }
 
@@ -805,7 +808,6 @@ static void swift_flush_tlb_page_for_cbit(unsigned long page)
 
 static void viking_flush_cache_all(void)
 {
-	viking_flush_icache();
 }
 
 static void viking_flush_cache_mm(struct mm_struct *mm)
@@ -814,7 +816,6 @@ static void viking_flush_cache_mm(struct mm_struct *mm)
 	if(mm->context != NO_CONTEXT) {
 #endif
 		flush_user_windows();
-		viking_flush_icache();
 #ifndef __SMP__
 	}
 #endif
@@ -826,7 +827,6 @@ static void viking_flush_cache_range(struct mm_struct *mm, unsigned long start, 
 	if(mm->context != NO_CONTEXT) {
 #endif
 		flush_user_windows();
-		viking_flush_icache();
 #ifndef __SMP__
 	}
 #endif
@@ -839,8 +839,6 @@ static void viking_flush_cache_page(struct vm_area_struct *vma, unsigned long pa
 	if(mm->context != NO_CONTEXT) {
 #endif
 		flush_user_windows();
-		if(vma->vm_flags & VM_EXEC)
-			viking_flush_icache();
 #ifndef __SMP__
 	}
 #endif

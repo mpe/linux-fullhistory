@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.90 1996/04/18 01:00:37 davem Exp $
+/* $Id: entry.S,v 1.93 1996/04/25 06:08:32 davem Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -990,15 +990,27 @@ C_LABEL(sunos_indir):
 	jmp	%l5 + 0x8		/* so stupid... */
 	 nop
 
-#if 0 /* work in progress */
+	/* Note how we really return to ret_syscall because we share the
+	 * register window with our caller.
+	 */
+
 	.align 4
 	.globl	C_LABEL(sys_ptrace)
 C_LABEL(sys_ptrace):
 	call	C_LABEL(do_ptrace)
 	 add	%sp, REGWIN_SZ, %o0
 
+	LOAD_CURRENT(l4, l5)
+	ld	[%l4 + 0x14], %l5
+	andcc	%l5, 0x20, %g0
+	be	1f
+	 nop
+
+	call	C_LABEL(syscall_trace)
+	 nop
+
+1:
 	RESTORE_ALL
-#endif
 
 	.align	4
 	.globl	C_LABEL(sys_execve)
@@ -1028,6 +1040,16 @@ C_LABEL(sys_sigpause):
 	call	C_LABEL(do_sigpause)
 	 add	%sp, REGWIN_SZ, %o1
 
+	LOAD_CURRENT(l4, l5)
+	ld	[%l4 + 0x14], %l5
+	andcc	%l5, 0x20, %g0
+	be	1f
+	 nop
+
+	call	C_LABEL(syscall_trace)
+	 nop
+
+1:
 	/* We are returning to a signal handler. */
 	RESTORE_ALL
 
@@ -1037,6 +1059,16 @@ C_LABEL(sys_sigsuspend):
 	call	C_LABEL(do_sigsuspend)
 	 add	%sp, REGWIN_SZ, %o0
 
+	LOAD_CURRENT(l4, l5)
+	ld	[%l4 + 0x14], %l5
+	andcc	%l5, 0x20, %g0
+	be	1f
+	 nop
+
+	call	C_LABEL(syscall_trace)
+	 nop
+
+1:
 	/* We are returning to a signal handler. */
 	RESTORE_ALL
 
@@ -1046,6 +1078,16 @@ C_LABEL(sys_sigreturn):
 	call	C_LABEL(do_sigreturn)
 	 add	%sp, REGWIN_SZ, %o0
 
+	LOAD_CURRENT(l4, l5)
+	ld	[%l4 + 0x14], %l5
+	andcc	%l5, 0x20, %g0
+	be	1f
+	 nop
+
+	call	C_LABEL(syscall_trace)
+	 nop
+
+1:
 	/* We don't want to muck with user registers like a
 	 * normal syscall, just return.
 	 */
@@ -1153,6 +1195,15 @@ syscall_is_too_hard:
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
 
+	LOAD_CURRENT(l4, l5)
+	ld	[%l4 + 0x14], %l5
+	andcc	%l5, 0x20, %g0
+	be	2f
+	 nop
+
+	call	C_LABEL(syscall_trace)
+	 nop
+
 2:
 	ldd	[%sp + REGWIN_SZ + PT_I0], %o0
 	st	%o0, [%sp + REGWIN_SZ + PT_G0]	! for restarting syscalls
@@ -1184,8 +1235,18 @@ C_LABEL(ret_sys_call):
 	or	%l5, %l6, %l5
 	st	%l5, [%sp + REGWIN_SZ + PT_PSR]
 
-	/* Advance the pc and npc over the trap instruction. */
 2:
+	LOAD_CURRENT(l4, l5)
+	ld	[%l4 + 0x14], %l5
+	andcc	%l5, 0x20, %g0
+	be	3f
+	 nop
+
+	call	C_LABEL(syscall_trace)
+	 nop
+
+	/* Advance the pc and npc over the trap instruction. */
+3:
 	ld	[%sp + REGWIN_SZ + PT_NPC], %l1	/* pc  = npc   */
 	add	%l1, 0x4, %l2			/* npc = npc+4 */
 	st	%l1, [%sp + REGWIN_SZ + PT_PC]

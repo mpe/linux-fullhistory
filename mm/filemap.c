@@ -424,8 +424,8 @@ static void profile_readahead(int async, struct file *filp)
  *   We try to have a limit of MAX_READWINDOW = 48K.
  */
 
-#define MAX_READWINDOW (PAGE_SIZE*32)
-#define MAX_READAHEAD (PAGE_SIZE*16)
+#define MAX_READWINDOW (PAGE_SIZE*12)
+#define MAX_READAHEAD (PAGE_SIZE*7)
 #define MIN_READAHEAD (PAGE_SIZE)
 
 static inline unsigned long generic_file_readahead(struct file * filp, struct inode * inode,
@@ -987,7 +987,7 @@ static int filemap_sync(struct vm_area_struct * vma, unsigned long address,
 	unsigned long end = address + size;
 	int error = 0;
 
-	dir = pgd_offset(current->mm, address);
+	dir = pgd_offset(vma->vm_mm, address);
 	flush_cache_range(vma->vm_mm, end - size, end);
 	while (address < end) {
 		error |= filemap_sync_pmd_range(dir, address, end - address, vma, flags);

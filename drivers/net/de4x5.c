@@ -121,6 +121,11 @@
     patched this  driver to detect it  because the SROM format used complies
     to a previous DEC-STD format.
 
+    I have removed the buffer copies needed for receive on Intels.  I cannot
+    remove them for   Alphas since  the  Tulip hardware   only does longword
+    aligned  DMA transfers  and  the  Alphas get   alignment traps with  non
+    longword aligned data copies (which makes them really slow). No comment.
+
     TO DO:
     ------
 
@@ -182,11 +187,19 @@
 			  Duh, put the SA_SHIRQ flag into request_interrupt().
 			  Fix SMC ethernet address in enet_det[].
 			  Print chip name instead of "UNKNOWN" during boot.
+      0.42    26-Apr-96   Fix MII write TA bit error.
+                          Fix bug in dc21040 and dc21041 autosense code.
+			  Remove buffer copies on receive for Intels.
+			  Change sk_buff handling during media disconnects to
+			  eliminate DUP packets.
+			  Add dynamic TX thresholding.
+			  Change all chips to use perfect multicast filtering.
+			  Fix alloc_device() bug <jari@markkus2.fimr.fi>
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:v0.41 96/3/21 davies@wanton.lkg.dec.com\n";
+static const char *version = "de4x5.c:v0.42 96/4/26 davies@wanton.lkg.dec.com\n";
 
 #include <linux/module.h>
 
@@ -298,6 +311,7 @@ static s32 de4x5_full_duplex = 0;
 ** Ethernet Info
 */
 #define PKT_BUF_SZ	1536            /* Buffer size for each Tx/Rx buffer */
+#define IEEE802_3_SZ    1518            /* Packet + CRC */
 #define MAX_PKT_SZ   	1514            /* Maximum ethernet packet length */
 #define MAX_DAT_SZ   	1500            /* Maximum ethernet data length */
 #define MIN_DAT_SZ   	1               /* Minimum ethernet data length */
@@ -418,6 +432,7 @@ struct de4x5_srom {
     char info[100];
     short chksum;
 };
+#define SUB_VENDOR_ID 0x500a
 
 /*
 ** DE4X5 Descriptors. Make sure that all the RX buffers are contiguous
@@ -451,7 +466,8 @@ struct de4x5_private {
     char adapter_name[80];                  /* Adapter name                 */
     struct de4x5_desc rx_ring[NUM_RX_DESC]; /* RX descriptor ring           */
     struct de4x5_desc tx_ring[NUM_TX_DESC]; /* TX descriptor ring           */
-    struct sk_buff *skb[NUM_TX_DESC];       /* TX skb for freeing when sent */
+    struct sk_buff *tx_skb[NUM_TX_DESC];    /* TX skb for freeing when sent */
+    struct sk_buff *rx_skb[NUM_RX_DESC];    /* RX skb's                     */
     int rx_new, rx_old;                     /* RX descriptor ring pointers  */
     int tx_new, tx_old;                     /* TX descriptor ring pointers  */
     char setup_frame[SETUP_FRAME_LEN];      /* Holds MCA and PA info.       */
@@ -531,6 +547,8 @@ static struct bus_type {
 			lp->tx_old+lp->txRingSize-lp->tx_new-1:\
 			lp->tx_old               -lp->tx_new-1)
 
+#define TX_PKT_PENDING (lp->tx_old != lp->tx_new)
+
 /*
 ** Public Functions
 */
@@ -551,6 +569,7 @@ static int     de4x5_sw_reset(struct device *dev);
 static int     de4x5_rx(struct device *dev);
 static int     de4x5_tx(struct device *dev);
 static int     de4x5_ast(struct device *dev);
+static int     de4x5_txur(struct device *dev);
 
 static int     autoconf_media(struct device *dev);
 static void    create_packet(struct device *dev, char *frame, int len);
@@ -563,13 +582,16 @@ static int     dc21140m_autoconf(struct device *dev);
 static int     de4x5_suspect_state(struct device *dev, int timeout, int prev_state, int (*fn)(struct device *, int), int (*asfn)(struct device *));
 static int     dc21040_state(struct device *dev, int csr13, int csr14, int csr15, int timeout, int next_state, int suspect_state, int (*fn)(struct device *, int));
 static int     test_media(struct device *dev, s32 irqs, s32 irq_mask, s32 csr13, s32 csr14, s32 csr15, s32 msec);
-/*static int     test_sym_link(struct device *dev, u32 msec);*/
+static int     test_sym_link(struct device *dev, int msec);
 static int     test_mii_reg(struct device *dev, int reg, int mask, int pol, long msec);
 static int     is_spd_100(struct device *dev);
 static int     is_100_up(struct device *dev);
 static int     is_10_up(struct device *dev);
 static int     is_anc_capable(struct device *dev);
 static int     ping_media(struct device *dev, int msec);
+static struct sk_buff *de4x5_alloc_rx_buff(struct device *dev, int index, int len);
+static void    de4x5_free_rx_buffs(struct device *dev);
+static void    de4x5_free_tx_buffs(struct device *dev);
 static void    de4x5_save_skbs(struct device *dev);
 static void    de4x5_restore_skbs(struct device *dev);
 static void    de4x5_cache_state(struct device *dev, int flag);
@@ -621,6 +643,7 @@ static void    de4x5_dbg_open(struct device *dev);
 static void    de4x5_dbg_mii(struct device *dev, int k);
 static void    de4x5_dbg_media(struct device *dev);
 static void    de4x5_dbg_srom(struct de4x5_srom *p);
+static void    de4x5_dbg_rx(struct sk_buff *skb, int len);
 static int     de4x5_strncmp(char *a, char *b, int n);
 
 #ifdef MODULE
@@ -655,7 +678,8 @@ static int num_de4x5s = 0, num_eth = 0;
 ** more info. Until I fix (un)register_netdevice() we won't be able to use it
 ** though.
 */
-int de4x5_probe(struct device *dev)
+int
+de4x5_probe(struct device *dev)
 {
     int tmp = num_de4x5s, status = -ENODEV;
     u_long iobase = dev->base_addr;
@@ -793,62 +817,66 @@ de4x5_hw_init(struct device *dev, u_long iobase)
 	sprintf(lp->adapter_name,"%s (%s)", name, dev->name);
 	
 	/*
-	** Allocate contiguous receive buffers, long word aligned. 
+	** Set up the RX descriptor ring (Intels)
+	** Allocate contiguous receive buffers, long word aligned (Alphas) 
 	*/
+#ifndef __alpha__
+	for (i=0; i<NUM_RX_DESC; i++) {
+	    lp->rx_ring[i].status = 0;
+	    lp->rx_ring[i].des1 = RX_BUFF_SZ;
+	    lp->rx_ring[i].buf = 0;
+	    lp->rx_ring[i].next = 0;
+	    lp->rx_skb[i] = (struct sk_buff *) 1;     /* Dummy entry */
+	}
+
+#else
 	if ((tmp = (void *)kmalloc(RX_BUFF_SZ * NUM_RX_DESC + ALIGN, 
-				   GFP_KERNEL)) != NULL) {
-	    lp->cache.buf = tmp;
-	    tmp = (char *)(((u_long) tmp + ALIGN) & ~ALIGN);
-	    for (i=0; i<NUM_RX_DESC; i++) {
-		lp->rx_ring[i].status = 0;
-		lp->rx_ring[i].des1 = RX_BUFF_SZ;
-		lp->rx_ring[i].buf = virt_to_bus(tmp + i * RX_BUFF_SZ);
-		lp->rx_ring[i].next = (u32)NULL;
-	    }
-	    barrier();
-	    
-	    request_region(iobase, (lp->bus == PCI ? DE4X5_PCI_TOTAL_SIZE :
-				    DE4X5_EISA_TOTAL_SIZE), 
-			   lp->adapter_name);
-	    
-	    lp->rxRingSize = NUM_RX_DESC;
-	    lp->txRingSize = NUM_TX_DESC;
-	    
-	    /* Write the end of list marker to the descriptor lists */
-	    lp->rx_ring[lp->rxRingSize - 1].des1 |= RD_RER;
-	    lp->tx_ring[lp->txRingSize - 1].des1 |= TD_TER;
-	    
-	    /* Tell the adapter where the TX/RX rings are located. */
-	    outl(virt_to_bus(lp->rx_ring), DE4X5_RRBA);
-	    outl(virt_to_bus(lp->tx_ring), DE4X5_TRBA);
-	    
-	    /* Initialise the IRQ mask and Enable/Disable */
-	    lp->irq_mask = IMR_RIM | IMR_TIM | IMR_TUM ;
-	    lp->irq_en   = IMR_NIM | IMR_AIM;
-
-	    /* Create a loopback packet frame for later media probing */
-	    create_packet(dev, lp->frame, sizeof(lp->frame));
-
-	    /* Initialise the adapter state */
-	    lp->state = CLOSED;
-
-	    printk("      and requires IRQ%d (provided by %s).\n", dev->irq,
-		   ((lp->bus == PCI) ? "PCI BIOS" : "EISA CNFG"));
-	} else {
-	    printk("%s: Kernel could not allocate RX buffer memory.\n", dev->name);
+				   GFP_KERNEL)) == NULL) {
+	    kfree(lp->cache.priv);
+	    return -ENOMEM;
 	}
-	if (status) {
-	    release_region(iobase, (lp->bus == PCI ? 
-				    DE4X5_PCI_TOTAL_SIZE :
-				    DE4X5_EISA_TOTAL_SIZE));
-	    if (lp->rx_ring[0].buf) {
-		kfree(bus_to_virt(lp->rx_ring[0].buf));
-	    }
-	    kfree(dev->priv);
-	    dev->priv = NULL;
-	    
-	    return -ENXIO;
+
+	lp->cache.buf = tmp;
+	tmp = (char *)(((u_long) tmp + ALIGN) & ~ALIGN);
+	for (i=0; i<NUM_RX_DESC; i++) {
+	    lp->rx_ring[i].status = 0;
+	    lp->rx_ring[i].des1 = RX_BUFF_SZ;
+	    lp->rx_ring[i].buf = virt_to_bus(tmp + i * RX_BUFF_SZ);
+	    lp->rx_ring[i].next = 0;
+	    lp->rx_skb[i] = (struct sk_buff *) 1;     /* Dummy entry */
 	}
+#endif
+
+	barrier();
+	    
+	request_region(iobase, (lp->bus == PCI ? DE4X5_PCI_TOTAL_SIZE :
+				DE4X5_EISA_TOTAL_SIZE), 
+		       lp->adapter_name);
+	    
+	lp->rxRingSize = NUM_RX_DESC;
+	lp->txRingSize = NUM_TX_DESC;
+	    
+	/* Write the end of list marker to the descriptor lists */
+	lp->rx_ring[lp->rxRingSize - 1].des1 |= RD_RER;
+	lp->tx_ring[lp->txRingSize - 1].des1 |= TD_TER;
+	    
+	/* Tell the adapter where the TX/RX rings are located. */
+	outl(virt_to_bus(lp->rx_ring), DE4X5_RRBA);
+	outl(virt_to_bus(lp->tx_ring), DE4X5_TRBA);
+	    
+	/* Initialise the IRQ mask and Enable/Disable */
+	lp->irq_mask = IMR_RIM | IMR_TIM | IMR_TUM | IMR_UNM;
+	lp->irq_en   = IMR_NIM | IMR_AIM;
+
+	/* Create a loopback packet frame for later media probing */
+	create_packet(dev, lp->frame, sizeof(lp->frame));
+
+	/* Initialise the adapter state */
+	lp->state = CLOSED;
+
+	printk("      and requires IRQ%d (provided by %s).\n", dev->irq,
+	       ((lp->bus == PCI) ? "PCI BIOS" : "EISA CNFG"));
+
     }
     
     if (de4x5_debug > 0) {
@@ -883,9 +911,17 @@ de4x5_open(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
-    int status = 0;
+    int i, status = 0;
     s32 omr;
     
+    /* Allocate the RX buffers */
+    for (i=0; i<lp->rxRingSize; i++) {
+	if (de4x5_alloc_rx_buff(dev, i, 0) == NULL) {
+	    de4x5_free_rx_buffs(dev);
+	    return -EAGAIN;
+	}
+    }
+
     /*
     ** Wake up the adapter
     */
@@ -893,14 +929,13 @@ de4x5_open(struct device *dev)
 	outl(0, PCI_CFDA);
 	de4x5_ms_delay(10);
     }
-    
-    lp->state = OPEN;
-    
+
     /* 
     ** Re-initialize the DE4X5... 
     */
     status = de4x5_init(dev);
     
+    lp->state = OPEN;
     de4x5_dbg_open(dev);
     
     if (request_irq(dev->irq, (void *)de4x5_interrupt, SA_SHIRQ, 
@@ -937,7 +972,7 @@ de4x5_open(struct device *dev)
 /*
 ** Initialize the DE4X5 operating conditions. NB: a chip problem with the
 ** DC21140 requires using perfect filtering mode for that chip. Since I can't
-** see why I'd want > 14 multicast addresses, I may change all chips to use
+** see why I'd want > 14 multicast addresses, I have changed all chips to use
 ** the perfect filtering mode. Keep the DMA burst length at 8: there seems
 ** to be data corruption problems if it is larger (UDP errors seen from a
 ** ttcp source).
@@ -956,7 +991,8 @@ de4x5_init(struct device *dev)
     return 0;
 }
 
-static int de4x5_sw_reset(struct device *dev)
+static int
+de4x5_sw_reset(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -978,14 +1014,11 @@ static int de4x5_sw_reset(struct device *dev)
     bmr = (lp->chipset==DC21140 ? PBL_8 : PBL_4) | DESC_SKIP_LEN | CACHE_ALIGN;
     outl(bmr, DE4X5_BMR);
     
-    omr = inl(DE4X5_OMR) & ~OMR_PR;             /* Turn of promiscuous mode */
-    if (lp->chipset != DC21140) {
-	omr |= TR_96;
-	lp->setup_f = HASH_PERF;
-    } else {
-	omr |= OMR_SDP | OMR_SB | (!lp->phy[lp->active].id ? OMR_SF : 0);
-	lp->setup_f = PERFECT;
+    omr = inl(DE4X5_OMR) & ~OMR_PR;             /* Turn off promiscuous mode */
+    if (lp->chipset == DC21140) {
+	omr |= (OMR_SDP | OMR_SB);
     }
+    lp->setup_f = PERFECT;
     outl(virt_to_bus(lp->rx_ring), DE4X5_RRBA);
     outl(virt_to_bus(lp->tx_ring), DE4X5_TRBA);
     
@@ -1005,11 +1038,7 @@ static int de4x5_sw_reset(struct device *dev)
     /* Build the setup frame depending on filtering mode */
     SetMulticastFilter(dev);
     
-    if (lp->chipset != DC21140) {
-	load_packet(dev, lp->setup_frame, HASH_F|TD_SET|SETUP_FRAME_LEN, NULL);
-    } else {
-	load_packet(dev, lp->setup_frame, PERFECT_F|TD_SET|SETUP_FRAME_LEN, NULL);
-    }
+    load_packet(dev, lp->setup_frame, PERFECT_F|TD_SET|SETUP_FRAME_LEN, NULL);
     outl(omr|OMR_ST, DE4X5_OMR);
     
     /* Poll for setup frame completion (adapter interrupts are disabled now) */
@@ -1041,15 +1070,14 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
     int status = 0;
-    
+
     if (skb == NULL) {
 	dev_tint(dev);
 	return 0;
     }
 
     if (lp->tx_enable == NO) {                   /* Cannot send for now */
-	de4x5_put_cache(dev, skb);               /* Queue the buffer locally */
-	return 0;                                
+	return -1;                                
     }
     
     /*
@@ -1063,14 +1091,14 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
     sti();
     
     /* Transmit descriptor ring full or stale skb */
-    if (dev->tbusy || lp->skb[lp->tx_new]) {
+    if (dev->tbusy || lp->tx_skb[lp->tx_new]) {
 	if (dev->interrupt) {
 	    de4x5_putb_cache(dev, skb);          /* Requeue the buffer */
 	} else {
 	    de4x5_put_cache(dev, skb);
 	}
 	if (de4x5_debug > 1) {
-	    printk("%s: transmit busy, lost media or stale skb found:\n  STS:%08x\n  tbusy:%ld\n  lostMedia:%d\n  IMR:%08x\n  OMR:%08x\n Stale skb: %s\n",dev->name, inl(DE4X5_STS), dev->tbusy, lp->lostMedia, inl(DE4X5_IMR), inl(DE4X5_OMR), (lp->skb[lp->tx_new] ? "YES" : "NO"));
+	    printk("%s: transmit busy, lost media or stale skb found:\n  STS:%08x\n  tbusy:%ld\n  lostMedia:%d\n  IMR:%08x\n  OMR:%08x\n Stale skb: %s\n",dev->name, inl(DE4X5_STS), dev->tbusy, lp->lostMedia, inl(DE4X5_IMR), inl(DE4X5_OMR), (lp->tx_skb[lp->tx_new] ? "YES" : "NO"));
 	}
     } else if (skb->len > 0) {
 	/* If we already have stuff queued locally, use that first */
@@ -1079,7 +1107,7 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
 	    skb = de4x5_get_cache(dev);
 	}
 
-	while (skb && !dev->tbusy && !lp->skb[lp->tx_new]) {
+	while (skb && !dev->tbusy && !lp->tx_skb[lp->tx_new]) {
 	    set_bit(0, (void*)&dev->tbusy);
 	    cli();
 	    if (TX_BUFFS_AVAIL) {           /* Fill in a Tx ring entry */
@@ -1097,7 +1125,7 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
 	    }
 	    sti();
 	}
-	if (skb && (dev->tbusy || lp->skb[lp->tx_new])) {
+	if (skb && (dev->tbusy || lp->tx_skb[lp->tx_new])) {
 	    de4x5_putb_cache(dev, skb);
 	}
     }
@@ -1121,7 +1149,7 @@ de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
     struct device *dev = (struct device *)dev_id;
     struct de4x5_private *lp;
-    s32 imr, omr, sts;
+    s32 imr, omr, sts, limit;
     u_long iobase;
     
     if (dev == NULL) {
@@ -1137,7 +1165,7 @@ de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     DISABLE_IRQs;                        /* Ensure non re-entrancy */
     dev->interrupt = MASK_INTERRUPTS;
 	
-    for (;;) {
+    for (limit=0; limit<8; limit++) {
 	sts = inl(DE4X5_STS);            /* Read IRQ status */
 	outl(sts, DE4X5_STS);            /* Reset the board interrupts */
 	    
@@ -1152,6 +1180,10 @@ de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (sts & STS_LNF) {             /* TP Link has failed */
 	    lp->lostMedia = LOST_MEDIA_THRESHOLD + 1;
 	    lp->irq_mask &= ~IMR_LFM;
+	}
+	    
+	if (sts & STS_UNF) {             /* Transmit underrun */
+	    de4x5_txur(dev);
 	}
 	    
 	if (sts & STS_SE) {              /* Bus Error */
@@ -1204,24 +1236,15 @@ de4x5_rx(struct device *dev)
 		struct sk_buff *skb;
 		short pkt_len = (short)(lp->rx_ring[entry].status >> 16) - 4;
 		
-		if ((skb = dev_alloc_skb(pkt_len+2)) == NULL) {
+		if ((skb = de4x5_alloc_rx_buff(dev, entry, pkt_len)) == NULL) {
 		    printk("%s: Insufficient memory; nuking packet.\n", 
 			                                            dev->name);
 		    lp->stats.rx_dropped++;   /* Really, deferred. */
 		    break;
 		}
+		de4x5_dbg_rx(skb, pkt_len);
 
-		skb->dev = dev;
-		skb_reserve(skb,2);	      /* Align */
-		if (entry < lp->rx_old) {     /* Wrapped buffer */
-		    short len = (lp->rxRingSize - lp->rx_old) * RX_BUFF_SZ;
-		    memcpy(skb_put(skb,len), bus_to_virt(lp->rx_ring[lp->rx_old].buf), len);
-		    memcpy(skb_put(skb,pkt_len-len), bus_to_virt(lp->rx_ring[0].buf), pkt_len - len);
-		} else {                      /* Linear buffer */
-		    memcpy(skb_put(skb,pkt_len), bus_to_virt(lp->rx_ring[lp->rx_old].buf), pkt_len);
-		}
-		    
-		/* Push up the protocol stack */
+	/* Push up the protocol stack */
 		skb->protocol=eth_type_trans(skb,dev);
 		netif_rx(skb);
 		    
@@ -1284,29 +1307,32 @@ de4x5_tx(struct device *dev)
 	status = lp->tx_ring[entry].status;
 	if (status < 0) {                     /* Buffer not sent yet */
 	    break;
-	} else if (status & TD_ES) {          /* An error happened */
-	    lp->stats.tx_errors++; 
-	    if (status & TD_NC)  lp->stats.tx_carrier_errors++;
-	    if (status & TD_LC)  lp->stats.tx_window_errors++;
-	    if (status & TD_UF)  lp->stats.tx_fifo_errors++;
-	    if (status & TD_LC)  lp->stats.collisions++;
-	    if (status & TD_EC)  lp->pktStats.excessive_collisions++;
-	    if (status & TD_DE)  lp->stats.tx_aborted_errors++;
+	} else if (status != 0x7fffffff) {    /* Not setup frame */
+	    if (status & TD_ES) {             /* An error happened */
+		lp->stats.tx_errors++; 
+		if (status & TD_NC) lp->stats.tx_carrier_errors++;
+		if (status & TD_LC) lp->stats.tx_window_errors++;
+		if (status & TD_UF) lp->stats.tx_fifo_errors++;
+		if (status & TD_LC) lp->stats.collisions++;
+		if (status & TD_EC) lp->pktStats.excessive_collisions++;
+		if (status & TD_DE) lp->stats.tx_aborted_errors++;
 	    
-	    if ((status != 0x7fffffff) &&     /* Not setup frame */
-		(status & (TD_LO | TD_NC | TD_EC | TD_LF))) {
-		lp->lostMedia++;
-	    } else {
-		outl(POLL_DEMAND, DE4X5_TPD); /* Restart a stalled TX */
+		if (status & (TD_LO | TD_NC | TD_EC | TD_LF)) {
+		    lp->lostMedia++;
+		}
+		if (TX_PKT_PENDING) {
+		    outl(POLL_DEMAND, DE4X5_TPD);/* Restart a stalled TX */
+		}
+	    } else {                      /* Packet sent */
+		lp->stats.tx_packets++;
+		lp->lostMedia = 0;        /* Remove transient problem */
+		lp->linkOK++;
 	    }
-	} else {                              /* Packet sent */
-	    lp->stats.tx_packets++;
-	    lp->lostMedia = 0;                /* Remove transient problem */
-	}
-	/* Free the buffer if it's not a setup frame. */
-	if (lp->skb[entry] != NULL) {
-	    dev_kfree_skb(lp->skb[entry], FREE_WRITE);
-	    lp->skb[entry] = NULL;
+	    /* Free the buffer. */
+	    if (lp->tx_skb[entry] != NULL) {
+		dev_kfree_skb(lp->tx_skb[entry], FREE_WRITE);
+		lp->tx_skb[entry] = NULL;
+	    }
 	}
 	
 	/* Update all the pointers */
@@ -1343,6 +1369,29 @@ de4x5_ast(struct device *dev)
 }
 
 static int
+de4x5_txur(struct device *dev)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    int iobase = dev->base_addr;
+    int omr;
+
+    omr = inl(DE4X5_OMR);
+    if (!(omr & OMR_SF)) {
+	omr &= ~(OMR_ST|OMR_SR);
+	outl(omr, DE4X5_OMR);
+	while (inl(DE4X5_STS) & STS_TS);
+	if ((omr & OMR_TR) < OMR_TR) {
+	    omr += 0x4000;
+	} else {
+	    omr |= OMR_SF;
+	}
+	outl(omr | OMR_ST | OMR_SR, DE4X5_OMR);
+    }
+    
+    return 0;
+}
+
+static int
 de4x5_close(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
@@ -1362,14 +1411,15 @@ de4x5_close(struct device *dev)
     ** We stop the DE4X5 here... mask interrupts and stop TX & RX
     */
     DISABLE_IRQs;
-    
     STOP_DE4X5;
     
-    /*
-    ** Free the associated irq
-    */
+    /* Free the associated irq */
     free_irq(dev->irq, dev);
     lp->state = CLOSED;
+
+    /* Free any socket buffers */
+    de4x5_free_rx_buffs(dev);
+    de4x5_free_tx_buffs(dev);
     
     MOD_DEC_USE_COUNT;
     
@@ -1393,14 +1443,15 @@ de4x5_get_stats(struct device *dev)
     return &lp->stats;
 }
 
-static void load_packet(struct device *dev, char *buf, u32 flags, struct sk_buff *skb)
+static void
+load_packet(struct device *dev, char *buf, u32 flags, struct sk_buff *skb)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     
     lp->tx_ring[lp->tx_new].buf = virt_to_bus(buf);
     lp->tx_ring[lp->tx_new].des1 &= TD_TER;
     lp->tx_ring[lp->tx_new].des1 |= flags;
-    lp->skb[lp->tx_new] = skb;
+    lp->tx_skb[lp->tx_new] = skb;
     barrier();
     lp->tx_ring[lp->tx_new].status = T_OWN;
     barrier();
@@ -1426,13 +1477,8 @@ set_multicast_list(struct device *dev)
 	    outl(omr, DE4X5_OMR);
 	} else { 
 	    SetMulticastFilter(dev);
-	    if (lp->setup_f == HASH_PERF) {
-		load_packet(dev, lp->setup_frame, TD_IC | HASH_F | TD_SET | 
-			    SETUP_FRAME_LEN, NULL);
-	    } else {
-		load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
-			    SETUP_FRAME_LEN, NULL);
-	    }
+	    load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
+			                                SETUP_FRAME_LEN, NULL);
 	    
 	    lp->tx_new = (++lp->tx_new) % lp->txRingSize;
 	    outl(POLL_DEMAND, DE4X5_TPD);       /* Start the TX */
@@ -1448,7 +1494,8 @@ set_multicast_list(struct device *dev)
 ** from a list of ethernet multicast addresses.
 ** Little endian crc one liner from Matt Thomas, DEC.
 */
-static void SetMulticastFilter(struct device *dev)
+static void
+SetMulticastFilter(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     struct dev_mc_list *dmi=dev->mc_list;
@@ -1508,7 +1555,8 @@ static void SetMulticastFilter(struct device *dev)
 ** EISA bus I/O device probe. Probe from slot 1 since slot 0 is usually
 ** the motherboard. Upto 15 EISA devices are supported.
 */
-static void eisa_probe(struct device *dev, u_long ioaddr)
+static void
+eisa_probe(struct device *dev, u_long ioaddr)
 {
     int i, maxSlots, status;
     u_short vendor, device;
@@ -1575,7 +1623,8 @@ static void eisa_probe(struct device *dev, u_long ioaddr)
 #define PCI_DEVICE    (dev_num << 3)
 #define PCI_LAST_DEV  32
 
-static void pci_probe(struct device *dev, u_long ioaddr)
+static void
+pci_probe(struct device *dev, u_long ioaddr)
 {
     u_char irq;
     u_char pb, pbus, dev_num, dnum, dev_fn;
@@ -1583,7 +1632,7 @@ static void pci_probe(struct device *dev, u_long ioaddr)
     u_int class = DE4X5_CLASS_CODE;
     u_int iobase;
     struct bus_type *lp = &bus;
-    
+
     if ((!ioaddr || !loading_module) && autoprobed) return;
     
     if (!pcibios_present()) return;          /* No PCI bus in this machine! */
@@ -1607,7 +1656,7 @@ static void pci_probe(struct device *dev, u_long ioaddr)
 	    pcibios_read_config_word(pb, PCI_DEVICE, PCI_VENDOR_ID, &vendor);
 	    pcibios_read_config_word(pb, PCI_DEVICE, PCI_DEVICE_ID, &device);
 	    if (!(is_DC21040 || is_DC21041 || is_DC21140)) continue;
-	    
+
 	    /* Set the device number information */
 	    lp->device = dev_num;
 	    lp->bus_num = pb;
@@ -1626,14 +1675,13 @@ static void pci_probe(struct device *dev, u_long ioaddr)
 	    /* Check if I/O accesses and Bus Mastering are enabled */
 	    pcibios_read_config_word(pb, PCI_DEVICE, PCI_COMMAND, &status);
 	    if (!(status & PCI_COMMAND_IO)) continue;
-	    
 	    if (!(status & PCI_COMMAND_MASTER)) {
 		status |= PCI_COMMAND_MASTER;
 		pcibios_write_config_word(pb, PCI_DEVICE, PCI_COMMAND, status);
 		pcibios_read_config_word(pb, PCI_DEVICE, PCI_COMMAND, &status);
 	    }
 	    if (!(status & PCI_COMMAND_MASTER)) continue;
-	    
+
 	    DevicePresent(DE4X5_APROM);
 	    if (check_region(iobase, DE4X5_PCI_TOTAL_SIZE) == 0) {
 		if ((dev = alloc_device(dev, iobase)) != NULL) {
@@ -1657,7 +1705,8 @@ static void pci_probe(struct device *dev, u_long ioaddr)
 ** Allocate the device by pointing to the next available space in the
 ** device structure. Should one not be available, it is created.
 */
-static struct device *alloc_device(struct device *dev, u_long iobase)
+static struct device *
+alloc_device(struct device *dev, u_long iobase)
 {
     int addAutoProbe = 0;
     struct device *tmp = NULL, *ret;
@@ -1700,7 +1749,7 @@ static struct device *alloc_device(struct device *dev, u_long iobase)
 	    ** and initialize it (name, I/O address, next device (NULL) and
 	    ** initialisation probe routine).
 	    */
-	    dev->name = (char *)(dev + sizeof(struct device));
+	    dev->name = (char *)(dev + 1);
 	    if (num_eth > 9999) {
 		sprintf(dev->name,"eth????");/* New device name */
 	    } else {
@@ -1739,7 +1788,7 @@ static struct device *alloc_device(struct device *dev, u_long iobase)
 		    ** area and initialize it (name, I/O address, next device
 		    ** (NULL) and initialisation probe routine).
 		    */
-		    tmp->name = (char *)(tmp + sizeof(struct device));
+		    tmp->name = (char *)(tmp + 1);
 		    if (num_eth > 9999) {
 			sprintf(tmp->name,"eth????");
 		    } else {               /* New device name */
@@ -1765,7 +1814,8 @@ static struct device *alloc_device(struct device *dev, u_long iobase)
 ** [TP] or no recent receive activity) to check whether the user has been 
 ** sneaky and changed the port on us.
 */
-static int autoconf_media(struct device *dev)
+static int
+autoconf_media(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -1783,7 +1833,7 @@ static int autoconf_media(struct device *dev)
     } else if (lp->chipset == DC21140) {
 	next_tick = dc21140m_autoconf(dev);
     }
-    if (lp->autosense == AUTO) enable_ast(dev, next_tick);
+    enable_ast(dev, next_tick);
     
     return (lp->media);
 }
@@ -1800,7 +1850,8 @@ static int autoconf_media(struct device *dev)
 ** I may have to "age out" locally queued packets so that the higher layer
 ** timeouts don't effectively duplicate packets on the network.
 */
-static int dc21040_autoconf(struct device *dev)
+static int
+dc21040_autoconf(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -1827,32 +1878,32 @@ static int dc21040_autoconf(struct device *dev)
 	break;
 	
       case TP:
-	dc21040_state(dev, 0x8f01, 0xffff, 0x0000, 3000, BNC_AUI, 
+	next_tick = dc21040_state(dev, 0x8f01, 0xffff, 0x0000, 3000, BNC_AUI, 
 		                                         TP_SUSPECT, test_tp);
 	break;
 	
       case TP_SUSPECT:
-	de4x5_suspect_state(dev, 1000, TP, test_tp, dc21040_autoconf);
+	next_tick = de4x5_suspect_state(dev, 1000, TP, test_tp, dc21040_autoconf);
 	break;
 	
       case BNC:
       case AUI:
       case BNC_AUI:
-	dc21040_state(dev, 0x8f09, 0x0705, 0x0006, 3000, EXT_SIA, 
+	next_tick = dc21040_state(dev, 0x8f09, 0x0705, 0x0006, 3000, EXT_SIA, 
 		                                  BNC_AUI_SUSPECT, ping_media);
 	break;
 	
       case BNC_AUI_SUSPECT:
-	de4x5_suspect_state(dev, 1000, BNC_AUI, ping_media, dc21040_autoconf);
+	next_tick = de4x5_suspect_state(dev, 1000, BNC_AUI, ping_media, dc21040_autoconf);
 	break;
 	
       case EXT_SIA:
-	dc21040_state(dev, 0x3041, 0x0000, 0x0006, 3000, 
+	next_tick = dc21040_state(dev, 0x3041, 0x0000, 0x0006, 3000, 
 		                              NC, EXT_SIA_SUSPECT, ping_media);
 	break;
 	
       case EXT_SIA_SUSPECT:
-	de4x5_suspect_state(dev, 1000, EXT_SIA, ping_media, dc21040_autoconf);
+	next_tick = de4x5_suspect_state(dev, 1000, EXT_SIA, ping_media, dc21040_autoconf);
 	break;
 	
       case NC:
@@ -1862,7 +1913,10 @@ static int dc21040_autoconf(struct device *dev)
 	/* JAE: for Alpha, default to BNC/AUI, *not* TP */
 	reset_init_sia(dev, 0x8f09, 0x0705, 0x0006);
 #endif  /* i386 */
-	de4x5_dbg_media(dev);
+	if (lp->media != lp->c_media) {
+	    de4x5_dbg_media(dev);
+	    lp->c_media = lp->media;
+	}
 	lp->media = INIT;
 	lp->tx_enable = NO;
 	break;
@@ -1953,7 +2007,8 @@ de4x5_suspect_state(struct device *dev, int timeout, int prev_state,
 ** any more packets to be queued to the hardware. Re-enable everything only
 ** when the media is found.
 */
-static int dc21041_autoconf(struct device *dev)
+static int
+dc21041_autoconf(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -2013,6 +2068,7 @@ static int dc21041_autoconf(struct device *dev)
 		    lp->media = TP;
 		    next_tick = dc21041_autoconf(dev);
 		} else {
+		    lp->local_state = 1;
 		    de4x5_init_connection(dev);
 		}
 	    }
@@ -2023,7 +2079,7 @@ static int dc21041_autoconf(struct device *dev)
 	break;
 	
       case ANS_SUSPECT:
-	de4x5_suspect_state(dev, 1000, ANS, test_tp, dc21041_autoconf);
+	next_tick = de4x5_suspect_state(dev, 1000, ANS, test_tp, dc21041_autoconf);
 	break;
 	
       case TP:
@@ -2046,6 +2102,7 @@ static int dc21041_autoconf(struct device *dev)
 		    }
 		    next_tick = dc21041_autoconf(dev);
 		} else {
+		    lp->local_state = 1;
 		    de4x5_init_connection(dev);
 		}
 	    }
@@ -2056,7 +2113,7 @@ static int dc21041_autoconf(struct device *dev)
 	break;
 	
       case TP_SUSPECT:
-	de4x5_suspect_state(dev, 1000, TP, test_tp, dc21041_autoconf);
+	next_tick = de4x5_suspect_state(dev, 1000, TP, test_tp, dc21041_autoconf);
 	break;
 	
       case AUI:
@@ -2067,7 +2124,7 @@ static int dc21041_autoconf(struct device *dev)
 	    }
 	    irqs = 0;
 	    irq_mask = 0;
-	    sts = test_media(dev,irqs, irq_mask, 0xef09, 0xf7fd, 0x000e, 1000);
+	    sts = test_media(dev,irqs, irq_mask, 0xef09, 0xf73d, 0x000e, 1000);
 	    if (sts < 0) {
 		next_tick = sts & ~TIMER_CB;
 	    } else {
@@ -2075,6 +2132,7 @@ static int dc21041_autoconf(struct device *dev)
 		    lp->media = BNC;
 		    next_tick = dc21041_autoconf(dev);
 		} else {
+		    lp->local_state = 1;
 		    de4x5_init_connection(dev);
 		}
 	    }
@@ -2085,7 +2143,7 @@ static int dc21041_autoconf(struct device *dev)
 	break;
 	
       case AUI_SUSPECT:
-	de4x5_suspect_state(dev, 1000, AUI, ping_media, dc21041_autoconf);
+	next_tick = de4x5_suspect_state(dev, 1000, AUI, ping_media, dc21041_autoconf);
 	break;
 	
       case BNC:
@@ -2097,7 +2155,7 @@ static int dc21041_autoconf(struct device *dev)
 	    }
 	    irqs = 0;
 	    irq_mask = 0;
-	    sts = test_media(dev,irqs, irq_mask, 0xef09, 0xf7fd, 0x0006, 1000);
+	    sts = test_media(dev,irqs, irq_mask, 0xef09, 0xf73d, 0x0006, 1000);
 	    if (sts < 0) {
 		next_tick = sts & ~TIMER_CB;
 	    } else {
@@ -2131,14 +2189,17 @@ static int dc21041_autoconf(struct device *dev)
 	break;
 	
       case BNC_SUSPECT:
-	de4x5_suspect_state(dev, 1000, BNC, ping_media, dc21041_autoconf);
+	next_tick = de4x5_suspect_state(dev, 1000, BNC, ping_media, dc21041_autoconf);
 	break;
 	
       case NC:
 	omr = inl(DE4X5_OMR);    /* Set up full duplex for the autonegotiate */
 	outl(omr | OMR_FD, DE4X5_OMR);
 	reset_init_sia(dev, 0xef01, 0xffff, 0x0008);/* Initialise the SIA */
-	de4x5_dbg_media(dev);
+	if (lp->media != lp->c_media) {
+	    de4x5_dbg_media(dev);
+	    lp->c_media = lp->media;
+	}
 	lp->media = INIT;
 	lp->tx_enable = NO;
 	break;
@@ -2147,10 +2208,16 @@ static int dc21041_autoconf(struct device *dev)
     return next_tick;
 }
 
-static int dc21140m_autoconf(struct device *dev)
+/*
+** Some autonegotiation chips are broken in that they do not return the
+** acknowledge bit (anlpa & MII_ANLPA_ACK) in the link partner advertisement
+** register, except at the first power up negotiation.
+*/
+static int
+dc21140m_autoconf(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
-    int ana, anlpa, cap, cr, sr, iobase = dev->base_addr;
+    int ana, anlpa, cap, cr, slnk, sr, iobase = dev->base_addr;
     int next_tick = DE4X5_AUTOSENSE_MS;
     u_long imr, omr;
     
@@ -2163,12 +2230,14 @@ static int dc21140m_autoconf(struct device *dev)
 	    next_tick &= ~TIMER_CB;
 	} else {
 	    de4x5_save_skbs(dev);          /* Save non transmitted skb's */
+	    lp->tmp = MII_SR_ASSC;         /* Fake out the MII speed set */
 	    SET_10Mb;
 	    if (lp->autosense == _100Mb) {
 		lp->media = _100Mb;
 	    } else if (lp->autosense == _10Mb) {
 		lp->media = _10Mb;
-	    } else if ((lp->autosense == AUTO) && (sr=is_anc_capable(dev))) {
+	    } else if ((lp->autosense == AUTO) && 
+		                     ((sr=is_anc_capable(dev)) & MII_SR_ANC)) {
 		ana = (((sr >> 6) & MII_ANA_TAF) | MII_ANA_CSMA);
 		ana &= (de4x5_full_duplex ? ~0 : ~MII_ANA_FDAM);
 		mii_wr(ana, MII_ANA, lp->phy[lp->active].addr, DE4X5_MII);
@@ -2206,21 +2275,23 @@ static int dc21140m_autoconf(struct device *dev)
 	    break;
 	    
 	  case 1:
-	    if ((sr=test_mii_reg(dev, MII_SR, MII_SR_ASSC, TRUE, 3000)) < 0) {
+	    if ((sr=test_mii_reg(dev, MII_SR, MII_SR_ASSC, TRUE, 2000)) < 0) {
 		next_tick = sr & ~TIMER_CB;
 	    } else {
 		lp->media = SPD_DET;
 		lp->local_state = 0;
 		if (sr) {                         /* Success! */
+		    lp->tmp = MII_SR_ASSC;
 		    anlpa = mii_rd(MII_ANLPA, lp->phy[lp->active].addr, DE4X5_MII);
 		    ana = mii_rd(MII_ANA, lp->phy[lp->active].addr, DE4X5_MII);
-		    if ((anlpa & MII_ANLPA_ACK) && !(anlpa & MII_ANLPA_RF) &&
-			(cap = anlpa & MII_ANLPA_TAF & ana)) {
+		    if (!(anlpa & MII_ANLPA_RF) && 
+			 (cap = anlpa & MII_ANLPA_TAF & ana)) {
 			if (cap & MII_ANA_100M) {
 			    de4x5_full_duplex = ((ana & anlpa & MII_ANA_FDAM & MII_ANA_100M) ? TRUE : FALSE);
 			    lp->media = _100Mb;
 			} else if (cap & MII_ANA_10M) {
 			    de4x5_full_duplex = ((ana & anlpa & MII_ANA_FDAM & MII_ANA_10M) ? TRUE : FALSE);
+
 			    lp->media = _10Mb;
 			}
 		    }
@@ -2232,17 +2303,23 @@ static int dc21140m_autoconf(struct device *dev)
 	break;
 	
       case SPD_DET:                              /* Choose 10Mb/s or 100Mb/s */
-	if (!lp->phy[lp->active].id) {
-	    outl(GEP_FDXD | GEP_MODE, DE4X5_GEP);
+        if (lp->timeout < 0) {
+	    lp->tmp = (lp->phy[lp->active].id ? MII_SR_LKS :
+		                                  (~inl(DE4X5_GEP) & GEP_LNP));
+	    SET_100Mb_PDET;
 	}
-	if (is_spd_100(dev) && is_100_up(dev)) {
-	    lp->media = _100Mb;
-	} else if (!is_spd_100(dev) && is_10_up(dev)) {
-	    lp->media = _10Mb;
+        if ((slnk = test_sym_link(dev, 6200)) < 0) {
+	    next_tick = slnk & ~TIMER_CB;
 	} else {
-	    lp->media = NC;
+	    if (is_spd_100(dev) && is_100_up(dev)) {
+		lp->media = _100Mb;
+	    } else if ((!is_spd_100(dev) && (is_10_up(dev) & lp->tmp))) {
+		lp->media = _10Mb;
+	    } else {
+		lp->media = NC;
+	    }
+	    next_tick = dc21140m_autoconf(dev);
 	}
-	next_tick = dc21140m_autoconf(dev);
 	break;
 	
       case _100Mb:                               /* Set 100Mb/s */
@@ -2276,8 +2353,10 @@ static int dc21140m_autoconf(struct device *dev)
 	break;
 	
       case NC:
-	SET_10Mb;
-	de4x5_dbg_media(dev);
+        if (lp->media != lp->c_media) {
+	    de4x5_dbg_media(dev);
+	    lp->c_media = lp->media;
+	}
 	lp->media = INIT;
 	lp->tx_enable = FALSE;
 	break;
@@ -2286,12 +2365,16 @@ static int dc21140m_autoconf(struct device *dev)
     return next_tick;
 }
 
-static void de4x5_init_connection(struct device *dev)
+static void
+de4x5_init_connection(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
 
-    de4x5_dbg_media(dev);
+    if (lp->media != lp->c_media) {
+        de4x5_dbg_media(dev);
+	lp->c_media = lp->media;          /* Stop scrolling media messages */
+    }
     de4x5_restore_skbs(dev);
     cli();
     de4x5_rx(dev);
@@ -2304,7 +2387,8 @@ static void de4x5_init_connection(struct device *dev)
     return;
 }
 
-static int de4x5_reset_phy(struct device *dev)
+static int
+de4x5_reset_phy(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -2360,7 +2444,8 @@ test_media(struct device *dev, s32 irqs, s32 irq_mask, s32 csr13, s32 csr14, s32
     return sts;
 }
 
-static int test_tp(struct device *dev, s32 msec)
+static int
+test_tp(struct device *dev, s32 msec)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -2381,11 +2466,37 @@ static int test_tp(struct device *dev, s32 msec)
     return sisr;
 }
 
+static int
+test_sym_link(struct device *dev, int msec)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    int iobase = dev->base_addr;
+    int gep = 0;
+    
+    if (lp->timeout < 0) {
+	lp->timeout = msec/100;
+    }
+    
+    if (lp->phy[lp->active].id) {
+	gep = ((is_100_up(dev) && is_spd_100(dev)) ? GEP_SLNK : 0);
+    } else {
+	gep = (~inl(DE4X5_GEP) & (GEP_SLNK | GEP_LNP));
+    }
+    if (!(gep & GEP_SLNK) && --lp->timeout) {
+	gep = 100 | TIMER_CB;
+    } else {
+	lp->timeout = -1;
+    }
+    
+    return gep;
+}
+
 /*
 **
 **
 */
-static int test_mii_reg(struct device *dev, int reg, int mask, int pol, long msec)
+static int
+test_mii_reg(struct device *dev, int reg, int mask, int pol, long msec)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     int test, iobase = dev->base_addr;
@@ -2395,7 +2506,7 @@ static int test_mii_reg(struct device *dev, int reg, int mask, int pol, long mse
     }
     
     if (pol) pol = ~0;
-    reg = mii_rd(reg, lp->phy[lp->active].addr, DE4X5_MII) & mask;
+    reg = mii_rd((u_char)reg, lp->phy[lp->active].addr, DE4X5_MII) & mask;
     test = (reg ^ pol) & mask;
     
     if (test && --lp->timeout) {
@@ -2407,7 +2518,8 @@ static int test_mii_reg(struct device *dev, int reg, int mask, int pol, long mse
     return reg;
 }
 
-static int is_spd_100(struct device *dev)
+static int
+is_spd_100(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -2424,7 +2536,8 @@ static int is_spd_100(struct device *dev)
     return spd;
 }
 
-static int is_100_up(struct device *dev)
+static int
+is_100_up(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -2438,7 +2551,8 @@ static int is_100_up(struct device *dev)
     }
 }
 
-static int is_10_up(struct device *dev)
+static int
+is_10_up(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -2452,13 +2566,14 @@ static int is_10_up(struct device *dev)
     }
 }
 
-static int is_anc_capable(struct device *dev)
+static int
+is_anc_capable(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
     
     if (lp->phy[lp->active].id) {
-	return (mii_rd(MII_SR, lp->phy[lp->active].addr, DE4X5_MII) & MII_SR_ANC);
+	return (mii_rd(MII_SR, lp->phy[lp->active].addr, DE4X5_MII));
     } else {
 	return 0;
     }
@@ -2468,7 +2583,8 @@ static int is_anc_capable(struct device *dev)
 ** Send a packet onto the media and watch for send errors that indicate the
 ** media is bad or unconnected.
 */
-static int ping_media(struct device *dev, int msec)
+static int
+ping_media(struct device *dev, int msec)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -2501,34 +2617,112 @@ static int ping_media(struct device *dev, int msec)
 }
 
 /*
+** This function does 2 things: on Intels it kmalloc's another buffer to
+** replace the one about to be passed up. On Alpha's it kmallocs a buffer
+** into which the packet is copied.
+*/
+static struct sk_buff *
+de4x5_alloc_rx_buff(struct device *dev, int index, int len)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    struct sk_buff *p;
+
+#ifndef __alpha__
+    struct sk_buff *ret;
+    u_long i=0, tmp;
+
+    p = dev_alloc_skb(IEEE802_3_SZ + ALIGN + 2);
+    if (!p) return NULL;
+
+    p->dev = dev;
+    tmp = virt_to_bus(p->data);
+    i = ((tmp + ALIGN) & ~ALIGN) - tmp;
+    skb_reserve(p, i);
+    lp->rx_ring[index].buf = tmp + i;
+
+    ret = lp->rx_skb[index];
+    lp->rx_skb[index] = p;
+    skb_put(ret, len);
+
+    return ret;
+
+#else
+    if (lp->state != OPEN) return (struct sk_buff *)1; /* Fake out the open */
+
+    p = dev_alloc_skb(len + 2);
+    if (!p) return NULL;
+
+    p->dev = dev;
+    skb_reserve(p, 2);	                               /* Align */
+    if (index < lp->rx_old) {                          /* Wrapped buffer */
+	short tlen = (lp->rxRingSize - lp->rx_old) * RX_BUFF_SZ;
+	memcpy(skb_put(p,tlen), bus_to_virt(lp->rx_ring[lp->rx_old].buf),tlen);
+	memcpy(skb_put(p,len-tlen), bus_to_virt(lp->rx_ring[0].buf), len-tlen);
+    } else {                                           /* Linear buffer */
+	memcpy(skb_put(p,len), bus_to_virt(lp->rx_ring[lp->rx_old].buf),len);
+    }
+		    
+    return p;
+#endif
+}
+
+static void
+de4x5_free_rx_buffs(struct device *dev)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    int i;
+
+    for (i=0; i<lp->rxRingSize; i++) {
+	if (lp->rx_skb[i]) {
+	    dev_kfree_skb(lp->rx_skb[i], FREE_WRITE);
+	}
+	lp->rx_ring[i].status = 0;
+	lp->rx_skb[i] = (struct sk_buff *)1;    /* Dummy entry */
+    }
+
+    return;
+}
+
+static void
+de4x5_free_tx_buffs(struct device *dev)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    int i;
+
+    for (i=0; i<lp->txRingSize; i++) {
+	if (lp->tx_skb[i]) {
+	    dev_kfree_skb(lp->tx_skb[i], FREE_WRITE);
+	    lp->tx_skb[i] = NULL;
+	}
+	lp->tx_ring[i].status = 0;
+    }
+
+    /* Unload the locally queued packets */
+    while (lp->cache.skb) {
+	dev_kfree_skb(de4x5_get_cache(dev), FREE_WRITE);
+    }
+
+    return;
+}
+
+/*
 ** When a user pulls a connection, the DECchip can end up in a
 ** 'running - waiting for end of transmission' state. This means that we
 ** have to perform a chip soft reset to ensure that we can synchronize
 ** the hardware and software and make any media probes using a loopback
 ** packet meaningful.
 */
-static void de4x5_save_skbs(struct device *dev)
+static void
+de4x5_save_skbs(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
-    int i;
     s32 omr;
 
     if (!lp->cache.save_cnt) {
 	STOP_DE4X5;
 	de4x5_tx(dev);                          /* Flush any sent skb's */
-	for (i=lp->tx_new; i!=lp->tx_old; i--) {
-	    if (lp->skb[i]) {
-		de4x5_putb_cache(dev, lp->skb[i]);
-		lp->skb[i] = NULL;
-	    }
-	    if (i==0) i=lp->txRingSize;
-	}
-        if (lp->skb[i]) {
-	    de4x5_putb_cache(dev, lp->skb[i]);
-	    lp->skb[i] = NULL;
-	}
-
+	de4x5_free_tx_buffs(dev);
 	de4x5_cache_state(dev, DE4X5_SAVE_STATE);
 	de4x5_sw_reset(dev);
 	de4x5_cache_state(dev, DE4X5_RESTORE_STATE);
@@ -2540,12 +2734,11 @@ static void de4x5_save_skbs(struct device *dev)
     return;
 }
 
-static void de4x5_restore_skbs(struct device *dev)
+static void
+de4x5_restore_skbs(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
-    struct sk_buff *skb;
-    int i;
     s32 omr;
 
     if (lp->cache.save_cnt) {
@@ -2553,16 +2746,7 @@ static void de4x5_restore_skbs(struct device *dev)
 	de4x5_cache_state(dev, DE4X5_SAVE_STATE);
 	de4x5_sw_reset(dev);
 	de4x5_cache_state(dev, DE4X5_RESTORE_STATE);
-	dev->tbusy = 1;
-
-	for (i=0; TX_BUFFS_AVAIL && lp->cache.skb; i++) {
-	    skb = de4x5_get_cache(dev);
-	    load_packet(dev, skb->data, TD_IC | TD_LS | TD_FS | skb->len, skb);
-	    lp->tx_new = (++lp->tx_new) % lp->txRingSize;
-	}
-	if (TX_BUFFS_AVAIL) {
-	    dev->tbusy = 0;
-	}
+	dev->tbusy = 0;
 	lp->cache.save_cnt--;
 	START_DE4X5;
     }
@@ -2570,7 +2754,8 @@ static void de4x5_restore_skbs(struct device *dev)
     return;
 }
 
-static void de4x5_cache_state(struct device *dev, int flag)
+static void
+de4x5_cache_state(struct device *dev, int flag)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -2609,7 +2794,8 @@ static void de4x5_cache_state(struct device *dev, int flag)
     return;
 }
 
-static void de4x5_put_cache(struct device *dev, struct sk_buff *skb)
+static void
+de4x5_put_cache(struct device *dev, struct sk_buff *skb)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     struct sk_buff *p;
@@ -2625,7 +2811,8 @@ static void de4x5_put_cache(struct device *dev, struct sk_buff *skb)
     return;
 }
 
-static void de4x5_putb_cache(struct device *dev, struct sk_buff *skb)
+static void
+de4x5_putb_cache(struct device *dev, struct sk_buff *skb)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     struct sk_buff *p = lp->cache.skb;
@@ -2636,7 +2823,8 @@ static void de4x5_putb_cache(struct device *dev, struct sk_buff *skb)
     return;
 }
 
-static struct sk_buff *de4x5_get_cache(struct device *dev)
+static struct sk_buff *
+de4x5_get_cache(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     struct sk_buff *p = lp->cache.skb;
@@ -2653,7 +2841,8 @@ static struct sk_buff *de4x5_get_cache(struct device *dev)
 ** Check the Auto Negotiation State. Return OK when a link pass interrupt
 ** is received and the auto-negotiation status is NWAY OK.
 */
-static int test_ans(struct device *dev, s32 irqs, s32 irq_mask, s32 msec)
+static int
+test_ans(struct device *dev, s32 irqs, s32 irq_mask, s32 msec)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -2680,7 +2869,8 @@ static int test_ans(struct device *dev, s32 irqs, s32 irq_mask, s32 msec)
     return sts;
 }
 
-static void de4x5_setup_intr(struct device *dev)
+static void
+de4x5_setup_intr(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -2700,7 +2890,8 @@ static void de4x5_setup_intr(struct device *dev)
 /*
 **
 */
-static void reset_init_sia(struct device *dev, s32 sicr, s32 strr, s32 sigr)
+static void
+reset_init_sia(struct device *dev, s32 sicr, s32 strr, s32 sigr)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
@@ -2716,7 +2907,8 @@ static void reset_init_sia(struct device *dev, s32 sicr, s32 strr, s32 sigr)
 /*
 ** Create a loopback ethernet packet with an invalid CRC
 */
-static void create_packet(struct device *dev, char *frame, int len)
+static void
+create_packet(struct device *dev, char *frame, int len)
 {
     int i;
     char *buf = frame;
@@ -2737,7 +2929,8 @@ static void create_packet(struct device *dev, char *frame, int len)
 /*
 ** Known delay in microseconds
 */
-static void de4x5_us_delay(u32 usec)
+static void
+de4x5_us_delay(u32 usec)
 {
     udelay(usec);
     
@@ -2747,7 +2940,8 @@ static void de4x5_us_delay(u32 usec)
 /*
 ** Known delay in milliseconds, in millisecond steps.
 */
-static void de4x5_ms_delay(u32 msec)
+static void
+de4x5_ms_delay(u32 msec)
 {
     u_int i;
     
@@ -2762,7 +2956,8 @@ static void de4x5_ms_delay(u32 msec)
 /*
 ** Look for a particular board name in the EISA configuration space
 */
-static int EISA_signature(char *name, s32 eisa_id)
+static int
+EISA_signature(char *name, s32 eisa_id)
 {
     c_char *signatures[] = DE4X5_SIGNATURE;
     char ManCode[DE4X5_STRLEN];
@@ -2796,7 +2991,8 @@ static int EISA_signature(char *name, s32 eisa_id)
 /*
 ** Look for a particular board name in the PCI configuration space
 */
-static int PCI_signature(char *name, struct bus_type *lp)
+static int
+PCI_signature(char *name, struct bus_type *lp)
 {
     c_char *de4x5_signatures[] = DE4X5_SIGNATURE;
     int i, status = 0, siglen = sizeof(de4x5_signatures)/sizeof(c_char *);
@@ -2833,7 +3029,8 @@ static int PCI_signature(char *name, struct bus_type *lp)
 ** Set up the Ethernet PROM counter to the start of the Ethernet address on
 ** the DC21040, else  read the SROM for the other chips.
 */
-static void DevicePresent(u_long aprom_addr)
+static void
+DevicePresent(u_long aprom_addr)
 {
     int i;
     struct bus_type *lp = &bus;
@@ -2851,7 +3048,8 @@ static void DevicePresent(u_long aprom_addr)
     return;
 }
 
-static int get_hw_addr(struct device *dev)
+static int
+get_hw_addr(struct device *dev)
 {
     u_long iobase = dev->base_addr;
     int broken, i, k, tmp, status = 0;
@@ -2902,7 +3100,7 @@ static int get_hw_addr(struct device *dev)
 	chksum |= (u_short) (inb(EISA_APROM) << 8);
 	if ((k != chksum) && (dec_only)) status = -1;
     }
-    
+
     return status;
 }
 
@@ -2910,7 +3108,8 @@ static int get_hw_addr(struct device *dev)
 ** Test for enet addresses in the first 32 bytes. The built-in strncmp
 ** didn't seem to work here...?
 */
-static int de4x5_bad_srom(struct bus_type *lp)
+static int
+de4x5_bad_srom(struct bus_type *lp)
 {
     int i, status = 0;
 
@@ -2925,7 +3124,8 @@ static int de4x5_bad_srom(struct bus_type *lp)
     return status;
 }
 
-static int de4x5_strncmp(char *a, char *b, int n)
+static int
+de4x5_strncmp(char *a, char *b, int n)
 {
     int ret=0;
 
@@ -2939,7 +3139,8 @@ static int de4x5_strncmp(char *a, char *b, int n)
 /*
 ** SROM Read
 */
-static short srom_rd(u_long addr, u_char offset)
+static short
+srom_rd(u_long addr, u_char offset)
 {
     sendto_srom(SROM_RD | SROM_SR, addr);
     
@@ -2950,7 +3151,8 @@ static short srom_rd(u_long addr, u_char offset)
     return srom_data(SROM_RD | SROM_SR | DT_CS, addr);
 }
 
-static void srom_latch(u_int command, u_long addr)
+static void
+srom_latch(u_int command, u_long addr)
 {
     sendto_srom(command, addr);
     sendto_srom(command | DT_CLK, addr);
@@ -2959,7 +3161,8 @@ static void srom_latch(u_int command, u_long addr)
     return;
 }
 
-static void srom_command(u_int command, u_long addr)
+static void
+srom_command(u_int command, u_long addr)
 {
     srom_latch(command, addr);
     srom_latch(command, addr);
@@ -2968,7 +3171,8 @@ static void srom_command(u_int command, u_long addr)
     return;
 }
 
-static void srom_address(u_int command, u_long addr, u_char offset)
+static void
+srom_address(u_int command, u_long addr, u_char offset)
 {
     int i;
     char a;
@@ -2987,7 +3191,8 @@ static void srom_address(u_int command, u_long addr, u_char offset)
     return;
 }
 
-static short srom_data(u_int command, u_long addr)
+static short
+srom_data(u_int command, u_long addr)
 {
     int i;
     short word = 0;
@@ -3007,7 +3212,8 @@ static short srom_data(u_int command, u_long addr)
 }
 
 /*
-static void srom_busy(u_int command, u_long addr)
+static void
+srom_busy(u_int command, u_long addr)
 {
    sendto_srom((command & 0x0000ff00) | DT_CS, addr);
    
@@ -3021,7 +3227,8 @@ static void srom_busy(u_int command, u_long addr)
 }
 */
 
-static void sendto_srom(u_int command, u_long addr)
+static void
+sendto_srom(u_int command, u_long addr)
 {
     outl(command, addr);
     udelay(1);
@@ -3029,7 +3236,8 @@ static void sendto_srom(u_int command, u_long addr)
     return;
 }
 
-static int getfrom_srom(u_long addr)
+static int
+getfrom_srom(u_long addr)
 {
     s32 tmp;
     
@@ -3043,7 +3251,8 @@ static int getfrom_srom(u_long addr)
 ** MII Read/Write
 */
 
-static int mii_rd(u_char phyreg, u_char phyaddr, u_long ioaddr)
+static int
+mii_rd(u_char phyreg, u_char phyaddr, u_long ioaddr)
 {
     mii_wdata(MII_PREAMBLE,  2, ioaddr);   /* Start of 34 bit preamble...    */
     mii_wdata(MII_PREAMBLE, 32, ioaddr);   /* ...continued                   */
@@ -3055,7 +3264,8 @@ static int mii_rd(u_char phyreg, u_char phyaddr, u_long ioaddr)
     return mii_rdata(ioaddr);              /* Read data                      */
 }
 
-static void mii_wr(int data, u_char phyreg, u_char phyaddr, u_long ioaddr)
+static void
+mii_wr(int data, u_char phyreg, u_char phyaddr, u_long ioaddr)
 {
     mii_wdata(MII_PREAMBLE,  2, ioaddr);   /* Start of 34 bit preamble...    */
     mii_wdata(MII_PREAMBLE, 32, ioaddr);   /* ...continued                   */
@@ -3069,7 +3279,8 @@ static void mii_wr(int data, u_char phyreg, u_char phyaddr, u_long ioaddr)
     return;
 }
 
-static int mii_rdata(u_long ioaddr)
+static int
+mii_rdata(u_long ioaddr)
 {
     int i;
     s32 tmp = 0;
@@ -3082,7 +3293,8 @@ static int mii_rdata(u_long ioaddr)
     return tmp;
 }
 
-static void mii_wdata(int data, int len, u_long ioaddr)
+static void
+mii_wdata(int data, int len, u_long ioaddr)
 {
     int i;
     
@@ -3094,7 +3306,8 @@ static void mii_wdata(int data, int len, u_long ioaddr)
     return;
 }
 
-static void mii_address(u_char addr, u_long ioaddr)
+static void
+mii_address(u_char addr, u_long ioaddr)
 {
     int i;
     
@@ -3107,11 +3320,12 @@ static void mii_address(u_char addr, u_long ioaddr)
     return;
 }
 
-static void mii_ta(u_long rw, u_long ioaddr)
+static void
+mii_ta(u_long rw, u_long ioaddr)
 {
     if (rw == MII_STWR) {
 	sendto_mii(MII_MWR | MII_WR, 1, ioaddr);  
-	getfrom_mii(MII_MRD | MII_RD, ioaddr);
+	sendto_mii(MII_MWR | MII_WR, 0, ioaddr);  
     } else {
 	getfrom_mii(MII_MRD | MII_RD, ioaddr);        /* Tri-state MDIO */
     }
@@ -3119,7 +3333,8 @@ static void mii_ta(u_long rw, u_long ioaddr)
     return;
 }
 
-static int mii_swap(int data, int len)
+static int
+mii_swap(int data, int len)
 {
     int i, tmp = 0;
     
@@ -3132,7 +3347,8 @@ static int mii_swap(int data, int len)
     return tmp;
 }
 
-static void sendto_mii(u32 command, int data, u_long ioaddr)
+static void
+sendto_mii(u32 command, int data, u_long ioaddr)
 {
     u32 j;
     
@@ -3145,7 +3361,8 @@ static void sendto_mii(u32 command, int data, u_long ioaddr)
     return;
 }
 
-static int getfrom_mii(u32 command, u_long ioaddr)
+static int
+getfrom_mii(u32 command, u_long ioaddr)
 {
     outl(command, ioaddr);
     udelay(1);
@@ -3159,7 +3376,8 @@ static int getfrom_mii(u32 command, u_long ioaddr)
 ** Here's 3 ways to calculate the OUI from the ID registers. One's a brain
 ** dead approach, 2 aren't (clue: mine isn't!).
 */
-static int mii_get_oui(u_char phyaddr, u_long ioaddr)
+static int
+mii_get_oui(u_char phyaddr, u_long ioaddr)
 {
 /*
     union {
@@ -3202,7 +3420,8 @@ static int mii_get_oui(u_char phyaddr, u_long ioaddr)
     return r2;                                  /* (I did it) My way */
 }
 
-static int mii_get_phy(struct device *dev)
+static int
+mii_get_phy(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     int iobase = dev->base_addr;
@@ -3246,7 +3465,8 @@ static int mii_get_phy(struct device *dev)
     return lp->mii_cnt;
 }
 
-static char *build_setup_frame(struct device *dev, int mode)
+static char *
+build_setup_frame(struct device *dev, int mode)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     int i;
@@ -3277,14 +3497,16 @@ static char *build_setup_frame(struct device *dev, int mode)
     return pa;                     /* Points to the next entry */
 }
 
-static void enable_ast(struct device *dev, u32 time_out)
+static void
+enable_ast(struct device *dev, u32 time_out)
 {
     timeout(dev, (void *)&de4x5_ast, (u_long)dev, time_out);
     
     return;
 }
 
-static void disable_ast(struct device *dev)
+static void
+disable_ast(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     
@@ -3293,7 +3515,8 @@ static void disable_ast(struct device *dev)
     return;
 }
 
-static long de4x5_switch_to_mii(struct device *dev)
+static long
+de4x5_switch_to_mii(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     int iobase = dev->base_addr;
@@ -3319,7 +3542,8 @@ static long de4x5_switch_to_mii(struct device *dev)
     return omr;
 }
 
-static long de4x5_switch_to_srl(struct device *dev)
+static long
+de4x5_switch_to_srl(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     int iobase = dev->base_addr;
@@ -3327,7 +3551,6 @@ static long de4x5_switch_to_srl(struct device *dev)
     
     /* Deassert the OMR_PS bit in CSR6 */
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR));
-    outl(omr | OMR_TTM, DE4X5_OMR);
     outl(omr, DE4X5_OMR);
     
     /* Soft Reset */
@@ -3345,7 +3568,8 @@ static long de4x5_switch_to_srl(struct device *dev)
     return omr;
 }
 
-static void timeout(struct device *dev, void (*fn)(u_long data), u_long data, u_long msec)
+static void
+timeout(struct device *dev, void (*fn)(u_long data), u_long data, u_long msec)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     int dt;
@@ -3366,7 +3590,8 @@ static void timeout(struct device *dev, void (*fn)(u_long data), u_long data, u_
     return;
 }
 
-static void de4x5_dbg_open(struct device *dev)
+static void
+de4x5_dbg_open(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     int i;
@@ -3416,7 +3641,8 @@ static void de4x5_dbg_open(struct device *dev)
     return;
 }
 
-static void de4x5_dbg_mii(struct device *dev, int k)
+static void
+de4x5_dbg_mii(struct device *dev, int k)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     int iobase = dev->base_addr;
@@ -3442,7 +3668,8 @@ static void de4x5_dbg_mii(struct device *dev, int k)
     return;
 }
 
-static void de4x5_dbg_media(struct device *dev)
+static void
+de4x5_dbg_media(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     
@@ -3473,7 +3700,8 @@ static void de4x5_dbg_media(struct device *dev)
     return;
 }
 
-static void de4x5_dbg_srom(struct de4x5_srom *p)
+static void
+de4x5_dbg_srom(struct de4x5_srom *p)
 {
     int i;
 
@@ -3496,11 +3724,48 @@ static void de4x5_dbg_srom(struct de4x5_srom *p)
     return;
 }
 
+static void
+de4x5_dbg_rx(struct sk_buff *skb, int len)
+{
+    int i, j;
+
+    if (de4x5_debug > 2) {
+	printk("R: %02x:%02x:%02x:%02x:%02x:%02x <- %02x:%02x:%02x:%02x:%02x:%02x len/SAP:%02x%02x [%d]\n",
+	       (u_char)skb->data[0],
+	       (u_char)skb->data[1],
+	       (u_char)skb->data[2],
+	       (u_char)skb->data[3],
+	       (u_char)skb->data[4],
+	       (u_char)skb->data[5],
+	       (u_char)skb->data[6],
+	       (u_char)skb->data[7],
+	       (u_char)skb->data[8],
+	       (u_char)skb->data[9],
+	       (u_char)skb->data[10],
+	       (u_char)skb->data[11],
+	       (u_char)skb->data[12],
+	       (u_char)skb->data[13],
+	       len);
+	if (de4x5_debug > 3) {
+	    for (j=0; len>0;j+=16, len-=16) {
+		printk("    %03x: ",j);
+		for (i=0; i<16 && i<len; i++) {
+		    printk("%02x ",(u_char)skb->data[i+j]);
+		}
+		printk("\n");
+	    }
+	}
+    }
+
+    return;
+}
+
 /*
 ** Perform IOCTL call functions here. Some are privileged operations and the
 ** effective uid is checked in those cases.
 */
-static int de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+static int
+de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     struct de4x5_ioctl *ioc = (struct de4x5_ioctl *) &rq->ifr_data;
@@ -3540,13 +3805,8 @@ static int de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	build_setup_frame(dev, PHYS_ADDR_ONLY);
 	/* Set up the descriptor and give ownership to the card */
 	while (set_bit(0, (void *)&dev->tbusy) != 0);/* Wait for lock to free*/
-	if (lp->setup_f == HASH_PERF) {
-	    load_packet(dev, lp->setup_frame, TD_IC | HASH_F | TD_SET | 
-			SETUP_FRAME_LEN, NULL);
-	} else {
-	    load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
-			SETUP_FRAME_LEN, NULL);
-	}
+	load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
+		                                        SETUP_FRAME_LEN, NULL);
 	lp->tx_new = (++lp->tx_new) % lp->txRingSize;
 	outl(POLL_DEMAND, DE4X5_TPD);                /* Start the TX */
 	dev->tbusy = 0;                              /* Unlock the TX ring */

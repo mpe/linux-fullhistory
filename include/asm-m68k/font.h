@@ -18,7 +18,7 @@
     *    Find a font with a specific name
     */
 
-extern int findsoftfont(char *name, int *width, int *heigth, u_char *data[]);
+extern int findsoftfont(char *name, int *width, int *height, u_char *data[]);
 
 
    /*
@@ -28,5 +28,8 @@ extern int findsoftfont(char *name, int *width, int *heigth, u_char *data[]);
 extern void getdefaultfont(int xres, int yres, char *name[], int *width,
                            int *height, u_char *data[]);
 
+
+/* Max. length for the name of a predefined font */
+#define MAX_FONT_NAME	32
 
 #endif /* _ASM_M68K_FONT_H_ */

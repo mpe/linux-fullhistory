@@ -29,7 +29,7 @@
  *  with a certain priority is executed, all requests with lower or same
  *  priority get locked out. executing the sti()-macro allows ANY interrupt
  *  to be served. this really causes BIG trouble!
- *  to protect an interrupt driven routine against beeing interrupted 
+ *  to protect an interrupt driven routine against being interrupted 
  *  (if absolutely needed!) one should use save_flags();cli()/restore_flags()!
  *
  */
@@ -231,7 +231,7 @@ static int lp_write_interrupt(struct inode *inode, struct file *file,
       }
       if (lp_error) {
 
-	/* an error has occured, maybe in lp_interrupt().
+	/* an error has occurred, maybe in lp_interrupt().
 	   figure out the type of error, exit on request or if nothing has 
 	   been printed at all. */
 	

@@ -378,7 +378,7 @@ void cache_clear (unsigned long paddr, int len)
 {
     if (m68k_is040or060) {
 	/* ++roman: There have been too many problems with the CINV, it seems
-	 * to break the cache maintainance of DMAing drivers. I don't expect
+	 * to break the cache maintenance of DMAing drivers. I don't expect
 	 * too much overhead by using CPUSH instead.
 	 */
 	while (len > PAGE_SIZE) {
@@ -461,7 +461,7 @@ void cache_push (unsigned long paddr, int len)
 		      "movec %/d0,%/cacr"
 		      : : "i" (FLUSH_I)
 		      : "d0");
-    }
+}
 
 void cache_push_v (unsigned long vaddr, int len)
 {
@@ -489,15 +489,44 @@ void cache_push_v (unsigned long vaddr, int len)
 	    pushv060(vaddr);
 	    len -= PAGE_SIZE;
 	    vaddr += PAGE_SIZE;
-	    }
+	}
 	if (len > 0) {
 	    pushv060(vaddr);
 	    if (((vaddr + len - 1) ^ vaddr) & PAGE_MASK) {
 		/* a page boundary gets crossed at the end */
 		pushv060(vaddr + len - 1);
-		}
 	    }
 	}
+    }
+    /* 68030/68020 have no writeback cache; still need to clear icache. */
+    else /* 68030 or 68020 */
+	asm volatile ("movec %/cacr,%/d0\n\t"
+		      "oriw %0,%/d0\n\t"
+		      "movec %/d0,%/cacr"
+		      : : "i" (FLUSH_I)
+		      : "d0");
+}
+
+void flush_cache_all(void)
+{
+    if (m68k_is040or060 >= 4)
+        __asm__ __volatile__ (".word 0xf478\n" ::);
+    else /* 68030 or 68020 */
+	asm volatile ("movec %/cacr,%/d0\n\t"
+		      "oriw %0,%/d0\n\t"
+		      "movec %/d0,%/cacr"
+		      : : "i" (FLUSH_I)
+		      : "d0");
+}
+
+void flush_page_to_ram (unsigned long addr)
+{
+    if (m68k_is040or060 == 4)
+        pushv040(addr);
+
+    else if (m68k_is040or060 == 6)
+        push040(VTOP(addr)); /* someone mentioned that pushv060 doesn't work */
+
     /* 68030/68020 have no writeback cache; still need to clear icache. */
     else /* 68030 or 68020 */
 	asm volatile ("movec %/cacr,%/d0\n\t"

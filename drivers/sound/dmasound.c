@@ -475,7 +475,7 @@ typedef struct {
 } TRANS;
 
 struct sound_settings {
-    MACHINE mach;	/* machine dependend things */
+    MACHINE mach;	/* machine dependent things */
     SETTINGS hard;	/* hardware settings */
     SETTINGS soft;	/* software settings */
     SETTINGS dsp;	/* /dev/dsp default settings */
@@ -676,11 +676,11 @@ void sound_setup(char *str, int *ints);		/* ++Martin: stub for now */
  * I think I've optimized anything as far as one can do in plain C, all
  * variables should fit in registers and the loops are really short. There's
  * one loop for every possible situation. Writing a more generalized and thus
- * parametrized loop would only produce slower code. Feel free to optimize
+ * parameterized loop would only produce slower code. Feel free to optimize
  * this in assembler if you like. :)
  *
  * I think these routines belong here because they're not yet really hardware
- * independend, especially the fact that the Falcon can play 16bit samples
+ * independent, especially the fact that the Falcon can play 16bit samples
  * only in stereo is hardcoded in both of them!
  *
  * ++geert: split in even more functions (one per format)
@@ -1872,7 +1872,7 @@ static void AtaPlay(void)
      * than considering all possible situations. But the point is that
      * disabling the irq doesn't have any bad influence on this version of
      * the driver as we benefit from having pre-programmed the DMA
-     * whereever possible: There's no need to reload the DMA at the exact
+     * wherever possible: There's no need to reload the DMA at the exact
      * time of an interrupt but only at some time while the pre-programmed
      * frame is playing!
      */
@@ -2755,7 +2755,7 @@ static int sq_sync(void)
     while (sq.playing) {
 	SLEEP(sq.sync_queue, ONE_SECOND);
 	if (SIGNAL_RECEIVED) {
-	    /* While waiting for audio output to drain, an interrupt occured.
+	    /* While waiting for audio output to drain, an interrupt occurred.
 	       Stop audio output immediately and clear the queue. */
 	    sq_reset();
 	    rc = -EINTR;
@@ -2775,7 +2775,7 @@ static int sq_release(void)
 	rc = sq_sync();
 	sq.busy = 0;
 	WAKE_UP(sq.open_queue);
-	/* Wake up a process waiting for the queue beeing released.
+	/* Wake up a process waiting for the queue being released.
 	   Note: There may be several processes waiting for a call to open()
 		 returning. */
     }

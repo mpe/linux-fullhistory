@@ -208,6 +208,43 @@ done:
 	brelse(bh);
 }
 
+#ifdef CONFIG_BSD_DISKLABEL
+/* 
+ * Create devices for BSD partitions listed in a disklabel, under a
+ * dos-like partition. See extended_partition() for more information.
+ */
+static void bsd_disklabel_partition(struct gendisk *hd, int dev)
+{
+	struct buffer_head *bh;
+	struct bsd_disklabel *l;
+	struct bsd_partition *p;
+	int mask = (1 << hd->minor_shift) - 1;
+
+	if (!(bh = bread(dev,0,1024)))
+		return;
+	bh->b_state = 0;
+	l = (struct bsd_disklabel *) (bh->b_data+512);
+	if (l->d_magic != BSD_DISKMAGIC) {
+		brelse(bh);
+		return;
+	}
+
+	p = &l->d_partitions[0];
+	while (p - &l->d_partitions[0] <= BSD_MAXPARTITIONS) {
+		if ((current_minor & mask) >= (4 + hd->max_p))
+			break;
+
+		if (p->p_fstype != BSD_FS_UNUSED) {
+			add_partition(hd, current_minor, p->p_offset, p->p_size);
+			current_minor++;
+		}
+		p++;
+	}
+	brelse(bh);
+
+}
+#endif
+
 static int msdos_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 {
 	int i, minor = current_minor;
@@ -329,6 +366,13 @@ check_table:
 			if (hd->part[minor].nr_sects > 2)
 				hd->part[minor].nr_sects = 2;
 		}
+#ifdef CONFIG_BSD_DISKLABEL
+		if (p->sys_ind == BSD_PARTITION) {
+			printk(" <");
+			bsd_disklabel_partition(hd, MKDEV(hd->major, minor));
+			printk(" >");
+		}
+#endif
 	}
 	/*
 	 *  Check for old-style Disk Manager partition table
@@ -445,15 +489,27 @@ static int sun_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 		unsigned short nsect;      /* Sectors per track */
 		unsigned char spare3[4];   /* Even more magic... */
 		struct sun_partition {
-			unsigned long start_cylinder;
-			unsigned long num_sectors;
+			__u32 start_cylinder;
+			__u32 num_sectors;
 		} partitions[8];
 		unsigned short magic;      /* Magic number */
 		unsigned short csum;       /* Label xor'd checksum */
 	} * label;		
 	struct sun_partition *p;
+	int other_endian;
 	unsigned long spc;
-#define SUN_LABEL_MAGIC  0xDABE
+#define SUN_LABEL_MAGIC          0xDABE
+#define SUN_LABEL_MAGIC_SWAPPED  0xBEDA
+/* No need to optimize these macros since they are called only when reading
+ * the partition table. This occurs only at each disk change. */
+#define SWAP16(x)  (other_endian ? (((__u16)(x) & 0xFF) << 8) \
+				 | (((__u16)(x) & 0xFF00) >> 8) \
+				 : (__u16)(x))
+#define SWAP32(x)  (other_endian ? (((__u32)(x) & 0xFF) << 24) \
+				 | (((__u32)(x) & 0xFF00) << 8) \
+				 | (((__u32)(x) & 0xFF0000) >> 8) \
+				 | (((__u32)(x) & 0xFF000000) >> 24) \
+				 : (__u32)(x))
 
 	if(!(bh = bread(dev, 0, 1024))) {
 		printk("Dev %d: unable to read partition table\n", dev);
@@ -461,11 +517,12 @@ static int sun_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 	}
 	label = (struct sun_disklabel *) bh->b_data;
 	p = label->partitions;
-	if(label->magic != SUN_LABEL_MAGIC) {
-		printk("Dev %d Sun disklabel: bad magic %08x\n", dev, label->magic);
+	if (label->magic != SUN_LABEL_MAGIC && label->magic != SUN_LABEL_MAGIC_SWAPPED) {
+		printk("Dev %d Sun disklabel: bad magic %04x\n", dev, label->magic);
 		brelse(bh);
 		return 0;
 	}
+	other_endian = (label->magic == SUN_LABEL_MAGIC_SWAPPED);
 	/* Look at the checksum */
 	ush = ((unsigned short *) (label+1)) - 1;
 	for(csum = 0; ush >= ((unsigned short *) label);)
@@ -476,20 +533,22 @@ static int sun_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 		return 0;
 	}
 	/* All Sun disks have 8 partition entries */
-	spc = (label->ntrks * label->nsect);
+	spc = SWAP16(label->ntrks) * SWAP16(label->nsect);
 	for(i=0; i < 8; i++, p++) {
 		unsigned long st_sector;
 
 		/* We register all partitions, even if zero size, so that
 		 * the minor numbers end up ok as per SunOS interpretation.
 		 */
-		st_sector = first_sector + (p->start_cylinder * spc);
-		add_partition(hd, current_minor, st_sector, p->num_sectors);
+		st_sector = first_sector + SWAP32(p->start_cylinder) * spc;
+		add_partition(hd, current_minor, st_sector, SWAP32(p->num_sectors));
 		current_minor++;
 	}
 	printk("\n");
 	brelse(bh);
 	return 1;
+#undef SWAP16
+#undef SWAP32
 }
 
 #endif /* CONFIG_SUN_PARTITION */

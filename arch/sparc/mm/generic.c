@@ -1,4 +1,5 @@
-/* generic.c: Generic Sparc mm routines that are not dependent upon
+/* $Id: generic.c,v 1.2 1996/04/25 06:09:30 davem Exp $
+ * generic.c: Generic Sparc mm routines that are not dependent upon
  *            MMU type but are Sparc specific.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)

@@ -153,7 +153,7 @@ struct ufs_superblock {
 	ufsquad	fs_qbmask;		/* ~usb_bmask - for use with __s64 size */
 	ufsquad	fs_qfmask;		/* ~usb_fmask - for use with __s64 size */
 	__s32	fs_postblformat;	/* format of positional layout tables */
-	__s32	fs_nrpos;		/* number of rotaional positions */
+	__s32	fs_nrpos;		/* number of rotational positions */
 	__s32	fs_postbloff;		/* (__s16) rotation block list head */
 	__s32	fs_rotbloff;		/* (__u8) blocks for each rotation */
 	__s32	fs_magic;		/* magic number */

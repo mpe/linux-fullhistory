@@ -121,6 +121,7 @@ extern void isp16_setup(char *str, int *ints);
 static void ramdisk_start_setup(char *str, int *ints);
 static void load_ramdisk(char *str, int *ints);
 static void prompt_ramdisk(char *str, int *ints);
+static void ramdisk_size(char *str, int *ints);
 #ifdef CONFIG_BLK_DEV_INITRD
 static void no_initrd(char *s,int *ints);
 #endif
@@ -131,6 +132,18 @@ extern void icn_setup(char *str, int *ints);
 #ifdef CONFIG_ISDN_DRV_TELES
 extern void teles_setup(char *str, int *ints);
 #endif
+
+#ifdef CONFIG_ATARIMOUSE
+extern void atari_mouse_setup (char *str, int *ints);
+#endif
+#ifdef CONFIG_DMASOUND
+extern void dmasound_setup (char *str, int *ints);
+#endif
+#ifdef CONFIG_ATARI_SCSI
+extern void atari_scsi_setup (char *str, int *ints);
+#endif
+extern void wd33c93_setup (char *str, int *ints);
+extern void gvp11_setup (char *str, int *ints);
 
 #ifdef CONFIG_DIGI
 extern void pcxx_setup(char *str, int *ints);
@@ -163,6 +176,7 @@ int rows, cols;
 #ifdef CONFIG_BLK_DEV_RAM
 extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
 extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
+extern int rd_size;		/* Size of the ramdisk(s) */
 extern int rd_image_start;	/* starting block # of image */
 #ifdef CONFIG_BLK_DEV_INITRD
 kdev_t real_root_dev;
@@ -224,6 +238,8 @@ struct {
 	{ "ramdisk_start=", ramdisk_start_setup },
 	{ "load_ramdisk=", load_ramdisk },
 	{ "prompt_ramdisk=", prompt_ramdisk },
+	{ "ramdisk=", ramdisk_size },
+	{ "ramdisk_size=", ramdisk_size },
 #ifdef CONFIG_BLK_DEV_INITRD
 	{ "noinitrd", no_initrd },
 #endif
@@ -346,6 +362,22 @@ struct {
 #ifdef CONFIG_ISDN_DRV_PCBIT
 	{ "pcbit=", pcbit_setup },
 #endif
+#ifdef CONFIG_ATARIMOUSE
+	{ "atamouse=", atari_mouse_setup },
+#endif
+#ifdef CONFIG_DMASOUND
+	{ "dmasound=", dmasound_setup },
+#endif
+#ifdef CONFIG_ATARI_SCSI
+	{ "atascsi=", atari_scsi_setup },
+#endif
+#if defined(CONFIG_A3000_SCSI) || defined(CONFIG_A2091_SCSI) \
+	    || defined(CONFIG_GVP11_SCSI)
+	{ "wd33c93=", wd33c93_setup },
+#endif
+#if defined(CONFIG_GVP11_SCSI)
+	{ "gvp11=", gvp11_setup },
+#endif
 #ifdef CONFIG_DIGI
 	{ "digi=", pcxx_setup },
 #endif
@@ -373,6 +405,13 @@ static void prompt_ramdisk(char *str, int *ints)
    if (ints[0] > 0 && ints[1] >= 0)
       rd_prompt = ints[1] & 1;
 }
+
+static void ramdisk_size(char *str, int *ints)
+{
+	if (ints[0] > 0 && ints[1] >= 0)
+		rd_size = ints[1];
+}
+
 #endif
 
 static int checksetup(char *line)

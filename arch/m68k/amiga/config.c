@@ -370,7 +370,7 @@ void amiga_sched_init (isrfunc timer_routine)
     time_finetune = finetune+0.5;
 #endif
 
-    ciab.cra &= 0xC0;	 /* turn off timer A, continous mode, from Eclk */
+    ciab.cra &= 0xC0;	 /* turn off timer A, continuous mode, from Eclk */
     ciab.talo = jiffy_ticks % 256;
     ciab.tahi = jiffy_ticks / 256;
     /* CIA interrupts when counter underflows, so adjust ticks by 1 */
@@ -378,7 +378,7 @@ void amiga_sched_init (isrfunc timer_routine)
 
     /* install interrupt service routine for CIAB Timer A */
     /*
-     * Please don't change this to use ciaa, as it interfers with the
+     * Please don't change this to use ciaa, as it interferes with the
      * SCSI code. We'll have to take a look at this later
      */
 #if 0

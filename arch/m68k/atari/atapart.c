@@ -98,7 +98,7 @@ atari_check_partition (struct gendisk *hd, unsigned int dev)
 			break;
 		}
 		if (memcmp( xrs->part[1].id, "XGM", 3 ) != 0) {
-			printk( "\nID of extended partion is not XGM!\n" );
+			printk( "\nID of extended partition is not XGM!\n" );
 			brelse( xbh );
 			break;
 		}
@@ -128,7 +128,7 @@ atari_check_partition (struct gendisk *hd, unsigned int dev)
   if ( part_fmt!=1 ) /* no extended partitions -> test ICD-format */
   {
     pi = &rs->icdpart[0];
-    /* sanity check: no ICD format if first partion invalid */
+    /* sanity check: no ICD format if first partition invalid */
     if (memcmp (pi->id, "GEM", 3) == 0 ||
         memcmp (pi->id, "BGM", 3) == 0 ||
         memcmp (pi->id, "RAW", 3) == 0 )

@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.19 1996/01/24 02:33:50 davem Exp $ */
+/* $Id: ptrace.h,v 1.20 1996/04/24 09:10:02 davem Exp $ */
 #ifndef _SPARC_PTRACE_H
 #define _SPARC_PTRACE_H
 
@@ -171,12 +171,8 @@ extern void show_regs(struct pt_regs *);
 #define SF_XXARG  0x5c
 
 /* Stuff for the ptrace system call */
-#if 0 /* Need to fix the header files a bit... */
-#undef PTRACE_ATTACH
-#undef PTRACE_DETACH
-#define PTRACE_ATTACH		  10
-#define PTRACE_DETACH		  11
-#endif
+#define PTRACE_SUNATTACH	  10
+#define PTRACE_SUNDETACH	  11
 #define PTRACE_GETREGS            12
 #define PTRACE_SETREGS            13
 #define PTRACE_GETFPREGS          14

@@ -163,13 +163,14 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 	unsigned char pid;
 	
 	if (skb == NULL) return 0;
+
+	ax25->idletimer = ax25->idle;
 	
 	pid = *skb->data;
 
 	switch (pid) {
 #ifdef CONFIG_NETROM
 		case AX25_P_NETROM:
-			ax25->idletimer = ax25->idle = ax25_dev_get_value(ax25->device, AX25_VALUES_IDLE);
 			if (ax25_dev_get_value(ax25->device, AX25_VALUES_NETROM)) {
 				skb_pull(skb, 1);	/* Remove PID */
 				queued = nr_route_frame(skb, ax25);
@@ -178,23 +179,19 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 #endif
 #ifdef CONFIG_INET
 		case AX25_P_IP:
-			ax25->idletimer = ax25->idle = ax25_dev_get_value(ax25->device, AX25_VALUES_IDLE);
 			skb_pull(skb, 1);	/* Remove PID */
 			skb->h.raw = skb->data;
 			ax25_ip_mode_set(&ax25->dest_addr, ax25->device, 'V');
 			ip_rcv(skb, ax25->device, NULL);	/* Wrong ptype */
 			queued = 1;
-			
 			break;
 #endif
 		case AX25_P_SEGMENT:
-			ax25->idletimer = ax25->idle = ax25_dev_get_value(ax25->device, AX25_VALUES_IDLE);
 			skb_pull(skb, 1);	/* Remove PID */
 			queued = ax25_rx_fragment(ax25, skb);
 			break;
 
 		default:
-			ax25->idletimer = ax25->idle = 0;
 			if (ax25->sk != NULL && ax25_dev_get_value(ax25->device, AX25_VALUES_TEXT) && ax25->sk->protocol == pid) {
 				if (sock_queue_rcv_skb(ax25->sk, skb) == 0) {
 					queued = 1;

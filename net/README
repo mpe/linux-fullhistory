@@ -6,12 +6,12 @@ Code Section		Bug Report Contact
 802 [other	]	alan@cymru.net	
     [token ring	]	needs a maintainer/debugger
 appletalk		alan@cymru.net and netatalk@umich.edu
-ax25			g4klx@g4klx.demon.co.uk
+ax25			jsn@cs.nott.ac.uk
 core			alan@cymru.net
 ethernet		alan@cymru.net
 ipv4			alan@cymru.net
 ipx			alan@cymru.net,greg@caldera.com
-netrom			g4klx@g4klx.demon.co.uk
+netrom			jsn@cs.nott.ac.uk
 unix			alan@cymru.net
 
 

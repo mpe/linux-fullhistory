@@ -1155,23 +1155,14 @@ CONFIG_SCSI_MULTI_LUN
   Unit Number), e.g. a CD jukebox, you should say Y here so that all
   will be found by the SCSI driver. An SCSI device with multiple LUNs
   acts logically like multiple SCSI devices. The vast majority of SCSI
-  devices have only one LUN, and so most people can say N here.
+  devices have only one LUN, and so most people can say N here and
+  should in fact do so, because it is safer.
 
 Verbose SCSI error reporting (kernel size +=12K)
 CONFIG_SCSI_CONSTANTS
   The error messages regarding your SCSI hardware will be easier to
   understand if you enable this; it will enlarge your kernel by about
   12KB. If in doubt, say Y.
-
-Automatic Disk Geometry Translation 
-CONFIG_SCSI_AUTO_BIOSP
-  When this is set to Y, Linux will examine the partition table to
-  determine the mapping used under the other operating systems (e.g.
-  DOS), and set these parameters to the determined values, or if the
-  disk has no valid partition table, to an optimal value.
-###
-### What are the advantages/disadvantages? What is a safe value?
-###
 
 AdvanSys SCSI support
 CONFIG_SCSI_ADVANSYS
@@ -1607,18 +1598,19 @@ CONFIG_PPP_LOTS
 
 STRIP (Starmode Radio IP) support
 CONFIG_STRIP
-  Say Y if you have a Metricom radio and intend to use Starmode Radio IP.
-  STRIP is a radio protocol developed for the MosquitoNet project
-  (http://mosquitonet.stanford.edu/) to send Internet traffic using Metricom
-  radios.  Metricom radios are small, battery powered, 100kbit/sec packet
-  radio transceivers, about the size and weight of a cellular telephone.
-  (You may also have heard them called "Metricom modems" but we avoid the
-  term "modem" because it misleads many people into thinking that you can
-  plug a Metricom modem into a phone line and use it as a modem.)
-  You can use STRIP on any Linux machine with a serial port, although
-  it is obviously most useful for people with laptop computers. If you
-  think you might get a Metricom radio in the future, there is no harm in
-  saying yes to STRIP now, except that it makes the kernel a bit bigger.
+  Say Y if you have a Metricom radio and intend to use Starmode Radio
+  IP.  STRIP is a radio protocol developed for the MosquitoNet project
+  (http://mosquitonet.stanford.edu/) to send Internet traffic using
+  Metricom radios.  Metricom radios are small, battery powered,
+  100kbit/sec packet radio transceivers, about the size and weight of
+  a cellular telephone.  (You may also have heard them called
+  "Metricom modems" but we avoid the term "modem" because it misleads
+  many people into thinking that you can plug a Metricom modem into a
+  phone line and use it as a modem.)  You can use STRIP on any Linux
+  machine with a serial port, although it is obviously most useful for
+  people with laptop computers. If you think you might get a Metricom
+  radio in the future, there is no harm in saying yes to STRIP now,
+  except that it makes the kernel a bit bigger.
 
 WIC (Radio IP bridge)
 CONFIG_WIC
@@ -1632,37 +1624,51 @@ Z8530 SCC kiss emulation driver for AX.2
 CONFIG_SCC
   These cards are used to connect your Linux box to an amateur radio
   and communicate with other computers.  If you want to use this, read
-  Documentation/networking/z8530drv.txt and the HAM-HOWTO, available via
-  ftp (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.
+  Documentation/networking/z8530drv.txt and the HAM-HOWTO, available
+  via ftp (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt.
 
 PLIP (parallel port) support
 CONFIG_PLIP
-  PLIP (Parallel Line Internet Protocol) is mainly used to create a
-  mini network consisting of two local machines. The parallel ports
-  are connected using a "null printer" or "Turbo Laplink" cable (you
-  can find the wiring in drivers/net/README?.plip).  This works also
-  if one of the two machines runs DOS and has some PLIP software
-  installed, e.g. NCSA telnet.  If you want to use this, say Y and
-  read the NET-2-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  You need to say N or M to
-  "parallel printer support" below if you say Y here. Also, you might
-  have to edit the file drivers/net/Space.c and adjust the parallel
-  port's IRQ (there is a small number of Interrupt ReQuest lines in
-  your computer that are used by the periphery to gain the CPU's
-  attention - often a source of trouble if two different devices are
-  mistakenly configured to use the same IRQ. If you have the /proc
-  filesystem installed (see below), you can say "cat /proc/interrupts"
-  to see what the different IRQs are currently used for.)  This option
-  enlarges your kernel by about 8kB. If unsure, say N.  If you want to
-  compile this as a module ( = code which can be inserted in and
-  removed from the running kernel whenever you want), say M here and
-  read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you want to use both a
-  parallel printer and PLIP, it is best to compile both drivers as
-  modules.
+  PLIP (Parallel Line Internet Protocol) is used to create a mini
+  network consisting of two (or, rarely, more) local machines. The
+  parallel ports (the connectors at the computers with 25 holes) are
+  connected using "null printer" or "Turbo Laplink" cables which can
+  transmit 4 bits at a time or using special PLIP cables, to be used
+  on bidirectional parallel ports only, which can transmit 8 bits at a
+  time (you can find the wiring of these cables in
+  drivers/net/README?.plip). The cables can be up to 15m long. This
+  works also if one of the machines runs DOS and has some PLIP
+  software installed, e.g. NCSA telnet.  If you want to use this, say
+  Y and read the PLIP mini-HOWTO, available via ftp (user: anonymous)
+  in sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini as well as the
+  NET-2-HOWTO in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the
+  PLIP protocol was changed and this PLIP driver won't work together
+  with the PLIP support in Linux versions 1.0.x.  This option enlarges
+  your kernel by about 8kB. If you want to compile this as a module (
+  = code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt as
+  well as Documentation/networking/net-modules.txt. If you want to use
+  both a parallel printer and PLIP, there are two cases: 1) If the
+  printer and the PLIP cable are to use the same parallel port
+  (presumably because you have just one), it is best to compile both
+  drivers as modules and load and unload them as needed. 2) To use
+  different parallel ports for the printer and the PLIP cable, you can
+  say Y to the printer driver, specify the base address of the
+  parallel port(s) to use for the printer(s) with the "lp" kernel
+  command line option. (See the documentation of your boot loader
+  (lilo or loadlin) about how to pass options to the kernel at boot
+  time. The lilo procedure is also explained in the SCSI-HOWTO,
+  available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.) The standard base addresses
+  as well as the syntax of the "lp" command line option can be found
+  in drivers/char/lp.c. You can then say Y to this PLIP driver or,
+  preferably, M in which case Documentation/networking/net-modules.txt
+  tells you how to specify the port and IRQ to be used by PLIP at
+  module load time.
+  It's safe to say N here.
 
 EQL (serial line load balancing) support
 CONFIG_EQUALIZER
@@ -2052,8 +2058,8 @@ CONFIG_EEXPRESS_PRO
 
 EtherExpress support
 CONFIG_EEXPRESS
-  If you have a network (ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  If you have an EtherExpress16 network (ethernet) card, say Y and
+  read the Ethernet-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the Intel
   EtherExpress16 card used to be regarded as a very poor choice
   because the driver was very unreliable. We now have a new driver
@@ -2523,7 +2529,7 @@ CONFIG_QUOTA
   usage (also called diskquotas). Currently, it works only for the
   ext2 filesystem; you need the software available via ftp (user:
   anonymous) in
-  ftp.funet.fi:/pub/Linux/People/Linux/subsystems/quota/ in order to
+  ftp.funet.fi:/pub/Linux/PEOPLE/Linus/subsystems/quota/ in order to
   use it. Probably this is only useful for multi user systems. If
   unsure, say N.
 
@@ -2784,6 +2790,61 @@ CONFIG_SYSV_FS
   Documentation/modules.txt. If you haven't heard about all of this
   before, it's safe to say N.
 
+BSD UFS filesystem support (read only)
+CONFIG_UFS_FS
+  BSD and derivate versions of Unix (such as SunOS, FreeBSD, NetBSD
+  and NeXTstep) use a filesystem called UFS. Some System V Unixes can
+  create and mount partitions and diskettes using this filesystem
+  as well. Enabling this option allows you to mount these partitions
+  and diskettes read-only. If you only intend to mount files from
+  some other Unix over the network using NFS, you don't need the
+  UFS filesystem support (but you need nfs filesystem support
+  obviously). Note that this option is generally not needed for
+  floppies, since a good portable way to transport files and
+  directories between unixes (and even other operating systems)
+  is given by the tar program ("man tar"). When accessing NeXTstep
+  files, you may need to convert them from the NeXT character set
+  to the Latin1 character set; use GNU recode for this purpose.
+  Say Y to build UFS support into your kernel. If you want to compile
+  this as a module ( = code which can be inserted in and removed from
+  the running kernel whenever you want), say M here and read
+  Documentation/modules.txt. If you haven't heard about all of this
+  before, it's safe to say N.
+
+BSD disklabel (FreeBSD partition tables) support
+CONFIG_BSD_DISKLABEL
+  FreeBSD uses its own partition scheme on your PC. It requires only
+  one entry in the primary partition table of your disk and manages it
+  similarly to DOS extended partitions, putting in its first sector a
+  new partition table in disklabel format. Enabling this option allow
+  you to read these disklabels and further mount FreeBSD partitions on
+  your Linux box if you also have configured BSD ufs filesystem
+  support. If you don't know what all this is about, say N.
+
+SMD disklabel (Sun partition tables) support
+CONFIG_SMD_DISKLABEL
+  Like most systems, SunOS uses its own partition table format,
+  incompatible with each other. Enabling this option allow you to read
+  these partition tables and further mount SunOS disks on your Linux
+  box if you also have configured BSD ufs filesystem support. This is
+  mainly used to carry data from a Sparc under SunOS to your Linux box
+  via a removable medium like magneto-optical or ZIP drives. If you
+  don't know what all this is about, say N.
+
+AFFS filesystem support
+CONFIG_AFFS_FS
+  AFFS is the filesystem used on Commodore Amiga computers. People
+  running Linux on other systems can say N here.
+
+UFS filesystem support (read only)
+CONFIG_UFS_FS
+  UFS (Unix File System) is the way files are organized on Sun Solaris
+  harddisks and floppies. If you want to be able to read those, say Y
+  here. Note that this option is generally not needed for floppies,
+  since a good portable way to transport files and directories between
+  unixes (and even other operating systems) is given by the tar
+  program ("man tar").
+
 SMB filesystem support (to mount WfW shares etc..)
 CONFIG_SMB_FS
   SMB (Server Message Buffer) is the protocol Windows for Workgroups
@@ -2816,6 +2877,24 @@ CONFIG_NCP_FS
   compile this as a module ( = code which can be inserted in and
   removed from the running kernel whenever you want), say M here and
   read Documentation/modules.txt.
+
+Amiga FFS filesystem support (read only)
+CONFIG_AFFS_FS
+  The Fast File System (FFS) is the common filesystem used on harddisks
+  by Amiga (tm) Systems since AmigaOS Version 1.3 (34.20). It's also
+  possible to mount Diskfiles used by the Un*X Amiga Emulator by Bernd
+  Schmidt (http://www-users.informatik.rwth-aachen.de/~crux/uae.html)
+  If you want to do this, you will also need the loopback device
+  support. Because it's in an early development state, the AFFS is 
+  read only. Say Y if you want to be able to read files from an Amiga
+  FFS partition of your harddrive. Amiga floppies however cannot be
+  read with this driver due to an incompatibility of the floppy
+  controller used in an Amiga and the standard floppy controller in
+  PCs and workstations. Read Documentation/filesystems/affs.txt. This
+  filesystem is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt. If unsure, say N.
 
 Standard/generic serial support
 CONFIG_SERIAL
@@ -2896,12 +2975,23 @@ CONFIG_PRINTER
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
   as a module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
-  Documentation/modules.txt. If you intend to use PLIP (Parallel Line
-  Internet Protocol is mainly used to create a mini network by
-  connecting the parallel ports of two local machines) or a ethernet
-  network pocket adaptor attaching to the parallel port and a parallel
-  printer as well, you should compile both drivers as modules because
-  the drivers both want the same resources.
+  Documentation/modules.txt. If you want to use both a parallel
+  printer and PLIP, there are two cases: 1) If the printer and the
+  PLIP cable are to use the same parallel port (presumably because you
+  have just one), it is best to compile both drivers as modules and
+  load and unload them as needed. 2) To use different parallel ports
+  for the printer and the PLIP cable, you can say Y to this printer
+  driver, specify the base address of the parallel port(s) to use for
+  the printer(s) with the "lp" kernel command line option. (See the
+  documentation of your boot loader (lilo or loadlin) about how to
+  pass options to the kernel at boot time. The lilo procedure is also
+  explained in the SCSI-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.) The standard base addresses
+  as well as the syntax of the "lp" command line option can be found
+  in drivers/char/lp.c. You can then say Y to the PLIP driver or,
+  preferably, M in which case Documentation/networking/net-modules.txt
+  tells you how to specify the port and IRQ to be used by PLIP at
+  module load time.
 
 Logitech busmouse support
 CONFIG_BUSMOUSE
@@ -2975,10 +3065,11 @@ CONFIG_ATIXL_BUSMOUSE
 
 Support for user miscellaneous modules
 CONFIG_UMISC
-  This option forces generic miscellaneous minor device  support in the
-  kernel, and allows later loading of user miscellaneous device  modules,
-  such as drivers for optic pens and touchscreens. Unless you need such
-  specific modules, or are willing to write/test one, just say N.
+  This option forces generic miscellaneous minor device support in the
+  kernel, and allows later loading of user miscellaneous device
+  modules, such as drivers for optic pens and touchscreens. Unless you
+  need such specific modules, or are willing to write/test one, just
+  say N.
 
 QIC-02 tape support
 CONFIG_QIC02_TAPE
@@ -3196,7 +3287,8 @@ CONFIG_ISDN_PPP
   This enables synchronous PPP via ISDN. This protocol is used by
   Cisco or Sun for example. You will need a special version of pppd
   (called ipppd) for using this feature. See
-  Documentation/isdn/README.syncppp for more information.
+  Documentation/isdn/README.syncppp and Documentation/isdn/syncPPP.FAQ
+  for more information.
 
 Support generic MP (RFC 1717)
 CONFIG_ISDN_MPP
@@ -3230,10 +3322,11 @@ CONFIG_ISDN_DRV_TELES
 PCBIT-D support
 CONFIG_ISDN_DRV_PCBIT
   This enables support for the PCBIT ISDN-cards. This card is
-  manufactured in Portugal by Octal. For running this card, 
-  additional firmware is necessary, which has to be downloaded into
-  the card using a utility which is distributed separately.  
-  See Documentation/isdn/README for more information.	
+  manufactured in Portugal by Octal. For running this card, additional
+  firmware is necessary, which has to be downloaded into the card
+  using a utility which is distributed separately.  See
+  Documentation/isdn/README and Documentation/isdn/README.pcbit for
+  more information.
 
 Support for AP1000 multicomputer
 CONFIG_AP1000
@@ -3311,4 +3404,5 @@ CONFIG_AP1000
 # LocalWords:  Starmode Metricom MosquitoNet mosquitonet kbit nfsroot Digiboard
 # LocalWords:  DIGI Xe Xeve digiboard UMISC touchscreens mtu ethernets HBAs MEX
 # LocalWords:  Shifflett netcom js jshiffle WIC DECchip ELCP EtherPower dst RTC
-# LocalWords:  rtc SMP
+# LocalWords:  rtc SMP lp Digi Intl RightSwitch DGRS dgrs AFFS Amiga UFS SDL AP
+# LocalWords:  Solaris RISCom riscom syncPPP PCBIT pcbit sparc anu au

@@ -104,7 +104,7 @@ bad_area:
 		current->tss.cr2 = address;
 		current->tss.error_code = error_code;
 		current->tss.trap_no = 14;
-		send_sig(SIGSEGV, current, 1);
+		force_sig(SIGSEGV, current);
 		return;
 	}
 /*

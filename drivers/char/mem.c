@@ -53,7 +53,7 @@ static int read_mem(struct inode * inode, struct file * file, char * buf, int co
 	if (count > high_memory - p)
 		count = high_memory - p;
 	read = 0;
-#if defined(__i386__)		/* we don't have page 0 mapped on x86.. */
+#if defined(__i386__) || defined(__sparc__) /* we don't have page 0 mapped on x86/sparc.. */
 	while (p < PAGE_OFFSET + PAGE_SIZE && count > 0) {
 		put_user(0,buf);
 		buf++;
@@ -81,7 +81,7 @@ static int write_mem(struct inode * inode, struct file * file, const char * buf,
 	if (count > high_memory - p)
 		count = high_memory - p;
 	written = 0;
-#if defined(__i386__)		/* we don't have page 0 mapped on x86.. */
+#if defined(__i386__) || defined(__sparc__) /* we don't have page 0 mapped on x86/sparc.. */
 	while (PAGE_OFFSET + p < PAGE_SIZE && count > 0) {
 		/* Hmm. Do something? */
 		buf++;
@@ -390,7 +390,7 @@ int chr_dev_init(void)
 #if defined (CONFIG_BUSMOUSE) || defined(CONFIG_UMISC) || \
     defined (CONFIG_PSMOUSE) || defined (CONFIG_MS_BUSMOUSE) || \
     defined (CONFIG_ATIXL_BUSMOUSE) || defined(CONFIG_SOFT_WATCHDOG) || \
-    defined (CONFIG_APM) || defined (CONFIG_RTC)
+    defined (CONFIG_APM) || defined (CONFIG_RTC) || defined (CONFIG_SUN_MOUSE)
 	misc_init();
 #endif
 #ifdef CONFIG_SOUND

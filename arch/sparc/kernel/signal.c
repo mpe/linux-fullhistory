@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.31 1996/04/18 01:00:41 davem Exp $
+/*  $Id: signal.c,v 1.32 1996/04/22 19:37:48 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -232,6 +232,22 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 		clear_bit(signr, &current->signal);
 		sa = current->sig->action + signr;
 		signr++;
+		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
+			current->exit_code = signr;
+			current->state = TASK_STOPPED;
+			notify_parent(current);
+			schedule();
+			if (!(signr = current->exit_code))
+				continue;
+			current->exit_code = 0;
+			if (signr == SIGSTOP)
+				continue;
+			if (_S(signr) & current->blocked) {
+				current->signal |= _S(signr);
+				continue;
+			}
+			sa = current->sig->action + signr - 1;
+		}
 		if(sa->sa_handler == SIG_IGN) {
 			if(signr != SIGCHLD)
 				continue;

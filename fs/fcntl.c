@@ -85,6 +85,10 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			if (!(arg & FASYNC) && (filp->f_flags & FASYNC) &&
 			    filp->f_op->fasync)
 				filp->f_op->fasync(filp->f_inode, filp, 0);
+			/* requiered for SunOS emulation */
+			if (O_NONBLOCK != O_NDELAY)
+			       if (arg & O_NDELAY)
+				   arg |= O_NONBLOCK;
 			filp->f_flags &= ~(O_APPEND | O_NONBLOCK | FASYNC);
 			filp->f_flags |= arg & (O_APPEND | O_NONBLOCK |
 						FASYNC);

@@ -161,7 +161,7 @@
 	.set	guard_bit,1		| guard bit is bit number 1
 	.set	round_bit,0		| round bit is bit number 0
 	.set	stag_mask,0xE0		| upper 3 bits are source tag type
-	.set	denorm_bit,7		| bit determins if denorm or unnorm
+	.set	denorm_bit,7		| bit determines if denorm or unnorm
 	.set	etemp15_bit,4		| etemp exponent bit #15
 	.set	wbtemp66_bit,2		| wbtemp mantissa bit #66
 	.set	wbtemp1_bit,1		| wbtemp mantissa bit #1

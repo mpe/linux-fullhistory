@@ -138,7 +138,7 @@ dest_dbl:
 	swap	%d0		|d0 now in upper word
 	lsll	#4,%d0		|d0 now in proper place for dbl prec exp
 	tstb	LOCAL_SGN(%a1)	
-	beqs	get_mant	|if postive, go process mantissa
+	beqs	get_mant	|if positive, go process mantissa
 	bsetl	#31,%d0		|if negative, put in sign information
 |				; before continuing
 	bras	get_mant	|go process mantissa

@@ -92,7 +92,7 @@ no_e3_1:
 |
 | It is possible to have either inex2 or inex1 exceptions with the
 | ovfl.  If the inex enable bit is set in the FPCR, and either
-| inex2 or inex1 occured, we must clean up and branch to the
+| inex2 or inex1 occurred, we must clean up and branch to the
 | real inex handler.
 |
 ck_inex:

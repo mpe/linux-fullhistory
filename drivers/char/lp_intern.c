@@ -1,6 +1,6 @@
 
 /*
- * split into mid and low-level for better support of diffent hardware
+ * split into mid and low-level for better support of different hardware
  * by Joerg Dorchain (dorchain@mpi-sb.mpg.de)
  *
  * Amiga printer device by Michael Rausch (linux@uni-koblenz.de);

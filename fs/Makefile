@@ -143,10 +143,18 @@ endif
 
 ifeq ($(CONFIG_UFS_FS),y)
 SUB_DIRS += ufs
+else
+  ifeq ($(CONFIG_UFS_FS),m)
+  MOD_SUB_DIRS += ufs
+  endif
 endif
 
 ifeq ($(CONFIG_AFFS_FS),y)
 SUB_DIRS += affs
+else
+  ifeq ($(CONFIG_AFFS_FS),m)
+  MOD_SUB_DIRS += affs
+  endif
 endif
 
 ifeq ($(CONFIG_BINFMT_ELF),y)

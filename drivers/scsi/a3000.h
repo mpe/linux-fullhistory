@@ -1,6 +1,6 @@
 #ifndef A3000_H
 
-/* $Id: a3000.h,v 1.2 1996/02/29 22:10:29 root Exp root $
+/* $Id: a3000.h,v 1.3 1996/04/25 20:58:09 root Exp root $
  *
  * Header file for the Amiga 3000 built-in SCSI controller for Linux
  *
@@ -14,7 +14,7 @@ int a3000_detect(Scsi_Host_Template *);
 const char *wd33c93_info(void);
 int wd33c93_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int wd33c93_abort(Scsi_Cmnd *);
-int wd33c93_reset(Scsi_Cmnd *);
+int wd33c93_reset(Scsi_Cmnd *, unsigned int);
 
 #ifndef NULL
 #define NULL 0

@@ -1065,6 +1065,8 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 		return(0);
 
 	port = find_port(skb->dev);
+	
+	skb->arp = 1;		/* Received frame so it is resolved */
 	skb->h.raw = skb->mac.raw;
 	if (br_stats.flags & BR_DEBUG)
 		printk("port %i src %02x:%02x:%02x:%02x:%02x:%02x\

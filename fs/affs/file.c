@@ -115,7 +115,7 @@ static int affs_smap(struct inode *inode, int block)
 /*
  * affs_file_read() is also needed by the directory read-routine,
  * so it's not static. NOTE! reading directories directly is a bad idea,
- * but has to be supported for now for compatability reasons with older
+ * but has to be supported for now for compatibility reasons with older
  * versions.
  */
 int affs_file_read(struct inode * inode, struct file * filp,

@@ -454,7 +454,7 @@ static int shm_map (struct vm_area_struct *shmd)
 		set_pte(page_table, __pte(shm_sgn));
 	}
 	flush_tlb_range(shmd->vm_mm, shmd->vm_start, shmd->vm_end);
-	return 0;
+	return error;
 }
 
 /*

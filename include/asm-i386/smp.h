@@ -19,7 +19,7 @@
  *	information is. 
  */
  
-#define SMP_MAGIC_IDENT	('_'<<24)|('P'<<16)|('M'<<8)|'_'
+#define SMP_MAGIC_IDENT	(('_'<<24)|('P'<<16)|('M'<<8)|'_')
 
 struct intel_mp_floating
 {

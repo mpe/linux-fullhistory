@@ -75,9 +75,9 @@ asmlinkage int sys_stime(int * tptr)
 	cli();
 	xtime.tv_sec = value;
 	xtime.tv_usec = 0;
-	time_state = TIME_BAD;
-	time_maxerror = 0x70000000;
-	time_esterror = 0x70000000;
+	time_state = TIME_ERROR;
+	time_maxerror = MAXPHASE;
+	time_esterror = MAXPHASE;
 	sti();
 	return 0;
 }
@@ -317,7 +317,7 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 		    time_freq = time_tolerance;
 		  else if (time_freq < -time_tolerance)
 		    time_freq = -time_tolerance;
-		}
+		} /* STA_PLL || STA_PPSTIME */
 	    if (txc.modes & ADJ_TICK)
 	      tick = txc.tick;
 

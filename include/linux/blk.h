@@ -318,7 +318,7 @@ static void floppy_off(unsigned int nr);
 #define CURRENT_DEV DEVICE_NR(CURRENT->rq_dev)
 
 #ifdef DEVICE_INTR
-void (*DEVICE_INTR)(void) = NULL;
+static void (*DEVICE_INTR)(void) = NULL;
 #endif
 #ifdef DEVICE_TIMEOUT
 

@@ -67,7 +67,7 @@ asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,
 	printk("%s: arithmetic trap at %016lx: %02lx %016lx\n",
 		current->comm, regs.pc, summary, write_mask);
 	die_if_kernel("Arithmetic fault", &regs, 0);
-	send_sig(SIGFPE, current, 1);
+	force_sig(SIGFPE, current);
 }
 
 asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
@@ -82,7 +82,7 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
 		if (ptrace_cancel_bpt(current)) {
 			regs.pc -= 4;	/* make pc point to former bpt */
 		}
-		send_sig(SIGTRAP, current, 1);
+		force_sig(SIGTRAP, current);
 		break;
 
 	      case 2: /* gentrap */
@@ -97,7 +97,7 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
 		      case GEN_INTOVF: case GEN_INTDIV: case GEN_FLTOVF:
 		      case GEN_FLTDIV: case GEN_FLTUND: case GEN_FLTINV:
 		      case GEN_FLTINE:
-			send_sig(SIGFPE, current, 1);
+			force_sig(SIGFPE, current);
 			break;
 
 		      case GEN_DECOVF:
@@ -118,14 +118,14 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
 		      case GEN_SUBRNG5:
 		      case GEN_SUBRNG6:
 		      case GEN_SUBRNG7:
-			send_sig(SIGILL, current, 1);
+			force_sig(SIGILL, current);
 			break;
 		}
 		break;
 
 	      case 1: /* bugcheck */
 	      case 3: /* FEN fault */
-		send_sig(SIGILL, current, 1);
+		force_sig(SIGILL, current);
 		break;
 
 	      case 4: /* opDEC */
@@ -142,12 +142,12 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
 				 * (we don't do no stinkin' VAX fp...)
 				 */
 				if (!alpha_fp_emul(regs.pc - 4))
-					send_sig(SIGFPE, current, 1);
+					force_sig(SIGFPE, current);
 				break;
 			}
 		}
 #endif
-		send_sig(SIGILL, current, 1);
+		force_sig(SIGILL, current);
 		break;
 
 	      default:
@@ -314,7 +314,7 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 	}
 	if (verify_area(dir, va, size)) {
 		*pc_addr -= 4;	/* make pc point to faulting insn */
-		send_sig(SIGSEGV, current, 1);
+		force_sig(SIGSEGV, current);
 		return;
 	}
 
@@ -362,7 +362,7 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 	      case 0x2d: stq_u(*reg_addr, va);		     break;	/* stq */
 	      default:
 		*pc_addr -= 4;	/* make pc point to faulting insn */
-		send_sig(SIGBUS, current, 1);
+		force_sig(SIGBUS, current);
 		return;
 	}
 

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 95
+SUBLEVEL = 96
 
 ARCH = i386
 
@@ -142,6 +142,10 @@ ifdef CONFIG_PCI
 DRIVERS := $(DRIVERS) drivers/pci/pci.a
 endif
 
+ifdef CONFIG_SBUS
+DRIVERS := $(DRIVERS) drivers/sbus/sbus.a
+endif
+
 include arch/$(ARCH)/Makefile
 
 ifdef SMP
@@ -202,7 +206,7 @@ newversion:
 	@if [ ! -f .version ]; then \
 		echo 1 > .version; \
 	else \
-		expr `cat .version` + 1 > .version; \
+		expr 0`cat .version` + 1 > .version; \
 	fi
 
 include/linux/compile.h: $(CONFIGURATION) include/linux/version.h newversion
@@ -326,7 +330,7 @@ mrproper: clean
 	rm -f .hdepend
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -f $(TOPDIR)/include/linux/modules/*
-	
+
 
 distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \

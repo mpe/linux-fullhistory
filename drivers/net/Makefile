@@ -450,6 +450,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ATARILANCE),y)
+L_OBJS += atarilance.o
+else
+  ifeq ($(CONFIG_ATARILANCE),m)
+  M_OBJS += atarilance.o
+  endif
+endif
+
+ifeq ($(CONFIG_A2065),y)
+L_OBJS += a2065.o
+else
+  ifeq ($(CONFIG_A2065),m)
+  M_OBJS += a2065.o
+  endif
+endif
+
 ifeq ($(CONFIG_SDLA),y)
 L_OBJS += sdla.o
 else
@@ -463,6 +479,14 @@ L_OBJS += dlci.o
 else
   ifeq ($(CONFIG_DLCI),m)
   M_OBJS += dlci.o
+  endif
+endif
+
+ifeq ($(CONFIG_ARIADNE),y)
+L_OBJS += ariadne.o
+else
+  ifeq ($(CONFIG_ARIADNE),m)
+  M_OBJS += ariadne.o
   endif
 endif
 

@@ -197,8 +197,7 @@ static void ax25_timer(unsigned long param)
 
 		ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
 
-		if (ax25->sk != NULL)
-		{
+		if (ax25->sk != NULL) {
 			ax25->sk->state = TCP_CLOSE;
 			ax25->sk->err = 0;
 			if (!ax25->sk->dead)
@@ -208,7 +207,6 @@ static void ax25_timer(unsigned long param)
 		}
 	}
 		                                                                                                                                                                                                                                                                                                                                        
-
 	/* dl1bke 960114: DAMA T1 timeouts are handled in ax25_dama_slave_transmit */
 	/* 		  nevertheless we have to re-enqueue the timer struct...   */
 	

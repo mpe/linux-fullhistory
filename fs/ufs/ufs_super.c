@@ -6,9 +6,16 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_super.c,v 1.1 1996/04/21 14:41:19 davem Exp $
+ * $Id: ufs_super.c,v 1.3 1996/04/25 09:12:09 davem Exp $
  *
  */
+
+/*
+ * Kernel module support added on 96/04/26 by
+ * Stefan Reinauer <stepan@home.culture.mipt.ru>
+ */
+
+#include <linux/module.h>
 
 #include <linux/kernel.h>
 #include <linux/fs.h>
@@ -26,18 +33,18 @@ extern void ufs_read_inode(struct inode * inode);
 extern void ufs_put_inode(struct inode * inode);
 
 static struct super_operations ufs_super_ops = {
-	&ufs_read_inode,
+	ufs_read_inode,
 	NULL,			/* notify_change() */
 	NULL,			/* XXX - ufs_write_inode() */
-	&ufs_put_inode,
-	&ufs_put_super,
+	ufs_put_inode,
+	ufs_put_super,
 	NULL,			/* XXX - ufs_write_super() */
-	&ufs_statfs,
+	ufs_statfs,
 	NULL,			/* XXX - ufs_remount() */
 };
 
 static struct file_system_type ufs_fs_type = {
-	&ufs_read_super, "ufs", 1, NULL
+	ufs_read_super, "ufs", 1, NULL
 };
 
 int
@@ -46,6 +53,23 @@ init_ufs_fs(void)
 	return(register_filesystem(&ufs_fs_type));
 }
 
+#ifdef MODULE
+int init_module(void)
+{
+	int status;
+
+	if ((status = init_ufs_fs()) == 0)
+		register_symtab(0);
+	return status;
+}
+
+void cleanup_module(void)
+{
+	unregister_filesystem(&ufs_fs_type);
+}
+#endif
+
+#if 0 /* unused */
 static void
 ufs_print_super_stuff(struct super_block * sb, struct ufs_superblock * usb)
 {
@@ -65,6 +89,7 @@ ufs_print_super_stuff(struct super_block * sb, struct ufs_superblock * usb)
 
 	return;
 }
+#endif
 
 struct super_block *
 ufs_read_super(struct super_block * sb, void * data, int silent)
@@ -203,7 +228,7 @@ ufs_read_super(struct super_block * sb, void * data, int silent)
 	sb->u.ufs_sb.s_fsfrag = usb->fs_frag; /* XXX - rename this later */
 	sb->s_mounted = iget(sb, UFS_ROOTINO);
 
-	printk("ufs_read_super: inopb %lu\n", sb->u.ufs_sb.s_inopb);
+	printk("ufs_read_super: inopb %u\n", sb->u.ufs_sb.s_inopb);
 	/*
 	 * XXX - read cg structs?
 	 */

@@ -81,7 +81,7 @@ void atari_mksound (unsigned int count, unsigned int ticks)
 
 	if (count == 750 && ticks == HZ/8) {
 		/* Special case: These values are used by console.c to
-		 * generate the console bell. They are catched here and the
+		 * generate the console bell. They are cached here and the
 		 * sound actually generated is somehow special: it uses the
 		 * generator B and an envelope. No timer is needed therefore
 		 * and the bell doesn't disturb an other ongoing sound.

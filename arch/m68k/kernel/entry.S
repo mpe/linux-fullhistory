@@ -234,7 +234,6 @@ SYMBOL_NAME_LABEL(ret_from_exception)
 	cmpl	%a0@(LTASK_COUNTER),%d0   | counter
 	jeq	SYMBOL_NAME(reschedule)
 
-	.word	0xf4f8
 	movel	%a0@(LTASK_BLOCKED),%d0
 	movel	%d0,%d1			| save blocked in d1 for sig handling
 	notl	%d0
@@ -356,9 +355,6 @@ SYMBOL_NAME_LABEL(resume)
 
 	/* offset of tss struct (processor state) from beginning
 	   of task struct */
-/*
-	movel	%sp@(8),%a1
-*/
 	addl	%a1,%a0
 
 	/* save sr */

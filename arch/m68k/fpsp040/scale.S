@@ -2,7 +2,7 @@
 |	scale.sa 3.3 7/30/91
 |
 |	The entry point sSCALE computes the destination operand
-|	scaled by the source operand.  If the absoulute value of
+|	scaled by the source operand.  If the absolute value of
 |	the source operand is (>= 2^14) an overflow or underflow
 |	is returned.
 |

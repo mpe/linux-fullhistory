@@ -1,6 +1,7 @@
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/blk.h>
+#include <linux/version.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>

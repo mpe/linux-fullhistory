@@ -7,7 +7,7 @@ static struct symbol_table mach_amiga_symbol_table = {
    * Add things here when you find the need for it.
    */
 
-  /* examble
+  /* example
   X(something_you_need),
   */
 

@@ -47,6 +47,7 @@
 #include <linux/string.h>
 #include <linux/config.h>
 #include <linux/kd.h>
+#include <linux/malloc.h>
 
 #include <asm/bootinfo.h>
 #include <asm/irq.h>
@@ -578,7 +579,7 @@ static void fbcon_setup(int con, int setcol, int cls)
    if (p->fontwidth != 8)
       panic("fbcon_setup: No support for fontwidth != 8");
 
-   if (divides(p->ywrapstep, p->fontheight))
+   if (divides(p->ywrapstep, p->fontheight) && divides(p->fontheight, p->var.yres_virtual))
       p->scrollmode = SCROLL_YWRAP;
    else if (divides(p->ypanstep, p->fontheight) &&
             p->var.yres_virtual >= p->var.yres+p->fontheight)
@@ -588,11 +589,15 @@ static void fbcon_setup(int con, int setcol, int cls)
 
    conp->vc_cols = p->var.xres/p->fontwidth;
    conp->vc_rows = p->var.yres/p->fontheight;
+   p->vrows = p->var.yres_virtual/p->fontheight;
    conp->vc_can_do_color = p->var.bits_per_pixel != 1;
 
 #ifdef CONFIG_FBCON_MONO
    if (p->var.bits_per_pixel == 1) {
-      p->next_line = p->var.xres_virtual>>3;
+      if (p->line_length)
+         p->next_line = p->line_length;
+      else
+         p->next_line = p->var.xres_virtual>>3;
       p->next_plane = 0;
       p->dispsw = &dispsw_mono;
    } else
@@ -621,14 +626,22 @@ static void fbcon_setup(int con, int setcol, int cls)
 #endif /* CONFIG_FBCON_IPLAN2 */
 #ifdef CONFIG_FBCON_ILBM
    if (p->type == FB_TYPE_INTERLEAVED_PLANES && p->type_aux != 2) {
-      p->next_line = p->type_aux;
-      p->next_plane = p->type_aux/p->var.bits_per_pixel;
+      if (p->line_length) {
+         p->next_line = p->line_length*p->var.bits_per_pixel;
+         p->next_plane = p->line_length;
+      } else {
+         p->next_line = p->type_aux;
+         p->next_plane = p->type_aux/p->var.bits_per_pixel;
+      }
       p->dispsw = &dispsw_ilbm;
    } else
 #endif /* CONFIG_FBCON_ILBM */
 #ifdef CONFIG_FBCON_PLANES
    if (p->type == FB_TYPE_PLANES) {
-      p->next_line = p->var.xres_virtual>>3;
+      if (p->line_length)
+         p->next_line = p->line_length;
+      else
+         p->next_line = p->var.xres_virtual>>3;
       p->next_plane = p->var.yres_virtual*p->next_line;
       p->dispsw = &dispsw_plan;
    } else
@@ -670,7 +683,10 @@ fail:
 #ifdef CONFIG_FBCON_MONO
       printk("fbcon_setup: type %d (aux %d) not supported, trying mono\n",
              p->type, p->type_aux);
-      p->next_line = (p->var.xres_virtual)>>3;
+      if (p->line_length)
+         p->next_line = p->line_length;
+      else
+         p->next_line = p->var.xres_virtual>>3;
       p->next_plane = 0;
       p->var.bits_per_pixel = 1;
       p->dispsw = &dispsw_mono;
@@ -708,7 +724,7 @@ fail:
  * equivalents for large blits, and thats important to the lowest level of
  * a graphics driver. Question is whether some scheme with the blitter
  * would be faster. I suspect not for simple text system - not much
- * asynchronisity.
+ * asynchrony.
  *
  * Code is very simple, just gruesome expansion. Basic strategy is to
  * increase data moved/cleared at each step to 16 bytes to reduce
@@ -732,7 +748,7 @@ fail:
    subl #65536,d0 replaced by clrw d0; subql #1,d0 for dbcc
    addal is faster than addaw
    movep is rather expensive compared to ordinary move's
-   some functions rewritten in C for clearity, no speed loss */
+   some functions rewritten in C for clarity, no speed loss */
 
 static __inline__ void *mymemclear_small(void *s, size_t count)
 {
@@ -1375,10 +1391,10 @@ static __inline__ u_short dup2w(u_char c)
 
 static __inline__ int real_y(struct display *p, int y)
 {
-   int rows = p->conp->vc_rows;
+   int rows = p->vrows;
 
    y += p->yscroll;
-   return(y < rows || p->scrollmode != SCROLL_YWRAP ? y : y-rows);
+   return(y < rows ? y : y-rows);
 }
 
 
@@ -1398,7 +1414,7 @@ static int fbcon_clear(struct vc_data *conp, int sy, int sx, int height,
 
    /* Split blits that cross physical y_wrap boundary */
 
-   y_break = conp->vc_rows-p->yscroll;
+   y_break = p->vrows-p->yscroll;
    if (sy < y_break && sy+height-1 >= y_break) {
       u_int b = y_break-sy;
       p->dispsw->clear(conp, p, real_y(p, sy), sx, b, width);
@@ -1513,8 +1529,8 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
             switch (p->scrollmode) {
                case SCROLL_YWRAP:
                   p->yscroll += count;
-                  if (p->yscroll >= conp->vc_rows) /* Deal with wrap */
-                     p->yscroll -= conp->vc_rows;
+                  if (p->yscroll >= p->vrows) /* Deal with wrap */
+                     p->yscroll -= p->vrows;
                   p->var.xoffset = 0;
                   p->var.yoffset = p->yscroll*p->fontheight;
                   p->var.vmode |= FB_VMODE_YWRAP;
@@ -1523,8 +1539,7 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
 
                case SCROLL_YPAN:
                   p->yscroll += count;
-                  if (p->yscroll*p->fontheight+p->var.yres >
-                      p->var.yres_virtual) {
+                  if (p->yscroll+conp->vc_rows > p->vrows) {
                      p->dispsw->bmove(p, p->yscroll, 0, 0, 0, b-count,
                                       conp->vc_cols);
                      p->yscroll = 0;
@@ -1553,7 +1568,7 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
                case SCROLL_YWRAP:
                   p->yscroll -= count;
                   if (p->yscroll < 0)              /* Deal with wrap */
-                     p->yscroll += conp->vc_rows;
+                     p->yscroll += p->vrows;
                   p->var.xoffset = 0;
                   p->var.yoffset = p->yscroll*p->fontheight;
                   p->var.vmode |= FB_VMODE_YWRAP;
@@ -1563,8 +1578,7 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
                case SCROLL_YPAN:
                   p->yscroll -= count;
                   if (p->yscroll < 0) {
-                     p->yscroll = (p->var.yres_virtual-p->var.yres)/
-                                  p->fontheight;
+                     p->yscroll = p->vrows-conp->vc_rows;
                      p->dispsw->bmove(p, 0, 0, p->yscroll+count, 0, b-count,
                                       conp->vc_cols);
                   }
@@ -1582,7 +1596,7 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
             fbcon_bmove(conp, t, 0, t+count, 0, b-t-count, conp->vc_cols);
 
          /* Fixed bmove() should end Arno's frustration with copying?
-          * Confusius says:
+          * Confucius says:
           *    Man who copies in wrong direction, end up with trashed data
           */
          fbcon_clear(conp, t, 0, count, conp->vc_cols);
@@ -1625,7 +1639,7 @@ static int fbcon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
     * Recursive invocations don't need to erase the cursor over and
     * over again, so we use fbcon_bmove_rec()
     */
-   fbcon_bmove_rec(p, sy, sx, dy, dx, height, width, conp->vc_rows-p->yscroll);
+   fbcon_bmove_rec(p, sy, sx, dy, dx, height, width, p->vrows-p->yscroll);
 
    return(0);
 }
@@ -1692,6 +1706,134 @@ static int fbcon_blank(int blank)
       }
    (*fb_info->blank)(blank);
    return(0);
+}
+
+
+static int fbcon_get_font(struct vc_data *conp, int *w, int *h, char *data)
+{
+	int unit = conp->vc_num;
+	struct display *p = &disp[unit];
+	int i, size, alloc;
+
+	size = (p->fontwidth+7)/8 * p->fontheight * 256;
+	alloc = (*w+7)/8 * *h * 256;
+	*w = p->fontwidth;
+	*h = p->fontheight;
+   
+	if (alloc < size)
+		/* allocation length not sufficient */
+		return( -ENAMETOOLONG );
+
+	if ((i = verify_area( VERIFY_WRITE, (void *)data, size )))
+		return i;
+
+	memcpy_tofs( data, p->fontdata, size );
+	return( 0 );
+}
+
+
+#define REFCOUNT(fd)	(((int *)(fd))[-1])
+
+static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
+{
+	int unit = conp->vc_num;
+	struct display *p = &disp[unit];
+	int i, size, userspace = 1, resize;
+	char *old_data = NULL, *new_data;
+
+	if (w < 0)
+		w = p->fontwidth;
+	if (h < 0)
+		h = p->fontheight;
+	
+	if (w == 0) {
+		/* engage predefined font, name in 'data' */
+		char name[MAX_FONT_NAME+1];
+	   
+		if ((i = verify_area( VERIFY_READ, (void *)data, MAX_FONT_NAME )))
+			return i;
+		memcpy_fromfs( name, data, MAX_FONT_NAME );
+		name[sizeof(name)-1] = 0;
+		
+		if (!findsoftfont( name, &w, &h, (u_char **)&data ))
+			return( -ENOENT );
+		userspace = 0;
+	}
+	else if (w == 1) {
+		/* copy font from some other console in 'h'*/
+		struct display *op;
+
+		if (h < 0 || !vc_cons_allocated( h ))
+			return( -ENOTTY );
+		if (h == unit)
+			return( 0 ); /* nothing to do */
+		op = &disp[h];
+		if (op->fontdata == p->fontdata)
+			return( 0 ); /* already the same font... */
+
+		resize = (op->fontwidth != p->fontwidth) ||
+			     (op->fontheight != p->fontheight);
+		if (p->userfont)
+			old_data = p->fontdata;
+		p->fontdata = op->fontdata;
+		w = p->fontwidth = op->fontwidth;
+		h = p->fontheight = op->fontheight;
+		if ((p->userfont = op->userfont))
+			REFCOUNT(p->fontdata)++; /* increment usage counter */
+		goto activate;
+	}
+
+	if (w != 8)
+		/* Currently only fontwidth == 8 supported */
+		return( -ENXIO );
+	
+	resize = (w != p->fontwidth) || (h != p->fontheight);
+	size = (w+7)/8 * h * 256;
+	
+	if (p->userfont)
+		old_data = p->fontdata;
+	
+	if (userspace) {
+		if ((i = verify_area( VERIFY_READ, (void *)data, size )))
+			return i;
+		if (!(new_data = kmalloc( sizeof(int)+size, GFP_USER )))
+			return( -ENOMEM );
+		new_data += sizeof(int);
+		REFCOUNT(new_data) = 1; /* usage counter */
+		memcpy_fromfs( new_data, data, size );
+		p->fontdata = new_data;
+		p->userfont = 1;
+	}
+	else {
+		p->fontdata = data;
+		p->userfont = 0;
+	}
+	p->fontwidth = w;
+	p->fontheight = h;
+
+  activate:
+	if (resize) {
+		p->var.xoffset = p->var.yoffset = p->yscroll = 0;  /* reset wrap/pan */
+		if (divides(p->ywrapstep, p->fontheight))
+			p->scrollmode = SCROLL_YWRAP;
+		else if (divides(p->ypanstep, p->fontheight) &&
+				 p->var.yres_virtual >= p->var.yres+p->fontheight)
+			p->scrollmode = SCROLL_YPAN;
+		else
+			p->scrollmode = SCROLL_YMOVE;
+
+		vc_resize_con( p->var.yres/h, p->var.xres/w, unit );
+	}
+	else if (unit == fg_console)
+		update_screen( unit );
+	
+	if (old_data) {
+		if (--REFCOUNT(old_data) == 0) {
+			kfree( old_data - sizeof(int) );
+		}
+	}
+	
+	return( 0 );
 }
 
 
@@ -1946,7 +2088,7 @@ static void putc_ilbm(struct vc_data *conp, struct display *p, int c, int y,
 
 
 /*
- *    I splitted the console character loop in two parts:
+ *    I split the console character loop in two parts:
  *
  *      - slow version: this blits one character at a time
  *
@@ -2179,7 +2321,7 @@ static void putc_plan(struct vc_data *conp, struct display *p, int c, int y,
 
 
 /*
- *    I splitted the console character loop in two parts
+ *    I split the console character loop in two parts
  *    (cfr. fbcon_putcs_ilbm())
  */
 
@@ -2326,7 +2468,7 @@ static void bmove_2_plane(struct display *p, int sy, int sx, int dy, int dx,
 	 * destination, start at even addresses or both are at odd
 	 * addresses, just the first odd and last even column (if present)
 	 * require special treatment (memmove_col()). The rest between
-	 * then can be copied by normal operations, because all adjancent
+	 * then can be copied by normal operations, because all adjacent
 	 * bytes are affected and are to be stored in the same order.
 	 *   The pathological case is when the move should go from an odd
 	 * address to an even or vice versa. Since the bytes in the plane
@@ -2590,7 +2732,7 @@ static void bmove_4_plane(struct display *p, int sy, int sx, int dy, int dx,
 	 * destination, start at even addresses or both are at odd
 	 * addresses, just the first odd and last even column (if present)
 	 * require special treatment (memmove_col()). The rest between
-	 * then can be copied by normal operations, because all adjancent
+	 * then can be copied by normal operations, because all adjacent
 	 * bytes are affected and are to be stored in the same order.
 	 *   The pathological case is when the move should go from an odd
 	 * address to an even or vice versa. Since the bytes in the plane
@@ -3614,5 +3756,5 @@ static void rev_char_cyber(struct display *p, int x, int y)
 struct consw fb_con = {
    fbcon_startup, fbcon_init, fbcon_deinit, fbcon_clear, fbcon_putc,
    fbcon_putcs, fbcon_cursor, fbcon_scroll, fbcon_bmove, fbcon_switch,
-   fbcon_blank
+   fbcon_blank, fbcon_get_font, fbcon_set_font
 };

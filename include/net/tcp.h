@@ -127,7 +127,6 @@ static __inline__ int max(unsigned int a, unsigned int b)
 
 extern struct proto tcp_prot;
 extern struct tcp_mib tcp_statistics;
-extern struct wait_queue *master_select_wakeup;
 
 extern void	tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 			__u32, struct inet_protocol *protocol);
@@ -311,10 +310,6 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	case TCP_ESTABLISHED:
 		if (oldstate != TCP_ESTABLISHED) {
 			tcp_statistics.TcpCurrEstab++;
-			/* This is a hack but it doesn't occur often and it's going to
-			   be a real        to fix nicely */
-			if (oldstate == TCP_SYN_RECV)
-				wake_up_interruptible(&master_select_wakeup);
 		}
 		break;
 

@@ -22,7 +22,7 @@ int atari_scsi_abort (Scsi_Cmnd *);
 int atari_scsi_detect (Scsi_Host_Template *);
 const char *atari_scsi_info (struct Scsi_Host *);
 int atari_scsi_queue_command (Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
-int atari_scsi_reset (Scsi_Cmnd *);
+int atari_scsi_reset (Scsi_Cmnd *, unsigned int);
 int atari_scsi_proc_info (char *, char **, off_t, int, int, int);
 #ifdef MODULE
 int atari_scsi_release (struct Scsi_Host *);
@@ -34,7 +34,7 @@ int atari_scsi_release (struct Scsi_Host *);
  * values should work, too; try it! (but cmd_per_lun costs memory!) */
 
 /* But there seems to be a bug somewhere that requires CAN_QUEUE to be
- * 2*CMD_OER_LUN. At least on a TT, no suprious timeouts seen since
+ * 2*CMD_OER_LUN. At least on a TT, no spurious timeouts seen since
  * changed CMD_PER_LUN... */
 
 /* Note: The Falcon currently uses 8/1 setting due to unsolved problems with

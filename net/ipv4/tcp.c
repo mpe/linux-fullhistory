@@ -437,12 +437,6 @@ struct tcp_mib	tcp_statistics;
 static void tcp_close(struct sock *sk, unsigned long timeout);
 
 /*
- *	The less said about this the better, but it works and will do for 1.2  (and 1.4 ;))
- */
-
-struct wait_queue *master_select_wakeup;
-
-/*
  *	Find someone to 'accept'. Must be called with
  *	the socket locked or with interrupts disabled
  */
@@ -460,24 +454,6 @@ static struct sk_buff *tcp_find_established(struct sock *s)
 	}
 	while(p!=(struct sk_buff *)&s->receive_queue);
 	return NULL;
-}
-
-/*
- *	Remove a completed connection and return it. This is used by
- *	tcp_accept() to get connections from the queue.
- */
-
-static struct sk_buff *tcp_dequeue_established(struct sock *s)
-{
-	struct sk_buff *skb;
-	unsigned long flags;
-	save_flags(flags);
-	cli();
-	skb=tcp_find_established(s);
-	if(skb!=NULL)
-		skb_unlink(skb);	/* Take it off the queue */
-	restore_flags(flags);
-	return skb;
 }
 
 /*
@@ -685,14 +661,15 @@ static int tcp_readable(struct sock *sk)
 static int tcp_listen_select(struct sock *sk, int sel_type, select_table *wait)
 {
 	if (sel_type == SEL_IN) {
-		int retval;
+		struct sk_buff * skb;
 
 		lock_sock(sk);
-		retval = (tcp_find_established(sk) != NULL);
+		skb = tcp_find_established(sk);
 		release_sock(sk);
-		if (!retval)
-			select_wait(&master_select_wakeup,wait);
-		return retval;
+		if (skb)
+			return 1;
+		select_wait(sk->sleep,wait);
+		return 0;
 	}
 	return 0;
 }
@@ -895,31 +872,53 @@ static void wait_for_tcp_memory(struct sock * sk)
  *	and starts the transmit system.
  */
 
-static int do_tcp_sendmsg(struct sock *sk, struct msghdr *msg,
-	  int len, int nonblock, int flags)
+static int do_tcp_sendmsg(struct sock *sk,
+	int iovlen, struct iovec *iov,
+	int len, int nonblock, int flags)
 {
 	int copied = 0;
-	int copy;
-	int tmp;
-	int seglen;
-	int iovct=0;
-	struct sk_buff *skb;
-	struct sk_buff *send_tmp;
-	struct proto *prot;
 	struct device *dev = NULL;
-	unsigned char *from;
+
+	/*
+	 *	Wait for a connection to finish.
+	 */
+	while (sk->state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT)
+	{
+		if (sk->err)
+			return sock_error(sk);
+
+		if (sk->state != TCP_SYN_SENT && sk->state != TCP_SYN_RECV)
+		{
+			if (sk->keepopen)
+				send_sig(SIGPIPE, current, 0);
+			return -EPIPE;
+		}
+
+		if (nonblock)
+			return -EAGAIN;
+
+		if (current->signal & ~current->blocked)
+			return -ERESTARTSYS;
+
+		wait_for_tcp_connect(sk);
+	}
 
 	/*
 	 *	Ok commence sending
 	 */
 
-	while(iovct<msg->msg_iovlen)
+	while (--iovlen >= 0)
 	{
-		seglen=msg->msg_iov[iovct].iov_len;
-		from=msg->msg_iov[iovct++].iov_base;
-		prot = sk->prot;
+		int seglen=iov->iov_len;
+		unsigned char * from=iov->iov_base;
+		iov++;
+
 		while(seglen > 0)
 		{
+			int copy, delay;
+			int tmp;
+			struct sk_buff *skb;
+
 			/*
 			 * Stop on errors
 			 */
@@ -938,33 +937,6 @@ static int do_tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 				if (copied)
 					return copied;
 				return -EPIPE;
-			}
-
-			/*
-			 *	Wait for a connection to finish.
-			 */
-			while (sk->state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT)
-			{
-				if (copied)
-					return copied;
-
-				if (sk->err)
-					return sock_error(sk);
-
-				if (sk->state != TCP_SYN_SENT && sk->state != TCP_SYN_RECV)
-				{
-					if (sk->keepopen)
-						send_sig(SIGPIPE, current, 0);
-					return -EPIPE;
-				}
-
-				if (nonblock)
-					return -EAGAIN;
-
-				if (current->signal & ~current->blocked)
-					return -ERESTARTSYS;
-
-				wait_for_tcp_connect(sk);
 			}
 
 		/*
@@ -1055,20 +1027,18 @@ static int do_tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 		  		return -EFAULT;
 			}
 
-		/*
-		 *	We should really check the window here also.
-		 */
+			/*
+			 *	We should really check the window here also.
+			 */
 
-			send_tmp = NULL;
+			delay = 0;
+			tmp = copy + sk->prot->max_header + 15;
 			if (copy < sk->mss && !(flags & MSG_OOB) && sk->packets_out)
 			{
-				skb = sock_wmalloc(sk, sk->mtu + 128 + prot->max_header + 15, 0, GFP_KERNEL);
-				send_tmp = skb;
+				tmp = tmp - copy + sk->mtu + 128;
+				delay = 1;
 			}
-			else
-			{
-				skb = sock_wmalloc(sk, copy + prot->max_header + 15 , 0, GFP_KERNEL);
-			}
+			skb = sock_wmalloc(sk, tmp, 0, GFP_KERNEL);
 
 			/*
 			 *	If we didn't get any memory, we need to sleep.
@@ -1104,7 +1074,7 @@ static int do_tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 			 * Perhaps some hints here would be good.
 			 */
 
-			tmp = prot->build_header(skb, sk->saddr, sk->daddr, &dev,
+			tmp = sk->prot->build_header(skb, sk->saddr, sk->daddr, &dev,
 				 IPPROTO_TCP, sk->opt, skb->truesize,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
 			if (tmp < 0 )
 			{
@@ -1143,9 +1113,9 @@ static int do_tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 			skb->free = 0;
 			sk->write_seq += copy;
 
-			if (send_tmp != NULL)
+			if (delay)
 			{
-				tcp_enqueue_partial(send_tmp, sk);
+				tcp_enqueue_partial(skb, sk);
 				continue;
 			}
 			tcp_send_skb(sk, skb);
@@ -1186,7 +1156,7 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 	}
 
 	lock_sock(sk);
-	retval = do_tcp_sendmsg(sk, msg, len, nonblock, flags);
+	retval = do_tcp_sendmsg(sk, msg->msg_iovlen, msg->msg_iov, len, nonblock, flags);
 
 /*
  *	Nagle's rule. Turn Nagle off with TCP_NODELAY for highly
@@ -1798,62 +1768,79 @@ static void tcp_close(struct sock *sk, unsigned long timeout)
 
 
 /*
+ * Wait for a incoming connection, avoid race
+ * conditions. This must be called with the socket
+ * locked.
+ */
+static struct sk_buff * wait_for_connect(struct sock * sk)
+{
+	struct wait_queue wait = { current, NULL };
+	struct sk_buff * skb = NULL;
+
+	add_wait_queue(sk->sleep, &wait);
+	for (;;) {
+		current->state = TASK_INTERRUPTIBLE;
+		release_sock(sk);
+		schedule();
+		lock_sock(sk);
+		skb = tcp_find_established(sk);
+		if (skb)
+			break;
+		if (current->signal & ~current->blocked)
+			break;
+	}
+	remove_wait_queue(sk->sleep, &wait);
+	return skb;
+}
+
+/*
  *	This will accept the next outstanding connection.
+ *
+ *	Be careful about race conditions here - this is subtle.
  */
 
 static struct sock *tcp_accept(struct sock *sk, int flags)
 {
-	struct sock *newsk;
+	int error;
 	struct sk_buff *skb;
+	struct sock *newsk = NULL;
 
   /*
    * We need to make sure that this socket is listening,
    * and that it has something pending.
    */
 
+	error = EINVAL;
 	if (sk->state != TCP_LISTEN)
-	{
-		sk->err = EINVAL;
-		return(NULL);
-	}
+		goto no_listen;
 
-	/* Avoid the race. */
-	cli();
 	lock_sock(sk);
 
-	while((skb = tcp_dequeue_established(sk)) == NULL)
-	{
-		if (flags & O_NONBLOCK)
-		{
-			sti();
-			release_sock(sk);
-			sk->err = EAGAIN;
-			return(NULL);
-		}
-
+	skb = tcp_find_established(sk);
+	if (skb) {
+got_new_connect:
+		__skb_unlink(skb, &sk->receive_queue);
+		newsk = skb->sk;
+		kfree_skb(skb, FREE_READ);
+		sk->ack_backlog--;
+		error = 0;
+out:
 		release_sock(sk);
-		interruptible_sleep_on(sk->sleep);
-		if (current->signal & ~current->blocked)
-		{
-			sti();
-			sk->err = ERESTARTSYS;
-			return(NULL);
-		}
-		lock_sock(sk);
-  	}
-	sti();
+no_listen:
+		sk->err = error;
+		return newsk;
+	}
 
-	/*
-	 *	Now all we need to do is return skb->sk.
-	 */
-
-	newsk = skb->sk;
-
-	kfree_skb(skb, FREE_READ);
-	sk->ack_backlog--;
-	release_sock(sk);
-	return(newsk);
+	error = EAGAIN;
+	if (flags & O_NONBLOCK)
+		goto out;
+	skb = wait_for_connect(sk);
+	if (skb)
+		goto got_new_connect;
+	error = ERESTARTSYS;
+	goto out;
 }
+
 
 /*
  *	This will initiate an outgoing connection.

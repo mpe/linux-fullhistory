@@ -254,7 +254,7 @@ _060_fpsp_fline:
             |
             |----> may exit through _060_real_trap
             |
-            |----> may exit thorugh _060_real_bsun
+            |----> may exit through _060_real_bsun
             |
             |----> may exit through _060_fpsp_done
 

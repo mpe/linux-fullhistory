@@ -18,7 +18,7 @@
 
 #include <linux/types.h>
 
-/* Reading the MFP port register gives a machine independant delay, since the
+/* Reading the MFP port register gives a machine independent delay, since the
  * MFP always has a 8 MHz clock. This avoids problems with the varying length
  * of nops on various machines. Somebody claimed that the tstb takes 600 ns.
  */
@@ -42,7 +42,7 @@ extern int is_medusa;
 #include <linux/mm.h>
 #include <asm/pgtable.h>
 
-static inline void dma_cache_maintainance( unsigned long paddr,
+static inline void dma_cache_maintenance( unsigned long paddr,
 					  unsigned long len,
 					  int writeflag )
 
@@ -293,7 +293,7 @@ struct BLITTER
   u_short endmask3;
   u_short dst_x_inc;
   u_short dst_y_inc;
-  u_long dst_adress;
+  u_long dst_address;
   u_short wd_per_line;
   u_short ln_per_bb;
   u_short hlf_op_reg;
@@ -448,7 +448,7 @@ struct TT_RTC {
  */
 /* constants for the ACIA registers */
 
-/* baudrate selection and reset (Baudrte = clock/factor) */
+/* baudrate selection and reset (Baudrate = clock/factor) */
 #define ACIA_DIV1  0
 #define ACIA_DIV16 1
 #define ACIA_DIV64 2

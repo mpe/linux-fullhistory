@@ -650,7 +650,7 @@ int atari_hwclk( int op, struct hwclk_time *t )
     tos_version = is_medusa ? 0xfff : *(unsigned short *)0xff000002;
 
     ctrl = RTC_READ(RTC_CONTROL); /* control registers are
-                                   * independant from the UIP */
+                                   * independent from the UIP */
 
     if (op) {
         /* write: prepare values */
@@ -1109,7 +1109,7 @@ void atari_get_model(char *model)
 
 int atari_get_hardware_list(char *buffer)
 {
-    int len = 0;
+    int len = 0, i;
 
     for (i = 0; i < boot_info.num_memory; i++)
 	len += sprintf (buffer+len, "\t%3ld MB at 0x%08lx (%s)\n",

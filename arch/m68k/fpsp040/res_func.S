@@ -83,7 +83,7 @@ monadic:
 	btstb	#direction_bit,CMDREG1B(%a6)	|check direction
 	bne	opclass3			|it is a mv out
 |
-| At this point, only oplcass 0 and 2 possible
+| At this point, only opclass 0 and 2 possible
 |
 	btstb	#7,STAG(%a6)	|if sop = norm=000, zero=001,
 |				;inf=010 or nan=011
@@ -299,7 +299,7 @@ cu_nuninx:
 	bnes	cu_nunzro
 |
 | The mantissa is zero from the denorm loop.  Check sign and rmode
-| to see if rounding should have occured which would leave the lsb.
+| to see if rounding should have occurred which would leave the lsb.
 |
 	movel	USER_FPCR(%a6),%d0
 	andil	#0x30,%d0		|isolate rmode
@@ -413,7 +413,7 @@ fix_stk:
 
 |
 | cu_dnrm handles all cu-only instructions (fmove, fabs, fneg, and
-| ftst) completly in software without an frestore to the 040. 
+| ftst) completely in software without an frestore to the 040. 
 |
 cu_dnrm:
 	st	CU_ONLY(%a6)
@@ -610,7 +610,7 @@ cu_sndr:
 |	DNRM_FLG contains $00 for neither op denormalized
 |	                  $0f for the destination op denormalized
 |	                  $f0 for the source op denormalized
-|	                  $ff for both ops denormalzed
+|	                  $ff for both ops denormalized
 |
 | The wrap-around condition occurs for add, sub, div, and cmp
 | when 
@@ -828,7 +828,7 @@ add_srcd:
 | precision.  We can then call round with no sticky and the result
 | will be correct for the user's rounding mode and precision.  If
 | the signs are the same, we call round with the sticky bit set
-| and the result will be correctfor the user's rounding mode and
+| and the result will be correct for the user's rounding mode and
 | precision.
 |
 add_wrap:
@@ -1003,7 +1003,7 @@ sub_srcd:
 | precision.  We can then call round with no sticky and the result
 | will be correct for the user's rounding mode and precision.  If
 | the signs are unlike, we call round with the sticky bit set
-| and the result will be correctfor the user's rounding mode and
+| and the result will be correct for the user's rounding mode and
 | precision.
 |
 sub_wrap:

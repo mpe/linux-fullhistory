@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_file.c,v 1.1 1996/04/21 14:41:08 davem Exp $
+ * $Id: ufs_file.c,v 1.3 1996/04/25 09:12:02 davem Exp $
  *
  */
 
@@ -75,13 +75,13 @@ int ufs_bmap (struct inode * inode, int block)
 	                bh = bread(inode->i_dev, inode->u.ufs_i.ui_ib[0],
 	                           BLOCK_SIZE);
 	                if (bh == NULL) {
-	                        printk("ufs_bmap: can't map block %lu, ino %lu\n",
+	                        printk("ufs_bmap: can't map block %u, ino %lu\n",
 	                               block + UFS_NDADDR, inode->i_ino);
 	                        return(0);
 	                }
 	                phys_block = ((__u32 *)bh->b_data)[block];
 	                brelse(bh);
-	                printk("ufs_bmap: imap ino %lu block %lu phys %lu\n",
+	                printk("ufs_bmap: imap ino %lu block %u phys %lu\n",
 	                       inode->i_ino, block + UFS_NDADDR, phys_block);
 	                return(phys_block);
 	        } else {
@@ -94,18 +94,17 @@ int ufs_bmap (struct inode * inode, int block)
 	return(0);
 }
 
-
 static struct file_operations ufs_file_operations = {
 	NULL,			/* lseek */
-	&generic_file_read,	/* read */
+	generic_file_read,	/* read */
 	NULL,			/* write */
 	NULL,			/* readdir */
 	NULL,			/* select */
 	NULL,			/* ioctl */
-	&generic_file_mmap,	/* mmap */
+	generic_file_mmap,	/* mmap */
 	NULL,			/* open */
 	NULL,			/* release */
-	&file_fsync,		/* fsync */  /* XXX - is this ok? */
+	file_fsync,		/* fsync */
 	NULL,			/* fasync */
 	NULL,			/* check_media_change */
 	NULL,			/* revalidate */
@@ -124,9 +123,9 @@ struct inode_operations ufs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	&generic_readpage,	/* readpage */
+	generic_readpage,	/* readpage */
 	NULL,			/* writepage */
-	&ufs_bmap,		/* bmap */
+	ufs_bmap,		/* bmap */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */

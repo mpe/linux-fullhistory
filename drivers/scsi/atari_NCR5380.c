@@ -47,7 +47,7 @@
  *    inside the execution of NCR5380_intr(), leading to recursive
  *    calls.
  *
- *  - I've added a function merge_consecutive_buffers() that trys to
+ *  - I've added a function merge_consecutive_buffers() that tries to
  *    merge scatter-gather buffers that are located at consecutive
  *    physical addresses and can be processed with the same DMA setup.
  *    Since most scatter-gather operations work on a page (4K) of
@@ -1995,7 +1995,7 @@ static int do_abort (struct Scsi_Host *host)
      * other phase and will have to source/sink data.
      * 
      * We really don't care what value was on the bus or what value
-     * the target see's, so we just handshake.
+     * the target sees, so we just handshake.
      */
     
     while (!(tmp = NCR5380_read(STATUS_REG)) & SR_REQ);
@@ -2280,7 +2280,7 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance)
 		    printk("scsi%d: target %d lun %d linked command complete.\n",
 			HOSTNO, cmd->target, cmd->lun);
 #endif
-		    /* Enable reselect interupts */
+		    /* Enable reselect interrupts */
 		    NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
 		    /*
 		     * Sanity check : A linked command should only terminate
@@ -2348,7 +2348,7 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance)
 #else
 		    hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
 #endif
-		    /* Enable reselect interupts */
+		    /* Enable reselect interrupts */
 		    NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
 
 		    /* 
@@ -2429,7 +2429,7 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance)
 		case MESSAGE_REJECT:
 		    /* Accept message by clearing ACK */
 		    NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE);
-		    /* Enable reselect interupts */
+		    /* Enable reselect interrupts */
 		    NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
 		    switch (hostdata->last_message) {
 		    case HEAD_OF_QUEUE_TAG:
@@ -2439,7 +2439,7 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance)
 			 * queuing, even though it announced this ability in
 			 * its INQUIRY data ?!? (maybe only this LUN?) Ok,
 			 * clear 'tagged_supported' and lock the LUN, since
-			 * the command is treated as untagged furtheron.
+			 * the command is treated as untagged further on.
 			 */
 			cmd->device->tagged_supported = 0;
 			hostdata->busy[cmd->target] |= (1 << cmd->lun);
@@ -2494,7 +2494,7 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance)
 		case RESTORE_POINTERS:
 		    /* Accept message by clearing ACK */
 		    NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE);
-		    /* Enable reselect interupts */
+		    /* Enable reselect interrupts */
 		    NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
 		    break;
 		case EXTENDED_MESSAGE:
@@ -2713,7 +2713,7 @@ static void NCR5380_reselect (struct Scsi_Host *instance)
 #ifdef SUPPORT_TAGS
     /* If the phase is still MSGIN, the target wants to send some more
      * messages. In case it supports tagged queuing, this is probably a
-     * SIMPLE_QEUE_TAG for the I_T_L_Q nexus.
+     * SIMPLE_QUEUE_TAG for the I_T_L_Q nexus.
      */
     tag = TAG_NONE;
     if (phase == PHASE_MSGIN && setup_use_tagged_queuing) {
@@ -3002,7 +3002,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd)
 
 
 /* 
- * Function : int NCR5380_reset (Scsi_Cmnd *cmd)
+ * Function : int NCR5380_reset (Scsi_Cmnd *cmd, unsigned int reset_flags)
  * 
  * Purpose : reset the SCSI bus.
  *
@@ -3010,7 +3010,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd)
  *
  */ 
 
-static int NCR5380_reset( Scsi_Cmnd *cmd )
+static int NCR5380_reset( Scsi_Cmnd *cmd, unsigned int reset_flags)
 {
 #if 0
     SETUP_HOSTDATA(cmd->host);
@@ -3045,7 +3045,7 @@ static int NCR5380_reset( Scsi_Cmnd *cmd )
     /* After the reset, there are no more connected or disconnected commands
      * and no busy units; to avoid problems with re-inserting the commands
      * into the issue_queue (via scsi_done()), the aborted commands are
-     * remebered in local variables first.
+     * remembered in local variables first.
      */
     save_flags(flags);
     cli();

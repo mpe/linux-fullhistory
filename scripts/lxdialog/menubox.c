@@ -199,7 +199,7 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
     while (key != ESC) {
 	key = wgetch(dialog);
 
-	if (isalpha(key)) key = tolower(key);
+	if (key < 256 && isalpha(key)) key = tolower(key);
 
 	if (strchr("ynm", key))
 		i = max_choice;

@@ -1,3 +1,5 @@
+/* Number of bytes to readahead on disc access */
+#define FAT_READAHEAD (18*1024)
 
 struct buffer_head *fat_bread (struct super_block *sb, int block);
 struct buffer_head *fat_getblk (struct super_block *sb, int block);

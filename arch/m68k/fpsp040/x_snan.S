@@ -57,7 +57,7 @@ fpsp_snan:
 |
 | It is possible to have an inex1 exception with the
 | snan.  If the inex enable bit is set in the FPCR, and either
-| inex2 or inex1 occured, we must clean up and branch to the
+| inex2 or inex1 occurred, we must clean up and branch to the
 | real inex handler.
 |
 ck_inex:

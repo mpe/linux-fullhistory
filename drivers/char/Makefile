@@ -20,16 +20,22 @@ FONTMAPFILE = cp437.uni
 
 L_TARGET := char.a
 M_OBJS   :=
-L_OBJS   := tty_io.o n_tty.o console.o keyboard.o \
+L_OBJS   := tty_io.o n_tty.o console.o \
 	tty_ioctl.o pty.o vt.o mem.o vc_screen.o random.o \
-	defkeymap.o consolemap.o selection.o
- 
+	consolemap.o selection.o
+
 ifeq ($(CONFIG_SERIAL),y)
-LX_OBJS += serial.o
+  ifndef CONFIG_SUN_SERIAL
+  LX_OBJS += serial.o
+  endif
 else
   ifeq ($(CONFIG_SERIAL),m)
   MX_OBJS += serial.o
   endif
+endif
+
+ifndef CONFIG_SUN_KEYBOARD
+L_OBJS += keyboard.o defkeymap.o
 endif
 
 ifeq ($(CONFIG_DIGI),y)
@@ -127,6 +133,10 @@ M = y
 # This is not modularized, so if configured then "misc.c" will be resident
 endif
 
+ifdef CONFIG_SUN_MOUSE
+M = y
+endif
+
 ifeq ($(CONFIG_WDT),y)
 M = y
 L_OBJS += wdt.o
@@ -167,7 +177,7 @@ else
   MX_OBJS += misc.o
   endif
 endif
-
+  
 ifeq ($(CONFIG_SCC),y)
 L_OBJS += scc.o
 else
@@ -179,7 +189,9 @@ endif
 ifdef CONFIG_TGA_CONSOLE
 L_OBJS += tga.o
 else
-L_OBJS += vga.o vesa_blank.o
+ ifndef CONFIG_SUN_CONSOLE
+ L_OBJS += vga.o vesa_blank.o
+ endif
 endif
 
 include $(TOPDIR)/Rules.make

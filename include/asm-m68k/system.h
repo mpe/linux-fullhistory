@@ -32,7 +32,7 @@ extern inline void wrusp(unsigned long usp) {
  * and so we might get see unexpected behaviors when a task returns
  * with unexpected register values.
  *
- * syscall stores these regsiters itself and none of them are used
+ * syscall stores these registers itself and none of them are used
  * by syscall after the function in the syscall has been called.
  *
  * Beware that resume now expects *next to be in d1 and the offset of

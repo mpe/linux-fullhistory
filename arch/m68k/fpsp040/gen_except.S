@@ -296,7 +296,7 @@ loop1:
 	moveb	#BUSY_SIZE-4,1(%a7)		|write busy fmt word.
 busy_fr:
 	movel	FP_SCR1(%a6),WBTEMP_EX(%a6)	|write
-	movel	FP_SCR1+4(%a6),WBTEMP_HI(%a6)	|execptional op to
+	movel	FP_SCR1+4(%a6),WBTEMP_HI(%a6)	|exceptional op to
 	movel	FP_SCR1+8(%a6),WBTEMP_LO(%a6)	|wbtemp
 	bsetb	#E3,E_BYTE(%a6)			|set E3 flag
 	bclrb	#E1,E_BYTE(%a6)			|make sure E1 is clear

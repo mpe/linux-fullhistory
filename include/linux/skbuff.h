@@ -13,10 +13,9 @@
  
 #ifndef _LINUX_SKBUFF_H
 #define _LINUX_SKBUFF_H
-#include <linux/malloc.h>
-#include <linux/wait.h>
-#include <linux/time.h>
+
 #include <linux/config.h>
+#include <linux/time.h>
 
 #include <asm/atomic.h>
 
@@ -131,6 +130,7 @@ struct sk_buff
 /*
  *	Handling routines are only of interest to the kernel
  */
+#include <linux/malloc.h>
 
 #include <asm/system.h>
 

@@ -93,7 +93,7 @@ char *smp_info(void)
 	sprintf(smp_buf,
 "\n        CPU0\t\tCPU1\t\tCPU2\t\tCPU3\n"
 "State: %s\t\t%s\t\t%s\t\t%s\n"
-"Lock:  %08lx\t\t%08lx\t%08lx\t\t%08lx\n"
+"Lock:  %08lx\t\t%08lx\t%08lx\t%08lx\n"
 "\n"
 "klock: %x\n",
 		(cpu_present_map & 1) ? ((active_kernel_processor == 0) ? "akp" : "online") : "offline",
@@ -236,7 +236,6 @@ void smp_boot_cpus(void)
 			/* whirrr, whirrr, whirrrrrrrrr... */
 			printk("Starting CPU %d at %p\n", i, entry);
 			mid_xlate[i] = (linux_cpus[i].mid & ~8);
-			current_set[i] = &init_task;
 			local_flush_cache_all();
 			prom_startcpu(linux_cpus[i].prom_node,
 				      &penguin_ctable, 0, (char *)entry);
@@ -255,7 +254,6 @@ void smp_boot_cpus(void)
 			} else {
 				printk("Penguin %d is stuck in the bottle.\n", i);
 			}
-			current_set[i] = 0;
 		}
 		if(!(cpu_callin_map[i])) {
 			cpu_present_map &= ~(1 << i);

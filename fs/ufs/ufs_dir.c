@@ -6,22 +6,16 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_dir.c,v 1.1 1996/04/21 14:41:04 davem Exp $
+ * $Id: ufs_dir.c,v 1.3 1996/04/25 09:12:00 davem Exp $
  *
  */
 
 #include <linux/fs.h>
 
 /* XXX */
-extern int ufs_lookup();
-extern int ufs_bmap();
-
-static int ufs_dir_read (struct inode * inode, struct file * filp,
-	                 char * buf, int count)
-{
-	/* XXX - probably allow this for root, EISDIR for normal users */
-	return -EISDIR;
-}
+extern int ufs_lookup (struct inode *, const char *, int, struct inode **);
+extern int ufs_bmap (struct inode *, int);
+extern void ufs_print_inode (struct inode *);
 
 /*
  * This is blatantly stolen from ext2fs
@@ -43,7 +37,7 @@ ufs_readdir (struct inode * inode, struct file * filp, void * dirent,
 
 	if (inode->i_sb->u.ufs_sb.s_flags & UFS_DEBUG) {
 	        printk("ufs_readdir: ino %lu  f_pos %lu\n",
-	               inode->i_ino, filp->f_pos);
+	               inode->i_ino, (unsigned long) filp->f_pos);
 	        ufs_print_inode(inode);
 	}
 
@@ -95,7 +89,7 @@ revalidate:
 			de = (struct direct *) (bh->b_data + offset);
 	                /* XXX - put in a real ufs_check_dir_entry() */
 	                if ((de->d_reclen == 0) || (de->d_namlen == 0)) {
-	                        filp->f_pos = filp->f_pos & (sb->s_blocksize - 1) + sb->s_blocksize;
+	                        filp->f_pos = (filp->f_pos & (sb->s_blocksize - 1)) + sb->s_blocksize;
 	                        brelse(bh);
 	                        return stored;
 	                }
@@ -123,7 +117,7 @@ revalidate:
 	                                   de->d_ino);
 				version = inode->i_version;
 	                        if (inode->i_sb->u.ufs_sb.s_flags & UFS_DEBUG) {
-	                                printk("ufs_readdir: filldir(%s,%lu)\n",
+	                                printk("ufs_readdir: filldir(%s,%u)\n",
 	                                       de->d_name, de->d_ino);
 	                        }
 				error = filldir(dirent, de->d_name, de->d_namlen, filp->f_pos, de->d_ino);
@@ -147,18 +141,17 @@ revalidate:
 	return 0;
 }
 
-
 static struct file_operations ufs_dir_operations = {
 	NULL,			/* lseek */
-	&ufs_dir_read,		/* read */
+	NULL,			/* read */
 	NULL,			/* write */
-	&ufs_readdir,		/* readdir */
+	ufs_readdir,		/* readdir */
 	NULL,			/* select */
 	NULL,			/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* open */
 	NULL,			/* release */
-	&file_fsync,		/* fsync */
+	file_fsync,		/* fsync */
 	NULL,			/* fasync */
 	NULL,			/* check_media_change */
 	NULL,			/* revalidate */
@@ -167,7 +160,7 @@ static struct file_operations ufs_dir_operations = {
 struct inode_operations ufs_dir_inode_operations = {
 	&ufs_dir_operations,	/* default directory file operations */
 	NULL,			/* create */
-	&ufs_lookup,		/* lookup */
+	ufs_lookup,		/* lookup */
 	NULL,			/* link */
 	NULL,			/* unlink */
 	NULL,			/* symlink */

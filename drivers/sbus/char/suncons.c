@@ -71,11 +71,11 @@
 #include <asm/io.h>
 #include <asm/pgtsun4c.h>	/* for the sun4c_nocache */
 
-#include "kbd_kern.h"
-#include "vt_kern.h"
-#include "consolemap.h"
-#include "selection.h"
-#include "console_struct.h"
+#include "../../char/kbd_kern.h"
+#include "../../char/vt_kern.h"
+#include "../../char/consolemap.h"
+#include "../../char/selection.h"
+#include "../../char/console_struct.h"
 
 #define cmapsz 8192
 
@@ -1214,8 +1214,20 @@ bwtwo_setup (int slot, unsigned int bwtwo, int bw2_io)
 		0, sizeof (struct bwtwo_regs), "bwtwo_regs", bw2_io, 0);
 }
 
+static void
+cg14_setup (int slot, unsigned int cg14, int cg14_io)
+{
+	printk ("cgfourteen%d at 0x%8.8x\n", slot, cg14);
+	fbinfo [slot].type.fb_cmsize = 256;
+	fbinfo [slot].mmap =  0;
+	fbinfo [slot].loadcmap = 0;
+	fbinfo [slot].ioctl = 0;
+	fbinfo [slot].blank = 0;
+	fbinfo [slot].unblank = 0;
+}
+
 static char *known_cards [] = {
-	"cgsix", "cgthree", "bwtwo", "SUNW,tcx", 0
+	"cgsix", "cgthree", "bwtwo", "SUNW,tcx", "cgfourteen", 0
 };
 
 static int
@@ -1242,12 +1254,30 @@ static struct {
 };
 
 static int
+cg14_present(void)
+{
+	int root, n;
+
+	prom_printf ("Looking for cg14\n");
+	root = prom_getchild (prom_root_node);
+	if ((n = prom_searchsiblings (root, "obio")) == 0)
+		return 0;
+
+	n = prom_getchild (n);
+	if ((n = prom_searchsiblings (n, "cgfourteen")) == 0)
+		return 0;
+	prom_printf ("Cg14 found!\n");
+	return n;
+}
+
+static int
 sparc_console_probe(void)
 {
 	int propl, con_node, i;
 	struct linux_sbus_device *sbdp;
 	unsigned int fbbase = 0xb001b001;
 	int fbiospace = 0;
+	int cg14 = 0;
 
 	/* XXX The detection code needs to support multiple video cards in one system */
 	con_node = 0;
@@ -1290,47 +1320,62 @@ sparc_console_probe(void)
 	case PROM_V3:
 	case PROM_P1275:
 		for_each_sbusdev(sbdp, SBus_chain) {
+		        prom_printf ("Trying: %s\n", sbdp->prom_name);
 			if (known_card (sbdp->prom_name))
 				break;
 		}
 		if (!sbdp){
-			prom_printf ("Could not find a know video card on this machine\n");
-			prom_halt ();
+			if (!(cg14 = cg14_present ())){
+				prom_printf ("Could not find a known video card on this machine\n");
+				prom_halt ();
+			} 
 		}
-		prom_apply_sbus_ranges (&sbdp->reg_addrs [0], sbdp->num_registers);
-		fbbase = (long) sbdp->reg_addrs [0].phys_addr;
-		fbiospace = sbdp->reg_addrs[0].which_io;
-		con_node = (*romvec->pv_v2devops.v2_inst2pkg)
-			(*romvec->pv_v2bootargs.fd_stdout);
-		/*
-		 * Determine the type of hardware accelerator.
-		 */
-		propl = prom_getproperty(con_node, "emulation", con_name, sizeof (con_name));
-		if (propl < 0 || propl >= sizeof (con_name)) {
-			/* Early cg3s had no "emulation". */
-			propl = prom_getproperty(con_node, "name", con_name, sizeof (con_name));
-			if (propl < 0) {
-				prom_printf("console: no device name!!\n");
+		if (!cg14){
+			prom_apply_sbus_ranges (&sbdp->reg_addrs [0], sbdp->num_registers);
+			fbbase = (long) sbdp->reg_addrs [0].phys_addr;
+			fbiospace = sbdp->reg_addrs[0].which_io;
+			con_node = (*romvec->pv_v2devops.v2_inst2pkg)
+				(*romvec->pv_v2bootargs.fd_stdout);
+			/*
+			 * Determine the type of hardware accelerator.
+			 */
+			propl = prom_getproperty(con_node, "emulation", con_name, sizeof (con_name));
+			if (propl < 0 || propl >= sizeof (con_name)) {
+				/* Early cg3s had no "emulation". */
+				propl = prom_getproperty(con_node, "name", con_name, sizeof (con_name));
+				if (propl < 0) {
+					prom_printf("console: no device name!!\n");
+					return -1;
+				}
+			}
+			if(!strncmp(con_name, "cgsix", sizeof (con_name))) {
+				con_type = FBTYPE_SUNFAST_COLOR;
+			} else if(!strncmp(con_name, "cgthree", sizeof (con_name))) {
+				con_type = FBTYPE_SUN3COLOR;
+			} else if(!strncmp(con_name, "cgfourteen", sizeof (con_name))) {
+				con_type = FBTYPE_MDICOLOR;
+			} else if(!strncmp(con_name, "bwtwo", sizeof (con_name))) {
+				con_type = FBTYPE_SUN2BW;
+			} else if(!strncmp(con_name,"SUNW,tcx", sizeof (con_name))){
+				con_type = FBTYPE_SUN3COLOR;
+			} else {
+				prom_printf("console: \"%s\" is unsupported\n", con_name);
 				return -1;
 			}
-		}
-		if(!strncmp(con_name, "cgsix", sizeof (con_name))) {
-			con_type = FBTYPE_SUNFAST_COLOR;
-		} else if(!strncmp(con_name, "cgthree", sizeof (con_name))) {
-			con_type = FBTYPE_SUN3COLOR;
-		} else if(!strncmp(con_name, "cgfourteen", sizeof (con_name))) {
-			con_type = FBTYPE_MDICOLOR;
-		} else if(!strncmp(con_name, "bwtwo", sizeof (con_name))) {
-			con_type = FBTYPE_SUN2BW;
-		} else if(!strncmp(con_name,"SUNW,tcx", sizeof (con_name))){
-			con_type = FBTYPE_SUN3COLOR;
+			propl = prom_getproperty(con_node, "address", (char *) &con_fb_base, 4);
+			if (propl != 4) {
+				con_fb_base = 0;
+			}
 		} else {
-			prom_printf("console: \"%s\" is unsupported\n", con_name);
-			return -1;
-		}
-		propl = prom_getproperty(con_node, "address", (char *) &con_fb_base, 4);
-		if (propl != 4) {
-		    con_fb_base = 0;
+			int bases [2];
+
+			con_node = cg14;
+			prom_printf ("Found a cg14\n");
+			propl = prom_getproperty (cg14, "address",
+						  (char *) &bases[0], 8);
+			prom_printf ("Size=%d, %x\n", propl, bases [1]);
+			con_fb_base = (unsigned char *) bases [1];
+			con_type = FBTYPE_MDICOLOR;
 		}
 		break;
 	default:
@@ -1408,6 +1453,9 @@ sparc_console_probe(void)
 		break;
 	case FBTYPE_SUN2BW:
 		bwtwo_setup (0, fbbase, fbiospace);
+		break;
+	case FBTYPE_MDICOLOR:
+		cg14_setup (0, fbbase, fbiospace);
 		break;
 	default:
 		break;

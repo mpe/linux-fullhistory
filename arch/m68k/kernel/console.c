@@ -1561,7 +1561,7 @@ static int con_write(struct tty_struct * tty, int from_user,
                            where we really draw the chars */
 
                         if (count > 2 &&
-			    !decim && currcons == fg_console) { 
+			    !decim && !utf && currcons == fg_console) { 
 				static char putcs_buf[256];
 				char   *p     = putcs_buf;
 				int putcs_count  = 1;
@@ -1582,14 +1582,25 @@ static int con_write(struct tty_struct * tty, int from_user,
 				
 				while (count)
 				{
+					enable_bh(CONSOLE_BH);
 					c = from_user ? get_user(buf) : *buf;
+					disable_bh(CONSOLE_BH);
 					tc = translate[toggle_meta ? (c|0x80) : c];
 					if (!tc ||
 					    !(c >= 32
-					      || (disp_ctrl && c != 0x1b)
-					      || !((CTRL_ACTION >> c) & 1)))
+					      || !(((disp_ctrl ? CTRL_ALWAYS
+						   : CTRL_ACTION) >> c) & 1)))
 					  break;
+					tc = conv_uni_to_pc(tc);
+					if (tc == -4)
+					  tc = conv_uni_to_pc(0xfffd);
+					else if (tc == -3)
+					  tc = c;
+
 					buf++; n++; count--;
+					if (tc & ~console_charmask)
+					  continue; /* Conversion failed */
+
 					*p++ = tc;
 					*pos++ = tc | (attr << 8);
 					++putcs_count;
