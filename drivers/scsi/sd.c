@@ -36,6 +36,9 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 
+#include <linux/smp.h>
+#include <asm/smp_lock.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 
@@ -513,14 +516,10 @@ static void do_sd_request (void)
     Scsi_Cmnd * SCpnt = NULL;
     Scsi_Device * SDev;
     struct request * req = NULL;
-    unsigned long flags;
     int flag = 0;
 
     while (1==1){
-	spin_lock_irqsave(&io_request_lock, flags);
-
 	if (CURRENT != NULL && CURRENT->rq_status == RQ_INACTIVE) {
-            spin_unlock_irqrestore(&io_request_lock, flags);
 	    return;
 	}
 
@@ -535,7 +534,6 @@ static void do_sd_request (void)
          */
         if( SDev->host->in_recovery )
           {
-            spin_unlock_irqrestore(&io_request_lock, flags);
             return;
           }
 
@@ -555,10 +553,11 @@ static void do_sd_request (void)
 	     */
 	    if( SDev->removable && !in_interrupt() )
 	    {
-                spin_unlock_irqrestore(&io_request_lock, flags);
+                spin_unlock_irq(&io_request_lock);	/* FIXME!!!! */
                 scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
 		/* scsi_ioctl may allow CURRENT to change, so start over. */
 		SDev->was_reset = 0;
+                spin_lock_irq(&io_request_lock);	/* FIXME!!!! */
 		continue;
 	    }
 	    SDev->was_reset = 0;
@@ -587,7 +586,6 @@ static void do_sd_request (void)
 	 * Using a "sti()" gets rid of the latency problems but causes
 	 * race conditions and crashes.
 	 */
-        spin_unlock_irqrestore(&io_request_lock, flags);
 
 	/* This is a performance enhancement. We dig down into the request
 	 * list and try to find a queueable request (i.e. device not busy,
@@ -605,7 +603,6 @@ static void do_sd_request (void)
 	if (!SCpnt && sd_template.nr_dev > 1){
 	    struct request *req1;
 	    req1 = NULL;
-	    spin_lock_irqsave(&io_request_lock, flags);
 	    req = CURRENT;
 	    while(req){
 		SCpnt = scsi_request_queueable(req,
@@ -620,7 +617,6 @@ static void do_sd_request (void)
 		else
 		    req1->next = req->next;
 	    }
-            spin_unlock_irqrestore(&io_request_lock, flags);
 	}
 
 	if (!SCpnt) return; /* Could not find anything to do */
@@ -1125,6 +1121,8 @@ static int sd_init_onedisk(int i)
         return i;
     }
 
+    spin_lock_irq(&io_request_lock);
+
     /* We need to retry the READ_CAPACITY because a UNIT_ATTENTION is
      * considered a fatal error, and many devices report such an error
      * just after a scsi bus reset.
@@ -1157,7 +1155,9 @@ static int sd_init_onedisk(int i)
 				 (void *) cmd, (void *) buffer,
 				 512, sd_init_done,  SD_TIMEOUT,
 				 MAX_RETRIES);
+		    spin_unlock_irq(&io_request_lock);
 		    down(&sem);
+		    spin_lock_irq(&io_request_lock);
                     SCpnt->request.sem = NULL;
 		}
 
@@ -1193,7 +1193,9 @@ static int sd_init_onedisk(int i)
 				     (void *) cmd, (void *) buffer,
 				     512, sd_init_done,  SD_TIMEOUT,
 				     MAX_RETRIES);
+			spin_unlock_irq(&io_request_lock);
 			down(&sem);
+			spin_lock_irq(&io_request_lock);
                         SCpnt->request.sem = NULL;
 		    }
 
@@ -1201,8 +1203,10 @@ static int sd_init_onedisk(int i)
 		}
 
 		time1 = jiffies + HZ;
+		spin_unlock_irq(&io_request_lock);
 		while(jiffies < time1); /* Wait 1 second for next try */
 		printk( "." );
+		spin_lock_irq(&io_request_lock);
 	    }
 	} while(the_result && spintime && spintime+100*HZ > jiffies);
 	if (spintime) {
@@ -1231,7 +1235,9 @@ static int sd_init_onedisk(int i)
 			 (void *) cmd, (void *) buffer,
 			 8, sd_init_done,  SD_TIMEOUT,
 			 MAX_RETRIES);
+	    spin_unlock_irq(&io_request_lock);
 	    down(&sem);	/* sleep until it is ready */
+	    spin_lock_irq(&io_request_lock);
             SCpnt->request.sem = NULL;
 	}
 
@@ -1406,7 +1412,9 @@ static int sd_init_onedisk(int i)
 			 (void *) cmd, (void *) buffer,
 			 512, sd_init_done,  SD_TIMEOUT,
 			 MAX_RETRIES);
+	    spin_unlock_irq(&io_request_lock);
 	    down(&sem);
+	    spin_lock_irq(&io_request_lock);
             SCpnt->request.sem = NULL;
 	}
 
@@ -1431,6 +1439,7 @@ static int sd_init_onedisk(int i)
     rscsi_disks[i].ten = 1;
     rscsi_disks[i].remap = 1;
     scsi_free(buffer, 512);
+    spin_unlock_irq(&io_request_lock);
     return i;
 }
 
@@ -1590,7 +1599,6 @@ static int sd_attach(Scsi_Device * SDp){
 int revalidate_scsidisk(kdev_t dev, int maxusage){
     int target;
     struct gendisk * gdev;
-    unsigned long flags;
     int max_p;
     int start;
     int i;
@@ -1598,14 +1606,11 @@ int revalidate_scsidisk(kdev_t dev, int maxusage){
     target =  DEVICE_NR(dev);
     gdev = &GENDISK_STRUCT;
 
-    spin_lock_irqsave(&io_request_lock, flags);
     if (DEVICE_BUSY || USAGE > maxusage) {
-	spin_unlock_irqrestore(&io_request_lock, flags);
 	printk("Device busy for revalidation (usage=%d)\n", USAGE);
 	return -EBUSY;
     }
     DEVICE_BUSY = 1;
-    spin_unlock_irqrestore(&io_request_lock, flags);
 
     max_p = gdev->max_p;
     start = target << gdev->minor_shift;

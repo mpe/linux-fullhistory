@@ -9787,12 +9787,16 @@ printk("ncr53c8xx : command successfully queued\n");
 #if LINUX_VERSION_CODE >= LinuxVersionCode(1,3,70)
 static void ncr53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs)
 {
+     unsigned long flags;
+
 #ifdef DEBUG_NCR53C8XX
      printk("ncr53c8xx : interrupt received\n");
 #endif
 
      if (DEBUG_FLAGS & DEBUG_TINY) printf ("[");
+     spin_lock_irqsave(&io_request_lock, flags);
      ncr_exception((ncb_p) dev_id);
+     spin_unlock_irqrestore(&io_request_lock, flags);
      if (DEBUG_FLAGS & DEBUG_TINY) printf ("]\n");
 }
 

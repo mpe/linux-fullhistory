@@ -472,12 +472,11 @@ __initfunc(void
 tga_console_init(void))
 {
 	struct pci_dev *dev;
-	int status;
 	
 	/*
 	 * first, find the TGA among the PCI devices...
 	 */
-	if (! (dev = pci_find_device(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA, NULL)))
+	if (! (dev = pci_find_device(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA, NULL))) {
 		/* PANIC!!! */
 		printk("tga_console_init: TGA not found!!! :-(\n");
 		return;

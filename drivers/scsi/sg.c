@@ -250,23 +250,22 @@ static ssize_t sg_read(struct file *filp, char *buf,
     /*
      * Wait until the command is actually done.
      */
-    save_flags(flags);
-    cli();
+    spin_lock_irqsave(&io_request_lock, flags);
     while(!device->pending || !device->complete)
     {
 	if (filp->f_flags & O_NONBLOCK)
 	{
-	    restore_flags(flags);
+	    spin_unlock_irqrestore(&io_request_lock, flags);
 	    return -EAGAIN;
 	}
 	interruptible_sleep_on(&device->read_wait);
 	if (signal_pending(current))
 	{
-	    restore_flags(flags);
+	    spin_unlock_irqrestore(&io_request_lock, flags);
 	    return -ERESTARTSYS;
 	}
     }
-    restore_flags(flags);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 
     /*
      * Now copy the result back to the user buffer.

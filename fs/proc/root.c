@@ -499,13 +499,6 @@ static struct proc_dir_entry proc_root_version = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
-#ifdef CONFIG_PCI_OLD_PROC
-static struct proc_dir_entry proc_root_pci = {
-	PROC_PCI, 3, "pci",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-#endif
 #ifdef CONFIG_ZORRO
 static struct proc_dir_entry proc_root_zorro = {
 	PROC_ZORRO, 5, "zorro",
@@ -640,9 +633,6 @@ void proc_root_init(void)
 	proc_register(&proc_root, &proc_root_meminfo);
 	proc_register(&proc_root, &proc_root_kmsg);
 	proc_register(&proc_root, &proc_root_version);
-#ifdef CONFIG_PCI_OLD_PROC
-	proc_register(&proc_root, &proc_root_pci);
-#endif
 #ifdef CONFIG_ZORRO
 	proc_register(&proc_root, &proc_root_zorro);
 #endif
@@ -707,9 +697,6 @@ void proc_root_init(void)
 #endif
 
 	proc_bus = create_proc_entry("bus", S_IFDIR, 0);
-#ifdef CONFIG_PCI
-	proc_bus_pci_init();
-#endif
 }
 
 /*

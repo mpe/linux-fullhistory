@@ -250,7 +250,7 @@ static void layout_dev(struct pci_dev *dev)
 {
 	struct pci_bus *bus;
 	unsigned short cmd;
-	unsigned int base, mask, size, off;
+	unsigned int base, mask, size, off, idx;
 	unsigned int alignto;
 	unsigned long handle;
 
@@ -278,7 +278,8 @@ static void layout_dev(struct pci_dev *dev)
 	bus = dev->bus;
 	pcibios_read_config_word(bus->number, dev->devfn, PCI_COMMAND, &cmd);
 
-	for (off = PCI_BASE_ADDRESS_0; off <= PCI_BASE_ADDRESS_5; off += 4) {
+	for (idx = 0; idx <= 5; idx++) {
+		off = PCI_BASE_ADDRESS_0 + 4*idx;
 		/*
 		 * Figure out how much space and of what type this
 		 * device wants.
@@ -288,7 +289,7 @@ static void layout_dev(struct pci_dev *dev)
 		pcibios_read_config_dword(bus->number, dev->devfn, off, &base);
 		if (!base) {
 			/* this base-address register is unused */
-			dev->base_address[PCI_BASE_INDEX(off)] = 0;
+			dev->base_address[idx] = 0;
 			continue;
 		}
 
@@ -324,7 +325,7 @@ static void layout_dev(struct pci_dev *dev)
 						   off, base | 0x1);
 
 			handle = HANDLE(bus->number) | base | 1;
-			dev->base_address[PCI_BASE_INDEX(off)] = handle;
+			dev->base_address[idx] = handle;
 
 			DBG_DEVS(("layout_dev: dev 0x%x IO @ 0x%lx (0x%x)\n",
 				  dev->device, handle, size));
@@ -348,7 +349,7 @@ static void layout_dev(struct pci_dev *dev)
 				       "slot %d, function %d: \n",
 				       PCI_SLOT(dev->devfn),
 				       PCI_FUNC(dev->devfn));
-				off += 4;	/* skip extra 4 bytes */
+				idx++;	/* skip extra 4 bytes */
 				continue;
 
 			case PCI_BASE_ADDRESS_MEM_TYPE_1M:

@@ -1265,10 +1265,7 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 #define IDE_IRQ_EQUAL(irq1, irq2)	((irq1) == (irq2))
 #endif
 
-/*
- * entry point for all interrupts, caller does __cli() for us
- */
-void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
+static void do_ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 {
 	unsigned long flags;
 	ide_hwgroup_t *hwgroup = dev_id;
@@ -1303,13 +1300,11 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 			ide_sti(); HACK */
 		handler(drive);
 		/* this is necessary, as next rq may be different irq */
-		spin_lock_irqsave(&io_request_lock,flags);
 		if (hwgroup->handler == NULL) {
 			set_recovery_timer(HWIF(drive));
 			drive->service_time = jiffies - drive->service_start;
 			ide_do_request(hwgroup);
 		}
-		spin_unlock_irqrestore(&io_request_lock,flags);
 	} else {
 		unexpected_intr(irq, hwgroup);
 	}
@@ -1319,6 +1314,18 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 		if (!IDE_IRQ_EQUAL(hwif->irq, irq))
 			enable_irq(hwif->irq);
 	} while ((hwif = hwif->next) != hwgroup->hwif);
+}
+
+/*
+ * entry point for all interrupts, caller does __cli() for us
+ */
+void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	do_ide_intr(irq, dev_id, regs);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 /*

@@ -834,44 +834,52 @@ __initfunc(static struct pci_access *pci_find_bios(void))
 __initfunc(void pcibios_fixup(void))
 {
 	struct pci_dev *dev;
-	int i, has_io;
+	int i, has_io, has_mem;
+	unsigned short cmd;
+	unsigned char pin;
 
 	for(dev = pci_devices; dev; dev=dev->next) {
 		/*
-		 * There are probably some buggy BIOSes that forget to assign I/O port
-		 * addresses to several devices. We probably should assign new addresses
-		 * to such devices, but we need to gather some information first. [mj]
+		 * There are buggy BIOSes that forget to enable I/O and memory
+		 * access to PCI devices. We try to fix this, but we need to
+		 * be sure that the BIOS didn't forget to assign an address
+		 * to the device. [mj]
 		 */
-		has_io = 0;
+		has_io = has_mem = 0;
 		for(i=0; i<6; i++) {
 			unsigned long a = dev->base_address[i];
 			if (a & PCI_BASE_ADDRESS_SPACE_IO) {
-				has_io = 1;
+				has_io |= 1;
 				a &= PCI_BASE_ADDRESS_IO_MASK;
-				if (!a || a == PCI_BASE_ADDRESS_IO_MASK)
+				if (!a || a == PCI_BASE_ADDRESS_IO_MASK) {
 					printk(KERN_WARNING "PCI: BIOS forgot to assign address #%d to device %02x:%02x,"
 						" please report to <mj@ucw.cz>\n", i, dev->bus->number, dev->devfn);
-			}
+					has_io |= 2;
+				}
+			} else if (a & PCI_BASE_ADDRESS_MEM_MASK)
+				has_mem = 1;
 		}
-		/*
-		 * Check if the I/O space access is allowed. If not, moan loudly. [mj]
-		 */
-		if (has_io) {
-			unsigned short cmd;
-			pci_read_config_word(dev, PCI_COMMAND, &cmd);
-			if (!(cmd & PCI_COMMAND_IO))
-				printk(KERN_WARNING "PCI: BIOS forgot to enable I/O for device %02x:%02x,"
-					" please report to <mj@ucw.cz>\n", dev->bus->number, dev->devfn);
+		pci_read_config_word(dev, PCI_COMMAND, &cmd);
+		if (has_io == 1 && !(cmd & PCI_COMMAND_IO)) {
+			printk("PCI: Enabling I/O for device %02x:%02x\n",
+				dev->bus->number, dev->devfn);
+			cmd |= PCI_COMMAND_IO;
+			pci_write_config_word(dev, PCI_COMMAND, cmd);
 		}
+		if (has_mem && !(cmd & PCI_COMMAND_MEMORY)) {
+			printk("PCI: Enabling memory for device %02x:%02x\n",
+				dev->bus->number, dev->devfn);
+			cmd |= PCI_COMMAND_MEMORY;
+			pci_write_config_word(dev, PCI_COMMAND, cmd);
+		}
+		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
 #ifdef __SMP__
 		/*
 		 * Recalculate IRQ numbers if we use the I/O APIC
 		 */
 		{
-		unsigned char pin;
 		int irq;
 
-		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
 		if (pin) {
 			pin--;		/* interrupt pins are numbered starting from 1 */
 			irq = IO_APIC_get_PCI_irq_vector (dev->bus->number, PCI_SLOT(dev->devfn), pin);
@@ -884,10 +892,13 @@ __initfunc(void pcibios_fixup(void))
 		}
 #endif
 		/*
-		 * Fix out-of-range IRQ numbers.
+		 * Fix out-of-range IRQ numbers and report bogus IRQ.
 		 */
 		if (dev->irq >= NR_IRQS)
 			dev->irq = 0;
+		if (pin && !dev->irq)
+			printk(KERN_WARNING "PCI: Bogus IRQ for device %02x:%02x [pin=%x], please report to <mj@ucw.cz>\n",
+				dev->bus->number, dev->devfn, pin);
 	}
 }
 
@@ -919,25 +930,25 @@ __initfunc(char *pcibios_setup(char *str))
 {
 	if (!strncmp(str, "off", 3)) {
 		pci_probe = 0;
-		return str+3;
+		return NULL;
 	}
 #ifdef CONFIG_PCI_BIOS
 	else if (!strncmp(str, "bios", 4)) {
 		pci_probe = PCI_PROBE_BIOS;
-		return str+4;
+		return NULL;
 	} else if (!strncmp(str, "nobios", 6)) {
 		pci_probe &= ~PCI_PROBE_BIOS;
-		return str+6;
+		return NULL;
 	}
 #endif
 #ifdef CONFIG_PCI_DIRECT
 	else if (!strncmp(str, "conf1", 5)) {
 		pci_probe = PCI_PROBE_CONF1;
-		return str+5;
+		return NULL;
 	}
 	else if (!strncmp(str, "conf2", 5)) {
 		pci_probe = PCI_PROBE_CONF2;
-		return str+5;
+		return NULL;
 	}
 #endif
 	return str;

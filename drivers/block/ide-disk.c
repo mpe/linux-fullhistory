@@ -120,7 +120,6 @@ static void read_intr (ide_drive_t *drive)
 	}
 	msect = drive->mult_count;
 	
-	spin_lock_irqsave(&io_request_lock,flags);
 read_next:
 	rq = HWGROUP(drive)->rq;
 	if (msect) {
@@ -152,7 +151,6 @@ read_next:
 			goto read_next;
 		ide_set_handler (drive, &read_intr, WAIT_CMD);
 	}
-	spin_unlock_irqrestore(&io_request_lock,flags);
 }
 
 /*
@@ -167,7 +165,6 @@ static void write_intr (ide_drive_t *drive)
 	unsigned long flags;
 	int error = 0;
 
-	spin_lock_irqsave(&io_request_lock,flags);
 	if (OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
 #ifdef DEBUG
 		printk("%s: write: sector %ld, buffer=0x%08lx, remaining=%ld\n",
@@ -192,7 +189,6 @@ static void write_intr (ide_drive_t *drive)
 		error = 1;
 
 out:
-	spin_unlock_irqrestore(&io_request_lock,flags);
 
 	if (error)
 		ide_error(drive, "write_intr", stat);
@@ -246,7 +242,6 @@ static void multwrite_intr (ide_drive_t *drive)
 	unsigned long flags;
 	int error = 0;
 
-	spin_lock_irqsave(&io_request_lock,flags);
 	if (OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
 		if (stat & DRQ_STAT) {
 			if (rq->nr_sectors) {
@@ -268,7 +263,6 @@ static void multwrite_intr (ide_drive_t *drive)
 		error = 1;
 
 out:
-	spin_unlock_irqrestore(&io_request_lock,flags);
 
 	if (error)
 		ide_error(drive, "multwrite_intr", stat);

@@ -20,6 +20,7 @@
 struct pci_bus pci_root;
 struct pci_dev *pci_devices = NULL;
 static struct pci_dev **pci_last_dev_p = &pci_devices;
+static int pci_reverse __initdata = 0;
 
 #undef DEBUG
 
@@ -193,8 +194,13 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 		 * Put it into the global PCI device chain. It's used to
 		 * find devices once everything is set up.
 		 */
-		*pci_last_dev_p = dev;
-		pci_last_dev_p = &dev->next;
+		if (!pci_reverse) {
+			*pci_last_dev_p = dev;
+			pci_last_dev_p = &dev->next;
+		} else {
+			dev->next = pci_devices;
+			pci_devices = dev;
+		}
 
 		/*
 		 * Now insert it into the list of devices held
@@ -202,6 +208,17 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 		 */
 		dev->sibling = bus->devices;
 		bus->devices = dev;
+
+		/*
+		 * In case the latency timer value is less than 32,
+		 * which makes everything very sllooowww, set it to
+		 * 32. Pciutils should be used to fine-tune it later.
+		 * Note that we don't check if the device is a bus-master:
+		 * if it isn't, write to the latency timer should be ignored.
+		 */
+		pcibios_read_config_byte(bus->number, dev->devfn, PCI_LATENCY_TIMER, &tmp);
+		if (tmp < 32)
+			pcibios_write_config_byte(bus->number, dev->devfn, PCI_LATENCY_TIMER, 32);
 
 		/*
 		 * If it's a bridge, scan the bus behind it.
@@ -299,6 +316,7 @@ __initfunc(void pci_init(void))
 
 	if (!pci_present()) {
 		printk("PCI: No PCI bus detected\n");
+		return;
 	}
 
 	printk("PCI: Probing PCI hardware.\n");
@@ -312,12 +330,30 @@ __initfunc(void pci_init(void))
 #ifdef CONFIG_PCI_OPTIMIZE
 	pci_quirks_init();
 #endif
+
+#ifdef CONFIG_PROC_FS
+	proc_bus_pci_init();
+#ifdef CONFIG_PCI_OLD_PROC
+	proc_old_pci_init();
+#endif
+#endif
 }
 
 
 __initfunc(void pci_setup (char *str, int *ints))
 {
 	str = pcibios_setup(str);
-	if (*str)
-		printk(KERN_ERR "PCI: Unknown option `%s'\n", str);
+	while (str) {
+		char *k = strchr(str, ',');
+		if (k)
+			*k++ = 0;
+		if (*str) {
+			if (!(str = pcibios_setup(str)) || !*str)
+				continue;
+			if (!strcmp(str, "reverse"))
+				pci_reverse = 1;
+			else printk(KERN_ERR "PCI: Unknown option `%s'\n", str);
+		}
+		str = k;
+	}
 }

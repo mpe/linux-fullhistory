@@ -42,6 +42,9 @@
 #include <linux/stat.h>
 #include <linux/pci.h>
 #include <linux/bios32.h>
+
+#include <linux/blk.h>
+
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -3267,8 +3270,7 @@ static void BusLogic_ProcessCompletedCCBs(void)
   BusLogic_InterruptHandler handles hardware interrupts from BusLogic Host
   Adapters.
 */
-
-static void BusLogic_InterruptHandler(int IRQ_Channel,
+static void do_BusLogic_InterruptHandler(int IRQ_Channel,
 				      void *DeviceIdentifier,
 				      Registers_T *InterruptRegisters)
 {
@@ -3375,6 +3377,22 @@ static void BusLogic_InterruptHandler(int IRQ_Channel,
 	}
 }
 
+/*
+ * This is the low-level interrupt handler:
+ * we get the io request lock here to guarantee
+ * that all of this is atomic wrt the setup
+ * functions.
+ */
+static void BusLogic_InterruptHandler(int IRQ_Channel,
+				      void *DeviceIdentifier,
+				      Registers_T *InterruptRegisters)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	do_BusLogic_InterruptHandler(IRQ_Channel, DeviceIdentifier, InterruptRegisters);
+	spin_unlock_irqrestore(&io_request_lock, flags);
+}
 
 /*
   BusLogic_WriteOutgoingMailbox places CCB and Action Code into an Outgoing

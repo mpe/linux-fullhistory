@@ -677,7 +677,7 @@ static long open_intr_election(void)
 static int close_intr_election(long tmp)
 {
 	int irq = PARPORT_IRQ_NONE;
-	int i;
+	int i, valid = 1;
 
 	/* We ignore the timer - irq 0 */
 	for (i = 1; i < 16; i++)
@@ -685,12 +685,15 @@ static int close_intr_election(long tmp)
 			if (intr_vote[i]) {
 				if (irq != PARPORT_IRQ_NONE)
 					/* More than one interrupt */
-					return PARPORT_IRQ_NONE;
+					valid = 0;
 				irq = i;
 			}
 			free_irq(i, intr_vote);
 		}
-	return irq;
+	if(valid)
+		return irq;
+	else
+		return PARPORT_IRQ_NONE;
 }
 
 /* Only if supports ECP mode */

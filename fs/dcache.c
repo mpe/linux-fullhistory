@@ -784,7 +784,7 @@ asmlinkage int sys_getcwd(char *buf, unsigned long size)
 
 	error = -ENOENT;
 	/* Has the current directory has been unlinked? */
-	if (pwd->d_parent != pwd && list_empty(&pwd->d_hash)) {
+	if (pwd->d_parent == pwd || !list_empty(&pwd->d_hash)) {
 		char *page = (char *) __get_free_page(GFP_USER);
 		error = -ENOMEM;
 		if (page) {

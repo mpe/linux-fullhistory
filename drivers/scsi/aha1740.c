@@ -228,6 +228,9 @@ void aha1740_intr_handle(int irq, void *dev_id, struct pt_regs * regs)
     struct ecb *ecbptr;
     Scsi_Cmnd *SCtmp;
     unsigned int base;
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
 
     if (!aha_host[irq - 9])
 	panic("aha1740.c: Irq from unknown host!\n");
@@ -304,6 +307,8 @@ void aha1740_intr_handle(int irq, void *dev_id, struct pt_regs * regs)
 	}
 	number_serviced++;
     }
+
+    spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))

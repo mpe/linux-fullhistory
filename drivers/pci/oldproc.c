@@ -13,6 +13,8 @@
 #include <linux/pci.h>
 #include <linux/string.h>
 #include <linux/sched.h>
+#include <linux/init.h>
+#include <linux/proc_fs.h>
 #include <asm/page.h>
 
 #ifdef CONFIG_PROC_FS
@@ -910,6 +912,17 @@ int get_pci_list(char *buf)
 		len += nprinted;
 	}
 	return len;
+}
+
+static struct proc_dir_entry proc_old_pci = {
+	PROC_PCI, 3, "pci",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
+};
+
+__initfunc(void proc_old_pci_init(void))
+{
+	proc_register(&proc_root, &proc_old_pci);
 }
 
 #endif /* CONFIG_PROC_FS */

@@ -977,9 +977,6 @@
 
 #ifdef __KERNEL__
 
-/* Create an index into the pci_dev base_address[] array from an offset.  */
-#define PCI_BASE_INDEX(o) (((o)-PCI_BASE_ADDRESS_0)>>2)
-
 /*
  * Error values that may be returned by the PCI bios.  Use
  * pcibios_strerror() to convert to a printable string.
@@ -1078,6 +1075,8 @@ void pci_init(void);
 void pci_setup(char *str, int *ints);
 void pci_quirks_init(void);
 unsigned int pci_scan_bus(struct pci_bus *bus);
+void proc_bus_pci_init(void);
+void proc_old_pci_init(void);
 
 struct pci_dev *pci_find_device (unsigned int vendor, unsigned int device, struct pci_dev *from);
 struct pci_dev *pci_find_class (unsigned int class, struct pci_dev *from);

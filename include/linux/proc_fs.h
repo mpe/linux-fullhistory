@@ -275,7 +275,6 @@ extern struct inode_operations proc_scsi_inode_operations;
 
 extern void proc_root_init(void);
 extern void proc_base_init(void);
-extern void proc_bus_pci_init(void);
 
 extern int proc_register(struct proc_dir_entry *, struct proc_dir_entry *);
 extern int proc_unregister(struct proc_dir_entry *, int);

@@ -537,20 +537,31 @@ static inline void get_irqlock(int cpu)
 	global_irq_holder = cpu;
 }
 
+#define EFLAGS_IF_SHIFT 9
+
 /*
  * A global "cli()" while in an interrupt context
  * turns into just a local cli(). Interrupts
  * should use spinlocks for the (very unlikely)
  * case that they ever want to protect against
  * each other.
+ *
+ * If we already have local interrupts disabled,
+ * this will not turn a local disable into a
+ * global one (problems with spinlocks: this makes
+ * save_flags+cli+sti usable inside a spinlock).
  */
 void __global_cli(void)
 {
-	int cpu = smp_processor_id();
+	unsigned int flags;
 
-	__cli();
-	if (!local_irq_count[cpu])
-		get_irqlock(cpu);
+	__save_flags(flags);
+	if (flags & (1 << EFLAGS_IF_SHIFT)) {
+		int cpu = smp_processor_id();
+		__cli();
+		if (!local_irq_count[cpu])
+			get_irqlock(cpu);
+	}
 }
 
 void __global_sti(void)
@@ -562,33 +573,53 @@ void __global_sti(void)
 	__sti();
 }
 
+/*
+ * SMP flags value to restore to:
+ * 0 - global cli
+ * 1 - global sti
+ * 2 - local cli
+ * 3 - local sti
+ */
 unsigned long __global_save_flags(void)
 {
-	if (!local_irq_count[smp_processor_id()])
-		return global_irq_holder == (unsigned char) smp_processor_id();
-	else {
-		unsigned long x;
-		__save_flags(x);
-		return x;
+	int retval;
+	int local_enabled;
+	unsigned long flags;
+
+	__save_flags(flags);
+	local_enabled = (flags >> EFLAGS_IF_SHIFT) & 1;
+	/* default to local */
+	retval = 2 + local_enabled;
+
+	/* check for global flags if we're not in an interrupt */
+	if (!local_irq_count[smp_processor_id()]) {
+		if (local_enabled)
+			retval = 1;
+		if (global_irq_holder == (unsigned char) smp_processor_id())
+			retval = 0;
 	}
+	return retval;
 }
 
 void __global_restore_flags(unsigned long flags)
 {
-	if (!local_irq_count[smp_processor_id()]) {
-		switch (flags) {
-		case 0:
-			__global_sti();
-			break;
-		case 1:
-			__global_cli();
-			break;
-		default:
-			printk("global_restore_flags: %08lx (%08lx)\n",
-				flags, (&flags)[-1]);
-		}
-	} else
-		__restore_flags(flags);
+	switch (flags) {
+	case 0:
+		__global_cli();
+		break;
+	case 1:
+		__global_sti();
+		break;
+	case 2:
+		__cli();
+		break;
+	case 3:
+		__sti();
+		break;
+	default:
+		printk("global_restore_flags: %08lx (%08lx)\n",
+			flags, (&flags)[-1]);
+	}
 }
 
 #endif
@@ -1073,7 +1104,6 @@ __initfunc(void init_IRQ(void))
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */
 
-	printk("INIT IRQ\n");
 	for (i=0; i<NR_IRQS; i++) {
 		irq_events[i] = 0;
 		disabled_irq[i] = 0;

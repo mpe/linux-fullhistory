@@ -215,7 +215,7 @@ __initfunc(static int ne_probe_pci(struct device *dev))
 			if (check_region(pci_ioaddr, NE_IO_EXTENT))
 				continue;
 			pci_irq_line = pdev->irq;
-			if (pci_irq_line == 0) continue;	/* Try next PCI ID */
+			if (pci_irq_line) break;	/* Found it */
 		}
 		if (!pdev)
 			continue;
