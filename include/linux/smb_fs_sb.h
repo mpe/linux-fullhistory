@@ -15,6 +15,11 @@
 #include <linux/smb.h>
 #include <linux/smb_mount.h>
 
+/* Get the server for the specified dentry */
+#define server_from_dentry(dentry) &dentry->d_sb->u.smbfs_sb
+#define SB_of(server) ((struct super_block *) ((char *)(server) - \
+	(unsigned long)(&((struct super_block *)0)->u.smbfs_sb)))
+
 struct smb_sb_info {
         enum smb_conn_state state;
 	struct file * sock_file;
@@ -29,6 +34,7 @@ struct smb_sb_info {
 	struct smb_conn_opt opt;
 
 	struct semaphore sem;
+	struct wait_queue * wait;
 
 	__u32              packet_size;
 	unsigned char *    packet;

@@ -62,8 +62,12 @@ svc_destroy(struct svc_serv *serv)
 				serv->sv_program->pg_name,
 				serv->sv_nrthreads);
 
-	if (--(serv->sv_nrthreads) != 0)
-		return;
+	if (serv->sv_nrthreads) {
+		if (--(serv->sv_nrthreads) != 0)
+			return;
+	} else
+		printk("svc_destroy: no threads for serv=%p!\n", serv);
+
 	while ((svsk = serv->sv_allsocks) != NULL)
 		svc_delete_socket(svsk);
 
@@ -110,30 +114,31 @@ svc_release_buffer(struct svc_buf *bufp)
 int
 svc_create_thread(svc_thread_fn func, struct svc_serv *serv)
 {
-	struct svc_rqst	*rqstp = 0;
-	int		error;
+	struct svc_rqst	*rqstp;
+	int		error = -ENOMEM;
 
-	if (!(rqstp = kmalloc(sizeof(*rqstp), GFP_KERNEL)))
-		return -ENOMEM;
+	rqstp = kmalloc(sizeof(*rqstp), GFP_KERNEL);
+	if (!rqstp)
+		goto out;
 
 	memset(rqstp, 0, sizeof(*rqstp));
 	if (!(rqstp->rq_argp = (u32 *) kmalloc(serv->sv_xdrsize, GFP_KERNEL))
 	 || !(rqstp->rq_resp = (u32 *) kmalloc(serv->sv_xdrsize, GFP_KERNEL))
-	 || !svc_init_buffer(&rqstp->rq_defbuf, serv->sv_bufsz)) {
-		error = -ENOMEM;
-		goto failure;
-	}
+	 || !svc_init_buffer(&rqstp->rq_defbuf, serv->sv_bufsz))
+		goto out_thread;
 
 	serv->sv_nrthreads++;
-	if ((error = kernel_thread((int (*)(void *)) func, rqstp, 0)) < 0)
-		goto failure;
-
 	rqstp->rq_server = serv;
-	return 0;
-
-failure:
-	svc_exit_thread(rqstp);
+	error = kernel_thread((int (*)(void *)) func, rqstp, 0);
+	if (error < 0)
+		goto out_thread;
+	error = 0;
+out:
 	return error;
+
+out_thread:
+	svc_exit_thread(rqstp);
+	goto out;
 }
 
 /*
@@ -152,7 +157,8 @@ svc_exit_thread(struct svc_rqst *rqstp)
 	kfree(rqstp);
 
 	/* Release the server */
-	svc_destroy(serv);
+	if (serv)
+		svc_destroy(serv);
 }
 
 /*

@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := smbfs.o
-O_OBJS   := proc.o dir.o sock.o inode.o file.o ioctl.o 
+O_OBJS   := proc.o dir.o cache.o sock.o inode.o file.o ioctl.o 
 M_OBJS   := $(O_TARGET)
 
 # If you want debugging output, please uncomment the following line

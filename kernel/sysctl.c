@@ -147,7 +147,7 @@ static ctl_table kern_table[] = {
 	 0444, NULL, &proc_dointvec},
 	{KERN_MAXINODE, "inode-max", &max_inodes, sizeof(int),
 	 0644, NULL, &proc_dointvec},
-	{KERN_NRFILE, "file-nr", &nr_files, sizeof(int),
+	{KERN_NRFILE, "file-nr", &nr_files, 3*sizeof(int),
 	 0444, NULL, &proc_dointvec},
 	{KERN_MAXFILE, "file-max", &max_files, sizeof(int),
 	 0644, NULL, &proc_dointvec},

@@ -143,7 +143,7 @@ void		rpc_del_timer(struct rpc_task *);
 void		rpc_delay(struct rpc_task *, unsigned long);
 void *		rpc_allocate(unsigned int flags, unsigned int);
 void		rpc_free(void *);
-void		rpciod_up(void);
+int		rpciod_up(void);
 void		rpciod_down(void);
 
 extern __inline__ void *

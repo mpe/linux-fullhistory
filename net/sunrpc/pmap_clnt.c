@@ -54,15 +54,16 @@ rpc_getport(struct rpc_task *task, struct rpc_clnt *clnt)
 	}
 	clnt->cl_binding = 1;
 
+	task->tk_status = -EACCES; /* why set this? returns -EIO below */
+	if (!(pmap_clnt = pmap_create(clnt->cl_server, sap, map->pm_prot)))
+		goto bailout;
 	task->tk_status = 0;
-	if (!(pmap_clnt = pmap_create(clnt->cl_server, sap, map->pm_prot))) {
-		task->tk_status = -EACCES;
+
+	/*
+	 * Note: rpc_new_child will release client after a failure.
+	 */
+	if (!(child = rpc_new_child(pmap_clnt, task)))
 		goto bailout;
-	}
-	if (!(child = rpc_new_child(pmap_clnt, task))) {
-		rpc_destroy_client(pmap_clnt);
-		goto bailout;
-	}
 
 	/* Setup the call info struct */
 	rpc_call_setup(child, PMAP_GETPORT, map, &clnt->cl_port, 0);

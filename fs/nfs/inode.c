@@ -34,6 +34,8 @@
 
 #define NFSDBG_FACILITY		NFSDBG_VFS
 
+extern void nfs_invalidate_dircache_sb(struct super_block *);
+
 static int nfs_notify_change(struct inode *, struct iattr *);
 static void nfs_put_inode(struct inode *);
 static void nfs_delete_inode(struct inode *);
@@ -67,6 +69,7 @@ nfs_read_inode(struct inode * inode)
 {
 	inode->i_blksize = inode->i_sb->s_blocksize;
 	inode->i_mode = 0;
+	inode->i_rdev = 0;
 	inode->i_op = NULL;
 	NFS_CACHEINV(inode);
 }
@@ -75,6 +78,11 @@ static void
 nfs_put_inode(struct inode * inode)
 {
 	dprintk("NFS: put_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
+	/*
+	 * We want to get rid of unused inodes ...
+	 */
+	if (inode->i_count == 1)
+		inode->i_nlink = 0;
 }
 
 static void
@@ -90,13 +98,21 @@ nfs_put_super(struct super_block *sb)
 	struct nfs_server *server = &sb->u.nfs_sb.s_server;
 	struct rpc_clnt	*rpc;
 
+	/*
+	 * Lock the super block while we bring down the daemons.
+	 */
+	lock_super(sb);
 	if ((rpc = server->client) != NULL)
 		rpc_shutdown_client(rpc);
 
 	if (!(server->flags & NFS_MOUNT_NONLM))
 		lockd_down();	/* release rpc.lockd */
 	rpciod_down();		/* release rpciod */
-	lock_super(sb);
+	/*
+	 * Invalidate the dircache for this superblock.
+	 */
+	nfs_invalidate_dircache_sb(sb);
+
 	sb->s_dev = 0;
 	unlock_super(sb);
 	MOD_DEC_USE_COUNT;
@@ -147,14 +163,12 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	unsigned int		authflavor;
 	int			tcp;
 	kdev_t			dev = sb->s_dev;
+	struct inode		*root_inode;
 
 	MOD_INC_USE_COUNT;
-	if (!data) {
-		printk("nfs_read_super: missing data argument\n");
-		sb->s_dev = 0;
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
+	if (!data)
+		goto out_miss_args;
+
 	if (data->version != NFS_MOUNT_VERSION) {
 		printk("nfs warning: mount version %s than kernel\n",
 			data->version < NFS_MOUNT_VERSION ? "older" : "newer");
@@ -164,13 +178,19 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 			data->bsize  = 0;
 	}
 
+	/* We now require that the mount process passes the remote address */
+	memcpy(&srvaddr, &data->addr, sizeof(srvaddr));
+	if (srvaddr.sin_addr.s_addr == INADDR_ANY)
+		goto out_no_remote;
+
 	lock_super(sb);
 
-	server           = &sb->u.nfs_sb.s_server;
 	sb->s_magic      = NFS_SUPER_MAGIC;
 	sb->s_dev        = dev;
 	sb->s_op         = &nfs_sops;
 	sb->s_blocksize  = nfs_block_size(data->bsize, &sb->s_blocksize_bits);
+	sb->u.nfs_sb.s_root = data->root;
+	server           = &sb->u.nfs_sb.s_server;
 	server->rsize    = nfs_block_size(data->rsize, NULL);
 	server->wsize    = nfs_block_size(data->wsize, NULL);
 	server->flags    = data->flags;
@@ -179,15 +199,6 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	server->acdirmin = data->acdirmin*HZ;
 	server->acdirmax = data->acdirmax*HZ;
 	strcpy(server->hostname, data->hostname);
-	sb->u.nfs_sb.s_root = data->root;
-
-	/* We now require that the mount process passes the remote address */
-	memcpy(&srvaddr, &data->addr, sizeof(srvaddr));
-	if (srvaddr.sin_addr.s_addr == INADDR_ANY) {
-		printk("NFS: mount program didn't pass remote address!\n");
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
 
 	/* Which protocol do we use? */
 	tcp   = (data->flags & NFS_MOUNT_TCP);
@@ -210,18 +221,13 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	/* Now create transport and client */
 	xprt = xprt_create_proto(tcp? IPPROTO_TCP : IPPROTO_UDP,
 						&srvaddr, &timeparms);
-	if (xprt == NULL) {
-		printk("NFS: cannot create RPC transport.\n");
-		goto failure;
-	}
+	if (xprt == NULL)
+		goto out_no_xprt;
 
 	clnt = rpc_create_client(xprt, server->hostname, &nfs_program,
 						NFS_VERSION, authflavor);
-	if (clnt == NULL) {
-		printk("NFS: cannot create RPC client.\n");
-		xprt_destroy(xprt);
-		goto failure;
-	}
+	if (clnt == NULL)
+		goto out_no_client;
 
 	clnt->cl_intr     = (data->flags & NFS_MOUNT_INTR)? 1 : 0;
 	clnt->cl_softrtry = (data->flags & NFS_MOUNT_SOFT)? 1 : 0;
@@ -229,29 +235,67 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	server->client    = clnt;
 
 	/* Fire up rpciod if not yet running */
+#ifdef RPCIOD_RESULT
+	if (rpciod_up())
+		goto out_no_iod;
+#else
 	rpciod_up();
+#endif
 
-	/* Unlock super block and try to get root fh attributes */
+	/*
+	 * Keep the super block locked while we try to get 
+	 * the root fh attributes.
+	 */
+	root_inode = nfs_fhget(sb, &data->root, NULL);
+	if (!root_inode)
+		goto out_no_root;
+	sb->s_root = d_alloc_root(root_inode, NULL);
+	if (!sb->s_root)
+		goto out_no_root;
+	/* We're airborne */
 	unlock_super(sb);
 
-	sb->s_root = d_alloc_root(nfs_fhget(sb, &data->root, NULL), NULL);
-	if (sb->s_root != NULL) {
-		/* We're airborne */
-		if (!(server->flags & NFS_MOUNT_NONLM))
-			lockd_up();
-		return sb;
-	}
+	/* Check whether to start the lockd process */
+	if (!(server->flags & NFS_MOUNT_NONLM))
+		lockd_up();
+	return sb;
 
 	/* Yargs. It didn't work out. */
+out_no_root:
 	printk("nfs_read_super: get root inode failed\n");
-	rpc_shutdown_client(server->client);
+	iput(root_inode);
 	rpciod_down();
+#ifdef RPCIOD_RESULT
+	goto out_shutdown;
 
-failure:
-	MOD_DEC_USE_COUNT;
-	if (sb->s_lock)
-		unlock_super(sb);
+out_no_iod:
+	printk("nfs_read_super: couldn't start rpciod!\n");
+out_shutdown:
+#endif
+	rpc_shutdown_client(server->client);
+	goto out_unlock;
+
+out_no_client:
+	printk("NFS: cannot create RPC client.\n");
+	xprt_destroy(xprt);
+	goto out_unlock;
+
+out_no_xprt:
+	printk("NFS: cannot create RPC transport.\n");
+out_unlock:
+	unlock_super(sb);
+	goto out_fail;
+
+out_no_remote:
+	printk("NFS: mount program didn't pass remote address!\n");
+	goto out_fail;
+
+out_miss_args:
+	printk("nfs_read_super: missing data argument\n");
+
+out_fail:
 	sb->s_dev = 0;
+	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 

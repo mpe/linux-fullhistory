@@ -160,8 +160,9 @@ static inline int
 nlmclnt_grace_wait(struct nlm_host *host)
 {
 	if (!host->h_reclaiming)
-		current->timeout = 10 * HZ;
+		current->timeout = jiffies + 10 * HZ;
 	interruptible_sleep_on(&host->h_gracewait);
+	current->timeout = 0;
 	return signalled()? -ERESTARTSYS : 0;
 }
 
@@ -178,9 +179,11 @@ nlmclnt_alloc_call(void)
 					sizeof(struct nlm_rqst));
 		if (call)
 			return call;
-		current->timeout = 5 * HZ;
+		printk("nlmclnt_alloc_call: failed, waiting for memory\n");
+		current->timeout = jiffies + 5 * HZ;
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
+		current->timeout = 0;
 	}
 	return NULL;
 }
@@ -232,6 +235,7 @@ nlmclnt_call(struct nlm_rqst *req, u32 proc)
 		/* Back off a little and try again */
 		current->timeout = jiffies + 15 * HZ;
 		interruptible_sleep_on(&host->h_gracewait);
+		current->timeout = 0;
 	} while (!signalled());
 
 	return -ERESTARTSYS;

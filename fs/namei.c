@@ -232,11 +232,14 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 	result = d_lookup(parent, name);
 	if (!result) {
 		struct dentry * dentry = d_alloc(parent, name);
-		int error = dir->i_op->lookup(dir, dentry);
-		result = ERR_PTR(error);
-		if (!error)
-			result = dget(dentry->d_mounts);
-		dput(dentry);
+		result = ERR_PTR(-ENOMEM);
+		if (dentry) {
+			int error = dir->i_op->lookup(dir, dentry);
+			result = ERR_PTR(error);
+			if (!error)
+				result = dget(dentry->d_mounts);
+			dput(dentry);
+		}
 	}
 	up(&dir->i_sem);
 	return result;
@@ -1170,7 +1173,8 @@ static inline int do_rename(const char * oldname, const char * newname)
 
 	if (new_dir->d_inode->i_sb && new_dir->d_inode->i_sb->dq_op)
 		new_dir->d_inode->i_sb->dq_op->initialize(new_dir->d_inode, -1);
-	error = old_dir->d_inode->i_op->rename(old_dir->d_inode, old_dentry, new_dir->d_inode, new_dentry);
+	error = old_dir->d_inode->i_op->rename(old_dir->d_inode, old_dentry,
+					       new_dir->d_inode, new_dentry);
 
 exit_lock:
 	double_unlock(new_dir, old_dir);

@@ -348,6 +348,12 @@ static unsigned long get_phys_addr(struct task_struct * p, unsigned long ptr)
 
 	if (!p || !p->mm || ptr >= TASK_SIZE)
 		return 0;
+	/* Check for NULL pgd .. shouldn't happen! */
+	if (!p->mm->pgd) {
+		printk("get_phys_addr: pid %d has NULL pgd!\n", p->pid);
+		return 0;
+	}
+
 	page_dir = pgd_offset(p->mm,ptr);
 	if (pgd_none(*page_dir))
 		return 0;
@@ -917,24 +923,34 @@ static int get_statm(int pid, char * buffer)
 #define MAPS_LINE_MAX	MAPS_LINE_MAX8
 
 
-static long read_maps (int pid, struct file * file,
-	char * buf, unsigned long count)
+static long read_maps (int pid, struct file * file, char * buf,
+			unsigned long count)
 {
-	struct task_struct *p = find_task_by_pid(pid);
-	char * destptr;
+	struct task_struct *p;
+	struct vm_area_struct * map, * next;
+	char * destptr = buf, * buffer;
 	loff_t lineno;
-	int column;
-	struct vm_area_struct * map;
-	int i;
-	char * buffer;
+	int column, i, volatile_task;
+	long retval;
 
+	/*
+	 * We might sleep getting the page, so get it first.
+	 */
+	retval = -ENOMEM;
+	buffer = (char*)__get_free_page(GFP_KERNEL);
+	if (!buffer)
+		goto out;
+
+	retval = -EINVAL;
+	p = find_task_by_pid(pid);
 	if (!p)
-		return -EINVAL;
+		goto freepage_out;
 
 	if (!p->mm || p->mm == &init_mm || count == 0)
-		return 0;
+		goto getlen_out;
 
-	buffer = (char*)__get_free_page(GFP_KERNEL);
+	/* Check whether the mmaps could change if we sleep */
+	volatile_task = (p != current || p->mm->count > 1);
 
 	/* decode f_pos */
 	lineno = file->f_pos >> MAPS_LINE_SHIFT;
@@ -944,9 +960,7 @@ static long read_maps (int pid, struct file * file,
 	for (map = p->mm->mmap, i = 0; map && (i < lineno); map = map->vm_next, i++)
 		continue;
 
-	destptr = buf;
-
-	for ( ; map ; ) {
+	for ( ; map ; map = next ) {
 		/* produce the next line */
 		char *line;
 		char str[5], *cp = str;
@@ -957,6 +971,10 @@ static long read_maps (int pid, struct file * file,
 			MAPS_LINE_MAX4 :  MAPS_LINE_MAX8;
 		int len;
 
+		/*
+		 * Get the next vma now (but it won't be used if we sleep).
+		 */
+		next = map->vm_next;
 		flags = map->vm_flags;
 
 		*cp++ = flags & VM_READ ? 'r' : '-';
@@ -993,20 +1011,19 @@ static long read_maps (int pid, struct file * file,
 		if (column >= len) {
 			column = 0; /* continue with next line at column 0 */
 			lineno++;
-			map = map->vm_next;
-			continue;
+			continue; /* we haven't slept */
 		}
 
 		i = len-column;
 		if (i > count)
 			i = count;
-		copy_to_user(destptr, line+column, i);
-		destptr += i; count -= i;
-		column += i;
+		copy_to_user(destptr, line+column, i); /* may have slept */
+		destptr += i;
+		count   -= i;
+		column  += i;
 		if (column >= len) {
 			column = 0; /* next time: next line at column 0 */
 			lineno++;
-			map = map->vm_next;
 		}
 
 		/* done? */
@@ -1016,15 +1033,20 @@ static long read_maps (int pid, struct file * file,
 		/* By writing to user space, we might have slept.
 		 * Stop the loop, to avoid a race condition.
 		 */
-		if (p != current)
+		if (volatile_task)
 			break;
 	}
 
 	/* encode f_pos */
 	file->f_pos = (lineno << MAPS_LINE_SHIFT) + column;
 
+getlen_out:
+	retval = destptr - buf;
+
+freepage_out:
 	free_page((unsigned long)buffer);
-	return destptr-buf;
+out:
+	return retval;
 }
 
 #ifdef CONFIG_MODULES

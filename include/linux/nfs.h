@@ -129,14 +129,6 @@ struct nfs_sattr {
 	struct nfs_time		mtime;
 };
 
-struct nfs_entry {
-	__u32			fileid;
-	char *			name;
-	unsigned int		length:31,
-				eof:1;
-	__u32			cookie;
-};
-
 struct nfs_fsinfo {
 	__u32			tsize;
 	__u32			bsize;

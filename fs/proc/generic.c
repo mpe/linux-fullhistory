@@ -16,11 +16,13 @@
 #include <linux/stat.h>
 #include <asm/bitops.h>
 
+extern struct inode_operations proc_dyna_dir_inode_operations;
+
 static long proc_file_read(struct inode * inode, struct file * file,
 			   char * buf, unsigned long nbytes);
 static long proc_file_write(struct inode * inode, struct file * file,
 			    const char * buffer, unsigned long count);
-static long long proc_file_lseek(struct file * file, long long offset, int orig);
+static long long proc_file_lseek(struct file *, long long, int);
 
 int proc_match(int len, const char *name,struct proc_dir_entry * de)
 {
@@ -44,17 +46,14 @@ static struct file_operations proc_file_operations = {
     NULL		/* can't fsync */
 };
 
-/*
- * proc files can do almost nothing..
- */
 struct inode_operations proc_file_inode_operations = {
-    &proc_file_operations,  /* default proc file-ops */
-    NULL,	    /* create	   */
-    NULL,	    /* lookup	   */
-    NULL,	    /* link	   */
-    NULL,	    /* unlink	   */
-    NULL,	    /* symlink	   */
-    NULL,	    /* mkdir	   */
+	&proc_file_operations,  /* default proc file-ops */
+	NULL,		/* create	*/
+	NULL,		/* lookup	*/
+    NULL,		/* link		*/
+    NULL,		/* unlink	*/
+    NULL,		/* symlink	*/
+    NULL,		/* mkdir	*/
     NULL,	    /* rmdir	   */
     NULL,	    /* mknod	   */
     NULL,	    /* rename	   */
@@ -240,57 +239,77 @@ static int xlate_proc_name(const char *name,
 struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 					 struct proc_dir_entry *parent)
 {
-	struct proc_dir_entry *ent;
-	const char *fn;
+	struct proc_dir_entry *ent = NULL;
+	const char *fn = name;
+	int len;
 
-	if (parent)
-		fn = name;
-	else {
-		if (xlate_proc_name(name, &parent, &fn))
-			return NULL;
-	}
+	if (!parent && xlate_proc_name(name, &parent, &fn) != 0)
+		goto out;
+	len = strlen(fn);
 
-	ent = kmalloc(sizeof(struct proc_dir_entry), GFP_KERNEL);
+	ent = kmalloc(sizeof(struct proc_dir_entry) + len + 1, GFP_KERNEL);
 	if (!ent)
-		return NULL;
+		goto out;
 	memset(ent, 0, sizeof(struct proc_dir_entry));
+	memcpy(((char *) ent) + sizeof(*ent), fn, len + 1);
+	ent->name = ((char *) ent) + sizeof(*ent);
+	ent->namelen = len;
 
-	if (mode == S_IFDIR)
+	if (mode == S_IFDIR) {
 		mode |= S_IRUGO | S_IXUGO;
-	else if (mode == 0)
-		mode = S_IFREG | S_IRUGO;
-	
-	ent->name = fn;
-	ent->namelen = strlen(fn);
-	ent->mode = mode;
-	if (S_ISDIR(mode)) 
+		ent->ops = &proc_dyna_dir_inode_operations;
 		ent->nlink = 2;
-	else
+	}
+	else if (mode == 0) {
+		mode = S_IFREG | S_IRUGO;
 		ent->nlink = 1;
+	}
+	ent->mode = mode;
 
 	proc_register(parent, ent);
 	
+out:
 	return ent;
 }
 
+extern void free_proc_entry(struct proc_dir_entry *);
+void free_proc_entry(struct proc_dir_entry *de)
+{
+	kfree(de);
+}
+
+/*
+ * Remove a /proc entry and free it if it's not currently in use.
+ * If it is in use, we set the 'deleted' flag.
+ */
 void remove_proc_entry(const char *name, struct proc_dir_entry *parent)
 {
 	struct proc_dir_entry *de;
-	const char *fn;
+	const char *fn = name;
 	int len;
 
-	if (parent)
-		fn = name;
-	else 
-		if (xlate_proc_name(name, &parent, &fn))
-			return;
+	if (!parent && xlate_proc_name(name, &parent, &fn) != 0)
+		goto out;
 	len = strlen(fn);
 
 	for (de = parent->subdir; de ; de = de->next) {
 		if (proc_match(len, fn, de))
 			break;
 	}
-	if (de)
+
+	if (de) {
+printk("remove_proc_entry: parent nlink=%d, file nlink=%d\n",
+parent->nlink, de->nlink);
 		proc_unregister(parent, de->low_ino);
-	kfree(de);
+		de->nlink = 0;
+		de->deleted = 1;
+		if (!de->count)
+			free_proc_entry(de);
+		else {
+			printk("remove_proc_entry: %s/%s busy, count=%d\n",
+				parent->name, de->name, de->count);
+		}
+	}
+out:
+	return;
 }

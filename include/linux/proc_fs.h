@@ -237,13 +237,15 @@ struct proc_dir_entry {
 	unsigned long size;
 	struct inode_operations * ops;
 	int (*get_info)(char *, char **, off_t, int, int);
-	void (*fill_inode)(struct inode *);
+	void (*fill_inode)(struct inode *, int);
 	struct proc_dir_entry *next, *parent, *subdir;
 	void *data;
 	int (*read_proc)(char *page, char **start, off_t off,
 			 int count, int *eof, void *data);
 	int (*write_proc)(struct file *file, const char *buffer,
 			  unsigned long count, void *data);
+	unsigned int count;	/* use count */
+	int deleted;		/* delete flag */
 };
 
 extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,

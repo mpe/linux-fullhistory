@@ -116,17 +116,23 @@ rpc_create_client(struct rpc_xprt *xprt, char *servname,
 
 /*
  * Properly shut down an RPC client, terminating all outstanding
- * requests.
+ * requests. Note that we must be certain that cl_oneshot and
+ * cl_dead are cleared, or else the client would be destroyed
+ * when the last task releases it.
  */
 int
 rpc_shutdown_client(struct rpc_clnt *clnt)
 {
 	dprintk("RPC: shutting down %s client for %s\n",
-			clnt->cl_protname, clnt->cl_server);
+		clnt->cl_protname, clnt->cl_server);
 	while (clnt->cl_users) {
-		dprintk("sigmask %08lx\n", current->signal);
-		dprintk("users %d\n", clnt->cl_users);
-		clnt->cl_dead = 1;
+#ifdef RPC_DEBUG
+		printk("rpc_shutdown_client: client %s, tasks=%d\n",
+			clnt->cl_protname, clnt->cl_users);
+#endif
+		/* Don't let rpc_release_client destroy us */
+		clnt->cl_oneshot = 0;
+		clnt->cl_dead = 0;
 		rpc_killall_tasks(clnt);
 		sleep_on(&destroy_wait);
 	}
@@ -162,12 +168,16 @@ rpc_release_client(struct rpc_clnt *clnt)
 {
 	dprintk("RPC:      rpc_release_client(%p, %d)\n",
 				clnt, clnt->cl_users);
-	if (--(clnt->cl_users) == 0) {
-		wake_up(&destroy_wait);
-		if (clnt->cl_oneshot || clnt->cl_dead)
-			rpc_destroy_client(clnt);
-	}
-	dprintk("RPC:      rpc_release_client done\n");
+	if (clnt->cl_users) {
+		if (--(clnt->cl_users) > 0)
+			return;
+	} else
+		printk("rpc_release_client: %s client already free??\n",
+			clnt->cl_protname);
+
+	wake_up(&destroy_wait);
+	if (clnt->cl_oneshot || clnt->cl_dead)
+		rpc_destroy_client(clnt);
 }
 
 /*
@@ -205,10 +215,9 @@ rpc_do_call(struct rpc_clnt *clnt, u32 proc, void *argp, void *resp,
 	if ((async = (flags & RPC_TASK_ASYNC)) != 0) {
 		if (!func)
 			func = rpc_default_callback;
-		if (!(task = rpc_new_task(clnt, func, flags))) {
-			current->blocked = oldmask;
-			return -ENOMEM;
-		}
+		status = -ENOMEM;
+		if (!(task = rpc_new_task(clnt, func, flags)))
+			goto out;
 		task->tk_calldata = data;
 	} else {
 		rpc_init_task(task, clnt, NULL, flags);
@@ -222,12 +231,13 @@ rpc_do_call(struct rpc_clnt *clnt, u32 proc, void *argp, void *resp,
 	} else
 		async = 0;
 
+	status = 0;
 	if (!async) {
 		status = task->tk_status;
 		rpc_release_task(task);
-	} else
-		status = 0;
+	}
 
+out:
 	current->blocked = oldmask;
 	return status;
 }
@@ -354,6 +364,7 @@ call_allocate(struct rpc_task *task)
 
 	if ((task->tk_buffer = rpc_malloc(task, bufsiz)) != NULL)
 		return;
+	printk("RPC: buffer allocation failed for task %p\n", task); 
 
 	if (1 || !signalled()) {
 		xprt_release(task);

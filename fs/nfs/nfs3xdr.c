@@ -384,17 +384,18 @@ nfs_xdr_readdirargs(struct rpc_rqst *req, u32 *p, struct nfs_readdirargs *args)
  * to avoid a malloc of NFS_MAXNAMLEN+1 for each file name.
  * After decoding, the layout in memory looks like this:
  *	entry1 entry2 ... entryN <space> stringN ... string2 string1
+ * Each entry consists of three __u32 values, the same space as NFS uses.
  * Note that the strings are not null-terminated so that the entire number
  * of entries returned by the server should fit into the buffer.
  */
 static int
 nfs_xdr_readdirres(struct rpc_rqst *req, u32 *p, struct nfs_readdirres *res)
 {
-	struct nfs_entry	*entry;
 	struct iovec		*iov = req->rq_rvec;
 	int			status, nr, len;
-	char			*string;
+	char			*string, *start;
 	u32			*end;
+	__u32			fileid, cookie, *entry;
 
 	if ((status = ntohl(*p++)))
 		return -nfs_stat_to_errno(status);
@@ -413,10 +414,11 @@ nfs_xdr_readdirres(struct rpc_rqst *req, u32 *p, struct nfs_readdirres *res)
 		return -errno_NFSERR_IO;
 	}
 
-	string = (char *) res->buffer + res->bufsiz;
-	entry = (struct nfs_entry *) res->buffer;
-	for (nr = 0; *p++; nr++, entry++) {
-		entry->fileid = ntohl(*p++);
+	entry  = (__u32 *) res->buffer;
+	start  = (char *) res->buffer;
+	string = start + res->bufsiz;
+	for (nr = 0; *p++; nr++) {
+		fileid = ntohl(*p++);
 
 		len = ntohl(*p++);
 		if ((p + QUADLEN(len) + 3) > end) {
@@ -430,22 +432,40 @@ nfs_xdr_readdirres(struct rpc_rqst *req, u32 *p, struct nfs_readdirres *res)
 			return -errno_NFSERR_IO;
 		}
 		string -= len;
-		if ((void *) (entry+1) > (void *) string) {
-			dprintk("NFS: shouldnothappen in readdirres_decode!\n");
-			break;	/* should not happen */
+		if ((void *) (entry+3) > (void *) string) {
+			/* 
+			 * This error is impossible as long as the temp
+			 * buffer is no larger than the user buffer. The 
+			 * current packing algorithm uses the same amount
+			 * of space in the user buffer as in the XDR data,
+			 * so it's guaranteed to fit.
+			 */
+			printk("NFS: incorrect buffer size in %s!\n",
+				__FUNCTION__);
+			break;
 		}
 
-		entry->name = string;
-		entry->length = len;
 		memmove(string, p, len);
 		p += QUADLEN(len);
-		entry->cookie = ntohl(*p++);
-		entry->eof = !p[0] && p[1];
+		cookie = ntohl(*p++);
+		/*
+		 * To make everything fit, we encode the length, offset,
+		 * and eof flag into 32 bits. This works for filenames
+		 * up to 32K and PAGE_SIZE up to 64K.
+		 */
+		status = !p[0] && p[1] ? (1 << 15) : 0; /* eof flag */
+		*entry++ = fileid;
+		*entry++ = cookie;
+		*entry++ = ((string - start) << 16) | status | (len & 0x7FFF);
 		/*
 		dprintk("NFS: decoded dirent %.*s cookie %d eof %d\n",
-			len, string, entry->cookie, entry->eof);
+			len, string, cookie, status);
 		 */
 	}
+#ifdef NFS_PARANOIA
+printk("nfs_xdr_readdirres: %d entries, ent sp=%d, str sp=%d\n",
+nr, ((char *) entry - start), (start + res->bufsiz - string));
+#endif
 	return nr;
 }
 

@@ -1398,3 +1398,60 @@ done_with_page:
 		return written;
 	return status;
 }
+
+/*
+ * Support routines for directory cacheing using the page cache.
+ */
+
+/*
+ * Finds the page at the specified offset, installing a new page
+ * if requested.  The count is incremented and the page is locked.
+ *
+ * Note: we don't have to worry about races here, as the caller
+ * is holding the inode semaphore.
+ */
+unsigned long get_cached_page(struct inode * inode, unsigned long offset,
+				int new)
+{
+	struct page * page;
+	struct page ** hash;
+	unsigned long page_cache;
+
+	hash = page_hash(inode, offset);
+	page = __find_page(inode, offset, *hash);
+	if (!page) {
+		if (!new)
+			goto out;
+		page_cache = get_free_page(GFP_KERNEL);
+		if (!page_cache)
+			goto out;
+		page = mem_map + MAP_NR(page_cache);
+		add_to_page_cache(page, inode, offset, hash);
+	}
+	if (atomic_read(&page->count) != 2)
+		printk("get_cached_page: page count=%d\n",
+			atomic_read(&page->count));
+	if (test_bit(PG_locked, &page->flags))
+		printk("get_cached_page: page already locked!\n");
+	set_bit(PG_locked, &page->flags);
+
+out:
+	return page_address(page);
+}
+
+/*
+ * Unlock and free a page.
+ */
+void put_cached_page(unsigned long addr)
+{
+	struct page * page = mem_map + MAP_NR(addr);
+
+	if (!test_bit(PG_locked, &page->flags))
+		printk("put_cached_page: page not locked!\n");
+	if (atomic_read(&page->count) != 2)
+		printk("put_cached_page: page count=%d\n", 
+			atomic_read(&page->count));
+	clear_bit(PG_locked, &page->flags);
+	wake_up(&page->wait);
+	__free_page(page);
+}

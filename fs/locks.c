@@ -881,9 +881,6 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 
 	if (caller->fl_type != F_UNLCK) {
   repeat:
-		error = -ERESTARTSYS;
-		if (signal_pending(current))
-			goto out;
 		for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
 			if (!(fl->fl_flags & FL_POSIX))
 				continue;
@@ -894,6 +891,9 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 				goto out;
 			error = -EDEADLK;
 			if (posix_locks_deadlock(caller, fl))
+				goto out;
+			error = -ERESTARTSYS;
+			if (signal_pending(current))
 				goto out;
 			locks_insert_block(fl, caller);
 			interruptible_sleep_on(&caller->fl_wait);

@@ -126,18 +126,26 @@ smb_data_callback(struct sock *sk, int len)
 	}
 }
 
+int
+smb_valid_socket(struct inode * inode)
+{
+	return (inode && S_ISSOCK(inode->i_mode) && 
+		inode->u.socket_i.type == SOCK_STREAM);
+}
+
 static struct socket *
 server_sock(struct smb_sb_info *server)
 {
 	struct file *file;
-	struct inode *inode;
 
-	if (server				&& 
-	    (file = server->sock_file)		&&
-	    (inode = file->f_dentry->d_inode)	&& 
-	    S_ISSOCK(inode->i_mode)		&& 
-	    inode->u.socket_i.type == SOCK_STREAM)
-		return &(inode->u.socket_i);
+	if (server && (file = server->sock_file))
+	{
+#ifdef SMBFS_PARANOIA
+		if (!smb_valid_socket(file->f_dentry->d_inode))
+			printk("smb_server_sock: bad socket!\n");
+#endif
+		return &file->f_dentry->d_inode->u.socket_i;
+	}
 	return NULL;
 }
 
@@ -242,15 +250,13 @@ smb_close_socket(struct smb_sb_info *server)
 
 	if (file)
 	{
-		struct socket * socket = server_sock(server);
-
-		printk("smb_close_socket: closing socket %p\n", socket);
-		/*
-		 * We need a way to check for tasks running the callback!
-		 */
-		if (socket->sk->data_ready == smb_data_callback)
-			printk("smb_close_socket: still catching keepalives!\n");
-
+#ifdef SMBFS_DEBUG_VERBOSE
+printk("smb_close_socket: closing socket %p\n", server_sock(server));
+#endif
+#ifdef SMBFS_PARANOIA
+if (server_sock(server)->sk->data_ready == smb_data_callback)
+printk("smb_close_socket: still catching keepalives!\n");
+#endif
 		server->sock_file = NULL;
 		close_fp(file);
 	}
@@ -325,7 +331,9 @@ smb_get_length(struct socket *socket, unsigned char *header)
 
 	if (result < 0)
 	{
-		pr_debug("smb_get_length: recv error = %d\n", -result);
+#ifdef SMBFS_PARANOIA
+printk("smb_get_length: recv error = %d\n", -result);
+#endif
 		return result;
 	}
 	switch (peek_buf[0])
@@ -339,7 +347,9 @@ smb_get_length(struct socket *socket, unsigned char *header)
 		goto re_recv;
 
 	default:
-		pr_debug("smb_get_length: Invalid NBT packet\n");
+#ifdef SMBFS_PARANOIA
+printk("smb_get_length: Invalid NBT packet, code=%x\n", peek_buf[0]);
+#endif
 		return -EIO;
 	}
 
@@ -359,39 +369,39 @@ static int
 smb_receive(struct smb_sb_info *server)
 {
 	struct socket *socket = server_sock(server);
-	int len;
-	int result;
+	int len, result;
 	unsigned char peek_buf[4];
 
-	len = smb_get_length(socket, peek_buf);
-
-	if (len < 0)
-	{
-		return len;
-	}
+	result = smb_get_length(socket, peek_buf);
+	if (result < 0)
+		goto out;
+	len = result;
+	/*
+	 * Some servers do not respect our max_xmit and send
+	 * larger packets.  Try to allocate a new packet,
+	 * but don't free the old one unless we succeed.
+	 */
 	if (len + 4 > server->packet_size)
 	{
-		/* Some servers do not care about our max_xmit. They
-		   send larger packets */
+		char * packet;
 		pr_debug("smb_receive: Increase packet size from %d to %d\n",
 			server->packet_size, len + 4);
+		result = -ENOMEM;
+		packet = smb_vmalloc(len + 4);
+		if (packet == NULL)
+			goto out;
 		smb_vfree(server->packet);
-		server->packet = 0;
-		server->packet_size = 0;
-		server->packet = smb_vmalloc(len + 4);
-		if (server->packet == NULL)
-		{
-			return -ENOMEM;
-		}
+		server->packet = packet;
 		server->packet_size = len + 4;
 	}
 	memcpy(server->packet, peek_buf, 4);
 	result = smb_receive_raw(socket, server->packet + 4, len);
-
 	if (result < 0)
 	{
-		pr_debug("smb_receive: receive error: %d\n", result);
-		return result;
+#ifdef SMBFS_DEBUG_VERBOSE
+printk("smb_receive: receive error: %d\n", result);
+#endif
+		goto out;
 	}
 	server->rcls = *(server->packet+9);
 	server->err = WVAL(server->packet, 11);
@@ -400,9 +410,16 @@ smb_receive(struct smb_sb_info *server)
 if (server->rcls != 0)
 printk("smb_receive: rcls=%d, err=%d\n", server->rcls, server->err);
 #endif
+out:
 	return result;
 }
 
+/*
+ * This routine needs a lot of work.  We should check whether the packet
+ * is all one part before allocating a new one, and should try first to
+ * copy to a temp buffer before allocating.
+ * The final server->packet should be the larger of the two.
+ */
 static int
 smb_receive_trans2(struct smb_sb_info *server,
 		   int *ldata, unsigned char **data,
@@ -515,6 +532,11 @@ data_len, total_data, param_len, total_param);
 	*ldata = data_len;
 	*lparam = param_len;
 
+#ifdef SMBFS_PARANOIA
+if (buf_len < server->packet_size)
+printk("smb_receive_trans2: changing packet, old size=%d, new size=%d\n",
+server->packet_size, buf_len);
+#endif
 	smb_vfree(server->packet);
 	server->packet = rcv_buf;
 	server->packet_size = buf_len;
@@ -537,9 +559,6 @@ smb_request(struct smb_sb_info *server)
 	unsigned char *buffer;
 
 	result = -EBADF;
-	if (!server) /* this can't happen */
-		goto bad_no_server;
-		
 	buffer = server->packet;
 	if (!buffer)
 		goto bad_no_packet;
@@ -586,13 +605,12 @@ out:
 	return result;
 	
 bad_conn:
-	printk("smb_request: result %d, setting invalid\n", result);
+#ifdef SMBFS_PARANOIA
+printk("smb_request: result %d, setting invalid\n", result);
+#endif
 	server->state = CONN_INVALID;
 	smb_invalidate_inodes(server);
 	goto out;		
-bad_no_server:
-	printk("smb_request: no server!\n");
-	goto out;
 bad_no_packet:
 	printk("smb_request: no packet!\n");
 	goto out;
@@ -631,6 +649,7 @@ smb_send_trans2(struct smb_sb_info *server, __u16 trans2_command,
 	struct iovec iov[4];
 	struct msghdr msg;
 
+	/* N.B. This test isn't valid! packet_size may be < max_xmit */
 	if ((bcc + oparam) > server->opt.max_xmit)
 	{
 		return -ENOMEM;
@@ -639,6 +658,7 @@ smb_send_trans2(struct smb_sb_info *server, __u16 trans2_command,
 
 	WSET(server->packet, smb_tpscnt, lparam);
 	WSET(server->packet, smb_tdscnt, ldata);
+	/* N.B. these values should reflect out current packet size */
 	WSET(server->packet, smb_mprcnt, TRANS2_MAX_TRANSFER);
 	WSET(server->packet, smb_mdrcnt, TRANS2_MAX_TRANSFER);
 	WSET(server->packet, smb_msrcnt, 0);
@@ -745,7 +765,9 @@ out:
 	return result;
 
 bad_conn:
-	printk("smb_trans2_request: connection bad, setting invalid\n");
+#ifdef SMBFS_PARANOIA
+printk("smb_trans2_request: connection bad, setting invalid\n");
+#endif
 	server->state = CONN_INVALID;
 	smb_invalidate_inodes(server);
 	goto out;

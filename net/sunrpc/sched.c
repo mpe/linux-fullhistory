@@ -56,7 +56,8 @@ static struct rpc_task *	all_tasks = NULL;
  */
 static struct wait_queue *	rpciod_idle = NULL;
 static struct wait_queue *	rpciod_killer = NULL;
-static int			rpciod_sema = 0;
+static struct semaphore		rpciod_sema = MUTEX;
+static unsigned int		rpciod_users = 0;
 static pid_t			rpciod_pid = 0;
 static int			rpc_inhibit = 0;
 
@@ -575,19 +576,36 @@ rpc_init_task(struct rpc_task *task, struct rpc_clnt *clnt,
 				current->pid);
 }
 
+/*
+ * Create a new task for the specified client.  We have to
+ * clean up after an allocation failure, as the client may
+ * have specified "oneshot".
+ */
 struct rpc_task *
 rpc_new_task(struct rpc_clnt *clnt, rpc_action callback, int flags)
 {
 	struct rpc_task	*task;
 
-	if (!(task = (struct rpc_task *) rpc_allocate(flags, sizeof(*task))))
-		return NULL;
+	task = (struct rpc_task *) rpc_allocate(flags, sizeof(*task));
+	if (!task)
+		goto cleanup;
 
 	rpc_init_task(task, clnt, callback, flags);
 
 	dprintk("RPC: %4d allocated task\n", task->tk_pid);
 	task->tk_flags |= RPC_TASK_DYNAMIC;
+out:
 	return task;
+
+cleanup:
+	/* Check whether to release the client */
+	if (clnt) {
+		printk("rpc_new_task: failed, users=%d, oneshot=%d\n",
+			clnt->cl_users, clnt->cl_oneshot);
+		clnt->cl_users++; /* pretend we were used ... */
+		rpc_release_client(clnt);
+	}
+	goto out;
 }
 
 void
@@ -662,6 +680,9 @@ rpc_child_exit(struct rpc_task *child)
 	rpc_release_task(child);
 }
 
+/*
+ * Note: rpc_new_task releases the client after a failure.
+ */
 struct rpc_task *
 rpc_new_child(struct rpc_clnt *clnt, struct rpc_task *parent)
 {
@@ -715,11 +736,15 @@ rpciod(void *ptr)
 	unsigned long	oldflags;
 	int		rounds = 0;
 
-	lock_kernel();
-	rpciod_pid = current->pid;
-
 	MOD_INC_USE_COUNT;
-	/* exit_files(current); */
+	lock_kernel();
+	/*
+	 * Let our maker know we're running ...
+	 */
+	rpciod_pid = current->pid;
+	wake_up(&rpciod_idle);
+
+	exit_files(current);
 	exit_mm(current);
 	current->blocked |= ~_S(SIGKILL);
 	current->session = 1;
@@ -727,25 +752,28 @@ rpciod(void *ptr)
 	sprintf(current->comm, "rpciod");
 
 	dprintk("RPC: rpciod starting (pid %d)\n", rpciod_pid);
-	while (rpciod_sema) {
+	while (rpciod_users) {
 		if (signalled()) {
 			if (current->signal & _S(SIGKILL)) {
 				rpciod_killall();
 			} else {
 				printk("rpciod: ignoring signal (%d users)\n",
-					rpciod_sema);
+					rpciod_users);
 			}
 			current->signal &= current->blocked;
 		}
 		__rpc_schedule();
 
-		if (++rounds >= 64)	/* safeguard */
+		if (++rounds >= 64) {	/* safeguard */
 			schedule();
+			rounds = 0;
+		}
 		save_flags(oldflags); cli();
 		if (!schedq.task) {
 			dprintk("RPC: rpciod back to sleep\n");
 			interruptible_sleep_on(&rpciod_idle);
 			dprintk("RPC: switch to rpciod\n");
+			rounds = 0;
 		}
 		restore_flags(oldflags);
 	}
@@ -780,26 +808,84 @@ rpciod_killall(void)
 	}
 }
 
-void
+/*
+ * Start up the rpciod process if it's not already running.
+ */
+int
 rpciod_up(void)
 {
-	dprintk("rpciod_up pid %d sema %d\n", rpciod_pid, rpciod_sema);
-	if (!(rpciod_sema++) || !rpciod_pid)
-		kernel_thread(rpciod, &rpciod_killer, 0);
+	int error = 0;
+
+	MOD_INC_USE_COUNT;
+	down(&rpciod_sema);
+	dprintk("rpciod_up: pid %d, users %d\n", rpciod_pid, rpciod_users);
+	rpciod_users++;
+	if (rpciod_pid)
+		goto out;
+	/*
+	 * If there's no pid, we should be the first user.
+	 */
+	if (rpciod_users > 1)
+		printk("rpciod_up: no pid, %d users??\n", rpciod_users);
+	/*
+	 * Create the rpciod thread and wait for it to start.
+	 */
+	error = kernel_thread(rpciod, &rpciod_killer, 0);
+	if (error < 0) {
+		printk("rpciod_up: create thread failed, error=%d\n", error);
+		goto out;
+	}
+	sleep_on(&rpciod_idle);
+	error = 0;
+out:
+	up(&rpciod_sema);
+	MOD_DEC_USE_COUNT;
+	return error;
 }
 
 void
 rpciod_down(void)
 {
-	dprintk("rpciod_down pid %d sema %d\n", rpciod_pid, rpciod_sema);
-	if (--rpciod_sema > 0)
-		return;
+	unsigned long oldflags;
 
-	rpciod_sema = 0;
+	MOD_INC_USE_COUNT;
+	down(&rpciod_sema);
+	dprintk("rpciod_down pid %d sema %d\n", rpciod_pid, rpciod_users);
+	if (rpciod_users) {
+		if (--rpciod_users)
+			goto out;
+	} else
+		printk("rpciod_down: pid=%d, no users??\n", rpciod_pid);
+
+	if (!rpciod_pid) {
+		printk("rpciod_down: Nothing to do!\n");
+		goto out;
+	}
+
 	kill_proc(rpciod_pid, SIGKILL, 1);
+	/*
+	 * Usually rpciod will exit very quickly, so we
+	 * wait briefly before checking the process id.
+	 */
+	oldflags = current->signal;
+	current->signal = 0;
+	current->state = TASK_INTERRUPTIBLE;
+	current->timeout = jiffies + 1;
+	schedule();
+	current->timeout = 0;
+	/*
+	 * Display a message if we're going to wait longer.
+	 */
 	while (rpciod_pid) {
-		if (signalled())
-			return;
+		printk("rpciod_down: waiting for pid %d to exit\n", rpciod_pid);
+		if (signalled()) {
+			printk("rpciod_down: caught signal\n");
+			break;
+		}
 		interruptible_sleep_on(&rpciod_killer);
 	}
+	current->signal = oldflags;
+out:
+	up(&rpciod_sema);
+	MOD_DEC_USE_COUNT;
 }

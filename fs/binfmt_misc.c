@@ -281,21 +281,19 @@ static int proc_write_register(struct file *file, const char *buffer,
 	const char *sp;
 	char del, *dp;
 	struct binfmt_entry *e;
-	int memsize, cnt = count - 1, err = 0;
+	int memsize, cnt = count - 1, err;
 
-	MOD_INC_USE_COUNT;
 	/* some sanity checks */
-	if ((count < 11) || (count > 256)) {
-		err = -EINVAL;
+	err = -EINVAL;
+	if ((count < 11) || (count > 256))
 		goto _err;
-	}
 
+	err = -ENOMEM;
 	memsize = sizeof(struct binfmt_entry) + count;
-	if (!(e = (struct binfmt_entry *) kmalloc(memsize, GFP_USER))) {
-		err = -ENOMEM;
+	if (!(e = (struct binfmt_entry *) kmalloc(memsize, GFP_USER)))
 		goto _err;
-	}
 
+	err = 0;
 	sp = buffer + 1;
 	del = buffer[0];
 	dp = (char *)e + sizeof(struct binfmt_entry);
@@ -327,12 +325,8 @@ static int proc_write_register(struct file *file, const char *buffer,
 	/* more sanity checks */
 	if (err || !(!cnt || (!(--cnt) && (*sp == '\n'))) ||
 	    (e->size < 1) || ((e->size + e->offset) > 127) ||
-	    !(e->proc_name) || !(e->interpreter) ||
-	    entry_proc_setup(e)) {
-		kfree(e);
-		err = -EINVAL;
-		goto _err;
-	}
+	    !(e->proc_name) || !(e->interpreter) || entry_proc_setup(e))
+		goto free_err;
 
 	write_lock(&entries_lock);
 	e->next = entries;
@@ -341,8 +335,11 @@ static int proc_write_register(struct file *file, const char *buffer,
 
 	err = count;
 _err:
-	MOD_DEC_USE_COUNT;
 	return err;
+free_err:
+	kfree(e);
+	err = -EINVAL;
+	goto _err;
 }
 
 /*
@@ -357,7 +354,6 @@ static int proc_read_status(char *page, char **start, off_t off,
 	char *dp;
 	int elen, i, err;
 
-	MOD_INC_USE_COUNT;
 #ifndef VERBOSE_STATUS
 	if (data) {
 		if (!(e = get_entry((int) data))) {
@@ -415,7 +411,6 @@ static int proc_read_status(char *page, char **start, off_t off,
 	err = elen;
 
 _err:
-	MOD_DEC_USE_COUNT;
 	return err;
 }
 
@@ -429,7 +424,6 @@ static int proc_write_status(struct file *file, const char *buffer,
 	struct binfmt_entry *e;
 	int res = count;
 
-	MOD_INC_USE_COUNT;
 	if (buffer[count-1] == '\n')
 		count--;
 	if ((count == 1) && !(buffer[0] & ~('0' | '1'))) {
@@ -449,7 +443,6 @@ static int proc_write_status(struct file *file, const char *buffer,
 	} else {
 		res = -EINVAL;
 	}
-	MOD_DEC_USE_COUNT;
 	return res;
 }
 
@@ -477,29 +470,57 @@ static int entry_proc_setup(struct binfmt_entry *e)
 	return 0;
 }
 
+#ifdef MODULE
+/*
+ * This is called as the fill_inode function when an inode
+ * is going into (fill = 1) or out of service (fill = 0).
+ * We use it here to manage the module use counts.
+ *
+ * Note: only the top-level directory needs to do this; if
+ * a lower level is referenced, the parent will be as well.
+ */
+static void bm_modcount(struct inode *inode, int fill)
+{
+	if (fill)
+		MOD_INC_USE_COUNT;
+	else
+		MOD_DEC_USE_COUNT;
+}
+#endif
 
 __initfunc(int init_misc_binfmt(void))
 {
 	struct proc_dir_entry *status = NULL, *reg;
+	int error = -ENOMEM;
 
-	if (!(bm_dir = create_proc_entry("sys/fs/binfmt_misc", S_IFDIR,
-					 NULL)) ||
-	    !(status = create_proc_entry("status", S_IFREG | S_IRUGO | S_IWUSR,
-					 bm_dir)) ||
-	    !(reg = create_proc_entry("register", S_IFREG | S_IWUSR,
-				      bm_dir))) {
-		if (status)
-			remove_proc_entry("status", bm_dir);
-		if (bm_dir)
-			remove_proc_entry("sys/fs/binfmt_misc", NULL);
-		return -ENOMEM;
-	}
+	bm_dir = create_proc_entry("sys/fs/binfmt_misc", S_IFDIR, NULL);
+	if (!bm_dir)
+		goto out;
+#ifdef MODULE
+	bm_dir->fill_inode = bm_modcount;
+#endif
+
+	status = create_proc_entry("status", S_IFREG | S_IRUGO | S_IWUSR,
+					bm_dir);
+	if (!status)
+		goto cleanup_bm;
 	status->read_proc = proc_read_status;
 	status->write_proc = proc_write_status;
 
+	reg = create_proc_entry("register", S_IFREG | S_IWUSR, bm_dir);
+	if (!reg)
+		goto cleanup_status;
 	reg->write_proc = proc_write_register;
 
-	return register_binfmt(&misc_format);
+	error = register_binfmt(&misc_format);
+out:
+	return error;
+
+cleanup_status:
+	remove_proc_entry("status", bm_dir);
+cleanup_bm:
+	remove_proc_entry("sys/fs/binfmt_misc", NULL);
+	goto out;
 }
 
 #ifdef MODULE

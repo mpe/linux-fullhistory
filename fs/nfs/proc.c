@@ -250,25 +250,43 @@ nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir, const char *name)
  */
 int
 nfs_proc_readdir(struct nfs_server *server, struct nfs_fh *fhandle,
-			u32 cookie, unsigned int size, struct nfs_entry *entry)
+			u32 cookie, unsigned int size, __u32 *entry)
 {
 	struct nfs_readdirargs	arg;
 	struct nfs_readdirres	res;
 	void *			buffer;
+	unsigned int		buf_size = PAGE_SIZE;
 	int			status;
 
 	/* First get a temp buffer for the readdir reply */
-	while (!(buffer = (void *) get_free_page(GFP_USER))) {
-		need_resched = 1;
-		schedule();
-		if (signalled())
-			return -ERESTARTSYS;
-	}
+	/* N.B. does this really need to be cleared? */
+	status = -ENOMEM;
+	buffer = (void *) get_free_page(GFP_KERNEL);
+	if (!buffer)
+		goto out;
+
+	/*
+	 * Calculate the effective size the buffer.  To make sure
+	 * that the returned data will fit into the user's buffer,
+	 * we decrease the buffer size as necessary.
+	 *
+	 * Note: NFS returns three __u32 values for each entry,
+	 * and we assume that the data is packed into the user
+	 * buffer with the same efficiency. 
+	 */
+	if (size < buf_size)
+		buf_size = size;
+	if (server->rsize < buf_size)
+		buf_size = server->rsize;
+#if 0
+printk("nfs_proc_readdir: user size=%d, rsize=%d, buf_size=%d\n",
+size, server->rsize, buf_size);
+#endif
 
 	arg.fh = fhandle;
 	arg.cookie = cookie;
 	arg.buffer = buffer;
-	arg.bufsiz = server->rsize < PAGE_SIZE? server->rsize : PAGE_SIZE;
+	arg.bufsiz = buf_size;
 	res.buffer = entry;
 	res.bufsiz = size;
 
@@ -276,6 +294,7 @@ nfs_proc_readdir(struct nfs_server *server, struct nfs_fh *fhandle,
 	status = rpc_call(server->client, NFSPROC_READDIR, &arg, &res, 0);
 	dprintk("NFS reply readdir: %d\n", status);
 	free_page((unsigned long) buffer);
+out:
 	return status;
 }
 

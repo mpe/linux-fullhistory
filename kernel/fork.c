@@ -208,7 +208,6 @@ static inline int dup_mmap(struct mm_struct * mm)
 	struct vm_area_struct * mpnt, *tmp, **pprev;
 	int retval;
 
-	mm->mmap = mm->mmap_cache = NULL;
 	flush_cache_mm(current->mm);
 	pprev = &mm->mmap;
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
@@ -254,8 +253,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 		if (retval)
 			goto fail_nomem;
 	}
-	flush_tlb_mm(current->mm);
-	return 0;
+	retval = 0;
 
 fail_nomem:
 	flush_tlb_mm(current->mm);
@@ -276,7 +274,10 @@ struct mm_struct * mm_alloc(void)
 		mm->count = 1;
 		mm->def_flags = 0;
 		mm->mmap_sem = MUTEX;
-		mm->pgd = NULL;
+		/*
+		 * Leave mm->pgd set to the parent's pgd
+		 * so that pgd_offset() is always valid.
+		 */
 		mm->mmap = mm->mmap_cache = NULL;
 
 		/* It has not run yet, so cannot be present in anyone's
@@ -324,10 +325,12 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		goto free_mm;
 	retval = dup_mmap(mm);
 	if (retval)
-		goto free_mm;
+		goto free_pt;
 	return 0;
 
 free_mm:
+	mm->pgd = NULL;
+free_pt:
 	tsk->mm = NULL;
 	mmput(mm);
 fail_nomem:
@@ -376,7 +379,13 @@ static inline int copy_files(unsigned long clone_flags, struct task_struct * tsk
 	struct files_struct *oldf, *newf;
 	struct file **old_fds, **new_fds;
 
+	/*
+	 * A background process may not have any files ...
+	 */
 	oldf = current->files;
+	if (!oldf)
+		return 0;
+
 	if (clone_flags & CLONE_FILES) {
 		oldf->count++;
 		return 0;
@@ -516,7 +525,9 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	}
 	++total_forks;
 	error = p->pid;
-	goto fork_out;
+bad_fork:
+	unlock_kernel();
+	return error;
 
 bad_fork_cleanup_sighand:
 	exit_sighand(p);
@@ -536,10 +547,7 @@ bad_fork_cleanup:
 	nr_tasks--;
 bad_fork_free:
 	free_task_struct(p);
-bad_fork:
-fork_out:
-	unlock_kernel();
-	return error;
+	goto bad_fork;
 }
 
 static void files_ctor(void *fp, kmem_cache_t *cachep, unsigned long flags)

@@ -104,6 +104,7 @@ extern void d_delete(struct dentry *);
 /* allocate/de-allocate */
 extern struct dentry * d_alloc(struct dentry * parent, const struct qstr *name);
 extern void prune_dcache(int);
+extern void shrink_dcache_sb(struct super_block *);
 extern int d_invalidate(struct dentry *);
 
 #define shrink_dcache() prune_dcache(0)

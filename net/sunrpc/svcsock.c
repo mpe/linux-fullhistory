@@ -743,14 +743,18 @@ again:
 	if ((svsk = svc_sock_dequeue(serv)) != NULL) {
 		enable_bh(NET_BH);
 		rqstp->rq_sock = svsk;
-		svsk->sk_inuse++;
+		svsk->sk_inuse++; /* N.B. where is this decremented? */
 	} else {
 		/* No data pending. Go to sleep */
 		rqstp->rq_sock = NULL;
 		rqstp->rq_wait = NULL;
 		svc_serv_enqueue(serv, rqstp);
 
-		current->state = TASK_UNINTERRUPTIBLE;
+		/*
+		 * We have to be able to interrupt this wait
+		 * to bring down the daemons ...
+		 */
+		current->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(&rqstp->rq_wait, &wait);
 		enable_bh(NET_BH);
 		schedule();
@@ -762,6 +766,7 @@ again:
 		}
 	}
 
+printk("svc_recv: svsk=%p, use count=%d\n", svsk, svsk->sk_inuse);
 	dprintk("svc: server %p servicing socket %p\n", rqstp, svsk);
 	len = svsk->sk_recvfrom(rqstp);
 

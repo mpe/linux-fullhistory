@@ -17,8 +17,6 @@
  *  Added change_root: Werner Almesberger & Hans Lermen, Feb '96
  */
 
-#include <stdarg.h>
-
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -252,29 +250,24 @@ static int fs_maxindex(void)
 /*
  * Whee.. Weird sysv syscall. 
  */
-asmlinkage int sys_sysfs(int option, ...)
+asmlinkage int sys_sysfs(int option, unsigned long arg1, unsigned long arg2)
 {
-	va_list args;
 	int retval = -EINVAL;
-	unsigned int index;
 
 	lock_kernel();
-	va_start(args, option);
 	switch (option) {
 		case 1:
-			retval = fs_index(va_arg(args, const char *));
+			retval = fs_index((const char *) arg1);
 			break;
 
 		case 2:
-			index = va_arg(args, unsigned int);
-			retval = fs_name(index, va_arg(args, char *));
+			retval = fs_name(arg1, (char *) arg2);
 			break;
 
 		case 3:
 			retval = fs_maxindex();
 			break;
 	}
-	va_end(args);
 	unlock_kernel();
 	return retval;
 }
@@ -933,12 +926,11 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	struct file_system_type * fstype;
 	struct dentry * dentry = NULL;
 	struct inode * inode = NULL;
-	struct file_operations * fops;
 	kdev_t dev;
 	int retval = -EPERM;
-	const char * t;
 	unsigned long flags = 0;
 	unsigned long page = 0;
+	struct file dummy;	/* allows read-write or read-only flag */
 
 	lock_kernel();
 	if (!suser())
@@ -954,6 +946,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 		free_page(page);
 		goto out;
 	}
+
 	retval = copy_mount_options (type, &page);
 	if (retval < 0)
 		goto out;
@@ -962,8 +955,8 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	retval = -ENODEV;
 	if (!fstype)		
 		goto out;
-	t = fstype->name;
-	fops = NULL;
+
+	memset(&dummy, 0, sizeof(dummy));
 	if (fstype->fs_flags & FS_REQUIRES_DEV) {
 		dentry = namei(dev_name);
 		retval = PTR_ERR(dentry);
@@ -984,17 +977,15 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 		if (MAJOR(dev) >= MAX_BLKDEV)
 			goto dput_and_out;
 
-		fops = get_blkfops(MAJOR(dev));
 		retval = -ENOTBLK;
-		if (!fops)
+		dummy.f_op = get_blkfops(MAJOR(dev));
+		if (!dummy.f_op)
 			goto dput_and_out;
 
-		if (fops->open) {
-			struct file dummy;	/* allows read-write or read-only flag */
-			memset(&dummy, 0, sizeof(dummy));
+		if (dummy.f_op->open) {
 			dummy.f_dentry = dentry;
 			dummy.f_mode = (new_flags & MS_RDONLY) ? 1 : 3;
-			retval = fops->open(inode, &dummy);
+			retval = dummy.f_op->open(inode, &dummy);
 			if (retval)
 				goto dput_and_out;
 		}
@@ -1009,22 +1000,28 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	if ((new_flags & MS_MGC_MSK) == MS_MGC_VAL) {
 		flags = new_flags & ~MS_MGC_MSK;
 		retval = copy_mount_options(data, &page);
-		if (retval < 0) {
-			put_unnamed_dev(dev);
-			goto dput_and_out;
-		}
+		if (retval < 0)
+			goto clean_up;
 	}
-	retval = do_mount(dev,dev_name,dir_name,t,flags,(void *) page);
+	retval = do_mount(dev, dev_name, dir_name, fstype->name, flags,
+				(void *) page);
 	free_page(page);
-	if (retval && fops && fops->release) {
-		fops->release(inode, NULL);
-		put_unnamed_dev(dev);
-	}
+	if (retval)
+		goto clean_up;
+
 dput_and_out:
 	dput(dentry);
 out:
 	unlock_kernel();
 	return retval;
+
+clean_up:
+	if (dummy.f_op) {
+		if (dummy.f_op->release)
+			dummy.f_op->release(inode, NULL);
+	} else
+		put_unnamed_dev(dev);
+	goto dput_and_out;
 }
 
 __initfunc(static void do_mount_root(void))

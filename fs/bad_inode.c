@@ -19,7 +19,7 @@ static struct dentry * bad_follow_link(struct inode * ino, struct dentry *base)
 	return ERR_PTR(-EIO);
 }
 
-static int return_EIO()
+static int return_EIO(void)
 {
 	return -EIO;
 }
@@ -81,3 +81,12 @@ void make_bad_inode(struct inode * inode)
 	inode->i_op = &bad_inode_ops;	
 }
 
+/*
+ * This tests whether an inode has been flagged as bad. The test uses
+ * &bad_inode_ops to cover the case of invalidated inodes as well as
+ * those created by make_bad_inode() above.
+ */
+int is_bad_inode(struct inode * inode) 
+{
+	return (inode->i_op == &bad_inode_ops);	
+}

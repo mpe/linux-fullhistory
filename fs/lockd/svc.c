@@ -42,10 +42,14 @@
 
 extern struct svc_program	nlmsvc_program;
 struct nlmsvc_binding *		nlmsvc_ops = NULL;
-static int			nlmsvc_sema = 0;
-static int			nlmsvc_pid = 0;
+static struct semaphore 	nlmsvc_sema = MUTEX;
+static unsigned int		nlmsvc_users = 0;
+static pid_t			nlmsvc_pid = 0;
 unsigned long			nlmsvc_grace_period = 0;
 unsigned long			nlmsvc_timeout = 0;
+
+static struct wait_queue *	lockd_start = NULL;
+static struct wait_queue *	lockd_exit = NULL;
 
 /*
  * Currently the following can be set only at insmod time.
@@ -64,10 +68,16 @@ lockd(struct svc_rqst *rqstp)
 	sigset_t	oldsigmask;
 	int		err = 0;
 
-	lock_kernel();
 	/* Lock module and set up kernel thread */
 	MOD_INC_USE_COUNT;
-	/* exit_files(current); */
+	lock_kernel();
+
+	/*
+	 * Let our maker know we're running.
+	 */
+	nlmsvc_pid = current->pid;
+	wake_up(&lockd_start);
+
 	exit_mm(current);
 	current->session = 1;
 	current->pgrp = 1;
@@ -75,6 +85,12 @@ lockd(struct svc_rqst *rqstp)
 
 	/* kick rpciod */
 	rpciod_up();
+
+	/*
+	 * N.B. current do_fork() doesn't like NULL task->files,
+	 * so we defer closing files until forking rpciod.
+	 */
+	exit_files(current);
 
 	dprintk("NFS locking service started (ver " LOCKD_VERSION ").\n");
 
@@ -94,14 +110,14 @@ lockd(struct svc_rqst *rqstp)
 
 	nlmsvc_grace_period += jiffies;
 	nlmsvc_timeout = nlm_timeout * HZ;
-	nlmsvc_pid = current->pid;
 
 	/*
 	 * The main request loop. We don't terminate until the last
 	 * NFS mount or NFS daemon has gone away, and we've been sent a
-	 * signal.
+	 * signal, or else another process has taken over our job.
 	 */
-	while (nlmsvc_sema || !signalled()) {
+	while ((nlmsvc_users || !signalled()) && nlmsvc_pid == current->pid)
+	{
 		if (signalled())
 			current->signal = 0;
 
@@ -156,8 +172,17 @@ lockd(struct svc_rqst *rqstp)
 			nlmsvc_ops->exp_unlock();
 	}
 
-	nlm_shutdown_hosts();
-
+	/*
+	 * Check whether there's a new lockd process before
+	 * shutting down the hosts and clearing the slot.
+	 */
+	if (!nlmsvc_pid || current->pid == nlmsvc_pid) {
+		nlm_shutdown_hosts();
+		nlmsvc_pid = 0;
+	} else
+		printk("lockd: new process, skipping host shutdown\n");
+	wake_up(&lockd_exit);
+		
 	/* Exit the RPC thread */
 	svc_exit_thread(rqstp);
 
@@ -166,7 +191,6 @@ lockd(struct svc_rqst *rqstp)
 
 	/* Release module */
 	MOD_DEC_USE_COUNT;
-	nlmsvc_pid = 0;
 }
 
 /*
@@ -185,42 +209,100 @@ lockd_makesock(struct svc_serv *serv, int protocol, unsigned short port)
 	return svc_create_socket(serv, protocol, &sin);
 }
 
+/*
+ * Bring up the lockd process if it's not already up.
+ */
 int
 lockd_up(void)
 {
 	struct svc_serv *	serv;
-	int			error;
+	int			error = 0;
 
-	if (nlmsvc_pid || nlmsvc_sema++)
-		return 0;
+	down(&nlmsvc_sema);
+	/*
+	 * Unconditionally increment the user count ... this is
+	 * the number of clients who _want_ a lockd process.
+	 */
+	nlmsvc_users++; 
+	/*
+	 * Check whether we're already up and running.
+	 */
+	if (nlmsvc_pid)
+		goto out;
 
-	dprintk("lockd: creating service\n");
-	if ((serv = svc_create(&nlmsvc_program, 0, NLMSVC_XDRSIZE)) == NULL)
-		return -ENOMEM;
+	/*
+	 * Sanity check: if there's no pid,
+	 * we should be the first user ...
+	 */
+	if (nlmsvc_users > 1)
+		printk("lockd_up: no pid, %d users??\n", nlmsvc_users);
 
-	if ((error = lockd_makesock(serv, IPPROTO_UDP, 0)) < 0
-	 || (error = lockd_makesock(serv, IPPROTO_TCP, 0)) < 0) {
-		svc_destroy(serv);
-		return error;
+	error = -ENOMEM;
+	serv = svc_create(&nlmsvc_program, 0, NLMSVC_XDRSIZE);
+	if (!serv) {
+		printk("lockd_up: create service failed\n");
+		goto out;
 	}
 
-	if ((error = svc_create_thread(lockd, serv)) < 0)
-		nlmsvc_sema--;
+	if ((error = lockd_makesock(serv, IPPROTO_UDP, 0)) < 0 
+	 || (error = lockd_makesock(serv, IPPROTO_TCP, 0)) < 0) {
+		printk("lockd_up: makesock failed, error=%d\n", error);
+		goto destroy_and_out;
+	}
 
-	/* Release server */
+	/*
+	 * Create the kernel thread and wait for it to start.
+	 */
+	error = svc_create_thread(lockd, serv);
+	if (error) {
+		printk("lockd_up: create thread failed, error=%d\n", error);
+		goto destroy_and_out;
+	}
+	sleep_on(&lockd_start);
+
+	/*
+	 * Note: svc_serv structures have an initial use count of 1,
+	 * so we exit through here on both success and failure.
+	 */
+destroy_and_out:
 	svc_destroy(serv);
-	return 0;
+out:
+	up(&nlmsvc_sema);
+	return error;
 }
 
+/*
+ * Decrement the user count and bring down lockd if we're the last.
+ */
 void
 lockd_down(void)
 {
-	if (!nlmsvc_pid || --nlmsvc_sema > 0)
-		return;
+	down(&nlmsvc_sema);
+	if (nlmsvc_users) {
+		if (--nlmsvc_users)
+			goto out;
+	} else
+		printk("lockd_down: no users! pid=%d\n", nlmsvc_pid);
+
+	if (!nlmsvc_pid) {
+		printk("lockd_down: nothing to do!\n"); 
+		goto out;
+	}
 
 	kill_proc(nlmsvc_pid, SIGKILL, 1);
-	nlmsvc_sema = 0;
-	nlmsvc_pid = 0;
+	/*
+	 * Wait for the lockd process to exit, but since we're holding
+	 * the lockd semaphore, we can't wait around forever ...
+	 */
+	current->timeout = jiffies + 5 * HZ;
+	interruptible_sleep_on(&lockd_exit);
+	current->timeout = 0;
+	if (nlmsvc_pid) {
+		printk("lockd_down: lockd failed to exit, clearing pid\n");
+		nlmsvc_pid = 0;
+	}
+out:
+	up(&nlmsvc_sema);
 }
 
 #ifdef MODULE
@@ -235,6 +317,11 @@ lockd_down(void)
 int
 init_module(void)
 {
+	/* Init the static variables */
+	nlmsvc_sema = MUTEX;
+	nlmsvc_users = 0;
+	nlmsvc_pid = 0;
+	lockd_exit = NULL;
 	nlmxdr_init();
 	return 0;
 }

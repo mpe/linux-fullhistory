@@ -125,7 +125,7 @@ extern int nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
 extern int nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir,
 			const char *name);
 extern int nfs_proc_readdir(struct nfs_server *server, struct nfs_fh *fhandle,
-			u32 cookie, unsigned int size, struct nfs_entry *entry);
+			u32 cookie, unsigned int size, __u32 *entry);
 extern int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
 			struct nfs_fsinfo *res);
 
@@ -138,7 +138,7 @@ extern struct super_block *nfs_read_super(struct super_block *sb,
 extern int init_nfs_fs(void);
 extern struct inode *nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
 			       struct nfs_fattr *fattr);
-extern void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr);
+extern int nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr);
 extern int nfs_revalidate(struct inode *);
 extern int _nfs_revalidate_inode(struct nfs_server *, struct inode *);
 

@@ -42,9 +42,10 @@
 
 /* And dynamically-tunable limits and defaults: */
 extern int max_inodes;
-extern int max_files, nr_files;
+extern int max_files, nr_files, nr_free_files;
 #define NR_INODE 4096	/* this should be bigger than NR_FILE */
 #define NR_FILE 1024	/* this can well be larger on a larger system */
+#define NR_RESERVED_FILES 10 /* reserved for root */
 
 #define MAY_EXEC 1
 #define MAY_WRITE 2
@@ -627,6 +628,10 @@ extern struct inode_operations chrdev_inode_operations;
 
 extern void init_fifo(struct inode * inode);
 extern struct inode_operations fifo_inode_operations;
+
+/* Invalid inode operations -- fs/bad_inode.c */
+extern void make_bad_inode(struct inode * inode);
+extern int is_bad_inode(struct inode * inode);
 
 extern struct file_operations connecting_fifo_fops;
 extern struct file_operations read_fifo_fops;

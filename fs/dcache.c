@@ -61,37 +61,54 @@ static inline void d_free(struct dentry *dentry)
  */
 void dput(struct dentry *dentry)
 {
-	if (dentry) {
-		int count;
+	int count;
+
+	if (!dentry)
+		return;
+
 repeat:
-		count = dentry->d_count-1;
-		if (count < 0) {
-			printk("Negative d_count (%d) for %s/%s\n",
-				count,
-				dentry->d_parent->d_name.name,
-				dentry->d_name.name);
-			*(int *)0 = 0;
-		}
-		dentry->d_count = count;
-		if (!count) {
-			list_del(&dentry->d_lru);
-			if (dentry->d_op && dentry->d_op->d_delete)
-				dentry->d_op->d_delete(dentry);
-			if (list_empty(&dentry->d_hash)) {
-				struct inode *inode = dentry->d_inode;
-				struct dentry * parent;
-				if (inode)
-					iput(inode);
-				parent = dentry->d_parent;
-				d_free(dentry);
-				if (dentry == parent)
-					return;
-				dentry = parent;
-				goto repeat;
-			}
-			list_add(&dentry->d_lru, &dentry_unused);
-		}
+	count = dentry->d_count - 1;
+	if (count != 0)
+		goto out;
+
+	/*
+	 * Note that if d_op->d_delete blocks,
+	 * the dentry could go back in use.
+	 * Each fs will have to watch for this.
+	 */
+	if (dentry->d_op && dentry->d_op->d_delete) {
+		dentry->d_op->d_delete(dentry);
+
+		count = dentry->d_count - 1;
+		if (count != 0)
+			goto out;
 	}
+
+	list_del(&dentry->d_lru);
+	if (list_empty(&dentry->d_hash)) {
+		struct inode *inode = dentry->d_inode;
+		struct dentry * parent;
+		if (inode)
+			iput(inode);
+		parent = dentry->d_parent;
+		d_free(dentry);
+		if (dentry == parent)
+			return;
+		dentry = parent;
+		goto repeat;
+	}
+	list_add(&dentry->d_lru, &dentry_unused);
+out:
+	if (count >= 0) {
+		dentry->d_count = count;
+		return;
+	}
+
+	printk("Negative d_count (%d) for %s/%s\n",
+		count,
+		dentry->d_parent->d_name.name,
+		dentry->d_name.name);
+	*(int *)0 = 0;	
 }
 
 /*
@@ -99,18 +116,40 @@ repeat:
  * possible. If there are other users of the dentry we
  * can't invalidate it.
  *
- * This is currently incorrect. We should try to see if
- * we can invalidate any unused children - right now we
- * refuse to invalidate way too much.
+ * We should probably try to see if we can invalidate
+ * any unused children - right now we refuse to invalidate
+ * too much. That would require a better child list
+ * data structure, though.
  */
 int d_invalidate(struct dentry * dentry)
 {
-	/* We should do a partial shrink_dcache here */
+	/* We might want to do a partial shrink_dcache here */
 	if (dentry->d_count != 1)
 		return -EBUSY;
 
 	d_drop(dentry);
 	return 0;
+}
+
+/*
+ * Throw away a dentry - free the inode, dput the parent.
+ * This requires that the LRU list has already been
+ * removed.
+ */
+static inline void prune_one_dentry(struct dentry * dentry)
+{
+	struct dentry * parent;
+
+	list_del(&dentry->d_hash);
+	if (dentry->d_inode) {
+		struct inode * inode = dentry->d_inode;
+
+		dentry->d_inode = NULL;
+		iput(inode);
+	}
+	parent = dentry->d_parent;
+	d_free(dentry);
+	dput(parent);
 }
 
 /*
@@ -131,21 +170,62 @@ void prune_dcache(int count)
 		INIT_LIST_HEAD(tmp);
 		dentry = list_entry(tmp, struct dentry, d_lru);
 		if (!dentry->d_count) {
-			struct dentry * parent;
-
-			list_del(&dentry->d_hash);
-			if (dentry->d_inode) {
-				struct inode * inode = dentry->d_inode;
-
-				dentry->d_inode = NULL;
-				iput(inode);
-			}
-			parent = dentry->d_parent;
-			d_free(dentry);
-			dput(parent);
+			prune_one_dentry(dentry);
 			if (!--count)
 				break;
 		}
+	}
+}
+
+/*
+ * Shrink the dcache for the specified super block.
+ * This allows us to unmount a device without disturbing
+ * the dcache for the other devices.
+ *
+ * This implementation makes just two traversals of the
+ * unused list.  On the first pass we move the selected
+ * dentries to the most recent end, and on the second
+ * pass we free them.  The second pass must restart after
+ * each dput(), but since the target dentries are all at
+ * the end, it's really just a single traversal.
+ */
+void shrink_dcache_sb(struct super_block * sb)
+{
+	struct list_head *tmp, *next;
+	struct dentry *dentry;
+
+	/*
+	 * Pass one ... move the dentries for the specified
+	 * superblock to the most recent end of the unused list.
+	 */
+	next = dentry_unused.next;
+	while (next != &dentry_unused) {
+		tmp = next;
+		next = tmp->next;
+		dentry = list_entry(tmp, struct dentry, d_lru);
+		if (dentry->d_sb != sb)
+			continue;
+		list_del(tmp);
+		list_add(tmp, &dentry_unused);
+	}
+
+	/*
+	 * Pass two ... free the dentries for this superblock.
+	 */
+repeat:
+	next = dentry_unused.next;
+	while (next != &dentry_unused) {
+		tmp = next;
+		next = tmp->next;
+		dentry = list_entry(tmp, struct dentry, d_lru);
+		if (dentry->d_sb != sb)
+			continue;
+		if (dentry->d_count)
+			continue;
+		list_del(tmp);
+		INIT_LIST_HEAD(tmp);
+		prune_one_dentry(dentry);
+		goto repeat;
 	}
 }
 
