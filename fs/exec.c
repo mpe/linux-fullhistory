@@ -587,7 +587,7 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 		bprm->p = copy_strings(1, dynloader, bprm->page, bprm->p, 2);
 		bprm->argc++;
 		bprm->loader = bprm->p;
-		retval = open_namei(dynloader[0], 0, 0, &bprm->inode, NULL);
+		retval = open_namei(dynloader[0], 0, 0, &bprm->inode);
 		if (retval)
 			return retval;
 		bprm->dont_iput = 0;
@@ -649,7 +649,7 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
 		bprm.page[i] = 0;
-	retval = open_namei(filename, 0, 0, &bprm.inode, NULL);
+	retval = open_namei(filename, 0, 0, &bprm.inode);
 	if (retval)
 		return retval;
 	bprm.filename = filename;

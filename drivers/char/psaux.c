@@ -168,6 +168,11 @@ static void aux_write_dev(int val)
 	outb_p(val, KBD_DATA_REG);			    /* Write data */
 }
 
+/*
+ * Write to device & handle returned ack
+ */
+
+#ifdef INITIALIZE_DEVICE
 __initfunc(static void aux_write_dev_nosleep(int val))
 {
 	poll_aux_status_nosleep();
@@ -176,11 +181,6 @@ __initfunc(static void aux_write_dev_nosleep(int val))
 	outb_p(val, KBD_DATA_REG);
 }
 
-/*
- * Write to device & handle returned ack
- */
-
-#ifdef INITIALIZE_DEVICE
 __initfunc(static int aux_write_ack(int val))
 {
 	aux_write_dev_nosleep(val);

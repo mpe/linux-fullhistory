@@ -33,7 +33,6 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/fd.h>
-#include <linux/dalloc.h>
 #include <linux/init.h>
 
 #include <asm/system.h>
@@ -745,7 +744,7 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 	if (IS_ERR(dir_d))
 		return error;
 
-	if (dir_d->d_flag & D_NEGATIVE) {
+	if (!dir_d->d_inode) {
 		dput(dir_d);
 		return -ENOENT;
 	}

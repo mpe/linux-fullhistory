@@ -67,7 +67,6 @@
 #include <linux/socket.h>
 #include <linux/fcntl.h>
 #include <linux/file.h>
-#include <linux/dalloc.h>
 #include <linux/net.h>
 #include <linux/interrupt.h>
 #include <linux/netdevice.h>

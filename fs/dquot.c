@@ -959,7 +959,7 @@ int quota_on(kdev_t dev, short type, char *path)
 		return(-EBUSY);
 	if ((error = getname(path, &tmp)) != 0)
 		return(error);
-	error = open_namei(tmp, O_RDWR, 0600, &inode, 0);
+	error = open_namei(tmp, O_RDWR, 0600, &inode);
 	putname(tmp);
 	if (error)
 		return(error);

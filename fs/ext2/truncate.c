@@ -110,7 +110,8 @@ repeat:
 	return retry;
 }
 
-static int trunc_indirect (struct inode * inode, int offset, u32 * p)
+static int trunc_indirect (struct inode * inode, int offset, u32 * p,
+			   int in_inode)
 {
 	int i, tmp;
 	struct buffer_head * bh;
@@ -124,16 +125,16 @@ static int trunc_indirect (struct inode * inode, int offset, u32 * p)
 #define INDIRECT_BLOCK ((int)DIRECT_BLOCK - offset)
 	int indirect_block = INDIRECT_BLOCK;
 
-	tmp = *p;
+	tmp = in_inode ? *p : le32_to_cpu(*p);
 	if (!tmp)
 		return 0;
 	ind_bh = bread (inode->i_dev, tmp, inode->i_sb->s_blocksize);
-	if (tmp != *p) {
+	if (tmp != (in_inode ? *p : le32_to_cpu(*p))) {
 		brelse (ind_bh);
 		return 1;
 	}
 	if (!ind_bh) {
-		*p = 0;
+		*p = in_inode ? 0 : cpu_to_le32(0);
 		return 0;
 	}
 repeat:
@@ -184,100 +185,15 @@ repeat:
 		if (ind_bh->b_count != 1)
 			retry = 1;
 		else {
-			tmp = *p;
-			*p = 0;
+			tmp = in_inode ? *p : le32_to_cpu(*p);
+			*p = in_inode ? 0 : cpu_to_le32(0);
 			inode->i_blocks -= blocks;
 			mark_inode_dirty(inode);
 			ext2_free_blocks (inode, tmp, 1);
+			bforget(ind_bh);
+			ind_bh = NULL;
 		}
-	if (IS_SYNC(inode) && buffer_dirty(ind_bh)) {
-		ll_rw_block (WRITE, 1, &ind_bh);
-		wait_on_buffer (ind_bh);
-	}
-	brelse (ind_bh);
-	return retry;
-}
-
-static int trunc_indirect_swab32 (struct inode * inode, int offset, u32 * p)
-{
-	int i, tmp;
-	struct buffer_head * bh;
-	struct buffer_head * ind_bh;
-	u32 * ind;
-	unsigned long block_to_free = 0;
-	unsigned long free_count = 0;
-	int retry = 0;
-	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
-	int blocks = inode->i_sb->s_blocksize / 512;
-	int indirect_block = INDIRECT_BLOCK;
-
-	tmp = le32_to_cpu(*p);
-	if (!tmp)
-		return 0;
-	ind_bh = bread (inode->i_dev, tmp, inode->i_sb->s_blocksize);
-	if (tmp != le32_to_cpu(*p)) {
-		brelse (ind_bh);
-		return 1;
-	}
-	if (!ind_bh) {
-		*p = cpu_to_le32(0);
-		return 0;
-	}
-repeat:
-	for (i = indirect_block ; i < addr_per_block ; i++) {
-		if (i < 0)
-			i = 0;
-		if (i < indirect_block)
-			goto repeat;
-		ind = i + (u32 *) ind_bh->b_data;
-		tmp = le32_to_cpu(*ind);
-		if (!tmp)
-			continue;
-		bh = get_hash_table (inode->i_dev, tmp,
-				     inode->i_sb->s_blocksize);
-		if (i < indirect_block) {
-			brelse (bh);
-			goto repeat;
-		}
-		if ((bh && bh->b_count != 1) || tmp != le32_to_cpu(*ind)) {
-			retry = 1;
-			brelse (bh);
-			continue;
-		}
-		*ind = cpu_to_le32(0);
-		mark_buffer_dirty(ind_bh, 1);
-		bforget(bh);
-		if (free_count == 0) {
-			block_to_free = tmp;
-			free_count++;
-		} else if (free_count > 0 && block_to_free == tmp - free_count)
-			free_count++;
-		else {
-			ext2_free_blocks (inode, block_to_free, free_count);
-			block_to_free = tmp;
-			free_count = 1;
-		}
-/*		ext2_free_blocks (inode, tmp, 1); */
-		inode->i_blocks -= blocks;
-		mark_inode_dirty(inode);
-	}
-	if (free_count > 0)
-		ext2_free_blocks (inode, block_to_free, free_count);
-	ind = (u32 *) ind_bh->b_data;
-	for (i = 0; i < addr_per_block; i++)
-		if (le32_to_cpu(*(ind++)))
-			break;
-	if (i >= addr_per_block)
-		if (ind_bh->b_count != 1)
-			retry = 1;
-		else {
-			tmp = le32_to_cpu(*p);
-			*p = cpu_to_le32(0);
-			inode->i_blocks -= blocks;
-			mark_inode_dirty(inode);
-			ext2_free_blocks (inode, tmp, 1);
-		}
-	if (IS_SYNC(inode) && buffer_dirty(ind_bh)) {
+	if (IS_SYNC(inode) && ind_bh && buffer_dirty(ind_bh)) {
 		ll_rw_block (WRITE, 1, &ind_bh);
 		wait_on_buffer (ind_bh);
 	}
@@ -286,7 +202,7 @@ repeat:
 }
 
 static int trunc_dindirect (struct inode * inode, int offset,
-			    u32 * p)
+			    u32 * p, int in_inode)
 {
 	int i, tmp;
 	struct buffer_head * dind_bh;
@@ -297,16 +213,16 @@ static int trunc_dindirect (struct inode * inode, int offset,
 #define DINDIRECT_BLOCK (((int)DIRECT_BLOCK - offset) / addr_per_block)
 	int dindirect_block = DINDIRECT_BLOCK;
 
-	tmp = *p;
+	tmp = in_inode ? *p : le32_to_cpu(*p);
 	if (!tmp)
 		return 0;
 	dind_bh = bread (inode->i_dev, tmp, inode->i_sb->s_blocksize);
-	if (tmp != *p) {
+	if (tmp != (in_inode ? *p : le32_to_cpu(*p))) {
 		brelse (dind_bh);
 		return 1;
 	}
 	if (!dind_bh) {
-		*p = 0;
+		*p = in_inode ? 0 : cpu_to_le32(0);
 		return 0;
 	}
 repeat:
@@ -319,8 +235,8 @@ repeat:
 		tmp = le32_to_cpu(*dind);
 		if (!tmp)
 			continue;
-		retry |= trunc_indirect_swab32 (inode, offset + (i * addr_per_block),
-						dind);
+		retry |= trunc_indirect(inode, offset + (i * addr_per_block),
+					dind, 0);
 		mark_buffer_dirty(dind_bh, 1);
 	}
 	dind = (u32 *) dind_bh->b_data;
@@ -331,72 +247,15 @@ repeat:
 		if (dind_bh->b_count != 1)
 			retry = 1;
 		else {
-			tmp = *p;
-			*p = 0;
+			tmp = in_inode ? *p : le32_to_cpu(*p);
+			*p = in_inode ? 0 : cpu_to_le32(0);
 			inode->i_blocks -= blocks;
 			mark_inode_dirty(inode);
 			ext2_free_blocks (inode, tmp, 1);
+			bforget(dind_bh);
+			dind_bh = 0;
 		}
-	if (IS_SYNC(inode) && buffer_dirty(dind_bh)) {
-		ll_rw_block (WRITE, 1, &dind_bh);
-		wait_on_buffer (dind_bh);
-	}
-	brelse (dind_bh);
-	return retry;
-}
-
-static int trunc_dindirect_swab32 (struct inode * inode, int offset,
-				   u32 * p)
-{
-	int i, tmp;
-	struct buffer_head * dind_bh;
-	u32 * dind;
-	int retry = 0;
-	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
-	int blocks = inode->i_sb->s_blocksize / 512;
-	int dindirect_block = DINDIRECT_BLOCK;
-
-	tmp = le32_to_cpu(*p);
-	if (!tmp)
-		return 0;
-	dind_bh = bread (inode->i_dev, tmp, inode->i_sb->s_blocksize);
-	if (tmp != le32_to_cpu(*p)) {
-		brelse (dind_bh);
-		return 1;
-	}
-	if (!dind_bh) {
-		*p = cpu_to_le32(0);
-		return 0;
-	}
-repeat:
-	for (i = dindirect_block ; i < addr_per_block ; i++) {
-		if (i < 0)
-			i = 0;
-		if (i < dindirect_block)
-			goto repeat;
-		dind = i + (u32 *) dind_bh->b_data;
-		tmp = le32_to_cpu(*dind);
-		if (!tmp)
-			continue;
-		retry |= trunc_indirect_swab32 (inode, offset + (i * addr_per_block),
-						dind);
-		mark_buffer_dirty(dind_bh, 1);
-	}
-	dind = (u32 *) dind_bh->b_data;
-	for (i = 0; i < addr_per_block; i++)
-		if (le32_to_cpu(*(dind++)))
-			break;
-	if (i >= addr_per_block)
-		if (dind_bh->b_count != 1)
-			retry = 1;
-		else {
-			tmp = le32_to_cpu(*p);
-			*p = cpu_to_le32(0);
-			inode->i_blocks -= blocks;
-			mark_inode_dirty(inode);
-			ext2_free_blocks (inode, tmp, 1);
-		}
-	if (IS_SYNC(inode) && buffer_dirty(dind_bh)) {
+	if (IS_SYNC(inode) && dind_bh && buffer_dirty(dind_bh)) {
 		ll_rw_block (WRITE, 1, &dind_bh);
 		wait_on_buffer (dind_bh);
 	}
@@ -436,9 +295,9 @@ repeat:
 		if (i < tindirect_block)
 			goto repeat;
 		tind = i + (u32 *) tind_bh->b_data;
-		retry |= trunc_dindirect_swab32(inode, EXT2_NDIR_BLOCKS +
+		retry |= trunc_dindirect(inode, EXT2_NDIR_BLOCKS +
 			 addr_per_block + (i + 1) * addr_per_block * addr_per_block,
-			 tind);
+			 tind, 0);
 		mark_buffer_dirty(tind_bh, 1);
 	}
 	tind = (u32 *) tind_bh->b_data;
@@ -454,8 +313,10 @@ repeat:
 			inode->i_blocks -= blocks;
 			mark_inode_dirty(inode);
 			ext2_free_blocks (inode, tmp, 1);
+			bforget(tind_bh);
+			tind_bh = 0;
 		}
-	if (IS_SYNC(inode) && buffer_dirty(tind_bh)) {
+	if (IS_SYNC(inode) && tind_bh && buffer_dirty(tind_bh)) {
 		ll_rw_block (WRITE, 1, &tind_bh);
 		wait_on_buffer (tind_bh);
 	}
@@ -479,10 +340,10 @@ void ext2_truncate (struct inode * inode)
 	while (1) {
 		retry = trunc_direct(inode);
 		retry |= trunc_indirect (inode, EXT2_IND_BLOCK,
-			(u32 *) &inode->u.ext2_i.i_data[EXT2_IND_BLOCK]);
+			(u32 *) &inode->u.ext2_i.i_data[EXT2_IND_BLOCK], 1);
 		retry |= trunc_dindirect (inode, EXT2_IND_BLOCK +
 			EXT2_ADDR_PER_BLOCK(inode->i_sb),
-			(u32 *) &inode->u.ext2_i.i_data[EXT2_DIND_BLOCK]);
+			(u32 *) &inode->u.ext2_i.i_data[EXT2_DIND_BLOCK], 1);
 		retry |= trunc_tindirect (inode);
 		if (!retry)
 			break;

@@ -395,7 +395,7 @@ static int nfs_create(struct inode *dir, struct dentry * dentry, int mode)
 	if (!inode)
 		return -EACCES;
 
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
@@ -434,7 +434,7 @@ static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rde
 	if (!inode)
 		return -EACCES;
 
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
@@ -471,7 +471,7 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	if (!inode)
 		return -EACCES;
 
-	d_instantiate(dentry, inode, D_DIR);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
@@ -561,7 +561,7 @@ static int nfs_symlink(struct inode *dir, struct dentry *dentry, const char *sym
 	if (!inode)
 		return -EACCES;
 
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
@@ -588,7 +588,7 @@ static int nfs_link(struct inode *inode, struct inode *dir, struct dentry *dentr
 		return error;
 
 	atomic_inc(&inode->i_count);
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 

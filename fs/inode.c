@@ -7,8 +7,6 @@
 #include <linux/fs.h>
 #include <linux/string.h>
 #include <linux/mm.h>
-#include <linux/dalloc.h>
-#include <linux/list.h>
 
 /*
  * New inode.c implementation.
@@ -105,6 +103,7 @@ static inline void init_once(struct inode * inode)
 {
 	memset(inode, 0, sizeof(*inode));
 	init_waitqueue(&inode->i_wait);
+	INIT_LIST_HEAD(&inode->i_dentry);
 	sema_init(&inode->i_sem, 1);
 }
 
@@ -301,6 +300,7 @@ void clean_inode(struct inode *inode)
 	inode->i_sock = 0;
 	inode->i_op = NULL;
 	inode->i_nlink = 1;
+	inode->i_writecount = 0;
 	memset(&inode->i_dquot, 0, sizeof(inode->i_dquot));
 	sema_init(&inode->i_sem, 1);
 }

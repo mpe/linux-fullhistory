@@ -16,16 +16,12 @@
 #include <linux/kdev_t.h>
 #include <linux/ioctl.h>
 #include <linux/list.h>
+#include <linux/dcache.h>
 
 #include <asm/atomic.h>
 #include <asm/bitops.h>
 
-/* Prefixes for routines (having no effect), but indicate what
- * the routine may do. This can greatly ease reasoning about routines...
- */
-#define blocking /*routine may schedule()*/
 
-#include <linux/dalloc.h>
 
 /*
  * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
@@ -155,7 +151,7 @@ extern int max_files, nr_files;
 extern void buffer_init(void);
 extern void inode_init(void);
 extern void file_table_init(void);
-extern unsigned long name_cache_init(unsigned long start, unsigned long end);
+extern void dcache_init(void);
 
 typedef char buffer_block[BLOCK_SIZE];
 
@@ -331,7 +327,7 @@ struct inode {
 	struct page		*i_pages;
 	struct dquot		*i_dquot[MAXQUOTAS];
 
-	struct dentry		*i_dentry;
+	struct list_head	i_dentry;
 
 	unsigned int		i_state;
 
@@ -685,8 +681,7 @@ extern int notify_change(struct inode *, struct iattr *);
 extern int permission(struct inode * inode,int mask);
 extern int get_write_access(struct inode *inode);
 extern void put_write_access(struct inode *inode);
-extern int open_namei(const char * pathname, int flag, int mode,
-	struct inode ** res_inode, struct dentry * base);
+extern int open_namei(const char * pathname, int flag, int mode, struct inode ** res_inode);
 extern int do_mknod(const char * filename, int mode, dev_t dev);
 extern int do_pipe(int *);
 
@@ -738,18 +733,18 @@ extern inline void vfs_unlock(void)
 extern void _get_inode(struct inode * inode);
 extern void iput(struct inode * inode);
 
-extern blocking struct inode * iget(struct super_block * sb, unsigned long nr);
-extern blocking void clear_inode(struct inode * inode);
-extern blocking struct inode * get_empty_inode(void);
+extern struct inode * iget(struct super_block * sb, unsigned long nr);
+extern void clear_inode(struct inode * inode);
+extern struct inode * get_empty_inode(void);
 
 /* Please prefer to use this function in future, instead of using
  * a get_empty_inode()/insert_inode_hash() combination.
  * It allows for better checking and less race conditions.
  */
-blocking struct inode * get_empty_inode_hashed(dev_t i_dev, unsigned long i_ino);
+extern struct inode * get_empty_inode_hashed(dev_t i_dev, unsigned long i_ino);
 
 extern void insert_inode_hash(struct inode *);
-extern blocking struct inode * get_pipe_inode(void);
+extern struct inode * get_pipe_inode(void);
 extern int get_unused_fd(void);
 extern void put_unused_fd(int);
 extern struct file * get_empty_filp(void);

@@ -50,13 +50,8 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/config.h>
-
-#include <linux/version.h>
-#if LINUX_VERSION_CODE < 66354 /* 1.3.50 */
-#include "../block/blk.h"
-#else
+#include <linux/init.h>
 #include <linux/blk.h>
-#endif
 
 #include "scsi.h"
 #include "hosts.h"
@@ -69,13 +64,10 @@
 
 #define PCI_DEVICE_ID_AMD53C974 	PCI_DEVICE_ID_AMD_SCSI
 
-
-#ifndef  VERSION_ELF_1_2_13
 struct proc_dir_entry	proc_scsi_tmscsim ={
        PROC_SCSI_DC390T, 7 ,"tmscsim",
        S_IFDIR | S_IRUGO | S_IXUGO, 2
        };
-#endif
 
 static USHORT DC390_StartSCSI( PACB pACB, PDCB pDCB, PSRB pSRB );
 static void DC390_DataOut_0( PACB pACB, PSRB pSRB, PUCHAR psstatus);
@@ -675,11 +667,7 @@ DoNextCmd( PACB pACB, PDCB pDCB )
  * Description:
  *   Return the disk geometry for the given SCSI device.
  ***********************************************************************/
-#ifdef	VERSION_ELF_1_2_13
-int DC390_bios_param(Disk *disk, int devno, int geom[])
-#else
 int DC390_bios_param(Disk *disk, kdev_t devno, int geom[])
-#endif
 {
     int heads, sectors, cylinders;
     PACB pACB;
@@ -1046,14 +1034,10 @@ void DC390_initDCB( PACB pACB, PDCB pDCB, PSCSICMD cmd )
  ***********************************************************************/
 void DC390_initSRB( PSRB psrb )
 {
-#ifndef VERSION_ELF_1_2_13
 #ifdef DC390_DEBUG0
    printk("DC390 init: %08lx %08lx,",(ULONG)psrb,(ULONG)virt_to_bus(psrb));
 #endif
 	psrb->PhysSRB = virt_to_bus( psrb );
-#else
-	psrb->PhysSRB = (ULONG) psrb;
-#endif
 }
 
 
@@ -1084,7 +1068,7 @@ void DC390_linkSRB( PACB pACB )
  * Inputs : psh - pointer to this host adapter's structure
  *
  ***********************************************************************/
-void DC390_initACB( PSH psh, ULONG io_port, UCHAR Irq, USHORT index )
+__initfunc(void DC390_initACB( PSH psh, ULONG io_port, UCHAR Irq, USHORT index ))
 {
     PACB    pACB;
     USHORT  i;
@@ -1098,7 +1082,6 @@ void DC390_initACB( PSH psh, ULONG io_port, UCHAR Irq, USHORT index )
 
     pACB = (PACB) psh->hostdata;
 
-#ifndef VERSION_ELF_1_2_13
     psh->max_id = 8;
 #ifdef	CONFIG_SCSI_MULTI_LUN
     if( eepromBuf[index][EE_MODE2] & LUN_CHECK )
@@ -1106,7 +1089,6 @@ void DC390_initACB( PSH psh, ULONG io_port, UCHAR Irq, USHORT index )
     else
 #endif
 	psh->max_lun = 1;
-#endif
 
     pACB->max_id = 7;
     if( pACB->max_id == eepromBuf[index][EE_ADAPT_SCSI_ID] )
@@ -1155,7 +1137,7 @@ void DC390_initACB( PSH psh, ULONG io_port, UCHAR Irq, USHORT index )
  * Inputs : psh - pointer to this host adapter's structure
  *
  ***********************************************************************/
-int DC390_initAdapter( PSH psh, ULONG io_port, UCHAR Irq, USHORT index )
+__initfunc(int DC390_initAdapter( PSH psh, ULONG io_port, UCHAR Irq, USHORT index))
 {
     USHORT ioport;
     UCHAR  bval;
@@ -1179,11 +1161,7 @@ int DC390_initAdapter( PSH psh, ULONG io_port, UCHAR Irq, USHORT index )
 
     if( !used_irq )
     {
-#ifdef	VERSION_ELF_1_2_13
-	if( request_irq(Irq, DC390_Interrupt, SA_INTERRUPT, "tmscsim"))
-#else
 	if( request_irq(Irq, DC390_Interrupt, SA_INTERRUPT, "tmscsim", NULL))
-#endif
 	{
 	    printk("DC390: register IRQ error!\n");
 	    return( -1 );
@@ -1533,8 +1511,8 @@ DC390_ToMech( USHORT Mechnum, USHORT BusDevFunNum )
  *	field of the pACB structure MUST have been set.
  ***********************************************************************/
 
-static int
-DC390_init (PSHT psht, ULONG io_port, UCHAR Irq, USHORT index, USHORT MechNum)
+__initfunc(static int
+DC390_init (PSHT psht, ULONG io_port, UCHAR Irq, USHORT index, USHORT MechNum))
 {
     PSH   psh;
     PACB  pACB;
@@ -1614,8 +1592,8 @@ DC390_init (PSHT psht, ULONG io_port, UCHAR Irq, USHORT index, USHORT MechNum)
  *
  ***********************************************************************/
 
-int
-DC390_detect(Scsi_Host_Template *psht)
+__initfunc(int
+DC390_detect(Scsi_Host_Template *psht))
 {
 #ifdef FOR_PCI_OK
     UCHAR   pci_bus, pci_device_fn;
@@ -1626,19 +1604,13 @@ DC390_detect(Scsi_Host_Template *psht)
 
     UCHAR   irq;
     UCHAR   istatus;
-#ifndef VERSION_ELF_1_2_13
     UINT    io_port;
-#else
-    ULONG   io_port;
-#endif
     USHORT  adaptCnt = 0;	/* Number of boards detected */
     USHORT  pci_index = 0;	/* Device index to PCI BIOS calls */
     USHORT  MechNum, BusDevFunNum;
     ULONG   wlval;
 
-#ifndef VERSION_ELF_1_2_13
     psht->proc_dir = &proc_scsi_tmscsim;
-#endif
 
     InitialTime = 1;
     pSHT_start = psht;
@@ -1725,8 +1697,6 @@ DC390_detect(Scsi_Host_Template *psht)
     return( adaptCnt );
 }
 
-
-#ifndef VERSION_ELF_1_2_13
 
 /********************************************************************
  * Function: tmscsim_set_info()
@@ -1848,7 +1818,6 @@ int tmscsim_proc_info(char *buffer, char **start,
   else
     return length;
 }
-#endif /* VERSION_ELF_1_2_13 */
 
 
 #ifdef MODULE
@@ -1909,11 +1878,7 @@ int DC390_release(struct Scsi_Host *host)
 #ifdef DC390_DEBUG0
 	    printk("DC390: Free IRQ %i.",host->irq);
 #endif
-#ifndef VERSION_ELF_1_2_13
 	    free_irq(host->irq,NULL);
-#else
-	    free_irq(host->irq);
-#endif
 	 }
     }
 

@@ -79,7 +79,7 @@ static int do_load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
 	 * Note that we use open_namei() as the name is now in kernel
 	 * space, and we don't need to copy it.
 	 */
-	retval = open_namei(interp, 0, 0, &bprm->inode, NULL);
+	retval = open_namei(interp, 0, 0, &bprm->inode);
 	if (retval)
 		return retval;
 	bprm->dont_iput=0;

@@ -29,6 +29,7 @@
 
 #include <linux/config.h>
 
+
 /*
   Define types for some of the structures that interface with the rest
   of the Linux Kernel and SCSI Subsystem.

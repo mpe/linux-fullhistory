@@ -4,7 +4,6 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/config.h>
 #include <linux/vfs.h>
 #include <linux/types.h>
 #include <linux/utime.h>
@@ -21,7 +20,6 @@
 #include <linux/file.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
-#include <linux/omirr.h>
 
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
@@ -211,11 +209,6 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 			goto iput_and_out;
 	}
 	error = notify_change(inode, &newattrs);
-#ifdef CONFIG_OMIRR
-	if(!error)
-		omirr_printall(inode, " U %ld %ld %ld ", CURRENT_TIME,
-				newattrs.ia_atime, newattrs.ia_mtime);
-#endif
 iput_and_out:
 	iput(inode);
 out:
@@ -257,11 +250,6 @@ asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 			goto iput_and_out;
 	}
 	error = notify_change(inode, &newattrs);
-#ifdef CONFIG_OMIRR
-	if(!error)
-		omirr_printall(inode, " U %ld %ld %ld ", CURRENT_TIME,
-				newattrs.ia_atime, newattrs.ia_mtime);
-#endif
 iput_and_out:
 	iput(inode);
 out:
@@ -312,11 +300,11 @@ asmlinkage int sys_chdir(const char * filename)
 		goto out;
 
 	error = -ENOENT;
-	if (dentry->d_flag & D_NEGATIVE)
+	inode = dentry->d_inode;
+	if (!inode)
 		goto dput_and_out;
 
 	error = -ENOTDIR;
-	inode = dentry->d_inode;
 	if (!S_ISDIR(inode->i_mode))
 		goto dput_and_out;
 
@@ -340,7 +328,6 @@ asmlinkage int sys_fchdir(unsigned int fd)
 {
 	struct file *file;
 	struct inode *inode;
-	struct dentry *dentry, *tmp;
 	int error;
 
 	lock_kernel();
@@ -361,10 +348,14 @@ asmlinkage int sys_fchdir(unsigned int fd)
 	if (error)
 		goto out;
 
-	dentry = dget(inode->i_dentry);
-	tmp = current->fs->pwd;
-	current->fs->pwd = dentry;
-	dput(tmp);
+	{
+		struct dentry *dentry, *tmp;
+	
+		dentry = dget(i_dentry(inode));
+		tmp = current->fs->pwd;
+		current->fs->pwd = dentry;
+		dput(tmp);
+	}
 out:
 	unlock_kernel();
 	return error;
@@ -384,11 +375,11 @@ asmlinkage int sys_chroot(const char * filename)
 		goto out;
 
 	error = -ENOENT;
-	if (dentry->d_flag & D_NEGATIVE)
+	inode = dentry->d_inode;
+	if (!inode)
 		goto dput_and_out;
 
 	error = -ENOTDIR;
-	inode = dentry->d_inode;
 	if (!S_ISDIR(inode->i_mode))
 		goto dput_and_out;
 
@@ -619,7 +610,7 @@ static int do_open(const char * filename,int flags,int mode, int fd)
 		flag++;
 	if (flag & O_TRUNC)
 		flag |= 2;
-	error = open_namei(filename,flag,mode,&inode,NULL);
+	error = open_namei(filename,flag,mode,&inode);
 	if (error)
 		goto cleanup_file;
 	if (f->f_mode & FMODE_WRITE) {

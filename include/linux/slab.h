@@ -57,7 +57,7 @@ extern void kmem_cache_free(kmem_cache_t *, void *);
 
 extern void *kmalloc(size_t, int);
 extern void kfree(const void *);
-extern void kfree_s(void *, size_t);
+extern void kfree_s(const void *, size_t);
 
 extern int kmem_cache_reap(int, int, int);
 extern int get_slabinfo(char *);

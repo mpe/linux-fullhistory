@@ -107,7 +107,9 @@ S: USA
 
 N: Randolph Bentson
 E: bentson@grieg.seaslug.org
-D: author of driver for Cyclades Cyclom-Y async mux
+D: author of driver for Cyclom-Y and Cyclades-Z async mux
+P: 1024/39ED5729 5C A8 7A F4 B2 7A D1 3E  B5 3B 81 CF 47 30 11 71
+W: http://www.aa.net/~bentson/
 S: 2322 37th Ave SW
 S: Seattle, Washington 98126-2010
 S: USA
@@ -793,6 +795,12 @@ S: Schlehenweg 9
 S: D-91080 Uttenreuth
 S: Germany
 
+N: Jaroslav Kysela
+E: perex@jcu.cz
+D: Original Author and Maintainer for HP 10/100 Mbit Network Adapters
+W: http://www.pf.jcu.cz/~perex
+S: Unix Centre of Pedagogical Faculty, University of South Bohemia
+
 N: Bas Laarhoven
 E: bas@vimec.nl
 D: Loadable modules and ftape driver
@@ -841,6 +849,13 @@ D: Promised to send money if I would put his name in the source tree.
 S: PO Box 371
 S: North Little Rock, Arkansas 72115
 S: US
+
+N: Siegfried "Frieder" Loeffler (dg1sek)
+E: floeff@tunix.mathematik.uni-stuttgart.de, fl@LF.net
+W: http://www.mathematik.uni-stuttgart.de/~floeff
+D: Busmaster driver for HP 10/100 Mbit Network Adapters
+S: University of Stuttgart, Germany  and
+S: Ecole Nationale Superieure des Telecommunications, Paris
 
 N: Martin von Loewis
 E: loewis@informatik.hu-berlin.de

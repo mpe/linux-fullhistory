@@ -114,7 +114,7 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 #else
 	corefile[4] = '\0';
 #endif
-	if (open_namei(corefile,O_CREAT | 2 | O_TRUNC,0600,&inode,NULL)) {
+	if (open_namei(corefile,O_CREAT | 2 | O_TRUNC,0600,&inode)) {
 		inode = NULL;
 		goto end_coredump;
 	}

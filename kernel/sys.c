@@ -21,7 +21,6 @@
 #include <linux/fcntl.h>
 #include <linux/acct.h>
 #include <linux/tty.h>
-#include <linux/nametrans.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/notifier.h>
@@ -431,7 +430,7 @@ asmlinkage int sys_acct(const char *name)
 			if ((error = getname(name, &tmp)) != 0)
 				goto out;
 
-			error = open_namei(tmp, O_RDWR, 0600, &inode, 0);
+			error = open_namei(tmp, O_RDWR, 0600, &inode);
 			putname(tmp);
 			if (error)
 				goto out;

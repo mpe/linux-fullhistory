@@ -78,7 +78,7 @@ static int do_load_java(struct linux_binprm *bprm,struct pt_regs *regs)
 	 * OK, now restart the process with the interpreter's inode.
 	 */
 	bprm->filename = binfmt_java_interpreter;
-	retval = open_namei(binfmt_java_interpreter, 0, 0, &bprm->inode, NULL);
+	retval = open_namei(binfmt_java_interpreter, 0, 0, &bprm->inode);
 	if (retval)
 		return retval;
 	bprm->dont_iput=0;
@@ -121,7 +121,7 @@ static int do_load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 	 * OK, now restart the process with the interpreter's inode.
 	 */
 	bprm->filename = binfmt_java_appletviewer;
-	retval = open_namei(binfmt_java_appletviewer, 0, 0, &bprm->inode, NULL);
+	retval = open_namei(binfmt_java_appletviewer, 0, 0, &bprm->inode);
 	if (retval)
 		return retval;
 	bprm->dont_iput=0;

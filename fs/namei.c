@@ -19,10 +19,7 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/mm.h>
-#include <linux/dalloc.h>
-#include <linux/nametrans.h>
 #include <linux/proc_fs.h>
-#include <linux/omirr.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
@@ -236,9 +233,9 @@ void put_write_access(struct inode * inode)
  * We get the directory semaphore, and after getting that we also
  * make sure that nobody added the entry to the dcache in the meantime..
  */
-static struct dentry * real_lookup(struct dentry * dentry, struct qstr * name)
+static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 {
-	struct inode *dir = dentry->d_inode;
+	struct inode *dir = parent->d_inode;
 	struct dentry *result;
 	struct inode *inode;
 	int error = -ENOTDIR;
@@ -252,26 +249,21 @@ static struct dentry * real_lookup(struct dentry * dentry, struct qstr * name)
 
 	if (!error || error == -ENOENT) {
 		struct dentry *new;
-		int isdir = 0, flags = D_NOCHECKDUP;
 
-		if (error) {
-			flags = D_NEGATIVE;
+		if (error)
 			inode = NULL;
-		} else if (S_ISDIR(inode->i_mode)) {
-			isdir = 1;
-			flags = D_DIR|D_NOCHECKDUP;
-		}
-		new = d_alloc(dentry, name, isdir);
+
+		new = d_alloc(parent, name);
 
 		/*
 		 * Ok, now we can't sleep any more. Double-check that
 		 * nobody else added this in the meantime..
 		 */
-		result = d_lookup(dentry, name);
+		result = d_lookup(parent, name);
 		if (result) {
 			d_free(new);
 		} else {
-			d_add(new, inode, flags);
+			d_add(new, inode);
 			result = new;
 		}
 	}
@@ -280,16 +272,39 @@ static struct dentry * real_lookup(struct dentry * dentry, struct qstr * name)
 }
 
 /* Internal lookup() using the new generic dcache. */
-static inline struct dentry * cached_lookup(struct dentry * dentry, struct qstr * name)
+static inline struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
 {
-	return d_lookup(dentry, name);
+	struct dentry * dentry = d_lookup(parent, name);
+
+	if (dentry) {
+		/*
+		 *   FIXME!   We should have something like
+
+		dentry = dentry->revalidate(dentry);
+
+		 * here - we need to ask the low-level filesystem permission
+		 * to use the cached entry (NFS needs to time them out, and
+		 * /proc might go away etc).
+		 */
+
+		/*
+		 * The parent d_count _should_ be at least 2: one for the
+		 * dentry we found, and one for the fact that we are using
+		 * it.
+		 */
+		if (parent->d_count <= 1) {
+			printk("lookup of %s success in %s, but parent count is %d\n",
+				dentry->d_name, parent->d_name, parent->d_count);
+		}
+	}
+	return dentry;
 }
 
 /*
  * "." and ".." are special - ".." especially so because it has to be able
  * to know about the current root directory and parent relationships
  */
-static struct dentry * reserved_lookup(struct dentry * dir, struct qstr * name)
+static struct dentry * reserved_lookup(struct dentry * parent, struct qstr * name)
 {
 	struct dentry *result = NULL;
 	if (name->name[0] == '.') {
@@ -300,12 +315,12 @@ static struct dentry * reserved_lookup(struct dentry * dir, struct qstr * name)
 			if (name->name[1] != '.')
 				break;
 
-			if (dir != current->fs->root) {
-				dir = dir->d_covers->d_parent;
+			if (parent != current->fs->root) {
+				parent = parent->d_covers->d_parent;
 			}
 			/* fallthrough */
 		case 1:
-			result = dget(dir);
+			result = dget(parent);
 			break;
 		}
 	}
@@ -425,7 +440,7 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 		dentry = lookup(base, &this);
 		if (IS_ERR(dentry))
 			break;
-		if (dentry->d_flag & D_NEGATIVE)
+		if (!dentry->d_inode)
 			break;
 
 		/* Last component? */
@@ -466,8 +481,8 @@ int __namei(const char *pathname, struct inode **res_inode, int follow_link)
 		if (!IS_ERR(dentry)) {
 			error = -ENOENT;
 			if (dentry) {
-				if (!(dentry->d_flag & D_NEGATIVE)) {
-					struct inode *inode = dentry->d_inode;
+				struct inode *inode = dentry->d_inode;
+				if (inode) {
 					atomic_inc(&inode->i_count);
 					*res_inode = inode;
 					error = 0;
@@ -509,20 +524,21 @@ static inline struct inode *lock_parent(struct dentry *dentry)
  * which is a lot more logical, and also allows the "no perm" needed
  * for symlinks (where the permissions are checked later).
  */
-int open_namei(const char * pathname, int flag, int mode,
-               struct inode ** res_inode, struct dentry * base)
+int open_namei(const char * pathname, int flag, int mode, struct inode ** res_inode)
 {
 	int error;
+	int acc_mode;
 	struct inode *inode;
 	struct dentry *dentry;
 
 	mode &= S_IALLUGO & ~current->fs->umask;
 	mode |= S_IFREG;
 
-	dentry = lookup_dentry(pathname, base, 1);
+	dentry = lookup_dentry(pathname, NULL, 1);
 	if (IS_ERR(dentry))
 		return PTR_ERR(dentry);
 
+	acc_mode = ACC_MODE(flag);
 	if (flag & O_CREAT) {
 		struct inode *dir;
 
@@ -531,7 +547,7 @@ int open_namei(const char * pathname, int flag, int mode,
 		 * The existence test must be done _after_ getting the directory
 		 * semaphore - the dentry might otherwise change.
 		 */
-		if (!(dentry->d_flag & D_NEGATIVE)) {
+		if (dentry->d_inode) {
 			error = 0;
 			if (flag & O_EXCL)
 				error = -EEXIST;
@@ -543,6 +559,8 @@ int open_namei(const char * pathname, int flag, int mode,
 			if (dir->i_sb && dir->i_sb->dq_op)
 				dir->i_sb->dq_op->initialize(dir, -1);
 			error = dir->i_op->create(dir, dentry, mode);
+			/* Don't check for write permission */
+			acc_mode = 0;
 		}
 		up(&dir->i_sem);
 		iput(dir);
@@ -551,15 +569,15 @@ int open_namei(const char * pathname, int flag, int mode,
 	}
 
 	error = -ENOENT;
-	if (dentry->d_flag & D_NEGATIVE)
-		goto exit;
-
 	inode = dentry->d_inode;
-	error = -EISDIR;
-	if (S_ISDIR(inode->i_mode) && (flag & 2))
+	if (!inode)
 		goto exit;
 
-	error = permission(inode,ACC_MODE(flag));
+	error = -EISDIR;
+	if (S_ISDIR(inode->i_mode) && (flag & FMODE_WRITE))
+		goto exit;
+
+	error = permission(inode,acc_mode);
 	if (error)
 		goto exit;
 
@@ -636,7 +654,7 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 	dir = lock_parent(dentry);
 
 	error = -EEXIST;
-	if (!(dentry->d_flag & D_NEGATIVE))
+	if (dentry->d_inode)
 		goto exit_lock;
 
 	error = -EROFS;
@@ -710,7 +728,7 @@ static inline int do_mkdir(const char * pathname, int mode)
 	dir = lock_parent(dentry);
 
 	error = -EEXIST;
-	if (!(dentry->d_flag & D_NEGATIVE))
+	if (dentry->d_inode)
 		goto exit_lock;
 
 	error = -EROFS;
@@ -766,7 +784,7 @@ static inline int do_rmdir(const char * name)
 
 	dir = lock_parent(dentry);
 	error = -ENOENT;
-	if (dentry->d_flag & D_NEGATIVE)
+	if (!dentry->d_inode)
 		goto exit_lock;
 
 	error = -EROFS;
@@ -894,7 +912,7 @@ static inline int do_symlink(const char * oldname, const char * newname)
 		goto exit;
 
 	error = -EEXIST;
-	if (!(dentry->d_flag & D_NEGATIVE))
+	if (dentry->d_inode)
 		goto exit;
 
 	dir = lock_parent(dentry);
@@ -961,18 +979,18 @@ static inline int do_link(const char * oldname, const char * newname)
 	dir = lock_parent(new_dentry);
 
 	error = -ENOENT;
-	if (old_dentry->d_flag & D_NEGATIVE)
+	inode = old_dentry->d_inode;
+	if (!inode)
 		goto exit_lock;
 
 	error = -EEXIST;
-	if (!(new_dentry->d_flag & D_NEGATIVE))
+	if (new_dentry->d_inode)
 		goto exit_lock;
 
 	error = -EROFS;
 	if (IS_RDONLY(dir))
 		goto exit_lock;
 
-	inode = old_dentry->d_inode;
 	error = -EXDEV;
 	if (dir->i_dev != inode->i_dev)
 		goto exit_lock;
@@ -1067,7 +1085,7 @@ static inline int do_rename(const char * oldname, const char * newname)
 	double_down(&new_dir->i_sem, &old_dir->i_sem);
 
 	error = -ENOENT;
-	if (old_dentry->d_flag & D_NEGATIVE)
+	if (!old_dentry->d_inode)
 		goto exit_lock;
 
 	error = permission(old_dir,MAY_WRITE | MAY_EXEC);

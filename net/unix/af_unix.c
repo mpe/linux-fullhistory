@@ -459,7 +459,7 @@ static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 	{
 		old_fs=get_fs();
 		set_fs(get_ds());
-		err = open_namei(sunname->sun_path, 2, S_IFSOCK, &inode, NULL);
+		err = open_namei(sunname->sun_path, 2, S_IFSOCK, &inode);
 		set_fs(old_fs);
 		if(err<0)
 		{
@@ -550,7 +550,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	err=do_mknod(sunaddr->sun_path, S_IFSOCK|S_IRWXUGO, 0);
 	if (!err)
-		err=open_namei(sunaddr->sun_path, 2, S_IFSOCK, &inode, NULL);
+		err=open_namei(sunaddr->sun_path, 2, S_IFSOCK, &inode);
 	
 	set_fs(old_fs);
 	

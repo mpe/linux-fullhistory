@@ -77,7 +77,7 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	/*
 	 * OK, now restart the process with the interpreter's inode.
 	 */
-	retval = open_namei(interp, 0, 0, &bprm->inode, NULL);
+	retval = open_namei(interp, 0, 0, &bprm->inode);
 	if (retval)
 		return retval;
 	bprm->dont_iput=0;

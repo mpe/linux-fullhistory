@@ -501,8 +501,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			if (retval >= 0) {
 				old_fs = get_fs(); /* This could probably be optimized */
 				set_fs(get_ds());
-				retval = open_namei(elf_interpreter, 0, 0,
-						    &interpreter_inode, NULL);
+				retval = open_namei(elf_interpreter, 0, 0, &interpreter_inode);
 				set_fs(old_fs);
 			}
 
@@ -1078,7 +1077,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 #else
 	corefile[4] = '\0';
 #endif
-	if (open_namei(corefile,O_CREAT | 2 | O_TRUNC,0600,&inode,NULL)) {
+	if (open_namei(corefile,O_CREAT | 2 | O_TRUNC,0600,&inode)) {
 		inode = NULL;
 		goto end_coredump;
 	}

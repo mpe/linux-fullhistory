@@ -136,7 +136,7 @@ static int autofs_root_lookup(struct inode *dir, struct qstr *str, struct inode 
 			return -EACCES;
 		}
 		
-		if ( !oz_mode && S_ISDIR(res->i_mode) && res->i_dentry->d_covers == res->i_dentry ) {
+		if ( !oz_mode && S_ISDIR(res->i_mode) && i_dentry(res)->d_covers == i_dentry(res)) {
 			/* Not a mount point yet, call 1-800-DAEMON */
 			DPRINTK(("autofs: waiting on non-mountpoint dir, inode = %lu, pid = %u, pgrp = %u\n", res->i_ino, current->pid, current->pgrp));
 			iput(res);
@@ -208,7 +208,7 @@ static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const c
 	memcpy(ent->name, dentry->d_name.name,ent->len = dentry->d_name.len);
 
 	autofs_hash_insert(dh,ent);
-	d_instantiate(dentry, iget(dir->i_sb,ent->ino), 0);
+	d_instantiate(dentry, iget(dir->i_sb,ent->ino));
 
 	return 0;
 }
@@ -295,7 +295,7 @@ static int autofs_root_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	ent->ino = sbi->next_dir_ino++;
 	autofs_hash_insert(dh,ent);
 	dir->i_nlink++;
-	d_instantiate(dentry, iget(dir->i_sb,ent->ino), D_DIR);
+	d_instantiate(dentry, iget(dir->i_sb,ent->ino));
 
 	return 0;
 }

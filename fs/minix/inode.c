@@ -18,7 +18,6 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
-#include <linux/dalloc.h>
 #include <linux/init.h>
 
 #include <asm/system.h>

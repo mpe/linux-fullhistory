@@ -7,7 +7,6 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/fs.h>
-#include <linux/dalloc.h>
 #include <linux/omirr.h>
 #include <asm/uaccess.h>
 

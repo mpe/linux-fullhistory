@@ -227,7 +227,7 @@ int minix_create(struct inode * dir, struct dentry *dentry, int mode)
 	de->inode = inode->i_ino;
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
@@ -280,7 +280,7 @@ int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev)
 	de->inode = inode->i_ino;
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
@@ -340,7 +340,7 @@ int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 	dir->i_nlink++;
 	dir->i_dirt = 1;
 	brelse(bh);
-	d_instantiate(dentry, inode, D_DIR);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
@@ -563,7 +563,7 @@ int minix_symlink(struct inode * dir, struct dentry *dentry,
 	de->inode = inode->i_ino;
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
@@ -598,7 +598,7 @@ int minix_link(struct inode * inode, struct inode * dir,
 	inode->i_nlink++;
 	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 

@@ -346,10 +346,10 @@ static int ext2_delete_entry (struct ext2_dir_entry * dir,
 /*
  * By the time this is called, we already have created
  * the directory cache entry for the new file, but it
- * is so far marked "D_NEGATIVE".
+ * is so far negative - it has no inode.
  *
- * If the create succeeds, remove the D_NEGATIVE flag,
- * and fill in the inode information with d_instantiate().
+ * If the create succeeds, we fill in the inode information
+ * with d_instantiate(). 
  */
 int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 {
@@ -382,7 +382,7 @@ int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 		wait_on_buffer (bh);
 	}
 	brelse (bh);
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
@@ -439,7 +439,7 @@ int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 		wait_on_buffer (bh);
 	}
 	brelse(bh);
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
@@ -503,7 +503,7 @@ int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	}
 	dir->i_nlink++;
 	mark_inode_dirty(dir);
-	d_instantiate(dentry, inode, D_DIR);
+	d_instantiate(dentry, inode);
 	brelse (bh);
 	return 0;
 }
@@ -775,7 +775,7 @@ int ext2_symlink (struct inode * dir, struct dentry *dentry, const char * symnam
 		wait_on_buffer (bh);
 	}
 	brelse (bh);
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 
@@ -810,7 +810,7 @@ int ext2_link (struct inode * inode, struct inode * dir, struct dentry *dentry)
 	inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);
 	atomic_inc(&inode->i_count);
-	d_instantiate(dentry, inode, 0);
+	d_instantiate(dentry, inode);
 	return 0;
 }
 

@@ -1275,7 +1275,7 @@ kmem_report_alloc_err(const char *str, kmem_cache_t * cachep)
 }
 
 static void
-kmem_report_free_err(const char *str, void *objp, kmem_cache_t * cachep)
+kmem_report_free_err(const char *str, const void *objp, kmem_cache_t * cachep)
 {
 	if (cachep)
 		SLAB_STATS_INC_ERR(cachep);
@@ -1456,7 +1456,7 @@ nul_ptr:
  * it should be in this state _before_ it is released.
  */
 static inline void
-__kmem_cache_free(kmem_cache_t *cachep, void *objp)
+__kmem_cache_free(kmem_cache_t *cachep, const void *objp)
 {
 	kmem_slab_t	*slabp;
 	kmem_bufctl_t	*bufp;
@@ -1653,7 +1653,7 @@ null_ptr:
 }
 
 void
-kfree_s(void *objp, size_t size)
+kfree_s(const void *objp, size_t size)
 {
 	struct page *page;
 	int	nr;
