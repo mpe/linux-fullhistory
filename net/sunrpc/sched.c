@@ -174,6 +174,7 @@ rpc_make_runnable(struct rpc_task *task)
 		printk(KERN_ERR "RPC: task w/ running timer in rpc_make_runnable!!\n");
 		return;
 	}
+	task->tk_flags |= RPC_TASK_RUNNING;
 	if (RPC_IS_ASYNC(task)) {
 		int status;
 		status = rpc_add_wait_queue(&schedq, task);
@@ -186,7 +187,6 @@ rpc_make_runnable(struct rpc_task *task)
 	} else {
 		wake_up(&task->tk_wait);
 	}
-	task->tk_flags |= RPC_TASK_RUNNING;
 }
 
 
@@ -447,7 +447,10 @@ __rpc_execute(struct rpc_task *task)
 							task->tk_pid);
 			if (current->pid == rpciod_pid)
 				printk(KERN_ERR "RPC: rpciod waiting on sync task!\n");
-			sleep_on(&task->tk_wait);
+
+			sti();
+			__wait_event(task->tk_wait, RPC_IS_RUNNING(task));
+			cli();
 
 			/*
 			 * When the task received a signal, remove from

@@ -72,7 +72,7 @@ static struct file_operations nfs_dir_operations = {
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
-	NULL,			/* no special open is needed */
+	nfs_open,		/* open - revalidate the inode */
 	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* fsync */
@@ -389,8 +389,11 @@ static int nfs_lookup_revalidate(struct dentry * dentry)
 	 * If we don't have an inode, let's just assume
 	 * a 5-second "live" time for negative dentries.
 	 */
-	if (!inode)
-		goto do_lookup;
+	if (!inode) {
+		if (time_after(jiffies, dentry->d_time + NFS_REVALIDATE_INTERVAL))
+			goto out_bad;
+		goto out_valid;
+	}
 
 	if (is_bad_inode(inode)) {
 		dfprintk(VFS, "nfs_lookup_validate: %s/%s has dud inode\n",
@@ -398,27 +401,17 @@ static int nfs_lookup_revalidate(struct dentry * dentry)
 		goto out_bad;
 	}
 
-	if (_nfs_revalidate_inode(NFS_DSERVER(dentry), dentry))
-		goto out_bad;
-
 	if (time_before(jiffies,dentry->d_time+NFS_ATTRTIMEO(inode)))
 		goto out_valid;
 
 	if (IS_ROOT(dentry))
 		goto out_valid;
 
-do_lookup:
 	/*
 	 * Do a new lookup and check the dentry attributes.
 	 */
 	error = nfs_proc_lookup(NFS_DSERVER(parent), NFS_FH(parent), 
 				dentry->d_name.name, &fhandle, &fattr);
-	if (dentry->d_inode == NULL) {
-		if (error == -ENOENT &&
-		    time_before(jiffies,dentry->d_time+NFS_REVALIDATE_INTERVAL))
-			goto out_valid;
-		goto out_bad;
-	}
 	if (error)
 		goto out_bad;
 

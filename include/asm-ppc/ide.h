@@ -11,7 +11,6 @@
 #ifndef __ASMPPC_IDE_H
 #define __ASMPPC_IDE_H
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <asm/processor.h>
 

@@ -190,7 +190,7 @@ extern inline void up(struct semaphore * sem)
 		"	stl_c	$28,%1\n"
 		"	beq	$28,2f\n"
 		"	mb\n"
-		"	ble	$27,3f\n"
+		"	ble	$24,3f\n"
 		"4:\n"
 		".section .text2,\"ax\"\n"
 		"2:	br	1b\n"

@@ -444,8 +444,8 @@ Real is aware of the problem and should have an updated version of the
 software available shortly.  In the mean time, you can always try
 backing up your copy of rvplayer, and then editing it by:
 
-   dd if=/dev/zero of=rvplayer bs=1 count=1 seek=657586 conv=notrunc dd
-if=/dev/zero of=rvplayer bs=1 count=1 seek=665986 conv=notrunc
+   dd if=/dev/zero of=rvplayer bs=1 count=1 seek=657586 conv=notrunc
+   dd if=/dev/zero of=rvplayer bs=1 count=1 seek=665986 conv=notrunc
 
    If you're lucky, you'll then have sound....
 

@@ -13,6 +13,23 @@
  *					(fixed range check bug as a side effect)
  *					Printk clean up
  *	9/12/98	alan@redhat.com		Rough port to 2.1.x
+ *
+ *
+ *	***********************************************************
+ *
+ *	To use this driver you also need the support package. You 
+ *	can find this in RPM format on
+ *		ftp://ftp.linux.org.uk/pub/linux/alan
+ * 	
+ *	You can find the original tools for this direct from Multitech
+ *		ftp://ftp.multitech.com/ISI-Cards/
+ *
+ *	Having installed the cards the module options (/etc/conf.modules)
+ *
+ *	options isicom   io=card1,card2,card3,card4 irq=card1,card2,card3,card4
+ *
+ *	Omit those entries for boards you don't have installed.
+ *
  */
 
 #include <linux/module.h>

@@ -354,7 +354,7 @@ static unsigned long memory_end = 0;
 int rows, cols;
 
 #ifdef CONFIG_BLK_DEV_RAM
-extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
+extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load 2 = dual disk */
 extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_size;		/* Size of the ramdisk(s) */
 extern int rd_image_start;	/* starting block # of image */

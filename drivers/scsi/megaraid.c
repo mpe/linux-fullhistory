@@ -100,7 +100,6 @@
 
 #define CRLFSTR "\n"
 
-#include <linux/config.h>
 #include <linux/version.h>
 
 #ifdef MODULE

@@ -181,6 +181,7 @@ extern struct inode *nfs_fhget(struct dentry *, struct nfs_fh *,
 				struct nfs_fattr *);
 extern int nfs_refresh_inode(struct inode *, struct nfs_fattr *);
 extern int nfs_revalidate(struct dentry *);
+extern int nfs_open(struct inode *, struct file *);
 extern int _nfs_revalidate_inode(struct nfs_server *, struct dentry *);
 
 /*

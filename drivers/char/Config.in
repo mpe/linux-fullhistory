@@ -137,6 +137,9 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
     dep_tristate 'Colour QuickCam Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_CQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
   fi
   dep_tristate 'Mediavision Pro Movie Studio Video For Linux' CONFIG_VIDEO_PMS $CONFIG_VIDEO_DEV
+  if [ "$CONFIG_PMAC" = "y" ]; then
+    dep_tristate 'PlanB Video-In on PowerMac' CONFIG_VIDEO_PLANB $CONFIG_VIDEO_DEV
+  fi
   dep_tristate 'SAA5249 Teletext processor' CONFIG_VIDEO_SAA5249 $CONFIG_VIDEO_DEV
   dep_tristate 'SF16FMI Radio' CONFIG_RADIO_SF16FMI $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_SF16FMI" = "y" ]; then

@@ -46,7 +46,7 @@ static struct file_operations nfs_file_operations = {
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
 	nfs_file_mmap,		/* mmap */
-	NULL,			/* no special open is needed */
+	nfs_open,		/* open - revalidate the inode */
 	nfs_file_flush,		/* flush */
 	NULL,			/* release */
 	nfs_fsync,		/* fsync */

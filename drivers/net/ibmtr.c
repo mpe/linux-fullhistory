@@ -1499,6 +1499,7 @@ static void tr_rx(struct device *dev)
 	       ti->asb + offsetof(struct asb_rec, rec_buf_addr));
 
 	lan_hdr_len=readb(ti->arb + offsetof(struct arb_rec_req, lan_hdr_len));
+	hdr_len = lan_hdr_len + sizeof(struct trllc) + sizeof(struct iphdr);
 	
 	llc=(rbuffer + offsetof(struct rec_buf, data) + lan_hdr_len);
 
@@ -1525,8 +1526,10 @@ static void tr_rx(struct device *dev)
 		return;
 	}
 
+	length = ntohs(readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
        	if ((readb(llc + offsetof(struct trllc, dsap))==EXTENDED_SAP) &&
-       	    (readb(llc + offsetof(struct trllc, ssap))==EXTENDED_SAP)) {
+       	    (readb(llc + offsetof(struct trllc, ssap))==EXTENDED_SAP) &&
+		(length>=hdr_len)) {
        		IPv4_p = 1;
        	}
 
@@ -1557,7 +1560,6 @@ static void tr_rx(struct device *dev)
        	}
 #endif
 
-       	length = ntohs(readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
        	skb_size = length-lan_hdr_len+sizeof(struct trh_hdr)+sizeof(struct trllc);
  
        	if (!(skb=dev_alloc_skb(skb_size))) {
@@ -1577,7 +1579,6 @@ static void tr_rx(struct device *dev)
 
 	if (IPv4_p) {
                 /* Copy the headers without checksumming */
-		hdr_len = lan_hdr_len + sizeof(struct trllc) + sizeof(struct iphdr);
 		memcpy_fromio(data, rbufdata, hdr_len);
 
 		/* Watch for padded packets and bogons */

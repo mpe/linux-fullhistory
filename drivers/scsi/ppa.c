@@ -741,6 +741,7 @@ static void ppa_interrupt(void *data)
 {
     ppa_struct *tmp = (ppa_struct *) data;
     Scsi_Cmnd *cmd = tmp->cur_cmd;
+    unsigned long flags;
 
     if (!cmd) {
 	printk("PPA: bug in ppa_interrupt\n");
@@ -792,7 +793,10 @@ static void ppa_interrupt(void *data)
 	ppa_pb_release(cmd->host->unique_id);
 
     tmp->cur_cmd = 0;
+    
+    spin_lock_irqsave(&io_request_lock, flags);
     cmd->scsi_done(cmd);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     return;
 }
 

@@ -354,6 +354,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_VIDEO_PLANB),y)
+L_OBJS += planb.o
+else
+  ifeq ($(CONFIG_VIDEO_PLANB),m)
+  M_OBJS += planb.o
+  endif
+endif
+
 ifeq ($(CONFIG_RADIO_AZTECH),y)
 L_OBJS += radio-aztech.o
 else

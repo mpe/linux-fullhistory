@@ -12,10 +12,16 @@ Original driver (sg.h):
 *       Copyright (C) 1998, 1999 Douglas Gilbert
 
 
-    Version: 2.1.31 (990327)
+    Version: 2.1.32 (990501)
     This version for later 2.1.x series and 2.2.x kernels
     D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au)
 
+    Changes since 2.1.31 (990327)
+        - add ioctls SG_GET_UNDERRUN_FLAG and _SET_. Change the default
+          to _not_ flag underruns (affects aic7xxx driver)
+        - clean up logging of pointers to use %p (for 64 bit architectures)
+        - rework usage of get_user/copy_to_user family of kernel calls
+        - "disown" scsi_command blocks before releasing them
     Changes since 2.1.30 (990320)
         - memory tweaks: change flags on kmalloc (GFP_KERNEL to GFP_ATOMIC)
         -                increase max allowable mid-level pool usage
@@ -113,7 +119,7 @@ Original driver (sg.h):
  requesting 512KB) and scale them back in the face of ENOMEM errors.
  N.B. Queuing up commands also ties up kernel memory.
 
- More documentation can be found at www.netwinder.org/~dougg
+ More documentation can be found at www.torque.net/sg
 */
 
 #define SG_MAX_SENSE 16   /* too little, unlikely to change in 2.2.x */
@@ -197,6 +203,11 @@ typedef struct sg_scsi_id {
 #define SG_GET_COMMAND_Q 0x2270   /* Yields 0 (queuing off) or 1 (on) */
 #define SG_SET_COMMAND_Q 0x2271   /* Change queuing state with 0 or 1 */
 
+/* Get/set whether DMA underrun will cause an error (DID_ERROR) [this only
+   currently applies to the [much-used] aic7xxx driver) */
+#define SG_GET_UNDERRUN_FLAG 0x2280 /* Yields 0 (don't flag) or 1 (flag) */
+#define SG_SET_UNDERRUN_FLAG 0x2281 /* Change flag underrun state */
+
 
 #define SG_DEFAULT_TIMEOUT (60*HZ) /* HZ == 'jiffies in 1 second' */
 #define SG_DEFAULT_RETRIES 1
@@ -206,6 +217,7 @@ typedef struct sg_scsi_id {
 #define SG_DEF_MERGE_FD 0       /* was 1 -> per device sequencing */
 #define SG_DEF_FORCE_LOW_DMA 0  /* was 1 -> memory below 16MB on i386 */
 #define SG_DEF_FORCE_PACK_ID 0
+#define SG_DEF_UNDERRUN_FLAG 0
 
 /* maximum outstanding requests, write() yields EDOM if exceeded */
 #define SG_MAX_QUEUE 16

@@ -40,6 +40,7 @@ static const char *version =
 	info that the casual reader might think that it documents the i82586 :-<.
 */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>

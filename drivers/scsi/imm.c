@@ -881,6 +881,7 @@ static void imm_interrupt(void *data)
 {
     imm_struct *tmp = (imm_struct *) data;
     Scsi_Cmnd *cmd = tmp->cur_cmd;
+    unsigned long flags;
 
     if (!cmd) {
 	printk("IMM: bug in imm_interrupt\n");
@@ -931,8 +932,10 @@ static void imm_interrupt(void *data)
     if (cmd->SCp.phase > 0)
 	imm_pb_release(cmd->host->unique_id);
 
+    spin_lock_irqsave(&io_request_lock, flags);
     tmp->cur_cmd = 0;
     cmd->scsi_done(cmd);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     return;
 }
 

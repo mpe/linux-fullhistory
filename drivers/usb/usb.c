@@ -569,24 +569,29 @@ int usb_get_report(struct usb_device *dev)
 
 int usb_get_configuration(struct usb_device *dev)
 {
-	unsigned int size;
+	unsigned int cfgno,size;
 	unsigned char buffer[400];
+	unsigned char * bufptr;
+	
+	bufptr=buffer;
+        for (cfgno=0;cfgno<dev->descriptor.bNumConfigurations;cfgno++) {
+  		/* Get the first 8 bytes - guaranteed */
+	  	if (usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, bufptr, 8))
+	    		return -1;
 
-	/* Get the first 8 bytes - guaranteed */
-	if (usb_get_descriptor(dev, USB_DT_CONFIG, 0, buffer, 8))
-		return -1;
-
-	/* Get the full buffer */
-	size = *(unsigned short *)(buffer+2);
-	if (size > sizeof(buffer))
-	{
-		printk(KERN_INFO "usb: truncated DT_CONFIG (want %d).\n", size);
-		size = sizeof(buffer);
+  	  	/* Get the full buffer */
+	  	size = *(unsigned short *)(bufptr+2);
+	  	if (bufptr+size > buffer+sizeof(buffer))
+	  	{
+			printk(KERN_INFO "usb: truncated DT_CONFIG (want %d).\n", size);
+			size = buffer+sizeof(buffer)-bufptr;
+		}
+		if (usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, bufptr, size))
+			return -1;
+			
+		/* Prepare for next configuration */
+		bufptr+=size;
 	}
-
-	if (usb_get_descriptor(dev, USB_DT_CONFIG, 0, buffer, size))
-		return -1;
-
 	return usb_parse_configuration(dev, buffer, size);
 }
 
