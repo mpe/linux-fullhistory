@@ -2,7 +2,7 @@
  *   
  * linux/fs/autofs/autofs_i.h
  *
- *   Copyright 1997 Transmeta Corporation - All Rights Reserved
+ *   Copyright 1997-1998 Transmeta Corporation - All Rights Reserved
  *
  * This file is part of the Linux kernel and is made available under
  * the terms of the GNU General Public License, version 2, or at your
@@ -47,11 +47,13 @@
 
 struct autofs_dir_ent {
 	int hash;
-	struct autofs_dir_ent *next;
-	struct autofs_dir_ent **back;
 	char *name;
 	int len;
 	ino_t ino;
+	struct dentry *dentry;
+	/* Linked list of entries */
+	struct autofs_dir_ent *next;
+	struct autofs_dir_ent **back;
 	/* The following entries are for the expiry system */
 	unsigned long last_usage;
 	struct autofs_dir_ent *exp_next;
@@ -123,7 +125,7 @@ void autofs_initialize_hash(struct autofs_dirhash *);
 struct autofs_dir_ent *autofs_hash_lookup(const struct autofs_dirhash *,struct qstr *);
 void autofs_hash_insert(struct autofs_dirhash *,struct autofs_dir_ent *);
 void autofs_hash_delete(struct autofs_dir_ent *);
-struct autofs_dir_ent *autofs_hash_enum(const struct autofs_dirhash *,off_t *);
+struct autofs_dir_ent *autofs_hash_enum(const struct autofs_dirhash *,off_t *,struct autofs_dir_ent *);
 void autofs_hash_nuke(struct autofs_dirhash *);
 
 /* Expiration-handling functions */

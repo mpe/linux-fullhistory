@@ -44,6 +44,8 @@
 #define IFF_PORTSEL	0x2000          /* can set media type		*/
 #define IFF_AUTOMEDIA	0x4000		/* auto media select active	*/
 #define IFF_NODYNARP	0x8000		/* use static ARP only (HIPPI)	*/
+
+#ifdef __KERNEL__
 /*
  * The ifaddr structure contains information about one address
  * of an interface.  They are maintained by the different address
@@ -65,6 +67,8 @@ struct ifaddr
 
 #define	ifa_broadaddr	ifa_ifu.ifu_broadaddr	/* broadcast address	*/
 #define	ifa_dstaddr	ifa_ifu.ifu_dstaddr	/* other end of link	*/
+
+#endif /* __KERNEL__ */ 
 
 /*
  *	Device mapping structure. I'd just gone off and designed a 
@@ -115,7 +119,7 @@ struct ifreq
 		struct  ifmap ifru_map;
 		char	ifru_slave[IFNAMSIZ];	/* Just fits the size */
 		char	ifru_newname[IFNAMSIZ];
-		__kernel_caddr_t	ifru_data;
+		char *	ifru_data;
 	} ifr_ifru;
 };
 
@@ -148,7 +152,7 @@ struct ifconf
 	int	ifc_len;			/* size of buffer	*/
 	union 
 	{
-		__kernel_caddr_t	ifcu_buf;
+		char *			ifcu_buf;
 		struct	ifreq 		*ifcu_req;
 	} ifc_ifcu;
 };

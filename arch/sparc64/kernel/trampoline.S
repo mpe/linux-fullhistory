@@ -1,4 +1,4 @@
-/* $Id: trampoline.S,v 1.5 1998/05/25 05:31:45 davem Exp $
+/* $Id: trampoline.S,v 1.6 1998/10/11 06:58:23 davem Exp $
  * trampoline.S: Jump start slave processors on sparc64.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -27,6 +27,7 @@ sparc64_cpu_startup:
 	stxa	%g1, [%g0] ASI_LSU_CONTROL
 	membar	#Sync
 	wrpr	%g0, (PSTATE_PRIV | PSTATE_PEF | PSTATE_IE), %pstate
+	wr	%g0, 0, %fprs
 	wrpr	%g0, 15, %pil
 
 	sethi	%uhi(PAGE_OFFSET), %g4

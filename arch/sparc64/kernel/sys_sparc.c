@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.22 1998/09/25 01:09:27 davem Exp $
+/* $Id: sys_sparc.c,v 1.25 1998/10/21 03:21:15 davem Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -25,6 +25,7 @@
 #include <asm/uaccess.h>
 #include <asm/ipc.h>
 #include <asm/utrap.h>
+#include <asm/perfctr.h>
 
 /* XXX Make this per-binary type, this way we can detect the type of
  * XXX a binary.  Every Sparc executable calls this very early on.
@@ -151,6 +152,7 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 	struct file * file = NULL;
 	unsigned long retval = -EBADF;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if (!(flags & MAP_ANONYMOUS)) {
 		file = fget(fd);
@@ -189,6 +191,7 @@ out_putf:
 		fput(file);
 out:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return retval;
 }
 
@@ -377,4 +380,106 @@ sys_rt_sigaction(int sig, const struct sigaction *act, struct sigaction *oact,
 	}
 
 	return ret;
+}
+
+/* Invoked by rtrap code to update performance counters in
+ * user space.
+ */
+asmlinkage void
+update_perfctrs(void)
+{
+	unsigned long pic, tmp;
+
+	read_pic(pic);
+	tmp = (current->tss.kernel_cntd0 += (unsigned int)pic);
+	__put_user(tmp, current->tss.user_cntd0);
+	tmp = (current->tss.kernel_cntd1 += (pic >> 32));
+	__put_user(tmp, current->tss.user_cntd1);
+	reset_pic();
+}
+
+asmlinkage int
+sys_perfctr(int opcode, unsigned long arg0, unsigned long arg1, unsigned long arg2)
+{
+	int err = 0;
+
+	switch(opcode) {
+	case PERFCTR_ON:
+		current->tss.pcr_reg = arg2;
+		current->tss.user_cntd0 = (u64 *) arg0;
+		current->tss.user_cntd1 = (u64 *) arg1;
+		current->tss.kernel_cntd0 =
+			current->tss.kernel_cntd1 = 0;
+		write_pcr(arg2);
+		reset_pic();
+		current->tss.flags |= SPARC_FLAG_PERFCTR;
+		break;
+
+	case PERFCTR_OFF:
+		err = -EINVAL;
+		if ((current->tss.flags & SPARC_FLAG_PERFCTR) != 0) {
+			current->tss.user_cntd0 =
+				current->tss.user_cntd1 = NULL;
+			current->tss.pcr_reg = 0;
+			write_pcr(0);
+			current->tss.flags &= ~(SPARC_FLAG_PERFCTR);
+			err = 0;
+		}
+		break;
+
+	case PERFCTR_READ: {
+		unsigned long pic, tmp;
+
+		if (!(current->tss.flags & SPARC_FLAG_PERFCTR)) {
+			err = -EINVAL;
+			break;
+		}
+		read_pic(pic);
+		tmp = (current->tss.kernel_cntd0 += (unsigned int)pic);
+		err |= __put_user(tmp, current->tss.user_cntd0);
+		tmp = (current->tss.kernel_cntd1 += (pic >> 32));
+		err |= __put_user(tmp, current->tss.user_cntd1);
+		reset_pic();
+		break;
+	}
+
+	case PERFCTR_CLRPIC:
+		if (!(current->tss.flags & SPARC_FLAG_PERFCTR)) {
+			err = -EINVAL;
+			break;
+		}
+		current->tss.kernel_cntd0 =
+			current->tss.kernel_cntd1 = 0;
+		reset_pic();
+		break;
+
+	case PERFCTR_SETPCR: {
+		u64 *user_pcr = (u64 *)arg0;
+		if (!(current->tss.flags & SPARC_FLAG_PERFCTR)) {
+			err = -EINVAL;
+			break;
+		}
+		err |= __get_user(current->tss.pcr_reg, user_pcr);
+		write_pcr(current->tss.pcr_reg);
+		current->tss.kernel_cntd0 =
+			current->tss.kernel_cntd1 = 0;
+		reset_pic();
+		break;
+	}
+
+	case PERFCTR_GETPCR: {
+		u64 *user_pcr = (u64 *)arg0;
+		if (!(current->tss.flags & SPARC_FLAG_PERFCTR)) {
+			err = -EINVAL;
+			break;
+		}
+		err |= __put_user(current->tss.pcr_reg, user_pcr);
+		break;
+	}
+
+	default:
+		err = -EINVAL;
+		break;
+	};
+	return err;
 }

@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.40 1998/09/23 02:05:18 davem Exp $
+/* $Id: rtrap.S,v 1.44 1998/10/21 22:27:22 davem Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -46,13 +46,15 @@ rtrap:		sethi			%hi(bh_active), %l2
 		ldub			[%l6 + %o0], %l2
 		sub			%l5, 2, %l5
 		add			%g6, AOFF_task_tss + AOFF_thread_gsr, %o1
-		andcc			%l2, FPRS_FEF, %g0
+		andcc			%l2, (FPRS_FEF|FPRS_DU), %g0
 		be,pt			%icc, 2f
 		 and			%l2, FPRS_DL, %l6
+		andcc			%l2, FPRS_FEF, %g0
+		be,pn			%icc, 5f
+		 sll			%o0, 3, %o5
 		rd			%fprs, %g5
 		wr			%g5, FPRS_FEF, %fprs
 		ldub			[%o1 + %o0], %g5
-		sll			%o0, 3, %o5
 		add			%g6, AOFF_task_tss + AOFF_thread_xfsr, %o1
 		membar			#StoreLoad | #LoadLoad
 		sll			%o0, 8, %o2
@@ -130,25 +132,49 @@ to_user:	ldx			[%g6 + AOFF_task_need_resched], %l0
 		 nop
 		lduw			[%g6 + AOFF_task_sigpending], %l0
 check_signal:	brz,a,pt		%l0, check_user_wins
-		 lduh			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
+		 nop
 		clr			%o0
 		mov			%l5, %o2  
 		mov			%l6, %o3
 		call			do_signal
 		 add			%sp, STACK_BIAS + REGWIN_SZ, %o1
-		lduh			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
 		clr			%l6
-check_user_wins:brz,pt			%o2, 1f
+
+		/* We must not take any traps between here and the actual
+		 * return to user-space.  If we do we risk having windows
+		 * saved to the thread struct between the test and the
+		 * actual return from trap.  --DaveM
+		 */
+check_user_wins:
+		wrpr			%l7, 0x0, %pstate
+		lduh			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
+		brz,pt			%o2, 1f
 		 sethi			%hi(TSTATE_PEF), %l6
 
+		wrpr			%l7, PSTATE_IE, %pstate
 		call			fault_in_user_windows
 		 add			%sp, STACK_BIAS + REGWIN_SZ, %o0
-
+		/* It is OK to leave interrupts on now because if
+		 * fault_in_user_windows has returned it has left us
+		 * with a clean user stack state.
+		 */
 1:
 #if 0
 		call			rtrap_check
 		 add			%sp, STACK_BIAS + REGWIN_SZ, %o0
 #endif
+		lduh			[%g6 + AOFF_task_tss + AOFF_thread_flags], %l5
+		andcc			%l5, 0x200, %g0
+		be,pt			%xcc, 1f
+		 nop
+
+		/* Don't forget to preserve user window invariants. */
+		wrpr			%l7, PSTATE_IE, %pstate
+		call			update_perfctrs
+		 nop
+		ba,a,pt			%xcc, check_user_wins
+
+1:
 		andcc			%l1, %l6, %g0
 		be,pt			%xcc, rt_continue
 		 stb			%g0, [%g6 + AOFF_task_tss + AOFF_thread_fpdepth] ! This is neccessary for non-syscall rtraps only
@@ -159,5 +185,17 @@ check_user_wins:brz,pt			%o2, 1f
 		 andn			%l1, %l6, %l1
 		ba,pt			%xcc, rt_continue+4
 		 lduh			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
+
+5:		wr			%g0, FPRS_FEF, %fprs
+		membar			#StoreLoad | #LoadLoad
+		sll			%o0, 8, %o2
+		add			%g6, AOFF_task_fpregs+0x80, %o3
+		add			%g6, AOFF_task_fpregs+0xc0, %o4
+		ldda			[%o3 + %o2] ASI_BLK_P, %f32
+		ldda			[%o4 + %o2] ASI_BLK_P, %f48
+1:		membar			#Sync
+		wr			%g0, FPRS_DU, %fprs
+		ba,pt			%xcc, rt_continue
+		 stb			%l5, [%g6 + AOFF_task_tss + AOFF_thread_fpdepth]
 
 #undef PTREGS_OFF

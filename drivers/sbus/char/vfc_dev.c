@@ -218,7 +218,7 @@ static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg)
 			return -ENOMEM;
 
 		if(copy_from_user(buffer, inout.buffer, 
-				  inout.len*sizeof(char));) {
+				  inout.len*sizeof(char))) {
 			kfree_s(buffer,inout.len*sizeof(char));
 			return -EFAULT;
 		}

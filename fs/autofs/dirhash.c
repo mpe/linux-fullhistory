@@ -59,13 +59,11 @@ struct autofs_dir_ent *autofs_expire(struct super_block *sb,
 			return ent; /* Symlinks are always expirable */
 
 		/* Get the dentry for the autofs subdirectory */
-		dentry = lookup_dentry(ent->name, dget(sb->s_root), 0);
+		dentry = ent->dentry;
 
-		if ( IS_ERR(dentry) ) {
-			printk("autofs: no such dentry on expiry queue: %s\n",
-			       ent->name);
+		if ( !dentry ) {
+			printk("autofs: dentry == NULL but inode range is directory, entry %s\n", ent->name);
 			autofs_delete_usage(ent);
-			continue;
 		}
 
 		if ( !dentry->d_inode ) {
@@ -79,24 +77,12 @@ struct autofs_dir_ent *autofs_expire(struct super_block *sb,
 		/* Make sure entry is mounted and unused; note that dentry will
 		   point to the mounted-on-top root. */
 		if ( !S_ISDIR(dentry->d_inode->i_mode)
-		     || dentry->d_covers == dentry ) {
-			dput(dentry);
+		     || dentry->d_mounts == dentry ) {
 			DPRINTK(("autofs: not expirable (not a mounted directory): %s\n", ent->name));
 			continue;
 		}
 
-		/*
-		 * Now, this is known to be a mount point; therefore the dentry
-		 * will be held by the superblock.  is_root_busy() will break if
-		 * we hold a use count here, so we have to dput() it before calling
-		 * is_root_busy().  However, since it is a mount point (already
-		 * verified), dput() will be a nonblocking operation and the use
-		 * count will not go to zero; therefore the call to is_root_busy()
-		 * here is legal.
-		 */
-		dput(dentry);
-
-		if ( !is_root_busy(dentry) ) {
+		if ( !is_root_busy(dentry->d_mounts) ) {
 			DPRINTK(("autofs: signaling expire on %s\n", ent->name));
 			return ent; /* Expirable! */
 		}
@@ -136,6 +122,8 @@ void autofs_hash_insert(struct autofs_dirhash *dh, struct autofs_dir_ent *ent)
 	autofs_say(ent->name,ent->len);
 
 	autofs_init_usage(dh,ent);
+	if ( ent->dentry )
+		ent->dentry->d_count++;
 
 	dhnp = &dh->h[(unsigned) ent->hash % AUTOFS_HASH_SIZE];
 	ent->next = *dhnp;
@@ -153,6 +141,8 @@ void autofs_hash_delete(struct autofs_dir_ent *ent)
 
 	autofs_delete_usage(ent);
 
+	if ( ent->dentry )
+		dput(ent->dentry);
 	kfree(ent->name);
 	kfree(ent);
 }
@@ -161,8 +151,12 @@ void autofs_hash_delete(struct autofs_dir_ent *ent)
  * Used by readdir().  We must validate "ptr", so we can't simply make it
  * a pointer.  Values below 0xffff are reserved; calling with any value
  * <= 0x10000 will return the first entry found.
+ *
+ * "last" can be NULL or the value returned by the last search *if* we
+ * want the next sequential entry.
  */
-struct autofs_dir_ent *autofs_hash_enum(const struct autofs_dirhash *dh, off_t *ptr)
+struct autofs_dir_ent *autofs_hash_enum(const struct autofs_dirhash *dh,
+					off_t *ptr, struct autofs_dir_ent *last)
 {
 	int bucket, ecount, i;
 	struct autofs_dir_ent *ent;
@@ -176,19 +170,23 @@ struct autofs_dir_ent *autofs_hash_enum(const struct autofs_dirhash *dh, off_t *
 
 	DPRINTK(("autofs_hash_enum: bucket %d, entry %d\n", bucket, ecount));
 
-	ent = NULL;
+	ent = last ? last->next : NULL;
 
-	while  ( bucket < AUTOFS_HASH_SIZE ) {
-		ent = dh->h[bucket];
-		for ( i = ecount ; ent && i ; i-- )
-			ent = ent->next;
-
-		if (ent) {
-			ecount++; /* Point to *next* entry */
-			break;
+	if ( ent ) {
+		ecount++;
+	} else {
+		while  ( bucket < AUTOFS_HASH_SIZE ) {
+			ent = dh->h[bucket];
+			for ( i = ecount ; ent && i ; i-- )
+				ent = ent->next;
+			
+			if (ent) {
+				ecount++; /* Point to *next* entry */
+				break;
+			}
+			
+			bucket++; ecount = 0;
 		}
-
-		bucket++; ecount = 0;
 	}
 
 #ifdef DEBUG
@@ -214,6 +212,8 @@ void autofs_hash_nuke(struct autofs_dirhash *dh)
 	for ( i = 0 ; i < AUTOFS_HASH_SIZE ; i++ ) {
 		for ( ent = dh->h[i] ; ent ; ent = nent ) {
 			nent = ent->next;
+			if ( ent->dentry )
+				dput(ent->dentry);
 			kfree(ent->name);
 			kfree(ent);
 		}

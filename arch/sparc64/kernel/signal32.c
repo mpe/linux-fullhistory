@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.44 1998/09/25 01:09:17 davem Exp $
+/*  $Id: signal32.c,v 1.47 1998/10/13 09:07:40 davem Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -76,6 +76,9 @@ struct new_signal_frame32 {
 	/* __siginfo_fpu32_t * */ u32 fpu_save;
 	unsigned int		insns [2];
 	unsigned		extramask[_NSIG_WORDS32 - 1];
+	unsigned		extra_size; /* Should be sizeof(siginfo_extra_v8plus_t) */
+	/* Only valid if (info.si_regs.psr & (PSR_VERS|PSR_IMPL)) == PSR_V8PLUS */
+	siginfo_extra_v8plus_t	v8plus;
 	__siginfo_fpu_t		fpu_state;
 };
 
@@ -87,6 +90,9 @@ struct rt_signal_frame32 {
 	/* __siginfo_fpu32_t * */ u32 fpu_save;
 	unsigned int		insns [2];
 	stack_t32		stack;
+	unsigned		extra_size; /* Should be sizeof(siginfo_extra_v8plus_t) */
+	/* Only valid if (regs.psr & (PSR_VERS|PSR_IMPL)) == PSR_V8PLUS */
+	siginfo_extra_v8plus_t	v8plus;
 	__siginfo_fpu_t		fpu_state;
 };
 
@@ -209,7 +215,7 @@ void do_new_sigreturn32(struct pt_regs *regs)
 	unsigned pc, npc, fpu_save;
 	sigset_t set;
 	unsigned seta[_NSIG_WORDS32];
-	int err;
+	int err, i;
 	
 	regs->u_regs[UREG_FP] &= 0x00000000ffffffffUL;
 	sf = (struct new_signal_frame32 *) regs->u_regs [UREG_FP];
@@ -232,24 +238,18 @@ void do_new_sigreturn32(struct pt_regs *regs)
 	err = __get_user(regs->y, &sf->info.si_regs.y);
 	err |= __get_user(psr, &sf->info.si_regs.psr);
 
-	err |= __get_user(regs->u_regs[UREG_G1], &sf->info.si_regs.u_regs[UREG_G1]);
-	err |= __get_user(regs->u_regs[UREG_G2], &sf->info.si_regs.u_regs[UREG_G2]);
-	err |= __get_user(regs->u_regs[UREG_G3], &sf->info.si_regs.u_regs[UREG_G3]);
-	err |= __get_user(regs->u_regs[UREG_G4], &sf->info.si_regs.u_regs[UREG_G4]);
-	err |= __get_user(regs->u_regs[UREG_G5], &sf->info.si_regs.u_regs[UREG_G5]);
-	err |= __get_user(regs->u_regs[UREG_G6], &sf->info.si_regs.u_regs[UREG_G6]);
-	err |= __get_user(regs->u_regs[UREG_G7], &sf->info.si_regs.u_regs[UREG_G7]);
-	err |= __get_user(regs->u_regs[UREG_I0], &sf->info.si_regs.u_regs[UREG_I0]);
-	err |= __get_user(regs->u_regs[UREG_I1], &sf->info.si_regs.u_regs[UREG_I1]);
-	err |= __get_user(regs->u_regs[UREG_I2], &sf->info.si_regs.u_regs[UREG_I2]);
-	err |= __get_user(regs->u_regs[UREG_I3], &sf->info.si_regs.u_regs[UREG_I3]);
-	err |= __get_user(regs->u_regs[UREG_I4], &sf->info.si_regs.u_regs[UREG_I4]);
-	err |= __get_user(regs->u_regs[UREG_I5], &sf->info.si_regs.u_regs[UREG_I5]);
-	err |= __get_user(regs->u_regs[UREG_I6], &sf->info.si_regs.u_regs[UREG_I6]);
-	err |= __get_user(regs->u_regs[UREG_I7], &sf->info.si_regs.u_regs[UREG_I7]);
+	for (i = UREG_G1; i <= UREG_I7; i++)
+		err |= __get_user(regs->u_regs[i], &sf->info.si_regs.u_regs[i]);
+	if ((psr & (PSR_VERS|PSR_IMPL)) == PSR_V8PLUS) {
+		err |= __get_user(i, &sf->v8plus.g_upper[0]);
+		if (i == SIGINFO_EXTRA_V8PLUS_MAGIC) {
+			for (i = UREG_G1; i <= UREG_I7; i++)
+				err |= __get_user(((u32 *)regs->u_regs)[2*i], &sf->v8plus.g_upper[i]);
+		}
+	}
 
 	/* User can only change condition codes in %tstate. */
-	regs->tstate &= ~(TSTATE_ICC);
+	regs->tstate &= ~(TSTATE_ICC|TSTATE_XCC);
 	regs->tstate |= psr_to_tstate_icc(psr);
 
 	err |= __get_user(fpu_save, &sf->fpu_save);
@@ -273,7 +273,6 @@ void do_new_sigreturn32(struct pt_regs *regs)
 	return;
 
 segv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -329,12 +328,11 @@ asmlinkage void do_sigreturn32(struct pt_regs *regs)
 	err |= __get_user(psr, &scptr->sigc_psr);
 	if (err)
 		goto segv;
-	regs->tstate &= ~(TSTATE_ICC);
+	regs->tstate &= ~(TSTATE_ICC|TSTATE_XCC);
 	regs->tstate |= psr_to_tstate_icc(psr);
 	return;
 
 segv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -346,7 +344,7 @@ asmlinkage void do_rt_sigreturn32(struct pt_regs *regs)
 	sigset_t set;
 	sigset_t32 seta;
 	stack_t st;
-	int err;
+	int err, i;
 	
 	synchronize_user_stack();
 	regs->u_regs[UREG_FP] &= 0x00000000ffffffffUL;
@@ -369,25 +367,19 @@ asmlinkage void do_rt_sigreturn32(struct pt_regs *regs)
 	/* 2. Restore the state */
 	err = __get_user(regs->y, &sf->regs.y);
 	err |= __get_user(psr, &sf->regs.psr);
-
-	err |= __get_user(regs->u_regs[UREG_G1], &sf->regs.u_regs[UREG_G1]);
-	err |= __get_user(regs->u_regs[UREG_G2], &sf->regs.u_regs[UREG_G2]);
-	err |= __get_user(regs->u_regs[UREG_G3], &sf->regs.u_regs[UREG_G3]);
-	err |= __get_user(regs->u_regs[UREG_G4], &sf->regs.u_regs[UREG_G4]);
-	err |= __get_user(regs->u_regs[UREG_G5], &sf->regs.u_regs[UREG_G5]);
-	err |= __get_user(regs->u_regs[UREG_G6], &sf->regs.u_regs[UREG_G6]);
-	err |= __get_user(regs->u_regs[UREG_G7], &sf->regs.u_regs[UREG_G7]);
-	err |= __get_user(regs->u_regs[UREG_I0], &sf->regs.u_regs[UREG_I0]);
-	err |= __get_user(regs->u_regs[UREG_I1], &sf->regs.u_regs[UREG_I1]);
-	err |= __get_user(regs->u_regs[UREG_I2], &sf->regs.u_regs[UREG_I2]);
-	err |= __get_user(regs->u_regs[UREG_I3], &sf->regs.u_regs[UREG_I3]);
-	err |= __get_user(regs->u_regs[UREG_I4], &sf->regs.u_regs[UREG_I4]);
-	err |= __get_user(regs->u_regs[UREG_I5], &sf->regs.u_regs[UREG_I5]);
-	err |= __get_user(regs->u_regs[UREG_I6], &sf->regs.u_regs[UREG_I6]);
-	err |= __get_user(regs->u_regs[UREG_I7], &sf->regs.u_regs[UREG_I7]);
+	
+	for (i = UREG_G1; i <= UREG_I7; i++)
+		err |= __get_user(regs->u_regs[i], &sf->regs.u_regs[i]);
+	if ((psr & (PSR_VERS|PSR_IMPL)) == PSR_V8PLUS) {
+		err |= __get_user(i, &sf->v8plus.g_upper[0]);
+		if (i == SIGINFO_EXTRA_V8PLUS_MAGIC) {
+			for (i = UREG_G1; i <= UREG_I7; i++)
+				err |= __get_user(((u32 *)regs->u_regs)[2*i], &sf->v8plus.g_upper[i]);
+		}
+	}
 
 	/* User can only change condition codes in %tstate. */
-	regs->tstate &= ~(TSTATE_ICC);
+	regs->tstate &= ~(TSTATE_ICC|TSTATE_XCC);
 	regs->tstate |= psr_to_tstate_icc(psr);
 
 	err |= __get_user(fpu_save, &sf->fpu_save);
@@ -417,7 +409,6 @@ asmlinkage void do_rt_sigreturn32(struct pt_regs *regs)
 	spin_unlock_irq(&current->sigmask_lock);
 	return;
 segv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -472,7 +463,6 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 		/* Don't change signal code and address, so that
 		 * post mortem debuggers can have a look.
 		 */
-		lock_kernel ();
 		do_exit(SIGILL);
 	}
 
@@ -544,7 +534,6 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	return;
 
 sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -614,6 +603,10 @@ static inline void new_setup_frame32(struct k_sigaction *ka, struct pt_regs *reg
 	err |= __put_user(psr, &sf->info.si_regs.psr);
 	for (i = 0; i < 16; i++)
 		err |= __put_user(regs->u_regs[i], &sf->info.si_regs.u_regs[i]);
+	err |= __put_user(sizeof(siginfo_extra_v8plus_t), &sf->extra_size);
+	err |= __put_user(SIGINFO_EXTRA_V8PLUS_MAGIC, &sf->v8plus.g_upper[0]);
+	for (i = 1; i < 16; i++)
+		err |= __put_user(((u32 *)regs->u_regs)[2*i], &sf->v8plus.g_upper[i]);
 
 	if (psr & PSR_EF) {
 		err |= save_fpu_state32(regs, &sf->fpu_state);
@@ -682,10 +675,8 @@ static inline void new_setup_frame32(struct k_sigaction *ka, struct pt_regs *reg
 	return;
 
 sigill:
-	lock_kernel();
 	do_exit(SIGILL);
 sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -717,7 +708,6 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 #ifdef DEBUG_SIGNALS
 		printk ("Invalid stack frame\n");
 #endif
-		lock_kernel ();
 		do_exit(SIGILL);
 	}
 
@@ -833,7 +823,6 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	return;
 
 sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -850,7 +839,6 @@ svr4_getcontext(svr4_ucontext_t *uc, struct pt_regs *regs)
 	
 	if (current->tss.w_saved){
 		printk ("Uh oh, w_saved is not zero (%d)\n", (int) current->tss.w_saved);
-		lock_kernel();
 		do_exit (SIGSEGV);
 	}
 	err = clear_user(uc, sizeof (*uc));
@@ -968,7 +956,7 @@ asmlinkage int svr4_setcontext(svr4_ucontext_t *c, struct pt_regs *regs)
 	regs->tnpc = npc | 1;
 	err |= __get_user(regs->y, &((*gr) [SVR4_Y]));
 	err |= __get_user(psr, &((*gr) [SVR4_PSR]));
-	regs->tstate &= ~(TSTATE_ICC);
+	regs->tstate &= ~(TSTATE_ICC|TSTATE_XCC);
 	regs->tstate |= psr_to_tstate_icc(psr);
 #if 0	
 	if(psr & PSR_EF)
@@ -984,7 +972,6 @@ asmlinkage int svr4_setcontext(svr4_ucontext_t *c, struct pt_regs *regs)
 
 	return -EINTR;
 sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -1034,6 +1021,10 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 	err |= __put_user(psr, &sf->regs.psr);
 	for (i = 0; i < 16; i++)
 		err |= __put_user(regs->u_regs[i], &sf->regs.u_regs[i]);
+	err |= __put_user(sizeof(siginfo_extra_v8plus_t), &sf->extra_size);
+	err |= __put_user(SIGINFO_EXTRA_V8PLUS_MAGIC, &sf->v8plus.g_upper[0]);
+	for (i = 1; i < 16; i++)
+		err |= __put_user(((u32 *)regs->u_regs)[2*i], &sf->v8plus.g_upper[i]);
 
 	if (psr & PSR_EF) {
 		err |= save_fpu_state32(regs, &sf->fpu_state);
@@ -1107,10 +1098,8 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 	return;
 
 sigill:
-	lock_kernel();
 	do_exit(SIGILL);
 sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -1304,14 +1293,19 @@ asmlinkage int do_signal32(sigset_t *oldset, struct pt_regs * regs,
 			case SIGABRT: case SIGFPE: case SIGSEGV: case SIGBUS:
 				if(current->binfmt && current->binfmt->core_dump) {
 					lock_kernel();
-					if(current->binfmt->core_dump(signr, regs))
+					if(current->binfmt &&
+					   current->binfmt->core_dump &&
+					   current->binfmt->core_dump(signr, regs))
 						exit_code |= 0x80;
 					unlock_kernel();
 				}
 #ifdef DEBUG_SIGNALS
 				/* Very useful to debug dynamic linker problems */
 				printk ("Sig %ld going for %s[%d]...\n", signr, current->comm, current->pid);
-				show_regs (regs);
+				/* On SMP we are only interested in the current
+				 * CPU's registers.
+				 */
+				__show_regs (regs);
 #ifdef DEBUG_SIGNALS_TLB
 				do {
 					extern void sparc_ultra_dump_itlb(void);

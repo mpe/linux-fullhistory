@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.44 1998/09/21 03:57:22 davem Exp $ */
+/* $Id: system.h,v 1.47 1998/10/21 03:21:20 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -76,24 +76,17 @@ extern unsigned long empty_zero_page;
 #else
 
 #ifndef __ASSEMBLY__
-extern unsigned char global_irq_holder;
-#endif
-
-#define save_flags(x) \
-do {	((x) = ((global_irq_holder == (unsigned char) smp_processor_id()) ? 1 : \
-		((getipl() != 0) ? 2 : 0))); } while(0)
-
-#define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
-
-#ifndef __ASSEMBLY__
 extern void __global_cli(void);
 extern void __global_sti(void);
+extern unsigned long __global_save_flags(void);
 extern void __global_restore_flags(unsigned long flags);
 #endif
 
 #define cli()			__global_cli()
 #define sti()			__global_sti()
+#define save_flags(x)		((x) = __global_save_flags())
 #define restore_flags(flags)	__global_restore_flags(flags)
+#define save_and_cli(flags)	do { save_flags(flags); cli(); } while(0)
 
 #endif
 
@@ -106,6 +99,12 @@ extern void __global_restore_flags(unsigned long flags);
 #define flushi(addr)	__asm__ __volatile__ ("flush %0" : : "r" (addr) : "memory")
 
 #define flushw_all()	__asm__ __volatile__("flushw")
+
+/* Performance counter register access. */
+#define read_pcr(__p)  __asm__ __volatile__("rd	%%pcr, %0" : "=r" (__p))
+#define write_pcr(__p) __asm__ __volatile__("wr	%0, 0x0, %%pcr" : : "r" (__p));
+#define read_pic(__p)  __asm__ __volatile__("rd %%pic, %0" : "=r" (__p))
+#define reset_pic()    __asm__ __volatile__("wr	%g0, 0x0, %pic");
 
 #ifndef __ASSEMBLY__
 
@@ -124,21 +123,6 @@ extern __inline__ void flushw_user(void)
 
 #define flush_user_windows flushw_user
 
-#define DEBUG_SWITCH
-
-#ifdef DEBUG_SWITCH
-#define SWITCH_CTX_CHECK(__tsk) \
-do {	unsigned short ctx_now; \
-	ctx_now = spitfire_get_secondary_context(); \
-	if(ctx_now != (__tsk)->tss.ctx) \
-		printk("[%s:%d] Bogus ctx after switch [%x:%x]\n", \
-		       (__tsk)->comm, (__tsk)->pid, \
-		       (__tsk)->tss.ctx, ctx_now); \
-} while(0)
-#else
-#define SWITCH_CTX_CHECK(__tsk)	do { } while(0)
-#endif
-
 	/* See what happens when you design the chip correctly?
 	 *
 	 * XXX What we are doing here assumes a lot about gcc reload
@@ -156,7 +140,15 @@ do {	unsigned short ctx_now; \
 	 *           not reference %g6.
 	 */
 #define switch_to(prev, next)							\
-do {	save_and_clear_fpu();							\
+do {	if (current->tss.flags & SPARC_FLAG_PERFCTR) {				\
+		unsigned long __tmp;						\
+		read_pcr(__tmp);						\
+		current->tss.pcr_reg = __tmp;					\
+		read_pic(__tmp);						\
+		current->tss.kernel_cntd0 += (unsigned int)(__tmp);		\
+		current->tss.kernel_cntd1 += ((__tmp) >> 32);			\
+	}									\
+	save_and_clear_fpu();							\
 	__asm__ __volatile__(							\
 	"flushw\n\t"								\
 	"wrpr	%g0, 0x94, %pstate\n\t");					\
@@ -201,7 +193,11 @@ do {	save_and_clear_fpu();							\
 	  "l2", "l3", "l4", "l5", "l6", "l7",					\
 	  "i0", "i1", "i2", "i3", "i4", "i5",					\
 	  "o0", "o1", "o2", "o3", "o4", "o5", "o7");				\
-	SWITCH_CTX_CHECK(current);						\
+	/* If you fuck with this, update ret_from_syscall code too. */		\
+	if (current->tss.flags & SPARC_FLAG_PERFCTR) {				\
+		write_pcr(current->tss.pcr_reg);				\
+		reset_pic();							\
+	}									\
 } while(0)
 
 extern __inline__ unsigned long xchg32(__volatile__ unsigned int *m, unsigned int val)

@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.64 1998/09/01 07:24:24 jj Exp $
+/* $Id: psycho.c,v 1.65 1998/10/20 14:41:28 ecd Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1639,17 +1639,8 @@ __initfunc(static void fixup_irq(struct pci_dev *pdev,
 		return;
 	}
 
-	/* See if we find a matching interrupt-map entry. */
-	if (pbm_intmap_match(pbm, pdev, preg, &prom_irq)) {
-		pdev->irq = psycho_irq_build(pbm, pdev,
-					     (pbm->parent->upa_portid << 6)
-					     | prom_irq);
-#ifdef FIXUP_IRQ_DEBUG
-		dprintf("interrupt-map specified: prom_irq[%x] pdev->irq[%x]",
-			prom_irq, pdev->irq);
-#endif
 	/* See if fully specified already (ie. for onboard devices like hme) */
-	} else if(((prom_irq & PSYCHO_IMAP_IGN) >> 6) == pbm->parent->upa_portid) {
+	if(((prom_irq & PSYCHO_IMAP_IGN) >> 6) == pbm->parent->upa_portid) {
 		pdev->irq = psycho_irq_build(pbm, pdev, prom_irq);
 #ifdef FIXUP_IRQ_DEBUG
 		dprintf("fully specified prom_irq[%x] pdev->irq[%x]",
@@ -1663,6 +1654,15 @@ __initfunc(static void fixup_irq(struct pci_dev *pdev,
 #ifdef FIXUP_IRQ_DEBUG
 		dprintf("partially specified prom_irq[%x] pdev->irq[%x]",
 		        prom_irq, pdev->irq);
+#endif
+	/* See if we find a matching interrupt-map entry. */
+	} else if (pbm_intmap_match(pbm, pdev, preg, &prom_irq)) {
+		pdev->irq = psycho_irq_build(pbm, pdev,
+					     (pbm->parent->upa_portid << 6)
+					     | prom_irq);
+#ifdef FIXUP_IRQ_DEBUG
+		dprintf("interrupt-map specified: prom_irq[%x] pdev->irq[%x]",
+			prom_irq, pdev->irq);
 #endif
 	} else {
 		unsigned int bus, slot, line;

@@ -17,6 +17,7 @@
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <asm/feature.h>
 #include "bmac.h"
 
 #define trunc_page(x)	((void *)(((unsigned long)(x)) & ~((unsigned long)(PAGE_SIZE - 1))))
@@ -29,15 +30,6 @@
 
 /* switch to use multicast code lifted from sunhme driver */
 #define SUNHME_MULTICAST
-
-/* a bunch of constants for the "Heathrow" interrupt controller.
-   These really should be in an include file somewhere */
-#define IoBaseHeathrow ((unsigned *)0xf3000000)
-#define HeathrowFCR 0x0038	/* FCR offset from Heathrow Base Address */
-#define fcrEnetEnabledBits	0x60000000 /* mask to enable Enet Xcvr/Controller */
-#define fcrResetEnetCell	0x80000000 /* mask used to reset Enet cell */
-#define fcrClearResetEnetCell	0x7fffffff /* mask used to clear reset Enet cell */
-#define fcrDisableEnet		0x1fffffff /* mask to disable Enet Xcvr/Controller */
 
 #define N_RX_RING	64
 #define N_TX_RING	32
@@ -122,6 +114,7 @@ bmac_reg_entry_t reg_entries[N_REG_ENTRIES] = {
 };
 
 struct device *bmac_devs = NULL;
+static int is_bmac_plus;
 
 #if 0
 /*
@@ -157,8 +150,6 @@ static void bmac_txdma_intr(int irq, void *dev_id, struct pt_regs *regs);
 static void bmac_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs);
 static void bmac_set_timeout(struct device *dev);
 static void bmac_tx_timeout(unsigned long data);
-static void bmac_reset_chip(struct device *dev);
-static void bmac_init_registers(struct device *dev);
 static int bmac_proc_info ( char *buffer, char **start, off_t offset, int length, int dummy);
 static int bmac_output(struct sk_buff *skb, struct device *dev);
 static void bmac_start(struct device *dev);
@@ -240,34 +231,86 @@ bmac_reset_chip(struct device *dev)
 	struct bmac_data *bp = (struct bmac_data *) dev->priv;
 	volatile struct dbdma_regs *rd = bp->rx_dma;
 	volatile struct dbdma_regs *td = bp->tx_dma;
-	volatile unsigned *heathrowFCR;
-	unsigned int fcrValue;
 	 
 	dbdma_reset(rd);
 	dbdma_reset(td);
 
-	heathrowFCR = (unsigned *)((unsigned char *)IoBaseHeathrow + HeathrowFCR);
+	feature_set(FEATURE_BMac_IO_enable);
+	udelay(10000);
+	feature_set(FEATURE_BMac_reset);
+	udelay(10000);
+	feature_clear(FEATURE_BMac_reset);
+	udelay(10000);
+}
 
-	fcrValue = in_le32(heathrowFCR);
+#define MIFDELAY	udelay(500)
 
-	fcrValue &= fcrDisableEnet;	/* clear out Xvr and Controller Bit */
-	out_le32(heathrowFCR, fcrValue);
-	udelay(50000);
+static unsigned int
+bmac_mif_readbits(struct device *dev, int nb)
+{
+	unsigned int val = 0;
 
-	fcrValue |= fcrResetEnetCell;	/* set bit to reset them */
-	out_le32(heathrowFCR, fcrValue);
-	udelay(50000);
-	
-	fcrValue &= fcrDisableEnet;
-	out_le32(heathrowFCR, fcrValue);
-	udelay(50000);
+	while (--nb >= 0) {
+		bmwrite(dev, MIFCSR, 0);
+		MIFDELAY;
+		if (bmread(dev, MIFCSR) & 8)
+			val |= 1 << nb;
+		bmwrite(dev, MIFCSR, 1);
+		MIFDELAY;
+	}
+	bmwrite(dev, MIFCSR, 0);
+	MIFDELAY;
+	bmwrite(dev, MIFCSR, 1);
+	MIFDELAY;
+	return val;
+}
 
-	fcrValue |= fcrEnetEnabledBits;
-	out_le32(heathrowFCR, fcrValue);
-	udelay(50000);
-	
-	out_le32(heathrowFCR, fcrValue);
-	udelay(50000);
+static void
+bmac_mif_writebits(struct device *dev, unsigned int val, int nb)
+{
+	int b;
+
+	while (--nb >= 0) {
+		b = (val & (1 << nb))? 6: 4;
+		bmwrite(dev, MIFCSR, b);
+		MIFDELAY;
+		bmwrite(dev, MIFCSR, b|1);
+		MIFDELAY;
+	}
+}
+
+static unsigned int
+bmac_mif_read(struct device *dev, unsigned int addr)
+{
+	unsigned int val;
+
+	bmwrite(dev, MIFCSR, 4);
+	MIFDELAY;
+	bmac_mif_writebits(dev, ~0U, 32);
+	bmac_mif_writebits(dev, 6, 4);
+	bmac_mif_writebits(dev, addr, 10);
+	bmwrite(dev, MIFCSR, 2);
+	MIFDELAY;
+	bmwrite(dev, MIFCSR, 1);
+	MIFDELAY;
+	val = bmac_mif_readbits(dev, 17);
+	bmwrite(dev, MIFCSR, 4);
+	MIFDELAY;
+	printk(KERN_DEBUG "bmac_mif_read(%x) -> %x\n", addr, val);
+	return val;
+}
+
+static void
+bmac_mif_write(struct device *dev, unsigned int addr, unsigned int val)
+{
+	bmwrite(dev, MIFCSR, 4);
+	MIFDELAY;
+	bmac_mif_writebits(dev, ~0U, 32);
+	bmac_mif_writebits(dev, 5, 4);
+	bmac_mif_writebits(dev, addr, 10);
+	bmac_mif_writebits(dev, 2, 2);
+	bmac_mif_writebits(dev, val, 16);
+	bmac_mif_writebits(dev, 3, 2);
 }
 
 static void
@@ -280,14 +323,23 @@ bmac_init_registers(struct device *dev)
 
 	/* XXDEBUG(("bmac: enter init_registers\n")); */
 
+	bmwrite(dev, RXRST, RxResetValue);
 	bmwrite(dev, TXRST, TxResetBit);
 
+	i = 100;
 	do {
+		--i;
+		udelay(10000);
 		regValue = bmread(dev, TXRST); /* wait for reset to clear..acknowledge */
-	} while (regValue & TxResetBit);
+	} while ((regValue & TxResetBit) && i > 0);
 
-	bmwrite(dev, RXRST, RxResetValue);
-	bmwrite(dev, XCVRIF, ClkBit | SerialMode | COLActiveLow);	
+	if (!is_bmac_plus) {
+		regValue = bmread(dev, XCVRIF);
+		regValue |= ClkBit | SerialMode | COLActiveLow;
+		bmwrite(dev, XCVRIF, regValue);
+		udelay(10000);
+	}
+
 	bmwrite(dev, RSEED, (unsigned short)0x1968);		
 
 	regValue = bmread(dev, XIFC);
@@ -366,18 +418,30 @@ bmac_start_chip(struct device *dev)
 
 	/* enable rx dma channel */
 	dbdma_continue(rd);
+ 
+	oldConfig = bmread(dev, TXCFG);		
+	bmwrite(dev, TXCFG, oldConfig | TxMACEnable );  
   
 	/* turn on rx plus any other bits already on (promiscuous possibly) */
 	oldConfig = bmread(dev, RXCFG);		
 	bmwrite(dev, RXCFG, oldConfig | RxMACEnable ); 
- 
-	oldConfig = bmread(dev, TXCFG);		
-	bmwrite(dev, TXCFG, oldConfig | TxMACEnable );  
+	udelay(20000);
 }
 
 static int
 bmac_init_chip(struct device *dev)
 {
+	if (is_bmac_plus && bmac_mif_read(dev, 2) == 0x7810) {
+		if (bmac_mif_read(dev, 4) == 0xa1) {
+			bmac_mif_write(dev, 0, 0x1000);
+		} else {
+			bmac_mif_write(dev, 4, 0xa1);
+			bmac_mif_write(dev, 0, 0x1200);
+		}
+		/* XXX debugging */
+		bmac_mif_read(dev, 0);
+		bmac_mif_read(dev, 4);
+	}
 	bmac_init_registers(dev);
 	return 1;
 }
@@ -1144,8 +1208,16 @@ bmac_probe(struct device *dev)
 	unsigned char *addr;
 	static struct device_node *all_bmacs = NULL, *next_bmac;
 
-	if (all_bmacs == NULL)
-		all_bmacs = next_bmac = find_devices("bmac");
+	if (all_bmacs == NULL) {
+		all_bmacs = find_devices("bmac");
+		is_bmac_plus = 0;
+		if (all_bmacs == NULL) {
+			all_bmacs = find_compatible_devices("network", "bmac+");
+			if (all_bmacs)
+				is_bmac_plus = 1;
+		}
+		next_bmac = all_bmacs;
+	}
 	bmacs = next_bmac;
 	if (bmacs == NULL) return -ENODEV;
 	next_bmac = bmacs->next;
@@ -1157,7 +1229,7 @@ bmac_probe(struct device *dev)
 		       bmacs->full_name);
 		return -EINVAL;
 	}
-    
+
 	if (dev == NULL) {
 		dev = init_etherdev(NULL, PRIV_BYTES);
 		bmac_devs = dev;  /*KLUDGE!!*/

@@ -1,7 +1,9 @@
-/* $Id: locks.S,v 1.13 1998/07/30 11:29:28 davem Exp $
+/* $Id: locks.S,v 1.15 1998/10/14 09:18:55 jj Exp $
  * locks.S: SMP low-level lock primitives on Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1998 Anton Blanchard (anton@progsoc.uts.edu.au)
+ * Copyright (C) 1998 Jakub Jelinek   (jj@ultra.linux.cz)
  */
 
 #include <asm/cprefix.h>
@@ -43,52 +45,48 @@ ___rw_read_enter_spin_on_wlock:
 	 ldstub	[%g1 + 3], %g2
 	b	___rw_read_enter_spin_on_wlock
 	 ldub	[%g1 + 3], %g2
+___rw_read_exit_spin_on_wlock:
+	orcc	%g2, 0x0, %g0
+	be,a	___rw_read_exit
+	 ldstub	[%g1 + 3], %g2
+	b	___rw_read_exit_spin_on_wlock
+	 ldub	[%g1 + 3], %g2
 ___rw_write_enter_spin_on_wlock:
 	orcc	%g2, 0x0, %g0
 	be,a	___rw_write_enter
 	 ldstub	[%g1 + 3], %g2
 	b	___rw_write_enter_spin_on_wlock
-	 ldub	[%g1 + 3], %g2
+	 ld	[%g1], %g2
 
 	.globl	___rw_read_enter
 ___rw_read_enter:
 	orcc	%g2, 0x0, %g0
 	bne,a	___rw_read_enter_spin_on_wlock
 	 ldub	[%g1 + 3], %g2
-1:
-	ldstub	[%g1 + 2], %g7
-	orcc	%g7, 0x0, %g0
-	bne	1b
-	 ldsh	[%g1], %g2
+	ld	[%g1], %g2
 	add	%g2, 1, %g2
-	sth	%g2, [%g1]
-	sth	%g0, [%g1 + 2]
+	st	%g2, [%g1]
 	retl
 	 mov	%g4, %o7
 
-	/* We must be careful here to not blow away wlock. */
 	.globl	___rw_read_exit
-___rw_read_exit_spin:
-	ldstub	[%g1 + 2], %g2
 ___rw_read_exit:
 	orcc	%g2, 0x0, %g0
-	bne	___rw_read_exit_spin
-	 ldsh	[%g1], %g7
-	sub	%g7, 1, %g7
-	sth	%g7, [%g1]
-	stb	%g0, [%g1 + 2]
+	bne,a	___rw_read_exit_spin_on_wlock
+	 ldub	[%g1 + 3], %g2
+	ld	[%g1], %g2
+	sub	%g2, 0x1ff, %g2
+	st	%g2, [%g1]
 	retl
 	 mov	%g4, %o7
 
 	.globl	___rw_write_enter
 ___rw_write_enter:
 	orcc	%g2, 0x0, %g0
-	bne,a	___rw_write_enter_spin_on_wlock
-	 ldub	[%g1 + 3], %g2
-	ld	[%g1], %g2
-1:
-	andncc	%g2, 0xff, %g0
-	bne,a	1b
+	bne	___rw_write_enter_spin_on_wlock
 	 ld	[%g1], %g2
+	andncc	%g2, 0xff, %g0
+	bne,a	___rw_write_enter_spin_on_wlock
+	 stb	%g0, [%g1 + 3]
 	retl
 	 mov	%g4, %o7

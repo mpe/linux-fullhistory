@@ -14,10 +14,10 @@
  */
 #if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
   typedef struct { } spinlock_t;
-  #define SPIN_LOCK_UNLOCKED { }
+  #define SPIN_LOCK_UNLOCKED (spinlock_t) { }
 #else
   typedef struct { int gcc_is_buggy; } spinlock_t;
-  #define SPIN_LOCK_UNLOCKED { 0 }
+  #define SPIN_LOCK_UNLOCKED (spinlock_t) { 0 }
 #endif
 
 #define spin_lock_init(lock)	do { } while(0)
@@ -38,7 +38,7 @@
 typedef struct {
 	volatile unsigned int lock;
 } spinlock_t;
-#define SPIN_LOCK_UNLOCKED { 0 }
+#define SPIN_LOCK_UNLOCKED (spinlock_t) { 0 }
 
 #define spin_lock_init(x)	do { (x)->lock = 0; } while (0)
 #define spin_trylock(lock)	(!test_and_set_bit(0,(lock)))
@@ -61,7 +61,7 @@ typedef struct {
 	volatile unsigned int babble;
 	const char *module;
 } spinlock_t;
-#define SPIN_LOCK_UNLOCKED { 0, 25, __BASE_FILE__ }
+#define SPIN_LOCK_UNLOCKED (spinlock_t) { 0, 25, __BASE_FILE__ }
 
 #include <linux/kernel.h>
 
@@ -90,7 +90,7 @@ typedef struct {
  * read-locks.
  */
 typedef struct { } rwlock_t;
-#define RW_LOCK_UNLOCKED { }
+#define RW_LOCK_UNLOCKED (rwlock_t) { }
 
 #define read_lock(lock)		do { } while(0)
 #define read_unlock(lock)	do { } while(0)
@@ -120,7 +120,7 @@ typedef struct {
 	volatile unsigned int lock;
 } spinlock_t;
 
-#define SPIN_LOCK_UNLOCKED { 0 }
+#define SPIN_LOCK_UNLOCKED (spinlock_t) { 0 }
 
 #define spin_lock_init(x)	do { (x)->lock = 0; } while(0)
 /*
@@ -188,7 +188,7 @@ typedef struct {
 	unsigned long previous;
 } rwlock_t;
 
-#define RW_LOCK_UNLOCKED { 0, 0 }
+#define RW_LOCK_UNLOCKED (rwlock_t) { 0, 0 }
 
 /*
  * On x86, we implement read-write locks as a 32-bit counter

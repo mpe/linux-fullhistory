@@ -103,7 +103,6 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 void __scm_destroy(struct scm_cookie *scm)
 {
 	struct scm_fp_list *fpl = scm->fp;
-	struct file *file;
 	int i;
 
 	if (fpl) {
@@ -112,34 +111,18 @@ void __scm_destroy(struct scm_cookie *scm)
 			fput(fpl->fp[i]);
 		kfree(fpl);
 	}
-
-	file = scm->file;
-	if (file) {
-		scm->sock = NULL;
-		scm->file = NULL;
-		fput(file);
-	}
 }
-
-
-
-extern __inline__ int not_one_bit(unsigned val)
-{
-	return (val-1) & val;
-}
-
 
 int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 {
 	struct cmsghdr *cmsg;
-	struct file *file;
-	int acc_fd, err;
-	unsigned int scm_flags=0;
+	int err;
 
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg))
 	{
 		err = -EINVAL;
 
+		/* Verify that cmsg_len is at least sizeof(struct cmsghdr) */
 		if ((unsigned long)(((char*)cmsg - (char*)msg->msg_control)
 				    + cmsg->cmsg_len) > msg->msg_controllen)
 			goto error;
@@ -162,30 +145,6 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 			if (err)
 				goto error;
 			break;
-		case SCM_CONNECT:
-			if (scm_flags)
-				goto error;
-			if (cmsg->cmsg_len != CMSG_LEN(sizeof(int)))
-				goto error;
-			memcpy(&acc_fd, CMSG_DATA(cmsg), sizeof(int));
-			p->sock = NULL;
-			if (acc_fd != -1) {
-				err = -EBADF;
-				file = fget(acc_fd);
-				if (!file)
-					goto error;
-				p->file = file;
-				err = -ENOTSOCK;
-				if (!file->f_dentry->d_inode ||
-				    !file->f_dentry->d_inode->i_sock)
-					goto error;
-				p->sock = &file->f_dentry->d_inode->u.socket_i;
-				err = -EINVAL;
-				if (p->sock->state != SS_UNCONNECTED) 
-					goto error;
-			}
-			scm_flags |= MSG_SYN;
-			break;
 		default:
 			goto error;
 		}
@@ -196,16 +155,13 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 		kfree(p->fp);
 		p->fp = NULL;
 	}
-	
-	err = -EINVAL;
-	msg->msg_flags |= scm_flags;
-	scm_flags = msg->msg_flags&MSG_CTLFLAGS;
-	if (not_one_bit(scm_flags))
+
+	err = -EINVAL; 
+	if (msg->msg_flags & MSG_CTLFLAGS)
 		goto error;
 
-	if (!(scm_flags && p->fp))
-		return 0;
-
+	return 0;
+	
 error:
 	scm_destroy(p);
 	return err;

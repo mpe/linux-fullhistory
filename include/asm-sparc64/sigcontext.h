@@ -1,4 +1,4 @@
-/* $Id: sigcontext.h,v 1.10 1997/12/11 15:16:11 jj Exp $ */
+/* $Id: sigcontext.h,v 1.11 1998/10/06 09:28:37 jj Exp $ */
 #ifndef __SPARC64_SIGCONTEXT_H
 #define __SPARC64_SIGCONTEXT_H
 
@@ -76,6 +76,14 @@ typedef struct {
 	unsigned   long si_gsr;
 	unsigned   long si_fprs;
 } __siginfo_fpu_t;
+
+/* This magic should be in g_upper[0] for all upper parts
+   to be valid.  */
+#define SIGINFO_EXTRA_V8PLUS_MAGIC	0x130e269
+typedef struct {
+	unsigned   int g_upper[8];
+	unsigned   int o_upper[8];
+} siginfo_extra_v8plus_t;
 
 #endif /* !(__ASSEMBLY__) */
 

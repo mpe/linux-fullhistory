@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.31 1998/09/24 03:22:01 davem Exp $ */
+/* $Id: mmu_context.h,v 1.32 1998/10/13 14:03:52 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -118,11 +118,10 @@ extern __inline__ void __get_mmu_context(struct task_struct *tsk)
  * the context for the new mm so we see the new mappings.
  */
 #define activate_context(__tsk)		\
-do {	unsigned long __flags;		\
-	__save_and_cli(__flags);	\
-	flushw_user();			\
+do {	flushw_user();			\
+	spin_lock(&scheduler_lock);	\
 	__get_mmu_context(__tsk);	\
-	__restore_flags(__flags);	\
+	spin_unlock(&scheduler_lock);	\
 } while(0)
 
 #endif /* !(__ASSEMBLY__) */

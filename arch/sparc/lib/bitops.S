@@ -26,12 +26,26 @@ ___set_bit:
 	wr	%g3, PSR_PIL, %psr
 	nop; nop; nop
 1:
-	ld	[%g1], %g7
+#ifdef __SMP__
+	set	C_LABEL(bitops_spinlock), %g5
+2:	ldstub	[%g5], %g7		! Spin on the byte lock for SMP.
+	orcc	%g7, 0x0, %g0		! Did we get it?
+	bne	2b			! Nope...
+#endif
+	 ld	[%g1], %g7
 	or	%g7, %g2, %g5
-	andcc	%g3, PSR_PIL, %g0
 	and	%g7, %g2, %g2
+#ifdef __SMP__
+	st	%g5, [%g1]
+	set	C_LABEL(bitops_spinlock), %g5
+	andcc	%g3, PSR_PIL, %g0
+	bne	1f
+	 stb	%g0, [%g5]
+#else
+	andcc	%g3, PSR_PIL, %g0
 	bne	1f
 	 st	%g5, [%g1]
+#endif
 	wr	%g3, 0x0, %psr
 	nop; nop; nop
 1:
@@ -48,12 +62,26 @@ ___clear_bit:
 	wr	%g3, PSR_PIL, %psr
 	nop; nop; nop
 1:
-	ld	[%g1], %g7
+#ifdef __SMP__
+	set	C_LABEL(bitops_spinlock), %g5
+2:	ldstub	[%g5], %g7		! Spin on the byte lock for SMP.
+	orcc	%g7, 0x0, %g0		! Did we get it?
+	bne	2b			! Nope...
+#endif
+	 ld	[%g1], %g7
 	andn	%g7, %g2, %g5
-	andcc	%g3, PSR_PIL, %g0
 	and	%g7, %g2, %g2
+#ifdef __SMP__
+	st	%g5, [%g1]
+	set	C_LABEL(bitops_spinlock), %g5
+	andcc	%g3, PSR_PIL, %g0
+	bne	1f
+	 stb	%g0, [%g5]
+#else
+	andcc	%g3, PSR_PIL, %g0
 	bne	1f
 	 st	%g5, [%g1]
+#endif
 	wr	%g3, 0x0, %psr
 	nop; nop; nop
 1:
@@ -70,12 +98,26 @@ ___change_bit:
 	wr	%g3, PSR_PIL, %psr
 	nop; nop; nop
 1:
-	ld	[%g1], %g7
+#ifdef __SMP__
+	set	C_LABEL(bitops_spinlock), %g5
+2:	ldstub	[%g5], %g7		! Spin on the byte lock for SMP.
+	orcc	%g7, 0x0, %g0		! Did we get it?
+	bne	2b			! Nope...
+#endif
+	 ld	[%g1], %g7
 	xor	%g7, %g2, %g5
-	andcc	%g3, PSR_PIL, %g0
 	and	%g7, %g2, %g2
+#ifdef __SMP__
+	st	%g5, [%g1]
+	set	C_LABEL(bitops_spinlock), %g5
+	andcc	%g3, PSR_PIL, %g0
+	bne	1f
+	 stb	%g0, [%g5]
+#else
+	andcc	%g3, PSR_PIL, %g0
 	bne	1f
 	 st	%g5, [%g1]
+#endif
 	wr	%g3, 0x0, %psr
 	nop; nop; nop
 1:
@@ -92,12 +134,26 @@ ___set_le_bit:
 	wr	%g3, PSR_PIL, %psr
 	nop; nop; nop
 1:
-	ldub	[%g1], %g7
+#ifdef __SMP__
+	set	C_LABEL(bitops_spinlock), %g5
+2:	ldstub	[%g5], %g7		! Spin on the byte lock for SMP.
+	orcc	%g7, 0x0, %g0		! Did we get it?
+	bne	2b			! Nope...
+#endif
+	 ldub	[%g1], %g7
 	or	%g7, %g2, %g5
-	andcc	%g3, PSR_PIL, %g0
 	and	%g7, %g2, %g2
+#ifdef __SMP__
+	stb	%g5, [%g1]
+	set	C_LABEL(bitops_spinlock), %g5
+	andcc	%g3, PSR_PIL, %g0
+	bne	1f
+	 stb	%g0, [%g5]
+#else
+	andcc	%g3, PSR_PIL, %g0
 	bne	1f
 	 stb	%g5, [%g1]
+#endif
 	wr	%g3, 0x0, %psr
 	nop; nop; nop
 1:
@@ -113,12 +169,26 @@ ___clear_le_bit:
 	wr	%g3, PSR_PIL, %psr
 	nop; nop; nop
 1:
-	ldub	[%g1], %g7
+#ifdef __SMP__
+	set	C_LABEL(bitops_spinlock), %g5
+2:	ldstub	[%g5], %g7		! Spin on the byte lock for SMP.
+	orcc	%g7, 0x0, %g0		! Did we get it?
+	bne	2b			! Nope...
+#endif
+	 ldub	[%g1], %g7
 	andn	%g7, %g2, %g5
-	andcc	%g3, PSR_PIL, %g0
 	and	%g7, %g2, %g2
+#ifdef __SMP__
+	stb	%g5, [%g1]
+	set	C_LABEL(bitops_spinlock), %g5
+	andcc	%g3, PSR_PIL, %g0
+	bne	1f
+	 stb	%g0, [%g5]
+#else
+	andcc	%g3, PSR_PIL, %g0
 	bne	1f
 	 stb	%g5, [%g1]
+#endif
 	wr	%g3, 0x0, %psr
 	nop; nop; nop
 1:

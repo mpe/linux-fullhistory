@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.8 1997/07/24 12:15:15 davem Exp $
+/* $Id: oplib.h,v 1.9 1998/10/06 20:56:05 ecd Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -117,8 +117,8 @@ extern void prom_halt(void) __attribute__ ((noreturn));
  * kernel is still active, the prom will call this routine.
  *
  */
-typedef void (*sync_func_t)(long *cmd);
-extern void prom_setsync(sync_func_t func_ptr);
+typedef int (*callback_func_t)(long *cmd);
+extern void prom_setcallback(callback_func_t func_ptr);
 
 /* Acquire the IDPROM of the root node in the prom device tree.  This
  * gets passed a buffer where you would like it stuffed.  The return value

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.8 1998/09/16 12:24:51 jj Exp $
+# $Id: Makefile,v 1.9 1998/10/26 20:01:03 davem Exp $
 # Makefile for the Sparc boot stuff.
 #
 # Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -26,6 +26,10 @@ BTOBJS := $(HEAD) init/main.o init/version.o \
 	$(CORE_FILES_NO_BTFIX) $(FILESYSTEMS) \
 	$(NETWORKS) $(DRIVERS)
 
+# I wanted to make this depend upon BTOBJS so that a parallel
+# build would work, but this fails because $(HEAD) cannot work
+# properly as it will cause head.o to be built with the implicit
+# rules not the ones in kernel/Makefile.  Someone please fix. --DaveM
 vmlinux.o: dummy
 	$(LD) -r $(patsubst %,$(TOPDIR)/%,$(BTOBJS)) $(LIBS) -o vmlinux.o
 

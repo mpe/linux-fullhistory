@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.49 1998/07/31 10:42:40 jj Exp $
+/* $Id: processor.h,v 1.51 1998/10/21 03:21:19 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -61,6 +61,11 @@ struct thread_struct {
 	unsigned long sig_address __attribute__ ((aligned (8)));
 	unsigned long sig_desc;
 	
+	/* Performance counter state */
+	u64 *user_cntd0, *user_cntd1;
+	u64 kernel_cntd0, kernel_cntd1;
+	u64 pcr_reg;
+
 	unsigned char fpdepth;
 	unsigned char fpsaved[7];
 	unsigned char gsr[7];
@@ -74,6 +79,7 @@ struct thread_struct {
 #define SPARC_FLAG_NEWSIGNALS   0x040    /* task wants new-style signals */
 #define SPARC_FLAG_32BIT        0x080    /* task is older 32-bit binary */
 #define SPARC_FLAG_NEWCHILD     0x100    /* task is just-spawned child process */
+#define SPARC_FLAG_PERFCTR	0x200    /* task has performance counters active */
 
 #define INIT_MMAP { &init_mm, 0xfffff80000000000, 0xfffff80001000000, \
 		    PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
@@ -91,6 +97,8 @@ struct thread_struct {
    { 0, 0, 0, 0, 0, 0, 0, },					\
 /* sig_address, sig_desc */					\
    0,           0,						\
+/* user_cntd0, user_cndd1, kernel_cntd0, kernel_cntd0, pcr_reg */ \
+   0,          0,          0,		 0,            0,	\
 /* fpdepth, fpsaved, gsr,   xfsr */				\
    0,       { 0 },   { 0 }, { 0 },				\
 }

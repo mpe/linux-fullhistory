@@ -1,4 +1,4 @@
-/* $Id: string.h,v 1.12 1998/10/04 08:44:27 davem Exp $
+/* $Id: string.h,v 1.14 1998/10/20 03:09:18 jj Exp $
  * string.h: External definitions for optimized assembly string
  *           routines for the Linux Kernel.
  *
@@ -65,23 +65,7 @@ extern inline void *__nonconstant_memcpy(void *to, const void *from, __kernel_si
 
 #define __HAVE_ARCH_MEMSET
 
-extern inline void *__constant_c_and_count_memset(void *s, char c, __kernel_size_t count)
-{
-	extern __kernel_size_t __bzero(void *, __kernel_size_t);
-	extern void *__bzero_1page(void *);
-
-	if(!c) {
-		if (count == 8192)
-			__bzero_1page(s);
-		else
-			__bzero(s, count);
-	} else {
-		__memset(s, c, count);
-	}
-	return s;
-}
-
-extern inline void *__constant_c_memset(void *s, char c, __kernel_size_t count)
+extern inline void *__constant_memset(void *s, char c, __kernel_size_t count)
 {
 	extern __kernel_size_t __bzero(void *, __kernel_size_t);
 
@@ -100,10 +84,9 @@ extern inline void *__nonconstant_memset(void *s, char c, __kernel_size_t count)
 
 #undef memset
 #define memset(s, c, count) \
-(__builtin_constant_p(c) ? (__builtin_constant_p(count) ? \
-                            __constant_c_and_count_memset((s), (c), (count)) : \
-                            __constant_c_memset((s), (c), (count))) \
-                          : __nonconstant_memset((s), (c), (count)))
+(__builtin_constant_p(c) ? \
+ __constant_memset((s), (c), (count)) : \
+ __nonconstant_memset((s), (c), (count)))
 
 #define __HAVE_ARCH_MEMSCAN
 
@@ -128,14 +111,19 @@ extern inline void *__nonconstant_memset(void *s, char c, __kernel_size_t count)
 /* Now the str*() stuff... */
 #define __HAVE_ARCH_STRLEN
 
-/* Ugly but it works around a bug in our original sparc64-linux-gcc.  */
 extern __kernel_size_t __strlen(const char *);
+
+#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+extern __kernel_size_t strlen(const char *);
+#else /* !EGCS */
+/* Ugly but it works around a bug in our original sparc64-linux-gcc.  */
 #undef strlen
 #define strlen(__arg0)					\
 ({	int __strlen_res = __strlen(__arg0) + 1;	\
 	__strlen_res -= 1;				\
 	__strlen_res;					\
 })
+#endif /* !EGCS */
 
 #define __HAVE_ARCH_STRNCMP
 

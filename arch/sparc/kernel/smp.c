@@ -64,6 +64,9 @@ volatile int __cpu_logical_map[NR_CPUS];
 /* Kernel spinlock */
 spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
+/* Used to make bitops atomic */
+unsigned char bitops_spinlock = 0;
+
 volatile unsigned long ipi_count;
 
 volatile int smp_process_available=0;

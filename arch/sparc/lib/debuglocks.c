@@ -1,4 +1,4 @@
-/* $Id: debuglocks.c,v 1.3 1998/09/29 09:46:22 davem Exp $
+/* $Id: debuglocks.c,v 1.5 1998/10/14 09:19:04 jj Exp $
  * debuglocks.c: Debugging versions of SMP locking primitives.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -120,29 +120,17 @@ wlock_again:
 	if(val) {
 		while(rw->lock & 0xff) {
 			if (!--stuck) {
-				show(str, (spinlock_t *)rw, caller);
+				show_read(str, rw, caller);
 				stuck = INIT_STUCK;
 			}
 			barrier();
 		}
 		goto wlock_again;
 	}
-clock_again:
-	__asm__ __volatile__("ldstub [%1 + 2], %0" : "=r" (val) : "r" (&(rw->lock)));
-	if(val) {
-		while(rw->lock & 0xff00) {
-			if (!--stuck) {
-				show_read(str, rw, caller);
-				stuck = INIT_STUCK;
-			}
-			barrier();
-		}
-		goto clock_again;
-	}
-	(*((unsigned short *)&rw->lock))++;
+
 	rw->reader_pc[cpu] = caller;
 	barrier();
-	(*(((unsigned short *)&rw->lock)+1)) = 0;
+	rw->lock++;
 }
 
 #undef INIT_STUCK
@@ -157,22 +145,22 @@ void _do_read_unlock(rwlock_t *rw, char *str)
 
 	STORE_CALLER(caller);
 
-clock_again:
-	__asm__ __volatile__("ldstub [%1 + 2], %0" : "=r" (val) : "r" (&(rw->lock)));
+wlock_again:
+	__asm__ __volatile__("ldstub [%1 + 3], %0" : "=r" (val) : "r" (&(rw->lock)));
 	if(val) {
-		while(rw->lock & 0xff00) {
+		while(rw->lock & 0xff) {
 			if (!--stuck) {
 				show_read(str, rw, caller);
 				stuck = INIT_STUCK;
 			}
 			barrier();
 		}
-		goto clock_again;
+		goto wlock_again;
 	}
-	(*((unsigned short *)&rw->lock))--;
+
 	rw->reader_pc[cpu] = 0;
 	barrier();
-	(*(((unsigned char *)&rw->lock)+2))=0;
+	rw->lock -= 0x1ff;
 }
 
 #undef INIT_STUCK
@@ -190,7 +178,8 @@ void _do_write_lock(rwlock_t *rw, char *str)
 wlock_again:
 	__asm__ __volatile__("ldstub [%1 + 3], %0" : "=r" (val) : "r" (&(rw->lock)));
 	if(val) {
-		while(rw->lock & 0xff) {
+wlock_wait:
+		while(rw->lock) {
 			if (!--stuck) {
 				show_write(str, rw, caller);
 				stuck = INIT_STUCK;
@@ -199,14 +188,15 @@ wlock_again:
 		}
 		goto wlock_again;
 	}
-	rw->owner_pc = (cpu & 3) | (caller & ~3);
-	while(rw->lock & ~0xff) {
-		if (!--stuck) {
-			show_write(str, rw, caller);
-			stuck = INIT_STUCK;
-		}
+
+	if (rw->lock & ~0xff) {
+		*(((unsigned char *)&rw->lock)+3) = 0;
 		barrier();
+		goto wlock_wait;
 	}
+
+	barrier();
+	rw->owner_pc = (cpu & 3) | (caller & ~3);
 }
 
 void _do_write_unlock(rwlock_t *rw)

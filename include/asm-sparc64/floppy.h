@@ -1,4 +1,4 @@
-/* $Id: floppy.h,v 1.15 1998/09/14 18:28:37 ecd Exp $
+/* $Id: floppy.h,v 1.16 1998/10/06 20:32:15 ecd Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -661,8 +661,9 @@ __initfunc(static unsigned long sun_floppy_init(void))
 			tmp |= FCR_LDE;
 			ns87303_writeb(config, FCR, tmp);
 
+			tmp = sun_floppy_types[0];
 			sun_floppy_types[0] = sun_floppy_types[1];
-			sun_floppy_types[1] = 0;
+			sun_floppy_types[1] = tmp;
 
 			if (sun_pci_broken_drive != -1) {
 				sun_pci_broken_drive = 1 - sun_pci_broken_drive;

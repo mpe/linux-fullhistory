@@ -22,6 +22,10 @@ extern void inet6_proto_init(struct net_proto *pro);
 #endif
 #endif	/* INET */
 
+#ifdef CONFIG_ECONET
+extern void econet_proto_init(struct net_proto *pro);
+#endif
+
 #ifdef CONFIG_NETLINK
 extern void netlink_proto_init(struct net_proto *pro);
 #endif
@@ -151,6 +155,10 @@ struct net_proto protocols[] = {
 
 #ifdef CONFIG_X25
   { "X.25",	x25_proto_init },			/* CCITT X.25 Packet Layer */
+#endif
+
+#ifdef CONFIG_ECONET
+  { "Econet",	econet_proto_init },			/* Acorn Econet */
 #endif
 
   { NULL,	NULL		}			/* End marker			*/

@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.11 1998/09/22 03:24:52 davem Exp $
+/* $Id: unaligned.c,v 1.13 1998/10/07 22:43:13 davem Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -58,9 +58,10 @@ static inline int decode_access_size(unsigned int insn)
 {
 	unsigned int tmp;
 
-	if (((insn >> 19) & 0xf) == 14)
-		return 8;	/* stx* */
-	tmp = (insn >> 19) & 3;
+	tmp = ((insn >> 19) & 0xf);
+	if (tmp == 11 || tmp == 14) /* ldx/stx */
+		return 8;
+	tmp &= 3;
 	if(!tmp)
 		return 4;
 	else if(tmp == 3)

@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.23 1998/06/12 14:54:33 jj Exp $ */
+/* $Id: page.h,v 1.24 1998/10/20 03:09:16 jj Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
@@ -18,7 +18,7 @@
 
 #ifndef __ASSEMBLY__
 
-#define clear_page(page)		memset((void *)(page), 0, PAGE_SIZE)
+extern void clear_page(unsigned long page);
 extern void copy_page(unsigned long to, unsigned long from);
 
 /* GROSS, defining this makes gcc pass these types as aggregates,

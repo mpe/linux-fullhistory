@@ -240,12 +240,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_SUN_OPENPROMIO),y)
-else
-  ifeq ($(CONFIG_SUN_OPENPROMIO),m)
-  endif
-endif
-
 ifeq ($(CONFIG_WDT),y)
 L_OBJS += wdt.o
 else

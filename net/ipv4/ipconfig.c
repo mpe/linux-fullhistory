@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.15 1998/06/19 13:22:33 davem Exp $
+ *  $Id: ipconfig.c,v 1.16 1998/10/21 22:27:26 davem Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -260,12 +260,12 @@ __initfunc(int ic_defaults(void))
 		root_server_addr = ic_servaddr;
 
 	if (ic_netmask == INADDR_NONE) {
-		if (IN_CLASSA(ic_myaddr))
-			ic_netmask = IN_CLASSA_NET;
-		else if (IN_CLASSB(ic_myaddr))
-			ic_netmask = IN_CLASSB_NET;
-		else if (IN_CLASSC(ic_myaddr))
-			ic_netmask = IN_CLASSC_NET;
+		if (IN_CLASSA(ntohl(ic_myaddr)))
+			ic_netmask = htonl(IN_CLASSA_NET);
+		else if (IN_CLASSB(ntohl(ic_myaddr)))
+			ic_netmask = htonl(IN_CLASSB_NET);
+		else if (IN_CLASSC(ntohl(ic_myaddr)))
+			ic_netmask = htonl(IN_CLASSC_NET);
 		else {
 			printk(KERN_ERR "IP-Config: Unable to guess netmask for address %08x\n", ic_myaddr);
 			return -1;

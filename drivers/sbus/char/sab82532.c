@@ -1,4 +1,4 @@
-/* $Id: sab82532.c,v 1.23 1998/09/16 03:20:25 ecd Exp $
+/* $Id: sab82532.c,v 1.26 1998/10/25 06:46:41 ecd Exp $
  * sab82532.c: ASYNC Driver for the SIEMENS SAB82532 DUSCC.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -88,6 +88,7 @@ static char *sab82532_version[16] = {
 	"V(0x08)", "V(0x09)", "V(0x0a)", "V(0x0b)",
 	"V(0x0c)", "V(0x0d)", "V(0x0e)", "V(0x0f)"
 };
+static char serial_version[16];
 
 /*
  * tmp_buf is used as a temporary buffer by sab82532_write.  We need to
@@ -505,7 +506,7 @@ check_modem:
 #endif
 	}
 	if ((info->regs->r.pvr & info->pvr_dsr_bit) ^ info->dsr) {
-		info->dsr = info->regs->r.pvr & info->pvr_dsr_bit;
+		info->dsr = (info->regs->r.pvr & info->pvr_dsr_bit) ? 0 : 1;
 		info->icount.dsr++;
 		modem_change++;
 #if 0
@@ -786,6 +787,12 @@ static int startup(struct sab82532 *info)
 	 */
 	sab82532_init_line(info);
 
+	if (info->tty->termios->c_cflag & CBAUD) {
+		info->regs->rw.mode &= ~(SAB82532_MODE_FRTS);
+		info->regs->rw.mode |= SAB82532_MODE_RTS;
+		info->regs->rw.pvr &= ~(info->pvr_dtr_bit);
+	}
+
 	/*
 	 * Finally, enable interrupts
 	 */
@@ -951,8 +958,9 @@ static void change_speed(struct sab82532 *info)
 	ebrg = ebrg_table[i].n;
 	ebrg |= (ebrg_table[i].m << 6);
 
-	if (ebrg_table[i].baud)
-		info->timeout = (info->xmit_fifo_size * HZ * bits) / ebrg_table[i].baud;
+	info->baud = ebrg_table[i].baud;
+	if (info->baud)
+		info->timeout = (info->xmit_fifo_size * HZ * bits) / info->baud;
 	else
 		info->timeout = 0;
 	info->timeout += HZ / 50;		/* Add .02 seconds of slop */
@@ -1278,7 +1286,9 @@ static int get_modem_info(struct sab82532 * info, unsigned int *value)
 {
 	unsigned int result;
 
-	result =  ((info->regs->r.mode & SAB82532_MODE_FRTS) ? 0 : TIOCM_RTS)
+	result =  ((info->regs->r.mode & SAB82532_MODE_RTS) ? 
+		    ((info->regs->r.mode & SAB82532_MODE_FRTS) ? 0 : TIOCM_RTS)
+							    : TIOCM_RTS)
 		| ((info->regs->r.pvr & info->pvr_dtr_bit) ? 0 : TIOCM_DTR)
 		| ((info->regs->r.vstr & SAB82532_VSTR_CD) ? 0 : TIOCM_CAR)
 		| ((info->regs->r.pvr & info->pvr_dsr_bit) ? 0 : TIOCM_DSR)
@@ -1952,9 +1962,11 @@ static int sab82532_open(struct tty_struct *tty, struct file * filp)
  * /proc fs routines....
  */
 
-static int inline line_info(char *buf, struct tty_struct *tty)
+static __inline__ int
+line_info(char *buf, struct sab82532 *info)
 {
-	struct sab82532 *info = (struct sab82532 *)tty->driver_data;
+	unsigned long flags;
+	char stat_buf[30];
 	int ret;
 
 	ret = sprintf(buf, "%d: uart:SAB82532 ", info->line);
@@ -1972,8 +1984,8 @@ static int inline line_info(char *buf, struct tty_struct *tty)
 			ret += sprintf(buf+ret, "V?.? ");
 			break;
 	}
-	ret += sprintf(buf+ret, "port:%lX irq:%d",
-		       (unsigned long)info->regs, info->irq);
+	ret += sprintf(buf+ret, "port:%lX irq:%s",
+		       (unsigned long)info->regs, __irq_itoa(info->irq));
 
 	if (!info->regs) {
 		ret += sprintf(buf+ret, "\n");
@@ -1983,20 +1995,57 @@ static int inline line_info(char *buf, struct tty_struct *tty)
 	/*
 	 * Figure out the current RS-232 lines
 	 */
+	stat_buf[0] = 0;
+	stat_buf[1] = 0;
+	save_flags(flags); cli();
+	if (info->regs->r.mode & SAB82532_MODE_RTS) {
+		if (!(info->regs->r.mode & SAB82532_MODE_FRTS))
+			strcat(stat_buf, "|RTS");
+	} else {
+		strcat(stat_buf, "|RTS");
+	}
+	if (info->regs->r.star & SAB82532_STAR_CTS)
+		strcat(stat_buf, "|CTS");
+	if (!(info->regs->r.pvr & info->pvr_dtr_bit))
+		strcat(stat_buf, "|DTR");
+	if (!(info->regs->r.pvr & info->pvr_dsr_bit))
+		strcat(stat_buf, "|DSR");
+	if (!(info->regs->r.vstr & SAB82532_VSTR_CD))
+		strcat(stat_buf, "|CD");
+	restore_flags(flags);
 
-	ret += sprintf(buf+ret, "\n");
+	if (info->baud)
+		ret += sprintf(buf+ret, " baud:%d", info->baud);
+
+	if (info->icount.frame)
+		ret += sprintf(buf+ret, " fe:%d", info->icount.frame);
+
+	if (info->icount.parity)
+		ret += sprintf(buf+ret, " pe:%d", info->icount.parity);
+
+	if (info->icount.brk)
+		ret += sprintf(buf+ret, " brk:%d", info->icount.brk);
+
+	if (info->icount.overrun)
+		ret += sprintf(buf+ret, " oe:%d", info->icount.overrun);
+
+	/*
+	 * Last thing is the RS-232 status lines.
+	 */
+	ret += sprintf(buf+ret, " %s\n", stat_buf + 1);
 	return ret;
 }
 
 int sab82532_read_proc(char *page, char **start, off_t off, int count,
 		       int *eof, void *data)
 {
-	int i, len = 0;
-	off_t	begin = 0;
+	struct sab82532 *info = sab82532_chain;
+	off_t begin = 0;
+	int len = 0;
 
-	len += sprintf(page, "serinfo:1.0 driver:%s\n", "$Revision: 1.23 $");
-	for (i = 0; i < NR_PORTS && len < 4000; i++) {
-		len += line_info(page + len, sab82532_table[i]);
+	len += sprintf(page, "serinfo:1.0 driver:%s\n", serial_version);
+	for (info = sab82532_chain; info && len < 4000; info = info->next) {
+		len += line_info(page + len, info);
 		if (len+begin > off+count)
 			goto done;
 		if (len+begin < off) {
@@ -2089,13 +2138,14 @@ sab82532_kgdb_hook(int line))
 
 __initfunc(static inline void show_serial_version(void))
 {
-	char *revision = "$Revision: 1.23 $";
+	char *revision = "$Revision: 1.26 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
-	p = strchr(++version, ' ');
+	strcpy(serial_version, ++version);
+	p = strchr(serial_version, ' ');
 	*p = '\0';
-	printk("SAB82532 serial driver version %s\n", version);
+	printk("SAB82532 serial driver version %s\n", serial_version);
 }
 
 /*
@@ -2456,8 +2506,9 @@ sab82532_console_setup(struct console *con, char *options)
 	ebrg = ebrg_table[i].n;
 	ebrg |= (ebrg_table[i].m << 6);
 
-	if (ebrg_table[i].baud)
-		info->timeout = (info->xmit_fifo_size * HZ * bits) / ebrg_table[i].baud;
+	info->baud = ebrg_table[i].baud;
+	if (info->baud)
+		info->timeout = (info->xmit_fifo_size * HZ * bits) / info->baud;
 	else
 		info->timeout = 0;
 	info->timeout += HZ / 50;		/* Add .02 seconds of slop */
@@ -2490,6 +2541,7 @@ sab82532_console_setup(struct console *con, char *options)
 		info->regs->rw.mode &= ~(SAB82532_MODE_FRTS);
 		info->regs->rw.mode |= SAB82532_MODE_FCTS;
 	}
+	info->regs->rw.pvr &= ~(info->pvr_dtr_bit);
 	info->regs->rw.mode |= SAB82532_MODE_RAC;
 	restore_flags(flags);
 

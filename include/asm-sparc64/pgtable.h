@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.90 1998/09/24 03:21:56 davem Exp $
+/* $Id: pgtable.h,v 1.95 1998/10/22 03:05:57 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -169,10 +169,9 @@ extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
 #define flush_cache_range(mm, start, end)	flushw_user()
 #define flush_cache_page(vma, page)		flushw_user()
 
-extern void flush_page_to_ram(unsigned long page);
-
-/* This operation in unnecessary on the SpitFire since D-CACHE is write-through. */
+/* These operations are unnecessary on the SpitFire since D-CACHE is write-through. */
 #define flush_icache_range(start, end)		do { } while (0)
+#define flush_page_to_ram(page)			do { } while (0)
 
 extern void __flush_dcache_range(unsigned long start, unsigned long end);
 
@@ -379,7 +378,7 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 		if(ret) {
 			struct page *page = mem_map + MAP_NR(ret);
 			
-			clear_page(ret);
+			memset(ret, 0, PAGE_SIZE);
 			(unsigned long)page->pprev_hash = 2;
 			(unsigned long *)page->next_hash = pgd_quicklist;
 			pgd_quicklist = (unsigned long *)page;
@@ -409,7 +408,7 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 	} else {
 		ret = (unsigned long *) __get_free_page(GFP_KERNEL);
 		if(ret)
-			clear_page(ret);
+			memset(ret, 0, PAGE_SIZE);
 	}
 	return (pgd_t *)ret;
 }
@@ -562,26 +561,41 @@ extern void mmu_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbu
 #define mmu_lockarea(vaddr, len)		(vaddr)
 #define mmu_unlockarea(vaddr, len)		do { } while(0)
 
+/* There used to be some funny code here which tried to guess which
+ * TLB wanted the mapping, that wasn't accurate enough to justify it's
+ * existance.  The real way to do that is to have each TLB miss handler
+ * pass in a distinct code to do_sparc64_fault() and do it more accurately
+ * there.
+ *
+ * What we do need to handle here is prevent I-cache corruption.  The
+ * deal is that the I-cache snoops stores from other CPUs and all DMA
+ * activity, however stores from the local processor are not snooped.
+ * The dynamic linker and our signal handler mechanism take care of
+ * the cases where they write into instruction space, but when a page
+ * is copied in the kernel and then executed in user-space is not handled
+ * right.  This leads to corruptions if things are "just right", consider
+ * the following scenerio:
+ * 1) Process 1 frees up a page that was used for the PLT of libc in
+ *    it's address space.
+ * 2) Process 2 writes into a page in the PLT of libc for the first
+ *    time.  do_wp_page() copies the page locally, the local I-cache of
+ *    the processor does not notice the writes during the page copy.
+ *    The new page used just so happens to be the one just freed in #1.
+ * 3) After the PLT write, later the cpu calls into an unresolved PLT
+ *    entry, the CPU executes old instructions from process 1's PLT
+ *    table.
+ * 4) Splat.
+ */
+extern void flush_icache_page(unsigned long phys_page);
 #define update_mmu_cache(__vma, __address, _pte) \
-__asm__ __volatile__( \
-	"rdpr	%%pstate, %%g1\n\t" \
-	"wrpr	%%g1, %0, %%pstate\n\t" \
-	"brz,pt	%1, 1f\n\t" \
-	" mov	%2, %%g2\n\t" \
-	"stxa	%3, [%%g2] %5\n\t" \
-	"ba,pt	%%xcc, 2f\n\t" \
-	" stxa	%4, [%%g0] %6\n\t" \
-"1:	stxa	%3, [%%g2] %7\n\t" \
-"	stxa	%4, [%%g0] %8\n\t" \
-"2:	wrpr	%%g1, 0x0, %%pstate\n" \
-	: /* no outputs */ \
-	: "i" (PSTATE_IE), \
-          "r" (((__vma)->vm_flags&(VM_READ|VM_WRITE|VM_EXEC))==(VM_READ|VM_EXEC)), \
-	  "i" (TLB_TAG_ACCESS), \
-	  "r" ((__address) | ((__vma)->vm_mm->context & 0x3ff)), \
-	  "r" (pte_val(_pte)), "i" (ASI_IMMU), "i" (ASI_ITLB_DATA_IN), \
-	  "i" (ASI_DMMU), "i" (ASI_DTLB_DATA_IN) \
-	: "g1", "g2")
+do { \
+	unsigned short __flags = ((__vma)->vm_flags); \
+	if ((__flags & VM_EXEC) != 0 && \
+	    ((pte_val(_pte) & (_PAGE_PRESENT | _PAGE_WRITE | _PAGE_MODIFIED)) == \
+	     (_PAGE_PRESENT | _PAGE_WRITE | _PAGE_MODIFIED))) { \
+		flush_icache_page(pte_page(_pte) - page_offset); \
+	} \
+} while(0)
 
 /* Make a non-present pseudo-TTE. */
 extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)

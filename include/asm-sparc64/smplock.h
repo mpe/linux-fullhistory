@@ -3,6 +3,7 @@
  *
  * Default SMP lock implementation
  */
+#include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <asm/spinlock.h>
 
@@ -36,14 +37,14 @@ do { \
  * so we only need to worry about other
  * CPU's.
  */
-extern __inline__ void lock_kernel(void)
-{
-	if (!++current->lock_depth)
-		spin_lock(&kernel_flag);
-}
+#define lock_kernel() \
+do { \
+	if (!++current->lock_depth) \
+		spin_lock(&kernel_flag); \
+} while(0)
 
-extern __inline__ void unlock_kernel(void)
-{
-	if (--current->lock_depth < 0)
-		spin_unlock(&kernel_flag);
-}
+#define unlock_kernel() \
+do { \
+	if (--current->lock_depth < 0) \
+		spin_unlock(&kernel_flag); \
+} while(0)

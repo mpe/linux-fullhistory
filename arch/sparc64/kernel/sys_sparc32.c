@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.95 1998/09/07 09:20:50 davem Exp $
+/* $Id: sys_sparc32.c,v 1.98 1998/10/26 20:01:11 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -224,9 +224,6 @@ struct shmid_ds32 {
         __kernel_ipc_pid_t32    shm_cpid; 
         __kernel_ipc_pid_t32    shm_lpid; 
         unsigned short          shm_nattch;
-        unsigned short          shm_npages;
-        u32			shm_pages;
-        u32			attaches; 
 };
                                                         
 /*
@@ -1394,7 +1391,7 @@ asmlinkage int sys32_mount(char *dev_name, char *dir_name, char *type, unsigned 
 		else if(is_smb)
 			do_smb_super_data_conv((void *)data_page);
 		else
-			panic("Tell DaveM he fucked up...");
+			panic("The problem is here...");
 		old_fs = get_fs();
 		set_fs(KERNEL_DS);
 		err = sys_mount((char *)dev_page, (char *)dir_page,
@@ -2707,10 +2704,53 @@ struct module_info32 {
 
 /* Query various bits about modules.  */
 
-extern long get_mod_name(const char *user_name, char **buf);
-extern void put_mod_name(char *buf);
-extern struct module *find_module(const char *name);
-extern struct module kernel_module;
+static inline long
+get_mod_name(const char *user_name, char **buf)
+{
+	unsigned long page;
+	long retval;
+
+	if ((unsigned long)user_name >= TASK_SIZE
+	    && !segment_eq(get_fs (), KERNEL_DS))
+		return -EFAULT;
+
+	page = __get_free_page(GFP_KERNEL);
+	if (!page)
+		return -ENOMEM;
+
+	retval = strncpy_from_user((char *)page, user_name, PAGE_SIZE);
+	if (retval > 0) {
+		if (retval < PAGE_SIZE) {
+			*buf = (char *)page;
+			return retval;
+		}
+		retval = -ENAMETOOLONG;
+	} else if (!retval)
+		retval = -EINVAL;
+
+	free_page(page);
+	return retval;
+}
+
+static inline void
+put_mod_name(char *buf)
+{
+	free_page((unsigned long)buf);
+}
+
+static __inline__ struct module *find_module(const char *name)
+{
+	struct module *mod;
+
+	for (mod = module_list; mod ; mod = mod->next) {
+		if (mod->flags & MOD_DELETED)
+			continue;
+		if (!strcmp(mod->name, name))
+			break;
+	}
+
+	return mod;
+}
 
 static int
 qm_modules(char *buf, size_t bufsize, __kernel_size_t32 *ret)
@@ -2720,7 +2760,7 @@ qm_modules(char *buf, size_t bufsize, __kernel_size_t32 *ret)
 
 	nmod = space = 0;
 
-	for (mod=module_list; mod != &kernel_module; mod=mod->next, ++nmod) {
+	for (mod = module_list; mod->next != NULL; mod = mod->next, ++nmod) {
 		len = strlen(mod->name)+1;
 		if (len > bufsize)
 			goto calc_space_needed;
@@ -2738,7 +2778,7 @@ qm_modules(char *buf, size_t bufsize, __kernel_size_t32 *ret)
 
 calc_space_needed:
 	space += len;
-	while ((mod = mod->next) != &kernel_module)
+	while ((mod = mod->next)->next != NULL)
 		space += strlen(mod->name)+1;
 
 	if (put_user(space, ret))
@@ -2752,7 +2792,7 @@ qm_deps(struct module *mod, char *buf, size_t bufsize, __kernel_size_t32 *ret)
 {
 	size_t i, space, len;
 
-	if (mod == &kernel_module)
+	if (mod->next == NULL)
 		return -EINVAL;
 	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
 		if (put_user(0, ret))
@@ -2796,7 +2836,7 @@ qm_refs(struct module *mod, char *buf, size_t bufsize, __kernel_size_t32 *ret)
 	size_t nrefs, space, len;
 	struct module_ref *ref;
 
-	if (mod == &kernel_module)
+	if (mod->next == NULL)
 		return -EINVAL;
 	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
 		if (put_user(0, ret))
@@ -2898,7 +2938,7 @@ qm_info(struct module *mod, char *buf, size_t bufsize, __kernel_size_t32 *ret)
 {
 	int error = 0;
 
-	if (mod == &kernel_module)
+	if (mod->next == NULL)
 		return -EINVAL;
 
 	if (sizeof(struct module_info32) <= bufsize) {
@@ -2926,9 +2966,11 @@ asmlinkage int sys32_query_module(char *name_user, int which, char *buf, __kerne
 	int err;
 
 	lock_kernel();
-	if (name_user == 0)
-		mod = &kernel_module;
-	else {
+	if (name_user == 0) {
+		/* This finds "kernel_module" which is not exported. */
+		for(mod = module_list; mod->next != NULL; mod = mod->next)
+			;
+	} else {
 		long namelen;
 		char *name;
 
@@ -2937,9 +2979,11 @@ asmlinkage int sys32_query_module(char *name_user, int which, char *buf, __kerne
 			goto out;
 		}
 		err = -ENOENT;
-		if (namelen == 0)
-			mod = &kernel_module;
-		else if ((mod = find_module(name)) == NULL) {
+		if (namelen == 0) {
+			/* This finds "kernel_module" which is not exported. */
+			for(mod = module_list; mod->next != NULL; mod = mod->next)
+				;
+		} else if ((mod = find_module(name)) == NULL) {
 			put_mod_name(name);
 			goto out;
 		}

@@ -194,6 +194,7 @@ extern void ibmmca_scsi_setup(char *str, int *ints);
 extern void in2000_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
 extern void wd7000_setup(char *str, int *ints);
+extern void dc390_setup(char* str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void scsi_logging_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
@@ -703,6 +704,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_SCSI_IBMMCA
         { "ibmmcascsi=", ibmmca_scsi_setup },
+#endif
+#if defined(CONFIG_SCSI_DC390T) && ! defined(CONFIG_SCSI_DC390T_NOGENSUPP)
+        { "tmscsim=", dc390_setup },
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },

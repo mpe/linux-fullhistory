@@ -1,4 +1,4 @@
-/* $Id: VIScopy.S,v 1.18 1998/06/12 14:53:55 jj Exp $
+/* $Id: VIScopy.S,v 1.19 1998/10/19 21:52:19 davem Exp $
  * VIScopy.S: High speed copy operations utilizing the UltraSparc
  *            Visual Instruction Set.
  *
@@ -480,7 +480,7 @@ vis00:FREG_FROB(f0, f2, f4, f6, f8, f10,f12,f14,f16) LOOP_CHUNK1(o1, o0, g7, vis
 vis01:FREG_FROB(f16,f18,f20,f22,f24,f26,f28,f30,f32) STORE_SYNC(o0, f48) membar #Sync
       FREG_FROB(f32,f34,f36,f38,f40,f42,f44,f46,f0)  STORE_JUMP(o0, f48, finish_f0) membar #Sync
 vis02:FREG_FROB(f32,f34,f36,f38,f40,f42,f44,f46,f0)  STORE_SYNC(o0, f48) membar #Sync
-      FREG_FROB(f0, f2, f4, f6, f8, f10,f12,f14,f16) STORE_JUMP(o0, f48, check_finish_f16) add %o2, %g3, %g7
+      FREG_FROB(f0, f2, f4, f6, f8, f10,f12,f14,f16) STORE_JUMP(o0, f48, finish_f16) membar #Sync
 vis03:FREG_FROB(f0, f2, f4, f6, f8, f10,f12,f14,f16) STORE_SYNC(o0, f48) membar #Sync
       FREG_FROB(f16,f18,f20,f22,f24,f26,f28,f30,f32) STORE_JUMP(o0, f48, finish_f32) membar #Sync
       VISLOOP_PAD
@@ -569,18 +569,7 @@ finish_f8:	FINISH_VISCHUNK(o0, f8,  f10, g3)
 finish_f10:	FINISH_VISCHUNK(o0, f10, f12, g3)
 finish_f12:	FINISH_VISCHUNK(o0, f12, f14, g3)
 finish_f14:	UNEVEN_VISCHUNK(o0, f14, f0,  g3)
-/* This is a special hack to speed up 8K page copy */
-check_finish_f16:
-		andcc 		%g1, 7, %g0
-		bne,pn		%icc, finish_f16
-		 cmp		%g7, 0x40
-		bne,pn		%icc, finish_f16
-		 FREG_FROB(f16,f18,f20,f22,f24,f26,f28,f30,f32)
-		membar #Sync
-		EXVIS1(STBLK	%f48, [%o0] ASIBLK)
-		b,pt		%xcc, vis_ret
-finish_f16:	 membar		#Sync
-		FINISH_VISCHUNK(o0, f16, f18, g3)
+finish_f16:	FINISH_VISCHUNK(o0, f16, f18, g3)
 finish_f18:	FINISH_VISCHUNK(o0, f18, f20, g3)
 finish_f20:	FINISH_VISCHUNK(o0, f20, f22, g3)
 finish_f22:	FINISH_VISCHUNK(o0, f22, f24, g3)

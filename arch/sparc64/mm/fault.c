@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.24 1998/09/22 03:27:33 davem Exp $
+/* $Id: fault.c,v 1.25 1998/10/19 21:52:26 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -154,6 +154,7 @@ good_area:
 		if(!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	}
+	current->mm->segments = (void *) (address & PAGE_SIZE);
 	handle_mm_fault(current, vma, address, write);
 	up(&mm->mmap_sem);
 	return;

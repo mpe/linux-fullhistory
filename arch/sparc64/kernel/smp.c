@@ -41,7 +41,9 @@ int smp_threads_ready = 0;
 
 struct cpuinfo_sparc cpu_data[NR_CPUS] __attribute__ ((aligned (64)));
 
-static unsigned char boot_cpu_id __initdata = 0;
+/* Please don't make this initdata!!!  --DaveM */
+static unsigned char boot_cpu_id = 0;
+
 static int smp_activated = 0;
 
 volatile int cpu_number_map[NR_CPUS];
@@ -82,12 +84,16 @@ int smp_bogo(char *buf)
 
 __initfunc(void smp_store_cpu_info(int id))
 {
-	cpu_data[id].udelay_val			= loops_per_sec;
 	cpu_data[id].irq_count			= 0;
+	cpu_data[id].bh_count			= 0;
+	/* multiplier and counter set by
+	   smp_setup_percpu_timer()  */
+	cpu_data[id].udelay_val			= loops_per_sec;
+
 	cpu_data[id].pgcache_size		= 0;
+	cpu_data[id].pte_cache			= NULL;
 	cpu_data[id].pgdcache_size		= 0;
 	cpu_data[id].pgd_cache			= NULL;
-	cpu_data[id].pte_cache			= NULL;
 }
 
 extern void distribute_irqs(void);
@@ -136,6 +142,11 @@ __initfunc(void smp_callin(void))
 	callin_flag = 1;
 	__asm__ __volatile__("membar #Sync\n\t"
 			     "flush  %%g6" : : : "memory");
+
+	/* Clear this or we will die instantly when we
+	 * schedule back to this idler...
+	 */
+	current->tss.flags &= ~(SPARC_FLAG_NEWCHILD);
 
 	while(!smp_processors_ready)
 		membar("#LoadLoad");
@@ -396,6 +407,8 @@ void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 {
 	u32 ctx = mm->context & 0x3ff;
 
+	start &= PAGE_MASK;
+	end   &= PAGE_MASK;
 	if(mm == current->mm && atomic_read(&mm->count) == 1) {
 		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
 			goto local_flush_and_out;
@@ -404,8 +417,6 @@ void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 	smp_cross_call(&xcall_flush_tlb_range, ctx, start, end);
 
 local_flush_and_out:
-	start &= PAGE_MASK;
-	end &= PAGE_MASK;
 	__flush_tlb_range(ctx, start, SECONDARY_CONTEXT, end, PAGE_SIZE, (end-start));
 }
 
@@ -413,6 +424,7 @@ void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 {
 	u32 ctx = mm->context & 0x3ff;
 
+	page &= PAGE_MASK;
 	if(mm == current->mm && atomic_read(&mm->count) == 1) {
 		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
 			goto local_flush_and_out;
@@ -433,11 +445,11 @@ void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 	smp_cross_call(&xcall_flush_tlb_page, ctx, page, 0);
 
 local_flush_and_out:
-	__flush_tlb_page(ctx, (page & PAGE_MASK), SECONDARY_CONTEXT);
+	__flush_tlb_page(ctx, page, SECONDARY_CONTEXT);
 }
 
 /* CPU capture. */
-#define CAPTURE_DEBUG
+/* #define CAPTURE_DEBUG */
 extern unsigned long xcall_capture;
 
 static atomic_t smp_capture_depth = ATOMIC_INIT(0);
@@ -446,37 +458,42 @@ static unsigned long penguins_are_doing_time = 0;
 
 void smp_capture(void)
 {
-	int result = atomic_add_return(1, &smp_capture_depth);
+	if (smp_processors_ready) {
+		int result = atomic_add_return(1, &smp_capture_depth);
 
-	membar("#StoreStore | #LoadStore");
-	if(result == 1) {
-		int ncpus = smp_num_cpus;
-
-#ifdef CAPTURE_DEBUG
-		printk("CPU[%d]: Sending penguins to jail...", smp_processor_id());
-#endif
-		penguins_are_doing_time = 1;
 		membar("#StoreStore | #LoadStore");
-		atomic_inc(&smp_capture_registry);
-		smp_cross_call(&xcall_capture, 0, 0, 0);
-		while(atomic_read(&smp_capture_registry) != ncpus)
-			membar("#LoadLoad");
+		if(result == 1) {
+			int ncpus = smp_num_cpus;
+
 #ifdef CAPTURE_DEBUG
-		printk("done\n");
+			printk("CPU[%d]: Sending penguins to jail...",
+			       smp_processor_id());
 #endif
+			penguins_are_doing_time = 1;
+			membar("#StoreStore | #LoadStore");
+			atomic_inc(&smp_capture_registry);
+			smp_cross_call(&xcall_capture, 0, 0, 0);
+			while(atomic_read(&smp_capture_registry) != ncpus)
+				membar("#LoadLoad");
+#ifdef CAPTURE_DEBUG
+			printk("done\n");
+#endif
+		}
 	}
 }
 
 void smp_release(void)
 {
-	if(atomic_dec_and_test(&smp_capture_depth)) {
+	if(smp_processors_ready) {
+		if(atomic_dec_and_test(&smp_capture_depth)) {
 #ifdef CAPTURE_DEBUG
-		printk("CPU[%d]: Giving pardon to imprisoned penguins\n",
-		       smp_processor_id());
+			printk("CPU[%d]: Giving pardon to imprisoned penguins\n",
+			       smp_processor_id());
 #endif
-		penguins_are_doing_time = 0;
-		membar("#StoreStore | #StoreLoad");
-		atomic_dec(&smp_capture_registry);
+			penguins_are_doing_time = 0;
+			membar("#StoreStore | #StoreLoad");
+			atomic_dec(&smp_capture_registry);
+		}
 	}
 }
 
@@ -539,8 +556,12 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 		if(!--prof_counter(cpu))
 		{
 			if (cpu == boot_cpu_id) {
-				extern void irq_enter(int, int);
-				extern void irq_exit(int, int);
+/* XXX Keep this in sync with irq.c --DaveM */
+#define irq_enter(cpu, irq)			\
+do {	hardirq_enter(cpu);			\
+	spin_unlock_wait(&global_irq_lock);	\
+} while(0)
+#define irq_exit(cpu, irq)	hardirq_exit(cpu)
 
 				irq_enter(cpu, 0);
 				kstat.irqs[cpu][0]++;
@@ -548,6 +569,9 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 				timer_tick_interrupt(regs);
 
 				irq_exit(cpu, 0);
+
+#undef irq_enter
+#undef irq_exit
 			}
 
 			if(current->pid) {

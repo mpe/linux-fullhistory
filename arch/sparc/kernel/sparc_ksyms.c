@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.70 1998/09/17 11:04:55 jj Exp $
+/* $Id: sparc_ksyms.c,v 1.72 1998/10/22 15:15:08 ecd Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -68,6 +68,10 @@ extern int __ashrdi3(int, int);
 
 extern void dump_thread(struct pt_regs *, struct user *);
 
+#ifdef __SMP__
+extern spinlock_t kernel_flag;
+#endif
+
 /* One thing to note is that the way the symbols of the mul/div
  * support routines are named is a mess, they all start with
  * a '.' which makes it a bitch to export, here is the trick:
@@ -87,33 +91,21 @@ __attribute__((section("__ksymtab"))) =				\
 EXPORT_SYMBOL(sparc_cpu_model);
 EXPORT_SYMBOL_PRIVATE(_spinlock_waitfor);
 #ifdef SPIN_LOCK_DEBUG
-EXPORT_SYMBOL(_spin_lock);
-EXPORT_SYMBOL(_spin_unlock);
+EXPORT_SYMBOL(_do_spin_lock);
+EXPORT_SYMBOL(_do_spin_unlock);
 EXPORT_SYMBOL(_spin_trylock);
-EXPORT_SYMBOL(_spin_lock_irq);
-EXPORT_SYMBOL(_spin_unlock_irq);
-EXPORT_SYMBOL(_spin_lock_irqsave);
-EXPORT_SYMBOL(_spin_unlock_irqrestore);
-EXPORT_SYMBOL(_read_lock);
-EXPORT_SYMBOL(_read_unlock);
-EXPORT_SYMBOL(_read_lock_irq);
-EXPORT_SYMBOL(_read_unlock_irq);
-EXPORT_SYMBOL(_read_lock_irqsave);
-EXPORT_SYMBOL(_read_unlock_irqrestore);
-EXPORT_SYMBOL(_write_lock);
-EXPORT_SYMBOL(_write_unlock);
-EXPORT_SYMBOL(_write_lock_irq);
-EXPORT_SYMBOL(_write_unlock_irq);
-EXPORT_SYMBOL(_write_lock_irqsave);
-EXPORT_SYMBOL(_write_unlock_irqrestore);
+EXPORT_SYMBOL(_do_read_lock);
+EXPORT_SYMBOL(_do_read_unlock);
+EXPORT_SYMBOL(_do_write_lock);
+EXPORT_SYMBOL(_do_write_unlock);
 #else
 EXPORT_SYMBOL_PRIVATE(_rw_read_enter);
 EXPORT_SYMBOL_PRIVATE(_rw_read_exit);
 EXPORT_SYMBOL_PRIVATE(_rw_write_enter);
 #endif
-EXPORT_SYMBOL(__sparc_bh_counter);
 #ifdef __SMP__
 #ifdef DEBUG_IRQLOCK
+EXPORT_SYMBOL(__global_save_flags);
 EXPORT_SYMBOL(__global_restore_flags);
 EXPORT_SYMBOL(__global_sti);
 EXPORT_SYMBOL(__global_cli);
@@ -142,14 +134,19 @@ EXPORT_SYMBOL_PRIVATE(_set_le_bit);
 EXPORT_SYMBOL_PRIVATE(_clear_le_bit);
 
 /* IRQ implementation. */
-EXPORT_SYMBOL(local_irq_count);
 #ifdef __SMP__
+EXPORT_SYMBOL(kernel_flag);
 EXPORT_SYMBOL(global_irq_holder);
 EXPORT_SYMBOL(global_irq_lock);
 EXPORT_SYMBOL(global_bh_lock);
+EXPORT_SYMBOL(global_bh_count);
+EXPORT_SYMBOL(sparc_bh_lock);
 EXPORT_SYMBOL(global_irq_count);
 EXPORT_SYMBOL(synchronize_irq);
+EXPORT_SYMBOL(synchronize_bh);
 #endif
+EXPORT_SYMBOL(local_irq_count);
+EXPORT_SYMBOL(local_bh_count);
 
 EXPORT_SYMBOL(udelay);
 EXPORT_SYMBOL(mstk48t02_regs);

@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.29 1998/09/21 05:06:53 jj Exp $
+/* $Id: zs.c,v 1.31 1998/10/07 11:35:29 jj Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1808,7 +1808,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.29 $";
+	char *revision = "$Revision: 1.31 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -1830,6 +1830,7 @@ __initfunc(static struct sun_zslayout *
 get_zs(int chip))
 {
 	unsigned int vaddr[2] = { 0, 0 };
+	unsigned long mapped_addr = 0;
 	int busnode, seen, zsnode, sun4u_ino;
 	static int irq = 0;
 
@@ -1854,7 +1855,30 @@ get_zs(int chip))
 			int len = prom_getproperty(zsnode, "address",
 						   (void *) vaddr, sizeof(vaddr));
 
-			if(len % sizeof(unsigned int)) {
+			if(len == -1) {
+				struct linux_sbus *sbus;
+				struct linux_sbus_device *sdev = NULL;
+
+				/* "address" property is not guarenteed,
+				 * everything in I/O is implicitly mapped
+				 * anyways by our clever TLB miss handling
+				 * scheme, so don't fail here.  -DaveM
+				 */
+				for_each_sbus(sbus) {
+					for_each_sbusdev(sdev, sbus) {
+						if (sdev->prom_node == zsnode)
+							goto found;
+					}
+				}
+			found:
+				if (sdev == NULL)
+					prom_halt();
+				prom_apply_sbus_ranges(sbus, sdev->reg_addrs, 1, sdev);
+				mapped_addr = (unsigned long)
+					sparc_alloc_io(sdev->reg_addrs[0].phys_addr, 0,
+						       PAGE_SIZE, "Zilog Registers",
+						       sdev->reg_addrs[0].which_io, 0x0);
+			} else if(len % sizeof(unsigned int)) {
 				prom_printf("WHOOPS:  proplen for %s "
 					    "was %d, need multiple of "
 					    "%d\n", "address", len,
@@ -1883,9 +1907,12 @@ get_zs(int chip))
 	}
 	if(!zsnode)
 		panic("get_zs: whee chip not found");
-	if(!vaddr[0])
+	if(!vaddr[0] && !mapped_addr)
 		panic("get_zs: whee no serial chip mappable");
-	return (struct sun_zslayout *)(unsigned long) vaddr[0];
+	if (mapped_addr != 0)
+		return (struct sun_zslayout *) mapped_addr;
+	else
+		return (struct sun_zslayout *) (unsigned long) vaddr[0];
 }
 #else /* !(__sparc_v9__) */
 __initfunc(static struct sun_zslayout *
@@ -2119,7 +2146,7 @@ no_probe:
 	kbd_ops.getledstate = sun_getledstate;
 	kbd_ops.setkeycode = sun_setkeycode;
 	kbd_ops.getkeycode = sun_getkeycode;
-#ifdef CONFIG_PCI
+#if defined(__sparc_v9__) && defined(CONFIG_PCI)
 	sunkbd_install_keymaps(memory_start, sun_key_maps, sun_keymap_count,
 			       sun_func_buf, sun_func_table,
 			       sun_funcbufsize, sun_funcbufleft,

@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.86 1998/09/29 09:46:04 davem Exp $
+/*  $Id: signal.c,v 1.90 1998/10/18 03:31:05 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -75,6 +75,7 @@ struct new_signal_frame {
 	__siginfo_fpu_t		*fpu_save;
 	unsigned long		insns [2] __attribute__ ((aligned (8)));
 	unsigned int		extramask[_NSIG_WORDS - 1];
+	unsigned int		extra_size; /* Should be 0 */
 	__siginfo_fpu_t		fpu_state;
 };
 
@@ -86,6 +87,7 @@ struct rt_signal_frame {
 	__siginfo_fpu_t		*fpu_save;
 	unsigned int		insns [2];
 	stack_t			stack;
+	unsigned int		extra_size; /* Should be 0 */
 	__siginfo_fpu_t		fpu_state;
 };
 
@@ -203,16 +205,19 @@ restore_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 #endif
 	current->used_math = 1;
 	current->flags &= ~PF_USEDFPU;
+	
+	if (verify_area (VERIFY_READ, fpu, sizeof(*fpu)))
+		return -EFAULT;
 
-	err = copy_from_user(&current->tss.float_regs[0], &fpu->si_float_regs[0],
-		       (sizeof(unsigned long) * 32));
+	err = __copy_from_user(&current->tss.float_regs[0], &fpu->si_float_regs[0],
+			       (sizeof(unsigned long) * 32));
 	err |= __get_user(current->tss.fsr, &fpu->si_fsr);
 	err |= __get_user(current->tss.fpqdepth, &fpu->si_fpqdepth);
 	if (current->tss.fpqdepth != 0)
-		err |= copy_from_user(&current->tss.fpqueue[0],
-			       &fpu->si_fpqueue[0],
-			       ((sizeof(unsigned long) +
-			       (sizeof(unsigned long *)))*16));
+		err |= __copy_from_user(&current->tss.fpqueue[0],
+					&fpu->si_fpqueue[0],
+					((sizeof(unsigned long) +
+					(sizeof(unsigned long *)))*16));
 	return err;
 }
 
@@ -241,7 +246,7 @@ static inline void do_new_sigreturn (struct pt_regs *regs)
 
 	/* 2. Restore the state */
 	up_psr = regs->psr;
-	err |= copy_from_user(regs, &sf->info.si_regs, sizeof (struct pt_regs));
+	err |= __copy_from_user(regs, &sf->info.si_regs, sizeof (struct pt_regs));
 
 	/* User can only change condition codes and FPU enabling in %psr. */
 	regs->psr = (up_psr & ~(PSR_ICC | PSR_EF))
@@ -250,14 +255,14 @@ static inline void do_new_sigreturn (struct pt_regs *regs)
 	err |= __get_user(fpu_save, &sf->fpu_save);
 
 	if (fpu_save)
-		err |= restore_fpu_state(regs, sf->fpu_save);
+		err |= restore_fpu_state(regs, fpu_save);
 
 	/* This is pretty much atomic, no amount locking would prevent
 	 * the races which exist anyways.
 	 */
 	err |= __get_user(set.sig[0], &sf->info.si_mask);
-	err |= copy_from_user(&set.sig[1], &sf->extramask,
-			   (_NSIG_WORDS-1) * sizeof(unsigned int));
+	err |= __copy_from_user(&set.sig[1], &sf->extramask,
+			        (_NSIG_WORDS-1) * sizeof(unsigned int));
 			   
 	if (err)
 		goto segv_and_exit;
@@ -270,8 +275,6 @@ static inline void do_new_sigreturn (struct pt_regs *regs)
 	return;
 
 segv_and_exit:
-	/* Ugh, we need to grab master lock in these rare cases ;-( */
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -305,8 +308,8 @@ asmlinkage void do_sigreturn(struct pt_regs *regs)
 	 */
 	err |= __get_user(set.sig[0], &scptr->sigc_mask);
 	/* Note that scptr + 1 points to extramask */
-	err |= copy_from_user(&set.sig[1], scptr + 1,
-			   (_NSIG_WORDS - 1) * sizeof(unsigned int));
+	err |= __copy_from_user(&set.sig[1], scptr + 1,
+				(_NSIG_WORDS - 1) * sizeof(unsigned int));
 	
 	if (err)
 		goto segv_and_exit;
@@ -352,7 +355,7 @@ asmlinkage void do_rt_sigreturn(struct pt_regs *regs)
 	   (((unsigned long) sf) & 0x03))
 		goto segv;
 
-	err = get_user(pc, &sf->regs.pc);
+	err = __get_user(pc, &sf->regs.pc);
 	err |= __get_user(npc, &sf->regs.npc);
 	err |= ((pc | npc) & 0x03);
 
@@ -366,8 +369,8 @@ asmlinkage void do_rt_sigreturn(struct pt_regs *regs)
 	err |= __get_user(fpu_save, &sf->fpu_save);
 
 	if(fpu_save)
-		err |= restore_fpu_state(regs, &sf->fpu_state);
-	err |= copy_from_user(&set, &sf->mask, sizeof(sigset_t));
+		err |= restore_fpu_state(regs, fpu_save);
+	err |= __copy_from_user(&set, &sf->mask, sizeof(sigset_t));
 	
 	err |= __copy_from_user(&st, &sf->stack, sizeof(stack_t));
 	
@@ -459,13 +462,13 @@ setup_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 		for(window = 0; window < current->tss.w_saved; window++) {
 			sc->sigc_spbuf[window] =
 				(char *)current->tss.rwbuf_stkptrs[window];
-			err |= copy_to_user(&sc->sigc_wbuf[window],
-					    &current->tss.reg_window[window],
-					    sizeof(struct reg_window));
+			err |= __copy_to_user(&sc->sigc_wbuf[window],
+					      &current->tss.reg_window[window],
+					      sizeof(struct reg_window));
 		}
 	else
-		err |= copy_to_user(sframep, (char *)regs->u_regs[UREG_FP],
-				    sizeof(struct reg_window));
+		err |= __copy_to_user(sframep, (char *)regs->u_regs[UREG_FP],
+				      sizeof(struct reg_window));
 
 	current->tss.w_saved = 0; /* So process is allowed to execute. */
 	err |= __put_user(signr, &sframep->sig_num);
@@ -490,11 +493,8 @@ setup_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	return;
 
 sigill_and_return:
-	/* Ugh, we need to grab master lock in these rare cases ;-( */
-	lock_kernel();
 	do_exit(SIGILL);
 sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -520,13 +520,13 @@ save_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 		regs->psr &= ~(PSR_EF);
 	}
 #endif
-	err |= copy_to_user(&fpu->si_float_regs[0], &current->tss.float_regs[0],
-			    (sizeof(unsigned long) * 32));
+	err |= __copy_to_user(&fpu->si_float_regs[0], &current->tss.float_regs[0],
+			      (sizeof(unsigned long) * 32));
 	err |= __put_user(current->tss.fsr, &fpu->si_fsr);
 	err |= __put_user(current->tss.fpqdepth, &fpu->si_fpqdepth);
 	if (current->tss.fpqdepth != 0)
-		err |= copy_to_user(&fpu->si_fpqueue[0], &current->tss.fpqueue[0],
-				    ((sizeof(unsigned long) +
+		err |= __copy_to_user(&fpu->si_fpqueue[0], &current->tss.fpqueue[0],
+				      ((sizeof(unsigned long) +
 				      (sizeof(unsigned long *)))*16));
 	current->used_math = 0;
 	return err;
@@ -560,7 +560,9 @@ new_setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	}
 
 	/* 2. Save the current process state */
-	err = copy_to_user(&sf->info.si_regs, regs, sizeof (struct pt_regs));
+	err = __copy_to_user(&sf->info.si_regs, regs, sizeof (struct pt_regs));
+	
+	err |= __put_user(0, &sf->extra_size);
 
 	if (current->used_math) {
 		err |= save_fpu_state(regs, &sf->fpu_state);
@@ -572,8 +574,8 @@ new_setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	err |= __put_user(oldset->sig[0], &sf->info.si_mask);
 	err |= __copy_to_user(sf->extramask, &oldset->sig[1],
 			      (_NSIG_WORDS - 1) * sizeof(unsigned int));
-	err |= copy_to_user(sf, (char *) regs->u_regs [UREG_FP],
-			    sizeof (struct reg_window));
+	err |= __copy_to_user(sf, (char *) regs->u_regs [UREG_FP],
+			      sizeof (struct reg_window));
 	if (err)
 		goto sigsegv;
 	
@@ -606,10 +608,8 @@ new_setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	return;
 
 sigill_and_return:
-	lock_kernel();
 	do_exit(SIGILL);
 sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -620,7 +620,7 @@ new_setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	struct rt_signal_frame *sf;
 	int sigframe_size;
 	unsigned int psr;
-	int i, err;
+	int err;
 
 	synchronize_user_stack();
 	sigframe_size = RT_ALIGNEDSZ;
@@ -632,15 +632,16 @@ new_setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	if(current->tss.w_saved != 0)
 		goto sigill;
 
-	err  = put_user(regs->pc, &sf->regs.pc);
+	err  = __put_user(regs->pc, &sf->regs.pc);
 	err |= __put_user(regs->npc, &sf->regs.npc);
 	err |= __put_user(regs->y, &sf->regs.y);
 	psr = regs->psr;
 	if(current->used_math)
 		psr |= PSR_EF;
 	err |= __put_user(psr, &sf->regs.psr);
-	for(i = 0; i < 16; i++)
-		err |= __put_user(regs->u_regs[i], &sf->regs.u_regs[i]);
+	err |= __copy_to_user(&sf->regs.u_regs, regs->u_regs, sizeof(regs->u_regs));
+	err |= __put_user(0, &sf->extra_size);
+
 	if(psr & PSR_EF) {
 		err |= save_fpu_state(regs, &sf->fpu_state);
 		err |= __put_user(&sf->fpu_state, &sf->fpu_save);
@@ -654,8 +655,8 @@ new_setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	err |= __put_user(sas_ss_flags(regs->u_regs[UREG_FP]), &sf->stack.ss_flags);
 	err |= __put_user(current->sas_ss_size, &sf->stack.ss_size);
 	
-	err |= copy_to_user(sf, (char *) regs->u_regs [UREG_FP],
-			    sizeof (struct reg_window));	
+	err |= __copy_to_user(sf, (char *) regs->u_regs [UREG_FP],
+			      sizeof (struct reg_window));	
 	if (err)
 		goto sigsegv;
 
@@ -685,10 +686,8 @@ new_setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	return;
 
 sigill:
-	lock_kernel();
 	do_exit(SIGILL);
 sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -717,7 +716,7 @@ setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	}
 
 	/* Start with a clean frame pointer and fill it */
-	err = clear_user(sfp, sizeof (*sfp));
+	err = __clear_user(sfp, sizeof (*sfp));
 
 	/* Setup convenience variables */
 	si = &sfp->si;
@@ -746,8 +745,8 @@ setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	err |= __put_user(regs->y, &((*gr) [SVR4_Y]));
 	
 	/* Copy g [1..7] and o [0..7] registers */
-	err |= copy_to_user(&(*gr)[SVR4_G1], &regs->u_regs [UREG_G1], sizeof (long) * 7);
-	err |= copy_to_user(&(*gr)[SVR4_O0], &regs->u_regs [UREG_I0], sizeof (long) * 8);
+	err |= __copy_to_user(&(*gr)[SVR4_G1], &regs->u_regs [UREG_G1], sizeof (long) * 7);
+	err |= __copy_to_user(&(*gr)[SVR4_O0], &regs->u_regs [UREG_I0], sizeof (long) * 8);
 
 	/* Setup sigaltstack */
 	err |= __put_user(current->sas_ss_sp, &uc->stack.sp);
@@ -775,9 +774,9 @@ setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	 */
 	for(window = 0; window < current->tss.w_saved; window++) {
 		err |= __put_user((int *) &(gw->win [window]), &gw->winptr [window]);
-		err |= copy_to_user(&gw->win [window],
-				    &current->tss.reg_window [window],
-				    sizeof (svr4_rwindow_t));
+		err |= __copy_to_user(&gw->win [window],
+				      &current->tss.reg_window [window],
+				      sizeof (svr4_rwindow_t));
 		err |= __put_user(0, gw->winptr [window]);
 	}
 
@@ -819,10 +818,8 @@ setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	return;
 
 sigill_and_return:
-	lock_kernel();
 	do_exit(SIGILL);
 sigsegv:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -839,6 +836,8 @@ asmlinkage int svr4_getcontext (svr4_ucontext_t *uc, struct pt_regs *regs)
 		goto sigsegv_and_return;
 
 	err = clear_user(uc, sizeof (*uc));
+	if (err)
+		return -EFAULT;
 
 	/* Setup convenience variables */
 	mc = &uc->mcontext;
@@ -860,8 +859,8 @@ asmlinkage int svr4_getcontext (svr4_ucontext_t *uc, struct pt_regs *regs)
 	err |= __put_user(regs->y, &uc->mcontext.greg [SVR4_Y]);
 	
 	/* Copy g [1..7] and o [0..7] registers */
-	err |= copy_to_user(&(*gr)[SVR4_G1], &regs->u_regs [UREG_G1], sizeof (uint) * 7);
-	err |= copy_to_user(&(*gr)[SVR4_O0], &regs->u_regs [UREG_I0], sizeof (uint) * 8);
+	err |= __copy_to_user(&(*gr)[SVR4_G1], &regs->u_regs [UREG_G1], sizeof (uint) * 7);
+	err |= __copy_to_user(&(*gr)[SVR4_O0], &regs->u_regs [UREG_I0], sizeof (uint) * 8);
 
 	/* Setup sigaltstack */
 	err |= __put_user(current->sas_ss_sp, &uc->stack.sp);
@@ -874,7 +873,6 @@ asmlinkage int svr4_getcontext (svr4_ucontext_t *uc, struct pt_regs *regs)
 	return (err ? -EFAULT : 0);
 
 sigsegv_and_return:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -950,14 +948,13 @@ asmlinkage int svr4_setcontext (svr4_ucontext_t *c, struct pt_regs *regs)
 	regs->psr |= (psr & PSR_ICC);
 
 	/* Restore g[1..7] and o[0..7] registers */
-	err |= copy_from_user(&regs->u_regs [UREG_G1], &(*gr)[SVR4_G1],
+	err |= __copy_from_user(&regs->u_regs [UREG_G1], &(*gr)[SVR4_G1],
 			      sizeof (long) * 7);
-	err |= copy_from_user(&regs->u_regs [UREG_I0], &(*gr)[SVR4_O0],
+	err |= __copy_from_user(&regs->u_regs [UREG_I0], &(*gr)[SVR4_O0],
 			      sizeof (long) * 8);
 	return (err ? -EFAULT : 0);
 
 sigsegv_and_return:
-	lock_kernel();
 	do_exit(SIGSEGV);
 }
 
@@ -1110,7 +1107,9 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 			case SIGABRT: case SIGFPE: case SIGSEGV: case SIGBUS:
 				if(current->binfmt && current->binfmt->core_dump) {
 					lock_kernel();
-					if(current->binfmt->core_dump(signr, regs))
+					if(current->binfmt &&
+					   current->binfmt->core_dump &&
+					   current->binfmt->core_dump(signr, regs))
 						exit_code |= 0x80;
 					unlock_kernel();
 				}

@@ -35,6 +35,9 @@ void soundcard_init(void);
 void dmasound_init(void);
 #endif
 #endif
+#ifdef CONFIG_SPARCAUDIO
+extern int sparcaudio_init(void);
+#endif
 #ifdef CONFIG_ISDN
 int isdn_init(void);
 #endif
@@ -570,6 +573,9 @@ __initfunc(int chr_dev_init(void))
 #ifdef CONFIG_DMASOUND
 	dmasound_init();
 #endif	
+#endif
+#ifdef CONFIG_SPARCAUDIO
+	sparcaudio_init();
 #endif
 #ifdef CONFIG_JOYSTICK
 	/*

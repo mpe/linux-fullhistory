@@ -1,4 +1,4 @@
-/* $Id: pcic.c,v 1.2 1998/09/29 03:21:56 jj Exp $
+/* $Id: pcic.c,v 1.3 1998/10/07 11:34:56 jj Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -83,7 +83,7 @@ __initfunc(void pcic_probe(void))
 	int node;
 	int err;
 
-	if (pci_present()) {
+	if (pcibios_present()) {
 		prom_printf("PCIC: called twice!\n");
 		prom_halt();
 	}
@@ -426,7 +426,7 @@ __initfunc(void pci_time_init(void))
 	/* A hack until do_gettimeofday prototype is moved to arch specific headers
 	   and btfixupped. Patch do_gettimeofday with ba pci_do_gettimeofday; nop */
 	((unsigned int *)do_gettimeofday)[0] = 
-		0x10800000 | (((unsigned long)pci_do_gettimeofday - (unsigned long)do_gettimeofday) & 0x003fffff);
+		0x10800000 | ((((unsigned long)pci_do_gettimeofday - (unsigned long)do_gettimeofday) >> 2) & 0x003fffff);
 	((unsigned int *)do_gettimeofday)[1] =
 		0x01000000;
 	BTFIXUPSET_CALL(bus_do_settimeofday, pci_do_settimeofday, BTFIXUPCALL_NORM);

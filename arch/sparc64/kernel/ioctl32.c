@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.52 1998/09/25 17:09:22 jj Exp $
+/* $Id: ioctl32.c,v 1.53 1998/10/26 08:01:01 jj Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -1532,8 +1532,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		error = loop_status(fd, cmd, arg);
 		goto out;
 
-	case AUTOFS_IOC_SETTIMEOUT:
-		error = rw_long(fd, cmd, arg);
+#define AUTOFS_IOC_SETTIMEOUT32 _IOWR(0x93,0x64,unsigned int)
+	case AUTOFS_IOC_SETTIMEOUT32:
+		error = rw_long(fd, AUTOFS_IOC_SETTIMEOUT, arg);
 		goto out;
 		
 	case PIO_FONTX:

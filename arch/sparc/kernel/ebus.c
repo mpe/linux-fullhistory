@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.1 1998/09/18 10:43:43 jj Exp $
+/* $Id: ebus.c,v 1.2 1998/10/07 11:35:16 jj Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -141,6 +141,9 @@ __initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 		       (unsigned long)sparc_alloc_io (dev->base_address[i], 0,
 						      regs[i].reg_size,
 						      dev->prom_name, 0, 0);
+		    /* Some drivers call 'check_region', so we release it */
+                    release_region(dev->base_address[i] & PAGE_MASK, PAGE_SIZE);
+
 		    if (dev->base_address[i] == 0 ) {
 			panic("ebus: unable sparc_alloc_io for dev %s",
 			      dev->prom_name);

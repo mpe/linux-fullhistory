@@ -163,7 +163,7 @@ good_area:
 	 * the fault.
 	 */
 	if (!handle_mm_fault(tsk, vma, address, write))
-		goto bad_area;
+		goto do_sigbus;
 
 	/*
 	 * Did it hit the DOS screen memory VA from vm86 mode?
@@ -250,4 +250,24 @@ no_context:
 	}
 	die("Oops", regs, error_code);
 	do_exit(SIGKILL);
+
+/*
+ * We ran out of memory, or some other thing happened to us that made
+ * us unable to handle the page fault gracefully.
+ */
+do_sigbus:
+	up(&mm->mmap_sem);
+
+	/*
+	 * Send a sigbus, regardless of whether we were in kernel
+	 * or user mode.
+	 */
+	tsk->tss.cr2 = address;
+	tsk->tss.error_code = error_code;
+	tsk->tss.trap_no = 14;
+	force_sig(SIGBUS, tsk);
+
+	/* Kernel mode? Handle exceptions or die */
+	if (!(error_code & 4))
+		goto no_context;
 }

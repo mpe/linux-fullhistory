@@ -457,14 +457,17 @@ exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino,
 	   char *path, struct knfs_fh *f)
 {
 	struct svc_export	*exp;
-	struct dentry		*dentry;
+	struct dentry		*dentry = NULL;
 	struct inode		*inode;
 	struct svc_fh		fh;
 	int			err;
 
+	err = -EPERM;
 	if (path) {
-		dentry = lookup_dentry(path, NULL, 0);
-
+		if (!(dentry = lookup_dentry(path, NULL, 0))) {
+			printk("nfsd: exp_rootfh path not found %s", path);
+			return -EPERM;
+		}
 		dev = dentry->d_inode->i_dev;
 		ino = dentry->d_inode->i_ino;
 	
@@ -474,17 +477,21 @@ exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino,
 	} else {
 		dprintk("nfsd: exp_rootfh(%s:%x/%ld)\n",
 		         clp->cl_ident, dev, ino);
-		exp = exp_get(clp, dev, ino);
-		dentry = dget(exp->ex_dentry);
+		if ((exp = exp_get(clp, dev, ino)))
+			if (!(dentry = dget(exp->ex_dentry))) {
+				printk("exp_rootfh: Aieee, NULL dentry\n");
+				return -EPERM;
+			}
 	}
-	err = -EPERM;
-	if (!exp)
+	if (!exp) {
+		dprintk("nfsd: exp_rootfh export not found.\n");
 		goto out;
+	}
 
 	inode = dentry->d_inode;
 	if (!inode) {
 		printk("exp_rootfh: Aieee, NULL d_inode\n");
-		return -EPERM;
+		goto out;
 	}
 	if (inode->i_dev != dev || inode->i_ino != ino) {
 		printk("exp_rootfh: Aieee, ino/dev mismatch\n");

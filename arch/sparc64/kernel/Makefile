@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.40 1998/09/17 11:05:03 jj Exp $
+# $Id: Makefile,v 1.41 1998/10/11 06:58:14 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -89,6 +89,8 @@ check_asm: dummy
 	@echo "" >> asm_offsets.h
 	@echo "#else /* __SMP__ */" >> asm_offsets.h
 	@echo "" >> asm_offsets.h
+	@echo "#ifndef SPIN_LOCK_DEBUG" >>asm_offsets.h
+	@echo "" >> asm_offsets.h
 	@echo "#include <linux/sched.h>" > tmp.c
 	$(CC) -D__SMP__ -E tmp.c -o tmp.i
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
@@ -110,6 +112,31 @@ check_asm: dummy
 	# </hack>
 	./check_asm >> asm_offsets.h
 	@rm -f check_asm check_asm.c
+	@echo "" >> asm_offsets.h
+	@echo "#else /* SPIN_LOCK_DEBUG */" >> asm_offsets.h
+	@echo "" >> asm_offsets.h
+	@echo "#include <linux/sched.h>" > tmp.c
+	$(CC) -D__SMP__ -DSPIN_LOCK_DEBUG -E tmp.c -o tmp.i
+	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
+	@echo "#include <linux/sched.h>" >> check_asm.c
+	@echo 'struct task_struct _task;' >> check_asm.c
+	@echo 'struct mm_struct _mm;' >> check_asm.c
+	@echo 'struct thread_struct _thread;' >> check_asm.c
+	@echo 'int main(void) {' >> check_asm.c
+	$(SH) ./check_asm.sh task tmp.i check_asm.c
+	$(SH) ./check_asm.sh mm tmp.i check_asm.c
+	$(SH) ./check_asm.sh thread tmp.i check_asm.c
+	@echo 'return 0; }' >> check_asm.c
+	@rm -f tmp.[ci]
+	#$(CC) -D__SMP__ -DSPIN_LOCK_DEBUG -o check_asm check_asm.c
+	# <hack> Until we can do this natively, a hack has to take place
+	$(CC) -D__SMP__ -DSPIN_LOCK_DEBUG $(CMODEL_CFLAG) -ffixed-g4 -S -o check_asm.s check_asm.c
+	$(HOSTCC) -Wa,-Av9a -o check_asm check_asm.s
+	@rm -f check_asm.s
+	# </hack>
+	./check_asm >> asm_offsets.h
+	@rm -f check_asm check_asm.c
+	@echo "#endif /* SPIN_LOCK_DEBUG */" >> asm_offsets.h
 	@echo "" >> asm_offsets.h
 	@echo "#endif /* __SMP__ */" >> asm_offsets.h
 	@echo "" >> asm_offsets.h

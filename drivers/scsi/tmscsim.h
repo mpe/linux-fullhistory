@@ -3,11 +3,22 @@
 ;*		    TEKRAM DC-390(T) PCI SCSI Bus Master Host Adapter  *
 ;*		    Device Driver				       *
 ;***********************************************************************/
+/* $Id: tmscsim.h,v 2.1 1998/10/14 10:31:48 garloff Exp $ */
 
 #ifndef _TMSCSIM_H
 #define _TMSCSIM_H
 
 #define IRQ_NONE 255
+
+#define MAX_ADAPTER_NUM 	4
+#define MAX_SG_LIST_BUF 	16
+#define MAX_CMD_PER_LUN 	8
+#define MAX_CMD_QUEUE		2*MAX_CMD_PER_LUN+1	
+#define MAX_SCSI_ID		8
+#define MAX_SRB_CNT		MAX_CMD_QUEUE+1	/* Max number of started commands */
+#define END_SCAN		2
+
+#define SEL_TIMEOUT		153	/* 250 ms selection timeout (@ 40 MHz) */
 
 typedef unsigned char	UCHAR;
 typedef unsigned short	USHORT;
@@ -54,17 +65,6 @@ ULONG		SGXPtr;
 } SGentry1, *PSGE;
 
 
-#define MAX_ADAPTER_NUM 	4
-#define MAX_DEVICES		10
-#define MAX_SG_LIST_BUF 	16
-#define MAX_CMD_QUEUE		20
-#define MAX_CMD_PER_LUN 	8
-#define MAX_SCSI_ID		8
-#define MAX_SRB_CNT		MAX_CMD_QUEUE+4
-#define END_SCAN		2
-
-#define SEL_TIMEOUT		153	/* 250 ms selection timeout (@ 40 MHz) */
-
 /*
 ;-----------------------------------------------------------------------
 ; SCSI Request Block
@@ -79,39 +79,45 @@ struct _DCB	*pSRBDCB;
 PSCSICMD	pcmd;
 PSGL		pSegmentList;
 
-ULONG		PhysSRB;
+ULONG		Segment0[2];
+ULONG		Segment1[2];
+
+/* 0x2c:*/
 ULONG		TotalXferredLen;
-ULONG		SGPhysAddr;	/*;a segment starting address */
+ULONG		SGBusAddr;	/*;a segment starting address as seen by AM53C974A*/
 ULONG		SGToBeXferLen;	/*; to be xfer length */
+ULONG		SRBState;
 
-SGL		Segmentx;	/* make a one entry of S/G list table */
-
-PUCHAR		pMsgPtr;
-USHORT		SRBState;
-USHORT		Revxx2; 	/* ??? */
-
+/* 0x3c: */
 UCHAR		MsgInBuf[6];
 UCHAR		MsgOutBuf[6];
 
+/* 0x48: */
+SGL		Segmentx;	/* make a one entry of S/G list table */
+
+PUCHAR		pMsgPtr;
+
+UCHAR		ScsiCmdLen;
+UCHAR		ScsiPhase;
+
 UCHAR		AdaptStatus;
 UCHAR		TargetStatus;
+
+/* 0x5c: */
 UCHAR		MsgCnt;
 UCHAR		EndMessage;
-UCHAR		TagNumber;
-UCHAR		SGcount;
-UCHAR		SGIndex;
-UCHAR		IORBFlag;	/*;81h-Reset, 2-retry */
-
-UCHAR		SRBStatus;
 UCHAR		RetryCnt;
 UCHAR		SRBFlag;	/*; b0-AutoReqSense,b6-Read,b7-write */
 				/*; b4-settimeout,b5-Residual valid */
-UCHAR		ScsiCmdLen;
-UCHAR		ScsiPhase;
-UCHAR		Reserved3[3];	/*;for dword alignment */
-ULONG		Segment0[2];
-ULONG		Segment1[2];
+UCHAR		TagNumber;
+UCHAR		SGcount;
+UCHAR		SGIndex;
+UCHAR		SRBStatus;
+  //UCHAR		IORBFlag;	/*;81h-Reset, 2-retry */
+
+/* 0x64: */
 };
+
 
 typedef  struct  _SRB	 DC390_SRB, *PSRB;
 
@@ -129,42 +135,44 @@ PSCSICMD	pQIORBhead;
 PSCSICMD	pQIORBtail;
 PSCSICMD	AboIORBhead;
 PSCSICMD	AboIORBtail;
-USHORT		QIORBCnt;
-USHORT		AboIORBcnt;
+ULONG		QIORBCnt;
+ULONG		AboIORBcnt;
 
+/* 0x20: */
 PSRB		pWaitingSRB;
 PSRB		pWaitLast;
 PSRB		pGoingSRB;
 PSRB		pGoingLast;
 PSRB		pActiveSRB;
-USHORT		GoingSRBCnt;
-USHORT		WaitSRBCnt;	/* ??? */
+UCHAR		GoingSRBCnt;
+UCHAR		WaitSRBCnt;	/* ??? */
+UCHAR		DevType;
+UCHAR		MaxCommand;
 
+/* 0x38: */
 ULONG		TagMask;
 
-USHORT		MaxCommand;
-USHORT		AdaptIndex;	/*; UnitInfo struc start */
-USHORT		UnitIndex;	/*; nth Unit on this card */
 UCHAR		UnitSCSIID;	/*; SCSI Target ID  (SCSI Only) */
 UCHAR		UnitSCSILUN;	/*; SCSI Log.  Unit (SCSI Only) */
-
+UCHAR		DevMode;
 UCHAR		IdentifyMsg;
+
 UCHAR		CtrlR1;
 UCHAR		CtrlR3;
 UCHAR		CtrlR4;
 
-UCHAR		InqDataBuf[8];
-UCHAR		CapacityBuf[8];
-UCHAR		DevMode;
-UCHAR		AdpMode;
+UCHAR		DCBFlag;
+
+/* 0x44: */
 UCHAR		SyncMode;	/*; 0:async mode */
 UCHAR		NegoPeriod;	/*;for nego. */
 UCHAR		SyncPeriod;	/*;for reg. */
 UCHAR		SyncOffset;	/*;for reg. and nego.(low nibble) */
-UCHAR		UnitCtrlFlag;
-UCHAR		DCBFlag;
-UCHAR		DevType;
-UCHAR		Reserved2[3];	/*;for dword alignment */
+
+/* 0x48:*/
+//UCHAR		InqDataBuf[8];
+//UCHAR		CapacityBuf[8];
+/* 0x58: */
 };
 
 typedef  struct  _DCB	 DC390_DCB, *PDCB;
@@ -175,40 +183,55 @@ typedef  struct  _DCB	 DC390_DCB, *PDCB;
 */
 struct	_ACB
 {
-ULONG		PhysACB;
 PSH		pScsiHost;
 struct _ACB	*pNextACB;
 USHORT		IOPortBase;
-USHORT		Revxx1; 	/* ??? */
-
-PDCB		pLinkDCB;
-PDCB		pDCBRunRobin;
-PDCB		pActiveDCB;
-PDCB		pDCB_free;
-PSRB		pFreeSRB;
-PSRB		pTmpSRB;
-USHORT		SRBCount;
-USHORT		AdapterIndex;	/*; nth Adapter this driver */
-USHORT		max_id;
-USHORT		max_lun;
-
-UCHAR		msgin123[4];
-UCHAR		status;
-UCHAR		AdaptSCSIID;	/*; Adapter SCSI Target ID */
-UCHAR		AdaptSCSILUN;	/*; Adapter SCSI LUN */
-UCHAR		DeviceCnt;
 UCHAR		IRQLevel;
+UCHAR		status;
+
+UCHAR		SRBCount;
+UCHAR		AdapterIndex;	/*; nth Adapter this driver */
+UCHAR		DeviceCnt;
+UCHAR		DCBCnt;
+
+/* 0x10: */
 UCHAR		TagMaxNum;
 UCHAR		ACBFlag;
 UCHAR		Gmode2;
-UCHAR		LUNchk;
 UCHAR		scan_devices;
-UCHAR		HostID_Bit;
-UCHAR		Reserved1[1];	/*;for dword alignment */
+
+PDCB		pLinkDCB;
+PDCB		pLastDCB;
+PDCB		pDCBRunRobin;
+PDCB		pActiveDCB;
+PSRB		pFreeSRB;
+PSRB		pTmpSRB;
+
+/* 0x2c: */
+
+UCHAR		msgin123[4];
 UCHAR		DCBmap[MAX_SCSI_ID];
-DC390_DCB	DCB_array[MAX_DEVICES]; 	/* +74h,  Len=3E8 */
-DC390_SRB	SRB_array[MAX_SRB_CNT]; 	/* +45Ch, Len=	*/
+
+#if defined(USE_SPINLOCKS) && USE_SPINLOCKS > 1 && (defined(__SMP__) || DEBUG_SPINLOCKS > 0)
+spinlock_t	lock;
+#endif
+UCHAR		sel_timeout;
+UCHAR		glitch_cfg;
+
+UCHAR		reserved[2];	/* alignment */
+
+PDEVDECL1;			/* Pointer to PCI cfg. space */
+/* 0x44/0x40: */
+ULONG		Cmds;
+ULONG		CmdInQ;
+ULONG		CmdOutOfSRB;
+ULONG		SelLost;
+	
+/* 0x50/0x4c: */	
 DC390_SRB	TmpSRB;
+/* 0xb4/0xb0: */
+DC390_SRB	SRB_array[MAX_SRB_CNT]; 	/* 18 SRBs */
+/* 0x7bc/0x7b8: */
 };
 
 typedef  struct  _ACB	 DC390_ACB, *PACB;
@@ -278,14 +301,6 @@ typedef  struct  _ACB	 DC390_ACB, *PACB;
 #define DO_SYNC_NEGO	BIT13
 #define SRB_UNEXPECT_RESEL BIT14
 
-/*;---ACBFlag */
-#define RESET_DEV	BIT0
-#define RESET_DETECT	BIT1
-#define RESET_DONE	BIT2
-
-/*;---DCBFlag */
-#define ABORT_DEV_	BIT0
-
 /*;---SRBstatus */
 #define SRB_OK		BIT0
 #define ABORTION	BIT1
@@ -293,6 +308,14 @@ typedef  struct  _ACB	 DC390_ACB, *PACB;
 #define UNDER_RUN	BIT3
 #define PARITY_ERROR	BIT4
 #define SRB_ERROR	BIT5
+
+/*;---ACBFlag */
+#define RESET_DEV	BIT0
+#define RESET_DETECT	BIT1
+#define RESET_DONE	BIT2
+
+/*;---DCBFlag */
+#define ABORT_DEV_	BIT0
 
 /*;---SRBFlag */
 #define DATAOUT 	BIT7
@@ -316,7 +339,7 @@ typedef  struct  _ACB	 DC390_ACB, *PACB;
 #define H_BAD_CCB_OR_SG  0x1A
 #define H_ABORT 	 0x0FF
 
-/*; SCSI Status byte codes*/
+/*; SCSI Status byte codes*/ /* Twice the values defined in scsi/scsi.h */
 #define SCSI_STAT_GOOD		0x0	/*;  Good status */
 #define SCSI_STAT_CHECKCOND	0x02	/*;  SCSI Check Condition */
 #define SCSI_STAT_CONDMET	0x04	/*;  Condition Met */
@@ -335,9 +358,9 @@ typedef  struct  _ACB	 DC390_ACB, *PACB;
 #define SYNC_DISABLE	0
 #define SYNC_ENABLE	BIT0
 #define SYNC_NEGO_DONE	BIT1
-#define WIDE_ENABLE	BIT2
-#define WIDE_NEGO_DONE	BIT3
-#define EN_TAG_QUEUING	BIT4
+#define WIDE_ENABLE	BIT2	/* Not used ;-) */
+#define WIDE_NEGO_DONE	BIT3	/* Not used ;-) */
+#define EN_TAG_QUEUEING	BIT4
 #define EN_ATN_STOP	BIT5
 
 #define SYNC_NEGO_OFFSET 15
@@ -352,7 +375,7 @@ typedef  struct  _ACB	 DC390_ACB, *PACB;
 #define SCSI_MSG_OUT	6
 #define SCSI_MSG_IN	7
 
-/*;----SCSI MSG BYTE*/
+/*;----SCSI MSG BYTE*/ /* see scsi/scsi.h */
 #define MSG_COMPLETE		0x00
 #define MSG_EXTENDED		0x01
 #define MSG_SAVE_PTR		0x02
@@ -373,13 +396,6 @@ typedef  struct  _ACB	 DC390_ACB, *PACB;
 #define MSG_IDENTIFY		0x80
 #define MSG_HOST_ID		0x0C0
 
-/*;----SCSI STATUS BYTE*/
-#define STATUS_GOOD		0x00
-#define CHECK_CONDITION_	0x02
-#define STATUS_BUSY		0x08
-#define STATUS_INTERMEDIATE	0x10
-#define RESERVE_CONFLICT	0x18
-
 /* cmd->result */
 #define STATUS_MASK_		0xFF
 #define MSG_MASK		0xFF00
@@ -389,7 +405,7 @@ typedef  struct  _ACB	 DC390_ACB, *PACB;
 **  Inquiry Data format
 */
 
-typedef struct	_SCSIInqData { /* INQ */
+typedef struct	_SCSIInqData { /* INQUIRY */
 
 	UCHAR	 DevType;		/* Periph Qualifier & Periph Dev Type*/
 	UCHAR	 RMB_TypeMod;		/* rem media bit & Dev Type Modifier */
@@ -412,6 +428,7 @@ typedef struct	_SCSIInqData { /* INQ */
 
 #define SCSI_DEVTYPE	    0x1F      /* Peripheral Device Type 	    */
 #define SCSI_PERIPHQUAL     0xE0      /* Peripheral Qualifier		    */
+#define TYPE_NODEV	    SCSI_DEVTYPE    /* Unknown or no device type    */
 
 
 /*  Inquiry byte 1 mask */
@@ -420,18 +437,10 @@ typedef struct	_SCSIInqData { /* INQ */
 
 
 /*  Peripheral Device Type definitions */
+/*  see include/scsi/scsi.h for the rest */
 
-#define SCSI_DASD		 0x00	   /* Direct-access Device	   */
-#define SCSI_SEQACESS		 0x01	   /* Sequential-access device	   */
-#define SCSI_PRINTER		 0x02	   /* Printer device		   */
-#define SCSI_PROCESSOR		 0x03	   /* Processor device		   */
-#define SCSI_WRITEONCE		 0x04	   /* Write-once device 	   */
-#define SCSI_CDROM		 0x05	   /* CD-ROM device		   */
-#define SCSI_SCANNER		 0x06	   /* Scanner device		   */
-#define SCSI_OPTICAL		 0x07	   /* Optical memory device	   */
-#define SCSI_MEDCHGR		 0x08	   /* Medium changer device	   */
-#define SCSI_COMM		 0x09	   /* Communications device	   */
-#define SCSI_NODEV		 0x1F	   /* Unknown or no device type    */
+#define TYPE_PRINTER		 0x02	   /* Printer device		   */
+#define TYPE_COMM		 0x09	   /* Communications device	   */
 
 /*
 ** Inquiry flag definitions (Inq data byte 7)
@@ -459,17 +468,24 @@ UCHAR	xx1;
 UCHAR	xx2;
 } EEprom, *PEEprom;
 
-#define EE_ADAPT_SCSI_ID 64
-#define EE_MODE2	65
-#define EE_DELAY	66
-#define EE_TAG_CMD_NUM	67
+#define REAL_EE_ADAPT_SCSI_ID 64
+#define REAL_EE_MODE2	65
+#define REAL_EE_DELAY	66
+#define REAL_EE_TAG_CMD_NUM	67
+
+#define EE_ADAPT_SCSI_ID 32
+#define EE_MODE2	33
+#define EE_DELAY	34
+#define EE_TAG_CMD_NUM	35
+
+#define EE_LEN		40
 
 /*; EE_MODE1 bits definition*/
 #define PARITY_CHK_	BIT0
 #define SYNC_NEGO_	BIT1
 #define EN_DISCONNECT_	BIT2
 #define SEND_START_	BIT3
-#define TAG_QUEUING_	BIT4
+#define TAG_QUEUEING_	BIT4
 
 /*; EE_MODE2 bits definition*/
 #define MORE2_DRV	BIT0
@@ -494,34 +510,42 @@ UCHAR	xx2;
 ;====================
 */
 
-/*; Command Reg.(+0CH) */
+/*; Command Reg.(+0CH) (rw) */
 #define DMA_COMMAND		BIT7
 #define NOP_CMD 		0
 #define CLEAR_FIFO_CMD		1
 #define RST_DEVICE_CMD		2
 #define RST_SCSI_BUS_CMD	3
+
 #define INFO_XFER_CMD		0x10
 #define INITIATOR_CMD_CMPLTE	0x11
 #define MSG_ACCEPTED_CMD	0x12
 #define XFER_PAD_BYTE		0x18
 #define SET_ATN_CMD		0x1A
 #define RESET_ATN_CMD		0x1B
-#define SELECT_W_ATN		0x42
+
+#define SEL_WO_ATN		0x41	/* currently not used */
+#define SEL_W_ATN		0x42
 #define SEL_W_ATN_STOP		0x43
+#define SEL_W_ATN3		0x46
 #define EN_SEL_RESEL		0x44
-#define SEL_W_ATN2		0x46
+#define DIS_SEL_RESEL		0x45	/* currently not used */
+#define RESEL			0x40	/* " */
+#define RESEL_ATN3		0x47	/* " */
+
 #define DATA_XFER_CMD		INFO_XFER_CMD
 
 
-/*; SCSI Status Reg.(+10H) */
+/*; SCSI Status Reg.(+10H) (r) */
 #define INTERRUPT		BIT7
 #define ILLEGAL_OP_ERR		BIT6
 #define PARITY_ERR		BIT5
 #define COUNT_2_ZERO		BIT4
 #define GROUP_CODE_VALID	BIT3
-#define SCSI_PHASE_MASK 	(BIT2+BIT1+BIT0)
+#define SCSI_PHASE_MASK 	(BIT2+BIT1+BIT0) 
+/* BIT2: MSG phase; BIT1: C/D physe; BIT0: I/O phase */
 
-/*; Interrupt Status Reg.(+14H) */
+/*; Interrupt Status Reg.(+14H) (r) */
 #define SCSI_RESET		BIT7
 #define INVALID_CMD		BIT6
 #define DISCONNECTED		BIT5
@@ -531,11 +555,12 @@ UCHAR	xx2;
 #define SEL_ATTENTION		BIT1
 #define SELECTED		BIT0
 
-/*; Internal State Reg.(+18H) */
+/*; Internal State Reg.(+18H) (r) */
 #define SYNC_OFFSET_FLAG	BIT3
 #define INTRN_STATE_MASK	(BIT2+BIT1+BIT0)
+/* 0x04: Sel. successful (w/o stop), 0x01: Sel. successful (w/ stop) */
 
-/*; Clock Factor Reg.(+24H) */
+/*; Clock Factor Reg.(+24H) (w) */
 #define CLK_FREQ_40MHZ		0
 #define CLK_FREQ_35MHZ		(BIT2+BIT1+BIT0)
 #define CLK_FREQ_30MHZ		(BIT2+BIT1)
@@ -544,47 +569,54 @@ UCHAR	xx2;
 #define CLK_FREQ_15MHZ		(BIT1+BIT0)
 #define CLK_FREQ_10MHZ		BIT1
 
-/*; Control Reg. 1(+20H) */
+/*; Control Reg. 1(+20H) (rw) */
 #define EXTENDED_TIMING 	BIT7
 #define DIS_INT_ON_SCSI_RST	BIT6
 #define PARITY_ERR_REPO 	BIT4
-#define SCSI_ID_ON_BUS		(BIT2+BIT1+BIT0)
+#define SCSI_ID_ON_BUS		(BIT2+BIT1+BIT0) /* host adapter ID */
 
-/*; Control Reg. 2(+2CH) */
+/*; Control Reg. 2(+2CH) (rw) */
 #define EN_FEATURE		BIT6
 #define EN_SCSI2_CMD		BIT3
 
-/*; Control Reg. 3(+30H) */
+/*; Control Reg. 3(+30H) (rw) */
 #define ID_MSG_CHECK		BIT7
 #define EN_QTAG_MSG		BIT6
 #define EN_GRP2_CMD		BIT5
 #define FAST_SCSI		BIT4	/* ;10MB/SEC */
 #define FAST_CLK		BIT3	/* ;25 - 40 MHZ */
 
-/*; Control Reg. 4(+34H) */
+/*; Control Reg. 4(+34H) (rw) */
 #define EATER_12NS		0
 #define EATER_25NS		BIT7
 #define EATER_35NS		BIT6
 #define EATER_0NS		(BIT7+BIT6)
+#define REDUCED_POWER		BIT5
+#define CTRL4_RESERVED		BIT4	/* must be 1 acc. to AM53C974.c */
 #define NEGATE_REQACKDATA	BIT2
 #define NEGATE_REQACK		BIT3
+
+#define GLITCH_TO_NS(x) (((~x>>6 & 2) >> 1) | ((x>>6 & 1) << 1 ^ (x>>6 & 2)))
+#define NS_TO_GLITCH(y) (((~y<<7) | ~((y<<6) ^ ((y<<5 & 1<<6) | ~0x40))) & 0xc0)
+
 /*
 ;====================
 ; DMA Register
 ;====================
 */
-/*; DMA Command Reg.(+40H) */
+/*; DMA Command Reg.(+40H) (rw) */
 #define READ_DIRECTION		BIT7
 #define WRITE_DIRECTION 	0
 #define EN_DMA_INT		BIT6
-#define MAP_TO_MDL		BIT5
-#define DIAGNOSTIC		BIT4
+#define EN_PAGE_INT		BIT5	/* page transfer interrupt enable */
+#define MAP_TO_MDL		BIT4
+#define DIAGNOSTIC		BIT2
 #define DMA_IDLE_CMD		0
 #define DMA_BLAST_CMD		BIT0
 #define DMA_ABORT_CMD		BIT1
 #define DMA_START_CMD		(BIT1+BIT0)
 
-/*; DMA Status Reg.(+54H) */
+/*; DMA Status Reg.(+54H) (r) */
 #define PCI_MS_ABORT		BIT6
 #define BLAST_COMPLETE		BIT5
 #define SCSI_INTERRUPT		BIT4
@@ -593,71 +625,77 @@ UCHAR	xx2;
 #define DMA_XFER_ERROR		BIT1
 #define POWER_DOWN		BIT0
 
-/*
-; DMA SCSI Bus and Ctrl.(+70H)
-;EN_INT_ON_PCI_ABORT
-*/
+/*; DMA SCSI Bus and Ctrl.(+70H) */
+#define EN_INT_ON_PCI_ABORT	BIT25
+#define WRT_ERASE_DMA_STAT	BIT24
+#define PW_DOWN_CTRL		BIT21
+#define SCSI_BUSY		BIT20
+#define SCLK			BIT19
+#define SCAM			BIT18
+#define SCSI_LINES		0x0003ffff
 
 /*
 ;==========================================================
 ; SCSI Chip register address offset
 ;==========================================================
+;Registers are rw unless declared otherwise 
 */
-#define CtcReg_Low	0x00
-#define CtcReg_Mid	0x04
+#define CtcReg_Low	0x00	/* r	curr. transfer count */
+#define CtcReg_Mid	0x04	/* r */
+#define CtcReg_High	0x38	/* r */
 #define ScsiFifo	0x08
 #define ScsiCmd 	0x0C
-#define Scsi_Status	0x10
-#define INT_Status	0x14
-#define Sync_Period	0x18
-#define Sync_Offset	0x1C
-#define CtrlReg1	0x20
-#define Clk_Factor	0x24
+#define Scsi_Status	0x10	/* r */
+#define INT_Status	0x14	/* r */
+#define Sync_Period	0x18	/* w */
+#define Sync_Offset	0x1C	/* w */
+#define Clk_Factor	0x24	/* w */
+#define CtrlReg1	0x20	
 #define CtrlReg2	0x2C
 #define CtrlReg3	0x30
 #define CtrlReg4	0x34
-#define CtcReg_High	0x38
 #define DMA_Cmd 	0x40
-#define DMA_XferCnt	0x44
-#define DMA_XferAddr	0x48
-#define DMA_Wk_ByteCntr 0x4C
-#define DMA_Wk_AddrCntr 0x50
-#define DMA_Status	0x54
-#define DMA_MDL_Addr	0x58
-#define DMA_Wk_MDL_Cntr 0x5C
-#define DMA_ScsiBusCtrl 0x70
+#define DMA_XferCnt	0x44	/* rw	starting transfer count (32 bit) */
+#define DMA_XferAddr	0x48	/* rw	starting physical address (32 bit) */
+#define DMA_Wk_ByteCntr 0x4C	/* r	working byte counter */
+#define DMA_Wk_AddrCntr 0x50	/* r	working address counter */
+#define DMA_Status	0x54	/* r */
+#define DMA_MDL_Addr	0x58	/* rw	starting MDL address */
+#define DMA_Wk_MDL_Cntr 0x5C	/* r	working MDL counter */
+#define DMA_ScsiBusCtrl 0x70	/* rw	SCSI Bus, PCI/DMA Ctrl */
 
-#define StcReg_Low	CtcReg_Low
-#define StcReg_Mid	CtcReg_Mid
-#define Scsi_Dest_ID	Scsi_Status
-#define Scsi_TimeOut	INT_Status
-#define Intern_State	Sync_Period
-#define Current_Fifo	Sync_Offset
-#define StcReg_High	CtcReg_High
-
-#define am_target	Scsi_Status
-#define am_timeout	INT_Status
-#define am_seq_step	Sync_Period
-#define am_fifo_count	Sync_Offset
+#define StcReg_Low	CtcReg_Low	/* w	start transfer count */
+#define StcReg_Mid	CtcReg_Mid	/* w */
+#define StcReg_High	CtcReg_High	/* w */
+#define Scsi_Dest_ID	Scsi_Status	/* w */
+#define Scsi_TimeOut	INT_Status	/* w */
+#define Intern_State	Sync_Period	/* r */
+#define Current_Fifo	Sync_Offset	/* r	Curr. FIFO / int. state */
 
 
-#define DC390_read8(address)			       \
-	inb(DC390_ioport + (address)))
+#define DC390_read8(address)			\
+	(inb (pACB->IOPortBase + (address)))
 
-#define DC390_read16(address)			       \
-	inw(DC390_ioport + (address)))
+#define DC390_read8_(address, base)		\
+	(inb ((USHORT)(base) + (address)))
 
-#define DC390_read32(address)			       \
-	inl(DC390_ioport + (address)))
+#define DC390_read16(address)			\
+	(inw (pACB->IOPortBase + (address)))
 
-#define DC390_write8(address,value)		       \
-	outb((value), DC390_ioport + (address)))
+#define DC390_read32(address)			\
+	(inl (pACB->IOPortBase + (address)))
 
-#define DC390_write16(address,value)		       \
-	outw((value), DC390_ioport + (address)))
+#define DC390_write8(address,value)		\
+	outb ((value), pACB->IOPortBase + (address))
 
-#define DC390_write32(address,value)		       \
-	outl((value), DC390_ioport + (address)))
+#define DC390_write8_(address,value,base)	\
+	outb ((value), (USHORT)(base) + (address))
+
+#define DC390_write16(address,value)		\
+	outw ((value), pACB->IOPortBase + (address))
+
+#define DC390_write32(address,value)		\
+	outl ((value), pACB->IOPortBase + (address))
 
 
 #endif /* _TMSCSIM_H */

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.130 1998/10/04 07:06:47 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.133 1998/10/21 05:38:53 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -53,6 +53,8 @@
  *		Andi Kleen:		Add tcp_measure_rcv_mss to make 
  *					connections with MSS<min(MTU,ann. MSS)
  *					work without delayed acks. 
+ *		Andi Kleen:		Process packets with PSH set in the
+ *					fast path.
  */
 
 #include <linux/config.h>
@@ -75,7 +77,6 @@ extern int sysctl_tcp_fin_timeout;
 int sysctl_tcp_timestamps = 1;
 int sysctl_tcp_window_scaling = 1;
 int sysctl_tcp_sack = 1;
-int sysctl_tcp_hoe_retransmits = 1;
 
 int sysctl_tcp_syncookies = SYNC_INIT; 
 int sysctl_tcp_stdurg;
@@ -1139,7 +1140,7 @@ coalesce:
 	/* Zap SWALK, by moving every further SACK up by one slot.
 	 * Decrease num_sacks.
 	 */
-	for(this_sack += 1; this_sack < num_sacks; this_sack++, swalk++) {
+	for(this_sack += 1; this_sack < num_sacks-1; this_sack++, swalk++) {
 		struct tcp_sack_block *next = (swalk + 1);
 		swalk->start_seq = next->start_seq;
 		swalk->end_seq = next->end_seq;
@@ -1745,14 +1746,15 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 		}
 	}
 
-	flg = *(((u32 *)th) + 3);
-		
+	flg = *(((u32 *)th) + 3) & ~htonl(0x8 << 16);
+
 	/*	pred_flags is 0xS?10 << 16 + snd_wnd
 	 *	if header_predition is to be made
 	 *	'S' will always be tp->tcp_header_len >> 2
 	 *	'?' will be 0 else it will be !0
 	 *	(when there are holes in the receive 
 	 *	 space for instance)
+	 *	PSH flag is ignored.
          */
 
 	if (flg == tp->pred_flags && TCP_SKB_CB(skb)->seq == tp->rcv_nxt) {

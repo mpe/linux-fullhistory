@@ -1,5 +1,5 @@
 /* devices.c: Initial scan of the prom device tree for important
- *            Sparc device nodes which we need to find.
+ *	      Sparc device nodes which we need to find.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -14,8 +14,8 @@
 #include <asm/smp.h>
 #include <asm/system.h>
 
-struct prom_cpuinfo linux_cpus[NR_CPUS];
-int linux_num_cpus;
+struct prom_cpuinfo linux_cpus[32];
+int linux_num_cpus = 0;
 
 extern void cpu_probe(void);
 extern void clock_stop_probe(void); /* tadpole.c */
@@ -25,64 +25,55 @@ __initfunc(unsigned long
 device_scan(unsigned long mem_start))
 {
 	char node_str[128];
-	int nd, prom_node_cpu, thismid;
-	int cpu_nds[NR_CPUS];  /* One node for each cpu */
-	int cpu_ctr = 0;
+	int thismid;
 
 	prom_getstring(prom_root_node, "device_type", node_str, sizeof(node_str));
 
 	if(strcmp(node_str, "cpu") == 0) {
-		cpu_nds[0] = prom_root_node;
-		cpu_ctr++;
+		linux_num_cpus++;
 	} else {
 		int scan;
 		scan = prom_getchild(prom_root_node);
 		prom_printf("root child is %08lx\n", (unsigned long) scan);
-		nd = 0;
 		while((scan = prom_getsibling(scan)) != 0) {
 			prom_getstring(scan, "device_type", node_str, sizeof(node_str));
 			if(strcmp(node_str, "cpu") == 0) {
-				cpu_nds[cpu_ctr] = scan;
-				linux_cpus[cpu_ctr].prom_node = scan;
+				linux_cpus[linux_num_cpus].prom_node = scan;
 				prom_getproperty(scan, "mid", (char *) &thismid, sizeof(thismid));
-				linux_cpus[cpu_ctr].mid = thismid;
+				linux_cpus[linux_num_cpus].mid = thismid;
 				prom_printf("Found CPU %d <node=%08lx,mid=%d>\n",
-					    cpu_ctr, (unsigned long) scan,
+					    linux_num_cpus, (unsigned long) scan,
 					    thismid);
-				cpu_ctr++;
+				linux_num_cpus++;
 			}
 		};
-		if(cpu_ctr == 0) {
+		if(linux_num_cpus == 0) {
 			if (sparc_cpu_model == sun4d) {
 				scan = prom_getchild(prom_root_node);
 				for (scan = prom_searchsiblings(scan, "cpu-unit"); scan;
 				     scan = prom_searchsiblings(prom_getsibling(scan), "cpu-unit")) {
 					int node = prom_getchild(scan);
-					
+
 					prom_getstring(node, "device_type", node_str, sizeof(node_str));
 					if (strcmp(node_str, "cpu") == 0) {
 						prom_getproperty(node, "cpu-id", (char *) &thismid, sizeof(thismid));
-						cpu_nds[cpu_ctr] = node;
-						linux_cpus[cpu_ctr].prom_node = node;
-						linux_cpus[cpu_ctr].mid = thismid;
+						linux_cpus[linux_num_cpus].prom_node = node;
+						linux_cpus[linux_num_cpus].mid = thismid;
 						prom_printf("Found CPU %d <node=%08lx,mid=%d>\n",
-							    cpu_ctr, (unsigned long) node,
+							    linux_num_cpus, (unsigned long) node,
 							    thismid);
-						cpu_ctr++;
+						linux_num_cpus++;
 					}
 				}
 			}
 		}
-		if(cpu_ctr == 0) {
+		if(linux_num_cpus == 0) {
 			printk("No CPU nodes found, cannot continue.\n");
 			/* Probably a sun4e, Sun is trying to trick us ;-) */
 			halt();
 		}
-		printk("Found %d CPU prom device tree node(s).\n", cpu_ctr);
+		printk("Found %d CPU prom device tree node(s).\n", linux_num_cpus);
 	};
-	prom_node_cpu = cpu_nds[0];
-
-	linux_num_cpus = cpu_ctr;
 
 	cpu_probe();
 #ifdef CONFIG_SUN_AUXIO

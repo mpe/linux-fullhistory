@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.90 1998/09/25 01:09:05 davem Exp $
+/* $Id: entry.S,v 1.91 1998/10/07 01:27:08 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -730,7 +730,7 @@ sys_clone:	flushw
 		 mov		%l5, %o7
 ret_from_syscall:
 		/* Clear SPARC_FLAG_NEWCHILD, switch_to leaves tss.flags in
-		 * %o7 for us.
+		 * %o7 for us.  Check performance counter stuff too.
 		 */
 		andn		%o7, 0x100, %o7
 		sth		%o7, [%g6 + AOFF_task_tss + AOFF_thread_flags]
@@ -739,7 +739,13 @@ ret_from_syscall:
 		membar		#StoreStore | #LoadStore
 		stb		%g0, [%o4 + %lo(scheduler_lock)]
 #endif
-		b,pt		%xcc, ret_sys_call
+		andcc		%o7, 0x200, %g0
+		be,pt		%icc, 1f
+		 nop
+		ldx		[%g6 + AOFF_task_tss + AOFF_thread_pcr_reg], %o7
+		wr		%g0, %o7, %pcr
+		wr		%g0, %g0, %pic
+1:		b,pt		%xcc, ret_sys_call
 		 ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0], %o0
 sparc_exit:	rdpr		%otherwin, %g1
 		rdpr		%pstate, %g2

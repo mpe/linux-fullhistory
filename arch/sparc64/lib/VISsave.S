@@ -1,4 +1,4 @@
-/* $Id: VISsave.S,v 1.2 1998/06/19 12:14:25 jj Exp $
+/* $Id: VISsave.S,v 1.3 1998/10/21 10:36:39 jj Exp $
  * VISsave.S: Code for saving FPU register state for
  *            VIS routines. One should not call this directly,
  *            but use macros provided in <asm/visasm.h>.
@@ -76,11 +76,13 @@ vis1:	ldub		[%g6 + AOFF_task_tss + AOFF_thread_fpsaved], %g3
 
 	sll		%g1, 5, %g1
 	add		%g6, AOFF_task_fpregs+0xc0, %g3
+	wr		%g0, FPRS_FEF, %fprs
 	membar		#StoreStore | #LoadStore
 	stda		%f32, [%g2 + %g1] ASI_BLK_P
 	stda		%f48, [%g3 + %g1] ASI_BLK_P
 	membar		#Sync
 	jmpl		%g7 + %g0, %g0
+
 	 nop
 
 	.align		32

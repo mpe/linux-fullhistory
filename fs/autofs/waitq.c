@@ -2,7 +2,7 @@
  *
  * linux/fs/autofs/waitq.c
  *
- *  Copyright 1997 Transmeta Corporation -- All Rights Reserved
+ *  Copyright 1997-1998 Transmeta Corporation -- All Rights Reserved
  *
  * This file is part of the Linux kernel and is made available under
  * the terms of the GNU General Public License, version 2, or at your
@@ -19,6 +19,9 @@
 /* We make this a static variable rather than a part of the superblock; it
    is better if we don't reassign numbers easily even across filesystems */
 static int autofs_next_wait_queue = 1;
+
+/* These are the signals we allow interrupting a pending mount */
+#define SHUTDOWN_SIGS	(sigmask(SIGKILL) | sigmask(SIGINT) | sigmask(SIGQUIT))
 
 void autofs_catatonic_mode(struct autofs_sb_info *sbi)
 {
@@ -133,9 +136,25 @@ int autofs_wait(struct autofs_sb_info *sbi, struct qstr * name)
 	} else
 		wq->wait_ctr++;
 
+	/* wq->name is NULL if and only if the lock is already released */
+
 	if ( wq->name ) {
-		/* wq->name is NULL if and only if the lock is released */
+		/* Block all but "shutdown" signals while waiting */
+		sigset_t oldset;
+		unsigned long irqflags;
+
+		spin_lock_irqsave(&current->sigmask_lock, irqflags);
+		oldset = current->blocked;
+		siginitsetinv(&current->blocked, SHUTDOWN_SIGS & ~oldset.sig[0]);
+		recalc_sigpending(current);
+		spin_unlock_irqrestore(&current->sigmask_lock, irqflags);
+
 		interruptible_sleep_on(&wq->queue);
+
+		spin_lock_irqsave(&current->sigmask_lock, irqflags);
+		current->blocked = oldset;
+		recalc_sigpending(current);
+		spin_unlock_irqrestore(&current->sigmask_lock, irqflags);
 	} else {
 		DPRINTK(("autofs_wait: skipped sleeping\n"));
 	}

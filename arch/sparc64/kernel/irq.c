@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.61 1998/08/02 14:51:38 ecd Exp $
+/* $Id: irq.c,v 1.66 1998/10/21 15:02:25 ecd Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -15,6 +15,7 @@
 #include <linux/malloc.h>
 #include <linux/random.h> /* XXX ADD add_foo_randomness() calls... -DaveM */
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
@@ -208,7 +209,7 @@ unsigned char psycho_ino_to_pil[] = {
 	13, /* Audio Record */
 	14, /* Audio Playback */
 	15, /* PowerFail */
-	9,  /* Keyboard/Mouse/Serial */
+	3,  /* second SCSI */
 	11, /* Floppy */
 	2,  /* Spare Hardware */
 	9,  /* Keyboard */
@@ -573,22 +574,18 @@ out:
 	restore_flags(flags);
 }
 
-/* Only uniprocessor needs this IRQ locking depth, on SMP it lives in the per-cpu
- * structure for cache reasons.
+/* Only uniprocessor needs this IRQ/BH locking depth, on SMP it
+ * lives in the per-cpu structure for cache reasons.
  */
 #ifndef __SMP__
 unsigned int local_irq_count;
-#endif
-
-#ifndef __SMP__
-int __sparc64_bh_counter = 0;
+unsigned int local_bh_count;
 
 #define irq_enter(cpu, irq)	(local_irq_count++)
 #define irq_exit(cpu, irq)	(local_irq_count--)
-
 #else
-
-atomic_t __sparc64_bh_counter = ATOMIC_INIT(0);
+atomic_t global_bh_lock = ATOMIC_INIT(0);
+spinlock_t global_bh_count = SPIN_LOCK_UNLOCKED;
 
 /* Who has global_irq_lock. */
 unsigned char global_irq_holder = NO_PROC_ID;
@@ -596,136 +593,163 @@ unsigned char global_irq_holder = NO_PROC_ID;
 /* This protects IRQ's. */
 spinlock_t global_irq_lock = SPIN_LOCK_UNLOCKED;
 
-/* This protects BH software state (masks, things like that). */
-spinlock_t global_bh_lock = SPIN_LOCK_UNLOCKED;
-
 /* Global IRQ locking depth. */
 atomic_t global_irq_count = ATOMIC_INIT(0);
 
-static unsigned long previous_irqholder;
+#define irq_enter(cpu, irq)			\
+do {	hardirq_enter(cpu);			\
+	spin_unlock_wait(&global_irq_lock);	\
+} while(0)
+#define irq_exit(cpu, irq)	hardirq_exit(cpu)
 
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
-#undef STUCK
-#define STUCK \
-if (!--stuck) {printk("wait_on_irq CPU#%d stuck at %08lx, waiting for %08lx (local=%d, global=%d)\n", cpu, where, previous_irqholder, local_count, atomic_read(&global_irq_count)); stuck = INIT_STUCK; }
-
-static inline void wait_on_irq(int cpu, unsigned long where)
+static void show(char * str)
 {
-	int stuck = INIT_STUCK;
-	int local_count = local_irq_count;
+	int cpu = smp_processor_id();
 
-	while(local_count != atomic_read(&global_irq_count)) {
-		atomic_sub(local_count, &global_irq_count);
-		spin_unlock(&global_irq_lock);
+	printk("\n%s, CPU %d:\n", str, cpu);
+	printk("irq:  %d [%d %d]\n",
+	       atomic_read(&global_irq_count),
+	       cpu_data[0].irq_count, cpu_data[1].irq_count);
+	printk("bh:   %d [%d %d]\n",
+	       (spin_is_locked(&global_bh_count) ? 1 : 0),
+	       cpu_data[0].bh_count, cpu_data[1].bh_count);
+}
+
+#define MAXCOUNT 100000000
+
+static inline void wait_on_bh(void)
+{
+	int count = MAXCOUNT;
+	do {
+		if(!--count) {
+			show("wait_on_bh");
+			count = 0;
+		}
+		membar("#LoadLoad");
+	} while(spin_is_locked(&global_bh_count));
+}
+
+#define SYNC_OTHER_ULTRAS(x)	udelay(x+1)
+
+static inline void wait_on_irq(int cpu)
+{
+	int count = MAXCOUNT;
+	for(;;) {
+		membar("#LoadLoad");
+		if (!atomic_read (&global_irq_count)) {
+			if (local_bh_count || ! spin_is_locked(&global_bh_count))
+				break;
+		}
+		spin_unlock (&global_irq_lock);
+		membar("#StoreLoad | #StoreStore");
 		for(;;) {
-			STUCK;
-			membar("#StoreLoad | #LoadLoad");
+			if (!--count) {
+				show("wait_on_irq");
+				count = ~0;
+			}
+			__sti();
+			SYNC_OTHER_ULTRAS(cpu);
+			__cli();
 			if (atomic_read(&global_irq_count))
 				continue;
-			if (*((volatile unsigned char *)&global_irq_lock))
+			if (spin_is_locked (&global_irq_lock))
 				continue;
-			membar("#LoadLoad | #LoadStore");
+			if (!local_bh_count && spin_is_locked (&global_bh_count))
+				continue;
 			if (spin_trylock(&global_irq_lock))
 				break;
 		}
-		atomic_add(local_count, &global_irq_count);
 	}
 }
 
-#undef INIT_STUCK
-#define INIT_STUCK 10000000
-
-#undef STUCK
-#define STUCK \
-if (!--stuck) {printk("get_irqlock stuck at %08lx, waiting for %08lx\n", where, previous_irqholder); stuck = INIT_STUCK;}
-
-static inline void get_irqlock(int cpu, unsigned long where)
+void synchronize_bh(void)
 {
-	int stuck = INIT_STUCK;
-
-	if (!spin_trylock(&global_irq_lock)) {
-		membar("#StoreLoad | #LoadLoad");
-		if ((unsigned char) cpu == global_irq_holder)
-			return;
-		do {
-			do {
-				STUCK;
-				membar("#LoadLoad");
-			} while(*((volatile unsigned char *)&global_irq_lock));
-		} while (!spin_trylock(&global_irq_lock));
-	}
-	wait_on_irq(cpu, where);
-	global_irq_holder = cpu;
-	previous_irqholder = where;
-}
-
-void __global_cli(void)
-{
-	int cpu = smp_processor_id();
-	unsigned long where;
-
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (where));
-	__cli();
-	get_irqlock(cpu, where);
-}
-
-void __global_sti(void)
-{
-	release_irqlock(smp_processor_id());
-	__sti();
-}
-
-void __global_restore_flags(unsigned long flags)
-{
-	if (flags & 1) {
-		__global_cli();
-	} else {
-		if (global_irq_holder == (unsigned char) smp_processor_id()) {
-			global_irq_holder = NO_PROC_ID;
-			spin_unlock(&global_irq_lock);
-		}
-		if (!(flags & 2))
-			__sti();
-	}
-}
-
-#undef INIT_STUCK
-#define INIT_STUCK 200000000
-
-#undef STUCK
-#define STUCK \
-if (!--stuck) {printk("irq_enter stuck (irq=%d, cpu=%d, global=%d)\n",irq,cpu,global_irq_holder); stuck = INIT_STUCK;}
-
-void irq_enter(int cpu, int irq)
-{
-	int stuck = INIT_STUCK;
-
-	hardirq_enter(cpu);
-	while (*((volatile unsigned char *)&global_irq_lock)) {
-		if ((unsigned char) cpu == global_irq_holder)
-			printk("irq_enter: Frosted Lucky Charms, "
-			       "they're magically delicious!\n");
-		STUCK;
-		membar("#LoadLoad");
-	}
-}
-
-void irq_exit(int cpu, int irq)
-{
-	hardirq_exit(cpu);
-	release_irqlock(cpu);
+	if (spin_is_locked (&global_bh_count) && !in_interrupt())
+		wait_on_bh();
 }
 
 void synchronize_irq(void)
 {
-	int local_count = local_irq_count;
+	if (atomic_read(&global_irq_count)) {
+		cli();
+		sti();
+	}
+}
+
+static inline void get_irqlock(int cpu)
+{
+	if (! spin_trylock(&global_irq_lock)) {
+		if ((unsigned char) cpu == global_irq_holder)
+			return;
+		do {
+			while (spin_is_locked (&global_irq_lock))
+				membar("#LoadLoad");
+		} while(! spin_trylock(&global_irq_lock));
+	}
+	wait_on_irq(cpu);
+	global_irq_holder = cpu;
+}
+
+void __global_cli(void)
+{
 	unsigned long flags;
 
-	if (local_count != atomic_read(&global_irq_count)) {
-		save_and_cli(flags);
-		restore_flags(flags);
+	__save_flags(flags);
+	if(flags == 0) {
+		int cpu = smp_processor_id();
+		__cli();
+		if (! local_irq_count)
+			get_irqlock(cpu);
+	}
+}
+
+void __global_sti(void)
+{
+	int cpu = smp_processor_id();
+
+	if (! local_irq_count)
+		release_irqlock(cpu);
+	__sti();
+}
+
+unsigned long __global_save_flags(void)
+{
+	unsigned long flags, local_enabled, retval;
+
+	__save_flags(flags);
+	local_enabled = ((flags == 0) ? 1 : 0);
+	retval = 2 + local_enabled;
+	if (! local_irq_count) {
+		if (local_enabled)
+			retval = 1;
+		if (global_irq_holder == (unsigned char) smp_processor_id())
+			retval = 0;
+	}
+	return retval;
+}
+
+void __global_restore_flags(unsigned long flags)
+{
+	switch (flags) {
+	case 0:
+		__global_cli();
+		break;
+	case 1:
+		__global_sti();
+		break;
+	case 2:
+		__cli();
+		break;
+	case 3:
+		__sti();
+		break;
+	default:
+	{
+		unsigned long pc;
+		__asm__ __volatile__("mov %%i7, %0" : "=r" (pc));
+		printk("global_restore_flags: Bogon flags(%016lx) caller %016lx\n",
+		       flags, pc);
+	}
 	}
 }
 
@@ -787,7 +811,7 @@ void handler_irq(int irq, struct pt_regs *regs)
 	/*
 	 * Check for TICK_INT on level 14 softint.
 	 */
-	if ((irq == 14) && get_softint() & (1UL << 0))
+	if ((irq == 14) && (get_softint() & (1UL << 0)))
 		irq = 0;
 #endif
 	clear_softint(1 << irq);
@@ -1004,12 +1028,15 @@ void init_timers(void (*cfunc)(int, void *, struct pt_regs *),
 /* Called from smp_commence, when we know how many cpus are in the system
  * and can have device IRQ's directed at them.
  */
+/* #define SMP_IRQ_VERBOSE */
 void distribute_irqs(void)
 {
 	unsigned long flags;
 	int cpu, level;
 
+#ifdef SMP_IRQ_VERBOSE
 	printk("SMP: redistributing interrupts...\n");
+#endif
 	save_and_cli(flags);
 	cpu = 0;
 	for(level = 0; level < NR_IRQS; level++) {
@@ -1020,16 +1047,18 @@ void distribute_irqs(void)
 				struct ino_bucket *bucket = (struct ino_bucket *)p->mask;
 				unsigned int *imap = __imap(bucket);
 				unsigned int val;
-				unsigned long tid = __cpu_logical_map[cpu] << 9;
+				unsigned long tid = __cpu_logical_map[cpu] << 26;
 
 				val = *imap;
 				*imap = SYSIO_IMAP_VALID | (tid & SYSIO_IMAP_TID);
 
+#ifdef SMP_IRQ_VERBOSE
 				printk("SMP: Redirecting IGN[%x] INO[%x] "
 				       "to cpu %d [%s]\n",
 				       (val & SYSIO_IMAP_IGN) >> 6,
 				       (val & SYSIO_IMAP_INO), cpu,
 				       p->name);
+#endif
 
 				cpu++;
 				if (cpu >= NR_CPUS || __cpu_logical_map[cpu] == -1)
@@ -1114,12 +1143,17 @@ void enable_prom_timer(void)
 
 __initfunc(void init_IRQ(void))
 {
-	int i;
+	static int called = 0;
 
-	map_prom_timers();
-	kill_prom_timer();
-	for(i = 0; i < NUM_IVECS; i++)
-		ivector_to_mask[i] = 0;
+	if (called == 0) {
+		int i;
+
+		called = 1;
+		map_prom_timers();
+		kill_prom_timer();
+		for(i = 0; i < NUM_IVECS; i++)
+			ivector_to_mask[i] = 0;
+	}
 
 	/* We need to clear any IRQ's pending in the soft interrupt
 	 * registers, a spurious one could be left around from the

@@ -16,10 +16,4 @@ O_OBJS   := math.o fabsq.o faddq.o fdivq.o fdmulq.o fitoq.o 		\
 		fmuls.o fmuld.o fdivs.o fdivd.o fsmuld.o		\
 		fstoi.o fdtoi.o fstox.o fdtox.o fstod.o fdtos.o
 
-.S.s:
-	$(CPP) -D__ASSEMBLY__ -ansi $< -o $*.s
-
-.S.o:
-	$(CC) -D__ASSEMBLY__ -ansi -c $< -o $*.o
-
 include $(TOPDIR)/Rules.make

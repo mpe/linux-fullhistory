@@ -107,7 +107,7 @@ ENOSYS = 38
 2:	popl %es;	\
 	addl $4,%esp;	\
 3:	iret;		\
-.section fixup,"ax";	\
+.section .fixup,"ax";	\
 4:	movl $0,(%esp);	\
 	jmp 1b;		\
 5:	movl $0,(%esp);	\

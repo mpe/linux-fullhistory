@@ -11,7 +11,8 @@
 #include <linux/linkage.h>
 
 /* Optimization barrier */
-#define barrier() __asm__("": : :"memory")
+/* The "volatile" is due to gcc bugs */
+#define barrier() __asm__ __volatile__("": : :"memory")
 
 #define INT_MAX		((int)(~0U>>1))
 #define UINT_MAX	(~0U)

@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.89 1998/09/21 05:05:12 jj Exp $
+/*  $Id: irq.c,v 1.91 1998/10/14 07:04:17 jj Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -8,6 +8,7 @@
  *  Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
  *  Copyright (C) 1995 Pete A. Zaitcev (zaitcev@metabyte.com)
  *  Copyright (C) 1996 Dave Redman (djhr@tadpole.co.uk)
+ *  Copyright (C) 1998 Anton Blanchard (anton@progsoc.uts.edu.au)
  */
 
 #include <linux/config.h>
@@ -191,13 +192,9 @@ void free_irq(unsigned int irq, void *dev_id)
         restore_flags(flags);
 }
 
-/* Per-processor IRQ locking depth, both SMP and non-SMP code use this. */
+/* Per-processor IRQ and bh locking depth, both SMP and non-SMP code use this. */
+unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
-#ifdef __SMP__
-atomic_t __sparc_bh_counter = ATOMIC_INIT(0);
-#else
-int __sparc_bh_counter = 0;
-#endif
 
 #ifdef __SMP__
 /* SMP interrupt locking on Sparc. */
@@ -208,13 +205,32 @@ unsigned char global_irq_holder = NO_PROC_ID;
 /* This protects IRQ's. */
 spinlock_t global_irq_lock = SPIN_LOCK_UNLOCKED;
 
-/* This protects BH software state (masks, things like that). */
-spinlock_t global_bh_lock = SPIN_LOCK_UNLOCKED;
-
 /* Global IRQ locking depth. */
 atomic_t global_irq_count = ATOMIC_INIT(0);
 
+atomic_t global_bh_count = ATOMIC_INIT(0);
+atomic_t global_bh_lock = ATOMIC_INIT(0);
+
+/* This protects BH software state (masks, things like that). */
+spinlock_t sparc_bh_lock = SPIN_LOCK_UNLOCKED;
+
 #ifdef DEBUG_IRQLOCK
+
+#undef INIT_STUCK
+#define INIT_STUCK 100000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {printk("wait_on_bh CPU#%d stuck at %08lx\n", cpu, where); stuck = INIT_STUCK; }
+
+static inline void wait_on_bh(int cpu, unsigned long where)
+{
+	int stuck = INIT_STUCK;
+	do {
+		STUCK;
+		/* nothing .. wait for the other bh's to go away */
+	} while (atomic_read(&global_bh_count) != 0);
+}
 
 static unsigned long previous_irqholder;
 
@@ -225,36 +241,83 @@ static unsigned long previous_irqholder;
 #define STUCK \
 if (!--stuck) {printk("wait_on_irq CPU#%d stuck at %08lx, waiting for %08lx (local=%d, global=%d)\n", cpu, where, previous_irqholder, local_count, atomic_read(&global_irq_count)); stuck = INIT_STUCK; }
 
+/*
+ * We have to allow irqs to arrive between __sti and __cli
+ */
+#define SYNC_OTHER_CORES(x) __asm__ __volatile__ ("nop")
+
 static inline void wait_on_irq(int cpu, unsigned long where)
 {
 	int stuck = INIT_STUCK;
 	int local_count = local_irq_count[cpu];
 
-	/* Are we the only one in an interrupt context? */
-	while (local_count != atomic_read(&global_irq_count)) {
-		/*
-		 * No such luck. Now we need to release the lock,
-		 * _and_ release our interrupt context, because
-		 * otherwise we'd have dead-locks and live-locks
-		 * and other fun things.
-		 */
-		atomic_sub(local_count, &global_irq_count);
-		spin_unlock(&global_irq_lock);
+	for (;;) {
 
 		/*
-		 * Wait for everybody else to go away and release
-		 * their things before trying to get the lock again.
+		 * Wait until all interrupts are gone. Wait
+		 * for bottom half handlers unless we're
+		 * already executing in one..
 		 */
+		if (!atomic_read(&global_irq_count)) {
+			if (local_bh_count[cpu] || !atomic_read(&global_bh_count))
+				break;
+		}
+
+		/* Duh, we have to loop. Release the lock to avoid deadlocks */
+		spin_unlock(&global_irq_lock);
+
 		for (;;) {
 			STUCK;
+
+			__sti();
+			SYNC_OTHER_CORES(cpu);
+			__cli();
+
 			if (atomic_read(&global_irq_count))
 				continue;
 			if (*((unsigned char *)&global_irq_lock))
 				continue;
+			if (!local_bh_count[cpu] && atomic_read(&global_bh_count))
+				continue;
 			if (spin_trylock(&global_irq_lock))
 				break;
 		}
-		atomic_add(local_count, &global_irq_count);
+	}
+}
+
+/*
+ * This is called when we want to synchronize with
+ * bottom half handlers. We need to wait until
+ * no other CPU is executing any bottom half handler.
+ *
+ * Don't wait if we're already running in an interrupt
+ * context or are inside a bh handler. 
+ */
+void synchronize_bh(void)
+{
+	unsigned long where;
+
+	__asm__("mov %%i7, %0" : "=r" (where));
+
+	if (atomic_read(&global_bh_count) && !in_interrupt()) {
+		int cpu = smp_processor_id();
+		wait_on_bh(cpu, where);
+	}
+}
+
+/*
+ * This is called when we want to synchronize with
+ * interrupts. We may for example tell a device to
+ * stop sending interrupts: but to make sure there
+ * are no interrupts that are executing on another
+ * CPU we need to call this function.
+ */
+void synchronize_irq(void)
+{
+	if (atomic_read(&global_irq_count)) {
+		/* Stupid approach */
+		cli();
+		sti();
 	}
 }
 
@@ -281,54 +344,106 @@ static inline void get_irqlock(int cpu, unsigned long where)
 			} while (*((volatile unsigned char *)&global_irq_lock));
 		} while (!spin_trylock(&global_irq_lock));
 	}
-	/*
-	 * Ok, we got the lock bit.
-	 * But that's actually just the easy part.. Now
-	 * we need to make sure that nobody else is running
+	/* 
+	 * We also to make sure that nobody else is running
 	 * in an interrupt context. 
 	 */
 	wait_on_irq(cpu, where);
 
 	/*
-	 * Finally.
+	 * Ok, finally..
 	 */
 	global_irq_holder = cpu;
 	previous_irqholder = where;
 }
 
+/*
+ * A global "cli()" while in an interrupt context
+ * turns into just a local cli(). Interrupts
+ * should use spinlocks for the (very unlikely)
+ * case that they ever want to protect against
+ * each other.
+ *
+ * If we already have local interrupts disabled,
+ * this will not turn a local disable into a
+ * global one (problems with spinlocks: this makes
+ * save_flags+cli+sti usable inside a spinlock).
+ */
 void __global_cli(void)
 {
-	int cpu = smp_processor_id();
+	unsigned int flags;
 	unsigned long where;
 
 	__asm__("mov %%i7, %0" : "=r" (where));
-	__cli();
-	get_irqlock(cpu, where);
+
+	__save_flags(flags);
+
+	if ((flags & PSR_PIL) != PSR_PIL) {
+		int cpu = smp_processor_id();
+		__cli();
+		if (!local_irq_count[cpu])
+			get_irqlock(cpu, where);
+	}
 }
 
 void __global_sti(void)
 {
-	release_irqlock(smp_processor_id());
+	int cpu = smp_processor_id();
+
+	if (!local_irq_count[cpu])
+		release_irqlock(cpu);
 	__sti();
 }
 
+/*
+ * SMP flags value to restore to:
+ * 0 - global cli
+ * 1 - global sti
+ * 2 - local cli
+ * 3 - local sti
+ */
 unsigned long __global_save_flags(void)
 {
-	return global_irq_holder == (unsigned char) smp_processor_id();
+	int retval;
+	int local_enabled = 0;
+	unsigned long flags;
+
+	__save_flags(flags);
+
+	if ((flags & PSR_PIL) != PSR_PIL)
+		local_enabled = 1;
+
+	/* default to local */
+	retval = 2 + local_enabled;
+
+	/* check for global flags if we're not in an interrupt */
+	if (!local_irq_count[smp_processor_id()]) {
+		if (local_enabled)
+			retval = 1;
+		if (global_irq_holder == (unsigned char) smp_processor_id())
+			retval = 0;
+	}
+	return retval;
 }
 
 void __global_restore_flags(unsigned long flags)
 {
-	if(flags & 1) {
+	switch (flags) {
+	case 0:
 		__global_cli();
-	} else {
-		/* release_irqlock() */
-		if(global_irq_holder == smp_processor_id()) {
-			global_irq_holder = NO_PROC_ID;
-			spin_unlock(&global_irq_lock);
-		}
-		if(!(flags & 2))
-			__sti();
+		break;
+	case 1:
+		__global_sti();
+		break;
+	case 2:
+		__cli();
+		break;
+	case 3:
+		__sti();
+		break;
+	default:
+		printk("global_restore_flags: %08lx (%08lx)\n",
+			flags, (&flags)[-1]);
 	}
 }
 
@@ -353,7 +468,7 @@ void irq_enter(int cpu, int irq, void *_opaque)
 	while (*((volatile unsigned char *)&global_irq_lock)) {
 		if ((unsigned char) cpu == global_irq_holder) {
 			struct pt_regs *regs = _opaque;
-			int sbh_cnt = atomic_read(&__sparc_bh_counter);
+			int sbh_cnt = atomic_read(&global_bh_count);
 			int globl_locked = *((unsigned char *)&global_irq_lock);
 			int globl_icount = atomic_read(&global_irq_count);
 			int local_count = local_irq_count[cpu];
@@ -386,24 +501,6 @@ void irq_exit(int cpu, int irq)
 }
 
 #endif /* DEBUG_IRQLOCK */
-
-/* There has to be a better way. */
-void synchronize_irq(void)
-{
-	int cpu = smp_processor_id();
-	int local_count = local_irq_count[cpu];
-
-	if(local_count != atomic_read(&global_irq_count)) {
-		unsigned long flags;
-
-		/* See comment below at __global_save_flags to understand
-		 * why we must do it this way on Sparc.
-		 */
-		save_and_cli(flags);
-		restore_flags(flags);
-	}
-}
-
 #endif /* __SMP__ */
 
 void unexpected_irq(int irq, void *dev_id, struct pt_regs * regs)
@@ -511,12 +608,13 @@ int request_fast_irq(unsigned int irq,
 	/* If this is flagged as statically allocated then we use our
 	 * private struct which is never freed.
 	 */
-	if (irqflags & SA_STATIC_ALLOC)
+	if (irqflags & SA_STATIC_ALLOC) {
 	    if (static_irq_count < MAX_STATIC_ALLOC)
 		action = &static_irqaction[static_irq_count++];
 	    else
 		printk("Fast IRQ%d (%s) SA_STATIC_ALLOC failed using kmalloc\n",
 		       irq, devname);
+	}
 	
 	if (action == NULL)
 	    action = (struct irqaction *)kmalloc(sizeof(struct irqaction),
@@ -604,11 +702,12 @@ int request_irq(unsigned int irq,
 	/* If this is flagged as statically allocated then we use our
 	 * private struct which is never freed.
 	 */
-	if (irqflags & SA_STATIC_ALLOC)
+	if (irqflags & SA_STATIC_ALLOC) {
 	    if (static_irq_count < MAX_STATIC_ALLOC)
 		action = &static_irqaction[static_irq_count++];
 	    else
 		printk("Request for IRQ%d (%s) SA_STATIC_ALLOC failed using kmalloc\n",irq, devname);
+	}
 	
 	if (action == NULL)
 	    action = (struct irqaction *)kmalloc(sizeof(struct irqaction),

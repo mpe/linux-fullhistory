@@ -4,15 +4,19 @@
  *	Description: Device Driver for Tekram DC-390(T) PCI SCSI       *
  *		     Bus Master Host Adapter			       *
  ***********************************************************************/
+/* $Id: dc390.h,v 2.3 1998/10/24 08:45:02 garloff Exp $ */
 
 #include <linux/version.h>
 
 /*
- * AMD 53C974 driver, header file
+ * DC390/AMD 53C974 driver, header file
  */
 
 #ifndef DC390_H
 #define DC390_H
+
+#define DC390_BANNER "Tekram DC390/AM53C974"
+#define DC390_VERSION "2.0b 1998/10/24"
 
 #if defined(HOSTS_C) || defined(MODULE)
 
@@ -30,24 +34,24 @@ static int DC390_release(struct Scsi_Host *);
 # define DC390_release NULL
 #endif
 
-extern struct proc_dir_entry proc_scsi_tmscsim;
-extern int tmscsim_proc_info(char *buffer, char **start, off_t offset, int length, int hostno, int inout);
+extern struct proc_dir_entry DC390_proc_scsi_tmscsim;
+extern int DC390_proc_info(char *buffer, char **start, off_t offset, int length, int hostno, int inout);
 
-#define DC390_T    {			          \
-   proc_dir:       &proc_scsi_tmscsim,            \
-   proc_info:      tmscsim_proc_info,             \
-   name:           "Tekram DC390(T) V1.12 Feb-25-1998",\
-   detect:         DC390_detect,   		  \
-   release:        DC390_release,		  \
-   queuecommand:   DC390_queue_command,	          \
-   abort:          DC390_abort,    		  \
-   reset:          DC390_reset,    		  \
-   bios_param:     DC390_bios_param,		  \
-   can_queue:      10,                 	          \
-   this_id:        7,                             \
-   sg_tablesize:   SG_ALL,            		  \
-   cmd_per_lun:    2,                 		  \
-   use_clustering: DISABLE_CLUSTERING 		  \
+#define DC390_T    {					\
+   proc_dir:       &DC390_proc_scsi_tmscsim,		\
+   proc_info:      DC390_proc_info,			\
+   name:           DC390_BANNER " V" DC390_VERSION,	\
+   detect:         DC390_detect,			\
+   release:        DC390_release,			\
+   queuecommand:   DC390_queue_command,			\
+   abort:          DC390_abort,				\
+   reset:          DC390_reset,				\
+   bios_param:     DC390_bios_param,			\
+   can_queue:      17,					\
+   this_id:        7,					\
+   sg_tablesize:   SG_ALL,				\
+   cmd_per_lun:    8,					\
+   use_clustering: DISABLE_CLUSTERING			\
    }
 
 #endif /* defined(HOSTS_C) || defined(MODULE) */

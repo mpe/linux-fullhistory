@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl.c,v 1.30 1998/01/21 06:17:32 ecd Exp $
+/* $Id: sunos_ioctl.c,v 1.31 1998/10/25 19:31:04 davem Exp $
  * sunos_ioctl.c: The Linux Operating system: SunOS ioctl compatibility.
  * 
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -218,7 +218,7 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 	}
 
 #if 0
-	if (cmd & 0xff00 == ('k' << 8)){
+	if ((cmd & 0xff00) == ('k' << 8)) {
 		printk ("[[KBIO: %8.8x\n", (unsigned int) cmd);
 	}
 #endif

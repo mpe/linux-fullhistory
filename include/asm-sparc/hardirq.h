@@ -1,6 +1,7 @@
 /* hardirq.h: 32-bit Sparc hard IRQ support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1998 Anton Blanchard (anton@progsoc.uts.edu.au)
  */
 
 #ifndef __SPARC_HARDIRQ_H
@@ -9,19 +10,25 @@
 #include <linux/tasks.h>
 
 extern unsigned int local_irq_count[NR_CPUS];
-#define in_interrupt()	(local_irq_count[smp_processor_id()] != 0)
+
+/*
+ * Are we in an interrupt context? Either doing bottom half
+ * or hardware interrupt processing?
+ */
+#define in_interrupt() ({ int __cpu = smp_processor_id(); \
+	(local_irq_count[__cpu] + local_bh_count[__cpu] != 0); })
 
 #ifndef __SMP__
 
 #define hardirq_trylock(cpu)	(local_irq_count[cpu] == 0)
-#define hardirq_endlock(cpu)	do { } while(0)
+#define hardirq_endlock(cpu)	do { } while (0)
 
 #define hardirq_enter(cpu)	(local_irq_count[cpu]++)
 #define hardirq_exit(cpu)	(local_irq_count[cpu]--)
 
 #define synchronize_irq()	barrier()
 
-#else /* __SMP__ */
+#else
 
 #include <asm/atomic.h>
 #include <asm/spinlock.h>
@@ -32,37 +39,33 @@ extern unsigned char global_irq_holder;
 extern spinlock_t global_irq_lock;
 extern atomic_t global_irq_count;
 
-#define release_irqlock(cpu)				\
-do {	if(global_irq_holder == (unsigned char) cpu) {	\
-		global_irq_holder = NO_PROC_ID;		\
-		spin_unlock(&global_irq_lock);		\
-	}						\
-} while(0)
+static inline void release_irqlock(int cpu)
+{
+	/* if we didn't own the irq lock, just ignore.. */
+	if (global_irq_holder == (unsigned char) cpu) {
+		global_irq_holder = NO_PROC_ID;
+		spin_unlock(&global_irq_lock);
+	}
+}
 
-/* Ordering of the counter bumps is _deadly_ important. */
-#define hardirq_enter(cpu) \
-	do { ++local_irq_count[cpu]; atomic_inc(&global_irq_count); } while(0)
+static inline void hardirq_enter(int cpu)
+{
+	++local_irq_count[cpu];
+	atomic_inc(&global_irq_count);
+}
 
-#define hardirq_exit(cpu) \
-	do { atomic_dec(&global_irq_count); --local_irq_count[cpu]; } while(0)
+static inline void hardirq_exit(int cpu)
+{
+	atomic_dec(&global_irq_count);
+	--local_irq_count[cpu];
+}
 
-#define hardirq_trylock(cpu)					\
-({	unsigned long flags; int ret = 1;			\
-	__save_flags(flags);					\
-	__cli();						\
-	if(atomic_add_return(1, &global_irq_count) != 1 ||	\
-	   *(((unsigned char *)(&global_irq_lock)))) {		\
-		atomic_dec(&global_irq_count);			\
-		__restore_flags(flags);				\
-		ret = 0;					\
-	} else {						\
-		++local_irq_count[cpu];				\
-		__sti();					\
-	}							\
-	ret;							\
-})
+static inline int hardirq_trylock(int cpu)
+{
+	return !atomic_read(&global_irq_count) && !*(((volatile unsigned char *)(&global_irq_lock)));
+}
 
-#define hardirq_endlock(cpu) do { __cli(); hardirq_exit(cpu); __sti(); } while(0)
+#define hardirq_endlock(cpu)	do { } while (0)
 
 extern void synchronize_irq(void);
 

@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@cymru.net>
  *
- *	Version: $Id: icmp.c,v 1.46 1998/10/03 09:37:15 davem Exp $
+ *	Version: $Id: icmp.c,v 1.47 1998/10/21 05:32:24 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -359,6 +359,11 @@ struct socket *icmp_socket=&icmp_inode.u.socket_i;
  *	This function is generic and could be used for other purposes
  *	too. It uses a Token bucket filter as suggested by Alexey Kuznetsov.
  *
+ *	Note that the same dst_entry fields are modified by functions in 
+ *	route.c too, but these work for packet destinations while xrlim_allow
+ *	works for icmp destinations. This means the rate limiting information
+ *	for one "ip object" is shared.
+ *
  *	RFC 1812: 4.3.2.8 SHOULD be able to limit error message rate
  *			  SHOULD allow setting of rate limits 
  *
@@ -374,6 +379,7 @@ int xrlim_allow(struct dst_entry *dst, int timeout)
 	if (dst->rate_tokens > XRLIM_BURST_FACTOR*timeout)
 		dst->rate_tokens = XRLIM_BURST_FACTOR*timeout;
 	if (dst->rate_tokens >= timeout) {
+		dst->rate_last = now;
 		dst->rate_tokens -= timeout;
 		return 1;
 	}

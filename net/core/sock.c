@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.73 1998/10/03 16:08:10 freitag Exp $
+ * Version:	$Id: sock.c,v 1.74 1998/10/21 05:40:38 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -293,6 +293,10 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 		case SO_BINDTODEVICE:
 		{
 			char devname[IFNAMSIZ]; 
+
+			/* Sorry... */ 
+			if (!capable(CAP_NET_RAW)) 
+				return -EPERM; 
 
 			/* Bind this socket to a particular device like "eth0",
 			 * as specified in the passed interface name. If the

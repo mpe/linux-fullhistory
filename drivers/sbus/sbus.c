@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.72 1998/09/05 17:25:51 jj Exp $
+/* $Id: sbus.c,v 1.73 1998/10/07 11:35:50 jj Exp $
  * sbus.c:  SBus support routines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -278,8 +278,16 @@ __initfunc(void sbus_init(void))
 		if((iommund = prom_searchsiblings(topnd, "iommu")) == 0 ||
 		   (nd = prom_getchild(iommund)) == 0 ||
 		   (nd = prom_searchsiblings(nd, "sbus")) == 0) {
+#ifdef CONFIG_PCI
+                        if (!pcibios_present()) {       
+                                prom_printf("Neither SBUS nor PCI found.\n");
+                                prom_halt();
+                        }
+                        return;
+#else
 			/* No reason to run further - the data access trap will occur. */
 			panic("sbus not found");
+#endif
 		}
 	}
 

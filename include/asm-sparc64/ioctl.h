@@ -1,4 +1,4 @@
-/* $Id: ioctl.h,v 1.1 1996/12/02 00:05:36 davem Exp $ */
+/* $Id: ioctl.h,v 1.2 1998/10/15 05:40:38 jj Exp $ */
 #ifndef _SPARC64_IOCTL_H
 #define _SPARC64_IOCTL_H
 
@@ -39,5 +39,13 @@
 #define _IOC_TYPE(nr)       (((nr) >> _IOC_TYPESHIFT) & _IOC_TYPEMASK)
 #define _IOC_NR(nr)         (((nr) >> _IOC_NRSHIFT) & _IOC_NRMASK)
 #define _IOC_SIZE(nr)       (((nr) >> _IOC_SIZESHIFT) & _IOC_SIZEMASK)
+
+/* ...and for the PCMCIA... */
+
+#define IOC_IN          (_IOC_WRITE << _IOC_DIRSHIFT)
+#define IOC_OUT         (_IOC_READ << _IOC_DIRSHIFT)
+#define IOC_INOUT       ((_IOC_WRITE|_IOC_READ) << _IOC_DIRSHIFT)
+#define IOCSIZE_MASK    (_IOC_SIZEMASK << _IOC_SIZESHIFT)
+#define IOCSIZE_SHIFT   (_IOC_SIZESHIFT)
 
 #endif /* !(_SPARC64_IOCTL_H) */

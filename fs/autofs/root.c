@@ -2,7 +2,7 @@
  *
  * linux/fs/autofs/root.c
  *
- *  Copyright 1997 Transmeta Corporation -- All Rights Reserved
+ *  Copyright 1997-1998 Transmeta Corporation -- All Rights Reserved
  *
  * This file is part of the Linux kernel and is made available under
  * the terms of the GNU General Public License, version 2, or at your
@@ -66,7 +66,7 @@ struct inode_operations autofs_root_inode_operations = {
 
 static int autofs_root_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
-	struct autofs_dir_ent *ent;
+	struct autofs_dir_ent *ent = NULL;
 	struct autofs_dirhash *dirhash;
 	struct inode * inode = filp->f_dentry->d_inode;
 	off_t onr, nr;
@@ -90,10 +90,12 @@ static int autofs_root_readdir(struct file *filp, void *dirent, filldir_t filldi
 		filp->f_pos = ++nr;
 		/* fall through */
 	default:
-		while ( onr = nr, ent = autofs_hash_enum(dirhash,&nr) ) {
-			if (filldir(dirent,ent->name,ent->len,onr,ent->ino) < 0)
-				return 0;
-			filp->f_pos = nr;
+		while ( onr = nr, ent = autofs_hash_enum(dirhash,&nr,ent) ) {
+			if ( !ent->dentry || ent->dentry->d_mounts != ent->dentry ) {
+				if (filldir(dirent,ent->name,ent->len,onr,ent->ino) < 0)
+					return 0;
+				filp->f_pos = nr;
+			}
 		}
 		break;
 	}
@@ -110,8 +112,8 @@ static int try_to_fill_dentry(struct dentry *dentry, struct super_block *sb, str
 	if ( !(ent = autofs_hash_lookup(&sbi->dirhash, &dentry->d_name)) ) {
 		do {
 			if ( status && dentry->d_inode ) {
-				printk("autofs warning: lookup failure on existing dentry, status = %d, name = %s\n", status, dentry->d_name.name);
-				break;
+				printk("autofs warning: lookup failure on positive dentry, status = %d, name = %s\n", status, dentry->d_name.name);
+				return 0; /* Try to get the kernel to invalidate this dentry */
 			}
 
 			/* Turn this into a real negative dentry? */
@@ -148,8 +150,9 @@ static int try_to_fill_dentry(struct dentry *dentry, struct super_block *sb, str
 
 	/* We don't update the usages for the autofs daemon itself, this
 	   is necessary for recursive autofs mounts */
-	if ( !autofs_oz_mode(sbi) )
+	if ( !autofs_oz_mode(sbi) ) {
 		autofs_update_usage(&sbi->dirhash,ent);
+	}
 
 	dentry->d_flags &= ~DCACHE_AUTOFS_PENDING;
 	return 1;
@@ -193,7 +196,8 @@ static int autofs_revalidate(struct dentry * dentry)
 	/* Update the usage list */
 	if ( !autofs_oz_mode(sbi) ) {
 		ent = (struct autofs_dir_ent *) dentry->d_time;
-		autofs_update_usage(&sbi->dirhash,ent);
+		if ( ent )
+			autofs_update_usage(&sbi->dirhash,ent);
 	}
 	return 1;
 }
@@ -207,7 +211,6 @@ static struct dentry_operations autofs_dentry_operations = {
 static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)
 {
 	struct autofs_sb_info *sbi;
-	struct inode *res;
 	int oz_mode;
 
 	DPRINTK(("autofs_root_lookup: name = "));
@@ -216,7 +219,6 @@ static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)
 	if (!S_ISDIR(dir->i_mode))
 		return -ENOTDIR;
 
-	res = NULL;
 	sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
 
 	oz_mode = autofs_oz_mode(sbi);
@@ -248,6 +250,15 @@ static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)
 		if (signal_pending(current))
 			return -ERESTARTNOINTR;
 	}
+
+	/*
+	 * If this dentry is unhashed, then we shouldn't honour this
+	 * lookup even if the dentry is positive.  Returning ENOENT here
+	 * doesn't do the right thing for all system calls, but it should
+	 * be OK for the operations we permit from an autofs.
+	 */
+	if ( dentry->d_inode && list_empty(&dentry->d_hash) )
+		return -ENOENT;
 
 	return 0;
 }
@@ -304,6 +315,7 @@ static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const c
 	ent->ino = AUTOFS_FIRST_SYMLINK + n;
 	ent->hash = dentry->d_name.hash;
 	memcpy(ent->name, dentry->d_name.name, 1+(ent->len = dentry->d_name.len));
+	ent->dentry = NULL;	/* We don't keep the dentry for symlinks */
 
 	autofs_hash_insert(dh,ent);
 	d_instantiate(dentry, iget(dir->i_sb,ent->ino));
@@ -339,7 +351,8 @@ static int autofs_root_unlink(struct inode *dir, struct dentry *dentry)
 	n = ent->ino - AUTOFS_FIRST_SYMLINK;
 	if ( n >= AUTOFS_MAX_SYMLINKS || !test_bit(n,sbi->symlink_bitmap) )
 		return -EINVAL;	/* Not a symlink inode, can't unlink */
-
+       
+	dentry->d_time = (unsigned long)(struct autofs_dirhash *)NULL;
 	autofs_hash_delete(ent);
 	clear_bit(n,sbi->symlink_bitmap);
 	kfree(sbi->symlink[n].data);
@@ -364,6 +377,11 @@ static int autofs_root_rmdir(struct inode *dir, struct dentry *dentry)
 	if ( (unsigned int)ent->ino < AUTOFS_FIRST_DIR_INO )
 		return -ENOTDIR; /* Not a directory */
 
+	if ( ent->dentry != dentry ) {
+		printk("autofs_rmdir: odentry != dentry for entry %s\n", dentry->d_name.name);
+	}
+
+	dentry->d_time = (unsigned long)(struct autofs_dir_ent *)NULL;
 	autofs_hash_delete(ent);
 	dir->i_nlink--;
 	d_drop(dentry);
@@ -399,12 +417,14 @@ static int autofs_root_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		return -ENOSPC;
 	}
 
+	dir->i_nlink++;
+	d_instantiate(dentry, iget(dir->i_sb,ent->ino));
+
 	ent->hash = dentry->d_name.hash;
 	memcpy(ent->name, dentry->d_name.name, 1+(ent->len = dentry->d_name.len));
 	ent->ino = sbi->next_dir_ino++;
+	ent->dentry = dentry;
 	autofs_hash_insert(dh,ent);
-	dir->i_nlink++;
-	d_instantiate(dentry, iget(dir->i_sb,ent->ino));
 
 	return 0;
 }

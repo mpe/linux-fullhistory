@@ -1,4 +1,4 @@
-/* $Id: fcntl.h,v 1.10 1998/08/26 10:33:29 davem Exp $ */
+/* $Id: fcntl.h,v 1.11 1998/10/26 20:03:10 davem Exp $ */
 #ifndef _SPARC_FCNTL_H
 #define _SPARC_FCNTL_H
 

@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.53 1998/06/15 16:59:35 jj Exp $
+/* $Id: head.S,v 1.54 1998/10/06 20:48:30 ecd Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -379,6 +379,9 @@ setup_tba:
 	sethi	%hi(ivector_to_mask), %g5
 	or	%g5, %lo(ivector_to_mask), %g1  /* IVECTOR table */
 	mov	0x40, %g2			/* INTR data 0 register */
+
+	/* Kill PROM timer */
+	wr	%g0, 0, %tick_cmpr
 
 	/* Ok, we're done setting up all the state our trap mechanims needs,
 	 * now get back into normal globals and let the PROM know what is up.

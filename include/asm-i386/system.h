@@ -88,7 +88,7 @@ static inline unsigned long _get_base(char * addr)
 		"1:\t"				\
 		"movl %0,%%" #seg "\n"		\
 		"2:\n"				\
-		".section fixup,\"ax\"\n"	\
+		".section .fixup,\"ax\"\n"	\
 		"3:\t"				\
 		"pushl $0\n\t"			\
 		"popl %%" #seg "\n\t"		\

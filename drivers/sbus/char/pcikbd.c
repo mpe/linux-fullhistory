@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.22 1998/09/21 05:06:45 jj Exp $
+/* $Id: pcikbd.c,v 1.23 1998/10/07 11:35:24 jj Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -36,13 +36,6 @@
 #else
 #define PCI_KB_NAME	"keyboard"
 #define PCI_MS_NAME	"mouse"
-/*
- * XXX.
- * Gleb defines check_region and request_region here.
- * This looks suspicios because he neglects to call
- * sparc_alloc_io, but the conflict with sparc_alloc_io is what
- * causes problems.
- */
 #endif
 
 #include "pcikbd.h"
@@ -517,7 +510,7 @@ __initfunc(void pcikbd_init_hw(void))
 			for_each_ebusdev(edev, ebus) {
 				if(!strcmp(edev->prom_name, "8042")) {
 					for_each_edevchild(edev, child) {
-						if (!strcmp(child->prom_name, "kb_ps2"))
+                                                if (!strcmp(child->prom_name, PCI_KB_NAME))
 							goto found;
 					}
 				}

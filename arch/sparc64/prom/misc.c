@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.10 1998/07/21 10:36:29 jj Exp $
+/* $Id: misc.c,v 1.13 1998/10/13 14:03:49 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -40,25 +40,18 @@ extern int serial_console;
 /* Drop into the prom, with the chance to continue with the 'go'
  * prom command.
  */
-/* XXX Fix the pre and post calls as it locks up my Ultra at the moment -DaveM */
 void
 prom_cmdline(void)
 {
-	extern void kernel_enter_debugger(void);
-	/* extern void install_obp_ticker(void); */
-	/* extern void install_linux_ticker(void); */
 	unsigned long flags;
     
-	/* kernel_enter_debugger(); */
 #ifdef CONFIG_SUN_CONSOLE
 	if(!serial_console && prom_palette)
 		prom_palette (1);
 #endif
-	/* install_obp_ticker(); */
-	save_flags(flags); cli();
+	__save_and_cli(flags);
 	p1275_cmd ("enter", P1275_INOUT(0,0));
-	restore_flags(flags);
-	/* install_linux_ticker(); */
+	__restore_flags(flags);
 #ifdef CONFIG_SUN_CONSOLE
 	if(!serial_console && prom_palette)
 		prom_palette (0);
@@ -78,7 +71,7 @@ again:
 
 /* Set prom sync handler to call function 'funcp'. */
 void
-prom_setsync(sync_func_t funcp)
+prom_setcallback(callback_func_t funcp)
 {
 	if(!funcp) return;
 	p1275_cmd ("set-callback", P1275_ARG(0,P1275_ARG_IN_FUNCTION)|

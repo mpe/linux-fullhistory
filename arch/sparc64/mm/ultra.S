@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.27 1998/09/28 06:18:42 davem Exp $
+/* $Id: ultra.S,v 1.29 1998/10/22 03:05:51 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -125,34 +125,39 @@ __flush_tlb_range_pbp_slow:
 	retl
 	 wrpr		%g1, 0x0, %pstate
 
-	/* Unfortunately, it is necessary. */
-	.globl		flush_page_to_ram
-flush_page_to_ram:	/* %o0 = page */
-	rdpr		%pstate, %g5
-	wrpr		%g5, PSTATE_IE, %pstate
-	sethi		%hi(dcache_aliases_found), %g1
-	ldx		[%g1 + %lo(dcache_aliases_found)], %g2
-	sub		%o0, %g4, %o0		! Get phys_page
-	clr		%o2			! This dcache area begin
-	sethi		%hi(1<<14), %o1		! This dcache area end
-1:	ldxa		[%o2] ASI_DCACHE_TAG, %o3
-	andcc		%o3, 0x3, %g0		! Valid bits set?
-	be,pn		%xcc, 2f		! Nope, skip this one
-	 andn		%o3, 0x3, %o3		! Mask out valid bits
-	sllx		%o3, (13 - 2), %o3	! Shift into physaddr
-	cmp		%o3, %o0		! Match?
-	bne,pt		%xcc, 2f		! Nope, skip to next
+	.align		32
+	.globl		flush_icache_page
+flush_icache_page:	/* %o0 = phys_page */
+	sethi		%hi(1 << 13), %o2	! I-cache valid/set bit
+	srlx		%o0, 5, %o0		! phys-addr comparitor
+	clr		%o1			! I-cache address
+1:	ldda		[%o1] ASI_IC_TAG, %o4
+	andcc		%o5, %o2, %g0
+	be,pn		%xcc, 2f
+	 andn		%o5, %o2, %o5
+	cmp		%o5, %o0
+
+	be,pn		%xcc, iflush1
+2:	 ldda		[%o1 + %o2] ASI_IC_TAG, %o4
+4:	andcc		%o5, %o2, %g0
+	be,pn		%xcc, 3f
+	 andn		%o5, %o2, %o5
+	cmp		%o5, %o0
+	be,pn		%xcc, iflush2
 	 nop
-	stxa		%g0, [%o2] ASI_DCACHE_TAG
-	membar		#Sync
-	add		%g2, 1, %g2		! Increment alias counter
-2:	add		%o2, (1<<5), %o2	! 32-bytes per full line
-	cmp		%o2, %o1
+
+3:	add		%o1, 0x20, %o1
+	cmp		%o1, %o2
 	bne,pt		%xcc, 1b
 	 nop
-	stx		%g2, [%g1 + %lo(dcache_aliases_found)]
 	retl
-	 wrpr		%g5, 0x0, %pstate
+	 nop
+iflush1:stxa		%g0, [%o1] ASI_IC_TAG
+	membar		#Sync
+	ba,a,pt		%xcc, 4b
+iflush2:stxa		%g0, [%o1 + %o2] ASI_IC_TAG
+	membar		#Sync
+	ba,a,pt		%xcc, 3b
 
 #ifdef __SMP__
 	/* These are all called by the slaves of a cross call, at

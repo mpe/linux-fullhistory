@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.32 1998/10/03 09:37:42 davem Exp $
+ * Version:	$Id: proc.c,v 1.33 1998/10/21 05:44:35 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -55,21 +55,22 @@ static inline void get__openreq(struct sock *sk, struct open_request *req,
 				char *tmpbuf, 
 				int i)
 {
-	/* FIXME: I'm not sure if the timer fields are correct. */
 	sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
-		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %lu",
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %u",
 		i,
 		(long unsigned int)req->af.v4_req.loc_addr,
 		ntohs(sk->sport),
 		(long unsigned int)req->af.v4_req.rmt_addr,
-		req->rmt_port,
+		ntohs(req->rmt_port),
 		TCP_SYN_RECV,
-		0,0, /* use sizeof(struct open_request) here? */
-		0, (unsigned long)(req->expires - jiffies), /* ??? */
+		0,0, /* could print option size, but that is af dependent. */
+		1,   /* timers active (only the expire timer) */  
+		(unsigned long)(req->expires - jiffies), 
 		req->retrans,
 		sk->socket ? sk->socket->inode->i_uid : 0,
-		0,      /* ??? */
-		sk->socket ? sk->socket->inode->i_ino:0);
+		0,  /* non standard timer */  
+		0 /* open_requests have no inode */
+		); 
 }
 
 /* Format a single socket into tmpbuf. */
@@ -157,6 +158,9 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
  * KNOWN BUGS
  *  As in get_unix_netinfo, the buffer might be too small. If this
  *  happens, get__netinfo returns only part of the available infos.
+ *
+ *  Assumes that buffer length is a multiply of 128 - if not it will
+ *  write past the end.   
  */
 static int
 get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t offset, int length)
@@ -172,17 +176,6 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 			       "  sl  local_address rem_address   st tx_queue "
 			       "rx_queue tr tm->when retrnsmt   uid  timeout inode");
 	pos = 128;
-/*
- *	This was very pretty but didn't work when a socket is destroyed
- *	at the wrong moment (eg a syn recv socket getting a reset), or
- *	a memory timer destroy. Instead of playing with timers we just
- *	concede defeat and do a start_bh_atomic().
- * 	Why not just use lock_sock()? As far as I can see all timer routines
- *	check for sock_readers before doing anything. -AK
- *      [Disabled for now again, because it hard-locked my machine, and there
- *	 is an theoretical situation then, where an user could prevent
- *	 sockets from being destroyed by constantly reading /proc/net/tcp.]
- */
 	SOCKHASH_LOCK(); 
 	sp = pro->sklist_next;
 	while(sp != (struct sock *)pro) {
@@ -196,8 +189,8 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 					continue;
 				get__openreq(sp, req, tmpbuf, i); 
 				len += sprintf(buffer+len, "%-127s\n", tmpbuf);
-				if(len >= length)
-					break; 
+				if(len >= length) 
+					goto out;
 			}
 		}
 		
@@ -215,6 +208,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 		sp = next;
 		i++;
 	}
+out: 
 	SOCKHASH_UNLOCK();
 	
 	begin = len - (pos - offset);
@@ -222,6 +216,8 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 	len -= begin;
 	if(len>length)
 		len = length;
+	if (len<0)
+		len = 0; 
 	return len;
 } 
 
@@ -265,6 +261,8 @@ int afinet_get_info(char *buffer, char **start, off_t offset, int length, int du
 	len -= offset;
 	if (len > length)
 		len = length;
+	if (len < 0)
+		len = 0;
 	return len;
 }
 
@@ -343,6 +341,8 @@ int snmp_get_info(char *buffer, char **start, off_t offset, int length, int dumm
 	len -= offset;
 	if (len > length)
 		len = length;
+	if (len < 0)
+		len = 0; 
 	return len;
 }
 
@@ -379,5 +379,7 @@ int netstat_get_info(char *buffer, char **start, off_t offset, int length, int d
 	len -= offset;
 	if (len > length)
 		len = length;
+	if (len < 0)
+		len = 0; 
 	return len;
 }

@@ -34,16 +34,16 @@ extern struct prom_cpuinfo linux_cpus[NR_CPUS];
 struct cpuinfo_sparc {
 	/* Dcache line 1 */
 	unsigned long	irq_count;
+	unsigned long	bh_count;
 	unsigned int	multiplier;
 	unsigned int	counter;
-	unsigned long	pgcache_size;
-	unsigned long	pgdcache_size;
+	unsigned long	udelay_val;
 
 	/* Dcache line 2 */
-	unsigned long	*pgd_cache;
+	unsigned long	pgcache_size;
 	unsigned long	*pte_cache;
-	unsigned long	udelay_val;
-	unsigned long	dummy;
+	unsigned long	pgdcache_size;
+	unsigned long	*pgd_cache;
 };
 
 extern struct cpuinfo_sparc cpu_data[NR_CPUS];

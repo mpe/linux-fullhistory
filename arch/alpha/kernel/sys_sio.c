@@ -110,6 +110,9 @@ alphabook1_init_arch(unsigned long *mem_start, unsigned long *mem_end)
  *
  * This probably ought to be configurable via MILO.  For
  * example, sound boards seem to like using IRQ 9.
+ *
+ * This is NOT how we should do it. PIRQ0-X should have
+ * their own IRQ's, the way intel uses the IO-APIC irq's.
  */
 static unsigned long sio_route_tab __initdata = 0;
 
@@ -238,7 +241,7 @@ static inline void __init
 avanti_pci_fixup(void)
 {
 	layout_all_busses(DEFAULT_IO_BASE, APECS_AND_LCA_DEFAULT_MEM_BASE);
-	sio_pci_fixup(noname_map_irq, 0x0b0a090f);
+	sio_pci_fixup(noname_map_irq, 0x0b0a0e0f);
 	sio_fixup_irq_levels(sio_collect_irq_levels());
         enable_ide(0x26e);
 }

@@ -1,4 +1,4 @@
-/* $Id: sab82532.h,v 1.3 1997/09/03 11:55:04 ecd Exp $
+/* $Id: sab82532.h,v 1.4 1998/10/25 23:04:29 ecd Exp $
  * sab82532.h: Register Definitions for the Siemens SAB82532 DUSCC
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -143,7 +143,7 @@ struct sab82532 {
 	int				 xmit_fifo_size;
 	int				 recv_fifo_size;
 	int				 custom_divisor;
-	int				 quot;
+	int				 baud;
 	int				 x_char;
 	int				 close_delay;
 	unsigned short			 closing_wait;

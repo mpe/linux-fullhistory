@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.54 1998/09/25 01:09:02 davem Exp $
+/* $Id: traps.c,v 1.55 1998/10/11 06:58:22 davem Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -661,7 +661,7 @@ void cache_flush_trap(struct pt_regs *regs)
 #ifndef __SMP__
 	unsigned node = linux_cpus[get_cpuid()].prom_node;
 #else
-#error SMP not supported on sparc64 yet
+#error cache_flush_trap not supported on sparc64/SMP yet
 #endif
 
 #if 0

@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.70 1998/08/26 12:03:18 davem Exp $
+ * Version:	$Id: arp.c,v 1.73 1998/10/21 05:36:02 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -1027,7 +1027,7 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 				"%-17s0x%-10x0x%-10x%s",
 				in_ntoa(*(u32*)n->key),
 				hatype,
-				ATF_PUBL|ATF_PERM,       
+ 				ATF_PUBL|ATF_PERM,
 				"00:00:00:00:00:00");
 			size += sprintf(buffer+len+size,
 				 "     %-17s %s\n",

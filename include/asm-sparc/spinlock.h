@@ -10,13 +10,8 @@
 
 #ifndef __SMP__
 
-#if (__GNUC__ > 2) || (__GNUC_MINOR__ >= 8)
-  typedef struct { } spinlock_t;
-  #define SPIN_LOCK_UNLOCKED { }
-#else
-  typedef unsigned char spinlock_t;
-  #define SPIN_LOCK_UNLOCKED 0
-#endif
+typedef unsigned char spinlock_t;
+#define SPIN_LOCK_UNLOCKED 0
 
 #define spin_lock_init(lock)	do { } while(0)
 #define spin_lock(lock)		do { } while(0)
@@ -270,18 +265,16 @@ typedef struct { volatile unsigned int lock; } rwlock_t;
 /* Sort of like atomic_t's on Sparc, but even more clever.
  *
  *	------------------------------------
- *	| 16-bit counter   | clock | wlock |  rwlock_t
+ *	| 24-bit counter           | wlock |  rwlock_t
  *	------------------------------------
- *	 31              16 15    8 7     0
+ *	 31                       8 7     0
  *
- * wlock signifies the one writer is in, the clock protects
- * counter bumping, however a reader must acquire wlock
- * before he can bump the counter on a read_lock().
- * Similarly a writer, once he has the wlock, must await
- * for the top 24 bits to all clear before he can finish
- * going in (this includes the clock of course).
+ * wlock signifies the one writer is in or somebody is updating
+ * counter. For a writer, if he successfully acquires the wlock,
+ * but counter is non-zero, he has to release the lock and wait,
+ * till both counter and wlock are zero.
  *
- * Unfortunately this scheme limits us to ~65,000 cpus.
+ * Unfortunately this scheme limits us to ~16,000,000 cpus.
  */
 extern __inline__ void _read_lock(rwlock_t *rw)
 {
@@ -310,7 +303,7 @@ extern __inline__ void _read_unlock(rwlock_t *rw)
 	__asm__ __volatile__("
 	mov	%%o7, %%g4
 	call	___rw_read_exit
-	 ldstub	[%%g1 + 2], %%g2
+	 ldstub	[%%g1 + 3], %%g2
 "	: /* no outputs */
 	: "r" (lp)
 	: "g2", "g4", "g7", "memory", "cc");

@@ -608,7 +608,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	   base, as well as whatever program they might try to exec.  This
 	   is because the brk will follow the loader, and is not movable.  */
 
-	load_bias = (elf_ex.e_type == ET_DYN ? ELF_ET_DYN_BASE : 0);
+	load_bias = ELF_PAGESTART(elf_ex.e_type==ET_DYN ? ELF_ET_DYN_BASE : 0);
 
 	/* Now we do a little grungy work by mmaping the ELF image into
 	   the correct location in memory.  At this point, we assume that
@@ -618,51 +618,50 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	old_fs = get_fs();
 	set_fs(get_ds());
 	for(i = 0, elf_ppnt = elf_phdata; i < elf_ex.e_phnum; i++, elf_ppnt++) {
-		if (elf_ppnt->p_type == PT_LOAD) {
-			int elf_prot = 0, elf_flags;
-			unsigned long vaddr;
+		int elf_prot = 0, elf_flags;
+		unsigned long vaddr;
 
-			if (elf_ppnt->p_flags & PF_R) elf_prot |= PROT_READ;
-			if (elf_ppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
-			if (elf_ppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
+		if (elf_ppnt->p_type != PT_LOAD)
+			continue;
 
-			elf_flags = MAP_PRIVATE|MAP_DENYWRITE|MAP_EXECUTABLE;
+		if (elf_ppnt->p_flags & PF_R) elf_prot |= PROT_READ;
+		if (elf_ppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
+		if (elf_ppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
 
-			vaddr = elf_ppnt->p_vaddr;
-			if (elf_ex.e_type == ET_EXEC || load_addr_set) {
-				elf_flags |= MAP_FIXED;
-			}
+		elf_flags = MAP_PRIVATE|MAP_DENYWRITE|MAP_EXECUTABLE;
 
-			error = do_mmap(file,
-					ELF_PAGESTART(load_bias + vaddr),
-					(elf_ppnt->p_filesz +
-					 ELF_PAGEOFFSET(elf_ppnt->p_vaddr)),
-					elf_prot, elf_flags,
-					(elf_ppnt->p_offset -
-					 ELF_PAGEOFFSET(elf_ppnt->p_vaddr)));
-
-			if (!load_addr_set) {
-				load_addr_set = 1;
-				load_addr = (elf_ppnt->p_vaddr -
-					     elf_ppnt->p_offset);
-				if (elf_ex.e_type == ET_DYN) {
-					load_bias = error - ELF_PAGESTART(load_bias + vaddr);
-					load_addr += error;
-				}
-			}
-			k = elf_ppnt->p_vaddr;
-			if (k < start_code) start_code = k;
-			k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
-			if (k > elf_bss)
-				elf_bss = k;
-			if ((elf_ppnt->p_flags & PF_X) && end_code <  k)
-				end_code = k;
-			if (end_data < k)
-				end_data = k;
-			k = elf_ppnt->p_vaddr + elf_ppnt->p_memsz;
-			if (k > elf_brk)
-				elf_brk = k;
+		vaddr = elf_ppnt->p_vaddr;
+		if (elf_ex.e_type == ET_EXEC || load_addr_set) {
+			elf_flags |= MAP_FIXED;
 		}
+
+		error = do_mmap(file, ELF_PAGESTART(load_bias + vaddr),
+		                (elf_ppnt->p_filesz +
+		                ELF_PAGEOFFSET(elf_ppnt->p_vaddr)),
+		                elf_prot, elf_flags, (elf_ppnt->p_offset -
+		                ELF_PAGEOFFSET(elf_ppnt->p_vaddr)));
+
+		if (!load_addr_set) {
+			load_addr_set = 1;
+			load_addr = (elf_ppnt->p_vaddr - elf_ppnt->p_offset);
+			if (elf_ex.e_type == ET_DYN) {
+				load_bias += error -
+				             ELF_PAGESTART(load_bias + vaddr);
+				load_addr += error;
+			}
+		}
+		k = elf_ppnt->p_vaddr;
+		if (k < start_code) start_code = k;
+		k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
+		if (k > elf_bss)
+			elf_bss = k;
+		if ((elf_ppnt->p_flags & PF_X) && end_code <  k)
+			end_code = k;
+		if (end_data < k)
+			end_data = k;
+		k = elf_ppnt->p_vaddr + elf_ppnt->p_memsz;
+		if (k > elf_brk)
+			elf_brk = k;
 	}
 	set_fs(old_fs);
 	fput(file); /* all done with the file */

@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.70 1998/09/29 09:46:32 davem Exp $ */
+/* $Id: system.h,v 1.71 1998/10/13 03:51:06 jj Exp $ */
 #include <linux/config.h>
 
 #ifndef __SPARC_SYSTEM_H
@@ -235,18 +235,16 @@ extern __inline__ unsigned long read_psr_and_cli(void)
 
 extern unsigned char global_irq_holder;
 
-#define save_flags(x) \
-do {	((x) = ((global_irq_holder == (unsigned char) smp_processor_id()) ? 1 : \
-		((getipl() & PSR_PIL) ? 2 : 0))); } while(0)
-
 #define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
 
 #ifdef DEBUG_IRQLOCK
 extern void __global_cli(void);
 extern void __global_sti(void);
+extern unsigned long __global_save_flags(void);
 extern void __global_restore_flags(unsigned long flags);
 #define cli()			__global_cli()
 #define sti()			__global_sti()
+#define save_flags(flags)	((flags)=__global_save_flags())
 #define restore_flags(flags)	__global_restore_flags(flags)
 #else
 

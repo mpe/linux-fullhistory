@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.26 1998/04/13 07:27:05 davem Exp $
+/* $Id: dma.h,v 1.28 1998/10/26 20:03:09 davem Exp $
  * include/asm-sparc/dma.h
  *
  * Copyright 1995 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -15,6 +15,22 @@
 #include <asm/sbus.h>
 #include <asm/delay.h>
 #include <asm/oplib.h>
+#include <asm/system.h>
+#include <asm/spinlock.h>
+
+extern spinlock_t  dma_spin_lock;
+
+static __inline__ unsigned long claim_dma_lock(void)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&dma_spin_lock, flags);
+	return flags;
+}
+
+static __inline__ void release_dma_lock(unsigned long flags)
+{
+	spin_unlock_irqrestore(&dma_spin_lock, flags);
+}
 
 /* These are irrelevant for Sparc DMA, but we leave it in so that
  * things can compile.

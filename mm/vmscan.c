@@ -550,7 +550,7 @@ int kswapd(void *unused)
 			do_try_to_free_page(0);
 			if (free_memory_available() > 1)
 				break;
-		} while (jiffies != start_time);
+		} while (jiffies == start_time);
 	}
 	/* As if we could ever get here - maybe we want to make this killable */
 	kswapd_task = NULL;

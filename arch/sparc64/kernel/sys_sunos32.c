@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.18 1998/08/31 03:41:01 davem Exp $
+/* $Id: sys_sunos32.c,v 1.22 1998/10/26 20:01:13 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -68,6 +68,7 @@ asmlinkage u32 sunos_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u32 of
 	struct file *file = NULL;
 	unsigned long retval, ret_type;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	current->personality |= PER_BSD;
 	if(flags & MAP_NORESERVE) {
@@ -117,6 +118,7 @@ out_putf:
 		fput(file);
 out:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return (u32) retval;
 }
 
@@ -131,6 +133,7 @@ asmlinkage int sunos_brk(u32 baddr)
 	unsigned long rlim;
 	unsigned long newbrk, oldbrk, brk = (unsigned long) baddr;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if (brk < current->mm->end_code)
 		goto out;
@@ -178,6 +181,7 @@ asmlinkage int sunos_brk(u32 baddr)
 	retval = 0;
 out:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return retval;
 }
 
@@ -538,27 +542,17 @@ struct sunos_utsname {
 	char mach[9];
 };
 
-asmlinkage int sunos_uname(u32 u_name)
+asmlinkage int sunos_uname(struct sunos_utsname *name)
 {
-	struct sunos_utsname *name = (struct sunos_utsname *)A(u_name);
-	int ret = -EFAULT;
+	int ret;
 
 	down(&uts_sem);
-	if(!name)
-		goto out;
-	if(copy_to_user(&name->sname[0],
-			&system_utsname.sysname[0],
-			sizeof(name->sname) - 1))
-		goto out;
-	copy_to_user(&name->nname[0],
-		     &system_utsname.nodename[0],
-		     sizeof(name->nname) - 1);
-	put_user('\0', &name->nname[8]);
-	copy_to_user(&name->rel[0], &system_utsname.release[0], sizeof(name->rel) - 1);
-	copy_to_user(&name->ver[0], &system_utsname.version[0], sizeof(name->ver) - 1);
-	copy_to_user(&name->mach[0], &system_utsname.machine[0], sizeof(name->mach) - 1);
-	ret = 0;
-out:
+	ret = copy_to_user(&name->sname[0], &system_utsname.sysname[0], sizeof(name->sname) - 1);
+	ret |= copy_to_user(&name->nname[0], &system_utsname.nodename[0], sizeof(name->nname) - 1);
+	ret |= put_user('\0', &name->nname[8]);
+	ret |= copy_to_user(&name->rel[0], &system_utsname.release[0], sizeof(name->rel) - 1);
+	ret |= copy_to_user(&name->ver[0], &system_utsname.version[0], sizeof(name->ver) - 1);
+	ret |= copy_to_user(&name->mach[0], &system_utsname.machine[0], sizeof(name->mach) - 1);
 	up(&uts_sem);
 	return ret;
 }
@@ -837,6 +831,8 @@ sunos_mount(char *type, char *dir, int flags, void *data)
 	int ret = -EINVAL;
 	char *dev_fname = 0;
 
+	if (!capable (CAP_SYS_ADMIN))
+		return -EPERM;
 	lock_kernel();
 	/* We don't handle the integer fs type */
 	if ((flags & SMNT_NEWTYPE) == 0)
@@ -1211,9 +1207,6 @@ struct shmid_ds32 {
         __kernel_ipc_pid_t32    shm_cpid; 
         __kernel_ipc_pid_t32    shm_lpid; 
         unsigned short          shm_nattch;
-        unsigned short          shm_npages;
-        u32			shm_pages;
-        u32			attaches; 
 };
                                                         
 static inline int sunos_shmid_get(struct shmid_ds32 *user,
@@ -1230,8 +1223,7 @@ static inline int sunos_shmid_get(struct shmid_ds32 *user,
 	   __get_user(kern->shm_ctime, &user->shm_ctime)		||
 	   __get_user(kern->shm_cpid, &user->shm_cpid)			||
 	   __get_user(kern->shm_lpid, &user->shm_lpid)			||
-	   __get_user(kern->shm_nattch, &user->shm_nattch)		||
-	   __get_user(kern->shm_npages, &user->shm_npages))
+	   __get_user(kern->shm_nattch, &user->shm_nattch))
 		return -EFAULT;
 	return 0;
 }
@@ -1250,8 +1242,7 @@ static inline int sunos_shmid_put(struct shmid_ds32 *user,
 	   __put_user(kern->shm_ctime, &user->shm_ctime)		||
 	   __put_user(kern->shm_cpid, &user->shm_cpid)			||
 	   __put_user(kern->shm_lpid, &user->shm_lpid)			||
-	   __put_user(kern->shm_nattch, &user->shm_nattch)		||
-	   __put_user(kern->shm_npages, &user->shm_npages))
+	   __put_user(kern->shm_nattch, &user->shm_nattch))
 		return -EFAULT;
 	return 0;
 }

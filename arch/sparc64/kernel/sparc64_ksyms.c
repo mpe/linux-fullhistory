@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.42 1998/10/05 03:18:50 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.48 1998/10/20 03:09:08 jj Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -13,8 +13,10 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/string.h>
+#include <linux/sched.h>
 #include <linux/in6.h>
 #include <linux/pci.h>
+#include <linux/interrupt.h>
 
 #include <asm/oplib.h>
 #include <asm/delay.h>
@@ -55,7 +57,6 @@ extern void die_if_kernel(char *str, struct pt_regs *regs);
 extern unsigned long sunos_mmap(unsigned long, unsigned long, unsigned long,
 				unsigned long, unsigned long, unsigned long);
 void _sigpause_common (unsigned int set, struct pt_regs *);
-extern void *__bzero_1page(void *);
 extern void *__bzero(void *, size_t);
 extern void *__bzero_noasi(void *, size_t);
 extern void *__memscan_zero(void *, size_t);
@@ -63,6 +64,7 @@ extern void *__memscan_generic(void *, int, size_t);
 extern int __memcmp(const void *, const void *, __kernel_size_t);
 extern int __strncmp(const char *, const char *, __kernel_size_t);
 extern __kernel_size_t __strlen(const char *);
+extern __kernel_size_t strlen(const char *);
 extern char saved_command_line[];
 extern char *getname32(u32 name);
 extern void linux_sparc_syscall(void);
@@ -87,6 +89,17 @@ extern void dump_thread(struct pt_regs *, struct user *);
 
 #ifdef __SMP__
 extern spinlock_t scheduler_lock;
+extern spinlock_t kernel_flag;
+extern int smp_num_cpus;
+#ifdef SPIN_LOCK_DEBUG
+extern void _do_spin_lock (spinlock_t *lock, char *str);
+extern void _do_spin_unlock (spinlock_t *lock);
+extern int _spin_trylock (spinlock_t *lock);
+extern void _do_read_lock(rwlock_t *rw, char *str);
+extern void _do_read_unlock(rwlock_t *rw, char *str);
+extern void _do_write_lock(rwlock_t *rw, char *str);
+extern void _do_write_unlock(rwlock_t *rw);
+#endif
 #endif
 
 /* One thing to note is that the way the symbols of the mul/div
@@ -102,19 +115,46 @@ __attribute__((section("__ksymtab"))) =				\
 
 /* used by various drivers */
 #ifdef __SMP__
+/* Kernel wide locking */
 EXPORT_SYMBOL(scheduler_lock);
+EXPORT_SYMBOL(kernel_flag);
+
+/* Software-IRQ BH locking */
 EXPORT_SYMBOL(global_bh_lock);
+EXPORT_SYMBOL(global_bh_count);
+EXPORT_SYMBOL(synchronize_bh);
+
+/* Hard IRQ locking */
 EXPORT_SYMBOL(global_irq_holder);
+EXPORT_SYMBOL(global_irq_lock);
+EXPORT_SYMBOL(global_irq_count);
 EXPORT_SYMBOL(synchronize_irq);
-EXPORT_SYMBOL(cpu_data);
 EXPORT_SYMBOL_PRIVATE(global_cli);
 EXPORT_SYMBOL_PRIVATE(global_sti);
+EXPORT_SYMBOL_PRIVATE(global_save_flags);
 EXPORT_SYMBOL_PRIVATE(global_restore_flags);
+
+/* Per-CPU information table */
+EXPORT_SYMBOL(cpu_data);
+
+/* Misc SMP information */
+EXPORT_SYMBOL(smp_num_cpus);
+
+/* Spinlock debugging library, optional. */
+#ifdef SPIN_LOCK_DEBUG
+EXPORT_SYMBOL(_do_spin_lock);
+EXPORT_SYMBOL(_do_spin_unlock);
+EXPORT_SYMBOL(_spin_trylock);
+EXPORT_SYMBOL(_do_read_lock);
+EXPORT_SYMBOL(_do_read_unlock);
+EXPORT_SYMBOL(_do_write_lock);
+EXPORT_SYMBOL(_do_write_unlock);
+#endif
+
 #else
 EXPORT_SYMBOL(local_irq_count);
+EXPORT_SYMBOL(local_bh_count);
 #endif
-EXPORT_SYMBOL_PRIVATE(_lock_kernel);
-EXPORT_SYMBOL_PRIVATE(_unlock_kernel);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 
@@ -124,7 +164,6 @@ EXPORT_SYMBOL(mstk48t02_regs);
 EXPORT_SYMBOL(request_fast_irq);
 EXPORT_SYMBOL(sparc_alloc_io);
 EXPORT_SYMBOL(sparc_free_io);
-EXPORT_SYMBOL(__sparc64_bh_counter);
 EXPORT_SYMBOL(sparc_ultra_unmapioaddr);
 EXPORT_SYMBOL(mmu_get_scsi_sgl);
 EXPORT_SYMBOL(mmu_get_scsi_one);
@@ -185,6 +224,9 @@ EXPORT_SYMBOL(__prom_getsibling);
 /* sparc library symbols */
 EXPORT_SYMBOL(bcopy);
 EXPORT_SYMBOL(__strlen);
+#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+EXPORT_SYMBOL(strlen);
+#endif
 EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strcpy);
 EXPORT_SYMBOL(strncpy);
@@ -220,7 +262,7 @@ EXPORT_SYMBOL(sys32_ioctl);
 /* Special internal versions of library functions. */
 EXPORT_SYMBOL(__memcpy);
 EXPORT_SYMBOL(__memset);
-EXPORT_SYMBOL(__bzero_1page);
+EXPORT_SYMBOL(clear_page);
 EXPORT_SYMBOL(__bzero);
 EXPORT_SYMBOL(__memscan_zero);
 EXPORT_SYMBOL(__memscan_generic);

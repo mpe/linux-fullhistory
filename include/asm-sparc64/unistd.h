@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.22 1998/09/13 04:33:14 davem Exp $ */
+/* $Id: unistd.h,v 1.23 1998/10/07 01:28:02 davem Exp $ */
 #ifndef _SPARC64_UNISTD_H
 #define _SPARC64_UNISTD_H
 
@@ -33,7 +33,7 @@
 #define __NR_chmod               15 /* Common                                      */
 #define __NR_lchown              16 /* Common                                      */
 #define __NR_brk                 17 /* Common                                      */
-/* #define __NR_ni_syscall       18    ENOSYS under SunOS                          */
+#define __NR_perfctr             18 /* Performance counter operations              */
 #define __NR_lseek               19 /* Common                                      */
 #define __NR_getpid              20 /* Common                                      */
 #define __NR_capget		 21 /* Linux Specific				   */

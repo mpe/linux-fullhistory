@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.48 1998/09/07 09:19:34 davem Exp $
+/* $Id: sys_sparc.c,v 1.49 1998/10/11 06:57:53 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -181,6 +181,7 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 	struct file * file = NULL;
 	unsigned long retval = -EBADF;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if (!(flags & MAP_ANONYMOUS)) {
 		file = fget(fd);
@@ -214,6 +215,7 @@ out_putf:
 		fput(file);
 out:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return retval;
 }
 

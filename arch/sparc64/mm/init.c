@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.98 1998/09/28 06:18:39 davem Exp $
+/*  $Id: init.c,v 1.103 1998/10/20 03:09:12 jj Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -45,7 +45,6 @@ extern char __init_begin, __init_end, etext, __bss_start;
 
 int do_check_pgt_cache(int low, int high)
 {
-        struct page *page, *page2;
         int freed = 0;
 
 	if(pgtable_cache_size > high) {
@@ -60,6 +59,7 @@ int do_check_pgt_cache(int low, int high)
 	}
 #ifndef __SMP__ 
         if (pgd_cache_size > high / 4) {
+		struct page *page, *page2;
                 for (page2 = NULL, page = (struct page *)pgd_quicklist; page;) {
                         if ((unsigned long)page->pprev_hash == 3) {
                                 if (page2)
@@ -537,7 +537,7 @@ static inline void inherit_prom_mappings(void)
 				if (pgd_none(*pgdp)) {
 					pmdp = sparc_init_alloc(&mempool,
 							 PMD_TABLE_SIZE);
-					clear_page(pmdp);
+					memset(pmdp, 0, PAGE_SIZE);
 					pgd_set(pgdp, pmdp);
 				}
 				pmdp = pmd_offset(pgdp, vaddr);
@@ -591,12 +591,17 @@ static void __flush_nucleus_vptes(void)
 }
 
 static int prom_ditlb_set = 0;
-int prom_itlb_ent, prom_dtlb_ent;
-unsigned long prom_itlb_tag, prom_itlb_data;
-unsigned long prom_dtlb_tag, prom_dtlb_data;
+struct prom_tlb_entry {
+	int		tlb_ent;
+	unsigned long	tlb_tag;
+	unsigned long	tlb_data;
+};
+struct prom_tlb_entry prom_itlb[8], prom_dtlb[8];
 
 void prom_world(int enter)
 {
+	int i;
+
 	if (!prom_ditlb_set)
 		return;
 	if (enter) {
@@ -604,29 +609,44 @@ void prom_world(int enter)
 		__flush_nucleus_vptes();
 
 		/* Install PROM world. */
-		__asm__ __volatile__("stxa %0, [%1] %2"
-					: : "r" (prom_dtlb_tag), "r" (TLB_TAG_ACCESS),
+		for (i = 0; i < 8; i++) {
+			if (prom_dtlb[i].tlb_ent != -1) {
+				__asm__ __volatile__("stxa %0, [%1] %2"
+					: : "r" (prom_dtlb[i].tlb_tag), "r" (TLB_TAG_ACCESS),
 					"i" (ASI_DMMU));
-		membar("#Sync");
-		spitfire_put_dtlb_data(62, prom_dtlb_data);
-		membar("#Sync");
-		__asm__ __volatile__("stxa %0, [%1] %2"
-					: : "r" (prom_itlb_tag), "r" (TLB_TAG_ACCESS),
+				membar("#Sync");
+				spitfire_put_dtlb_data(prom_dtlb[i].tlb_ent,
+						       prom_dtlb[i].tlb_data);
+				membar("#Sync");
+			}
+
+			if (prom_itlb[i].tlb_ent != -1) {
+				__asm__ __volatile__("stxa %0, [%1] %2"
+					: : "r" (prom_itlb[i].tlb_tag), "r" (TLB_TAG_ACCESS),
 					"i" (ASI_IMMU));
-		membar("#Sync");
-		spitfire_put_itlb_data(62, prom_itlb_data);
-		membar("#Sync");
+				membar("#Sync");
+				spitfire_put_itlb_data(prom_itlb[i].tlb_ent,
+						       prom_itlb[i].tlb_data);
+				membar("#Sync");
+			}
+		}
 	} else {
-		__asm__ __volatile__("stxa %%g0, [%0] %1"
+		for (i = 0; i < 8; i++) {
+			if (prom_dtlb[i].tlb_ent != -1) {
+				__asm__ __volatile__("stxa %%g0, [%0] %1"
 					: : "r" (TLB_TAG_ACCESS), "i" (ASI_DMMU));
-		membar("#Sync");
-		spitfire_put_dtlb_data(62, 0x0UL);
-		membar("#Sync");
-		__asm__ __volatile__("stxa %%g0, [%0] %1"
+				membar("#Sync");
+				spitfire_put_dtlb_data(prom_dtlb[i].tlb_ent, 0x0UL);
+				membar("#Sync");
+			}
+			if (prom_itlb[i].tlb_ent != -1) {
+				__asm__ __volatile__("stxa %%g0, [%0] %1"
 					: : "r" (TLB_TAG_ACCESS), "i" (ASI_IMMU));
-		membar("#Sync");
-		spitfire_put_itlb_data(62, 0x0UL);
-		membar("#Sync");
+				membar("#Sync");
+				spitfire_put_itlb_data(prom_itlb[i].tlb_ent, 0x0UL);
+				membar("#Sync");
+			}
+		}
 	}
 }
 
@@ -640,8 +660,8 @@ void inherit_locked_prom_mappings(int save_p)
 	 * it (conveniently) fails to mention any of these in the
 	 * translations property.  The only ones that matter are
 	 * the locked PROM tlb entries, so we impose the following
-	 * irrecovable rule on the PROM, it is allowed 1 locked
-	 * entry in the ITLB and 1 in the DTLB.
+	 * irrecovable rule on the PROM, it is allowed 8 locked
+	 * entries in the ITLB and 8 in the DTLB.
 	 *
 	 * Supposedly the upper 16GB of the address space is
 	 * reserved for OBP, BUT I WISH THIS WAS DOCUMENTED
@@ -650,17 +670,23 @@ void inherit_locked_prom_mappings(int save_p)
 	 * systems to coordinate mmu mappings is also COMPLETELY
 	 * UNDOCUMENTED!!!!!! Thanks S(t)un!
 	 */
+	if (save_p) {
+		for(i = 0; i < 8; i++) {
+			prom_dtlb[i].tlb_ent = -1;
+			prom_itlb[i].tlb_ent = -1;
+		}
+	}
 	for(i = 0; i < 63; i++) {
 		unsigned long data;
 
 		data = spitfire_get_dtlb_data(i);
-		if(!dtlb_seen && (data & _PAGE_L)) {
+		if(data & _PAGE_L) {
 			unsigned long tag = spitfire_get_dtlb_tag(i);
 
 			if(save_p) {
-				prom_dtlb_ent = i;
-				prom_dtlb_tag = tag;
-				prom_dtlb_data = data;
+				prom_dtlb[dtlb_seen].tlb_ent = i;
+				prom_dtlb[dtlb_seen].tlb_tag = tag;
+				prom_dtlb[dtlb_seen].tlb_data = data;
 			}
 			__asm__ __volatile__("stxa %%g0, [%0] %1"
 					     : : "r" (TLB_TAG_ACCESS), "i" (ASI_DMMU));
@@ -668,18 +694,22 @@ void inherit_locked_prom_mappings(int save_p)
 			spitfire_put_dtlb_data(i, 0x0UL);
 			membar("#Sync");
 
-			dtlb_seen = 1;
-			if(itlb_seen)
+			dtlb_seen++;
+			if(dtlb_seen > 7)
 				break;
 		}
+	}
+	for(i = 0; i < 63; i++) {
+		unsigned long data;
+
 		data = spitfire_get_itlb_data(i);
-		if(!itlb_seen && (data & _PAGE_L)) {
+		if(data & _PAGE_L) {
 			unsigned long tag = spitfire_get_itlb_tag(i);
 
 			if(save_p) {
-				prom_itlb_ent = i;
-				prom_itlb_tag = tag;
-				prom_itlb_data = data;
+				prom_itlb[itlb_seen].tlb_ent = i;
+				prom_itlb[itlb_seen].tlb_tag = tag;
+				prom_itlb[itlb_seen].tlb_data = data;
 			}
 			__asm__ __volatile__("stxa %%g0, [%0] %1"
 					     : : "r" (TLB_TAG_ACCESS), "i" (ASI_IMMU));
@@ -687,15 +717,8 @@ void inherit_locked_prom_mappings(int save_p)
 			spitfire_put_itlb_data(i, 0x0UL);
 			membar("#Sync");
 
-			/* Re-install it. */
-			__asm__ __volatile__("stxa %0, [%1] %2"
-					     : : "r" (tag), "r" (TLB_TAG_ACCESS),
-					         "i" (ASI_IMMU));
-			membar("#Sync");
-			spitfire_put_itlb_data(62, data);
-			membar("#Sync");
-			itlb_seen = 1;
-			if(dtlb_seen)
+			itlb_seen++;
+			if(itlb_seen > 7)
 				break;
 		}
 	}
@@ -706,19 +729,29 @@ void inherit_locked_prom_mappings(int save_p)
 /* Give PROM back his world, done during reboots... */
 void prom_reload_locked(void)
 {
-	__asm__ __volatile__("stxa %0, [%1] %2"
-			     : : "r" (prom_dtlb_tag), "r" (TLB_TAG_ACCESS),
-			     "i" (ASI_DMMU));
-	membar("#Sync");
-	spitfire_put_dtlb_data(prom_dtlb_ent, prom_dtlb_data);
-	membar("#Sync");
+	int i;
 
-	__asm__ __volatile__("stxa %0, [%1] %2"
-			     : : "r" (prom_itlb_tag), "r" (TLB_TAG_ACCESS),
-			     "i" (ASI_IMMU));
-	membar("#Sync");
-	spitfire_put_itlb_data(prom_itlb_ent, prom_itlb_data);
-	membar("#Sync");
+	for (i = 0; i < 8; i++) {
+		if (prom_dtlb[i].tlb_ent != -1) {
+			__asm__ __volatile__("stxa %0, [%1] %2"
+				: : "r" (prom_dtlb[i].tlb_tag), "r" (TLB_TAG_ACCESS),
+				"i" (ASI_DMMU));
+			membar("#Sync");
+			spitfire_put_dtlb_data(prom_dtlb[i].tlb_ent,
+					       prom_dtlb[i].tlb_data);
+			membar("#Sync");
+		}
+
+		if (prom_itlb[i].tlb_ent != -1) {
+			__asm__ __volatile__("stxa %0, [%1] %2"
+				: : "r" (prom_itlb[i].tlb_tag), "r" (TLB_TAG_ACCESS),
+				"i" (ASI_IMMU));
+			membar("#Sync");
+			spitfire_put_itlb_data(prom_itlb[i].tlb_ent,
+					       prom_itlb[i].tlb_data);
+			membar("#Sync");
+		}
+	}
 }
 
 void __flush_dcache_range(unsigned long start, unsigned long end)
@@ -844,7 +877,7 @@ pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
 
 	pmd = (pmd_t *) __get_free_page(GFP_DMA|GFP_KERNEL);
 	if(pmd) {
-		clear_page(pmd);
+		memset(pmd, 0, PAGE_SIZE);
 		pgd_set(pgd, pmd);
 		return pmd + offset;
 	}
@@ -857,7 +890,7 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 
 	pte = (pte_t *) __get_free_page(GFP_DMA|GFP_KERNEL);
 	if(pte) {
-		clear_page(pte);
+		memset(pte, 0, PAGE_SIZE);
 		pmd_set(pmd, pte);
 		return pte + offset;
 	}
@@ -875,13 +908,13 @@ allocate_ptable_skeleton(unsigned long start, unsigned long end))
 		pgdp = pgd_offset(init_task.mm, start);
 		if (pgd_none(*pgdp)) {
 			pmdp = sparc_init_alloc(&mempool, PAGE_SIZE);
-			clear_page(pmdp);
+			memset(pmdp, 0, PAGE_SIZE);
 			pgd_set(pgdp, pmdp);
 		}
 		pmdp = pmd_offset(pgdp, start);
 		if (pmd_none(*pmdp)) {
 			ptep = sparc_init_alloc(&mempool, PAGE_SIZE);
-			clear_page(ptep);
+			memset(ptep, 0, PAGE_SIZE);
 			pmd_set(pmdp, ptep);
 		}
 		start = (start + PMD_SIZE) & PMD_MASK;

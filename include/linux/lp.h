@@ -25,7 +25,7 @@
 #define LP_NOPA  0x0010
 #define LP_ERR   0x0020
 #define LP_ABORT 0x0040
-#ifdef LP_NEED_CAREFUL
+#if 0
 #define LP_CAREFUL 0x0080
 #endif
 #define LP_ABORTOPEN 0x0100
@@ -131,6 +131,7 @@ struct lp_struct {
 	unsigned int last_error;
 	volatile unsigned int irq_detected:1;
 	volatile unsigned int irq_missed:1;
+	unsigned int polled:1;
 };
 
 /*
@@ -176,7 +177,7 @@ struct lp_struct {
  */
 #define LP_DELAY 	50
 
-#define LP_POLLED(minor) (lp_table[(minor)].dev->port->irq == PARPORT_IRQ_NONE)
+#define LP_POLLED(minor) (lp_table[(minor)].polled)
 #define LP_PREEMPTED(minor) (lp_table[(minor)].dev->port->waithead != NULL)
 
 /*

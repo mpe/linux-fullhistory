@@ -199,7 +199,6 @@ out:
 		free_wait(&wait_table);
 		free_page((unsigned long) wait_table.entry);
 	}
-out_nowait:
 	unlock_kernel();
 	return retval;
 }

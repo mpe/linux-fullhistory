@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.37 1998/09/25 01:09:22 davem Exp $
+/*  $Id: signal.c,v 1.38 1998/10/16 03:19:04 davem Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -53,7 +53,7 @@ asmlinkage void sparc64_set_context(struct pt_regs *regs)
 	unsigned char fenab;
 	int err;
 
-	__asm__ __volatile__("flushw");
+	flush_user_windows();
 	if(tp->w_saved						||
 	   (((unsigned long)ucp) & (sizeof(unsigned long)-1))	||
 	   (!__access_ok((unsigned long)ucp, sizeof(*ucp))))

@@ -43,6 +43,12 @@ static pte_t *get_page(struct task_struct * tsk,
 
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
+
+	/* Seems non-intuitive but the page copy/clear routines always
+	 * check current's value.
+	 */
+	current->mm->segments = (void *) (addr & PAGE_SIZE);
+
 	if (pgd_none(*pgdir)) {
 		handle_mm_fault(tsk, vma, addr, write);
 		goto repeat;
@@ -574,7 +580,11 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		goto out;
 	}
 #endif
-	if(!(child = find_task_by_pid(pid))) {
+	read_lock(&tasklist_lock);
+	child = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);
+
+	if(!child) {
 		pt_error_return(regs, ESRCH);
 		goto out;
 	}
@@ -604,9 +614,13 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		}
 		child->flags |= PF_PTRACED;
 		if(child->p_pptr != current) {
+			unsigned long flags;
+
+			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
+			write_unlock_irqrestore(&tasklist_lock, flags);
 		}
 		send_sig(SIGSTOP, child, 1);
 		pt_succ_return(regs, 0);
@@ -781,11 +795,12 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			cregs->tnpc = npc;
 		}
 		cregs->y = y;
-		for(i = 1; i < 16; i++)
+		for(i = 1; i < 16; i++) {
 			if (__get_user(cregs->u_regs[i], (&pregs->u_regs[i-1]))) {
 				pt_error_return(regs, EFAULT);
 				goto out;
 			}
+		}
 		pt_succ_return(regs, 0);
 		goto out;
 	}
@@ -814,11 +829,12 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			cregs->tnpc = tnpc;
 		}
 		cregs->y = y;
-		for(i = 1; i < 16; i++)
+		for(i = 1; i < 16; i++) {
 			if (__get_user(cregs->u_regs[i], (&pregs->u_regs[i-1]))) {
 				pt_error_return(regs, EFAULT);
 				goto out;
 			}
+		}
 		pt_succ_return(regs, 0);
 		goto out;
 	}
@@ -1055,23 +1071,29 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			pt_succ_return(regs, 0);
 			goto out;
 		}
-		wake_up_process(child);
 		child->exit_code = SIGKILL;
+		wake_up_process(child);
 		pt_succ_return(regs, 0);
 		goto out;
 	}
 
 	case PTRACE_SUNDETACH: { /* detach a process that was attached. */
+		unsigned long flags;
+
 		if ((unsigned long) data > _NSIG) {
 			pt_error_return(regs, EIO);
 			goto out;
 		}
 		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
-		wake_up_process(child);
 		child->exit_code = data;
+
+		write_lock_irqsave(&tasklist_lock, flags);
 		REMOVE_LINKS(child);
 		child->p_pptr = child->p_opptr;
 		SET_LINKS(child);
+		write_unlock_irqrestore(&tasklist_lock, flags);
+
+		wake_up_process(child);
 		pt_succ_return(regs, 0);
 		goto out;
 	}
