@@ -80,7 +80,7 @@ static char *card_names[] __devinitdata = {
 	"EMU10K1",
 };
 
-static struct pci_device_id emu10k1_pci_tbl[] __initdata = {
+static struct pci_device_id emu10k1_pci_tbl[] = {
 	{PCI_VENDOR_ID_CREATIVE, PCI_DEVICE_ID_CREATIVE_EMU10K1,
 	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, EMU10K1},
 	{0,}
@@ -763,7 +763,7 @@ static void __devexit emu10k1_remove(struct pci_dev *pci_dev)
 MODULE_AUTHOR("Bertrand Lee, Cai Ying. (Email to: emu10k1-devel@opensource.creative.com)");
 MODULE_DESCRIPTION("Creative EMU10K1 PCI Audio Driver v" DRIVER_VERSION "\nCopyright (C) 1999 Creative Technology Ltd.");
 
-static struct pci_driver emu10k1_pci_driver __initdata = {
+static struct pci_driver emu10k1_pci_driver = {
 	name:"emu10k1",
 	id_table:emu10k1_pci_tbl,
 	probe:emu10k1_probe,

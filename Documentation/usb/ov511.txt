@@ -6,8 +6,11 @@ Author: Mark McClelland
 Homepage: http://alpha.dyndns.org/ov511
 
 NEW IN THIS VERSION:
- o Support for OV511+
- o Support for OV7620
+ o Improvements to sensor detection code
+ o Added "i2c_detect_tries" and "aperture" parameters
+ o proc filesystem status support
+ o read() fixed partially
+ o code cleanups and minor fixes
 
 INTRODUCTION:
 
@@ -151,11 +154,13 @@ WORKING FEATURES:
  o Monochrome
  o Setting/getting of saturation, contrast and brightness (no hue yet; only
    works with OV7610, not the OV7620 or OV7620AE)
+ o proc status reporting
 
 EXPERIMENTAL FEATURES:
  o fix_rgb_offset: Sometimes works, but other times causes errors with xawtv and
    corrupted frames.
  o Snapshot mode (only works with some read() based apps; see below for more)
+ o read() support
 
 TODO:
  o Fix the noise / grainy image problem.
@@ -180,6 +185,8 @@ TODO:
  o Get rid of the memory management functions (put them in videodev.c??)
  o Setting of contrast and brightness not working with 7620
  o Driver/camera state save/restore for when USB supports suspend/resume
+ o Multiple cameras reportedly do not work simultaneously
+ o Problems with OHCI
 
 HOW TO CONTACT ME:
 

@@ -13,12 +13,11 @@ The via82cxxx audio driver found in the drivers/sound directory
 of the kernel source tree is a PCI audio driver for audio chips
 found on Via-based motherboards, such as the MVP4.
 
-Currently the driver provides audio via SoundBlaster Pro compatibility,
-and MIDI via MPU-401 compatibility.  An AC97 mixing device is also
-supported, and is generally preferred over the SoundBlaster mixer.
+Currently the driver exports the following features:
 
-IMPORTANT NOTE:  Some users report that the SoundBlaster mixer does
-not work at all -- use the AC97 mixer if possible.
+	* /dev/dsp and /dev/audio support
+	* 16-bit stereo PCM output channel
+	* AC97 mixer
 
 Please send bug reports to the mailing list linux-via@gtf.org.
 To subscribe, e-mail majordomo@gtf.org with "subscribe linux-via" in the
@@ -27,7 +26,7 @@ body of the message.
 
 Thanks
 ------------------------------------------------------------------------
-Via for providing e-mail support, specs, and NDA's source code.
+Via for providing e-mail support, specs, and NDA'd source code.
 
 MandrakeSoft for providing hacking time.
 
@@ -40,15 +39,10 @@ Installation
 If the driver is being statically compiled into the kernel, no
 configuration should be necessary.
 
-If the driver is being compiled as a module, generally two lines must
+If the driver is being compiled as a module, generally one line must
 be added to your /etc/conf.modules (or /etc/modules.conf) file:
 
-	alias sound via82cxxx
-	options sb support=1
-
-The second line is very important:  it tells the required 'sb' module
-not to load SoundBlaster support, but to instead let the Via driver
-do so at a later time.
+	alias sound via82cxxx_audio
 
 
 
@@ -63,8 +57,8 @@ Some architecture remains for multiple cards, feel free to submit
 a patch to clean some of that up.  Ideally, 
 
 No consideration for SMP, this chipset is not known to be found on
-any SMP motherboards.  However, this will change when we start handling
-our own interrupts in "native mode."
+any SMP motherboards.  However, spin_locks must be used anyway in order
+to handle interrupts correctly.
 
 GNU indent formatting options:  -kr -i8 -pcs
 
@@ -76,28 +70,16 @@ The following is an _incomplete_ list of motherboards supported by this
 audio driver.  If your motherboard (or notebook) is not listed here,
 please e-mail the maintainer with details.
 
-	AOpen MX59 Pro (Apollo MVP4)
+	AOpen MX59 Pro
+	Compaq Presario 1247
 
 
 
-The Future
+Random Developer Notes / Comments
 ------------------------------------------------------------------------
 Via has graciously donated e-mail support and source code to help further
 the development of this driver.  Their assistance has been invaluable
 in the design and coding of the next major version of this driver.
-
-This audio chip supports a DirectSound(tm)-style hardware interface,
-with a single 16-bit stereo input channel, and a single 16-bit stereo
-output channel.  Data is transferred to/from the hardware using
-table-driven scatter-gather DMA buffers.
-
-Work is currently underway to support this "native mode" of the chip.
-When complete, SoundBlaster legacy mode will be completely removed.
-After a round of testing, this code will become version 2.0.0.
-
-Following the 2.0.0 release, the last major task to complete is
-MIDI support.  MPU-401 legacy support is available currently, but
-not well tested at all.
 
 The Via audio chip apparently provides a second PCM scatter-gather
 DMA channel just for FM data, but does not have a full hardware MIDI
@@ -109,11 +91,15 @@ support altogether and using the FM PCM channel as a second (input? output?)
 
 General To-do List (patches/suggestions welcome)
 ------------------------------------------------------------------------
+Recording support
+
+mmap support
+
+Other advanced ioctls
+
 Better docs
 
-Code review by sound guru(s)
-
-Native DSP audio driver using scatter-gather DMA, as described above
+Code review
 
 Native MIDI driver, as described above
 
@@ -121,8 +107,35 @@ Native MIDI driver, as described above
 
 Known bugs (patches/suggestions welcome)
 ------------------------------------------------------------------------
-1) Two MIDI devices are loaded by the sound driver.  Eliminate one of them. 
+1) Volume too low on many systems.  Workaround:  use mixer program
+such as xmixer to increase volume.
 
-2) Two mixer devices are loaded by the sound driver.  Eliminate one of
-them.  At least one bug report says that SB mixer does not work at all,
-only AC97 mixer.
+2) RealPlayer output very scratchy.
+
+3) Applications which attempt to open the sound device in read/write
+mode (O_RDWR) will fail.  This is incorrect OSS behavior, but since
+this driver will eventually support recording as well as playback,
+we will be able to (in the future) support even broken programs which
+unconditionally use O_RDWR.
+
+
+
+Submitting a bug report
+------------------------------------------------------------------------
+Describe the application you were using to play/record sound, and how
+to reproduce the problem.
+
+Obtain the via-audio-diag diagnostics program from
+http://gtf.org/garzik/drivers/via82cxxx/ and provide a dump of the
+audio chip's registers while the problem is occurring.  Sample command line:
+	./via-audio-diag -aps > diag-output.txt
+
+Define "VIA_DEBUG" at the beginning of the driver, then capture and email
+the kernel log output.  This can be viewed in the system kernel log (if
+enabled), or via the 'dmesg' program.
+
+If you wish to increase the size of the buffer displayed by 'dmesg', then
+change the LOG_BUF_LEN macro at the top of linux/kernel/printk.c, recompile
+your kernel, and pass the "-s <size>" option to 'dmesg'.
+
+

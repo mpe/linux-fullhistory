@@ -1,34 +1,38 @@
 #ifndef __LINUX_OV511_H
 #define __LINUX_OV511_H
 
+#include <asm/uaccess.h>
+#include <linux/videodev.h>
+#include <linux/smp_lock.h>
+
 #define OV511_DEBUG	/* Turn on debug messages */
 
 #ifdef OV511_DEBUG
 #  define PDEBUG(level, fmt, args...) \
-if (debug >= level) printk("ov511: " fmt "\n" , ## args)
+if (debug >= level) printk("ov511: [" __PRETTY_FUNCTION__ ":%d] " fmt "\n", __LINE__ , ## args)
 #else
 #  define PDEBUG(level, fmt, args...) do {} while(0)
 #endif
 
 /* Camera interface register numbers */
-#define OV511_REG_CAMERA_DELAY_MODE			0x10
-#define OV511_REG_CAMERA_EDGE_MODE			0x11
+#define OV511_REG_CAMERA_DELAY_MODE		0x10
+#define OV511_REG_CAMERA_EDGE_MODE		0x11
 #define OV511_REG_CAMERA_CLAMPED_PIXEL_NUM	0x12
 #define OV511_REG_CAMERA_CLAMPED_LINE_NUM	0x13
 #define OV511_REG_CAMERA_PIXEL_DIVISOR		0x14
 #define OV511_REG_CAMERA_LINE_DIVISOR		0x15
 #define OV511_REG_CAMERA_DATA_INPUT_SELECT	0x16
 #define OV511_REG_CAMERA_RESERVED_LINE_MODE	0x17
-#define OV511_REG_CAMERA_BITMASK			0x18
+#define OV511_REG_CAMERA_BITMASK		0x18
 
 /* Snapshot mode camera interface register numbers */
 #define OV511_REG_SNAP_CAPTURED_FRAME		0x19
 #define OV511_REG_SNAP_CLAMPED_PIXEL_NUM	0x1A
 #define OV511_REG_SNAP_CLAMPED_LINE_NUM		0x1B
 #define OV511_REG_SNAP_PIXEL_DIVISOR		0x1C
-#define OV511_REG_SNAP_LINE_DIVISOR			0x1D
+#define OV511_REG_SNAP_LINE_DIVISOR		0x1D
 #define OV511_REG_SNAP_DATA_INPUT_SELECT	0x1E
-#define OV511_REG_SNAP_BITMASK				0x1F
+#define OV511_REG_SNAP_BITMASK			0x1F
 
 /* DRAM register numbers */
 #define OV511_REG_DRAM_ENABLE_FLOW_CONTROL	0x20
@@ -37,21 +41,21 @@ if (debug >= level) printk("ov511: " fmt "\n" , ## args)
 #define OV511_REG_DRAM_REFRESH_COUNTER		0x23
 
 /* ISO FIFO register numbers */
-#define OV511_REG_FIFO_PACKET_SIZE			0x30
-#define OV511_REG_FIFO_BITMASK				0x31
+#define OV511_REG_FIFO_PACKET_SIZE		0x30
+#define OV511_REG_FIFO_BITMASK			0x31
 
 /* PIO register numbers */
-#define OV511_REG_PIO_BITMASK				0x38
-#define OV511_REG_PIO_DATA_PORT				0x39
-#define OV511_REG_PIO_BIST					0x3E
+#define OV511_REG_PIO_BITMASK			0x38
+#define OV511_REG_PIO_DATA_PORT			0x39
+#define OV511_REG_PIO_BIST			0x3E
 
 /* I2C register numbers */
-#define OV511_REG_I2C_CONTROL				0x40
+#define OV511_REG_I2C_CONTROL			0x40
 #define OV511_REG_I2C_SLAVE_ID_WRITE		0x41
 #define OV511_REG_I2C_SUB_ADDRESS_3_BYTE	0x42
 #define OV511_REG_I2C_SUB_ADDRESS_2_BYTE	0x43
-#define OV511_REG_I2C_SLAVE_ID_READ			0x44
-#define OV511_REG_I2C_DATA_PORT				0x45
+#define OV511_REG_I2C_SLAVE_ID_READ		0x44
+#define OV511_REG_I2C_DATA_PORT			0x45
 #define OV511_REG_I2C_CLOCK_PRESCALER		0x46
 #define OV511_REG_I2C_TIME_OUT_COUNTER		0x47
 
@@ -60,39 +64,39 @@ if (debug >= level) printk("ov511: " fmt "\n" , ## args)
 #define OV511_REG_I2C_SNAP_DATA_PORT		0x49
 
 /* System control register numbers */
-#define OV511_REG_SYSTEM_RESET				0x50
-#define 	OV511_RESET_UDC				0x01
-#define 	OV511_RESET_I2C				0x02
-#define 	OV511_RESET_FIFO			0x04
-#define 	OV511_RESET_OMNICE			0x08
+#define OV511_REG_SYSTEM_RESET			0x50
+#define 	OV511_RESET_UDC			0x01
+#define 	OV511_RESET_I2C			0x02
+#define 	OV511_RESET_FIFO		0x04
+#define 	OV511_RESET_OMNICE		0x08
 #define 	OV511_RESET_DRAM_INTF		0x10
 #define 	OV511_RESET_CAMERA_INTF		0x20
-#define		OV511_RESET_OV511			0x40
-#define		OV511_RESET_NOREGS			0x3F	/* All but OV511 & regs */
-#define 	OV511_RESET_ALL				0x7F
+#define 	OV511_RESET_OV511		0x40
+#define 	OV511_RESET_NOREGS		0x3F /* All but OV511 & regs */
+#define 	OV511_RESET_ALL			0x7F
 #define OV511_REG_SYSTEM_CLOCK_DIVISOR		0x51
-#define OV511_REG_SYSTEM_SNAPSHOT			0x52
+#define OV511_REG_SYSTEM_SNAPSHOT		0x52
 #define OV511_REG_SYSTEM_INIT         		0x53
-#define OV511_REG_SYSTEM_PWR_CLK      		0x54    /* OV511+ only */
-#define OV511_REG_SYSTEM_LED_CTL      		0x55    /* OV511+ only */
+#define OV511_REG_SYSTEM_PWR_CLK		0x54	/* OV511+ only */
+#define OV511_REG_SYSTEM_LED_CTL		0x55	/* OV511+ only */
 #define OV511_REG_SYSTEM_USER_DEFINED		0x5E
-#define OV511_REG_SYSTEM_CUSTOM_ID			0x5F
+#define OV511_REG_SYSTEM_CUSTOM_ID		0x5F
 
 /* OmniCE register numbers */
-#define OV511_OMNICE_PREDICTION_HORIZ_Y	0x70
+#define OV511_OMNICE_PREDICTION_HORIZ_Y		0x70
 #define OV511_OMNICE_PREDICTION_HORIZ_UV	0x71
 #define OV511_OMNICE_PREDICTION_VERT_Y		0x72
-#define OV511_OMNICE_PREDICTION_VERT_UV	0x73
+#define OV511_OMNICE_PREDICTION_VERT_UV		0x73
 #define OV511_OMNICE_QUANTIZATION_HORIZ_Y	0x74
 #define OV511_OMNICE_QUANTIZATION_HORIZ_UV	0x75
 #define OV511_OMNICE_QUANTIZATION_VERT_Y	0x76
 #define OV511_OMNICE_QUANTIZATION_VERT_UV	0x77
-#define OV511_OMNICE_ENABLE					0x78
-#define OV511_OMNICE_LUT_ENABLE				0x79		
-#define OV511_OMNICE_Y_LUT_BEGIN			0x80
-#define OV511_OMNICE_Y_LUT_END				0x9F
-#define OV511_OMNICE_UV_LUT_BEGIN			0xA0
-#define OV511_OMNICE_UV_LUT_END				0xBF
+#define OV511_OMNICE_ENABLE			0x78
+#define OV511_OMNICE_LUT_ENABLE			0x79		
+#define OV511_OMNICE_Y_LUT_BEGIN		0x80
+#define OV511_OMNICE_Y_LUT_END			0x9F
+#define OV511_OMNICE_UV_LUT_BEGIN		0xA0
+#define OV511_OMNICE_UV_LUT_END			0xBF
 
 /* Alternate numbers for various max packet sizes (OV511 only) */
 #define OV511_ALT_SIZE_992	0
@@ -114,7 +118,7 @@ if (debug >= level) printk("ov511: " fmt "\n" , ## args)
 #define OV511PLUS_ALT_SIZE_769	6
 #define OV511PLUS_ALT_SIZE_961	7
 
-/* ov7610 registers */
+/* OV7610 registers */
 #define OV7610_REG_GAIN          0x00
 #define OV7610_REG_BLUE          0x01
 #define OV7610_REG_RED           0x02
@@ -163,12 +167,12 @@ if (debug >= level) printk("ov511: " fmt "\n" , ## args)
 
 #define SCRATCH_BUF_SIZE 384
 
-#define FRAMES_PER_DESC		10  /* FIXME - What should this be? */
+#define FRAMES_PER_DESC		10	/* FIXME - What should this be? */
 #define FRAME_SIZE_PER_DESC	993	/* FIXME - Deprecated */
-#define MAX_FRAME_SIZE_PER_DESC	993  /* For statically allocated stuff */
+#define MAX_FRAME_SIZE_PER_DESC	993	/* For statically allocated stuff */
 
 // FIXME - should this be 0x81 (endpoint address) or 0x01 (endpoint number)?
-#define OV511_ENDPOINT_ADDRESS 0x81 /* Address of isoc endpoint */
+#define OV511_ENDPOINT_ADDRESS 0x81	/* Address of isoc endpoint */
 
 // CAMERA SPECIFIC
 // FIXME - these can vary between specific models
@@ -213,7 +217,7 @@ enum {
 	FRAME_UNUSED,		/* Unused (no MCAPTURE) */
 	FRAME_READY,		/* Ready to start grabbing */
 	FRAME_GRABBING,		/* In the process of being grabbed into */
-	FRAME_DONE,			/* Finished grabbing, but not been synced yet */
+	FRAME_DONE,		/* Finished grabbing, but not been synced yet */
 	FRAME_ERROR,		/* Something bad happened while processing */
 };
 
@@ -238,7 +242,7 @@ struct ov511_frame {
 	int hdrheight;		/* Height */
 
 	int sub_flag;		/* Sub-capture mode for this frame? */
-	int format;			/* Format for this frame */
+	int format;		/* Format for this frame */
 	int segsize;		/* How big is each segment from the camera? */
 
 	volatile int grabstate;	/* State of grabbing */
@@ -253,7 +257,7 @@ struct ov511_frame {
 
 	wait_queue_head_t wq;	/* Processes waiting */
 
-	int snapshot;			/* True if frame was a snapshot */
+	int snapshot;		/* True if frame was a snapshot */
 };
 
 #define OV511_NUMFRAMES	2
@@ -261,23 +265,28 @@ struct ov511_frame {
 
 struct usb_ov511 {
 	struct video_device vdev;
-	
+
 	/* Device structure */
 	struct usb_device *dev;
 
+#if 0
 	unsigned char customid; /* Type of camera */
+#else
+	int customid;
+	int desc;
+#endif
 
 	unsigned char iface;
-	
+
 	struct semaphore lock;
-	int user;			/* user count for exclusive use */
+	int user;		/* user count for exclusive use */
 
 	int streaming;		/* Are we streaming Isochronous? */
 	int grabbing;		/* Are we grabbing? */
 
 	int compress;		/* Should the next frame be compressed? */
 
-	char *fbuf;			/* Videodev buffer area */
+	char *fbuf;		/* Videodev buffer area */
 
 	int sub_flag;		/* Pix Array subcapture on flag */
 	int subx;		/* Pix Array subcapture x offset */
@@ -297,12 +306,22 @@ struct usb_ov511 {
 
 	wait_queue_head_t wq;	/* Processes waiting */
 
-	int snap_enabled;   /* Snapshot mode enabled */
+	int snap_enabled;	/* Snapshot mode enabled */
 	
-	int bridge;         /* Type of bridge (OV511 or OV511+) */
-	int sensor;         /* Type of image sensor chip */
+	int bridge;		/* Type of bridge (OV511 or OV511+) */
+	int sensor;		/* Type of image sensor chip */
 
-	int packet_size;    /* Frame size per isoc desc */
+	int packet_size;	/* Frame size per isoc desc */
+
+				/* proc interface */
+	struct semaphore param_lock;	/* params lock for this camera */
+	struct proc_dir_entry *proc_entry;	/* /proc/ov511/videoX */
+};
+
+
+struct cam_list {
+	int id;
+	char *description;
 };
 
 #endif

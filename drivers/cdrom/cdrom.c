@@ -199,11 +199,22 @@
   home now.
   -- Clear header length in mode_select unconditionally.
   -- Removed the register_disk() that was added, not needed here.
+
+  3.08 May 1, 2000 - Jens Axboe <axboe@suse.de>
+  -- Fix direction flag in setup_send_key and setup_report_key. This
+  gave some SCSI adapters problems.
+  -- Always return -EROFS for write opens
+  -- Convert to module_init/module_exit style init and remove some
+  of the #ifdef MODULE stuff
+  -- Fix several dvd errors - DVD_LU_SEND_ASF should pass agid,
+  DVD_HOST_SEND_RPC_STATE did not set buffer size in cdb, and
+  dvd_do_auth passed uninitialized data to drive because init_cdrom_command
+  did not clear a 0 sized buffer.
   
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 3.07"
-#define VERSION "Id: cdrom.c 3.07 2000/02/02"
+#define REVISION "Revision: 3.08"
+#define VERSION "Id: cdrom.c 3.08 2000/05/01"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -431,17 +442,6 @@ struct cdrom_device_info *cdrom_find_device(kdev_t dev)
 	cdi = topCdromPtr;
 	while (cdi != NULL && cdi->dev != dev)
 		cdi = cdi->next;
-
-	/* we need to find the device this way when IDE devices such
-	 * as /dev/hdc2 are opened. SCSI drives will be found above and
-	 * so will /dev/hdc, for instance.
-	 */
-	if (cdi == NULL) {
-		kdev_t cd_dev = MKDEV(MAJOR(dev), MINOR(dev) | CD_PART_MASK);
-		cdi = topCdromPtr;
-		while (cdi != NULL && cdi->dev != cd_dev)
-			cdi = cdi->next;
-	}
 
 	return cdi;
 }
@@ -834,7 +834,7 @@ static int cdrom_media_changed(kdev_t dev)
 	/* This talks to the VFS, which doesn't like errors - just 1 or 0.  
 	 * Returning "0" is always safe (media hasn't been changed). Do that 
 	 * if the low-level cdrom driver dosn't support media changed. */ 
-	if (cdi->ops->media_changed == NULL)
+	if (cdi == NULL || cdi->ops->media_changed == NULL)
 		return 0;
 	if (!CDROM_CAN(CDC_MEDIA_CHANGED))
 	    return 0;
@@ -994,6 +994,7 @@ static int dvd_do_auth(struct cdrom_device_info *cdi, dvd_authinfo *ai)
 	struct cdrom_generic_command cgc;
 	struct cdrom_device_ops *cdo = cdi->ops;
 
+	memset(buf, 0, sizeof(buf));
 	init_cdrom_command(&cgc, buf, 0, CGC_DATA_READ);
 
 	switch (ai->type) {
@@ -1052,7 +1053,7 @@ static int dvd_do_auth(struct cdrom_device_info *cdi, dvd_authinfo *ai)
 
 	case DVD_LU_SEND_ASF:
 		cdinfo(CD_DVD, "entering DVD_LU_SEND_ASF\n"); 
-		setup_report_key(&cgc, ai->lsasf.asf, 5);
+		setup_report_key(&cgc, ai->lsasf.agid, 5);
 		
 		if ((ret = cdo->generic_packet(cdi, &cgc)))
 			return ret;
@@ -1113,6 +1114,7 @@ static int dvd_do_auth(struct cdrom_device_info *cdi, dvd_authinfo *ai)
 	case DVD_HOST_SEND_RPC_STATE:
 		cdinfo(CD_DVD, "entering DVD_HOST_SEND_RPC_STATE\n");
 		setup_send_key(&cgc, 0, 6);
+		buf[1] = 6;
 		buf[4] = ai->hrpcs.pdrc;
 
 		if ((ret = cdo->generic_packet(cdi, &cgc)))

@@ -67,7 +67,7 @@ void __add_page_to_hash_queue(struct page * page, struct page **p)
 		PAGE_BUG(page);
 }
 
-static void remove_page_from_hash_queue(struct page * page)
+static inline void remove_page_from_hash_queue(struct page * page)
 {
 	if(page->pprev_hash) {
 		if(page->next_hash)
@@ -92,44 +92,71 @@ static inline int sync_page(struct page *page)
  * sure the page is locked and that nobody else uses it - or that usage
  * is safe.
  */
+static inline void __remove_inode_page(struct page *page)
+{
+	remove_page_from_inode_queue(page);
+	remove_page_from_hash_queue(page);
+	page->mapping = NULL;
+}
+
 void remove_inode_page(struct page *page)
 {
 	if (!PageLocked(page))
 		PAGE_BUG(page);
 
 	spin_lock(&pagecache_lock);
-	remove_page_from_inode_queue(page);
-	remove_page_from_hash_queue(page);
-	page->mapping = NULL;
+	__remove_inode_page(page);
 	spin_unlock(&pagecache_lock);
 }
+
+#define ITERATIONS 100
 
 void invalidate_inode_pages(struct inode * inode)
 {
 	struct list_head *head, *curr;
 	struct page * page;
+	int count;
 
- repeat:
 	head = &inode->i_mapping->pages;
-	spin_lock(&pagecache_lock);
-	curr = head->next;
 
-	while (curr != head) {
-		page = list_entry(curr, struct page, list);
-		curr = curr->next;
+	while (head != head->next) {
+		spin_lock(&pagecache_lock);
+		spin_lock(&pagemap_lru_lock);
+		head = &inode->i_mapping->pages;
+		curr = head->next;
+		count = 0;
 
-		/* We cannot invalidate a locked page */
-		if (TryLockPage(page))
-			continue;
-		spin_unlock(&pagecache_lock);
+		while ((curr != head) && (count++ < ITERATIONS)) {
+			page = list_entry(curr, struct page, list);
+			curr = curr->next;
 
-		lru_cache_del(page);
-		remove_inode_page(page);
-		UnlockPage(page);
-		page_cache_release(page);
-		goto repeat;
+			/* We cannot invalidate a locked page */
+			if (TryLockPage(page))
+				continue;
+
+			__lru_cache_del(page);
+			__remove_inode_page(page);
+			UnlockPage(page);
+			page_cache_release(page);
+		}
+
+		/* At this stage we have passed through the list
+		 * once, and there may still be locked pages. */
+
+		if (head->next!=head) {
+			page = list_entry(head->next, struct page, list);
+			get_page(page);
+			spin_unlock(&pagemap_lru_lock);
+			spin_unlock(&pagecache_lock);
+			/* We need to block */
+			lock_page(page);
+			UnlockPage(page);
+			page_cache_release(page);
+		} else {                                         
+			spin_unlock(&pagemap_lru_lock);
+			spin_unlock(&pagecache_lock);
+		}
 	}
-	spin_unlock(&pagecache_lock);
 }
 
 /*
@@ -160,10 +187,10 @@ repeat:
 		/* page wholly truncated - free it */
 		if (offset >= start) {
 			if (TryLockPage(page)) {
-				spin_unlock(&pagecache_lock);
 				get_page(page);
+				spin_unlock(&pagecache_lock);
 				wait_on_page(page);
-				put_page(page);
+				page_cache_release(page);
 				goto repeat;
 			}
 			get_page(page);
@@ -253,7 +280,19 @@ int shrink_mmap(int priority, int gfp_mask)
 			goto dispose_continue;
 
 		count--;
+
+		/*
+		 * I'm ambivalent on this one.. Should we try to
+		 * maintain LRU on the LRU list, and put pages that
+		 * are old at the end of the queue, even if that
+		 * means that we'll re-scan then again soon and
+		 * often waste CPU time? Or should be just let any
+		 * pages we do not want to touch now for one reason
+		 * or another percolate to be "young"?
+		 *
 		dispose = &old;
+		 *
+		 */
 
 		/*
 		 * Avoid unscalable SMP locking for pages we can
@@ -323,9 +362,7 @@ int shrink_mmap(int priority, int gfp_mask)
 		/* is it a page-cache page? */
 		if (page->mapping) {
 			if (!PageDirty(page) && !pgcache_under_min()) {
-				remove_page_from_inode_queue(page);
-				remove_page_from_hash_queue(page);
-				page->mapping = NULL;
+				__remove_inode_page(page);
 				spin_unlock(&pagecache_lock);
 				goto made_inode_progress;
 			}

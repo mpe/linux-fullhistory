@@ -2129,9 +2129,7 @@ static void sync_page_buffers(struct buffer_head *bh)
 	do {
 		struct buffer_head *p = tmp;
 		tmp = tmp->b_this_page;
-		if (buffer_locked(p))
-			__wait_on_buffer(p);
-		else if (buffer_dirty(p))
+		if (buffer_dirty(p) && !buffer_locked(p))
 			ll_rw_block(WRITE, 1, &p);
 	} while (tmp != bh);
 }

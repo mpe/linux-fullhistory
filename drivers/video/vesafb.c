@@ -543,12 +543,19 @@ int __init vesafb_init(void)
 
 	if (!request_mem_region(video_base, video_size, "vesafb")) {
 		printk(KERN_ERR
-		       "vesafb: abort, cannot reserve video memory at 0x%lu\n",
+		       "vesafb: abort, cannot reserve video memory at 0x%lx\n",
 			video_base);
-		return -1;
+		return -EBUSY;
 	}
 
         video_vbase = ioremap(video_base, video_size);
+	if (!video_vbase) {
+		release_mem_region(video_base, video_size);
+		printk(KERN_ERR
+		       "vesafb: abort, cannot ioremap video memory 0x%lx @ 0x%lx\n",
+			video_size, video_base);
+		return -EIO;
+	}
 
 	printk(KERN_INFO "vesafb: framebuffer at 0x%lx, mapped to 0x%p, size %dk\n",
 	       video_base, video_vbase, video_size/1024);

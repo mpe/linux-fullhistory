@@ -79,6 +79,8 @@ if [ "$CONFIG_SOUND_MSNDPIN" = "y" -o "$CONFIG_SOUND_MSNDCLAS" = "y" ]; then
    int 'MSND buffer size (kB)' CONFIG_MSND_FIFOSIZE 128
 fi
 
+tristate '  VIA 82C686 Audio Codec' CONFIG_SOUND_VIA82CXXX
+
 dep_tristate '  OSS sound modules' CONFIG_SOUND_OSS $CONFIG_SOUND
 
 if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
@@ -144,7 +146,6 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       fi
    fi
 
-   dep_tristate '    VIA 82C686 Audio Codec' CONFIG_SOUND_VIA82CXXX $CONFIG_SOUND_OSS
    dep_tristate '    Yamaha FM synthesizer (YM3812/OPL-3) support' CONFIG_SOUND_YM3812 $CONFIG_SOUND_OSS
    dep_tristate '    Yamaha OPL3-SA1 audio controller' CONFIG_SOUND_OPL3SA1 $CONFIG_SOUND_OSS
    dep_tristate '    Yamaha OPL3-SA2, SA3, and SAx based PnP cards' CONFIG_SOUND_OPL3SA2 $CONFIG_SOUND_OSS

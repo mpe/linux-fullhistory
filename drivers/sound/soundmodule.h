@@ -26,4 +26,4 @@ static struct notifier_block sound_notifier=
 	0
 };
 
-#endif
+#endif /* _SOUNDMODULE_H */

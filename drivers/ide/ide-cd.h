@@ -10,15 +10,6 @@
 #include <linux/cdrom.h>
 #include <asm/byteorder.h>
 
-/*
- * Apparently older drives have problems with filling out the entire
- * mode_sense capability structure. Define this to 1 if your drive isn't
- * probed correctly.
- */
-#ifndef BROKEN_CAP_PAGE
-#define BROKEN_CAP_PAGE 0
-#endif
-
 /* Turn this on to have the driver print out the meanings of the
    ATAPI error codes.  This will use up additional kernel-space
    memory, though. */
@@ -114,6 +105,7 @@ struct packet_command {
 	char *buffer;
 	int buflen;
 	int stat;
+	int quiet;
 	struct request_sense *sense;
 	unsigned char c[12];
 };
@@ -410,9 +402,7 @@ struct atapi_capabilities_page {
 	unsigned short buffer_size;
 	/* Current speed (in kB/s). */
 	unsigned short curspeed;
-#if !BROKEN_CAP_PAGE
 	char pad[4];
-#endif
 };
 
 

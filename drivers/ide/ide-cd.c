@@ -282,9 +282,12 @@
  *			  - cdrom_read_capacity returns one frame too little.
  *			  - Fix real capacity reporting.
  *
+ * 4.58  May 1, 2000	- Clean up ACER50 stuff.
+ *			- Fix small problem with ide_cdrom_capacity
+ *
  *************************************************************************/
  
-#define IDECD_VERSION "4.57"
+#define IDECD_VERSION "4.58"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -1521,7 +1524,7 @@ cdrom_lockdoor(ide_drive_t *drive, int lockflag, struct request_sense *sense)
 		memset(&pc, 0, sizeof(pc));
 		pc.sense = sense;
 		pc.c[0] = GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL;
-		pc.c[4] = (lockflag != 0);
+		pc.c[4] = lockflag ? 3 : 0;
 		stat = cdrom_queue_packet_command (drive, &pc);
 	}
 
@@ -1857,6 +1860,10 @@ static int ide_cdrom_packet(struct cdrom_device_info *cdi,
 	pc.buffer = cgc->buffer;
 	pc.buflen = cgc->buflen;
 	cgc->stat = cdrom_queue_packet_command(drive, &pc);
+
+	/*
+	 * FIXME: copy sense, don't just assign pointer!!
+	 */
 	cgc->sense = pc.sense;
 
 	return cgc->stat;
@@ -2159,9 +2166,9 @@ static int ide_cdrom_register (ide_drive_t *drive, int nslots)
 {
 	struct cdrom_info *info = drive->driver_data;
 	struct cdrom_device_info *devinfo = &info->devinfo;
-	int minor = (drive->select.b.unit)<<PARTN_BITS;
+	int minor = (drive->select.b.unit) << PARTN_BITS;
 
-	devinfo->dev = MKDEV (HWIF(drive)->major, minor | CD_PART_MASK);
+	devinfo->dev = MKDEV (HWIF(drive)->major, minor);
 	devinfo->ops = &ide_cdrom_dops;
 	devinfo->mask = 0;
 	*(int *)&devinfo->speed = CDROM_STATE_FLAGS (drive)->current_speed;
@@ -2195,22 +2202,23 @@ static int ide_cdrom_register (ide_drive_t *drive, int nslots)
 	return register_cdrom(devinfo);
 }
 
-/*
- * the buffer struct used by ide_cdrom_get_capabilities()
- */
-struct get_capabilities_buf {
-	char pad[8];
-	struct atapi_capabilities_page cap;
-	char extra_cap[4];
-};
-
 static
 int ide_cdrom_get_capabilities(ide_drive_t *drive, struct atapi_capabilities_page *cap)
 {
 	struct cdrom_info *info = drive->driver_data;
 	struct cdrom_device_info *cdi = &info->devinfo;
 	struct cdrom_generic_command cgc;
-	int stat, attempts = 3;
+	int stat, attempts = 3, size = sizeof(*cap);
+
+	/*
+	 * ACER50 (and others?) require the full spec length mode sense
+	 * page capabilities size, but older drives break.
+	 */
+	if (drive->id) {
+		if (!(!strcmp(drive->id->model, "ATAPI CD ROM DRIVE 50X MAX") ||
+		    !strcmp(drive->id->model, "WPI CDS-32X")))
+			size -= sizeof(cap->pad);
+	}
 
 	/* we have to cheat a little here. the packet will eventually
 	 * be queued with ide_cdrom_packet(), which extracts the
@@ -2220,7 +2228,7 @@ int ide_cdrom_get_capabilities(ide_drive_t *drive, struct atapi_capabilities_pag
 	 */
 	cdi->handle = (ide_drive_t *) drive;
 	cdi->ops = &ide_cdrom_dops;
-	init_cdrom_command(&cgc, cap, sizeof(*cap), CGC_DATA_UNKNOWN);
+	init_cdrom_command(&cgc, cap, size, CGC_DATA_UNKNOWN);
 	do { /* we seem to get stat=0x01,err=0x00 the first time (??) */
 		stat = cdrom_mode_sense(cdi, &cgc, GPMODE_CAPABILITIES_PAGE, 0);
 		if (!stat)
@@ -2513,9 +2521,8 @@ void ide_cdrom_release (struct inode *inode, struct file *file,
 static
 int ide_cdrom_check_media_change (ide_drive_t *drive)
 {
-	return cdrom_fops.check_media_change
-		(MKDEV (HWIF (drive)->major,
-			(drive->select.b.unit)<<PARTN_BITS));
+	return cdrom_fops.check_media_change(MKDEV (HWIF (drive)->major,
+			(drive->select.b.unit) << PARTN_BITS));
 }
 
 static
@@ -2545,8 +2552,7 @@ unsigned long ide_cdrom_capacity (ide_drive_t *drive)
 {
 	unsigned capacity;
 
-	capacity = cdrom_read_capacity(drive, &capacity, NULL);
-	return capacity ? 0 : capacity * SECTORS_PER_FRAME;
+	return cdrom_read_capacity(drive, &capacity, NULL) ? 0 : capacity * SECTORS_PER_FRAME;
 }
 
 static

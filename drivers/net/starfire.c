@@ -102,7 +102,7 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 static char version1[] __devinitdata =
 "starfire.c:v0.15+LK1.1.2 4/28/2000  Written by Donald Becker <becker@scyld.com>\n";
 static char version2[] __devinitdata =
-" Undates and info at http://www.scyld.com/network/starfire.html\n";
+" Updates and info at http://www.scyld.com/network/starfire.html\n";
 
 MODULE_AUTHOR("Donald Becker <becker@scyld.com>");
 MODULE_DESCRIPTION("Adaptec Starfire Ethernet driver");

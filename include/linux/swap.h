@@ -171,13 +171,18 @@ do {						\
 	spin_unlock(&pagemap_lru_lock);		\
 } while (0)
 
+#define	__lru_cache_del(page)			\
+do {						\
+	list_del(&(page)->lru);			\
+	nr_lru_pages--;				\
+} while (0)
+
 #define	lru_cache_del(page)			\
 do {						\
 	if (!PageLocked(page))			\
 		BUG();				\
 	spin_lock(&pagemap_lru_lock);		\
-	list_del(&(page)->lru);			\
-	nr_lru_pages--;				\
+	__lru_cache_del(page);			\
 	spin_unlock(&pagemap_lru_lock);		\
 } while (0)
 

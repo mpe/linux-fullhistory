@@ -66,7 +66,7 @@ obj-$(CONFIG_SOUND_AD1816)	+= ad1816.o
 obj-$(CONFIG_SOUND_ACI_MIXER)	+= aci.o
 obj-$(CONFIG_SOUND_AWE32_SYNTH)	+= awe_wave.o
 
-obj-$(CONFIG_SOUND_VIA82CXXX)	+= via82cxxx_audio.o sb_lib.o uart401.o ac97.o
+obj-$(CONFIG_SOUND_VIA82CXXX)	+= via82cxxx_audio.o ac97_codec.o
 obj-$(CONFIG_SOUND_MSNDCLAS)	+= msnd.o msnd_classic.o
 obj-$(CONFIG_SOUND_MSNDPIN)	+= msnd.o msnd_pinnacle.o
 obj-$(CONFIG_SOUND_VWSND)	+= vwsnd.o

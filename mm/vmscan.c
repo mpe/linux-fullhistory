@@ -347,7 +347,6 @@ static int swap_out(unsigned int priority, int gfp_mask)
 	struct task_struct * p;
 	int counter;
 	int __ret = 0;
-	int assign = 0;
 
 	lock_kernel();
 	/* 
@@ -364,7 +363,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 	 * Think of swap_cnt as a "shadow rss" - it tells us which process
 	 * we want to page out (always try largest first).
 	 */
-	counter = nr_threads / (priority+1);
+	counter = (nr_threads << 1) >> (priority >> 1);
 	if (counter < 1)
 		counter = 1;
 
@@ -372,6 +371,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 		unsigned long max_cnt = 0;
 		struct mm_struct *best = NULL;
 		int pid = 0;
+		int assign = 0;
 	select:
 		read_lock(&tasklist_lock);
 		p = init_task.next_task;
@@ -391,8 +391,6 @@ static int swap_out(unsigned int priority, int gfp_mask)
 			}
 		}
 		read_unlock(&tasklist_lock);
-		if (assign == 1)
-			assign = 2;
 		if (!best) {
 			if (!assign) {
 				assign = 1;
